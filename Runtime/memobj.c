@@ -1,6 +1,7 @@
 #include "tag.h"
 #include "memobj.h"
 #include "bitmap.h"
+#include <limits.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -13,6 +14,7 @@
 #include <fcntl.h>
 #include "stats.h"
 #include "thread.h"
+#include "platform.h"
 
 Stacklet_t   *Stacklets; 
 StackChain_t *StackChains;
@@ -49,9 +51,8 @@ const mem_t heapstart  = (mem_t) (780 * 1024 * 1024);
 #endif
 
 /* The heaps are managed by a bitmap where each bit corresponds to a 32K chunk of the heap.
-   We take 320 megs for heap space which result in 10240 bits.
 */
-static int heapspace = 320 * 1024 * 1024;
+static int heapspace;
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
 static int Heapbitmap_bits;
@@ -632,6 +633,16 @@ extern mem_t datastart;
 void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
+  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * pagesize;
+  unsigned long address_bytes = RoundDown(ULONG_MAX - (unsigned long)heapstart, pagesize);
+  unsigned long heap_bytes;
+  int max_heap_byte;
+  heap_bytes = (unsigned long)INT_MAX;
+  heap_bytes = Min(heap_bytes, mem_bytes);
+  heap_bytes = Min(heap_bytes, address_bytes);
+  heapspace = (int)heap_bytes;
+  init_int(&MinHeapByte, 2048 * 1024);
+  init_int(&MaxHeapByte, 0.40 * heapspace);
   Heapbitmap_bits = heapspace / chunksize;
   bmp = CreateBitmap(Heapbitmap_bits);
 #ifdef solaris

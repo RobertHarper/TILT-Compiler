@@ -174,6 +174,6 @@ void GCInit_Semi(void)
 {
   if (ordering == DefaultOrder)
     ordering = ImplicitOrder;
-  GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);
+  GCInit_Help(0.1, 0.7, 512, 50 * 1024);
 }
 

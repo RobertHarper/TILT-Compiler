@@ -988,7 +988,7 @@ void GCInit_GenConc(void)
   if (ordering == HybridOrder)
     grayAsReplica = 1;
 
-  GCInit_Help(2048, 128 * 1024, 0.2, 0.8, 512, 50 * 1024);   
+  GCInit_Help(0.2, 0.8, 512, 50 * 1024);   
   if (relaxed) {
     reducedTenuredSize = Heap_GetSize(fromSpace);
     expandedTenuredSize = reducedToExpanded(reducedTenuredSize, CollectionRate, doAgressive ? 2 : 1);

@@ -81,8 +81,7 @@ void ResetAllocation(Proc_t *proc, Heap_t *h);
 
 /* These are initialization and finalization routines. */
 void GCInit(void);
-void GCInit_Help(int defaultMinHeap, int defaultMaxHeap, 
-		 double defaultMinRatio, double defaultMaxRatio, 
+void GCInit_Help(double defaultMinRatio, double defaultMaxRatio, 
 		 int defaultMinRatioSize, int defaultMaxRatioSize);
 void GCInit_Semi(void);
 void GCInit_Gen(void);

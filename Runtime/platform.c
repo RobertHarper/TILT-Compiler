@@ -88,6 +88,23 @@ static PlatformType platform;
 int GetBcacheSize(void) { return platform.bcacheSize; }
 int GetIcacheSize(void) { return platform.icacheSize; }
 int GetDcacheSize(void) { return platform.dcacheSize; }
+
+/* This does not count all physical pages, just the "managed" ones.
+   (Compare to the output of vmstat -P.) */
+
+#include <mach.h>
+
+int GetPhysicalPages(void) {
+  vm_statistics_data_t vmstats;
+  if (vm_statistics(task_self(),&vmstats) != KERN_SUCCESS) {
+    perror("vm_statistics");
+    exit(1);
+  }
+  return (vmstats.free_count +
+	  vmstats.active_count +
+	  vmstats.inactive_count +
+	  vmstats.wire_count);
+}
 #endif
 
 #ifdef rs_aix
@@ -100,7 +117,14 @@ int GetDcacheSize(void) { return 8 * 1024; }
 int GetBcacheSize(void) { return 512 * 1024; }
 int GetIcacheSize(void) { return 8 * 1024; }
 int GetDcacheSize(void) { return 8 * 1024; }
-
+int GetPhysicalPages(void) {
+  long r = sysconf(_SC_PHYS_PAGES);
+  if (r == -1) {
+    perror("sysconf");
+    exit(1);
+  }
+  return r;
+}
 
 enum PerfType {NoPerf = -1, UserBasic = 0, SysBasic, BothBasic, UserDCache, SysDCache, UserECache, SysECache, UserEWrite, UserESnoop};
 int perfType = (int) NoPerf;

@@ -928,7 +928,7 @@ void GCInit_SemiConc(void)
     ordering = StackOrder;
   if (ordering == HybridOrder)
     grayAsReplica = 1;
-  GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);   
+  GCInit_Help(0.1, 0.7, 512, 50 * 1024);   
   if (relaxed) {
     reducedSize = Heap_GetSize(fromSpace);
     expandedSize = reducedToExpanded(reducedSize, CollectionRate, doAgressive ? 2 : 1);

@@ -289,7 +289,7 @@ void GCInit_GenPara(void)
 {
   int cache_size = GetBcacheSize();
   
-  GCInit_Help(1024, 128 * 1024, 0.2, 0.8, 512, 50 * 1024);   
+  GCInit_Help(0.2, 0.8, 512, 50 * 1024);   
   init_int(&NurseryByte, (int)(0.85 * cache_size));
   assert(MinHeapByte >= 1.2*NurseryByte);
   nursery = Heap_Alloc(NurseryByte, NurseryByte);

@@ -8,6 +8,7 @@ void platform_init(void);
 int GetBcacheSize(void); /* secondary cache size */
 int GetIcacheSize(void); /* primary icache size */
 int GetDcacheSize(void); /* primary dcache size */
+int GetPhysicalPages(void); /* main memory size */ 
 
 /* Only defined for Sparc - otherwise, no-op */
 extern int perfType;

@@ -246,23 +246,16 @@ void HeapAdjust2(int request, int unused, int withhold,  double reserve, int pha
   HeapAdjust(request, unused, withhold, reserve, phases, froms, to);
 }
 
-void GCInit_Help(int defaultMinHeap, int defaultMaxHeap, 
-		 double defaultMinRatio, double defaultMaxRatio, 
+void GCInit_Help(double defaultMinRatio, double defaultMaxRatio, 
 		 int defaultMinRatioSize, int defaultMaxRatioSize)
 {
-  init_int(&MinHeapByte, 1024 * defaultMinHeap);
-  init_int(&MaxHeapByte, 1024 * defaultMaxHeap);
   MinHeapByte = Min(MinHeapByte, MaxHeapByte);
   init_double(&MinRatio, defaultMinRatio);
   init_double(&MaxRatio, defaultMaxRatio);
   init_int(&MinRatioSize, defaultMinRatioSize);
   init_int(&MaxRatioSize, defaultMaxRatioSize);
-  /*
   fromSpace = Heap_Alloc(MinHeapByte, MaxHeapByte);
   toSpace = Heap_Alloc(MinHeapByte, MaxHeapByte);  
-  */
-  fromSpace = Heap_Alloc(MinHeapByte, 1024 * defaultMaxHeap);
-  toSpace = Heap_Alloc(MinHeapByte, 1024 * defaultMaxHeap);
   Heap_Resize(fromSpace, (MinHeapByte + MaxHeapByte) / 2, 1);
   Heap_Resize(toSpace, (MinHeapByte + MaxHeapByte) / 2, 1);
 }
