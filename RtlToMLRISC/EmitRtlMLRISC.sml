@@ -1263,7 +1263,7 @@ functor EmitRtlMLRISC(
 
     fun SAVE_CS _ = []
 
-    val RESTORE_CS =
+    fun RESTORE_CS _ =
 	  [MLTree.CODE(CallConventionBasis.getAssignment(Procedure.saves()))]
 
     val END_SAVE = []
@@ -1485,7 +1485,7 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.END_SAVE) =
 	  END_SAVE
       | translateInstruction(Rtl.RESTORE_CS) =
-	  RESTORE_CS
+	  RESTORE_CS()
 
       | translateInstruction(Rtl.LOAD32I(address, dest)) =
 	  LOAD32I(ea address, destReg dest)
