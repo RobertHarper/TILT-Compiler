@@ -1,5 +1,5 @@
 Number: 0128
-Title:       discrepancy on arguments to datatypes
+Title:       bombing on nonuniform datatypes
 Keywords:    datatypes
 Submitter:   rwh
 Date:        08/16/02
@@ -15,6 +15,11 @@ Comments:
 	TILT should be rejecting this code, not failing raising an internal error.
 
 Fix:         
+
+	The test is skipped.
+
+	TILT now rejects rather than bombs.
+
 Test: m0082
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

@@ -28,8 +28,6 @@ signature ASTHELP =
     val fctb_strip : Ast.fctb  -> (Symbol.symbol * Ast.fctexp)
     val strb_strip : Ast.strb  -> (Symbol.symbol * (Ast.strexp * Ast.sigexp Ast.sigConst))
     val vb_strip   : Ast.vb    -> (Ast.pat * Ast.exp)
-    val rvb_strip  : Ast.rvb    -> {var : Ast.symbol, fixity : (Ast.symbol * Ast.region) option,
-				    exp : Ast.exp, resultty : Ast.ty option}
     val fb_strip   : Ast.fb    -> Ast.clause list
     val exp_strip  : Ast.exp   -> Ast.exp
 

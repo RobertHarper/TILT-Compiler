@@ -1,4 +1,8 @@
 (*
+	The SML/NJ library IntInf is not the same as the basis library
+	IntInf.  We do not provide a standard IntInf.  -dave
+*)
+(*
  * NJ rejects this as well.  I believe that they and we are both
  * incorrect to reject ~ and +, etc. at type IntInf.int. The Basis 
  * documentation specifies that these should be overloaded to include 

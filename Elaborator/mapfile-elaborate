@@ -38,7 +38,8 @@ unit IlPrimUtilParam = "ilprimutilparam.sml" {
 }
 unit PRIMUTIL = "primutil.sig.sml" {PRIM Prim}
 unit PrimUtil = "primutil.sml" {
-	TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL Char String
+	TilWord32 TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real
+	PRIMUTIL Char String
 }
 unit ILUTIL = "ilutil.sig.sml" {
 	Name Symbol Prim Tyvar IL Il

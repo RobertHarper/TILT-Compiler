@@ -171,35 +171,42 @@ struct
 				" not defined in project"))
 	    end
 
-    fun check_file (desc:I.desc, file:string) : unit =
-	let fun bad (why:string) : 'a =
-		reject(concat[file, " conflicts with ",why])
-	    val file = OS.Path.mkCanonical file
-	    fun checkarc (arc:string) : unit =
-		(case arc
-		   of "TM" => bad "TILT's private files"
-		    | _ => ())
-	    val {arcs,...} = OS.Path.fromString file
-	    val _ = app checkarc arcs
-	    fun checksrc (l:label, src:string, pos:Pos.pos) : unit =
-		if src = file then
-		    bad (Name.label2longname l ^ " (" ^
-			 Pos.tostring pos ^ ")")
-		else ()
-	    fun check (pdec:I.pdec) : unit =
-		(case pdec
-		   of I.IDEC (I,iexp,pos) =>
-			(case I.P.I.src' iexp
-			   of SOME src => checksrc(I,src,pos)
-			    | NONE => ())
-		    | I.SCDEC _ => ()
-		    | I.UDEC (U,uexp,pos) =>
-			(case I.P.U.src' uexp
-			   of SOME src => checksrc(U,src,pos)
-			    | NONE => ()))
-	    val _ = app check desc
-	in  ()
-	end
+	fun check_file (descfiles:string list, desc:I.desc) (file:string) : unit =
+	    let fun bad (why:string) : 'a =
+		    reject(concat[file, " conflicts with ",why])
+		val file = OS.Path.mkCanonical file
+		fun checkDescFile (descfile:string) : unit =
+		    let val descfile = OS.Path.mkCanonical descfile
+		    in  if descfile = file then
+			    bad "project description"
+			else ()
+		    end
+		val _ = app checkDescFile descfiles
+		fun checkarc (arc:string) : unit =
+		    (case arc
+		       of "TM" => bad "TILT's private files"
+			| _ => ())
+		val {arcs,...} = OS.Path.fromString file
+		val _ = app checkarc arcs
+		fun checksrc (l:label, src:string, pos:Pos.pos) : unit =
+		    if src = file then
+			bad (Name.label2longname l ^ " (" ^
+			     Pos.tostring pos ^ ")")
+		    else ()
+		fun check (pdec:I.pdec) : unit =
+		    (case pdec
+		       of I.IDEC (I,iexp,pos) =>
+			    (case I.P.I.src' iexp
+			       of SOME src => checksrc(I,src,pos)
+				| NONE => ())
+			| I.SCDEC _ => ()
+			| I.UDEC (U,uexp,pos) =>
+			    (case I.P.U.src' uexp
+			       of SOME src => checksrc(U,src,pos)
+				| NONE => ()))
+		val _ = app check desc
+	    in	()
+	    end
 
     in
 	fun set_desc (descfiles:string list, targets:targets,
@@ -207,7 +214,7 @@ struct
 	    let val d = Project.empty {linking=linking}
 		val d = foldl (fn (descfile,d) => Project.add_include (d, descfile)) d descfiles
 		val d = Project.finish d
-		val _ = app (fn f => check_file(d,f)) files
+		val _ = app (check_file(descfiles,d)) files
 		val numEntries = length d
 		val TiltExn = Name.unit_label "TiltExn"
 		val targets = get_targets(d,targets)

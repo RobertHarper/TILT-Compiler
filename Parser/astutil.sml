@@ -17,13 +17,6 @@ val bogusID = varSymbol "BOGUS"
 val symArg = strSymbol "<Parameter>"
 val itsym = [varSymbol "it"]
 
-fun checkFix (i, err : ErrorMsg.complainer) =
-      if (i < 0) orelse (9 < i)
-	then (
-	  err COMPLAIN "fixity precedence must be between 0 and 9" nullErrorBody;
-	  9)
-	else i
-
 (* layered patterns *)
 
 fun lay3 ((x as VarPat _), y, _) = LayeredPat{varPat=x,expPat=y}

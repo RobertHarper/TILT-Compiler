@@ -18,16 +18,10 @@ sig
     (*
 	These run a master and, if boolean is true, a slave.
     *)
-    val make' : bool -> string list * targets -> unit
-    val make_exe' : bool -> string list * string * targets -> unit	(* projects, exe *)
-    val make_lib' : bool -> string list * string * targets -> unit	(* projects, lib *)
+    val make : bool -> string list * targets -> unit
+    val make_exe : bool -> string list * string * targets -> unit	(* projects, exe *)
+    val make_lib : bool -> string list * string * targets -> unit	(* projects, lib *)
 
-    (*
-	These run a master and a slave together.
-    *)
-    val make : string list * targets -> unit
-    val make_exe : string list * string * targets -> unit	(* projects, exe *)
-    val make_lib : string list * string * targets -> unit	(* projects, lib *)
     val purge : string list * targets -> unit
     val purgeAll : string list * targets -> unit
 

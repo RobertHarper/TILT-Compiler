@@ -17,6 +17,8 @@ platform.sml
 sequence.sig.sml
 sequence.sml
 tilword.sig.sml
+tilwordfromword.sml
+tilwordfromhalf.sml
 tilword32.sml
 tilword64.sml
 listops.sig.sml

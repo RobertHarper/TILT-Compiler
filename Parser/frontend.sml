@@ -47,8 +47,7 @@ fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
                     charlist = ref (nil : string list),
                     stringtype = ref false,
                     stringstart = ref 0,
-                    err = err,
-                    brack_stack = ref (nil: int ref list)}
+                    err = err}
 
 (*      val doprompt = ref true *)
       val doprompt = ref false

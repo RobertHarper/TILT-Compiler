@@ -8,9 +8,20 @@ System:      any
 Severity:    minor
 Problem:     fails to type check, perhaps because of word overloading problem
 Code:        
+	(* ../../Test/bug114/mapfile *)
+	val f : Word8.word -> int = fn 0w0 => 1
+
 Transcript:  
+
+	test.sml:1.29-1.40 Warning: match nonexhaustive
+	test.sml:1.1-1.40 Error: actual type does not match constraint in pattern
+	  Actual type: ((mvar_2262_2 == UINT32) -> (fullResultType_2263_3 == INT32))
+	  Pattern type: (CON_PATH(_2258.Word8_STR. word_TYC) -> INT32)
+	slave cuff.link.16287 found an error in unit Test
+	tilt: mapfile:1: could not elaborate test.sml
+
 Comments:    
 Fix:         
-Test: m0046
-Owner: rwh
+Test: bug114 m0046
+Owner: swasey
 Status: open

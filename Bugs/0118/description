@@ -1,16 +1,78 @@
 Number: 0118
-Title:       syntax discrepancies
+Title:       Parsing of val rec
 Keywords:    syntax
 Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     we do not parse this file 
-Code:        
-Transcript:  
-Comments:    
-Fix:         
+Problem:     we do not parse this file
+Code:
+Transcript:
+Comments:
+
+	The Definition (pages 10 and 64) says
+
+		dec	::=	...
+			|	val tyvarseq valbind
+
+		valbind
+			::=	pat = exp <and valbind>
+			|	rec valbind
+
+	and "[f]or each value binding pat = exp within rec, exp must be of
+	the form fn match" (page 8).
+
+	Taken together, we have
+
+		dec	::=	...
+			val tyvarseq valbind
+
+		valbind
+			::=	pat = exp <and valbind>
+			|	rec rvalbind
+
+		rvalbind
+			::=	pat = fn match <and rvalbind>
+			|	rec rvalbind
+
+	TILT's parser was wrong.  It did not permit a single declaration
+	to bind both recursive and nonrecursive values and it required the
+	"pat" in a val rec to be either vid or vid : ty.
+
+	In the Ast, we had
+
+		datatype dec = ...
+		|	ValDec of vb list * tyvar list ref
+		|	ValrecDec of rvb list * tyvar list ref
+
+		and vb =
+			Vb of {pat:pat, exp:exp}
+		|	MarkVb of vb * region
+
+		and rvb =
+			Rvb of {var:symbol, fixity: (symbol * region) option,
+				exp:exp, resultty: ty option}
+		|	MarkRvb of rvb * region
+
+	which is clunky to represent code like "val x = 3 and rec f = fn
+	() => ()" and is unable to represent code like "val rec f as g =
+	fn () => ()".
+
+Fix:
+
+	I changed the Ast to
+
+		datatype dec = ...
+		|	ValDec of vb list * vb list * tyvar list ref
+
+	where the first list contains nonrecursive bindings and the second
+	list contains recursive bindings.  Type rvb is gone.
+
+	I corrected the parser and updated the elaborator for the new Ast.
+	(The elaborator's shares some code for val rec and fun
+	declarations; it could do better.)
+
 Test: m0053
-Owner: rwh
-Status: open
+Owner: swasey
+Status: closed

@@ -6,11 +6,6 @@ val INTER:  'a * 'a -> (svalue,'a) token
 val IMPL:  'a * 'a -> (svalue,'a) token
 val CCALL:  'a * 'a -> (svalue,'a) token
 val EXTERN:  'a * 'a -> (svalue,'a) token
-val AQID: (FastSymbol.raw_symbol) *  'a * 'a -> (svalue,'a) token
-val OBJL: (string) *  'a * 'a -> (svalue,'a) token
-val ENDQ: (string) *  'a * 'a -> (svalue,'a) token
-val BEGINQ:  'a * 'a -> (svalue,'a) token
-val VECTORSTART:  'a * 'a -> (svalue,'a) token
 val ANDALSO:  'a * 'a -> (svalue,'a) token
 val ORELSE:  'a * 'a -> (svalue,'a) token
 val RPAREN:  'a * 'a -> (svalue,'a) token
@@ -75,6 +70,7 @@ val CHAR: (string) *  'a * 'a -> (svalue,'a) token
 val STRING: (string) *  'a * 'a -> (svalue,'a) token
 val REAL: (string) *  'a * 'a -> (svalue,'a) token
 val WORD: (TilWord64.word) *  'a * 'a -> (svalue,'a) token
+val DIGIT: (int) *  'a * 'a -> (svalue,'a) token
 val INT0: (TilWord64.word) *  'a * 'a -> (svalue,'a) token
 val INT: (TilWord64.word) *  'a * 'a -> (svalue,'a) token
 val TYVAR: (FastSymbol.raw_symbol) *  'a * 'a -> (svalue,'a) token

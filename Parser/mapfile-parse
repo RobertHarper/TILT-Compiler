@@ -111,7 +111,7 @@ unit MLLexFun : MLLexFun = "ml.lex.sml" {
 interface MLLrValsFun = "ml.grm.int" {TOKEN ML_TOKENS ErrorMsg Ast}
 unit MLLrValsFun : MLLrValsFun = "ml.grm.sml" {
 	Fixity Char String TilWord64 TOKEN PARSER_DATA ML_TOKENS
-	Symbol Ast ErrorMsg AstUtil StrgHash Array
+	Symbol Ast ErrorMsg AstUtil StrgHash Array Int
 }
 
 unit FRONTEND = "frontend.sig.sml" {Ast Source}

@@ -1,5 +1,5 @@
 Number: 0113
-Title:       parsing problem
+Title:       Parsing of (op*)
 Keywords:    parser
 Submitter:   rwh
 Date:        08/16/02
@@ -11,6 +11,10 @@ Code:
 Transcript:  
 Comments:    
 Fix:         
+
+	I eliminate the lexical rule that complained about unmatched *) so
+	the lexer now views (op*) as LPAREN OP ASTERISK RPAREN.
+
 Test: m0045
-Owner: rwh
-Status: open
+Owner: swasey
+Status: closed

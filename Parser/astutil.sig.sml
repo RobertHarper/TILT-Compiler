@@ -4,8 +4,6 @@
 signature ASTUTIL =
   sig
 
-    val checkFix : int * ErrorMsg.complainer -> int
-
     (* BUILDS VARIOUS CONSTRUCTIONS *)
     val makeSEQdec : Ast.dec * Ast.dec -> Ast.dec
     val makeSEQtopspec : Ast.topspec * Ast.topspec -> Ast.topspec

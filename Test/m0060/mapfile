@@ -1,2 +1,1 @@
-local $libdir ^ "/smlnj-lib/desc"
 unit Test = "conv.sml" {Int IntInf}

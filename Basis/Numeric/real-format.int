@@ -2,8 +2,5 @@ structure RealFormat :
 sig
 
     val fmtReal : StringCvt.realfmt -> real -> string
-(** The type should be:
-    val fmtReal : StringCvt.realfmt -> LargeReal.real -> string
- **)
 
 end

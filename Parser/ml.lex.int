@@ -9,5 +9,4 @@ ARG_LEXER
 		 charlist : string list ref,
 		 stringtype : bool ref,
 		 stringstart : int ref,
-		 brack_stack : int ref list ref,
 		 err : int*int -> ErrorMsg.complainer}

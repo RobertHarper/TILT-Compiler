@@ -11,6 +11,7 @@ Code:
 Transcript:  
 Comments:    
 Fix: Fixed by unifying the tyvar with unit. - tom7
+	NB m0038 fails for other reasons.
 Test: m0038
 Owner: rwh
 Status: closed

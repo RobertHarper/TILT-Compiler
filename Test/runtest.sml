@@ -212,6 +212,7 @@ struct
 		      of NONE => (* we are the child *)
 			  (IO.close infd;
 			   redirect (FS.stdout, outfd);
+(* XXX: We want to send stderr to stdout so harness prints runtime messages. *)
 			   supress (FS.stderr, FS.O_WRONLY);
 			   supress (FS.stdin, FS.O_RDONLY);
 			   P.execp (path, program)

@@ -1,2 +1,2 @@
 (* explicit poly and recursion *)
-val rec 'a f = fn x => x
+val 'a rec f = fn x => x

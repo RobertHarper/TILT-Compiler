@@ -46,7 +46,27 @@ Code:
 
 Transcript:
 Comments: 
+
+	The lexer and parser were incorrect because they did not look
+	for a single digit in infix declarations.
+
+	This bug report is also incorrect.  The Definition says "[a]t each
+	stage [of lexical analysis] the longest next item is taken" (page
+	5).  In the preceeding code example, the declaration "infix 0x0 l"
+	should lex as INFIX INT ID (a syntax error) not as INFIX DIGIT ID
+	ID.  (This example has another bug:  If the infix declaration were
+	correct as written, then the expression "f x0 1 = 1" would parse
+	as x0(f,=(1,1)) rather than =(x0(f,1),1) and would fail to
+	typecheck.)
+
 Fix:
-Test: *
-Owner: *
-Status: open
+
+	Updated the lexer to recognize a single digit token and the parser
+	to require these in infix declarations.
+
+	Removed test 0005; it was based on the preceeding buggy code.
+	Updated test 0006.
+
+Test: 0006
+Owner: swasey
+Status: closed

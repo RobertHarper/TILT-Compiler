@@ -7,10 +7,44 @@ Version:     CVS
 System:      any
 Severity:    minor
 Problem:     test reports "wrong" answers
+
+	m0054's subtests numbered 37, 38, 39, 40, 42, and 43 fail because
+	of deficiencies in various string <-> char functions.  The project
+	descriptions bug37, bug38, bug39, bug40, bug42, and bug43 print
+	specific errors; their output is collected here.
+
+	Char.fromString does not handle the escape sequences \a, \b, \v,
+	\f, and \r properly.  It returns NONE rather than correct
+	character.  (bug37.sml, bug38.sml)
+
+	Char.fromString does not ignore leading sequences matching the re
+	\\[ \n\t\r\v\f]+\\.  So Char.fromString "\\ \\a" returns NONE
+	rather than SOME #"a".  (bug38.sml)
+
+	Char.fromString "\\256" is raising Chr rather than returning NONE.
+	(bug39.sml)
+
+	Char.fromCString is not implemented.  (bug40.sml, bug42.sml, bug43.sml)
+
 Code:        
 Transcript:  
 Comments:    
 Fix:         
+
+	There was a typo in ../../Test/m0054/result; the program prefixed
+	some tests with chckset and the result file expected checkset.
+
+	Changed Char.scan to support \a, \b, \v, \f, \r, and \uhhhh; to
+	return NONE rather than raise Chr when the number is out of range
+	in \ddd and \uhhhh; and to ignore leading sequences matching the
+	re \\[ \n\t\r\v\f]+\\.
+
+	Implemented Char.fromCString.  Like Char.scan, it will return NONE
+	rather than raise Chr or Overflow with large numeric escapes.
+
+	Fixed Char.toCString to return \ddd escapes with octal rather than
+	decimal numbers.
+
 Test: m0054
-Owner: rwh
-Status: open
+Owner: swasey
+Status: closed

@@ -14,7 +14,7 @@ signature PAT =
 
     (* BindCompile creates bindings of all variables in the given pattern Ast.pat
         when the pattern is applied to the expression (Il.exp/Il.con).
-	Bind is raised of the pattern does not match. *)
+	Bind is raised if the pattern does not match. *)
     val bindCompile  : {context : Il.context,
 			bindpat :  Ast.pat,
 			arg : (Il.var * Il.con)} -> (Il.sbnd * Il.sdec) list

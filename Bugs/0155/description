@@ -36,5 +36,5 @@ CONCRETE v_TYC  -->  KIND(2 -> TYPE)  = /-\(_38691, _38692)CON_APP(CON_PATH(modt
 Comments:    
 Fix:         
 Test: bug155
-Owner: *
+Owner: swasey
 Status: open

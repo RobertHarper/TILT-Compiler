@@ -3,7 +3,7 @@ val rec ((((((((x)))))))) = fn () => ()
 val _ = x ()
 
 local
-   val rec 'a f = fn () => ()
+   val 'a rec f = fn () => ()
 in
 end
 
@@ -50,11 +50,6 @@ and c : 'a -> 'a as d : 'a -> 'a = fn x => x
 and rec e as f as g = fn x => x
 and h : 'b -> 'b : 'b -> 'b = fn x => x;
 
-val x =
-let
-    val rec LESS = fn x => x	(* will raise Bind *)
-    and NONE as SOME = fn x => x
-    val SOME = 1;
-in
-    raise Fail "should not get here!"
-end handle Bind => ();
+(* val rec may override identifier status *)
+datatype t = f
+val rec f = fn () => ()

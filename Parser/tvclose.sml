@@ -1,7 +1,7 @@
 (*
    tvclose
 
-   Bind open type variables in ValDec, ValRecDec, and FunDec declarations.
+   Bind open type variables in ValDec and FunDec declarations.
 
    This is a two-pass operation in which tyvar bindings (tyvar list
    refs) are destructively modified:
@@ -142,11 +142,8 @@ struct
 	app (pass1_strexp o #1) strexpbools
     | pass1_fctexp (MarkFct (fctexp, region)) = pass1_fctexp fctexp
 
-  and pass1_dec (ValDec (vbs, tvbref)) =
-        (tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_vb vbs));
-	 [])
-    | pass1_dec (ValrecDec (rvbs, tvbref)) =
-	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_rvb rvbs));
+  and pass1_dec (ValDec (vbs, rvbs, tvbref)) =
+        (tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_vb (vbs @ rvbs)));
 	 [])
     | pass1_dec (FunDec (fbs, tvbref)) =
 	(tvbref := !tvbref @ map TempTyv (TVSet.union (map pass1_fb fbs));
@@ -175,12 +172,6 @@ struct
 
   and pass1_vb (Vb {pat, exp}) = TVSet.merge (pass1_pat pat, pass1_exp exp)
     | pass1_vb (MarkVb (vb, region)) = pass1_vb vb
-
-  and pass1_rvb (Rvb {var, fixity, exp, resultty}) =
-        (case resultty of
-	   SOME ty => TVSet.merge (pass1_exp exp, pass1_ty ty)
-	 | NONE => pass1_exp exp)
-    | pass1_rvb (MarkRvb (rvb, region)) = pass1_rvb rvb
 
   and pass1_fb (Fb clauses) = TVSet.union (map pass1_clause clauses)
     | pass1_fb (MarkFb (fb, region)) = pass1_fb fb
@@ -299,10 +290,8 @@ struct
 	  newenv
 	end
 
-  and pass2_dec env (ValDec (vbs, tvlistref)) =
-        app (pass2_vb (rebind env tvlistref)) vbs
-    | pass2_dec env (ValrecDec (rvbs, tvlistref)) =
-        app (pass2_rvb (rebind env tvlistref)) rvbs
+  and pass2_dec env (ValDec (vbs, rvbs, tvlistref)) =
+        app (pass2_vb (rebind env tvlistref)) (vbs @ rvbs)
     | pass2_dec env (FunDec (fbs, tvlistref)) =
         app (pass2_fb (rebind env tvlistref)) fbs
     | pass2_dec env (ExternDec (sym,ty)) = ()
@@ -325,9 +314,6 @@ struct
 
   and pass2_vb env (Vb {pat, exp}) = pass2_exp env exp
     | pass2_vb env (MarkVb (vb, region)) = pass2_vb env vb
-
-  and pass2_rvb env (Rvb {var, fixity, exp, resultty}) = pass2_exp env exp
-    | pass2_rvb env (MarkRvb (rvb, region)) = pass2_rvb env rvb
 
   and pass2_fb env (Fb clauses) = app (pass2_clause env) clauses
     | pass2_fb env (MarkFb (fb, region)) = pass2_fb env fb

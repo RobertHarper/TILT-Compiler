@@ -150,8 +150,7 @@ and spec = StrSpec of (symbol * sigexp * path option) list
 	 | MarkSpec of spec * region		(* mark a spec *)
 
 (* DECLARATIONS (let and structure) *)
-and dec	= ValDec of vb list * tyvar list ref		(* values *)
-	| ValrecDec of rvb list * tyvar list ref	(* recursive values *)
+and dec	= ValDec of vb list * vb list * tyvar list ref	(* values, recursive values *)
 	| FunDec of fb list * tyvar list ref		(* recurs functions *)
 	| TypeDec of tb list				(* type dec *)
 	| DatatypeDec of {datatycs: db list, withtycs: tb list}
@@ -175,11 +174,6 @@ and dec	= ValDec of vb list * tyvar list ref		(* values *)
 (* VALUE BINDINGS *)
 and vb = Vb of {pat:pat, exp:exp}
        | MarkVb of vb * region
-
-(* RECURSIVE VALUE BINDINGS *)
-and rvb = Rvb of {var:symbol, fixity: (symbol * region) option,
-		    exp:exp, resultty: ty option}
-	  | MarkRvb of rvb * region
 
 (* RECURSIVE FUNCTIONS BINDINGS *)
 and fb = Fb of clause list

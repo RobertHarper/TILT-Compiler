@@ -1,2 +1,1 @@
-local $libdir ^ "/smlnj-lib/desc"
-unit Test = "conv2.sml" {}
+unit Test = "conv2.sml" {IntInf String StringCvt List}

@@ -132,11 +132,11 @@ struct
 	    val with_slave = not master
 	in
 	    (case action
-	       of MAKE => M.make' with_slave (projects(), targets)
+	       of MAKE => M.make with_slave (projects(), targets)
 		| MAKE_EXE exe =>
-		    M.make_exe' with_slave (projects(), exe, targets)
+		    M.make_exe with_slave (projects(), exe, targets)
 		| MAKE_LIB lib =>
-		    M.make_lib' with_slave (projects(), lib, targets)
+		    M.make_lib with_slave (projects(), lib, targets)
 		| PURGE => M.purge (projects(), targets)
 		| PURGE_ALL => M.purgeAll (projects(), targets)
 		| RUN_SLAVES =>

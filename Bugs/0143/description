@@ -1,5 +1,5 @@
 Number: 0143
-Title:       parsing problem with test file
+Title:       PrimUtil gets negative integers wrong
 Keywords:    parser
 Submitter:   rwh
 Date:        08/18/02
@@ -7,10 +7,87 @@ Version:     CVS
 System:      any
 Severity:    critical
 Problem:     test file does not parse, but should.  this is not a corner case.
+
+	Any parser problems have apparantly been fixed already.
+
+	TILT fails some tests in m0118.  The optimizer uses structure
+	PrimUtil to evaluate arithmetic expressions and PrimUtil uses
+	structure TilWord64 to implement 8-, 16-, and 32-bit integer
+	("int") and modular ("word") arithmetic in terms of structure
+	TilWord64's 64-bit modular arithmetic.  PrimUtil has serious
+	errors.  I have found minor errors in TilWord64 and intend to
+	check it carefully.
+
+	PROBLEM: Negative 8-, 16-, and 32-bit integers are not represented
+	consistently in 64 bits.  Sometimes, the low order bits are
+	sign-extended to 64 bits and sometimes they are not.  So equality,
+	which is implemented as a 64-bit comparison, does not work.
+	Consider
+
+	val a = (~  5 = ~5)
+	val b = (~23 - 15 = ~38)
+	val c = (~23 * 2 = ~46)
+	fun p b = print (Bool.toString b ^ " ")
+	val _ = (p a; p b; p c)
+
+	This program prints false false false.  In the (~ 5 = ~5) example,
+	PrimUtil sees ~5 as a 64-bit negative number but trucates ~ 5 to a
+	32-bit negative number (the top 32 bits are 0 rather than 1) so
+	that the 64 bit equality test fails.  Here is a program that
+	mimics what is going on in PrimUtil:
+
+	structure W = TilWord64
+	fun filter w = W.andb(w,W.low_mask)	(* clear upper 32 bits *)
+	val a = W.equal(filter(W.snegate(W.fromInt 5)), W.fromInt ~5)
+	val b = W.equal(filter(W.sminus(W.fromInt ~23, W.fromInt 15)), W.fromInt ~38)
+	val c = W.equal(filter (W.smult(W.fromInt ~23, W.fromInt 2)), W.fromInt ~46)
+	fun p b = print (Bool.toString b ^ " ")
+	val _ = (p a; p b; p c)
+
+	PROBLEM: PrimUtil does not make any effort to detect 8-, 16-, and
+	32-bit overflow for integer arithmetic.  Consider
+
+	val a = fn () => (~2147483648 - 1 = 0)
+	val b = fn () => (2147483647  + 1 = ~2147483648)
+	val c = fn () => (2147483647  + 1 = 0)
+	fun p b = print ((Bool.toString (b()) handle Overflow => "overflow") ^ " ")
+	val _ = (p a; p b; p c)
+
+	Note that ~2147483648 and 2147483647 are the smallest and largest
+	32-bit integers.  Each calculation a, b, and c should raise
+	Overflow.  This program printed false false true.
+
 Code:        
 Transcript:  
 Comments:    
+
+	TilWord32 and TilWord64 had many bugs.  The implementation
+	now uses two functors
+
+		functor TilWordFromWord (W:WORD) : TILWORD
+			where type word = W.word =
+	
+		functor TilWordFromHalf (W:TILWORD) : TILWORD
+			where type halfword = W.word =
+
+	These were extensively tested with 8 and 16 bit words and are used
+	to define TilWord32 and TilWord64.
+
+	The Prim.value invariants were written down; they are:
+
+		An integer of any size is represented as a sign-extended,
+		twos-complement 64 bit word.  Invariant: The upper 64-w bits
+		of a w-bit integer in this format are either all zero or all
+		one.
+
+		A word of any size is represented as a 64-bit word.
+		Invariant: The upper 64-w bits of a w-bit word in this format
+		are all zero.
+
+	PrimUtil was modified to maintain these invariants.  Other minor
+	bugs in PrimUtil.apply were fixed.
+
 Fix:         
 Test: m0118
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

@@ -70,13 +70,10 @@ struct
 	    else
 		raise e)
 
-    val make' = Exn (Diag (Stats (Slave Master.make)))
-    val make_exe' = Exn (Diag (Stats (Slave Master.make_exe)))
-    val make_lib' = Exn (Diag (Stats (Slave Master.make_lib)))
+    val make = Exn (Diag (Stats (Slave Master.make)))
+    val make_exe = Exn (Diag (Stats (Slave Master.make_exe)))
+    val make_lib = Exn (Diag (Stats (Slave Master.make_lib)))
 
-    val make = Exn (Diag (Stats (Slave Master.make true)))
-    val make_exe = Exn (Diag (Stats (Slave Master.make_exe true)))
-    val make_lib = Exn (Diag (Stats (Slave Master.make_lib true)))
     val purge = Exn (Diag Master.purge)
     val purgeAll = Exn (Diag Master.purgeAll)
 

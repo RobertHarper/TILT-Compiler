@@ -32,8 +32,13 @@ testing/test_file.sml:6.3-8.6 Error:  application is ill-typed.
 *          b_LAB = Cmetavar_230032_439}
   Expanded argument type: {!a_LAB = metavar_230055_452!}
 
-Comments:    
+Comments:
+
+	The project descriptions flexrecord1, flexrecord3, flexrecord4,
+	flexrecord5, flexrecord8, flexrecord9 are specific tests from
+	m0071 that fail to elaborate.
+
 Fix:	     
-Test: bug82
-Owner: 
+Test: bug82 m0071
+Owner: swasey
 Status: open

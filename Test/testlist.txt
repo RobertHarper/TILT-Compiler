@@ -16,12 +16,11 @@
 #
 # Please keep the status bits up to date.
 
-0001	pass	Arithmetic exceptions.
+0001	pass	[Bug #0039 on alpha] Arithmetic exceptions.
 0002	pass	Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
-0005	fail	Picky infix decl parsing bug.
-0006	fail	More infix decls that should be accepted.
+0006	pass	More infix decls that should be accepted.
 0007	pass	overload resolution order (top-level)
 0008	pass	overload resolution order (in structures)
 0009	pass	overload resolution order (in functors)
@@ -47,9 +46,10 @@ bug50b	pass	We no longer support "eqtype tyvars t = ty" specs.
 bug55a	pass	Unresolved tyvar breaking elaborator.
 bug55b	pass	Unresolved tyvar breaking phase-splitter.
 bug80	pass	Phase splitter and signatures.
-bug82	fail	Type of thunk prematurely made a rigid record.
+bug82	fail	Flexible records.
 bug84	pass	Shadowing :: or nil breaks pattern compiler.
 bug84b	fail	Shadowing :: or nil should be disallowed.
+bug114	fail	Overloading constants.
 bug151a	pass	name-mangling test [x] <- [x]
 bug151b	pass	order of imports and effects are correct
 bug151c	pass	implicit imports do not conflict with explicit imports
@@ -87,26 +87,26 @@ m0020	pass	Empty structure.
 m0021	pass	Explicit polymorphism and recursion.
 m0022	pass	Null tuple.
 m0024	pass	Merge sort.
-m0025	fail	[Bug# 0100] Word value ranges.
+m0025	fail	[Bug# ?] Word value ranges.
 m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
 m0028	fail	[Bug #0103] Word stuff.
-m0029	fail	[Bug #0104] Word8 array
+m0029	fail	[Bug #?] Word8 array
 m0030	pass	Word8 vector
 m0031	pass	List
 m0032	pass	List pair
-m0033	fail	[Bug #0110] Math
+m0033	pass	Math
 m0034	pass	Local ref's.
 m0035	pass	Lists and ref's
 m0037	pass	abstype
-m0038	fail	[Bug #0112] arrays
-m0039	fail	two-dimensional arrays
+m0038	fail	[Bug #?] arrays
+m0039	skip	two-dimensional arrays [TILT does not provide 2d arrays]
 m0040	pass	arrays
 m0041	pass	arrays
-m0042	fail	two-dimensional arrays
+m0042	skip	two-dimensional arrays [TILT does not provide 2d arrays]
 m0043	pass	arrays
 m0044	pass	arrays
-m0045	fail	[Bug #0113] asterisk parsing
+m0045	pass	asterisk parsing
 m0046	fail	[Bug #0114] case analysis
 m0047	pass	withtype
 m0048	pass	vectors
@@ -114,15 +114,15 @@ m0049	pass	vectors
 m0050	pass	vectors
 m0051	pass	vectors
 m0052	pass	vector looping
-m0053	fail	[Bug #0118] val rec declarations
-m0054	fail	[Bug #0119] bytes and characters
+m0053	pass	val rec declarations
+m0054	pass	bytes and characters
 m0055	pass	character patterns
 m0056	pass	word8, char, and general arrays
 m0057	pass	tabulation of vectors
 m0058	pass	command line
 m0059	pass	signature constraints
-m0060	fail	infinite integer conversion tests
-m0061	fail	infinite integers
+m0060	skip	infinite integer conversion tests [no Basis structure IntInf]
+m0061	skip	infinite integers [no Basis structure IntInf]
 m0062	pass	mutual recursion
 m0063	pass	exhaustiveness
 m0064	pass	exceptions
@@ -132,10 +132,10 @@ m0067	pass	factorial
 m0068	pass	loop with comparison
 m0069	pass	looping
 m0070	pass	fft
-m0071	fail	[Bug #0124] flexible records
+m0071	fail	[Bug #0082] flexible records
 m0072	pass	functional unparsing
 m0073	pass	functors
-m0074	fail	general basis items
+m0074	pass	some basis exceptions
 m0075	pass	deep raise
 m0075	pass	deep raise
 m0076	pass	identifier syntax
@@ -144,7 +144,7 @@ m0078	pass	integers
 m0079	pass	list tabulation
 m0080	pass	known case
 m0081	pass	known case
-m0082	fail	[Bug #0128] llv?
+m0082	skip	llv? [uses nonuniform datatypes]
 m0083	pass	nested loops
 m0084	pass	non-exhaustive match
 m0085	pass	generativity
@@ -158,15 +158,15 @@ m0092	pass	polymorphic equality
 m0093	pass	posix exit
 m0094	pass	self-printer
 m0095	pass	maximum real
-m0096	fail	[Bug #0131] reals
-m0097	fail	[Bug #0132] reals
-m0098	fail	[Bug #0133] reals
-m0099	fail	[Bug #0134] reals
-m0100	fail	[Bug #0135] reals
-m0101	fail	[Bug #0136] reals
-m0102	fail	reals
+m0096	fail	[Bug #0039] reals
+m0097	fail	[Bug #0039] reals
+m0098	pass	reals
+m0099	pass	reals
+m0100	fail	[Bug #0039] reals
+m0101	fail	[Bug #0039] reals
+m0102	fail	[Bug #0039] reals
 m0103	pass	modules
-m0104	fail	special constants
+m0104	pass	special constants
 m0105	pass	semicolon parsing
 m0106	pass	sharing
 m0107	pass	binary io
@@ -179,7 +179,7 @@ m0114	fail	string conversion
 m0115	pass	substring overflow
 m0116	pass	take
 m0117	pass	matrices
-m0118	fail	basic dynamic tests of primitives
+m0118	pass	basic dynamic tests of primitives
 m0119	fail	text io
 m0120	fail	time
 m0121	skip	time [requires LargeInt to be bigger than 32 bits]

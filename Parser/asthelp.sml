@@ -36,11 +36,6 @@ structure AstHelp : ASTHELP =
     fun fb_strip (Ast.Fb arg) = arg
       | fb_strip (Ast.MarkFb (fb,r)) = fb_strip fb
 
-    fun rvb_strip (Ast.Rvb {var:symbol, fixity: (symbol * region) option,
-			    exp:exp, resultty: ty option}) = {var = var, fixity = fixity,
-							      exp = exp, resultty = resultty}
-      | rvb_strip (MarkRvb (rvb,_)) = rvb_strip rvb
-
     fun exp_strip (Ast.MarkExp (e,_)) = exp_strip e
       | exp_strip e = e
 
@@ -137,8 +132,8 @@ structure AstHelp : ASTHELP =
 			   doty, tybound,
 			   dovar, varbound : symbol list)) dec =
 	(case dec of
-	  Ast.ValDec (vb_list,tvr) => Ast.ValDec (map (f_vb state) vb_list, tvr)
-	| Ast.ValrecDec (rvb_list ,tvr)=> Ast.ValrecDec (map (f_rvb state) rvb_list, tvr)
+	  Ast.ValDec (vb_list,rvb_list,tvr) =>
+		Ast.ValDec (map (f_vb state) vb_list, map (f_vb state) rvb_list, tvr)
 	| Ast.FunDec (fb_list,tvr) => Ast.FunDec (map (f_fb state) fb_list, tvr)
 	| Ast.TypeDec tb_list => Ast.TypeDec (map (f_tb state) tb_list)
 	| Ast.DatatypeDec {datatycs,withtycs} =>
@@ -169,10 +164,6 @@ structure AstHelp : ASTHELP =
 	| Ast.MarkDec (dec,r) => Ast.MarkDec(f_dec state dec,r))
       and f_vb state (Ast.Vb{pat,exp}) = Ast.Vb{pat=f_pat state pat,exp=f_exp state exp}
 	| f_vb state (Ast.MarkVb(vb,r)) = Ast.MarkVb(f_vb state vb,r)
-      and f_rvb state (Ast.Rvb{var,fixity,exp,resultty}) =
-	    Ast.Rvb{var=var,fixity=fixity,exp=f_exp state exp,
-		    resultty=case resultty of NONE => NONE | SOME ty => SOME(f_ty state ty)}
-	| f_rvb state (Ast.MarkRvb(rvb,r)) = Ast.MarkRvb(f_rvb state rvb,r)
       and f_fb state (Ast.Fb clauses) = Ast.Fb(map (f_clause state) clauses)
 	| f_fb state (Ast.MarkFb(fb,r)) = Ast.MarkFb(f_fb state fb,r)
       and f_clause state (Ast.Clause{pats,resultty,exp}) =

@@ -203,8 +203,8 @@ unit REAL : REAL = "Numeric/real-sig.sml" {
 }
 interface TiltRealFmt = "Numeric/real-format.int" {TiltPrim  StringCvt}
 unit TiltRealFmt : TiltRealFmt = "Numeric/real-format.sml" {
-	TiltPrim TiltPrelude TiltVectorEq TiltPreString TiltNumFmt String
-	StringCvt List
+	TiltPrim TiltPrelude TiltVectorEq TiltExn TiltPreString TiltNumFmt
+	TiltPreInt String StringCvt List
 }
 interface Real64 = "Numeric/real64.int" {TiltPrim REAL}
 unit Real64 : Real64 = "Numeric/real64.sml" {

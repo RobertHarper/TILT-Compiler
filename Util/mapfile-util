@@ -23,14 +23,20 @@ unit Sequence = "sequence.sml" {
 	Util SEQUENCE Listops List
 }
 
-unit TILWORD = "tilword.sig.sml" {Word32}
-unit TilWord32 = "tilword32-native.sml" {
-	TILWORD Word32 Util Char Listops String
+unit TILWORD = "tilword.sig.sml" {}
+
+unit TilWordFromWord = "tilwordfromword.sml" {
+	TILWORD WORD Util Word StringCvt Substring
 }
-interface TilWord64 = "tilword64.int" {TILWORD TilWord32}
-unit TilWord64 : TilWord64 = "tilword64.sml" {
-	TILWORD TilWord32 Util Char String
+unit TilWordFromHalf = "tilwordfromhalf.sml" {
+	TILWORD Util Int Substring Char String
 }
+
+interface TilWord32 = "tilword32.int" {TILWORD Word32}
+unit TilWord32 : TilWord32 = "tilword32.sml" {TilWordFromWord Word32}
+
+interface TilWord64 = "tilword64.int" {TILWORD Word32}
+unit TilWord64 : TilWord64 = "tilword64.sml" {TilWordFromHalf TilWord32}
 
 unit BLASTER = "blast.sig.sml" {Word8 Word32 TilWord64 Time}
 interface BLASTER = "blast.int" {BLASTER}

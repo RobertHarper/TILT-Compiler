@@ -50,6 +50,8 @@ Fix:
 	Changed getOverflowExn and getDivExn in Runtime/exn.c.  Fixed
 	a similar bug in getTiltExnStamp.
 
+	NB m0074 fails for other reasons.
+
 Test: m0074
 Owner: swasey
 Status: closed

@@ -15,14 +15,3 @@ infixr 0x;
 infixr 0x a;
 infixr 0e;
 infixr 0e a;
-
-infix 0w0;
-infix 0w0 a;
-infix 0e0;
-infix 0e0 a;
-
-infixr 0w0;
-infixr 0w0 a;
-infixr 0e0;
-infixr 0e0 a;
-
