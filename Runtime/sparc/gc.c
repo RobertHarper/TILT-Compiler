@@ -10,7 +10,7 @@ int diag = 0;
 int collectDiag = 0;
 int timeDiag = 0;
 int debug = 0;
-int collector_type = Generational;
+Collector_Type_t collector_type = Generational;
 int SHOW_GCERROR = 1;
 int SHOW_GCSTATS = 0;
 int SHOW_GCDEBUG = 0;
@@ -102,7 +102,7 @@ double pageWeight = 100.0;
 int arraySegmentSize = 0;
 int localWorkSize = 4096;
 int usageCount = 50;
-int ordering = DefaultOrder;
+Order_t ordering = DefaultOrder;
 int forceSpaceCheck = 0;
 int grayAsReplica = 0;
 

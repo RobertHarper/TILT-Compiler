@@ -204,7 +204,32 @@ typedef struct StackChain__t StackChain_t;
 typedef volatile struct Stacklet__t Stacklet_t;
 typedef struct range__t range_t;
 typedef struct Heap__t Heap_t;
-typedef int StackletState_t;
+typedef enum {
+	Inconsistent,
+	/*
+		no information on primary or replica
+	*/
+	Pending,
+	/*
+		primary not used; replica uninitialized but needs to
+		be copied before primary modified
+	*/
+	Copying,
+	/*
+		primary not used; replica snapshot being made, copying
+		from primary snapshot
+	*/
+	InactiveCopied,
+	/*
+		primary not used; replica snapshot made (and scanned
+		by end of GC)
+	*/
+	ActiveCopied
+	/*
+		primary used; replica snapshot made (and scanned by
+		end of GC)
+	*/
+} StackletState_t;
 /*
 	Each stacklet is actually a pair of stacklets.  The variable
 	stackletOffset indicates which one we use.
@@ -293,7 +318,13 @@ struct Heap__t {
 	Bitmap_t* bitmap;
 };
 
-typedef int ShowType_t;
+typedef enum {
+	/*
+		SelfReplica is relevant for mirrored ptr arrays in tenured
+		space during a minor collection.
+	*/
+	NoReplica, OtherReplica, SelfReplica,
+} ShowType_t;
 
 typedef struct Callinfo__t Callinfo_t;
 typedef struct CallinfoCursor__t CallinfoCursor_t;
@@ -448,7 +479,14 @@ struct Thread__t {
 	Thread_t* parent;
 };
 
-typedef int ProcessorState_t;
+typedef enum {
+	/*
+		The states Scheduler, Mutator, GC, and Done are disjoint.  The
+		remaining GC* states are substates of GC.
+	*/
+	Scheduler, Mutator, GC, Done, Idle, 
+	GCStack, GCGlobal, GCReplicate, GCWork, GCWrite, GCIdle,
+} ProcessorState_t;
 
 struct LocalWork__t {
 	Set_t objs;	/* Gray objects */
@@ -486,6 +524,19 @@ struct SharedStack__t {
 	volatile long numPop;
 };
 
+typedef enum {
+	/*
+		Each segment might be no collection, minor, or major.
+		Independently, it might involve flipping the collector on or
+		off or both.
+	*/
+	MinorWork	= 1,
+	MajorWork	= 2,
+	FlipOn	= 4,
+	FlipOff	= 8,
+	FlipTransition	= 16,
+} Summary_Type_t;
+
 /*
 	Summarizes information of a state.  Not concurrently accessed.
 	Fields that are frequently and directly accessed should be placed
@@ -496,7 +547,7 @@ struct Summary__t {
 	double time;	/* time in ms */
 	int segment;	/* segment number */
 	int state;	/* primary state type */
-	int type;	/* additional segment type info */
+	Summary_Type_t type;	/* additional segment type info */
 	/* value of segUsage.workdone for GC and bytes allocaetd for Mutator */
 	int data1;
 	int data2;	/* numWrites for Mutator */
@@ -625,10 +676,23 @@ struct Object_Profile__t {
 	int PArrayWord;
 };
 
-typedef int GCStatus_t;
-typedef int GCType_t;
-typedef int Align_t;
-typedef int Field_t; 
+typedef enum {
+	GCOff, GCPendingAgressive, GCAgressive, GCPendingOn, GCOn,
+	GCPendingOff,
+} GCStatus_t;
+
+typedef enum {
+	Minor, Major,
+} GCType_t;
+
+typedef enum {
+	NoWordAlign, OddWordAlign, EvenWordAlign,
+} Align_t;
+
+typedef enum {
+	PointerField, IntField, DoubleField, MirrorPointerField,
+	OldPointerField,
+} Field_t; 
 
 typedef struct ArraySpec__t ArraySpec_t;
 struct ArraySpec__t {
@@ -646,85 +710,36 @@ struct ArraySpec__t {
 	double doubleVal;
 };
 
-typedef int LocAllocCopy_t;
-typedef int SourceSpaceCheck_t;
-typedef int SpaceCheck_t;
-typedef int Transfer_t;
-typedef int StackType_t;
-typedef int CopyWrite_t;
-typedef int CopyCopy_t;
+typedef enum {
+	Copy, LocCopy, LocAlloc,
+} LocAllocCopy_t;
+
+typedef enum {
+	OneSpace, OneSpaceLarge, TwoSpaceLarge,
+} SourceSpaceCheck_t;
+
+typedef enum {
+	DoSpaceCheck, NoSpaceCheck,
+} SpaceCheck_t;
+
+typedef enum {
+	NoTransfer, Transfer, SelfTransfer, BackTransfer,
+} Transfer_t;
+
+typedef enum {
+	NoSet, PrimarySet, ReplicaSet,
+} StackType_t;
+
+typedef enum {
+	NoCopyWrite, DoCopyWrite,
+} CopyWrite_t;
+
+typedef enum {
+	NoCopyCopy, DoCopyCopy,
+} CopyCopy_t;
 
 enum {
 	TILT_PAGESIZE=8192,
-
-	/* StackletState_t values */
-	/*
-		Inconsistent
-			no information on primary or replica
-		Pending
-			primary not used; replica uninitialized but needs to be
-			copied before primary modified
-		Copying
-			primary not used; replica snapshot being made, copying
-			from primary snapshot
-		InactiveCopied
-			primary not used; replica snapshot made (and scanned by
-			end of GC)
-		ActiveCopied
-			primary used; replica snapshot made (and scanned by end of
-			GC)
-	*/
-	Inconsistent=0, Pending, Copying, InactiveCopied, ActiveCopied,
-
-	/* ShowType_t values */
-	/*
-		SelfReplica is relevant for mirrored ptr arrays in tenured
-		space during a minor collection.
-	*/
-	NoReplica=0, OtherReplica, SelfReplica,
-
-	/* ProcessorState_t values */
-	/*
-		The states Scheduler, Mutator, GC, and Done are disjoint.  The
-		remaining GC* states are substates of GC.
-	*/
-	Scheduler=0, Mutator, GC, Done, Idle, 
-	GCStack, GCGlobal, GCReplicate, GCWork, GCWrite, GCIdle,
-
-	/* Summary_t.type values */
-	/*
-		Each segment might be no collection, minor, or major.
-		Independently, it migth invole flipping the collector on or
-		off or both.
-	*/
-	MinorWork = 1,
-	MajorWork = 2,
-	FlipOn = 4,
-	FlipOff = 8,
-	FlipTransition = 16,
-
-	/* GCStatus_t values */
-	GCOff=0, GCPendingAgressive, GCAgressive, GCPendingOn, GCOn,
-	GCPendingOff,
-
-	/* GCType_t values */
-	Minor=0, Major,
-
-	/* Align_t values */
-	NoWordAlign=0, OddWordAlign, EvenWordAlign,
-
-	/* Field_t values */
-	PointerField=0, IntField, DoubleField, MirrorPointerField,
-	OldPointerField,
-
-	/* collector_type values */
-	Semispace=0, Generational, SemispaceParallel,
-	GenerationalParallel, SemispaceConcurrent, GenerationalConcurrent,
-	SemispaceExplicit,
-
-	/* ordering values */
-	DefaultOrder=0, ImplicitOrder, QueueOrder, StackOrder,
-	HybridOrder,
 
 	/*
 		Tags and related constants.
@@ -782,27 +797,6 @@ enum {
 	SpTyShift	= 30,
 	SpTyMask	= 3,
 	SpTyStackRec=0, SpTyLabelRec, SpTyGlobalRec, SpTyUnset,
-
-	/* LocAllocCopy_t values */
-	Copy=0, LocCopy, LocAlloc,
-
-	/* SourceSpaceCheck_t values */
-	OneSpace=0, OneSpaceLarge, TwoSpaceLarge,
-
-	/* SpaceCheck_t values */
-	DoSpaceCheck=0, NoSpaceCheck,
-
-	/* Transfer_t values */
-	NoTransfer=0, Transfer, SelfTransfer, BackTransfer,
-
-	/* StackType_t values */
-	NoSet=0, PrimarySet, ReplicaSet,
-
-	/* CopyWrite_t values */
-	NoCopyWrite=0, DoCopyWrite,
-
-	/* CopyCopy_t values */
-	NoCopyCopy=0, DoCopyCopy,
 };
 
 #ifdef DEBUG
@@ -1079,13 +1073,24 @@ ptr_t	copy_noSpaceCheck_copyCopySync(Proc_t*, ptr_t obj);
 ptr_t	copy_noSpaceCheck_copyCopySync_replicaSet(Proc_t*, ptr_t obj);
 
 /* gc.c */
+typedef enum {
+	Semispace, Generational, SemispaceParallel,
+	GenerationalParallel, SemispaceConcurrent, GenerationalConcurrent,
+	SemispaceExplicit,
+} Collector_Type_t;
+
+typedef enum {
+	DefaultOrder, ImplicitOrder, QueueOrder, StackOrder,
+	HybridOrder,
+} Order_t;
+
 extern int	paranoid;
 extern int	verbose;
 extern int	diag;
 extern int	collectDiag;
 extern int	timeDiag;
 extern int	debug;
-extern int	collector_type;
+extern Collector_Type_t	collector_type;
 extern int	SHOW_GCERROR;
 extern int	SHOW_GCSTATS;
 extern int	SHOW_GCDEBUG;
@@ -1175,7 +1180,7 @@ extern int	arraySegmentSize;
 	segments for incremental copying.  Each segment (except possibly
 	the last) is of size arraySegmentSize.
 */
-extern int	ordering;	/* Implicit queue, explicit stack, explicit queue */
+extern Order_t	ordering;	/* Implicit queue, explicit stack, explicit queue */
 /* Do space check even when not necessary */
 extern int	forceSpaceCheck;
 extern double	CollectionRate;	/* Ratio of coll rate to alloc rate */
