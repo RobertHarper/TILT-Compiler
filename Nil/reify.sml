@@ -1,4 +1,6 @@
-(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs *)
+(*$import Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs *)
+
+(* Determines which constructors are used as data, creates proper traces, and possibly adds extra bindings for reified types *)
 
 structure Reify :> REIFY =
 struct
@@ -7,11 +9,13 @@ struct
     val debug = Stats.ff("ReifyDebug")
     fun error s = Util.error "reify.sml" s 
 
+    val foldl_acc = Listops.foldl_acc
 
-
+    (* Generalize the idea of expressions inside bindings *)
     datatype letbody = BODY_EXP of Nil.exp
                      | BODY_EXPORTS of Nil.export_entry list
 
+    (* psets are sets of variables that must be available at runtime *)
     val empty_pset = Name.VarSet.empty
 
     val print_pset =
@@ -56,7 +60,7 @@ struct
           else
              (Compiletime, pset)
 
-
+    (* Update the trace information for a constructor, which may generate extra bindings and add to the pset *)
     fun do_reify (ctxt, con, nt, pset) =
       let
 	fun doit con =
@@ -65,7 +69,7 @@ struct
 	      (TraceKnown tinfo, [], 
 	       pset_add_pset (pset, TraceOps.get_free_vars' tinfo))
 	  | NONE =>
-	      let 
+	      let
 		val v' = Name.fresh_named_var "reify"
 		val con = NilRename.renameCon con
 		val pset' = reify_con_rt(con,pset)
@@ -91,7 +95,7 @@ struct
     fun reify_exp ctxt (e as Var_e v, pset) = (e, pset)
       | reify_exp ctxt (e as Const_e _, pset) = (e, pset)
       | reify_exp ctxt (Prim_e (p, trs, cons, exps), pset) =
-	  let 
+	  let
 
 	    fun reify1 (con,tr,(bnds,pset)) = 
 	      let val (tr,bnd,pset) = do_reify(ctxt,con,tr,pset)
@@ -100,7 +104,7 @@ struct
 
 	    fun reify_record_gctag_con (trs,c,pset) =
 	      (case #2 (Normalize.reduce_hnf (ctxt,c)) of
-		 Prim_c (Record_c _,cons) => 
+		 Prim_c (Record_c _,cons) =>
 		   let val (_,trs,(bnds,pset)) = Listops.foldl_acc2 reify1 ([],pset) (cons,trs)
 		   in (bnds,trs,pset)
 		   end
@@ -117,7 +121,7 @@ struct
 		   end
 		 | _ =>
                    ([],trs,
-		    if (NilDefs.allprim_uses_carg p) then
+		    if (NilDefs.allprim_uses_carg p) then (* Only reify params for primops that use con args as data *)
 		      reify_cons_rt (cons, pset)
 		    else
 		      pset)
@@ -382,40 +386,34 @@ struct
              (new_bnds @ bnds, (e1',nt',e2')::arms', pset)
           end
 
-    (* really should probably be written using a fold over sequence *)
     and reify_vfseq ctxt (vfseq, openness, pset) =
           let
-             (* should probably be written with Sequence.foldl_acc *)
-
              val vflist = Sequence.toList vfseq
              val getftype = NilUtil.function_type openness
              val ctxt = NilContext.insert_con_list 
                          (ctxt, (map (fn (v,f) => (v, getftype f)) vflist))
 
-             fun loop ([], pset) = ([], [], pset)
-               | loop ((f, Function{effect=eff,recursive=recur,isDependent=dep,
+             fun folder ((f, Function{effect=eff,recursive=recur,isDependent=dep,
 				    tFormals=vks,eFormals=vtcs,
-				    fFormals=fs,body=e,body_type})::fns, pset)=
+				    fFormals=fs,body=e,body_type}), (bnds, pset))=
                    let
-                      val (fns', bnds, pset) = loop (fns, pset)
                       val ctxt = NilContext.insert_kind_list (ctxt,vks)
                       val vks_length = List.length vks
                       val error_message = 
 		       "reify_vflist: Cannot hoist from Lambda-lambda function"
-                      fun loop' _ [] pset = (bnds, [], pset)
-                        | loop' ctxt ((v,nt,c)::vtcs) pset =
+
+		      fun folder' ((v,nt,c), (bnds, ctxt, pset)) =
 	                    let
                                val ctxt' = 
 				   if dep then
 				       NilContext.insert_con (ctxt, v, c)
 				   else
 				       ctxt
-                               val (bnds, vtcs', pset') = loop' ctxt' vtcs pset
 
-			       val (nt', new_bnds, pset'') = 
-				   do_reify(ctxt, c, nt, pset')
+			       val (nt', new_bnds, pset') = 
+				   do_reify(ctxt, c, nt, pset)
 
-			       val _ = 
+			       val _ =
 				   if (vks_length > 0) then
 				       (case new_bnds of 
 					    [] => ()
@@ -426,21 +424,21 @@ struct
 			       val bnds' = new_bnds @ bnds
 				   
                             in 
-				(bnds', (v,nt',c)::vtcs', pset'')
+				((v,nt',c), (bnds', ctxt', pset'))
                             end
 
-                      val (bnds', vtcs', pset) = loop' ctxt vtcs pset
+                      val (vtcs', (bnds', _, pset)) = foldl_acc folder' (nil, ctxt, pset) vtcs
                       val ctxt = NilContext.insert_con_list (ctxt,
 							     (map (fn (v,t,c) => (v,c)) vtcs))
                       val (e', pset) = reify_exp ctxt (e, pset)
                    in
                       ((f, Function{effect=eff,recursive=recur,isDependent=dep,
 				    tFormals=vks,eFormals=vtcs',fFormals=fs,
-				    body=e',body_type=body_type})::fns',
-                       bnds', pset)
+				    body=e',body_type=body_type}),
+                       (bnds' @ bnds, pset))
                    end
 
-             val (vflist', bnds', pset) = loop (vflist, pset)
+             val (vflist', (bnds', pset)) = foldl_acc folder (nil, pset) vflist
           in
              (Sequence.fromList vflist', bnds', pset, ctxt)
           end
@@ -451,17 +449,15 @@ struct
              val ctxt = NilContext.insert_con_list (ctxt,
                           (map (fn (v,{tipe,...}) => (v, tipe)) vcllist))
 
-             fun loop ([], pset) = ([], pset)
-               | loop ((v,{code, cenv, venv, tipe})::cls, pset) = 
+             fun folder ((v,{code, cenv, venv, tipe}), pset) = 
                    let
-                      val (cls', pset) = loop (cls, pset)
                       val (venv', pset) = reify_exp ctxt (venv, pset)
                    in
                       ((v,{code = code, cenv = cenv, venv = venv', 
-                        tipe = tipe})::cls', pset)
+                        tipe = tipe}), pset)
                    end
 
-             val (vcllist', pset) = loop (vcllist, pset)
+             val (vcllist', pset) = foldl_acc folder pset vcllist
           in
              (Sequence.fromList vcllist', pset, ctxt)
           end
