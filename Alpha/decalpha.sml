@@ -1,6 +1,6 @@
 (*$import RTL DECALPHA String Rtl Util Char *)
 
-structure Decalpha :> DECALPHA  =
+structure Decalpha :> DECALPHA =
 
 struct
       
@@ -12,10 +12,10 @@ struct
     val fregs_disp         = iregs_disp + 8 * 32
     val proc_disp          = fregs_disp + 8 * 32 
     val threadScratch_disp = proc_disp + 8 + 8
-    val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 8 * 3 + 8 * 32 + 8 * 32
+    val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 * 3 + 8 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4  (* ploc_t is 4 bytes *)
     val stackLimit_disp     = writelistLimit_disp + 4
-    val globalOffset_disp   = stackLimit_disp + 4
+    val globalOffset_disp   = stackLimit_disp + 4      (* mem_t is 4 bytes *)
     val stackletOffset_disp   = globalOffset_disp + 4
     val arrayOffset_disp   = stackletOffset_disp + 4
 
