@@ -24,7 +24,7 @@ int ftime(struct timeb *tp);   /* Not in header file */
 static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
 
-int information = 1;
+int information = 0;
 char *historyFile = NULL;
 int	prof_fd = 1;
 static double time_diff(void),time2double(void);
