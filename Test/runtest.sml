@@ -311,7 +311,8 @@ struct
 	    (case Test.run_test arg
 	       of Test.Success => ()
 		| Test.Failure msg =>
-		   (eprint ("FAILURE in " ^ testdir ^ "\n" ^ msg);
+		   (eprint ("FAILURE in " ^ testdir ^ ", actual results were:\n");
+		    eprint msg;
 		    fail()))
 	end
 
