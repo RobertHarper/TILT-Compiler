@@ -135,3 +135,4 @@
 0139 [open]	filesys discrepancies
 0140 [open]	discrepancies on string tests
 0141 [open]	stringcvt discrepancies
+0142 [open]	uncaught exception leads to assertion failure in runtime
