@@ -7,3 +7,4 @@ val f =
 
 val _ = f(raise Overflow)
 val _ = f(raise Bind)
+
