@@ -45,7 +45,7 @@ esac
 
 # Where to run tilt.
 
-tiltdir=`cd "$argdir/.."; pwd`
+tiltdir=`cd "$argdir/../.."; pwd`
 
 # Provide a reasonable default for TILT_LIBDIR.
 
