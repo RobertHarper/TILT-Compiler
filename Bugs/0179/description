@@ -1,0 +1,68 @@
+Number: 0179
+Title:	Array.foldri looks past end of non-empty array.
+Keywords:	Basis
+Submitter:	David Swasey <swasey@cs.cmu.edu>
+Date:	11/26/04
+Version:	CVS
+System:	any
+Severity:	library, compiler
+Problem:
+
+	The following code prints nothing
+	and raises Subscript on talx86.
+
+Code:
+
+	fun folder (i:int, x:unit, acc:unit) : unit = print(Int.toString i ^ "\n")
+
+	val xs : unit array = Array.array (10, ())
+
+	val () = Array.foldri folder () (xs,0,NONE)
+
+Transcript:
+Comments:
+
+	The implementation of Array.foldri is flawed:
+
+	    fun foldri f init slice = let
+		  val (vec, start, stop) = chkSlice slice
+		  fun fold (i, accum) = if ugt(i,start)
+			then let val i' = uminus(i,0w1)
+			     in fold (i', f (uint32toint32 i', unsafe_sub(vec, i), accum))
+			     end
+			else accum
+		  in
+		    fold (stop, init)
+		  end
+
+	In the code above, we have
+
+		vec = xs
+		start = 0
+		stop = |xs|
+
+	so that i \in |xs|=stop, |xs|-1, ..., start + 1=1
+	and i' \in |xs|-1, ..., 0.
+
+	The call to unsafe_sub(vec,i)
+	should be unsafe_sub(vec,i').
+
+	In particular, the first call is unsafe_sub(vec,|xs|)
+	and that raises Subscript on the talx86
+	(because TiltPrim.unsafe_sub is actually safe
+	on that platform).
+
+	This library bug has existed since at least March 1998
+	when Array.foldri was last modified.
+
+	The bug bites us now because the TAL backend uses
+	Array.foldri so that the TILT-compiled compiler throws
+	Subscript when compiling on talx86 for talx86.
+
+Fix:
+
+	Just replace i with i'.
+
+Test: bug179
+Owner: swasey
+Status: open

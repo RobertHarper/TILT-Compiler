@@ -36,7 +36,7 @@
 0040 [closed]	Datatype replication doesn't work behind opaque ascription.
 0041 [closed]	Assertion failure when running TILT+wizard.
 0042 [closed]	Runtime not being made up-to-date.
-0043 [open]	Alpha assembler trashes registers.
+0043 [closed]	Alpha assembler trashes registers.
 0045 [closed]	Equality for datatypes.
 0046 [closed]	Generativity.
 0047 [closed]	Mishandling ref in patterns.
@@ -157,3 +157,4 @@
 0176 [open]	TILT can not compile with -fnil_debug.
 0177 [open]	Nonexhaustive match warning is overly pessimistic.
 0178 [open]	Word8Array and Array each use a single empty array.
+0179 [open]	Array.foldri looks past end of non-empty array.
