@@ -14,5 +14,93 @@ fun mem_assoc dummy =
   in mem_rec
   end
 
-(4) need to do syntax datatype xxx = datatype yyy
-	then need to put it back in bool structure
+(4) ml.grm.sml takes FOREVER to compile
+
+AFTER PHASESPLIT:
+Number of renamed variables: 76537
+Number of variables: 98097
+Number of lexp calls: 2577
+Number of lcon calls: 214279
+Number of lcon calls with Exp_b: 125328
+Number of lcon calls with Con_b: 201917
+Number of lcon calls with sums: 48614
+Number of lcon calls with case: 0
+Number of lcon calls with inj: 1134
+Number of lkind calls: 91627
+
+AFTER ONEOPTIMIZE:
+Number of renamed variables: 498
+Number of variables: 92665
+Number of lexp calls: 2504
+Number of lcon calls: 192245
+Number of lcon calls with Exp_b: 115217
+Number of lcon calls with Con_b: 179883
+Number of lcon calls with sums: 48314
+Number of lcon calls with case: 0
+Number of lcon calls with inj: 1134
+Number of lkind calls: 71051
+
+AFTER CC:
+Number of renamed variables: 11213
+Number of variables: 108586
+Number of lexp calls: 3070
+Number of lcon calls: 217246
+Number of lcon calls with Exp_b: 114780
+Number of lcon calls with Con_b: 204713
+Number of lcon calls with sums: 57891
+Number of lcon calls with case: 0
+Number of lcon calls with inj: 972
+Number of lkind calls: 85128
+
+
+
+text    data    bss     dec     hex
+312512  157760  0       470272  72d00
+
+
+Global timing in seconds
+-------------------------------------------
+AddingContext                  : 1.448    (0.143%)        1.150    (0.044%)
+Elaboration                    : 104.489  (10.305%)       367.545  (13.953%)  ****
+ReadingContext                 : 9.201    (0.907%)        9.979    (0.379%)
+Phase-splitting                : 65.999   (6.509%)        74.374   (2.823%)
+Linearization                  : 84.059   (8.290%)        311.218  (11.815%)  ****
+OneOptimize                    : 44.639   (4.403%)        259.491  (9.851%)   ****
+Linearization__temp            : 48.711   (4.804%)        246.932  (9.374%)   ****
+Specialize                     : 0.925    (0.091%)        1.576    (0.060%)
+TwoOptimize                    : 14.521   (1.432%)        17.497   (0.664%)
+toclosure_add_boundcvars       : 1.741                    2.511
+toclosure_rewrite_bnds         : 48.584                   227.142             ****
+Closure-conversion             : 71.853   (7.087%)        259.373  (9.847%)   ****
+Linearization2                 : 32.663   (3.221%)        52.983   (2.011%)
+tortl_con2rep                  : 0.264                    0.381
+tortl_insert_kind_equation     : 0.036                    0.225               ****
+tortl_insert_kind              : 0.291                    1.047               ****
+tortl_insert_kind_plain        : 0.060                    0.104
+tortl_simplify_type            : 1.919                    2.929
+Translation to RTL             : 325.964  (32.149%)       541.904  (20.572%)
+toasm_translateproc            : 43.369                   134.895             ****
+precolor                       : 0.454                    1.049               ****
+replace calls                  : 5.424                    6.092
+annotate                       : 44.097                   45.117
+build graph                    : 20.195                   18.441
+simplify graph                 : 18.217                   22.185
+select colors                  : 0.020                    0.014
+summarize info                 : 0.407                    0.464
+rewrite prog                   : 0.390                    0.402
+toasm_allocProc2               : 112.518                  282.249             ****
+toasm                          : 209.313  (20.644%)       489.167  (18.570%)  ****
+WritingContext                 : 0.137    (0.013%)        0.933    (0.035%)   ****
+-------------------------------------------
+TOTAL TIME                     : 1013.922 2634.123
+LINES/SEC                      : 1.779
+
+
+(5) change xcoerce_transparent to copy only the needed type components
+	currently ilcontext, transparently ascribed generates a LOT of kinds in NIL	
+
+(6) these take too long:
+	ast.sml
+	frontend.sml
+	ilcontext.sml
+
