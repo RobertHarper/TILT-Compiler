@@ -99,7 +99,7 @@
 0102 [closed]	word test fails
 0103 [open]	word8 problems
 0104 [closed]	hidden hidden name clash
-0105 [open]	overloading with words
+0105 [closed]	overloading with words
 0106 [closed]	internal Option failure
 0107 [closed]	tilt option failure
 0108 [open]	Parsing of infix(r) declarations is not correct.

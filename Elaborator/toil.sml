@@ -62,8 +62,8 @@ structure Toil
 	fun overload_table_push () = overload_table := nil :: !overload_table
 	fun overload_table_pop () = (case !overload_table
 				       of nil => error "overload_table_pop: overload table is empty"
-					| (a::b) => (overload_table := b; a))
-	fun overload_table_empty () = List.concat (!overload_table) before overload_table := []
+					| (a::b) => (overload_table := b; rev a))
+	fun overload_table_empty () = rev (List.concat (!overload_table)) before overload_table := []
 	fun add_overload_entry ocon = (case !overload_table
 				       of nil => error "add_overload_entry: overload table is empty"
 					| (a::b) => (overload_table := ((peek_region(),ocon)::a) :: b))
@@ -179,33 +179,33 @@ structure Toil
 	     CON_UINT W8, true) 
     end
 	
-     (* ----------------- overload_resolver ----------------------- *)
-    fun overload_help (warn,force) (region,ocon) =
+    (* ----------------- overload_resolver ----------------------- *)
+    fun overload_help (warn,force) (region,ocon) : unit =
 	let val _ = push_region region
 	    val f = if force then ocon_constrain_default else ocon_constrain
-	val resolved =  (
-(*
-	    print "overload_help: internal type is: ";
-	    Ppil.pp_con (CON_TYVAR (ocon_deref ocon));
-	    print "\n";
-*)
-	    case (f ocon) of
-		0 => (error_region();
-		      print "overloaded type: none of the constraints are satisfied\n";
-		      false)
-	      | 1 => true
-	      | n => (if warn 
-			  then 
-			      (error_region(); 
-			       print "overloaded type: more than one constraint is satisfied\n")
-		      else ();
-		      false))
+	    val _ = 
+		(case f ocon
+		   of 0 =>
+		       (error_region();
+			print "overloaded type: none of the constraints are satisfied\n")
+		    | 1 => ()
+		    | n =>
+		       if warn then 
+			   (error_region(); 
+			    print "overloaded type: more than one constraint is satisfied\n")
+		       else ())
 	    val _ = pop_region()
-	in  resolved
+	in  ()
 	end
-    fun resolve_overloads' overloads = if List.all (overload_help (true,true)) overloads
-					   then ()
-				       else error "unresolved overloading"
+    fun resolve_overloads' (overloads : (region * ocon) list) =
+	let val _ = debugdo(fn() =>
+			    (print "\nresolving overloads\n";
+			     app (fn (r,ocon) =>
+				  (push_region r; print (peek_region_string()); pop_region();
+				   print " "; pp_con (CON_OVAR ocon); print "\n")) overloads;
+			     print "(done resolving overloads)\n"))
+	in  app (overload_help (true,true)) overloads
+	end
     fun resolve_overloads (f : unit -> 'a) : 'a =
 	let val _ = overload_table_push()
 	    val res = f()

@@ -53,7 +53,7 @@ m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
 m0028	fail	[Bug #0103] Word stuff.
 m0029	fail	[Bug #0104] Word8 array
-m0030	fail	[Bug #0105] Word8 vector
+m0030	pass	Word8 vector
 m0031	pass	[Bug #0091, #0106(closed)] List
 m0032	pass	[Bug #0109(closed)] List pair
 m0033	fail	[Bug #0110] Math
