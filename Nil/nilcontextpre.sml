@@ -695,8 +695,9 @@ structure NilContextPre
 	    of NONE => raise Unbound
 	     | SOME {eqn,kind,...} => (eqn,kind))
 
-       fun k_insert (v,k,SOME c,D) = insert_kind_equation (D,v,c,k) 
-	 | k_insert (v,k,NONE,D)   = insert_kind (D,v,k)
+       fun k_insert (v,k,copt,D) = 
+	 if contains (#kindmap D) v then D else
+	   (case copt of SOME c => insert_kind_equation (D,v,c,k) | NONE => insert_kind (D,v,k))
 
        val (ev_list,cv_list) = Listops.unzip fvlist
        val free_cvs = List.concat cv_list

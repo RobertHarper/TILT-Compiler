@@ -951,7 +951,7 @@ struct
 	(
          print "\nCon equiv called with arg1 = \n";
 	 Ppnil.pp_con c1;
-	 print "\n arg 2 = \n";
+	 print "\n arg2 = \n";
 	 Ppnil.pp_con c2;
 	 print "\nkind =\n";
 	 Ppnil.pp_kind k
@@ -974,7 +974,7 @@ struct
 	      Ppnil.pp_con (#2 args)) else ());
 	  let val res = time_con_head_normalize "Equiv" args
 	  in 
-	    ( if !show_calls then print "\nReturning\n" else ();
+	    ( if !show_calls then (print "\nReturning with\n";Ppnil.pp_con res;print "\n") else ();
 	      res ) 
 	  end)
       val con_reduce = subtimer ("Equiv:con_reduce",NilHNF.con_reduce)
@@ -1035,11 +1035,16 @@ struct
       let 
 	fun folder((v1,k1),(v2,k2),(D,rename,match)) = 
 	  let 
+	    val k1 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k1
 	    val k2 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k2
 	    val match = match andalso subtimer("Tchk:Equiv:kind_equiv",kind_equiv)(D,k1,k2)
+
+	    val vnew = Name.derived_var v1
+
+	    val rename = Subst.C.sim_add rename (v1,Var_c vnew)
 	    val rename = if (eq_var(v1,v2)) then rename
-			 else Subst.C.sim_add rename (v2,Var_c v1)
-	    val D = insert_kind(D,v1,k1)
+			 else Subst.C.sim_add rename (v2,Var_c vnew)
+	    val D = insert_kind(D,vnew,k1)
 	  in  (D,rename,match)
 	  end
       in  
@@ -1050,15 +1055,21 @@ struct
     
   and vlistopt_clist_equiv (D, cRename, vclist1, vclist2,sk) : context * (exp_subst * con_subst) * bool =
       let fun folder((vopt1, c1), (vopt2, c2), (D, eRename, match)) = 
-	      let val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (eRename,cRename)) c2
+	      let val c1 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (eRename,cRename)) c1
+		  val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (eRename,cRename)) c2
 		  val match = match andalso con_equiv(D,c1,c2,Type_k,sk)
-		  val D = (case vopt1 of
-			       NONE => D
-			     | SOME v1 => NilContext.insert_con(D,v1,c1))
-		  val eRename = (case (vopt1,vopt2) of
-				     (SOME v1, SOME v2) =>  if (eq_var(v1,v2)) then eRename
-							    else Subst.E.sim_add eRename (v2,Var_e v1)
-				   | _ => eRename)
+
+		  val (eRename,D) = 
+		    (case (vopt1,vopt2) of
+		       (NONE,NONE) => (eRename,D)
+		     | (SOME v1,NONE) => let val vnew = Name.derived_var v1 
+					 in (Subst.E.sim_add eRename (v1,Var_e vnew),NilContext.insert_con(D,vnew,c1)) end
+		     | (NONE,SOME v2) => let val vnew = Name.derived_var v2
+					 in (Subst.E.sim_add eRename (v2,Var_e vnew),NilContext.insert_con(D,vnew,c2)) end
+		     | (SOME v1,SOME v2) => let val vnew = Name.derived_var v1
+						val eRename = Subst.E.sim_add eRename (v1,Var_e vnew)
+						val eRename = Subst.E.sim_add eRename (v2,Var_e vnew)
+					    in (eRename,NilContext.insert_con(D,vnew,c1)) end)
 	      in  (D,eRename,match)
 	      end
       in  if (length vclist1 = length vclist2)
@@ -1116,16 +1127,19 @@ struct
 		let val vc1 = Sequence.toList defs1
 		    val vc2 = Sequence.toList defs2
 		    fun build (D,rename) ((v1,_)::rest1,(v2,_)::rest2) = 
-			let val D = NilContext.insert_kind(D,v1,Type_k)
-			    val rename = if (eq_var(v1,v2))
-					     then rename
-					 else Subst.C.sim_add rename (v2,Var_c v1)
+			let
+			  val vnew = Name.derived_var v1
+			  val D = NilContext.insert_kind(D,vnew,Type_k)
+			  val rename = Subst.C.sim_add rename (v1,Var_c vnew)
+			  val rename = Subst.C.sim_add rename (v2,Var_c vnew)
 			in  build (D,rename) (rest1,rest2)
 			end
 		      | build acc _ = acc
 		    val (D,rename) = build (D,Subst.C.empty()) (vc1,vc2)
 		    fun pred ((_,c1),(_,c2)) = 
-			    con_equiv(D,c1,subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2, Type_k, false) (* no subtyping *)
+		      let val c1 = subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c1
+			  val c2 = subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2
+		      in con_equiv(D,c1,c2, Type_k, false) (* no subtyping *) end
 		in  if ((ir1 = ir2) andalso Listops.eq_list(pred,vc1,vc2))
 			then SOME(kind_type_tuple (length vc1))
 		    else NONE
@@ -1139,8 +1153,10 @@ struct
 		     in  match andalso
 			 let val (D,rename,match) = 
 			   vlistopt_clist_equiv(D,cRename,e2,e1,sk)
+			     val b1 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) b1
+			     val b2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) b2
 			 in  match andalso
-			   type_equiv(D,b1,subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) b2, sk)
+			   type_equiv(D,b1,b2, sk)
 			 end
 		     end)
 
