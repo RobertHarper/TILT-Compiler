@@ -1,0 +1,16 @@
+Number: 0128
+Title:       discrepancy on arguments to datatypes
+Keywords:    datatypes
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     mutually recursive datatypes have to have the same arguments in tilt, but this example doesn't have them
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0082
+Owner: 
+Status: open
