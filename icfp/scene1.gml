@@ -25,7 +25,7 @@
 
 % defs are done; the scene:
 
-0.2   % ambient light
+0.2  0.2  0.2  point   % ambient light
 [ ]   % lights (none!)
 
 % wall facing us (z=0), push back

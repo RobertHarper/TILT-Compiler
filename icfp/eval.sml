@@ -44,6 +44,8 @@ struct
     and closure = env * Gml.exp list
     and stack = value list
 
+    val real_render : (stack -> stack) ref = ref (fn _ => raise Unimplemented)
+
 structure T :> 
     sig
 
@@ -222,7 +224,7 @@ fun cylinder ((Closure c) :: s) = Object (Cylinder(M4.ident, c)) :: s
 fun cone ((Closure c) :: s) = Object (Cone(M4.ident, c)) :: s
 fun plane ((Closure c) :: s) = Object (Plane(M4.ident, c)) :: s
 
-
+fun render (s : stack) = !real_render s
 
 (* FIXME *)
 
@@ -288,7 +290,7 @@ fun spotlight ((Real exp) :: (Real cutoff) :: (Point c) ::
   ("union", union),
   ("intersect", intersect),
   ("difference", difference),
-  ("render", u)
+  ("render", render)
   ]
 
 
@@ -309,45 +311,80 @@ end
 
     val empty_context = Envmap.empty
 
-    fun eval (el) =
-	let
-
-	    fun step (G, s, (Gml.Int i) :: c) = step (G, (Int i) :: s, c)
-	      | step (G, s, (Gml.Bool b) :: c) = step (G, (Bool b) :: s, c)
-	      | step (G, s, (Gml.Real r) :: c) = step (G, (Real r) :: s, c)
-	      | step (G, s, (Gml.String ss) :: c) = 
-		step (G, (String ss) :: s, c)
-	      | step (G, v :: s, (Gml.Binder var) :: c) =
-		step (G ++ (var, v), s, c)
-	      | step (G, s, (Gml.Oper p) :: c ) = 
-		step ((G, (T.opers ?? p) s, c)
-		      handle Match => 
-			  raise Eval ("inappropriate stack for " ^ p ^
-				      "(caught Match)"))
-	      | step (G, 
-		      (Closure (G'f, elf)) :: 
-		      (Closure (G't, elt)) :: 
-		      (Bool b) :: s, Gml.If :: c) =
-		let val (_, stk) = step (if b then G't else G'f, s, 
-					     if b then elt else elf)
-		in step (G, stk, c)
-		end
-	      | step (G, (Closure (G', el)) :: s, Gml.Apply :: c) =
-		let val (_, stk) = step (G', s, el)
-		in step (G, stk, c)
-		end
-              | step (G, s, (Gml.Var v) :: c) = step (G, (G ?? v) :: s, c)
-	      | step (G, s, (Gml.Fun f) :: c) = 
-		step (G, (Closure (G, f)) :: s, c)
-	      | step (G, s, (Gml.Array a) :: c) =
-		let val (_, out) = step (G, nil, a)
-		(* might be missing a rev here XXX *)
-		in step (G, (Array (Vector.fromList (rev out))) :: s, c)
-		end
-	      | step (G, s, nil) = (G, s)
-	      | step _ = raise Eval ("Eval error")
-	in
-            #2 (step (empty_context, nil, el))
+    local
+      fun eval' (G, s, (Gml.Int i) :: c) = eval' (G, (Int i) :: s, c)
+	| eval' (G, s, (Gml.Bool b) :: c) = eval' (G, (Bool b) :: s, c)
+	| eval' (G, s, (Gml.Real r) :: c) = eval' (G, (Real r) :: s, c)
+	| eval' (G, s, (Gml.String ss) :: c) = 
+	eval' (G, (String ss) :: s, c)
+	| eval' (G, v :: s, (Gml.Binder var) :: c) =
+	eval' (G ++ (var, v), s, c)
+	| eval' (G, s, (Gml.Oper p) :: c ) = 
+	eval' ((G, (T.opers ?? p) s, c)
+	       handle Match => 
+		 raise Eval ("inappropriate stack for " ^ p ^
+			     "(caught Match)"))
+	| eval' (G, 
+		 (Closure (G'f, elf)) :: 
+		 (Closure (G't, elt)) :: 
+		 (Bool b) :: s, Gml.If :: c) =
+	let val (_, stk) = eval' (if b then G't else G'f, s, 
+				    if b then elt else elf)
+	in eval' (G, stk, c)
 	end
+	| eval' (G, (Closure (G', el)) :: s, Gml.Apply :: c) =
+	let val (_, stk) = eval' (G', s, el)
+	in eval' (G, stk, c)
+	end
+	| eval' (G, s, (Gml.Var v) :: c) = eval' (G, (G ?? v) :: s, c)
+	| eval' (G, s, (Gml.Fun f) :: c) = 
+	eval' (G, (Closure (G, f)) :: s, c)
+	| eval' (G, s, (Gml.Array a) :: c) =
+	let val (_, out) = eval' (G, nil, a)
+	(* might be missing a rev here XXX *)
+	in eval' (G, (Array (Vector.fromList (rev out))) :: s, c)
+	end
+	| eval' (G, s, nil) = (G, s)
+	| eval' _ = raise Eval ("Eval error")
+
+      fun render ((Point amb)      
+		  :: (Array v)  
+		  :: (Object obj) 
+		  :: (Int depth)    
+		  :: (Real hfov) 
+		  :: (Int wid) 
+		  :: (Int ht) 
+		  :: (String fname) 
+		  :: s) = 
+	let 
+	  val lights = Vector.foldr (fn (Light light,ls) => (light :: ls)) [] v
+
+	  val sref = ref s
+
+	  fun apply ((G,exps),face,u,v) = 
+	    let 
+	      val stack = (Real v) :: (Real u) :: (Int face) :: (!sref)
+	      val (_,stack) = eval' (G,stack,exps)
+	      val ((Real n) :: (Real ks) :: (Real kd) :: (Point color) :: stack) = stack
+	      val _ = sref := stack
+	    in (color,kd,ks,n)
+	    end
+
+	  val ppm = Render.render (apply,
+				   {amb    = amb,
+				    lights = lights,
+				    scene  = obj,
+				    depth  = depth,
+				    hfov   = hfov,
+				    hres   = wid,
+				    vres   = ht})
+	  val _ = Ppm.write (ppm,fname)
+	in !sref
+	end
+    in
+      val _ = real_render := render
+      fun eval (el) =   #2 (eval' (empty_context, nil, el))
+    end
+
         
 end

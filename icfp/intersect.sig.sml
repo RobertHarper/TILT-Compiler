@@ -10,11 +10,12 @@ signature INTERSECT =
 
     type l2 = {hit : v3,dist : real} list
 
-    type l3 = {u:real,v:real,face:int, 
-	       N : v3,         (*Normal vector*)
-	       hit : v3,       (*Point of intersection in world coordinates *)
-	       dist : real     (*Distance to viewer *)
-	       } list
+    type l3info = {u:real,v:real,face:int, 
+		   N : v3,         (*Normal vector*)
+		   hit : v3,       (*Point of intersection in world coordinates *)
+		   dist : real     (*Distance to viewer *)
+		   } 
+    type l3 = l3info list
 
     type result = l1 * (unit -> l2) * (unit -> l3)
 

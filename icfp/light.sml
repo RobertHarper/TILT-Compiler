@@ -10,7 +10,7 @@ structure Light =
 	       | Eval.Pointlight (pos, _) => makeDir(src, pos)
 	       | Eval.Spotlight {pos, ...} => makeDir(src, pos))
 
-	fun attenuate d = 100.0 / (99.0 + d * d * d)
+	fun attenuate d = 100.0 / (99.0 + d * d)
 
 	fun illuminate (light, src, dir) = 
 	    (case light of

@@ -4,6 +4,21 @@ structure Intersect : INTERSECT =
     type v4 = Matrix.v4
     type v3 = Matrix.v3
 
+    open Vect
+
+    type l1 = bool
+
+    type l2 = {hit : v3,dist : real} list
+
+    type l3info = {u:real,v:real,face:int, 
+		   N : v3,         (*Normal vector*)
+		   hit : v3,       (*Point of intersection in world coordinates *)
+		   dist : real     (*Distance to viewer *)
+		   } 
+    type l3 = l3info list
+
+    type result = l1 * (unit -> l2) * (unit -> l3)
+
     val invert    = Matrix.invert
     val apply     = Matrix.applyV3
 
@@ -11,19 +26,51 @@ structure Intersect : INTERSECT =
     val distance  = Vect.distance
     val normalize = Vect.normalize
 
-    type l1 = bool
+    fun no_l2 () : l2 = []
+    fun no_l3 () : l3 = []
+    val noIntersect = (false, no_l2, no_l3)
+    fun memoize f = 
+	let val result = ref NONE
+	in  fn () => (case (!result) of
+			  SOME r => r
+			| NONE => let val r = f()
+				      val _ = (result := (SOME r))
+				  in r
+				  end)
+	end
 
-    type l2 = {hit : v3,dist : real} list
 
-    type l3 = {u:real,v:real,face:int, 
-	       N : v3,         (*Normal vector*)
-	       hit : v3,       (*Point of intersection in world coordinates *)
-	       dist : real     (*Distance to viewer *)
-	       } list
-
-    type result = l1 * (unit -> l2) * (unit -> l3)
-
-    fun dummy _ = raise Div
+    (* Where does the plane y=0 transformed by m4 intersect the vector originating from src0 in the direction of dir0 *)
+    fun plane (m4, src0, dir0) = (* Plane is Ax + By + Cz = D *)
+	let val N = v4tov3 (Matrix.apply(m4, (0.0, 1.0, 0.0, 0.0)))  (* A, B, C *)
+	    val newOrigin = v4tov3 (Matrix.apply(m4, (0.0, 0.0, 0.0, 1.0)))
+	    val D = dp(N, newOrigin)
+	    val numerator = D - dp(N, src0)
+	    val denominator = dp(N, dir0)
+	in  if (Real.==(numerator, 0.0) orelse  (* point in plane *)
+		Real.==(denominator, 0.0))      (* direction parallel to plane *)
+		then noIntersect
+	    else let val t = numerator / denominator 
+		     fun l2() : l2 = let val dist = Real.abs t (* since dir0 is unit vector *)
+				    val hit = add(src0, scale(t, dir0))
+				in  [{dist = dist, hit = hit}]
+				end
+		     val l2 = memoize l2
+		     fun l3() : l3 = let val [{hit, dist}] = l2()
+				    val (u,_,v) = v4tov3(Matrix.apply(Matrix.invert m4, v3tov4 hit))
+				    val tPos = t > 0.0
+				    val dpNeg = dp(dir0, N) < 0.0
+				    val N = if ((tPos andalso dpNeg) orelse
+						(not tPos andalso not dpNeg))
+						then N
+					    else negate N
+				in  [{u = u, v = v, face = 0, N = N,
+				      hit = hit, dist = dist}]
+				end
+		     val l3 = memoize l3
+		 in  (true, l2, l3)
+		 end
+	end
 
     val eps = 1.0e~10
     fun iszero r = (Real.abs r) < eps
@@ -100,16 +147,10 @@ structure Intersect : INTERSECT =
 	  end
       end
 
-    val plane    : m4 * v3 * v3 -> result = dummy
+    fun dummy _ : result = raise Div
+
     val cylinder : m4 * v3 * v3 -> result = dummy
     val cube     : m4 * v3 * v3 -> result = dummy
     val cone     : m4 * v3 * v3 -> result = dummy
-
-
-    val hits_sphere   : m4 * v3 * v3 -> bool = dummy
-    val hits_plane    : m4 * v3 * v3 -> bool = dummy
-    val hits_cylinder : m4 * v3 * v3 -> bool = dummy
-    val hits_cube     : m4 * v3 * v3 -> bool = dummy
-    val hits_cone     : m4 * v3 * v3 -> bool = dummy
 
   end
