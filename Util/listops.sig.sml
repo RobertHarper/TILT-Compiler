@@ -12,7 +12,9 @@ signature LISTOPS =
                             ('a * 'b * 'c * 'd * 'e * 'f) list
 
     val unzip3 : ('a * 'b * 'c) list -> ('a list * 'b list * 'c list)
+    val unzip4 : ('a * 'b * 'c * 'd) list -> ('a list * 'b list * 'c list * 'd list)
 
+    val all3 : (('a * 'b *'c) -> bool) -> ('a list * 'b list * 'c list) -> bool
     val map2 : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
     val map3 : ('a * 'b * 'c -> 'd) -> 'a list * 'b list * 'c list -> 'd list
     val map4 : ('a * 'b * 'c * 'd -> 'e) -> 
@@ -34,6 +36,8 @@ signature LISTOPS =
     val map6count : (int * 'a * 'b * 'c * 'd * 'e * 'f -> 'g) -> 
                            'a list * 'b list * 'c list * 'd list * 'e list * 'f list -> 'g list
 
+    val app2 : ('a * 'b -> 'any) -> ('a list * 'b list) -> unit
+    val app3 : ('a * 'b * 'c -> 'any) -> ('a list * 'b list * 'c list) -> unit
     (* Misc list helpers *)
     val eq_list : (('a * 'a -> bool) * 'a list * 'a list) -> bool
     val eq_listlist : (('a * 'a -> bool) * 'a list list * 'a list list) -> bool
@@ -67,4 +71,5 @@ signature LISTOPS =
     val foldl_acc : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
 
     val eq_len : 'a list * 'b list -> bool
+    val eq_len3 : 'a list *'b list * 'c list -> bool
   end

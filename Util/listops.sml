@@ -18,6 +18,23 @@ structure Listops : LISTOPS =
 	      | unzip3_loop ((a,b,c)::rest) (aa,bb,cc) = unzip3_loop rest (a::aa,b::bb,c::cc)
 	in unzip3_loop abc_list ([],[],[])
 	end
+
+    fun unzip4 abcd_list = 
+	let fun unzip4_loop [] (aa,bb,cc,dd) = (rev aa, rev bb, rev cc, rev dd)
+	      | unzip4_loop ((a,b,c,d)::rest) (aa,bb,cc,dd) = 
+	  unzip4_loop rest (a::aa,b::bb,c::cc,d::dd)
+	in unzip4_loop abcd_list ([],[],[],[])
+	end
+
+    fun all3 pred = 
+      let
+	fun check ([],[],[]) = true
+	  | check (a::arest,b::brest,c::crest) = 
+	  (pred (a,b,c)) andalso check (arest,brest,crest)
+	  | check _ = false
+      in
+	check 
+      end
     fun map2 F (a,b) = map F (zip a b)
     fun map3 F (a,b,c) = map F (zip3 a b c)
     fun map4 F (a,b,c,d) = map F (zip4 a b c d)
@@ -33,6 +50,25 @@ structure Listops : LISTOPS =
     fun map4count F (a,b,c,d) = map5 F (count(length a),a,b,c,d)
     fun map5count F (a,b,c,d,e) = map6 F (count(length a),a,b,c,d,e)
     fun map6count F (a,b,c,d,e,f) = map7 F (count(length a),a,b,c,d,e,f)
+      
+    fun app2 f = 
+      let
+	fun loop ([],[]) = ()
+	  | loop (a::aa,b::bb) = (ignore (f (a,b));loop (aa,bb))
+	  | loop _ = error "app2 passed lists of different lengths"
+      in
+	loop
+      end
+
+    fun app3 f = 
+      let
+	fun loop ([],[],[]) = ()
+	  | loop (a::aa,b::bb,c::cc) = (ignore (f (a,b,c));loop (aa,bb,cc))
+	  | loop _ = error "app3 passed lists of different lengths"
+      in
+	loop
+      end
+
     fun flatten arg = foldr (op @) [] arg
     fun transpose [] = []
       | transpose ([]::_) = []
@@ -99,5 +135,7 @@ structure Listops : LISTOPS =
     
     fun eq_len (l1,l2) = ((List.length l1) = (List.length l2))
 
-
+    fun eq_len3 ([],[],[]) = true
+      | eq_len3 (a::arest,b::brest,c::crest) = eq_len3 (arest,brest,crest)
+      | eq_len3 _ = false
   end
