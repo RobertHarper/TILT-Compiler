@@ -38,26 +38,22 @@ struct
 	  
     exception Transcript
     local
-	open Posix.IO
-	open Posix.FileSys
-	val curout = ref (NONE : file_desc option)
+        structure T = TextIO
+	val curout = ref (NONE : T.StreamIO.outstream option)
     in
 	fun fileon(s) = 
-	    let 
-		val _ = curout := SOME(dup stdout)
-		val _ = close stdout
-		val _ = createf (s,O_RDWR,O.trunc,S.flags[S.irusr,S.iwusr])
-	    in ()
-	    end
+	      (curout := SOME (T.getOutstream T.stdOut);
+               T.setOutstream (T.stdOut, 
+                               T.getOutstream(T.openOut s)))
 	fun fileoff() = 
 	    let 
-		val _ = close stdout
-		val _ = dup (case !curout of
-				 NONE => raise Transcript
-			       | SOME x => x)
-		val _ = curout := NONE
+		val old_stdOut =
+	              (case !curout of
+			NONE => raise Transcript
+		       | SOME x => x)
 	    in
-		()
+               T.setOutstream (T.stdOut, old_stdOut);
+               curout := NONE
 	    end
     end
 

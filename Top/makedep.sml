@@ -205,17 +205,17 @@ structure Makedep : MAKEDEP = struct
 
   fun printFiles ((pname, files, _), out) = let 
     fun printFile (SML {name=name, imports=imports, time = time, ...}) =
-      (TextIO.output(out, ("  " ^ name ^ " : SML\t" ^ (Date.toString(Date.fromTime(time))) ^
+      (TextIO.output(out, ("  " ^ name ^ " : SML\t" ^ (Date.toString(Date.fromTimeLocal(time))) ^
        "\n    Imports:\n"));
        List.app (fn s => TextIO.output (out, ("      "^s^"\n"))) imports)
       | printFile (INT {name=name, includes=includes, time=time, ...}) =
 	(TextIO.output(out, ("  " ^ name ^ " : INT\t" ^ 
-		  (Date.toString(Date.fromTime(time))) ^"\n    Includes:\n"));
+		  (Date.toString(Date.fromTimeLocal(time))) ^"\n    Includes:\n"));
 	 List.app (fn s => TextIO.output (out, ("      "^s^"\n"))) includes)
       | printFile (UI {name=name, time=time, ...}) = TextIO.output (out, ("  " ^ name ^ " : UI\t" ^ 
-		  (Date.toString(Date.fromTime(time))) ^"\n"))
+		  (Date.toString(Date.fromTimeLocal(time))) ^"\n"))
       | printFile (UO {name=name, time=time, ...}) = TextIO.output (out, ("  " ^ name ^ " : UO\t" ^ 
-		  (Date.toString(Date.fromTime(time))) ^"\n"))
+		  (Date.toString(Date.fromTimeLocal(time))) ^"\n"))
   in
     (TextIO.output (out,  ("Project " ^ pname ^ " contains these files:\n"));
      List.app printFile files;
