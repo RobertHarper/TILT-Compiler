@@ -3,7 +3,7 @@ sig
 
     val littleEndian : bool ref	(* Is target little endian? *)
 
-    datatype platform = TIL_ALPHA | TIL_SPARC
+    datatype platform = TIL_ALPHA | TIL_SPARC | TIL_TALx86
 
     val blastOutPlatform : Blaster.outstream -> platform -> unit
     val blastInPlatform : Blaster.instream -> platform

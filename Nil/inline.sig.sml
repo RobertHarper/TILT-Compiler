@@ -9,12 +9,15 @@ signature INLINE =
      val debug : bool ref
      (* Print debug information *)
 
-     val inline_once : bool -> Nil.module -> Nil.module
-     (* Inline all functions called only once.  If the argument is
-      * true, then iterate until a fixed point is reached.
+     val inline_once : (bool * bool) -> Nil.module -> Nil.module
+     (* Inline all functions called only once.  
+      * inlince_once (inline_cons,iterate) nilmod
+      * If inlince_cons is true, do con functions.
+      * If iterate is true, then iterate until a fixed point is reached.
       *)
 
      val inline : {iterate : bool,
+		   inlinecons : bool,
 		   tinyThreshold : int,
 		   sizeThreshold : int,
 		   occurThreshold : int} -> Nil.module -> Nil.module

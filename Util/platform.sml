@@ -3,12 +3,13 @@ structure Platform :> PLATFORM =
 struct
 
     val error = fn s => UtilError.error "platform.sml" s
-    datatype platform = DUNIX | SOLARIS | GENERIC
+    datatype platform = DUNIX | SOLARIS | LINUX | GENERIC
 
     fun platformName (p : platform) : string =
 	(case p
-	   of DUNIX => "alpha"
+	   of DUNIX   => "alpha"
 	    | SOLARIS => "sparc"
+	    | LINUX   => "linux"
 	    | GENERIC => "generic")
 
     fun get (name : string) : string =
@@ -24,6 +25,7 @@ struct
 	(case get "sysname"
 	   of "SunOS" => SOLARIS
 	    | "OSF1" => DUNIX
+	    | "Linux" => LINUX
 	    | _ => GENERIC)
 
     (* hostname : unit -> string *)
@@ -48,6 +50,7 @@ struct
 	(case platform() of
 	     DUNIX   => spinMilliDUNIX (1 + Real.floor(duration * 1000.0))
 	   | SOLARIS => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
+	   | LINUX   => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
 	   | GENERIC => (OS.IO.poll([], SOME (Time.fromReal duration)); ()))
 
     fun pid() =

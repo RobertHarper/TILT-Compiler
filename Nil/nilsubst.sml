@@ -14,9 +14,6 @@ structure NilSubst :> NILSUBST =
     val debug         = Stats.ff "nil_debug"
     val profile       = Stats.ff "nil_profile"
     val subst_profile = Stats.ff "subst_profile"
-    val make_lets     = Stats.ff "subst_make_lets"
-    val eager_lets    = Stats.ff "subst_eager_lets"
-    val opt_lets      = Stats.tt "subst_opt_lets"
 
     val subtimer = fn args => fn args2 => if !profile orelse !subst_profile then Stats.subtimer args args2 else #2 args args2
 
@@ -70,29 +67,12 @@ structure NilSubst :> NILSUBST =
     end (* Delay *)
     open Delay
 
-    structure Dlist :> SUBST_DLIST =
-    struct
-      (* (aa,bb) == aa @ (rev bb) *)
-      type 'a dlist = ('a list * 'a list)
-      val DNIL = (nil,nil)
-      fun LCONS (a,(left,right)) = if !make_lets then (a::left,right) else DNIL
-      fun RCONS ((left,right),a) = if !make_lets then (left,a::right) else DNIL
-
-      fun dempty i = 
-	(case i
-	   of (nil,nil) => true
-	    | _ => false)
-      fun dListToList (left,right)    = left @ (rev right)
-      fun dListFromList ll = (ll,nil)
-      fun dListApp ((l1,r1),(l2,r2))  = (l1 @ (List.revAppend (r1,(l2 @ (rev r2)))),nil)
-    end (* Dlist *)
-    open Dlist
 
     type 'a map = 'a VarMap.map
 
     (* The definition of the types.  These are exported*)
-    type con_subst = con delay map * (var * con delay) dlist
-    type exp_subst = exp delay map * (var * exp delay) dlist
+    type con_subst = con delay map 
+    type exp_subst = exp delay map 
 
     (* How to carry out substitutions on the various levels.  Uses the rewriter.
      *)
@@ -102,48 +82,11 @@ structure NilSubst :> NILSUBST =
 
       type state = {esubst : exp_subst,csubst : con_subst}
 
-      fun substitute ((s,i),var) = VarMap.find (s,var)
+      fun substitute (s,var) = VarMap.find (s,var)
 
-      fun is_empty (s,i) = if !make_lets then dempty i else (VarMap.numItems s) = 0
+      fun is_empty s = (VarMap.numItems s) = 0
 
-      fun empty ()   = (VarMap.empty,DNIL)
-
-      fun listItems (s,i) = map_second thaw (if !eager_lets then VarMap.listItemsi s else dListToList i)
-
-      fun kindhandler(state : state as {esubst,csubst},kind : kind) = 
-	let
-	  fun makeLet c = 
-	    let  
-	      fun makeLetC nil body = body
-		| makeLetC [conbnd as Con_cb(var,con)] (cv as Var_c var') =
-		if (Name.eq_var(var,var')) then con else cv
-		| makeLetC [conbnd as Con_cb(var,con)] (cv as Proj_c(Var_c var',l)) =
-		  if (Name.eq_var(var,var')) then Proj_c(con,l) else cv
-		| makeLetC cbnds (cv as Var_c var') =
-		    (case (List.rev cbnds) of
-		       Con_cb(var,con)::rest => 
-			 if (Name.eq_var(var,var')) then
-			   makeLetC (rev rest) con
-			 else
-			   Let_c (Sequential, cbnds, cv)
-		     | _ => Let_c (Sequential, cbnds, cv))
-		| makeLetC cbnds (Let_c(Sequential, cbnds', body)) =
-		       makeLetC (cbnds @ cbnds') body
-		| makeLetC cbnds body = Let_c (Sequential, cbnds, body)
-
-	      val items    = listItems csubst
-	      val cbnds    = map Con_cb items
-	    in if !opt_lets then makeLetC cbnds c else Let_c(Sequential,cbnds,c)
-	    end
-	in
-	  if is_empty esubst andalso !make_lets then
-	      (case kind of
-		 SingleType_k c => CHANGE_NORECURSE(state,SingleType_k (makeLet c))
-	       | Single_k c     => CHANGE_NORECURSE(state,Single_k (makeLet c))
-	       | _ => NOCHANGE)
-	  else NOCHANGE
-	end
-
+      fun empty ()   = VarMap.empty
 
       (* What to do with constructors.  If the constructor is a variable,
        * see if it is in the subst.  If it is a projection, you might as
@@ -185,7 +128,6 @@ structure NilSubst :> NILSUBST =
 	let
 	  val h = set_conhandler default_handler conhandler
 	  val h = set_exphandler h  exphandler
-	  val h = set_kindhandler h kindhandler
 	in h 
 	end
 
@@ -275,8 +217,6 @@ structure NilSubst :> NILSUBST =
     structure Help =
     struct
 	structure Delay = Delay
-	structure Dlist = Dlist
-	val make_lets = make_lets
 	val error = error
     end
 
@@ -302,8 +242,8 @@ structure NilSubst :> NILSUBST =
       fun renameCon (con :con) : con delay = delay (fn () => NilRename.renameCon con)
       fun renameExp (exp :exp) : exp delay = delay (fn () => NilRename.renameExp exp)
 
-      fun item_insert (subst as (s,i),var,delay) = 
-	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
+      fun item_insert (s,var,delay) = 
+	VarMap.insert(s,var,delay)
     in
       fun varConExpSubst var con exp   = substConInExp  (item_insert(C.empty(),var,renameCon con)) exp
       fun varConConSubst var con con2  = substConInCon  (item_insert(C.empty(),var,renameCon con)) con2

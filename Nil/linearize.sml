@@ -291,9 +291,8 @@ struct
 	   fun add_vars state vx_list = foldl (fn (((v,_),_),s) => #1(add_var(s,v))) state vx_list
 
 	   (* Open/Code fold function *)
-	   fun vf_help wrapper vf_set =
-	       let val vf_list = sequence2list vf_set
-		   val newstate = add_vars state vf_list
+	   fun vf_help wrapper vf_list =
+	       let val newstate = add_vars state vf_list
 		   val vf_list = map (fn ((v,c),f) =>
 					    let
 					      val c = lcon_lift' state c
@@ -301,7 +300,9 @@ struct
 					    in
 					      ((find_var(newstate,v),c),f)
 					    end) vf_list
-	       in  ([wrapper (list2sequence vf_list)], newstate)
+		   val vf_lists = NU.break_fix vf_list
+		   val vf_bnds = map wrapper vf_lists
+	       in  (vf_bnds, newstate)
 	       end
 
            (* Closure fold function *)

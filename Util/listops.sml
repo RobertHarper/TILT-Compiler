@@ -122,6 +122,7 @@ structure Listops :> LISTOPS =
       | member (elem,a::rest) = (elem = a) orelse member(elem,rest)
     fun member_eq (eq,elem:'a,[]:'b list) = false
       | member_eq (eq,elem,a::rest) = eq(elem,a) orelse member_eq(eq,elem,rest)
+
     fun assoc (aa,[]) = NONE
       | assoc (aa,(a,b)::rest) = if (a = aa) then SOME b else assoc(aa,rest)
     fun assoc_eq (eq:'a*'a->bool, aa,[]) = NONE
@@ -170,6 +171,12 @@ structure Listops :> LISTOPS =
 
     fun map_second f = List.map (fn (x,v) => (x,f v))
     fun map_first f = List.map (fn (x,v) => (f x,v))
+
+    fun app_second f = List.app (fn (x,v) => f v)
+    fun app_first f = List.app (fn (x,v) => f x)
+
+    fun firsts  (l : ('a * 'b) list) = List.map #1 l
+    fun seconds (l : ('a * 'b) list) = List.map #2 l
 
     fun foldl_acc ffun init list =
       let

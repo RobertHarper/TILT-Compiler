@@ -4,4 +4,5 @@ struct
 
     fun error (file : string) (msg : string) : 'a =
 	raise BUG {file=file,msg=msg}
+    fun errormsg {file,msg} =  "BUG:" ^ file ^ ": " ^ msg
 end

@@ -898,6 +898,27 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso
 		 con_equiv((D,T),argc2,argc1,Type_k,sk) andalso
 		 con_equiv((D,T),resc1,resc2,Type_k,sk)
+	       | (Prim_c(Array_c,[c1]), Prim_c(Array_c,[c2])) =>
+		 let
+		   val (D,c1) = context_reduce_hnf(D,c1)
+		   val (D,c2) = context_reduce_hnf(D,c2)
+		 in
+		   (case (c1,c2)
+		      of (Prim_c(BoxFloat_c is,[]),Prim_c(Float_c is',[])) => is = is'
+		       | (Prim_c(Float_c is,[]),Prim_c(BoxFloat_c is',[])) => is = is'
+		       | _ => con_equiv((D,T),c1,c2,Type_k,false))
+		 end
+	       | (Prim_c(Vector_c,[c1]), Prim_c(Vector_c,[c2])) =>
+		 let
+		   val (D,c1) = context_reduce_hnf(D,c1)
+		   val (D,c2) = context_reduce_hnf(D,c2)
+		 in
+		   (case (c1,c2)
+		      of (Prim_c(BoxFloat_c is,[]),Prim_c(Float_c is',[])) => is = is'
+		       | (Prim_c(Float_c is,[]),Prim_c(BoxFloat_c is',[])) => is = is'
+		       | _ => con_equiv((D,T),c1,c2,Type_k,false))
+		 end
+
 	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) =>
 		 let
 		   val sk' = sk andalso (NilDefs.covariant_prim pcon1)
@@ -1885,7 +1906,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    let val found = exp_valid(D,actual)
 	    in
 	      if sub_type(D,found,formal) then ()
-	      else e_error(D,exp,"Formal/actual parameter mismatch in arglist")
+	      else (print "found = ";Ppnil.pp_con found;print "\n";
+		    print "formal = ";Ppnil.pp_con formal;print "\n";
+		    e_error(D,exp,"Formal/actual parameter mismatch in arglist"))
 	    end
 	in (app2 do_one (formals,actuals)) handle e => (print "Length Mismatch?";raise e)
 	end
@@ -2091,7 +2114,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    let
 	      val _ = type_analyze(D,argcon)
 	      val argcon = con_head_normalize(D,argcon)
+	      val _ =
+		(case NilUtil.strip_sum argcon of
+		   SOME (tc,total,NONE,c) => ()
+		 | SOME _ => e_error(D,orig_exp,"project_sum decoration is special sum")
+		 | NONE => (pp_con argcon;
+			    e_error(D,orig_exp,"project given invalid type argument")))
+
 	      val argcon' = convert_sum_to_special(argcon,k)
+
 	      val _ = exp_analyze (D,argexp,argcon')
 	    in projectSumType(D,argcon,k)  (*Already normal!*)
 	    end
@@ -2152,7 +2183,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | (project_known k,[argcon],[argexp]) =>
 		 let val con_k = project_sum_xxx(D,argcon,argexp,k)
 		 in if is_known(D,con_k) then con_k
-		    else e_error(D,orig_exp,"project_known projects into unkown type")
+		    else e_error(D,orig_exp,"project_known projects into unknown type")
 		 end
 	     | (record [],[],[]) => NilDefs.unit_con
 	     | (record labels,[],t::exps) =>
@@ -2321,7 +2352,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
          | ForgetKnown_e (sumcon,field) => 
 	     let
 	       val _ = type_analyze (D,sumcon)
-	       val ksumcon = convert_sum_to_special(con_head_normalize(D,sumcon),field)
+	       val sumcon_hnf = con_head_normalize(D,sumcon)
+	       val ksumcon = convert_sum_to_special(sumcon_hnf,field)
+	       val _ =
+		 (case NilUtil.strip_sum sumcon_hnf of
+		    SOME (tc,total,NONE,c) => ()
+		  | SOME _ => e_error(D,exp,"Forgetknown decoration is special sum")
+		  | NONE => (pp_con sumcon;
+			     e_error(D,exp,"Forgetknown given invalid type argument")))
 	     in
 	       Coercion_c {vars = [],from = ksumcon,to = sumcon}
 	     end

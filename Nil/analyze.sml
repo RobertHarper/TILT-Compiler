@@ -58,8 +58,10 @@ struct
 
   fun debugdo f = if !debug then f() else ()
 
+  datatype func = CFUN of ((var * kind) list * con) | FUN of function
+
   type funinfo = {size : int,
-		  definition : function,
+		  definition : func,
 		  occurs : (bool * int) list}
 
   local
@@ -69,7 +71,7 @@ struct
 	   * 3: currently determined highest possible level
 	   *)
 
-      val sizeDefs = ref (Name.VarMap.empty : (int * Nil.function) Name.VarMap.map)
+      val sizeDefs = ref (Name.VarMap.empty : (int * func) Name.VarMap.map)
 	  (* 1: size of function body
 	   * 2: function type
 	   * 3: function itself
@@ -88,7 +90,8 @@ struct
 			    | SOME _ => true)
   in
       fun reset() = (sizeDefs := Name.VarMap.empty; occurs := []; constraints := Name.VarMap.empty)
-      fun addFunction(v,i,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, f))
+      fun addCFunction(v,i,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, CFUN f))
+      fun addFunction(v,i,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, FUN f))
       fun addConstraint(v, n, r) = constraints := Name.VarMap.insert(!constraints, v, (n,r))
 
       (* Add level constraints for a particular sequence of applications starting from a curried function. *)
@@ -161,25 +164,62 @@ struct
 
   and doCons cons = doList doCon cons
   and doCon (con:con):int =
-      1 +
-      (case con of
-	   Prim_c(pc,cs) => doCons cs
-         | Mu_c(b,vcs) => doCons (map #2 (Sequence.toList vcs))
-         | AllArrow_c{tFormals,eFormals,body_type,...} =>
-	       (doVklist tFormals) + (doCons eFormals) + (doCon body_type)
-         | ExternArrow_c(cs,c) => doCons (c::cs)
-         | Var_c v => 0
-         | Let_c(_,cbnds,c) => (doList doCbnd cbnds) + (doCon c)
-         | Crecord_c lcs => doCons (map #2 lcs)
-         | Proj_c(c,l) => doCon c
-         | Closure_c(c1,c2) => doCons [c1,c2]
-         | App_c(c,cs) => doCons (c::cs)
-	 | Coercion_c{vars,from,to} => (doCon from) + (doCon to))
+    1 +
+    (case con of
+       Prim_c(pc,cs) => doCons cs
+     | Mu_c(b,vcs) => doCons (map #2 (Sequence.toList vcs))
+     | AllArrow_c{tFormals,eFormals,body_type,...} =>
+	 (doVklist tFormals) + (doCons eFormals) + (doCon body_type)
+     | ExternArrow_c(cs,c) => doCons (c::cs)
+     | Var_c v => 0
+     | Let_c(_,cbnds,c) => (doCbnds cbnds) + (doCon c)
+     | Crecord_c lcs => doCons (map #2 lcs)
+     | Proj_c(c,l) => doCon c
+     | Closure_c(c1,c2) => doCons [c1,c2]
+     | App_c(c,cs) => doCons (c::cs)
+     | Coercion_c{vars,from,to} => (doCon from) + (doCon to))
+       
+  (* We look for as many applications as possible to find *)
+  and doCbnds [] = 0
+    (* We have an application (possibly partial) of a function.
+     * We wish to find as many partial applications of it as possible,
+     * so that its level is less constrained.
+     *)
+    | doCbnds ((Con_cb(a, App_c(Var_c f, cons))) :: rest) =
+    let
+      val junkVar = fresh_var()
+      val c = App_c(Var_c junkVar, cons)
+      fun findApp (rPartials,cur,cAcc,
+		   all as ((Con_cb(v, App_c(Var_c f, cons))) :: rest)) =
+	if (eq_var(f,cur))
+	  then let val c = App_c(Var_c junkVar, cons)
+	       in  findApp(v::rPartials,v,c::cAcc,rest)
+	       end
+	else (rev rPartials, cAcc, all)
+	| findApp (rPartials, cur, cAcc, all) = (rev rPartials, cAcc, all)
+      val (partials, cons, rest) = findApp ([],a,[c],rest)
+      val () = applyOccur(f, partials)
+
+      (* Traverse the expressions (with junkVar in for the function applications)
+       * to find escaping occurrences of function variables.
+       * In a-normal form, fexps cannot contain function variables,
+       * since they are of float type.  Therefore, no need to traverse them.
+       *)
+      val sz = doCons cons
+    in  sz + (doCbnds rest)
+    end
+    | doCbnds (first::rest) = (doCbnd first) + (doCbnds rest)
 
   and doCbnd (conbnd:conbnd):int =
     (case conbnd of
        Con_cb(v,c) => doCon c
-     | Open_cb (v,vks,c) => (doVklist vks) + (doCon c)
+     | Open_cb (v,vks,c) => 
+	 let
+	   val size = (doVklist vks) + (doCon c)
+	   val vsizedef = (v,size,(vks,c))
+	   val () = addCFunction vsizedef
+	 in size
+	 end
      | Code_cb (v,vks,c) => (doVklist vks) + (doCon c))
   and doType t = 0
   and doTypes ts = 0
@@ -301,12 +341,15 @@ struct
   fun doExport (ExportValue(l,v)) = doExp(Var_e v)
     | doExport (ExportType(l,v)) = doCon(Var_c v)
 
+  fun doImport (ImportBnd (Runtime,conbnd)) = ignore (doCbnd conbnd)
+    | doImport _ = ()
   (* Produce statistics on occurrences of function symbols in a module *)
   fun analyze (Nil.MODULE{imports, bnds, exports}) =
-      let val _ = reset()
-	  (* Skip imports *)
-	  val _ = doBnds bnds
-	  val _ = map doExport exports
+      let 
+	val _ = reset()
+	val _ = app doImport imports
+	val _ = doBnds bnds
+	val _ = map doExport exports
       in  collect()
       end
 

@@ -141,7 +141,8 @@ struct
     type context = LinkIl.context
     type il_module = LinkIl.module
     type nil_module = Nil.module
-    type rtl_module = Rtl.module
+
+    datatype rtl_module = RTL of Rtl.module | LIL of Lil.module
 
     local
 	fun parser (f : string * string -> 'a option)
@@ -365,7 +366,14 @@ struct
 	= Linknil.il_to_nil
 
     fun nil_to_rtl (arg : unitname * nil_module) : rtl_module =
-	(timestamp(); Linkrtl.nil_to_rtl arg)
+      let
+      in
+      timestamp();
+      case Target.getTargetPlatform ()
+	of Target.TIL_ALPHA  => RTL(Linkrtl.nil_to_rtl arg)
+	 | Target.TIL_SPARC  => RTL(Linkrtl.nil_to_rtl arg)
+	 | Target.TIL_TALx86 => LIL(Linklil.nil_to_lil arg)
+      end
 
     (*
 	RTL parameters are more specific than unit names.
@@ -384,6 +392,11 @@ struct
 	in  LS.addList (LS.empty,List.mapPartial mapper pctxt)
 	end
 
+    fun getparms module = 
+      (case module
+	 of RTL (Rtl.MODULE {parms, ...}) => parms
+	  | LIL _ => LS.empty)
+
     fun rtl_to_asm {precontext : precontext,
 		    asmTarget : file,
 		    ueTarget : file,
@@ -395,10 +408,13 @@ struct
 		  print ("ue = " ^ ueTarget ^ "\n");
 		  print_precontext precontext))
 	    val _ = timestamp()
+	    fun rtlwrap f (s,module) = (case module of RTL rmod => f (s,rmod)  | _ => error "Can't translate LIL to sparc/alpha")
+	    fun lilwrap f (s,module) = (case module of LIL rmod => f (s,rmod)  | _ => error "Can't translate RTL to TAL")
 	    val toasm = (case Target.getTargetPlatform ()
-			   of Target.TIL_ALPHA => Linkalpha.rtl_to_asm
-			    | Target.TIL_SPARC => Linksparc.rtl_to_asm)
-	    val Rtl.MODULE {parms, ...} = rtl_module
+			   of Target.TIL_ALPHA  => rtlwrap Linkalpha.rtl_to_asm
+			    | Target.TIL_SPARC  => rtlwrap Linksparc.rtl_to_asm
+			    | Target.TIL_TALx86 => lilwrap LinkTAL.lil_to_asm)
+	    val parms = getparms rtl_module
 	    val ctxt = context precontext
 	    val parms = unitnames (precontext,parms)
 	    val _ = writeUe (ueTarget, precontext, ctxt, parms)
@@ -409,8 +425,9 @@ struct
     fun link {asmTarget : file, unitnames : unitname list} : unit =
 	let val _ = timestamp()
 	    val link = (case Target.getTargetPlatform()
-			  of Target.TIL_ALPHA => Linkalpha.link
-			   | Target.TIL_SPARC => Linksparc.link)
+			  of Target.TIL_ALPHA  => Linkalpha.link
+			   | Target.TIL_SPARC  => Linksparc.link
+			   | Target.TIL_TALx86 => error "No TAL linker yet")
 	    fun writer asm = link {asmFile=asm, units=unitnames}
 	in  File.write' writer asmTarget
 	end

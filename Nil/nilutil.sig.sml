@@ -152,4 +152,17 @@ signature NILUTIL =
 
     (* Rename the constructor parameters in an arrow type *)
     val rename_arrow : arrow * Nil.var list -> arrow
+
+    (* Find the strongly connected components of a graph. 
+     * Result is a list of list of vars and their info.
+     * Each list is a scc.  The sccs are ordered such
+     * that there are no edges from an earlier component 
+     * to a later one (the opposite of the ordering returned 
+     * by GraphUtil).
+     *)
+    val scc : ((Nil.var * 'info) * Name.VarSet.set) list -> (Nil.var * 'info) list list 
+
+    (* Break a fix binding into its strongly connected components *)
+    val break_fix : ((Nil.var * Nil.con) * Nil.function) list -> ((Nil.var * Nil.con) * Nil.function) list list 
+
   end

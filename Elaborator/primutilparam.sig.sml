@@ -1,9 +1,9 @@
 signature PRIMUTILPARAM =
     sig
+
 	type context
 	type con
 	type exp
-
 
 	val partial_arrow : con list * con -> con
 	val total_arrow : con list * con -> con

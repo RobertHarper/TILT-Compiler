@@ -133,6 +133,7 @@ structure Name :> NAME =
 
     fun rename_var (v : var, s : string) : unit = varmap := (VarMap.insert(!varmap,v,s))
 
+
     fun fresh_named_tag s = (inc_counter tag_counter,s)
     fun fresh_tag  () = fresh_named_tag "t"
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
@@ -152,8 +153,12 @@ structure Name :> NAME =
     fun fresh_string s = s ^ "_" ^ Int.toString(inc_counter label_counter)
     fun fresh_internal_label s = internal_label(fresh_string s)
 
+    fun var2label v = fresh_internal_label ((var2name v)^"_l")
+
 
     fun label2name ((_,str) : label) = str
+
+    fun label2var l = fresh_named_var(label2name l)
 
     fun label2string ((num,str) : label) =
       let

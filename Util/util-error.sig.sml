@@ -5,5 +5,5 @@ sig
 
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
-
+    val errormsg : {file : string, msg : string} -> string
 end

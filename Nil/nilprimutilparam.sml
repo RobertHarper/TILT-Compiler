@@ -65,7 +65,28 @@ structure NilPrimUtilParam
 		val bool_tr = TraceCompute bool_var
 	      in ([],mod_var,sum_var,coercion_var,bool_tr)
 	      end
-	    else
+	    else if !(Stats.bool "doSingElim") then
+	      let
+		val rv = NilContextPre.find_labelled_var (context,unit_r)
+		val cv = NilContextPre.find_labelled_var (context,unit_c)
+		  
+		val sum_var = Name.fresh_named_var "bool_sum"
+		val mod_var = Name.fresh_named_var "bool_mod"
+		val coercion_var = Name.fresh_named_var "bool_in"
+		  
+		val mod_exp = Prim_e (NilPrimOp (select bool_mod),[],[],[Var_e rv])
+		val coercion_exp = Prim_e (NilPrimOp (select bool_in_lab),[],[],[Var_e mod_var])
+		val sum_type = Prim_c (Sum_c {tagcount = 0w2,totalcount = 0w2,known = NONE},[Crecord_c[]])
+		val bool_tr = TraceKnown (TraceInfo.Compute (cv,[bool_mod,bool_lab]))
+		  
+		val bnds = [Con_b(Runtime,Con_cb(sum_var,sum_type)),
+			    Exp_b(mod_var,TraceKnown TraceInfo.Trace,mod_exp),
+			    Exp_b(coercion_var,TraceKnown TraceInfo.Notrace_Int,coercion_exp)
+			    ]
+		  
+	      in (bnds,mod_var,sum_var,coercion_var,bool_tr)
+	      end
+            else
 	      let
 		val rv = NilContextPre.find_labelled_var (context,unit_r)
 		val cv = NilContextPre.find_labelled_var (context,unit_c)

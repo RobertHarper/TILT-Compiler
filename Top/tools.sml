@@ -74,11 +74,14 @@ struct
 				       "-lc", "-lrt"]}
 		     end)
 
+    val talx86Config : unit -> config = fn () => error "No tools for talx85 yet"
+
     (* targetConfig : unit -> config *)
     fun targetConfig () =
 	(case Target.getTargetPlatform()
-	   of Target.TIL_ALPHA => alphaConfig()
-	    | Target.TIL_SPARC => sparcConfig())
+	   of Target.TIL_ALPHA  => alphaConfig()
+	    | Target.TIL_SPARC  => sparcConfig()
+	    | Target.TIL_TALx86 => talx86Config())
 
     (* run' : string list -> unit *)
     fun run' nil = ()

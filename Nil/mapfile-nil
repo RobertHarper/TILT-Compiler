@@ -79,14 +79,17 @@ source unit NilDefs = "nildefs.sml" {
 	TraceInfo Sequence
 }
 
+source unit FREES = "frees.sig.sml" {Nil Name}
+source unit Frees = "frees.sml" {FREES Nil Name NilRewrite}
+
 source unit NILUTIL = "nilutil.sig.sml" {
-	Name TilWord32 Sequence Prim Nil NilSubst Alpha
+	Name TilWord32 Sequence Prim Nil NilSubst Alpha 
 }
 source interface NilUtil = "nilutil.int" {NILUTIL}
 source unit NilUtil : NilUtil = "nilutil.sml" {
 	Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops
 	Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option
-	ListPair List TraceInfo Stats Int NilDefs NilRename
+	ListPair List TraceInfo Stats Int NilDefs NilRename GraphUtil Frees
 }
 
 source unit TRAIL = "trail.sig.sml" {Nil}
@@ -211,13 +214,13 @@ source unit ToNil : ToNil = "tonil.sml" {
 
 source unit PASS = "pass.sig.sml" {Nil}
 
-source unit REDUCE = "reduce.sig.sml" {Nil}
-source unit Reduce = "reduce.sml" {
-	Nil NilUtil Ppnil PrimUtil NilSubst REDUCE
+source unit NILREDUCE = "reduce.sig.sml" {Nil}
+source unit NilReduce = "reduce.sml" {
+	Nil NilUtil Ppnil PrimUtil NilSubst NILREDUCE
 }
 
 source unit Flatten = "flatten.sml" {
-	Nil NilUtil Ppnil PrimUtil NilSubst Reduce PASS PRIMUTIL
+	Nil NilUtil Ppnil PrimUtil NilSubst NilReduce PASS PRIMUTIL
 }
 
 source unit HOIST = "hoist.sig.sml" {Nil}
@@ -253,7 +256,7 @@ source unit CoerceElim = "coerce-elim.sml" {
 
 source unit SINGLETONELIM = "singleton-elim.sig.sml" {Nil NilContext}
 source unit SingletonElim = "singleton-elim.sml" {
-	Nil NilUtil NilContext Normalize SINGLETONELIM Name Util Listops NilSubst Option Prim Array
+	Nil NilUtil NilContext Normalize SINGLETONELIM Name Util Listops NilSubst Option Prim Array NilDefs NilRename List
 }
 
 source unit LINKNIL = "linknil.sig.sml" {

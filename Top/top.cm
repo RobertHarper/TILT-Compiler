@@ -10,6 +10,9 @@ Group is
 ../Backend/backend.cm
 ../Alpha/alpha.cm
 ../Sparc/sparc.cm
+../Lil/lil.cm
+../TAL/tal.cm
+
 (*../RtlToMLRISC/Alpha/Alpha.cm*)
 (*../RtlToMLRISC/Sparc/Sparc.cm*)
 

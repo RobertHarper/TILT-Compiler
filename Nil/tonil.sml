@@ -1419,26 +1419,31 @@ end (* local defining splitting context *)
 				      tFormals = [(var_arg_c, knd_arg)],
 				      eFormals = [con_arg], fFormals = 0w0,
 				      body_type = con_res'}
+	   val con_fun_name = Name.fresh_named_var (Name.var2name var_fun_r ^ "_type")
 
+	   val con_fun_bnd = Con_cb(con_fun_name,con_fun_r)
 	   (* Add this binding to the context *)
 
            (* Create a binding for the term part of the functor *)
 
 	   val ebnd_fun_cat =
-	       SINGLETON(Fixopen_b (Sequence.fromList
-			      [((var_fun_r, con_fun_r),
-			       Function{recursive = NonRecursive,
-					effect = effect,
-					tFormals = [var_arg_c],
-					eFormals = [(var_arg_r, TraceUnknown)],
-					fFormals = [],
-					body = (NU.makeLetE Sequential
-						((map NU.makeConb cbnds_body) @ ebnds_body)
-						name_body_r)})]))
+	       LIST[
+		    Con_b(Runtime,con_fun_bnd),
+		    Fixopen_b ([((var_fun_r, Var_c con_fun_name),
+				 Function{recursive = NonRecursive,
+					  effect = effect,
+					  tFormals = [var_arg_c],
+					  eFormals = [(var_arg_r, TraceUnknown)],
+					  fFormals = [],
+					  body = (NU.makeLetE Sequential
+						  ((map NU.makeConb cbnds_body) @ ebnds_body)
+						  name_body_r)})])
+		    ]
 
 	   val context = update_NILctx_insert_kind(context, var_fun_c,
                            Arrow_k(Open, [(var_arg_c, knd_arg)], Single_k(con_body)))
-	   val context = insert_con(context, var_fun_r, con_fun_r)
+	   val context = update_NILctx_insert_cbnd(context,con_fun_bnd)
+	   val context = insert_con(context, var_fun_r, Var_c con_fun_name)
        in
 	   {cbnd_cat = cbnd_fun_cat,
             ebnd_cat = ebnd_fun_cat,
@@ -1493,31 +1498,41 @@ end (* local defining splitting context *)
 		   (insert_con(context, var_str_r, type_of context (#2 (hd record_r_exp_items))),
 		    SINGLETON(Exp_b (var_str_r, TraceUnknown, #2(hd record_r_exp_items))))
 	       else
-		 let
-		   val (labels,exps) = unzip record_r_exp_items
-
-		   val tvar = N.fresh_named_var "struct_gctag"
-
-		   val r = Prim_e (NilPrimOp (record labels),[], [], (Var_e tvar)::exps)
-                   (* Note that exps will always be of the form (Var_e v)
-                     *)
-		   val (recbnds,rtype) = NU.makeNamedRecordType ((Name.var2name var_str_r)^"_type1") labels (map (type_of context) exps)
-
-		   val trs = map (fn _ => TraceUnknown) labels
-
-		   val bnds =
-		     APPEND[LIST (map (fn cb => (Con_b (Runtime,cb))) recbnds),
-			    LIST [Exp_b (tvar,TraceUnknown,
-					 Prim_e(NilPrimOp mk_record_gctag, trs,[rtype],[])),
-				  Exp_b (var_str_r, TraceUnknown,r)]]
-
-		   val context = update_NILctx_insert_cbnd_list(context,recbnds)
-		   val context = insert_con(context,tvar,Prim_c(GCTag_c,[rtype]))
-		   val context = insert_con(context, var_str_r, rtype)
-		 in
+		 if null record_r_exp_items then
+		   let
+		     val r = NilDefs.unit_exp
+		     val rtype = NilDefs.unit_con
+		     val bnds = SINGLETON(Exp_b (var_str_r, TraceUnknown,r))
+		     val context = insert_con(context, var_str_r, rtype)
+		   in
 		     (context, bnds)
-		 end
-
+		   end
+		 else
+		   let
+		     val (labels,exps) = unzip record_r_exp_items
+		       
+		     val tvar = N.fresh_named_var "struct_gctag"
+		       
+		     val r = Prim_e (NilPrimOp (record labels),[], [], (Var_e tvar)::exps)
+		     (* Note that exps will always be of the form (Var_e v)
+		      *)
+		     val (recbnds,rtype) = NU.makeNamedRecordType ((Name.var2name var_str_r)^"_type1") labels (map (type_of context) exps)
+		       
+		     val trs = map (fn _ => TraceUnknown) labels
+		       
+		     val bnds =
+		       APPEND[LIST (map (fn cb => (Con_b (Runtime,cb))) recbnds),
+			      LIST [Exp_b (tvar,TraceUnknown,
+					   Prim_e(NilPrimOp mk_record_gctag, trs,[rtype],[])),
+				    Exp_b (var_str_r, TraceUnknown,r)]]
+		       
+		     val context = update_NILctx_insert_cbnd_list(context,recbnds)
+		     val context = insert_con(context,tvar,Prim_c(GCTag_c,[rtype]))
+		     val context = insert_con(context, var_str_r, rtype)
+		   in
+		     (context, bnds)
+		   end
+		 
 	   val ebnd_cat = APPEND[ebnd_cat_bnds,ebnd_cat_str]
 
        in
@@ -1771,7 +1786,7 @@ end (* local defining splitting context *)
 	   in
 	       {final_context = final_context,
 		cbnd_cat = cbnd_cat,
-		ebnd_cat = APPEND[LIST (map NU.makeConb ftbnds), CONS(ebnd, ebnd_cat)],
+		ebnd_cat = APPEND[LIST (map NU.makeConb ftbnds), SINGLETON ebnd, ebnd_cat],
 		record_c_con_items = record_c_con_items,
 		record_c_knd_items = record_c_knd_items,
 		record_r_exp_items = (* If this is in a module, then
@@ -3035,6 +3050,21 @@ end (* local defining splitting context *)
        let
 	   val exp = xexp context il_exp
 	   val sumcon = xcon context il_con
+	   val sumcon_reduced = NilContext_con_hnf (context, sumcon)
+
+	   (* The HIL has a subtyping on known/unknown sums, so either
+	    * type is valid here.  So we must promote to the supertype for
+	    * the MIL
+	    *)
+	   val sumcon = 
+	     (case NilUtil.strip_sum sumcon_reduced
+		of SOME (_,_,NONE,_) => sumcon
+		 | SOME (tagcount,totalcount,_,carriers) =>
+		  Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount,
+				known = NONE}, [carriers])
+		 | NONE => error "SUM_TAIL argument not a sumcon")
+
+
        in  Prim_e (NilPrimOp (project (TilWord32.fromInt i)),
 		   [], [sumcon], [exp])
        end
@@ -3225,6 +3255,7 @@ end (* local defining splitting context *)
 	 val inj_var = Name.fresh_named_var "inj_var"
 
 	 val cbnd = Con_b(Runtime,Con_cb (svar,sumcon))
+
 	 val bnd = Exp_b (inj_var,TraceUnknown,Prim_e(NilPrimOp (inject field),[],[Var_c svar],elist))
 	 val coercion = ForgetKnown_e (Var_c svar,field)
 	 val body = Coerce_e(coercion,[],Var_e inj_var)
@@ -3419,10 +3450,6 @@ end (* local defining splitting context *)
 	 val (fun_names, context) = insert_rename_vars (fun_names, context)
 	   
 	   
-	 fun mark_non_recur ((v,c),Function {recursive, effect, tFormals, eFormals, fFormals, body}) =
-	   ((v,c),Function{recursive = NonRecursive, effect=effect,
-			   tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
-			   body=body})
 	   
 	 (* Pre compute the new function name, the argument type, and 
 	  * the function type for each function
@@ -3461,14 +3488,6 @@ end (* local defining splitting context *)
 	 
 	 val vcflist = map3 mapper (vcs,argtypes,fbnds)
 	   
-	 (* If none of the variables have been used at all yet, then we know
-	  * that none of the functions are actually recursive.  This is a conservative
-	  * approximation that catches most cases.
-	  *)
-	 val vcflist = if List.exists (var_is_used context) fun_names
-			 then vcflist
-		       else map mark_non_recur vcflist
-			 
        in (ftbnds,vcflist)
        end
      handle e => (print "uncaught exception in xfbnds\n";

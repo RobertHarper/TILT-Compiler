@@ -6,7 +6,7 @@ Parser/parser.cm         (* ------ external file to AST ---- *)
 Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
 Nil/nil.cm               (* ------ Nil stuff ------ *)
 
-(*Lil/lil.cm*)
+Lil/lil.cm
 
 Rtl/rtl.cm
 Backend/backend.cm

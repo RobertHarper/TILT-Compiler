@@ -38,6 +38,7 @@ struct
   fun debugpr s = if (!debug) then print s else ()
   fun inc(r:int ref) = r := (!r) + 1
 
+  datatype func = datatype Analyze.func
   datatype inlineStatus =
     NoInline | InlineOnce
     | InlineMany of int (* Inline if inlined version is below threshold *)
@@ -51,11 +52,28 @@ struct
   val inlineOnce = ref 0
   val inlineManyFun = ref 0
   val inlineManyCall = ref 0
+  val inlineOnceC = ref 0
+  val inlineManyCFun = ref 0
+  val inlineManyCCall = ref 0
+
   val hasCandidates  = ref false
+  val doCons = ref false
+
+  fun renameCFUN (vks,body) = 
+    let
+      val junk = Name.fresh_named_var "junk"
+    in case NilRename.renameCBnd (Open_cb(junk,vks,body))
+	 of (Open_cb(_,vks,body),_) => (vks,body)
+	  | _ => error "Unexpected result from renaming"
+    end
 
   fun updateDefinition(v,f) =
       let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v)
-      in  analyzeTable := (Name.VarMap.insert(table,v,{definition=f,size=size,occurs=occurs}))
+      in  analyzeTable := (Name.VarMap.insert(table,v,{definition= FUN f,size=size,occurs=occurs}))
+      end
+  fun updateCDefinition(v,f) =
+      let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v)
+      in  analyzeTable := (Name.VarMap.insert(table,v,{definition= CFUN f,size=size,occurs=occurs}))
       end
 
   fun size v =
@@ -100,9 +118,11 @@ struct
 
   val inline_tiny = Stats.tt "inline_tiny"
 
-  fun analyzeInfo {iterate,tinyThreshold, sizeThreshold, occurThreshold}
+  fun is_cfun d = (case d of CFUN _ => true | _ => false)
+
+  fun analyzeInfo {iterate,tinyThreshold, sizeThreshold, occurThreshold,inlinecons}
       (v,{size : int,
-	definition = _,
+	definition,
 	occurs} : Analyze.funinfo) : inlineStatus =
       let val calledOnce = (case occurs of
 				[] => true  (* or dead *)
@@ -127,7 +147,8 @@ struct
 	     * If there are no non-escaping occurrences, then
 	     * there are no places to inline.
 	     *)
-	    if recursive orelse (not has_nonescape) then NoInline
+	    if (not inlinecons) andalso is_cfun definition then NoInline
+	    else if recursive orelse (not has_nonescape) then NoInline
 	    else if calledOnce                      then InlineOnce
 	    else if (not escaping andalso small)    then InlineMany (sizeThreshold * occurThreshold div numapps)
 	    else if verysmall                       then InlineMany tinyThreshold
@@ -143,8 +164,100 @@ struct
 
   fun rbnds bnds = List.concat(map rbnd bnds)
 
-  and rcon con = con
-  and rcbnd conbnd = conbnd
+  and rcbnds cbnds = List.concat(map rcbnd cbnds)
+  and rcon con = 
+    if not (!doCons) then con
+    else
+      (case con
+	 of Var_c _ => con
+	  | Prim_c (pc,cons) => Prim_c(pc,map rcon cons)
+	  | Mu_c (flag,vc_seq) => Mu_c(flag,Listops.map_second rcon vc_seq)
+	  | ExternArrow_c (clist,c) => ExternArrow_c(map rcon clist,rcon c)
+	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
+	   AllArrow_c{openness=openness,effect=effect,tFormals=tFormals,eFormals=map rcon eFormals,fFormals=fFormals,body_type=rcon body_type}
+	  | Let_c (letsort,cbnds,c) => Let_c(letsort,rcbnds cbnds,rcon c)
+	  | Crecord_c lc_list => Crecord_c (Listops.map_second rcon lc_list)
+	  | Proj_c (c,l) => Proj_c(rcon c,l)
+	  | Closure_c (c1,c2) => 
+	   Closure_c(rcon c1,rcon c2)
+	  | App_c (c,clist) => App_c(rcon c,map rcon clist)
+	  | Coercion_c {vars,from,to} => Coercion_c{vars = vars,from = rcon from,to = rcon to})
+      
+  and rcbnd conbnd = 
+    if not (!doCons) then [conbnd]
+    else
+      (case conbnd
+	 of Con_cb(a,c) =>
+	   (case c of
+	      App_c(Var_c f,cons) =>
+		let 
+		  val funinfoOpt = Name.VarMap.find(!analyzeTable, f)
+		  val defOpt =
+		    (case Name.VarMap.find(!optimizeTable, f) of
+		       SOME NoInline => NONE
+		     | SOME InlineOnce =>
+			 (case funinfoOpt of
+			    SOME {definition = CFUN definition,size, ...} =>
+			      (inlineOnceC := 1 + (!inlineOnceC);
+			       updateSizes size;
+			       SOME (renameCFUN definition))
+			  | _ => error "must have definition here")
+		     | SOME (InlineMany _) =>
+			(case funinfoOpt of
+			   SOME {definition = CFUN definition,size, ...} =>
+			     (inlineManyCCall := 1 + (!inlineManyCCall);
+			      updateSizes size;
+			      SOME (renameCFUN definition))
+			 | _ => error "must have definition here")
+		     | NONE => NONE)
+		  val cons = map rcon cons
+		in  (case defOpt of
+		       NONE => [Con_cb(a,App_c(Var_c f,cons))]
+		     | SOME (vks,body) =>
+			 let  
+			   val bnds1 =
+			     Listops.map2 (fn ((v,_),c) => Con_cb(v,c)) (vks,cons)
+			   val (bnds2,bnds3) =
+			     (case body of
+				Let_c(_,cbnds,c) => (cbnds,[Con_cb(a,c)])
+			      | _ => ([],[Con_cb(a,body)]))
+				
+			   val bnds = List.concat [bnds1,bnds2,bnds3]
+			     
+			   val bnds = rcbnds bnds
+			 in bnds
+			 end)
+		end
+	    | _ =>  [Con_cb(a,rcon c)])
+	  | Open_cb (f,vks,body) => 
+	      (case Name.VarMap.find(!optimizeTable,f) 
+		 of SOME InlineOnce =>
+		   let
+		     val _ = enterFunction f
+		     val body = rcon body
+		     val _ = leaveFunction ()
+		     val _ = updateCDefinition(f,(vks,body))
+
+		   (* Note: occurrence info is not precise for type functions,
+		    * since we don't analyze types (only constructors). Therefore.
+		    * it is not safe to delete inlineOnce con functions, since they
+		    * may appear in types.  We still always inline: in general, type
+		    * functions are small anyway, and only con occurrences affect
+		    * run time code size.
+		    *)
+		   in [Open_cb(f,vks,body)]
+		   end
+		  | SOME (InlineMany n) =>
+		   let 
+		     val _ = inlineManyCFun := 1 + (!inlineManyCFun)
+		     val _ = enterFunction f
+		     val body = rcon body
+		     val _ = leaveFunction ()
+		     val _ = if size f <= n then updateCDefinition(f,(vks,body)) else makeNoInline f
+		   in  [Open_cb(f,vks,body)]
+		   end
+		  | _ => [Open_cb(f,vks,rcon body)])
+	| Code_cb (f,vks,body) => [Code_cb (f,vks,rcon body)])
 
   and rexp e =
       (case e of
@@ -172,7 +285,7 @@ struct
 
   and rbnd b =
       (case b of
-	   Con_b (p, cbnd) => [(Con_b (p, rcbnd cbnd))]
+	   Con_b (p, cbnd) => NilUtil.cbnds2bnds (rcbnd cbnd)
 	 | Exp_b(v,nt,e) =>
 	       (case e of
 		    App_e(Open,Var_e f,cs,es1,es2) =>
@@ -182,18 +295,18 @@ struct
 				     SOME NoInline => NONE
 				   | SOME InlineOnce =>
 					 (case funinfoOpt of
-					      SOME {definition,size, ...} =>
+					      SOME {definition = FUN definition,size, ...} =>
 						(inlineOnce := 1 + (!inlineOnce);
 						 updateSizes size;
 						 SOME definition)
 					    | _ => error "must have definition here")
 				   | SOME (InlineMany _) =>
 					 (case funinfoOpt of
-					      SOME {definition,size, ...} =>
-						  (inlineManyCall := 1 + (!inlineManyCall);
-						   updateSizes size;
-						   SOME (NilRename.renameFunction definition))
-					    | _ => error "must have definition here")
+					    SOME {definition = FUN definition,size, ...} =>
+					      (inlineManyCall := 1 + (!inlineManyCall);
+					       updateSizes size;
+					       SOME (NilRename.renameFunction definition))
+					  | _ => error "must have definition here")
 				   | NONE => NONE)
 			    val cs = map rcon cs
 			    val es1 = map rexp es1
@@ -288,31 +401,46 @@ struct
 			  default= rexp default,
 			  result_type = rcon result_type})
 
+  fun rimports imps = 
+    let
+      fun doimport (ImportBnd(Runtime,conbnd)) = cbnds2importbnds (rcbnd conbnd)
+	| doimport other = [other]
+    in List.concat (map doimport imps)
+    end
+
   fun reset () =
     let in
       hasCandidates := false;
+      inlineOnceC := 0;
+      inlineManyCCall := 0;
+      inlineManyCFun := 0;
       inlineOnce := 0;
       inlineManyCall := 0;
       inlineManyFun := 0
     end
 
-  fun inline_once iterate nilmod =
+  fun inline_once (inlinecons,iterate) nilmod =
     let
       val _ = reset();
-      val threshold = {iterate=iterate,tinyThreshold=0,sizeThreshold=0,occurThreshold=0}
+      val threshold = {iterate=iterate,tinyThreshold=0,sizeThreshold=0,occurThreshold=0,inlinecons = inlinecons}
 
       fun loop (nilmod,n) =
 	let
 	  val _ = msg ("  Pass "^(Int.toString n)^"....")
+
 	  val _ = hasCandidates := false
+
+	  val _ = doCons := (#inlinecons threshold)
 	  val _ = functionList := []
 	  val _ = analyzeTable := Analyze.analyze nilmod
 	  val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
 
 	  val MODULE{bnds,imports,exports} = nilmod
+	  val imports = if !hasCandidates andalso !doCons then rimports imports else imports
 	  val bnds = if !hasCandidates then rbnds bnds else bnds
 	  val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
 
+	  val _ = doCons := false
 	  val _ = functionList := []
 	  val _ = analyzeTable := Name.VarMap.empty
 	  val _ = optimizeTable := Name.VarMap.empty
@@ -325,35 +453,53 @@ struct
 
       val _ = msg ("  " ^ Int.toString (!inlineOnce) ^
 		   " functions inlined once.\n")
-
+      val _ = 
+	if (#inlinecons threshold) then 
+	  msg ("  " ^ Int.toString (!inlineOnceC) ^
+	       " con functions inlined once.\n")
+	else ()
+	  
     in  nilmod
     end
 
   fun inline threshold nilmod =
       let
 	val _ = reset()
+
+	val _ = doCons := (#inlinecons threshold)
 	val _ = functionList := []
 	val _ = analyzeTable := Analyze.analyze nilmod
 	val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
+
 	val MODULE{bnds,imports,exports} = nilmod
+	val imports = if !hasCandidates andalso !doCons then rimports imports else imports
 	val bnds = if !hasCandidates then rbnds bnds else bnds
 	val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
+
+	val _ = doCons := false
 	val _ = functionList := []
 	val _ = analyzeTable := Name.VarMap.empty
 	val _ = optimizeTable := Name.VarMap.empty
 
 	val _ =
 	  if !hasCandidates then
-	    msg ("  " ^ Int.toString (!inlineOnce) ^ 
-		 " functions inlined once.\n  " ^
-		 Int.toString (!inlineManyCall) ^ " copies of " ^
-		 Int.toString (!inlineManyFun) ^ " other functions inlined.\n")
+	    (msg ("  " ^ Int.toString (!inlineOnce) ^ 
+		  " functions inlined once.\n  " ^
+		  Int.toString (!inlineManyCall) ^ " copies of " ^
+		  Int.toString (!inlineManyFun) ^ " other functions inlined.\n");
+
+	     if (#inlinecons threshold) then 
+	       msg ("  " ^ Int.toString (!inlineOnceC) ^ 
+		    " con functions inlined once.\n  " ^
+		    Int.toString (!inlineManyCCall) ^ " copies of " ^
+		    Int.toString (!inlineManyCFun) ^ " other con functions inlined.\n")
+	     else ())
 	  else
 	    msg "  No candidate functions for inlining\n"
 
 	val nilmod = if !hasCandidates andalso #iterate threshold
 		       then (msg "  Iterating\n";
-			     inline_once (#iterate threshold) nilmod)
+			     inline_once (#iterate threshold,#inlinecons threshold) nilmod)
 		     else nilmod
       in  nilmod
       end

@@ -3,6 +3,7 @@ structure SingletonElim :> SINGLETONELIM =
     open Nil
 
     structure NU = NilUtil 
+    structure ND = NilDefs
 
     val error = fn s => Util.error "singleton_elim" s
     val foldl_acc = Listops.foldl_acc
@@ -11,6 +12,17 @@ structure SingletonElim :> SINGLETONELIM =
     val unzip3 = Listops.unzip3
 
     val rename_arrow = NilUtil.rename_arrow
+
+    (* We must keep a typing context around because of undecorated singletons,
+     * and because the undecorated function type requires head normalization.
+     *
+     * We only bother to keep a kind context, since we never enquire about term
+     * variables.  
+     *
+     * Note that the context holds "old program" kinds - that is, un-rewritten 
+     * kinds and constructors
+     * 
+     *)
     datatype env = Env of {ctxt:NilContext.context}
 
     fun insert_kind (Env {ctxt}) (v,k)     = Env {ctxt=NilContext.insert_kind (ctxt,v,k)}
@@ -25,17 +37,17 @@ structure SingletonElim :> SINGLETONELIM =
       case k
 	of Type_k => Type_k
 	 | SingleType_k c => Type_k
-	 | Single_k c => erasek env (kind_of env c)
+	 | Single_k c => erasek env (NilRename.renameKind(kind_of env c))
 	 | Record_k lvks =>
 	  let
 	    val (lvks,_) =
-	      foldl_acc (fn (((l,v),k),env) => (((l,v),erasek env k),insert_kind env (v,k))) env lvks
+	      foldl_acc (fn (((l,v),k),env) => (((l,Name.derived_var v),erasek env k),insert_kind env (v,k))) env lvks
 	  in Record_k lvks
 	  end
 	 | Arrow_k (os,vks,k) =>
 	  let
 	    val (vks,env) =
-	      foldl_acc (fn ((v,k),env) => ((v,erasek env k),insert_kind env (v,k))) env vks
+	      foldl_acc (fn ((v,k),env) => ((Name.derived_var v,erasek env k),insert_kind env (v,k))) env vks
 	  in Arrow_k  (os,vks,erasek env k)
 	  end
 
@@ -43,6 +55,11 @@ structure SingletonElim :> SINGLETONELIM =
     fun R_k env (arg : con * kind) : con option  =
       let
 	val changed = ref false
+	fun path2var p = 
+	  (case ND.con2path p
+	     of SOME (v,[])  => Name.derived_var v
+	      | SOME(v,lbls) => Name.label2var (List.last lbls)
+	      | NONE => Name.fresh_named_var "erasure_fun")
 	fun trans env (c,k) =
 	  (case k
 	     of Type_k => c
@@ -50,13 +67,14 @@ structure SingletonElim :> SINGLETONELIM =
 	      | Single_k c' => (changed := true; R_c env c')
 	      | Record_k lvks =>
 	       let
-		 fun folder (((l,v),k),env) =
+		 fun folder (((l,v),oldk),env) =
 		   let
-		     val c = trans env (Proj_c(c,l),k)
-		     val k = erasek env k
+		     (* Invariant: c is always a path (doesn't require renaming) *)
+		     val c = trans env (Proj_c(c,l),oldk)
+		     val k = erasek env oldk
 		     val bnd = Con_cb(v,c)
 		     val field = (l,Var_c v)
-		     val env = insert_kind env (v,k)
+		     val env = insert_kind env (v,oldk)
 		   in ((bnd,field),env)
 		   end
 		 val (cbsfields,_) = foldl_acc folder env lvks
@@ -65,15 +83,15 @@ structure SingletonElim :> SINGLETONELIM =
 	       end
 	      | Arrow_k (os,vks,k) =>
 	       let
-		 fun folder ((v,k),env) =
+		 fun folder ((v,oldk),env) =
 		   let
 		     val newv = Name.derived_var v
-		     val newc = trans env (Var_c newv,k)
-		     val k = erasek env k
+		     val newc = trans env (Var_c newv,oldk)
+		     val k = erasek env oldk
 		     val arg = Var_c v
 		     val bnd = Con_cb(v,newc)
 		     val vk = (newv,k)
-		     val env = insert_kind env (v,k)
+		     val env = insert_kind env (v,oldk)
 		   in ((vk,bnd,arg),env)
 		   end
 		 val (vbas,env) = foldl_acc folder env vks
@@ -81,7 +99,7 @@ structure SingletonElim :> SINGLETONELIM =
 		 val body = trans env (App_c(c,args),k)
 		 val k = erasek env k
 
-		 val name = Name.fresh_named_var "erasure_fun"
+		 val name = path2var c
 		 val newbody = NU.makeLetC bnds body
 		 val lam = Open_cb (name,vks,newbody)
 
@@ -113,7 +131,10 @@ structure SingletonElim :> SINGLETONELIM =
 		val (tFormals,vcs,env) = R_vklist env tFormals
 		val subst = NilSubst.C.seqFromList vcs
 		val eFormals = R_clist env eFormals
-		val eFormals = map (fn c => NilSubst.substConInCon subst c) eFormals
+		(* Must preserve the unique variables invariant.  Note that substitutions
+		 * only preserve the no shadowing invariant. 
+		 *)
+		val eFormals = map (fn c => NilRename.renameCon(NilSubst.substConInCon subst c)) eFormals
 		val body_type = R_c env body_type
 		val body_type = NU.makeLetC (map Con_cb vcs) body_type
 	      in
@@ -137,14 +158,14 @@ structure SingletonElim :> SINGLETONELIM =
       end
     and R_vklist env vks =
       let
-	fun folder ((v,k),env) =
+	fun folder ((v,oldk),env) =
 	  let
 	    val newv = Name.derived_var v
 	    val (newc,k) =
-	      case R_k env (Var_c newv,k)
-		of SOME newc => (newc,erasek env k)
-		 | NONE => (Var_c newv,k)
-	    val env = insert_kind env (v,k)
+	      case R_k env (Var_c newv,oldk)
+		of SOME newc => (newc,erasek env oldk)
+		 | NONE => (Var_c newv,oldk)
+	    val env = insert_kind env (v,oldk)
 	  in (((newv,k),(v,newc)),env)
 	  end
 	val (vkvcs,env) = foldl_acc folder env vks
@@ -161,13 +182,13 @@ structure SingletonElim :> SINGLETONELIM =
 	    val c = R_c env' c
 	    val c = NU.makeLetC (map Con_cb vcs) c
 	    val cb = wrapper(v,vks,c)
-	    val env = insert_cbnd env cb
+	    val env = insert_cbnd env cbnd
 	  in (cb,env)
 	  end
       in (case cbnd
-	    of Con_cb (v,c) =>
-	      let val c = R_c env c
-	      in (Con_cb(v,c),insert_equation env (v,c))
+	    of Con_cb (v,oldc) =>
+	      let val c = R_c env oldc
+	      in (Con_cb(v,c),insert_equation env (v,oldc))
 	      end
 	     | Open_cb arg => R_confun Open_cb arg
 	     | Code_cb arg => R_confun Code_cb arg)
@@ -242,6 +263,9 @@ structure SingletonElim :> SINGLETONELIM =
        val arg as {tFormals=vks,...} = rename_arrow (strip_arrow env c,tFormals)
        val c = R_c env c
 
+       (* The same kinds have been translated elsewhere, so we must rename them
+	* here to avoid duplicating variables. *)
+       val vks = Listops.map_second NilRename.renameKind vks
        val (vks,vcs,env) = R_vklist env vks
        val tFormals = map #1 vks
        val body = R_e env body
@@ -271,15 +295,15 @@ structure SingletonElim :> SINGLETONELIM =
 
    fun R_import (ImportValue(l,v,tr,c),(rbnds,env)) =
      ((ImportValue(l,v,tr,R_c env c))::rbnds,env)
-     | R_import (ImportType(l,v,k),(rbnds,env)) =
+     | R_import (ImportType(l,v,oldk),(rbnds,env)) =
      let
        val newv = Name.derived_var v
        val (newc,k) =
-	 case R_k env (Var_c newv,k)
-	   of SOME newc => (newc,erasek env k)
-	    | NONE => (Var_c newv,k)
+	 case R_k env (Var_c newv,oldk)
+	   of SOME newc => (newc,erasek env oldk)
+	    | NONE => (Var_c newv,oldk)
 
-       val env = insert_kind env (v,k)
+       val env = insert_kind env (v,oldk)
        val rbnds = 
 	 (ImportBnd(Runtime,Con_cb(v,newc)))::
 	 (ImportType(l,newv,k)) ::

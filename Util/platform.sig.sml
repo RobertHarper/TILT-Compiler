@@ -1,6 +1,6 @@
 signature PLATFORM =
 sig
-    datatype platform = DUNIX | SOLARIS | GENERIC
+    datatype platform = DUNIX | SOLARIS | LINUX | GENERIC
 
     val platform : unit -> platform
     val platformName : platform -> string

@@ -6,6 +6,10 @@ struct
 
     val debug = Stats.ff("ReifyDebug")
     val rdebug = Stats.ff("ReifyMinDebug")
+
+    (* Lil code does not use traces (much) *)
+    val doTrace = Stats.tt("ReifyTraces")
+
     fun error s = Util.error "reify.sml" s
 
     val float64 = NilDefs.ftype64
@@ -95,11 +99,27 @@ struct
 	 * but may be able to improve on it.
 	 *)
 
-      in case (TraceOps.valid_trace (ctxt,nt),nt)
-	   of (false,_) => doit con
-	    | (_,TraceCompute v) => doit (Var_c v)
-	    | (_,TraceKnown (TraceInfo.Compute p)) => doit (NilDefs.path2con p)
-	    | (_,ti) => (ti,[],pset)
+      in 
+	if !doTrace then
+	  case (TraceOps.valid_trace (ctxt,nt),nt)
+	    of (false,_) => doit con
+	     | (_,TraceCompute v) => doit (Var_c v)
+	     | (_,TraceKnown (TraceInfo.Compute p)) => doit (NilDefs.path2con p)
+	     | (_,ti) => (ti,[],pset)
+	else
+	  (* niltolil currently uses trace annotations to find reals,
+	   * so for now keep this much trace info.
+	   *)
+	  let
+	    val nt = 
+	      (case nt
+		 of TraceKnown (TraceInfo.Notrace_Real) => nt
+		  | _ => 
+		   (case TraceOps.get_trace (ctxt,con) 
+		      of SOME (TraceInfo.Notrace_Real) => TraceKnown (TraceInfo.Notrace_Real)
+		       | _ => TraceUnknown))
+	  in (nt,[],pset)
+	  end
       end
 
     fun reify_exp ctxt (e as Var_e v, pset) = (e, pset)

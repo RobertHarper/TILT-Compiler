@@ -101,8 +101,13 @@ signature LISTOPS =
 
     val transpose : 'a list list -> 'a list list
 
-    val map_first : ('a -> 'b) -> ('a * 'c) list -> ('b * 'c) list
+    val map_first  : ('a -> 'b) -> ('a * 'c) list -> ('b * 'c) list
     val map_second : ('a -> 'b) -> ('c * 'a) list -> ('c * 'b) list
+    val app_first  : ('a -> unit) -> ('a * 'c) list -> unit
+    val app_second : ('a -> unit) -> ('c * 'a) list -> unit
+
+    val firsts  : ('a * 'b) list -> 'a list
+    val seconds : ('a * 'b) list -> 'b list
 
     (* foldl_acc f s l => (l',s') where s' is equivalent to the result of
       * List.foldl (fn x => #2(f x)) s l

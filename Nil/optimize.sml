@@ -50,7 +50,10 @@ struct
 	val onearg_apps_reduced = ref 0
 	val imports_killed = ref 0
 	val uncurried = ref 0
-
+	val record_eta = ref 0
+	val fun_eta = ref 0
+	val proj_inj = ref 0
+	val inj_proj = ref 0
 	fun reset_stats() =
 	  let in
 	    folds_reduced :=  0;
@@ -61,7 +64,11 @@ struct
 	    oneargs_reduced := 0;
 	    onearg_apps_reduced := 0;
 	    imports_killed := 0;
-	    uncurried := 0
+	    uncurried := 0;
+	    record_eta := 0;
+	    fun_eta := 0;
+	    proj_inj := 0;
+	    inj_proj := 0
 	  end
 
 	fun chat lev str = if (!chatlev) >= lev then print str else ()
@@ -97,7 +104,19 @@ struct
 	     print " imports killed\n";
 	     print "\t";
 	     print (Int.toString (!uncurried));
-	     print " functions uncurried\n"
+	     print " functions uncurried\n";
+	     print "\t";
+	     print (Int.toString (!record_eta));
+	     print " records eta reduced\n";
+	     print "\t";
+	     print (Int.toString (!fun_eta));
+	     print " functions eta reduced\n";
+	     print "\t";
+	     print (Int.toString (!proj_inj));
+	     print " sum projections beta reduced\n";
+	     print "\t";
+	     print (Int.toString (!inj_proj));
+	     print " sum injections eta reduced \n"
 	     ) else ()
 
 
@@ -411,6 +430,19 @@ struct
 	    in loop e
 	    end
 
+	  (*Same for cons
+	   *)
+	  fun unalias_c (state,c) =
+	    let
+	      fun loop (Var_c a) =
+		(case lookup_alias(state,a) of
+		   MUSTc c => loop c
+		 | OPTIONALc c => c
+		 | _ => c)
+		| loop c = c
+	    in loop c
+	    end
+
 (*	  val lookup_alias = fn (s,v) =>
 	    let val alias = lookup_alias (s,v)
 	    in
@@ -475,6 +507,9 @@ struct
 
 	  fun type_of(STATE{equation,...},e) =
 	      subtimer("optimizeTypeof", Normalize.type_of)(equation,e)
+
+	  fun kind_of(STATE{equation,...},c) =
+	      subtimer("optimizeKindof", NilContext.kind_of)(equation,c)
 
 	  fun type_equiv(STATE{equation,...},c1,c2) =
 	      subtimer("optimizeTypeEquiv", NilStatic.type_equiv)(equation,c1,c2)
@@ -571,7 +606,16 @@ struct
 	  fun strip_arrow (STATE{equation,...},c) =
 	      Normalize.strip_arrow_norm equation c
 
+	  fun var_is_unit (state,x) =
+	    (case NilUtil.strip_record(#2(reduce_hnf(state,(type_of(state,Var_e x)))))
+	       of SOME ([],[]) => true
+		| _ => false)
+
 	  (* Look up constructor level record projection *)
+
+	  (* XXX I'm not sure what this was supposed to do, but I'm pretty sure
+	   * it's not doing it.  Note that length(labs) will never exceed 1. -leaf
+	   *)
 	  fun lookup_cproj(state,v,labs) =
 	      let fun loop c [] = SOME c
 		    | loop (Crecord_c lclist) (l::rest) =
@@ -586,12 +630,17 @@ struct
 			 end
 		    | loop (Var_c v) labs = lookup_cproj(state,v,labs)
 		    | loop _ _ = NONE
-	      in  (case lookup_alias(state,v) of
+		  val res1 = 
+		    (case lookup_alias(state,v) of
 		       OPTIONALc c => loop c labs
 		     | MUSTc c => loop c labs
-		     | _ => (case find_availC(state,NilDefs.path2con(v,labs)) of
+		     | _ => NONE)
+	      in   
+		case res1
+		  of NONE => (case find_availC(state,NilDefs.path2con(v,labs)) of
 				NONE =>	NONE
-			      | SOME v => SOME(Var_c v)))
+			      | SOME v => SOME(Var_c v))
+		   | _ => res1
 	      end
 
 
@@ -1105,58 +1154,89 @@ struct
 	    end
 
 	and do_con' (state : state) (con : con) : con =
-	   (case con of
+	  let
+	    fun do_aggregate_con state (constr,eltt) = 
+	      (case reduce_hnf (state,eltt)
+		 of (_,Prim_c(BoxFloat_c is,_)) => Prim_c(constr,[Prim_c(Float_c is,[])])
+		  | _ => Prim_c (constr,[do_con state eltt]))
+	  in
+	    case con of
 	      Prim_c(Vararg_c _,clist) =>
-		  (case reduce_hnf(state,con)  (* Try to reduce Varargs if possible *)
-		     of (_,Prim_c(pc,clist)) => Prim_c(pc, map (do_con state) clist)
-		      | (_,con) => do_con state con)
-	      | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
-	      | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
-					   (fn (v,c) => (v,do_con state c)) vc_seq)
-	      | ExternArrow_c(clist,c) =>
-		    ExternArrow_c(map (do_con state) clist, do_con state c)
-	      | AllArrow_c{openness,effect,tFormals,eFormals,fFormals,body_type} =>
-		    let val (tFormals,state) = do_vklist state tFormals
-		      val (eFormals,state) = do_clist state eFormals
-		    in  AllArrow_c{openness=openness, effect=effect,
-				   tFormals=tFormals, eFormals=eFormals,
-				   fFormals = fFormals, body_type = do_con state body_type}
-		    end
-	      | Var_c v =>
-		  let
-		    val res =
-		      case lookup_alias(state,v) of
-			MUSTc c => do_con state c
-		      | OPTIONALc c => if NilDefs.small_con c then do_con state c
-				       else (use_var(state,v); con)
-		      | _ => (use_var(state,v); con)
-		  in res
-		  end
-	      | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l, do_con state c)) lclist)
-	      | Proj_c(Var_c v, l) =>
-			 (case (lookup_cproj(state,v,[l])) of
-			      NONE => Proj_c(do_con state (Var_c v), l)
-			    | SOME c => do_con state c)
-	      | Proj_c(c,l) => Proj_c(do_con state c, l)
-	      | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
-	      | App_c(c,clist) => App_c(do_con state c, map (do_con state) clist)
-	      | Coercion_c {vars,from,to} =>
-			    let
-			      fun folder (v,s) = add_kind(s,v,Type_k)
-			      val state = foldl folder state vars
-			    in
-			      Coercion_c {vars=vars,from=do_con state from,
-					  to=do_con state to}
-			    end
-	      | Let_c(letsort,cbnds,c) =>
-			let val cbnds = flattenCbnds cbnds
-			    (* we must put a wrapper in order to perform the filter *)
-			    val state = retain_state state
-			    val (cbnds,state) = foldl_acc do_cbnd state cbnds
-			    val c = do_con state c
-			    val cbnds = List.filter (cbnd_used state) cbnds
-		        in  NilUtil.makeLetC cbnds c
-			end)
+		(case reduce_hnf(state,con)  (* Try to reduce Varargs if possible *)
+		   of (_,Prim_c (pc,_)) => Prim_c(pc, map (do_con state) clist)
+		    | (_,con) => do_con state con)
+	    | Prim_c(Array_c,[eltt])  => do_aggregate_con state (Array_c,eltt)
+	    | Prim_c(Vector_c,[eltt]) => do_aggregate_con state (Vector_c,eltt)
+	    | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
+	    | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
+					 (fn (v,c) => (v,do_con state c)) vc_seq)
+	    | ExternArrow_c(clist,c) =>
+		   ExternArrow_c(map (do_con state) clist, do_con state c)
+	    | AllArrow_c{openness,effect,tFormals,eFormals,fFormals,body_type} =>
+		   let val (tFormals,state) = do_vklist state tFormals
+		     val (eFormals,state) = do_clist state eFormals
+		   in  AllArrow_c{openness=openness, effect=effect,
+				  tFormals=tFormals, eFormals=eFormals,
+				  fFormals = fFormals, body_type = do_con state body_type}
+		   end
+	    | Var_c v =>
+		   let
+		     val res =
+		       case lookup_alias(state,v) of
+			 MUSTc c => do_con state c
+		       | OPTIONALc c => if NilDefs.small_con c then do_con state c
+					else (use_var(state,v); con)
+		       | _ => (use_var(state,v); con)
+		   in res
+		   end
+	    | Crecord_c lclist => 
+	       let 
+		 fun eta_crecord(state,lclist as ((_,Proj_c(Var_c a,_))::_)) = 
+		   let
+		     fun check ((l,Proj_c(Var_c a',l')),((l'',_),_)) = 
+		       Name.eq_var(a,a') andalso Name.eq_label(l,l') andalso Name.eq_label(l',l'')
+		       | check _ = false
+		     val is_eta = 
+		       (case kind_of(state,(Var_c a))
+			  of Record_k (lvks) => Listops.all2 check (lclist,lvks)
+			   | _ => false)
+		   in if is_eta then SOME (Var_c a)
+		      else NONE
+		   end
+		   | eta_crecord _ = NONE
+
+		 val lclist = map (fn (l,c) => (l, do_con state c)) lclist
+		 val con = 
+		   (case eta_crecord (state,Listops.map_second (fn c => unalias_c(state,c)) lclist)
+		      of SOME c => c
+		       | NONE => Crecord_c lclist)
+	       in con
+	       end
+	    | Proj_c(Var_c v, l) =>
+		   (case (lookup_cproj(state,v,[l])) of
+		      NONE => Proj_c(do_con state (Var_c v), l)
+		    | SOME c => do_con state c)
+	    | Proj_c(c,l) => Proj_c(do_con state c, l)
+	    | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
+	    | App_c(c,clist) => App_c(do_con state c, map (do_con state) clist)
+	    | Coercion_c {vars,from,to} =>
+		      let
+			fun folder (v,s) = add_kind(s,v,Type_k)
+			val state = foldl folder state vars
+		      in
+			Coercion_c {vars=vars,from=do_con state from,
+				    to=do_con state to}
+		      end
+	    | Let_c(letsort,cbnds,c) =>
+		      let val cbnds = flattenCbnds cbnds
+			(* we must put a wrapper in order to perform the filter *)
+			val state = retain_state state
+			val (cbnds,state) = foldl_acc do_cbnd state cbnds
+			val c = do_con state c
+			val cbnds = List.filter (cbnd_used state) cbnds
+		      in  NilUtil.makeLetC cbnds c
+		      end
+	  end
 
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state =
 	   (case cbnd of
@@ -1167,7 +1247,8 @@ struct
 			 then do_cbnd(Open_cb(v,vklist,c), state)
 		       else do_cbnd(Con_cb(v,Var_c v''),state)  (* Lambda is dead code *)
 		      |	_ =>
-			 let val state = add_var(state,v)
+			 let 
+			   val state = add_var(state,v)
 			   val state' = enter_var(state,v)
 			   val c = do_con state' c
 			   val c =
@@ -1192,8 +1273,16 @@ struct
 					   val state = add_kind(state,v,
 							  Single_k (#2(extractCbnd cbnd)))
 					   val (vklist,state') = do_vklist state' vklist
-					in  (Open_cb(v,vklist, do_con state' c), state)
-					end
+					   val c = do_con state' c
+					   fun check_eta_args (vklist,args) =
+					     (Listops.all2 (fn ((v,k),(Var_c v')) => Name.eq_var (v,v') | _ => false) (vklist,args))
+				       in  case c
+					     of Let_c (_,[Con_cb(a,App_c(Var_c v',args))],Var_c a') => 
+					       if Name.eq_var (a,a') andalso check_eta_args(vklist,args)
+						 then (Con_cb(v,Var_c v'),state)
+					       else(Open_cb(v,vklist, c), state)
+					      | _ => (Open_cb(v,vklist, c), state)
+				       end
 	      | Code_cb(v,vklist,c) => let val state = add_var(state,v)
 					   val state' = enter_var(state,v)
 					   val state = add_kind(state,v,
@@ -1252,25 +1341,51 @@ struct
 
 
 	and do_aggregate (state,constr,t,clist,elist)  =
-	    let open Prim
-		fun helper is_array c =
-		(case (is_array,reduce_hnf(state, c)) of
-		     (true,(_, Prim_c(Int_c is, _))) => (IntArray is,[])
-		   | (false,(_, Prim_c(Int_c is, _))) => (IntVector is,[])
-		   | (true,(_, Prim_c(Float_c is, _))) => (FloatArray is,[])
-		   | (false,(_, Prim_c(Float_c is, _))) => (FloatVector is,[])
-		   | (true, (hnf, _)) => (OtherArray hnf,[c])
-		   | (false, (hnf, _)) => (OtherVector hnf,[c]))
-		val (t,clist) =
-		    (case t of
-			 OtherArray _ => helper true (hd clist)
-		       | OtherVector _ => helper false (hd clist)
-		       | _ => (t,clist))
-		val clist = map (do_con state) clist
-		val elist = map (do_exp state) elist
-	    in  Prim_e(PrimOp(constr t), [],clist, elist)
-	    end
+	  let open Prim
 
+	      fun unbox sv = 
+		let
+		  val x = Name.fresh_named_var "unboxed_arr_arg"
+		in Let_e (Sequential,[Exp_b(x,TraceKnown(TraceInfo.Notrace_Real),Prim_e(NilPrimOp(unbox_float Prim.F64), [],[], [sv]))],Var_e x)
+		end
+	      fun box oper = 
+		let
+		  val xf = Name.fresh_named_var "float_arr_res"
+		  val x = Name.fresh_named_var "boxed_arr_res"
+		in Let_e (Sequential,[Exp_b(xf,TraceKnown(TraceInfo.Notrace_Real),oper),
+				      Exp_b(x,TraceKnown(TraceInfo.Trace),Prim_e(NilPrimOp(box_float Prim.F64), [],[], [Var_e xf]))],Var_e x)
+		end
+
+	      fun do_boxfloat (p,elist) = 
+		(case (p,elist)
+		   of (create_table _,[len,init]) => (false,p,[],[len,unbox init])
+		    | (create_empty_table _,_)    => (false,p,[],elist)
+		    | (sub _,[arr,i])             => (true,p,[],elist)
+		    | (update _,[arr,i,v])        => (false,p,[],[arr,i,unbox v])
+		    | (length_table _,_)          => (false,p,[],elist))
+		   
+
+	      fun helper is_array c elist =
+		(case (is_array,reduce_hnf(state, c)) of
+		   (true,(_, Prim_c(Int_c is, _))) => (false,constr(IntArray is),[],elist)
+		 | (false,(_, Prim_c(Int_c is, _))) => (false,constr(IntVector is),[],elist)
+		 | (true,(_, Prim_c(BoxFloat_c is, _))) => do_boxfloat(constr(FloatArray is),elist)
+		 | (false,(_, Prim_c(BoxFloat_c is, _))) => do_boxfloat(constr(FloatVector is),elist)
+		 | (_,(_, Prim_c(Float_c is, _))) => error "This shouldn't happen?"
+		 | (true, (hnf, _)) => (false,constr(OtherArray hnf),[c],elist)
+		 | (false, (hnf, _)) => (false,constr (OtherVector hnf),[c],elist))
+		   
+	      val (boxit,p,clist,elist) =
+		(case t of
+		   OtherArray _ => helper true (hd clist) elist
+		 | OtherVector _ => helper false (hd clist) elist
+		 | _ => (false,constr t,clist,elist))
+	      val clist = map (do_con state) clist
+	      val elist = map (do_exp state) elist
+	      val oper = Prim_e(PrimOp p, [],clist, elist)
+	  in if boxit then box oper else oper
+	  end
+	
 	(* Convert some inject's to inject_known's *)
 	and do_inject (state : state) (k, clist, elist) =
 	    let fun default() = Prim_e(NilPrimOp (inject k),[],
@@ -1362,14 +1477,45 @@ struct
 						  then do_exp state new_exp
 					      else default())
 		     end
+	       | (NilPrimOp (record labs),(gctag::(exps as (Prim_e(NilPrimOp(select l),_,_,[Var_e v]))::_))) => 
+		     let  (*Record eta reduction *)
+		       fun check (e,l,l') =
+			 (case e
+			    of Prim_e(NilPrimOp(select l''),_,_,[Var_e v']) => 
+			      Name.eq_var(v,v') andalso Name.eq_label (l,l') andalso Name.eq_label (l',l'')
+			     | _ => false)
+		       val is_eta =
+			 (case NilUtil.strip_record (#2(reduce_hnf(state,type_of(state,Var_e v))))
+			    of SOME(labs',cons) => Listops.all3 check (exps,labs,labs')
+			     | _ => false)
+		     in if is_eta then (inc record_eta;Var_e v) else default()
+		     end
+	       | (NilPrimOp (project k),[Prim_e(NilPrimOp (inject k'),_,[sumcon],[arg])]) => (inc proj_inj;arg)
+	       | (NilPrimOp (project_known k),[Prim_e(NilPrimOp (inject_known k'),_,[sumcon],[arg])]) => (inc proj_inj;arg)
+	       | (NilPrimOp (project_known k),[Prim_e(NilPrimOp (inject_known k'),_,[sumcon],[_,arg])]) => (inc proj_inj;arg)
+	       | (NilPrimOp (inject k),[Prim_e(NilPrimOp (project k'),_,[sumcon],[arg])]) => 
+		  (case clist
+		     of [sumcon'] => if TilWord32.equal (k,k') andalso type_equiv(state,sumcon,sumcon') 
+				       then (inc inj_proj;arg)
+				     else do_inject state (k,clist,elist))
+	       | (NilPrimOp (inject_known k),[Prim_e(NilPrimOp (project_known k'),_,[sumcon],[arg])]) => 
+	          (case clist
+		     of [sumcon'] => if TilWord32.equal (k,k') andalso type_equiv(state,sumcon,sumcon') 
+				       then (inc inj_proj;arg)
+				     else default())
+	       | (NilPrimOp (inject_known k),[_,Prim_e(NilPrimOp (project_known k'),_,[sumcon],[arg])]) => 
+	          (case clist
+		     of [sumcon'] => if TilWord32.equal (k,k') andalso type_equiv(state,sumcon,sumcon') 
+				       then (inc inj_proj;arg)
+				     else default())
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
-	       | (PrimOp(create_table t), _) => do_aggregate
-							(state,create_table,t,clist,elist)
-	       | (PrimOp(create_empty_table t), _) =>
-		   do_aggregate (state,create_empty_table,t,clist,elist)
-	       | (PrimOp(sub t), _) => do_aggregate (state,sub,t,clist,elist)
-	       | (PrimOp(update t), _) => do_aggregate (state,update,t,clist,elist)
-	       | (PrimOp(length_table t), _) => do_aggregate (state,length_table,t,clist,elist)
+	       | (PrimOp(p as (create_table t)), _) => do_aggregate (state,create_table,t,clist,elist)
+	       | (PrimOp(p as (create_empty_table t)), _) =>
+							do_aggregate (state,create_empty_table,t,clist,elist)
+	       | (PrimOp(p as (sub t)), _)          => do_aggregate (state,sub,t,clist,elist)
+	       | (PrimOp(p as (update t)), _)       => do_aggregate (state,update,t,clist,elist)
+	       | (PrimOp(p as (length_table t)), _) => do_aggregate (state,length_table,t,clist,elist)
+	       | (PrimOp(p as (equal_table t)), _)  => do_aggregate (state,equal_table,t,clist,elist)
 	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,_,[e])]) => do_exp state e
 	       | (NilPrimOp (make_vararg oe), [Prim_e(NilPrimOp (make_onearg _), _, _, [e])]) => do_exp state e
 	       | (NilPrimOp (make_onearg oe), [Prim_e(NilPrimOp (make_vararg _), _, _, [e])]) => do_exp state e
@@ -1607,6 +1753,18 @@ struct
 			let val ssumtype = make_ssum n
 			    val tr = do_niltrace state tr
 			    val (_,state) = do_vclist state [(bound,ssumtype)]
+			    val state = 
+			      (case arg
+				 of Var_e x => 
+				   let
+				     val q = ForgetKnown_e (sumtype,n)
+				     val q = (case find_availE(state,q)
+						of NONE => q
+						 | SOME x => Var_e x)
+				     val state = add_availE(state,Coerce_e(q,[],Var_e bound) ,x)
+				   in state
+				   end
+				  | _ => state)
 			in  (n,tr,do_exp state body)
 			end
 
@@ -1615,22 +1773,9 @@ struct
 			   of Coerce_e(q,_,inj) => 
 			     (case unalias (state,q)
 				of ForgetKnown_e (sumcon,w) => SOME (w,inj)
-				 | _ => 			       
-				  (case (unalias(state,inj))   (*The prior case should always catch it, but...*)
-				     of Prim_e(NilPrimOp (inject w), _, _, _) => SOME (w,inj)
-				      | Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME (w,inj)
-				      | _ => NONE))
+				 | _ => NONE)
 			    | _ => NONE)
 
-		    val known_tag =
-			(case arg of
-			     Prim_e(NilPrimOp (inject w), _, _, _) => SOME w
-			   | Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME w
-			   | e =>
-			       (case (unalias(state,e)) of
-				  Prim_e(NilPrimOp (inject w), _, _, _) => SOME w
-				| Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME w
-				| _ => NONE))
 		in
 
 		    case tag_value of
@@ -1870,8 +2015,9 @@ struct
 					     | _ => (eff,OPTIONALe e))
 
 				      val _ = if effect then use_var(state,v) else ()
-				      val state = (case e of
-						       Var_e _ => state
+				      val state = (case e 
+						     of Var_e _ => state
+						      | Const_e _ => state
 						     | _ => add_availE(state, e, v))
 
 				      val state = add_alias(state,v,alias)
@@ -1882,21 +2028,45 @@ struct
 		   | Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
 				      in  ([Con_b(p,cbnd)], state)
 				      end
-		   | Fixopen_b vfset =>
-		     let val vflist = Sequence.toList vfset
-			 val (cbndslists_vflistlist,state) = foldl_acc rewrite_uncurry state vflist
-			 val (cbndslists,vflistlist) = unzip cbndslists_vflistlist
-
-			 val cbnds = Listops.flatten cbndslists
-			 val (cbnds,state) = foldl_acc do_cbnd state cbnds
-
-			 val vflist = Listops.flatten vflistlist
-			 fun folder (((v,c),f),state) = add_con(state,v,c)
-			 val state = foldl folder state vflist
-			 val vflist = map (do_function state) vflist
-
-		     in  ((NilUtil.cbnds2bnds cbnds) @ [Fixopen_b vflist], state)
+		   | Fixopen_b vfset => 
+		     let 
+		       val vflist = Sequence.toList vfset
+		       val (cbndslists_vflistlist,state) = foldl_acc rewrite_uncurry state vflist
+		       val (cbndslists,vflistlist) = unzip cbndslists_vflistlist
+			 
+		       val cbnds = Listops.flatten cbndslists
+		       val (cbnds,state) = foldl_acc do_cbnd state cbnds
+			 
+		       val vflist = Listops.flatten vflistlist
+		       fun folder (((v,c),f),state) = add_con(state,v,c)
+		       val state = foldl folder state vflist
+		       val vflist = map (do_function state) vflist
+		       val (state,fixbnds) = 
+			 (case vflist
+			    of [((v,_),Function{effect=effect,recursive=recursive,
+						tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
+						body=Let_e(_,[Exp_b(x,_,App_e(openness,Var_e v',clist,elist,eflist))],Var_e x')})] =>
+			      let
+				fun ccheck(a,Var_c a') = Name.eq_var (a,a') 
+				  | ccheck _ = false
+				fun echeck((x,_),Var_e x') = 
+				  Name.eq_var(x,x') (*orelse (var_is_unit(state,x) andalso var_is_unit(state,x'))*)
+				  | echeck _ = false
+				fun efcheck(x,Var_e x') = Name.eq_var(x,x')
+				  | efcheck _ = false
+			      in
+				if not (Name.eq_var(v,v')) andalso (Name.eq_var(x,x')) andalso
+				  (Listops.all2 ccheck (tFormals,clist)) andalso
+				  (Listops.all2 echeck (eFormals,elist)) andalso
+				  (Listops.all2 efcheck (fFormals,eflist)) 
+				  then (inc fun_eta;
+					(add_alias(state,v,MUSTe(Var_e v')),[]))
+				else (state,[Fixopen_b(vflist)])
+			      end
+			     | _ => (state,[Fixopen_b(vflist)]))
+		     in  ((NilUtil.cbnds2bnds cbnds) @ fixbnds, state)
 		     end
+
 		   | Fixcode_b vfset =>
 		     let 
 		       val vflist = Sequence.toList vfset

@@ -30,6 +30,8 @@ signature NAME =
     val fresh_internal_label  : string -> label
     val derived_var : var -> var
     val rename_var : var * string -> unit
+    val var2label : var -> label
+    val label2var : label -> var
 
     (* injective *)
     val tag2int : tag -> int

@@ -565,6 +565,10 @@ struct
 		(uptoAsm andalso not (keepAsm orelse keepAsmz)) orelse
 		have Paths.asmFile orelse
 		have Paths.asmzFile
+	    val dont_assemble = 		  
+	      uptoElaborate orelse
+	      uptoAsm orelse
+	      have Paths.objFile
 	    val inputs : inputs =
 		(case (dont_elaborate,dont_generate)
 		   of (true,true) => NONE
@@ -584,9 +588,7 @@ struct
 		  not (have Paths.asmzFile) orelse
 		  have Paths.asmFile),
 		 (Assemble,
-		  uptoElaborate orelse
-		  uptoAsm orelse
-		  have Paths.objFile),
+		  dont_assemble),
 		 (Compress,
 		  uptoElaborate orelse
 		  not (keepAsm orelse keepAsmz) orelse
@@ -595,7 +597,7 @@ struct
 		 (RemoveAsm,
 		  uptoElaborate orelse
 		  keepAsm orelse
-		  (dont_generate andalso (not (have Paths.asmFile)))),   (* not have Paths.asmFile andalso ...?*)
+		  (dont_generate andalso dont_assemble)),   (* not have Paths.asmFile andalso ...?*)
 		 (RemoveAsmz,
 		  uptoElaborate orelse
 		  keepAsmz)]

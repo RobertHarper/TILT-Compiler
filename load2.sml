@@ -1,4 +1,4 @@
-CM.make();
+CM.make ();
 
 
 structure Load :> LOAD = 
@@ -20,7 +20,8 @@ fun show b =
     LoadVars.show := b;
     LinkIl.ShowHIL := b;
     Linkrtl.ShowRtl := b;
-    Stats.bool "ShowNil" := b
+    Stats.bool "ShowNil" := b;
+    Stats.bool "ShowLil" := b
   end;
 
 fun show_hil b = (LoadVars.show_hil := b;LinkIl.ShowHIL := b)

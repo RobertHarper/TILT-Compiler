@@ -25,6 +25,8 @@ struct
 
   fun error s = Util.error "nilutil.sml" s
 
+  val arrow_is_taglike = Stats.ff "ArrowIsTaglike"
+
   val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "nilutil_profile"
   val _ = Stats.ff "closure_omit_coercions"
@@ -180,7 +182,7 @@ struct
       | strip_int' _ = NONE
     fun strip_sum' (Prim_c (Sum_c {tagcount,totalcount,known},cons)) =
       (case cons
-	 of [con] => SOME (tagcount,totalcount,known,hd cons)
+	 of [con] => SOME (tagcount,totalcount,known,con)
 	  | _ => error "strip_sum given sum not carrying exactly one type argument")
       | strip_sum' _ = NONE
     fun strip_arrow' (AllArrow_c arg) = SOME arg
@@ -242,6 +244,7 @@ struct
 	 | Mu_c _              => true
 	 | Proj_c(Mu_c _,_)    => true
 	 | Prim_c(Exntag_c, _) => true
+	 | AllArrow_c _        => !arrow_is_taglike
 	 | _                   => false)
 
 
@@ -841,22 +844,6 @@ struct
   end
 
   local
-    fun con_handler conmap ({boundcvars,boundevars},Var_c var) =
-	 if (Name.VarSet.member(boundcvars,var))
-	   then NOCHANGE
-	 else (case (conmap var) of
-		 NONE => NOCHANGE
-	       | SOME c => CHANGE_NORECURSE c)
-      | con_handler _ _ = NOCHANGE
-
-    fun exp_handler expmap ({boundevars,boundcvars},Var_e var) =
-      if (Name.VarSet.member(boundevars,var))
-	then NOCHANGE
-      else (case (expmap var) of
-		NONE => NOCHANGE
-	      | SOME e => CHANGE_NORECURSE e)
-      | exp_handler _ _ = NOCHANGE
-
 
     (* var_set_handler creates a set of handlers to pass to the rewriter defined above
      for the purpose of finding free variables.  This is presumably used for countless
@@ -971,6 +958,7 @@ struct
 	end
 
   end
+
 
     (* get the bound var from a conbnd *)
     fun varBoundByCbnd (Con_cb (v,c)) = v
@@ -1414,5 +1402,64 @@ struct
 	  {openness = openness, effect = effect, tFormals = tFormals, eFormals = eFormals,
 	   fFormals = fFormals, body_type = body_type}
 	end
+
+    (* Find the strongly connected components of the graph.
+     * Result is a list of list of vars and their info.
+     * Each list is a scc.  The sccs are ordered such
+     * that there are no edges from an earlier component 
+     * to a later one (the opposite of the ordering returned 
+     * by GraphUtil).
+     *)
+    fun scc (vars : ((var * 'a) * VarSet.set) list) : (var * 'a) list list = 
+      let
+	val var2i = 
+	  let
+	    val map = foldl (fn ((v,i),m) => VarMap.insert(m,v,i)) VarMap.empty (Listops.mapcount (fn (i,((v,a),vars)) => (v,i)) vars)
+	  in fn v => valOf (VarMap.find (map,v))
+	  end
+	val imap = Array.fromList vars
+	fun i2va i = #1 (Array.sub(imap,i))
+	val nodes = Array.length imap
+	fun get_edge (i,(_,edgeset),edges) = VarSet.foldl (fn (v,edges) => (i,var2i v) :: edges) edges edgeset
+	val edges = Array.foldli get_edge [] (imap,0,NONE)
+	val components = GraphUtil.scc nodes edges
+	val components = map (fn l => map i2va l) (rev components)
+      in components
+      end
+
+    fun mark_non_recur (Function {recursive, effect, tFormals, eFormals, fFormals, body}) =
+      (Function{recursive = NonRecursive, effect=effect,
+		tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
+		body=body})
+      
+    (* Break a fix binding into its strongly connected components *)
+    fun break_fix [((v,c),f)] = 
+      let
+	val f = if VarSet.member(Frees.E.freeInFunction f,v)then f else mark_non_recur f
+      in [[((v,c),f)]]
+      end
+      | break_fix (vcfs : ((var * con) * function) list) : ((var * con) * function) list list = 
+      let
+	(* The set of functions in the nest*)
+	val fset = VarSet.addList(VarSet.empty,map (#1 o #1) vcfs)
+	  
+	(* For each function, get the set of functions from the nest to 
+	 * which it refers.  These comprise edges in a graph where the nodes
+	 * are the functions.
+	 *)
+	fun get_frees ((v,c),f) = 
+	  let
+	    val frees = VarSet.intersection(fset,Frees.E.freeInFunction f)
+	    val f = if VarSet.isEmpty frees then mark_non_recur f else f
+	  in ((v,(c,f)),frees)
+	  end
+
+	val vifrees = map get_frees vcfs
+
+	(* Get the strongly connected components of the graph *)
+	val components = scc vifrees
+
+      in map (fn l => map (fn (v,(c,f)) => ((v,c),f)) l) components
+      end
 
 end

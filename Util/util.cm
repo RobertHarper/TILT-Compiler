@@ -21,6 +21,8 @@ tilword32.sml
 tilword64.sml
 listops.sig.sml
 listops.sml
+vectorops.sig.sml
+vectorops.sml
 formatter.sig.sml
 formatter.sml
 graphutil.sig.sml

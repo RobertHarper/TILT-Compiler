@@ -39,6 +39,8 @@ nilsubst.sig.sml
 nilsubst.sml
 nilrename.sml
 nilrename.sig.sml
+frees.sig.sml
+frees.sml
 
 measure.sig.sml
 measure.sml

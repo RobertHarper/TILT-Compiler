@@ -71,12 +71,16 @@ struct
 	 [Update.UpdateDiag, Slave.SlaveDiag],
 	 [Update.ShowPlan, Update.ShowStale],
 	 [Master.Checkpoint, LinkParse.LinkParseDiag, Compiler.CompilerDiag,
-	  Linknil.LinkNilDiag, Linkrtl.LinkRtlDiag, Linksparc.diag,
+	  Linknil.LinkNilDiag, 
+	  Linklil.LinkLilDiag, 
+	  Linkrtl.LinkRtlDiag, Linksparc.diag,
 	  Linkalpha.diag],
 	 [Master.CheckpointVerbose, LinkIl.LinkIlDiag, Tonil.diag,
 	  IlContext.IlcontextDiag, Hoist.HoistDiag, Inline.InlineDiag,
 	  NilStatic.NilStaticDiag, Specialize.SpecializeDiag,
-	  Normalize.NormalizeDiag, Tools.ToolsDiag],
+	  Normalize.NormalizeDiag, 
+	  LilTypecheck.diag,
+	  Tools.ToolsDiag],
 	 [Master.MasterDiag, Master.ShowEnable, Master.ShowUptodate,
 	  Master.ShowFinalReport]]
 

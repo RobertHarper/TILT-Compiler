@@ -5,10 +5,12 @@ include group "../Util/mapfile-util"
 include group "../Parser/mapfile-parse"
 include group "../Elaborator/mapfile-elaborate"
 include group "../Nil/mapfile-nil"
+include group "../Lil/mapfile"
 include group "../Rtl/mapfile-rtl"
 include group "../Backend/mapfile"
 include group "../Alpha/mapfile"
 include group "../Sparc/mapfile"
+include group "../TAL/mapfile"
 
 source unit Version = "version.sml" {Int}
 
@@ -58,7 +60,7 @@ source interface Compiler = "compiler.int" {COMPILER}
 source unit Compiler : Compiler = "compiler.sml" {
 	Int Name Time Real COMPILER LinkParse LinkIl Nil Linknil Rtl
 	Linkrtl Linkalpha Linksparc Target FileCache Stats Timestamp
-	Info UnitEnvironment File Util Blaster Crc List Il
+	Info UnitEnvironment File Util Blaster Crc List Il Linklil LinkTAL Lil
 }
 source unit GROUP = "group.sig.sml" {ExtSyn Name}
 source interface GROUP = "group.int" {GROUP}
@@ -123,7 +125,7 @@ source unit Manager : Manager = "manager.sml" {
 	Util Stats Dirs String Int MANAGER Slave Compiler OS
 	Master MASTER Option ExnHandler Tools Normalize Specialize
 	NilStatic Inline Hoist IlContext ToNil LinkIl Update Linkalpha
-	Linksparc Linkrtl Linknil LinkParse List ExtSyn
+	Linksparc Linkrtl Linknil LinkParse List ExtSyn LilTypecheck Linklil
 }
 source unit RUN = "run.sig.sml" {OS}
 source unit Run = "run.sml" {Posix Word8 OS RUN CommandLine}

@@ -747,7 +747,7 @@ structure NilContextPre
 		       in CON c   (*Try and get a transitive closure of it*)
 		       end
 		      | _ => KIND (kind, empty_subst()))
-		 | NONE => (print "Traverse:Variable ";print (var2string v);print " not found in context!\n";
+		 | NONE => (if !debug then (print "Traverse:Variable ";print (var2string v);print " not found in context!\n") else ();
 			    raise Unbound))
 	    | (Proj_c (c,l)) =>
 	      (case traverse c of

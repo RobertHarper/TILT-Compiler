@@ -9,28 +9,11 @@ sig
     val delayed : 'a delay -> bool
 end
 
-(* Lists with efficient insertion to both beginning and end *)
-signature SUBST_DLIST =
-sig
-    type 'a dlist
-    val DNIL : 'a dlist
-    val LCONS : 'a * 'a dlist -> 'a dlist
-    val RCONS : 'a dlist * 'a -> 'a dlist
-    val dempty : 'a dlist -> bool
-    val dListToList : 'a dlist -> 'a list
-    val dListFromList : 'a list -> 'a dlist
-    val dListApp : 'a dlist * 'a dlist -> 'a dlist
-end
 
 (* Functor parameter *)
 signature SUBST_HELP =
 sig
     structure Delay : SUBST_DELAY
-    structure Dlist : SUBST_DLIST
-    val make_lets : bool ref
-	(* make_lets controls whether or not a particular optimization involving singleton kinds is used:
-	 When substituting [c_i/a_i]S(c'), the optimization returns S(Let a_i = c_i In c' End) instead of performing the
-	 substitution fully. *)
     val error : string -> string -> 'a
 end
 
@@ -42,12 +25,11 @@ end
 functor SubstFn(structure Help : SUBST_HELP
 		type item                                          (*What is it: e.g. con, exp *)
 		type item_subst =				   (*The substitution type  *)
-		    item Help.Delay.delay Name.VarMap.map * (Name.var * item Help.Delay.delay) Help.Dlist.dlist
-		    (* The first part of this pair is a mapping from variables in the substitution
-		     to delayed computations of their fully evaluated replacements (i.e., variables substituted
-		     "to their lefts" in the substitution are replaced). The second pair is a straightforward list
-		     of variables and replacements, stored in a "double-ended list." It is maintained as empty if
-		     !make_lets is false. *)
+		    item Help.Delay.delay Name.VarMap.map 
+		    (* A mapping from variables in the substitution
+		     * to delayed computations of their fully evaluated replacements (i.e., variables substituted
+		     * "to their lefts" in the substitution are replaced). 
+		     *)
 		val substItemInItem : item_subst -> item -> item   (*For composition *)
 		val renameItem : item -> item                      (*To avoid shadowing *)
 		val printer : item -> unit)                        (*To print them out *)
@@ -56,9 +38,8 @@ functor SubstFn(structure Help : SUBST_HELP
 struct
 
   (* Help *)
-  val make_lets = Help.make_lets
   val error = Help.error
-  open Help.Dlist Help.Delay
+  open Help.Delay
 
   (* Util *)
   val mapopt   = Util.mapopt
@@ -76,23 +57,20 @@ struct
 
   fun rename (item :item) : item delay = delay (fn () => renameItem item)
 
-  fun empty () : item_subst = (VarMap.empty,DNIL)
+  fun empty () : item_subst = VarMap.empty
 
   (*Return the value (if any) that is associated with
    * the given variable in the given substitution
    *)
-  fun substitute (subst,items) var = mapopt thaw (VarMap.find (subst,var))
+  fun substitute subst var = mapopt thaw (VarMap.find (subst,var))
 
   (*Return a list corresponding to the substitution
    * Note that toList (xxxfromList list) is not
    * required to be the identity.
    *)
-  fun toList (subst : item_subst) = if !make_lets then map_second thaw (dListToList (#2 subst)) else (map_second thaw (VarMap.listItemsi (#1 subst)))
-  (* The dList won't be kept if the make_lets optimization isn't used, but we want to use it if it's there for its possibly
-   smaller/already computed replacements. *)
+  fun toList (subst : item_subst) = map_second thaw (VarMap.listItemsi subst)
 
-  fun item_insert (subst as (s,i),var,delay) =
-	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
+  fun item_insert (s,var,delay) = VarMap.insert(s,var,delay)
 
   (*Add as if to a simultaneous substitution.
    * substitute (sim_add (s,x,v)) x => v
@@ -106,50 +84,48 @@ struct
    *
    * addl (x,v,s) = {v/x} o s (where o is the composition operator
    *)
-  fun addl (var,item,(subst,items)) =
+  fun addl (var,item,subst) =
 	let
 	  val item_delay = rename item
 	  val map_subst = item_insert(empty(),var,item_delay)
 	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
-	in item_insert((VarMap.map domap subst,items),var,item_delay)
+	in item_insert(VarMap.map domap subst,var,item_delay)
 	end
 
   (* Add as if to the right of a sequential substition.
    *
    * addr (s,x,v) = s o {v/x} (where o is the composition operator
    *)
-  fun addr (s as (subst,items),var,item) =
+  fun addr (subst,var,item) =
 	let
 	  val item_delay = rename item
-	in (VarMap.insert (subst,var,delay (fn () => substItemInItem s (thaw item_delay))),
-	    RCONS(items,(var,item_delay)))
+	in VarMap.insert (subst,var,delay (fn () => substItemInItem subst (thaw item_delay)))
 	end
 
   (*Returns true if the subsitution is empty.  That is,
    * is_empty s => true iff forall x, substitute s x => NONE
    *)
-  fun is_empty (subst,_) = (VarMap.numItems subst) = 0
+  fun is_empty subst = (VarMap.numItems subst) = 0
 
   (*Create a substitution which when applies behaves as if the two
    * substitutions were applies sequentially.
    *
    * compose (s_1,s_2) = s_1 o s_2
    *)
-  fun compose (s1 as (subst1,items1),(subst2,items2)) =
+  fun compose (s1 as subst1,subst2) =
 	let
 	  fun domap item_delay = delay (fn () => substItemInItem s1 (thaw item_delay))
 	  val subst2 = VarMap.map domap subst2
 	  val subst = VarMap.unionWith (fn _ => error "compose" "Duplicate variables in substitution composition") (subst1,subst2)
-	in (subst,dListApp(items1,items2))
+	in subst
 	end
 
   (* Merge two substs, without looking at the ranges.
    * If the domains overlap at v, the image of v in the
    * new map is that of the second map
    *)
-  fun merge ((subst1,items1),(subst2,items2)) =
-	(VarMap.unionWith (fn _ => error "merge" "Duplicate variables in merged substitutions") (subst1,subst2),
-	 dListApp(items1,items2))
+  fun merge (subst1,subst2) =
+    VarMap.unionWith (fn _ => error "merge" "Duplicate variables in merged substitutions") (subst1,subst2)
 
   (* Treat the list as a simultaneous substitution.
    * Duplicate variables in the argument list may lead to
@@ -166,7 +142,7 @@ struct
   (* Print every mapping in the substitution using the given item printing function *)
   (* N.B. doesn't print items
    *)
-  fun printf (printer : item -> unit) ((subst,items): item_subst) =
+  fun printf (printer : item -> unit) (subst : item_subst) =
 	let
 	  fun print1 (v,a) =
 	    (TextIO.print (Name.var2string v);
