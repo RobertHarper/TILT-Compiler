@@ -14,12 +14,11 @@ type lexarg = {comLevel : int ref,
 	       charlist : string list ref,
 	       stringtype : bool ref,
 	       stringstart : int ref, (* start of current string or comment*)
-               brack_stack : int ref list ref, (* for frags *)
 	       err : pos*pos -> ErrorMsg.complainer}
 type arg = lexarg
 type ('a,'b) token = ('a,'b) Tokens.token
 val eof = fn ({comLevel,err,stringstart,stringtype,sourceMap,
-               charlist, brack_stack}:lexarg) =>
+               charlist, ...}:lexarg) =>
 	   let val pos = Int.max(!stringstart+2, SourceMap.lastChange sourceMap)
 	    in if !comLevel>0 then err (!stringstart,pos) COMPLAIN
 					 "unclosed comment" nullErrorBody
@@ -46,41 +45,20 @@ fun xtoi(err,p,s,i) =
 	      TilWord64.zero)
      end
 
-fun mysynch (src, pos, parts) =
-  let fun digit d = Char.ord d - Char.ord #"0"
-      fun cvt digits = foldl (fn(d, n) => 10*n + digit d) 0 (explode digits)
-      val r = SourceMap.resynch src
-  in  case parts
-        of [col, line] =>
-              r (pos, {fileName=NONE,      line=cvt line, column=SOME(cvt col)})
-         | [file, col, line] =>
-              r (pos, {fileName=SOME file, line=cvt line, column=SOME(cvt col)})
-         | _ => impossible "text in (*#line...*)"
-  end
-
-fun has_quote s = let
-      fun loop i = ((String.sub(s,i) = #"`") orelse loop (i+1))
-	    handle _ => false
-      in
-	loop 0
-      end
-
 fun inc (ri as ref i) = (ri := i+1)
 fun dec (ri as ref i) = (ri := i-1)
+
 %%
 %reject
-%s A S F Q AQ L LL LLC LLCQ;
+%s A S F;
 %header (functor MLLexFun(structure Tokens : ML_TOKENS));
-%arg ({comLevel,sourceMap,err,charlist,stringstart,stringtype,brack_stack});
+%arg ({comLevel,sourceMap,err,charlist,stringstart,stringtype});
 idchars=[A-Za-z'_0-9];
 id=[A-Za-z]{idchars}*;
 ws=("\012"|[\t\ ])*;
-nrws=("\012"|[\t\ ])+;
 eol=("\013\010"|"\010"|"\013");
-some_sym=[!%&$+/:<=>?@~|#*]|\-|\^;
+some_sym=[!%&$+/:<=>?@~`|#*]|\-|\^;
 sym={some_sym}|"\\";
-quote="`";
-full_sym={sym}|{quote};
 num=[0-9]+;
 frac="."{num};
 exp=[eE](~?){num};
@@ -94,41 +72,18 @@ hexnum=[0-9a-fA-F]+;
 <INITIAL>"{"	=> (Tokens.LBRACE(yypos,yypos+1));
 <INITIAL>"}"	=> (Tokens.RBRACE(yypos,yypos+1));
 <INITIAL>"["	=> (Tokens.LBRACKET(yypos,yypos+1));
-<INITIAL>"#["	=> (Tokens.VECTORSTART(yypos,yypos+1));
 <INITIAL>"]"	=> (Tokens.RBRACKET(yypos,yypos+1));
 <INITIAL>";"	=> (Tokens.SEMICOLON(yypos,yypos+1));
-<INITIAL>"("	=> (if (null(!brack_stack))
-                    then ()
-                    else inc (hd (!brack_stack));
-                    Tokens.LPAREN(yypos,yypos+1));
-<INITIAL>")"	=> (if (null(!brack_stack))
-                    then ()
-                    else if (!(hd (!brack_stack)) = 1)
-                         then ( brack_stack := tl (!brack_stack);
-                                charlist := [];
-                                YYBEGIN Q)
-                         else dec (hd (!brack_stack));
-                    Tokens.RPAREN(yypos,yypos+1));
+<INITIAL>"("	=> (Tokens.LPAREN(yypos,yypos+1));
+<INITIAL>")"	=> (Tokens.RPAREN(yypos,yypos+1));
 <INITIAL>"."		=> (Tokens.DOT(yypos,yypos+1));
 <INITIAL>"..."		=> (Tokens.DOTDOTDOT(yypos,yypos+3));
 <INITIAL>"'"("'"?)("_"|{num}|"'")?{id}?
 			=> (TokTable.checkTyvar(yytext,yypos));
 <INITIAL>{id}	        => (TokTable.checkToken(yytext,yypos));
-<INITIAL>{full_sym}+    => (if (!Control.quotation)
-                            then if (has_quote yytext)
-                                 then REJECT()
-                                 else TokTable.checkToken(yytext,yypos)
-                            else TokTable.checkToken(yytext,yypos));
 <INITIAL>{sym}+         => (TokTable.checkToken(yytext,yypos));
-<INITIAL>{quote}        => (if (!Control.quotation)
-                            then (YYBEGIN Q;
-                                  charlist := [];
-                                  Tokens.BEGINQ(yypos,yypos+1))
-                            else (err(yypos, yypos+1)
-                                     COMPLAIN "quotation implementation error"
-				     nullErrorBody;
-                                  Tokens.BEGINQ(yypos,yypos+1)));
 <INITIAL>{real}	=> (Tokens.REAL(yytext,yypos,yypos+size yytext));
+<INITIAL>[0-9]	=> (Tokens.DIGIT(Char.ord(String.sub(yytext,0))-Char.ord #"0",yypos,yypos+1));
 <INITIAL>[1-9][0-9]* => (Tokens.INT(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext));
 <INITIAL>{num}	=> (Tokens.INT0(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext));
 <INITIAL>~{num}	=> (Tokens.INT0(atoi(err, yypos, yytext, 0),yypos,yypos+size yytext));
@@ -140,34 +95,12 @@ hexnum=[0-9a-fA-F]+;
                     stringtype := true; YYBEGIN S; continue());
 <INITIAL>\#\"	=> (charlist := [""]; stringstart := yypos;
                     stringtype := false; YYBEGIN S; continue());
-<INITIAL>"(*#line"{nrws}  =>
-                   (YYBEGIN L; stringstart := yypos; comLevel := 1; continue());
 <INITIAL>"(*"	=> (YYBEGIN A; stringstart := yypos; comLevel := 1; continue());
-<INITIAL>"*)"	=> (err (yypos,yypos+1) COMPLAIN "unmatched close comment"
-		        nullErrorBody;
-		    continue());
 <INITIAL>\h	=> (err (yypos,yypos) COMPLAIN "non-Ascii character"
 		        nullErrorBody;
 		    continue());
 <INITIAL>.	=> (err (yypos,yypos) COMPLAIN "illegal token" nullErrorBody;
 		    continue());
-<L>[0-9]+                 => (YYBEGIN LL; charlist := [yytext]; continue());
-<LL>\.                    => ((* cheat: take n > 0 dots *) continue());
-<LL>[0-9]+                => (YYBEGIN LLC; addString(charlist, yytext); continue());
-<LL>0*               	  => (YYBEGIN LLC; addString(charlist, "1");    continue()
-		(* note hack, since ml-lex chokes on the empty string for 0* *));
-<LLC>"*)"                 => (YYBEGIN INITIAL; mysynch(sourceMap, yypos+2, !charlist);
-		              comLevel := 0; charlist := []; continue());
-<LLC>{ws}\"		  => (YYBEGIN LLCQ; continue());
-<LLCQ>[^\"]*              => (addString(charlist, yytext); continue());
-<LLCQ>\""*)"              => (YYBEGIN INITIAL; mysynch(sourceMap, yypos+3, !charlist);
-		              comLevel := 0; charlist := []; continue());
-<L,LLC,LLCQ>"*)" => (err (!stringstart, yypos+1) WARN
-                       "ill-formed (*#line...*) taken as comment" nullErrorBody;
-                     YYBEGIN INITIAL; comLevel := 0; charlist := []; continue());
-<L,LLC,LLCQ>.    => (err (!stringstart, yypos+1) WARN
-                       "ill-formed (*#line...*) taken as comment" nullErrorBody;
-                     YYBEGIN A; continue());
 <A>"(*"		=> (inc comLevel; continue());
 <A>{eol}	=> (SourceMap.newline sourceMap yypos; continue());
 <A>"*)" => (dec comLevel; if !comLevel=0 then YYBEGIN INITIAL else (); continue());
@@ -216,6 +149,19 @@ hexnum=[0-9a-fA-F]+;
       else addChar(charlist, Char.chr x);
       continue())
   end);
+<S>\\u[0-9a-fA-F]{4}	=>
+ (let fun digit i =
+	  let val n = Char.ord(String.sub(yytext,i+1))
+	  in  if n < 65 then n - 48
+	      else if n < 97 then n - 55
+	      else n - 87
+	  end
+      val x = digit 1*4096+digit 2*256+digit 3*16+digit 4
+  in (if x>255
+      then err (yypos,yypos+6) COMPLAIN "illegal ascii escape" nullErrorBody
+      else addChar(charlist, Char.chr x);
+      continue())
+  end);
 <S>\\		=> (err (yypos,yypos+1) COMPLAIN "illegal string escape"
 		        nullErrorBody;
 		    continue());
@@ -223,48 +169,10 @@ hexnum=[0-9a-fA-F]+;
 
 <S>[\000-\031]  => (err (yypos,yypos+1) COMPLAIN "illegal non-printing character in string" nullErrorBody;
                     continue());
-<S>({idchars}|{some_sym}|\[|\]|\(|\)|{quote}|[,.;^{}])+|.  => (addString(charlist,yytext); continue());
+<S>({idchars}|{some_sym}|\[|\]|\(|\)|[,.;^{}])+|.  => (addString(charlist,yytext); continue());
 <F>{eol}	=> (SourceMap.newline sourceMap yypos; continue());
 <F>{ws}		=> (continue());
 <F>\\		=> (YYBEGIN S; stringstart := yypos; continue());
 <F>.		=> (err (!stringstart,yypos) COMPLAIN "unclosed string"
 		        nullErrorBody;
 		    YYBEGIN INITIAL; Tokens.STRING(makeString charlist,!stringstart,yypos+1));
-<Q>"^`"	=> (addString(charlist, "`"); continue());
-<Q>"^^"	=> (addString(charlist, "^"); continue());
-<Q>"^"          => (YYBEGIN AQ;
-                    let val x = makeString charlist
-                    in
-                    Tokens.OBJL(x,yypos,yypos+(size x))
-                    end);
-<Q>"`"          => ((* a closing quote *)
-                    YYBEGIN INITIAL;
-                    let val x = makeString charlist
-                    in
-                    Tokens.ENDQ(x,yypos,yypos+(size x))
-                    end);
-<Q>{eol}        => (SourceMap.newline sourceMap yypos; addString(charlist,"\n"); continue());
-<Q>.            => (addString(charlist,yytext); continue());
-
-<AQ>{eol}       => (SourceMap.newline sourceMap yypos; continue());
-<AQ>{ws}        => (continue());
-<AQ>{id}        => (YYBEGIN Q;
-                    let val hash = StrgHash.hashString yytext
-                    in
-                    Tokens.AQID(FastSymbol.rawSymbol(hash,yytext),
-				yypos,yypos+(size yytext))
-                    end);
-<AQ>{sym}+      => (YYBEGIN Q;
-                    let val hash = StrgHash.hashString yytext
-                    in
-                    Tokens.AQID(FastSymbol.rawSymbol(hash,yytext),
-				yypos,yypos+(size yytext))
-                    end);
-<AQ>"("         => (YYBEGIN INITIAL;
-                    brack_stack := ((ref 1)::(!brack_stack));
-                    Tokens.LPAREN(yypos,yypos+1));
-<AQ>.           => (err (yypos,yypos+1) COMPLAIN
-		       ("ml lexer: bad character after antiquote "^yytext)
-		       nullErrorBody;
-                    Tokens.AQID(FastSymbol.rawSymbol(0,""),yypos,yypos));
-

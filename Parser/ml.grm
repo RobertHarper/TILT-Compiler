@@ -11,9 +11,7 @@ type raw_symbol = FastSymbol.raw_symbol
 
 fun markexp (e as MarkExp _, _, _) = e
   | markexp(e,a,b) = MarkExp(e,(a,b))
-(*fun markdec((d as MarkDec _, e), _,_) = (d,e)
-  | markdec((d,e),a,b) = (MarkDec(d,(a,b)),e)
-*)
+
 fun markdec(d as MarkDec _, _,_) = d
   | markdec(d,a,b) = MarkDec(d,(a,b))
 
@@ -35,7 +33,7 @@ val quotedBogusString = "'BOGUS"
   %term
       EOF | SEMICOLON
     | ID of FastSymbol.raw_symbol | TYVAR of FastSymbol.raw_symbol
-    | INT of TilWord64.word | INT0 of TilWord64.word
+    | INT of TilWord64.word | INT0 of TilWord64.word | DIGIT of int
     | WORD of TilWord64.word
     | REAL of string
     | STRING of string
@@ -47,8 +45,7 @@ val quotedBogusString = "'BOGUS"
     | OP | OPEN | OVERLOAD | RAISE | REC | SHARING | SIG | SIGNATURE | STRUCT
     | STRUCTURE | THEN | TYPE | VAL | WHERE | WHILE | WILD | WITH | WITHTYPE
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE
-    | RBRACKET | RPAREN | ORELSE | ANDALSO | VECTORSTART | BEGINQ
-    | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
+    | RBRACKET | RPAREN | ORELSE | ANDALSO
     | EXTERN | CCALL | IMPL | INTER
 
 %nonterm ident of FastSymbol.raw_symbol
@@ -74,8 +71,6 @@ val quotedBogusString = "'BOGUS"
        | aexp of  exp
        | exp_list of  exp list
        | exp_2c  of  exp list
-       | quote of  exp list
-       | ot_list of  exp list
        | pat of pat
        | apat of pat fixitem
        | apat' of  pat
@@ -83,9 +78,11 @@ val quotedBogusString = "'BOGUS"
        | plabels of  ((symbol * pat) list * bool)
        | pat_2c of  pat list
        | pat_list of  pat list
-       | vb of  vb list
+       | vbpe of  vb
+       | vb of  vb list * vb list
        | constraint of ty option
-       | rvb of  rvb list
+       | vbm of  vb
+       | rvb of  vb list
        | fb' of  clause list
        | fb of  fb list
        | apats of pat fixitem list
@@ -100,11 +97,11 @@ val quotedBogusString = "'BOGUS"
        | constr of  symbol * ty option
        | eb of  eb list
        | qid_p of Symbol.symbol list list
-       | fixity of fixity
+       | ops of symbol list
+       | fixity of {fixity:fixity, ops:symbol list}
        | ldec of dec
        | exp_pa of   exp list
        | ldecs of  dec
-       | ops of symbol list
        | spec_s of  spec list
        | spec of  spec list
        | topspec_s of  topspec
@@ -174,6 +171,7 @@ val quotedBogusString = "'BOGUS"
 %value TYVAR (rawSymbol(quotedBogusHash,quotedBogusString))
 %value INT (TilWord64.fromInt 1)
 %value INT0 (TilWord64.fromInt 0)
+%value DIGIT (0)
 %value WORD (TilWord64.fromInt 0)
 %value REAL ("0.0")
 %value STRING ("")
@@ -183,6 +181,7 @@ val quotedBogusString = "'BOGUS"
 
 int	: INT		(INT)
 	| INT0		(INT0)
+	| DIGIT		(TilWord64.fromInt DIGIT)
 
 id	: ID		(ID)
 	| ASTERISK	(rawSymbol (asteriskHash,asteriskString))
@@ -200,6 +199,7 @@ qid	: ID DOT qid	(fn kind => strSymbol ID :: qid kind)
 
 selector: id		(labSymbol id)
 	| INT		(Symbol.labSymbol (TilWord64.toDecimalString INT))
+	| DIGIT		(Symbol.labSymbol (Int.toString DIGIT))
 
 tycon   : ID DOT tycon		(strSymbol ID :: tycon)
 	| ID			([tycSymbol ID])
@@ -300,24 +300,11 @@ app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
 	| LPAREN exp_2c RPAREN	(TupleExp exp_2c)
 	| LBRACKET exp_list RBRACKET     (ListExp exp_list)
 	| LBRACKET RBRACKET	(ListExp nil)
-(* Getting rid of vector expressions because we don't want to support them.
-        | VECTORSTART exp_list RBRACKET (VectorExp exp_list)
-        | VECTORSTART RBRACKET  (VectorExp nil)
-*)
 	| LET ldecs IN exp_ps END
 				(markexp (LetExp{dec=markdec(ldecs,ldecsleft,
 							     ldecsright),
 						 expr=SeqExp exp_ps},
 					  LETleft,ENDright))
-        | AQID                  (VarExp([varSymbol AQID]))
-        | quote                 (ListExp quote)
-
-quote   : BEGINQ ENDQ           ([QuoteExp ENDQ])
-        | BEGINQ ot_list ENDQ   (ot_list @ [QuoteExp ENDQ])
-
-ot_list : OBJL aexp             ([QuoteExp OBJL,AntiquoteExp aexp])
-        | OBJL aexp ot_list     (QuoteExp OBJL :: AntiquoteExp aexp ::
-                                            ot_list)
 
 exp_2c	: exp COMMA exp_2c	(exp :: exp_2c)
 	| exp COMMA exp		([exp1, exp2])
@@ -356,11 +343,6 @@ apat'	: OP ident		(VarPat [varSymbol ident])
 	| LBRACKET RBRACKET	(ListPat nil)
 	| LBRACKET pat_list
 		RBRACKET	(ListPat pat_list)
-(* problem in pattern compilation
-        | VECTORSTART RBRACKET  (VectorPat nil)
-	| VECTORSTART pat_list
-		RBRACKET	(VectorPat pat_list)
-*)
 	| LBRACE RBRACE		(unitPat)
 	| LBRACE plabels RBRACE
 		            (let val (d,f) = plabels
@@ -389,22 +371,21 @@ plabels : plabel COMMA plabels	(let val (a,(b,fx))=(plabel, plabels)
 pat_list: pat			([pat])
 	| pat COMMA pat_list	(pat :: pat_list)
 
-vb	: vb AND vb		(vb1 @ vb2)
-	| pat EQUALOP exp	([MarkVb(Vb{exp=exp, pat=pat}, (patleft,expright))])
+vbpe	: pat EQUALOP exp	(MarkVb(Vb{exp=exp,pat=pat},(patleft,expright)))
+
+vb	: vbpe			(([vbpe],nil))
+	| vbpe AND vb		((vbpe :: #1 vb, #2 vb))
+	| REC rvb		((nil, rvb))
 
 constraint :	 		(NONE)
 	   | COLON ty	 	(SOME ty)
 
-rvb	: id constraint EQUALOP FN match
-			  (let val (v,f) = var'n'fix id
-	                   in [MarkRvb(Rvb{var=v,fixity=SOME(f,(idleft,idright)),
-					   resultty=constraint,
-			       exp=FnExp match},(idleft,matchright))] end)
-	| OP id constraint EQUALOP FN match
-			  ([MarkRvb(Rvb{var=varSymbol id,fixity=NONE,
-				       resultty=constraint,
-			       exp=FnExp match},(OPleft,matchright))])
-	| rvb AND rvb		(rvb1 @ rvb2)
+vbm	: pat EQUALOP FN match	(MarkVb(Vb{exp=FnExp match,pat=pat},(patleft,matchright)))
+
+
+rvb	: vbm			([vbm])
+	| vbm AND rvb		(vbm :: rvb)
+	| REC rvb		(rvb)
 
 fb'	: clause		([clause])
 	| clause BAR fb'	(clause :: fb')
@@ -461,16 +442,17 @@ eb	: op_op ident		([EbGen{exn=(varSymbol ident),etype=NONE}])
 qid_p	: qid			([qid strSymbol])
 	| qid qid_p		(qid strSymbol :: qid_p)
 
-fixity	: INFIX			(infixleft 0)
-	| INFIX int		(infixleft (checkFix(TilWord64.toInt int,error(intleft,intright))))
-	| INFIXR		(infixright 0)
-	| INFIXR int		(infixright (checkFix(TilWord64.toInt int,error(intleft,intright))))
-	| NONFIX		(NONfix)
+ops	: ident			([fixSymbol ident])
+	| ident ops		(fixSymbol ident :: ops)
 
-ldec	: VAL vb		(ValDec (vb,ref []))
-        | VAL tyvarseq vb       (ValDec(vb,ref tyvarseq))
-	| VAL REC rvb		(ValrecDec (rvb,ref []))
-        | VAL REC tyvarseq rvb  (ValrecDec(rvb,ref tyvarseq))
+fixity	: INFIX ops		({fixity=infixleft 0, ops=ops})
+	| INFIX DIGIT ops	({fixity=infixleft DIGIT, ops=ops})
+	| INFIXR ops		({fixity=infixright 0, ops=ops})
+	| INFIXR DIGIT ops	({fixity=infixright DIGIT, ops=ops})
+	| NONFIX ops		({fixity=NONfix,ops=ops})
+
+ldec	: VAL vb		(ValDec(#1 vb, #2 vb,ref []))
+        | VAL tyvarseq vb       (ValDec(#1 vb, #2 vb,ref tyvarseq))
 	| FUN fb		(FunDec (fb,ref []))
         | FUN tyvarseq fb       (FunDec(fb,ref tyvarseq))
 	| EXTERN ID COLON ty 	(ExternDec(varSymbol ID,ty))
@@ -487,7 +469,7 @@ ldec	: VAL vb		(ValDec (vb,ref []))
 							     body=ldecs})
 	| EXCEPTION eb		(ExceptionDec eb)
 	| OPEN qid_p		(OpenDec qid_p)
-	| fixity ops		(FixDec{fixity=fixity, ops=ops})
+	| fixity		(FixDec fixity)
 	| OVERLOAD ident COLON ty AS exp_pa
 				(OvldDec(varSymbol ident,ty,exp_pa))
 
@@ -504,9 +486,6 @@ ldecs	: 			(SeqDec nil)
 				     markdec(ldecs2,ldecs2left,ldecs2right)),
 			    LOCALleft,ENDright),
  	            ldecs3))
-
-ops	: ident			([fixSymbol ident])
-	| ident ops 		(fixSymbol ident :: ops)
 
 spec_s	: 			([])
 	| spec spec_s		(spec @ spec_s)
@@ -538,7 +517,7 @@ topspec	: spec			(TopSpec spec)
 	| SIGNATURE sigb	(SigSpec sigb)
 	| OVERLOAD ident COLON ty AS exp_pa
 				(OvldSpec (varSymbol ident,ty,exp_pa))
-	| fixity ops		(FixSpec{fixity=fixity, ops=ops})
+	| fixity		(FixSpec fixity)
 	| EXTERN ID COLON ty 	(ExternSpec(varSymbol ID,ty))
 
 topspec_s	: 		(SeqSpec[])
