@@ -40,19 +40,32 @@ struct
     val sparcConfig : config Delay.value =
 	Delay.delay (fn () =>
 		     let
-			 val (profDirs, crt) = if (!profile)
-						   then (["-L/usr/lib/libp"], "mcrt1.o")
-					       else ([], "crt1.o")
+			 val libc = if !profile
+					then "/usr/lib/libp/libc.a"
+				    else "-lc"
+					
+			 val libm = "-lm" (* note: /usr/lib/libp/libm.a leads to ldd.so errors on cuff *)
+			     
+			 val crt1 =
+			     if !profile then
+				 (* Hack so we can profile on cuff. *)
+				 (case gccFile "mcrt1.o"
+				    of "mcrt1.o" => "/afs/cs/project/fox/member/swasey/ml96/Runtime/mcrt1.o"
+				     | s => s)
+			     else gccFile "crt1.o"
+
+			 val libdl = if !profile
+					 then ["-ldl"]
+				     else []
 		     in
 			 {assembler = ["/usr/ccs/bin/as", "-xarch=v8plus"],
 			  linker    = ["/usr/ccs/bin/ld"],
-			  ldpre     = [runtimeFile "obj_solaris/firstdata.o",
-				       gccFile crt, gccFile "crti.o",
+			  ldpre     = [runtimeFile "obj_solaris/firstdata.o", crt1, gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
-			  ldpost    = (profDirs @
-				       ["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib", 
+			  ldpost    = (["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib", 
 					runtimeFile "runtime.solaris.a", "-lperfmon", "-lpthread","-lposix4", "-lgen",
-					"-lm", "-lc", gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"])}
+					libm, libc, gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"] @
+				       libdl)}
 		     end)
     val alphaConfig : config Delay.value =
 	Delay.delay (fn() =>
