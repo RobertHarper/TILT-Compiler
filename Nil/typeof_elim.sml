@@ -41,7 +41,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 (* NilContext.insert_exp)*)
       val all_handlers =  
 	let
-	  fun none f = fn ((D,i) : state,v : Nil.var ,item : 'item) : state * Nil.var option => ((f (D,v,item),i), NONE)
+	  fun none f = fn ((D,i) : state,v : Nil.var ,item : 'item) => ((f (D,v,item),i), NONE)
 	  val h = set_conhandler default_handler conhandler
 	  val h = set_con_binder h (none NilContext.insert_kind)
 	  val h = set_con_definer h (none NilContext.insert_equation)
