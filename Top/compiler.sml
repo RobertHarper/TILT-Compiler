@@ -355,7 +355,7 @@ struct
 				raise Reject(source ^ " failed to elaborate")
 			     | SOME r => r)
 	    val (pi,i) = instantiate (ctxt,interface)
-	in  (case LinkIl.seal (ctxt, m, i)
+	in  (case LinkIl.seal (ctxt, source, m, i)
 	       of NONE =>
 		   raise Reject (source ^ " does not match " ^ interface)
 		| SOME m => m)

@@ -31,7 +31,7 @@ sig
 	instantiated in a prefix of the given context.
     *)
     val eq   : context * interface * interface -> bool
-    val seal : context * module * interface -> module option
+    val seal : context * string * module * interface -> module option (* source *)
 
     val unitlabel : string -> label
     type imports = Il.labels

@@ -431,7 +431,8 @@ struct
 	end
     val eq = wrap "eq" eq
 
-    fun seal (ctxt : context, m : module, i : interface) : module option =
+    fun seal (ctxt : context, source : string, m : module,
+	      i : interface) : module option =
 	let val _ = debugdo
 		    (fn () =>
 		     (print "---- LinkIl.seal called\n";
@@ -446,6 +447,7 @@ struct
 		    | _ => error "seal given malformed module")
 	    val ilctxt = #1 ctxt
 	    val _ = msg "  Sealing\n"
+	    val fp : filepos = fn _ => (source,0,0)
 	in  Option.map
 	    (fn m =>
 	     let val sbnd = SBND(mainlab,BND_MOD(v,false,m))
@@ -458,8 +460,7 @@ struct
 		     else ()
 	     in  module
 	     end)
-	    (Toil.seal (ilctxt, Error.nofilepos, mod_actual,
-			sig_actual, sig_target))
+	    (Toil.seal (ilctxt, fp, mod_actual, sig_actual, sig_target))
 	end
 
     fun unitlabel (unit : string) : label =
