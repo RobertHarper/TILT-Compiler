@@ -477,3 +477,27 @@ open IO
 
 (* unimped parts of the standard basis *)
 exception LibFail of string
+
+(* Predefined external functions *)
+extern exnName : (exn, string) -->
+extern exnMessage : (exn, string) -->
+extern real_logb : (float, int) -->
+extern real_scalb : (float * int, float) -->
+extern sqrt : (float, float) -->
+extern exp : (float, float) -->
+extern ln : (float, float) -->
+extern log10 : (float, float) -->
+extern sin : (float, float) -->
+extern cos : (float, float) -->
+extern tan : (float, float) -->
+extern atan : (float, float) -->
+extern asin : (float, float) -->
+extern acos : (float, float) -->
+extern tanh : (float, float) -->
+extern sinh : (float, float) -->
+extern cosh : (float, float) -->
+extern setRoundingMode : (int, int) -->
+extern getRoundingMode : (int, int) -->
+extern ml_timeofday : (unit, (int * int)) -->
+
+fun log x = log10 x
