@@ -11,6 +11,16 @@ struct
       | eqReg (F v, F v') = v = v'
       | eqReg _ = false
 
+    structure SetKey : ORD_KEY = 
+	struct
+	    type ord_key = Machine.register
+	    fun compare(R _, F _) = LESS
+	      | compare(F _, R _) = GREATER
+	      | compare(R i1, R i2) = Int.compare(i1,i2)
+	      | compare(F i1, F i2) = Int.compare(i1,i2)
+	end
+    structure RegSet = SplaySetFn(SetKey) 
+
      structure HashKey =
        struct
          type hash_key = Machine.register
@@ -25,25 +35,20 @@ struct
 	   We keep the length of the list also.*)
 
      type node = Machine.register
-     datatype graph = GRAPH of (int * node list) A.hash_table
+     datatype graph = GRAPH of (int * RegSet.set) A.hash_table
 
-     (* list utilities *)
+     (* set utilities *)
 
-     fun delete (a,(degree,l)) =
-       let exception NotFound
-	   fun remove (h::t) =
-	        if eqReg (h,a) then t
-		else h :: remove t
-             | remove nil = raise NotFound
-       in (degree-1,remove l)
-	  handle NotFound => (degree,l)
-       end
+     fun single v = RegSet.singleton v
 
-     fun member (a,nil) = false
-       | member (a,h::t) = eqReg(a,h) orelse member(a,t)
+     fun delete (a,orig as (degree,s)) =
+	 ((degree-1,RegSet.delete(s,a))
+	  handle LibBase.NotFound => orig)
 
-     fun insert (a,(degree,l)) =
-	  if member(a,l) then (degree,l) else (degree+1,a :: l)
+     fun member (a,s) = RegSet.member(s,a)
+
+     fun insert (a,orig as (degree,s)) =
+	  if member(a,s) then orig else (degree+1,RegSet.add(s,a))
 	 
 
      (* graph operations *)
@@ -65,8 +70,8 @@ struct
      
      fun edges (GRAPH g) n =
 	 case A.find g n of
-	     NONE => nil
-	   | SOME (_,l) => l
+	     NONE => []
+	   | SOME (_,l) => RegSet.listItems l
 
      fun degree (GRAPH g) n =
 	 case A.find g n of
@@ -79,7 +84,7 @@ struct
 	 in fn n =>
 	      if not (isPhysical n) then
 	         (case peek n of
-		      NONE => insert (n,(0,nil))
+		      NONE => insert (n,(0,RegSet.empty))
 		   | SOME _ => ())
 	      else ()
 	 end
@@ -96,7 +101,7 @@ struct
 					 raise AdjList)
 		 fun upd x = if isPhysical x then ()
 		             else insert (x,delete(n,find x))
-	     in app upd l
+	     in RegSet.app upd l
 	     end
          end
 
@@ -116,7 +121,7 @@ struct
 	   fun add (a,b) = 
 	       if not (isPhysical a) then
 		   let val l = case peek a
-		               of NONE => (1,[b])
+		               of NONE => (1,single b)
 			        | SOME l => insert(b,l)
 		   in graph_insert (a,l)
 		   end

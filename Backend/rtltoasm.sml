@@ -175,6 +175,9 @@ struct
 
        fun allocateProc1 (name : loclabel) =
 	 let 
+	     val _ = if (!debug)
+			 then (print "allocateProc 1 entered\n")
+		     else ()
 	   val (psig as (PROCSIG{allocated, regs_destroyed, ...})) = 
 	     getSig name
 	 in
@@ -205,7 +208,12 @@ struct
 		      emitString "recursive: ";
 		      print_list print_lab recursive_callees) else ()
 
-		 val code_labels_listlist = map allocateComponent (map (fn x => [x]) nonrecursive_callees)
+		 val code_labels_listlist = Listops.mapcount allocateComponent (map (fn x => [x]) nonrecursive_callees)
+
+	     val _ = if (!debug)
+			 then (print "allocateProc 1 : 1\n")
+		     else ()
+
 		 val code_labels = flatten code_labels_listlist
 		 val _ = app (fn name =>
 			         let val PROCSIG{args,res,
@@ -228,6 +236,10 @@ struct
 		     (known andalso (! knowns), 
 		      Toasm.translateProc rtlproc)
 		   end
+
+	     val _ = if (!debug)
+			 then (print "allocateProc 1 : 2\n")
+		     else ()
 
 
 		 (* Add blocklabels and recursive-updated regs_destroyed *)
@@ -259,6 +271,10 @@ struct
 
 		 val _ = msg "\tallocating\n"
 
+	     val _ = if (!debug)
+			 then (print "allocateProc 1 : 3\n")
+		     else ()
+
 		 val temp = Procalloc.allocateProc1
 		     {getSignature = getSig,
 		      external_name = name2external name,
@@ -270,6 +286,9 @@ struct
 		     handle e => (print "exception from Procalloc\n";
 				  raise e)
 
+		 val _ = if (!debug)
+			     then (print "allocateProc 1 exitting\n")
+			 else ()
 	       in
 		   (NONE, SOME (name, temp),code_labels)
 	       end
@@ -277,6 +296,9 @@ struct
      
        and allocateProc2 (name, res_of_allocateproc1) =
 	   let
+	       val _ = if (!debug)
+			     then (print "allocateProc 2 entered\n")
+		       else ()
 	       val (new_sig, new_block_map, new_block_labels, gc_data) =
 		   Procalloc.allocateProc2 res_of_allocateproc1
 	       fun doer l = 
@@ -308,11 +330,18 @@ struct
 		    (emitString commentHeader;
 		     emitString(" done procedure "))
 		else ();
+	       (if (!debug)
+			     then (print "allocateProc 2 exitting\n")
+			 else ());
 		(new_sig, code_label_list)
 	   end
 	   
-       and allocateComponent chunk = 
+       and allocateComponent (count,chunk) = 
 	 let 
+	     val _ = if (!debug)
+			 then (print "allocating component #"; 
+			       print (Int.toString count); print "\n")
+		     else ()
 	     val temps = map allocateProc1 chunk
 	     local
 		 fun helper (PROCSIG{regs_modified,...}) = regs_modified
@@ -336,6 +365,10 @@ struct
 		 | _ => error "allocateproc in allocatecomponent"
 	     val code_labels_listlist = map (fn ((_,a),b) => (a @ b)) (map final_alloc temps)
 	     val code_labels = flatten code_labels_listlist
+	     val _ = if (!debug)
+			 then (print "done allocating component #"; 
+			       print (Int.toString count); print "\n")
+		     else ()
 	 in
 	   code_labels
 	 end
@@ -359,7 +392,7 @@ struct
        val _ = emitString ("\t.globl "^main'^"_CODE_END_VAL\n");
        val _ = emitString ("\t.globl "^main'^"_CODE_BEGIN_VAL\n");
        val _ = emitString (""^main'^"_CODE_BEGIN_VAL:\n");
-       val code_labels_listlist = map allocateComponent component_names;
+       val code_labels_listlist = Listops.mapcount allocateComponent component_names;
        val code_labels = flatten code_labels_listlist
      in (* allocateProg *)
        app emitString textStart;

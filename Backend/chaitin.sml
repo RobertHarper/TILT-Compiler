@@ -577,8 +577,16 @@ struct
                 | _ => ()
 	     end
 	   
-	   fun processBlock (BLOCK{in_live, instrs, ...}) =
-	      (app processInstr (!instrs))
+	   fun processBlock (BLOCK{in_live, instrs, ...},n) =
+	       (if (!msgs)
+		    then (print "processBlock #";
+			  print (Int.toString n);
+			  print ": ";
+			  print (Int.toString (length (!instrs)));
+			  print "instrs \n")
+		else ();
+		    (app processInstr (!instrs));
+		    n+1)
 
        (* add_list:
 	  (1) add every variable in a list to the interference graph.
@@ -613,8 +621,11 @@ struct
 	      but are to be allocated.    they can't be placed in callee-saved
 	      registers either. This restriction isn't implemented right
 	      now.*)
-
-	   Labelmap.app processBlock block_map;
+	     if (!msgs) 
+		 then (print ("There are " ^ (Int.toString (Labelmap.numItems block_map)) 
+			      ^ "blocks in the blockmap\n"))
+	     else ();
+	   Labelmap.foldl processBlock 0 block_map;
 	   if (! debug) then print_graph igraph else ();
 	   igraph
 	 end

@@ -24,7 +24,8 @@ struct
    fun emitString msg =
      (case (! output_stream) of
 	NONE => error "output stream not open"
-      | SOME s => TextIO.output (s, msg))
+      | SOME s => ((* print msg; *)
+		   TextIO.output (s, msg)))
 
    fun emitInstr cmt instr = emitString (msInstruction cmt instr)
 
