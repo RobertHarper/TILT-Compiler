@@ -128,4 +128,5 @@ source unit LinkIl : LinkIl = "linkil.sml" {
 	IlStatic Toil IlContext Equal Pat Signature IlUtil
 	IlPrimUtilParam LinkParse Ast Il Stats Util Name Fixity
 	IlBlast List Option Listops Ppil Basis LINKIL Error
+	Formatter
 }
