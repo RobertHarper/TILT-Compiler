@@ -1,25 +1,26 @@
-(*$import List String Int OS MAIN Manager Stats Getopt UtilError Dirs Target Compiler TextIO Posix *)
-
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vpsbB] [-t platform] [-fr flag] [-cCmM mapfile] [-S [num/]host]"
+    fun reject s = raise Compiler.Reject s
+
+    val usage = "usage: tilt [-vVps] [-t platform] [-fr flag] [-cCmMbB groupfile] [-S [num/]host]"
     val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
-        Make of string			(* -m mapfile *)
+        Make of string			(* -m groupfile *)
+      | Boot of string			(* -b groupfile *)
       | SetTarget of Target.platform	(* -t platform *)
       | SetFlag of string		(* -f flag *)
       | ResetFlag of string		(* -r flag *)
-      | Clean of string			(* -c mapfile *)
-      | CleanAll of string		(* -C mapfile *)
-      | Master of string		(* -M mapfile *)
+      | Clean of string			(* -c groupfile *)
+      | CleanAll of string		(* -C groupfile *)
+      | Master of string		(* -M groupfile *)
+      | BootMaster of string		(* -B groupfile *)
       | Slave				(* -s *)
       | Slaves of int * string		(* -S [num/]host *)
-      | Boot				(* -b *)
-      | BootMaster			(* -B *)
+      | Verbose				(* -v *)
       | PrintUsage			(* -? *)
-      | PrintVersion			(* -v *)
+      | PrintVersion			(* -V *)
       | PrintStats			(* -p *)
 
     (* isSlaves, isSlave : cmd -> bool *)
@@ -27,24 +28,32 @@ struct
       | isSlaves _ = false
     fun isSlave (Slave) = true
       | isSlave _ = false
-	
+
+    fun printVersion () : unit =
+	(print version;
+	 print "(Using basis from ";
+	 print (Dirs.libDir());
+	 print ")\n")
+
     (* runCmd : cmd -> unit *)
-    fun runCmd (Make mapfile) = Manager.make mapfile
+    fun runCmd (Make groupfile) = Manager.make groupfile
+      | runCmd (Boot groupfile) = Boot.make groupfile
       | runCmd (SetTarget target) = Target.setTargetPlatform target
       | runCmd (SetFlag flag) = Stats.bool flag := true
       | runCmd (ResetFlag flag) = Stats.bool flag := false
-      | runCmd (Clean mapfile) = Manager.purge mapfile
-      | runCmd (CleanAll mapfile) = Manager.purgeAll mapfile
-      | runCmd (Master mapfile) = Manager.master mapfile
+      | runCmd (Clean groupfile) = Manager.purge groupfile
+      | runCmd (CleanAll groupfile) = Manager.purgeAll groupfile
+      | runCmd (Master groupfile) = Manager.master groupfile
+      | runCmd (BootMaster groupfile) = Boot.master groupfile
       | runCmd (Slave) = Manager.slave ()
       | runCmd (Slaves arg) = Manager.slaves [arg]
-      | runCmd (Boot) = Boot.boot ()
-      | runCmd (BootMaster) = Boot.bootMaster ()
+      | runCmd (Verbose) = (Manager.DiagLevel := !Manager.DiagLevel + 1;
+			    Boot.DiagLevel := !Boot.DiagLevel + 1;
+			    if !Manager.DiagLevel = 1 then
+				printVersion()
+			    else ())
       | runCmd (PrintUsage) = (print usage; print "\n")
-      | runCmd (PrintVersion) = (print version;
-				 print "(Using basis from ";
-				 print (Dirs.getLibDir (Dirs.getDirs ()));
-				 print ")\n")
+      | runCmd (PrintVersion) = printVersion()
       | runCmd (PrintStats) = Stats.print_stats()
 
     (* run : cmd list -> unit.
@@ -61,14 +70,12 @@ struct
 	    List.app runCmd cmds;
 	    if List.null localSlave then () else Manager.slave()
 	end
-    
-    exception ArgErr of string
 
     (* slavesArg : string -> int * string *)
     fun slavesArg arg =
 	let fun isslash c = c = #"/"
 	    val args = String.fields isslash arg
-	    fun error() = raise ArgErr ("argument must have form [num/]host -- " ^ arg)
+	    fun error() = reject ("argument must have form [num/]host -- " ^ arg)
 	    fun nonempty "" = error()
 	      | nonempty s = s
 	    fun nat num = (case Int.fromString num
@@ -82,63 +89,43 @@ struct
 	       | _ => error()
 	end
 
-    (* cmdline : string list -> cmd list.  May raise ArgErr *)
-    fun cmdline args =
+    fun platform (target : string) : Target.platform =
+	(case Target.platformFromName target
+	   of SOME platform => platform
+	    | NONE => reject ("invalid target platform: " ^ target))
+
+    fun cmdline (args : string list) : cmd list =
 	let
-	    val options = [Getopt.Arg   (#"t", SetTarget o Target.platformFromName),
+	    val options = [Getopt.Arg   (#"t", SetTarget o platform),
 			   Getopt.Arg   (#"f", SetFlag),
 			   Getopt.Arg   (#"r", ResetFlag),
 			   Getopt.Arg   (#"c", Clean),
 			   Getopt.Arg   (#"C", CleanAll),
 			   Getopt.Arg   (#"m", Make),
+			   Getopt.Arg   (#"b", Boot),
 			   Getopt.Arg   (#"M", Master),
+			   Getopt.Arg   (#"B", BootMaster),
 			   Getopt.Noarg (#"s", Slave),
 			   Getopt.Arg   (#"S", Slaves o slavesArg),
-			   Getopt.Noarg (#"b", Boot),
-			   Getopt.Noarg (#"B", BootMaster),
+			   Getopt.Noarg (#"v", Verbose),
 			   Getopt.Noarg (#"?", PrintUsage),
-			   Getopt.Noarg (#"v", PrintVersion),
+			   Getopt.Noarg (#"V", PrintVersion),
 			   Getopt.Noarg (#"p", PrintStats)]
 	in
 	    case Getopt.getopt (options, args)
-	      of Getopt.Error msg => raise ArgErr (msg ^ "\n" ^ usage)
+	      of Getopt.Error msg => reject (msg ^ "\n" ^ usage)
 	       | Getopt.Success (cmds, args) =>
-		  let 
+		  let
 		      val _ = if List.null cmds orelse not (List.null args)
-				  then raise ArgErr usage
+				  then reject usage
 			      else ()
 		  in  cmds
 		  end
 	end
 
-    fun printMsg (msg : string) : unit =
-	let fun eprint s = TextIO.output(TextIO.stdErr, s)
-	in  eprint "tilt: ";
-	    eprint msg;
-	    eprint "\n"
-	end
-	    
-    (* errorMsg : exn -> string *)
-    fun errorMsg (UtilError.BUG msg) = ("internal error: " ^ msg)
-      | errorMsg (ArgErr msg) = msg
-      | errorMsg (e) = exnMessage e
+    fun main (_ : string, args : string list) : OS.Process.status =
+	(ExnHandler.Interactive := false;
+	 run (cmdline args);
+	 OS.Process.success) handle e => ExnHandler.printAndExit e
 
-    (* This error code is recognized by test harness. *)
-    fun reject () = (Posix.Process.exit 0w10)
-	
-    (* main : string * string list -> OS.Process.status *)
-    fun main (_, args) =
-	(let 
-	   val _ = UtilError.showErrors := false	     
-	   val cmds = cmdline args
-	 in
-	     run cmds; OS.Process.success
-	 end)
-	     handle e =>
-		 (case e
-		    of Compiler.Reject msg =>
-			(printMsg msg;
-			 reject())
-		     | _ => (printMsg (errorMsg e);
-			     OS.Process.failure))
 end
