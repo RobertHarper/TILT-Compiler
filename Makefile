@@ -65,20 +65,11 @@ runtime: FORCE
 # TILT-compiled binaries
 
 tilt: FORCE
-	case $(cputype) in \
-	unsupported) $(master) -c Top Top/mapfile ;; \
-	*) $(master) -oBin/$(cputype)/tilt -c Top Top/mapfile ;; \
-	esac
+	$(master) -oBin/$(cputype)/tilt -c Top Top/mapfile
 dump: FORCE
-	case $(cputype) in \
-	unsupported) $(master) -c DumpTop Top/mapfile ;; \
-	*) $(master) -oBin/$(cputype)/dump -c DumpTop Top/mapfile ;; \
-	esac
+	$(master) -oBin/$(cputype)/dump -c DumpTop Top/mapfile
 runtest: FORCE
-	case $(cputype) in \
-	unsupporte) $(master) -c Runtest Test/mapfile ;; \
-	*) $(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile ;; \
-	esac
+	$(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile
 
 # Other targets
 
