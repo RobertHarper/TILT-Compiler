@@ -1194,7 +1194,13 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
 						  bindpat = parsed_pat,
 						  arg = (v,con)})
-		val sbnd_sdec_list = sbnd_sdec::bind_sbnd_sdec
+		val sbnd_sdec_list = 
+		    (case bind_sbnd_sdec of
+			 [(SBND(lbl',BND_EXP(v'',VAR v')),_)] =>
+			     if (eq_var(v,v'))
+				 then [(SBND(lbl',BND_EXP(v'',e)), SDEC(lbl',DEC_EXP(v'',con)))]
+			     else sbnd_sdec::bind_sbnd_sdec
+		       | _ => sbnd_sdec::bind_sbnd_sdec)
 		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
 		fun refutable_case () = 
 		    let val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", SIGNAT_STRUCTURE(NONE,[])))
@@ -2218,13 +2224,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
 	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	    val sig' = xsigexp(context,sigexp) 
-	    val orig_var = fresh_named_var "orig_var"
+	    val (orig_var,mod_is_var) = (case module of
+					     MOD_VAR v => (v,true)
+					   | _ => (fresh_named_var "orig_var", false))
 
 	    (* --- coerced_sig should not contain references to orig_var *)
 	    val (coerced_mod,coerced_sig) = xcoerce_transparent (context',orig_var,signat,sig')
-	    val resmod = MOD_LET(orig_var, module, 
-				 MOD_SEAL(coerced_mod,
-					  coerced_sig))
+	    val sealed_mod = MOD_SEAL(coerced_mod, coerced_sig)
+	    val resmod = if mod_is_var then sealed_mod else MOD_LET(orig_var, module, sealed_mod)
+
 	in  (sbnd_ce_list,resmod, coerced_sig)
 	end
 
@@ -2620,12 +2628,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		      var_actual : var,
 		      sig_actual : signat,
 		      sig_target : signat) : Il.mod * Il.signat =
-	    let val (m,s,_) = xcoerce_help(empty_mapping,
-					   true,
-					   add_context_mod'(context,var_actual,
-							SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
-					   SIMPLE_PATH var_actual,
-					   sig_actual,sig_target)
+	    let val (_,m,s,_) = xcoerce_help(empty_mapping,
+					     true,
+					     add_context_mod'(context,var_actual,
+							      SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
+					     SIMPLE_PATH var_actual,
+					     sig_actual,sig_target)
 	    in  (m,s)
 	    end
 
@@ -2638,7 +2646,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    val label_local = Name.fresh_internal_label "hidden_module"
 	    fun labels2path_local labs = join_path_labels(SIMPLE_PATH var_local, labs)
 	    fun labels2path_actual labs = join_path_labels(SIMPLE_PATH var_actual, labs)
-	    (* first, we compute the components that we need to extract and 
+	    (* first, we compute the components that we need to extract
+	      as a result of coerced_sig and 
 		convert the projections to use var_local instead of var_actual *)
 	    local 
 		val neededpaths = ref ([] : (label list * con) list)
@@ -2658,8 +2667,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		    end
 		  | chandle _ = NONE
 	    in
-		val coerced_sig = sig_all_handle(coerced_sig, fn _ => NONE, chandle, fn _ => NONE, fn _ => NONE)
+		val coerced_sig = sig_all_handle(coerced_sig, fn _ => NONE, chandle, 
+						 fn _ => NONE, fn _ => NONE)
 	        val neededpaths = !neededpaths
+		val _ = (print "extract_hidden: there are ";
+			 print (Int.toString (length neededpaths)); 
+			 print " paths:\n";
+			 app (fn (labs,_) => (pp_pathlist pp_label' labs;
+					      print "\n")) neededpaths;
+			 print "\n\n")
 	    end (* local *)
 
 
@@ -2723,19 +2739,26 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		in  SOME(mapping,MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
 		end
 	      | dosig _ = NONE
-	    val (mapping,augment_m,augment_s) = (case dosig([],empty_mapping,sig_actual) of
-						     SOME mapmodsig => mapmodsig
-						   | NONE => (print "sig_actual is not a structure\n";
-							      elab_error "sig_actual is not a structure"))
-	    val coerced_sig = sig_substconmod(coerced_sig,mapping)
-	    val sbnd_augment = SBND(label_local,BND_MOD(var_local, augment_m))
-	    val sdec_augment = SDEC(label_local,DEC_MOD(var_local, augment_s))
-	    val res as (m,s) = case (coerced_mod, coerced_sig) of
-		(MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE (popt,sdecs)) =>
-		    (MOD_STRUCTURE (sbnd_augment::sbnds), SIGNAT_STRUCTURE (popt,sdec_augment::sdecs))
-	      | _ => error "extract_hidden given coerced_mod/sig not strutures"
-
-	in  res
+	in
+	    if (length neededpaths = 0)
+		then (coerced_mod, coerced_sig)
+	    else let
+		     val (mapping,augment_m,augment_s) = 
+			 (case dosig([],empty_mapping,sig_actual) of
+			      SOME mapmodsig => mapmodsig
+			    | NONE => (print "sig_actual is not a structure\n";
+				       elab_error "sig_actual is not a structure"))
+		     val coerced_sig = sig_substconmod(coerced_sig,mapping)
+		     val sbnd_augment = SBND(label_local,BND_MOD(var_local, augment_m))
+		     val sdec_augment = SDEC(label_local,DEC_MOD(var_local, augment_s))
+		     val res as (m,s) = case (coerced_mod, coerced_sig) of
+			 (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE (popt,sdecs)) =>
+			     (MOD_STRUCTURE (sbnd_augment::sbnds), 
+			      SIGNAT_STRUCTURE (popt,sdec_augment::sdecs))
+		       | _ => error "extract_hidden given coerced_mod/sig not strutures"
+			     
+		 in  res
+		 end
 	end
 
     and xcoerce_transparent (context : context,
@@ -2752,26 +2775,22 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      print "\n\n")
 		    else ()
 	    (* first call perform an opaque sealing for type-checking reasons *)
-	    val (coerced_mod,coerced_sig,mapping : mapping) = 
+	    val (coerced,coerced_mod,coerced_sig,mapping : mapping) = 
 		xcoerce_help(empty_mapping,
 			     true,
 			     add_context_mod'(context,var_actual,
 					      SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
 			     SIMPLE_PATH var_actual,
 			     sig_actual,sig_target)
-(*
-	    (* second call performs transparent sealing using the obtained coerced_sig *)
-	    val (m,s,mapping) = xcoerce_help(empty_mapping,
-					     false,
-					     add_context_mod'(context,var_actual,
-							      SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
-					     SIMPLE_PATH var_actual,
-					     sig_actual,coerced_sig)
-	    (* now we need to get rid of references to var_actual *)
-	    val s' = sig_substcon(s,mapping)
-*)
-	    (* first we get rid of some references to var_actual with internal variables *)
-	    val coerced_sig' = sig_substconmod(coerced_sig,mapping)
+
+
+	    val coerced_sig' = coerced_sig
+	    (* we want to get rid of some references to var_actual with internal variables;
+		but things have been reordered so that may not be possible  
+			      if coerced 
+				then sig_substconmod(coerced_sig,mapping)
+			       else coerced_sig	 *)
+
 	    val _ = if (!debug_coerce)
 			then (print "xcoerce_transparent about to call extract_hidden..\n";
 			      if (!debug_coerce_full)
@@ -2801,14 +2820,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
               The current list of labels indicating our current position.
 	          This list allows us to look up components in the 
 		    sig_actual and sig_target to type-check. *)
+
     and xcoerce_help (mapping : mapping,
-		      opaque : bool,
-		      context : context,
-		      path_actual : path,
-		      sig_actual : signat,
-		      sig_target : signat) : Il.mod * Il.signat * mapping =
+		       opaque : bool,
+		       context : context,
+		       path_actual : path,
+		       sig_actual : signat,
+		       sig_target : signat) : (bool * Il.mod * Il.signat * mapping) =
       let 
 
+	  val coerced = ref false
 
 	  fun makecon(path,labs) = path2con(join_path_labels(path,labs))
 
@@ -2866,6 +2887,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	fun polyval_case mapping (ctxt : context) (labs,v,con : con,varsig_option) 
 	    : (bnd * dec * context * mapping) option = 
 	    let 
+		val _ = (print "coerced set to true because of coercing polyval\n";
+			 coerced := true)
 		exception Bad of int
 		(* dispatch is passed the actual signature *)
 		 fun local_error(expected_con,actual_con) = 
@@ -2884,10 +2907,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		      pp_con actual_con;
 		      print "\n";
 		      NONE)
-		 fun dispatch(path,s as SIGNAT_FUNCTOR(var_poly,sig_poly as SIGNAT_STRUCTURE (NONE,sig_poly_sdecs),
-						      SIGNAT_STRUCTURE(NONE,[SDEC(maybe_it_lab,DEC_EXP(vp,con'))]),_)) = 
-		    let val v' = Name.derived_var v
-			val ctxt' =  add_context_mod'(ctxt,var_poly,SelfifySig(SIMPLE_PATH var_poly,sig_poly))
+		 fun dispatch(path,
+			      s as SIGNAT_FUNCTOR(var_poly,
+						  sig_poly as SIGNAT_STRUCTURE (NONE,
+										sig_poly_sdecs),
+						  SIGNAT_STRUCTURE(NONE,[SDEC(maybe_it_lab,
+									      DEC_EXP(vp,con'))]),_)) = 
+		     let val v' = Name.derived_var v
+			val ctxt' =  add_context_mod'(ctxt,var_poly,
+						      SelfifySig(SIMPLE_PATH var_poly,sig_poly))
 			val ctxt' = (case varsig_option of
 					 NONE => ctxt'
 				       | SOME(v1,s1) => add_context_mod'(ctxt',v1,
@@ -2919,10 +2947,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				end
 		      | SOME (v1,s1) => 
 				let val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
-				    val s2 = SIGNAT_FUNCTOR(v1,s1,
-							    SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,
-											DEC_EXP(fresh_var(),con''))]),
-							    TOTAL)
+				    val s2 = (SIGNAT_FUNCTOR
+					      (v1,s1,
+					       SIGNAT_STRUCTURE(NONE,
+								[SDEC(it_lab,
+								      DEC_EXP(fresh_var(),con''))]),
+					       TOTAL))
 				in  if (not opaque orelse
 					sub_con(ctxt',con'',con_substconmod (con,mapping)))
 					then 
@@ -2978,8 +3008,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 						       NONE => false
 						     | SOME _ => true) sdecs1)
 				    | _ => SIGNAT_STRUCTURE(NONE,[]))
-			 val (mbody,sig_ret,mapping') = 
+			 val (inner_coerced,mbody,sig_ret,mapping') = 
 			     xcoerce_help(mapping,opaque,ctxt,join_path_labels(path_actual,lbls),s1,s)
+			 val _ = if inner_coerced
+				     then (print "coerced set to true because of innermod\n";
+					   coerced := true)
+				 else ()
 (*			 val mapping = join_maps(mapping, mapping') *)
 			 val mapping = mapping'
 			 val v1 = fresh_var()
@@ -3056,10 +3090,33 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				       NONE))
 		   | (_, SOME(DEC_EXP _)) => NONE
 	           (* ----- check for polymorphic specification case first ---- *)
-		   | (SOME(DEC_MOD(v,s as (SIGNAT_FUNCTOR(v1,s1,SIGNAT_STRUCTURE (NONE,
-					 [SDEC(maybe_it,DEC_EXP(_,c))]),_)))),_) =>
+		   | (SOME(DEC_MOD(v,ss1 as (SIGNAT_FUNCTOR(v1,s1,SIGNAT_STRUCTURE (NONE,
+					 [SDEC(maybe_it,DEC_EXP(_,c1))]),_)))),sopt2) =>
 		     if (eq_label(maybe_it,it_lab))
-			 then polyval_case mapping ctxt (labs,v,c,SOME(v1,s1))
+			 then (* check if a coercion is even needed *)
+			     (case sopt2 of
+				  SOME(DEC_MOD(_,ss2 as SIGNAT_FUNCTOR(v2,s2,SIGNAT_STRUCTURE (NONE,
+				    [SDEC(maybe_it,DEC_EXP(_,c2))]),_))) =>
+				  (if (eq_label(maybe_it,it_lab))
+				       then 
+					 if (Sig_IsSub(ctxt,s1,s2) andalso
+					     Sig_IsSub(ctxt,s2,s1) andalso	
+					     eq_con(add_context_dec
+						    (add_context_dec(ctxt,SelfifyDec(DEC_MOD(v1,s1))),
+						     SelfifyDec(DEC_MOD(v2,s1))), c1, c2))
+					     then 
+						 let val lbls = 
+						     (case (sig_actual_lookup labs) of
+							  SOME(lbls,PHRASE_CLASS_MOD _) => lbls
+							| _ => error "lookup inconsistent")
+						     val v' = Name.derived_var v
+						     val bnd = BND_MOD(v',path2mod(join_path_labels(path_actual,lbls)))
+						     val dec = DEC_MOD(v',sig_substconmod(ss2,mapping))
+						 in  SOME(bnd,dec,ctxt,mapping)
+						 end
+					   else polyval_case mapping ctxt (labs,v,c1,SOME(v1,s1))
+				   else NONE)
+				| _ => polyval_case mapping ctxt (labs,v,c1,SOME(v1,s1)))
 		     else general_mod v 
                    (* ---------- coercion of non-polyfun module component ---------------- *)
          	   | (SOME(DEC_MOD(v,s)),_) => general_mod v 
@@ -3169,20 +3226,23 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    in  (sbnds,sbnds_code,sdecs_imp,sdecs,mapping)
 	    end
 
+			
 	val (m,s,mapping : mapping) = 
 	    (case (opaque,sig_actual,sig_target) of
 		       (_,SIGNAT_FUNCTOR(v1,s1,s1',a1), SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
 			 let 
+			   val _ = (print "coerced set to true because of functor coercion\n";
+				    coerced := true)
 			   val _ = if (a1 = a2) then () 
 				   else raise (FAILURE "arrow mismatch in xcoerce")
-			   val (m3body,_,_) = xcoerce_help(mapping,
+			   val (_,m3body,_,_) = xcoerce_help(mapping,
 							   true,
 							   add_context_mod'(context,v2,
 									    SelfifySig(SIMPLE_PATH v2, s2)),
 							   SIMPLE_PATH v2,s2,s1)
 			   val m4_arg = MOD_APP(path2mod path_actual, m3body)
 			   val m4var = fresh_named_var "var_actual_xcoerce"
-			   val (m4body,_,_) = xcoerce_help(mapping,
+			   val (_,m4body,_,_) = xcoerce_help(mapping,
 							   true,
 							   add_context_mod'(context,m4var,
 									    SelfifySig(SIMPLE_PATH m4var,s1')),
@@ -3237,6 +3297,33 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			    print "cannot coerce a structure to a functor\n";
 			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]),empty_mapping)))
 
+	val (asd,actual_str_length) = (case sig_actual of
+				     SIGNAT_STRUCTURE(_,sdecs) => (sdecs,length sdecs)
+				   | SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs,...} => (sdecs,length sdecs)
+				   | _ => ([],~1))
+	val (tsd,target_str_length) = (case sig_target of
+				     SIGNAT_STRUCTURE(_,sdecs) => (sdecs,length sdecs)
+				   | SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs,...} => (sdecs,length sdecs)
+				   | _ => ([],~1))
+	val match = (actual_str_length = target_str_length) andalso
+			Listops.eq_list((fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2)), asd,tsd)
+
+	val _ = if match then () else coerced := true
+
+	val _ = if match then ()
+	        else (print "coerced set to true because of length mismatch\n";
+		      print "actual_str_length = "; print (Int.toString actual_str_length); print "\n";
+		      print "target_str_length = "; print (Int.toString target_str_length); print "\n";
+	      print "actual_sdecs: "; app (fn SDEC(l,_) => (pp_label l; print "  ")) asd; print "\n";
+	      print "target_sdecs: "; app (fn SDEC(l,_) => (pp_label l; print "  ")) tsd; print "\n")
+
+
+val _ = (print "xcoerce_help with path_actual = ";
+	 pp_path path_actual;
+	 print " and coerced = ";
+	 print (Bool.toString (!coerced));
+	 print "\n")
+
 	val _ = if (!debug_coerce) 
 		    then (print "\n\nxcoerce result:\n";
 			  if (!debug_coerce_full)
@@ -3247,8 +3334,10 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			  else ();
 			  print "\n")
 		else ()
-
-      in (m,s,mapping)
+		    
+      in if !coerced
+	  then (true,m,s,mapping)
+	 else (false,path2mod path_actual, sig_actual, mapping)
       end
 
 

@@ -35,6 +35,7 @@ datatype.sig.sml
 datatype.sml
 pat.sig.sml
 pat.sml
+(*coerce.sml *)
 toil.sig.sml
 toil.sml
 ileval.sig.sml

@@ -1327,11 +1327,14 @@ end
 	     | ((SIGNAT_STRUCTURE (SOME p,sdecs)) |
 		   (SIGNAT_INLINE_STRUCTURE {self=SOME p,abs_sig=sdecs,...})) =>
 		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
-			NONE =>  (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
-					 pp_label l;
-					 print "\nand with signat = \n";
-					 pp_signat signat;
+			NONE =>  
+			    (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
+			     pp_label l;
+(*			     print "\nand with signat = \n";
+                             pp_signat signat;
+*)
 					 print "\n";
+
 					 fail "MOD_PROJECT failed to find label ")
 		      | (SOME (PHRASE_CLASS_MOD(_,s))) => (va,s)
 		      | _ => (print "MOD_PROJECT at label "; pp_label l; 
