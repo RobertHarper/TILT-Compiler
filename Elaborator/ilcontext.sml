@@ -93,8 +93,8 @@ struct
 	let val CONTEXT {varMap,...} = ctxt
 	in  VarMap.find (varMap, v)
 	end
-    local
 
+    local
 	type lvs = mod * subst
 
 	fun lvs (m : mod) : lvs = (m, empty_subst)
@@ -343,30 +343,72 @@ struct
 	Handle shadowing.  Equality functions are special: If a type t is
 	shadowed, then +Et must be shadowed in order to maintain the
 	invariant that if +Et is visible, then it is the equality function
-	for type t.  This implementation assumes that only constructor
-	labels have the equality attribute.
+	for type t.
     *)
 
+    fun lookup_vpath_dec (vm:varMap, vpath:vpath) : dec =
+	let fun fail() = error "labelMap contains invalid vpath"
+	    fun find (sdecs,lab) : dec =
+		(case sdecs of
+		    (SDEC(l,dec) :: sdecs) =>
+			if Name.eq_label(l,lab) then dec
+			else find(sdecs,lab)
+		 |  nil => fail())
+	    fun project (sdecs,labs) : dec =
+		(case labs of
+		    l::nil => find(sdecs,l)
+		 |  l::labs =>
+			(case find(sdecs,l) of
+			    DEC_MOD (_,_,SIGNAT_STRUCTURE sdecs) =>
+				project(sdecs,labs)
+			 |  _ => fail())
+		 |  nil => fail())
+	    val (v,labs) = vpath
+	in  (case VarMap.find(vm,v) of
+		SOME (_,PHRASE_CLASS_MOD(_,_,_,f)) =>
+		    (case f() of
+			SIGNAT_STRUCTURE sdecs => project(sdecs,labs)
+		     |  _ => fail())
+	     |  _ => fail())
+	end
+			
     fun shadow' (vm : varMap, lm : labelMap, om : overloadMap, l : label,
-		 l' : label) : varMap * labelMap * overloadMap =
+		 l' : label) : varMap * labelMap * overloadMap * bool =
 	(case (LabelMap.find(om,l), LabelMap.find(lm,l))
-	   of (SOME _, NONE) => (vm,lm,labelmap_remove(om,l))
+	   of (SOME _, NONE) => (vm,lm,labelmap_remove(om,l),false)
 	    | (NONE, SOME (v,nil)) =>
 	       let val SOME (_,pc) = VarMap.find(vm,v)
 		   val vm = VarMap.insert (vm,v,(l',pc))
 		   val lm = labelmap_remove(lm,l)
 		   val lm = LabelMap.insert (lm,l',(v,nil))
-	       in  (vm,lm,om)
+		   val eq =
+			(case pc of
+			    PHRASE_CLASS_CON _ => true
+			 |  _ => false)
+	       in  (vm,lm,om,eq)
 	       end
-	    | (NONE, SOME _) => (vm,labelmap_remove(lm,l),om)
-	    | (NONE, NONE) => (vm,lm,om)
+	    | (NONE, SOME vpath) =>
+	       let val lm = labelmap_remove(lm,l)
+		   val eq =
+			(case (lookup_vpath_dec(vm,vpath)) of
+			    DEC_CON _ => true
+			 |  _ => false)
+	       in  (vm,lm,om,eq)
+	       end
+	    | (NONE, NONE) => (vm,lm,om,false)
 	    | (SOME _, SOME _) => error "overloadMap and labelMap labels\
 					\ not disjoint")
     fun shadow (vm : varMap, lm : labelMap, om : overloadMap, l : label)
 	: varMap * labelMap * overloadMap =
 	let val l' = fresh_internal_label(label2name' l)
-	    val (vm,lm,om) = shadow' (vm,lm,om,l,l')
-	in  shadow' (vm,lm,om,to_eq l,to_eq l')
+	    val (vm,lm,om,eq) = shadow' (vm,lm,om,l,l')
+	in  if eq then
+		let val eql = to_eq l
+		    val eql' = to_eq l'
+		    val (vm,lm,om,_) = shadow' (vm,lm,om,eql,eql')
+		in  (vm,lm,om)
+		end
+	    else (vm,lm,om)
 	end
 
     local
