@@ -18,6 +18,7 @@ struct
     val error = fn s => error "primutil.sml" s
     structure Float = Real64
 
+    val con_string = con_vector(con_uint W8)
     fun value_type exp_typer scon : con = 
 	(case scon of
 	     (int (is,_)) => con_int is
@@ -51,11 +52,21 @@ struct
        | ((not_int is | neg_int is | abs_int is),[]) => help(con_int is, con_int is)
        | (float2int,[]) => help(con_float F64, con_int W32)
        | (int2float,[]) => help(con_int W32, con_float F64)
-       | (int2uint,[]) => help(con_int W32, con_uint W32)
-       | (uint2int,[]) => help(con_uint W32, con_int W32)
+       | (int2uint(is1,is2),[]) => help(con_int is1, con_uint is2)
+       | (uint2int(is1,is2),[]) => help(con_uint is1, con_int is2)
+       | (uinta2uinta(is1,is2),[]) => help(con_array(con_uint is1), con_array(con_uint is2))
+       | (uintv2uintv(is1,is2),[]) => help(con_vector(con_uint is1), con_vector(con_uint is2))
 
-       | (output,[]) => help(con_vector (con_uint W8), con_unit)
-       | (input,[]) => help(con_unit, con_vector (con_uint W8))
+       | (open_in,[]) => help(con_string, con_int W32)
+       | (input,[]) => help'([con_int W32, con_int W32], con_vector (con_uint W8))
+       | (input1,[]) => help(con_int W32, con_uint W8)
+       | (lookahead,[]) => help'([con_int W32], con_uint W8)
+       | (end_of_stream,[]) => help(con_int W32, con_uint W32)
+       | (open_out,[]) => help(con_string, con_int W32)
+       | (close_in,[]) => help(con_int W32, con_unit)
+       | (output,[]) => help'([con_int W32, con_vector (con_uint W8)], con_unit)
+       | (flush_out,[]) => help(con_int W32, con_unit)
+       | (close_out,[]) => help(con_int W32, con_unit)
 
 (*	      | ISNIL {instance} => help(CON_LIST instance, con_bool)
 	      | CAR {instance} => help(CON_LIST instance, instance)
@@ -102,32 +113,34 @@ struct
 	       lesseq_uint is | greatereq_uint is),[]) => help'([con_uint is, con_uint is], con_bool)
 (*	  | cons {instance} => help'([instance,con_list instance],con_list instance) *)
 
-	  | (array1 true, [instance]) => thelp'([con_int W32, instance], con_array instance)
-	  | (length1 true, [instance]) => thelp(con_array instance, con_int W32)
-	  | (sub1 true, [instance]) => help'([con_array instance, con_int W32], instance)
+	  | (array1 true, [instance]) => thelp'([con_uint W32, instance], con_array instance)
+	  | (length1 true, [instance]) => thelp(con_array instance, con_uint W32)
+	  | (array2vector, [instance]) => thelp(con_array instance, con_vector instance)
+	  | (sub1 true, [instance]) => thelp'([con_array instance, con_uint W32], instance)
 	  | (array_eq true, [instance]) => help'([con_array instance, con_array instance],con_bool)
 
-	  | (array1 false, [instance]) => thelp'([con_int W32, instance], con_vector instance)
-	  | (length1 false, [instance]) => help(con_vector instance, con_int W32)
-	  | (sub1 false, [instance]) => help'([con_vector instance, con_int W32], instance)
+	  | (array1 false, [instance]) => help'([con_uint W32, instance], con_vector instance)
+	  | (length1 false, [instance]) => thelp(con_vector instance, con_uint W32)
+	  | (sub1 false, [instance]) => thelp'([con_vector instance, con_uint W32], instance)
 	  | (array_eq false, [instance]) => help(help'([instance, instance],con_bool),
 					    help'([con_vector instance, 
 						   con_vector instance],con_bool))
 		
 (*	  | output => help'([con_int, con_string], con_unit) *)
 	      
-	  | (update1, [instance]) => help'([con_array instance, con_int W32, instance], con_unit)
-	  | (intsub1 true, []) => help'([con_array (con_int W32), con_int W32], con_int W32)
-	  | (floatsub1 true, []) => help'([con_array (con_float F64), con_int W32], con_float F64)
-	  | (ptrsub1 true, [instance]) => help'([con_array instance, con_int W32], instance)
-	  | (intsub1 false, []) => help'([con_vector (con_int W32), con_int W32], con_int W32)
-	  | (floatsub1 false, []) => help'([con_vector (con_float F64), con_int W32], con_float F64)
-	  | (ptrsub1 false, [instance]) => help'([con_vector instance, con_int W32], instance)
-	  | (intupdate1, []) => help'([con_array (con_int W32), con_int W32, con_int W32], con_unit)
-	  | (floatupdate1, []) => help'([con_array (con_float F64), con_int W32, con_float F64], con_unit)
-	  | (ptrupdate1, [instance]) => help'([con_array instance, con_int W32, instance], con_unit)
+	  | (update1, [instance]) => thelp'([con_array instance, con_uint W32, instance], con_unit)
+	  | (intsub1 true, []) => thelp'([con_array (con_uint W32), con_uint W32], con_int W32)
+	  | (floatsub1 true, []) => thelp'([con_array (con_float F64), con_uint W32], con_float F64)
+	  | (ptrsub1 true, [instance]) => thelp'([con_array instance, con_uint W32], instance)
+	  | (intsub1 false, []) => thelp'([con_vector (con_uint W32), con_uint W32], con_int W32)
+	  | (floatsub1 false, []) => thelp'([con_vector (con_float F64), con_uint W32], con_float F64)
+	  | (ptrsub1 false, [instance]) => thelp'([con_vector instance, con_uint W32], instance)
+	  | (intupdate1, []) => thelp'([con_array (con_uint W32), con_uint W32, con_int W32], con_unit)
+	  | (floatupdate1, []) => thelp'([con_array (con_float F64), con_uint W32, con_float F64], con_unit)
+	  | (ptrupdate1, [instance]) => thelp'([con_array instance, con_uint W32, instance], con_unit)
 
-	  | _ => error "can't get type"
+	  | _ => (Ppprim.pp_prim prim;
+		  error "can't get type")
 (*	   | array2  {instance} => raise UNIMP
 	   | SUB2    {instance} => raise UNIMP *) )
 
@@ -137,7 +150,7 @@ struct
 
      end
 
-  fun get_iltype ilprim =
+  fun get_iltype ilprim _ =
      let 
 	 fun help (arg,res) = partial_arrow(arg,res)
 	 fun help' (args,res) = help(con_tuple args,res)
@@ -243,8 +256,10 @@ struct
 	                                (fn f => (int(W32,TilWord64.fromInt(floor f))))
 	  | (int2float, [], [v]) => objunary (value2int W32)
 					(fn w => (float(F64,Float.toString(real(TilWord64.toInt w)))))
-	  | (int2uint, [], [v]) => objunary (value2int W32) (fn w => uint(W32,w))
-	  | (uint2int, [], [v]) => objunary (value2int W32) (fn w => int(W32,w))
+	  | (int2uint(is1,is2), [], [v]) => objunary (value2int is1) (fn w => uint(is2,w))
+	  | (uint2int(is1,is2), [], [v]) => objunary (value2int is1) (fn w => int(is2,w))
+	  | (uinta2uinta(is1,is2),_,_) => error "UNIMP"
+	  | (uintv2uintv(is1,is2),_,_) => error "UNIMP"
 
 	  | (neg_float fs, [], _) => funary fs (op ~)
 	  | (plus_float fs, [], _) => fbinary fs (op +)
@@ -307,6 +322,15 @@ struct
 				  end
 			    | _ => bad "output")
 		   | _ => bad "output")
+	  | (input,_,_) => error "UNIMP"
+	  | (input1,_,_) => error "UNIMP"
+	  | (open_in,_,_) => error "UNIMP"
+	  | (open_out,_,_) => error "UNIMP"
+	  | (close_in,_,_) => error "UNIMP"
+	  | (close_out,_,_) => error "UNIMP"
+	  | (lookahead,_,_) => error "UNIMP"
+	  | (end_of_stream,_,_) => error "UNIMP"
+	  | (flush_out,_,_) => error "UNIMP"
 
 	  | _ => bad "general"())
 	end

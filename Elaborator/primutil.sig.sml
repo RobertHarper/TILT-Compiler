@@ -7,6 +7,6 @@ signature PRIMUTIL =
 
 	val value_type : (exp -> con) -> value -> con
 	val get_type : Prim.prim -> con list -> con
-	val get_iltype : Prim.ilprim -> con
+	val get_iltype : Prim.ilprim -> con list -> con
 	val apply : Prim.prim -> con list -> exp list -> exp
     end

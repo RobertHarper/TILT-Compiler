@@ -416,6 +416,7 @@ struct
 	     | NONE => NONE)
 
 
+      fun Context_Varmap (CONTEXT {var_list,...}) = var_list
 
       fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(var_list,v)
       fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)

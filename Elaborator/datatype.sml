@@ -28,6 +28,11 @@ functor Datatype(structure Il : IL
 		withtycs : Ast.tb list,
 		eqcomp : Il.context * Il.con -> Il.exp option) : (mod * signat) =
       let 
+	  fun sort_std' (ncs,cs) [] = (rev ncs) @ (rev cs)
+	    | sort_std' (ncs,cs) ((nc as (_,NONE))::rest) = sort_std' (nc::ncs,cs) rest
+	    | sort_std' (ncs,cs) ((c as (_,SOME _))::rest) = sort_std' (ncs,c::cs) rest
+	fun sort_std (s,tvs,st_list) = (s,tvs,sort_std' ([],[]) st_list)
+	val std_list = map sort_std std_list
 	val _ = (case withtycs of 
 		   [] => ()
 		 | _ => error "xdatbind does not handle withtypes yet")

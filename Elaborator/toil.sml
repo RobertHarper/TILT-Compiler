@@ -93,6 +93,8 @@ functor Toil(structure Il : IL
 				      end
 	fun error_region() = (error_level := error_max(!error_level,Error);
 			      print "Error at "; print (peek_region()); print ", ")
+	fun error_region() = (error_level := error_max(!error_level,Error);
+			      print "Error at "; print ", ")
 	fun warn_region() = (error_level := error_max(!error_level,Warn);
 			     print "Warning at "; print (peek_region()); print ", ")
 	    
@@ -144,6 +146,20 @@ functor Toil(structure Il : IL
 				  [] => elab_error "XXX tyvar must have some context"
 				| a::_ => a)
 
+     (* ----------------- overload_resolver ----------------------- *)
+    fun overload_help warn ocon =
+	let val helpers = {hard = fn (c1,c2) => eq_con(empty_context,c1,c2),
+			   soft = fn (c1,c2) => soft_eq_con(empty_context,c1,c2)}
+	in (case (ocon_constrain(ocon,helpers)) of
+		[] => (error_region();
+		       print "overloaded type: none of the constraints are satisfied\n")
+	      | [pos] => ()
+	      | pos::_ => if warn 
+			      then 
+				  (error_region();
+				   print "Warning: more than one constraint satisfied by overloaded type")
+			  else ())
+	end
 
      (* ----------------- Helper Functions ----------------------- *)
     fun dummy_exp (context,str) =
@@ -409,7 +425,24 @@ functor Toil(structure Il : IL
 			  pp_signat s; print "\nsignat' is \n";
 			  pp_signat signat'; print "\n";
 			  elab_error "Failed rule 24 Sig_IsSub")
-	    val exp = MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab)
+	    val exp = (case (mod_poly,module) of
+			   (MOD_STRUCTURE sbnds,
+			    MOD_FUNCTOR(v,SIGNAT_STRUCTURE sdecs,MOD_STRUCTURE[SBND(it_maybe,BND_EXP(_,e))])) =>
+			       if (eq_label(it_lab,it_maybe))
+				   then
+				       let fun table_entry (SBND(l,BND_CON(_,c))) = (l,c)
+					     | table_entry _ = error "bad functor application"
+					   val table = map table_entry sbnds
+					   fun eproj _ = NONE
+					   fun cproj (MOD_VAR v', l) = 
+					       if (eq_var(v,v')) 
+						   then assoc_eq(eq_label,l,table)
+					       else NONE
+					     | cproj _ = NONE
+				       in  exp_subst_proj(e,eproj,cproj)
+				       end
+			       else MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab)
+			 | _ => MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab))
 	    val _ = debugdo (fn () => (print "polyfun_inst returning exp :\n";
 				       pp_exp exp; print "\n\n  and rescon:\n";
 				       pp_con new_rescon; print "\n\n"))
@@ -586,22 +619,37 @@ functor Toil(structure Il : IL
 		 val (e2',con2) = xexp(context,argument)
 		 val spec_rescon = fresh_con context
 		 val spec_funcon = CON_ARROW(con2,spec_rescon, oneshot())
-		 fun reduce(ETAPRIM(p,cs),RECORD rbnds) = PRIM(p,cs,map #2 rbnds)
+		 fun reduce(ETAPRIM(p,cs),RECORD rbnds) = 
+		     (print "reduce: etaprim-record case\n";
+		      PRIM(p,cs,map #2 rbnds))
 		   | reduce(ETAILPRIM(ip,cs),RECORD rbnds) = ILPRIM(ip,cs,map #2 rbnds)
 		   | reduce(x as ETAPRIM(p,cs),y) = 
-		     (case (IlStatic.PrimUtil.get_type p cs) of
+		     (print "reduce: etaprim-nonrecord case\n";
+		      case (IlStatic.PrimUtil.get_type p cs) of
 			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
 			| CON_ARROW(_,_,_) => PRIM(p,cs,[y])
 			| _ => APP(x,y))
 		   | reduce(x as ETAILPRIM(ip,cs),y) = 
-		     (case (IlStatic.PrimUtil.get_iltype ip) of
+		     (case (IlStatic.PrimUtil.get_iltype ip cs) of
 			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
 			| CON_ARROW(_,_,_) => ILPRIM(ip,cs,[y])
 			| _ => APP(x,y))
-		   | reduce(x,y) = APP(x,y)
+		   | reduce(x,y) = 
+			  (print "reduce: default case\n"; 
+			   print "x is: "; Ppil.pp_exp x; print "\n";
+			   print "y is: "; Ppil.pp_exp y; print "\n";
+			   APP(x,y))
+		 fun red (exp as (OVEREXP (c,_,oe))) = 
+		     ((case c of 
+			   CON_OVAR ocon => overload_help false ocon
+			 | _ => ());
+		      (case (oneshot_deref oe) of
+			   SOME exp => exp
+			 | NONE => exp))
+		   | red exp = exp
 	     in
 		 if (eq_con(context,con1,spec_funcon))
-		     then (reduce(e1',e2'),con_deref spec_rescon)
+		     then (reduce(red e1',red e2'),con_deref spec_rescon)
 		 else
 		     case con1 of
 			 CON_ARROW(argcon,rescon,_) => 
@@ -933,6 +981,9 @@ functor Toil(structure Il : IL
 					       ({item=Ast.VarPat[s],...}::rest) => (s, map getitem rest)
 					 | [p1,{item=Ast.VarPat[s],...},p2] => (s, [Ast.TuplePat[getitem p1,
 												 getitem p2]])
+					 | {item=Ast.FlatAppPat[p1,{item=Ast.VarPat[s],...},p2],
+					    ...}::rest => (s, (Ast.TuplePat[getitem p1,
+									    getitem p2]) :: (map getitem rest))
 					 | _ => parse_error "can't find funid")
 				      val _  = (case resultty of
 						    NONE => ()
@@ -2476,16 +2527,6 @@ functor Toil(structure Il : IL
 	    in oneshot_set(eshot,e)
 	    end
 	  | flex_help (l,ref(INDIRECT_FLEXINFO fr),fieldc,eshot) = flex_help (l,fr,fieldc,eshot)
-	fun overload_help ocon =
-		 let val helpers = {hard = fn (c1,c2) => eq_con(empty_context,c1,c2),
-				    soft = fn (c1,c2) => soft_eq_con(empty_context,c1,c2)}
-		 in (case (ocon_constrain(ocon,helpers)) of
-			 [] => (error_region();
-				print "overloaded type: none of the constraints are satisfied\n")
-			 | [pos] => ()
-			 | pos::_ => (error_region();
-				      print "Warning: more than one constraint satisfied by overloaded type"))
-		 end
 	fun eq_help (decs,tyvar,exp_oneshot) = 
 	  let
 	      val con = CON_TYVAR tyvar
@@ -2510,7 +2551,7 @@ functor Toil(structure Il : IL
         val tyvar_table = get_tyvar_table()
 	val overload_table = get_overload_table()
 	val flex_table = get_flex_table()
-        val _ = app overload_help overload_table 
+        val _ = app (overload_help true) overload_table 
 	val _ = app flex_help flex_table 
         val _ = app tyvar_help tyvar_table
 

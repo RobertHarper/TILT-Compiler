@@ -1,8 +1,8 @@
-functor IlPrimUtilParam(structure IlUtil : ILUTIL) 
+functor IlPrimUtilParam(structure Il : IL)
     : PRIMUTILPARAM =
     struct
 
-	open IlUtil 
+(*	open IlUtil  *)
 	open Il
 	open Util
 	open Prim
@@ -14,7 +14,20 @@ functor IlPrimUtilParam(structure IlUtil : ILUTIL)
 
 	fun partial_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init PARTIAL)
 	fun total_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init TOTAL)
-	val con_tuple = con_tuple
+	fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
+	fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
+	val unit_exp : exp = RECORD[]
+	val con_unit = CON_RECORD[]
+	val con_bool = CON_MUPROJECT(0,CON_FUN([Name.fresh_named_var "dummy"],
+					       CON_SUM{noncarriers = 2,
+						       carriers = [],
+						       special = NONE}))
+	val false_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=0,inject=NONE})
+	val true_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=1,inject=NONE})
+	    
+	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
+							     (generate_tuple_label (i+1),c)) conlist)
+
 	val con_int = CON_INT
 	val con_uint = CON_UINT
 	val con_float = CON_FLOAT

@@ -31,8 +31,10 @@ functor Prim()
       (* conversions amongst floats, ints, uints with w32 and f64 *)
       | float2int (* floor *)
       | int2float (* real  *) 
-      | int2uint
-      | uint2int
+      | int2uint of intsize * intsize
+      | uint2int of intsize * intsize
+      | uinta2uinta of intsize * intsize
+      | uintv2uintv of intsize * intsize
 
       (* ref operation *)
       | eq_ref
@@ -87,6 +89,7 @@ functor Prim()
       | rshift_uint of intsize      (* right shift logical *)
 
       (* array and vector ops - bool = true indicates writeable *)
+      | array2vector
       | sub1 of bool 
       | array1 of bool
       | update1 
@@ -101,9 +104,17 @@ functor Prim()
       | ptrsub1 of bool 
       | ptrupdate1 
 
-      (* super hacky IO stuff for now *)
+      (* IO stuff *)
+      | open_in
       | input
+      | input1
+      | lookahead
+      | end_of_stream
+      | open_out
+      | close_in
       | output
+      | flush_out
+      | close_out
 
     datatype ilprim = 
       (* unsigned int operations: separated for type reasons; they are identical to

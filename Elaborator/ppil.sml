@@ -342,7 +342,7 @@ functor Ppil(structure Il : IL
 	      (pp_list (fn NONE => String "NONE" 
 	    | SOME e => pp_exp seen e) arms ("[",", ","]",true)) ::
 	      (case default of
-		   NONE => []
+		   NONE => [String "NODEFAULT"]
 		 | SOME e => [String ", DEFAULT: ", pp_exp seen e]))
        | EXN_CASE (earg,elist,eopt) => pp_region "EXN_CASE(" ")"
 			  [pp_exp seen earg,

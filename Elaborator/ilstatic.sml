@@ -677,7 +677,7 @@ functor IlStatic(structure Il : IL
 					       else GetExpCon(e,ctxt)
 				   | NONE => (va,con))
      | ETAPRIM (p,cs) => (true, PrimUtil.get_type p cs)
-     | ETAILPRIM (ip,_) => (true, PrimUtil.get_iltype ip)
+     | ETAILPRIM (ip,cs) => (true, PrimUtil.get_iltype ip cs)
      | PRIM(p,cs,[e]) => GetExpCon(APP(ETAPRIM(p,cs),e),ctxt)
      | ILPRIM(ip,cs,[e]) => GetExpCon(APP(ETAILPRIM(ip,cs),e),ctxt)
      | PRIM(p,cs,es) => GetExpCon(APP(ETAPRIM(p,cs),exp_tuple es),ctxt)
@@ -685,7 +685,7 @@ functor IlStatic(structure Il : IL
      | (VAR v) => (case Context_Lookup'(ctxt,v) of
 		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
 		     | SOME _ => error "VAR looked up to a non-value"
-		     | NONE => error "GetExpCon: v of (VAR v) not in context")
+		     | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
      | (APP (e1,e2)) => 
 	   let val (va1,con1) = GetExpCon(e1,ctxt)
 	       val con1 = Normalize(con1,ctxt)
@@ -912,7 +912,7 @@ functor IlStatic(structure Il : IL
 				     noncarriers = noncarriers}
 	       val rescon = fresh_con ctxt
 	       val guess_arm_cons = 
-		   mapcount (fn (i,_) => CON_ARROW(CON_SUM{special = SOME i,
+		   mapcount (fn (i,_) => CON_ARROW(CON_SUM{special = SOME (i + noncarriers),
 							   carriers = consNorm,
 							   noncarriers = noncarriers},
 						   rescon,oneshot())) consNorm
@@ -1034,7 +1034,14 @@ functor IlStatic(structure Il : IL
    and GetSbndSdec (ctxt,SBND (l, bnd)) = let val (va,dec) = GetBndDec(ctxt,bnd)
 					  in (va,SDEC(l,dec))
 					  end
-   and GetSbndsSdecs (ctxt, sbnds) = map (fn sbnd => GetSbndSdec(ctxt,sbnd)) sbnds
+
+   and GetSbndsSdecs (ctxt, []) = []
+     | GetSbndsSdecs (ctxt, (sbnd as (SBND(l,bnd))) :: rest) = 
+       let val (va,dec) = GetBndDec(ctxt,bnd)
+	   val sdec = SDEC(l,dec)
+	   val ctxt' = add_context_dec(ctxt, SelfifyDec dec)
+       in (sbnd,sdec)::(GetSbndsSdecs(ctxt',rest))
+       end
 
 
 

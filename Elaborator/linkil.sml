@@ -44,14 +44,15 @@ structure LinkIl (* : LINKIL *) =
 			      structure Ppprim = Ppprim
 			      structure IlContext = IlContext
 			      structure Il = Il); 
-	structure IlUtil = IlUtil(structure Il = Il
-				  structure IlContext = IlContext
-				  structure AstHelp = AstHelp
-				  structure Ppil = Ppil);
-	structure IlPrimUtilParam = IlPrimUtilParam(structure IlUtil = IlUtil);
+	structure IlPrimUtilParam = IlPrimUtilParam(structure Il = Il);
 	structure IlPrimUtil = PrimUtil(structure Prim = Prim
 					structure Ppprim = Ppprim
 					structure PrimUtilParam = IlPrimUtilParam);
+	structure IlUtil = IlUtil(structure Il = Il
+				  structure IlContext = IlContext
+				  structure PrimUtil = IlPrimUtil
+				  structure AstHelp = AstHelp
+				  structure Ppil = Ppil);
 	structure IlStatic = IlStatic(structure Il = Il
 				      structure IlContext = IlContext
 				      structure PrimUtil = IlPrimUtil

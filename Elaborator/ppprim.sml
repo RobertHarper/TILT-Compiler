@@ -67,8 +67,11 @@ functor Ppprim(structure Prim : PRIM)
 	   | abs_int is => Hbox[String "ABS_INT", pp_is is]
 	   | float2int => String "FLOAT2INT"
 	   | int2float => String "INT2FLOAT"
-	   | int2uint => String "INT2UINT"
-	   | uint2int => String "UINT2INT"
+	   | int2uint(is1,is2) => Hbox[String "INT2UINT(", pp_is is1, String "->", pp_is is2, String ")"]
+	   | uint2int(is1,is2) => Hbox[String "UINT2INT(", pp_is is1, String "->", pp_is is2, String ")"]
+	   | uinta2uinta(is1,is2) => Hbox[String "UINTA2UINTA(", pp_is is1, String "->", pp_is is2, String ")"]
+	   | uintv2uintv(is1,is2) => Hbox[String "UINTV2UINTV(", pp_is is1, String "->", pp_is is2, String ")"]
+
 (*
 	   | OPEN_IN => String "OPEN_IN"
 	   | OPEN_OUT => String "OPEN_OUT"
@@ -144,13 +147,20 @@ functor Ppprim(structure Prim : PRIM)
 	  | greatereq_uint is => Hbox[String "greatereqUI", pp_is is]
 	  | rshift_uint is => Hbox[String "rshiftUI", pp_is is]
 
-	  | output => String "output"
+	  | open_in => String "open_in"
 	  | input => String "input"
-(*
-	  | CONS => String "::"
-*)
+	  | input1 => String "input1"
+	  | lookahead => String "lookahead"
+	  | open_out => String "open_out"
+	  | close_in => String "close_in"
+	  | close_out => String "close_out"
+	  | flush_out => String "flush_out"
+	  | output => String "output"
+	  | end_of_stream => String "end_of_stream"
+
 	  | array1 true => String "array1"
 	  | sub1   true  => String "sub1"
+	  | array2vector => String "array2vector"
 	  | update1 => String "update1"
 	  | array_eq true => String "array_eq"
 	  | array1 false => String "vector1"
@@ -186,18 +196,21 @@ functor Ppprim(structure Prim : PRIM)
 	  | uint (is,i) => String (doint (is,i))
 	  | float (_,s) => String s
 	  | array (c,a) => String "ArrayValue"
-	  | vector (c,a) =>  (case (exp2value(Array.sub(a,0))) of
-				 SOME(uint(W8,_)) => 
-				     let fun folder(e,acc) = 
-					 (case (exp2value e) of
-					      SOME(uint(W8,c)) => 
-						  let val c = chr(TilWord64.toInt c)
-						  in  if (c = #"\n") then (#"\\")::(#"n")::acc else c::acc
-						  end
-					    | _ => error "bad vector value: corrupt string")
-				     in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
-				     end
+	  | vector (_,a) => 
+		if ((Array.length a) > 0)
+		    then (case (exp2value(Array.sub(a,0))) of
+			      SOME(uint(W8,_)) => 
+				  let fun folder(e,acc) = 
+				      (case (exp2value e) of
+					   SOME(uint(W8,c)) => 
+					       let val c = chr(TilWord64.toInt c)
+					       in  if (c = #"\n") then (#"\\")::(#"n")::acc else c::acc
+					       end
+					 | _ => error "bad vector value: corrupt string")
+				  in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
+				  end
 			       | _ => String "VectorValue")
+		else String "EmptyVectorValue"
 	  | refcell r => String "RefCellValue"
 	  | tag (name,c) => HOVbox[String "tag(",pp_tag name, String ", ", 
 				   pp_con c, String ")"]

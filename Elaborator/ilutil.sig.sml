@@ -45,9 +45,10 @@ signature ILUTIL =
     val make_catch : exp * con * exp -> exp
     val make_ifthenelse : exp * exp * exp * con -> exp
     val make_seq : (exp * con) list -> exp * con
+    val prim_etaexpand : (Il.Prim.prim * con list) -> exp
+    val ilprim_etaexpand : (Il.Prim.ilprim * con list) -> exp
 
     val con_bool : con
-
     val con_tuple : con list -> con                 (* the type of tuple values *)
     val con_tuple_inject : Il.con list -> Il.con    (* makes a tuple of types   *)
     val con_record : (Symbol.symbol * con) list -> con

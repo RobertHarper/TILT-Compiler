@@ -2,7 +2,11 @@
 functor IlUtil(structure Ppil : PPIL
 	       structure Il : IL
 	       structure IlContext : ILCONTEXT
-	       sharing Ppil.Il = IlContext.Il = Il)
+	       structure PrimUtil : PRIMUTIL
+	       sharing PrimUtil.Prim = Il.Prim
+               sharing Ppil.Il = IlContext.Il = Il
+	       sharing type PrimUtil.con = Il.con
+	       sharing type PrimUtil.exp = Il.exp)
 
   : ILUTIL = 
   struct
@@ -113,6 +117,29 @@ functor IlUtil(structure Ppil : PPIL
 	   val outer = EXN_CASE(VAR v,[(fail_exp, con_unit, efail')],NONE)
        in HANDLE(e,#1 (make_lambda(v,CON_ANY,con,outer)))
        end
+
+    fun etaexpand_help (primer,typer) (prim,cargs) = 
+	let val prim_tipe = typer prim cargs
+	    val (res_tipe,args_tipes) = (case prim_tipe of
+					     CON_ARROW(CON_RECORD lclist,res_tipe,_) => (res_tipe,map #2 lclist)
+					   | CON_ARROW(c,res_tipe,_) => (res_tipe,[c])
+					   | _ => error "cannot expand a non-arrow primitive")
+	    val vars = map (fn _ => fresh_var()) args_tipes
+	    val arg_var = fresh_var()
+	    val (eargs,arg_tipe) = (case args_tipes of 
+					[c] => ([VAR arg_var], c)
+				      | _ => let val arg_tipe = con_tuple args_tipes
+						 fun mapper (n,_) = (RECORD_PROJECT(VAR arg_var, 
+										    generate_tuple_label (n+1),
+										    arg_tipe))
+					     in  (mapcount mapper args_tipes, arg_tipe)
+					     end)
+	in  #1(make_lambda(arg_var,arg_tipe,res_tipe,
+			   primer(prim,cargs,eargs)))
+	end
+
+    val prim_etaexpand = etaexpand_help (PRIM,PrimUtil.get_type)
+    val ilprim_etaexpand = etaexpand_help (ILPRIM,PrimUtil.get_iltype)
 
     fun con_deref (CON_TYVAR tyvar) = (case (tyvar_deref tyvar) of
 					   NONE => CON_TYVAR tyvar

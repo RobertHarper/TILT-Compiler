@@ -189,14 +189,14 @@ functor Pat(structure Il : IL
 	       accs : (Ast.symbol * arm) list,
 	       def : def) : bound list * (exp * con) = 
     (case (args,accs) of
-           (* if no variable is yet bound, this is the last pattern,
+(*           (* if no variable is yet bound, this is the last pattern,
             and this is a binding construct, then the symbol
 	      matches the expression, and the bound list will be a 
 	      singleton of that expression. *)
        ([],[(s,([],[],NONE))]) => (case arg1 of
 				     CASE_NONVAR (v,e,c) => ([[(s,v,c)]],(e,c))
 				   | CASE_VAR(v,c) => ([[(s,v,c)]],(VAR v, c)))
-     | _ =>
+     | *) _ =>
 	 let 
 	   val con1 = get_case_exp_con arg1
 	   val (bnd,(var,con)) = lethelp ("casevar",arg1)
@@ -397,7 +397,7 @@ functor Pat(structure Il : IL
 		  | NONE => let val c = fresh_con context
 			    in ([], (Il.RAISE(c,bindexn_exp),c))
 			    end)
-     | ((_,[bound1 as (_,v,c)],NONE)::_,[]) => ([[bound1]],(VAR v,c))
+(*     | ((_,[bound1 as (_,v,c)],NONE)::_,[]) => ([[bound1]],(VAR v,c)) *)
      | ((_,bound,NONE)::_,[]) => (let val (vars,cons) = (map #2 bound, map #3 bound)
 				  in ([bound],(exp_tuple (map VAR vars), con_tuple cons))
 				  end)
@@ -616,7 +616,7 @@ functor Pat(structure Il : IL
 		 in (vc_ll @ vc_ll2, ec)
 		 end
 
-	       fun constant_dispatch(eqcon,eq,sc) : bound list * (exp * con) = 
+	       fun constant_dispatch(eqcon,eq) : bound list * (exp * con) = 
 		   let
 		     fun conszip a b = map (op ::) (zip a b)
 		     val (bndopt,(var,con)) = lethelp("casevar_scon",arg1)
@@ -631,7 +631,7 @@ functor Pat(structure Il : IL
 				 then ()
 			     else (error_region();
 				   print "base type mismatches argument type\n")
-		     val ite_exp = make_ifthenelse(eq[VAR var,Il.SCON sc],e1,e2,c1)
+		     val ite_exp = make_ifthenelse(eq var,e1,e2,c1)
 		     val ec = (case bndopt of
 				 NONE => (ite_exp,c1)
 			       | SOME bnd => (LET([bnd],ite_exp),c1))
@@ -653,28 +653,55 @@ functor Pat(structure Il : IL
 		  | (Ast.ConstraintPat _) => error "no ConstaintPat should be here"
 		  | (Ast.WordPat lit) => 
 			let val ds = IntInf.toString lit
-			in constant_dispatch(CON_UINT W32,   
-					     (fn elist => ILPRIM (eq_uint W32,[],elist)),
-					     uint (W32,TilWord64.fromDecimalString ds))
+			    fun equaler v = ILPRIM (eq_uint W32,[],
+						    [VAR v,SCON(uint (W32,TilWord64.fromDecimalString ds))])
+			in constant_dispatch(CON_UINT W32, equaler)
 			end
 		  | (Ast.IntPat lit)  => 
 			let val ds = IntInf.toString lit
-			in constant_dispatch(CON_INT W32,   
-					     (fn elist => PRIM (eq_int W32,[],elist)),
-					     int (W32,TilWord64.fromDecimalString ds))
+			    fun equaler v = PRIM (eq_int W32,[],
+						  [VAR v, SCON(int (W32,TilWord64.fromDecimalString ds))])
+			in constant_dispatch(CON_INT W32, equaler)
 			end
-		  | (Ast.StringPat ss) => constant_dispatch(CON_VECTOR (CON_UINT W8),
-							    raise UNIMP,
-							    vector(CON_UINT W8,
-								   Array.fromList
-								   (map (fn c => 
-									 (SCON(uint(W8,TilWord64.fromInt
-										    (ord c)))))
-								    (explode ss))))
-		  | (Ast.CharPat cs)   => constant_dispatch(CON_UINT W8,
-							    (fn elist => ILPRIM (eq_uint W8,[],elist)),
-							    uint(W8,TilWord64.fromInt
-								 (ord (CharStr2char cs))))
+		  | (Ast.StringPat ss) => 
+			let fun equaler v = 
+			    let val len = size ss
+				val lenbool = ILPRIM(eq_uint W32,[],
+						   [PRIM(length1 false,[CON_UINT W8],[VAR v]),
+						    SCON(uint (W32, TilWord64.fromInt len))])
+				val z = chr 0
+				val v' = fresh_var()
+				fun loop _ [] = true_exp
+				  | loop n [a] = loop n [a,z,z,z]
+				  | loop n [a,b] = loop n [a,b,z,z]
+				  | loop n [a,b,c] = loop n [a,b,c,z]
+				  | loop n (a::b::c::d::rest) = 
+				    let fun shift sh ch = TilWord64.lshift(TilWord64.fromInt(ord ch),sh)
+					val (a,b,c,d) = (shift 0 a, shift 8 b, shift 16 c, shift 24 d)
+					val e = TilWord64.orb(TilWord64.orb(a,b),TilWord64.orb(c,d))
+					val match = ILPRIM(eq_uint W32,[],
+							 [SCON(uint (W32, TilWord64.fromInt len)),
+							  PRIM(sub1 false, [CON_UINT W32], 
+							       [VAR v', 
+								SCON(uint (W32, TilWord64.fromInt n))])])
+				    in  (case rest of
+					     [] => match
+					   | _ => make_ifthenelse(match,loop (n+1) rest,
+								  false_exp, con_bool))
+				    end
+				val content_bool = 
+				    LET([BND_EXP(v',PRIM(uintv2uintv (W8,W32),[],[VAR v]))],
+					loop 0 (explode ss))
+			    in  make_ifthenelse(lenbool,content_bool,false_exp,con_bool)
+			    end
+			in  constant_dispatch(CON_VECTOR (CON_UINT W8),equaler)
+			end
+		 | (Ast.CharPat cs)   => 
+		      let fun equaler v = ILPRIM (eq_uint W8,[],
+						  [VAR v,SCON(uint(W8,TilWord64.fromInt
+								   (ord (CharStr2char cs))))])
+		      in  constant_dispatch(CON_UINT W8,equaler)
+		      end
 		  | (Ast.RecordPat _ | Ast.TuplePat _) => tuple_record_dispatch()
 		  | (Ast.WildPat) => wild_dispatch()
 		  | (Ast.VarPat p) => (if (is_constr p) then constructor_dispatch() 
@@ -732,14 +759,18 @@ functor Pat(structure Il : IL
 	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,bindexn_exp),res_con)
 	val (e,c,bindings_list) = compile(patarg,args,arms,def)
-	val sbnd_sdecs =
+	val sc_list = (case bindings_list of
+			   [sc_list] => sc_list
+			 | [] => error "bindCompile: compile returned no bindings"
+			 | _ => error "bindCompile: compile returned more than one bindings")
+	fun default_case() = 
 	    (case bindings_list of
 		 (* if vc_list is of length 1, result was not tupled up *)
-		 [[(s,c)]] => let val v = gen_var_from_symbol s
+(*		 [[(s,c)]] => let val v = gen_var_from_symbol s
 			      in [(SBND (symbol_label s, BND_EXP(v,e)),
 				   SDEC(symbol_label s, DEC_EXP(v,c)))]
-			      end
-	  | [sc_list] => (* otherwise, result was tupled up and we must project *)
+			      end 
+	  | *) [sc_list] => (* otherwise, result was tupled up and we must project *)
 	      let
 		val lbl = internal_label "lbl"
 		val var = fresh_var()
@@ -761,6 +792,30 @@ functor Pat(structure Il : IL
 	      end
 	  | [] => error "bindCompile: compile returned no bindings"
 	  | _ => error "bindCompile: compile returned more than one bindings")
+
+	  local
+	    exception CannotFlatten
+	    fun getvar(_,VAR v) = v
+	      | getvar _ = raise CannotFlatten
+	    fun flatten acc (RECORD le_list) = (acc,(map getvar le_list))
+	      | flatten acc (VAR v) = (acc,[v])
+	      | flatten acc (LET (bnds, rest)) = flatten (acc @ bnds) rest
+	      | flatten _ _ = raise CannotFlatten
+	    fun irrefutable_case (bnds,vlist) = 
+		let val table = Listops.zip vlist sc_list
+		    fun namer v = (case (assoc_eq(Name.eq_var, v, table)) of
+				       SOME (s,_) => symbol_label s
+				     | _ => internal_label "lblx")
+		    fun make_sbnd(BND_EXP(v,e)) = SBND(namer v, BND_EXP(v,e))
+		      | make_sbnd(BND_MOD(v,m)) = SBND(namer v, BND_MOD(v,m))
+		      | make_sbnd(BND_CON(v,c)) = SBND(namer v, BND_CON(v,c))
+		    val sbnds = map make_sbnd bnds
+		    val sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
+		in  Listops.zip sbnds sdecs
+		end
+	in  val sbnd_sdecs = ((irrefutable_case (flatten [] e)) 
+			       handle CannotFlatten => default_case())
+	end
 	val _ = debugdo (fn () => (print "bindCompile returning sbnds_sdecs = \n";
 				   (pp_list (fn (sbnd,sdec) => Formatter.HOVbox[pp_sbnd' sbnd,
 									       pp_sdec' sdec])
