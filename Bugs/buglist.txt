@@ -120,3 +120,4 @@
 0120 [open]	zero-sized word8array
 0121 [open]	nonexhaustive binding failure in optimize1
 0122 [open]	overflow in compiler
+0123 [open]	possible nontermination
