@@ -220,8 +220,8 @@ functor SplayMapFn (K : ORD_KEY) : ORD_MAP =
 		(* end case *))
 	  in
 	    if (numItems m1 > numItems m2)
-	      then foldli (ins f) m1 m2
-	      else foldli (ins (fn (a, b) => f(b, a))) m2 m1
+	      then foldli (ins (fn (a, b) => f(b, a))) m1 m2
+	      else foldli (ins f) m2 m1
 	  end
     fun unionWithi f (m1, m2) = let
 	  fun ins f (key, x, m) = (case find(m, key)
@@ -230,8 +230,8 @@ functor SplayMapFn (K : ORD_KEY) : ORD_MAP =
 		(* end case *))
 	  in
 	    if (numItems m1 > numItems m2)
-	      then foldli (ins f) m1 m2
-	      else foldli (ins (fn (k, a, b) => f(k, b, a))) m2 m1
+	      then foldli (ins (fn (k, a, b) => f(k, b, a))) m1 m2
+	      else foldli (ins f) m2 m1
 	  end
 
     fun intersectWith f (m1, m2) = let
