@@ -7,3 +7,9 @@
 (2) improve this error msg:
 
 	Error: infixparse.sml: parse_pat on subcall yielded multiple patterns
+
+(3) the result type of mem_rec is not constraied to bool by the elaborator
+fun mem_assoc dummy =
+  let fun mem_rec (x : bool) : bool = (mem_rec x) 
+  in mem_rec
+  end
