@@ -1089,7 +1089,7 @@ structure Signature :> SIGNATURE =
                    (* ------- coercion to a monomorphic value specificiation ---- *)
 		     (SOME(DEC_EXP(v,c)),_) =>
 			 (case (sig_actual_lookup labs) of
-			      SOME(lbls,PHRASE_CLASS_EXP (_,con)) => (* con has var_actual *)
+			      SOME(lbls,PHRASE_CLASS_EXP (e,con)) => (* con has var_actual *)
 				  let val _ = (debugdo (fn () => 
 					    (print "Looking up with path_actual = "; 
 					     pp_path path_actual; 
@@ -1101,8 +1101,10 @@ structure Signature :> SIGNATURE =
 				    then
 					let 
 					    val v' = derived_var v
-					    val exp_path = join_path_labels(path_actual,lbls)
-					    val bnd = BND_EXP(v',path2exp exp_path)
+				            val inline = Listops.orfold IlUtil.is_dt lbls
+				            val exp = if (inline) then e 
+							else path2exp(join_path_labels(path_actual,lbls))
+					    val bnd = BND_EXP(v',exp)
 					    val dec = DEC_EXP(v',con)
 					in  SOME(bnd,dec,ctxt)
 					end 
