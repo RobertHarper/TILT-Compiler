@@ -18,7 +18,7 @@ struct
     fun error s = Util.error "tortl-array" s
 
   (* ----------  Subscript operations ----------------- *)
-  fun xsub_float (state, fs) (vl1 : term, vl2 : term) =
+  fun xsub_float (state, fs) (vl1 : term, vl2 : term, tr) =
       let
 	  val a' = load_ireg_term(vl1,NONE)
 	  val destf = alloc_regf()
@@ -35,9 +35,9 @@ struct
 	   state)
       end
 
-  fun xsub_help (state : state, is, c)  (vl1 : term, vl2 : term) =
+  fun xsub_help (state : state, is, c)  (vl1 : term, vl2 : term, rep) =
       let val a' = load_ireg_term(vl1,NONE)
-	  val desti = alloc_regi(con2rep state c)
+	  val desti = alloc_regi rep
       in  (case is of
 	       Prim.W32 => (add_instr(ICOMMENT "int sub start");
 			    (case (in_ea_range 4 vl2) of
@@ -69,29 +69,30 @@ struct
 	  (LOCATION(REGISTER(false,I desti)), c, state)
       end
 
-  fun xsub_int (state : state, is)  (vl1 : term, vl2 : term) =
+  fun xsub_int (state : state, is)  (vl1 : term, vl2 : term, tr) =
       let val c = Prim_c(Int_c is, [])
-      in  xsub_help (state,is,c) (vl1,vl2)
+      in  xsub_help (state,is,c) (vl1,vl2,niltrace2rep state tr)
       end
 
-  fun xsub_known(state : state, c) (vl1 : term, vl2 : term) =
-      xsub_help(state, Prim.W32,c) (vl1,vl2)
+  fun xsub_known(state : state, c) (vl1 : term, vl2 : term, tr) =
+      xsub_help(state, Prim.W32,c) (vl1,vl2,niltrace2rep state tr)
 
 
-  fun xsub_dynamic(state,c, con_ir) (vl1 : term, vl2 : term) : term * con * state =
+  fun xsub_dynamic(state,c, con_ir) (vl1 : term, vl2 : term, tr) : term * con * state =
       let
 	  val _ = Stats.counter("Rtlxsub_dyn")()
-	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),_,s) = xsub_float(state,Prim.F64) (vl1,vl2)
+	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),_,s) = xsub_float(state,Prim.F64) 
+								(vl1,vl2,Nil.TraceKnown TraceInfo.Notrace_Real)
 				val (ir,s) = boxFloat(s,fr)
 			    in  (I ir, s)
 			    end
-	  fun nonfloatcase (s,is) = let val (LOCATION(REGISTER(_, reg)),_,s) = xsub_int(s,is) (vl1,vl2)
+	  fun nonfloatcase (s,is) = let val (LOCATION(REGISTER(_, reg)),_,s) = xsub_int(s,is) (vl1,vl2,tr)
 				    in  (reg,s)
 				    end
 				
 	  val r = con_ir
 	  val tmp = alloc_regi NOTRACE_INT
-	  val desti = alloc_regi(con2rep state c)
+	  val desti = alloc_regi(niltrace2rep state tr)
 	  val afterl = fresh_code_label "sub_after"
 	  val floatl = fresh_code_label "sub_float"
 	  val charl = fresh_code_label "sub_char"

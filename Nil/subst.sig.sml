@@ -81,6 +81,7 @@ signature NILSUBST =
   sig
     type exp = Nil.exp
     type con = Nil.con
+    type niltrace = Nil.niltrace
     type kind = Nil.kind
     type bnd = Nil.bnd
     type conbnd = Nil.conbnd
@@ -101,6 +102,7 @@ signature NILSUBST =
     val substConInKind : con_subst -> kind -> kind
     val substConInBnd : con_subst -> bnd -> bnd
     val substConInCBnd : con_subst -> conbnd -> conbnd
+    val substConInTrace : con_subst -> niltrace -> niltrace
     val substExpInExp : exp_subst -> exp -> exp
     val substExpInCon : exp_subst -> con -> con
     val substExpInKind : exp_subst -> kind -> kind

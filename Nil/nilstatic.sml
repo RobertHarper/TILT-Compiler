@@ -1587,7 +1587,7 @@ struct
 			| _ => ()) 
 		 
 	     fun check_loop [] = result_type
-	       | check_loop ((index,exp)::arms) = 
+	       | check_loop ((index,tr,exp)::arms) = 
 		 let 
 		     val sum_con = mk_sum index
 		     val D = insert_con(D,bound,sum_con)	     
@@ -1616,7 +1616,7 @@ struct
 	     (is_exn_con (con_head_normalize (D,argcon))) orelse
 	     (error (locate "switch_valid") "Argument to exncase not an exn")
 
-	   val (indices,bodies) = unzip arms
+	   val (indices,_,bodies) = unzip3 arms
 	   val index_cons = map (curry2 exp_valid D) indices
 
 	   val _ = (case (default, arms) of

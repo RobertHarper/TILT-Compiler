@@ -159,12 +159,12 @@ sig
 		  sumtype : con,
 		  result_type : con,
 		  bound : var,
-		  arms : (w32 * exp) list,
+		  arms : (w32 * niltrace * exp) list,
 		  default : exp option}             (* sum types *)
     | Exncase_e of {arg : exp,
 		    result_type : con,
 		    bound : var,
-		    arms : (exp * exp) list,
+		    arms : (exp * niltrace * exp) list,
 		    default : exp option}           (* exceptions *)
     | Typecase_e of {arg : con,
 		     result_type : con,

@@ -125,9 +125,10 @@ structure Name :> NAME =
       in (case (is_internal,is_generative) of
 	    (true,false) => (str ^ "_INT")
 	  | (true,true) => (str ^ "_INT_GEN")
-	  | (false,_) => (str ^ (case space of
-					   0 => ""
-					 | x => "_" ^ (Int.toString x))))
+	  | (false,_) => str)
+                    (* (str ^ (case space of
+				   0 => ""
+				 | x => "_" ^ (Int.toString x))) *)
       end
     fun loc2string (i) = ("LOC_" ^ (Int.toString i))
     fun tag2string (i,s) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))

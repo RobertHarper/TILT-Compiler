@@ -143,6 +143,7 @@ void DeleteJob(SysThread_t *sth)
       for (j=i; j<NumThread-1; j++)
 	JobQueue[j] = JobQueue[j+1];
       topThread--;
+      /*      printf("topThread = %d.  Signalling EmptyCond.\n", topThread); */
       pthread_cond_signal(&EmptyCond);
       LocalUnlock();
       th->status = ThreadDone;  /* Now, we put it back in the free pool */
@@ -269,13 +270,12 @@ void work(SysThread_t *sth)
 
   /* Wait for next user thread and remove from queue. Map system thread. */
   while (th == NULL) {
-#ifdef alpha_osf
     if (NumReadyJob() == 0)
+#ifdef alpha_osf
       sched_yield();
 #endif
 #ifdef solaris
-    while (NumReadyJob() == 0)
-      ;
+      thr_yield();
 #endif
     /* We _might_ have some work now */
     th = FetchJob();
@@ -347,7 +347,7 @@ printf ("Failed at i = %d\n",i);
 static void* systhread(void* addr)
 {
   SysThread_t *st = getSysThread();
-  st->stack = (int)(&st);
+  st->stack = (int)(&st) & (~31);
   work(st);
   assert(0);
 }
@@ -362,9 +362,10 @@ void thread_go(value_t start_adds, int num_add)
   for (i=0; i<NumSysThread; i++)
     pthread_create(&(SysThreads[i].pthread),NULL,systhread,(void *)i);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
-  while ((i = NumTotalJob()) > 0) 
+  while ((i = NumTotalJob()) > 0) {
+      printf("Main thread found %d jobs.\n", i);
       pthread_cond_wait(&EmptyCond,&EmptyLock);
-
+  }
 }
 
 

@@ -699,13 +699,13 @@ struct
 
 	  val cvs' = Set.add(cvs,bound)
 
-	  fun mapper (w,e) = 
+	  fun mapper (w,tr,e) = 
 	      let 
 		  val (e',bvl,_,_) = rexp (e,cvs',econtext)
 		  val (up,stay) = filter_bnds (bvl, boundset) 
 		  val e'' = NilUtil.makeLetE Sequential stay e'
 	      in
-		  ((w,e''), up)
+		  ((w,tr,e''), up)
 	      end
 	      
 	  val (arg', bvl', _, _) = rexp (arg,cvs,econtext)
@@ -733,13 +733,13 @@ struct
 	  val cvs' = add(cvs,bound)
 
 	  (* e1 is supposed to be a path, so no point traversing it *)
-	  fun mapper (e1,e) = 
+	  fun mapper (e1,tr,e) = 
 	      let 
 		  val (e',bvl,_,_) = rexp (e,cvs',econtext)
 		  val (up,stay) = filter_bnds (bvl, boundset) 
 		  val e'' = NilUtil.makeLetE Sequential stay e'
 	      in
-		  ((e1,e''), up)
+		  ((e1,tr,e''), up)
 	      end
 	      
 	  val (arg', bvl', _, _) = rexp (arg,cvs,econtext)

@@ -15,10 +15,10 @@ sig
     val xlen_known   : state * con            -> term -> term * con * state
     val xlen_dynamic : state * con * regi     -> term -> term * con * state
 
-    val xsub_float   : state * Prim.floatsize -> term * term -> term * con * state
-    val xsub_int     : state * Prim.intsize   -> term * term -> term * con * state
-    val xsub_known   : state * con            -> term * term -> term * con * state
-    val xsub_dynamic : state * con * regi     -> term * term -> term * con * state
+    val xsub_float   : state * Prim.floatsize -> term * term * Nil.niltrace -> term * con * state
+    val xsub_int     : state * Prim.intsize   -> term * term * Nil.niltrace -> term * con * state
+    val xsub_known   : state * con            -> term * term * Nil.niltrace -> term * con * state
+    val xsub_dynamic : state * con * regi     -> term * term * Nil.niltrace -> term * con * state
 
     val xupdate_float : state * Prim.floatsize -> term * term * term -> term * con * state
     val xupdate_int   : state * Prim.intsize   -> term * term * term -> term * con * state

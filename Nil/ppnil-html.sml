@@ -347,8 +347,8 @@ structure PpnilHtml :> PPNIL =
 			   pp_exp arg, String ": ",
 			   pp_con sumtype, String ", ",
 			   Break0 0 5,
-			   pp_bound_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
+			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", pp_trace tr,
+								    String ": ", pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -358,7 +358,7 @@ structure PpnilHtml :> PPNIL =
 			   pp_exp arg, String ": EXN, ",
 			   Break0 0 5,
 			   pp_bound_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (t,e) => Hbox[pp_exp t, String ": ", pp_exp e])
+			   (pp_list (fn (t,tr,e) => Hbox[pp_exp t, String ": ", pp_trace tr, String ": ", pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -437,9 +437,9 @@ structure PpnilHtml :> PPNIL =
 
     fun pp_module (MODULE{bnds,imports,exports}) = 
 	let 
-	    fun pp_importentry (ImportValue (l,v,nt,c)) = 
-		Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", 
-		     pp_trace nt, String " : ", pp_con c]
+	    fun pp_importentry (ImportValue (l,v,tr,c)) = 
+		Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_trace tr,
+		     String " : ", pp_con c]
 	      |  pp_importentry (ImportType (l,v,k)) = 
 		Hbox[pp_label l, String " > ", pp_bound_var v, String " :: ", pp_kind k]
 	    fun pp_exportentry (ExportValue (l,v)) = 
@@ -463,6 +463,7 @@ structure PpnilHtml :> PPNIL =
     val pp_con' = help pp_con
     val pp_kind' = help pp_kind
     val pp_bnd' = help pp_bnd
+    val pp_trace' = help pp_trace
     val pp_conbnd' = help pp_conbnd
     val pp_bnds' = help pp_bnds
     val pp_exp' = help pp_exp
@@ -474,6 +475,7 @@ structure PpnilHtml :> PPNIL =
     val pp_kind = help' pp_kind
     fun pp_list doer data = help' (pp_list' doer data)
     val pp_bnd = help' pp_bnd
+    val pp_trace = help' pp_trace
     val pp_conbnd = help' pp_conbnd
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp

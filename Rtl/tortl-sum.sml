@@ -124,7 +124,8 @@ struct
 
     fun xsum_dynamic_single (info,
 			     con_varloc,
-			     exp_varloc) : term * con * state = 
+			     exp_varloc,
+			     trace) : term * con * state = 
       let val _ = Stats.counter("RTLxsum_dyn_single") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -156,7 +157,8 @@ struct
 
     fun xsum_dynamic_multi (info,
 			    con_varloc,
-			    exp_varloc) : term * con * state = 
+			    exp_varloc,
+			    trace) : term * con * state = 
 	let val _ = Stats.counter("RTLxsum_dyn_multi") ()
 	    
 	  val  (state,known,sumcon,
@@ -175,7 +177,7 @@ struct
 	  val srccursor = alloc_regi LOCATIVE
 	  val destcursor = alloc_regi LOCATIVE
 	  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
-	  val desti = alloc_regi(con2rep state sumcon)
+	  val desti = alloc_regi(niltrace2rep state trace)
 	      
 	  val nonrecordl = fresh_code_label "dyntagsum_norecord"
 	  val afterl = fresh_code_label "dyntagsum_after"
@@ -246,18 +248,18 @@ struct
 
     fun xsum_dynamic (info,
 		      con_varloc,
-		      exp_varloc) : term * con * state = 
+		      exp_varloc,
+		      trace) : term * con * state = 
 	let
 	    val  (state,known,sumcon,
 		  tagcount,nontagcount,single_carrier,is_tag,
 		  sumtypes,field_sub) = help info
 	in  if single_carrier
-		then xsum_dynamic_single(info,con_varloc,exp_varloc)
-	    else xsum_dynamic_multi(info,con_varloc,exp_varloc)
+		then xsum_dynamic_single(info,con_varloc,exp_varloc,trace)
+	    else xsum_dynamic_multi(info,con_varloc,exp_varloc,trace)
 	end
     
-  fun xsum_nonrecord (info,
-		      varloc_opt) : term * con * state = 
+  fun xsum_nonrecord (info, varloc_opt, trace) : term * con * state = 
       let
 	  open Prim
 	  val  (state,known,sumcon,
@@ -268,7 +270,7 @@ struct
 	      let 
 		  val SOME varloc = varloc_opt
 		  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
-		  val desti = alloc_regi(con2rep state sumcon)
+		  val desti = alloc_regi(niltrace2rep state trace)
 	      in  if (needs_boxing state field_type)
 		  then 
 		      let val rep = valloc2rep varloc

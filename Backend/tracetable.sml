@@ -253,7 +253,7 @@ functor Tracetable(val little_endian    : bool)
       | regtr2bits cr (TRACE_CALLEE  r)        = 
 	if (cr = Core.regNum r) then
 	    (inc Count_callee; (1,1))
-	else (print ("ERROR WRONG WRONG WRONG: regtr2bot: non matching TRACE_CALLEE: " ^
+	else (print ("WARN ERROR WRONG WRONG WRONG: regtr2bot: non matching TRACE_CALLEE: " ^
 		    (Int.toString cr) ^ " != " ^ (Int.toString (Core.regNum r)));
 	      (1,0))
       | regtr2bits _ (TRACE_UNSET) = 

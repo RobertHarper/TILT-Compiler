@@ -57,13 +57,14 @@ signature CALL_CONVENTION = sig
    * result registers.
    * wrapper   -> a procedure to call to generate a wrapper for the call site
    * frame    <-> the stack frame to store memory arguments in
+   * cCall     -> is it a call to C?
    * procedure -> the procedure to call
    * arguments -> the argument registers
    * results   -> the result registers
    * <- a list of mltree values to implement the call
    *)
   val call: (rexp -> mltree list * mltree list) ->
-	      frame -> rexp * register list * register list -> mltree list
+	      frame -> bool -> rexp * register list * register list -> mltree list
 
   (*
    * Return an assignment for registers to save and restore in a given

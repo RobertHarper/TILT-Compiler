@@ -111,15 +111,22 @@ functor SparcStandardConvention(
     val define = (map MLTreeExtra.gpr IntegerConvention.define)@
 		 (map MLTreeExtra.fpr FloatConvention.define)
   in
-    fun call wrapper frame (procedure, arguments, results) =
+    fun call wrapper frame cCall (procedure, arguments, results) =
 	  let
+	    val stackPointer = IntegerConvention.stackPointer
 	    nonfix before
 	    val (before, after) = wrapper procedure
 	    val use		 = useArguments arguments
 	  in
 	    [MLTree.CODE(marshalArguments frame arguments)]@
 	    before@
+	    (if cCall then [MLTree.CODE[MLTree.MV(stackPointer, MLTree.SUB(MLTree.REG stackPointer,
+									   MLTree.LI 256, MLTree.LR))]]
+		 else []) @
 	    [MLTree.CODE[MLTree.CALL(procedure, define, use)]]@
+	    (if cCall then [MLTree.CODE[MLTree.MV(stackPointer, MLTree.ADD(MLTree.REG stackPointer,
+									   MLTree.LI 256))]]
+		 else []) @
 	    after@
 	    [MLTree.CODE(unmarshalResults frame results)]
 	  end

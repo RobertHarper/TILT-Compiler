@@ -927,9 +927,9 @@ functor EmitRtlMLRISC(
      * <- the mltree values
      *)
     fun call live operands =
-	  ExternalConvention.call (mlWrapper live) (Procedure.frame()) operands
+	  ExternalConvention.call (mlWrapper live) (Procedure.frame()) false operands
     fun callC operands =
-	  ExternalConvention.call noWrapper (Procedure.frame()) operands
+	  ExternalConvention.call noWrapper (Procedure.frame()) true operands
     fun callRaw live procedure =
 	  let
 	    val (before_, after) = mlWrapper live procedure
@@ -1224,10 +1224,7 @@ functor EmitRtlMLRISC(
 	    code(Comparison.translateFloat(compare, left, right), label)
     end
 
-    fun CALL(procedure, arguments, results, _) =
-	  call IntSet.empty (procedure, arguments, results)
-
-    fun externalCALL operand =
+    fun CALL isExternal (procedure, arguments, results, _) =
 	  let
 	    val cur_alloc_pointer = externalExp "cur_alloc_pointer"
 	    val cur_alloc_limit	  = externalExp "cur_alloc_limit"
@@ -1240,20 +1237,16 @@ functor EmitRtlMLRISC(
 	    val thread = Rtl.SREGI(Rtl.THREADPTR)
 	    val pointer = ea(Rtl.EA(thread,8 * alloc_num))
 	    val limit = ea(Rtl.EA(thread,8 * limit_num))
+	    val justCall = (if isExternal then callC else call IntSet.empty)
+		                (procedure, arguments, results)
 	  in
-	    [MLTree.CODE[
-	       MLTree.STORE32(pointer, MLTree.REG heapPointer, memory),
-	       MLTree.STORE32(limit, MLTree.REG heapLimit, memory),
-	       MLTree.MV(stackPointer, MLTree.SUB(MLTree.REG stackPointer,
-						  MLTree.LI 256, MLTree.LR))
-	     ]]@
-	    CALL operand@
-	    [MLTree.CODE[
-	       MLTree.MV(stackPointer, MLTree.ADD(MLTree.REG stackPointer,
-						  MLTree.LI 256)),
-	       MLTree.MV(heapPointer, MLTree.LOAD32(pointer, memory)),
-	       MLTree.MV(heapLimit, MLTree.LOAD32(limit, memory))
-	     ]]
+	      if isExternal
+		  then justCall
+	      else [MLTree.CODE[MLTree.STORE32(pointer, MLTree.REG heapPointer, memory),
+				MLTree.STORE32(limit, MLTree.REG heapLimit, memory)]] @
+		  justCall @
+		  [MLTree.CODE[MLTree.MV(heapPointer, MLTree.LOAD32(pointer, memory)),
+			       MLTree.MV(heapLimit, MLTree.LOAD32(limit, memory))]]
 	  end
 
     fun RETURN _ =
@@ -1475,10 +1468,10 @@ functor EmitRtlMLRISC(
 				      results	  = results,
 				      call_type,
 				      save}) =
-	  (case call_type of
-	       Rtl.ML_NORMAL => CALL
-	     | Rtl.C_NORMAL => externalCALL
-	     | Rtl.ML_TAIL _ => CALL)
+	  CALL (case call_type of
+		    Rtl.ML_NORMAL => false
+		  | Rtl.C_NORMAL => true
+		  | Rtl.ML_TAIL _ => false)
 	     (RegisterOrLabel.translate procedure,
 	      RegisterSet.translateCall arguments,
 	      RegisterSet.translateCall results,

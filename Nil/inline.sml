@@ -253,11 +253,11 @@ e))
 	     List.foldl (fn ((_,e),s) => s + (aexp e)) 
 	     ((aexp arg) + (aexpopt default)) arms
          | Sumsw_e{arg,(*unroll=u,*)sumtype,bound,arms,default,result_type} =>
-	     List.foldl (fn ((_,e),s) => 
+	     List.foldl (fn ((_,tr,e),s) => 
 			 s + (aexp e)) ((aexp arg) + (aexpopt default) +
 					(acon sumtype)) arms
          | Exncase_e{arg,bound,arms,default,result_type} =>
-	     List.foldl (fn ((e1,e2),s) => 
+	     List.foldl (fn ((e1,_,e2),s) => 
 			 s + (aexp e1) + (aexp e2)) 
 	     ((aexp arg) + (aexpopt default)) arms
          | Typecase_e{arg,arms,default,result_type} => 
@@ -418,12 +418,12 @@ e))
 		       result_type = rcon result_type}
 	 | Sumsw_e{arg,(*unroll=u,*)sumtype,bound,arms,default,result_type} => 
 	       Sumsw_e{arg=rexp arg,(*unroll=u,*)sumtype=rcon sumtype,bound=bound,
-		       arms=List.map(fn(w,e) => (w,rexp e)) arms,
+		       arms=List.map(fn(w,tr,e) => (w,tr,rexp e)) arms,
 		       default=ropt rexp default,
 		       result_type = rcon result_type}
 	 | Exncase_e {arg,bound,arms,default,result_type} => 
 	       Exncase_e{arg=rexp arg,bound=bound,
-			 arms=List.map(fn(e1,e2) => (e1,rexp e2)) arms,
+			 arms=List.map(fn(e1,tr,e2) => (e1,tr,rexp e2)) arms,
 			 default=ropt rexp default,
 			 result_type = rcon result_type}
 	 | Typecase_e {arg,arms,default,result_type} => 

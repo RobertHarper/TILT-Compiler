@@ -286,28 +286,39 @@ struct
 
     (* pre: c is a sum type in whnf *)
     and reify_sum_arms ctxt ([], _, _, pset) = ([], pset)
-      | reify_sum_arms ctxt ((w,e)::arms, v, c, pset) = 
+      | reify_sum_arms ctxt ((w,_,e)::arms, v, c, pset) = 
           let
              val (arms', pset) = reify_sum_arms ctxt (arms, v, c, pset)
              val t = NilUtil.convert_sum_to_special(c, w)
              val ctxt = NilContext.insert_con(ctxt, v, t)
+	     val (tinfo,pset) = (case TraceOps.get_trace(ctxt, t) of
+				SOME tinfo => (TraceKnown tinfo,pset)
+			      | NONE => let val v' = Name.fresh_named_var "reify"
+					    val pset = reify_con_rt(t,pset)
+					in  (TraceCompute v', pset)
+					end)
              val (e', pset) = reify_exp ctxt (e, pset)
           in
-             ((w,e')::arms', pset)
+             ((w,tinfo,e')::arms', pset)
           end
 
     and reify_exn_arms ctxt ([], _, pset) = ([], pset)
-      | reify_exn_arms ctxt ((e1,e2)::arms, v, pset) = 
+      | reify_exn_arms ctxt ((e1,_,e2)::arms, v, pset) = 
           let
              val (arms', pset) = reify_exn_arms ctxt (arms, v, pset)
              val (e1', pset) = reify_exp ctxt (e1, pset)
              val tagcon = Normalize.type_of(ctxt,e1)
-	     val (_,Prim_c(Exntag_c, [con])) = 
-		    Normalize.reduce_hnf(ctxt,tagcon)
+	     val (_,Prim_c(Exntag_c, [con])) = Normalize.reduce_hnf(ctxt,tagcon)
+	     val (tinfo,pset) = (case TraceOps.get_trace(ctxt, con) of
+				SOME tinfo => (TraceKnown tinfo,pset)
+			      | NONE => let val v' = Name.fresh_named_var "reify"
+					    val pset = reify_con_rt(con,pset)
+					in  (TraceCompute v', pset)
+					end)
 	     val ctxt = NilContext.insert_con(ctxt, v, con)
              val (e2', pset) = reify_exp ctxt (e2, pset)
           in
-             ((e1',e2')::arms', pset)
+             ((e1',tinfo,e2')::arms', pset)
           end
 
     (* really should probably be written using a fold over sequence *)

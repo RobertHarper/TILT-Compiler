@@ -237,16 +237,18 @@ structure Linknil :> LINKNIL  =
 				    cse = !do_cse, uncurry = !do_uncurry},
 				 filename, nilmod) 
 
-            val nilmod = transform(do_reify, show_reify2,
-                                   "Reification2",
-                                   Reify.reify_mod,
-                                   filename, nilmod)
-
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 
 				 ToClosure.close_mod,
 				 filename, nilmod)
 
+(*
+            val nilmod = transform(do_reify, show_reify2,
+                                   "Reification2",
+                                   Reify.reify_mod,
+                                   filename, nilmod)
+
+*)
  	    val nilmod = check (typecheck_after_cc,show_typecheck3,
 				    "Nil_typecheck_post-cc",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),

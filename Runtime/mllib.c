@@ -63,10 +63,12 @@ int ml_output(value_t _des, value_t mlstring)
   int bytelen = tag >> ARRLEN_OFFSET;
   int i;
 
+  /*
   printf("ml_output called: _des = %d  F = %d   stdout = %d\n",_des,F,stdout);
   printf("ml_output called: length = %d\n",bytelen);
   for (i=0; i<bytelen; i++)
     printf("    str[0] = %d\n",str[i]);
+    */
 
 #ifdef DEBUG
   if (_des <= 2)

@@ -234,11 +234,11 @@ struct
 		| Sumsw_e {arg,arms,default,...} =>
 		      (scan_exp state arg;
 		       Util.mapopt (scan_exp state) default;
-		       app (fn (t,e) => (scan_exp state e)) arms)
+		       app (fn (t,_,e) => (scan_exp state e)) arms)
 		| Exncase_e {arg,arms,default,...} =>
 		      (scan_exp state arg;
 		       Util.mapopt (scan_exp state) default;
-		       app (fn (e1,e2) => (scan_exp state e1; scan_exp state e2)) arms)
+		       app (fn (e1,_,e2) => (scan_exp state e1; scan_exp state e2)) arms)
 		| Typecase_e _ => error "typecase_e not done")
 	  end
 
@@ -280,6 +280,7 @@ struct
 		      end
 		   | Fixcode_b _ => error "sorry: Fixcode not handled"
 		   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
+
 
 	fun scan_import(ImportValue _,state) : state = state
 	  | scan_import(ImportType(l,v,k),state)  = add_var(state,v,NONE)
@@ -329,7 +330,7 @@ struct
 		    end
 	      | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 		    let val arg = do_exp arg
-			val arms = map (fn (t,e) => (t,do_exp e)) arms
+			val arms = map (fn (t,tr,e) => (t,tr,do_exp e)) arms
 			val default = Util.mapopt do_exp default
 		    in  Sumsw_e {sumtype=sumtype,arg=arg,
 				 bound=bound,arms=arms,default=default,
@@ -337,7 +338,7 @@ struct
 	      end
 	      | Exncase_e {arg,bound,arms,default,result_type} =>
 		let val arg = do_exp arg
-		    val arms = map (fn (e1,e2) => (do_exp e1, do_exp e2)) arms
+		    val arms = map (fn (e1,tr,e2) => (do_exp e1, tr, do_exp e2)) arms
 		    val default = Util.mapopt do_exp  default
 		in  Exncase_e {arg=arg,
 			       bound=bound,arms=arms,default=default,

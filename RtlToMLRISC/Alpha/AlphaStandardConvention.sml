@@ -119,7 +119,7 @@ functor AlphaStandardConvention(
     val define = (map MLTreeExtra.gpr IntegerConvention.define)@
 		 (map MLTreeExtra.fpr FloatConvention.define)
   in
-    fun call wrapper frame (procedure, arguments, results) =
+    fun call wrapper frame isExternal (procedure, arguments, results) =
 	  let
 	    val (before_, after) = wrapper procedure
 	    val use		 = useArguments arguments

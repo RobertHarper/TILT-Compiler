@@ -14,6 +14,7 @@ signature PPNIL =
     val pp_con'     : Nil.con -> Formatter.format
     val pp_kind'    : Nil.kind -> Formatter.format
     val pp_prim'    : Nil.prim -> Formatter.format
+    val pp_trace'   : Nil.niltrace -> Formatter.format
     val pp_var'     : Name.var -> Formatter.format
     val pp_label'   : Name.label -> Formatter.format
     val pp_list'    : ('a -> Formatter.format) -> 'a list -> 
@@ -28,6 +29,7 @@ signature PPNIL =
     val pp_con     : Nil.con -> unit
     val pp_kind    : Nil.kind -> unit
     val pp_prim    : Nil.prim -> unit
+    val pp_trace   : Nil.niltrace -> unit
     val pp_var     : Name.var -> unit
     val pp_label   : Name.label -> unit
     val pp_list    : ('a -> Formatter.format) -> 'a list -> 

@@ -6,7 +6,7 @@ signature TOCLOSURE =
 	val debug : bool ref
 	val debug_full : bool ref
 
-	val do_close_path : bool ref
+
 	val do_single_venv : bool ref
 	val closure_print_free : bool ref
 

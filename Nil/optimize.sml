@@ -45,6 +45,9 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		    val body = Prim_e(PrimOp(Prim.length_table 
 					     (aggregate false)), [Var_c c], 
 				      [Var_e agg])
+		    val res_var = Name.fresh_named_var "len_result"
+		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown TraceInfo.Notrace_Int, body)],
+						Var_e res_var)
 		    val len_fun = Function{effect = Partial, recursive = Leaf, isDependent = false,
 					   tFormals = [(c,Type_k)],
 					   eFormals = [(agg,TraceUnknown,Prim_c(constr,[Var_c c]))],
@@ -60,9 +63,12 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		let val c = Name.fresh_named_var "subscript_type"
 		    val agg = Name.fresh_named_var "subscript_agg"
 		    val index = Name.fresh_named_var "subscript_index"
+		    val res_var = Name.fresh_named_var "subscript_result"
 		    val body = Prim_e(PrimOp(Prim.sub (aggregate false)), 
 				      [Var_c c], 
 				      [Var_e agg, Var_e index])
+		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown (TraceInfo.Compute(c,[])), body)],
+						Var_e res_var)
 		    val sub_fun = Function{effect = Partial, recursive = Leaf, isDependent = false,
 					   tFormals = [(c,Type_k)],
 					   eFormals = [(agg, TraceUnknown, Prim_c(constr,[Var_c c])),
@@ -83,6 +89,9 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		    val body = Prim_e(PrimOp(Prim.update (Prim.OtherArray false)), 
 				      [Var_c c], 
 				      [Var_e array, Var_e index, Var_e item])
+		    val res_var = Name.fresh_named_var "update_result"
+		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown TraceInfo.Trace, body)],
+						Var_e res_var)
 		in  val update_fun = Function{effect = Partial, recursive = Leaf, isDependent = false,
 					      tFormals = [(c,Type_k)],
 					      eFormals = [(array, TraceUnknown, Prim_c(Array_c,[Var_c c])),
@@ -471,7 +480,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	    (case (arg,arms,default) of
 		 (Prim_e(PrimOp(Prim.eq_int is),[],
 			 [Var_e v,Const_e (Prim.int(_,w))]),
-		  [(0w0,zeroexp), (0w1,oneexp)],
+		  [(0w0,_,zeroexp), (0w1,_,oneexp)],
 		  NONE) => SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
 		 | _ => NONE)
 	  | is_sumsw_int state _ = NONE
@@ -956,10 +965,11 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 						        case carrier of
 							  [_] => carrier
 							 | _ => [con_tuple_inject carrier])
-			 fun do_arm(n,body) = 
+			 fun do_arm(n,tr,body) = 
 			     let val ssumtype = make_ssum n
+				 val tr = do_niltrace state tr
 				 val (_,state) = do_vclist state[(bound,ssumtype)]
-			     in  (n,do_exp state body)
+			     in  (n,tr,do_exp state body)
 			     end
 
 			 val known_tag =
@@ -975,13 +985,13 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			 case known_tag of
 			     SOME w => 
 				 (* Reduce known switch *)
-				 (case Listops.assoc (w, arms) of
-				      SOME arm =>
+				 (case List.find (fn (w',_,_) => w = w') arms of
+				      SOME (_,_,arm_body) =>
 					  do_exp state
 					  (Let_e(Sequential,
 						   [Exp_b(bound,TraceUnknown,
 							  arg)],
-						   arm))
+						   arm_body))
 				    | NONE =>
 					  do_exp state
 					    (Let_e(Sequential,
@@ -1002,12 +1012,14 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	       | Exncase_e {arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
 			 val result_type = do_type state result_type
-			 fun do_arm(tag,body) = 
+			 fun do_arm(tag,tr,body) = 
 			     let val tag = do_exp state tag
+				 val tr = do_niltrace state tr
 				 val tagcon = type_of(state,tag)
 				 val Prim_c(Exntag_c, [con]) = tagcon
 				 val (_,state) = do_vclist state[(bound,con)]
-			     in  (tag,do_exp state body)
+			         val body = do_exp state body
+			     in  (tag,tr,body)
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
@@ -1213,8 +1225,8 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 				in  ([Fixclosure_b(recur,Sequence.fromList vcllist)], state)
 				end)
 	  end
-	fun do_import(ImportValue(l,v,nt,c),state) = (ImportValue(l,v,nt,do_con state c), 
-						   add_con(state,v,c))
+	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c), 
+						      add_con(state,v,c))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 

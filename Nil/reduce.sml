@@ -538,7 +538,7 @@ structure Reduce
 			 scan_con sumtype;
 			 scan_con result_type;
 			 ins_esc bound;
-			 map (scan_exp o #2) arms;
+			 map (scan_exp o #3) arms;
 			 Option.map (scan_exp) default;
 			 ()
 			 )
@@ -547,7 +547,7 @@ structure Reduce
 			 scan_exp arg;
 			 scan_con result_type;
 			 ins_esc bound;
-			 app (fn x => (scan_exp (#1 x); scan_exp (#2 x))) arms;
+			 app (fn (e1,tr,e2) => (scan_exp e1; scan_exp e2)) arms;
 			 Option.map (scan_exp) default;
 			 ()
 			 )
@@ -824,14 +824,14 @@ structure Reduce
 				 result_type = xcon fset result_type,
 				 sumtype= xcon fset sumtype,
 				 bound=bound,
-				 arms = map (fn (w,e) => (w,xexp fset e)) arms,
+				 arms = map (fn (w,tr,e) => (w,tr,xexp fset e)) arms,
 				 default =  Option.map (xexp fset) default
 				 }
 		  | Exncase_e {arg, bound, arms, default, result_type} =>  
 			Exncase_e {arg = xexp fset arg,
 				   result_type = xcon fset result_type,
 				   bound = bound,
-				   arms =  map (fn (w,e) => (xexp fset w,xexp fset e)) arms,
+				   arms =  map (fn (w,tr,e) => (xexp fset w,tr,xexp fset e)) arms,
 				   default =  Option.map (xexp fset) default
 				   }
 		  | Typecase_e {arg, arms, default, result_type} => 

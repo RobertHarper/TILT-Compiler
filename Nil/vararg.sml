@@ -465,7 +465,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 		| Fixclosure_b (recur,vclset) => error "fixclosure not handled")
 	  end
 
-	fun do_import(ImportValue(l,v,c),state) = (ImportValue(l,v,do_con state c), 
+	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c), 
 						   add_con(state,v,c))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))

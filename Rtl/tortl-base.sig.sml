@@ -87,7 +87,9 @@ sig
    val simplify_type : state -> con -> bool * con
    val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
    val niltrace2rep : state -> Nil.niltrace -> rep
+(* XXX
    val con2rep : state -> con -> rep
+*)
    val valloc2rep : term -> rep
    val type_of : state -> exp -> con
 
@@ -106,8 +108,9 @@ sig
    val alloc_named_regi : var -> rep -> regi
    val alloc_regf : unit -> regf
    val alloc_named_regf : var -> regf
-   val alloc_reg : state -> con -> reg
+(* XXXX   val alloc_reg : state -> con -> reg 
    val alloc_named_reg : state -> con * var -> reg
+*)
    val alloc_reg_trace : state -> Nil.niltrace -> rep * reg
 
    (* Routines for adding code and data *)

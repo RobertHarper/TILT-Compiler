@@ -581,7 +581,7 @@ structure NilRewrite :> NILREWRITE =
 		 val sumtype = recur_c changed state sumtype 
 		 val (state',bound) = bind_e changed (state,bound,sumtype)
 		 val result_type = recur_c changed state result_type
-		 fun recur changed state (t,e) = (t,recur_e changed state e)
+		 fun recur changed state (t,tr,e) = (t,recur_trace changed state tr,recur_e changed state e)
 		 val arms = map_f recur changed state' arms
 		 val default = Util.mapopt (recur_e changed state) default
 	       in  
@@ -601,7 +601,8 @@ structure NilRewrite :> NILREWRITE =
 		 val arg = recur_e changed state arg
 		 val (state',bound) = bind_e changed (state,bound,Prim_c(Exn_c,[]))
 		 val result_type = recur_c changed state result_type
-		 fun recur changed state (t,e) = (recur_e changed state t,recur_e changed state' e)
+		 fun recur changed state (t,tr,e) = (recur_e changed state t, recur_trace changed state tr,
+						     recur_e changed state' e)
 		 val arms = map_f recur changed state arms
 		 val default = Util.mapopt (recur_e changed state) default
 	       in  

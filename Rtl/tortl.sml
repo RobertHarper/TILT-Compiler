@@ -358,7 +358,7 @@ struct
 		  end
 	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,
 								   context,trace)
-	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context)
+	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context,trace)
 	    | Switch_e sw => xswitch(state,name,sw,trace,context)
 	    | ExternApp_e (f, elist) => (* assume the environment is passed in first *)
 		  let 
@@ -551,7 +551,7 @@ struct
 	    | Raise_e (exp, con) =>
 		  let val (I ir,_,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
 		      val newpc = alloc_regi NOTRACE_CODE
-		      val rep = con2rep state con
+		      val rep = niltrace2rep state trace
 		  in  add_instr(LOAD32I(EA(exnptr,0),newpc));
 		      add_instr(MV (ir,exnarg));
 		      add_instr RESTORE_CS;
@@ -815,7 +815,7 @@ struct
 								  trace,context)
 				   in  move(r,c); newstate :: states
 				   end)
-			| scan(states,lab,(armtag,body)::rest) = 
+			| scan(states,lab,(armtag,tr,body)::rest) = 
 			  let 
 			      val _ = add_instr(ILABEL lab)
 			      val (I armtagi,tagcon,state) = xexp'(state,fresh_var(),armtag,
@@ -823,7 +823,7 @@ struct
 			      val (_,Prim_c(Exntag_c,[c])) = simplify_type state tagcon
 			      val next = fresh_code_label "exnarm"
 			      val test = alloc_regi(NOTRACE_INT)
-			      val carried = alloc_reg state c
+			      val (_,carried) = alloc_reg_trace state tr
 			      val carriedi = (case carried of
 						  I ir => ir
 						| _ => error "carried value is an unboxed float")
@@ -858,7 +858,7 @@ struct
 				       else [con_tuple_inject cons])
 	      in 
 	       (case (tagcount,cons,arms, default) of
-		  (0w2,[], [(0w0,zeroexp),(0w1,oneexp)], NONE) => 
+		  (0w2,[], [(0w0,_,zeroexp),(0w1,_,oneexp)], NONE) => 
 			let val (r,state) = 
 			    (case (xexp'(state,fresh_named_var "intsw_arg",arg,
 					 Nil.TraceUnknown,NOTID)) of
@@ -874,7 +874,7 @@ struct
 		      val one_carrier = (length cons) = 1
 		      val total = TW32.uplus(tagcount, i2w(length cons))
 		      val exhaustive = 
-			  let val handled = map (fn (w,_) => (w2i w)) arms
+			  let val handled = map (fn (w,_,_) => (w2i w)) arms
 			      fun mem i = member(i,handled)
 			  in  List.all mem (count (w2i total))
 			  end
@@ -891,7 +891,7 @@ struct
 								     trace,context)
 					 in  move(r,c); state::newstates
 					 end))
-			| scan(newstates,lab,(i,body)::rest) =
+			| scan(newstates,lab,(i,tr,body)::rest) =
 			  let val next = fresh_code_label "sumarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val _ = add_instr(ILABEL lab)
@@ -984,10 +984,7 @@ struct
 							    then (n,c1)
 							else loop lrest crest (n+1)
 		   val (which,con) = loop labels fieldcons 0
-		   val I desti = (case trace of
-				      Nil.TraceUnknown => alloc_reg state con
-				    | _ => #2(alloc_reg_trace state trace))
-
+		   val I desti = #2(alloc_reg_trace state trace)
 		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
 	       in  (LOCATION(REGISTER(false, I desti)), con, state)
 	       end
@@ -1004,13 +1001,13 @@ struct
 							    Nil.TraceUnknown,NOTID)
 				in  (SOME lv,state)
 				end)
-		in  TortlSum.xsum_nonrecord ((state,known,hd clist),lvopt)
+		in  TortlSum.xsum_nonrecord ((state,known,hd clist),lvopt,trace)
 		end
 	 | inject known => 
 		let val (e_lv,c,state) = xexp(state,fresh_var(),hd elist,
 					      Nil.TraceUnknown,NOTID)
 		    val (_,c_lv,_,state) = xcon'(state,fresh_var(),hd clist,NONE)
-		in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv)
+		in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv,trace)
 		end
 	 | project_sum_record (k,field) => 
 	       let val e = hd elist
@@ -1121,9 +1118,9 @@ struct
 
 
 
-  and xprim(state,Prim.neg_int is,clist,elist,context) =
-          xprim(state, Prim.minus_int is, clist, (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context)
-    | xprim(state : state, prim,clist,elist,context) : term * con * state = 
+  and xprim(state,Prim.neg_int is,clist,elist,context,trace) =
+          xprim(state, Prim.minus_int is, clist, (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context,trace)
+    | xprim(state : state, prim,clist,elist,context,trace) : term * con * state = 
       let 
 	  fun error' s = (print "nilprimexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.PrimOp prim, clist,elist));
@@ -1396,7 +1393,7 @@ struct
 		       end
 	     | (sub t) => 
 		       let val [vl1,vl2] = vl_list 
-		       in  extract_dispatch(t,state,(vl1,vl2),
+		       in  extract_dispatch(t,state,(vl1,vl2,trace),
 					    (TortlArray.xsub_float,
 					     TortlArray.xsub_int,
 					     TortlArray.xsub_known,
@@ -1751,8 +1748,8 @@ struct
 		  in  (r,s')
 		  end
 	      val (cargs,state) = foldl_list folder state vklist
-              fun folder ((v,tr,c),s) = let val r as (I ir) = alloc_named_reg s (c,v)
-					 val s' = add_reg (s,v,c,r)
+              fun folder ((v,tr,c),s) = let val ir = alloc_named_regi v (niltrace2rep s tr)
+					 val s' = add_reg (s,v,c,I ir)
 			             in  (ir, s')
                                      end
 	      val (eiargs,state) = foldl_list folder state vclist
@@ -1845,14 +1842,18 @@ struct
 	     val _ = msg "tortl - handling imports now\n"
 
 	     val _ = reset_state(true, (mainCodeVar, mainCodeName))
-	     fun folder (ImportValue(l,v,c),s) = 
+	     fun folder (ImportValue(l,v,tr,c),s) = 
 		 (* For extern or C functions, 
 		    the label IS the code value rather than an address containing the code value *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
+		     (* XXX not implemented fully *)
+		     val rep = (case tr of
+				  TraceUnknown => error "tortl- Import has TraceUnknown - not implemented"
+				| _ => niltrace2rep s tr)
 		     val lv = 			 
 			 (case c of
 			      ExternArrow_c _ => VALUE(CODE mllab)
-			    | _ => LOCATION(GLOBAL(mllab,con2rep s c)))
+			    | _ => LOCATION(GLOBAL(mllab,rep)))
 		 in  add_global(s,v,c,lv)
 		 end
 	       | folder (ImportType(l,v,k),s) = 

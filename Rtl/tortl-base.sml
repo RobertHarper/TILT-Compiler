@@ -292,6 +292,7 @@ struct
       in  loop [] k labs
       end
 
+(* XXXXXXXXXXXXXXXXXXXXXXXXxx
    fun con2rep_raw (state : state) con : rep option = 
        let fun primcon2rep (pcon,clist) = 
 	   case (pcon,clist) of
@@ -364,6 +365,26 @@ struct
 	 | (Closure_c _) => error "Closure_c not a type"
 	 | (Annotate_c (_,c)) => con2rep_raw state c
        end
+*)
+
+   fun location2rep(REGISTER(_,I (SREGI HEAPPTR))) = NOTRACE_INT
+     | location2rep(REGISTER(_,I (SREGI HEAPLIMIT))) = NOTRACE_INT
+     | location2rep(REGISTER(_,I (SREGI EXNPTR))) = TRACE
+     | location2rep(REGISTER(_,I (SREGI EXNARG))) = TRACE
+     | location2rep(REGISTER(_,I (SREGI STACKPTR))) = NOTRACE_INT
+     | location2rep(REGISTER(_,I (SREGI THREADPTR))) = NOTRACE_INT
+     | location2rep(REGISTER(_,I (REGI (_,rep)))) = rep
+     | location2rep(REGISTER(_,F _)) = NOTRACE_REAL
+     | location2rep(GLOBAL(_,rep)) = rep
+   fun value2rep(VOID rep) = rep
+     | value2rep(INT _) = NOTRACE_INT
+     | value2rep(TAG _) = TRACE
+     | value2rep(REAL _) = NOTRACE_REAL
+     | value2rep(RECORD _) = TRACE
+     | value2rep(LABEL _) = TRACE
+     | value2rep(CODE _) = NOTRACE_CODE
+   fun term2rep(LOCATION loc) = location2rep loc
+     | term2rep(VALUE value) = value2rep value
 
    fun niltrace2rep (state : state) niltrace : rep =
        let fun pathcase (v,labs) = 
@@ -407,13 +428,16 @@ struct
 				      ))))
        end
 
+(* XXXXXXXXXXXXXXXXXXXXXXXXx
    fun con2rep state con : rep =
-       (let fun failure copt = (print "con2rep failed original con = \n";
-				Ppnil.pp_con con; print "\n";
-				(case copt of
-				    SOME c => (print "reduced con = \n";
-					       Ppnil.pp_con c; print "\n")
-				  | _ => print "no reduced con\n"))
+       (let fun failure str copt = (print "con2rep failed "; print str; 
+				    print "\noriginal con = \n";
+				    Ppnil.pp_con con; print "\n";
+				    (case copt of
+					 SOME c => (print "reduced con = \n";
+						    Ppnil.pp_con c; print "\n")
+				       | _ => print "no reduced con\n");
+				    error "con2rep failed")
 	    fun reduce c = 
 		 (case c of
 		      Proj_c _ => #2(simplify_type state c)
@@ -425,25 +449,15 @@ struct
 
 	in  (case (con2rep_raw state con) of
 		 NONE => 
-		     let val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
-		     in  (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
+		     let val c = reduce con 
+			         handle e => (failure "during reduce" NONE)
+		     in  (case ((con2rep_raw state c) 
+				handle e => (failure "con2rep_raw" (SOME c))) of
 			      SOME rep => rep
-			    | NONE => (print "con2rep failed on orig and reduced con; assuming TRACE\n";
-				       if (!debug) then failure (SOME c) else ();
-				       TRACE))
-				(* error "con2rep failed" *)
-		     end
-	       | SOME(rep as (COMPUTE _)) => (* a reduction here might be advantageous *)
-		     let val c = reduce con handle e => (print "reduce failed\n"; failure NONE; raise e)
-		     in  (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
-			      SOME rep => rep
-			    | NONE => rep (* well, we default back to unreduced rep *))
+			    | NONE => (failure "no trace computable\n" (SOME c)))
 		     end
 	       | SOME rep => rep)
 	end)
-
-(*
-val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 *)
 
    fun loc2rep location =
@@ -586,16 +600,18 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	     | _ => (rep,I(alloc_regi rep))
 	   end
 
+(* XXXXXX
        fun alloc_reg state c = 
 	   case c of (* might need to normalize *)
 	       Nil.Prim_c(Float_c _,[]) => F(alloc_regf())
 	     | _ => I(alloc_regi (con2rep state c))
+
 		   
        fun alloc_named_reg state (c,v : var) = 
 	   case c of
 	       Nil.Prim_c(Float_c _,[]) => F(alloc_named_regf v)
 	     | _ => I(alloc_named_regi v (con2rep state c))
-		   
+*)		   
 
        fun promote_maps ({env,...} : state) : state = 
 	   let val {varmap,convarmap,gcstate,...} = !global_state
@@ -983,6 +999,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	     | VALUE (CODE l) => add_data(DATA l))
       end
 
+
   fun add_global (state,v : var,
 		  con : con,
 		  term : term) : state =
@@ -992,7 +1009,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 					   SOME (lab::rest) => (true,lab,rest)
 					 | SOME [] => error "no labels in export entry"
 					 | NONE => (false,LOCAL_DATA (Name.var2string v),[]))
-	val rtl_rep = con2rep state con
+	val rep = term2rep term
 
 	val isReg =
 	    (case term of
@@ -1000,12 +1017,12 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	       | _ => false)
 		 
 	val _ = if (exported orelse isReg)
-		    then allocate_global(label,labels,rtl_rep,term)
+		    then allocate_global(label,labels,rep,term)
 		else ()
 
 	val term = 
 	    (case term of
-		 LOCATION (REGISTER _) => LOCATION(GLOBAL(label,rtl_rep))
+		 LOCATION (REGISTER _) => LOCATION(GLOBAL(label,rep))
 	       | _ => term)
 		 
 	val state' = add_term (state,v,con,term)

@@ -1960,7 +1960,7 @@ end (* local defining splitting context *)
 	   val sumcon = xcon context sumtype
 	   val exp = xexp context il_arg
 	   fun xarm (n, NONE ) = NONE
-	     | xarm (n, SOME ilexp) = SOME(Word32.fromInt n, xexp context ilexp)
+	     | xarm (n, SOME ilexp) = SOME(Word32.fromInt n, TraceUnknown, xexp context ilexp)
 	   val arms = List.mapPartial (fn x => x) (mapcount xarm il_arms)
 	   val default = Util.mapopt (xexp context) il_default
        
@@ -1978,7 +1978,7 @@ end (* local defining splitting context *)
            fun xarm (il_tag_exp, _, exp) =
 	       let val tag = xexp context il_tag_exp
 		   val (bound, _, handler) = toFunction context exp
-	       in  (bound,(tag,handler))
+	       in  (bound,(tag,TraceUnknown,handler))
 	       end
 
 	   val (vars,arms) = Listops.unzip (map xarm il_arms)
@@ -2341,8 +2341,7 @@ end (* local defining splitting context *)
 	       (case pc of
 		    Il.PHRASE_CLASS_EXP (_,il_type, _, _) => 
 			let val nil_type = xcon context il_type
-			in  (ImportValue(l,v,TraceUnknown,nil_type)::imports,
-			     context)
+			in  (ImportValue(l,v,TraceUnknown,nil_type)::imports, context)
 			end
 		  | Il.PHRASE_CLASS_CON (il_con, il_kind, il_conopt, _) => 
 			let

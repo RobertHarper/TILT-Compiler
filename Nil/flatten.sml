@@ -264,7 +264,7 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 	   arg=xexp arg,
 	   sumtype= xcon sumtype,
 	   bound=bound,
-	   arms = map (fn (w,e) => (w,xexp e)) arms,
+	   arms = map (fn (w,tr,e) => (w,tr,xexp e)) arms,
 	   default =  Option.map (xexp ) default,
 	   result_type = xcon result_type
 	   }
@@ -273,7 +273,7 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 	  {
 	   arg = xexp arg,
 	   bound = bound,
-	   arms =  map (fn (w,e) => (xexp w,xexp e)) arms,
+	   arms =  map (fn (w,tr,e) => (xexp w,tr,xexp e)) arms,
 	   default =  Option.map (xexp ) default,
 	   result_type = xcon result_type
 	   }

@@ -29,6 +29,7 @@ structure Ppnil	:> PPNIL =
 	end
     val pp_listid = pp_list (fn x => x)
     fun pp_list' doer objs = pp_list doer objs ("(", ",",")", false)
+    fun pp_list'' doer objs = pp_list doer objs ("", ".","", false)
 
     fun pp_var v = String(var2string v)
     fun pp_label l = String(label2string l)
@@ -100,7 +101,7 @@ structure Ppnil	:> PPNIL =
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", pp_con c]
       | pp_conbnd (Open_cb(v,vklist,c,k)) = 
 	HOVbox[pp_var v, String " = ", Break,
-	       HOVbox[String "FUN_C",
+	       HOVbox[String "FUN",
 		      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", Break, pp_kind k])
 		       vklist),
 		      Break0 0 5,
@@ -109,7 +110,7 @@ structure Ppnil	:> PPNIL =
 		      pp_con c]]
       | pp_conbnd (Code_cb(v,vklist,c,k)) = 
 	HOVbox[pp_var v, String " = ",
-	       String "CODE_CB", Break,
+	       String "CODE", Break,
 	       (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
 		vklist),
 	       Break0 0 5,
@@ -128,9 +129,9 @@ structure Ppnil	:> PPNIL =
 	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon,
 					       pp_list' pp_con conlist]
 	 | Crecord_c lc_list => (pp_list (fn (l,c) => HOVbox[pp_label l, String " = ", pp_con c])
-				  lc_list ("CREC_C{", ",","}", false))
-	 | Proj_c (c,l) => HOVbox[String "PROJ_C(", pp_con c, String ",", pp_label l, String ")"]
-	 | Typeof_c e => HOVbox[String "TYPEOF_C(", pp_exp e, String ")"]
+				  lc_list ("CREC{", ",","}", false))
+	 | Proj_c (c,l) => HOVbox[String "PROJ(", pp_con c, String ",", pp_label l, String ")"]
+	 | Typeof_c e => HOVbox[String "TYPEOF(", pp_exp e, String ")"]
 	 | Let_c (letsort,cbnds,cbody) =>
 		   Vbox0 0 1 [String (case letsort of
 					  Sequential => "LET  "
@@ -141,22 +142,22 @@ structure Ppnil	:> PPNIL =
 			      pp_con cbody,
 			      Break,
 			      String "END"]
-	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
+	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE(", pp_con c1, String ",", 
 				       pp_con c2, String ")"]
 	 | Typecase_c {arg, arms, default, kind} =>
 	       let fun pp_arm(pc,vklist,c) = HOVbox[pp_primcon pc, String " => ",
-						      String "FUN_C",
+						      String "FUN",
 						      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
 						       vklist),
 						      Break0 0 5,
 						      pp_con c]
-	       in HOVbox[String "TYPECASE_C(", pp_con arg, Break0 0 5,
+	       in HOVbox[String "TYPECASE(", pp_con arg, Break0 0 5,
 			 pp_kind kind, Break0 0 5,
 			 pp_list pp_arm arms ("","","",true), Break0 0 5,
 			 String "DEFAULT: ",
 			 pp_con default]
 	       end
-	 | App_c (con,conlist) => HOVbox[String "APP_C(",
+	 | App_c (con,conlist) => HOVbox[String "APP(",
 (*
 					       pp_arrow arrow,
 					       String ",",
@@ -165,39 +166,24 @@ structure Ppnil	:> PPNIL =
 					       String ";",
 					       pp_list' pp_con conlist,
 					       String ")"]
-	 | Mu_c (flag,vcset) => HOVbox[if flag then String "MU_C(" else String "MU_C_NR(",
+	 | Mu_c (flag,vcset) => HOVbox[if flag then String "MU(" else String "MU_NR(",
 					   (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
 					    (Sequence.toList vcset)),
 					   String ")"]
-(*	 | Listcase_c {arg,arms,default} =>HOVbox[String "LISTCASE_C ",
-						  pp_con arg,
-						  Break0 0 5,
-						  (pp_list (fn (lc,cf) => Hbox[pp_listcon lc,
-									       pp_confun cf])
-						   arms ("","","", true)),
-						  (case default of 
-						       NONE => String "NONE"
-						     | SOME con => Hbox[String "SOME ",
-									   pp_con con])]
-	 | All_c confun => HOVbox[String "ALL_C(", pp_confun confun, String ")"] 
-*)
 	 | AllArrow_c confun => pp_confun confun
-	 | ExternArrow_c(cons,c) => pp_region "ExternArrow(" ")"
+	 | ExternArrow_c(cons,c) => pp_region "EXTERNARROW(" ")"
 	                            [pp_list pp_con cons ("",",","",false),
 				     String " --> ",
 				     pp_con c]
-	 | Annotate_c (Annotation.TYPECHECKED kind,con) => HOVbox[String "ANNOTE_C(Typechecked: ", 
+	 | Annotate_c (Annotation.TYPECHECKED kind,con) => HOVbox[String "ANNOTE(Typechecked: ", 
 						       pp_kind kind, 
 						       String ",", 
 						       pp_con con, String ")"]
-	 | Annotate_c (annot,con) => HOVbox[String "ANNOTE_C(", String "annot not done", 
+	 | Annotate_c (annot,con) => HOVbox[String "ANNOTE(", String "annot not done", 
 					    String ",", 
 					    pp_con con, String ")"])
 
-(*
-    and pp_listcon (Nil_c k) = Hbox[String "NIL_C(", pp_kind k, String ")"]
-      | pp_listcon Cons_c = String "CONS_C"
-*)
+
 	
     and pp_primcon (Int_c intsize) = Hbox[String "INT", pp_is' intsize]
       | pp_primcon (Float_c fs) = Hbox[String "FLOAT", pp_fs' fs]
@@ -344,7 +330,8 @@ structure Ppnil	:> PPNIL =
 			   pp_con sumtype, String ", ",
 			   Break0 0 5,
 			   pp_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
+			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", pp_trace tr,
+								    String ": ", pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -354,7 +341,8 @@ structure Ppnil	:> PPNIL =
 			   pp_exp arg, String ": EXN, ",
 			   Break0 0 5,
 			   pp_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (t,e) => Hbox[pp_exp t, String ": ", pp_exp e])
+			   (pp_list (fn (t,tr,e) => Hbox[pp_exp t, String ": ", pp_trace tr,
+								   String ": ", pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -367,10 +355,14 @@ structure Ppnil	:> PPNIL =
       | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]
       | pp_trace (TraceKnown (TraceInfo.Compute(v,labs))) = 
 	Hbox[String "Compute(", pp_var v, 
-	     String ".", pp_list' pp_label labs,String ")"]
+	     String ".", pp_list'' pp_label labs,String ")"]
+      | pp_trace (TraceKnown (TraceInfo.Trace)) = String "Known_Trace"
+      | pp_trace (TraceKnown (TraceInfo.Unset)) = String "Known_Unset"
       | pp_trace (TraceKnown (TraceInfo.Notrace_Int)) = String "Known_Int"
+      | pp_trace (TraceKnown (TraceInfo.Notrace_Code)) = String "Known_Code"
       | pp_trace (TraceKnown (TraceInfo.Notrace_Real)) = String "Known_Real"
-      | pp_trace (TraceKnown _) = String "Known"
+      | pp_trace (TraceKnown (TraceInfo.Label)) = String "Known_Label"
+
 
     and pp_bnd bnd =
 	let fun help x y = (x,y)
@@ -405,7 +397,8 @@ structure Ppnil	:> PPNIL =
 				    body, body_type})) : format = 
 	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_var v, String " :: ", Break, pp_kind k]) 
 			     tFormals ("",",","",false))
-	    val vcformats = (pp_list_flat (fn (v,nt,c) => HOVbox[pp_var v, String " : ", Break, pp_con c]) 
+	    val vcformats = (pp_list_flat (fn (v,tr,c) => HOVbox[pp_var v, String " : ", pp_trace tr,
+									   String " : ", Break, pp_con c]) 
 			     eFormals ("",",","",false))
 	    val vfformats = (pp_list_flat (fn v => HOVbox[pp_var v, String " : Float"])
 			     fFormals ("",",","",false))
@@ -462,6 +455,7 @@ structure Ppnil	:> PPNIL =
     val pp_con' = help pp_con
     val pp_kind' = help pp_kind
     val pp_bnd' = help pp_bnd
+    val pp_trace' = help pp_trace
     val pp_conbnd' = help pp_conbnd
     val pp_bnds' = help pp_bnds
     val pp_exp' = help pp_exp
@@ -473,6 +467,7 @@ structure Ppnil	:> PPNIL =
     val pp_kind = help' pp_kind
     fun pp_list doer data = help' (pp_list' doer data)
     val pp_bnd = help' pp_bnd
+    val pp_trace = help' pp_trace
     val pp_conbnd = help' pp_conbnd
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp

@@ -144,7 +144,7 @@ struct
 		  val result_type = lcon_flat state result_type
 		  val arg = lexp_lift' state arg
 		  val (state,bound) = add_var(state,bound)
-		  val arms = map (fn (t,e) => (t,lexp_lift' state e)) arms
+		  val arms = map (fn (t,tr,e) => (t,tr,lexp_lift' state e)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
 	      in  Sumsw_e {sumtype=sumtype,arg=arg,
 			   bound=bound,arms=arms,default=default,
@@ -155,7 +155,7 @@ struct
 		  val arg = lexp_lift' state arg
 		  val result_type = lcon_flat state result_type
 		  val (state,bound) = add_var(state,bound)
-		  val arms = map (fn (e1,e2) => (lexp_lift' state e1,lexp_lift' state e2)) arms
+		  val arms = map (fn (e1,trace,e2) => (lexp_lift' state e1, trace, lexp_lift' state e2)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
 	      in  Exncase_e {arg=arg,
 			     bound=bound,arms=arms,default=default,

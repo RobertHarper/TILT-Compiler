@@ -163,6 +163,13 @@ structure NilSubst :> NILSUBST =
       val substConInExp = substConInXXX substExpConInExp'
       val substConInKind = substConInXXX substExpConInKind'
       val substExpInKind = substExpInXXX substExpConInKind'
+      fun substConInTrace subst (TraceKnown (TraceInfo.Compute (v,labs))) = 
+		let fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
+		      | loop (Proj_c (c,l)) labs = loop c (l::labs)
+		      | loop _ _ = error "substConInTrace" "got non-path"
+		in  loop (substConInCon subst (Var_c v)) labs
+		end
+	| substConInTrace _ tr = tr
 
       fun substConInCBnd csubst bnd = 
 	let

@@ -22,6 +22,7 @@ struct
   fun instrKind(I.Bicc _)  = IK_JUMP
     | instrKind(I.FBfcc _) = IK_JUMP
     | instrKind(I.JMP _)   = IK_JUMP
+    | instrKind(I.RET _)   = IK_JUMP
 (*
     | instrKind(I.ANNOTATION(i,_)) = instrKind i
 *)
@@ -32,6 +33,7 @@ struct
     | branchTargets(I.FBfcc{b=I.FBA,label,...}) = [LABELLED label]
     | branchTargets(I.FBfcc{label,...}) = [LABELLED label, FALLTHROUGH]
     | branchTargets(I.JMP{labs=[],...}) = [ESCAPES]
+    | branchTargets(I.RET _) = [ESCAPES]
     | branchTargets(I.JMP{labs,...})    = map LABELLED labs
 (*
     | branchTargets(I.ANNOTATION(i,_)) = branchTargets i

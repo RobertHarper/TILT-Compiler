@@ -696,7 +696,7 @@ end
 	       in  Sumsw_e {arg = f_exp state arg,
 			    sumtype = f_con state sumtype,
 			    bound = bound,
-			    arms = map (fn (t,e) => (t,f_exp state' e)) arms,
+			    arms = map (fn (t,tr,e) => (t,f_niltrace state tr,f_exp state' e)) arms,
 			    default = Util.mapopt (f_exp state) default,
 			    result_type = f_con state result_type}
 	       end
@@ -704,7 +704,7 @@ end
 	       let val state' = add_var(state,bound)
 	       in  Exncase_e {arg = f_exp state arg,
 			      bound = bound,
-			      arms = map (fn (t,e) => (f_exp state t,f_exp state' e)) arms,
+			      arms = map (fn (t,tr,e) => (f_exp state t,f_niltrace state tr,f_exp state' e)) arms,
 			      default = Util.mapopt (f_exp state) default,
 			      result_type = f_con state result_type}
 	       end
