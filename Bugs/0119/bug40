@@ -1,0 +1,1 @@
+unit bug40 = "bug40.sml" {Int Char List}

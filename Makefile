@@ -4,7 +4,7 @@
 # SML/NJ heaps.
 #
 # Ensure that ./Bin/cputype prints sparc, alpha, or unsupported.  (After
-# building an SML/NJ heap for TILT with "make tilt_heap", you can use
+# building an SML/NJ heap for TILT with "make tilt-heap", you can use
 # ./Bin/tilt-nj to run TILT with the SML/NJ runtime on unsupported
 # systems.)  If you are compiling on a sparc or alpha, then look at
 # Runtime/Makefile too.
@@ -22,8 +22,8 @@ slave=:
 purge=$(tiltnj) -pp
 
 all:\
-	tilt_heap\
-	dump_heap\
+	tilt-heap\
+	dump-heap\
 	runtime\
 	slaves\
 	basis\
@@ -41,9 +41,9 @@ FORCE:
 
 # SML/NJ heaps
 
-tilt_heap: FORCE
+tilt-heap: FORCE
 	$(mkheap) Heaps/tilt Main.main | $(smlnj)
-dump_heap: FORCE
+dump-heap: FORCE
 	$(mkheap) Heaps/dump Dump.main | $(smlnj)
 
 # TILT-compiled libraries

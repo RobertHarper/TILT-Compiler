@@ -1,0 +1,2 @@
+structure TilWord32 : TILWORD
+	where type word = Word32.word
