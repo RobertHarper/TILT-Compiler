@@ -354,7 +354,9 @@ fun pp_alias UNKNOWN = print "unknown"
 	      in  (case lookup_alias(state,v) of
 		       OPTIONALc c => loop c labs
 		     | MUSTc c => loop c labs
-		     | _ => NONE)
+		     | _ => (case find_availC(state,path2con(v,labs)) of
+				NONE =>	NONE
+			      | SOME v => SOME(Var_c v)))
 	      end
 
 	  fun get_env(STATE{equation,...}) = equation

@@ -328,8 +328,8 @@ struct
 	  val (body_up', body_stay') = filter_cbnds(body_up, stop_vars)
 	      
 	  val up'' = up @ body_up'
-      in
-	  (Let_c(letsort,stay @ body_stay',bodcon'),
+	  (* XXX what happened to the letsort *)
+      in  (NilUtil.makeLetC (stay @ body_stay') bodcon',
 	   up'')
       end
 
