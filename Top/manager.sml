@@ -1,6 +1,7 @@
-(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl Linker MakeDep Compiler List *)
+(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl Linker MakeDep Compiler List SplayMapFn *)
 (* it is touching too many files so it's slow *)
 (* should add caching of import scans *)
+
 
 functor Manager (structure Parser: LINK_PARSE
 		 structure Elaborator: LINKIL
@@ -23,7 +24,6 @@ struct
 (*  structure UIBlast = mkBlast(type t = Elaborator.context) *)
 
   val error = fn x => Util.error "Manager" x
-  fun access arg = OS.FileSys.access arg handle _ => false
 
   val chat_ref = ref true
   val diag_ref = ref false
@@ -40,130 +40,47 @@ struct
       end
 
   fun help() = print "This is TILT - no help available.\n"
-  fun readContextRaw file = let val is = BinIO.openIn file
-			     val res = Elaborator.IlContextEq.blastInContext is
-			     val _ = BinIO.closeIn is
-			 in  res
-			 end
-  fun writeContextRaw (file,ctxt) = let val os = BinIO.openOut file
-				     val _ = Elaborator.IlContextEq.blastOutContext os ctxt
-				     val _ = BinIO.closeOut os
-				 in  ()
-				 end
-  val readContextRaw = Stats.timer("ReadingContext",readContextRaw)
-  val writeContextRaw = Stats.timer("WritingContext",writeContextRaw)
-  val addContext = Stats.timer("AddingContext",Elaborator.plus_context)
 
-  type unitname = string
-  type filebase = string
-  datatype fresh = STALE | FRESH_INTER | FRESH_IMPL
+
+  (* ---- we want to do lookup on strings ----- *)
   local
       structure StringKey = 
 	  struct
-	      type ord_key = unitname
+	      type ord_key = string
 	      val compare = String.compare
 	  end
-      structure StringMap = SplayMapFn(StringKey)
-      datatype mapping = 
-	  Map of (unitname list * 
-		  {filebase : filebase,
-		   imports  : unitname list option ref,
-		   includes : unitname list option ref,
-		   fresh : fresh ref,
-		   context : Elaborator.context option ref} StringMap.map) ref
-
-      fun find_unit (Map (ref(_,m))) unitname = StringMap.find(m,unitname)
-  in  type mapping = mapping
-      fun make_mapping() = Map(ref ([],StringMap.empty))
-      fun add_unit (m as Map (r as (ref(units,map)))) (unitname,filebase) = 
-	  case (find_unit m  unitname) of
-	      NONE => let val newentry = {filebase = filebase,
-					  imports = ref NONE,
-					  includes = ref NONE,
-					  fresh = ref STALE,
-					  context = ref NONE}
-		      in  r := (unitname::units,StringMap.insert(map,unitname,newentry))
-		      end
-	    | SOME _ => error ("unit " ^ unitname ^ " already present")
-      fun lookup_unit m unitname =
-	  (case (find_unit m  unitname) of
-	       NONE => error ("unit " ^ unitname ^ " missing")
-	     | SOME entry => entry)
-      fun list_units (Map (ref (units,m))) = rev units
+  in  structure StringMap = SplayMapFn(StringKey)
   end
 
-  fun name2base (mapping : mapping) (name : string) = #filebase(lookup_unit mapping name)
+  (* ---- memoize the result of getting file attributes ---- *)
+  local
+      datatype stat = ABSENT | PRESENT of Time.time
+      val stats = ref (StringMap.empty : stat StringMap.map)
+      fun fetch_stat file =
+	  let val exists = (OS.FileSys.access(file, [OS.FileSys.A_READ])
+	                    handle _ => (print "Warning: OS.FileSys.access\n"; false))
+	  in  if exists
+		  then (PRESENT(OS.FileSys.modTime file)
+			handle _ => (print "Warning: OS.FileSys.modTime raised exception\n"; ABSENT))
+	      else ABSENT
+	  end
+      fun fetch file = 
+	  (case StringMap.find(!stats,file) of
+	       NONE => let val stat = fetch_stat file
+		       in  (stats := (StringMap.insert(!stats,file,stat)); stat)
+		       end
+	     | SOME stat => stat)
+  in  fun reset_stats() = stats := StringMap.empty
+      fun exists file = (case fetch file of
+			     ABSENT => false
+			   | PRESENT _ => true)
+      fun modTime file = (case fetch file of
+			     ABSENT => error ("Getting modTime on non-existent file " ^ file)
+			   | PRESENT t => t)
 
-  fun base2ui (f : string) = f ^ ".ui"
-  fun base2uo (f : string) = f ^ ".uo"
-  fun base2sml (f : string) = f ^ ".sml"
-  fun base2int (f : string) = f ^ ".int"
+  end
 
-  fun readContext mapping unit = 
-      let val r = #context(lookup_unit mapping unit) 
-      in  (case !r of
-	       SOME ctxt => ctxt
-	     | NONE => let val uifile = base2ui (name2base mapping unit)
-			   val ctxt = readContextRaw uifile
-			   val _ = if (!cache_context) then r := SOME ctxt else ()
-		       in  ctxt
-		       end)
-      end
-  fun writeContext mapping (unit,ctxt) = 
-       let val r = #context(lookup_unit mapping unit)
-	   val _ = if (!cache_context) then r := SOME ctxt else ()
-	   val uifile = base2ui (name2base mapping unit)
-       in  writeContextRaw(uifile,ctxt)
-       end
-
-
-
-  fun getContext mapping imports = 
-      let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
-	  val ctxts = List.map (readContext mapping) imports
-	  val _ = chat ("  [Adding contexts now]\n")
-	  val context_basis = addContext (ctxt_inline :: ctxts)
-	  val context = addContext ctxts
-      in (context_basis, context)
-      end
-
-    fun bincopy (is,os) = 
-	let fun loop() = (BinIO_Util.copy(is,os); if (BinIO.endOfStream is) then () else loop())
-	in  loop()
-	end
-    fun emitter in_file os = let (* val _ = (print "mk_emitter on file "; print in_file; print "\n") *)
-				 val is = BinIO.openIn in_file
-			     in bincopy(is,os); 
-				 BinIO.closeIn is
-			     end
-
-  fun elab_constrained(ctxt,sourcefile,fp,dec,fp2,specs,least_new_time) =
-      let 
-      in case Elaborator.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
-	      SOME ctxt_sbnds_entries => ctxt_sbnds_entries
-            | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
-      end
-
-  fun elab_nonconstrained(mapping,unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
-      case Elaborator.elab_dec(pre_ctxt, fp, dec)
-	of SOME(new_ctxt, sbnd_entries) => 
-	    let	val same = 
-		(access(uiFile, [OS.FileSys.A_READ]) andalso
-		 Elaborator.IlContextEq.eq_context(new_ctxt, readContext mapping unit))
-		val _ = if same 
-			    then (if Time.<(OS.FileSys.modTime uiFile, least_new_time)
-				      then 
-					  (print "OS.FileSys.setTime does not seem to work: conservatively using current time for now!\n";
-					   OS.FileSys.setTime(uiFile, NONE))
-(* OS.FileSys.setTime(uiFile, SOME least_new_time) *)
-				  else ())
-			else (chat ("[writing " ^ uiFile);
-			      writeContext mapping (unit, new_ctxt);
-			      chat "]\n")
-	    in (new_ctxt,sbnd_entries)
-	    end
-         | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
-
+  (* ------------ reading the import/include list of a file ------------------------------- *)
   (* Takes a string(line) and splits into white-space separted fields.
      Inclusively drops all fields after the first field(non-empty string) that passes dropper. *)
   fun split_line dropper line = let val fields = String.fields Char.isSpace line
@@ -196,21 +113,172 @@ struct
    fun parse_impl_import file = parse_depend "(*$import" (#2 o Parser.parse_impl) file
    fun parse_inter_include file = parse_depend "(*$include" (#2 o Parser.parse_inter) file
 
-  (* getImport:
+
+  fun readContextRaw file = let val is = BinIO.openIn file
+			     val res = Elaborator.IlContextEq.blastInContext is
+			     val _ = BinIO.closeIn is
+			 in  res
+			 end
+  fun writeContextRaw (file,ctxt) = let val os = BinIO.openOut file
+				     val _ = Elaborator.IlContextEq.blastOutContext os ctxt
+				     val _ = BinIO.closeOut os
+				 in  ()
+				 end
+  val readContextRaw = Stats.timer("ReadingContext",readContextRaw)
+  val writeContextRaw = Stats.timer("WritingContext",writeContextRaw)
+  val addContext = Stats.timer("AddingContext",Elaborator.plus_context)
+
+  type unitname = string
+  type filebase = string
+  fun base2ui (f : string) = f ^ ".ui"
+  fun base2uo (f : string) = f ^ ".uo"
+  fun base2sml (f : string) = f ^ ".sml"
+  fun base2int (f : string) = f ^ ".int"
+  datatype fresh = STALE | FRESH_INTER | FRESH_IMPL
+  local
+      val unitlist = ref ([] : unitname list)
+      val mapping = ref (StringMap.empty : 
+			 {filebase : filebase,
+			  imports_base  : unitname list option ref,
+			  includes_base : unitname list option ref,
+			  imports  : unitname list option ref,
+			  includes : unitname list option ref,
+			  fresh : fresh ref,
+			  context : Elaborator.context option ref} StringMap.map)
+
+      fun find_unit unitname = StringMap.find(!mapping,unitname)
+      fun lookup unitname =
+	  (case (find_unit unitname) of
+	       NONE => error ("unit " ^ unitname ^ " missing")
+	     | SOME entry => entry)
+  in  fun reset_mapping() = (unitlist := [];
+			     mapping := StringMap.empty)
+      fun list_units () = rev(!unitlist)
+      fun add_unit (unitname,filebase) = 
+	  case (find_unit unitname) of
+	      NONE => let val newentry = {filebase = filebase,
+					  imports_base = ref NONE,
+					  includes_base = ref NONE,
+					  imports = ref NONE,
+					  includes = ref NONE,
+					  fresh = ref STALE,
+					  context = ref NONE}
+			  val _ = mapping :=  StringMap.insert(!mapping,unitname,newentry)
+			  val _ = unitlist := unitname::(!unitlist)
+		      in  ()
+		      end
+	    | SOME _ => error ("unit " ^ unitname ^ " already present")
+      fun get_base unit = #filebase(lookup unit)
+      val name2base = get_base
+      fun get_fresh unit = #fresh(lookup unit)
+      fun get_import_direct unit = 
+	  let val {imports_base=r,filebase,...} = lookup unit
+	  in  (case !r of
+	        SOME result => result
+	      | NONE => let val result = parse_impl_import(base2sml filebase)
+		        in   (r := SOME result; result)
+                        end)
+          end
+      fun get_include_direct unit = 
+	  let val {includes_base=r,filebase,...} = lookup unit
+	  in  (case !r of
+	        SOME result => result
+	      | NONE => let val result = parse_inter_include(base2int filebase)
+		        in   (r := SOME result; result)
+                        end)
+          end
+      fun get_import unit = #imports(lookup unit)
+      fun get_include unit = #includes(lookup unit)
+      fun get_context unit = #context(lookup unit)
+  end
+
+
+  fun readContext unit = 
+      let val r = get_context unit
+      in  (case !r of
+	       SOME ctxt => ctxt
+	     | NONE => let val uifile = base2ui (name2base unit)
+			   val ctxt = readContextRaw uifile
+			   val _ = if (!cache_context) then r := SOME ctxt else ()
+		       in  ctxt
+		       end)
+      end
+  fun writeContext (unit,ctxt) = 
+       let val r = get_context unit
+	   val _ = if (!cache_context) then r := SOME ctxt else ()
+	   val uifile = base2ui (name2base unit)
+       in  writeContextRaw(uifile,ctxt)
+       end
+
+
+
+  fun getContext imports = 
+      let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
+	  val _ = (chat "  [Creating context from imports: ";
+	           chat_imports 4 imports;
+	           chat "]\n")
+          val ctxts = List.map readContext imports
+	  val _ = chat ("  [Adding contexts now]\n")
+	  val context_basis = addContext (ctxt_inline :: ctxts)
+	  val context = addContext ctxts
+      in (context_basis, context)
+      end
+
+    fun bincopy (is,os) = 
+	let fun loop() = (BinIO_Util.copy(is,os); if (BinIO.endOfStream is) then () else loop())
+	in  loop()
+	end
+    fun emitter in_file os = let (* val _ = (print "mk_emitter on file "; print in_file; print "\n") *)
+				 val is = BinIO.openIn in_file
+			     in bincopy(is,os); 
+				 BinIO.closeIn is
+			     end
+
+  fun elab_constrained(ctxt,sourcefile,fp,dec,fp2,specs,least_new_time) =
+      let 
+      in case Elaborator.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
+	      SOME ctxt_sbnds_entries => ctxt_sbnds_entries
+            | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
+      end
+
+  fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
+      case Elaborator.elab_dec(pre_ctxt, fp, dec)
+	of SOME(new_ctxt, sbnd_entries) => 
+	    let	val same = 
+		(exists uiFile andalso
+		 Elaborator.IlContextEq.eq_context(new_ctxt, readContext unit))
+		val _ = if same 
+			    then (if Time.<(modTime uiFile, least_new_time)
+				      then 
+					  (print "OS.FileSys.setTime does not seem to work: conservatively using current time for now!\n";
+					   OS.FileSys.setTime(uiFile, NONE))
+(* OS.FileSys.setTime(uiFile, SOME least_new_time) *)
+				  else ())
+			else (chat ("[writing " ^ uiFile);
+			      writeContext (unit, new_ctxt);
+			      chat "]\n")
+	    in (new_ctxt,sbnd_entries)
+	    end
+         | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
+
+
+  (* getImportTransitive:
    given a unit, find all the imports it depends on with leaves listed first;
    if the interface file is present, search the includes
    if the interface file is absent, search the imports *)
-  fun getImport use_imp mapping unitname seenunits : unitname list =
-     let val {imports=impref,includes=incref,filebase,...} = lookup_unit mapping unitname
+  fun getImportTr use_imp unitname seenunits : unitname list =
+     let val filebase = get_base unitname
+	 val impref = get_import unitname
+	 val incref = get_include unitname
 	 val smlfile = base2sml filebase
 	 val intfile = base2int filebase
-	 val int_exists = access(intfile, [OS.FileSys.A_READ])
+	 val int_exists = exists intfile
      in  (case (use_imp orelse (not int_exists), !impref, !incref) of
 	  (true, SOME i,_) => i (* cached implementation imports *)
 	| (false,_, SOME i) => i (* cached interface includes *)
 	| _ =>
 	      let fun folder(import,acc) = 
-		      let val depends = getImport use_imp mapping import (import::seenunits)
+		      let val depends = getImportTr false import (import::seenunits)
 			  fun adder(u, ac) = 
 			      if Listops.member(u,ac)
 				  then ac else u::ac
@@ -221,123 +289,129 @@ struct
 					 then error ("Loop detected in: " ^
 						     foldr (fn (a,b) => (a ^ " " ^ b)) "" seenunits)
 				     else ()) imports
-	      in  if (not use_imp andalso access(intfile, [OS.FileSys.A_READ]))
+	      in  if (not use_imp andalso exists intfile)
 		      then let val _ = diag ("  [Scanning " ^ intfile ^ " for includes]\n")
-			       val imports = parse_inter_include intfile
-			       val _ = check_loop imports
-			       val result = rev(foldl folder [] imports)
+			       val base_includes = get_include_direct unitname
+			       val _ = check_loop base_includes
+			       val result = rev(foldl folder [] base_includes)
 			       val _ = incref := SOME result
 			   in  result
 			   end
 		  else 
 		      let val _ = diag ("  [Scanning " ^ smlfile ^ " for imports]\n")
-			  val imports = parse_impl_import smlfile
-			  val _ = check_loop imports
-			  val result = rev(foldl folder [] imports)
+			  val base_imports = get_import_direct unitname
+			  val _ = check_loop base_imports
+			  val result = rev(foldl folder [] base_imports)
 			  val _ = impref := SOME result
 		      in  result
 		      end
 	      end)
      end
 
-  fun is_fresh files (curdate,curfile) = 
-      let fun folder f = 
-	      let val t = OS.FileSys.modTime f
-		  handle OS.SysErr _ => error (f ^ "not present") 
-	      in  Time.<=(t,curdate)
-		  orelse
-		  (chat ("  [" ^ f ^ " is newer than " ^ curfile ^ "]\n"); false)
-	      end
-      in  Listops.andfold folder files
-      end
-(* handle OS.SysErr _ => false *)
-
-  fun  compileSML make_uo mapping unitname : unit = 
-      let val _ = (print "compileSML: "; print unitname; print "\n")
-	  val fresh = #fresh(lookup_unit mapping unitname)
-      in  (case !fresh of
-	       STALE       => (compileSML' make_uo mapping unitname; fresh := FRESH_IMPL)
-	     | FRESH_INTER => (compileSML' make_uo mapping unitname; fresh := FRESH_IMPL)
-	     | FRESH_IMPL => ())
+  (* ----- get_latest ----- *)
+  fun get_latest files =
+      let fun folder (f,(missing,curtime)) = 
+	  if (exists f)
+	      then let val mt = modTime f
+		   in  (missing, if (Time.<=(curtime,mt)) then mt else curtime)
+		   end
+	  else (SOME f, curtime)
+      in foldl folder (NONE,Time.zeroTime) files
       end
 
-  and compileSML' make_uo mapping unitname : unit = 
-      let val sourcebase = name2base mapping unitname
+
+  val depth = ref 0
+  fun space 0 = ()
+    | space n = (print " "; space (n-1))
+  fun push_tab() = (print (Int.toString (!depth));
+		    space (2 * (!depth)); 
+		    depth := !depth + 1)
+  fun pop() = (depth := !depth - 1)
+
+  fun  compileSML make_uo unitname : unit = 
+      let val _ = if (!diag_ref) then (push_tab(); print "compileSML: "; print unitname; print "\n") else ()
+	  val fresh = get_fresh unitname
+	  val _ = (case !fresh of
+		       STALE       => (compileSML' make_uo unitname; fresh := FRESH_IMPL)
+		     | FRESH_INTER => (compileSML' make_uo unitname; fresh := FRESH_IMPL)
+		     | FRESH_IMPL => ())
+	  val _ = if (!diag_ref) then pop() else ()
+      in  ()
+      end
+
+  and compileSML' make_uo unitname : unit = 
+      let val sourcebase = name2base unitname
 	  val smlfile = base2sml sourcebase
 	  val uofile = base2uo sourcebase
 	  val uifile = base2ui sourcebase
 	  val intfile = base2int sourcebase
 
-	  val imports = getImport true mapping unitname []
-	  val import_bases = map (name2base mapping) imports
+	  val imports_direct = get_import_direct unitname
+	  val imports = getImportTr true unitname []
+	  val import_bases = map name2base imports
 
           (* work on imports *)
-	  val _ = app (compile false mapping) imports
+	  val _ = app (compile false) imports_direct
 	  val imports_ui = map base2ui import_bases
 
-	  val smldate = OS.FileSys.modTime smlfile
-	  val least_new_time = foldl (fn (f,t) => let val t' = OS.FileSys.modTime f
-						  in  if (Time.<(t,t')) then t' else t
-						  end) smldate imports_ui
-	  val is_fresh = is_fresh (smlfile :: imports_ui)
+	  val smldate = modTime smlfile
 
-	  val fresh = (access(uofile, [OS.FileSys.A_READ]) andalso
-		       is_fresh(OS.FileSys.modTime uofile, uofile) andalso
-		       (Time.<=(OS.FileSys.modTime smlfile, OS.FileSys.modTime uofile) orelse
-                         access(intfile, [OS.FileSys.A_READ]) orelse
-			(access(uifile, [OS.FileSys.A_READ]) andalso
-			 is_fresh(OS.FileSys.modTime uifile, uifile))))
+	  val (missing,latest_time) = get_latest (smlfile :: imports_ui)
+
+	  val fresh = (case missing of
+			   NONE => (exists uofile andalso
+				    Time.>=(modTime uofile, latest_time) andalso
+				    (Time.<=(modTime smlfile, modTime uofile) orelse
+				     exists intfile orelse
+				     (exists uifile andalso
+				      Time.>=(modTime uifile, latest_time))))
+			 | SOME f => (chat ("  [" ^ f ^ " is missing: recompiling\n"); false))
 	  val _ = if fresh
 		      then diag ("  [" ^ uofile ^ " is up-to-date]\n")
 		  else (chat ("  [" ^ smlfile ^ " has imports: ");
 			chat_imports 4 imports;
 			chat "]\n";
-			compileSML'' mapping (unitname, imports, least_new_time))
+			compileSML'' (unitname, imports, latest_time))
       in  ()
       end
   
-  and compile make_uo mapping unit =
-      let val sourcebase = name2base mapping unit
+  and compile make_uo unit =
+      let val sourcebase = name2base  unit
 	  val source_sml = base2sml sourcebase
 	  val source_int = base2int sourcebase
-      in  case (make_uo,
-		access(source_int, [OS.FileSys.A_READ]),
-		access(source_sml, [OS.FileSys.A_READ])) of
-	  (true, true, true) => (compileINT mapping unit;
-				 compileSML make_uo mapping unit)
-	| (false, true, true) => compileINT mapping unit
-	| (_,true, _) => compileINT mapping unit
-	| (_, _, true) => compileSML make_uo mapping unit
+      in  case (make_uo, exists source_int, exists source_sml) of
+	  (true, true, true) => (compileINT unit;
+				 compileSML make_uo unit)
+	| (false, true, true) => compileINT unit
+	| (_,true, _) => compileINT unit
+	| (_, _, true) => compileSML make_uo unit
 	| _ => error ("Missing " ^ source_sml ^ " and " ^ source_int ^ ": cannot generate .ui")
       end
 
-  and compileSML'' mapping (unit, imports, least_new_time) : unit = 
+  and compileSML'' (unit, imports, least_new_time) : unit = 
       let val _ = if (!stat_each_file)
 		      then Stats.clear_stats()
 		  else ()
-	  val srcBase = name2base mapping unit
+	  val srcBase = name2base unit
 	  val smlfile = base2sml srcBase
 	  val _ = chat ("  [Parsing " ^ smlfile ^ "]\n")
 	  val (fp, _, dec) = Parser.parse_impl smlfile
-	  val _ = (chat "  [Creating context from imports: ";
-		   chat_imports 4 imports;
-		   chat "]\n")
-	  val import_bases = map (name2base mapping) imports
-	  val (ctxt_for_elab,ctxt) = getContext mapping imports
+	  val (ctxt_for_elab,ctxt) = getContext imports
+	  val import_bases = map name2base imports
 	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
 	  val uiFile = srcBase ^ ".ui"
 	  val intFile = srcBase ^ ".int"
 	  val oFile = srcBase ^ ".o"
 	  val uoFile = srcBase ^ ".uo"
 	  val (ctxt',sbnds) = 
-	      if access(intFile, []) then 
-		  let val _ = compileINT mapping unit 
+	      if exists intFile then 
+		  let val _ = compileINT unit 
 		      val (fp2, _, specs) = Parser.parse_inter intFile
 		      val _ = chat ("  [Elaborating " ^ smlfile ^ " with constraint]\n"  )
 		  in elab_constrained(ctxt_for_elab,smlfile,fp,dec,fp2,specs,least_new_time)
 		  end
 	      else let val _ = chat ("  [Elaborating " ^ smlfile ^ " non-constrained]\n")
-		   in elab_nonconstrained(mapping,unit,ctxt_for_elab,smlfile,fp,dec,uiFile,least_new_time)
+		   in elab_nonconstrained(unit,ctxt_for_elab,smlfile,fp,dec,uiFile,least_new_time)
 		   end
 
 
@@ -373,46 +447,42 @@ struct
       in  ()
       end
 
-  (* XXXXXX change to be recursive like compileSML *)
-  and compileINT mapping unitname =
-      let val _ = (print "compileINT: "; print unitname; print "\n")
-	  val fresh = #fresh(lookup_unit mapping unitname)
-      in  (case !fresh of
-	       STALE => (compileINT' mapping unitname; fresh := FRESH_INTER)
-	     | FRESH_INTER => ()
-	     | FRESH_IMPL => ())
+
+  and compileINT unitname =
+      let val _ = if (!diag_ref) then (push_tab(); print "compileINT: "; print unitname; print "\n") else ()
+	  val fresh = get_fresh unitname
+	  val _ = (case !fresh of
+		       STALE => (compileINT' unitname; fresh := FRESH_INTER)
+		     | FRESH_INTER => ()
+		     | FRESH_IMPL => ())
+	  val _ = if (!diag_ref) then pop() else ()
+      in  ()
       end
 
-  and compileINT' mapping unit =
-      let val sourcebase = name2base mapping unit
+  and compileINT' unit =
+      let val sourcebase = name2base unit
 	  val sourcefile = base2int sourcebase
-	  val includes = getImport false mapping unit [] 
-	  val _ = app (compile false mapping) includes
-	  val includes_base = map (name2base mapping) includes
+	  val includes = getImportTr false unit [] 
+	  val _ = app (compile false) includes
+	  val includes_base = map name2base includes
 	  val includes_uo = map base2uo includes_base
 	  val unitName = OS.Path.base(OS.Path.file sourcefile)
 	  val uiFile = (OS.Path.base sourcefile) ^ ".ui"
-      in if (access(uiFile, [OS.FileSys.A_READ]) andalso
-	     is_fresh includes_uo (OS.FileSys.modTime uiFile, uiFile))
+	  val (missing,latest_time) = get_latest includes_uo
+      in if (exists uiFile andalso
+	     (case missing of
+		  NONE => Time.>=(modTime uiFile, latest_time)
+		| SOME _ => false))
 	     then ()
-	 else let val (ctxt_for_elab,ctxt) = getContext mapping includes
+	 else let val (ctxt_for_elab,ctxt) = getContext includes
 		  val (fp, _, specs) = Parser.parse_inter sourcefile
 		  val _ = (chat "[Compiling specification file: ";
 			   chat sourcefile; chat "\n")
 	      in  (case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of
-		       SOME ctxt' => writeContext mapping (unit, ctxt')
+		       SOME ctxt' => writeContext (unit, ctxt')
 		     | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
 	      end
       end
-(*
-  fun compileFile mapping sourcefile = 
-      case OS.Path.ext sourcefile of
-	   SOME "sml" => compileSML mapping (OS.Path.base sourcefile)
-         | SOME "int" => compileINT mapping (OS.Path.base sourcefile)
-	 | SOME "uo" => ()                      (* Ignores .uo files *)
-	 | SOME "ui" => error "Cannot compile or link .ui file"
-	 | _ => error("Missing or unsupported file extension in file " ^ sourcefile)
-*)
 
   val flags = (ref false, ref false, ref false, ref false) (* c, r ,o, all *)
 
@@ -482,12 +552,12 @@ struct
   (* linkopt - if present, names the file containing the concatenation of the generated .uo files
      exeopt - if present, names the final executable 
      srcs    - .int, .uo, or .sml filenames *)
-  fun compileThem(mapping, linkopt, exeopt, units) = 
-      let val bases = map (name2base mapping) units
-	  val _ = List.app (compile true mapping) units
+  fun compileThem(linkopt, exeopt, units) = 
+      let val bases = map name2base  units
+	  val _ = app (compile true) units
 	  val tmp = OS.FileSys.tmpName()
 	  val tmp_uo = tmp ^ ".uo"
-	  val base_args = map (fn u => (name2base mapping u)) units
+	  val base_args = map name2base units
       in
 	  (case (linkopt,exeopt) of
 	       (NONE,NONE) => ()
@@ -503,38 +573,39 @@ struct
 				      Linker.mk_exe {base_arg = f, exe_result = out}))
       end
        
-  fun getMapping mapFile : mapping = 
-      let val _ = if (access(mapFile, [OS.FileSys.A_READ]))
+  fun setMapping mapFile =
+      let val _ = if (exists mapFile)
 		      then ()
 		  else error "Cannot read map file"
 	  val is = TextIO.openIn mapFile
-	  val m = make_mapping()
+	  val _ = reset_mapping()
 	  fun fetch_line() = let fun dropper s = String.sub(s,0) = #"#"
 				 val line = TextIO.inputLine is
 			     in  case (split_line dropper line) of
-				 [unitname, filebase] => add_unit m (unitname, filebase)
+				 [unitname, filebase] => add_unit (unitname, filebase)
 			       | [] => ()
 			       | _ => error ("ill-formed map line: " ^ line)
 			     end
 	  fun loop () = if (TextIO.endOfStream is)
 			    then TextIO.closeIn is
 			else (fetch_line();loop())
-      in  loop (); m
+      in  loop ()
       end
 
   fun tilc(mapfile : string, cs : bool, rs : string option, 
 	   os : string option, srcs : string list) =
 	let val _ = Stats.clear_stats()
-	    val mapping = getMapping mapfile
+	    val _ = reset_stats()
+	    val _ = setMapping mapfile
 	    val srcs = if srcs = [] 
-			   then list_units mapping
+			   then list_units()
 		       else srcs
 	in  (case (cs, rs, os) of
-		    (false, NONE, NONE) =>    compileThem(mapping, NONE, SOME "a.out", srcs)
-		  | (false, SOME f, NONE) =>  compileThem(mapping, SOME f, NONE, srcs)
-		  | (false, NONE, SOME f) =>  compileThem(mapping, NONE, SOME f, srcs)
-		  | (false, SOME f, SOME g)=> compileThem(mapping, SOME f, SOME g, srcs)
-		  | (true, NONE, NONE) =>     compileThem(mapping, NONE, NONE, srcs)
+		    (false, NONE, NONE) =>    compileThem(NONE, SOME "a.out", srcs)
+		  | (false, SOME f, NONE) =>  compileThem(SOME f, NONE, srcs)
+		  | (false, NONE, SOME f) =>  compileThem(NONE, SOME f, srcs)
+		  | (false, SOME f, SOME g)=> compileThem(SOME f, SOME g, srcs)
+		  | (true, NONE, NONE) =>     compileThem(NONE, NONE, srcs)
 		  | (true, _, _) =>           error "Cannot specify -c and -o/-r");
 	    Stats.print_stats()
 	end

@@ -7,6 +7,7 @@ signature COMPILER =
    type sbnd and context_entry and context
 
    val debug_asm : bool ref (* use the -g flag in call to assembler *)
+   val keep_asm : bool ref  (* don't erase the asm *)
    val compile : context * string * (sbnd option * context_entry) list * context -> unit
 
    (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an

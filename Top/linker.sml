@@ -192,9 +192,10 @@ structure Linker :> LINKER =
 	  fun li (iue0,eue0,[]) = (iue0,eue0)
 	    | li (iue0,eue0,{unitname,imports=iue,exports=eue,ofile}::rest) =
 	    let val iue' = UE.confine(unitname,iue,eue0)
-	        val iue0' = UE.plus_overlap(unitname,iue0,iue') 
-		val eue0' = UE.plus_no_overlap(unitname,eue0,eue)
-	    in li (iue0',eue0',rest)
+	        val iue0' = UE.confine(unitname,iue0,eue)
+	        val iue_next = UE.plus_overlap(unitname,iue0',iue') 
+		val eue_next = UE.plus_no_overlap(unitname,eue0,eue)
+	    in li (iue_next,eue_next,rest)
 	    end
 	  val (imports, exports) = li ([],[],linkinfo)
 	  val o_files = map #ofile linkinfo
@@ -223,7 +224,7 @@ structure Linker :> LINKER =
       in case imports
 	   of nil => (* everything has been resolved *)
 	       let val unitnames = map #1 exports
-		   val local_labels = map (fn un => Linkalpha.Rtl.LOCAL_CODE 
+		   val local_labels = map (fn un => Linkrtl.Rtl.LOCAL_CODE 
 					   (Name.non_generative_named_var ("main_" ^ un ^ "_doit"))) unitnames
 		   val _ = Linkalpha.mk_link_file ("link_clients.s", local_labels)
 		   val _ = if OS.Process.system (as_path ^ " -o link_clients.o link_clients.s") = OS.Process.success then ()

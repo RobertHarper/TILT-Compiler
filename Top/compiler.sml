@@ -1,17 +1,18 @@
-(*$import COMPILER Linknil Linkrtl Linkalpha OS *)
+(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha OS *)
 structure Til : COMPILER =
     struct
 
 
-	type sbnd = Linknil.Il.sbnd
-	and context_entry = Linknil.Il.context_entry
-	and context = Linknil.Il.context
+	type sbnd = LinkIl.Il.sbnd
+	and context_entry = LinkIl.Il.context_entry
+	and context = LinkIl.Il.context
 
 	val error = fn x => Util.error "Compiler" x
 	val as_path = "as"
 	val has_sys = OS.Process.system "sys" = OS.Process.success
 
 	val debug_asm = ref false
+	val keep_asm = ref false
 	fun get_debug_flag() = if (!debug_asm) then " -g " else ""
 	fun assemble(s_file,o_file) =
 	    let val command = as_path ^ (get_debug_flag()) ^ " -c -o " ^ o_file ^ " " ^ s_file
@@ -30,7 +31,9 @@ structure Til : COMPILER =
 	          (if (OS.Process.system command =  OS.Process.success 
 		       andalso ((OS.FileSys.fileSize o_file > 0)
 				handle _ => false))
-		       then (OS.Process.system rmcommand; ())
+		       then (if (!keep_asm)
+				 then ()
+			     else (OS.Process.system rmcommand; ()))
 		  else error "assemble. System command as failed")
 	    end
 

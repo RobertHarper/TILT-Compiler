@@ -42,7 +42,9 @@
 
 signature MANAGER = sig
 
-  
+  val chat_ref : bool ref
+  val diag_ref : bool ref
+
   val cache_context : bool ref
   val up_to_phasesplit : bool ref
   val up_to_elaborate : bool ref
