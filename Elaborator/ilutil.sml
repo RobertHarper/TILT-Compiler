@@ -78,7 +78,7 @@ functor IlUtil(structure Ppil : PPIL
     fun make_lambda_help (a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
-		    in (FIX(a,[fbnd],var'), CON_ARROW(con,rescon,oneshot_init a))
+		    in (FIX(a,[fbnd]), CON_ARROW(con,rescon,oneshot_init a))
 		    end
     fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
     fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
@@ -177,7 +177,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | PRIM (p,cs) => PRIM(p, map (f_con state) cs)
 	   | ILPRIM ilp => ILPRIM ilp
 	   | APP (e1,e2) => APP(self e1, self e2)
-	   | FIX (a,fbnds,var) => FIX(a,map (f_fbnd state) fbnds,var)
+	   | FIX (a,fbnds) => FIX(a,map (f_fbnd state) fbnds)
 	   | RECORD (rbnds) => RECORD(map (f_rbnd state) rbnds)
 	   | RECORD_PROJECT (e,l,c) => RECORD_PROJECT(self e,l,f_con state c)
 	   | SUM_TAIL (c,e) => SUM_TAIL(f_con state c, self e)
@@ -273,8 +273,8 @@ functor IlUtil(structure Ppil : PPIL
 	     | NONE =>
 	(case s of
 	   SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
-	 | SIGNAT_FUNCTOR (v,s1,s2,comp) => SIGNAT_FUNCTOR(v, f_signat state s1, 
-							   f_signat state s2, comp)))
+	 | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
+							   f_signat state s2, a)))
 
       and f_rbnd state (l,e) = (l, f_exp state e)
       and f_fbnd state (FBND(vname,varg,carg,cres,e)) : fbnd =

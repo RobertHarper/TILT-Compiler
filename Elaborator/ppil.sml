@@ -69,6 +69,8 @@ functor Ppil(structure Il : IL
 	  close_fmt fmtstream;
 	  fmt)
       end
+    fun pp_arrow PARTIAL = String "->"
+      | pp_arrow TOTAL = String "=>"
     fun pp_complete oneshot = 
       String (case (oneshot_deref oneshot) of
 		(SOME TOTAL) => "=>"
@@ -288,22 +290,18 @@ functor Ppil(structure Il : IL
        | ILPRIM ip => pp_ilprim' ip
        | VAR var => pp_var var
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
-       | FIX (a,[FBND(v',v,c,cres,e)],var) => 
-	     if eq_var(v',var)
-		 then HOVbox[String (case a of TOTAL => "/TOTAL\\ " | PARTIAL => "/\\"),
-			     pp_var v',
-			     String " (", pp_var v, Break0 0 5,
-			     String " : ",
-			     pp_con seen c, String ")", Break0 0 5,
-			     String " :", pp_con seen cres, 
-			     String " =", Break,
-			     pp_exp seen e]
-	     else error "FIX of one thing not a lambda"
-       | FIX (a,fbnds, var) => HOVbox[String (case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX"),
-				      pp_list (pp_fbnd seen) fbnds ("[",",","]", true),
-				      String "IN  ",
-				      pp_var var,
-				      String "END "]
+       | FIX (a,[FBND(v',v,c,cres,e)]) => 
+		  HOVbox[String (case a of TOTAL => "/TOTAL\\ " | PARTIAL => "/\\"),
+			 pp_var v',
+			 String " (", pp_var v, Break0 0 5,
+			 String " : ",
+			 pp_con seen c, String ")", Break0 0 5,
+			 String " :", pp_con seen cres, 
+			 String " =", Break,
+			 pp_exp seen e]
+       | FIX (a,fbnds) => HOVbox[String (case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX"),
+				 pp_list (pp_fbnd seen) fbnds ("[",",","]", true),
+				 String "END "]
 (*       | SEQ elist => pp_list (pp_exp seen) elist ("(", ";",")", true) *)
        | RECORD [] => String "unit"
        | RECORD rbnds =>  let val (format,doer) = if (rbnds_is_tuple rbnds)
@@ -384,13 +382,13 @@ functor Ppil(structure Il : IL
 						   pp_path p, String ", ",
 						   pp_list (pp_sdec seen) sdecs ("[",",","]",true),
 						   String ")"]
-       | SIGNAT_FUNCTOR (v,s1,s2,comp) => HOVbox0 1 8 1 
+       | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,
 						 String ", ",
 						 pp_signat seen s1,
 						 String " ",
-						 pp_complete comp,
+						 pp_arrow a,
 						 Break0 1 8,
 						 pp_signat seen s2,
 						 String ")"])

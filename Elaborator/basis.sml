@@ -141,10 +141,24 @@ functor Basis(structure Il : IL
 
        val context = exp_entry context "true" true_exp
        val context = exp_entry context "false" false_exp
-	   
+
+       local
+	   val arg_var = fresh_named_var "not_arg"
+	   val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
+       in  val not_exp = #1(make_lambda(arg_var, con_bool, con_bool, not_body))
+       end
+       val context = exp_entry context "not" not_exp
+
+       local
+	   val arg_var = fresh_named_var "size_arg"
+	   val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
+       in  val not_exp = #1(make_lambda(arg_var, con_bool, con_bool, not_body))
+       end
+       val context = exp_entry context "not" not_exp
+
+       val context = exp_entry context "size" (PRIM(vlength1,[CON_UINT W8]))
+
 (*
-	   mono_entry "not" (NOT),
-	   
 	   mono_entry "size" (SIZE),
 	   mono_entry "chr" (CHR),
 	   mono_entry "ord" (ORD),

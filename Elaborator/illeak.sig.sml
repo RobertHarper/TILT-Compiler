@@ -27,7 +27,7 @@ signature ILLEAK =
                  | ILPRIM  of ilprim          (* for type-checking reasons *)
                  | VAR     of var
                  | APP     of exp * exp
-                 | FIX     of arrow * fbnd list * var
+                 | FIX     of arrow * fbnd list
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp
@@ -88,7 +88,7 @@ signature ILLEAK =
                  | BND_CON of var * con
 
     and   signat = SIGNAT_STRUCTURE         of path option * sdec list
-                 | SIGNAT_FUNCTOR of var * signat * signat * (arrow Util.oneshot)
+                 | SIGNAT_FUNCTOR of var * signat * signat * arrow
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con
                  | DEC_MOD       of var * signat

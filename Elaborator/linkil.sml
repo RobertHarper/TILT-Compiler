@@ -140,8 +140,13 @@ structure LinkIl (* : LINKIL *) =
 	    in ressbnds
 	    end
 
-	fun foobaz arg = IlContext.add_context_entries(IlContext.empty_context,arg)
-	
+	fun foobaz arg = 
+	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
+		  | help ce = ce
+		val arg' = map help arg
+	    in IlContext.add_context_entries(IlContext.empty_context,arg')
+	    end
+
 	fun check filename doprint =
 	    let
 		val (sbnds,cdiff) = elaborate_diff filename

@@ -314,7 +314,8 @@ struct
     fun Sdecs_Lookup' (m, sdecs, labs) : (bool * (phrase_class * labels)) = 
 	let 
 	    fun loop lbl [] : (bool * (phrase_class * labels)) = 
-		raise (NOTFOUND "Sdecs_Lookup reached []")
+		raise (NOTFOUND ("Sdecs_Lookup' reached [] while lbl = " ^
+				 (label2string lbl)))
 	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
 		if (eq_label(l,lbl)) 
 		    then (case d of
@@ -341,7 +342,7 @@ struct
 
 	in
 	    (case labs of
-		 [] => error "Sdecs_Lookup got []"
+		 [] => error "Sdecs_Lookup' got []"
 	       | [lbl] => loop lbl sdecs
 	       | (lbl :: lbls) =>
 		     let val (_,(phrase_class,labs)) = loop lbl sdecs
@@ -358,7 +359,8 @@ struct
     fun Sdecs_Lookup (m, sdecs, labs) : (labels * phrase_class) =
 	let 
 	    fun loop lbl [] : (labels * phrase_class) = 
-		raise (NOTFOUND "Sdecs_Lookup reached []")
+		raise (NOTFOUND ("Sdecs_Lookup reached [] while looking for " ^ 
+				 (label2string lbl)))
 	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
 		if (eq_label(l,lbl)) 
 		    then (case d of
@@ -433,7 +435,7 @@ struct
 				  end)
       val Sdecs_Lookup' = 
 	  fn (m,sdecs,labels) => (let val (f,(pc,labels)) = Sdecs_Lookup' (m,sdecs,labels)
-				  in (f,(labels,pc))
+				  in (labels,pc)
 				  end)
 				      handle e => (
 (*print "error in Sdecs_Lookup with decs = ...\n";

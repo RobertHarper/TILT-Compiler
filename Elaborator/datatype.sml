@@ -231,7 +231,7 @@ functor Datatype(structure Il : IL
 		     else DEC_MOD(fresh_var(),
 				  SIGNAT_FUNCTOR(var_poly,sigpoly,
 						 SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)]),
-						 oneshot_init TOTAL)))
+						 TOTAL)))
 		
 
 	    (* ----- do the mk  ---- *)
@@ -247,7 +247,7 @@ functor Datatype(structure Il : IL
 			DEC_MOD(fresh_var(),
 				   SIGNAT_FUNCTOR(var_poly,sigpoly,
 						  SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,sig_dec)]),
-						  oneshot_init TOTAL)))
+						  TOTAL)))
 		  end
 		val (mk_bnd,mk_dec) = maker exp_mk_ij con_mk_ij 
 		val module = MOD_STRUCTURE[SBND(mk_lab,mk_bnd)]
@@ -304,7 +304,7 @@ functor Datatype(structure Il : IL
 				      else DEC_MOD(fresh_var(),
 					     SIGNAT_FUNCTOR(var_poly,sigpoly_eq,
 							    SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,eq_expdec)]),
-							    oneshot_init TOTAL)))
+							    TOTAL)))
 			 in SOME(eq_sbnd, eq_sdec)
 			 end)
 	in val eq_sbnd_sdec_opts = map2 help (top_type_label,exp_con_eq_opt)

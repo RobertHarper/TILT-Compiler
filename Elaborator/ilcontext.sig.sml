@@ -66,6 +66,7 @@ signature ILCONTEXT =
 	val var_bound : context * var -> bool
 	val name_bound : context * Il.tag -> bool
 	val Sdecs_Lookup  : mod * sdecs * label list -> label list * phrase_class
+	val Sdecs_Lookup' : mod * sdecs * label list -> label list * phrase_class
 	val Sbnds_Lookup  : Il.sbnds * label list -> label list * phrase
 	val Context_Lookup  : context * label list -> phrase_class
 	val Context_Lookup' : context * var -> phrase_class

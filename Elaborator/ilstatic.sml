@@ -260,6 +260,7 @@ functor IlStatic(structure Il : IL
    (* ---------------------------------------------------------------
       oneshot arrow unifier: note that unset does NOT unify with unset
      ---------------------------------------------------------------- *)
+   fun eq_arrow(ax,ay,is_sub) = (ax = ay) orelse (is_sub andalso ax = TOTAL)
    fun eq_comp (comp1,comp2,is_sub) = 
        (case (oneshot_deref comp1,oneshot_deref comp2) of
 	    (SOME x, SOME y) => (x = y) orelse (is_sub andalso x = TOTAL)
@@ -566,9 +567,9 @@ functor IlStatic(structure Il : IL
 
    and eq_sig (ctxt,SIGNAT_STRUCTURE (NONE,sdecs1), 
 	       SIGNAT_STRUCTURE (NONE,sdecs2)) = eq_sdecs(ctxt,sdecs1,sdecs2)
-     | eq_sig (ctxt,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,comp1), 
-	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,comp2)) = 
-       (eq_comp(comp1,comp2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(ctxt,s1_arg,s2_arg)))
+     | eq_sig (ctxt,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,a1), 
+	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,a2)) = 
+       (eq_arrow(a1,a2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(ctxt,s1_arg,s2_arg)))
        andalso let val s1_arg' = SelfifySig(SIMPLE_PATH v1,s1_arg)
 		   val ctxt' = add_context_mod'(ctxt,v1,s1_arg')
 	       in  eq_sig (ctxt',s1_res,s2_res)
@@ -640,9 +641,8 @@ functor IlStatic(structure Il : IL
      | MOD_PROJECT (m,l) => Module_IsValuable m ctxt
      | MOD_APP (m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
 			  in case s1 of
-			      SIGNAT_FUNCTOR(_,_,_,comp) =>
-				  va1 andalso eq_comp(oneshot_init TOTAL,comp,false) 
-				  andalso (Module_IsValuable m2 ctxt)
+			      SIGNAT_FUNCTOR(_,_,_,TOTAL) =>
+				  va1 andalso (Module_IsValuable m2 ctxt)
 			    | _ => false
 			  end
      | _ => false)
@@ -755,12 +755,11 @@ functor IlStatic(structure Il : IL
 		     print "\nargument type is = "; pp_con con2; print "\n";
 		     error "Type mismatch in expression application")
 	   end
-     | (FIX (a,fbnds, var)) => 
-	   let fun loop [] = error "FIX: var is not in any fbnd expression"
-		 | loop ((FBND(v',v,c,c',e))::rest) = if (eq_var(var,v')) 
-							  then (v',v,c,c',e)
-						      else loop rest
-	       val (v',v,c,c',e) = loop fbnds
+     | (FIX (a,fbnds)) => 
+	   let fun get_arm_type(FBND(_,_,c,c',_)) = CON_ARROW(c,c',oneshot_init a)
+	       val res_type = (case fbnds of
+				   [fbnd] => get_arm_type fbnd
+				 | _ => con_tuple(map get_arm_type fbnds))
 	       fun folder (FBND(v',v,c,c',e), ctxt) = 
 		   add_context_exp'(ctxt,v',CON_ARROW(c,c',oneshot_init PARTIAL))
 	       val full_ctxt = foldl folder ctxt fbnds
@@ -775,12 +774,12 @@ functor IlStatic(structure Il : IL
 	   in (true,
 	       case a of
 	       PARTIAL => if (andfold (ptest full_ctxt) fbnds)
-					then CON_ARROW(c,c',oneshot_init PARTIAL)
-				    else (print "could not type-check FIX expression:\n";
-					  pp_exp exparg;
-					  error "could not type-check FIX expression")
+			      then res_type
+			  else (print "could not type-check FIX expression:\n";
+				pp_exp exparg;
+				error "could not type-check FIX expression")
 	     | TOTAL =>  if ((andfold (ttest ctxt) fbnds))
-			     then CON_ARROW(c,c',oneshot_init TOTAL)
+			     then res_type
 			 else (print "could not type-check TOTALFIX expression:\n";
 			       pp_exp exparg;
 			       error "could not type-check TOTALFIX expression"))
@@ -796,11 +795,15 @@ functor IlStatic(structure Il : IL
 	   end
      | (RECORD_PROJECT (exp,l,c)) => 
 	   let 
-	       fun RdecLookup (label,[]) = raise (NOTFOUND "RdecLookup")
+	       val (va,con) = GetExpCon(exp,ctxt)
+	       val con' = #2(HeadNormalize(con,ctxt))
+	       fun RdecLookup (label,[]) = (print "RdecLookup could not find label ";
+					    pp_label label; print "in type ";
+					    pp_con con';
+					    error "RdecLookup could not find label")
 		 | RdecLookup (label,(l,c)::rest) = if eq_label(label,l) then c
 						    else RdecLookup (label,rest)
-	       val (va,con) = GetExpCon(exp,ctxt)
-	   in (case (#2(HeadNormalize(con,ctxt))) of 
+	   in (case con' of
 		   (CON_RECORD rdecs) => (va,RdecLookup(l,rdecs))
 		 | _ => (print "Record Proj on exp not of type CON_RECORD; type = ";
 			 pp_con con; print "\n";
@@ -1067,7 +1070,7 @@ functor IlStatic(structure Il : IL
      | MOD_FUNCTOR (v,s,m) => 
 	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig(SIMPLE_PATH v, s)))
 	       val (va,signat) = GetModSig(m,ctxt')
-	   in  (true,SIGNAT_FUNCTOR(v,s,signat,oneshot_init 
+	   in  (true,SIGNAT_FUNCTOR(v,s,signat,
 				    (if va then TOTAL else PARTIAL)))
 	   end
      | MOD_APP (a,b) => 
@@ -1083,7 +1086,7 @@ functor IlStatic(structure Il : IL
 	       (SIGNAT_STRUCTURE _) => error "Can't apply a structure signature"
 	     | SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
-		       then (vaa andalso vab andalso (oneshot_deref ar = SOME TOTAL),
+		       then (vaa andalso vab andalso (ar = TOTAL),
 			     sig_subst_modvar(dsignat,[(v,b)]))
 			    else error ("Module Application where" ^ 
 					" argument and parameter signature mismatch")
@@ -1380,7 +1383,7 @@ functor IlStatic(structure Il : IL
 
      and Sig_Valid (ctxt : context, SIGNAT_STRUCTURE(NONE, sdecs)) = Sdecs_Valid(ctxt,sdecs)
        | Sig_Valid (ctxt : context, SIGNAT_STRUCTURE (SOME p,sdecs)) = Sdecs_Valid(ctxt,sdecs)
-       | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,comp)) = 
+       | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) = 
 	 (Sig_Valid(ctxt,s_arg) andalso 
 	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig(SIMPLE_PATH v,s_arg)),s_res))
 
@@ -1464,9 +1467,9 @@ functor IlStatic(structure Il : IL
 		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => if (eq_path(p1,p2))
 							       then help(ctxt,sdecs1,sdecs2)
 							   else false
-		| (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,comp1), 
-		   SIGNAT_FUNCTOR(v2,s2_arg,s2_res,comp2)) =>
-		  ((eq_comp(comp1,comp2,true)) andalso 
+		| (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,a1), 
+		   SIGNAT_FUNCTOR(v2,s2_arg,s2_res,a2)) =>
+		  ((eq_arrow(a1,a2,true)) andalso 
 		   let val s1_res = if (eq_var(v1,v2)) then s1_res
 				    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
 		       val s2_arg = SelfifySig(SIMPLE_PATH v2, s2_arg)

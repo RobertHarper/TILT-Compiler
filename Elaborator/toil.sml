@@ -252,16 +252,44 @@ functor Toil(structure Il : IL
 	       | loop context (obj::rest) =
 		 let 
 		     val boolsbnd_ctxt_list = xobj(context,obj)
-		     val (lbl1,lbl2) = (fresh_open_internal_label "lbl1", fresh_open_internal_label "lbl2")
+		     val (lbl1,lbl2) = (fresh_open_internal_label "lbl1", 
+					fresh_open_internal_label "lbl2")
 		     val var1 = fresh_var()
 		     val var2 = fresh_var()
 		     val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
 		     val boolsbnd_ctxt_restlist = loop context' rest
 		 in boolsbnd_ctxt_list @ boolsbnd_ctxt_restlist
 		 end
-	     fun help (NONE,ce) = (NONE,ce)
-	       | help (SOME(_,sbnd),ce) = (SOME sbnd, ce)
-	 in map help (loop context objs)
+	     val boolsbnd_ctxt_list = loop context objs
+	     fun maxmap_folder((NONE,_),map) = map
+	       | maxmap_folder((SOME(_,SBND(l,_)),_),map) = 
+		 (case Name.LabelMap.find(map,l) of
+		     SOME r => (r := 1 + (!r);
+				map)
+		   | NONE => Name.LabelMap.insert(map,l,ref 1))
+	     val maxmap = foldl maxmap_folder Name.LabelMap.empty boolsbnd_ctxt_list 
+	     fun uniquify [] = []
+	       | uniquify (boolsbnd_ctxt::rest) = 
+		 (case boolsbnd_ctxt of
+		      (NONE,ce) => (NONE,ce) :: (uniquify rest)
+		    | (SOME(_,sbnd as (SBND(l,bnd))),
+		       ce as (CONTEXT_SDEC(SDEC(_,dec)))) => 
+		          (case (Name.LabelMap.find(maxmap,l)) of
+			      NONE => error "maxmap must have entry at this point"
+			    | SOME r =>
+				  (r := (!r) - 1;
+				   if (!r = 0)
+				       then (SOME sbnd, ce) :: (uniquify rest)
+				   else if (!r < 0)
+					    then error "maxmap count inconsistency"
+					else (* rename case *)
+					    let val l' = fresh_internal_label "hidden"
+					    in (SOME (SBND(l',bnd)), 
+						CONTEXT_SDEC(SDEC(l',dec)))
+						:: (uniquify rest)
+					    end))
+		    | (SOME(_,sbnd), _) => error "packagedec: got sbnd without CONTEXT_SDEC")
+	 in uniquify boolsbnd_ctxt_list 
 	 end
 
     (* --------------------------------------------------------- 
@@ -393,7 +421,7 @@ functor Toil(structure Il : IL
 						      DEC_EXP(resv,new_rescon))])
 	    val _ = debugdo (fn () => (print "\n*********\ndone make_non_dependent_type with signat_temp:\n";
 				       pp_signat signat_temp; print "\n\n"))
-	    val signat'= SIGNAT_FUNCTOR(v,signat_poly,signat_temp,oneshot_init PARTIAL)
+	    val signat'= SIGNAT_FUNCTOR(v,signat_poly,signat_temp,PARTIAL)
 	    val _ = if (Sig_IsSub(context,s,signat')) then ()
 		    else (print "s is\n";
 			  pp_signat s; print "\nsignat' is \n";
@@ -740,13 +768,13 @@ functor Toil(structure Il : IL
 					     val bnd = BND_MOD(outer_var,MOD_FUNCTOR(var_poly,sig_poly,temp_mod))
 					     val dec = DEC_MOD(outer_var,SIGNAT_FUNCTOR(var_poly,sig_poly,
 											temp_sig,
-											oneshot_init TOTAL))
+											TOTAL))
 					 in (SBND(l,bnd),SDEC(l,dec))
 					 end
 				     val temp_mod = MOD_FUNCTOR(var_poly,sig_poly,MOD_STRUCTURE sbnds)
 				     val temp_sig = SIGNAT_FUNCTOR(var_poly,sig_poly,
 								   SIGNAT_STRUCTURE(NONE, sdecs),
-								   oneshot_init TOTAL)
+								   TOTAL)
 				     val rest_sbnds_sdecs = map2 mod_sig_help (labs,cons)
 				     val final_sbnds = ((SBND(lbl',BND_MOD(var',temp_mod)))::
 							(map #1 rest_sbnds_sdecs))
@@ -916,53 +944,97 @@ functor Toil(structure Il : IL
 
 
 		  val fbnds = map #1 fbnd_con_list
-		  val exp_con_list = map2 (fn (v',c) => (FIX(PARTIAL,fbnds,v'),c)) (fun_vars,map #2 fbnd_con_list)
-		  val tyvar_lbls'_useeq = 
-		      flatten(map (fn (_,c) => 
-				   (debugdo (fn () => (print "about to call rebind_free_type_var:  var_poly = ";
-						       pp_var var_poly; print "\nand c = \n";
-						       pp_con c; print"\n\n"));
-				    rebind_free_type_var(tyvar_stamp,c,
-							 context_fun_ids,var_poly)))
-		      exp_con_list)
+		  val fbnd_cons : con list = map #2 fbnd_con_list
+		  val top_label = fresh_internal_label "top_label"
+		  val top_var = fresh_named_var "top_var"
+		  val top_exp_con = (FIX(PARTIAL,fbnds),
+				     case fbnd_cons of
+					 [c] => c
+				       | _ => con_tuple fbnd_cons)
 
 		  local 
+		      val tyvar_lbls'_useeq = 
+			  ((fn (_,c) => 
+			    (debugdo (fn () => (print "about to call rebind_free_type_var:";
+						print "var_poly = ";
+						pp_var var_poly; print "\nand c = \n";
+						pp_con c; print"\n\n"));
+			     rebind_free_type_var(tyvar_stamp,c,
+						  context_fun_ids,var_poly)))
+			  top_exp_con)
 		      fun help(_,tlab,iseq) = (tlab,iseq)
 		      val temp = map help tyvar_lbls'_useeq
 		  in
 		      val sdecs2 = make_typearg_sdec temp
+		      val sdecs = sdecs1 @ sdecs2
 		  end
-		  val sdecs = sdecs1 @ sdecs2
+
+
+		  val temp_exp = (case sdecs of
+				      [] => VAR top_var
+				    | _ => let val s = MOD_APP(MOD_VAR top_var,
+							       MOD_VAR var_poly)
+					   in MODULE_PROJECT(s,it_lab)
+					   end)
+					  
+		  val exp_con_list = 
+		      case fbnd_cons of
+			  [c] => [(temp_exp,c)]
+			| _ => mapcount (fn (i,c) => (RECORD_PROJECT(temp_exp, 
+								     generate_tuple_label (i+1),
+								     #2 top_exp_con), c))
+			  fbnd_cons
+(*
+		  val exp_con_list = map2count 
+		      (fn (i,v',c) => (let val f = FIX(PARTIAL,fbnds)
+				       in case fbnd_con_list of
+					   [_] => f
+					 | _ => RECORD_PROJECT(f,generate_tuple_label(i+1),
+							       #2 top_exp_con)
+				       end,
+					   c))
+		      (fun_vars,map #2 fbnd_con_list)
+*) 
+
 
 		  val _ = 
 		      let val extra_dec = DEC_MOD(var_poly,SIGNAT_STRUCTURE(NONE, sdecs))
 		      in  eq_table_pop extra_dec
 		      end
 
-		  fun modsig_helper (id,(exp,con)) = 
+
+		  fun modsig_helper nameopt (id,(exp,con)) = 
 		      let val v1 = fresh_named_var "unused1"
-			  val v2 = fresh_named_var "unused2"
+			  val v2 = (case nameopt of
+					NONE => fresh_named_var "unused2"
+				      | SOME v => v)
+			  fun poly_case () = 
+			      let 
+				  val sig_poly = SIGNAT_STRUCTURE (NONE,sdecs)
+				  val sbnd = SBND(it_lab, BND_EXP(v1,exp))
+				  val sdec = SDEC(it_lab, DEC_EXP(v1,con))
+				  val functor_mod = MOD_FUNCTOR(var_poly,sig_poly,
+								MOD_STRUCTURE[sbnd])
+				  val functor_sig = 
+				      SIGNAT_FUNCTOR(var_poly,sig_poly,
+						     SIGNAT_STRUCTURE(NONE, [sdec]),
+						     TOTAL)
+			      in  (SBND(id,BND_MOD(v2,functor_mod)),
+				   SDEC(id,DEC_MOD(v2,functor_sig)))
+			      end
 		      in
 			  (case sdecs of
 			       [] => (SBND(id,BND_EXP(v2,exp)),
 				      SDEC(id,DEC_EXP(v2,con)))
-			     | _ => let 
-					val sig_poly = SIGNAT_STRUCTURE (NONE,sdecs)
-					val functor_mod = MOD_FUNCTOR(var_poly,sig_poly,
-								      MOD_STRUCTURE[SBND(it_lab,
-											 BND_EXP(v2,exp))])
-					val functor_sig = 
-					    SIGNAT_FUNCTOR(var_poly,sig_poly,
-							   SIGNAT_STRUCTURE(NONE, [SDEC(it_lab,
-											DEC_EXP(v2,con))]),
-							   oneshot_init TOTAL)
-				    in  (SBND(id,BND_MOD(v1,functor_mod)),
-					 SDEC(id,DEC_MOD(v1,functor_sig)))
-				    end)
+			     | _ => poly_case())
 		      end
-		  val sbnds_sdecs = map2 modsig_helper (fun_ids,exp_con_list)
-	    in
-		map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnds_sdecs
+
+		  val (top_sbnd,top_sdec) = modsig_helper (SOME top_var) (top_label, top_exp_con)
+		  val top_sbnd_entry = (SOME top_sbnd, CONTEXT_SDEC top_sdec)
+		  val sbnds_sdecs = map2 (modsig_helper NONE) (fun_ids,exp_con_list)
+		  val sbnds_entries = (map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) 
+				       sbnds_sdecs)
+	    in	top_sbnd_entry :: sbnds_entries
 	    end
 
 	| Ast.SeqDec decs => packagedecs xdec' context decs
@@ -1290,7 +1362,7 @@ functor Toil(structure Il : IL
 						      SIGNAT_STRUCTURE(NONE,
 								       [SDEC(it_lab,
 									     DEC_EXP(fresh_var(),con))]),
-						      oneshot_init TOTAL)
+						      TOTAL)
 			in SDEC(symbol_label sym, DEC_MOD(fresh_named_var "unused",fsig))
 			end)
 	       in ADDITIONAL(map doer vtlist )
@@ -1324,7 +1396,7 @@ functor Toil(structure Il : IL
 			       val context' = add_context_mod(context,strid,var,
 								 SelfifySig(SIMPLE_PATH var,signat))
 			       val signat' = xsigexp(context',sigexp')
-			     in SIGNAT_FUNCTOR(var,signat,signat',oneshot_init PARTIAL)
+			     in SIGNAT_FUNCTOR(var,signat,signat',PARTIAL)
 			     end
 		      in SDEC(symbol_label funid, DEC_MOD(var,help fsig))
 		      end
@@ -1366,8 +1438,8 @@ functor Toil(structure Il : IL
 		       | loop (a::b::rest) sdecs = 
 			 let val s = SIGNAT_STRUCTURE (NONE, sdecs)
 			     val m = MOD_VAR(fresh_named_var "junk")
-			     val la = #1(Sdecs_Lookup(m,sdecs,map symbol_label a))
-			     val lb = #1(Sdecs_Lookup(m,sdecs,map symbol_label b))
+			     val la = #1(Sdecs_Lookup'(m,sdecs,map symbol_label a))
+			     val lb = #1(Sdecs_Lookup'(m,sdecs,map symbol_label b))
 			 in case (xsig_sharing(s,la,lb,KIND_TUPLE 1)) of
 			     SIGNAT_STRUCTURE (NONE, sdecs') => loop (b::rest) sdecs'
 			   | SIGNAT_STRUCTURE _ => error "xsig_sharing returned selfified sig"
@@ -1420,7 +1492,7 @@ functor Toil(structure Il : IL
 			      val v = fresh_named_var "functor_var"
 			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m')))
 			      val sdec = SDEC(funid,DEC_MOD(v,SIGNAT_FUNCTOR(argvar,signat,s',
-									 oneshot_init PARTIAL)))
+									     PARTIAL)))
 			  in [(SOME(false,sbnd), CONTEXT_SDEC sdec)]
 			  end
 		    | (Ast.FctFct _) => raise UNIMP
@@ -1454,8 +1526,8 @@ functor Toil(structure Il : IL
 						xcoerce(context,signat,sig1)
 					    val sig1' = least_super_sig(modc_v0,signat,temp_sig1')
 					    val sig2' = least_super_sig(var1,sig1',sig2)
-					  val fsig = SIGNAT_FUNCTOR(var1,sig1,sig2,oneshot_init PARTIAL)
-					  val fsig' = SIGNAT_FUNCTOR(var1,sig1',sig2',oneshot_init PARTIAL)
+					  val fsig = SIGNAT_FUNCTOR(var1,sig1,sig2,PARTIAL)
+					  val fsig' = SIGNAT_FUNCTOR(var1,sig1',sig2',PARTIAL)
 					in if (true orelse Sig_IsSub(context,fsig,fsig'))
 					     then 
 						 (let val v1 = fresh_var()
@@ -1695,7 +1767,7 @@ functor Toil(structure Il : IL
 	  fun sig_actual_lookup lbl = 
 	      (case sig_actual_self of
 		   SIGNAT_STRUCTURE (_,self_sdecs) =>
-			Sdecs_Lookup(MOD_VAR v0, self_sdecs, [lbl])
+		       Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl])
 		 | SIGNAT_FUNCTOR _ => error "sig_actual_Lookup for functor")
 
         (* ---- coercion of a polymorphic component to a mono or polymorphic specification --- *)
@@ -1731,12 +1803,12 @@ functor Toil(structure Il : IL
 					     val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt',sig_poly_sdecs)
 					     val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
 					 in (BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
-					     DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,oneshot())),
+					     DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,TOTAL)),
 					     sdecs_poly,
 					     ctxt')
 					 end)
 			    val sig_poly' = SIGNAT_STRUCTURE(NONE, sdecs_poly)
-			    val s'' = SIGNAT_FUNCTOR(fresh_var(),sig_poly',itsig,oneshot())
+			    val s'' = SIGNAT_FUNCTOR(fresh_var(),sig_poly',itsig,TOTAL)
 			    fun bad() = (print "varsig_option is:\n";
 					  (case varsig_option of
 					       NONE => print "NONE\n"
@@ -1835,7 +1907,8 @@ functor Toil(structure Il : IL
 	val (m,s) = (case (sig_actual,signat) of
 		       (SIGNAT_FUNCTOR(v1,s1,s1',a1), SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
 			 let 
-			   val _ = comp_unify(a1,a2)
+			   val _ = if (a1 = a2) then () 
+				   else raise (FAILURE "arrow mismatch in xcoerce")
 			   val (m3var,m3body,_) = xcoerce(context,s2,s1)
 			   val m3_applied = mod_subst_modvar(m3body,[(m3var,MOD_VAR v2)])
 			   val m4_arg = MOD_APP(MOD_VAR v0, m3_applied)
@@ -1848,7 +1921,6 @@ functor Toil(structure Il : IL
 			 end
 		     | (_,SIGNAT_STRUCTURE (NONE,sdecs)) => 
 			   let 
-			       val _ = print "!!!CALLING sdecs_loop now\n"
 			       val (sbnds,sdecs) = sdecs_loop context sdecs
 			   in (MOD_STRUCTURE sbnds,
 			       SIGNAT_STRUCTURE (NONE, sdecs))
@@ -1857,12 +1929,12 @@ functor Toil(structure Il : IL
       in (v0,m,s)
       end
 
-    and xeq (ctxt : context, con : con) : exp = 
+    and xeq (ctxt : context, argcon : con) : exp = 
       let
 	  val _ = debugdo (fn () => (print "CALLED xeq with con = ";
-				     pp_con con; print "\nand ctxt = \n";
+				     pp_con argcon; print "\nand ctxt = \n";
 				     pp_context ctxt))
-	  val con' = con_normalize'(ctxt,con) 
+	  val con' = con_normalize'(ctxt,argcon) 
 	  val _ = debugdo (fn () => (print "NORMALIZE to con = ";
 				     pp_con con'; print "\n"))
 	  fun self c = xeq(ctxt,c)
@@ -1891,14 +1963,14 @@ functor Toil(structure Il : IL
 		    val v = fresh_var()
 		    val v1 = fresh_var()
 		    val v2 = fresh_var()
-		    val paircon = con_tuple[con,con]
+		    val paircon = con_tuple[con',con']
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
 		    fun help (lbl,fieldcon) = 
 			let 
 			    val eqexp = self fieldcon
-			    val e1 = RECORD_PROJECT(VAR v1,lbl,con)
-			    val e2 = RECORD_PROJECT(VAR v2,lbl,con)
+			    val e1 = RECORD_PROJECT(VAR v1,lbl,con')
+			    val e2 = RECORD_PROJECT(VAR v2,lbl,con')
 			in APP(eqexp,exp_tuple[e1,e2])
 			end
 		    fun folder (rdec,exp) = 
@@ -1916,7 +1988,7 @@ functor Toil(structure Il : IL
 		    val v = fresh_var()
 		    val v1 = fresh_var()
 		    val v2 = fresh_var()
-		    val paircon = con_tuple[con,con]
+		    val paircon = con_tuple[con',con']
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
 		    fun help(i,cs) = let val eqexp = self cs
@@ -2034,10 +2106,20 @@ functor Toil(structure Il : IL
 				 in (var,APP(expv',exp_tuple[e1',e2']))
 				 end
 			     val exps_eq = map2 make_expeq (mu_cons,exps_v)
-			     val fbnds = map2 (fn (vareq,(vararg,expeq)) =>
-					       FBND(vareq,vararg,con_tuple[con,con],con_bool,expeq))
-				 (vars_eq,exps_eq)
-			 in FIX(PARTIAL,fbnds,List.nth(vars_eq,j))
+			     val fbnds = map3 (fn (mu_con,vareq,(vararg,expeq)) =>
+					       FBND(vareq,vararg,con_tuple[mu_con,mu_con],
+						    con_bool,expeq))
+				 (mu_cons,vars_eq,exps_eq)
+			     val fbnd_types = 
+				 map (fn mu_con => CON_ARROW(con_tuple[mu_con,mu_con],
+							     con_bool,
+							     oneshot_init PARTIAL))
+				 mu_cons
+			     val fix_exp = FIX(PARTIAL,fbnds)
+			 in case fbnds of
+			     [fbnd] => fix_exp
+			   | _ => RECORD_PROJECT(fix_exp, generate_tuple_label j,
+						 con_tuple fbnd_types)
 			 end)
 	  | CON_TAG _ => error "cannot perform equality on tag type"
 	  | CON_ANY => error "cannot perform equality on exception type"

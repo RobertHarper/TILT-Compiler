@@ -354,7 +354,7 @@ functor SlowIlContext(structure Il : ILLEAK)
 				  end)
       val Sdecs_Lookup' = 
 	  fn (m,sdecs,labels) => (let val (f,(pc,labels)) = Sdecs_Lookup' (m,sdecs,labels)
-				  in (f,(labels,pc))
+				  in (labels,pc)
 				  end)
       val Sdecs_Lookup = 
 	  fn (m,sdecs,labels) => (let val (pc,labels) = Sdecs_Lookup (m,sdecs,labels)

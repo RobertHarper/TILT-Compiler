@@ -260,10 +260,10 @@ functor IlEval(structure Il : IL
 	((* print "********** reduce_exp called on exp:";
 	 Ppil.pp_exp exp; print "\n\n";  *)
 	  case exp of
-	    (FIX (a,fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = FBND(v1,v2,reduce_con env c1,
+	    (FIX (a,fbnds)) => let fun help (FBND(v1,v2,c1,c2,e)) = FBND(v1,v2,reduce_con env c1,
 									 reduce_con env c2, 
 									 reduce_exp env e)
-			       in FIX(a,map help fbnds, v)
+			       in FIX(a,map help fbnds)
 			       end
 	  | (APP(e1,e2)) => APP(reduce_exp env e1, reduce_exp env e2)
 	  | CASE (cons,arg,arms,default) => 
@@ -301,31 +301,35 @@ functor IlEval(structure Il : IL
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
 	   | (SCON _ | PRIM _) => exp
-	   | (FIX (a,fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = 
-		                             FBND(v1,v2,
-						  reduce_con env c1,
-						  reduce_con env c2, 
-						  (case (subst_var(BND_EXP(fresh_var(),reduce_exp env e),env)) of
-						       BND_EXP(v,e) => e
-						     | _ => error "subst_var got exp, returned non-exp"))
-			       in FIX(a,map help fbnds, v)
-			       end
+	   | (FIX (a,fbnds)) => 
+		 let fun help (FBND(v1,v2,c1,c2,e)) = 
+		     FBND(v1,v2,
+			  reduce_con env c1,
+			  reduce_con env c2, 
+			  (case (subst_var(BND_EXP(fresh_var(),reduce_exp env e),env)) of
+			       BND_EXP(v,e) => e
+			     | _ => error "subst_var got exp, returned non-exp"))
+		 in FIX(a,map help fbnds)
+		 end
 	   | (VAR v) => eval_exp env (exp_lookup env v)
-	   | (APP (e1,e2)) => let val e1' = eval_exp env e1
-				  val e2' = eval_exp env e2
-			      in (case e1' of
-				      FIX (a,fbnds,tarv) => 
-					  let fun loop [] = error "ill-formed FIX"
-						| loop ((FBND(v,argv,argc,resc,body))::rest) = 
-					      if (eq_var(v,tarv)) then (argv,body) else loop rest
-					      val (argv,body) = loop fbnds
-					      val table = map (fn (FBND(v,_,_,_,_)) => (v,FIX(a,fbnds,v))) fbnds
-					      val body' = exp_subst_expvar(body,(argv,e2')::table)
-					  in eval_exp env body'
-					  end
-				    | PRIM prim_cons => eval_prim(prim_cons,e2')
-				    | _ => error_exp exp "APP applying a non-(FIX or PRIM)")
-			      end
+	   | (APP (e1,e2)) => raise UNIMP
+(*
+		 let val e1' = eval_exp env e1
+		     val e2' = eval_exp env e2
+		 in (case e1' of
+			 FIX (a,fbnds,tarv) => 
+			     let fun loop [] = error "ill-formed FIX"
+				   | loop ((FBND(v,argv,argc,resc,body))::rest) = 
+				     if (eq_var(v,tarv)) then (argv,body) else loop rest
+				 val (argv,body) = loop fbnds
+				 val table = map (fn (FBND(v,_,_,_,_)) => (v,FIX(a,fbnds,v))) fbnds
+				 val body' = exp_subst_expvar(body,(argv,e2')::table)
+			     in eval_exp env body'
+			     end
+		       | PRIM prim_cons => eval_prim(prim_cons,e2')
+		       | _ => error_exp exp "APP applying a non-(FIX or PRIM)")
+		 end
+*)
 	   | (RECORD rbnds) => RECORD(map (fn (l,e) => (l,eval_exp env e)) rbnds)
 	   | (RECORD_PROJECT (e,l,c)) => let fun loop [] = error "rec projection did not find label"
 					       | loop ((ll,v)::rest) = if (eq_label(l,ll)) 
