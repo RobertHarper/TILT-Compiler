@@ -1,4 +1,4 @@
-(*$include STRING Prelude *)
+(*$import STRING Prelude *)
 
 structure String : STRING where type string = string
                             and type Char.char = char

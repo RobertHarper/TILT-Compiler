@@ -1,4 +1,4 @@
-(*$include PRIM_IO OS_PRIM_IO BinPrimIO Posix *)
+(*$import PRIM_IO OS_PRIM_IO BinPrimIO Posix *)
 
 structure PosixBinPrimIO : OS_PRIM_IO
    where PrimIO = BinPrimIO

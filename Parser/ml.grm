@@ -5,6 +5,10 @@
 
 (* Based on grammar in SML/NJ 110.0.7 *)
 
+(* ml.grm.sml imports Prelude TopLevel Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
+
+(* ml.grm.sig.sml imports Prelude TilWord64 Symbol YaccBase *)
+
 open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
 
 type raw_symbol = FastSymbol.raw_symbol
@@ -49,7 +53,7 @@ val quotedBogusString = "'BOGUS"
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
     | RBRACKET | RPAREN | ORELSE | ANDALSO | VECTORSTART | BEGINQ 
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
-    | IMPORT | EXTERN | CCALL | PLET | PVAL
+    | IMPORT | EXTERN | CCALL | PLET | PVAL | IMPL | INTER
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
@@ -130,11 +134,9 @@ val quotedBogusString = "'BOGUS"
        | fctb of  fctb list
        | interdec of  dec
        | strlist of string list
-       | imple of string list
-       | inter of string list
+       | imports of string list
        | top of top 
 
-%verbose
 %pos int
 %arg (error) : pos * pos -> ErrorMsg.complainer
 %start top
@@ -639,56 +641,9 @@ fctb	: ident fparamList sigconstraint_op EQUALOP str
 	| fctb AND fctb		(fctb1 @ fctb2)
 
 strlist: STRING strlist (STRING :: strlist)
-        |               ([])
+       |                ([])
 
-imple: IMPORT strlist   (strlist)
+imports : IMPORT strlist (strlist)
 
-inter: INCLUDE strlist  (strlist) 
-
-top: sdecs              (marktop(ImplTop([], sdecs), sdecsleft, sdecsright)) 
-   | imple sdecs        (marktop(ImplTop(imple, sdecs),
-				    impleleft, sdecsright))
-   | inter spec_s       (marktop(InterTop(inter, spec_s),
-				    interleft, spec_sright))
-
-(*
- * $Log$
-# Revision 1.9  2000/11/27  22:37:01  swasey
-# *** empty log message ***
-# 
- * Revision 1.8  1999/05/12 15:27:42  pscheng
- * *** empty log message ***
- *
-# Revision 1.7  1999/01/18  20:18:24  pscheng
-# *** empty log message ***
-#
-# Revision 1.6  1997/10/21  21:00:27  pscheng
-# got rid of int inf
-#
-# Revision 1.5  1997/09/03  20:10:21  pscheng
-# added extern and ccall syntax
-#
-# Revision 1.4  97/07/02  22:03:06  jgmorris
-# Modified syntax to allow for interfaces and implementations.
-# 
- * Revision 1.2  1997/05/30 14:12:32  zdance
- * Added support for (*$import...*) and (*$include...*) directives.
- * Also changed the grammar to allow for (possibly) semicolon-separated sequences
- * at the top level declarations.
- *
- * Revision 1.1.1.1  1997/05/23 14:53:51  til
- * Imported Sources
- *
-# Revision 1.3  97/04/10  15:04:59  cokasaki
-# Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
-# 
-# Revision 1.2  97/03/21  16:34:34  pscheng
-# changed to work with new Parser directory
-# ml.grm.sig and ml.grm.sml cannot be created with 109.25 for some reason
-# So, these are the results of manually invoking the 109.22 lex and yacc.
-# 
- * Revision 1.2  1997/01/28  23:20:44  jhr
- * Integer and word literals are now represented by IntInf.int (instead of
- * as strings).
- *
- *)
+top : IMPL imports sdecs   (marktop(ImplTop(imports, sdecs), importsleft, sdecsright))
+    | INTER imports spec_s (marktop(InterTop(imports, spec_s), importsleft, spec_sright))

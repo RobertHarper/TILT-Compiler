@@ -83,7 +83,6 @@ structure IlUtil :> ILUTIL =
     (* Some internal labels are non-exported *)
     (* Eq labels are identifiable as eq labels *)
 	 
-    val questionable_str = "+Q"
     val open_str = "+O"
     val nonexport_str = "-X"
     val eq_str = "+E"
@@ -91,7 +90,6 @@ structure IlUtil :> ILUTIL =
     val cluster_str = "+C"
     val coercion_str = "+N"
 
-    fun is_questionable lab =  isSome(substring (questionable_str,label2name lab))
     fun is_open lab = isSome(substring (open_str,label2name lab))
     fun is_nonexport lab =  isSome(substring (nonexport_str,label2name lab))
     fun is_eq lab = isSome(substring (eq_str,label2name lab))
@@ -105,8 +103,7 @@ structure IlUtil :> ILUTIL =
 	      val final_str = meta_str ^ str
 	  in  internal_label final_str
 	  end
-    in  val to_questionable = to_meta_lab questionable_str
-	val to_open = to_meta_lab open_str 
+    in  val to_open = to_meta_lab open_str 
 	val to_nonexport = to_meta_lab nonexport_str
 	val to_eq = to_meta_lab eq_str
 	val to_dt = to_meta_lab dt_str

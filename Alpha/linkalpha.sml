@@ -12,8 +12,7 @@ struct
   structure Decalphautils = Decalphautils
   structure Callconv = DecalphaCallconv
   structure Ifgraph = Ifgraph(structure Machine = Machine)
-  structure Tracetable = Tracetable(val little_endian = true
-				    structure ArgMachine = Decalpha.Machine)
+  structure Tracetable = Tracetable(val little_endian = true)
 
   structure Bblock = Bblock(structure Machine = Machine
 			    structure Machineutils = Decalphautils

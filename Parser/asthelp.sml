@@ -41,7 +41,10 @@ structure AstHelp : ASTHELP =
 			    exp:exp, resultty: ty option}) = {var = var, fixity = fixity, 
 							      exp = exp, resultty = resultty}
       | rvb_strip (MarkRvb (rvb,_)) = rvb_strip rvb
-	
+
+    fun exp_strip (Ast.MarkExp (e,_)) = exp_strip e
+      | exp_strip e = e
+
     fun eq_tyvar(Tyv s1, Tyv s2) = Symbol.eq(s1,s2)
       | eq_tyvar(TempTyv s1, TempTyv s2) = Symbol.eq(s1,s2)
       | eq_tyvar(MarkTyv(tv1,_), tv2) = eq_tyvar(tv1,tv2)

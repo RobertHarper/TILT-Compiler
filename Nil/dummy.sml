@@ -7,7 +7,7 @@ structure WNilContext =
 
 structure WNilStatic = 
   struct
-    fun module_valid (a,b) = b
+    fun module_valid (a,b) = ()
   end
 
 structure NilToWizard = 

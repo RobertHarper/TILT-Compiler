@@ -1,4 +1,4 @@
-(*$include BIN_IO BinPrimIO *)
+(*$import BIN_IO BinPrimIO *)
 
 structure BinIO : BIN_IO
     where type StreamIO.pos = BinPrimIO.pos

@@ -51,7 +51,7 @@ functor Chaitin(val commentHeader: string
 		  ) :> PROCALLOC where Bblock = Printutils.Bblock 
                                  where Tracetable = Printutils.Tracetable =
 struct
-
+   val makeTable = Stats.tt "MakeTable"
    open Rtl
    open Callconv Color Printutils Machineutils
    open Tracetable 
@@ -65,7 +65,7 @@ struct
    structure Tracetable = Tracetable
 
    val debug = Stats.ff("ChaitinDebug")
-   val msgs = ref false
+   val msgs = Stats.ff("ChaitinMsgs")
    val delete_moves = ref true
 
    fun msg (x : string) = if !msgs then print x else ()
@@ -115,7 +115,7 @@ struct
       alist of moves *)
 
    fun mvlist (srcs,dests) =
-         foldr (op @) nil (map mv (zip srcs dests)) 
+         List.concat (map mv (zip srcs dests))
 
        (* Bias info *)
 
@@ -527,7 +527,7 @@ struct
 	      registers either. This restriction isn't implemented right
 	      now.*)
 	     msg("There are " ^ (Int.toString (Labelmap.numItems block_map)) 
-			      ^ "blocks in the blockmap\n");
+			      ^ " blocks in the blockmap\n");
 
 	   Labelmap.foldl processBlock 0 block_map;
 	   if (! debug) then print_graph igraph else ();
@@ -1192,17 +1192,21 @@ struct
 				       name) callee_save_slots bblock))
 		(Labelmap.listItems block_map)
 
-	 val callsite_info = foldr (op @) nil callsite_info 
+	 val callsite_info = List.concat callsite_info 
 
 	   (* modify the preamble and postamble code *)
 	 val _ = createPostamble(block_map,hd(rev block_labels),arg_ra_pos,summary)
          val _ = createPreamble (block_map,name,arg_ra_pos,summary)
 
+	 val _ = msg "\tmaking trace table\n"
 	 val callinfo = subtimer("chaitin_getcallinfo",
 				       getCallInfo name summary mapping tracemap)  callsite_info
 
+	 fun MakeTable callinfo =
+	     if !makeTable then Tracetable.MakeTable callinfo
+	     else []
 
-	 val tables = subtimer("chaitin_maketable", Tracetable.MakeTable) callinfo
+	 val tables = subtimer("chaitin_maketable", MakeTable) callinfo
      in	(new_procsig, 
 	 block_map, 
 	 block_labels,

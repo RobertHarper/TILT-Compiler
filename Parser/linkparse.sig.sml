@@ -3,7 +3,9 @@
 signature LINK_PARSE =
  sig 
    type filepos = SourceMap.charpos -> string * int * int
-   val parse_impl : string -> int * filepos * string list * Ast.dec
-   val parse_inter : string -> int * filepos * string list * Ast.spec list
+   type 'a parser = string -> int * filepos * string list * 'a
+
+   val parse_impl : Ast.dec parser
+   val parse_inter : Ast.spec list parser
  end
 

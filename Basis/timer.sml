@@ -54,6 +54,9 @@ structure Timer : TIMER =
 
 (*
  * $Log$
+# Revision 1.2  2001/12/13  16:31:16  swasey
+# *** empty log message ***
+# 
 # Revision 1.1  98/03/09  15:45:47  pscheng
 # adding the basis
 # 

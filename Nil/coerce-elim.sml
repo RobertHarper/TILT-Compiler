@@ -1,5 +1,4 @@
-
-(*$import Prelude TopLevel Nil TypedNilRewrite Stats COERCEELIM Ppnil NilStatic NilRename List Int *)
+(*$import Prelude TopLevel Nil TypedNilRewrite Stats COERCEELIM Ppnil NilStatic NilRename List Int Name Sequence *)
 
 structure CoerceElim :> COERCEELIM =
   struct

@@ -30,9 +30,8 @@ struct
    open Machine
    open Core
 
-   val debug       = ref false
-   val knowns      = ref false
-   val msgs        = ref false
+   val debug       = Stats.ff "ToasmDebug"
+   val msgs        = Stats.ff "ToasmMsgs"
 
    fun msg (x: string) = if !msgs then print x else ()
    val error = fn s => Util.error "rtltoasm.sml" s

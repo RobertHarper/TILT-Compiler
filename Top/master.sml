@@ -240,11 +240,12 @@ struct
 	end
 
     local
-	fun parse_depend depend_str failure file =
+	fun parse_depend failure file =
 	    let val ins = TextIO.openIn file
 		val line = TextIO.inputLine ins
 		val sz = size line
 		val _ = TextIO.closeIn ins
+		val depend_str = "(*$import"
 		val depend_str_sz = size depend_str
 	    in
 		if (sz >= depend_str_sz andalso 
@@ -257,15 +258,15 @@ struct
 		    end
 		else 
 		    (print ("Warning: first line of " ^ file ^ 
-			    " is not import/include.\n");
+			    " is not import directive.\n");
 		     print "Calling parser to process.\n";
 		     failure file)
 	    end
     in
 	fun parse_impl_import file = 
-	    parse_depend "(*$import" (#3 o LinkParse.parse_impl) file
+	    parse_depend (#3 o LinkParse.parse_impl) file
 	fun parse_inter_include file = 
-	    parse_depend "(*$include" (#3 o LinkParse.parse_inter) file
+	    parse_depend (#3 o LinkParse.parse_inter) file
     end
 
     (* setMapping : string * bool -> unit *)

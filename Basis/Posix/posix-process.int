@@ -1,2 +1,2 @@
-(*$include POSIX_PROCESS POSIX_Signal *)
+(*$import POSIX_PROCESS POSIX_Signal *)
 structure POSIX_Process : POSIX_PROCESS where type signal = POSIX_Signal.signal 

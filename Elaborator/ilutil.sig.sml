@@ -83,16 +83,11 @@ signature ILUTIL =
     val expose_lab : label
     val functor_arg_lab : label
 
-    (* A type component with a questionable label in a signature can be synthesized
-         and not merely matched during signature matching.
-       Some internal labels are opened for lookup 
+    (* Some internal labels are opened for lookup 
        Some internal labels are non-exported 
        Eq labels are internal, non-exported, and identifiable as eq labels 
     *)
 
-   (* XXX to_questionable should be removed. XXX *)
-
-    val to_questionable : label -> label
     val to_open : label -> label
     val to_nonexport : label -> label
     val to_eq: label -> label       
@@ -100,7 +95,6 @@ signature ILUTIL =
     val to_cluster: label -> label       
     val to_coercion : label -> label
 
-    val is_questionable : label -> bool
     val is_open : label -> bool
     val is_nonexport : label -> bool
     val is_eq : label -> bool

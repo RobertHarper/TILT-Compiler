@@ -11,9 +11,9 @@ structure IlStatic
     open Prim Tyvar Name
 
     val error = fn s => error "ilstatic.sml" s
-    val trace = Stats.ff("IlstaticTrace")
-    val debug = Stats.ff("IlstaticDebug")
-    val showing = Stats.ff("IlstaticShowing")
+    val trace = Stats.ff("IlstaticTrace") 		(* show debug messages while raising exception *)
+    val debug = Stats.ff("IlstaticDebug")		(* show other debug messages *)
+    val showing = Stats.ff("IlstaticShowing")		(* show unification progress *)
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun debugdo' t = t()
@@ -247,6 +247,7 @@ structure IlStatic
 		in  ()
 		end
 	in  help false con;
+	    debugdo (fn () => print "find_tyvars_flexes finished\n");
 	    (!tyvars, !flexes)
 	end
 

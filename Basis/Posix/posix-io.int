@@ -1,4 +1,4 @@
-(*$include POSIX_IO POSIX_FileSys *)
+(*$import POSIX_IO POSIX_FileSys *)
 structure POSIX_IO : POSIX_IO where type open_mode = PrePosix.open_mode 
 				and type file_desc = POSIX_FileSys.file_desc
 				and type O.flags = POSIX_FileSys.O.flags

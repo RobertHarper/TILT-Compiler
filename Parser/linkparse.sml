@@ -5,43 +5,50 @@ structure LinkParse :> LINK_PARSE =
 struct
   val error = fn s => Util.error "linkparse.sml" s
 
+  val doNamedForm = Stats.tt "DoNamedForm"
+
+  type filepos = SourceMap.charpos -> string * int * int
+  type 'a parser = string -> int * filepos * string list * 'a
+      
   fun parseError fileName expected =
       error ("File " ^ fileName ^ " could not be parsed as an " ^ expected ^ " file")
 
-  val doNamedForm = Stats.tt "DoNamedForm"
+  fun make_source s = 
+      let val instream = TextIO.openIn s
+      in  (instream,
+	   Source.newSource(s,1,instream,true,
+			    ErrorMsg.defaultConsumer()))
+      end
 
-  local
-    fun make_source s = 
-	let val instream = TextIO.openIn s
-	in  (instream,
-	     Source.newSource(s,1,instream,true,
-			      ErrorMsg.defaultConsumer()))
-	end
+  fun parse (name, parser, cleanup) s =
+      let val (instream,src) = make_source s
+	  val fp = Source.filepos src
+      in
+	  case parser src
+	    of FrontEnd.SUCCESS (lines, imports, contents) =>
+		let val contents = cleanup contents
+		    val _ = TextIO.closeIn instream
+		in  (lines,fp,imports,contents)
+		end
+	     | _ => (TextIO.closeIn instream; parseError s name)
+      end
 
-    fun parse s = let val (instream,src) = make_source s
-		  in  (instream,Source.filepos src, FrontEnd.parse src)
-		  end
-		  
-    fun tvscope_dec dec = (TVClose.closeDec dec; dec)
-    fun named_form_dec dec = NamedForm.namedForm dec
-  in
-    type filepos = SourceMap.charpos -> string * int * int
-    fun parse_impl s =
-      case parse s of 
-	(ins,fp,FrontEnd.PARSE_IMPL (lines,imports,dec)) => 
-	  let val dec = tvscope_dec dec
-	      val dec = if (!doNamedForm) then named_form_dec dec else dec
-	      val _ = TextIO.closeIn ins
-	  in (lines,fp,imports,dec)
-	  end
-      | (ins,_,result) => (TextIO.closeIn ins; parseError s "implementation")
-    fun parse_inter s =
-      case parse s of 
-	(ins,fp,FrontEnd.PARSE_INTER (lines,includes,specs)) => 
-	    (TextIO.closeIn ins; (lines,fp,includes,specs))
-      | (ins,_,result) => (TextIO.closeIn ins; parseError s "interface")
-  end
+  fun tvscope_dec dec = (TVClose.closeDec dec; dec)
+  fun named_form_dec dec = NamedForm.namedForm dec
 
+  fun cleanup_impl dec =
+      let val dec = tvscope_dec dec
+	  val dec = if (!doNamedForm) then named_form_dec dec else dec
+      in  dec
+      end
+
+  val parse_impl = parse ("implementation",
+			  FrontEnd.parse_impl,
+			  cleanup_impl)
+  val parse_inter = parse ("interface",
+			   FrontEnd.parse_inter,
+			   fn specs => specs)
+      
   val parse_impl = Stats.timer("Parsing", parse_impl)
   val parse_inter = Stats.timer("Parsing", parse_inter)
 end;

@@ -1,4 +1,4 @@
-(*$include TEXT_IO TextPrimIO *)
+(*$import TEXT_IO TextPrimIO *)
 
 structure TextIO : TEXT_IO
     where type StreamIO.reader = TextPrimIO.reader

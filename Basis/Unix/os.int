@@ -1,4 +1,4 @@
-(*$include OS_SIG PreOS Posix *)
+(*$import OS_SIG PreOS Posix *)
 
 structure OS : OS where type IO.iodesc = PreOS.IO.iodesc
                      and type IO.poll_desc = PreOS.IO.poll_desc 

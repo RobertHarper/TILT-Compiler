@@ -1,2 +1,2 @@
-(*$include MATH *)
+(*$import MATH *)
 structure Math64 : MATH where type real = real

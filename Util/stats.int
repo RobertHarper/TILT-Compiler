@@ -1,2 +1,2 @@
-(*$include STATS *)
+(*$import STATS *)
 structure Stats : STATS

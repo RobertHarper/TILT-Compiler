@@ -114,6 +114,9 @@ Typeof_Elim	typeof_elim
 // CURTAIN ../Wizard/curtain.sig
 // Curtain ../Wizard/curtain
 
+COERCEELIM coerce-elim.sig
+CoerceElim coerce-elim
+
 LINKNIL linknil.sig
 Linknil linknil
 

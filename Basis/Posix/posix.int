@@ -1,4 +1,4 @@
-(*$include POSIX *)
+(*$import POSIX *)
 
 structure Posix :
     sig

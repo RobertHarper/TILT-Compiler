@@ -1386,13 +1386,13 @@ struct
 		 val (vars,to) = case #2 (reduce_hnf(D,coerce_con)) of 
 				     Coercion_c {vars,to,...} => (vars,to)
 				   | c => (print "Ill Typed expression - coercion has type: \n";
-			      Ppnil.pp_con coerce_con;
-			      print "\nwhich reduces to:";
-			      Ppnil.pp_con c;
-			      print "\nexp = \n";
-			      Ppnil.pp_exp exp;
-			      print "\n";
-			      error' "Ill Typed expression - not a coercion type")
+					   Ppnil.pp_con coerce_con;
+					   print "\nwhich reduces to:";
+					   Ppnil.pp_con c;
+					   print "\nexp = \n";
+					   Ppnil.pp_exp exp;
+					   print "\n";
+					   error' "Ill Typed expression - not a coercion type")
 		 val subst = fromList (zip vars cargs)
 		 val to = substConInCon subst to
 	     in to

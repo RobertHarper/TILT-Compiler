@@ -58,6 +58,9 @@ signature WORD =
 
 (*
  * $Log$
+# Revision 1.3  2001/12/13  16:31:23  swasey
+# *** empty log message ***
+# 
 # Revision 1.2  2000/11/27  22:36:36  swasey
 # *** empty log message ***
 # 

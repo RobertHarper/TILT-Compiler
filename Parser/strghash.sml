@@ -41,6 +41,9 @@ structure StrgHash =
 
 (*
  * $Log$
+# Revision 1.6  2001/12/13  16:32:49  swasey
+# *** empty log message ***
+# 
 # Revision 1.5  2000/09/12  18:57:14  swasey
 # Changes for cutoff compilation
 # 

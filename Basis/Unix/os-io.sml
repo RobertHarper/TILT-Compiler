@@ -116,6 +116,9 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 (*
 
  * $Log$
+# Revision 1.6  2001/12/13  16:31:33  swasey
+# *** empty log message ***
+# 
 # Revision 1.5  2001/08/30  07:09:12  dreyer
 # Elaborator now implements opaque interpretation of datatypes with coercions.
 # 

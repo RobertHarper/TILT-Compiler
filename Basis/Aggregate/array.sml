@@ -298,6 +298,9 @@ structure Array :> ARRAY where type 'a array = 'a array
 
 (*
  * $Log$
+# Revision 1.9  2001/12/13  16:31:16  swasey
+# *** empty log message ***
+# 
 # Revision 1.8  2001/07/08  21:32:12  tom7
 # fix tabs, oops!
 # 

@@ -107,34 +107,3 @@ fun checkTyvar (str,yypos) =
   in Tokens.TYVAR (FastSymbol.rawSymbol(hash,str),yypos,yypos+size (str)) end
 
 end
-
-(*
- * $Log$
-# Revision 1.8  2000/11/27  22:37:10  swasey
-# *** empty log message ***
-# 
- * Revision 1.7  2000/09/12 18:57:15  swasey
- * Changes for cutoff compilation
- *
-# Revision 1.6  99/05/12  15:27:55  pscheng
-# *** empty log message ***
-# 
-# Revision 1.5  1999/01/18  20:18:46  pscheng
-# *** empty log message ***
-#
-# Revision 1.4  1998/02/15  22:44:08  pscheng
-# bootstrapping changes
-#
-# Revision 1.3  1998/01/21  20:40:52  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.2  1997/09/03  20:10:41  pscheng
-# added extern and ccall syntax
-#
-# Revision 1.1  97/03/26  14:12:38  pscheng
-# added copy of SMLNJ parser files
-# 
- * Revision 1.1.1.1  1997/01/14  01:38:38  george
- *   Version 109.24
- *
- *)

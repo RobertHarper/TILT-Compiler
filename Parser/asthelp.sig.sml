@@ -33,6 +33,7 @@ signature ASTHELP =
     val rvb_strip  : Ast.rvb    -> {var : Ast.symbol, fixity : (Ast.symbol * Ast.region) option,
 				    exp : Ast.exp, resultty : Ast.ty option}
     val fb_strip   : Ast.fb    -> Ast.clause list
+    val exp_strip  : Ast.exp   -> Ast.exp
 
     (* Useful AST/EL expressions *)
     val true_exp  : Ast.exp

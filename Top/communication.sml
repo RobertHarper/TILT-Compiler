@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Substring Paths Update String Char Bool TextIO Posix Int Word32 Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue *)
+(*$import Prelude TopLevel Util Substring Paths Update String Char Bool TextIO Posix Int Word32 Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools Queue Linknil *)
 
 structure Comm :> COMMUNICATION =
 struct
@@ -211,7 +211,9 @@ struct
 	 ("makeBackups", Help.makeBackups),
 	 ("ShowWrittenContext", Compiler.showWrittenContext),
 	 ("WriteUnselfContext", Compiler.writeUnselfContext),
-	 ("ShowTools", Tools.showTools)]
+	 ("ShowTools", Tools.showTools),
+	 ("Typecheck", Linknil.typecheck),
+	 ("WTypecheck", Linknil.wtypecheck)]
 
     fun getFlags () =
 	let

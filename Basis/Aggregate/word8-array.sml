@@ -301,6 +301,9 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 
 (*
  * $Log$
+# Revision 1.7  2001/12/13  16:31:18  swasey
+# *** empty log message ***
+# 
 # Revision 1.6  2001/07/08  21:32:13  tom7
 # fix tabs, oops!
 # 

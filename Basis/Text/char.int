@@ -1,4 +1,4 @@
-(*$include Prelude CHAR *)
+(*$import Prelude CHAR *)
 
 structure Char : CHAR where type char = char
                         and type string = string

@@ -3,6 +3,8 @@ signature ML_TOKENS =
 sig
 type ('a,'b) token
 type svalue
+val INTER:  'a * 'a -> (svalue,'a) token
+val IMPL:  'a * 'a -> (svalue,'a) token
 val PVAL:  'a * 'a -> (svalue,'a) token
 val PLET:  'a * 'a -> (svalue,'a) token
 val CCALL:  'a * 'a -> (svalue,'a) token
@@ -86,8 +88,8 @@ val EOF:  'a * 'a -> (svalue,'a) token
 end
 signature ML_LRVALS=
 sig
-structure ParserData:PARSER_DATA
 structure Tokens : ML_TOKENS
-    where type ('a,'b) token = ('a,'b) ParserData.Token.token
-    where type svalue = ParserData.svalue
+structure ParserData:PARSER_DATA
+sharing type ParserData.Token.token = Tokens.token
+sharing type ParserData.svalue = Tokens.svalue
 end

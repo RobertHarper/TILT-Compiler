@@ -1,36 +1,9 @@
 (* ml.lex
  *
  * Copyright 1989 by AT&T Bell Laboratories
- *
- * $Log$
-# Revision 1.5  2000/11/27  22:37:06  swasey
-# *** empty log message ***
-# 
- * Revision 1.4  1997/10/21 21:00:35  pscheng
- * got rid of int inf
- *
-# Revision 1.3  1997/09/03  20:10:37  pscheng
-# added extern and ccall syntax
-#
-# Revision 1.2  97/07/02  22:03:18  jgmorris
-# Modified syntax to allow for interfaces and implementations.
-# 
- * Revision 1.2  1997/05/30 14:12:41  zdance
- * Added support for (*$import...*) and (*$include...*) directives.
- * Also changed the grammar to allow for (possibly) semicolon-separated sequences
- * at the top level declarations.
- *
- * Revision 1.1.1.1  1997/05/23 14:53:52  til
- * Imported Sources
- *
-# Revision 1.1  97/04/10  15:05:11  cokasaki
-# Added DelayExp and DelayPat to ast.  Added lexical token DOLLAR.
-# 
- * Revision 1.2  1997/01/28  23:20:40  jhr
- * Integer and word literals are now represented by IntInf.int (instead of
- * as strings).
- *
  *)
+
+(* ml.lex.sml imports Prelude TopLevel StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
 
 open ErrorMsg;
 
@@ -168,8 +141,6 @@ hexnum=[0-9a-fA-F]+;
                    (YYBEGIN L; stringstart := yypos; comLevel := 1; continue());
 <INITIAL>"(*$import"{nrws} =>
 		   (YYBEGIN IMP; comLevel := 1; Tokens.IMPORT(yypos, yypos+9));
-<INITIAL>"(*$include"{nrws} =>
- 		   (YYBEGIN IMP; comLevel := 1; Tokens.INCLUDE(yypos, yypos+10));
 <INITIAL>"(*"	=> (YYBEGIN A; stringstart := yypos; comLevel := 1; continue());
 <INITIAL>"*)"	=> (err (yypos,yypos+1) COMPLAIN "unmatched close comment"
 		        nullErrorBody;
@@ -184,7 +155,7 @@ hexnum=[0-9a-fA-F]+;
 <IMP>{eol}                 => (SourceMap.newline sourceMap yypos; continue());
 <IMP>"*)"                 => (YYBEGIN INITIAL; comLevel := 0; continue());
 <IMP>.			  => (err (yypos, yypos+1) COMPLAIN
-			      "ill-formed (*$import...*) or (*$include...*)" nullErrorBody
+			      "ill-formed import directive" nullErrorBody
 		              ; YYBEGIN INITIAL; comLevel := 0; continue());
 <L>[0-9]+                 => (YYBEGIN LL; charlist := [yytext]; continue());
 <LL>\.                    => ((* cheat: take n > 0 dots *) continue());

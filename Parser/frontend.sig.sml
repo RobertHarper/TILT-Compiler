@@ -2,12 +2,16 @@
 
 signature FRONT_END = 
 sig
-    datatype parseResult
+    datatype 'a parseResult
       = EOF   
       | ERROR 
-      | ABORT 
-      | PARSE_IMPL of int * string list * Ast.dec
-      | PARSE_INTER of int * string list * Ast.spec list
+      | ABORT
+      | SUCCESS of 'a
 
-    val parse : Source.inputSource -> parseResult
+    type 'a parser = Source.inputSource -> (int * string list * 'a) parseResult
+
+    val parse_impl : Ast.dec parser
+
+    val parse_inter : Ast.spec list parser
+
 end (* signature FRONT_END *)

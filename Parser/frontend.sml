@@ -26,18 +26,19 @@ fun addLines lines = let val r = Stats.int("SourceLines")
 		     in  r := !r + lines
 		     end
 
-datatype parseResult
+datatype 'a parseResult
   = EOF   (* end of file reached *)
   | ERROR (* parsed successfully, but with syntactic or semantic errors *)
   | ABORT (* could not even parse to end of declaration *)
-  | PARSE_IMPL of int * string list * Ast.dec
-  | PARSE_INTER of int * string list * Ast.spec list
+  | SUCCESS of 'a
+
+type 'a parser = Source.inputSource -> (int * string list * 'a) parseResult
 
 val dummyEOF = MLLrVals.Tokens.EOF(0,0)
 val dummySEMI = MLLrVals.Tokens.SEMICOLON(0,0)
 
-fun parse (source as {sourceStream,errConsumer,interactive,
-                      sourceMap, anyErrors,...}: Source.inputSource) =
+fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
+				       sourceMap, anyErrors,...}: Source.inputSource) =
   let val err = ErrorMsg.error source
       val complainMatch = ErrorMsg.matchErrorString source
 
@@ -81,7 +82,9 @@ fun parse (source as {sourceStream,errConsumer,interactive,
       val lexer = 
         Lex.makeLexer (if interactive then getline 
                        else inputc_sourceStream) lexarg
-      val lexer' = ref(LrParser.Stream.streamify lexer)
+      val lexer = LrParser.Stream.streamify lexer
+      val lexer = LrParser.Stream.cons (start, lexer)
+      val lexer' = ref(lexer)
       val lookahead = if interactive then 0 else 30
 
       fun oneparse () =
@@ -104,12 +107,7 @@ fun parse (source as {sourceStream,errConsumer,interactive,
                           val _ = lexer' := lexer''
 			  val Ast.MarkTop(top, _) = result
 		      in if !anyErrors then ERROR
-			 else case top of
-				   Ast.ImplTop (imports,dec) => 
-				    PARSE_IMPL(linesRead(),imports,dec)
-			         | Ast.InterTop (imports,spec) => 
-				    PARSE_INTER(linesRead(),imports,spec)
-				 | _ => ERROR 
+			 else cleanup (linesRead(), top)
                       end 
         end handle LrParser.ParseError => ABORT
                  | AbortLex => ABORT
@@ -117,52 +115,16 @@ fun parse (source as {sourceStream,errConsumer,interactive,
    in anyErrors := false; oneparse ()
   end
 
+
+val dummyIMPL = MLLrVals.Tokens.IMPL(0,0)
+val dummyINTER = MLLrVals.Tokens.INTER(0,0)
+    
+val parse_impl = parse (dummyIMPL,
+			fn (lines, Ast.ImplTop (imports,dec)) => SUCCESS (lines,imports,dec)
+			 | _ => ERROR)
+    
+val parse_inter = parse (dummyINTER,
+			 fn (lines, Ast.InterTop (imports,specs)) => SUCCESS (lines,imports,specs)
+			  | _ => ERROR)
+
 end (* structure FrontEnd *)
-
-
-(*
- * $Log$
-# Revision 1.10  2000/09/12  18:56:52  swasey
-# Changes for cutoff compilation
-# 
-# Revision 1.9  99/02/17  20:31:05  pscheng
-# *** empty log message ***
-# 
-# Revision 1.8  1998/04/06  21:19:40  pscheng
-# update: Typeof_c, dependent arrow/record types
-#
-# Revision 1.7  1998/02/15  22:43:26  pscheng
-# bootstrapping changes
-#
-# Revision 1.6  1998/02/01  01:27:59  pscheng
-# Changes to facilitate bootstrapping:
-#   Added ascription in various places
-#   Split up files into signature and code
-#
-# Revision 1.5  1998/01/21  20:40:18  pscheng
-# moved the .sig files to .sig.sml file
-#
-# Revision 1.4  1997/11/19  16:48:48  pscheng
-# changed timers to subtimers
-#
-# Revision 1.3  1997/10/21  18:06:56  pscheng
-# added copies of files from ml-yacc
-#
-# Revision 1.2  97/07/02  22:03:04  jgmorris
-# Modified syntax to allow for interfaces and implementations.
-# 
- * Revision 1.3  1997/06/09 15:37:31  mael
- * Added parsing of interfaces
- *
- * Revision 1.2  1997/05/30 14:12:31  zdance
- * Added support for (*$import...*) and (*$include...*) directives.
- * Also changed the grammar to allow for (possibly) semicolon-separated sequences
- * at the top level declarations.
- *
- * Revision 1.1.1.1  1997/05/23 14:53:50  til
- * Imported Sources
- *
-# Revision 1.1  97/03/24  13:02:18  pscheng
-# added frontend
-# 
- *)

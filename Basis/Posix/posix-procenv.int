@@ -1,4 +1,4 @@
-(*$include POSIX_PROC_ENV POSIX_FileSys POSIX_Process *)
+(*$import POSIX_PROC_ENV POSIX_FileSys POSIX_Process *)
 structure POSIX_ProcEnv : POSIX_PROC_ENV 
 	where type pid = POSIX_Process.pid 
 	and   type file_desc = POSIX_FileSys.file_desc 

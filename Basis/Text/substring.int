@@ -1,4 +1,4 @@
-(*$include Prelude PreString SUBSTRING *)
+(*$import Prelude PreString SUBSTRING *)
 structure Substring : SUBSTRING where type substring = PreString.substring
 				  and type String.string = string
 				  and type String.Char.char = char

@@ -59,6 +59,9 @@ structure SML90 :> SML90 =
 
 (*
  * $Log$
+# Revision 1.2  2001/12/13  16:31:18  swasey
+# *** empty log message ***
+# 
 # Revision 1.1  2000/11/27  22:36:24  swasey
 # *** empty log message ***
 # 

@@ -1,3 +1,3 @@
-(*$include WORD *)
+(*$import WORD *)
 
 structure Word32 : WORD where type word = word

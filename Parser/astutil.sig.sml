@@ -32,6 +32,9 @@ signature ASTUTIL =
 
 (*
  * $Log$
+# Revision 1.4  2001/12/13  16:32:34  swasey
+# *** empty log message ***
+# 
 # Revision 1.3  2000/09/12  18:56:46  swasey
 # Changes for cutoff compilation
 # 

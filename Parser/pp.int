@@ -1,3 +1,3 @@
-(*$include PRETTYPRINT *)
+(*$import PRETTYPRINT *)
 
 structure PrettyPrint : PRETTYPRINT
