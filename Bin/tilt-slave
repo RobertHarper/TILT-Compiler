@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# The command tilt-slaves uses this to launch slaves.
+
 # usage: tilt_slave name n count host
 #
 # Create count slaves on host by running "bindir/name -s" in the current
