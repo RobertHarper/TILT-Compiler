@@ -30,6 +30,7 @@ basis.sml
 illeak.sig.sml
 ilcontext.sig.sml
 ilcontext.sml
+slowilcontext.sml 
 (*
 illookup.sig.sml
 illookup.sml

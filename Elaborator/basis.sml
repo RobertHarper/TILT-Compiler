@@ -52,44 +52,45 @@ functor Basis(structure Il : IL
 						 | SOME c => c)
 				in CON_ARROW(con_tuple[con,con],con,oneshot_init PARTIAL)
 				end
-	fun var_entry s c = CONTEXT_SDEC(SDEC(mk_var_lab s, DEC_EXP(mk_var s, c)))
-	fun type_entry s k c = CONTEXT_SDEC(SDEC(mk_tyc_lab s, DEC_CON(mk_var s, k, SOME c)))
-	fun exp_entry str e = 
-	    let 
-		val res = CONTEXT_INLINE(mk_var_lab str, fresh_named_var str, 
-					 INLINE_EXPCON(e,IlStatic.GetExpCon(empty_context,e)))
-	    in res
+	fun var_entry ctxt s c = add_context_sdec(ctxt,SDEC(mk_var_lab s, DEC_EXP(mk_var s, c)))
+	fun type_entry ctxt s k c = add_context_sdec(ctxt,SDEC(mk_tyc_lab s, DEC_CON(mk_var s, k, SOME c)))
+	fun exp_entry ctxt str e = 
+	    let val inline = INLINE_EXPCON(e,IlStatic.GetExpCon(empty_context,e))
+	    in  add_context_inline(ctxt, mk_var_lab str, fresh_named_var str, inline)
 	    end
-	fun mono_entry str prim = exp_entry str (PRIM (prim,[]))
-	fun scon_entry str scon = exp_entry str (SCON scon)
-	fun poly_entry str c2exp = let val argvar = fresh_var()
-				       val l = internal_label str
-				       val argsig = SIGNAT_STRUCTURE(NONE,
-								     [SDEC(l,DEC_CON(fresh_var(),
-										     KIND_TUPLE 1, 
-										     NONE))])
-				       val instcon = CON_MODULE_PROJECT(MOD_VAR argvar,l)
-				       val resmod = MOD_STRUCTURE[SBND(it_lab,
-								       BND_EXP(fresh_var(),
-									       (c2exp instcon)))]
-				       val m = MOD_FUNCTOR(argvar,argsig,resmod)
+	fun mono_entry ctxt str prim = exp_entry ctxt str (PRIM (prim,[]))
+	fun scon_entry ctxt str scon = exp_entry ctxt str (SCON scon)
+	fun poly_entry ctxt str c2exp = 
+	    let val argvar = fresh_var()
+		val l = internal_label str
+		val argsig = SIGNAT_STRUCTURE(NONE,
+					      [SDEC(l,DEC_CON(fresh_var(),
+							      KIND_TUPLE 1, 
+							      NONE))])
+		val instcon = CON_MODULE_PROJECT(MOD_VAR argvar,l)
+		val resmod = MOD_STRUCTURE[SBND(it_lab,
+						BND_EXP(fresh_var(),
+							(c2exp instcon)))]
+		val m = MOD_FUNCTOR(argvar,argsig,resmod)
 				       val s = IlStatic.GetModSig(empty_context,m)
-				   in CONTEXT_INLINE(mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
-				   end
-	fun over_entry str con_thunker constraints =
-	  CONTEXT_INLINE(mk_var_lab str, 
-			 fresh_named_var str,
-			 INLINE_OVER(fn _ => 
-				     let val eshot = oneshot()
-					 val ocon = uocon_inst (empty_context,
-								fresh_uocon constraints, 
-								con_thunker eshot)
-					 val con = CON_OVAR ocon
-				     in (OVEREXP(con,true,eshot),ocon)
-				     end))
+	    in add_context_inline(ctxt,mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
+	    end
+	fun over_entry ctxt str con_thunker constraints =
+	    add_context_inline(ctxt,
+			       mk_var_lab str, 
+			       fresh_named_var str,
+			       INLINE_OVER(fn _ => 
+					   let val eshot = oneshot()
+					       val ocon = uocon_inst (empty_context,
+								      fresh_uocon constraints, 
+								      con_thunker eshot)
+					       val con = CON_OVAR ocon
+					   in (OVEREXP(con,true,eshot),ocon)
+					   end))
 
 
-	val fixity_entries = [CONTEXT_FIXITY default_fixity_table]
+	val context = empty_context
+	val context = add_context_fixity(context,default_fixity_table)
 
 	local
 	    val basetype_list = [("float", CON_FLOAT F64),
@@ -107,16 +108,17 @@ functor Basis(structure Il : IL
 					in CON_FUN([v1,v2],CON_ARROW (CON_VAR v1, CON_VAR v2, 
 								      oneshot_init PARTIAL))
 					end)]
-	    fun entry_maker (s,c) = 
-		CONTEXT_INLINE(symbol_label (Symbol.tycSymbol s),
-			       fresh_named_var s,
-			       INLINE_CONKIND(c,IlStatic.GetConKind(empty_context,c)))
+	    fun folder ((s,c),ctxt) = 
+		add_context_inline(ctxt,
+				   symbol_label (Symbol.tycSymbol s),
+				   fresh_named_var s,
+				   INLINE_CONKIND(c,IlStatic.GetConKind(empty_context,c)))
 	in
-	    val type_entries = map entry_maker basetype_list
+	    val context = foldl folder context basetype_list
 	end
 
-	val val_entries = 
-	  [
+
+	val context = 
 	   let
 	       datatype X = A | B
 	       fun con_thunk exp_oneshot x = (case (oneshot_deref exp_oneshot,x) of
@@ -134,11 +136,11 @@ functor Basis(structure Il : IL
 						  CON_INT W32, oneshot_init PARTIAL), A)
 	       val cstr2 = constraints (CON_ARROW(con_tuple[CON_FLOAT F64, CON_FLOAT F64], 
 						  CON_FLOAT F64, oneshot_init PARTIAL), B)
-	   in over_entry "over" con_thunk [cstr1,cstr2]
-	   end,
-	   
-	   exp_entry "true" true_exp,
-	   exp_entry "false" false_exp,
+	   in over_entry context "over" con_thunk [cstr1,cstr2]
+	   end
+
+       val context = exp_entry context "true" true_exp
+       val context = exp_entry context "false" false_exp
 	   
 (*
 	   mono_entry "not" (NOT),
@@ -149,105 +151,97 @@ functor Basis(structure Il : IL
 	   mono_entry "explode" (EXPLODE),
 	   mono_entry "implode" (IMPLODE), 
 *)
-	   var_entry "^" (CON_ARROW(con_tuple[con_string,con_string],con_string,oneshot_init TOTAL)),
+       val context = var_entry context "^" (CON_ARROW(con_tuple[con_string,con_string],
+						      con_string,oneshot_init TOTAL))
 
-	   poly_entry "ref" (fn c => let val v = fresh_var()
-				     in #1(make_total_lambda(v,c,CON_REF c,
-							     APP(PRIM(mk_ref,[c]),VAR v)))
-				     end),
-	   poly_entry "!" (fn c => let val v = fresh_var()
-				   in #1(make_total_lambda(v,CON_REF c,c,
-							   APP(PRIM(deref,[c]),VAR v)))
-				   end),
-	   poly_entry ":=" (fn c => let val v = fresh_var()
-					val pc = con_tuple[CON_REF c, c]
-					fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
-				    in #1(make_total_lambda(v,pc,
-							    con_unit,APP(PRIM(setref,[c]),
-									 exp_tuple[proj 1, proj 2])))
-				    end),
+       val context = poly_entry context "ref" (fn c => let val v = fresh_var()
+						       in #1(make_total_lambda(v,c,CON_REF c,
+									       APP(PRIM(mk_ref,[c]),VAR v)))
+						       end)
+       val context = poly_entry context "!" (fn c => let val v = fresh_var()
+					     in #1(make_total_lambda(v,CON_REF c,c,
+								     APP(PRIM(deref,[c]),VAR v)))
+					     end)
+       val context = poly_entry context ":=" 
+	   (fn c => let val v = fresh_var()
+			val pc = con_tuple[CON_REF c, c]
+			fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
+		    in #1(make_total_lambda(v,pc,
+					    con_unit,APP(PRIM(setref,[c]),
+							 exp_tuple[proj 1, proj 2])))
+		    end)
 	   
-	   mono_entry "+" (plus_int W32),
-	   mono_entry "-" (minus_int W32),
-	   mono_entry "*" (mul_int W32),
-	   mono_entry "div" (div_int W32),
-	   mono_entry "mod" (mod_int W32),
-	   mono_entry "quot" (quot_int W32),
-	   mono_entry "rem" (rem_int W32),
-	   mono_entry "<" (less_int W32),
-	   mono_entry ">" (greater_int W32),
-	   mono_entry "<=" (lesseq_int W32),
-	   mono_entry ">=" (greatereq_int W32),
-	   mono_entry "<>" (neq_int W32),
-	   mono_entry "notb" (not_int W32),
-	   mono_entry "<<" (lshift_int W32),
-	   mono_entry ">>" (rshift_uint W32),
-	   mono_entry "~>>" (rshift_int W32),
-	   mono_entry "&&" (and_int W32),
-	   mono_entry "||" (or_int W32),
-	   mono_entry "~" (neg_int W32),
-	   mono_entry "abs" (abs_int W32),
+       val context = mono_entry context "+" (plus_int W32)
+       val context = mono_entry context "-" (minus_int W32)
+       val context = mono_entry context "*" (mul_int W32)
+       val context = mono_entry context "div" (div_int W32)
+       val context = mono_entry context "mod" (mod_int W32)
+       val context = mono_entry context "quot" (quot_int W32)
+       val context = mono_entry context "rem" (rem_int W32)
+       val context = mono_entry context "<" (less_int W32)
+       val context = mono_entry context ">" (greater_int W32)
+       val context = mono_entry context "<=" (lesseq_int W32)
+       val context = mono_entry context ">=" (greatereq_int W32)
+       val context = mono_entry context "<>" (neq_int W32)
+       val context = mono_entry context "notb" (not_int W32)
+       val context = mono_entry context "<<" (lshift_int W32)
+       val context = mono_entry context ">>" (rshift_uint W32)
+       val context = mono_entry context "~>>" (rshift_int W32)
+       val context = mono_entry context "&&" (and_int W32)
+       val context = mono_entry context "||" (or_int W32)
+       val context = mono_entry context "~" (neg_int W32)
+       val context = mono_entry context "abs" (abs_int W32)
 	   (* XXX need to do unsigned and real stuff *)
 	   
-	   mono_entry "floor" (float2int),
-	   mono_entry "real" (int2float),
+       val context = mono_entry context "floor" (float2int)
+       val context = mono_entry context "real" (int2float)
 	   
-	   mono_entry "output" output,
-	   mono_entry "input" input
-	   ]
-
-	fun tag_help str t con = CONTEXT_SDEC(SDEC(fresh_internal_label str,
-						     DEC_EXCEPTION(t,con)))
-
-	val tag_entries = [tag_help "fail" fail_tag con_unit,
-			   tag_help "bind" bind_tag con_unit,
-			   tag_help "match" match_tag con_unit]
+       val context = mono_entry context "output" output
+       val context = mono_entry context "input" input
 
 
-	val context = empty_context
-	fun selfify_entry (CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s)))) = 
-	    CONTEXT_SDEC(SDEC(l,DEC_MOD(v,IlStatic.SelfifySig(SIMPLE_PATH v,s))))
-	  | selfify_entry e = e
-	val add_context_entries = fn(ctxt,entries) => add_context_entries(ctxt, map selfify_entry entries)
-	val context = add_context_entries(context,tag_entries)
-	val context = add_context_entries(context,fixity_entries)
-	val context = add_context_entries(context,type_entries)
-	val context = add_context_entries(context,val_entries)
-
-	val (datatype_entries, datatype_sbnds) =
+       fun tag_help ctxt str t con = add_context_sdec(ctxt,SDEC(fresh_internal_label str,
+								DEC_EXCEPTION(t,con)))
+	   
+       val context = tag_help context "fail" fail_tag con_unit
+       val context = tag_help context "bind" bind_tag con_unit
+       val context = tag_help context "match" match_tag con_unit
+	   
+	   
+       val (datatype_sdecs, datatype_sbnds) =
 	    let
 		open Ast 
 		open Symbol
 		val booldb = [Db
-                             {def=[(varSymbol "true",NONE),
+			      {def=[(varSymbol "true",NONE),
                                    (varSymbol "false",NONE)],
-                              tyc=tycSymbol "bool",tyvars=[]}]
+			       tyc=tycSymbol "bool",tyvars=[]}]
 		val listdb = [Db
 			      {def=[(varSymbol "::",
 				     SOME
 				     (TupleTy
 				      [VarTy (Tyv (tyvSymbol "'a")),
 				       ConTy
-					([tycSymbol "list"],
-					 [VarTy
-					  (Tyv (tyvSymbol "'a"))])])),
+				       ([tycSymbol "list"],
+					[VarTy
+					 (Tyv (tyvSymbol "'a"))])])),
 				    (varSymbol "nil",NONE)],
-			       tyc=tycSymbol "list",
-			       tyvars=[Tyv (tyvSymbol "'a")]}]
+			      tyc=tycSymbol "list",
+			      tyvars=[Tyv (tyvSymbol "'a")]}]
 		    
 
-	      val list_sbnd_sdecs = Datatype.compile {context = context,
-						      typecompile = xty,
-						      datatycs = listdb : Ast.db list,
-						      withtycs = [] : Ast.tb list,
-						      eq_compile = xeq}
-
-
-	      val (mlist,slist) = (MOD_STRUCTURE(map #1 list_sbnd_sdecs),
-				   SIGNAT_STRUCTURE(NONE, map #2 list_sbnd_sdecs))
-(*
-	      val (mlist,slist) = (case (make_inline_module(context,mlist)) of
-				       SOME m => (
+		val list_sbnd_sdecs = Datatype.compile {context = context,
+							typecompile = xty,
+							datatycs = listdb : Ast.db list,
+							withtycs = [] : Ast.tb list,
+							eq_compile = xeq}
+		    
+		    
+		val (mlist,slist) = (MOD_STRUCTURE(map #1 list_sbnd_sdecs),
+				     SIGNAT_STRUCTURE(NONE, map #2 list_sbnd_sdecs))
+		(*
+                 val (mlist,slist) = (case (make_inline_module(context,mlist)) of
+		                             SOME m => (
 						  print "original mlist is\n";
 						  pp_mod mlist;
 						  print "inlinable mlist is\n";
@@ -282,17 +276,19 @@ functor Basis(structure Il : IL
 	      val bool_var = fresh_named_var "bools"
 	      val list_label = open_internal_label "lists"
 	      val list_var = fresh_named_var "lists"
+	      val sbool = IlStatic.SelfifySig(SIMPLE_PATH bool_var, sbool)
+	      val slist = IlStatic.SelfifySig(SIMPLE_PATH list_var, slist)
 	    in
 		(
 (*		 [CONTEXT_INLINE(bool_label, bool_var, INLINE_MODSIG(mbool,sbool)),
 		  CONTEXT_INLINE(list_label, list_var, INLINE_MODSIG(mlist,slist))], *)
-		 [CONTEXT_SDEC(SDEC(bool_label, DEC_MOD(bool_var, sbool))),
-		  CONTEXT_SDEC(SDEC(list_label, DEC_MOD(list_var, slist)))],
+		 [SDEC(bool_label, DEC_MOD(bool_var, sbool)),
+		  SDEC(list_label, DEC_MOD(list_var, slist))],
 		 [SBND(bool_label, BND_MOD(bool_var,mbool)),
 		  SBND(list_label, BND_MOD(list_var,mlist))])
 	    end
 
-	val context = add_context_entries(context,datatype_entries)
+	val context = add_context_sdecs(context,datatype_sdecs)
       in
 	  (context, datatype_sbnds)      
       end

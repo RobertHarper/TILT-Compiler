@@ -1412,8 +1412,11 @@ functor Toil(structure Il : IL
 			      val argvar = fresh_named_var "functor_arg_var"
 			      val signat = xsigexp(context,sigexp)
 			      val context' = add_context_mod(context,arglabel,argvar,
-								SelfifySig (SIMPLE_PATH argvar, signat))
+							     SelfifySig (SIMPLE_PATH argvar, 
+									 signat))
+			      val _ = print "about to compile functor body"
 			      val (m',s') = xstrexp(context',body,constraint)
+			      val _ = print "compiled functor body"
 			      val v = fresh_named_var "functor_var"
 			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m')))
 			      val sdec = SDEC(funid,DEC_MOD(v,SIGNAT_FUNCTOR(argvar,signat,s',
@@ -1891,9 +1894,9 @@ functor Toil(structure Il : IL
 		    val paircon = con_tuple[con,con]
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
-		    fun help (lbl,con) = 
+		    fun help (lbl,fieldcon) = 
 			let 
-			    val eqexp = self con
+			    val eqexp = self fieldcon
 			    val e1 = RECORD_PROJECT(VAR v1,lbl,con)
 			    val e2 = RECORD_PROJECT(VAR v2,lbl,con)
 			in APP(eqexp,exp_tuple[e1,e2])

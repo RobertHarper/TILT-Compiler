@@ -29,6 +29,19 @@ structure Name : NAME =
       | eq_label _ = false
     fun eq_tag   (GTAG n1, GTAG n2)     = n1 = n2
     fun compare_var (GVAR(a,_),GVAR(b,_)) = Int.compare(a,b)
+    fun compare_tag (GTAG(a,_),GTAG(b,_)) = Int.compare(a,b)
+    fun compare_label(GLABEL _, GBAR _) = LESS
+      | compare_label(GBAR _, GLABEL _) = GREATER
+      | compare_label(GLABEL (a,sa,_), GLABEL (b,sb,_)) = 
+	(case Int.compare(a,b) of
+	     EQUAL => String.compare(sa,sb)
+	   | res => res)
+      | compare_label(GBAR (s1,_), GBAR (s2,_)) = 
+	if (Symbol.symbolCMLt(s1,s2))
+	    then LESS
+	else if (Symbol.eq(s1,s2))
+		 then EQUAL
+	     else GREATER
 
     fun make_counter() = 
       let
@@ -101,4 +114,21 @@ structure Name : NAME =
 	    fun eqKey (GVAR(i,_),GVAR(j,_)) = i=j
 	in HashTable.mkTable (hash,eqKey) (size,notfound_exn)
 	end
+
+      structure VarKey : ORD_KEY = struct
+				    type ord_key = var
+				    val compare = compare_var
+				end
+      structure LabelKey : ORD_KEY = struct
+					 type ord_key = label
+					 val compare = compare_label
+				     end
+      structure TagKey : ORD_KEY = struct
+					 type ord_key = tag
+					 val compare = compare_tag
+				     end
+      structure VarMap = LocalSplayMapFn(VarKey) 
+      structure LabelMap = LocalSplayMapFn(LabelKey) 
+      structure TagMap = LocalSplayMapFn(TagKey) 
+
   end

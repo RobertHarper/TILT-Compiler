@@ -97,17 +97,27 @@ signature ILLEAK =
 
 
     and inline = INLINE_MODSIG of mod * signat
-	      | INLINE_EXPCON of exp * con
-	      | INLINE_CONKIND of con * kind
-	      | INLINE_OVER   of unit -> exp * (context,con) Tyvar.ocon
+               | INLINE_EXPCON of exp * con
+               | INLINE_CONKIND of con * kind
+	       | INLINE_OVER   of unit -> exp * (context,con) Tyvar.ocon
 
     and context_entry = 
 		CONTEXT_INLINE of label * var * inline
 	      | CONTEXT_SDEC   of sdec
 	      | CONTEXT_SIGNAT of label * var * signat
-              | CONTEXT_FIXITY of fixity_table   (* tracks infix precedence *)
+              | CONTEXT_FIXITY of fixity_table
 
-    and context = CONTEXT of context_entry list
+    and context = CONTEXT of  {flatlist : context_entry list,
+			       fixity_list : fixity_table list,
+			       label_list : (path * pc) Name.LabelMap.map,
+			       var_list : (label * pc) Name.VarMap.map,
+			       tag_list : con Name.TagMap.map}
+
+	and pc = XPHRASE_CLASS_EXP  of exp * con
+	  | XPHRASE_CLASS_CON  of con * kind
+	  | XPHRASE_CLASS_MOD  of mod * signat
+	  | XPHRASE_CLASS_SIG  of signat
+	  | XPHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Tyvar.ocon
 
     withtype value = (con,exp) Prim.value
     and decs = dec list

@@ -1,117 +1,54 @@
 Group is
 ../smlnj-lib.cm
 ../Util/util.cm
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/bignums/int-inf-sig.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/bignums/int-inf.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/symbol.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/strghash.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/ppqueue.sml 
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/build/control.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pp.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/source.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/source.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pathnames.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pathnames.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/errormsg.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/errormsg.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sml
-(* /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/stats.sml *)
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sortedlist.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/env.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/env.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/fixity.sml
 
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/ml.lex.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/tokentable.sml
+(* --------------- Support files for the Parser --------------------------- *)
+int-inf-sig.sml (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/bignums/int-inf-sig.sml *)
+int-inf.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/bignums/int-inf.sml *)
+symbol.sig      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/symbol.sig *)
+printutil.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sig *)
+printutil.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sml *)
+strghash.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/strghash.sml *)
+ppqueue.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/ppqueue.sml  *)
+control.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/build/control.sml *)
+pp.sml          (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pp.sml *)
+sourcemap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sig *)
+sourcemap.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sml *)
+source.sig      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/source.sig *)
+source.sml      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/source.sml *)
+pathnames.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pathnames.sig *)
+pathnames.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pathnames.sml *)
+errormsg.sig    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/errormsg.sig *)
+errormsg.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/errormsg.sml *)
+intstrmap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sig *)
+intstrmap.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sml *)
+sortedlist.sml  (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sortedlist.sml *)
+env.sig         (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/env.sig *)
+env.sml         (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/env.sml *)
+fixity.sml      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/fixity.sml *)
 
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/sources.cm
 
-ast.sig
-ast.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/astutil.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/astutil.sml
+(* --------------------------------- the Parser files -------------------------------------------- *)
+
+ast.sig        (* modification of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/ast.sig *)
+ast.sml        (* modification of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/ast.sml *)
+astutil.sig    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/astutil.sig *)
+astutil.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/astutil.sml *)
+
+ml.lex.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/ml.lex.sml *)
+tokentable.sml (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/tokentable.sml *)
+
+/afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/sources.cm  
 
 (* ml.grm - letting CM use the 109.25 version fails so manually use 109.22 *)
 ml.grm.sig
 ml.grm.sml
 
-
-(* /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/frontend.sml *)
-frontend.sml
+frontend.sml   (* modificication of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/frontend.sml *)
 tvclose.sml
 linkparse.sml
 asthelp.sig.sml
 asthelp.sml
 name.sig.sml
 name.sml
-
-(* optional for printing ast *)
-(*
-(* ------ Some are commented out because they already exist in the SML/NJ library ------ *)
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intmap.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intmap.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/ordkey.sig 
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/binary-dict.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/dynamic.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sort.sml      
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/arrayext.sml
-(* -------------------------------------------------------------------------------------- *)
-
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/absyn/absyn.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/absyn/absyn.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/debindex.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/sympaths.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/sympaths.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/persstamps.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/persstamps.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/stamps.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/stamps.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/primtyc.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/primtyc.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/ltykernel.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/ltykernel.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/lambdavar.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/lambdavar.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/access.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/access.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/types.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/types.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/lambda.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/lambda.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/lambdatype.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/lambdatype.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/tuples.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/basictypes.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/basictypes.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/primop.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/primop.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/inlinfo.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/varcon.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/varcon.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/typesutil.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/typesutil.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/entpath.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/modules.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/modules.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/bindings.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/moduleid.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/epcontext.sml   
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/entityenv.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/entityenv.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/moduleutil.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/modules/moduleutil.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/statenv.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/statenv.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/lookup.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/lookup.sml
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/print/pputil.sig
-/afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/print/pputil.sml
-ppast.sml
-*)
-
 

@@ -58,12 +58,12 @@ functor Pat(structure Il : IL
 
     type clause = Ast.pat list
     type def =  (Il.exp * Il.con) option
-    type delay_exp = context_entry list * Ast.exp
+    type delay_exp = sdec list * Ast.exp
     type bound = (Symbol.symbol * var * con) list 
     type arm = clause * bound * Ast.exp option
 
-    fun arm2context_entries(_,svc_list,_) = map (fn (s,v,c) => CONTEXT_SDEC(SDEC(symbol_label s,
-										 DEC_EXP(v,c)))) svc_list
+    fun arm2sdecs(_,svc_list,_) = map (fn (s,v,c) => (SDEC(symbol_label s,
+							   DEC_EXP(v,c)))) svc_list
     fun arm_addbind(s,v,c,(cl,svc_list,expopt) : arm) = (cl,(s,v,c)::svc_list,expopt)
     fun is_constr (modsig_lookup, context) (p : Ast.path) = 
       let val res = (case Datatype.constr_lookup context p of
@@ -345,8 +345,8 @@ functor Pat(structure Il : IL
 				  end)
      | ((arm as (_,bound : bound,SOME exp))::_, []) =>
 	 let
-	   val ce = arm2context_entries arm
-	   val context' = add_context_entries(context,ce)
+	   val sdecs = arm2sdecs arm
+	   val context' = add_context_sdecs(context,sdecs)
 	   val ec = xexp(context',exp)
 	 in ([bound],ec)
 	 end

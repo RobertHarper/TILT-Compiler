@@ -1,13 +1,12 @@
 Group is
 
-smlnj-lib.cm             (* ------ SML/NJ library ------ *)
-Util/util.cm             (* ------ Our own utilities --- *)
-Parser/parser.cm        (* ------ external file to AST ---- *)
+smlnj-lib.cm             (* ------ SML/NJ library ---------- *)
+Util/util.cm             (* ------ Our own utilities ------- *)
+Parser/parser.cm         (* ------ external file to AST ---- *)
 Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
 Nil/nil.cm               (* ------ Nil stuff ------ *)
 (* Rtl/rtl.cm *)
 
 link.sml
-
 
 

@@ -13,7 +13,9 @@ signature NAME =
     val eq_label : (label * label) -> bool
     val eq_var   : (var * var) -> bool
     val eq_tag   : (tag * tag) -> bool
+    val compare_tag : (tag * tag) -> order
     val compare_var : (var * var) -> order
+    val compare_label : (label * label) -> order
 
     (* generative *)
     val fresh_named_var : string -> var
@@ -38,5 +40,14 @@ signature NAME =
 
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
+
+    structure VarMap : ORD_MAP
+    sharing type VarMap.Key.ord_key = var
+
+    structure LabelMap : ORD_MAP
+    sharing type LabelMap.Key.ord_key = label
+
+    structure TagMap : ORD_MAP
+    sharing type TagMap.Key.ord_key = tag
 
   end

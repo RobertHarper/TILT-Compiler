@@ -160,19 +160,57 @@ structure LinkIl (* : LINKIL *) =
 		open IlContext
 		val (sbnds,cdiff) = elaborate_diff filename
 		val _ = print "ELABORATED\n"
+		val _ = if doprint 
+			    then (print "test: sbnds are: \n";
+				  Ppil.pp_sbnds sbnds)
+			else ()
 		val m = MOD_STRUCTURE sbnds
 		val sdecs = List.mapPartial (fn (CONTEXT_SDEC sdec) => SOME sdec | _ => NONE) cdiff
 		val given_s = SIGNAT_STRUCTURE (NONE,sdecs)
+		val _ =  if doprint
+			     then (print "\ngiven_s is:\n";
+				   Ppil.pp_signat given_s)
+			 else ()
 		val ctxt = initial_context 
 		val precise_s = IlStatic.GetModSig(ctxt,m)
 		val _ = print "OBTAINED SIGNATURE\n"
-	    in  if doprint
-		    then (print "\ncontext is\n";
-			  Ppil.pp_context (foobaz cdiff);
-			  print "\ngiven_s is:\n";
-			  Ppil.pp_signat given_s;
-			  print "\nprecise_s is:\n";
+		val _ = if doprint
+			    then (	  print "\nprecise_s is:\n";
+				  Ppil.pp_signat precise_s;
+				  print "\n";
+				  print "\ncontext is\n";
+				  Ppil.pp_context (foobaz cdiff);
+				  print "\n")
+			else ()
+	    in (m,given_s,precise_s,ctxt)
+	    end
+
+	fun check'' filename doprint =
+	    let
+		open Il
+		open IlContext
+		val (sbnds,cdiff) = elaborate_diff filename
+		val _ = print "ELABORATED\n"
+		val _ = if doprint 
+			    then (print "test: sbnds are: \n";
+				  Ppil.pp_sbnds sbnds)
+			else ()
+		val m = MOD_STRUCTURE sbnds
+		val sdecs = List.mapPartial (fn (CONTEXT_SDEC sdec) => SOME sdec | _ => NONE) cdiff
+		val given_s = SIGNAT_STRUCTURE (NONE,sdecs)
+		val _ =  if doprint
+			     then (print "\ngiven_s is:\n";
+				   Ppil.pp_signat given_s)
+			 else ()
+		val ctxt = initial_context 
+		val precise_s = IlStatic.GetModSig(ctxt,m)
+		val _ = print "OBTAINED SIGNATURE\n"
+	    in if doprint
+		then (	  print "\nprecise_s is:\n";
 			  Ppil.pp_signat precise_s;
+			  print "\n";
+			  print "\ncontext is\n";
+			  Ppil.pp_context (foobaz cdiff);
 			  print "\n")
 		else ();
 		if (IlStatic.Sig_IsSub(ctxt,precise_s,given_s))
@@ -184,5 +222,10 @@ structure LinkIl (* : LINKIL *) =
 	val ptest = fn s => check s true
 	val test' = fn s => check' s false
 	val ptest' = fn s => check' s true
+	val test'' = fn s => check'' s false
+	val ptest'' = fn s => check'' s true
+
+structure IntKey = struct type ord_key = int val compare = Int.compare end;
+ structure IntMap = SplayMapFn(IntKey);
     end (* struct *)
 

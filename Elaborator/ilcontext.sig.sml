@@ -22,6 +22,7 @@ signature ILCONTEXT =
 	(* ----------- context extenders ----------------------------  *)
 	val empty_context : context
 
+	val add_context_fixity : context * fixity_table -> context
 	val add_context_dec   : context * dec -> context
 	val add_context_decs  : context * decs -> context
 	val add_context_sdec  : context * sdec -> context
@@ -53,18 +54,17 @@ signature ILCONTEXT =
 	  | CLASS_SIG
 	  | CLASS_OVEREXP
 	    
-	datatype phrase_class = PHRASE_CLASS_EXP  of exp * con
-	  | PHRASE_CLASS_CON  of con * kind
-	  | PHRASE_CLASS_MOD  of mod * signat
-	  | PHRASE_CLASS_SIG  of signat
-	  | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
+    datatype phrase_class = PHRASE_CLASS_EXP  of exp * con
+                          | PHRASE_CLASS_CON  of con * kind
+                          | PHRASE_CLASS_MOD  of mod * signat
+                          | PHRASE_CLASS_SIG  of signat
+                          | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
+
 	    
 	(* ---- none of these lookup functions perform normalization ---- *)		
-	val context_entries : context -> context_entry list (* for printing *)
 	val Context_Get_FixityTable : context -> fixity_table
 	val var_bound : context * var -> bool
 	val name_bound : context * Il.tag -> bool
-	val Sdecs_Lookup' : mod * sdecs * label list -> bool * (label list * phrase_class)
 	val Sdecs_Lookup  : mod * sdecs * label list -> label list * phrase_class
 	val Sbnds_Lookup  : Il.sbnds * label list -> label list * phrase
 	val Context_Lookup  : context * label list -> phrase_class

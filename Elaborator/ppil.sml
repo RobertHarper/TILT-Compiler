@@ -256,8 +256,8 @@ functor Ppil(structure Il : IL
 	      | (INLINE_OVER _) => String "INLINE_OVER"
 	end
 
-    and pp_context seen context =
-      let 
+    and pp_context seen (context : context) : Formatter.format = raise UNIMP
+(*      let 
 	  val entries = context_entries context
 	  fun dolv l v fmts = HOVbox((pp_label l) :: (String ">") :: (pp_var v) :: 
 				     (String ":") :: (Break0 0 3) :: fmts)
@@ -275,7 +275,7 @@ functor Ppil(structure Il : IL
 	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat seen s]
       in pp_list helper entries ("CONTEXT(", ", ", ")", true)
       end
-
+*)
 
     and pp_exp seen exp = 
       (case exp of

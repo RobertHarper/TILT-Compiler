@@ -20,6 +20,7 @@ functor IlStatic(structure Il : IL
     val error = fn s => error "ilstatic.sml" s
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
+    fun debugdo' t = t()
     fun fail s = raise (FAILURE s)
 
 
@@ -161,16 +162,6 @@ functor IlStatic(structure Il : IL
 		   | PHRASE_CLASS_MOD(m,s) => PHRASE_CLASS_MOD(mod_subst_modvar(m,[vm]),
 							       sig_subst_modvar(s,[vm]))
 		   | _ => pc)
-	fun NormalSignatLookup(p :path, label,sdecs) : (bool * phrase_class) option =
-	    (let val signat' = SelfifySig'([],[],SOME p,SIGNAT_STRUCTURE(NONE,sdecs))
-	     in  (case signat' of
-		      (SIGNAT_STRUCTURE (_,sdecs')) =>
-			  let val (f,(_,pc)) = Sdecs_Lookup'(path2mod p, sdecs', [label])
-			  in SOME(f,pc)
-			  end
-		    | _ => error "NormalizeSig' took SIGNAT_STRUCTURE and returned ?")
-	     end
-		 handle (NOTFOUND _) => NONE)
 	fun local_Sdecs_Lookup (m,sdecs,labels) = 
 	    (let val (_,pc) = Sdecs_Lookup(m,sdecs,labels)
 	    in SOME pc
@@ -438,7 +429,7 @@ functor IlStatic(structure Il : IL
 
        (* the flex record considered as an entirety is not generalizeable
 	  but its subparts are generalizable *)
-       val res =  
+       fun doit() = 
 	 (case (con1,con2) of
 	    (CON_TYVAR tv1, CON_TYVAR tv2) => 
 		(eq_tyvar(tv1,tv2) 
@@ -478,39 +469,40 @@ functor IlStatic(structure Il : IL
 	  | ((CON_RECORD _ | CON_FLEXRECORD _),(CON_RECORD _ | CON_FLEXRECORD _)) =>
 		let 
 		    fun match rdecs1 rdecs2 = 
-			let  val rdecs1' = sort_labelpair rdecs1
-			       val rdecs2' = sort_labelpair rdecs2    (* <-- no need to sort here *)
-			    fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2) 
-				andalso self(c1,c2,ctxt,is_sub)
-			in  eq_list(help,rdecs1',rdecs2')
+			let fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2) 
+			    andalso self(c1,c2,ctxt,is_sub)
+			in  eq_list(help,rdecs1,rdecs2)
 			end
-		    fun check_one addflag (l,c) rdecs =
-			let 
-			    fun loop [] = if addflag then SOME((l,c)::rdecs) else NONE
-			      | loop ((l',c')::rest) = 
-				if (eq_label(l,l'))
-				    (* do we need to flip the sense of is_sub *)
-				    then if (self(c,c',ctxt,is_sub))
+		    local
+			fun check_one addflag (l,c) rdecs =
+			    let 
+				fun loop [] = if addflag then SOME((l,c)::rdecs) else NONE
+				  | loop ((l',c')::rest) = 
+				    if (eq_label(l,l'))
+					(* do we need to flip the sense of is_sub *)
+					then if (self(c,c',ctxt,is_sub))
 					     then SOME rdecs
-					 else NONE
-				else loop rest
-			in loop rdecs
-			end
-		    fun union [] rdecs = SOME(sort_labelpair rdecs)
-		      | union (rdec::rest) rdecs = 
-			(case (check_one true rdec rdecs) of
-			     NONE => NONE
+					     else NONE
+				    else loop rest
+			    in loop rdecs
+			    end
+		    in
+			fun union [] rdecs = SOME(sort_labelpair rdecs)
+			  | union (rdec::rest) rdecs = 
+			    (case (check_one true rdec rdecs) of
+				 NONE => NONE
 			   | SOME x => (union rest x))
-		    fun stamp_constrain stamp rdecs = map (fn (_,c) => 
-							    local_con_constrain(ctxt,c,{constrain=false,
-									     stamp = SOME stamp,
-									     eq_constrain=false},[])) rdecs
-		    fun subset ([]) rdecs = true
-		      | subset (rdec::rest) rdecs = 
-			(case (check_one false rdec rdecs) of
-			     NONE => false
-			   | SOME _ => subset rest rdecs)  (* _ should be same as rdecs here *)
-
+			fun subset ([]) rdecs = true
+			  | subset (rdec::rest) rdecs = 
+			    (case (check_one false rdec rdecs) of
+				 NONE => false
+			       | SOME _ => subset rest rdecs)  (* _ should be same as rdecs here *)
+		    end
+		    fun stamp_constrain stamp rdecs = 
+			map (fn (_,c) => 
+			     local_con_constrain(ctxt,c,{constrain=false,
+							 stamp = SOME stamp,
+							 eq_constrain=false},[])) rdecs
 		    fun follow (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf))) = follow (CON_FLEXRECORD rf)
 		      | follow (CON_FLEXRECORD (ref (FLEXINFO (_,true,rdecs)))) = CON_RECORD rdecs
 		      | follow c = c
@@ -551,6 +543,7 @@ functor IlStatic(structure Il : IL
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
 		(i1 =i2) andalso (self(c1,c2,ctxt,is_sub))
 	  | _ => false)
+       val res = doit()
        val _ = debugdo (fn () => print (if res then "unified\n" else "NOT unified\n"))
      in res
      end
@@ -1121,7 +1114,7 @@ functor IlStatic(structure Il : IL
 					 fail "MOD_PROJECT failed to find label ")
 		      | (SOME (PHRASE_CLASS_MOD(_,s))) => (va,s)
 		      | _ => (print "MOD_PROJECT at label "; pp_label l; 
-			      print "did not find DEC_MOD.  sig was = ";
+			      print "did not find DEC_MOD.  \nsig was = ";
 			      pp_signat signat; print "\n";
 			      fail "MOD_PROJECT found label not of flavor DEC_MOD"))
 	     | SIGNAT_STRUCTURE (NONE,sdecs) =>
@@ -1197,6 +1190,11 @@ functor IlStatic(structure Il : IL
 	  | (CON_MODULE_PROJECT (m,l)) =>
 	       (let 
 		   val (_,s) = GetModSig(m,ctxt)
+		   fun break_loop (c as (CON_MODULE_PROJECT(m',l'))) = 
+		       if (eq_label(l,l') andalso eq_modval(m,m')) 
+			   then (false,c)
+		       else HeadNormalize(c,ctxt)
+		     | break_loop c = HeadNormalize(c,ctxt)
 		   fun loop _ [] = (false,arg)
 		     | loop (tables as (ctable,mtable)) ((SDEC(curl,dec))::rest) = 
 		       (case dec of
@@ -1205,13 +1203,7 @@ functor IlStatic(structure Il : IL
 				in  if eq_label(curl,l)
 					then let val curc' = con_subst_convar(curc,ctable)
 						 val curc'' = con_subst_modvar(curc',mtable)
-					     in (case curc'' of
-						     CON_MODULE_PROJECT(m',l') =>
-							 if (eq_label(l,l') andalso eq_modval(m,m')) 
-(* self rule would otherwise introduce infinite loop *)
-							     then (false,curc'')
-							 else HeadNormalize(curc'',ctxt)
-						   | _ => HeadNormalize(curc'',ctxt))
+					     in break_loop curc''
 					     end
 				    else loop tables' rest
 				end
@@ -1226,7 +1218,11 @@ functor IlStatic(structure Il : IL
 					       pp_sdecs sdecs;
 					       print "\n"));
 			    loop ([],[]) sdecs)
-		     | SIGNAT_STRUCTURE (SOME p,sdecs) => loop ([],[]) sdecs
+		     | SIGNAT_STRUCTURE (SOME p,sdecs) => (* XXX loop ([],[]) sdecs *)
+			   (case Sdecs_Lookup(path2mod p, sdecs, [l]) of
+				SOME(PHRASE_CLASS_CON(c,_)) => break_loop c
+			      | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
+			      | NONE => (false,arg))
 		     | SIGNAT_FUNCTOR _ => error "CON_MODULE_PROJECT from a functor")
 	       end
 	   handle NOTFOUND _ => (false,arg))

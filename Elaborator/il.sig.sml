@@ -96,6 +96,16 @@ signature IL =
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
 
+    and inline = INLINE_MODSIG of mod * signat
+	  | INLINE_EXPCON  of exp * con
+	  | INLINE_CONKIND of con * kind
+	  | INLINE_OVER    of unit -> exp * (context,con) Tyvar.ocon
+
+    and context_entry = 
+		CONTEXT_INLINE of label * var * inline
+	      | CONTEXT_SDEC   of sdec
+	      | CONTEXT_SIGNAT of label * var * signat
+              | CONTEXT_FIXITY of fixity_table
 
     withtype value = (con,exp) Prim.value
     and decs = dec list
@@ -103,15 +113,5 @@ signature IL =
     type bnds  = bnd list
     type sdecs = sdec list
     type sbnds = sbnd list
-
-    datatype inline = INLINE_MODSIG of mod * signat
-      | INLINE_EXPCON of exp * con
-      | INLINE_CONKIND of con * kind
-      | INLINE_OVER   of unit -> exp * (context,con) Tyvar.ocon
-    datatype context_entry = 
-	CONTEXT_INLINE of label * var * inline
-      | CONTEXT_SDEC   of sdec
-      | CONTEXT_SIGNAT of label * var * signat
-      | CONTEXT_FIXITY of fixity_table   (* tracks infix precedence *)
 
 end
