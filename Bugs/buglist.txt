@@ -44,7 +44,7 @@
 0049 [closed]	Datatype optimizer problems.
 0050 [closed]	Equality types are handled poorly.
 0051 [closed]	Vararg violating bound variable invariant.
-0052 [open]	Equality compiler generates poor code.
+0052 [closed]	Equality compiler generates poor code.
 0053 [closed]	Nil bool2exp violating bound variable invariant.
 0054 [open]	TILT not enforcing syntactic restrictions.
 0055 [closed]	Unresolved tyvars breaking elaborator and phase-splitter.
