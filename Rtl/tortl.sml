@@ -1203,7 +1203,7 @@ val debug = ref false
 *)
 	  fun pickdesti rep = alloc_named_regi name rep
 	  fun pickdestf () = alloc_named_regf name
-      in
+	  val res = 
 	  case arg_e of
 	      Var_e v => (case (getrep state v) of
 			      (_,SOME value,c) => (VAR_VAL value,c)
@@ -1275,12 +1275,22 @@ val debug = ref false
 			  val eregs = eregs 
 			  val eregs' = eregs'
 			  val efregs = efregs
+			  fun reduce(vklist,clist,rescon) = 
+			      let fun nada _ = NOCHANGE
+				  val table = Listops.map2 (fn ((v,_),c) => (v,c)) (vklist,clist)
+				  fun ch (bound,Var_c v) = (case (Listops.assoc_eq(eq_var,v,table)) of
+								NONE => NOCHANGE
+							      | SOME c => CHANGE_NORECURSE c)
+				    | ch _ = NOCHANGE
+				  val handlers = (nada,nada,ch,nada,nada)
+			      in  con_rewrite handlers rescon
+			      end
 			  val rescon = (case (copt,funcon) of
 					    (SOME c,_) => c
-					  | (NONE,AllArrow_c(_,_,_,_,_,rescon)) => rescon (* XXX *)
+					  | (NONE,AllArrow_c(_,_,vklist,_,_,rescon)) => reduce(vklist,clist,rescon)
 					  | (_,c) => 
 						(case #2(simplify_type state c) of
-						     AllArrow_c(_,_,_,_,_,rescon) => rescon (* XXX *)
+						     AllArrow_c(_,_,vklist,_,_,rescon) => reduce(vklist,clist,rescon)
 						   | _ => error "cannot compute type of result of call"))
 						     
 		      end
@@ -1442,6 +1452,12 @@ val debug = ref false
 		      (VAR_LOC(VREGISTER reg), arg_c)
 		  end
 	    | Handle_e _ => error "ill-formed handler"
+(*
+	  val _ = (print "xexp translating: ";
+		   Ppnil.pp_exp arg_e;
+		   print "\n\n")
+*)
+      in res
       end
 
 
@@ -2893,6 +2909,7 @@ val debug = ref false
 	    arg_con : con     (* The expression being translated *)
 	    ) : regi * kind = 
       let 
+
 (*
 	  val _ = (print "xcon called on con = \n";
 		   Ppnil.pp_con arg_con;
