@@ -977,7 +977,6 @@ struct
 	   val pc_free = let val temp = VarMap.listItemsi pc_free
 			     fun mapper(v,(v',tr,copt)) = 
 				 let val l = Name.internal_label(Name.var2string v)
-				     val _ = (print "pc_free trace is "; Ppnil.pp_trace tr; print "\n")
 				 in (v, v', tr, l, 
 				     c_rewrite state 
 				       (case copt of
@@ -987,9 +986,8 @@ struct
 			 in  map mapper temp
 			 end
 
-	   val is_recur = Listops.orfold 
-	                    (fn fun_var => Listops.orfold (fn (free_var,_,_,_,_) => 
-						Name.eq_var(fun_var,free_var)) pc_free) vars
+	   val free_vars = map #1 pc_free
+	   val is_recur = not(null (Listops.list_inter_eq(Name.eq_var, vars, free_vars)))
 
 	   val _ = if (!debug)
 		       then (print "fun_rewrite v = "; Ppnil.pp_var v;
@@ -1004,6 +1002,16 @@ struct
 	   val num_pc_free = length pc_free
 	   val is_empty = num_pc_free = 0
 
+	   val (external_subst, code_cbnds, cenv, cenv_kind) =
+	       let val cbnds = map (fn (_,v',_,l) => Con_b(Runtime, (Con_cb(v',
+								Proj_c(Var_c cenv_var, l))))) vkl_free
+		   val cenv = Crecord_c(map (fn (v,_,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
+		   val kind = Record_k(Sequence.fromList(map (fn (v,_,k,l) => ((l,v),k)) vkl_free))
+		   val subst = foldl (fn ((v,_,_,l),s) => NilSubst.C.sim_add s (v,Proj_c(Var_c cenv_var, l)))
+				(NilSubst.C.empty()) vkl_free
+	       in  (subst, cbnds, cenv, kind)
+	       end
+
 	   val (venv_tr,venv_type) = (case (!do_single_venv, pc_free) of
 					    (true, [(_,_,tr,_,t)]) => (tr,t)
 					  | _ => 
@@ -1013,30 +1021,10 @@ struct
 						     Prim_c(Record_c (labs,NONE), types))
 						end)
 
-
-
-	   val (external_subst, code_cbnds, cenv, cenv_kind) =
-	       let val cbnds = map (fn (_,v',_,l) => Con_b(Runtime, (Con_cb(v',
-								Proj_c(Var_c cenv_var, l))))) vkl_free
-		   val cenv = Crecord_c(map (fn (v,_,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
-		   val kind = Record_k(Sequence.fromList(map (fn (v,_,k,l) => ((l,v),k)) vkl_free))
-		   val subst = foldl (fn ((v,_,_,l),s) => 
-					(print "ext_subst "; Ppnil.pp_var v; 
-					print  " --> "; Ppnil.pp_con (Proj_c(Var_c cenv_var, l));
-					print "\n";
-					NilSubst.C.sim_add s (v,Proj_c(Var_c cenv_var, l))))
-				(NilSubst.C.empty()) vkl_free
-	       in  (subst, cbnds, cenv, kind)
-	       end
-
 	   val vklist = tFormals
 	   val vklist_code = vklist @ [(cenv_var,cenv_kind)]
-	   fun vc_mapper (v,tr,c) = let val tr' = NilSubst.substConInTrace external_subst tr
-							val _ = (print "trace: "; Ppnil.pp_trace tr; print "  -->  ";
-								Ppnil.pp_trace tr'; print "\n")
-						in  (v,NilSubst.substConInTrace external_subst tr,
-						      NilSubst.substConInCon external_subst c)
-						end
+	   fun vc_mapper (v,tr,c) = (v,NilSubst.substConInTrace external_subst tr,
+					NilSubst.substConInCon external_subst c)
 	   val vclist = map vc_mapper eFormals 
 	   val vclist_code = vclist @ [vc_mapper (venv_var,venv_tr,venv_type)]
 
@@ -1058,15 +1046,17 @@ struct
 	   val (venv,code_bnds) = 
 	 	case (!do_single_venv, pc_free) of
 			 (_, []) => (Prim_e(NilPrimOp(record []),[], []), [])
-		       | (true, [(v,v',tr,_,c)]) => (Var_e v, [Exp_b(v',tr,Var_e venv_var)])
+		       | (true, [(v,v',tr,_,c)]) => (e_rewrite state (Var_e v), [Exp_b(v',tr,Var_e venv_var)])
 		       | _ => let val venv_vars = map #2 pc_free
 				  val labels = map #4 pc_free
-				  val venv_bnds = map (fn (v,v',tr,_,_) => Exp_b(v',tr,e_rewrite state (Var_e v)))
+				  val venv_bnds = map (fn (v,v',tr,_,_) => Exp_b(v',trace_rewrite state tr,
+										e_rewrite state (Var_e v)))
 						       pc_free
 				  val venv = Let_e(Sequential, venv_bnds, 
 			                           Prim_e(NilPrimOp(record labels),[], map Var_e venv_vars))
-				  val code_bnds = map (fn (_,v,tr,l,_) => Exp_b(v,tr,Prim_e(NilPrimOp(select l), [],
-											  [Var_e venv_var]))) pc_free
+				  val code_bnds = map (fn (_,v,tr,l,_) => Exp_b(v,trace_rewrite inner_state tr,
+										Prim_e(NilPrimOp(select l), [],
+										  [Var_e venv_var]))) pc_free
 			      in  (venv, code_bnds)
 			      end
 
