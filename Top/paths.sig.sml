@@ -12,9 +12,15 @@ sig
     val commDir : string -> string
 
     (*
+	Identity is a machine- and process-specific filename.  The
+	function is memoized.
+    *)
+    val identity : unit -> string
+
+    (*
 	(tmpFile file) is for atomic file writes.  File should be in a
 	directory created by TILT to avoid trashing user files.  There
-	is only one temporary file per directory.
+	is one temporary file per process per directory.
     *)
     val tmpFile : string -> string
 

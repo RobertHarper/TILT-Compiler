@@ -218,14 +218,7 @@ struct
 
     type identity = string
     val master : identity = "master"
-    fun slave () : identity =
-	let val hostName = Platform.hostname()
-	    val machineName = (case Util.substring(".cs.cmu.edu",hostName) of
-				   NONE => hostName
-				 | SOME pos => String.substring(hostName,0,pos))
-	    val pid = Int.toString(Word32.toInt(Platform.pid()))
-	in  machineName ^ "." ^ pid
-	end
+    val slave : unit -> identity = Paths.identity
     fun compare (id : identity, id' : identity) : order =
 	String.compare (id, id')
     fun name (id : identity) : string = id

@@ -33,7 +33,18 @@ struct
     val target : unit -> string = Target.platformString
 
     fun commDir (dir : string) : string = dir/TM/C
-    fun tmpFile (file : string) : string = dir file/tmp
+    fun identity () : string =
+	let val host = Platform.hostname()
+	    val host =
+		(case Util.substring(".cs.cmu.edu",host)
+		   of NONE => host
+		    | SOME pos => String.substring(host,0,pos))
+	    val pid = Int.toString(Word32.toInt(Platform.pid()))
+	in  host^"."^pid
+	end
+    val identity = Util.memoize identity
+
+    fun tmpFile (file : string) : string = dir file/tmp^identity()
 
     type id = string
     type filename = string
