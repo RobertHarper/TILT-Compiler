@@ -116,3 +116,4 @@
 0116 [open]	option failure
 0117 [open]	option failure
 0118 [open]	syntax discrepancies
+0119 [open]	discrepancies on byte/char tests
