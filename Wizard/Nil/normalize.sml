@@ -29,7 +29,7 @@ struct
   val addr          = NilSubst.C.addr
   val substitute    = NilSubst.C.substitute
   val fromList      = NilSubst.C.simFromList
-  val printConSubst = NilSubst.C.print
+  val printConSubst = NilSubst.C.printf Ppnil.pp_con
 
   val makeLetC             = NilUtil.makeLetC
   val is_var_c             = NilUtil.is_var_c

@@ -119,8 +119,7 @@ structure NilRewrite :> NILREWRITE =
 	    fun define wrap (var,vklist,c) state = 
 	      let
 		val var' = Name.derived_var var
-		val con_ = Let_c (Sequential,[wrap (var',vklist,c)],C.hide(Var_c var'))
-		val con  = C.hide con_
+		val con = C.Let_c (Sequential,[wrap (var',vklist,c)],C.Var_c var')
 		val (state,varopt) = con_var_define(state,var,con)
 	      in 
 		case varopt 
@@ -204,7 +203,7 @@ structure NilRewrite :> NILREWRITE =
 		     let
 		       val changed = ref false
 		       val args = map_f recur_c changed state args
-		     in if !changed then SOME (Prim_c (pcon,args)) else NONE
+		     in if !changed then SOME (C.Prim_c (pcon,args)) else NONE
 		     end
 		     
 		    | (Mu_c (flag,defs)) =>
@@ -212,7 +211,7 @@ structure NilRewrite :> NILREWRITE =
 		       val changed = ref false
 		       fun folder ((v,c),state) = 
 			 let
-			   val (state,v) = bind_c changed (state,v,K.hide Type_k)
+			   val (state,v) = bind_c changed (state,v,K.Type_k)
 			 in
 			   ((v,c),state)
 			 end
@@ -223,7 +222,7 @@ structure NilRewrite :> NILREWRITE =
 			   end 
 			 else (defs,state)
 		       val defs = Sequence.map_second (recur_c changed state) defs
-		     in  if !changed then SOME (Mu_c (flag,defs)) else NONE
+		     in  if !changed then SOME (C.Mu_c (flag,defs)) else NONE
 		     end
 		   
 		    | (AllArrow_c {openness, effect, isDependent, tFormals, 
@@ -253,7 +252,7 @@ structure NilRewrite :> NILREWRITE =
 		       val body_type = recur_c changed state body_type
 		     in
 		       if !changed
-			 then SOME (AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
+			 then SOME (C.AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
 					       tFormals = tFormals, eFormals = eFormals, 
 					       fFormals = fFormals, body_type = body_type})
 		       else NONE
@@ -264,7 +263,7 @@ structure NilRewrite :> NILREWRITE =
 		       val changed = ref false
 		       val cons = map_f recur_c changed state cons
 		       val con = recur_c changed state con
-		     in if !changed then SOME (ExternArrow_c (cons,con)) else NONE
+		     in if !changed then SOME (C.ExternArrow_c (cons,con)) else NONE
 		     end
 		    | (Var_c var) => NONE
 		     
@@ -285,34 +284,34 @@ structure NilRewrite :> NILREWRITE =
 		       val (cbnds_list,state) = foldl_acc folder state cbnds
 		       val cbnds = if !changed then List.concat cbnds_list else cbnds
 		       val body = recur_c changed state body
-		     in if !changed then SOME (Let_c (letsort, cbnds, body)) else NONE
+		     in if !changed then SOME (C.Let_c (letsort, cbnds, body)) else NONE
 		     end
-		    | Typeof_c exp => mapopt Typeof_c (rewrite_exp state exp)
+		    | Typeof_c exp => mapopt C.Typeof_c (rewrite_exp state exp)
 		    | (Closure_c (code,env)) =>
 		     let
 		       val changed = ref false
 		       val code = recur_c changed state code
 		       val env = recur_c changed state env
-		     in if !changed then SOME (Closure_c(code, env)) else NONE
+		     in if !changed then SOME (C.Closure_c(code, env)) else NONE
 		     end
 		   
 		    | (Crecord_c entries) =>
 		     let
 		       val changed = ref false
 		       val entries = map_second (recur_c changed state) entries
-		     in if !changed then SOME (Crecord_c entries) else NONE
+		     in if !changed then SOME (C.Crecord_c entries) else NONE
 		     end
 		   
 		    | (Proj_c (con,lbl)) => 
 		     (case rewrite_con state con
-			of SOME con => SOME (Proj_c (con,lbl))
+			of SOME con => SOME (C.Proj_c (con,lbl))
 			 | NONE => NONE)
 		    | (App_c (cfun,actuals)) =>
 		     let
 		       val changed = ref false
 		       val cfun = recur_c changed state cfun
 		       val actuals = map_f recur_c changed state actuals
-		     in if !changed then SOME (App_c (cfun, actuals)) else NONE
+		     in if !changed then SOME (C.App_c (cfun, actuals)) else NONE
 		     end
 		   
 		    | Typecase_c {arg, arms, default, kind} => 
@@ -330,13 +329,12 @@ structure NilRewrite :> NILREWRITE =
 		       val kind = recur_k changed state kind
 		     in  
 		       if !changed then
-			 SOME (Typecase_c{arg = arg,
-					  arms = arms,
-					  default = default,
-					  kind = kind})
+			 SOME (C.Typecase_c{arg = arg,
+					    arms = arms,
+					    default = default,
+					    kind = kind})
 		       else NONE
 		     end)
-		val res = mapopt C.hide res
 	      in res
 	      end
 	  in
@@ -352,11 +350,11 @@ structure NilRewrite :> NILREWRITE =
 	  let 
 	    fun dokind (state,kind) = 
 	      let
-		val res_ = 
+		val res = 
 		  (case K.expose kind 
 		     of Type_k => NONE
-		      | (SingleType_k con) => mapopt SingleType_k (rewrite_con state con)
-		      | (Single_k con) => mapopt Single_k (rewrite_con state con)
+		      | (SingleType_k con) => mapopt K.SingleType_k (rewrite_con state con)
+		      | (Single_k con) => mapopt K.Single_k (rewrite_con state con)
 		      | (Record_k fieldseq) =>
 		       let
 			 val changed = ref false
@@ -368,7 +366,7 @@ structure NilRewrite :> NILREWRITE =
 			     (((lbl, var), kind),state)
 			   end
 			 val (fieldseq,state) = Sequence.foldl_acc fold_one state fieldseq
-		       in if !changed then SOME(Record_k fieldseq) else NONE
+		       in if !changed then SOME(K.Record_k fieldseq) else NONE
 		       end
 		     
 		      | (Arrow_k (openness, args, result)) =>
@@ -376,9 +374,8 @@ structure NilRewrite :> NILREWRITE =
 			 val changed = ref false
 			 val (args, state) = tformals_helper changed state args
 			 val result = recur_k changed state result
-		       in if !changed then SOME(Arrow_k (openness, args, result)) else NONE
+		       in if !changed then SOME(K.Arrow_k (openness, args, result)) else NONE
 		       end)
-		val res = mapopt K.hide res_
 	      in res
 	      end
 
@@ -424,7 +421,7 @@ structure NilRewrite :> NILREWRITE =
 	    in
 	      val (eFormals, state2) = foldl_acc_f vcfolder changed state1 eFormals
 	    end
-	    val ftype = C.hide(Prim_c (Float_c Prim.F64,[]))
+	    val ftype = C.Prim_c (Float_c Prim.F64,[])
 	    fun folder changed (v,s) = let val (s,v) = bind_e changed (s,v,ftype) in (v,s) end
 	    val (fFormals,state2) = foldl_acc_f folder changed state2 fFormals
 	    val body_type = recur_c changed (if isDependent then state2 else state1) body_type
@@ -444,7 +441,7 @@ structure NilRewrite :> NILREWRITE =
 		val changed = ref false
 		fun folder ((v,f),s) =
 		  let 
-		    val (s,v) = define_e changed (s,v,E.hide(Let_e (Sequential,[maker vfset],E.hide(Var_e v))))
+		    val (s,v) = define_e changed (s,v,E.Let_e (Sequential,[maker vfset],E.Var_e v))
 		  in
 		    ((v,f),s)
 		  end
@@ -494,7 +491,7 @@ structure NilRewrite :> NILREWRITE =
 		     fun folder ((v,{tipe,cenv,venv,code}),s) =
 		       let 
 			 val bnd = Fixclosure_b(is_recur,vcset)
-			 val (s,v) = define_e changed (s,v,E.hide(Let_e (Sequential,[bnd],E.hide(Var_e v))))
+			 val (s,v) = define_e changed (s,v,E.Let_e (Sequential,[bnd],E.Var_e v))
 		       in
 			 ((v,{tipe=tipe,cenv=cenv,venv=venv,code=code}),s)
 		       end
@@ -509,7 +506,7 @@ structure NilRewrite :> NILREWRITE =
 			      of Var_e v' => (changed := true;v')
 			       | _ => error "can't have non-var in closure code comp")
 
-			 val code = (case (exphandler (state,E.hide(Var_e code))) 
+			 val code = (case (exphandler (state,E.Var_e code))
 				       of NOCHANGE => code
 					| NORECURSE => code
 					| (CHANGE_RECURSE (state,e))   => do_change e
@@ -555,7 +552,7 @@ structure NilRewrite :> NILREWRITE =
 		| NORECURSE => (NONE,state))
 	  end
 
-	and switch_helper (state : 'state) (sw : switch) : exp_ option = 
+	and switch_helper (state : 'state) (sw : switch) : exp option = 
 	  (case sw of
 	     Intsw_e {arg, size, arms, default, result_type} =>
 	       let
@@ -567,7 +564,7 @@ structure NilRewrite :> NILREWRITE =
 		 val default = Util.mapopt (recur_e changed state) default
 	       in
 		 if !changed then
-		   SOME (Switch_e 
+		   SOME (E.Switch_e 
 			 (Intsw_e {arg = arg,
 				   size = size, 
 				   arms = arms,
@@ -587,7 +584,7 @@ structure NilRewrite :> NILREWRITE =
 		 val default = Util.mapopt (recur_e changed state) default
 	       in  
 		 if !changed then
-		   SOME (Switch_e
+		   SOME (E.Switch_e
 			 (Sumsw_e {arg = arg,
 				   sumtype = sumtype,
 				   bound = bound,
@@ -600,7 +597,7 @@ structure NilRewrite :> NILREWRITE =
 	       let
 		 val changed = ref false
 		 val arg = recur_e changed state arg
-		 val (state',bound) = bind_e changed (state,bound,C.hide(Prim_c(Exn_c,[])))
+		 val (state',bound) = bind_e changed (state,bound,C.Prim_c(Exn_c,[]))
 		 val result_type = recur_c changed state result_type
 		 fun recur changed state (t,tr,e) = (recur_e changed state t, recur_trace changed state tr,
 						     recur_e changed state' e)
@@ -608,7 +605,7 @@ structure NilRewrite :> NILREWRITE =
 		 val default = Util.mapopt (recur_e changed state) default
 	       in  
 		 if !changed then 
-		   SOME (Switch_e
+		   SOME (E.Switch_e
 			 (Exncase_e {arg = arg,
 				     bound = bound,
 				     arms = arms,
@@ -631,7 +628,7 @@ structure NilRewrite :> NILREWRITE =
 		 val result_type = recur_c changed state result_type
 	       in  
 		 if !changed then
-		   SOME (Switch_e
+		   SOME (E.Switch_e
 			 (Typecase_e{arg = arg,
 				     arms = arms,
 				     default = default,
@@ -646,7 +643,7 @@ structure NilRewrite :> NILREWRITE =
 	      let
 		val map_e = map_f recur_e
 		val map_c = map_f recur_c
-		val res_ = 
+		val res = 
 		(case E.expose e of
 		   (Var_e _) => NONE
 		 | (Const_e v) => 	
@@ -661,7 +658,7 @@ structure NilRewrite :> NILREWRITE =
 			    val c = recur_c changed state c
 			  in
 			    if !changed then
-			      SOME (Const_e (Prim.array(c,array)))
+			      SOME (E.Const_e (Prim.array(c,array)))
 			    else NONE
 			  end
 		      | (Prim.vector (c,array)) =>
@@ -671,16 +668,16 @@ structure NilRewrite :> NILREWRITE =
 			    val c = recur_c changed state c
 			  in
 			    if !changed then
-			      SOME (Const_e (Prim.vector(c,array)))
+			      SOME (E.Const_e (Prim.vector(c,array)))
 			    else NONE
 			  end
 		      | Prim.refcell (r as (ref e)) => 
 			  (case rewrite_exp state e
-			     of SOME e => (r := e; SOME (Const_e v))
+			     of SOME e => (r := e; SOME (E.Const_e v))
 			      | NONE => NONE)
 		      | Prim.tag (t,c) => 
 			 (case rewrite_con state c
-			    of SOME c => SOME (Const_e (Prim.tag(t,c)))
+			    of SOME c => SOME (E.Const_e (Prim.tag(t,c)))
 			     | NONE => NONE))
 		 | (Let_e (sort,bnds,body)) => 
 		    let 
@@ -695,7 +692,7 @@ structure NilRewrite :> NILREWRITE =
 		      val (bndslist,state) = foldl_acc folder state bnds
 		      val bnds = if !changed then List.concat bndslist else bnds
 		      val body = recur_e changed state body
-		    in if !changed then SOME (Let_e(sort,bnds,body)) else NONE
+		    in if !changed then SOME (E.Let_e(sort,bnds,body)) else NONE
 		    end
 		 | (Prim_e (ap,clist,elist)) => 
 		    let
@@ -704,7 +701,7 @@ structure NilRewrite :> NILREWRITE =
 		      val elist = map_e changed state elist
 		    in
 		      if !changed then
-			SOME (Prim_e(ap,clist,elist))
+			SOME (E.Prim_e(ap,clist,elist))
 		      else NONE
 		    end
 		 | (Switch_e switch) => switch_helper state switch
@@ -717,7 +714,7 @@ structure NilRewrite :> NILREWRITE =
 		      val eflist = map_e changed state eflist
 		    in 
 		      if !changed
-			then SOME (App_e(openness,func,clist,elist,eflist))
+			then SOME (E.App_e(openness,func,clist,elist,eflist))
 		      else NONE
 		    end
 		 | ExternApp_e (exp,args) =>
@@ -727,7 +724,7 @@ structure NilRewrite :> NILREWRITE =
 		      val args = map_e changed state args
 		    in
 		      if !changed then
-			SOME (ExternApp_e (exp,args))
+			SOME (E.ExternApp_e (exp,args))
 		      else NONE
 		    end
 		 | Raise_e (e,c) => 
@@ -735,7 +732,7 @@ structure NilRewrite :> NILREWRITE =
 		      val changed = ref false
 		      val e = recur_e changed state e
 		      val c = recur_c changed state c
-		    in if !changed then SOME (Raise_e(e,c)) else NONE
+		    in if !changed then SOME (E.Raise_e(e,c)) else NONE
 		    end
 		 | Handle_e {body,bound,handler,result_type} =>
 		    let 
@@ -743,15 +740,14 @@ structure NilRewrite :> NILREWRITE =
 		      val body = recur_e changed state body
 		      val result_type = recur_c changed state result_type
 		      val (state,bound) = 
-			  bind_e changed (state,bound,C.hide (Prim_c(Exn_c,[])))
+			  bind_e changed (state,bound,C.Prim_c(Exn_c,[]))
 		      val handler = recur_e changed state handler
 		    in if !changed then 
-			SOME (Handle_e{body = body, bound = bound,
-				       handler = handler, 
-				       result_type = result_type})
+			SOME (E.Handle_e{body = body, bound = bound,
+					 handler = handler, 
+					 result_type = result_type})
 		       else NONE
 		    end)
-		val res = mapopt E.hide res_
 	      in res 
 	      end
 	    
@@ -775,13 +771,13 @@ structure NilRewrite :> NILREWRITE =
 	      (case trace of
 		 TraceCompute var => 
 		   let val changed = ref false
-		       val trace = loop (recur_c changed state (C.hide(Var_c var))) []
+		       val trace = loop (recur_c changed state (C.Var_c var)) []
 		   in
 		     if !changed then SOME trace else NONE
 		   end
 	       | TraceKnown (TraceInfo.Compute (var,labels)) => 
 		   let val changed = ref false
-		       val trace = loop (recur_c changed state (C.hide (Var_c var))) labels
+		       val trace = loop (recur_c changed state (C.Var_c var)) labels
 		   in
 		     if !changed then SOME trace else NONE
 		   end
@@ -813,14 +809,14 @@ structure NilRewrite :> NILREWRITE =
 	  end
 	
 	fun export_helper flag state (export as (ExportValue (label,var))) = 
-	  (case rewrite_exp state (E.hide(Var_e var))
+	  (case rewrite_exp state (E.Var_e var)
 		 of SOME e => (case E.expose e
 				 of (Var_e var) => (flag := true;ExportValue (label,var))
 				  | _ => error "Export value rewritten to non variable! Don't know what to do!")
 		  | NONE => export)
 
 	  | export_helper flag state (export as (ExportType (label,var))) = 
-	   (case rewrite_con state (C.hide(Var_c var))
+	   (case rewrite_con state (C.Var_c var)
 	      of SOME c => (case C.expose c
 			      of (Var_c var) => (flag := true;ExportType (label,var))
 			       | _ => error "Export type rewritten to non variable! Don't know what to do!")

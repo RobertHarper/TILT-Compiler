@@ -1045,7 +1045,11 @@ struct
     | same_phase (Runtime, Runtime) = true
     | same_phase _ = false
 
+  val eq_found = Stats.counter "Alpha_eq_found"
+  val subtype  = Stats.counter "eq but subtype"
+
   fun alpha_equiv_kind' (context) (kind1,kind2) = 
+    K.eq (kind1,kind2) orelse
     let
       val recur = alpha_equiv_kind' context
     in
@@ -1100,7 +1104,7 @@ struct
     in foldl2 folder (context,true) (vk1,vk2)
     end
   and alpha_subequiv_con' st context (con1,con2) = 
-    C.eq(con1,con2) orelse
+    if C.eq(con1,con2) then (eq_found();true) else
     let
       val res = 
 	(case (C.expose con1,C.expose con2)
@@ -1241,7 +1245,7 @@ struct
 
   fun alpha_subequiv_con st (args as (c1,c2))= 
     let val res = alpha_subequiv_con' st (empty_context (),empty_context ()) args
-        val _ = if res then C.equate (c1,c2) else ()
+        val _ = if res andalso not st then C.equate (c1,c2) else if res then ignore(subtype()) else ()
     in res
     end
 

@@ -43,6 +43,12 @@ struct
   val primequiv            = NilUtil.primequiv
   val singletonize         = NilUtil.singletonize 
 
+  (*From NilRename*)
+  val alphaCRenameExp   = NilRename.alphaCRenameExp
+  val alphaCRenameCon   = NilRename.alphaCRenameCon
+  val alphaCRenameKind  = NilRename.alphaCRenameKind
+  val alphaECRenameCon  = NilRename.alphaECRenameCon
+  val alphaECRenameKind = NilRename.alphaECRenameKind
 
   (*From Name*)
   val eq_var          = Name.eq_var
@@ -57,6 +63,7 @@ struct
   (*From Listops*)
   val map_second = Listops.map_second
   val foldl_acc  = Listops.foldl_acc
+  val foldl2     = Listops.foldl2
   val map        = Listops.map
   val map2       = Listops.map2
   val zip        = Listops.zip
@@ -79,6 +86,10 @@ struct
 
   val find_kind_equation = NilContext.find_kind_equation
   val print_context      = NilContext.print_context
+
+  val insert_kind          = NilContext.insert_kind
+  val insert_kind_equation = NilContext.insert_kind_equation
+  val insert_equation      = NilContext.insert_equation
 
   fun error s = Util.error "normalize.sml" s
 
@@ -1356,6 +1367,191 @@ struct
 	   | Handle_e {result_type,...} => result_type
 	    )
      end
+
+    local
+      fun bind_kind_eqn'((D,alpha),var,con,kind) =
+	if NilContext.bound_con (D,var) then
+	  let
+	    val vnew = Name.derived_var var
+	    val D = insert_kind_equation(D,vnew,con,kind)
+	    val alpha = Alpha.rename(alpha,var,vnew)
+	  in (D,alpha)
+	  end
+	else (insert_kind_equation(D,var,con,kind),alpha)
+
+      fun bind_kind_eqn(state as (D,alpha),var,con,kind) = 
+	bind_kind_eqn'(state,var,alphaCRenameCon alpha con,alphaCRenameKind alpha kind)
+	
+      fun bind_eqn(state as (D,alpha),var,con) = 
+	let val con = alphaCRenameCon alpha con
+	in
+	  if NilContext.bound_con (D,var) then
+	    let
+	      val vnew = Name.derived_var var
+	      val D = insert_equation(D,vnew,con)
+	      val alpha = Alpha.rename(alpha,var,vnew)
+	    in (D,alpha)
+	    end
+	  else (insert_equation(D,var,con),alpha)
+	end
+
+      fun instantiate_formals(state,vklist,actuals) = 
+	let
+	  fun folder ((var,k),actual,state) = bind_kind_eqn(state,var,actual,k)
+	in foldl2 folder state (vklist,actuals)
+	end
+    in
+      fun context_beta_reduce_letfun (state,sort,coder,var,formals,body,rest,con) = 
+	let
+	  val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
+	in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+	     then (state,lambda,false)
+	   else
+	     context_beta_reduce(bind_eqn(state,var,lambda),Let_c(sort,rest,con))
+	end
+      
+      and context_beta_reduce (state : (context * Alpha.alpha_context),constructor : con) 
+	: ((context * Alpha.alpha_context) * con * bool)  = 
+	(case constructor of 
+	   (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>       
+	     let 
+	       val (state,argc,path) = context_reduce_hnf''(state,argc)
+		 
+	       val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
+	       val no_flatten  = AllArrow_c{openness=openness,effect=effect,isDependent=false,
+					    tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
+					    body_type=resc}
+	       val res = 
+		 (case argc of
+			Prim_c(Record_c (labs,_),cons) => 
+			  if (length labs > !number_flatten) then no_flatten 
+			  else AllArrow_c{openness=openness,effect=effect,isDependent=false,
+					  tFormals=[], eFormals=map (fn c => (NONE,c)) cons,
+					  fFormals=0w0, body_type=resc}
+		      | _ => if path then irreducible
+			     else no_flatten)
+	     in (state,res,false)
+	     end
+	 | (Prim_c _)            => (state,constructor,false)
+	 | (Mu_c _)              => (state,constructor,false)
+	 | (AllArrow_c _)        => (state,constructor,false)
+	 | (ExternArrow_c _)     => (state,constructor,false)
+	 | (Crecord_c _)         => (state,constructor,false)
+	 | (Proj_c (Mu_c _,lab)) => (state,constructor,false)
+	 | (Var_c var)           => (state,constructor,true)
+	     
+	 | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
+	     context_beta_reduce_letfun (state,sort,Open_cb,var,formals,body,rest,con)
+	     
+	 | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
+	     context_beta_reduce_letfun (state,sort,Code_cb,var,formals,body,rest,con)
+	     
+	 | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body))             =>
+	     context_beta_reduce(bind_eqn(state,var,con),Let_c(sort,rest,body))
+	     
+	 | (Let_c (sort,[],body)) => context_beta_reduce(state,body)
+	     
+	 | (Closure_c (c1,c2)) => 
+	     let val (state,c1,path) = context_beta_reduce (state,c1)
+	     in  (state,Closure_c(c1,c2),path)
+	     end
+
+	 | Typeof_c e => 
+	     let val (D,alpha) = state
+	     in context_beta_reduce((D,Alpha.empty_context()),type_of(D,alphaCRenameExp alpha e))
+	     end
+	 | (Proj_c (c,lab)) => 
+	     (case context_beta_reduce (state,c) of
+		(state,constructor,true)  => (state,Proj_c(constructor,lab),true)
+	      | (state,constructor,false) => 
+		  let val field = 
+		    (case strip_crecord constructor
+		       of SOME entries =>
+			 (case (List.find (fn ((l,_)) => eq_label (l,lab))
+				entries )
+			    of SOME (l,c) => c
+			     | NONE => error (locate "context_beta_reduce") "Field not in record")
+			| NONE => error (locate "context_beta_reduce") "Proj from non-record")
+		  in context_beta_reduce(state,field)
+		  end)
+	 | (App_c (cfun,actuals)) => 
+	      (case context_beta_reduce (state,cfun) of
+		 (state,constructor,true)  => (state,App_c(constructor,actuals),true)
+	       | (state,constructor,false) => 
+		   let
+		     exception NOT_A_LAMBDA
+		     
+		     fun strip (Open_cb (var,formals,body)) = (var,formals,body)
+		       | strip (Code_cb (var,formals,body)) = (var,formals,body)
+		       | strip _ = raise NOT_A_LAMBDA
+		       
+		     fun get_lambda (lambda,name) = 
+		       let
+			 val (var,formals,body) = strip lambda
+		       in
+			 (case strip_annotate name
+			    of Var_c var' => 	  
+			      if eq_var (var,var') then
+				(formals,body)
+			      else raise NOT_A_LAMBDA
+			     | _ => raise NOT_A_LAMBDA)
+		       end
+		     
+		     fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
+		       | lambda_or_closure (Closure_c(code,env)) = 
+		       let val (args,_) = lambda_or_closure code
+		       in  (args,SOME env) end
+		       | lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)
+		       | lambda_or_closure _ = raise NOT_A_LAMBDA
+			 
+			 
+		     fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
+		       
+		   in
+		     (case open_lambda constructor
+			of SOME((formals,body),SOME env) =>
+			  context_beta_reduce(instantiate_formals(state,formals,env::actuals),body)
+			 | SOME((formals,body),NONE)     => 
+			  context_beta_reduce(instantiate_formals(state,formals,actuals),body)
+			 | NONE => (Ppnil.pp_con constructor;
+				    error (locate "context_beta_reduce") "redex not in HNF"))
+		   end)
+		    
+	     | (Typecase_c {arg,arms,default,kind}) => 
+		 let
+		   val (state,arg)   = context_reduce_hnf'(state,arg)
+		 in
+		   (case strip_prim arg
+		      of SOME (pcon,args) =>
+			(case List.find (fn (pcon',formals,body) => primequiv (pcon,pcon')) arms
+			   of SOME (_,formals,body) => context_beta_reduce(instantiate_formals(state,formals,args),body)
+			    | NONE => (state,default,false))
+		       | _ => (state,Typecase_c{arg=arg,arms=arms,default=default,kind=kind},false))
+		 end
+	     | (Annotate_c (annot,con)) => context_beta_reduce (state,con))
+      and context_reduce_hnf'' (state,constructor) =
+	let val ((D,alpha),con,path) = context_beta_reduce (state,constructor)
+	in
+	  if path then
+	    let val con = alphaCRenameCon alpha con
+	    in
+	      (case find_kind_equation (D,con)
+		 of SOME con => context_reduce_hnf'' ((D,Alpha.empty_context()),con)
+		  | NONE => ((D,Alpha.empty_context()),con,true))
+	    end
+	  else
+	    ((D,alpha),con,false)
+	end
+      
+      and context_reduce_hnf' args = 
+	let val (state,con,path) = context_reduce_hnf'' args
+	in (state,con)
+	end
+      fun context_reduce_hnf(D,constructor) = 
+	let val ((D,alpha),con) = context_reduce_hnf'((D,Alpha.empty_context()),constructor)
+	in (D,alphaCRenameCon alpha con)
+	end
+    end      
 
   val type_of = fn args => strip_annotate (type_of args)
 

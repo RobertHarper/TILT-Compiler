@@ -61,4 +61,11 @@ signature NILRENAME =
     val renameExpWRT   : ((var -> bool) * (var -> bool)) -> exp -> exp
     val renameConWRT   : ((var -> bool) * (var -> bool)) -> con -> con
     val renameKindWRT  : ((var -> bool) * (var -> bool)) -> kind -> kind
+
+    val alphaCRenameExp   : Alpha.alpha_context -> exp -> exp
+    val alphaCRenameCon   : Alpha.alpha_context -> con -> con
+    val alphaCRenameKind  : Alpha.alpha_context -> kind -> kind
+    val alphaECRenameCon  : Alpha.alpha_context * Alpha.alpha_context -> con -> con
+    val alphaECRenameKind : Alpha.alpha_context * Alpha.alpha_context -> kind -> kind
+
   end

@@ -24,6 +24,8 @@ rewrite.sig.sml
 rewrite.sml
 subst.sig.sml
 subst.sml
+subst-fn.sml
+nilsubst.sig.sml
 nilrename.sig.sml
 nilrename.sml
 nilprimutilparam.sml

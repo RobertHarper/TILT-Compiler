@@ -103,6 +103,9 @@ traceinfo.sml
 
 reorder.sml
 
+trail.sig.sml
+trail.sml
+
 (*
 cleanup.sig.sml
 cleanup.sml

@@ -435,6 +435,80 @@ structure NilRename :> NILRENAME =
       val noShadowsMod  = noShadowsXXX checkMod
     end
 
+    (* Alpha vary items
+     *)
+    local
+      open NilRewrite
+	
+      type state = {alpha_e : Alpha.alpha_context,
+		    alpha_c : Alpha.alpha_context}
+	
+      fun con_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
+	if Alpha.bound (alpha_c,var) then ({alpha_e = alpha_e,alpha_c = Alpha.unbind (alpha_c,var)},NONE)
+	else (state,NONE)
+	  
+      fun conhandler (state as {alpha_e,alpha_c} : state,con : con) =
+	if (Alpha.is_empty alpha_c) andalso (Alpha.is_empty alpha_e)  then NORECURSE
+	else
+	  (case con
+	     of Var_c var => 
+	       (if Alpha.renamed (alpha_c,var) then
+		  CHANGE_NORECURSE(state,Var_c (Alpha.substitute(alpha_c,var)))
+		else
+		  NORECURSE)
+	      | _ => NOCHANGE)
+	     
+      fun exp_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
+	if Alpha.bound (alpha_e,var) then ({alpha_c = alpha_c,alpha_e = Alpha.unbind (alpha_e,var)},NONE)
+	else (state,NONE)
+	  
+      fun exphandler (state as {alpha_e,alpha_c} : state,exp : exp) =
+	if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c)  then NORECURSE
+	else
+	  (case exp
+	     of Var_e var => 
+	       (if Alpha.renamed (alpha_e,var) then
+		  CHANGE_NORECURSE(state,Var_e (Alpha.substitute(alpha_e,var)))
+		else
+		  NORECURSE)
+	      | _ => NOCHANGE)
+	     
+      val all_handlers = 
+	let
+	  val h = set_conhandler default_handler conhandler
+	  val h = set_exphandler h exphandler
+	  val h = set_con_binder h con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_exp_definer h exp_var_xxx
+	in
+	  h
+	end
+      
+      val {rewrite_exp,
+	   rewrite_con,
+	   rewrite_kind,...} = rewriters all_handlers
+	
+      fun rewriteItem_e rewriter alpha item = 
+	if Alpha.is_empty alpha then item
+	else rewriter {alpha_e = alpha,alpha_c = Alpha.empty_context()} item
+	  
+      fun rewriteItem_c rewriter alpha item = 
+	if Alpha.is_empty alpha then item
+	else rewriter {alpha_c = alpha,alpha_e = Alpha.empty_context()} item
+	  
+      fun rewriteItem rewriter (alpha_e,alpha_c) item = 
+	if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c) then item
+	else rewriter {alpha_c = alpha_c,alpha_e = alpha_e} item
+    in
+      val alphaCRenameExp  = rewriteItem_c rewrite_exp
+      val alphaCRenameCon  = rewriteItem_c rewrite_con
+      val alphaCRenameKind = rewriteItem_c rewrite_kind
+      val alphaECRenameCon  = rewriteItem rewrite_con 
+      val alphaECRenameKind = rewriteItem rewrite_kind
+
+	
+    end
 
 
   end

@@ -1,4 +1,4 @@
-(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha *)
+(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 
@@ -83,6 +83,16 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   fun con_head_normalize args = #2( Normalize.reduce_hnf args)
 
   val con_head_normalize = flagtimer (import_profile,"Tchk:CHNF:",con_head_normalize)
+
+  val context_beta_reduce = Normalize.context_beta_reduce
+  val context_reduce_hnf  = Normalize.context_reduce_hnf
+
+  (*From NilRename*)
+  val alphaCRenameExp   = NilRename.alphaCRenameExp
+  val alphaCRenameCon   = NilRename.alphaCRenameCon
+  val alphaCRenameKind  = NilRename.alphaCRenameKind
+  val alphaECRenameCon  = NilRename.alphaECRenameCon
+  val alphaECRenameKind = NilRename.alphaECRenameKind
 
   (*From NilContext*)
   type context = NilContext.context
@@ -384,80 +394,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	| SingleType_k _ => true
 	| _ => false)
 
-  (* Alpha vary items
-   *)
-  local
-    open NilRewrite
-      
-    type state = {alpha_e : Alpha.alpha_context,
-		  alpha_c : Alpha.alpha_context}
-      
-    fun con_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
-      if Alpha.bound (alpha_c,var) then ({alpha_e = alpha_e,alpha_c = Alpha.unbind (alpha_c,var)},NONE)
-      else (state,NONE)
-	
-    fun conhandler (state as {alpha_e,alpha_c} : state,con : con) =
-      if (Alpha.is_empty alpha_c) andalso (Alpha.is_empty alpha_e)  then NORECURSE
-      else
-	(case con
-	   of Var_c var => 
-	     (if Alpha.renamed (alpha_c,var) then
-		CHANGE_NORECURSE(state,Var_c (Alpha.substitute(alpha_c,var)))
-	      else
-		NORECURSE)
-	    | _ => NOCHANGE)
-	    
-    fun exp_var_xxx (state as {alpha_e,alpha_c} : state,var,any) = 
-      if Alpha.bound (alpha_e,var) then ({alpha_c = alpha_c,alpha_e = Alpha.unbind (alpha_e,var)},NONE)
-      else (state,NONE)
-	
-    fun exphandler (state as {alpha_e,alpha_c} : state,exp : exp) =
-      if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c)  then NORECURSE
-      else
-	(case exp
-	   of Var_e var => 
-	     (if Alpha.renamed (alpha_e,var) then
-		CHANGE_NORECURSE(state,Var_e (Alpha.substitute(alpha_e,var)))
-	      else
-		NORECURSE)
-	    | _ => NOCHANGE)
-	   
-    val all_handlers = 
-      let
-	val h = set_conhandler default_handler conhandler
-	val h = set_exphandler h exphandler
-	val h = set_con_binder h con_var_xxx
-	val h = set_con_definer h con_var_xxx
-	val h = set_exp_binder h exp_var_xxx
-	val h = set_exp_definer h exp_var_xxx
-      in
-	h
-      end
-    
-    val {rewrite_exp,
-	 rewrite_con,
-	 rewrite_kind,...} = rewriters all_handlers
-      
-    fun rewriteItem_e rewriter alpha item = 
-      if Alpha.is_empty alpha then item
-      else rewriter {alpha_e = alpha,alpha_c = Alpha.empty_context()} item
-	
-    fun rewriteItem_c rewriter alpha item = 
-      if Alpha.is_empty alpha then item
-      else rewriter {alpha_c = alpha,alpha_e = Alpha.empty_context()} item
-	
-    fun rewriteItem rewriter (alpha_e,alpha_c) item = 
-      if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c) then item
-      else rewriter {alpha_c = alpha_c,alpha_e = alpha_e} item
-  in
-    val alphaCRenameExp  = rewriteItem_c rewrite_exp
-    val alphaCRenameCon  = rewriteItem_c rewrite_con
-    val alphaCRenameKind = rewriteItem_c rewrite_kind
-    val alphaECRenameCon  = rewriteItem rewrite_con 
-    val alphaECRenameKind = rewriteItem rewrite_kind
-
-      
-  end
 
   local
       datatype entry = 
@@ -663,7 +599,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       (case (constructor,kind) of
 	 (constructor,SingleType_k c) => 
 	 let val _ = type_analyze D constructor
-	     val _ = type_equiv(D,constructor,c,false)
+	     val _ = type_equiv(D,constructor,c)
 	 in ()
 	 end
        | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
@@ -1074,13 +1010,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     end		  
 
   (*PRE: kind1 and kind2 not necessarily normalized *)
-  and sub_kind arg = subeq_kind false arg
-  and kind_equiv arg = subeq_kind true arg
+  and sub_kind   (D,k1,k2) = subeq_kind false ((D,Trail.empty),k1,k2)
+  and kind_equiv (D,k1,k2) = subeq_kind true  ((D,Trail.empty),k1,k2)
+  and kind_equiv' args     = subeq_kind false args
 
   and subeq_phase true (p1,p2) = p1 = p2
     | subeq_phase false (p1,p2) = sub_phase(p1,p2)
 
-  and subeq_kind is_eq (D,kind1,kind2) = 
+  and subeq_kind is_eq ((D,T),kind1,kind2) = 
     let
       val _ = push_subkind(kind1,kind2,D)
 
@@ -1103,7 +1040,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    in (D,rename1,rename2)
 	    end
 	in
-	  (subeq_kind is_eq (D,kind1,kind2),(D',rename1,rename2))
+	  (subeq_kind is_eq ((D,T),kind1,kind2),(D',rename1,rename2))
 	end
 
       fun sub_all D (vks1,vks2) = 
@@ -1113,11 +1050,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       (case (kind1,kind2) 
 	 of (Type_k, Type_k) => true
 	  | (Type_k,_) => false
-	  | (Single_k _,_) => subeq_kind is_eq (D, kind_standardize(D,kind1), kind2)
-	  | (_,Single_k _) => subeq_kind is_eq (D, kind1, kind_standardize(D,kind2))
+	  | (Single_k _,_) => subeq_kind is_eq ((D,T), kind_standardize(D,kind1), kind2)
+	  | (_,Single_k _) => subeq_kind is_eq ((D,T), kind1, kind_standardize(D,kind2))
 	  | (SingleType_k _ ,Type_k) => true
 	  | (SingleType_k (c1),SingleType_k (c2)) => 
-	     subtimer("SubKind:st",type_equiv)(D,c1,c2,false)
+	     subtimer("SubKind:st",type_equiv')((D,T),c1,c2)
 	  | (SingleType_k (c1), _) => false
 (*
 	  | (SingleType_k (c1),Single_k (c2)) => 
@@ -1140,7 +1077,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      in
 		formals_ok andalso 
 		same_openness (openness1,openness2) andalso 
-		  subeq_kind is_eq (D,return1,return2)
+		  subeq_kind is_eq ((D,T),return1,return2)
 	      end
 	    else
 	      (lprintl "formals of different lengths!!";
@@ -1171,15 +1108,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in res
     end
 
-  and subtype   (D,c1,c2)    = type_equiv (D,c1,c2,true)
-  and type_equiv (D,c1,c2,sk) = con_equiv (D,c1,c2,Type_k,sk)
-
+  and subtype     (D,c1,c2)     = con_equiv  (D,c1,c2,Type_k,true)
+  and type_equiv  (D,c1,c2)     = con_equiv  (D,c1,c2,Type_k,false)
+  and type_equiv' ((D,T),c1,c2) = con_equiv_wrapper ((D,T),c1,c2,Type_k,false)
 
   (* Given a well-formed context D and well-formed constructors c1 and c2 of kind k,
    return whether they are equivalent at well-formed kind k. *)
   (* note: wrapper function at end of file redefines con_equiv! *)
-  and con_equiv (args) : bool = 
-    flagtimer (equiv_total_profile,"Tchk:equiv_total", con_equiv_wrapper) args
+  and con_equiv (D,c1,c2,k,sk) : bool = 
+    flagtimer (equiv_total_profile,"Tchk:equiv_total", con_equiv_wrapper) ((D,Trail.empty),c1,c2,k,sk)
   and con_equiv_wrapper args = 
     let
 
@@ -1230,165 +1167,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in foldl2 folder state (vklist,actuals)
 	end
 
-      fun con_equiv (args as (D,c1,c2,k,sk)) : bool = 
+      fun con_equiv (args as (state,c1,c2,k,sk)) : bool = 
 	let val res = (alpha_subequiv_con sk (c1,c2)) orelse (con_equiv' args)
 	in res
 	end
 
-      and con_equiv' (D,c1,c2,k,sk) = 
+      and con_equiv' ((D,T),c1,c2,k,sk) = 
 	let
-
-	  fun con_reduce_letfun (state,sort,coder,var,formals,body,rest,con) = 
-	    let
-	      val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
-	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
-		 then (state,lambda,false)
-	       else
-		 con_reduce(bind_eqn(state,var,lambda),Let_c(sort,rest,con))
-	    end
-	  
-	  and con_reduce (state : (context * Alpha.alpha_context),constructor : con) : ((context * Alpha.alpha_context) * con * bool)  = 
-	    (case constructor of 
-	       (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>       
-		 let 
-		   val (state,argc,path) = reduce_hnf''(state,argc)
-	       
-		   val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
-		   val no_flatten  = AllArrow_c{openness=openness,effect=effect,isDependent=false,
-					       tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
-					       body_type=resc}
-		   val res = 
-		     (case argc of
-			Prim_c(Record_c (labs,_),cons) => 
-			  if (length labs > !number_flatten) then no_flatten 
-			  else AllArrow_c{openness=openness,effect=effect,isDependent=false,
-					  tFormals=[], eFormals=map (fn c => (NONE,c)) cons,
-					  fFormals=0w0, body_type=resc}
-		      | _ => if path then irreducible
-				 else no_flatten)
-		 in (state,res,false)
-		 end
-	     | (Prim_c _)            => (state,constructor,false)
-	     | (Mu_c _)              => (state,constructor,false)
-	     | (AllArrow_c _)        => (state,constructor,false)
-	     | (ExternArrow_c _)     => (state,constructor,false)
-	     | (Crecord_c _)         => (state,constructor,false)
-	     | (Proj_c (Mu_c _,lab)) => (state,constructor,false)
-	     | (Var_c var)           => (state,constructor,true)
-
-	     | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
-		 con_reduce_letfun (state,sort,Open_cb,var,formals,body,rest,con)
-
-	     | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
-		 con_reduce_letfun (state,sort,Code_cb,var,formals,body,rest,con)
-
-	     | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body))             =>
-		 con_reduce(bind_eqn(state,var,con),Let_c(sort,rest,body))
-
-	     | (Let_c (sort,[],body)) => con_reduce(state,body)
-
-	     | (Closure_c (c1,c2)) => 
-		 let val (state,c1,path) = con_reduce (state,c1)
-		 in  (state,Closure_c(c1,c2),path)
-		 end
-
-	     | Typeof_c e => 
-		 let val (D,alpha) = state
-		 in con_reduce((D,Alpha.empty_context()),type_of(D,alphaCRenameExp alpha e))
-		 end
-	     | (Proj_c (c,lab)) => 
-		 (case con_reduce (state,c) of
-		    (state,constructor,true)  => (state,Proj_c(constructor,lab),true)
-		  | (state,constructor,false) => 
-		      let val field = 
-			(case strip_crecord constructor
-			   of SOME entries =>
-			     (case (List.find (fn ((l,_)) => eq_label (l,lab))
-				    entries )
-				of SOME (l,c) => c
-				 | NONE => error (locate "con_reduce") "Field not in record")
-			    | NONE => error (locate "con_reduce") "Proj from non-record")
-		      in con_reduce(state,field)
-		      end)
-	     | (App_c (cfun,actuals)) => 
-		 (case con_reduce (state,cfun) of
-		    (state,constructor,true)  => (state,App_c(constructor,actuals),true)
-		  | (state,constructor,false) => 
-		      let
-			exception NOT_A_LAMBDA
-			
-			fun strip (Open_cb (var,formals,body)) = (var,formals,body)
-			  | strip (Code_cb (var,formals,body)) = (var,formals,body)
-			  | strip _ = raise NOT_A_LAMBDA
-			  
-			fun get_lambda (lambda,name) = 
-			  let
-			    val (var,formals,body) = strip lambda
-			  in
-			    (case strip_annotate name
-			       of Var_c var' => 	  
-				 if eq_var (var,var') then
-				   (formals,body)
-				 else raise NOT_A_LAMBDA
-				| _ => raise NOT_A_LAMBDA)
-			  end
-			
-			fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
-			  | lambda_or_closure (Closure_c(code,env)) = 
-			  let val (args,_) = lambda_or_closure code
-			  in  (args,SOME env) end
-			  | lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)
-			  | lambda_or_closure _ = raise NOT_A_LAMBDA
-			    
-			    
-			fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
-			  
-		      in
-			(case open_lambda constructor
-			   of SOME((formals,body),SOME env) =>
-			     con_reduce(instantiate_formals(state,formals,env::actuals),body)
-			    | SOME((formals,body),NONE)     => 
-			     con_reduce(instantiate_formals(state,formals,actuals),body)
-			    | NONE => (perr_c constructor;
-				       error (locate "con_reduce") "redex not in HNF"))
-		      end)
-		    
-	     | (Typecase_c {arg,arms,default,kind}) => 
-		 let
-		   val (state,arg)   = reduce_hnf'(state,arg)
-		 in
-		   (case strip_prim arg
-		      of SOME (pcon,args) =>
-			(case List.find (fn (pcon',formals,body) => primequiv (pcon,pcon')) arms
-			   of SOME (_,formals,body) => con_reduce(instantiate_formals(state,formals,args),body)
-			    | NONE => (state,default,false))
-		       | _ => (state,Typecase_c{arg=arg,arms=arms,default=default,kind=kind},false))
-		 end
-	     | (Annotate_c (annot,con)) => con_reduce (state,con))
-	  and reduce_hnf'' (state,constructor) =
-	    let val ((D,alpha),con,path) = con_reduce (state,constructor)
-	    in
-	      if path then
-		let val con = alphaCRenameCon alpha con
-		in
-		  (case find_kind_equation (D,con)
-		     of SOME con => reduce_hnf'' ((D,Alpha.empty_context()),con)
-		      | NONE => ((D,Alpha.empty_context()),con,true))
-		end
-	      else
-		((D,alpha),con,false)
-	    end
-
-	  and reduce_hnf' args = 
-	    let val (state,con,path) = reduce_hnf'' args
-	    in (state,con)
-	    end
-	  fun reduce_hnf(D,constructor) = 
-	    let val ((D,alpha),con) = reduce_hnf'((D,Alpha.empty_context()),constructor)
-	    in (D,alphaCRenameCon alpha con)
-	    end
-
-	  val reduce_hnf = flagtimer(equiv_profile,"Tchk:Equiv:reduce_hnf",reduce_hnf)
 
 
 	  fun compare_list2 ([],c) = false
@@ -1403,7 +1188,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		if done1 then (D,c1,false)
 		else 
 		  let
-		    val ((D,alpha),c1,path) = con_reduce ((D,Alpha.empty_context()),c1)
+		    val ((D,alpha),c1,path) = context_beta_reduce ((D,Alpha.empty_context()),c1)
 		    val c1 = alphaCRenameCon alpha c1
 		  in (D,c1,path)
 		  end
@@ -1412,7 +1197,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		if done1 then (D,c2,false)
 		else 
 		  let
-		    val ((D,alpha),c2,path) = con_reduce ((D,Alpha.empty_context()),c2)
+		    val ((D,alpha),c2,path) = context_beta_reduce ((D,Alpha.empty_context()),c2)
 		    val c2 = alphaCRenameCon alpha c2
 		  in (D,c2,path)
 		  end
@@ -1446,30 +1231,30 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		if !compare_paths then
 		  let
 		    val (D,c1,c2,eq) = compare (D,[c1],false,[c2],false)
-		  in eq orelse con_structural_equiv(D,c1,c2,sk)
+		  in eq orelse con_structural_equiv((D,T),c1,c2,sk)
 		  end
 		else
 		  let
-		    val (D,c1) = reduce_hnf(D,c1)
-		    val (D,c2) = reduce_hnf(D,c2)
-		  in con_structural_equiv(D,c1,c2,sk)
+		    val (D,c1) = context_reduce_hnf(D,c1)
+		    val (D,c2) = context_reduce_hnf(D,c2)
+		  in con_structural_equiv((D,T),c1,c2,sk)
 		  end
 	      
 	    | SingleType_k c => true
 	    | Single_k c => true
 	    | Record_k lvk_seq => 
 		let 
-		  val (D,c1) = reduce_hnf(D,c1)
-		  val (D,c2) = reduce_hnf(D,c2)
+		  val (D,c1) = context_reduce_hnf(D,c1)
+		  val (D,c2) = context_reduce_hnf(D,c2)
 		  fun folder (((l,v),k),(state as (D,alpha),equal)) =
 		    let 
 		      val k = alphaCRenameKind alpha k
-		      val equal = equal andalso con_equiv'(D,Proj_c(c1,l),Proj_c(c2,l),k,sk)
+		      val equal = equal andalso con_equiv'((D,T),Proj_c(c1,l),Proj_c(c2,l),k,sk)
 		      val state = bind_kind_eqn'(state,v,Proj_c(c1,l),k)  
 		    in  (state,equal)
 		    end
 		in (case (c1,c2) 
-		      of (Mu_c _,Mu_c _) => alpha_subequiv_con sk (c1,c2) orelse con_structural_equiv(D,c1,c2,sk)
+		      of (Mu_c _,Mu_c _) => alpha_subequiv_con sk (c1,c2) orelse con_structural_equiv((D,T),c1,c2,sk)
 		       | _ => #2 (Sequence.foldl folder ((D,Alpha.empty_context()),true) lvk_seq))
 		end
 	    | Arrow_k (openness,vklist,k) => 
@@ -1489,7 +1274,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  val k = alphaCRenameKind rename k
 		  val c1 = App_c(c1,args)
 		  val c2 = App_c(c2,args)
-		in  con_equiv'(D,c1,c2,k,sk) 
+		in  con_equiv'((D,T),c1,c2,k,sk) 
 		end
 	  val _ = pop()
 	  val _ = if res then ()
@@ -1504,14 +1289,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in  res
 	end
       (* The substitution returned maps variables in the second list to the first. *)
-      and vklist_equiv (D, vklist1, vklist2) : context * Alpha.alpha_context * bool =
+      and vklist_equiv ((D,T), vklist1, vklist2) : context * Alpha.alpha_context * bool =
 	let 
 	  fun folder((v1,k1),(v2,k2),(D,rename,match)) = 
 	    let 
 	      val k1 = alphaCRenameKind rename k1
 	      val k2 = alphaCRenameKind rename k2
 
-	      val match = match andalso kind_equiv (D,k1,k2)
+	      val match = match andalso kind_equiv' ((D,T),k1,k2)
 	      val (D,rename) = 
 		if NilContext.bound_con (D,v1) then
 		  let
@@ -1530,13 +1315,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  else (D, Alpha.empty_context(), false)
 	end
       
-      and vlistopt_clist_equiv (D, cRename, vclist1, vclist2,sk) : context * (Alpha.alpha_context * Alpha.alpha_context) * bool =
+      and vlistopt_clist_equiv ((D,T), cRename, vclist1, vclist2,sk) : context * (Alpha.alpha_context * Alpha.alpha_context) * bool =
 	let 
 	  fun folder((vopt1, c1), (vopt2, c2), (D, eRename, cRename, match)) = 
 	    let 
 	      val c1 = alphaECRenameCon (eRename,cRename) c1
 	      val c2 = alphaECRenameCon (eRename,cRename) c2
-	      val match = match andalso con_equiv(D,c1,c2,Type_k,sk)
+	      val match = match andalso con_equiv((D,T),c1,c2,Type_k,sk)
 		
 	      fun bind(D,eRename,v,c) = 
 		if NilContext.bound_exp (D,v) then 
@@ -1570,8 +1355,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    else (D, (Alpha.empty_context(), cRename), false)
 	end
 
-      and con_structural_equiv (D,c1,c2,sk) : bool (*kind option *)=
-	let val res =   
+      and con_structural_equiv ((D,T),c1,c2,sk) : bool (*kind option *)=
+	let
+
+	  fun mu_equate ((D,T),con1,con2) =
+	    (print "Checking trail\n";
+	     (Trail.equal(T,(con1,con2))) orelse
+	     let
+	       val T = Trail.equate(T,(con1,con2))
+	       val con1 = expandMuType(D,con1)
+	       val con2 = expandMuType(D,con2)
+	       val _ = print "Adding to trail and unrolling\n"
+	     in con_equiv((D,T),con1,con2,Type_k,false)
+	     end
+	     )
+
+	  val res =   
 	      (case (c1,c2) of
 		 (Prim_c(Record_c (labs1,vlistopt1),clist1), 
 		  (Prim_c(Record_c (labs2,vlistopt2),clist2))) =>
@@ -1582,7 +1381,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		     | SOME vars => map2 (fn (v,c) => (SOME v, c)) (vars,clist))
 		      val vclist1 = combine(vlistopt1, clist1)
 		      val vclist2 = combine(vlistopt2, clist2)
-		  in  #3(vlistopt_clist_equiv(D,Alpha.empty_context(),vclist1,vclist2,sk))
+		  in  #3(vlistopt_clist_equiv((D,T),Alpha.empty_context(),vclist1,vclist2,sk))
 		  end)
 	       | (Prim_c(pcon1 as Sum_c{tagcount=tagcount1,totalcount=totalcount1,
 					known=known1}, clist1), 
@@ -1599,20 +1398,20 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      | _ => false)
 		 in  
 		   res1 andalso 
-		   eq_list(fn (c1,c2) => con_equiv(D,c1,c2,k,sk),
+		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,k,sk),
 					  clist1,clist2)
 		 end
 	       | (Prim_c(Vararg_c(o1,eff1),[argc1,resc1]),
 		  Prim_c(Vararg_c(o2,eff2),[argc2,resc2])) => 
 		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso
-		 type_equiv(D,argc2,argc1,sk) andalso
-		 type_equiv(D,resc1,resc2,sk)
+		 con_equiv((D,T),argc2,argc1,Type_k,sk) andalso
+		 con_equiv((D,T),resc1,resc2,Type_k,sk)
 	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
 		 let
 		   val sk' = sk andalso (NilUtil.covariant_prim pcon1)
 		 in
 		   NilUtil.primequiv(pcon1,pcon2) andalso 
-		   eq_list(fn (c1,c2) => con_equiv(D,c1,c2,Type_k,sk'),
+		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,Type_k,sk'),
 				   clist1,clist2)
 		 end
 	       | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
@@ -1646,36 +1445,44 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		       fun pred ((_,c1),(_,c2)) = 
 			 let val c1 = alphaCRenameCon rename c1
 			     val c2 = alphaCRenameCon rename c2
-			 in con_equiv(D,c1,c2, Type_k, false) (* no subtyping *) end
+			 in con_equiv((D,T),c1,c2, Type_k, false) (* no subtyping *) end
 		     in  
 		       (ir1 = ir2) andalso eq_list(pred,vc1,vc2)
 		     end
+
+		   (*This should only apply when there is one
+		    * arm.  Otherwise, it should be caught by the projections.*)
+		   fun do_unroll () = 
+		     (case (Sequence.length defs1,Sequence.length defs2)
+			of (1,1) => mu_equate((D,T),c1,c2)
+			 | _ => false)
 		 in
-		   flagtimer (equiv_profile,"Tchk:Equiv:Mu",do_mu) ()
+		   (flagtimer (equiv_profile,"Tchk:Equiv:Mu",do_mu) ()) orelse
+		   (flagtimer (equiv_profile,"Tchk:Equiv:Mu_unroll",do_unroll) ())
 		 end
 	     | (AllArrow_c {openness=o1,effect=eff1,isDependent=i1,
 			    tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},
 		 AllArrow_c {openness=o2,effect=eff2,isDependent=i2,
 			     tFormals=t2,eFormals=e2,fFormals=f2,body_type=b2}) =>
 		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso 
-		 let val (D,cRename,match) = vklist_equiv(D,t1,t2)
+		 let val (D,cRename,match) = vklist_equiv((D,T),t1,t2)
 		 in  match andalso
 		   let val (D,rename,match) = 
-		     vlistopt_clist_equiv(D,cRename,e2,e1,sk)
+		     vlistopt_clist_equiv((D,T),cRename,e2,e1,sk)
 		       val b1 = alphaECRenameCon rename b1
 		       val b2 = alphaECRenameCon rename b2
 		   in  match andalso
-		     type_equiv(D,b1,b2, sk)
+		     con_equiv((D,T),b1,b2, Type_k,sk)
 		   end
 		 end
 
 	     | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
 		 let fun mapper c = (NONE, c)
-		   val (D,_,match) = vlistopt_clist_equiv(D,Alpha.empty_context(),
+		   val (D,_,match) = vlistopt_clist_equiv((D,T),Alpha.empty_context(),
 							  map mapper clist1,
 							  map mapper clist2,
 							  false)
-		 in  type_equiv(D,c1,c2,false)
+		 in  type_equiv(D,c1,c2)
 		 end
 
 	     | (Crecord_c lclist, _) => 
@@ -1683,9 +1490,16 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 
 	     | (Let_c _, _) => error' "Let_c given to con_structural_equiv: not WHNF"
 		 
-	     | (Proj_c (c1,l1), Proj_c(c2,l2)) => (eq_label(l1,l2)) andalso (con_structural_equiv(D,c1,c2,false))
+	     | (Proj_c (con1,l1), Proj_c(con2,l2)) => 
+		 ((eq_label(l1,l2)) andalso (con_structural_equiv((D,T),con1,con2,false))) orelse
+		 (case (con1,con2)
+		    of (Mu_c _,Mu_c_) => mu_equate((D,T),c1,c2)
+		     | _ => false)
+	     | (Proj_c (Mu_c _,l1),Mu_c _) => mu_equate((D,T),c1,c2)
+	     | (Mu_c _,Proj_c (Mu_c _,l1)) => mu_equate((D,T),c1,c2)
+
 	     | (App_c (f1,clist1), App_c (f2,clist2)) =>
-		 if con_structural_equiv(D,f1,f2,false) then
+		 if con_structural_equiv((D,T),f1,f2,false) then
 		   (case kind_of (D,f1) of
 		      Arrow_k(openness,vklist,k) =>
 			let     
@@ -1693,7 +1507,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 			    if equal then 
 			      let 
 				val k = alphaCRenameKind alpha k
-				val equal = con_equiv(D,c1,c2,k,false)
+				val equal = con_equiv((D,T),c1,c2,k,false)
 				val D = bind_kind_eqn'(state,v,c1,k)
 			      in  (state,equal)
 			      end
@@ -1709,19 +1523,19 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   let
 		     fun arm_equiv ((pc1,f1,b1),(pc2,f2,b2)) = 
 		       primequiv(pc1,pc2) andalso
-		       let val (D,cRename,match) = vklist_equiv(D,f1,f2)
+		       let val (D,cRename,match) = vklist_equiv((D,T),f1,f2)
 		       in  
 			 match andalso
 			 let 
 			   val b1 = alphaCRenameCon cRename b1
 			   val b2 = alphaCRenameCon cRename b2
-			 in type_equiv(D,b1,b2, sk)
+			 in con_equiv((D,T),b1,b2, Type_k,sk)
 			 end
 		       end
 		   in
-		     con_structural_equiv(D,arg1,arg2,sk)
-		     andalso con_equiv(D,d1,d2,k1,sk)
-		     andalso kind_equiv(D,k1,k2)
+		     con_structural_equiv((D,T),arg1,arg2,sk)
+		     andalso con_equiv((D,T),d1,d2,k1,sk)
+		     andalso kind_equiv'((D,T),k1,k2)
 		     andalso eq_list (arm_equiv,arms1,arms2)
 		   end
 	     | (Annotate_c _, _) => error' "Annotate_c not WHNF"
@@ -1843,7 +1657,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val closure = substExpConInCon (esubst,csubst) closure_type
 	    
 	  val _ = 
-	    (type_equiv (D,closure_type,tipe,false)) orelse
+	    (type_equiv (D,closure_type,tipe)) orelse
 	    (perr_c_c (tipe,closure_type);
 	     print "code_type is "; pp_con code_type; print "\n";
 	     print "con is "; pp_con closure_type; print "\n";
@@ -1896,7 +1710,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     let
       val con' = exp_valid(D,exp)
     in
-       ignore (subtimer("exp_analyze:st",type_equiv)(D,con',con,true) orelse 
+       ignore (subtimer("exp_analyze:st",subtype)(D,con',con) orelse 
 	       (perr_c_c (con,con');
 		e_error(D,exp,"Expression cannot be given required type")))
     end

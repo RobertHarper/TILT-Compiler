@@ -68,4 +68,19 @@ signature CURTAIN =
 	val equate : Nil.kind * Nil.kind -> unit
       end
 
+    structure CurtainSubst : 
+      sig
+	type con_subst
+	  
+	structure CSubst : SUBST where type item = Nil.con
+				   and type item_subst = con_subst
+					 
+	val substConInExp   : con_subst -> Nil.exp      -> Nil.exp
+	val substConInCon   : con_subst -> Nil.con      -> Nil.con
+	val substConInKind  : con_subst -> Nil.kind     -> Nil.kind
+	val substConInBnd   : con_subst -> Nil.bnd      -> Nil.bnd
+	val substConInCBnd  : con_subst -> Nil.conbnd   -> Nil.conbnd
+	val substConInTrace : con_subst -> Nil.niltrace -> Nil.niltrace
+      end
+
   end
