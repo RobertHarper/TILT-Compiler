@@ -124,7 +124,7 @@ functor AlphaStandardConvention(
 	  val use	       = useArguments arguments
 	in
 	  [MLTree.CODE(marshalArguments frame arguments)]@
-	  [MLTree.CODE[MLTree.MV(callPointer, procedure)]]@
+	  [MLTree.CODE[MLTreeExtra.mv(callPointer, procedure)]]@
 	  before_@
 	  [MLTree.CODE[MLTree.CALL(MLTree.REG callPointer, define, use)]]@
 	  after@
