@@ -88,6 +88,6 @@ Fix:
 	* The Sparc backend and printutils were marking too many
 	labels .globl.
 
-Test: m0131, 0010, 0011, 0012
+Test: m0131, bug151a-d
 Owner: swasey
 Status: open
