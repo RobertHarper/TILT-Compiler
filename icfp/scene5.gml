@@ -1,5 +1,5 @@
 
-% Checkerboarded cube
+% Gradient Cube - Tom 7
 
 { /x x x } /dup
 
@@ -24,44 +24,38 @@
 0.8  0.8  0.8  point   % ambient light
 [ ]   % lights (none!)
 
-{ 
-/red /blue
-  [
-  [ red blue red  ]
-  [ blue red blue ]
-  [ red blue red  ]
-  ] 
-} /check
-
 [
- red1 blue1 check apply
- red2 blue2 check apply
- red3 blue3 check apply
- red4 blue4 check apply
- red5 blue5 check apply
- red6 blue6 check apply
+ [ red1 blue1 ]
+ [ red2 blue2 ]
+ [ red3 blue3 ]
+ [ red4 blue4 ]
+ [ red5 blue5 ]
+ [ red6 blue6 ]
 ] /texture
 
+{ /s /c c getx s mulf c gety s mulf c getz s mulf point } /scalec
+{ /a /b a getx b getx addf 0.5 mulf
+        a gety b gety addf 0.5 mulf
+        a getz b getz addf 0.5 mulf point } /avgc
+
+
 { /v /u /face
-  {
-    3.0 mulf floor /i
-    i 3 eqi { 2 } { i } if
-  } /toIntCoord
   texture face get
-    u toIntCoord apply get
-    v toIntCoord apply get
+    0 get u scalec apply
+  texture face get
+    1 get u scalec apply avgc apply
   1.0
   0.0
   1.0
 } cube
 
-1.2 1.5 0.8 scale
+1.2 3.0 0.8 scale
 
 27.0 rotatex
 34.0 rotatey
 -7.0 rotatez
 
-0.0 0.0 5.0 translate
+0.0 0.0 3.0 translate
 
 % transform here to look around
 
@@ -72,6 +66,6 @@
 90.0  % fov
 320   % width
 200   % height
-"scene4.ppm"   % file output
+"scene5.ppm"   % file output
 
 render
