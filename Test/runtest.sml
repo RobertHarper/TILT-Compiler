@@ -290,12 +290,12 @@ struct
 		  binary : string} : status =
 	let
 	    val cleanup = if clean
-			      then fn () => app run_for_effect [[tilt,"-C",mapfile],["/bin/rm", "-f","core",corefile]]
+			      then fn () => app run_for_effect [[tilt,"-cc",mapfile],["/bin/rm", "-f","core",corefile]]
 			  else fn () => ()
 	    val _ = cleanup()
 	    val expected = read_result resultfile
 	    val actual =
-		(case run_program [tilt,"-fTypecheck","-fIlcontextChecks","-m",mapfile]
+		(case run_program [tilt,"-fTypecheck","-fIlcontextChecks",mapfile]
 		   of Exit (0, _) => Raw (run_program [binary])
 		    | Exit (10, _) => Reject
 		    | Exit _ => Bomb
@@ -313,7 +313,6 @@ end
 
 structure Main =
 struct
-    structure G = Getopt
     structure P = OS.Path
 
     fun fail (msg : string) : 'a = raise Test.Crash msg
@@ -363,10 +362,10 @@ struct
 
     local
 	val op/ : string * string -> string =
-	    fn (dir,file) => P.joinDirFile {dir=dir, file=file}
+	    fn (dir,file) => P.joinDirFile{dir=dir,file=file}
     in
 	fun bindir (name : string) : string =
-	    P.dir (CommandLine.name())/".."/"Bin"/name
+	    P.dir (CommandLine.name())/".."/name
     end
 
     fun pblock b = 
@@ -387,54 +386,49 @@ struct
        "change its status from \"pass\" to \"fail\" before checking in."
        ]
 
+    fun usage () : 'a =
+	fail ("usage: " ^ CommandLine.name() ^ " [-fncFS] testdir ...")
+
     fun main () : unit =
-	(let
-	   val opts = [G.Noarg (#"f",#"f"),
-		       G.Noarg (#"n",#"n"),
-		       G.Noarg (#"c",#"c"),
-		       G.Noarg (#"S",#"S"),
-		       G.Noarg (#"F",#"F")]
-	   val args = CommandLine.arguments()
-	 in
-	     (case G.getopt (opts,args)
-		of G.Error msg =>
-		    fail (msg ^ "\nusage: " ^ CommandLine.name() ^
-			  " [-fncES] testdir ...")
-		 | G.Success (flags, args) =>
-			let
-			    fun has (flag : char) : bool =
-				List.exists (fn c => c=flag) flags
-			    val tilt = bindir (if has #"n"
-						   then "tilt-nj"
-					       else "tilt")
-
-			    val onfail = if has #"f" then fn () => ()
-					 else fn () => fail "test failed"
-
-			    val (fail,succeed) =
-			      (case (has #"F",has #"S")
-				 of (true,true) => fail "S and F flags are mutually exclusive"
-				  | (false,false) => (onfail,fn ()=>())
-				  | (true,false)  => (onfail,warn_on_success)
-				  | (false,true)  => (onfail o warn_on_failure,fn () => ()))
-
-			    val run = run_test {tilt=tilt,
-						clean=not (has #"c"),
-						platform=platform(),
-						succeed=succeed,
-						fail=fail}
-			in
-			    app run args
-			end)
-	 end)
-	     handle e => (eprint (CommandLine.name());
-			  eprint ": ";
-			  eprint (case e
-				    of Test.Crash msg => msg
-				     | _ => exnMessage e);
-			  eprint "\n";
-			  OS.Process.exit OS.Process.failure)
-
+	let val dashn : bool ref = ref false
+	    val dashf : bool ref = ref false
+	    val dashS : bool ref = ref false
+	    val dashF : bool ref = ref false
+	    val dashc : bool ref = ref false
+	    fun option ({argc,...} : Arg.arg) : unit =
+		(case argc
+		   of #"n" => dashn := true
+		    | #"f" => dashf := true
+		    | #"S" => dashS := true
+		    | #"F" => dashF := true
+		    | #"c" => dashc := true
+		    | _ => usage())
+	    val testdirs = Arg.args option (CommandLine.arguments())
+	    val tilt : string = bindir (if !dashn then "tilt-nj" else "tilt")
+	    val onfail : unit -> unit =
+		if !dashf then fn () => ()
+		else fn () => fail "test failed"
+	    val (fail : unit -> unit, succeed : unit -> unit) =
+		(case (!dashF, !dashS)
+		   of (true,true) => fail "-S and -F are mutually exclusive"
+		    | (false,false) => (onfail,fn ()=>())
+		    | (true,false)  => (onfail,warn_on_success)
+		    | (false,true)  => (onfail o warn_on_failure,fn () => ()))
+	    val run : string -> unit =
+		run_test {tilt=tilt,
+			  clean=not (!dashc),
+			  platform=platform(),
+			  succeed=succeed,
+			  fail=fail}
+	in  app run testdirs
+	end handle e =>
+		(eprint (CommandLine.name());
+		 eprint ": ";
+		 eprint (case e
+			   of Test.Crash msg => msg
+			    | _ => exnMessage e);
+		 eprint "\n";
+		 OS.Process.exit OS.Process.failure)
 end
 
 val _ = Main.main()
