@@ -8,9 +8,9 @@ signature REGISTER_LIVENESS = sig
   (* -- types -------------------------------------------------------------- *)
 
   (*
-   * Identifies a register.
+   * A set of register ids.
    *)
-  type id
+  type idSet
 
   (*
    * A statement/directive.
@@ -28,10 +28,10 @@ signature REGISTER_LIVENESS = sig
    * Return the live sets of a given list of basic blocks according to the
    * fixed point of an iterative liveness analysis.
    * blocks -> the blocks to compute the live sets of
-   * <- a list of lists representing the registers live entering and leaving
+   * <- a list of sets representing the registers live entering and leaving
    *	the corresponding elements of blocks
    *)
-  val liveness: block list -> id list list
+  val liveness: block list -> idSet list
 
 end
 

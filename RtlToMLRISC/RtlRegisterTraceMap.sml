@@ -18,6 +18,7 @@ functor RtlRegisterTraceMap(
 		 and type rep		= Rtl.rep
 		 and type trace		= TraceTable.trace
 		 and type stacklocation = TraceTable.Machine.stacklocation
+		 and type idSet		= IntSet.set
 	  = struct
 
   (* -- types -------------------------------------------------------------- *)
@@ -33,6 +34,8 @@ functor RtlRegisterTraceMap(
   type register = var * rep
 
   type stacklocation = TraceTable.Machine.stacklocation
+
+  type idSet = IntSet.set
 
   (*
    * A trace value whose polymorphic spills might not be resolved to physical
@@ -152,11 +155,9 @@ functor RtlRegisterTraceMap(
 
     fun polySpills1 traceMap (id, set) =
 	  polySpillsTrace(RegisterMap.lookup traceMap id, set)
-
-    fun member set item = IntSet.member(set, item)
   in
     fun polySpills(_, traceMap) =
-	  member o foldr (polySpills1 traceMap) IntSet.empty
+	  IntSet.foldr (polySpills1 traceMap) IntSet.empty
   end
 
   fun resetSource(map, _) =

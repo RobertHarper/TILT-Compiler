@@ -3,14 +3,15 @@
  * AlphaMLRISCPseudo.sml
  * ========================================================================= *)
 
-structure AlphaMLRISCPseudo
-	    :> MLRISC_PSEUDO
-		 where type id = int
-	    = struct
+functor AlphaMLRISCPseudo(
+	  structure IntSet: ORD_SET where type Key.ord_key = int
+	) :> MLRISC_PSEUDO
+	       where type idSet = IntSet.set
+	  = struct
 
   (* -- types -------------------------------------------------------------- *)
 
-  type id = int
+  type idSet = IntSet.set
 
   datatype pseudo_op =
     ModuleHeader
@@ -26,7 +27,7 @@ structure AlphaMLRISCPseudo
   | ProcedureHeader of Label.label
   | ProcedureTrailer of Label.label
   | Export of Label.label
-  | CallSite of id list ref * (id list -> unit)
+  | CallSite of idSet ref * (idSet -> unit)
   | Align of int * int
   | Comment of string
   | Integer of Word32.word

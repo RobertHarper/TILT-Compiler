@@ -8,9 +8,9 @@ signature MLRISC_PSEUDO = sig
   (* -- types -------------------------------------------------------------- *)
 
   (*
-   * Identifies a register.
+   * A set of register ids.
    *)
-  type id
+  type idSet
 
   datatype pseudo_op =
     ModuleHeader
@@ -26,7 +26,7 @@ signature MLRISC_PSEUDO = sig
   | ProcedureHeader of Label.label
   | ProcedureTrailer of Label.label
   | Export of Label.label
-  | CallSite of id list ref * (id list -> unit)
+  | CallSite of idSet ref * (idSet -> unit)
   | Align of int * int
   | Comment of string
   | Integer of Word32.word

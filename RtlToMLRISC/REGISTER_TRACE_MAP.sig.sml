@@ -38,6 +38,11 @@ signature REGISTER_TRACE_MAP = sig
   type stacklocation
 
   (*
+   * A set of register ids.
+   *)
+  type idSet
+
+  (*
    * Maps source registers to target register ids and retains traceability
    * information.
    *)
@@ -91,14 +96,13 @@ signature REGISTER_TRACE_MAP = sig
   val trace: (id -> stacklocation) -> map -> id -> trace
 
   (*
-   * Return the polymorphic spill predicate for a given map and a given list of
+   * Return the polymorphic spill set for a given map and a given set of
    * register ids.
    * map -> the map to trace the register ids in
-   * ids -> the register ids to return the polymorphic spill predicate of
-   * <- a function that returns true if a given id must be spilled for
-   *	polymorphic values
+   * ids -> the register ids to return the polymorphic spill set of
+   * <- the ids that must be spilled for polymorphic values
    *)
-  val polySpills: map -> id list -> id -> bool
+  val polySpills: map -> idSet -> idSet
 
   (*
    * Remove all the source-based register mappings from a given map.

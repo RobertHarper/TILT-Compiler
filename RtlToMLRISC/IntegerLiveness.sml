@@ -13,9 +13,9 @@ functor IntegerLiveness(
 		       BasicBlock.mltree =
 		       IntegerDataFlow.mltree
 	      and type IntSet.set =
-		       IntegerDataFlow.set
+		       IntegerDataFlow.idSet
 	) :> REGISTER_LIVENESS
-	       where type id	 = int
+	       where type idSet	 = IntSet.set
 		 and type mltree = MLTreeExtra.MLTree.mltree
 	  = struct
 
@@ -25,7 +25,7 @@ functor IntegerLiveness(
 
   (* -- types -------------------------------------------------------------- *)
 
-  type id = int
+  type idSet = IntSet.set
 
   type mltree = MLTree.mltree
 
@@ -105,15 +105,10 @@ functor IntegerLiveness(
 	    else
 	      sets
 	  end
-
-    (*
-     * Return a list of the registers that are in the intersection of an in
-     * and an out set.
-     *)
-    fun result sets = IntSet.listItems(IntSet.intersection sets)
   in
     fun liveness blocks =
-	  map result (liveness' (triples blocks) (fn _ => IntSet.empty))
+	  map IntSet.intersection
+	      (liveness' (triples blocks) (fn _ => IntSet.empty))
   end
 
 end
