@@ -5,6 +5,8 @@ structure Listops : LISTOPS =
 
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
     fun count n = loop 0 (n-1)
+    fun copy (0,_) = []
+      | copy (n,x) = x::(copy(n-1,x))
     val error = fn s => Util.error "util.sml" s
 			      
     fun zip [] [] = []

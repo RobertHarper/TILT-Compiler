@@ -4,6 +4,8 @@ Group is
 (* ------ Our own utilities --- *)
 util.sig.sml
 util.sml
+sequence.sig.sml
+sequence.sml
 tilword.sig.sml
 tilword32.sml
 tilword64.sml

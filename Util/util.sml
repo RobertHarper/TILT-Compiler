@@ -36,30 +36,6 @@ structure Util : UTIL =
     fun oneshot_deref (ONESHOT (_,r)) = !r
     fun eq_oneshot (ONESHOT a,ONESHOT b) = a = b
 
-    type ('a,'b) sequence = ('a*'b) list
-    type ('a,'b) set = ('a*'b) list
-    fun list2sequence x = x
-    fun sequence2list x = x
-    fun sequence2set x = x
-    fun set2sequence x = x
-    fun list2set x = x
-    fun set2list x = x
-    val foldsequence = foldl
-    val foldset = foldl
-    val mapsequence = map
-    val mapset = map
-    val appsequence = app
-    val appset = app
-    val allsequence = List.all
-
-    fun set_lookup pred set key = 
-	let fun loop [] = NONE
-	      | loop ((a,b)::rest) = if (pred(a,key)) then SOME b else loop rest
-	in loop set
-	end
-    val sequence_lookup = set_lookup
-    val setconcat = op @
-    val sequenceconcat = op @
 
     fun substring (pattern,target) =
 	let val pattern = explode pattern
