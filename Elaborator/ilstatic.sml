@@ -837,86 +837,6 @@ structure IlStatic
 	   end)
 
 
-   and GetConKindFast (con : con, ctxt : context) : kind = 
-      (case con of
-       (CON_TYVAR tv) => KIND
-     | (CON_VAR v) => 
-	   (case Context_Lookup_Var(ctxt,v) of
-		SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
-	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
-	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
-     | (CON_OVAR ocon) => KIND
-     | (CON_INT _) => KIND
-     | (CON_FLOAT _) => KIND
-     | (CON_UINT _) => KIND
-     | (CON_ANY) => KIND
-     | (CON_REF _) => KIND
-     | (CON_ARRAY _) => KIND
-     | (CON_VECTOR _) => KIND
-     | (CON_TAG _) => KIND
-     | (CON_ARROW _) => KIND
-     | (CON_COERCION _) => KIND             (* XXX Is this correct? XXX *)
-     | (CON_APP (c1,_)) => 
-	   let val k = GetConKindFast(c1,ctxt)
-	   in (case k of
-		   KIND_ARROW(a,kres) => kres
-		 | _ => 
-			(debugdo (fn () =>
-				  (print "GetConKindFast: kind mismatch in "; pp_con con;
-				   print "\nFunction kind = "; pp_kind k; print "\n"));
-			 error "GetConKindFast: kind mismatch in CON_APP"))
-	   end
-     | (CON_MU c) => (case GetConKindFast(c,ctxt) of
-			KIND_ARROW(m,_) => KIND_TUPLE m
-		      | _ => error "kind of CON_MU argument not KIND_ARROW")
-     | (CON_FLEXRECORD _) => KIND
-     | (CON_RECORD _) => KIND
-     | (CON_FUN (vs,c)) => 
-	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND,NONE)
-	       val ctxt' = foldl folder ctxt vs
-	       val kbody = GetConKindFast(c,ctxt') 
-	   in  KIND_ARROW(length vs,kbody)
-	   end
-     | (CON_SUM _) => KIND
-     | (CON_TUPLE_INJECT [_]) => error "Cannot CON_TUPLE_INJECT one con"
-     | (CON_TUPLE_INJECT cs) => KIND_TUPLE (length cs)
-     | (CON_TUPLE_PROJECT (i,c)) => (case (GetConKindFast(c,ctxt)) of
-				       KIND_TUPLE n =>
-					 (if (i >= 0 andalso i < n)
-					    then KIND
-					  else
-					    (debugdo (fn () =>
-						      (print "GetConKind got: ";
-						       pp_con con;
-						       print "\n"));
-					     error "got CON_TUPLE_PROJECT in GetConKindFast"))
-				     | k => (debugdo (fn () =>
-						      (print "GetConKindFast got: ";
-						       pp_con con;
-						       print "\nwith kind";
-						       pp_kind k;
-						       print "\n"));
-					     error "got CON_TUPLE_PROJECT in GetConKindFast"))
-     | (CON_MODULE_PROJECT (m,l)) => 
-	   let val (_,signat) = GetModSig(m,ctxt)
-	       val signat = reduce_signat ctxt signat
-	       val sdecs = 
-		   (case signat of
-			SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
-		      | _ => error "cannot project from unselfified sig_structure")
-	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
-		    NONE => (debugdo (fn () =>
-				      (print "no such label = ";
-				       pp_label l; print " in sig \n";
-				       Ppil.pp_signat signat;
-				       print "\n"));
-			     error "no such label in sig")
-		  | SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
-		  | _ => error "label in sig not a DEC_CON")
-	   end)
-
-
-
    (* --------- Rules 69 to 96 ----------- *)
    and GetExpCon (exparg,ctxt) : bool * con = 
      let fun msg() = (print "GetExpCon called with exp = \n";
@@ -1555,7 +1475,7 @@ structure IlStatic
 			 end)
 
     and Normalize (con,ctxt) : (bool * con) = 
-	let fun msg() = (print "HeadNormalize called with con =\n";
+	let fun msg() = (print "Normalize called with con =\n";
 			 pp_con con; print "\n")
 	in  (case Reduce NORM (con,ctxt) of
 		 NONE => (false, con)
@@ -2029,7 +1949,6 @@ structure IlStatic
 
     val GetExpCon = fn (d,e) => #2(GetExpCon(e,d))
     val GetConKind = fn (d,c) => GetConKind(c,d)
-    val GetConKindFast = fn (d,c) => GetConKindFast(c,d)
     val GetModSig = fn (d,m) => ((* Stats.counter "ilstatic.externgetmodsig" (); *)
 				#2(GetModSig(m,d)))
     val GetBndDec = fn arg => #2(GetBndDec arg)

@@ -137,7 +137,16 @@ structure Signature :> SIGNATURE =
 					      print "  = ";
 					      pp_con c)
 
-  (* this function is staged to reduce repeated selfification *)
+  (* follow_labels looks up the "labels" type component of
+     sdecs and follows type definitions to determine whether it is 
+     flexible or rigid (ABSTRACT or CONCRETE).  In order to do so,
+     a variable is put into the context (unless pathopt is supplied)
+     with the sdecs signature.  If the normalized form of the "labels"
+     component is a path with that variable at its head, then it is
+     flexible, otherwise rigid.
+   *)
+
+  (* This function is staged to reduce repeated selfification. *)
   fun follow_labels (pathopt,sdecs,ctxt) =
       let val (v,path,ctxt) = 
 	      (case pathopt of

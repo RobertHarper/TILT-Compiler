@@ -45,7 +45,6 @@ signature ILSTATIC =
     (* ---------- Obtain types and kinds and signatures ---------- *)
     val GetExpCon     : Il.context * Il.exp  -> Il.con
     val GetConKind    : Il.context * Il.con  -> Il.kind
-    val GetConKindFast : Il.context * Il.con  -> Il.kind
     val GetModSig     : Il.context * Il.mod  -> Il.signat
     val GetBndDec     : Il.context * Il.bnd  -> Il.dec
     val GetBndsDecs   : Il.context * Il.bnds -> Il.decs 
