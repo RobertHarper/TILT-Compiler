@@ -163,12 +163,13 @@ structure Linknil :> LINKNIL  =
 	    val D = NilContext.empty()
 
 	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
+
+(*	    val nilmod = NilRename.renameMod nilmod *)
+	    val nilmod = transform typecheck_after_phasesplit (typecheck, nilmod)
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
 		    else ()
 
-	    val nilmod = NilRename.renameMod nilmod
-	    val nilmod = transform typecheck_after_phasesplit (typecheck, nilmod)
 	    val nilmod = transform rename1 (Linearize.linearize_mod, nilmod)
  	    val nilmod = transform typecheck_before_opt (typecheck, nilmod)
 	    val nilmod = transform optimize1 
