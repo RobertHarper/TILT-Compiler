@@ -1,5 +1,4 @@
-(*$import Fixity Name Prim Tyvar Util IL *)
-
+(* The datatypes for the internal language. *)
 structure Il :> IL =
 struct
 
@@ -26,7 +25,7 @@ struct
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of int * con * exp
-                 | HANDLE  of con * exp * exp      
+                 | HANDLE  of con * exp * exp
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
@@ -46,7 +45,7 @@ struct
 			       arms : (exp option) list,
 			       tipe : con,
 			       default : exp option}
-                 (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *) 
+                 (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *)
                  | EXN_CASE of {arg : exp,
 				arms : (exp * con * exp) list,
 				default : exp option,
@@ -55,7 +54,7 @@ struct
                  | SEAL    of exp * con
 
                               (* var = (var : con) : con |-> exp *)
-    and  fbnd = FBND    of var * var * con * con * exp  
+    and  fbnd = FBND    of var * var * con * con * exp
 
     and flexinfo = FLEXINFO of (Tyvar.stamp * bool * (label * con) list)
 	         | INDIRECT_FLEXINFO of flexinfo ref (* <--- this ref is necessary for unification *)
@@ -83,7 +82,7 @@ struct
 					 special : int option}
                  | CON_COERCION of var list * con * con
                  | CON_TUPLE_INJECT  of con list
-                 | CON_TUPLE_PROJECT of int * con 
+                 | CON_TUPLE_PROJECT of int * con
                  | CON_MODULE_PROJECT of mod * label
     and     kind = KIND
                  | KIND_TUPLE of int
@@ -112,10 +111,11 @@ struct
                  | DEC_MOD       of var * bool * signat
 
     and     ovld = OVLD of (con * exp) list * int option (* types, default *)
-	
-    and context_entry = 
+
+    and context_entry =
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
+      | CONTEXT_EXTERN of label * var * label * con
       | CONTEXT_FIXITY of label * Fixity.fixity
       | CONTEXT_OVEREXP of label * ovld
 
@@ -135,21 +135,17 @@ struct
 		form a well-formed elaboration context.
 
        		If (v,(l,pc)) in varMap, then (l,(v,nil) in labelMap.
-		
+
 		If (l,(v,nil)) in labelMap, then (v,(l',pc)) in varMap.
 
 		(l,(v,labs)) in labelMap, where labs is non-nil, iff
 		the label l is visible at the top-level due to the
 		star convention and v.labs is the corresponding path.
 
-		If (v,s) in !memo, then decs |- v : s and s is fully
-		transparant, deeply reduced, and contains no
-		non-binding occurrences of local variables.
-		
 		dom(overloadMap) and dom(labelMap) are disjoint.
-		
+
        Comments:
-       
+
 		Equality compilation needs to map constructor
 		variables to labels so varMap entries do not have the
 		form (v,pc).
@@ -158,36 +154,88 @@ struct
 		to the same variable so there is not a one-to-one
 		correspondence between the entries in varMap and the
 		entries of the form (l,(v,nil)) in labelMap.
-		
-		When a module variable is looked up, it's signature is
-		transformed and memoized in !memo.  Rather than risk
-		aliasing errors, we allocate a new ref cell for each
-		new context, even when two contexts can "obviously"
-		share a ref cell.
-		
+
+		An extern has two labels: A top-level label that can
+		be missing or shadowed and an underlying label that
+		does not change.
+
 		The union of dom(overloadMap) and dom(labelMap) is the
 		set of top-level labels.
     *)
+
+    (* Should be abstract. *)
     and context = CONTEXT of  {varMap : (label * phrase_class) Name.VarMap.map,
 			       ordering : var list,
 			       labelMap : vpath Name.LabelMap.map,
-			       memo : signat Name.VarMap.map ref,
 			       fixityMap : Fixity.fixity Name.LabelMap.map,
 			       overloadMap : ovld Name.LabelMap.map}
 
+    (*
+	We write Transformed(decs,s,s') iff
+	1. decs |- s = s'.
+	2. for every substructure signature s'' in s',
+	   a. s'' is selfified
+	   b. s'' has the form SIGNAT_STRUCTURE sdecs''
+	   c. s'' has no non-binding occurrences of local variables.
+
+	N.B. (2) does not apply to any structures declared in functor
+	signatures.
+
+	Invariant:
+
+	If (v,PHRASE_CLASS_MOD (_,_,s,f)) in decs,
+	then Transformed(decs,s,f()).
+
+	N.B.  This invariant does not apply to every value of type
+	phrase_class; only those in an elaboration context.
+    *)
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
-                     | PHRASE_CLASS_MOD     of mod * bool * signat
+                     | PHRASE_CLASS_MOD     of mod * bool * signat * (unit -> signat)
                      | PHRASE_CLASS_SIG     of var * signat
+		     | PHRASE_CLASS_EXT     of var * label * con
 
     withtype value = (con,exp) Prim.value
-    type decs = dec list
 
+    type decs = dec list
     type bnds  = bnd list
     type sdecs = sdec list
     type sbnds = sbnd list
 
-    type partial_context = context * label Name.VarMap.map  (* A context with free variables *)
-    type module = context * partial_context * (sbnd option * context_entry) list
+    (*
+	Invariant: The first component is SOME sbnd iff the second
+	component is CONTEXT_SDEC.
+    *)
+    type decresult = (sbnd option * context_entry) list
+
+    type entries = context_entry list
+
+    (*
+	A module's context contains only those top-level sdecs and
+	signatures needed to support sbnd and sdec.  This is
+	accomplished with IlContext.gc_context.
+    *)
+
+    type module = context * sbnd * sdec
+
+    (*
+	Parameterized compilation unit interfaces can be written to
+	disk.  Instantiated interfaces have more structure than this;
+	see LinkIl.  Parameters do not have classifier information.
+	The manager uses CRCs of interface files to ensure that if a
+	compilation unit's interface changes, then everything that
+	depends on that unit gets recompiled.
+   *)
+
+    datatype parm =
+	PARM of label			(* unit name *)
+      | PARM_SIG of label * label	(* unit name, signature name *)
+      | PARM_EXT of label * label	(* unit name, extern name *)
+
+    type parms = parm Name.VarMap.map
+
+    type pinterface =
+	{parms : parms,
+	 entries : entries}
 
 end
