@@ -1483,6 +1483,8 @@ structure IlStatic
 	  handle e => (if !trace then msg() else (); raise e)
 	end
 
+
+    (* Derek: NormOnce appears to be implemented the same as Normalize!! *)
     and NormOnce (con,ctxt) : con option =
 	let fun msg() = (print "ReduceOnce called with con =\n";
 			 pp_con con; print "\n")

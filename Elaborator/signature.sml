@@ -548,6 +548,30 @@ structure Signature :> SIGNATURE =
 			     raise SharingError))
       end
   
+  and xsig_sharing_structure_slow2(ctxt,sdecs,lpathlist) : sdecs =
+      let
+	  val mjunk = fresh_named_var "mjunk_sharing_structure"
+	  val mpath = PATH (mjunk,[])
+	  val s = SelfifySig ctxt (mpath, SIGNAT_STRUCTURE sdecs)
+	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
+
+	  (* 
+	     The i-th path is the path (starting with mjunk) to the i-th structure.
+	     The i-th lpath is the i-th path with the head (mjunk) cut off.
+             The i-th sdecs is the spec of the i-th structure.
+          *)
+	  val (pathlist,lpathlist,sdecslist) = 
+	      Listops.unzip3(map (fn lpath => path2triple(lpath, s, mjunk, ctxt')) lpathlist)
+
+          (* 
+	     The i-th slabs is the list of lpaths to type components in the i-th structure.
+	  *)
+	  val slabslist : lpath list list = map (fn sdecs => map #2 (find_labels_sdecs ctxt' sdecs)) sdecslist
+
+
+in raise SharingError end
+
+
   and xsig_sharing_structure_slow(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
@@ -982,6 +1006,7 @@ structure Signature :> SIGNATURE =
 					NONE)
 			         (* --- Coercion from exception constructor to value spec --- *)
 				 | SOME con_actual => 
+				       (coerce(true,"exception constructor to value spec");
 				       if (sub_con(ctxt,con_actual,con_spec)) then
 					   let val exp = path2exp(join_path_labels(path_actual, lbls @ [mk_lab]))
 					       val bnd = BND_EXP(v_spec,exp)
@@ -1001,7 +1026,7 @@ structure Signature :> SIGNATURE =
 					       print "\n";
 					       NONE
 					   end
-				       )
+				       ))
 			 | SOME (var_actual, 
 				 SIGNAT_STRUCTURE sdecs_actual,
 				 con_actual,_,inline) =>
