@@ -92,11 +92,13 @@ slaves: FORCE
 	$(slaves) -n 4/localhost
 
 install: FORCE
-	-mkdir $(PREFIX)/lib/tilt
+	-mkdir $(PREFIX)/lib $(PREFIX)/lib/tilt
 	tar cf - Bin Lib Heaps | (cd $(PREFIX)/lib/tilt && tar xf -)
+	-mkdir $(PREFIX)/man $(PREFIX)/man/man1
 	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1
+	-mkdir $(PREFIX)/bin
 	for name in tilt tilt-nj tilt-slaves dump dump-nj; do \
-		{echo '#!/bin/sh'; \
-		 echo 'exec $(PREFIX)/'$$name' $${1+"$$@"}'; \
-		}>$(PREFIX)/bin/$$name && chmod 755 $(PREFIX)/bin/$$name; \
+		(echo '#!/bin/sh'; \
+		 echo 'exec $(PREFIX)/lib/tilt/Bin/'$$name' $${1+"$$@"}'; \
+		)>$(PREFIX)/bin/$$name && chmod 755 $(PREFIX)/bin/$$name; \
 	done
