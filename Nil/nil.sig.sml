@@ -36,12 +36,12 @@ sig
    * A parallel let permits the bindings to be concurrently executed.
    *)
   datatype letsort = Sequential | Parallel
-
+  datatype phase = Runtime | Compiletime
   datatype kind = 
-      Type_k                        (* classifies constructors that are types *)
-    | Word_k                        (* classifies types that fit in a word *)
-    | Singleton_k of kind * con     (* singleton-kind at kind type that leaks 
-				           through the constructor *)
+      Type_k of phase               (* classifies constructors that are types *)
+    | Word_k of phase               (* classifies types that fit in a word *)
+    | Singleton_k of phase * kind * con     (* singleton-kind at kind type that leaks 
+				               through the constructor *)
                                     (* dependent record kind classify records of 
 				           constructors *)
     | Record_k of ((label*var),kind) sequence
@@ -61,7 +61,8 @@ sig
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
-    | Sum_c of int option                     (* sum types *)
+    | Sum_c of {tagcount : w32,
+                known : w32 option}           (* sum types *)
     | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 
@@ -75,8 +76,7 @@ sig
 					               note that the classifiers of open functions 
                                                        and closures are given by Arrow_c *)
     | Var_c of var
-    | Let_c of letsort * (var * con) list * con   (* Constructor-level bindings *)
-    | Fun_c of openness * (var * kind) list * con (* Constructor-level lambdas *)
+    | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
     | Crecord_c of (label * con) list             (* Constructor-level records *)
     | Proj_c of con * label                       (* Constructor-level record projection *)
     | Closure_c of con * con                      (* Constructor-level closure: 
@@ -85,14 +85,20 @@ sig
 						       of open or closed constructor function *)
     | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
-  withtype confun = effect * (var * kind) list * con list * con
+  and conbnd = Con_cb of (var * kind * con)
+             | Fun_cb of (var * openness * (var * kind) list * con * kind)
+
+  withtype confun = effect * (var * kind) list * con list * con (* describe term-level functions *)
+
+                  
 
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection; takes the record type *)
-    | inject of w32              (* slow; sum intro *)
-    | inject_record of w32       (* fast; sum intro where argument is a record
-					  whose components are individually passed in *)
+    | inject of {tagcount : w32,
+                 field : w32}    (* slow; sum intro *)
+    | inject_record of {tagcount : w32,       (* fast; sum intro where argument is a record *)
+			field : w32}	      (* whose components are individually passed in *)
     | project_sum of w32         (* slow; given a special sum type, return carried value *)
     | project_sum_record of w32 * w32 (* fast; given a special sum type of record type, 
 				               return the specified field *)
@@ -117,7 +123,7 @@ sig
    *)
   datatype switch =                                 (* Switching on / Elim Form *)
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
-    | Sumsw_e of (con list,exp,w32) sw                    (* sum types *)
+    | Sumsw_e of (int * con list,exp,w32) sw             (* sum types *)
     | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
 
 
@@ -140,9 +146,9 @@ sig
    * closure-convert recursive functions.
    *)
 
-  and bnd =                                (* Term-level Bindings *)
-      Con_b of var * con                            (* Binds constructors *)
-    | Exp_b of var * exp                            (* Binds expressions *)
+  and bnd =                                (* Term-level Bindings with optional classifiers *)
+      Con_b of var * kind * con              (* Binds constructors *)
+    | Exp_b of var * con * exp               (* Binds expressions *)
     | Fixfun_b of (var,function) set                (* Binds mutually recursive functions *)
                                                     (* Allows the creation of closures *)
     | Fixclosure_b of (var , {code:var, cenv:con, venv:exp}) set
