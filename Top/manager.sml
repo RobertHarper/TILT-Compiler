@@ -125,7 +125,7 @@ struct
                             NONE => error "HOST environment variable unset"
                           | SOME selfName => selfName)
 	val selfName = (case Util.substring(".cs.cmu.edu",selfName) of
-			    NONE => error "cannot strip of realm name .cs.cmu.edu"
+			    NONE => selfName
 			  | SOME pos => String.substring(selfName,0,pos))
 	val selfPid = Word32.toInt(Platform.pid())
 	val self = selfName ^ "." ^ (Int.toString selfPid)
@@ -712,7 +712,7 @@ struct
 
 	fun lookup unitname =
 	    ((Dag.nodeAttribute(!graph,unitname))
-	     handle Dag.UnknownNode => error ("unit " ^ unitname ^ " missing"))
+	     handle Dag.UnknownNode _ => error ("unit " ^ unitname ^ " missing"))
  
     in 
 
@@ -745,17 +745,32 @@ struct
 
 	fun get_import_direct unit = 
 	    (Dag.parents(!graph,unit)
-	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	     handle Dag.UnknownNode _ => error ("unit " ^ unit ^ " missing"))
 	fun get_import_transitive unit = 
 	    (rev(Dag.ancestors(!graph,unit))
-	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	     handle Dag.UnknownNode _ => error ("unit " ^ unit ^ " missing"))
 	fun get_dependent_direct unit = 
 	    (Dag.children(!graph,unit)
-	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	     handle Dag.UnknownNode _ => error ("unit " ^ unit ^ " missing"))
 	fun get_size unit = 
 	    (Dag.nodeWeight(!graph,unit)
-	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
-
+	     handle Dag.UnknownNode _ => error ("unit " ^ unit ^ " missing"))
+	fun refreshDag g =
+	    Dag.refresh g
+	    handle Dag.Cycle nodes =>
+		   (chat "  Cycle detected in mapfile: ";
+		    chat_strings 20 nodes;
+		    chat "\n";
+		    error "Cycle detected in mapfile")
+		 | Dag.UnknownNode node =>
+		   let val msg = "  " ^ node ^ " not defined in mapfile."
+		   in
+		       chat msg;
+		       chat "  Used by ";
+		       chat_strings 20 (Dag.children' (g, node));
+		       chat "\n";
+		       error msg
+		   end
 
 	fun markReady unit = 
 	    (case (get_status unit) of
@@ -907,7 +922,7 @@ struct
 		    then 
 			let val _ = app read_import (list_units());
 			    val _ = chat ("Imports read.\n");
-			    val _ = Dag.refresh (!graph);
+			    val _ = refreshDag (!graph);
 			    val _= (chat "Dependency graph computed: ";
 				    chat (Int.toString (Dag.numNodes (!graph))); print " nodes and ";
 				    chat (Int.toString (Dag.numEdges (!graph))); print " edges.\n")
@@ -1433,55 +1448,15 @@ struct
 	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
-  fun slaves (slaveList : (int * string) list) = 
-      let fun startSlave (num,count,machine) = 
-	  let val row = num mod 5
-	      val col = num div 5
-	      val geometry = "120x" ^ (Int.toString (11 * count)) ^ 
-			     "+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 160))
-	      val dir = OS.FileSys.getDir()
-	      val commDir = dir ^ "/" ^ Comm.tempDir
-	      val SOME display = OS.Process.getEnv "DISPLAY"
-	      val SOME user = OS.Process.getEnv "USER"
-	      val out = TextIO.openOut (commDir ^ "/startSlave1")
-	      val _ = TextIO.output(out, "(set-default-font \"courier7\")\n")
-	      fun loop 0 = ()
-		| loop n = 
-		  (TextIO.output
-		   (out, 
-		    String.concat["(shell)",
-				  "(balance-windows)(balance-windows)\n"]);
-		   TextIO.output(out, "(rename-buffer \"slave" ^ (Int.toString n) ^ "\")");
-		   if (n > 1) then TextIO.output(out, "(split-window-vertically)") else ();
-		   loop (n-1))
-	      fun loop2 0 = ()
-		| loop2 n = 
-		  (TextIO.output
-		   (out, 
-		    String.concat["(other-window 1)",
-				  "(insert-file \"", commDir, "/startSlave2\")",
-				  "(end-of-buffer)",
-				  "(comint-send-input)\n",
-				  "(insert-file \"", commDir, "/startSlave3\")",
-				  "(end-of-buffer)",
-				  "(comint-send-input)",
-				  "(balance-windows)\n"]);
-		   loop2 (n-1))
-	      val _ = loop count
-	      val _ = loop2 count
-	      val _ = TextIO.closeOut out
-	      val out = TextIO.openOut (commDir ^ "/startSlave2")
-	      val _ = TextIO.output(out, "cd " ^ dir ^ "; Local/sml-cm\n")
-	      val _ = TextIO.closeOut out
-	      val out = TextIO.openOut (commDir ^ "/startSlave3")
-	      val _ = TextIO.output(out, "CM.make(); Manager.slave();\n")
-	      val _ = TextIO.closeOut out
-	      val command = 
-		  "setenv DISPLAY " ^ display ^ 
-		  "; xterm -geometry -0 -e kinit " ^ user ^
-		  "; emacs -bg black -fg yellow -geometry " ^ geometry ^ " -l " ^ commDir ^ "/startSlave1"
-	  in  (OS.Process.system ("rsh " ^ machine ^ " '" ^ command ^ "'&"); ()) 
-	  end
+  fun slaves (slaveList : (int * string) list) =
+      let val dir = OS.FileSys.getDir()
+	  val commDir = dir ^ "/" ^ Comm.tempDir
+	  val script = dir ^ "/Bin/til_slave"
+	  fun cmdline (num, count, machine) =
+	      String.concat [script, " ", Int.toString num, " ", Int.toString count, " ",
+			     machine, " ", commDir, "&"]
+	  fun startSlave ncm =
+	      (OS.Process.system (cmdline ncm); ())
 	  fun loop _ [] = ()
 	    | loop cur ((count,machine)::rest) = (startSlave(cur,count,machine); loop (cur+count) rest)
       in  loop 0 slaveList;
