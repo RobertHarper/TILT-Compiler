@@ -16,15 +16,20 @@ sig
      * NONE if path is not accessible via any of dirs.
      *)
     val accessPath : string list * OS.FileSys.access_mode list -> string -> string option
-	
+
     (* Compiler directories *)
 	
     type dirs
-
+	
     val getDirs : unit -> dirs		(* Depends on process' environment.  Don't force too early. *)
 
+    (* Encode/decode path for use on another machine -- possibly with
+     * different LIBDIRs, CWDs, etc.
+     *)
+    val encode : dirs -> string -> string
+    val decode : dirs -> string -> string
+
     val isSystemFile  : dirs * string -> bool
-    val stripLibDir   : dirs * string -> string option
 	
     val getLibDir     : dirs -> string
     val getRuntimeDir : dirs -> string

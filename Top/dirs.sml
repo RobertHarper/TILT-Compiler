@@ -32,7 +32,6 @@ struct
 	end
 
     datatype dirs = DIRS of {system : string -> bool,
-			     stripLib : string -> string option,
 			     libDir : string,
 			     runtimeDir : string,
 			     binDir : string,
@@ -77,6 +76,13 @@ struct
 			  then String.extract (s, 1, NONE)
 		      else s
 
+    (* strip : string * string -> string option *)
+    fun strip (dir, file) = if inDirByName (dir, file)
+				then SOME (chopSlash (String.extract (file, size dir, NONE)))
+			    else if OS.Path.isRelative file
+				     then strip (dir, relative (Delay.force cwd, file))
+				 else NONE
+
     (* sysDir : string -> bool *)
     fun sysDir dir =
 	let val sysDirs = ["/tmp", "/usr/tmp", "/usr0/tmp", (* For testing purposes *)
@@ -95,16 +101,10 @@ struct
 	    val sys = sysDir dir
 	    fun system file = sys andalso inDir (dir, file)
 	    val curDir = Delay.force cwd
-	    val len = size dir
-	    fun stripLib file = if inDirByName (dir, file)
-				    then SOME (chopSlash (String.extract (file, len, NONE)))
-				else if OS.Path.isRelative file
-					 then stripLib (relative (curDir, file))
-				     else NONE
 	    val commDir = relative (curDir, "TempCommunication")
 	    fun join file = relative (dir, file)		
 	in
-	    DIRS {system=system, stripLib=stripLib, libDir=dir,
+	    DIRS {system=system, libDir=dir,
 		  runtimeDir=join "Runtime", binDir=join "Bin",
 		  commDir=Delay.delay (fn () => (mkdir commDir; commDir))}
 	end
@@ -118,16 +118,31 @@ struct
     (* getDirs : unit -> dirs *)
     fun getDirs () = Delay.force dirs
 	
+    (* encode/decode necessary because LibDir is not fixed *)
+    (* decode should probably do a path search *)
+
+    (* encode : dirs -> string -> string *)
+    fun encode (DIRS {libDir, ...}) file =
+	case strip (libDir, file)
+	  of NONE => "U" ^ file
+	   | SOME file' => "L" ^ file'
+	      
+    (* decode : dirs -> string -> string *)
+    fun decode (DIRS {libDir, ...}) code =
+	let val file = String.extract (code, 1, NONE)
+	in
+	    case String.sub (code, 0)
+	      of #"L" => relative (libDir, file)
+	       | #"U" => file
+	end
+	      
     (* isSystemFile : dirs * string -> bool *)
     fun isSystemFile (DIRS {system,...}, file) = system file
 	
-    (* stripLibDir : dirs * string -> string option *)
-    fun stripLibDir (DIRS {stripLib,...}, file) = stripLib file
-
     (* get*Dir : dirs -> string *)
     fun getLibDir     (DIRS {libDir,...})     = libDir
     fun getRuntimeDir (DIRS {runtimeDir,...}) = runtimeDir
     fun getBinDir     (DIRS {binDir,...})     = binDir
     fun getCommDir    (DIRS {commDir,...})    = Delay.force commDir
-
+	
 end

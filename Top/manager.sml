@@ -95,13 +95,20 @@ struct
     val flush = "FLUSH"
     val request = "REQUEST"
 
+    fun changeFiles f (platform::unit::absBase::absImportBases) =
+	(platform::unit::(f absBase)::(map f absImportBases))
+      | changeFiles f _ = error "wrong number of words - bad msg"
+	
+    fun jobToWords job = changeFiles (Dirs.encode (Dirs.getDirs())) job
+    fun wordsToJob words = changeFiles (Dirs.decode (Dirs.getDirs())) words
+	
     fun messageToWords READY = [ready]
-      | messageToWords (ACK_INTERFACE words) = ack_interface :: words
-      | messageToWords (ACK_ASSEMBLY words) = ack_assembly :: words
-      | messageToWords (ACK_OBJECT words) = ack_object :: words
-      | messageToWords (ACK_ERROR words) = ack_error :: words
+      | messageToWords (ACK_INTERFACE job) = ack_interface :: (jobToWords job)
+      | messageToWords (ACK_ASSEMBLY job) = ack_assembly :: (jobToWords job)
+      | messageToWords (ACK_OBJECT job) = ack_object :: (jobToWords job)
+      | messageToWords (ACK_ERROR job) = ack_error :: (jobToWords job)
       | messageToWords FLUSH = [flush]
-      | messageToWords (REQUEST words) = request :: words
+      | messageToWords (REQUEST job) = request :: (jobToWords job)
     fun wordsToMessage [] = error "no words - bad msg"
       | wordsToMessage (first::rest) = 
 	if (first = ready andalso null rest)
@@ -109,15 +116,15 @@ struct
 	else if (first = flush andalso null rest)
 	    then FLUSH
 	else if (first = ack_interface)
-		 then ACK_INTERFACE rest
+		 then ACK_INTERFACE (wordsToJob rest)
 	else if (first = ack_assembly)
-		 then ACK_ASSEMBLY rest
+		 then ACK_ASSEMBLY (wordsToJob rest)
 	else if (first = ack_object)
-		 then ACK_OBJECT rest
+		 then ACK_OBJECT (wordsToJob rest)
 	else if (first = ack_error)
-		 then ACK_ERROR rest
+		 then ACK_ERROR (wordsToJob rest)
         else if (first = request)
-		 then REQUEST rest
+		 then REQUEST (wordsToJob rest)
 	else error ("strange header word " ^ first ^ " - bad msg")
 
     type channel = (string * string) Delay.value

@@ -145,31 +145,13 @@ structure Linker :> LINKER =
 				    BinIO.closeIn is
 				end
 
-    (* encode/decode necessary because LibDir is not fixed *)
-    (* decode should probably do a path search *)
-
-    (* encode : Dirs.dirs -> string -> string *)
-    fun encode dirs file =
-	(case Dirs.stripLibDir (dirs, file)
-	   of NONE => "U" ^ file
-	    | SOME relativeFile => "L" ^ relativeFile)
-
-    (* decode : Dirs.dirs -> string -> string *)
-    fun decode dirs code =
-	let val file = String.extract (code, 1, NONE)
-	in
-	    case String.sub (code, 0)
-	      of #"L" => Dirs.relative (Dirs.getLibDir dirs, file)
-	       | #"U" => file
-	end
-
     local open BinIO_Util
     in
       fun mk_uo {imports : (string * Crc.crc) list,
 		 exports : (string * Crc.crc) list,
 		 base_result : string} : string =
 	let
-	    val encode = encode (Dirs.getDirs())
+	    val encode = Dirs.encode (Dirs.getDirs())
 	    val uo_result = Til.base2uo base_result
 	    val os = BinIO.openOut uo_result
 	    val out_pairs = app (fn (name,crc) =>
@@ -201,7 +183,7 @@ structure Linker :> LINKER =
 	end
  
       fun input_pairs (is : BinIO.instream) : (string * Crc.crc) list =
-	let val decode = decode (Dirs.getDirs())
+	let val decode = Dirs.decode (Dirs.getDirs())
 	    fun loop a = case lookahead is of
 			      NONE => rev a
 			    | SOME #"$" => rev a
