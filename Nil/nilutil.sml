@@ -1322,37 +1322,30 @@ end
                  makeLetE (bnds, formal = arg) IN fnbody
     *)
 
-   fun makeLetE Parallel ebnds body = Let_e(Parallel, ebnds, body)
-     | makeLetE _ nil body = body
-     | makeLetE _ ebnds (Let_e(Sequential, ebnds', body)) =
-          makeLetE Sequential (ebnds @ ebnds') body
-     | makeLetE _ ebnds body =
-       (case (List.rev ebnds, body) of
-(*         (* XXX Breaks a-normal form *)
-           (Exp_b(evar',exp)::rest, Var_e evar) => 
-	       if (Name.eq_var(evar',evar)) then 
-                  makeLetE Sequential (List.rev rest) exp
-               else
-		   Let_e(Sequential, ebnds, body)
-*)
+   fun makeLetE Parallel ebnds let_body = Let_e(Parallel, ebnds, let_body)
+     | makeLetE _ nil let_body = let_body
+     | makeLetE _ ebnds (Let_e(Sequential, ebnds', let_body)) =
+          makeLetE Sequential (ebnds @ ebnds') let_body
+     | makeLetE _ ebnds let_body =
+       (case (List.rev ebnds, let_body) of
            (Fixopen_b fset :: rest, 
 	    App_e(_,Var_e evar, con_args, exp_args, fp_args))=>
 	       (case (Sequence.toList fset) of
 		    [(evar', 
 		      Function{recursive = Leaf, 
 			       tFormals = vklist, eFormals = vclist, fFormals = fplist,
-			       body,...})] => 
+			       body=fun_body,...})] => 
  		       if (Name.eq_var(evar',evar)) then
 			   makeLetE Sequential 
 			   ((List.rev rest) @ 
 			    (createBindings(vklist, con_args,
 					    vclist, exp_args,
 					    fplist, fp_args)))
-			   body
+			   fun_body
 		       else
-			   Let_e(Sequential, ebnds, body)
-		    | _ => Let_e(Sequential, ebnds, body))
-	 | _ => Let_e(Sequential, ebnds, body))
+			   Let_e(Sequential, ebnds, let_body)
+		    | _ => Let_e(Sequential, ebnds, let_body))
+	 | _ => Let_e(Sequential, ebnds, let_body))
 
    (* makeApply
          Creates an application.  Optimizes (beta-reduces) 

@@ -12,12 +12,12 @@ sig
 
   type typearg = state * TilWord32.word * con
 
-  val xsum_dynamic   : (typearg * term * term * Nil.niltrace) -> term * con * state
-  val xsum_nonrecord : (typearg * term option * Nil.niltrace) -> term * con * state
-  val xsum_record    : (typearg * term list) -> term * con * state
+  val xsum_dynamic   : (typearg * term * term * Nil.niltrace) -> term * state
+  val xsum_nonrecord : (typearg * term option * Nil.niltrace) -> term * state
+  val xsum_record    : (typearg * term list) -> term * state
 
-  val xproject_sum_dynamic   : (typearg * regi * regi * Nil.niltrace) -> term * con * state
-  val xproject_sum_record    : (typearg * Name.label * con list * regi * Nil.niltrace) -> term * con * state
-  val xproject_sum_nonrecord : (typearg * regi * con * Nil.niltrace) -> term * con * state
+  val xproject_sum_dynamic   : (typearg * regi * regi * Nil.niltrace) -> term * state
+  val xproject_sum_record    : (typearg * Name.label * con list * regi * Nil.niltrace) -> term * state
+  val xproject_sum_nonrecord : (typearg * regi * con * Nil.niltrace) -> term * state
 
 end

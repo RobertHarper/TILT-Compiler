@@ -136,6 +136,7 @@ struct
 	val fids = ref empty_table
 	fun is_fid f = (case (VarMap.find(!fids,f)) of NONE => false | _ => true)
 
+
 	fun get_static caller = (case (VarMap.find(!fids,caller)) of
 				     NONE => error ((Name.var2string caller) ^ "fid not found for get_static")
 				   | SOME (ref{static,...}) => static)
@@ -1249,8 +1250,7 @@ struct
 	     val (code_var, cenv_var, vkl_free, cbnds, subst) = 
 		 if (is_fid v)
 		     then let val {code_var, cenv_var, ...} = get_static v
-			      (* freeevars/free_evars must be empty *)
-			      val {free_cvars,...} = get_frees v 
+			      val {free_cvars,...} = get_frees v    (* free_evars must be empty *)
 			      fun folder ((v,v'),subst) = 
 				let val k = Single_k(Var_c v)
 				    val l = Name.internal_label(Name.var2string v)
@@ -1274,7 +1274,8 @@ struct
 							    vkl_free))
 
 	     val vklist' = vklist @ [(cenv_var, vkl_free_kind)]
-	     val body    = c_rewrite (copy_state(state ,v)) c
+	     val inner_state = if (is_fid v) then (copy_state(state ,v)) else state
+	     val body    = c_rewrite inner_state c
 	     val code_cb = Code_cb(code_var, vklist',Let_c(Sequential,cbnds,body))
 	     val con_env = Crecord_c(map (fn (v,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))

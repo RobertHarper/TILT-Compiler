@@ -66,15 +66,14 @@ struct
                  | VALUE of value
 
 
-   type var_rep     = location option * value option * con
+   type var_rep     = location option * value option
    type convar_rep' = location option * value option
-   type convar_rep  = location option * value option * kind
+   type convar_rep  = location option * value option
 
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep' VarMap.map
    val uninit_val = 0w258 : TilWord32.word
-   val unitval = TAG 0w256
-   val unit_vvc = (VALUE unitval, Prim_c(Record_c ([],NONE),[]))
+   val unit_term = VALUE (TAG 0w256)
 
    datatype gcinfo = GC_IMM of instr ref | GC_INF
    type gcstate = gcinfo list
@@ -142,17 +141,32 @@ struct
 (*	 | _ => (VarSet.member(!globals,v))) *)
 
   fun varmap_insert' ({is_top,varmap,
-		       env,convarmap,gcstate} : state) (v,vr : var_rep) : state = 
+		       env,convarmap,gcstate} : state) (v,(lc,lv,c)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "varmap adding to v = "; 
 			    Ppnil.pp_var v; print "\n")
 		  else ()
 	  val _ = case (VarMap.find(varmap,v)) of
 		  NONE => ()
-		| SOME _ => error ("varmap contains "
+		| SOME _ => error ("varmap already contains "
 					    ^ (Name.var2string v))
-	  val env = NilContext.insert_con(env,v,#3 vr)
-	  val varmap = VarMap.insert(varmap,v,vr)
+	  val env = NilContext.insert_con(env,v,c)
+	  val varmap = VarMap.insert(varmap,v,(lc,lv))
+      in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+      end
+  
+  fun varmap_insert_eq' ({is_top,varmap,
+		       env,convarmap,gcstate} : state) (v,(lc,lv,e)) : state = 
+      let val _ = if (!debug_bound)
+		      then (print "varmap adding to v = "; 
+			    Ppnil.pp_var v; print "\n")
+		  else ()
+	  val _ = case (VarMap.find(varmap,v)) of
+		  NONE => ()
+		| SOME _ => error ("varmap already contains "
+					    ^ (Name.var2string v))
+	  val env = NilContext.insert_exp(env,v,e)
+	  val varmap = VarMap.insert(varmap,v,(lc,lv))
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
@@ -161,6 +175,12 @@ struct
 	   then global_state := varmap_insert' (!global_state) arg
        else ();
 	varmap_insert' state arg)
+
+  fun varmap_insert_eq state (arg as (_,(vl,vv,_))) =
+      (if (top_rep(vl,vv))
+	   then global_state := varmap_insert_eq' (!global_state) arg
+       else ();
+	varmap_insert_eq' state arg)
 
   fun convarmap_insert' ({is_top,convarmap,varmap,env,gcstate}:state) 
                         (v,(vl,vv,k)) : state = 
@@ -203,6 +223,8 @@ struct
   
   fun add_term (s,v,con,LOCATION loc) = varmap_insert s (v,(SOME loc,NONE,con))
     | add_term (s,v,con,VALUE value) = varmap_insert s (v,(NONE, SOME value,con))
+  fun add_term_equation (s,v,e,LOCATION loc) = varmap_insert_eq s (v,(SOME loc,NONE,e))
+    | add_term_equation (s,v,e,VALUE value) = varmap_insert_eq s (v,(NONE, SOME value,e))
   fun add_reg (s,v,con,reg)         =  add_term (s,v,con,LOCATION(REGISTER(false,reg)))
   fun add_code (s,v,con,l)          =  add_term (s,v,con,VALUE(CODE l))
 
@@ -213,21 +235,7 @@ struct
     | add_conterm (s,v,kind,SOME(LOCATION loc)) = convarmap_insert s (v,(SOME loc, NONE, kind))
     | add_conterm (s,v,kind,SOME(VALUE value)) = convarmap_insert s (v,(NONE, SOME value, kind))
 
-   fun getconvarrep' ({convarmap,env,...} : state) v : convar_rep option = 
-       (case VarMap.find (convarmap,v) of
-	   NONE => NONE
-	 | SOME (vl,vv) => let  val k = (case NilContext.find_std_kind(env,v) of
-					     SingleType_k _ => Type_k
-					   | kind => kind)
-					handle e =>
-				           (print "tortl-base: error in call to find_std_kind of ";
-					    Ppnil.pp_var v; print "\n\nwith environment\n:";
-					    NilContext.print_context env; print "\n";
-					    raise e)
-	                       (* XXX should be removed when uniqueness invariant is removed *)
-			       val k = NilRename.renameCVarsKind k 
-			     in  SOME(vl,vv,k)
-			     end)
+   fun getconvarrep' ({convarmap,...} : state) v = VarMap.find (convarmap,v) 
 
    fun getconvarrep state v : convar_rep = 
        (case getconvarrep' state v of
@@ -386,14 +394,14 @@ struct
    fun niltrace2rep (state : state) niltrace : rep =
        let fun pathcase (v,labs) = 
 	   (case getconvarrep' state v of
-		SOME(_,SOME(RECORD (l,_)),_) => (COMPUTE(Projlabel_p (l,labs)))
-	      | SOME(_,SOME(LABEL l),_) => (COMPUTE(Projlabel_p (l,labs)))
-	      | SOME(_,SOME(VOID _),_) => error "constructor is void"
-	      | SOME(_,SOME(REAL _),_) => error "constructor represented as  a float"
-	      | SOME(_,SOME(CODE _),_) => error "constructor function cannot be a type"
-	      | SOME(SOME(REGISTER (_,I r)),_,_) => (COMPUTE(Projvar_p (r,labs)))
-	      | SOME(SOME(REGISTER (_,F _)),_,_) => error "constructor in float reg"
-	      | SOME(SOME(GLOBAL (l,_)),_,_) => (COMPUTE(Projlabel_p(l,0::labs)))
+		SOME(_,SOME(RECORD (l,_))) => (COMPUTE(Projlabel_p (l,labs)))
+	      | SOME(_,SOME(LABEL l)) => (COMPUTE(Projlabel_p (l,labs)))
+	      | SOME(_,SOME(VOID _)) => error "constructor is void"
+	      | SOME(_,SOME(REAL _)) => error "constructor represented as  a float"
+	      | SOME(_,SOME(CODE _)) => error "constructor function cannot be a type"
+	      | SOME(SOME(REGISTER (_,I r)),_) => (COMPUTE(Projvar_p (r,labs)))
+	      | SOME(SOME(REGISTER (_,F _)),_) => error "constructor in float reg"
+	      | SOME(SOME(GLOBAL (l,_)),_) => (COMPUTE(Projlabel_p(l,0::labs)))
 	      | _ => (print "niltrace2rep convar = ";
 		      print (var2string v); print "\n";
 		      error "no information on this convar!!"))
@@ -412,18 +420,10 @@ struct
 		       | TraceInfo.Label => NOTRACE_LABEL
 		       | TraceInfo.Locative => LOCATIVE
 		       | TraceInfo.Compute (v,labs) => 
-			     ((let val SOME(_,_,k) = getconvarrep' state v
+			     let val k = std_kind_of state (Var_c v)
 				 val labs = cpath2indices state k labs
 			     in  pathcase(v,labs)
-			     end)
-				  handle _ => 
-				      (print "unbound representation ";
-				       Ppnil.pp_var v;
-				       print ".";
-				       app Ppnil.pp_label labs;
-				       print "\n";
-				       raise Match
-				      ))))
+			     end))
        end
 
    fun loc2rep location =
@@ -969,9 +969,8 @@ struct
       end
 
 
-  fun add_global (state,v : var,
-		  con : con,
-		  term : term) : state =
+
+  fun help_global (add_obj, (state,v : var, obj, term : term)) : state =
     let 
 	val _ = Stats.counter("RTLglobal") ()
 	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
@@ -993,13 +992,15 @@ struct
 	    (case term of
 		 LOCATION (REGISTER _) => LOCATION(GLOBAL(label,rep))
 	       | _ => term)
-		 
-	val state' = add_term (state,v,con,term)
 
-
-    in  state'
+    in  add_obj (state,v,obj,term)
     end
 	
+
+  fun add_global arg : state = help_global(add_term, arg)
+  fun add_global_equation arg : state = help_global(add_term_equation, arg)
+
+
   fun add_conglobal (state : state,
 		     v : var,
 		     kind : kind,
@@ -1174,7 +1175,7 @@ struct
    and the rest of the fields, which are values *)
 
 
-  fun make_record_help (const, state, destopt, _ , [], _) : term * state = (VALUE unitval, state)
+  fun make_record_help (const, state, destopt, _ , [], _) : term * state = (unit_term, state)
     | make_record_help (const, state, destopt, reps : rep list, vl : term list, labopt) = 
     let 
 

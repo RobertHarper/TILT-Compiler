@@ -30,9 +30,7 @@ struct
 			    in  add_instr(S8ADD(b',REG a',addr));
 				add_instr(LOADQF(EA(addr,0),destf))
 			    end)
-      in  (LOCATION(REGISTER(false, F destf)), 
-	   Prim_c(Float_c fs, []), 
-	   state)
+      in  (LOCATION(REGISTER(false, F destf)), state)
       end
 
   fun xsub_help (state : state, is, c)  (vl1 : term, vl2 : term, rep) =
@@ -66,7 +64,7 @@ struct
 			  in ()
 			  end
 	     | _ => error "xintptrsub not done on all int sizes");
-	  (LOCATION(REGISTER(false,I desti)), c, state)
+	  (LOCATION(REGISTER(false,I desti)), state)
       end
 
   fun xsub_int (state : state, is)  (vl1 : term, vl2 : term, tr) =
@@ -78,15 +76,15 @@ struct
       xsub_help(state, Prim.W32,c) (vl1,vl2,niltrace2rep state tr)
 
 
-  fun xsub_dynamic(state,c, con_ir) (vl1 : term, vl2 : term, tr) : term * con * state =
+  fun xsub_dynamic(state,c, con_ir) (vl1 : term, vl2 : term, tr) : term * state =
       let
 	  val _ = Stats.counter("Rtlxsub_dyn")()
-	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),_,s) = xsub_float(state,Prim.F64) 
+	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),s) = xsub_float(state,Prim.F64) 
 								(vl1,vl2,Nil.TraceKnown TraceInfo.Notrace_Real)
 				val (ir,s) = boxFloat(s,fr)
 			    in  (I ir, s)
 			    end
-	  fun nonfloatcase (s,is) = let val (LOCATION(REGISTER(_, reg)),_,s) = xsub_int(s,is) (vl1,vl2,tr)
+	  fun nonfloatcase (s,is) = let val (LOCATION(REGISTER(_, reg)),s) = xsub_int(s,is) (vl1,vl2,tr)
 				    in  (reg,s)
 				    end
 				
@@ -114,12 +112,12 @@ struct
 	  val _ = (add_instr(MV(boxi,desti));
 		   add_instr(ILABEL afterl))
 	  val state = join_states[w8_state,w32_state,float_state]
-      in (LOCATION(REGISTER(false, I desti)), c, state)
+      in (LOCATION(REGISTER(false, I desti)), state)
       end
  
   (* ----------  Update operations ----------------- *)
 
-  fun xupdate_float(state : state, fs) (vl1 : term, vl2 : term, vl3 : term) : term * con * state =
+  fun xupdate_float(state : state, fs) (vl1 : term, vl2 : term, vl3 : term) : term * state =
       let val a' = load_ireg_term(vl1,NONE)
 	  val argf = load_freg_term(vl3,NONE)
       in (case (in_ea_range 8 vl2) of
@@ -129,10 +127,10 @@ struct
 		      in  add_instr(S8ADD(b',REG a',addr));
 			  add_instr(STOREQF(EA(addr,0),argf))
 		      end);
-	  (#1 unit_vvc, #2 unit_vvc, state)
+	  (unit_term, state)
       end
 
-  fun xupdate_int(state : state, is) (vl1 : term, vl2 : term, vl3 : term) : term * con * state =
+  fun xupdate_int(state : state, is) (vl1 : term, vl2 : term, vl3 : term) : term * state =
       let
 	  val a' = load_ireg_term(vl1,NONE)
 	  val argi = load_ireg_term(vl3,NONE)
@@ -170,10 +168,10 @@ struct
 			  in ()
 			  end
 	     | _ => error "xintupdate not implemented on this size");
-	  (#1 unit_vvc, #2 unit_vvc, state)
+	  (unit_term, state)
       end
 
-  fun xptrupdate(state, c) (vl1 : term, vl2 : term, vl3 : term) : term * con * state =
+  fun xptrupdate(state, c) (vl1 : term, vl2 : term, vl3 : term) : term * state =
       let
 	  val base = load_ireg_term(vl1,NONE)
 	  val newval = load_ireg_term(vl3,NONE)
@@ -184,10 +182,10 @@ struct
 		       in  add_instr(S4ADD(offset,REG base,addr));
 			   add_instr(MUTATE(EA(addr,0),newval,NONE))
 		       end);
-	  (#1 unit_vvc, #2 unit_vvc, state)
+	  (unit_term, state)
       end
 
-  fun xupdate_known(state, c) vlist : term * con * state =
+  fun xupdate_known(state, c) vlist : term * state =
       let
 	  val is_ptr = (case #2(simplify_type state c) of
 			    Prim_c(Sum_c{totalcount,tagcount,...},_) => totalcount <> tagcount
@@ -199,7 +197,7 @@ struct
 
   fun xupdate_dynamic(state : state,c, con_ir) 
                      (vl1 : term, vl2 : term, vl3 : term) 
-      : term * con * state =
+      : term * state =
       let
 	  val _ = Stats.counter("Rtlxupdate_dyn")()
 	   val r = con_ir
@@ -223,21 +221,21 @@ struct
 	   val fr = unboxFloat(load_ireg_term(vl3,NONE))
 	   val _ = xupdate_float(state,Prim.F64) (vl1,vl2,LOCATION(REGISTER (false,F fr)))
 	   val _ = add_instr(ILABEL afterl)
-      in (#1 unit_vvc, #2 unit_vvc, state)
+      in  (unit_term, state)
       end
 
 
 
   (* -------------------- Length operations ------------------ *)
-  fun xlen_float (state,fs) (vl : term) : term * con * state =
+  fun xlen_float (state,fs) (vl : term) : term * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
 	  val _ = add_instr(SRL(dest,IMM real_len_offset,dest))
-      in  (LOCATION (REGISTER (false,I dest)), Prim_c(Int_c Prim.W32, []),state)
+      in  (LOCATION (REGISTER (false,I dest)), state)
       end
 
-  fun xlen_int (state,is) (vl : term) : term * con * state =
+  fun xlen_int (state,is) (vl : term) : term * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
@@ -246,18 +244,18 @@ struct
 					   | Prim.W16 => 1
 					   | Prim.W32 => 2)
 	  val _ = add_instr(SRL(dest,IMM offset,dest))
-      in  (LOCATION (REGISTER (false,I dest)), Prim_c(Int_c Prim.W32, []),state)
+      in  (LOCATION (REGISTER (false,I dest)), state)
       end
 
-  fun xlen_known (state,c) (vl : term) : term * con * state =
+  fun xlen_known (state,c) (vl : term) : term * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
 	  val _ = add_instr(SRL(dest,IMM (2 + int_len_offset),dest))
-      in  (LOCATION (REGISTER (false,I dest)), Prim_c(Int_c Prim.W32, []),state)
+      in  (LOCATION (REGISTER (false,I dest)), state)
       end
 
-  fun xlen_dynamic (state,c, con_ir) (vl : term) : term * con * state =
+  fun xlen_dynamic (state,c, con_ir) (vl : term) : term * state =
       let 
 	  val _ = Stats.counter("Rtlxlen_dyn")()
 	  val dest = alloc_regi NOTRACE_INT
@@ -278,7 +276,7 @@ struct
 		   add_instr(ILABEL charl);
 		   add_instr(SRL(dest,IMM (int_len_offset),dest));
 		   add_instr(ILABEL afterl))
-      in  (LOCATION (REGISTER (false,I dest)), Prim_c(Int_c Prim.W32, []),state)
+      in  (LOCATION (REGISTER (false,I dest)), state)
       end
 
     (* -----------------  allocation code ---------------------- *)
@@ -290,7 +288,7 @@ struct
 	       end
       else NONE
 
-    fun xarray_float (state, Prim.F32) (_, _) : term * con * state = error "no 32-bit floats"
+    fun xarray_float (state, Prim.F32) (_, _) : term * state = error "no 32-bit floats"
       | xarray_float (state, Prim.F64) (vl1, vl2) = 
 	let 
 	    val len = load_ireg_term(vl1,NONE)
@@ -363,7 +361,6 @@ struct
 	    add_instr(BCNDI(GE,i,IMM 0,ftop,true));
 	    add_instr(ILABEL fafter);
 	    (LOCATION(REGISTER(false, I dest)),
-	     Prim_c(Array_c, [Prim_c(Float_c Prim.F64,[])]),
 	     new_gcstate state)   (* after all this allocation, we cannot merge *)
 	end (* end of floatcase *)
 
@@ -415,7 +412,7 @@ struct
 	    add_instr(ILABEL gafter)
       end
 
-    and xarray_int (state,is) (vl1,vl2) : term * con * state = 
+    and xarray_int (state,is) (vl1,vl2) : term * state = 
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val dest  = alloc_regi TRACE
 		val gctemp  = alloc_regi(NOTRACE_INT)
@@ -507,12 +504,10 @@ struct
 					      add_instr(STORE32I(EA(tmp,0),ir))));
 				  add_instr(ICOMMENT "initializing int/ptr array end");
 				  new_gcstate state)   (* after all this allocation, we cannot merge *)
-	    in  (LOCATION(REGISTER(false, I dest)),
-		 Prim_c(Array_c, [Prim_c(Int_c is,[])]),
-		 state)
+	    in  (LOCATION(REGISTER(false, I dest)), state)
 	    end
 
-     fun xarray_ptr (state,c) (vl1,vl2) : term * con * state = 
+     fun xarray_ptr (state,c) (vl1,vl2) : term * state = 
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val dest = alloc_regi TRACE
 		val gctemp  = alloc_regi(NOTRACE_INT)
@@ -553,11 +548,10 @@ struct
 				       len,v,gafter,true);
 		     (* after all this allocation, we cannot merge *)
 		     (LOCATION(REGISTER(false, I dest)),
-		      Prim_c(Array_c, [c]),
 		      new_gcstate state))
 	    end
 
-  fun xarray_known(state, c) vl_list : term * con * state =
+  fun xarray_known(state, c) vl_list : term * state =
       let
 	  val is_ptr =
 	      (case #2(simplify_type state c) of
@@ -569,7 +563,7 @@ struct
       end
 
   (* if we allocate arrays statically, we must add labels of pointer arrays to mutable_objects *)
- and xarray_dynamic (state,c, con_ir) (vl1 : term, vl2 : term) : term * con * state =
+ and xarray_dynamic (state,c, con_ir) (vl1 : term, vl2 : term) : term * state =
     let 
 	val _ = Stats.counter("Rtlxarray_dyn")()
 	val dest = alloc_regi TRACE
@@ -583,7 +577,8 @@ struct
 		 add_instr(BCNDI(EQ, r, IMM 2, intl, false));
 		 add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
 	val ptr_state = 
-	    let val (LOCATION(REGISTER(_, I tmp)),_,state) = xarray_ptr(state,c) (vl1,vl2)
+	    let val (term,state) = xarray_ptr(state,c) (vl1,vl2)
+		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state 
 	    end
@@ -591,7 +586,8 @@ struct
 	    
 	val _ = add_instr(ILABEL intl)
 	val int_state = 
-	    let val (LOCATION(REGISTER(_, I tmp)),_,state) = xarray_int(state,Prim.W32) (vl1,vl2)
+	    let val (term,state) = xarray_int(state,Prim.W32) (vl1,vl2)
+		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state 
 	    end
@@ -599,7 +595,8 @@ struct
 	    
 	val _ = add_instr(ILABEL charl)
 	val char_state = 
-	    let val (LOCATION(REGISTER(_, I tmp)),_,state) = xarray_int(state,Prim.W8) (vl1,vl2)
+	    let val (term,state) = xarray_int(state,Prim.W8) (vl1,vl2)
+		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state 
 	    end
@@ -612,13 +609,14 @@ struct
 	    
 	val float_state = 
 	    let val vl2 = LOCATION(REGISTER(false, F fr))
-		val (LOCATION(REGISTER(_, I tmp)),_,state) = xarray_float(state,Prim.F64) (vl1,vl2)
+		val (term,state) = xarray_float(state,Prim.F64) (vl1,vl2)
+		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state
 	    end
 	val _ = add_instr(ILABEL afterl)
 	val state = join_states [float_state, int_state, char_state, ptr_state]
-    in  (LOCATION (REGISTER (false,I dest)), Prim_c(Array_c, [c]),state)
+    in  (LOCATION (REGISTER (false,I dest)), state)
     end
 
 

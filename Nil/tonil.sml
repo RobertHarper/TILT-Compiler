@@ -1910,7 +1910,7 @@ end (* local defining splitting context *)
            val cbnds = flattenCatlist cbnd_cat
            val ebnds = (map makeConb cbnds) @ (flattenCatlist ebnd_cat)
 	   val exp = xexp context' il_exp
-       in   NilUtil.makeLetE Sequential ebnds exp
+       in  NilUtil.makeLetE Sequential ebnds exp
        end
 
      | xexp' context (Il.NEW_STAMP il_con) = 

@@ -41,8 +41,8 @@ sig
    datatype term = LOCATION of location
                  | VALUE of value
 
-   type var_rep = location option * value option * con
-   type convar_rep = location option * value option * kind
+   type var_rep = location option * value option
+   type convar_rep = location option * value option
    val uninit_val : TilWord32.word
 
    (* (global) RTL translation state *)
@@ -68,6 +68,8 @@ sig
    val add_reg         : (state * var * con * reg) -> state
    val add_term        : (state * var * con * term) -> state
    val add_global      : (state * var * con * term) -> state
+   val add_term_equation   : (state * var * exp * term) -> state
+   val add_global_equation : (state * var * exp * term) -> state
 
    val add_conterm     : (state * var * kind * term option) -> state
    val add_conglobal   : (state * var * kind * term option) -> state
@@ -125,8 +127,7 @@ sig
    val stackptr : regi
    val exnptr : regi
    val exnarg : regi
-   val unitval : value
-   val unit_vvc : term * con
+   val unit_term : term
 
    (* Helper routines *)
    val in_ea_range : int -> term -> int option
