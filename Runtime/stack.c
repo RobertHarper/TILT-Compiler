@@ -512,6 +512,7 @@ int should_trace_big(unsigned long trace,
 #endif
   if (IS_TRACE_SPECIAL(trace))
     {
+      /* res is the type of the value */
       int res = 0;
       int special_type, special_data;
 #ifdef DEBUG
@@ -544,7 +545,8 @@ int should_trace_big(unsigned long trace,
       else
 	printf("impossible trace_special wordpair entry: %d %d\n",
 	       special_type,special_data);
-      if (res)
+      /* values 0 to 3 represent integers */
+      if (res >= 3)
 	return 1;
     }
   else
