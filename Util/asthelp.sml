@@ -369,6 +369,11 @@ structure AstHelp : ASTHELP =
       (case exp of
 	 Ast.VarExp p => pp_path p
        | Ast.IntExp s => String s
+       | Ast.FlatAppExp exp_fix_list => let fun help {item,fixity,region} = pp_exp item
+					in pp_list help exp_fix_list ("FlatAppExp(",",",")",false)
+					end
+       | Ast.AppExp{function,argument} => pp_region "App(" ")" 
+	     [pp_exp function, String ",", Break, pp_exp argument]
        | Ast.MarkExp (e,r) => pp_exp e
        | _ => String "Asthelp.pp_exp UNIMPED")
 
