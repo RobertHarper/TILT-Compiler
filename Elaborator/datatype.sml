@@ -9,7 +9,7 @@ functor Datatype(structure Il : IL
     : DATATYPE  = 
   struct
 
-    structure Il = Il
+    structure IlContext = IlContext
     open AstHelp Il IlStatic IlUtil Ppil 
     open Util Listops Name (* IlLookup *) Tyvar
     open IlContext
@@ -252,10 +252,9 @@ functor Datatype(structure Il : IL
 						  TOTAL)))
 		  end
 		val (mk_bnd,mk_dec) = maker exp_mk_ij con_mk_ij 
-		val module = MOD_STRUCTURE[SBND(mk_lab,mk_bnd)]
-		val signat = SIGNAT_STRUCTURE(NONE,[SDEC(mk_lab,mk_dec)])
-	      in (SBND(id_ij,BND_MOD(fresh_var(),module)),
-		  SDEC(id_ij,DEC_MOD(fresh_var(),signat)))
+	      in 
+		  (SBND(id_ij,mk_bnd),
+		   SDEC(id_ij,mk_dec))
 	      end
 	    val temp = map2 inner_help (map symbol_label id_i, expcon_mk_i)
 	    val (sbnds,sdecs) = (map #1 temp, map #2 temp)
@@ -381,64 +380,52 @@ functor Datatype(structure Il : IL
      --------------------------------------------------------- *)
     type lookup = (Il.context * Il.label list -> (Il.mod * Il.signat) option) 
     fun constr_lookup context (p : Ast.path) =
-      (debugdo (fn () => (print "constr_lookup called with path = ";
-			  AstHelp.pp_path p;
-			  print "\nand with context = ";
-			  pp_context context;
-			  print "\n"));
-       (case (modsig_lookup(context,map symbol_label p)) of
-	    NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup returned NONE\n");
-		     NONE)
-	  | SOME (path_mod,m,constr_sig as
-		  (SIGNAT_STRUCTURE(_,[SDEC(maybe_mk,_)]))) =>
-	    (if (eq_label(maybe_mk,mk_lab))
-		then 
-		    (case path_mod of
-			 SIMPLE_PATH v => NONE
-		       | COMPOUND_PATH (v,[]) => error "constr_lookup got empty COMPOUND PATH"
-		       | COMPOUND_PATH (v,ls) => 
-			     let val (short_p,name) = (COMPOUND_PATH(v, butlast ls), List.last ls)
-				 val _ = debugdo (fn () => (print "BEFORE GETMODSIG with short_p = "; 
-							    pp_path short_p;
-							    print " and ctxt = \n"; pp_context context;
-							    print "\n\n"))
-				 val data_sig = GetModSig(context,path2mod short_p)
-				 val _ = debugdo(fn () => print "AFTER GETMODSIG\n")
-			     in
-				 (case data_sig of
-				      SIGNAT_STRUCTURE(_,(SDEC(type_lab,_)) :: (SDEC(maybe_expose,_)) :: _) =>
-					  if (eq_label(maybe_expose,expose_lab))
-					      then SOME{name = name,
-							constr_sig = constr_sig,
-							datatype_path = short_p,
-							datatype_sig = data_sig}
-					  else NONE
-				    | _ => NONE)
-			     end)
-	    else NONE)
-	     | _ => (debugdo (fn () => print "constr_lookup modsig_lookup returned SOME(unk)\n");
-		     NONE))
-	    handle NOTFOUND _ => (debugdo (fn () => print "constr_lookup failed ...\n");
-				  NONE))
+	let 
+	    fun is_const pc = 
+		let val innercon =
+		    (case pc of
+			 PHRASE_CLASS_MOD(_,SIGNAT_FUNCTOR(_,_,s,_)) =>
+			     (case s of
+				  SIGNAT_STRUCTURE(_,[SDEC(itlabel,
+							   DEC_EXP(_,con))]) => con
+				| _ => error "ill-formed constructor phrase_class")
+		       | PHRASE_CLASS_EXP(_,con) => con
+		       | _ => (error "ill-formed constructor phrase_class"))
+		in  (case innercon of
+			 CON_ARROW(_,CON_RECORD[],_) => true
+		       | _ => false)
+		end
+	    val _ = (debugdo (fn () => (print "constr_lookup called with path = ";
+					AstHelp.pp_path p;
+					print "\nand with context = ";
+					pp_context context;
+					print "\n")))
+	in
+	    (case (Path_Context_Lookup(context,map symbol_label p)) of
+		 NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup got NONE\n");
+			 NONE)
+	       | SOME (constr_path,pc) =>
+		     (case constr_path of
+			  SIMPLE_PATH v => NONE
+			| COMPOUND_PATH (v,[]) => error "constr_lookup: empty COMPOUND PATH"
+			| COMPOUND_PATH (v,ls) => 
+			      let 
+				  val (short_path,name) = (COMPOUND_PATH(v, butlast ls), 
+							   List.last ls)
+				  val data_sig = GetModSig(context,path2mod short_path)
+			      in  (case data_sig of
+				       SIGNAT_STRUCTURE(_,(SDEC(type_lab,_)) :: 
+							(SDEC(maybe_expose,_)) :: _) =>
+				       if (eq_label(maybe_expose,expose_lab))
+					   then SOME{name = name,
+						     is_const = is_const pc,
+						     datatype_path = short_path,
+						     datatype_sig = data_sig}
+				       else NONE
+				     | _ => NONE)
+			      end))
+	end
 
-     fun is_const_constr signat = 
-       (case signat of
-	  SIGNAT_STRUCTURE(_,[SDEC(maybe_mk,dec)]) =>
-	  let 
-	    val _ = debugdo (fn () => (print "is_const_constr got signat of:\n";
-				       pp_signat signat; print "\n"))
-	    val con = (case dec of
-			 DEC_MOD(_,SIGNAT_FUNCTOR(_,_,
-				   SIGNAT_STRUCTURE(_,[SDEC(itlabel,
-							    DEC_EXP(_,con))]),_)) => con
-		       | DEC_EXP(_,con) => con
-		       | _ => (pp_signat signat;
-			       error "ill-formed constructor signature"))
-	  in (case con of
-		  CON_ARROW(_,CON_RECORD[],_) => true
-		| _ => false)
-	  end
-	| _ => (pp_signat signat; error "This is not a valid constr_sig"))
 
 
      fun des_dec (d : dec) : ((Il.var option * Il.sdecs option) * Il.con) = 
@@ -456,33 +443,28 @@ functor Datatype(structure Il : IL
        = 
        let fun bad () = (Ppil.pp_signat s;
 			 error "ill-formed datatype_signature")
-	   fun good (name,arm_sdecs) = 
-	       let fun helper (sdec as 
-			       (SDEC(name,DEC_MOD(_,SIGNAT_STRUCTURE (_,sdecs))))) = 
-		   (case sdecs of
-			[SDEC(_,mkdec)] =>
+	   fun good (type_name,arm_sdecs) = 
+	       let fun helper (SDEC(constr_name,mkdec)) =
 			    let 
 				val (vso,mkc) = des_dec mkdec
 				val argcon = case mkc of
 				    CON_ARROW(c,_,_) => SOME c
 				  | _ => NONE
-			    in (vso,{name=name,arg_type=argcon})
+			    in (vso,{name=constr_name,arg_type=argcon})
 			    end
-		      | _ => error "ill-formed arm signature")
-		     | helper _ = error "ill-formed arm signature"
 		   val arm_types = map (#2 o helper) arm_sdecs
 		   val (var_poly,sdecs_poly) = #1 (helper (hd arm_sdecs))
-	       in {name = name,
+	       in {name = type_name,
 		   var_poly = var_poly,
 		   sdecs_poly = sdecs_poly,
 		   arm_types = arm_types}
 	       end
        in
 	   (case s of
-		SIGNAT_STRUCTURE(_,(SDEC(name,DEC_CON(_,_,_)))::
+		SIGNAT_STRUCTURE(_,(SDEC(type_name,DEC_CON(_,_,_)))::
 				 (SDEC(maybe_expose,_))::arm_sdecs) =>
 		   (if (eq_label(maybe_expose,expose_lab))
-			then good(name,arm_sdecs)
+			then good(type_name,arm_sdecs)
 		    else bad())
 	      | _ => bad())
        end
@@ -525,25 +507,6 @@ functor Datatype(structure Il : IL
    end
 
 
-   fun old_exn_lookup context path : {name : Il.label,
-				  carried_type : Il.con option} option =
-       (case (modsig_lookup(context,map symbol_label path)) of
-	  NONE=> NONE
-	| SOME (path_mod,m,exn_sig as 
-		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))])) =>
-	      if (eq_label(lab1,it_lab) andalso eq_label(lab2,mk_lab))
-		  then 
-		      let val name = (case path_mod of
-					  SIMPLE_PATH v => error "exn_lookup found SIMPLE"
-					| COMPOUND_PATH (v,[]) => error "exn_lookup found degenerate COMPUOND_PATH"
-					| COMPOUND_PATH (v,ls) => List.last ls)
-		      in (case (ctag,cmk) of 
-			      (_, CON_ANY) => SOME {name=name, carried_type = NONE}
-			    | (CON_TAG c, _) => SOME {name=name, carried_type = SOME c}
-			    | _ => error_sig exn_sig "bad exn signature")
-		      end
-	      else NONE
-	| _ => NONE)
 
    fun exn_lookup context path : {stamp : Il.exp,
 				  carried_type : Il.con option} option =

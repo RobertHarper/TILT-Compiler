@@ -6,8 +6,9 @@ functor Basis(structure Il : IL
 	      structure IlUtil : ILUTIL
 	      structure Datatype : DATATYPE
 	      structure Toil : TOIL
+	      sharing Datatype.IlContext = IlContext
 	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il 
-		                   = Datatype.Il = Toil.Il = Il) : BASIS =
+		                   = Toil.Il = Il) : BASIS =
   struct
 
     structure Il = Il

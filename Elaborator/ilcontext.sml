@@ -429,6 +429,8 @@ struct
 				  (path,PHRASE_CLASS_MOD (m,s)) => SOME(path,m,s)
 				| _ => NONE)
 			       handle (NOTFOUND _) => NONE)
+      fun Path_Context_Lookup arg =  (SOME (newContext_Lookup arg) 
+				      handle (NOTFOUND _) => NONE)
       val Sbnds_Lookup =
 	  fn (sbnds,labels) => (let val (phrase,labels) = Sbnds_Lookup (sbnds,labels)
 				  in (labels,phrase)

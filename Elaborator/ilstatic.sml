@@ -169,16 +169,28 @@ functor IlStatic(structure Il : IL
 
 	fun local_Sdecs_Project(mopt, sdecs, l) = 
 	    let
-		fun eh m et (VAR v) = mapopt (fn l => MODULE_PROJECT(m,l)) (assoc_eq (eq_var,v,et))
-		  | eh m et _ = NONE
-		fun ch m ct (CON_VAR v) = mapopt (fn l => CON_MODULE_PROJECT(m,l)) (assoc_eq (eq_var,v,ct))
-		  | ch m ct _ = NONE
-		fun mh m mt (MOD_VAR v) = mapopt (fn l => MOD_PROJECT(m,l)) (assoc_eq (eq_var,v,mt))
-		  | mh m mt _ = NONE
-		fun nada _ _ = error "local_Sdecs_Project failed"
-		val (eh,ch,mh) = (case mopt of
-				      NONE => (nada,nada,nada)
-				    | SOME m => (eh m, ch m, mh m))
+		fun bad () = (print "local_Sdecs_Project failed on ";
+			      pp_label l;
+			      print "\n";
+			      print "and sdecs = ";
+			      pp_sdecs sdecs;
+			      print "\n";
+			      error "local_Sdecs_Project failed")
+		fun exper l = (case mopt of
+				   NONE => bad()
+				 | SOME m => MODULE_PROJECT(m,l))
+		fun coner l = (case mopt of
+				   NONE => bad()
+				 | SOME m => CON_MODULE_PROJECT(m,l))
+		fun moder l = (case mopt of
+				   NONE => bad()
+				 | SOME m => MOD_PROJECT(m,l))
+		fun eh et (VAR v) = mapopt exper (assoc_eq (eq_var,v,et))
+		  | eh et _ = NONE
+		fun ch ct (CON_VAR v) = mapopt coner (assoc_eq (eq_var,v,ct))
+		  | ch ct _ = NONE
+		fun mh mt (MOD_VAR v) = mapopt moder (assoc_eq (eq_var,v,mt))
+		  | mh mt _ = NONE
 		fun externalize (et,ct,mt) dec =
 		    case dec of
 			(DEC_MOD(_,s)) => SOME(CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt)))

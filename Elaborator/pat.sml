@@ -6,7 +6,8 @@ functor Pat(structure Il : IL
 	    structure AstHelp : ASTHELP
 	    structure Datatype : DATATYPE
 	    structure IlContext : ILCONTEXT
-	    sharing IlContext.Il = InfixParse.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Datatype.Il = Il)
+	    sharing Datatype.IlContext = IlContext
+	    sharing IlContext.Il = InfixParse.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
   : PAT =
   struct
     
@@ -272,7 +273,7 @@ functor Pat(structure Il : IL
       fun getarm datacon sumcon (i,{name=cur_constr,arg_type}) : bound list * exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
-	    (case (eq_label(cur_constr, symbol_label (List.last path)), patopt) of
+	      (case (eq_label(cur_constr, symbol_label (List.last path)), patopt) of
 	       (false,_) => NONE
 	     | (true,NONE) => SOME(clause,bound,body)
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
@@ -305,7 +306,7 @@ functor Pat(structure Il : IL
 	   expose_exp} =
 	(case (Datatype.constr_lookup context (#1(#1(hd accs)))) of
 	   NONE => error "constructor_lookup got path not to constructor"
-	 | (SOME {name,datatype_path,constr_sig,datatype_sig}) => 
+	 | (SOME {name,datatype_path,is_const,datatype_sig}) => 
 	     Datatype.instantiate_datatype_signature(datatype_path,datatype_sig,context,polyinst))
       val sumcon = (map (fn {name,arg_type} => case arg_type of 
 			 NONE => con_unit | SOME c => c) constr_patconopt_list)
@@ -627,8 +628,8 @@ functor Pat(structure Il : IL
 			   NONE => false
 			 | SOME {stamp,carried_type=NONE} => false
 			 | SOME {stamp,carried_type=SOME _} => true)
-	    | (SOME {name,datatype_path,constr_sig,datatype_sig}) => 
-		 not (Datatype.is_const_constr constr_sig))
+	    | (SOME {name,datatype_path,is_const,datatype_sig}) => 
+		 not is_const)
 	val fixtable = Context_Get_FixityTable context
 	val res = InfixParse.parse_pat(fixtable, is_non_const, pats)
       in res

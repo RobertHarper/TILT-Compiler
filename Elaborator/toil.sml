@@ -12,8 +12,9 @@ functor Toil(structure Il : IL
 	     structure AstHelp : ASTHELP
 	     structure InfixParse : INFIXPARSE
 	     structure Datatype : DATATYPE
+	     sharing Datatype.IlContext = IlContext
 	     sharing IlContext.Il = InfixParse.Il = Pat.Il = Ppil.Il 
-	       = IlUtil.Il = IlStatic.Il = Datatype.Il = Il)
+	       = IlUtil.Il = IlStatic.Il = Il)
    : TOIL =  
   struct
 

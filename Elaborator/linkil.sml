@@ -222,5 +222,12 @@ structure LinkIl (* : LINKIL *) =
 	fun test' s = (test_res' s; ())
 	fun ptest' s = (ptest_res' s; ())
 
+	structure P = Compiler.Profile
+	fun profile thunk arg = 
+	    let val _ = P.reset()
+		val res = thunk arg
+		val _ = P.report TextIO.stdOut
+	    in res
+	    end
     end (* struct *)
 

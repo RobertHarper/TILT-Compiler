@@ -72,6 +72,7 @@ signature ILCONTEXT =
 	val Context_Lookup' : context * var -> phrase_class
 	val Context_Exn_Lookup : context * Il.tag -> con
 	val modsig_lookup : context * label list -> (path * mod * signat) option
+	val Path_Context_Lookup  : context * label list -> (path * phrase_class) option
 	val var2label     : context * var -> label 
 	val print_context    : {pp_exp : exp -> Formatter.format,
 				pp_mod : mod -> Formatter.format,
