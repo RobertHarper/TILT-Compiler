@@ -1179,6 +1179,24 @@ functor EmitRtlMLRISC(
     fun CALL(procedure, arguments, results, (integers, _)) =
 	  call integers (procedure, arguments, results)
 
+    fun externalCALL operand =
+	  let
+	    val alloc_pointer = externalExp "cur_alloc_pointer"
+	    val alloc_limit   = externalExp "cur_alloc_limit"
+	    val heapPointer   = IntegerConvention.heapPointer
+	    val heapLimit     = IntegerConvention.heapLimit
+	  in
+	    [MLTree.CODE[
+	       MLTree.STORE32(alloc_pointer, MLTree.REG heapPointer),
+	       MLTree.STORE32(alloc_limit, MLTree.REG heapLimit)
+	     ]]@
+	    CALL operand@
+	    [MLTree.CODE[
+	       MLTree.MV(heapPointer, MLTree.LOAD32 alloc_pointer),
+	       MLTree.MV(heapLimit, MLTree.LOAD32 alloc_limit)
+	     ]]
+	  end
+
     fun RETURN _ =
 	  raise InvalidRtl "should have been translated to a branch"
 
@@ -1419,16 +1437,18 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.STOREQF(address, src)) =
 	  STOREQF(ea address, srcFloatReg src)
 
-      | translateInstruction(Rtl.CALL{func     = procedure,
-				      args     = arguments,
-				      results  = results,
-				      tailcall = tailFlag, (* ??? *)
-				      save     = Rtl.SAVE save,
+      | translateInstruction(Rtl.CALL{func	  = procedure,
+				      args	  = arguments,
+				      results	  = results,
+				      extern_call = externalFlag,
+				      tailcall	  = tailFlag, (* ??? *)
+				      save	  = Rtl.SAVE save,
 				      ...}) =
-	  CALL(RegisterOrLabel.translate procedure,
-	       RegisterSet.translateCall arguments,
-	       RegisterSet.translateCall results,
-	       RegisterSet.translate save)
+	  (if externalFlag then externalCALL else CALL)
+	     (RegisterOrLabel.translate procedure,
+	      RegisterSet.translateCall arguments,
+	      RegisterSet.translateCall results,
+	      RegisterSet.translate save)
       | translateInstruction(Rtl.RETURN src) =
 	  RETURN(srcReg src)
 
