@@ -2341,7 +2341,8 @@ end (* local defining splitting context *)
 	       (case pc of
 		    Il.PHRASE_CLASS_EXP (_,il_type, _, _) => 
 			let val nil_type = xcon context il_type
-			in  (ImportValue(l,v,nil_type)::imports, context)
+			in  (ImportValue(l,v,TraceUnknown,nil_type)::imports,
+			     context)
 			end
 		  | Il.PHRASE_CLASS_CON (il_con, il_kind, il_conopt, _) => 
 			let
@@ -2366,7 +2367,7 @@ end (* local defining splitting context *)
 			    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
 			    val context = update_NILctx_insert_kind(context, v_c, knd)
-			    val iv = ImportValue(l_r,v_r,type_r)
+			    val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
 			    val it = ImportType(l_c,v_c,knd)
 			in
 			    if is_polyfun then
@@ -2455,7 +2456,7 @@ end (* local defining splitting context *)
 
 	     (* Filter out the unused imports *)
 	    fun filter_imports [] = ([], used)
-              | filter_imports ((iv as ImportValue(l,v,c)) :: rest) =
+              | filter_imports ((iv as ImportValue(l,v,_,c)) :: rest) =
 		   let
 		       val result as (imports, used) = filter_imports rest
 		   in

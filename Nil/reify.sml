@@ -57,6 +57,23 @@ struct
              (Compiletime, pset)
 
 
+    fun do_reify (ctxt, con, nt, pset) =
+	if (TraceOps.valid_trace (ctxt,nt)) then
+	    (nt, [], pset_add_list (pset, TraceOps.get_free_vars nt))
+	else
+	    (case TraceOps.get_trace (ctxt, con) of
+		 SOME tinfo => 
+		     (TraceKnown tinfo, [], 
+		      pset_add_list (pset, TraceOps.get_free_vars' tinfo))
+	       | NONE =>
+		     let 
+			 val v' = Name.fresh_named_var "reify"
+			 val pset' = reify_con_rt(con,pset)
+		     in
+			 (TraceCompute v',
+			  [Con_b(Runtime,Con_cb (v', con))], pset')
+		     end)
+
     fun reify_exp ctxt (e as Var_e v, pset) = (e, pset)
       | reify_exp ctxt (e as Const_e _, pset) = (e, pset)
       | reify_exp ctxt (Prim_e (p, cons, exps), pset) =
@@ -185,27 +202,16 @@ struct
               ([], BODY_EXPORTS es, pset)
            end
 
-      | reify_seq_bnds ctxt (Exp_b (v,_,e)::bs, body, pset) =
+      | reify_seq_bnds ctxt (Exp_b (v,nt,e)::bs, body, pset) =
            let
               val t1 = Normalize.type_of (ctxt, e)
               val ctxt' = NilContext.insert_con(ctxt, v, t1)
               val (bs', body', pset) = reify_seq_bnds ctxt' (bs, body, pset)
               val (e', pset') = reify_exp ctxt (e, pset)
 
-              val (bnds, pset'') = 
-                 (case TraceOps.get_trace (ctxt, t1) of
-                    SOME tinfo => 
-                       (Exp_b (v, TraceKnown tinfo, e') :: bs',
-                        pset_add_list (pset', TraceOps.get_free_vars' tinfo))
-                  | NONE =>
-                       let 
-                          val v' = Name.fresh_named_var "reify"
-			  val pset'' = reify_con_rt(t1,pset')
-                       in
-                          (Con_b(Runtime,Con_cb (v', t1))::
-                              Exp_b (v, TraceCompute v',e') :: bs',
-                           pset'')
-                       end)
+	      val (nt', new_bnds, pset'') = do_reify(ctxt, t1, nt, pset')
+
+	      val bnds = new_bnds @ (Exp_b (v, nt',e') :: bs')
 
            in
               (bnds, body', pset'')
@@ -296,7 +302,8 @@ struct
              val (arms', pset) = reify_exn_arms ctxt (arms, v, pset)
              val (e1', pset) = reify_exp ctxt (e1, pset)
              val tagcon = Normalize.type_of(ctxt,e1)
-	     val (_,Prim_c(Exntag_c, [con])) = Normalize.reduce_hnf(ctxt,tagcon)
+	     val (_,Prim_c(Exntag_c, [con])) = 
+		    Normalize.reduce_hnf(ctxt,tagcon)
 	     val ctxt = NilContext.insert_con(ctxt, v, con)
              val (e2', pset) = reify_exp ctxt (e2, pset)
           in
@@ -321,33 +328,35 @@ struct
                       val (fns', bnds, pset) = loop (fns, pset)
                       val ctxt = NilContext.insert_kind_list (ctxt,vks)
                       val vks_length = List.length vks
+                      val error_message = 
+		       "reify_vflist: Cannot hoist from Lambda-lambda function"
                       fun loop' _ [] pset = (bnds, [], pset)
-                        | loop' ctxt ((v,tr,c)::vtcs) pset =
+                        | loop' ctxt ((v,nt,c)::vtcs) pset =
 	                    let
                                val ctxt' = 
 				   if dep then
 				       NilContext.insert_con (ctxt, v, c)
 				   else
 				       ctxt
-                               val (bnds, vtcs', pset) = loop' ctxt' vtcs pset
+                               val (bnds, vtcs', pset') = loop' ctxt' vtcs pset
+
+			       val (nt', new_bnds, pset'') = 
+				   do_reify(ctxt, c, nt, pset')
+
+			       val _ = 
+				   if (vks_length > 0) then
+				       (case new_bnds of 
+					    [] => ()
+					  | _ =>  error error_message)
+				   else
+				       ()
+
+			       val bnds' = new_bnds @ bnds
+				   
                             in 
-			       case TraceOps.get_trace (ctxt, c) of
-				   SOME tinfo => 
-				       (bnds, (v,TraceKnown tinfo,c)::vtcs',pset)
-				 | NONE => 
-				       if (vks_length = 0) then
-					   let 
-					       val v' = Name.fresh_named_var "reify"
-					       val pset' = reify_con_rt(c,pset)
-					   in
-					       (Con_b(Runtime,Con_cb (v', c))::bnds,
-						(v,TraceCompute v',Var_c v')::vtcs',
-						pset')
-					   end
-				       else
-					   error ("reify_vflist: Cannot hoist from" ^
-						  " Lambda-lambda function")
+				(bnds', (v,nt',c)::vtcs', pset'')
                             end
+
                       val (bnds', vtcs', pset) = loop' ctxt vtcs pset
                       val ctxt = NilContext.insert_con_list (ctxt,
 							     (map (fn (v,t,c) => (v,c)) vtcs))
@@ -385,27 +394,42 @@ struct
              (Sequence.fromList vcllist', pset, ctxt)
           end
 
-   and reify_exports ctxt ([], pset) = pset
-     | reify_exports ctxt ((ExportType (l, v))::exports, pset) =
-       let val pset = pset_add_list(pset,[v])
-       in  reify_exports ctxt (exports, pset)
-       end
-     | reify_exports ctxt ((ExportValue _)::exports, pset) =
-	    reify_exports ctxt (exports, pset)
+    and reify_exports ctxt ([], pset) = pset
+      | reify_exports ctxt ((ExportType (l, v))::exports, pset) =
+	let val pset = pset_add_list(pset,[v])
+	in  reify_exports ctxt (exports, pset)
+	end
+      | reify_exports ctxt ((ExportValue _)::exports, pset) =
+	reify_exports ctxt (exports, pset)
+	
+    fun reify_imports ([], ctxt, is') = (ctxt, rev is')
+      | reify_imports ((imp as ImportType (_, v, k)) :: is,
+		       ctxt, is') =
+	reify_imports (is, NilContext.insert_kind(ctxt, v, k), imp :: is')
+      | reify_imports (ImportValue (l, v, nt, c) :: is, ctxt, is') = 
+	let
+	    val nt' = 
+		if (TraceOps.valid_trace (ctxt, nt)) then
+		    nt
+		else
+		    (case TraceOps.get_trace(ctxt, c) of
+			 SOME tinfo => TraceKnown tinfo
+		       | NONE => TraceUnknown)
 
+	    val imp' = ImportValue(l, v, nt', c)
+	    val ctxt' = NilContext.insert_con(ctxt, v, c)
+	in
+	    reify_imports (is, ctxt', imp' :: is')
+	end
 
+	
     fun reify_mod (MODULE {bnds, imports, exports}) =
-        let fun create_ctxt ([], ctxt) = ctxt
-              | create_ctxt (ImportType (_, v, k) :: is, ctxt) = 
-                   create_ctxt (is, NilContext.insert_kind(ctxt, v, k))
-		   (* XXX Chris look at the trace on ImportValue *)
-              | create_ctxt (ImportValue (_, v, tr, c) :: is, ctxt) = 
-                   create_ctxt (is, NilContext.insert_con(ctxt, v, c))
-	    val ctxt = create_ctxt (imports, NilContext.empty ())
+        let val (ctxt, imports') = 
+	       reify_imports (imports, NilContext.empty (), [])
 	    val (bnds', BODY_EXPORTS exports', pset) = 
                   reify_seq_bnds ctxt (bnds, BODY_EXPORTS exports, empty_pset)
 	in  if (!debug) then print_pset pset else ();
-            MODULE {bnds = bnds', imports = imports,
+            MODULE {bnds = bnds', imports = imports',
 		    exports = exports'}
             
 	end

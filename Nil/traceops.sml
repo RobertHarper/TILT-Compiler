@@ -18,6 +18,7 @@ struct
      | Array_c => SOME TI.Trace
      | Vector_c => SOME TI.Trace
      | Ref_c => error "ref_c disappearing soon"
+     | Loc_c => error "what do I do with a locative?"
      | Exntag_c => SOME TI.Notrace_Int
      | Record_c _ => SOME TI.Trace
      | Sum_c _ => SOME TI.Trace
@@ -69,5 +70,17 @@ struct
   fun get_free_vars (TraceKnown tinfo) = get_free_vars' tinfo
     | get_free_vars (TraceCompute v) = [v]
     | get_free_vars _ = []
+
+  fun valid_trace (ctxt, TraceKnown (TI.Compute(v,ls))) = 
+      (* XXX Unsound approximation ! *)
+      (* but calling con_valid is too heavyweight; it
+         would print an error message *)
+	  ((NilContext.find_con (ctxt, v); true)
+	   handle NilContext.Unbound => false)
+    | valid_trace (ctxt, TraceKnown _) = true
+    | valid_trace (ctxt, TraceCompute v) =
+	  ((NilContext.find_con (ctxt, v); true)
+	   handle NilContext.Unbound => false)
+    | valid_trace (_, TraceUnknown) = false
 
 end
