@@ -5,7 +5,7 @@
 signature BLASTER =
 sig
 
-    exception BadMagicNumber
+    exception BadMagicNumber of string
     val BlastDebug : bool ref
 
     type instream

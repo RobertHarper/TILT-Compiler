@@ -93,7 +93,7 @@ struct
 	    end
     fun blastInMessages (is : B.instream) : message list =
 	(readMessages (is,nil)
-	 handle B.BadMagicNumber =>
+	 handle B.BadMagicNumber _ =>
 	     reject "master and slave are incompatible")
 
     fun pp_job (l : label) : F.format =

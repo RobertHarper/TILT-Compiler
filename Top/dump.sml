@@ -32,7 +32,7 @@ struct
 
     fun try_reader (path : string, reader : reader) : bool =
 	let val is = B.openIn path
-	    val contents = (SOME (reader is) handle B.BadMagicNumber => NONE)
+	    val contents = (SOME (reader is) handle B.BadMagicNumber _ => NONE)
 	    val _ = B.closeIn is
 	in  (case contents
 	       of SOME contents =>

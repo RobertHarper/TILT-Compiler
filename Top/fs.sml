@@ -20,10 +20,10 @@ struct
 	((f arg; ()) handle _ => ())
 
     fun cleanup (f : unit -> 'a, c : unit -> unit) : 'a =
-	((f() handle e => (ignore_exn c (); raise e)) before c())
-
-    fun bad (file : file) : 'a =
-	reject ("bad magic number in " ^ file)
+	let val r = Util.apply(f,())
+	    val _ = ignore_exn c ()
+	in  r()
+	end
 
     fun identity () : file =
 	let val host = Platform.hostname()
@@ -120,7 +120,7 @@ struct
 
     fun read (f : Blaster.instream -> 'a) file : 'a =
 	let val is = Blaster.openIn file
-	    fun reader () = f is handle Blaster.BadMagicNumber => bad file
+	    fun reader () = f is
 	    fun cleaner () = Blaster.closeIn is
 	in  cleanup (reader, cleaner)
 	end
@@ -309,7 +309,7 @@ struct
     fun read_pinterface' (file:file) : pinterface option =
 	if exists file then
 	    (SOME (read_pinterface file)
-	     handle Blaster.BadMagicNumber => NONE)
+	     handle Blaster.BadMagicNumber _ => NONE)
 	else NONE
 
     fun write_pinterface (file:file, pi:pinterface) : unit =

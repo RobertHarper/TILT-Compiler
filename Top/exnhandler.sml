@@ -8,23 +8,24 @@ struct
     val Interactive : bool ref = ref true
 
     fun bomb (e:exn) : bool =
-	(case e
-	   of UtilError.Reject _ => false
-	    | _ => true)
+	(case e of
+	    UtilError.Reject _ => false
+	    (* Assume one of the user's files is broken. *)
+	|   Blaster.BadMagicNumber _ => false
+	|   _ => true)
 
     fun errorMsg (e : exn) : string =
-	(case e
-	   of UtilError.BUG {file,msg} => file ^ ": " ^ msg
-	    | UtilError.Reject {msg} => msg
-	    | e => "uncaught exception: " ^ exnMessage e)
+	(case e of
+	    UtilError.BUG {file,msg} => file ^ ": " ^ msg
+	|   UtilError.Reject {msg} => msg
+	|   Blaster.BadMagicNumber file => "bad magic number in " ^ file
+	|   e => "uncaught exception: " ^ exnMessage e)
 
     val bug : Word8.word = 0w1
     val reject : Word8.word = 0w10	(* See ../Test/runtest.sml *)
 
     fun exitStatus (e : exn) : Word8.word =
-	(case e
-	   of UtilError.Reject _ => reject
-	    | _ => bug)
+	if bomb e then reject else bug
 
     fun eprint (s : string) : unit = TextIO.output(TextIO.stdErr, s)
 

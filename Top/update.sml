@@ -141,7 +141,7 @@ struct
 			let val past = Fs.read I.blastInInfo infoFile
 			    val current = C.info (desc,pdec)
 			in  info_status (current, past)
-			end handle Blaster.BadMagicNumber =>
+			end handle Blaster.BadMagicNumber _ =>
 			    Stale "bad magic number"
 		    else
 			Stale "first compile"
