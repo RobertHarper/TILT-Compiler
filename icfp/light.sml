@@ -8,7 +8,7 @@ structure Light =
 
 	fun toLight (src, light) = 
 	    (case light of
-		 Sunlight (dir, _) => (dir, realInf)
+		 Sunlight (dir, _) => (negate dir, realInf)
 	       | Pointlight (pos, _) => (makeDir(src, pos), distance(src, pos))  (* Can optimize this *)
 	       | Spotlight {pos, ...} => (makeDir(src, pos), distance(src, pos)))
 

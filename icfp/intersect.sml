@@ -105,11 +105,13 @@ structure Intersect : INTERSECT =
 	  
 	  fun l3info ({hit,dist},(x,y,z)) = 
 	    let
-	      val v = y+1.0/2.0
+	      val v = (y+1.0)/2.0
 	      val u = if iszero v orelse iszero (v-1.0) then 0.0  (* What to do here?*)
 		      else (Math.atan2(x,z)) / (2.0 * Math.pi)     (*180/pi * (atan (x/z))/360 *)
 	      val face = 0
-	      val N = normalize hit
+	      val N' = (x,y,z)  (* BUG might have to negate if inside sphere *)
+	      val N = Matrix.applyVector(M, N')
+(*	      val _ = (print "sphere N = "; printV3 N; print "\n") *)
 	    in {u = u,v = v,face = face,
 		hit = hit,
 		dist = dist,

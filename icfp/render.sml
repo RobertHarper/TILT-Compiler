@@ -63,8 +63,9 @@ structure Render : RENDER =
 
     (* Diffuse intensity and Specular intensity *)
     fun castShadow (hit, scene, incident, N, n) light : v3 * v3 = 
-	let val hit = add(hit, scale(1e~10, incident))
+	let val hit = add(hit, scale(1e~5, incident)) 
 	    val (Lj, Ldist) = Light.toLight (hit, light)  
+(*	    val _ = (print "castShadow: offset hit = "; printV3 hit; print "    Lj = "; printV3 Lj; print "\n") *)
 	    val intersects = getIntersects hit Lj scene
 	    val shadowed = (case intersects of
 				[] => false

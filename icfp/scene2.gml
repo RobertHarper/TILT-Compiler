@@ -37,7 +37,10 @@ white solid-color apply sphere
 	2.0 -2.0 4.0 translate 
 
 % little purple sphere
-purple solid-color apply sphere
+{ /v /u /face			  % bind arguments
+  0.8 0.2 v point		  % surface color
+  1.0 0.2 1.0			  % kd ks n
+} sphere 
 	-1.0 1.0 3.0 translate 
 
 % wall facing us (z=0), push back
