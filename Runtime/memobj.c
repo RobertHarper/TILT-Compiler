@@ -21,6 +21,7 @@ Heap_t       *Heaps;
 int NumHeap       = 20;
 int NumStackChain = 200;  /* 2 * NumThread */
 int NumStacklet   = 200;  /* NumStackChain */
+int NumStackletPerChain = 10;	/* Initial size of a chain's stacklet array.  */
 
 
 mem_t StopHeapLimit  = (mem_t) 1; /* A user thread heap limit used to indicates that it has been interrupted */
@@ -55,6 +56,25 @@ static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
 static int Heapbitmap_bits;
 
+void* my_malloc(size_t size)
+{
+  void* mem = malloc(size);
+  if (mem == NULL) {
+    fprintf(stderr, "malloc %u failed with %d (%s)\n", (unsigned)size,errno,strerror(errno));
+    assert(0);
+  }
+  return mem;
+}
+
+void* my_realloc(void* src, size_t size)
+{
+  void* mem = realloc(src, size);
+  if (mem == NULL && size != 0) {
+    fprintf(stderr, "realloc %u failed with %d (%s)\n", (unsigned)size,errno,strerror(errno));
+    assert(0);
+  }
+  return mem;
+}
 
 
 void my_mprotect(int which, caddr_t bottom, int size, int perm)
@@ -105,15 +125,17 @@ mem_t my_mmap(caddr_t start, int size, int prot)
 void StackInitialize(void)
 {
   int i;
-  Stacklets = (Stacklet_t *)malloc(sizeof(Stacklet_t) * NumStacklet);
-  StackChains = (StackChain_t *)malloc(sizeof(StackChain_t) * NumStackChain);
+  Stacklets = (Stacklet_t *)my_malloc(sizeof(Stacklet_t) * NumStacklet);
   for (i=0; i<NumStacklet; i++) {
     Stacklets[i].count = 0;
     Stacklets[i].mapped = 0;
   }
+  StackChains = (StackChain_t *)my_malloc(sizeof(StackChain_t) * NumStackChain);
   for (i=0; i<NumStackChain; i++) {
     StackChains[i].used = 0;
     StackChains[i].thread = NULL;
+    StackChains[i].avail = 0;
+    StackChains[i].stacklets = NULL;
   }
 }
 
@@ -200,6 +222,15 @@ Stacklet_t *NewStacklet(StackChain_t *stackChain)
 {
   int i;
   Stacklet_t *newStacklet = Stacklet_Alloc(stackChain);
+  if (stackChain->cursor + 1 == stackChain->avail) {
+    int avail = stackChain->avail * 2;
+    assert(avail > 0);
+    stackChain->stacklets = (Stacklet_t**) my_realloc(stackChain->stacklets, sizeof(Stacklet_t*) * avail);
+    for (i=stackChain->avail; i < avail; i++) {
+      stackChain->stacklets[i] = NULL;
+    }
+    stackChain->avail = avail;
+  }
   stackChain->stacklets[stackChain->cursor++] = newStacklet;
   for (i=0; i<stackChain->cursor; i++) 
     assert(stackChain->stacklets[i]->count > 0);
@@ -327,7 +358,7 @@ void showAllThreads(void)
   }
 }
 
-StackChain_t* StackChain_BaseAlloc(Thread_t *t)
+StackChain_t* StackChain_BaseAlloc(Thread_t *t, int n)
 {
   int i;
   for (i=0; i<NumStackChain; i++)
@@ -337,6 +368,12 @@ StackChain_t* StackChain_BaseAlloc(Thread_t *t)
       assert(res->used == 1);
       res->cursor = 0;
       res->thread = t;
+      res->avail = n;
+      assert(n > 0);
+      res->stacklets = (Stacklet_t**) my_malloc(sizeof(Stacklet_t*) * n);
+      for (i=0; i < n; i++) {
+	res->stacklets[i] = NULL;
+      }
       return res;
     }
   showAllThreads();
@@ -348,7 +385,7 @@ StackChain_t* StackChain_Copy(void *tVoid, StackChain_t *src)
 {
   int i;
   Thread_t *t = (Thread_t *) tVoid;
-  StackChain_t* res = StackChain_BaseAlloc(t);
+  StackChain_t* res = StackChain_BaseAlloc(t, src->avail);
   assert(t == t->stack->thread);
   assert(src->used);
   res->cursor = src->cursor;
@@ -373,7 +410,7 @@ int StackChain_Size(StackChain_t *chain)
 StackChain_t* StackChain_Alloc(void *tVoid)
 {
   Thread_t *t = (Thread_t *) tVoid;
-  StackChain_t* res = StackChain_BaseAlloc(t);
+  StackChain_t* res = StackChain_BaseAlloc(t, NumStackletPerChain);
   NewStacklet(res);
   return res;
 }
@@ -381,8 +418,10 @@ StackChain_t* StackChain_Alloc(void *tVoid)
 void StackChain_Dealloc(StackChain_t *stackChain)
 {
   int i;
-  for (i=0; i<stackChain->cursor; i++)
+  for (i=0; i<stackChain->cursor; i++) {
     Stacklet_Dealloc(stackChain->stacklets[i]);
+    stackChain->stacklets[i] = NULL;
+  }
   stackChain->cursor = 0;
   stackChain->thread = NULL;
   stackChain->used = 0;   /* Should be last */
@@ -406,7 +445,7 @@ Stacklet_t* CurrentStacklet(StackChain_t *stackChain)
 {
   Stacklet_t *stacklet = stackChain->stacklets[stackChain->cursor-1];
   assert(stackChain->used);
-  assert(stackChain->cursor > 0);
+  assert(stackChain->cursor > 0 && stackChain->cursor < stackChain->avail);
   assert(stacklet->count > 0);
   return stacklet;
 }
@@ -414,7 +453,7 @@ Stacklet_t* CurrentStacklet(StackChain_t *stackChain)
 void HeapInitialize(void)
 {
   int i;
-  Heaps = (Heap_t *)malloc(sizeof(Heap_t) * NumHeap);
+  Heaps = (Heap_t *)my_malloc(sizeof(Heap_t) * NumHeap);
   for (i=0; i<NumHeap; i++) {
     Heap_t *heap = &(Heaps[i]);
     heap->id = i;
@@ -424,7 +463,7 @@ void HeapInitialize(void)
     heap->cursor = 0;
     heap->mappedTop = 0;
     heap->writeableTop = 0;
-    heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    heap->lock = (pthread_mutex_t *) my_malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(heap->lock,NULL);
   }
 }
@@ -484,7 +523,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   SetRange(&(res->range), res->bottom, res->mappedTop);
   res->valid  = 1;
   res->bitmap = paranoid ? CreateBitmap(maxsize_pageround / 4) : NULL;
-  res->freshPages = (int *) malloc(DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
+  res->freshPages = (int *) my_malloc(DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
   memset((int *)res->freshPages, 0, DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
   assert(res->bottom != (mem_t) -1);
   assert(chunkstart >= 0);

@@ -52,7 +52,8 @@ typedef struct StackChain__t
 {
   volatile int used;
   volatile int cursor;                  /* Index of first uninitialized stacklet */
-  Stacklet_t *stacklets[10];   /* Should be dynamic XXXX */
+  volatile int avail; 
+  Stacklet_t **stacklets;	        /* Dynamic -- expands but doesn't contract */
   volatile void *thread;                /* Really of type Thread_t *  */
 } StackChain_t;
 
