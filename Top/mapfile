@@ -1,0 +1,78 @@
+#include ../Backend/mapfile
+
+// ----------------- Alpha directory -----------------
+DECALPHA           ../Alpha/decalpha.sig
+DecAlpha           ../Alpha/decalpha
+DecAlphaUtils      ../Alpha/decalphautils
+CallConv           ../Alpha/callconv
+DIVMULT            ../Alpha/divmult.sig
+DivMult            ../Alpha/divmult
+ToAlpha            ../Alpha/toalpha
+TrackStorage       ../Alpha/trackstorage
+Linkalpha          ../Alpha/linkalpha
+
+// ----------------- Sparc directory -----------------
+SPARC              ../Sparc/sparc.sig
+Sparc              ../Sparc/sparc
+SparcUtils         ../Sparc/sparcutils
+SparcCallConv      ../Sparc/sparccallconv
+SparcTrackStorage  ../Sparc/sparctrackstorage
+ToSparc            ../Sparc/tosparc
+Linksparc          ../Sparc/linksparc
+
+
+// ----------------- Top directory -----------------
+TARGET     target.sig
+Target     target
+TopHelp     tophelp
+PATHS     paths.sig
+Paths     paths
+BACKGROUND     background.sig
+Background     background
+DELAY     delay.sig
+Delay     delay
+POPEN     popen.sig
+Popen     popen
+DIRS     dirs.sig
+Dirs     dirs
+FILECACHE     filecache.sig
+FileCache     filecache
+TOOLS     tools.sig
+Tools     tools
+COMPILER     compiler.sig
+Compiler     compiler
+UNIT_ENVIRONMENT     ue.sig
+UnitEnvironment     ue
+PRELINK     prelink.sig
+Prelink     prelink
+INFO     info.sig
+Info     info
+// DEPENDENT_FILE     dependentfile.sig
+// FileHelp     filehelp
+// SourceFile     sourcefile
+// IlFile     ilfile
+// AsmFile     asmfile
+// ObjFile     objfile
+UPDATE_HELP     updatehelp.sig
+UpdateHelp     updatehelp
+UPDATE     update.sig
+Update     update
+COMMUNICATION     communication.sig
+Communication     communication
+STATISTICS     statistics.sig
+Statistics     statistics
+MASTER     master.sig
+Master     master
+SLAVE     slave.sig
+Slave     slave
+MANAGER     manager.sig
+Manager     manager
+GETOPT     getopt.sig
+Getopt     getopt
+MAIN     main.sig
+Main     main
+RUN     run.sig
+Run     run
+Top     top TARGET
+
+// Dumpil     dumpil TARGET
