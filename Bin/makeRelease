@@ -221,6 +221,7 @@ fn makeCommon { common=$1 {
 			s,/usr/local/bin/sml,'$SMLNJ',g
 			s,/usr/local/lib/tilt,'$LIBDIR',g
 		' <Bin/tilt >$tmp
+		chmod og+x $tmp
 		copyFile $tmp $common/bin/tilt
 		copyFile $tmp $common/lib/tilt/Bin/tilt
 		rm -f $tmp
