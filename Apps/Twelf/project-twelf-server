@@ -1,4 +1,4 @@
-include "twelf.proj"
+include "project-twelf"
 
 unit SIGINT = "src/server/sigint.sig.sml" {}
 unit SigINT = "src/server/sigint-tilt.sml" {SIGINT}
