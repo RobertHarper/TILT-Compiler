@@ -9,16 +9,11 @@ structure Render : RENDER =
     val i2r = Real.fromInt
     val black = (0.0, 0.0, 0.0)
 
-    fun for(start,stop,f) = 
-	let fun loop cur = if (cur >= stop) 
-			       then ()
-			   else (f cur; loop (cur+1))
-	in  loop start
-	end
     fun add2o f obj (x : real, y : real) = 
 	let val (x2,y2) = f obj
 	in  (x+x2, y+y2)
 	end
+    fun say s = (print s; TextIO.flushOut TextIO.stdOut)
 
     type scene = obj list   (* Our notion of a scene is a union of objects represented by a list *)
 
@@ -70,7 +65,8 @@ structure Render : RENDER =
 
     fun cast (apply, Ia, viewerPos, dir, scene, lights, 0) : color =  black
       | cast (apply, Ia, viewerPos, dir, scene, lights, depth) : color =  
-	let val _ = (print "."; TextIO.flushOut TextIO.stdOut)
+	let 
+(*	    val _ = say "." *)
 	    val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
 	    fun greater ((_,{dist=d1,...}:l3info),
 			 (_,{dist=d2,...}:l3info)) = d1 > d2
@@ -114,18 +110,20 @@ structure Render : RENDER =
 	    val height = pixelSize * vresR  (* Since pixels are squares *)
 	    val upperLeftY = ~ height / 2.0
 
-	    val image = Ppm.ppm (hres, vres)
+	    val image = Ppm.ppm (vres, hres)
 	    val viewPos = (0.0, 0.0, ~1.0)   (* Viewer position *)
 
 	    val scene = obj2scene scene
 	    val _ = for(0, vres, fn row => 
-			for (0, hres, fn col => 
-			     let val dir = (upperLeftX + (i2r col + 0.5) * pixelSize,
-					    upperLeftY - (i2r row + 0.5) * pixelSize, 1.0)
-				 val dir = normalize dir
-				 val color = cast (apply, amb, viewPos, dir, scene, lights, depth)
-                             in  Ppm.pxl(col,row,Ppm.colortorgb color, image)
-                             end))
+			(say "\nRendering row "; say (Int.toString row); say ":  ";
+			 for (0, hres, fn col => 
+			      let val dir = (upperLeftX + (i2r col + 0.5) * pixelSize,
+					     upperLeftY - (i2r row + 0.5) * pixelSize, 1.0)
+				  val dir = normalize dir
+				  val _ = if (col mod 10 = 0) then say "!" else ()
+				  val color = cast (apply, amb, viewPos, dir, scene, lights, depth)
+			      in  Ppm.pxl(col,row,Ppm.colortorgb color, image)
+			      end)))
 
 	in  image
 	end

@@ -1,10 +1,14 @@
 
 % Our first scene! - Tom 7, Team Fixed-point
 
-% val parse = ParseString.parse (Stdin.stdintostring ())
-% (paste this file)
+% Get file with:
+%   val str = (Stdin.stdintostring ())
+%   (paste this file)
+% Or with:
+%   val str = ParseString.file2string "scene1.gml"
+% val parse = ParseString.parse string
 % val res = Eval.eval (valOf parse) 
-%           handle Eval.Eval s => (print s; raise Eval.Eval s)
+%           handle Base.Eval s => (print s; raise Base.Eval s)
 % <- probably want to patch this to call render instead of
 %    raising an exception!
 

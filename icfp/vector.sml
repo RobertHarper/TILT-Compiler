@@ -4,6 +4,12 @@ structure Vect : VECT =
 	type v3 =  real * real * real
  	type v4 =  real * real * real * real
 
+	val r2s = Real.toString
+	fun printV3(x,y,z) = (print "(";
+			      print (r2s x); print ", ";
+			      print (r2s y); print ", ";
+			      print (r2s z); print ")")
+
 	val deg2radConv = Math.pi / 180.0
 	val rad2degConv = 180.0 / Math.pi 
 	fun deg2rad d = deg2radConv * d

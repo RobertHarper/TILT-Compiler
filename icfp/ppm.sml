@@ -32,20 +32,24 @@ struct
 
     fun write (ppm, file) =
 	let
-	    val (w,h) = Array2.dimensions ppm
+	    val (h,w) = Array2.dimensions ppm
 	    val out = BinIO.openOut file
 
-	    fun dorow r = Vector.app (fn b => BinIO.output1 (out, b))
+	    fun dopixel (row,col) = 
+		let val (r,g,b) = Array2.sub (ppm, row, col)
+		in  BinIO.output1 (out, r);
+		    BinIO.output1 (out, g);
+		    BinIO.output1 (out, b)
+		end
 
-	    fun go n = if n = h then {} 
-		       else (dorow (Array2.row (ppm, n));
-			     go (n + 1))
 	in
-	    BinIO.output (out, byt ("P6\n# " ^ teamstring));
+	    BinIO.output (out, byt ("P6\n# " ^ teamstring ^ "\n"));
 	    BinIO.output (out, byt ((Int.toString w) ^ " " ^
 			       (Int.toString h) ^ "\n"));
 	    BinIO.output (out, byt "255\n");
-	    go 0;
+	    Base.for (0, h, fn row =>
+		      Base.for(0, w, fn col =>
+			       dopixel(row,col)));
 	    BinIO.closeOut out
 	end handle _ => raise Ppm ("IO failed in ppm")
 	  

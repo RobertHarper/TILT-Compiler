@@ -256,7 +256,23 @@ fun spotlight ((Real exp) :: (Real cutoff) :: (Point c) ::
 
 end
 
+fun printValue value = 
+    (case value of
+	 Int i => print (Int.toString i)
+       | Bool b => print (Bool.toString b)
+       | String s => print s
+       | Real r => print (Real.toString r)
+       | Array a => (print "[";
+		     Vector.app (fn v => (printValue v; print ", ")) a;
+		     print "]")
+       | Point p => Vect.printV3 p
+       | Closure c => print "Closure"
+       | Object obj => print "Object"
+       | Light light => print "Light")
 
+fun printStack stack = (print "Stack:\n";
+			app (fn v => (print "  "; printValue v; print "\n")) stack;
+			print "\n\n")
     infix ++ ??
     fun G ++ (var, v) = Envmap.insert (G, var, v)
     fun G ?? var = case Envmap.find (G, var) of
@@ -282,8 +298,9 @@ end
 	| eval' (G, s, (Gml.Oper p) :: c ) = 
 	eval' ((G, (T.opers ?? p) s, c)
 	       handle Match => 
-		 raise Eval ("inappropriate stack for " ^ p ^
-			     "(caught Match)"))
+		 (printStack s;
+		  raise Eval ("inappropriate stack for " ^ p ^
+			     "(caught Match)")))
 	| eval' (G, 
 		 (Closure (G'f, elf)) :: 
 		 (Closure (G't, elt)) :: 
@@ -307,20 +324,18 @@ end
 	| eval' (G, s, nil) = (G, s)
 	| eval' _ = raise Eval ("Eval error")
 
-      fun render ((Point amb)      
-		  :: (Array v)  
-		  :: (Object obj) 
-		  :: (Int depth)    
-		  :: (Real hfov) 
-		  :: (Int wid) 
+      fun render ((String fname) 
 		  :: (Int ht) 
-		  :: (String fname) 
+		  :: (Int wid) 
+		  :: (Real hfov) 
+		  :: (Int depth)    
+		  :: (Object obj) 
+		  :: (Array v)  
+		  :: (Point amb)      
 		  :: s) = 
 	let 
 	  val lights = Vector.foldr (fn (Light light,ls) => (light :: ls)) [] v
-
 	  val sref = ref s
-
 	  fun apply ((G,exps) : closure, face, u, v) = 
 	    let 
 	      val stack = (Real v) :: (Real u) :: (Int face) :: (!sref)
@@ -329,7 +344,6 @@ end
 	      val _ = sref := stack
 	    in (color,kd,ks,n)
 	    end
-
 	  val ppm = Render.render apply
 				   {amb    = amb,
 				    lights = lights,
@@ -346,5 +360,4 @@ end
       fun eval (el) =   #2 (eval' (empty_context, nil, el))
     end
 
-        
 end

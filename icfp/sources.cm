@@ -68,6 +68,4 @@ light.sml
 render.sig.sml
 render.sml
 
-(* toplevel-sig.sml *)
-(* toplevel.sml *)
-
+top.sml

@@ -4,6 +4,8 @@ signature VECT =
 	type v3 =  real * real * real
  	type v4 =  real * real * real * real
 
+	val printV3 : v3 -> unit
+
 	val v3tov4 : v3 -> v4
 	val v4tov3 : v4 -> v3
 
