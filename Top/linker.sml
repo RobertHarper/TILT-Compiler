@@ -2,6 +2,8 @@
 structure Linker :> LINKER =
   struct
 
+    val debug_asm = Stats.bool("debug_asm")
+
     val as_path = "as"
     fun preld() = 
 	let val alpha = "ld -r " 
@@ -13,7 +15,11 @@ structure Linker :> LINKER =
 	     | Til.MLRISC_SPARC => solaris
 	end
     fun ld() = 
-	let val alpha = "ld -D a000000 -T 8000000 " 
+	let val alpha = 
+	    if (!debug_asm) then
+		"ld -D a000000 -T 8000000 -g" 
+	    else
+		"ld -D a000000 -T 8000000"
 	    val solaris = "ld"
 	in   case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
