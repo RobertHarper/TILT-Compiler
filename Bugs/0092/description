@@ -1,0 +1,15 @@
+Number: 0092
+Title:       There are too many steps to reporting bugs.
+Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Submitter:   swasey
+Date:        08/16/02
+Version:     <TILT version number>
+System:      <e.g. solaris,alpha,linux>
+Severity:    <critical, major, minor, cosmetic>
+Problem:     <description of problem>
+Code:        <SML source code to reproduce the bug>
+Transcript:  <transcript of exectution demonstating the bug>
+Comments:    <additional comments>
+Fix:         <optional - but you get extra credit>
+Owner:
+Status: open
