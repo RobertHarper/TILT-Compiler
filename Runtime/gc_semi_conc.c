@@ -386,6 +386,7 @@ void GCRelease_SemiConc(Proc_t *proc)
   if (gcOn) {
     if (diag)
       printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
+
     while (allocCurrent + 1 <= allocStop) { /* There may be no data for empty array */
       int objSize;
       ptr_t obj = allocCurrent;  /* Eventually becomes start of object */

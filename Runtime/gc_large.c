@@ -18,7 +18,7 @@
 #include "show.h"
 
 
-static int largeheapsize = 16384 * 1024;
+int largeheapsize = 16384;  /* measure in Kb */
 static int largebitmapsize = 512;
 static Bitmap_t  *allocMap = NULL;
 static Bitmap_t  *markMap = NULL;
@@ -67,8 +67,8 @@ void gc_large_endCollect()
 
 void gc_large_init()
 {
-  largeSpace = Heap_Alloc(largeheapsize,largeheapsize);
-  allocMap = CreateBitmap(largeheapsize / largebitmapsize);
-  markMap = CreateBitmap(largeheapsize / largebitmapsize);
+  largeSpace = Heap_Alloc(largeheapsize * 1024,largeheapsize);
+  allocMap = CreateBitmap(largeheapsize * 1024 / largebitmapsize);
+  markMap = CreateBitmap(largeheapsize * 1024 / largebitmapsize);
 }
 

@@ -97,7 +97,7 @@ struct option_entry {
   char *description;
 };
 
-extern int XXXXX;
+extern int largeheapsize;
 
 static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0, fixheap=0, youngheap=0;
 struct option_entry table[] = 
@@ -125,6 +125,7 @@ struct option_entry table[] =
    1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
    1, "stackletSize", &StackletSize, "Stack size of thread stacklets measured in Kbytes",
    1, "proc", &NumProc, "Use this many processors",
+   1, "largeheap", &largeheapsize, "Set large object heap size in Kbytes",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
    1, "maxheap", &MaxHeap, "Set maximum size of heap in Kbytes",
    1, "fixheap", &fixheap, "Set the size of heap in Kbytes",
