@@ -50,7 +50,7 @@
 #define Min(a,b) ((a) < (b) ? (a) : (b))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 #define arraysize(a) (sizeof(a)/sizeof(*(a)))
-#define BUG(x) {printf(x); exit(-1); }
+void DIE(char*);
 
 void init_int(int *, int);
 void init_double(double *, double);

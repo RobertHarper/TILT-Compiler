@@ -71,7 +71,7 @@ unsigned long GetIReg(ucontext_t *uctxt, int i)
       return sp[i - 16];
     }
   }
-  assert(0);
+  DIE("bad register number in GetIReg");
 }
 
 void SetIReg(ucontext_t *uctxt, int i, unsigned long v)    
@@ -82,12 +82,13 @@ void SetIReg(ucontext_t *uctxt, int i, unsigned long v)
     uctxt->uc_mcontext.gregs[REG_G1 + (i - 1)] = v;
   if (i < 32) {
     gwindows_t *gwins = uctxt->uc_mcontext.gwins;
-    if (gwins != NULL)
+    if (gwins != NULL) {
       if (i < 24)
 	(gwins->wbuf[gwins->wbcnt].rw_local[i-16]) = v;
       else 
 	(gwins->wbuf[gwins->wbcnt].rw_in[i-24]) = v;
-    else assert(0);
+    } else
+      DIE("bad ucontext in SetIReg");
   }
 }
 mem_t GetPc(ucontext_t *uctxt)    { return (mem_t) (uctxt->uc_mcontext.gregs[REG_PC]); }

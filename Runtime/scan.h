@@ -51,22 +51,22 @@ void doField(Proc_t *proc, ploc_t field,
       else if (stackType == NoSet)
 	locAlloc1_copyCopySync(proc,field,from_range);
       else
-	assert(0);
+	DIE("scan1");
       break;
     case OneSpaceLarge:
       if (stackType == PrimarySet)
 	locAlloc1L_copyCopySync_primarySet(proc,field,from_range, large_range);
       else 
-	assert(0);
+	DIE("scan2");
       break;
     case TwoSpaceLarge:
       if (stackType == PrimarySet)
 	locAlloc2L_copyCopySync_primarySet(proc,field,from_range,from2_range,large_range);
       else 
-	assert(0);
+	DIE("scan3");
       break;
     default : 
-      assert(0);
+      DIE("scan4");
     }
     break;
   case LocCopy:
@@ -106,7 +106,7 @@ void doField(Proc_t *proc, ploc_t field,
 	}
       }
       else
-	assert(0);
+	DIE("scan5");
       break;
     case OneSpaceLarge: 
       assert(copyCopy == DoCopyCopy);
@@ -131,7 +131,7 @@ void doField(Proc_t *proc, ploc_t field,
 	locCopy2L_noSpaceCheck(proc,field,from_range,from2_range,large_range); 
       }
       break;
-    default: assert(0);
+    default: DIE("scan6");
     }
     break;
   case Copy:
@@ -140,7 +140,7 @@ void doField(Proc_t *proc, ploc_t field,
     assert(spaceCheck == DoSpaceCheck);
     switch (sourceSpaceCheck) {
       case OneSpace: copy1_copyCopySync_primarySet(proc,*field,from_range); break;
-      default: assert(0);
+      default: DIE("scan7");
     }
     break;
   } /* switch locAllocCopy */
@@ -345,7 +345,7 @@ ptr_t genericScan(Proc_t *proc,
       return primaryOrReplicaGray + fieldLen;
     }
     else if (TYPE_IS_FORWARD(type)) {
-      assert(0);
+      DIE("scan8");
       tag = ((ptr_t)tag)[-1];
       continue;
     }
@@ -361,7 +361,7 @@ ptr_t genericScan(Proc_t *proc,
       continue;
     }
   }
-  assert(0);
+  DIE("scan9");
   breakUpArray:    /* If a large array object, convert into segments */
   {
     int segments = DivideUp(largeArrayByteLen, arraySegmentSize);

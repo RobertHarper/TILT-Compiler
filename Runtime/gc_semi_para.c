@@ -150,7 +150,7 @@ static void stop_copy(Proc_t *proc)
 	assert(proc->copyRange.start == proc->copyRange.cursor);
       }
       else 
-	assert(0);
+	DIE("bad ordering");
 
       if ((noSharing && SetIsEmpty(&proc->work.objs) && SetIsEmpty(&proc->work.grayRegion)) || 
                                                                       /* If not sharing work, check if local stack is empty */

@@ -111,7 +111,7 @@ static void stop_copy(Proc_t *proc)
     scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,fromSpace); /* XXXX */
   }
   else
-    assert(0);
+    DIE("bad ordering");
 
   SetReset(&proc->work.objs); /* XXX */
   /*  assert(isLocalWorkEmpty(&proc->work)); XXX */

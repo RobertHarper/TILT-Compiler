@@ -139,7 +139,7 @@ int changeRoom(Rooms_t *r, int i)
 	return finalizerResult;
       }
     }
-    assert(0);
+    DIE("changeRoom");
   }
   while (oldWait > r->cur[i])
     ;

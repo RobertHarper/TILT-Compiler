@@ -195,11 +195,8 @@ double addTimeList(void *procVoid, int w, int d)
   data[cursor] = d;
   times[cursor] = t;
   cursor++;
-  if (cursor >= arraysize(which)) {
-    printf("Time list overflowed with %d entries:\n", arraysize(which));
-    showTimeList(0.0);
-    assert(0);
-  }
+  if (cursor >= arraysize(which))
+    DIE("time list overflowed");
   return t;
 }
 
@@ -384,21 +381,6 @@ void add_windowQuotient_addHelp(WindowQuotient_t *wq, int i)
   add_statistic(&wq->stat[i], q);
 }
 
-void check(WindowQuotient_t *wq, int i)
-{
-  int c = wq->start[i], on = 0, off = 0;
-  while (c != wq->last) {
-    if (wq->data[c]) { on++; } else { off++; }
-    c++;
-    if (c >= wq->size) 
-      c = 0;
-  }
-  printf("on/off = %d %d     onSum/offSum = %d  %d\n", on, off, wq->onSum[i], wq->offSum[i]);
-  if (on != wq->onSum[i] ||
-      off != wq->offSum[i])
-    assert(0);
-}
-
 /* Find how much time at the beginning of which^th window so that x ON time are included in them - 
    returns 0.0 if cannot determine that much on time*/
 double get_prewindow(WindowQuotient_t *wq, int which, double neededOnTime)
@@ -444,12 +426,6 @@ void add_windowQuotient(WindowQuotient_t *wq, double time, int on)
   ticks = Min(ticks, wq->size / 2);  /* Half of size is greater than largest window */
   if (ticks == 0)
     return;
-  /*
-  if (wq->numWindows > 0)
-    printf("adding %d  ticks  %d\n", ticks, on);
-  for (w=0; w<wq->numWindows; w++) 
-    check(wq,w);
-    */
   for (i=0; i < ticks; i++) {
     wq->data[wq->last] = on;
     wq->last = (wq->last + 1 == wq->size) ? 0 : wq->last + 1;
@@ -490,10 +466,6 @@ void add_windowQuotient(WindowQuotient_t *wq, double time, int on)
 	  add_windowQuotient_addHelp(wq,w);
       }
     }
-    /*
-check(wq,w);
-printf("\n");
-*/
     if (transfer > 0)
       add_windowQuotient_addHelp(wq,w);
   }

@@ -137,7 +137,7 @@ static void GCCollect_Semi(Proc_t *proc)
 	(void) scanObj_locCopy1_replicaSet(proc,gray,fromSpace);   
     }
     else
-      assert(0);
+      DIE("bad ordering");
   }
 
   if (!forceSpaceCheck)
