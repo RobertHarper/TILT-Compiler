@@ -37,30 +37,19 @@ structure Name :> NAME =
     val eq_label2 = curry2 eq_label
     fun eq_tag   (n1, n2)     = n1 = n2
     fun compare_tag ((a,_),(b,_)) = Int.compare(a,b)
-    fun compare_label_name((a,sa,oa) : label, (b,sb,ob) : label) = 
-	let val is_num_a = (size sa > 0) andalso Char.isDigit(String.sub(sa,0))
-	    val is_num_b = (size sb > 0) andalso Char.isDigit(String.sub(sb,0))
-	in  (case (is_num_a,is_num_b) of
-		 (true,false) => LESS
-	       | (false,true) => GREATER
-	       | (true,true) => 
-		     (case Int.compare(size sa, size sb) of
-			  EQUAL => String.compare(sa,sb)
-			| res => res)
-	       | _ => String.compare(sa,sb))
-	end
+
     fun compare_label((a,sa,oa) : label, (b,sb,ob) : label) = 
 	(case Int.compare(a,b) of
-			   EQUAL => (case String.compare(sa,sb) of
-					 EQUAL => (case (oa,ob) of
-						       (false,true) => LESS
-						     | (true,false) => GREATER
-						     | _ => EQUAL)
-				       | res => res)
+	     EQUAL => (case String.compare(sa,sb) of
+			   EQUAL => (case (oa,ob) of
+					 (false,true) => LESS
+				       | (true,false) => GREATER
+				       | _ => EQUAL)
 			 | res => res)
+	   | res => res)
 
 
-    val labels_name_sorted_distinct = all_pairs (fn (l1,l2) => compare_label_name(l1,l2) = LESS)
+    val labels_name_sorted_distinct = all_pairs (fn (l1,l2) => compare_label(l1,l2) = LESS)
     
     (* XXX small variable numbers could be mapped to physical registers at the tortl level *)
     val var_counter = ref 256
@@ -120,7 +109,15 @@ structure Name :> NAME =
     fun open_internal_label s : label = (internal_hash s,s,true)
     fun is_label_internal ((num,str,flag) : label) = internal_hash str = num
 
-    fun symbol_label s = (Symbol.number s, Symbol.name s, false)
+    fun symbol_label sym = 
+	let val str = Symbol.name sym
+	    val numOpt = Int.fromString str
+	    val hash = case numOpt of 
+		SOME num => num 
+	      | NONE => Symbol.number sym
+	in  (hash, str, false)
+	end
+
     fun open_symbol_label s = (Symbol.number s, Symbol.name s, true)
     fun fresh_string s = s ^ "_" ^ Int.toString(inc_counter label_counter)
     fun fresh_internal_label s = internal_label(fresh_string s)

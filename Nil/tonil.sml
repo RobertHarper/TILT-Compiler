@@ -190,9 +190,9 @@ struct
    (* xeffect.  
          Translates the total/partial distinction from HIL to MIL.
     *)
-   (* XXX: since xmod of functors is broken, always saying "partial",
-           we break this function to match *)
-   fun xeffect (Il.TOTAL) = Partial
+   (* XXX: xmod of functors is broken WRT totality *)
+
+   fun xeffect (Il.TOTAL) = Total
      | xeffect (Il.PARTIAL) = Partial
 
    (* xilprim.  Translates the so-called "IL primitives" (primitives
@@ -1941,7 +1941,7 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.FIX (is_recur, il_arrow, fbnds)) = 
        let
-	   val fbnds'= xfbnds context (is_recur, fbnds)
+	   val fbnds'= xfbnds context (is_recur, il_arrow, fbnds)
            val set = Sequence.fromList fbnds'
            val names = map (fn (var,_) => Var_e var) fbnds'
            val num_names = List.length names
@@ -2107,15 +2107,16 @@ end (* local defining splitting context *)
      | xexp' context (Il.SEAL (exp,_)) = xexp context exp
 
 
-   and xfbnds context (is_recur, fbnds) = 
+   and xfbnds context (is_recur, il_arrow, fbnds) = 
        let
 	   val recursive = if is_recur then Arbitrary else Leaf
+	   val totality = xeffect il_arrow
 	   fun mapper (Il.FBND(var, var', il_con1, il_con2, body)) = 
 	       let
 		   val (con1,_) = xcon context il_con1
 		   val (con2,_) = xcon context il_con2
 		   val body' = xexp context body
-	       in  (var, Function(Partial, recursive, [],
+	       in  (var, Function(totality, recursive, [],
 				  false, [(var', con1)], [], body', con2))
 	       end
        in  map mapper fbnds

@@ -242,7 +242,7 @@ struct
 	 | (_, Sum_c _ ) => LESS
 
 	 | (Record_c (l1,v1), Record_c (l2,v2)) => 
-	       cmp_orders[cmp_list Name.compare_label_name (l1,l2),
+	       cmp_orders[cmp_list Name.compare_label (l1,l2),
 			  cmp_option (cmp_list Name.compare_var) (v1,v2)]
 	 | ( Record_c _, _) => GREATER
 	 | (_, Record_c _) => LESS
@@ -258,7 +258,7 @@ struct
     fun cmp_exp_list e = cmp_list cmp_exp e
     and cmp_con_list e = cmp_list cmp_con e
     and cmp_bnd_list e = cmp_list cmp_bnd e
-    and cmp_label_list e = cmp_list Name.compare_label_name e
+    and cmp_label_list e = cmp_list Name.compare_label e
     and cmp_conbnd_list e = cmp_list cmp_conbnd e
 
     and cmp_value (v1, v2) =
@@ -319,7 +319,7 @@ struct
 
 	   | (Record_k lvk1, Record_k lvk2) =>
 		 let fun cmp(((l1,v1),k1), ((l2,v2),k2)) = 
-		              cmp_orders[Name.compare_label_name (l1,l2),
+		              cmp_orders[Name.compare_label (l1,l2),
 					 Name.compare_var (v1,v2),
 					 cmp_kind (k1,k2)]
 		 in  cmp_list cmp (Sequence.toList lvk1, Sequence.toList lvk2)
@@ -367,7 +367,7 @@ struct
 		let val (labels1, cons1) = Listops.unzip lclist1
 		    val (labels2, cons2) = Listops.unzip lclist2
 		in 
-		    cmp_orders [ cmp_list Name.compare_label_name  (labels1, labels2), 
+		    cmp_orders [ cmp_list Name.compare_label  (labels1, labels2), 
 				 cmp_list cmp_con (cons1, cons2)]
 		end
 	  | (Crecord_c _, _) => GREATER
@@ -375,7 +375,7 @@ struct
 		
 
 	  | (Proj_c (con1, label1) , Proj_c (con2, label2) ) =>
-		cmp_orders [ cmp_con (con1, con2) , Name.compare_label_name (label1, label2) ]
+		cmp_orders [ cmp_con (con1, con2) , Name.compare_label (label1, label2) ]
 	  | (Proj_c _ , _) => GREATER
 	  | ( _, Proj_c _) => LESS
 
@@ -440,7 +440,7 @@ struct
 	  | (record l, _) => GREATER
 	  | ( _, record l) => LESS
 
-	  | (select l1, select l2) => Name.compare_label_name (l1, l2)
+	  | (select l1, select l2) => Name.compare_label (l1, l2)
 	  | (select l, _ ) => GREATER
 	  | (_, select l) => LESS
 
@@ -467,7 +467,7 @@ struct
       | (project_sum_record (s1, f1),
 	 project_sum_record (s2, f2)) => 
 		 cmp_orders [Word32.compare(s1,s2), 
-			     Name.compare_label_name (f1, f2)]
+			     Name.compare_label (f1, f2)]
        | (project_sum_record _ , _) => GREATER
        | (_ , project_sum_record _) => LESS
 

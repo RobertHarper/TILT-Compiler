@@ -22,7 +22,6 @@ signature NAME =
     val eq_tag   : (tag * tag) -> bool
     val compare_tag : (tag * tag) -> order
     val compare_var : (var * var) -> order
-    val compare_label_name : (label * label) -> order
     val compare_label : label * label -> order
 
     val labels_name_sorted_distinct : label list -> bool

@@ -254,7 +254,7 @@ struct
   val opt_cons = Listops.opt_cons
   val find2 = Listops.find2
   (* XXX CS: detects conflicts between namespaces  that ought not occur! *)
-  val labels_distinct = Listops.no_dups Name.compare_label_name
+  val labels_distinct = Listops.no_dups Name.compare_label
 
   (*From PrimUtil*)
   val same_intsize = NilPrimUtil.same_intsize
@@ -421,7 +421,7 @@ struct
 	     (kind_valid (D,k);
 	      insert_kind (D,v,k))
 	   val _ = Sequence.foldl folder D elts
-	   fun compare (((l1,_),_),((l2,_),_)) = Name.compare_label_name (l1,l2)
+	   fun compare (((l1,_),_),((l2,_),_)) = Name.compare_label (l1,l2)
 	   val _ = 
 	     (Sequence.no_dups compare elts) orelse
 	     (perr_k kind;
@@ -635,7 +635,7 @@ struct
 		 (Ppnil.pp_list Ppnil.pp_label' labels 
 		  ("labels are: ",",",";",true);
                   Listops.no_dups (fn (x,y) => let val _ = (print "comparing: "; pp_label x; print " and "; pp_label y; print " : ")
-                                                   val result = Name.compare_label_name (x,y)
+                                                   val result = Name.compare_label (x,y)
                                                    val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
                                                in result end) labels;
 		  (error (locate "con_valid") "Labels in record of constructors not distinct" ))

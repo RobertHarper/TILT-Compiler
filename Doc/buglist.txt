@@ -14,15 +14,9 @@ HIGH PRIORITY
 
 (4) document how the system is used (mapfiles and make)
 
-(5) Label-equality is being done on label "names", which does not 
-        seem to distinguish between identifiers from different namespaces.
-        E.g., NIL typechecker can't allow a type foo and a functor foo
-        (the compile-time part of a functor foo) in the same module because
-        the names clash.
-
-(6) The phase-splitter is marking all functions as partial because
+(5) The phase-splitter is marking all functors as partial because
         it doesn't have enough information.  Either it has to keep
-        a term-level context, or HIL fbnds must be marked TOTAL/PARTIAL
+        a term-level context, or HIL functors must be marked TOTAL/PARTIAL
 
 
 

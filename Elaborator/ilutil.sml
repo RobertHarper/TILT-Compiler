@@ -52,11 +52,11 @@ structure IlUtil
     val functor_arg_lab = internal_label "functor_arg"
 
 
-    (* We cannot use Name.compare_label since it does not respect the ordering of
-       numeric labels that arise from tuples.  We use Name.compare_label_name instead. *)
+    (* We can use Name.compare_label since it does respect the ordering of
+       numeric labels that arise from tuples.  *)
     local 
       fun geq_label (l1,l2) = 
-	  (case (Name.compare_label_name(l1,l2)) of
+	  (case (Name.compare_label(l1,l2)) of
 	       GREATER => true
 	     | EQUAL => true
 	     | LESS => false)
@@ -67,7 +67,7 @@ structure IlUtil
       fun label_issorted [] = true
 	| label_issorted [_] = true
 	| label_issorted (l1::(r as (l2::_))) = 
-	  (case (Name.compare_label_name(l1,l2)) of
+	  (case (Name.compare_label(l1,l2)) of
 	       LESS => (label_issorted r)
 	     | _ => false)
     end
