@@ -68,6 +68,7 @@ struct
 	       | NONE =>
 		     let 
 			 val v' = Name.fresh_named_var "reify"
+			 val con = NilRename.renameCon con
 			 val pset' = reify_con_rt(con,pset)
 		     in
 			 (TraceCompute v',

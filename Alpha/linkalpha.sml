@@ -136,7 +136,9 @@ struct
 *)
 
   fun comp (asm_file,rtlmod) = 
-    let val _ = Printutils.openOutput asm_file
+    let val _ = print "\n================================================\n"
+	val _ = print "Starting translation to TIL-Alpha assembly\n"
+	val _ = Printutils.openOutput asm_file
 	val _ = Rtltoalpha.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
 	val _ = print "Generation of TIL-Alpha assembly files complete\n"

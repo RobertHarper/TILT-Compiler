@@ -632,29 +632,29 @@ struct
 	   val (bnds,state) = foldl_acc folder state bnds
 	   val bnds = flatten bnds
 	   val exports = map (lexport state) exports
-	   val _ = (print "Number of renamed variables: ";
+	   val _ = (print "  Number of renamed variables: ";
 		    print (Int.toString (!num_renamed)); print "\n";
-		    print "Number of variables: ";
+		    print "  Number of variables: ";
 		    print (Int.toString (!num_var)); print "\n";
-		    print "Number of lexp calls: ";
+		    print "  Number of lexp calls: ";
 		    print (Int.toString (!num_lexp)); print "\n";
-		    print "Number of lcon calls: ";
+		    print "  Number of lcon calls: ";
 		    print (Int.toString (!num_lcon)); print "\n";
 
-		    print "Number of lcon calls from Prim_e: ";
+		    print "    Number of lcon calls from Prim_e: ";
 		    print (Int.toString (!num_lcon_prim)); print "\n";
-		    print "Number of lcon calls from Import: ";
+		    print "    Number of lcon calls from Import: ";
 		    print (Int.toString (!num_lcon_import)); print "\n";
-		    print "Number of lcon calls from Singletons: ";
+		    print "    Number of lcon calls from Singletons: ";
 		    print (Int.toString (!num_lcon_single)); print "\n";
-		    print "Number of lcon calls from Function formals: ";
+		    print "    Number of lcon calls from Function formals: ";
 		    print (Int.toString (!num_lcon_function)); print "\n";
-		    print "Number of lcon calls from Con_b: ";
+		    print "    Number of lcon calls from Con_b: ";
 		    print (Int.toString (!num_lcon_conb)); print "\n";
-		    print "Number of lcon calls from Con_cb: ";
+		    print "    Number of lcon calls from Con_cb: ";
 		    print (Int.toString (!num_lcon_concb)); print "\n";
 
-		    print "Number of lkind calls: ";
+		    print "  Number of lkind calls: ";
 		    print (Int.toString (!num_lkind)); print "\n")
 	   val _ = reset_state()
 

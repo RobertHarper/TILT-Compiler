@@ -594,8 +594,7 @@ end (* local defining splitting context *)
 		 else ()
 
 	    fun folder (mpath,(cbnds,ebnds,context)) = 
-		let val _ = (print "Working on "; Ppil.pp_mod mpath; print "\n")
-		    fun loop (Il.MOD_VAR v) acc = (Name.var2name v) ^ acc
+		let fun loop (Il.MOD_VAR v) acc = (Name.var2name v) ^ acc
 		      | loop (Il.MOD_PROJECT (m,l)) acc = loop m ("_" ^ (Name.label2name l) ^ acc)
 		    val var = Name.fresh_named_var(loop mpath "")
 		    val ((var_c, var_r), context) = splitVar (var, context)
@@ -2441,7 +2440,7 @@ end (* local defining splitting context *)
 		     print "\n")
 		else
 		    ()
-	    val _ = msg "Initial context is phase-split\n"
+	    val _ = msg "  Initial context is phase-split\n"
 
 	    (* Phase-split the bindings *)
 	    val {cbnd_cat, ebnd_cat, final_context, ...} =
@@ -2451,7 +2450,7 @@ end (* local defining splitting context *)
 	    val bnds = cbnds @ ebnds
 	    val (nil_initial_context,used) = filter_NILctx initial_splitting_context
 	    val (nil_final_context,_) = filter_NILctx final_context
-	    val _ = msg "Bindings are phase-split\n" 
+	    val _ = msg "  Bindings are phase-split\n" 
 
 	     (* Filter out the unused imports *)
 	    fun filter_imports [] = ([], used)
@@ -2501,7 +2500,7 @@ end (* local defining splitting context *)
 			     in  exports
 			     end)
 	    val exports : export_entry list = rev(foldr folder [] sdecs)
-	    val _ = msg "Exports are phase-split\n" 
+	    val _ = msg "  Exports are phase-split\n" 
 
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,

@@ -17,7 +17,6 @@ struct
      | Exn_c => SOME TI.Trace
      | Array_c => SOME TI.Trace
      | Vector_c => SOME TI.Trace
-     | Ref_c => error "ref_c disappearing soon"
      | Loc_c => error "what do I do with a locative?"
      | Exntag_c => SOME TI.Notrace_Int
      | Record_c _ => SOME TI.Trace

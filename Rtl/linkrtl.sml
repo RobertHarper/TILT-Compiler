@@ -36,23 +36,24 @@ struct
 	let val translate_params = {HeapProfile = NONE, do_write_list = true,
 				    codeAlign = Rtl.QUAD, FullConditionalBranch = false,
 				    elim_tail_call = true, recognize_constants = true}
+
+	    val _ = print "\n============================================\n";
+	    val _ = print "Starting translation to RTL\n"
 	    val rtlmod = Tortl.translate unitname translate_params nilmodule
 (*	    val rtlmod = Rtlopt.opt translate_params rtlmod *)
 
-	    val _ = print "Not doing Rtlopt.GCmerge\n"
+	    val _ = print "  Not doing Rtlopt.GCmerge\n"
 (*
 	    val _ = print "Starting Rtlopt.GCmerge\n"
 	    val rtlmod = Rtlopt.GCmerge rtlmod
 	    val _ = print "Finished Rtlopt.GCmerge\n"
 *)
+	    val _ = print "Translation to RTL complete\n"
 	    val _ = if debug orelse !show_rtl
-			then (print "============================================\n\n";
-			      print "RTL code:\n";
+			then (print "RTL code:\n";
 			      Pprtl.pp_Module rtlmod;
-			      print "\n\n";
-(*			      Rtlinterp.RTL_interp([("main",rtlmod)],([],[]),false); *)
-			      ())
-		    else print "Translation to RTL complete\n"
+			      print "\n\n")
+		    else ()
 	in  rtlmod
 	end
 

@@ -25,11 +25,6 @@ fun path2con (v,labs) =
   in  loop (Var_c v) labs
   end
 
-val Normalize_type_of = Stats.timer("optimize_typeof", Normalize.type_of);
-val Normalize_reduce_hnf = Stats.timer("optimize_typeof", Normalize.reduce_hnf);
-val Normalize_allprim_uses_carg = Stats.timer("optimize_typeof", Normalize.allprim_uses_carg);
-val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceToSumtype);
-
 	val do_lift_array = ref true
 	val do_dead = ref true
 	val do_proj = ref true
@@ -370,8 +365,15 @@ fun pp_alias UNKNOWN = print "unknown"
 	       STATE{equation=NilContext.insert_con(equation,v,c),
 		     avail=avail,
 		     curry_processed = curry_processed,
-		    mapping=mapping,
-		    current=current})
+		     mapping=mapping,
+		     current=current})
+
+	  fun add_exp(STATE{avail,equation,mapping,curry_processed,current},v,e) = 
+	      (STATE{equation=NilContext.insert_exp(equation,v,e),
+		     avail=avail,
+		     curry_processed = curry_processed,
+		     mapping=mapping,
+		     current=current})
 
 	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current},v) =
 	       STATE{equation=equation,
@@ -391,6 +393,10 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	  fun find_curry_pair(STATE{curry_processed,...},v) = Name.VarMap.find(#2 curry_processed,v)
 	  fun is_curry_processed(STATE{curry_processed,...},v) = Name.VarSet.member(#1 curry_processed,v)
+
+	  val Normalize_reduce_hnf = Stats.timer("optimize_reduce_hnf", Normalize.reduce_hnf);
+	  val Normalize_reduceToSumtype = Stats.timer("optimize_reduce_tosumtype", Normalize.reduceToSumtype);
+	  val Normalize_type_of = Stats.timer("optimize_typeof", Normalize.type_of);
 	  fun type_of(STATE{equation,...},e) = Normalize_type_of(equation,e)
 	  fun get_trace(STATE{equation,...},t) = TraceOps.get_trace (equation,t)
 	end
@@ -542,19 +548,14 @@ fun pp_alias UNKNOWN = print "unknown"
 			 fun loop [] = []
 			   | loop (ls as [_]) = ls
 			   | loop ((a,af)::(b,bf)::rest) = 
-			     (
-			      (* xxx print "trying to eliminate 1\n";
-			      show_mapping state; *)
-			      case find_curry_pair(state,a) of
+			     (case find_curry_pair(state,a) of
 				  NONE => (a,af)::loop((b,bf)::rest)
 				| SOME v => 
 				      (if (Name.eq_var(v,b) andalso 
 					   (case (get_varuse(state,b)) of
 						USED 1 => true
-					      | USED n => (print "USED ";
-							   print (Int.toString n);
-							   print "\n"; false)
-					      | UNUSED => (print "UNUSED\n"; false)
+					      | USED n => false
+					      | UNUSED => false
 					      | _ => false))
 					  then (eliminate_uncurry(a,b,af,bf))::(loop rest)
 				      else (a,af)::loop((b,bf)::rest)))
@@ -932,7 +933,6 @@ fun pp_alias UNKNOWN = print "unknown"
 				 val cargs = Listops.flatten cargs
 				 val eargs = Listops.flatten eargs
 				 val fargs = Listops.flatten fargs
-				 val _ = print "doing etaexp\n"
 				 val new_exp = App_e(Open, Var_e uncurry, cargs @ clist, 
 						     eargs @ elist, eflist @ eflist)
 			     in  do_exp state new_exp
@@ -1113,8 +1113,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) =>
 			 error "inject argument is not a value"
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
-			 let val c = type_of(state,e)
-			     val sv_con = find_con(state,sv)
+			 let val sv_con = find_con(state,sv)
 			     val (tagcount,k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
 			     val known = (case k of
 					  SOME k => k
@@ -1149,9 +1148,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			     | (true, _) => SOME[Exp_b(v,niltrace,
 						       Prim_e(NilPrimOp (project_sum_nonrecord known),
 							      [sumcon],[Var_e sv]))]
-			     | (_,c) => ((* print "project_sum irreducible...";
-					 Ppnil.pp_con c; print "\n"; *)
-					 NONE)
+			     | _ => NONE
 			 end
 		     | _ => NONE)
 	  in	(case bnd of
@@ -1159,7 +1156,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			 ((* print "working on bnd with v = "; Ppnil.pp_var v; print "\n";  *)
 			  case rewrite_bnd(v,niltrace,e) of
 			      NONE => 
-				  let val c = type_of(state,e)
+				  let
 				      val state = add_var(state,v)
 				      val state' = enter_var(state,v)
 				      val niltrace = do_niltrace state' niltrace
@@ -1193,18 +1190,13 @@ fun pp_alias UNKNOWN = print "unknown"
 						   (false, OPTIONALe e)
 
 					     | App_e(openness,Var_e v,clist,elist,eflist) => 
-						   (
-(* xxx						    print "trying etabnd\n";
-						    show_mapping state;
-*)
-						    case (lookup_alias(state,v)) of
+						   (case (lookup_alias(state,v)) of
 							ETAe (depth,uncurry,args) => 
 							    (print "found ETAe in etabnd\n";
 							     if (depth > 1) 
 								then
 								    let val new_info = (depth-1,uncurry,
 											args @ [(clist,elist,eflist)])
-									val _ = print "did etabnd\n"
 								    in  (false,ETAe new_info)
 								    end
 							    else (eff,OPTIONALe e))
@@ -1215,14 +1207,11 @@ fun pp_alias UNKNOWN = print "unknown"
 						       Var_e _ => state
 						     | _ => add_availE(state, e, v))
 				      val state = add_alias(state,v,alias)
-				      val state = add_con(state,v,c)
+				      val state = add_exp(state,v,e)
 				  in  ([Exp_b(v, niltrace, e)], state)
 				  end
 			    | SOME bnds => do_bnds(bnds,state))
-		   | Con_b(p,cbnd) => let (* val _ = (print "working on bnd with v = "; 
-						   Ppnil.pp_var (#1(extractCbnd cbnd)); 
-						   print "\n") *)
-					  val (cbnd,state) = do_cbnd(cbnd,state)
+		   | Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
 				      in  ([Con_b(p,cbnd)], state)
 				      end
 		   | Fixopen_b vfset =>
@@ -1232,10 +1221,6 @@ fun pp_alias UNKNOWN = print "unknown"
 			 val vflist = Listops.flatten vflistlist
 			 val state = foldl folder state vflist
 			 val newbnd = Fixopen_b(Sequence.fromList vflist)
-(* xxx			 val _ = (print "old bnd: "; Ppnil.pp_bnd bnd;
-				  print "\n\nnew bnd: "; Ppnil.pp_bnd newbnd;
-				  print "\n\n")
-*)
 			 val vflist = map (do_function state) vflist
 		     in  ([Fixopen_b(Sequence.fromList vflist)], state)
 		     end

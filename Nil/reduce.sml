@@ -97,7 +97,8 @@ structure Reduce
 		t := ! t + 1
     fun print_clicks unit = 
 	let fun pritem {name = name, last = r, total = count } = 
-	    (fprint (!max_name_size) name;
+	    (print "  ";
+	     fprint (!max_name_size) name;
 	     print " : ";
 	     fprint 8 (Int.toString (!count));
 	     print "\n")
@@ -118,7 +119,7 @@ structure Reduce
 		 in ( r := !t ; temp+acc ) end )) 0 clicks 
     fun print_round_clicks clicks = 
 	app (fn {name = n, last = r, total = t } =>
-	     print (n ^ " :" ^ Int.toString ((!t)-(!r)) ^ "\n") ) clicks
+	     print ("  " ^ n ^ " :" ^ Int.toString ((!t)-(!r)) ^ "\n") ) clicks
 
 (*    val select_con_click = make_click "Selects from known con records" *)
     val select_click = make_click "Selects from known exp records" 

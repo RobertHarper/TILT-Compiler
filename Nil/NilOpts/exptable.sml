@@ -225,9 +225,9 @@ struct
 	 | (Vector_c, _) => GREATER
 	 | ( _, Vector_c) => LESS
 
-	 | (Ref_c, Ref_c) => EQUAL
-	 | ( Ref_c, _) => GREATER
-	 | (_, Ref_c) => LESS
+	 | (Loc_c, Loc_c) => EQUAL
+	 | (Loc_c, _) => GREATER
+	 | (_, Loc_c) => LESS
 
 	 | (Exntag_c, Exntag_c) => EQUAL
 	 | ( Exntag_c, _) => GREATER

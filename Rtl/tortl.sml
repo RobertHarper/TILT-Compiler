@@ -764,9 +764,9 @@ struct
 			| scan(states,lab,(armtag,tr,body)::rest) = 
 			  let 
 			      val _ = add_instr(ILABEL lab)
+			      val tagcon = type_of state armtag
 			      val (I armtagi,state) = xexp'(state,fresh_var(),armtag,
 								   Nil.TraceUnknown,NOTID)
-			      val tagcon = type_of state armtag
 			      val (_,Prim_c(Exntag_c,[c])) = simplify_type state tagcon
 			      val next = fresh_code_label "exnarm"
 			      val test = alloc_regi(NOTRACE_INT)
@@ -1449,7 +1449,7 @@ struct
 	     | Prim_c(Exntag_c,[c]) => mk_sum(state,12,[c])
 	     | Prim_c(Array_c,[c]) => mk_sum(state,0,[c])
 	     | Prim_c(Vector_c,[c]) => mk_sum(state,1,[c])
-	     | Prim_c(Ref_c,[c]) => mk_sum(state,2,[c])
+	     | Prim_c(Loc_c,_) => error "LOC cannot be a constructor"
 	     | Prim_c(Sum_c {known,totalcount,tagcount},[c]) => 
 		   mk_sum'(state,
 			   [4,(case known of

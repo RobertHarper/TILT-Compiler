@@ -72,7 +72,10 @@ struct
   fun asm_suffix() = ".sparc.s"
 
   fun comp (asm_file,rtlmod) = 
-    let val _ = Printutils.openOutput asm_file
+    let 
+	val _ = print "\n================================================\n"
+	val _ = print "Starting translation to TIL-Sparc assembly\n"
+	val _ = Printutils.openOutput asm_file
 	val _ = Rtltosparc.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
 	val _ = print "Generation of TIL-Sparc assembly files complete\n"

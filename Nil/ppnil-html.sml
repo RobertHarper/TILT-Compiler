@@ -221,7 +221,7 @@ structure PpnilHtml :> PPNIL =
       | pp_primcon (BoxFloat_c fs) = Hbox[String "BOXFLOAT", pp_fs' fs]
       | pp_primcon Array_c = String "ARRAY"
       | pp_primcon Vector_c = String "VECTOR"
-      | pp_primcon Ref_c = error "no ref_c soon!!"
+      | pp_primcon Loc_c = String "LOC"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
        | pp_primcon (Sum_c {known = opt,tagcount,totalcount}) = 

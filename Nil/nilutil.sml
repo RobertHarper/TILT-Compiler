@@ -1008,7 +1008,7 @@ end
 	| (Exn_c,Exn_c) => true
 	| (Array_c,Array_c) => true
 	| (Vector_c,Vector_c) => true
-	| (Ref_c,Ref_c) => error "ref_c should be removed"
+	| (Loc_c,Loc_c) => true
 	| (Exntag_c,Exntag_c) => true
 	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},
 	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => (Util.eq_opt (op =,k1,k2)

@@ -67,7 +67,6 @@ sig
     | Exn_c                                   (* exceptions *)
     | Array_c                                 (* arrays *)
     | Vector_c                                (* vectors *)
-    | Ref_c                                   (* references *)
     | Loc_c                                   (* locatives *)
     | Exntag_c                                (* exception tags *)
     | Record_c of label list * var list option  (* records *)

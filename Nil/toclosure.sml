@@ -1374,18 +1374,12 @@ struct
 	       let val f = k_find_fv (state,empty_frees) k
 	       in  add_gboundcvar(state,v,k)
 	       end
+	   val _ = chat "  Scanning for free variables\n"
 	   val state = foldl import_folder state imports
-	   val _ = chat "Closure conversion: Scanned imports\n"
-
 	   val ({free_evars,free_cvars,...},state) = foldl bnd_find_fv (empty_frees,state) bnds
-	   val _ = chat "Closure conversion: Scanned bnds\n"
-
 	   fun export_mapper state (ExportValue(l,v)) = e_find_fv (state, empty_frees) (Var_e v)
 	     | export_mapper state (ExportType(l,v)) = c_find_fv (state, empty_frees) (Var_c v)
-
 	   val _ = map (export_mapper state) exports
-	   val _ = chat "Closure conversion: Scanned exports\n"
-
 
            (* Perform transitive closure computation *)
 	   val _ = if (!debug)
@@ -1395,16 +1389,16 @@ struct
 						   VarMap.numItems free_cvars = 0));
 			     print "\n")
 		   else ()
+	   val _ = chat "  Computing transitive closure of close funs\n"
 	   val _ = close_funs(get_fids())
 	   val _ = if (!debug)
 		       then print "close_mod: Done with close_funs\n"
 		   else ()
 
-	   val _ = chat "Closure conversion: Performed transitive closure of close funs\n"
-
 
 	   (* Rewrite module *)
 	   val initial_state = new_state top_fid
+	   val _ = chat "  Rewriting imports, bindings, exports\n"
 
 	   fun import_mapper (ImportValue(l,v,tr,c)) =
 	       let val c = c_rewrite initial_state c
@@ -1416,20 +1410,16 @@ struct
 	       in  ImportType(l,v,k)
 	       end
 	   val imports' = map import_mapper imports
-	   val _ = chat "Closure conversion: Rewritten imports\n"
-
 
 	   fun folder (bnd,acc) = 
 	       let val bnds = bnd_rewrite initial_state bnd
 	       in  acc @ bnds
 	       end
 	   val bnds' = (Stats.subtimer("toclosure_rewrite_bnds",foldl folder [])) bnds
-	   val _ = chat "Closure conversion: Rewritten bindings\n"
 
 	   fun export_rewrite (ExportValue(l,v)) = ExportValue(l,v)
 	     | export_rewrite (ExportType(l,v)) = ExportType(l,v)
 	   val exports' = map export_rewrite exports
-	   val _ = chat "Closure conversion: Rewritten exports\n"
 
 	   val _ = reset_table []
 

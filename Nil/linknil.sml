@@ -3,6 +3,7 @@
 
 structure Linknil :> LINKNIL  =
   struct
+
     val do_cleanup = ref false
     val do_opt = ref false
     val do_one_optimize = ref true
@@ -27,14 +28,11 @@ structure Linknil :> LINKNIL  =
     val show_two_optimize = Stats.ff("showOptimize2")
     val show_hoist = Stats.ff("showHoist")
     val show_reify = Stats.ff("showReify")
+    val show_reify2 = Stats.ff("showReify2")
     val show_cse = Stats.ff("showCSE")
     val show_specialize = Stats.ff("showSpecialize")
     val show_cc = Stats.ff("showCC")
     val show_before_rtl = Stats.ff("showBeforeRtl")
-    val show_typecheck0 = Stats.ff("showTypecheck0")
-    val show_typecheck1 = Stats.ff("showTypecheck1")
-    val show_typecheck2 = Stats.ff("showTypecheck2")
-    val show_typecheck3 = Stats.ff("showTypecheck3")
     val show_reduce = Stats.ff("showReduce")
     val show_reduce2 = Stats.ff("showReduce2")
     val show_flatten = Stats.ff("showFlatten")
@@ -43,10 +41,30 @@ structure Linknil :> LINKNIL  =
     val show_inline2 = Stats.ff("showInline2")
     val show_html = Stats.tt("showHTML")
 
-    val typecheck_after_phasesplit = Stats.ff("TypecheckAfterPhasesplit")
-    val typecheck_before_opt = Stats.ff("TypecheckBeforeOpt")
-    val typecheck_after_opt = Stats.ff("TypecheckAfterOpt")
-    val typecheck_after_cc = Stats.ff("TypecheckAfterCC")
+    val do_typecheck_after_phasesplit = Stats.ff("TypecheckAfterPhasesplit")
+    val do_typecheck_before_opt = Stats.ff("TypecheckBeforeOpt")
+    val do_typecheck_after_opt = Stats.ff("TypecheckAfterOpt")
+    val do_typecheck_after_cc = Stats.ff("TypecheckAfterCC")
+
+    val typecheck_after_phasesplit = (do_typecheck_after_phasesplit, ref false, "Nil_typecheck_post_phasesplit")
+    val typecheck_before_opt = (do_typecheck_before_opt, ref false, "Nil_typecheck_pre-opt")
+    val typecheck_after_opt = (do_typecheck_after_opt, ref false, "Nil_typecheck_post-opt")
+    val typecheck_after_opt2 = (do_typecheck_after_opt, ref false,"Nil_typecheck_post-opt2")
+    val typecheck_after_cc = (do_typecheck_after_cc, ref false, "Nil_typecheck_postcc")
+    val phasesplit = (show_phasesplit, "Phase-split")
+    val rename1 = (do_rename, show_renamed, "Renaming1")
+    val reduce1 = (do_reduce, show_reduce, "Reduce")
+    val flatten = (do_flatten, show_flatten, "Flatten")
+    val inline = (do_inline, show_inline, "Inline")
+    val reify1 = (do_reify, show_reify, "Reification1")
+    val optimize1 = (do_one_optimize, show_one_optimize, "Optimize1")
+    val specialize = (do_specialize, show_specialize, "Specialize")
+    val hoist = (do_hoist, show_hoist, "Hoist")
+    val optimize2 = (do_two_optimize, show_two_optimize, "Optimize2")
+    val reduce2 = (do_reduce, show_reduce2, "Reduce2")
+    val inline2 = (do_inline, show_inline2, "Inline2")
+    val reify2 = (do_reify, show_reify2, "Reification2")
+    val cc = (ref true, show_cc, "Closure-conversion")
 
     val number_flatten = 6
     val _ = Stats.int("number_flatten") := number_flatten
@@ -87,20 +105,12 @@ structure Linknil :> LINKNIL  =
     structure Flatten = Flatten(structure PrimUtil = NilPrimUtil)
     structure Reduce = Reduce 
 
-(*
-    structure NilEval = NilEvaluate(structure Nil = Nil
-				    structure NilUtil = NilUtil
-				    structure Ppnil = Ppnil
-				    structure PrimUtil = NilPrimUtil
-				    structure Subst = NilSubst)
-*)
 
-    fun pass (showphase,phasename,phase,filename,nilmod) = 
-	let val _ = print "\n\n=======================================\n"
-	    val _ = (print "Starting "; print phasename; print " on ";
-		     print filename; print "...\n")
-	    val nilmod = Stats.timer(phasename,phase) nilmod
-	    val _ = (print phasename; print " complete: "; print filename; print "\n")
+    fun pass filename (showphase,phasename) (transformer,obj) =
+	let val _ = print "\n\n============================================\n"
+	    val _ = (print "Starting "; print phasename; print ": "; print filename; print "\n")
+	    val nilmod = Stats.timer(phasename,transformer) obj
+	    val _ = (print "Completed "; print phasename; print ": "; print filename; print "\n")
 	    val _ = if !show_size
 		      then
 			  (print "  size = ";
@@ -120,153 +130,68 @@ structure Linknil :> LINKNIL  =
 	in  nilmod
 	end
 
-    fun transform (ref false,showphase,phasename,phase,filename,nilmod) = 
-	(print "\n===== SKIPPING "; print phasename; print "  =======\n"; nilmod)
-      | transform (ref true,showphase,phasename,phase,filename,nilmod) = 
-	pass (showphase,phasename,phase,filename,nilmod)
+    fun transform filename (ref false,_,phasename) (_,nilmod) = 
+	(print "\n=======================================\n";
+	 print "Skipping "; print phasename; print " on "; print filename;
+	 nilmod)
+      | transform filename (ref true,showphase,phasename) arg =
+	pass filename (showphase,phasename) arg
 
-    fun check (doit,showphase,phasename,phase,filename,nilmod) = 
-      transform (doit,showphase,phasename,(fn nilmod => (phase nilmod;nilmod)),filename,nilmod)
 
+    fun inline_domod m = 
+	let val (count, result) = Inline.optimize m
+	in print "  Small functions inlined: ";
+	    print (Int.toString count);
+	    print "\n";
+	    result
+	end
+    fun typecheck nilmod = (NilStatic.module_valid (NilContext.empty (), nilmod); nilmod)
 
     exception Stop of Nil.module
 
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
+	    val pass = pass filename
+	    val transform = transform filename
+
 	    open Nil LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = pass(show_phasesplit,
-			       "Phase-split", 
-			       Stats.timer("Phase-splitting",Tonil.phasesplit),
-			       filename, (ctxt,sbnd_entries))
+	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
 		    else ()
 
+	    val nilmod = NilRename.renameMod nilmod
+	    val nilmod = transform typecheck_after_phasesplit (typecheck, nilmod)
+	    val nilmod = transform rename1 (Linearize.linearize_mod, nilmod)
+ 	    val nilmod = transform typecheck_before_opt (typecheck, nilmod)
+	    val nilmod = transform reduce1 (Reduce.doModule, nilmod)
+	    val nilmod = transform flatten (Flatten.doModule, nilmod)
+	    val nilmod = transform inline (inline_domod, nilmod)
+            val nilmod = transform reify1 (Reify.reify_mod, nilmod)
+	    val nilmod = transform optimize1 
+				   (Optimize.optimize {lift_array = true,
+						       dead = true, projection = true, 
+						       cse = false, uncurry = false},
+				    nilmod)
 
-	    val nilmod = check (typecheck_after_phasesplit, show_typecheck0,
-				    "Nil_typecheck_post_phase-split",
-				    (Util.curry2 NilStatic.module_valid (NilContext.empty ())) o 
-				    (NilRename.renameMod),
-				    filename, nilmod)
+ 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
+	    val nilmod = transform specialize (Specialize.optimize, nilmod)
+	    val nilmod = transform hoist (Hoist.optimize, nilmod)
+	    val nilmod = transform optimize2
+				   (Optimize.optimize {lift_array = false,
+						      dead = true, projection = true, 
+						      cse = !do_cse, uncurry = !do_uncurry},
+				   nilmod) 
 
-	    val nilmod = transform(do_rename, show_renamed,
-				 "Renaming1",Linearize.linearize_mod,
-				 filename, nilmod)
+	    val nilmod = transform reduce2 (Reduce.doModule, nilmod)
+	    val nilmod = transform inline2 (inline_domod, nilmod)
+            val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
- 	    val nilmod = check (typecheck_before_opt,show_typecheck1,
-				    "Nil_typecheck_pre-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-
-	    val nilmod = transform(do_reduce, show_reduce,
-				   "Reduce", Reduce.doModule, 
-				   filename, nilmod)
-
-	    val nilmod = transform(do_flatten, show_flatten,
-				   "Flatten", Flatten.doModule, 
-				   filename, nilmod)
-
-	    fun inline_domod m = 
-                   let val (count, result) = Inline.optimize m
-                   in print "Small functions inlined: ";
-                      print (Int.toString count);
-                      print "\n";
-                      result
-                   end
-	    val nilmod = transform(do_inline, show_inline,
-				   "Inline", 
-				   inline_domod, filename, nilmod)
-
-	    val nilmod = transform(do_one_optimize, show_one_optimize,
-				 "Optimize1", 
-				 Optimize.optimize
-				   {lift_array = true,
-				    dead = true, projection = true, 
-				    cse = false, uncurry = false},
-				 filename, nilmod)
-
- 	    val nilmod = check (typecheck_after_opt,show_typecheck2,
-				    "Nil_typecheck_post-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-	
-
-	    val _ = if (!do_vararg) then error "no vararg" else ()
-(*
-	    val nilmod = if (!do_vararg)
-			     then (Stats.timer("Vararg",Vararg.optimize)) nilmod
-			 else nilmod
-	    val _ = if (!do_vararg)
-			then transform (!show_vararg,!show_size) 
-			    "Vararg" (filename, nilmod)
-		    else ()
-*)
-
-	    val nilmod = transform(do_specialize, show_specialize,
-				 "Specialize",
-				 Specialize.optimize,
-				 filename, nilmod)
-
-
- 	    val nilmod = check (typecheck_after_opt,show_typecheck2,
-				    "Nil_typecheck_post-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-
-	    val nilmod = transform(do_hoist, show_hoist,
-				 "Hoist", 
-				 Hoist.optimize,
-				 filename, nilmod)
-
-	    val nilmod = transform(do_two_optimize, show_two_optimize,
-				 "Optimize2", 
-				 Optimize.optimize
-				   {lift_array = false,
-				    dead = true, projection = true, 
-				    cse = !do_cse, uncurry = !do_uncurry},
-				 filename, nilmod) 
-
-
-	    val nilmod = transform(do_reduce, show_reduce2,
-				   "Reduce2", Reduce.doModule, 
-				   filename, nilmod)
-
-	    val nilmod = transform(do_flatten, show_flatten2,
-				   "Flatten", Flatten.doModule, 
-				   filename, nilmod)
-
-	    fun inline_domod m = 
-                   let val (count, result) = Inline.optimize m
-                   in print "Small functions inlined: ";
-                      print (Int.toString count);
-                      print "\n";
-                      result
-                   end
-	    val nilmod = transform(do_inline, show_inline2,
-				   "Inline", 
-				   inline_domod, filename, nilmod)
-
-            val nilmod = transform(do_reify, show_reify,
-                                   "Reification",
-                                   Reify.reify_mod,
-                                   filename, nilmod)
-
- 	    val nilmod = check (typecheck_after_opt,show_typecheck2,
-				    "Nil_typecheck_post-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-
-	    val nilmod = transform(ref true, show_cc,
-				 "Closure-conversion", 
-				 ToClosure.close_mod,
-				 filename, nilmod)
-
- 	    val nilmod = check (typecheck_after_cc,show_typecheck3,
-				    "Nil_typecheck_post-cc",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
+ 	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
+	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
+ 	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
 
 	in  nilmod
 	end

@@ -19,9 +19,9 @@ sig
     val do_vararg : bool ref
     val do_specialize : bool ref
 
-    val typecheck_after_cc : bool ref
-    val typecheck_before_opt : bool ref
-    val typecheck_after_opt : bool ref
+    val do_typecheck_after_cc : bool ref
+    val do_typecheck_before_opt : bool ref
+    val do_typecheck_after_opt : bool ref
 
     val show_html : bool ref    
     val show_renamed : bool ref

@@ -31,7 +31,7 @@ structure Ppnil	:> PPNIL =
     fun pp_list'' doer objs = pp_list doer objs ("", ".","", false)
 
     fun pp_var v = String(var2string v)
-    fun pp_label l = String(label2string l)
+    fun pp_label l = String(label2name l)
     fun pp_tag n = String(tag2string n)
     val pp_word = String o Word32.toString
 
@@ -193,7 +193,7 @@ structure Ppnil	:> PPNIL =
       | pp_primcon (BoxFloat_c fs) = Hbox[String "BOXFLOAT", pp_fs' fs]
       | pp_primcon Array_c = String "ARRAY"
       | pp_primcon Vector_c = String "VECTOR"
-      | pp_primcon Ref_c = error "no ref_c soon!!"
+      | pp_primcon Loc_c = String "LOC"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
       | pp_primcon (Record_c (labs,NONE)) = HOVbox[String "RECORD[", Break0 0 3,
@@ -238,6 +238,7 @@ structure Ppnil	:> PPNIL =
       | pp_nilprimop nilprimop = 
 	String (case nilprimop of
 		    record labels => "record"
+		  | partialRecord (labels,missField) => "partialRecord_" ^ (Int.toString missField)
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
 		  | inject w => "inject_dyn" ^ (TilWord32.toDecimalString w)
 		  | inject_nonrecord w => "inject_nonrec_" ^ (TilWord32.toDecimalString w)
@@ -304,7 +305,7 @@ structure Ppnil	:> PPNIL =
 
 	   | Raise_e (e,c) => pp_region "Raise(" ")" [pp_exp e, String ",", pp_con c]
 	   | Handle_e (body,v,handler) => 
-		 Vbox[HOVbox[String "Handle ",
+		 Vbox[HOVbox[String "Handle ", Break0 0 5,
 			     pp_exp body],
 		      Break0 0 0,
 		      HOVbox[String "With ", pp_var v, 
@@ -365,6 +366,7 @@ structure Ppnil	:> PPNIL =
       | pp_trace (TraceKnown (TraceInfo.Notrace_Code)) = String "Known_Code"
       | pp_trace (TraceKnown (TraceInfo.Notrace_Real)) = String "Known_Real"
       | pp_trace (TraceKnown (TraceInfo.Label)) = String "Known_Label"
+      | pp_trace (TraceKnown (TraceInfo.Locative)) = String "Known_Locative"
 
 
     and pp_bnd bnd =
