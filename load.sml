@@ -105,12 +105,12 @@ structure LoadVars =
      * See load2.sml for an example of setting this variable.
      *)
 
-    val show_which : bool ref list ref = ref []
+    val show_which : string list ref = ref []
 
     (* Contains the Stats.bool flags for the phases to be typechecked.
      * See load2.sml for an example of setting this variable.
      *)
-    val typecheck_which : bool ref list ref =  ref []
+    val typecheck_which : string list ref =  ref []
 
     val show_hil = ref false
 

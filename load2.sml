@@ -41,43 +41,37 @@ fun show b =
 
 fun show_hil b = (LoadVars.show_hil := b;LinkIl.show_hil := b)
 
-fun show_some b = 
-  let in
-    LoadVars.show_some := b;
-    app (fn flag => flag := b) (!LoadVars.show_which)
-  end;
 
 fun typecheck b = (LoadVars.typecheck := b;
 		   Stats.bool "Typecheck" := b)
 
-fun typecheck_some b = (LoadVars.typecheck_some := b;
-			app (fn flag => flag := b) (!LoadVars.typecheck_which)
-			)
 
-fun also_xxx pre which s = which := (Stats.bool (pre^s)) :: !which
+fun do_some (flag,which,pre) b =   
+  let in
+    flag := b;
+    app (fn phase => Stats.bool (pre^phase) := b) (!which)
+  end;
 
-fun dont_xxx pre which s = 
-  let val b = Stats.bool (pre^s)
-  in
-    which := List.filter (fn b' => b <> b') (!which)
-  end
+val show_some      = do_some (LoadVars.show_some,LoadVars.show_which,"show")
+val typecheck_some = do_some (LoadVars.typecheck_some,LoadVars.typecheck_which,"check")
 
-val also_show      = also_xxx "show" LoadVars.show_which
-val also_typecheck = also_xxx "check" LoadVars.typecheck_which
-val dont_show      = dont_xxx "show" LoadVars.show_which
-val dont_typecheck = dont_xxx "check" LoadVars.typecheck_which
+fun also which s = which := s :: !which
+fun dont which s =     which := List.filter (fn s' => s <> s') (!which)
 
+val also_show      = also LoadVars.show_which
+val also_typecheck = also LoadVars.typecheck_which
+val dont_show      = dont LoadVars.show_which
+val dont_typecheck = dont LoadVars.typecheck_which
+
+val default_which = ["Phasesplit",
+		     "Optimize1",
+		     "Optimize2",
+		     "ClosureConv"]
 val _ = 
   if !LoadVars.first then
     (
-     LoadVars.show_which := [Stats.bool ("showPhasesplit"),
-			     Stats.bool("showOptimize1"),
-			     Stats.bool("showOptimize2"),
-			     Stats.bool("showClosureConv")];
-     LoadVars.typecheck_which := [Stats.bool ("checkPhasesplit"),
-				  Stats.bool("checkOptimize1"),
-				  Stats.bool("checkOptimize2"),
-				  Stats.bool("checkClosureConv")];
+     LoadVars.show_which := default_which;
+     LoadVars.typecheck_which := default_which;
      toExe();
      typecheck true;
      LoadVars.first := false

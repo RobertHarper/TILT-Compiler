@@ -779,12 +779,12 @@ structure NilRewrite :> NILREWRITE =
 		val (tFormals,state) = tformals_helper changed state tFormals
 		  
 		local
-		  fun vcfolder changed ((v,trace,c),s) = 
+		  fun vcfolder changed ((v,trace,c),state) = 
 		    let 
-		      val c = recur_c changed s c
+		      val c = recur_c changed state c
 		      val trace = recur_trace changed state trace
-		      val (v,s) = bind_e changed (v,s) 
-		    in  ((v,trace,c),s)
+		      val (v,state) = bind_e changed (v,state) 
+		    in  ((v,trace,c),state)
 		    end
 		in
 		  val (eFormals, state) = foldl_acc_f vcfolder changed state eFormals
@@ -835,15 +835,15 @@ structure NilRewrite :> NILREWRITE =
 		   let 
 		     val changed = ref false
 		     val vclist = Sequence.toList vcset
-
-		     val (vcset,s) = foldl_acc_f bind_first_e changed state vclist
-		     val innerstate = if is_recur then s else state
+		     val oldstate = state
+		     val (vclist,state) = foldl_acc_f bind_first_e changed state vclist
+		     val innerstate = if is_recur then state else oldstate
 
 		     fun doer flag s (arg as (v,{code,cenv,venv,tipe})) = 
 		       let 
 			 val changed = ref false
-			 val code = (case recur_e changed s (Var_e v)
-				       of Var_e v => v
+			 val code = (case recur_e changed s (Var_e code)
+				       of Var_e code => code
 					| _ => error "can't have non-var in closure code comp")
 			 val cenv = recur_c changed s cenv
 			 val venv = recur_e changed s venv

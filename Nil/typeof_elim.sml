@@ -87,6 +87,9 @@ structure Typeof_Elim :> TYPEOF_ELIM =
     in
       fun mod_elim D nilmod = 
 	let 
+	  val nilmod = if NilRename.isRenamedMod nilmod then nilmod
+		       else (print "\nWarning: got an unrenamed module\n";
+			     NilRename.renameMod nilmod)
 	  val i = ref 0
 	  val nilmod' = rewrite_mod (D,i,!leave_toplevel_typeofs) nilmod
 	  val _ = 
