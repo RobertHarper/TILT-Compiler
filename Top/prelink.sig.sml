@@ -1,20 +1,23 @@
 (*
-	XXX: Interfaces have unit environments too.
+	The manager checks that unit interface CRCs are consistent
+	prior to combining them into elaboration contexts, linking
+	unit object files into an executable, and packing unit object
+	files and interfaces into a library.
 *)
 signature PRELINK =
 sig
 
-    val doConsistent : bool ref		(* Stop when generated files are inconsistent. *)
+    val PrelinkDebug : bool ref
 
-    type equiv = Crc.crc * Crc.crc -> bool
+    type crc = Crc.crc
     type ue = UnitEnvironment.ue
-    type package = {unit : string, imports : ue, exports : ue}
+    type equiv = crc * crc -> bool
 
-    (* Combine a sequence of units environments, performing
-     * consistency checks and creating new import and export
-     * environments.  *)
-    val check : equiv -> package list -> {imports : ue, exports : ue}
+    datatype entry =
+	UNIT of {name:string, iface:crc * ue, objue:ue}
+      | IMPORT of {name:string, iface:crc * ue}
+      | IFACE of {name:string, ue:ue}
 
-    val checkTarget : equiv -> string * package list -> unit (* target *)
+    val check : equiv * entry list -> unit
 
 end
