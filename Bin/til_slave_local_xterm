@@ -99,16 +99,13 @@ cmd='	PATH="'"$PATH"'"
 	TILT_LIBDIR="'"$TILT_LIBDIR"'"
 	export TILT_LIBDIR
 
-	TILT_VERSION="'"$TILT_VERSION"'"
-	export TILT_VERSION
-
 	# Required at CMU, harmless elsewhere.
 	
 	SML_VERSION="'"$SML_VERSION"'"
 	export SML_VERSION
 
 	cat << "END_EMACS" > '$elisp'
-(defvar tilt-executable (concat (getenv "TILT_LIBDIR") "/Bin/tilt"))
+(defvar tilt-executable (concat (getenv "TILT_LIBDIR") "/Bin/tilt-nj"))
 (defvar tilt-slave-args "-vs")
 
 (require '\''comint)
