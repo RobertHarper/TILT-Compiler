@@ -153,3 +153,4 @@
 0157 [open]	Memory leak: continuous slow heap growth
 0158 [open]	pattern compiler rejecting valid code
 0159 [open]	Phase splitter bombing on datatype replication.
+0160 [open]	Ugly hack: add_context_label
