@@ -277,8 +277,8 @@ struct
 		       fidtype_var = fresh_named_var(name ^ "_type"),
 		       code_var = fresh_named_var(name ^ "_code"),
 		       unpack_var = fresh_named_var(name ^ "_unpack"),
-		       cenv_var = fresh_named_var("cenv"),
-		       venv_var = fresh_named_var("tenv")},
+		       cenv_var = fresh_named_var(name ^ "_cEnv"),
+		       venv_var = fresh_named_var(name ^ "_eEnv")},
 	          escape = escape,
 	          callee = [],
 	          frees = empty_frees}
@@ -1003,7 +1003,7 @@ struct
 	   val num_pc_free = length pc_free
 	   val is_empty = num_pc_free = 0
 
-	   val (external_subst, code_cbnds, cenv, cenv_kind) =
+	   val (internal_subst, code_cbnds, cenv, cenv_kind) =
 	       let val cbnds = map (fn (_,v',_,l) => Con_b(Runtime, (Con_cb(v',
 								Proj_c(Var_c cenv_var, l))))) vkl_free
 		   val cenv = Crecord_c(map (fn (v,_,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
@@ -1015,11 +1015,10 @@ struct
 
 
  
-	   fun vc_mapper (v,tr,c) = (v,NilSubst.substConInTrace external_subst tr,
-					NilSubst.substConInCon external_subst c)
+	   fun vc_mapper (v,tr,c) = (v,NilSubst.substConInTrace internal_subst tr,
+				       NilSubst.substConInCon internal_subst c)
 	   val vklist = tFormals
-	   val vclist = map vc_mapper eFormals 
-
+	   val vclist = eFormals 
 
 	   val codebody_tipe = c_rewrite state body_type
 
@@ -1029,7 +1028,7 @@ struct
 						       (if isDependent then SOME v else NONE, c)) vclist,
 					 fFormals=TilWord32.fromInt(length fFormals),
 					 body_type=codebody_tipe}
-	   val codebody_tipe = NilSubst.substConInCon external_subst codebody_tipe
+	   val codebody_tipe = NilSubst.substConInCon internal_subst codebody_tipe
 
 
 	   val code_body = e_rewrite inner_state body
@@ -1081,7 +1080,7 @@ struct
 
 
 	   val vklist_code = vklist @ [(cenv_var,cenv_kind)]
-	   val vclist_code = vclist @ [vc_mapper (venv_var,venv_tr,venv_type)]
+	   val vclist_code = map vc_mapper (vclist @ [(venv_var,venv_tr,venv_type)])
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
 				   eFormals=vclist_code,

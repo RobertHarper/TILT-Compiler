@@ -76,6 +76,16 @@ structure Ppnil	:> PPNIL =
 	 (Prim_c _) => true
        | _ => false)
 
+    fun con2path c = 
+	let fun loop (Var_c v) labs = SOME(v,labs)
+  	      | loop (Proj_c(c,l)) labs = loop c (l::labs)
+	      | loop _ _ = NONE
+ 	in  loop c []
+	end
+
+    fun pp_path (v,[]) = pp_var v
+      | pp_path (v,labs) = Hbox[pp_var v, String ".", pp_list'' pp_label labs]
+
     fun pp_labvar (l,v) = [pp_label l, String " > ", pp_var v]
     fun pp_kind kind =
 	    (case kind of
@@ -98,7 +108,7 @@ structure Ppnil	:> PPNIL =
 	       | Single_k c => (pp_region "SINGLE(" ")" [pp_con c]))
 
 
-    and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", pp_con c]
+    and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", Break0 0 5, pp_con c]
       | pp_conbnd (Open_cb(v,vklist,c,k)) = 
 	HOVbox[pp_var v, String " = ", Break,
 	       HOVbox[String "FUN",
@@ -130,7 +140,10 @@ structure Ppnil	:> PPNIL =
 					       pp_list' pp_con conlist]
 	 | Crecord_c lc_list => (pp_list (fn (l,c) => HOVbox[pp_label l, String " = ", pp_con c])
 				  lc_list ("CREC{", ",","}", false))
-	 | Proj_c (c,l) => HOVbox[String "PROJ(", pp_con c, String ",", pp_label l, String ")"]
+	 | Proj_c (c,l) => (case con2path arg_con of
+				SOME path => pp_path path
+			      | NONE => HOVbox[String "PROJ(", pp_con c, String ",", 
+						pp_label l, String ")"])
 	 | Typeof_c e => HOVbox[String "TYPEOF(", pp_exp e, String ")"]
 	 | Let_c (letsort,cbnds,cbody) =>
 		   Vbox0 0 1 [String (case letsort of
@@ -349,9 +362,8 @@ structure Ppnil	:> PPNIL =
 
     and pp_trace TraceUnknown = String "Unknown"
       | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]
-      | pp_trace (TraceKnown (TraceInfo.Compute(v,labs))) = 
-	Hbox[String "Compute(", pp_var v, 
-	     String ".", pp_list'' pp_label labs,String ")"]
+      | pp_trace (TraceKnown (TraceInfo.Compute path)) =
+		Hbox[String "Compute(", pp_path path, String ")"]
       | pp_trace (TraceKnown (TraceInfo.Trace)) = String "Known_Trace"
       | pp_trace (TraceKnown (TraceInfo.Unset)) = String "Known_Unset"
       | pp_trace (TraceKnown (TraceInfo.Notrace_Int)) = String "Known_Int"
@@ -379,10 +391,10 @@ structure Ppnil	:> PPNIL =
 				HOVbox[if recur then String "& " else String "",
 				       pp_var v, 
 				       HOVbox(if (!elide_bnd) then [] else [String " : ", pp_con tipe]),
-				       String " = ",
+				       String " = ", Break0 0 5,
 				       String "(",
-				       pp_var code, String ",", Break,
-				       pp_con cenv, String ",", Break,
+				       pp_var code, String ",", Break0 0 5,
+				       pp_con cenv, String ",", Break0 0 5,
 				       pp_exp venv, String ")"])
 			vcelist ("","","",true)
 		    end)
@@ -391,10 +403,13 @@ structure Ppnil	:> PPNIL =
     and pp_fix is_code (v,(Function{effect,recursive,isDependent,
 				    tFormals, eFormals, fFormals, 
 				    body, body_type})) : format = 
-	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_var v, String " :: ", Break, pp_kind k]) 
+	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_var v, String " :: ", Break0 0 2, 
+									pp_kind k]) 
 			     tFormals ("",",","",false))
-	    val vcformats = (pp_list_flat (fn (v,tr,c) => HOVbox[pp_var v, String " : ", pp_trace tr,
-									   String " : ", Break, pp_con c]) 
+	    val vcformats = (pp_list_flat (fn (v,tr,c) => 
+					HOVbox[pp_var v,
+						String " : ", Break0 0 2, pp_trace tr,
+					   	String " : ", Break0 0 2, pp_con c])
 			     eFormals ("",",","",false))
 	    val vfformats = (pp_list_flat (fn v => HOVbox[pp_var v, String " : Float"])
 			     fFormals ("",",","",false))
@@ -409,9 +424,11 @@ structure Ppnil	:> PPNIL =
 		  if isDependent then String "DEP" else String "",
 		    pp_var v, Break,
 		    pp_region "(" ")"
-		    [HVbox(vkformats @
-			   (if (null vkformats) then [String " ;; "] else [String " ;; ", Break0 0 8]) @
-			   vcformats @ [String " ;; "] @
+		    [HOVbox(vkformats @
+			   (if (null vkformats) 
+				  then [String " ;; "] else 
+				[String " ;; ", Break0 0 0]) @
+			   vcformats @ [String " ;; ", Break0 0 0] @
 			   vfformats)],
 		    Break0 0 0,
 		    String (case effect of 

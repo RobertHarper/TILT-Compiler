@@ -24,7 +24,8 @@ fun fold f l b = foldr f b l
 (*
 \subsection{Setting default values}
 *)
-      val Indent  = ref 3
+      val Indent  = Stats.int("FormatterIndent")
+      val _       = Indent := 3
       and Skip    = ref 1
       and Blanks  = ref 1
       and Pagewidth = ref 80

@@ -161,7 +161,7 @@ struct
 			      else ()
 		      val _ = add_instr(ICOMMENT ("done allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
-		      val _ = (print "    done with fixclosure_b "; (* print (var2string v); *) print "\n")
+		      val _ = msg "done with fixclosure_b\n"
 		  in  rec_state
 		  end)
 

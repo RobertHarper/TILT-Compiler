@@ -61,7 +61,8 @@ struct
 	   | (true,Prim_c(Sum_c _,_)) => true
 	   | (true,Prim_c(Exntag_c, _)) => true
 	   | (true,_) => false
-	   | _ => error "needs_boxing: field type cannot be determined")
+	   | (_,c) => (print "needs_boxing got irreducible type: "; Ppnil.pp_con c; print "\n";
+		error "needs_boxing: field type cannot be determined"))
 
   (* First, we assume that datatypes have already been translated by 
      rearranging the non value-carrying components to the beginning.
