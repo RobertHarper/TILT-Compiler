@@ -1,0 +1,7 @@
+// Used to bomb with hidden/hidden clash.
+bug	bug.sml TARGET
+
+// Used to bomb with labelMap not disjoint at !bindarg/bindTuple.
+bug1a	bug1a.sml
+bug1b	bug1b.sml
+bug1	bug1.sml TARGET

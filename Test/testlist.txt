@@ -213,7 +213,7 @@ n138    fail	Denmark Core-SML accept test
 m0053	fail	[Bug #0118] val rec declarations
 m0054	fail	[Bug #0119] bytes and characters
 m0055	pass	character patterns
-m0056	fail	[Bug #0120] word8, char, and general arrays
+m0056	pass	word8, char, and general arrays
 m0057	pass	tabulation of vectors
 m0058	pass	command line
 m0059	pass	signature constraints

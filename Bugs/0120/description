@@ -9,8 +9,11 @@ Severity:    major
 Problem:     zero-sized word8 vectors cause a seg fault
 Code:        
 Transcript:  
-Comments:    
+Comments:
+	Word8Array.foldr was not dealing with zero-length
+	arrays.  Array.foldr (the only other implementation)
+	did not have this bug.
 Fix:         
 Test: m0056
-Owner: rwh
-Status: open
+Owner: swasey
+Status: closed

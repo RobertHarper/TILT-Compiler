@@ -1,16 +1,56 @@
 Number: 0100
-Title:       hidden hidden clashes
-Keywords:    assembler
+Title:       hidden lables and _ patterns
+Keywords:    elaborator, nonexport labels
 Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
 Severity:    major
 Problem:     as fails with redefinition of symbol "ml_hidden1_hidden4_BANGbindarg_INT" and similar identifiers
-Code:        
+Code:
+	(*$import *)
+	local
+	in
+	    val _ = 1
+	    val _ = 2
+	end
+	val _ = 3
 Transcript:  
-Comments:    
-Fix:         
+Comments:
+	The first bug lies in how packagedecs renames hidden labels.
+	In translating the code
+
+		(*$import *)
+		local
+		in
+		    val a = 1
+		    val a = 2
+		end
+		val a = 3
+
+	The name clash inside the local expression is resolved by
+	making the first two labels "hidden1_a" and "a".  Then the
+	name clash between the two "a"s is resolved making the second
+	label "hidden1_a" and the third "a".  The result is two
+	(exported) labels "hidden1_a".
+
+	The second bug is that the declaration "val _ = 3" should not
+	generate exported labels (!bindarg_INT and bindTuple_INT).  (I
+	checked for similar bugs by grepping for every occurrence of
+	internal_label in the elaborator and verifying that each label
+	is either maarked nonexport or should not be.)
+
+Fix:
+
+	Made packagedecs generate hidden labels that are fresh with
+	respect to the entire compilation unit.
+
+	Added missing uses of Name.to_nonexport.  This is important.
+	It may permit more aggressive optimization.  It ensures that
+	hidden labels in different compilation units can not conflict.
+
+	N.B. TILT still fails test m0025.
+
 Test: m0025
 Owner: swasey
-Status: open
+Status: closed
