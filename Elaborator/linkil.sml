@@ -38,6 +38,7 @@ struct
 	if !LinkIlDebug then error s
 	else raise Fail s
 
+    structure F = Formatter
     structure U = IlUtil
     structure C = IlContext
     structure S = IlStatic
@@ -66,6 +67,43 @@ struct
     type externs = (var * con) LabelMap.map
     type other = {fixity : fixity, ovlds : ovlds, externs : externs}
     type interface = {main : var * signat, signats : signats, other : other}
+
+    val Com = F.String ","
+    fun pp_signats (s : signats) : F.format =
+	let val items = LabelMap.listItemsi s
+	    fun pp (l,(v,s)) = F.Hbox [Ppil.pp_label' l, F.String " > ",
+				       Ppil.pp_var' v, F.String " = ",
+				       Ppil.pp_signat' s]
+	in  F.pp_list pp items
+	end
+
+    fun pp_ovlds (ovlds : ovlds) : F.format =
+	let fun pp (l,ovld) = F.Hbox [Ppil.pp_label' l, F.String " : ",
+				      Ppil.pp_ovld' ovld]
+	in  F.pp_list pp ovlds
+	end
+
+    fun pp_externs (e : externs) : F.format =
+	let val items = LabelMap.listItemsi e
+	    fun pp (l,(v,c)) = F.Hbox [Ppil.pp_label' l, F.String " > ",
+				       Ppil.pp_var' v, F.String " : ",
+				       Ppil.pp_con' c]
+	in  F.pp_list pp items
+	end
+
+    fun pp_interface (i : interface) : F.format =
+	let val {main=(v,s),signats,other={fixity,ovlds,externs}} = i
+	in  F.HOVbox [F.String "interface", F.Break,
+		      F.String "main = ", Ppil.pp_var' v, F.String " : ",
+		      Ppil.pp_signat' s, Com, F.Break,
+		      F.String "signats = ", pp_signats signats,
+		      Com, F.Break,
+		      F.String "ovlds = ", pp_ovlds ovlds, Com, F.Break,
+		      F.String "externs = ", pp_externs externs]
+	end
+
+    val pp_interface : interface -> unit =
+	F.print_fmt o pp_interface
 
     (*
 	A context's second component is necessary to resolve signature
@@ -307,7 +345,11 @@ struct
 		      classify (rest,main,signats,externs,fixity,x::ovlds)))
 
     fun instantiate (ctxt : context, i : pinterface) : interface option =
-	let val {entries,parms,...} = i
+	let val _ = debugdo
+		    (fn () =>
+		     (print "---- LinkIl.instantiate called\n";
+		      print "i = "; Ppil.pp_pinterface i; print "\n"))
+	    val {entries,parms,...} = i
 	    val subst = VarMap.foldli (parm_subst ctxt) U.empty_subst parms
 	    val (mainvar,mainsig,entries) = factor_entries (entries,subst)
 	    val i = classify (entries, (mainvar,mainsig), LabelMap.empty,
@@ -372,7 +414,12 @@ struct
     val eq_other = wrap "eq_other" eq_other
 
     fun eq (ctxt : context, i1 : interface, i2 : interface) : bool =
-	let val {main=(v1,s1),signats=signats1,other=other1} = i1
+	let val _ = debugdo
+		    (fn () =>
+		     (print "---- LinkIl.eq called\n";
+		      print "i1 = "; pp_interface i1; print "\n";
+		      print "i2 = "; pp_interface i2; print "\n"))
+	    val {main=(v1,s1),signats=signats1,other=other1} = i1
 	    val {main=(v2,s2),signats=signats2,other=other2} = i2
 	    val ilctxt = #1 ctxt
 	in  Sig_IsEqual (ilctxt,s1,s2) andalso
@@ -386,7 +433,12 @@ struct
     val eq = wrap "eq" eq
 
     fun seal (ctxt : context, m : module, i : interface) : module option =
-	let val (_, sbnd, sdec) = m
+	let val _ = debugdo
+		    (fn () =>
+		     (print "---- LinkIl.seal called\n";
+		      print "m = "; Ppil.pp_module m; print "\n";
+		      print "i = "; pp_interface i; print "\n"))
+	    val (_, sbnd, sdec) = m
 	    val {main=(v,sig_target),...} = i
 	    val (mainlab,mod_actual,sig_actual) =
 		(case (sbnd,sdec)
@@ -399,7 +451,13 @@ struct
 	    (fn m =>
 	     let val sbnd = SBND(mainlab,BND_MOD(v,false,m))
 		 val sdec = SDEC(mainlab,DEC_MOD(v,false,sig_target))
-	     in  (ilctxt,sbnd,sdec)
+		 val module = (ilctxt,sbnd,sdec)
+		 val _ =
+		     if !ShowHIL then
+			 (print "\nsealed module:\n"; Ppil.pp_module module;
+			  print "\n\n")
+		     else ()
+	     in  module
 	     end)
 	    (Toil.seal (ilctxt, Error.nofilepos, mod_actual,
 			sig_actual, sig_target))
