@@ -25,7 +25,7 @@ structure Name :> NAME =
 				 end
     structure VarSet = SplaySetFn(VarKey) 
     structure VarMap = SplayMapFn(VarKey) 
-    val varmap = ref (VarMap.empty : string VarMap.map)
+    val varmap = ref (VarMap.empty : (string*bool) VarMap.map)
     fun reset_varmap() = varmap := VarMap.empty
 
     fun eq_label (l1 as (h1,_) : label, l2 as (h2,_)) = 
@@ -75,33 +75,50 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
-    fun construct_var (i : int, s : string) : var = 
+    fun construct_var (i : int, s : string, f : bool) : var = 
 	let val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
 			then "v" ^ s else s
-	    val _ = varmap := (VarMap.insert(!varmap,i,s))
+	    val _ = varmap := (VarMap.insert(!varmap,i,(s,f)))
 	in  i
 	end
 
-    fun fresh_named_var str = construct_var(inc_counter var_counter, str)
+    fun fresh_named_var str = construct_var(inc_counter var_counter, str, true)
     fun fresh_var() = inc_counter var_counter
     fun gen_var_from_symbol v : var = fresh_named_var(Symbol.name v)
 
     fun var2int    (v : var) = v
     fun var2name   (v : var) = (case VarMap.find(!varmap,v) of
 				    NONE => ""
-				  | SOME str => str)
+				  | SOME (str,_) => str)
     fun var2string (v : var) = (var2name v) ^ "_" ^ (Int.toString v)
+
     fun derived_var v = fresh_named_var(var2name v)
+
     fun deconstruct_var v = (v, var2name v)
 
     fun rename_var (v : var, s : string) : unit =
-         (varmap := (VarMap.insert(!varmap,v,s)))
+         (varmap := (VarMap.insert(!varmap,v,(s,true))))
 
     fun fresh_named_tag s = (inc_counter tag_counter,s)
     fun fresh_tag  () = fresh_named_tag "t"
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
     fun internal_label s : label = (internal_hash s,s)
     fun is_label_internal ((num,str) : label) = internal_hash str = num
+
+    fun fresh_named_var' str = construct_var(inc_counter var_counter, str, false)
+    fun derived_var' v = fresh_named_var'(var2name v)
+    local
+      val trim = Stats.tt "trim_unused_vars"
+    in
+      fun used_var v = 
+	if !trim then
+	  (case VarMap.find(!varmap,v) of
+	     NONE => true
+	   | SOME (_,f) => f)
+	else true
+    end
+
+    val construct_var = fn (c,s) => construct_var (c,s,true)
 
     fun symbol_label sym : label = 
 	let val str = Symbol.name sym

@@ -32,6 +32,9 @@ signature NAME =
     val derived_var : var -> var
     val rename_var : var * string -> unit
 
+    val fresh_named_var' : string -> var
+    val derived_var'     : var -> var
+    val used_var         : var -> bool
 
     (* injective *)
     val tag2int : tag -> int
