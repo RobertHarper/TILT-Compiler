@@ -183,11 +183,11 @@ signature ILUTIL =
 			           (mod * label -> con option)) -> exp
     val con_subst_conapps : (con * (con * con -> con option)) -> con
     val sig_all_handle : signat * (exp -> exp option) * (con -> con option) * 
-	                          (mod -> mod option) -> signat
+	                          (mod -> mod option) * (Il.sdec -> Il.sdec option) -> signat
     val con_all_handle : con * (exp -> exp option) * (con -> con option) * 
-	                       (mod -> mod option) -> con
+	                       (mod -> mod option) * (Il.sdec -> Il.sdec option) -> con
     val mod_all_handle : mod * (exp -> exp option) * (con -> con option) * 
-	                       (mod -> mod option) -> mod
+	                       (mod -> mod option) * (Il.sdec -> Il.sdec option) -> mod
     val sig_subst_allproj : (signat * (mod * label -> exp option) * 
 			     (mod * label -> con option) * 
 			     (mod * label -> mod option) * 

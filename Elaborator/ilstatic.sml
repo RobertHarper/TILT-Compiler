@@ -200,7 +200,7 @@ functor IlStatic(structure Il : IL
 			   val s2' = SelfifySig (state,selfify) (NONE,s2)
 		       in  SIGNAT_FUNCTOR(v,s1',s2',a)
 		       end
-		 | ((true,SIGNAT_INLINE_STRUCTURE {self=NONE,code,abs_sig,imp_sig}) |
+		 | ((true,SIGNAT_INLINE_STRUCTURE {self=_,code,abs_sig,imp_sig}) |
 		       (false,SIGNAT_INLINE_STRUCTURE {self=SOME _,code,abs_sig,imp_sig})) =>
 		       let val abs_sig = do_sdecs (popt,selfify) (state, abs_sig)
 			   val imp_sig = do_sdecs (popt,selfify) (state, imp_sig)
@@ -273,8 +273,8 @@ functor IlStatic(structure Il : IL
 		  | mh mt _ = NONE
 		fun externalize (et,ct,mt) dec =
 		    case dec of
-			(DEC_MOD(_,s)) => SOME(CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt)))
-		      | (DEC_EXP(_,c)) => SOME(CLASS_EXP(con_all_handle(c,eh et,ch ct,mh mt)))
+			(DEC_MOD(_,s)) => SOME(CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt, fn _ => NONE)))
+		      | (DEC_EXP(_,c)) => SOME(CLASS_EXP(con_all_handle(c,eh et,ch ct,mh mt, fn _ => NONE)))
 		      | (DEC_CON(_,k,SOME c)) => SOME(CLASS_CON k)
 		      | (DEC_CON(_,k,NONE)) => SOME(CLASS_CON k)
 		      | (DEC_EXCEPTION _) => NONE
@@ -1663,17 +1663,17 @@ end
 				   if (eq_var(v1,v2))
 				       then sdec2::(match_var rest1 rest2)
 				   else SDEC(l2,(DEC_MOD(v1,s2)))::
-				       (match_var rest1 (help sig_subst_modvar (v1,MOD_VAR v2,rest2)))
+				       (match_var rest1 (help sig_subst_modvar (v2,MOD_VAR v1,rest2)))
 			     | (DEC_EXP(v1,c1),DEC_EXP(v2,c2)) =>
 				   if (eq_var(v1,v2))
 				       then sdec2::(match_var rest1 rest2)
 				   else SDEC(l2,(DEC_EXP(v1,c2)))
-				       ::(match_var rest1 (help sig_subst_expvar (v1,VAR v2,rest2)))
+				       ::(match_var rest1 (help sig_subst_expvar (v2,VAR v1,rest2)))
 			     | (DEC_CON(v1,k1,c1),DEC_CON(v2,k2,c2)) =>
 				   if (eq_var(v1,v2))
 				       then sdec2::(match_var rest1 rest2)
 				   else SDEC(l2,(DEC_CON(v1,k2,c2)))
-				       ::(match_var rest1 (help sig_subst_convar (v1,CON_VAR v2,rest2)))
+				       ::(match_var rest1 (help sig_subst_convar (v2,CON_VAR v1,rest2)))
 			     | _ => SDEC(l2,dec2)::(match_var rest1 rest2))
 		 else raise NOPE
 	       | match_var _ _ = (print "Sdecs_IsSub: length mismatch\n";

@@ -334,7 +334,7 @@ structure LinkIl (* : LINKIL *) =
 						   NONE => unset := true
 						 | _ => ()); NONE)
 		  | chandle _ = NONE
-		val _ = mod_all_handle(m,ehandle,chandle,fn _ => NONE)
+		val _ = mod_all_handle(m,ehandle,chandle,fn _ => NONE, fn _ => NONE)
 	    in  !unset
 	    end
 

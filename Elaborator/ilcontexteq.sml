@@ -235,9 +235,10 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 
 	fun eq_cntxt(vm,c,c',vars) =
 	    let fun folder v =
-		    let fun diag() = 
+		    let fun diag s = 
 			if (!debug)
-			    then (print "eq_cntxt was processing v = ";
+			    then (print s;
+				  print "eq_cntxt was processing v = ";
 				  Ppil.pp_var v; print "\n";
 				  print "context 1 = \n";
 				  Ppil.pp_context c;
@@ -249,10 +250,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 			    (case (Context_Lookup'(c,v), Context_Lookup'(c',VM.lookup vm v)) of
 				 (SOME (_, pc), SOME (_, pc')) => eq_pc(vm,pc,pc')
 			       | _ => false)
-				handle e => (print "eq_cntxt caught exception\n";
-					     diag();
+				handle e => (diag "eq_cntxt caught exception\n";
 					     raise e)
-		    in  if res then res else (print "eq_cntxt got false\n"; diag(); false)
+		    in  if res then res else (diag "eq_cntxt got false\n"; false)
 		    end
 		val res = foldand folder vars
 		val _ = (print "eq_cntxt returning "; 

@@ -956,26 +956,26 @@ functor IlUtil(structure Ppil : PPIL
 	  in f_signat handlers argsig
 	  end
 
-      fun all_handlers(exp_handler, con_handler, mod_handler) =
+      fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) =
 	  STATE(default_bound,
-		{sdec_handler = default_sdec_handler,
+		{sdec_handler = fn (_,sd) => sdec_handler sd,
 		 exp_handler = fn (e,_) => exp_handler e,
 		 con_handler = fn (c,_) => con_handler c,
 		 mod_handler = fn (m,_) => mod_handler m,
 		 sig_handler = default_sig_handler})
 
-       fun sig_all_handle (argsig : signat, exp_handler, con_handler, mod_handler) : signat =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler) 
+       fun sig_all_handle (argsig : signat, exp_handler, con_handler, mod_handler, sdec_handler) : signat =
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
 	  in f_signat handlers argsig
 	  end
 
-       fun con_all_handle (argcon : con, exp_handler, con_handler, mod_handler) : con =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler) 
+       fun con_all_handle (argcon : con, exp_handler, con_handler, mod_handler, sdec_handler) : con =
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
 	  in f_con handlers argcon
 	  end
 
-       fun mod_all_handle (argmod : mod, exp_handler, con_handler, mod_handler) : mod =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler) 
+       fun mod_all_handle (argmod : mod, exp_handler, con_handler, mod_handler, sdec_handler) : mod =
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
 	  in f_mod handlers argmod
 	  end
 
@@ -1135,8 +1135,10 @@ functor IlUtil(structure Ppil : PPIL
 	      val final_str = meta_str ^ str
 	  in  internal_label final_str
 	  end
-    in  fun to_eq_lab lab = to_meta_lab eq_str lab
-	fun to_top_lab lab = to_meta_lab top_str lab 
+    in  fun to_top_lab lab = to_meta_lab top_str lab 
+	fun to_eq_lab lab = to_meta_lab eq_str(if (is_top_lab lab)
+						   then lab
+					       else to_top_lab lab)
 (*	fun to_top_lab lab = lab *)
 	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
     end

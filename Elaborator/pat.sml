@@ -41,7 +41,7 @@ functor Pat(structure Il : IL
 					special = NONE,
 					carriers = map supertype carriers})
 		| _ => NONE)
-	in  con_all_handle(arg_con,exp_handler,con_handler,mod_handler)
+	in  con_all_handle(arg_con,exp_handler,con_handler,mod_handler, fn _ => NONE)
 	end
 
     (* ---------- auxilliary types, datatypes, and functions -------------- 

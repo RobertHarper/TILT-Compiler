@@ -8,7 +8,7 @@ functor Ppprim(structure ArgPrim : PRIM)
     open Prim Formatter Util
 
     val error = fn s => error "ppprim.sml" s
-    val elide = ref true
+    val elide = ref false
 
     fun pp_is_real W8 = String "8"
       | pp_is_real W16 = String "16"
