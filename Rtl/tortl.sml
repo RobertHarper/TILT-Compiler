@@ -130,7 +130,7 @@ val debug_bound = ref false
 					VAR_LOC(var_loc) => add_varloc state (v,var_loc,c)
 				      | VAR_VAL(var_val) => 
 					    let val reg = load_reg_val(var_val, NONE)
-					    in  add_var' state (v,SOME(VREGISTER reg),SOME var_val,c)
+					    in  add_var' state (v,SOME(VREGISTER (false,reg)),SOME var_val,c)
 					    end)
 		  in  s'
 		  end
@@ -388,7 +388,7 @@ val debug_bound = ref false
 					       | _ => false),
 					    (case (vlopt,vvopt) of
 						 (NONE,SOME(VCODE l)) => LABEL' l
-					       | (SOME(VREGISTER (I r)),_) => REG' r
+					       | (SOME(VREGISTER (_,I r)),_) => REG' r
 					       | (SOME(VGLOBAL (l,_)),_) => let val addr = alloc_regi LABEL
 										val reg = alloc_regi NOTRACE_CODE
 									    in  (add_instr(LADDR(l,0,addr));
@@ -483,7 +483,7 @@ val debug_bound = ref false
 					     add_instr(BR (getTop()));
 					     alloc_reg state rescon)
 				      | (ID r,true,false) => do_call (SOME r))
-		      val result = (VAR_LOC(VREGISTER dest), rescon,
+		      val result = (VAR_LOC(VREGISTER (false,dest)), rescon,
 				     new_gcstate state)
 		      val _ = add_instr (ICOMMENT ("done making " ^ call_type))
 
@@ -522,10 +522,10 @@ val debug_bound = ref false
 			  fun loop [] (irep,ir,fr) = (irep,ir,fr)
 			    | loop (vlopt::rest) (irep,ir,fr) = 
 			      (case vlopt of
-				   SOME(VREGISTER (I (r as (REGI (_,rep))))) => loop rest 
+				   SOME(VREGISTER (_,I (r as (REGI (_,rep))))) => loop rest 
 				       (rep::irep,r::ir,fr)
-				 | SOME(VREGISTER (I (SREGI _))) => error "SREGI free in handler!!!"
-				 | SOME(VREGISTER (F r)) => loop rest (irep,ir,r::fr)
+				 | SOME(VREGISTER (_,I (SREGI _))) => error "SREGI free in handler!!!"
+				 | SOME(VREGISTER (_,F r)) => loop rest (irep,ir,r::fr)
 				  (* don't need to save globals - or varval only *)
 				 | SOME(VGLOBAL _) => loop rest (irep,ir,fr)
 				 | NONE => loop rest (irep,ir,fr))
@@ -544,13 +544,14 @@ val debug_bound = ref false
 		      val (fpbase,state) = (* --- save the floating point values, if any *)
 			  (case local_fregs of
 			       [] => (NONE,state)
-			     | _ => let val (ir,state) = (fparray(state,map (VAR_LOC o VREGISTER o F) local_fregs))
+			     | _ => let val vv = map (fn freg => VAR_LOC(VREGISTER(false,F freg))) local_fregs
+				        val (ir,state) = fparray(state,vv)
 				    in  (SOME ir, state)
 				    end)
 
 
 		      (* --- create the exn record and set the exnptr to it to install it *)
-		      val int_vallocs = (map (VAR_LOC o VREGISTER o I) 
+		      val int_vallocs = (map (fn ireg => VAR_LOC(VREGISTER(false,I ireg)))
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
 		      val _ = add_instr(LADDR(LOCAL_LABEL hl,0,hlreg))
 		      val (_,state) = make_record(state,SOME exnptr,reps, int_vallocs)
@@ -615,7 +616,7 @@ val debug_bound = ref false
 
 		  in 
 		      (* for debugging, should check that arg_c and hcon are the same *)
-		      (VAR_LOC(VREGISTER reg), arg_c, state)
+		      (VAR_LOC(VREGISTER (false,reg)), arg_c, state)
 		  end
 	    | Handle_e _ => error "ill-formed handler"
 
@@ -658,7 +659,7 @@ val debug_bound = ref false
 			 | (F zz, F oo) => add_instr(FMV (oo,zz))
 			 | _ => error "zero_one: different arms have results in float and int registers")
 	      val _ = add_instr(ILABEL afterl)
-	  in (VAR_LOC (VREGISTER result), zcon,state)
+	  in (VAR_LOC (VREGISTER (false, result)), zcon,state)
 	  end
 
 
@@ -732,7 +733,7 @@ val debug_bound = ref false
 			  in  
 			      add_instr(ILABEL afterl);
 			      case (!dest,!rescon) of
-				  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c,state)
+				  (SOME r,SOME c) => (VAR_LOC(VREGISTER (false, r)),c,state)
 				| _ => error "no arms"
 			  end
 		  end
@@ -783,7 +784,7 @@ val debug_bound = ref false
 		  in  
 		      add_instr(ILABEL afterl);
 		      case (!dest,!rescon) of
-			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c,state)
+			  (SOME r,SOME c) => (VAR_LOC(VREGISTER (false, r)),c,state)
 			| _ => error "no arms"
 		  end 
 	    | Typecase_e _ => error "typecase_e not implemented"
@@ -875,7 +876,7 @@ val debug_bound = ref false
 		  in  
 		      add_instr(ILABEL afterl);
 		      case (!dest,!rescon) of
-			  (SOME r,SOME c) => (VAR_LOC(VREGISTER r),c,state)
+			  (SOME r,SOME c) => (VAR_LOC(VREGISTER(false,r)),c,state)
 			| _ => error "no arms"
 		  end)
 	      end
@@ -981,7 +982,7 @@ val debug_bound = ref false
 				  val _ = add_instr(MV(load_ireg_locval(vl,NONE), desti))
 				  val _ = add_instr(ILABEL afterl)
 
-			      in  (VAR_LOC(VREGISTER(I desti)),
+			      in  (VAR_LOC(VREGISTER(false, I desti)),
 				   join_states[nobox_state,box_state])
 			      end)
 	      end
@@ -1061,7 +1062,7 @@ val debug_bound = ref false
 
 		  val _ = add_instr(ILABEL afterl) (* result is in desti at this point *)
 
-	      in  (VAR_LOC(VREGISTER(I desti)),state)
+	      in  (VAR_LOC(VREGISTER(false, I desti)),state)
 	      end
 
 	  fun xtagsum state = 
@@ -1218,7 +1219,7 @@ val debug_bound = ref false
 	      end
 	  val (ir,state) = if single_carrier then single_case() 
 			   else multi_case()
-	  val lv = VAR_LOC(VREGISTER (I ir))
+	  val lv = VAR_LOC(VREGISTER (false, I ir))
       in  (lv,summand_type,state)
       end
 
@@ -1271,7 +1272,7 @@ val debug_bound = ref false
 				    I ir => ir
 				  | _ => error "records cannot have floats")
 		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
-	       in  (VAR_LOC(VREGISTER(I desti)), con, state)
+	       in  (VAR_LOC(VREGISTER(false, I desti)), con, state)
 	       end
 	 | inject_record => xsum true (state,hd clist,elist,context)
 	 | inject => xsum false (state,hd clist,elist,context)
@@ -1323,7 +1324,7 @@ val debug_bound = ref false
 		   val desti = alloc_regi (con2rep state field_con)
 		   val subscript = if single_carrier then field' else field' + 1
 		   val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
-	       in (VAR_LOC(VREGISTER(I desti)), field_con, state)
+	       in (VAR_LOC(VREGISTER(false, I desti)), field_con, state)
 	       end
 	 | project_sum =>
 	       let val sumcon = hd clist
@@ -1357,7 +1358,7 @@ val debug_bound = ref false
 			       let val ir = load_ireg_locval(lv,NONE)
 				   val desti = alloc_regi(con2rep state summand_type)
 				   val _ = add_instr(LOAD32I(EA(ir,offset), desti))
-			       in  (VAR_LOC(VREGISTER(I desti)), summand_type,state)
+			       in  (VAR_LOC(VREGISTER(false, I desti)), summand_type,state)
 			       end
 		       in  (case (single_carrier,need_unbox) of
 				(true,false) => (lv,c,state)
@@ -1387,7 +1388,7 @@ val debug_bound = ref false
 		   val (I ir,_,state) = xexp'(state,fresh_var(),e,NONE,NOTID)
 		   val fr = alloc_regf()
 		   val _ = add_instr(LOADQF(EA(ir,0),fr))
-	       in (VAR_LOC(VREGISTER(F fr)), Prim_c(Float_c Prim.F64,[]),state)
+	       in (VAR_LOC(VREGISTER(false, F fr)), Prim_c(Float_c Prim.F64,[]),state)
 	       end
 	 | box_float Prim.F32 => error "32-bit floats not done"
 	 | unbox_float Prim.F32 => error "32-bit floats not done"
@@ -1410,7 +1411,7 @@ val debug_bound = ref false
 				add_instr(LOAD32I(EA(addr,0),desti));
 				add_instr(ADD(desti,IMM 1,tmp));
 				add_instr(STORE32I(EA(addr,0),tmp)))
-		   in  (VAR_LOC(VREGISTER (I desti)), c',state)
+		   in  (VAR_LOC(VREGISTER (false, I desti)), c',state)
 		   end
 	 | inj_exn name => 
 		   let val [e1,e2] = elist
@@ -1500,7 +1501,7 @@ val debug_bound = ref false
 		       val dest = alloc_regi NOTRACE_INT
 		       val cmp = if signed then CMPSI else CMPUI
 		       val _ =  add_instr(cmp(oper,a',b',dest))
-		   in (VAR_LOC(VREGISTER(I dest)),bool_con, state)
+		   in (VAR_LOC(VREGISTER(false, I dest)),bool_con, state)
 		   end
 
           val stdcmp2si = stdcmp2i true
@@ -1513,7 +1514,7 @@ val debug_bound = ref false
 		  val b' = load_freg_locval(vl2,NONE)
 		  val dest = alloc_regi NOTRACE_INT
 		  val _ =  add_instr(CMPF(oper,a',b',dest))
-	      in (VAR_LOC(VREGISTER(I dest)),bool_con,state)
+	      in (VAR_LOC(VREGISTER(false, I dest)),bool_con,state)
 	      end
 
 
@@ -1523,7 +1524,7 @@ val debug_bound = ref false
 		  val a' = load_ireg_locval(vl1,NONE)
 		  val dest = alloc_regi NOTRACE_INT
 		  val _ = add_instr(oper(a',dest))
-	      in (VAR_LOC(VREGISTER(I dest)), int32, state)
+	      in (VAR_LOC(VREGISTER(false, I dest)), int32, state)
 	      end
 
 	  (* ----------- binary integer operations ----------------- *)
@@ -1535,7 +1536,7 @@ val debug_bound = ref false
 		  val b' = load_ireg_sv vl2
 		  val dest = alloc_regi NOTRACE_INT
 		  val _ = add_instr(oper(a',b',dest))
-	      in (VAR_LOC(VREGISTER(I dest)), int32, state)
+	      in (VAR_LOC(VREGISTER(false, I dest)), int32, state)
 	      end
 
 	  val commutesop2i = op2i true
@@ -1551,7 +1552,7 @@ val debug_bound = ref false
 			   val b' = load_freg_locval(vl2,NONE)
 			   val dest = alloc_regf()
 			   val _ = add_instr(oper(a',b',dest))
-		       in (VAR_LOC(VREGISTER(F dest)), float64, state)
+		       in (VAR_LOC(VREGISTER(false, F dest)), float64, state)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
 	  fun op1f oper : loc_or_val * con * state =
@@ -1560,7 +1561,7 @@ val debug_bound = ref false
 		       let val a' = load_freg_locval(vl,NONE)
 			   val dest = alloc_regf()
 			   val _ = add_instr(oper(a',dest))
-		       in (VAR_LOC(VREGISTER(F dest)), float64, state)
+		       in (VAR_LOC(VREGISTER(false, F dest)), float64, state)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
 	  fun extract_type (t,clist) = 
@@ -1597,7 +1598,7 @@ val debug_bound = ref false
 		      val src = load_freg_locval(vl,NONE)
 		      val dest = alloc_regi NOTRACE_INT
 		      val _ = add_instr(CVT_REAL2INT(src,dest))
-		  in (VAR_LOC(VREGISTER(I dest)), int32, state)
+		  in (VAR_LOC(VREGISTER(false, I dest)), int32, state)
 		  end
 
 	    | int2float => 
@@ -1605,7 +1606,7 @@ val debug_bound = ref false
 		      val src = load_ireg_locval(vl,NONE)
 		      val dest = alloc_regf()
 		      val _ = add_instr(CVT_INT2REAL(src,dest))
-		  in (VAR_LOC(VREGISTER(F dest)), float64,state)
+		  in (VAR_LOC(VREGISTER(false, F dest)), float64,state)
 		  end
 
             (* XXX do we want overflow in some cases or are these casts? *)
@@ -1896,7 +1897,7 @@ val debug_bound = ref false
 						  add_instr(ILABEL afterl))
 		       in  (I desti, join_states[w8_state,w32_state,float_state])
 		       end)
-      in (VAR_LOC(VREGISTER r), c, state)
+      in (VAR_LOC(VREGISTER(false, r)), c, state)
       end
  
   and xfloatupdate(vl1 : loc_or_val, vl2 : loc_or_val, vl3 : loc_or_val) : loc_or_val * con =
@@ -1981,7 +1982,7 @@ val debug_bound = ref false
 		   (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); state)
 		 | (true,Prim_c(BoxFloat_c Prim.F64,[])) => 
 		       let val fr = unboxFloat(load_ireg_locval(vl3,NONE))
-			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr)))
+			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (false,F fr)))
 		       in state
 		       end
 		 | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
@@ -2033,7 +2034,7 @@ val debug_bound = ref false
 			   val _ = add_instr(BR afterl)
 			   val _ = add_instr(ILABEL floatl)
 			   val fr = unboxFloat(load_ireg_locval(vl3,NONE))
-			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (F fr)))
+			   val _ = xfloatupdate(vl1,vl2,VAR_LOC(VREGISTER (false,F fr)))
 			   val _ = add_instr(ILABEL afterl)
 		       in  state
 		       end)
@@ -2045,7 +2046,7 @@ val debug_bound = ref false
 	  val ir2 = load_ireg_locval(vl2,NONE)
 	  val desti = alloc_regi NOTRACE_INT
 	  val _ = add_instr(CMPUI(EQ,ir1,REG ir2,desti))
-      in  (VAR_LOC(VREGISTER (I desti)),NilUtil.bool_con, state)
+      in  (VAR_LOC(VREGISTER (false,I desti)),NilUtil.bool_con, state)
       end
 
   and xeqvector(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con * state =
@@ -2087,7 +2088,7 @@ val debug_bound = ref false
 					 add_instr(ILABEL afterl);
 					 state)
 				     end)
-      in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []),state)
+      in  (VAR_LOC (VREGISTER (false,I dest)), Prim_c(Int_c Prim.W32, []),state)
       end
 
     and floatcase (state, dest, Prim.F32, _, _) : state = error "no 32-bit floats"
@@ -2264,7 +2265,7 @@ val debug_bound = ref false
 		 else ();
 		 let val state = needgc(state,REG gctemp)
 		 in  general_init_case(ptag,tag,dest,
-				       VAR_LOC(VREGISTER(I gctemp)),
+				       VAR_LOC(VREGISTER(false,I gctemp)),
 				       wordlen,v,gafter);
 		     (case afteropt of
 			  NONE => ()
@@ -2304,7 +2305,7 @@ val debug_bound = ref false
 		     needgc(state,REG gctemp);
 		     mk_ptrarraytag(len,tag);
 		     general_init_case(ptag,tag,dest,
-				       VAR_LOC(VREGISTER(I gctemp)),
+				       VAR_LOC(VREGISTER(false,I gctemp)),
 				       len,v,gafter);
 		     (* after all this allocation, we cannot merge *)
 		     new_gcstate state)
@@ -2378,7 +2379,7 @@ val debug_bound = ref false
 			 val _ = add_instr(ILABEL afterl)
 		     in  join_states [float_state, int_state, char_state, ptr_state]
 		     end)
-    in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Array_c, [c]),state)
+    in  (VAR_LOC (VREGISTER (false,I dest)), Prim_c(Array_c, [c]),state)
     end
 
 
@@ -2502,8 +2503,9 @@ val debug_bound = ref false
 			   if is_recur
 			       then
 				   let val clregs = map (fn lv => load_ireg_locval(lv,NONE)) lvs
-				       fun folder (((v,_),clreg),s) = add_convar s (v,SOME(VREGISTER (I clreg)),
-										    NONE,Word_k Runtime,NONE)
+				       fun folder (((v,_),clreg),s) = 
+						add_convar s (v,SOME(VREGISTER (false,I clreg)),
+							    NONE,Word_k Runtime,NONE)
 				       val recstate = foldl folder state (zip vclist clregs)
 				       fun do_write ((clreg,(v,c)),s) = 
 					   let val (r,_,s) = xcon(s,v,c, NONE)
@@ -2536,7 +2538,7 @@ val debug_bound = ref false
 			     | (SOME vl,_, k) => 
 				   let val const = (case vl of
 							VGLOBAL _ => true
-						      | _ => false)
+						      | VREGISTER (const,_) => const)
 				   in  (const, VAR_LOC vl,k,state)
 				   end
 			     | (NONE,NONE,_) => error "no info on convar")
@@ -2579,7 +2581,7 @@ val debug_bound = ref false
 			       val dest = alloc_regi TRACE
 			       val ir = load_ireg_locval(lv,NONE)
 			       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
-			   in (const,VAR_LOC(VREGISTER (I dest)), fieldk, state)
+			   in (const,VAR_LOC(VREGISTER (const,I dest)), fieldk, state)
 			   end
 		   in  (case (!do_single_crecord,Util.sequence2list lvk_seq) of
 			    (true,[(_,k)]) => (const,lv,k,state)
@@ -2622,7 +2624,7 @@ val debug_bound = ref false
 					      tailcall=false,
 					      save=SAVE(getLocals())})
 		       val state = new_gcstate state
-		   in (const,VAR_LOC (VREGISTER (I desti)),resk,state)
+		   in (const,VAR_LOC (VREGISTER (const,I desti)),resk,state)
 		   end
 	     | Annotate_c (_,c) => xcon'(state,name,c,kopt))
       end
@@ -2640,10 +2642,11 @@ val debug_bound = ref false
 				else ();
 				print "\n")
 		      else ()
-              fun folder ((v,k),s) = let val r = alloc_named_regi v TRACE
-					       val s' = add_convar s (v,SOME(VREGISTER (I r)),NONE,k,NONE)
-					   in  (r,s')
-                                           end
+              fun folder ((v,k),s) = 
+			let val r = alloc_named_regi v TRACE
+			    val s' = add_convar s (v,SOME(VREGISTER (false,I r)),NONE,k,NONE)
+			in  (r,s')
+                        end
 	      val (cargs,state) = foldl_list folder state vklist
 	      val args = (cargs,[])
 	      val resulti = alloc_regi TRACE
@@ -2677,7 +2680,7 @@ val debug_bound = ref false
 			  then (print "-----dofun_help : "; Ppnil.pp_var name; print "\n")
 		      else ()
               fun folder ((v,k),s) = let val r = alloc_named_regi v TRACE
-					       val s' = add_convar s (v,SOME(VREGISTER (I r)),NONE,k,NONE)
+					       val s' = add_convar s (v,SOME(VREGISTER (false,I r)),NONE,k,NONE)
 					   in  (r,s')
                                            end
 	      val (cargs,state) = foldl_list folder state vklist

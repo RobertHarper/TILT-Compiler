@@ -69,7 +69,7 @@ val debug_bound = ref false
    *)
 
    datatype reg = I of Rtl.regi | F of Rtl.regf
-   datatype var_loc = VREGISTER of reg 
+   datatype var_loc = VREGISTER of bool * reg 
 		    | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
    and var_val = VINT of TW32.word
                | VREAL of label           (* I am a real located at this label *)
@@ -262,7 +262,7 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 
   
   fun add_var' s (v,vlopt,vvopt,con) =  varmap_insert s (v,(vlopt,vvopt,con))
-  fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER reg), NONE, con)
+  fun add_var  s (v,reg,con)         =  add_var' s (v,SOME(VREGISTER(false,reg)), NONE, con)
   fun add_varloc s (v,vl,con)        =  add_var' s (v,SOME vl,NONE,con)
   fun add_code s (v,l,con)           =  add_var' s (v,NONE, SOME(VCODE l), con)
 
@@ -439,8 +439,8 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		  | SOME(_,SOME(VINT _),_) => SOME TRACE
 
 
-		  | SOME(SOME(VREGISTER (I r)),_,_) => SOME(COMPUTE(Var_p r))
-		  | SOME(SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
+		  | SOME(SOME(VREGISTER (_,I r)),_,_) => SOME(COMPUTE(Var_p r))
+		  | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
 		  | SOME(SOME(VGLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
 		  | SOME(NONE,NONE,_) => error "no information on this convar!!"
 		  | NONE => NONE)
@@ -477,10 +477,10 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 		     | SOME(_,SOME(VLABEL l),kind) => indices(fn [] => COMPUTE(Label_p l)
 							       | x => COMPUTE(Projlabel_p(l,x))) kind
 		     | SOME(_,SOME(VCODE _),_) => error "expect constr record: got code"
-		     | SOME(SOME(VREGISTER (I ir)),_,kind) => 
+		     | SOME(SOME(VREGISTER (_,I ir)),_,kind) => 
 			   indices (fn [] => COMPUTE(Var_p ir)
 			             | x => COMPUTE(Projvar_p(ir,x))) kind
-		     | SOME(SOME(VREGISTER (F _)),_,_) => error "constructor in float reg"
+		     | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
 		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices 
 			   (fn x => COMPUTE(Projlabel_p(l,0::x))) kind
 		     | SOME(NONE,NONE,_) => error "no info on convar"
@@ -534,7 +534,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 
    fun varloc2rep varloc =
        (case varloc of
-	    VREGISTER reg =>
+	    VREGISTER (_,reg) =>
 		(case reg of
 		     F (REGF(_,frep)) => frep
 		   | I (REGI(_,irep)) => irep
@@ -856,10 +856,10 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 		   add_instr(LOAD32I(EA(addr,0),reg));
 		   reg
 	       end
-	 | VREGISTER (I r) => (case poss_dest of
+	 | VREGISTER (_,I r) => (case poss_dest of
 				   NONE => r
 				 | SOME d => (add_instr(MV(r,d)); d))
-	 | VREGISTER (F r) => error "moving from float to int register"
+	 | VREGISTER (_,F r) => error "moving from float to int register"
       end
     
     fun load_ireg_val (value : var_val, poss_dest : regi option) : regi =
@@ -915,10 +915,10 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 				  NONE => alloc_regf()
 				| SOME d => d)
       in case rep of
-	  (VREGISTER (F r)) => (case poss_dest of
+	  (VREGISTER (_,F r)) => (case poss_dest of
 				      NONE => r
 				    | SOME d => (add_instr(FMV(r,d)); d))
-	| (VREGISTER (I r)) => error "moving from integer register to float register"
+	| (VREGISTER (_,I r)) => error "moving from integer register to float register"
 	| (VGLOBAL (l,NOTRACE_REAL)) =>
 	      let val addr = alloc_regi(LABEL)
 		  val dest = pickdest()
@@ -952,7 +952,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 
     fun load_reg_loc (rep : var_loc, destopt : reg option) : reg = 
 	(case rep of
-	     ((VREGISTER (F _)) | (VGLOBAL (_, NOTRACE_REAL))) =>
+	     ((VREGISTER (_,F _)) | (VGLOBAL (_, NOTRACE_REAL))) =>
 		 (case destopt of
 		      NONE => F(load_freg_loc(rep, NONE))
 		    | SOME (I ir) => error "load_reg on a FLOAT rep and a SOME(I _)"
@@ -1074,7 +1074,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 	       app (fn l => add_data(DLABEL l)) labels;
 	       add_data(DLABEL (label));
 	       (case lv of
-		    VAR_LOC (VREGISTER reg) => 
+		    VAR_LOC (VREGISTER (_,reg)) => 
 			(add_instr(LADDR(label,0,addr));
 			 (case reg of
 			      I r => (add_data(INT32(i2w 0));
@@ -1176,10 +1176,10 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 
   fun boxFloat_vl (state,lv) : loc_or_val * state = 
       (case lv of
-	  VAR_LOC(VREGISTER (F fr)) => let val (ir,state) = boxFloat(state,fr)
-				       in  (VAR_LOC(VREGISTER (I ir)), state)
+	  VAR_LOC(VREGISTER (_,F fr)) => let val (ir,state) = boxFloat(state,fr)
+				       in  (VAR_LOC(VREGISTER (false,I ir)), state)
 				       end
-	| VAR_LOC(VREGISTER (I _)) => error "float in int reg"
+	| VAR_LOC(VREGISTER (_,I _)) => error "float in int reg"
 	| VAR_LOC(VGLOBAL (l,_)) => (VAR_VAL(VLABEL l), state)
 	| VAR_VAL(VINT _) => error "can't boxfloat an int"
 	| VAR_VAL(VREAL l) => (VAR_VAL(VLABEL l), state)
@@ -1407,7 +1407,7 @@ val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_t
 			add_data(DLABEL label);
 			(VAR_VAL(VLABEL label), SOME label))
 		   end
-	  else (VAR_LOC (VREGISTER (I dest)), NONE)
+	  else (VAR_LOC (VREGISTER (false,I dest)), NONE)
 
       val offset = scan_vals (offset, vl)
       val _ = if const

@@ -25,8 +25,8 @@ sig
 
     (* RTL values can be located somewhere or the value is known *)
     datatype var_loc = 
-	VREGISTER of reg 
-      | VGLOBAL   of label * rep  (* I am located at this label: closure, data, ... *)
+	VREGISTER of bool * reg   (* flag indicates constant-ness *)
+      | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
 
     and var_val = 
 	VINT of TilWord32.word
