@@ -1,13 +1,13 @@
-functor Nil(structure Annotation : ANNOTATION
+functor Nil(structure ArgAnnotation : ANNOTATION
 	    structure ArgPrim : PRIM)
 	   :> sig 
 	        include NIL 
-	        sharing ArgPrim = Prim and Annotation = Annotation 
+	        sharing ArgPrim = Prim and ArgAnnotation = Annotation 
               end =
 struct	
 
   open Util Name Listops
-  structure Annotation = Annotation
+  structure Annotation = ArgAnnotation
   structure Prim = ArgPrim
   val error = fn s => error "nil.sml" s
 
