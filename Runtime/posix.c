@@ -1263,10 +1263,18 @@ int posix_filesys_opendir(string dirname)
   return (int)dir;
 }
 
+static bool filter(const char* name) {
+	return (name[0] == '.' &&
+		(name[1] == '\0' ||
+		 (name[1] == '.' && name[2] == '\0')));
+}
+
 string posix_filesys_readdir(int arg)
 {
   DIR *dir = (DIR *)arg;
   struct dirent *entry = readdir(dir);
+  while (entry != NULL && filter(entry->d_name))
+	  entry = readdir(dir);
   if (entry == NULL)
     return cstring2mlstring_alloc("");
   else 
