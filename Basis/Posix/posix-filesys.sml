@@ -49,12 +49,10 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
 	    isOpen = ref true
 	  }
     fun readdir (DS{dirStrm, isOpen = ref false}) =
-	  raise TiltExn.LibFail "readdir on closed directory stream"
-	  (* PreOS.error "readdir on closed directory stream" ??? *)
+	  raise TiltExn.SysErr ("readdir on closed directory stream", NONE)
       | readdir (DS{dirStrm, ...}) = readdir' dirStrm
     fun rewinddir (DS{dirStrm, isOpen = ref false}) =
-	  raise TiltExn.LibFail "rewinddir on closed directory stream"
-	  (* PreOS.error "rewinddir on closed directory stream" ??? *)
+	  raise TiltExn.SysErr ("rewinddir on closed directory stream", NONE)
       | rewinddir (DS{dirStrm, ...}) = rewinddir' dirStrm
     fun closedir (DS{dirStrm, isOpen = ref false}) = ()
       | closedir (DS{dirStrm, isOpen}) = (
