@@ -267,7 +267,7 @@ struct
 	if isEmpty plan orelse not (!ShowPlan) then ()
 	else
 	    let val plan = concat(Listops.join " " (planStrings plan))
-	    in  msg ("  Plan: " ^ plan ^ "\n")
+	    in  msg ("  plan: " ^ plan ^ "\n")
 	    end
 
     val Has = F.String " : "
@@ -384,7 +384,7 @@ struct
     fun showStale' (status : status) : unit =
 	(case status
 	   of OK => ()
-	    | Bad s => msg ("  Stale: " ^ s ^ "\n")
+	    | Bad s => msg ("  stale: " ^ s ^ "\n")
 	    | Join ss => app showStale' ss)
 
     fun showStale (status : status) : unit =
@@ -426,7 +426,7 @@ struct
 		Bad ("interface of unit " ^ u ^ " has changed"))
 
     fun check_imports (current : Info.imports, past : Info.imports) : status =
-	let val mismatch = Bad "import length/order mismatch"
+	let val mismatch = Bad "imports have changed"
 	    fun loop (c,p) =
 		(case (c,p)
 		   of (nil,nil) => OK
@@ -440,14 +440,14 @@ struct
 
     fun check_source (current : Crc.crc, past : Crc.crc) : status =
 	if current = past then OK
-	else Bad "source file changed"
+	else Bad "source has changed"
 
     fun check_iface (eq : equiv, current : Crc.crc option,
 		     past : Crc.crc option) : status =
 	(case (current, past)
 	   of (SOME crc, SOME crc') =>
 		if eq(crc,crc') then OK
-		else Bad "exlicit interface changed"
+		else Bad "explicit interface has changed"
 	    | (NONE, NONE) => OK
 	    | (SOME _, NONE) => Bad "explicit interface added"
 	    | (NONE, SOME _) => Bad "explicit interface removed")
@@ -474,8 +474,8 @@ struct
 	if FileCache.exists infoFile then
 	    (case FileCache.read_old_info infoFile
 	       of SOME old => check_info (eq, current, old)
-		| NONE => Bad "bad magic number in info file")
-	else Bad "first compilation"
+		| NONE => Bad "bad magic number")
+	else Bad "first compile"
 
     fun check (eq : equiv, infoFile : string, current : Info.info) : bool =
 	let val status = check_info_file (eq,infoFile,current)
