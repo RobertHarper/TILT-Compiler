@@ -66,8 +66,26 @@ structure Machine =
     val Rth     = R 2   (* non-volatile *)
 
 
-    val Fat     = F 62  (* volatile *)
-    val Fat2    = F 60   (* volatile *)
+    (*
+	NB %f0 and %f2 are valid 32-bit and 64-bit floating point
+	registers.  This is important because some SPARC implementations
+	apparantly do not support storing 32 bit results in 64-bit
+	floating point registers.  In particular, code like
+
+		.section	".text"
+		.align	4
+		.globl	test
+	
+	test:
+		fdtoi	%f4, %f62		! error: invalid register
+		retl
+		nop
+		.size	test,(.-test)
+
+	will not assemble on some machines (it assembles on cuff).
+    *)
+    val Fat     = F 0
+    val Fat2    = F 2
 
 
     fun isPhysical (R i) = i<32
