@@ -57,13 +57,11 @@ LIST_PAIR   Basis/Aggregate/list-pair-sig
 ListPair    Basis/Aggregate/list-pair
 # "BYTE", "Byte", "CharVector", "CharArray", "LIST_PAIR", "ListPair", "TopLevel"
 
-POSIX_extern   Basis/extern
 
 TIME        Basis/OS/time-sig
 PreTime     Basis/OS/pre-time
 Time        Basis/OS/time
 DATE	    Basis/date-sig
-Date	    Basis/date
 OS_FILE_SYS Basis/OS/os-filesys-sig
 OS_IO_SIG   Basis/OS/os-io-sig
 OS_PATH     Basis/OS/os-path-sig
@@ -92,44 +90,52 @@ TextPrimIO     Basis/IO/text-prim-io
 CLEAN_UP       Basis/NJ/cleanup-sig
 CleanUp        Basis/NJ/cleanup
 CleanIO        Basis/IO/clean-io
-# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn"
+BinPrimIO         Basis/IO/bin-prim-io
+BinIOFn        Basis/IO/bin-io-fn
+# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn", "BinPrimIO"
+
 
 TIMER	       Basis/timer-sig
 Timer	       Basis/useless-timer
 
+POSIX_extern   Basis/extern
+Date	    Basis/date
 POSIX_ERROR    Basis/Posix/posix-error.sig
 POSIX_Error    Basis/Posix/posix-error
 POSIX_FLAGS    Basis/Posix/posix-flags-sig
 POSIX_IO_SIG     Basis/Posix/posix-io-sig
-
+# "POSIX_extern", "POSIX_ERROR", "POSIX_Error", "POSIX_FLAGS", "POSIX_IO_SIG"
 
 POSIX_FILE_SYS Basis/Posix/posix-filesys-sig
 POSIX_FileSys Basis/Posix/posix-filesys
 POSIX_PROCESS Basis/Posix/posix-process-sig
+# "POSIX_FILE_SYS", "POSIX_FileSys", "POSIX_PROCESS"
 
 POSIX_SIGNAL  Basis/Posix/posix-signal-sig
 POSIX_Signal  Basis/Posix/posix-signal
 POSIX_Process Basis/Posix/posix-process
 POSIX_IO      Basis/Posix/posix-io
+# "POSIX_SIGNAL", "POSIX_Signal", "POSIX_Process", "POSIX_IO"
 
 POSIX_PROC_ENV Basis/Posix/posix-procenv-sig
 POSIX_ProcEnv  Basis/Posix/posix-procenv
 POSIX_TTY      Basis/Posix/posix-tty-sig
 POSIX_Tty      Basis/Posix/posix-tty
+# "POSIX_PROC_ENV", "POSIX_ProcEnv", "POSIX_TTY", "POSIX_Tty"
 
 POSIX_SYS_DB   Basis/Posix/posix-sysdb-sig
 POSIX_Sys_DB   Basis/Posix/posix-sysdb
 POSIX          Basis/Posix/posix-sig
 Posix          Basis/Posix/posix
+# "POSIX_SYS_DB", "POSIX_Sys_DB", "POSIX", "Posix"
 
 OS_Path        Basis/Unix/os-path
 OS_FileSys     Basis/Unix/os-filesys
 OS_Process     Basis/Unix/os-process
 OS_IO          Basis/Unix/os-io
 OS             Basis/Unix/os
+# "OS_FileSys", "OS_Path", "OS_Process", "OS_IO", "OS"
 
-BinPrimIO         Basis/IO/bin-prim-io
-BinIOFn        Basis/IO/bin-io-fn
 
 TextIOFn       Basis/IO/text-io-fn
 PosixPrimIOFn  Basis/Unix/posix-prim-io-fn
@@ -303,6 +309,7 @@ GRAPHUTIL Util/graphutil.sig
 GraphUtil Util/graphutil
 
 Blaster  Util/blast
+
 Specific Util/specific-til
 
 #################### Parser directory #################
@@ -320,6 +327,7 @@ PATHNAMES Parser/pathnames.sig
 PathNames Parser/pathnames
 SOURCE   Parser/source.sig
 Source   Parser/source
+
 
 ERRORMSG Parser/errormsg.sig
 ErrorMsg Parser/errormsg
@@ -382,7 +390,6 @@ LinkParse Parser/linkparse
 
 #################### Elaborator directory #################
 
-
 PRIM    Elaborator/prim.sig
 Prim    Elaborator/prim
 PPPRIM  Elaborator/ppprim.sig
@@ -400,27 +407,36 @@ PRIMUTIL Elaborator/primutil.sig
 PrimUtil Elaborator/primutil
 ILUTIL Elaborator/ilutil.sig
 IlUtil Elaborator/ilutil
+
 ILCONTEXT Elaborator/ilcontext.sig
 IlContext Elaborator/ilcontext
 ILCONTEXTEQ Elaborator/ilcontexteq.sig
 IlContextEq Elaborator/ilcontexteq
+	
+ERROR Elaborator/error.sig
+Error Elaborator/error
+
+INFIXPARSE Elaborator/infixparse.sig
+InfixParse Elaborator/infixparse
+
+
+
 ILSTATIC  Elaborator/ilstatic.sig
 IlStatic  Elaborator/ilstatic
 
-ERROR Elaborator/error.sig
-Error Elaborator/error
-INFIXPARSE Elaborator/infixparse.sig
-InfixParse Elaborator/infixparse
 EQUAL Elaborator/equal.sig
 Equal Elaborator/equal
 DATATYPE Elaborator/datatype.sig
 Datatype Elaborator/datatype
 SIGNATURE Elaborator/signature.sig
 Signature Elaborator/signature
+
 PAT Elaborator/pat.sig
 Pat Elaborator/pat
+
 TOIL Elaborator/toil.sig
 Toil Elaborator/toil
+
 BASIS Elaborator/basis.sig
 Basis Elaborator/basis
 
@@ -464,26 +480,23 @@ NilContext Nil/nilcontext
 NORMALIZE Nil/normalize.sig
 Normalize Nil/normalize
 
-TRACEOPS Nil/traceops.sig
-TraceOps Nil/traceops
-
 NILSTATIC Nil/nilstatic.sig
 NilStatic Nil/nilstatic
 
 LINEARIZE Nil/linearize.sig
 Linearize Nil/linearize
 
+TRACEOPS Nil/traceops.sig
+TraceOps Nil/traceops
+
+REIFY Nil/reify.sig
+Reify Nil/reify
+
 EXPTABLE Nil/NilOpts/exptable.sig
 ExpTable Nil/NilOpts/exptable
 
 OPTIMIZE Nil/optimize.sig
 Optimize Nil/optimize
-
-REIFY Nil/reify.sig
-Reify Nil/reify
-
-HOIST Nil/hoist.sig
-Hoist Nil/hoist
 
 SPECIALIZE Nil/specialize.sig
 Specialize Nil/specialize
@@ -493,6 +506,19 @@ ToClosure Nil/toclosure
 
 TONIL Nil/tonil.sig
 ToNil Nil/tonil
+
+PASS Nil/pass.sig
+
+REDUCE Nil/reduce.sig
+Reduce Nil/reduce
+
+Flatten Nil/flatten
+
+HOIST Nil/hoist.sig
+Hoist Nil/hoist
+
+INLINE Nil/inline.sig
+Inline Nil/inline
 
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
@@ -513,11 +539,11 @@ TortlBase Rtl/tortl-base
 TORTLSUM Rtl/tortl-sum.sig
 TortlSum  Rtl/tortl-sum
 
-TORTLARRAY Rtl/tortl-array.sig
-TortlArray  Rtl/tortl-array
-
 TORTLVARARG Rtl/tortl-vararg.sig
-TortlVararg  Rtl/tortl-vararg
+TortlVararg Rtl/tortl-vararg
+
+TORTLARRAY Rtl/tortl-array.sig
+TortlArray Rtl/tortl-array
 
 TORTL     Rtl/tortl.sig
 Tortl     Rtl/tortl
@@ -526,14 +552,14 @@ LINKRTL Rtl/linkrtl.sig
 Linkrtl Rtl/linkrtl
 
 
-#################### Backend directory #################
+##################### Backend directory #################
 MACHINE Backend/machine.sig
 MACHINEUTILS Backend/machineutils.sig
+CALLCONV Backend/callconv.sig
 TRACETABLE Backend/tracetable.sig
 Tracetable Backend/tracetable
 BBLOCK Backend/bblock.sig
 Bblock Backend/bblock
-CALLCONV Backend/callconv.sig
 PRINTUTILS Backend/printutils.sig
 PrintUtils Backend/printutils
 
@@ -542,7 +568,6 @@ IfGraph Backend/ifgraph
 TRACKSTORAGE Backend/trackstorage.sig
 COLOR   Backend/color.sig
 Color   Backend/color1
-
 
 TOASM Backend/toasm.sig
 INTRAPROC Backend/intraproc.sig
@@ -559,9 +584,10 @@ Regset Backend/regset
 Labelmap Backend/labelmap
 RTLTOASM Backend/rtltoasm.sig
 RtlToAsm Backend/rtltoasm
-VarGraph Backend/vargraph
 
-#################### Alpha directory #################
+VarGraph Backend/vargraph
+#
+##################### Alpha directory #################
 DECALPHA      Alpha/decalpha.sig
 DecAlpha      Alpha/decalpha
 DecAlphaUtils Alpha/decalphautils
@@ -572,8 +598,8 @@ ToAlpha       Alpha/toalpha
 TrackStorage  Alpha/trackstorage
 LINKALPHA     Alpha/linkalpha.sig
 Linkalpha     Alpha/linkalpha
-
-#################### Top directory #################
+#
+##################### Top directory #################
 COMPILER Top/compiler.sig
 Compiler Top/compiler
 # distribute.sml
@@ -585,5 +611,5 @@ MANAGER Top/manager.sig
 Manager Top/manager
 Top Top/top
 
-#test alltest
+
 
