@@ -40,16 +40,19 @@ struct
     val sparcConfig : config Delay.value =
 	Delay.delay (fn () =>
 		     let
-			 val crt = if (!profile) then "mcrt1.o" else "crt1.o"
+			 val (profDirs, crt) = if (!profile)
+						   then (["-L/usr/lib/libp"], "mcrt1.o")
+					       else ([], "crt1.o")
 		     in
 			 {assembler = ["/usr/ccs/bin/as", "-xarch=v8plus"],
 			  linker    = ["/usr/ccs/bin/ld"],
 			  ldpre     = [runtimeFile "obj_solaris/firstdata.o",
 				       gccFile crt, gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
-			  ldpost    = ["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib", 
-				       runtimeFile "runtime.solaris.a", "-lperfmon", "-lpthread","-lposix4", "-lgen",
-				       "-lm", "-lc", gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"]}
+			  ldpost    = (profDirs @
+				       ["-L/afs/cs/project/fox/member/pscheng/ml96/SparcPerfMon/lib", 
+					runtimeFile "runtime.solaris.a", "-lperfmon", "-lpthread","-lposix4", "-lgen",
+					"-lm", "-lc", gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"])}
 		     end)
     val alphaConfig : config Delay.value =
 	Delay.delay (fn() =>
@@ -64,7 +67,8 @@ struct
 			 {assembler = ["/usr/bin/as"] @ debug,
 			  linker    = ["/usr/bin/ld", "-call_shared", "-D", "a000000", "-T", "8000000"] @ debug,
 			  ldpre     = crt,
-			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm", "-lc", "-lrt"]}
+			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm",
+				       "-lc", "-lrt"]}
 		     end)
 
     (* targetConfig : unit -> config *)

@@ -993,10 +993,9 @@ struct
 		    val _ = Tools.assemble (linkAsmFile, linkObjFile);
 
 		    (* Link *)
-		    val linkExeFile = Paths.linkExeFile paths
 		    val linkExeFile = if (!Tools.profile)
-					  then Paths.exeToProf linkExeFile
-				      else linkExeFile
+					  then Paths.linkProfExeFile paths
+				      else Paths.linkExeFile paths
 		    val objectFiles = (map (Paths.objFile o get_paths) requiredUnits) @ [linkObjFile]
 		    val _ = (chat "Manager calling linker with: ";
 			     if (!chat_verbose)
@@ -1139,7 +1138,7 @@ struct
 		  Paths.linkAsmFile,
 		  Paths.linkObjFile,
 		  Paths.linkExeFile,
-		  Paths.exeToProf o Paths.linkExeFile]
+		  Paths.linkProfExeFile]
     fun purge mapfile = purge_help (mapfile, " (binaries)", target)
     fun purgeAll mapfile = purge_help (mapfile, " (binaries and interfaces)", any @ target)
 

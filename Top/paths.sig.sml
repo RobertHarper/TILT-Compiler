@@ -14,7 +14,6 @@ sig
     val mapfileToPs  : string -> string
     val ilToUnself : string -> string
     val fileToBackup : string -> string
-    val exeToProf : string -> string
 	
     type unit_paths
     (* Invariant: If p = sourceUnitPaths{unit,file} and file is
@@ -22,18 +21,19 @@ sig
      * canonical (absolute).
      *)
     val sourceUnitPaths : {unit:string, file:string} -> unit_paths
-    val unitName      : unit_paths -> string
-    val sourceFile    : unit_paths -> string	(* source file (ext arbitrary but should exist) *)
-    val interfaceFile : unit_paths -> string	(* .int interface file *)
-    val infoFile      : unit_paths -> string	(* meta information for manager *)
-    val ilFile        : unit_paths -> string	(* IL context *)
-    val asmFile       : unit_paths -> string	(* assmebler source *)
-    val asmzFile      : unit_paths -> string	(* compressed assembler source *)
-    val objFile       : unit_paths -> string	(* object file *)
-    val linkAsmFile   : unit_paths -> string	(* linking source file *)
-    val linkAsmzFile  : unit_paths -> string	(* compressed assembler source *)
-    val linkObjFile   : unit_paths -> string	(* linking object file *)
-    val linkExeFile   : unit_paths -> string	(* executable name *)
+    val unitName        : unit_paths -> string
+    val sourceFile      : unit_paths -> string	(* source file (ext arbitrary but should exist) *)
+    val interfaceFile   : unit_paths -> string	(* .int interface file *)
+    val infoFile        : unit_paths -> string	(* meta information for manager *)
+    val ilFile          : unit_paths -> string	(* IL context *)
+    val asmFile         : unit_paths -> string	(* assmebler source *)
+    val asmzFile        : unit_paths -> string	(* compressed assembler source *)
+    val objFile         : unit_paths -> string	(* object file *)
+    val linkAsmFile     : unit_paths -> string	(* linking source file *)
+    val linkAsmzFile    : unit_paths -> string	(* compressed assembler source *)
+    val linkObjFile     : unit_paths -> string	(* linking object file *)
+    val linkExeFile     : unit_paths -> string	(* executable name *)
+    val linkProfExeFile : unit_paths -> string  (* profiling executable name *)
 
     (* TILT intermediate directories related to unit, with
      * parents preceding children. *)

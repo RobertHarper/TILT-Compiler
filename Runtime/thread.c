@@ -30,7 +30,11 @@ int NumThread     = 150;
 int NumProc       = 1;
 int RotateProc = 0;
 int threadDiag = 0;
+#if defined(solaris)
 int accountingLevel = 1;
+#elif defined(alpha_osf)
+int accountingLevel = 0;
+#endif
 extern int usageCount;
 
 Thread_t    *Threads;                         /* array of NumUserThread user threads */

@@ -22,7 +22,6 @@ struct
     fun mapfileToPs mapfile = joinBaseExt (mapfile, "ps")
     fun ilToUnself il = joinBaseExt (il, "unself")
     fun fileToBackup file = joinBaseExt (file, "BACKUP")
-    fun exeToProf file = joinBaseExt (file, "prof")
 
     datatype unit_paths = SOURCE of {unit : string, file : string}
 
@@ -50,9 +49,10 @@ struct
     fun linkAsmFile (SOURCE {file, ...}) = joinBaseExt (joinBaseExt (inDir platformDir file, "link"), "s")
     val linkAsmzFile = asmToAsmz o linkAsmFile
     val linkObjFile = asmToObj o linkAsmFile
-    fun linkExeFile (SOURCE {unit, file}) = joinDirFile (OS.Path.dir file,
-							 joinBaseExt (joinBaseExt (unit, Target.platformString()), "exe"))
-
+    fun exeBase (SOURCE {unit, file}) = joinDirFile (OS.Path.dir file, joinBaseExt (unit, Target.platformString()))
+    fun linkExeFile paths = joinBaseExt (exeBase paths, "exe")
+    fun linkProfExeFile paths = joinBaseExt (joinBaseExt (exeBase paths, "prof"), "exe")
+	
     (* tiltDirs : unit_paths -> string list *)
     fun tiltDirs (SOURCE {file, ...}) = [tiltDir file, neutralDir file, platformDir file]
 
