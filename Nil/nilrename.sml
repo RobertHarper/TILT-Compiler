@@ -359,4 +359,68 @@ structure NilRename :> NILRENAME =
     end
 
 
+    (*Shadowing*)
+    local 
+      open NilRewrite
+
+      structure VarSet = Name.VarSet
+
+      val add = VarSet.add
+      val member = VarSet.member
+
+      exception Rebound of var
+
+      type state = {cbound : VarSet.set,
+		    ebound : VarSet.set}
+
+      fun exp_var_xxx (state : state as {ebound,cbound},var,any) : (state * var option)= 
+	(if member (ebound, var) then
+	   raise Rebound var
+	 else
+	   ({ebound = add (ebound,var),cbound = cbound},
+	    NONE))
+
+      fun con_var_xxx (state :state as {cbound,ebound},var,any) : (state * var option)= 
+	(if member (cbound, var) then
+	   raise Rebound var
+	 else
+	   ({cbound = add (cbound,var),ebound = ebound},
+	    NONE))
+
+      val all_handlers =  
+	let
+	  val h = set_con_binder default_handler con_var_xxx
+	  val h = set_con_definer h con_var_xxx
+	  val h = set_exp_binder h exp_var_xxx
+	  val h = set_exp_definer h exp_var_xxx
+	in
+	  h
+	end
+
+      val {rewrite_exp = checkExp,
+	   rewrite_con = checkCon,
+	   rewrite_kind = checkKind,
+	   rewrite_mod = checkMod,...} = rewriters all_handlers
+
+      fun noShadowsXXX checker item = 
+	let
+	  val cbound = VarSet.empty
+	  val ebound = VarSet.empty
+	in 
+	  ((ignore (checker {ebound = ebound,cbound = cbound} item);
+	    true)
+	   handle Rebound var => 
+	     (lprintl ("Variable "^(Name.var2string var)^" shadows");
+	      false))
+	end
+
+    in
+      val noShadowsExp  = noShadowsXXX checkExp
+      val noShadowsCon  = noShadowsXXX checkCon
+      val noShadowsKind = noShadowsXXX checkKind
+      val noShadowsMod  = noShadowsXXX checkMod
+    end
+
+
+
   end

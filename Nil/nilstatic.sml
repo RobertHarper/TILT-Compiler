@@ -21,6 +21,7 @@ struct
   val trace = Stats.ff "nilstatic_trace"
   val stack_trace = Stats.ff "nilstatic_show_stack"
   val local_debug = Stats.ff "nilstatic_debug"
+  val assertions  = Stats.ff "nilstatic_assertions"
   val debug = Stats.ff "nil_debug"
   val show_calls = Stats.ff "nil_show_calls"
   val show_context = Stats.ff "nil_show_context"
@@ -2197,6 +2198,14 @@ struct
 	    [
 	     (assertWellFormed D)
 	     ]
+
+	  val _ = 
+	    if (!assertions) then
+	      assert (locate "module_valid")
+	      [
+	       (NilRename.noShadowsMod module,fn () => print "Typechecker called with shadowed code")
+	       ]
+	    else ()
 
 	  val _ = if (!show_calls)
 		    then (print "module_valid called with module =\n";

@@ -37,6 +37,13 @@ signature NILRENAME =
     val isRenamedKind : kind -> bool
     val isRenamedMod  : module -> bool
 
+    (*These functions return true if there is no shadowing, otherwise false
+     *)
+    val noShadowsExp  : exp -> bool
+    val noShadowsCon  : con -> bool
+    val noShadowsKind : kind -> bool
+    val noShadowsMod  : module -> bool
+
     (* These functions check as above, but also check that 
      * no bound binding occurrence fails the predicate.  So
      * for example, by passing in functions that look in a context
