@@ -70,15 +70,15 @@ source unit Crc = "crc-native.sml" {
 	Formatter
 }
 
-source unit GRAPH = "graph.sig.sml" {TextIO}
-source unit Graph = "graph.sml" {
-	GRAPH Int TextIO String List Array Util HashString HashTableFn
-	ORD_MAP UTIL
+source unit GRAPH = "graph.sig.sml" {}
+source interface GRAPH = "graph.int" {GRAPH HASH_KEY}
+source unit Graph (*: GRAPH*) = "graph.sml" {
+	GRAPH HASH_KEY HashTableFn Int List Listops Array Stats
 }
 
 source unit GRAPHUTIL = "graphutil.sig.sml" {}
 source unit GraphUtil = "graphutil.sml" {
-	GRAPHUTIL List Array
+	GRAPHUTIL Array List
 }
 source unit Specific = "specific-til.sml" {}
 

@@ -1,0 +1,18 @@
+functor Node(structure Key : HASH_KEY
+	     val toString : Key.hash_key -> string)
+	: NODE where type node = Key.hash_key
+
+functor Graph (Node : NODE)
+	: DIRECTEDGRAPH where type node = Node.node
+
+functor SpeedUpGraph (Graph : DIRECTEDGRAPH)
+	: DIRECTEDGRAPH where type node = Graph.node
+
+functor LabelGraph (Graph : DIRECTEDGRAPH)
+	: LABELLEDGRAPH where type node = Graph.node
+
+functor UnlabelGraph(Graph : LABELLEDGRAPH)
+	: DIRECTEDGRAPH where type node = Graph.node
+
+functor DebugGraph(Graph : LABELLEDGRAPH)
+	: LABELLEDGRAPH where type node = Graph.node
