@@ -1,0 +1,50 @@
+This file serves as an overview log for modifications to the TILT
+compiler.  Starting date is April 20, 1998.
+
+------------------------------------------------------------------------
+April 20  Chris
+
+In discussing the reifier, Perry and I came to the following
+conclusions:
+
+ (1) We would like to remove the code in the back-end (in particular,
+     in tortl) that determines the tracability of values through type
+     normalization, since this is redundent; the reifier already has
+     to do all this computation.
+
+ (2) In order for this to be possible, the reifier must annotate every
+     subexpression with tracability info (since each subexpression
+     corresponds to an RTL/MLRISC pseudoregister needing a tracability
+     annotation).  
+
+ (3) Adding annotation nodes to our program is clumsy, and the
+     information is hard to maintain.  Therefore, we will add
+     tracability annotations to expression-level let bindings, and
+     have the reifier emit (term-level) A-normalized code.
+
+ (4) The tracability annotation should be something like
+
+         datatype trace_annot = UNKNOWN
+                              | TRACE_KNOWN of <abstract trace info>
+                              | TRACE_COMPUTE of <short path>
+
+     where we assume the reifier is parameterized by a function
+
+         get_trace : Nil.context * Nil.con -> <abstract trace info> option
+
+     which returns SOME xxx if the tracability of values of this type
+     can be determined statically (for now, if the head-normal form is
+     known) and NONE otherwise.  If NONE is returned it is the
+     reifier's responsibility to bind the constructor to a variable so
+     that the type (and hence the tracability) will be available at
+     run-time.
+
+ (5) Adding code to the reifier to do a-normalization as it goes seems
+     rather redundent at the moment; especially since Perry is
+     currently working on Stephanie's CSE optimizer, which also requires
+     A-normal form.  We therefore intend to either keep the program in
+     A-normal form or normalize it just before calling these two
+     passes.  In particular, I'll write the reifier to assume the
+     input has been normalized.
+
+------------------------------------------------------------------------    
