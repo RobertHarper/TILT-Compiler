@@ -30,6 +30,7 @@ alpha_osf32_sys_name = alpha_osf
 alpha_dux40_sys_name = alpha_osf
 rs_aix32_sys_name = rs_aix
 sun4_55_sys_name = solaris
+sun4x_56_sys_name = solaris
 
 alpha_osf20_chip_name = alpha
 alpha_osf32_chip_name = alpha
