@@ -101,7 +101,7 @@
 0104 [open]	hidden hidden name clash
 0105 [open]	overloading with words
 0106 [open]	internal Option failure
-0107 [open]	tilt option failure
+0107 [closed]	tilt option failure
 0108 [open]	Parsing of infix(r) declarations is not correct.
 0109 [open]	listpair discrepancies
 0110 [open]	math discrepancies
