@@ -45,6 +45,7 @@ signature NAME =
     val open_symbol_label : Symbol.symbol -> label 
     val openlabel       : label -> label
 
+
     (* useful printing routine *)
     val var2int      : var   -> int     (* v_23 -> 23 *)
     val var2name     : var   -> string  (* v_23 -> "v" *)
@@ -70,4 +71,22 @@ signature NAME =
 
     structure PathMap : ORD_MAP
     where type Key.ord_key = vpath
+
+
+    (* blasting routines *)
+    val blastInVar    : TextIO.instream -> var
+    val blastOutVar   : TextIO.outstream -> var -> unit
+    val blastInLabel  : TextIO.instream -> label
+    val blastOutLabel : TextIO.outstream -> label -> unit
+    val blastInTag    : TextIO.instream -> tag
+    val blastOutTag   : TextIO.outstream -> tag -> unit
+
+    val blastOutVarmap   : TextIO.outstream -> 'a Blaster.blastout -> 'a VarMap.map -> unit
+    val blastInVarmap    : TextIO.instream -> 'a Blaster.blastin -> 'a VarMap.map
+    val blastOutLabelmap   : TextIO.outstream -> 'a Blaster.blastout -> 'a LabelMap.map -> unit
+    val blastInLabelmap    : TextIO.instream -> 'a Blaster.blastin -> 'a LabelMap.map
+    val blastOutTagmap   : TextIO.outstream -> 'a Blaster.blastout -> 'a TagMap.map -> unit
+    val blastInTagmap    : TextIO.instream -> 'a Blaster.blastin -> 'a TagMap.map
+
+
   end

@@ -18,6 +18,8 @@ structure Name :> NAME =
     fun is_label_open ((_,_,flag) : label) = flag
 
 
+
+
     (* equality and generation functions on Nameitive types *)
     fun eq_var   (v1 : var, v2)     = v1 = v2
     fun eq_label (l1 as (h1,_,_) : label, l2 as (h2,_,_)) = 
@@ -163,4 +165,60 @@ structure Name :> NAME =
       structure LabelMap = LocalSplayMapFn(LabelKey) 
       structure TagMap = LocalSplayMapFn(TagKey) 
       structure PathMap = LocalSplayMapFn(PathKey) 
+
+
+    local 
+	open Blaster
+    in
+	fun blastOutVar os (n,str) = 
+	    (blastOutInt os n;
+	     blastOutString os str)
+	    
+	fun blastInVar is = 
+	    let val n = blastInInt is
+		val str = blastInString is
+	    in  (n, str)
+	    end
+	
+	fun blastOutTag os (GTAG num_str) = blastOutVar os num_str
+	fun blastInTag is = GTAG (blastInVar is)
+
+	fun blastOutLabel os (n,str,b) = 
+	    (blastOutInt os n;
+	     blastOutString os str;
+	     blastOutBool os b)
+	    
+	fun blastInLabel is = 
+	    let val n = blastInInt is
+		val str = blastInString is
+		val b = blastInBool is
+	    in  (n, str, b)
+	    end
+
+	fun blastOutVarmap os blaster vmap = blastOutList (blastOutPair blastOutVar blaster) os (VarMap.listItemsi vmap)
+	fun blastInVarmap is blaster =
+	    let val ls = blastInList (blastInPair blastInVar blaster)  is
+		fun folder((v,item),acc) = VarMap.insert(acc,v,item)
+	    in  foldl folder VarMap.empty ls
+	    end
+
+	fun blastOutLabelmap os blaster vmap = blastOutList (blastOutPair blastOutLabel blaster) os (LabelMap.listItemsi vmap)
+	fun blastInLabelmap is blaster =
+	    let val ls = blastInList (blastInPair blastInLabel blaster)  is
+		fun folder((v,item),acc) = LabelMap.insert(acc,v,item)
+	    in  foldl folder LabelMap.empty ls
+	    end
+
+
+	fun blastOutTagmap os blaster vmap = blastOutList (blastOutPair blastOutTag blaster) os (TagMap.listItemsi vmap)
+	fun blastInTagmap is blaster =
+	    let val ls = blastInList (blastInPair blastInTag blaster)  is
+		fun folder((v,item),acc) = TagMap.insert(acc,v,item)
+	    in  foldl folder TagMap.empty ls
+	    end
+
+    end
+
+
+
   end

@@ -35,6 +35,7 @@ structure BinIO_Util : BIN_IO_UTIL =
       app (fn c => BinIO.output1(os,charToElem c)) 
       (explode s)
 
+	
     fun copy (is : instream, os : outstream) : unit =
       let val n = 1024
 	  fun loop () =
