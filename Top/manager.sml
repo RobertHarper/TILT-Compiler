@@ -1203,9 +1203,13 @@ struct
 		let val (state as (_, ready, _, _, _)) = newState state
 		in  if (stateDone state)
 			then 	
-			    let fun mapper u = (case get_status u of
-						    DONE t => (u, Time.toReal t)
-						  | _ => error "unit still not DONE here")
+			    let fun mapper u = (case get_status u 
+						  of DONE        t => (u, Time.toReal t)  
+						  | READY        t => (print "Ready\n";     (u, Time.toReal t))
+						  | PENDING      t => (print "Pending\n";   (u, Time.toReal t))
+						  | ASSEMBLING   t => (print "Assembling\n";(u, Time.toReal t))
+						  | PROCEEDING   t => (print "Proceeding\n";(u, Time.toReal t))
+						  | WAITING => error "Unit still waiting for compilation!")
 				val unsorted = map mapper units
 				fun greater ((_,x),(_,y)) = x > (y : real)
 				val sorted = ListMergeSort.sort greater unsorted

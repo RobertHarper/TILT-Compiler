@@ -101,8 +101,8 @@ structure Linker :> LINKER =
 		| plus ([],e::ue2,a) = plus([],ue2,e::a)
 		| plus (e::ue1,[],a) = plus(ue1,[],e::a)
 		| plus (ue1 as ((un1,crc1)::ue1'),ue2 as ((un2,crc2)::ue2'),a) =
-	        if un1 < un2 then plus(ue1',ue2,(un1,crc1)::a)
-		else if un2 < un1 then plus(ue1,ue2',(un2,crc2)::a)
+	        if String.<(un1,un2) then plus(ue1',ue2,(un1,crc1)::a)
+		else if String.<(un2,un1) then plus(ue1,ue2',(un2,crc2)::a)
 		else (* un1=un2 *)
 		  if crc1=crc2 then plus(ue1',ue2',(un1,crc1)::a)
 		  else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
@@ -116,8 +116,8 @@ structure Linker :> LINKER =
 		| plus ([],e::ue2,a) = plus([],ue2,e::a)
 		| plus (e::ue1,[],a) = plus(ue1,[],e::a)
 		| plus (ue1 as ((un1,crc1)::ue1'),ue2 as ((un2,crc2)::ue2'),a) =
-	        if un1 < un2 then plus(ue1',ue2,(un1,crc1)::a)
-		else if un2 < un1 then plus(ue1,ue2',(un2,crc2)::a)
+	        if String.<(un1,un2) then plus(ue1',ue2,(un1,crc1)::a)
+		else if String.<(un2,un1) then plus(ue1,ue2',(un2,crc2)::a)
 		else (* un1=un2 *)
 		  error ("Link Error: You are trying to link in the unit " ^ un1 ^ " more\n" ^
 			 "than once. This is not allowed.") 

@@ -14,6 +14,8 @@ signature UTIL =
     val lprint : string -> unit    (* print newline before string *)
     val lprintl : string -> unit   (* print newline before and after string *)
 
+    val printem : string list -> unit
+
     (* Misc helpers *)
     val eq_opt : (('a * 'a -> bool) * 'a option * 'a option) -> bool
     val mapopt : ('a -> 'b) -> 'a option -> 'b option

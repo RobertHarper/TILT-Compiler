@@ -94,11 +94,17 @@ structure Til :> COMPILER =
 	   | MLRISC_SPARC => SparcLink.base2uo *) ) base
 
 
+
+    val uptoElaborate = Stats.ff("UptoElaborate")
+    val uptoPhasesplit = Stats.ff("UptoPhasesplit")
+    val uptoClosureConvert = Stats.ff("UptoClosureConvert")
+    val uptoRtl = Stats.ff("UptoRtl")
     val uptoAsm = Stats.ff("UptoAsm")
+
     fun assemble_help background base =
 	let val s_file = base2s base
 	    val o_file = base2o base
-	in  if (!uptoAsm) 
+	in  if (!uptoAsm orelse !uptoPhasesplit orelse !uptoClosureConvert orelse !uptoRtl) 
 		then let val os = TextIO.openOut o_file
 			 val _ = TextIO.output(os,"Dummy .o file\n")
 		     in  TextIO.closeOut os; o_file
@@ -137,10 +143,6 @@ structure Til :> COMPILER =
      * label for `initialization' with name `unitName_doit'. 
      *)
     exception Stop
-    val uptoElaborate = Stats.ff("UptoElaborate")
-    val uptoPhasesplit = Stats.ff("UptoPhasesplit")
-    val uptoClosureConvert = Stats.ff("UptoClosureConvert")
-    val uptoRtl = Stats.ff("UptoRtl")
     fun il_to_asm (unitName : string,
 		   fileBase: string, 
 		   il_module) : string = 

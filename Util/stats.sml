@@ -221,7 +221,7 @@ structure Stats :> STATS =
 	      (loop (max_size - (size str)); print str)
       end
 
-       fun print_timers() =
+       fun print_timers'() =
 	 let 
 	   
 	   (*gc time is included in the user time - don't overcount*)
@@ -329,7 +329,7 @@ structure Stats :> STATS =
 	   print "\n\n"
 	 end
        
-      fun print_counters() = 
+      fun print_counters'() = 
         let
 	       fun pritem (name,COUNTER_ENTRY(ref count)) =
 		       (lprint 30 name;
@@ -345,7 +345,7 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n"
 	 end
 
-      fun print_ints() =
+      fun print_ints'() =
         let
 	       fun pritem (name,INT_ENTRY(ref count)) =
 		       (lprint 30 name;
@@ -360,7 +360,7 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n"
 	 end
 
-      fun print_bools() =
+      fun print_bools'() =
         let
 	       fun pritem (name,BOOL_ENTRY(ref flag)) =
 		       (lprint 30 name;
@@ -375,21 +375,38 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n"
 	 end
 
+       
+      fun make_sorted () = 
+	let 
+	  val orig_entries = !entries
+	  val sort_entries = ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) orig_entries
+	in entries := sort_entries
+	end
+
+      fun print_bools ()    = (make_sorted();print_bools'())
+      fun print_counters () = (make_sorted();print_counters'())
+      fun print_ints ()     = (make_sorted();print_ints'())
+
+      val sort_timers = ff "StatsSortTimers"
+
+      fun print_timers ()   = (if !sort_timers then make_sorted() else ();
+			       print_timers'() )
+
       fun print_stats() = 
-	  let val orig_entries = !entries
-	      val sort_entries = ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) orig_entries
-	  in  entries := sort_entries;
-	      print "\n\n";
-	      print_bools(); 	
-	      print "\n\n";
-	      print_counters(); 	
-	      print "\n\n";
-	      print_ints(); 	
-	      print "\n\n";
-	      entries := orig_entries;
-	      print_timers(); 
-	      print "\n\n"
-	  end
+	let val orig_entries = !entries
+	in
+	  make_sorted();
+	  print "\n\n";
+	  print_bools'(); 	
+	  print "\n\n";
+	  print_counters'(); 	
+	  print "\n\n";
+	  print_ints'(); 	
+	  print "\n\n";
+	  if !sort_timers then () else entries := orig_entries; 
+	  print_timers'(); 
+	  print "\n\n"
+	end
 
 
 

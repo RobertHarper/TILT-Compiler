@@ -38,6 +38,8 @@ structure Util :> UTIL =
     fun lprint s = print ("\n"^s)
     fun lprintl s = print ("\n"^s^"\n")
 
+    fun printem strings = app print strings
+
     fun mapopt f NONE = NONE
       | mapopt f (SOME x) = SOME(f x)
     fun eq_opt (f, NONE, NONE) = true
