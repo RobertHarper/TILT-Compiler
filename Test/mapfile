@@ -1,9 +1,5 @@
-source unit GETOPT = "../Top/getopt.sig.sml" {}
-source unit Getopt = "../Top/getopt.sml" {
-	GETOPT String Char List
-}
-
+import group $libdir ^ "/arg/group"
 source unit Runtest = "runtest.sml" {
-	Posix TextIO CharVector Byte Word8 OS List CommandLine Getopt
+	Posix TextIO CharVector Byte Word8 OS List CommandLine Arg
 }
-make executable "Runtest." ^ $target ^ ".exe" {Runtest}
+make executable "../Bin/" ^ $target ^ "/runtest" {Runtest}

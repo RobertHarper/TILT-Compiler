@@ -61,19 +61,20 @@ struct
 	in  F.print_fmt fmt
 	end
 
+    fun usage () : 'a =
+	(TextIO.output (TextIO.stdErr, "usage: dump [-c] file ...\n");
+	 OS.Process.exit (OS.Process.failure))
+
     fun main (_ : string, args : string list) : OS.Process.status =
-	let val usage = "dump [-c] file ..."
-	    val _ = ExnHandler.Interactive := false
-	    val options = [Getopt.Noarg (#"c",())]
-	    val _ = 
-		(case Getopt.getopt (options,args)
-		   of Getopt.Error msg =>
-			raise Compiler.Reject (msg ^ "\n" ^ usage)
-		    | Getopt.Success (opts,args) =>
-			let val f = if null opts then dump else crc
-			in  app f args
-			end)
-	in  OS.Process.success
+	let val _ = ExnHandler.Interactive := false
+	    type acc = string -> unit
+	    fun option ({argc,...} : acc Arg.argument) : acc =
+		(case argc
+		   of #"c" => crc
+		    | _ => usage ())
+	    val (files, f) = Arg.arguments option (args,dump)
+	in  app f files;
+	    OS.Process.success
 	end handle e => ExnHandler.printAndExit e
 
 end
