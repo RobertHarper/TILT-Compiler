@@ -195,7 +195,7 @@
 
   fun etst b s = if b then () else print ("Error - " ^ s ^ "...\n");
 
-  val _ = etst ("\u0041\u000a\\u0041\n" = "A\n\092" ^ "u0041\010")
+  val _ = etst ("\u0041\u000a\u0041\n" = "A\n\092" ^ "u0041\010")
             "backslash u does not work or somepin";
 
   val _ = etst (map ord [#"a", #"A", #" ", chr 42, #"\117"] =

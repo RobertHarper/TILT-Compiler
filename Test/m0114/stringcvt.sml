@@ -1,4 +1,4 @@
-(*$import Int Bool Char StringCvt List *)
+(*$import Int Bool Char StringCvt List TextIO *)
 
 (* Auxiliary functions for test cases *)
 
