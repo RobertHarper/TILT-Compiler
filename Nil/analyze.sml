@@ -76,9 +76,7 @@ struct
       val occurs = ref ([] : occur list)
 
       val constraints = ref (Name.VarMap.empty : (int * int ref) Name.VarMap.map)
-          (* The following are what I think these are supposed to mean, though it looks like the current code doesn't do it.
-	   * (See bug #0087) -adamc
-	   * 1: Level that bounds from above the level of the function of which the variable represented by this constraint
+	  (* 1: Level that bounds from above the level of the function of which the variable represented by this constraint
 	   *    is some degree of partial application, if that variable occurs in code
 	   * 2: Currently determined highest possible level of that function
            *)
@@ -213,9 +211,9 @@ struct
 	      val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
 	      fun findApp (rPartials,cur,eAcc,
 			   all as ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest)) = 
-		  if (eq_var(v,cur)) (* Possible bug: should it be f instead of v? *)
+		  if (eq_var(f,cur))
 		      then let val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
-			   in  findApp(v::rPartials,cur,e::eAcc,rest) (* should cur be v? *)
+			   in  findApp(v::rPartials,v,e::eAcc,rest)
 			   end
 		  else (rev rPartials, eAcc, all)
 		| findApp (rPartials, cur, eAcc, all) = (rev rPartials, eAcc, all)
