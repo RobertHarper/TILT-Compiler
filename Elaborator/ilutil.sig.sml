@@ -196,12 +196,14 @@ signature ILUTIL =
 
     (* ------------ More Miscellaneous/General Substituter ------- *)
     type handler = (exp -> exp option) * (con -> con option) *
-	           (mod -> mod option) * (sdec -> sdec option)
+	           (mod -> mod option) * (sdec -> sdec option) *
+		   (signat -> signat option)
 
     val default_exp_handler  : exp -> exp option
     val default_con_handler  : con -> con option
     val default_mod_handler  : mod -> mod option
     val default_sdec_handler : sdec -> sdec option
+    val default_sig_handler  : signat -> signat option
 
     val sig_handle : handler -> signat -> signat
     val exp_handle : handler -> exp -> exp

@@ -623,7 +623,6 @@ structure IlUtil :> ILUTIL =
 			   bound_modvar = nil,
 			   bound_sigvar = nil}
       fun default_flex_handler _ = false
-      fun default_sig_handler _ = NONE
 
     in
 
@@ -631,17 +630,19 @@ structure IlUtil :> ILUTIL =
       fun default_exp_handler _ = NONE
       fun default_con_handler _ = NONE
       fun default_mod_handler _ = NONE
+      fun default_sig_handler _ = NONE
 
       type handler = (exp -> exp option) * (con -> con option) *
-	              (mod -> mod option) * (sdec -> sdec option)
+	              (mod -> mod option) * (sdec -> sdec option) *
+		      (signat -> signat option)
        local
-	   fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) =
+	   fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler, sig_handler) =
 	       STATE(default_bound,
 		     {sdec_handler = fn (_,sd) => sdec_handler sd,
 		      exp_handler = fn (e,_) => exp_handler e,
 		      con_handler = fn (c,_) => con_handler c,
 		      mod_handler = fn (m,_) => mod_handler m,
-		      sig_handler = default_sig_handler})
+		      sig_handler = fn (s,_) => sig_handler s})
        in
 	   fun exp_handle handlers = f_exp (all_handlers handlers)
 	   fun con_handle handlers = f_con (all_handlers handlers)
@@ -1166,7 +1167,8 @@ structure IlUtil :> ILUTIL =
 	    val handler = (default_exp_handler,
 			   con_handler,
 			   default_mod_handler,
-			   default_sdec_handler)
+			   default_sdec_handler,
+			   default_sig_handler)
 	    fun is_default (con,exp) = ((con_handle handler con; false)
 					handle Seen => true)
 (*
