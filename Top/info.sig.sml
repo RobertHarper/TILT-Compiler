@@ -14,7 +14,8 @@ sig
 		 constrained : bool,			(* Was last elaboration constrained?  *)
 		 imports : UnitEnvironment.ue,		(* Contexts imported during last elaboration. *)
 		 exports : UnitEnvironment.ue}		(* Contexts provided by last elaboration. *)
-	
+
+    val validUnit : string -> bool	(* Check unit name *)
     val read : string -> info
     val write : string * info -> unit
     val equal : info * info -> bool
