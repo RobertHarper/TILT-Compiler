@@ -35,13 +35,13 @@ functor Datatype(structure Il : IL
 		 | _ => error "xdatbind does not handle withtypes yet")
 	(* --------- create labels and variables; compute indices --------------- *)
 	val p = length std_list
-	val tc_list = map (fn (s,_,_) => symbol2label s) std_list
+	val tc_list = map (fn (s,_,_) => symbol_label s) std_list
 	val varty_list = map (fn _ => fresh_named_var "vty") std_list
 	val vardt_list = map (fn _ => fresh_named_var "vdt") std_list
-	val tv_list = flatten (map (fn (_,tyvars,_) => map (symbol2label o tyvar_strip) tyvars) std_list)
+	val tv_list = flatten (map (fn (_,tyvars,_) => map (symbol_label o tyvar_strip) tyvars) std_list)
 	val k = length tv_list
 	val varpoly_list = map (fn _ => fresh_named_var "poly") tv_list
-	val lbl_poly = fresh_named_open_label "lbl_poly"
+	val lbl_poly = fresh_open_internal_label "lbl_poly"
 	val (var_poly,var_all) = (fresh_named_var "vpoly",fresh_named_var "vall")
 	val tys : Ast.ty option list list = map (fn (_,_,def) => map #2 def) std_list
 	val ids = map (fn (_,_,def) => map #1 def) std_list
@@ -197,7 +197,7 @@ functor Datatype(structure Il : IL
 	      in (SBND(id_ij,BND_MOD(fresh_var(),module)),
 		  SDEC(id_ij,DEC_MOD(fresh_var(),signat)))
 	      end
-	    val temp = map3 inner_help (map symbol2label id_i, expcon_mk_i, expcon_km_i)
+	    val temp = map3 inner_help (map symbol_label id_i, expcon_mk_i, expcon_km_i)
 	    val (sbnds,sdecs) = (map #1 temp, map #2 temp)
 	    val inner_mod = MOD_STRUCTURE(sbnd1::sbnd2::sbnd3::sbnds)
 	    val inner_sig = SIGNAT_STRUCTURE(sdec1::sdec2::sdec3::sdecs)
@@ -207,7 +207,7 @@ functor Datatype(structure Il : IL
 	  end
 	val temp = map6count help (tc_list, ids, exp_con_mk, exp_con_km, exp_con_case, exp_con_expose)
 	local
-	  val lbl = fresh_int_label()
+	  val lbl = internal_label "lbl"
 	in 
 	  val help_con = if (is_onedatatype)
 			     then CON_MUPROJECT(0,con_all)
@@ -238,7 +238,7 @@ functor Datatype(structure Il : IL
 	  val nodes = mapcount (fn (i,arg) => (i,db_strip arg)) datatycs
 	  val syms = map (fn (_,(s,_,_)) => s) nodes
 	  fun help (_,NONE) = []
-	    | help (_,SOME ty) = let val s = free_tyc_ty(ty,[])
+	    | help (_,SOME ty) = let val s = free_tyc_ty(ty,fn _ => false)
 				 in list_inter(s,syms)
 				 end
 	  fun lookupint [] tari = error "lookupint should not fail"
@@ -252,22 +252,23 @@ functor Datatype(structure Il : IL
 	  fun get_edges (i,(s,tyvars,def)) = (map (fn x => (i,x))
 					      (map (lookup nodes) (flatten (map help def))))
 	  val edges = flatten (map get_edges nodes)
-	  val comps = GraphUtil.scc numnodes edges
+	  val comps = rev(GraphUtil.scc numnodes edges)
 	  val sym_tyvar_def_listlist = mapmap (lookupint nodes) comps
-	end
-        (* ---- call the main routine for each list of datatypes;
-         ---- combine the modules and signatures into sbnds and sdecs *)
-	val mod_sig_list = (map (fn std_list => driver(typecompile,context,std_list,withtycs)) 
-			    sym_tyvar_def_listlist)
-	val sbnds_sdecs = map (fn (m,s) => let val l = fresh_open_label()
-					      val v = fresh_var()
-					  in (SBND(l,BND_MOD(v,m)),
-					      SDEC(l,DEC_MOD(v,s)))
-					  end) mod_sig_list
-      in sbnds_sdecs
+	end (* local *)
+        (* ---- call the main routine for each list of datatypes retaining the accumulated context *)
+	fun loop context acc [] = acc
+	  | loop context acc (std_list::rest) = 
+	    let val (m,s) = driver(typecompile,context,std_list,withtycs)
+		val l = fresh_open_internal_label "lbl"
+		val v = fresh_var()
+		val sbnd = SBND(l,BND_MOD(v,m))
+		val sdec = SDEC(l,DEC_MOD(v,s))
+		val context' = add_context_sdecs(context,[sdec])
+		val acc' = (sbnd,sdec)::acc
+	    in loop context' acc' rest
+	    end
+      in loop context [] sym_tyvar_def_listlist
       end
-
-
 
     (* ---------------- constructor LOOKUP RULES --------------------------- 
      --------------------------------------------------------- *)
@@ -278,7 +279,7 @@ functor Datatype(structure Il : IL
 			  print "\nand with context = ";
 			  pp_context context;
 			  print "\n"));
-       (case (modsig_lookup(context,map symbol2label p)) of
+       (case (modsig_lookup(context,map symbol_label p)) of
 	    NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup returned NONE\n");
 		     NONE)
 	  | SOME (path_mod,m,constr_sig as
@@ -384,14 +385,12 @@ functor Datatype(structure Il : IL
        ---   and an sdec corresponding to a particular datatype arm dec
        --- returns the name of the construtor and a list for the carried types *)
      fun getconstr_namepatconoption datacon var_sdecs_option {name,arg_type} =
-	let 
-	  val rescon = fresh_con()
-	in {name=name,
-	    arg_type=(case (arg_type,var_sdecs_option) of
-			  (NONE,_) => NONE
-			| (SOME x,NONE) => SOME x
-			| (SOME x,SOME(var_poly,sdecs)) => SOME(remove_modvar_type(x,var_poly,sdecs)))}
-	end
+	 {name=name,
+	  arg_type=(case (arg_type,var_sdecs_option) of
+			(NONE,_) => NONE
+		      | (SOME x,NONE) => SOME x
+		      | (SOME x,SOME(var_poly,sdecs)) => SOME(remove_modvar_type(x,var_poly,sdecs)))}
+	 
 
      val {name,abstract_type,var_poly,
 	  sdecs_poly,arm_types} = destructure_datatype_signature datatype_sig
@@ -418,7 +417,7 @@ functor Datatype(structure Il : IL
 
    fun old_exn_lookup context path : {name : Il.label,
 				  carried_type : Il.con option} option =
-       (case (modsig_lookup(context,map symbol2label path)) of
+       (case (modsig_lookup(context,map symbol_label path)) of
 	  NONE=> NONE
 	| SOME (path_mod,m,exn_sig as 
 		SIGNAT_STRUCTURE [SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]) =>
@@ -438,7 +437,7 @@ functor Datatype(structure Il : IL
 
    fun exn_lookup context path : {stamp : Il.exp,
 				  carried_type : Il.con option} option =
-       (case (modsig_lookup(context,map symbol2label path)) of
+       (case (modsig_lookup(context,map symbol_label path)) of
 	  NONE=> NONE
 	| SOME (path_mod,m,exn_sig as 
 		SIGNAT_STRUCTURE [SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]) =>

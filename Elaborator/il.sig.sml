@@ -29,7 +29,7 @@ signature IL =
                  | VAR     of var
                  | APP     of exp * exp
                  | FIX     of fbnd list * var
-                 | RECORD  of rbnd list
+                 | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp
                  | HANDLE  of exp * exp      
@@ -52,12 +52,16 @@ signature IL =
                  | MODULE_PROJECT of mod * label
                  | SEAL    of exp * con
 
-    and     rbnd = RBND    of label * exp
                               (* var = (var : con) : con |-> exp *)
     and     fbnd = FBND    of var * var * con * con * exp  
+
+    and flexinfo = FLEXINFO of (Tyvar.stamp * bool * (label * con) list)
+	         | INDIRECT_FLEXINFO of flexinfo ref (* <--- this ref is necessary for unification *)
+
     and      con = CON_VAR           of var
-                 | CON_TYVAR         of con Tyvar.tyvar  (* supports type inference *)
-                 | CON_OVAR          of con Tyvar.ocon   (* supports "overloaded" types *)
+                 | CON_TYVAR         of (decs,con) Tyvar.tyvar  (* supports type inference *)
+                 | CON_OVAR          of (decs,con) Tyvar.ocon   (* supports "overloaded" types *)
+                 | CON_FLEXRECORD    of flexinfo ref
                  | CON_INT           of Prim.intsize
                  | CON_UINT          of Prim.intsize
                  | CON_FLOAT         of Prim.floatsize
@@ -69,18 +73,16 @@ signature IL =
                  | CON_ARROW         of con * con * (arrow Util.oneshot)
                  | CON_APP           of con * con
                  | CON_MUPROJECT     of int * con
-                 | CON_RECORD        of rdec list
+                 | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
                  | CON_SUM           of int option * con list
                  | CON_TUPLE_INJECT  of con list
                  | CON_TUPLE_PROJECT of int * con 
                  | CON_MODULE_PROJECT of mod * label
-    and     rdec = RDEC    of label * con
     and     kind = KIND_TUPLE of int
                  | KIND_ARROW of int * int
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
-(*                 | MOD_DATATYPE  of Ast.db list * Ast.tb list * sbnd list *)
                  | MOD_FUNCTOR of var * signat * mod
                  | MOD_APP of mod * mod
                  | MOD_PROJECT of mod * label
@@ -91,7 +93,6 @@ signature IL =
                  | BND_CON of var * con
                  | BND_FIXITY    of fixity_table
     and   signat = SIGNAT_STRUCTURE       of sdec list
-                 | SIGNAT_DATATYPE of Ast.db list * Ast.tb list * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * (arrow Util.oneshot)
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con
@@ -99,23 +100,22 @@ signature IL =
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
                  | DEC_FIXITY    of fixity_table
+    and inline = INLINE_MODSIG of mod * signat
+                    | INLINE_EXPCON of exp * con
+                    | INLINE_CONKIND of con * kind
+                    | INLINE_OVER   of unit -> exp * (decs,con) Tyvar.ocon
+
+    and context_entry = CONTEXT_INLINE of label * var * inline
+                      | CONTEXT_SDEC   of sdec
+                      | CONTEXT_SIGNAT of label * var * signat
+                      | CONTEXT_SCOPED_TYVAR of Symbol.symbol list             
+    and context = CONTEXT of context_entry list
+
     withtype value = exp Prim.value
+    and decs = dec list
 
     type bnds  = bnd list
     type sdecs = sdec list
     type sbnds = sbnd list
-    type decs = dec list
-
-
-    datatype inline = INLINE_MODSIG of mod * signat
-                    | INLINE_EXPCON of exp * con
-                    | INLINE_CONKIND of con * kind
-                    | INLINE_OVER   of unit -> (int -> exp) * con Tyvar.ocon
-
-    datatype context_entry = CONTEXT_INLINE of label * var * inline
-                           | CONTEXT_SDEC   of sdec
-                           | CONTEXT_SIGNAT of label * var * signat
-                           | CONTEXT_SCOPED_TYVAR of Symbol.symbol list             
-    datatype context = CONTEXT of context_entry list
 
   end

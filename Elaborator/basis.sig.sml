@@ -5,7 +5,8 @@ signature BASIS =
     structure Datatype : DATATYPE
 
     val empty_context : Il.context
-    val initial_context : (Il.exp -> Il.con) * (Il.mod -> Il.signat) * (Il.context * Ast.ty -> Il.con)
+    val initial_context : (Il.exp -> Il.con) * (Il.con -> Il.kind) * 
+	(Il.mod -> Il.signat) * (Il.context * Ast.ty -> Il.con)
 	-> Il.context * Il.sbnd list
 
   end;

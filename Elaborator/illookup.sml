@@ -23,7 +23,7 @@ functor IlLookup(structure Il : IL
                     | PHRASE_CON of con
                     | PHRASE_MOD of mod
                     | PHRASE_SIG of signat
-                    | PHRASE_OVEREXP of unit -> (int -> Il.exp) * Il.con Il.Tyvar.ocon
+                    | PHRASE_OVEREXP of unit -> Il.exp * (Il.decs,Il.con) Il.Tyvar.ocon
 
     datatype class = CLASS_EXP of con
                    | CLASS_CON of kind
@@ -35,7 +35,7 @@ functor IlLookup(structure Il : IL
                           | PHRASE_CLASS_CON  of con * kind
                           | PHRASE_CLASS_MOD  of mod * signat
                           | PHRASE_CLASS_SIG  of signat
-                          | PHRASE_CLASS_OVEREXP of unit -> (int -> Il.exp) * Il.con Il.Tyvar.ocon
+                          | PHRASE_CLASS_OVEREXP of unit -> Il.exp * (Il.decs,Il.con) Il.Tyvar.ocon
 
     type phrase_class_p = path * phrase_class
 

@@ -21,18 +21,18 @@ functor IlUtil(structure Ppil : PPIL
     
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
-    fun fresh_named_con s = CON_TYVAR (fresh_named_tyvar s)
-    fun fresh_con () = fresh_named_con "c"
+    fun fresh_named_con (ctxt,s) = CON_TYVAR (fresh_named_tyvar (ctxt,s))
+    fun fresh_con ctxt = fresh_named_con (ctxt,"con")
     fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
-    fun generate_tuple_label (i : int) = symbol2label(generate_tuple_symbol i)
+    fun generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
       
-    val mk_lab = fresh_named_int_label "mk"
-    val km_lab = fresh_named_int_label "km"
-    val it_lab = fresh_named_int_label "it"
-    val case_lab = fresh_named_int_label "case"
-    val expose_lab = fresh_named_int_label "expose"
-    val eq_lab = fresh_named_int_label "eq"
-    val functor_arg_lab = fresh_named_int_label "functor_arg"
+    val mk_lab = internal_label "mk"
+    val km_lab = internal_label "km"
+    val it_lab = internal_label "it"
+    val case_lab = internal_label "case"
+    val expose_lab = internal_label "expose"
+    val eq_lab = internal_label "eq"
+    val functor_arg_lab = internal_label "functor_arg"
 
 
     val unit_exp : exp = RECORD[]
@@ -46,9 +46,9 @@ functor IlUtil(structure Ppil : PPIL
     val failexn_exp = EXN_INJECT(fail_tag,unit_exp)
     val bindexn_exp = EXN_INJECT(bind_tag,unit_exp)
     val matchexn_exp = EXN_INJECT(match_tag,unit_exp)
-    fun con_tuple conlist = CON_RECORD(mapcount (fn (i,c) => RDEC(generate_tuple_label (i+1),c)) conlist)
-    fun con_record symconlist = CON_RECORD(map (fn (s,c) => RDEC(symbol2label s,c))  symconlist)
-    fun exp_tuple explist = RECORD(mapcount (fn (i,e) => RBND(generate_tuple_label (i+1),e)) explist)
+    fun con_tuple conlist = CON_RECORD(mapcount (fn (i,c) => (generate_tuple_label (i+1),c)) conlist)
+    fun con_record symconlist = CON_RECORD(map (fn (s,c) => (symbol_label s,c))  symconlist)
+    fun exp_tuple explist = RECORD(mapcount (fn (i,e) => (generate_tuple_label (i+1),e)) explist)
     val con_string = CON_VECTOR (CON_UINT W8)
     val con_bool = CON_MUPROJECT(0,CON_FUN([fresh_named_var "dummy"],CON_SUM(NONE,[con_unit,con_unit])))
     val false_exp = ROLL(con_bool,INJ([con_unit,con_unit], 0, unit_exp))
@@ -136,7 +136,6 @@ functor IlUtil(structure Ppil : PPIL
 	      | (_,(DEC_FIXITY _ | 
 		    DEC_EXCEPTION _ | DEC_EXP _ | DEC_MOD _)) => [])
 	  and sighelp (SIGNAT_STRUCTURE sdecs) = flatten(map sdechelp sdecs)
-	    | sighelp (SIGNAT_DATATYPE (_,_,sdecs)) = flatten(map sdechelp sdecs)
 	    | sighelp (SIGNAT_FUNCTOR _) = []
 	  fun loop [] = []
 	    | loop (CONTEXT_SDEC(SDEC(l,dec))::rest) = 
@@ -157,7 +156,6 @@ functor IlUtil(structure Ppil : PPIL
 	    | (_,(DEC_CON _ | DEC_FIXITY _ | 
 		  DEC_EXCEPTION _ | DEC_EXP _ | DEC_MOD _)) => [])
 	 and sighelp (SIGNAT_STRUCTURE sdecs) = flatten(map sdechelp sdecs)
-	   | sighelp (SIGNAT_DATATYPE (_,_,sdecs)) = flatten(map sdechelp sdecs)
 	   | sighelp (SIGNAT_FUNCTOR _) = []
 	 fun loop [] = []
 	   | loop (CONTEXT_SDEC(SDEC(l,(DEC_MOD(v, s))))::rest) = 
@@ -194,7 +192,8 @@ functor IlUtil(structure Ppil : PPIL
 				  bound_var : var list,
 				  bound_modvar : var list} *
 				 {sdec_handler : state * sdec -> sdec option,
-				  tyvar_handler : con tyvar -> con option,
+				  tyvar_handler : (decs,con) tyvar -> con option,
+				  flex_handler : flexinfo ref -> bool,
 				  convar_handler : (var * var list) -> con option,
 				  var_handler : (var * var list) -> exp option,
 				  modvar_handler : (var * var list) -> mod option,
@@ -275,7 +274,8 @@ functor IlUtil(structure Ppil : PPIL
 	let 
 	    val self = f_con state
 	    val STATE({bound_convar,...},
-		      {convar_handler,con_app_handler,con_proj_handler,tyvar_handler,...}) = state
+		      {convar_handler,con_app_handler,con_proj_handler,
+		       tyvar_handler,flex_handler,...}) = state
 	in
 	  (case con of
 	     CON_TYVAR tyvar => (case (tyvar_handler tyvar) of
@@ -298,6 +298,18 @@ functor IlUtil(structure Ppil : PPIL
 				 | SOME c => c)
 	   | CON_MUPROJECT (i,c) =>  CON_MUPROJECT (i, self c)
 	   | CON_RECORD rdecs => CON_RECORD (map (f_rdec state) rdecs)
+	   | CON_FLEXRECORD r => (* don't dereference until flex_handler called *)
+		 if (flex_handler r)
+		     then con
+		 else
+		     (case (!r) of  
+			 (FLEXINFO (stamp,true,rdecs)) => CON_RECORD (map (f_rdec state) rdecs)
+		       | (FLEXINFO (stamp,false,rdecs)) => 
+			     let val res = map (f_rdec state) rdecs
+				 val _ = r := FLEXINFO(stamp,false,res)
+			     in con
+			     end
+		       | (INDIRECT_FLEXINFO rf) => self (CON_FLEXRECORD rf))
 	   | CON_FUN (vars,c) => let val state' = add_convars(state,vars)
 				 in CON_FUN(vars,f_con state' c)
 				 end
@@ -315,7 +327,6 @@ functor IlUtil(structure Ppil : PPIL
 			     NONE => m
 			   | SOME m' => m')
 	 | MOD_STRUCTURE sbnds => MOD_STRUCTURE (map (f_sbnd state) sbnds)
-(*	 | MOD_DATATYPE (dt,tb,sbnds) => MOD_DATATYPE(dt,tb,map (f_sbnd state) sbnds) *)
 	 | MOD_FUNCTOR (v,s,m) => MOD_FUNCTOR (v, f_signat state s, f_mod state m)
 	 | MOD_APP (m1,m2) => MOD_APP (f_mod state m1, f_mod state m2)
 	 | MOD_PROJECT (m,l) => MOD_PROJECT (f_mod state m, l)
@@ -324,15 +335,14 @@ functor IlUtil(structure Ppil : PPIL
       and f_signat (state : state) (s : signat) : signat = 
 	(case s of
 	   SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (map (f_sdec state) sdecs)
-	 | SIGNAT_DATATYPE(dt,tb,sdecs) => SIGNAT_DATATYPE(dt,tb, (map (f_sdec state) sdecs))
 	 | SIGNAT_FUNCTOR (v,s1,s2,comp) => SIGNAT_FUNCTOR(v, f_signat state s1, f_signat state s2, comp))
 
-      and f_rbnd state (RBND(l,e)) : rbnd = RBND(l, f_exp state e)
+      and f_rbnd state (l,e) = (l, f_exp state e)
       and f_fbnd state (FBND(vname,varg,carg,cres,e)) : fbnd =
 	   let val state' = add_var(state,varg)
 	   in FBND(vname,varg,f_con state' carg,f_con state' cres,f_exp state' e)
 	   end
-      and f_rdec (state) (RDEC(l,c)) : rdec = RDEC(l, f_con state c)
+      and f_rdec (state) (l,c) = (l, f_con state c)
       and f_sbnd (state) (SBND(l,bnd)) : sbnd = SBND(l, f_bnd state bnd)
       and f_sdec (state as STATE(_,{sdec_handler,...})) (sdec as (SDEC(l,dec))) : sdec = 
 	  (case (sdec_handler (state,sdec)) of
@@ -363,6 +373,7 @@ functor IlUtil(structure Ppil : PPIL
 			   bound_modvar = default_bound_modvar}
       fun default_convar_handler _ = NONE
       fun default_tyvar_handler _ = NONE
+      fun default_flex_handler _ = false
       fun default_var_handler _ = NONE
       fun default_sdec_handler _ = NONE
       fun default_modvar_handler _ = NONE
@@ -371,6 +382,7 @@ functor IlUtil(structure Ppil : PPIL
       fun default_exp_proj_handler _ = NONE
       val default_handler = {convar_handler = default_convar_handler,
 			     tyvar_handler = default_tyvar_handler,
+			     flex_handler = default_flex_handler,
 			     var_handler = default_var_handler,
 			     sdec_handler = default_sdec_handler,
 			     modvar_handler = default_modvar_handler,
@@ -381,7 +393,7 @@ functor IlUtil(structure Ppil : PPIL
 
     in
 
-      fun con_occurs(argcon : con, origtv : con tyvar) : bool =
+      fun con_occurs(argcon : con, origtv : (decs,con) tyvar) : bool =
 	let 
 	  val occurs = ref false
 	  fun tyvar_handler tv = (if eq_tyvar(tv,origtv) 
@@ -390,6 +402,7 @@ functor IlUtil(structure Ppil : PPIL
 	  val handlers = STATE(default_bound,
 			       {convar_handler = default_convar_handler,
 				tyvar_handler = tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
 				modvar_handler = default_modvar_handler,
@@ -410,6 +423,7 @@ functor IlUtil(structure Ppil : PPIL
 	  val handlers = STATE(default_bound,
 			       {convar_handler = convar_handler,
 				tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
 				modvar_handler = default_modvar_handler,
@@ -421,39 +435,44 @@ functor IlUtil(structure Ppil : PPIL
 	end
 
 
-      fun rebind_free_type_var(argcon : con, context, targetv : var) : (label * bool) list = 
+      fun rebind_free_type_var(tv_stamp : stamp,
+			       argcon : con, context, targetv : var) 
+	  : ((decs,con)Tyvar.tyvar * label * bool) list = 
 	let 
-	    val _ = (print "rebind_free_type_var called on argcon = ";
-		     pp_con argcon;
-		     print "\n")
+	    val _ = debugdo (fn () => (print "rebind_free_type_var called on argcon = ";
+				       pp_con argcon;
+				       print "\n"))
 	  val bound_convar = Context_Get_BoundConvars(context)
-	  val free_tyvar = ref ([] : con Tyvar.tyvar list)
+	  val free_tyvar = ref ([] : (decs,con) Tyvar.tyvar list)
 	  fun tyvar_handler tv = ((case (tyvar_deref tv) of
 					    SOME _ => ()
 					  | NONE => (if (not (member_eq(eq_tyvar,tv,!free_tyvar))
-							 andalso not (tyvar_isconstrained tv))
+							 andalso not (tyvar_isconstrained tv)
+							 andalso (tyvar_after tv_stamp tv))
 						       then free_tyvar := (tv::(!free_tyvar))
 						     else ()));
 					 NONE)
+	  fun flex_handler (r as (ref (FLEXINFO (stamp,resolved,rdecs)))) =
+	      (r := FLEXINFO(stamp,true,rdecs);
+	       false)
 	  val handlers = STATE(default_bound,
 			       {var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
 				modvar_handler = default_modvar_handler,
 				tyvar_handler = tyvar_handler,
+				flex_handler = flex_handler,
 				convar_handler = default_convar_handler,
 				con_proj_handler = default_con_proj_handler,
 				con_app_handler = default_con_app_handler,
 				exp_proj_handler = default_exp_proj_handler})
 	  val _ = f_con handlers argcon
-	  val res = map (fn tv => (fresh_int_label(),tyvar_is_use_equal tv)) (!free_tyvar)
-	  val _ = (map2 (fn (tv,(lbl,useeq)) => 
-			 let val proj = if useeq
-					  then (CON_MODULE_PROJECT
-						(MOD_PROJECT(MOD_VAR targetv, openlabel lbl),lbl))
-					else CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
+	  val res = map (fn tv => (tv, internal_label (tyvar2string tv),
+				   tyvar_is_use_equal tv)) (!free_tyvar)
+	  val _ = (map (fn (tv,lbl,useeq) => 
+			 let val proj = CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
 			 in tyvar_set(tv,proj)
 			 end)
-		   (!free_tyvar,res))
+		   res)
 	in res
 	end
 
@@ -509,6 +528,7 @@ functor IlUtil(structure Ppil : PPIL
 	    | sdec_handler (state,sdec) = NONE
 	  val handlers = STATE(default_bound,
 			       {tyvar_handler = tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				convar_handler = default_convar_handler,
 				sdec_handler = sdec_handler,
@@ -559,6 +579,7 @@ functor IlUtil(structure Ppil : PPIL
 		   | NONE => NONE)
 	    val handlers = STATE(default_bound,
 				 {tyvar_handler = default_tyvar_handler,
+				  flex_handler = default_flex_handler,
 				  var_handler = var_handler,
 				  convar_handler = convar_handler,
 				  sdec_handler = default_sdec_handler,
@@ -589,6 +610,7 @@ functor IlUtil(structure Ppil : PPIL
 	       | NONE => NONE)
 	    val handlers = STATE(default_bound,
 				 {tyvar_handler = default_tyvar_handler,
+				  flex_handler = default_flex_handler,
 				  var_handler = default_var_handler,
 				  convar_handler = convar_handler,
 				  sdec_handler = default_sdec_handler,
@@ -604,6 +626,7 @@ functor IlUtil(structure Ppil : PPIL
 	  fun convar_handler (var,bound) = assoc_eq(eq_var,var,table)
 	  val handlers = STATE(default_bound,
 			       {tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				convar_handler = convar_handler,
 				var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
@@ -621,6 +644,7 @@ functor IlUtil(structure Ppil : PPIL
 					      else assoc_eq(eq_var,var,table)
 	  fun handlers table = STATE(default_bound,
 			       {tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = var_handler table,
 				convar_handler = default_convar_handler,
 				sdec_handler = default_sdec_handler,
@@ -643,6 +667,7 @@ functor IlUtil(structure Ppil : PPIL
 					   else assoc_eq(eq_var,var,table)
 	  fun handlers table = STATE(default_bound,
 			       {tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				convar_handler = convar_handler table,
 				sdec_handler = default_sdec_handler,
@@ -663,6 +688,7 @@ functor IlUtil(structure Ppil : PPIL
 					   else assoc_eq(eq_var,var,table)
 	  fun handlers table = STATE(default_bound,
 			       {tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				convar_handler = default_convar_handler,
 				sdec_handler = default_sdec_handler,
@@ -681,6 +707,7 @@ functor IlUtil(structure Ppil : PPIL
 	let 
 	  val handlers = STATE(default_bound,
 			       {tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				convar_handler = default_convar_handler,
 				sdec_handler = default_sdec_handler,
@@ -691,40 +718,56 @@ functor IlUtil(structure Ppil : PPIL
 	in f_con handlers argcon
 	end
 
-      fun exp_subst_proj(argexp : exp, exp_proj_handler) : exp = 
+      fun exp_subst_proj(argexp : exp, exp_proj_handler, con_proj_handler) : exp = 
 	let 
 	  val handlers = STATE(default_bound,
 			       {tyvar_handler = default_tyvar_handler,
+				flex_handler = default_flex_handler,
 				convar_handler = default_convar_handler,
 				var_handler = default_var_handler,
 				sdec_handler = default_sdec_handler,
 				modvar_handler = default_modvar_handler,
-				con_proj_handler = default_con_proj_handler,
+				con_proj_handler = con_proj_handler,
 				con_app_handler = default_con_app_handler,
 				exp_proj_handler = exp_proj_handler})
 	in f_exp handlers argexp
 	end
 
-      fun con_constrain argcon =
-	let 
-	  fun tyvar_handler tyvar = (tyvar_constrain tyvar; NONE)
-	  val handlers = STATE(default_bound,
-			       {tyvar_handler = tyvar_handler,
-				var_handler = default_var_handler,
-				convar_handler = default_convar_handler,
-				sdec_handler = default_sdec_handler,
-				modvar_handler = default_modvar_handler,
-				con_proj_handler = default_con_proj_handler,
-				con_app_handler = default_con_app_handler,
-				exp_proj_handler = default_exp_proj_handler})
-	in (f_con handlers argcon; ())
-	end
+      fun con_constrain  (argcon, param as {constrain : bool, 
+					    stamp = stampopt : Il.Tyvar.stamp option,
+					    eq_constrain : bool}) = 
+	  let 
+	      fun tyvar_handler tyvar = (if constrain then tyvar_constrain tyvar else (); 
+					 if eq_constrain then tyvar_use_equal tyvar else (); 
+					 (case stampopt of
+					      SOME stamp => update_stamp(tyvar,stamp)
+					    | NONE => ());
+					 NONE)
+	      fun flex_handler (r as (ref (FLEXINFO (stamp,resolved,rdecs)))) =
+		  (app (fn (_,c) => con_constrain(c,param)) rdecs;
+		   (case stampopt of
+			SOME s => r := FLEXINFO(stamp_join(s,stamp),resolved,rdecs)
+		      | NONE => ());
+		   true)
+	      val handlers = STATE(default_bound,
+				     {tyvar_handler = tyvar_handler,
+				      flex_handler = flex_handler,
+				      var_handler = default_var_handler,
+				      convar_handler = default_convar_handler,
+				      sdec_handler = default_sdec_handler,
+				      modvar_handler = default_modvar_handler,
+				      con_proj_handler = default_con_proj_handler,
+				      con_app_handler = default_con_app_handler,
+				      exp_proj_handler = default_exp_proj_handler})
+	  in (f_con handlers argcon; ())
+	  end
 
       fun con_useeq argcon =
 	let 
 	  fun tyvar_handler tyvar = (tyvar_use_equal tyvar; NONE)
 	  val handlers = STATE(default_bound,
 			       {tyvar_handler = tyvar_handler,
+				flex_handler = default_flex_handler,
 				var_handler = default_var_handler,
 				convar_handler = default_convar_handler,
 				sdec_handler = default_sdec_handler,
@@ -754,6 +797,7 @@ functor IlUtil(structure Ppil : PPIL
 							NONE)
 	      val handlers = STATE(default_bound,
 				   {tyvar_handler = default_tyvar_handler,
+				    flex_handler = default_flex_handler,
 				    var_handler = expvar_handler,
 				    convar_handler = default_convar_handler,
 				    sdec_handler = default_sdec_handler,
@@ -778,6 +822,7 @@ functor IlUtil(structure Ppil : PPIL
 							NONE)
 	      val handlers = STATE(default_bound,
 				   {tyvar_handler = default_tyvar_handler,
+				    flex_handler = default_flex_handler,
 				    var_handler = default_var_handler,
 				    convar_handler = default_convar_handler,
 				    sdec_handler = default_sdec_handler,
@@ -807,6 +852,7 @@ functor IlUtil(structure Ppil : PPIL
 						then NONE else assoc_eq(eq_var,var,mtable)
 	      val handlers = STATE(default_bound,
 				   {tyvar_handler = default_tyvar_handler,
+				    flex_handler = default_flex_handler,
 				    var_handler = var_handler,
 				    convar_handler = convar_handler,
 				    sdec_handler = default_sdec_handler,
@@ -924,7 +970,6 @@ functor IlUtil(structure Ppil : PPIL
 	let fun lookup(signat,lbl) : (class * labels) =
 	    (case signat of
 		 SIGNAT_FUNCTOR _ => raise (NOTFOUND "Signat_Lookup reached a functor signature")
-	       | SIGNAT_DATATYPE (_,_,sdecs) => lookup(SIGNAT_STRUCTURE sdecs,lbl)
 	       | SIGNAT_STRUCTURE sdecs => 
 		     let
 			 fun loop [] = raise (NOTFOUND "Signat_Lookup reached []")

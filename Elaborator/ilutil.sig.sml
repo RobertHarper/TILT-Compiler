@@ -17,9 +17,10 @@ signature ILUTIL =
     type context = Il.context
     type context_entry = Il.context_entry
     type tag = Il.tag
+    type decs = Il.decs
 
-    val fresh_con : unit -> con
-    val fresh_named_con : string -> con
+    val fresh_con : decs -> con
+    val fresh_named_con : decs * string -> con
 
 
     (* context extenders and extractors *)
@@ -126,7 +127,8 @@ signature ILUTIL =
     (* mod_free_expvar : given a module, return all free expression variables  *)
     val mod_free_expvar : mod -> var list
 
-    (*  con_constrain: given a con, constrain all free tyvars 
+    (*  
+       con_constrain: given a con, constrain, update stamp, eq_constrain all unset tyvars 
        con_useeq: given a con, use_eq all free tyvars
        con_free_convar: given a con, return all free convars
        con_free_modvar: given a con, return all free modvars
@@ -138,11 +140,13 @@ signature ILUTIL =
                   performs a substitution(i.e. beta reduction. *)
 
 
-    val con_constrain  : con -> unit
+    val con_constrain  : con * {constrain : bool, 
+				stamp : Il.Tyvar.stamp option,
+				eq_constrain : bool} -> unit
     val con_useeq      : con -> unit
     val con_free_convar : con -> var list
     val con_free_modvar : con -> var list
-    val con_occurs     : con * con Il.Tyvar.tyvar -> bool
+    val con_occurs     : con * (decs,con) Il.Tyvar.tyvar -> bool
     val con_subst_var  : (con * (var * con) list) -> con 
     val ConApply       : con * con -> con
 
@@ -151,8 +155,12 @@ signature ILUTIL =
         exp_subst_var: given an exp and a (variable,exp) assoc list,
                      returns the exp in which each var is substituted 
 		        according to the assoc list. 
-        exp_subst_proj: given an exp and a function f, substitute each 
+        exp_subst_eproj: given an exp and a function f, substitute each 
                            expression module projection m.l with x if 
+			       the call "f(m,l)" returns "SOME x"; otherwise,
+			       leave the projection alone
+        exp_subst_cproj: given an exp and a function f, substitute each 
+                           type-level module projection m.l with x if 
 			       the call "f(m,l)" returns "SOME x"; otherwise,
 			       leave the projection alone
 	con_subst_conapps: given a con and a function f, substitue each CON_APP(c1,c2)
@@ -183,7 +191,7 @@ signature ILUTIL =
 			       *)
     val exp_subst_var  : (exp * (var * exp) list) -> exp
     val con_subst_var_withproj    : (con * Il.sdec list * mod) -> con
-    val exp_subst_proj    : (exp * (mod * label -> exp option)) -> exp
+    val exp_subst_proj    : (exp * (mod * label -> exp option) * (mod * label -> con option)) -> exp
     val con_subst_conapps : (con * (con * con -> con option)) -> con
 
     val remove_modvar_type : con * var * Il.sdecs -> con
@@ -192,7 +200,8 @@ signature ILUTIL =
     val add_modvar_type : con * mod * Il.sdecs -> con
     val add_modvar_sig : signat * mod * Il.sdecs -> signat
 
-    val rebind_free_type_var : con * context * var -> (label * bool) list
+    val rebind_free_type_var : Il.Tyvar.stamp * con * context * var -> 
+	                          ((Il.decs,Il.con)Il.Tyvar.tyvar * label * bool) list
 
     (* Travels the first bnd to locate free variables for exps, cons, and mods
        and substitute in the corresponding value give by the bnd list *)

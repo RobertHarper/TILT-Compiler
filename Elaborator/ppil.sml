@@ -51,12 +51,12 @@ functor Ppil(structure Il : IL
     local
       (* these 3 functions copied from ilutil.sml; no recursive modules... *)
       fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
-      fun generate_tuple_label (i : int) = symbol2label(generate_tuple_symbol i)
+      fun generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
       fun loop [] _ = true
-	| loop (l::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1) 
+	| loop ((l,_)::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1) 
     in
-      fun rdecs_is_tuple rdecs = loop(map (fn (RDEC(l,_)) => l) rdecs) 1
-      fun rbnds_is_tuple rbnds = loop(map (fn (RBND(l,_)) => l) rbnds) 1
+      fun rdecs_is_tuple rdecs = loop rdecs 1
+      fun rbnds_is_tuple rbnds = loop rbnds 1
     end
 
     fun wrapper pp out obj = 
@@ -91,7 +91,7 @@ functor Ppil(structure Il : IL
 
 
 
-    fun pp_con (seen : con tyvar list) (arg_con : con) : format = 
+    fun pp_con (seen : (decs,con) tyvar list) (arg_con : con) : format = 
       (case arg_con of
 	 CON_OVAR ocon => pp_con seen (CON_TYVAR (ocon_deref ocon))
        | CON_VAR var => pp_var var
@@ -99,6 +99,8 @@ functor Ppil(structure Il : IL
 	     let val varname = if (tyvar_isconstrained tyvar)
 				   then ("C" ^ tyvar2string tyvar)
 			       else tyvar2string tyvar
+		 val stamp = Int.toString(stamp2int (tyvar_stamp tyvar))
+		 val varname = varname ^ "_" ^ stamp
 	     in (case (tyvar_deref tyvar) of
 		     NONE => Hbox[String varname]
 		   | (SOME con) => (if (member_eq(eq_tyvar,tyvar,seen)) then
@@ -140,17 +142,31 @@ functor Ppil(structure Il : IL
        | CON_MUPROJECT(i,c) => pp_region ("CON_MUPROJECT(" ^ (Int.toString i) ^ "; ") ")"
 	                              [pp_con seen c]
        | CON_RECORD [] => String "UNIT"
-       | CON_RECORD rdecs => let val (format,doer) = if (rdecs_is_tuple rdecs)
-							   then (("{", " *","}", false), 
-								 fn (RDEC(l,c)) => pp_con seen c)
-							 else
-							   (("{", ",","}", false), 
-							    fn (RDEC(l,c)) => 
-							    Hbox[pp_label l,
-								 String " = ",
-								 pp_con seen c])
-				 in pp_list doer rdecs format
-				 end
+       | CON_FLEXRECORD (ref(FLEXINFO(_,true,[]))) => String "UNIT"
+       | CON_FLEXRECORD (ref(FLEXINFO(_,false,[]))) => String "FLEXUNIT"
+       | CON_FLEXRECORD (ref(INDIRECT_FLEXINFO rf)) => pp_con seen (CON_FLEXRECORD rf)
+       | (CON_RECORD _ | CON_FLEXRECORD (ref (FLEXINFO _))) =>
+	     let 
+		 val (isflex,rdecs) = 
+		     (case arg_con of
+			  CON_RECORD rdecs => (false,rdecs)
+			| CON_FLEXRECORD (ref (FLEXINFO(_,true,rdecs))) => (false,rdecs)
+			| CON_FLEXRECORD (ref (FLEXINFO(_,false,rdecs))) => (true,rdecs)
+                        | _ => error "must have record or direct flex_record here")
+		 val is_tuple = rdecs_is_tuple rdecs
+		 val format = (case (is_tuple,isflex) of
+				   (true,false) => ("{", " *","}", false)
+				 | (true,true) => ("{?", " *","?}", false)
+				 | (false,false) => ("{", ",","}", false)
+				 | (false,true) => ("{?", ",","?}", false))
+		 val doer = if is_tuple
+				then (fn (l,c) => pp_con seen c)
+			    else
+				(fn (l,c) => Hbox[pp_label l,
+						  String " = ",
+						  pp_con seen c])
+	     in pp_list doer rdecs format
+	     end
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
 				       pp_con seen con]
@@ -198,15 +214,6 @@ functor Ppil(structure Il : IL
     and pp_mod seen module =
 	  (case module of
 	     MOD_VAR var => pp_var var
-(*	   | MOD_DATATYPE (dblist,tblist,sbnds) => 
-	       HOVbox[String "DATATYPE(",
-		      Break,
-		      pp_list pp_db dblist ("DBs = ",", ","", true),
-		      Break,
-		      pp_list pp_tb tblist ("TBs = ",", ","", true),
-		      Break,
-		      pp_list (pp_sbnd seen) sbnds ("sbnds = [",", ","]", true),
-		      String ")"] *)
 	   | MOD_STRUCTURE sbnds => pp_list (pp_sbnd seen) sbnds ("STR[",", ","]", true)
 	   | MOD_FUNCTOR (v,s,m) => HOVbox[String "FUNC(",
 					   pp_var v,
@@ -282,10 +289,10 @@ functor Ppil(structure Il : IL
        | RECORD [] => String "unit"
        | RECORD rbnds =>  let val (format,doer) = if (rbnds_is_tuple rbnds)
 						    then (("(", ",",")", false), 
-							  fn (RBND(l,e)) => (pp_exp seen e))
+							  fn (l,e) => (pp_exp seen e))
 						  else
 						    (("{", ",","}", false), 
-						     fn (RBND(l,e)) => 
+						     fn (l,e) => 
 						     Hbox[pp_label l,
 							  String " = ",
 							  pp_exp seen e])
@@ -362,15 +369,6 @@ functor Ppil(structure Il : IL
     and pp_signat seen signat = 
       (case signat of
 	 SIGNAT_STRUCTURE sdecs => pp_list (pp_sdec seen) sdecs ("SIGS[",", ", "]", true)
-       | SIGNAT_DATATYPE (dblist,tblist,sdecs) => 
-	       HOVbox[String "SIG_DATATYPE(",
-		      Break,
-		      pp_list pp_db dblist ("DBs = ",", ","", true),
-		      Break,
-		      pp_list pp_tb tblist ("TBs = ",", ","", true),
-		      Break,
-		      pp_list (pp_sdec seen) sdecs ("sdecs = [",", ","]", true),
-		      String ")"]
        | SIGNAT_FUNCTOR (v,s1,s2,comp) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,

@@ -22,6 +22,11 @@ signature ILSTATIC =
     val soft_eq_con      : Il.decs * Il.con * Il.con -> bool
     val soft_eq_con'     : Il.context * Il.con * Il.con -> bool
 
+    val con_head_normalize : Il.decs * Il.con -> Il.con
+    val con_head_normalize' : Il.context * Il.con -> Il.con
+    val con_normalize : Il.decs * Il.con -> Il.con
+    val con_normalize' : Il.context * Il.con -> Il.con
+
     (* These functions test whether the first constructor is a subtype of the second constructor *)
     val sub_con      : Il.decs * Il.con * Il.con -> bool
     val sub_con'     : Il.context * Il.con * Il.con -> bool

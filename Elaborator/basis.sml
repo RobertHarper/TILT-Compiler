@@ -36,15 +36,15 @@ functor Basis(structure Il : IL
 		   ("mod",infixleft 7),
 		   ("/",  infixleft 7),
 		   ("*",  infixleft 7)]
-      val default_fixity_table = map (fn (str,f) => (symbol2label(varSymbol(str)), f)) table
+      val default_fixity_table = map (fn (str,f) => (symbol_label(varSymbol(str)), f)) table
     end
 
-    fun initial_context (exp2con, mod2sig, xty) : context * sbnd list =
+    fun initial_context (exp2con, con2kind, mod2sig, xty) : context * sbnd list =
       let
-	fun mk_var_lab str = symbol2label(Symbol.varSymbol str)
-	fun mk_tyc_lab str = symbol2label(Symbol.tycSymbol str)
+	fun mk_var_lab str = symbol_label(Symbol.varSymbol str)
+	fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
 	fun mk_var str = fresh_named_var str
-	fun binop_con(conopt) = let val con = (case conopt of NONE => fresh_con() | SOME c => c)
+	fun binop_con(conopt) = let val con = (case conopt of NONE => fresh_con [] | SOME c => c)
 				in CON_ARROW(con_tuple[con,con],con,oneshot_init PARTIAL)
 				end
 	fun var_entry s c = CONTEXT_SDEC(SDEC(mk_var_lab s, DEC_EXP(mk_var s, c)))
@@ -53,7 +53,7 @@ functor Basis(structure Il : IL
 	fun mono_entry str prim = exp_entry str (PRIM (prim,[]))
 	fun scon_entry str scon = exp_entry str (SCON scon)
 	fun poly_entry str c2exp = let val argvar = fresh_var()
-				       val l = fresh_int_label()
+				       val l = internal_label str
 				       val argsig = SIGNAT_STRUCTURE[SDEC(l,DEC_CON(fresh_var(),
 										    KIND_TUPLE 1, 
 										    NONE))]
@@ -65,16 +65,19 @@ functor Basis(structure Il : IL
 				       val s = mod2sig m
 				   in CONTEXT_INLINE(mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
 				   end
-	fun over_entry str exp_thunk constraints =
+	fun over_entry str con_thunker constraints =
 	  CONTEXT_INLINE(mk_var_lab str, 
 			 fresh_named_var str,
 			 INLINE_OVER(fn _ => 
-				     let val ocon = uocon_inst (fresh_uocon constraints)
-				     in (exp_thunk,ocon)
+				     let val eshot = oneshot()
+					 val ocon = uocon_inst ([],fresh_uocon constraints, con_thunker eshot)
+					 val con = CON_OVAR ocon
+				     in (OVEREXP(con,true,eshot),ocon)
 				     end))
 
 	val fixity_entries = 
-	    [CONTEXT_SDEC(SDEC(fresh_int_label(),DEC_FIXITY default_fixity_table))]
+	    [CONTEXT_SDEC(SDEC(internal_label "fixities",
+			       DEC_FIXITY default_fixity_table))]
 
 	val (datatype_entries, datatype_sbnds) =
 	    let
@@ -132,9 +135,9 @@ functor Basis(structure Il : IL
 	      val _ = (print "DONE BOOLS with mbool = \n";
 		       pp_mod mbool; print "\n")
 *)
-	      val bool_label = fresh_named_open_label "bools"
+	      val bool_label = open_internal_label "bools"
 	      val bool_var = fresh_named_var "bools"
-	      val list_label = fresh_named_open_label "lists"
+	      val list_label = open_internal_label "lists"
 	      val list_var = fresh_named_var "lists"
 	    in
 		([CONTEXT_INLINE(bool_label, bool_var, INLINE_MODSIG(mbool,sbool)),
@@ -151,22 +154,43 @@ functor Basis(structure Il : IL
 				 ("char", CON_UINT W8), 
 				 ("string", con_string),
 				 ("exn",CON_ANY),
-				 ("unit", con_unit)]
-	    fun entry_maker (s,c) = CONTEXT_INLINE(symbol2label (Symbol.tycSymbol s),
+				 ("unit", con_unit),
+				 ("ref",let val v = fresh_var()
+					in CON_FUN([v],CON_REF (CON_VAR v))
+					end),
+				 ("->",let val v1 = fresh_var()
+					   val v2 = fresh_var()
+					in CON_FUN([v1,v2],CON_ARROW (CON_VAR v1, CON_VAR v2, 
+								      oneshot_init PARTIAL))
+					end)]
+	    fun entry_maker (s,c) = CONTEXT_INLINE(symbol_label (Symbol.tycSymbol s),
 						   fresh_named_var s,
-						   INLINE_CONKIND(c,KIND_TUPLE 1))
+						   INLINE_CONKIND(c,con2kind c))
 	in
 	    val type_entries = map entry_maker basetype_list
 	end
 
 	val val_entries = 
 	  [
-	   over_entry "over" 
-	   (fn i => if (i=0) then PRIM (plus_int W32,[])
-		    else if (i=1) then PRIM (plus_float F64,[])
-			 else error "over receieved int not 0 or 1")
-	   [CON_ARROW(con_tuple[CON_INT W32, CON_INT W32], CON_INT W32, oneshot_init PARTIAL),
-	    CON_ARROW(con_tuple[CON_FLOAT F64, CON_FLOAT F64], CON_FLOAT F64, oneshot_init PARTIAL)],
+	   let
+	       datatype X = A | B
+	       fun con_thunk exp_oneshot x = (case (oneshot_deref exp_oneshot,x) of
+						  (NONE,_) => ()
+						| (_,A) => oneshot_set(exp_oneshot,PRIM (plus_int W32,[]))
+						| (_,B) => oneshot_set(exp_oneshot,PRIM (plus_float F64,[])))
+	       fun constraints (c,res) (tyvar, 
+					helpers as  {hard : con * con -> bool,
+						     soft : con * con -> bool},
+					is_hard) = 
+		   if ((if is_hard then hard else soft)(c,CON_TYVAR tyvar))
+		       then MATCH res
+		   else FAIL
+	       val cstr1 = constraints (CON_ARROW(con_tuple[CON_INT W32, CON_INT W32], 
+						  CON_INT W32, oneshot_init PARTIAL), A)
+	       val cstr2 = constraints (CON_ARROW(con_tuple[CON_FLOAT F64, CON_FLOAT F64], 
+						  CON_FLOAT F64, oneshot_init PARTIAL), B)
+	   in over_entry "over" con_thunk [cstr1,cstr2]
+	   end,
 	   
 	   exp_entry "true" true_exp,
 	   exp_entry "false" false_exp,

@@ -34,7 +34,7 @@ functor IlEval(structure Il : IL
            | (SCON (vector _)) => true (* XXX not really *)
 	   | (SCON (array _)) => true  (* XXX not really *)
 	   | (SCON _ | PRIM _ | FIX _ | TAG _) => true
-	   | (RECORD rbnds) => andfold (fn (RBND(l,bnd)) => exp_isval bnd) rbnds
+	   | (RECORD rbnds) => andfold (fn (l,bnd) => exp_isval bnd) rbnds
 	   | EXN_INJECT (tag,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | UNROLL (c,e) => (con_isval c) andalso (exp_isval e)
@@ -64,7 +64,7 @@ functor IlEval(structure Il : IL
 	   | (CON_VAR _ | CON_FUN _ | CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY ) => true
 	   | (CON_ARRAY c | CON_VECTOR c | CON_REF c | CON_TAG c) => con_isval c
 	   | (CON_ARROW (c1,c2,_)) => (con_isval c1) andalso (con_isval c2)
-	   | (CON_RECORD rdecs) => andfold (fn (RDEC(l,bnd)) => con_isval bnd) rdecs
+	   | (CON_RECORD rdecs) => andfold (fn (l,bnd) => con_isval bnd) rdecs
 	   | (CON_SUM (iopt,cons)) => andfold con_isval cons
 	   | (CON_TUPLE_INJECT(cons)) => andfold con_isval cons)
 
@@ -163,7 +163,7 @@ functor IlEval(structure Il : IL
 											   zip vars args))
 		      | _ => error "CON_APP applied to a first arg which is not CON_FUN")
 		end
-	  | CON_RECORD rdecs => CON_RECORD (map (fn (RDEC(l,c)) => RDEC(l,eval_con env c)) rdecs)
+	  | CON_RECORD rdecs => CON_RECORD (map (fn (l,c) => (l,eval_con env c)) rdecs)
 	  | CON_TUPLE_INJECT cs => CON_TUPLE_INJECT(map (eval_con env) cs)
 	  | CON_TUPLE_PROJECT(i,c) => (case (eval_con env c) of
 					   CON_TUPLE_INJECT cs => List.nth(cs,i)
@@ -202,7 +202,10 @@ functor IlEval(structure Il : IL
 											   zip vars args))
 		      | _ => CON_APP(c1',c2'))
 		end
-	  | CON_RECORD rdecs => CON_RECORD (map (fn (RDEC(l,c)) => RDEC(l,reduce_con env c)) rdecs)
+	  | CON_RECORD rdecs => CON_RECORD (map (fn (l,c) => (l,reduce_con env c)) rdecs)
+	  | CON_FLEXRECORD (ref(FLEXINFO(_,true,rdecs))) => CON_RECORD (map (fn (l,c) => (l,reduce_con env c)) rdecs)
+	  | CON_FLEXRECORD (ref(FLEXINFO(_,false,_))) => error "should not evaluate unresolved flex record type"
+          | CON_FLEXRECORD (ref(INDIRECT_FLEXINFO rf)) => reduce_con env (CON_FLEXRECORD rf)
 	  | CON_TUPLE_INJECT cs => CON_TUPLE_INJECT(map (reduce_con env) cs)
 	  | CON_TUPLE_PROJECT(i,c) => (case (reduce_con env c) of
 					   CON_TUPLE_INJECT cs => List.nth(cs,i)
@@ -216,7 +219,7 @@ functor IlEval(structure Il : IL
 
     and eval_prim ((prim,cons),arg) = 
 	let val vals = (case arg of
-			    RECORD rbnds => map (fn (RBND(_,v)) => v) rbnds
+			    RECORD rbnds => map (fn (_,v) => v) rbnds
 			  | _ => [arg])
 	in PrimUtil.apply prim cons vals
 	end
@@ -325,10 +328,10 @@ functor IlEval(structure Il : IL
 				    | PRIM prim_cons => eval_prim(prim_cons,e2')
 				    | _ => error_exp exp "APP applying a non-(FIX or PRIM)")
 			      end
-	   | (RECORD rbnds) => RECORD(map (fn (RBND(l,e)) => RBND(l,eval_exp env e)) rbnds)
+	   | (RECORD rbnds) => RECORD(map (fn (l,e) => (l,eval_exp env e)) rbnds)
 	   | (RECORD_PROJECT (e,l,c)) => let fun loop [] = error "rec projection did not find label"
-					       | loop ((RBND(ll,v))::rest) = if (eq_label(l,ll)) 
-										 then v else loop rest
+					       | loop ((ll,v)::rest) = if (eq_label(l,ll)) 
+									   then v else loop rest
 					 in loop (case (eval_exp env e) of
 						      RECORD rbnds => rbnds
 						    | _ => error "projection not from record")

@@ -1,3 +1,4 @@
+(*
 signature LINKIL = 
   sig
       structure Tyvar : TYVAR
@@ -8,7 +9,7 @@ signature LINKIL =
       structure IlUtil : ILUTIL
       structure IlPrimUtil : PRIMUTIL
       structure IlLookup : ILLOOKUP
-      structure IlStatic : ILSTATIC
+      structure IlStatic : ILSTATIC 
       structure Datatype : DATATYPE
       structure Basis : BASIS
       structure InfixParse : INFIXPARSE
@@ -27,8 +28,8 @@ signature LINKIL =
       val parse : string -> Ast.dec
       val setdepth : int -> unit
   end
-
-structure LinkIl : LINKIL = 
+*)
+structure LinkIl (* : LINKIL *) =
     struct
 	structure Tyvar = Tyvar();
 	structure Prim = Prim();
@@ -110,6 +111,7 @@ structure LinkIl : LINKIL =
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 	    
 	val (initial_context, initial_sbnds) = Basis.initial_context(fn e => GetExpCon([],e),
+								     fn c => GetConKind([],c),
 								     fn m => GetModSig([],m),
 								     Toil.xty) 
 	val initial_sbnds_len = length initial_sbnds

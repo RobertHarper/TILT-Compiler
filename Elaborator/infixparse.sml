@@ -23,7 +23,7 @@ functor InfixParse(structure Il : IL
       Useful values to make application explicit
       ---------------------------------------------------------------------- *)
     val app_sym = Symbol.varSymbol("internal_app")
-    val app_lab = symbol2label app_sym
+    val app_lab = symbol_label app_sym
     val app_exp = Ast.VarExp [app_sym]
     val app_pat = Ast.VarPat [app_sym]
 
@@ -35,7 +35,7 @@ functor InfixParse(structure Il : IL
     fun fixity_to_level (Fixity.NONfix) = error "no level for NONfix"
       | fixity_to_level (Fixity.INfix (a,b)) = a div 2
     fun path_fixity_lookup path [] = NONE
-      | path_fixity_lookup [s] ((l,f)::rest) = if (eq_label(l,symbol2label s)) then SOME f 
+      | path_fixity_lookup [s] ((l,f)::rest) = if (eq_label(l,symbol_label s)) then SOME f 
 					       else path_fixity_lookup [s] rest
       | path_fixity_lookup _ _ = NONE
     fun exp_fixity_lookup table (Ast.VarExp p) = path_fixity_lookup p table

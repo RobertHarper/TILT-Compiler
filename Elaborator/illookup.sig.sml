@@ -10,7 +10,7 @@ signature ILLOOKUP =
                     | PHRASE_CON of Il.con
                     | PHRASE_MOD of Il.mod
                     | PHRASE_SIG of Il.signat
-                    | PHRASE_OVEREXP of unit -> (int -> Il.exp) * Il.con Il.Tyvar.ocon
+                    | PHRASE_OVEREXP of unit -> Il.exp * (Il.decs,Il.con) Il.Tyvar.ocon
 
     datatype class = CLASS_EXP of Il.con
                    | CLASS_CON of Il.kind
@@ -22,7 +22,7 @@ signature ILLOOKUP =
                           | PHRASE_CLASS_CON  of Il.con * Il.kind
                           | PHRASE_CLASS_MOD  of Il.mod * Il.signat
                           | PHRASE_CLASS_SIG  of Il.signat
-                          | PHRASE_CLASS_OVEREXP of unit -> (int -> Il.exp) * Il.con Il.Tyvar.ocon
+                          | PHRASE_CLASS_OVEREXP of unit -> Il.exp * (Il.decs,Il.con) Il.Tyvar.ocon
 
     val Sdecs_Lookup  : Il.decs * (Il.mod * Il.sdecs) * Il.label list -> Il.label list * class
     val Sbnds_Lookup  : Il.mod * Il.sbnds * Il.label list -> Il.label list * phrase
