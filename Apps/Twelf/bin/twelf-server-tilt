@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Try to run TILT-generated executable
+
+bindir=`dirname $0`
+case `uname -m` in
+sun4*) platform=sparc ;;
+alpha) platform=alpha ;;
+*)     platform=bogus ;;
+esac
+
+exec "$bindir/TwelfServer.$platform.exe"

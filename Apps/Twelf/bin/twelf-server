@@ -1,3 +1,6 @@
-#!/bin/csh
-/afs/cs/project/fox/member/swasey/ml96/Apps/Twelf/bin/sml110 @SMLload=/afs/cs/project/fox/member/swasey/ml96/Apps/Twelf/bin/.heap/twelf-server \
-     @SMLdebug=/dev/null
+#!/bin/sh
+
+# Try to run SML/NJ-generated heap
+
+bindir=`dirname $0`
+exec "$bindir/sml110" "@SMLload=$bindir/.heap/twelf-server" @SMLdebug=/dev/null
