@@ -1042,7 +1042,7 @@ structure Toil
 				 [] => VAR top_var
 			       | _ => let val s = MOD_APP(MOD_VAR top_var,
 							  MOD_VAR var_poly)
-				      in MODULE_PROJECT(s,it_lab)
+				      in MODULE_PROJECT(s,them_lab)
 				      end)
 		 
 	     val exp_con_list = 
