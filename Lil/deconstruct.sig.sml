@@ -124,6 +124,13 @@ signature CDEC =
     val tuple_ptr_ml  : Lil.con -> Lil.con list
     val tuple_ptr_ml' : Lil.con -> Lil.con list option
 
+
+    val array  : Lil.con -> (Lil.size * Lil.con)
+    val array' : Lil.con -> (Lil.size * Lil.con) option
+
+    val array_ptr  : Lil.con -> (Lil.size * Lil.con)
+    val array_ptr' : Lil.con -> (Lil.size * Lil.con) option
+
     val list     : Lil.con -> Lil.kind * (Lil.con list)
     val list'    : Lil.con -> (Lil.kind * (Lil.con list)) option
     val nill  : Lil.con -> Lil.kind 
@@ -164,16 +171,16 @@ signature CDEC =
     val embed  : Lil.con -> (Lil.size * Lil.con)
     val embed' : Lil.con -> (Lil.size * Lil.con) option
       
-    val externarrow : Lil.con -> (Lil.size * Lil.con * Lil.con * Lil.con) 
-    val externarrow' : Lil.con -> (Lil.size * Lil.con * Lil.con * Lil.con) option 
-    val externarrow_ml : Lil.con -> (Lil.size * Lil.con list * Lil.con list * Lil.con) 
-    val externarrow_ml' : Lil.con -> (Lil.size * Lil.con list * Lil.con list * Lil.con) option
+    val externarrow : Lil.con -> (Lil.size * Lil.con * Lil.con) 
+    val externarrow' : Lil.con -> (Lil.size * Lil.con * Lil.con) option 
+    val externarrow_ml : Lil.con -> (Lil.size * Lil.con list * Lil.con) 
+    val externarrow_ml' : Lil.con -> (Lil.size * Lil.con list * Lil.con) option
 
     val coercion  : Lil.con -> (Lil.con * Lil.con)
     val coercion' : Lil.con -> (Lil.con * Lil.con) option
 
-    val exn_packet  : Lil.con -> (Lil.con * Lil.con)
-    val exn_packet' : Lil.con -> (Lil.con * Lil.con) option
+    val exn_packet  : Lil.con -> (Lil.con * Lil.con * Lil.con)
+    val exn_packet' : Lil.con -> (Lil.con * Lil.con * Lil.con) option
 
   end    (* CDEC *)
 

@@ -34,4 +34,5 @@ signature LILCONTEXT =
     val find_var64 : context * Lil.var -> Lil.con
     val find_label : context * Lil.label -> Lil.con
 
+    val clear_vars : context -> context 
   end 

@@ -11,6 +11,7 @@ sig
 
     val reject : string -> 'a
 
+    val register_exn_printer : (exn -> (string option)) -> unit
     val errormsg : exn -> string
     val print : exn -> unit
     val print_and_exit : exn -> 'a

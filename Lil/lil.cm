@@ -48,8 +48,6 @@ closure_analyze.sml
 closure_analyze.sig.sml
 toclosure.sig.sml
 toclosure.sml
-linklil.sig.sml
-linklil.sml
 type_equiv.sig.sml
 type_equiv.sml
 typecheck.sig.sml
@@ -61,3 +59,12 @@ optable.sig.sml
 optimize.sml
 optimize.sig.sml
 (*template.sml*)
+
+coercion_flatten.sig.sml
+coercion_flatten.sml
+
+linkunit.sig.sml
+linkunit.sml
+
+linklil.sig.sml
+linklil.sml

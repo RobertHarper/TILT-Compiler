@@ -37,9 +37,9 @@ structure Life :> RUN =
 	
     fun cons a x = a::x
 	
-    val revonto = accumulate (C cons)
+    val revonto = fn a => fn l => accumulate (C cons) a l
 	
-    val length = let fun count n a = n+1 in accumulate count 0 end
+    val length = fn l => let fun count n a = n+1 in accumulate count 0 l end
 
     fun repeat f = let fun rptf n x = if n=0 then x else rptf(n-1)(f x)
 		       fun check n = if n<0 then error "repeat<0" else n

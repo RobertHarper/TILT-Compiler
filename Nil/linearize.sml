@@ -973,19 +973,26 @@ struct
     val linearize_mod : module -> module
     linearize_mod module ==> module with bindings, imports, and exports A-normalized
    *)
-   fun linearize_mod (MODULE{bnds,imports,exports}) =
+   fun linearize_mod (MODULE{bnds,imports,exports,exports_int}) =
        let (* Module must be closed *)
 	   val state = reset_state false
 	   val (imports,state) = limports(imports,state)
+
 	   fun folder (bnd,state) = lbnd state bnd
 	   val (bnds,state) = foldl_acc folder state bnds
 	   val bnds = flatten bnds
 	   val exports = map (lexport state) exports
-	   val _ = reset_state false
 
+	   val exports_int = 
+	     (case exports_int
+		of SOME ei => SOME (#1 (limports (ei,state)))
+		 | NONE => NONE)
+
+	   val _ = reset_state false
        in  MODULE{bnds = bnds,
 		  imports = imports,
-		  exports = exports}
+		  exports = exports,
+		  exports_int = exports_int}
        end
 
 

@@ -1,6 +1,7 @@
 functor AbbrevFn (type identifier
 		  type index
 		  type result
+		  val abbrevs : (identifier * result) list ref
 		  val closed : index -> bool
 		  val newid : string -> identifier
 		  val id2res : identifier -> result
@@ -16,7 +17,6 @@ functor AbbrevFn (type identifier
     type result = result
 
     val idset : ISet.set ref = ref ISet.empty
-    val abbrevs : (identifier * result) list ref = ref []
     val seen    : result Map.map ref = ref Map.empty
 
     fun abbreviate id r = 

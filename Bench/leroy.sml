@@ -203,10 +203,10 @@ structure Leroy :> RUN =
       end
 
   (* checks that rules are numbered in sequence and returns their number *)
-  val check_rules =
+  val check_rules = fn l => 
       it_list (fn n => fn (k,_) =>
 	       if k=n+1 then k
-	       else failwith "Rule numbers not in sequence") 0
+	       else failwith "Rule numbers not in sequence") 0 l
 
   fun pretty_rule (k,(n,(M,N))) =
       (print_num k; print_string " : ";
@@ -214,7 +214,7 @@ structure Leroy :> RUN =
        print_newline())
 
 
-  val pretty_rules = do_list pretty_rule
+  val pretty_rules = fn l => do_list pretty_rule l
 
 
   (****************** Rewriting **************************)

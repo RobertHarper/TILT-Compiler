@@ -47,7 +47,6 @@ fun exnMessage (exn:exn) : string= Ccall(exnMessageRuntime,exn)
 fun getOpt (SOME x, _) = x | getOpt (NONE, y) = y
 fun isSome (SOME _) = true | isSome NONE = false
 fun valOf (SOME x) = x | valOf NONE = raise Option
-
 fun rev l =
     let fun revappend([],x) = x
 	  | revappend(hd::tl,x) = revappend(tl,hd::x)

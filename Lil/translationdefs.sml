@@ -15,6 +15,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
     val debug  = Stats.ff "TranslationDefsDebug"
     val betaexp = Stats.counter "TD:if_xxx beta expansions"
     val inline_interp = Stats.ff "TDInlineInterp"
+    val taglike_arrays  = CompilerControl.ArrayIsTaglike
 
     fun debugdo f = if !debug then f() else ()
 
@@ -119,12 +120,37 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	     of (SOME _,true) => interp_case c
 	      | _ => LD.C.app (interp_fn()) c)
 
+
+      fun taglike_interp_body (arg : Lil.con) : Lil.con = 
+	LD.T.ptr (LD.C.sumcase arg [ (Tupleidx,fn l => interpr_tuple l),
+				  (BFloatidx,fn _ => LD.T.boxed_float ()),
+				  (Ptridx,fn t => t),
+				  (Otheridx,fn t => (LD.T.tuple' [t]))
+				  ] NONE)
+
+      fun taglike_interp_fn () = 
+	let
+	  val arg = Name.fresh_named_var "tinterp_arg"
+	in LD.C.lambda (arg,Tmil()) (taglike_interp_body (mk_con(Var_c arg)))
+	end
+
+      fun taglike_interp (c : Lil.con) : Lil.con = 
+	if !inline_interp then
+	  taglike_interp_body c
+	else 
+	  (case (Dec.C.inj' c,!simplify)
+	     of (SOME _,true) => taglike_interp_body c
+	      | _ => LD.C.app (taglike_interp_fn()) c)
+      
+
+
     in
       val Tmilr = Tmilr
       val Tmil = Tmil
       val interp_ptr_case = interp_ptr_case
       val interpr = interpr
       val interp = interp
+      val taglike_interp = taglike_interp
 
       fun Bigtuple l  = LD.C.inj (LU.i2w (!flattenThreshold + 1)) (Tmilr()) (LD.T.tuple (LD.C.tlist l))
       fun Flattuple l = LD.C.inj (LU.i2w (List.length l)) (Tmilr()) (LD.C.ntuple l)
@@ -227,7 +253,9 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 
       fun Vararg argc resc = Vararg' argc (interp resc)
 
+	
       fun IfTaglike arg ift ifnott = 
+
 	let
 	  val ift = fn _ => ift
 	in LD.C.sumcase arg [(Otheridx,ift)] (SOME ifnott)
@@ -251,7 +279,20 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  [(BFloatidx,BFloata)] 
 	  (SOME (LD.T.array Lil.B4 (interp arg)))
 	end
-      fun Arrayptr arg = LD.T.ptr (Array arg)
+      fun Arrayptr arg = 
+	if !taglike_arrays then 
+	  let
+	    val BFloata = fn _ => LD.T.ptr (LD.T.array Lil.B8 (LD.T.float()))
+	  (*	  val Tuplea = fn a => LD.T.array Lil.B4 (interpr a)
+val BFloata = fn _ => LD.T.array Lil.B8 (LD.T.float())
+val Ptra = fn t => LD.T.array Lil.B4 (LD.T.ptr t)
+val Otherwisea = fn t => LD.T.array Lil.B4 t*)
+	  in (*LD.C.sumcase arg [(Tupleidx,Tuplea),(BFloatidx,BFloata),(Ptridx,Ptra),(Otheridx,Otherwisea)] NONE*)
+	    LD.C.sumcase arg 
+	    [(BFloatidx,BFloata)] 
+	    (SOME (LD.T.ptr(LD.T.array Lil.B4 (interp arg))))
+	  end
+	else LD.T.ptr (Array arg)
     end
 
     local
@@ -479,7 +520,8 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val rept = R srep
 	  val sumargv = Name.fresh_named_var "sumarg"
 	  val sumarg = Lil.Var_32 sumargv
-	  val sumt = IfTaglike srep (LD.T.ptr (LD.T.tuple' [interp srep])) (interp srep)
+	  val sumt = taglike_interp srep
+	    (*IfTaglike srep (LD.T.ptr (LD.T.tuple' [interp srep])) (interp srep)*)
 
 	  val body = iftaglike interp srep rep
 	    (fn _ => LD.E.select (LU.i2w 0) sumarg)
@@ -503,7 +545,9 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  val rept = R srep
 	  val injargv = Name.fresh_named_var "injarg"
 	  val injarg = Lil.Var_32 injargv
-	  val mkrtype = fn injt => IfTaglike srep (LD.T.ptr (LD.T.tuple' [interp injt])) (interp injt)
+	  val mkrtype = taglike_interp 
+
+(*IfTaglike srep (LD.T.ptr (LD.T.tuple' [interp injt])) (interp injt)*)
 
 	  val body = iftaglike mkrtype srep rep
 	    (fn _ => LD.E.tuple [injarg])
@@ -823,21 +867,22 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	fun length_float   arr = LD.E.length_array64' arr 
 	fun length_other t arr = LD.E.length_array32' t arr 
 
-      (* Superceded by Ptreq
+	(* This could be eliminated by Ptreq, except that TAL needs the ptr to be with the array 
+	 * instead of outside the ccase *)
 	fun equal_dynamic staticrep crep (arr1,arr2) = 
 	  let
 	    val _ = debugdo (fn () => print "Entering equality \n")
-	    fun ifbfloat  staticrep [arr1,arr2] = LD.E.equal_array64 arr1 arr2
-	    fun notbfloat staticrep [arr1,arr2] = LD.E.equal_array32 (interp staticrep) arr1 arr2
+	    fun ifbfloat  staticrep [arr1,arr2] = LD.E.ptreq arr1 arr2 (*LD.E.equal_array64 arr1 arr2*)
+	    fun notbfloat staticrep [arr1,arr2] = LD.E.ptreq arr1 arr2 (*LD.E.equal_array32 (interp staticrep) arr1 arr2*)
 	    val args = [arr1,arr2]
 	    val argtypes = [Arrayptr,Arrayptr]
 	    val op32 = ifboxfloat (fn _ => LD.T.bool()) staticrep crep args argtypes ifbfloat notbfloat
 	  in op32
 	  end
-	fun equal_int is  (arr1,arr2) = LD.E.equal_array32' (LD.T.intt (LU.i2size is)) arr1 arr2 
-	fun equal_float   (arr1,arr2) = LD.E.equal_array64' arr1 arr2 
-	fun equal_other t (arr1,arr2) = LD.E.equal_array32' t arr1 arr2 
-	  *)
+	fun equal_int is  (arr1,arr2) = LD.E.ptreq' arr1 arr2 (*LD.E.equal_array32' (LD.T.intt (LU.i2size is)) arr1 arr2 *)
+	fun equal_float   (arr1,arr2) = LD.E.ptreq' arr1 arr2 (*LD.E.equal_array64' arr1 arr2 *)
+	fun equal_other t (arr1,arr2) = LD.E.ptreq' arr1 arr2 (*LD.E.equal_array32' t arr1 arr2 *)
+
       end
 
   end

@@ -177,7 +177,7 @@ interface ToClosure = "toclosure.int" {TOCLOSURE}
 unit ToClosure : ToClosure = "toclosure.sml" {
 	Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32
 	NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool
-	NilDefs NilRename NilContext NilStatic
+	NilDefs NilRename NilContext NilStatic CompilerControl
 }
 
 unit VARARG = "vararg.sig.sml" {Nil NilContext}

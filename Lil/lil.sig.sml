@@ -104,7 +104,7 @@ signature LIL =
       Val_64 of sv64 
       | Unbox of sv32
       | Prim64 of Prim.prim * primarg list
-      | ExternAppf of sv32 * sv32 list * sv64 list
+      | ExternAppf of sv32 * primarg list
 
     datatype lilprimop32 = 
       Box 			(*  sv64 *)
@@ -118,12 +118,12 @@ signature LIL =
       | Prim32 of Prim.prim * con list * primarg list
       | PrimEmbed of size * Prim.prim * primarg list
       | LilPrimOp32 of lilprimop32 * con list * sv32 list * sv64 list
-      | ExternApp of sv32 * sv32 list * sv64 list
+      | ExternApp of sv32 * primarg list 
       | App of sv32 * sv32 list * sv64 list
       | Call of sv32 * sv32 list * sv64 list
       | Switch of switch
       | Raise of con * sv32 
-      | Handle of con * exp * (var * exp)
+      | Handle of {t : con, e : exp , h : {b : var, he : exp}}
     and exp_ = 
       Val32_e of sv32
       | Let_e of bnd list * exp
@@ -173,6 +173,7 @@ signature LIL =
       
 
     type timport = label * var * kind
+    type vimport = label * con
 
     (* A lil module is:
      * 1) a list of global imported types, which are bound throughout the module
@@ -187,9 +188,10 @@ signature LIL =
      *)
     datatype module = MODULE of {unitname : string,
 				 parms : Name.LabelSet.set,
-				 entry_c : label,
-				 entry_r : label,
+				 entry_c : label * var * kind,
+				 entry_r : label * con,
 				 timports : timport list,
+				 vimports : vimport list,
 				 data   : data list,
 				 confun : con}
 

@@ -253,7 +253,8 @@ struct
 
   datatype module = MODULE of {bnds : bnd list,
 			       imports : import_entry list,
-			       exports : export_entry list}
+			       exports : export_entry list,
+			       exports_int : import_entry list option}
 
   datatype interface = INTERFACE of {imports : import_entry list,
 				     exports : import_entry list}

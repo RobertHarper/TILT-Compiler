@@ -12,12 +12,15 @@ signature COMPILERCONTROL =
     val NilTargetsLil : bool ref
     val ReifyTraces : bool ref
     val ArrowIsTaglike : bool ref
+    val ArrayIsTaglike : bool ref
     val RefIsArray : bool ref
     val EliminateSingletons : bool ref 
     val UncurryPushCbnds : bool ref
     val UncurryPolymorphism : bool ref
     val SpecializeArrayofChar : bool ref
-
+    val DoExportsInt : bool ref
+    val KillDeadImport : bool ref
+    val VarargUsesResult : bool ref
     (* By default, the RtlDefaults are set *)
 
     (* Set the control flags appropriately for compiling to Rtl *)

@@ -39,8 +39,11 @@ val write_options : Talpp.options ref;; (* TEMPORARY; CYCLONE/MASM *)
 
 *)
 
+
     val write_imp : string -> string -> Tal.int_ref vector -> Tal.int_ref vector -> Tal.tal_imp -> unit
+    (* modname file name *)
     val write_int : string -> string -> Tal.tal_int -> unit
+    (* modname file name *)
     val write_pre_mod : string -> string -> Tal.tal_pre_mod -> unit
 
 (*

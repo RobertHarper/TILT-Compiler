@@ -247,7 +247,7 @@ structure ClosureState :> CLOSURESTATE =
 	val add_boundfids = add_boundfids' false false
 	val add_gboundfids = add_boundfids' false true
 
-	(* promote_state : state * (var * var list) -> state *)
+	(* promote_state : state * (var list) -> state *)
 	(* Does the necessary bookkeeping to begin scanning a new function nest; takes the state from the *)
 	(* point just before the function and turns all the LOCALs into   *)
 	(* SHADOWs to reflect the fact that we're entering a new scope.  Comment by joev, 8/2002.    *)

@@ -184,7 +184,8 @@ struct
 						 Fixopen_b(Sequence.fromList[((varargVar, varCon), varFun)])],
 					 imports = [],
 					 exports = [ExportValue(oneargLabel,oneargVar),
-						    ExportValue(varargLabel,varargVar)]}
+						    ExportValue(varargLabel,varargVar)],
+					 exports_int = NONE}
 
 		     fun mprint phasename nilmod = 
 		       if !show_generate then
@@ -205,7 +206,7 @@ struct
 
 		     val MODULE{bnds,imports=[],
 				exports=[ExportValue(oneargLabel',oneargVar),
-					 ExportValue(varargLabel',varargVar)]} = nilmod
+					 ExportValue(varargLabel',varargVar)],exports_int} = nilmod
 		     fun getClosureType v [] = error "could not find closure"
 		       | getClosureType v ((Fixclosure_b (_,cl))::rest) =
 			 (case Sequence.toList cl of
@@ -734,15 +735,12 @@ struct
 		 state)
 	    end
 
-	fun do_export(ExportValue(l,v),state) = (ExportValue(l,v),state)
-	  | do_export(ExportType(l,v),state)  = (ExportType(l,v),state)
-
-	fun optimize (MODULE{imports, exports, bnds}) =
+	fun optimize (MODULE{imports, exports, exports_int, bnds}) =
 	    let val state = new_state flattenThreshold
 		val (imports,state) = foldl_acc do_import state imports
 		val (bnds,state) = do_bnds(bnds,state)
-		val (exports,state) = foldl_acc do_export state exports
-		val result = MODULE{imports=imports,exports=exports,bnds=bnds}
+		val exports_int = mapopt (fn ei => #1 (foldl_acc do_import state ei)) exports_int
+		val result = MODULE{imports=imports,exports=exports,bnds=bnds,exports_int=exports_int}
 	    in  result
 	    end
 

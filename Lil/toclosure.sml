@@ -271,6 +271,9 @@ structure LilClosure :> LILCLOSURE =
     fun do_sv64subst (ENV{subst,...},sv) = 
       LS.substSv32Sv64ConInSv64 subst sv
 
+    fun do_expsubst (ENV{subst,...},e) = 
+      LS.substSv32Sv64ConInExp subst e
+
     fun subst_var32 (ENV{subst = (sv32s,sv64s,cs),...},v) = 
       Util.mapopt (LS.substConInSv32 cs) (LS.SV32.substitute sv32s v)
     fun subst_var64 (ENV{subst = (sv32s,sv64s,cs),...},v) = 
@@ -1084,7 +1087,7 @@ structure LilClosure :> LILCLOSURE =
 				   map recur_c cs, 
 				   map recur_sv32 sv32s,
 				   map recur_sv64 sv64s))
-	      | ExternApp (sv,sv32s,sv64s) =>  P.ret (ExternApp (recur_sv32 sv,map recur_sv32 sv32s,map recur_sv64 sv64s))
+	      | ExternApp (sv,args) =>  P.ret (ExternApp (recur_sv32 sv,map recur_primarg args))
 	      | Call (sv,sv32s,sv64s) =>  P.ret (Call (recur_sv32 sv,map recur_sv32 sv32s,map recur_sv64 sv64s))
 	      | App (f,sv32s,sv64s) => 
 	       (* This potentially sucks major rocks.  Because we can only pack
@@ -1147,13 +1150,16 @@ structure LilClosure :> LILCLOSURE =
 	       end
 	      | Switch switch => P.ret(Switch (rewrite_switch env switch))
 	      | Raise (c,sv32) => P.ret(Raise (recur_c c,recur_sv32 sv32))
-	      | Handle (t,e1,(v,e2)) => 
+	      | Handle {t,e,h = {b,he}} => 
 	       let
 		 val t = recur_c t
-		 val e1 = recur_e e1
-		 val env = exp_var32_bind (env,(v,LD.T.exn()))
-		 val e2 = rewrite_exp env e2
-	       in P.ret(Handle (t,e1,(v,e2)))
+		 val e = recur_e e
+		 val env = exp_var32_bind (env,(b,LD.T.exn()))
+		 val he = rewrite_exp env he
+
+		 val handler = Handle {t = t,e = e,h = {b = b, he = he}}
+
+	       in P.ret handler
 	       end)
       in do_op32 (env,op32)
       end
@@ -1178,7 +1184,7 @@ structure LilClosure :> LILCLOSURE =
 	case op64
 	  of Val_64 sv64 => Val_64 (recur_sv64 sv64)
 	   | Unbox sv32 => Unbox (recur_sv32 sv32)
-	   | ExternAppf (sv,sv32s,sv64s) =>  ExternAppf (recur_sv32 sv,map recur_sv32 sv32s,map recur_sv64 sv64s)
+	   | ExternAppf (sv,args) =>  ExternAppf (recur_sv32 sv,map recur_primarg args)
 	   | Prim64 (p,primargs) =>
 	    Prim64 (p,map recur_primarg primargs)
       end
@@ -1336,7 +1342,7 @@ structure LilClosure :> LILCLOSURE =
       end
 
 
-    fun close_mod (module as MODULE{unitname,parms,entry_c,entry_r,timports,data,confun}) = 
+    fun close_mod (module as MODULE{unitname,parms,entry_c,entry_r,timports,vimports,data,confun}) = 
       let 
 
 	val () = reset_data()	  
@@ -1352,18 +1358,29 @@ structure LilClosure :> LILCLOSURE =
 	val _ = chat 1 "  Adding timports\n"
 	val env = con_vars_bind (env,map (fn (l,v,k) => (v,k)) timports)
 
+	val _ = chat 1 "  Adding vimports\n"
+	val env = foldl (fn (lc,env) => exp_label_bind (env,lc)) env vimports
+
+	val _ = chat 1 "  Rewriting vimports\n"
+	val vimports = map (fn (l,c) => (l,rewrite_con env c)) vimports
+
 	val _ = chat 1 "  Rewriting data\n"	  
 	val (data,env) = rewrite_data env data
 
 	val _ = chat 1 "  Rewriting confun\n"	  
 	val confun = rewrite_con env confun
 
+	val _ = chat 1 "  Rewriting entry_r type\n"
+	val (entry_r_l,entry_r_t) = entry_r
+	val entry_r_t = rewrite_con env entry_r_t
+	val entry_r = (entry_r_l,entry_r_t)
+
 	val _ = chat 1 "  Module rewritten\n"
 
 	val data = data @ (get_data())
 	val () = reset_data()
 	val () = reset_rewritten()
-      in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c,entry_r = entry_r,timports = timports,data=data,confun=confun}
+      in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c,entry_r = entry_r,timports = timports,vimports = vimports,data=data,confun=confun}
       end handle any => (reset_data();reset_rewritten();raise any)
 
 

@@ -47,7 +47,7 @@ structure LilUtil :> LILUTIL =
 
   fun value2w32 v =
     (case v
-       of int (sz,w64)   => TilWord64.toSignedHalf w64
+       of int (sz,w64)   => TilWord64.toUnsignedHalf w64
 	| uint (sx,w64)  => TilWord64.toUnsignedHalf w64
 	| _ => error "Not a word value")
 
@@ -74,6 +74,23 @@ structure LilUtil :> LILUTIL =
 	  | B2 => error "size has no corresponding floatsize"
 	  | B4 => F32
 	  | B8 => F64)
+
+    fun get_data_entry data l =
+      let
+	fun finder d = 
+	  let
+	    val l' = 
+	      (case d
+		 of Dcode (l',f) => l'
+		  | Dboxed (l',_) => l'
+		  | Darray (l',_,_,_) => l'
+		  | Dtuple (l',_,_,_) => l')
+	  in Name.eq_label (l,l')
+	  end
+      in case List.find finder data
+	   of SOME d => d
+	    | NONE => error "Label not found"
+      end
 
 
     (* Find the strongly connected components of the graph.

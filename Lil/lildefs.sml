@@ -101,6 +101,9 @@ structure LilDefs :> LILDEFS  =
 	  
 	fun tlist () : Lil.kind = tlist'
 
+	val T32or64' = binsum (T32(),T64())
+	fun T32or64 () = T32or64'
+
       end
 
 
@@ -287,24 +290,6 @@ structure LilDefs :> LILDEFS  =
 		| arm::arms => doit (c,[],arm,arms)
 	  end
 
-
-	fun closure () = 
-	  lambda' (K.list (K.T32())) 
-	  (fn args => 
-	   lambda' (K.list (K.T64()))
-	   (fn fargs => 
-	    lambda' (K.T32())
-	    (fn body => 
-	     let
-	       val venv_v = Name.fresh_named_var "venv_t"
-	       val venv_t = mk_con (Var_c venv_v)
-	       val args = cons' (K.T32()) (venv_t,args)
-	       val code_t = pcon_app Code_c [args,fargs,body]
-	       val tup_t = pcon_app Tuple_c [code_t,venv_t]
-	       val lam_t = lambda (venv_v,K.T32()) tup_t
-	       val exists_t = app (k_app (Lil.mk_pcon Exists_c) (K.T32())) lam_t
-	     in exists_t
-	     end)))
 	  
       end
 
@@ -358,6 +343,16 @@ structure LilDefs :> LILDEFS  =
     structure T = 
       struct
 
+	fun float () = mk_pcon Float_c
+	fun intt s = mk_pcon (Int_c s)
+
+	fun boxed s c = C.pcon_app (Boxed_c s) [c]
+	fun boxed_float () = boxed B8 (mk_pcon Float_c)
+
+	fun float64 ()     = mk_pcon Float_c
+
+	fun embed sz c = C.pcon_app (Embed_c sz) [c]
+
 	fun tuple ts =  C.pcon_app Tuple_c [ts]
 	fun tuple' ts = tuple (C.tlist ts)
 
@@ -372,6 +367,10 @@ structure LilDefs :> LILDEFS  =
 	fun void () = mk_pcon Void_c
 
 	fun array sz c = C.pcon_app (Lil.Array_c sz) [c]
+	fun arrayptr sz c = ptr(C.pcon_app (Lil.Array_c sz) [c])
+
+	val stringt' = arrayptr Lil.B1 (intt Lil.B1)
+	fun stringt () = stringt'
 	fun coercion from to = C.pcon_app Coercion_c [from,to]
 
 	fun sum tagcount carriers = C.pcon_app Lil.Sum_c [tagcount,carriers]
@@ -395,28 +394,17 @@ structure LilDefs :> LILDEFS  =
 	  in ksum which tagcount sum_args
 	  end
 
-	fun float () = mk_pcon Float_c
-	fun intt s = mk_pcon (Int_c s)
-
-	fun boxed s c = C.pcon_app (Boxed_c s) [c]
-	fun boxed_float () = boxed B8 (mk_pcon Float_c)
-
-	fun float64 ()     = mk_pcon Float_c
-
-	fun embed sz c = C.pcon_app (Embed_c sz) [c]
-
 	fun dyntag c = C.pcon_app Dyntag_c [c]
 	fun tag iw = C.pcon_app Tag_c [C.nat iw]
 	fun bool () = sum' 0w2 []
 
-	fun externarrow size args fargs ret = 
-	  C.pcon_app (ExternArrow_c size) [args,fargs,ret]
+	fun externarrow size args ret = 
+	  C.pcon_app (ExternArrow_c size) [args,ret]
 
-	fun externarrow' size args fargs ret = 
+	fun externarrow' size args ret = 
 	  let
-	    val args  = C.tlist args
-	    val fargs = C.list (K.T64()) fargs
-	  in externarrow size args fargs ret
+	    val args = C.list (K.T32or64()) args
+	  in externarrow size args ret
 	  end
 
 	fun arrow args fargs body = 
@@ -457,24 +445,40 @@ structure LilDefs :> LILDEFS  =
 	fun allcode' vks t32s t64s rt = nary_forall vks (code' t32s t64s rt)
 
 
-	fun closure vks args fargs rtype =
-	  let
-	    val venv_v = Name.fresh_named_var "venv_t"
-	    val venv_t = mk_con (Var_c venv_v)
-	    val args = C.cons' (K.T32()) (venv_t,args)
-	    val code_t = allcode vks args fargs rtype
-	    val tup_t = ptr (tuple' [code_t,venv_t])
-	    val lam_t = C.lambda (venv_v,K.T32()) tup_t
-	    val exists_t = exists' (K.T32()) lam_t
-	  in exists_t
-	  end 
+	local
+	  val venv_v = Name.fresh_named_var "venv_t"
+	  val venv_t = mk_con (Var_c venv_v)
+	  val code_v = Name.fresh_named_var "code_t"
+	  val code_t = mk_con (Var_c code_v)
 
-	fun exn () = 
+
+	  val tup_t = ptr (tuple' [C.app code_t venv_t,venv_t])
+	  val lam_t = C.lambda (venv_v,K.T32()) tup_t
+	  val exists_t = exists' (K.T32()) lam_t
+	  val closure_lam = C.lambda (code_v,K.arrow (K.T32()) (K.T32())) exists_t
+	in
+	  fun closure aks args fargs rtype =
+	    let
+	      val venv_v = Name.fresh_named_var "venv_t"
+	      val venv_t = mk_con (Var_c venv_v)
+	      val args = C.cons' (K.T32()) (venv_t,args)
+	      val code_t = allcode aks args fargs rtype
+	      val lam_t = C.lambda (venv_v,K.T32()) code_t
+	  in C.app closure_lam lam_t
+	  end
+	end
+
+	fun exn' () = 
 	  let
 	    val a = Name.fresh_named_var "exnval_t"
 	    val c = mk_con (Var_c a)
-	    val ttype = tupleptr' [dyntag c,c]
+	    val ttype = tupleptr' [dyntag c,c,stringt()]
 	  in exists (a,K.T32()) ttype
+	  end
+	val exn = 
+	  let
+	    val ex = exn'()
+	  in fn () => ex
 	  end
 
 	fun mu f =
@@ -886,9 +890,9 @@ structure LilDefs :> LILDEFS  =
 
 	val closure_app = tosv closure_app'
 
-	fun inj_exn dcon dtag dval = 
+	fun inj_exn dcon dtag dval dstr = 
 	  let
-	    val tup = tuple [dtag,dval]
+	    val tup = tuple [dtag,dval,dstr]
 	    val etype = T.exn()
 	  in P.map (pack' etype dcon) tup
 	  end

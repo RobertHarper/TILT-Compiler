@@ -373,11 +373,10 @@ structure PpLil :> PPLIL =
       (case oper
 	 of Val_64 sv64 => pp_sv64 sv64
 	  | Unbox sv32 => Hbox[String "unbox",Break,pp_sv32 sv32]
-	  | ExternAppf (sv32,args,fargs) => 
+	  | ExternAppf (sv32,args) => 
 	   (pp_region ("ExternAppf_(") ")"
 	    [pp_sv32 sv32, String ", ", Break,
-	     pp_list pp_sv32 args ("",",","",false), Break,
-	     pp_list pp_sv64 fargs ("",",","",false)])
+	     pp_list pp_primarg args ("",",","",false)])
 	  | Prim64 (p,args) =>
 	   let
 	     val p = pp_prim' p
@@ -424,11 +423,10 @@ structure PpLil :> PPLIL =
 		  val sv64s = pp_list pp_sv64 sv64s ("(",",",")",false)
 		in HOVbox[p,cons,sv32s,sv64s]
 		end)
-	  | ExternApp (sv32,args,fargs) => 
+	  | ExternApp (sv32,args) => 
 	      (pp_region ("ExternApp_(") ")"
 	       [pp_sv32 sv32, String ", ", Break,
-		pp_list pp_sv32 args ("",",","",false), Break,
-		pp_list pp_sv64 fargs ("",",","",false)])
+		pp_list pp_primarg args ("",",","",false)])
 	  | App (f,sv32s,sv64s) =>
 	      HOVbox[String "App(",pp_sv32 f, String ";", Break0 0 2,
 		     pp_list pp_sv32 sv32s ("",",","",false), 
@@ -443,13 +441,14 @@ structure PpLil :> PPLIL =
 		     String ")"]
 	  | Switch sw => pp_switch sw
 	  | Raise (c,sv32) => pp_region "Raise(" ")" [pp_sv32 sv32, String ",", pp_con c]
-	  | Handle (t,e1,(v,e2))=>
+	  | Handle {t,e,h = {b, he}}=>
 	      Vbox[HOVbox[String "Handle[", pp_con t,
-			     String "] ", Break0 0 3,pp_exp e1],
+			     String "] ", Break0 0 3,pp_exp e],
 		   Break0 0 0,
-		   HOVbox[String "With ", pp_var v,
+		   HOVbox[String "With ", 
+			  pp_var b,
 			  String ": EXN = ", Break0 0 3,
-			  pp_exp e2]])
+			  pp_exp he]])
     and pp_exp_ e = 
       (case e 
 	 of Val32_e sv32 => Hbox[String "Val(",pp_sv32 sv32,String ")"]
@@ -603,14 +602,16 @@ structure PpLil :> PPLIL =
     fun pp_lvk (l,v,k) = Hbox [pp_label l,String " > ",pp_var v,String " :: ",pp_kind k]
     fun pp_lc (l,c) = Hbox [pp_label l,String " : ",pp_con c]
 
-    fun pp_module (MODULE{unitname,parms,entry_c,entry_r,timports,data,confun}) = 
+    fun pp_module (MODULE{unitname,parms,entry_c,entry_r,timports,vimports,data,confun}) = 
       Vbox0 0 1 [
 		 String ("UNIT: "^unitname),Break0 0 0,
 		 String ("PARMS: "),pp_list pp_label (Name.LabelSet.listItems parms) ("",",","",true) ,Break0 0 2,
-		 String ("ENTRY_R: "),pp_label entry_r,Break0 0 0,
-		 String ("ENTRY_C: "),pp_label entry_c,Break0 0 2,
+		 String ("ENTRY_R: "),pp_lc entry_r,Break0 0 0,
+		 String ("ENTRY_C: "),pp_lvk entry_c,Break0 0 2,
 		 String "TIMPORTS:", Break0 0 2,
 		 pp_list pp_lvk timports ("",",","",true), Break0 0 2,
+		 String "VIMPORTS:", Break0 0 2,
+		 pp_list pp_lc vimports ("",",","",true), Break0 0 2,
 		 String "DATA:", Break0 0 2,
 		 pp_datalist data, Break,
 		 String "CONFUN:", Break0 0 2,

@@ -167,21 +167,25 @@ structure Measure :> MEASURE =
 	    imports, bindings, and exports of module, respectively.
         Effects: Prints total size information with chat level above 0
       *)
-      fun mod_size' args (MODULE {bnds,imports,exports}) =
+      fun mod_size' args (MODULE {bnds,imports,exports,exports_int}) =
 	let
 	  val _ = chat 0 "\nIMPORTS\n"
-	  val impsize = mod_size args (MODULE {bnds=[],imports=imports,exports=[]})
+	  val impsize = mod_size args (MODULE {bnds=[],imports=imports,exports=[],exports_int=NONE})
 
 	  val _ = chat 0 "\nBNDS\n"
-	  val bndsize = mod_size args (MODULE {bnds=bnds,imports=[],exports=[]})
+	  val bndsize = mod_size args (MODULE {bnds=bnds,imports=[],exports=[],exports_int=NONE})
 
 	  val _ = chat 0 "\nEXPORTS\n"
-	  val exportsize = mod_size args (MODULE {bnds=[],imports=[],exports=exports})
+	  val exportsize = mod_size args (MODULE {bnds=[],imports=[],exports=exports,exports_int=NONE})
 
-	  val total = adds impsize (adds bndsize exportsize)
+	  val _ = chat 0 "\nEXPORTS_INT\n"
+	  val exports_intsize = mod_size args (MODULE {bnds=[],imports=[],exports=[],exports_int=exports_int})
+
+	  val total = adds impsize (adds bndsize (adds exportsize exports_intsize))
 
 	  val _ = chat 0 ("\nBNDS size is "^(Int.toString (#total bndsize))^"\n")
 	  val _ = chat 0 ("\nEXPORTS size is "^(Int.toString (#total exportsize))^"\n")
+	  val _ = chat 0 ("\nEXPORTS_INT size is "^(Int.toString (#total exports_intsize))^"\n")
 	  val _ = chat 0 ("\nIMPORTS size is "^(Int.toString (#total impsize))^"\n")
 	  val _ = chat 0 ("\nTOTAL size is "^(Int.toString (#total total))^"\n")
 	in (impsize,bndsize,exportsize)

@@ -237,7 +237,7 @@ struct
       
     fun add_alias(state as STATE{mapping,...},v,alias) =
       let 
-	val SOME(use,_) = Name.VarMap.find(mapping,v)
+	val use = case Name.VarMap.find(mapping,v) of SOME (use,_) => use | _ => error "Alias not found"
 	val mapping = Name.VarMap.insert(mapping,v,(use,alias))
 	  
       in  update_mapping(state,mapping)
@@ -979,8 +979,8 @@ struct
 	  | PrimEmbed args => do_prim_embed state args
 	  | LilPrimOp32 args => do_lilprim32 state args
 	  | Switch sw => error "Impossible"
-	  | ExternApp(f,sv32s,sv64s) =>
-	   ExternApp(do_sv32 state f, map (do_sv32 state) sv32s, map (do_sv64 state) sv64s)
+	  | ExternApp(f,args) =>
+	   ExternApp(do_sv32 state f, map (do_primarg state) args)
 	  | App(f,elist,eflist) =>
 	   App(do_sv32 state f,
 	       map (do_sv32 state) elist,
@@ -990,14 +990,14 @@ struct
 		map (do_sv32 state) elist,
 		map (do_sv64 state) eflist)
 	  | Raise (c,sv) => Raise(do_con state c,do_sv32 state sv)
-	  | Handle (result_type,body,(bound,handler)) => 
+	  | Handle {t,e,h = {b,he}} => 
 	   let 
-	     val body = do_exp' state body
-	     val result_type = do_con state result_type
-	     val (_,state) = do_vc ((bound,LD.T.exn()),state)
-	     val handler = do_exp' state handler
+	     val e = do_exp' state e
+	     val t = do_con state t
+	     val (_,state) = do_vc ((b,LD.T.exn()),state)
+	     val he = do_exp' state he
 	   in  
-	     Handle (result_type,body,(bound,handler))
+	     Handle {t = t,e = e, h = {b = b, he = he}}
 	   end)
 
     and do_op64 (state : state) (oper : op64) : op64 = 
@@ -1008,8 +1008,8 @@ struct
 	      of LilPrimOp32(Box,[],[],[sv64]) => Val_64(do_sv64 state sv64)
 	       | _ => Unbox (do_sv32 state sv))
 	  | Prim64 args => do_prim64 state args
-	  | ExternAppf (f,sv32s,sv64s) =>
-	      ExternAppf(do_sv32 state f, map (do_sv32 state) sv32s, map (do_sv64 state) sv64s))
+	  | ExternAppf (f,args) =>
+	      ExternAppf(do_sv32 state f, map (do_primarg state) args))
 
     and do_sum_switch state sw = 
       let
@@ -1529,18 +1529,19 @@ struct
       in (data,state)
       end
 
-    fun optimize params (MODULE{unitname,parms,entry_c,entry_r,timports, data, confun}) =
+    fun optimize params (MODULE{unitname,parms,entry_c,entry_r,timports, vimports,data, confun}) =
       let
 	val _ = reset_stats()
 	  
 	val state = newState (params,VarSet.empty)
 	val state = foldl (fn ((l,a,k),state) => bind_cvar(state,(a,k))) state timports
+	val state = foldl (fn (lt,state) => bind_label(state,lt)) state vimports
 	val (data,state) = do_data state data
 	val confun = do_con state confun
 
 	val _ = chat_stats ()
 	  
-      in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c, entry_r = entry_r,timports=timports,data=data,confun=confun}
+      in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c, entry_r = entry_r,timports=timports,vimports = vimports, data=data,confun=confun}
       end
   end
 end (* Optimize *)

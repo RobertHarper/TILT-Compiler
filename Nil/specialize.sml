@@ -712,7 +712,7 @@ struct
 
 	  | Handle_e{body,bound,handler,result_type} =>
 	      (scan_exp ctxt body;
-	       scan_exp ctxt handler)
+	       scan_exp (NilContext.insert_con(ctxt,bound,Prim_c(Exn_c,[]))) handler)
 
 	  | Coerce_e (coercion,cargs,exp) =>
 	      (scan_exp ctxt coercion; scan_exp ctxt exp)
@@ -889,7 +889,7 @@ struct
 	fun scan_export ctxt (ExportValue(l,v)) = (scan_exp ctxt (Var_e v))
 	  | scan_export ctxt (ExportType(l,v)) = ()
 
-	fun scan_module(MODULE{imports, exports, bnds}) : unit =
+	fun scan_module(MODULE{imports, exports, exports_int,bnds}) : unit =
 	  let
 	    val ctxt = NilContext.empty()
 	    val ctxt = foldl scan_import ctxt imports
@@ -1017,18 +1017,11 @@ struct
 		      body = do_exp body}
 
 
-	fun do_import import = import
-
-	fun do_export(ExportValue(l,v)) = ExportValue(l,v)
-	  | do_export(ExportType(l,v))  = ExportType(l,v)
-
-	fun do_module(MODULE{imports, exports, bnds}) =
+	fun do_module(MODULE{imports, exports, exports_int,bnds}) =
 	  let
-	    val imports = map do_import imports
 	    val bnds = do_bnds bnds
-	    val exports = map do_export exports
 	  in
-	    MODULE{imports=imports,exports=exports,bnds=bnds}
+	    MODULE{imports=imports,exports=exports,bnds=bnds,exports_int = exports_int}
 	  end
 
 	(* Main optimization routine:

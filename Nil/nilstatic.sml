@@ -26,6 +26,7 @@ struct
   val con_valid_prof      = Stats.ff "nilstatic_con_valid_profile"
   val con_valid_top       = Stats.ff "nilstatic_con_valid_top_profile"
 
+  val equiv_noisy_fail    = Stats.ff "nilstatic_eq_noisy_fail"
   val debug               = Stats.ff "nil_debug"
   val NilStaticDiag	  = Stats.ff "NilStaticDiag"
 
@@ -360,6 +361,20 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      print_context (exp_error_context (D,exp));
      error' explanation
        )
+
+  fun ec_error (D,exp,con,explanation) =
+    (
+     printem ["\n","TYPE ERROR: Problem with expression and type\n",
+		explanation,"\n"];
+     Ppnil.pp_exp exp;
+     lprintl "WITH MINIMAL CONTEXT AS";
+     print_context (exp_error_context (D,exp));
+     print "\n";
+     Ppnil.pp_con con;
+     lprintl "WITH MINIMAL CONTEXT AS";
+     print_context (con_error_context (D,con));
+     error' explanation
+     )
 
   fun c_error (D,con,explanation) =
       (
@@ -796,7 +811,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		end
 	  val _ = pop()
 	  val _ = if res then ()
-		  else if !debug then
+		  else if !debug orelse !equiv_noisy_fail then
 		    (print "con_equiv' returning false\n";
 		     print "subkinding = "; print (Bool.toString sk); print "\n";
 		     print "c1 = "; Ppnil.pp_con c1; print "\n";
@@ -1038,7 +1053,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | _ => false)
 
 	    val _ = if res then ()
-		    else if !debug then
+		    else if !debug orelse !equiv_noisy_fail then
 		      (print "con_structural_equiv returning false\n";
 		       print "c1 = "; Ppnil.pp_con c1; print "\n";
 		       print "c2 = "; Ppnil.pp_con c2; print "\n";
@@ -1753,7 +1768,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      (print "Analyzing an expression\n";Ppnil.pp_exp exp;
 	       print "\nof type\n";Ppnil.pp_con con';
 	       print "\nAt type \n";Ppnil.pp_con con;
-	       e_error(D,exp,"Expression cannot be given required type")))
+	       ec_error(D,exp,con,"Expression cannot be given required type")))
     end
   and exp_valid (D : context, exp : exp) : con =
       let
@@ -2455,7 +2470,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in ()
 	end
 
-      fun module_valid' (D,MODULE {bnds,imports,exports}) =
+      fun module_valid' (D,MODULE {bnds,imports,exports,exports_int}) =
 	let
 	  val _ = NilContext.is_well_formed (kind_valid,con_valid,sub_kind) D
 	  val _ = msg "  Done checking context\n"
@@ -2467,6 +2482,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
           val _ = msg "  Done validating module\n"
 	  val _ = app (export_valid D) exports
           val _ = msg "  Done validating exports\n"
+	  val _ = 
+	    Util.mapopt (fn ei => subtimer("Tchk:Exports_int",foldl import_valid' D) ei) exports_int
+          val _ = msg "  Done validating exports_int\n"
 	in
 	  ()
 	end

@@ -359,6 +359,18 @@ local
 
 	    val tuple_ptr_ml = opt_out "Not a deconstructible tuple_ptr" tuple_ptr_ml'
 
+	    fun array' c = 
+	      obind (prim1' c)
+	      (fn (Array_c s, c) => SOME (s,c) | _ => NONE)
+	    val array = opt_out "Not an array type" array'
+
+	    fun array_ptr' c =
+	      obind (ptr' c)
+	      (fn c => array' c)
+
+	    val array_ptr = opt_out "Not an array ptr type" array_ptr' 
+
+
 	    fun float' c = obind (prim0' c) (fn Float_c => SOME () | _ => NONE)
 	    val float = opt_out "Not float type" float'
 
@@ -410,14 +422,13 @@ local
 	    val embed = opt_out "Not an embedded type" embed'
 
 	    fun externarrow' c = 
-	      obind (prim3' c)
-	      (fn (ExternArrow_c s, args,fargs,res) => SOME (s,args,fargs,res) | _ => NONE)
+	      obind (prim2' c)
+	      (fn (ExternArrow_c s, args,res) => SOME (s,args,res) | _ => NONE)
 	    val externarrow = opt_out "Not an externarrow type" externarrow'
 
 	    fun externarrow_ml' c = obind (externarrow' c) 
-	      (fn (s,l,fl,r) => obind (list' l) 
-	       (fn (k,l) => obind (list' fl) 
-		(fn (k,fl) => (SOME (s,l,fl,r)))))
+	      (fn (s,l,r) => obind (list' l) 
+	       (fn (k,l) => SOME (s,l,r)))
 	    val externarrow_ml = opt_out "Not a deconstructible externarrow" externarrow_ml'
 
 	    fun coercion' c = 
@@ -429,7 +440,7 @@ local
 	    fun exn_packet' (c : con) = 
 	      obind (ptr' c)
 	      (fn tup => obind (tuple_ml' tup)
-	       (fn [d,c] => SOME(d,c)
+	       (fn [d,c,s] => SOME(d,c,s)
 	          | _ =>  NONE))
 
 	    val exn_packet = opt_out "Not an exn packet" exn_packet'
@@ -1134,8 +1145,8 @@ structure Deconstruct :> DECONSTRUCT =
 		 | _ => error "Not a known sum"
 
 	    fun externapp c = 
-	      case Dec.C.prim3 c
-		of (ExternArrow_c s, args,fargs,res) => res
+	      case Dec.C.externarrow' c
+		of SOME (s, args,res) => res
 		 | _ => error "Not an extern arrow"
 
 	    fun app c = 

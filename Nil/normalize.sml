@@ -1294,6 +1294,12 @@ struct
 	(case constructor of
 	   (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>
 	     let
+	       val (D,alpha) = state
+
+	       (* Alpha context may be zeroed out on return from recursive call *)
+	       val argc = alphaCRenameCon alpha argc
+	       val resc = alphaCRenameCon alpha resc
+	       val state = (D,Alpha.empty_context())
 	       val (state,argc,path) = context_reduce_hnf''(state,argc)
 
 	       val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
@@ -1366,15 +1372,6 @@ struct
 	     in  (state,Closure_c(c1,c2),path)
 	     end
 
-	 (*Typeof may insert con bindings into the context which
-	  * are already in the context.  Therefore, we must rename it first.
-	  *)
-(*
-	 | Typeof_c e =>
-	     let val (D,alpha) = state
-	     in context_beta_reduce((D,Alpha.empty_context()),type_of(D,renameExp(alphaCRenameExp alpha e)))
-	     end
-*)
 	 | (Proj_c (c,lab)) =>
 	     (case context_beta_reduce (state,c) of
 		(state,constructor,true)  => (state,Proj_c(constructor,lab),true)

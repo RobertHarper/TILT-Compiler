@@ -9,6 +9,7 @@ struct
 
     (* Lil code does not use traces (much) *)
     val doTrace = CompilerControl.ReifyTraces
+    val vararg_uses_result = CompilerControl.VarargUsesResult
 
     fun error s = Util.error "reify.sml" s
 
@@ -149,12 +150,28 @@ struct
 		     val (tr,bnds,pset) = do_reify(ctxt,carrier,hd trs,pset)
 		   in (bnds,[tr],pset)
 		   end
-		 | _ =>
-                   ([],trs,
-		    if (NilDefs.allprim_uses_carg p) then (* Only reify params for primops that use con args as data *)
-		      reify_cons_rt (cons, pset)
-		    else
-		      pset)
+
+	       (* Only first arg is data *)
+	       | NilPrimOp (make_vararg (ope,eff)) => 
+		 if !vararg_uses_result then
+		   ([],trs,reify_cons_rt (cons, pset))
+		 else
+		   (case cons
+		      of [arg,ret] => ([],trs,reify_con_rt (arg,pset))
+		       | _ => error "Bad args to vararg")
+	       | NilPrimOp (make_onearg (ope,eff)) => 
+		  if !vararg_uses_result then
+		   ([],trs, reify_cons_rt (cons, pset))
+		  else
+		    (case cons
+		       of [arg,ret] => ([],trs,reify_con_rt (arg,pset))
+			| _ => error "Bad args to onearg")
+	       | _ =>
+	        ([],trs,
+		 if (NilDefs.allprim_uses_carg p) then (* Only reify params for primops that use con args as data *)
+		   reify_cons_rt (cons, pset)
+		 else
+		   pset)
 
              val (exps', pset'') = reify_exps ctxt (exps, pset')
 	  in
@@ -545,13 +562,13 @@ struct
 	    (bnds, exports, pset, ctxt, is)
 	end
 
-    fun reify_mod (nilmod as MODULE {imports, ...}) =
+    fun reify_mod (nilmod as MODULE {imports, exports_int,...}) =
         let val (bnds', exports', pset, ctxt, imports') =
 	       reify_mod' (imports, NilContext.empty (), nilmod)
 
 	in  if (!debug) then print_pset pset else ();
             MODULE {bnds = bnds', imports = imports',
-		    exports = exports'}
+		    exports = exports', exports_int = exports_int}
 
 	end
 

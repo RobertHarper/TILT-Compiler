@@ -96,7 +96,7 @@ unit ILSTATIC = "ilstatic2.sig.sml" {Util Il}
 interface IlStatic = "ilstatic.int" {ILSTATIC}
 unit IlStatic : IlStatic = "ilstatic2.sml" {
 	Prim Tyvar Name Int List Il IlContext PrimUtil Ppil
-	IlUtil Util Listops ILSTATIC Stats Option UtilError
+	IlUtil Util Listops ILSTATIC Stats Option UtilError 
 }
 
 unit EQUAL = "equal2.sig.sml" {Il Tyvar}
@@ -194,9 +194,9 @@ unit IlContext = "ilcontext.sml" {
 	List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil
 	Fixity Option
 }
-(*
+
 unit IlEq = "ileq.sml" {Il Util Stats Name Ppil Listops Tyvar}
-*)
+
 interface IlBlast = "ilblast.int" {Blaster Il}
 unit IlBlast : IlBlast = "ilblast.sml" {
 	Il Blaster Util Int SplayMapFn Ppil IlTable Name Prim
@@ -222,7 +222,7 @@ unit ILSTATIC = "ilstatic.sig.sml" {Util Il}
 interface IlStatic = "ilstatic.int" {ILSTATIC}
 unit IlStatic : IlStatic = "ilstatic.sml" {
 	Prim Tyvar Name Int List Il IlContext PrimUtil Ppil
-	IlUtil Util Listops ILSTATIC Stats Option UtilError
+	IlUtil Util Listops ILSTATIC Stats Option UtilError IlEq
 }
 
 unit EQUAL = "equal.sig.sml" {Il Tyvar}

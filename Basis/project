@@ -16,17 +16,27 @@ unit TiltPrim : TiltPrim = primitive
 interface TiltVectorEq = "vector_eq.int" {TiltPrim}
 unit TiltVectorEq : TiltVectorEq = "vector_eq.sml" {TiltPrim}
 
+#if $objtype S= "talx86"
+interface TiltExnExtern = "General/tal_extern.sml" {TiltPrim}
+unit TiltExnExtern : TiltExnExtern = "General/tal_extern.sml" {TiltPrim}
+#else
 interface TiltExnExtern = "General/extern.sml" {TiltPrim}
 unit TiltExnExtern : TiltExnExtern = "General/extern.sml" {TiltPrim}
+#endif
 
 interface TiltPrelude = "Prelude.int" {TiltPrim}
-unit TiltPrelude : TiltPrelude = "Prelude.sml" {TiltPrim TiltExnExtern}
+unit TiltPrelude : TiltPrelude = "Prelude.sml" {TiltPrim TiltExnExtern
+}
 
 interface TiltCleanUp = "cleanup.int" { TiltPrim TiltPrelude }
 unit TiltCleanUp : TiltCleanUp = "cleanup.sml" { TiltPrim TiltPrelude }
 
 interface TiltExn = "tiltexn.int" {TiltPrim TiltPrelude}
+#if $objtype S= "talx86"
+unit TiltExn : TiltExn = "tal_tiltexn.sml" {TiltPrim TiltPrelude TiltExnExtern}
+#else
 unit TiltExn : TiltExn = "tiltexn.sml" {TiltPrim TiltPrelude}
+#endif
 
 interface GENERAL = "General/general.sig.sml" {
 	TiltPrim TiltPrelude
@@ -263,9 +273,17 @@ unit ARRAY : ARRAY = "Aggregate/array-sig.sml" {
 	TiltPrim TiltPrelude
 }
 interface Array = "Aggregate/array.int" {TiltPrim TiltPrelude ARRAY}
+
+#if $objtype S= "talx86"
+unit Array : Array = "Aggregate/tal_array.sml" {
+	TiltPrim TiltPrelude TiltVectorEq ARRAY TiltPreVector
+}
+#else
 unit Array : Array = "Aggregate/array.sml" {
 	TiltPrim TiltPrelude TiltVectorEq ARRAY TiltPreVector
 }
+#endif
+
 interface VECTOR = "Aggregate/vector-sig.sml" {
 	TiltPrim TiltPrelude
 }
@@ -279,9 +297,17 @@ unit TiltPreVector8 : TiltPreVector8 = "Aggregate/pre-vector8.sml" {
 	TiltPrim TiltPrelude
 }
 interface Vector = "Aggregate/vector.int" {TiltPrim TiltPrelude VECTOR}
+
+#if $objtype S= "talx86"
+unit Vector : Vector = "Aggregate/tal_vector.sml" {
+	TiltPrim TiltPrelude TiltVectorEq VECTOR Array TiltPreVector
+}
+#else
 unit Vector : Vector = "Aggregate/vector.sml" {
 	TiltPrim TiltPrelude TiltVectorEq VECTOR Array TiltPreVector
 }
+#endif
+
 interface MONO_VECTOR = "Aggregate/mono-vector-sig.sml" {
 	TiltPrim TiltPrelude
 }
@@ -297,17 +323,32 @@ unit MONO_ARRAY : MONO_ARRAY = "Aggregate/mono-array-sig.sml" {
 interface Word8Vector = "Aggregate/word8-vector.int" {
 	TiltPrim TiltPrelude MONO_VECTOR
 }
+#if $objtype S= "talx86"
+unit Word8Vector : Word8Vector = "Aggregate/tal-word8-vector.sml" {
+	TiltPrim TiltPrelude TiltVectorEq MONO_VECTOR
+	List TiltPreVector8
+}
+#else
 unit Word8Vector : Word8Vector = "Aggregate/word8-vector.sml" {
 	TiltPrim TiltPrelude TiltVectorEq MONO_VECTOR
 	List TiltPreVector8
 }
+#endif
+
 interface Word8Array = "Aggregate/word8-array.int" {
 	TiltPrim TiltPrelude MONO_ARRAY
 }
+#if $objtype S= "talx86"
+unit Word8Array : Word8Array = "Aggregate/tal-word8-array.sml" {
+	TiltPrim TiltPrelude TiltVectorEq MONO_ARRAY
+	List Word8Vector TiltPreVector8
+}
+#else
 unit Word8Array : Word8Array = "Aggregate/word8-array.sml" {
 	TiltPrim TiltPrelude TiltVectorEq MONO_ARRAY
 	List Word8Vector TiltPreVector8
 }
+#endif
 interface PACK_WORD = "Aggregate/pack-word-sig.sml" {
 	TiltPrim TiltPrelude Word8Vector Word8Array LargeWord
 }

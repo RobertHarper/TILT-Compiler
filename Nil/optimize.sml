@@ -41,7 +41,7 @@ struct
 	val reduce_varargs = Stats.tt "ReduceVarargs"
 	val reduce_oneargs = Stats.tt "ReduceOneargs"
 	val reduce_onearg_apps = Stats.tt "ReduceOneargApps"
-	val kill_imports = Stats.tt "KillImports"
+	val kill_imports  = CompilerControl.KillDeadImport
 
 	val chatlev = ref 0
 	val folds_reduced = ref 0
@@ -2284,30 +2284,57 @@ struct
 	  in imports 
 	  end
 
-	fun optimize params (MODULE{imports, exports, bnds}) =
+	fun use_export state exp = 
+	  (case exp
+	     of ImportValue(l,v,tr,c) => use_var (state,v)
+	      | ImportType(l,v,k)  =>  use_var (state,v)
+	      | _ => ())
+
+	fun optimize params (MODULE{imports, exports, bnds,exports_int}) =
 	  let
 	      val _ = reset_debug()
 	      val _ = reset_stats()
 
 	      val state = newState params
 	      val (imports,state) = foldl_acc do_import state imports
-
 	      val (bnds,state) = do_bnds(bnds,state)
+	      val (exports_int,state) = 
+		(case exports_int
+		   of SOME ei => 
+		     let
+		       val (ei,state) = foldl_acc do_import state ei
+		     in (SOME ei,state)
+		     end
+		    | NONE => (NONE,state))
+
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
 	      val temp = map (do_export state) exports
 	      val export_bnds = List.mapPartial #1 temp
 	      val exports = map #2 temp
 	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
+
+	      val exports_int = 
+		(case exports_int
+		   of SOME ei => 
+		     let
+		       val () = List.app (use_export state) ei
+		       val ei = filter_imports state ei
+		     in SOME ei
+		     end
+		    | NONE => NONE)
               val bnds = Listops.map_concat (bnd_used state) bnds
 	      val bnds = flattenBnds bnds
 	      val imports = filter_imports state imports
+
 	      val _ = chat_stats ()
 	      val _ = reset_debug()
 	      val _ = reset_stats()
 
-	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
+	  in  MODULE{imports=imports,exports=exports,bnds=bnds,exports_int = exports_int}
 	  end
+
+
 
 	fun optimize_int params (INTERFACE{imports, exports}) =
 	  let
@@ -2318,7 +2345,12 @@ struct
 	      val (imports,state) = foldl_acc do_import state imports
 	      val (exports,state) = foldl_acc do_import state exports
 
+	      (* we "retain" the state so that no exports are optimized away *)
+	      val state = retain_state state
+	      val () = List.app (use_export state) exports
 	      val imports = filter_imports state imports
+	      val exports = filter_imports state exports
+
 	      val _ = chat_stats ()
 	      val _ = reset_debug()
 	      val _ = reset_stats()

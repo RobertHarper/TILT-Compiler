@@ -172,7 +172,7 @@ structure LilTypecheck :> LILTYPECHECK =
     fun vcase_cvar args = ((LC.vcase_cvar args) 
 			   handle LC.Unbound s => FAIL ("Vcase of unbound variable "^s)
 				| LC.Rebound s => FAIL ("Vcase rebinds variable "^s))
-
+    val clear_vars = LC.clear_vars 
 
 
     structure K = 
@@ -616,6 +616,12 @@ structure LilTypecheck :> LILTYPECHECK =
 	  in t 
 	  end
 	and primargcheck env arg t s = check primarg "primarg" env arg t s
+	and primarg_union env arg s = 
+	  let 
+	    val t = ((primarg_union' env arg) handle IllTyped => FAIL s)
+	  in t 
+	  end
+	and primarg_unioncheck env arg t s = check primarg_union "primarg_union" env arg t s
 	and value size env v s = ((value' size env v) handle IllTyped => FAIL s)
 	and valuecheck size env v t s = check (value size) "value" env v t s
 	and sv64 env sv s = 
@@ -726,6 +732,17 @@ structure LilTypecheck :> LILTYPECHECK =
 	       end
 	      | arg32 sv => sv32 env sv "primarg32: bad sv"
 	      | arg64 sv => sv64 env sv "primarg64: bad sv")
+	and primarg_union' env arg = 
+	  (case arg
+	     of slice (sz,sv) => 
+               let 
+                 val t = sv32 env sv "slice: bad sv" 
+                 val (sz',c) = VALOF (Dec.C.embed' t) "slice: not an embedded type" 
+                 val _ = ASSERT (sz = sz') "slice: bad sizes" 
+               in LD.C.inl (LD.K.T32or64()) t
+	       end
+	      | arg32 sv => LD.C.inl (LD.K.T32or64()) (sv32 env sv "primarg32: bad sv")
+	      | arg64 sv => LD.C.inr (LD.K.T32or64()) (sv64 env sv "primarg64: bad sv"))
 	and value' size env arg  =
 	  (case size
 	     of B1 => 
@@ -829,15 +846,13 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val () = T.check64 env rtype "Prim64 has bad return type"
 	       in rtype
 	       end	      
-	      | ExternAppf (f,args,fargs) => 
+	      | ExternAppf (f,args) => 
 	       let
 		 val ft = sv32 env f "ExternAppf: bad fun"
-		 val (size,ts,fts,rtype) = VALOF (Dec.C.externarrow' ft) "ExternAppf: type not Extern_c"
+		 val (size,ts,rtype) = VALOF (Dec.C.externarrow' ft) "ExternAppf: type not Extern_c"
 		 val () = ASSERT (size = B8) "ExternAppf: not a 64 bit return type"
 		 val (_,ts) = VALOF (Dec.C.list' ts) "ExternAppf: Extern arg not a list"
-		 val () = checklist sv32check env args ts "ExternAppf got bad 32bit argument"
-		 val (_,fts) = VALOF (Dec.C.list' fts) "ExternAppf: Extern arg not a list"
-		 val () = checklist sv64check env fargs fts "ExternAppf got bad 32bit argument"
+		 val () = checklist primarg_unioncheck env args ts "ExternAppf got bad 32bit argument"
 	       in rtype
 	       end
 )
@@ -898,15 +913,13 @@ structure LilTypecheck :> LILTYPECHECK =
 	       in rtype
 	       end
 	      | LilPrimOp32 args => lilprimop32 env args "LilPrimOp32: bad prim"
-	      | ExternApp (f,args,fargs) => 
+	      | ExternApp (f,args) => 
 	       let
 		 val ft = sv32 env f "ExternApp: bad fun"
-		 val (size,ts,fts,rtype) = VALOF (Dec.C.externarrow' ft) "ExternApp: type not Extern_c"
+		 val (size,ts,rtype) = VALOF (Dec.C.externarrow' ft) "ExternApp: type not Extern_c"
 		 val () = ASSERT (size = B4) "ExternApp: bad function return type"
 		 val (_,ts) = VALOF (Dec.C.list' ts) "ExternApp: Extern arg not a list"
-		 val () = checklist sv32check env args ts "ExternApp got bad argument"
-		 val (_,fts) = VALOF (Dec.C.list' fts) "ExternApp: Extern arg not a list"
-		 val () = checklist sv64check env fargs fts "ExternApp got bad 32bit argument"
+		 val () = checklist primarg_unioncheck env args ts "ExternApp got bad argument"
 	       in rtype
 	       end
 	      | App (f,vs,fvs) =>
@@ -938,11 +951,11 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val () = T.check32 env c "Raise: bad type"
 	       in c
 	       end
-	      | Handle (t,e1,(v,e2)) => 
+	      | Handle {t,e,h = {b,he}}=> 
 	       let
-		 val () = expcheck env e1 t "Handle: bad body"
-		 val env = bind_var32 (env,(v,LD.T.exn()))
-		 val () = expcheck env e2 t "Handle: bad handler"
+		 val () = expcheck env e t "Handle: bad body"
+		 val env = bind_var32 (env,(b,LD.T.exn()))
+		 val () = expcheck env he t "Handle: bad handler"
 	       in t
 	       end)
 
@@ -1024,7 +1037,13 @@ structure LilTypecheck :> LILTYPECHECK =
 	    val env = bind_var64s (env,vts)
 	  in env
 	  end
-	
+        and checklts env lts s =
+	  let
+	    val () = LO.app_second (fn t => T.check32 env t s) lts
+	    val env = bind_labels (env,lts)
+	  in env
+	  end
+
 	and function env (f,Function {tFormals    : (var * kind) list,
 				      eFormals    : (var * con) list,
 				      fFormals    : (var * con) list,
@@ -1073,12 +1092,13 @@ structure LilTypecheck :> LILTYPECHECK =
 	       let
 		 val () = T.check32 env rtype "Dyncase: bad return type"
 		 val t = sv32 env arg  "Dyncase: bad arg"
-		 val (dyntag,c) = DECT Dec.C.exn_packet' t "Dyncase: not an exn packet"
+		 val (dyntag,c,s) = DECT Dec.C.exn_packet' t "Dyncase: not an exn packet"
 		 val () = EQUALTYPES (LD.T.dyntag c) dyntag "Dyncase: exn packet fields are wrong"
+		 val () = EQUALTYPES (LD.T.stringt()) s "Dyncase: name field not a string"
 		 fun armcheck (sv,(v,c),exp) = 
 		   let
 		     val () = T.check32 env c "Dyncase: bad arm formal type"
-		     val (d,elt) = DECT Dec.C.exn_packet' c "Dyncase: arm arg not of exn packet type"
+		     val (d,elt,_) = DECT Dec.C.exn_packet' c "Dyncase: arm arg not of exn packet type"
 		     val () = sv32check env sv d "Dyncase: bad arm exntag"
 		     val () = EQUALTYPES (LD.T.dyntag elt) d "Dyncase: exn stamp packet fields are wrong"
 		     val env = bind_var32 (env,(v,c)) 
@@ -1239,7 +1259,7 @@ structure LilTypecheck :> LILTYPECHECK =
       struct
 	fun check env d = 
 	  (case d
-	     of Dboxed (l,sv64) => E.sv64check env sv64 (LD.T.ptr (LD.T.boxed_float())) "Dboxed: bad box"
+	     of Dboxed (l,sv64) => E.sv64check env sv64 (LD.T.float()) "Dboxed: bad box"
 	      | Dtuple (l,t,qs,svs) => 
 	       let
 		 val () = T.check32 env t "Dtuple: bad type"
@@ -1317,6 +1337,7 @@ structure LilTypecheck :> LILTYPECHECK =
 	val check = fn env => fn e => fn t => E.expcheck env e t "EXP CHECK FAILED"
 	val checkvks = fn env => fn vks => E.checkvks env vks "VKS LIST CHECK FAILED"
 	val checklvks = fn env => fn lvks => E.checklvks env lvks "LVKS LIST CHECK FAILED"
+	val checklts = fn env => fn lts => E.checklts env lts "LTS LIST CHECK FAILED"
 	val synth = fn env => fn e => E.exp env e "EXP SYNTH FAILED"
 	val check = wrap3 check
 	val synth = wrap2 synth
@@ -1337,20 +1358,44 @@ structure LilTypecheck :> LILTYPECHECK =
 
 	fun check (MODULE {unitname : string,
 			   parms : Name.LabelSet.set,
-			   entry_c : label,
-			   entry_r : label,
+			   entry_c : label * var * kind,
+			   entry_r : label * con,
 			   timports : (label * var * kind) list,
+			   vimports : (label * con) list,
 			   data   : data list,
 			   confun : con}) = 
 	  let
 	    val () = reset_checked()
 	    val () = msg "\tValidating type imports\n"
 	    val env = E.checklvks (LC.empty()) timports
+	    val () = msg "\tValidating term imports\n"
+	    val env = E.checklts env vimports
 	    val () = msg "\tValidating data\n"
 	    val env  = D.check data env
 	    val () = msg "\tValidating confun\n"
 	    val () = if !paranoid then ASSERT (LR.isRenamedCon confun) "CONFUN fails renaming check" else ()
-	    val _  = C.synth env confun
+	    val confun_k  = C.synth env confun
+
+	    val () = msg "\tValidating entry_c\n"
+	    val (entry_c_l,entry_c_a,entry_c_k) = entry_c
+	    val ()  = K.check env entry_c_k
+
+	    val () = msg "\tValidating entry_r\n"
+	    val env = bind_cvar (env,(entry_c_a,entry_c_k))
+	    val (entry_r_l,entry_r_t) = entry_r
+	    val ()  = T.check32 env entry_r_t
+
+	    val () = msg "\tChecking interface conformance \n"
+	    val () = EQUALKINDS entry_c_k confun_k "entry_c kind does not match confun"
+	    val entry_r_t = LS.varConConSubst entry_c_a confun entry_r_t
+	    val expfun_t = 
+	      (case LU.get_data_entry data entry_r_l
+		 of Dcode (l,f) => Synth.Typeof.code f
+		  | _ => FAIL "Bad entry_r_l")
+
+	    val () = EQUALTYPES expfun_t entry_r_t "entry_r type doesn't match expfun"
+
+
 	    val () = msg "\tDone validating module\n"
 	    val () = reset_checked()
 	  in ()

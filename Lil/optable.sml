@@ -372,10 +372,7 @@ struct
 	  | (Prim64 a, Prim64 b)  => cmp_prim64 (a,b)
 	  | (Prim64 _, _ )  => GREATER
 	  | (_ , Prim64 _) => LESS
-	  | (ExternAppf (f1,args1,fargs1), ExternAppf (f2,args2,fargs2))  => 
-	   (case cmp_list cmp_sv32 (f1::args1,f2::args2)
-	      of EQUAL => cmp_list cmp_sv64 (fargs1,fargs2)
-	       | other => other))
+	  | (ExternAppf (f1,args1), ExternAppf (f2,args2))  => cmp_list cmp_primarg (arg32 f1::args1,arg32 f2::args2))
 (*	  | (ExternAppf _, _ )  => GREATER
 	  | (_ , ExternAppf _) => LESS*)
 
@@ -413,7 +410,7 @@ struct
 	  | (LilPrimOp32 a,LilPrimOp32 b) => cmp4 (cmp_lilprim,cmp_con_list,cmp_sv32_list,cmp_sv64_list) (a,b)
 	  | (LilPrimOp32 _, _) => GREATER
 	  | (_, LilPrimOp32 _) => LESS
-	  | (ExternApp a,ExternApp b) => cmp3 (cmp_sv32,cmp_sv32_list,cmp_sv64_list) (a,b)
+	  | (ExternApp a,ExternApp b) => cmp2 (cmp_sv32,cmp_primarg_list) (a,b)
 	  | (ExternApp _, _) => GREATER
 	  | (_, ExternApp _) => LESS
 	  | (App a,App b) => cmp3 (cmp_sv32,cmp_sv32_list,cmp_sv64_list) (a,b)
@@ -428,7 +425,7 @@ struct
 	  | (Raise a,Raise b) => cmp2 (cmp_con,cmp_sv32) (a,b)
 	  | (Raise _, _) => GREATER
 	  | (_, Raise _) => LESS
-	  | (Handle (c1,_,_),Handle (c2,_,_)) => 
+	  | (Handle {t = c1,...},Handle {t = c2,...}) =>
 	   (case cmp_con (c1,c2)
 	      of EQUAL => LESS
 	       | other => other))  (* We don't try to track expressions *)

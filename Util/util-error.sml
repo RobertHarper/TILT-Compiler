@@ -24,13 +24,30 @@ struct
 	|   BadMagicNumber _ => false
 	|   _ => true)
 
-    fun errormsg (e : exn) : string =
+    local
+      val exn_printers : (exn -> (string option)) list ref = ref []
+      fun try_exn_printers e = 
+	let
+	  fun loop [] = NONE
+	    | loop (pr::prs) = 
+	    let
+	      val sopt = pr e
+	    in if isSome sopt then sopt else loop prs
+	    end
+	in loop (!exn_printers)
+	end
+    in
+      fun register_exn_printer pr = exn_printers := pr :: (!exn_printers)
+      fun errormsg (e : exn) : string =
 	(case e of
-	    BUG {file,msg} => file ^ ": " ^ msg
-	|   Reject {msg} => msg
-	|   BadMagicNumber file => "bad magic number in " ^ file
-	|   e => "uncaught exception: " ^ exnMessage e)
-
+	   BUG {file,msg} => file ^ ": " ^ msg
+	 | Reject {msg} => msg
+	 | BadMagicNumber file => "bad magic number in " ^ file
+	 | e => 
+	     (case try_exn_printers e
+		of SOME s => s
+		 | NONE => "uncaught exception: " ^ exnMessage e))
+    end
     fun exitstatus (e : exn) : Word8.word =
 	if bomb e then 0w1 else 0w10	(* See ../Test/runtest.sml *)
 

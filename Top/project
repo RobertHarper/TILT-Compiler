@@ -44,8 +44,9 @@ unit ProjectLexFun : ProjectLexFun = "project.lex.sml" {
 
 unit FS = "fs.sig.sml" {LinkIl Blaster Name Crc}
 unit Fs = "fs.sml" {
-	FS FileCache LinkIl Blaster Name Util Platform String Int
-	Word32 OS List BinIO Word8Vector Crc HashString Stats
+	FS FileCache LinkIl Blaster Name Util Platform 
+	Stats Listops Crc HashString 
+	Word32 OS List BinIO Word8Vector ListPair String Int
 }
 
 #if defined (env TILT_FRONTEND) andalso env TILT_FRONTEND S= "2" 

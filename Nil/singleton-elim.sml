@@ -332,23 +332,25 @@ structure SingletonElim :> SINGLETONELIM =
      in ((ImportBnd(p,cb))::rbnds,env)  
      end
    
-   fun R_imports imports =
+   fun R_imports env imports =
      let
-       val (rimports,env) = foldl R_import ([],new_env()) imports
+       val (rimports,env) = foldl R_import ([],env) imports
      in (rev rimports,env)
      end
 
-   fun R_module (MODULE{bnds,imports,exports}) =
+   fun R_module (MODULE{bnds,imports,exports,exports_int}) =
      let
-       val (imports,env) = R_imports imports
-       val (bnds,_) = R_bnds env bnds
-     in MODULE{bnds=bnds,imports=imports,exports=exports}
+       val env = new_env()
+       val (imports,env) = R_imports env imports
+       val (bnds,env) = R_bnds env bnds
+       val exports_int = Util.mapopt (fn ei => #1(R_imports env ei)) exports_int
+     in MODULE{bnds=bnds,imports=imports,exports=exports,exports_int=exports_int}
      end
 
    fun R_interface (INTERFACE{imports,exports}) =
      let
-       val (imports,env) = R_imports imports
-       val (exports,env) = R_imports exports
+       val (imports,env) = R_imports (new_env()) imports
+       val (exports,env) = R_imports env exports
      in INTERFACE{imports=imports,exports=exports}
      end
 

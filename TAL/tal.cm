@@ -9,6 +9,8 @@ is
 
 tal.sml
 
+peep.sig.sml
+peep.sml
 abbrev.sig.sml
 abbrev.sml
 pp.sig.sml
@@ -17,12 +19,19 @@ talout.sig.sml
 talout.sml
 tal_abbrev.sig.sml
 tal_abbrev.sml
+instructions.sig.sml
+instructions.sml
 taltranslationdefs.sig.sml
 taltranslationdefs.sml
 liltotalenv.sig.sml
 liltotalenv.sml
 liltotalcon.sig.sml
 liltotalcon.sml
+statetypes.sml
+stackdesc.sig.sml
+stackdesc.sml
+instrdesc.sig.sml
+instrdesc.sml
 liltotalstate.sig.sml
 liltotalstate.sml
 liltotalexp.sig.sml

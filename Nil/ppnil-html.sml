@@ -30,6 +30,10 @@ structure PpnilHtml :> PPNIL =
     fun pp_list' doer objs = pp_list doer objs ("(", ",",")", false)
     fun pp_list'' doer objs = pp_list doer objs ("", ",","", false)
     fun pp_list''' doer objs = pp_list doer objs ("", ".", "", false)
+    fun pp_opt opt doer = 
+      (case opt 
+	 of SOME obj => doer obj
+	  | NONE => String "")
 
     fun pp_var v =
 	let val s = var2string v
@@ -489,14 +493,18 @@ structure PpnilHtml :> PPNIL =
       |  pp_exportentry (ExportType (l,v)) =
       Hbox[pp_label l, String " = ", pp_var v]
 
-    fun pp_module (MODULE{bnds,imports,exports}) =
+    fun pp_module (MODULE{bnds,imports,exports,exports_int}) =
       Vbox0 0 1 [pp_bnds bnds,
 		 Break,
 		 String "IMPORTS:", Break,
 		 pp_list pp_importentry imports ("","","",true), Break,
 		 String "EXPORTS:", Break,
-		 pp_list pp_exportentry exports ("","","",true), Break]
-
+		 pp_list pp_exportentry exports ("","","",true), Break,
+		 pp_opt exports_int (fn ei => (
+					       HOVbox[String "EXPORTS_INT:", Break,
+						      pp_list pp_importentry ei ("","","",true), Break]))
+		 ]
+      
     fun pp_interface (INTERFACE{imports,exports}) =
       Vbox0 0 1 [String "IMPORTS:", Break,
 		 pp_list pp_importentry imports ("","","",true), Break,

@@ -40,8 +40,12 @@ struct
 	val Pinterface = "pinterface"
 	val Using = "using"
 	val Asm = "asm"
+	val Asmtal = "asm.tal"
+	val Asmetali = "asm_e.tali"
+	val Asmitali = "asm_i.tali"
 	val Asmz = "asmz"
-	val Obj = "obj"
+	val Obj = "obj.o"
+	val Tobj = "obj.to"
 	val Tali = "tali"
 	val Tmp = "tmp"
 	val Lib = "Lib"
@@ -76,25 +80,34 @@ struct
 	    in	{info=info, tali=tali, tali_rel=tali_rel}
 	    end
 
-	fun u (pos:pos, l:label) : {info:file, pinterface:file, obj:file,
-		asm:file, asmz:file, using_file:file, tali:file, tali_rel:file} =
+	fun u (pos:pos, l:label) : {info:file, pinterface:file, obj:file, tobj:file,
+				    asm:file, asmz:file, 
+				    asme:file, asme_rel:file, asmi:file, asmi_rel:file, 
+				    using_file:file, tali:file, tali_rel:file} =
 	    let val l = Name.label2name' l
 		val target = Target()
 		val root = pdir pos/U/l
 		val root' = root/target
 	    in	{info=root/Info, pinterface=root/Pinterface,
-		 obj=root'/Obj, asm=root'/Asm, asmz=root'/Asmz,
+		 obj=root'/Obj, 
+		 tobj = root'/Tobj,
+		 asm=if Target.tal() then root'/Asmtal else root'/Asm, 
+		 asme=root'/Asmetali, asme_rel=l/target/Asmetali,
+		 asmi=root'/Asmitali, asmi_rel=l/target/Asmitali,
+		 asmz=root'/Asmz,
 		 using_file=root/Using, tali=root'/Tali, tali_rel=l/target/Tali}
 	    end
 
 	val cwd : unit -> string =
 	    Util.memoize OS.FileSys.getDir
 
-	type link = {exe:file, asm:file, asmz:file, obj:file}
+	type link = {exe:file, asm:file, asmz:file, obj:file, tobj:file}
 
 	fun link (exe:file) : link =
 	    let val root = cwd()/TM/L/file exe
-	    in	{exe=exe, asm=root/Asm, asmz=root/Asmz, obj=root/Obj}
+	    in	{exe=exe, 
+		 asm=if Target.tal() then root/Asmtal else root/Asm, 
+		 asmz=root/Asmz, obj=root/Obj, tobj=root/Tobj}
 	    end
 
 	type pack =
@@ -188,22 +201,32 @@ struct
 
     type srcu =
 	{pos:pos, opened:units, src:file,
-	 info:file, pinterface:file, obj:file,
+	 info:file, pinterface:file, obj:file, tobj:file,
 	 asm:file, asmz:file, using_file:file,
+	 asme:file, asme_rel:file,
+	 asmi:file, asmi_rel:file,
 	 tali:file, tali_rel:file}
     type ssrcu =
 	{pos:pos, opened:units, src:file, asc:label,
-	 info:file, obj:file, asm:file, asmz:file,
+	 info:file, obj:file, tobj:file, asm:file, asmz:file,
+	 asme:file, asme_rel:file,
+	 asmi:file, asmi_rel:file,
 	 using_file:file, tali:file, tali_rel:file}
     type primu =
 	{pos:pos, asc:label,
-	 obj:file, asm:file, asmz:file,
+	 obj:file, tobj:file, asm:file, asmz:file,
+	 asme:file, asme_rel:file,
+	 asmi:file, asmi_rel:file,
 	 using_file:file, tali:file, tali_rel:file}
     type precompu =
-	{pos:pos, obj:file, using:units, opened:units, src:file, asc:label,
+	{pos:pos, obj:file, tobj:file, using:units, opened:units, src:file, asc:label,
+	 asme:file, asme_rel:file,
+	 asmi:file, asmi_rel:file,
 	 info:file, using_file:file, tali:file, tali_rel:file}
     type compu =
-	{pos:pos, obj:file, using:units, opened:units, asc:label,
+	{pos:pos, obj:file, tobj:file, using:units, opened:units, asc:label,
+	 asme:file, asme_rel:file,
+	 asmi:file, asmi_rel:file,
 	 using_file:file, tali:file, tali_rel:file}
 
     datatype uexp =
@@ -293,62 +316,77 @@ struct
 	struct
 
 	    fun src (pos:pos, U:label, opened:units, src:file) : uexp =
-		let val {info,pinterface,obj,asm,asmz,using_file,tali,tali_rel,...} =
+		let val {info,pinterface,obj,tobj,asm,asmz,
+			 asme,asme_rel,asmi,asmi_rel,
+			 using_file,tali,tali_rel,...} =
 			F.u(pos,U)
 		in  SRCU
 			{pos=pos, opened=opened, src=src, info=info,
-			 pinterface=pinterface, obj=obj, asm=asm,
+			 pinterface=pinterface, obj=obj, tobj=tobj, asm=asm,
+			 asme=asme, asme_rel=asme_rel,asmi=asmi, asmi_rel=asmi_rel,
 			 asmz=asmz, using_file=using_file, tali=tali,
 			 tali_rel=tali_rel}
 		end
 
 	    fun ssrc (pos:pos, U:label, I:label, opened:units, src:file) : uexp =
-		let val {info,obj,asm,asmz,using_file,tali,tali_rel,...} = F.u(pos,U)
+		let val {info,obj,tobj,asm,asme,asme_rel,asmi,asmi_rel,
+			 asmz,using_file,tali,tali_rel,...} = F.u(pos,U)
 		in  SSRCU
 			{pos=pos, opened=opened, src=src, asc=I, info=info,
-			 obj=obj, asm=asm, asmz=asmz, using_file=using_file,
+			 obj=obj, tobj=tobj, asm=asm, asmz=asmz, using_file=using_file,
+			 asmi=asmi, asmi_rel=asmi_rel,
+			 asme=asme, asme_rel=asme_rel,
 			 tali=tali, tali_rel=tali_rel}
 		end
 
 	    fun prim (pos:pos, U:label, I:label) : uexp =
-		let val {obj,asm,asmz,using_file,tali,tali_rel,...} = F.u(pos,U)
+		let val {obj,tobj,asm,asmz,asme,asme_rel,asmi,asmi_rel,using_file,tali,tali_rel,...} = F.u(pos,U)
 		in  PRIMU
-			{pos=pos, asc=I, obj=obj, asm=asm, asmz=asmz,
+			{pos=pos, asc=I, obj=obj, tobj=tobj, asm=asm, asmz=asmz,
+			 asme=asme, asme_rel=asme_rel,asmi=asmi, asmi_rel=asmi_rel,
 			 using_file=using_file, tali=tali, tali_rel=tali_rel}
 		end
 
 	    fun precomp (pos:pos, U:label, I:label, opened:units, src:file) : uexp =
-		let val {obj,info,using_file,tali,tali_rel,...} = F.u(pos,U)
+		let val {obj,tobj,info,using_file,asmi,asmi_rel,asme,asme_rel,tali,tali_rel,...} = F.u(pos,U)
 		    val using = Fs.read blastInUnits using_file
 		in  PRECOMPU
-			{pos=pos, obj=obj, using=using, opened=opened,
+			{pos=pos, obj=obj, tobj=tobj, using=using, opened=opened,
 			 src=src, asc=I, info=info, using_file=using_file,
+			 asme=asme, asme_rel=asme_rel,
+			 asmi=asmi, asmi_rel=asmi_rel,
 			 tali=tali, tali_rel=tali_rel}
 		end
 
 	    fun precomp' (pos:pos, U:label, using:units, I:label, opened:units, src:file) : uexp =
-		let val {obj,info,using_file,tali,tali_rel,...} = F.u(pos,U)
+		let val {obj,tobj,info,using_file,asme,asme_rel,asmi,asmi_rel,tali,tali_rel,...} = F.u(pos,U)
 		in  PRECOMPU
-			{pos=pos, obj=obj, using=using, opened=opened,
+			{pos=pos, obj=obj, tobj=tobj, using=using, opened=opened,
 			 src=src, asc=I, info=info, using_file=using_file,
+			 asme=asme, asme_rel=asme_rel,
+			 asmi=asmi, asmi_rel=asmi_rel,
 			 tali=tali, tali_rel=tali_rel}
 		end
 
 	    fun comp (pos:pos, U:label, opened:units, I:label) : uexp =
-		let val {obj,using_file,tali,tali_rel,...} = F.u(pos,U)
+		let val {obj,tobj,using_file,asme,asme_rel,asmi,asmi_rel,tali,tali_rel,...} = F.u(pos,U)
 		    val using = Fs.read blastInUnits using_file
 		in  COMPU
-			{pos=pos, obj=obj, using=using, opened=opened,
-			 asc=I,using_file=using_file, tali=tali,
-			 tali_rel=tali_rel}
+			{pos=pos, obj=obj, tobj=tobj, using=using, opened=opened,
+			 asc=I,using_file=using_file,
+			 asme=asme,asme_rel=asme_rel,
+			 asmi=asmi,asmi_rel=asmi_rel,
+			 tali=tali, tali_rel=tali_rel}
 		end
 
 	    fun comp' (pos:pos, U:label, using:units, opened:units, I:label) : uexp =
-		let val {obj,using_file,tali,tali_rel,...} = F.u(pos,U)
+		let val {obj,tobj,using_file,asme,asme_rel,asmi,asmi_rel,tali,tali_rel,...} = F.u(pos,U)
 		in  COMPU
-			{pos=pos, obj=obj, using=using, opened=opened,
-			 asc=I,using_file=using_file, tali=tali,
-			 tali_rel=tali_rel}
+			{pos=pos, obj=obj, tobj=tobj, using=using, opened=opened,
+			 asc=I,using_file=using_file, 
+			 asme=asme, asme_rel=asme_rel,
+			 asmi=asmi, asmi_rel=asmi_rel,
+			 tali=tali, tali_rel=tali_rel}
 		end
 	end
 
@@ -556,6 +594,14 @@ struct
 		|   PRECOMPU {obj,...} => obj
 		|   COMPU {obj,...} => obj)
 
+	    fun tobj (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {tobj,...} => tobj
+		|   SSRCU {tobj,...} => tobj
+		|   PRIMU {tobj,...} => tobj
+		|   PRECOMPU {tobj,...} => tobj
+		|   COMPU {tobj,...} => tobj)
+
 	    fun pinterface' (uexp : uexp) : file option =
 		(case uexp of
 		    SRCU {pinterface,...} => SOME pinterface
@@ -577,6 +623,39 @@ struct
 		|   PRIMU {tali_rel,...} => tali_rel
 		|   PRECOMPU {tali_rel,...} => tali_rel
 		|   COMPU {tali_rel,...} => tali_rel)
+
+
+	    fun asme (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {asme,...} => asme
+		|   SSRCU {asme,...} => asme
+		|   PRIMU {asme,...} => asme
+		|   PRECOMPU {asme,...} => asme
+		|   COMPU {asme,...} => asme)
+
+	    fun asme_rel (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {asme_rel,...} => asme_rel
+		|   SSRCU {asme_rel,...} => asme_rel
+		|   PRIMU {asme_rel,...} => asme_rel
+		|   PRECOMPU {asme_rel,...} => asme_rel
+		|   COMPU {asme_rel,...} => asme_rel)
+
+	    fun asmi (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {asmi,...} => asmi
+		|   SSRCU {asmi,...} => asmi
+		|   PRIMU {asmi,...} => asmi
+		|   PRECOMPU {asmi,...} => asmi
+		|   COMPU {asmi,...} => asmi)
+
+	    fun asmi_rel (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {asmi_rel,...} => asmi_rel
+		|   SSRCU {asmi_rel,...} => asmi_rel
+		|   PRIMU {asmi_rel,...} => asmi_rel
+		|   PRECOMPU {asmi_rel,...} => asmi_rel
+		|   COMPU {asmi_rel,...} => asmi_rel)
 
 	    fun stable (uexp:uexp) : bool =
 		(case uexp of
@@ -785,7 +864,7 @@ struct
 
     fun pp_uexp (uexp : uexp) : format =
 	(case uexp of
-	    SRCU {pos,opened,src,info,pinterface,obj,asm,asmz,using_file,tali,tali_rel} =>
+	    SRCU {pos,opened,src,info,pinterface,obj,tobj,asm,asmz,using_file,asme,asme_rel,asmi,asmi_rel,tali,tali_rel} =>
 		Box[String "SRCU", Break,
 		    String "pos = ", pp_pos pos, Break,
 		    String "opened = ", pp_units opened, Break,
@@ -793,52 +872,77 @@ struct
 		    String "info = ", String info, Break,
 		    String "pinterface = ", String pinterface, Break,
 		    String "obj = ", String obj, Break,
+		    String "tobj = ", String tobj, Break,
 		    String "asm = ", String asm, Break,
 		    String "asmz = ", String asmz, Break,
 		    String "using_file = ", String using_file, Break,
 		    String "tali = ", String tali, Break,
-		    String "tali_rel = ", String tali_rel]
-	|   SSRCU {pos,opened,src,asc=I,info,obj,asm,asmz,using_file,tali,tali_rel} =>
+		    String "tali_rel = ", String tali_rel, Break,
+		    String "asme = ", String asme, Break,
+		    String "asme_rel = ", String asme_rel, Break,
+		    String "asmi = ", String asmi, Break,
+		    String "asmi_rel = ", String asmi_rel]
+	|   SSRCU {pos,opened,src,asc=I,info,obj,tobj,asm,asmz,using_file,tali,tali_rel,asme,asme_rel,asmi,asmi_rel} =>
 		Box[String "SSRCU", Has, pp_label I, Break,
 		    String "pos = ", pp_pos pos, Break,
 		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info, Break,
 		    String "obj = ", String obj, Break,
+		    String "tobj = ", String tobj, Break,
 		    String "asm = ", String asm, Break,
 		    String "asmz = ", String asmz, Break,
 		    String "using_file = ", String using_file, Break,
 		    String "tali = ", String tali, Break,
-		    String "tali_rel = ", String tali_rel]
-	|   PRIMU {pos,asc=I,obj,asm,asmz,using_file,tali,tali_rel} =>
+		    String "tali_rel = ", String tali_rel, Break,
+		    String "asme = ", String asme, Break,
+		    String "asme_rel = ", String asme_rel, Break,
+		    String "asmi = ", String asmi, Break,
+		    String "asmi_rel = ", String asmi_rel]
+	|   PRIMU {pos,asc=I,obj,tobj,asm,asmz,using_file,asme,asme_rel,asmi,asmi_rel,tali,tali_rel} =>
 		Box[String "PRIMU", Has, pp_label I, Break,
 		    String "pos = ", pp_pos pos, Break,
 		    String "obj = ", String obj, Break,
+		    String "tobj = ", String tobj, Break,
 		    String "asm = ", String asm, Break,
 		    String "asmz = ", String asmz, Break,
 		    String "using_file = ", String using_file, Break,
 		    String "tali = ", String tali, Break,
-		    String "tali_rel = ", String tali_rel]
-	|   PRECOMPU {pos,obj,using,opened,src,asc=I,info,using_file,tali,tali_rel} =>
+		    String "tali_rel = ", String tali_rel, Break,
+		    String "asme = ", String asme, Break,
+		    String "asme_rel = ", String asme_rel, Break,
+		    String "asmi = ", String asmi, Break,
+		    String "asmi_rel = ", String asmi_rel]
+	|   PRECOMPU {pos,obj,tobj,using,opened,src,asc=I,info,using_file,tali,tali_rel,asme,asme_rel,asmi,asmi_rel} =>
 		Box[String "PRECOMPU", Has, pp_label I, Break,
 		    String "pos = ", pp_pos pos, Break,
 		    String "obj = ", String obj, Break,
+		    String "tobj = ", String tobj, Break,
 		    String "using = ", pp_units using, Break,
 		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info, Break,
 		    String "using_file = ", String using_file, Break,
 		    String "tali = ", String tali, Break,
-		    String "tali_rel = ", String tali_rel]
-	|   COMPU {pos,obj,using,opened,asc=I,using_file,tali,tali_rel} =>
+		    String "tali_rel = ", String tali_rel, Break,
+		    String "asme = ", String asme, Break,
+		    String "asme_rel = ", String asme_rel, Break,
+		    String "asmi = ", String asmi, Break,
+		    String "asmi_rel = ", String asmi_rel]
+	|   COMPU {pos,obj,tobj,using,opened,asc=I,using_file,tali,tali_rel,asme,asme_rel,asmi,asmi_rel} =>
 		Box[String "COMPU", Has, pp_label I, Break,
 		    String "pos = ", pp_pos pos, Break,
 		    String "obj = ", String obj, Break,
+		    String "tobj = ", String tobj, Break,
 		    String "using = ", pp_units using, Break,
 		    String "opened = ", pp_units opened, Break,
 		    String "using_file = ", String using_file, Break,
 		    String "tali = ", String tali, Break,
-		    String "tali_rel = ", String tali_rel])
+		    String "tali_rel = ", String tali_rel, Break,
+		    String "asme = ", String asme, Break,
+		    String "asme_rel = ", String asme_rel, Break,
+		    String "asmi = ", String asmi, Break,
+		    String "asmi_rel = ", String asmi_rel])
 
     fun pp_pdec (pdec:pdec) : format =
 	(case pdec of

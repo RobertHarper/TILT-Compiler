@@ -27,7 +27,17 @@ structure LilContext
 
 
    exception Unbound of string
-   exception Rebound of string 
+   exception Rebound of string
+
+   val () = 
+     let
+       fun print_exn (Unbound s) = SOME s
+	 | print_exn (Rebound s) = SOME s
+	 | print_exn _ = NONE
+     in UtilError.register_exn_printer print_exn
+     end
+
+   fun unbound (s : string) : 'a = raise (Unbound ("lilcontext.sml:Unbound var/label "^s))
 
    datatype parity = Pos | Neg | Any
    
@@ -132,7 +142,7 @@ structure LilContext
    fun find_var32 ({vars32,index,substs,...}:context,var) = 
      (case Vfind(vars32, var) of
 	SOME ci => do_subst(index,substs,ci)
-      | NONE => raise Unbound (Name.var2string var))
+      | NONE => unbound (Name.var2string var))
 	
    fun bind_label (ctx as {vars32,cvars,kvars,vars64,labels,index,substs}:context,(lbl,con:con)) :context= 
      let
@@ -153,7 +163,7 @@ structure LilContext
    fun find_label ({labels,index,substs,...}:context,lbl) = 
      (case Lfind (labels, lbl) of
 	SOME cs => do_subst(index,substs,cs)
-      | NONE => raise Unbound (Name.label2string lbl))
+      | NONE => unbound (Name.label2string lbl))
 
 
    fun bind_var64 (ctx as {vars32,cvars,kvars,vars64,labels,index,substs}:context,(var,con:con)) :context= 
@@ -176,7 +186,7 @@ structure LilContext
    fun find_var64 ({vars64,index,substs,...}:context,var) = 
      (case Vfind (vars64, var) of
 	SOME cs => do_subst(index,substs,cs)
-      | NONE => raise Unbound (Name.var2string var))
+      | NONE => unbound (Name.var2string var))
 	
 
    (**** Type level functions *****)
@@ -209,7 +219,7 @@ structure LilContext
    fun find_cvar ({cvars,...}:context,var) = 
      (case Vfind (cvars, var) of
 	SOME kind => kind
-      | NONE => raise Unbound (Name.var2string var))
+      | NONE => unbound (Name.var2string var))
 
 
 
@@ -243,7 +253,7 @@ structure LilContext
    fun find_kvar ({kvars,...}:context,var) = 
      (case Vfind (kvars, var)
 	of SOME p => p
-	 | NONE => raise Unbound (Name.var2string var))
+	 | NONE => unbound (Name.var2string var))
 
 
    (* replace (D1,a::k,D2,G) a aks c => (D1,aks,D2,G[c/a]) *)
@@ -287,6 +297,9 @@ structure LilContext
        val ctxts = LO.map2 (fn (ki,ci) => replace (ctx,a,[(b,ki)],ci)) (ks,cs)
      in ctxts
      end
+
+   fun clear_vars ({vars32,cvars,kvars,vars64,labels,index,substs} : context) : context = 
+     {kvars = kvars, cvars = cvars, vars32 = V.empty, vars64 = V.empty,labels = labels,index = index,substs = substs}
 
  end
 

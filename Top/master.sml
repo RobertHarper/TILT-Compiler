@@ -223,7 +223,7 @@ struct
 		val TiltExn = Name.unit_label "TiltExn"
 		val targets = get_targets(d,targets)
 		val targets =
-		    if linking then Set.add(targets,TiltExn)
+		    if linking andalso not (Target.tal()) then Set.add(targets,TiltExn)
 		    else targets
 		val d = Compiler.gc_desc(d,targets)
 		val numTargets = length d
@@ -1027,10 +1027,13 @@ struct
 	val obj : droppings =
 	    (nil,
 	     [SOME o I.P.U.obj,
+	      SOME o I.P.U.tobj,
 	      I.P.U.asm',
 	      I.P.U.asmz',
 	      SOME o I.P.U.using_file,
-	      SOME o I.P.U.tali],
+	      SOME o I.P.U.tali,
+	      SOME o I.P.U.asme,
+	      SOME o I.P.U.asmi],
 	     [#tali])
     in
 	val purge : string list * targets -> unit =

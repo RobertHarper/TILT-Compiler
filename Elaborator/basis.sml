@@ -358,8 +358,8 @@ structure Basis :> BASIS =
 	       ("xorb", (xor_int W32)),
 	       ("orb", (or_int W32)),
 	       
-	       ("uinta8touinta32", (uinta2uinta (W8,W32))),
-	       ("uintv8touintv32", (uintv2uintv (W8,W32))),
+(*	       ("uinta8touinta32", (uinta2uinta (W8,W32))),
+	       ("uintv8touintv32", (uintv2uintv (W8,W32))),*)
 	       
 	       ("uint8toint32", (uint2int (W8,W32))),
 	       ("uint8touint32", (uint2uint (W8,W32))),

@@ -37,6 +37,8 @@ structure NiltoLil :> NILTOLIL =
     val inline_varargs = Stats.ff("NilToLilInlineVarargs")
     val inline_oneargs = Stats.ff("NilToLilInlineOneargs")
 
+    val array_is_taglike = CompilerControl.ArrayIsTaglike
+
     fun debugdo (i,t) = if (!debug) andalso (i <= !debuglev) then (t(); ()) else ()
 
     fun chatp i = (!chatlev) >= i 
@@ -178,6 +180,15 @@ structure NiltoLil :> NILTOLIL =
       fun add_dboxed (l,sv)    = add_data (Lil.Dboxed (l,sv))
       fun add_darray (l,sz,t,sv) = add_data (Lil.Darray (l,sz,t,sv))
       fun add_dcode (l,f)      = add_data (Lil.Dcode (l,f))
+
+      fun add_string (l,s)     = 
+	let
+	  fun char2val c = Prim.uint(Prim.W8,TilWord64.fromInt (ord c))
+	  val cs = String.explode s
+	  val vs = map char2val cs
+	in add_darray (l,Lil.B1,LD.T.intt Lil.B1,vs)
+	end
+
       fun get_data () = rev (!data)
       fun reset_data () = data := []
     end
@@ -345,30 +356,54 @@ structure NiltoLil :> NILTOLIL =
 		| Nil.IntArray_c sz  => 
 		 let
 		   val sz = i_sizetrans sz
-		 in TD.PtrRep (LD.T.array sz (LD.T.intt sz))
+		 in 
+		   if !array_is_taglike then 
+		     TD.OtherRep (LD.T.arrayptr sz (LD.T.intt sz))
+		   else 
+		     TD.PtrRep (LD.T.array sz (LD.T.intt sz))
 		 end
 		| Nil.IntVector_c sz  => 
 		 let
 		   val sz = i_sizetrans sz
-		 in TD.PtrRep (LD.T.array sz (LD.T.intt sz))
+		 in 
+		   if !array_is_taglike then 
+		     TD.OtherRep (LD.T.arrayptr sz (LD.T.intt sz))
+		   else 
+		     TD.PtrRep (LD.T.array sz (LD.T.intt sz))
 		 end
 		| Nil.FloatArray_c sz  => 
 		 let
 		   val sz = f_sizetrans sz
-		 in TD.PtrRep (LD.T.array sz (LD.T.float()))
+		 in 
+		   if !array_is_taglike then 
+		     TD.OtherRep (LD.T.arrayptr sz (LD.T.float()))
+		   else 
+		     TD.PtrRep (LD.T.array sz (LD.T.float()))
 		 end
 		| Nil.FloatVector_c sz  => 
 		 let
 		   val sz = f_sizetrans sz
-		 in TD.PtrRep (LD.T.array sz (LD.T.float()))
+		 in 
+		   if !array_is_taglike then 
+		     TD.OtherRep (LD.T.arrayptr sz (LD.T.float()))
+		   else 
+		     TD.PtrRep (LD.T.array sz (LD.T.float()))
 		 end
 		| Nil.Loc_c          => error "Locatives not supported"
 		| Nil.Float_c fsz    => error "Float is not a constructor"
 		| _                  => error "Bad primcon: not enough args")
 	   | [c] =>
 	    (case p 
-	       of Nil.Array_c        => TD.PtrRep (TD.Array (ctrans c))
-		| Nil.Vector_c       => TD.PtrRep (TD.Array (ctrans c))
+	       of Nil.Array_c        => 
+		 if !array_is_taglike then 
+		   TD.OtherRep (TD.Arrayptr (ctrans c))
+		 else 
+		   TD.PtrRep (TD.Array (ctrans c))
+		| Nil.Vector_c       => 
+		 if !array_is_taglike then 
+		   TD.OtherRep (TD.Arrayptr (ctrans c))
+		 else 
+		   TD.PtrRep (TD.Array (ctrans c))
 		| Nil.Ref_c          => TD.PtrRep (LD.T.refc (TD.interp (ctrans c)))
 		| Nil.Exntag_c       => Other1 Lil.Dyntag_c (TD.interp (ctrans c))
 		| Nil.GCTag_c        => TD.PtrRep (LD.T.tuple'[])  (*We don't use GCtags right now*)
@@ -387,7 +422,7 @@ structure NiltoLil :> NILTOLIL =
 			 let 
 			   val argrep = ctrans carrier
 			   val t = TD.interp argrep
-			 in [TD.IfTaglike argrep (LD.T.ptr (LD.T.tuple' [t])) t]
+			 in [TD.taglike_interp argrep]
 			 end
 		     else
 		       let 
@@ -669,6 +704,12 @@ structure NiltoLil :> NILTOLIL =
 	fun dyn_rep_bfloat env c    = TD.bfloat' (TD.R (ctrans env c))
 	fun dyn_rep_ptr env c = TD.ptr' (TD.R (ctrans env c))
 
+	fun dyn_rep_array env c = 
+	  if !array_is_taglike then 
+	    dyn_rep_other env c
+	  else 
+	    dyn_rep_ptr env c
+
       in
 	case c
 	  of Nil.Var_c v => P.ret (Lil.Val (Lil.Var_32 (rep_var env v)))
@@ -715,12 +756,12 @@ structure NiltoLil :> NILTOLIL =
 		| Nil.BoxFloat_c sz => dyn_rep_bfloat env c
 		| Nil.Float_c sz => error "Float is not a constructor"
 		| Nil.Exn_c => dyn_rep_other env c
-		| Nil.Array_c => dyn_rep_ptr env c
-		| Nil.Vector_c => dyn_rep_ptr env c                              
-		| Nil.IntArray_c _ => dyn_rep_ptr env c
-		| Nil.IntVector_c _ => dyn_rep_ptr env c                         
-		| Nil.FloatArray_c _ => dyn_rep_ptr env c
-		| Nil.FloatVector_c _ => dyn_rep_ptr env c 
+		| Nil.Array_c => dyn_rep_array env c
+		| Nil.Vector_c => dyn_rep_array env c                              
+		| Nil.IntArray_c _ => dyn_rep_array env c
+		| Nil.IntVector_c _ => dyn_rep_array env c                         
+		| Nil.FloatArray_c _ => dyn_rep_array env c
+		| Nil.FloatVector_c _ => dyn_rep_array env c 
 		| Nil.Ref_c => dyn_rep_ptr env c
 		| Nil.Loc_c => error "Locatives not supported"         
 		| Nil.Vararg_c _ => dyn_rep_other env c
@@ -843,14 +884,17 @@ structure NiltoLil :> NILTOLIL =
 	    let
 	      val args = map (txxtrans env) args
 	      val ret = txxtrans env ret
-	      val fargs = List.mapPartial chooseB args
-	      val args = List.mapPartial chooseA args
+	      fun mapper p = 
+		(case p 
+		   of A a => LD.C.inl (LD.K.T32or64()) a
+		    | B b => LD.C.inr (LD.K.T32or64()) b)
+	      val args = List.map mapper args
 	      val (size,ret) = 
 		(case ret
 		   of A t32 => (Lil.B4,t32)
 		    | B t64 => (Lil.B8,t64))
 	    in
-	      LD.T.externarrow' size args fargs ret
+	      LD.T.externarrow' size args ret
 	    end
 	   | Nil.AllArrow_c {tFormals,eFormals,fFormals,body_type,...} => 
 	    let
@@ -988,14 +1032,19 @@ structure NiltoLil :> NILTOLIL =
 		   of SOME res => res
 		    | NONE => error "Externapp of non externarrow")
 
-	      val args = LO.map2 (svxx_trans env) (args,argtypes)
-	      val fargs = List.mapPartial chooseB args
-	      val args = List.mapPartial chooseA args
-	      val oper = Lil.ExternAppf (f_sv,args,fargs)
+	      val args = LO.map2 (primarg_trans env) (args,argtypes)
+	      val oper = Lil.ExternAppf (f_sv,args)
 	    in oper
 	    end
 
-          | Nil.Const_e v => Lil.Val_64 (Lil.Const_64 (value64_trans env v))
+          | Nil.Const_e v => 
+	    let
+	      val sv = Lil.Const_64 (value64_trans env v)
+	      val l = Name.fresh_internal_label "float"
+	      val () = add_dboxed (l,sv)
+	      val op64 = Lil.Unbox (Lil.Label l)
+	    in op64
+	    end
 	  | _ => error "Not a valid 64 bit expression"
       end
     and value64_trans (env : env) (v : (Nil.con,Nil.exp) Prim.value) : (Lil.con,Lil.primarg) Prim.value = 
@@ -1196,7 +1245,12 @@ structure NiltoLil :> NILTOLIL =
 		  val dtag = sv32_trans' env exp1
 		  val (dval,dcon) = sv32_trans env exp2
 		  val dtype = ttrans env dcon
-		  val pexp = LD.E.inj_exn dtype dtag dval
+
+		  val l = Name.fresh_internal_label "exn_nm"
+		  val () = add_string (l,name)
+		  val dnm = Lil.Label l
+
+		  val pexp = LD.E.inj_exn dtype dtag dval dnm
 		  val pexp = P.SV32.to_op pexp
 		  val rtype = Nil.Prim_c (Nil.Exn_c,[])
 		in (pexp,rtype)
@@ -1374,9 +1428,18 @@ structure NiltoLil :> NILTOLIL =
 	      | (Prim.vector2array aggregate,cons,[arr]) => (P.ret (Lil.Val (sv32_trans' env arr)),rtype)
 	      | (Prim.equal_table t,cs,[arr1,arr2]) => 
 	       let
-		 val arr1 = sv32_trans' env arr1
-		 val arr2 = sv32_trans' env arr2
-	       in (LD.E.ptreq' arr1 arr2,nil_bool_con ())
+		 fun trans env (arr1,arr2) = 
+		   let
+		     val arr1 = sv32_trans' env arr1
+		     val arr2 = sv32_trans' env arr2
+		   in (arr1,arr2)
+		   end
+		 val (op32,eltt) = do_dispatch env (t,cs,trans,trans,
+						    TD.Array.equal_int,
+						    TD.Array.equal_float,
+						    TD.Array.equal_other,
+						    TD.Array.equal_dynamic,(arr1,arr2))
+	       in (op32,nil_bool_con ())
 	       end
 
               (* Floating point arguments *)
@@ -1501,10 +1564,8 @@ structure NiltoLil :> NILTOLIL =
 		   of SOME res => res
 		    | NONE => error "Externapp of non externarrow")
 
-	      val args = LO.map2 (svxx_trans env) (args,argtypes)
-	      val fargs = List.mapPartial chooseB args
-	      val args = List.mapPartial chooseA args
-	      val oper = Lil.ExternApp (f_sv,args,fargs)
+	      val args = LO.map2 (primarg_trans env) (args,argtypes)
+	      val oper = Lil.ExternApp (f_sv,args)
 	    in (P.ret oper,ret)
 	    end
 	   | Nil.Raise_e (e,c) => 
@@ -1520,7 +1581,7 @@ structure NiltoLil :> NILTOLIL =
 	      val (body,_) = exp2exp32_trans env body
 	      val env  = add_type env (bound,ND.exn_con)
 	      val (handler,_) = exp2exp32_trans env handler
-	      val oper = Lil.Handle (t,body,(bound,handler))
+	      val oper = Lil.Handle {t = t, e = body, h = {b = bound,he = handler}}
 	    in (P.ret oper,result_type)
 	    end
 	   | Nil.ForgetKnown_e (sumcon,which) =>
@@ -1710,7 +1771,7 @@ structure NiltoLil :> NILTOLIL =
 			      of SOME con => con
 			       | NONE => error "Not an exntag"
 		  val carriedt = ttrans env con
-		  val ltype = LD.T.tupleptr' [LD.T.dyntag carriedt,carriedt]
+		  val ltype = LD.T.tupleptr' [LD.T.dyntag carriedt,carriedt,LD.T.stringt()]
 		  val (env,bound') = get_rename env bound
 		  val env = add_type env (bound,con)
 		  val e = #1 (exp2exp32_trans env e)
@@ -1747,23 +1808,31 @@ structure NiltoLil :> NILTOLIL =
 	in parms
 	end
 
-	fun get_timport imp = case imp of Nil.ImportType lvk         => SOME lvk | _ => NONE
-	fun get_vimport imp = case imp of Nil.ImportValue (l,v,tr,c) => SOME ((l,v),c) | _ => NONE
-	fun get_ibnd imp    = case imp of Nil.ImportBnd arg          => SOME arg       | _ => NONE
-	fun get_cbnd bnd    = case bnd of Nil.Con_b (Nil.Runtime,cb) => SOME cb        | _ => NONE
-	fun get_texport e   = case e   of Nil.ExportType (l,v)       => SOME (l,Nil.Var_c v) | _ => NONE
-	fun get_vexport e   = case e   of Nil.ExportValue (l,v)      => SOME (l,Nil.Var_e v) | _ => NONE
-	fun cmp_imp (((l1,_),_),((l2,_),_)) = Name.compare_label (l1,l2)
-	val isort = fn l => LO.insertion_sort cmp_imp l
-	fun cmp_exp ((l1,_),(l2,_)) = Name.compare_label (l1,l2)
-	val esort = fn l => LO.insertion_sort cmp_exp l
-				    
-	fun dropl l = map (fn ((l,v),ck) => (v,ck)) l
-	fun drops (p,cb) = (case p of Nil.Runtime => SOME cb | _ => NONE)
+      fun get_timport imp = case imp of Nil.ImportType lvk         => SOME lvk | _ => NONE
+      fun get_vimport imp = case imp 
+			      of Nil.ImportValue (l,v,tr,c) => if Name.is_unit l then SOME ((l,v),c) else NONE
+			       | _ => NONE
+      fun get_extern imp = case imp 
+			     of Nil.ImportValue (l,v,tr,c) => if Name.is_unit l then NONE else SOME ((l,v),c)
+			      | _ => NONE
+      fun get_ibnd imp    = case imp of Nil.ImportBnd arg          => SOME arg       | _ => NONE
+      fun get_cbnd bnd    = case bnd of Nil.Con_b (Nil.Runtime,cb) => SOME cb        | _ => NONE
+      fun get_texport e   = case e   of Nil.ExportType (l,v)       => SOME (l,Nil.Var_c v) | _ => NONE
+      fun get_vexport e   = case e   of Nil.ExportValue (l,v)      => SOME (l,Nil.Var_e v) | _ => NONE
+      fun l_cmp l1 l2 = String.compare (Name.label2name l1,Name.label2name l2)
+      fun cmp_imp (((l1,_),_),((l2,_),_)) = l_cmp l1 l2
+      val isort = fn l => LO.insertion_sort cmp_imp l
+      fun cmp_timp ((l1,_,_),(l2,_,_)) = l_cmp l1 l2
+      val tisort = fn l => LO.insertion_sort cmp_timp l
+      fun cmp_exp ((l1,_),(l2,_)) = l_cmp l1 l2
+      val esort = fn l => LO.insertion_sort cmp_exp l
+	
+      fun dropl l = map (fn ((l,v),ck) => (v,ck)) l
+      fun drops (p,cb) = (case p of Nil.Runtime => SOME cb | _ => NONE)
 
-      val get_parms = get_parms
-      fun get_timports imports = List.mapPartial get_timport imports
-      fun get_vimports imports = dropl (isort (List.mapPartial get_vimport imports))
+      fun get_timports imports = tisort (List.mapPartial get_timport imports)
+      fun get_vimports imports = isort (List.mapPartial get_vimport imports)
+      fun get_externs imports = List.mapPartial get_extern imports
       fun get_itbnds imports   = List.mapPartial get_ibnd imports
       fun get_icbnds itbnds   = List.mapPartial drops itbnds 
       fun get_texports exports = esort (List.mapPartial get_texport exports)
@@ -1775,9 +1844,10 @@ structure NiltoLil :> NILTOLIL =
 	  val parms = get_parms imports
 	  val timports = get_timports imports
 	  val vimports = get_vimports imports
+	  val externs  = get_externs imports
 	  val itbnds   = get_itbnds imports
 	  val icbnds   = get_icbnds itbnds 
-	in (parms,timports,vimports,itbnds,icbnds)
+	in (parms,timports,vimports,externs,itbnds,icbnds)
 	end
       fun separate_exports exports = 
 	let
@@ -1789,52 +1859,61 @@ structure NiltoLil :> NILTOLIL =
     end  
 
       
-    fun mk_type_fun (ibnds,cbnds,texports) = 
+    fun mk_type_fun (unitname,ibnds,cbnds,texports,texports_int) = 
       let
 (*	val f    = Name.fresh_named_var "mk_export_c"*)
-	val res  = 
-	  (case texports 
-	     of [(l,c)] => c
-	      | _ => Nil.Crecord_c texports)
+	val (l,a,k,res)  = 
+	  (case (texports,texports_int)
+	     of ([(l,c)],[(_,a,k)]) => (l,a,k,c)
+	      | _ => error "Multiple exports not handled")
 	val cbnds = ibnds @ cbnds
 	val body = NU.makeLetC cbnds res
-(*	val lam  = Nil.Open_cb(f, [], body)*)
-      in (*NU.makeLetC [lam] (Nil.Var_c f)*) body
+      in (l,a,k,body)
       end
     
     (* We don't have enough type information at this point
      * to create the right syntax
      *)
-    fun mk_term_fun (vimports,ibnds,bnds,texports,vexports) = 
+    fun mk_term_fun (unitname,vimports,externs,ibnds,bnds,texports,vexports,vexports_int,vexports_tbnds) = 
       let
 	val f     = Name.fresh_named_var "mk_export_v"
 	val (elabels,eexps) = LO.unzip vexports
 	val ibnds = map Nil.Con_b ibnds
 	val gctag = Nil.Var_e (Name.fresh_named_var "fake gctag")
-	val vres  = 
-	  (case eexps 
-	     of [e] => e
-	      | _ => Nil.Prim_e(Nil.NilPrimOp (Nil.record elabels),[],[],(gctag::eexps)))
-	val cres  = 
+	val (l_r,vres)  = 
+	  (case (eexps,elabels)
+	     of ([e],[l]) => (l,e)
+	      | _ => (Name.internal_label (unitname ^ "." ^ "code_r"),
+		      Nil.Prim_e(Nil.NilPrimOp (Nil.record elabels),[],[],(gctag::eexps))))
+	val (l_c,cres)  = 
 	  (case texports
-	     of [(l,c)] => c
-	      | _ => Nil.Crecord_c texports)
-      in (f, ibnds, vimports, bnds,cres,vres)
+	     of [(l,c)] => (l,c)
+	      | _ => (Name.internal_label (unitname ^ "." ^ "code_c"),Nil.Crecord_c texports))
+	val l_r_t = 
+	  (case vexports_int
+	     of [(_,t)] => NU.makeLetC vexports_tbnds t
+	      | _ => error "Multiple exports not handled")
+      in (f, ibnds, vimports, externs,bnds,l_c,cres,l_r,l_r_t,vres)
       end
   
-    fun modfuns (Nil.MODULE {bnds : Nil.bnd list,
-			     imports : Nil.import_entry list,
-			     exports : Nil.export_entry list}) = 
+    fun modfuns (unitname,Nil.MODULE {bnds : Nil.bnd list,
+				      imports : Nil.import_entry list,
+				      exports : Nil.export_entry list,
+				      exports_int : Nil.import_entry list option}) = 
       let
-	val (parms,timports,vimports,itbnds,icbnds) = separate_imports imports
+	val (parms,timports,vimports,externs,itbnds,icbnds) = separate_imports imports
 
 	val cbnds    = get_cbnds bnds
 
 	val (texports,vexports) = separate_exports exports
 
+	val (_,texports_int,vexports_int,_,vexports_tbnds,_) = 
+	  (case exports_int
+	     of SOME ei => separate_imports ei
+	      | NONE => error "No export interface")
 
-	val tlam = mk_type_fun (icbnds,cbnds,texports)
-	val vlam = mk_term_fun (vimports,itbnds,bnds,texports,vexports)
+	val tlam = mk_type_fun (unitname,icbnds,cbnds,texports,texports_int)
+	val vlam = mk_term_fun (unitname,vimports,externs,itbnds,bnds,texports,vexports,vexports_int,map #2 vexports_tbnds)
       in (parms,timports,tlam,vlam)
       end
 
@@ -1855,11 +1934,11 @@ structure NiltoLil :> NILTOLIL =
 	val () = reset_globals ()
 	val () = reset_data()
 	val env = new_env ()
-	val (parms,timports,tlam,vlam) = modfuns module
+	val (parms,timports,(mainLabel_c,mainVar_c,mainK,tlam),vlam) = modfuns (unitname,module)
 
 	val _ = chat 2 "  Translating type imports\n"
 
-	(* THese labels are wrong *)
+	(* THese labels are wrong in the flattened case (not currently used) *)
 	val (env,timports,rargs) = 
 	  let
 	    val (ls,vks) = map_unzip (fn (l,v,k) => (l,(v,k))) timports
@@ -1882,9 +1961,13 @@ structure NiltoLil :> NILTOLIL =
 			  PpLil.pp_con tfun;
 			  print "\n"))
 
+	val _ = chat 2 "  Translating mainLabel_c kind\n"
+
+	val LilMainK = ktrans mainK
+
 	val _ = chat 1 "  Translating expressions\n"
 	  
-	val (f, ibnds, vimports, bnds, cres, vres) = vlam
+	val (f, ibnds, vimports, externs, bnds, _, cres, mainLabel_r, mainLabel_t,vres) = vlam
 	  
 	val _ = debugdo (2,fn () => 
 			 (print "Term nil function is:\n";
@@ -1907,23 +1990,37 @@ structure NiltoLil :> NILTOLIL =
 	 * we can bind them at the same level as the rargs.  Therefore, we hoist them
 	 * out of the monad along with the return type.
 	 * *)
-	val (body,(vargs,rtype)) = 
+	val (body,(vargs,rtype,LilMainLabel_t,externs)) = 
 	  P.bind_first ibnds
 	  (fn (env,_) =>   (* As long as the NIL type doesn't escape, we don't need the subst*)
 	   let
 
 	     val _ = chat 2 "  Translating vimports\n"
+	     val vimports = LO.map_first #2 vimports
 	     val vargs = LO.map_second (ttrans env) vimports
 	     val env = add_type_list env vimports
+
+	     val _ = chat 2 "  Translating externs\n"
+	     val l_externs = map (fn ((l,v),c) => (l,ttrans env c)) externs
+	     val l_bnds = map (fn ((l,v),c) => Lil.Exp32_b(v,Lil.Val (Lil.Label l))) externs
+	     val l_bnds = P.Lili.from_bnds (l_bnds,())
+	     val env = foldl (fn (((l,v),c),env) => add_type env (v,c)) env externs
 
 	     val _ = chat 2 "  Building global definitions\n"
 	     val env = add_globals env
 
 	     val _ = chat 2 "  Translating bnds\n"
 	     val bnds = bnds_trans env bnds
-	     val (body,rtype) = P.bind_first bnds
+	     val (body,(rtype,mainLabel_t)) = P.bind_first bnds
 	       (fn (env,_) =>
 		let
+		  val _ = chat 2 "  Translating export interface type\n"
+		  val exportEnv = add_kind env (mainVar_c,mainK)
+		  val mainLabel_t = ttrans exportEnv mainLabel_t
+		  val mainRep_t = dyn_rep_type exportEnv (Nil.Var_c mainVar_c,mainK)
+		  val mainLabel_t = LD.T.tupleptr' [mainRep_t,mainLabel_t]
+		  val mainLabel_t = LD.T.code' (map #2 (rargs@vargs)) [] mainLabel_t
+
 		  val crtype = dyn_rep_type env (cres,erased_kind_of env cres)
 		  val cres = dyn_rep' env cres
 		  val (vres,vrtype) = exp32_trans env vres
@@ -1933,13 +2030,13 @@ structure NiltoLil :> NILTOLIL =
 		  val vresv = Name.fresh_named_var "TermExportRecord"
 		  val resv = Name.fresh_named_var "ModuleExports"
 		  val res = LD.E.tuple' [Lil.Var_32 cresv,Lil.Var_32 vresv]
-		in (P.Bind.op32' cresv cres (P.Bind.op32' vresv vres res),rtype)
+		in (P.Bind.op32' cresv cres (P.Bind.op32' vresv vres res),(rtype,mainLabel_t))
 		end)
 
 	     val body = wrap_with_globals body
+	     val body = P.bind l_bnds (fn () => body)
 
-
-	   in (body,(vargs,rtype))
+	   in (body,(vargs,rtype,mainLabel_t,l_externs))
 	   end)
 
 	val body = P.Lili.op_to_exp body
@@ -1962,16 +2059,15 @@ structure NiltoLil :> NILTOLIL =
 
 	val _ = chat 1 "  Finished translation to LIL\n"
 
-	val mainLabel_r = Name.internal_label (unitname ^ "." ^ "code_r")
-	val mainLabel_c = Name.internal_label (unitname ^ "." ^ "code_c")
 	val data = get_data ()
 	val () = reset_globals ()
 	val () = reset_data ()
       in Lil.MODULE {unitname = unitname,
 		     parms = parms,
-		     entry_c = mainLabel_c,
-		     entry_r = mainLabel_r,
+		     entry_c = (mainLabel_c,mainVar_c,LilMainK),
+		     entry_r = (mainLabel_r,LilMainLabel_t),
 		     timports = timports,
+		     vimports = externs,
 		     data   = (Lil.Dcode (mainLabel_r,lam))::data,
 		     confun = tfun}
       end
@@ -1990,20 +2086,20 @@ structure NiltoLil :> NILTOLIL =
     (* We don't have enough type information at this point
      * to create the right syntax
      *)
-    fun mk_term_fun_type (vimports : (Nil.var * Nil.con) list,cbnds : (Nil.phase * Nil.conbnd) list,vexports : (Nil.var * Nil.con) list ) = 
+    fun mk_term_fun_type (vimports : ((Nil.label * Nil.var) * Nil.con) list,cbnds : (Nil.phase * Nil.conbnd) list,vexports : ((Nil.label * Nil.var) * Nil.con) list ) = 
       let
-	val vres  = 
+	val (l_r,vres)  = 
 	  (case vexports
-	     of [(v,c)] => c
+	     of [((l,v),c)] => (l,c)
 	      | many => error "Multiple term exports not currently supported")
-      in (map #2 cbnds, vimports, vres)
+      in (map #2 cbnds, vimports, l_r,vres)
       end
   
     fun intfuns (Nil.INTERFACE {imports : Nil.import_entry list,
 				exports : Nil.import_entry list}) = 
       let
-	val (parms,timports,vimports,itbnds,_) = separate_imports imports
-	val (_,texports,vexports,itbnds',_) = separate_imports exports
+	val (parms,timports,vimports,_,itbnds,_) = separate_imports imports
+	val (_,texports,vexports,_,itbnds',_) = separate_imports exports
 
 	val cbnds = itbnds @ itbnds'
 
@@ -2016,16 +2112,13 @@ structure NiltoLil :> NILTOLIL =
 
     fun niltolil_int unitname (interface : Nil.interface) : Lil.interface =  
       let
-	val mainLabel_r = Name.internal_label (unitname ^ "." ^ "code_r")
-	val mainLabel_c = Name.internal_label (unitname ^ "." ^ "code_c")
-
 	val (parms,timports,tlam,vlam) = intfuns interface
 
 	val env = new_env ()
 
 	val _ = chat 2 "  Translating type imports\n"
 
-	(* These labels are wrong *)
+	(* These labels are wrong in the nary-case *)
 	fun do_import ((l,a,k),env) = 
 	  let
 	    val env = add_kind env (a,k)
@@ -2044,31 +2137,33 @@ structure NiltoLil :> NILTOLIL =
 
 	val _ = chat 2 "  Translating constructor fun kind\n"
 
-	val (entry_c,entry_c_rep_type) = 
+	val (entry_c,entry_c_rep_type,env) = 
 	  let
 	    val (l,v,lk) = tlam
+	    val env = add_kind env (v,lk)
 	    val k = ktrans lk
 	    val Rvk = var_dyn_rep_type env (v,lk)
-	  in ((mainLabel_c,v,k),Rvk)
+	  in ((l,v,k),Rvk,env)
 	  end
 	val _ = chat 1 "  Translating expression type\n"
 
 	val entry_r = 
 	  let
-	    val (cbnds, vimports, vres) = vlam
+	    val (cbnds, vimports, l_r, vres) = vlam
 	  
 	    val _ = chat 2 "  Translating cbnds\n"
 
-	    val env = cbnds_trans env cbnds
+	    val env = tbnds_trans env cbnds
 
 	    val _ = chat 2 "  Translating vimports\n"
+	    val vimports = LO.map_first #2 vimports
 	    val vargs = LO.map (fn (v,c) => ttrans env c) vimports
 	    val env = add_type_list env vimports
 
-	    val c = ctrans_interp env vres
+	    val c = ttrans env vres
 	    val rtype = LD.T.tupleptr' [entry_c_rep_type,c]
 	    val ftype = LD.T.code' (rargs@vargs) [] rtype
-	  in (mainLabel_r,ftype)
+	  in (l_r,ftype)
 	  end
 	  
 	val _ = chat 1 "  Finished translation to LIL\n"

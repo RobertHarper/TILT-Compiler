@@ -69,10 +69,10 @@ structure Simple :> RUN =
   val southeast = south o east
   val northwest = north o west		
   val southwest = south o west
-  val farnorth = north o north 
-  val farsouth = south o south
-  val fareast = east o east		
-  val farwest = west o west
+  val farnorth = fn a => (north o north) a
+  val farsouth = fn a => (south o south) a
+  val fareast = fn a => (east o east) a
+  val farwest = fn a => (west o west) a
   fun zone_A(k,l) = (k,l)
   fun zone_B(k,l) = (k+1,l)
   fun zone_C(k,l) = (k+1,l+1)		

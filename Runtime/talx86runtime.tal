@@ -1,0 +1,72 @@
+	INCLUDE	TAL.INC
+	_begin_TAL
+
+	TAL_IMPORT	talx86runtime_i.tali
+
+	TAL_EXPORT	tal_prog.tali
+
+
+	TYPE	<wrapper_t = code{EAX:exn,ESP:sptr se,EBX:B4}>
+
+	CODE
+
+_pop_exn_handler_wrapper:
+LABELTYPE <wrapper_t>
+	PUSH	EAX
+	CALL	_pop_exn_handler_verbose
+	JMP	_pop_never_null
+
+
+; For doubles we need the stack fo be doubleword aligned.  Aligning the stack
+; requires pushing a variable amount of stuff on the stack.  Before we can call
+; tal_exit we have to clear this stuff off. So we push the stack pointer on the
+; stack.
+_tal_main:
+LABELTYPE <code{ESP:sptr se}>
+; Allocating initial handler frame
+	MALLOC	htlen_1121_INT,12
+; No spill record needed
+	MOV	DWORD PTR[EAX+8],0
+; Store the stack
+	MOV	[EAX+4],ESP
+; Store the handler code
+	MOV	[EAX],_pop_exn_handler_wrapper 
+	FORGETUNIQUE	htlen_1121_INT
+	COERCE	pack(<B4>,forgetname(EAX),<HndlrFrm se>)
+	MOV	EBP,EAX
+; End initial handler_frame
+
+	MOV 	EBX,ESP
+	COERCE	subsume(<B4>,EBX)
+	AND	EBX,7
+	CMP	EBX,0
+; If stack is doubleword aligned.
+	JE	tapp(std_start,<se>)
+	CMP     EBX,4
+	JE	word_align
+; If the stack isn't word aligned we give up.
+	PUSH	1
+	JMP	tapp(_tal_exit,<se>)
+		
+word_align:
+	; Stack is word_aligned.
+	PUSH 	0
+	JMP	tapp(std_start,<junk4::se>)
+
+std_start: 
+LABELTYPE <All[s1:Ts].code{ESP:sptr s1#se, EBP: HndlrFrm se}>
+	MOV	EBX,0
+	MOV	ESI,0
+	MOV	EDI,0
+	MOV	EAX,0
+	MOV	ECX,0
+	MOV	EDX,0
+	CALL	tapp(TiltMain__INT__r__INT_LAB,<B4,B4,B4,s1,se>)
+;Recover bottom (unaligned) stackptr 
+	UNPACK	unpack__t__9215_INT,ECX,EBP
+	MOV	ESP,[ECX+4]
+	PUSH	0
+	JMP	tapp(_tal_exit,<se>)
+
+	_end_TAL
+	END

@@ -1000,7 +1000,7 @@ structure NilRewrite :> NILREWRITE =
       fun rewrite_mod (state : 'state) (module : module) : module =
 	let
 	  val changed = ref false
-	  val (MODULE {bnds,imports,exports}) = module
+	  val (MODULE {bnds,imports,exports,exports_int}) = module
 	  val (imports,state) = foldl_acc_f import_helper changed state imports
 	  local
 	    val flag = ref false
@@ -1015,7 +1015,12 @@ structure NilRewrite :> NILREWRITE =
 	    val bnds = if !flag then List.concat bndslist else bnds
 	  end
 	  val exports = map_f export_helper changed state exports
-	in if !changed then MODULE {bnds=bnds,imports=imports,exports=exports} else module
+	  val exports_int = 
+	    mapopt 
+	    (fn ei => 
+	     #1 (foldl_acc_f import_helper changed state ei)) exports_int
+
+	in if !changed then MODULE {bnds=bnds,imports=imports,exports=exports,exports_int = exports_int} else module
 	end
 
       fun rewrite_item rewriter state item =

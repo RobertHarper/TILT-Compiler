@@ -22,8 +22,8 @@ structure Tal =
 struct
 (*  structure N = Numtypes*)
 
-  structure VarSet = Name.VarSet
-  structure VarMap = Name.VarMap
+  structure LabelSet = Name.LabelSet
+  structure LabelMap = Name.LabelMap
   val error = fn s => Util.error "tal.sml" s
 
   type int8 = TilWord32.word
@@ -34,10 +34,10 @@ struct
   type f64 = string 
   val int32_to_int = TilWord32.toInt
 
-  type identifier = Name.var
+  (* TAL doesn't have a label/var distinction, unfortunately.  *)
+  type identifier = Name.label
   type label = Name.label
 
-  val id_compare = fn i1 => fn i2 => Name.compare_var (i1,i2)
 
   datatype mode = Abs | Rel
 
@@ -84,7 +84,7 @@ struct
   withtype kind =
     { 
      rkind : rkind,                                (* the raw kind *)
-     freekindvars : VarSet.set option ref,         (* free kind vars *)
+     freekindvars : LabelSet.set option ref,         (* free kind vars *)
      kabbrev : identifier option ref               (* is this kind an abbreviation *)
      } 
 
@@ -94,7 +94,7 @@ struct
     (* helper functions for creating kinds *)
   fun defkind (k : rkind) : kind = { rkind = k, freekindvars = ref NONE, kabbrev = ref NONE }
 
-  fun defprimkind (k : rkind) : kind = { rkind = k, freekindvars = ref (SOME (VarSet.empty)), kabbrev = ref NONE}
+  fun defprimkind (k : rkind) : kind = { rkind = k, freekindvars = ref (SOME (LabelSet.empty)), kabbrev = ref NONE}
 
   (* kind constructors *)
   fun kbyte s = defprimkind (Kbyte s)
@@ -108,7 +108,7 @@ struct
   fun kprod ks = defkind (Kprod ks)
   val kunit = defprimkind(Kprod [])
   fun ksum ks = defkind (Ksum ks)
-  fun kvar i = {rkind=Kvar i, freekindvars = ref (SOME (VarSet.singleton i)), kabbrev= ref NONE}
+  fun kvar i = {rkind=Kvar i, freekindvars = ref (SOME (LabelSet.singleton i)), kabbrev= ref NONE}
   fun kmu i l = defkind (Kmu (i,l))
   val kname = defprimkind Kname
   val kcap = defprimkind Kcap
@@ -282,7 +282,7 @@ struct
    with other values.  
  *)
     | Cname of con
-    | Ccap of (alias_info*con) VarMap.map
+    | Ccap of (alias_info*con) LabelMap.map
     | Cjoin of con list
     | Ctagof of con (* :Kname -> K4byte the tag of a sum value *)
 (*    (* Cyclone *)
@@ -310,7 +310,7 @@ struct
     { 
      rcon     : rcon ref,   (* "raw" constructor *)
      con_state : con_state ref,
-     freevars : (VarSet.set * VarSet.set) option ref,
+     freevars : (LabelSet.set * LabelSet.set) option ref,
      (*     hash : int ref; *)
      abbrev : identifier option ref  (* is this con an abbreviation *)
      } 
@@ -324,7 +324,7 @@ struct
   fun string_of_int32 i = TilWord32.toDecimalString i
   fun string_of_int16 i = TilWord32.toDecimalString i
   fun string_of_int8 i = TilWord32.toDecimalString i
-  fun id_to_string v = Name.var2string v
+  fun id_to_string v = Name.label2string v
   fun lbl_to_string v = Name.label2string v
 
     (* floating point registers and stack *)
@@ -543,7 +543,7 @@ struct
     in con
     end
 
-  val empty_id_set = VarSet.empty
+  val empty_id_set = LabelSet.empty
   val empty_freevars = SOME(empty_id_set,empty_id_set)
   fun prcon (rc : rcon) : con = 
     let val con = defcon rc 
@@ -559,7 +559,7 @@ struct
       con
     end
 
-  val cempty_cap = wcon (Ccap (VarMap.empty))
+  val cempty_cap = wcon (Ccap (LabelMap.empty))
   (* Machine states *)
 
   val ms_empty : machine_state =
@@ -898,7 +898,7 @@ struct
     val () = 
       (case #freevars con of
 	 (ref NONE) =>  (#con_state con :=  Normalized;
-			 #freevars con := SOME(empty_id_set, VarSet.singleton v))
+			 #freevars con := SOME(empty_id_set, LabelSet.singleton v))
        | _ => ())
   in
     con
@@ -949,7 +949,11 @@ struct
   fun csptr c = wcon (Csptr c)
   val cempty = prcon Cempty
   fun ccons c1 c2 = wcon (Ccons (c1,c2))
-  fun cappend c1 c2 = defcon (Cappend (c1,c2))
+  fun cappend c1 c2 = 
+    (case (#rcon c1,#rcon c2)
+       of (ref Cempty,_) => c2
+	| (_,ref Cempty) => c1
+	| _ => defcon (Cappend (c1,c2)))
 
     
   (**********************************************************************)
@@ -1201,7 +1205,7 @@ struct
 
   datatype int_con_def = AbsCon | BoundCon of con | ConcCon of con
 
-  type int_con = identifier * kind * int_con_def
+  type int_con = label * kind * int_con_def
 
   type tal_int =
     { 

@@ -23,6 +23,7 @@ signature LILDEFS =
 	val T32 : unit -> Lil.kind
 	val T64 : unit -> Lil.kind
 	val TM  : unit -> Lil.kind
+	val T32or64 : unit -> Lil.kind
 
 	val list : Lil.kind-> Lil.kind
 	val tlist : unit -> Lil.kind
@@ -113,8 +114,6 @@ signature LILDEFS =
 
 	val pcon_app : Lil.primcon -> Lil.con list -> Lil.con
 
-	(* closure :: T32 list -> T64 list -> T32 -> T32 *)
-	val closure : unit -> Lil.con
       end
 
     structure COps :
@@ -159,8 +158,8 @@ signature LILDEFS =
 	val code  : Lil.con -> Lil.con -> Lil.con -> Lil.con
 	val code' : Lil.con list -> Lil.con list -> Lil.con -> Lil.con
 
-	val externarrow : Lil.size -> Lil.con -> Lil.con -> Lil.con -> Lil.con
-	val externarrow' : Lil.size -> Lil.con list -> Lil.con list -> Lil.con -> Lil.con
+	val externarrow : Lil.size -> Lil.con -> Lil.con -> Lil.con
+	val externarrow' : Lil.size -> Lil.con list -> Lil.con -> Lil.con
 
 	val float : unit -> Lil.con
 	val boxed : Lil.size -> Lil.con -> Lil.con
@@ -199,7 +198,9 @@ signature LILDEFS =
 
 	val unit : unit -> Lil.con
 
+	val stringt : unit -> Lil.con
 	val array : Lil.size -> Lil.con -> Lil.con
+	val arrayptr : Lil.size -> Lil.con -> Lil.con
 	val refc : Lil.con -> Lil.con
 
 	val tag : Lil.w32 -> Lil.con
@@ -244,11 +245,12 @@ signature LILDEFS =
 	val select'  : Lil.w32 -> Lil.sv32 -> Lil.op32 P.pexp
 	val select   : Lil.w32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
-	(* inj_exn c tag v  : T.exn_type()
+	(* inj_exn c tag v  s : T.exn_type()
 	 *   v : c
 	 *   tag : T.dyntag c
+	 *   s : string
 	 *)
-	val inj_exn : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
+	val inj_exn : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
 	val dyntag'' : Lil.con -> Lil.op32 
 	val dyntag'  : Lil.con -> Lil.op32 P.pexp

@@ -12,11 +12,15 @@
  *
  * TODO: 1. GAS support
  *       2. Movsx/movzx instructions
+ *
  *)
 structure Pptal :> PPTAL = 
   struct
     open Tal
     open Formatter 
+
+    fun error s = Util.error "pp.sml" s
+    val pp_instr_no = Stats.ff "TalNumberInstrs"
 
     type options = { 
 		    kinds          : bool, 
@@ -31,18 +35,19 @@ structure Pptal :> PPTAL =
 
       (* Utilities *)
 
-    fun id_prn v = String(Name.var2string v)
+    fun id_prn v = String(Name.label2string v)
     fun lbl_prn l = String(Name.label2string l)
       
     val pp_print_string = String 
     fun pp_print_int i = String (string_of_int i)
     fun pp_print_int32 i = String (string_of_int32 i)
-    val pp_print_break = Break0
+    fun pp_print_break blanks indent = String (String.implode (Listops.copy (blanks,#" ")))
     fun pp_print_char c = String (String.str c)
     fun pp_open_hovbox i = HOVbox0 0 i 0
     fun pp_open_hvbox i = HVbox0 0 i 0
     fun pp_open_vbox i = Vbox0 i 0
-    fun pp_print_cut () = pp_print_break 0 0
+    fun pp_open_hbox i = Hbox0 i
+    fun pp_print_cut () = Newline ()
     val pp_print_newline = Newline
 
     fun sepi i s p l =
@@ -213,7 +218,6 @@ structure Pptal :> PPTAL =
 	  pp_open_hovbox 0 [
 		 print_kind_b true k1,
 		 pp_print_string "-!>",
-		 pp_print_cut (),
 		 (case #rkind k2
 		    of Karrow (_,_) => print_kind_a k2
 		     | _ => print_kind_b false k2)
@@ -356,8 +360,8 @@ structure Pptal :> PPTAL =
 	    val c = !(#rcon con )
 	    val myprec = prec c 
 	    val lp =
-	      if inprec > myprec then pp_print_string "(" else String ""
-	    val rp = if inprec > myprec then pp_print_string ")"  else String ""
+	      if inprec >= myprec then pp_print_string "(" else String ""
+	    val rp = if inprec >= myprec then pp_print_string ")"  else String ""
 	  in
 	    case c 
 	      of Cvar v => id_prn v
@@ -521,7 +525,7 @@ structure Pptal :> PPTAL =
 	       | Cappend (c1,c2) => 
 		pp_open_hovbox 0 [lp,
 				  print_con_a opts (myprec+1) c1, pp_print_string "#",
-				  pp_print_cut (),
+				  pp_print_break 0 0,
 				  print_con_a opts myprec c2,
 				  rp ]
 	       | Cname c => 
@@ -542,7 +546,7 @@ structure Pptal :> PPTAL =
 		 ]
 	       | Ccap d =>
 		let 
-		  val entries = VarMap.foldli (fn (x,p,es) => (x,p)::es) [] d 
+		  val entries = Name.LabelMap.foldli (fn (x,p,es) => (x,p)::es) [] d 
 		in
 		  pp_open_hovbox 0 
 		  [
@@ -561,9 +565,9 @@ structure Pptal :> PPTAL =
 	       | Cinj(i,c,k) =>
 		pp_open_hovbox 0
 		[
-		 pp_open_hovbox 0 [lp, pp_print_string "inj",  pp_print_break 0 2,
-				   pp_print_int32 i, pp_print_break 0 2,
-				   pp_open_hovbox 0 [lp, print_con_a opts 0 c,  rp], pp_print_break 0 2,
+		 pp_open_hovbox 0 [lp, pp_print_string "inj",  pp_print_break 1 2,
+				   pp_print_int32 i, pp_print_break 1 2,
+				   pp_open_hovbox 0 [lp, print_con_a opts myprec c,  rp], pp_print_break 0 2,
 				   pp_print_char #"[",  print_kind opts k, pp_print_char #"]", 
 				   rp]
 		 ]
@@ -590,7 +594,7 @@ structure Pptal :> PPTAL =
 		  fun find l = 
 		    case l 
 		      of ((hd as (_,_,_,f,_,_))::rest) =>
-			if Name.eq_var (f,i) 
+			if Name.eq_label (f,i) 
 			  then hd else find rest
 		       | [] => error "ill-formed Cpr in talpp.ml"
 
@@ -667,8 +671,7 @@ structure Pptal :> PPTAL =
 		      pp_open_hovbox 0
 		      [
 		       pp_open_hovbox 0 (rev acc),
-		       pp_print_string "].",
-		       pp_print_break 0 2,
+		       pp_print_string "]. ",
 		       print_con_a opts myprec con]
 		end
 	  end
@@ -694,8 +697,7 @@ structure Pptal :> PPTAL =
 		pp_open_hovbox 0 
 		[
 		 pp_open_hovbox 0 (rev acc),
-		 pp_print_string "].",
-		 pp_print_break 0 2,
+		 pp_print_string "]. ",
 		 print_con_a opts myprec c2
 		 ]
 	       | _ =>
@@ -706,8 +708,7 @@ structure Pptal :> PPTAL =
 		in pp_open_hovbox 0 
 		  [
 		   pp_open_hovbox 0 (rev acc),
-		   pp_print_string "].",
-		   pp_print_break 0 2,
+		   pp_print_string "]. ",
 		   print_con_a opts myprec c2
 		   ]
 		end
@@ -720,7 +721,7 @@ structure Pptal :> PPTAL =
 	  pp_open_hovbox 0 
 	  [print_con_a opts (myprec+1) c1,
 	   pp_print_string "::",
-	   pp_print_cut (),
+	   pp_print_break 0 0,
 	   print_ccons opts myprec c2
 	   ]
 	 | _ => print_con_a opts myprec c
@@ -827,6 +828,7 @@ structure Pptal :> PPTAL =
 	     pp_print_string "tapp(",
 	     print_coerce f opts (raw,clist),
 	     pp_print_char #",", pp_print_break 0 2, pp_print_char #"<",
+	     pp_open_hovbox 0 [ sepc (print_annotate opts) cons],
 	     pp_print_string ">)"
 	     ]
 	  end
@@ -872,7 +874,7 @@ structure Pptal :> PPTAL =
 	     pp_print_break 0 2,
 	     pp_print_string "<",
 	     print_con opts c, 
-	     pp_print_string ">",
+	     pp_print_string ">,",
 	     pp_print_break 0 2,
 	     print_coerce f opts (raw,clist),
 	     pp_print_string ")"
@@ -1489,7 +1491,7 @@ structure Pptal :> PPTAL =
 		     ]
 		  end
 	      | Comment s =>
-		  [pp_string ", ", pp_string s]
+		  [pp_string "; ", pp_string s]
 	      | Fallthru cons =>
 		   pp_string "\tFALLTHRU"
 		   :: (if cons<>[] 
@@ -1542,7 +1544,7 @@ structure Pptal :> PPTAL =
 	      (* LX *)
 	      | Letprod (is,c) =>  
 		[
-		 pp_print_string "\tLETPROD\t", pp_print_string "*["
+		 pp_print_string "\tLETPROD\t", pp_print_string "["
 		 ] @
 		(case is 
 		   of (hd::rest) => 
@@ -1571,6 +1573,26 @@ structure Pptal :> PPTAL =
       end
 
     fun print_code_block opts ((l,lc,is) : code_block) =
+      let
+	fun pp_instructions is = 
+	  let
+	    fun realp i fmt = pp_print_newline () :: print_instruction opts i :: fmt
+	    fun linenop count fmt = 
+	      if !pp_instr_no then realp (Comment ("Instr no: "^(Int.toString count))) fmt
+	      else fmt
+	    fun folder (i,(fmt,count)) = 
+	      (case i 
+		 of Comment _ => (realp i fmt,count)
+		  | _ => 
+		   let
+		     val fmt = linenop count fmt
+		     val fmt = realp i fmt
+		   in (fmt,count+1)
+		   end)
+	    val (revfmt,_) = Vector.foldl folder ([],0) is
+	  in List.rev revfmt
+	  end
+      in
       pp_open_hovbox 0 
       (
        [
@@ -1589,11 +1611,27 @@ structure Pptal :> PPTAL =
 	       ]
 	   else []
 	   | NONE => [])
-       @
-       (Vector.foldr (fn (i,fmt) => (print_instruction opts i :: pp_print_newline ()::fmt)) [] is)
+       @ pp_instructions is
        )
-
+      end
       (*** Data ***)
+
+    fun fixupFloat float_string =
+      let
+	fun fixSigns [] = []
+	  | fixSigns (#"~" :: rest) = #"-" :: fixSigns rest
+	  | fixSigns (d :: rest) = d :: (fixSigns rest)
+	fun explodeToSci f_s =
+	  (explode f_s) @
+	  (if ((Char.contains f_s #"e") orelse 
+	       (Char.contains f_s #"E") orelse 
+	       (Char.contains f_s #"n") orelse   (* Catch [~,+,-]nan and  [~,+,-]inf. *)
+	       (Char.contains f_s #"i"))
+	     then []
+	   else [#"e", #"0"])
+      in
+	(implode o fixSigns o explodeToSci) float_string
+      end
 
     fun print_data_item opts di =
       let
@@ -1647,8 +1685,8 @@ structure Pptal :> PPTAL =
 		 pp_print_string "\tDD\t", print_coerce aux opts ci
 		 ]
 	      end
-	     | Dfloat32 f => error "No float constants yet" (*[pp_print_string ("\tREAL4\t0x" ^ (f32_to_hex f))]*)
-	     | Dfloat64 f => error "No float constants yet" (*[pp_print_string ("\tREAL8\t0x" ^ (f64_to_hex f))]*)
+	     | Dfloat32 f => error "No 32 bit float constants yet" (*[pp_print_string ("\tREAL4\t0x" ^ (f32_to_hex f))]*)
+	     | Dfloat64 f => [pp_print_string ("\tREAL8\t" ^ (fixupFloat f))]
 	     | Djunk => [pp_print_string "\tDD\t?"]
 	     | Dup => [pp_print_string "\tTAL_STRUCT"]
 	     | Ddown => [pp_print_string "\tTAL_ENDS"]
@@ -1710,8 +1748,7 @@ structure Pptal :> PPTAL =
 	  :: pp_open_hovbox 0
 	  [
 	   id_prn l,
-	   pp_print_break 1 2,
-	   pp_print_string "= ",
+	   pp_print_string " = ",
 	   print_con opts c
 	   ]
 	  ::pp_print_char #">"
@@ -1747,7 +1784,7 @@ structure Pptal :> PPTAL =
 	val fmt1 = 
 	  [
 	   pp_print_string ("; TAL INTERFACE "^name), pp_print_newline (),
-	   pp_print_string "; This file was generated by TALC (sml version)", pp_print_newline ()
+	   pp_print_string "; This file was generated by TILT ", pp_print_newline ()
 	   ]
       in fmt1
       end
@@ -1765,7 +1802,7 @@ structure Pptal :> PPTAL =
 	      pp_print_string "\tTYPE\t"
 	      :: pp_print_char #"<"
 	      :: pp_open_hovbox 0 ([
-				    id_prn l
+				    lbl_prn l
 				    ,pp_print_break 1 2
 				    ,pp_print_char #":"
 				    ,print_kind opts k
@@ -1805,7 +1842,7 @@ structure Pptal :> PPTAL =
       let 
 	fun prn_lkco (l,k,cd) =
 	  pp_open_hovbox 0 
-	  ([ id_prn l, pp_print_break 1 2,
+	  ([ lbl_prn l, pp_print_break 1 2,
 	    print_ckind opts k
 	    ] @
 	   (if #cons opts then
@@ -1970,6 +2007,22 @@ structure Pptal :> PPTAL =
 	(fmt1 @ fmt2 @ fmt3 @ fmt4 
 	 )
       end
+
+
+    fun wrapper pp out obj = 
+      let 
+	val fmtstream = open_fmt out
+	val fmt = pp std_options obj
+      in (output_fmt (fmtstream,fmt); 
+	  close_fmt fmtstream;
+	  ())
+      end
+
+    fun help pp obj = pp std_options obj
+    fun help' pp obj = wrapper pp TextIO.stdOut obj
+
+    val pp_genop' = help print_genop
+    val pp_genop = help' print_genop
 
   end  (* EOF: x86talpp.ml *)
 

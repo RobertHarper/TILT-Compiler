@@ -7,8 +7,11 @@
 
 structure Fs :> FS =
 struct
+  structure LO = Listops
 
     val error = fn s => Util.error "fs.sml" s
+    val IMP = fn () => error "Impossible"
+
     val reject = Util.reject
 
     type file = string	(* filename *)
@@ -88,15 +91,27 @@ struct
     fun tmpFile (file : string) : string =
 	OS.Path.joinDirFile {dir=OS.Path.dir file, file=("tmp"^identity())}
 
-    fun write' (writer : file -> 'a) (file : file) : 'a =
-	let val _ = mkdirs (OS.Path.dir file)
-	    val tmp = tmpFile file
-	    val _ = ignore_exn OS.FileSys.remove tmp
-	    val r = writer tmp
-	    val _ = ignore_exn OS.FileSys.remove file
-	    val _ = OS.FileSys.rename {old=tmp, new=file}
+    fun tmpFilei (i : int,file : string) : string =
+	OS.Path.joinDirFile {dir=OS.Path.dir file, file=("tmp"^(Int.toString i)^identity())}
+
+    fun writen' (writer : file list -> 'a) (files : file list) : 'a = 
+      let 
+	val _ = app (mkdirs o OS.Path.dir) files
+	val tmps = LO.mapcount tmpFilei files
+	val _ = app (ignore_exn OS.FileSys.remove) tmps
+	val r = writer tmps
+	val _ = app (ignore_exn OS.FileSys.remove) files
+	val _ = ListPair.app (fn (tmp,file) => OS.FileSys.rename {old=tmp, new=file}) (tmps,files)
 	in  r
 	end
+
+    fun write' (writer : file -> 'a) (file : file) : 'a = writen' (writer o hd) [file]
+
+    fun write2' (writer : file -> file -> 'a) (file1 : file) (file2 : file) : 'a =
+      writen' (fn [a,b] => writer a b | _ => IMP()) [file1,file2]
+
+    fun write3' (writer : file -> file -> file -> 'a) (file1 : file) (file2 : file) (file3 : file) : 'a =
+      writen' (fn [a,b,c] => writer a b c | _ => IMP()) [file1,file2,file3]
 
     fun blastOut (f : Blaster.outstream -> 'a -> unit, x : 'a) (file : file) : unit =
 	let val os = Blaster.openOut file

@@ -702,11 +702,10 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		     val frees = findfv_list findfv_sv64 env frees sv64s
 		   in frees
 		   end
-		  | ExternApp (sv,sv32s,sv64s) =>  
+		  | ExternApp (sv,args) =>  
 		   let
 		     val frees = findfv_sv32 env frees sv
-		     val frees = findfv_list findfv_sv32 env frees sv32s
-		     val frees = findfv_list findfv_sv64 env frees sv64s
+		     val frees = findfv_list findfv_primarg env frees args
 		   in frees
 		   end
 		  | Call (f,sv32s,sv64s) => 
@@ -758,14 +757,13 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		     val frees = findfv_sv32 env frees sv32
 		   in frees
 		   end
-
-		  | Handle (t,e1,(v,e2)) => 
+		  | Handle {t,e,h = {b,he}} => 
 		   let
 		     val frees = findfv_con env frees t
-		     val frees = findfv_exp env frees e1
+		     val frees = findfv_exp env frees e
 		     (*exn type is closed, don't need to subst *)
-		     val env = exp_var32_bind (env,(v,LD.T.exn()))
-		     val frees = findfv_exp env frees e2
+		     val env = exp_var32_bind (env,(b,LD.T.exn()))
+		     val frees = findfv_exp env frees he
 		   in frees
 		   end)
 	  in do_op32 (env,frees,op32)
@@ -795,11 +793,10 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	    case op64
 	      of Val_64 sv64 => recur_sv64 frees sv64 
 	       | Unbox sv32 => recur_sv32 frees sv32 
-	       | ExternAppf (sv,sv32s,sv64s) =>  
+	       | ExternAppf (sv,args) =>  
 		let
 		  val frees = findfv_sv32 env frees sv
-		  val frees = findfv_list findfv_sv32 env frees sv32s
-		  val frees = findfv_list findfv_sv64 env frees sv64s
+		  val frees = findfv_list findfv_primarg env frees args
 		in frees
 		end
 	       | Prim64 (p,primargs) =>
@@ -988,7 +985,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	(* Scan module for free variables *)
 	(* Shouldn't be any code in the data segment yet.	
  *)
-	fun findfv_module top_fid (MODULE{unitname,parms,entry_c,entry_r,timports,data,confun}) = 
+	fun findfv_module top_fid (MODULE{unitname,parms,entry_c,entry_r,timports,vimports,data,confun}) = 
 	  let
 
 	    val _ = chat 1 "  Scanning for free variables\n"
@@ -1007,6 +1004,9 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		app (fn (l,v,k) => Global.add_conglobal v) timports
 	      else
 		()
+
+	    val env = foldl (fn (lc,env) => exp_label_bind (env,lc)) env vimports
+
 	    val env = findfv_data env data
 
 	    val _ = chat 1 "  Computing transitive closure of close funs\n"

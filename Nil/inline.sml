@@ -462,10 +462,14 @@ struct
 	  val _ = analyzeTable := Analyze.analyze nilmod
 	  val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
 
-	  val MODULE{bnds,imports,exports} = nilmod
+	  val MODULE{bnds,imports,exports,exports_int} = nilmod
 	  val imports = if !hasCandidates andalso !doCons then rimports imports else imports
 	  val bnds = if !hasCandidates then rbnds bnds else bnds
-	  val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
+	  val exports_int = 
+	    (case exports_int
+	       of SOME ei => if !hasCandidates andalso !doCons then SOME (rimports ei) else SOME ei
+		| NONE => NONE)
+	  val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports,exports_int = exports_int}
 
 	  val _ = doCons := false
 	  val _ = functionList := []
@@ -498,10 +502,14 @@ struct
 	val _ = analyzeTable := Analyze.analyze nilmod
 	val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
 
-	val MODULE{bnds,imports,exports} = nilmod
+	val MODULE{bnds,imports,exports,exports_int} = nilmod
 	val imports = if !hasCandidates andalso !doCons then rimports imports else imports
 	val bnds = if !hasCandidates then rbnds bnds else bnds
-	val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
+	val exports_int = 
+	  (case exports_int
+	     of SOME ei => if !hasCandidates andalso !doCons then SOME (rimports ei) else SOME ei
+	      | NONE => NONE)
+	val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports,exports_int=exports_int}
 
 	val _ = doCons := false
 	val _ = functionList := []

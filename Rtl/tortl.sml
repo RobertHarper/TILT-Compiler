@@ -2096,7 +2096,7 @@ struct
     end
 
      fun translate (unitname : string, module : Nil.module) : Rtl.module =
-	 let val Nil.MODULE {bnds,imports,exports} = module
+	 let val Nil.MODULE {bnds,imports,exports,exports_int} = module
 
 	   fun need_unit l = 
 	     let val l = if Name.is_flat l then hd (Name.split_label l) else l

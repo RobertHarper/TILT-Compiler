@@ -24,6 +24,13 @@ struct
     fun cout (c : Lil.con) : Lil.con_ = #c c
     fun kout (k : Lil.kind) : Lil.kind_ = #k k
 
+    fun kvar2lbl var = 
+      let
+	val s = Name.var2string var
+	val l = Name.internal_label s
+      in l
+      end
+
     fun ktrans kind =
       (case TA.K.find kind
 	 of SOME tk => tk
@@ -36,15 +43,19 @@ struct
 		   | Lil.Tmem => Tal.kmem
 		   | Lil.Unit_k => Tal.kprod []
 		   | Lil.Nat_k => Tal.kint 
-		   | Lil.Var_k j => Tal.kvar j
+		   | Lil.Var_k j => Tal.kvar (kvar2lbl j)
 		   | Lil.Arrow_k (k1,k2) => TA.K.share kind (Tal.karrow (recur k1) (recur k2))
 		   | Lil.Prod_k (k1,k2)  => TA.K.share kind (Tal.kprod [recur k1,recur k2])
 		   | Lil.Sum_k ks   => TA.K.share kind (Tal.ksum (map recur ks))
-		   | Lil.Mu_k (j,k) => TA.K.share kind (Tal.kmu [(j,recur k)] j)
+		   | Lil.Mu_k (j,k) => TA.K.share kind (Tal.kmu [(kvar2lbl j,recur k)] (kvar2lbl j))
 		   | Lil.All_k (j,k) => error "Forall kinds cannot be translated to TAL")
 	   in res
 	   end)
 
+    (*Externarrow_c takes a sum (T32 + T64).  In TAL, we have ktype
+     * which classifies them both.
+     *)
+    fun sumout c = #3 (Dec.C.inj c)
 
     fun fixup_case ks arms def bound = 
 	 let
@@ -85,26 +96,40 @@ struct
      * with "dynamic" number of args
      *)
     fun ctrans_stack (env : TE.env) (con : Lil.con) : Tal.con = 
-      (case Dec.C.list' con
-	 of SOME (_,cs) => TTD.T.stackargs (map (ctrans' env) cs)
-	  | NONE => 
-      (case Dec.C.cons_ml' con
-	 of SOME (hd,tl) => TTD.T.stackargcons (ctrans' env hd) (ctrans_stack env tl)
-	  | NONE => 
-      (case Dec.C.sumcase' con
-	 of SOME (arg,arms,def) =>
-	   let
-	     val ks = Dec.K.sum (TE.kindof env arg)
-	     val arg = ctrans' env arg
-	     val bound = Name.fresh_named_var "Case_arg"
-	     val arms = fixup_case ks arms def bound
-	     val arms = ListPair.map (fn (ki,ci) => ctrans_stack (TE.bind_cvar(env,(bound,ki))) ci) (ks,arms)
-	   in TTD.C.sumcase arg bound arms
-	   end
-	  | _ => 
-	   (print "Type is:\n";
-	    PpLil.pp_con con;
-	    error "Function args must be lists or cases"))))
+      (case Dec.C.nill' con
+	 of SOME _ => Tal.cempty
+	  | NONE => (* Catch nill out here to avoid abbreviating cempy everywhere *)
+      let
+	val res = 
+	  (case TA.CS.find con
+	     of SOME tc => tc
+	      | NONE => 
+	       let
+		 val tc = 
+	       ((*case Dec.C.list' con
+		  of SOME (_,cs) => TTD.T.stackargs (map (ctrans' env) cs)
+		   | NONE => *)
+	       (case Dec.C.cons_ml' con
+		  of SOME (hd,tl) => TTD.T.stackargcons (ctrans' env hd) (ctrans_stack env tl)
+		   | NONE => 
+	       (case Dec.C.sumcase' con
+		  of SOME (arg,arms,def) =>
+		    let
+		      val ks = Dec.K.sum (TE.kindof env arg)
+		      val arg = ctrans' env arg
+		      val bound = Name.fresh_named_var "Case_arg"
+		      val arms = fixup_case ks arms def bound
+		      val arms = ListPair.map (fn (ki,ci) => ctrans_stack (TE.bind_cvar(env,(bound,ki))) ci) (ks,arms)
+		    in TTD.C.sumcase arg (TE.vartrans env bound) arms
+		    end
+		   | _ => 
+		    (print "Type is:\n";
+		     PpLil.pp_con con;
+		     error "Function args must be lists or cases"))))
+	       in TA.CS.share con tc
+	       end)
+      in res
+      end)
 
 
 
@@ -125,29 +150,33 @@ struct
 		 val dokind = ktrans
 
 		 fun rewrite_defined_form c = 
-		   case Dec.C.code' c
+		   case Dec.C'.code' c
 		     of SOME (args,fargs,rtype) => SOME(TTD.T.code (ctrans_stack env args) (ctrans_stack env fargs) (docon rtype))
-         | NONE => case Dec.C.sum_ml' c
-		     of SOME(w,arms) => SOME(TTD.T.sum w (docons arms))
-         | NONE => case Dec.C.ksum_ml' c
-		     of SOME(which,w,arms) => SOME(TTD.T.ksum which w (docons arms))
-         | NONE => case Dec.C.tuple_ml' c
+         | NONE => case Dec.C'.sum_ml' c
+		     of SOME(w,arms) => SOME(TTD.T.sum w (docons (map Dec.C.ptr arms)))
+         | NONE => case Dec.C'.ksum_ml' c
+		     of SOME(which,w,arms) => SOME(TTD.T.ksum which w (docons (map Dec.C.ptr arms)))
+         | NONE => case Dec.C'.tuple_ml' c
 		     of SOME fields => SOME(TTD.T.tuple (docons fields))
-         | NONE => case Dec.C.exists_ml' c
-		     of SOME ((v,k),c) => SOME(TTD.T.exists (v,dokind k) (ctrans' (TE.bind_cvar (env,(v,k))) c))
-         | NONE => case Dec.C.forall_ml' c
-		     of SOME ((v,k),c) => SOME(TTD.T.forall (v,dokind k) (ctrans' (TE.bind_cvar (env,(v,k))) c))
-         | NONE => case Dec.C.externarrow_ml' c
-		     of SOME (sz,args,fargs,rtype) => SOME(TTD.T.externarrow sz (docons args) (docons fargs) (docon rtype))
-         | NONE => case Dec.C.polyprim' c
+         | NONE => case Dec.C'.exists_ml' c
+		     of SOME ((v,k),c) => SOME(TTD.T.exists (TE.vartrans env v,dokind k) (ctrans' (TE.bind_cvar (env,(v,k))) c))
+         | NONE => case Dec.C'.forall_ml' c
+		     of SOME ((v,k),c) => SOME(TTD.T.forall (TE.vartrans env v,dokind k) (ctrans' (TE.bind_cvar (env,(v,k))) c))
+         | NONE => case Dec.C'.externarrow_ml' c
+		     of SOME (sz,args,rtype) => SOME(TTD.T.externarrow sz (docons (map sumout args)) (docon rtype))
+         | NONE => case Dec.C'.tag' c
+		     of SOME c => SOME(TTD.T.tag (docon c))
+         | NONE => case Dec.C'.array_ptr' c
+		     of SOME (sz,c) => SOME(TTD.T.array sz (docon c))
+         | NONE => case Dec.C'.polyprim' c
 		     of SOME(Lil.Embed_c sz,[],[c]) => SOME(TTD.T.embed sz (docon c))
 		      | SOME (Lil.Rec_c,[k],cs) => 
 			  let
 			    val k = dokind k
 			    fun eta () = TTD.T.eta_rek k
 			    fun partial clam = 
-			      (case Dec.C.lam' clam
-				 of SOME ((r,_),c) => TTD.T.partial_rek ((r,k),docon c)
+			      (case Dec.C'.lam' clam
+				 of SOME ((r,_),c) => TTD.T.partial_rek ((TE.vartrans env r,k),docon c)
 				  | NONE => eta())
 			    fun total clam carg =
 			      TTD.C.app (partial clam) (docon carg)
@@ -168,7 +197,7 @@ struct
 		      | NONE => 
    	           (* Translate the con directly (assuming all defined forms have been checked for) *)
 		   (case cout con 
-		     of Lil.Var_c v => TTD.C.var v
+		     of Lil.Var_c v => TE.var2con env v
 		      | Lil.Nat_c w => TTD.C.nat w
 		      | Lil.Star_c => TTD.C.unit
 		      | Lil.Prim_c p => TTD.T.primcon p
@@ -182,7 +211,7 @@ struct
 				  val tk = dokind k
 				  val env = TE.bind_cvar (env,(a,k))
 				  val tc = ctrans' env c
-				in TTD.C.lam a tk tc
+				in TTD.C.lam (TE.vartrans env a) tk tc
 				end
 			       | Lil.Pi1_c c => TTD.C.pi1 (docon c)
 			       | Lil.Pi2_c c => TTD.C.pi2 (docon c)
@@ -194,7 +223,7 @@ struct
 				  val env = TE.bind_cvar(env,(a,k))
 				  val env = TE.bind_cvar(env,(r,LD.K.arrow (LD.K.var j) k'))
 				  val body = ctrans' env body
-				in TTD.C.pr (j,(a,tk),tk',r,body)
+				in TTD.C.pr (TE.vartrans env j,(TE.vartrans env a,tk),tk',TE.vartrans env r,body)
 				end
 			       | Lil.Case_c (arg,arms,def) =>
 				(* The TAL case construct has no default, and uses the same bound var
@@ -206,7 +235,7 @@ struct
 				  val bound = Name.fresh_named_var "Case_arg"
 				  val arms = fixup_case ks arms def bound
 				  val arms = ListPair.map (fn (ki,ci) => ctrans' (TE.bind_cvar(env,(bound,ki))) ci) (ks,arms)
-				in TTD.C.sumcase arg bound arms
+				in TTD.C.sumcase arg (TE.vartrans env bound) arms
 				end
 			       | Lil.Pair_c (c1,c2) => TTD.C.pair (docon c1) (docon c2)
 			       | Lil.Inj_c (w,k,c) => 
@@ -234,8 +263,11 @@ struct
 
     fun ctrans env con = 
       let
+	val () = chat 3 "Starting ctrans\n"
 	val con = TE.subst_con env con
-      in ctrans' env con
+	val con = ctrans' env con
+	val () = chat 3 "Finished ctrans\n"
+      in con
       end
 
 end  (* LilToTal *)

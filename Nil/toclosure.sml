@@ -107,6 +107,7 @@ struct
 
 
     val do_single_venv = Stats.tt("Closure_TermCompress")
+    val vararg_uses_result = CompilerControl.VarargUsesResult
     val closure_print_free = Stats.ff "closure_print_free"
     (* If omit_coercions is true, coercion values that only appear in *)
     (* application position will be omitted from closures.  This will *)
@@ -779,9 +780,30 @@ struct
 		     fun efold(e,f) = e_find_fv (state,f) e
 		     fun trfold(tr,f) = trace_find_fv(state,f) tr
 
-		     val frees = if (NilDefs.allprim_uses_carg p)
-				     then foldl cfold frees clist
-				 else foldl tfold frees clist
+		     val frees = 
+		       (case (p,clist)
+			  of (NilPrimOp (make_vararg (ope,eff)),[arg,ret]) => 
+			    let
+			      val frees = c_find_fv (state,frees) arg
+			      val frees = 
+				if !vararg_uses_result then
+				  c_find_fv (state,frees) ret
+				else t_find_fv (state,frees) ret
+			    in frees
+			    end
+			   | (NilPrimOp (make_onearg (ope,eff)),[arg,ret]) => 
+			    let
+			      val frees = c_find_fv (state,frees) arg
+			      val frees =
+ 				if !vararg_uses_result then
+				  c_find_fv (state,frees) ret
+				else t_find_fv (state,frees) ret
+			    in frees
+			    end
+			   | _ => 
+			    if (NilDefs.allprim_uses_carg p)
+			      then foldl cfold frees clist
+			    else foldl tfold frees clist)
 		     val frees = foldl efold frees elist
 		     val frees = foldl trfold frees trlist
 		 in  frees
@@ -1710,7 +1732,7 @@ struct
 
 
 
-   fun close_mod (MODULE{bnds, imports, exports}) =
+   fun close_mod (MODULE{bnds, imports, exports,exports_int}) =
        let val _ = reset_table []
 	   val top_fid = Name.fresh_named_var "top_fid"
 	   val state = initial_state top_fid
@@ -1803,7 +1825,7 @@ struct
 
 	   val _ = reset_table []
 
-       in  MODULE{bnds = bnds', imports = imports', exports = exports'}
+       in  MODULE{bnds = bnds', imports = imports', exports = exports',exports_int = exports_int}
        end
 
 

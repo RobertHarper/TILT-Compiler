@@ -419,18 +419,18 @@ structure LilRewrite :> LILREWRITE =
 				map recur_c cs, 
 				map recur_sv32 sv32s,
 				map recur_sv64 sv64s)
-		  | ExternApp (sv,sv32s,sv64s) =>  ExternApp (recur_sv32 sv,map recur_sv32 sv32s,map recur_sv64 sv64s)
+		  | ExternApp (sv,args) =>  ExternApp (recur_sv32 sv,map recur_primarg args)
 		  | App (f,sv32s,sv64s) => App (recur_sv32 f,map recur_sv32 sv32s,map recur_sv64 sv64s)
 		  | Call (f,sv32s,sv64s) => Call (recur_sv32 f,map recur_sv32 sv32s,map recur_sv64 sv64s)
 		  | Switch switch => Switch (rewrite_switch state switch)
 		  | Raise (c,sv32) => Raise (recur_c c,recur_sv32 sv32)
-		  | Handle (t,e1,(v,e2)) => 
+		  | Handle {t,e,h = {b,he}} => 
 		   let
 		     val t = recur_c t
-		     val e1 = recur_e e1
-		     val (state,v) = exp_var32_bind (state,v)
-		     val e2 = rewrite_exp state e2
-		   in Handle (t,e1,(v,e2))
+		     val e = recur_e e
+		     val (state,b) = exp_var32_bind (state,b)
+		     val he = rewrite_exp state he
+		   in Handle {t = t, e = e, h = {b = b,he = he}}
 		   end)
 	  in do_op32 (state,op32)
 	  end
@@ -448,7 +448,7 @@ structure LilRewrite :> LILREWRITE =
 	  in
 	    case op64
 	      of Val_64 sv64 => Val_64 (recur_sv64 sv64)
-	       | ExternAppf (sv,sv32s,sv64s) =>  ExternAppf (recur_sv32 sv,map recur_sv32 sv32s,map recur_sv64 sv64s)
+	       | ExternAppf (sv,args) =>  ExternAppf (recur_sv32 sv,map recur_primarg args)
 	       | Unbox sv32 => Unbox (recur_sv32 sv32)
 	       | Prim64 (p,primargs) =>
 		Prim64 (p,map recur_primarg primargs)

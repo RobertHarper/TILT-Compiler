@@ -8,6 +8,6 @@
 case `uname -s` in
 SunOS) echo sparc ;;
 OSF1) echo alpha ;;
-# Linux) echo talx86 ;;
+Linux) echo talx86 ;;
 *) echo unsupported ;;
 esac

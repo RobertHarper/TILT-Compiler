@@ -40,22 +40,16 @@
 0023	pass	Elaborator error: Bombing with unbound variable during coercion.
 0024	pass	Problem with "where structure" signature patching.
 0025	pass	Problem with "where structure" and datatype modules.
-0026	pass	Phase splitter bombing.
-bug50a	pass	We no longer support "eqtype t = ty" specs.
-bug50b	pass	We no longer support "eqtype tyvars t = ty" specs.
 bug55a	pass	Unresolved tyvar breaking elaborator.
 bug55b	pass	Unresolved tyvar breaking phase-splitter.
 bug80	pass	Phase splitter and signatures.
 bug82	fail	Flexible records.
 bug84	pass	Shadowing :: or nil breaks pattern compiler.
 bug84b	pass	Shadowing :: or nil should be disallowed.
-bug114	fail	Overloading constants.
 bug151a	pass	name-mangling test [x] <- [x]
 bug151b	pass	order of imports and effects are correct
 bug151c	pass	implicit imports do not conflict with explicit imports
 bug151d	pass	name-mangling test [x] <- * <- * -> [x]
-bug152	pass	Incorrect matching of eqtype specs.
-bug153	fail	Sharing abstract type and eqtype specs.
 bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug155	fail	Type sharing fails on corner case.
 bug159	pass	Datatype replication.
@@ -183,7 +177,6 @@ m0118	pass	basic dynamic tests of primitives
 m0119	fail	text io
 m0120	fail	[Bug #0145] time
 m0121	skip	time [requires LargeInt to be bigger than 32 bits]
-m0121b	pass	time [works in 32 bits]
 m0122	fail	time
 m0123	pass	string comparison
 m0124	fail	type specs

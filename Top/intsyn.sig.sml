@@ -59,7 +59,7 @@ sig
     (* Files names. *)
     structure F :
     sig
-	type link = {exe:file, asm:file, asmz:file, obj:file}
+	type link = {exe:file, asm:file, asmz:file, obj:file, tobj:file}
 	val link : file -> link (* exe *)
 
 	type pack =
@@ -103,22 +103,32 @@ sig
 
     type srcu =
 	{pos:pos, opened:units, src:file,
-	 info:file, pinterface:file, obj:file,
+	 info:file, pinterface:file, obj:file, tobj:file,
 	 asm:file, asmz:file, using_file:file,
+	 asme:file,asme_rel:file,
+	 asmi:file,asmi_rel:file,
 	 tali:file, tali_rel:file}
     type ssrcu =
 	{pos:pos, opened:units, src:file, asc:label,
-	 info:file, obj:file, asm:file, asmz:file,
+	 info:file, obj:file, tobj:file, asm:file, asmz:file,
+	 asme:file,asme_rel:file,
+	 asmi:file,asmi_rel:file,
 	 using_file:file, tali:file, tali_rel:file}
     type primu =
 	{pos:pos, asc:label,
-	 obj:file, asm:file, asmz:file,
+	 obj:file, tobj:file, asm:file, asmz:file,
+	 asmi:file,asmi_rel:file,
+	 asme:file,asme_rel:file,
 	 using_file:file, tali:file, tali_rel:file}
     type precompu =
-	{pos:pos, obj:file, using:units, opened:units, src:file, asc:label,
+	{pos:pos, obj:file, tobj:file, using:units, opened:units, src:file, asc:label,
+	 asmi:file,asmi_rel:file,
+	 asme:file,asme_rel:file,
 	 info:file, using_file:file, tali:file, tali_rel:file}
     type compu =
-	{pos:pos, obj:file, using:units, opened:units, asc:label,
+	{pos:pos, obj:file, tobj:file, using:units, opened:units, asc:label,
+	 asmi:file,asmi_rel:file,
+	 asme:file,asme_rel:file,
 	 using_file:file, tali:file, tali_rel:file}
 
     datatype uexp =
@@ -265,10 +275,15 @@ sig
 	    val info : uexp -> file
 	    val info' : uexp -> file option
 	    val obj : uexp -> file
+	    val tobj : uexp -> file 
 	    val pinterface : uexp -> file
 	    val pinterface' : uexp -> file option
 	    val tali : uexp -> file
 	    val tali_rel : uexp -> file
+	    val asme : uexp -> file
+	    val asme_rel : uexp -> file
+	    val asmi : uexp -> file
+	    val asmi_rel : uexp -> file
 	    val stable : uexp -> bool
 	end
 

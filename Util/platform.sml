@@ -48,7 +48,7 @@ struct
 	(case get "sysname"
 	   of "SunOS" => SUPPORTED SPARC
 	    | "OSF1" => SUPPORTED ALPHA
-(*	    | "Linux" => SUPPORTED TALx86 *)
+	    | "Linux" => SUPPORTED TALx86 
 	    | _ => UNSUPPORTED)
 
     fun cputypeToString (ct : cputype) : string =

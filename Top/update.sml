@@ -354,11 +354,11 @@ struct
 		else fn path => Fs.remove (path uexp)
 	    val _ =
 		if uptoElaborate orelse uptoAsm then
-		    remove I.P.U.obj
+		    app remove [I.P.U.obj, I.P.U.tobj]
 		else ()
 	    val _ =
 		if uptoElaborate then
-		    app remove [I.P.U.asm, I.P.U.asmz, I.P.U.using_file, I.P.U.tali]
+		    app remove [I.P.U.asm, I.P.U.asmi, I.P.U.asme, I.P.U.asmz, I.P.U.using_file, I.P.U.tali]
 		else ()
 
 	    fun have (path : I.uexp -> string) : bool =
@@ -388,6 +388,14 @@ struct
 		 (tal andalso not (have I.P.U.tali),
 		  COMPILE {pinterface=true, tali=false}),
 
+		 (* asme needed and missing *)
+		 (tal andalso not (have I.P.U.asme),
+		  COMPILE {pinterface=true, tali=true}),
+
+		 (* asmi needed and missing *)
+		 (tal andalso not (have I.P.U.asmi),
+		  COMPILE {pinterface=true, tali=true}),
+
 		 (* asm/asmz needed and both are missing *)
 		 (not (have I.P.U.asm orelse have I.P.U.asmz) andalso
 		  (keepAsm orelse
@@ -396,6 +404,10 @@ struct
 
 		 (* obj file is missing *)
 		 (not (uptoAsm orelse have I.P.U.obj),
+		  ASSEMBLE),
+
+		 (* tobj file is missing *)
+		 (tal andalso not (uptoAsm orelse have I.P.U.tobj),
 		  ASSEMBLE),
 
 		 (not keepAsm, EMPTY),
@@ -444,8 +456,12 @@ struct
 	if uptodate then
 	    let val uexp = I.P.D.uexp pdec
 		val obj = I.P.U.obj uexp
-	    in	if Fs.exists obj then EMPTY
-		else fail (pdec, "missing compiled file: " ^ obj)
+		val tobj = I.P.U.tobj uexp
+	    in	
+	      if Fs.exists obj then 
+		if not(Target.tal()) orelse Fs.exists tobj then EMPTY
+		else fail (pdec, "missing compiled file: " ^ tobj)
+	      else fail (pdec, "missing compiled file: " ^ obj)
 	    end
 	else fail (pdec, "no longer up to date")
 

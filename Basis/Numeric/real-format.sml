@@ -15,6 +15,13 @@ structure RealFormat : sig
     val float_eq = TiltPrim.float_eq
     val float_neq = TiltPrim.float_neq
     val floor = TiltPrim.float2int
+    val floor = 
+      fn r =>
+      let val a = TiltPrim.float2int r
+      in  if (TiltPrim.int2float a) <= r then a
+	  else TiltPrim.iminus(a,1)
+      end
+
     val int32touint32 = TiltPrim.int32touint32
     val unsafe_vsub = TiltPrim.unsafe_vsub8
 

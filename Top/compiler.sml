@@ -422,7 +422,7 @@ struct
 	in  List.mapPartial mapper desc
 	end
 
-    fun generate (desc:I.desc, U:label, asm:file, using_file:file, tali_rel:file, ilmod:LinkIl.module) : unit =
+    fun generate (desc:I.desc, U:label, asm:file, asme:file, asme_rel:file, asmi:file, asmi_rel:file, using_file:file, tali_rel:file, ilmod:LinkIl.module) : unit =
 	let val name = Name.label2name' U
 	    val nilmod = Linknil.il_to_nil (name,ilmod)
 	    val _ = timestamp()
@@ -438,22 +438,33 @@ struct
 		(case module of
 		    RTL rmod => f (s,rmod)
 		|   _ => error "Can't translate LIL to sparc/alpha")
-	    fun lilwrap f module s =
+	    fun lilwrap f module asm_tmp asme_tmp asmi_tmp =
 		(case module of
 		    LIL rmod =>
 			let val look : label -> file =
 				I.P.D.tali_rel o (lookup desc)
-			    val imports = map look using
-			    val exports = [tali_rel]
-			in  f (s,name,imports,exports,rmod)
+			    val imports = asmi_rel :: map look using
+			    val exports = [tali_rel,asme_rel]
+			in  f (asmi_tmp,asm_tmp,asme_tmp,name,imports,exports,rmod)
 			end
 		|   _ => error "Can't translate RTL to TAL")
-	    val toasm =
+	    val () =
 		(case (Target.getTarget()) of
-		    Platform.ALPHA => rtlwrap Linkalpha.rtl_to_asm
-		|   Platform.SPARC => rtlwrap Linksparc.rtl_to_asm
-		|   Platform.TALx86 => lilwrap LinkTAL.lil_to_asm)
-	    val _ = Fs.write' (toasm module) asm
+		    Platform.ALPHA => 
+		      let
+			val toasm = rtlwrap Linkalpha.rtl_to_asm
+		      in Fs.write' (toasm module) asm
+		      end
+		|   Platform.SPARC => 
+		      let
+			val toasm = rtlwrap Linksparc.rtl_to_asm
+		      in Fs.write' (toasm module) asm
+		      end
+		|   Platform.TALx86 => 
+		      let
+			val toasm = lilwrap LinkTAL.lil_to_asm
+		      in Fs.write3' (toasm module) asm asme asmi
+		      end)
 	in  ()
 	end
 
@@ -482,7 +493,7 @@ struct
 		nil
 	end
 
-    fun assemble'' (desc:I.desc, asm:file, asmz:file, obj:file) : bool =
+    fun assemble'' (desc:I.desc, asm:file, asmz:file, obj:file, tobj:file) : bool =
 	let val haveasm = Fs.exists asm
 	    val haveasmz = Fs.exists asmz
 	    val wantasm = !KeepAsm andalso not (!CompressAsm)
@@ -498,21 +509,22 @@ struct
 	    val _ = Timestamp.timestamp()
 	in
 	    if uncompress then Tools.uncompress{src=asmz, dest=asm} else ();
-	    if assemble then Tools.assemble (tal_includes desc,asm,obj) else ();
+	    if assemble then Tools.assemble (tal_includes desc,asm,obj,tobj) else ();
 	    if compress then Tools.compress{src=asm, dest=asmz} else ();
 	    if removeasm then Fs.remove asm else ();
 	    if removeasmz then Fs.remove asmz else ();
 	    finished
 	end
 
-    fun finish_compile (desc:I.desc, U:label, ilmod:LinkIl.module, asm:file,
-	    asmz:file, obj:file, using:file, tali_rel:file) : bool =
+    fun finish_compile (desc:I.desc, U:label, ilmod:LinkIl.module, asm:file, 
+			asme:file, asme_rel:file, asmi:file, asmi_rel:file,
+	    asmz:file, obj:file, tobj:file, using:file, tali_rel:file) : bool =
 	let val elab_only =
 		!UptoElaborate orelse
 		(!UptoAsm andalso not (!KeepAsm))
 	in  elab_only orelse
-	    (generate(desc,U,asm,using,tali_rel,ilmod);
-	     assemble''(desc,asm,asmz,obj))
+	    (generate(desc,U,asm,asme,asme_rel,asmi,asmi_rel,using,tali_rel,ilmod);
+	     assemble''(desc,asm,asmz,obj,tobj))
 	end
 
     fun compile_srci ((desc,pdec):inputs) : bool =
@@ -551,7 +563,7 @@ struct
     fun compile_srcu (tali_ready:bool, ack_inter:unit -> unit)
 	    ((desc,pdec):inputs) : bool =
 	let val {name=U,uexp,...} = I.D.D.u pdec
-	    val {opened,pinterface,src,asm,using_file,asmz,obj,tali,tali_rel,...} = I.D.U.src uexp
+	    val {opened,pinterface,src,asm,asme,asme_rel,asmi,asmi_rel,using_file,asmz,obj,tobj,tali,tali_rel,...} = I.D.U.src uexp
 	    val (fp,topdec) = parse_topdec (U,src)
 	    val _ = elaborating U
 	    val pctx = precontext desc
@@ -563,12 +575,12 @@ struct
 		if unchanged orelse tali_ready then ()
 		else compile_tali (pctx,U,pi,tali)
 	    val _ = ack_inter()
-	in  finish_compile (desc,U,ilmod,asm,asmz,obj,using_file,tali_rel)
+	in  finish_compile (desc,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
 	end
 
     fun compile_ssrcu (tali_ready:bool) ((desc,pdec):inputs) : bool =
 	let val {name=U,uexp,...} = I.D.D.u pdec
-	    val {opened,asc=I,src,asm,asmz,obj,using_file,tali,tali_rel,...} = I.D.U.ssrc uexp
+	    val {opened,asc=I,src,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali,tali_rel,...} = I.D.U.ssrc uexp
 	    val (fp,topdec) = parse_topdec (U,src)
 	    val _ = elaborating U
 	    val pctx = precontext desc
@@ -580,12 +592,12 @@ struct
 	    val _ = reset() (* not essential *)
 	    val opt = LinkIl.elab_sealed_topdec (pctx,U,opened,fp,topdec,pi)
 	    val ilmod = elab_opt (src,opt)
-	in  finish_compile (desc,U,ilmod,asm,asmz,obj,using_file,tali_rel)
+	in  finish_compile (desc,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
 	end
 
     fun compile_primu (tali_ready:bool) ((desc,pdec):inputs) : bool =
 	let val {name=U,uexp,...} = I.D.D.u pdec
-	    val {asc=I,asm,asmz,obj,using_file,tali,tali_rel,...} = I.D.U.prim uexp
+	    val {asc=I,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali,tali_rel,...} = I.D.U.prim uexp
 	    val _ = elaborating U
 	    val pinterface = pinterface(lookup'(desc,I))
 	    val pi = Fs.read_pinterface pinterface
@@ -595,7 +607,7 @@ struct
 	    val _ = reset() (* not essential *)
 	    val opt = LinkIl.elab_primdec (U,pi)
 	    val ilmod = elab_opt ("primitive unit",opt)
-	in  finish_compile (desc,U,ilmod,asm,asmz,obj,using_file,tali_rel)
+	in  finish_compile (desc,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
 	end
 
     fun compile (inputs:inputs, f:unit -> unit) : bool =
@@ -645,13 +657,14 @@ struct
 	    val asm = I.P.U.asm uexp
 	    val asmz = I.P.U.asmz uexp
 	    val obj = I.P.U.obj uexp
+	    val tobj = I.P.U.tobj uexp
 	    (*
 		Update may have brought information about these
 		files into the cache which a slave subsequently made
 		out of date.
 	    *)
-	    val _ = Fs.flush_some [asm,asmz,obj]
-	in  if assemble'' (desc,asm,asmz,obj) then ()
+	    val _ = Fs.flush_some [asm,asmz,obj,tobj]
+	in  if assemble'' (desc,asm,asmz,obj,tobj) then ()
 	    else error "unable to assemble (not native)"
 	end
 
@@ -666,7 +679,7 @@ struct
 		end)
 
     fun link (desc:I.desc, exe:file) : unit =
-	let val {exe,asm,asmz,obj} = I.F.link exe
+	let val {exe,asm,asmz,obj,tobj} = I.F.link exe
 	    val _ = msg ("[linking " ^ exe ^ "]\n")
 	    fun unitname (pdec:I.pdec) : label option =
 		(case pdec of
@@ -679,7 +692,7 @@ struct
 		let val units = map Name.label2name' units
 		in  f{asmFile=tmp, units=units}
 		end
-	    fun typed (f:{asmFile:string, units:{name:string, imports:string list}list} -> unit) (tmp:string) : unit =
+	    fun typed (f:{asmFile:string, importfiles : string list, units:{name:string, imports:string list}list} -> unit) (tmp:string) : unit =
 		let fun mapper (U:label) : {name:string, imports:string list} =
 			let val name = Name.label2name' U
 			    val uexp = lookup U
@@ -688,23 +701,35 @@ struct
 				map Name.label2name' imports
 			in  {name=name, imports=imports}
 			end
+		    val tali_files = map (I.P.U.tali_rel o lookup) units
+		    val asme_files = map (I.P.U.asme_rel o lookup) units
+		    val files = tali_files@asme_files
 		    val units = map mapper units
-		in  f{asmFile=tmp, units=units}
+		in  f{asmFile=tmp, importfiles = files, units=units}
 		end
 	    val _ = timestamp()
 	    val generate : string -> unit =
 		(case (Target.getTarget()) of
 		    Platform.ALPHA => untyped Linkalpha.link
 		|   Platform.SPARC => untyped Linksparc.link
-		|   Platform.TALx86 => typed (error "no TAL linker yet"))
+		|   Platform.TALx86 => typed LinkTAL.link)
 	    val _ = reset() (* not essential *)
 	    val _ = Fs.write' generate asm
-	in  if assemble'' (desc,asm,asmz,obj) then
-		let val objs = map (I.P.U.obj o lookup) units
-		    val includes = tal_includes desc
-		in  Tools.link (includes, objs @ [obj], exe)
-		end
-	    else ()
+	in  
+	  if assemble'' (desc,asm,asmz,obj,tobj) then
+	    if Target.tal() then
+	      let 
+		val tobjs = map (I.P.U.tobj o lookup) units
+		val includes = tal_includes desc
+	      in  Tools.link (includes, tobj::tobjs, exe)
+	      end
+	    else
+	      let 
+		val objs = map (I.P.U.obj o lookup) units
+		val includes = tal_includes desc
+	      in  Tools.link (includes, objs @ [obj], exe)
+	      end
+	  else ()
 	end
 
     (*
@@ -808,6 +833,7 @@ struct
 	{copy:file * file -> unit,
 	 copysrc:file * file -> unit,
 	 copytali:file * file -> unit,
+	 copytobj:file * file  -> unit,
 	 writeusing:file * I.units -> unit}
 
     fun copy_iexp (parms:copyparms, iexp:I.iexp, libiexp:I.iexp) : unit =
@@ -828,20 +854,26 @@ struct
 
     fun copy_uexp (parms:copyparms, uexp:I.uexp, libuexp:I.uexp) : unit =
 	(case libuexp of
-	    I.PRECOMPU {using,obj,src,info,using_file,tali,...} =>
-		let val {copysrc,copy,writeusing,copytali,...} = parms
+	    I.PRECOMPU {using,obj,tobj,src,info,using_file,tali,asmi,asme,...} =>
+		let val {copysrc,copy,copytobj,writeusing,copytali,...} = parms
 		    val _ = copysrc(I.P.U.src uexp,src)
 		    val _ = copy(I.P.U.info uexp,info)
 		    val _ = copy(I.P.U.obj uexp,obj)
+		    val _ = copytobj(I.P.U.tobj uexp,tobj)
 		    val _ = writeusing(using_file,using)
 		    val _ = copytali(I.P.U.tali uexp,tali)
+		    val _ = copytali(I.P.U.asmi uexp,asmi)
+		    val _ = copytali(I.P.U.asme uexp,asme)
 		in  ()
 		end
-	|   I.COMPU {using,obj,using_file,tali,...} =>
-		let val {copy,writeusing,copytali,...} = parms
+	|   I.COMPU {using,obj,tobj,using_file,tali,asmi,asme,...} =>
+		let val {copy,copytobj,writeusing,copytali,...} = parms
 		    val _ = copy(I.P.U.obj uexp,obj)
+		    val _ = copytobj(I.P.U.tobj uexp,tobj)
 		    val _ = writeusing(using_file,using)
 		    val _ = copytali(I.P.U.tali uexp,tali)
+		    val _ = copytali(I.P.U.asmi uexp,asmi)
+		    val _ = copytali(I.P.U.asme uexp,asme)
 		in  ()
 		end
 	|   _ => error "copy_uexp")
@@ -872,10 +904,13 @@ struct
 		if !UptoElaborate orelse not(Target.tal())
 		then dontcopy
 		else copy
+	    val copytobj : file * file -> unit = 
+	      if Target.tal() then copy
+	      else dontcopy
 	    fun writeusing (file:string, using:I.units) : unit =
 		Fs.write I.blastOutUnits file using
 	    val parms : copyparms =
-		{copy=copy, copysrc=copysrc, copytali=copytali,
+		{copy=copy, copytobj=copytobj, copysrc=copysrc, copytali=copytali,
 		 writeusing=writeusing}
 	in  app (copy_pdec parms) (Listops.zip srcdesc libdesc)
 	end

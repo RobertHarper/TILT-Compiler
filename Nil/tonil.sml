@@ -97,7 +97,6 @@ struct
 			 
    *)
 
-   val killDeadImport           = Stats.tt("killDeadImport")
    val do_preproject            = Stats.tt("do_preproject")
    val do_memoize               = Stats.tt("do_memoize")
    val do_polyrec               = Stats.ff("do_polyrec")
@@ -108,7 +107,9 @@ struct
     *)
    val flatten_modules          = Stats.ff("flatten_modules")
 
+   val killDeadImport           = CompilerControl.KillDeadImport
    val ref_is_array             = CompilerControl.RefIsArray
+   val do_exports_int           = CompilerControl.DoExportsInt
 
    (* The elaborator_specific_optimizations ref controls whether
       the phase-splitter should do some simple optimizations
@@ -4418,7 +4419,103 @@ end (* local defining splitting context *)
      in  (imports, bnds,context)
      end
 
-
+   fun sdecs2exports final_context sdecs =
+     let
+       fun loop ([],acc) = rev acc
+	 | loop ((Il.SDEC (l,dec))::sdecs,acc) = 
+	 (case dec 
+	    of Il.DEC_MOD (v,is_polyfun,_) =>
+	      let
+		val (lc,lr) = N.make_cr_labels l
+		(* v should already be bound in the context*)
+		val ((vc,vr),_) = splitVar (v,final_context)
+		val acc = 
+		  if is_polyfun then 
+		    (ExportValue(lr,vr)):: acc
+		  else
+		    (ExportValue(lr,vr)) :: (ExportType(lc,vc)) :: acc
+	      in
+		loop(sdecs,acc)
+	      end
+	     | Il.DEC_EXP (v,_,_,_) => 
+	      let
+		val l = if Name.is_flat l then #2 (Name.make_cr_labels l) else l
+		val v = rename_var(v, final_context)
+	      in
+		mark_var_used(final_context,v);
+		loop(sdecs,(ExportValue(l,v)) :: acc)
+	      end
+	     | Il.DEC_CON (v,_,_,_) => 
+	      let
+		val l = if Name.is_flat l then #1 (Name.make_cr_labels l) else l
+		val v = rename_var(v, final_context)
+	      in
+		mark_var_used(final_context,v);
+		loop(sdecs,ExportType(l,v) :: acc)
+	      end)
+     in loop (sdecs,[])
+     end
+   fun sdecs2exports_int context sdecs =
+     let
+       fun loop ([],acc) = rev acc
+	 | loop ((Il.SDEC (l,dec))::sdecs,acc) = 
+	 (case dec of
+	    Il.DEC_MOD (v, is_polyfun, il_sig) =>
+	      let
+		val (l_c,l_r) = N.make_cr_labels l
+		  
+		val ((v_c, v_r),context) = splitNewVar (v,context)
+		  
+		val (knd, type_r) = xsig context (Var_c v_c, il_sig)
+		  
+		val context = update_NILctx_insert_kind(context,v_c, knd)
+		  
+		val (context,ivtbs,type_r) = flatten_type_to_bnds(context,(Name.var2name v)^"_t",type_r)
+		  
+		val context = insert_con(context, v_r, type_r)
+		  
+		  
+		val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
+		val it = ImportType(l_c,v_c,knd)
+		  
+		(* If we're importing a polymorphic function,
+			     then we don't ever need the type part.
+			       *)
+		val acc =
+		  if is_polyfun then
+		    iv::ivtbs@acc
+		  else
+		    (iv::ivtbs@(it::acc))
+	      in loop(sdecs,acc)
+	      end
+	  | Il.DEC_EXP (var, il_con, _,_) =>
+	      let
+		val l = if Name.is_flat l then #2 (Name.make_cr_labels l) else l
+		  
+		val con = xcon context il_con
+		val (context,ibnds,con) = flatten_type_to_bnds(context,(Name.var2name var)^"_type",con)
+		val (var, context) = insert_rename_var(var, context)
+		val context = update_NILctx_insert_con(context, var, con)
+		val acc = 
+		  ((ImportValue(l,var,TraceUnknown,con))::ibnds@acc)
+	      in loop(sdecs,acc)
+	      end
+	  | Il.DEC_CON(var, il_knd, maybecon,_) =>
+	      let
+		val l = if Name.is_flat l then #1 (Name.make_cr_labels l) else l
+		val knd =
+		  (case maybecon of
+		     NONE => xkind context il_knd
+		   | SOME il_con => Single_k(xcon context il_con))
+		     
+		val (var, context) = insert_rename_var(var, context)
+		val context = update_NILctx_insert_kind(context, var, knd)
+		val acc =
+		  ((ImportType(l,var,knd))::acc)
+	      in loop(sdecs,acc)
+	      end)
+     in loop (sdecs,[])
+     end   
    (* The top-level function for the phase-splitter.
     *)
    fun phasesplit (ilmodule : Il.module) : Nil.module =
@@ -4494,15 +4591,22 @@ end (* local defining splitting context *)
        val bnds = cbnds @ ebnds
        val nil_initial_context = get_nilctxt initial_splitting_context
        val nil_final_context = get_nilctxt final_context
+	 
+       val _ = msg "  Bindings are phase-split\n"
+	 
+       (* Create the exports.
+	*)
+       val exports : export_entry list = sdecs2exports final_context sdecs
+       val exports_int = if !do_exports_int then SOME(sdecs2exports_int final_context sdecs)
+			 else NONE
+       
+       val _ = msg "  Exports are phase-split\n"
+
        (* Since "used" is maintained as a ref in the context, we
 	could access it via either the nil_initial_context or
 	nil_final_context
 	*)
-	 
        val used = get_used initial_splitting_context
-	 
-       val _ = msg "  Bindings are phase-split\n"
-	 
 	 
        val (imports,import_bnds) = 
 	 if (!killDeadImport) then
@@ -4513,54 +4617,14 @@ end (* local defining splitting context *)
        val bnds = import_bnds @ bnds
 
        val _ = msg "  Imports are computed\n"
-	 
-	 
-       (* Create the exports.
-	*)
-       val exports : export_entry list =
-	 let
-	   fun loop ([],acc) = rev acc
-	     | loop ((Il.SDEC (l,dec))::sdecs,acc) = 
-	     (case dec 
-		of Il.DEC_MOD (v,is_polyfun,_) =>
-		  let
-		    val (lc,lr) = N.make_cr_labels l
-		    (* v should already be bound in the context*)
-		    val ((vc,vr),_) = splitVar (v,final_context)
-		    val acc = 
-		      if is_polyfun then 
-			(ExportValue(lr,vr)):: acc
-		      else
-			(ExportValue(lr,vr)) :: (ExportType(lc,vc)) :: acc
-		  in
-		    loop(sdecs,acc)
-		  end
-		 | Il.DEC_EXP (v,_,_,_) => 
-		  let
-		    val l = if Name.is_flat l then #2 (Name.make_cr_labels l) else l
-		    val v = rename_var(v, final_context)
-		  in
-		    mark_var_used(final_context,v);
-		    loop(sdecs,(ExportValue(l,v)) :: acc)
-		  end
-		 | Il.DEC_CON (v,_,_,_) => 
-		  let
-		    val l = if Name.is_flat l then #1 (Name.make_cr_labels l) else l
-		    val v = rename_var(v, final_context)
-		  in
-		    mark_var_used(final_context,v);
-		    loop(sdecs,ExportType(l,v) :: acc)
-		  end)
-	 in loop (sdecs,[])
-	 end
-       
-       val _ = msg "  Exports are phase-split\n"
+	 	 
 	 
        (* We finally have the phase-split compilation unit.
 	*)
        val nilmod = MODULE{bnds = bnds,
 			   imports = imports,
-			   exports = exports}
+			   exports = exports,
+			   exports_int = exports_int}
 	 
        (* Release the memory for the memo pad immediately, rather
 	than waiting for the next time the phase-splitter runs.
@@ -4639,67 +4703,7 @@ end (* local defining splitting context *)
 
        val context = initial_splitting_context 
 
-       val exports : import_entry list =
-	 let
-	   fun loop ([],acc) = rev acc
-	     | loop ((Il.SDEC (l,dec))::sdecs,acc) = 
-	     (case dec of
-		Il.DEC_MOD (v, is_polyfun, il_sig) =>
-		  let
-		    val (l_c,l_r) = N.make_cr_labels l
-		      
-		    val ((v_c, v_r),context) = splitNewVar (v,context)
-		  
-		    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
-		  
-		    val context = update_NILctx_insert_kind(context,v_c, knd)
-
-		    val (context,ivtbs,type_r) = flatten_type_to_bnds(context,(Name.var2name v)^"_t",type_r)
-		  
-		    val context = insert_con(context, v_r, type_r)
-		  
-		  
-		    val iv = ImportValue(l_r,v_r,TraceUnknown,type_r)
-		    val it = ImportType(l_c,v_c,knd)
-
-		    (* If we're importing a polymorphic function,
-			     then we don't ever need the type part.
-			       *)
-		    val acc =
-		      if is_polyfun then
-			iv::ivtbs@imports@acc
-		      else
-			(iv::ivtbs@(it::imports@acc))
-		  in loop(sdecs,acc)
-		  end
-	      | Il.DEC_EXP (var, il_con, _,_) =>
-		  let
-		    val l = if Name.is_flat l then #2 (Name.make_cr_labels l) else l
-		      
-		    val con = xcon context il_con
-		    val (context,ibnds,con) = flatten_type_to_bnds(context,(Name.var2name var)^"_type",con)
-		    val (var, context) = insert_rename_var(var, context)
-		    val context = update_NILctx_insert_con(context, var, con)
-		    val acc = 
-		      ((ImportValue(l,var,TraceUnknown,con))::ibnds@imports@acc)
-		  in loop(sdecs,acc)
-		  end
-	      | Il.DEC_CON(var, il_knd, maybecon,_) =>
-		  let
-		    val l = if Name.is_flat l then #1 (Name.make_cr_labels l) else l
-		    val knd =
-		      (case maybecon of
-			 NONE => xkind context il_knd
-		       | SOME il_con => Single_k(xcon context il_con))
-			 
-		    val (var, context) = insert_rename_var(var, context)
-		    val context = update_NILctx_insert_kind(context, var, knd)
-		    val acc =
-		      ((ImportType(l,var,knd))::imports@acc)
-		  in loop(sdecs,acc)
-		  end)
-	 in loop (sdecs,[])
-	 end
+       val exports : import_entry list = sdecs2exports_int context sdecs 
        
        val _ = msg "  Exports are phase-split\n"
 	 

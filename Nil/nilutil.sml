@@ -28,6 +28,7 @@ struct
   fun error s = Util.error "nilutil.sml" s
 
   val arrow_is_taglike = CompilerControl.ArrowIsTaglike
+  val array_is_taglike = CompilerControl.ArrayIsTaglike
 
   val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "nilutil_profile"
@@ -258,6 +259,12 @@ struct
 	 | Proj_c(Mu_c _,_)    => true
 	 | Prim_c(Exntag_c, _) => true
 	 | AllArrow_c _        => !arrow_is_taglike
+	 | Prim_c(Array_c,_)           => !array_is_taglike
+	 | Prim_c(Vector_c,_)         => !array_is_taglike
+	 | Prim_c(IntArray_c _ ,_)       => !array_is_taglike
+	 | Prim_c(IntVector_c _ ,_)      => !array_is_taglike
+	 | Prim_c(FloatArray_c _,_)      => !array_is_taglike
+	 | Prim_c(FloatVector_c _ ,_)    => !array_is_taglike
 	 | _                   => false)
 
 
@@ -860,10 +867,14 @@ struct
 	| import_size (ImportBnd (_, cb)) = 1 + cbnd_size cb
       fun export_size (ExportValue (_,v)) = 2
 	| export_size (ExportType (_,v)) = 2
-      fun module_size (MODULE{bnds,imports,exports}) =
+      fun module_size (MODULE{bnds,imports,exports,exports_int}) =
 	  let val count = foldl (fn (bnd,acc) => acc + (bnd_size bnd))    0 bnds
 	      val count = foldl (fn (imp,acc) => acc + (import_size imp)) count imports
 	      val count = foldl (fn (exp,acc) => acc + (export_size exp)) count exports
+	      val count = 
+		(case exports_int
+		   of SOME ei => foldl (fn (exp,acc) => acc + (import_size exp)) count ei
+		    | NONE => count)
 	  in  count
 	  end
   end
@@ -1163,7 +1174,8 @@ struct
 		 andalso (List.length t1 = List.length t2)
 		 andalso
 		 let val (context,equal) = alpha_equiv_vk_list context (t1,t2)
-		 in (alpha_subequiv_con_list st context (e2, e1)
+		 in (equal 
+		     andalso alpha_subequiv_con_list st context (e2, e1)
 		     andalso alpha_subequiv_con' st context (b1,b2))
 		 end )
 

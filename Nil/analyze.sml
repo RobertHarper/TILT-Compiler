@@ -344,12 +344,15 @@ struct
   fun doImport (ImportBnd (Runtime,conbnd)) = ignore (doCbnd conbnd)
     | doImport _ = ()
   (* Produce statistics on occurrences of function symbols in a module *)
-  fun analyze (Nil.MODULE{imports, bnds, exports}) =
+  fun analyze (Nil.MODULE{imports, bnds, exports, exports_int}) =
       let 
 	val _ = reset()
 	val _ = app doImport imports
 	val _ = doBnds bnds
 	val _ = map doExport exports
+	val _ = (case exports_int
+		   of SOME ei => app doImport ei
+		    | NONE => ())
       in  collect()
       end
 

@@ -75,15 +75,16 @@ struct
 				       "-lc", "-lrt"]}
 		     end)
 
-    (* I'm not sure about all the options yet.  *)
     val talx86Config : unit -> config =
 	Util.memoize(fn () =>
 		     let
 		     in
-			 {assembler = ["talc.exe", "-c", "--verify-link", "--verify-program"],
-			  linker    = ["talc.exe", "--verify-link", "--verify-program"],
+			 {assembler = ["talc.exe", "--no-internals", "-c", "--translucent-sums", "-I", IntSyn.F.runtimedir()],
+			  linker    = ["talc.exe", "--verify-link", "--no-internals", "--translucent-sums", "-I", IntSyn.F.runtimedir()],
 			  ldpre     = [],
-			  ldpost    = []  (* Obviously, these are not yet complete *)
+			  ldpost    = [runtimeFile "talx86runtime.to"
+				       , "--std-lib", runtimeFile "stdlib"
+				       , "--std-lib", runtimeFile "tal_posix"] 
 			  }
 		     end)
 
@@ -118,13 +119,23 @@ struct
 	in  run'{command=command, stdin=NONE, stdout=NONE}
 	end
 
-    fun assemble (tal_includes : string list, asmFile : string, objFile : string) : unit =
+    fun assemble (tal_includes : string list, asmFile : string, objFile : string, tobjFile : string) : unit =
 	let val _ = msg "  Assembling\n"
 	    val _ = Target.checkNative()
 	    val {assembler, ...} = targetConfig()
-	    fun writer tmp = run [assembler,tal_includes,["-o", tmp, asmFile]]
-	in  Fs.write' writer objFile
+	in
+	  if Target.tal () then 
+	    let
+	      fun writer tmp1 tmp2 = run [assembler,tal_includes,["-o", tmp1, "-to", tmp2, asmFile]]
+	    in Fs.write2' writer objFile tobjFile
+	    end
+	  else
+	    let
+	      fun writer tmp = run [assembler,tal_includes,["-o", tmp, asmFile]]
+	    in Fs.write' writer objFile
+	    end
 	end
+	    
 
     (*
 	We do not have a good temporary name because exeFile is not

@@ -1756,8 +1756,6 @@ struct
       end
       | split (ImportBnd (phase, cb)::rest, env, imps) =
       let
-	(*val (inner_env, state, inner_level) =
-	 bumpCurrentlevel (env, empty_state)*)
 	
 	val (env, state) =
 	  rcbnd phase (cb, env, empty_state)
@@ -1768,7 +1766,7 @@ struct
 	split(rest, env, List.revAppend(ibnds, imps))
       end
     
-    fun optimize (MODULE {bnds, imports, exports}) =
+    fun optimize (MODULE {bnds, imports, exports, exports_int}) =
       let
 	
 	  val (env, imports) = split (imports, empty_env, [])
@@ -1787,14 +1785,15 @@ struct
 	   *)
 	  val (env, state, effectlevel) = bumpCurrentlevel (env, state)
 
-	  val (_, state, _) =
+	  val (env, state, _) =
 	      rbnds(bnds, env, state)
-
+	  val exports_int = Util.mapopt
+	    (fn ei => #2 (split (ei, env, []))) exports_int
 	  val (effect_bnds,_,state,_) = extractBnds(state, effectlevel)
 	  val (pure_bnds,_,_,valuable) = extractBnds(state, toplevel)
 	  val _ = if not valuable then print "Warning: non-valuable binding hoisted to top level\n" else ()
       in
-	  MODULE {bnds=pure_bnds@effect_bnds,imports=imports,exports=exports}
+	  MODULE {bnds=pure_bnds@effect_bnds,imports=imports,exports=exports,exports_int = exports_int}
       end
 
     fun optimize_int (INTERFACE {imports, exports}) =

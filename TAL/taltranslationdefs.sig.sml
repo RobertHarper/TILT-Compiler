@@ -31,6 +31,7 @@ signature TALTRANSLATIONDEFS =
   structure T :
     sig
 
+      val list2stack : Tal.con -> Tal.con
       val s_tvar : Tal.identifier
       val s_tvar1 : Tal.identifier
       val s_tvar2 : Tal.identifier
@@ -57,8 +58,10 @@ signature TALTRANSLATIONDEFS =
       val boxed : Tal.scale -> Tal.con -> Tal.con
       val embed : Tal.scale -> Tal.con -> Tal.con 
       val array : Tal.scale -> Tal.con -> Tal.con
+      val array_elts : Tal.scale -> Tal.con -> Tal.con -> Tal.con
       val reft  : Tal.con -> Tal.con
       val dyntag : Tal.con -> Tal.con
+      val exn_body' : Tal.con -> Tal.con
 
       val eta_tag : unit -> Tal.con
       val eta_boxed : Tal.scale -> Tal.con
@@ -68,23 +71,34 @@ signature TALTRANSLATIONDEFS =
       val stackargs : Tal.con list -> Tal.con
       val stackargcons : Tal.con -> Tal.con -> Tal.con
 
-      val handler_stackptr : Tal.con -> Tal.con
+      (* handler_code s_con2 handler_fv_con *)
+      val handler_code : Tal.con -> Tal.con -> Tal.con 
+      (* handler_frame s_con2*)
+      val handler_frame : Tal.con -> Tal.con
 
       val coercion : Tal.con -> Tal.con -> Tal.con
       val code : Tal.con -> Tal.con -> Tal.con -> Tal.con
+      val rtype : Tal.con -> Tal.con
+
       val sum : Tal.int32 -> Tal.con list -> Tal.con
       val ksum : Tal.int32 -> Tal.int32 -> Tal.con list -> Tal.con
       val tuple : Tal.con list -> Tal.con
+      val het_tuple_ptr : Tal.con list -> Tal.con list -> Tal.con
       val unit : unit -> Tal.con
       val exists : (Tal.identifier * Tal.kind) -> Tal.con -> Tal.con
       val forall : (Tal.identifier * Tal.kind) -> Tal.con -> Tal.con
-      val externarrow : Tal.scale -> Tal.con list -> Tal.con list -> Tal.con -> Tal.con
+      val externarrow : Tal.scale -> Tal.con list -> Tal.con -> Tal.con
 
       val rek : ((Tal.identifier * Tal.kind) * Tal.con) -> Tal.con -> Tal.con
       val partial_rek : ((Tal.identifier * Tal.kind) * Tal.con) -> Tal.con 
       val eta_rek : Tal.kind -> Tal.con
 
       val primcon : Lil.primcon -> Tal.con
+
+      val new_dyntag_type : Lil.con
+      val new_ptrarray_type : Lil.con
+      val new_intarray_type : Lil.size -> Lil.con
+      val new_floatarray_type : Lil.con
     end
 
   structure E : 
@@ -93,5 +107,16 @@ signature TALTRANSLATIONDEFS =
       val l_overflow : Tal.label
       val l_unit : Tal.label
       val l_array_zero : Tal.label
+      val l_wordarray_zero : Tal.label
+      val l_floatarray_zero : Tal.label
+      val l_raise_subscript : Tal.label
+      val l_div_zero : Tal.label
+
+
+      (* Note: these are Lil labels *)
+      val l_newdyntag : Lil.label
+      val l_ptrarray : Lil.label
+      val l_intarray : Lil.size -> Lil.label
+      val l_floatarray : Lil.label
     end
   end

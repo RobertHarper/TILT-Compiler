@@ -39,6 +39,7 @@ structure Synthesis :> SYNTHESIS =
 	val T32 = LD.K.T32()
 	val T8 = LD.K.Type B1
 	val T64 = LD.K.T64()
+	val T32or64 = LD.K.T32or64()
 	val TM = LD.K.TM()
 	val T32_to_TM = LD.K.arrow T32 TM
 	val T64_to_TM = LD.K.arrow T64 TM
@@ -78,8 +79,7 @@ structure Synthesis :> SYNTHESIS =
 	      | Exists_c   => Forallj_jtoT_to_T
 	      | Forall_c   => Forallj_jtoT_to_T
 	      | Rec_c      => RecKind
-	      | ExternArrow_c s => LD.K.narrow [LD.K.tlist(),
-						LD.K.list T64,
+	      | ExternArrow_c s => LD.K.narrow [LD.K.list T32or64,
 						LD.K.Type s] T32
 	      | Boxed_c size => LD.K.arrow (LD.K.Type size) TM
 	      | Embed_c size => LD.K.arrow (LD.K.Type size) T32
@@ -183,7 +183,7 @@ structure Synthesis :> SYNTHESIS =
 	and op64 env fop = 
 	  (case fop
 	     of Val_64 sv => sv64 env sv
-	      | ExternAppf (f,_,_) => Elim.C.externapp (sv32 env f)
+	      | ExternAppf (f,_) => Elim.C.externapp (sv32 env f)
 	      | Unbox sv => Elim.C.unbox (sv32 env sv)
 	      | Prim64 (p,pargs) => #3 (PU.get_type () p []))
 	and lilprimop32 env (pop32,cons,sv32s,sv64s) =
@@ -200,12 +200,12 @@ structure Synthesis :> SYNTHESIS =
 	      | Prim32 (p,cs,primargs) => #3 (PU.get_type () p cs)
 	      | PrimEmbed (sz,p,primargs) => LD.T.embed sz (#3 (PU.get_type () p []))
 	      | LilPrimOp32 args => lilprimop32 env args
-	      | ExternApp (f,args,fargs) => Elim.C.externapp (sv32 env f)
+	      | ExternApp (f,args) => Elim.C.externapp (sv32 env f)
 	      | App (f,vs,fvs) => Elim.C.app (sv32 env f)
 	      | Call (f,vs,fvs) => Elim.C.call (sv32 env f)
 	      | Switch sw => switch env sw
 	      | Raise (c,sv) => c
-	      | Handle (t,e1,(v,e2)) => t)
+	      | Handle {t,...} => t)
 
 	and bnd env b = 
 	  (case b 

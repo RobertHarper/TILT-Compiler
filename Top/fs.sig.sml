@@ -24,6 +24,9 @@ sig
 	*)
 	val write' : (file -> unit) -> file -> unit
 	val write : (Blaster.outstream -> 'a -> unit) -> file -> 'a -> unit
+	val write2' : (file -> file -> unit) -> file -> file -> unit
+	val write3' : (file -> file -> file -> unit) -> file -> file -> file -> unit
+
 	val read : (Blaster.instream -> 'a) -> file -> 'a
 
 	val flush : unit -> unit
