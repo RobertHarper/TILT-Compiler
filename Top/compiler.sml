@@ -50,9 +50,6 @@ struct
 	  | IFACE of LinkIl.pinterface
 	  | INFO of Info.info
 
-	fun bad (file : string) : 'a =
-	    raise Reject ("bad magic number in " ^ file)
-
 	fun reader name : internal =
 	    (case name
 	       of NAME_UE file =>
@@ -61,7 +58,6 @@ struct
 		   IFACE (File.read LinkIl.blastInPinterface file)
 		| NAME_INFO file =>
 		   INFO (File.read Info.blastInInfo file))
-	    handle Blaster.BadMagicNumber => bad (filename name)
 
 	fun writer (file : string, i : internal) : unit =
 	    (case i
@@ -70,7 +66,6 @@ struct
 		   File.write LinkIl.blastOutPinterface file iface
 		| INFO info =>
 		   File.write Info.blastOutInfo file info)
-	    handle Blaster.BadMagicNumber => bad file
 
 	structure Cache =
 	FileCache (type name = name
@@ -82,7 +77,7 @@ struct
 	fun mismatch (file : string) : 'a =
 	    error ("file type mismatch with " ^ file)
 
-	fun read_ue (file : string) : UE.ue =
+	fun read_ue' (file : string) : UE.ue =
 	    (case Cache.read (NAME_UE file)
 	       of UE ue => ue
 		| _ => mismatch file)
@@ -90,7 +85,7 @@ struct
 	fun write_ue (file : string, ue : UE.ue) : unit =
 	    Cache.write (file, UE ue)
 
-	fun read_iface (file : string) : LinkIl.pinterface =
+	fun read_iface' (file : string) : LinkIl.pinterface =
 	    (case Cache.read (NAME_IFACE file)
 	       of IFACE iface => iface
 		| _ => mismatch file)
@@ -99,13 +94,24 @@ struct
 			 iface : LinkIl.pinterface) : unit =
 	    Cache.write (file, IFACE iface)
 
-	fun read_info (file : string) : Info.info =
+	fun read_info' (file : string) : Info.info =
 	    (case Cache.read (NAME_INFO file)
 	       of INFO info => info
 		| _ => mismatch file)
 
 	fun write_info (file : string, info : Info.info) : unit =
 	    Cache.write (file, INFO info)
+
+	fun bad (file : string) : 'a =
+	    raise Reject ("bad magic number in " ^ file)
+
+	fun wrap (f : string -> 'a) : (string -> 'a) * (string -> 'a option) =
+	    (fn file => f file handle Blaster.BadMagicNumber => bad file,
+	     fn file => SOME (f file) handle Blaster.BadMagicNumber => NONE)
+
+	val (read_ue, read_old_ue) = wrap read_ue'
+	val (read_iface, read_old_iface) = wrap read_iface'
+	val (read_info, read_old_info) = wrap read_info'
 
 	open Cache
     end
@@ -221,12 +227,16 @@ struct
 	Does not assume the file exists and can be instantiated.
     *)
     fun oldIfaceOk (ctxt : context, iface : file, i : pinterface) : bool =
-	(FileCache.exists iface andalso
-	 (case (LinkIl.instantiate (ctxt, FileCache.read_iface iface),
-		LinkIl.instantiate (ctxt, i))
-	    of (SOME i', SOME i) => LinkIl.eq (ctxt,i,i')
-	     | (_, NONE) => error "new interface bad"
-	     | _ => false))
+	if FileCache.exists iface then
+	    (case FileCache.read_old_iface iface
+	       of NONE => false
+		| SOME i' =>
+		    (case (LinkIl.instantiate (ctxt, i'),
+			   LinkIl.instantiate (ctxt, i))
+		       of (SOME i', SOME i) => LinkIl.eq (ctxt,i,i')
+			| (_, NONE) => error "new interface bad"
+			| _ => false))
+	else false
 
     fun writeIface (pctxt : precontext, ctxt : context,
 		    iface : file, ue : file, i : pinterface) : bool =

@@ -18,9 +18,11 @@ sig
     sig
 	include FILECACHE
 
+	val read_old_ue : string -> UnitEnvironment.ue option
 	val read_ue : string -> UnitEnvironment.ue
 	val write_ue : string * UnitEnvironment.ue -> unit
 
+	val read_old_info : string -> Info.info option
 	val read_info : string -> Info.info
 	val write_info : string * Info.info -> unit
     end
