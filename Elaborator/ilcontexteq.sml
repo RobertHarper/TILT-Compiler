@@ -1,17 +1,27 @@
 (*$import Il IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util *)
+(* Equality of contexts *)
 
 structure IlContextEq 
     :> ILCONTEXTEQ =
 struct
 
-    open Util
-    open IlContext
-    open Il
-
-    fun error s = Util.error "IlContextEq" s
     val error = fn str => Util.error "ilcontexteq.sml" str
     val debug = Stats.ff("IlcontexteqDebug")
     val blast_debug = Stats.ff("BlastDebug")
+    val useOldBlast = ref false
+
+    (* --- State is kept in this module so avoid excessive parameter passing --- *)
+    val cur_out = ref (NONE : BinIO.outstream option)
+    val cur_in = ref (NONE : BinIO.instream option)
+    fun curOut() = valOf(!cur_out)
+    fun curIn() = valOf(!cur_in)
+
+    fun exportOut f os arg =
+	let val _ = cur_out := SOME os
+	    val res = f arg
+	    val _ = cur_out := NONE
+	in  res
+	end
 
     (* The mapping of integers to variables is used to alpha-vary variables on input. *)
     structure IntKey =
@@ -20,21 +30,29 @@ struct
 	    val compare = Int.compare
 	end
     structure IntMap = SplayMapFn(IntKey)
-
-    type inState = BinIO.instream * Name.var IntMap.map ref
-    type outState = BinIO.outstream
-
-    fun makeInState ins = (ins, ref IntMap.empty)
-    fun makeOutState outs = outs
-
-    fun int2var (_, mapRef) i = 
-	(case IntMap.find(!mapRef,i) of
+    val inMap = ref (IntMap.empty : Name.var IntMap.map)
+    fun int2var i = 
+	(case IntMap.find(!inMap,i) of
 	     SOME v => v
 	   | NONE => let val v = Name.fresh_var()
-			 val _ = mapRef := IntMap.insert(!mapRef,i,v)
+			 val _ = inMap := IntMap.insert(!inMap,i,v)
 		     in  v
 		     end)
 
+    fun exportIn f is arg =
+	let val _ = cur_in := SOME is
+	    val _ = inMap := IntMap.empty
+	    val res = f arg
+	    val _ = cur_in := NONE
+	    val _ = inMap := IntMap.empty
+	in  res
+	end
+
+    open Util
+    open IlContext
+    open Il
+
+    fun error s = Util.error "IlContextEq" s
     nonfix mod
 
     (* debugging stuff *)
@@ -51,267 +69,255 @@ struct
 
 	
     (* specialized blasters from Blaster and NameBlast *)
-    fun blastOutInt outState i = Blaster.blastOutInt outState i
-    fun blastInInt (inState : inState) = Blaster.blastInInt (#1 inState)
-    fun blastOutBool outState i = Blaster.blastOutBool outState i
-    fun blastInBool (inState : inState) = Blaster.blastInBool (#1 inState)
-    fun blastOutString outState i = Blaster.blastOutString outState i
-    fun blastInString (inState : inState) = Blaster.blastInString (#1 inState)
-    fun blastOutWord64 outState i = Blaster.blastOutWord64 outState i
-    fun blastInWord64 (inState : inState) = Blaster.blastInWord64 (#1 inState)
-    val blastOutList = Blaster.blastOutList
-    fun blastInList blaster (inState : inState) = Blaster.blastInList (fn _ => blaster inState) (#1 inState) 
-    val blastOutOption = Blaster.blastOutOption
-    fun blastInOption blaster (inState : inState) = Blaster.blastInOption (fn _ => blaster inState) (#1 inState) 
-    val blastOutPair = Blaster.blastOutPair
-    fun blastInPair b1 b2 (inState : inState) = Blaster.blastInPair (fn _ => b1 inState) (fn _ => b2 inState)
-	                                             (#1 inState) 
-    val blastOutTriple = Blaster.blastOutTriple
-    fun blastInTriple b1 b2 b3 (inState : inState) = Blaster.blastInTriple (fn _ => b1 inState) (fn _ => b2 inState)
-	                                               (fn _ => b3 inState)  (#1 inState) 
+    fun blastOutInt i = Blaster.blastOutInt (curOut()) i
+    fun blastInInt () = Blaster.blastInInt (curIn())
+    fun blastOutBool i = Blaster.blastOutBool (curOut()) i
+    fun blastInBool () = Blaster.blastInBool (curIn())
+    fun blastOutString i = Blaster.blastOutString (curOut()) i
+    fun blastInString () = Blaster.blastInString (curIn())
+    fun blastOutWord64 i = Blaster.blastOutWord64 (curOut()) i
+    fun blastInWord64 () = Blaster.blastInWord64 (curIn())
+    fun blastOutList blaster objs = Blaster.blastOutList (fn _ => blaster) (curOut()) objs
+    fun blastInList blaster = Blaster.blastInList (fn _ => blaster()) (curIn()) 
+    fun blastOutOption blaster obj = Blaster.blastOutOption (fn _ => blaster) (curOut()) obj
+    fun blastInOption blaster = Blaster.blastInOption (fn _ => blaster()) (curIn()) 
+    fun blastOutPair b1 b2 obj = Blaster.blastOutPair (fn _ => b1) (fn _ => b2) (curOut()) obj
+    fun blastInPair b1 b2 = Blaster.blastInPair (fn _ => b1()) (fn _ => b2()) (curIn()) 
+    fun blastOutTriple b1 b2 b3 obj = Blaster.blastOutTriple (fn _ => b1) (fn _ => b2) (fn _ => b3) (curOut()) obj
+    fun blastInTriple b1 b2 b3 = Blaster.blastInTriple (fn _ => b1()) (fn _ => b2()) (fn _ => b3()) (curIn()) 
 
-    fun blastOutVar outState v = NameBlast.blastOutVar outState v
-    fun blastInVar (inState : inState) = NameBlast.blastInVar (int2var inState) (#1 inState)
-    fun blastOutLabel outState l = NameBlast.blastOutLabel outState l
-    fun blastInLabel (inState : inState) = NameBlast.blastInLabel (#1 inState)
-    fun blastOutTag outState t = NameBlast.blastOutTag outState t
-    fun blastInTag (inState : inState) = NameBlast.blastInTag (#1 inState)
+    fun blastOutVar v = NameBlast.blastOutVar (curOut()) v
+    fun blastInVar () = NameBlast.blastInVar int2var (curIn())
+    fun blastOutLabel l = NameBlast.blastOutLabel (curOut()) l
+    fun blastInLabel () = NameBlast.blastInLabel (curIn())
+    fun blastOutTag t = NameBlast.blastOutTag (curOut()) t
+    fun blastInTag () = NameBlast.blastInTag (curIn())
 
 
-    fun blastOutChoice outState i = BinIO.output1(outState,Word8.fromInt i)
-    fun blastInChoice (inState : inState) = Word8.toInt(case BinIO.input1 (#1 inState) of
+    fun blastOutChoice i = if (!useOldBlast)
+				  then blastOutInt i
+			      else BinIO.output1(curOut(),Word8.fromInt i)
+    fun blastInChoice is = if (!useOldBlast)
+			          then blastInInt ()
+			   else Word8.toInt(case BinIO.input1 (curIn()) of
 						NONE => error "blastInChoice failed"
 					      | SOME w => w)
 
-    fun blastOutPath outState (PATH (v,ls)) = (blastOutVar outState v;  blastOutList blastOutLabel outState ls)
-    fun blastInPath (inState : inState) = PATH(blastInVar inState, blastInList blastInLabel inState)
+    fun blastOutPath (PATH (v,ls)) = (blastOutVar v;  blastOutList blastOutLabel ls)
+    fun blastInPath () = PATH(blastInVar(), blastInList blastInLabel)
 
-    fun blastOutArrow outState arrow = blastOutChoice outState (case arrow of
-								    TOTAL => 0
-								  | PARTIAL => 1)
-    fun blastInArrow inState =
-	(case (blastInChoice inState) of
-	     0 => TOTAL
-	   | 1 => PARTIAL
-	   | _ => error "bad blastInArrow")
+	fun blastOutArrow TOTAL = blastOutChoice 0
+	  | blastOutArrow PARTIAL = blastOutChoice 1
+	fun blastInArrow () =
+	    (case (blastInChoice()) of
+		 0 => TOTAL
+	       | 1 => PARTIAL
+	       | _ => error "bad blastInArrow")
 
-    fun blastOutIS outState ws = 
-	blastOutChoice outState
-	(case ws of
-	     Prim.W8 => 0
-	   | Prim.W16 => 1
-	   | Prim.W32 => 2
-	   | Prim.W64 => 3)
-    fun blastInIS inState = 
-	(case blastInChoice inState of
-	     0 => Prim.W8
-	   | 1 => Prim.W16
-	   | 2 => Prim.W32
-	   | 3 => Prim.W64
-	   | _ => (error "bad blastInIS" handle e => raise e))
-    fun blastOutFS outState Prim.F32 = blastOutChoice outState 0
-      | blastOutFS outState Prim.F64 = blastOutChoice outState 1
-    fun blastInFS inState = 
-	(case blastInChoice inState of
-	     0 => Prim.F32
-	   | 1 => Prim.F64
-	   | _ => error "bad blastInFS")
+	fun blastOutIS Prim.W8 = blastOutChoice 0
+	  | blastOutIS Prim.W16 = blastOutChoice 1
+	  | blastOutIS Prim.W32 = blastOutChoice 2
+	  | blastOutIS Prim.W64 = blastOutChoice 3
+	fun blastInIS () =
+	    (case blastInChoice() of
+		 0 => Prim.W8
+	       | 1 => Prim.W16
+	       | 2 => Prim.W32
+	       | 3 => Prim.W64
+	       | _ => (error "bad blastInIS" handle e => raise e))
+	fun blastOutFS Prim.F32 = blastOutChoice 0
+	  | blastOutFS Prim.F64 = blastOutChoice 1
+	fun blastInFS () =
+	    (case blastInChoice() of
+		 0 => Prim.F32
+	       | 1 => Prim.F64
+	       | _ => error "bad blastInFS")
 
-    fun blastOutDec outState dec = 
-	let val choice = blastOutChoice outState
-	    val var = blastOutVar outState
-	    val bool = blastOutBool outState
-	    val con = blastOutCon outState
-	in
-	    case dec of
-	     DEC_EXP (v,c,NONE, inline)   => (choice 0; var v; con c; bool inline)
-	   | DEC_EXP (v,c,SOME e, inline) => (choice 1; var v; con c; blastOutExp outState e; 
-					      bool inline)
-	   | DEC_CON (v,k,NONE, inline)   => (choice 2; var v; blastOutKind outState k; bool inline)
-	   | DEC_CON (v,k,SOME c, inline) => (choice 3; var v; blastOutKind outState k; con c; bool inline)
-	   | DEC_MOD (v,b,s)              => (choice 4; var v; bool b; blastOutSig outState s)
-	end
+	fun blastOutDec dec = 
+	    (case dec of
+		 DEC_EXP (v,c,NONE, inline)   => (blastOutChoice 0; blastOutVar v; blastOutCon c;
+						  blastOutBool inline)
+	       | DEC_EXP (v,c,SOME e, inline) => (blastOutChoice 1; blastOutVar v; blastOutCon c;
+						  blastOutExp e; blastOutBool inline)
+	       | DEC_CON (v,k,NONE, inline)   => (blastOutChoice 2; blastOutVar v; blastOutKind k;
+						  blastOutBool inline)
+	       | DEC_CON (v,k,SOME c, inline) => (blastOutChoice 3; blastOutVar v; blastOutKind k; 
+						 blastOutCon c; blastOutBool inline)
+	       | DEC_MOD (v,b,s)      => (blastOutChoice 4; blastOutVar v; blastOutBool b; 
+					  blastOutSig s))
+	and blastInDec () =
+	    (case (blastInChoice()) of
+		 0 => DEC_EXP (blastInVar (), blastInCon (), NONE, blastInBool())
+	       | 1 => DEC_EXP (blastInVar (), blastInCon (), SOME (blastInExp()), blastInBool())
+	       | 2 => DEC_CON (blastInVar (), blastInKind (), NONE, blastInBool())
+	       | 3 => DEC_CON (blastInVar (), blastInKind (), SOME (blastInCon ()), blastInBool())
+	       | 4 => DEC_MOD (blastInVar (), blastInBool (), blastInSig ())
+	       | _ => error "bad blastInDec")
+	and blastOutBnd bnd = 
+	    (case bnd of
+		 BND_EXP (v,e) => (blastOutChoice 0; blastOutVar v; blastOutExp e)
+	       | BND_CON (v,c) => (blastOutChoice 1; blastOutVar v; blastOutCon c)
+	       | BND_MOD (v,b,m) => (blastOutChoice 2; blastOutVar v; blastOutBool b; blastOutMod m))
+	and blastInBnd () =
+	    (case (blastInChoice()) of
+		 0 => BND_EXP(blastInVar (), blastInExp ())
+	       | 1 => BND_CON(blastInVar (), blastInCon ())
+	       | 2 => BND_MOD(blastInVar (), blastInBool (), blastInMod ())
+	       | _ => error "bad blastInBnd")
+	and blastOutSdec (SDEC(l,dec)) = (blastOutLabel l; blastOutDec dec)
+	and blastInSdec () = SDEC(blastInLabel (), blastInDec ())
+	and blastOutSbnd (SBND(l,bnd)) = (blastOutLabel l; blastOutBnd bnd)
+	and blastInSbnd () = SBND(blastInLabel (), blastInBnd ())
 
-    and blastInDec inState = 
-	(case (blastInChoice inState) of
-	     0 => DEC_EXP (blastInVar  inState, blastInCon  inState, NONE, blastInBool inState)
-	   | 1 => DEC_EXP (blastInVar  inState, blastInCon  inState, SOME (blastInExp inState), blastInBool inState)
-	   | 2 => DEC_CON (blastInVar  inState, blastInKind  inState, NONE, blastInBool inState)
-	   | 3 => DEC_CON (blastInVar  inState, blastInKind  inState, SOME (blastInCon  inState), blastInBool inState)
-	   | 4 => DEC_MOD (blastInVar  inState, blastInBool  inState, blastInSig  inState)
-	   | _ => error "bad blastInDec")
+	and blastOutSdecs sdecs = blastOutList blastOutSdec sdecs
+	and blastInSdecs () = blastInList blastInSdec
+	and blastOutSbnds sbnds = blastOutList blastOutSbnd sbnds
+	and blastInSbnds () = blastInList blastInSbnd
 
-    and blastOutBnd outState bnd = 
-	let val choice = blastOutChoice outState
-	    val var = blastOutVar outState
-	in  (case bnd of
-		 BND_EXP (v,e) => (choice 0; var v; blastOutExp outState e)
-	       | BND_CON (v,c) => (choice 1; var v; blastOutCon outState c)
-	       | BND_MOD (v,b,m) => (choice 2; var v; blastOutBool outState b; blastOutMod outState m))
-	end
+	and blastOutKind k = 
+	    (case k of
+		 KIND => blastOutChoice 0
+	       | KIND_TUPLE n => (blastOutChoice 1; blastOutChoice n)
+	       | KIND_ARROW (m,kres) => (blastOutChoice 2; blastOutChoice m;  blastOutKind kres))
 
-    and blastInBnd  inState =
-	(case (blastInChoice inState) of
-	     0 => BND_EXP(blastInVar  inState, blastInExp  inState)
-	   | 1 => BND_CON(blastInVar  inState, blastInCon  inState)
-	   | 2 => BND_MOD(blastInVar  inState, blastInBool  inState, blastInMod  inState)
-	   | _ => error "bad blastInBnd")
-
-    and blastOutSdec outState (SDEC(l,dec)) = (blastOutLabel outState l; blastOutDec outState  dec)
-    and blastInSdec  inState = SDEC(blastInLabel  inState, blastInDec  inState)
-    and blastOutSbnd outState (SBND(l,bnd)) = (blastOutLabel outState l; blastOutBnd outState bnd)
-    and blastInSbnd  inState = SBND(blastInLabel  inState, blastInBnd  inState)
-	
-    and blastOutSdecs outState sdecs = blastOutList blastOutSdec outState sdecs
-    and blastInSdecs  inState = blastInList blastInSdec inState
-    and blastOutSbnds outState sbnds = blastOutList blastOutSbnd outState sbnds
-    and blastInSbnds  inState = blastInList blastInSbnd inState
-
-    and blastOutKind outState k = 
-	let val choice = blastOutChoice outState
-	in  (case k of
-		 KIND => choice 0
-	       | KIND_TUPLE n => (choice 1; choice n)
-	       | KIND_ARROW (m,k) => (choice 2; choice m; blastOutKind outState k))
-	end
 		    
-    and blastInKind inState = 
-	    (case blastInChoice inState of
+	and blastInKind () = 
+	    (case blastInChoice() of
 		 0 => KIND
-	       | 1 => KIND_TUPLE(blastInChoice inState)
-	       | 2 => KIND_ARROW(blastInChoice inState, blastInKind inState)
+	       | 1 => KIND_TUPLE(blastInChoice())
+	       | 2 => KIND_ARROW(blastInChoice(), blastInKind())
 	       | _ => error "bad blastInKind")
 		 
-    and blastOutCon outState c = 
-	let val choice = blastOutChoice outState
-	    val var = blastOutVar outState
-	    val con = blastOutCon outState
-	in (case c of
-		 CON_VAR v => (choice 0; var v)
+	and blastOutCon c = 
+	    (case c of
+		 CON_VAR v => (blastOutChoice 0; blastOutVar v)
 	       | CON_TYVAR tv => (case Tyvar.tyvar_deref tv of
-				      SOME c => con c
+				      SOME c => blastOutCon c
 				    | NONE => error "cannot blastOut unresolved CON_TYVAR")
-	       | CON_OVAR oc => con (CON_TYVAR (Tyvar.ocon_deref oc))
-	       | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => con (CON_FLEXRECORD r)
-	       | CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))) => con (CON_RECORD lclist)
+	       | CON_OVAR oc => blastOutCon (CON_TYVAR (Tyvar.ocon_deref oc))
+	       | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => blastOutCon (CON_FLEXRECORD r)
+	       | CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))) => blastOutCon (CON_RECORD lclist)
 	       | CON_FLEXRECORD (ref (FLEXINFO (_, false, _))) => error "cannot blastOut flex record type"
-	       | CON_INT is => (choice 1; blastOutIS outState is)
-	       | CON_UINT is => (choice 2; blastOutIS outState  is)
-	       | CON_FLOAT fs => (choice 3; blastOutFS outState fs)
-	       | CON_ARRAY c => (choice 4; con c)
-	       | CON_VECTOR c => (choice 5; con c)
-	       | CON_ANY => (choice 6)
-	       | CON_REF c => (choice 7; con c)
-	       | CON_TAG c => (choice 8; con c)
-	       | CON_ARROW (cs,c,f,oa) => (choice 9; 
-					   blastOutList blastOutCon outState cs;
-					   con c; blastOutBool outState f;
-					   blastOutArrow outState
-					   (case (oneshot_deref oa) of
-						SOME a => a
-					      | _ => error "unresolved CON_ARROW"))
-	       | CON_APP (c1,cargs) => (choice 10; con c1; blastOutList blastOutCon outState cargs)
-	       | CON_MU c => (choice 11; con c)
-	       | CON_RECORD lclist => (choice 12; blastOutList (blastOutPair blastOutLabel blastOutCon) outState lclist)
-	       | CON_FUN (vlist, c) => (choice 13; blastOutList blastOutVar outState vlist; con c)
+	       | CON_INT is => (blastOutChoice 1; blastOutIS is)
+	       | CON_UINT is => (blastOutChoice 2; blastOutIS is)
+	       | CON_FLOAT fs => (blastOutChoice 3; blastOutFS fs)
+	       | CON_ARRAY c => (blastOutChoice 4; blastOutCon c)
+	       | CON_VECTOR c => (blastOutChoice 5; blastOutCon c)
+	       | CON_ANY => (blastOutChoice 6)
+	       | CON_REF c => (blastOutChoice 7; blastOutCon c)
+	       | CON_TAG c => (blastOutChoice 8; blastOutCon c)
+	       | CON_ARROW (cs,c,f,oa) => (blastOutChoice 9; 
+					   blastOutList blastOutCon cs;
+					   blastOutCon c; blastOutBool f;
+					   blastOutArrow (case (oneshot_deref oa) of
+								 SOME a => a
+							       | _ => error "unresolved CON_ARROW"))
+	       | CON_APP (c1,cargs) => (blastOutChoice 10; blastOutCon c1; 
+					blastOutList blastOutCon cargs)
+	       | CON_MU c => (blastOutChoice 11; blastOutCon c)
+	       | CON_RECORD lclist => (blastOutChoice 12; blastOutList (blastOutPair blastOutLabel blastOutCon) lclist)
+	       | CON_FUN (vlist, c) => (blastOutChoice 13; blastOutList blastOutVar vlist; blastOutCon c)
 	       | CON_SUM {names, noncarriers, carrier, special = NONE} => 
-		     (choice 14; 
-		      blastOutList blastOutLabel outState names;
-		      choice noncarriers; 
-		      con carrier)
+		     (blastOutChoice 14; 
+		      blastOutList blastOutLabel names;
+		      blastOutChoice noncarriers; 
+		      blastOutCon carrier)
 	       | CON_SUM {names, noncarriers, carrier, special = SOME i} => 
-		     (choice 15; 
-		      blastOutList blastOutLabel outState names;
-		      choice noncarriers; 
-		      con carrier; 
-		      choice i)
-	       | CON_TUPLE_INJECT clist => (choice 16; blastOutList blastOutCon outState clist)
-	       | CON_TUPLE_PROJECT (i,c) => (choice 17; choice i; con c)
-	       | CON_MODULE_PROJECT (m,l) => (choice 18; blastOutMod outState m; blastOutLabel outState l))
-	end
+		     (blastOutChoice 15; 
+		      blastOutList blastOutLabel names;
+		      blastOutChoice noncarriers; 
+		      blastOutCon carrier; 
+		      blastOutChoice i)
+	       | CON_TUPLE_INJECT clist => (blastOutChoice 16; blastOutList blastOutCon clist)
+	       | CON_TUPLE_PROJECT (i,c) => (blastOutChoice 17; blastOutChoice i; blastOutCon c)
+	       | CON_MODULE_PROJECT (m,l) => (blastOutChoice 18; blastOutMod m; blastOutLabel l))
 
-	and blastInCon  inState = 
-	    (case (blastInChoice inState) of
-		 0 => CON_VAR (blastInVar  inState)
-	       | 1 => CON_INT (blastInIS  inState)
-	       | 2 => CON_UINT (blastInIS  inState)
-	       | 3 => CON_FLOAT (blastInFS  inState)
-	       | 4 => CON_ARRAY (blastInCon  inState)
-	       | 5 => CON_VECTOR (blastInCon  inState)
+        and blastInCon () = 
+	    let val _ = push()
+		val _ = tab "blastInCon\n"
+		val res = blastInCon' ()
+		val _ = pop()
+	    in  res
+	    end
+
+	and blastInCon' () = 
+	    (case (blastInChoice()) of
+		 0 => CON_VAR (blastInVar ())
+	       | 1 => CON_INT (blastInIS ())
+	       | 2 => CON_UINT (blastInIS ())
+	       | 3 => CON_FLOAT (blastInFS ())
+	       | 4 => CON_ARRAY (blastInCon ())
+	       | 5 => CON_VECTOR (blastInCon ())
 	       | 6 => CON_ANY
-	       | 7 => CON_REF (blastInCon  inState)
-	       | 8 => CON_TAG (blastInCon  inState)
-	       | 9 => let val cs = blastInList blastInCon inState
-			  val c = blastInCon  inState
-			  val f = blastInBool  inState
-			  val a = oneshot_init (blastInArrow  inState)
+	       | 7 => CON_REF (blastInCon ())
+	       | 8 => CON_TAG (blastInCon ())
+	       | 9 => let val cs = blastInList blastInCon
+			  val c = blastInCon ()
+			  val f = blastInBool ()
+			  val a = oneshot_init (blastInArrow ())
 		      in 
 			  CON_ARROW (cs,c,f,a)
 		      end
-	       | 10 => CON_APP (blastInCon  inState, blastInList blastInCon inState)
-	       | 11 => CON_MU (blastInCon  inState)
-	       | 12 => CON_RECORD(blastInList (blastInPair blastInLabel blastInCon) inState)
-	       | 13 => CON_FUN (blastInList blastInVar inState, blastInCon  inState)
-	       | 14 => CON_SUM {names = blastInList blastInLabel inState,
-				noncarriers = blastInChoice inState,
-				carrier = blastInCon  inState,
+	       | 10 => CON_APP (blastInCon (), blastInList blastInCon)
+	       | 11 => CON_MU (blastInCon ())
+	       | 12 => CON_RECORD(blastInList (fn () => blastInPair blastInLabel blastInCon))
+	       | 13 => CON_FUN (blastInList blastInVar, blastInCon ())
+	       | 14 => CON_SUM {names = blastInList blastInLabel,
+				noncarriers = blastInChoice(),
+				carrier = blastInCon (),
 				special = NONE} 
-	       | 15 => CON_SUM {names = blastInList blastInLabel inState,
-				noncarriers = blastInChoice inState,
-				carrier = blastInCon  inState,
-				special = SOME (blastInChoice inState)}
-	       | 16 => CON_TUPLE_INJECT (blastInList blastInCon inState)
-	       | 17 => CON_TUPLE_PROJECT (blastInChoice inState, blastInCon  inState)
-	       | 18 => CON_MODULE_PROJECT (blastInMod  inState, blastInLabel  inState)
+	       | 15 => CON_SUM {names = blastInList blastInLabel,
+				noncarriers = blastInChoice(),
+				carrier = blastInCon (),
+				special = SOME (blastInChoice())}
+	       | 16 => CON_TUPLE_INJECT (blastInList blastInCon)
+	       | 17 => CON_TUPLE_PROJECT (blastInChoice(), blastInCon ())
+	       | 18 => CON_MODULE_PROJECT (blastInMod (), blastInLabel ())
 	       | _ => error "bad blastInCon")
 
-    and blastOutValue outState v = 
-	let val choice = blastOutChoice outState
-	in  (case v of
-		 (Prim.int (is,w64)) => (choice 0; blastOutIS outState is; blastOutWord64 outState w64)
-	       | (Prim.uint (is,w64)) => (choice 1; blastOutIS outState is; blastOutWord64 outState w64)
-	       | (Prim.float (fs,str)) => (choice 2; blastOutFS outState fs; blastOutString outState str)
-	       | (Prim.tag (t,c)) => (choice 3; blastOutTag outState t; blastOutCon outState c)
+	and blastOutValue v = 
+	    (case v of
+		 (Prim.int (is,w64)) => (blastOutChoice 0; blastOutIS is; blastOutWord64 w64)
+	       | (Prim.uint (is,w64)) => (blastOutChoice 1; blastOutIS is; blastOutWord64 w64)
+	       | (Prim.float (fs,str)) => (blastOutChoice 2; blastOutFS fs; blastOutString str)
+	       | (Prim.tag (t,c)) => (blastOutChoice 3; blastOutTag t; blastOutCon c)
 	       | _ => error "blasting of array/vector/refcell not supported")
-	end
 
-    and blastInValue  inState =
-	(case (blastInChoice inState) of
-	     0 => Prim.int (blastInIS  inState, blastInWord64  inState)
-	   | 1 => Prim.uint (blastInIS  inState, blastInWord64  inState)
-	   | 2 => Prim.float (blastInFS  inState, blastInString  inState)
-	   | 3 => Prim.tag (blastInTag  inState, blastInCon  inState)
-	   | _ => error "bad blastInValue")
+	and blastInValue () =
+	    (case (blastInChoice()) of
+		 0 => Prim.int (blastInIS (), blastInWord64 ())
+	       | 1 => Prim.uint (blastInIS (), blastInWord64 ())
+	       | 2 => Prim.float (blastInFS (), blastInString ())
+	       | 3 => Prim.tag (blastInTag (), blastInCon ())
+	       | _ => error "bad blastInValue")
 
-	and blastOutIlPrim outState ilprim = 
+	and blastOutIlPrim ilprim = 
 	    let open Prim
-		val choice = blastOutChoice outState
-		val IS = blastOutIS outState
 	    in  (case ilprim of
-		     eq_uint is => (choice 0; IS is)
-		   | neq_uint is => (choice 1; IS is)
-		   | not_uint is => (choice 2; IS is)
-		   | and_uint is => (choice 3; IS is)
-		   | or_uint is => (choice 4; IS is)
-		   | xor_uint is => (choice 5; IS is)
-		   | lshift_uint is => (choice 6; IS is)
+		     eq_uint is => (blastOutChoice 0; blastOutIS is)
+		   | neq_uint is => (blastOutChoice 1; blastOutIS is)
+		   | not_uint is => (blastOutChoice 2; blastOutIS is)
+		   | and_uint is => (blastOutChoice 3; blastOutIS is)
+		   | or_uint is => (blastOutChoice 4; blastOutIS is)
+		   | xor_uint is => (blastOutChoice 5; blastOutIS is)
+		   | lshift_uint is => (blastOutChoice 6; blastOutIS is)
 
-		   | mk_ref => (choice 7)
-		   | deref => (choice 8)
-		   | eq_ref => (choice 9)
-		   | setref => (choice 10))
+		   | mk_ref => (blastOutChoice 7)
+		   | deref => (blastOutChoice 8)
+		   | eq_ref => (blastOutChoice 9)
+		   | setref => (blastOutChoice 10))
 	    end
 
-	and blastInIlPrim  inState = 
+	and blastInIlPrim () = 
 	    let open Prim
-	    in  (case (blastInChoice inState) of
-		     0 => eq_uint(blastInIS  inState)
-		   | 1 => neq_uint(blastInIS  inState)
-		   | 2 => not_uint(blastInIS  inState)
-		   | 3 => and_uint(blastInIS  inState)
-		   | 4 => or_uint(blastInIS  inState)
-		   | 5 => xor_uint(blastInIS  inState)
-		   | 6 => lshift_uint(blastInIS  inState)
+	    in  (case (blastInChoice()) of
+		     0 => eq_uint(blastInIS ())
+		   | 1 => neq_uint(blastInIS ())
+		   | 2 => not_uint(blastInIS ())
+		   | 3 => and_uint(blastInIS ())
+		   | 4 => or_uint(blastInIS ())
+		   | 5 => xor_uint(blastInIS ())
+		   | 6 => lshift_uint(blastInIS ())
 
 		   | 7 => mk_ref
 		   | 8 => deref
@@ -321,488 +327,497 @@ struct
 	    end
 
 
-	and blastOutTT outState tt =
+	and blastOutTT tt =
 	    let open Prim 
-		val choice = blastOutChoice outState
-		val IS = blastOutIS outState
 	    in  (case tt of
-		     int_tt => choice 0
-		   | real_tt => choice 1
-		   | both_tt => choice 2)
+		     int_tt => blastOutChoice 0
+		   | real_tt => blastOutChoice 1
+		   | both_tt => blastOutChoice 2)
 	    end
 
 
-	and blastInTT  inState =
+	and blastInTT () =
 	    let open Prim 
-	    in  (case (blastInChoice inState) of
+	    in  (case (blastInChoice()) of
 		     0 => int_tt
 		   | 1 => real_tt
 		   | 2 => both_tt
 		   | _ => error "bad blastInTT")
 	    end
 			 
-	and blastOutTable outState table = 
+	and blastOutTable table = 
 	    let open Prim 
-		val choice = blastOutChoice outState
-		val IS = blastOutIS outState
-		val FS = blastOutFS outState
-		val bool = blastOutBool outState
 	    in  (case table of
-		     IntArray is => (choice 0; IS is)
-		   | IntVector is => (choice 1; IS is)
-		   | FloatArray fs => (choice 2; FS fs)
-		   | FloatVector fs => (choice 3; FS fs)
-		   | OtherArray hnf => (choice 4; bool hnf)
-		   | OtherVector hnf => (choice 5; bool hnf))
+		     IntArray is => (blastOutChoice 0; blastOutIS is)
+		   | IntVector is => (blastOutChoice 1; blastOutIS is)
+		   | FloatArray fs => (blastOutChoice 2; blastOutFS fs)
+		   | FloatVector fs => (blastOutChoice 3; blastOutFS fs)
+		   | OtherArray hnf => (blastOutChoice 4; blastOutBool hnf)
+		   | OtherVector hnf => (blastOutChoice 5; blastOutBool hnf))
 	    end
 
-	and blastInTable  inState =
+	and blastInTable () =
 	    let open Prim 
-	    in  (case (blastInChoice inState) of
-		     0 => IntArray (blastInIS  inState)
-		   | 1 => IntVector (blastInIS  inState)
-		   | 2 => FloatArray (blastInFS  inState)
-		   | 3 => FloatVector (blastInFS  inState)
-		   | 4 => OtherArray (blastInBool  inState)
-		   | 5 => OtherVector (blastInBool  inState)
+	    in  (case (blastInChoice()) of
+		     0 => IntArray (blastInIS ())
+		   | 1 => IntVector (blastInIS ())
+		   | 2 => FloatArray (blastInFS ())
+		   | 3 => FloatVector (blastInFS ())
+		   | 4 => OtherArray (blastInBool ())
+		   | 5 => OtherVector (blastInBool ())
 		   | _ => error "bad blastInTable")
 	    end
 
-	and blastOutPrim outState prim = 
+	and blastOutPrim prim = 
 	    let open Prim
-		val choice = blastOutChoice outState
-		val IS = blastOutIS outState
-		val FS = blastOutFS outState
-		val TT = blastOutTT outState
-		val table = blastOutTable outState
 	    in  (case prim of
-		     soft_vtrap tt => (choice 0; TT tt)
-		   | soft_ztrap tt => (choice 1; TT tt)
-		   | hard_vtrap tt => (choice 2; TT tt)
-		   | hard_ztrap tt => (choice 3; TT tt)
+		     soft_vtrap tt => (blastOutChoice 0; blastOutTT tt)
+		   | soft_ztrap tt => (blastOutChoice 1; blastOutTT tt)
+		   | hard_vtrap tt => (blastOutChoice 2; blastOutTT tt)
+		   | hard_ztrap tt => (blastOutChoice 3; blastOutTT tt)
 			 
+
 		       (* conversions amongst floats, ints, uints with w32 and f64 *)
-		   | float2int (* floor *) => (choice 6)
-		   | int2float (* real  *) => (choice 7)
-		   | int2uint (is1,is2) => (choice 8; IS is1; IS is2)
-		   | uint2int (is1,is2) => (choice 9; IS is1; IS is2)
-		   | uinta2uinta (is1,is2) => (choice 10; IS is1; IS is2)
-		   | uintv2uintv (is1,is2) => (choice 11; IS is1; IS is2)
-		   | int2int (is1,is2) => (choice 12; IS is1; IS is2)
-		   | uint2uint (is1,is2) => (choice 13; IS is1; IS is2)
+		   | float2int (* floor *) => (blastOutChoice 6)
+		   | int2float (* real  *) => (blastOutChoice 7)
+		   | int2uint (is1,is2) => (blastOutChoice 8; blastOutIS is1; blastOutIS is2)
+		   | uint2int (is1,is2) => (blastOutChoice 9; blastOutIS is1; blastOutIS is2)
+		   | uinta2uinta (is1,is2) => (blastOutChoice 10; blastOutIS is1; blastOutIS is2)
+		   | uintv2uintv (is1,is2) => (blastOutChoice 11; blastOutIS is1; blastOutIS is2)
+		   | int2int (is1,is2) => (blastOutChoice 12; blastOutIS is1; blastOutIS is2)
+		   | uint2uint (is1,is2) => (blastOutChoice 13; blastOutIS is1; blastOutIS is2)
 
 		   (* floatint-point operations *)	
-		   | neg_float fs  => (choice 14; FS fs)
-		   | abs_float fs  => (choice 15; FS fs)
-		   | plus_float fs  => (choice 16; FS fs)
-		   | minus_float fs  => (choice 17; FS fs)
-		   | mul_float fs  => (choice 18; FS fs)
-		   | div_float fs  => (choice 19; FS fs)
-		   | less_float fs  => (choice 20; FS fs)
-		   | greater_float fs  => (choice 21; FS fs)
-		   | lesseq_float fs  => (choice 22; FS fs)
-		   | greatereq_float  fs  => (choice 23; FS fs)
-		   | eq_float  fs  => (choice 24; FS fs)
-		   | neq_float fs  => (choice 25; FS fs)
+		   | neg_float fs  => (blastOutChoice 14; blastOutFS fs)
+		   | abs_float fs  => (blastOutChoice 15; blastOutFS fs)
+		   | plus_float fs  => (blastOutChoice 16; blastOutFS fs)
+		   | minus_float fs  => (blastOutChoice 17; blastOutFS fs)
+		   | mul_float fs  => (blastOutChoice 18; blastOutFS fs)
+		   | div_float fs  => (blastOutChoice 19; blastOutFS fs)
+		   | less_float fs  => (blastOutChoice 20; blastOutFS fs)
+		   | greater_float fs  => (blastOutChoice 21; blastOutFS fs)
+		   | lesseq_float fs  => (blastOutChoice 22; blastOutFS fs)
+		   | greatereq_float  fs  => (blastOutChoice 23; blastOutFS fs)
+		   | eq_float  fs  => (blastOutChoice 24; blastOutFS fs)
+		   | neq_float fs  => (blastOutChoice 25; blastOutFS fs)
 
 		   (* int operations *)
-		   | plus_int is  => (choice 26; IS is)
-		   | minus_int is  => (choice 27; IS is)
-		   | mul_int is  => (choice 28; IS is)
-		   | div_int is  => (choice 29; IS is)
-		   | mod_int is  => (choice 30; IS is)
-		   | quot_int is  => (choice 31; IS is)
-		   | rem_int is  => (choice 32; IS is)
-		   | plus_uint is  => (choice 33; IS is)
-		   | minus_uint is  => (choice 34; IS is)
-		   | mul_uint is  => (choice 35; IS is)
-		   | div_uint is  => (choice 36; IS is)
-		   | mod_uint is  => (choice 37; IS is)
-		   | less_int is  => (choice 38; IS is)
-		   | greater_int is  => (choice 39; IS is)
-		   | lesseq_int is  => (choice 40; IS is)
-		   | greatereq_int is  => (choice 41; IS is)
-		   | less_uint is  => (choice 42; IS is)
-		   | greater_uint is  => (choice 43; IS is)
-		   | lesseq_uint is  => (choice 44; IS is)
-		   | greatereq_uint is  => (choice 45; IS is)
-		   | eq_int is  => (choice 46; IS is)
-		   | neq_int is  => (choice 47; IS is)
-		   | neg_int is  => (choice 48; IS is)
-		   | abs_int is  => (choice 49; IS is)
+		   | plus_int is  => (blastOutChoice 26; blastOutIS is)
+		   | minus_int is  => (blastOutChoice 27; blastOutIS is)
+		   | mul_int is  => (blastOutChoice 28; blastOutIS is)
+		   | div_int is  => (blastOutChoice 29; blastOutIS is)
+		   | mod_int is  => (blastOutChoice 30; blastOutIS is)
+		   | quot_int is  => (blastOutChoice 31; blastOutIS is)
+		   | rem_int is  => (blastOutChoice 32; blastOutIS is)
+		   | plus_uint is  => (blastOutChoice 33; blastOutIS is)
+		   | minus_uint is  => (blastOutChoice 34; blastOutIS is)
+		   | mul_uint is  => (blastOutChoice 35; blastOutIS is)
+		   | div_uint is  => (blastOutChoice 36; blastOutIS is)
+		   | mod_uint is  => (blastOutChoice 37; blastOutIS is)
+		   | less_int is  => (blastOutChoice 38; blastOutIS is)
+		   | greater_int is  => (blastOutChoice 39; blastOutIS is)
+		   | lesseq_int is  => (blastOutChoice 40; blastOutIS is)
+		   | greatereq_int is  => (blastOutChoice 41; blastOutIS is)
+		   | less_uint is  => (blastOutChoice 42; blastOutIS is)
+		   | greater_uint is  => (blastOutChoice 43; blastOutIS is)
+		   | lesseq_uint is  => (blastOutChoice 44; blastOutIS is)
+		   | greatereq_uint is  => (blastOutChoice 45; blastOutIS is)
+		   | eq_int is  => (blastOutChoice 46; blastOutIS is)
+		   | neq_int is  => (blastOutChoice 47; blastOutIS is)
+		   | neg_int is  => (blastOutChoice 48; blastOutIS is)
+		   | abs_int is  => (blastOutChoice 49; blastOutIS is)
 
 		   (* bit-pattern manipulation *)
-		   | not_int is  => (choice 50; IS is)
-		   | and_int is  => (choice 51; IS is)
-		   | or_int is  => (choice 52; IS is)
-		   | xor_int is  => (choice 53; IS is)
-		   | lshift_int is  => (choice 54; IS is)
-		   | rshift_int is  => (choice 55; IS is)
-		   | rshift_uint is  => (choice 56; IS is)
+		   | not_int is  => (blastOutChoice 50; blastOutIS is)
+		   | and_int is  => (blastOutChoice 51; blastOutIS is)
+		   | or_int is  => (blastOutChoice 52; blastOutIS is)
+		   | xor_int is  => (blastOutChoice 53; blastOutIS is)
+		   | lshift_int is  => (blastOutChoice 54; blastOutIS is)
+		   | rshift_int is  => (blastOutChoice 55; blastOutIS is)
+		   | rshift_uint is  => (blastOutChoice 56; blastOutIS is)
 			 
 		   (* array and vectors *)
-		   | array2vector t => (choice 57; table t)
-		   | vector2array t => (choice 58; table t)
-		   | create_table t => (choice 59; table t)
-		   | create_empty_table t => (choice 60; table t)
-		   | sub t => (choice 61; table t)
-		   | update t => (choice 62; table t)
-		   | length_table t => (choice 63; table t)
-		   | equal_table t => (choice 64; table t))
+		   | array2vector t => (blastOutChoice 57; blastOutTable t)
+		   | vector2array t => (blastOutChoice 58; blastOutTable t)
+		   | create_table t => (blastOutChoice 59; blastOutTable t)
+		   | create_empty_table t => (blastOutChoice 60; blastOutTable t)
+		   | sub t => (blastOutChoice 61; blastOutTable t)
+		   | update t => (blastOutChoice 62; blastOutTable t)
+		   | length_table t => (blastOutChoice 63; blastOutTable t)
+		   | equal_table t => (blastOutChoice 64; blastOutTable t))
+
+
 
 	    end
 
-	and blastInPrim  inState =
+	and blastInPrim () =
 	    let open Prim
-	    in  (case (blastInChoice inState) of
-		     0 => soft_vtrap(blastInTT  inState)
-		   | 1 => soft_ztrap(blastInTT  inState)
-		   | 2 => hard_vtrap(blastInTT  inState)
-		   | 3 => hard_ztrap(blastInTT  inState)
+	    in  (case (blastInChoice()) of
+		     0 => soft_vtrap(blastInTT ())
+		   | 1 => soft_ztrap(blastInTT ())
+		   | 2 => hard_vtrap(blastInTT ())
+		   | 3 => hard_ztrap(blastInTT ())
 			 
 
 		       (* conversions amongst floats, ints, uints with w32 and f64 *)
 		   | 6 => float2int (* floor *)
 		   | 7 => int2float (* real  *)
-		   | 8 => int2uint (blastInIS  inState, blastInIS  inState)
-		   | 9 => uint2int(blastInIS  inState, blastInIS  inState)
-		   | 10 => uinta2uinta(blastInIS  inState, blastInIS  inState)
-		   | 11 => uintv2uintv(blastInIS  inState, blastInIS  inState)
-		   | 12 => int2int (blastInIS  inState, blastInIS  inState)
-		   | 13 => uint2uint (blastInIS  inState, blastInIS  inState)
+		   | 8 => int2uint (blastInIS (), blastInIS ())
+		   | 9 => uint2int(blastInIS (), blastInIS ())
+		   | 10 => uinta2uinta(blastInIS (), blastInIS ())
+		   | 11 => uintv2uintv(blastInIS (), blastInIS ())
+		   | 12 => int2int (blastInIS (), blastInIS ())
+		   | 13 => uint2uint (blastInIS (), blastInIS ())
 
 		   (* floatint-point operations *)	
-		   | 14 => neg_float(blastInFS  inState)
-		   | 15 => abs_float(blastInFS  inState)
-		   | 16 => plus_float(blastInFS  inState)
-		   | 17 => minus_float(blastInFS  inState)
-		   | 18 => mul_float(blastInFS  inState)
-		   | 19 => div_float(blastInFS  inState)
-		   | 20 => less_float(blastInFS  inState)
-		   | 21 => greater_float(blastInFS  inState)
-		   | 22 => lesseq_float(blastInFS  inState)
-		   | 23 => greatereq_float (blastInFS  inState)
-		   | 24 => eq_float (blastInFS  inState)
-		   | 25 => neq_float(blastInFS  inState)
+		   | 14 => neg_float(blastInFS ())
+		   | 15 => abs_float(blastInFS ())
+		   | 16 => plus_float(blastInFS ())
+		   | 17 => minus_float(blastInFS ())
+		   | 18 => mul_float(blastInFS ())
+		   | 19 => div_float(blastInFS ())
+		   | 20 => less_float(blastInFS ())
+		   | 21 => greater_float(blastInFS ())
+		   | 22 => lesseq_float(blastInFS ())
+		   | 23 => greatereq_float (blastInFS ())
+		   | 24 => eq_float (blastInFS ())
+		   | 25 => neq_float(blastInFS ())
 
 		   (* int operations *)
-		   | 26 => plus_int(blastInIS  inState)
-		   | 27 => minus_int(blastInIS  inState)
-		   | 28 => mul_int(blastInIS  inState)
-		   | 29 => div_int(blastInIS  inState)
-		   | 30 => mod_int(blastInIS  inState)
-		   | 31 => quot_int(blastInIS  inState)
-		   | 32 => rem_int(blastInIS  inState)
-		   | 33 => plus_uint(blastInIS  inState)
-		   | 34 => minus_uint(blastInIS  inState)
-		   | 35 => mul_uint(blastInIS  inState)
-		   | 36 => div_uint(blastInIS  inState)
-		   | 37 => mod_uint(blastInIS  inState)
-		   | 38 => less_int(blastInIS  inState)
-		   | 39 => greater_int(blastInIS  inState)
-		   | 40 => lesseq_int(blastInIS  inState)
-		   | 41 => greatereq_int(blastInIS  inState)
-		   | 42 => less_uint(blastInIS  inState)
-		   | 43 => greater_uint(blastInIS  inState)
-		   | 44 => lesseq_uint(blastInIS  inState)
-		   | 45 => greatereq_uint(blastInIS  inState)
-		   | 46 => eq_int(blastInIS  inState)
-		   | 47 => neq_int(blastInIS  inState)
-		   | 48 => neg_int(blastInIS  inState)
-		   | 49 => abs_int(blastInIS  inState)
+		   | 26 => plus_int(blastInIS ())
+		   | 27 => minus_int(blastInIS ())
+		   | 28 => mul_int(blastInIS ())
+		   | 29 => div_int(blastInIS ())
+		   | 30 => mod_int(blastInIS ())
+		   | 31 => quot_int(blastInIS ())
+		   | 32 => rem_int(blastInIS ())
+		   | 33 => plus_uint(blastInIS ())
+		   | 34 => minus_uint(blastInIS ())
+		   | 35 => mul_uint(blastInIS ())
+		   | 36 => div_uint(blastInIS ())
+		   | 37 => mod_uint(blastInIS ())
+		   | 38 => less_int(blastInIS ())
+		   | 39 => greater_int(blastInIS ())
+		   | 40 => lesseq_int(blastInIS ())
+		   | 41 => greatereq_int(blastInIS ())
+		   | 42 => less_uint(blastInIS ())
+		   | 43 => greater_uint(blastInIS ())
+		   | 44 => lesseq_uint(blastInIS ())
+		   | 45 => greatereq_uint(blastInIS ())
+		   | 46 => eq_int(blastInIS ())
+		   | 47 => neq_int(blastInIS ())
+		   | 48 => neg_int(blastInIS ())
+		   | 49 => abs_int(blastInIS ())
 
 		   (* bit-pattern manipulation *)
-		   | 50 => not_int(blastInIS  inState)
-		   | 51 => and_int(blastInIS  inState)
-		   | 52 => or_int(blastInIS  inState)
-		   | 53 => xor_int(blastInIS  inState)
-		   | 54 => lshift_int(blastInIS  inState)
-		   | 55 => rshift_int(blastInIS  inState)
-		   | 56 => rshift_uint(blastInIS  inState)
+		   | 50 => not_int(blastInIS ())
+		   | 51 => and_int(blastInIS ())
+		   | 52 => or_int(blastInIS ())
+		   | 53 => xor_int(blastInIS ())
+		   | 54 => lshift_int(blastInIS ())
+		   | 55 => rshift_int(blastInIS ())
+		   | 56 => rshift_uint(blastInIS ())
 			 
 		   (* array and vectors *)
-		   | 57 => array2vector (blastInTable  inState)
-		   | 58 => vector2array (blastInTable  inState)
-		   | 59 => create_table (blastInTable  inState)
-		   | 60 => create_empty_table (blastInTable  inState)
-		   | 61 => sub (blastInTable  inState)
-		   | 62 => update (blastInTable  inState)
-		   | 63 => length_table (blastInTable  inState)
-		   | 64 => equal_table (blastInTable  inState)
+		   | 57 => array2vector (blastInTable ())
+		   | 58 => vector2array (blastInTable ())
+		   | 59 => create_table (blastInTable ())
+		   | 60 => create_empty_table (blastInTable ())
+		   | 61 => sub (blastInTable ())
+		   | 62 => update (blastInTable ())
+		   | 63 => length_table (blastInTable ())
+		   | 64 => equal_table (blastInTable ())
 
 		   | _ => error "bad blastInPrim")
 
 	    end
 
-	and blastOutExp outState e = 
-	    let val choice = blastOutChoice outState
-		val exp = blastOutExp outState
-		val con = blastOutCon outState
-		val expList = blastOutList blastOutExp outState
-		val conList = blastOutList blastOutCon outState
-	    in
-	    (case e of
+	and blastOutExp exp = 
+	    (case exp of
 		 OVEREXP (_,_,oe) => (case oneshot_deref oe of
-					  SOME e => exp e
+					  SOME e => blastOutExp e
 					| NONE => error "cannot blastOut unresolved OVEREXP")
-	       | SCON v => (choice 0; blastOutValue outState v)
-	       | PRIM (p,clist,elist) => (choice 1; blastOutPrim outState p;
-					  conList clist; expList elist)
-	       | ILPRIM (p,clist,elist) => (choice 2; blastOutIlPrim outState p;
-					    conList clist; expList elist)
-	       | ETAPRIM (p,clist) => (choice 3; blastOutPrim outState p; conList clist)
-	       | ETAILPRIM (p,clist) => (choice 4; blastOutIlPrim outState p; conList clist)
-	       | VAR v => (choice 5; blastOutVar outState v)
-	       | APP (e1,e2) => (choice 6; exp e1; exp e2)
-	       | EXTERN_APP (c,e,elist) => (choice 23; con c; exp e; expList elist)
-	       | FIX (b,a,fbnds) => (choice 7; blastOutBool outState b; blastOutArrow outState a;
-				     blastOutList blastOutFbnd outState fbnds)
-	       | RECORD lelist => (choice 8; blastOutList (blastOutPair blastOutLabel blastOutExp) outState lelist)
-	       | RECORD_PROJECT (e,l,c) => (choice 9; exp e; blastOutLabel outState l; con c)
-	       | SUM_TAIL (i,c,e) => (choice 10; choice i; con c; exp e)
-	       | HANDLE (c,e1,e2) => (choice 11; con c; exp e1; exp e2)
-	       | RAISE (c,e) => (choice 12; con c; exp e)
-	       | LET(bnds,e) => (choice 13; blastOutList blastOutBnd outState bnds; exp e)
-	       | NEW_STAMP c => (choice 14; con c)
-	       | EXN_INJECT (str,e1,e2) => (choice 15; blastOutString outState str; exp e1; exp e2)
-	       | ROLL (c,e) => (choice 16; con c; exp e)
-	       | UNROLL (c1,c2,e) => (choice 17; con c1; con c2; exp e)
+	       | SCON v => (blastOutChoice 0; blastOutValue v)
+	       | PRIM (p,clist,elist) => (blastOutChoice 1; blastOutPrim p;
+					  blastOutList blastOutCon clist;
+					  blastOutList blastOutExp elist)
+	       | ILPRIM (p,clist,elist) => (blastOutChoice 2; blastOutIlPrim p;
+					    blastOutList blastOutCon clist;
+					    blastOutList blastOutExp elist)
+	       | ETAPRIM (p,clist) => (blastOutChoice 3; blastOutPrim p;
+				       blastOutList blastOutCon clist)
+	       | ETAILPRIM (p,clist) => (blastOutChoice 4; blastOutIlPrim p;
+					 blastOutList blastOutCon clist)
+	       | VAR v => (blastOutChoice 5; blastOutVar v)
+	       | APP (e1,e2) => (blastOutChoice 6; blastOutExp e1; 
+				 blastOutExp e2)
+	       | EXTERN_APP (c,e,elist) => (blastOutChoice 23; 
+					    blastOutCon c;
+					    blastOutExp e; 
+					    blastOutList blastOutExp elist)
+	       | FIX (b,a,fbnds) => (blastOutChoice 7; blastOutBool b; blastOutArrow a;
+				     blastOutList blastOutFbnd fbnds)
+	       | RECORD lelist => (blastOutChoice 8; blastOutList (blastOutPair blastOutLabel blastOutExp) lelist)
+	       | RECORD_PROJECT (e,l,c) => (blastOutChoice 9; blastOutExp e; blastOutLabel l; blastOutCon c)
+	       | SUM_TAIL (i,c,e) => (blastOutChoice 10; blastOutChoice i;
+				      blastOutCon c; blastOutExp e)
+	       | HANDLE (c,e1,e2) => (blastOutChoice 11; blastOutCon c; blastOutExp e1; blastOutExp e2)
+	       | RAISE (c,e) => (blastOutChoice 12; blastOutCon c; blastOutExp e)
+	       | LET(bnds,e) => (blastOutChoice 13; blastOutList blastOutBnd bnds; blastOutExp e)
+	       | NEW_STAMP c => (blastOutChoice 14; blastOutCon c)
+	       | EXN_INJECT (str,e1,e2) => (blastOutChoice 15; blastOutString str; blastOutExp e1; blastOutExp e2)
+	       | ROLL (c,e) => (blastOutChoice 16; blastOutCon c; blastOutExp e)
+	       | UNROLL (c1,c2,e) => (blastOutChoice 17; blastOutCon c1; blastOutCon c2;
+				      blastOutExp e)
 	       | INJ {sumtype, field, inject} =>
-		     (choice 18; con sumtype; 
-		      choice field;
-		      blastOutOption blastOutExp outState inject)
+		     (blastOutChoice 18; blastOutCon sumtype; 
+		      blastOutChoice field;
+		      blastOutOption blastOutExp inject)
 	       | CASE {sumtype, arg, bound, arms, tipe, default} => 
-		      (choice 19;
-		       con sumtype;
-		       exp arg;
-		       blastOutVar outState bound;
-		       blastOutList (blastOutOption blastOutExp) outState arms;
-		       con tipe;
-		       blastOutOption blastOutExp outState default)
+		      (blastOutChoice 19;
+		       blastOutCon sumtype;
+		       blastOutExp arg;
+		       blastOutVar bound;
+		       blastOutList (blastOutOption blastOutExp) arms;
+		       blastOutCon tipe;
+		       blastOutOption blastOutExp default)
 	       | EXN_CASE {arg, arms, default, tipe} => 
-		      (choice 20;
-		       exp arg;
-		       blastOutList (blastOutTriple blastOutExp blastOutCon blastOutExp) outState arms;
-		       blastOutOption blastOutExp outState default;
-		       con tipe)
-	       | MODULE_PROJECT (m,l) => (choice 21; blastOutMod outState m; blastOutLabel outState l)
-	       | SEAL(e,c) => (choice 22; exp e; con c))
+		      (blastOutChoice 20;
+		       blastOutExp arg;
+		       blastOutList (blastOutTriple blastOutExp blastOutCon blastOutExp) arms;
+		       blastOutOption blastOutExp default;
+		       blastOutCon tipe)
+	       | MODULE_PROJECT (m,l) => (blastOutChoice 21; blastOutMod m; blastOutLabel l)
+	       | SEAL(e,c) => (blastOutChoice 22; blastOutExp e; blastOutCon c))
+
+        and blastInExp () = 
+	    let val _ = push()
+		val _ = tab "blastInExp\n" 
+		val res = blastInExp' ()
+		val _ = pop()
+	    in  res
 	    end
 
-	and blastInExp  inState =
-	     (case (blastInChoice inState) of
-	         0 => SCON(blastInValue  inState)
-	       | 1 => PRIM (blastInPrim  inState,
-			    blastInList blastInCon inState,
-			    blastInList blastInExp inState)
-	       | 2 => ILPRIM (blastInIlPrim  inState,
-			      blastInList blastInCon inState,
-			      blastInList blastInExp inState)
-	       | 3 => ETAPRIM (blastInPrim  inState,
-			       blastInList blastInCon inState)
-	       | 4 => ETAILPRIM (blastInIlPrim  inState,
-				 blastInList blastInCon inState)
-	       | 5 => VAR (blastInVar  inState)
-	       | 6 => APP (blastInExp  inState, blastInExp  inState)
-	       | 23 => EXTERN_APP (blastInCon  inState,
-				   blastInExp  inState, 
-				   blastInList blastInExp inState)
-	       | 7 => FIX (blastInBool  inState, blastInArrow  inState, blastInList blastInFbnd inState)
-	       | 8 => RECORD (blastInList (blastInPair blastInLabel blastInExp) inState)
-	       | 9 => RECORD_PROJECT (blastInExp  inState, blastInLabel  inState, blastInCon  inState)
-	       | 10 => SUM_TAIL (blastInChoice inState, blastInCon  inState, blastInExp  inState)
-	       | 11 => HANDLE (blastInCon inState, blastInExp  inState, blastInExp  inState)
-	       | 12 => RAISE (blastInCon  inState, blastInExp  inState)
-	       | 13 => LET(blastInList blastInBnd inState, blastInExp  inState)
-	       | 14 => NEW_STAMP (blastInCon  inState)
-	       | 15 => EXN_INJECT (blastInString  inState, blastInExp  inState, blastInExp  inState)
-	       | 16 => ROLL (blastInCon  inState, blastInExp  inState)
-	       | 17 => UNROLL (blastInCon  inState, blastInCon  inState, blastInExp  inState)
-	       | 18 => let val sumtype = blastInCon  inState
-			   val field = blastInChoice inState
-			   val inject = blastInOption blastInExp inState
+	and blastInExp' () =
+	     (case (blastInChoice()) of
+	         0 => (tab "  SCON\n"; 
+		       SCON(blastInValue ()))
+	       | 1 => (tab "  PRIM\n"; 
+		       PRIM (blastInPrim (),
+			    blastInList blastInCon,
+			    blastInList blastInExp))
+	       | 2 => ILPRIM (blastInIlPrim (),
+			      blastInList blastInCon,
+			      blastInList blastInExp)
+	       | 3 => ETAPRIM (blastInPrim (),
+			       blastInList blastInCon)
+	       | 4 => ETAILPRIM (blastInIlPrim (),
+				 blastInList blastInCon)
+	       | 5 => let val _ = tab "  VAR"
+			  val v = blastInVar ()
+			  val _ = (say (Name.var2string v); say "\n")
+		      in  VAR v
+		      end
+	       | 6 => APP (blastInExp (), blastInExp ())
+	       | 23 => EXTERN_APP (blastInCon (),
+				   blastInExp (), 
+				   blastInList blastInExp)
+	       | 7 => FIX (blastInBool (), blastInArrow (), blastInList blastInFbnd)
+	       | 8 => RECORD (blastInList (fn () => blastInPair blastInLabel blastInExp))
+	       | 9 => RECORD_PROJECT (blastInExp (), blastInLabel (), blastInCon ())
+	       | 10 => SUM_TAIL (blastInChoice(), blastInCon (), blastInExp ())
+	       | 11 => HANDLE (blastInCon(), blastInExp (), blastInExp ())
+	       | 12 => RAISE (blastInCon (), blastInExp ())
+	       | 13 => LET(blastInList blastInBnd, blastInExp ())
+	       | 14 => NEW_STAMP (blastInCon ())
+	       | 15 => EXN_INJECT (blastInString (), blastInExp (), blastInExp ())
+	       | 16 => ROLL (blastInCon (), blastInExp ())
+	       | 17 => UNROLL (blastInCon (), blastInCon (), blastInExp ())
+	       | 18 => let val sumtype = blastInCon ()
+			   val field = blastInChoice()
+			   val inject = blastInOption blastInExp
 		       in  INJ {sumtype = sumtype,
 				field = field,
 				inject = inject}
 		       end
-	       | 19 => (CASE {sumtype = blastInCon  inState,
-			      arg = blastInExp  inState, 
-			      bound = blastInVar  inState,
-			      arms = blastInList (blastInOption blastInExp) inState,
-			      tipe = blastInCon  inState, 
-			      default = blastInOption blastInExp inState})
-	       | 20 => (EXN_CASE {arg = blastInExp  inState, 
-				 arms = blastInList (blastInTriple blastInExp blastInCon blastInExp) inState,
-				 default = blastInOption blastInExp inState, 
-				 tipe = blastInCon  inState})
-	       | 21 => MODULE_PROJECT (blastInMod  inState, blastInLabel  inState)
-	       | 22 => SEAL(blastInExp  inState, blastInCon  inState)
+	       | 19 => (tab "  CASE\n";
+			CASE {sumtype = blastInCon (),
+			      arg = blastInExp (), 
+			      bound = blastInVar (),
+			      arms = blastInList (fn() => blastInOption blastInExp),
+			      tipe = blastInCon (), 
+			      default = blastInOption blastInExp})
+	       | 20 => (tab "  EXN_CASE\n";
+			EXN_CASE {arg = blastInExp (), 
+				 arms = blastInList (fn() => blastInTriple blastInExp blastInCon blastInExp),
+				 default = blastInOption blastInExp, 
+				 tipe = blastInCon ()})
+	       | 21 => MODULE_PROJECT (blastInMod (), blastInLabel ())
+	       | 22 => SEAL(blastInExp (), blastInCon ())
 	       | _ => error "bad blastInExp")
 
-	and blastOutFbnd outState (FBND(v1,v2,c1,c2,e)) = 
-	    let val var = blastOutVar outState
-		val con = blastOutCon outState
-	    in  var v1; var v2; con c1; con c2; blastOutExp outState e
+	and blastOutFbnd (FBND(v1,v2,c1,c2,e)) = (blastOutVar v1;
+						     blastOutVar v2;
+						     blastOutCon c1;
+						     blastOutCon c2;
+						     blastOutExp e)
+	and blastInFbnd () = let val _ = tab "blastInFbnd"
+				 val v = blastInVar ()
+				 val _ = (say (Name.var2string v); say "\n")    
+				 val _ = push()
+				 val res = FBND(v, blastInVar (),
+						blastInCon (), blastInCon (), blastInExp ())
+				 val _ = pop()
+			     in  res
+			     end
+				  
+
+	and blastOutMod m = 
+	    (case m of
+		 MOD_VAR v => (blastOutChoice 0; blastOutVar v)
+	       | MOD_STRUCTURE sbnds => (blastOutChoice 1; blastOutSbnds sbnds)
+	       | MOD_FUNCTOR (a,v,s1,m,s2) => (blastOutChoice 2; 
+					     blastOutArrow a; blastOutVar v; 
+					     blastOutSig s1; blastOutMod m;
+					     blastOutSig s2)
+	       | MOD_APP (m1,m2) => (blastOutChoice 3; blastOutMod m1; blastOutMod m2)
+	       | MOD_PROJECT (m,l) => (blastOutChoice 4; blastOutMod m; blastOutLabel l)
+	       | MOD_SEAL (m,s) => (blastOutChoice 5; blastOutMod m; blastOutSig s)
+	       | MOD_LET (v,m1,m2) => (blastOutChoice 6; blastOutVar v; blastOutMod m1; blastOutMod m2))
+
+        and blastInMod () = 
+	    let val _ = push()
+		val _ = tab "blastInMod\n"
+		val res = blastInMod' ()
+		val _ = pop()
+	    in  res
 	    end
 
-	and blastInFbnd  inState = 
-	    FBND(blastInVar  inState, blastInVar  inState,
-		 blastInCon  inState, blastInCon  inState, blastInExp  inState)
-
-	and blastOutMod outState m = 
-	    let val choice = blastOutChoice outState
-		val mod = blastOutMod outState
-		val var = blastOutVar outState
-		val signat = blastOutSig outState
-	    in
-		(case m of
-		     MOD_VAR v => (choice 0; var v)
-		   | MOD_STRUCTURE sbnds => (choice 1; blastOutSbnds outState sbnds)
-		   | MOD_FUNCTOR (a,v,s1,m,s2) => (choice 2; 
-						   blastOutArrow outState a; var v; 
-						   signat s1; mod m;
-						   signat s2)
-		   | MOD_APP (m1,m2) => (choice 3; mod m1; mod m2)
-		   | MOD_PROJECT (m,l) => (choice 4; mod m; blastOutLabel outState l)
-		   | MOD_SEAL (m,s) => (choice 5; mod m; signat s)
-		   | MOD_LET (v,m1,m2) => (choice 6; var v; mod m1; mod m2))
-	    end
-
-	and blastInMod  inState =
-	    (case (blastInChoice inState) of
-		 0 => MOD_VAR(blastInVar  inState)
-	       | 1 => MOD_STRUCTURE(blastInSbnds  inState)
-	       | 2 => MOD_FUNCTOR(blastInArrow inState, blastInVar  inState, 
-				  blastInSig  inState, blastInMod  inState, blastInSig  inState)
-	       | 3 => MOD_APP (blastInMod  inState, blastInMod  inState)
-	       | 4 => MOD_PROJECT (blastInMod  inState, blastInLabel  inState)
-	       | 5 => MOD_SEAL (blastInMod  inState, blastInSig  inState)
-	       | 6 => MOD_LET (blastInVar  inState, blastInMod  inState, blastInMod  inState)
+	and blastInMod' () =
+	    (
+		     case (blastInChoice()) of
+		 0 => MOD_VAR(blastInVar ())
+	       | 1 => MOD_STRUCTURE(blastInSbnds ())
+	       | 2 => MOD_FUNCTOR(blastInArrow(), blastInVar (), 
+				  blastInSig (), blastInMod (), blastInSig ())
+	       | 3 => MOD_APP (blastInMod (), blastInMod ())
+	       | 4 => MOD_PROJECT (blastInMod (), blastInLabel ())
+	       | 5 => MOD_SEAL (blastInMod (), blastInSig ())
+	       | 6 => MOD_LET (blastInVar (), blastInMod (), blastInMod ())
 	       | _ => error "bad blastInMod")
 
-	and blastOutSig (outState : outState) s = 
-	    let val signat = blastOutSig outState
-		val var = blastOutVar outState
-		val choice = blastOutChoice outState
-	    in  (case s of
-		 SIGNAT_STRUCTURE sdecs => (choice 0; blastOutSdecs outState sdecs)
-	       | SIGNAT_SELF(self, unselfSigOpt, selfSig) => (choice 1; blastOutPath outState self; 
-							      blastOutOption blastOutSig outState unselfSigOpt; 
-							      signat selfSig)
-	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (choice 2; var v;
-						      signat s1; signat s2; blastOutArrow outState arrow)
-	       | SIGNAT_VAR v => (choice 5; var v)
-	       | SIGNAT_OF m => (choice 6; blastOutPath outState m))
-	    end
+	and blastOutSig s = 
+		 (tab "    blastInSig\n"; 
+		  case s of
+		 SIGNAT_STRUCTURE sdecs => (blastOutChoice 0; blastOutSdecs sdecs)
+	       | SIGNAT_SELF(self, unselfSigOpt, selfSig) => (blastOutChoice 1; blastOutPath self; 
+							      blastOutOption blastOutSig unselfSigOpt; blastOutSig selfSig)
+	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutChoice 2; blastOutVar v;
+						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
+	       | SIGNAT_VAR v => (blastOutChoice 5; blastOutVar v)
+	       | SIGNAT_OF m => (blastOutChoice 6; blastOutPath m))
 
-	and blastInSig  inState =
-	    (case (blastInChoice inState) of
-		 0 => SIGNAT_STRUCTURE (blastInSdecs  inState)
-	       | 1 => SIGNAT_SELF (blastInPath  inState, blastInOption blastInSig inState, blastInSig  inState)
-	       | 2 => SIGNAT_FUNCTOR(blastInVar  inState, blastInSig  inState, blastInSig  inState, blastInArrow  inState)
-	       | 5 => SIGNAT_VAR(blastInVar  inState)
-	       | 6 => SIGNAT_OF(blastInPath  inState)
+	and blastInSig () =
+	    (case (blastInChoice()) of
+		 0 => SIGNAT_STRUCTURE (blastInSdecs ())
+	       | 1 => SIGNAT_SELF (blastInPath (), blastInOption blastInSig, blastInSig ())
+	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
+	       | 5 => SIGNAT_VAR(blastInVar ())
+	       | 6 => SIGNAT_OF(blastInPath ())
 	       | _ => error "bad blastInSig")
 				
 	fun blastOutCelist celist = blastOutList (blastOutPair blastOutCon blastOutExp) celist
-        fun blastInCelist inState = blastInList (blastInPair blastInCon blastInExp) inState
+        fun blastInCelist() = blastInList (fn() => blastInPair blastInCon blastInExp)
 
-	fun blastOutPC outState pc = 
-	    let val choice = blastOutChoice outState
-		val con = blastOutCon outState
-		val bool = blastOutBool outState
-	    in
+	fun blastOutPC pc = 
 	    case pc of
-		PHRASE_CLASS_EXP (e,c,eopt,inline) => (choice 0; blastOutExp outState e; 
-						       con c; blastOutOption blastOutExp outState eopt;
-						       bool inline)
-	      | PHRASE_CLASS_CON (c,k,copt,inline) => (choice 1; con c; blastOutKind outState k; 
-						       blastOutOption blastOutCon outState copt; 
-						       bool inline)
-	      | PHRASE_CLASS_MOD (m,b,s) => (choice 2; blastOutMod outState m; bool b;
-					     blastOutSig outState s)
-	      | PHRASE_CLASS_SIG (v,s) => (choice 3; blastOutVar outState v; blastOutSig outState s)
-	    end
+		PHRASE_CLASS_EXP (e,c,eopt,inline) => (blastOutChoice 0; blastOutExp e; 
+						       blastOutCon c; blastOutOption blastOutExp eopt;
+						       blastOutBool inline)
+	      | PHRASE_CLASS_CON (c,k,copt,inline) => (blastOutChoice 1; blastOutCon c; blastOutKind k; 
+						       blastOutOption blastOutCon copt; 
+						       blastOutBool inline)
+	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutChoice 2; blastOutMod m; blastOutBool b; 
+					     blastOutSig s)
+	      | PHRASE_CLASS_SIG (v,s) => (blastOutChoice 3; blastOutVar v; blastOutSig s)
 
-	fun blastInPC  inState = 
-	    (case (blastInChoice inState) of
-		0 => PHRASE_CLASS_EXP(blastInExp  inState, blastInCon  inState, 
-				      blastInOption blastInExp inState, blastInBool inState)
-	      | 1 => PHRASE_CLASS_CON(blastInCon  inState, blastInKind  inState, 
-				      blastInOption blastInCon inState, blastInBool inState)
-	      | 2 => PHRASE_CLASS_MOD(blastInMod  inState, blastInBool  inState, blastInSig  inState)
-	      | 3 => PHRASE_CLASS_SIG(blastInVar  inState, blastInSig  inState)
+	fun blastInPC () = 
+	    (tab "  blastInPC\n"; 
+	    case (blastInChoice()) of
+		0 => PHRASE_CLASS_EXP(blastInExp (), blastInCon (), blastInOption blastInExp, blastInBool())
+	      | 1 => PHRASE_CLASS_CON(blastInCon (), blastInKind (), blastInOption blastInCon, blastInBool())
+	      | 2 => PHRASE_CLASS_MOD(blastInMod (), blastInBool (), blastInSig ())
+	      | 3 => PHRASE_CLASS_SIG(blastInVar (), blastInSig ())
 	      | _ => error "bad blastInPC")
 
-	fun blastOutFixity outState fixity = 
-	    let val choice = blastOutChoice outState
-	    in  case fixity of
-		Fixity.NONfix => choice 0
-	      | Fixity.INfix (m,n) => (choice 1; choice m; choice n)
-	    end
-
-	fun blastInFixity  inState =
-	    if (blastInChoice inState = 0) 
+	fun blastOutFixity Fixity.NONfix = blastOutChoice 0
+	  | blastOutFixity (Fixity.INfix (m,n)) = (blastOutChoice 1; 
+						      blastOutChoice m; blastOutChoice n)
+	fun blastInFixity () =
+	    if (blastInChoice() = 0) 
 		then Fixity.NONfix 
-	    else let val m = blastInChoice inState
-		     val n = blastInChoice inState
+	    else let val m = blastInChoice()
+		     val n = blastInChoice()
 		 in  Fixity.INfix (m,n)
 		 end
 
-	fun blastOutFixityMap outState fm = 
-	    NameBlast.blastOutLabelmap outState blastOutFixity fm
-	fun blastInFixityMap  inState = 
-	    NameBlast.blastInLabelmap (#1 inState) (fn _ => blastInFixity inState)
+	fun blastOutFixityMap fm = 
+	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutFixity) fm
+	fun blastInFixityMap () = 
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInFixity())
 
-	fun blastOutOverloadMap outState fm = 
-	    NameBlast.blastOutLabelmap  outState blastOutCelist  fm
-	fun blastInOverloadMap  inState = 
-	    NameBlast.blastInLabelmap (#1 inState) (fn _ => blastInCelist inState)
+	fun blastOutOverloadMap fm = 
+	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutCelist) fm
+	fun blastInOverloadMap () = 
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInCelist())
 
-	fun blastOutPathMap outState label_list = 
-	    NameBlast.blastOutPathmap outState (blastOutPair blastOutLabel blastOutPC) label_list
-	fun blastInPathMap  inState = 
-	    NameBlast.blastInPathmap (int2var inState) (#1 inState) (fn _ => blastInPair blastInLabel blastInPC inState)
+
+	fun blastOutPathMap label_list = 
+	    NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) label_list
+	fun blastInPathMap () = 
+	    NameBlast.blastInPathmap int2var (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
 
 	fun reconstructLabelMap pathMap = 
 	    let fun folder(p,(l,pc),pmap) = Name.LabelMap.insert(pmap,l,(PATH p,pc))
 	    in  Name.PathMap.foldli folder Name.LabelMap.empty pathMap 
 	    end
 
-	fun blastOutUnresolved outState unresolved = 
-	    NameBlast.blastOutVarmap outState blastOutLabel unresolved
+	fun blastOutUnresolved unresolved = 
+	    NameBlast.blastOutVarmap (curOut()) (fn _ => blastOutLabel) unresolved
 
-	fun blastInUnresolved  inState : Name.label Name.VarMap.map =
-	    NameBlast.blastInVarmap (int2var inState) (#1 inState) (fn _ => blastInLabel inState)
+	fun blastInUnresolved () : Name.label Name.VarMap.map =
+	    NameBlast.blastInVarmap int2var (curIn()) (fn _ => blastInLabel())
 
-    fun blastOutContext outState (CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}) = 
-	(blastOutFixityMap outState fixityMap;
-         blastOutOverloadMap outState overloadMap;
-	 blastOutPathMap outState pathMap;
-	 blastOutList blastOutPath outState ordering)
+    fun blastOutContext (CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}) = 
+	(blastOutFixityMap fixityMap;
+         blastOutOverloadMap overloadMap;
+	 blastOutPathMap pathMap;
+	 blastOutList blastOutPath ordering)
 
-    fun blastInContext  ins = 
-	let val inState = makeInState ins
-	    val fixityMap = blastInFixityMap  inState
-	    val overloadMap = blastInOverloadMap inState	 
-	    val pathMap = blastInPathMap  inState
-	    val ordering = blastInList blastInPath inState
+    fun blastInContext () = 
+	let val fixityMap = blastInFixityMap ()
+	    val overloadMap = blastInOverloadMap()	 
+	    val pathMap = blastInPathMap ()
+	    val ordering = blastInList blastInPath
 	    val labelMap = reconstructLabelMap pathMap
 	in CONTEXT {fixityMap = fixityMap, overloadMap = overloadMap,
 		    labelMap = labelMap, pathMap = pathMap, ordering = ordering}
 	end
 
-    fun blastOutPartialContext out (ctxt, unresolved) = 
-	(blastOutContext out ctxt;
-	 blastOutUnresolved out unresolved)
+    fun blastOutPartialContext (ctxt, unresolved) = 
+	(blastOutContext ctxt;
+	 blastOutUnresolved unresolved)
 
-    fun blastInPartialContext  ins = 
-	let val ctxt = blastInContext ins
-	    val inState = makeInState ins
-	    val unresolved = blastInUnresolved inState
+    fun blastInPartialContext () = 
+	let val ctxt = blastInContext()
+	    val unresolved = blastInUnresolved()
 	in  (ctxt, unresolved)
 	end
 
+    val blastOutContext = exportOut blastOutContext
+    val blastOutPartialContext = exportOut blastOutPartialContext
+    val blastInContext = fn (is : BinIO.instream) => exportIn blastInContext is ()
+    val blastInPartialContext = fn (is : BinIO.instream) => exportIn blastInPartialContext is ()
 
 	(* alpha-conversion () necessary when checking contexts for
 	 * equality.  This () done by explicitly maintaining a `var
