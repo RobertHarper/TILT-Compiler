@@ -332,6 +332,10 @@ end
 					     if b then elt else elf)
 		in step (G, stk, c)
 		end
+	      | step (G, (Closure (G', el)) :: s, Gml.Apply :: c) =
+		let val (_, stk) = step (G', s, el)
+		in step (G, stk, c)
+		end
               | step (G, s, (Gml.Var v) :: c) = step (G, (G ?? v) :: s, c)
 	      | step (G, s, (Gml.Fun f) :: c) = 
 		step (G, (Closure (G, f)) :: s, c)

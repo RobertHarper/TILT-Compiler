@@ -291,7 +291,7 @@ struct
 					val r1 = "(" ^ $a11 ^ s ^ $a12 ^ s ^ $a13 ^ s^ $a14 ^ ")\n"
           val r2 = "(" ^ $a21 ^ s ^ $a22 ^ s ^ $a23 ^ s^ $a24 ^ ")\n"
 					val r3 = "(" ^ $a31 ^ s ^ $a32 ^ s ^ $a33 ^ s^ $a34 ^ ")\n"
-          val r4 = "(" ^ $a21 ^ s ^ $a22 ^ s ^ $a23 ^ s^ $a24 ^ ")\n"
+          val r4 = "(" ^ $a41 ^ s ^ $a42 ^ s ^ $a43 ^ s^ $a44 ^ ")\n"
 			in
 					"\n" ^ r1 ^ r2 ^ r3 ^ r4
 			end

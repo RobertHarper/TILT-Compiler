@@ -62,7 +62,7 @@ vector.sml
 
 (* commented out; not added or don't compile 
 	(sorry that I keep doing this ;) *)
-
+(*
 intersect.sig.sml
 intersect.sml
 
@@ -71,3 +71,4 @@ light.sml
 
 render.sig.sml
 render.sml
+*)
