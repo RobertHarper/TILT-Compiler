@@ -180,7 +180,7 @@ static void unimplemented(int lineno)
 {
   runtime_error_fmt("function not implemented at %s:%d\n", __FILE__, lineno);
 }
-#define UNIMP() unimplemented(__LINE__); assert(0); return 0
+#define UNIMP() unimplemented(__LINE__); return 0
 
 static void* emalloc(size_t size)
 {
@@ -200,10 +200,8 @@ char* mlstring2cstring_buffer(string mlstring, int len, char *buf)
 {
   int bytelen = stringlen(mlstring);
   char *raw = (char *)mlstring;
-  if ((bytelen+1) > len) {
+  if ((bytelen+1) > len)
      runtime_error_msg("fixed-length buffer too small");
-     assert(0);
-  }
   memcpy(buf,raw,bytelen);
   buf[bytelen] = 0;
   return (char *)buf;
@@ -229,7 +227,6 @@ static void runtime_error(int e)
   string msg = posix_error_msg(e);
   ptr_t exn = mkSysErrExn(msg, 1, e);
   raise_exn(exn);
-  assert(0);
 }
 
 static void runtime_error_msg(char* msg)
@@ -237,7 +234,6 @@ static void runtime_error_msg(char* msg)
   string mlmsg = cstring2mlstring_alloc(msg);
   ptr_t exn = mkSysErrExn(mlmsg, 0, 0);
   raise_exn(exn);
-  assert(0);
 }
 
 static void runtime_error_fmt(const char* fmt, ...)
@@ -1260,6 +1256,8 @@ int posix_filesys_opendir(string dirname)
 {
   char* cdir = mlstring2cstring_static(dirname);
   DIR *dir = opendir(cdir);
+  if (dir == NULL)
+    runtime_error(errno);
   return (int)dir;
 }
 
@@ -1276,9 +1274,8 @@ string posix_filesys_readdir(int arg)
   while (entry != NULL && filter(entry->d_name))
 	  entry = readdir(dir);
   if (entry == NULL)
-    return cstring2mlstring_alloc("");
-  else 
-    return cstring2mlstring_alloc(entry->d_name);
+    runtime_error(errno);
+  return cstring2mlstring_alloc(entry->d_name);
 }
 
 unit posix_filesys_rewinddir(int arg)
