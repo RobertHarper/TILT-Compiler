@@ -2,7 +2,7 @@ structure TilWord64 : TILWORD =
  struct
 
   structure W = TilWord32
-  val error = fn s => Util.error "word64.sml" s
+  val error = fn s => Util.error "tilword64.sml" s
 
   type word32 = W.word
   type word = word32 * word32           (* high bits * low bits *)
@@ -45,7 +45,7 @@ structure TilWord64 : TILWORD =
 	end
   fun rshiftl ((high, low):word, shift:int):word =
        if shift >= 32 then
-	rshiftl ((0wx0, high), shift - 32)
+	rshiftl ((W.zero, high), shift - 32)
        else
 	let val highhigh = W.rshiftl (high, shift)
 	    val highlow = W.lshift (high, 32 - shift)
@@ -85,7 +85,6 @@ structure TilWord64 : TILWORD =
   fun ugte(a,b) = not(ult(a,b))
   fun udiv(a,b) = 
       let
-	  val one32 : W.word = 0wx1
 	  fun high_bit ((high, _):word) = W.equal(W.one,W.rshiftl (high, W.wordsize - 1))
 	  fun find_shift (n1, n2) =
 	      if (ult(n1,n2) orelse high_bit n2) 
@@ -198,7 +197,25 @@ structure TilWord64 : TILWORD =
 	 | (_,true,~1) => W.toInt low
 	 | _ => raise Overflow)
 
-  fun fromHexString s = raise Util.UNIMP
+  fun fromHexString s = 
+      let 
+	  open Char
+	  fun hexchar2int c = if (isDigit c) 
+				  then ord(c) - ord #"0"
+			      else if (isHexDigit c)
+				       then 10 + (ord(toLower c) - ord #"a")
+				   else error ("fromHexString got an illegal string: " ^ s)
+	  fun loop acc [] = acc
+	    | loop acc (c::rest) = 
+	      let 
+		  val digit = fromInt(hexchar2int c)
+		  val acc' = orb(lshift(acc,4),digit)
+	      in loop acc' rest
+	      end
+      in loop zero (explode s)
+      end
+
+				    
   fun fromDecimalString str = 
       let 
 	  val (sign,chars) = (case (String.explode str) of
@@ -211,6 +228,13 @@ structure TilWord64 : TILWORD =
 	    | loop acc (a::b) = loop (splus(smult(ten,acc),digit a)) b
       in smult(sign,loop zero chars)
       end
+  fun fromWordStringLiteral ws = if (size ws > 3 andalso
+				    substring(ws,0,3) = "0wx")
+				    then fromHexString (substring(ws,3,(size ws) - 3))
+				else if (size ws > 2 andalso
+					 substring(ws,0,2) = "0w")
+					 then fromDecimalString (substring(ws,2,(size ws) - 2))
+				     else error ("fromWordString got an illegal string: " ^ ws)
   fun toHexString (high,low) = W.toHexString(high) ^ W.toHexString(low)
   fun toDecimalString w =
       let

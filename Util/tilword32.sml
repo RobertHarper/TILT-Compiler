@@ -14,7 +14,7 @@ struct
   val low_mask = 0wx0000ffff : word
   val high_mask = 0wxffff0000 : word
   val most_neg = 0wx80000000 : word
-  val error = fn s => Util.error "word32ops.sml" s
+  val error = fn s => Util.error "tilword32.sml" s
 
   (* ------ EQUALITY OPERATIONS --------- *)
   fun equal(x:word,y) = x = y
@@ -108,7 +108,7 @@ struct
 	  let
 	      val signx = sign x
 	      val signy = sign y
-	      val signres = Int.*(signx, signy)
+	      val signres = signx * signy
 	      val ux = if (signx<0) then snegate x else x
 	      val uy = if (signy<0) then snegate y else y
 	      val ures = udiv(ux,uy)   (* udiv raises Div when uy is zero, 
@@ -116,7 +116,7 @@ struct
 	      val res = if (signres<0) then snegate ures else ures
 	  in res
 	  end
-  fun smod(x,y) = sminus(x,(x div y) * y)
+  fun smod(x,y) = sminus(x,(smult(sdiv(x,y),y)))
   fun squot arg = raise Util.UNIMP
   fun srem arg = raise Util.UNIMP
 
@@ -145,6 +145,7 @@ struct
   fun fromHexString arg = (case (Word32.fromString arg) of
 			       SOME res => res
 			     | NONE => error "fromHexString: got a non Hex-String")
+
   fun fromDecimalString str = 
       let val ten = fromInt 10
 	  val (sign,chars) = (case (String.explode str) of
@@ -157,6 +158,15 @@ struct
 	    | loop acc (a::b) = loop (splus(smult(ten,acc),digit a)) b
       in smult(sign,loop zero chars)
       end
+
+  fun fromWordStringLiteral ws = if (size ws > 3 andalso
+				    substring(ws,0,3) = "0wx")
+				    then fromHexString (substring(ws,3,(size ws) - 3))
+				else if (size ws > 2 andalso
+					 substring(ws,0,2) = "0w")
+					 then fromDecimalString (substring(ws,2,(size ws) - 2))
+				     else error ("fromWordStringLiteral got an illegal string: " ^ ws)
+
   fun toHexString str = raise Util.UNIMP
   fun toDecimalString str = raise Util.UNIMP
 
