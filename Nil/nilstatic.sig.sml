@@ -36,7 +36,8 @@ signature NILSTATIC =
       *   module' is the normal form of module
       *)
 
-    val con_equiv : context * Nil.con * Nil.con -> bool
+
+    val con_equiv : context * Nil.con * Nil.con * Nil.kind -> bool
     (* con_equiv(context,con1,con2) => v
       * PRE : context is well formed
       * POST: returns true if con1 is equivalent to con2
@@ -58,16 +59,12 @@ signature NILSTATIC =
     (* sub_kind(context,kind1,kind2) => v
       * PRE : context, kind1, kind2 are well formed
       * POST: returns true if kind1 is equivalent to kind2
-      * Note that if kind1 and kind2 are both fully 
-      * normalized, then equivalent results can be 
-      * obtained more efficiently by calling sub_kind'
       *)
 
-    val sub_kind' : context * Nil.kind * Nil.kind -> bool
-    (* sub_kind'(context,kind1,kind2) => v
-      * PRE : context, kind1, kind2 are well formed, *and* in normal form
-      * POST: returns true if kind1 is equivalent to kind2
-      *)
+    val get_shape : context -> Nil.con -> Nil.kind
+
+    val con_reduce_once : context * Nil.con -> Nil.con
+    (* alias to Normalize.con_reduce_once *)
 
     val con_reduce : context * Nil.con -> Nil.con
     (* con_reduce (context,con) => con'
@@ -77,11 +74,7 @@ signature NILSTATIC =
       * alias to Normalize.con_normalize
       *)
 
-    val con_reduce_once : context * Nil.con -> Nil.con
-    (* alias to Normalize.con_reduce_once *)
-
-    val get_shape : context -> Nil.con -> Nil.kind
-
+(*
     val kind_reduce : context * Nil.kind -> Nil.kind
     (* kind_reduce (context,kind) => kind'
       * PRE: context is well formed
@@ -89,5 +82,6 @@ signature NILSTATIC =
       * not check for well-kindedness.  This is currently just an
       * alias to Normalize.kind_normalize
       *)
+*)
 
   end

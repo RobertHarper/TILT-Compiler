@@ -2,9 +2,13 @@ Group
         signature NIL
 	signature NILUTIL
 	signature NILSTATIC
-        signature NORMALIZE
+        signature NORMALIZE 
 	signature PPNIL
         signature NILCONTEXT
+        signature NILSUBST
+	signature ALPHA 
+	signature NILERROR
+	signature ANNOTATION
 
         structure Linknil
 	structure LinkIl

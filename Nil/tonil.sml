@@ -466,7 +466,7 @@ local
 
 in
     type splitting_context = splitting_context
-    fun make_splitting_context vmap = CONTEXT{NILctx = Nilcontext.empty(),
+    fun make_splitting_context vmap = CONTEXT{NILctx = Nilcontext.empty,
 					      used = Name.VarMap.empty,
 					      vmap = vmap,
 					      convarmap = Name.VarMap.empty,
@@ -485,7 +485,8 @@ in
    fun vmap_of (CONTEXT{vmap,...}) = vmap
 
    fun nilcontext_find_con(CONTEXT{NILctx,used,...},v) = 
-       let val res = Nilcontext.find_con(NILctx,v)
+       let val res = (SOME (Nilcontext.find_con(NILctx,v))
+			handle Nilcontext.Unbound => NONE)
 	   val _ = (case (res,Name.VarMap.find(used,v)) of
 			(NONE,NONE) => ()
 		      | (SOME _, SOME r) => r := true
@@ -495,7 +496,8 @@ in
        end
 		
    fun nilcontext_find_kind(CONTEXT{NILctx,used,...},v) = 
-       let val res = Nilcontext.find_kind(NILctx,v)
+       let val res = (SOME (Nilcontext.find_kind(NILctx,v))
+			handle Nilcontext.Unbound => NONE)
 	   val _ = (case (res,Name.VarMap.find(used,v)) of
 			(NONE,NONE) => ()
 		      | (SOME _, SOME r) => r := true
@@ -569,10 +571,10 @@ in
 	  let val cbnds = flattenCatlist cbnd_cat
 	      fun loop [] = true
                 | loop ((v,_,_)::rest) = 
-		(case (NilContext.find_kind(NILctx,v)) of
-			NONE => (print "cbndpresent false because of ";
-				Ppnil.pp_var v; print "\n"; false)
-	 	 	| SOME _ => loop rest)
+		((NilContext.find_kind(NILctx,v); loop rest)
+			handle NilContext.Unbound
+			 => (print "cbndpresent false because of ";
+				Ppnil.pp_var v; print "\n"; false))
 	  in  loop cbnds
 	  end
 
@@ -580,19 +582,21 @@ in
 	  let val ebnds = flattenCatlist ebnd_cat
 	      fun loop [] = true
                 | loop ((Exp_b(v,_,_))::rest) = 
-		(case (NilContext.find_con(NILctx,v)) of
-			NONE => false
-	 	 	| SOME _ => loop rest)
+		((NilContext.find_con(NILctx,v); loop rest)
+			handle NilContext.Unbound => false)
 	  in  loop ebnds
 	  end
 
    fun update_NILctx_cbndcat_help strict (CONTEXT{NILctx,used,vmap,
 						  memoized_mpath,alias,convarmap},cbnd_cat) = 
        let fun folder((v,k,c:con),(ctxt,used,cm)) = 
-           let val insert = (strict orelse 
-			     (case (Nilcontext.find_kind(ctxt,v)) of
-				  NONE => true
-				| SOME _ => (print "update_NILctx_cbndcat found variable already present\n"; false)))
+           let val insert = 
+		(strict orelse 
+		(((Nilcontext.find_kind(ctxt,v); 
+		  print "update_NILctx_cbndcat found var already present\n";
+		   false)
+				handle Nilcontext.Unbound => true)))
+
            in  if insert
 		   then (print "update_NILctx_bndcat_help inserting ";
 			Ppnil.pp_var v; print "  --> \n"; Ppnil.pp_kind k;
@@ -611,10 +615,11 @@ in
     fun update_NILctx_ebndcat_help strict (CONTEXT{NILctx,vmap,used,
 						   memoized_mpath,alias,convarmap},ebnd_cat) = 
        let fun folder' openness ((v,f), (ctxt, used,cm)) = 
-             let val insert = (strict orelse 
-			        (case (Nilcontext.find_con(ctxt,v)) of
-				     NONE => true
-				   | SOME _ => (print "update_NILctx_cbndcat found variable already present\n"; false)))
+             let val insert = 
+		 (strict orelse 
+		 (((Nilcontext.find_con(ctxt,v));
+		 print "update_NILctx_cbndcat found var already present\n"; 
+		 false) handle Nilcontext.Unbound => true))
 	     in if insert
 		    then (Nilcontext.insert_con(ctxt, v, Nilutil.get_function_type openness f),
 			  Name.VarMap.insert(used,v, ref false),
@@ -622,10 +627,11 @@ in
 		else (ctxt, used, cm)
 	     end
            fun folder(Exp_b(v,c,_),(ctxt,used,cm)) = 
-               let val insert = (strict orelse
-				 (case Nilcontext.find_con(ctxt,v) of
-				      NONE => true
-				    | SOME _ => (print "update_NILctx_ebndcat found variable alreadt present\n"; false)))
+               let val insert = 
+		   (strict orelse
+		   ((Nilcontext.find_con(ctxt,v);
+		    print "update_NILctx_ebndcat found var already present\n";
+		    false) handle Nilcontext.Unbound => true))
 	       in  if insert
 		       then (Nilcontext.insert_con(ctxt,v,c), 
 			     Name.VarMap.insert(used, v, ref false), cm)
@@ -633,10 +639,11 @@ in
 	       end
 
              | folder(Con_b(v,k,c),(ctxt,used,cm)) = 
-               let val insert = (strict orelse
-				 (case Nilcontext.find_kind(ctxt,v) of
-				      NONE => true
-				    | SOME _ => (print "update_NILctx_ebndcat found variable alreadt present\n"; false)))
+               let val insert =
+		    (strict orelse
+		    ((Nilcontext.find_kind(ctxt,v);
+		     print "update_NILctx_ebndcat found var already present\n";
+		     false) handle Nilcontext.Unbound => true))
 	       in  if insert 
                        then (NilContext.insert_kind(ctxt,v,#2 (Nilstatic.con_valid (ctxt, c))),
 			     Name.VarMap.insert(used, v, ref false),
@@ -3384,9 +3391,9 @@ val _ = (print "Nil final context is:\n";
 		if (!do_kill_dead_import andalso case VarMap.find(initial_used,v) of
 			 NONE => error "missing import expvar"
 		       | SOME r => !r)
-		    then let val c' = (case NilContext.find_con(nil_initial_context,v) of
-					   SOME c' => c'
-					 | NONE => error "exp var not in NIL context")
+		    then let val c' = (NilContext.find_con(nil_initial_context,v) 
+				handle NilContext.Unbound =>
+					error "exp var not in NIL context")
 			     val _ = Stats.counter("import_live")()
 			 in  (ImportValue(l,v,c'))::imps
 			 end

@@ -236,7 +236,7 @@ struct
 	 if (is_elim_exp exp) then 
 	      ( case Expmap.find (ae, exp) of 
 		    SOME (var, tau) => 
-			if NilStatic.con_equiv (D, sigma, tau) then 
+			if NilStatic.con_equiv (D, sigma, tau, Type_k Runtime) then 
 			    ( inc_click cse_exp_click ; cse_record_exp exp; Var_e var )
 			else exp
 		  | NONE => exp)
@@ -292,11 +292,14 @@ struct
     val empty = NilContext.empty
     (*    val insert_con = NilContext.insert_con 
     val insert_con_list = NilContext.insert_con_list *)
-    val find_con = NilContext.find_con
+    fun find_con arg = (SOME (NilContext.find_con arg))
+				handle NilContext.Unbound => NONE
     val remove_con = NilContext.remove_con
+
     (*    val insert_kind = NilContext.insert_kind
     val insert_kind_list = NilContext.insert_kind_list*)
-    val find_kind = NilContext.find_kind
+    fun find_kind arg = (SOME (NilContext.find_kind arg))
+				handle NilContext.Unbound => NONE
     val remove_kind = NilContext.remove_kind
 
     fun insert_con (D, var, con) = 
@@ -1077,7 +1080,7 @@ struct
 
      (* ---- constructors ----- *)
     fun test_exp exp = 
-	normalize_exp exp (empty()) (Expmap.empty, Conmap.empty)  (fn (exp, newD, (ae, ac)) => exp)
+	normalize_exp exp (empty) (Expmap.empty, Conmap.empty)  (fn (exp, newD, (ae, ac)) => exp)
 
      fun doModule debug ( MODULE{bnds = bnds, imports=imports, exports = exports}) =
 	 let val _ = print_bind := debug
@@ -1092,7 +1095,7 @@ struct
 				ImportValue (l, v, c) => insert_con (D, v, c)
 			      | ImportType (l , v, k) => insert_kind (D, v, k))
 			 D imports  ))
-	     val D = (baseDFn (empty()))
+	     val D = (baseDFn (empty))
 	     val temp =  Let_e(Sequential,bnds, Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])  ) (* true! *)
 	     val  exp =  
 		 normalize_exp temp D (Expmap.empty, Conmap.empty)  (fn (exp, newD, (ae, ac)) => exp)

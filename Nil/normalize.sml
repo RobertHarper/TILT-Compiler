@@ -1,7 +1,7 @@
 functor NormalizeFn(structure Nil : NIL
 		    structure PpNil : PPNIL
 		    structure NilUtil : NILUTIL 
-		    structure NilContext : NILCONTEXT'
+		    structure NilContext : NILCONTEXT
 		    structure Subst : NILSUBST
 		         sharing NilUtil.Nil = PpNil.Nil = NilContext.Nil = Nil
 			 and type Subst.con = Nil.con
@@ -80,8 +80,8 @@ struct
   (* Local helpers *)
   type context = NilContext.context
   val find_kind = NilContext.find_kind   
-  val find_kind' = NilContext.find_kind'
-  val unpull_convar = NilContext.unpull_convar
+
+
 
   fun error s = Util.error "normalize.sml" s
 
@@ -256,11 +256,10 @@ val show_context = ref false
 	| (Mu_c (recur,defs,var)) => (singletonize (Word_k Runtime,constructor))
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>Word_k Runtime
 	| (v as (Var_c var)) => 
-	 (case find_kind (D,var) 
-	    of SOME k => make_shape k
-	     | NONE => 
+	 ((make_shape(find_kind (D,var))
+	  handle NilContext.Unbound =>
 	      (NilContext.print_context D;
-	       error ("variable "^(var2string var)^" not in context")))
+	       error ("variable "^(var2string var)^" not in context"))))
         | (Let_c (sort,(([cbnd as Open_cb (var,formals,body,body_kind)]) | 
 			([cbnd as Code_cb (var,formals,body,body_kind)])),con)) => 
 	      (case con of
@@ -443,13 +442,12 @@ val show_context = ref false
       map_annotate beta_confun' app
     end
 
-  and insert_kind (D,var,kind) = NilContext.insert_kind (fn D => con_normalize' (D,empty())) (D,var,kind)
+  and insert_kind (D,var,kind) = NilContext.insert_kind (D,var,kind)
   and bind_at_kind (D,subst) (var,kind) = 
     let
       val kind = kind_normalize' (D,subst) kind
-      val var' = if (!closed_check orelse (case find_kind'(D,var) of
-					       SOME _ => true
-					     | _ => false))
+      val var' = if ((find_kind(D,var); true)
+			handle NilContext.Unbound => false)
 		     then derived_var var 
 		 else var
       val D = insert_kind (D,var',kind)
@@ -543,16 +541,7 @@ val show_context = ref false
     (case constructor of
 	 (App_c (cfun,actuals)) => 
 	    let
-		local val (D,subst) = state
-		    fun extract (Var_c v) = 
-			(case (substitute subst v) of
-			    NONE =>  unpull_convar(D,v) 
-			  | SOME (Var_c v) => D (* unpull_convar(D,v) *)
-			  | _ => D)
-		      | extract (Proj_c (c,_)) = extract c
-		      | extract _ = D
-		in  val D = extract cfun
-		end
+	      val (D,subst) = state
 	      val cfun = con_normalize' state cfun
 	      val actuals = map (con_normalize' state) actuals
 	      val con = App_c (cfun,actuals)
@@ -825,18 +814,13 @@ val show_context = ref false
 	 let
 	   val (D,subst) = state
 	   val con = 
-	     (case (substitute subst var)  
-		of SOME c => c
-		 | _ => constructor)
-	   val res = (case strip_var con
-	      of SOME v => 
-		(case find_kind' (D,v)
-		   of SOME (c,_) => c
-		    | _ => 
-		     (NilContext.print_context D;
-		      error ("Variable not found in context: "^(var2string v))))
-	       | _ => con)
-	 in res
+	     (case (substitute subst var) of
+		   SOME c => c
+		 | NONE =>
+	           (case NilContext.find_kind_equation(D,Var_c var) of
+			SOME c => con_normalize' state c
+		      | NONE => Var_c var))
+	 in con
 	 end
         | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
@@ -916,16 +900,7 @@ val show_context = ref false
 	    end
 	| (App_c (cfun,actuals)) => 
 	    let
-		local val (D,subst) = state
-		    fun extract (Var_c v) = 
-			(case (substitute subst v) of
-			    NONE => unpull_convar(D,v)
-			  | SOME (Var_c v) => D (* unpull_convar(D,v) *)
-			  | _ => D)
-		      | extract (Proj_c (c,_)) = extract c
-		      | extract _ = D
-		in  val D = extract cfun
-		end
+		val (D,subst) = state
 	      val cfun = con_normalize' state cfun
 	      val actuals = map (con_normalize' state) actuals
 	      val con = App_c (cfun,actuals)

@@ -138,15 +138,9 @@ val do_close_path = ref true
 	    end
 	fun add_gboundcvar (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},v,k) = 
 	    let val boundcvars' = VarMap.insert(boundcvars,v,GLOBALc)
-		val ctxt' = if (!use_kind_at_bind) then ctxt 
-			    else 
-				let (* val k = Stats.subtimer("toclosure_kindreduce_g",
-					     NilStatic.kind_reduce)(ctxt,k) *)
-					val k = NilStatic.kind_reduce(ctxt,k) 
-				in  (* Stats.subtimer("toclosure_insert_kind_g",
-					     NilContext.insert_kind) (ctxt,v,k) *)
-				     NilContext.insert_kind(ctxt,v,k)
-				end
+		val ctxt' = if (!use_kind_at_bind) 
+				then (error "use_kind_at_bind not done here")
+			    else NilContext.insert_kind(ctxt,v,k)
 	    in  STATE{ctxt = ctxt',
 		      is_top = is_top,
 		      curfid = curfid,
@@ -176,25 +170,20 @@ val do_close_path = ref true
 			    then (Stats.counter("add_boundcvars_reduced"))()
 			else (Stats.counter("add_boundcvars_unreduced"))()
 		fun folder ((v,copt,kopt),ctxt) =
-		    case (NilContext.find_kind(ctxt,v),copt,kopt) of
-			(NONE,NONE,SOME k) => 
-			    let val k = if reduced then k
-					else (* Stats.subtimer("toclosure_kindreduce",
-					      NilStatic.kind_reduce)(ctxt,k) *)
-					    NilStatic.kind_reduce(ctxt,k) 
-			    in  (* Stats.subtimer("toclosure_insert_kind",
-				 NilContext.insert_kind)
-				 (ctxt,v,k) *)
-				NilContext.insert_kind(ctxt,v,k)
-			    end
-		      | (NONE, SOME c, _) => NilContext.insert_kind_equation(ctxt,v,c)
-		      | (SOME _,_,_) => ctxt
+		    ((NilContext.find_kind(ctxt,v); ctxt)
+		    handle NilContext.Unbound =>
+			(case (copt,kopt) of
+			  (NONE,SOME k) => NilContext.insert_kind(ctxt,v,k)
+		        | (SOME c, SOME k) => NilContext.insert_kind_equation(ctxt,v,c,k)
+		        | (SOME c, NONE) => error "add_boundcvar with equation but no kind"
+		        | (NONE,NONE) => error "add_boundcvars with no info"))
 		val ctxt' =  if (!use_kind_at_bind) then ctxt 
 		              else foldl folder ctxt vck_list
 
 		fun folder ((v,NONE,SOME k),m) = VarMap.insert(m,v,wrap k)
 		  | folder ((v,_,_),m) = 
-		    let val SOME k = NilContext.find_kind(ctxt',v)
+		    let val k = NilContext.find_kind(ctxt',v)
+		    handle NilContext.Unbound => (error "add_boundcvars internal error")
 		    in  VarMap.insert(m,v,wrap k)
 		    end
 		val boundcvars' = foldl folder boundcvars vck_list
@@ -224,7 +213,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 
 	fun add_boundevar(s,v,c) = add_boundevars(s,[(v,c)])
 	fun add_boundcvar(s,v,k) = add_boundcvars false (s,[(v,NONE, SOME k)])
-	fun add_boundcvar'(s,v,c) = add_boundcvars true (s,[(v,SOME c, NONE)])
+	fun add_boundcvar'(s,v,c,k) = add_boundcvars true (s,[(v,SOME c, SOME k)])
 	    
 	fun is_boundevar(STATE{boundevars,...},evar) = 
 	    (case (VarMap.find(boundevars,evar)) of
@@ -456,7 +445,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	     end)
 	    
 	fun initial_state topfid = let val _ = add_fun topfid
-				   in   STATE{ctxt = NilContext.empty(),
+				   in   STATE{ctxt = NilContext.empty,
 					      is_top = true,
 					      curfid=topfid,boundfids=VarSet.empty,
 					      boundevars = VarMap.empty,
@@ -561,27 +550,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 				     else
 					 (* con_valid and con_reduce not quite the same! *)
 					 let 
-(*
-					     val c' = Stats.subtimer("toclosure_bnd_fv_con_b_conreduce",
-								     NilStatic.con_reduce) (get_ctxt state, c)
-					     val k = Stats.subtimer("toclosure_bnd_fv_con_b_getshape",
-								    NilStatic.get_shape) (get_ctxt state) c
-					     val pk = Stats.subtimer("toclosure_bnd_fv_con_b_single",
-								     NilUtil.singletonize) (k,c')
-					     val (c2,pk2) = Stats.subtimer("toclosure_bnd_fv_con_valid",
-								     NilStatic.con_valid) (get_ctxt state, c)
-					     val _ = if NilUtil.alpha_equiv_con(c',c2)
-							 then ()
-						     else (print "toclosure c' != c\nc = ";
-							   Ppnil.pp_con c'; print "\nc2 = ";
-							   Ppnil.pp_con c2; print "\n")
-					     val _ = if NilUtil.alpha_equiv_kind(pk,pk2)
-							 then ()
-						     else (print "toclosure pk != pk2\npk = ";
-							   Ppnil.pp_kind pk; print "\npk2 = ";
-							   Ppnil.pp_kind pk2; print "\n")
-*)
-					  in  (add_boundcvar'(state,v,c), f)
+					  in  (add_boundcvar'(state,v,c,k), f)
 					       (* by not adding the FV's of k,
 						we are not closed WRT types
 						(pk, k_find_fv (state,f) k) *)
@@ -898,7 +867,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		| Proj_c _ => false
 		| Annotate_c (_,c) => istype c)
 
-    and istype_reducible (state,con) = (istype con orelse istype (NilStatic.con_reduce(get_ctxt state,con)))
+    and istype_reducible (state,con) = 
+		(istype con orelse istype (NilStatic.con_reduce(get_ctxt state,con)))
 
 	and t_find_fv' (state : state, frees : frees) con : frees =
 	    let fun type_case() = (c_find_fv'(state,frees) con; frees)
@@ -975,31 +945,12 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 			     let val f' = c_find_fv (s,f) c
 				 val (state,f) = 
 				     if (!use_kind_at_bind)
-					 then let val k = NilStatic.kind_reduce(get_ctxt s, k)
+					 then let 
 						  val s = add_boundcvar(s,v,k)
 					      in (s, k_find_fv (s,f') k)
 					      end
 				     else 
-					 (add_boundcvar'(s,v,c),f')
-(*
-val (_,k) = 
-					 (Stats.subtimer("toclosure_convalid",
-							 NilStatic.con_valid)) (get_ctxt s, c)
-					      val _ = case k of
-						  Arrow_k((Code | Closure), _,_) =>
-						      (print "Got arrow_k(code/closure) from c = ";
-						       Ppnil.pp_con c; print "\nk = \n";
-						       Ppnil.pp_kind k; print "\n\n")
-						| _ => ()
-					  in  (k, Stats.subtimer("toclosure_kfind",
-								 k_find_fv (s,f')) k)
-					  end
-				 val k' = NilStatic.kind_reduce(get_ctxt s, k) 
-				 val _ = (print "TOCLOSURE: c = \n ";
-					  Ppnil.pp_con c; print "\n\nk = ";
-					  Ppnil.pp_kind k; print "\n\n k' = \n";
-					  Ppnil.pp_kind k'; print "\n\n\n")
-*)
+					 (add_boundcvar'(s,v,c,k),f')
 			     in (f,state)
 			     end
 			   | cb_folder (Code_cb(v,vklist,c,k), (f,s)) = (f,s)

@@ -85,7 +85,7 @@ structure Linknil (* : LINKNIL *) =
     structure NilError = NilErrorFn(structure ArgNil = Nil
 				    structure PpNil = PpNil)
 
-    structure NilContext' = NilContextFn'(structure NilUtil = NilUtil
+    structure NilContext = NilContextFn(structure NilUtil = NilUtil
 					structure ArgNil = Nil
 					structure PpNil = PpNil
 					structure Cont = Cont
@@ -93,12 +93,10 @@ structure Linknil (* : LINKNIL *) =
 
     structure Normalize = NormalizeFn(structure Nil = Nil
 				      structure NilUtil = NilUtil
-				      structure NilContext = NilContext'
+				      structure NilContext = NilContext
 				      structure PpNil = PpNil
 				      structure Subst = NilSubst)
 
-    structure NilContext = NilContextFn(structure NilContext' = NilContext'
-					structure Normalize = Normalize)
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
@@ -393,7 +391,7 @@ val _ = (print "Nil final context is:\n";
     fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val D = NilContext.empty()
+	    val D = NilContext.empty
 
 	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
 	    val _ = showmod debug "Phase-split" (filename,nilmod)
@@ -404,7 +402,7 @@ val _ = (print "Nil final context is:\n";
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val D = NilContext.empty()
+	    val D = NilContext.empty
 
 	    val _ = if (!show_hil)
 			then 
