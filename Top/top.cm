@@ -1,0 +1,21 @@
+Group is
+../Elaborator/elaborator.cm
+../Util/util.cm
+../smlnj-lib.cm
+../Nil/nil.cm
+../Rtl/rtl.cm
+../Backend/backend.cm
+../Alpha/alpha.cm
+(*
+../Ppc/ppc.cm
+../C/c.cm
+*)
+linkall.sml
+(*
+toplevel.sml
+measure.sig.sml
+measure.sml
+distribute.sml
+*)
+
+
