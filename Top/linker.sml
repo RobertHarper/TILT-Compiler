@@ -3,8 +3,8 @@ structure Linker : LINKER =
 
     val as_path = "as"
     val ld_path = "ld"
-    val ld_libs = (*"/usr/lib/cmplrs/cc/crt0.o " ^ *)
-	          "/afs/cs.cmu.edu/project/fox-4/member/jgmorris/tilt/mael/ml96/Runtime/runtime.alpha_osf.a " ^
+    val startup_lib = "/usr/lib/cmplrs/cc/crt0.o "
+    val ld_libs = "/afs/cs.cmu.edu/project/fox-4/member/jgmorris/tilt/mael/ml96/Runtime/runtime.alpha_osf.a " ^
 		  "-lm -lc"
                   (* runtime, etc *)
     val error = fn x => Util.error "Linker" x
@@ -70,13 +70,26 @@ structure Linker : LINKER =
 	  end
       end
 
+
+    fun bincopy (is,os) = 
+	let fun loop() = (BinIO_Util.copy(is,os); if (BinIO.endOfStream is) then () else loop())
+	in  loop()
+	end
+    fun mk_emitter in_file os = let (* val _ = (print "mk_emitter on file "; print in_file; print "\n")*)
+				    val is = BinIO.openIn in_file
+				in bincopy(is,os); 
+				    BinIO.closeIn is
+				end
+
+
     local open BinIO_Util
     in
       fun mk_uo {imports : (string * Crc.crc) list,
 		 exports : (string * Crc.crc) list,
 		 uo_result : string,
 		 emitter : BinIO.outstream -> unit} : unit =
-	let val os = BinIO.openOut uo_result
+	let 
+	    val os = BinIO.openOut uo_result
 	  val out_pairs = app (fn (name,crc) =>
 			       (output_string (os, name ^ ":");
 				Crc.output_crc (os, crc);
@@ -128,34 +141,32 @@ structure Linker : LINKER =
 	in input_pairs is
 	end
 
+
       (* read imports and exports from uo-file and copy code-segment
        * into the file code_o. *)
       fun read_header_and_extract_code {uo_arg : string, o_file : string} : 
 	{imports : (string * Crc.crc) list,
 	 exports : (string * Crc.crc) list} =
-	let val is = BinIO.openIn uo_arg
-	  val imports = read_imports is
-	  val exports = read_exports is
-	  val _ = read_string(is, "$code:\n")
-	  val os = BinIO.openOut o_file
-	  val _ = copy(is,os)
-	  val _ = BinIO.closeOut os
-	  val _ = BinIO.closeIn is
+	let
+	    val is = BinIO.openIn uo_arg
+	    val imports = read_imports is
+	    val exports = read_exports is
+	    val _ = read_string(is, "$code:\n")
+	    val os = BinIO.openOut o_file
+	    val _ = bincopy(is,os)
+	    val _ = BinIO.closeOut os
+	    val _ = BinIO.closeIn is
 	in {imports=imports, exports=exports}
 	end
     end
-
-    fun emitter in_file os = let val is = BinIO.openIn in_file
-			     in BinIO_Util.copy(is,os); 
-			        BinIO.closeIn is
-			     end
 
     (* link: Link a sequence of uo-files into a new uo-file 
      * and perform consistency check. *)
 
     fun link {uo_args : string list,       (* Current directory, or absolute path. *)
 	      uo_result : string} : unit = (* Strings should contain extension. *) 
-      let val linkinfo =
+      let 
+	  val linkinfo =
 	    map (fn uo_file =>
 		 let val base = OS.Path.base uo_file
 		     val o_file = base ^ ".o"
@@ -176,11 +187,14 @@ structure Linker : LINKER =
 	  fun pr_list [] = ""
 	    | pr_list [a] = a
 	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
-      in if OS.Process.system (ld_path ^ " -non_shared -r -o " ^ o_file ^ " " ^ pr_list o_files) 
-	    = OS.Process.success then 
-		mk_uo {imports=imports,exports=exports,uo_result=uo_result,
-		       emitter=emitter o_file}
-	 else error "link. System command ld failed"
+	  val command = (ld_path ^ " -non_shared -r -o " ^ o_file ^ 
+			 " " ^ pr_list o_files)
+	  val res = if OS.Process.system command = OS.Process.success then 
+	      mk_uo {imports=imports,exports=exports,uo_result=uo_result,
+		     emitter=mk_emitter o_file}
+		    else (print "link failed: "; print command; print "\n";
+			  error "link. System command ld failed")
+      in  res
       end
 
     (* mk_exe: Make an executable from a uo-file and check 
@@ -201,10 +215,11 @@ structure Linker : LINKER =
 		   val _ = Linkalpha.mk_link_file ("link_clients.s", local_labels)
 		   val _ = if OS.Process.system (as_path ^ " -o link_clients.o link_clients.s") = OS.Process.success then ()
 			   else error "mk_exe - as failed"
-		   val _ = if OS.Process.system (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
-						 exe_result ^ " " ^ o_temp ^ " link_clients.o " ^ ld_libs)
-		                 = OS.Process.success then ()
-			   else error "mk_exe - ld failed"
+		   val command = (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
+				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " link_clients.o " ^ ld_libs)
+		   val _ = if OS.Process.system command = OS.Process.success then ()
+			   else (print "load failed: "; print command; print "\n";
+				 error "mk_exe - ld failed")
 	       in ()
 	       end
 	    | _ => let val units = map #1 imports
@@ -267,5 +282,7 @@ structure Linker : LINKER =
 
       end
 *)
+
+
   end
 

@@ -5,12 +5,13 @@ structure Compiler : COMPILER =
 	and context = Linknil.Il.context
 
 	val error = fn x => Util.error "Compiler" x
-	val as_path = "/usr/ucb/cc"
+	val as_path = "as"
 
 	fun assemble(s_file,o_file) =
-	    if OS.Process.system (as_path ^ " -c -o " ^ o_file ^ " " ^ s_file) 
-		= OS.Process.success then ()
-	    else error "assemble. System command as failed"
+	    let val command = as_path ^ " -c -o " ^ o_file ^ " " ^ s_file
+	    in  if OS.Process.system command =  OS.Process.success then ()
+		else error "assemble. System command as failed"
+	    end
 
 	fun compile (ctxt: context, unitName: string, sbnds: sbnds, ctxt': context) : unit =
 	    let val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'

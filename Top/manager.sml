@@ -9,7 +9,7 @@ functor Manager (structure Parser: LINK_PARSE
 struct
 
   structure Basis = Elaborator.Basis
-  structure UIBlast = mkBlast(type t = Elaborator.context)
+(*  structure UIBlast = mkBlast(type t = Elaborator.context) *)
 
   val error = fn x => Util.error "Manager" x
 
@@ -19,21 +19,39 @@ struct
 
   fun help() = print "This is TILT - no help available.\n"
 
+  fun readContext file = let val is = TextIO.openIn file
+			     val res = Elaborator.IlContext.blastInContext is
+			     val _ = TextIO.closeIn is
+			 in  res
+			 end
+  fun writeContext (file,ctxt) = let val os = TextIO.openOut file
+				     val _ = Elaborator.IlContext.blastOutContext os ctxt
+				     val _ = TextIO.closeOut os
+				 in  ()
+				 end
+
   fun getContext imports = 
-      let val (_,_,_,ctxt_noninline) = Basis.initial_context()
-	  val ctxts = List.map (fn file => UIBlast.blastIn (file^".ui")) imports
-      in Elaborator.plus_context (ctxt_noninline :: ctxts)
+      let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
+(*	  val ctxts = List.map (fn file => UIBlast.blastIn (file^".ui")) imports *)
+	  val ctxts = List.map (fn file => readContext (file ^ ".ui")) imports
+      in Elaborator.plus_context (ctxt_inline :: ctxts)
       end
 
-  fun emitter oFile outs = 
-      let val ins = BinIO.openIn oFile
-      in BinIO.output(outs, BinIO.input(ins));
-         BinIO.closeIn ins
-      end
+    fun bincopy (is,os) = 
+	let fun loop() = (BinIO_Util.copy(is,os); if (BinIO.endOfStream is) then () else loop())
+	in  loop()
+	end
+    fun emitter in_file os = let (* val _ = (print "mk_emitter on file "; print in_file; print "\n") *)
+				 val is = BinIO.openIn in_file
+			     in bincopy(is,os); 
+				 BinIO.closeIn is
+			     end
 
   fun elab_constrained(ctxt,sourcefile,fp,dec,uiFile) =
-      let val ctxt' = UIBlast.blastIn(uiFile) 
-	              handle _ => error ("File "^uiFile^" not found.")
+      let val _ = (print "blasting in "; print uiFile)
+(*	  val ctxt' = UIBlast.blastIn(uiFile) 
+	              handle _ => error ("File "^uiFile^" not found.") *)
+	  val ctxt' = readContext uiFile
       in case Elaborator.elab_dec_constrained(ctxt, fp, dec, ctxt')
 	   of SOME sbnds => (sbnds, ctxt')
             | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
@@ -42,12 +60,15 @@ struct
   fun elab_nonconstrained(ctxt,sourcefile,fp,dec,uiFile) =
       case Elaborator.elab_dec(ctxt, fp, dec)
 	of SOME(sbnds, ctxt') => 
-	    let	val _ = (if Elaborator.eq_context(ctxt', UIBlast.blastIn uiFile) then ()
-			 else UIBlast.blastOut(uiFile, ctxt'))
-		        handle IO.Io _ => UIBlast.blastOut(uiFile, ctxt')
+	    let	
+		val _ = (if Elaborator.eq_context(ctxt', readContext uiFile) then ()
+			 else writeContext(uiFile, ctxt'))
+		        handle IO.Io _ => writeContext(uiFile, ctxt')
 	    in (sbnds, ctxt')
 	    end
          | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
+
+
 
   fun compileSML sourcefile = 
       let val _ = chat ("  [Parsing " ^ sourcefile ^ "...")
@@ -57,10 +78,12 @@ struct
 	  val ctxt = getContext imports
 	  val _ = chat "]\n"
 	  val imports = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) imports
-	  val unitName = OS.Path.base(OS.Path.file sourcefile)
-	  val uiFile = unitName^".ui"
-	  val intFile = unitName^".int"
-	  val oFile = unitName^".o"
+	  val unitBase = OS.Path.base sourcefile
+	  val unitName = OS.Path.file unitBase
+	  val uiFile = unitBase ^ ".ui"
+	  val intFile = unitBase ^ ".int"
+	  val oFile = unitBase ^ ".o"
+	  val uoFile = unitBase ^ ".uo"
 	  val (sbnds, ctxt') = 
 	      if OS.FileSys.access(intFile, []) then 
 		  let val _ = chat "  [Elaborating with constraint..."  
@@ -70,15 +93,15 @@ struct
 		   in elab_nonconstrained(ctxt,sourcefile,fp,dec,uiFile)
 		   end
 	  val _ = chat "]\n"
-	  val _ = chat ("  [Compiling into " ^ unitName ^ ".o ...")
-	  val _ = Compiler.compile(ctxt, unitName, sbnds, ctxt')  (* generates oFile *)
+	  val _ = chat ("  [Compiling into " ^ oFile ^ " ...")
+	  val _ = Compiler.compile(ctxt, unitBase, sbnds, ctxt')  (* generates oFile *)
 	  val _ = chat "]\n"
 	  val crc = Linker.Crc.crc_of_file uiFile
-	  val exports = [(unitName, crc)]
-	  val _ = chat ("  [Creating " ^ unitName ^ ".uo ...")
+	  val exports = [(unitBase, crc)]
+	  val _ = chat ("  [Creating " ^ uoFile ^ " ...")
 	  val res = Linker.mk_uo {imports = imports,
 				  exports = exports,
-				  uo_result = (unitName^".uo"),
+				  uo_result = uoFile,
 				  emitter = emitter oFile}
 	  val _ = chat "]\n"
       in res
@@ -88,9 +111,10 @@ struct
       let val (fp, includes, specs) = Parser.parse_inter sourcefile
 	  val ctxt = getContext includes
 	  val unitName = OS.Path.base(OS.Path.file sourcefile)
-      in case Elaborator.elab_specs(ctxt, fp, specs)  
-	   of SOME ctxt' => UIBlast.blastOut(unitName^".ui", ctxt')
-	    | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
+	  val uiFile = (OS.Path.base sourcefile) ^ ".ui"
+      in case Elaborator.elab_specs(ctxt, fp, specs) of
+	  SOME ctxt' => writeContext(uiFile, ctxt')
+	| NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
       end
 
   fun compileFile sourcefile = 
@@ -148,7 +172,7 @@ struct
   in
     case ext of
       SOME "uo" => SOME file
-    | SOME "sml" => SOME (OS.Path.base(file)^".uo")
+    | SOME "sml" => SOME ((OS.Path.base file)^".uo")
     | _ => NONE
   end
 
