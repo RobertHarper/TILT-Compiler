@@ -178,6 +178,9 @@ struct
     in asm_file
     end
 
+  fun wrapper string command = Stats.timer(string,command)
+  val comp = wrapper "toasm" comp
+
   fun link (srcfile,local_labels) = 
     let 
       val asm_file = srcfile ^ (asm_suffix())
