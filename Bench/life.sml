@@ -161,7 +161,8 @@ in
 	    | loop count thing = (show thing; loop (count-1) (nthgen thing step))
       in  loop start thing
       end
-  val result = doit 10 10 gun
+  fun test() = doit 10 10 gun
+  val result = test()
 
 end
 
