@@ -44,6 +44,7 @@ bug155	fail	Type sharing fails on corner case.
 bug159	fail	Datatype replication.
 bug163	fail	Pattern compiler causing elaborator to bomb.
 bug165	fail	Elaborator shadowing variables.
+bug166	fail	Elaborator adding classifiers with unbound, free variables to context.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
