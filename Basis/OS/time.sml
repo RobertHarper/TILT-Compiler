@@ -4,7 +4,7 @@
  *
  *)
 
-structure Time :> TIME where type time = PreTime.time =
+structure Time :> TIME =
   struct
     val uint8touint32 = TiltPrim.uint8touint32
     val ulte = TiltPrim.ulte
@@ -15,7 +15,7 @@ structure Time :> TIME where type time = PreTime.time =
   (* get time type from type-only structure *)
 (*    open Time *)
 
-    datatype time = datatype PreTime.time
+    datatype time = TIME of {sec : int, usec : int}
     exception Time
 
     val zeroTime = TIME{sec=0, usec=0}

@@ -94,7 +94,12 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
     in
     fun poll (pds, timeOut) = let
 	  val timeOut = (case timeOut
-		 of SOME(PreTime.TIME{sec, usec}) => SOME(sec, usec)
+		 of SOME t =>
+		     let val sec = Time.toSeconds t
+			 val t' = Time.-(t, Time.fromSeconds sec)
+			 val usec = Time.toMicroseconds t'
+		     in  SOME(sec, usec)
+		     end
 		  | NONE => NONE
 		(* end case *))
 	  val info = Ccall(posix_os_poll, List.map fromPollDesc pds, timeOut)
