@@ -115,13 +115,19 @@ struct
      listdiff(general_regs, indirect_caller_saved_regs)
 
   fun makeAsmHeader(PROCSIG{framesize,ra_offset,...}) = 
-    (case (framesize, ra_offset) of
-       (SOME framesize, SOME ra_offset) => ("\t.mask (1 << 26), -" ^ 
+      let val (realized,framesize, ra_offset) = (case (framesize, ra_offset) of
+						     (SOME f, SOME r) => (true,f,r)
+						   | _ => (false,0,0))
+	  val result =  ("\t.mask (1 << 26), -" ^ 
 					       (Int.toString (framesize - ra_offset)) ^
 					       "\n\t.frame $sp, " ^ 
 					       (Int.toString framesize) ^ "\n" ^
 					       "\t.prologue 1\n")
-     | _ => error "makeAsmHeader: framesize or ra_offset not realized at dump time")
+      in  if realized 
+	      then result 
+	  else ("error: framesize/ra_offset unrealized\n" ^ result)
+      end
+
 
   fun msRegList l = 
     let fun doer(r,acc) = acc ^ " " ^ (msReg r)
@@ -129,9 +135,14 @@ struct
     end
   fun msRegSet s = msRegList (setToList s)
 
+  fun translateLocalLabel loclabel = loclabel
+  fun translateCodeLabel loclabel = loclabel
+  fun translateLabel (Rtl.LOCAL_LABEL ll) = I (translateLocalLabel ll)
+    | translateLabel (Rtl.ML_EXTERN_LABEL label) = MLE label
+    | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
 
   val programHeader = ["\t.set noat\n"]
-  fun procedureHeader s = [" \t.align 4\n", "\t.ent " ^ s ^ "\n"]
+  fun procedureHeader rtl_label = [" \t.align 4\n", "\t.ent " ^ (msLabel (translateLabel rtl_label)) ^ "\n"]
   fun procedureTrailer s = ["\t.end " ^ s ^ "\n"]
   val textStart = ["\t.text\n"]
   val dataStart = ["\t.data\n"]

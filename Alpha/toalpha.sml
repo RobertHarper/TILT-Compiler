@@ -1099,16 +1099,16 @@ struct
 			  Rtl.STORE32I(Rtl.EA(cursor_addr_reg,0),cursor_val_reg1)]
 	 end
 
-     | translate (Rtl.INT_ALLOC (rtl_logsize, rtl_ival, rtl_dest, tag)) = 
+     | translate (Rtl.INT_ALLOC (rtl_bytesize, rtl_ival, rtl_dest, tag)) = 
        let
-	   val logsize = translateIReg rtl_logsize
+	   val bytesize = translateIReg rtl_bytesize
 	   val ival = translateIReg rtl_ival
 	   val Rdest = translateIReg rtl_dest
 	   val rtl_loclabel = Rtl.fresh_code_label ()
 	   val gp_loclabel = Rtl.fresh_code_label ()
 	   val label = translateLocalLabel rtl_loclabel
         in
-	    emit (SPECIFIC (INTOP   (ADDL, logsize, REGop Rzero, Rat)));
+	    emit (SPECIFIC (INTOP   (ADDL, bytesize, REGop Rzero, Rat)));
 	    emit (SPECIFIC (INTOP   (ADDL, ival,    REGop Rzero, Rat2)));
 (* XXX how to pass the tag 
 	    if (tag = 0) then ()

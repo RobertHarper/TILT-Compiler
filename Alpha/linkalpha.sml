@@ -8,7 +8,7 @@ sig
     val test : string -> string * Rtl.local_label
 end
 
-structure Linkalpha : LINKALPHA =
+structure Linkalpha (* : LINKALPHA *) =
 struct
   val error = fn s => Util.error "linkalpha.sml" s
   open Linkrtl
