@@ -239,9 +239,9 @@ struct
        in either case, the returned type is possibly simpler than the argument type *)
 
     fun get_shape ({env,...} : state) c = Stats.subtimer("RTL_getshape",
-							 Normalize.get_shape env) c
+							 Normalize.get_shape) (env,c)
     fun make_shape ({env,...} : state) k = Stats.subtimer("RTL_makeshape",
-							  Normalize.make_shape env) k
+							  Normalize.make_shape) (env,k)
     fun simplify_type ({env,...} : state) con : bool * con = 
 	let val result = Stats.subtimer("RTL_reduce_hnf",
 					Normalize.reduce_hnf)(env,con)
@@ -279,7 +279,7 @@ struct
 	  end
 	    | loop acc (Singleton_k c) labs = 
 	  let val k = Stats.subtimer("RTLgetshape0",
-				     Normalize.get_shape (#env state)) c
+				     Normalize.get_shape)  (#env state,c)
 	  in  loop acc k labs
 	  end
 	    | loop acc _ labs = error "expect record kind"
@@ -334,7 +334,7 @@ struct
 		     | koop (Var_c v) acc = (v,acc)
 		     | koop _ _ = error "projection is not a chain of projections from a variable"
 		   val (v,labels) = koop con []
-		  
+
 		   fun indices wrap kind = let val temp = cpath2indices state kind labels
 					   in  if (length temp > 3)
 						then NONE else SOME(wrap temp)
