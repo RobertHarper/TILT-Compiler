@@ -1,4 +1,4 @@
-(*$import TopLevel Array Array2 Int Real64 Math64 *)
+(*$import Prelude TopLevel Array Array2 Int Real64 Math64 List *)
 
 local
 
@@ -881,6 +881,8 @@ local
     end
 
 in
-(*  val _ = print_state(runit(4,false))  *)
-    val simpleResult = runit(4,false) 
+    fun runSimple() = let val state = runit(4,false) 
+		      (*  val _ = print_state state *)
+		      in  ()
+		      end
 end

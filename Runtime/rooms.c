@@ -3,9 +3,7 @@
 #include <strings.h>
 #include <assert.h>
 #include "rooms.h"
-
-int FetchAndAdd(int *, int);
-int CompareAndSwap(int *location, int testValue, int swapValue); /* Returns value in memory location */
+#include "general.h"
 
 static void lockRooms(Rooms_t *r)
 {
@@ -23,9 +21,9 @@ Rooms_t *createRooms(int n)
   Rooms_t *r = (Rooms_t *) malloc(sizeof(Rooms_t));
   assert(n > 0);
   assert(2 * n < MAXINT);
-  r->cur = (int *) calloc(n, sizeof(int));
-  r->wait = (int *) calloc(n, sizeof(int));
-  r->prev = (int *) calloc(n, sizeof(int));
+  r->cur = (long *) calloc(n, sizeof(long));
+  r->wait = (long *) calloc(n, sizeof(long));
+  r->prev = (long *) calloc(n, sizeof(long));
   r->finalizer = (finalizer_t *) calloc(n, sizeof(finalizer_t));
   r->finalizerData = (void **) calloc(n, sizeof(void *));
   r->size = n;
@@ -41,7 +39,7 @@ void destroyRooms(Rooms_t *r)
   free(r->prev);
   free(r->finalizer);
   free(r->finalizerData);
-  free(r);
+  free((void *)r);
 }
 
 void assignExitCode(Rooms_t *r, int i, finalizer_t f, void *d) 
@@ -73,13 +71,16 @@ static void transition(Rooms_t *r, int from, int to)
 void enterRoom(Rooms_t *r, int i) 
 {
   int oldWait = FetchAndAdd(&r->wait[i],1) + 1;
-  while (oldWait > r->cur[i])
+  while (oldWait > r->cur[i]) {
+    memBarrier();
     if (CompareAndSwap(&r->which,-1,i) == -1) {
       r->cur[i] = r->wait[i];
       transition(r,-1,i);
       break;
     }
+  }
   assert(r->which == i);
+  memBarrier();
 }
 
 
@@ -101,11 +102,13 @@ int exitRoom(Rooms_t *r)
         r->which = newWh;
         r->cur[newWh] = r->wait[newWh];
 	transition(r,wh,newWh);
+	memBarrier();
 	return finalizerResult;
       }
     }
     r->which = -1;
     transition(r,wh,-1);
+    memBarrier();
     return finalizerResult;
   }
   return 0;

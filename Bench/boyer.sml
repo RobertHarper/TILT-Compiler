@@ -1,5 +1,6 @@
-(*$import TopLevel Int *)
+(*$import Prelude TopLevel Int *)
 
+(* Thread safety by wrapping entire benchmark in a function *)
 (***********************************************************************)
 (*                                                                     *)
 (*                         Caml Special Light                          *)
@@ -11,9 +12,11 @@
 (*                                                                     *)
 (***********************************************************************)
 
+fun runBoyer() = 
 
 (* $Id$ *)
-local
+let
+
 fun myprint s = () (* print s *)
 (* compatability *)
 val print_string : string -> unit = print
@@ -922,19 +925,16 @@ fun print_head ({name,props}:head) =
      (!props); 
      print "\n\n")
 
-fun doit () =
+
+in
     let val _ = print "Starting\n"
 	val temp = apply_subst subst term
 	val _ = print "computed temp\n"
-    in  if tautp temp then
-	print_string "Proved!\n"
-	else
-	    (print_string "Cannot prove!\n")
+    in  if tautp temp 
+	    then print_string "Proved!\n"
+	else print_string "Cannot prove!\n"
     end
-in
-  val boyerResult = doit()
-      handle Match => print "match exception\n"
-
+        handle Match => print "match exception\n"
 end
 
 (*********

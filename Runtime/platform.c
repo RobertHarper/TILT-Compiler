@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include "thread.h"
 #include "platform.h"
 #include <strings.h>
 #include <fcntl.h>
@@ -102,28 +103,29 @@ int GetBcacheSize() { return 512 * 1024; }
 int GetIcacheSize() { return 8 * 1024; }
 int GetDcacheSize() { return 8 * 1024; }
 
-static unsigned long last0, last1;
-long pic0[1024], pic1[1024], picCursor = 0;
-long pic2[1024], pic3[1024];  /* Splitting into two areas */
 
-enum PerfType {UserBasic = 0, SysBasic, BothBasic, UserDCache, SysDCache, UserECache, SysECache, UserEWrite, UserESnoop};
-int perfType = (int) UserBasic;
+enum PerfType {NoPerf = -1, UserBasic = 0, SysBasic, BothBasic, UserDCache, SysDCache, UserECache, SysECache, UserEWrite, UserESnoop};
+int perfType = (int) NoPerf;
 int hasPerfMon = 0;
 
-int initializePerfMon(void)
+int initializePerfMon(Proc_t *proc)
 {
   int fd, rc;
   unsigned long long tmp;
 
-  /* XXX Need to bind processor? */
+  /* Establish Perf Mon */
+  if (hasPerfMon == -1)
+    return 0;
   fd = open("/dev/perfmon", O_RDONLY);
   if (fd == -1) {
     fprintf(stderr,"Cannot open /dev/perfmon\n");
+    hasPerfMon = -1;
     return 0;
   }
-
   hasPerfMon = 1;
+
   switch (perfType) {
+    case NoPerf: return 0;
     case UserBasic:  tmp = PCR_S0_CYCLE_CNT | PCR_S1_INSTR_CNT | PCR_USER_TRACE; break;
     case SysBasic:   tmp = PCR_S0_CYCLE_CNT | PCR_S1_INSTR_CNT | PCR_SYS_TRACE; break;
     case BothBasic:  tmp = PCR_S0_CYCLE_CNT | PCR_S1_INSTR_CNT | PCR_USER_TRACE | PCR_SYS_TRACE; break;
@@ -142,58 +144,49 @@ int initializePerfMon(void)
   ioctl(fd, PERFMON_FLUSH_CACHE);
 }
 
-void resetPerfMon()
+void resetPerfMon(Proc_t *proc)
 {
   unsigned register long long pic;
   int i;
-  assert(hasPerfMon);
-  for (i=0; i<(sizeof(pic0) / sizeof(long)); i++)
-    pic0[i] = pic1[i] = pic2[i] = pic3[i] = 0;
-  picCursor = 0;
+  assert(hasPerfMon == 1);
+  if (perfType == NoPerf)
+    return;
+  for (i=0; i<(sizeof(proc->pic0) / sizeof(long)); i++)
+    proc->pic0[i] = proc->pic1[i] = proc->pic2[i] = proc->pic3[i] = 0;
+  proc->picCursor = 0;
   clr_pic();
   cpu_sync();
   pic = get_pic();
-  last0 = extract_pic0(pic);
-  last1 = extract_pic1(pic);
+  proc->last0 = extract_pic0(pic);
+  proc->last1 = extract_pic1(pic);
 }
 
-void update(int primary)
+void lapPerfMon(Proc_t *proc, int which)
 {
   unsigned register long long pic;
   unsigned long cur0, cur1;
-  assert(hasPerfMon);
+  assert(hasPerfMon == 1);
+  if (perfType == NoPerf)
+    return;
   pic = get_pic();
   cur0 = extract_pic0(pic);
   cur1 = extract_pic1(pic);
-  (primary ? pic0[picCursor] : pic2[picCursor]) += cur0 - last0;
-  (primary ? pic1[picCursor] : pic3[picCursor]) += cur1 - last1;
-  last0 = cur0;
-  last1 = cur1;
-  assert(picCursor < (sizeof(pic0) / sizeof(long)));
+  (which ? proc->pic2[proc->picCursor] : proc->pic0[proc->picCursor]) += cur0 - proc->last0;
+  (which ? proc->pic3[proc->picCursor] : proc->pic1[proc->picCursor]) += cur1 - proc->last1;
+  if (which == 0)
+    proc->picCursor++;
+  proc->last0 = cur0;
+  proc->last1 = cur1;
+  assert(proc->picCursor < (sizeof(proc->pic0) / sizeof(long)));
 }
 
-void startAlternatePerfMon()
-{
-  update(1);
-}
-
-void stopAlternatePerfMon()
-{
-  update(0);
-}
-
-void lapPerfMon()
-{
-  update(1);
-  picCursor++;
-  assert(picCursor < (sizeof(pic0) / sizeof(long)));
-}
-
-void showPerfMon(int which)
+void showPerfMon(Proc_t *proc, int which)
 {
   int i;
-  assert(hasPerfMon);
-  printf("\nPerfMon: %s\n", which == 0 ? "PRIMARY" : (which == 1 ? "ALTERNATE" : "BOTH"));
+  assert(hasPerfMon == 1);
+  if (perfType == NoPerf)
+    return;
+  printf("\nProc %d    PerfMon: %s\n",proc->procid, which == 0 ? "PRIMARY" : (which == 1 ? "ALTERNATE" : "BOTH"));
   switch (perfType) {
     case UserBasic: 
       printf("    |    User  |    User  |  User\n");
@@ -233,14 +226,14 @@ void showPerfMon(int which)
       break;
     }
   printf("===========================================\n");
-  for (i=0; i<picCursor+1; i++) {
-    unsigned long count0 = (which == 0) ? pic0[i] : pic2[i];
-    unsigned long count1 = (which == 0) ? pic1[i] : pic3[i];
-    if (i < picCursor) {
-      pic0[picCursor] += pic0[i];
-      pic1[picCursor] += pic1[i];
-      pic2[picCursor] += pic2[i];
-      pic3[picCursor] += pic3[i];
+  for (i=0; i<proc->picCursor+1; i++) {
+    unsigned long count0 = (which == 0) ? proc->pic0[i] : proc->pic2[i];
+    unsigned long count1 = (which == 0) ? proc->pic1[i] : proc->pic3[i];
+    if (i < proc->picCursor) {
+      proc->pic0[proc->picCursor] += proc->pic0[i];
+      proc->pic1[proc->picCursor] += proc->pic1[i];
+      proc->pic2[proc->picCursor] += proc->pic2[i];
+      proc->pic3[proc->picCursor] += proc->pic3[i];
       printf("%3d | ", i);
     }
     else
@@ -255,8 +248,8 @@ void showPerfMon(int which)
       case SysBasic:
 	if (which == 2)
 	  printf("%7d  | %7d  |   %4.2f  | %7d  | %7d  |  %4.2f\n", 
-		 pic0[i], pic1[i], ((double) pic0[i]) / pic1[i],
-		 pic2[i], pic3[i], ((double) pic2[i]) / pic3[i]);
+		 proc->pic0[i], proc->pic1[i], ((double) proc->pic0[i]) / proc->pic1[i],
+		 proc->pic2[i], proc->pic3[i], ((double) proc->pic2[i]) / proc->pic3[i]);
 	else 
 	  printf("%7d  | %7d  |   %4.2f\n", count0, count1, ((double) count0) / count1);
 	break;
@@ -288,6 +281,14 @@ void testPerfMon()
 }
 */
 
+#else
+int perfType;
+int initializePerfMon(Proc_t *) {}
+void resetPerfMon(Proc_t *) {}
+void startAlternatePerfMon(Proc_t *) {}
+void stopAlternatePerfMon(Proc_t *) {}
+void lapPerfMon(Proc_t *) {}
+void showPerfMon(Proc_t *, int) {}
 #endif
 
 

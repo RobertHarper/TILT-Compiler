@@ -69,10 +69,10 @@ unsigned long objectLength(ptr_t obj, mem_t *start);
    (3) The number of bytes copied is returned and added to proc->curBytesCopied.
    (4) The copied object can be retrieved with obj[-1].
 */
-int copy(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
-int alloc(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
-int copy_noSpaceCheck(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
-int copy_noSpaceCheck_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *);
+ptr_t copy(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
+ptr_t alloc(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
+ptr_t copy_noSpaceCheck(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
+ptr_t copy_noSpaceCheck_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *);
 
 /* copy_copyCopySync and alloc_copyCopySync
    (1) Takes a primary object and (if it is not already copied)
@@ -83,19 +83,20 @@ int copy_noSpaceCheck_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, 
    (3) The object being copied is locked first to prevent multiple copies
        from being made because of multiple copiers.  The object is 
        copied coarsely, all at once, even if the object is large.
-   (4) The number of bytes copied is returned and added to proc->curBytesCopied.
+   (4) The number of bytes copied is stored in proc->bytesCopied (0 if not copied).
+       proc->segUsage will also be updated.
    (5) The new copy of the object can be retrieved with obj[-1].
 */
-int copy_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
-int copy_copyCopySync_primaryStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
-int copy_copyCopySync_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
+ptr_t copy_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
+ptr_t copy_copyCopySync_primaryStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
+ptr_t copy_copyCopySync_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
 
-int alloc_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
-int alloc_copyCopySync_primaryStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
-int alloc_copyCopySync_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
+ptr_t alloc_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
+ptr_t alloc_copyCopySync_primaryStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
+ptr_t alloc_copyCopySync_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
 
-int copy_noSpaceCheck_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
-int copy_noSpaceCheck_copyCopySync_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
+ptr_t copy_noSpaceCheck_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
+ptr_t copy_noSpaceCheck_copyCopySync_replicaStack(Proc_t *, ptr_t obj, CopyRange_t *copyRange, Stack_t *grayStack);
 
 
 /* ------------------------------------------------------- */
@@ -116,8 +117,8 @@ void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange, Hea
 {
   ptr_t obj = *loc;
   if (InRange((mem_t) obj, &from->range)) {
-    copy_noSpaceCheck(proc,obj,copyRange);
-    *loc = (ptr_t) obj[-1];
+    *loc = copy_noSpaceCheck(proc,obj,copyRange);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -129,14 +130,13 @@ void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange,
   ptr_t obj = *loc;
   if (InRange((mem_t) obj, &from->range) ||
       InRange((mem_t) obj, &from2->range)) {
-    copy_noSpaceCheck(proc,obj,copyRange);
-    *loc = (ptr_t) obj[-1];
+    *loc = copy_noSpaceCheck(proc,obj,copyRange);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if ((val_t) obj - (val_t) large->range.low < large->range.diff)
     gc_large_addRoot(obj);
 }
 
-/* copy2L_noSpaceCheck */
 INLINE(copy2L_noSpaceCheck)
 void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange,
 			 Heap_t *from, Heap_t *from2, Heap_t *large)
@@ -181,8 +181,8 @@ void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 { 
   ptr_t white = *loc;							
   if (InRange((mem_t) white, &from->range)) {
-    alloc_copyCopySync_primaryStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = alloc_copyCopySync_primaryStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -192,8 +192,8 @@ void locAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loc
 { 
   ptr_t white = *loc;							
   if (InRange((mem_t) white, &from->range)) {
-    alloc_copyCopySync_primaryStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = alloc_copyCopySync_primaryStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if (InRange((mem_t) white, &large->range)) 
     gc_large_addRoot(white);
@@ -206,8 +206,8 @@ void locCopy1_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *local
 { 
   ptr_t white = *loc;				
   if (InRange((mem_t) white, &from->range)) {			
-    copy_copyCopySync_replicaStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_copyCopySync_replicaStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -218,8 +218,8 @@ void locCopy1_noSpaceCheck_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, S
 { 
   ptr_t white = *loc;						
   if (InRange((mem_t) white, &from->range)) {	
-    copy_noSpaceCheck_copyCopySync_replicaStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_noSpaceCheck_copyCopySync_replicaStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -230,8 +230,8 @@ void locCopy1_noSpaceCheck_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *local
 { 
   ptr_t white = *loc;				
   if (InRange((mem_t) white, &from->range)) {			
-    copy_noSpaceCheck_replicaStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_noSpaceCheck_replicaStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -241,8 +241,8 @@ void locCopy1_noSpaceCheck_copyCopySync(Proc_t *proc, ploc_t loc, CopyRange_t *c
 { 
   ptr_t white = *loc;
   if (InRange((mem_t) white, &from->range)) {				
-    copy_noSpaceCheck_copyCopySync(proc,white,copyRange);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_noSpaceCheck_copyCopySync(proc,white,copyRange);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -262,8 +262,8 @@ void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *local
 { 
   ptr_t white = *loc;							
   if (InRange((mem_t) white, &from->range)) {
-    copy_copyCopySync_primaryStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_copyCopySync_primaryStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
 }
 
@@ -274,8 +274,8 @@ void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 { 
   ptr_t white = *loc;
   if (InRange((mem_t) white, &from->range)) {			
-    copy_copyCopySync_primaryStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_copyCopySync_primaryStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if (InRange((mem_t) white, &large->range)) 
     gc_large_addRoot(white);
@@ -289,8 +289,8 @@ void locCopy2L_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *loca
   ptr_t white = *loc;
   if (InRange((mem_t) white, &from->range) ||
       InRange((mem_t) white, &from2->range)) {
-    copy_copyCopySync_replicaStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_copyCopySync_replicaStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if (InRange((mem_t) white, &large->range))
     gc_large_addRoot(white);
@@ -317,8 +317,8 @@ void locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
   ptr_t white = *loc;
   if (InRange((mem_t) white, &from->range) ||
       InRange((mem_t) white, &from2->range)) {
-    copy_copyCopySync_primaryStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_copyCopySync_primaryStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if (InRange((mem_t) white, &large->range))
     gc_large_addRoot(white);
@@ -332,8 +332,8 @@ void locCopy2L_copyCopySync_replica(Proc_t *proc, ploc_t loc, Stack_t *localStac
   ptr_t white = *loc;
   if (InRange((mem_t) white, &from->range) ||
       InRange((mem_t) white, &from2->range)) {
-    copy_copyCopySync_replicaStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = copy_copyCopySync_replicaStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if (InRange((mem_t) white, &large->range))
     gc_large_addRoot(white);
@@ -347,8 +347,8 @@ void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loc
   ptr_t white = *loc;							
   if (InRange((mem_t) white, &from->range) ||
       InRange((mem_t) white, &from2->range)) {
-    alloc_copyCopySync_primaryStack(proc,white,copyRange,localStack);
-    *loc = (ptr_t) white[-1];
+    *loc = alloc_copyCopySync_primaryStack(proc,white,copyRange,localStack);
+    assert(TAG_IS_FORWARD(*loc)); /* XXXX */
   }
   else if (InRange((mem_t) white, &large->range))
     gc_large_addRoot(white);
@@ -356,6 +356,7 @@ void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loc
 
 
 /* ------------------- Writelist Routines ---------------------- */
+int empty_writelist(Proc_t *proc);
 void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to);
 
 /* ------------------- Scanning Routines ---------------------- */

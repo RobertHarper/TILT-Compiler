@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL Optimize *)
+(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL Optimize String *)
 
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
@@ -1896,21 +1896,35 @@ struct
 
 
      fun entryTables moduleLabels = 
-	 let fun makeImportBnd (ML_EXTERN_LABEL lab) = 
+	 let val nt = TraceKnown TraceInfo.Trace
+	     val registerVar = Name.fresh_var()
+	     val stringCon = Prim_c(Array_c, [Prim_c (Int_c Prim.W8, [])])
+	     val registerImport = Nil.ImportValue (Name.symbol_label(Symbol.varSymbol "registerThunk"),
+						   registerVar, nt, 
+						   ExternArrow_c([stringCon],Prim_c(Record_c([],NONE),[])))
+	     fun makeImportBnd (ML_EXTERN_LABEL lab) = 
 	     let open Nil
 		 val lab = Name.symbol_label (Symbol.varSymbol lab)
 		 val v1 = Name.fresh_var()
 		 val v2 = Name.fresh_var()
-		 val nt = TraceKnown TraceInfo.Trace
+		 val v3 = Name.fresh_var()
 		 val c = AllArrow_c {openness = Closure, effect = Partial, isDependent = false,
 				     tFormals = [], eFormals = [], fFormals = 0w0,
 				     body_type = Prim_c(Record_c ([], NONE),[])}
+		 val str = label2string lab
+		 fun tabulator i = Const_e(Prim.int (Prim.W8, TilWord64.fromInt(ord (String.sub(str,i)))))
+		 val strVal = Const_e (Prim.vector(Prim_c(Int_c Prim.W8,[]),
+						   Array.tabulate(size str, tabulator)))
+
 	     in  (Nil.ImportValue (lab, v1, nt, c),
-		  Nil.Exp_b(v2, nt, App_e(Closure, Var_e v1, [], [], [])))
+		  [
+		   (* Nil.Exp_b(v2, nt, ExternApp_e(Var_e registerVar,[strVal])), *)
+		   Nil.Exp_b(v3, nt, App_e(Closure, Var_e v1, [], [], []))])
 	     end
-	     val (moduleImports,moduleBnds) = unzip (map makeImportBnd moduleLabels)
+	     val (moduleImports,moduleBndLists) = unzip (map makeImportBnd moduleLabels)
+	     val moduleBnds = Listops.flatten moduleBndLists
 	     val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds @ moduleBnds,
-				     imports = moduleImports,
+				     imports = registerImport :: moduleImports,
 				     exports = map (fn (l,v,tr,c) => ExportValue(l,v))
 				                [sub,vsub,len,vlen,update,array,vector,vararg,onearg]}
 	     val Rtl.MODULE{procs=linkProcs,data=linkData,

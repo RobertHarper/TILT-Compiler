@@ -49,15 +49,15 @@ static mem_t alloc_space(int bytesNeeded)
     }
   }
   else {
-    assert(0);
-/*
+
     alloc = (mem_t) RuntimeGlobalData_Cur;
     limit = (mem_t) RuntimeGlobalData_End;
     newAlloc = alloc + wordsNeeded;
     assert(newAlloc <= limit);  
     RuntimeGlobalData_Cur = newAlloc;
+    printf("Warning: alloc_space called with no thread mapped\n");
     return alloc;
-*/
+
   }
 }
 

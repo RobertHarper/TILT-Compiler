@@ -58,7 +58,7 @@ static void stop_copy(Proc_t *proc)
   static long req_size;            /* These are shared across processors. */
   ploc_t rootLoc, globalLoc;
   
-  assert(isEmptyStack(&proc->majorObjStack)); 
+  assert(isEmptyStack(&proc->work.objs)); 
 
   /* Using asynchronous version, we detect the first thread and permit
      it to do some preliminary work while other processors have not reached the barrier.
@@ -70,7 +70,7 @@ static void stop_copy(Proc_t *proc)
 
   proc->segmentType |= (MajorWork | FlipOn | FlipOff);
   /* All threads get local structures ready */
-  assert(isEmptyStack(proc->rootLocs));
+  assert(isLocalWorkEmpty(&proc->work));
   SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
   /* no-space chech hack - only for uniprocessor*/
   proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
@@ -80,38 +80,35 @@ static void stop_copy(Proc_t *proc)
   process_writelist(proc,NULL,NULL);
 
   /* The "first" processor is in charge of the globals. */
-  procChangeState(proc, GCGlobal);
+  procChangeState(proc, GCGlobal, 700);
   major_global_scan(proc);
 
   /* All other processors compute thread-specific roots in parallel */
-  procChangeState(proc, GCStack);
+  procChangeState(proc, GCStack, 701);
   while ((curThread = NextJob()) != NULL) {
     if (curThread->requestInfo >= 0)
       FetchAndAdd(&req_size, curThread->requestInfo);
     thread_root_scan(proc,curThread);
   }
 
-  procChangeState(proc, GC);
+  procChangeState(proc, GC, 702);
   /* Now forward all the roots which initializes the local work stacks */
-  proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
-  while (rootLoc = (ploc_t) popStack(proc->rootLocs))
+  proc->numRoot += lengthStack(&proc->work.roots) + lengthStack(&proc->work.globals);
+  while (rootLoc = (ploc_t) popStack(&proc->work.roots))
     locCopy1_noSpaceCheck_replicaStack(proc, rootLoc,
-				       &proc->majorObjStack,&proc->majorRange,fromSpace); 
-  while (globalLoc = (ploc_t) popStack(proc->globalLocs))
+				       &proc->work.objs,&proc->majorRange,fromSpace); 
+  while (globalLoc = (ploc_t) popStack(&proc->work.globals))
     locCopy1_noSpaceCheck_replicaStack(proc, globalLoc,
-				       &proc->majorObjStack,&proc->majorRange,fromSpace); 
+				       &proc->work.objs,&proc->majorRange,fromSpace); 
 
   while (1) {
-    ptr_t gray = popStack(&proc->majorObjStack);
+    ptr_t gray = popStack(&proc->work.objs);
     if (gray == NULL) 
       break;
-    (void) scanObj_locCopy1_noSpaceCheck_replicaStack(proc,gray,&proc->majorObjStack,&proc->majorRange,fromSpace);
+    (void) scanObj_locCopy1_noSpaceCheck_replicaStack(proc,gray,&proc->work.objs,&proc->majorRange,fromSpace);
   }
 
-  assert(isEmptyStack(&proc->threads));
-  assert(isEmptyStack(proc->globalLocs));
-  assert(isEmptyStack(proc->rootLocs));
-  assert(isEmptyStack(&proc->majorObjStack)); 
+  assert(isLocalWorkEmpty(&proc->work));
   /* no-space hack - uniprocessor only */
   toSpace->cursor = proc->majorRange.cursor;
   proc->majorRange.stop = proc->majorRange.cursor;
@@ -128,7 +125,7 @@ static void stop_copy(Proc_t *proc)
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
     /* Resize heaps and do stats */
     liveRatio = HeapAdjust1(req_size, 0, 0, 0.0, fromSpace, toSpace);
-    add_statistic(&proc->majorSurvivalStatistic, liveRatio);
+    add_statistic(&majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;

@@ -18,6 +18,7 @@ signature ERROR =
     val get_error : unit -> ErrorLevel
 
     (* Get the current region and the string associated with it *)
+    val peek_filename : unit -> string
     val peek_region : unit -> region
     val peek_region_string : unit -> string
 

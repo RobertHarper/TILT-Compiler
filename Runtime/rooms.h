@@ -4,10 +4,11 @@
 typedef int (*finalizer_t)(void *);
 typedef int (*logger_t)(int, int, void *);
 
-typedef struct Rooms__t {
-  int *cur;
-  int *wait;
-  int *prev;
+typedef volatile struct Rooms__t 
+{
+  long *cur;
+  long *wait;
+  long *prev;
   finalizer_t *finalizer;
   void **finalizerData;
   logger_t logger;

@@ -7,16 +7,19 @@ struct
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
     (* Check against Runtime/thread.h *)
-    val iregs_disp         = 0
-    val heapLimit_disp     = iregs_disp + 4 * 5
-    val fregs_disp         = iregs_disp + 4 * 32
-    val threadScratch_disp = fregs_disp + 8 * 32 + 4 + 4
-    val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 4 * 3 + 4 * 32 + 8 * 32
+    val iregs_disp          = 0
+    val fregs_disp          = iregs_disp + 4 * 32
+    val threadScratch_disp  = fregs_disp + 8 * 32 + 4 + 4
+    val request_disp        = threadScratch_disp + 8
+    val requestInfo_disp    = request_disp + 4
+    val writelistAlloc_disp = requestInfo_disp + 4 + 4 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4
     val stackLimit_disp     = writelistLimit_disp + 4
     val globalOffset_disp   = stackLimit_disp + 4
-    val stackletOffset_disp   = globalOffset_disp + 4
-    val arrayOffset_disp   = stackletOffset_disp + 4
+    val stackletOffset_disp = globalOffset_disp + 4
+    val arrayOffset_disp    = stackletOffset_disp + 4
+
+    val heapLimit_disp      = iregs_disp + 4 * 5
 
 structure Machine = 
   struct

@@ -36,6 +36,7 @@ int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the
 #include "posix.h"
 #include "global.h"
 #include "exn.h"
+#include "gc.h"
 
 #ifdef sparc
 int getrusage(int who, struct rusage *rusage);  /* Not in header files for some reason */
@@ -208,10 +209,11 @@ char* mlstring2cstring_buffer(string mlstring, int len, char *buf)
   return (char *)buf;
 }
 
+/* Uses the per-processor buffer */
 static char* mlstring2cstring_static(string mlstring)
 {
-  static char buf[1024];
-  return mlstring2cstring_buffer(mlstring, sizeof(buf), buf);
+  Proc_t *proc = getProc();  /* XXXX too slow? */
+  return mlstring2cstring_buffer(mlstring, sizeof(proc->buffer), proc->buffer);
 }
 
 static char* mlstring2cstring_malloc(string mlstring)
@@ -1153,14 +1155,12 @@ word posix_process_sysconf(string arg)
 
 int posix_process_fork(unit unused)
 {
-  int code;
   Proc_t *self = getProc();
-  code = fork();
-  if (getThread() == NULL) {
-    assert(code == 0);
+  int code = fork();
+  if (code == 0) {   /* Child needs to reset pthread values */
     self->pthread = pthread_self();
   }
-  if (code == -1) {
+  if (code == -1) {  /* fork failed for some reason */
     runtime_error(errno);
   }
   return code;
@@ -1611,7 +1611,27 @@ ptr_t til_realtime()
 ptr_t printString(ptr_t str)
 {
   int len = stringlen(str);
-  printf("%.*s", len, (char*) str);
+  if (NumGC < 5)
+    return;
+  printf("%.*s   GC %d  GCStatus = %d   alloc ptr = %d\n",
+	 len, (char*) str, NumGC, GCStatus,  
+	 Threads[0].saveregs[ALLOCPTR]);
+  /*
+  if (NumGC == 8)
+    printf("sp = %d   *(*(sp' + 0x70) + 4) = %d\n", 
+	   Threads[0].saveregs[SP],
+	   *(int *)(*(int *)(268606336 + 0x70) + 4));
+    */
+  return empty_record;
+}
+
+ptr_t printStringInt(ptr_t str, int n)
+{
+  int len = stringlen(str);
+  int sp =   Threads[0].saveregs[SP];
+  if (NumGC < 5)
+    return;
+  printf("%.*s %d\n", len, (char*) str, n);
   return empty_record;
 }
 
@@ -1638,59 +1658,10 @@ string_list commandline_arguments(unit ignored)
   return array_to_string_list(commandline_argv);
 }
 
-/* debugging */
-/*
-ptr_t printSize(int size)
-{
-  printf("YYYYYYYYY size = %d\n", size);
-}
+ptr_t cast1(ptr_t v) { return v; }
+ptr_t cast2(ptr_t v) { return v; }
 
-
-ptr_t printAddr(ptr_t addr1, ptr_t addr2)
-{
-  static int count = 0;
-  int i, size = 20000, found = 0;
-  printf("XXX printAddr #%d: %u   %u -> (%u, %u) ->  %lf   %lf\n", count++, addr1, addr2, addr2[0], addr2[1], 
-	 *((double *)addr2[0]), *((double *)addr2[1]));
-  for (i=0; i<size && found < 4; i++)
-    if ((ptr_t)addr1[i] == addr2) {
-      printf("     %d:  point found at index %d   arrayOffset = %d\n", found, i, primaryArrayOffset);
-      found++;
-    }
+ptr_t showAddr(ptr_t v) {
+  printf("showAddr: %d  NumGC = %d   fromSpace->bottom = %d\n", v, NumGC, fromSpace->bottom);
   return empty_record;
 }
-
-
-
-ptr_t printAllAddr(ptr_t addr1)
-{
-  int i, size = 20000;
-  printf("     arrayOffset = %d\n", primaryArrayOffset);
-  for (i=0; i<size; i++) {
-    ploc_t elem = (ploc_t) addr1[i];
-    if ((i % 2) == (primaryGlobalOffset / sizeof(val_t)))
-      printf("     %u[%5d] = %u -> (%u, %u) -> %lf   %lf\n",
-	     addr1, i, elem, 
-	     elem[0], elem[1], 
-	     *((double *)elem[0]), *((double *)elem[1]));
-    else
-      printf("     %u[%5d] = %u -> (%u, %u) ->  ***\n",
-	     addr1, i, elem, 
-	     elem[0], elem[1]);
-  }
-  return empty_record;
-}
-
-
-ptr_t printCheck(ptr_t array, int index)
-{
-  ptr_t p1 = array[2*(index-1) + primaryArrayOffset/sizeof(val_t)];
-  ptr_t p2 = array[2*index     + primaryArrayOffset/sizeof(val_t)];
-  ptr_t x1 = p1[0];
-  ptr_t x2 = p2[0];
-  printf("printCheck: %10d    i = %5d    x1 = %d -> %lf     x2 = %d -> %lf\n",
-	 array, index, x1, *((double *)x1), x2, *((double *)x2));
-  return empty_record;
-}
-
-*/

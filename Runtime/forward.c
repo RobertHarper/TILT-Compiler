@@ -111,7 +111,7 @@ void expandCopyRange(CopyRange_t *copyRange, int size)
     GetHeapArea(copyRange->heap, roundSize, &copyRange->start, &copyRange->cursor, &copyRange->stop);
   else 
     copyRange->start = copyRange->cursor = copyRange->stop = 0;
-  if (collectDiag >= 2) {
+  if (collectDiag >= 3) {
     static int consumed = 0, used = 0;
     consumed += sizeof(val_t) * (oldStop - oldStart);
     used += 4 * (copyRange->proc->segUsage.fieldsCopied + copyRange->proc->segUsage.objsCopied);
@@ -136,10 +136,11 @@ void PadCopyRange(CopyRange_t *copyRange)
 
 
 INLINE(getTag)
-tag_t getTag(ptr_t obj)
+tag_t getTag(vptr_t obj)
 {
   tag_t tag = (tag_t) obj[-1];
-
+  while (tag == STALL_TAG)
+    tag = (tag_t) obj[-1];
   while (TAG_IS_FORWARD(tag)) {
     ptr_t replica = (ptr_t) tag;
     fastAssert(replica != obj);
@@ -218,7 +219,7 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRa
   if (tag == STALL_TAG) {         /* Somebody grabbed it but did not finish forwarding */
     while (tag == STALL_TAG) {
       tag = white[-1];
-      flushStore();               /* Might need to refetch from memory */
+      memBarrier();               /* Might need to refetch from memory */
     }
     assert(TAG_IS_FORWARD(tag));  /* Object forwarded by someone else now */
   }
@@ -244,7 +245,7 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRa
       if (diag) 
 	printf("Proc %d: contention copying object white = %d\n", copyRange->proc->procid, white);
       while ((tag = white[-1]) == STALL_TAG)
-	flushStore();
+	memBarrier();
       assert(TAG_IS_FORWARD(tag));
     }
     else if (TAG_IS_FORWARD(localStall))
@@ -260,8 +261,9 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRa
 }
 
 
+/* Returns the copied/allocated version - Check proc->bytesCopied to see if actually copied */
 INLINE(genericAlloc)
-int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, 
+ptr_t genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, 
 		 int doCopyCopy, int skipSpaceCheck)
 {
   ptr_t obj;                       /* forwarded object */
@@ -273,10 +275,11 @@ int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy,
   /* If the objects has not been forwarded, atomically try commiting to be the copier.
      When we leave the block, we are the copier if "tag" is not a forwarding pointer. */
   if (TAG_IS_FORWARD(tag)) {
-    /* ptr_t gray = (ptr_t) tag;
-       assert(gray != (ptr_t) gray[-1]); Make sure object is not self-forwarded */
-    proc->numShared++;
-    return 0;
+     ptr_t replica = (ptr_t) tag;
+     fastAssert(replica != (ptr_t) replica[-1]); /* Make sure object is not self-forwarded */
+     proc->numShared++;
+     proc->bytesCopied = 0;
+     return replica;
   }
   else {
     if (doCopyCopy && doCopyCopySync)  { /* We omit copy-copy sync for measuring the costs of the copy-copy sync */
@@ -302,13 +305,15 @@ int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy,
     /* Sparc TSO order guarantees forwarding pointer will be visible only after fields are visible */
     proc->numCopied++;
     proc->segUsage.fieldsCopied += numFields;
-    return objByteLen;
+    proc->bytesCopied = objByteLen;
+    return obj;
   }
   else if (TYPE_IS_FORWARD(type)) {
-    /* ptr_t gray = (ptr_t) tag;
-       assert(gray != (ptr_t) gray[-1]); Make sure object is not self-forwarded */
+    ptr_t replica = (ptr_t) tag;
+    fastAssert(replica != (ptr_t) replica[-1]); /* Make sure object is not self-forwarded */
     proc->numShared++;
-    return 0;
+    proc->bytesCopied = 0;
+    return replica;
   }
   else if (TYPE_IS_ARRAY(type)) {
     int i, arrayByteLen = GET_ANY_ARRAY_LEN(tag);
@@ -329,117 +334,118 @@ int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy,
     white[-1] = (val_t) obj;
     proc->numCopied++;
     proc->segUsage.fieldsCopied += objByteLen / 2;
-    return objByteLen;
+    proc->bytesCopied = objByteLen;
+    return obj;
   }
-  else if (IS_SKIP_TAG(tag)) {
-    return 0;
-  }
-  else 
-    printf("\n\ncopy_copyCopySync: BAD TAG: white = %d, tag = %d\n",white,tag);
+  printf("\n\ngenericAlloc: BAD TAG: white = %d, tag = %d\n",white,tag);
   assert(0);
 }
 
-int copy(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+ptr_t copy(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
   return genericAlloc(proc, white, copyRange, 1, 0, 0);
 }
 
-int alloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+ptr_t alloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
   return genericAlloc(proc, white, copyRange, 0, 0, 0);
 }
 
-int alloc_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t alloc_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 0, 0, 0);
-  if (bytesCopied) {
+  ptr_t replica = genericAlloc(proc, white, copyRange, 0, 0, 0);
+  if (proc->bytesCopied) {
     /* XXX   proc->segUsage.pagesTouched += Heap_TouchPage(from,white);   */
     pushStack(grayStack, white);
   }
-  return bytesCopied;
+  return replica;
 }
 
-int copy_noSpaceCheck(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+ptr_t copy_noSpaceCheck(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
   return genericAlloc(proc, white, copyRange, 1, 0, 1);
 }
 
-int copy_noSpaceCheck_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t copy_noSpaceCheck_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 0, 1);
-  if (bytesCopied) {
+  ptr_t replica = genericAlloc(proc, white, copyRange, 1, 0, 1);
+  if (proc->bytesCopied) 
     pushStack(grayStack, (ptr_t) white[-1]);
-  }
-  return bytesCopied;
+  return replica;
 }
 
-int copy_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+ptr_t copy_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
   return genericAlloc(proc, white, copyRange, 1, 1, 0);
 }
 
-int copy_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t copy_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 1, 0);
+  ptr_t replica = genericAlloc(proc, white, copyRange, 1, 1, 0);
   if (bytesCopied) {
     /* XXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
     pushStack(grayStack, (ptr_t) white);
   }
-  return bytesCopied;
+  return replica;
 }
 
-int copy_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t copy_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 1, 0);
-  if (bytesCopied) {
+  ptr_t replica = genericAlloc(proc, white, copyRange, 1, 1, 0);
+  if (proc->bytesCopied) {
     /* XXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
     pushStack(grayStack, (ptr_t) white[-1]);
   }
-  return bytesCopied;
+  return replica;
 }
 
-int copy_noSpaceCheck_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+ptr_t copy_noSpaceCheck_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
   return genericAlloc(proc, white, copyRange, 1, 1, 1);
 }
 
-int copy_noSpaceCheck_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t copy_noSpaceCheck_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 1, 1);
-  if (bytesCopied) {
+  ptr_t replica = genericAlloc(proc, white, copyRange, 1, 1, 1);
+  if (proc->bytesCopied) {
     pushStack(grayStack, (ptr_t) white[-1]);
   }
-  return bytesCopied;
+  return replica;
 }
 
-int alloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+ptr_t alloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
   return genericAlloc(proc, white, copyRange, 0, 1, 0);
 }
 
-int alloc_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t alloc_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 0, 1, 0);
-  if (bytesCopied) {
+  ptr_t replica = genericAlloc(proc, white, copyRange, 0, 1, 0);
+  if (proc->bytesCopied) {
     /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
     pushStack(grayStack, white);
   }
-  return bytesCopied;
+  return replica;
 }
 
-int alloc_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+ptr_t alloc_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  int bytesCopied = genericAlloc(proc, white, copyRange, 0, 1, 0);
-  if (bytesCopied) {
+  ptr_t replica = genericAlloc(proc, white, copyRange, 0, 1, 0);
+  if (proc->bytesCopied) {
     /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
     pushStack(grayStack, (ptr_t) white[-1]);
   }
-  return bytesCopied;
+  return replica;
 }
 
 /* ------------------------------------------------------- */
 /* -------------- Exported functions --------------------- */
 /* ------------------------------------------------------- */
+
+int empty_writelist(Proc_t *proc)
+{
+  return (proc->writelistCursor == proc->writelistStart);
+}
 
 /* (1) Add global roots.
    (2) If from and to are not NULL, add the locations of all pointer arrays containing back pointers 
@@ -449,7 +455,7 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
   ploc_t curLoc = proc->writelistStart;
   ploc_t end = proc->writelistCursor;
 
-  procChangeState(proc, GCWrite);
+  procChangeState(proc, GCWrite, 800);
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   proc->writelistCursor = proc->writelistStart;
   if (curLoc < end) 
@@ -481,61 +487,13 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
     field  = (ploc_t) (obj + byteOffset / sizeof(val_t));
     data = *field;
     if (NotInRange(data,&to->range)) {
-      pushStack(proc->rootLocs, (ptr_t) field);
+      pushStack(&proc->work.roots, (ptr_t) field);
     }
   }
 }
 
 
 /* --------------- Scanning routines ----------------------- */
-
-mem_t scanTag_locCopy1_noSpaceCheck_replicaStackXXX(Proc_t *proc, mem_t start, Stack_t *objStack, 
-						    CopyRange_t *copyRange, Heap_t *from)
-{
-  tag_t tag = start[0];
-  int type = GET_TYPE(tag);
-  ptr_t gray = start + 1;
-
-  proc->segUsage.objsScanned++;
-  if (type == RECORD_TYPE) {
-    unsigned mask = GET_RECMASK(tag);
-    int i, fieldLen = GET_RECLEN(tag);
-    for (i=0; i<fieldLen; i++, mask >>= 1) 
-      if (mask & 1) 
-	locCopy1_noSpaceCheck_replicaStack(proc,(ploc_t)gray + i,objStack,copyRange,from);
-    proc->segUsage.fieldsScanned += fieldLen;
-    return gray + fieldLen;
-  }
-  else if (type == WORD_ARRAY_TYPE || type == QUAD_ARRAY_TYPE) {
-    unsigned int fieldLen = (GET_ANY_ARRAY_LEN(tag) + 3) / 4; /* WORD_ARRAY len might not be mult of 4 */
-    proc->segUsage.fieldsScanned += fieldLen;
-    return gray + fieldLen;
-  }
-  else if (type == PTR_ARRAY_TYPE) {
-    int i, fieldLen = GET_ANY_ARRAY_LEN(tag) >> 2;
-    for (i=0; i<fieldLen; i++) 
-      locCopy1_noSpaceCheck_replicaStack(proc,(ploc_t)gray + i,objStack,copyRange,from);
-    proc->segUsage.ptrFieldsScanned += fieldLen;
-    return gray + fieldLen;
-  }
-  else if (type == MIRROR_PTR_ARRAY_TYPE) {
-    int i, fieldLen = GET_ANY_ARRAY_LEN(tag) >> 3;
-    for (i=0; i<fieldLen; i++) {
-      locCopy1_noSpaceCheck_replicaStack(proc,(ploc_t)gray + 2 * i + (primaryArrayOffset/sizeof(val_t)), objStack, copyRange, from);
-      gray[2 * i + (replicaArrayOffset/sizeof(val_t))] = gray[2 * i + (primaryArrayOffset/sizeof(val_t))];
-    }
-    proc->segUsage.ptrFieldsScanned += 2 * fieldLen;
-    return gray + 2 * fieldLen;
-  }
-  else if (IS_SKIP_TAG(tag))
-    return start + (GET_SKIPWORD(tag));
-  else {
-    printf("\n\nscanTag_locCopy1_noSpaceCheck: found bad tag = %d at start %d\n",tag,start);
-    assert(0);
-  }
-  assert(0);
-}
-
 mem_t scanTag_locCopy1_noSpaceCheck(Proc_t *proc, mem_t start, CopyRange_t *copyRange, 
 				    Heap_t *from)
 {
@@ -886,7 +844,7 @@ void genericScan(Proc_t *proc,
     }
     else {
       while (tag == STALL_TAG) {
-	flushStore();
+	memBarrier();
 	tag = replicaGray[-1];
       }
       continue;

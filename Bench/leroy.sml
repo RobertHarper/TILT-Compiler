@@ -1,7 +1,11 @@
-(*$import TopLevel Int *)
+(*$import Prelude List TopLevel Int *)
+
+(* Thread safety automatic since no mutable types are used *)
 
 local
-    
+
+  val silent = true
+
   exception failure of string;
   fun failwith s = raise(failure s)
 
@@ -418,10 +422,14 @@ fun kb_completion greater =
                   val N' = normal_form N;
                   fun enter_rule(left,right) =
                     let val new_rule = (n+1, mk_rule left right) in
-                     (pretty_rule new_rule;
+                     (if silent
+			  then ()
+		      else pretty_rule new_rule;
                       let fun left_reducible (_,(_,(L,_))) = reducible left L;
                           val (redl,irredl) = List.partition left_reducible rules
-                      in (do_list deletion_message redl;
+                      in (if silent
+			      then ()
+			  else do_list deletion_message redl;
                           let fun right_reduce (m,(_,(L,R))) = 
                               (m,mk_rule L (mrewrite_all (new_rule::rules) R));
                               val irreds = map right_reduce irredl;
@@ -465,7 +473,9 @@ fun kb_complete greater complete_rules rules =
         val completed_rules =
                kb_completion greater n complete_rules [] (n,n) eqs
     in (message "Canonical set found :";
-        pretty_rules (rev completed_rules);
+        if (silent)
+	    then ()
+	else pretty_rules (rev completed_rules);
         ())
     end
 ;
@@ -522,8 +532,7 @@ val Group_order = rpo Group_precedence lex_ext
 fun greater pair =
   case Group_order pair of Greater => true | _ => false
 
-    fun doit() = kb_complete greater [] Geom_rules 
-	handle e => (print "top-level exception caught and re-raised"; raise e)
 in
-    val leroyResult = doit()
+    fun runLeroy() = kb_complete greater [] Geom_rules 
+	handle e => (print "top-level exception caught and re-raised"; raise e)
 end

@@ -16,14 +16,22 @@
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
-	.globl	flushStore
+	.globl	memOrder
+	.globl	memBarrier
 
 	.proc	07
 	.align	4
-flushStore:
-	membar	#StoreStore | #StoreLoad | #LoadLoad | #LoadStore | #Sync | #MemIssue | #Lookaside
+memOrder:	
+	membar	#StoreStore | #StoreLoad | #LoadLoad | #LoadStore 
 	retl
 	nop
+
+	.proc	07
+	.align	4
+memBarrier:	
+	membar	#Sync | #MemIssue | #Lookaside
+	retl
+	nop	
 			
  ! ----------------------------------------------------------------------------	
  ! CompareAndAdd takes an address, a test value, and a new value
@@ -94,21 +102,22 @@ GetTick:
 	
  ! ------------------------ start_client  -------------------------------------
  ! first C arg = current thread pointer
+ ! second C arg = thunk pointer
  ! ----------------------------------------------------------------------------
 	.proc	07
 	.align	4
 start_client:
 	flushw
-	mov	%o0, THREADPTR_REG		! initialize thread ptr outside loop
+	mov	%o0, THREADPTR_REG		! initialize thread ptr
+	mov	%o1, %r4			! save thunk in r4
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs			! restore dedicated pointers like
 	nop					! heap pointer, heap limit, and stack pointer
 							! don't need to restore return address
+	mov	%r4, ASMTMP_REG				! move thunk to temp
 	ld	[%r1+16], %r4				! restore r4 which is not restored by load_regs
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
 	st	%g0, [THREADPTR_REG + notinml_disp]             ! leaving to ML
- 	ld	[THREADPTR_REG + thunk_disp], ASMTMP_REG	! fetch thunk
- 	st	%g0, [THREADPTR_REG + thunk_disp]		! erase thunk
 	ld	[ASMTMP_REG + 0], LINK_REG		! fetch code pointer
 	ld	[ASMTMP_REG + 4], %o0			! fetch type env
 	ld	[ASMTMP_REG + 8], %o1			! fetch term env

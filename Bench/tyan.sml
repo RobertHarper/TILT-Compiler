@@ -1,5 +1,7 @@
-(*$import TopLevel List Array Int *)
+(*$import Prelude TopLevel List Array Int TextIO *)
 
+functor makeRunTyan() = 
+struct
 local
 
 fun fold f l acc = List.foldr f acc l
@@ -863,18 +865,31 @@ val u5 = map G.parsePoly ["abcde-f5","a+b+c+d+e","ab+bc+cd+de+ea","abc+bcd+cde+d
 val u4 = map G.parsePoly ["abcd-e4","a+b+c+d","ab+bc+cd+da","abc+bcd+cda+dab"]
 
 
-fun runit () = 
-    let
-	val _ = (print "Enter fs, u7, u6, u5, or u4: "; TextIO.flushOut TextIO.stdOut);
-	val s = TextIO.inputN(TextIO.stdIn,2)
-	val data = if (s = "fs") then fs else if (s = "u7") then u7 else if (s = "u6") then u6 else 
+fun runit s = 
+    let	val data = if (s = "fs") then fs else if (s = "u7") then u7 else if (s = "u6") then u6 else 
 	    if (s = "u5") then u5 else if (s = "u4") then u4 else 
 		(print "no such data\n"; raise (Util.Impossible "no such data"))
     in
 	gb data handle e => report e
     end
 
+fun readTyanInput() = 
+    let val _ = (print "Enter fs, u7, u6, u5, or u4: "; TextIO.flushOut TextIO.stdOut);
+	val s = TextIO.inputN(TextIO.stdIn,2)
+    in s
+    end
 in
-    val tyanResult = runit()
+    fun runTyan() = runit "u6"  (* readTyanInput() *)
 end
+end
+
+structure runTyan = makeRunTyan()
+structure runTyan1 = makeRunTyan()
+structure runTyan2 = makeRunTyan()
+structure runTyan3 = makeRunTyan()
+
+val runTyan = runTyan.runTyan
+val runTyan1 = runTyan1.runTyan
+val runTyan2 = runTyan2.runTyan
+val runTyan3 = runTyan3.runTyan
 

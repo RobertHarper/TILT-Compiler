@@ -1,5 +1,5 @@
 // include the basis and NJ library
-#include    ../Basis/Library/mapfile-lib
+#include    ../Basis/Library/mapfile
 
 // ------------ Util directory --------------
 

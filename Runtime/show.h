@@ -8,6 +8,7 @@
 extern long SemanticGarbageSize;
 extern int traceError;
 
+mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **legalHeaps, Bitmap_t **legalStarts);
 void scan_heap(char *label, mem_t start, mem_t finish, mem_t top, Heap_t **legalHeaps, Bitmap_t **legalStarts,
 	       int show, int doReplica, Bitmap_t *makeStart);
 

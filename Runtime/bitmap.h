@@ -11,7 +11,7 @@ struct Bitmap_st
   unsigned long *data; 
 };
 
-typedef struct Bitmap_st Bitmap_t;
+typedef volatile struct Bitmap_st Bitmap_t;
 
 Bitmap_t *CreateBitmap(int size);
 void      DestroyBitmap(Bitmap_t *);

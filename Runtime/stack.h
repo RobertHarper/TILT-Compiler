@@ -61,4 +61,7 @@ ploc_t DupGlobal(ptr_t global)
   return replicaLoc;
 }
 
+void installThreadRoot(Thread_t *th, ploc_t rootLoc);
+void uninstallThreadRoot(Thread_t *th, ploc_t rootLoc);
+
 #endif

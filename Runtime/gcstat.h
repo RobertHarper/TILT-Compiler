@@ -16,7 +16,7 @@ struct Object_Profile__t
   int PArrayWord;
 };
 
-typedef struct Object_Profile__t Object_Profile_t;
+typedef volatile struct Object_Profile__t Object_Profile_t;
 
 void object_profile_init(Object_Profile_t *);
 void show_gcstats(Object_Profile_t *alloc, Object_Profile_t *collect);

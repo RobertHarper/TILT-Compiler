@@ -33,10 +33,15 @@ int SHOW_GCDEBUG   = 0;
 int SHOW_HEAPS     = 0;
 int SHOW_GLOBALS   = 0;
 int SHOW_GCFORWARD = 0;
+double pauseWarningThreshold = -1.0;
 
 
 GCType_t GCType = Minor;
 GCStatus_t GCStatus = GCOff;
+
+Statistic_t        heapSizeStatistic;    
+Statistic_t        minorSurvivalStatistic;
+Statistic_t        majorSurvivalStatistic;
 
 Heap_t *fromSpace = NULL, *toSpace = NULL;
 Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
@@ -54,6 +59,8 @@ extern val_t GLOBALS_BEGIN_VAL;
 extern val_t GLOBALS_END_VAL;
 extern void PopStackletFromML(void);
 
+int minAllocRegion = 256;         /* Minimum allocation region size in bytes.  Mutator will be resumed with at least this 
+				     many bytes even if allocation request is less. */
 int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
@@ -177,6 +184,10 @@ void GCInit(void)
   minOffRequest = RoundUp(minOffRequest, pagesize);
   minOnRequest = RoundUp(minOnRequest, pagesize);
 
+  reset_statistic(&minorSurvivalStatistic);
+  reset_statistic(&heapSizeStatistic);
+  reset_statistic(&majorSurvivalStatistic);
+
   switch (collector_type) {
   case Semispace:
     GCFun = GC_Semi;
@@ -265,8 +276,8 @@ void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **lega
 void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
     int count = 0, mi, i;
-    unsigned long *saveregs = thread->saveregs;
-    StackChain_t *stackChain = thread->stack;
+    volatile unsigned long *saveregs = thread->saveregs;
+    StackChain_t *stackChain = (StackChain_t *) thread->stack;
     ptr_t thunk = thread->thunk;
 
     /* should check start_addr */
@@ -413,7 +424,7 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
 mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* bytesToAlloc does not include alignment */
 {
   mem_t alloc = (mem_t) thread->saveregs[ALLOCPTR];
-  mem_t limit = (mem_t) thread->saveregs[ALLOCLIMIT];
+  mem_t limit = (mem_t) thread->saveregs[ALLOCLIMIT]; /* limit might be StopHeapLimit */
   int wordsToAlloc = bytesToAlloc >> 2;
   mem_t region = NULL;
   if (alloc + wordsToAlloc + (align == NoWordAlign ? 0 : 1) <= limit) {
@@ -422,7 +433,8 @@ mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* byte
     alloc += wordsToAlloc;
     thread->saveregs[ALLOCPTR] = (val_t) alloc;
   }
-  assert(thread->saveregs[ALLOCPTR] <= thread->saveregs[ALLOCLIMIT]);
+  assert((thread->saveregs[ALLOCLIMIT] == limit) ||
+	 (thread->saveregs[ALLOCPTR] < thread->saveregs[ALLOCLIMIT]));
   return region;
 }
 
@@ -441,19 +453,25 @@ mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t al
 
 static ptr_t alloc_bigdispatcharray(ArraySpec_t *spec)
 {
+  ptr_t result = NULL;
   Proc_t *proc = getProc();
   Thread_t *thread = proc->userThread;
   assert(spec->byteLen >= 512);
+  if (spec->type == PointerField || spec->type == MirrorPointerField)
+    installThreadRoot(thread,&spec->pointerVal);
   switch (collector_type) {
-    case Semispace:              return AllocBigArray_Semi(proc,thread,spec);
-    case Generational:           return AllocBigArray_Gen(proc,thread,spec);
-    case SemispaceParallel:      return AllocBigArray_SemiPara(proc,thread,spec);
-    case GenerationalParallel:   return AllocBigArray_GenPara(proc,thread,spec);
-    case SemispaceConcurrent:    return AllocBigArray_SemiConc(proc,thread,spec);
-    case GenerationalConcurrent: return AllocBigArray_GenConc(proc,thread,spec);
-    case SemispaceStack:         return AllocBigArray_SemiStack(proc,thread,spec);
+    case Semispace:              result = AllocBigArray_Semi(proc,thread,spec); break;
+    case Generational:           result = AllocBigArray_Gen(proc,thread,spec); break;
+    case SemispaceParallel:      result = AllocBigArray_SemiPara(proc,thread,spec); break;
+    case GenerationalParallel:   result = AllocBigArray_GenPara(proc,thread,spec); break;
+    case SemispaceConcurrent:    result = AllocBigArray_SemiConc(proc,thread,spec); break;
+    case GenerationalConcurrent: result = AllocBigArray_GenConc(proc,thread,spec); break;
+    case SemispaceStack:         result = AllocBigArray_SemiStack(proc,thread,spec); break;
     default: assert(0);
   }
+  if (spec->type == PointerField || spec->type == MirrorPointerField)
+    uninstallThreadRoot(thread,&spec->pointerVal);
+  return result;
 }
 
 /* Compute reduced heap size by reserving area and rounding down to nearest page */
@@ -516,6 +534,7 @@ void GCPoll(Proc_t *proc)
 /* Is there enough room in proc to satisfy mapping th onto it?  
    Does not consider overriding factors such as intentionally signalled 
    major GC or flipping collector on and off.
+   Area is discarded if too small by considering the request unsatisfied.
  */
 int GCSatisfiable(Proc_t *proc, Thread_t *th)
 {
@@ -523,11 +542,12 @@ int GCSatisfiable(Proc_t *proc, Thread_t *th)
      requestInfo > 0 means that many bytes of allocation is requested 
      requestInfo == 0 is illegal
   */
+  int allocSpaceLeft = (val_t) proc->allocLimit - (val_t) proc->allocCursor;
   if (th->requestInfo < 0) {
     return ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd);
   } 
   else if (th->requestInfo > 0) {
-    return (th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit);
+    return (allocSpaceLeft > minAllocRegion) && (th->requestInfo < allocSpaceLeft);
   }
   else
     assert(0);
@@ -536,48 +556,44 @@ int GCSatisfiable(Proc_t *proc, Thread_t *th)
 
 void GCFromScheduler(Proc_t *proc, Thread_t *th)
 {  
-  procChangeState(proc, GC);
-  assert(proc->userThread == NULL);
-  assert(th->proc == NULL);
-  procChangeState(proc, GC);                     /* Definitely have to do work when stop/copy */
+  procChangeState(proc, GC, 1000);
   ((*GCFun)(proc,th));
   assert(GCSatisfiable(proc,th));
 }
 
 void GCReleaseThread(Proc_t *proc)
 {  
+  procChangeState(proc, Scheduler, 1002);
   (*GCReleaseFun)(proc);
 }
 
 /* Does not return - goes to scheduler */
 void GCFromMutator(Thread_t *curThread)
 {
-  Proc_t *self = curThread->proc;
+  Proc_t *proc = (Proc_t *) curThread->proc;
   mem_t alloc = (mem_t) curThread->saveregs[ALLOCPTR];
   mem_t limit = (mem_t) curThread->saveregs[ALLOCLIMIT];
-  mem_t sysAllocCursor = self->allocCursor;
-  mem_t sysAllocLimit = self->allocLimit;
+  mem_t sysAllocCursor = proc->allocCursor;
+  mem_t sysAllocLimit = proc->allocLimit;
 
   /* Check that we are running on own stack and allocation pointers consistent */
   if (paranoid)
-    assert(self == (getProc())); /* getProc is slow */
-  assert(self->userThread == curThread);
-  assert((self->stack - (int) (&self)) < 1024) ;
+    assert(proc == (getProc())); /* getProc is slow */
+  assert(proc->userThread == curThread);
+  assert((proc->stack - (int) (&proc)) < 1024) ;
   assert((limit == sysAllocLimit) || (limit == StopHeapLimit));
   assert(alloc <= sysAllocLimit);
 
   /* Write skip tag to indicate the end of region and then release job */
   PadHeapArea(alloc, sysAllocLimit);
 
-  /* For now, always unmap the job and run the scheduler which will invoke GC if necessary */
-  ReleaseJob(self);
-  scheduler(self);
+  /* ReleaseJob(proc) */
+  UpdateJob(proc); /* Update processor's info, GCRelease thread, but don't unmap */
+  procChangeState(proc, Scheduler, 1003);
+  scheduler(proc);
   assert(0);
 }
 
-extern Stacklet_t *Stacklets; /* XXXX */
-
-  
 /* maxOffset is non-zero if the caller passed arguments on the stack */
 void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 {
@@ -589,7 +605,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
   mem_t returnToCallee = (mem_t) curThread->saveregs[RA];
 #endif
   Stacklet_t *oldStacklet, *newStacklet;
-  StackChain_t *stackChain = curThread->stack;
+  StackChain_t *stackChain = (StackChain_t *) curThread->stack;
 
   oldStacklet = EstablishStacklet(stackChain, sp); /* saves sp already */
   oldStacklet->retadd = returnToCaller;
@@ -614,15 +630,6 @@ void PopStackletFromMutator(Thread_t *curThread)
   Stacklet_t *newStacklet = NULL;
 
   EstablishStacklet(curThread->stack, sp);
-  /* XXX
-     printf("PopStackletFromMutator: %d -> %d            ", curThread->stack->cursor, curThread->stack->cursor-1);
-  {
-    int i;
-    for (i=0; i<curThread->stack->cursor-1; i++)
-      printf("%d : %s         ", i, curThread->stack->stacklets[i]->active ? "  active" : "inactive"); 
-    printf("\n");
-  }
-  */
   PopStacklet(curThread->stack);
   newStacklet = CurrentStacklet(curThread->stack);
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);

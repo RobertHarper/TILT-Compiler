@@ -1,4 +1,6 @@
-(*$import TopLevel *)
+(*$import Prelude TopLevel *)
+
+(* Thread safety automatic since no mutable types are used *)
 
 (*
 extern fastTimerOn : (unit) -->
@@ -199,7 +201,6 @@ val gun = mkgen
       end
 
 in
-    fun lifeDoit() = doit 10 10 gun
-    val lifeResult = lifeDoit()
+    fun runLife() = doit 5 30 gun
 end
 

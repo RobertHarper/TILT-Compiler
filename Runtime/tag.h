@@ -18,6 +18,7 @@ typedef ui_t *ptr_t;        /* An ML value that has a pointer type.
                                 It might be a small-valued constructor (<= 256),
 			        points to global data (in the data segment),
 			        or is in the heap(s). */
+typedef volatile ui_t *vptr_t;
 typedef val_t *loc_t;        /* A location which contains an ML value.
 				External information is needed to determine whether
 				the location contains a pointer value or not.

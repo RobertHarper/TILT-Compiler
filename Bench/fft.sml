@@ -1,4 +1,6 @@
-(*$import TopLevel Math64 Real64 Array *)
+(*$import Prelude Int TopLevel Math64 Real64 Array *)
+
+(* Thread safety automatic since no top-level mutable values are present *)
 
 (***********************************************************************)
 (*                                                                     *)
@@ -263,10 +265,10 @@ fun test np =
  end)
 
 in
-    fun fftdoit() = 
+    fun runFft() = 
 	let 
 	    val np = ref 16 
 	in for(1,14,fn i => (test (!np); np := (!np)*2))
 	end
-    val fftResult = fftdoit()
+
 end

@@ -11,9 +11,9 @@
 #include "hash.h"
 #include "stats.h"
 #include "memobj.h"
-#include "client.h"
 #include "forward.h"
 #include "global.h"
+#include "client.h"
 
 int GCTableEntryIDFlag = 0;  /* let the user code set it if it thinks it's on */
 int save_rate = 70;
@@ -140,10 +140,6 @@ void stack_init()
   global_root_init();
 }
 
-#ifdef CACHE_DEBUG
-int XXXcount, XXXhit[100], XXXmiss[100];
-int XXXmissValCursor = 0, XXXmissVal[64];
-#endif /* CACHE_DEBUG */
 
 INLINE(LookupCallinfo)
 Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
@@ -160,16 +156,8 @@ Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
 #endif
 
    if ((val_t) proc->lastHashKey == key) {
-#ifdef CACHE_DEBUG
-     XXXhit[XXXcount]++;
-#endif
      return proc->lastHashData;
    }
-#ifdef CACHE_DEBUG
-  XXXmiss[XXXcount]++;
-  XXXmissVal[XXXmissValCursor++] = key;
-  XXXmissValCursor &= 63;
-#endif
   e = HashTableLookup(CallinfoHashTable,(unsigned long) key,0);
   if (e == NULL) {
     fprintf(stderr,"FATAL ERROR: key = %d not found in table during stack trace\n",key);
@@ -318,32 +306,6 @@ int should_trace(unsigned long trace,
     return should_trace_special(cursor, cur_sp, regstate, data_add, i);
 }
 
-#ifdef CACHE_DEBUG
-static void uptrace_stackletXXX(Proc_t *proc, Stacklet_t *stacklet, int stackletOffset)
-{
-  Stack_t *callinfoStack = stacklet->callinfoStack;
-  int count = 0;
-  mem_t curSP = stacklet->replicaCursor + stackletOffset / sizeof(val_t), nextSP;
-  mem_t curRA = stacklet->replicaRetadd, nextRA;
-  mem_t top = stacklet->baseTop + stackletOffset / sizeof(val_t);
-  mem_t guardSP = curSP;
-
-  assert(isEmptyStack(callinfoStack));
-  while (curSP < top) {
-    Callinfo_t *callinfo = LookupCallinfo(proc,(val_t)curRA);
-    CallinfoCursor_t *cursor = getCursor(proc, callinfo);
-    curRA = (mem_t) curSP[cursor->RAQuadOffset];
-    curSP = curSP + cursor->frameSize;
-    count++;
-    if ((count & 127) == 127) {
-      XXXcount++;
-    }
-    if (count > 240)
-      break;
-  }
-}
-#endif
-
 static void uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOffset)
 {
   Stack_t *callinfoStack = stacklet->callinfoStack;
@@ -384,7 +346,7 @@ done, bot_sp will point to the bottom of the last processed frame.
 */
 static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 				       int stackletOffset,
-				       unsigned long *saveregs)
+				       volatile unsigned long *saveregs)
 {
   int i, j, k;
   mem_t cur_sp = stacklet->baseTop + stackletOffset / sizeof(val_t);
@@ -419,7 +381,9 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 	  ptr_t data = (ptr_t) cur_sp[slot];
 	  if (IsTagData(data) || IsGlobalData(data))
 	    continue;
-	  pushStack(proc->rootLocs, (ptr_t) &cur_sp[slot]); 
+	  if (debugStack) 
+	    printf("   pushed location %d\n", (ptr_t) &cur_sp[slot]);
+	  pushStack(&proc->work.roots, (ptr_t) &cur_sp[slot]); 
 	}
       }
     }
@@ -440,7 +404,9 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 	      ptr_t data = (ptr_t) cur_sp[curSlot];
 	      if (IsTagData(data) || IsGlobalData(data))
 		continue;
-	      pushStack(proc->rootLocs, (ptr_t) &cur_sp[curSlot]);
+	      if (debugStack) 
+		printf("   pushed location %d\n", (ptr_t) &cur_sp[curSlot]);
+	      pushStack(&proc->work.roots, (ptr_t) &cur_sp[curSlot]);
 	    }
 	  }
 	}
@@ -479,8 +445,37 @@ static void addRegRoots(Proc_t *proc, unsigned long *saveregs, unsigned int regM
       ploc_t rootLoc = (ploc_t) &saveregs[i];
       ptr_t rootVal = *rootLoc;
       if (!(IsTagData(rootVal)) && !(IsGlobalData(rootVal))) 
-	pushStack(proc->rootLocs, (ptr_t) rootLoc);
+	pushStack(&proc->work.roots, (ptr_t) rootLoc);
     }
+}
+
+/* Might be given rootLoc that was already installed */
+void installThreadRoot(Thread_t *th, ploc_t rootLoc)
+{
+  int i;
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    if (th->rootLocs[i] == rootLoc)
+      return;
+    if (th->rootLocs[i] == NULL) {
+      th->rootLocs[i] = rootLoc;
+      th->rootVals[i] = *rootLoc;
+      return;
+    }
+  }
+  assert(0);
+}
+
+/* Might be given rootLoc that was never installed */
+void uninstallThreadRoot(Thread_t *th, ploc_t rootLoc)
+{
+  int i;
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    if (th->rootLocs[i] == rootLoc) {
+      th->rootLocs[i] = NULL;
+      th->rootVals[i] = NULL;
+      return;
+    }
+  }
 }
 
 void thread_root_scan(Proc_t *proc, Thread_t *th)
@@ -494,9 +489,18 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   if (collectDiag >= 2)
     printf("Proc %d: GC %d: thread_root_scan on thread %d with thunk %d\n", proc->procid, NumGC, th->tid, thunk);
 
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    if (th->rootLocs[i] != NULL) {
+      ptr_t rootVal = *th->rootLocs[i];
+      if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
+	pushStack(&proc->work.roots, (ptr_t) th->rootLocs[i]);
+    }
+  }
+
+  /* Alternatively, we can call installThreadRoot and uninstallThreadRoot */
   if (thunk != NULL) {
     if (!IsTagData(thunk) && !IsGlobalData(thunk)) 
-      pushStack(proc->rootLocs, (ptr_t) &(th->thunk));
+      pushStack(&proc->work.roots, (ptr_t) &(th->thunk));
     return;   /* Thunk not yet started and so no more roots */
   }
 
@@ -530,24 +534,53 @@ int initial_root_scan(Proc_t *proc, Thread_t *th)
   ptr_t thunk = th->thunk;
 
   Thread_Pin(th);
-    
-  if (thunk != NULL) {
-    if (!IsTagData(thunk) && !IsGlobalData(thunk)) {
-      th->snapshotThunk = thunk;
-      pushStack(proc->rootLocs, (ptr_t) &th->snapshotThunk);
+
+  installThreadRoot(th, (ploc_t) &th->thunk);
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    ptr_t rootVal = th->rootVals[i];
+    if (rootVal != NULL) {
+      if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
+	pushStack(&proc->work.roots, (ptr_t) &th->rootVals[i]);
     }
-    return 0;   /* Thunk not yet started and so no more roots */
   }
+
+  if (thunk != NULL) 
+    return 0;   /* Thunk not yet started and so no more roots */
+
   assert(stack->cursor > 0);
   assert(th->snapshot == NULL);
-  th->snapshot = StackChain_Copy(stack);          /* New stack chain */
+  th->snapshot = StackChain_Copy(th,stack);          /* New stack chain */
   for (i=0; i<stack->cursor; i++) 
     th->snapshot->stacklets[i]->state = Pending;  /* Snapshot copying delayed */
-
   for (i=0; i<32; i++)
     th->snapshotRegs[i] = th->saveregs[i];  
 
+  if (th->snapshot->cursor <= 0) {
+    extern StackChain_t *StackChains;
+    extern Thread_t *Threads;
+    int i;
+      printf("BAD Thread %d %d   stack %d   snapshot %d   stack->cursor = %d   snapshot->cursor = %d   snapshot->thread = %d\n\n",
+	     th->tid, th->id, 
+	     th->stack - &(StackChains[0]), th->snapshot - &(StackChains[0]),
+	     th->stack->cursor, th->snapshot->cursor, 
+	     ((Thread_t *)th->snapshot->thread)->id);
+    for (i=0; i<NumThread; i++) {
+      Thread_t *th = &Threads[i];
+      printf("Thread %4d %4d   ", th->tid, th->id);
+      if (th->stack == NULL)
+	printf("stack = NULL                                   ");
+      else
+	printf("stack %4d   cursor %d  thread %d           ", th->stack - &(StackChains[0]), th->stack->cursor, 
+	       ((Thread_t *)th->stack->thread)->id);
+      if (th->snapshot == NULL)
+	printf("snapshot = NULL                \n");
+      else
+	printf("snapshot %4d cursor %d  thread %d\n", th->snapshot - &(StackChains[0]), th->snapshot->cursor, 
+	       ((Thread_t *)th->snapshot->thread)->id);
+    }
+  }
   assert(th->snapshot->cursor > 0);
+
   return 1;
 }
 
@@ -610,18 +643,8 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack= th->stack;
   int firstActive = stack->cursor;
 
-#ifdef CACHE_DEBUG
-  resetTimeList(); 
-  resetPerfMon();
-  addTimeList(proc, 0, 0);
-  XXXcount = 0;
-  XXXmissValCursor = 0;
-  for (i=0; i<100; i++)
-    XXXhit[i] = XXXmiss[i] = 0;
-#endif
-
   /* Thread might not be really be live but was pinned to preserve liveness so 
-     that snapshot, snapshotThunk, and snapshotRegs can be used */
+     that snapshot and snapshotRegs can be used */
   Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
   if (th->used == 0)  /* Thread is actually dead now.  Was live only due to pinning */
     return;
@@ -630,11 +653,20 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
     StackChain_Dealloc(th->snapshot);
     th->snapshot = NULL;
   }
-  if (th->thunk != NULL) {
-    if (!IsTagData(th->thunk) && !IsGlobalData(th->thunk)) 
-      pushStack(proc->rootLocs, (ptr_t) &(th->thunk));
-    return;   /* Thunk not yet started and so no more roots */
+
+  installThreadRoot(th, (ploc_t) &th->thunk);   /* Thread may not have existed at the beginning of the GC and
+						   so initial_root_scan was not called on it */
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    if (th->rootLocs[i] != NULL) {
+      ptr_t rootVal = *th->rootLocs[i];
+      if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
+	pushStack(&proc->work.roots, (ptr_t) th->rootLocs[i]);
+    }
   }
+  uninstallThreadRoot(th, (ploc_t) &th->thunk);
+
+  if (th->thunk != NULL) 
+    return;   /* Thunk not yet started and so no more roots */
 
   for (i=0; i<stack->cursor; i++) {
     Stacklet_t *stacklet = stack->stacklets[i];
@@ -642,54 +674,18 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
       if (firstActive == stack->cursor)
 	firstActive = i;
       stacklet->state = Pending;
-#ifdef CACHE_DEBUG
-      addTimeList(proc, 1, 0);
-#endif
       Stacklet_Copy(stacklet);
-#ifdef CACHE_DEBUG
-      addTimeList(proc, 2, 0);
-      lapPerfMon();
-      /* Uptrace can be done independently of other stacklets */
-      uptrace_stackletXXX(proc, stacklet, replicaStackletOffset);
-      resetStack(stacklet->callinfoStack);
-      XXXcount++;
-      lapPerfMon();
-      addTimeList(proc, 3, 0);
-#endif
       uptrace_stacklet(proc, stacklet, replicaStackletOffset);
-#ifdef CACHE_DEBUG
-      lapPerfMon();
-      addTimeList(proc, 4, 0);
-#endif
     }
   }
   assert(firstActive <= stack->cursor);  /* Could equal if collection finished in first segment */
 
   for (i=firstActive; i<stack->cursor; i++) {
-#ifdef CACHE_DEBUG
-    addTimeList(proc, 5, 0);
-#endif
     downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
-#ifdef CACHE_DEBUG
-    lapPerfMon();
-    addTimeList(proc, 6, 0);
-#endif
   }
   regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
   addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
 
-#ifdef CACHE_DEBUG
-  addTimeList(proc, 7, 0);
-  if (showTimeList(3.0)) {
-    printf("\n");
-    for (i=0; i<=XXXcount; i++)
-      printf("hit[%d] = %d   miss[%d] = %d\n", i, XXXhit[i], i, XXXmiss[i]);
-    for (i=0; i<=64; i++)
-      printf("missVal[%d] = %d\n", i, XXXmissVal[i]);
-    printf("\n");
-    showPerfMon(0);
-  }
-#endif
 }
 
 
@@ -701,8 +697,12 @@ void discard_root_scan(Proc_t *proc, Thread_t *th)
   int firstActive = stack->cursor;
 
   /* Thread might not be really be live but was pinned to preserve liveness so 
-     that snapshot, snapshotThunk, and snapshotRegs can be used */
+     that snapshot and snapshotRegs can be used */
   Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
+  if (th->used == 0)  /* Thread is actually dead now.  Was live only due to pinning */
+    return;
+
+  uninstallThreadRoot(th, (ploc_t) &th->thunk);
   if (th->snapshot != NULL) {
     StackChain_Dealloc(th->snapshot);
     th->snapshot = NULL;
@@ -759,7 +759,7 @@ void add_global_root(Proc_t *proc, mem_t global)
 
 void minor_global_scan(Proc_t *proc)
 {  
-  copyStack(&promotedGlobal, proc->globalLocs);
+  copyStack(&promotedGlobal, &proc->work.globals);
 }
 
 /* Transfers items from promotedGlobal to tenuredGlobal */
@@ -774,7 +774,7 @@ void major_global_scan(Proc_t *proc)
   minor_global_promote(proc);
   assert(isEmptyStack(&promotedGlobal));
   proc->segUsage.globalsProcessed += lengthStack(&tenuredGlobal) / 10;
-  copyStack(&tenuredGlobal, proc->globalLocs);
+  copyStack(&tenuredGlobal, &proc->work.globals);
 }
 
 void NullGlobals(int globalOffset)

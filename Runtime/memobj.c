@@ -14,13 +14,14 @@
 #include "stats.h"
 #include "thread.h"
 
-Stacklet_t *Stacklets; /* XXXX should be static */
-static StackChain_t *StackChains;
-static Heap_t  *Heaps;
+Stacklet_t   *Stacklets; 
+StackChain_t *StackChains;
+Heap_t       *Heaps;
 
 int NumHeap       = 20;
-int NumStacklet   = 100;
-int NumStackChain = 100;
+int NumStackChain = 200;  /* 2 * NumThread */
+int NumStacklet   = 200;  /* NumStackChain */
+
 
 mem_t StopHeapLimit  = (mem_t) 1; /* A user thread heap limit used to indicates that it has been interrupted */
 mem_t StartHeapLimit = (mem_t) 2; /* A user thread heap limit used to indicates that it has not been given space */
@@ -29,7 +30,7 @@ mem_t StartHeapLimit = (mem_t) 2; /* A user thread heap limit used to indicates 
 int MLStackletSize = 128;        /* Normal area available to ML */
 int CStackletSize = 32;          /* Extra area made available when calling C */
 int GuardStackletSize;           /* Guard page at bottom */
-int primaryStackletOffset, replicaStackletOffset;
+int primaryStackletOffset, replicaStackletOffset, stackletOffset;
 
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
@@ -110,13 +111,17 @@ void StackInitialize(void)
     Stacklets[i].count = 0;
     Stacklets[i].mapped = 0;
   }
-  for (i=0; i<NumStackChain; i++)
+  for (i=0; i<NumStackChain; i++) {
     StackChains[i].used = 0;
+    StackChains[i].thread = NULL;
+  }
 }
 
 void Stacklet_Dealloc(Stacklet_t *stacklet)
 {
   assert(stacklet->count > 0);
+  if (stacklet->count == 1)
+    stacklet->parent = NULL;
   stacklet->count--;
 }
 
@@ -136,8 +141,10 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
 {
   int i;
   Stacklet_t *res = NULL;
+  /* Each stacklet contains the primary and replica.  Each one starts with a guard page, a C area, and then an ML area. */
   int size = (GuardStackletSize + MLStackletSize + CStackletSize) * kilobyte;  /* for just one of the two: primary and replica */
 
+  assert(stackletOffset == size);
   for (i=0; i<NumStacklet; i++)
     if (CompareAndSwap(&Stacklets[i].count, 0, 1) == 0) {
       res = &Stacklets[i];
@@ -145,6 +152,7 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
     }
   assert(res != NULL);
 
+  res->parent = stackChain;
   res->state = Inconsistent;
   if (!res->mapped) {
     mem_t start = my_mmap((caddr_t) (stackstart + (2 * i * size) / (sizeof (val_t))), 
@@ -198,6 +206,19 @@ Stacklet_t *NewStacklet(StackChain_t *stackChain)
   return newStacklet;
 }
 
+int badcode(Stacklet_t *stacklet)
+{
+  StackletState_t state;
+
+  state = CompareAndSwap((int*) &stacklet->state, Pending, Copying);
+  if (state == Pending) {
+    return 1;
+  }
+  while (stacklet->state == Copying)
+    ;
+  return 0;
+}
+
 /* Copy primary into replica */
 int Stacklet_Copy(Stacklet_t *stacklet)
 {
@@ -236,7 +257,8 @@ Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp)
   mem_t sp_base = sp - primaryStackletOffset / sizeof(val_t);
   for (active=stackChain->cursor-1; active>=0; active--) {
     Stacklet_t *stacklet = stackChain->stacklets[active];
-    if (stacklet->baseBottom <= sp_base && sp_base <= stacklet->baseTop) { /* Not cursor since that is not reliable yet */
+    if (stacklet->baseExtendedBottom <= sp_base && 
+	sp_base <= stacklet->baseTop) { 
       stacklet->baseCursor = sp_base;
       break;
     }
@@ -249,7 +271,6 @@ Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp)
   stackChain->cursor = active + 1;
   return stackChain->stacklets[active]; 
 }
-
 
 /* Deallocate most recent stacklet - at least one active must remain */
 void PopStacklet(StackChain_t *stackChain)
@@ -275,24 +296,51 @@ void DequeueStacklet(StackChain_t *stackChain)
   assert(stackChain->cursor>=0);
 }
 
-StackChain_t* StackChain_BaseAlloc(void)
+void showAllThreads()
+{
+  int i;
+  for (i=0; i<NumThread; i++) {
+    Thread_t *th = &Threads[i];
+    StackChain_t *stack = th->stack;
+    StackChain_t *snap = th->snapshot;
+    int stackNum = (stack == NULL) ? -1 : (stack - &StackChains[0]);
+    int snapNum = (snap == NULL) ? -1 : (snap - &StackChains[0]);
+    printf("%3d: stat = %d    tid = %4d  stack = %3d   snap = %3d\n", 
+	   i, th->status, th->tid, stackNum, snapNum);
+  }
+  printf("\n\nStackChains:\n");
+  for (i=0; i<NumStackChain; i++) {
+    StackChain_t *sc = &StackChains[i];
+    Thread_t *th = (Thread_t *) sc->thread;
+    int tid = (th == NULL) ? -1 : (th - &Threads[0]);
+    printf("%3d: th = %d\n",
+	   i, tid);
+  }
+}
+
+StackChain_t* StackChain_BaseAlloc(Thread_t *t)
 {
   int i;
   for (i=0; i<NumStackChain; i++)
-    if (!StackChains[i].used) {
+    if (CompareAndSwap(&StackChains[i].used, 0, 1) == 0) {
       StackChain_t *res = &StackChains[i];
-      res->used = 1;
+      /* memBarrier(); */
+      assert(res->used == 1);
       res->cursor = 0;
+      res->thread = t;
       return res;
     }
+  showAllThreads();
   assert(0);
 }
 
 
-StackChain_t* StackChain_Copy(StackChain_t *src)
+StackChain_t* StackChain_Copy(void *tVoid, StackChain_t *src)
 {
   int i;
-  StackChain_t* res = StackChain_BaseAlloc();
+  Thread_t *t = (Thread_t *) tVoid;
+  StackChain_t* res = StackChain_BaseAlloc(t);
+  assert(t == t->stack->thread);
   assert(src->used);
   res->cursor = src->cursor;
   for (i=0; i<src->cursor; i++) {
@@ -313,9 +361,10 @@ int StackChain_Size(StackChain_t *chain)
 }
 
 
-StackChain_t* StackChain_Alloc()
+StackChain_t* StackChain_Alloc(void *tVoid)
 {
-  StackChain_t* res = StackChain_BaseAlloc();
+  Thread_t *t = (Thread_t *) tVoid;
+  StackChain_t* res = StackChain_BaseAlloc(t);
   NewStacklet(res);
   return res;
 }
@@ -325,19 +374,20 @@ void StackChain_Dealloc(StackChain_t *stackChain)
   int i;
   for (i=0; i<stackChain->cursor; i++)
     Stacklet_Dealloc(stackChain->stacklets[i]);
-  stackChain->used = 0;
   stackChain->cursor = 0;
+  stackChain->thread = NULL;
+  stackChain->used = 0;   /* Should be last */
 }
 
 Stacklet_t* GetStacklet(mem_t add)
 {
   int i;
-  mem_t offsetAdd = add - (CStackletSize + MLStackletSize) * kilobyte / sizeof(val_t);
+  mem_t offsetAdd = add - stackletOffset / sizeof(val_t);
   for (i=0; i<NumStacklet; i++) {
     Stacklet_t *s = &Stacklets[i];
     if (s->count && 
-	((s->baseBottom <= add && s->baseTop >= add) ||
-	 (s->baseBottom <= offsetAdd && s->baseTop >= offsetAdd)))
+	((s->baseExtendedBottom <= add       &&       add <= s->baseTop) ||
+	 (s->baseExtendedBottom <= offsetAdd && offsetAdd <= s->baseTop)))
       return s;
   }
   return NULL;
@@ -441,7 +491,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   res->valid  = 1;
   res->bitmap = paranoid ? CreateBitmap(maxsize_pageround / 4) : NULL;
   res->freshPages = (int *) malloc(DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
-  memset(res->freshPages, 0, DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
+  memset((int *)res->freshPages, 0, DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
   assert(res->bottom != (mem_t) -1);
   assert(chunkstart >= 0);
   assert(heap_count < NumHeap);
@@ -464,7 +514,7 @@ int Heap_ResetFreshPages(Proc_t *proc, Heap_t *h)
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
   int i, pages = DivideUp(MaxSize,pagesize);
   return 0;
-  memset(h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
+  memset((int *)h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
   proc->segUsage.pagesTouched += pages / 100;   /* These refer to pages of the pageMap itself */
   return pages;
 }
@@ -554,8 +604,9 @@ void memobj_init()
   StackInitialize();
   HeapInitialize();
   GuardStackletSize = pagesize / kilobyte;
+  stackletOffset = (GuardStackletSize + MLStackletSize + CStackletSize) * kilobyte;
   primaryStackletOffset = 0;
-  replicaStackletOffset = (GuardStackletSize + MLStackletSize + CStackletSize) * kilobyte;
+  replicaStackletOffset = stackletOffset;
   /* So we don't pay mmap for first thread - general case? XXXX */
   { int i;
     Stacklet_t *temp[5];

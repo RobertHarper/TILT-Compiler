@@ -30,7 +30,7 @@ Bitmap_t *CreateBitmap(int size)
 void DestroyBitmap(Bitmap_t *b)
 {
   free(b->data);
-  free(b);
+  free((void *)b);
 }
 
 static int GetBit(unsigned long *data, int i)

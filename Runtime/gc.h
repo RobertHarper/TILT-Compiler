@@ -8,17 +8,22 @@
 #include "barriers.h"
 #include "gc_para.h"
 
+extern Statistic_t        heapSizeStatistic;    
+extern Statistic_t        minorSurvivalStatistic;
+extern Statistic_t        majorSurvivalStatistic;
+
 extern int NumGC;
 extern int forceMirrorArray, mirrorGlobal, mirrorArray;  /* Are we flipping globals and arrays? */
 extern int primaryGlobalOffset, replicaGlobalOffset;     /* Used by concurrent collector to support global root redirection */
 extern int primaryArrayOffset, replicaArrayOffset;       /* Used by generational, concurrent collector to support atomic redirection */
+extern double pauseWarningThreshold;
 
 /* States of the collector */
 typedef enum GCStatus__t { GCOff, GCPendingAgressive, GCAgressive, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
 typedef enum GCType__t   { Minor, Major } GCType_t;
                             /* Semi and SemiPara has no state variables */
-extern GCType_t GCType;     /* Used by Gen, GenPara, GenConc */
-extern GCStatus_t GCStatus; /* Used by SemiConc, GenConc */
+extern volatile GCType_t GCType;     /* Used by Gen, GenPara, GenConc */
+extern volatile GCStatus_t GCStatus; /* Used by SemiConc, GenConc */
 
 /* Array value */
 typedef enum Field__t {PointerField, IntField, DoubleField, MirrorPointerField, OldPointerField} Field_t; 
@@ -27,7 +32,7 @@ typedef struct ArraySpec__t {
   int     elemLen;  /* bytes for intField, words for pointerField, doublewords for doubleField */
   int     byteLen;  /* (+ 3) / 4 * 4 for intField, * 4 for pointerField, * 8 for doubleField */
   val_t   intVal;
-  ptr_t   pointerVal;
+  volatile ptr_t   pointerVal;
   double  doubleVal;
 } ArraySpec_t;
 

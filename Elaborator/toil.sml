@@ -64,6 +64,7 @@ structure Toil
 	fun get_unit_name () = (case !unit_name
 				  of NONE => error "unit name unavailable - get_unit_name"
 				   | SOME unitName => unitName)
+
 	fun get_tyvar_table () = !tyvar_table
 	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
 

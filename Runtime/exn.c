@@ -69,7 +69,7 @@ void raise_exception(struct ucontext *uctxt, ptr_t exn_arg)
   Thread_t *th = getThread();
 
   /* Move saved register from uctxt to thread area so it can be restored by raise_exception_raw */
-  GetIRegs(uctxt, th->saveregs);
+  GetIRegs(uctxt, (unsigned long *) th->saveregs);
 
   if (debug) {
     int i;

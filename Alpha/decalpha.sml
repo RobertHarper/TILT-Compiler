@@ -7,17 +7,17 @@ struct
     val exclude_intregs = []
     val error = fn s => Util.error "decalpha.sml" s
     (* Check against Runtime/thread.h *)
-    val iregs_disp         = 0
-    val heapLimit_disp      = iregs_disp + 8 * 14
-    val fregs_disp         = iregs_disp + 8 * 32
-    val proc_disp          = fregs_disp + 8 * 32 
-    val threadScratch_disp = proc_disp + 8 + 8
-    val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 * 3 + 8 * 32 + 8 * 32
+    val iregs_disp          = 0
+    val fregs_disp          = iregs_disp + 8 * 32
+    val threadScratch_disp  = fregs_disp + 8 * 32 + 8 + 8
+    val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 + 8 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4  (* ploc_t is 4 bytes *)
     val stackLimit_disp     = writelistLimit_disp + 4
     val globalOffset_disp   = stackLimit_disp + 4
     val stackletOffset_disp = globalOffset_disp + 4
-    val arrayOffset_disp   = stackletOffset_disp + 4
+    val arrayOffset_disp    = stackletOffset_disp + 4
+
+    val heapLimit_disp     = iregs_disp + 8 * 14
 
 structure Machine = 
   struct

@@ -7,7 +7,7 @@
 #include "general.h"
 #include "tag.h"
 
-struct Queue
+typedef struct Queue__t
 {
   long start;   /* First entry of queue */
   long end;     /* Index beyond last entry of queue */
@@ -15,9 +15,7 @@ struct Queue
 		   When empty, start = end.  When full with size - 1 entries, start = end + 1. */
   long size;    /* Size of table */
   void **table; /* Table of entries */
-};
-
-typedef struct Queue Queue_t;
+} Queue_t;
 
 void        QueueResize (Queue_t *, int additionalSize);  /* not to be called by client code */
 Queue_t    *QueueCreate (long);

@@ -59,9 +59,8 @@ static void GCCollect_Semi(Proc_t *proc)
   ploc_t globalLoc, rootLoc;
 
   /* Check that processor is unmapped, write list is not overflowed, allocation region intact */
-  procChangeState(proc, GC);
+  procChangeState(proc, GCWork, 200);
   assert(NumProc == 1);
-  assert(proc->userThread == NULL);
   assert(allocCursor <= allocLimit);
   assert(totalRequested >= 0);
 
@@ -72,8 +71,8 @@ static void GCCollect_Semi(Proc_t *proc)
   process_writelist(proc, NULL, NULL); /* Get globals; discard backpointers */
 
   /* Compute the roots from the stack and register set */
-  assert(isEmptyStack(proc->rootLocs));
-  procChangeState(proc, GCStack);
+  assert(isEmptyStack(&proc->work.roots));
+  procChangeState(proc, GCStack, 201);
   totalUnused += sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
   ResetJob();
   while ((curThread = NextJob()) != NULL) {
@@ -81,9 +80,9 @@ static void GCCollect_Semi(Proc_t *proc)
       totalRequested += curThread->requestInfo;
     thread_root_scan(proc,curThread);
   }
-  procChangeState(proc, GCGlobal);
+  procChangeState(proc, GCGlobal, 202);
   major_global_scan(proc);
-  procChangeState(proc, GC);
+  procChangeState(proc, GCWork, 203);
 
   /* Get toSpace ready for collection. Forward roots. Do Cheney scan. */
   /* The non-standard use of CopyRange only works for uniprocessors */
@@ -91,10 +90,10 @@ static void GCCollect_Semi(Proc_t *proc)
   SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
   proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
   proc->majorRange.stop = toSpace->top;
-  while (rootLoc = (ploc_t) popStack(proc->rootLocs))     /* NULL when empty */
+  while (rootLoc = (ploc_t) popStack(&proc->work.roots))     /* NULL when empty */
     locCopy1_noSpaceCheck(proc, rootLoc, &proc->majorRange, fromSpace);
   assert(primaryGlobalOffset == 0);
-  while (globalLoc = (ploc_t) popStack(proc->globalLocs)) /* NULL when empty */
+  while (globalLoc = (ploc_t) popStack(&proc->work.globals)) /* NULL when empty */
     locCopy1_noSpaceCheck(proc, (ploc_t) globalLoc, &proc->majorRange, fromSpace);
   scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,&proc->majorRange, fromSpace);
   toSpace->cursor = proc->majorRange.cursor;
@@ -105,7 +104,7 @@ static void GCCollect_Semi(Proc_t *proc)
 
   /* Resize the tospace, discard fromspace, flip space */
   liveRatio = HeapAdjust1(totalRequested, totalUnused, 0, 0.0, fromSpace, toSpace);
-  add_statistic(&proc->majorSurvivalStatistic, liveRatio);
+  add_statistic(&majorSurvivalStatistic, liveRatio);
   Heap_Resize(fromSpace,0,1);
   typed_swap(Heap_t *, fromSpace, toSpace);
 
@@ -121,9 +120,6 @@ static void GCCollect_Semi(Proc_t *proc)
 
 void GC_Semi(Proc_t *proc, Thread_t *th)
 {
-  /* Threads should not be mapped */
-  assert(proc->userThread == NULL);
-  assert(th->proc == NULL);
   /* If allocation pointer is StartHeapLimit, we give the single processor the whole heap */
   if (proc->allocLimit == StartHeapLimit) {
     proc->allocStart = fromSpace->bottom;

@@ -19,7 +19,10 @@
 #include "forward.h"
 #include "platform.h"
 
-int    threadDiag = 0;
+int NumThread     = 150;
+int NumProc       = 1;
+int threadDiag = 0;
+int allowSubstates = 0;                       /* Record substate changes in procChangeState */
 extern int usageCount;
 
 Thread_t    *Threads;                         /* array of NumUserThread user threads */
@@ -36,7 +39,7 @@ static pthread_mutex_t EmptyLock;             /* Lock associated with EmptyCond 
 static int activeThread = 0;                  /* number of threads in work list */
 static int curThread = 0;                     /* cursor for iterating over all jobs */
 
-extern void start_client(Thread_t *);
+extern void start_client(Thread_t *, ptr_t thunk);
 extern void context_restore(Thread_t *);
 
 Thread_t *mainThread = NULL;
@@ -50,12 +53,12 @@ void LocalLock(void)
   while (!TestAndSet(&local_lock)) /* No need to flush */
     ;
   assert(local_lock == 1);
-  flushStore();
+  memBarrier();
 }
 
 void LocalUnlock(void)
 {
-  flushStore();
+  memBarrier();
   local_lock = 0;
 }
 
@@ -112,7 +115,7 @@ void AddJob(Thread_t *th)
   assert(i < NumThread);
   activeThread++;
   maxThread = (activeThread > maxThread) ? activeThread : maxThread;
-  flushStore();
+  memBarrier();
   LocalUnlock();
 }
 
@@ -132,7 +135,8 @@ Thread_t *FetchJob(void)
   return NULL;
 }
 
-void ReleaseJob(Proc_t *proc)
+
+void UpdateJob(Proc_t *proc)
 {
   int i;
   Thread_t *th = proc->userThread;
@@ -141,7 +145,7 @@ void ReleaseJob(Proc_t *proc)
   mem_t proc_allocLimit = proc->allocLimit;
   mem_t proc_writelistCursor = (mem_t) proc->writelistCursor;
 
-  procChangeState(proc, Scheduler);
+  procChangeState(proc, Scheduler, 1);
 
   /* Check that thread's allocation pointers are consistent and update processor's version */
   if (((mem_t) th->saveregs[ALLOCLIMIT] != proc_allocLimit &&
@@ -164,8 +168,9 @@ void ReleaseJob(Proc_t *proc)
   /* Update processor's version of allocation range and write list and process */
   proc->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
   proc->writelistCursor = th->writelistAlloc;
+  procChangeState(proc, Scheduler, 5);
   GCReleaseThread(proc);
-  procChangeState(proc, Scheduler);
+  procChangeState(proc, Scheduler, 6);
 
   /* Null out thread's version of allocation and write-list */
   stacklet = EstablishStacklet(th->stack, (mem_t) th->saveregs[SP]); /* updates stacklet->cursor */
@@ -179,25 +184,35 @@ void ReleaseJob(Proc_t *proc)
   th->writelistAlloc = 0;
   th->writelistLimit = 0;
 
+}
+
+void ReleaseJob(Proc_t *proc)
+{
+  Thread_t *th = proc->userThread;
+  UpdateJob(proc);
+
   /* Break association between thread and processor */
   proc->userThread = NULL;
   th->proc = NULL;
   
-  flushStore();                          /* make sure thread info is flushed to memory */
+  memBarrier();                          /* make sure thread info is flushed to memory */
   assert(th->status >= 1);               /* Thread was mapped and running so could not be ready or done */
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
-
 }
-
 
 
 /* Does not do locking to prevent multiple access.  Assumes caller does it. */
 void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
 {
+  int i;
   assert(th->used == 0);
   assert(th->status == -1);
   assert(!th->pinned);
   assert(&(Threads[th->id]) == th);
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    th->rootVals[i] = NULL;
+    th->rootLocs[i] = NULL;
+  }
   th->used = 1;
   th->status = 0;
   th->tid = FetchAndAdd(&totalThread,1);
@@ -210,7 +225,7 @@ void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
   th->stackletOffset = 0;
   th->thunk = thunk;
   if (th->stack == NULL)
-    th->stack = StackChain_Alloc(); 
+    th->stack = StackChain_Alloc(th); 
   th->snapshot = NULL;
 }
 
@@ -263,6 +278,7 @@ void DeleteJob(Proc_t *proc)
   assert(th->proc == proc);
   FetchAndAdd(&(th->status),1);  /* We increment status so it doesn't get scheduled when released */
   ReleaseJob(proc);
+  procChangeState(proc, Scheduler, 11);
   if (th->parent) {
     FetchAndAdd(&(th->parent->status),-1);
     assert(th->parent->status >= 0); /* Parent must not have already finished */
@@ -296,7 +312,7 @@ Proc_t *getNthProc(int i)
   return &(Procs[i]);
 }
 
-Proc_t *getProc()
+Proc_t *getProcPthread()
 {
   int i;
   pthread_t sys = pthread_self();
@@ -307,13 +323,32 @@ Proc_t *getProc()
   return NULL;
 }
 
-
 Thread_t *getThread()
 {
-  Proc_t *proc = getProc();
-  if (proc == NULL) 
+  int localVar;
+  Stacklet_t *stacklet = GetStacklet(&localVar);
+  Thread_t *thread = NULL;
+
+  if (stacklet == NULL)
     return NULL;
-  return proc->userThread;
+  thread = (Thread_t *) stacklet->parent->thread;
+  if (thread != NULL) {
+    Proc_t *proc2 = getProcPthread();
+    if (thread->proc != proc2) {
+      printf("thread->proc  %d  %d\n", thread->proc->procid, thread->proc);
+      printf("getProcPthread()  %d %d\n", proc2->procid, proc2);
+    }
+    assert(thread->proc == getProcPthread());
+  }
+  return thread;
+}
+
+Proc_t *getProc()
+{
+  Thread_t *thread = getThread();
+  if (thread != NULL)
+    return thread->proc;
+  return getProcPthread();
 }
 
 void resetUsage(Usage_t *u)
@@ -372,9 +407,14 @@ static void attributeUsage(Usage_t *from, Usage_t *to)
 }
 
 
-void fillThread(Thread_t *th, int i)
-{
-  th->id = i;
+void fillThread(Thread_t *th, int id)
+{  
+  int i;
+  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+    th->rootVals[i] = NULL;
+    th->rootLocs[i] = NULL;
+  }
+  th->id = id;
   th->tid = -1;
   th->status = -1;
   th->used = 0;
@@ -389,6 +429,25 @@ void fillThread(Thread_t *th, int i)
 }
 
 
+
+void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, int rootSize, int stackletSize)
+{
+  allocStack(&lw->objs, objSize);
+  allocStack(&lw->segments, segSize);
+  allocStack(&lw->globals, globalSize);
+  allocStack(&lw->roots, rootSize);
+  allocStack(&lw->stacklets, stackletSize);
+  lw->hasShared = 0;
+} 
+
+int isLocalWorkEmpty(LocalWork_t *lw)
+{
+  return (lw->stacklets.cursor == 0 && 
+	  lw->globals.cursor == 0 && 
+	  lw->roots.cursor == 0 && 
+	  lw->objs.cursor == 0 && 
+	  lw->segments.cursor == 0);
+}
 
 
 void thread_init()
@@ -413,14 +472,11 @@ void thread_init()
   for (i=0; i<NumThread; i++)
     fillThread(&Threads[i], i);
   for (i=0; i<NumProc; i++) {
+    int tabSize = 20;
     Proc_t *proc = &(Procs[i]); /* Structures are by-value in C */
     proc->procid = i;
-    allocStack(&proc->minorObjStack, 16384);
-    allocStack(&proc->majorObjStack, 1024);
-    allocStack(&proc->minorSegmentStack, 16384);
-    allocStack(&proc->majorSegmentStack, 1024);
-    allocStack(&proc->majorRegionStack, 1024);
     proc->barrierPhase = 0;
+
     proc->allocStart = (mem_t) StartHeapLimit;
     proc->allocCursor = (mem_t) StartHeapLimit;
     proc->allocLimit = (mem_t) StartHeapLimit;
@@ -429,38 +485,46 @@ void thread_init()
     proc->writelistEnd = &(proc->writelist[(sizeof(proc->writelist) / sizeof(ptr_t)) - 2]);
     for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
       proc->writelist[j] = 0;
+    init_localWork(&proc->work, 16384, 16384, 8192, 4096, 128);
+    /* YYYYY
+       allocStack(&proc->minorObjStack, 16384);
+    allocStack(&proc->majorObjStack, 1024);
+    allocStack(&proc->minorSegmentStack, 16384);
+    allocStack(&proc->majorSegmentStack, 1024);
+    allocStack(&proc->majorRegionStack, 1024);
+
     proc->globalLocs = createStack(8192);
     proc->rootLocs = createStack(4096);
+    allocStack(&proc->threads, 100);
+    */
     proc->backObjs = createStack(1024);
     proc->backObjsTemp = createStack(1024);
     proc->backLocs = createStack(64 * 1024);
     proc->backLocsTemp = createStack(64 * 1024);
-    allocStack(&proc->threads, 100);
     reset_timer(&(proc->totalTimer));
     reset_timer(&(proc->currentTimer));
     proc->state = Scheduler;
+    proc->substate = -1;
     proc->segmentNumber = 0;
     proc->segmentType = 0;
-    proc->gcTime = 0;
-    proc->schedulerTime = 0;
+    proc->nonMutatorTime = 0;
+    proc->nonMutatorCount = -1;
     resetUsage(&proc->segUsage);
     resetUsage(&proc->cycleUsage);
     reset_statistic(&proc->bytesAllocatedStatistic);
     reset_statistic(&proc->bytesReplicatedStatistic);
     reset_statistic(&proc->bytesCopiedStatistic);
     reset_statistic(&proc->workStatistic);
-    reset_statistic(&proc->minorSurvivalStatistic);
-    reset_statistic(&proc->heapSizeStatistic);
-    reset_statistic(&proc->majorSurvivalStatistic);
     reset_statistic(&proc->schedulerStatistic);
+    reset_statistic(&proc->idleStatistic);
     reset_histogram(&proc->mutatorHistogram);
-    reset_statistic(&proc->gcNoneStatistic);
-    reset_histogram(&proc->gcWorkHistogram);
-    reset_histogram(&proc->gcMajorWorkHistogram);
+    reset_statistic(&proc->gcStatistic);
+    reset_histogram(&proc->gcPauseHistogram);
     reset_histogram(&proc->gcFlipOffHistogram);
     reset_histogram(&proc->gcFlipOnHistogram);
     reset_histogram(&proc->gcFlipBothHistogram);
     reset_histogram(&proc->gcFlipTransitionHistogram);
+    reset_statistic(&proc->gcWorkStatistic);
     reset_statistic(&proc->gcStackStatistic);
     reset_statistic(&proc->gcGlobalStatistic);
     reset_statistic(&proc->gcWriteStatistic);
@@ -468,13 +532,17 @@ void thread_init()
     SetCopyRange(&proc->minorRange, proc, NULL, NULL, NULL, NULL, 0);
     SetCopyRange(&proc->majorRange, proc, NULL, NULL, NULL, NULL, 0);
     proc->numCopied = proc->numShared = proc->numContention = 0;
-    proc->numSegment = 0;
+    proc->segmentNumber = 0;
+    proc->segmentType = 0;
     proc->numWrite = 0;
     proc->numRoot = 0;
     proc->numLocative = 0;
     proc->lastHashKey = 0;
     proc->lastHashData = NULL;
     proc->lastCallinfoCursor.callinfo = NULL;
+    proc->tab = (char *) malloc(i * tabSize + 1);
+    memset(proc->tab, ' ', i * tabSize);
+    proc->tab[i * tabSize] = (char) 0;
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -482,11 +550,12 @@ void thread_init()
   setbuf(stderr,NULL);
 }
 
-static char* state2str(ProcessorState_t procState)
+static char* state2string(ProcessorState_t procState)
 {
   switch (procState) {
   case Scheduler: return "Scheduler";
   case Mutator: return "Mutator";
+  case Idle: return "Idle";
   case GC: return "GC";
   case GCStack: return "GCStack";
   case GCGlobal: return "GCGlboal";
@@ -497,12 +566,21 @@ static char* state2str(ProcessorState_t procState)
   }
 }
 
-void procChangeState(Proc_t *proc, ProcessorState_t procState)
+void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
 {
-  /* Get the time spent since last here and attribute it */
-  double diff = 0.0;
-  if (proc->state == procState)
+  int i;
+  double diff = 0.0;             /* Time just spent in current segment */
+  int switchToMutator = (newState == Mutator || 
+			 newState == Done ||
+			 newState == Idle); /* Switching to mutator or effectievly so? */
+
+  assert(proc->substate != 0);
+
+  if (proc->segmentNumber < 0)
     return;
+  if (!allowSubstates && proc->state == newState)  /* No state change */
+    return;
+
   if (proc->currentTimer.on) {
     restart_timer(&proc->currentTimer);
     diff = proc->currentTimer.last;
@@ -510,83 +588,122 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
   else
     start_timer(&proc->currentTimer);
 
-  /* Accumulate time for all GC substates */
-  if (proc->state != Scheduler && proc->state != Mutator && proc->state != Done)
-    proc->gcTime += diff;
-
-  switch (proc->state) {
-  case Scheduler: {
-    int flipOn = (proc->segmentType & FlipOn);
-    int flipOff = (proc->segmentType & FlipOff);
-    int flipTransition = (proc->segmentType & FlipTransition);
-
-    proc->schedulerTime += diff;
-    if (procState == Mutator || procState == Done) {  /* Reset GC-related info once we enter mutator */
-      /* First do statistics dependent on whether GC is major or minor */
-      attributeUsage(&proc->segUsage, &proc->cycleUsage);
-      if (flipOff || procState == Done) {
-	add_statistic(&proc->bytesAllocatedStatistic, proc->cycleUsage.bytesAllocated);
-	add_statistic(&proc->bytesReplicatedStatistic, proc->cycleUsage.bytesReplicated);
-	add_statistic(&proc->bytesCopiedStatistic, bytesCopied(&proc->cycleUsage));
-	add_statistic(&proc->workStatistic, updateUsage(&proc->cycleUsage));
-	resetUsage(&proc->cycleUsage);
-      }
-      if (proc->segmentType & MinorWork) {
-	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
-      }
-      else if (proc->segmentType & MajorWork) {
-	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
-	add_histogram(&proc->gcMajorWorkHistogram, proc->gcTime);
-      }
-      else {
-	add_statistic(&proc->gcNoneStatistic, proc->gcTime);
-      }
-      /* Add statistics related to flipping on/off collector - independent of whether GC is major or minor */
-      if (flipOff) 
-	add_statistic(&proc->heapSizeStatistic, Heap_GetSize(fromSpace) / 1024);
-      if (flipOn && flipOff)
-	add_histogram(&proc->gcFlipBothHistogram, proc->gcTime);
-      else if (flipOff) 
-	add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
-      else if (flipOn) 
-	add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);     
-      if (flipTransition)
-	add_histogram(&proc->gcFlipTransitionHistogram, proc->gcTime);     
-      add_statistic(&proc->schedulerStatistic, proc->schedulerTime);
-      proc->segmentNumber++;
-      proc->segmentType = 0;
-      proc->gcTime = 0.0;
-      proc->schedulerTime = 0.0;
-      proc->numSegment++;
-    }
-    break;
+  /* Accumulate info across segments since mutator segment */
+  if (proc->state != Mutator && proc->nonMutatorCount >= 0) {
+    proc->nonMutatorTime += diff;
+    proc->nonMutatorSegmentType |= proc->segmentType;
   }
+
+
+  if (pauseWarningThreshold > 0.0  &&   /* Are we in a mutator-started pause? */
+      proc->nonMutatorCount >= 0) {     /* Are we doing threshold check? */ 
+    if (switchToMutator) {
+      if (proc->nonMutatorTime > pauseWarningThreshold) {
+	printf("\nProc %d exceeded threshold with %.2f ms starting at segment %d\n", 
+	       proc->procid, proc->nonMutatorTime, proc->nonMutatorSegmentStart);
+	for (i=0; i<proc->nonMutatorCount; i++)
+	  printf("   %i: State %s   Time = %.2f ms    which = %d\n", 
+		 i, state2string(proc->nonMutatorStates[i]), 
+		 proc->nonMutatorTimes[i], 
+		 proc->nonMutatorSubstates[i]);
+      }
+    }
+    else {
+      proc->nonMutatorTimes[proc->nonMutatorCount] = diff;
+      proc->nonMutatorStates[proc->nonMutatorCount] = proc->state;
+      proc->nonMutatorSubstates[proc->nonMutatorCount] = proc->substate;
+      proc->nonMutatorCount++;
+      assert(proc->nonMutatorCount < sizeof(proc->nonMutatorTimes) / sizeof(double));
+    }
+  }
+
+  /* Add times to the segment that just ended */
+  switch (proc->state) {
   case Mutator:
-    assert(procState == Scheduler);
+    assert(newState == Scheduler);
     add_histogram(&proc->mutatorHistogram, diff);
+    proc->nonMutatorCount = 0;
+    proc->nonMutatorSegmentStart = proc->segmentNumber;
+    proc->nonMutatorSegmentType = 0;
+    proc->nonMutatorTime = 0.0;
+    break;
+  case Scheduler:
+    add_statistic(&proc->schedulerStatistic, diff);
+    break;
+  case Idle:
+    add_statistic(&proc->idleStatistic, diff);
+    proc->nonMutatorCount = -1;  
     break;
   case GC:
   case GCWork:
-    assert(procState != Mutator);
-    break;
   case GCStack:
-    add_statistic(&proc->gcStackStatistic, diff);
-    assert(procState != Mutator && procState != Scheduler);
-    break;
   case GCGlobal:
-    add_statistic(&proc->gcGlobalStatistic, diff);
-    assert(procState != Mutator && procState != Scheduler);
-    break;
   case GCWrite:
-    add_statistic(&proc->gcWriteStatistic, diff);
-    assert(procState != Mutator);
-    break;
   case GCReplicate:
-    add_statistic(&proc->gcReplicateStatistic, diff);
-    assert(procState != Mutator);
+    assert(newState != Mutator);
+    add_statistic(&proc->gcStatistic, diff);
+    switch (proc->state) {
+    case GC:
+      break;
+    case GCWork:
+      add_statistic(&proc->gcWorkStatistic, diff);
+      break;
+    case GCStack:
+      add_statistic(&proc->gcStackStatistic, diff);
+      break;
+    case GCGlobal:
+      add_statistic(&proc->gcGlobalStatistic, diff);
+      break;
+    case GCWrite:
+      add_statistic(&proc->gcWriteStatistic, diff);
+      break;
+    case GCReplicate:
+      add_statistic(&proc->gcReplicateStatistic, diff);
+      break;
+    }
+  case Done:
     break;
+  default:
+    assert(0);
   }
-  proc->state = procState;
+  
+  if (switchToMutator) {
+
+    int flipOn = (proc->nonMutatorSegmentType & FlipOn);
+    int flipOff = (proc->nonMutatorSegmentType & FlipOff);
+    int flipTransition = (proc->nonMutatorSegmentType & FlipTransition);
+
+    /* First do statistics dependent on whether GC is major or minor */
+    attributeUsage(&proc->segUsage, &proc->cycleUsage);
+    if (flipOff || newState == Done) {
+      add_statistic(&proc->bytesAllocatedStatistic, proc->cycleUsage.bytesAllocated);
+      add_statistic(&proc->bytesReplicatedStatistic, proc->cycleUsage.bytesReplicated);
+      add_statistic(&proc->bytesCopiedStatistic, bytesCopied(&proc->cycleUsage));
+      add_statistic(&proc->workStatistic, updateUsage(&proc->cycleUsage));
+      resetUsage(&proc->cycleUsage);
+    }
+
+    /* Attribute time since mutator last run and reset */
+    if (flipOff) 
+      add_statistic(&heapSizeStatistic, Heap_GetSize(fromSpace) / 1024);
+    if (flipOn && flipOff)
+      add_histogram(&proc->gcFlipBothHistogram, proc->nonMutatorTime);
+    else if (flipOff) 
+      add_histogram(&proc->gcFlipOffHistogram, proc->nonMutatorTime);
+    else if (flipOn) 
+      add_histogram(&proc->gcFlipOnHistogram, proc->nonMutatorTime);
+    if (flipTransition)
+      add_histogram(&proc->gcFlipTransitionHistogram, proc->nonMutatorTime);
+    add_histogram(&proc->gcPauseHistogram, proc->nonMutatorTime);
+  }
+  
+  /* Perform state change */
+  proc->segmentNumber++;
+  proc->segmentType = 0;
+  proc->state = newState;
+  proc->substate = newSubstate;
+
+  assert(proc->substate != 0);
 }
 
 int thread_total() 
@@ -645,15 +762,21 @@ void save_regs_fail(int memValue, int regValue)
 }
 
 
+/* Map thread onto processor.  Processor must be unmapped or already mapped to thread. */
 static void mapThread(Proc_t *proc, Thread_t *th)
 {
   Stacklet_t *stacklet = CurrentStacklet(th->stack);
 
   Stacklet_KillReplica(stacklet);
-  assert(proc->userThread == NULL);
-  assert(th->proc == NULL);
-  proc->userThread = th;
-  th->proc = proc;
+  if (proc->userThread == NULL) {
+    assert(th->proc == NULL);
+    proc->userThread = th;
+    th->proc = proc;
+  }
+  else {
+    assert(proc->userThread == th);
+    assert(th->proc == proc);
+  }
   th->saveregs[ALLOCPTR] = (reg_t) proc->allocCursor;
   th->saveregs[ALLOCLIMIT] = (reg_t) proc->allocLimit;
   th->writelistAlloc = proc->writelistCursor;
@@ -666,16 +789,20 @@ static void mapThread(Proc_t *proc, Thread_t *th)
   th->stackLimit = StackletPrimaryBottom(stacklet);
 }
 
-/* Processor should not be mapped to any user thread */
+/* Processor might be mapped */
 static void work(Proc_t *proc)
 {
-  Thread_t *th = NULL;
+  Thread_t *th = proc->userThread;
+
+  procChangeState(proc, Scheduler, 20);
 
   /* To get changes other processors have made */
-  flushStore();
+  memBarrier();
 
-  /* Processor should not be mapped */
-  assert(proc->userThread == NULL);
+  if (th == NULL)
+    procChangeState(proc, Scheduler, 21);
+  else
+    procChangeState(proc, Scheduler, 22);
 
   /* Wait for next user thread and remove from queue. Map processor. */
   while (th == NULL) {
@@ -686,17 +813,14 @@ static void work(Proc_t *proc)
       thr_yield();
 #else
       assert(0);
-#endif
-    th = FetchJob();  /* Provisionally grab thread but don't map onto processor yet */
+#endif 
+      th = FetchJob();  /* Provisionally grab thread but don't map onto processor yet */
     if (th == NULL) {
-      procChangeState(proc, Scheduler);
+      procChangeState(proc, Idle, 23);
       GCPoll(proc);
-      procChangeState(proc, Scheduler);
-      procChangeState(proc, Mutator);    /* So that segment counter increases */
-      procChangeState(proc, Scheduler);
     }
     if (EmptyPlain) {
-      procChangeState(proc,Done);
+      procChangeState(proc,Done, 25);
       stop_timer(&proc->totalTimer);
       FetchAndAdd(&NumActiveProc, -1);
       if (diag)
@@ -716,6 +840,8 @@ Abort
     }
   }
 
+  procChangeState(proc, Scheduler, 26);
+
   assert(th->status == 1); /* FetchJob increments status from 0 to 1 */
 
   switch (th->request) {
@@ -727,19 +853,22 @@ Abort
       th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
       mapThread(proc,th);
+      procChangeState(proc, Mutator, 27);
       returnFromYield(th);
     }
     case StartRequest: {              /* Starting thread for the first time */
-      assert(th->thunk != NULL);
+      ptr_t thunk = th->thunk;
       mapThread(proc,th);
+      th->thunk = NULL;
+      assert(thunk != NULL);
       if (threadDiag) {
 	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
 	       proc->procid, th->tid, th->id, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
-      flushStore();  /* make visible changes to other processors */
-      procChangeState(proc, Mutator);
-      start_client(th);
+      memBarrier();  /* make visible changes to other processors */
+      procChangeState(proc, Mutator, 28);
+      start_client(th,thunk);
       assert(0);
     }
 
@@ -748,14 +877,9 @@ Abort
     case MajorGCRequestFromC: {
       /* Allocate space or check write buffer to see if we have enough space */
       GCFromScheduler(proc, th);
-      procChangeState(proc, Scheduler);
+      procChangeState(proc, Scheduler, 29);
       /* Note that another processor can change th->saveregs[ALLOCLIMIT] to Stop at any point */
-      if (th->requestInfo > 0)
-	assert(th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit);
-      else if (th->requestInfo < 0)
-	assert((-th->requestInfo) + (val_t) proc->writelistCursor <= (val_t) proc->writelistEnd);
-      else 
-	assert(0);
+      assert(GCSatisfiable(proc,th));
       mapThread(proc,th);
       if (th->request == GCRequestFromML) {
 	if (threadDiag)
@@ -763,8 +887,8 @@ Abort
 		 proc->procid, th->tid, th->requestInfo, 
 		 th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT],
 		 th->writelistAlloc, th->writelistLimit);
-	flushStore();  /* make visible changes to other processors */
-	procChangeState(proc, Mutator);
+	memBarrier();  /* make visible changes to other processors */
+	procChangeState(proc, Mutator, 30);
 	returnFromGCFromML(th);	
 	assert(0);
       }
@@ -774,8 +898,8 @@ Abort
 	  printf("Proc %d: Resuming thread %d from Major/C GCRequestFromML of %d bytes with allocation region %d < %d and writelist %d < %d\n",
 		 proc->procid, th->tid, th->requestInfo, proc->allocCursor, proc->allocLimit,
 		 th->writelistAlloc, th->writelistLimit);
-	flushStore();  /* make visible changes to other processors */
-	procChangeState(proc, Mutator);
+	memBarrier();  /* make visible changes to other processors */
+	procChangeState(proc, Mutator, 31);
 	returnFromGCFromC(th);	
 	assert(0);
       }
@@ -791,25 +915,28 @@ Abort
 }
 
 
-static void* proc_go(void* unused)
+static void* proc_go(void* untypedProc)
 {
-  Proc_t *proc = getProc();
+  Proc_t *proc = (Proc_t *) untypedProc;
 #ifdef solaris
   int status = processor_bind(P_LWPID, P_MYID, proc->processor, NULL);
   if (status != 0)
-    printf("processor_bind failed with %d\n",status);
+    printf("processor_bind on %d failed with %d\n", proc->processor, status);
 #else
   if (threadDiag)
     printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
-#ifdef solaris
-  initializePerfMon();
-#endif
+  proc->pthread = pthread_self();
+  initializePerfMon(proc);
   install_signal_handlers(0);
   proc->stack = (int)(&proc) & (~255);
   FetchAndAdd(&NumActiveProc, 1);
   start_timer(&proc->totalTimer);
   start_timer(&proc->currentTimer);
+
+  proc->segmentNumber = -1; /* Disable procChangeState */
+  GCReleaseThread(proc);    /* Fault in the code to avoid later Icache miss */
+  proc->segmentNumber = 0;  /* Enable procChangeState */
   work(proc);
   assert(0);
   return 0;
@@ -818,7 +945,7 @@ static void* proc_go(void* unused)
 void thread_go(ptr_t thunk)
 {
   int curproc = -1;
-  int i, status;
+  int i, status, discard;
 
   mainThread = thread_create(NULL,thunk);
   AddJob(mainThread);
@@ -836,7 +963,7 @@ void thread_go(ptr_t thunk)
 	break;
       }
       if (curproc > 1024) {
-	printf("Cannot find enough online processors: curproc = %d\n",curproc);
+	printf("Only found %d processors, needed %d.\n",i,NumProc);
 	assert(0);
       }
     }
@@ -853,11 +980,17 @@ void thread_go(ptr_t thunk)
     status = pthread_attr_setschedparam(&attr,&schedParam);
     if (status)
       printf("pthread_attr_setschedparam returned status = %d\n", status);
-    pthread_create(&(Procs[i].pthread),&attr,proc_go,NULL);
+    pthread_create(&discard,&attr,proc_go,&Procs[i]);
     if (threadDiag)
       printf("Proc %d:  processor %d and pthread = %d\n",
 	     Procs[i].procid, Procs[i].processor, Procs[i].pthread);
   }
+
+  printf("Found %d processors:  ", NumProc);
+  for (i=0; i<NumProc; i++) 
+    printf("%d  ", Procs[i].processor);
+  printf("\n");
+
   install_signal_handlers(1);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
   while ((i = NumTotalJob()) > 0) {
@@ -936,6 +1069,7 @@ Thread_t *YieldRest()
   proc->userThread->request = YieldRequest;  /* Record why this thread pre-empted */
   proc->userThread->saveregs[RESULT] = 256;  /* ML representation of unit */
   ReleaseJob(proc);
+  procChangeState(proc, Scheduler, 11);
   work(proc);
   assert(0);
   return 0;
@@ -945,27 +1079,35 @@ Thread_t *YieldRest()
 void Interrupt(struct ucontext *uctxt)
 {
   Thread_t *th = getThread();
-  if (!th->notInML)
-    {
-      mem_t pc = GetPc(uctxt);
-      SetIReg(uctxt, ALLOCLIMIT, (reg_t) StopHeapLimit);
-      printf("      setting heap limit to %d while at %d\n",StopHeapLimit, pc);
-    }
+  if (!th->notInML) {
+    mem_t pc = GetPc(uctxt);
+    SetIReg(uctxt, ALLOCLIMIT, (reg_t) StopHeapLimit);
+    printf("      setting heap limit to %d while at %d\n",StopHeapLimit, pc);
+  }
   return;
 }
 
-/* Processor must be unmapped */
+/* Processor might be mapped but is at least up-to-date */
 void schedulerRest(Proc_t *proc)
 {
   int local;
   assert((proc->stack - (int) (&local)) < 1024); /* Check that we are running on own stack */
-  assert(proc->userThread == NULL);
   work(proc);
   assert(0);
 }
 
 
-double segmentTime(Proc_t *proc)
+double nonMutatorTime(Proc_t *proc)
 {
-  return proc->gcTime + lap_timer(&proc->currentTimer);
+  return proc->nonMutatorTime + lap_timer(&proc->currentTimer);
+}
+
+ptr_t registerThunk(ptr_t mlString)
+{
+  /*
+    char buffer[256];
+    mlstring2cstring_buffer(mlString, sizeof(buffer), buffer);
+    printf("registerThunk: %20s   Threads[0].saveregs[ALLOC] = %dd\n", buffer, Threads[0].saveregs[ALLOCPTR]);
+  */
+  return empty_record;
 }

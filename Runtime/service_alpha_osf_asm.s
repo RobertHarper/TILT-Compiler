@@ -17,13 +17,19 @@
 	.globl  Yield
 	.globl  Spawn
 	.globl  scheduler
-	.globl	flushStore
+	.globl	memOrder
+	.globl	memBarrier
 
- # XXX dummy function	
-        .ent flushStore
-flushStore:
+ # XXX dummy functions
+        .ent memOrder
+memOrder:	
         ret     $31, ($26), 1
-	.end flushStore
+	.end memOrder
+
+        .ent memBarrier
+memBarrier:	
+        ret     $31, ($26), 1
+	.end memBarrier
 	
  # ----------------------------------------------------------------------------	
  # FetchAndAdd takes the address of the variable to be incremented and the increment
@@ -106,15 +112,18 @@ GetRpcc:
 	
  # ------------------------ start_client  -------------------------------------
  # first C arg = current thread pointer
+ # second C arg = thunk
  # ----------------------------------------------------------------------------
 	.ent	start_client 
 start_client:
  	ldgp	$gp, 0($27)				# get self gp
-	mov	$16,THREADPTR_REG			# initialize thread ptr outside loop
+	mov	$16,THREADPTR_REG			# initialize thread ptr
+	mov	$17,$1					# save thunk
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
 	bsr	load_regs				# restore dedicated pointers like
 							# heap pointer, heap limit, and stack pointer
 							# don't need to restore return address
+	mov	$1, $at					# restore thunk to temp
 	ldq	$1, MLsaveregs_disp+8($0)		# restore $1 which is not restored by load_regs
 	ldq	$0, MLsaveregs_disp($0)			# restore $0 which was used as arg to load_regs
 	br	$gp, start_client_getgp1
@@ -122,8 +131,6 @@ start_client_getgp1:
 	ldgp	$gp, 0($gp)				# fix $gp
 	stq	$31, notinml_disp(THREADPTR_REG)
 .set noat
- 	ldq	$at, thunk_disp(THREADPTR_REG)		# fetch thunk
-	stq	$31, thunk_disp(THREADPTR_REG)		# erase thunk
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$1, 8($at)				# fetch term env

@@ -1262,7 +1262,6 @@ struct
 		val (vm,vlist) = extend_vm_unresolved(u,u',VM.empty,[])
 		val (vm,vlist) = extend_vm_context(c,c',vm,vlist)
 		val res = eq_cntxt(vm,c,c',vlist)
-		    handle NOT_EQUAL => false
 		val _ = if (!showUnequal andalso not res)
 			    then (print "vm = "; VM.show_vm vm; print "\n";
 				  print "pc = "; Ppil.pp_pcontext pc; print "\n\n";
@@ -1270,6 +1269,7 @@ struct
 			else ()
 	    in  res
 	    end
+	    handle NOT_EQUAL => false
 
 	fun eq_context (c: context, c': context) : bool = 
 	    let val pc = (c, Name.VarMap.empty)

@@ -1,7 +1,7 @@
-(*$import TopLevel Real64 Math64 TextIO *)
+(*$import Prelude TopLevel Real64 Math64 TextIO String *)
 
-local
-
+fun runSomePia dataFile = 
+let
 open Math64
 val open_in = TextIO.openIn
 val open_out = TextIO.openOut
@@ -1128,18 +1128,18 @@ datatype OBJECTS = junction of (int*(int list))
 
 (* some useful simple functions *)
 
-local 
-    val prefix = ref NONE
-in  
+
+    val filePrefix = ref NONE
+
     fun get_file_prefix  ()  =                 (* get_filename of model *)
-	case (!prefix) of
+	case (!filePrefix) of
 	    SOME p => p   (* Example "Bench/bsim" *)
 	  | NONE => let val _ = output(TextIO.stdOut,"\nFile prefix for models, scenes, and arc-files: ")
 			val p = read_to_eol TextIO.stdIn
-			val _ = prefix := SOME p
+			val _ = filePrefix := SOME p
 		    in  p
 		    end
-end
+
 
 fun get_file_model() = get_file_prefix()
 fun get_file_scene() =
@@ -2045,7 +2045,7 @@ fun go() =
             do_clever_bit(FILE);
             if filename = "screen" then () else close_out(FILE) 
         )
-    end(*;*)
+    end
 
 
 (* get executable file name *)
@@ -2058,10 +2058,14 @@ val _ = output(TextIO.stdOut, "appended to it.\n")(*;*)
 *)
 
 in
-
-    val piaResult = (print "About to start...\n";
-		     go())
-
+    (print "About to start...\n";
+     filePrefix := (SOME dataFile);
+     go())
 end
+
+fun runPia () = runSomePia "../BenchData/bsim"
+fun runPia1 () = runSomePia "../BenchData/bsim1"
+fun runPia2 () = runSomePia "../BenchData/bsim2"
+fun runPia3 () = runSomePia "../BenchData/bsim3"
 
 

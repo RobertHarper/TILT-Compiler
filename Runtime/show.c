@@ -24,8 +24,10 @@ int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
       if (curStart == NULL)
 	return 1;
       validOffset = IsSet(curStart, wordOffset);
+      /*
       if (!validOffset)
 	printf("!!! invalid wordOffset %d\n",wordOffset);
+      */
       return validOffset;
     }
   }
@@ -64,11 +66,14 @@ static int show_field(int show, Field_t fieldType,
 	printf("P(%5d)  ", primaryField);     
       if ((isNonheapPointer && (fieldType == PointerField)) ||
 	  fieldType == OldPointerField ||
-	  (inHeaps(primaryField,legalHeaps,legalStarts)))
+	  inHeaps(primaryField,legalHeaps,legalStarts))
 	;
       else {
-	traceError = 1;
-	printf("\n  !!!!TRACE ERROR: found bad pointer %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	if (inHeaps(primaryField,legalHeaps,NULL)) 
+	  printf("\n  !!!!TRACE ERROR: bad pointer (in range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	else
+	  printf("\n  !!!!TRACE ERROR: bad pointer (out of range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	traceError = 1; 
 	return 0;
       }
       if (replica) {
@@ -281,7 +286,7 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 	}
 	else {
 	  replica = (doReplica && replica == NULL) ? obj : replica;
-	  if (primaryArrayOffset == 0) {
+	  if (primaryGlobalOffset == 0) {
 	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 0, 1, legalHeaps, legalStarts);
 	    show_field(show, doReplica ? PointerField : IntField, obj, NULL, 1, 0, legalHeaps, legalStarts);
 	  }

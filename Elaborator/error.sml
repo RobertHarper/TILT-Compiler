@@ -19,7 +19,7 @@ struct
     val error_level = ref NoError
     val src_region = ref ([] : region list)
 
-    fun nofilepos (_ : SourceMap.charpos) = ("nofilepos",0,0)
+    fun nofilepos (_ : SourceMap.charpos) = ("nofilepos.sml",0,0)
     val filepos = ref nofilepos
 
     fun error_max (Error,_) = Error
@@ -35,6 +35,11 @@ struct
     fun get_error() = !error_level
 
     fun peek_region () = (hd(!src_region))
+    fun peek_filename() = let val (p1,p2) = (hd(!src_region))
+			      val fp = !filepos
+			      val (f1,_,_) = fp p1
+			  in  f1
+			  end
     fun peek_region_string () : string = let val (p1,p2) = (hd(!src_region))
 					  val fp = !filepos
 					  val (f1,r1,c1) = fp p1

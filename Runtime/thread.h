@@ -17,13 +17,12 @@
 #define proc_disp           longSz*32+8*32
 #define notinml_disp        longSz*32+8*32+CptrSz
 #define scratch_disp        longSz*32+8*32+CptrSz+longSz
-#define thunk_disp          longSz*32+8*32+CptrSz+longSz+doubleSz
-#define request_disp        longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz
-#define requestInfo_disp    longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz
-#define Csaveregs_disp      longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz
-#define writelistAlloc_disp longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+32*longSz+32*doubleSz
-#define writelistLimit_disp longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
-#define stackLimit_disp     longSz*32+8*32+CptrSz+longSz+doubleSz+CptrSz+longSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz 
+#define request_disp        longSz*32+8*32+CptrSz+longSz+doubleSz
+#define requestInfo_disp    longSz*32+8*32+CptrSz+longSz+doubleSz+longSz
+#define Csaveregs_disp      longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz
+#define writelistAlloc_disp longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz
+#define writelistLimit_disp longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
+#define stackLimit_disp     longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz 
 #if    defined(solaris)
 #define snapshot_size       16
 #elif  defined(alpha_osf)
@@ -99,6 +98,8 @@ struct Proc__t;
 struct CopyRange__t;
 typedef void discharge_t(struct CopyRange__t *);
 typedef void expand_t(struct CopyRange__t *, int size);
+
+/* Not volatile - not concurrently accessed */
 typedef struct CopyRange__t   /* This is essentially an object clumsily expressed in C */
 {
   mem_t start;
@@ -111,6 +112,7 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
   Stack_t *regionStack;
 } CopyRange_t;
 
+/* Not volatile - not concurrently accessed */
 typedef struct Usage__t
 {
   long bytesAllocated;
@@ -144,36 +146,37 @@ typedef struct Usage__t
 typedef struct Thread__t
 {
   /* ---- These fields are accessed by assembly code ---- */
-  unsigned long      saveregs[32];     /* Register set; compiler relied on this being first */
-  double             fregs[32];        /* Register set; compiler relied on this being second */
-  struct Proc__t     *proc;            /* of type Proc_t * - relied on by service_alpha_osf.s  */
-  long               notInML;          /* set to true whenever mutator calls a normal external function */
-  double             scratch;
-  ptr_t              thunk;            /* Thunk of this thread - NULL after thunk has started */
-  long               request;          /* Why were we stoppped and how do we resume? */
-  long               requestInfo;      /* If positive, how many bytes needed for allocation.
-					  If negative, how many bytes of write buffer needed. */
-  long               filler;           /* must double align here */
-  long               Csaveregs[32];    /* C register saved when we need to de-schedule while in a C function */
-  double             Cfregs[32];        
-  ploc_t             writelistAlloc;
-  ploc_t             writelistLimit;
-  mem_t              stackLimit;       /* Bottom of current stack */
-  int                globalOffset;     /* zero or four */
-  int                stackletOffset;   /* zero or stackletSize * 1024 */
-  int                arrayOffset;      /* zero or four */
+  volatile unsigned long      saveregs[32];     /* Register set; compiler relied on this being first */
+  volatile double             fregs[32];        /* Register set; compiler relied on this being second */
+  volatile struct Proc__t     *proc;            /* of type Proc_t * - relied on by service_alpha_osf.s  */
+  volatile long               notInML;          /* set to true whenever mutator calls a normal external function */
+  volatile double             scratch;
+  volatile long               request;          /* Why were we stoppped and how do we resume? */
+  volatile long               requestInfo;      /* If positive, how many bytes needed for allocation.
+						   If negative, how many bytes of write buffer needed. */
+  volatile long               Csaveregs[32];    /* C register saved when we need to de-schedule while in a C function */
+  volatile double             Cfregs[32];        
+  volatile ploc_t             writelistAlloc;
+  volatile ploc_t             writelistLimit;
+  volatile mem_t              stackLimit;       /* Bottom of current stack */
+  volatile int                globalOffset;     /* zero or four */
+  volatile int                stackletOffset;   /* zero or stackletSize * 1024 */
+  volatile int                arrayOffset;      /* zero or four */
 
   /* ---- The remaining fields not accessed by assembly code or mutator ---- */
-  StackChain_t       *stack;
-  StackChain_t       *snapshot;          /* Stack chain copied for concurrent collector */
-  unsigned long       snapshotRegs[32];  /* Register set copied for concurrent collector */
-  ptr_t               snapshotThunk;     /* used by concurrent collector */
-  long                tid;               /* Thread ID */
-  long                id;                /* Structure ID */
-  int                 used;
-  long                status;            /* long so fetchAndAdd works */
-  int                 pinned;
-  struct Thread__t   *parent;
+  volatile ptr_t              thunk;            /* Thunk of this thread - NULL after thunk has started */
+  volatile ptr_t              rootVals[10];     /* Contains root values - needed only for concurrent collector */
+  volatile ploc_t             rootLocs[10];     /* Contains root locations (when non-NULL) from which the 
+						   corresponding rootVals obtained their values */
+  StackChain_t                *stack;           /* Stack chain used by mutator */
+  StackChain_t                *snapshot;        /* Stack chain copied for concurrent collector */
+  volatile unsigned long      snapshotRegs[32]; /* Register set copied for concurrent collector */
+  long                        tid;              /* Thread ID */
+  long                        id;               /* Structure ID */
+  volatile int                used;
+  volatile long               status;           /* long so fetchAndAdd works */
+  volatile int                pinned;
+  struct Thread__t            *parent;
 } Thread_t;
 
 
@@ -181,7 +184,7 @@ typedef struct Thread__t
 /* The states Scheduler, Mutator, GC,and  Done are disjoint.
    The remaining GC* states are substates of GC.
  */
-typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done,
+typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done, Idle, 
 				GCStack, GCGlobal, GCReplicate, GCWork, GCWrite} ProcessorState_t;
 /* Each segment might be no collection, minor, or major. 
    Independently, it migth invole flipping the collector on or off or both */
@@ -191,9 +194,23 @@ typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done,
 #define FlipOff   8
 #define FlipTransition 16
 
+typedef struct LocalWork__t
+{
+  Stack_t  objs;
+  Stack_t  globals;          /* Global variables */
+  Stack_t  roots;            /* Stack root locations containing root values */
+  Stack_t  segments;         /* Used by incremental collector for breaking up scanning stacks */
+  Stack_t  stacklets;        /* Used by incremental collector for breaking up scanning stacks */
+  volatile int hasShared;    /* 1 if local stack grabbed items from shared stack */
+} LocalWork_t;
+
+void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, int rootSize, int stackletSize);
+int isLocalWorkEmpty(LocalWork_t *lw);
+
+/* Not volatile - not concurently accessed */
 typedef struct Proc__t
 {
-  int                stack;        /* address of system thread stack that can be used to enter scheduler */
+  int                stack;          /* address of system thread stack that can be used to enter scheduler */
   int                procid;         /* sys thread id */
   mem_t              allocStart;     /* allocation range */
   mem_t              allocCursor;
@@ -201,13 +218,13 @@ typedef struct Proc__t
   ploc_t             writelistStart;  /* write list range */
   ploc_t             writelistCursor;
   ploc_t             writelistEnd;
-  ptr_t              writelist[3 * 8192];
+  ptr_t              writelist[3 * 4096];
   int                processor;      /* processor id that this pthread is bound to */
   pthread_t          pthread;        /* pthread that this system thread is implemented as */
   Thread_t           *userThread;    /* current user thread mapped to this system thread */
 
-  Stack_t            *globalLocs;       /* Global variables */
-  Stack_t            *rootLocs;         /* Stack root locations containing root values */
+  LocalWork_t        work;
+
   /* In a generation, concurrent collector, backLocs and backObjs have to be processed twice.
      So, each entry is a pair containing the location/object and a count, initially 0. 
      The temp versions are necessary so we have a place to push.  At the end of the GC,
@@ -215,23 +232,24 @@ typedef struct Proc__t
   */
   Stack_t            *backLocs, *backLocsTemp;  /* All modified pointer array field for generational, concurrent collector */
   Stack_t            *backObjs, *backObjsTemp;  /* Pointer arrays allocated in generational collector */
-  Stack_t            threads;           /* Used by incremental collector for breaking up scanning stacks */
-  Stack_t            minorObjStack;     /* Used by parallel/concurrent generational collector */
-  Stack_t            minorSegmentStack; 
-  Stack_t            majorObjStack;     /* Used by parallel/concurrent collector */
-  Stack_t            majorSegmentStack;  
   Stack_t            majorRegionStack; /* Possibly used by a generational concurrent collector */
 
   int                barrierPhase;   
 
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
-  int                segmentNumber;  /* Counts the Number of times we are in a GC since running a mutator */
+  int                segmentNumber;  /* Current segment number */
   int                segmentType;    /* Was there minor work, major work, flip off, or flip on? */
-  double             gcTime;         /* How much time spent on current GC/Scheduler segment? */
-  double             schedulerTime;  /* How much time spent on current GC/Scheduler segment? */
+  double             nonMutatorTime; /* Total time since mutator suspended */
+  int                nonMutatorSegmentType; /* Union of all segment types since mutator suspended */
+  double             nonMutatorTimes[20];   /* For debugging */
+  int                nonMutatorStates[20];
+  int                nonMutatorSubstates[20];
+  int                nonMutatorSegmentStart; /* Segment number of first segment comprising pause */
+  int                nonMutatorCount;
   ProcessorState_t   state;          /* What the processor is working on */
-  long               numSegment;     /* Number of current segment, incremented each time we switch to a mutator */
+  int                substate;
+  int                bytesCopied;    /* Number of bytes copied (0 if not copied).  Modified by call to alloc/copy */
   Usage_t            segUsage;       /* Info for current segment which will be added to a cycle */
   Usage_t            cycleUsage;     /* Info for current GC cycle */
   Statistic_t        bytesAllocatedStatistic;  /* just minor - won't this exclude large objects? XXXX */
@@ -239,18 +257,16 @@ typedef struct Proc__t
   Statistic_t        bytesCopiedStatistic;     /* both minor and major */
                                                /* XXX Should the next 3 be program-wide */
   Statistic_t        workStatistic;
-  Statistic_t        heapSizeStatistic;        /* in Kb */
-  Statistic_t        minorSurvivalStatistic;
-  Statistic_t        majorSurvivalStatistic;
   Statistic_t        schedulerStatistic;
+  Statistic_t        idleStatistic;
   Histogram_t        mutatorHistogram;
+  Statistic_t        gcStatistic;
+  Statistic_t        gcWorkStatistic;
   Statistic_t        gcStackStatistic;
   Statistic_t        gcGlobalStatistic;
   Statistic_t        gcWriteStatistic;
   Statistic_t        gcReplicateStatistic;
-  Statistic_t        gcNoneStatistic;
-  Histogram_t        gcWorkHistogram;
-  Histogram_t        gcMajorWorkHistogram;
+  Histogram_t        gcPauseHistogram;
   Histogram_t        gcFlipOffHistogram;
   Histogram_t        gcFlipOnHistogram;
   Histogram_t        gcFlipBothHistogram;
@@ -270,9 +286,19 @@ typedef struct Proc__t
   unsigned long      lastHashKey;     /* Last hash entry key/data for optimizing LookupCallinfo */
   void               *lastHashData; 
   CallinfoCursor_t   lastCallinfoCursor;
+
+  char               buffer[1024];    /* For use in posix.c */
+  char               *tab;
+
+  /* For Perf mon */
+#ifdef sparc
+  unsigned long last0, last1;
+  long pic0[1024], pic1[1024], picCursor;
+  long pic2[1024], pic3[1024];  /* Splitting into two areas */
+#endif
 } Proc_t;
 
-void procChangeState(Proc_t *, ProcessorState_t);
+void procChangeState(Proc_t *, ProcessorState_t, int which);
 
 long updateWorkDone(Proc_t *proc);
 long bytesCopied(Usage_t *u);
@@ -309,7 +335,7 @@ extern pthread_mutex_t ScheduleLock;       /* locks (de)scheduling of sys thread
 void ResetJob(void);                       /* For iterating over all jobs in work list */
 Thread_t *NextJob(void);
 void StopAllThreads(void);                 /* Change all user thread's limit to StopHeapLimit */
-double segmentTime(Proc_t *);              /* Time of current GC segment */
+double nonMutatorTime(Proc_t *);           /* Time of current GC segment */
 
 void thread_init(void);
 void thread_go(ptr_t thunk);
@@ -317,7 +343,8 @@ void Interrupt(struct ucontext *);
 void scheduler(Proc_t *);                  /* Unmap user thread of Proc if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);
-void ReleaseJob(Proc_t *);
+void UpdateJob(Proc_t *);        /* GCRelease tread; update processor's info */
+void ReleaseJob(Proc_t *);       /* UpdateJob; release/unmap thread */
 void Thread_Pin(Thread_t *th);
 void Thread_Unpin(Thread_t *th);
 

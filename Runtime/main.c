@@ -10,26 +10,21 @@
 #include "memobj.h"
 #include "exn.h"
 #include "general.h"
-#include "platform.h"
 #include "gc.h"
 #include "thread.h" 
+#include "platform.h"
 #include "til-signal.h"
 #include "stats.h"
 #include "global.h"
-/* #include "mllib.h" */
-#include "client.h"
 #include "stack.h"
 
 int LEAST_GC_TO_CHECK = 0;
-
-int NumThread     = 100;
-int NumProc       = 1;
 
 void setCommandLine(char* cmd, char** argv);
 
 int process_bool(int *var, char *item, char *option)
 {
-  int match = !strcmp(item,option);
+  int match = !strcasecmp(item,option);
   if (match) 
     *var = 1;
   return match;

@@ -46,10 +46,11 @@
 
 void init_int(int *, int);
 void init_double(double *, double);
-long FetchAndAdd(long *, int);
-long TestAndSet(long *);
-int CompareAndSwap(int *location, int testValue, int swapValue); /* Returns value in memory location */
-void flushStore(void);
+long FetchAndAdd(volatile long *, int);
+long TestAndSet(volatile long *);
+int CompareAndSwap(volatile int *location, int testValue, int swapValue); /* Returns value in memory location */
+void memOrder(void);
+void memBarrier(void);
 
 extern int LEAST_GC_TO_CHECK;
 extern int SHOW_GCSTATS;

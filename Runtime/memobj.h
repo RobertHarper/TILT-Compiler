@@ -27,7 +27,7 @@ struct StackChain__t;
 typedef enum StackletState__t {Inconsistent, Pending, Copying, InactiveCopied, ActiveCopied} StackletState_t;
 
 /* Each stacklet is actually a pair of stacklets.  The variable stackletOffset indicatse which one we use */
-typedef struct Stacklet__t
+typedef volatile struct Stacklet__t
 {
   int  count;                    /* Reference count of how many stack chains I belong to */
   int mapped;                    /* Has memory been mapped to this stacklet */
@@ -44,20 +44,20 @@ typedef struct Stacklet__t
   unsigned int topRegstate;            /* Register state (mask) at top frame */
   unsigned int bottomRegstate;         /* Register state (mask) at bottom frame */
   Stack_t  *callinfoStack;             /* Corresponds to stack frames of this stacklet */
+  struct StackChain__t *parent;        /* Stack chain this stacklet belongs to */
 } Stacklet_t;
 
-struct StackChain__t
+typedef struct StackChain__t
 {
-  int used;
-  int cursor;                  /* Index of first uninitialized stacklet */
+  volatile int used;
+  volatile int cursor;                  /* Index of first uninitialized stacklet */
   Stacklet_t *stacklets[10];   /* Should be dynamic XXXX */
-};
+  volatile void *thread;                /* Really of type Thread_t *  */
+} StackChain_t;
 
-typedef struct StackChain__t StackChain_t;
-
-StackChain_t* StackChain_Alloc(void);       /* Obtains an initial stacklet */
+StackChain_t* StackChain_Alloc(void *);       /* Obtains an initial stacklet */
 void StackChain_Dealloc(StackChain_t *);
-StackChain_t* StackChain_Copy(StackChain_t *);  /* Dupliacte stacklets and link to replicas */
+StackChain_t* StackChain_Copy(void *, StackChain_t *);  /* Dupliacte stacklets and link to replicas */
 int StackChain_Size(StackChain_t *);  /* Total sizes of active area of stacklets */
 
 mem_t StackletPrimaryTop(Stacklet_t *stacklet);
@@ -65,7 +65,7 @@ mem_t StackletPrimaryCursor(Stacklet_t *stacklet);
 mem_t StackletPrimaryBottom(Stacklet_t *stacklet);
 
 void Stacklet_Dealloc(Stacklet_t *stacklet); /* Decrease reference count; if freed, call dealloc on replica */
-Stacklet_t* GetStacklet(mem_t);   /* Stack chain can be obatined by looking at parent field */
+Stacklet_t* GetStacklet(mem_t sp);   /* Stack chain can be obatined by looking at parent field */
 Stacklet_t* CurrentStacklet(StackChain_t *);  /* Get bottom stacklet of chain */
 Stacklet_t *NewStacklet(StackChain_t *); /* Allocate new stacklet to chain */
 Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp); /* fix stackchain cursor (possible exceptions); return active stacklet */
@@ -101,23 +101,21 @@ int NotInRange(mem_t addr, range_t *range)
   return ((unsigned int)addr - (unsigned int)range->low > range->diff);
 }
 
-struct Heap__t
+typedef struct Heap__t
 {
-  int id;                  /* The ID for the heap object. */
-  int valid;               /* Indicates whether this heap is in current use. */
-  mem_t bottom;            /* The physical and logical bottom of the memory region and heap. */
-  mem_t top;               /* The logical top of the heap. */
-  mem_t mappedTop;         /* The top of the memory region that is mapped. */
-  mem_t writeableTop;      /* The top of the memory region that is unprotected. */
-  mem_t cursor;            /* The next allocation point in the logical heap. bottom <= cursor <= top */
-  int   size;              /* bottom - top in bytes - makes inHeap faster */
-  struct range__t range;   /* The physical range bottom to physicalTop */
-  pthread_mutex_t *lock;   /* Used to synchronize multiple access to heap object. */
-  int      *freshPages;    /* Pages not access by collector since start of GC */
-  Bitmap_t *bitmap;        /* Stores starts of objects for debugging */
-};
-
-typedef struct Heap__t Heap_t;
+  int id;                      /* The ID for the heap object. */
+  volatile int valid;          /* Indicates whether this heap is in current use. */
+  mem_t bottom;                /* The physical and logical bottom of the memory region and heap. */
+  volatile mem_t top;          /* The logical top of the heap. */
+  volatile mem_t mappedTop;    /* The top of the memory region that is mapped. */
+  volatile mem_t writeableTop; /* The top of the memory region that is unprotected. */
+  volatile mem_t cursor;       /* The next allocation point in the logical heap. bottom <= cursor <= top */
+  volatile int   size;         /* = top - bottom (in bytes) - makes inHeap faster */
+  struct range__t range;       /* The physical range bottom to physicalTop */
+  pthread_mutex_t *lock;       /* Used to synchronize multiple access to heap object. */
+  volatile int    *freshPages; /* Pages not access by collector since start of GC */
+  Bitmap_t *bitmap;            /* Stores starts of objects for debugging */
+} Heap_t;
 
 INLINE(inHeap)
 int inHeap(ptr_t v, Heap_t *heap)

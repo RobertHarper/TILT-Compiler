@@ -1,7 +1,7 @@
-(*$import TopLevel Int String TextIO *)
+(*$import Prelude TopLevel Int String TextIO Array List *)
 
-
-local
+fun runSomeLexgen str = 
+let
 val makestring_int = Int.toString
 fun fold f l a = foldr f a l
 fun ordof(s : string, i : int) = ord(String.sub(s,i))
@@ -39,7 +39,6 @@ open Array
 	    in f key key'
 	    end
   in
- datatype 'a option = NONE | SOME of 'a
  datatype color = RED | BLACK
  datatype tree = empty | tree of (int list * string) * color * tree * tree
  exception notfound of (int list * string)
@@ -1162,14 +1161,20 @@ fun lexGen(xinfile) =
 	 end)
     end
 
-in
-    val lexgenInput =     (* Example input file is Bench/ml.lex *)
+
+
+    fun readLexgenInput() =     (* Example input file is Bench/ml.lex *)
 	let val _ = (print "Enter filename: "; TextIO.flushOut TextIO.stdOut)
 	    val s = TextIO.inputLine TextIO.stdIn
 	in  if (String.sub(s,size s - 1) = #"\n")
 		then String.substring(s,0,size s - 1)
 	    else s
 	end
-    val lexgenResult = lexGen lexgenInput
+in
+    lexGen str
 end
  
+fun runLexgen() = runSomeLexgen "../BenchData/ml.lex"
+fun runLexgen1() = runSomeLexgen "../BenchData/ml1.lex"
+fun runLexgen2() = runSomeLexgen "../BenchData/ml2.lex"
+fun runLexgen3() = runSomeLexgen "../BenchData/ml3.lex"

@@ -1,0 +1,35 @@
+#include ../Rtl/mapfile-rtl
+
+// ----------------- Backend directory -----------------
+CORE        core.sig
+Core        core
+MACHINE       machine.sig
+MACHINEUTILS       machineutils.sig
+CALLCONV       callconv.sig
+TRACETABLE       tracetable.sig
+Tracetable       tracetable
+BBLOCK       bblock.sig
+Bblock       bblock
+PRINTUTILS       printutils.sig
+PrintUtils       printutils
+
+IFGRAPH       ifgraph.sig
+IfGraph       ifgraph
+TRACKSTORAGE       trackstorage.sig
+COLOR         color.sig
+Color         color1
+
+TOASM       toasm.sig
+INTRAPROC       intraproc.sig
+Chaitin       chaitin
+
+Labelgraph       labelgraph
+
+RECURSION       recursion.sig
+Recursion       recursion
+RTLTOASM       rtltoasm.sig
+RtlToAsm       rtltoasm
+
+VarGraph       vargraph
+
+LINKASM       link.sig

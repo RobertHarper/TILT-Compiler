@@ -1,202 +1,205 @@
-(*$import TopLevel Int *)
+(*$import Prelude TopLevel Int TextIO *)
+
+(* Thread safety achieved by encapsulating top-level state into two functions: makeSolver and makeTest *)
+
 local
     fun inc ir = ir := (!ir) + 1
     val makestring_int = Int.toString
-
-        datatype 'a option = SOME of 'a | NONE
-
-	datatype term
-	  = STR of string * term list
-	  | INT of int
-	  | CON of string
-	  | REF of term option ref
-
-	exception BadArg of string
-
-	val global_trail = ref (nil : term option ref list)
-	val trail_counter = ref 0
-
-	fun unwind_trail (0, tr) = tr
-	  | unwind_trail (n, r::tr) =
-	   ( r := NONE ; unwind_trail (n-1, tr) )
-	  | unwind_trail (_, nil) =
-	   raise BadArg "unwind_trail"
-
-	fun reset_trail () = ( global_trail := nil )
-
-	fun trail func =
-	   let 
-	      val tc0 = !trail_counter
-	   in
-	      ( func () ;
-	       global_trail := unwind_trail (!trail_counter-tc0, !global_trail) ;
-	       trail_counter := tc0 )
-	   end
 	
-	fun bind (r, t) =
-	    ( r := SOME t ;
-	     global_trail := r::(!global_trail) ;
-	     trail_counter := !trail_counter+1 )
+    datatype term = STR of string * term list
+      | INT of int
+      | CON of string
+      | REF of term option ref
+	
+    exception BadArg of string
+    exception Done
+
+    fun makeSolver() = 
+	let 
+	    val global_trail = ref (nil : term option ref list)
+	    val trail_counter = ref 0
+		
+	    fun unwind_trail (0, tr) = tr
+	      | unwind_trail (n, r::tr) =
+		( r := NONE ; unwind_trail (n-1, tr) )
+	      | unwind_trail (_, nil) =
+		raise BadArg "unwind_trail"
+		    
+	    fun reset_trail () = ( global_trail := nil )
+		
+	    fun trail func =
+		let 
+		    val tc0 = !trail_counter
+		in
+		    ( func () ;
+		     global_trail := unwind_trail (!trail_counter-tc0, !global_trail) ;
+		     trail_counter := tc0 )
+		end
 	    
-	fun same_ref (r, REF(r')) = (r = r')
-	  | same_ref _ = false
-
-	fun occurs_check r t =
-	    let
-		fun oc (STR(_,ts)) = ocs ts
-		  | oc (REF(r')) = 
-		    (case !r' of
-			 SOME(s) => oc s
-		       | _ => r <> r')
-		  | oc (CON _) = true
-		  | oc (INT _) = true
-		and ocs nil = true
-		  | ocs (t::ts) = oc t andalso ocs ts
-	    in
-		oc t
-	    end
-
-	fun deref (t as (REF(x))) = 
-	    (case !x of 
-	      SOME(s) => deref s
-	    | _ => t)
-	  | deref t = t
-
-	fun unify' (REF(r), t) sc = unify_REF (r,t) sc
-	  | unify' (s, REF(r)) sc = unify_REF (r,s) sc
-	  | unify' (STR(f,ts), STR(g,ss)) sc =
-	    if (f = g)
-		then unifys (ts,ss) sc
-	    else ()
-	  | unify' (CON(f), CON(g)) sc =
-	    if (f = g) then
-		sc ()
-	    else
-		()
-	  | unify' (INT(f), INT(g)) sc =
-	    if (f = g) then
-		sc ()
-	    else
-		()
-	  | unify' (_, _) sc = ()
-
-	and unifys (nil, nil) sc = sc ()
-	  | unifys (t::ts, s::ss) sc =
-	    unify' (deref(t), deref(s))
-	    (fn () => unifys (ts, ss) sc)
-	  | unifys _ sc = ()
-
-	and unify_REF (r, t) sc =
-	    if same_ref (r, t)
-		then sc ()
-	    else if occurs_check r t
-		     then ( bind(r, t) ; sc () )
-		 else ()
-
-	fun unify (s, t) = unify' (deref(s), deref(t))
+	    fun bind (r, t) =
+		( r := SOME t ;
+		 global_trail := r::(!global_trail) ;
+		 trail_counter := !trail_counter+1 )
+		
+	    fun same_ref (r, REF(r')) = (r = r')
+	      | same_ref _ = false
+		
+	    fun occurs_check r t =
+		let
+		    fun oc (STR(_,ts)) = ocs ts
+		      | oc (REF(r')) = 
+			(case !r' of
+			     SOME(s) => oc s
+			   | _ => r <> r')
+		      | oc (CON _) = true
+		      | oc (INT _) = true
+		    and ocs nil = true
+		      | ocs (t::ts) = oc t andalso ocs ts
+		in
+		    oc t
+		end
 	    
-	fun instantiate (r, t) sc =
-	    ( bind (r, t) ; sc () )
-	    
-	fun exists sc = sc (REF(ref(NONE)))
-
-	fun alias t sc = sc t
-
-	fun get_structure (t, c, n) sc =
-	    let
-		fun newrefs 0 = nil
-		  | newrefs n = REF(ref(NONE))::newrefs(n-1)
-
-		fun gs (REF(r)) =
-		    let
-			val ts = newrefs n
-		    in
-			(bind(r, STR(c, ts));
-			 sc ts)
-		    end
-		  | gs (STR(f,args)) =
-		    if (c = f)
-			then sc (args)
-		    else ()
-		  | gs _ = raise BadArg "get_structure"
-	    in
-		gs (deref t)
-	    end
-
-	fun get_const (t, c) sc =
-	   let
-	      fun gs (REF(r)) =
-		 (bind(r, CON c);
-		  sc ())
-		| gs (CON(f)) =
-		 if (c = f) then
-		    sc ()
-		 else ()
-		| gs _ = raise BadArg "get_const"
-	   in
-	      gs (deref t)
-	   end
-
-	fun get_integer (t, c) sc =
-	   let
-	      fun gs (REF(r)) =
-		 (bind(r, INT c);
-		  sc ())
-		| gs (INT(f)) =
-		 if (c = f) then
-		    sc ()
-		 else ()
-		| gs _ = raise BadArg "get_integer"
-	   in
-	      gs (deref t)
-	   end
-
-	(* some support code for remembering variable names for printing *)
-	val variable_names = ref (nil : (string * term) list)
-	val next_made_up_variable_num = ref 0
-	fun name_of_var r =
-	    let
-		fun find_name nil = NONE
-		  | find_name ((name, REF(r')) :: rest) =
-		    if r = r' then
-			SOME name
+	    fun deref (t as (REF(x))) = 
+		(case !x of 
+		     SOME(s) => deref s
+		   | _ => t)
+	      | deref t = t
+		     
+	    fun unify' (REF(r), t) sc = unify_REF (r,t) sc
+	      | unify' (s, REF(r)) sc = unify_REF (r,s) sc
+	      | unify' (STR(f,ts), STR(g,ss)) sc =
+		if (f = g)
+		    then unifys (ts,ss) sc
+		else ()
+	      | unify' (CON(f), CON(g)) sc =
+		    if (f = g) then
+			sc ()
 		    else
-			find_name rest
-		  | find_name (_ :: rest) =
-		    (* this term is not a variable *)
-		    find_name rest
-	    in
-		case find_name (!variable_names)
-		  of SOME name => name
-		   | NONE =>
-			 let
-			     val name = "X" ^ (makestring_int (!next_made_up_variable_num))
-			 in
-			     (*
-			      * We wrap the references with the REF constructor
-			      * so that the form of list entries that we add
-			      * matches the form of the list we are given to
-			      * start with.
-			      *)
-			     variable_names := (name, REF(r)) :: !variable_names;
-			     inc next_made_up_variable_num;
-			     name
-			 end
-	    end
-
-	fun makestring (STR(f,nil)) = f
-	  | makestring (STR(f,ts)) = f ^ "(" ^ makestring_s ts ^ ")"
-	  | makestring (REF(r)) = 
-	    (case !r of 
-		 SOME t => makestring t
-	       | _ => name_of_var r)
-	  | makestring (CON(f)) = f
-	  | makestring (INT(i)) = makestring_int i
-	and makestring_s nil = raise BadArg "makestring_s" (* can't happen *)
-	  | makestring_s (t::nil) = makestring t
-	  | makestring_s (t::ts) = makestring t ^ "," ^ makestring_s ts
-
-	(* print substitution, represented as list of variable/term pairs *)
+			()
+	      | unify' (INT(f), INT(g)) sc =
+			if (f = g) then
+			    sc ()
+			else
+			    ()
+	      | unify' (_, _) sc = ()
+			    
+	    and unifys (nil, nil) sc = sc ()
+	      | unifys (t::ts, s::ss) sc =
+		unify' (deref(t), deref(s))
+		(fn () => unifys (ts, ss) sc)
+	      | unifys _ sc = ()
+		
+	    and unify_REF (r, t) sc =
+		if same_ref (r, t)
+		    then sc ()
+		else if occurs_check r t
+			 then ( bind(r, t) ; sc () )
+		     else ()
+			 
+	    fun unify (s, t) = unify' (deref(s), deref(t))
+		
+	    fun instantiate (r, t) sc =
+		( bind (r, t) ; sc () )
+		
+	    fun exists sc = sc (REF(ref(NONE)))
+		
+	    fun alias t sc = sc t
+		
+	    fun get_structure (t, c, n) sc =
+		let
+		    fun newrefs 0 = nil
+		      | newrefs n = REF(ref(NONE))::newrefs(n-1)
+			
+		    fun gs (REF(r)) =
+			let
+			    val ts = newrefs n
+			in
+			    (bind(r, STR(c, ts));
+			     sc ts)
+			end
+		      | gs (STR(f,args)) =
+			if (c = f)
+			    then sc (args)
+			else ()
+		      | gs _ = raise BadArg "get_structure"
+		in
+		    gs (deref t)
+		end
+	    
+	    fun get_const (t, c) sc =
+		let
+		    fun gs (REF(r)) =
+			(bind(r, CON c);
+			 sc ())
+		      | gs (CON(f)) =
+			if (c = f) then
+			    sc ()
+			else ()
+		      | gs _ = raise BadArg "get_const"
+		in
+		    gs (deref t)
+		end
+	    
+	    fun get_integer (t, c) sc =
+		let
+		    fun gs (REF(r)) =
+			(bind(r, INT c);
+			 sc ())
+		      | gs (INT(f)) =
+			if (c = f) then
+			    sc ()
+			else ()
+		      | gs _ = raise BadArg "get_integer"
+		in
+		    gs (deref t)
+		end
+	    
+	    (* some support code for remembering variable names for printing *)
+	    val variable_names = ref (nil : (string * term) list)
+	    val next_made_up_variable_num = ref 0
+	    fun name_of_var r =
+		let
+		    fun find_name nil = NONE
+		      | find_name ((name, REF(r')) :: rest) =
+			if r = r' then
+			    SOME name
+			else
+			    find_name rest
+		      | find_name (_ :: rest) =
+			    (* this term is not a variable *)
+			    find_name rest
+		in
+		    case find_name (!variable_names)
+			of SOME name => name
+		      | NONE =>
+			    let
+				val name = "X" ^ (makestring_int (!next_made_up_variable_num))
+			    in
+				(*
+				 * We wrap the references with the REF constructor
+				 * so that the form of list entries that we add
+				 * matches the form of the list we are given to
+				 * start with.
+				 *)
+				variable_names := (name, REF(r)) :: !variable_names;
+				inc next_made_up_variable_num;
+				name
+			    end
+		end
+	    
+	    fun makestring (STR(f,nil)) = f
+	      | makestring (STR(f,ts)) = f ^ "(" ^ makestring_s ts ^ ")"
+	      | makestring (REF(r)) = 
+		(case !r of 
+		     SOME t => makestring t
+		   | _ => name_of_var r)
+	      | makestring (CON(f)) = f
+	      | makestring (INT(i)) = makestring_int i
+	    and makestring_s nil = raise BadArg "makestring_s" (* can't happen *)
+	      | makestring_s (t::nil) = makestring t
+	      | makestring_s (t::ts) = makestring t ^ "," ^ makestring_s ts
+		
+	    (* print substitution, represented as list of variable/term pairs *)
 	fun makestrings l =
 	    let
 		fun ms [] = ".\n"
@@ -207,40 +210,45 @@ local
 		next_made_up_variable_num := 0;
 		ms l
 	    end
-
-	exception Done
+	
         (* check if the user requests more solutions *)
         (* return if yes, raise exception Done if not *)
-(*
-	fun nextp () = ( print " ? " ; flush_out std_out ;
-			if ord (input_line std_in) = ord ";"
+	fun nextp () = (print " ? " ; TextIO.flushOut TextIO.stdOut;
+			if (TextIO.inputN(TextIO.stdIn,1)) = ";"
 			    then ()
 			else raise Done)
-*)
-
+	    
+	    
 	(* implement arithmetic binary operators *)
 	fun intbinop f (t1, t2) sc =
-	   case (deref t1, deref t2)
-	     of (INT i, INT j) =>
-		if f (i, j) then
-		   sc ()
-		else
-		   ()
+	    case (deref t1, deref t2) of
+		(INT i, INT j) =>
+		    if f (i, j) then
+			sc ()
+		    else
+			()
 	      | _ => raise BadArg "intbinop"
-
+			
 	val less_equal = intbinop (op <=)
 	val less = intbinop (op <)
 	val greater_equal = intbinop (op >=)
 	val greater = intbinop (op >)
+	in  (trail, exists, unify)
+	end
+    
+    val cons_s = "cons"
+    val x_s = "x"
+    val nil_s = "nil"
+    val o_s = "o"
+    val s_s = "s"
+    val CON_o_s = CON(o_s)
+    val CON_nil_s = CON(nil_s)
+    val CON_x_s = CON(x_s)
 
-	val cons_s = "cons"
-	val x_s = "x"
-	val nil_s = "nil"
-	val o_s = "o"
-	val s_s = "s"
-        val CON_o_s = CON(o_s)
-	val CON_nil_s = CON(nil_s)
-	val CON_x_s = CON(x_s)
+
+fun makeTest() = 
+let
+val (trail, exists, unify) = makeSolver()
 
 fun move_horiz (T_1, T_2) sc = 
 (
@@ -446,15 +454,21 @@ exists (fn X =>
 unify (T_1, X) (fn () => 
 solitaire (STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, CON_nil_s])])])])]), STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, CON_nil_s])])])]), STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_o_s, STR(cons_s, [CON_x_s, CON_nil_s])])]), STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, CON_nil_s])]), STR(cons_s, [STR(cons_s, [CON_x_s, CON_nil_s]), CON_nil_s])])])])]), X, STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [INT(0)])])])])])])])])])])])])])) sc))
 
+in   (exists, solution1, solution2)
+end
 
 
-exception Done
-fun sol1 _ = exists(fn Z =>
-	       solution1 (Z) (fn () => (print "yes\n"; raise Done)))
+fun sol1 () = let val (exists, solution1, solution2) = makeTest()
+	      in  exists(fn Z => solution1 (Z) (fn () => (print "yes\n"; raise Done)))
+	      end
 
-fun sol2 _ = exists(fn Z =>
-	       solution2 (Z) (fn () => (print "yes\n"; raise Done)))
+fun sol2 () = let val (exists, solution1, solution2) = makeTest()
+	      in  exists(fn Z => solution2 (Z) (fn () => (print "yes\n"; raise Done)))
+	      end
 in
-val frankResult = (sol2 ()) handle Done => ()
+
+    fun runFrank() = (sol2 ()) 
+	handle (e as BadArg s) => (print ("BadArg " ^ s ^ "\n"); raise e)
+	     | Done => ()
 
 end

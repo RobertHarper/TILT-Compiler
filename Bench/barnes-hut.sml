@@ -1,5 +1,8 @@
-(*$import TopLevel Int List Help Math64 Real64 String Help *)
+(*$import Prelude TopLevel Int List Help Math64 Real64 String Help *)
 
+(* Thread safety due to no top-level refs *)
+
+local
 
 val realEq = Real.==
 
@@ -611,26 +614,24 @@ fun simulate makeForce particles delta cur stop when =
      else particles)
 
 (* ------------ Running the code -------------- *)
-local 
-    val last = ref 0.5
-    (* Generates not so random numbers from 0.0 to 1.0 *)
-in  fun random() = 
-    let val next = !last
-	val next = next * 23.345436 + 0.832723
-	val next = next - real(floor next)
-	val _ = last := next
-    in  next
+fun randomParticles n = 
+    let  val last = ref 0.5
+	(* Generates not so random numbers from 0.0 to 1.0 *)
+	fun random() = 
+	    let val next = !last
+		val next = next * 23.345436 + 0.832723
+		val next = next - real(floor next)
+		val _ = last := next
+	    in  next
+	    end
+	fun randomParticle() = ((random(), random()), 1.0, vecZero)
+	fun loop acc 0 = acc
+	  | loop acc n =
+	    let val acc' = (randomParticle()) :: acc
+	    in  loop acc' (n-1)
+	    end
+    in  loop [] n
     end
-    fun randomParticle() = ((random(), random()), 1.0, vecZero)
-    fun randomParticles n = 
-	let fun loop acc 0 = acc
-	      | loop acc n =
-	        let val acc' = (randomParticle()) :: acc
-		in  loop acc' (n-1)
-		end
-	in  loop [] n
-	end
-end
 
 fun standard numParticles numIterations numCheckpoint = 
 let 
@@ -664,4 +665,7 @@ end;
 
 (* val _ = standard 1000 2 1000 *)
 (* val _ = bh 1000 10 1000  *)
- val _ = bhP 1000 10 1000  
+
+in
+    fun runBarnesHut() = bhP 1000 10 1000  
+end

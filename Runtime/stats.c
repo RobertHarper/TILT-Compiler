@@ -213,7 +213,7 @@ int showTimeList(double min)
 double addTimeList(void *procVoid, int w, int d)
 {
   Proc_t *proc = (Proc_t *)procVoid;
-  double t = segmentTime(proc);
+  double t = nonMutatorTime(proc);
   which[cursor] = w;
   data[cursor] = d;
   times[cursor] = t;
@@ -375,7 +375,6 @@ const char *collectorTypeString(void)
 }
 
 
-
 void stats_finish(void)
 { 
   int i;
@@ -409,41 +408,40 @@ void stats_finish(void)
   if (information >= 1) {
     for (i=0; i<NumProc; i++) {
       Proc_t *proc = getNthProc(i);
+      printf("\n");
       printf("PROC #%d: Allocated  = %8.0f kb\n", i, proc->bytesAllocatedStatistic.sum / 1024.0);
       printf("         Copied     = %8.0f kb\n", proc->bytesCopiedStatistic.sum / 1024.0); 
       printf("         Work       = %8.0f kw\n", proc->workStatistic.sum / 1024.0);
       show_time_statistic_header();
-      printf("          Total        |   %8.3f\n", proc->totalTimer.last / 1000.0);
-      show_time_statistic(" Scheduler   ", &proc->schedulerStatistic, proc->totalTimer.last);
-      show_time_statistic(" Mutator     ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
-      show_time_statistic(" GCNone      ", &proc->gcNoneStatistic, proc->totalTimer.last);
-      show_time_statistic(" GCWork      ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
+      printf("         Total         |   %8.3f\n", proc->totalTimer.last / 1000.0);
+      show_time_statistic("  Scheduler  ", &proc->schedulerStatistic, proc->totalTimer.last);
+      show_time_statistic("  Mutator    ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
+      show_time_statistic("  GC         ", &proc->gcStatistic, proc->totalTimer.last);
+      show_time_statistic("  Idle       ", &proc->idleStatistic, proc->totalTimer.last);
+      show_time_statistic("Pause        ", &proc->gcPauseHistogram.stat, proc->totalTimer.last);
       if (information >= 2) {
-	show_time_statistic("  GCReplicate", &proc->gcReplicateStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCWrite    ", &proc->gcWriteStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCGlobal   ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCStack    ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCMajor    ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCFlipBoth ", &proc->gcFlipBothHistogram.stat, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCFlipOn   ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCFlipOff  ", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	printf("\n");
+	show_time_statistic("  GCWork     ", &proc->gcWorkStatistic, proc->gcStatistic.sum);
+	show_time_statistic("  GCGlobal   ", &proc->gcGlobalStatistic, proc->gcStatistic.sum);
+	show_time_statistic("  GCStack    ", &proc->gcStackStatistic, proc->gcStatistic.sum);
+	show_time_statistic("  GCWrite    ", &proc->gcWriteStatistic, proc->gcStatistic.sum);
+	show_time_statistic("  GCReplicate", &proc->gcReplicateStatistic, proc->gcStatistic.sum);
       }
       if (information >= 3) {
-	show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
-	show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
-	show_histogram(" GCFlipBoth  Hist", &proc->gcFlipOffHistogram);
-	show_histogram(" GCFlipOff   Hist", &proc->gcFlipOffHistogram);
-	show_histogram(" GCFlipOn    Hist", &proc->gcFlipOnHistogram);
+	printf("\n");
+	show_time_statistic("GCFlipBoth   ", &proc->gcFlipBothHistogram.stat, proc->gcStatistic.sum);
+	show_time_statistic("GCFlipOn     ", &proc->gcFlipOnHistogram.stat, proc->gcStatistic.sum);
+	show_time_statistic("GCFlipOff    ", &proc->gcFlipOffHistogram.stat, proc->gcStatistic.sum);
+	show_histogram(" Pause   Histogram", &proc->gcPauseHistogram);
+	show_histogram(" GCFlipBoth   Hist", &proc->gcFlipOffHistogram);
+	show_histogram(" GCFlipOff    Hist", &proc->gcFlipOffHistogram);
+	show_histogram(" GCFlipOn     Hist", &proc->gcFlipOnHistogram);
 	/*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
       }
-      /* These are not really per-processor */
-      printf("\n");
-      show_statistic("MinSurvRate ", &proc->minorSurvivalStatistic);
-      show_statistic("MajSurvRate ", &proc->majorSurvivalStatistic);
-      show_statistic("HeapSize(kb)", &proc->heapSizeStatistic);
     }
   }
 
+  printf("\n");
   printf("GC:    GCMethod      = %8s     Allocated    = %9.0f kb   NumCopied    = %8d    MaxStkDepth  = %4d\n"
 	 "       StackMethod   = %8s     Copied       = %9.0f kb   NumShared    = %8d    AvgStkDepth  = %4.0f\n",
 	 collectorTypeString(),          bytesAllocated / 1024.0, NumCopied,      MaxStackDepth,
@@ -458,14 +456,25 @@ void stats_finish(void)
 	   NumMajorGC,                     NumWrites,               NumLocatives);
   if(useGenStack)
     printf("       newStkDepth   = %4.0f\n",  AvgNewStackDepth);
+  show_statistic("MinSurvRate ", &minorSurvivalStatistic);
+  show_statistic("MajSurvRate ", &majorSurvivalStatistic);
+  show_statistic("HeapSize(kb)", &heapSizeStatistic);
+
+  printf("\n");
   printf("MISC:  Total time    = %8.2f s   maxPhysMem   = %9d      minPageFault = %8d    invCtxtSwap  = %5d\n"
          "       Total Threads = %8d     sharedMem    = %9d      majPageFault = %8d    volCtxtSwap  = %5d\n"
+	 "       Processors    = %8d\n"
 	 "       Max Threads   = %8d     unsharedData = %9d                                 swapping     = %5d\n"
 	 "                                    unsharedStk  = %9d\n",
 	 elapsed, 	 stop_rusage.ru_maxrss,	 stop_rusage.ru_minflt,	stop_rusage.ru_nvcsw,  
 	 thread_total(), stop_rusage.ru_ixrss,   stop_rusage.ru_majflt, stop_rusage.ru_nivcsw,
+	 NumProc,
 	 thread_max(),	 stop_rusage.ru_idrss,                          stop_rusage.ru_nswap,
 	                 stop_rusage.ru_isrss);
+
+  if (workStack != NULL)
+    printf("       Shared Stack Push = %6d    Shared Stack Pops = %6d\n",
+	   workStack->numPush, 	 workStack->numPop);
   /*
     printf("MISC:    GCTable       = %9d b  \n"
 	 "         SMLGlobal     = %9d b  \n"

@@ -14,7 +14,6 @@
 #include "stats.h"
 #include "gcstat.h"
 #include "platform.h"
-#include "client.h"
 #include "show.h"
 
 int largeheapsize = 16384;  /* measure in Kb */
