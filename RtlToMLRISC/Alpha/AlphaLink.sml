@@ -138,6 +138,8 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 		    structure IntSet	      = IntBinarySet
 		    structure MLTreeExtra     = MLTreeExtra)
 
+  structure SpillReload = SpillReload(structure MLTreeExtra = MLTreeExtra)
+
   structure EmitRtlMLRISC =
     EmitRtlMLRISC(structure BasicBlock		= BasicBlock
 		  structure CallConventionBasis = CallConventionBasis
@@ -157,6 +159,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 		  structure RegisterSpillMap	= RegisterSpillMap
 		  structure RegisterTraceMap	= RegisterTraceMap
 		  structure Rtl			= Rtl
+		  structure SpillReload		= SpillReload
 		  structure StackFrame		= StackFrame
 		  structure TraceTable		= TraceTable)
 
