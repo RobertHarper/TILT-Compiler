@@ -6,9 +6,9 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure Alpha : ALPHA
 		  sharing ArgNil = Alpha.Nil
 		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim) 
-  : (*>*) NILUTIL where structure Nil = ArgNil 
-			and structure Prim = ArgPrim
-			and type alpha_context = Alpha.alpha_context =
+  :(*>*) NILUTIL where structure Nil = ArgNil 
+		   and structure Prim = ArgPrim
+		   and type alpha_context = Alpha.alpha_context =
 struct
 
   structure Nil = ArgNil
@@ -135,6 +135,9 @@ struct
     val is_exn_con = strip_annotate is_exn_con'
     val is_var_c = isSome o strip_var
   end
+
+  fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
+    | strip_singleton k = k
 
   fun get_arrow_return con = 
     case strip_arrow con

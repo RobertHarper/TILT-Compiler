@@ -5,7 +5,7 @@ Group
 	signature PPNIL
         signature NILCONTEXT
 
-(*        structure Linknil*)
+        structure Linknil
 is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)

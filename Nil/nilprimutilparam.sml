@@ -1,5 +1,9 @@
 functor NilPrimUtilParam(structure Nil : NIL)
-    : PRIMUTILPARAM =
+    :(*>*) PRIMUTILPARAM where type con = Nil.con 
+		       and type exp = Nil.exp 
+		       and type intsize = Nil.Prim.intsize
+		       and type floatsize = Nil.Prim.floatsize 
+		       and type ('con,'exp) value = ('con,'exp) Nil.Prim.value =
     struct
 
 	open Nil

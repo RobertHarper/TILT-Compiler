@@ -2,32 +2,35 @@
    Thus, kind type is replaced by work types.
    Also note that all record fields must be sorted by their labels. *)
 
-functor Tonil(structure Il : IL
+functor Tonil(structure ArgIl : IL
               structure Ilutil : ILUTIL
               structure Nilutil : NILUTIL
+	      structure NilError : NILERROR
               structure Ilcontext : ILCONTEXT
               structure IlStatic : ILSTATIC
-              structure Nilcontext : NILCONTEXT
+              structure ArgNilcontext : NILCONTEXT
               structure Nilstatic : NILSTATIC
               structure Nilprimutil : PRIMUTIL
               structure Ppnil : PPNIL
               structure Ppil : PPIL
-                 sharing Il = Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il
-		 sharing Nilutil.Nil.Prim = Nilprimutil.Prim = Il.Prim
-                 sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil = 
-                         Nilstatic.Nil
-                 sharing type Nilstatic.context = Nilcontext.context
+                 sharing ArgIl = Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il
+		 sharing Nilutil.Nil.Prim = Nilprimutil.Prim = ArgIl.Prim
+                 sharing Nilutil.Nil = ArgNilcontext.Nil = Ppnil.Nil = 
+                         Nilstatic.Nil = NilError.Nil
+                 sharing type Nilstatic.context = ArgNilcontext.context
 		 sharing type Nilprimutil.exp = Nilutil.Nil.exp
                      and type Nilprimutil.con = Nilutil.Nil.con
-             ) : TONIL =
+             ) :(*>*) TONIL where structure Il = ArgIl and structure NilContext = ArgNilcontext =
 struct
-   structure Il = Il
-   structure NilContext = Nilcontext
+   structure Il = ArgIl
+   structure NilContext = ArgNilcontext
+   structure Nilcontext = ArgNilcontext
    structure Nil = NilContext.Nil
 
    open Nil
    val debug = ref false
    val full_debug = ref false
+   val trace = ref false
 (*
    val debug = ref (Prim_c (Record_c nil, nil))
    val il_debug = ref (Il.CON_ANY)
@@ -38,6 +41,16 @@ struct
 
    fun error msg = Util.error "tonil.sml" msg
 
+   val printl = Util.printl
+   val lprintl = Util.lprintl
+   val strip_var = Nilutil.strip_var
+   val strip_arrow = Nilutil.strip_arrow
+   val strip_singleton = Nilutil.strip_singleton
+
+   val perr_c = NilError.perr_c
+   val perr_e = NilError.perr_e
+   val perr_k = NilError.perr_k
+   val perr_c_k = NilError.perr_c_k
 
    fun gt_label_pair ((l1,_),(l2,_)) = (case Name.compare_label (l1,l2) of
 							 GREATER => true
@@ -412,6 +425,9 @@ struct
        let
 	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap_of context)
 
+	   val _ = (lprintl "MOD IS";
+		    Ppil.pp_mod ilmod_fun)
+
 	   val {cbnd_cat = cbnd_cat_fun,
 		ebnd_cat = ebnd_cat_fun,
 		name_c = name_fun_c,
@@ -427,12 +443,23 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 *)
 	   val {cbnd_cat = cbnd_cat_arg,
 		ebnd_cat = ebnd_cat_arg,
-                name_c = name_arg_c as (Var_c var_arg_c),
-                name_r = name_arg_r as (Var_e var_arg_r),
+                name_c = name_arg_c,
+                name_r = name_arg_r,
 		knd_c = knd_arg_c,
 		type_r = type_arg_r,
 		valuable = valuable_arg
 		} = xmod context (ilmod_arg, NONE)
+	   val var_arg_c = 
+	     case strip_var name_arg_c
+	       of SOME v => v
+		| NONE => (perr_c name_arg_c;
+			   error "Expected constructor variable")
+
+	   val var_arg_r = 
+	     case name_arg_r
+	       of (Var_e v) => v
+		| _ => (perr_e name_arg_r;
+			   error "Expected expression variable")
 
 	   val is_type_arg_unit = (case type_arg_r of
 				       Prim_c(Record_c _,[]) => true
@@ -441,10 +468,23 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 	   val name_r = Var_e var_r
 
            local
-	       val (Arrow_k(_, [(v_c, _)], con_body_kind)) = knd_fun_c
+	       val (v_c,con_body_kind) = 
+		 case strip_singleton knd_fun_c 
+		   of (Arrow_k(_, [(v_c, _)], con_body_kind)) => (v_c,con_body_kind)
+		    | _ => (perr_k knd_fun_c;
+			    error "Expected arrow kind")
+
+	       val _ = (lprintl "Here?";
+			ignore (map (fn (v,k,c) => perr_k k) ((flattenCatlist cbnd_cat_fun))))
+			
 	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_arg_c
 	       val reduced_argument_c = Nilstatic.con_reduce (NILctx_of context, argument_c)
-               val (AllArrow_c(_,effect,[(var_body_arg_c,_)],_,_,exp_body_type)) = type_fun_r
+               val (effect,var_body_arg_c,exp_body_type) = 
+		 case strip_arrow type_fun_r 
+		   of SOME (_,effect,[(var_body_arg_c,_)],_,_,exp_body_type) =>
+		     (effect,var_body_arg_c,exp_body_type)
+		    | _ => (perr_c type_fun_r;
+			    error "Expected arrow constructor with one arg")
 
                fun subst v = 
 		   if (Name.eq_var(v_c,v)) then 
@@ -461,6 +501,7 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 
 	       val knd_c = Nilstatic.kind_reduce (NILctx_of context,
 						  Nilutil.substConInKind subst con_body_kind)
+
 	       val cbnd_cat = APP[cbnd_cat_fun, 
 				  cbnd_cat_arg,
 				  LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
@@ -546,12 +587,14 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val name_proj_r = Var_e var_proj_r
 
 	   local
-	       val v = Name.fresh_var ()
 	       val type_mod_r' = Nilstatic.con_reduce(NILctx_of context, type_mod_r)
 	   in
 
-	       val (_,knd_proj_c) = Nilstatic.con_valid(Nilcontext.insert_kind(NILctx_of context, v, knd_mod_c),
-							selectFromCon(Var_c v, lbls))
+	       val con_proj_c = selectFromCon(name_mod_c, lbls)
+
+	       val (con_proj_c,knd_proj_c) = 
+		 Nilstatic.con_valid(NILctx_of context,con_proj_c)
+
 (*
 	       val _ = (print "calling projectFromRecord with type_mod_r' = ";
 			Ppnil.pp_con type_mod_r'; print "\n and hd lbls = ";
@@ -560,9 +603,15 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	       val type_proj_r = projectFromRecord type_mod_r' lbls
 	   end
 
+
            val cbnd_proj_cat = APP[cbnd_mod_cat,
-				   LIST [(var_proj_c, knd_proj_c,
-					  selectFromCon(name_mod_c, lbls))]]
+				   LIST [(var_proj_c, knd_proj_c,con_proj_c)]]
+	   val _ = 
+	     if (!trace) then
+	       (lprintl "HERE!!";
+		ignore (map (fn (v,k,c) => perr_k k) ((flattenCatlist cbnd_proj_cat))))
+	     else ()
+
 	   val ebnd_proj_cat = APP[ebnd_mod_cat,
 				   LIST [Exp_b(var_proj_r, type_proj_r,
 					       selectFromRec(name_mod_r,
@@ -1519,7 +1568,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   open Prim
 	   val cons = map (#1 o (xcon context)) il_cons
 	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
-           val (AllArrow_c(_,effect,_,_,_,con)) = Nilprimutil.get_type prim cons
+           val (effect,con) = 
+	     case strip_arrow (Nilprimutil.get_type prim cons)
+	       of SOME (_,effect,_,_,_,con) => (effect,con)
+		| _ => (perr_c (Nilprimutil.get_type prim cons);
+			error "Expected arrow constructor")
            val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
 
 	   val con : con = (case con of
@@ -1559,7 +1612,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
        let
 	   val cons = map (#1 o (xcon context)) il_cons
 	   val (args, _, valuables) = myunzip3 (map (xexp context) il_args)
-           val (AllArrow_c(_,effect,_,_,_,con)) = Nilprimutil.get_iltype ilprim cons
+           val (effect,con) = 
+	     case strip_arrow (Nilprimutil.get_iltype ilprim cons)
+	       of SOME (_,effect,_,_,_,con) => (effect,con)
+		| _ => (perr_c (Nilprimutil.get_iltype ilprim cons);
+			error "Expected arrow constructor")
            val valuable = (effect = Total) andalso (Listops.andfold (fn x => x) valuables)
        in
 	   (Prim_e (PrimOp (xilprim ilprim), cons, args), con, valuable)
@@ -1590,7 +1647,6 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		let
 		    val (exp1, con1, valuable1) = xexp context il_exp1
 		    val (exp2, con2, valuable2) = xexp context il_exp2
-			
 		    val (effect,con) = 
 			(case (Nilstatic.con_reduce(NILctx_of context, con1)) of
 			     AllArrow_c(_,effect,_,_,_,con) => (effect, con)
@@ -1603,7 +1659,6 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 					  Ppnil.pp_con nonarrow;
 					  print "\n";
 					  error "xexp:  could not reduce function type to arrow!\n"))
-					  
 			
 		    val valuable = (effect = Total) andalso valuable1 andalso valuable2
 		in
@@ -1679,7 +1734,14 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
        let
 	   val {ebnds, valuable, final_context=context'} = xbnds context bnds
 	   val (exp, con, valuable') = xexp context' il_exp
+
+	   val _ = (lprintl "HERE WE ARE1";
+		    perr_c con)
+
 	   val reduced_con = Nilstatic.con_reduce(NILctx_of context', con)
+
+	   val _ = printl "OUT1"
+
        in
 	   (Let_e (Sequential, ebnds, exp),
 	    reduced_con, valuable andalso valuable')
@@ -1808,15 +1870,25 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xexp' context (il_exp as (Il.MODULE_PROJECT (module, label))) =
        let
-	   val {cbnd_cat, ebnd_cat, 
-		name_c, name_r, 
-		knd_c, type_r,
-		valuable} = xmod context (module, NONE)
-
+	 val _ = (lprintl "IL MODULE IS";
+		  Ppil.pp_mod module;
+		  printl "")
+	   
+	 val {cbnd_cat, ebnd_cat, 
+	      name_c, name_r, 
+	      knd_c, type_r,
+	      valuable} = xmod context (module, NONE)
+	   
 	   val specialize = (Name.eq_label(label, Ilutil.it_lab)) andalso 
                             ! elaborator_specific_optimizations
 
 	   val cbnds = flattenCatlist cbnd_cat
+
+	   val _ = 
+	     (lprintl "Con bounds kinds are";
+	      ignore (map (fn (v,k,c) => perr_k k) cbnds);
+	      lprintl "DONE")
+
 	   val bnds = (map Con_b cbnds) @ 
 	              (flattenCatlist ebnd_cat)
 
@@ -1840,7 +1912,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		    NilContext.print_context (NILctx_of context); print "\n")
 *)
 
+	   val _ = (lprintl "HERE WE ARE2";
+		    perr_c unnormalized_con)
+
            val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
+
+	   val _ = printl "OUT2"
 (*
            val _ = (print "normalized con = ";
 		    Ppnil.pp_con con;

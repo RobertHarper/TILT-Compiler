@@ -17,9 +17,11 @@ struct
 
     val error = fn s => Util.error "linknil.sml" s
 
+    structure Name = Name
+
     structure Nil = Nil(structure ArgAnnotation = Annotation
 			structure ArgPrim = LinkIl.Prim)      
-	
+
     structure PpNil = Ppnil(structure ArgNil = Nil
 			    structure Prim = LinkIl.Prim
 			    structure Ppprim = LinkIl.Ppprim)
@@ -92,13 +94,14 @@ struct
 	in res
 	end
 *)
-    structure Tonil = Tonil(structure Il = LinkIl.Il
+    structure Tonil = Tonil(structure ArgIl = LinkIl.Il
 			    structure Nilstatic = NilStatic
+			    structure NilError = NilError
 			    structure Nilprimutil = NilPrimUtil
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
                             structure IlStatic = LinkIl.IlStatic
-			    structure Nilcontext = NilContext
+			    structure ArgNilcontext = NilContext
 			    structure Nilutil = NilUtil
 			    structure Ppnil = PpNil
 			    structure Ppil = LinkIl.Ppil)
