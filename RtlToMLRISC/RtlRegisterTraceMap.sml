@@ -124,11 +124,19 @@ functor RtlRegisterTraceMap(
 
   fun lookup lookup' (map, traceMap) (var, represent) =
 	let
-	  val id = RegisterMap.lookup map (Name.var2int var)
+	  val var' = Name.var2int var
 	in
-	  (* don't store trace value each time ??? *)
-	  RegisterMap.insert traceMap (id, traceRepresent lookup' represent);
-	  id
+	  case RegisterMap.test map var' of
+	    NONE =>
+	      let
+		val id	  = RegisterMap.lookup map var'
+		val trace = traceRepresent lookup' represent
+	      in
+		RegisterMap.insert traceMap (id, trace);
+		id
+	      end
+	  | SOME id =>
+	      id
 	end
 
   fun assign (_, traceMap) (id, trace) =
