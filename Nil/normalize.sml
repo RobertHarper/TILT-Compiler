@@ -1215,7 +1215,11 @@ val show_context = ref false
 	  | peq => error "peq not done")
 
    and type_of (D : context,exp : exp) : con = 
-     let
+     let val _ = if (!debug)
+		     then (print "XXX type_of on ";
+			   Ppnil.pp_exp exp;
+			   print "\n")
+		 else ()
      in
        (case exp 
 	  of Var_e var => 

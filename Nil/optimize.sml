@@ -1,4 +1,4 @@
-(*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable *)
+(*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps *)
 (* A one-pass optimizer with the following goals:
 	Convert project_sum to project_sum_record.
 	Eliminate dead code.
@@ -85,9 +85,9 @@ struct
 			(i) unknown - no information is kept for this variable
 			(ii) optionalE - an equivalent term expression which may be used
 			(iii) mustE - an equivalent term expression which must be used
+			(iv) etaE - an equivalent partially applied curried expression
 			(iv) optionalC - an equialent type expression which may be used
 			(iv) mustC - an equialent type expression which may be used
-		    (c) possibly uncurried function with the curry depth
 	  
 		(1) allows some reification to occur
 		(2) allows type reduction and some code transformation to occur
@@ -96,72 +96,98 @@ struct
 		(4.c) allows functions to be uncurried
         *)
 
-	datatype used_state = UNUSED | USED | TYPE_USED 
+	datatype used_state = UNUSED 
+	                    | USED of int
+	                    | TYPE_USED of int
 	                    | DEFER of (bool * used_state ref) list
 	datatype equivalent = UNKNOWN 
-	                    | OPTIONALe of exp | MUSTe of exp
+	                    | OPTIONALe of exp | MUSTe of exp 
+	                    | ETAe of int * var * (con list * exp list * exp list) list
 	                    | OPTIONALc of con | MUSTc of con
 	      
 	local
-	  type entry = used_state ref * equivalent * (int * var) option
-	  datatype state = STATE of {intype : bool,
+	  type entry = used_state ref * equivalent
+	  datatype state = STATE of {curry_processed : (Name.VarSet.set * var Name.VarMap.map),
+				     intype : bool,
 				     equation : NilContext.context,
 				     current : used_state ref,
 				     mapping : entry Name.VarMap.map,
 				     avail : var ExpTable.Expmap.map * 
 				             var ExpTable.Conmap.map}
 
+
+	      
 	  fun isused r = 
-	      let fun loop current [] = current
-		    | loop current ((intype,l)::rest) = 
+	      let fun loop count current [] = current
+		    | loop count current ((intype,l)::rest) = 
 		      (case (isused l) of
-			   USED => USED
-			 | TYPE_USED => if intype then loop TYPE_USED rest else USED
-			 | UNUSED => loop current rest
+			   USED _ => loop (count+1) (USED(count+1)) rest
+			 | TYPE_USED _ => loop (count+1)
+			                     (if intype then TYPE_USED(count+1) 
+					      else USED(count+1)) rest
+			 | UNUSED => loop count current rest
 			 | _ => error "got defer")
-	      in  case (!r) of
-		  USED => USED
-		| TYPE_USED => TYPE_USED
-		| UNUSED => UNUSED
-		| DEFER ls => let val use = loop UNUSED ls
-				  val _ = r := use
-			      in  use
-			      end
+	      in  (case (!r) of
+		       DEFER ls => let val use = loop 0 UNUSED ls
+				       val _ = r := use
+				   in  use
+				   end	
+		     | r => r)
 	      end
 
-	  fun update_mapping(STATE{intype, equation, current, avail, ...}, mapping) =
-			STATE{intype=intype,equation=equation, avail = avail,
+	  fun update_mapping(STATE{intype, equation, current, avail, curry_processed, ...}, mapping) =
+			STATE{intype=intype,curry_processed=curry_processed,
+			      equation=equation, avail = avail,
 			      current=current,mapping=mapping}
 
 	in
+
+	  fun show_pair(v1,v2) = 
+	      (Ppnil.pp_var v1; print " -> "; Ppnil.pp_var v2; print "\n")
+	  fun show_entry(v,(_,eq)) = 
+	      let val _ = (Ppnil.pp_var v; print " -> ")
+		  val _ = (case eq of
+			       ETAe (depth,_,_) => (print "ETAe "; print (Int.toString depth);
+						    print "\n")
+			     | _ => print "OTHER\n")
+	      in  print "\n"
+	      end
+	  fun show_mapping(STATE{mapping,curry_processed,...}) = 
+	      (Name.VarMap.appi show_entry mapping;
+	       Name.VarMap.appi show_pair (#2 curry_processed))
+
 	  type state = state
 	  fun new_state() = STATE {intype = false,
+				   curry_processed = (Name.VarSet.empty, Name.VarMap.empty),
 				   equation = NilContext.empty(),
-				   current = ref USED,
+				   current = ref (USED 1),
 				   avail = (ExpTable.Expmap.empty,
 					    ExpTable.Conmap.empty),
 				   mapping = Name.VarMap.empty}
 				   
-	  fun retain_state(STATE{intype, equation, current, mapping, avail}) =
+	  fun retain_state(STATE{intype, equation, current, mapping, avail, curry_processed}) =
 			STATE{intype=intype,equation=equation, avail=avail,
-			      current=ref USED,mapping=mapping}
+			      curry_processed = curry_processed,
+			      current=ref (USED 1),mapping=mapping}
 
-	  fun type_state(STATE{intype, equation, current, mapping, avail}) =
+	  fun type_state(STATE{intype, equation, current, mapping, avail, curry_processed}) =
 			STATE{intype=true,equation=equation, avail = avail,
+			      curry_processed = curry_processed,
 			      current=current,mapping=mapping}
 
-	  fun enter_var(STATE{intype, equation, current, mapping, avail}, v) =
+	  fun enter_var(STATE{intype, equation, curry_processed, current, mapping, avail}, v) =
 		STATE{intype = intype,
 		      equation=equation,
 		      mapping = mapping,
 		      avail = avail,
+		      curry_processed = curry_processed,
 		      current=case (Name.VarMap.find(mapping,v)) of
 				NONE => error "enter_var given var not in used map"
-			      | SOME (us,_,_) => us}
+			      | SOME (us,_) => us}
 
 	  fun add_vars(state as STATE{mapping,...},vars) =
 		let val r = ref UNUSED
-		    val mapping = foldl (fn (v,m) => Name.VarMap.insert(m,v,(r,UNKNOWN,NONE))) mapping vars
+		    val mapping = foldl (fn (v,m) => Name.VarMap.insert(m,v,(r,UNKNOWN))) mapping vars
 		in  update_mapping(state,mapping)
 		end
 	  fun add_var(state,v) = add_vars(state,[v])
@@ -169,10 +195,10 @@ struct
 	  fun use_var(STATE{intype,mapping,current,...},v) = 
 	  	(case Name.VarMap.find(mapping,v) of
 		  NONE => ()
-		| SOME (r,_,_) =>
+		| SOME (r,_) =>
 		   (case !r of
-			USED => ()
-		      | TYPE_USED => r := DEFER[(intype,current), (true, ref USED)]
+			USED n => r := (USED(n+1))
+		      | TYPE_USED n => r := DEFER[(intype,current), (true, ref (USED n))]
 		      | UNUSED => r := DEFER[(intype,current)]
 		      | DEFER ls => r := DEFER ((intype,current)::ls)))
 
@@ -181,59 +207,47 @@ struct
 		  NONE => (print "is_used_var given var not in state: ";
 		  	   Ppnil.pp_var v; print "\n";
 			   error "is_used_var given var not in state")
-		| SOME (r,_,_) => (case (!do_dead,isused r) of
-				       (false,_) => USED
+		| SOME (r,_) => (case (!do_dead,isused r) of
+				       (false,_) => USED 999
 				     | (_,use) => use)
           fun is_used_var(state,v) = (case get_varuse(state,v) of
-					  USED => true
-					| TYPE_USED => true
+					  USED _ => true
+					| TYPE_USED _ => true
 					| UNUSED => false)
 
-	  fun add_aliases(state as STATE{mapping,...},aliases) =
-	      let fun folder((v,alias),m) =
-		  let val SOME(use,_,uncurry) = Name.VarMap.find(m,v)
-		  in  Name.VarMap.insert(m,v,(use,alias,uncurry))
-		  end
-		  val mapping = foldl folder mapping aliases
+	  fun add_alias(state as STATE{mapping,...},v,alias) =
+	      let val SOME(use,_) = Name.VarMap.find(mapping,v)
+		  val mapping = Name.VarMap.insert(mapping,v,(use,alias))
+(* xxx		  val _ = (print "add_alias for "; Ppnil.pp_var v; print "\n") *)
 	      in  update_mapping(state,mapping)
 	      end
-	  fun add_alias(s,v,info) = add_aliases(s,[(v,info)])
-
-	  fun add_curry(state as STATE{mapping,...},v_curry,depth,v_uncurry) =
-		  let val SOME(use,alias,uncurry) = Name.VarMap.find(mapping,v_curry)
-		      val uncurry = SOME(depth,v_uncurry)
-		      val mapping = Name.VarMap.insert(mapping,v_curry,(use,alias,uncurry))
-		  in  update_mapping(state,mapping)
-		  end
 
 	  fun lookup_alias(STATE{mapping,...},v) = 
 	      (case (Name.VarMap.find(mapping,v)) of
 		   NONE => UNKNOWN
-		 | SOME (_,alias,_) => alias)
+		 | SOME (_,alias) => alias)
 
-	  fun lookup_curry(STATE{mapping,...},v) = 
-	      (case (Name.VarMap.find(mapping,v)) of
-		   NONE => NONE
-		 | SOME (_,_,info) => info)
 
 	  fun find_availC(STATE{avail,...},c) = 
 	      if (!do_cse) then ExpTable.Conmap.find(#2 avail,c) else NONE
-	  fun add_availC(state as STATE{intype,mapping,current,equation,avail},c,v) = 
+	  fun add_availC(state as STATE{curry_processed,intype,mapping,current,equation,avail},c,v) = 
 	      if (!do_cse)
 		  then STATE{intype=intype,mapping=mapping,current=current,
 			     equation=equation,
+			     curry_processed = curry_processed,
 			     avail=(#1 avail,
 				    ExpTable.Conmap.insert(#2 avail,c,v))}
 	      else state
 
 	  fun find_availE(STATE{avail,...},e) = 
 	      if (!do_cse) then ExpTable.Expmap.find(#1 avail,e) else NONE
-	  fun add_availE(state as STATE{intype,mapping,current,equation,avail},e,v) = 
+	  fun add_availE(state as STATE{intype,mapping,current,curry_processed,equation,avail},e,v) = 
 	      if (!do_cse andalso (not (NilUtil.effect e))
 		  andalso (case e of
 			       Prim_e(NilPrimOp (unbox_float _), _, _) => false
 			     | _ => true))
 		  then STATE{intype=intype,mapping=mapping,current=current,
+			     curry_processed = curry_processed,
 			     equation=equation,
 			     avail=(ExpTable.Expmap.insert(#1 avail,e,v),
 				    #2 avail)}
@@ -266,13 +280,15 @@ struct
 	  fun find_equation(STATE{equation,...},c) = NilContext.find_kind_equation(equation,c)
 	  fun find_con(STATE{equation,...},v) = NilContext.find_con(equation,v)
 
-	  fun add_kind(STATE{avail,intype,equation,current,mapping},v,k) = 
+	  fun add_kind(STATE{avail,intype,curry_processed,equation,current,mapping},v,k) = 
 	      STATE{equation=NilContext.insert_kind(equation,v,k),
 		    intype=intype,
 		    avail=avail,
+		    curry_processed = curry_processed,
 		    mapping=mapping,
 		    current=current}
-	  fun add_con(STATE{avail,equation,mapping,current,intype},v,c) = 
+	  
+	  fun add_con(STATE{avail,equation,mapping,curry_processed,current,intype},v,c) = 
 	      (if (!debug)
 		   then (print "optimize: add_con "; Ppnil.pp_var v;
 			 print " -> "; Ppnil.pp_con c; print "\n")
@@ -280,11 +296,90 @@ struct
 	       STATE{equation=NilContext.insert_con(equation,v,c),
 		    intype=intype,
 		     avail=avail,
+		     curry_processed = curry_processed,
 		    mapping=mapping,
 		    current=current})
+
+	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,intype},v) =
+	       STATE{equation=equation,
+		    intype=intype,
+		     avail=avail,
+		     curry_processed = (Name.VarSet.add(#1 curry_processed,v), #2 curry_processed),
+		     mapping=mapping,
+		    current=current}
+
+	  fun add_curry_pair(STATE{avail,equation,mapping,curry_processed,current,intype},
+			     curry_name,uncurry_name) =
+	       STATE{equation=equation,
+		    intype=intype,
+		     avail=avail,
+		     curry_processed = (#1 curry_processed, Name.VarMap.insert(#2 curry_processed,
+									       curry_name,uncurry_name)),
+		     mapping=mapping,
+		    current=current}
+
+	  fun find_curry_pair(STATE{curry_processed,...},v) = Name.VarMap.find(#2 curry_processed,v)
+	  fun is_curry_processed(STATE{curry_processed,...},v) = Name.VarSet.member(#1 curry_processed,v)
 	  fun type_of(STATE{equation,...},e) = Normalize.type_of(equation,e)
+	  fun get_trace(STATE{equation,...},t) = TraceOps.get_trace (equation,t)
 	end
 
+        (* Helper functions for uncurry optimizations *)
+	fun get_lambda (Let_e(_,[Fixopen_b vfset],Var_e v)) =
+	    (case (Sequence.toList vfset) of
+		 [(v',f)] => if (Name.eq_var(v,v')) 
+				then SOME (v,f)
+			    else NONE
+	       | _ => NONE)
+	  | get_lambda _ = NONE
+
+	fun make_lambda (v,f) = Let_e(Sequential,[Fixopen_b(Sequence.fromList[(v,f)])],Var_e v)
+
+	type wrap = var * effect * recursive * (var * kind) list * bool *
+	            (var * con) list * var list * con
+	fun extract_lambdas vf = 
+	    let val e = make_lambda vf
+		fun loop acc e = 
+		    (case get_lambda e of
+			 NONE => (rev acc, e)
+		       | SOME (v,Function(eff,r,vklist,dep,vclist,vflist,body,con)) =>
+			     loop ((v,eff,r,vklist,dep,vclist,vflist,con)::acc) body)
+	    in  loop [] e
+	    end
+
+	fun create_lambdas ([],_) = error "no wraps to create_lambdas"
+	  | create_lambdas (wraps,body) = 
+	    let fun loop [] body = body
+		  | loop ((v,eff,r,vklist,dep,vclist,vflist,con)::rest) body = 
+		          make_lambda(v,Function(eff,r,vklist,dep,vclist,vflist,
+						 loop rest body,con))
+		val lambda = loop wraps body
+		val SOME vf = get_lambda lambda 
+	    in  vf
+	    end
+	    
+	fun wraps2args_bnds (wraps : wrap list) = 
+	    let fun loop acc ([] : wrap list) = error "no wraps to wraps2args_bnds"
+		  | loop acc [_] = rev acc
+		  | loop acc ((v,_,_,vklist,dep,vclist,vflist,_)::(rest as (next::_))) =
+		    let val vk = map #1 vklist
+			val vc = map #1 vclist
+			val info = Exp_b(#1 next,TraceKnown TraceInfo.Trace,
+					 App_e(Open, Var_e v, map Var_c vk, map Var_e vc, map Var_e vflist))
+		    in  loop (info::acc) rest
+		    end
+		val vklist = Listops.flatten(map #4 wraps)
+		val vclist = Listops.flatten(map #6 wraps)
+		val vflist = Listops.flatten(map #7 wraps)
+	    in  ((vklist,vclist,vflist), loop [] wraps)
+	    end
+
+	fun create_flatlambda(_,[],_) = error "no wraps to create_flatlamba"
+	  | create_flatlambda(name,wraps,body) = 
+	    let val (_,eff,r,_,dep,_,_,con) = List.last wraps
+		 val ((vklist,vclist,vflist),_) = wraps2args_bnds wraps
+	    in  (name,Function(eff,r,vklist,dep,vclist,vflist,body,con))
+	    end
 
 
         (* DEBUGGING FUNCTIONS *)
@@ -344,19 +439,56 @@ struct
 	    (case bnd of
 		 (Con_b(_,cb)) => (case (cbnd_used' state cb) of
 				       UNUSED => NONE
-				     | TYPE_USED => SOME(Con_b(Compiletime,cb))
-				     | USED => SOME(Con_b(Runtime,cb)))
+				     | TYPE_USED _ => SOME(Con_b(Compiletime,cb))
+				     | USED _ => SOME(Con_b(Runtime,cb)))
 	       | (Exp_b(v,_,e)) => if is_used_var(state,v) then SOME bnd else NONE
 	       | (Fixopen_b vfset) => 
-		     if orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
-			 then SOME bnd else NONE
+		     let val vflist = Sequence.toList vfset
+			 val vflist = List.filter (fn (v,_) => is_used_var(state,v)) vflist
+			 fun eliminate_uncurry(a,b,af,Function(_,_,_,_,_,_,body,_)) =
+			     let val (wraps,_) = extract_lambdas(a,af)
+				 val curry = create_lambdas(wraps,body)
+			     in  curry
+			     end
+			 fun loop [] = []
+			   | loop (ls as [_]) = ls
+			   | loop ((a,af)::(b,bf)::rest) = 
+			     (
+			      (* xxx print "trying to eliminate 1\n";
+			      show_mapping state; *)
+			      case find_curry_pair(state,a) of
+				  NONE => (a,af)::loop((b,bf)::rest)
+				| SOME v => 
+				      (if (Name.eq_var(v,b) andalso 
+					   (case (get_varuse(state,b)) of
+						USED 1 => true
+					      | USED n => (print "USED ";
+							   print (Int.toString n);
+							   print "\n"; false)
+					      | TYPE_USED _ => (print "TYPE_USED\n"; false)
+					      | UNUSED => (print "UNUSED\n"; false)
+					      | _ => false))
+					  then (eliminate_uncurry(a,b,af,bf))::(loop rest)
+				      else (a,af)::loop((b,bf)::rest)))
+			 val vflist = loop vflist
+		     in  (case vflist of
+			      [] => NONE
+			    | _ => SOME(Fixopen_b (Sequence.fromList vflist)))
+		     end
 	       | (Fixcode_b vfset) => 
-			     if orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
-			 then SOME bnd else NONE
-	       | (Fixclosure_b(_,vclset)) => 
-			     if orfold (fn (v,_) => is_used_var(state,v)) 
-				 (Sequence.toList vclset)
-				 then SOME bnd else NONE)
+		     let val vflist = Sequence.toList vfset
+			 val vflist = List.filter (fn (v,_) => is_used_var(state,v)) vflist
+		     in  (case vflist of
+			      [] => NONE
+			    | _ => SOME(Fixcode_b (Sequence.fromList vflist)))
+		     end
+	       | (Fixclosure_b(recur,vclset)) => 
+		     let val vcllist = Sequence.toList vclset
+			 val vcllist = List.filter (fn (v,_) => is_used_var(state,v)) vcllist
+		     in  (case vcllist of
+			      [] => NONE
+			    | _ => SOME(Fixclosure_b (recur,Sequence.fromList vcllist)))
+		     end)
 
 	fun do_vklist state vklist =
 	    let fun folder((v,k),state) = let val k = do_kind state k
@@ -364,8 +496,8 @@ struct
 					  end
 	    in  foldl_acc folder state vklist
 	    end
-	and do_vclist state vclist = foldl_acc (fn ((v,c),acc) => let val c = do_con state c
-								  in  ((v,c),add_con(acc,v,c))
+	and do_vclist state vclist = foldl_acc (fn ((v,c),state) => let val c = do_con state c
+								  in  ((v,c),add_con(state,v,c))
 								  end) state vclist
 	and do_kind (state : state) (kind : kind) : kind = 
 	  (case kind of 
@@ -379,20 +511,23 @@ struct
 					      in  Arrow_k(openness,vklist,do_kind state k)
 					      end)
 
-(*
 	and do_con (state : state) (con : con) : con =
-	    let val _ = push_con con
+	    let val _ = if (!debug) then push_con con else ()
 		val result = do_con' state con
-		val _ = pop_con con
+		val _ = if (!debug) then pop_con con else ()
 	    in  result
 	    end 
-*)
 
 	and do_type (state : state) (con : con) : con = do_con (type_state state) con
 
-	and do_con (state : state) (con : con) : con =
+	and do_con' (state : state) (con : con) : con =
 	   (case con of
-		Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
+		Prim_c(Record_c(labs,SOME vlist),clist) => 
+		    let val (vclist,state) = do_vclist state (Listops.zip vlist clist)
+			val (vlist,clist) = Listops.unzip vclist
+		    in  Prim_c(Record_c(labs,SOME vlist),clist)
+		    end
+	      | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
 	      | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
 	      | ExternArrow_c(clist,c) =>
@@ -474,87 +609,46 @@ struct
 						do_con state' c, do_kind state' k), state)
 					 end)
 
-	and extract_uncurry state (openness,curry_name,uncurry_name,function) = 
-	    let fun separate(Function(effect,recur,vklist,dep,vclist,vflist,e,c)) = 
-		  let val vklist = map (fn (v,k) => (v,do_kind state k)) vklist
-		      val vclist = map (fn (v,c) => (v,do_type state c)) vclist
-		  in  (e, c, vklist, vclist, vflist,
-		       fn c => fn e => Function(effect,recur,vklist,dep,vclist,vflist,e,c))
-		  end
-	        fun is_lambda (Let_e(_,[Fixopen_b vfset],Var_e v)) = 
-		    (case (Sequence.toList vfset) of
-			 [(v',f)] => if (Name.eq_var(v,v') andalso (!do_uncurry))
-					 then SOME(v,f)
-				     else NONE
-			| _ => NONE)
-		  | is_lambda _ = NONE
-		fun loop (depth,alias,funcons,curry_call,args,cwrapper_opt,v,function) = 
-		    let val (body,con,vk,vc,vf,wrapper) = separate function
-			val alias = if (depth>1) then (v,MUSTe curry_call)::alias else alias
-			val funcon = NilUtil.function_type Open function
-			val funcons = if (depth>1) then (v,funcon)::funcons else funcons
-			val curry_call = App_e(Open,curry_call,
-						map (Var_c o #1) vk, 
-						map (Var_e o #1) vc, map Var_e vf)
-			val args = ((#1 args) @ vk, (#2 args) @ vc, (#3 args) @ vf)
-			val cwrapper_base = 
-			      (case cwrapper_opt of
-				   NONE => wrapper
-				 | SOME cwrapper => 
-				       (fn c => fn e =>
-					let val f = wrapper c e
-					    val e = Let_e(Sequential,
-							  [Fixopen_b(Sequence.fromList[(v,f)])], 
-							  Var_e v)
-					in  cwrapper c e
-					end))
-			fun cwrapper_nonbase c e = cwrapper_base (do_type state con) e
-			fun base() = 
-			    let 
-				val (vk,vc,vf) = args
-				val uncurry_call = App_e(openness,Var_e uncurry_name, 
-							 map (Var_c o #1) vk,
-							 map (Var_e o #1) vc,
-							 map Var_e vf)
-				fun uwrapper(body,con) = Function(Partial,Arbitrary,vk,false,
-								  vc,vf,body,con)
-			    in  (depth,uncurry_call,vk,vc,vf,body,con,
-				 alias,funcons,cwrapper_base,uwrapper)
-			    end
-		    in  case (is_lambda body) of
-			SOME(v,f) => loop (depth+1,alias,funcons,
-					   curry_call,args,SOME cwrapper_nonbase,v,f)
-		      | NONE => base()
-		    end
-	    in  loop(1,[],[],Var_e curry_name,([],[],[]),NONE,curry_name,function)
+		 
+	and rewrite_uncurry ((name,function),orig_state) : (var * function) list * state =
+	    let val uncurry_name = Name.fresh_named_var ((Name.var2name name) ^ "_uncurry")
+		val state = add_curry_pair(orig_state,name,uncurry_name)
+		val state = add_curry_processed(state,name)
+		val state = add_curry_processed(state,uncurry_name)
+		val state = add_var(state,name)
+		val state = add_var(state,uncurry_name)
+		val (wraps, body) = extract_lambdas (name,function)
+	    in  if ((not (!do_uncurry)) 
+		    orelse is_curry_processed(orig_state,name)
+		    orelse (length wraps <= 1))
+		  then ([(name,function)],state)
+		else 
+		 let val ((vklist,vclist,vflist),bnds) = wraps2args_bnds wraps
+		     val body = Let_e(Sequential,bnds,body)
+		     val vkarg = map (Var_c o #1) vklist
+		     val vcarg = map (Var_e o #1) vclist
+		     val vfarg = map Var_e vflist
+		     val v = Name.fresh_named_var "call_result"
+		     val call = App_e(Open, Var_e uncurry_name, vkarg, vcarg, vfarg)
+
+		     val (_,temp_state) = do_vklist state vklist
+		     val return_con = #8(List.last wraps)
+		     val (bnds,tinfo) = (case get_trace (temp_state, return_con) of
+					     SOME tinfo => ([],TraceKnown tinfo)
+					   | NONE =>
+						 let val v' = Name.fresh_named_var "reify"
+						 in  ([Con_b(Runtime,Con_cb (v', return_con))], TraceCompute v')
+						 end)
+		     val bnd = Exp_b(v,tinfo,call)
+		     val callbody = Let_e(Sequential,bnds @ [bnd],Var_e v)
+		     val curry = create_lambdas(wraps,callbody)
+		     val uncurry = create_flatlambda(uncurry_name,wraps,body)
+		     val state = add_var(state,name)
+		     val state = foldl (fn (v,s) => add_curry_processed(s,v)) state (map #1 wraps)
+		     val state = add_alias(state,name,ETAe (length wraps,uncurry_name,[]))
+		 in  ([curry,uncurry], state)
+		 end
 	    end
-
-	and uncurry(vflist,state) = 
-	  let fun folder ((v,f),(acc,state)) = 
-	        let (* v' is the name of the uncurried function *)
-		    val v' = Name.fresh_named_var ((Name.var2name v) ^ "_uncurry")
-		    val (depth,uncurry_call,vk,vc,vf,body,con,aliases,funcons,
-			 cwrapper,uwrapper) = extract_uncurry state (Open,v,v',f)
-		    val temp = (v,vk,vc,vf,body,con,cwrapper,uwrapper,uncurry_call)
-		    val state = add_con(state,v,NilUtil.function_type Open f)
-
-		    val state = 
-			if (depth>1)
-			    then 
-				let
-				    val state = foldl (fn ((v,c),s) => add_con(s,v,c)) state funcons
-				    val state = add_var(state,v)
-				    val state = add_var(state,v')
-				    val state = foldl (fn ((v,_),state) => add_var(state,v)) state aliases
-				    val state = add_curry(state,v,depth,v')
-				in  add_aliases(state,aliases)
-				end
-			else state
-		in   (temp::acc,state)
-		end
-	  in  foldl folder ([],state) vflist
-	  end
-
 
 
 (*
@@ -683,51 +777,28 @@ struct
 		| ExternApp_e(f,elist) =>
 			ExternApp_e(do_exp state f, map (do_exp state) elist)
 		| App_e(openness,f,clist,elist,eflist) => 
-		        let fun extract acc (Var_e v) = 
+		     let fun default() = App_e(openness, do_exp state f, 
+					       map (do_con state) clist,
+					       map (do_exp state) elist, 
+					       map (do_exp state) eflist)
+			 (* assumes anormalization by not performing purity check *)
+			 fun do_eta (uncurry,args) = 
+			     let val (cargs,eargs,fargs) = Listops.unzip3 args
+				 val cargs = Listops.flatten cargs
+				 val eargs = Listops.flatten eargs
+				 val fargs = Listops.flatten fargs
+				 val _ = print "doing etaexp\n"
+				 val new_exp = App_e(Open, Var_e uncurry, cargs @ clist, 
+						     eargs @ elist, eflist @ eflist)
+			     in  do_exp state new_exp
+			     end
+		     in (case f of 
+			     Var_e v =>
 			         (case (lookup_alias(state,v)) of
-				      OPTIONALe e => extract acc e
-				    | MUSTe e => extract acc e
-				    | _ => SOME(v,acc))
-			      | extract acc (App_e(openness,e, clist,elist,eflist)) = 
-				      let val acc = (clist,elist,eflist)::acc
-				      in  extract acc e
-				      end
-			      | extract _ _ = NONE
-			    fun default() = App_e(openness, do_exp state f,
-						map (do_con state) clist,
-						map (do_exp state) elist,
-						map (do_exp state) eflist)
-			    fun uncurry (depth, v,args) = 
-				let 
-(*				    val _ = (print "curry case with v = ";
-						Ppnil.pp_var v; print "\n")
-*)
-				    val _ = use_var(state,v)
-				    val args1 = List.take(args,depth)
-				    val args2 = List.drop(args,depth)
-				    fun folder ((clist,elist,eflist),(cacc,eacc,efacc)) = 
-					(cacc @ (map (do_con state) clist),
-					 eacc @ (map (do_exp state) elist),
-			 		 efacc @ (map (do_exp state) eflist))
-				    val (clist,elist,eflist)= foldl folder ([],[],[]) args1
-				    fun folder ((clist,elist,eflist), f) = 
-					App_e(openness,f,
- 						map (do_con state) clist,
-						map (do_exp state) elist,
-						map (do_exp state) eflist)
-				in  foldl folder (App_e(openness,Var_e v, clist, elist,eflist)) args2
-				end
-			in  case (extract [] exp) of
-				NONE =>	(diag "could not extract\n"; default())
-			      | SOME (v,args) => 
-				  (case(lookup_curry(state,v)) of
-					NONE => (diag "could not find uncurry\n"; default())
-				      | SOME (depth,v') => 
-					    if (length args < depth)
-						then (diag "depth too low\n"; default())
-					    else uncurry (depth, v',args))
-			end
-
+				      ETAe (1,uncurry,args)=> do_eta (uncurry,args)
+				    | _ => default())
+			      | _ => default())
+		     end
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_type state c)
 		| Handle_e(e,v,handler) => 
 			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
@@ -780,13 +851,20 @@ struct
 		     end
 	       | Typecase_e _ => error "typecase not done")
 
-	and do_function (state : state) (Function(effect,recur,vklist,dep,vclist,vlist,e,c)) =
-		let val (vklist,state) = do_vklist state vklist
+	and do_function (state : state) (v,Function(effect,recur,vklist,dep,vclist,vlist,e,c)) =
+		let val state = enter_var(state,v)
+		    val (vklist,state) = do_vklist state vklist
 		    val (vclist,state) = do_vclist state vclist
 		    val e = do_exp state e
 		    val c = do_type state c
-		in  Function(effect,recur,vklist,dep,vclist,vlist,e,c)
+		in  (v,Function(effect,recur,vklist,dep,vclist,vlist,e,c))
 		end
+
+	and do_niltrace state niltrace = 
+	    (case niltrace of
+		 TraceCompute v => (use_var(state,v); niltrace)
+	       | TraceKnown (TraceInfo.Compute(v,_)) => (use_var(state,v); niltrace)
+	       | _ => niltrace)
 
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
 	    let val (bnds_list,state) = foldl_acc do_bnd state bnds
@@ -796,34 +874,21 @@ struct
 	and do_bnd (bnd : bnd, state : state) : bnd list * state = 
 	  let 
 	      (* Rewrite a binding to do the following:
-	         (a) name record arguments
-		 (b) name inject argument
+	         (a) check record arguments are variables
+		 (b) check inject argument are variables
 		 (c) rewrite project_sum to project_sum_record or project_sum_nonrecord
 		 If NONE is returned, the binding does not need to be rewrritten.
 		 Otherwise, SOME bindings are returned.  The original bindings
 		   is guaranteed not to occur in this list.  This prevents looping. *)
-	      fun rewrite_bnd(v,e) =
+	      fun rewrite_bnd(v,niltrace,e) =
 		  (case e of
 		       Prim_e(NilPrimOp(record labs),_,elist) => 
-	                 let fun folder(Var_e v,bnds) = (v, bnds)
-			       | folder(e,bnds) = 
-			           let val v = Name.fresh_named_var "namedRecComp"
-				       val bnd = Exp_b(v,TraceUnknown,e)
-				   in  (v, bnd ::bnds)
-				   end
-			     val (vars,rev_bnds) = foldl_acc folder [] elist
-			     val bnds = rev rev_bnds
-			 in  case bnds of
-			       [] => NONE
-			     | _ => SOME(bnds @ [Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labs),[],map Var_e vars))])
+	                 let fun check(Var_e v) = ()
+			       | check _ = error "record argument is not a variable"
+			 in  NONE
 			 end
 		     | Prim_e(NilPrimOp (inject _), _, [Var_e _]) => NONE
-		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) => 
-			 let val injectee_con = type_of(state,injectee)
-			     val var = Name.fresh_named_var "namedInjectee"
-			 in  SOME([Exp_b(var,TraceUnknown,injectee),
-				   Exp_b(v,TraceUnknown,Prim_e(NilPrimOp (inject k),clist,[Var_e var]))])
-			 end
+		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) => error "inject argument is not a var"
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
 			 let val c = type_of(state,e)
 			     val sv_con = find_con(state,sv)
@@ -833,16 +898,26 @@ struct
 			       (_,Prim_c (Record_c (labs,_), rcons)) => 
 				 let val vars = map (fn l => Name.fresh_named_var
 						     (Name.label2string l)) labs
-				     fun mapper(v,l) =
-					 let val np = project_sum_record(k, l)
-					 in  Exp_b(v,TraceUnknown,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))
+				     fun mapper(v,l,t) =
+					 let val (bnds,tinfo) = 
+						 (case get_trace (state, t) of
+						      SOME tinfo => ([],TraceKnown tinfo)
+						    | NONE =>
+							  let val v' = Name.fresh_named_var "reify"
+							  in  ([Con_b(Runtime,Con_cb (v', t))], TraceCompute v')
+							  end)
+					     val np = project_sum_record(k, l)
+					 in  bnds @ [Exp_b(v,tinfo,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))]
 					 end
-				     val bnds = Listops.map2 mapper (vars, labs)
-				 in  SOME(bnds @ [Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labs), [], map Var_e vars))])
+				     val bnds = Listops.map3 mapper (vars, labs, rcons)
+				     val bnd = Exp_b(v,TraceKnown TraceInfo.Trace,
+						     Prim_e(NilPrimOp(record labs), [], map Var_e vars))
+				 in  SOME((Listops.flatten bnds) @ [bnd])
 				 end
 			     (* not a record for sure *)
-			     | (true, _) => SOME[Exp_b(v,TraceUnknown,Prim_e(NilPrimOp (project_sum_nonrecord k),
-								[sumcon],[Var_e sv]))]
+			     | (true, _) => SOME[Exp_b(v,niltrace,
+						       Prim_e(NilPrimOp (project_sum_nonrecord k),
+							      [sumcon],[Var_e sv]))]
 			     | (_,c) => ((* print "project_sum irreducible...";
 					 Ppnil.pp_con c; print "\n"; *)
 					 NONE)
@@ -851,12 +926,12 @@ struct
 	  in	(case bnd of
 		     Exp_b(v,niltrace,e) =>
 			 ((* print "working on bnd with v = "; Ppnil.pp_var v; print "\n";  *)
-			  case rewrite_bnd(v,e) of
+			  case rewrite_bnd(v,niltrace,e) of
 			      NONE => 
 				  let val c = type_of(state,e)
 				      val state = add_var(state,v)
 				      val state' = enter_var(state,v)
-				      val _ = if (NilUtil.effect e) then use_var(state,v) else ()
+				      val niltrace = do_niltrace state' niltrace
 				      val e = do_exp state' e
 				      val e =
 					  (case find_availE(state,e) of
@@ -864,9 +939,29 @@ struct
 					     | SOME v' => let val _ = use_var(state',v')
 							  in  Var_e v'
 							  end)
-				      val alias = (case e of
-						       Var_e _ => MUSTe e
-						     | _ => OPTIONALe e)
+				      val eff = (NilUtil.effect e) 
+				      val (effect,alias) = 
+					  (case e of
+					       Var_e _ => (false,MUSTe e)
+					     | App_e(openness,Var_e v,clist,elist,eflist) => 
+						   (
+(* xxx						    print "trying etabnd\n";
+						    show_mapping state;
+*)
+						    case (lookup_alias(state,v)) of
+							ETAe (depth,uncurry,args) => 
+							    (print "found ETAe in etabnd\n";
+							     if (depth > 1) 
+								then
+								    let val new_info = (depth-1,uncurry,
+											args @ [(clist,elist,eflist)])
+									val _ = print "did etabnd\n"
+								    in  (false,ETAe new_info)
+								    end
+							    else (eff,OPTIONALe e))
+					              | _ => (eff,OPTIONALe e))
+					     | _ => (eff,OPTIONALe e))
+				      val _ = if effect then use_var(state,v) else ()
 				      val state = (case e of
 						       Var_e _ => state
 						     | _ => add_availE(state, e, v))
@@ -883,44 +978,22 @@ struct
 				      end
 		   | Fixopen_b vfset =>
 		     let val vflist = Sequence.toList vfset
-			 val (v_vk_vc_b_c_cw_uw_call,state) = uncurry(vflist,state)
-			 val state = add_vars(state,map #1 vflist)
-			 val state = add_vars(state,map #1 v_vk_vc_b_c_cw_uw_call)
-			 val state' = enter_var(state,hd(map #1 vflist))
-			 fun mapper (v,vk,vc,vf,b,c,cw,uw,call) = 
-			     let fun folder((v,k),state) = add_kind(state,v,do_kind state k)
-				 val state = foldl folder state vk
-				 fun folder((v,c),state) = add_con(state,v,do_con state c)
-				 val state = foldl folder state vc
-			     in  (v,do_exp state b, do_type state c,
-				  cw, uw, call)
-			     end
-			 val v_b_c_cw_uw_call = map mapper v_vk_vc_b_c_cw_uw_call
-			 fun folder ((v,b,c,cw,uw,call),(uncurry,curry)) =
-			     case (lookup_curry(state,v)) of
-				 NONE => ((v,cw c b)::uncurry,curry)
-			       | SOME (_,v') => 
-				     let val uncurried = uw(b,c)
-					 val curried = cw c call
-					 val _ = use_var(enter_var(state,v),v')
-				     in  ((v',uncurried)::uncurry,(v,curried)::curry)
-				     end
-			 val (uncurries,curries) = foldl folder ([],[]) v_b_c_cw_uw_call
-			 val used = orfold (fn (v,_) => is_used_var(state,v)) curries
-			     
-			 val res as (bnds,state) =   
-			     if used
-				 then ([Fixopen_b(Sequence.fromList (uncurries@curries))], state)
-			     else ([Fixopen_b(Sequence.fromList uncurries)] @
-				   (if (null curries) then [] 
-				    else [Fixopen_b(Sequence.fromList curries)]), state)
-		     in res
+			 fun folder ((v,f),state) = add_con(state,v,NilUtil.function_type Open f)
+			 val (vflistlist,state) = foldl_acc rewrite_uncurry state vflist
+			 val vflist = Listops.flatten vflistlist
+			 val state = foldl folder state vflist
+			 val newbnd = Fixopen_b(Sequence.fromList vflist)
+(* xxx			 val _ = (print "old bnd: "; Ppnil.pp_bnd bnd;
+				  print "\n\nnew bnd: "; Ppnil.pp_bnd newbnd;
+				  print "\n\n")
+*)
+			 val vflist = map (do_function state) vflist
+		     in  ([Fixopen_b(Sequence.fromList vflist)], state)
 		     end
 		   | Fixcode_b vfset =>
 				let val vflist = Sequence.toList vfset
 				    val state = add_vars(state,map #1 vflist)
-				    val state' = enter_var(state,hd(map #1 vflist))
-				    val vflist = map (fn (v,f) => (v,do_function state' f)) vflist
+				    val vflist = map (do_function state) vflist
 				in  ([Fixcode_b(Sequence.fromList vflist)], state)
 				end
 		   | Fixclosure_b (recur,vclset) => 
@@ -947,17 +1020,13 @@ struct
 	    let val e = do_exp state (Var_e v)
 	    in  (case e of
 		     Var_e v => ((NONE,ExportValue(l,v)), state)
-		   | _ => let val v' = Name.derived_var v
-			  in  ((SOME(Exp_b(v', TraceUnknown, e)),ExportValue(l,v')),state)
-			  end)
+		   | _ => error "exported term is not a variable")
 	    end
 	  | do_export(ExportType(l,v),state) =
 	    let val c = do_con state (Var_c v)
 	    in  (case c of
 		     Var_c v => ((NONE,ExportType(l,v)), state)
-		   | _ => let val v' = Name.derived_var v
-			  in  ((SOME(Con_b(Runtime, Con_cb(v',c))),ExportType(l,v')),state)
-			  end)
+		   | _ => error "exported type result is not a variable")
 	    end
 	fun optimize {lift_array, dead, projection, uncurry, cse} 
 	              (MODULE{imports, exports, bnds}) =

@@ -1158,12 +1158,13 @@ struct
 
 
    local 
-       datatype state = STATE of {curfid : var}
+       datatype state = STATE of {curfid : var list}
    in
-       fun copy_state (STATE{...},fid) = STATE{curfid = fid}
-       fun show_state(STATE{curfid}) = (print "state = "; Ppnil.pp_var curfid; print "\n")
-       fun new_state curfid = STATE{curfid = curfid}
-       fun current_fid (STATE{curfid}) = curfid
+       fun copy_state (STATE{curfid},fid) = STATE{curfid = fid::curfid}
+       fun show_state(STATE{curfid}) = (print "state = "; Ppnil.pp_var (hd curfid); print "\n")
+       fun new_state curfid = STATE{curfid = [curfid]}
+       fun current_fid (STATE{curfid}) = hd curfid
+       fun current_fids (STATE{curfid}) = curfid
        type state = state
    end
 
@@ -1459,9 +1460,9 @@ struct
 			    val elist'' = elist' @ [Var_e venv_var] 
 			in App_e(Code, Var_e cv, clist'', elist'', eflist')
 			end
-		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist')
+		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist') 
 		in  (case e of
-			 Var_e v => if (is_fid v andalso eq_var(v,current_fid state))
+			 Var_e v => if (eq_var(v,current_fid state))
 					then let val {code_var,...} = get_static v
 					     in  docall(code_var,get_frees v)
 					     end

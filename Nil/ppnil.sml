@@ -80,7 +80,7 @@ structure Ppnil	:> PPNIL =
 	    (case kind of
 		 Type_k => String "TYPE"
 	       | Record_k lvk_seq => (pp_list (fn (lv,k) => HOVbox(pp_labvar lv
-								   @ [String " : ",
+								   @ [String " : ", Break,
 								      pp_kind k]))
 				      (Sequence.toList lvk_seq) ("REC_K{", ",","}", true))
 	       | Arrow_k (openness,ks,k) => 
@@ -98,9 +98,9 @@ structure Ppnil	:> PPNIL =
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", pp_con c]
       | pp_conbnd (Open_cb(v,vklist,c,k)) = 
-	HOVbox[pp_var v, String " = ",
+	HOVbox[pp_var v, String " = ", Break,
 	       HOVbox[String "FUN_C",
-		      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
+		      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", Break, pp_kind k])
 		       vklist),
 		      Break0 0 5,
 		      String " : ", pp_kind k, String " = ",
@@ -151,7 +151,7 @@ structure Ppnil	:> PPNIL =
 						      pp_con c]
 	       in HOVbox[String "TYPECASE_C(", pp_con arg, Break0 0 5,
 			 pp_kind kind, Break0 0 5,
-			 pp_list pp_arm arms ("","","",true),
+			 pp_list pp_arm arms ("","","",true), Break0 0 5,
 			 String "DEFAULT: ",
 			 pp_con default]
 	       end
@@ -338,6 +338,7 @@ structure Ppnil	:> PPNIL =
 			   Break0 0 5,
 			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
 			      arms ("","","", true)),
+			   Break0 0 5,
 			   pp_default default]
 	      | Sumsw_e {arg,sumtype,bound,arms,default} => 
 		    HOVbox[String "SUM_SWITCH(", 
@@ -347,6 +348,7 @@ structure Ppnil	:> PPNIL =
 			   pp_var bound, String ", ",  Break0 0 5,
 			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
 			      arms ("","","", true)),
+			   Break0 0 5,
 			   pp_default default]
 	      | Exncase_e {arg,bound,arms,default} => 
 		    HOVbox[String "EXN_SWITCH(", 
@@ -355,6 +357,7 @@ structure Ppnil	:> PPNIL =
 			   pp_var bound, String ", ",  Break0 0 5,
 			   (pp_list (fn (t,e) => Hbox[pp_exp t, String ": ", pp_exp e])
 			      arms ("","","", true)),
+			   Break0 0 5,
 			   pp_default default]
 	      | Typecase_e sw => error "can't print typecase"
 
@@ -397,9 +400,9 @@ structure Ppnil	:> PPNIL =
 	end
 
     and pp_fix is_code (v,Function(effect,recursive,vklist,dep,vclist,vflist,e,c)) : format = 
-	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_var v, String " :: ", pp_kind k]) 
+	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_var v, String " :: ", Break, pp_kind k]) 
 			     vklist ("",",","",false))
-	    val vcformats = (pp_list_flat (fn (v,c) => HOVbox[pp_var v, String " : ", pp_con c]) 
+	    val vcformats = (pp_list_flat (fn (v,c) => HOVbox[pp_var v, String " : ", Break, pp_con c]) 
 			     vclist ("",",","",false))
 	    val vfformats = (pp_list_flat (fn v => HOVbox[pp_var v, String " : Float"])
 			     vflist ("",",","",false))

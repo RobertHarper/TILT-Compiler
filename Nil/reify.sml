@@ -1,9 +1,4 @@
-(*$import TopLevel Nil Nilcontext NilUtil Util Sequence Name TraceInfo TraceOps *)
-
-signature REIFY = 
-    sig
-	val reify_mod : Nil.module -> Nil.module
-    end
+(*$import TopLevel Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY *)
 
 structure Reify :> REIFY =
 struct

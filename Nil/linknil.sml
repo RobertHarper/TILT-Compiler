@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist *)
+(*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify *)
 
 structure Linknil (* :> LINKNIL  *) =
   struct
@@ -16,6 +16,7 @@ structure Linknil (* :> LINKNIL  *) =
     val do_hoist = Stats.tt("doHoist")
     val do_reify = Stats.tt("doReify")
     val do_cse = Stats.tt("doCSE")
+    val do_uncurry = Stats.ff("doUncurry")
     val show_size = ref false
     val show_hil = ref false
     val show_phasesplit = Stats.ff("showPhaseSplit")
@@ -159,7 +160,7 @@ structure Linknil (* :> LINKNIL  *) =
 				 Optimize.optimize
 				   {lift_array = true,
 				    dead = true, projection = true, 
-				    cse = false, uncurry = true},
+				    cse = false, uncurry = false},
 				 filename, nilmod)
 
 	    val _ = if (!do_vararg) then error "no vararg" else ()
@@ -194,7 +195,7 @@ structure Linknil (* :> LINKNIL  *) =
 				 Optimize.optimize
 				   {lift_array = false,
 				    dead = true, projection = true, 
-				    cse = !do_cse, uncurry = false},
+				    cse = !do_cse, uncurry = !do_uncurry},
 				 filename, nilmod)
 
 (*
@@ -245,17 +246,17 @@ structure Linknil (* :> LINKNIL  *) =
 	    val _ = transform debug  "Beta-reduction" nilmod
 *)
 
-
+(*
 	    val nilmod = transform(ref true, show_before_rtl,
 				 "Renaming2",Linearize.linearize_mod,
 				 filename, nilmod)
-
-
+*)
+(*
             val nilmod = transform(do_reify, show_reify,
                                    "Reification2",
                                    Reify.reify_mod,
                                    filename, nilmod)
-
+*)
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 
 				 ToClosure.close_mod,

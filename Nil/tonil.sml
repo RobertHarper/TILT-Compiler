@@ -1106,7 +1106,7 @@ end (* local defining splitting context *)
 				 Il.BND_EXP(top_var, 
 					    il_exp as Il.FIX(_, _, fbnds)))
 			 ::rest_il_sbnds) =
-       (if (Util.substring("polyfun",Name.label2string lbl)) then
+       (if (Util.substring("polyfun!",Name.label2string lbl)) then
 	   let
 	       (* external_labels = Exported labels for these functions.
                   external_vars = Variables to which the functions should be bound
@@ -1172,7 +1172,8 @@ end (* local defining splitting context *)
 
        if ((Name.eq_label (it_lbl, IlUtil.it_lab))
 	   andalso ((Name.is_label_internal lbl)  (* this or is needed to handler bnds *)
-		    orelse (Util.substring("polyfun",Name.label2string lbl)))
+		    orelse (Util.substring("polyfun!",Name.label2string lbl))
+		    orelse (Util.substring("polyfun!",Name.var2name top_var)))
 	   andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
 	   andalso (not (IlUtil.is_eq_lab lbl))) then
 				  
@@ -2271,7 +2272,7 @@ end (* local defining splitting context *)
 	   fun loop [] = []
 	     | loop ((sdec as 
 		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con))) :: rest) = 
-	        if (Util.substring("polyfun",Name.label2string lab)) then
+	        if (Util.substring("polyfun!",Name.label2string lab)) then
 		   let
 (*		       val _ = print "entered mono optimization case\n" *)
 		       val clist = (case il_con of
@@ -2298,7 +2299,7 @@ end (* local defining splitting context *)
 		     :: rest) = 
 	       if ((Name.eq_label (it_lbl, IlUtil.it_lab))
 		   andalso (Name.is_label_internal lbl)
-		   andalso (Util.substring("polyfun",Name.label2string lbl))
+		   andalso (Util.substring("polyfun!",Name.label2string lbl))
 		   andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
 		   andalso (not (IlUtil.is_eq_lab lbl))) then
 		   let

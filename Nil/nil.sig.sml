@@ -1,4 +1,4 @@
-(*$import Prim PRIM Annotation Sequence *)
+(*$import Prim PRIM Annotation Sequence TraceInfo *)
 
 signature NIL =
 sig

@@ -368,12 +368,16 @@ struct
       val _ = (pprint ("rewriting bnd for exp var: "^vstr^"\n");ppin 2)  
 *)
       val (e',bvl') = rexp(e,cvs)
-      val fv = freeExpVars e
+
       (* XXX hack, can't have floats at top-level (bug in tortl) *)
-      val up = subset(fv,cvs) andalso (not (NilUtil.effect e))
-	                      andalso (case e of
-					   Prim_e(NilPrimOp(unbox_float _),_,_) => false
-					 | _ => true)
+      val (up,fv) = if ((NilUtil.effect e) orelse
+			(case e of
+			     Prim_e(NilPrimOp(unbox_float _),_,_) => true
+			   | _ => false))
+			then (false, NONE)
+		    else let val fv = freeExpVars e
+			 in  (subset(fv,cvs), SOME fv)
+			 end
 (*
       val _ = if up then pprint ("E-moving "^vstr^" up\n") 
       	      else pprint ("E-keeping "^vstr^" here\n") 
@@ -381,7 +385,7 @@ struct
 *)
       val newbnd = Exp_b(v,niltrace,e')
     in
-      if up then (UP v,bvl'@[(newbnd,fv)])
+      if up then (UP v,bvl'@[(newbnd,valOf fv)])
       else (STAY newbnd,bvl')
     end
 

@@ -244,8 +244,11 @@ struct
 	  | Prim_e (ap,clist,elist) =>
 		let val _ = inc depth_lcon_prim
 		    (* val constr = Normalize.prim_uses_carg ap *)
-		    val clist = map (lcon_flat state) clist
-		    val cbnds = (* flatten cbnds *) []
+		    val cbnds_clist = map (lcon (case ap of
+					       NilPrimOp _ => false
+					     | PrimOp _ => lift) state) clist
+		    val (cbnds,clist) = Listops.unzip cbnds_clist
+		    val cbnds = flatten cbnds 
 		    val _ = dec depth_lcon_prim
 		    val (bnds,elist) = map_unzip (lexp lift state) elist
 		    val bnds = flatten bnds
