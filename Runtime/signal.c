@@ -276,7 +276,7 @@ void memfault_handler(int signum,
     case SIGILL:
       {
 	printf("Illegal instruction\n");
-	exit(-1);
+	break;
       }
     case SIGSEGV:
       {
@@ -478,7 +478,6 @@ if (0)
   }
 
 }
-
 
 void float_tester (double arg)
 {
