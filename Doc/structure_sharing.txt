@@ -159,11 +159,12 @@ always legal; the compiler may just whine a lot if you use it weirdly.
 3) Why bother with the two variations?  At the time we studied this
 issue, we couldn't agree on which was better and it seemed easy to
 implement them both.  The distinction comes up in the case that there
-are two type components of the same name that cannot be shared.  The
-Definition of course says to reject such cases.  When one of the types
-is flexible, one could attempt to implement real sharing here, using a
-"where type" or something to realize the flexible component in terms
-of the non-flexible one, but it is unclear how to do this in general.
+are two type components of the same name that cannot be shared (as in
+the third and fourth pairs of specs above).  The Definition of course
+says to reject such cases.  When one of the types is flexible, one
+could attempt to implement real sharing here, using a "where type" or
+something to realize the flexible component in terms of the
+non-flexible one, but it is unclear how to do this in general.
 Consider for example,
 
 > structure A : sig type a  type t        type s = a*a end
