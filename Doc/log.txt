@@ -175,3 +175,39 @@ Intended changes:
 5) Rename AllArrow_c{body,...} to AllArrow_c{body_type,...}
    while I'm making changes.
 6) why is ppnil giving nonexhaustive match warnings !?
+
+
+------------------------------------------------------------------------
+June 22, 1999	Perry	Chris
+
+Needed optimizations/fixes:
+
+(1) ExpTable is not doing alpha-equivalence
+(2) CSE uses ExpTable's alpha-equivalence which even if correct
+	is still too weak
+(3) Large mu types are appearing in the NIL code
+	(ilstatic, after hoisting, has at least 6 copies of the IL datatype)
+    This is at least started by the elaborator.
+(4) Elaborator does not try to drop any terms in transparent ascription
+(5) Mutate checks are not being coalesced (tortl should count these too)
+(6) Tortl computation of what is a global is too weak 
+	(it must distinguish types vs constructors)
+(7) Types are not anormlized because this used to cause a blowup
+	(is this true anymore?)
+(8) tortl needs to statically allocate recursive closures if possible
+(9) Register allocation needs to be improved.  Pay attention
+	to the compilation of applications
+(10) Delay slots on Sparc not utilized
+(11) Alternating application and allocation leads to extra GC checks
+(12) Elaborator refers to datatype constructors (instead of inlining)
+	for signature ascription
+(13) This won't elaborate.
+	structure BasicStream =
+	struct
+	  datatype 'a stream = Stream of unit -> 'a front
+	  and 'a front = Cons of 'a stream
+	end
+
+
+
+
