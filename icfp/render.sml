@@ -70,7 +70,8 @@ structure Render =
 
     fun cast (apply, Ia, viewerPos, dir, scene, lights, 0) : color =  black
       | cast (apply, Ia, viewerPos, dir, scene, lights, depth) : color =  
-	let val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
+	let val _ = (print "."; TextIO.flushOut TextIO.stdOut)
+	    val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
 	    fun greater ((_,{dist=d1,...}:l3info),
 			 (_,{dist=d2,...}:l3info)) = d1 > d2
 	    val intersects = ListMergeSort.sort greater intersects
