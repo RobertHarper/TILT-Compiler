@@ -9,7 +9,6 @@
 #include "general.h"
 #include "stats.h"
 
-#define DEBUG
 #ifdef DEBUG
 #include "memobj.h"
 extern HeapObj_t *fromheap, *toheap;
