@@ -51,7 +51,8 @@ An example implementation:
 
 Every compilation unit has an interface consisting of an optional,
 user-supplied external interface and a compiler-generated internal
-interface.
+interface. External interfaces are used to support separate
+compilation (see below).
 
 **** External Interface
 
@@ -112,8 +113,8 @@ sense of (a) as long as they have no dependents in common. This is
 possible, for example, when the project has more than one target or
 includes units not depended on by any target.
 
-Condition (b) could be relaxed to (b') a third unit depends directly
-on both. TILT implements (b).
+Condition (b) could be relaxed to generate errors only for direct
+mutual dependencies.
 
 **** File Dependencies
 
@@ -183,7 +184,7 @@ are specified, TILT treats the last unit in the mapfile as a target.
 
 Another reasonable design would be to require that source and external
 interface filenames be provided explicitly. This would eliminate the
-special treatment of suffixes like ".sml" and ".int". More important,
+special treatment of suffixes like ".sml" and ".int". More importantly,
 this would make explicit in the project description whether a unit is
 constrained by an external interface. Currently, you have to examine
 the file system to answer this question.
@@ -196,10 +197,10 @@ An include directive looks like
 
 where `path' is a Unix-style path to a mapfile. The contents of the
 included mapfile are considered in place of the include
-directive. TILT performs a simple search to resolve path: first TILT
-tries to resolve path relative to the mapfile, then TILT tries to
-resolve path relative to a designated TILT library directory (where a
-compiled copy of the basis library is stored).
+directive. TILT performs a simple search to resolve the path: first
+TILT tries to resolve the path relative to the mapfile, then TILT
+tries to resolve the path relative to a designated TILT library
+directory (where a compiled copy of the basis library is stored).
 
 *** Mapfile Example
 
@@ -214,15 +215,15 @@ and a target unit Main:
 	Map map
 	Main main TARGET
 
-Focusing on the unit named MAP, the compiler looks for the source in
-file map-sig.sml and for an external interface in map-sig.int.
+Focusing on the unit named Map, the compiler looks for the source in
+file map.sml and for an external interface in map.int.
 
 ** Dependencies
 
-Inside an SML file, the (direct) dependencies for the implementation
-are given using the import directive (a special comment). Import
-directives specify unit names as defined in the mapfile, not file
-names. For example, map.sml might contain:
+Inside an SML file, the (direct) file dependencies for the
+implementation are given using the import directive (a special
+comment). Import directives specify unit names as defined in the
+mapfile, not file names. For example, map.sml might contain:
 
 	(*$import MAP SplayTree *)
 
@@ -231,16 +232,15 @@ names. For example, map.sml might contain:
 	...
 	end
 
-Inside an external interface file, the dependencies are given with a
-similar include directive. For example, map.int might contain:
+Inside an external interface file, the file dependencies are given
+with a similar include directive. For example, map.int might contain:
 
 	(*$include MAP *)
 
 	structure Map : MAP
 
 Import directives only appear within an implementation, and include
-directives only appear within an external interface. There is no
-significance to the name change.
+directives only appear within an external interface.
 
 Another reasonable design would have been to store dependency
 information outside of the source and external interface files. For
@@ -399,7 +399,7 @@ code, and a unit environment.
 
 A unit environment provides a specification for every parent of the
 implementation. Currently, TILT implements a unit environment as a
-finite map taking a unit's name to the CRC of it's internal interface
+finite map taking a unit's name to a hash of it's internal interface
 file.
 
 Candidates provided in source form can be compiled to obtain an
