@@ -11,7 +11,7 @@ signature NILUTIL =
     val is_shape : Nil.kind -> bool
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
-    val exp_tuple : (Nil.exp * Nil.con) list -> Nil.exp
+    val exp_tuple : Nil.exp list -> Nil.exp
     val con_tuple : Nil.con list -> Nil.con
     val con_tuple_inject : Nil.con list -> Nil.con
     val kind_tuple : Nil.kind list -> Nil.kind
@@ -24,6 +24,7 @@ signature NILUTIL =
     val false_exp : Nil.exp
     val int_con : Nil.con   (* 32-bit ints *)
     val char_con : Nil.con  (* 8-bit ints *)
+    val function_type : Nil.function -> Nil.con
 
     val letc : Nil.conbnd list * Nil.con -> Nil.con
     val lete : Nil.bnd list * Nil.exp -> Nil.exp

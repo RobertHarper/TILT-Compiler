@@ -165,7 +165,7 @@ struct
 
   and bnd =                                (* Term-level Bindings with optional classifiers *)
       Con_b of phase * conbnd                (* Binds constructors *)
-    | Exp_b of var * con  * exp              (* Binds expressions *)
+    | Exp_b of var * exp              (* Binds expressions *)
     | Fixopen_b of (var,function) sequence   (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) sequence   (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures *)

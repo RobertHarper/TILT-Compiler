@@ -25,8 +25,14 @@ functor ToClosure(structure Nil : NIL
 struct
 
 
-    val do_close_path = ref true
-    val do_single_venv = ref true
+    val do_close_path = Stats.bool("Closure_TermPath")
+    val do_close_cpath = Stats.bool("Closure_TypePath")
+    val do_single_venv = Stats.bool("Closure_TermCompress")
+    val _ = do_close_path := true
+    val _ = do_close_cpath := false
+    val _ = do_single_venv := true
+
+
 
     val select_carries_types = Stats.bool "select_carries_types"
     val select_has_con = select_carries_types
@@ -626,7 +632,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 			     let val (f,state) = cbnd_find_fv(cbnd,(frees,state))
 			     in (state, f)
 			     end
-		       | Exp_b(v,_,e) => 
+		       | Exp_b(v,e) => 
 			     let 
 				 val c = type_of(state,e) 
 				 val f = t_find_fv (state,frees) c
@@ -795,9 +801,11 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 		     val frees = (case default of
 				      NONE => frees
 				    | SOME e => e_find_fv (state,frees) e)
-		     val state = add_boundevar(state,bound,Prim_c(Exn_c,[]))
 		     val frees = foldl (fn ((e1,e2),f) => 
 					let val f = e_find_fv (state,f) e1
+					    val tagcon = type_of(state,e1)
+					    val Prim_c(Exntag_c, [con]) = tagcon
+					    val state = add_boundevar(state,bound,con)
 					    val f = e_find_fv (state,f) e2
 					in  f
 					end) frees arms 
@@ -961,35 +969,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	    end	 
 
 
-         and istype c = 
-	     (case c of
-		  Prim_c _ => true
-		| Mu_c(_,vcset) => 
-		      let val vclist = Sequence.toList vcset
-		      in  (case vclist of
-			       [(_,c)] => istype c
-			     | _ => false)
-		      end
-		| Proj_c (Mu_c (_,vcset), l) => 
-		      let val vclist = Sequence.toList vcset
-			  fun loop n [] = error "bad proj_c(mu_c"
-			    | loop n ((v,c)::rest) = if (eq_label(generate_tuple_label n, l))
-							 then istype c
-						     else loop (n+1) rest
-		      in  loop 1 vclist
-		      end
-		| AllArrow_c _ => true
-		| Var_c _ => false
-		| Typecase_c _ => false
-		| Let_c _ => false
-		| Crecord_c _ => error "t_find_fv given crecord : wrong kind"
-		| Closure_c _ => error "t_find_fv given crecord : wrong kind"
-		| App_c _ => false
-		| Proj_c _ => false
-		| Annotate_c (_,c) => istype c)
-
-    and istype_reducible (state,con) = 
-		(istype con orelse istype (NilStatic.con_reduce(get_ctxt state,con)))
+    and istype_reducible (state,con) = Normalize.is_hnf(Normalize.reduce_hnf(get_ctxt state,con))
 
 	and t_find_fv' (state : state, frees : frees) con : frees =
 	    let fun type_case() = (c_find_fv'(state,frees) con; frees)
@@ -1093,7 +1073,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	       | Proj_c (c,l) => 
 		    let (* labels are returned backwards *)
 			val (base,labels) = extract_cpath con
-			val do_path = (!do_close_path) andalso
+			val do_path = (!do_close_cpath) andalso
 				(case base of Var_c _ => true | _ => false)
 		    in  if not do_path	
 			then c_find_fv (state,frees) c
@@ -1360,7 +1340,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 			  val elist = map (fn (p,_,_,_) => e_rewrite state (path2exp p)) pc_free
 		      in  if (!do_single_venv andalso length labels = 1)
 			      then hd elist
-			  else Prim_e(NilPrimOp(record labels),clist,elist)
+			  else Prim_e(NilPrimOp(record labels),[],elist)
 		      end
 
 	   val code_fun = Function(effect,recur,
@@ -1400,7 +1380,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 		(Con_b(p,cb)) => let val cbnds = cbnd_rewrite state cb
 				 in  map (fn cb => Con_b(p,cb)) cbnds
 				 end
-	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite state c, e_rewrite state e)]
+	      | (Exp_b(v,e)) => [Exp_b(v, e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
 	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite state) var_fun_set)
@@ -1630,7 +1610,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	  | Proj_c _ => 
 		let (* labels are backwards *)
 		    val (base,labels) = extract_cpath arg_con
-		    val do_path = (!do_close_path) andalso
+		    val do_path = (!do_close_cpath) andalso
 				(case base of Var_c _ => true | _ => false)
 		in  if not do_path
 			then projectc(c_rewrite base,labels)

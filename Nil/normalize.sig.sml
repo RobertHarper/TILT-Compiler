@@ -47,6 +47,14 @@ signature NORMALIZE =
     val exp_normalize' : (context * (con subst)) -> exp -> exp
     val con_reduce_once : context * con subst -> con -> bool * con subst * con
 
+
+    val is_hnf       : con -> bool
+    val reduce_hnf   : context * con -> con
+    val reduce_once  : context * con -> con
+    val reduce       : context * con -> con
+    datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
+    val reduce_until : context * (con -> 'a option) * con -> 'a ReduceResult
+
     (*Perform the given reduction, renormalizing the result if necessary*)
 
     (*PRE: argument is a well kinded normalized record projection, c.l

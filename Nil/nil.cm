@@ -65,6 +65,10 @@ linknil.sig.sml
 linknil.sml
 
 
+vararg.sig.sml
+vararg.sml
+
+
 (*
 cleanup.sig.sml
 cleanup.sml
@@ -72,8 +76,6 @@ betareduce.sig.sml
 betareduce.sml
 cont.sig.sml
 cont.sml
-vararg.sig.sml
-vararg.sml
 nileval.sig.sml
 nileval.sml 
 *)

@@ -212,7 +212,7 @@ functor Ppnil(structure ArgNil : NIL
 		"(" ^ (TilWord32.toDecimalString tagcount) ^ ","
 		^ (TilWord32.toDecimalString totalcount) ^ ")")
       | pp_primcon (Record_c labels) = pp_list pp_label labels ("RECORD[", ",", "]", false)
-      | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
+      | pp_primcon (Vararg_c (oness,e)) = Hbox[String "VARARG[", pp_openness oness, pp_effect e, String "]"]
 
     and pp_confun (openness,effect,vklist,clist,numfloats,con) = 
 	pp_region "AllArrow(" ")"
@@ -348,10 +348,7 @@ functor Ppnil(structure ArgNil : NIL
     and pp_bnd bnd =
 	let fun help x y = (x,y)
 	  in (case bnd of
-	        Exp_b (v,c,e) => 
-		    if (!elide_bnd)
-			then HOVbox[pp_var v, String " = ", Break, pp_exp e]
-		    else HOVbox[pp_var v, String " : ", pp_con c, String " = ", Break, pp_exp e]
+	        Exp_b (v,e) => HOVbox[pp_var v, String " = ", Break, pp_exp e]
 	      | Con_b (Runtime,cb) => pp_conbnd cb
 	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
 	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset

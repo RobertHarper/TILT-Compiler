@@ -46,6 +46,8 @@ struct
    val do_memoize = ref true
    val do_kill_cpart_of_functor = ref true
    val do_kill_dead_import = ref true
+   val do_preproject = Stats.bool("do_preproject")
+   val _ = do_preproject := true
 
    val elaborator_specific_optimizations = ref true
    val optimize_empty_structure = ref true
@@ -226,7 +228,7 @@ struct
           makeLetE (ebnds @ ebnds') body
      | makeLetE ebnds body =
        (case (List.rev ebnds, body) of
-           (Exp_b(evar',_,exp)::rest, Var_e evar) => 
+           (Exp_b(evar',exp)::rest, Var_e evar) => 
 	       if (Name.eq_var(evar',evar)) then 
                   makeLetE (List.rev rest) exp
                else
@@ -251,10 +253,10 @@ struct
        let
 	   val con_bnds = map (fn((cvar, knd), con) => Con_b (Runtime, Con_cb(cvar, con)))
                               (Listops.zip vklist con_args)
-           val exp_bnds = map (fn((evar, con), exp) => Exp_b (evar, con, exp))
+           val exp_bnds = map (fn((evar, con), exp) => Exp_b (evar, exp))
 	                      (Listops.zip vclist exp_args)
 	   val float_type = Prim_c (Float_c Prim.F64, [])
-           val fp_bnds = map (fn (evar, exp) => Exp_b (evar, float_type, exp))
+           val fp_bnds = map (fn (evar, exp) => Exp_b (evar, exp))
 	                     (Listops.zip fplist fp_args)
        in
            con_bnds @ exp_bnds @ fp_bnds
@@ -289,7 +291,7 @@ struct
 	      | loop acc (bnd::rest) ve_opt = 
 		(case bnd of
 		   Con_b _ => loop (bnd::acc) rest ve_opt
-		 | Exp_b (v,_,e) => 
+		 | Exp_b (v,e) => 
 			(case check v ve_opt e of
 			  USE => original
 			| CLOSED => loop (bnd::acc) rest ve_opt
@@ -323,7 +325,7 @@ struct
 	    fun bnd_check (Con_b(_,Con_cb(v,_))) = VarSet.member(fv,v)
 	      | bnd_check (Con_b(_,Open_cb(v,_,_,_))) = VarSet.member(fv,v)
 	      | bnd_check (Con_b(_,Code_cb(v,_,_,_))) = VarSet.member(fv,v)
-	      | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
+	      | bnd_check (Exp_b(v,_)) = VarSet.member(fv,v)
 	      | bnd_check (Fixopen_b vfset) = Listops.orfold vf_mem (Sequence.toList vfset)
 	      | bnd_check (Fixcode_b vfset) = Listops.orfold vf_mem (Sequence.toList vfset)
 	      | bnd_check (Fixclosure_b (_,vfset)) = 
@@ -416,10 +418,8 @@ struct
        let fun decompose ctxt (Record_k lvk_seq) = Sequence.toList lvk_seq
 	     | decompose ctxt (Singleton_k c) = 
 	   error "selectFromKind got singleton kind" 
-(*	           decompose ctxt (Stats.subtimer("tonil_getshape_proj",Nilstatic.get_shape ctxt) c) *)
 	     | decompose _ _ = error "selectFromKind failed to get record or singleton kind"
 	   fun loop ctxt k [] = k
-(* Stats.subtimer("tonil_makeshape_proj", Nilstatic.make_shape ctxt) k  *)
 	     | loop ctxt k (lbl::lbls) = 
 	       let val lvk_list = decompose ctxt k
 		   fun find ctxt [] = 
@@ -646,8 +646,7 @@ in
 					   error "con variable not in context but in used list"))
        end
 
-   fun nilcontext_con_reduce(CONTEXT{NILctx,...},c) = Nilstatic.con_reduce(NILctx,c)
-   fun nilcontext_con_valid(CONTEXT{NILctx,...},c) = Nilstatic.con_valid(NILctx,c)
+   fun nilcontext_con_hnf(CONTEXT{NILctx,...},c) = Normalize.reduce_hnf(NILctx,c)
    fun nilcontext_print(CONTEXT{NILctx,...}) = Nilcontext.print_context NILctx
 
    fun update_vmap  (CONTEXT{NILctx,sigmap,
@@ -679,7 +678,7 @@ in
 		   val k_shape = (case k_shape_opt of
 				      SOME k => k
 				    | NONE => Stats.subtimer("tonil_make_shape0_",
-							     Nilstatic.make_shape NILctx) k)
+							     Normalize.make_shape NILctx) k)
 	       in  (k_shape, strip_kind true k_shape)
 	       end
 	   val convarmap' = Name.VarMap.insert(convarmap,v,memoize kinds)
@@ -697,7 +696,7 @@ in
 	       let val k_shape = 
 		   (case k_shape_opt of
 			SOME k => k
-		      | NONE => Stats.subtimer("tonil_get_shape0_",Nilstatic.get_shape NILctx) c)
+		      | NONE => Stats.subtimer("tonil_get_shape0_",Normalize.get_shape NILctx) c)
 	       in  (k_shape, strip_kind true k_shape)
 	       end
 	  val convarmap' = Name.VarMap.insert(convarmap,v,memoize kinds)
@@ -732,7 +731,7 @@ in
        fun check_ebndpresent (CONTEXT{NILctx,...}) ebnd_cat = 
 	  let val ebnds = flattenCatlist ebnd_cat
 	      fun loop [] = true
-                | loop ((Exp_b(v,_,_))::rest) = 
+                | loop ((Exp_b(v,_))::rest) = 
 		((Nilcontext.find_con(NILctx,v); loop rest)
 			handle Nilcontext.Unbound => false)
 	  in  loop ebnds
@@ -742,7 +741,7 @@ in
 						  memoized_mpath,alias,convarmap},cbnd_cat) = 
        let fun folder((v,k,c:con),(ctxt,used,cm)) = 
            let fun kinds() = 
-	       let val k_shape = Stats.subtimer("tonil_get_shape2",Nilstatic.get_shape NILctx) c
+	       let val k_shape = Stats.subtimer("tonil_get_shape2",Normalize.get_shape NILctx) c
 	       in (k_shape, strip_kind true k_shape)
 	       end
 	       val insert = 
@@ -783,7 +782,7 @@ in
 			  cm)
 		else (ctxt, used, cm)
 	     end
-           fun folder(Exp_b(v,_,e),(ctxt,used,cm)) = 
+           fun folder(Exp_b(v,e),(ctxt,used,cm)) = 
                let val insert = 
 		   (strict orelse
 		   ((Nilcontext.find_con(ctxt,v);
@@ -808,7 +807,7 @@ in
 	       in  if insert 
                    then
 		       let fun kinds() = let val k_shape = Stats.subtimer("tonil_get_shape3",
-									  Nilstatic.get_shape ctxt) c
+									  Normalize.get_shape ctxt) c
 					 in  (k_shape, strip_kind true k_shape)
 					 end
 		       in  (Nilcontext.insert_kind_equation(ctxt,v,c,Singleton_k c),
@@ -836,7 +835,7 @@ in
    fun strip_singleton str (CONTEXT{NILctx,...}) k = 
        (case k of
 	    Singleton_k c => 
-		((Stats.subtimer("tonil_get_shape_4",Nilstatic.get_shape NILctx) c)
+		((Stats.subtimer("tonil_get_shape_4",Normalize.get_shape NILctx) c)
 		 handle e => (print "!!!strip_singleton error!!! "; 
 			      print str; print "  con = \n"; 
 			      Ppnil.pp_con c; print "\n"; raise e))
@@ -884,7 +883,7 @@ end (* local defining splitting context *)
        else
 	   projectFromRecord nilctxt (Prim_c(Record_cc "1" lbls, cons)) l'
      | projectFromRecord nilctxt c labels =
-	   (case nilcontext_con_reduce(nilctxt,c) of
+	   (case nilcontext_con_hnf(nilctxt,c) of
 		c as (Prim_c(Record_c _, _)) => projectFromRecord nilctxt c labels
 	      | c' => 
 		    (print "Error: bad projection from constructor ";
@@ -946,9 +945,9 @@ end (* local defining splitting context *)
 
        fun augment_ebndcat ebnd_cat (from_var,to_var) = 
 	   let val ebnds = flattenCatlist ebnd_cat
-	       fun traverse((ebnd as Exp_b(v,c,e))::rest) = 
+	       fun traverse((ebnd as Exp_b(v,e))::rest) = 
 		   if Name.eq_var(v,from_var)
-		       then ebnd::(Exp_b(to_var,c,e))::rest
+		       then ebnd::(Exp_b(to_var,e))::rest
 		   else ebnd::(traverse rest)
 		 | traverse[] = error "augment_ebndcat could not find from_var"
 	   in  LIST(traverse ebnds)
@@ -981,7 +980,7 @@ end (* local defining splitting context *)
 					 else
 					  (Var_c pc, Var_e pr,
 						LIST[(pc,knd_c,Var_c vc)],
-						LIST[Exp_b(pr,type_r,Var_e vr)],
+						LIST[Exp_b(pr,Var_e vr)],
 					   	update_NILctx_insert_con(
 						update_NILctx_insert_kind_equation(context,pc,
 						Var_c vc,SOME knd_c_context),pr,type_r)))
@@ -1027,7 +1026,7 @@ end (* local defining splitting context *)
 	   (print str; print " has sumtype = \n";
 	    Ppnil.pp_con con; 
 	    print "\n reducing to non sum type = \n";
-	    Ppnil.pp_con (nilcontext_con_reduce(context,con));
+	    Ppnil.pp_con (nilcontext_con_hnf(context,con));
 	    print "\n in context = \n";
 	    nilcontext_print context; print "\n";
 	    error (str ^ " has sumtype whose translate is irreducible to a sum type"))
@@ -1036,7 +1035,7 @@ end (* local defining splitting context *)
 	       then (tagcount,totalcount,known,[carrier])
 	   else (case carrier of
 		     Crecord_c lcons => (tagcount,totalcount,known,map #2 lcons)
-		   | _ => (case nilcontext_con_reduce(context,carrier) of
+		   | _ => (case nilcontext_con_hnf(context,carrier) of
 			       Crecord_c lcons => (tagcount,totalcount,known,map #2 lcons)
 			     | _ => local_error()))
        in
@@ -1044,7 +1043,7 @@ end (* local defining splitting context *)
 	   Prim_c(Sum_c {tagcount,totalcount,known},[carrier]) => 
 	       help(tagcount,totalcount,known,carrier)
 	 | _ => 
-	       (case nilcontext_con_reduce(context,con) of
+	       (case nilcontext_con_hnf(context,con) of
 		    Prim_c(Sum_c {tagcount,totalcount,known},[carrier]) => 
 			 help(tagcount,totalcount,known,carrier)
 		  | c => local_error()))
@@ -1079,7 +1078,7 @@ end (* local defining splitting context *)
 										    name_c, SOME knd_c_context)
 					    val context = update_NILctx_insert_con(context,pr,type_r)
 					in  (Var_c pc, Var_e pr, 
-						LIST[(pc,knd_c,name_c)], LIST[Exp_b(pr,type_r,name_r)],
+						LIST[(pc,knd_c,name_c)], LIST[Exp_b(pr,name_r)],
 						context)
 					end)
 			in {cbnd_cat=cbnd_cat, ebnd_cat=ebnd_cat, name_c=name_c, name_r=name_r,
@@ -1200,7 +1199,7 @@ end (* local defining splitting context *)
 		    NONE => (LIST cbnds, LIST nil, context)
 		  | SOME (_, name_c, name_r) => 
 			(LIST (cbnds@[(name_c, knd_c_real, Var_c var_mod_c)]),
-			 LIST [Exp_b (name_r, type_r, Var_e var_mod_r)],
+			 LIST [Exp_b (name_r, Var_e var_mod_r)],
 			 update_NILctx_insert_kind_equation
 			  (update_NILctx_insert_con(context,name_r, type_r), 
 			   name_c, Var_c var_mod_c, SOME knd_c_context)))
@@ -1312,7 +1311,7 @@ end (* local defining splitting context *)
 	     val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
        
-	   val ebnd_cat_new = LIST[Exp_b(var_r, type_r,
+	   val ebnd_cat_new = LIST[Exp_b(var_r, 
 					 makeAppE
 					 name_fun_r
 					 [name_arg_c]
@@ -1434,7 +1433,7 @@ end (* local defining splitting context *)
 	   val cbnd_cat_new = LIST [(var_proj_c, knd_proj_c_real,con_proj_c)]
            val cbnd_proj_cat = APPEND[cbnd_mod_cat,cbnd_cat_new]
 
-	   val ebnd_cat_new = LIST [Exp_b(var_proj_r, type_proj_r,
+	   val ebnd_cat_new = LIST [Exp_b(var_proj_r, 
 					  selectFromRec(name_mod_r,type_mod_r,
 							lbls))]
 	   val context = update_NILctx_ebndcat(context, ebnd_cat_new)
@@ -1485,9 +1484,15 @@ end (* local defining splitting context *)
 		 val context = update_NILctx_insert_kind(context, var_arg_c, 
 							 knd_arg_context, NONE)
 		 val context = update_NILctx_insert_con(context, var_arg_r, con_arg)
-	   in    val {cbnd_cat = cbnd_preproject_cat,
-			ebnd_cat = ebnd_preproject_cat,
-			context = inner_context} = preproject(var_arg,il_arg_signat,context)
+	   in    val (cbnd_preproject_cat,ebnd_preproject_cat,inner_context) = 
+	       if (!do_preproject)
+		   then let val {cbnd_cat = cbnd_preproject_cat,
+				 ebnd_cat = ebnd_preproject_cat,
+				 context = inner_context} = preproject(var_arg,il_arg_signat,context)
+			in (cbnd_preproject_cat, ebnd_preproject_cat, inner_context)
+			end
+	       else (LIST[], LIST[], context)
+	       
 	   end
 	
 
@@ -1633,10 +1638,10 @@ end (* local defining splitting context *)
 
 	   val ebnd_cat_new = 
 	       if specialize 
-		   then LIST[Exp_b (var_str_r, type_str_r, hd record_r_exp_items)]
-	       else     LIST[Exp_b (var_str_r, type_str_r,
+		   then LIST[Exp_b (var_str_r, hd record_r_exp_items)]
+	       else     LIST[Exp_b (var_str_r, 
 				    Prim_e (NilPrimOp (record record_r_labels),
-					    record_r_field_types, record_r_exp_items))]
+					    [], record_r_exp_items))]
 	   val ebnd_str_cat = APPEND[ebnd_cat,ebnd_cat_new]
 
 
@@ -2093,7 +2098,7 @@ end (* local defining splitting context *)
        in
 	   {final_context = final_context,
 	    cbnd_cat = cbnd_cat,
-	    ebnd_cat = APPEND[LIST [Exp_b(var,con,exp)], ebnd_cat],
+	    ebnd_cat = APPEND[LIST [Exp_b(var,exp)], ebnd_cat],
 	    valuable = valuable andalso exp_valuable,
 	    record_c_con_items = record_c_con_items,
 	    record_c_knd_items = record_c_knd_items,
@@ -2797,7 +2802,7 @@ end (* local defining splitting context *)
 	       val valuable2 = Listops.andfold #3 exp_con_va
 		   
 	       val (openness,effect,con) = 
-		   (case (nilcontext_con_reduce(context, con1)) of
+		   (case (nilcontext_con_hnf(context, con1)) of
 			AllArrow_c(openness,effect,_,_,_,con) => (openness, effect, con)
 		      | nonarrow => (print "Error: could not reduce function type to arrow!\n";
 				     print "Expression was :\n";
@@ -2861,7 +2866,7 @@ end (* local defining splitting context *)
        let
 	   val (labels, exps, cons, valuable) = xrbnds context rbnds
        in  (* labels already sorted *)
-	   (Prim_e (NilPrimOp (record labels), cons, exps),
+	   (Prim_e (NilPrimOp (record labels), [], exps),
 	    Prim_c (Record_cc "6"  labels, cons), valuable) 
        end
 
@@ -2925,10 +2930,6 @@ end (* local defining splitting context *)
            val ebnds = (map Con_b_temp cbnd_list) @ (flattenCatlist ebnd_cat)
            val cbnds = (map Con_cb_temp cbnd_list)
 	   val (exp, con, valuable') = xexp context' il_exp
-
-
-	   val reduced_con = nilcontext_con_reduce(context', con)
-
 
            val _ =
              if (!full_debug) then
@@ -3079,12 +3080,12 @@ end (* local defining splitting context *)
 	   val bnds = (map Con_b_temp cbnds) @ 
 	              (flattenCatlist ebnd_cat)
 
-           val unnormalized_con = 
+           val con = 
 	       makeLetC (map Con_cb_temp cbnds) 
 	                (if specialize then type_r 
 			 else projectFromRecord context type_r [label])
 
-           val con = nilcontext_con_reduce(context, unnormalized_con)
+           val con = nilcontext_con_hnf(context, con)
 
 
 	   val let_body = 
@@ -3698,38 +3699,19 @@ val _ = (print "Nil final context is:\n";
              open labels must be recursively unpackaged 
              for module bindings, use the varmap returned by the phase-splitter *)
 
-	    fun folder cr_pathopts ((Il.SDEC(l,dec)),exports) = 
+	    fun folder ((Il.SDEC(l,dec)),exports) = 
 		let open Ilutil
-		    fun make_cpath v = (case cr_pathopts of
-					   SOME (path,_) => join_path_labels(path,[l])
-					 | NONE => Il.SIMPLE_PATH v)
-		    fun make_rpath v = (case cr_pathopts of
-					   SOME (_,path) => join_path_labels(path,[l])
-					 | NONE => Il.SIMPLE_PATH v)
-
-		    fun path2exp (Il.SIMPLE_PATH v) = Var_e v
-		      | path2exp (Il.COMPOUND_PATH (v,lbls)) = 
-			let fun loop e [] = e
-			      | loop e (lbl::lbls) = loop (Prim_e(NilPrimOp (select lbl),[],[e])) lbls
-			in loop (Var_e v) lbls
-			end
-		    fun path2con (Il.SIMPLE_PATH v) = Var_c v
-		      | path2con (Il.COMPOUND_PATH (v,lbls)) = 
-			let fun loop c [] = c
-			      | loop c (lbl::lbls) = loop (Proj_c(c,lbl)) lbls
-			in loop (Var_c v) lbls
-			end
 		in
 		    (case (not (is_nonexport_lab l), dec) of
 			 (false,_) => exports
 		       | (true,Il.DEC_EXP (v,_)) => 
-			     let val e = path2exp (make_rpath v)
-				 val (_,c) = Nilstatic.exp_valid(nil_final_context,e)
+			     let val e = Var_e v
+				 val c = Normalize.type_of(nil_final_context,e)
 			     in  (ExportValue(l,e,c)::exports)
 			     end
 		       | (true,Il.DEC_CON (v,_,_)) =>
-			     let val c = path2con (make_cpath v)
-				 val (_,k) = Nilstatic.con_valid(nil_final_context,c)
+			     let val c = Var_c v
+				 val (_,k) = Nilstatic.con_valid(nil_final_context, c)
 				 val k = if (!do_kill_cpart_of_functor)
 					     then strip_kind false k
 					 else k
@@ -3750,15 +3732,12 @@ val _ = (print "Nil final context is:\n";
 							print "\n";
 							error "total_varmap missing bindings"))
 
-				 val rpath = make_rpath vr
-				 val cpath = make_cpath vc
 				 val exports = 
 				     let 
-
-					 val er = path2exp rpath
-					 val (_,cr) = Nilstatic.exp_valid(nil_final_context,er)
-					 val cc = path2con cpath
-					 val (_,kc) = Nilstatic.con_valid(nil_final_context,cc)
+					 val er = Var_e vr
+					 val cr = Normalize.type_of(nil_final_context,er)
+					 val cc = Var_c vc
+					 val (_,kc) = Nilstatic.con_valid(nil_final_context, cc)
 					 val kc = if (!do_kill_cpart_of_functor)
 						      then strip_kind false kc
 						  else kc
@@ -3778,7 +3757,7 @@ val _ = (print "Nil final context is:\n";
 			     end)
 		end
 	    val _ = msg "---about to compute exports\n" 
-	   val exports : export_entry list = rev(foldl (folder NONE) [] sdecs)
+	   val exports : export_entry list = rev(foldl folder [] sdecs)
 	   val _ = msg "---done with compute exports\n" 
 
 	    val nilmod = MODULE{bnds = bnds, 

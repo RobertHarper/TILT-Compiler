@@ -24,6 +24,7 @@ sig
     val do_opt : bool ref
     val do_one_optimize : bool ref
     val do_two_optimize : bool ref
+    val do_vararg : bool ref
     val do_specialize : bool ref
 
     val typecheck_after_cc : bool ref
@@ -34,6 +35,7 @@ sig
     val show_renamed : bool ref
     val show_one_optimize : bool ref
     val show_two_optimize : bool ref
+    val show_vararg : bool ref
     val show_phasesplit : bool ref
     val show_cc : bool ref
     val show_before_rtl : bool ref

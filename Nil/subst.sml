@@ -503,12 +503,11 @@ functor NilSubstFn(structure Nil : NIL
 		     in
 			 (bnd,(expmap,conmap))
 		     end
-	       | Exp_b (var, con, exp) =>
+	       | Exp_b (var, exp) =>
 		     let
-			 val con = substConInCon conmap con
 			 val exp = substExpConInExp' maps exp
 			 val (var,expmap) = exp_rebind (var,expmap)
-			 val bnd = (Exp_b (var,con,exp))
+			 val bnd = (Exp_b (var,exp))
 		     in
 			 (bnd,(expmap,conmap))
 		     end

@@ -47,19 +47,37 @@ struct
 		      a set of equations.
 	  (3) and (1.b) together allow cascading dead code to be eliminated.
         *)
+	datatype used_state = UNUSED | USED | TYPE_USED 
+	                    | DEFER of (used_state ref) list
+	                    | TYPE_DEFER of (used_state ref) list
 	local
-	  datatype used_state = UNUSED | USED | DEFER of (used_state ref) list
-	  datatype state = STATE of {equation: NilContext.context,
+	  datatype state = STATE of {intype : bool,
+				     equation: NilContext.context,
 				     used : used_state ref Name.VarMap.map,
 				     current : used_state ref,
 				     alias : (bool * exp) Name.VarMap.map,
 				     uncurry : (int * var) Name.VarMap.map}
-	  fun isused (ref USED) = true
-	    | isused (ref UNUSED) = false
-	    | isused (r as ref (DEFER ls)) = 
-	      let val isused = orfold isused ls
-		  val _ = r := (if isused then USED else UNUSED)
-	      in  isused
+	  fun isused r = 
+	      let fun loop [] = false
+		    | loop (l::rest) = 
+		      (case (isused l) of
+			   USED => true
+			 | TYPE_USED => true
+			 | UNUSED => loop rest
+			 | _ => error "got defer")
+	      in  case (!r) of
+		  USED => USED
+		| TYPE_USED => TYPE_USED
+		| UNUSED => UNUSED
+		| DEFER ls => let val use = if (loop ls) then USED else UNUSED 
+				  val _ = r := use
+			      in  use
+			      end
+		| TYPE_DEFER ls => let val use = if (loop ls) then TYPE_USED else UNUSED 
+				  val _ = r := use
+			      in  use
+			      end
+
 	      end
 	in
 	  type state = state
@@ -67,24 +85,32 @@ struct
 				   used = Name.VarMap.empty,
 				   uncurry = Name.VarMap.empty,
 				   alias = Name.VarMap.empty,
-				   current = ref USED}	
-	  fun retain_state(STATE{equation,alias,used,current,uncurry}) = 
+				   current = ref USED,
+				   intype = false}
+	  fun retain_state(STATE{equation,alias,used,current,uncurry,intype}) = 
 			STATE{used=used,alias=alias,equation=equation,
-			      uncurry=uncurry,current=ref USED}
-	  fun add_vars(STATE{equation,used,alias,current,uncurry},vars) = 
+			      uncurry=uncurry,current=ref USED,intype=intype}
+	  fun type_state(STATE{equation,alias,used,current,uncurry,intype}) = 
+			STATE{used=used,alias=alias,equation=equation,
+			      uncurry=uncurry,current=current,
+			      intype = true}
+	  fun intype(STATE{intype,...}) = intype
+	  fun add_vars(STATE{equation,used,alias,current,uncurry,intype},vars) = 
 		let val r = ref UNUSED
 		in  STATE{equation=equation,
 			  used=foldl (fn (v,m) => Name.VarMap.insert(m,v,r)) used vars,
 			  alias=alias,
 			  current=current,
-			  uncurry=uncurry}
+			  uncurry=uncurry,
+			  intype=intype}
 		end
 	  fun add_var(state,v) = add_vars(state,[v])
-	  fun enter_var(STATE{equation,used,alias,current,uncurry},v) = 
+	  fun enter_var(STATE{equation,used,alias,current,uncurry,intype},v) = 
 		STATE{equation=equation,
 		      used=used,
 		      alias=alias,
 		      uncurry=uncurry,
+		      intype = intype,
 		      current=case (Name.VarMap.find(used,v)) of
 				NONE => error "enter_var given var not in used map"
 			      | SOME us => us}
@@ -92,15 +118,38 @@ struct
 	  	(case Name.VarMap.find(used,v) of
 		  NONE => ()
 		| SOME (ref USED) => ()
+		| SOME (r as (ref TYPE_USED)) => r := USED
 		| SOME (r as (ref UNUSED)) => r := DEFER [current]
+		| SOME (r as (ref (TYPE_DEFER ls))) => r := DEFER (current::ls)
 		| SOME (r as (ref (DEFER ls))) => r := DEFER (current::ls))
+	  fun use_typevar(STATE{used,current,...},v) = 
+	  	(case Name.VarMap.find(used,v) of
+		  NONE => ()
+		| SOME (ref USED) => ()
+		| SOME (ref TYPE_USED) => ()
+		| SOME (r as (ref UNUSED)) => r := TYPE_DEFER [current]
+		| SOME (r as (ref (DEFER ls))) => r := DEFER (current::ls)
+		| SOME (r as (ref (TYPE_DEFER ls))) => r := TYPE_DEFER (current::ls))
           fun is_used_var(STATE{used,...},v) = 
 		case Name.VarMap.find(used,v) of
 		  NONE => (print "is_used_var given var not in state: ";
 		  	   Ppnil.pp_var v; print "\n";
 			   error "is_used_var given var not in state")
-		| SOME r => if (!do_dead) then isused r else true
-	  fun add_aliases(STATE{equation,used,uncurry,current,alias},aliases) =
+		| SOME r => (case (!do_dead,isused r) of
+                              (false,_) => true
+			    | (_,USED) => true
+			    | (_,TYPE_USED) => true
+			    | (_,UNUSED) => false
+			    | _ => error "got DEFER")
+          fun is_used_convar(STATE{used,...},v) = 
+		case Name.VarMap.find(used,v) of
+		  NONE => (print "is_used_var given var not in state: ";
+		  	   Ppnil.pp_var v; print "\n";
+			   error "is_used_var given var not in state")
+		| SOME r => (case (!do_dead,isused r) of
+                              (false,_) => USED
+			    | (_,use) => use)
+	  fun add_aliases(STATE{equation,used,uncurry,current,alias,intype},aliases) =
 		STATE{equation=equation,
 		      used=used,
 		      alias=foldl (fn ((v,b,e),m) => 
@@ -109,13 +158,15 @@ struct
 	                           print " to "; Ppnil.pp_exp e; print "\n";
 	  *)
 					 Name.VarMap.insert(m,v,(b,e)))) alias aliases,
+		      intype = intype,
 		      uncurry=uncurry,
 		      current=current}		
 	  fun add_alias(s,v,b,e) = add_aliases(s,[(v,b,e)])
-	  fun add_curry(STATE{equation,alias,used,uncurry,current},v_curry,depth,v_uncurry) =
+	  fun add_curry(STATE{intype,equation,alias,used,uncurry,current},v_curry,depth,v_uncurry) =
 	      STATE{equation=equation,
 		    used=used,
 		    alias=alias,
+		    intype = intype,
 		    uncurry=Name.VarMap.insert(uncurry,v_curry,(depth,v_uncurry)),
 		    current=current}
 	  fun lookup_curry(STATE{uncurry,...},v) = Name.VarMap.find(uncurry,v)
@@ -135,21 +186,24 @@ struct
 	  fun find_equation(STATE{equation,...},c) = NilContext.find_kind_equation(equation,c)
 	  fun find_con(STATE{equation,...},v) = NilContext.find_con(equation,v)
 
-	  fun add_kind(STATE{equation,alias,used,uncurry,current},v,k) = 
+	  fun add_kind(STATE{equation,alias,used,uncurry,current,intype},v,k) = 
 	      STATE{equation=NilContext.insert_kind(equation,v,k),
 		    used=used,
 		    alias=alias,
+		    intype = intype,
 		    uncurry=uncurry,
 		    current=current}
-	  fun add_con(STATE{equation,alias,used,uncurry,current},v,c) = 
+	  fun add_con(STATE{equation,alias,used,uncurry,current,intype},v,c) = 
 	      (STATE{equation=NilContext.insert_con(equation,v,c),
+		     intype = intype,
 		    used=used,
 		    alias=alias,
 		    uncurry=uncurry,
 		    current=current})
-	  fun add_kind_equation(STATE{equation,alias,used,uncurry,current},v,c,k) = 
+	  fun add_kind_equation(STATE{intype,equation,alias,used,uncurry,current},v,c,k) = 
 	      STATE{equation=NilContext.insert_kind_equation(equation,v,c,k),
 		    used=used,
+		    intype = intype,
 		    alias=alias,
 		    uncurry=uncurry,
 		    current=current}
@@ -184,12 +238,26 @@ struct
 	fun cbnd_used state (Con_cb(v,_)) = is_used_var(state,v)
 	  | cbnd_used state (Open_cb(v,_,_,_)) = is_used_var(state,v)
 	  | cbnd_used state (Code_cb(v,_,_,_)) = is_used_var(state,v)
-	fun bnd_used state (Con_b(_,cb)) = cbnd_used state cb
-	  | bnd_used state (Exp_b(v,_,e)) = is_used_var(state,v)
-	  | bnd_used state (Fixopen_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
-	  | bnd_used state (Fixcode_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
-	  | bnd_used state (Fixclosure_b(_,vclset)) = orfold (fn (v,_) => is_used_var(state,v)) 
-								(Sequence.toList vclset)
+	fun cbnd_used' state (Con_cb(v,_)) = is_used_convar(state,v)
+	  | cbnd_used' state (Open_cb(v,_,_,_)) = is_used_convar(state,v)
+	  | cbnd_used' state (Code_cb(v,_,_,_)) = is_used_convar(state,v)
+	fun bnd_used state bnd = 
+	    (case bnd of
+		 (Con_b(_,cb)) => (case (cbnd_used' state cb) of
+				       UNUSED => NONE
+				     | TYPE_USED => SOME(Con_b(Compiletime,cb))
+				     | USED => SOME(Con_b(Runtime,cb)))
+	       | (Exp_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
+	       | (Fixopen_b vfset) => 
+		     if orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
+			 then SOME bnd else NONE
+	       | (Fixcode_b vfset) => 
+			     if orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
+			 then SOME bnd else NONE
+	       | (Fixclosure_b(_,vclset)) => 
+			     if orfold (fn (v,_) => is_used_var(state,v)) 
+				 (Sequence.toList vclset)
+				 then SOME bnd else NONE)
 
 	fun do_vklist state vklist =
 	    let fun folder((v,k),state) = let val k = do_kind state k
@@ -220,6 +288,9 @@ struct
 	    in  result
 	    end 
 *)
+
+	and do_type (state : state) (con : con) : con = do_con (type_state state) con
+
 	and do_con (state : state) (con : con) : con =
 	   (case con of
 		Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
@@ -230,7 +301,7 @@ struct
 			in  AllArrow_c(openness,effect,vklist,
 				   map (do_con state) vclist, numfloats, do_con state c)
 			end
-	      | Var_c v => (use_var(state,v); con)
+	      | Var_c v => (if (intype state) then use_typevar(state,v) else use_var(state,v); con)
 	      | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l, do_con state c)) lclist)
 	      | Proj_c(c,l) => Proj_c(do_con state c, l)
 	      | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
@@ -250,7 +321,6 @@ struct
 	   (case cbnd of
 		Con_cb(v,c) => let val state = add_var(state,v)
 				   val state' = enter_var(state,v)
-(*		   val k = NilStatic.get_shape (get_env state) c *)
 				   val k = Singleton_k c
 				   val state = add_kind_equation(state,v,c,k)
 			       in  (Con_cb(v,do_con state' c), state)
@@ -276,7 +346,8 @@ struct
 		    (case (Sequence.toList vfset) of
 			 [(v',f)] => if (Name.eq_var(v,v'))
 					 then SOME(v,f)
-				     else NONE)
+				     else NONE
+			| _ => NONE)
 		  | is_lambda _ = NONE
 		fun loop (depth,alias,funcons,curry_call,args,cwrapper_opt,v,function) = 
 		    let val (body,con,vk,vc,vf,wrapper) = separate function
@@ -348,54 +419,14 @@ struct
 	  end
 
 
-(*
-	fun reduce_once (state : state) (con : con) : con option = 
-	  (case con of
-	       App_c(Var_c v, args) => 
-		 (case (find_equation(state,Var_c v)) of
-		      SOME (Let_c(_,[Open_cb(v,vklist,body,_)],Var_c v')) => 
-			  if (Name.eq_var(v,v'))
-			      then let val ls = zip (map #1 vklist) args
-				       val subst = Subst.fromList ls
-				   in  SOME (Subst.substConInCon subst body)
-				   end
-			  else NONE
-		    | _ => NONE)
-	     | Var_c v => find_equation(state,Var_c v)
-	     | Proj_c(Crecord_c lcons,l) => Listops.assoc_eq(Name.eq_label,l,lcons)
-	     | Proj_c(c,l) => (case reduce_once state c of
-				   NONE => find_equation(state,con) 
-				 | SOME c => SOME (Proj_c(c,l)))
-	     | _ => (if (!debug)
-			 then (print "reduce got non-variable, non-projection,";
-			       print "and non-application:\n";
-			       Ppnil.pp_con con)
-		     else (); 
-		     NONE))
-*)
-
-	fun reduce (state : state) (pred : con -> 'a option) (con : con) : 'a option = 
-	    let fun loop (subst,con) = 
-		(case (pred con) of
-		     (some as SOME _) => pred (NilStatic.con_subst(subst,con))
-		   |  NONE => (case (NilStatic.con_reduce_once (get_env state,subst) con) of
-				   (false,_,con) => (if (!do_diag)
-						     then (print "reduce stopped at: ";
-						     Ppnil.pp_con con;
-						     print "\n") else ();
-						     NONE)
-				 | (true,subst,con) => loop (subst,con)))
-	    in  loop (NilStatic.empty_subst,con)
-	    end
-
-val reduce = fn state => fn pred => 
-    Stats.subtimer("optimize_reduce",reduce state pred)
+	fun reduce (state : state) (pred : con -> 'a option) (con : con) =
+	    Normalize.reduce_until(get_env state, pred, con)
 
 	fun is_bool state con = 
 	    (case reduce state (fn (Prim_c(Sum_c{tagcount=0w2,...},[])) => SOME ()
 	                         | _ => NONE) con of
-		 SOME () => true
-	       | NONE => false)
+		 Normalize.REDUCED _ => true
+	       | Normalize.UNREDUCED _ => false)
 
 	 fun getknownsum (Prim_c(Sum_c {tagcount,totalcount,known=SOME k}, [c])) = 
 	     SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
@@ -465,7 +496,7 @@ val reduce = fn state => fn pred =>
 		| Const_e _ => exp
 		| Prim_e(p as NilPrimOp(select l),clist, elist as [Var_e v]) => 
 			(case (lookup_proj(state,v,[l])) of
-				NONE => Prim_e(p,map (do_con state) clist, map (do_exp state) elist)
+				NONE => Prim_e(p,map (do_type state) clist, map (do_exp state) elist)
 			      | SOME e => do_exp state e)
 		| Prim_e(p as NilPrimOp (inject k),clist,elist as [Var_e v]) => 
 			 (case lookup_alias(state,v) of
@@ -480,7 +511,7 @@ val reduce = fn state => fn pred =>
 			    val state = retain_state state
 			    val (bnds,state) = do_bnds(bnds,state)
 			    val e = do_exp state e
-			    val bnds = List.filter (bnd_used state) bnds
+			    val bnds = List.mapPartial (bnd_used state) bnds
 		        in  Let_e(letsort,bnds,e)
 			end
 		| App_e(openness,f,clist,elist,eflist) => 
@@ -528,7 +559,7 @@ val reduce = fn state => fn pred =>
 					    else uncurry (depth, v',args))
 			end
 
-		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
+		| Raise_e(e,c) => Raise_e(do_exp state e, do_type state c)
 		| Handle_e(e,v,handler,c) => 
 			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
 			in  Handle_e(do_exp state e, v, do_exp state handler, do_con state c)
@@ -538,7 +569,7 @@ val reduce = fn state => fn pred =>
 	    (case switch of
 		 Intsw_e {size,arg,result_type,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
+			 val result_type = do_type state result_type
 			 val arms = map_second (do_exp state) arms
 			 val default = Util.mapopt (do_exp state) default
 		     in  Intsw_e {size=size,arg=arg,result_type=result_type,
@@ -546,12 +577,12 @@ val reduce = fn state => fn pred =>
 		     end
 	       | Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
-			 val sumtype = do_con state sumtype
+			 val result_type = do_type state result_type
+			 val sumtype = do_type state sumtype
 			 val (tagcount,totalcount,_,carrier) = 
 			     (case reduce state getsum sumtype of
-				  SOME quad => quad
-				| NONE => error "sumcon of sumsw_e not reducible to sum")
+				  Normalize.REDUCED quad => quad
+				| Normalize.UNREDUCED _ => error "sumcon of sumsw_e not reducible to sum")
 			 fun make_ssum i = Prim_c(Sum_c{tagcount=TilWord32.fromInt tagcount,
 							totalcount=TilWord32.fromInt totalcount,
 							known=SOME i},[carrier])
@@ -567,7 +598,7 @@ val reduce = fn state => fn pred =>
 		     end
 	       | Exncase_e {arg,result_type,bound,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
+			 val result_type = do_type state result_type
 			 fun do_arm(tag,body) = 
 			     let val tag = do_exp state tag
 				 val tagcon = type_of(state,tag)
@@ -606,7 +637,7 @@ val reduce = fn state => fn pred =>
 						    Var_e _ => add_alias(state,v,false,e)
 						  | _ => state)
 				     val state = add_con(state,v,c)
-				 in  ([Exp_b(v,do_con state' c, e)], state)
+				 in  ([Exp_b(v, e)], state)
 				 end
 	      fun exp_b_proj(v,c,sumcon,k,labs,reccons,sv) = 
 		  let val vars = map (fn l => Name.fresh_named_var
@@ -616,81 +647,80 @@ val reduce = fn state => fn pred =>
 		      val state = foldl (fn (v,s) => add_var(s,v)) state vars
 		      fun folder((v,c,l),s) = 
 				let val np = project_sum_record(k, l)
-			 	in  (Exp_b(v,c,Prim_e(NilPrimOp np,[sumcon],[Var_e sv])),
+			 	in  (Exp_b(v,Prim_e(NilPrimOp np,[sumcon],[Var_e sv])),
 				     add_con(s,v,c))
 				end
 		      val (bnds,state) = Listops.foldl_acc folder state
 			                 (Listops.zip3  vars reccons labs)
-		      val r = Prim_e(NilPrimOp(record labs), reccons, map Var_e vars)
-		      val bnd = Exp_b(v,c,r)
+		      val r = Prim_e(NilPrimOp(record labs), [], map Var_e vars)
+		      val bnd = Exp_b(v,r)
 		      val (bnds2,state) = do_bnd(bnd,state)
 		      val state = add_alias(state,v,false,r)
 
 		  in  (bnds @ bnds2, state)
 		  end
 	  in	(case bnd of
-		     Exp_b(v,_,e as Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv])) =>
+		     Exp_b(v,e as Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv])) =>
 		     let val c = type_of(state,e)
 			 fun getrecord (Crecord_c lcons) = SOME(map #2 lcons)
 			   | getrecord _ = NONE
 			 val sv_con = find_con(state,sv)
 			 val fieldcon = 
 			     (case reduce state getknownsum sv_con of
-				  SOME (tagcount,totalcount,k,carrier) => 
+				  Normalize.REDUCED (tagcount,totalcount,k,carrier) => 
 				      if (totalcount = tagcount + 1) then carrier
 				      else (case (reduce state getrecord carrier) of
-						SOME clist => List.nth(clist, k-tagcount)
-					      | NONE => error "sumcon of project_sum reduced to bad sum")
-				| NONE => error "sumcon of project_sum not reducible to sum")
+						Normalize.REDUCED clist => List.nth(clist, k-tagcount)
+					      | _ => error "sumcon of project_sum reduced to bad sum")
+				| _ => error "sumcon of project_sum not reducible to sum")
 			 fun getrecord (Prim_c (Record_c labs, reccons)) = SOME(labs,reccons)
 			   | getrecord _ = NONE
 
 		     in  case (reduce state getrecord fieldcon) of
-			   SOME(labs,reccons) => exp_b_proj(v,c,sumcon,k,labs,reccons,sv)
-			 | NONE => exp_b(v,c,e)
+			   Normalize.REDUCED(labs,reccons) => exp_b_proj(v,c,sumcon,k,labs,reccons,sv)
+			 | _ => exp_b(v,c,e)
 		     end
 		   (* anormalizes the components of a record *)
-		 | Exp_b(v,_,e as Prim_e(NilPrimOp(record labs),clist,elist)) => 
+		 | Exp_b(v,e as Prim_e(NilPrimOp(record labs),_,elist)) => 
 		     let val c = type_of(state,e)
-			 fun folder((Var_e v,c),bnds) = (v, bnds)
-			   | folder((e,c),bnds) = 
+			 fun folder(Var_e v,bnds) = (v, bnds)
+			   | folder(e,bnds) = 
 			 let val v = Name.fresh_named_var "named"
-			     val bnd = Exp_b(v,c,e)
+			     val bnd = Exp_b(v,e)
 			 in  (v, bnd ::bnds)
 			 end
-			 val (vars,rev_bnds) = foldl_acc folder [] (Listops.zip elist clist)
+			 val (vars,rev_bnds) = foldl_acc folder [] elist
 			 val bnds = rev rev_bnds
 			 val (bnds,state) = do_bnds(bnds,state)
 			 val state = add_var(state,v)
 			 val state' = enter_var(state,v)
 			 val _ = app (fn v => use_var(state',v)) vars
 			 val c = do_con state c
-			 val clist = map (do_con state) clist
-			 val e = Prim_e(NilPrimOp(record labs),clist,map Var_e vars)
+			 val e = Prim_e(NilPrimOp(record labs),[],map Var_e vars)
 			 val state = add_alias(state,v,false,e)
-			 val bnd = Exp_b(v,c,e)
+			 val bnd = Exp_b(v,e)
 			 val state = add_con(state,v,c)
 		     in  (bnds @ [bnd], state)
 		     end
 
 		 (* these 2 cases names inject_sum's argument to a variable *)
-		   | Exp_b(v,_,e as Prim_e(NilPrimOp (inject _), _, [Var_e _])) => 
+		   | Exp_b(v,e as Prim_e(NilPrimOp (inject _), _, [Var_e _])) => 
 		     let val c = type_of(state,e)
 		     in  exp_b(v,c,e)
 		     end
-		   | Exp_b(v,_,e as Prim_e(NilPrimOp (inject k), clist,[injectee])) => 
+		   | Exp_b(v,e as Prim_e(NilPrimOp (inject k), clist,[injectee])) => 
 		     let val c = type_of(state,e)
 			 val injectee_con = type_of(state,injectee)
 			 val var = Name.fresh_named_var "named2"
-			 val bnd1 = Exp_b(var,injectee_con,injectee)
-			 val bnd2 = Exp_b(v,c,Prim_e(NilPrimOp (inject k),
+			 val bnd1 = Exp_b(var,injectee)
+			 val bnd2 = Exp_b(v,Prim_e(NilPrimOp (inject k),
 						     clist,[Var_e var]))
 			 val state = add_con(state,var,injectee_con)
 			 val state = add_con(state,v,c)
 		     in  do_bnds([bnd1,bnd2], state)
 		     end
-		   | Exp_b(v,c,Let_e(_,bnds,e)) => do_bnds(bnds @ [Exp_b(v,c,e)], state)
-		   | Exp_b(v,c,e) => let val c = type_of(state,e)
+		   | Exp_b(v,Let_e(_,bnds,e)) => do_bnds(bnds @ [Exp_b(v,e)], state)
+		   | Exp_b(v,e) => let val c = type_of(state,e)
 				     in  exp_b(v,c,e)
 				     end
 		   | Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
@@ -703,9 +733,9 @@ val reduce = fn state => fn pred =>
 			 val state = add_vars(state,map #1 v_vk_vc_b_c_cw_uw_call)
 			 val state' = enter_var(state,hd(map #1 vflist))
 			 fun mapper (v,vk,vc,vf,b,c,cw,uw,call) = 
-			     let fun folder((v,k),state) = add_kind(state,v,k)
+			     let fun folder((v,k),state) = add_kind(state,v,do_kind state k)
 				 val state = foldl folder state vk
-				 fun folder((v,c),state) = add_con(state,v,c)
+				 fun folder((v,c),state) = add_con(state,v,do_con state c)
 				 val state = foldl folder state vc
 			     in  (v,do_exp state b, do_con state c,
 				  cw, uw, call)
@@ -769,7 +799,7 @@ val reduce = fn state => fn pred =>
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
 	      val (exports,state) = foldl_acc do_export state exports
-              val bnds = List.filter (bnd_used state) bnds
+              val bnds = List.mapPartial (bnd_used state) bnds
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end
 

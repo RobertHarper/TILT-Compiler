@@ -29,11 +29,9 @@ struct
 
   fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
   fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
-  fun exp_tuple (eclist : (exp * con) list) = 
-      let val clist = map #2 eclist
-	  val elist = map #1 eclist
-	  val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) elist
-      in Prim_e(NilPrimOp(record labels),clist,elist)
+  fun exp_tuple (elist : exp list) = 
+      let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) elist
+      in Prim_e(NilPrimOp(record labels),[],elist)
       end
   fun con_tuple clist = 
       let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) clist
@@ -59,6 +57,8 @@ struct
   val true_exp = Prim_e(NilPrimOp (inject 0w1),[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
+  fun function_type(Function(effect,recur,vklist,vclist,vflist,_,c)) = 
+      AllArrow_c(Open,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
 
   fun effect (e : exp) = true (* very conservative *)
 
@@ -241,7 +241,7 @@ struct
     fun add_convar (h : state ,v) = add_convars(h,[v])
 
     fun add_var (STATE{bound={boundevars,boundcvars},
-		       cbndhandler,bndhandler,conhandler,exphandler,kindhandler}, v, c) =
+		       cbndhandler,bndhandler,conhandler,exphandler,kindhandler}, v) =
 	(STATE{bound = {boundcvars = boundcvars,
 			boundevars = Name.VarSet.add(boundevars, v)},
 	       bndhandler = bndhandler,
@@ -464,7 +464,7 @@ struct
 					   in ((v,k')::vklist, add_convar(s,v))
 					   end
 	  fun vcfolder((v,c),(vclist,s)) = let val c' = f_con s c
-					   in  ((v,c')::vclist, add_var(s,v,c'))
+					   in  ((v,c')::vclist, add_var(s,v))
 					   end
 	  val (rev_vklist', state) = foldl vkfolder ([],state) vklist
 	  val (rev_vclist', state) = foldl vcfolder ([],state) vclist
@@ -476,26 +476,24 @@ struct
 
   and f_bnd (state : state) (bnd : bnd) : bnd list * state = 
       let val (STATE{bound,bndhandler,exphandler,...}) = state
-	  fun funtype openness (Function(effect,recur,vklist,vclist,vflist,body,c)) = 
-	      AllArrow_c(openness,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
 	  fun do_bnd (bnd,s) : bnd list * state = 
 	      case bnd of
 		  Con_b(p,cb) => let val (cbnds,state) = f_cbnd state cb
 				 in  (map (fn cb => Con_b(p,cb)) cbnds, state)
 				 end
-		| Exp_b(v,c,e) => ([Exp_b(v,f_con state c, f_exp state e)], add_var(state,v,c))
+		| Exp_b(v,e) => ([Exp_b(v, f_exp state e)], add_var(state,v))
 		| Fixopen_b vfset => 
-		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v,funtype Open f)) s vfset
+		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
 		      in  ([Fixopen_b(Sequence.map doer vfset)], s')
 		      end
 		| Fixcode_b vfset => 
-		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v,funtype Code f)) s vfset
+		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
 		      in  ([Fixcode_b(Sequence.map doer vfset)], s')
 		      end
 		| Fixclosure_b (is_recur,vcset) => 
-		      let val s' = Sequence.foldl (fn ((v,{tipe,...}),s) => add_var(s,v,tipe)) s vcset 
+		      let val s' = Sequence.foldl (fn ((v,{tipe,...}),s) => add_var(s,v)) s vcset 
 			  fun doer(v,{code,cenv,venv,tipe}) = 
 			  (v,{code = (case (exphandler (bound,Var_e code)) of
 					  NOCHANGE => code
@@ -524,7 +522,7 @@ struct
 			arms = map (fn (t,e) => (t,f_exp state e)) arms,
 			default = Util.mapopt (f_exp state) default}
 	 | Sumsw_e {result_type, arg, sumtype, bound, arms, default} =>
-	       let val state' = add_var(state,bound,sumtype)
+	       let val state' = add_var(state,bound)
 	       in  Sumsw_e {result_type = f_con state result_type, 
 			    arg = f_exp state arg,
 			    sumtype = f_con state sumtype,
@@ -533,7 +531,7 @@ struct
 			    default = Util.mapopt (f_exp state) default}
 	       end
 	 | Exncase_e {result_type, arg, bound, arms, default} =>
-	       let val state' = add_var(state,bound,Prim_c(Exn_c,[]))
+	       let val state' = add_var(state,bound)
 	       in  Exncase_e {result_type = f_con state result_type, 
 			      arg = f_exp state arg,
 			      bound = bound,
@@ -581,7 +579,7 @@ struct
 			    map self elist, 
 			    map self eflist)
 		| Raise_e (e,c) => Raise_e(self e, f_con state c)
-		| Handle_e (e,v,h,c) => let val state' = add_var(state,v,Prim_c(Exn_c,[]))
+		| Handle_e (e,v,h,c) => let val state' = add_var(state,v)
 					in  Handle_e(self e, v, f_exp state' h, f_con state c)
 					end
       in case (exphandler (bound,exp)) of
@@ -1040,8 +1038,8 @@ struct
 	    case cbnd of
 		 Con_cb (var,con) =>
 		     let 
+			 val con' = alpha_normalize_con' context con
 			 val (context',var') = alpha_bind (context,var)
-			 val con' = alpha_normalize_con' context' con
 			 val cbnd' = Con_cb (var',con')
 		     in  
 			 (cbnd',context')
@@ -1276,12 +1274,11 @@ struct
 		     let val (cbnd,c_context') = alpha_normalize_cbnd' c_context cb
 		     in  (Con_b(phase, cbnd), (e_context, c_context'))
 		     end
-	       | Exp_b (var, con, exp) =>
+	       | Exp_b (var, exp) =>
 		     let
-			 val con' = alpha_normalize_con' c_context con
 			 val exp' = alpha_normalize_exp' (e_context,c_context) exp
 			 val (e_context',var') = alpha_bind (e_context,var)
-			 val bnd' = (Exp_b (var',con',exp'))
+			 val bnd' = (Exp_b (var',exp'))
 		     in
 			 (bnd',(e_context',c_context))
 		     end

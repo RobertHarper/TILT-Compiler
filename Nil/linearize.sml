@@ -27,15 +27,21 @@ struct
 	val num_lkind = ref 0
 
 	val num_lcon_prim = ref 0
-	val num_lcon_expb = ref 0
+	val num_lcon_import = ref 0
+	val num_lcon_export = ref 0
 	val num_lcon_conb = ref 0
 	val num_lcon_concb = ref 0
+	val num_lcon_single = ref 0
+	val num_lcon_function = ref 0
 	val num_lkind_single = ref 0
 
 	val depth_lcon_prim = ref 0
-	val depth_lcon_expb = ref 0
+	val depth_lcon_import = ref 0
+	val depth_lcon_export = ref 0
 	val depth_lcon_conb = ref 0
 	val depth_lcon_concb = ref 0
+        val depth_lcon_single = ref 0
+	val depth_lcon_function = ref 0
 	val depth_lkind_single = ref 0
 
 	fun bumper(num,depth) = if (!depth > 0) then num := !num + 1 else ()
@@ -49,12 +55,17 @@ struct
 				     num_lcon := 0;
 				     num_lkind := 0;
 				     num_lcon_prim := 0;
-				     num_lcon_expb := 0;
+				     num_lcon_import := 0;
+				     num_lcon_export := 0;
+				     num_lcon_single := 0;
+				     num_lcon_function := 0;
 				     num_lcon_conb := 0;
 				     num_lcon_concb := 0;
 				     num_lkind_single := 0;
 				     depth_lcon_prim := 0;
-				     depth_lcon_expb := 0;
+				     depth_lcon_export := 0;
+				     depth_lcon_single := 0;
+				     depth_lcon_function := 0;
 				     depth_lcon_conb := 0;
 				     depth_lcon_concb := 0;
 				     depth_lkind_single := 0;
@@ -161,13 +172,10 @@ struct
 				    val _ = dec depth_lcon_conb
 				in  (Con_b(p,cb),state)
 				end
-	      | Exp_b (v,c,e) => let val e = lexp state e
-				     val _ = inc depth_lcon_expb
-				     val c = lcon state c
-				     val _ = dec depth_lcon_expb
-				     val (state,v) = add_var(state,v)
-				 in  (Exp_b(v,c,e), state)
-				 end
+	      | Exp_b (v,e) => let val e = lexp state e
+				   val (state,v) = add_var(state,v)
+			       in  (Exp_b(v,e), state)
+			       end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
 (* RECURSIVE BINDING *)
@@ -273,7 +281,10 @@ struct
    and lcon' state arg_con : con = 
        (inc num_lcon;
 	bumper(num_lcon_prim, depth_lcon_prim);
-	bumper(num_lcon_expb, depth_lcon_expb);
+	bumper(num_lcon_import, depth_lcon_import);
+	bumper(num_lcon_export, depth_lcon_export);
+	bumper(num_lcon_single, depth_lcon_single);
+	bumper(num_lcon_function, depth_lcon_function);
 	bumper(num_lcon_conb, depth_lcon_conb);
 	bumper(num_lcon_concb, depth_lcon_concb);
 
@@ -371,7 +382,9 @@ struct
 
    and lvclist state vclist = 
        let fun vcfolder((v,c),(acc,state)) = 
-	   let val c = lcon state c
+	   let val _ = inc depth_lcon_function
+	       val c = lcon state c
+               val _ = dec depth_lcon_function
 	       val (state,v) = add_var(state,v)
 	   in  ((v,c)::acc, state)
 	   end
@@ -391,7 +404,11 @@ struct
 
 	case arg_kind of
 	    Type_k => arg_kind
-	  | Singleton_k c => Singleton_k(lcon state c)
+	  | Singleton_k c => let val _ = inc depth_lcon_single
+			         val c = lcon state c
+	                         val _ = dec depth_lcon_single
+			     in  Singleton_k c
+			     end
 	  | Record_k lvk_seq => 
 		let fun folder (((l,v),k),state) = 
 			let val ((v,k),state) = lvk state (v,k)
@@ -407,7 +424,9 @@ struct
 
    fun lexport state (ExportValue(l,e,c)) = 
        let val e = lexp state e
+	   val _ = inc depth_lcon_export
 	   val c = lcon state c
+	   val _ = dec depth_lcon_export
        in  ExportValue(l,e,c)
        end
      | lexport state (ExportType(l,c,k)) = 
@@ -418,7 +437,10 @@ struct
 
    fun limport (ImportValue(l,v,c),s) =
        let val (s,v) = add_var(s,v)
-       in  (ImportValue(l,v,lcon s c),s)
+	   val _ = inc depth_lcon_import
+	   val c = lcon s c
+	   val _ = dec depth_lcon_import
+       in  (ImportValue(l,v,c),s)
 	   handle e => (print "exception in limport call\n";
 			raise e)
        end
@@ -450,13 +472,19 @@ struct
 		    print "Number of lcon calls: ";
 		    print (Int.toString (!num_lcon)); print "\n";
 
-		    print "Number of lcon calls within Prim_e: ";
+		    print "Number of lcon calls from Prim_e: ";
 		    print (Int.toString (!num_lcon_prim)); print "\n";
-		    print "Number of lcon calls with Exp_b: ";
-		    print (Int.toString (!num_lcon_expb)); print "\n";
-		    print "Number of lcon calls with Con_b: ";
+		    print "Number of lcon calls from Import: ";
+		    print (Int.toString (!num_lcon_import)); print "\n";
+		    print "Number of lcon calls from Export: ";
+		    print (Int.toString (!num_lcon_export)); print "\n";
+		    print "Number of lcon calls from Singletons: ";
+		    print (Int.toString (!num_lcon_single)); print "\n";
+		    print "Number of lcon calls from Function formals: ";
+		    print (Int.toString (!num_lcon_function)); print "\n";
+		    print "Number of lcon calls from Con_b: ";
 		    print (Int.toString (!num_lcon_conb)); print "\n";
-		    print "Number of lcon calls with Con_cb: ";
+		    print "Number of lcon calls from Con_cb: ";
 		    print (Int.toString (!num_lcon_concb)); print "\n";
 
 		    print "Number of lkind calls: ";

@@ -1065,24 +1065,17 @@ struct
 	    Prim_c (Exntag_c,[con]))
 	 end)
   and prim_valid (D,prim,cons,exps) = 
-    (case (prim,cons,exps)
-       of (record labels,cons,exps) =>
+    (case (prim,cons,exps) of
+          (record labels,_,exps) =>
 	 let
-	   val fields = zip3 labels exps cons
-	   fun check_one (label,exp,con) = 
-	     let
-	       val (con,kind) = con_valid (D,con)
-	       val (exp,con') = exp_valid (D,exp)
-	     in
-	       if type_equiv (D,con,con') then
-		 (label,exp,con)
-	       else
-		 (perr_e_c_c (exp,con,con');
-		  (error ("Type mismatch in record at field "^(label2string label)) handle e => raise e))
+	   val fields = zip labels exps
+	   fun check_one (label,exp) =
+	     let val (exp,con) = exp_valid (D,exp)
+	     in	 (label,exp,con)
 	     end
 	   val fields = map check_one fields
 	   val (labels,exps,cons) = unzip3 fields
-	   val exp = (record labels,cons,exps)
+	   val exp = (record labels,[],exps)
 	   val con = Prim_c (Record_c labels,cons)
 	   val (con,kind) = con_valid (D,con)
 	 in
@@ -1632,19 +1625,13 @@ struct
     in
       (case bnd of
 	   Con_b (phase, cbnd) => error "bnd_valid not done"
-	  | Exp_b (var, con, exp) =>
+	  | Exp_b (var, exp) =>
 	   let
-	     val (given_con,kind) = con_valid (D,con)
-	     val (exp,found_con) = exp_valid (D,exp)
-	     val bnd_con = if !bnds_made_precise then found_con else given_con
+	     val (exp,bnd_con) = exp_valid (D,exp)
 	     val D = insert_con (D,var,bnd_con)
-	     val bnd = Exp_b (var,bnd_con,exp)
+	     val bnd = Exp_b (var,exp)
 	   in
-	     if type_equiv (D,given_con,found_con) then
 	       (bnd,(D,subst))
-	     else
-	       (perr_e_c_c (exp,given_con,found_con);
-		(error ("type mismatch in expression binding of "^(var2string var)) handle e => raise e))
 	   end
 	  | (Fixopen_b defs) => fbnd_valid''(false,Open,Fixopen_b,defs,(D,subst))
 	  | (Fixcode_b defs) => fbnd_valid''(true,Code,Fixcode_b,defs,(D,subst))

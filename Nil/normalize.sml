@@ -1,5 +1,6 @@
 (*$import NIL PPNIL NILUTIL NILCONTEXT NILSUBST NORMALIZE PRIMUTIL *)
-functor NormalizeFn(structure Nil : NIL
+functor NormalizeFn(val number_flatten : int
+		    structure Nil : NIL
 		    structure PpNil : PPNIL
 		    structure NilUtil : NILUTIL 
 		    structure PrimUtil : PRIMUTIL 
@@ -837,11 +838,10 @@ val show_context = ref false
   and bnd_normalize' state (bnd : bnd) =
     (case bnd of
           Con_b (p, cb) => error "sorry not handled"
-	| Exp_b (var, con, exp) =>
+	| Exp_b (var, exp) =>
 	 let
-	   val con = con_normalize' state con
 	   val exp = exp_normalize' state exp
-	   val bnd = Exp_b (var,con,exp)
+	   val bnd = Exp_b (var,exp)
 	 in (bnd,state)
 	 end
 	| (Fixopen_b defs) =>
@@ -1014,6 +1014,45 @@ val show_context = ref false
         in  Subst.substConInCon subst c
         end
 
+
+    fun reduce_until_hnf'(env,c) : bool * con = 
+        let fun loop (n,past) (subst,c) = 
+            if (n>1000) then (subst,c,false)
+                else 
+            if (is_hnf c)
+                then (subst,c,true)
+            else let val next = (n+1,c::past)
+                     val (progress,subst,c) = con_reduce_once(env,subst) c
+                 in  if progress then loop next (subst,c) else (subst,c,false)
+                 end
+            val (subst,c,hnf) = loop (0,[]) (Subst.empty(),c)
+        in  (hnf,Subst.substConInCon subst c)
+        end
+
+    datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
+    fun reduce_once (D,con) = let val (progress,subst,c) = con_reduce_once(D,Subst.empty()) con
+			      in  Subst.substConInCon subst c
+			      end
+    fun reduce_until (D,pred,con) = 
+        let fun loop n (subst,c) = 
+            let val _ = if (n>1000) then error "reduce_until exceeded 1000 reductions" else ()
+	    in  case (pred c) of
+                SOME info => REDUCED(valOf(pred (Subst.substConInCon subst c)))
+	      | NONE => let val (progress,subst,c) = con_reduce_once(D,subst) c
+			in  if progress then loop (n+1) (subst,c) 
+			    else UNREDUCED (Subst.substConInCon subst c)
+			end
+	    end
+        in  loop 0 (Subst.empty(),con)
+        end
+    fun reduce_hnf (D,con) = 
+	let fun help c = if (is_hnf c) then SOME c else NONE
+	in  case (reduce_until(D,help,con)) of
+	      REDUCED c => c
+	    | UNREDUCED c => c
+	end
+    fun reduce(D,con) = con_normalize D con
+
     fun lab2int l ~1 = error "lab2int failed"
       | lab2int l n = if (eq_label(l,NilUtil.generate_tuple_label n))
 			  then n else lab2int l (n-1)
@@ -1069,6 +1108,19 @@ val show_context = ref false
 		   PpNil.pp_con c; print "\n";
 		   error "projectSumType reduced to non-sum type"))
 
+   fun reduce_vararg(D:context,openness,effect,argc,resc) = 
+       let val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
+	   val no_flatten = AllArrow_c(openness,effect,[],[argc],0w0,resc)
+       in  case (reduce_until_hnf'(D,argc)) of
+	   (_,Prim_c(Record_c labs,cons)) => 
+	       if (length labs > number_flatten) then no_flatten 
+	       else AllArrow_c(openness,effect,[],cons,0w0,resc)
+	 | (true,_) => no_flatten
+	 | _ => irreducible
+       end
+
+
+
    fun type_of_switch (D:context,switch:switch):con  = 
      (case switch
 	of Intsw_e {result_type,...} => result_type
@@ -1117,7 +1169,7 @@ val show_context = ref false
 		       val subst = Subst.add subst (v,Subst.substConInCon subst c)
 		   in  (D,subst)
 		   end
-	     | Exp_b (var, _, exp) =>
+	     | Exp_b (var, exp) =>
 	      let
 		val con = type_of (D,exp)
 		val D = NilContext.insert_con(D,var,con)
@@ -1137,6 +1189,7 @@ val show_context = ref false
      in
        List.foldl folder (D,Subst.empty()) bnds
      end
+
    and type_of_prim (D,prim,cons,exps) = 
        (case prim of
 	    record labs => Prim_c(Record_c labs, map (fn e => type_of(D,e)) exps)
@@ -1153,8 +1206,14 @@ val show_context = ref false
 	  | unroll => expandMuType(D,hd cons)
 	  | make_exntag => Prim_c(Exntag_c, cons)
 	  | inj_exn _ => Prim_c(Exn_c, [])
-	  | make_vararg (openness,effect) => error "type_of vararg not done"
-	  | make_onearg (openness,effect) => error "type_of onearg not done"
+	  | make_vararg (openness,effect) => 
+	       let val [argc,resc] = cons
+	       in  reduce_vararg(D,openness,effect,argc,resc)
+	       end
+	  | make_onearg (openness,effect) => 
+	       let val [argc,resc] = cons
+	       in  AllArrow_c(openness,effect,[],[argc],0w0,resc)
+	       end
 	  | peq => error "peq not done")
 
    and type_of (D : context,exp : exp) : con = 
@@ -1186,15 +1245,16 @@ val show_context = ref false
 	   | (App_e (openness,app,cons,texps,fexps)) =>
 	    let
 	      val app_con : con = type_of (D,app)
-	      val  (_,_,tformals,_,_,body) = 
-		(case (NilUtil.strip_arrow(reduce_until_hnf(D,app_con))) of
-		      SOME c => c
-		    | NONE => (print "Ill Typed expression - not an arrow type. c = \n";
-			       PpNil.pp_con app_con;
-			       print "\nexp = \n";
-			       PpNil.pp_exp app;
-			       print "\n";
-			       error "Ill Typed expression - not an arrow"))
+	      val  (tformals,body) = 
+		(case (reduce_until_hnf(D,app_con)) of
+		     AllArrow_c(_,_,tformals,_,_,c) => (tformals,c)
+		   | Prim_c(Vararg_c _, [_,c]) => ([],c)
+		   | _ => (print "Ill Typed expression - not an arrow type. c = \n";
+			      PpNil.pp_con app_con;
+			      print "\nexp = \n";
+			      PpNil.pp_exp app;
+			      print "\n";
+			      error "Ill Typed expression - not an arrow"))
 
 	      val subst = Subst.fromList (zip (#1 (unzip tformals)) cons)
 

@@ -35,6 +35,9 @@ signature NILCONTEXT =
       *    If var is already bound, raises an exception
       *)
     val insert_kind : context * var * kind -> context
+    val insert_shape : context * var * kind -> context
+    val insert_kind_shape : context * var * kind * kind -> context
+    val insert_kind_shape_equation : context * var * con * kind * kind -> context
     val insert_kind_equation : context * var * con * kind -> context
     val insert_kind_list : context* (var * kind) list -> context
 

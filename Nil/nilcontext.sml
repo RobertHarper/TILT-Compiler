@@ -394,6 +394,69 @@ functor NilContextFn(structure ArgNil : NIL
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
+   fun insert_kind_shape ({conmap,kindmap,counter}:context,var,kind,shape) = 
+     let
+       val _ =  
+	 if !debug then
+	   assert (locate "insert_kind")
+	   [
+	    (not (contains kindmap var),
+		 var_error var),
+	    (allBound_k kindmap kind,
+		 fn () => (PpNil.pp_kind kind;
+			   print "Kind contains variables not found in context")),
+	    (allBound_k kindmap shape,
+		 fn () => (PpNil.pp_kind shape;
+			   print "Shape kind contains variables not found in context")),
+	    (is_shape shape, 
+	     fn () => (PpNil.pp_kind shape;
+		       print "Shape kind is not a shape"))
+	    ]
+	 else ();
+
+       val entry = {eqn = NONE,
+		    kind = immediate kind,
+		    shape = immediate shape,
+		    index = counter}
+     in
+       {conmap = conmap, 
+	counter = counter+1,
+	kindmap = V.insert (kindmap, var, entry)}
+     end
+
+   fun insert_kind_shape_equation ({conmap,kindmap,counter}:context,var,con,kind,shape) = 
+     let
+       val _ =  
+	 if !debug then
+	   assert (locate "insert_kind")
+	   [
+	    (not (contains kindmap var),
+		 var_error var),
+	    (allBound_c kindmap con,
+		 fn () => (PpNil.pp_con con;
+			   print "Constructor contains variables not found in context")),
+	    (allBound_k kindmap kind,
+		 fn () => (PpNil.pp_kind kind;
+			   print "Kind contains variables not found in context")),
+	    (allBound_k kindmap shape,
+		 fn () => (PpNil.pp_kind shape;
+			   print "Shape kind contains variables not found in context")),
+	    (is_shape shape, 
+	     fn () => (PpNil.pp_kind shape;
+		       print "Shape kind is not a shape"))
+	    ]
+	 else ();
+
+       val entry = {eqn = SOME con,
+		    kind = immediate kind,
+		    shape = immediate shape,
+		    index = counter}
+     in
+       {conmap = conmap, 
+	counter = counter+1,
+	kindmap = V.insert (kindmap, var, entry)}
+     end
+
    fun insert_kind_equation ({conmap,kindmap,counter}:context,var,con,kind) = 
      let
        val _ =  

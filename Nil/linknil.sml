@@ -10,6 +10,8 @@ structure Linknil :> LINKNIL  =
     val do_cleanup = ref false
     val do_opt = ref false
     val do_one_optimize = ref true
+    val do_vararg = Stats.bool("do_vararg")
+    val _ = do_vararg := false
     val do_specialize = ref true
     val do_two_optimize = ref true
     val show_size = ref false
@@ -18,12 +20,13 @@ structure Linknil :> LINKNIL  =
     val show_renamed = ref false
     val show_opt = ref false
     val show_one_optimize = ref false
+    val show_vararg = ref false
     val show_two_optimize = ref false
     val show_specialize = ref false
     val show_cc = ref false
     val show_before_rtl = ref false
 
-
+    val number_flatten = 6
     val error = fn s => Util.error "linknil.sml" s
 
     val select_carries_types = Stats.bool "select_carries_types"
@@ -78,7 +81,8 @@ structure Linknil :> LINKNIL  =
 					structure PrimUtil = NilPrimUtil
 					structure Subst = NilSubst)
 
-    structure Normalize = NormalizeFn(structure Nil = Nil
+    structure Normalize = NormalizeFn(val number_flatten = number_flatten
+				      structure Nil = Nil
 				      structure NilUtil = NilUtil
 				      structure PrimUtil = NilPrimUtil
 				      structure NilContext = NilContext
@@ -122,7 +126,16 @@ structure Linknil :> LINKNIL  =
 				  structure Normalize = Normalize
 				  structure NilStatic = NilStatic
 				  structure Ppnil = PpNil)
-
+(*
+    structure Vararg = Vararg(val number_flatten = number_flatten
+			      structure Nil = Nil
+			      structure Subst = NilSubst			
+			      structure NilUtil = NilUtil
+			      structure NilContext = NilContext
+			      structure Normalize = Normalize
+			      structure NilStatic = NilStatic
+			      structure Ppnil = PpNil)
+*)
     structure Specialize = Specialize(structure Nil = Nil
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil)
@@ -244,6 +257,16 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = (Stats.timer("Linearization__temp",Linearize.linearize_mod)) nilmod
 
+	    val _ = if (!do_vararg) then error "no vararg" else ()
+(*
+	    val nilmod = if (!do_vararg)
+			     then (Stats.timer("Vararg",Vararg.optimize)) nilmod
+			 else nilmod
+	    val _ = if (!do_vararg)
+			then showmod (!show_vararg,!show_size) 
+			    "Vararg" (filename, nilmod)
+		    else ()
+*)
 
 	    val nilmod = if (!do_specialize)
 			     then (Stats.timer("Specialize",Specialize.optimize)) nilmod
