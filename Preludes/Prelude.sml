@@ -46,6 +46,8 @@ structure List =
 	    end
 	fun foldl f acc [] = acc
 	  | foldl f acc (first::rest) = foldl f (f(first,acc)) rest
+	fun map f [] = []
+	  | map f (a::b) = (f a)::(map f b)
     end
 open List
 
@@ -117,6 +119,14 @@ structure Vector =
 		    then raise Subscript
 		else unsafe_vsub(a,index)
 	    end
+	fun vector_eq (equaler : 'a * 'a -> bool) (x : 'a vector, y : 'a vector) = 
+	    let val lx = vector_length x
+		val ly = vector_length y
+		fun vector_eq_loop n = 
+		    (n = 0w0) orelse (equaler(unsafe_vsub(x,n),unsafe_vsub(y,n))
+					 andalso (vector_eq_loop (uminus(n,0w1))))
+	    in  (lx = ly) andalso vector_eq_loop (uminus(lx,0w1))
+	    end
     end
 open Vector
 
@@ -162,27 +172,29 @@ structure String =
 	
 	
 	local
-	    (* copies len words from vector x to array y *)
-	    fun icopy(x:uint vector, x_start:uint, len:uint,
-		      y:uint array, y_start:uint):unit =
-		let val stop = uplus(y_start,len)
-		    fun loop (i,j) = 
-			if ult(j,stop)
-			    then (unsafe_update(y,j,unsafe_vsub(x,i)); 
-				  loop(uplus(i,0w1),uplus(j,0w1)))
+    (* copies len words from vector x starting at x_start to array y starting at y_start *)
+	    fun wordcopy(len : uint,
+			 x:uint vector, x_start:uint,
+			 y:uint array, y_start:uint) =
+		let val y_stop = uplus(y_start,len)
+		    fun wordcopyLoop (x_cur,y_cur) = 
+			if ult(y_cur,y_stop)
+			    then (unsafe_update(y,y_cur,unsafe_vsub(x,x_cur)); 
+				  wordcopyLoop(uplus(x_cur,0w1),uplus(y_cur,0w1)))
 			else ()
-		in  loop(x_start,y_start)
+		in  wordcopyLoop(x_start,y_start)
 		end
-            (* byte copy *)	    
-	    fun bcopy(x:char vector, xs:uint, len:uint,
-		      y:char array, ys:uint) =
-		let val stop = uplus(ys,len)
-		    fun loop(xi,yi) = 
-			if ult(xi,stop) then
-			    (unsafe_update(y,yi,unsafe_vsub(x,xi));
-			     loop(uplus(xi,0w1),uplus(yi,0w1)))
+    (* same as before with with bytes *)	    
+	    fun bytecopy(len : uint,
+			 x:char vector, x_start:uint,
+			 y:char array, y_start:uint) =
+		let val y_stop = uplus(y_start,len)
+		    fun bytecopyLoop (x_cur,y_cur) = 
+			if ult(y_cur,y_stop)
+			    then (unsafe_update(y,y_cur,unsafe_vsub(x,x_cur)); 
+				  bytecopyLoop(uplus(x_cur,0w1),uplus(y_cur,0w1)))
 			else ()
-		in loop(xs,ys)
+		in  bytecopyLoop(x_start,y_start)
 		end
 	in
 	    fun concat(x : string, y : string) = 
@@ -193,8 +205,8 @@ structure String =
 		    val a : char array = unsafe_array(a_sz,c)
 		    val aw = uinta8touinta32 a
 		    val xw = uintv8touintv32 x
-		    val _ = icopy(xw,0w0,(uplus(x_sz,0w3))>>2,aw,0w0);
-		    val _ = bcopy(y, 0w0,y_sz,a,x_sz);
+		    val _ = wordcopy((uplus(x_sz,0w3))>>2, xw,0w0, aw,0w0)
+		    val _ = bytecopy(y_sz,y,0w0,  a,x_sz)
 		in  unsafe_array2vector a
 		end
 	    val op ^ = concat
@@ -221,10 +233,13 @@ structure String =
 		    val _ = if (ugt(stop,size))
 				then raise Substring
 			    else
-				bcopy(a,start,len,res,0w0)
+				bytecopy(len,a,start,res,0w0)
 		in  unsafe_array2vector res
 		end
 	end
+    
+	fun char_eq (cx:char,cy:char) = cx = cy
+	val string_eq = vector_eq char_eq
     end
 open String
 
@@ -321,8 +336,9 @@ structure Real =
 			      end
 	    in  if r < zero 
 		    then concat("~",mkstr(~r,0))
-		else if r = zero then "0.0"
-		     else mkstr(r,0)
+		else if r > zero 
+			 then mkstr(r,0)
+		     else "0.0"
 	    end (* makestring_real *)
     end
 
