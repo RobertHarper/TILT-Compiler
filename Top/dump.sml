@@ -17,7 +17,7 @@ struct
 	(case B.checkMagic is
 	   of SOME s =>
 		if List.all Char.isPrint (String.explode s)
-		then F.String ("uknown magic number: " ^ s)
+		then F.String ("unknown magic number: " ^ s)
 		else bad_magic
 	    | NONE => bad_magic)
 

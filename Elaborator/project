@@ -2,6 +2,8 @@ include $libdir ^ "/smlnj-lib/project"
 include "../Util/project"
 include "../Parser/project"
 
+(* Shared Elaborator stuff *)
+
 unit PRIM = "prim.sig.sml" {
 	TilWord64 Array Name
 }
@@ -15,6 +17,142 @@ unit Ppprim = "ppprim.sml" {
 	Name TilWord64 Array TextIO PPPRIM PRIM Util Formatter Prim
 	Stats Listops
 }
+unit PRIMUTILPARAM = "primutilparam.sig.sml" {Prim}
+unit PRIMUTIL = "primutil.sig.sml" {PRIM Prim}
+unit PrimUtil = "primutil.sml" {
+	TilWord32 TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real
+	PRIMUTIL Char String
+}
+
+
+#if defined (env TILT_FRONTEND) andalso env TILT_FRONTEND S= "2" 
+
+(* Derek's Elaborator stuff *)
+
+unit TYVAR = "tyvar2.sig.sml" {Util}
+unit Tyvar = "tyvar2.sml" {
+	TYVAR Listops Name Util List Stats Int
+}
+
+unit IL = "il2.sig.sml" {
+	Fixity Name Prim Tyvar Util
+}
+unit Il = "il2.sml" {
+	Fixity Name Prim Tyvar Util IL
+}
+unit PPIL = "ppil2.sig.sml" {Name Il Formatter}
+interface Ppil = "ppil.int" {PPIL}
+unit Ppil : Ppil = "ppil2.sml" {
+	Util Int Symbol TextIO List Listops Name Il Formatter Prim Ppprim
+	Tyvar Bool PPIL Stats Fixity
+}
+unit IlPrimUtilParam = "ilprimutilparam2.sml" {
+	Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name Stats
+}
+unit ILUTIL = "ilutil2.sig.sml" {
+	Name Symbol Prim Tyvar IL Il
+}
+interface IlUtil = "ilutil.int" {ILUTIL PRIMUTIL Il}
+unit IlUtil : IlUtil = "ilutil2.sml" {
+	PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name
+	Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats List Option
+}
+
+interface IlTable = "iltable.int" {Il}
+unit IlTable : IlTable = "iltable2.sml" {
+	Array Word32 Name Sequence Listops Il Prim Util TilWord64 String
+	BinaryMapFn Option Tyvar Int
+}
+unit ILCONTEXT = "ilcontext2.sig.sml" {IL Il Fixity Name}
+unit IlContext = "ilcontext2.sml" {
+	List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil
+	Fixity Option
+}
+unit IlEq = "ileq2.sml" {Il Util Stats Name Ppil Listops Tyvar}
+interface IlBlast = "ilblast.int" {Blaster Il}
+unit IlBlast : IlBlast = "ilblast2.sml" {
+	Il Blaster Util Int SplayMapFn Ppil IlTable Name Prim
+	Tyvar Fixity NameBlast IntListMap
+}
+
+unit ERROR = "error2.sig.sml" {
+	Ast SourceMap IL Il
+}
+unit Error = "error2.sml" {
+	Ast SourceMap Int ERROR IlUtil Il Util Stats LinkParse
+}
+
+unit INFIXPARSE = "infixparse2.sig.sml" {
+	Fixity Name Ast Il Error
+}
+unit InfixParse = "infixparse2.sml" {
+	Fixity Symbol List Name Listops Ast Util INFIXPARSE Il Ppil
+	AstHelp ListMergeSort Stats Error
+}
+
+unit ILSTATIC = "ilstatic2.sig.sml" {Util Il}
+interface IlStatic = "ilstatic.int" {ILSTATIC}
+unit IlStatic : IlStatic = "ilstatic2.sml" {
+	Prim Tyvar Name Int List Il IlContext IlEq PrimUtil Ppil
+	IlUtil Util Listops ILSTATIC Stats Option UtilError
+}
+
+unit EQUAL = "equal2.sig.sml" {Il Tyvar}
+interface Equal = "equal.int" {EQUAL}
+unit Equal : Equal = "equal2.sml" {
+	List Prim Int Il IlStatic IlUtil Ppil Util Listops Name IlContext
+	Tyvar EQUAL Stats UtilError
+}
+unit DATATYPE = "datatype2.sig.sml" {IL Ast Il}
+interface Datatype = "datatype.int" {DATATYPE}
+unit Datatype : Datatype = "datatype2.sml" {
+	String Symbol Int List Util Listops Tyvar Il IlStatic IlUtil
+	IlContext Ppil Name Ast GraphUtil ListMergeSort AstHelp DATATYPE
+	Stats Error
+}
+unit SIGNATURE = "signature2.sig.sml" {Il}
+interface Signature = "signature.int" {SIGNATURE}
+unit Signature : Signature = "signature2.sml" {
+	Formatter List Int Listops Util Name Tyvar Il IlStatic IlUtil
+	Ppil IlContext Error SIGNATURE Bool Stats Option
+}
+
+unit PAT = "pat2.sig.sml" {Il Ast}
+interface Pat = "pat.int" {PAT}
+unit Pat : Pat = "pat2.sml" {
+	Util Listops Name Prim Int Symbol TilWord64 Array Tyvar List
+	Ast Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp
+	Stats Option
+}
+
+unit TOIL = "toil2.sig.sml" {Il Ast Tyvar}
+interface Toil = "toil.int" {TOIL}
+unit Toil : Toil = "toil2.sml" {
+	Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array
+	Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat
+	InfixParse Datatype Equal Error Signature TVClose TOIL
+}
+
+unit BASIS = "basis2.sig.sml" {Il}
+interface Basis = "basis.int" {BASIS}
+unit Basis : Basis = "basis2.sml" {
+	Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic
+	Ppil IlUtil Toil BASIS Stats TilWord64 Listops Int Datatype
+}
+
+unit LINKIL = "linkil2.sig.sml" {LinkParse Il Blaster Name Ast}
+interface LinkIl = "linkil.int" {LINKIL}
+unit LinkIl : LinkIl = "linkil2.sml" {
+	IlStatic Toil IlContext Equal Pat Signature IlUtil
+	IlPrimUtilParam LinkParse Ast Il Stats Util Name Fixity
+	IlBlast List Option Listops Ppil Basis LINKIL Error
+	Formatter Blaster
+}
+
+#else 
+
+(* TILT Elaborator stuff *)
+
 unit TYVAR = "tyvar.sig.sml" {Util}
 unit Tyvar = "tyvar.sml" {
 	TYVAR Listops Name Util List Stats Int
@@ -32,14 +170,8 @@ unit Ppil : Ppil = "ppil.sml" {
 	Util Int Symbol TextIO List Listops Name Il Formatter Prim Ppprim
 	Tyvar Bool PPIL Stats Fixity
 }
-unit PRIMUTILPARAM = "primutilparam.sig.sml" {Prim}
 unit IlPrimUtilParam = "ilprimutilparam.sml" {
 	Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name Stats
-}
-unit PRIMUTIL = "primutil.sig.sml" {PRIM Prim}
-unit PrimUtil = "primutil.sml" {
-	TilWord32 TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real
-	PRIMUTIL Char String
 }
 unit ILUTIL = "ilutil.sig.sml" {
 	Name Symbol Prim Tyvar IL Il
@@ -81,8 +213,6 @@ unit InfixParse = "infixparse.sml" {
 	Fixity Symbol List Name Listops Ast Util INFIXPARSE Il Ppil
 	AstHelp ListMergeSort Stats Error
 }
-
-
 
 unit ILSTATIC = "ilstatic.sig.sml" {Util Il}
 interface IlStatic = "ilstatic.int" {ILSTATIC}
@@ -142,3 +272,5 @@ unit LinkIl : LinkIl = "linkil.sml" {
 	IlBlast List Option Listops Ppil Basis LINKIL Error
 	Formatter Blaster
 }
+
+#endif

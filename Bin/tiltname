@@ -1,0 +1,2 @@
+#!/bin/sh
+if test "$TILT_FRONTEND" = "2" ; then echo tilt2 ; else echo tilt ; fi

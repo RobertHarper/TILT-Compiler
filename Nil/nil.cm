@@ -1,31 +1,13 @@
-Group 
-(*
-        signature NIL
-	signature NILUTIL
-	signature NILSTATIC
-        signature NORMALIZE 
-	signature PPNIL
-        signature NILCONTEXT
-        signature NILSUBST
-	signature ALPHA 
-	signature NILERROR
-	signature ANNOTATION
-
-        structure Linknil
-	structure LinkIl
-(*	structure NilOpts  *)
-*)
-is
+Group is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
 ../Util/util.cm             	(* ------ Our own utilities --- *)
 ../Parser/parser.cm   		(* ------ Parsing, name utils 	*)
+
 ../Elaborator/elaborator.cm	(* ------ Elaborator Stuff ---- *)
 
 (* ------ Nil stuff ------ *)
 
-(*annote.sig.sml
-annote.sml*)
 nil.sig.sml
 nil.sml
 ppnil.sig.sml
@@ -49,21 +31,21 @@ nilutil.sig.sml
 nilutil.sml
 nildefs.sig.sml
 nildefs.sml
+nilprimutilparam.sml
+nilprimutil.sml
+
 nilerror.sig.sml
 nilerror.sml
 nilcontext.sig.sml
 nilcontext.sml
 nilcontextpre.sml
 nilcontextpre.sig.sml
-nilprimutilparam.sml
-nilprimutil.sml
 linearize.sig.sml
 linearize.sml
 normalize.sig.sml
 normalize.sml
 rewrite.sig.sml
 rewrite.sml
-(*typed_rewrite.sml*)
 
 nilstatic.sig.sml
 nilstatic.sml 
@@ -73,28 +55,19 @@ optimize.sml
 specialize.sig.sml
 specialize.sml
 
-tonil.sig.sml
-tonil.sml
-
 toclosure.sig.sml
 toclosure.sml
 
 hoist.sig.sml
 hoist.sml
 
-(*reduce.sig.sml*)
 pass.sig.sml
-(*reduce.sml
- flatten.sml  *)
 
 analyze.sig.sml
 analyze.sml
 
 inline.sig.sml
 inline.sml
-
-linknil.sig.sml
-linknil.sml
 
 vararg.sig.sml
 vararg.sml
@@ -106,18 +79,9 @@ traceops.sml
 traceinfo.sig.sml
 traceinfo.sml
 
-(*reorder.sml*)
-
 trail.sig.sml
 trail.sml
 
-(*bound_check.sml
-bound_check.sig.sml
-
-
-typeof_elim.sml
-typeof_elim.sig.sml
-*)
 coerce-elim.sig.sml
 coerce-elim.sml
 
@@ -129,13 +93,25 @@ singleton-elim.sig.sml
 NilOpts/exptable.sig.sml
 NilOpts/exptable.sml
 
+#if (defined(TILT_FRONTEND) && TILT_FRONTEND == 2)
 
-(*
-NilOpts/nilopts.sig.sml
-NilOpts/nilopts.sml
-NilOpts/pass.sig.sml
-NilOpts/anormalize-cse.sml
-*)
+(* Derek's Phase-Splitter stuff *)
+
+tonil2.sig.sml
+tonil2.sml
+linknil2.sig.sml
+linknil2.sml
+
+#else
+
+(* TILT's Phase-Splitter stuff *)
+
+tonil.sig.sml
+tonil.sml
+linknil.sig.sml
+linknil.sml
+
+#endif
 
 (* ----- Optimizer Stuff ------- *)
 (*

@@ -10,11 +10,13 @@ struct
     type ilprim = Prim.ilprim
 
     datatype path = PATH of var * labels
+
+    (* XXX want to eliminate total/partial eventually *)
     datatype arrow = TOTAL | PARTIAL
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
-                 | PRIM    of prim * con list * exp list   (* fully applied primitivies only *)
+                 | PRIM    of prim * con list * exp list   (* fully applied primitives only *)
                  | ILPRIM  of ilprim * con list * exp list (* for type-checking reasons *)
                  | ETAPRIM of prim * con list
                  | ETAILPRIM of ilprim * con list
@@ -35,7 +37,7 @@ struct
                  | UNFOLD of var list * con * con                 (* Unfold coercion : rolled type, unrolled type (hopefully names) *)
                  | ROLL    of con * exp
                  | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
-                 | INJ     of {sumtype : con,    (* non-special sum tyoe *)
+                 | INJ     of {sumtype : con,    (* non-special sum type *)
 			       field : int,
 			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
@@ -66,7 +68,7 @@ struct
                  | CON_INT           of Prim.intsize
                  | CON_UINT          of Prim.intsize
                  | CON_FLOAT         of Prim.floatsize
-                 | CON_ARRAY         of con
+                 | CON_ARRAY         of con     (* Array (t) (type analyzing) *)
                  | CON_VECTOR        of con
                  | CON_INTARRAY      of Prim.intsize     (* Array_sz  (uniform rep at size)*)
                  | CON_INTVECTOR     of Prim.intsize 
@@ -84,9 +86,9 @@ struct
 					 noncarriers : int,
 					 carrier : con,
 					 special : int option}
-                 | CON_COERCION of var list * con * con
-                 | CON_TUPLE_INJECT  of con list
-                 | CON_TUPLE_PROJECT of int * con
+                 | CON_COERCION       of var list * con * con
+                 | CON_TUPLE_INJECT   of con list
+                 | CON_TUPLE_PROJECT  of int * con
                  | CON_MODULE_PROJECT of mod * label
     and     kind = KIND
                  | KIND_TUPLE of int
@@ -107,12 +109,11 @@ struct
     and   signat = SIGNAT_STRUCTURE of sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
-	         | SIGNAT_OF of path
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)
                  | DEC_CON       of var * kind * con option * bool (* true indicates should inline *)
-                 | DEC_MOD       of var * bool * signat
+                 | DEC_MOD       of var * bool * signat  (* true indicates polymorphic function *)
 
     and     ovld = OVLD of (con * exp) list * int option (* types, default *)
 
@@ -138,7 +139,7 @@ struct
 		The entries of varMap, listed in (rev ordering) order,
 		form a well-formed elaboration context.
 
-       		If (v,(l,pc)) in varMap, then (l,(v,nil) in labelMap.
+       		If (v,(l,pc)) in varMap, then (l,(v,nil)) in labelMap.
 
 		If (l,(v,nil)) in labelMap, then (v,(l',pc)) in varMap.
 

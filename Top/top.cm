@@ -13,24 +13,38 @@ Group is
 ../Lil/lil.cm
 ../TAL/tal.cm
 
-version.sml
+(* Shared Manager stuff *)
+
 target.sig.sml
 target.sml
 
 filecache.sig.sml
 filecache.sml
 
-fs.sig.sml
-fs.sml
-
 pos.sig.sml
 pos.sml
-intsyn.sig.sml
-intsyn.sml
 extsyn.sml
 
 project.grm.sig project.grm.sml (* project.grm *)
 project.lex.sml (* project.lex *)
+
+fs.sig.sml
+fs.sml
+
+#if (defined(TILT_FRONTEND) && TILT_FRONTEND == 2)
+
+version2.sml
+intsyn.sig.sml
+intsyn2.sml
+
+#else
+
+version.sml
+intsyn.sig.sml
+intsyn.sml
+
+#endif
+
 project.sig.sml
 project.sml
 

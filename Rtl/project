@@ -70,6 +70,6 @@ unit LINKRTL = "linkrtl.sig.sml" {
 }
 interface Linkrtl = "linkrtl.int" {LINKRTL}
 unit Linkrtl : Linkrtl = "linkrtl.sml" {
-	Stats Nil LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32
+	Stats Nil LINKRTL TortlBase TortlSum Tortl Util TilWord32
 	Rtl Rtltags Pprtl TortlArray
 }

@@ -9,7 +9,7 @@ sig
     val PrintStats : bool ref	(* Print stats after compilation. *)
     val ResetStats : bool ref	(* Reset stats before compilation. *)
 
-    type label
+    type label = Name.label
     type targets = label list
 
     val unit : string -> label

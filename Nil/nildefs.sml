@@ -8,6 +8,7 @@ structure NilDefs :> NILDEFS =
 
     open Nil Prim
 
+    val error = fn s => Util.error "nildefs.sml" s
 
     val fresh_var = Name.fresh_var
 
@@ -217,8 +218,19 @@ structure NilDefs :> NILDEFS =
  	in  loop (c,[])
 	end
 
-    val generate_tuple_symbol = IlUtil.generate_tuple_symbol
-    val generate_tuple_label = IlUtil.generate_tuple_label
+  (* This code was just copied from IlUtil so that this module can be independent from the Il. *)
+    local
+	val size = 20
+	fun make i = let val s = Symbol.labSymbol(Int.toString i)
+		     in  (s, Name.symbol_label s)
+		     end
+	val table = Array.tabulate(size, make)
+    in
+	fun generate_tuple_label 0 = error "generate_tuple_label called with 0"
+	  | generate_tuple_label i = #2(if (i<size)
+					    then Array.sub(table,i)
+					else make i)
+    end
 
     fun tuple_con clist =
       let fun mapper(i,_) = generate_tuple_label(i+1)
@@ -268,7 +280,7 @@ structure NilDefs :> NILDEFS =
 
     (* This will not be the same as the user level match tag
      *)
-    val match_tag = Const_e(Prim.tag(IlUtil.internal_match_tag,unit_con))
+    val match_tag = Const_e(Prim.tag(Name.internal_match_tag,unit_con))
 
     (* An internal match exception, for use by the compiler.  If the compiler
      * is correct, this should never be raised.

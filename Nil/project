@@ -73,24 +73,24 @@ unit NilSubst = "nilsubst.sml" {
 	NilRewrite NilRename Option Subst
 }
 
-unit NILDEFS = "nildefs.sig.sml" {Nil}
+unit NILDEFS= "nildefs.sig.sml" {Nil}
 unit NilDefs = "nildefs.sml" {
-	NILDEFS Nil TilWord32 TilWord64 IlUtil Listops Prim Name
-	TraceInfo Sequence
+	NILDEFS Nil TilWord32 TilWord64 Listops Prim Name
+	TraceInfo Sequence Symbol Util Int Array
 }
+
+unit FREES = "frees.sig.sml" {Nil Name}
+unit Frees = "frees.sml" {FREES Nil Name NilRewrite}
 
 unit NILUTIL = "nilutil.sig.sml" {
 	Name TilWord32 Sequence Prim Nil NilSubst Alpha
 }
-unit FREES = "frees.sig.sml" {Nil Name}
-unit Frees = "frees.sml" {FREES Nil Name NilRewrite}
-
 interface NilUtil = "nilutil.int" {NILUTIL}
 unit NilUtil : NilUtil = "nilutil.sml" {
 	Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops
 	Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option
 	ListPair List TraceInfo Stats Int NilDefs NilRename GraphUtil Frees
-	CompilerControl
+	CompilerControl Symbol
 }
 
 unit TRAIL = "trail.sig.sml" {Nil}
@@ -108,7 +108,7 @@ unit NilContextPre : NilContextPre = "nilcontextpre.sml" {
 
 unit NilPrimUtilParam = "nilprimutilparam.sml" {
 	Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil
-	IlUtil NilContextPre TilWord32 TraceInfo Stats CompilerControl
+	NilContextPre TilWord32 TraceInfo Stats CompilerControl
 }
 unit NilPrimUtil = "nilprimutil.sml" {
 	PrimUtil NilPrimUtilParam
@@ -204,15 +204,6 @@ unit Specialize = "specialize.sml" {
 	Stats
 }
 
-unit TONIL = "tonil.sig.sml" {Il Nil}
-interface ToNil = "tonil.int" {TONIL}
-unit ToNil : ToNil = "tonil.sml" {
-	Name Listops Util Sequence List Prim Tyvar Int Word32 Array
-	TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil
-	NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL
-	Option NilPrimUtil NilDefs ListPair NilRename CompilerControl
-}
-
 unit PASS = "pass.sig.sml" {Nil}
 
 (*
@@ -264,6 +255,40 @@ unit SingletonElim = "singleton-elim.sml" {
 	Nil NilUtil NilContext Normalize SINGLETONELIM Name Util Listops NilSubst Option Prim Array NilDefs NilRename List
 }
 
+#if defined (env TILT_FRONTEND) andalso env TILT_FRONTEND S= "2" 
+
+unit TONIL = "tonil2.sig.sml" {Il Nil}
+interface ToNil = "tonil.int" {TONIL}
+unit ToNil : ToNil = "tonil2.sml" {
+	Name Listops Util Sequence List Prim Tyvar Int Word32 Array
+	TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil
+	NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL
+	Option NilPrimUtil NilDefs ListPair NilRename CompilerControl
+}
+
+unit LINKNIL = "linknil2.sig.sml" {
+	Il Nil NILUTIL NILCONTEXT PPNIL NORMALIZE TONIL VARARG
+}
+interface Linknil = "linknil.int" {LINKNIL}
+unit Linknil : Linknil = "linknil2.sml" {
+	Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil
+	ToNil Optimize Specialize Normalize Linearize ToClosure LINKNIL
+	Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic
+	Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim SingletonElim
+	CompilerControl
+}
+
+#else
+
+unit TONIL = "tonil.sig.sml" {Il Nil}
+interface ToNil = "tonil.int" {TONIL}
+unit ToNil : ToNil = "tonil.sml" {
+	Name Listops Util Sequence List Prim Tyvar Int Word32 Array
+	TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil
+	NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL
+	Option NilPrimUtil NilDefs ListPair NilRename CompilerControl
+}
+
 unit LINKNIL = "linknil.sig.sml" {
 	Il Nil NILUTIL NILCONTEXT PPNIL NORMALIZE TONIL VARARG
 }
@@ -276,3 +301,4 @@ unit Linknil : Linknil = "linknil.sml" {
 	CompilerControl
 }
 
+#endif

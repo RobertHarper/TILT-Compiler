@@ -1,40 +1,3 @@
-(*
-	When a structure variable is looked up, its signature is
-	transformed and memoized.  The transformations are (deep)
-	reduction, local variable elimination, and selfification.
-	These transformations do not touch functor signatures.
-
-	Reduce reduces an arbitrary structure signature to an sdecs.
-	Reduce_sigvar reduces a signature of the form SIGNAT_VAR v to
-	an sdecs (which may contain signature variables) by looking up
-	v and recursing on the definition.  Reduce_sigof reduces a
-	signature of the form SIGNAT_OF(X) to an sdecs by looking up
-	and selfifying the signature of X.  Deep_reduce applies reduce
-	recursively so that any sub-structure signatures are also
-	sdecs.
-
-	Eliminate recursively eliminates non-binding occurrences of
-	local variables in an sdecs, replacing them with paths.  This
-	may be a bad idea but it is currently assumed by other parts
-	of the elaborator.
-
-	Selfify recursively applies the HS self rules.
-
-	These transformations use local variable substitutions (lvs)
-	to account for local variables; these are substitutions from
-	local variables to bound paths.
-
-	Several of these functions return a boolean to indicate
-	whether the result comes from the memo table.  This enables
-	some shortcuts and may be a premature optimization.  (I
-	measured the real time needed to elaborate the Basis using
-	time(1) with "tilt -fUptoElaborate -b" on a 650MHz Pentium
-	III.  The following code averaged (four runs) 19.08 seconds.
-	A simpler version of the code that did not use most of the
-	shortcuts and did not pass and test the booleans averaged
-	(three runs) 19.71 seconds.)
-*)
-
 structure IlContext :> ILCONTEXT =
 struct
 
@@ -94,237 +57,55 @@ struct
 	in  VarMap.find (varMap, v)
 	end
 
-    local
-	type lvs = mod * subst
+    (* 
+       Selfify does not check for variable capture, 
+       i.e. that the free variables of m do not intersect the bound variables of s.
+       I think this is OK, given the assumption that all bound variables are distinct,
+       but it should be confirmed. -Derek
+    *)
+    fun selfify (ctxt : context, m : mod, s : signat) : signat =
+	  let 
 
-	fun lvs (m : mod) : lvs = (m, empty_subst)
+	      fun selfify_sig (m : mod) (s : signat) : signat = (
+                 case s
+                   of SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE(selfify_sdecs m sdecs)
+		    | SIGNAT_VAR v =>
+		       (case Context_Lookup_Var_Raw(ctxt,v)
+			  of SOME(_,PHRASE_CLASS_SIG(_,s')) => selfify_sig m s'
+                           | _ => error "selfify: signature variable not bound to signature")
+		    | SIGNAT_FUNCTOR _ => s
+              )
 
-	(*
-		Note that the only local expression variables that may
-		appear in inlined expressions are coercions.
-	*)
-	fun lvs_extend ((m,subst) : lvs, sdec) : lvs =
-	    let val SDEC(l,dec) = sdec
-		val p = (m,l)
-		val subst =
-		    (case dec
-		       of DEC_EXP (v,_,_,_) =>
-			   if is_coercion l
-			       then subst_add_expvar (subst, v, MODULE_PROJECT p)
-			   else subst
-			| DEC_CON (v,_,_,_) =>
-			   subst_add_convar (subst, v, CON_MODULE_PROJECT p)
-			| DEC_MOD (v,_,_) =>
-			   subst_add_modvar (subst, v, MOD_PROJECT p))
-	    in  (m,subst)
-	    end
+	      and selfify_sdecs (m : mod) (sdecs : sdecs) : sdecs = 
+		  #1(foldl_acc (selfify_sdec m) empty_subst sdecs)
 
-	(*
-		Rewrite SIGNAT_OF(localvar.labs) as SIGNAT_OF(v.labs')
-		where v is bound in the ambient context.
-	*)
-	fun lvs_rewrite ((_,subst) : lvs, s : signat) : signat =
-	    (case s
-	       of SIGNAT_OF _ => sig_subst(s, subst)
-		| _ => s)
+	      and selfify_sdec (m : mod) (sdec, subst) : sdec * subst =
+		let val [sdec as SDEC(l,dec)] = sdecs_subst([sdec],subst)
+		    val (dec,subst) = 
+			      case dec
+                                of DEC_EXP(v,_,_,_) => 
+				    (dec, if is_coercion l 
+					      then subst_add_expvar(subst,v,MODULE_PROJECT(m,l))
+					  else subst)
+			         | DEC_CON(v,_,SOME _,_) => 
+				    (dec, subst_add_convar(subst,v,CON_MODULE_PROJECT(m,l)))
+				 | DEC_CON(v,k,NONE,inline) =>
+				    (DEC_CON(v,k,SOME(CON_MODULE_PROJECT(m,l)),inline),
+				     subst_add_convar(subst,v,CON_MODULE_PROJECT(m,l)))
+				 | DEC_MOD(v,poly,s) => 
+				    (DEC_MOD(v,poly,selfify_sig (MOD_PROJECT(m,l)) s),
+				     subst_add_modvar(subst,v,MOD_PROJECT(m,l)))
+		in  (SDEC(l,dec),subst)
+		end
 
-	fun lvs_recurse ((m,subst) : lvs, l : label, s : signat) : lvs =
-	    let val subst = (case s
-			       of SIGNAT_VAR _ => empty_subst
-				| SIGNAT_OF _ => empty_subst
-				| _ => subst)
-		val m = MOD_PROJECT (m,l)
-	    in  (m,subst)
-	    end
+	  in  selfify_sig m s
+	  end
 
-	fun lvs_subst (lvs : lvs) : subst = #2 lvs
+    val noTransform : unit -> signat = 
+        fn () => error "noTransform is a dummy function and should never be called"
 
-	fun lvs_mod (lvs : lvs) : mod = #1 lvs
-
-	fun eliminate (lvs, sdecs : sdecs) : sdecs =
-	    #1 (foldl_acc eliminate' lvs sdecs)
-
-	and eliminate' (sdec, lvs) : sdec * lvs =
-	    let val SDEC (l,dec) = sdec
-		val subst = lvs_subst lvs
-		val EXP = fn e => exp_subst(e,subst)
-		val CON = fn c => con_subst(c,subst)
-		val SIG = fn s => sig_subst(s,subst)
-		val OPT = Option.map
-		val dec =
-		    (case dec
-		       of DEC_EXP (v,c,eopt,inline) =>
-			    DEC_EXP (v,CON c,OPT EXP eopt,inline)
-			| DEC_CON (v,k,copt,inline) =>
-			    DEC_CON (v,k,OPT CON copt,inline)
-			| DEC_MOD (v,poly,s as SIGNAT_STRUCTURE sdecs) =>
-			    let val lvs = lvs_recurse (lvs,l,s)
-				val sdecs = eliminate (lvs,sdecs)
-			    in  DEC_MOD (v,poly,SIGNAT_STRUCTURE sdecs)
-			    end
-			| DEC_MOD (v,poly,s) => DEC_MOD (v,poly,SIG s))
-	    in  (SDEC (l,dec), lvs_extend (lvs,sdec))
-	    end
-
-	exception Memo
-
-	datatype class =
-	    MOD of signat * bool
-	  | SIG of signat
-
-	fun lookup (arg : context * var) : class =
-	    (case Context_Lookup_Var_Raw arg
-	       of SOME(_,pc) =>
-		    (case pc
-		       of PHRASE_CLASS_MOD (_,_,s,f) =>
-			    (MOD (f(), true) handle Memo => MOD (s, false))
-			| PHRASE_CLASS_SIG (_,s) => SIG s
-			| _ =>
-			    error "lookup saw non-module, non-signature\
-				  \ variable")
-		| NONE => error "lookup saw unbound variable")
-
-	fun project_fast (s : signat, labs : labels) : sdecs * bool =
-	    let
-		fun sdecs (s : signat) : sdecs =
-		    (case s
-		       of SIGNAT_STRUCTURE sdecs => sdecs
-			| _ => error "project_fast saw non-sdecs signature")
-		fun project (l : label, s : signat) : signat =
-		    let val sdecs = sdecs s
-			val sdecopt = find_sdec (sdecs,l)
-		    in  (case sdecopt
-			   of SOME (SDEC(_,DEC_MOD(_,_,s))) => s
-			    | SOME _ => error "projecting from non-module\
-					      \ component in project_fast"
-			    | NONE => error "cannot find label in project_fast")
-		    end
-	    in  (sdecs(foldl project s labs),true)
-	    end
-
-	fun reduce (ctxt : context, s : signat) : sdecs * bool =
-	    (case s
-	       of SIGNAT_STRUCTURE sdecs => (sdecs,false)
-		| SIGNAT_VAR v => reduce_sigvar (ctxt, v)
-		| SIGNAT_OF (PATH(v,labs)) => reduce_sigof (ctxt, v, labs)
-		| SIGNAT_FUNCTOR _ => error "reduce saw functor signature")
-
-	and reduce_sigvar (ctxt : context, v : var) : sdecs * bool =
-	    (case lookup (ctxt, v)
-	       of SIG s => reduce(ctxt,s)
-		| _ => error "reduce_sigvar saw non-signature variable")
-
-	and reduce_sigof (ctxt : context, v : var,
-			  labs : labels) : sdecs * bool =
-	    (case lookup (ctxt, v)
-	       of MOD (s,false) =>
-		    (case reduce (ctxt,s)
-		       of (sdecs,true) =>
-			    project_fast (SIGNAT_STRUCTURE sdecs, labs)
-			| (sdecs,false) =>
-			    let val m = MOD_VAR v
-				val sdecs = selfify(ctxt,m,sdecs)
-			    in  project(ctxt,m,sdecs,labs)
-			    end)
-		| MOD (s,true) => project_fast (s, labs)
-		| _ => error "reduce_sigof saw non-module variable")
-
-	and project (ctxt : context, m : mod, sdecs : sdecs,
-		     labs : labels) : sdecs * bool =
-	    let
-		fun find (l : label, sdecs, lvs) : lvs * sdecs * bool =
-		    (case sdecs
-		       of nil => error "project cannot find label"
-			| (sdec as SDEC(l',dec)) :: rest =>
-			    if eq_label (l,l') then
-				let val s = (case dec
-					       of DEC_MOD(_,_,s) => s
-						| _ => error "projecting from non-module component")
-				    val s = lvs_rewrite (lvs, s)
-				    val lvs = lvs_recurse (lvs,l,s)
-				    val (sdecs,memoized) = reduce (ctxt, s)
-				in  (lvs,sdecs,memoized)
-				end
-			    else find (l,rest, lvs_extend (lvs,sdec)))
-		fun loop (labels, lvs, sdecs) : sdecs * bool =
-		    (case labels
-		       of nil => (sdecs_subst (sdecs, lvs_subst lvs),false)
-			| (l :: rest) =>
-			    (case find (l,sdecs,lvs)
-			       of (_,sdecs,true) =>
-				    project_fast (SIGNAT_STRUCTURE sdecs,rest)
-				| (lvs,sdecs,false) => loop (rest,lvs,sdecs)))
-	    in  loop (labs, lvs m, sdecs)
-	    end
-
-	and selfify (ctxt : context, m : mod, sdecs : sdecs) : sdecs =
-	    map (selfify' (ctxt,m)) sdecs
-
-	and selfify' (ctxt, m : mod) (sdec : sdec) : sdec =
-	    (case sdec
-	       of SDEC (_, DEC_EXP _) => sdec
-	        | SDEC (_, DEC_CON (_,_,SOME _,_)) => sdec
-	        | SDEC (l, DEC_CON (v,k,NONE,inline)) =>
-		    let val c = CON_MODULE_PROJECT (m,l)
-		        val dec = DEC_CON (v,k,SOME c, inline)
-		    in  SDEC (l,dec)
-		    end
-		| SDEC (_, DEC_MOD (_,_,SIGNAT_FUNCTOR _)) => sdec
-		| SDEC (_, DEC_MOD (_,_,SIGNAT_OF _)) => sdec
-		| SDEC (l, DEC_MOD (v,poly,s)) =>
-		    let val sdecs =
-			    (case reduce (ctxt, s)
-			       of (sdecs,true) => sdecs
-				| (sdecs,false) =>
-				    selfify (ctxt,MOD_PROJECT (m,l),sdecs))
-			val dec = DEC_MOD (v,poly,SIGNAT_STRUCTURE sdecs)
-		    in  SDEC (l,dec)
-		    end)
-
-	fun deep_reduce (ctxt : context, lvs, s : signat) : sdecs * bool =
-	    (case reduce (ctxt, s)
-	       of (sdecs,false) =>
-		    (#1 (foldl_acc (deep_reduce' ctxt) lvs sdecs), false)
-		| r => r)
-
-	and deep_reduce' (ctxt : context) (arg as (sdec,lvs)) : sdec * lvs =
-	    (case sdec
-	       of SDEC (_,DEC_MOD(_,_,SIGNAT_FUNCTOR _)) => arg
-		| SDEC (l,DEC_MOD(v,poly,s)) =>
-		   let val s = lvs_rewrite (lvs, s)
-		       val (sdecs,_) = deep_reduce (ctxt, lvs_recurse (lvs,l,s),
-						    s)
-		       val s = SIGNAT_STRUCTURE sdecs
-		       val lvs = lvs_extend (lvs,sdec)
-		       val sdec = SDEC (l,DEC_MOD (v,poly,s))
-		   in  (sdec,lvs)
-		   end
-		| _ => arg)
-
-	fun transform' (ctxt : context, m : mod, s : signat) : signat =
-	    let val lvs = lvs m
-		val sdecs =
-		    (case deep_reduce (ctxt,lvs,s)
-		       of (sdecs,true) => sdecs
-			| (sdecs,false) =>
-			    eliminate (lvs, selfify (ctxt,m,sdecs)))
-		val s' = SIGNAT_STRUCTURE sdecs
-(*
-		val _ = debugdo(fn () =>
-				(print "\n\ntransformed "; pp_mod m;
-				 print " : "; pp_signat s; print "\nto : ";
-				 pp_signat s'; print "\n\n"))
-*)
-	    in  s'
-	    end
-    in
-	val noTransform : unit -> signat = fn () => raise Memo
-
-	fun transform (ctxt : context, m : mod, s : signat) : unit -> signat =
-	    (case s
-	       of SIGNAT_FUNCTOR _ => (fn () => s)
-		| _ => Util.memoize (fn () => transform' (ctxt,m,s)))
-    end
+    fun transform (ctxt : context, m : mod, s : signat) : unit -> signat =
+	Util.memoize (fn () => selfify (ctxt,m,s))
 
     (* ----------- context extenders ----------------------------  *)
     val empty_context = CONTEXT{varMap = VarMap.empty,

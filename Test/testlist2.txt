@@ -1,0 +1,343 @@
+# The format of this file is currently of the form:
+# testdir	status	comment
+#
+# testdir is the directory in which the test is located
+# status is either pass, fail, or skip
+#   pass means that this test is expected to pass.  if it fails,
+#        extra warnings will be generated.
+#   fail means that this test is expected to fail.  if it passes,
+#        extra warnings will be generated.
+#   skip means that this test should be skipped.  This is useful 
+#        for tests on which we do not terminate (or take arbitrarily 
+#        large amounts of time on)
+#
+# Tests marked fail should cross-reference any relevant open
+# bug-reports.
+#
+# Please keep the status bits up to date.
+
+0001	pass	[Bug #0039 on alpha] Arithmetic exceptions.
+0002	pass	Top-level types and values, basis structures and sharing.
+0003	pass	Overloading.
+0004	pass	Hello world.
+0006	pass	More infix decls that should be accepted.
+0007	pass	overload resolution order (top-level)
+0008	pass	overload resolution order (in structures)
+0009	pass	overload resolution order (in functors)
+0010	pass	Pattern compiler overloading.
+0011	pass	Patterns with out of scope constructors.
+0012	pass	Pattern compiler's Match and Bind exceptions.
+0013	pass	Separate compilation and fixity declarations.
+0014	skip	Comparing functor signatures.
+0015	skip	Comparing functor signatures.
+0016	pass	Comparing functor signatures.
+0017	pass	Coercion compiler's handling of equality functions.
+0018	pass	Coercion of poly to mono value in precense of unmatched specs.
+0019	pass	Variation on 0018.
+0020	pass	Coercion of poly to mono type.
+0021	pass	Phase splitter bombing on SIGNAT_OF.
+0022	pass	Elaborator error: SIGNAT_OF and functors.
+0023	pass	Elaborator error: Bombing with unbound variable during coercion.
+0024	pass	Problem with "where structure" signature patching.
+0025	pass	Problem with "where structure" and datatype modules.
+0026	pass	Phase splitter bombing.
+bug50a	pass	We no longer support "eqtype t = ty" specs.
+bug50b	pass	We no longer support "eqtype tyvars t = ty" specs.
+bug55a	pass	Unresolved tyvar breaking elaborator.
+bug55b	pass	Unresolved tyvar breaking phase-splitter.
+bug80	pass	Phase splitter and signatures.
+bug82	fail	Flexible records.
+bug84	pass	Shadowing :: or nil breaks pattern compiler.
+bug84b	pass	Shadowing :: or nil should be disallowed.
+bug114	fail	Overloading constants.
+bug151a	pass	name-mangling test [x] <- [x]
+bug151b	pass	order of imports and effects are correct
+bug151c	pass	implicit imports do not conflict with explicit imports
+bug151d	pass	name-mangling test [x] <- * <- * -> [x]
+bug152	pass	Incorrect matching of eqtype specs.
+bug153	fail	Sharing abstract type and eqtype specs.
+bug154	pass	Equality allowed on non-eqtypes by elaborator.
+bug155	fail	Type sharing fails on corner case.
+bug159	pass	Datatype replication.
+bug163	pass	Pattern compiler causing elaborator to bomb.
+bug165	pass	Elaborator shadowing variables.
+bug166	pass	Elaborator adding classifiers with unbound, free variables to context.
+bug167	pass	Elaborator bombs on toplevel raise/handle/raise.
+bug168	pass	Real.fromString fails on nan and inf.
+m0001	pass	Raise uncaught exception.
+m0002	pass	Raise uncaught exception.
+m0003	pass	Type variable syntax.
+m0004	pass	Deep loop, unused handler.
+m0005	pass	Verifies that signature constraints change status.
+m0006	pass	Check ref's and polymorphism.
+m0007	pass	Check ref's and polymorphism.
+m0008	pass	Records.
+m0009	pass	Explicit polymorphism and ascription.
+m0010	pass	Record elision.
+m0011	pass	valOf.
+m0012	pass	Word.word, Word8.word.
+m0013	pass	Rudimentary functor instantiation.
+m0014	pass	Datatype equality.
+m0015	pass	Empty file.
+m0016	pass	Hello world.
+m0017	pass	Hello world in two lines.
+m0018	pass	Hello world in three lines.
+m0019	pass	Hello world in four lines.
+m0020	pass	Empty structure.
+m0021	pass	Explicit polymorphism and recursion.
+m0022	pass	Null tuple.
+m0024	pass	Merge sort.
+m0025	pass	Word value ranges.
+m0026	pass	Word32 checks.
+m0027	pass	Word sub checks.
+m0028	pass	Word stuff.
+m0029	fail	[Bug #0178] Word8 array
+m0030	pass	Word8 vector
+m0031	pass	List
+m0032	pass	List pair
+m0033	pass	Math
+m0034	pass	Local ref's.
+m0035	pass	Lists and ref's
+m0037	pass	abstype
+m0038	fail	arrays
+m0039	skip	two-dimensional arrays [TILT does not provide 2d arrays]
+m0040	pass	arrays
+m0041	pass	arrays
+m0042	skip	two-dimensional arrays [TILT does not provide 2d arrays]
+m0043	pass	arrays
+m0044	pass	arrays
+m0045	pass	asterisk parsing
+m0046	fail	[Bug #0114] case analysis
+m0047	pass	withtype
+m0048	pass	vectors
+m0049	pass	vectors
+m0050	pass	vectors
+m0051	pass	vectors
+m0052	pass	vector looping
+m0053	pass	val rec declarations
+m0054	pass	bytes and characters
+m0055	pass	character patterns
+m0056	pass	word8, char, and general arrays
+m0057	pass	tabulation of vectors
+m0058	pass	command line
+m0059	pass	signature constraints
+m0060	skip	infinite integer conversion tests [no Basis structure IntInf]
+m0061	skip	infinite integers [no Basis structure IntInf]
+m0062	pass	mutual recursion
+m0063	pass	exhaustiveness
+m0064	pass	exceptions
+m0065	pass	exceptions
+m0066	skip	[Bug #0123] exponential polymorphic instantiation 
+m0067	pass	factorial
+m0068	pass	loop with comparison
+m0069	pass	looping
+m0070	pass	fft
+m0071	fail	[Bug #0082] flexible records
+m0072	pass	functional unparsing
+m0073	pass	functors
+m0074	pass	some basis exceptions
+m0075	pass	deep raise
+m0075	pass	deep raise
+m0076	pass	identifier syntax
+m0077	pass	integer overflow
+m0078	pass	integers
+m0079	pass	list tabulation
+m0080	pass	known case
+m0081	pass	known case
+m0082	skip	llv? [uses nonuniform datatypes]
+m0083	pass	nested loops
+m0084	pass	non-exhaustive match
+m0085	pass	generativity
+m0086	pass	opaque types
+m0087	pass	open scoping
+m0088	pass	exit status
+m0089	pass	overloading
+m0090	pass	patterns
+m0091	pass	polymorphic equality
+m0092	pass	polymorphic equality
+m0093	pass	posix exit
+m0094	pass	self-printer
+m0095	pass	maximum real
+m0096	fail	[Bug #0039] reals
+m0097	fail	[Bug #0039] reals
+m0098	pass	reals
+m0099	pass	reals
+m0100	fail	[Bug #0039] reals
+m0101	fail	[Bug #0039] reals
+m0102	fail	[Bug #0039] reals
+m0103	pass	modules
+m0104	pass	special constants
+m0105	pass	semicolon parsing
+m0106	pass	sharing
+m0107	pass	binary io
+m0108	fail	[Bug #0138] date and time
+m0109	pass	file system
+m0111	pass	signatures
+m0112	fail	[Bug #0140] strings
+m0113	pass	strings
+m0114	pass	string conversion
+m0115	pass	substring overflow
+m0116	pass	take
+m0117	pass	matrices
+m0118	pass	basic dynamic tests of primitives
+m0119	fail	text io
+m0120	fail	[Bug #0145] time
+m0121	skip	time [requires LargeInt to be bigger than 32 bits]
+m0121b	pass	time [works in 32 bits]
+m0122	fail	time
+m0123	pass	string comparison
+m0124	fail	type specs
+m0125	pass	unary constructors
+m0126	pass	unary arithmetic
+m0127	pass	non-generalized type variables
+m0128	pass	unix paths
+m0129	skip	where-and [conflicts with the popular where strid=strid extension]
+m0130	pass	where
+m0131	pass	list checks
+m0132	pass	fib 35
+m0133	pass	deep recursion
+m0134	pass	quicksort
+m0135	pass	reynolds 2
+m0136	pass	reynolds 3
+m0137	pass	merge sort
+n0	fail	abstype not equality type
+n1	pass	scoping of abstype
+n2	pass	syntax error (exp in local top)
+n3	pass	syntax error (exp in local bottom)
+n4	pass	syntax error (exp in local bottom)
+n5	pass	syntax error (exp in let top)
+n6	fail	unresolved flex pattern
+n7	pass	arrow not an equality type
+n8	pass	exn not an equality type
+n9	pass	arrow not an equality type
+n10	pass	distinct namespaces of types and values
+n11	pass	ref constraint (obsolete imperative tyvar test)
+n12	pass	ref constraint (obsolete imperative tyvar test)
+n13	pass	record type mismatch
+n14	pass	records aren't ints
+n15	pass	scoping
+n16	pass	type shadowing and opaque datatypes
+n16a	pass	opaque datatypes
+n17	pass	records aren't lists
+n18	pass	nested pairs aren't triples
+n19	pass	distinct type variables don't unify
+n20	pass	polymorphic constraint
+n21	pass	polymorphic constraint
+n22	pass	exception handler typing
+n23	pass	exception handler typing
+n24	pass	exception raise typing
+n25	pass	multi-arm fn typing
+n26	pass	multi-arm fn typing
+n27	pass	equality typing
+n28	pass	type inference with refs
+n29	pass	type inference with refs
+n30	pass	type inference with refs
+n31	pass	type inference with refs
+n32	pass	distinct type variables don't unify
+n33	pass	scope of explicit type variables
+n34	pass	non-equality datatype
+n35	fail	abstypes are not equality types
+n36	pass	scoping of abstype
+n37	pass	exception constructor in pattern match
+n38	pass	scoping of local
+n39	pass	opaque datatypes and type scope
+n39a	pass	type scope
+n39b	pass	opaque datatypes
+n40	pass	ints aren't reals
+n41	pass	scoping of and
+n42	pass	scoping of val
+n43	pass	occurs check in type inference
+n44	pass	scoping of "and" in type definition
+n45	pass	opaque datatypes and shadowing
+n46	pass	opaque datatypes and shadowing
+n47	pass	polymorphic exception
+n49	pass	type inference with records
+n50	pass	type inference with records
+n51	pass	type inference with records
+n52	pass	type inference with records
+n53	pass	type inference with type constructors
+n54	pass	type inference
+n55	fail	value restriction
+n56	fail	duplicate id pattern
+n57	fail	[bug #0054] duplicate label in record
+n58	pass	duplicate label in record pattern
+n59	fail	[bug #0054] duplicate label in record type
+n60	fail	duplicate id in "and" binding
+n61	fail	duplicate id in "and" type binding
+n62	fail	duplicate id in "and" type binding
+n63	fail	duplicate constructor in datatype
+n64	fail	duplicate constructor in exception "and" declaration
+n65	fail	duplicate type id in multi-datatype declaration
+n66	fail	duplicate constructor in multi-datatype declaration
+n67	fail	duplicate type argument in type definition
+n68	pass	duplicate type argument in datatype
+n69	pass	duplicate type argument in abstype
+n70	pass	unbound type variable in datatype
+n71	pass	unbound type variable in abstype
+n72	pass	illegal val rec
+n73	pass	illegal val rec
+n74	pass	illegal val rec
+n75	pass	illegal val rec
+n76	pass	miscellaneous
+n77	pass	bindings
+n78	pass	functions and pattern matchings
+n79	pass	withtype
+n80	pass	abstype
+n81	pass	simple equalities
+n82	fail	flex records
+n83	pass	equality types
+n84	pass	record equality
+n85	pass	shadowing
+n86	pass	parenthesization
+n87	pass	records
+n88	pass	list reversal
+n89	pass	type constraints
+n90	pass	exception handling
+n91	pass	monomorphic function application
+n92	pass	Denmark Core-SML accept test
+n93	pass	Denmark Core-SML accept test
+n94	pass	Denmark Core-SML accept test
+n95	pass	Denmark Core-SML accept test
+n96	pass	Denmark Core-SML accept test
+n97	pass	Denmark Core-SML accept test
+n98	fail	Denmark Core-SML accept test
+n99	fail	Denmark Core-SML accept test
+n100	pass	Denmark Core-SML accept test
+n101	pass	Denmark Core-SML accept test
+n102	fail	Denmark Core-SML accept test
+n103	fail	Denmark Core-SML accept test
+n104	pass	Denmark Core-SML accept test
+n105	pass	Denmark Core-SML accept test
+n106	pass	Denmark Core-SML accept test
+n107	pass	Denmark Core-SML accept test
+n108	pass	Denmark Core-SML accept test
+n109	fail	Denmark Core-SML accept test
+n110	pass	Denmark Core-SML accept test
+n111	pass	Denmark Core-SML accept test
+n112	pass	Denmark Core-SML accept test
+n113	pass	Denmark Core-SML accept test
+n114	pass	Denmark Core-SML accept test
+n115	pass	Denmark Core-SML accept test
+n116	pass	Denmark Core-SML accept test
+n117	fail	Denmark Core-SML accept test
+n118	pass	Denmark Core-SML accept test
+n119	pass	Denmark Core-SML accept test
+n120	pass	Denmark Core-SML accept test
+n121	pass	Denmark Core-SML accept test
+n122	pass	Denmark Core-SML accept test
+n123	pass	Denmark Core-SML accept test
+n124	pass	Denmark Core-SML accept test
+n125	pass	Denmark Core-SML accept test
+n126	fail	[Bug #0158] Denmark Core-SML accept test
+n127	pass	Denmark Core-SML accept test
+n128	pass	Denmark Core-SML accept test
+n129	pass	Denmark Core-SML accept test
+n130	fail	Denmark Core-SML accept test
+n131	pass	Denmark Core-SML accept test
+n132	pass	Denmark Core-SML accept test
+n133	pass	Denmark Core-SML accept test
+n134	pass	Denmark Core-SML accept test
+n135	pass	Denmark Core-SML accept test
+n136	pass	Denmark Core-SML accept test
+n137	pass	Denmark Core-SML accept test
+n138	fail	Denmark Core-SML accept test

@@ -193,9 +193,7 @@ struct
 		    end
 		val _ = app checkDescFile descfiles
 		fun checkarc (arc:string) : unit =
-		    (case arc
-		       of "TM" => bad "TILT's private files"
-			| _ => ())
+		    if arc = I.F.TM then bad "TILT's private files" else ()
 		val {arcs,...} = OS.Path.fromString file
 		val _ = app checkarc arcs
 		fun checksrc (pdec:I.pdec) : unit =

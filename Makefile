@@ -23,8 +23,11 @@ PREFIX=/usr/local
 RUNPREFIX=$(PREFIX)
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
+tiltname=`./Bin/tiltname`
+tiltdumpname=`./Bin/tiltdumpname`
 tilt=./Bin/tilt-nj -vv
 slaves=:
+
 
 all:\
 	tilt-heap\
@@ -47,9 +50,9 @@ FORCE:
 # SML/NJ heaps
 
 heap tilt-heap: FORCE
-	$(mkheap) sources.cm Bin/heap/tilt Main.main
+	$(mkheap) sources.cm Bin/heap/$(tiltname) Main.main
 dump-heap: FORCE
-	$(mkheap) sources.cm Bin/heap/tilt-dump Dump.main
+	$(mkheap) sources.cm Bin/heap/$(tiltdumpname) Dump.main
 
 # TILT-compiled libraries
 
@@ -70,9 +73,9 @@ runtime: FORCE
 # TILT-compiled binaries
 
 tilt: FORCE
-	$(tilt) -oBin/$(cputype)/tilt -c Top Top/project
+	$(tilt) -oBin/$(cputype)/$(tiltname) -c Top Top/project
 dump: FORCE
-	$(tilt) -oBin/$(cputype)/tilt-dump -c DumpTop Top/project
+	$(tilt) -oBin/$(cputype)/$(tiltdumpname) -c DumpTop Top/project
 runtest: FORCE
 	if test -d Test; then $(tilt) -oBin/$(cputype)/runtest -c Runtest Test/project; fi
 

@@ -12,6 +12,8 @@ struct
   open Nil
   open Name
 
+  val error = fn s => Util.error "nilutil.sml" s
+
   val printl  = Util.printl
   val lprintl = Util.lprintl
 
@@ -41,8 +43,19 @@ struct
   val foldl4    = Listops.foldl4
   val eq_list   = Listops.eq_list
 
-  val generate_tuple_symbol = IlUtil.generate_tuple_symbol
-  val generate_tuple_label = IlUtil.generate_tuple_label
+  (* This code was just copied from IlUtil so that this module can be independent from the Il. *)
+  local
+	val size = 20
+	fun make i = let val s = Symbol.labSymbol(Int.toString i)
+		     in  (s, Name.symbol_label s)
+		     end
+	val table = Array.tabulate(size, make)
+  in
+	fun generate_tuple_label 0 = error "generate_tuple_label called with 0"
+	  | generate_tuple_label i = #2(if (i<size)
+					    then Array.sub(table,i)
+					else make i)
+  end
 
   val fresh_named_var = Name.fresh_named_var
 

@@ -3,8 +3,13 @@
 case $# in
 3)
 	bindir=`dirname "$0"`
+	if test "$TILT_FRONTEND" = "2" 
+	then definefrontend='CM.SymVal.define("TILT_FRONTEND", 2);'
+        else definefrontend=''
+        fi
 	echo '
 		SMLofNJ.Internals.GC.messages false;
+		'"$definefrontend"'
 		CM.make'\'' "'"$1"'" handle _ => OS.Process.exit OS.Process.failure;
 		SMLofNJ.exportFn ("'"$2"'", '"$3"');
 	' | "$bindir"/smlnj

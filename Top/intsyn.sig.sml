@@ -69,6 +69,7 @@ sig
 	val inter : file
 	val impl : file
 	val desc : file
+	val TM : file
 	val pack : file -> pack (* libdir *)
 
 	val commdir : unit -> file

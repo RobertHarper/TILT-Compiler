@@ -12,6 +12,52 @@ ppprim.sml
 primutil.sig.sml
 primutil.sml
 primutilparam.sig.sml
+
+#if (defined(TILT_FRONTEND) && TILT_FRONTEND == 2)
+
+(* Derek's Elaborator Stuff *)
+
+ilprimutilparam2.sml
+tyvar2.sig.sml
+tyvar2.sml
+il2.sig.sml
+il2.sml
+ppil2.sig.sml
+ppil2.sml
+ilutil2.sig.sml
+ilutil2.sml
+ilstatic2.sig.sml
+ilstatic2.sml
+infixparse2.sig.sml
+infixparse2.sml
+basis2.sig.sml
+basis2.sml
+ilcontext2.sig.sml
+ilcontext2.sml 
+
+equal2.sig.sml
+equal2.sml
+datatype2.sig.sml
+datatype2.sml
+pat2.sig.sml
+pat2.sml
+
+toil2.sig.sml
+toil2.sml
+linkil2.sig.sml 
+linkil2.sml 
+ileq2.sml
+ilblast2.sml
+
+error2.sig.sml
+error2.sml
+signature2.sig.sml
+signature2.sml
+
+iltable2.sml
+
+#else  (* TILT Elaborator stuff *)
+
 ilprimutilparam.sml
 tyvar.sig.sml
 tyvar.sml
@@ -29,7 +75,6 @@ basis.sig.sml
 basis.sml
 ilcontext.sig.sml
 ilcontext.sml 
-(* slowilcontext.sml *)
 
 equal.sig.sml
 equal.sml
@@ -51,3 +96,5 @@ signature.sig.sml
 signature.sml
 
 iltable.sml
+
+#endif

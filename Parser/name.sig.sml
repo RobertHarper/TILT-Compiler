@@ -90,6 +90,8 @@ signature NAME =
 
     val make_cr_labels  : label -> label * label (* for use after phase splitting *)
 
+    val internal_match_tag : tag
+
     (*
        The compiler should never discard data associated with
        top-level labels satisfying keep_import.

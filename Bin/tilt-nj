@@ -1,5 +1,6 @@
 #!/bin/sh
 bindir=`dirname "$0"`
+tiltname=`"$bindir"/tiltname`
 TILTROOT=`cd "$bindir"/..; pwd`
 export TILTROOT
-exec "$bindir"/smlnj @SMLload'='"$bindir"/heap/tilt @SMLname'='tilt ${1+"$@"}
+exec "$bindir"/smlnj @SMLload'='"$bindir"/heap/"$tiltname" @SMLname'='tilt ${1+"$@"}

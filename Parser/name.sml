@@ -279,6 +279,11 @@ structure Name :> NAME =
 		    else if is_interface l then "interface " ^ (label2name' l)
 		    else if is_env l then "environment variable " ^ (label2name' l)
 		    else label2string l)
+
+        (* internal_match_tag used to be in IlUtil for no particularly good reason.
+           It was moved here so that NilDefs wouldn't depend on the Il. *)
+        val internal_match_tag = fresh_named_tag "match"
+
     end
 
     local 

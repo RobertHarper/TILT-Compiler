@@ -1,0 +1,2 @@
+#!/bin/sh
+if test "$TILT_FRONTEND" = "2" ; then echo tilt2-dump ; else echo tilt-dump ; fi
