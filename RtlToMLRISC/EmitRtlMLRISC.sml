@@ -73,7 +73,8 @@ functor EmitRtlMLRISC(
 	      and type TraceTable.trace =
 		       RegisterTraceMap.trace
 	) :> EMIT_RTL
-	       where type module = Rtl.module
+	       where type local_label = Rtl.local_label
+		 and type module      = Rtl.module
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
@@ -82,6 +83,8 @@ functor EmitRtlMLRISC(
   structure MLTree  = MLTreeExtra.MLTree
 
   (* -- types -------------------------------------------------------------- *)
+
+  type local_label = Rtl.local_label
 
   type module = Rtl.module
 
@@ -700,12 +703,16 @@ functor EmitRtlMLRISC(
 	| translate(Rtl.LOCAL_CODE label) = lookup(Name.var2int label)
 
       (*
-       * Return the name of a given Rtl local label.
+       * Return the string of a given Rtl local label.
        * -> the Rtl local label
-       * <- the name of the label
+       * <- the string of the label
        *)
-      fun name(Rtl.LOCAL_DATA label) = Name.var2name label
-	| name(Rtl.LOCAL_CODE label) = Name.var2name label
+      local
+	val toString = MLRISCPseudo.fixLabel o Name.var2string
+      in
+	fun string(Rtl.LOCAL_DATA label) = "LD"^toString label
+	  | string(Rtl.LOCAL_CODE label) = "LC"^toString label
+      end
 
       (*
        * Reset the internal state of the local label translation.
@@ -1799,14 +1806,15 @@ functor EmitRtlMLRISC(
 			 Label.reset();
 			 Module.close())
   in
-    fun emitModule(name,
-		   Rtl.MODULE{main		= main,
+    fun emitModule(Rtl.MODULE{main		= main,
 			      procs		= procedures,
 			      data		= data,
 			      mutable_objects	= objects,
 			      mutable_variables = variables}) =
 	  let
 	    val _ = Module.open_()
+
+	    val name = LocalLabel.string main
 
 	    fun emitBody() =
 		  (emitMLTree(translateBody(name, main, procedures, data));
@@ -1819,11 +1827,13 @@ functor EmitRtlMLRISC(
 	  end
   end
 
-  fun emitEntryTable names =
+  fun emitEntryTable labels =
 	let
 	  val maps = Cells.resetRegs()
 
 	  val emitData = app (emitMLTree o translateData)
+
+	  val names = map LocalLabel.string labels
 
 	  fun table name =
 		let
