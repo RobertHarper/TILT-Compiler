@@ -488,4 +488,4 @@ source unit SML90 = "General/sml90.sml" {
 	Firstlude TiltPrim Prelude General SML90_SIG Math Real Char
 	CharVector String TextIO
 }
-make library "../Lib/basis"
+make library $libdir ^ "/basis"

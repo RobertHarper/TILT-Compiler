@@ -112,4 +112,4 @@ source unit IOUtil = "io-util.sml" {IO_UTIL TextIO}
 	BIT_VECTOR     bit-vector-sig
 	BitVector      bit-vector
 *)
-make library "../../Lib/smlnj-lib"
+make library $libdir ^ "/smlnj-lib"
