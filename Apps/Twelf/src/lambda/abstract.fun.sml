@@ -1,4 +1,4 @@
-(*$import ABSTRACT INTSYN WHNF UNIFY CONSTRAINTS *)
+(*$import Prelude TopLevel ABSTRACT INTSYN WHNF UNIFY CONSTRAINTS *)
 (* Abstraction *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

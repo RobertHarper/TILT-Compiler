@@ -1,4 +1,4 @@
-(*$import INTSYN COMPSYN *)
+(*$import Prelude INTSYN COMPSYN *)
 (* Compiler *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

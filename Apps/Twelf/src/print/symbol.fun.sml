@@ -1,4 +1,4 @@
-(*$import SYMBOL *)
+(*$import Prelude TopLevel String SYMBOL *)
 functor SymbolAscii () :> SYMBOL =
 struct
 

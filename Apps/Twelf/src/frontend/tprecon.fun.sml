@@ -1,4 +1,4 @@
-(*$import INTSYN NAMES GLOBAL PATHS WHNF UNIFY ABSTRACT TYPECHECK STRICT PRINT TIMERS TP_RECON *)
+(*$import Prelude TopLevel List INTSYN NAMES GLOBAL PATHS WHNF UNIFY ABSTRACT TYPECHECK STRICT PRINT TIMERS TP_RECON *)
 (* Type Reconstruction *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)

@@ -1,4 +1,4 @@
-(*$import PARSE_CONDEC PARSING TP_RECON PARSE_TERM *)
+(*$import Prelude PARSE_CONDEC PARSING TP_RECON PARSE_TERM *)
 (* Parsing Signature Entries *) 
 (* Author: Frank Pfenning *)
 

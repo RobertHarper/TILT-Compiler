@@ -1,4 +1,4 @@
-(*$import INTSYN COMPSYN *)
+(*$import Prelude INTSYN COMPSYN *)
 (* Printer for Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 

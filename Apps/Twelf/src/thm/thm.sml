@@ -1,4 +1,4 @@
-(*$import ThmSyn ThmPrint Thm LambdaStructs ModesStructs PathsStructs FormatterStructs OrderStructs *)
+(*$import GlobalStructs ThmSyn ThmPrint Thm LambdaStructs ModesStructs PathsStructs FormatterStructs OrderStructs *)
 structure ThmSyn = 
   ThmSyn (structure IntSyn' = IntSyn
 	  structure Abstract = Abstract

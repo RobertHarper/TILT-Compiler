@@ -1,4 +1,4 @@
-(*$import METASYN *)
+(*$import Prelude METASYN *)
 (* Lemma *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Type Checking *)
 (* Author: Carsten Schuermann *)
 

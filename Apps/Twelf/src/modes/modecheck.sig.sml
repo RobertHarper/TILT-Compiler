@@ -1,4 +1,4 @@
-(*$import MODESYN PATHS *)
+(*$import Prelude MODESYN PATHS *)
 (* Mode Checking *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

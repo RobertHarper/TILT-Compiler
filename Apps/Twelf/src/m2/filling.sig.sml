@@ -1,4 +1,4 @@
-(*$import METASYN *)
+(*$import Prelude METASYN *)
 (* Filling *)
 (* Author: Carsten Schuermann *)
 

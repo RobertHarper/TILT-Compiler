@@ -1,4 +1,4 @@
-(*$import METASYN *)
+(*$import Prelude METASYN *)
 (* Meta Abstraction *)
 (* Author: Carsten Schuermann *)
 

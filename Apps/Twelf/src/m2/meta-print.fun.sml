@@ -1,4 +1,4 @@
-(*$import METAPRINT GLOBAL METASYN FORMATTER PRINT CLAUSEPRINT *)
+(*$import Prelude TopLevel Int METAPRINT GLOBAL METASYN FORMATTER PRINT CLAUSEPRINT *)
 (* Meta printer for proof states *)
 (* Author: Carsten Schuermann *)
 

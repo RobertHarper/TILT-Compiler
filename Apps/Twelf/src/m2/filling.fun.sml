@@ -1,4 +1,4 @@
-(*$import FILLING METASYN METAABSTRACT SEARCH WHNF PRINT *)
+(*$import Prelude FILLING METASYN METAABSTRACT SEARCH WHNF PRINT *)
 (* Filling *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Convertibility Modulo Beta and Eta *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

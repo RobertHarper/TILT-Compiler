@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Unification *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

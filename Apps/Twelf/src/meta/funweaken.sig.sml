@@ -1,4 +1,4 @@
-(*$import FUNSYN *)
+(*$import Prelude FUNSYN *)
 (* Weakening substitutions for meta substitutions *)
 (* Author: Carsten Schuermann *)
 

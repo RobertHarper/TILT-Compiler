@@ -1,4 +1,4 @@
-(*$import MODEDEC MODESYN PATHS *)
+(*$import Prelude MODEDEC MODESYN PATHS *)
 (* Modes: short and full mode declarations *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

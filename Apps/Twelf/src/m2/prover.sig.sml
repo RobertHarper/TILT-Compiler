@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Meta Prover *)
 (* Author: Carsten Schuermann *)
 

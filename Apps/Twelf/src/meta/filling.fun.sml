@@ -1,4 +1,4 @@
-(*$import MTPFILLING INTSYN FUNSYN STATESYN ABSTRACT TYPECHECK MTPDATA MTPSEARCH WHNF GlobalStructs MTPGlobal *)
+(*$import Prelude TopLevel Int MTPFILLING INTSYN FUNSYN STATESYN ABSTRACT TYPECHECK MTPDATA MTPSEARCH WHNF GlobalStructs MTPGlobal *)
 (* Filling  Version 1.3*)
 (* Author: Carsten Schuermann *)
 

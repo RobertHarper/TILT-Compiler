@@ -1,4 +1,4 @@
-(*$import INIT METASYN METAABSTRACT *)
+(*$import Prelude TopLevel INIT METASYN METAABSTRACT *)
 (* Initialization *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import METASYN INTSYN WHNF *)
+(*$import Prelude METASYN INTSYN WHNF *)
 (* Meta syntax *)
 (* Author: Carsten Schuermann *)
 

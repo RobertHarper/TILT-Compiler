@@ -1,4 +1,4 @@
-(*$import CompSyn Compile CPrint AbsMachine Trace TMachine GlobalStructs LambdaStructs NamesStructs TypeCheckStructs PrintStructs FormatterStructs IndexStructs *)
+(*$import CompSyn Compile CPrint AbsMachine Trace TMachine GlobalStructs LambdaStructs NamesStructs TypeCheckStructs PrintStructs FormatterStructs IndexStructs INTSYN COMPSYN CPRINT *)
 structure CompSyn =
   CompSyn (structure Global = Global
            structure IntSyn' = IntSyn

@@ -1,4 +1,4 @@
-(*$import ABSMACHINE INTSYN COMPSYN UNIFY INDEX TRAIL CPRINT NAMES TRACE *)
+(*$import Prelude ABSMACHINE INTSYN COMPSYN UNIFY INDEX TRAIL CPRINT NAMES TRACE *)
 (* Abstract Machine for Tracing *)
 (* Author: Frank Pfenning *)
 

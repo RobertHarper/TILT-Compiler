@@ -1,4 +1,4 @@
-(*$import METASYN *)
+(*$import Prelude METASYN *)
 (* Strategy *)
 (* Author: Carsten Schuermann *)
 

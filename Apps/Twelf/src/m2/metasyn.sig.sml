@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Meta syntax *)
 (* Author: Carsten Schuermann *)
 

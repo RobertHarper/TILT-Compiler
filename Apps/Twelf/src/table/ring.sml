@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude TopLevel List *)
 (* Rings (aka cyclic lists) *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Skolem administration *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import INTSYN FUNSYN STATESYN *)
+(*$import Prelude INTSYN FUNSYN STATESYN *)
 (* Meta Theorem Prover abstraction : Version 1.3 *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

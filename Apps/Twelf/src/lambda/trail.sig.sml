@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Trailing EVar Instantiations *)
 (* Author: Carsten Schuermann *)
 

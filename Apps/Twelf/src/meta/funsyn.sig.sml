@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Internal syntax for functional proof term calculus *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import STATESYN *)
+(*$import Prelude STATESYN *)
 (* Recursion: Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

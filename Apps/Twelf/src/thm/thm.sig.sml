@@ -1,4 +1,4 @@
-(*$import THMSYN PATHS *)
+(*$import Prelude THMSYN PATHS *)
 (* Theorem Declarations *)
 (* Author: Carsten Schuermann *)
 

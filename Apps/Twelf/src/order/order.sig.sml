@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN *)
 (* Termination Order *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import INTSYN *)
+(*$import Prelude INTSYN Prelude *)
 (* Termination checker *)
 (* Author: Carsten Schuermann *)
 

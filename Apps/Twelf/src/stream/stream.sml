@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude TopLevel *)
 (* Stream Library *)
 (* Author: Frank Pfenning *)
 

@@ -1,4 +1,4 @@
-(*$import THM GLOBAL THMSYN TWELF_ORDER THMPRINT PATHS NamesStructs *)
+(*$import Prelude TopLevel List THM GLOBAL THMSYN TWELF_ORDER THMPRINT PATHS NamesStructs *)
 (* Theorem and Related Declarations *)
 (* Author: Carsten Schuermann *)
 

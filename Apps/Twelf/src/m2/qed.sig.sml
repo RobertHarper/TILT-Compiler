@@ -1,4 +1,4 @@
-(*$import METASYN *)
+(*$import Prelude METASYN *)
 (* Qed *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude TopLevel List *)
 (* Queues *)
 (* Author: Frank Pfenning *)
 (* Standard functional implementation of queues *)

@@ -1,4 +1,4 @@
-(*$import PARSE_FIXITY PARSING NAMES *)
+(*$import Prelude Int PARSE_FIXITY PARSING NAMES *)
 (* Parsing Fixity and Name Preference Declarations *)
 (* Author: Frank Pfenning *)
 
@@ -18,7 +18,7 @@ struct
     structure FX = Names.Fixity
 
     fun fixToString (FX.Strength(p)) = Int.toString p
-	    
+
     (* idToPrec (region, (idCase, name)) = n
        where n is the precedence indicated by name, which should consists
        of all digits.  Raises error otherwise, or if precedence it too large
@@ -110,9 +110,9 @@ struct
 
     fun parseNamePref (s) = parseNamePref' (LS.expose s)
 
-  in
+   in
     val parseFixity' = parseFixity'
     val parseNamePref' = parseNamePref'
-  end  (* local ... in *)
+   end  (* local ... in *)
 
 end;  (* functor ParseFixity *)

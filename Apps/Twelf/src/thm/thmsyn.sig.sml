@@ -1,4 +1,4 @@
-(*$import MODESYN PATHS *)
+(*$import Prelude MODESYN PATHS *)
 (* Theorems *)
 (* Author: Carsten Schuermann *)
 

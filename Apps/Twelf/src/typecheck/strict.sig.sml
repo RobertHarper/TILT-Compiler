@@ -1,4 +1,4 @@
-(*$import INTSYN PATHS *)
+(*$import Prelude INTSYN PATHS *)
 (* Checking Definitions for Strictness *)
 (* Author: Carsten Schuermann *)
 

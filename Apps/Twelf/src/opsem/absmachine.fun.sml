@@ -1,4 +1,4 @@
-(*$import ABSMACHINE INTSYN COMPSYN UNIFY INDEX TRAIL CPRINT NAMES *)
+(*$import Prelude ABSMACHINE INTSYN COMPSYN UNIFY INDEX TRAIL CPRINT NAMES *)
 (* Abstract Machine *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

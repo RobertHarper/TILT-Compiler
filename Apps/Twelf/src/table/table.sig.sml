@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 (* Tables *)
 (* Author: Frank Pfenning *)
 

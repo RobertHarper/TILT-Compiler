@@ -1,4 +1,4 @@
-(*$import PRINT_TWEGA INTSYN WHNF ABSTRACT CONSTRAINTS NAMES FORMATTER *)
+(*$import Prelude TopLevel Int PRINT_TWEGA INTSYN WHNF ABSTRACT CONSTRAINTS NAMES FORMATTER *)
 (* Printing *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)

@@ -1,4 +1,4 @@
-(*$import HEURISTIC *)
+(*$import Prelude Int Real64 StringCvt HEURISTIC *)
 (* Heuristics : Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

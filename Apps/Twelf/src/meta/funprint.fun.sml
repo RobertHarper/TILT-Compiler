@@ -1,4 +1,4 @@
-(*$import FUNPRINT FUNSYN FORMATTER NAMES PRINT *)
+(*$import Prelude TopLevel List FUNPRINT FUNSYN FORMATTER NAMES PRINT *)
 (* Printing of functional proof terms *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import MODESYN TP_RECON PATHS *)
+(*$import Prelude MODESYN TP_RECON PATHS *)
 (* External Syntax of Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

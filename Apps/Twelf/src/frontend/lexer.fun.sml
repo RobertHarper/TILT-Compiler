@@ -1,4 +1,4 @@
-(*$import LEXER PATHS StreamStructs *)
+(*$import Prelude TopLevel TextIO Char String LEXER PATHS StreamStructs *)
 (* Lexer *)
 (* Author: Frank Pfenning *)
 

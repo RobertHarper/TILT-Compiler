@@ -1,4 +1,4 @@
-(*$import FUNSYN INTSYN WHNF CONV GlobalStructs *)
+(*$import Prelude Array Int FUNSYN INTSYN WHNF CONV GlobalStructs *)
 (* Internal syntax for functional proof term calculus *)
 (* Author: Carsten Schuermann *)
 

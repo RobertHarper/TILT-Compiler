@@ -1,4 +1,4 @@
-(*$import TRAIL INTSYN *)
+(*$import Prelude TRAIL INTSYN *)
 (* Trailer Which Does Not Record EVar Instantiations *)
 (* Author: Carsten Schuermann *)
 
