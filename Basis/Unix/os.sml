@@ -7,7 +7,10 @@
  *
  *)
 
-structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc and type syserror = Posix.Error.syserror = 
+structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc 
+                     and type IO.poll_desc = PreOS.IO.poll_desc 
+                     and type IO.poll_info = PreOS.IO.poll_info
+		     and type syserror = Posix.Error.syserror = 
   struct
 
     open PreOS (* open type-only structure to get types *)
@@ -26,14 +29,18 @@ structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc and type syserror = Po
 
   end (* OS *)
 
+
 (*
  * $Log$
+# Revision 1.3  2000/09/21  01:08:39  pscheng
+# *** empty log message ***
+# 
 # Revision 1.2  2000/09/12  18:55:04  swasey
 # Changes for cutoff compilation
 # 
 # Revision 1.1  98/03/09  19:54:22  pscheng
 # added basis
-# 
+#
  * Revision 1.2  1997/06/30  19:36:33  jhr
  *   Removed System structure; added Unsafe structure.
  *

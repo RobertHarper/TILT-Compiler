@@ -8,7 +8,9 @@
  *
  *)
 
-structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc =
+structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc 
+			   and type poll_desc = PreOS.IO.poll_desc 
+                           and type poll_info = PreOS.IO.poll_info = 
   struct
 
   (* an iodesc is an abstract descriptor for an OS object that
@@ -112,13 +114,17 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc =
 
 
 (*
+
  * $Log$
+# Revision 1.3  2000/09/21  01:08:38  pscheng
+# *** empty log message ***
+# 
 # Revision 1.2  2000/09/12  18:55:02  swasey
 # Changes for cutoff compilation
 # 
 # Revision 1.1  98/03/09  19:54:17  pscheng
 # added basis
-# 
+#
  * Revision 1.3  1997/06/07  15:27:51  jhr
  *   SML'97 Basis Library changes (phase 3; Posix changes)
  *

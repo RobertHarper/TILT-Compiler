@@ -841,6 +841,7 @@ functor TextIOFn (
 		});
 	      strm
 	    end
+
       fun mkStdErr () = let
 	    val (strm as SIO.OSTRM{cleanTag, ...}) =
 		  SIO.mkOutstream(OSPrimIO.stdErr(), IO.NO_BUF)
@@ -853,8 +854,10 @@ functor TextIOFn (
 	      strm
 	    end
     in
-    val stdIn = mkInstream(mkStdIn())
-    val stdOut = mkOutstream(mkStdOut())
+
+
+    val stdIn = mkInstream(mkStdIn()) 
+    val stdOut = mkOutstream(mkStdOut()) 
     val stdErr = mkOutstream(mkStdErr())
 
   (* Establish a hook function to rebuild the I/O stack *)
@@ -886,6 +889,9 @@ functor TextIOFn (
 
 (*
  * $Log$
+# Revision 1.4  2000/09/21  01:08:31  pscheng
+# *** empty log message ***
+# 
 # Revision 1.3  2000/09/12  18:54:16  swasey
 # Changes for cutoff compilation
 # 

@@ -1,3 +1,5 @@
+(*$import Prelude SMLofNJ *)
+
 (* signals-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -16,7 +18,7 @@ signature SIGNALS =
     datatype sig_action
       = IGNORE
       | DEFAULT
-      | HANDLER of (signal * int * unit cont) -> unit cont
+      | HANDLER of (signal * int * unit SMLofNJ.Cont.cont) -> unit SMLofNJ.Cont.cont
 
     val listSignals : unit -> signal list
 	(* list the signals supported by this version *)
@@ -75,9 +77,12 @@ signature SIGNALS =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:52:26  pscheng
-# added basis
+# Revision 1.2  2000/09/21  01:08:35  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:52:26  pscheng
+# added basis
+#
  * Revision 1.1.1.1  1997/01/14  01:38:20  george
  *   Version 109.24
  *

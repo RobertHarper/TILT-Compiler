@@ -25,6 +25,9 @@ structure PreOS =
 (** This probably should be
 	datatype iodesc = IODesc of Posix.FileSys.file_desc
  **)
+	type poll_flags = {rd : bool, wr : bool, pri : bool}
+	datatype poll_desc = PollDesc of (iodesc * poll_flags)
+	datatype poll_info = PollInfo of (iodesc * poll_flags)
       end
 
   end;
@@ -34,9 +37,12 @@ structure PreOS =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:54:31  pscheng
-# added basis
+# Revision 1.2  2000/09/21  01:08:39  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:54:31  pscheng
+# added basis
+#
  * Revision 1.1.1.1  1997/01/14  01:38:25  george
  *   Version 109.24
  *

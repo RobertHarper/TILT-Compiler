@@ -1,4 +1,4 @@
-(*$import Word8Vector Word8Array Word32 *)
+(*$import Prelude Word8Vector Word8Array Word32 *)
 (* pack-word-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

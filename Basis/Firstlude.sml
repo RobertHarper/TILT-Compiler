@@ -72,6 +72,7 @@ extern cosh : (float, float) -->
 extern setRoundingMode : (int, int) -->
 extern getRoundingMode : (int, int) -->
 extern ml_timeofday : (unit, (int * int)) -->
+extern printString : (char vector, unit) -->
 
     fun f o g = fn x => f(g x)
     fun a before b = a
