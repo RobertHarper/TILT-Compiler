@@ -891,14 +891,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			    val e = do_exp state e
 			    val bnds = List.mapPartial (bnd_used state) bnds
 		        in  
-			    (case (bnds,e) of
-				 ([Exp_b(v,_,e')], Var_e v') =>
-				     if Name.eq_var(v,v') then
-					 e'
-				     else
-					 NilUtil.makeLetE letsort bnds e
-			       | _ => 
-					 NilUtil.makeLetE letsort bnds e)
+			    NilUtil.makeLetE letsort bnds e
 			end
 		| ExternApp_e(f,elist) =>
 			ExternApp_e(do_exp state f, map (do_exp state) elist)
