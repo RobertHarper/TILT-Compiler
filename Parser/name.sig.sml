@@ -72,6 +72,9 @@ signature NAME =
     structure PathMap : ORD_MAP
     where type Key.ord_key = vpath
 
+    structure PathSet : ORD_SET
+    where type Key.ord_key = vpath
+
 
     (* blasting routines *)
     val blastInVar    : BinIO.instream -> var

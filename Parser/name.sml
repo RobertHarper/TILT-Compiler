@@ -166,6 +166,7 @@ structure Name :> NAME =
       structure LabelMap = LocalSplayMapFn(LabelKey) 
       structure TagMap = LocalSplayMapFn(TagKey) 
       structure PathMap = LocalSplayMapFn(PathKey) 
+      structure PathSet = SplaySetFn(PathKey) 
 
 
     local 
