@@ -411,38 +411,38 @@ xxxxx *)
 						 val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 						 val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					     in #1(make_lambda(v,argc,CON_ARRAY c,
-							       PRIM(create_table WordArray,[c],[x,y])))
+							       PRIM(create_table (OtherArray false),[c],[x,y])))
 					    end)),
-		   ("empty_array",(fn c => PRIM(create_empty_table WordArray,[c],[]))),
-		   ("empty_vector",(fn c => PRIM(create_empty_table WordVector,[c],[]))),
+		   ("empty_array",(fn c => PRIM(create_empty_table (OtherArray false),[c],[]))),
+		   ("empty_vector",(fn c => PRIM(create_empty_table (OtherVector false),[c],[]))),
 		  ("unsafe_array2vector",(fn c => let val v = fresh_var()
 						  in #1(make_lambda(v,CON_ARRAY c, CON_VECTOR c,
-								    PRIM(array2vector WordArray,[c],[VAR v])))
+								    PRIM(array2vector (OtherArray false),[c],[VAR v])))
 						  end)),
 		  ("unsafe_vector2array",(fn c => let val v = fresh_var()
 						  in #1(make_lambda(v,CON_VECTOR c, CON_ARRAY c,
-								    PRIM(vector2array WordVector,[c],[VAR v])))
+								    PRIM(vector2array (OtherVector false),[c],[VAR v])))
 						  end)),
 		  ("unsafe_sub",(fn c => let val v = fresh_var()
 					     val argc = con_tuple[CON_ARRAY c, uint32]
 					     val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 					     val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					 in #1(make_total_lambda(v,argc,c,
-								 PRIM(sub WordArray,[c],[x,y])))
+								 PRIM(sub (OtherArray false),[c],[x,y])))
 					 end)),
 		  ("unsafe_vector",(fn c => let val v = fresh_var()
 						 val argc = con_tuple[uint32, c]
 						 val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 						 val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					     in #1(make_lambda(v,argc,CON_VECTOR c,
-							       PRIM(create_table WordVector, [c],[x,y])))
+							       PRIM(create_table (OtherVector false), [c],[x,y])))
 					    end)),
 		  ("unsafe_vsub",(fn c => let val v = fresh_var()
 					     val argc = con_tuple[CON_VECTOR c, uint32]
 					     val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 					     val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					 in #1(make_total_lambda(v,argc,c,
-								 PRIM(sub WordVector,[c],[x,y])))
+								 PRIM(sub (OtherVector false),[c],[x,y])))
 					 end)),
 		  ("unsafe_update",(fn c => let val v = fresh_var()
 						val argc = con_tuple[CON_ARRAY c, uint32, c]
@@ -450,15 +450,15 @@ xxxxx *)
 						val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 						val z = RECORD_PROJECT(VAR v,generate_tuple_label 3,argc)
 					    in #1(make_total_lambda(v,argc,con_unit,
-								    PRIM(update WordArray,[c],[x,y,z])))
+								    PRIM(update (OtherArray false),[c],[x,y,z])))
 					    end)),
 		  ("array_length",(fn c => let val v = fresh_var()
 					   in #1(make_total_lambda(v,CON_ARRAY c,uint32,
-								   PRIM(length_table WordArray,[c],[VAR v])))
+								   PRIM(length_table (OtherArray false),[c],[VAR v])))
 					   end)),
 		  ("vector_length",(fn c => let val v = fresh_var()
 					   in #1(make_total_lambda(v,CON_VECTOR c,uint32,
-								   PRIM(length_table WordVector,[c],[VAR v])))
+								   PRIM(length_table (OtherVector false),[c],[VAR v])))
 					   end)),
 		  (* NOT TOTAL! has a store effect - otherwise we would generalize *)
 		  ("ref", (fn c => let val v = fresh_var()

@@ -37,6 +37,19 @@ structure Ppprim :> PPPRIM =
 	  | eq_ref => String "EQ_REF"
 	  | setref => String "SETREF")
 
+    fun pp_aggregate str t = 
+	let val str2 = (case t of
+			    (OtherArray true) => "_knownArray"
+			  | (OtherArray false) => "_unknownArray"
+			  | (OtherVector true) => "_knownVector"
+			  | (OtherVector false) => "_unknownVector"
+			  | (IntArray is) => "_intArray"
+			  | (IntVector is) => "_intVector"
+			  | (FloatArray is) => "_floatArray"
+			  | (FloatVector is) => "_floatVector")
+	in  String (str ^ str2)
+	end
+
     fun pp_prim prim = 
 	  (case prim of
 (*	   | NIL  {instance} => String "nil" *)
@@ -163,80 +176,14 @@ structure Ppprim :> PPPRIM =
 
 
 
-	  | array2vector WordArray => String "wordarray2vector"
-	  | array2vector (IntArray _) => String "intarray2vector"
-	  | array2vector (FloatArray _) => String "(FloatArray _)2vector"
-	  | array2vector PtrArray => String "ptrarray2vector"
-
-	  | array2vector WordVector => error "can't have array2vector *vector"
-	  | array2vector (IntVector _) => error "can't have array2vector *vector"
-	  | array2vector (FloatVector _) => error "can't have array2vector *vector"
-	  | array2vector PtrVector => error "can't have array2vector *vector"
-
-	  | vector2array WordArray => error "can't have vector2array *array"
-	  | vector2array (IntArray _) => error "can't have vector2array *array"
-	  | vector2array (FloatArray _) => error "can't have vector2array *array"
-	  | vector2array PtrArray => error "can't have vector2array *array"
-
-	  | vector2array WordVector => String "wordvector2array"
-	  | vector2array (IntVector _) => String "intvector2array"
-	  | vector2array (FloatVector _) => String "(FloatArray _)2vector"
-	  | vector2array PtrVector => String "ptrvector2array"
-
-	  | create_table WordArray => String "array1"
-	  | create_table WordVector => String "vector1"
-	  | create_table (IntArray _) => String "intarray_create"
-	  | create_table (IntVector _) => String "(IntVector _)1"
-	  | create_table (FloatArray _) => String "floatarray_create"
-	  | create_table (FloatVector _) => String "(FloatVector _)1"
-	  | create_table PtrArray => String "ptrarray1"
-	  | create_table PtrVector => String "ptrvector1"
-
-	  | create_empty_table WordArray => String "empty_array1"
-	  | create_empty_table WordVector => String "empty_vector1"
-	  | create_empty_table (IntArray _) => String "empty_intarray_create"
-	  | create_empty_table (IntVector _) => String "(empty_IntVector _)1"
-	  | create_empty_table (FloatArray _) => String "empty_floatarray_create"
-	  | create_empty_table (FloatVector _) => String "(empty_FloatVector _)1"
-	  | create_empty_table PtrArray => String "empty_ptrarray1"
-	  | create_empty_table PtrVector => String "empty_ptrvector1"
-
-	  | sub WordArray => String "sub1"
-	  | sub WordVector => String "vsub1"
-	  | sub (IntArray _) => String "intsub1"
-	  | sub (IntVector _) => String "intvsub1"
-	  | sub (FloatArray _) => String "floatsub1"
-	  | sub (FloatVector _) => String "floatvsub1"
-	  | sub PtrArray => String "ptrsub1"
-	  | sub PtrVector => String "ptrvsub"
-
-	  | update WordArray => String "update1"
-	  | update WordVector => String "vupdate1"
-	  | update (IntArray _) => String "intupdate1"
-	  | update (IntVector _) => String "intvupdate1"
-	  | update (FloatArray _) => String "floatupdate1"
-	  | update (FloatVector _) => String "floatvupdate1"
-	  | update PtrArray => String "ptrupdate1"
-	  | update PtrVector => String "ptrvupdate"
-
-	  | length_table WordArray => String "word_length"
-	  | length_table WordVector => String "word_vlength"
-	  | length_table (IntArray _) => String "int_length"
-	  | length_table (IntVector _) => String "int_vlength"
-	  | length_table (FloatArray _) => String "float_length"
-	  | length_table (FloatVector _) => String "float_vlength"
-	  | length_table PtrArray => String "ptr_length1"
-	  | length_table PtrVector => String "ptr_vlength"
-
-	  | equal_table WordArray => String "array_eq"
-	  | equal_table WordVector => String "vector_eq"
-	  | equal_table (IntArray _) => String "intarray_eq"
-	  | equal_table (IntVector _) => String "(IntVector _)_eq"
-	  | equal_table (FloatArray _) => String "(FloatVector _)_eq"
-	  | equal_table (FloatVector _) => String "(FloatVector _)_eq"
-	  | equal_table PtrArray => String "ptrarray_eq"
-	  | equal_table PtrVector => String "ptrvector_eq"
-
+	  | array2vector t => pp_aggregate "array2vector" t
+	  | vector2array t => pp_aggregate "vector2array" t
+	  | create_table t => pp_aggregate "create" t
+	  | create_empty_table t => pp_aggregate "createempty" t
+	  | sub t => pp_aggregate "sub" t
+	  | update t => pp_aggregate "update" t
+	  | length_table t => pp_aggregate "length" t
+	  | equal_table t => pp_aggregate "equal" t
 
 (*	   | ARRAY2  {instance} => String "array2"
 	   | SUB2    {instance} => String "sub2" *)

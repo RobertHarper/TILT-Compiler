@@ -373,9 +373,8 @@ structure LinkIl :> LINKIL  =
 						  IlUtil.kind_subst_expconmodvar,
 						  IlUtil.sig_subst_expconmodvar)
 
-	structure IlContextEq = IlContextEq(structure IlContext = IlContext
-					    structure IlUtil = IlUtil
-					    structure Ppil = Ppil)
+	structure IlContextEq = IlContextEq
+
 	val eq_context = IlContextEq.eq_context
 	val init_context = empty_context
 

@@ -131,8 +131,8 @@ struct
 		in #1(make_total_lambda(v,paircon,con_bool,
 				  make_let([BND_EXP(v1,e1),BND_EXP(v2,e2)],body)))
 		end
-	  | CON_ARRAY c => ETAPRIM(equal_table WordArray,[c])
-(*	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c) *)
+	  | CON_ARRAY c => ETAPRIM(equal_table (OtherArray false),[c])
+(*	  | CON_VECTOR c => APP(ETAPRIM(equal_table (OtherVector false),self c) *)
 	  | CON_VECTOR c => 
 		let val (e,vc) = vector_eq ctxt
 		    val ac = CON_ARROW([con_eqfun c], 

@@ -22,10 +22,8 @@ signature PRIM =
       | IntVector of intsize
       | FloatArray of floatsize
       | FloatVector of floatsize
-      | PtrArray 
-      | PtrVector 
-      | WordArray 
-      | WordVector
+      | OtherArray of bool  (* if bool is true, then type is reducible to HNF *)
+      | OtherVector of bool 
 		      
     datatype prim = 
 

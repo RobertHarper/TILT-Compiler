@@ -74,10 +74,8 @@ struct
 		   | _ => error "pattern impossibility")
 		     
 	in  (case (aggregate,cons) of
-		 (WordArray, [instance]) => do_array instance
-	       | (WordVector, [instance]) => do_vector instance
-	       | (PtrArray, [instance]) => do_array instance
-	       | (PtrVector, [instance]) => do_vector instance
+		 (OtherArray  _, [instance]) => do_array instance
+	       | (OtherVector _, [instance]) => do_vector instance
 	       | (IntArray is, []) => do_array (con_uint is)
 	       | (IntVector is, []) => do_vector (con_uint is)
 	       | (FloatArray fs, []) => do_array (con_float fs)
@@ -422,6 +420,158 @@ struct
 	   | (OR_uint, [], _) => uibinary (Word32.orb)
 
 	end
+*)
+
+
+(*
+  val skip = 16
+
+    fun tt2int int_tt = 0
+      | tt2int real_tt = 1
+      | tt2int both_tt = 2
+
+    fun int2tt 0 =  int_tt
+      | int2tt 1 = real_tt
+      | int2tt 2 = both_tt
+
+    fun intsize2int W8 = 0
+      | intsize2int W16 = 1
+      | intsize2int W32 = 2
+      | intsize2int W64 = 3
+
+    fun int2intsize 0 = W8
+      | int2intsize 1 = W16
+      | int2intsize 2 = W32
+      | int2intsize 3 = W64
+	
+    fun floatsize2int F32 = 0
+      | floatsize2int F64 = 1
+
+    fun int2floatsize 0 = F32
+      | int2floatsize 1 = F64
+
+    fun table2pair t = 
+	case t of 
+	    IntArray sz => (0, intsize2int sz)
+	  | IntVector sz => (1, intsize2int sz)
+	  | FloatArray sz => (2, floatsize2int sz)
+	  | FloatVector sz => (3, floatsize2int sz)
+	  | OtherArray false => (4, 0)
+	  | OtherArray true => (4, 1)
+	  | OtherVector false => (5, 0)
+	  | OtherVector true => (5, 1)
+
+    fun pair2table (0, i) = IntArray (int2intsize i)
+      | pair2table (1, i) = IntVector (int2intsize i)
+      | pair2table (2, i) = FloatArray (int2floatsize i)
+      | pair2table (3, i) = FloatVector (int2floatsize i)
+      | pair2table (4, 0) = OtherArray false 
+      | pair2table (4, 1) = OtherArray true
+      | pair2table (5, 0) = OtherVector false 
+      | pair2table (5, 1) = OtherVector true
+
+
+    fun prim2triple p =
+	case p of
+	    soft_vtrap tt => (0, tt2int tt, 0)
+	  | soft_ztrap tt => (1, tt2int tt, 0)
+	  | hard_vtrap tt => (2, tt2int tt, 0)
+	  | hard_ztrap tt => (3, tt2int tt, 0)
+	    
+	  | float2int => (6, 0, 0)
+	  | int2float => (7, 0, 0)
+	  | int2uint (sz1, sz2) => (8, intsize2int sz1, intsize2int sz2)
+	  | uint2int (sz1, sz2) => (9, intsize2int sz1, intsize2int sz2)
+	  | int2int (sz1, sz2) => (10, intsize2int sz1, intsize2int sz2)
+	  | uint2uint (sz1, sz2) => (11, intsize2int sz1, intsize2int sz2)
+	  | uinta2uinta (sz1, sz2) => (12, intsize2int sz1, intsize2int sz2)
+	  | uintv2uintv (sz1 , sz2) => (13, intsize2int sz1, intsize2int sz2)
+
+	  | neg_float sz => (14, floatsize2int sz, 0)
+	  | abs_float sz => (15, floatsize2int sz, 0)
+	  | plus_float sz => (16, floatsize2int sz, 0)
+	  | minus_float  sz => (17, floatsize2int sz, 0)
+	  | mul_float sz => (18, floatsize2int sz, 0)
+	  | div_float sz  => (19, floatsize2int sz, 0) 
+	  | less_float sz => (20, floatsize2int sz, 0)
+	  | greater_float sz => (21, floatsize2int sz, 0)
+	  | lesseq_float sz => (22, floatsize2int sz, 0)
+	  | greatereq_float sz => (23, floatsize2int sz, 0)
+	  | eq_float sz => (24, floatsize2int sz, 0)
+	  | neq_float sz => (25, floatsize2int sz, 0)
+
+	  | plus_int sz => (26, intsize2int sz, 0)
+	  | minus_int sz => (27, intsize2int sz, 0) 
+	  | mul_int sz => (28, intsize2int sz, 0) 
+	  | div_int sz => (29, intsize2int sz, 0) 
+	  | mod_int sz => (30, intsize2int sz, 0) 
+	  | quot_int sz => (31, intsize2int sz, 0) 
+	  | rem_int sz => (32, intsize2int sz, 0) 
+	  | plus_uint sz => (33, intsize2int sz, 0) 
+	  | minus_uint sz => (34, intsize2int sz, 0) 
+	  | mul_uint sz => (35, intsize2int sz, 0) 
+	  | div_uint sz => (36, intsize2int sz, 0) 
+	  | mod_uint sz => (37, intsize2int sz, 0) 
+	  | less_int sz => (38, intsize2int sz, 0) 
+	  | greater_int sz => (39, intsize2int sz, 0)
+	  | lesseq_int sz => (40, intsize2int sz, 0) 
+	  | greatereq_int sz => (41, intsize2int sz, 0) 
+	  | less_uint sz => (42, intsize2int sz, 0) 
+	  | greater_uint sz => (43, intsize2int sz, 0) 
+	  | lesseq_uint sz => (44, intsize2int sz, 0) 
+	  | greatereq_uint sz => (45, intsize2int sz, 0)
+	  | eq_int sz => (46, intsize2int sz, 0) 
+	  | neq_int sz => (47, intsize2int sz, 0)
+	  | neg_int sz => (48, intsize2int sz, 0)
+	  | abs_int sz => (49, intsize2int sz, 0)
+		
+	  (* bit-pattern manipulation *)
+	  | not_int sz => (50, intsize2int sz, 0)
+	  | and_int sz => (51, intsize2int sz, 0)
+	  | or_int sz => (52, intsize2int sz, 0)
+	  | xor_int sz => (53, intsize2int sz, 0)
+	  | lshift_int sz => (54, intsize2int sz, 0)
+	  | rshift_int sz => (55, intsize2int sz, 0)
+	  | rshift_uint sz => (56, intsize2int sz, 0)
+		
+	  (* array and vector ops - bool = true indicates writeable *)
+	  | array2vector t => let val (a,b) = table2pair t
+				  in  (54, a, b)
+				  end
+	  | vector2array t =>  let val (a,b) = table2pair t
+				  in  (55, a, b)
+				  end
+	  | create_table t =>  let val (a,b) = table2pair t
+				  in  (56, a, b)
+				  end
+	  | create_empty_table t =>  let val (a,b) = table2pair t
+				  in  (57, a, b)
+				  end
+	  | sub t =>  let val (a,b) = table2pair t
+				  in  (58, a, b)
+				  end
+	  | update t =>  let val (a,b) = table2pair t
+				  in  (59, a, b)
+				  end
+	  | length_table t =>  let val (a,b) = table2pair t
+				  in  (60, a, b)
+				  end
+	  | equal_table t =>  let val (a,b) = table2pair t
+				  in  (61, a, b)
+				  end
+
+	  (* IO operations *)
+	  | open_in => (62, 0, 0)
+	  | input => (63, 0, 0)
+	  | input1 => (64, 0, 0)
+	  | lookahead => (65, 0, 0)
+	  | open_out => (66, 0, 0)
+	  | close_in => (67, 0, 0)
+	  | output => (62, 0, 0)
+	  | flush_out => (62, 0, 0)
+	  | close_out => (62, 0, 0)
+	  | end_of_stream => (62, 0, 0)
+
 *)
 
 end
