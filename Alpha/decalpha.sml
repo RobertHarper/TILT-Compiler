@@ -6,7 +6,7 @@ struct
       
     val exclude_intregs = []
     val error = fn s => Util.error "decalpha.sml" s
-
+    val threadScratch_disp : int = 4 * 32 + 8 * 32 + 4 + 8 + 8 + 4
 structure Machine = 
   struct
     open Rtl
@@ -349,8 +349,15 @@ structure Machine =
 				 comma ^ (ms hint))
     | msInstr_base (RTL instr) =  (tab ^ (rtl_to_ascii instr))
     | msInstr_base (MOVE (Rsrc,Rdest)) =
-                                ("\tmov\t" ^ (msReg Rsrc) ^ comma ^
-				 msReg Rdest)
+           (case (Rsrc,Rdest) of
+		(R _, R _) => ("\tmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+	      | (F _, F _) => ("\tfmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+	      | (R _, F _) => ("\tstl\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
+			       "\tldt\t" ^ (msReg Rdest) ^ comma ^ (msDisp(Rth, threadScratch_disp)))
+	      | (F _, R _) => ("\tstt\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
+		               "\tldl\t" ^ (msReg Rdest) ^ comma ^ (msDisp(Rth, threadScratch_disp))))
+			       
+
     | msInstr_base (PUSH (Rsrc, sloc)) = 
                                 ("\tPUSH\t" ^ (msReg Rsrc) ^ comma ^
 				 (msStackLocation sloc))
