@@ -634,8 +634,12 @@ struct
 
 	     fun putInRegs src_regs dst_regs =
 	       let
-		 val itemps = [Rat, Rat2]
-		 val ftemps = [Fat, Fat2]
+	         (* Prefer to use Rat2 because the alpha may try to use Rat.
+                    We catch this and compensate, but it's less efficient
+                    and should be avoided if possible.
+                    (See code generation for multiply-by-constant.) *)
+		 val itemps = [Rat2, Rat]
+		 val ftemps = [Fat2, Fat]
 		 val temps = (itemps, ftemps)
 		 val free_itemps = Listops.list_diff_eq(eqRegs',itemps, src_regs)
 		 val free_ftemps = Listops.list_diff_eq(eqRegs',ftemps, src_regs)
