@@ -1,4 +1,4 @@
-(*$import Posix TextIO Getopt CharVector Byte Word8 OS List CommandLine Substring *)
+(*$import Posix TextIO CharVector Byte Word8 OS List CommandLine Getopt *)
 
 (*
 NAME
@@ -271,8 +271,7 @@ structure Main =
 struct
     structure G = Getopt
     structure P = OS.Path
-    structure S = Substring
-	
+
     fun fail (msg : string) : 'a = raise Test.Crash msg
 	
     fun uname (name : string) : string =
