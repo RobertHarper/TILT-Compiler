@@ -122,6 +122,46 @@ Problem:
 Code:
 Transcript:
 Comments:
+
+   [cstone] I don't believe the diagnosis above is accurate.  Looking
+            at the NIL output of this basis file, it appears that
+            announce is considered too big to be inlined, and so the
+            code for putV is still doing all 4 function applications
+            (the polymorphic instantiation of announce is lifted out.)
+            This explains why the "writeVec" string is still being
+            used by the function.
+
+            The reference to strbindvar_r_writeVec_150137 in the
+            assembly is not a direct call, but computing the address
+            of this closure as the second curried argument to
+            announce.
+
+            
+            Oddly, in the stripped-down file
+
+                (*$import Position Posix *)
+		fun announce (s:string) x y = x y
+		val pos = ref(Position.fromInt 0)
+		structure PIO = Posix.IO                
+		val toFPI = Position.fromInt
+		fun incPos k = pos := Position.+(!pos, toFPI k)
+		  
+		fun putV x = incPos(announce "writeVec" PIO.writeVec x)
+
+            the hoister, correctly realizing that announce has type
+
+            forall 'a,'b.  string => ('a->'b) => 'a -> 'b 
+
+	    (i.e., is total in its type arguments and its first two
+            value arguments) lifts the entire partial application
+
+                announce "writeVec" PIO.writeVec
+
+            out of the definition of putV.  I don't know why the same
+            thing doesn't happen in posix-prim-io-fn.sml, since the
+            announce code is still marking the function total.  This
+            might be a bug (suboptimality) in the hoister.
+
 Fix:
 Test: 
 Owner: swasey
