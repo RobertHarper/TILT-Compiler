@@ -79,3 +79,4 @@
 0079 [closed]	Signed comparison of pointers.
 0080 [open]	Phase splitting fails on some files.
 0081 [open]	Compiled compiler seg faults.
+0082 [open]     Type of thunk prematurely made a rigid record
