@@ -1,5 +1,6 @@
 (*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic *)
 
+
 structure Linknil (* :> LINKNIL  *) =
   struct
     val typecheck_before_opt = ref true
@@ -17,6 +18,10 @@ structure Linknil (* :> LINKNIL  *) =
     val do_reify = Stats.tt("doReify")
     val do_cse = Stats.tt("doCSE")
     val do_uncurry = Stats.ff("doUncurry")
+    val do_reduce = Stats.tt("doReduce")
+    val do_flatten = Stats.tt("doFlatten")
+    val do_inline = Stats.tt ("doInline")
+
     val show_size = ref false
     val show_hil = ref false
     val show_phasesplit = Stats.ff("showPhaseSplit")
@@ -32,6 +37,10 @@ structure Linknil (* :> LINKNIL  *) =
     val show_cc = ref false
     val show_before_rtl = ref false
     val show_typecheck = ref false
+    val show_reduce = Stats.ff("showReduce")
+    val show_flatten = Stats.ff("showFlatten")
+    val show_inline = Stats.ff("showInline")
+
 (*    val type_check_before_opt = Stats.ff("TypecheckBeforeOpt")
     val type_check_after_opt = Stats.ff("TypecheckAfterOpt")
     val type_check_after_cc = Stats.ff("TypecheckAfterCC")
@@ -72,7 +81,13 @@ structure Linknil (* :> LINKNIL  *) =
     structure Specialize = Specialize
     structure Linearize = Linearize
     structure ToClosure = ToClosure
-	
+    structure NilPrimUtilParam = NilPrimUtilParam
+    structure NilPrimUtil = PrimUtil(structure PrimUtilParam = NilPrimUtilParam)
+    structure Flatten = Flatten(structure PrimUtil = NilPrimUtil)
+    structure Reduce = Reduce 
+
+(*    structure Flatten = Flatten *)
+
 (*
     structure NilEval = NilEvaluate(structure Nil = Nil
 				    structure NilUtil = NilUtil
@@ -102,9 +117,10 @@ structure Linknil (* :> LINKNIL  *) =
 	    val nilmod = Stats.timer(phasename,phase) nilmod
 	    val _ = (print phasename; print " complete: "; print filename; print "\n")
 	    val _ = if !show_size
-			then (print "  size = ";
-			      print (Int.toString (NilUtil.module_size nilmod));
-			      print "\n")
+		      then
+			  (print "  size = ";
+			   print (Int.toString (NilUtil.module_size nilmod));
+			   print "\n")
 		    else ()
 	    val _ = if !showphase
 			then (Ppnil.pp_module nilmod; print "\n")
@@ -156,6 +172,19 @@ structure Linknil (* :> LINKNIL  *) =
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
 
+	    val nilmod = transform(do_reduce, show_reduce,
+				   "Reduce", Reduce.doModule, 
+				   filename, nilmod)
+
+	    val nilmod = transform(do_flatten, show_flatten,
+				   "Flatten", Flatten.doModule, 
+				   filename, nilmod)
+
+	    fun inline_domod m = #2 (Inline.optimize m)
+	    val nilmod = transform(do_inline, show_inline,
+				   "Inline", 
+				   inline_domod, filename, nilmod)
+
 	    val nilmod = transform(do_one_optimize, show_one_optimize,
 				 "Optimize1", 
 				 Optimize.optimize
@@ -197,7 +226,7 @@ structure Linknil (* :> LINKNIL  *) =
 				   {lift_array = false,
 				    dead = true, projection = true, 
 				    cse = !do_cse, uncurry = !do_uncurry},
-				 filename, nilmod)
+				 filename, nilmod) 
 
 (*
 	    val nilmod = transform(do_cse, show_cse,
@@ -253,6 +282,7 @@ structure Linknil (* :> LINKNIL  *) =
 				    "Nil typechecking - post cc",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
+
 	in  nilmod
 	end
 
@@ -291,5 +321,16 @@ structure Linknil (* :> LINKNIL  *) =
 		     in  m
 		     end
 end
+
+
+
+
+
+
+
+
+
+
+
 
 

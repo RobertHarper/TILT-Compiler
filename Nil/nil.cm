@@ -66,9 +66,16 @@ toclosure.sml
 hoist.sig.sml
 hoist.sml
 
+reduce.sig.sml
+pass.sig.sml
+reduce.sml
+flatten.sml 
+
+inline.sig.sml
+inline.sml
+
 linknil.sig.sml
 linknil.sml
-
 
 vararg.sig.sml
 vararg.sml

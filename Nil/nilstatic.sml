@@ -634,7 +634,7 @@ struct
 	     end
 	    | (Proj_c (rvals,label)) => 
 	     let
-		 val _ = (print "XXX con_valid on Proj_c\n")
+(*		 val _ = (print "XXX con_valid on Proj_c\n") *)
 	       val record_kind = con_valid (D,rvals)
 		 
 	       val entry_kinds = 
@@ -647,18 +647,18 @@ struct
 		       (error (locate "con_valid") 
 			"Non-record kind returned from con_valid in projection")))
 		val labs = map (#1 o #1) (Sequence.toList entry_kinds)
-		val _ = (print "XXX DONE con_valid on Proj_c\n")
+(*		val _ = (print "XXX DONE con_valid on Proj_c\n") *)
 	     in if (Listops.member_eq(eq_label,label,labs))
 		    then () 
 		else error' "Ill-formed projection"
 	     end
 	    | (App_c (cfun_orig,actuals)) => 
 	     let
-		 val _ = (print "XXX con_valid on App_c";
+(*		 val _ = (print "XXX con_valid on App_c";
 			  (case cfun_orig of
 			       Var_c v => (print " var = "; pp_var v)
 			     | _ => print " nonvar");
-			 print "\n")
+			 print "\n") *)
 	       val cfun_kind = con_valid (D,cfun_orig)
 	       val (formals,body_kind) = 
 		 case (strip_singleton (D,cfun_kind)) of
@@ -674,7 +674,7 @@ struct
 		  (actual_kinds,formal_kinds))
 		 orelse
 		 (error (locate "con_valid") "Constructor function failed: argument not subkind of expected kind")
-	       val _ = print "XXX con_valid on App_c 5 DONE\n"
+(*	       val _ = print "XXX con_valid on App_c 5 DONE\n" *)
 	     in  ()
 	     end
 	    | (Typecase_c {arg,arms,default,kind=given_kind}) => 
@@ -1578,9 +1578,9 @@ struct
 			then (print "Processing fbnd_valid \n")
 		    else ()
 	  val bnd_types = Sequence.map_second (function_type openness) defs
-	  val _ = (print "bnd_types are: ";
+(*	  val _ = (print "bnd_types are: ";
 		   Sequence.app (fn (_,c) => (Ppnil.pp_con c; print "\n")) bnd_types;
-		   print "\n")
+		   print "\n") *)
 	  val _ = Sequence.map_second (curry2 con_valid D) bnd_types
 	  val D = Sequence.foldl (fn ((v,c),D) => insert_con(D,v,c)) D bnd_types
 	  val _ = if (!trace)
