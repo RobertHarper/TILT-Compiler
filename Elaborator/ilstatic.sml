@@ -1035,7 +1035,15 @@ end
 		   end
 	       fun ptest lctxt (FBND(v',v,c,c',e)) =
 		   let val (_,bodyc) = GetExpCon(e,add_context_exp'(lctxt,v,c))
-		   in sub_con(bodyc,c',lctxt)
+		       val res = sub_con(bodyc,c',lctxt)
+		       val _ = if res
+				   then ()
+			       else (print "ILSTATIC - ptest yielded false\n";
+				     print "e = \n"; pp_exp e; print "\n";
+				     print "c' = \n"; pp_con c'; print "\n";
+				     print "bodyc = \n"; pp_con bodyc; print "\n")
+
+		   in res
 		   end
 	   in (true,
 	       case a of

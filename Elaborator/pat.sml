@@ -30,6 +30,18 @@ functor Pat(structure Il : IL
     open Util Listops Name (* IlLookup *) Prim
     open IlContext
 
+val sub_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "sub_con called from "; print str; print "\n") *)
+					val res = sub_con(ctxt,c1,c2)
+		(*		          val _ = (print "sub_con from "; print str; print " DONE\n") *)
+			in res
+			end
+
+val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from "; print str; print "\n") *)
+					val res = eq_con(ctxt,c1,c2)
+					(* val _ = (print "eq_con from "; print str; print " DONE\n") *)
+			in res
+			end
+			
     val error = fn s => error "pat.sml" s
     val debug = ref false
     fun printint i = print (Int.toString i)
@@ -272,7 +284,7 @@ functor Pat(structure Il : IL
     let
 	val elemcon = fresh_con context
 	val CASE_VAR(var,con) = arg1
-	val _ = if (eq_con(context,con,CON_REF elemcon))
+	val _ = if (eq_con("0",context,con,CON_REF elemcon))
 		    then ()
 		else (error_region();
 		      print "ref pattern used on a non-ref argument\n")
@@ -341,7 +353,7 @@ functor Pat(structure Il : IL
 	val argcon = if flex 
 			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.get_stamp(),false,lc)))
 		     else CON_RECORD lc
-	val _ = if (eq_con(context,con1,argcon))
+	val _ = if (eq_con("1",context,con1,argcon))
 		    then ()
 		else (error_region();
 		      print "tuple/record pattern used on a non-record argument\n")
@@ -358,9 +370,9 @@ functor Pat(structure Il : IL
       let
 	  val rescon = ref(fresh_con context)
 	  fun check_rescon c = 
-		(sub_con(context,c,!rescon)) orelse
+		(sub_con("7",context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
-		sub_con(context,c,!rescon))
+		sub_con("8",context,c,!rescon))
 	  val v = fresh_named_var "exnarg_var"
 	  fun helper ((path,stamp,carried_type,patopt),arm : arm) = 
 	      let val con = (case carried_type of 
@@ -414,9 +426,9 @@ functor Pat(structure Il : IL
       val rescon = ref(fresh_con context)
       val rsvar = fresh_named_var "sumswitch_arg"
       fun check_rescon c = 
-		(sub_con(context,c,!rescon)) orelse
+		(sub_con("11",context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
-		sub_con(context,c,!rescon))      
+		sub_con("12",context,c,!rescon))      
       fun getarm (datacon,sumcon) (i,{name=cur_constr,arg_type}) : exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
@@ -426,7 +438,7 @@ functor Pat(structure Il : IL
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
 	  val relevants : arm list = List.mapPartial armhelp accs
 (*	val _ = (print "====getarm enter====casecon is: "; Ppil.pp_con casecon; print "\n") *)
-	  val _ = if (sub_con(context,casecon,datacon))
+	  val _ = if (sub_con("13",context,casecon,datacon))
 		      then ()
 		  else (error_region();
 			print "datacon is "; Ppil.pp_con datacon; print "\n";
@@ -491,7 +503,7 @@ functor Pat(structure Il : IL
 		  | (_,NONE) => NONE
 		  | (_,SOME ec_thunk) => 
 			let val (e,c) = ec_thunk()
-			in  (if (eq_con(context,c,(!rescon)))
+			in  (if (eq_con("2",context,c,(!rescon)))
 				 then ()
 			     else (error_region();
 				   print "result type of constructor patterns mismatch";
@@ -512,7 +524,7 @@ functor Pat(structure Il : IL
 	     arms : arm list,
 	     def : def) : (Il.exp * Il.con) = 
     (
-(*
+
 debugdo 
      (fn () => 
       (print "match called with "; printint (length args); print " args:\n";
@@ -520,14 +532,21 @@ debugdo
        print "\nand with "; printint (length arms); print " arms:\n";
        mapcount (fn(i,a) => (print "  #"; printint i; print ": "; pp_arm a; print "\n")) arms;
        print "      and with def = "; pp_def def; print "\n\n"));
-*)
+
      case (arms,args) of
        ([],_) => (case def of
 		    SOME ec_thunk => ec_thunk()
 		  | NONE => let val c = fresh_con context
-			    in (Il.RAISE(case result_type_var of
+	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and really first c = \n");
+			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
+			    val ec =  (Il.RAISE(case result_type_var of
 					     NONE => c
 					   | SOME v => CON_VAR v,bindexn_exp),c)
+	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and returning c = \n");
+			pp_con (#2 ec); TextIO.output(TextIO.stdOut,"\n"))
+	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and first c = \n");
+			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
+			    in ec
 			    end)
      | ((_,bound,NONE)::_,[]) => (let val (vars,cons) = (map #2 bound, map #3 bound)
 				  in (exp_tuple (map VAR vars), con_tuple cons)
@@ -536,7 +555,12 @@ debugdo
 	 let
 	   val sdecs = arm2sdecs arm
 	   val context' = add_context_sdecs(context,sdecs)
-	 in ec_maker(context',clause,bound)
+           val (e,c) = ec_maker(context',clause,bound)
+(*
+	   val _ = (TextIO.output(TextIO.stdOut,"called ec_maker and got c = \n");
+			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
+*)
+	 in (e,c)
 	 end
      | (_,arg1::argrest) => 
 	 let
@@ -561,7 +585,7 @@ debugdo
 		   | (Ast.ConstraintPat{pattern,constraint}) =>
 			 let val c = xty(context,constraint)
 			     val CASE_VAR(_,con) = arg1
-			     val _ = if (eq_con(context,c,con))
+			     val _ = if (eq_con("3",context,c,con))
 					 then ()
 				     else (error_region();
 					   print "constraint pattern mismatches pattern type\n";
@@ -710,7 +734,7 @@ debugdo
 		   let
 		     fun conszip a b = map (op ::) (zip a b)
 		     val CASE_VAR(var,con) = arg1
-		     val _ = if (eq_con(context,eqcon,con))
+		     val _ = if (eq_con("4",context,eqcon,con))
 				 then ()
 			     else (error_region();
 				   print "base type mismatches argument type\n")
@@ -723,7 +747,11 @@ debugdo
 			 in  match(args, List.filter filter temp, def)
 			 end
 		     val (e1,c1) = match(argrest, [(tlpat1, bound1, body1)], SOME thunk)
-		     val _ = if (eq_con(context,c1,c2))
+(*
+val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.stdOut,"\n");
+		print "\nand c2 = "; pp_con c2; TextIO.output(TextIO.stdOut,"\n"); print "\n")
+*)
+		     val _ = if (eq_con("5",context,c1,c2))
 				 then ()
 			     else (error_region();
 				   print "different result type in different arms\n")
@@ -995,7 +1023,7 @@ debugdo
 	val result_type_var  = fresh_named_var "result_type"
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)
-				 val _ =  if (eq_con(context,c,CON_ANY))
+				 val _ =  if (eq_con("6",context,c,CON_ANY))
 					      then ()
 					  else (error_region();
 						print "default of pattern not an exn type\n")

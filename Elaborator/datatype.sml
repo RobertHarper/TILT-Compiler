@@ -472,9 +472,10 @@ functor Datatype(structure Il : IL
 
 
 	val top_type_sbnd_sdec = 
-		let val (c,k) = if is_monomorphic
+		let val (c,base_kind) = if is_monomorphic
 					then (top_type_tyvar, KIND_TUPLE num_datatype)
 				else (CON_FUN(tyvar_vars, top_type_tyvar), KIND_ARROW(num_tyvar, num_datatype))
+		    val k = if (!do_inline) then KIND_INLINE(base_kind,c) else base_kind
 		in  if num_datatype = 1 
 			then []
 		     else [(SBND(top_type_lab, BND_CON(top_type_var, c)),
