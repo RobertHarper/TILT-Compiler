@@ -46,6 +46,10 @@ Comments:
 	we encounter an exception indicating that somehow we cannot
 	generate a equality function at that tyvar.
 
+	[tom7] Rather than manually setting it to unit, I con_eq it.
+        Unification seems to invoke the equality compiler correctly. 
+	I can compile the code above and the rest of the basis.
+
 Fix:    Figure out why equality compiler is raising NoEqExp on that tyvar.
 Test:   m0031
 Owner: swasey

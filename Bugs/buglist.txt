@@ -87,7 +87,7 @@
 0087 [closed]   Possible "conservative" bug in Analyze avoiding desired optimizations
 0089 [open]	Printing from runtime.
 0090 [open]     Shadowing type "bool" causes equality compiler to fail.
-0091 [open]     Unresolved equality expressions breaking elaborator
+0091 [closed]	Unresolved equality expressions breaking elaborator
 0092 [closed]	There are too many steps to reporting bugs.
 0093 [open]	TILT does not support separate compilation.
 0094 [open]	The Runtime uses too much virtual memory.
