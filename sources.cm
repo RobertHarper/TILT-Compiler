@@ -10,6 +10,4 @@ Rtl/rtl.cm
 Backend/backend.cm
 Alpha/alpha.cm
 Top/top.cm
-(*
-link.sml 
-*)
+
