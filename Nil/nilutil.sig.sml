@@ -79,6 +79,7 @@ signature NILUTIL =
     val sub_phase : Nil.phase * Nil.phase -> bool
 
     val is_var_e : Nil.exp -> bool
+    val is_mu_c : Nil.con -> bool
 
     val map_annotate : (Nil.con -> Nil.con) -> Nil.con -> Nil.con 
 

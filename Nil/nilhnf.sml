@@ -31,6 +31,7 @@ structure NilHNF :> NILHNF =
 
     val strip_var = NilUtil.strip_var
     val strip_crecord = NilUtil.strip_crecord
+    val is_mu_c = NilUtil.is_mu_c
 
     val eq_opt = Util.eq_opt
 
@@ -94,7 +95,6 @@ structure NilHNF :> NILHNF =
 	   | (AllArrow_c _) => (substConInCon subst constructor,false)
 	   | (ExternArrow_c _) => (substConInCon subst constructor,false)
 	   | (Crecord_c _) => (substConInCon subst constructor,false)
-	   | (Proj_c (Mu_c _,lab)) => (substConInCon subst constructor,true)
 
 	   | (Var_c var) => 
 	     (case (substitute subst var) of
@@ -118,29 +118,31 @@ structure NilHNF :> NILHNF =
 	     let 
 	       val (c1,path) = con_reduce state c1 
 	       val c2 = substConInCon subst c2
-	     in  (Closure_c(c1,c2),false)
+	     in  (Closure_c(c1,c2),path)
 	     end
 	   | Typeof_c e => con_reduce state (type_of(D,e))
 	   | (Proj_c (con,label)) => 
-	     let
-	       (*Empty the substitution first, so that you don't substitute
-		* into the large thing*)
-	       val ((con,path),state) = 
-		 (case con_reduce (D,empty()) con
-		    of (con,true) => (con_reduce state con,(D,empty()))
-		     | other => (other,state))
-	     in
-	       if path then
-		 (Proj_c(con,label),true)
-	       else
-		 (case strip_crecord con
-		    of SOME entries =>
-		      (case (find (fn ((l,_)) => eq_label (l,label)) entries )
-			 of SOME (_,con) => con_reduce state con  
-			  | NONE => (error (locate "con_reduce") "Field not in record"))
-		     | NONE => (perr_c con;
-				error (locate "con_reduce") "Not a path, but not a record!"))
-	     end
+	     if is_mu_c con then  (substConInCon subst constructor,true) (*Watch out for annotations!*)
+	     else
+	       let
+		 (*Empty the substitution first, so that you don't substitute
+		  * into the large thing*)
+		 val ((con,path),state) = 
+		   (case con_reduce (D,empty()) con
+		      of (con,true) => (con_reduce state con,(D,empty()))
+		       | other => (other,state))
+	       in
+		 if path orelse (is_mu_c con) then
+		   (Proj_c(con,label),true)
+		 else
+		   (case strip_crecord con
+		      of SOME entries =>
+			(case (find (fn ((l,_)) => eq_label (l,label)) entries )
+			   of SOME (_,con) => con_reduce state con  
+			    | NONE => (error (locate "con_reduce") "Field not in record"))
+		       | NONE => (perr_c con;
+				  error (locate "con_reduce") "Not a path, but not a record!"))
+	       end
 	   | (App_c (cfun,actuals)) => 
 	     let
 
@@ -195,7 +197,8 @@ structure NilHNF :> NILHNF =
 			  if eq_var(var,v)
 			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body,body_kind) 
 			  else error (locate "con_reduce") "redex not in HNF"
-			 | _ => error (locate "con_reduce") "redex not in HNF")
+			 | _ => (perr_c cfun;
+				 error (locate "con_reduce") "redex not in HNF"))
 		 end
 	     in  res
 	     end

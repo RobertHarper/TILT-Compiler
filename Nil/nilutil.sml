@@ -133,6 +133,9 @@ struct
 
     fun is_unit_c' (Prim_c(Record_c _,[])) = true
       | is_unit_c' _ = false
+
+    fun is_mu_c' (Mu_c _) = true
+      | is_mu_c' _ = false
   in
     val strip_var = strip_annotate strip_var'
     val strip_exntag = strip_annotate strip_exntag'
@@ -153,6 +156,7 @@ struct
     val is_unit_c = strip_annotate is_unit_c'
     val is_var_c = Option.isSome o strip_var
     val is_float_c = Option.isSome o strip_float
+    val is_mu_c = strip_annotate is_mu_c'
   end
 
 
