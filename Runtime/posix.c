@@ -933,7 +933,7 @@ static char** string_list_to_array_malloc(string_list_long list)
 {
   int i;
   int length = string_list_length(list);
-  char** v = (char**)emalloc(length + 1);
+  char** v = (char**)emalloc((length + 1)*sizeof(char*));
   for (i=0; i<length; i++) {
     v[i] = mlstring2cstring_malloc(list->car);
     list = (string_list_long) list->cdr;
