@@ -10,7 +10,14 @@ Problem:     compiler faults with nonexhaustive binding failure in optimize1
 Code:        
 Transcript:  
 Comments:    
+	[Leaf] This was actually an elaborator/phase splitter bug.  The phase
+	splitter takes advantage of elaborator invariants that were not 
+	correctly being maintained: in particular that datatype labels
+	are never actually used (since we inline constructors).
+	
 Fix:         
+	[Leaf] More sanity checking code was added to the phase-splitter.
+	Derek fixed the actual bug in the elaborator.
 Test: m0059
 Owner: rwh
-Status: open
+Status: closed

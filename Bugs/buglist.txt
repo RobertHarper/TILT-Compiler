@@ -114,7 +114,7 @@
 0118 [open]	syntax discrepancies
 0119 [open]	discrepancies on byte/char tests
 0120 [open]	zero-sized word8array
-0121 [open]	nonexhaustive binding failure in optimize1
+0121 [closed]	nonexhaustive binding failure in optimize1
 0122 [open]	overflow in compiler
 0123 [open]	possible nontermination
 0124 [open]	flexible records
