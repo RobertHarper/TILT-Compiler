@@ -60,16 +60,13 @@ signature NILDEFS =
     *)
     val kind_type_tuple : int -> Nil.kind
 
-
-
     val unit_con : Nil.con  (*unit *)
-
     val unit_exp : Nil.exp  (*()*)
-
 
     val string_con : Nil.con(* Type of strings*)
 
     val int_con : Nil.con   (* 32-bit ints *)
+    val zero_int_exp : Nil.exp
 
     val char_con : Nil.con  (* 8-bit ints *)
 

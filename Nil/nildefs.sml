@@ -1,4 +1,4 @@
-(*$import NILDEFS Nil IlUtil Listops Prim Name TraceInfo Sequence *)
+(*$import NILDEFS Nil TilWord32 TilWord64 IlUtil Listops Prim Name TraceInfo Sequence *)
 
 (*
  * This structure is a central repository for NIL syntactic
@@ -197,6 +197,8 @@ structure NilDefs :> NILDEFS =
     (*Type of 32 bit integers
      *)
     val int_con = Prim_c(Int_c Prim.W32,[])
+    val zero_int_exp = Const_e(Prim.int(Prim.W32,TilWord64.zero))
+
     (*Type of 8 bit chars.
      *)
     val char_con = Prim_c(Int_c Prim.W8,[])

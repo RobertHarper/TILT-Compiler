@@ -7,17 +7,17 @@ struct
 
    (* Module-level declarations *)
 
-    open Util Listops
-    open Nil
-    open NilUtil
-    open Rtl
-    open Name
-    open Rtltags 
-    open Pprtl 
-    type label = Rtl.label
-    fun error s = Util.error "tortl-base.sml" s
+    open Nil Rtl
     structure TW32 = TilWord32
     structure TW64 = TilWord64
+    structure VarMap = Name.VarMap
+    structure VarSet = Name.VarSet
+
+    val mirrorGlobal = Rtltags.mirrorGlobal
+    val mirrorGlobalTag = Rtltags.mirrorGlobalTag
+
+    type label = Rtl.label
+    fun error s = Util.error "tortl-base.sml" s
 
     val do_gcmerge = ref true
     val do_constant_records = ref true
@@ -74,7 +74,7 @@ struct
        fun clear_stats() = app (fn (_,r) => r := 0) stats
        fun show_stats() = (print "\nRTL statistics:\n";
 			   app (fn (str,r) => 
-				let val tab = spaces (30 - size str)
+				let val tab = Util.spaces (30 - size str)
 				in  print "  "; 
 				    print str; 
 				    print ": ";
@@ -118,10 +118,9 @@ struct
    datatype term = LOCATION of location
                  | VALUE of value
 
-   type var_rep     = location option * value option
-   type convar_rep  = location option * value option 
+   type convar_rep  = term option
 
-   type varmap = var_rep VarMap.map
+   type varmap = term VarMap.map
    type convarmap = convar_rep VarMap.map
 
    datatype gcstate = ALLOC_IMM of instr ref list   (* all ways of reaching current point went through these fixed-size allocation checks *)
@@ -204,15 +203,15 @@ struct
 
   (* ---- Looking up and adding new variables --------------- *)
 
-  fun top_rep (v : var, vl : location option, vv : value option) =
+  fun top_rep (v : var, vt : term) =
       (VarSet.member(!globals,v))
-      andalso (case (vl,vv) of
-		   (SOME(GLOBAL _),_) => true 
-		 | (_, SOME _) => true
+      andalso (case vt of
+		   VALUE _ => true
+		 | LOCATION (GLOBAL _) => true 
 		 | _ => false)
 
-  fun varmap_insert' ({is_top,varmap,
-		       env,convarmap,gcstate} : state) (v,(lc,lv,c)) : state = 
+  fun state_var_insert' ({is_top,varmap,
+		       env,convarmap,gcstate} : state) (v,(t,c)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "varmap adding to v = "; 
 			    Ppnil.pp_var v; print "\n")
@@ -222,12 +221,12 @@ struct
 		| SOME _ => error ("varmap already contains "
 					    ^ (Name.var2string v))
 	  val env = (NilContext.insert_con(#1 env,v,c), #2 env)
-	  val varmap = VarMap.insert(varmap,v,(lc,lv))
+	  val varmap = VarMap.insert(varmap,v,t)
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun varmap_insert_eq' ({is_top,varmap,
-		       env,convarmap,gcstate} : state) (v,(lc,lv,e)) : state = 
+  fun state_var_insert_eq' ({is_top,varmap,
+		       env,convarmap,gcstate} : state) (v,(t,e)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "varmap adding to v = "; 
 			    Ppnil.pp_var v; print "\n")
@@ -237,81 +236,65 @@ struct
 		| SOME _ => error ("varmap already contains "
 					    ^ (Name.var2string v))
 	  val env = (NilContext.insert_exp(#1 env,v,e), #2 env)
-	  val varmap = VarMap.insert(varmap,v,(lc,lv))
+	  val varmap = VarMap.insert(varmap,v,t)
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun varmap_insert state (arg as (v,(vl,vv,_))) =
-      (if (top_rep(v,vl,vv))
-	   then global_state := varmap_insert' (!global_state) arg
+  fun state_var_insert state (arg as (v,(t,_))) =
+      (if (top_rep(v,t))
+	   then global_state := state_var_insert' (!global_state) arg
        else ();
-	varmap_insert' state arg)
+	state_var_insert' state arg)
 
-  fun varmap_insert_eq state (arg as (v,(vl,vv,_))) =
-      (if (top_rep(v,vl,vv))
-	   then global_state := varmap_insert_eq' (!global_state) arg
+  fun state_var_insert_eq state (arg as (v,(t,_))) =
+      (if (top_rep(v,t))
+	   then global_state := state_var_insert_eq' (!global_state) arg
        else ();
-	varmap_insert_eq' state arg)
+	state_var_insert_eq' state arg)
 
-  fun convarmap_insert' ({is_top,convarmap,varmap,env,gcstate}:state) 
-                        (v,(vl,vv,k)) : state = 
-      let val _ = if (!debug_bound)
-		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
-		  else ()
-	  val _ = (case (VarMap.find(convarmap,v)) of
-		       NONE => ()
-		     | SOME _ => error ("convarmap already contains "
-						 ^ (Name.var2string v)))
-	  val convarmap = VarMap.insert(convarmap,v,(vl,vv))
-      in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
-      end
-  
+  fun state_convar_insert' ({is_top,convarmap,varmap,env,gcstate}:state) 
+                           (v,(vr,k)) : state =
+      let
+	val _ = if (!debug_bound)
+		  then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
+		else ()
+	val _ = (case (VarMap.find(convarmap,v)) of
+		   NONE => ()
+		 | SOME _ => error ("convarmap already contains "
+				    ^ (Name.var2string v)))
+	val convarmap = VarMap.insert(convarmap,v,vr)
+	val newenv = (NilContext.insert_kind(#1 env,v,k),
+		      VarMap.insert(#2 env, v, ref NONE))
+      in
+	{is_top=is_top,env=newenv,
+	 varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+      end  	
 
-  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k) : state = 
-      let val _ = if (!debug_bound)
-		      then (print "env adding v = ";
-			    Ppnil.pp_var v; print "\n")
-		  else ()
-	  val newenv = (NilContext.insert_kind(#1 env,v,k),
-			VarMap.insert(#2 env, v, ref NONE))
-	  val newstate = {is_top=is_top,env=newenv,
-			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
-      in  newstate
-      end
-
-  fun convarmap_insert state (arg as (v,(vl,vv,k))) =
-      let val state = convarmap_insert' state arg
-	  val state = env_insert' state (v,k)
-	  val _ = if (#is_top state)
-	      (* top_rep (vl,vv) *)
-		      then let val gs = convarmap_insert' (!global_state) arg
-			       val gs = env_insert' gs (v,k)
-			   in  global_state := gs
-			   end
+  fun state_convar_insert state (arg as (v,(vr,k))) =
+      let 
+	val state = state_convar_insert' state arg
+	val _ = if (#is_top state)
+		    then global_state := state_convar_insert' (!global_state) arg
 		  else ()
       in  state
       end
 
   (* adding term-level variables and functions *)
-  fun add_term (s,v,con,LOCATION loc,NONE) = varmap_insert s (v,(SOME loc,NONE,con))
-    | add_term (s,v,con,VALUE value ,NONE) = varmap_insert s (v,(NONE, SOME value,con))
-    | add_term (s,v,con,LOCATION loc,SOME e) = varmap_insert_eq s (v,(SOME loc,NONE,e))
-    | add_term (s,v,con,VALUE value, SOME e) = varmap_insert_eq s (v,(NONE, SOME value,e))
+  fun add_term (s,v,con,term,NONE) = state_var_insert s (v,(term,con))
+    | add_term (s,v,con,term,SOME e) = state_var_insert_eq s (v,(term,e))
 
   (* adding constructor-level variables and functions *)
-  fun add_conterm (s,v,kind,NONE) = convarmap_insert s (v,(NONE, NONE, kind))
-    | add_conterm (s,v,kind,SOME(LOCATION loc)) = convarmap_insert s (v,(SOME loc, NONE, kind))
-    | add_conterm (s,v,kind,SOME(VALUE value)) = convarmap_insert s (v,(NONE, SOME value, kind))
+  fun add_conterm (s,v,kind,termOpt) = state_convar_insert s (v,(termOpt, kind))
 
    fun getconvarrep' ({convarmap,...} : state) v = VarMap.find (convarmap,v) 
    fun getconvarrep state v : convar_rep = 
        (case getconvarrep' state v of
-	    NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
+	    NONE => error ("getconvarrep: variable "^(Name.var2string v)^" not found")
 	  | SOME result => result)
 
   fun getrep ({varmap=lm,...} : state) v = 
       (case VarMap.find(lm,v) of
-	   NONE => error ("getvarrep: variable "^(var2string v)^" not found")
+	   NONE => error ("getrep: variable "^(Name.var2string v)^" not found")
 	 | SOME rep => rep)
 
     (* given a type returns true and a type in head-normal form
@@ -387,7 +370,7 @@ struct
 					print " in the fields of "; Ppnil.pp_kind k; print "\n";
 					error "bad Proj_c")
 		    | extract acc (((l,_),fc)::rest) = 
-		      if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
+		      if (Name.eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
 		  val fields_list = (Sequence.toList fields_seq)
 		  val (con,index) = extract 0 fields_list 
 		  val acc = if (!do_single_crecord andalso length fields_list = 1)
@@ -446,26 +429,30 @@ struct
 	  | _ => false)
 
    fun niltrace2rep (state : state) niltrace : rep =
-       let fun pathcase (v,labs) = 
+       let fun pathcase (v,labs) =
+	 (* XXX: Why getconvarrep', not getconvarrep?   joev *)
 	   (case getconvarrep' state v of
-		SOME(_,SOME(RECORD (l,_))) => (COMPUTE(Projlabel_p (l,labs)))
-	      | SOME(_,SOME(LABEL l)) => (COMPUTE(Projlabel_p (l,labs)))
-	      | SOME(_,SOME(VOID _)) => error "constructor is void"
-	      | SOME(_,SOME(REAL _)) => error "constructor represented as  a float"
-	      | SOME(_,SOME(CODE _)) => error "constructor function cannot be a type"
-	      | SOME(SOME(REGISTER (_,I r)),_) => (COMPUTE(Projvar_p (r,labs)))
-	      | SOME(SOME(REGISTER (_,F _)),_) => error "constructor in float reg"
-	      | SOME(SOME(GLOBAL (l,_)),_) => (COMPUTE(Projglobal_p(l,labs)))
-	      | SOME _ => (print "niltrace2rep convar = ";
-			   print (var2string v); print "\n";
-			   error "inappropriate information for this convar!!")
-	      | NONE => (print "niltrace2rep convar = ";
-			 print (var2string v); print "\n";
-			 error "no information on this convar!!"))
+	      NONE => error ("getconvarrep' of bad variable in niltrace2rep: " ^ Name.var2string v)
+	      | SOME topt =>
+		(case topt of
+		   (SOME (VALUE(RECORD (l,_)))) => (COMPUTE(Projlabel_p (l,labs)))
+		 | (SOME (VALUE(LABEL l))) => (COMPUTE(Projlabel_p (l,labs)))
+		 | (SOME (VALUE(VOID _))) => error "constructor is void"
+		 | (SOME (VALUE(REAL _))) => error "constructor represented as a float"
+		 | (SOME (VALUE(CODE _))) => error "constructor function cannot be a type"
+		 | (SOME (LOCATION(REGISTER (_,I r)))) => (COMPUTE(Projvar_p (r,labs)))
+		 | (SOME (LOCATION(REGISTER (_,F _)))) => error "constructor in float reg"
+		 | (SOME (LOCATION(GLOBAL (l,_)))) => (COMPUTE(Projglobal_p(l,labs)))
+		 | (SOME (VALUE _)) => (print "niltrace2rep convar = ";
+					print (Name.var2string v); print "\n";
+					error "inappropriate information for this convar!!")
+		 | NONE => (print "niltrace2rep convar = ";
+			    print (Name.var2string v); print "\n";
+			    error "this is a compiletime convar!!")))
 
        in  
 	   (case niltrace of
-		Nil.TraceUnknown => error "TraceUnknown"
+		Nil.TraceUnknown => error "TraceUnknown in niltrace2rep"
 	      | (Nil.TraceCompute v) => pathcase(v,[])
 	      | (Nil.TraceKnown t) => 
 		    (case t of
@@ -502,8 +489,8 @@ struct
    local
        val istop : bool ref = ref false
        val top : label ref = ref (LOCAL_CODE "dummy_top")
-       val currentfun : (var * label) ref = ref (fresh_named_var "dummy_fun",
-						 LOCAL_CODE "dummy_fun")
+       val currentfun : (var * label) ref = ref (Name.fresh_named_var "dummy_fun",
+					       LOCAL_CODE "dummy_fun")
        val resultreg : reg option ref = ref NONE
        val il : (Rtl.instr ref) list ref = ref nil
        val localregs : reg list ref = ref nil
@@ -629,7 +616,7 @@ struct
 	   in  localregs := (I r) :: (!localregs);
 	       r
 	   end
-       fun alloc_regi (traceflag) = alloc_named_regi (fresh_var()) traceflag
+       fun alloc_regi (traceflag) = alloc_named_regi (Name.fresh_var()) traceflag
 
        
        fun alloc_named_regf v = 
@@ -637,8 +624,7 @@ struct
 	   in  localregs := (F r) :: (!localregs);
 	       r
 	   end
-
-       fun alloc_regf () = alloc_named_regf (fresh_var())
+       fun alloc_regf () = alloc_named_regf (Name.fresh_var())
        
        fun alloc_reg_trace state trace = 
 	   let val rep = niltrace2rep state trace
@@ -651,10 +637,12 @@ struct
 
        fun promote_maps ({env,...} : state) : state = 
 	   let val {varmap,convarmap,gcstate,...} = !global_state
-	       fun isNotReg(SOME (REGISTER _), _) = false
-		 | isNotReg _ = true
-	       val varmap = VarMap.filter isNotReg varmap
-	       val convarmap = VarMap.filter isNotReg convarmap
+	       fun isNotReg_exp(LOCATION (REGISTER _)) = false
+		 | isNotReg_exp _ = true
+	       fun isNotReg_con(SOME (LOCATION (REGISTER _))) = false
+		 | isNotReg_con _ = true
+	       val varmap = VarMap.filter isNotReg_exp varmap
+	       val convarmap = VarMap.filter isNotReg_con convarmap
 	   in  {is_top = false, varmap = varmap, 
 		convarmap = convarmap, env = env, gcstate = gcstate}
 	   end
@@ -689,7 +677,7 @@ struct
 		dl := nil;
 		pl := nil;
 		reset_records();
-		reset_state(false,(fresh_named_var "code", fresh_code_label "code"));
+		reset_state(false,(Name.fresh_named_var "code", fresh_code_label "code"));
 		clear_stats())
 	   end
        fun unset_global_state() = (if (!diag) then show_stats() else ();
@@ -760,6 +748,7 @@ struct
 
   (* all lengths measured in bytes *)
   local
+    open Rtltags
       fun mk_arraytag (granularity,offset,tagDesc) (byteLen,dest) =
 	  let (*
 	      val _ = if (byteLen mod granularity <> 0)
@@ -774,22 +763,16 @@ struct
       val mk_quad_arraytag = mk_arraytag (8, quad_array_len_offset, quadarray)
       val mk_ptr_arraytag = mk_arraytag  (4, ptr_array_len_offset, ptrarray)
       val mk_mirror_ptr_arraytag = mk_arraytag (8, mirror_ptr_array_len_offset, mirrorptrarray)
+      val mk_recordtag = recordtag
   end
-  val mk_recordtag = recordtag
     
-  (* storing a tag *)
+  (* storing a tag at the allocation point. *)
   fun store_tag_zero tag =
     let val tmp = alloc_regi(NOTRACE_INT)
       in add_instr(LI(tag,tmp));
 	 add_instr(STORE32I(REA(heapptr,0),tmp)) (* store tag *)
     end
   
-  fun store_tag_disp (disp,tag) =
-    let val tmp = alloc_regi(NOTRACE_INT)
-    in add_instr(LI(tag,tmp));
-      add_instr(STORE32I(REA(heapptr,disp),tmp)) (* store tag *)
-    end
-
   (* ----- functions for loading NIL values into RTL registers ----------- *)
 
 
@@ -909,7 +892,7 @@ struct
 
     fun mk_named_float_data (r : string, label : label) =
 	(oddlong_align();
-	 add_data(INT32 (mk_quad_array_tag (i2w 8)));
+	 add_data(INT32 (Rtltags.mk_quad_array_tag (i2w 8)));
 	 add_data(DLABEL label);
 	 add_data(FLOAT r))
 	
@@ -1062,8 +1045,8 @@ struct
 	val skip1 = Rtltags.skip 1
 	val skip2 = Rtltags.skip 2
 	val skip3 = Rtltags.skip 3
-	val quadArrayTag = mk_quad_array_tag 0w8
-	val uninit = INT32 uninitVal
+	val quadArrayTag = Rtltags.mk_quad_array_tag 0w8
+	val uninit = INT32 Rtltags.uninitVal
 
 	fun initPtrGlobal (state,label, global) = 
 	    let val addr = alloc_regi NOTRACE_LABEL
@@ -1118,7 +1101,7 @@ struct
 			      | TRACE => let val _ = add_static_record (label, 0, 1)
 					     val _ = if (!mirrorGlobal)
 							 then (staticPortion(skip3, [uninit, uninit]);
-							       add_instr(LI(Rtltags.mirrorGlobalTag, tag)))
+							       add_instr(LI(mirrorGlobalTag, tag)))
 						     else (staticPortion(skip2, [uninit]);
 							   add_instr(LI(recPtrTag, tag)))
 					     val _ = add_instr (STORE32I(LEA(label,~4), tag))
@@ -1134,7 +1117,7 @@ struct
 							 let val _ = staticPortion(skip3, [uninit, uninit])
 							     val (state,instrs) = initPtrGlobal(state,label,ir)
 							 in  ifthenelse(isPtr,
-									[LI(Rtltags.mirrorGlobalTag, tag),
+									[LI(mirrorGlobalTag, tag),
 									 STORE32I(LEA(label,~4), tag)] @
 									instrs,
 									[LI(recIntTag, tag),
@@ -1269,7 +1252,7 @@ struct
       let val dest = alloc_regi TRACE
 	  val state = needalloc(state,IMM 4)
 	  val _ = (align_odd_word();
-		   store_tag_zero(mk_quad_array_tag (i2w 8));
+		   store_tag_zero(Rtltags.mk_quad_array_tag (i2w 8));
 		   add_instr(STORE64F(REA(heapptr,4),regf));
 		   add(heapptr,4,dest);
 		   add(heapptr,12,heapptr))
@@ -1300,7 +1283,7 @@ struct
 	  end
       val state = needalloc(state,IMM((if len = 0 then 1 else 2*len)+2))
       val _ = (align_odd_word();
-	       store_tag_zero(mk_quad_array_tag(i2w (8 * len)));
+	       store_tag_zero(Rtltags.mk_quad_array_tag(i2w (8 * len)));
 	       add_instr(ADD(heapptr,IMM 4,res)))
 
     in
@@ -1320,8 +1303,8 @@ struct
 		 mover: ('a * 'a) -> instr)
 	        (src : 'a list,
 		 dest : 'a list) = 
-      let fun isdest r = member_eq(eqreg,r, dest)
-	
+      let fun isdest r = Listops.member_eq(eqreg,r, dest)
+ 
 	local
 	  (* given two lists of equal length, remove corresponding equal elements *)
 	  fun sieve2 (h::t,h'::t') =
@@ -1341,12 +1324,14 @@ struct
 	val needtmp = map (fn r => (r,isdest r)) src
 	  
 	(* create temp regs for these, and copy sources into them.*)
-	val tmps = map (fn (r,true) =>
-			let val r' = alloc(r)
-			in  add_instr(mover(r,r'));
-			  (r,SOME r')
-			end
-      |  (r,_) => (r,NONE)) needtmp
+	val tmps = 
+	  map (fn (r,b) => 
+	       if b then
+		 let val r' = alloc(r)
+		 in  add_instr(mover(r,r'));
+		   (r,SOME r')
+		 end
+	       else (r,NONE)) needtmp
 	  
 	fun merge (nil,nil) = ()
 	  | merge ((h',tmp)::t',h::t) =
@@ -1369,8 +1354,12 @@ struct
     fun mv (I ir1, I ir2) = MV(ir1,ir2)
       | mv (F fr1, F fr2) = FMV(fr1,fr2)
       | mv _ = error "cannot move between int and float regs"
-    val shuffle_fregs =	shuffle (eqregf, fclone, FMV)
-    val shuffle_iregs = shuffle (eqregi, iclone, MV)
+
+    (* shuffle_regs (src_regs,dst_regs)               *)
+    (* Emits instructions to move the value of each src_reg into the corresponding dst_reg. *)
+    (* i.e., final value of dst_regs[i] == initial value of src_regs[i]                     *)
+    (* At the moment, this is only used in Tortl when translating recursive tailcalls.      *)
+    (*       joev, 8/2002                                                                   *)
     val shuffle_regs  = shuffle (eqreg, clone, mv)
   end
 

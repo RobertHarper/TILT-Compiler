@@ -621,7 +621,7 @@ struct
 		       | mapper (TAG w) = INT32 w
 		       | mapper (REAL l) =  DATA l
 		       | mapper (RECORD (l,_)) = DATA l
-		       | mapper (VOID _) = (print "Warning: xvector got VOID, not propogated!\n";
+		       | mapper (VOID _) = (print "Warning: xvector got VOID, not propagated!\n";
 					    INT32 0w0)
 		       | mapper (LABEL l) = DATA l
 		       | mapper (CODE l) = DATA l

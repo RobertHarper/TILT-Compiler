@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL Optimize String NilDefs *)
+(*$import Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps TORTL Optimize String NilDefs *)
 
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
@@ -41,6 +41,12 @@ struct
 
   (* Module-level declarations *)
   open Nil Rtl TortlBase
+  structure TB = TortlBase
+  structure TW32 = TilWord32
+  structure TW64 = TilWord64
+  
+  val w2i = TW32.toInt
+  val i2w = TW32.fromInt;
 
   val fresh_var = Name.fresh_var
   val fresh_named_var = Name.fresh_named_var
@@ -66,10 +72,6 @@ struct
 
     val exncounter_label = C_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
-    structure TW32 = TilWord32
-    structure TW64 = TilWord64
-    val w2i = TW32.toInt
-    val i2w = TW32.fromInt;
 
     val con_depth = ref 0
     val exp_depth = ref 0
@@ -290,6 +292,7 @@ struct
       in  Listops.foldl_acc folder state elist
       end
 
+  (* xexp just wraps xexp'' with debugging output.  joev *)
   and xexp (state   : state,     (* state of bound variables *)
 	    name    : var,       (* Purely for debugging and generation of useful names *)
 	    arg_e   : exp,       (* The expression being translated *)
@@ -327,11 +330,7 @@ struct
 	  fun pickdestf () = alloc_named_regf name
 	  val res = 
 	  case arg_e of
-	      Var_e v => 
-		  (case (getrep state v) of
-		       (_,SOME value) => (VALUE value, state)
-		     | (SOME loc,_) => (LOCATION loc, state)
-		     | (NONE,NONE) => error "no info on var")
+	      Var_e v => (getrep state v,state) 
 	    | Const_e v => xconst(state,v)
 	    | Let_e (_, [], body) => xexp(state,name,body,trace,context)
 	    | Let_e (_, bnds, body) => 
@@ -354,29 +353,26 @@ struct
 		  let 
 		      val _ = incApp()
 		      val _ = add_instr (ICOMMENT ("making external call"))
-		      fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
+
 		      fun efolder(e,(eregs,fregs,state)) = 
 			  let val (res,state) = xexp'(state,fresh_named_var "call_e", 
 							e, Nil.TraceUnknown, NOTID)
 			  in  case res of
-			      I ir => (ir::eregs,fregs,state)
-			    | F fr => (eregs,fr::fregs,state)
+			      I _ => (res::eregs,fregs,state)
+			    | F _ => (eregs,res::fregs,state)
 			  end
 
 		      val (rev_iregs, rev_fregs, state) = foldl efolder ([],[],state) elist
 		      val iregs = rev rev_iregs
 		      val fregs = rev rev_fregs
-		      val args = (map I iregs) @ (map F fregs)
+		      val args = iregs @ fregs
 
-		      val Var_e expvar = f
-		      val (vlopt,vvopt) = getrep state expvar
-
-		      val fun_reglabel = 
-				(case (vlopt,vvopt) of
-				     (NONE,SOME(CODE (ML_EXTERN_LABEL s))) => LABEL' (C_EXTERN_LABEL s)
-				   | (SOME loc, _) => REG'(load_ireg_loc(loc, NONE))
-				   | _ => error "bad varloc or varval for function")
-				     
+		      val expvar = case f of Var_e v => v | _ => error "Function in an extern app should be a variable."
+		      val fun_reglabel =
+			case getrep state expvar of
+			  VALUE (CODE (ML_EXTERN_LABEL s)) => LABEL' (C_EXTERN_LABEL s)
+			| LOCATION loc => REG'(load_ireg_loc(loc,NONE))
+			| _ => error "bad varval for function"
 				     
 		      val (_,dest) = alloc_reg_trace state trace
 		      val _ = add_instr(CALL{call_type = C_NORMAL,
@@ -401,6 +397,7 @@ struct
 						    then "closure polycall"
 						else "closure call"))
 
+		      (* Compute all the arguments and get them in registers. *)
 		      local 
 			  fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
 			  fun efolder(e,state) = xexp'(state,fresh_named_var "call_e", 
@@ -412,20 +409,20 @@ struct
 		      end
 
 		      val _ = add_instr (ICOMMENT ("making " ^ call_type))
-		      fun direct_call expvar = 
-			  let 
-			      val (vlopt,vvopt) = getrep state expvar
-			  in  (Name.eq_var(#1(getCurrentFun()), expvar), 
-			       (case (vlopt,vvopt) of
-				    (NONE,SOME(CODE l)) => LABEL' l
-				  | (SOME loc, _) => REG'(load_ireg_loc(loc, NONE))
-				  | _ => error "bad varloc or varval for function"),
-				    [], [],state)
-			  end
-		      
+
+		      (* a. Find out if this is a self call. *)
+		      (* b. Ensure that either we know the label of the function code, or have it in a register. *)
+		      (* c. If there are additional arguments (i.e. from a closure), get them into registers. *)
 		      val (selfcall,fun_reglabel,cregsiCl,eregsCl,state) = 
 			  (case (openness,f) of
-			       (Code,Var_e expvar) => (direct_call expvar)
+			       (Code,Var_e expvar) => 
+				 (* This is a direct call. *)
+				 (Name.eq_var(#1(getCurrentFun()), expvar), 
+				      (case (getrep state expvar) of
+					 (VALUE (CODE l)) => LABEL' l
+				       | (LOCATION loc) => REG'(load_ireg_loc(loc, NONE))
+				       | _ => error "bad varval for function"),
+					 [], [],state)
 			     | (Code,_) => error "ill-formed application"
 			     | (Open,_) => error "no open apps allowed"
 			     | (Closure,cl) =>
@@ -445,16 +442,16 @@ struct
 				   in  (false, REG' funregi, [cregi], [I eregi], state)
 				   end)
 			       
-		      val args = (map I cregsiCl) @ 
-			         (map I cregsi) @
+		      (* Now we really have all the arguments.  Put them in order. *)
+		      val args = (map I cregsiCl) @ (map I cregsi) @
 				 eregsCl @ eregs @ efregs
+
 		      val (resrep,dest) = alloc_reg_trace state trace
-		      val context = if (!elim_tail_call)
-					then context
-				    else NOTID
+		      val context = if (!elim_tail_call) then context else NOTID
 		  in
 		      (case (context,selfcall) of
 			   (NOTID, _) => 
+			     (* This is just a normal call. *)
 			       (add_instr(CALL{call_type = ML_NORMAL,
 					       func = fun_reglabel,
 					       args = args,
@@ -464,11 +461,14 @@ struct
 				(LOCATION(REGISTER (false,dest)), 
 				 new_gcstate state))
 			 | (ID r,true) =>  
+			       (* This is a recursive tailcall.  Move the recursive arguments *)
+			       (* into the right registers, and jump back to the beginning.   *)
 			       (shuffle_regs(args,getArgs());
 				add_instr(BR (getTop()));
 				add_instr (ICOMMENT ("done making self tail call"));
 				(VALUE (VOID resrep), state))
 			 | (ID r,false) =>
+			       (* This is a non-recursive tailcall.                           *)
 			       (add_instr(CALL{call_type = ML_TAIL r,
 					       func = fun_reglabel,
 					       args = args,
@@ -510,6 +510,18 @@ struct
 		  in  add_instr(JMP(SREGI HANDLER,[]));
 		      (VALUE(VOID rep), state)
 		  end
+
+	    (* The comment below does not make much sense.  As far as I can tell the runtime 
+	     does nothing special in the course of handling an exception other than possibly 
+	     popping some stacklets.  I think the point is that anything we have on the stack
+	     when we install the handler will still be there if we end up in the handler; in 
+	     particular, anything below us on the stack (i.e. data that will be accessed after
+	     the entire Handle_e is finished, i.e. by its continuation) will not be disturbed
+	     by the exception event.  Of course, it is the Raise_e expression, not the 
+	     runtime, that restores the stack pointer before jumping to the handler.
+
+	     However, I am leaving the bizarre comment in because I think people expect to
+	     find it here.             joev, 8/2002.          *)
             (* --- We rely on the runtime to unwind the stack so we don't need to save the
 	           free variables of the continuation of this expression. *)
 	    | Handle_e {body = exp, bound = exnvar, 
@@ -521,19 +533,17 @@ struct
 			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExnHandler(false, 0, handler_body)
 			  (* Include only constructors that have locations *)
 			  val cTerms = List.mapPartial
-					    (fn v => (case (getconvarrep' state v) of
-							  NONE => NONE
-							| SOME (SOME loc, _) => SOME (LOCATION loc)
-							| _ => NONE)) 
+			                    (fn v => (case (getconvarrep' state v) of
+							SOME (SOME (LOCATION loc)) => SOME (LOCATION loc)
+						      | _ => NONE)) 
 					    (Name.VarSet.listItems free_cvars)
-			  (* Drop the exception variables - include only locations *)
+			  (* Drop the exception variables, and include only locations *)
 			  val eTerms = List.mapPartial 
 			                    (fn v => 
 					     if (Name.eq_var(v,exnvar)) then NONE else
 					     (case (getrep state v) of
-							 (_, SOME v) => NONE
-						       | (SOME l, _) => SOME(LOCATION l)
-						       | _ => error "eTerm wrong")) 
+							 (VALUE v) => NONE
+						       | (LOCATION l) => SOME(LOCATION l))) 
 					    (Name.VarSet.listItems free_evars)
 			  val terms = eTerms @ cTerms
 			  fun folder (term, acc as (ir,it,fr,ft)) = 
@@ -634,10 +644,12 @@ struct
                       (* --- compute the handler; move result into same register
                              as result reg of expression; add after label; and fall-through *)
 		      val (hreg,hstate) = xexp'(hstate,name,handler_body,trace,context)
-		      val _ = (case (hreg,reg) of
+(*		      val _ = (case (hreg,reg) of
 				   (I hreg,I reg) => add_instr(MV(hreg,reg))
 				 | (F hreg,F reg) => add_instr(FMV(hreg,reg))
 				 | _ => error "hreg/ireg mismatch in handler")
+*)
+		      val _ = add_instr (mv(hreg,reg))
 		      val _ = add_instr(ILABEL handler_after)
 
 		      val state = join_states[state,bstate,hstate]
@@ -651,6 +663,8 @@ struct
 
 
 
+      (* zero_one : state * regi * niltrace * exp * exp * context -> term * state *)
+      (* A helper for some cases of xswitch.                                      *)
       (* The trick is to notice that for certain args, the comparison and computation
          can be folded into one instruction. *)
       and zero_one (state : state, r : regi, 
@@ -685,13 +699,25 @@ struct
 	       ) : term * state =
       let
 	  val _ = incCase()
+
+	  val swtype = case sw of
+	    Intsw_e _ => "intcase"
+	  | Exncase_e _ => "exncase"
+	  | Typecase_e _ => "typecase"
+	  | Sumsw_e _ => "sumcase"
+	  | Ifthenelse_e _ => "ifthenelse"
+	  val afterl = fresh_code_label ("after_" ^ swtype)
+
 	  val dest = ref NONE
-	  fun move r = let val _ = (case (!dest) of
-					  NONE => dest := (SOME (#2(alloc_reg_trace state trace)))
-					| _ => ())
-			     val d = valOf(!dest)
-			 in add_instr(mv(r,d))
-			 end
+	  fun move r = 
+	    let val d = case !dest of
+	                     SOME d => d
+			   | NONE => let val d = #2(alloc_reg_trace state trace)
+				     in dest := SOME d; d
+				     end
+	    in add_instr(mv(r,d))
+	    end
+
 	  fun no_match state = 
 	      (case (!dest) of
 		   SOME _ => let val c = NilDefs.dummy_con (* XXX not really *)
@@ -701,6 +727,24 @@ struct
 			     in  move r; newstate
 			     end
 		 | NONE => error "empty switch statement")
+
+	  (* If tag cmp i, branch to label *)
+	  fun check lbl cmp i tag = 
+	    (if in_imm_range i
+	       then add_instr(BCNDI(cmp,tag,IMM (w2i i), lbl, true))
+	     else 
+	       let val tmp = alloc_regi(NOTRACE_INT)
+	       in  add_instr(LI(i,tmp));
+		 add_instr(BCNDI(cmp,tag,REG tmp,lbl, true))
+	       end)
+
+	  fun do_arm_body (state,body,trace,context) : state =
+	    let val (r,state) = xexp'(state,fresh_var(),body,trace,context)
+	    in move r;
+	       add_instr(BR afterl);
+	       state
+	    end
+
       in
 	  case sw of
 	      Intsw_e {size, arg, arms, default, result_type} => 
@@ -711,7 +755,6 @@ struct
 		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, trace, z, one, context)
 		    | _ => (* general case *)
 			  let 
-			      val afterl = fresh_code_label "after_intcase"
 			      fun scan(states,lab,[]) = 
 				  (add_instr(ILABEL lab);
 				   case default of
@@ -724,18 +767,8 @@ struct
 				| scan(states,lab,(i,body)::rest) =
 				  let val next = fresh_code_label "intarm"
 				  in  add_instr(ILABEL lab);
-				      if in_imm_range i
-					  then add_instr(BCNDI(NE,r,IMM (w2i i), next,true))
-				      else let val tmp = alloc_regi(NOTRACE_INT)
-					   in add_instr(LI(i,tmp));
-					      add_instr(BCNDI(NE,r,REG tmp, next,true))
-					   end;
-				      let val (r,newstate) = 
-					  xexp'(state,fresh_var(),body,trace,context)
-				      in  move r;
-					  add_instr(BR afterl);
-					  scan(newstate::states,next,rest)
-				      end
+				      check next NE i r;
+				      scan( do_arm_body(state,body,trace,context)::states, next, rest )
 				  end
 			      val new_states = scan([],fresh_code_label "intarm",arms)
 			      val state = join_states new_states
@@ -753,7 +786,6 @@ struct
 
 		      val exntag = alloc_regi(NOTRACE_INT)
 		      val _ = record_project(exnarg,0,exntag)
-		      val afterl = fresh_code_label "after+exncase"
 		      fun scan(states,lab,[]) =
 			  (add_instr(ILABEL lab);
 			   case default of
@@ -784,12 +816,7 @@ struct
 			      val state = add_reg (state,bound,c,carried)
 			  in  add_instr(BCNDI(NE,exntag,REG armtagi,next,true));
 			      record_project(exnarg,1,carriedi);
-			      let val (r,state) = xexp'(state,fresh_var(),body,
-							  trace,context)
-			      in  move r;
-				  add_instr(BR afterl);
-				  scan(state::states,next,rest)
-			      end
+			      scan( do_arm_body(state,body,trace,context)::states,next,rest )
 			  end
 		      val states = scan([],fresh_code_label "exnarm",arms)
 		      val state = join_states states
@@ -802,7 +829,6 @@ struct
 	    | Typecase_e {arg,arms,default,result_type} => 
 		  let
 		      val (conr,state) = xcon(state,fresh_named_var "typecase_arg",arg)
-		      val afterl = fresh_code_label "afterTypecase"
 		      val defaultl = fresh_code_label "defaultTypecase"
 		      val contagr = alloc_regi(NOTRACE_INT)
 		      val arityr = alloc_regi(NOTRACE_INT)
@@ -833,11 +859,7 @@ struct
 			      val _ =  add_instr(ILABEL lab);
 			      val _ = add_instr(BCNDI(NE,arityr,IMM arity,next,true));
 			      val state = loop (2,vklist,state)
-			      val (r,state) = xexp'(state,fresh_var(),body,
-						    trace,context)
-			  in  move r;
-			      add_instr(BR afterl);
-			      scan(state::states,next,rest)
+			  in scan( do_arm_body(state,body,trace,context)::states, next, rest)
 			  end
 		      val states = scan([],fresh_code_label "typecasearm",arms)
 		      val state = join_states states
@@ -866,8 +888,7 @@ struct
 		| _ =>
 		  let val (I r,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,
 						Nil.TraceUnknown,NOTID)
-		      val afterl = fresh_code_label "after_sum"
-		      val nomatchl = fresh_code_label "nomatch_sum"
+		    val nomatchl = fresh_code_label "nomatch_sum"
 		      val one_carrier = (length cons) = 1
 		      val total = TW32.uplus(tagcount, i2w(length cons))
 		      val exhaustive = 
@@ -896,15 +917,6 @@ struct
 				  if (TW32.ult(i,tagcount))
 				      then state
 				  else add_reg (state,bound,spcon i, I r)
-			      (* If tag cmp i, branch to label *)
-			      fun check lbl cmp i tag = 
-				  (if in_imm_range i
-				       then add_instr(BCNDI(cmp,tag,IMM (w2i i), lbl, true))
-				   else 
-				       let val tmp = alloc_regi(NOTRACE_INT)
-				       in  add_instr(LI(i,tmp));
-					   add_instr(BCNDI(cmp,tag,REG tmp,lbl, true))
-				       end)
 			      val check_ptr_done = ref (TW32.equal(tagcount,0w0))
 			      val load_tag_done = ref false
 			      fun check_ptr() = 
@@ -927,12 +939,7 @@ struct
 						    then ()
 						else (load_tag();
 						     check next NE (TW32.uminus(i,tagcount)) tag)));
-			      let val (r,state) = xexp'(state,fresh_var(),body,
-							  trace,context)
-			      in  move r;
-				  add_instr(BR afterl);
-				  scan(state::newstates,next,rest)
-			      end
+		              scan( do_arm_body(state,body,trace,context)::newstates, next, rest )
 			  end
 		      val states = scan([],fresh_code_label "sumarm",arms)
 		      val state = join_states states
@@ -943,6 +950,8 @@ struct
 			| _ => error "no arms"
 		  end)
 	      end
+	    | Ifthenelse_e _ =>
+	      error "Ifthenelse_e not supported in Tortl"
       end
 
 
@@ -1110,15 +1119,11 @@ struct
 
 	  (* First, rewrite negation as subtraction.
 	  *)
-	  val zero_exp = Const_e(Prim.int(Prim.W32,TW64.zero))
-	  val zero_term = VALUE(INT 0w0)
 	  val (prim,elist) = (case (prim,elist) of
-				  (Prim.neg_int is, [e]) => (Prim.minus_int is, [zero_exp,e])
+				  (Prim.neg_int is, [e]) => (Prim.minus_int is, [NilDefs.zero_int_exp,e])
 				| _ => (prim,elist))
 
 	  val _ = incPrim()
-	  val int32 = Prim_c(Int_c W32, []) 
-	  val float64 = Prim_c(Float_c F64, []) 
 	  fun xtt int_tt = INT_TT
 	    | xtt real_tt = REAL_TT
 	    | xtt both_tt = BOTH_TT
@@ -1375,7 +1380,7 @@ struct
 		  
 	     (* Note that zero is NOT a legal representation for an empty array. *)
 	     | (create_empty_table t) => 
-		       extract_dispatch(t,state,(zero_term,NONE),
+		       extract_dispatch(t,state,(VALUE (INT 0w0),NONE),
 					(TortlArray.xarray_float,
 					 TortlArray.xarray_int,
 					 TortlArray.xarray_known,
@@ -1448,9 +1453,13 @@ struct
 	    name : var, (* Purely for debugging and generation of useful names *)
 	    arg_con : con     (* The expression being translated *)
 	    ) : bool * term * state = 
+    (* The boolean result indicates whether this con is "constant". *)
+    (* Terms whose representations are statically computed here are constant; *)
+    (* representations constructed at run-time can be "constant" if they don't *)
+    (* depend on anything non-constant.                                        *)
       let 
-	  fun mk_ptr  i = (true, VALUE (TAG (TW32.fromInt i)), state)
-	  fun mk_ptr' i = (true, VALUE (TAG (TW32.fromInt i)), state)
+	  fun mktag i = (VALUE (INT (TW32.fromInt i)))
+	  fun mk_ptr  i = (true, mktag i, state)
 	  fun mk_sum (state,preTerms,cons) = 
 	      let fun folder (c,(const,s)) =
 		       let val (const',t,s) = xcon'(s,fresh_named_var "xcon_sum",c)
@@ -1463,16 +1472,15 @@ struct
 				   else TortlRecord.make_record(state,terms)
 	      in (const, res, state)
 	      end
-	  fun mktag i = (VALUE (INT (TW32.fromInt i)))
 	  open Prim
       in
 	  (case arg_con of
 	       Prim_c(Int_c W8, []) => mk_ptr 0
 	     | Prim_c(Int_c W16, []) => mk_ptr 1
 	     | Prim_c(Int_c W32, []) => mk_ptr 2
-	     | Prim_c(Int_c W64, []) => mk_ptr' 3
-	     | Prim_c(Float_c F32, []) => mk_ptr' 6 
-	     | Prim_c(Float_c F64, []) => mk_ptr' 7
+	     | Prim_c(Int_c W64, []) => mk_ptr 3
+	     | Prim_c(Float_c F32, []) => mk_ptr 6 
+	     | Prim_c(Float_c F64, []) => mk_ptr 7
 	     | Prim_c(BoxFloat_c F32, []) => mk_ptr 10
 	     | Prim_c(BoxFloat_c F64, []) => mk_ptr 11
 	     | Prim_c(Exn_c,[]) => mk_ptr 12
@@ -1545,24 +1553,21 @@ struct
 	     | AllArrow_c {openness=Open,...} => error "open Arrow_c"
 	     | AllArrow_c {openness=Closure,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
 		   mk_sum(state,[mktag 9],[])
-(*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
 	     | AllArrow_c {openness=Code,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
 		   mk_sum(state,[mktag 10],[])
-(*		   mk_sum_help(state,[10,TW32.toInt numfloat],c::clist) *)
 	     | ExternArrow_c _ =>
 		   mk_sum(state,[mktag 11],[])
-(*		   mk_sum_help(NONE,[11,TW32.toInt numfloat],c::clist) *)
 	     | Var_c v => 
 		   let val (vl,vv) = 
 		       (case (getconvarrep state v) of
-			    (_,SOME vv) => (true, VALUE vv)
-			  | (SOME vl,_) => 
+			    SOME (VALUE vv) => (true, VALUE vv)
+			  | SOME (LOCATION vl) => 
 				let val const = (case vl of
 							GLOBAL _ => true
 						      | REGISTER (const,_) => const)
 				in  (const, LOCATION vl)
 				end
-			  | (NONE,NONE) => error ("no info on convar " ^ (Name.var2string v)))
+			  | NONE => error ("Tried to translate compiletime convar " ^ (Name.var2string v)))
 		   in  (vl,vv,state)
 		   end
 	     | Let_c (letsort, cbnds, c) => 
@@ -1720,7 +1725,7 @@ struct
 	      val (r,state) = xexp'(state,fresh_named_var "result",body,
 				      Nil.TraceUnknown, ID return)
 	      val result = getResult(fn() => r)
-	      val results = (case result of
+	      val results = (case result of    (* XXX Not used joev *)
 				 I ir => ([ir],[])
 			       | F fr => ([],[fr]))
 	      val _ = (add_instr(mv(r,result));

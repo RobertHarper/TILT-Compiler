@@ -1,20 +1,15 @@
-(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int List Rtl Pprtl Rtltags TortlBase Nil TORTLRECORD Stats *)
+(*$import Prelude TopLevel Util Listops Int List Rtl Rtltags TortlBase TORTLRECORD Stats *)
 
 structure TortlRecord :> TORTL_RECORD =
 struct
 
    (* Module-level declarations *)
 
-    open Util Listops
-    open Name 
+  
     open Rtl
-    open Pprtl 
-    open Rtltags 
     open TortlBase
 	
     fun error s = Util.error "tortl-record.sml" s
-    structure TW32 = TilWord32
-    structure TW64 = TilWord64
 
     val do_reject_nonValue = Stats.tt("Reject_NonValue")
     val debug = Stats.ff("TortlRecordDebug")
@@ -24,7 +19,8 @@ struct
     val maxRtlRecord = TortlBase.maxRtlRecord
 
 
-    (* tag_from_reps generates code to compute the tag word for a record, given the rep's of *)
+    (* record_tag_from_reps : rep list -> term                                                 *)
+    (* record_tag_from_reps generates code to compute the tag word for a record, given the rep's of *)
     (* its components.  The degenerate cases are the empty record, which does not need a tag,  *)
     (* and records that are too long to be allocated in one shot.  It is harmless to call      *)
     (* make_record_tag in these cases, but of course we do not want to try to use the resulting *)
@@ -42,7 +38,7 @@ struct
       in
 	if len = 0 then VALUE (INT 0w0)  (* Some arbitrary thing *)
 	else if len > maxRtlRecord then VALUE (INT 0w0) (* Some other thing *)
-	     else tag_to_term (recordtag reps)
+	     else tag_to_term (Rtltags.recordtag reps)
       end
 	
   fun make_record_core_with_tag (const, state, tagword : term, terms, labopt) = 
@@ -77,86 +73,82 @@ struct
 	val staticComponents = (Listops.andfold (fn VALUE _ => true
 						 | _ => false) (tagword::terms))
 
-	(* What is the deal with storenew?  The only time it does anything other than 
-	 add a STORE32I is when it calls repPathIsPointer -- but it ignores the result
-	 of this call.  repPathIsPointer generates some instructions,
-	 but there should be no observable effect.  I don't get it.  joev *)
-	(*
-	fun storenew(ea,r,rep) = 
-	    (case rep of
-		 TRACE => add_instr(STORE32I(ea,r))
-	       | NOTRACE_INT => add_instr(STORE32I(ea,r))
-	       | NOTRACE_CODE => add_instr(STORE32I(ea,r))
-	       | NOTRACE_LABEL => add_instr(STORE32I(ea,r))
-	       | COMPUTE path => let val isPointer = repPathIsPointer path
-				 in  add_instr(STORE32I(ea,r))
-				 end
-	       | _ => error "storenew got funny rep")
-	    *)
-	fun storenew (ea,r,_) = add_instr (STORE32I(ea,r))
-
-	(* Offset starts from the point of allocation not from start of the object *)
-	fun scan_vals (offset,[]) = offset
-	  | scan_vals (offset,vl::vls) =
-	    (if const
-		 then (case vl of
-			   VALUE v => (nonHeapCount := 1 + !nonHeapCount;
-				       (case v of
-					    (INT w32) => add_data(INT32 w32)
-					  | (TAG w32) => add_data(INT32 w32)
-					  | (RECORD (l,_)) => add_data(DATA l)
-					  | (LABEL l) => add_data(DATA l)
-					  | (CODE l) => add_data(DATA l)
-					  | (REAL l) => error "make_record_core given REAL"
-					  | (VOID _) => add_data(INT32 0w0) (* 0 is an ok bit pattern for any trace. *)
-					      ))
-			 | _ => let val nonheap = repIsNonheap (term2rep vl)
-				    val _ = if nonheap
-						then nonHeapCount := 1 + !nonHeapCount
-					    else heapCount := 1 + !heapCount;
-				    val r = load_ireg_term(vl,NONE)
-				in  add_data(INT32 uninitVal);
-				    add_instr(STORE32I(LEA(recordLabel,offset - 4), r))
-				end)
-	     else let val r = load_ireg_term(vl,NONE)
-		  in  storenew(REA(heapptr(),offset),r,term2rep vl)
-		  end;
-	     scan_vals(offset+4,vls))
-
+	(* The tag word comes first. *)
 	val _ = 	    
 	  if const then 
-	    if staticComponents
-	      then case tagword of 
-		      VALUE (INT i) => add_data (INT32 i)
-		    | _ => error "making constant record with dynamic tag"
-	    else let val _ = add_data(INT32 (Rtltags.skip (1 + numTerms)))
-		     val r = load_ireg_term(tagword,NONE)
-		 in  add_instr(STORE32I(LEA(recordLabel,~4),r))
-		 end
-	  else 
+	    if staticComponents then
+	      (* Everything in the record is static; we should just know the tag word. *)
+	      case tagword of 
+		VALUE (INT i) => add_data (INT32 i)
+	      | _ => error "making constant record with dynamic tag" (* This can't happen. joev *)
+	    else
+	      (* Record will be initialized at run time.  Until then, its tag word is a skip. *)
+	      let val _ = add_data(INT32 (Rtltags.skip (1 + numTerms)))
+		  val r = load_ireg_term(tagword,NONE)
+	      in  add_instr(STORE32I(LEA(recordLabel,~4),r))
+	      end
+	  else
+	    (* Dynamic heap allocation. *)
 	    let val r = load_ireg_term(tagword,NONE)
 	    in
 	      add_instr(STORE32I(REA(heapptr(),0),r))
 	    end
 	     
-      val (result,templabelopt) = 
-	  if const
-	      then (add_data(DLABEL recordLabel);
-		    (VALUE(LABEL recordLabel), SOME recordLabel))
-	  else (LOCATION (REGISTER (false,I dest)), NONE)
-      val offset = scan_vals (4, terms)
+        (* Two separate loops, one for the constant case, one for the heap. *)
+	(* Note: in both cases, offset starts from the point of allocation not from start of the object *)
+	local
+	  fun scan_vals_const (offset,[]) = offset
+	    | scan_vals_const (offset,vl::vls) =
+	    ((case vl of
+		VALUE v => (nonHeapCount := 1 + !nonHeapCount;
+			    (case v of
+			       (INT w32) => add_data(INT32 w32)
+			     | (TAG w32) => add_data(INT32 w32)
+			     | (RECORD (l,_)) => add_data(DATA l)
+			     | (LABEL l) => add_data(DATA l)
+			     | (CODE l) => add_data(DATA l)
+			     | (REAL l) => error "make_record_core given REAL"
+			     | (VOID _) => add_data(INT32 0w0) (* 0 is an ok bit pattern for any trace. *)
+				 ))
+	      | _ => let val nonheap = repIsNonheap (term2rep vl)
+			 val _ = if nonheap then nonHeapCount := 1 + !nonHeapCount
+				 else heapCount := 1 + !heapCount;
+			 val r = load_ireg_term(vl,NONE)
+		     in  add_data(INT32 Rtltags.uninitVal);
+		       add_instr(STORE32I(LEA(recordLabel,offset - 4), r))
+		     end);
+		scan_vals_const(offset+4,vls))
 
-      (* The values of nonHeapCount and heapCount must be accessed only after scan_vals *)
-      val _ = (case (const, templabelopt) of
-		   (true, SOME label) => add_static_record (label, !nonHeapCount, !heapCount)
-		 | (true, NONE) => error "impossible control flow"
-		 | _ => ())
-      val _ = if const
-		  then ()
-	      else (add(heapptr(),4,dest);
-		    add(heapptr(),4 * words_alloced,heapptr()))
-      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length terms)) ^ " record"))
-    in  (result, state)
+	  fun scan_vals_heap (offset,[]) = offset
+	    | scan_vals_heap (offset,vl::vls) =
+	    let val r = load_ireg_term(vl,NONE)
+	    in add_instr (STORE32I(REA(heapptr(),offset),r));
+	      scan_vals_heap(offset+4,vls)
+	    end
+	in
+	  fun scan_vals vls = if const then scan_vals_const (4,vls)
+			      else scan_vals_heap(4,vls)
+	end
+
+      val result =
+	if const then
+	  (add_data(DLABEL recordLabel);
+	   scan_vals terms;
+	   (* The values of nonHeapCount and heapCount are meaningless until after scan_vals *)
+	   add_static_record (recordLabel,!nonHeapCount,!heapCount);
+	   (VALUE(LABEL recordLabel)))
+	else
+	  let val offset = scan_vals terms
+	  in
+	    add (heapptr(),4,dest);
+	    add (heapptr(),4*words_alloced,heapptr());
+	    LOCATION (REGISTER (false,I dest))
+	  end
+
+      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length terms)) ^ " record"));
+
+    in  
+      (result, state)
     end
 
 
@@ -165,11 +157,11 @@ struct
     in make_record_core_with_tag (const,state,tagword,terms,labopt)
     end
 
-  fun propogate_void l = 
+  fun propagate_void l = 
     (case l
        of [] => NONE
 	| ((VALUE (VOID _))::_) => SOME (VALUE(VOID Rtl.TRACE))
-	| (_::rest) => propogate_void rest)
+	| (_::rest) => propagate_void rest)
 
   fun make_record_help (const, state, reps, [], _) = (empty_record, state)
     | make_record_help (const, state, reps, terms, labopt) =
@@ -184,7 +176,7 @@ struct
 		   val reps = reps1 @ [TRACE]
 	       in  make_record_core(const,state, map term2rep terms, terms, labopt)
 	       end
-      in case propogate_void terms
+      in case propagate_void terms
 	   of SOME v => (v,state)
 	    | NONE => loop (state,reps,terms,labopt)
       end
@@ -192,7 +184,7 @@ struct
   fun make_record_help_with_tag (const,state,tagword,[],_) = (empty_record, state)
     | make_record_help_with_tag (const,state,tagword,terms,labopt) =
     if length terms < maxRtlRecord then 
-      case propogate_void terms
+      case propagate_void terms
 	of SOME v => (v,state)
 	 | NONE => make_record_core_with_tag (const,state,tagword,terms,labopt)
     else (* The precomputed tag is worthless; just do it the hard way. *) 
@@ -210,7 +202,7 @@ struct
 						 | _ => true)
 	      in  loop (vFlag,ncFlag) rest
 	      end
-      in  loop (true,true) (zip terms reps)
+      in  loop (true,true) (Listops.zip terms reps)
       end
 
   fun make_record_with_tag (state,tagword,terms) =
@@ -255,8 +247,6 @@ struct
       in  make_record_help(false,state,reps,terms,NONE)
       end
 
-  val record_project = TortlBase.record_project
-      
   (* Record_insert takes 4 arguments: (1) a totrl state, (2) a record r : TRACE, (3) a type rt where r : rt, 
                                       (4) a value v : NOTRACE_INT
         Reutrn a record r' whose first field is v and whose remaining fields are those of r.
@@ -266,7 +256,7 @@ struct
 
   fun record_insert (state,record : regi, recType : regi, field : regi) : state * regi = 
       let
-	  val state = needalloc(state,IMM (1+maxRecordLength)) (* one more for tag word *)
+	  val state = needalloc(state,IMM (1+Rtltags.maxRecordLength)) (* one more for tag word *)
 
 	  val len = alloc_regi NOTRACE_INT
 	  val mask = alloc_regi NOTRACE_INT
@@ -280,9 +270,9 @@ struct
 	  val tag = alloc_regi NOTRACE_INT
 	  val tmp = alloc_regi NOTRACE_INT
 	  val _ = add_instr(LOAD32I(REA(record,~4),tag))
-	  val _ = add_instr(SRL(tag, IMM rec_len_offset, tmp))
-	  val _ = add_instr(ANDB(tmp, IMM rec_len_mask, len))
-	  val _ = add_instr(SRL(tag, IMM rec_mask_offset, mask))
+	  val _ = add_instr(SRL(tag, IMM Rtltags.rec_len_offset, tmp))
+	  val _ = add_instr(ANDB(tmp, IMM Rtltags.rec_len_mask, len))
+	  val _ = add_instr(SRL(tag, IMM Rtltags.rec_mask_offset, mask))
 	  val _ = add_instr(ILABEL afterLenMask)
 
 	  (* Creating the new tag - Relies on all non-pointer types represented by 3 or less *)

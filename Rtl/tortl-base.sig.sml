@@ -41,8 +41,9 @@ sig
    datatype term = LOCATION of location
                  | VALUE of value
 
-   type var_rep = location option * value option
-   type convar_rep = location option * value option
+   (* convar_rep is the type of the value returned by getconvarrep;                *)
+   (* NONE means the convar is compile-time only and has no representation in RTL. *)
+   type convar_rep = term option
 
     val add_dynamic : Rtl.regi * {bitpos : int,
 				 path : Rtl.rep_path} list -> unit
@@ -81,9 +82,9 @@ sig
    val add_reg         : (state * var * con * reg) -> state
    val add_conterm     : (state * var * kind * term option) -> state
 
-   val getrep : state -> var -> var_rep
-   val getconvarrep : state -> var -> convar_rep
+   val getrep : state -> var -> term
    val getconvarrep' : state -> var -> convar_rep option
+   val getconvarrep : state -> var -> convar_rep
    val getCurrentFun : unit -> var * label
    val getLocals : unit -> reg list
    val getArgs : unit -> reg list
@@ -118,6 +119,8 @@ sig
    val repIsNonheap : Rtl.rep -> bool
 
    (* Routines for allocating registers and labels *)
+   (* alloc_reg_trace uses a niltrace to determine the correct type of register to allocate, and additionally *)
+   (*      returns the equivalent Rtl.rep for the niltrace.                                                   *)
    val alloc_regi : rep -> regi
    val alloc_named_regi : var -> rep -> regi
    val alloc_regf : unit -> regf
@@ -144,8 +147,12 @@ sig
    val in_ea_range : int -> term -> int option
    val in_imm_range_vl : term -> int option
    val add : regi * int * regi -> unit  (* source, int not necessarily in immediate range, dest *)
-   val shuffle_iregs : regi list * regi list -> unit
-   val shuffle_fregs : regf list * regf list -> unit
+
+   (* shuffle_regs (src_regs,dst_regs)               *)
+   (* Emits instructions to move the value of each src_reg into the corresponding dst_reg. *)
+   (* i.e., final value of dst_regs[i] == initial value of src_regs[i]                     *)
+   (* At the moment, this is only used in Tortl when translating recursive tailcalls.      *)
+   (*       joev, 8/2002                                                                   *)
    val shuffle_regs  : reg  list * reg  list -> unit
    val mv : reg * reg -> instr (* src -> dest *)
    val boxFloat : state * regf -> regi * state
@@ -158,8 +165,6 @@ sig
    val mk_quad_arraytag : regi * regi -> unit
    val mk_ptr_arraytag : regi * regi -> unit
    val mk_mirror_ptr_arraytag : regi * regi -> unit
-   val store_tag_zero : TilWord32.word -> unit
-   val store_tag_disp : int * TilWord32.word -> unit
 
    (* Recording stats *)
    val incSelect : unit -> unit

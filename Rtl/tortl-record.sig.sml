@@ -23,7 +23,6 @@ sig
     val make_record_with_tag: state * term * term list -> term * state
     val make_record_const   : state * term list * label option -> term * state
     val make_record_mutable : state * term list -> term * state
-    val record_project      : regi * int * regi -> unit   (* register contaiing record, index of field, dest register *)
 
    (* Add an extra field to the beginning of a record
       Remove the first field of a record
