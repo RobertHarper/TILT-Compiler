@@ -1,4 +1,4 @@
-(*$import TopLevel GRAPHUTIL List Array *)
+(*$import GRAPHUTIL TopLevel List Array *)
 
 (* Chris Okasaki
    School of Computer Science

@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS BBLOCK Int32 *)
+(*$import MACHINEUTILS BBLOCK Int32 Util Listops *)
 functor Bblock(structure Machineutils : MACHINEUTILS) 
     :> BBLOCK where Machine = Machineutils.Machine =
 struct
@@ -17,7 +17,7 @@ struct
 			       in_live   : Regset.set ref,
 			       out_live  : Regset.set ref,
 			       truelabel : bool,
-			       succs     : loclabel list ref}
+			       succs     : label list ref}
 
    (* utility functions *)
 
@@ -113,9 +113,9 @@ struct
 	   case Labelmap.find(block_map, blk) of
 	       SOME value => value
 	     | NONE => error ("findLiveTemps: getblock" ^
-			      (msLoclabel blk))
+			      (msLabel blk))
 
-       fun memberLabel labs l = Listops.member_eq(fn (l1,l2) => eqLLabs l1 l2, l,labs)
+       fun memberLabel labs l = Listops.member_eq(fn (l1,l2) => eqLabs l1 l2, l,labs)
 
        (* Aho/Sethi/Ullman suggests traversing the blocks in the
           OPPOSITE order from a depth-first-search through the
@@ -146,7 +146,7 @@ struct
 	     val block_liveins = map (fn l => getInLive (getBlock l)) (!succs)
              val out_live' = unionLists block_liveins
 	     val in_live'  =  
-		 if (eqLLabs blk first_label) (* the in_live of the first block never changes *)
+		 if (eqLabs blk first_label) (* the in_live of the first block never changes *)
 		     then (!in_live)
 		 else Regset.union (use, Regset.difference(out_live', def))
 (*

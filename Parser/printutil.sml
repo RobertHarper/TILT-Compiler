@@ -1,4 +1,4 @@
-(*$import PRINTUTIL Symbol Control Char TextIO Int32 *)
+(*$import PRINTUTIL Symbol Control Char TextIO Int32 String *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 (* printutil.sml *)
 
@@ -80,9 +80,12 @@ end (* structure PrintUtil *)
 
 (*
  * $Log$
-# Revision 1.4  98/02/15  22:44:06  pscheng
-# bootstrapping changes
+# Revision 1.5  98/04/24  22:51:58  pscheng
+# fixed imports
 # 
+# Revision 1.4  1998/02/15  22:44:06  pscheng
+# bootstrapping changes
+#
 # Revision 1.3  1998/02/01  01:28:14  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

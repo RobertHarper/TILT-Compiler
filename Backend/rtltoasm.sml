@@ -1,4 +1,4 @@
-(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int32 *)
+(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int32 Util Listops *)
 functor Rtltoasm (val commentHeader : string
 		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV
@@ -44,31 +44,7 @@ struct
    fun filter p [] = []
      | filter p (x::xs) = if (p x) then x :: (filter p xs) else filter p xs
 
-   fun xlocal_label (Rtl.LOCAL_DATA v) = LOCAL_DATA v
-     | xlocal_label (Rtl.LOCAL_CODE v) = LOCAL_CODE v
 
-   fun xlabel (Rtl.ML_EXTERN_LABEL s) = MLE s
-     | xlabel (Rtl.C_EXTERN_LABEL s) = CE(s,NONE)
-     | xlabel (Rtl.LOCAL_LABEL ll) = I(xlocal_label ll)
-
-   fun xalign Rtl.LONG = LONG
-     | xalign Rtl.ODDLONG = ODDLONG
-     | xalign Rtl.QUAD = QUAD
-     | xalign Rtl.OCTA = OCTA
-     | xalign Rtl.ODDOCTA = ODDOCTA
-
-   fun xdata (Rtl.COMMENT arg) = COMMENT arg
-     | xdata (Rtl.STRING arg) = STRING arg
-     | xdata (Rtl.INT32 arg) = INT32 arg
-     | xdata (Rtl.INT_FLOATSIZE arg) = INT_FLOATSIZE arg
-     | xdata (Rtl.FLOAT arg) = FLOAT arg
-     | xdata (Rtl.DATA arg) = DATA (xlabel arg)
-     | xdata (Rtl.ARRAYI arg) = ARRAYI arg
-     | xdata (Rtl.ARRAYF arg) = ARRAYF arg
-     | xdata (Rtl.ARRAYP (i,Rtl.PTR arg)) = ARRAYP(i,PTR (xlabel arg))
-     | xdata (Rtl.ARRAYP (i,Rtl.TAG arg)) = ARRAYP(i,TAG arg)
-     | xdata (Rtl.ALIGN arg) = ALIGN (xalign arg)
-     | xdata (Rtl.DLABEL arg) = DLABEL (xlabel arg)
 
 (* ----------------------------------------------------------------- *)
 
@@ -77,18 +53,9 @@ struct
 					  mutable_variables}) =
      let
       
-       local 
-	   val table = map (fn PROC{name,external_name,...} => (xlocal_label name,Util.mapopt xlabel external_name)) procs
-       in  fun name2external name = 
-	   (case (Listops.assoc_eq(fn(x,y) => eqLLabs x y,name,table)) of
-		NONE => error "bad name"
-	      | SOME res => res)
-       end
        val {callee_map, rtl_scc, ...} = Recursion.procGroups prog
        local
-	   val recursive_components =
-	       map (map Toasm.translateLocalLabel) rtl_scc
-	       
+	   val recursive_components = rtl_scc
 	   val _ = if (!debug)
 		       then (print "***** There are ";
 			     print (Int.toString (length procs));
@@ -99,15 +66,12 @@ struct
 						  (map length recursive_components)));
 			     print "\n")
 		   else ()
-	   fun memberLabel [] _ = false
-	     | memberLabel (l::rest) l' =
-	       (eqLLabs l l') orelse (memberLabel rest l')
 
 	   fun getComponent groups proc =
 	       let
 		   fun loop [] = error "getComponent: procedure not found"
 		     | loop (lst :: lsts) =
-	       if (memberLabel lst proc) then
+	       if Listops.member_eq(Rtl.eq_label,proc,lst) then
 		   lst
 	       else
 		   loop lsts
@@ -116,11 +80,10 @@ struct
 	       end
 	   
 	   fun sameComponent groups proc1 proc2 = 
-	       memberLabel (getComponent groups proc1) proc2
+	       Listops.member_eq(Rtl.eq_label, proc2, getComponent groups proc1)
        in
 	   val is_mutual_recursive = sameComponent recursive_components
-	   val names = map (fn (Rtl.PROC{name,external_name,...}) => 
-			    (Toasm.translateLocalLabel name,external_name)) procs
+	   val names = map (fn (Rtl.PROC{name,...}) => name) procs
 	   val component_names = recursive_components
        end
 
@@ -129,7 +92,7 @@ struct
 
        fun getSig proc_name = (case (Labelmap.find (!Labelmap, proc_name)) of
 				   SOME s => s
-				 | _ => error "getSig")
+				 | _ => error ("getSig " ^ (msLabel proc_name)))
 
        fun existsSig proc_name = 
 	   case Labelmap.find (!Labelmap,proc_name) of
@@ -164,7 +127,6 @@ struct
          | initSigs (proc::rest)=
 	   let 
 	     val (Rtl.PROC{name, args, results, return, known, ...}) = proc
-	     val name = Toasm.translateLocalLabel name
 	     val args = (map Toasm.translateIReg (#1 args)) @
 	                (map Toasm.translateFReg (#2 args))
 	     val results  = (map Toasm.translateIReg (#1 results)) @
@@ -187,7 +149,7 @@ struct
 		       else makeUnknownSig(args,results)
            in if existsSig name then
 	           error ("function names not unique: "; 
-			  msLoclabel name^" occurs twice")
+			  msLabel name^" occurs twice")
 	      else setSig name sign;
 	     initSigs rest
 	   end
@@ -198,7 +160,7 @@ struct
 	   
        fun findRtlProc p [] = error "findRtlProc"
 	 | findRtlProc p ((p' as Rtl.PROC{name,...})::rest) =
-	 if (Rtl.eq_locallabel (p, name)) then
+	 if (Rtl.eq_label (p, name)) then
 	   p'
 	 else
 	   findRtlProc p rest
@@ -206,7 +168,7 @@ struct
 
 
 
-       fun allocateProc1 (name : loclabel) =
+       fun allocateProc1 (name : label) =
 	 let 
 	     val _ = if (!debug)
 			 then (print "allocateProc 1 entered\n")
@@ -219,10 +181,7 @@ struct
 	       (SOME psig, NONE, [])
 	   else
 	       let
-		 val callees = 
-		   map Toasm.translateLocalLabel 
-		       (callee_map (Toasm.untranslateLocalLabel name))
-
+		 val callees = callee_map name
 		 val recursive_callees = 
 		   filter (is_mutual_recursive name) callees
 
@@ -233,7 +192,7 @@ struct
 		   if (! debug) then
 		     (emitString commentHeader;
 		      emitString ("  Allocating " ^ 
-				  (msLoclabel name) ^ "\n");
+				  (msLabel name) ^ "\n");
 		      emitString commentHeader;
 		      emitString "nonrecursive: ";
 		      print_list print_lab nonrecursive_callees;
@@ -256,15 +215,14 @@ struct
 				    else setSig name(makeUnknownSig(args,res))
 				 end) recursive_callees
 
-		 val _ = msg ((msLoclabel name) ^ "\n")
+		 val _ = msg ((msLabel name) ^ "\n")
 
 
 		 val _ = msg "\ttranslating\n"
 
 		 val (known, (blocklabels, block_map, tracemap,stack_resident)) =
 		   let
-		     val (rtlproc as Rtl.PROC{known,...})= 
-		       findRtlProc (Toasm.untranslateLocalLabel name) procs
+		     val (rtlproc as Rtl.PROC{known,...})= findRtlProc name procs
 		   in
 		     (known andalso (! knowns), 
 		      (* Stats.subtimer("toasm_translateproc", *) 
@@ -300,7 +258,7 @@ struct
 		     if !debug
 		     then (emitString commentHeader;
 			   emitString (" dumping initial version of procedure");
-			   dumpProc(name,name2external name,psig, block_map, blocklabels, true))
+			   dumpProc(name,psig, block_map, blocklabels, true))
 		     else ()
 
 		 val _ = msg "\tallocating\n"
@@ -311,7 +269,6 @@ struct
 
 		 val temp = Procalloc.allocateProc1
 		     {getSignature = getSig,
-		      external_name = name2external name,
 		      name      = name,
 		      block_map = block_map,
 		      tracemap  = tracemap,
@@ -344,9 +301,7 @@ struct
 		     val instrs = !instrs
 		     fun folder (annote_instr,acc) = 
 			 (case (Bblock.stripAnnot annote_instr) of
-			    (BASE(LADDR(_,I (LOCAL_CODE l)))) => (I (LOCAL_CODE l)) :: acc
-			  | (BASE(LADDR(_,MLE s))) => (MLE s) :: acc
-			  | (BASE(LADDR(_,CE x))) => (CE x) :: acc
+			    (BASE(LADDR(_,l))) => l :: acc
 			  | _ => acc)
 		 in foldl folder acc instrs
 		 end
@@ -359,7 +314,7 @@ struct
 		   (emitString commentHeader;
 		    emitString(" dumping final version of procedure "))
 	       else ();
-		dumpProc (name, name2external name,
+		dumpProc (name, 
 			  new_sig, new_block_map, 
 			  new_block_labels, !debug);
 		dumpDatalist gc_data;
@@ -384,7 +339,7 @@ struct
 		 fun helper (PROCSIG{regs_modified,...}) = regs_modified
 	     in
 		 fun get_modsetref (SOME psig,NONE,_) = helper psig
-		   | get_modsetref (NONE,SOME(_,({getSignature,external_name,name,block_map,
+		   | get_modsetref (NONE,SOME(_,({getSignature,name,block_map,
 						  procsig,stack_resident,tracemap},
 						  _,_,_,_)),_) = helper procsig
 		   | get_modsetref _ = error "allocateproc in allocatecomponent"
@@ -412,8 +367,7 @@ struct
 	 end
 
 
-       val main_loc_label = Toasm.translateLocalLabel main
-       val main' = Machine.msLoclabel main_loc_label
+       val main' = Machine.msLabel main
        val client_entry = main'^"_client_entry"
        val sml_global = main'^"_SML_GLOBALS_BEGIN_VAL"
        val end_sml_global = main'^"_SML_GLOBALS_END_VAL"
@@ -444,7 +398,7 @@ struct
        emitString (sml_global^":\n");
 
        dumpCodeLabel code_labels;
-       dumpDatalist (map xdata data);
+       dumpDatalist data;
        app emitString dataStart;
        emitString ("\n"^end_sml_global^":   ");
        emitString commentHeader;
@@ -452,26 +406,24 @@ struct
        emitString ("\t.long 0\n\n");
        dumpDatalist (Tracetable.MakeGlobalTable 
 		          (main', 
-			   map (fn (l, rep) => (xlabel l,Toasm.translateRep rep))
+			   map (fn (l, rep) => (l,Toasm.translateRep rep))
 			        mutable_variables));
 
-       dumpDatalist (Tracetable.MakeMutableTable (main', 
-						  map xlabel mutable_objects));
-
+       dumpDatalist (Tracetable.MakeMutableTable (main', mutable_objects));
        ()
      end (* allocateProg *)
        handle e => (Printutils.closeOutput (); raise e)
 
      fun dumpEntryTables nl =
 	 let val count = length nl
-	     val nl' = map msLoclabel (map Toasm.translateLocalLabel nl)
+	     val nl' = map msLabel nl
              fun mktable(name,suffix) =
 	       let 
 		 val temps = map (fn s => s ^ suffix) nl'
 		 val _ = app (fn s => emitString(extern_decl s)) temps
 	       in
-		 DLABEL (MLE name) ::
-		 map (fn s => DATA(MLE s)) temps
+		 DLABEL (ML_EXTERN_LABEL name) ::
+		 map (fn s => DATA(ML_EXTERN_LABEL s)) temps
 	       end
 	     val gc_table_begin =    mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
 	     val gc_table_end =	     mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
@@ -484,7 +436,7 @@ struct
 	     val codetable_begin =   mktable("CODE_BEGIN_VAL","_CODE_BEGIN_VAL")
 	     val codetable_end =     mktable("CODE_END_VAL","_CODE_END_VAL")
              val entrytable =        mktable("client_entry","")
-	     val count = [DLABEL (MLE "module_count"),
+	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
 			  INT32 (TilWord32.fromInt count)]
          in  
 	    dumpDatalist count;

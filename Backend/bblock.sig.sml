@@ -37,7 +37,7 @@ sig
  			        in_live   : Machine.Regset.set ref,
  			        out_live  : Machine.Regset.set ref,
  			        truelabel : bool,
- 			        succs     : Machine.loclabel list ref}
+ 			        succs     : Machine.label list ref}
 
    (* moved from annotate.sig.sml to here, since these
       need to be global.*)
@@ -48,7 +48,7 @@ sig
    val live : Machine.instruction annotated -> Machine.Regset.set
    val defUse : Machine.instruction -> Machine.register list * Machine.register list
    val blockDefUse : bblock -> bblock
-   val liveVars : bblock Machine.Labelmap.map -> Machine.loclabel -> 
+   val liveVars : bblock Machine.Labelmap.map -> Machine.label -> 
                         bblock Machine.Labelmap.map
 
 end

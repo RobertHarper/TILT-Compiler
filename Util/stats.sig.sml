@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 signature STATS =
    sig

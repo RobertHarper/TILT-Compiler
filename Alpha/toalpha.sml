@@ -1,4 +1,4 @@
-(*$import PPRTL DECALPHA MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM *)
+(*$import PPRTL DECALPHA MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
 (* Translation from Rtl to DecAlpha pseudoregister-assembly. *)
 functor Toalpha(val do_tailcalls : bool ref
                 structure Decalpha: DECALPHA 
@@ -56,20 +56,6 @@ struct
    end
 
 
-   (* Translate RTL local label into a DECALPHA local label *)
-   fun translateLocalLabel (Rtl.LOCAL_CODE v) = LOCAL_CODE v
-     | translateLocalLabel (Rtl.LOCAL_DATA v) = LOCAL_DATA v
-   fun untranslateLocalLabel (LOCAL_CODE v) = Rtl.LOCAL_CODE v
-     | untranslateLocalLabel (LOCAL_DATA v) = Rtl.LOCAL_DATA v
-(*
-   fun translateLocalLabel loclabel = loclabel
-   fun translateCodeLabel loclabel = loclabel
-*)
-   val translateCodeLabel = translateLocalLabel
-   fun translateLabel (Rtl.LOCAL_LABEL ll) = I (translateLocalLabel ll)
-     | translateLabel (Rtl.ML_EXTERN_LABEL label) = MLE label
-     | translateLabel (Rtl.C_EXTERN_LABEL label) = CE (label,NONE)
-
 
 
    fun translateRep rep =
@@ -81,8 +67,8 @@ struct
 	         Rtl.Projvar_p (Rtl.REGI(v,_),[]) => Tracetable.TRACE_STACK(add_stack (R (Name.var2int v)))
 	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) => Tracetable.TRACE_STACK_REC(add_stack(R (Name.var2int v)),i)
 	       | Rtl.Projvar_p (Rtl.SREGI _, i) => error "SREG should not contain type"
-	       | Rtl.Projlabel_p (l,[]) => Tracetable.TRACE_GLOBAL (translateLabel l)
-	       | Rtl.Projlabel_p (l,i) => Tracetable.TRACE_GLOBAL_REC (translateLabel l,i)
+	       | Rtl.Projlabel_p (l,[]) => Tracetable.TRACE_GLOBAL l
+	       | Rtl.Projlabel_p (l,i) => Tracetable.TRACE_GLOBAL_REC (l,i)
 	       | Rtl.Notneeded_p => Tracetable.TRACE_IMPOSSIBLE)
 	| Rtl.UNSET => Tracetable.TRACE_UNSET
 	| Rtl.NOTRACE_INT => Tracetable.TRACE_NO
@@ -140,21 +126,21 @@ struct
       packaged up into a BBLOCK and stored in the block_map. *)
 
    (* Name of the procedure being allocated *)
-   val current_proc   = ref (freshCodeLabel ()) : loclabel ref
+   val current_proc   = ref (freshCodeLabel ()) : label ref
 
    (* The current procedure's formal return variables; accessible
       here so that we can add them to DecAlpha's RETURN assembly op *)
    val current_res    = ref []              : register list ref
 
    (* Name/Label of the block currently being allocated *)
-   val current_label  = ref (freshCodeLabel ()) : loclabel ref
+   val current_label  = ref (freshCodeLabel ()) : label ref
 
    (* List of instructions in this basic block.
       !!!instrs are kept in REVERSE order in this list!!! *)
    val current_instrs = ref [] : instruction annotated list ref
 
    (* Blocks to which control may flow following this block *)
-   val current_succs  = ref []              : loclabel list ref
+   val current_succs  = ref []              : label list ref
 
    (* True iff this block's label is ever referenced.  If not,
       we don't have to print this label in the final assembly code *)
@@ -165,7 +151,7 @@ struct
       in the RTL code.  That is, as blocks are translated their
       label is prepended to this list.  Note that the hd of this list
       is the label of the last block saved in the block_map. *)
-   val current_blocklabels = ref [] : loclabel list ref
+   val current_blocklabels = ref [] : label list ref
 
    (* Flag:  True if the last block stored ended with a unconditional
              branch, or otherwise control does not flow through to the
@@ -182,7 +168,7 @@ struct
    (* Remove all occurrences of a given label from a list *)
    fun removeAllLabel [] _ = []
      | removeAllLabel (lab :: rest) lab' = 
-       if (eqLLabs lab lab') then
+       if (eqLabs lab lab') then
 	 removeAllLabel rest lab'
        else
 	 lab :: (removeAllLabel rest lab')
@@ -286,7 +272,7 @@ struct
           let
 	    val Rdest = translateIReg rtl_Rdest
 	  in
-	    emit (BASE(LADDR (Rdest, translateLabel label)));
+	    emit (BASE(LADDR (Rdest, label)));
 	    if (offset <> 0) then 
 	      emit (SPECIFIC(LOADI (LDA, Rdest, offset, Rdest)))
 	    else 
@@ -376,7 +362,7 @@ struct
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27. *)
 	 emit (BASE(RTL (CALL{extern_call = true,
-			      func = DIRECT (CE( "__divl", SOME (ireg 23))),
+			      func = DIRECT (Rtl.C_EXTERN_LABEL "__divl", SOME (ireg 23)),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -400,7 +386,7 @@ struct
 	   in
 	     emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
 	     emit (BASE(RTL (CALL{extern_call = true,
-				  func = DIRECT (CE ("__divl",SOME (ireg 23))),
+				  func = DIRECT (Rtl.C_EXTERN_LABEL "__divl",SOME (ireg 23)),
 				  args = [Rsrc1, Rsrc2],
 				  results = [Rdest],
 				  argregs = SOME [ireg 24, ireg 25],
@@ -420,7 +406,7 @@ struct
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27 and the pv in $23. *)
 		   emit (BASE(RTL (CALL{extern_call = true,
-					func = DIRECT (CE ("__reml",SOME(ireg 23))),
+					func = DIRECT (Rtl.C_EXTERN_LABEL "__reml",SOME(ireg 23)),
 					args = [Rsrc1, Rsrc2],
 					results = [Rdest],
 					argregs = SOME [ireg 24, ireg 25],
@@ -438,7 +424,7 @@ struct
        in
 	 emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
 	 emit (BASE(RTL (CALL{extern_call = true,
-			      func = DIRECT (CE ("__reml",SOME(ireg 23))),
+			      func = DIRECT (Rtl.C_EXTERN_LABEL "__reml",SOME(ireg 23)),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -736,7 +722,7 @@ struct
 	    to a canonical integer bit-pattern in Rdest, rounding
 	    towards minus-infinity. *)
 	   emit (SPECIFIC (FPCONV (CVTTQM, Fsrc, Fat)));
-	   emit (BASE(LADDR (Rat, MLE ("FPTOFROMINT"))));
+	   emit (BASE(LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
 	   emit (SPECIFIC(STOREF (STT, Fat, 0, Rat)));
 	   emit (SPECIFIC(LOADI (LDQ, Rdest, 0, Rat)))
        end
@@ -748,7 +734,7 @@ struct
        in
 	 (* Converts an integer in Rsrc to a double-precision 
 	    floating-point value in Fdest; this is always precise *)
-	   emit (BASE(LADDR (Rat, MLE ("FPTOFROMINT"))));
+	   emit (BASE(LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
 	   emit (SPECIFIC(STOREI (STQ, Rsrc, 0, Rat)));
 	   emit (SPECIFIC(LOADF  (LDT, Fdest, 0, Rat)));
 	   emit (SPECIFIC (FPCONV (CVTQT, Fdest, Fdest)))
@@ -761,7 +747,7 @@ struct
        in
 	 (* Call to a C routine in libm *)
 	 emit (BASE (RTL (CALL{extern_call = true,
-			       func = DIRECT (CE ("sqrt",NONE)),
+			       func = DIRECT (Rtl.C_EXTERN_LABEL "sqrt",NONE),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -777,7 +763,7 @@ struct
        in
 	 (* Call to a C routine in libm *)
 	 emit (BASE (RTL (CALL{extern_call = true,
-			       func = DIRECT (CE ("sin",NONE)),
+			       func = DIRECT (Rtl.C_EXTERN_LABEL "sin",NONE),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -793,7 +779,7 @@ struct
        in
 	 (* Call to a C routine in libm *)
 	 emit (BASE (RTL (CALL{extern_call = true,
-			       func = DIRECT (CE ("cos",NONE)),
+			       func = DIRECT (Rtl.C_EXTERN_LABEL "cos",NONE),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -809,7 +795,7 @@ struct
        in
 	 (* Call to a C routine in libm *)
 	 emit (BASE (RTL (CALL{extern_call = true,
-			       func = DIRECT (CE ("atan",NONE)),
+			       func = DIRECT (Rtl.C_EXTERN_LABEL "atan",NONE),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -825,7 +811,7 @@ struct
        in
 	 (* Call to a C routine in libm *)
 	 emit (BASE (RTL (CALL{extern_call = true,
-			       func = DIRECT (CE ("exp",NONE)),
+			       func = DIRECT (Rtl.C_EXTERN_LABEL "exp",NONE),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -841,7 +827,7 @@ struct
        in
 	 (* Call to a C routine in libm *)
 	 emit (BASE (RTL (CALL{extern_call = true,
-			       func = DIRECT (CE ("log",NONE)),
+			       func = DIRECT (Rtl.C_EXTERN_LABEL "log",NONE),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -855,8 +841,7 @@ struct
 	 val Fsrc1 = translateFReg rtl_Fsrc1
          val Fsrc2 = translateFReg rtl_Fsrc2
          val Rdest = translateIReg rtl_Rdest
-	 val rtl_loclabel = Rtl.fresh_code_label ()
-	 val label = translateLocalLabel rtl_loclabel
+	 val label = Rtl.fresh_code_label "cmpf"
 	 val (fop,reverse_operand, reverse_result) = 
 		(case comparison of
 		   Rtl.EQ =>  (CMPTEQ, false, false)
@@ -874,10 +859,10 @@ struct
 	 else emit (SPECIFIC (FPOP(fop, Fsrc2, Fsrc1, Fat)));
          emit (SPECIFIC (CBRANCHF (FBEQ, Fat, label)));
     	 emit (SPECIFIC (LOADI (LDA, Rdest, pass_test, Rzero)));          
-	 translate (Rtl.ILABEL rtl_loclabel)
+	 translate (Rtl.ILABEL label)
        end
 
-     | translate (Rtl.BR ll) =  emit (BASE (BR (I(translateCodeLabel ll))))
+     | translate (Rtl.BR ll) =  emit (BASE (BR ll))
 
      | translate (Rtl.BCNDI2 (comparison, rtl_Rsrc1, rtl_Rsrc2, loc_label, pre)) =
        let val rtl_tmp =  Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
@@ -911,43 +896,40 @@ struct
      | translate (Rtl.BCNDI (comparison, rtl_Rsrc, ll, _)) =
        let
 	 val Rsrc = translateIReg rtl_Rsrc
-	 val newll = translateCodeLabel ll
        in
           case comparison of
-	    Rtl.EQ  => emit (SPECIFIC (CBRANCHI (BEQ,  Rsrc, newll)))
-	  | Rtl.LE  => emit (SPECIFIC (CBRANCHI (BLE,  Rsrc, newll)))
-	  | Rtl.LT  => emit (SPECIFIC (CBRANCHI (BLT,  Rsrc, newll)))
-	  | Rtl.GE  => emit (SPECIFIC (CBRANCHI (BGE,  Rsrc, newll)))
-	  | Rtl.GT  => emit (SPECIFIC (CBRANCHI (BGT,  Rsrc, newll)))
-	  | Rtl.NE  => emit (SPECIFIC (CBRANCHI (BNE,  Rsrc, newll)))
-	  | Rtl.LBC => emit (SPECIFIC (CBRANCHI (BLBC, Rsrc, newll)))
-	  | Rtl.LBS => emit (SPECIFIC (CBRANCHI (BLBS, Rsrc, newll)))
+	    Rtl.EQ  => emit (SPECIFIC (CBRANCHI (BEQ,  Rsrc, ll)))
+	  | Rtl.LE  => emit (SPECIFIC (CBRANCHI (BLE,  Rsrc, ll)))
+	  | Rtl.LT  => emit (SPECIFIC (CBRANCHI (BLT,  Rsrc, ll)))
+	  | Rtl.GE  => emit (SPECIFIC (CBRANCHI (BGE,  Rsrc, ll)))
+	  | Rtl.GT  => emit (SPECIFIC (CBRANCHI (BGT,  Rsrc, ll)))
+	  | Rtl.NE  => emit (SPECIFIC (CBRANCHI (BNE,  Rsrc, ll)))
+	  | Rtl.LBC => emit (SPECIFIC (CBRANCHI (BLBC, Rsrc, ll)))
+	  | Rtl.LBS => emit (SPECIFIC (CBRANCHI (BLBS, Rsrc, ll)))
        end
 
      | translate (Rtl.BCNDF (comparison, rtl_Fsrc, ll, _)) =
        let
 	 val Fsrc = translateFReg rtl_Fsrc
-	 val newll = translateCodeLabel ll
        in
           (case comparison of
-	     Rtl.EQ => emit (SPECIFIC (CBRANCHF(FBEQ, Fsrc, newll)))
-           | Rtl.LE => emit (SPECIFIC (CBRANCHF(FBLE, Fsrc, newll)))
-           | Rtl.LT => emit (SPECIFIC (CBRANCHF(FBLT, Fsrc, newll)))
-           | Rtl.GE => emit (SPECIFIC (CBRANCHF(FBGE, Fsrc, newll)))
-           | Rtl.GT => emit (SPECIFIC (CBRANCHF(FBGT, Fsrc, newll)))
-           | Rtl.NE => emit (SPECIFIC (CBRANCHF(FBNE, Fsrc, newll)))
+	     Rtl.EQ => emit (SPECIFIC (CBRANCHF(FBEQ, Fsrc, ll)))
+           | Rtl.LE => emit (SPECIFIC (CBRANCHF(FBLE, Fsrc, ll)))
+           | Rtl.LT => emit (SPECIFIC (CBRANCHF(FBLT, Fsrc, ll)))
+           | Rtl.GE => emit (SPECIFIC (CBRANCHF(FBGE, Fsrc, ll)))
+           | Rtl.GT => emit (SPECIFIC (CBRANCHF(FBGT, Fsrc, ll)))
+           | Rtl.NE => emit (SPECIFIC (CBRANCHF(FBNE, Fsrc, ll)))
            | _ => error ("translate/BCNDF: bad comparison"))
        end
 
      | translate (Rtl.JMP (rtl_Raddr, rtllabels)) =
        let
 	 val Raddr = translateIReg rtl_Raddr
-	 val loclabels = map translateCodeLabel rtllabels
        in (* JMP must first restore callee-save registers first *)
 (*	 emit (BASE (MOVI (Raddr,Rpv)));
 	 emit (BASE (JSR (false, Raddr, 1, loclabels)))
 *)
-	   emit (BASE (RTL (JMP (Raddr, map translateLocalLabel rtllabels))))
+	   emit (BASE (RTL (JMP (Raddr, rtllabels))))
        end
 
      | translate (Rtl.CALL {extern_call,
@@ -1005,7 +987,7 @@ struct
 			    results  = (resI, resF),
 			    tailcall = tailcall, ...}) =
        let
-	 val destlabel = translateLabel l
+	 val destlabel = l
 	 val c_call = extern_call (* case destlabel of (CE _) => true | _ => false *)
 	 val tailcall = tailcall andalso (not c_call) andalso (! do_tailcalls)
        in
@@ -1025,7 +1007,7 @@ struct
 
 	
 	 emit (BASE(RTL (CALL{extern_call = extern_call,
-				  func     = DIRECT destlabel,
+				  func     = DIRECT (destlabel, NONE),
 				  args     = (map translateIReg argI) @
 				  (map translateFReg argF),
 				  results  = (map translateIReg resI) @
@@ -1060,10 +1042,8 @@ struct
      | translate (Rtl.RETURN rtl_Raddr) =
           emit (BASE (RTL (RETURN {results = ! current_res})))
 
-     | translate (Rtl.SAVE_CS l) = 
-           let val l' = translateLocalLabel l
-	   in emit (BASE (RTL (SAVE_CS l')))
-	   end
+     | translate (Rtl.SAVE_CS l) = emit (BASE (RTL (SAVE_CS l)))
+
      | translate (Rtl.END_SAVE) = ()
      | translate (Rtl.RESTORE_CS) = ()
      | translate (Rtl.LOAD32I (Rtl.EA (rtl_Raddr, disp), rtl_Rdest)) =
@@ -1120,9 +1100,8 @@ struct
 	   val bytesize = translateIReg rtl_bytesize
 	   val ival = translateIReg rtl_ival
 	   val Rdest = translateIReg rtl_dest
-	   val rtl_loclabel = Rtl.fresh_code_label ()
-	   val gp_loclabel = Rtl.fresh_code_label ()
-	   val label = translateLocalLabel rtl_loclabel
+	   val rtl_loclabel = Rtl.fresh_code_label "intalloc"
+	   val gp_loclabel = Rtl.fresh_code_label "intalloc"
         in
 	    emit (SPECIFIC (INTOP   (ADDL, bytesize, REGop Rzero, Rat)));
 	    emit (SPECIFIC (INTOP   (ADDL, ival,    REGop Rzero, Rat2)));
@@ -1130,8 +1109,8 @@ struct
 	    if (tag = 0) then ()
 	    else translate (Rtl.LI (tag, untranslateIReg Rhlimit));
 *)
-	    emit (BASE (GC_CALLSITE label));
-	    emit (BASE (BSR (MLE ("int_alloc_raw"), NONE,
+	    emit (BASE (GC_CALLSITE rtl_loclabel));
+	    emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("int_alloc_raw"), NONE,
 			     {regs_modified=[Rat], regs_destroyed=[Rat],
 			      args=[Rat, Rat2]})));
 	    translate (Rtl.ILABEL rtl_loclabel);
@@ -1144,9 +1123,8 @@ struct
 	   val logsize = translateIReg rtl_logsize
 	   val ival = translateIReg rtl_ival
 	   val Rdest = translateIReg rtl_dest
-	   val gp_loclabel = Rtl.fresh_code_label ()
-	   val rtl_loclabel = Rtl.fresh_code_label ()
-	   val label = translateLocalLabel rtl_loclabel
+	   val gp_loclabel = Rtl.fresh_code_label "ptralloc"
+	   val rtl_loclabel = Rtl.fresh_code_label "ptralloc"
         in
 	    emit (SPECIFIC (INTOP   (ADDL, logsize, REGop Rzero, Rat)));
 	    emit (SPECIFIC (INTOP   (ADDL, ival,    REGop Rzero, Rat2)));
@@ -1154,8 +1132,8 @@ struct
 	    if (tag = 0) then ()
 	    else translate (Rtl.LI (tag, untranslateIReg Rhlimit));
 *)
-	    emit (BASE (GC_CALLSITE label));
-	    emit (BASE (BSR(MLE ("ptr_alloc_raw"), NONE,
+	    emit (BASE (GC_CALLSITE rtl_loclabel));
+	    emit (BASE (BSR(Rtl.ML_EXTERN_LABEL ("ptr_alloc_raw"), NONE,
 			     {regs_modified=[Rat], regs_destroyed=[Rat],
 			      args=[Rat, Rat2]})));
 	    translate (Rtl.ILABEL rtl_loclabel);
@@ -1167,8 +1145,7 @@ struct
 	   val logsize = translateIReg rtl_logsize
 	   val fval = translateFReg rtl_fval
 	   val Rdest = translateIReg rtl_dest
-	   val rtl_loclabel = Rtl.fresh_code_label ()
-	   val label = translateLocalLabel rtl_loclabel
+	   val rtl_loclabel = Rtl.fresh_code_label "floatalloc"
         in
 	    emit (SPECIFIC (INTOP(ADDL, logsize, REGop Rzero, Rat)));
 	    emit (BASE (MOVF (fval, Fat)));
@@ -1176,8 +1153,8 @@ struct
 	    if (tag = 0) then ()
 	    else translate (Rtl.LI (tag, untranslateIReg Rhlimit));
 *)
-	    emit (BASE (GC_CALLSITE label));
-	    emit (BASE (BSR (MLE ("float_alloc_raw"), NONE,
+	    emit (BASE (GC_CALLSITE rtl_loclabel));
+	    emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("float_alloc_raw"), NONE,
 			     {regs_modified=[Rat], regs_destroyed=[Rat],
 			      args=[Rat, Rat2]})));
 	    translate (Rtl.ILABEL rtl_loclabel);
@@ -1187,15 +1164,14 @@ struct
      | translate (Rtl.NEEDGC (Rtl.REG rtl_Rsize)) =
        let
 	 val Rsize = translateIReg rtl_Rsize
-	 val rtl_loclabel = Rtl.fresh_code_label ()
-	 val label = translateLocalLabel rtl_loclabel
+	 val rtl_loclabel = Rtl.fresh_code_label "needgc"
        in
 	 emit (SPECIFIC (INTOP   (S4ADDL, Rsize, REGop Rheap, Rat)));
 	 emit (SPECIFIC (INTOP   (CMPULE, Rhlimit, REGop Rat, Rat)));
-	 emit (SPECIFIC (CBRANCHI(BEQ, Rat, label)));
+	 emit (SPECIFIC (CBRANCHI(BEQ, Rat, rtl_loclabel)));
 	 emit (SPECIFIC (INTOP   (S4ADDL, Rsize, REGop Rzero, Rhlimit)));
-	 emit (BASE (GC_CALLSITE label));
-	 emit (BASE (BSR (MLE ("gc_raw"), NONE,
+	 emit (BASE (GC_CALLSITE rtl_loclabel));
+	 emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
 			     {regs_modified=[Rat], regs_destroyed=[Rat],
 			      args=[Rat]})));
 	 translate (Rtl.ILABEL rtl_loclabel)
@@ -1206,8 +1182,7 @@ struct
        let
 	 val rtl_Itemp = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
 	 val Itemp = translateIReg rtl_Itemp
-	 val rtl_loclabel = Rtl.fresh_code_label ()
-	 val label = translateLocalLabel rtl_loclabel
+	 val rtl_loclabel = Rtl.fresh_code_label "needgc"
 	 val size = 4 * words
        in
 	 if (in_ea_disp_range size) then
@@ -1216,10 +1191,10 @@ struct
 	   (load_imm(i2w size, Rat);
 	    emit (SPECIFIC (INTOP (ADDL, Rheap, REGop Rat, Rheap))));
 	 emit (SPECIFIC (INTOP   (CMPULE, Rhlimit, REGop Rat, Rat)));
-	 emit (SPECIFIC (CBRANCHI(BEQ, Rat, label)));
+	 emit (SPECIFIC (CBRANCHI(BEQ, Rat, rtl_loclabel)));
 	 load_imm(i2w size, Rhlimit);
-	 emit (BASE (GC_CALLSITE label));
-	 emit (BASE (BSR (MLE ("gc_raw"), NONE,
+	 emit (BASE (GC_CALLSITE rtl_loclabel));
+	 emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
 			  {regs_modified=[Rat], regs_destroyed=[Rat],
 			   args=[Rat]})));
 	 translate (Rtl.ILABEL rtl_loclabel)
@@ -1241,7 +1216,7 @@ struct
      | translate (Rtl.ILABEL ll) = 
           (* Begin new basic block *)
           (saveBlock ();
-	   resetBlock (translateCodeLabel ll) true true)
+	   resetBlock ll true true)
 
 	  
      | translate Rtl.HALT = 
@@ -1268,18 +1243,17 @@ struct
        val args   = (map translateIReg argI) @ (map translateFReg argF)
        val res    = (map translateIReg resI) @ (map translateFReg resF)
        val return = translateIReg return
-       val proc_label = translateLocalLabel name
      in
        (* initialization *)
        tracemap := Regmap.empty;
        block_map := Labelmap.empty;
        current_blocklabels := [];
-       current_proc := proc_label;
+       current_proc := name;
        current_res := res;
        init_stack_res();
        
        (* Create (empty) preamble block with same name as the procedure *)
-       resetBlock proc_label true false;
+       resetBlock name true false;
        saveBlock ();
 
        (* Start a new block *)

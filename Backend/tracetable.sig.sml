@@ -3,7 +3,7 @@ signature TRACETABLE =
   sig
     structure Machine : MACHINE
 
-    datatype calllabel = CALLLABEL of Machine.loclabel
+    datatype calllabel = CALLLABEL of Rtl.label
     datatype trace     = TRACE_YES 
                        | TRACE_NO
                        | TRACE_UNSET   (* unset variable; handle specially for gener GC *)
@@ -31,21 +31,21 @@ signature TRACETABLE =
     val ShowDebug        : bool ref
     val ShowDiag         : bool ref
     val TagEntry         : bool ref
-    val MakeTableHeader  : string            -> Machine.data list
-    val MakeTable        : callinfo list     -> Machine.data list
-    val MakeTableTrailer : string            -> Machine.data list
+    val MakeTableHeader  : string            -> Rtl.data list
+    val MakeTable        : callinfo list     -> Rtl.data list
+    val MakeTableTrailer : string            -> Rtl.data list
 
     (* MakeGlobalTable: given list of traceable global variables,
        construct table.   A ``global variable'' is a memory location containing
        a traceable value.*)
 
-    val MakeGlobalTable  : string * (Machine.label * trace) list -> Machine.data list
+    val MakeGlobalTable  : string * (Rtl.label * trace) list -> Rtl.data list
 
     (* MakeGlobalTable: given a list of addresses of mutable statically-allocated
        objects, construct table.   These objects are statically-allocated arrays 
        and record which could be side-effected.*)
 
-    val MakeMutableTable : string * Machine.label list -> Machine.data list
+    val MakeMutableTable : string * Rtl.label list -> Rtl.data list
 
     val trace2string : trace -> string
   end;

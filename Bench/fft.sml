@@ -71,10 +71,10 @@ in
       for(1,n4,fn j =>
       let val a = e * real(j - 1) 
 	  val a3 = 3.0 * a 
-	  val cc1 = cos(a) 
-	  val ss1 = sin(a) 
-	  val cc3 = cos(a3)
-	  val ss3 = sin(a3)
+	  val cc1 = Ccall(cos,a) 
+	  val ss1 = Ccall(sin,a) 
+	  val cc3 = Ccall(cos,a3)
+	  val ss3 = Ccall(sin,a3)
 	  val is = ref j 
 	  val id = ref(2 * !n2) 
       in
@@ -193,7 +193,7 @@ fun test np =
 	  val _ = update(pxr,i+1,~0.5)
 	  val _ = update(pxr,j+1,~0.5)
 	  val z = t * (real i)
-	  val y = ~0.5 * (cos(z)/sin(z)) 
+	  val y = ~0.5 * ((Ccall(cos,z))/(Ccall(sin,z)))
       in
 	   update(pxi,i+1,y);
 	   update(pxi,j+1,~y)

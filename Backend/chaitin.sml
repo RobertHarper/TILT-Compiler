@@ -1,4 +1,4 @@
-(*$import PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO *)
+(*$import PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops *)
 (* Graph-coloring register allocator.
        Notes on constructing the interference graph for procedures.
        
@@ -67,6 +67,7 @@ functor Chaitin(val commentHeader: string
 				 where Machine = Bblock.Machine =
 struct
 
+   open Rtl
    open Bblock 
    open Callconv Color
    open Printutils Tracetable 
@@ -185,10 +186,10 @@ struct
 
   (* getCallInstrRegs: calculate the physical registers used by a call *)
      
-       fun getCallInstrRegs (getSignature : loclabel -> procsig) call =
+       fun getCallInstrRegs (getSignature : label -> procsig) call =
 	(case call
-	 of (CALL{func = DIRECT (I llabel), ...}) =>
-	   (case getSignature llabel of
+	 of (CALL{func = DIRECT (label as (LOCAL_CODE _),_), ...}) =>
+	   (case getSignature label of
 	      PROCSIG{regs_destroyed = regs_destroyed, 
 		      regs_modified = regs_modified,
 		      arg_ra_pos = SOME (arg_pos),
@@ -200,7 +201,7 @@ struct
 			 res_pos = res_pos, 
 			 C_call = false}
 		    | _ => error "call to nonallocated function!")
-           | (CALL{func = INDIRECT _, args, results, ...})=>
+           | (CALL{func = INDIRECT _, args : register list, results, ...})=>
 		 let 
 		   val ACTUALS{args=arg_pos, results=res_pos} =
 		     unknown_ml false (FORMALS{args=args,results=results})
@@ -213,7 +214,7 @@ struct
 		 end
 
 	   | (CALL{extern_call = true,
-		   func = DIRECT (MLE _), args, results,  
+		   func = DIRECT (ML_EXTERN_LABEL _, _), args, results,  
 				 argregs, resregs, destroys, ...}) =>
 		  let 
 		    val ACTUALS{args=arg_pos_default,
@@ -235,8 +236,9 @@ struct
               end
 
 	   | (CALL{extern_call = true,
-		   func = DIRECT (CE (_,NONE)), args, results,  
-				 argregs, resregs, destroys, ...}) =>
+		   func = DIRECT (C_EXTERN_LABEL _, _), 
+		   args, results,  
+		   argregs, resregs, destroys, ...}) =>
 		  let 
 		    val ACTUALS{args=arg_pos_default,
 				results=res_pos_default} = std_c false 
@@ -255,25 +257,6 @@ struct
 			     | SOME regs => map IN_REG regs),
 		  C_call = true}
               end
-	   | (CALL{func = DIRECT (CE (_,SOME sra)), args, results, 
-				 argregs, resregs, destroys, ...}) =>
-		  let 
-		    val ACTUALS{args=arg_pos_default,
-				results=res_pos_default} = std_c false 
-		      (FORMALS{args=args,results=results})
-		    val temp = (case destroys of
-				   NONE => sra::C_caller_saved_regs
-				 | SOME regs => sra::regs)
-		  in {regs_destroyed = temp,
-		      regs_modified = temp,
-		      arg_pos = (case argregs of
-				   NONE => arg_pos_default
-				 | SOME regs => map IN_REG regs),
-		      res_pos = (case resregs of
-				   NONE => res_pos_default
-				 | SOME regs => map IN_REG regs),
-		      C_call = true}
-		  end
 	  | _ => error "getCallInstRegs: not a call")
 
     
@@ -281,7 +264,7 @@ struct
       already assigned, then rewrite procedure as described in comments at
       the top of the file.*)
 
-   fun pre_color (name : loclabel, arg_ra_pos,res_ra_pos,blocklabels,args,res, block_map) = 
+   fun pre_color (name : label, arg_ra_pos,res_ra_pos,blocklabels,args,res, block_map) = 
       case (arg_ra_pos,res_ra_pos)
       of (SOME(actual_args), SOME actual_results) =>
 	  let val postlude_label = freshCodeLabel()
@@ -345,7 +328,7 @@ struct
 		   let fun usual () = 
 		           map (fn (NO_ANN(BASE(RTL (RETURN _)))) =>
 					 (succs := postlude_label :: !succs;
-					 NO_ANN(BASE(BR(I postlude_label))))
+					 NO_ANN(BASE(BR postlude_label)))
 					  
 			       | NO_ANN i => NO_ANN i
 			       | _ => error "replace returns: annotated instruction!")
@@ -407,7 +390,7 @@ struct
    local
        val _ = ()
    in
-     fun replace_calls (getSignature : loclabel -> procsig) (blockmap,tracemap) =
+     fun replace_calls (getSignature : label -> procsig) (blockmap,tracemap) =
        let val max_on_stack = ref 0
 	   val max_C_args = ref 0
 	   val regs_destroyed = ref Regset.empty
@@ -426,7 +409,8 @@ struct
 		      (* update maximum num of args passed on stack *)
 		       val _ = app check_arg arg_pos
 		       val _ = (case func of
-				  DIRECT (CE _) => max_C_args := Int.max(!max_C_args, length args)
+				  DIRECT (C_EXTERN_LABEL _, _) => 
+				      max_C_args := Int.max(!max_C_args, length args)
 				| _ => ())
 		      (* make sure to load address of called routine into
 		         Rpv if Rpv exists.   The caller may want to reset
@@ -434,15 +418,16 @@ struct
 		       val code : instruction list =
 			   mvlist(map IN_REG args,arg_pos) @
 			   (case func of
-			      DIRECT (I label) => if hasRpv then [BASE(LADDR(Rpv_virt,I label))] else []
-(* new code *)              | DIRECT (MLE label) => 
-				  if hasRpv then [BASE(LADDR(Rpv_virt,MLE label))] 
+			      DIRECT (LOCAL_CODE label, _) => 
+				  if hasRpv then [BASE(LADDR(Rpv_virt,LOCAL_CODE label))] 
 				  else []
-			    | DIRECT (CE (label,NONE)) =>  
-				  if hasRpv then [BASE(LADDR(Rpv_virt,CE (label,NONE)))] 
+(* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
+				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
 				  else []
-			    | DIRECT (CE (label,SOME sra)) => 
-				if hasRpv then [BASE(LADDR(Rpv_virt,CE (label,SOME sra)))] else []
+			    | DIRECT (C_EXTERN_LABEL label, _) =>
+				  if hasRpv then [BASE(LADDR(Rpv_virt,
+							     C_EXTERN_LABEL label))]
+				  else []
 			    | INDIRECT reg => [mvregs(reg,Rpv_virt)]
 (*			    | _ => error "replace_calls: pv move") *)
 				)
@@ -662,7 +647,7 @@ struct
 
    (* generate tables of information for the garbage collector *)
 
-   datatype callsite_info = CALLSITE of {label : loclabel,live : Regset.set}
+   datatype callsite_info = CALLSITE of {label : label,live : Regset.set}
 
 
     (* rewrite a block to use physical registers *)
@@ -809,7 +794,7 @@ struct
 			case (maybe_overflow_args,func, tailcall) of
 			  (true,_,_) =>
 			    add_info {label=return_label,live=live} 
-			    | (_,DIRECT (CE _), _) => 
+			    | (_,DIRECT (C_EXTERN_LABEL _, _), _) => 
 			    add_info {label=return_label,live=live} 
 			    | (_,_, true) => ()
 			    | _ => add_info {label=return_label,live=live}
@@ -828,21 +813,20 @@ struct
 		      (* Actual call *)
 		      val br_instrs : instruction list = 
 			case (func, tailcall) of
-			  (DIRECT (I label), false) => 
-			    ([BASE(BSR (I label, NONE, no_moddef_info)),
+			  (DIRECT (LOCAL_CODE label,_), false) => 
+			    ([BASE(BSR (LOCAL_CODE label, NONE, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
-(*			| (DIRECT (MLE _), _) => error "br_instrs: ML extern" *)
-			| (DIRECT (MLE label), false) => 
-			    ([BASE(BSR (MLE label, NONE, no_moddef_info)),
+			| (DIRECT (ML_EXTERN_LABEL label,_), false) => 
+			    ([BASE(BSR (ML_EXTERN_LABEL label, NONE, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
-			| (DIRECT (CE (label,NONE)), false) => 
-			    ([BASE(BSR (CE (label,NONE), NONE, no_moddef_info)),
+			| (DIRECT (C_EXTERN_LABEL label,NONE), false) => 
+			    ([BASE(BSR (C_EXTERN_LABEL label, NONE, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
-			| (DIRECT (CE (label,SOME sra)), false) =>
-			    ([BASE(BSR (CE (label,SOME sra), SOME sra, no_moddef_info)),
+			| (DIRECT (C_EXTERN_LABEL label,SOME sra), false) =>
+			    ([BASE(BSR (C_EXTERN_LABEL label, SOME sra, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code(SOME sra)))
 			| (INDIRECT _, false) =>
@@ -850,30 +834,30 @@ struct
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
 			    
-			| (DIRECT (I label), true) =>
+			| (DIRECT (LOCAL_CODE label,_), true) =>
 			    if (not maybe_overflow_args)
 			      then
 				(stack_fixup_code1 ()) @ 
 				[BASE(POP_RET(SOME(ra_sloc)))] @
 				stack_fixup_code2 @
-				[BASE(BR (I label))]
+				[BASE(BR (LOCAL_CODE label))]
 			    else 
-			      [BASE(BSR (I label, NONE, no_moddef_info)),
+			      [BASE(BSR (LOCAL_CODE label, NONE, no_moddef_info)),
 			       BASE(ILABEL return_label),
 			       BASE(POP_RET(SOME(ra_sloc)))] @
 			      (stack_fixup_code1 ()) @ 
 			      stack_fixup_code2 @
 			      [BASE(RET (false, 1))]
 			      
-			| (DIRECT (CE (label,NONE)), true) =>
+			| (DIRECT (C_EXTERN_LABEL label,NONE), true) =>
 			      if (not maybe_overflow_args)
 				then
 				  (stack_fixup_code1 ()) @ 
 				  [BASE(POP_RET(SOME(ra_sloc)))] @
 				  stack_fixup_code2 @
-				  [BASE(BR (CE (label,NONE)))]
+				  [BASE(BR (C_EXTERN_LABEL label))]
 			      else
-				[BASE(BSR(CE (label,NONE), NONE, no_moddef_info)),
+				[BASE(BSR(C_EXTERN_LABEL label, NONE, no_moddef_info)),
 				 BASE(ILABEL return_label),
 				 BASE(POP_RET(SOME(ra_sloc)))] @
 				(stack_fixup_code1 ()) @ 
@@ -881,15 +865,15 @@ struct
 				[BASE(RET (false, 1))]
 				       
 				       
-			| (DIRECT (CE (label,SOME sra)), true) =>
+			| (DIRECT (C_EXTERN_LABEL label,SOME sra), true) =>
 				if (not maybe_overflow_args)
 				  then
 				    (stack_fixup_code1 ()) @ 
 				    [BASE(POP(sra,ra_sloc))] @
 				    stack_fixup_code2 @
-				    [BASE(BR (CE (label, SOME sra)))]
+				    [BASE(BR (C_EXTERN_LABEL label))]
 				else
-				  [BASE(BSR (CE (label, SOME sra), SOME sra, no_moddef_info)),
+				  [BASE(BSR (C_EXTERN_LABEL label, SOME sra, no_moddef_info)),
 				   BASE(ILABEL return_label),
 				   BASE(POP_RET(SOME(ra_sloc)))] @
 				  (stack_fixup_code1 ()) @ 
@@ -992,7 +976,7 @@ struct
 								(msInstruction "" (stripAnnot instr)))));
 				   (instructionLoop rest))
 			| GETREGBUG => (print "GETREGBUG in ";
-					print (msLoclabel name);
+					print (msLabel name);
 					print ": ";
 					print (msInstruction "" (stripAnnot instr));
 					raise GETREGBUG)
@@ -1031,10 +1015,9 @@ struct
 	       . list of call sites
         *)
 
-       fun getCallInfo (name as (LOCAL_CODE v)) summary mapping tracemap 
+       fun getCallInfo name summary mapping tracemap 
 				(l : callsite_info list)=
 	let 
-	     val rawname = Name.var2string v
 	     val Trackstorage.SUMMARY
 	            {registers_used,
 		     stackframe_size,
@@ -1143,7 +1126,7 @@ struct
 			 | tr2s _          = 	"<ignoring trace>"
 			   
 		       val _ = (print "chaitin.sml processing label = ";
-				print (Machineutils.Machine.msLoclabel label); print "\n";
+				print (Machineutils.Machine.msLabel label); print "\n";
 				print "regtrace:\n";
 				app (fn (v,t) => (print (msReg v); print " => ";
 						  print (tr2s t); print "\n")) regtrace;
@@ -1229,9 +1212,8 @@ struct
 		end)
 		
    fun allocateProc1 (blah as
-		      {getSignature : loclabel -> procsig,
-		       external_name : label option,
-		       name         : loclabel,
+		      {getSignature : label -> procsig,
+		       name         : label,
 		      block_map    : bblock Labelmap.map,
 		      procsig = procsig as PROCSIG{arg_ra_pos=orig_args,
 						   res_ra_pos,
@@ -1263,7 +1245,7 @@ struct
       val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " before precoloring procedure\n";
-	            dumpProc(name,external_name,procsig,
+	            dumpProc(name,procsig,
 			     block_map,blocklabels, true))
             else ()
 
@@ -1274,7 +1256,7 @@ struct
       val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " result of precoloring procedure\n";
-	            dumpProc(name,external_name,procsig,
+	            dumpProc(name,procsig,
 			     block_map,block_labels, true))
             else ()
 
@@ -1285,7 +1267,7 @@ struct
        val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " dumping procedure after expanding calls\n";
-		    dumpProc (name,external_name,procsig, block_map, block_labels, !debug);
+		    dumpProc (name,procsig, block_map, block_labels, !debug);
 		    emitString commentHeader;
 		    emitString " done expanding\n")
 	       else ()
@@ -1297,7 +1279,7 @@ struct
 	   if (! debug) then 
 	       (emitString commentHeader;
 		emitString " dumping procedure after annotation\n";
-		dumpProc (name, external_name,procsig, block_map, block_labels, !debug);
+		dumpProc (name,procsig, block_map, block_labels, !debug);
 		emitString commentHeader;
 		emitString " done annotation\n")
 	   else ()
@@ -1305,7 +1287,6 @@ struct
      in
 	 ({getSignature = getSignature,
 	   name = name,
-	   external_name = external_name,
 	   block_map = block_map,
 	   procsig = PROCSIG{arg_ra_pos=orig_args,
 			     res_ra_pos = res_ra_pos,
@@ -1324,9 +1305,8 @@ struct
 
 
 
-   fun allocateProc2 ({getSignature : loclabel -> procsig,
-		       external_name : label option,
-		       name         : loclabel,
+   fun allocateProc2 ({getSignature : label -> procsig,
+		       name         : label,
 		       block_map    : bblock Labelmap.map,
 		       procsig as PROCSIG{arg_ra_pos=orig_args,
 						    res_ra_pos,
@@ -1366,7 +1346,7 @@ struct
 	   end
 
        val _ = if !msgs then
-	         print ("processing procedure "^msLoclabel name^"\n")
+	         print ("processing procedure "^msLabel name^"\n")
 	       else ()
 
        (* initialize information on storage *)

@@ -8,9 +8,8 @@ sig
    val debug : bool ref
    val msgs : bool ref
 
-   val allocateProc : {getSignature  : Machine.loclabel -> Machine.procsig,
-		       external_name : Machine.label option,
-		       name          : Machine.loclabel,
+   val allocateProc : {getSignature  : Machine.label -> Machine.procsig,
+		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
@@ -18,44 +17,41 @@ sig
 		       procsig       : Machine.procsig} 
                       -> (Machine.procsig * 
 			  Bblock.bblock Machine.Labelmap.map *
-			  Machine.loclabel list *
+			  Machine.label list *
 			  Machine.data list)
 
 
-   val allocateProc1 : {getSignature  : Machine.loclabel -> Machine.procsig,
-		       external_name : Machine.label option,
-		       name          : Machine.loclabel,
+   val allocateProc1 : {getSignature  : Machine.label -> Machine.procsig,
+		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 
                       -> 
-                       ({getSignature  : Machine.loclabel -> Machine.procsig,
-		       external_name : Machine.label option,
-		       name          : Machine.loclabel,
+                       ({getSignature  : Machine.label -> Machine.procsig,
+		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 
 			* (Machine.assign list) option   
-			* int * int * Machine.loclabel list)
+			* int * int * Machine.label list)
 
    val allocateProc2 : 
-                     ({getSignature  : Machine.loclabel -> Machine.procsig,
-		       name          : Machine.loclabel,
-		       external_name : Machine.label option,
+                     ({getSignature  : Machine.label -> Machine.procsig,
+		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
 		       tracemap      : Tracetable.trace Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 
 			* (Machine.assign list) option 		
-			* int * int * Machine.loclabel list)
+			* int * int * Machine.label list)
                       -> (Machine.procsig * 
 			  Bblock.bblock Machine.Labelmap.map *
-			  Machine.loclabel list *
+			  Machine.label list *
 			  Machine.data list)
 end
 

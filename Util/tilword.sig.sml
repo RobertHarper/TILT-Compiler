@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Word32 *)
 
 signature TILWORD =
     sig

@@ -9,6 +9,14 @@
  *)
 
 local
+
+val sin = fn arg => Ccall(sin,arg)
+val cos = fn arg => Ccall(cos,arg)
+val sqrt = fn arg => Ccall(sqrt,arg)
+val atan = fn arg => Ccall(atan,arg)
+val exp = fn arg => Ccall(exp,arg)
+val log = fn arg => Ccall(log,arg)
+
 (* FILE: Build.PIA *)
 val makestring_real = Real.toString
 fun query_prompt () = output(std_out,

@@ -1,4 +1,4 @@
-(*$import ORD_KEY ORD_SET TopLevel  SplayTree LibBase *)
+(*$import ORD_KEY ORD_SET TopLevel List SplayTree LibBase *)
 (* splay-set-fn.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

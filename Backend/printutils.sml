@@ -1,4 +1,4 @@
-(*$import BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO *)
+(*$import BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
 functor Printutils(val commentHeader : string
 		   structure Bblock : BBLOCK
 		   structure Machineutils : MACHINEUTILS
@@ -41,7 +41,7 @@ struct
 
    val print_reg = emitString o msReg
 
-   val print_lab = emitString o msLoclabel
+   val print_lab = emitString o msLabel
 
    fun print_pos (IN_REG r) = print_reg r
      | print_pos (ON_STACK s) = (emitString "STACK:"; 
@@ -111,7 +111,7 @@ struct
 	       (case Labelmap.find (block_map, l) of
 		    SOME value => value
 		  | NONE => (print "dumpblock: ";
-			     print (msLoclabel l);
+			     print (msLabel l);
 			     error "dumpblock"))
 	 in
 	   if debug then
@@ -126,7 +126,7 @@ struct
 	   else
 	     ();
 
-	   if (eqLLabs proc_name l) then
+	   if (eqLabs proc_name l) then
 	     emitString(makeAsmHeader psig)
 	   else ();
 
@@ -164,14 +164,7 @@ struct
 
    fun dumpCodeLabel cls = 
        let open Machine
-	   fun eq_loc_label(LOCAL_DATA v1, LOCAL_DATA v2) = Name.eq_var(v1,v2)
-	     | eq_loc_label(LOCAL_CODE v1, LOCAL_CODE v2) = Name.eq_var(v1,v2)
-	     | eq_loc_label _ = false
-	   fun eq_label(I ll1, I ll2) = eq_loc_label(ll1,ll2)
-	     | eq_label(MLE s1, MLE s2) = s1 = s2
-	     | eq_label(CE (s1,_), CE (s2,_)) = s1 = s2
-	     | eq_label _ = false
-	   fun member (elem,list) = Listops.member_eq(eq_label,elem,list)
+	   fun member (elem,list) = Listops.member_eq(Rtl.eq_label,elem,list)
 	   fun unique [] = []
 	     | unique (a::rest) = if (member(a,rest)) then unique rest else a::(unique rest)
 	   val ucls = unique cls
@@ -179,7 +172,7 @@ struct
        app (emitString o CodeLabelDecl) ucls
      end
 
-   fun dumpProc (name, external_name : label option,
+   fun dumpProc (name, 
 		 psig as PROCSIG{args, res, regs_destroyed, regs_modified,
 				 arg_ra_pos, res_ra_pos, ...}, 
 		 
@@ -187,9 +180,7 @@ struct
 		 block_labels,
 		 debug) =
      (app emitString textStart; 
-      app emitString (procedureHeader (case external_name of
-					   NONE => I name
-					 | SOME label => label));
+      app emitString (procedureHeader name);
       emitString commentHeader;
 
       emitString " arguments : ";
@@ -219,8 +210,8 @@ struct
 						 | _ => error "missing block")
 	        in  case (rev (!instrs)) of
 		      first_instr::_ => (case (stripAnnot first_instr) of
-					BASE(ILABEL (LOCAL_CODE v)) =>  
-					emitString (".globl " ^ (Name.var2string v) ^ "\n")
+					BASE(ILABEL l) =>  
+					emitString (".globl " ^ (msLabel l) ^ "\n")
 				      | _ => ())
 		    | _ => ()
                 end
@@ -228,7 +219,7 @@ struct
 
 
       dumpBlocks debug name psig block_map block_labels;
-      app emitString (procedureTrailer (msLoclabel name));
+      app emitString (procedureTrailer (msLabel name));
       emitString "\n")
 
    fun dumpData data =

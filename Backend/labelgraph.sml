@@ -1,26 +1,31 @@
-(*$import MACHINE GRAPH HashTableFn Graph MACHINE *)
+(*$import MACHINE GRAPH HashTableFn Graph MACHINE HashString *)
 (* For procedure-level callgraph *)
 
-functor Labelgraph (structure Machine : MACHINE) : DIRECTEDGRAPH =
+functor Labelgraph () :> DIRECTEDGRAPH where type node = Rtl.label =
 struct
-    open Machine
      structure HashKey =
        struct
-         type hash_key = Machine.loclabel
-         fun hashVal (LOCAL_CODE v) = Word.fromInt (Name.var2int v)
-	   | hashVal (LOCAL_DATA v) = Word.fromInt ((Name.var2int v) + 1000000)
-         fun sameKey (LOCAL_CODE v1, LOCAL_CODE v2) = Name.eq_var(v1,v2)
-         fun sameKey (LOCAL_DATA v1, LOCAL_DATA v2) = Name.eq_var(v1,v2)
-	   | sameKey _ = false
+	   open Rtl
+         type hash_key = Rtl.label
+         fun hashVal (ML_EXTERN_LABEL s) = HashString.hashString s
+	   | hashVal (C_EXTERN_LABEL s) = HashString.hashString s
+	   | hashVal (LOCAL_CODE s) = HashString.hashString s
+	   | hashVal (LOCAL_DATA s) = HashString.hashString s
+         val sameKey = Rtl.eq_label
        end
-     structure HashTable : MONO_HASH_TABLE = HashTableFn(HashKey)
-     exception LG_NotFound
+
+     structure HashTable = HashTableFn(HashKey)
+
+     exception CG_NotFound
+
      structure Node : NODE =
 	 struct
-	     type node = Machine.loclabel
+	     type node = Rtl.label
 	     open HashTable
-	     fun make i = HashTable.mkTable(i,LG_NotFound)
+	     fun make i = HashTable.mkTable(i,CG_NotFound)
 	 end
+
      structure Graph = Graph(Node)
      open Graph
 end
+

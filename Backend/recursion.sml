@@ -1,6 +1,6 @@
-(*$import PPRTL GRAPH PRINTUTILS RECURSION *)
+(*$import PPRTL GRAPH PRINTUTILS RECURSION Util *)
 functor Recursion(structure Pprtl : PPRTL
-		  structure Graph : DIRECTEDGRAPH where type node = Rtl.var
+		  structure Graph : DIRECTEDGRAPH where type node = Rtl.label
 		  structure Printutils : PRINTUTILS)
     :> RECURSION =
 struct
@@ -10,47 +10,50 @@ struct
   val error = fn s => Util.error "recursion.sml" s
   val debug = ref false
 
-  fun print_rtl_locallabel ll = print (Pprtl.local_label2s ll)
+  fun print_rtl_label ll = print (Pprtl.label2s ll)
   fun print_rtl_var v = print (Pprtl.var2s v)
 
   fun print_node n = if (! debug) 
-		       then print_rtl_var n
+		       then print_rtl_label n
 		     else ()
 
-  fun extractVarFromCodeLabel (Rtl.LOCAL_CODE v) = v
-    | extractVarFromCodeLabel _ = error "extractvarfromcodelabel: locallabel not a code_label"
 
   (* Given an Rtl module, return:
      - a mapping taking a function name to the functions it calls;
      - the list of strongly-connected components in the call graph;
      - the list of connected (viewing the call graph as undirected)
        components only considering the tailcall edges. *)     
+  fun isLocal(Rtl.LOCAL_CODE _) = true
+    | isLocal(Rtl.LOCAL_DATA _) = true
+    | isLocal _ = false
+
   fun procGroups module =
     let
-      val callgraph     = Graph.empty (Name.fresh_var ())
-      val tailcallgraph = Graph.empty (Name.fresh_var ())
+      val callgraph     = Graph.empty (Rtl.fresh_code_label "dead")
+      val tailcallgraph = Graph.empty (Rtl.fresh_code_label "dead")
 
       (* Add edge to the callgraph if the instruction is a call *)
-      fun addCall proc (Rtl.CALL{func=Rtl.LABEL' (Rtl.LOCAL_LABEL l), 
+      fun addCall proc (Rtl.CALL{func=Rtl.LABEL' l,
 				 ...}) =
 	     (if (! debug) then
 		(emitString "Recording call from ";
-		 print_rtl_locallabel proc;
+		 print_rtl_label proc;
 		 emitString " to ";
-		 print_rtl_locallabel l;
+		 print_rtl_label l;
 		 emitString "\n") else ();
-	      Graph.insert_edge(callgraph, (extractVarFromCodeLabel proc, 
-					    extractVarFromCodeLabel l)))
+		if isLocal l
+		    then Graph.insert_edge(callgraph, (proc, l))
+		else ())
         | addCall _ _ = ()
 
       (* Add edge to the tailcall graph if the instruction is 
          a tailcall *)
-      fun addTailCall proc (Rtl.CALL{func=Rtl.LABEL' (Rtl.LOCAL_LABEL l), 
+      fun addTailCall proc (Rtl.CALL{func=Rtl.LABEL' l,
 				     tailcall=true, ...}) =
-	     (Graph.insert_edge(tailcallgraph, (extractVarFromCodeLabel proc, 
-						extractVarFromCodeLabel l));
-	      Graph.insert_edge(tailcallgraph, (extractVarFromCodeLabel l, 
-						extractVarFromCodeLabel proc)))
+	     if isLocal l
+		 then (Graph.insert_edge(tailcallgraph, (proc, l));
+		       Graph.insert_edge(tailcallgraph, (l, proc)))
+	     else ()
 	| addTailCall _ _ = ()
 
       fun procLoop f [] = ()
@@ -67,14 +70,14 @@ struct
 	let 
 	  val procnames = procNames procs
 	in
-	  app (fn proc => Graph.insert_node(callgraph, extractVarFromCodeLabel proc)) procnames;
-	  app (fn proc => Graph.insert_node(tailcallgraph, extractVarFromCodeLabel proc)) procnames;
+	  app (fn proc => Graph.insert_node(callgraph, proc)) procnames;
+	  app (fn proc => Graph.insert_node(tailcallgraph, proc)) procnames;
 	  procLoop addCall procs; 
 	  procLoop addTailCall procs
 	end
 	
       val ghash   = Graph.hash callgraph
-      val gunhash = Rtl.LOCAL_CODE o (Graph.unhash callgraph)
+      val gunhash = Graph.unhash callgraph
 
       (* Create the graphs *)
       val _ = makeGraphs module;
@@ -88,25 +91,25 @@ struct
 
       if (! debug) then
 	(emitString "\nCallgraph:\n";
-	 app (fn (n : Rtl.var) =>
+	 app (fn (n : Rtl.label) =>
 	      let
 		val edges = map gunhash (Graph.edges callgraph (ghash n))
 	      in
-		print_rtl_var n;
+		print_rtl_label n;
 		emitString " : ";
-		print_list print_rtl_locallabel edges
+		print_list print_rtl_label edges
 	      end) 
 	     (Graph.nodes callgraph))
       else ();
 
       if (! debug) then
 	(emitString "Connected components: \n";
-	 app (print_list print_rtl_locallabel) rtl_scc)
+	 app (print_list print_rtl_label) rtl_scc)
       else ();
 
       (* Return info *)
       {callee_map = fn n => map gunhash
-       (Graph.edges callgraph (ghash (extractVarFromCodeLabel n))),
+       (Graph.edges callgraph (ghash n)),
        rtl_scc    = rtl_scc,
        rtl_tailcall_cc = rtl_tailcall_cc}
     end

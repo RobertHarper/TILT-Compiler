@@ -1,6 +1,6 @@
-(*$import TopLevel LISTOPS Util ListPair *)
+(*$import LISTOPS List Util ListPair TopLevel *)
 
-structure Listops : LISTOPS = 
+structure Listops :> LISTOPS = 
   struct
 
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)

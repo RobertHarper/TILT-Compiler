@@ -374,8 +374,8 @@ local
 	    val speed_of_sound  =  gamma*sub2(p,zone)/sub2(rho',zone)
 	    val ubar  =  pow(upper_ubar,2) + pow(lower_ubar,2)
 	    val viscosity   =  
-		sub2(rho',zone)*(1.5*ubar + 0.5*speed_of_sound*(sqrt ubar))
-	    val length   = sqrt(pow(upper_del r',2) + pow(lower_del r',2))
+		sub2(rho',zone)*(1.5*ubar + 0.5*speed_of_sound*(Ccall(sqrt, ubar)))
+	    val length   = Ccall(sqrt,pow(upper_del r',2) + pow(lower_del r',2))
 	    val courant_delta = 0.5* sub2(alpha',zone)/(speed_of_sound*length)
 	in (viscosity, courant_delta)
 	end
@@ -486,7 +486,7 @@ local
   fun make_cc(alpha_prime, theta_hat) =
     let fun interior_cc zone =  
 	    (0.0001 * pow(sub2(theta_hat,zone),2) *
-	    (sqrt (abs(sub2(theta_hat,zone)))) / sub2(alpha_prime,zone))
+	    (Ccall(sqrt,abs(sub2(theta_hat,zone)))) / sub2(alpha_prime,zone))
 	    handle Sqrt => (print (makestring_real (sub2(theta_hat, zone)));
 			    print ("\nzone =(" ^ makestring_int (#1 zone) ^ "," ^ 
 				   makestring_int (#2 zone) ^ ")\n");
@@ -736,7 +736,7 @@ local
 			     val rp = real (lmax - lmin)
 			     val z1 = real(10 + k - kmin)
 			     val zz = (~0.5 + real(l - lmin) / rp) * pi
-			 in (z1 * cos zz,  z1 * sin zz)
+			 in (z1 * (Ccall(cos,zz)),  z1 * (Ccall(sin, zz)))
 			 end
 		 in  make_position_matrix interior_position
 		 end

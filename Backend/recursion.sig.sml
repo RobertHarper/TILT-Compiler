@@ -12,9 +12,9 @@ sig
        undirected) when only considering the tailcall edges. *)     
 
   val procGroups : Rtl.module -> 
-                   {callee_map: Rtl.local_label -> Rtl.local_label list,
-		    rtl_scc: Rtl.local_label list list,
-		    rtl_tailcall_cc: Rtl.local_label list list}
+                   {callee_map: Rtl.label -> Rtl.label list,
+		    rtl_scc: Rtl.label list list,
+		    rtl_tailcall_cc: Rtl.label list list}
 
 
 

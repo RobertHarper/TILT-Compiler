@@ -69,22 +69,23 @@ structure Stats :> STATS =
 		INT_ENTRY res => res
 	      | _ => error "find_time_entry: did not find a INT_ENTRY"
         end
-      fun find_bool_entry default s = 
-	let fun maker () = BOOL_ENTRY(ref default)
-        in  case (find_entry maker s) of
+      fun find_bool_entry maker s = 
+         case (find_entry maker s) of
 		BOOL_ENTRY res => res
-	      | _ => error "find_time_entry: did not find a BOOL_ENTRY"
-        end
+	      | _ => error "find_bool_entry: did not find a BOOL_ENTRY"
+
+
+      val int = find_int_entry
+      fun bool str = find_bool_entry 
+	             (fn() => error ("trying to get an uninitialized bool" ^ str)) str
+      val tt = find_bool_entry (fn() => BOOL_ENTRY(ref true))
+      val ff = find_bool_entry (fn() => BOOL_ENTRY(ref false))
+
       fun counter str = let val intref = find_counter_entry str
                         in fn() => let val v = !intref
 				   in intref := v + 1; v
 				   end
 			end
-      val int = find_int_entry
-      val bool = find_bool_entry false
-      val tt = find_bool_entry true
-      val ff = find_bool_entry false
-
       fun timer_help disjoint (str,f) arg =
 	   let val cpu_timer = Timer.startCPUTimer()
 	       val real_timer = Timer.startRealTimer()

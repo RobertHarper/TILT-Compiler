@@ -25,3 +25,4 @@ struct
      structure Graph = Graph(Node)
      open Graph
 end
+

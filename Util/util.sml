@@ -1,6 +1,6 @@
-(*$import TopLevel UTIL *)
+(*$import TopLevel UTIL OS TextIO *)
 
-structure Util : UTIL = 
+structure Util :> UTIL = 
   struct
     exception UNIMP
     exception BUG of string
@@ -69,6 +69,21 @@ structure Util : UTIL =
 			    end
 	      | SOME res => res)
        end
+
+   val has_sys = OS.Process.system "sys" = OS.Process.success
+   fun system command = 
+       if (not has_sys)
+	        then 
+                  let val os = TextIO.openOut "worklist"
+	              val _ = TextIO.output(os,command)
+	              val _ = TextIO.closeOut os
+		      fun count 0 = () | count n = count(n-1)
+		      fun sleep 0 = () | sleep n = (count 1000000; sleep(n-1))
+		      fun loop() = if OS.FileSys.access("worklist",[])
+					then (sleep 10; loop()) else ()
+                  in  loop(); true
+                  end
+       else (OS.Process.system command = OS.Process.success)
 
     val error = real_error
   end

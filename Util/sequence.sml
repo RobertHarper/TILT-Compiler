@@ -1,6 +1,6 @@
-(*$import TopLevel Util SEQUENCE Listops *)
+(*$import Util SEQUENCE Listops List TopLevel *)
 
-structure Sequence : SEQUENCE =
+structure Sequence :> SEQUENCE =
 struct
 
     val error = fn s => Util.error "sequence.sml" s

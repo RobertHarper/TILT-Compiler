@@ -1,3 +1,21 @@
 (*$include Prelude *)
 
+
+val option_valOf  : 'a option -> 'a
+val list_app : ('a -> unit) -> 'a list -> unit
+val list_map : ('a -> 'b) -> 'a list -> 'b list
+val list_hd : 'a list -> 'a
+val list_tl : 'a list -> 'a list
+val list_append : 'a list * 'a list -> 'a list
+val list_foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+val list_foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+val list_null  : 'a list -> bool
+
+val string_concat : string list -> string
+val string_lt : string * string -> bool
+val string_le : string * string -> bool
+val string_gt : string * string -> bool
+val string_ge : string * string -> bool
+
 val textio_print : string -> unit
+

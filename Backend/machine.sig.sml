@@ -1,39 +1,16 @@
-(*$import Name TilWord32 *)
+(*$import Rtl Name TilWord32 *)
 signature MACHINE =
   sig
 
     datatype register = R of int
                       | F of int
 
-    datatype loclabel = LOCAL_DATA of Name.var
-	              | LOCAL_CODE of Name.var
 
-    datatype label    = I of loclabel  
-                      | MLE of string                  (* a label emitted from direct assembly *)
-                      | CE of string * register option (* a label emitted from C compiler *)
+    type align = Rtl.align
+    type label = Rtl.label
+    type data = Rtl.data
 
-    datatype align    = LONG (* 4 bytes *)
-                      | QUAD (* 8 bytes *)
-                      | ODDLONG (* align at 8 byte boundary +4 *)
-                      | OCTA    (* 16 bytes *)
-                      | ODDOCTA (* 16 bytes bound + 12 *)
-
-  datatype labelortag = PTR of label | TAG of TilWord32.word
-
-  datatype data = 
-      COMMENT of string
-    | STRING of (string)
-    | INT32 of  (TilWord32.word)
-    | INT_FLOATSIZE of (TilWord32.word)
-    | FLOAT of  (string)
-    | DATA of   (label)
-    | ARRAYI of (int * TilWord32.word)  (* array of i words inited to word32 *)
-    | ARRAYF of (int * string)     (* array of i words initialized to fp value in string *)
-    | ARRAYP of (int * labelortag)  (* array of i words initialized to label or small int *)
-    | ALIGN of  (align)
-    | DLABEL of (label)
-
-   structure Labelmap : ORD_MAP where type Key.ord_key = loclabel
+   structure Labelmap : ORD_MAP where type Key.ord_key = label
    structure Regmap   : ORD_MAP where type Key.ord_key = register
    structure Regset   : ORD_SET where type Key.ord_key = register
 
@@ -51,8 +28,8 @@ signature MACHINE =
     val isFloat   : register -> bool
     val isPhysical : register -> bool
 
-    val freshCodeLabel : unit -> loclabel
-    val freshDataLabel : unit -> loclabel
+    val freshCodeLabel : unit -> label
+    val freshDataLabel : unit -> label
     val freshIreg  : unit -> register
     val freshFreg  : unit -> register
 
@@ -72,7 +49,8 @@ signature MACHINE =
     val Fat2    : register   (* Second floating-point temporary *)
 
 
-    datatype call_type = DIRECT of label | INDIRECT of register
+    datatype call_type = DIRECT of label * register option
+                       | INDIRECT of register
     datatype rtl_instruction =
       CALL of 
       {extern_call : bool,               (* is this a C call? *)
@@ -83,9 +61,9 @@ signature MACHINE =
        resregs : register list option,   (*   "         "    *)
        destroys: register list option,   (*   "         "    *)
        tailcall : bool}
-    | JMP of register * loclabel list
+    | JMP of register * label list
     | RETURN of {results: register list}        (* formals *)
-    | SAVE_CS of loclabel
+    | SAVE_CS of label
     | HANDLER_ENTRY
 
 
@@ -102,10 +80,10 @@ signature MACHINE =
     | BSR     of label * register option * {regs_modified : register list, regs_destroyed : register list,
 					    args : register list}
                        (* if register is SOME ?, then ? is the reg where we want to put retadd *)
-    | JSR     of bool * register * int * loclabel list (* link, dest, hint, labels *)
+    | JSR     of bool * register * int * label list (* link, dest, hint, labels *)
     | RET     of bool * int (* link, hint *)
-    | GC_CALLSITE of loclabel
-    | ILABEL  of loclabel
+    | GC_CALLSITE of label
+    | ILABEL  of label
     | ICOMMENT of string
     | LADDR of register * label         (* dest, label *)
 
@@ -116,8 +94,7 @@ signature MACHINE =
 
     val msReg           : register -> string
     val msLabel         : label -> string
-    val msLoclabel      : loclabel -> string
-    val msData          : data -> (int * string) list
+    val msData          : Rtl.data -> (int * string) list
     val msInstruction   : string -> instruction -> string
     val msStackLocation : stacklocation -> string
 
@@ -128,7 +105,6 @@ signature MACHINE =
     val fp_regs       : register list
 
    val eqRegs    : register -> register -> bool
-   val eqLLabs   : loclabel -> loclabel -> bool
    val eqLabs    : label -> label -> bool
 
    (* these functions should be used with care since careless use
@@ -155,7 +131,7 @@ signature MACHINE =
    val push : register * stacklocation -> instruction
 
    val defUse : instruction -> register list * register list
-   val cFlow : instruction -> (bool * loclabel list) option
+   val cFlow : instruction -> (bool * label list) option
    val extern_decl : string -> string
 
    (* Where a given pseudoregister is physically located *)
@@ -182,7 +158,7 @@ signature MACHINE =
 		 allocated  : bool,
 		 regs_destroyed  : register list ref,
 		 regs_modified  : register list ref,
-		 blocklabels: loclabel list,
+		 blocklabels: label list,
                  framesize  : int option,
 		 ra_offset : int option,
 		 callee_saved: register list,

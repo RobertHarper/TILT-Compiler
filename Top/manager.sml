@@ -769,6 +769,10 @@ struct
   fun compileThem(linkopt, exeopt, units) = 
       let val _ = app (compile true) units
 	  val tmp = OS.FileSys.tmpName()
+	  val len = size tmp
+	  val tmp = if (len > 2 andalso String.substring(tmp,0,2) = ".\\")
+			then String.substring(tmp,2,len-2)
+		    else tmp
 	  val tmp_uo = tmp ^ ".uo"
 
           val unit_set = 

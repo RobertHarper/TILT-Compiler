@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (* Chris Okasaki
    School of Computer Science

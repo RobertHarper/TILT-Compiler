@@ -59,7 +59,7 @@ struct
 
 
 
-  structure Graph = Vargraph()
+  structure Graph = Labelgraph()
 
   structure Recursion = Recursion(structure Pprtl = Pprtl
 				  structure Graph = Graph
@@ -97,8 +97,8 @@ struct
 				  structure Recursion = Recursion
 				  structure Toasm = Toalpha)
 
-  val prelude_modules : ((Rtl.local_label list * string list) option) ref = ref NONE
-  val prelude_modules_hprof : ((Rtl.local_label list * string list) option) ref = ref NONE
+  val prelude_modules : ((Rtl.label list * string list) option) ref = ref NONE
+  val prelude_modules_hprof : ((Rtl.label list * string list) option) ref = ref NONE
 
   fun asm_suffix() = ".alpha.s"
 
@@ -174,19 +174,19 @@ struct
   fun wrapper string command = Stats.timer(string,command)
   val comp = wrapper "toasm" comp
 
-  fun link (srcfile,local_labels) = 
+  fun link (srcfile,labels) = 
     let 
       val asm_file = srcfile ^ (asm_suffix())
       val _ = Printutils.openAppend asm_file
-      val _ = Rtltoalpha.dumpEntryTables local_labels 
+      val _ = Rtltoalpha.dumpEntryTables labels 
       val _ = Printutils.closeOutput()
     in ()
     end
 
-  fun mk_link_file (asm_file,local_labels) = 
+  fun mk_link_file (asm_file,labels) = 
     let 
       val _ = Printutils.openOutput asm_file
-      val _ = Rtltoalpha.dumpEntryTables local_labels 
+      val _ = Rtltoalpha.dumpEntryTables labels 
       val _ = Printutils.closeOutput()
     in ()
     end
@@ -200,7 +200,7 @@ struct
       end
   fun compile filename = hd(compiles [filename])
 
-  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.local_label =
+  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
       in (comp(filename ^ ".s",rtlmod), main)
       end
@@ -211,7 +211,7 @@ struct
       in  (comp(filename ^ asm_suffix(),rtlmod),main)
       end
 
-  val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
+  val cached_prelude = ref (NONE : (string * Rtl.label) option)
   fun compile_prelude (use_cache,filename) = 
       case (use_cache, !cached_prelude) of
 	  (true, SOME mlabel) => mlabel

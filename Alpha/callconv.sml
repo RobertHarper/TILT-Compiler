@@ -1,4 +1,4 @@
-(*$import DECALPHA MACHINEUTILS CALLCONV *)
+(*$import DECALPHA MACHINEUTILS CALLCONV Util *)
 functor DecalphaCallconv(structure Decalpha : DECALPHA
 			 structure Machineutils : MACHINEUTILS 	
 	 (* where Machine = Decalpha  this break 109.30 so we must use sharing *)

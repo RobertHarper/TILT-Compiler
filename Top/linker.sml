@@ -13,6 +13,7 @@ structure Linker :> LINKER =
     fun base2uo s = s ^ ".uo"
     fun base2o s = s ^ ".o"
 
+
     structure Crc = Crc
 
 
@@ -206,11 +207,12 @@ structure Linker :> LINKER =
 	  val command = (ld_path ^ " -non_shared -r -o " ^ o_file ^ 
 			 " " ^ pr_list o_files)
 	  val _ = (print "Running: "; print command; print "\n")
-	  val res = if OS.Process.system command = OS.Process.success then 
-	      mk_uo {imports=imports,exports=exports,base_result=base_result}
-		    else (print "link failed: "; print command; print "\n";
-			  error "link. System command ld failed")
-      in  res
+	  val success = Util.system command
+	  val _ = if success
+		      then mk_uo {imports=imports,exports=exports,base_result=base_result}
+		  else (print "link failed: "; print command; print "\n";
+			error "link. System command ld failed")
+      in  ()
       end
 
     (* mk_exe: Make an executable from a uo-file and check 
@@ -226,15 +228,17 @@ structure Linker :> LINKER =
 	       let val link_s = "link_" ^ exe_result ^ ".s"
 		   val link_o = "link_" ^ exe_result ^ ".o"
 		   val unitnames = map #1 exports
-		   val local_labels = map (fn un => Rtl.LOCAL_CODE 
-					   (Name.construct_var (0,"main_" ^ un ^ "_doit"))) unitnames
+		   val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
+					   ("main_" ^ un ^ "_doit")) unitnames
 		   val _ = Linkalpha.mk_link_file (link_s, local_labels)
-		   val _ = if OS.Process.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s) = OS.Process.success then ()
+		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
+		   val _ = if success then ()
 			   else error "mk_exe - as failed"
 		   val command = (ld_path ^ " -D 40000000 -T 20000000 -non_shared -o " ^ 
 				  exe_result ^ " " ^ startup_lib ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs)
 		   val _ = (print "Running: "; print command; print "\n")
-		   val _ = if OS.Process.system command = OS.Process.success then ()
+		   val success = Util.system command
+		   val _ = if success then ()
 			   else (print "load failed: "; print command; print "\n";
 				 error "mk_exe - ld failed")
 	       in ()

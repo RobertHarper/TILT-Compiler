@@ -15,10 +15,10 @@ sig
 
    val print_reg  : Machine.register -> unit
    val print_pos  : Machine.assign -> unit
-   val print_lab  : Machine.loclabel -> unit
    val print_asn  : Machine.register * Machine.assign -> unit
    val print_move : Machine.register *
                     (Machine.assign * Machine.assign) -> unit
+   val print_lab  : Rtl.label -> unit
    val print_list : ('a -> unit) -> 'a list -> unit
    val print_set  : Machine.Regset.set -> unit
    val print_map  : Machine.assign Machine.Regmap.map -> unit
@@ -28,15 +28,15 @@ sig
 
    val show_labels : bool ref
 
-   val dumpBlocks : bool -> Machine.loclabel -> 
+   val dumpBlocks : bool -> Machine.label -> 
                             Machine.procsig -> 
 			    Bblock.bblock Machine.Labelmap.map -> 
-			    Machine.loclabel list -> unit
+			    Machine.label list -> unit
 
-   val dumpProc : Machine.loclabel * Machine.label option *
+   val dumpProc : Machine.label *
                  Machine.procsig *
                  Bblock.bblock Machine.Labelmap.map * 
-	         Machine.loclabel list *
+	         Machine.label list *
 		 bool -> unit
    val dumpCodeLabel : Machine.label list -> unit
    val dumpData : Machine.data Array.array -> unit

@@ -1,46 +1,17 @@
-(*$import RTL DECALPHA Labelmap Regmap Regset String *)
-functor Decalpha (val exclude_intregs : int list
-		  structure Rtl : RTL) :> DECALPHA  =
+(*$import RTL DECALPHA Labelmap Regmap Regset String Rtl Util Char *)
+functor Decalpha (val exclude_intregs : int list) :> DECALPHA  =
+
 
 struct
       
  val error = fn s => Util.error "decalpha.sml" s
+ open Rtl
 
  structure Temp = 
   struct
     structure Rtl = Rtl
 
     datatype register = R of int | F of int
-
-    datatype loclabel = LOCAL_DATA of Name.var | LOCAL_CODE of Name.var
-
-    datatype align    = LONG (* 4 bytes *)
-                      | QUAD (* 8 bytes *)
-                      | ODDLONG (* align at 8 byte boundary +4 *)
-                      | OCTA    (* 16 bytes *)
-                      | ODDOCTA (* 16 bytes bound + 12 *)
-
-    datatype label  = I of loclabel  (* must be same as in DECALPHA *)
-		    | MLE of string
-		    | CE of string * register option
-
-    datatype labelortag = PTR of label | TAG of TilWord32.word
-
-  datatype data = 
-      COMMENT of string
-    | STRING of (string)
-    | INT32 of  (TilWord32.word)
-    | INT_FLOATSIZE of (TilWord32.word)
-    | FLOAT of  (string)
-    | DATA of   (label)
-    | ARRAYI of (int * TilWord32.word)  (* array of i words inited to word32 *)
-    | ARRAYF of (int * string)     (* array of i words initialized to fp value in string *)
-    | ARRAYP of (int * labelortag)  (* array of i words initialized to label or small int *)
-    | ALIGN of  (align)
-    | DLABEL of (label)
-
-
-
 
 
       datatype operand = REGop of register
@@ -56,7 +27,10 @@ struct
 	| ACTUAL4 of int
 	| ACTUAL8 of int
 	| RETADD_POS
-
+      
+      type label = Rtl.label
+      type data = Rtl.data
+      type align = Rtl.align
 
 
     val Rzero   = R 31
@@ -132,7 +106,7 @@ struct
     datatype jmp_instruction = 
       JMP | JSR | RET
 
-  datatype call_type = DIRECT of label | INDIRECT of register
+  datatype call_type = DIRECT of label * register option | INDIRECT of register
 
   datatype rtl_instruction =
     CALL of 
@@ -147,9 +121,9 @@ struct
 
     | RETURN of {results: register list}       (* formals *)
 
-    | JMP of register * loclabel list
+    | JMP of register * label list
     | HANDLER_ENTRY
-    | SAVE_CS of loclabel
+    | SAVE_CS of label
 
     datatype decalpha_specific_instruction =
       IALIGN of align
@@ -157,8 +131,8 @@ struct
     | LOADI  of loadi_instruction * register * int * register
     | STOREF of storef_instruction * register * int * register
     | LOADF  of loadf_instruction * register * int * register
-    | CBRANCHI of cbri_instruction * register * loclabel
-    | CBRANCHF of cbrf_instruction * register * loclabel
+    | CBRANCHI of cbri_instruction * register * label
+    | CBRANCHF of cbrf_instruction * register * label
     | INTOP  of int_instruction * register * operand * register
     | FPOP   of fp_instruction * register * register * register
     | FPCONV of fpconv_instruction * register * register
@@ -177,10 +151,10 @@ struct
     | BR       of label
     | BSR      of label * register option * {regs_modified : register list, regs_destroyed : register list,
 					     args : register list}
-    | JSR      of bool * register * int * loclabel list
+    | JSR      of bool * register * int * label list
     | RET      of bool * int
-    | GC_CALLSITE of loclabel
-    | ILABEL of loclabel
+    | GC_CALLSITE of label
+    | ILABEL of label
     | ICOMMENT of string
     | LADDR of register * label         (* dest, offset, label *)
 
@@ -232,11 +206,11 @@ struct
       loop o explode
     end
 
-  fun msLoclabel (LOCAL_CODE v) = "LC" ^ (makeAsmLabel (Name.var2string v))
-    | msLoclabel (LOCAL_DATA v) = "LD" ^ (makeAsmLabel (Name.var2string v))
-  fun msLabel (I label)         = msLoclabel label
-    | msLabel (MLE label)        = (makeAsmLabel label)
-    | msLabel (CE (label,_))     = (makeAsmLabel label)
+
+  fun msLabel (LOCAL_CODE s) = makeAsmLabel s
+    | msLabel (LOCAL_DATA s) = makeAsmLabel s
+    | msLabel (ML_EXTERN_LABEL label)     = (makeAsmLabel label)
+    | msLabel (C_EXTERN_LABEL label)     = (makeAsmLabel label)
 
 
   fun storei_to_ascii STL = "stl"
@@ -344,7 +318,7 @@ struct
     | reglist_to_ascii [r] = (msReg r)
     | reglist_to_ascii (r::rs) = (msReg r) ^ "," ^ (reglist_to_ascii rs)
 
-  fun rtl_to_ascii (CALL {func=DIRECT func, tailcall=true, 
+  fun rtl_to_ascii (CALL {func=DIRECT (func,_), tailcall=true, 
 			  args, results,...}) =
            "(tail)CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
@@ -353,7 +327,7 @@ struct
            "(tail)CALL via " ^ msReg Raddr
     | rtl_to_ascii (CALL {func=INDIRECT Raddr, ...}) = 
            "CALL via " ^ msReg Raddr
-    | rtl_to_ascii (CALL {func=DIRECT func, args,results,...}) = 
+    | rtl_to_ascii (CALL {func=DIRECT (func,_), args,results,...}) = 
            "CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
@@ -407,10 +381,10 @@ struct
 				 (msReg Rdest) ^ comma ^ (msDisp(Raddr, disp)))
     | msInstr' (CBRANCHI (instr, Rtest, label)) =
                                 (tab ^ (cbri_to_ascii instr) ^ tab ^
-				 (msReg Rtest) ^ comma ^ (msLabel (I label)))
+				 (msReg Rtest) ^ comma ^ (msLabel label))
     | msInstr' (CBRANCHF (instr, Rtest, label)) =
                                 (tab ^ (cbrf_to_ascii instr) ^ tab ^
-				 (msReg Rtest) ^ comma ^ (msLabel (I label)))
+				 (msReg Rtest) ^ comma ^ (msLabel label))
     | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
                                 (tab ^ (int_to_ascii instr) ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
@@ -434,7 +408,7 @@ struct
     | msInstr_base (TAILCALL label) = ("\tTAILCALL\t" ^ (msLabel label))
     | msInstr_base (BR label) = (tab ^ "br" ^ tab ^
 				           (msReg Rzero) ^ comma ^ (msLabel label))
-    | msInstr_base (ILABEL loclabel) = (msLoclabel loclabel) ^ ":"
+    | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
     | msInstr_base (ICOMMENT str) = (tab ^ "# " ^ str)
     | msInstr_base (JSR(link, Raddr, hint, _)) =
                                 (tab ^ "jsr" ^ tab 
@@ -466,7 +440,7 @@ struct
     | msInstr_base (PUSH_RET (SOME sloc)) = ("\tPUSH_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (POP_RET (SOME sloc)) =  ("\tPOP_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (GC_CALLSITE label) = ("\tGC CALLING SITE\t" ^
-                                      (msLabel (I label)))
+                                      (msLabel label))
     | msInstr_base (LADDR (Rdest, label)) = 
                                 ("\tlda\t" ^ (msReg Rdest) ^ comma ^ 
 				 (msLabel label))
@@ -480,11 +454,6 @@ struct
   fun wms arg = "0x" ^ (W.toHexString arg)
 
 
-  fun msRtlLocalLabel (Rtl.LOCAL_CODE v) = "LC" ^ (makeAsmLabel (Name.var2string v))
-    | msRtlLocalLabel (Rtl.LOCAL_DATA v) = "LD" ^ (makeAsmLabel (Name.var2string v))
-  fun msRtlLabel (Rtl.LOCAL_LABEL ll) = msRtlLocalLabel  ll
-    | msRtlLabel (Rtl.ML_EXTERN_LABEL s) = msLabel (MLE s)
-    | msRtlLabel (Rtl.C_EXTERN_LABEL s) = msLabel (CE (s,NONE))
 
 
   fun fixupFloat float_string =
@@ -555,12 +524,13 @@ struct
 					  (1,"\t.quad 0\n\t.long 0\n")]
     | msData (DLABEL (label))   = 
 	   [(1,case label of
-		 I _ => ((msLabel label) ^ ":\n")
+		 LOCAL_CODE _ => ((msLabel label) ^ ":\n")
+	       | LOCAL_DATA _ => ((msLabel label) ^ ":\n")
 	       | _ => ("\t.globl " ^ (msLabel label) ^ "\n" ^
 		       (msLabel label) ^ ":\n"))]
 
-   fun freshCodeLabel () = LOCAL_CODE (Name.fresh_var())
-   fun freshDataLabel () = LOCAL_DATA (Name.fresh_var())
+   fun freshCodeLabel () = Rtl.fresh_code_label "code"
+   fun freshDataLabel () = Rtl.fresh_data_label "data"
    fun freshIreg  () = let val v = Name.fresh_var() in R (Name.var2int v) end
    fun freshFreg  () = let val v = Name.fresh_var() in F (Name.var2int v) end
 
@@ -654,9 +624,9 @@ struct
       | defUse (SPECIFIC TRAPB)                         = ([], [])
       | defUse (BASE (LADDR (Rdest,_)))             = ([Rdest], [])
       | defUse (BASE (RTL (JMP (Raddr, _))))        = ([], [Raddr])
-      | defUse (BASE (RTL (CALL {func=DIRECT (CE (_,SOME sra)),args,
+      | defUse (BASE (RTL (CALL {func=DIRECT (_,SOME sra),args,
 				 results, ...})))   = (results, real_Rpv :: sra :: args)
-      | defUse (BASE (RTL (CALL {func=DIRECT (CE (_,NONE)), args,
+      | defUse (BASE (RTL (CALL {func=DIRECT (_,NONE), args,
 				 results, ...})))   = (results, real_Rpv :: args)
       | defUse (BASE (RTL (CALL {func=INDIRECT reg,
 				 args, results, ...})))  = (results, real_Rpv :: reg :: args)
@@ -677,12 +647,12 @@ struct
 
     (* SOME (fallthrough possible, other local labels this instr jumps to)
         if this instruction ends basic block; NONE otherwise *)
-    fun cFlow (BASE (BR (I label)))    = SOME (false, [label])
-      | cFlow (BASE (BR (CE _)))       = SOME (false, [])
-      | cFlow (BASE (BR (MLE _)))      = SOME (false, [])
-      | cFlow (BASE (BSR (I label,_,_))) = SOME (true, [label])
-      | cFlow (BASE (BSR (CE _,_,_)))    = SOME (true, [])
-      | cFlow (BASE (BSR (MLE _,_,_)))   = SOME (true, [])
+    fun cFlow (BASE (BR (label as LOCAL_CODE _)))    = SOME (false, [label])
+      | cFlow (BASE (BR (label as LOCAL_DATA _)))    = SOME (false, [label])
+      | cFlow (BASE (BR (label as _)))    = SOME (false, [])
+      | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_)))    = SOME (true, [label])
+      | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_)))    = SOME (true, [label])
+      | cFlow (BASE (BSR (label as _,_,_)))    = SOME (true, [])
       | cFlow (SPECIFIC (CBRANCHI(_, _, label))) = SOME (true, [label])
       | cFlow (SPECIFIC (CBRANCHF(_, _, label))) = SOME (true, [label])
       | cFlow (BASE (JSR(_,_,_,labels)))         = SOME (false, labels)
@@ -695,13 +665,7 @@ struct
       | cFlow (BASE(TAILCALL label))         = SOME (false, [])
       | cFlow _ = NONE
 
-   fun eqLLabs (LOCAL_CODE v) (LOCAL_CODE v') = Name.eq_var(v,v')
-     | eqLLabs (LOCAL_DATA v) (LOCAL_DATA v') = Name.eq_var(v,v')
-     | eqLLabs _ _ = false
-   fun eqLabs (I l) (I l') = eqLLabs l l'
-     | eqLabs (MLE s) (MLE s') = (s = s')
-     | eqLabs (CE (s,_)) (CE (s',_)) = (s = s')
-     | eqLabs _ _ = false
+   fun eqLabs l1 l2 = Rtl.eq_label(l1,l2)
 
    (* map src registers using fs and destination using fd and return mapped instruction *)
    fun translate_to_real_reg(i,fs,fd) = 
@@ -785,7 +749,7 @@ struct
 		 allocated  : bool,
 		 regs_destroyed  : register list ref,
 		 regs_modified  : register list ref,
-		 blocklabels: loclabel list,
+		 blocklabels: label list,
                  framesize  : int option,
 		 ra_offset : int option,
 		 callee_saved: register list,
@@ -832,7 +796,7 @@ struct
    val special_regs  = listunion(special_iregs, special_fregs) 
    val general_regs  = listdiff(physical_regs, special_regs)
 
-   structure Labelmap = Labelmap(structure Machine = struct datatype loclabel = datatype loclabel end)
+   structure Labelmap = Labelmap()
    structure Regmap = Regmap(structure Machine = struct datatype register = datatype register end)
    structure Regset = Regset(structure Machine = struct datatype register = datatype register end)
 

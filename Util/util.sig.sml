@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (*Non IL specific utility routines *)
 signature UTIL =
@@ -44,4 +44,12 @@ signature UTIL =
     val all_pairs : ('a * 'a -> bool) -> 'a list -> bool
 
     val memoize : (unit -> 'a) -> (unit -> 'a)
+
+    (* system command *)
+    (* If the system is UNIX (has a sys command), then execute system and return the success status.
+       Otherwise, put the command in a file called worklist.  When the file disappears
+          the command returns.  Presumably there is a process on a UNIX system monitoring
+	  this file and executing commands placed there. *)
+    val system : string -> bool
+
   end

@@ -1,4 +1,4 @@
-(*$import DECALPHA MACHINEUTILS TilWord64 DIVMULT *)
+(*$import DECALPHA MACHINEUTILS TilWord64 DIVMULT Util *)
 functor Divmult(structure Decalpha : DECALPHA 
 		structure MU : MACHINEUTILS 
 			     (* where Machine = Decalpha  this break 109.30 so we must have the following mess *) 

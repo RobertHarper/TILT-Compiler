@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS TRACETABLE Int32 *)
+(*$import MACHINEUTILS TRACETABLE Int32 Util List *)
 
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
@@ -50,10 +50,11 @@ functor Tracetable(val little_endian    : bool
   struct
 
     structure MU = MU
+    open Rtl
     open MU
     open MU.Machine
 
-    datatype calllabel = CALLLABEL of MU.Machine.loclabel
+    datatype calllabel = CALLLABEL of MU.Machine.label
     datatype trace     = TRACE_YES 
                        | TRACE_NO
                        | TRACE_UNSET   (* unset variable; handle specially for gener GC *)
@@ -353,7 +354,7 @@ functor Tracetable(val little_endian    : bool
 			print "  and  sum count = "; print (Int.toString sum); print "\n")
 		val _ = if (!ShowDiag) then
 		    (print "\n------------------------\n"; 
-		     print (msLoclabel lab); print ":\n";
+		     print (msLabel lab); print ":\n";
 		     app (fn (v,t) => (print (Int.toString v);
 				       print (tr2s t); 
 				       print "\n")) stacktrace;
@@ -375,7 +376,7 @@ functor Tracetable(val little_endian    : bool
 		val regtracewords = (bitlist2wordlist regtracebits_a) @
 				     (bitlist2wordlist regtracebits_b)
 	    end
-	    val labeldata       = DATA (I lab)
+	    val labeldata       = DATA lab
 	    val (bytedata,octa_ra_offset_word) =
 	      if ((retaddpos >= 0) andalso
 		  ((retaddpos mod 8) = 0))
@@ -436,7 +437,7 @@ functor Tracetable(val little_endian    : bool
 	end
     
     fun MakeTableHeader name = 
-	[COMMENT "gcinfo",DLABEL(MLE (name^"_GCTABLE_BEGIN_VAL"))]
+	[COMMENT "gcinfo",DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_BEGIN_VAL"))]
     fun MakeTable (calllist) = foldr (op @) nil (map do_callinfo calllist) 
     fun MakeTableTrailer name = 
 	(if !ShowDebug
@@ -453,7 +454,7 @@ functor Tracetable(val little_endian    : bool
 		   print "\n")
 	 else ();
 	 [COMMENT "endgcinfo with filler for alignment",
-	  DLABEL(MLE (name^"_GCTABLE_END_VAL")),
+	  DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_END_VAL")),
 	  INT32 wzero])
 
 
@@ -478,19 +479,19 @@ functor Tracetable(val little_endian    : bool
 		  (DATA lab) :: (map INT32 botword) @ specdata
 	      end
       in
-	[DLABEL(MLE (name^"_GLOBAL_TABLE_BEGIN_VAL"))]
+	[DLABEL(ML_EXTERN_LABEL (name^"_GLOBAL_TABLE_BEGIN_VAL"))]
 	@ (foldr (op @) nil (map do_lab_trace arg))
 	@ [COMMENT "filler for alignment of global_table",
-	   DLABEL(MLE (name^"_GLOBAL_TABLE_END_VAL")),
+	   DLABEL(ML_EXTERN_LABEL (name^"_GLOBAL_TABLE_END_VAL")),
 	   INT32 wzero]
       end
 
 
     fun MakeMutableTable (name,arg) = 
-	[DLABEL(MLE (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
+	[DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
 	@ (map (fn (lab) => DATA(lab)) arg)
 	@ [COMMENT "filler for alignment for mutable_table",
-	   DLABEL(MLE (name^"_MUTABLE_TABLE_END_VAL")),
+	   DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_END_VAL")),
 	   INT32 wzero]
 
   end

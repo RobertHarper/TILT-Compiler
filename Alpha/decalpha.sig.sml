@@ -3,9 +3,10 @@ signature DECALPHA =
 sig
 
   structure Machine : MACHINE
+
   type register = Machine.register
-  type loclabel = Machine.loclabel
-  type align = Machine.align
+  type label = Rtl.label
+  type align = Rtl.align
 
   val Rzero   : register   (* Integer zero *)
   val Rgp     : register   (* Alpha's $gp, pointer to global offset table *)
@@ -41,20 +42,21 @@ sig
   | CMPTEQ | CMPTLT | CMPTLE | ADDT | SUBT | MULT | DIVT    
   | FCMOVEQ | FCMOVNE | FCMOVLT | FCMOVLE | FCMOVGT | FCMOVGE
 
+
   datatype decalpha_specific_instruction =
     IALIGN of align
   | STOREI of storei_instruction * register * int * register
   | LOADI  of loadi_instruction * register * int * register
   | STOREF of storef_instruction * register * int * register
   | LOADF  of loadf_instruction * register * int * register
-  | CBRANCHI of cbri_instruction * register * loclabel
-  | CBRANCHF of cbrf_instruction * register * loclabel
+  | CBRANCHI of cbri_instruction * register * label
+  | CBRANCHF of cbrf_instruction * register * label
   | INTOP  of int_instruction * register * operand * register
   | FPOP   of fp_instruction * register * register * register
   | FPCONV of fpconv_instruction * register * register
   | TRAPB			      (* Trap barrier *)
 
 
-  sharing type decalpha_specific_instruction = Machine.specific_instruction
+  sharing type Machine.specific_instruction = decalpha_specific_instruction
 
 end

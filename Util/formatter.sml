@@ -16,7 +16,7 @@
   with the formatting and printing routines.}
 %************************************************************************
 *)
-structure Formatter : FORMATTER  =
+structure Formatter :> FORMATTER  =
    struct
 
 fun fold f l b = foldr f b l

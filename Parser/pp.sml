@@ -1,4 +1,4 @@
-(*$import TopLevel Control Array Vector PpQueue PRETTYPRINT *)
+(*$import TopLevel Control Array Vector PpQueue PRETTYPRINT String *)
 
 (* pp.sml
  *
@@ -549,11 +549,14 @@ end (* PrettyPrint *)
 
 (*
  * $Log$
-# Revision 1.3  98/02/01  01:28:11  pscheng
+# Revision 1.4  98/04/24  22:51:53  pscheng
+# fixed imports
+# 
+# Revision 1.3  1998/02/01  01:28:11  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places
 #   Split up files into signature and code
-# 
+#
 # Revision 1.2  1998/01/21  20:40:41  pscheng
 # moved the .sig files to .sig.sml file
 #

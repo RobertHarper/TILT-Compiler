@@ -2,6 +2,8 @@
 structure Til : COMPILER =
     struct
 
+	val littleEndian = Stats.tt("littleEndian")
+
 	val use_mlrisc = ref false
 
 	type sbnd = Il.sbnd
@@ -10,7 +12,6 @@ structure Til : COMPILER =
 
 	val error = fn x => Util.error "Compiler" x
 	val as_path = "as"
-	val has_sys = OS.Process.system "sys" = OS.Process.success
 
 	val debug_asm = ref false
 	val keep_asm = ref false
@@ -19,24 +20,14 @@ structure Til : COMPILER =
 	    let val as_command = as_path ^ (get_debug_flag()) ^ " -c -o " ^ o_file ^ " " ^ s_file
 		val rm_command = "rm " ^ s_file
 		val compress_command = "gzip -f " ^ s_file ^ " &"
-	    in  if (not has_sys)
-	        then 
-                  let val os = TextIO.openOut "worklist"
-	              val _ = TextIO.output(os,as_command)
-	              val _ = TextIO.closeOut os
-		      fun sleep() = ()
-		      fun loop() = if OS.FileSys.access("worklist",[])
-					then (sleep(); loop()) else ()
-                  in  loop()
-                  end
-	        else 
-	          (if ((Stats.timer("Assemble",OS.Process.system)as_command) =  OS.Process.success 
-		       andalso ((OS.FileSys.fileSize o_file > 0)
-				handle _ => false))
-		       then (if (!keep_asm)
-				 then (OS.Process.system compress_command; ())
-			     else (OS.Process.system rm_command; ()))
-		  else error "assemble. System command as failed")
+		val success = (Stats.timer("Assemble",Util.system) as_command)
+		val success = success andalso
+		              ((OS.FileSys.fileSize o_file > 0) handle _ => false)
+	    in if success
+		   then (if (!keep_asm)
+			     then (Util.system compress_command; ())
+			 else (Util.system rm_command; ()))
+	       else error "assemble. System command as failed"
 	    end
 
     (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an

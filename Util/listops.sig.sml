@@ -1,4 +1,4 @@
-(*$import TopLevel *)
+(*$import Prelude *)
 
 (*Non IL specific utility routines *)
 signature LISTOPS = 
