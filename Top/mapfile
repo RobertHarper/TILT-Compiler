@@ -47,12 +47,6 @@ PRELINK     prelink.sig.sml
 Prelink     prelink.sml
 INFO     info.sig.sml
 Info     info.sml
-// DEPENDENT_FILE     dependentfile.sig
-// FileHelp     filehelp
-// SourceFile     sourcefile
-// IlFile     ilfile
-// AsmFile     asmfile
-// ObjFile     objfile
 UPDATE_HELP     updatehelp.sig.sml
 UpdateHelp     updatehelp.sml
 UPDATE     update.sig.sml
