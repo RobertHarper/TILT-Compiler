@@ -32,6 +32,12 @@ exception Io of string
 
 structure List = 
     struct
+	fun hd (a::b) = a
+	  | hd _ = raise Hd
+	fun tl (a::b) = b
+	  | tl _ = raise Tl
+	fun null [] = true
+	  | null _ = false
 	fun [] @ y = y
 	  |  (x::xs) @ y = x :: (xs @ y)
 	fun rev l = 
@@ -46,6 +52,8 @@ structure List =
 	    end
 	fun foldl f acc [] = acc
 	  | foldl f acc (first::rest) = foldl f (f(first,acc)) rest
+	fun foldr f acc [] = acc
+	  | foldr f acc (first::rest) = f(first,foldr f acc rest)
 	fun map f [] = []
 	  | map f (a::b) = (f a)::(map f b)
     end
@@ -100,7 +108,8 @@ structure Array =
 		    then raise Subscript
 		else unsafe_update(data,uplus(umult(s,columns),t),e)
 	    end
-	
+
+	fun length1 a = uint32toint32(array_length a)
 	fun length2 ({rows,columns,data} : 'a array2) : int * int = (uint32toint32 rows,
 								     uint32toint32 columns)
 	      
@@ -154,6 +163,10 @@ structure Char =
     struct
 	fun ord(x : char) : int = uint8toint32 x
 	fun chr(x : int) : char = int32touint8 x
+	fun toString(x : char) = 
+	    let val a = unsafe_array(0w1,x)
+	    in  unsafe_array2vector a
+	    end
     end
 open Char
 
@@ -170,7 +183,8 @@ structure String =
 		explode_loop(0,[])
 	    end
 	
-	
+	fun sub(x : string, i : int) = Vector.vsub1(x,i)
+
 	local
     (* copies len words from vector x starting at x_start to array y starting at y_start *)
 	    fun wordcopy(len : uint,
@@ -243,9 +257,27 @@ structure String =
     end
 open String
 
-structure Integer = 
-    struct
-	fun toString (i:int):string =
+	fun (a : int) mod (b : int) =
+	    let val temp = a rem b
+	    in if ((b>0 andalso temp>=0) orelse
+		   (b<0 andalso temp<=0))
+		   then temp
+	       else temp+b
+	    end
+	fun (a : int) div (b : int) =
+	    let val temp = a quot b
+	    in  (* same if sign of a and b agree *)
+		if ((a>=0 andalso b>0) orelse (a<=0 andalso b<0))
+		    then temp
+		else 
+		    if (b * temp = a)   (* same if exact div *)
+			then temp
+		    else temp - 1       (* here's where they differ *)
+	    end
+
+structure Int = 
+    struct  
+	fun toChars (i:int):char list =
 	    let fun ord' (i : uint) = chr(uint32toint32(uplus(i,0w48)))
 		fun loop (i : uint) = 
 		    if ulte(i,0w9) 
@@ -257,8 +289,9 @@ structure Integer =
 		val chars = if (i>=0)
 				then List.rev(loop (int32touint32 i))
 			    else #"~"::(rev(loop (int32touint32 (~i))))
-	    in  implode chars
+	    in  chars
 	    end
+	fun toString (i:int):string = implode (toChars i)
     end
 
 
@@ -275,10 +308,9 @@ structure Real =
 		val ten  = 10.0
 		val one = 1.0
 		val zero = 0.0
-		val itoa = Integer.toString
 		fun chr'(x:int) = chr(x+48)
 		fun scistr(a::b::tl,e) : string =
-		    let val tail = [#"E", chr e]  (* XXX what if e > 9 *)
+		    let val tail = #"E" :: (Int.toChars e)
 			fun trail nil : char list = tail
 			  | trail (0::tl) =
 			    let val rest = trail tl
@@ -340,6 +372,7 @@ structure Real =
 			 then mkstr(r,0)
 		     else "0.0"
 	    end (* makestring_real *)
+	fun eq(x,y) = float_eq(x,y)
     end
 
 
