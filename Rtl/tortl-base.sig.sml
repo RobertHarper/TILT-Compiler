@@ -9,6 +9,7 @@ sig
 
     structure Rtl : RTL
     structure Nil : NIL
+    type exp = Nil.exp
     type con = Nil.con
     type kind = Nil.kind
     type regi = Rtl.regi
@@ -69,7 +70,7 @@ sig
    val show_state : state -> unit
    val new_gcstate : state -> state
    val join_states : state list -> state
-   val promote_maps : bool -> state -> state
+   val promote_maps : state -> state
 
    val add_code        : (state * var * con * label) -> state
    val add_reg         : (state * var * con * reg) -> state
@@ -99,6 +100,7 @@ sig
    val reduce_to_known_sum : string -> state -> con -> TilWord32.word * TilWord32.word * con list
    val con2rep : state -> con -> rep
    val valloc2rep : loc_or_val -> rep
+   val type_of : state -> exp -> con
 
    (* Routines for loading RTL values *)
    val load_ireg_loc : var_loc * regi option -> regi

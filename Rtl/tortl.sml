@@ -1,4 +1,4 @@
-(*$import TORTL RTL PPRTL TORTLSUM TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
+(*$import TORTL RTL PPRTL TORTLSUM TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats NORMALIZE *)
 
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
@@ -114,8 +114,9 @@ val debug_bound = ref false
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
 	      Con_b (_,cbnd) => xconbnd state cbnd
-	    | Exp_b (v,c,e) => 
-		  let val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
+	    | Exp_b (v,_,e) => 
+		  let val c = type_of state e
+		      val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
 		  in  (case (istoplevel(),loc_or_val) of
 			   (true, _)           => add_global (state,v,c,loc_or_val)
 			 | (false, VAR_LOC vl) => add_var    (state,v,c,SOME vl,NONE)
@@ -131,7 +132,7 @@ val debug_bound = ref false
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
 		      val state = foldl folder state var_fun_list
-		      val s' = promote_maps (istoplevel()) state
+		      val s' = promote_maps state
 		      val _ = app (fn (v,f) => addWork (FunWork(s',v,f))) var_fun_list
 		  in state
 		  end
@@ -185,7 +186,7 @@ val debug_bound = ref false
 				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
 				 val l = LOCAL_LABEL(LOCAL_CODE name)
 				 val state = add_concode "5" (state,name,funkind,NONE, SOME funcon,l)
-				 val s' = promote_maps (istoplevel()) state
+				 val s' = promote_maps state
 			     in  (addWork (ConFunWork(s',name,vklist,c,k)); state)
 			     end
 	 | Open_cb _ => (print "open Fun_cb:\n";

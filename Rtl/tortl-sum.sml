@@ -498,10 +498,7 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 					  | (_,Prim_c(Sum_c _,_)) => (true,true)
 					  | (_,Mu_c _) => (true,true)
 					  | (_,Proj_c(Mu_c _,_)) => (true,true)
-					  | (true,c) => 
-						(print "xtagsum got true/false with c = \n";
-						 Ppnil.pp_con c; print "\n";
-						 (true,false))
+					  | (true,c) => (true,false)
 					  | _ => error "project_sum not fully done")
 			       else  (false,false)
 

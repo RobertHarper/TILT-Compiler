@@ -24,6 +24,7 @@ struct
     structure TortlBase = TortlBase(structure Nil = Linknil.Nil
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
+			    structure Normalize = Linknil.Normalize
 			    structure Rtl = Rtl
 			    structure Pprtl = Pprtl
 			    structure Rtltags = Rtltags

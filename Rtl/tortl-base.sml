@@ -1,17 +1,18 @@
-(*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILSTATIC NILUTIL PPNIL TORTLBASE Listops Stats Bool *)
+(*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILSTATIC NILUTIL PPNIL TORTLBASE Listops Stats Bool NORMALIZE *)
 
 functor TortlBase(structure Rtl : RTL
 		  structure Pprtl : PPRTL 
 		  structure Rtltags : RTLTAGS 
 		  structure Nil : NIL
 		  structure NilContext : NILCONTEXT
+		  structure Normalize : NORMALIZE
 		  structure NilStatic : NILSTATIC
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
-		  sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Nil
+		  sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Normalize.Nil = Nil
 		  sharing Pprtl.Rtltags = Rtltags
 		  sharing Pprtl.Rtl = Rtltags.Rtl = Rtl
-		  sharing type NilStatic.context = NilContext.context)
+		  sharing type NilStatic.context = NilContext.context = Normalize.context)
     :> TORTL_BASE where Rtl = Rtl where Nil = Nil
    =
 struct
@@ -119,11 +120,13 @@ val debug_bound = ref false
    val globals = ref VarSet.empty
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
-   type state = {env : NilContext.context,
+   type state = {is_top : bool,
+		 env : NilContext.context,
 		 varmap : varmap,
 		 convarmap : convarmap,
 		 gcstate : gcstate}
-   fun make_state() : state = {env = NilContext.empty,
+   fun make_state() : state = {is_top = true,
+			       env = NilContext.empty(),
 			       varmap = VarMap.empty,
 			       convarmap = VarMap.empty,
 			       gcstate = [GC_INF]}
@@ -157,6 +160,8 @@ val debug_bound = ref false
 
 
 
+  fun type_of ({env,...}:state) e = Normalize.type_of(env,e)
+
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
@@ -170,7 +175,8 @@ val debug_bound = ref false
 	 | _ => false)
 (*	 | _ => (VarSet.member(!globals,v))) *)
 
-  fun varmap_insert' ({varmap,env,convarmap,gcstate} : state) (v,vr : var_rep) : state = 
+  fun varmap_insert' ({is_top,varmap,
+		       env,convarmap,gcstate} : state) (v,vr : var_rep) : state = 
       let val _ = if (!debug_bound)
 		      then (print "varmap adding to v = "; 
 			    Ppnil.pp_var v; print "\n")
@@ -179,8 +185,9 @@ val debug_bound = ref false
 		  NONE => ()
 		| SOME _ => error ("varmap contains "
 					    ^ (Name.var2string v))
+	  val env = NilContext.insert_con(env,v,#3 vr)
 	  val varmap = VarMap.insert(varmap,v,vr)
-      in  {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+      in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
   fun varmap_insert state (arg as (_,(vl,vv,_))) =
@@ -189,7 +196,8 @@ val debug_bound = ref false
        else ();
 	varmap_insert' state arg)
 
-  fun convarmap_insert' str ({convarmap,varmap,env,gcstate}:state) (v,(vl,vv,k,kopt,copt)) : state = 
+  fun convarmap_insert' str ({is_top,convarmap,varmap,env,gcstate}:state) 
+                        (v,(vl,vv,k,kopt,copt)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
@@ -208,7 +216,7 @@ val debug_bound = ref false
 				    | SOME (vl,vv,k) => k())
 			   | _ => Stats.subtimer("tortl_make_shape0"^str,NilStatic.make_shape env) k))
 	  val convarmap = VarMap.insert(convarmap,v,(vl,vv,memoize kind))
-      in  {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+      in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
   fun insert_kind(ctxt,v,k,copt : con option) = 
@@ -216,23 +224,28 @@ val debug_bound = ref false
 	       (_,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
 	     | (Singleton_k c,_) => NilContext.insert_kind_equation(ctxt,v,c,k)
 	     | _ => NilContext.insert_kind(ctxt,v,k))
-	       handle e => (print "Error in tortl_insert_kind\n"; raise e)
+	       handle e => (print "\nError in tortl_insert_kind with \n"; 
+			    NilContext.print_context ctxt;
+			    print "\n";
+			    raise e)
 
 
-  fun env_insert' ({env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
+  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "\n")
 		  else ()
 	  val newenv = insert_kind(env,v,k,copt)
-	  val newstate = {env=newenv,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+	  val newstate = {is_top=is_top,env=newenv,
+			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       in  newstate
       end
 
   fun convarmap_insert str state (arg as (v,(vl,vv,k,kshape_opt,copt))) =
       let val state = convarmap_insert' str state arg
 	  val state = env_insert' state (v,k,copt)
-	  val _ = if top_rep (vl,vv)
+	  val _ = if (#is_top state)
+	      (* top_rep (vl,vv) *)
 		      then let val gs = convarmap_insert' str (!global_state) arg
 			       val gs = env_insert' gs (v,k,copt)
 			   in  global_state := gs
@@ -575,7 +588,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        fun add_data d = dl := d :: !dl
 
        fun join_states ([] : state list) : state = error "join_states got []"
-	 | join_states (({env,varmap,convarmap,gcstate}) :: rest) = 
+	 | join_states (({is_top,env,varmap,convarmap,gcstate}) :: rest) = 
 	   let val gcstates = gcstate :: (map #gcstate rest)
 	       (* we must not have duplicates or else we get exponential blowup 
 		  and the updates will also be too large since they are duplicated *)
@@ -585,7 +598,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		fun folder(info,infos) = if (Listops.member_eq(gcinfo_eq,info,infos))
 						then infos else info::infos
 		val gcstate = foldl (fn (infos,acc) => foldl folder acc infos) [] gcstates
-	   in   {env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+	   in   {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
 	   end
        fun add_instr i = 
 	   (add_instr' i;
@@ -593,7 +606,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		NEEDGC _ => error "should use needgc to add a NEEDGC"
 	      | _ => ())
 
-       fun needgc(state as {gcstate,env,convarmap,varmap}:state,operand) : state = 
+       fun needgc(state as {is_top,gcstate,env,convarmap,varmap}:state,operand) : state = 
 	 if (not (!do_gcmerge))
 	     then (add_instr'(NEEDGC operand); state)
 	 else
@@ -606,7 +619,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		      then let val r = ref(NEEDGC operand)
 			       val _ = il := r :: !il
 			       val gcinfo = if is_imm then GC_IMM r else GC_INF
-			   in  {env=env,convarmap=convarmap,varmap=varmap,
+			   in  {is_top=is_top,env=env,convarmap=convarmap,varmap=varmap,
 				gcstate=[gcinfo]}
 			   end
 		  else (* the merge case where everything is IMM *)
@@ -619,8 +632,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		      end
 	      end
 
-       fun new_gcstate ({env,varmap,convarmap,gcstate} : state) : state =
-	   let val s = {env=env,varmap=varmap,convarmap=convarmap,gcstate=[GC_INF]}
+       fun new_gcstate ({is_top,env,varmap,convarmap,gcstate} : state) : state =
+	   let val s = {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=[GC_INF]}
 	   in  needgc(s,IMM 0)
 	   end
 
@@ -660,9 +673,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	     | _ => I(alloc_named_regi v (con2rep state c))
 		   
 
-       fun promote_maps is_top ({env,...} : state) : state = 
+       fun promote_maps ({env,...} : state) : state = 
 	   let val {varmap,convarmap,gcstate,...} = !global_state
-	   in  {varmap = varmap, convarmap = convarmap, env = env, gcstate = gcstate}
+	   in  {is_top = false, varmap = varmap, 
+		convarmap = convarmap, env = env, gcstate = gcstate}
 	   end
 
        fun set_args_result ((iargs,fargs),result,return) = 
