@@ -1228,7 +1228,7 @@ struct
 	    end	    
 
 	fun eq_partial_context (pc as (c,u): partial_context, pc' as (c',u'): partial_context) : bool =
-	    let 
+	    let
 		val (vm,vlist) = extend_vm_unresolved(u,u',VM.empty,[])
 		val (vm,vlist) = extend_vm_context(c,c',vm,vlist)
 		val res = eq_cntxt(vm,c,c',vlist)
@@ -1247,12 +1247,17 @@ struct
 	    in  eq_partial_context (pc, pc')
 	    end
 
-	val eq_con = 
+	val eq_con =
 	    fn (c: con, c': con) =>
 	    let val vm = Name.VarMap.empty
 	    in  eq_con (vm, c, c')
 	    end
 
+	fun wrapTopLevel f arg = (f arg handle NOT_EQUAL => false)
+	    
+	val eq_partial_context = wrapTopLevel eq_partial_context
+	val eq_context         = wrapTopLevel eq_context
+	val eq_con             = wrapTopLevel eq_con
     end
 
 
