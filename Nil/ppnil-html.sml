@@ -1,4 +1,4 @@
-(*$import Nil Ppprim Formatter PPNIL *)
+(*$import Nil Ppprim Formatter String PPNIL *)
 (* Nil pretty-printer. *)
 
 structure PpnilHtml :> PPNIL =
