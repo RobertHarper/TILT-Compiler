@@ -295,9 +295,9 @@ functor NilEvaluate (structure Nil : NIL
 		clist,elist,eflist) = doCall(f,clist,elist,eflist)
 	| doApp(env, Let_e(Sequential,[Fixclosure_b vcset],Var_e v),clist,elist,eflist) = 
 	  let val vclist = set2list vcset
-	      val {code=codevar,cenv,venv} = (case (assoc_eq(eq_var,v,vclist)) of
-						  SOME cl => cl
-						| NONE => error "doApp failed")
+	      val {code=codevar,cenv,venv,tipe} = (case (assoc_eq(eq_var,v,vclist)) of
+						       SOME cl => cl
+						     | NONE => error "doApp failed")
 	      val code = find_var env codevar
 	      val clist' = clist @ [cenv]
 	      val elist' = elist @ [venv]

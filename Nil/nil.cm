@@ -1,14 +1,12 @@
 Group 
-(*        signature NIL
+        signature NIL
 	signature NILUTIL
 	signature NILSTATIC
 	signature PPNIL
 
-
-        functor   Nil
-        functor   Ppnil
-*)
-(*	structure NilUtil   *)
+        functor   Nil 
+        functor   Ppnil 
+	functor   NilUtilFn
 (*	structure NilStatic *)
 is
 
@@ -29,22 +27,17 @@ ppnil.sml
 tonil.sml
 nilutil.sig.sml
 nilutil.sml
-linknil.sml
-(*linkstatic.sml*)
-(*
 nilstatic.sig.sml
-*)
 (* nilstatic.sml *)
-(*
 cont.sig.sml
-(*cont.sml*)
+cont.sml
 typecheck.sig.sml
-*)
 (*typecheck.sml*)
-nileval.sig.sml
 vararg.sig.sml
 vararg.sml
+nileval.sig.sml
 nileval.sml 
 toclosure.sig.sml
 toclosure.sml
-
+linknil.sml
+(*linkstatic.sml*)

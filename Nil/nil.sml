@@ -1,14 +1,14 @@
 functor Nil(structure Annotation : ANNOTATION
-	    structure Prim : PRIM)
-	   : sig 
+	    structure ArgPrim : PRIM)
+	   :> sig 
 	        include NIL 
-(*	        sharing Prim = Prim and Annotation = Annotation *)
+	        sharing ArgPrim = Prim and Annotation = Annotation 
               end =
 struct	
 
   open Util Name Listops
   structure Annotation = Annotation
-  structure Prim = Prim
+  structure Prim = ArgPrim
   val error = fn s => error "nil.sml" s
 
   type var = Name.var
@@ -162,7 +162,7 @@ struct
     | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures *)
-    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp}) set
+    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp, tipe:con}) set
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.
    * It may or may not be effect-free and may or may not be recursive.

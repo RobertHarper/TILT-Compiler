@@ -1,12 +1,12 @@
 structure Linknil =
 struct
     structure Nil = Nil(structure Annotation = Annotation
-			structure Prim = LinkIl.Prim)      
+			structure ArgPrim = LinkIl.Prim)      
 	
     structure Ppnil = Ppnil(structure Nil = Nil
 			    structure Ppprim = LinkIl.Ppprim)
 
-    structure NilUtil = NilUtilFn(structure Nil = Nil
+    structure NilUtil = NilUtilFn(structure ArgNil = Nil
 				  structure IlUtil = LinkIl.IlUtil)
 (*      
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
@@ -15,6 +15,7 @@ struct
 				      structure NilUtil = NilUtil
 				      structure Cont = Cont)
 *)
+
     structure Tonil = Tonil(structure Ilstatic = LinkIl.IlStatic
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
@@ -47,3 +48,4 @@ struct
 end
 
 fun doit () = Linknil.test "test"
+

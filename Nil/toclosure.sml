@@ -416,19 +416,23 @@ struct
 	   val venv_type = con_tuple(map #2 vc_free)
 	   val vklist_code = vklist @ vk_free
 	   val vclist_code = vclist @ vc_free
-	   val code_tipe = c_rewrite tipe
+	   val codebody_tipe = c_rewrite tipe
 	   val code_fun = Function(effect,recur,
 				   vklist_code,vclist_code,vflist,
-				   e_rewrite body, code_tipe)
+				   e_rewrite body, codebody_tipe)
+	   val closure_tipe = AllArrow_c(Closure,effect,
+					 vklist,map #2 vclist,
+					 TilWord32.fromInt(length vflist),codebody_tipe)
 	   val closure = {code = code_var,
 			  cenv = con_tuple_inject(map (Var_c o #1) vk_free),
-			  venv = exp_tuple(map (fn (v,c) => (Var_e v, c)) vc_free)}
+			  venv = exp_tuple(map (fn (v,c) => (Var_e v, c)) vc_free),
+			  tipe = closure_tipe}
        in if escape then ([(code_var,code_fun)],
 			  [(v,closure)])
 	  else ([(code_var,code_fun)],[])
        end
 
-   and bnd_rewrite bnd : bnd list = 
+   and bnd_rewrite' (bound,bnd) : bnd list changeopt = 
        let
 	   fun funthing_helper rewriter var_thing_set =
 	       let 
@@ -441,71 +445,34 @@ struct
 			  | close_list => [Fixclosure_b(list2set close_list)])
 	       in  pfun_bnd :: closure_bnd_list
 	       end
-       in case bnd of
-	   (Con_b(v,k,c)) => [Con_b(v,k_rewrite k, c_rewrite c)]
-	 | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite c, e_rewrite e)]
-	 | (Fixclosure_b _) => error "there can't be closures while closure-converting"
-	 | (Fixcode_b _) => error "there can't be codes while closure-converting"
-	 | (Fixopen_b var_fun_set) => funthing_helper fun_rewrite var_fun_set 
+       in CHANGE_NORECURSE
+	   (case bnd of
+		(Con_b(v,k,c)) => [Con_b(v,k_rewrite k, c_rewrite c)]
+	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite c, e_rewrite e)]
+	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
+	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
+	      | (Fixopen_b var_fun_set) => funthing_helper fun_rewrite var_fun_set)
        end
 
-   and e_rewrite arg_exp : exp =
+   and make_handlers() = (e_rewrite', 
+			  bnd_rewrite',
+			  c_rewrite',
+			  fn (_,cb : conbnd) => NOCHANGE,
+			  k_rewrite')
+
+   and bnd_rewrite (arg_bnd : bnd) : bnd list =
+       NilUtil.bnd_rewrite (make_handlers()) arg_bnd
+
+   and e_rewrite (arg_exp : exp) : exp  = 
+       NilUtil.exp_rewrite (make_handlers()) arg_exp
+
+   and e_rewrite' (bound,arg_exp) : exp changeopt =
        (case arg_exp of
-	    Var_e v => arg_exp (* closures retain their name *)
-	  | Const_e v => Const_e 
-		(case v of
-		     ((Prim.int _) | (Prim.uint _) | (Prim.float _)) => v
-		   | (Prim.array (c,array)) =>
-			 (Array.modify e_rewrite array;
-			  Prim.array(c_rewrite c,array))
-		   | (Prim.vector (c,array)) =>
-			 (Array.modify e_rewrite array;
-			  Prim.vector(c_rewrite c,array))
-		   | Prim.refcell (r as (ref e)) => (r := e_rewrite e; v)
-		   | Prim.tag (t,c) => Prim.tag(t,c_rewrite c))
-	  | Let_e(letsort,bnds,e) => 
-		let 
-		    val bnds' = foldl (fn (bnd,acc_bnds) => let val bnds = bnd_rewrite bnd
-							    in  bnds @ acc_bnds
-							    end) [] bnds
-		    val e' = e_rewrite e
-		in Let_e(letsort,bnds',e')
-		end
-	  | Prim_e(p,clist,elist) => Prim_e(p, map c_rewrite clist, 
-					    (map e_rewrite elist))
-	  | Switch_e switch => 
-		let
-		    fun do_sw {info, arg, arms, default} do_info do_arg do_prearm =
-			let  fun do_arm(prearm,Function(effect,recur,
-							 vklist,vclist,vflist,body,tipe)) =
-				     let 
-					 fun vkfolder((v,k),vklist) = 
-					     ((v,k_rewrite k)::vklist)
-					 fun vcfolder((v,c),vclist) = 
-					     ((v,c_rewrite c)::vclist)
-					 val vklist' = foldr vkfolder [] vklist
-					 val vclist' = foldr vcfolder [] vclist
-					 val body' = e_rewrite body
-					 val tipe' = c_rewrite tipe
-				     in  (do_prearm prearm,
-					  Function(effect,recur,vklist',vclist',vflist,body',tipe'))
-				     end
-			in {info = do_info info,
-			    arg = do_arg arg,
-			    arms = map do_arm arms,
-			    default = Util.mapopt e_rewrite default}
-			end
-		    fun identity x = x
-		    val switch' = 
-			(case switch of
-			     Intsw_e sw => Intsw_e(do_sw sw identity e_rewrite identity)
-			   | Sumsw_e sw => Sumsw_e(do_sw sw (fn (tc,clist) => (tc,map c_rewrite clist))
-						   e_rewrite identity)
-			   | Exncase_e sw => Exncase_e(do_sw sw identity e_rewrite 
-						       e_rewrite)
-			   | Typecase_e sw => Typecase_e(do_sw sw identity c_rewrite identity))
-		in  Switch_e switch'
-		end
+	    Var_e v => NOCHANGE (* closures retain their name *)
+	  | Const_e v => NOCHANGE
+	  | Prim_e(p,clist,elist) => NOCHANGE
+	  | Switch_e switch => NOCHANGE
+	  | Let_e(letsort,bnds,e) => NOCHANGE
 	  | App_e ((Code | Closure), _,_,_,_) => error "App_e(Code|Closure,...) during closure conversion"
 	  | App_e (Open, e, clist, elist, eflist) => 
 		let val clist' = map c_rewrite clist
@@ -517,18 +484,15 @@ struct
 			in App_e(Code, Var_e v, clist' @ clist'', elist' @ elist'', eflist')
 			end
 		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist')
-		in case e of
-		    Var_e v => if (is_fid v)
-				   then docall(v,get_frees v)
-			       else default()
-		  | _ => default()
+		in CHANGE_NORECURSE
+		    (case e of
+			 Var_e v => if (is_fid v)
+					then docall(v,get_frees v)
+				    else default()
+		       | _ => default())
 		end
-	  | Raise_e (e,c) => Raise_e(e_rewrite e, c_rewrite c)
-	  | Handle_e (e,Function(effect,recur,[],[(v,c)],[],body,tipe)) =>
-		Handle_e(e_rewrite e, 
-			 Function(effect,recur,[],[(v,c_rewrite c)],[],
-				  e_rewrite body, c_rewrite tipe))
-	  | Handle_e _ => error "ill-typed Handle_e")
+	  | Raise_e (e,c) => NOCHANGE
+	  | Handle_e _ => NOCHANGE)
 
    and cbnd_rewrite (Con_cb(v,k,c)) = [Con_cb(v,k_rewrite k, c_rewrite c)]
      | cbnd_rewrite (Open_cb(v,vklist,c,k)) = 
@@ -549,51 +513,42 @@ struct
        end			
      | cbnd_rewrite (Code_cb _) = error "found Code_cb during closure-conversion"
 
-   and c_rewrite arg_con : con = 
+   and c_rewrite' (bound, arg_con) : con changeopt = 
        (case arg_con of
-	    Prim_c (primcon,clist) => Prim_c(primcon, map c_rewrite clist)
-	  | Mu_c (vc_set,v) =>  let val vc_list = set2list vc_set
-				    val vc_list' = map (fn (v,c) => (v, c_rewrite c)) vc_list
-				in Mu_c(list2set vc_list', v)
-				end
+	    Prim_c (primcon,clist) => NOCHANGE
+	  | Mu_c (vc_set,v) =>  NOCHANGE
+	  | Var_c v => NOCHANGE
 	  | AllArrow_c (Open,effect,vklist,clist,numfloats,c) => 
 		let val vklist' = map (fn(v,k) => (v,k_rewrite k)) vklist
-		in  AllArrow_c(Closure,effect,vklist',map c_rewrite clist,numfloats,c_rewrite c)
+		in  CHANGE_NORECURSE(AllArrow_c(Closure,effect,vklist',
+					      map c_rewrite clist,numfloats,c_rewrite c))
 		end
 	  | AllArrow_c ((Code | Closure),_,_,_,_,_) => error "All_c(Closure,...) during closure-conversion"
-	  | Var_c v => arg_con
 	  | Let_c (letsort,cbnds,c) => 
 		let val cbnds' = List.concat(map cbnd_rewrite cbnds)
-		in  Let_c(letsort,cbnds',c_rewrite c)
+		in  CHANGE_NORECURSE(Let_c(letsort,cbnds',c_rewrite c))
 		end
-	  | Typecase_c {arg,arms,default} =>
-	    let val arg' = c_rewrite arg
-		val default' = Util.mapopt c_rewrite default
-		fun do_arm(pc,vklist,c,k) = 
-		    let val vklist' = map (fn (v,k) => (v, k_rewrite k)) vklist
-		    in (pc,vklist',c_rewrite c, k_rewrite k)
-		    end
-		val arms' = map do_arm arms
-	    in  Typecase_c{arg = arg', arms = arms', default = default'}
-	    end
-	  | Crecord_c lclist => Crecord_c (map (fn (l,c) => (l, c_rewrite c)) lclist)
-	  | Proj_c (c,l) => Proj_c(c_rewrite c, l)
+	  | Typecase_c {arg,arms,default} => NOCHANGE
+	  | Crecord_c lclist => NOCHANGE
+	  | Proj_c (c,l) => NOCHANGE
 	  | Closure_c (c1,c2) => error "should not encounter Closure_c during closure-conversion"
-	  | App_c (c,clist) => App_c(c_rewrite c, map c_rewrite clist)
-	  | Annotate_c (annot,c) => Annotate_c(annot, c_rewrite c))
+	  | App_c (c,clist) => NOCHANGE
+	  | Annotate_c (annot,c) => NOCHANGE)
 
    and k_rewrite arg_kind : kind = 
+       NilUtil.kind_rewrite (make_handlers()) arg_kind
+
+   and c_rewrite arg_con : con =
+       NilUtil.con_rewrite (make_handlers()) arg_con
+
+   and k_rewrite' (bound,arg_kind) : kind changeopt = 
        (case arg_kind of 
-	    ((Type_k _) | (Word_k _)) => arg_kind
-	  | Singleton_k (p,k,c) => Singleton_k(p, k_rewrite k, c_rewrite c)
-	  | Record_k lv_k_seq => let val lv_k_list = sequence2list lv_k_seq
-				     fun doer((l,v),k) = ((l,v),k_rewrite k)
-				     val lv_k_list' = map doer lv_k_list
-				 in Record_k (list2sequence lv_k_list')
-				 end
-	  | Arrow_k (Open,vklist,k) => let val vklist' = map (fn (v,k) => (v,k_rewrite k)) vklist
-					   in Arrow_k(Closure, vklist', k_rewrite k)
-					   end
+	    ((Type_k _) | (Word_k _) | 
+	     (Singleton_k _) | (Record_k _)) => NOCHANGE
+	  | Arrow_k (Open,vklist,k) => 
+		let val vklist' = map (fn (v,k) => (v,k_rewrite k)) vklist
+		in CHANGE_NORECURSE(Arrow_k(Closure, vklist', k_rewrite k))
+		end
 	  | Arrow_k _ => error "cannot encounter arrow_k(Code/Closure,...) during closure-conversion")
 
 

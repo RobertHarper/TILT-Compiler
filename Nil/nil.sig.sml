@@ -152,7 +152,7 @@ sig
     | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures *)
-    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp}) set
+    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp, tipe:con}) set
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.
    * It may or may not be effect-free and may or may not be recursive.

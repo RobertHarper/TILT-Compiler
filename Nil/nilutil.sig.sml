@@ -28,4 +28,18 @@ signature NILUTIL =
 
     val same_openness : Nil.openness * Nil.openness -> bool
     val same_effect : Nil.effect * Nil.effect -> bool
+
+    datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
+    type bound = {boundcvars : Nil.kind Name.VarMap.map,
+		  boundevars : Nil.con Name.VarMap.map}
+    type handlers = ((bound * Nil.exp -> Nil.exp changeopt) *
+		     (bound * Nil.bnd -> (Nil.bnd list) changeopt) *
+		     (bound * Nil.con -> Nil.con changeopt) *
+		     (bound * Nil.conbnd -> (Nil.conbnd list) changeopt) *
+		     (bound * Nil.kind -> Nil.kind changeopt))
+    val exp_rewrite : handlers -> Nil.exp -> Nil.exp
+    val bnd_rewrite : handlers -> Nil.bnd -> Nil.bnd list
+    val kind_rewrite : handlers -> Nil.kind -> Nil.kind
+    val con_rewrite : handlers -> Nil.con -> Nil.con
+
   end

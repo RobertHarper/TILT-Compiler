@@ -328,7 +328,7 @@ functor Ppnil(structure Nil : NIL
 				    in Vbox(map (pp_fix true) fixlist)
 				    end
 	      | Fixclosure_b vceset => let val vcelist = set2list vceset
-				       in pp_list (fn (v,{code,cenv,venv}) => 
+				       in pp_list (fn (v,{code,cenv,venv,tipe}) => 
 						   HOVbox[pp_var v, String "=",
 							  String "(",
 							  pp_var code, String ",",

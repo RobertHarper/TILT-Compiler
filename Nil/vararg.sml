@@ -8,6 +8,8 @@ struct
     open Nil
     open NilUtil
     open Name
+    open Util
+    val error = fn s => Util.error "vararg.sml" s
 
     (* produces term-level functions with the following signature and definition:
      * produces constructor-level functions with the following signature and definition:
@@ -135,4 +137,70 @@ struct
 	end
 
 
+    (* The flatarg transformation takes a term and flattens the arguments of functions
+     * if they are records.  The opposite action is taken at applications.  Sometimes
+     * the type of the argument is not known and we must then use the vararg/onearg
+     * primitives.  We want to keep this to a minimum.  At the type level, we must
+     * transform each arrow type by applying Vararg to it.  We only consider functions
+     * and arrows that take no type argument and having exactly one term argument.
+     *)
+
+    datatype recordtype = NOT_RECORD | RECORD of label list * con list | DYNAMIC | NOT_TYPE
+
+    fun is_record argc = 
+	    case argc of
+		(Prim_c(((Int_c _) | (Float_c _) | (BoxFloat_c _) | 
+			 Exn_c | Array_c | Vector_c |
+			 Ref_c | Exntag_c | (Sum_c _) |
+			 (Vararg_c _)), _)) => NOT_RECORD
+	      | (Prim_c(Record_c labels, cons)) => RECORD(labels,cons)
+	      | ((Mu_c _) | (AllArrow_c _) | (Annotate_c _)) => NOT_RECORD
+	      | (Crecord_c _) => NOT_TYPE
+	      | (Closure_c _) => NOT_TYPE
+	      | ((Proj_c _) | (App_c _) | (Typecase_c _) | (Let_c _) | (Var_c _)) => DYNAMIC
+
+    fun xarrow(flatcount : int,openness,effect,argc,resc) : con = 
+	let val cr = con_rewrite flatcount
+	    fun nochange() = AllArrow_c(openness,effect,[],[cr argc],0w0,cr resc)
+	    fun change(labels,cons) = 
+		if ((length labels) <= flatcount)
+		    then AllArrow_c(openness,effect,[],map cr cons,0w0,cr resc)
+		else nochange()
+	in  (case is_record argc of
+		 NOT_RECORD => nochange()
+	       | RECORD(ls,cs) => change(ls,cs)
+	       | DYNAMIC => Prim_c(Vararg_c(openness,effect),[cr argc,cr resc]) 
+	       | NOT_TYPE => error "ill-formed arrow type")
+	end
+
+    and con_rewrite' flatcount (bound, arg_con) : con changeopt = 
+	case arg_con of
+	    AllArrow_c(openness,effect,[],[argc],0w0,resc) => 
+		CHANGE_NORECURSE(xarrow(flatcount,openness,effect,argc,resc))
+	  | _ => NOCHANGE
+
+    and exp_rewrite' flatcount ({boundevars,...} : bound, arg_exp) : exp changeopt = 
+	let val x = 1
+	in  case arg_exp of
+	    ((Var_e _) | (Const_e _) | (Let_e _) | (Prim_e _) |
+	     (Switch_e _) | (Raise_e _) | (Handle_e _)) => NOCHANGE
+	   | (App_e (openness,Var_e v,clist,elist,eflist)) => 
+		 let val clist' = map (con_rewrite flatcount) clist
+		     val elist' = map (exp_rewrite flatcount) elist
+		     val eflist' = map (exp_rewrite flatcount) eflist
+		     val con = (case (Name.VarMap.find(boundevars,v)) of
+				    SOME c => c
+				  | NONE => error "ill-typed App_e")
+		 in  raise Util.UNIMP (* App_e (openness,f',clist',elist',eflist') *)
+		 end
+	end
+
+    and con_rewrite (flatcount : int) con : con = NilUtil.con_rewrite (make_handlers flatcount) con
+    and exp_rewrite flatcount exp : exp = NilUtil.exp_rewrite (make_handlers flatcount) exp
+    and make_handlers flatcount = (exp_rewrite' flatcount, 
+				    fn (_,b : bnd) => NOCHANGE,
+				    con_rewrite' flatcount,
+				    fn (_,cb : conbnd) => NOCHANGE,
+				    fn (_,k : kind) => NOCHANGE)
+	 
 end
