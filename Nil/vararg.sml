@@ -1,4 +1,4 @@
-(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs *)
+(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs ListPair Prim *)
 
 (* Converting functions with either statically and dynamically known parameter types such that they take a single record
  * argument to use multiple arguments, as well as generating code to apply vararg/onearg at runtime
@@ -23,9 +23,10 @@ struct
 
     val flattenThreshold = !Nil.flattenThreshold
 
+    val float64 = Prim_c(Float_c Prim.F64, [])
+
     val debug = Stats.ff("vararg_debug")
     val error = fn s => Util.error "vararg.sml" s
-
 
     (* produces term-level functions with the following signature and definition:
      * produces constructor-level functions with the following signature and definition:
@@ -59,7 +60,7 @@ struct
      *   | _ => Arrow(c; c')
      *)
 
-    fun vararg () : function = 
+    fun vararg () : con * function = 
 	let
 	    val domain_tvar = fresh_named_var "domain"
 	    val range_tvar = fresh_named_var "range"
@@ -67,14 +68,14 @@ struct
 	    val vklist = [(domain_tvar,Type_k),
 			  (range_tvar,Type_k)]
 	    val funvar = fresh_var()
-	    val funtype = AllArrow_c{openness=Open,effect=Partial,isDependent=false,
-				     tFormals=[],eFormals=[(NONE,Var_c domain_tvar)],fFormals=0w0,
+	    val funtype = AllArrow_c{openness=Open,effect=Partial,
+				     tFormals=[],eFormals=[Var_c domain_tvar],fFormals=0w0,
 				     body_type=Var_c range_tvar}
 	    val vtrclist = [(funvar,TraceKnown TraceInfo.Trace,funtype)]
 	    val newfuntype = Prim_c(Vararg_c(Open,Partial),[Var_c domain_tvar, Var_c range_tvar])
 	    fun make_arm n = 
 		let val labels = Listops.map0count (fn n => generate_tuple_label(n+1)) n
-		    val primcon = Record_c (labels, NONE)
+		    val primcon = Record_c labels
 		    val vklist = Listops.map0count (fn _ => (fresh_var(),Type_k)) n
 
 
@@ -92,29 +93,31 @@ struct
 		      NilUtil.makeLetE Sequential bnds  (App_e(Open, Var_e funvar,[],[rcrd],[]))
 
 		    val rescon = Var_c range_tvar
-		    val funbnd = Function{effect=Partial,recursive=Arbitrary,isDependent=false,
-					  tFormals=[],eFormals=vtrclist,fFormals=[],
-					  body=body,body_type=rescon}
-		    val newfuncon = AllArrow_c{openness=Open,effect=Partial,isDependent=false,
+		    val funbnd = Function{effect=Partial,recursive=Arbitrary,
+					  tFormals=[],eFormals=map (fn (v, tr, _) => (v, tr)) vtrclist,fFormals=[],
+					  body=body}
+		    val newfuncon = AllArrow_c{openness=Open,effect=Partial,
 					       tFormals=[],fFormals=0w0,
-					       eFormals=map (fn (_,_,c) => (NONE,c)) vtrclist,
+					       eFormals=map (fn (_,_,c) => c) vtrclist,
 					       body_type=rescon}
 		    val newfunvar = fresh_named_var ("vararg" ^ (Int.toString n))
-		    val bnd = Fixopen_b(Sequence.fromList[(newfunvar,funbnd)])
+		    val bnd = Fixopen_b(Sequence.fromList[((newfunvar,newfuncon),funbnd)])
 		    val body = Let_e(Sequential,[bnd],Var_e newfunvar)
 		in  (primcon,vklist,body)
 		end
 	    val arms = Listops.map0count make_arm (flattenThreshold+1)
 	    val default = Var_e funvar
-	    val body = Switch_e(Typecase_e{result_type=newfuntype,arg=typearg,arms=arms,default=default})
-	in  Function{effect=Partial,recursive=Arbitrary,isDependent=false,
-		     tFormals=vklist,eFormals=vtrclist,fFormals=[],
-		     body=body,
-		     body_type=newfuntype}
+	    val body = Switch_e(Typecase_e{arg=typearg,arms=arms,default=default,result_type=newfuntype})
+	in  (AllArrow_c {effect=Partial,openness=Open,
+		       tFormals=vklist,eFormals=map (fn (_,_,c) => c) vtrclist,fFormals=0w0,
+		       body_type=newfuntype},
+	     Function{effect=Partial,recursive=Arbitrary,
+		      tFormals=map #1 vklist,eFormals=map (fn (v,tr,_) => (v, tr)) vtrclist,fFormals=[],
+		      body=body})
 	end
 
 
-    fun onearg () : function = 
+    fun onearg () : con * function = 
 	let
 	    val domain_tvar = fresh_named_var "domain"
 	    val range_tvar = fresh_named_var "range"
@@ -124,70 +127,41 @@ struct
 	    val funvar = fresh_var()
 	    val funtype = Prim_c(Vararg_c(Open,Partial),[Var_c domain_tvar, Var_c range_tvar])
 	    val vtrclist = [(funvar,TraceKnown TraceInfo.Trace, funtype)]
-	    val newfuntype = AllArrow_c{openness=Open,effect=Partial,isDependent=false,
-					tFormals=[],eFormals=[(NONE,Var_c domain_tvar)],fFormals=0w0,
+	    val newfuntype = AllArrow_c{openness=Open,effect=Partial,
+					tFormals=[],eFormals=[Var_c domain_tvar],fFormals=0w0,
 					body_type=Var_c range_tvar}
 	    fun make_arm n = 
 		let val labels = Listops.map0count (fn n => generate_tuple_label (n+1)) n
-		    val primcon = Record_c (labels, NONE)
+		    val primcon = Record_c labels
 		    val vklist = Listops.map0count (fn _ => (fresh_var(), Type_k)) n
 		    val argv = fresh_var()
 		    val rectypes = map (Var_c o #1) vklist
 		    val argtr = TraceKnown TraceInfo.Trace
-		    val argtype = Prim_c(Record_c (labels,NONE), rectypes)
+		    val argtype = Prim_c(Record_c labels, rectypes)
 		    fun make_proj l = Prim_e(NilPrimOp(select l), [],[], [Var_e argv])
 		    val projects = map make_proj labels
 		    val body = App_e(Open, Var_e funvar,[],projects,[])
 		    val rescon = Var_c range_tvar
-		    val funbnd = Function{effect=Partial,recursive=Arbitrary,isDependent=false,
-					  tFormals=[],fFormals=[],eFormals=[(argv,argtr,argtype)],
-					  body=body,body_type=rescon}
-		    val newfuncon = AllArrow_c{openness=Open,effect=Partial,isDependent=false,
-					       tFormals=[],eFormals=[(NONE,argtype)],fFormals=0w0,
+		    val funbnd = Function{effect=Partial,recursive=Arbitrary,
+					  tFormals=[],fFormals=[],eFormals=[(argv,argtr)],
+					  body=body}
+		    val newfuncon = AllArrow_c{openness=Open,effect=Partial,
+					       tFormals=[],eFormals=[argtype],fFormals=0w0,
 					       body_type=rescon}
 		    val newfunvar = fresh_named_var ("onearg" ^ (Int.toString n))
-		    val bnd = Fixopen_b(Sequence.fromList[(newfunvar,funbnd)])
+		    val bnd = Fixopen_b(Sequence.fromList[((newfunvar,newfuncon),funbnd)])
 		    val newfun = Let_e(Sequential,[bnd],Var_e newfunvar)
 		in  (primcon,vklist,newfun)
 		end
 	    val arms = Listops.map0count make_arm (flattenThreshold+1)
 	    val default = Var_e funvar
-	    val body = Switch_e(Typecase_e{result_type=newfuntype,arg=typearg,
-					   arms=arms,default=default})
-	in  Function{effect=Partial,recursive=Arbitrary,isDependent=false,
-		     tFormals=vklist,fFormals=[],eFormals=vtrclist,
-		     body=body,
-		     body_type=newfuntype}
-	end
-
-    fun Vararg () : (var * kind) list * con * kind = 
-	let
-	    val domain_tvar = fresh_var()
-	    val range_tvar = fresh_var()
-	    val vklist = [(domain_tvar,Type_k),
-			  (range_tvar,Type_k)]
-	    val funtype = AllArrow_c{openness=Open,effect=Partial,isDependent=false,
-				     tFormals=[],eFormals=[(NONE,Var_c domain_tvar)],fFormals=0w0,
-				     body_type=Var_c range_tvar}
-	    val typevar = fresh_var()
-	    val restypevar = fresh_var()
-	    val typearg = Var_c typevar
-	    fun make_arm n = 
-		let val labels = Listops.map0count (fn n => generate_tuple_label (n+1)) n
-		    val primcon = Record_c (labels, NONE)
-		    val rescon = Var_c restypevar
-		    val vklist = Listops.map0count (fn _ => (fresh_var(), Type_k)) n
-		    val rectypes = map (Var_c o #1) vklist
-		    val argtype = Prim_c(Record_c (labels,NONE), rectypes)
-		    val newfuncon = AllArrow_c{openness=Open,effect=Partial,isDependent=false,
-					       tFormals=[],eFormals=[(NONE,argtype)],fFormals=0w0,
-					       body_type=rescon}
-		in  (primcon,vklist,newfuncon)
-		end
-	    val arms = Listops.map0count make_arm (flattenThreshold+1)
-	    val default = funtype
-	    val body = Typecase_c{arg=typearg,arms=arms,default=default,kind=Type_k}
-	in  (vklist,body,Type_k)
+	    val body = Switch_e(Typecase_e{arg=typearg,arms=arms,default=default,result_type=newfuntype})
+	in  (AllArrow_c {effect=Partial,openness=Open,
+		       tFormals=vklist,eFormals=map (fn (_,_,c) => c) vtrclist,fFormals=0w0,
+		       body_type=newfuntype},
+	     Function{effect=Partial,recursive=Arbitrary,
+		      tFormals=map #1 vklist,fFormals=[],eFormals=map (fn (v,tr,_) => (v,tr)) vtrclist,
+		      body=body})
 	end
 
     local
@@ -200,32 +174,25 @@ struct
 	   | NONE => 
 		 let val oneargVar = fresh_named_var "onearg"
 		     val varargVar = fresh_named_var "vararg"
-		     val nilmod = MODULE{bnds = [Fixopen_b(Sequence.fromList[(oneargVar, onearg())]),
-						 Fixopen_b(Sequence.fromList[(varargVar, vararg())])],
+		     val (oneCon, oneFun) = onearg()
+		     val (varCon, varFun) = vararg()
+		     val nilmod = MODULE{bnds = [Fixopen_b(Sequence.fromList[((oneargVar, oneCon), oneFun)]),
+						 Fixopen_b(Sequence.fromList[((varargVar, varCon), varFun)])],
 					 imports = [],
 					 exports = [ExportValue(oneargLabel,oneargVar),
 						    ExportValue(varargLabel,varargVar)]}
-(*		     val _ = Ppnil.pp_module {module = nilmod,
-					      name = "vararg nilmod before CC",
-					      header = "vararg nilmod before CC",
-					      pass = "vararg nilmod before CC"}
-*)
+
 		     val nilmod = Linearize.linearize_mod nilmod
 		     val nilmod = Reify.reify_mod nilmod 
 		     val nilmod = ToClosure.close_mod nilmod
-(*
-		     val _ = Ppnil.pp_module {module = nilmod,
-					      name = "vararg nilmod after CC",
-					      header = "vararg nilmod after CC",
-					      pass = "vararg nilmod after CC"}
-*)
+
 		     val MODULE{bnds,imports=[],
 				exports=[ExportValue(oneargLabel',oneargVar),
 					 ExportValue(varargLabel',varargVar)]} = nilmod
 		     fun getClosureType v [] = error "could not find closure"
 		       | getClosureType v ((Fixclosure_b (_,cl))::rest) = 
 			 (case Sequence.toList cl of
-			      [(v',{tipe , ...})] => if (eq_var(v,v')) then tipe else getClosureType v rest
+			      [((v',tipe),{ ...})] => if (eq_var(v,v')) then tipe else getClosureType v rest
 			    | _ => getClosureType v rest)
 		       | getClosureType v (_::rest) = getClosureType v rest
 		     val oneargType = getClosureType oneargVar bnds
@@ -253,6 +220,8 @@ struct
 				 count = i}
 	fun add_kind(STATE{ctxt,count},v,k) = 
 	    STATE{ctxt=NilContext.insert_kind(ctxt,v,k), count=count}
+	fun add_equation(STATE{ctxt,count},v,c) = 
+	    STATE{ctxt=NilContext.insert_equation(ctxt,v,c), count=count}
 	fun add_con(STATE{ctxt,count},v,c) = 
 	    STATE{ctxt=NilContext.insert_con(ctxt,v,c), count=count}
 	fun add_label(STATE{ctxt,count},l,v) =
@@ -261,19 +230,20 @@ struct
 	fun type_of(STATE{ctxt,...},e) = Normalize.type_of(ctxt,e)
 	fun reduce (STATE{ctxt,...}) (pred : con -> 'a option) (con : con) = Normalize.reduce_until(ctxt,pred,con)
 	fun reduce_hnf (STATE{ctxt,...}) c = Normalize.reduce_hnf(ctxt, c)
+	fun strip_arrow_norm (STATE{ctxt,...}) c = Normalize.strip_arrow_norm ctxt c
     end
 
 
-    datatype arrowType = Transform of openness * effect * bool * con * con
-	               | NoTransform of openness * effect * bool * 
-	                                (var * kind) list * w32 * (var option * con) list * con
-    fun getarrow(AllArrow_c {openness,effect,isDependent,body_type,tFormals,fFormals,eFormals}) = 
+    datatype arrowType = Transform of openness * effect * con * con
+	               | NoTransform of openness * effect * 
+	                                (var * kind) list * w32 * con list * con
+    fun getarrow (AllArrow_c {openness,effect,body_type,tFormals,fFormals,eFormals}) = 
 	SOME(case (tFormals,fFormals,eFormals) of
-		 ([], 0w0, [(_,argc)]) => Transform(openness,effect,isDependent,argc,body_type)
-	       | _ => NoTransform(openness,effect,isDependent,tFormals,fFormals,eFormals,body_type))
-      | getarrow(Prim_c(Vararg_c (openness,effect), [argc,resc])) = 
-				       SOME(Transform(openness,effect,false,argc,resc))
-      | getarrow _ = NONE
+		 ([], 0w0, [argc]) => Transform(openness,effect,argc,body_type)
+	       | _ => NoTransform(openness,effect,tFormals,fFormals,eFormals,body_type))
+      | getarrow (Prim_c(Vararg_c (openness,effect), [argc,resc])) = 
+				       SOME(Transform(openness,effect,argc,resc))
+      | getarrow c = NONE
 
     fun getexn (Prim_c(Exntag_c, [c])) = SOME c
       | getexn _ = NONE
@@ -295,7 +265,7 @@ struct
 
     fun getrecord argc =
 	(case argc of
-	     Prim_c(Record_c (labs,_),cons) => SOME(RECORD(labs, cons))
+	     Prim_c(Record_c labs, cons) => SOME(RECORD(labs, cons))
 	   | (Prim_c _) => SOME NOT_RECORD
 	   | (Mu_c _) => SOME NOT_TYPE
 	   | (AllArrow_c _) => SOME NOT_RECORD
@@ -333,13 +303,7 @@ struct
       and do_con (state : state) (con : con) : con =
 	  (case con of
 	       Prim_c(pc,clist) => 
-		   let val clist = 
-		       (case pc of
-			    Record_c(labs,SOME vars) => 
-				let val (vclist,_) = do_vclist state (Listops.zip vars clist)
-				in  map #2 vclist
-				end
-	                  | _ => map (do_con state) clist)
+		   let val clist = map (do_con state) clist
 		   in  Prim_c(pc, clist)
 		   end
 	     | Mu_c(recur,vc_seq) => 
@@ -348,15 +312,15 @@ struct
 		   in  Mu_c(recur,Sequence.map
 			    (fn (v,c) => (v,do_con state' c)) vc_seq)
 		   end
-	     | AllArrow_c{openness,effect,isDependent,
-			  tFormals=[],fFormals=0w0,eFormals=[(argvopt,argc)],body_type=resc} =>
-		   do_arrow state (openness,effect,isDependent,argvopt,argc,resc) (* possible flattening opportunity *)
-	     | AllArrow_c{openness,effect,isDependent,
+	     | AllArrow_c{openness,effect,
+			  tFormals=[],fFormals=0w0,eFormals=[argc],body_type=resc} =>
+		   do_arrow state (openness,effect,argc,resc) (* possible flattening opportunity *)
+	     | AllArrow_c{openness,effect,
 			  tFormals,eFormals,fFormals,body_type} =>
 		   let val (tFormals,state) = do_vklist state tFormals
-		       val (eFormals,state) = do_voptclist state eFormals
+		       val (eFormals,state) = do_clist state eFormals
 		       val body_type = do_con state body_type
-		   in  AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
+		   in  AllArrow_c{openness=openness,effect=effect,
 				  tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 				  body_type=body_type}
 		   end
@@ -374,30 +338,31 @@ struct
 		     Coercion_c {vars=vars,from=do_con state from,
 				 to=do_con state to}
 		   end
-	     | Typecase_c _ => error "typecase not handled"
-	     | Annotate_c (a,c) => Annotate_c(a,do_con state c)
-	     | Typeof_c e => Typeof_c(do_exp state e)
 	     | Let_c(letsort,cbnds,c) => 
 		   let val (cbnds,state) = foldl_acc do_cbnd state cbnds
 		       val c = do_con state c
 		   in  Let_c(letsort,cbnds,c)
 		   end)
 
-     and do_arrow state (openness,effect,isDependent,argvopt,argc,resc) : con = 
+     and do_arrow state (openness,effect,argc,resc) : con = 
 	 let val cnr = do_con state
 	     val cr = NilRename.renameCon o cnr
 	     val flatcount = get_count state
-	     fun nochange() = AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
+	     fun nochange() = AllArrow_c{openness=openness,effect=effect,
 					 tFormals=[],fFormals=0w0,
-					 eFormals=[(argvopt,cr argc)],
+					 eFormals=[cr argc],
 					 body_type = cnr resc}
-	     fun change(labels,cons) = 
-		 if ((length labels) <= flatcount)
-		     then AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
-				     tFormals=[],fFormals=0w0,
-				     eFormals = map (fn c => (NONE, cr c)) cons,
-				     body_type = cnr resc}
-		 else nochange()
+	     fun change(labels,cons) =
+		 let
+		     val len = length labels
+		 in
+		     if len <= flatcount
+			 then AllArrow_c{openness=openness,effect=effect,
+					 tFormals=[],fFormals=0w0,
+					 eFormals = map cr cons,
+					 body_type = cnr resc}
+		     else nochange()
+		 end
 	 in  (case (is_record state argc) of
 		 NOT_RECORD => nochange()
 	       | RECORD(ls,cs) => change(ls,cs)
@@ -416,7 +381,8 @@ struct
 	     | Code_cb _ => error "code_cb not handled")
 
       and do_vklist state vklist =
-	  let fun folder((v,k),state) = let val k' = do_kind state k
+	  let fun folder((v,k),state) = let
+					    val k' = do_kind state k
 					in  ((v,k'),add_kind(state,v,k))
 					end
 	  in  foldl_acc folder state vklist
@@ -426,17 +392,14 @@ struct
 							       in  ((v,c'),add_con(acc,v,c))
 							       end) state vclist
 
-     and do_vtrclist state vclist = foldl_acc (fn ((v,tr,c),acc) => let val c' = do_con acc c
-								 in  ((v,tr,c'),add_con(acc,v,c))
+     and do_vtrclist state vclist = foldl_acc (fn (((v,tr),c),acc) => let val c' = do_con acc c
+								 in  (((v,tr),c'),add_con(acc,v,c))
 								 end) state vclist
 
-     and do_voptclist state voptclist = foldl_acc (fn ((vopt,c),acc) => 
+     and do_clist state clist = foldl_acc (fn (c,acc) => 
 	                                               let val c' = do_con acc c
-							   val acc = (case vopt of
-									  SOME v => add_con(acc,v,c)
-									| _ => acc)
-						       in  ((vopt,c'),acc)
-						       end) state voptclist
+						       in  (c',acc)
+						       end) state clist
 
     (* transform expressions, bindings, switches *)
      and do_exp (state : state) (exp : exp) : exp = 
@@ -457,7 +420,7 @@ struct
 			App_e(openness, do_exp state f, map (do_con state) clist, 
 			      map (do_exp state) elist, map (do_exp state) eflist)
 		| ExternApp_e(e,elist) => ExternApp_e(do_exp state e, map (do_exp state) elist)
-		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
+		| Raise_e (e, c) => Raise_e(do_exp state e, do_con state c)
 		| Handle_e{body,bound,handler,result_type} =>
 			let val ([(bound,_)],state') = do_vclist state [(bound,Prim_c(Exn_c,[]))]
 			in  Handle_e{bound=bound, body=do_exp state body, 
@@ -490,21 +453,36 @@ struct
       * original function name funvar.
       *)
      and do_fun (state, extras)
-	        (funvar,Function{effect,recursive,isDependent,
-				 tFormals,fFormals,eFormals,
-				 body,body_type},
+	        (funvar, c,
+		 func as Function{effect,recursive,
+			  tFormals,fFormals,eFormals,
+			  body,...},
 		 pvar) =
-	 let fun folder ((v,e),subst) = let val v' = derived_var v
-					in  (Exp_b(v',TraceUnknown,NilRename.renameExp e), 
+	 let val arg as {openness,body_type,tFormals=tFa,eFormals=eFa,fFormals=fFa,...} = strip_arrow_norm state c
+	     val arrow = AllArrow_c arg
+	     fun folder ((v,e),subst) = let val v' = derived_var v
+	                                    val e' = NilRename.renameExp e
+					in  
+					    (Exp_b(v',TraceUnknown,e'), 
 					     NilSubst.E.addr(subst, v, Var_e v'))
 					end
 	     val (extraBnds,subst) = foldl_acc folder (NilSubst.E.empty()) extras
 	     fun change(v,argc,labels,cons) = 
-		 let val body_type = do_con state body_type
+		 let
+		     val body_type = NilRename.renameCon(do_con state body_type)
 		     val innerState = add_con(state,v,argc)
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
-		     val vtrclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, NilRename.renameCon (do_con state c))) (vars,cons)
-		     val (_,trs,cons) = unzip3 vtrclist
+
+		     val cons = map (fn c => NilRename.renameCon (do_con state c)) cons
+		     val vtrlist = map (fn v => (v, TraceUnknown)) vars
+
+		     val trs = map (fn _ => TraceUnknown) vars
+
+		     val newarrow = AllArrow_c{openness=openness,effect=effect,
+					       tFormals=[],fFormals=0w0,eFormals=cons,body_type=body_type}
+		     val newtvar = Name.fresh_named_var (Name.var2string funvar ^ "_type")
+		     val newbnd = Con_b(Compiletime, Con_cb(newtvar, newarrow))
+
 		     val (recordBnds,_) = NilDefs.mk_record_with_gctag(labels,
 								       SOME trs,
 								       map NilRename.renameCon cons,
@@ -517,48 +495,79 @@ struct
 		     val body = do_exp innerState body
 		     val body = NilSubst.substExpInExp subst body
 		     val body = makeLetE Sequential (recordBnds @ extraBnds) body
-		 in  (funvar,Function{effect=effect,recursive=recursive,isDependent=isDependent,
-				       tFormals=[],fFormals=[],eFormals=vtrclist,
-				       body=body,body_type=body_type})
+		 in  (SOME newbnd, ((funvar, Var_c newtvar),
+		      Function{effect=effect,recursive=recursive,
+			       tFormals=[],fFormals=[],eFormals=vtrlist,
+			       body=body}))
 		 end
-	     fun default fvar =
-		 let val (tFormals,state) = do_vklist state tFormals
-		     val (eFormals,state) = do_vtrclist state eFormals
-		     val body_type = do_con state body_type
-		     val body = do_exp state body
+	     fun default (isDyn, fvar) =
+		 let 
+		     val (_,state') = do_vklist state (ListPair.map (fn (v, (_, k)) => (v, k)) (tFormals, tFa))
+
+		     val kindSubst = ListPair.foldl (fn (v, (v', _), subst) => NilSubst.C.addr(subst, v', Var_c v))
+			 (NilSubst.C.empty()) (tFormals, tFa)
+
+		     val (_,state') = do_vtrclist state' (ListPair.zip (eFormals, map (NilSubst.substConInCon kindSubst) eFa))
+
+		     val state' = foldl (fn (v, state) => add_con(state, v, float64)) state' fFormals
+
+		     val body = do_exp state' body
 		     val body = NilSubst.substExpInExp subst body
 		     val body = makeLetE Sequential extraBnds body
-		 in  (fvar,Function{effect=effect,recursive=recursive,isDependent=isDependent,
-				       tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
-				       body=body, body_type=body_type})
-		 end
 
-	 in  (case (tFormals,fFormals,eFormals) of
-		  ([],[],[(v,_,argc)]) =>
+		     val c =
+			  if isDyn then
+			      c
+			  else
+			      do_con state' c
+			 (*case c of
+			     AllArrow_c{effect, ...} =>
+				 let
+				     val (tFa,state) = do_vklist state tFa
+				     val (eForms,state) = do_vtrclist state (ListPair.zip (eFormals, eFa))
+				     val body_type = do_con state body_type
+				     val (eFormals,eFa) = ListPair.unzip eForms
+				 in
+				     AllArrow_c{openness = openness, effect = effect,
+						tFormals = tFa, eFormals = eFa, fFormals = fFa,
+						body_type = body_type}
+				 end
+			   | c => do_con state' c*)
+		 in  (NONE, ((fvar, c),
+		      Function{effect=effect,recursive=recursive,
+			       tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
+			       body=body}))
+		 end
+	 
+	 in  (case (tFormals,fFormals,eFormals,eFa) of
+		  ([],[],[(v,_)],[argc]) =>
 		      (case (is_record state argc) of
-			   NOT_RECORD => default funvar
+			   NOT_RECORD => default (false, funvar)
 			 | RECORD(ls,cs) => if ((length ls) <= get_count state)
 						then change(v,argc,ls,cs)
-					    else default funvar
-			 | DYNAMIC => default pvar (* Keep the old function, but give it a new name.
+					    else default (false, funvar)
+			 | DYNAMIC => default (true, pvar) (* Keep the old function, but give it a new name.
 						    * The old name will be a varargification of the new one, supplied by
 						    * the getExtra function below.
 						    *)
 			 | NOT_TYPE => error "ill-formed lambda")
-		| _ => default funvar)
+		| _ => default (false, funvar))
 	 end
 
      (* Get extra binding creating a vararg version of the given function with var as the vararg'd name and pvar as the original,
       * if the function is eligible to be vararg'd.
-      *)
-     and getExtra state (var,Function{tFormals=[],fFormals=[],eFormals=[(_,_,argc)],body_type,effect,...},
-			 pvar) =
-	 (case (is_record state argc) of
-	      NOT_RECORD => NONE
-	    | RECORD _ => NONE
-	    | DYNAMIC => SOME(var, Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
-					  [do_con state argc,do_con state body_type],[Var_e pvar]))
-	    | NOT_TYPE => error "ill-formed lambda type")
+      *)	 
+     and getExtra state (var,c,Function{tFormals=[],fFormals=[],effect,...},pvar) =
+	 (case strip_arrow_norm state c of
+	     {body_type,eFormals=[argc],...} =>
+		 (case (is_record state argc) of
+		      NOT_RECORD => NONE
+		    | RECORD _ => NONE
+		    | DYNAMIC => SOME((var, Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
+						  [do_con state argc,do_con state body_type],[Var_e pvar])),
+				      (Name.fresh_named_var (Name.var2string var ^ "_type"), effect, argc, body_type))
+		    | NOT_TYPE => error "ill-formed lambda type")
+	   | _ => NONE)
        | getExtra _ _ = NONE
 
      and do_app state (f,arg) =
@@ -590,19 +599,24 @@ struct
 	 in  (case (reduce state getarrow con) of
 		  Normalize.REDUCED arrowType =>
 		    (case arrowType of
-			 Transform(openness,effect,isDependent,argc,resc) =>
-			     (case (is_record state argc) of
-				  NOT_RECORD => nochange
-				| RECORD(ls,_) => change(ls)
-				| DYNAMIC => dynamic(openness,effect,argc,resc)
-				| NOT_TYPE => error "ill-formed application")
-	               | NoTransform _ =>
-				  (print "application in which function does not have mono arrow type: \n";
-				   Ppnil.pp_con con; print "\n";
-				   error "application in which function does not have mono arrow type"))
+			 Transform(openness,effect,argc,resc) =>
+			 (case (is_record state argc) of
+			      NOT_RECORD => nochange
+			    | RECORD(ls,_) => change(ls)
+			    | DYNAMIC => dynamic(openness,effect,argc,resc)
+			    | NOT_TYPE => error "ill-formed application")
+		       | NoTransform _ =>
+			      (print "application in which function does not have mono arrow type: \n";
+			       Ppnil.pp_con con; print "\n";
+			       print "\nFunction: ";
+			       Ppnil.pp_exp f;
+			       print "\nParam: ";
+			       Ppnil.pp_exp arg;
+			       print "\n";
+			       error "application in which function does not have mono arrow type"))
 		| _ => (print "application in which function does not have arrow type: \n";
-			Ppnil.pp_con con; print "\n";
-			error "application in which function does not have arrow type"))
+			 Ppnil.pp_con con; print "\n";
+			 error "application in which function does not have arrow type"))
 	 end
 
      and do_switch (state : state) (switch : switch) : switch = 
@@ -616,9 +630,8 @@ struct
 				  arms=arms,default=default,
 				  result_type=result_type}
 		     end
-	       | Sumsw_e {sumtype,arg,bound,arms,default,result_type=result_type} =>
+	       | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
 			 val (tagcount,totalcount,_,carrier) = 
 			     (case reduce state getsum sumtype of
 				  Normalize.REDUCED quad => quad
@@ -634,33 +647,28 @@ struct
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
+			 val result_type = do_con state result_type
 		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
 				  arms=arms,default=default,
 				  result_type=result_type}
 		     end
 	       | Exncase_e {arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
 			 fun do_arm(tag,tr,body) = 
 			     let val tagcon = type_of(state,tag)
 				 val tag = do_exp state tag
 				 val (_,Prim_c(Exntag_c,[con])) = reduce_hnf state tagcon
-(*
-				     con = (case (getexn tagcon) of
-						SOME c => c
-					      | _ => (print "type of tag is not exntag_c";
-						      Ppnil.pp_con tagcon;
-						      error "type of tag is not exntag_c"))
-*)
+
 				 val (_,state) = do_vclist state [(bound,con)]
 			     in  (tag,tr,do_exp state body)
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
+			 val result_type = do_con state result_type
 		     in  Exncase_e {bound=bound,arg=arg,
-				     arms=arms,default=default,
-				     result_type=result_type}
+				     arms=arms,default=default,result_type=result_type}
 		     end
+	       | Ifthenelse_e _ => error "Ifthenelse not implemented"
 	       | Typecase_e _ => error "typecase not done")
 
 
@@ -682,13 +690,40 @@ struct
 				   end
 		| Fixopen_b vfset => 
 		       let val vflist = Sequence.toList vfset
-			   val varFunPvar = map (fn (v,f) => (v,f,derived_var v)) vflist
-			   val extras = List.mapPartial (getExtra state) varFunPvar
-			   val state = foldl (fn ((v,f,_),s) => add_con(s,v,NilUtil.function_type Open f))
-			               state varFunPvar
-			   val vflist = map (do_fun (state, extras)) varFunPvar
+			   val varFunPvar = map (fn ((v,c),f) => (v,c,f,derived_var v)) vflist
+
+			   val state = foldl (fn ((v,c,f,_),s) => add_con(s,v,c))
+			       state varFunPvar
+
+			   val (varFunPvar', ftbnds, state, extras) =
+			       foldr (fn (pv as (v,c,f,v'), (pvs, ftbnds, state, extras)) =>
+				      case getExtra state pv of
+					  NONE => ((v,c,f,v')::pvs, ftbnds, state, extras)
+					| SOME (extra, (tv, effect, dom, ran)) =>
+					      let
+						  val dom = NilRename.renameCon (do_con state dom)
+						  val ran = NilRename.renameCon (do_con state ran)
+						  val arrow = AllArrow_c{effect = effect, openness = Open,
+									 tFormals = [], fFormals = 0w0,
+									 eFormals = [dom], body_type = ran}
+					      in
+						  ((v,Var_c tv,f,v')::pvs,
+						   Con_b(Runtime, Con_cb(tv, arrow)) :: ftbnds,
+						   add_equation(state, tv, arrow),
+						   extra::extras)
+					      end) ([], [], state, []) varFunPvar
+
+			   (*val extras = List.mapPartial (getExtra state) varFunPvar*)
+
+
+			   val (bnds, vflist) = foldr (fn (x, (bnds, vfs))  =>
+						       case do_fun (state, extras) x of
+							   (NONE, vf) => (bnds, vf::vfs)
+							 | (SOME bnd, vf) => (bnd::bnds, vf::vfs)) ([], []) varFunPvar'
+			   (*val vflist = map (do_fun (state, extras)) varFunPvar'*)
+
 			   val extraBnds = map (fn (v,e) => (Exp_b(v,TraceUnknown,NilRename.renameExp e))) extras
-		       in  ((Fixopen_b(Sequence.fromList vflist))::extraBnds, state)
+		       in  (ftbnds @ bnds @ ((Fixopen_b(Sequence.fromList vflist))::extraBnds), state)
 		       end
 		| Fixcode_b vfset => error "fixcode not handled"
 		| Fixclosure_b (recur,vclset) => error "fixclosure not handled")

@@ -431,7 +431,8 @@ structure NilContextPre
 	    of Prim_c _        => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
 	     | (AllArrow_c _)  => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
 	     | ExternArrow_c _ => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
-	     | Typeof_c _      => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
+	     | (Coercion_c _)  => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
+	     (*| Typeof_c _      => (empty_subst(),name_eqn(name,SingleType_k(constructor)))*)
 	      
 	     | (Mu_c (recur,defs)) => 
 	      let val len = Sequence.length defs
@@ -522,7 +523,7 @@ structure NilContextPre
 			| _ => (error  (locate "kind_of") "Invalid closure: code component does not have correct kind" ))
 	      in name_self(name,Arrow_k(Closure,vklist,body_kind),NilSubst.C.addl (TEv,env,subst))
 	      end
- 	    
+
 	     | (Crecord_c entries) => 
 	      let 
 		fun mapper (l,c) = 
@@ -553,8 +554,11 @@ structure NilContextPre
 		   (print "Invalid kind for constructor application\n";
 		    Ppnil.pp_kind cfun_kind; print "\n";
 		    error (locate "kind_of")  "Invalid kind for constructor application"))
+(*
 	    | (Typecase_c {arg,arms,default,kind}) => (empty_subst(),kind_standardize'(D,kind,name))
 	    | (Annotate_c (annot,con)) => kind_of'(D,con,name))
+*)
+	      )
      in res
      end
    and insert_kind (context as {conmap,kindmap,varmap,counter}:context,var,kind) = 
@@ -726,7 +730,7 @@ structure NilContextPre
 		 of CON c1 => CON(Closure_c(c1,c2))
 		  | KIND (k,subst) => closure_kind(k,c2,subst)
 		  | NON_PATH => NON_PATH)
-	    | (Annotate_c (_,c)) => traverse c
+	    (*| (Annotate_c (_,c)) => traverse c*)
 	    | _ => NON_PATH)
 	   
     in 

@@ -42,7 +42,7 @@ signature NILCONTEXTPRE =
       *)
     val insert_kind          : context * var * kind       -> context
     val insert_kind_equation : context * var * con * kind -> context
-    val insert_equation      : context * var * con        -> context (* kind = Type_k *)
+    val insert_equation      : context * var * con        -> context 
     val insert_kind_list     : context* (var * kind) list -> context
 
     (*As above, except that the kind is guaranteed not to contain

@@ -61,7 +61,7 @@ struct
   fun debugdo f = if !debug then f() else ()
 
   type funinfo = {size : int,
-		  definition : function,
+		  definition : con * function,
 		  occurs : (bool * int) list}
 
   local
@@ -71,9 +71,10 @@ struct
 	   * 3: currently determined highest possible level
 	   *)
 
-      val sizeDefs = ref (Name.VarMap.empty : (int * Nil.function) Name.VarMap.map)
+      val sizeDefs = ref (Name.VarMap.empty : (int * Nil.con * Nil.function) Name.VarMap.map)
 	  (* 1: size of function body
-	   * 2: function itself
+	   * 2: function type
+	   * 3: function itself
 	   *)
 
       val occurs = ref ([] : occur list)
@@ -89,7 +90,7 @@ struct
 			    | SOME _ => true)
   in
       fun reset() = (sizeDefs := Name.VarMap.empty; occurs := [])
-      fun addFunction(v,i,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, f))
+      fun addFunction(v,i,c,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, c, f))
       fun addConstraint(v, n, r) = constraints := Name.VarMap.insert(!constraints, v, (n,r))
 
       (* Add level constraints for a particular sequence of applications starting from a curried function. *)
@@ -129,7 +130,7 @@ struct
 	end
       (* Create the map to be returned based on data kept in sizeDefs and occurs *)
       fun collect() : funinfo Name.VarMap.map =
-	  let val table = Name.VarMap.map (fn (i,f) => {size = i, definition = f, occurs = []}) (!sizeDefs)
+	  let val table = Name.VarMap.map (fn (i,c,f) => {size = i, definition = (c,f), occurs = []}) (!sizeDefs)
 	      fun folder ((v, inside, ref level), table) = 
 		  (case Name.VarMap.find(table, v) of
 		       NONE => table  (* application variable not a function *)
@@ -167,21 +168,15 @@ struct
 	   Prim_c(pc,cs) => doCons cs
          | Mu_c(b,vcs) => doCons (map #2 (Sequence.toList vcs))
          | AllArrow_c{tFormals,eFormals,body_type,...} =>
-	       (doVklist tFormals) + (doCons (map #2 eFormals)) + (doCon body_type)
+	       (doVklist tFormals) + (doCons eFormals) + (doCon body_type)
          | ExternArrow_c(cs,c) => doCons (c::cs)
          | Var_c v => 0
          | Let_c(_,cbnds,c) => (doList doCbnd cbnds) + (doCon c)
-         | Typeof_c e => doExp e
          | Crecord_c lcs => doCons (map #2 lcs)
          | Proj_c(c,l) => doCon c
          | Closure_c(c1,c2) => doCons [c1,c2]
          | App_c(c,cs) => doCons (c::cs)
-	 | Coercion_c{vars,from,to} => (doCon from) + (doCon to)
-         | Typecase_c{arg,arms,default,kind} =>
-	       (doKind kind;
-	        (doCon arg) + (doCon default) + 
-	       (doList (fn (pc,vks,c) => (doVklist vks) + (doCon c)) arms))
-         | Annotate_c (ka,c) => doCon c)
+	 | Coercion_c{vars,from,to} => (doCon from) + (doCon to))
 
   and doCbnd (conbnd:conbnd):int = 
 	1 + (case conbnd of
@@ -214,9 +209,8 @@ struct
          | Switch_e sw => doSwitch sw
          | App_e(ot,e,cs,es1,es2) => (doCons cs) + (doExps (e :: (es1 @ es2))) 
          | ExternApp_e(e,es) => doExps (e::es)
-         | Raise_e(e,c) => (doExp e) + (doCon c)
-         | Handle_e{body,bound,handler,result_type} => 
-	       (doExps [body,handler]) + (doCon result_type)
+         | Raise_e (e, c) => doExp e + doCon c
+         | Handle_e{body,bound,handler,result_type} => doExps [body,handler] + doCon result_type
 	 | Coerce_e (coercion,cargs,exp) =>
 	   (doCons cargs) + (doExp coercion) + (doExp exp)
 	 | Fold_e (vars,from,to) => (doCon from) + (doCon to)
@@ -263,12 +257,10 @@ struct
          | Exp_b(v,nt,e) => doExp e
          | Fixopen_b vfSeq => 
 	     let val vf = Sequence.toList vfSeq
-		 fun doFunction(v,f as Function{tFormals,eFormals,fFormals,body,body_type,...}) = 
+		 fun doFunction((v, c),
+				f as Function{body,...}) = 
 	            let 
-	              val _ = (doVklist tFormals)
-	              val _ = (doCons (map #3 eFormals))
-	              val _ = (doCon body_type)
-	              val size = doExp body
+	              val size = doExp body + doCon c
 	              val _ = if (!debug) then 
 	                         (print "size of ";
 	                          Ppnil.pp_var v;
@@ -277,7 +269,7 @@ struct
 	                          print "\n")
 	                      else ()
 	            in
-		      (v, size, f)
+		      (v, size, c, f)
                     end
 		 val vsizedef = map doFunction vf
 		 val _ = map addFunction vsizedef
@@ -293,13 +285,14 @@ struct
         (case switch of
            Intsw_e{arg,size,arms,default,result_type} =>
 	       (doExps (arg :: (map #2 arms))) +
-	       (doExpopt default) 
+	       (doExpopt default)
          | Sumsw_e{arg,sumtype,bound,arms,default,result_type} =>
 	       (doExps (arg :: (map #3 arms))) + 
-	       (doExpopt default) 
+	       (doExpopt default)
          | Exncase_e{arg,bound,arms,default,result_type} =>
 	       (doExps (arg :: ((map #1 arms) @ (map #3 arms)))) +
 	       (doExpopt default)
+	 | Ifthenelse_e _ => error "Ifthenelse not implemented yet"
          | Typecase_e{arg,arms,default,result_type} => 
 	       (doCon arg) + (doExp default) + 
 	       doList (fn (pc,vks,e) => (doExp e) + (doVklist vks)) arms)

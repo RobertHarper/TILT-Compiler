@@ -32,7 +32,7 @@ structure Reduce
 	 record _ => Listops.andfold exp_isval elist
        | inject _ => Listops.andfold exp_isval elist
        | box_float _ => Listops.andfold exp_isval elist
-       | roll => Listops.andfold exp_isval elist
+(*       | roll => Listops.andfold exp_isval elist*)
        | inj_exn _ => Listops.andfold exp_isval elist
        | _ => false)
 (*
@@ -161,7 +161,7 @@ structure Reduce
     (* In order to project from known records or inline functions,
      we store their bodies in the following hashtable: *)
 		
-    datatype bind = F of function | R of label list * exp list | INLINED 
+    datatype bind = F of con * function | R of label list * exp list | INLINED 
       | S of var * w32 * con list
       (* Constructor functions and records *)
       | FC of ((var * kind) list * con * kind)
@@ -455,28 +455,26 @@ structure Reduce
 		end 
 	    | AllArrow_c {tFormals, eFormals, body_type, ...} => 
 		(app ((scan_kind fset) o #2) tFormals;
-		 app ((scan_con fset) o #2) eFormals;
+		 app (scan_con fset) eFormals;
 		 (scan_con fset) body_type)
 	    | ExternArrow_c (cons, con) =>
 		(app (scan_con fset) cons ; scan_con fset con)
 	    | Var_c v => ()
 	    | Let_c (sort, conbnds, con) => 
 		(app (scan_conbnd fset) conbnds ; (scan_con fset) con)
-	    | Typeof_c (exp) =>
-		scan_exp fset exp
 	    | Crecord_c (lclist) =>
 		(app ((scan_con fset) o #2) lclist)
 	    | Proj_c (con, label) => (scan_con fset) con
 	    | Closure_c _ => raise UNIMP
 	    | App_c (con, cons) => 
 		( scan_con fset con ; app (scan_con fset) cons)
-	    | Typecase_c { arg=arg, arms = arms, default = default, kind = kind} =>
+(*	    | Typecase_c { arg=arg, arms = arms, default = default, kind = kind} =>
 		((scan_con fset) arg ; (scan_con fset) default ;
 		 scan_kind fset kind ;
 		 app (fn (primcon, vklist, con) => 
 		      ( app ((scan_kind fset) o #2) vklist;
 		       (scan_con fset) con)) arms )
-	    | Annotate_c (annot,con) => (scan_con fset) con
+*)
 		
 	and scan_conbnd fset conbnd = 
 	  case conbnd of 
@@ -581,18 +579,15 @@ structure Reduce
 			 ()
 			 )
 	    end
-		
 
 	and scan_function fset (Function{tFormals=cvarlist,eFormals=varlist,
-					 fFormals=fvarlist,body=exp,body_type, ...}) = 
+					 fFormals=fvarlist,body=exp,...}) = 
 		    let fun dec (v,k) = (declare false v; scan_kind fset k)
 		    in  ( 
-			 app dec cvarlist;
-			 app (fn (v, tr, con) =>
-			      ignore (declare false v, scan_con fset con))  varlist;
+			 app (dec false) cvarlist;
 			 app (declare false) fvarlist; 
-			 scan_exp fset exp;
-			 scan_con fset body_type
+			 app (declare false) varlist; 
+			 scan_exp fset exp
 			 )
 		    end 
 
@@ -601,18 +596,19 @@ structure Reduce
 	      fun dofix vcset =
 		    let 
 			val newfset = VarSet.addList 
-			    (fset, Sequence.maptolist #1 vcset) 
-			fun dec (v,c) = declare true v
+			    (fset, Sequence.maptolist (#1 o #1) vcset) 
+			fun dec ((v,_),_) = declare true v
 			val _ = Sequence.app dec vcset
 		    in
 			Sequence.app 
-			(fn (v,function as 
+			(fn ((v,c),function as 
 			     Function{effect,tFormals=cvarlist,eFormals=varlist,
 				      fFormals=fvarlist,body=exp,...}) =>
 			     (if effect = Total 
 				  then total_set := VarSet.add (!total_set, v)
 			      else () ;
-				  scan_function newfset function)) vcset
+  			      scan_function newfset function;
+			      scan_con newfset c)) vcset
 			
 		    end 
 	    in
@@ -791,8 +787,7 @@ structure Reduce
 
 	  and xcon fset c =
 	    case c of 
-	      Typeof_c e => Typeof_c (xexp fset e)
-	    | Var_c var => sc(var)
+	      Var_c var => sc(var)
 	    | Let_c (sort, cbnds, con) =>
 		Let_c (sort, map (xconbnd fset) cbnds, con)
 	    | App_c (con, cons) =>
@@ -804,11 +799,11 @@ structure Reduce
 		in 
 		  Mu_c (bool, Sequence.map (fn (v, c) => (v, xcon fset c)) vcseq)
 		end 
-	    | AllArrow_c {openness, effect, isDependent, tFormals, 
+	    | AllArrow_c {openness, effect, tFormals, 
 			  eFormals, fFormals, body_type} =>
-		AllArrow_c {openness = openness, effect = effect, isDependent=isDependent,
+		AllArrow_c {openness = openness, effect = effect,
 			    tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals,
-			    eFormals = map (fn (vopt,c) => (vopt, xcon fset c)) eFormals,
+			    eFormals = map (xcon fset) eFormals,
 			    fFormals = fFormals,
 			    body_type = xcon fset body_type}
 	    | ExternArrow_c (cons, con) => 
@@ -817,15 +812,14 @@ structure Reduce
 		Crecord_c ( map (fn  (l,c) => (l, xcon fset c) ) lclist)
 	    | Proj_c (con, label) => Proj_c (xcon fset con, label)
 	    | Closure_c _ => raise UNIMP
-	    | Annotate_c (a,con) => Annotate_c (a, xcon fset con)
-	    | Typecase_c { arg=arg, arms=arms, default=default, kind= kind} => 
+	    (*| Typecase_c { arg=arg, arms=arms, default=default, kind= kind} => 
 		Typecase_c { arg=xcon fset arg,
 			    default = xcon fset default,
 			    kind = xkind fset kind, 
 			    arms = map (fn (primc, vklist, con)=> 
 					(primc, (map (fn (v,k)=>
 						      (v,xkind fset k))vklist),
-					 xcon fset con)) arms}
+					 xcon fset con)) arms}*)
 
 	    and xswitch fset s =
 		case s of
@@ -851,6 +845,7 @@ structure Reduce
 				   arms =  map (fn (w,tr,e) => (xexp fset w,tr,xexp fset e)) arms,
 				   default =  Option.map (xexp fset) default
 				   }
+		  | Ifthenelse_e _ => error "Ifthenelse not implemented yet"
 		  | Typecase_e {arg, arms, default, result_type} => 
 			Typecase_e 
 			{
@@ -861,19 +856,17 @@ structure Reduce
 			   (pc,map (fn (v,k) => (v, xkind fset k)) w,xexp fset e)) arms,
 			 default =  xexp fset default
 			 }
-			 
+
 	    and xfunction fset 
-		(Function{effect, recursive, isDependent,
+		(Function{effect, recursive,
 			  tFormals, eFormals, fFormals, 
-			  body, body_type}) =
-		let val tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals
-		    val eFormals = map (fn (v,tr,con) => (v, tr, xcon fset con)) eFormals
+			  body}) =
+		let
 		    val body = xexp fset body
-		    val body_type = xcon fset body_type
 		in 
-		    Function{effect=effect,recursive=recursive,isDependent=isDependent,
+		    Function{effect=effect,recursive=recursive,
 			     tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
-			     body=body, body_type=body_type}
+			     body=body}
 		end
 	
 	    and xbnds fset 
@@ -1029,26 +1022,21 @@ structure Reduce
 	  (* ----------------- Function bindings ----------------- *)
 	  | (bnd as Fixopen_b vcset) => 
 		let (* val vclist = VarSet.listItems vcset *)
-		    val vars = Sequence.maptolist #1 vcset
+		    val vars = Sequence.maptolist (#1 o #1) vcset
 		    fun possible_func  v  =
 			!do_inline andalso look count_app v = 1 andalso look count_esc v = 0 
 			
 		    (* Even when we inline the function, the cons & kinds on the args and the return con
 		     go away, so we need to update the counts for them *)
 			
-		    fun remove_rest
-			( vc as (v, Function{tFormals=vklist, eFormals=vclist, body_type,...})) =
-			(app (fn (_, kind) => census_kind fset (~1, kind)) vklist; 
-			 app (fn (_, _, con) => census_con fset (~1, con)) vclist; 
-			 census_con fset (~1, body_type))
 		    fun remove_func 
-			( vc as (v, Function{body, ...})) =
+			( vcf as ((v,c), Function{body, ...})) =
 			( census_exp fset ( ~1, body); 
-			 remove_rest vc
+			  census_con fset (~1, con))
 			 )
-		    fun recur_func ( v, function) = 
+		    fun recur_func ( (v,c), function) = 
 			let val newfset = VarSet.addList (fset, vars)
-			in ( v, xfunction newfset function)
+			in ( (v, xcon newfset c), xfunction newfset function)
 			end 
 		in
 		    if (Listops.orfold 
@@ -1068,9 +1056,9 @@ structure Reduce
 			    ( Sequence.app remove_func vcset ; xbnds fset rest body )
 			else
 			    let 		
-				val _ = Sequence.app  (fn (v, f) => HashTable.insert bind (v, F f)) vcset
+				val _ = Sequence.app  (fn ((v, c), f) => HashTable.insert bind (v, F (c, f))) vcset
 				val (rest,body) = xbnds fset rest body
-				fun final (vc as (v:var,c:function)) = 
+				fun final (vc as ((v:var,_),_)) = 
 				    case HashTable.find bind v of
 					SOME INLINED => (remove_rest vc ; false )
 				      | _ =>( if dead_var v then (remove_func vc; false)  else true )
@@ -1152,11 +1140,11 @@ structure Reduce
 			      val exp' = Prim_e (ap, trlist, clist', elist')
 			  in
 			      case exp' of 
-				  (* Unroll a  Roll *)
+(*				  (* Unroll a  Roll *)
 				  Prim_e ( NilPrimOp (unroll), _, con , [ Prim_e (NilPrimOp (roll), _, _, [exp] ) ] ) =>
-				      (inc_click fold_click; exp)
+				      (inc_click fold_click; exp)*)
 				(* box an unbox *)
-				| Prim_e ( NilPrimOp (box_float (sz1)), _, _,
+				  Prim_e ( NilPrimOp (box_float (sz1)), _, _,
 					  [ Prim_e (NilPrimOp (unbox_float(sz2)), _, _, [ exp ] ) ] ) =>
 				  if sz1 = sz2
 				      then (inc_click fold_click; exp)
@@ -1200,10 +1188,11 @@ structure Reduce
 				  look count_esc sf = 0 
 			       then 
 				   ( case (HashTable.find bind sf) of
-					 SOME (F (Function{tFormals=vklist, 
+					 SOME (F (c,
+						  Function{tFormals=vklist, 
 							   eFormals=vclist, 
 							   fFormals=vlist, 
-							   body=exp, body_type, ...})) =>
+							   body=exp, ...})) =>
 					     let val _ = inc_click inline_click
 						 fun do_args (arg,  x ) =
 						     case arg of
@@ -1229,7 +1218,7 @@ structure Reduce
 						 (* Substitute the args *)
 						 (Listops.map2 do_args (elist, map #1 vclist) ; (* Regular arguments *)
 						  Listops.map2 do_args (elist2, vlist) ;        (* Floating point *)
-						  Listops.map2 do_cargs (clist, map #1 vklist) ;(* Constructor arguments *)
+						  Listops.map2 do_cargs (clist, vklist) ;(* Constructor arguments *)
 						  
 						  update_count APP (s(f)) ~1 fset;
 					       HashTable.insert bind (sf, INLINED) ;

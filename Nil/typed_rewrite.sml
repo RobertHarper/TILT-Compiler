@@ -1,5 +1,6 @@
-(*$import Prelude TopLevel Name List Sequence Prim Array TraceInfo Listops Util Nil *)
+(* Doesn't work yet *)
 
+(*$import Prelude TopLevel Name List Sequence Prim Array TraceInfo Listops Util Nil *)
 
 signature TYPEDNILREWRITE = 
   sig
@@ -279,20 +280,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	      let
 	      in
 		(case con 
-		   of (Prim_c (Record_c (labels,SOME vars),args)) => 
-		     let
-		       val changed = ref false
-		       fun folder (v,c,state) = 
-			 let
-			   val c = recur_c changed state c 
-			   val (state,v) = bind_e changed (state,v,c)
-			 in
-			   (v,c,state)
-			 end
-		       val (vars,args,state) = foldl_acc2 folder state (vars,args)
-		     in if !changed then SOME (Prim_c (Record_c(labels,SOME vars),args)) else NONE
-		     end
-		    | (Prim_c (pcon,args)) => 
+		   of (Prim_c (pcon,args)) => 
 		     let
 		       val changed = ref false
 		       val args = map_f recur_c changed state args
@@ -317,7 +305,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		     in  if !changed then SOME (Mu_c (flag,defs)) else NONE
 		     end
 		   
-		    | (AllArrow_c {openness, effect, isDependent, tFormals, 
+		    | (AllArrow_c {openness, effect, tFormals, 
 				   eFormals, fFormals, body_type}) =>
 		     let
 		       val changed = ref false
@@ -344,7 +332,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		       val body_type = recur_c changed state body_type
 		     in
 		       if !changed
-			 then SOME (AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
+			 then SOME (AllArrow_c{openness = openness, effect = effect,
 					       tFormals = tFormals, eFormals = eFormals, 
 					       fFormals = fFormals, body_type = body_type})
 		       else NONE
@@ -378,7 +366,6 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		       val body = recur_c changed state body
 		     in if !changed then SOME (Let_c (letsort, cbnds, body)) else NONE
 		     end
-		    | Typeof_c exp => mapopt Typeof_c (rewrite_exp state exp)
 		    | (Closure_c (code,env)) =>
 		     let
 		       val changed = ref false
@@ -418,34 +405,6 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		       val to = recur_c changed state to
 		     in if !changed then SOME (Coercion_c {vars=vars,from=from,to=to}) 
 			else NONE
-		     end
-
-		    | Typecase_c {arg, arms, default, kind} => 
-		     let 
-		       val changed = ref false
-		       fun doarm(pc,vklist,body) =   
-			 let 
-			   val (vklist,state) = tformals_helper changed state vklist
-			   val body = recur_c changed state body
-			 in  (pc, vklist, body)
-			 end
-		       val arg = recur_c changed state arg
-		       val arms = map doarm arms
-		       val default = recur_c changed state default
-		       val kind = recur_k changed state kind
-		     in  
-		       if !changed then
-			 SOME (Typecase_c{arg = arg,
-					  arms = arms,
-					  default = default,
-					  kind = kind})
-		       else NONE
-		     end
-		    | (Annotate_c (annot,con)) => 
-		     let
-		       val changed = ref false 
-		       val con = recur_c changed state con
-		     in if !changed then SOME (Annotate_c (annot, con)) else NONE
 		     end)
 	      end
 	  in
@@ -511,16 +470,15 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	  in (vklist,state)
 	  end
 
-	and fun_helper (state : 'state) (Function{effect, recursive, isDependent,
+	and fun_helper (state : 'state) (Function{effect, recursive,
 						  tFormals, eFormals, fFormals,
-						  body, body_type}) : function option = 
+						  body}) : function option = 
 	  let 
 	    val changed = ref false
 	    val (tFormals,state1) = tformals_helper changed state tFormals
 	    local
-	      fun vcfolder changed ((v,trace,c),s) = 
+	      fun vtrfolder changed ((v,trace),s) = 
 		let 
-		  val c' = recur_c changed s c
 		  val trace = recur_trace changed state trace
 		  val (s,v) = bind_e changed (s,v,c') 
 		in  ((v,trace,c'),s)
@@ -531,13 +489,12 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	    val ftype = Prim_c (Float_c Prim.F64,[])
 	    fun folder changed (v,s) = let val (s,v) = bind_e changed (s,v,ftype) in (v,s) end
 	    val (fFormals,state2) = foldl_acc_f folder changed state2 fFormals
-	    val body_type = recur_c changed (if isDependent then state2 else state1) body_type
 	    val body = recur_e changed state2 body
 	  in
 	    if !changed then
-	      SOME (Function({effect = effect , recursive = recursive, isDependent = isDependent,
+	      SOME (Function({effect = effect , recursive = recursive,
 			      tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
-			      body = body, body_type = body_type}))
+			      body = body}))
 	    else NONE
 	  end
 
@@ -932,7 +889,6 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 
 	    fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
 	      | loop (Proj_c (c,l)) labs = loop c (l::labs)
-	      | loop (Annotate_c (_,c)) labs = loop c labs
 	      | loop _ _ = error "Non path returned from rewriting trace info"
 
 	    fun do_trace (state,trace) =

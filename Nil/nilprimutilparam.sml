@@ -16,9 +16,8 @@ structure NilPrimUtilParam
 
 	fun simple_arrow (effect,cons,c2) = AllArrow_c{openness = Code,
 						       effect = effect,
-						       isDependent = false,
 						       tFormals = [],
-						       eFormals = map (fn c => (NONE,c)) cons,
+						       eFormals = cons,
 						       fFormals = 0w0,
 						       body_type = c2}
 	fun partial_arrow (cons,c2) = simple_arrow(Partial,cons,c2)
@@ -74,7 +73,7 @@ structure NilPrimUtilParam
 			   Var_e bool_var)
 		end
 	end
-	val con_unit = Prim_c(Record_c ([],NONE), [])
+	val con_unit = Prim_c(Record_c [], [])
 	val unit_value = Prim_e(NilPrimOp(record []),[],[],[])
 
 	fun exp2value (Const_e v) = SOME v
@@ -87,6 +86,6 @@ structure NilPrimUtilParam
 	fun con_tuple clist = 
 	    let fun mapper(i,_) = generate_tuple_label(i+1)
 		val labs = Listops.mapcount mapper clist
-	    in Prim_c(Record_c (labs,NONE),clist)
+	    in Prim_c(Record_c labs, clist)
 	    end
     end

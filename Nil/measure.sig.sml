@@ -9,7 +9,8 @@ signature MEASURE =
 
     val chatlev : int ref
     (* Controls how much extra printed output to produce.
-       Greater than 0 gets some output. Greater than 1 gets extra ouput, including counts of specific types of constructors. *)
+       Greater than 0 gets some output.
+       Greater than 1 gets extra ouput, including counts of specific types of constructors. *)
 
     val cstring : Nil.con -> string
     (* Mapping from a constructor to the string used to identify it in keeping counts *)

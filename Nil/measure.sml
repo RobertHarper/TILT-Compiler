@@ -10,9 +10,11 @@ structure Measure :> MEASURE =
 
     val chatlev = ref 0
     (* Controls how much extra printed output to produce.
-       Greater than 0 gets some output. Greater than 1 gets extra ouput, including counts of specific types of constructors. *)
+       Greater than 0 gets some output.
+       Greater than 1 gets extra ouput, including counts of specific types of constructors. *)
 
     fun chat i s = if !chatlev > i then print s else ()
+
     local 
       
       type state = {cstring : con -> string,
@@ -84,7 +86,6 @@ structure Measure :> MEASURE =
       val {rewrite_con,rewrite_exp,rewrite_kind,rewrite_mod,...} = rewriters all_handlers
 
     in
-
       type measure = {cstring  : Nil.con -> string, 
 		      count    : string list,
 		      count_in : string list}
@@ -150,6 +151,7 @@ structure Measure :> MEASURE =
       val kind_size = item_size rewrite_kind
 
       val mod_size  = item_size rewrite_mod
+
       (* mod_size meas module ==> counts of components of module, using the constructor string conversion function in meas.
 	 count and count_in in meas only matter if the chat level is high enough to generate printed output, in which case
 	 the counts of the constructor varieties they give will be printed.
@@ -187,8 +189,6 @@ structure Measure :> MEASURE =
 	in (impsize,bndsize,exportsize)
 	end
 
-
-
       fun cstring con = 
 	(case con of
 	   Prim_c (Sum_c _,_)    => "Sum_c"
@@ -200,12 +200,9 @@ structure Measure :> MEASURE =
 	 | Let_c _               => "Let_c"
 	 | Mu_c _                => "Mu_c"
 	 | Proj_c _              => "Proj_c"
-	 | Typeof_c _            => "Typeof_c"
 	 | App_c _               => "App_c"
 	 | Crecord_c _           => "Crecord_c"
 	 | Closure_c _           => "Closure_c"
-	 | Typecase_c _          => "Typecase_c"
-	 | Annotate_c (_,c)      => "Annotate_c"
 	 | Coercion_c _          => "Coercion_c")
 
     end

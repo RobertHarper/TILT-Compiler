@@ -1,4 +1,4 @@
-(*$import Util Listops Name Int Normalize List Prim Sequence Nil NilUtil Ppnil LibBase SPECIALIZE NilContext NilDefs NilStatic *)
+(*$import Util Listops Name Int Normalize List Prim Sequence Nil NilUtil Ppnil LibBase SPECIALIZE NilContext NilDefs NilStatic ListPair *)
 
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert
@@ -39,6 +39,10 @@ struct
 	val diag = ref false
 	val do_dead = ref true
 	val do_proj = ref true
+
+	val type_of = Normalize.type_of
+	val strip_arrow_norm = Normalize.strip_arrow_norm
+	val rename_arrow     = NilUtil.rename_arrow
 
 	(* In the first pass, we locate all candidate functions.
 	   Candidate functions are term-level functions which
@@ -175,10 +179,13 @@ struct
 
             (* Given a function definition, add it to the global state
              *)
-	    fun addCandidate (context, v : var, 
+	    fun addCandidate (context, v : var, c : con,
 			      Function {recursive, tFormals, eFormals, 
 					fFormals, body, ...}) = 
 		let 
+		    
+		  val {tFormals=tFormals',...} = rename_arrow (strip_arrow_norm context c,tFormals)
+		  val tKinds = map #2 tFormals'
 		  val nonRecur = (case recursive of
 				    Arbitrary => false
 				  | _ => true)
@@ -193,8 +200,8 @@ struct
 			    *)
 			   Candidate{body = body,
 				     context = context,
-				     tFormals = map #1 tFormals,
-				     tKinds   = map #2 tFormals,
+				     tFormals = tFormals,
+				     tKinds   = tKinds,
 				     eFormals = map #1 eFormals,
 				     tActuals = ref NONE,
 				     replace = Name.derived_var v}
@@ -277,12 +284,12 @@ struct
 		    (case (Normalize.reduce_hnf(callContext,
 						Normalize.type_of (callContext,
 								   e))) of
-		       (_,Prim_c(Record_c ([],_), _)) => true
+		       (_,Prim_c(Record_c [], _)) => true
 		     | _ => false)
 		    
 		  (* Given the typing context at the point where the
 		     function was defined and the ref containing the
-		     type applications we've seen so far, see whether
+                     type applications we've seen so far, see whether
 		     the new type arguments tArgs are can be hoisted
                      up to the definition and are consistent with
                      any other type arguments we've seen.
@@ -451,8 +458,8 @@ struct
 
 	  | Coerce_e (coercion,cargs,exp) =>
 	      (scan_exp ctxt coercion; scan_exp ctxt exp)
-		| Fold_e _ => ()
-		| Unfold_e _ => ())
+	  | Fold_e _ => ()
+	  | Unfold_e _ => ())
 
 	and scan_switch ctxt (switch : switch) : unit = 
 	  let 
@@ -495,21 +502,17 @@ struct
 	     | Typecase_e _ => error "typecase_e not done")
 	  end
 
-	and scan_function ((v:var, f as Function{tFormals,fFormals,eFormals,
-						 body,recursive,...}), 
-			   ctxt) =
+	and scan_function (((v:var, c),
+			    f as Function{tFormals,fFormals,eFormals,body,recursive,...}), ctxt) =
 	    let	
-	      val fctxt = NilContext.insert_con
-		              (ctxt, v, NilUtil.function_type Open f)
-	      val ctxt  = NilContext.insert_kind_list(fctxt,tFormals)
-	      val ctxt  = NilContext.insert_con_list
-		              (ctxt, map (fn (v,_,c) => (v,c)) eFormals)
-	      val float = NilDefs.unboxfloat_con
-	      val ctxt  = NilContext.insert_con_list
-                              (ctxt,map (fn v => (v, float)) fFormals)
-	      val _ = scan_exp ctxt body
-	    in  
-	      fctxt
+		val {tFormals=tFa,eFormals=eFa,...} = strip_arrow_norm ctxt c
+		val fctxt = NilContext.insert_con(ctxt, v, c)
+		val ctxt = NilContext.insert_kind_list(fctxt, ListPair.map (fn (v, (_, k)) => (v, k)) (tFormals, tFa))
+		val ctxt = NilContext.insert_con_list(ctxt, ListPair.map (fn ((v,_),c) => (v,c)) (eFormals, eFa))
+		val float = NilDefs.unboxfloat_con
+		val ctxt = NilContext.insert_con_list(ctxt,map (fn v => (v, float)) fFormals)
+		val _ = scan_exp ctxt body
+	    in  fctxt
 	    end
 
 	and scan_bnds(bnds : bnd list, ctxt) = foldl scan_bnd ctxt bnds
@@ -528,29 +531,20 @@ struct
 	     | Code_cb (v,_,_) => error "Cannot handle Code_cb")
 
 	and scan_bnd (bnd : bnd, ctxt) : context = 
-	  (case bnd of
-	     Exp_b(v,_,e) => let 
-			       val _ = scan_exp ctxt e
-			       val ctxt = NilContext.insert_exp(ctxt,v,e)
-			     in
-			       ctxt
-			     end
-
-	   | Con_b(p,cbnd) => scan_cbnd(cbnd,ctxt)
-
-	   | Fixopen_b vfset =>
-	        let 
-		  val vflist = (Sequence.toList vfset)
-		  val _ = app (fn (v,f) => addCandidate(ctxt,v,f)) vflist
-		  val ctxt = foldl scan_function ctxt vflist
-		in 
-		  ctxt
-		end
-	   
-	   | Fixcode_b _ => error "sorry: Fixcode not handled"
-	   
-	   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
-
+	  	(case bnd of
+		     Exp_b(v,_,e) => let val _ = scan_exp ctxt e
+					 val ctxt = NilContext.insert_exp(ctxt,v,e)
+				     in  ctxt
+				     end
+		   | Con_b(p,cbnd) => scan_cbnd(cbnd,ctxt)
+		   | Fixopen_b vfset =>
+		      let val vflist = (Sequence.toList vfset)
+			  val _ = app (fn ((v,c),f) => addCandidate(ctxt,v,c,f)) vflist
+			  val ctxt = foldl scan_function ctxt vflist
+		      in ctxt
+		      end
+		   | Fixcode_b _ => error "sorry: Fixcode not handled"
+		   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
 
 	fun scan_import(ImportValue(l,v,tr,c),ctxt) = 
 	       insert_label(insert_con(ctxt,v,c),l,v)
@@ -651,9 +645,8 @@ struct
 			       bound=bound,arms=arms,default=default,
 			       result_type=result_type}
 		end
-
-	      | Typecase_e _ => error "typecase not handled")
-
+	      | Typecase_e _ => error "typecase not handled"
+	      | Ifthenelse_e _ => error "Ifthenelse not handled")
 
 	and do_bnds(bnds : bnd list) : bnd list = 
 	    let 
@@ -663,39 +656,30 @@ struct
 	    end
 
 	and do_bnd (bnd : bnd) : bnd list =
-	  (case bnd of
-	     Exp_b(v,traceinfo,e) => [Exp_b(v,traceinfo,do_exp e)]
+	  	(case bnd of
+		     Exp_b(v,traceinfo,e) => [Exp_b(v,traceinfo,do_exp e)]
+		   | Con_b(v,c) => [bnd]
+		   | Fixopen_b vfset =>
+		      let fun getBnd((v,_),_) = 
+			  (case rewriteFunction v of
+			       NONE => NONE
+			     | SOME (replace,bnds,body) => 
+				   let val body = do_exp body
+				   in  SOME(Exp_b(replace, TraceUnknown,
+						  makeLetE Sequential bnds body))
+				   end)
+			  fun getFun((v, c),
+				     f as Function{effect,recursive,
+						   tFormals, eFormals, fFormals, body}) =
+			      (case rewriteFunction v of
+				   NONE => 
+				       let val body = do_exp body
+				       in  SOME((v,c),Function{effect=effect,recursive=recursive,
+							   tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
+							   body = body})
+				       end
+				 | SOME _ => NONE)
 
-	   | Con_b(v,c) => [bnd]
-
-	   | Fixopen_b vfset =>
-	       let fun getBnd(v,_) = 
-		         (case rewriteFunction v of
-			    NONE => NONE
-			  | SOME (replace,bnds,body) => 
-			      let val body = do_exp body
-			      in  SOME(Exp_b(replace, TraceUnknown,
-					     makeLetE Sequential bnds body))
-			      end)
-
-		   fun getFun(v,Function{effect,recursive,isDependent,
-					 tFormals, eFormals, fFormals, 
-					 body, body_type}) =
-		         (case rewriteFunction v of
-			    NONE => 
-			      let 
-				val body = do_exp body
-			      in  
-				SOME(v,Function{effect=effect,
-						recursive=recursive,
-						isDependent=isDependent,
-						tFormals=tFormals, 
-						eFormals=eFormals, 
-						fFormals=fFormals,
-						body = body, 
-						body_type = body_type})
-			      end
-			  | SOME _ => NONE)
 			  val vflist = (Sequence.toList vfset)
 			  val bnds = List.mapPartial getBnd vflist
 			  val funs = List.mapPartial getFun vflist

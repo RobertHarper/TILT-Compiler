@@ -24,8 +24,8 @@ is
 
 (* ------ Nil stuff ------ *)
 
-annote.sig.sml
-annote.sml
+(*annote.sig.sml
+annote.sml*)
 nil.sig.sml
 nil.sml
 ppnil.sig.sml
@@ -59,7 +59,7 @@ normalize.sig.sml
 normalize.sml
 rewrite.sig.sml
 rewrite.sml
-typed_rewrite.sml
+(*typed_rewrite.sml*)
 
 nilstatic.sig.sml
 nilstatic.sml 
@@ -78,10 +78,10 @@ toclosure.sml
 hoist.sig.sml
 hoist.sml
 
-reduce.sig.sml
+(*reduce.sig.sml*)
 pass.sig.sml
-reduce.sml
-(* flatten.sml  *)
+(*reduce.sml
+ flatten.sml  *)
 
 analyze.sig.sml
 analyze.sml
@@ -102,12 +102,12 @@ traceops.sml
 traceinfo.sig.sml
 traceinfo.sml
 
-reorder.sml
+(*reorder.sml*)
 
 trail.sig.sml
 trail.sml
 
-bound_check.sml
+(*bound_check.sml
 bound_check.sig.sml
 
 typeof_elim.sml
@@ -116,7 +116,7 @@ typeof_elim.sig.sml
 coerce-elim.sig.sml
 coerce-elim.sml
 
-(*
+
 cleanup.sig.sml
 cleanup.sml
 betareduce.sig.sml
@@ -124,11 +124,12 @@ betareduce.sml
 cont.sig.sml
 cont.sml
 nileval.sig.sml
-nileval.sml 
-*)
+nileval.sml *)
+
 
 NilOpts/exptable.sig.sml
 NilOpts/exptable.sml
+
 
 (*
 NilOpts/nilopts.sig.sml
@@ -148,4 +149,5 @@ NilOpts/uncurry.sml
 NilOpts/inline.sml
 NilOpts/linkopt.sml
 *)
+
 

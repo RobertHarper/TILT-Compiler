@@ -26,6 +26,8 @@
 structure NilRewrite :> NILREWRITE = 
   struct
     open Nil
+
+    val exn_con = Prim_c(Exn_c, [])
       
     val foldl_acc = Listops.foldl_acc
     val foldl_acc2 = Listops.foldl_acc2
@@ -146,6 +148,7 @@ structure NilRewrite :> NILREWRITE =
 	    val changed = ref false
 	    val (temp,state) = foldl_acc (f changed) state list
 	    val _ = flag := (!flag orelse !changed)
+
 	  in (if !changed then temp else list,state)
 	  end
 
@@ -161,6 +164,11 @@ structure NilRewrite :> NILREWRITE =
 	fun bind_first_e changed ((v : Nil.var,t),s : 'state) = 
 	  let val (v,s) = bind_e changed (v,s)
 	  in ((v,t),s)
+	  end
+
+	fun bind_firstfirst_e changed (((v : Nil.var,u),t),s : 'state) = 
+	  let val (v,s) = bind_e changed (v,s)
+	  in (((v,u),t),s)
 	  end
 
 	(* Given a flag and a constructor variable to bind in a state,
@@ -181,6 +189,7 @@ structure NilRewrite :> NILREWRITE =
 	 * the rewriter and set the flag if the rewriter changes
 	 * the term: otherwise return the original term.
 	 *)
+
 	fun recur_e flag state exp = 
 	  (case rewrite_exp state exp
 	     of SOME exp => (flag := true;exp)
@@ -221,21 +230,8 @@ structure NilRewrite :> NILREWRITE =
 	    fun docon (state,con) = 
 	      let
 	      in
-		(case con 
-		   of (Prim_c (Record_c (labels,SOME vars),args)) => 
-		     let
-		       val changed = ref false    
-		       fun folder (v,c,state) =   
-			 let
-			   val c = recur_c changed state c 
-			   val (v,state) = bind_e changed (v,state)
-			 in
-			   (v,c,state)
-			 end
-		       val (vars,args,state) = foldl_acc2 folder state (vars,args)
-		     in if !changed then SOME (Prim_c (Record_c(labels,SOME vars),args)) else NONE
-		     end
-		    | (Prim_c (pcon,args)) => 
+		(case con of
+		     (Prim_c (pcon,args)) => 
 		     let
 		       val changed = ref false      (* Will be set if anything changes *)
 		       val args = map_f recur_c changed state args
@@ -256,33 +252,29 @@ structure NilRewrite :> NILREWRITE =
 		     in  if !changed then SOME (Mu_c (flag,Sequence.fromList defslist)) else NONE
 		     end
 		   
-		    | (AllArrow_c {openness, effect, isDependent, tFormals, 
+		    | (AllArrow_c {openness, effect, tFormals, 
 				   eFormals, fFormals, body_type}) =>
 		     let
 		       val changed = ref false   (* Did anything at all change? *)
 
-		       val (tFormals,state) = tformals_helper changed state tFormals
+		       val (tFormals,state) = tformals_helper_arrow changed state tFormals
 
 		       val (eFormals,state) = 
 			   let
-			     fun efolder changed ((vopt,c),s) = 
-			       let 
-				 val c = recur_c changed state c
-				 val (vopt,s) = 
-				   (case vopt of
-				      NONE => (vopt, s)
-				    | SOME v => let val (v,s) = bind_e changed (v,s) 
-						in  (SOME v, s)
-						end)
-			       in  ((vopt,c),s)
-			       end
-			   in foldl_acc_f efolder changed state eFormals
+			       fun efolder(c,s) = 
+				   let 
+				       val c = recur_c changed state c
+				   in  (c,s)
+				   end
+			       val (new_eFormals,state) = foldl_acc efolder state eFormals
+			       val eFormals = if !changed then new_eFormals else eFormals
+			   in  (eFormals, state)
 			   end
 
 		       val body_type = recur_c changed state body_type
 		     in
 		       if !changed
-			 then SOME (AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
+			 then SOME (AllArrow_c{openness = openness, effect = effect,
 					       tFormals = tFormals, eFormals = eFormals, 
 					       fFormals = fFormals, body_type = body_type})
 		       else NONE
@@ -312,7 +304,7 @@ structure NilRewrite :> NILREWRITE =
 		       val body = recur_c changed state body
 		     in if !changed then SOME (Let_c (letsort, cbnds, body)) else NONE
 		     end
-		    | Typeof_c exp => mapopt Typeof_c (rewrite_exp state exp)
+
 		    | (Closure_c (code,env)) =>
 		     let
 		       val changed = ref false
@@ -349,34 +341,6 @@ structure NilRewrite :> NILREWRITE =
 		       val to = recur_c changed state to
 		     in if !changed then SOME (Coercion_c {vars=vars,from=from,to=to}) 
 			else NONE
-		     end
-
-		    | Typecase_c {arg, arms, default, kind} => 
-		     let 
-		       val changed = ref false
-		       fun doarm(pc,vklist,body) =   
-			 let 
-			   val (vklist,state) = tformals_helper changed state vklist
-			   val body = recur_c changed state body
-			 in  (pc, vklist, body)
-			 end
-		       val arg = recur_c changed state arg
-		       val arms = map doarm arms
-		       val default = recur_c changed state default
-		       val kind = recur_k changed state kind
-		     in  
-		       if !changed then
-			 SOME (Typecase_c{arg = arg,
-					  arms = arms,
-					  default = default,
-					  kind = kind})
-		       else NONE
-		     end
-		    | (Annotate_c (annot,con)) => 
-		     let
-		       val changed = ref false 
-		       val con = recur_c changed state con
-		     in if !changed then SOME (Annotate_c (annot, con)) else NONE
 		     end)
 	      end
 	  in
@@ -420,7 +384,7 @@ structure NilRewrite :> NILREWRITE =
 		  | (Arrow_k (openness, args, result)) =>
 		   let
 		     val changed = ref false
-		     val (args, state) = tformals_helper changed state args
+		     val (args, state) = tformals_helper_arrow changed state args
 		     val result = recur_k changed state result
 		   in if !changed then SOME(Arrow_k (openness, args, result)) else NONE
 		   end)
@@ -433,9 +397,7 @@ structure NilRewrite :> NILREWRITE =
 	     | NORECURSE => NONE)
 	  end
 	
-	(* Rewrite a list of variable kind pairs.
-	 *)
-	and tformals_helper (flag : bool ref) (state : 'state) (vklist : (var * kind) list) : (var * kind) list * 'state = 
+	and tformals_helper_arrow (flag : bool ref) (state : 'state) (vklist : (var * kind) list) : (var * kind) list * 'state = 
 	  let
 	    fun bind changed ((var,knd),state) = 
 	      let
@@ -443,7 +405,7 @@ structure NilRewrite :> NILREWRITE =
 		  (case rewrite_kind state knd
 		     of SOME knd => (changed := true;knd)
 		      | NONE => knd)
-		val (var,state) = bind_c changed (var,state)
+		val (var, state) = bind_c changed (var, state)
 	      in
 		((var,knd),state)
 	      end
@@ -452,6 +414,51 @@ structure NilRewrite :> NILREWRITE =
 	  in (vklist,state)
 	  end
 
+	and tformals_helper (flag : bool ref) (state : 'state) (vlist : var list) : var list * 'state = 
+	  let
+	    fun bind changed (var,state) = 
+	      let
+		val (var, state) = bind_c changed (var, state)
+	      in
+		(var,state)
+	      end
+
+	    val (vlist,state) = foldl_acc_f bind flag state vlist
+	  in (vlist,state)
+	  end
+
+	and fun_helper (state : 'state) (c,
+					 Function{effect, recursive,
+						  tFormals, eFormals, fFormals,
+						  body}) : (con * function) option = 
+	  let 
+	    val changed = ref false
+	    val (tFormals,state1) = tformals_helper changed state tFormals
+
+	    val c = recur_c changed state c
+	    local
+	      fun vcfolder changed ((v,trace),s) = 
+		let 
+		  val trace = recur_trace changed state trace
+		  val (v,s) = bind_e changed (v,s)
+		in  ((v,trace),s)
+		end
+	    in
+	      val (eFormals, state2) = foldl_acc_f vcfolder changed state1 eFormals
+	    end
+
+	    fun folder changed (v,s) = bind_e changed (v,s)
+	    val (fFormals,state) = foldl_acc_f folder changed state fFormals
+
+	    val body = recur_e changed state2 body
+	  in
+	    if !changed then
+	      SOME (c,
+		    Function{effect = effect, recursive = recursive,
+			      tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
+			      body = body})
+	    else NONE
+	  end
 
 	(* Once again, this code is completely idiomatic.  See the documentation 
 	 * for the constructor case above for an explanation of the idiom.
@@ -607,7 +614,6 @@ structure NilRewrite :> NILREWRITE =
 
 	    fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
 	      | loop (Proj_c (c,l)) labs = loop c (l::labs)
-	      | loop (Annotate_c (_,c)) labs = loop c labs
 	      | loop _ _ = error "Non path returned from rewriting trace info"
 
 	    fun do_trace (state,trace) =
@@ -702,9 +708,9 @@ structure NilRewrite :> NILREWRITE =
 	   | Typecase_e {arg,arms,default, result_type} => 		     
 	       let 
 		 val changed = ref false
-		 fun doarm(pc,vklist,body) =   
+		 fun doarm(pc,vklist,body) =
 		   let 
-		     val (vklist,state) = tformals_helper changed state vklist
+		     val (vklist,state) = tformals_helper_arrow changed state vklist
 		     val body = recur_e changed state body
 		   in  (pc, vklist, body)
 		   end
@@ -766,9 +772,9 @@ structure NilRewrite :> NILREWRITE =
 	    (* Set outerflag to true if anything changed.
 	     *)
 	    fun fun_helper outerflag state
-	      (arg as (v,Function{effect, recursive, isDependent,
+	      (arg as ((v,c),Function{effect, recursive,
 				  tFormals, eFormals, fFormals,
-				  body, body_type})) = 
+				  body})) = 
 	      let 
 		(* Set to true if anything changes.  Note that this may
 		 * remain false even if outerflag is already true, so we get to preserve
@@ -776,28 +782,28 @@ structure NilRewrite :> NILREWRITE =
 		 *)
 		val changed = ref false
 
+		val c = recur_c changed state c
+
 		val (tFormals,state) = tformals_helper changed state tFormals
 		  
 		local
-		  fun vcfolder changed ((v,trace,c),state) = 
+		  fun vcfolder changed ((v,trace),state) = 
 		    let 
-		      val c = recur_c changed state c
 		      val trace = recur_trace changed state trace
 		      val (v,state) = bind_e changed (v,state) 
-		    in  ((v,trace,c),state)
+		    in  ((v,trace),state)
 		    end
 		in
 		  val (eFormals, state) = foldl_acc_f vcfolder changed state eFormals
 		end
 		val (fFormals,state) = foldl_acc_f bind_e changed state fFormals
-		val body_type = recur_c changed state body_type
 		val body = recur_e changed state body
 		val _ = outerflag := (!outerflag orelse !changed)
 	      in
 		if !changed then
-		  (v,Function({effect = effect , recursive = recursive, isDependent = isDependent,
+		  ((v,c),Function({effect = effect, recursive = recursive,
 			       tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
-			       body = body, body_type = body_type}))
+			       body = body}))
 		else arg
 	      end
 	    
@@ -806,7 +812,7 @@ structure NilRewrite :> NILREWRITE =
 		val changed = ref false
 		val vflist = Sequence.toList vfset 
 
-		val (vflist,state) = foldl_acc_f bind_first_e changed state vflist 
+		val (vflist,state) = foldl_acc_f bind_firstfirst_e changed state vflist 
 
 		val vflist =  map_f fun_helper changed state vflist
 		val vfset = Sequence.fromList vflist
@@ -836,10 +842,10 @@ structure NilRewrite :> NILREWRITE =
 		     val changed = ref false
 		     val vclist = Sequence.toList vcset
 		     val oldstate = state
-		     val (vclist,state) = foldl_acc_f bind_first_e changed state vclist
+		     val (vclist,state) = foldl_acc_f bind_firstfirst_e changed state vclist
 		     val innerstate = if is_recur then state else oldstate
 
-		     fun doer flag s (arg as (v,{code,cenv,venv,tipe})) = 
+		     fun doer flag s (arg as ((v,tipe),{code,cenv,venv})) = 
 		       let 
 			 val changed = ref false
 			 val code = (case recur_e changed s (Var_e code)
@@ -851,7 +857,7 @@ structure NilRewrite :> NILREWRITE =
 			 val _ = flag := (!flag orelse !changed)
 		       in
 			 if !changed then
-			   (v,{code=code,cenv=cenv,venv=venv,tipe=tipe})
+			   ((v,tipe),{code=code,cenv=cenv,venv=venv})
 			 else arg
 		       end
 		     val vclist = map_f doer changed innerstate vclist

@@ -23,8 +23,9 @@
    its bound term variables to maintain the invariant that term variables
    are unique.
 
-   This pass depends on applications to be inlined being in A-normal form.
+   This pass depends on applications being inlined being in A-normal form.
 *)
+
 structure Inline :> INLINE =
 struct
   open Nil Name NilUtil
@@ -45,9 +46,9 @@ struct
   val inlineManyCall = ref 0
   val hasCandidates  = ref false
 
-  fun updateDefinition(v,f) = 
+  fun updateDefinition(v,c,f) = 
       let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v) 
-      in  analyzeTable := (Name.VarMap.insert(table,v,{definition=f,size=size,occurs=occurs}))
+      in  analyzeTable := (Name.VarMap.insert(table,v,{definition=(c,f),size=size,occurs=occurs}))
       end
 
 
@@ -139,8 +140,7 @@ struct
 	 | ExternApp_e (f,es) => ExternApp_e (rexp f, map rexp es)
 	 | Handle_e {body,bound,handler,result_type} => 
 	       Handle_e{body = rexp body, bound = bound, 
-			handler = rexp handler, 
-			result_type = rcon result_type}
+			handler = rexp handler, result_type = rcon result_type}
 	 | Raise_e (exp, con) => 
 		    Raise_e (rexp exp, rcon con)
 	 | Fold_e (vars,from,to) => Fold_e (vars,rcon from,rcon to)
@@ -166,8 +166,8 @@ struct
 					    | _ => error "must have definition here")
 				   | SOME InlineMany => 
 					 (case funinfoOpt of
-					      SOME {definition, ...} => (inlineManyCall := 1 + (!inlineManyCall);
-									 SOME (NilRename.renameFunction definition))
+					      SOME {definition=(c,f), ...} => (inlineManyCall := 1 + (!inlineManyCall);
+									 SOME (NilRename.renameCon c, NilRename.renameFunction (f,c)))
 					    | _ => error "must have definition here")
 				   | NONE => NONE)
 			    val cs = map rcon cs
@@ -175,12 +175,12 @@ struct
 			    val es2 = map rexp es2
 			in  (case defOpt of
 				 NONE => [Exp_b(v,nt,App_e(Open,Var_e f,cs,es1,es2))]
-			       | SOME (Function{tFormals,eFormals,fFormals,body,...}) => 
+			       | SOME (_,Function{tFormals,eFormals,fFormals,body,...}) => 
 				 let  val bnd1 = 
-					 Listops.map2 (fn ((v,k),c) =>
+					 Listops.map2 (fn (v,c) =>
 						       Con_b(Runtime,Con_cb(v,c)))(tFormals,cs)
 				     val bnd2 = 
-					 Listops.map2 (fn ((v,tr,c),e) =>
+					 Listops.map2 (fn ((v,tr),e) =>
 						       Exp_b(v,tr,e))
 					 (eFormals,es1)
 				     val bnd3 = 
@@ -191,7 +191,10 @@ struct
 					 (case body of
 					      Let_e(ls,bnds,e) => (bnds,[Exp_b(v,nt,e)])
 					    | _ => ([],[Exp_b(v,nt,body)]))
+
+
 				     val bnds = List.concat [bnd1,bnd2,bnd3,bnd4,bnd5]
+
 				     val bnds = rbnds bnds
 				 in bnds
 				 end)
@@ -200,7 +203,7 @@ struct
 	| Fixopen_b vfSeq => 
 	    let val vf = Sequence.toList vfSeq
 		val vf = List.mapPartial
-		    (fn (v,f) => (case Name.VarMap.find(!optimizeTable,v) of
+		    (fn ((v,c),f) => (case Name.VarMap.find(!optimizeTable,v) of
 				      SOME InlineOnce => 
 					(* Tarditi's thesis suggests rewriting the definition
 					 * here before inlining, and I can't see any reason
@@ -210,54 +213,53 @@ struct
 					 *)
 					let
 					  val f = rfunction f
-					  val _ = updateDefinition(v,f)
+					  val _ = updateDefinition(v,c,f)
 					in NONE
 					end
 				    | SOME InlineMany => 
 					  let val _ = inlineManyFun := 1 + (!inlineManyFun)
+					      val c = rarrow c
 					      val f = rfunction f
-					      val _ = updateDefinition(v,f)
-					  in  SOME (v,f)
+					      val _ = updateDefinition(v,c,f)
+					  in  SOME ((v,c),f)
 					  end
-				    | _ => SOME(v,rfunction f))) vf
+				    | _ => SOME((v,rarrow c),rfunction f))) vf
 	    in  (case vf of
 		     [] => []
 		   | _ => [Fixopen_b(Sequence.fromList vf)])
 	    end
 	| Fixcode_b vfs => 
 	      [Fixcode_b(Sequence.fromList
-			 (List.map(fn (v,f) => (v,rfunction f))
+			 (List.map(fn ((v,c),f) => ((v,rarrow c),rfunction f))
 			  (Sequence.toList vfs)))]
 	| Fixclosure_b _ => [b])
-      and rfunction(Function{effect,recursive,isDependent,
+      and rfunction(Function{effect,recursive,
 			     tFormals,eFormals,fFormals,
-			     body,body_type}) = 
-	  Function{effect=effect,recursive=recursive,isDependent=isDependent,
+			     body}) = 
+	  Function{effect=effect,recursive=recursive,
 		   tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
-		   body=rexp body, body_type=body_type}
+		   body=rexp body}
+      and rarrow x = x
 
       and rswitch sw = 
 	(case sw of
 	   Intsw_e{arg,size,arms,default,result_type} =>
 	       Intsw_e{arg=rexp arg,size=size,
 		       arms=List.map(fn(w,e) => (w,rexp e)) arms,
-		       default=ropt rexp default,
-		       result_type = rcon result_type}
+		       default=ropt rexp default, result_type = rcon result_type}
 	 | Sumsw_e{arg,sumtype,bound,arms,default,result_type} => 
 	       Sumsw_e{arg=rexp arg,sumtype=rcon sumtype,bound=bound,
 		       arms=List.map(fn(w,tr,e) => (w,tr,rexp e)) arms,
-		       default=ropt rexp default,
-		       result_type = rcon result_type}
+		       default=ropt rexp default, result_type = rcon result_type}
 	 | Exncase_e {arg,bound,arms,default,result_type} => 
 	       Exncase_e{arg=rexp arg,bound=bound,
 			 arms=List.map(fn(e1,tr,e2) => (e1,tr,rexp e2)) arms,
-			 default=ropt rexp default,
-			 result_type = rcon result_type}
+			 default=ropt rexp default, result_type = rcon result_type}
+	 | Ifthenelse_e _ => error "Ifthenelse not implemented"
 	 | Typecase_e {arg,arms,default,result_type} => 
 	       Typecase_e{arg=rcon arg,
 			  arms=List.map(fn (pc,vks,e) => (pc,vks,rexp e)) arms,
-			  default= rexp default,
-			  result_type = rcon result_type})
+			  default= rexp default, result_type = rcon result_type})
 
   fun inline threshold nilmod = 
       let 

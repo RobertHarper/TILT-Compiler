@@ -9,6 +9,7 @@ signature NORMALIZE =
     type module = Nil.module
     type context = NilContextPre.context
     type con_subst = NilSubst.con_subst
+    type function = Nil.function
 
     (*Print debugging messages*)
     val debug : bool ref
@@ -26,6 +27,11 @@ signature NORMALIZE =
     val con_normalize : context -> con -> con
     val exp_normalize : context -> exp -> exp
     val module_normalize : context -> module -> module
+    val strip_arrow_norm: context -> con -> {openness : Nil.openness, effect : Nil.effect,
+					     tFormals : (Nil.var*Nil.kind) list,
+					     eFormals : Nil.con list,
+					     fFormals : Nil.w32,
+					     body_type: Nil.con}
 
     (*Normalizing functions with substitutions.
      * xxx_normalize' (context,subst) xxx is equivalent to
@@ -56,7 +62,7 @@ signature NORMALIZE =
     val expandMuType : context * con -> con
     val projectRecordType : context * con * Nil.label -> con
     val projectSumType : context * con * Nil.w32 -> con
-    val removeDependence : (Nil.var * con) list -> con -> con
+    (*val removeDependence : (Nil.var * con) list -> con -> con*)
 
     (*Perform the given reduction, renormalizing the result if necessary*)
 
@@ -88,7 +94,7 @@ signature NORMALIZE =
      *   beta_typecase D (case c {cj(v1,...vn) => cj'}) => con_normalize D ({ci'/vi} cj')
      * where p == cj, or the default case if none match.
      *)
-    val beta_typecase : context -> con -> con
+    (*val beta_typecase : context -> con -> con*)
 
     (* gets the type of a well-formed expression *)
     val reduceToSumtype : context * Nil.con -> TilWord32.word * TilWord32.word option * Nil.con list

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Typeof_Elim Real CoerceElim Timestamp *)
+(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Real Timestamp *)
 
 (* Reorder *)
 
@@ -14,7 +14,7 @@ structure Linknil :> LINKNIL  =
     val measure   = Stats.ff "Measure"     (* measure after each pass *)
     val show      = Stats.ff "ShowNil"     (* show after each pass *)
 
-    val typeof_elim = fn nilmod => Typeof_Elim.mod_elim (NilContext.empty()) nilmod
+    (*val typeof_elim = fn nilmod => Typeof_Elim.mod_elim (NilContext.empty()) nilmod*)
 
     fun makeEntry (enable, str) = ((if enable then Stats.tt else Stats.ff) ("do" ^ str),
 				   Stats.ff("show" ^ str),
@@ -43,6 +43,11 @@ structure Linknil :> LINKNIL  =
 (*  val reduce      = makeEntry (false, "Reduce") *)
 (*  val flatten     = makeEntry (false, "Flatten") *)
     val coerce_elim = makeEntry (false, "CoerceElim")
+
+    val walk         = makeEntry (true, "Walk")
+    val context_walk = makeEntry (true, "ContextWalk")
+    val bind_walk    = makeEntry (true, "BindWalk")
+    (*val worst_walk   = makeEntry (true, "WorstWalk")*)
 
 (*  val reorder     = makeEntry (false, "Reorder") *)
 
@@ -108,6 +113,12 @@ structure Linknil :> LINKNIL  =
 	    val _ = if !checkphase orelse !typecheck then
 		      NilStatic.module_valid (NilContext.empty (), nilmod)
 		    else ()
+	    (* Note that these get redirected in the self-compile, 
+	     * since TIL can't handle the Wizard.  (Datatype bug)
+	     *)
+	    (*val _ = if !wcheckphase orelse !wtypecheck then
+		      WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod)
+		    else ()*)
 	val _ = 
 	  if !measurephase orelse !measure then 
 	    let
@@ -116,9 +127,9 @@ structure Linknil :> LINKNIL  =
 	      val totcsr = Stats.int (phasename^"::totalconsize")
 	      val totsr = Stats.int (phasename^"::totalsize")
 	    in
-	       impsr := !impsr + (#total imps);
-	       totcsr := !totcsr + (#cons imps) + (#cons bnds) + (#cons exps);
-	       totsr := !totsr + (#total imps) + (#total bnds) + (#total exps)
+		impsr := !impsr + (#total imps);
+		totcsr := !totcsr + (#cons imps) + (#cons bnds) + (#cons exps);
+		totsr := !totsr + (#total imps) + (#total bnds) + (#total exps)
 	    end
 	  else ()
 	in  nilmod
@@ -150,15 +161,11 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
 
-	    val nilmod = transform typeofelim1 (typeof_elim, nilmod)
-
-	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
-
-
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
 		    else ()
 	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
+
 	    val nilmod = transform optimize1 
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
@@ -168,9 +175,6 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform vararg (Vararg.optimize, nilmod)
 
-(*	    val nilmod = transform reduce1 (Reduce.doModule, nilmod)  *)
-(*	    val nilmod = transform flatten (Flatten.doModule, nilmod) *)
-
 	    val nilmod = transform inline1
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
@@ -179,7 +183,14 @@ structure Linknil :> LINKNIL  =
             val nilmod = transform reify1 (Reify.reify_mod, nilmod)
 
 	    val nilmod = transform specialize (Specialize.optimize, nilmod)
+
+	    (*val _ = transform walk (Walker.walk, nilmod)
+	    val _ = transform context_walk (Walker.context_walk, nilmod)
+	    val _ = transform bind_walk (Walker.bind_walk, nilmod)
+	    val _ = transform worst_walk (Walker.worst_walk, nilmod)*)
+
 	    val nilmod = transform hoist (Hoist.optimize, nilmod)
+
 	    val nilmod = transform optimize2
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
@@ -216,10 +227,6 @@ structure Linknil :> LINKNIL  =
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
-
-	    val nilmod = transform typeofelim2 (typeof_elim,nilmod)
-
-(*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
 
 	in  nilmod
 	end

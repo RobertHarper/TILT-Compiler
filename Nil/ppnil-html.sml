@@ -1,4 +1,4 @@
-(*$import Word32 TextIO Listops TilWord32 TraceInfo Sequence Annotation Stats Util Name Prim Nil Ppprim Formatter String PPNIL *)
+(*$import Word32 TextIO Listops TilWord32 TraceInfo Sequence Stats Util Name Prim Nil Ppprim Formatter String PPNIL Int *)
 
 (* Nil pretty-printer that uses HTML to hyperlink variable occurrences to their binding sites *)
 
@@ -132,26 +132,18 @@ structure PpnilHtml :> PPNIL =
 	val res = 
 	  (case arg_con of
 	     Var_c v => pp_var v
-         | Prim_c(Record_c ([],NONE),[]) => HOVbox[String "UNIT"]
-         | Prim_c (Record_c (labs,NONE), conlist) => 
+         | Prim_c(Record_c [],[]) => HOVbox[String "UNIT"]
+         | Prim_c (Record_c labs, conlist) => 
               pp_list pp_labcon (Listops.zip labs conlist) ("{",",","}", false)
-         | Prim_c (Record_c (labs,SOME vars), conlist) =>
-	       if (length labs = length vars) then
-		   pp_list pp_labvarcon (Listops.zip3 labs vars conlist) ("{",",","}", false)
-               else
-		   HOVbox[String "DEP_RECORD[", Break,
-			  HOVbox[pp_list pp_label labs ("",",","", false),
-				 String " :LENGTH_MISMATCH: ",
-				 pp_list pp_bound_var vars ("",",","", false)],
-			  String "]",
-			  pp_list' pp_con conlist]
          | Prim_c (primcon, nil) => HOVbox[pp_primcon primcon]
 	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon,
 					       pp_list' pp_con conlist]
 	 | Crecord_c lc_list => (pp_list (fn (l,c) => HOVbox[pp_label l, String " = ", pp_con c])
 				  lc_list ("{", ",","}", false))
 	 | Proj_c (c,l) => HOVbox[pp_con c, String ".", pp_label l]
+(*
 	 | Typeof_c e => HOVbox[String "TYPEOF_C(", pp_exp e, String ")"]
+*)
 	 | Let_c (letsort,cbnds,cbody) =>
 		   Vbox0 0 1 [String (case letsort of
 					  Sequential => "LET  "
@@ -164,6 +156,7 @@ structure PpnilHtml :> PPNIL =
 			      String "END"]
 	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
 				       pp_con c2, String ")"]
+(*
 	 | Typecase_c {arg, arms, default, kind} =>
 	       let fun pp_arm(pc,vklist,c) = HOVbox[pp_primcon pc, String " => ",
 						      String "FUN_C",
@@ -177,6 +170,7 @@ structure PpnilHtml :> PPNIL =
 			 String "DEFAULT: ",
 			 pp_con default]
 	       end
+*)
 	 | App_c (con,conlist) => HOVbox[String "APP_C(",
 (*
 					       pp_arrow arrow,
@@ -206,16 +200,19 @@ structure PpnilHtml :> PPNIL =
 	 | ExternArrow_c(cons,c) => pp_region "ExternArrow(" ")"
 	                            [pp_list pp_con cons ("",",","",false),
 				     String " --> ",
-				     pp_con c]
-	 | Annotate_c (Annotation.TYPECHECKED kind,con) => HOVbox[String "ANNOTE_C(Typechecked: ", 
-						       pp_kind kind, 
-						       String ",", 
-						       pp_con con, String ")"]
-	 | Annotate_c (annot,con) => HOVbox[String "ANNOTE_C(", String "annot not done", 
-					    String ",", 
-					    pp_con con, String ")"])
+			     pp_con c]
+	 | Coercion_c {vars,from,to} =>
+				    HOVbox[String "COERCION[ ",
+					   pp_list'' pp_var vars,
+					   String " ](",
+					   pp_con from,
+					   String ",",
+					   pp_con to,
+					   String ")"]
+				    )
       in res
       end
+
 (*
     and pp_listcon (Nil_c k) = Hbox[String "NIL_C(", pp_kind k, String ")"]
       | pp_listcon Cons_c = String "CONS_C"
@@ -229,24 +226,23 @@ structure PpnilHtml :> PPNIL =
       | pp_primcon Loc_c = String "LOC"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
+      | pp_primcon (Record_c labs) = HOVbox[String "RECORD[", Break0 0 3,
+						   pp_list pp_label labs ("",",","", false),
+						   String "]"]
        | pp_primcon (Sum_c {known = opt,tagcount,totalcount}) = 
 	String ("SUM" ^ (case opt of NONE => "" | SOME i => "_" ^ (TilWord32.toDecimalString i)) ^
 		"(" ^ (TilWord32.toDecimalString tagcount) ^ ","
 		^ (TilWord32.toDecimalString totalcount) ^ ")")
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "VARARG[", pp_openness oness, pp_effect e, String "]"]
+      | pp_primcon GCTag_c = String "GCTAG"
 
-    and pp_confun {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =
+    and pp_confun {openness,effect,tFormals,eFormals,fFormals,body_type} =
 	pp_region "AllArrow(" ")"
 	[HVbox[pp_openness openness,
 	       String "; ",
 	       (pp_list'' (fn (v,k) => Hbox[pp_bound_var v, String " :: ", pp_kind k]) tFormals),
 	       String "; ", Break0 0 5,
-	       (pp_list' (fn (vopt,c) =>
-			  (case vopt of
-			       NONE => pp_con c
-			     | SOME v => if isDependent
-					     then Hbox[pp_var v,String " :: ", pp_con c]
-					 else error "non-dependent but has var")) eFormals),
+	       (pp_list' pp_con eFormals),
 	       String "; ", String (TilWord32.toDecimalString fFormals),
                pp_effect effect, Break0 0 5,
 	       pp_con body_type]]
@@ -254,16 +250,23 @@ structure PpnilHtml :> PPNIL =
     and pp_nilprimop nilprimop = 
 	String (case nilprimop of
 		    record labels => "record"
+		  | partialRecord (labels,missField) => "partialRecord_" ^ (Int.toString missField)
 		  | select label => error "pp_nilprimop: control should not reach here"
 		  | inject w => "inject_dyn" ^ (TilWord32.toDecimalString w)
 		  | inject_known w => "inject_known_" ^ (TilWord32.toDecimalString w)
+(*
 		  | inject_known_record w => "inject_knownrec_" ^ (TilWord32.toDecimalString w)
+*)
 		  | project w => "project_dyn" ^ (TilWord32.toDecimalString w)
 		  | project_known w => "project_known_" ^ (TilWord32.toDecimalString w)
+(*
 		  | project_known_record (w,field) => ("project_knownrec_" ^ (TilWord32.toDecimalString w) ^
 						 "[" ^ (Name.label2string field) ^ "]")
+*)
+(*
 		  | roll => "roll"
 		  | unroll  => "unroll"
+*)
 		  | make_exntag => "make_exntag"
 		  | inj_exn s => "inj_exn[" ^ s ^ "]"
 		  | make_vararg (openness,effect) => "make_vararg" 
@@ -271,7 +274,9 @@ structure PpnilHtml :> PPNIL =
 		  | box_float Prim.F64 => "box_float_64"
 		  | box_float Prim.F32 => "box_float_32"
 		  | unbox_float Prim.F64 => "unbox_float_64"
-		  | unbox_float Prim.F32 => "unbox_float_32")
+		  | unbox_float Prim.F32 => "unbox_float_32"
+		  | mk_record_gctag      => "mk_record_gctag"
+		  | mk_sum_known_gctag   => "mk_sum_known_gctag")
 
     and pp_exp exp = 
 	(case exp of
@@ -324,7 +329,6 @@ structure PpnilHtml :> PPNIL =
 						  pp_exp e,
 						  Break,
 						  String "End"]
-
 	   | Raise_e (e,c) => pp_region "RAISE(" ")" [pp_exp e, String ",", pp_con c]
 	   | Handle_e {body,bound,handler,result_type} =>
 		 Vbox[HOVbox[Hbox[String "HANDLE [", pp_con result_type,
@@ -334,9 +338,25 @@ structure PpnilHtml :> PPNIL =
 		      HOVbox[String "WITH ", pp_bound_var bound, 
 			     String ": EXN . ",
 			     pp_exp handler]]
-	   | Switch_e sw => pp_switch sw)
+	   | Switch_e sw => pp_switch sw
+	   | Coerce_e (coercion,cargs,exp) =>
+		 HOVbox [String "COERCE( ",
+			 pp_exp coercion,
+			 String "[",pp_list'' pp_con cargs,String "],",
+			 pp_exp exp,
+			 String " )"]
+	   | Fold_e (cvars,from,to) =>
+		 HOVbox [String "FOLD ",
+			 pp_list pp_var cvars ("{",",","}",false),
+			 String "(",pp_con from,String "=>",pp_con to,
+			 String " )"]
+	   | Unfold_e (cvars,from,to) =>
+		 HOVbox [String "UNFOLD ",
+			 pp_list pp_var cvars ("{",",","}",false),
+			 String "(",pp_con from,String "=>",pp_con to,
+			 String " )"])
 
-	 
+
     and pp_switch sw =
 	let fun pp_default NONE = String "NODEFAULT"
 	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", pp_exp e]
@@ -378,6 +398,13 @@ structure PpnilHtml :> PPNIL =
 
 	end
 
+    and pp_conditionCode cc = 
+	(case cc of
+	     Exp_cc exp => pp_exp exp
+	   | And_cc (cc1,cc2) => HOVbox[String "AND(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
+	   | Or_cc  (cc1,cc2) => HOVbox[String "OR(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
+	   | Not_cc  cc => HOVbox[String "NOT(", pp_conditionCode cc, String ")"])
+
     and pp_trace TraceUnknown = String "Unknown"
       | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]
       | pp_trace (TraceKnown (TraceInfo.Compute(v,labs))) = 
@@ -394,18 +421,14 @@ structure PpnilHtml :> PPNIL =
 					String " = ", pp_exp e]
 	      | Con_b (Runtime,cb) => pp_conbnd cb
 	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
-	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset
-				    in Vbox(separate (map (pp_fix false) fixlist) Break)
-				    end
-	      | Fixcode_b fixset => let val fixlist = Sequence.toList fixset
-				    in Vbox(separate (map (pp_fix true) fixlist) Break)
-				    end
+	      | Fixopen_b fixlist => Vbox(separate (map (pp_fix false) fixlist) Break)
+	      | Fixcode_b fixlist => Vbox(separate (map (pp_fix true) fixlist) Break)
 	      | Fixclosure_b (recur,vceset) => 
 		    let val vcelist = Sequence.toList vceset
-		    in pp_list (fn (v,{code,cenv,venv,tipe}) => 
+		    in pp_list (fn ((v,c),{code,cenv,venv}) => 
 				HOVbox[if recur then String "& " else String "",
 				       pp_bound_var v, 
-				       String " : ", pp_con tipe,
+				       String " : ", pp_con c,
 				       String " = ",
 				       String "(",
 				       pp_var code, String ",",
@@ -415,12 +438,12 @@ structure PpnilHtml :> PPNIL =
 		    end)
 	end
 
-    and pp_fix is_code (v,Function{effect,recursive,isDependent,
+    and pp_fix is_code ((v,c),Function{effect,recursive,
 				    tFormals, eFormals, fFormals, 
-				    body, body_type}) : format =
-	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_bound_var v, String " :: ", Break, pp_kind k]) 
+				    body}) : format =
+	let val vkformats = (pp_list_flat (fn v => HOVbox[pp_bound_var v]) 
 			     tFormals ("",",","",false))
-	    val vcformats = (pp_list_flat (fn (v,nt,c) => HOVbox[pp_bound_var v, String " : ", Break, pp_con c]) 
+	    val vcformats = (pp_list_flat (fn (v,nt) => HOVbox[pp_bound_var v]) 
 			     eFormals ("",",","",false))
 	    val vfformats = (pp_list_flat (fn v => HOVbox[pp_bound_var v, String " : Float"])
 			     fFormals ("",",","",false))
@@ -432,15 +455,14 @@ structure PpnilHtml :> PPNIL =
 			  | (true, Arbitrary) => "/CODE\\"
 			  | (true, NonRecursive) => "/NORECUR-CODE\\"
 			  | (true, Leaf) => "/LEAF-CODE\\"),
-		  if isDependent then String "DEP" else String "",
-		  pp_bound_var v, Break,
+		  pp_bound_var v, String " : ", pp_con c, Break,
 		  pp_region "(" ")"
 		  [HVbox(vkformats @
 			 (if (null vkformats) then [String " ;; "] else [String " ;; ", Break0 0 8]) @
 			      vcformats @ [String " ;; "] @ vfformats)],
 		  Break0 0 5,
 		  pp_effect effect,
-		  pp_con body_type, String " =", Break,
+		  String " =", Break,
 		  pp_exp body])
 	end
 

@@ -18,9 +18,10 @@ PpnilHtml ppnil-html.sml
 NILERROR nilerror.sig.sml
 NilError nilerror.sml
 
+
 NILREWRITE rewrite.sig.sml
 NilRewrite rewrite.sml
-TypedNilRewrite typed_rewrite.sml
+//TypedNilRewrite typed_rewrite.sml
 
 MEASURE measure.sig.sml
 Measure measure.sml
@@ -106,11 +107,8 @@ Inline inline.sml
 
 Reorder reorder.sml
 
-TYPEOF_ELIM	typeof_elim.sig.sml
-Typeof_Elim	typeof_elim.sml
-
-COERCEELIM coerce-elim.sig.sml
-CoerceElim coerce-elim.sml
+//COERCEELIM coerce-elim.sig.sml
+//CoerceElim coerce-elim.sml
 
 LINKNIL linknil.sig.sml
 Linknil linknil.sml

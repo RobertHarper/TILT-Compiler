@@ -27,7 +27,7 @@ signature NILRENAME =
     val renameMod : module -> module
     val renameBnd : bnd -> (bnd * (var map* var map))
     val renameCBnd : conbnd -> (conbnd * var map)
-    val renameFunction : Nil.function -> Nil.function
+    val renameFunction : Nil.function * Nil.con -> Nil.function
 
     (*These functions check whether or not the given item is
      * renamed in the sense that all binding occurrences in the

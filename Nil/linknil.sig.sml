@@ -1,4 +1,4 @@
-(*$import Prelude Il Nil NILUTIL NILCONTEXT PPNIL TONIL TOCLOSURE NORMALIZE PASS VARARG *)
+(*$import Prelude Il Nil NILUTIL NILCONTEXT PPNIL NORMALIZE TONIL VARARG *)
 
 signature LINKNIL = 
 sig
@@ -8,8 +8,10 @@ sig
     structure NilContext : NILCONTEXT where type context = Normalize.context
 
     structure Ppnil : PPNIL
+(*
     structure ToClosure : TOCLOSURE
     structure Vararg : VARARG
+*)
 
     val typecheck : bool ref
 

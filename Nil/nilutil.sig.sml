@@ -2,6 +2,11 @@
 
 signature NILUTIL =
   sig
+      type arrow = {openness : Nil.openness, effect : Nil.effect,
+		    tFormals : (Nil.var*Nil.kind) list,
+		    eFormals : Nil.con list,
+		    fFormals : Nil.w32,
+		    body_type : Nil.con}
 
 
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
@@ -35,7 +40,6 @@ signature NILUTIL =
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
 
-    val function_type : Nil.openness -> Nil.function -> Nil.con
     val convert_sum_to_special : Nil.con * TilWord32.word -> Nil.con
 
     val flattenCbnds : Nil.conbnd list -> Nil.conbnd list
@@ -83,6 +87,7 @@ signature NILUTIL =
     val module_size : Nil.module -> int
 
     val primequiv : Nil.primcon * Nil.primcon -> bool
+    val covariant_prim: Nil.primcon -> bool
 
     val alpha_subequiv_con : bool -> Nil.con * Nil.con -> bool
     val alpha_equiv_con    : Nil.con * Nil.con -> bool
@@ -90,7 +95,8 @@ signature NILUTIL =
 
     val sub_phase : Nil.phase * Nil.phase -> bool
 
-    val map_annotate : (Nil.con -> Nil.con) -> Nil.con -> Nil.con 
+    val is_var_e : Nil.exp -> bool
+    val is_mu_c : Nil.con -> bool
 
     val strip_var : Nil.con -> Nil.var option
     val strip_exntag : Nil.con -> Nil.con option
@@ -100,24 +106,17 @@ signature NILUTIL =
     val strip_int : Nil.con -> Prim.intsize option
     val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 * Nil.w32 option * Nil.con) option
     val strip_arrow : Nil.con -> {openness : Nil.openness, effect : Nil.effect,
-				  isDependent : bool,
 				  tFormals : (Nil.var*Nil.kind) list,
-				  eFormals : (Nil.var option * Nil.con) list,
+				  eFormals : Nil.con list,
 				  fFormals : Nil.w32,
-				  body_type : Nil.con} option
+				  body_type: Nil.con} option
     val strip_externarrow : Nil.con -> (Nil.con list * Nil.con) option
-    val strip_record : Nil.con -> (Nil.label list * Nil.var list option * Nil.con list) option
+    val strip_record : Nil.con -> (Nil.label list * Nil.con list) option
     val strip_crecord : Nil.con -> (Nil.label*Nil.con) list option
     val strip_proj : Nil.con -> (Nil.con*Nil.label) option
     val strip_prim : Nil.con -> (Nil.primcon*Nil.con list) option
     val strip_app : Nil.con -> (Nil.con*Nil.con list) option
     val strip_coercion : Nil.con -> {vars:Nil.var list,from:Nil.con,to:Nil.con} option
-    val strip_annotate : Nil.con -> Nil.con
-
-
-    val is_var_e : Nil.exp -> bool
-    val is_mu_c : Nil.con -> bool
-
 
     val alpha_mu : (Nil.var -> bool) -> (Nil.var * Nil.con) list -> (Nil.var * Nil.con) list
     val is_exn_con : Nil.con -> bool
@@ -138,4 +137,7 @@ signature NILUTIL =
 
     val sum_project_carrier_type : Nil.con -> Nil.con
 
+
+    (* Rename the constructor parameters in an arrow type *)
+    val rename_arrow : arrow * Nil.var list -> arrow
   end

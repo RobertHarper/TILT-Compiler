@@ -132,9 +132,9 @@ structure NilRename :> NILRENAME =
 	  (hd bnds,con_subst)
 	end
 
-      fun renameFunction(f : function) = 
+      fun renameFunction(f : function, c : con) = 
 	  let val v = Name.fresh_var()
-	      val bnd = Fixopen_b (Sequence.fromList[(v,f)])
+	      val bnd = Fixopen_b (Sequence.fromList[((v, c),f)])
 	  in  (case renameBnd bnd of
 		   (Fixopen_b vfSeq, _) => 
 		       (case Sequence.toList vfSeq of

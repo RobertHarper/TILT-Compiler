@@ -48,11 +48,15 @@ struct
 	| Proj_c _ => path2TraceCompute c
         | App_c _ => NONE
 	| Coercion_c _ => SOME TI.Notrace_Int
+(*
         | Typecase_c _ => NONE
         | Annotate_c (_,c) => 
             get_trace' c
+*)
         | Let_c (_,_,body) => get_trace' body
+(*
         | Typeof_c _ => NONE
+*)
         | Crecord_c _ => 
             error "get_trace found Crecord_c"
         | Closure_c _ =>
@@ -100,7 +104,7 @@ struct
        *)
        val (_, c',paths) = Normalize.reduce_hnf_list (ctxt, c)	  
     in
-       case NilUtil.strip_annotate c' of
+       case c' of
 	 Proj_c _ => 
 	   if !minimize_computes then 
 	     bestTraceCompute (c'::paths)  (*c' is a candidate, so include it*)

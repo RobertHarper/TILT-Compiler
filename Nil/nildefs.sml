@@ -53,7 +53,6 @@ structure NilDefs :> NILDEFS =
 	 record _ => Listops.andfold is_closed_value elist
        | inject _ => Listops.andfold is_closed_value elist
        | box_float _ => Listops.andfold is_closed_value elist
-       | roll => Listops.andfold is_closed_value elist
        | inj_exn _ => Listops.andfold is_closed_value elist
        | _ => false)
 	 
@@ -151,22 +150,18 @@ structure NilDefs :> NILDEFS =
       (case np of
 	 record _ => false
        | select _ => false
-       | roll => false
-       | unroll => false
-       | project_known_record _ => false
        | project_known _ => false
        | project _ => true
-       | inject_known_record _ => false
-	   | inject_known _ => false
-	   | inject _ => true
-           | box_float _ => false
-           | unbox_float _ => false
-           | make_exntag => false
-           | inj_exn _ => false
-           | make_vararg _ => true
-           | make_onearg _ => true
-	   | mk_record_gctag  => false
-	   | mk_sum_known_gctag  => false)
+       | inject_known _ => false
+       | inject _ => true
+       | box_float _ => false
+       | unbox_float _ => false
+       | make_exntag => false
+       | inj_exn _ => false
+       | make_vararg _ => true
+       | make_onearg _ => true
+       | mk_record_gctag  => false
+       | mk_sum_known_gctag  => false)
 
   fun aggregate_uses_carg (Prim.OtherArray false) = true
     | aggregate_uses_carg (Prim.OtherVector false) = true
@@ -209,7 +204,7 @@ structure NilDefs :> NILDEFS =
     fun tuple_con clist = 
       let fun mapper(i,_) = generate_tuple_label(i+1)
 	val labs = Listops.mapcount mapper clist
-      in Prim_c(Record_c (labs,NONE),clist)
+      in Prim_c(Record_c labs,clist)
       end
     
     fun con_tuple clist = 
@@ -283,7 +278,7 @@ structure NilDefs :> NILDEFS =
 	     of [] => ([],Prim_e(NilPrimOp (record labels),[],[],[]))
 	      | _  => 
 	       let
-		 val rt = Prim_c (Record_c (labels,NONE),cons)
+		 val rt = Prim_c (Record_c labels,cons)
 		 val rtvar = Name.fresh_named_var "record_gctag_type"
 		 val rtbnd = Con_b(Compiletime,Con_cb(rtvar,rt))
 		 val trs = case trs_opt of SOME trs => trs | _ => map (fn _ => TraceUnknown) labels

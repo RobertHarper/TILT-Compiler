@@ -38,6 +38,7 @@ structure Trail :> TRAIL =
       in res
       end
 
+    val cmp_var_list = cmp_list cmp_var
 
     fun cmp_pair cmp ((a1,b1),(a2,b2)) = 
       (case cmp (a1,a2)
@@ -142,15 +143,18 @@ structure Trail :> TRAIL =
 	 | ( Sum_c _ , _) => GREATER
 	 | (_, Sum_c _ ) => LESS
 
-	 | (Record_c (l1,v1), Record_c (l2,v2)) => 
-	  cmp_orders[cmp_list cmp_label (l1,l2),
-		     cmp_option (cmp_list cmp_var) (v1,v2)]
+	 | (Record_c l1, Record_c l2) => 
+	  cmp_list cmp_label (l1,l2)
 	 | ( Record_c _, _) => GREATER
 	 | (_, Record_c _) => LESS
 	  
 	 | (Vararg_c (o1, e1), Vararg_c (o2, e2)) =>
 	  cmp_orders [cmp_openness (o1,o2),
 		      cmp_effect (e1,e2)]
+	 | (Vararg_c _, _) => GREATER
+	 | (_, Vararg_c _) => LESS
+
+	 | (GCTag_c, GCTag_c) => EQUAL
 
     fun cmp_kind (context,kind1,kind2) = 
       (case (kind1,kind2) of
@@ -205,9 +209,9 @@ structure Trail :> TRAIL =
       let
 	val res = 
 	  (case (con1,con2)
-	     of (Annotate_c (annot1,con1),con2) => cmp_con (context,con1,con2)
+	     of (*(Annotate_c (annot1,con1),con2) => cmp_con (context,con1,con2)
 	      | (con1,Annotate_c (annot1,con2)) => cmp_con (context,con1,con2)
-	      | (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) => 
+	      |*) (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) => 
 	       (case cmp_prim(context,pcon1,pcon2)
 		  of EQUAL => cmp_con_list (context,args1,args2)
 		   | other => other)
@@ -236,9 +240,9 @@ structure Trail :> TRAIL =
 	      | (ExternArrow_c _,_) => GREATER
 	      | (_,ExternArrow_c _) => LESS
 
-	      | (AllArrow_c {openness = o1, effect = eff1, isDependent = i1,
+	      | (AllArrow_c {openness = o1, effect = eff1,
 			     tFormals = t1, eFormals = e1, fFormals = f1, body_type = b1},
-  	         AllArrow_c {openness = o2, effect = eff2, isDependent = i2,
+  	         AllArrow_c {openness = o2, effect = eff2,
 			     tFormals = t2, eFormals = e2, fFormals = f2, body_type = b2}) =>
 		 (case (cmp_orders [cmp_openness(o1,o2),
 				    cmp_word (f1,f2),
@@ -246,7 +250,7 @@ structure Trail :> TRAIL =
 		    of EQUAL =>
 		      (case cmp_vklist (context,t1,t2)
 			 of (context,EQUAL) =>
-			   (case cmp_con_list (context,map #2 e2, map #2 e1)
+			   (case cmp_con_list (context, e2, e1)
 			      of EQUAL => cmp_con (context,b1,b2)
 			       | other => other)
 			  | (_,other) => other)
@@ -254,12 +258,14 @@ structure Trail :> TRAIL =
 	      | (AllArrow_c _,_) => GREATER
 	      | (_,AllArrow_c _) => LESS
 
+(*
 	      | (Typeof_c (Var_e v1), Typeof_c (Var_e v2)) => cmp_var (v1,v2)
 
 	      (* XXX need to fix this! *)
 	      | (Typeof_c exp1, Typeof_c exp2) => EQUAL (*error "Typeof not handled correctly"*)
 	      | (Typeof_c _,_) => GREATER
 	      | (_,Typeof_c _) => LESS
+*)
 
 	      | (Var_c var1,Var_c var2) => 
 		cmp_var(substitute(#1 context,var1),substitute(#2 context,var2))
@@ -331,6 +337,15 @@ structure Trail :> TRAIL =
 	      | (App_c _,_) => GREATER
 	      | (_,App_c _) => LESS
 
+	      | (Coercion_c {vars = v1, from = f1, to = t1},
+		     Coercion_c {vars = v2, from = f2, to = t2}) =>
+		     (case cmp_var_list (v1, v2) of
+			  EQUAL => (case cmp_con(context, f1, f2)
+					of EQUAL => cmp_con(context, t1, t2)
+				         | x => x)
+			| x => x)
+
+(*
 	      | (Typecase_c {arg=arg1,arms=arms1,default=d1,kind=k1}, 
 		 Typecase_c {arg=arg2,arms=arms2,default=d2,kind=k2}) => 
 		   let
@@ -351,7 +366,9 @@ structure Trail :> TRAIL =
 				   | other => other)
 			      | other => other)
 			 | other => other)
-		   end)
+		   end
+*)
+	       )
       in res
       end
 

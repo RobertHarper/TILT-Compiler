@@ -345,9 +345,8 @@ struct
 	 | ( Sum_c _ , _) => GREATER
 	 | (_, Sum_c _ ) => LESS
 
-	 | (Record_c (l1,v1), Record_c (l2,v2)) => 
-	       cmp_orders[cmp_list Name.compare_label (l1,l2),
-			  cmp_option (cmp_list Name.compare_var) (v1,v2)]
+	 | (Record_c l1, Record_c l2) => 
+	       cmp_orders[cmp_list Name.compare_label (l1,l2)]
 	 | ( Record_c _, _) => GREATER
 	 | (_, Record_c _) => LESS
 
@@ -505,13 +504,13 @@ struct
 	  | (Let_c _, _) =>  GREATER 
 	  | (_, Let_c _) =>  LESS
 
-	  | (Typeof_c e1, Typeof_c e2) => cmp_exp (e1,e2)
+	  (*| (Typeof_c e1, Typeof_c e2) => cmp_exp (e1,e2)
 	  | (Typeof_c _, _) =>  GREATER 
 	  | (_, Typeof_c _) =>  LESS
 
 	  | (Typecase_c rec1, Typecase_c rec2) => error "typecases not done"
 	  | (Typecase_c _, _) =>  GREATER 
-	  | (_, Typecase_c _) =>  LESS
+	  | (_, Typecase_c _) =>  LESS*)
 
 
 
@@ -526,18 +525,17 @@ struct
 	  | (Mu_c _ , _) =>  GREATER
 	  | (_ , Mu_c _) =>  LESS
 
-          | ( AllArrow_c {openness = op1, effect = eff1, isDependent = i1,
-			  tFormals = vklist1, eFormals = vclist1, fFormals = f1,
+          | ( AllArrow_c {openness = op1, effect = eff1,
+			  tFormals = vklist1, eFormals = clist1, fFormals = f1,
 			  body_type = con1},
-	      AllArrow_c {openness = op2, effect = eff2, isDependent = i2,
-			  tFormals = vklist2, eFormals = vclist2, fFormals = f2,
+	      AllArrow_c {openness = op2, effect = eff2,
+			  tFormals = vklist2, eFormals = clist2, fFormals = f2,
 			  body_type = con2}) =>
-	       (case (cmp_orders [cmp_bool (i1,i2),
-				  cmp_openness(op1,op2),
+	       (case (cmp_orders [cmp_openness(op1,op2),
 				  cmp_effect (eff1, eff2),
 				  cmp_int (Word32.toInt f1, Word32.toInt f2)]) of
 		    EQUAL => cmp_orders[cmp_vklist (vklist1,vklist2),             (*Effects!!!*)
-					cmp_varcon_list (vclist1, vclist2),      
+					cmp_con_list (clist1, clist2),      
 					cmp_con (con1,con2)]
 		 | r => r)
 	  | ( AllArrow_c _, _) => GREATER
@@ -554,10 +552,8 @@ struct
 	     Coercion_c {from=from2,to=to2,vars=vars2}) => 
 	     cmp_orders[cvar_list_equate (vars1,vars2), cmp_con(from1,from2),cmp_con(to1,to2)]
 		    
-	  | (Coercion_c _, _) => GREATER
-	  | (_, Coercion_c _) => LESS
-
-	  | (Annotate_c (_,c1), Annotate_c (_,c2)) => cmp_con (c1,c2)
+	  (*| (Coercion_c _, _) => GREATER
+	  | (_, Coercion_c _) => LESS*)
 
     and cmp_allprim ((NilPrimOp p1), (NilPrimOp p2))= 
      (case (p1, p2) of 
@@ -581,10 +577,6 @@ struct
        | (inject_known _, _) => GREATER
        | ( _, inject_known _) => LESS
 	     
-       | (inject_known_record s1, inject_known_record s2) => Word32.compare(s1,s2)
-       | (inject_known_record _, _) => GREATER
-       | (_, inject_known_record _) => LESS
-	     
        | (project s1 , project s2) => Word32.compare(s1, s2)
        | (project _, _) => GREATER
        | (_, project _) => LESS
@@ -593,12 +585,6 @@ struct
        | (project_known _, _) => GREATER
        | (_, project_known _) => LESS
 	     
-       | (project_known_record (s1, f1), project_known_record (s2, f2)) => 
-	     cmp_orders [Word32.compare(s1,s2), 
-			 Name.compare_label (f1, f2)]
-       | (project_known_record _ , _) => GREATER
-       | (_ , project_known_record _) => LESS
-
        | (box_float sz1, box_float sz2) => cmp_int (hash_floatsize sz1, hash_floatsize sz2)
        | (box_float _ , _ ) => GREATER
        | (_, box_float _) => LESS
@@ -607,7 +593,7 @@ struct
        | (unbox_float sz1, unbox_float sz2) => cmp_int (hash_floatsize sz1, hash_floatsize sz2)
        | (unbox_float _ , _ ) => GREATER
        | (_, unbox_float _) => LESS
-	     
+(*	     
        | (roll, roll) => EQUAL
        |( roll, _ ) => GREATER
        | (_, roll) => LESS
@@ -615,7 +601,7 @@ struct
        | (unroll, unroll) => EQUAL
        | (unroll, _ ) => GREATER
        | (_, unroll) => LESS
-	     
+*)	     
        | (make_exntag, make_exntag) => EQUAL
        | (make_exntag, _) => GREATER
        | (_, make_exntag) => LESS
@@ -734,6 +720,7 @@ struct
        | (Coerce_e _, _)  => GREATER
        | (_, Coerce_e _)  => LESS
 
+
        | (Handle_e {body = body1, bound = bound1, 
 		    handler = handler1, result_type = result_type1},
           Handle_e {body = body2, bound = bound2, 
@@ -748,6 +735,7 @@ struct
 			      | r => r)
 		| r => r)
 
+		
 
     fun wrap f = fn arg => (reset();f arg)
 

@@ -8,13 +8,11 @@ sig
 
   type w32 = Word32.word
   type prim = Prim.prim
-  type ('a,'b) sequence = ('a,'b) Sequence.sequence
+  type ('a,'b) sequence = ('a * 'b) list (* Sequence.sequence *)
                           (* An ('a,'b) sequence is conceptually equivalent to an ('a*'b) list.
 			     Additionally, it has fast access using 'a as a key *)
 
   val flattenThreshold : int ref
-
-  datatype annotation = datatype Annotation.annotation
 
   (* In general, we want to distinguish between different function-like terms.
    *   Open - open lambda terms (with free variables)
@@ -64,19 +62,31 @@ sig
 
   and primcon =                          (* classifies term-level ... *)
       Int_c of Prim.intsize                   (* register integers *)
+      (* Params: None *)
     | Float_c of Prim.floatsize               (* register floating-points *)
+      (* Params: None *)
     | BoxFloat_c of Prim.floatsize            (* boxed floating-points *)
+      (* Params: None *)
     | Exn_c                                   (* exceptions *)
+      (* Params: None *)
     | Array_c                                 (* arrays *)
+      (* Params: Element con *)
     | Vector_c                                (* vectors *)
+      (* Params: Element con *)
     | Loc_c                                   (* locatives *)
+      (* Params: None *)
     | Exntag_c                                (* exception tags *)
-    | Record_c of label list * var list option  (* records *)
+      (* Params: Carried con *)
+    | Record_c of label list                  (* records *)
+      (* Params: Cons to inject *)
     | Sum_c of {tagcount : w32,
 		totalcount : w32,
                 known : w32 option}           (* sum types *)
+      (* Params: Con to inject *)
     | Vararg_c of openness * effect           (* classifies make_vararg and make_onearg *)
+      (* Params: Arg con, result con *)
     | GCTag_c                                 (* Type of header word for heap values *)
+      (* Params: Con to tag *)
 
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
@@ -86,15 +96,13 @@ sig
 						    is really recursive *)
     | AllArrow_c of {openness : openness, (* open functions, code functions, and closures *)
 		     effect : effect,
-		     isDependent : bool,
 		     tFormals : (var * kind) list,
-		     eFormals : (var option * con) list,
+		     eFormals : con list,
 		     fFormals : w32,
 		     body_type : con}
     | ExternArrow_c of con list * con
     | Var_c of var
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
-    | Typeof_c of exp                             (* is equivalent to type of given expression *)
     | Crecord_c of (label * con) list             (* Constructor-level records *)
     | Proj_c of con * label                       (* Constructor-level record projection *)
     | Closure_c of con * con                      (* Constructor-level closure: 
@@ -106,11 +114,7 @@ sig
     | Coercion_c of {vars : var list,     (* Coercions: *)
 		     from : con,              (* forall[vars:Type].from=>to *)
 		     to : con}
-    | Typecase_c of {arg : con,
-                     arms : (primcon * (var * kind) list * con) list,
-                     default : con,
-		     kind : kind}        (* Constructor-level typecase *)
-    | Annotate_c of kind annotation * con  (* General-purpose place to hang information *)
+
 
   and conbnd = Con_cb  of (var * con)
              | Open_cb of (var * (var * kind) list * con)
@@ -118,30 +122,40 @@ sig
 
   and nilprim = 
       record of label list       (* record intro *)
+      (* Params: Terms to inject *)
     | partialRecord of label list * int (* record with a missing zero-indexed field *)
+      (* Params: Terms to inject, minus missing term *)
     | select of label            (* record field selection; takes the record type *)
+      (* Params: Record from which to select *)
     | inject of TilWord32.word   (* slow; must be given one type that is
 				    reducible to a sum type *)
+      (* Params: Sum con and term to inject *)
     | inject_known of TilWord32.word   (* fast; the injected field is a non-carrier or else
                                                 its type is reducible to HNF *)
-    | inject_known_record of TilWord32.word 
-                                 (* fast; the type of the injected field must be reducible to a record type
-				    further, the term arguments consituting the record are passed separately *)
-
+      (* Params: Term to inject *)
     | project of TilWord32.word  (* corresponds to inject *)
+      (* Params: Known sum con and known sum term *)
     | project_known of TilWord32.word  (* corresponds to inject_known *)
-    | project_known_record of TilWord32.word * label (* corresponds to inject_known_record *)
+      (* Params: Known sum term *)
 
 
     | box_float of Prim.floatsize   (* boxing floating-points *)
+      (* Params: Float term to box *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
-    | roll | unroll              (* coerce to/from recursive type *) 
+      (* Params: BoxFloat term to unbox *)
+
     | make_exntag                (* generate new exn tag *)
+      (* Params: Carried con *)
     | inj_exn of string          (* takes tag + value and give exn *)
+      (* Params: Tag and term to inject *)
     | make_vararg of openness * effect  (* given a function in onearg calling conv, convert to vararg *)
+      (* Params: Normal term function *)
     | make_onearg of openness * effect  (* given a function in vararg calling conv, convert to onearg *)
+      (* Params: Vararg term function *)
     | mk_record_gctag       (* Create the gc tag for a record *)
+      (* Params: Record con *)
     | mk_sum_known_gctag    (* Create the gc tag for a sum with a statically known carrier type *)
+      (* Params: Sum con *)
 
 
   and allprim = NilPrimOp of nilprim
@@ -173,13 +187,14 @@ sig
 		    arms : (exp * niltrace * exp) list,
 		    default : exp option}           (* exceptions *)
     | Typecase_e of {arg : con,
-		     result_type : con,
 		     arms : (primcon * (var * kind) list * exp) list,
-		     default : exp}                 (* typecase *)
+		     default : exp,
+		     result_type : con}                 (* typecase *)
     | Ifthenelse_e of {arg : conditionCode,             
 		       thenArm : exp,
 		       elseArm : exp,
 		       result_type : con}
+
 
   and exp =                                          (* Term-level constructs *)
       Var_e of var                                   (* Term-level variables *)
@@ -191,7 +206,7 @@ sig
     | App_e of openness * exp * con list *           (* application of open funs, code, or closures *)
                        exp list * exp list           (* in the case of code, the first exp must be a var *)
     | ExternApp_e of exp * exp list
-    | Raise_e of exp * con                                
+    | Raise_e of exp * con                                      
     | Handle_e of {body :exp,
 	           bound : var,
                    handler : exp,
@@ -204,11 +219,13 @@ sig
 						  a value. *)
     (* End of coercions *)
 
+
   and conditionCode =                          (* Usd by Ifthenelse_e *)
       Exp_cc of exp
     | And_cc  of conditionCode * conditionCode (* Short-circuiting *)
     | Or_cc   of conditionCode * conditionCode (* Short-circuiting *)
     | Not_cc  of conditionCode 
+
 
   (* result types are needed for recursive definitions in order to make
    * type-checking syntax directed.  Also note that I've forced all functions
@@ -220,20 +237,18 @@ sig
   and bnd =                                 (* Term-level Bindings with optional classifiers *)
       Con_b of phase * conbnd               (* Binds constructors *)
     | Exp_b of var * niltrace * exp         (* Binds expressions *)
-    | Fixopen_b of (var,function) sequence  (* Binds mutually recursive open functions *)
-    | Fixcode_b of (var,function) sequence  (* Binds mutually recursive code functions *)
+    | Fixopen_b of (var*con,function) sequence  (* Binds mutually recursive open functions *)
+    | Fixcode_b of (var*con,function) sequence  (* Binds mutually recursive code functions *)
                                             (* Allows the creation of term and for-all closures;
                                                 bool indicates if it is really recursive *)
-    | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) sequence
+    | Fixclosure_b of bool * (var*con , {code:var, cenv:con, venv:exp}) sequence
                                              
   and function = Function of {effect      : effect,
 			      recursive   : recursive,
-			      isDependent : bool,
-			      tFormals    : (var * kind) list,
-			      eFormals    : (var * niltrace * con) list,
+			      tFormals    : var list,
+			      eFormals    : (var * niltrace) list,
 			      fFormals    : (var list),
-			      body        : exp,
-			      body_type   : con}
+			      body        : exp}
 
   datatype import_entry = ImportValue of label * var * niltrace * con
                         | ImportType  of label * var * kind
@@ -246,4 +261,9 @@ sig
 			       exports : export_entry list}
 
 end
+
+
+
+
+
 

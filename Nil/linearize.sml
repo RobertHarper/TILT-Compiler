@@ -141,7 +141,7 @@ struct
 	    let val is_seen = VarSet.member(!seen,v)
 		val _ = if (!debug)
 			    then (print ("add_var on " ^ (Name.var2string v));
-				  if is_seen then print "  RENAME" else ();
+				 if is_seen then print "  RENAME" else ();
 				      print "\n")
 			else ()
 		val _ = if is_seen
@@ -197,6 +197,7 @@ struct
 				in (cbnds,Prim.tag (t,con)) end
 	  | _ => ([],value))
 
+
    (*
     val lswitch : bool -> state -> switch -> switch
     lswitch lift state switch ==> switch with its component constructors and terms A-normalized using state
@@ -242,7 +243,8 @@ struct
 				  in  (pc, vklist, lexp_lift' state e)
 				  end) arms
 	      in  ([],Typecase_e {arg=arg, arms=arms, default=default, result_type=result_type})
-	      end)
+	      end
+	| Ifthenelse_e _ => error "Ifthenelse not implemented yet")
 
    (*
     val lbnd : state -> bnd -> bnd list * state
@@ -251,25 +253,30 @@ struct
    *)
    and lbnd state arg_bnd : bnd list * state =
        let 
-	   fun add_vars state vx_list = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vx_list
+	   fun add_vars state vx_list = foldl (fn (((v,_),_),s) => #1(add_var(s,v))) state vx_list
 
 	   (* Open/Code fold function *)
 	   fun vf_help wrapper vf_set = 
 	       let val vf_list = sequence2list vf_set
 		   val newstate = add_vars state vf_list
-		   val vf_list = map (fn (v,f) => (find_var(newstate,v),
-						   lfunction newstate f)) vf_list
+		   val vf_list = map (fn ((v,c),f) =>
+				      let
+					  val c = lcon_flat state c
+					  val f = lfunction newstate f
+				      in
+					  ((find_var(newstate,v),c),f)
+				      end) vf_list
 	       in  ([wrapper (list2sequence vf_list)], newstate)
 	       end
 
            (* Closure fold function *)
-	   fun vcl_help state (v,{code,cenv,venv,tipe}) = 
+	   fun vcl_help state ((v,c),{code,cenv,venv}) = 
 	       let val v = find_var(state,v)
+		   val c' = lcon_flat state c
 		   val cenv' = lcon_flat state cenv
-		   val tipe' = lcon_flat state tipe
 		   val venv' = lexp_lift' state venv
 		   val code' = find_var(state,code)
-	       in  (v,{code=code',cenv=cenv',venv=venv',tipe=tipe'})
+	       in  ((v,c),{code=code',cenv=cenv',venv=venv'})
 	       end
 	   fun mapset f s = list2sequence(map f (sequence2list s))
 
@@ -280,9 +287,9 @@ struct
 				in  (map (fn cb => Con_b(p,cb)) cbnds,state)
 				end
 	      | Exp_b (v,niltrace,e) => let val (bnds,e) = lexp true state e
-				   val (state,v) = add_var(state,v)
-			       in  (bnds @ [Exp_b(v,niltrace,e)], state)
-			       end
+					    val (state,v) = add_var(state,v)
+					in  (bnds @ [Exp_b(v,niltrace,e)], state)
+					end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
 (* RECURSIVE BINDING *)
@@ -299,12 +306,12 @@ struct
     val lfunction : state -> function -> function
     lfunction state func ==> func with its component parts A-normalized, using state
    *)
-   and lfunction state (Function{effect,recursive,isDependent,
-				 tFormals,eFormals,fFormals,body,body_type}) : function =
+   and lfunction state (Function{effect,recursive,
+				 tFormals,eFormals,fFormals,body}) : function =
        let 
-	   val (tFormals,state) = lvklist state tFormals
+	   val (tFormals,state) = lvlist state tFormals
 	   val _ = inc depth_lcon_function
-	   val (eFormals,state) = lvtrclist_flat state eFormals
+	   val (eFormals,state) = lvtrlist_flat state eFormals
 	   val _ = dec depth_lcon_function
 	   fun vfolder(v,state) = 
 	       let val (state,v) = add_var(state,v)
@@ -312,10 +319,9 @@ struct
 	       end
 	   val (fFormals,state) = foldl_acc vfolder state fFormals
 	   val body = lexp_lift' state body
-	   val body_type = lcon_lift' state body_type
-       in  Function{effect=effect,recursive=recursive,isDependent=isDependent,
+       in  Function{effect=effect,recursive=recursive,
 		    tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
-		    body=body,body_type=body_type}
+		    body=body}
        end
 
 
@@ -345,7 +351,8 @@ struct
 				      (Name.label2name l))
 				end
 			  | _ => Name.fresh_named_var "" (* "tmpexp" *))
-	       in  (bnds @ [Exp_b(v,TraceUnknown,e)], Var_e v)
+	       in
+		   (bnds @ [Exp_b(v,TraceUnknown,e)], Var_e v)
 	       end
        end
        handle e => (print "exception in lexp call with con =\n";
@@ -380,7 +387,6 @@ struct
 		end
 	  | Prim_e (ap,trs,clist,elist) =>
 		let val _ = inc depth_lcon_prim
-		    (* val constr = Normalize.prim_uses_carg ap *)
 		    val cbnds_clist = map (lcon lift state) clist
 		    val (cbnds,clist) = Listops.unzip cbnds_clist
 		    val cbnds = flatten cbnds 
@@ -449,8 +455,8 @@ struct
 	    in
 		([],Unfold_e (vars,from,to))
 	    end
-		     
 	end
+
 
    (*
     val lcbnd : bool -> state -> conbnd -> conbnd list * state
@@ -593,18 +599,6 @@ struct
 	case arg_con of
 	    Var_c v => (num_var := !num_var + 1; 
 			([],Var_c(find_var(state,v))))
-	  (* dependent records *)
-	  | Prim_c (Record_c(labs,SOME vars),cons) => 
-		let fun folder ((v,c),state) = 
-		    let val (cbnds,c) = lcon false state c
-			val (state,v) = add_var(state,v)
-		    in  ((cbnds,(v,c)),state)
-		    end
-		    val (cbnds_vc,_) = foldl_acc folder state (Listops.zip vars cons)
-		    val (cbnds,vc) = Listops.unzip cbnds_vc
-		in  (flatten cbnds,
-		     Prim_c(Record_c(labs,SOME (map #1 vc)), map #2 vc))
-		end
 	  | Prim_c (pc,cons) => 
                 let val (cbnds,cons) = map_unzip (local_lcon state) cons
                 in  (flatten cbnds, Prim_c(pc,cons))
@@ -624,13 +618,13 @@ struct
 		    val (cbnds',c) = local_lcon state c
 		in  (flatten cbnds@cbnds',ExternArrow_c (clist,c))
 		end
-	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
+	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
 	      let 
 		  val (tFormals,state) = lvklist state tFormals
-		  val (eFormals,state) = lvoptclist state eFormals
+		  val (eFormals,state) = lclist state eFormals
 		  val body_type = lcon_lift' state body_type
 	      in  ([],
-		   AllArrow_c {openness=openness,effect=effect,isDependent=isDependent,
+		   AllArrow_c {openness=openness,effect=effect,
 			       tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			       body_type=body_type})
 	      end
@@ -655,8 +649,6 @@ struct
 			    in  (cbnds, Proj_c(c,l))
 			    end
 
-	  | Typeof_c e => ([],Typeof_c(lexp_flat state e))
-
 	  | Closure_c (c1,c2) => let val (cbnds1,c1) = local_lcon state c1
 				     val (cbnds2,c2) = local_lcon state c2
 				 in  (cbnds1@cbnds2,Closure_c(c1,c2))
@@ -668,19 +660,15 @@ struct
 			       end
 	  | Coercion_c {vars,from,to} =>
 	    let
-		fun folder (v,state) = let val (state,v) = add_var (state,v) 
-				       in state
-				       end
-		val state = foldl folder state vars
+		fun folder (v,(state,vars)) = let
+						  val (state,v) = add_var (state,v) 
+					      in (state, v::vars)
+					      end
+		val (state, vars) = foldr folder (state, nil) vars
 		val from = lcon_lift' state from
 		val to = lcon_lift' state to
 	    in ([],Coercion_c{vars=vars,from=from,to=to})
 	    end
-          | Typecase_c _ => error "typecase not done"
-
-	  | Annotate_c (a,c) => let val (cbnds,c) = local_lcon state c
-				in  (cbnds,Annotate_c(a,c))
-				end
        end
 
    (*
@@ -744,25 +732,31 @@ struct
        in  foldl_acc vtrcfolder state vtrclist
        end
 
-   (*
-    val lvoptclist : state -> (var option * con) list
-    lvoptclist state vclist ==> (vclist', state'), with vclist' created from vclist by A-normalizing constructors and renaming
-	variables (with appropriate changes made to state' from state)
-   *)
-   and lvoptclist state vclist = 
-       let fun vcfolder((vopt,c),state) =
+   and lvtrlist_flat state vtrlist = 
+       let fun vtrfolder((v,tr),state) =
+	   let val (state,v) = add_var(state,v)
+	   in  ((v,tr), state)
+	   end
+       in  foldl_acc vtrfolder state vtrlist
+       end
+
+   and lvlist state vlist = 
+       let fun vfolder(v,state) =
+	   let val (state,v) = add_var(state,v)
+	   in  (v, state)
+	   end
+       in  foldl_acc vfolder state vlist
+       end
+
+   and lclist state vclist = 
+       let fun vcfolder(c,state) =
 	   let val _ = inc depth_lcon_function
 	       val c = lcon_lift' state c
                val _ = dec depth_lcon_function
-	       val (state,vopt) = (case vopt of
-				       SOME v => let val (s,v) = add_var(state,v)
-						 in  (s, SOME v)
-						 end
-				     | NONE => (state, vopt))
-	   in  ((vopt,c), state)
+	   in  (c, state)
 	   end
-	   val (vopt_c,state) = foldl_acc vcfolder state vclist
-       in  (vopt_c, state)
+	   val (cs,state) = foldl_acc vcfolder state vclist
+       in  (cs, state)
        end
 
    (*

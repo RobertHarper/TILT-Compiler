@@ -1,4 +1,4 @@
-(*$import Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs *)
+(*$import Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs ListPair NilSubst Prim *)
 
 (* Determines which constructors are used as data, creates proper traces, and possibly adds extra bindings for reified types *)
 
@@ -7,9 +7,14 @@ struct
     open Util Nil
 
     val debug = Stats.ff("ReifyDebug")
+    val rdebug = Stats.ff("ReifyMinDebug")
     fun error s = Util.error "reify.sml" s 
 
+    val float64 = NilDefs.ftype64
+    val strip_arrow_norm = Normalize.strip_arrow_norm
+
     val foldl_acc = Listops.foldl_acc
+
 
     (* Generalize the idea of expressions inside bindings *)
     datatype letbody = BODY_EXP of Nil.exp
@@ -25,6 +30,13 @@ struct
     val pset_add_list = Name.VarSet.addList
     val pset_member = Name.VarSet.member
     val pset_add_pset = Name.VarSet.union
+
+    (* Some expressions don't carry enough typing information to be processed here (i.e., they're "analysis terms") *)
+    (* This function tries to extract a type from an option, and raises an error to indicate insufficient information if none is there *)
+    fun extract NONE = error "Insufficient information to reify constructor"
+      | extract (SOME x) = x
+
+    fun type_of (D, e) = Normalize.type_of (D, e)
 
     (* reify_con_rt 
          post: returned pset extends input pset, ensuring that 
@@ -241,6 +253,9 @@ struct
 				    default = default', result_type = result_type}),
 	      pset)
 	  end
+
+      | reify_exp ctxt (Switch_e (Ifthenelse_e _), pset) = error "Ifthenelse_e not implemented yet"
+
       | reify_exp ctxt (e_and_pset as (Fold_e (vars,from,to),_)) = e_and_pset
       | reify_exp ctxt (e_and_pset as (Unfold_e (vars,from,to),_)) = e_and_pset
       | reify_exp ctxt (Coerce_e (coercion,cargs,exp),pset) =
@@ -253,6 +268,14 @@ struct
 	    val (exp,pset) = reify_exp ctxt (exp,pset)
 	in 
 	    (Coerce_e (coercion,cargs,exp),pset)
+	end
+
+    and reify_typecase_arms ctxt ([], pset) = ([],pset)
+      | reify_typecase_arms ctxt ((pc,vklist,e)::arms, pset) = 
+	let val (arms',pset) = reify_typecase_arms ctxt (arms,pset)
+	    val ctxt = NilContext.insert_kind_list(ctxt,vklist)
+	    val (e',pset) = reify_exp ctxt (e,pset)
+	in  ((pc,vklist,e')::arms',pset)
 	end
 
     and reify_seq_bnds ctxt ([], BODY_EXP e, pset) =
@@ -269,9 +292,9 @@ struct
               ([], BODY_EXPORTS es, pset)
            end
 
-      | reify_seq_bnds ctxt (Exp_b (v,nt,e)::bs, body, pset) =
+      | reify_seq_bnds ctxt ((bnd as Exp_b (v,nt,e))::bs, body, pset) =
            let
-              val t1 = Normalize.type_of (ctxt, e)
+              val t1 = type_of (ctxt, e)
               val ctxt' = NilContext.insert_con(ctxt, v, t1)
               val (bs', body', pset) = reify_seq_bnds ctxt' (bs, body, pset)
               val (e', pset') = reify_exp ctxt (e, pset)
@@ -279,7 +302,6 @@ struct
 	      val (nt', new_bnds, pset'') = do_reify(ctxt, t1, nt, pset')
 
 	      val bnds = new_bnds @ (Exp_b (v, nt',e') :: bs')
-
            in
               (bnds, body', pset'')
            end
@@ -364,20 +386,12 @@ struct
              (new_bnds @ bnds, (w,nt',e')::arms', pset)
           end
 
-    and reify_typecase_arms ctxt ([], pset) = ([],pset)
-      | reify_typecase_arms ctxt ((pc,vklist,e)::arms, pset) = 
-	let val (arms',pset) = reify_typecase_arms ctxt (arms,pset)
-	    val ctxt = NilContext.insert_kind_list(ctxt,vklist)
-	    val (e',pset) = reify_exp ctxt (e,pset)
-	in  ((pc,vklist,e')::arms',pset)
-	end
-
     and reify_exn_arms ctxt ([], _, pset) = ([], [], pset)
       | reify_exn_arms ctxt ((e1,nt,e2)::arms, v, pset) = 
           let
              val (bnds, arms', pset) = reify_exn_arms ctxt (arms, v, pset)
              val (e1', pset) = reify_exp ctxt (e1, pset)
-             val tagcon = Normalize.type_of(ctxt,e1)
+             val tagcon = type_of(ctxt,e1)
 	     val (_,Prim_c(Exntag_c, [con])) = Normalize.reduce_hnf(ctxt,tagcon)
 	     val (nt', new_bnds, pset) = do_reify (ctxt, con, nt, pset)
 	     val ctxt = NilContext.insert_con(ctxt, v, con)
@@ -389,27 +403,28 @@ struct
     and reify_vfseq ctxt (vfseq, openness, pset) =
           let
              val vflist = Sequence.toList vfseq
-             val getftype = NilUtil.function_type openness
              val ctxt = NilContext.insert_con_list 
-                         (ctxt, (map (fn (v,f) => (v, getftype f)) vflist))
+                         (ctxt, map #1 vflist)
 
-             fun folder ((f, Function{effect=eff,recursive=recur,isDependent=dep,
-				    tFormals=vks,eFormals=vtcs,
-				    fFormals=fs,body=e,body_type}), (bnds, pset))=
+
+             fun folder (((f, c),
+			Function{effect=eff,recursive=recur,
+				 tFormals=vksF,eFormals=vtcsF,
+				 fFormals=fsF,body=e,...}), (bnds, pset))=
                    let
-                      val ctxt = NilContext.insert_kind_list (ctxt,vks)
-                      val vks_length = List.length vks
+		      val arr = strip_arrow_norm ctxt c
+		      val {tFormals=vksA,eFormals=vtcsA,fFormals=fsA,body_type,...} =
+			  NilUtil.rename_arrow (arr, vksF)
+
+                      val ctxt = NilContext.insert_kind_list (ctxt, vksA)
+
+                      val vks_length = List.length vksA
+
                       val error_message = 
 		       "reify_vflist: Cannot hoist from Lambda-lambda function"
 
-		      fun folder' ((v,nt,c), (bnds, ctxt, pset)) =
+                      fun folder' ((v,nt,c), (bnds, pset)) =
 	                    let
-                               val ctxt' = 
-				   if dep then
-				       NilContext.insert_con (ctxt, v, c)
-				   else
-				       ctxt
-
 			       val (nt', new_bnds, pset') = 
 				   do_reify(ctxt, c, nt, pset)
 
@@ -421,20 +436,22 @@ struct
 				   else
 				       ()
 
-			       val bnds' = new_bnds @ bnds
-				   
+			       val bnds' = new_bnds @ bnds   
                             in 
-				((v,nt',c), (bnds', ctxt', pset'))
+				((v,nt',c), (bnds', pset'))
                             end
 
-                      val (vtcs', (bnds', _, pset)) = foldl_acc folder' (nil, ctxt, pset) vtcs
-                      val ctxt = NilContext.insert_con_list (ctxt,
-							     (map (fn (v,t,c) => (v,c)) vtcs))
+                      val (vtcs', (bnds', pset)) = foldl_acc folder' ([], pset) (ListPair.map (fn (c, (v, tr)) => (v, tr, c)) (vtcsA, vtcsF))
+                      val ctxt = NilContext.insert_con_list (ctxt, map (fn (v, _, c) =>
+									(v, c)) vtcs')
+		      val ctxt = foldl (fn (v, ctxt) => NilContext.insert_con(ctxt, v, float64)) ctxt fsF
+
                       val (e', pset) = reify_exp ctxt (e, pset)
                    in
-                      ((f, Function{effect=eff,recursive=recur,isDependent=dep,
-				    tFormals=vks,eFormals=vtcs',fFormals=fs,
-				    body=e',body_type=body_type}),
+
+                      (((f, c), Function{effect=eff,recursive=recur,
+				    tFormals=vksF,eFormals = map (fn (v,nt,_) => (v,nt)) vtcs',fFormals=fsF,
+				    body=e'}),
                        (bnds' @ bnds, pset))
                    end
 
@@ -447,14 +464,13 @@ struct
           let
              val vcllist = Sequence.toList vclseq
              val ctxt = NilContext.insert_con_list (ctxt,
-                          (map (fn (v,{tipe,...}) => (v, tipe)) vcllist))
+                          (map (fn ((v,tipe),{...}) => (v, tipe)) vcllist))
 
-             fun folder ((v,{code, cenv, venv, tipe}), pset) = 
+             fun folder (((v,c),{code, cenv, venv}), pset) = 
                    let
                       val (venv', pset) = reify_exp ctxt (venv, pset)
                    in
-                      ((v,{code = code, cenv = cenv, venv = venv', 
-                        tipe = tipe}), pset)
+                      (((v,c),{code = code, cenv = cenv, venv = venv'}), pset)
                    end
 
              val (vcllist', pset) = foldl_acc folder pset vcllist
@@ -492,9 +508,10 @@ struct
 	end
 
 	
-    fun reify_mod (MODULE {bnds, imports, exports}) =
+    fun reify_mod (nilmod as MODULE {bnds, imports, exports}) =
         let val (ctxt, imports') = 
 	       reify_imports (imports, NilContext.empty (), [])
+
 	    val (bnds', BODY_EXPORTS exports', pset) = 
                   reify_seq_bnds ctxt (bnds, BODY_EXPORTS exports, empty_pset)
 	in  if (!debug) then print_pset pset else ();

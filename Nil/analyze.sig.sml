@@ -4,7 +4,7 @@
 
 signature ANALYZE = 
     sig
-	type funinfo = {definition : Nil.function,
+	type funinfo = {definition : Nil.con * Nil.function,
 			size : int,
 			occurs : (bool * int) list}
 	    (* definition = function definition
