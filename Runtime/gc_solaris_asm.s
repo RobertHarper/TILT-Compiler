@@ -20,6 +20,7 @@
 	.globl	load_regs
 	.globl	save_regs
 	.globl	GCFromML
+	.globl	RestoreStackFromML
 	.globl	NewStackletFromML
 	.globl	PopStackletFromML
 	.globl	GCFromC
@@ -225,7 +226,7 @@ load_regs_ok:
 GCFromML:	
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]
+	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
@@ -244,6 +245,29 @@ GCFromML:
 	nop
 	.size GCFromML,(.-GCFromML)
 
+ ! ----------------- RestoreStackFromML ----------------------------------------------------------------
+ ! This routine is called when raising an exception sets %sp outside the top stacklet.
+ ! -----------------------------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+RestoreStackFromML:	
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
+	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
+	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
+	call	save_regs					
+	nop
+	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer
+	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! must use temp so SP always safe
+	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
+	call	RestoreStackFromMutator				! call runtime
+	nop
+	call	abort
+	nop
+	.size RestoreStackFromML,(.-RestoreStackFromML)
+
  ! ----------------- NewStackletFromML --------------------------------------------------------------------
  ! When an ML function A calls B, the prolog of B checks if a new stacklet is necessary.  If so, this routine is called.
  ! Rra:	 The return address back to B comes in the normal return address register
@@ -255,7 +279,7 @@ GCFromML:
 NewStackletFromML:	
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]
+	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
@@ -281,7 +305,7 @@ NewStackletFromML:
 PopStackletFromML:	
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]	
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
@@ -299,7 +323,7 @@ PopStackletFromML:
  ! -------------------------------------------------------------------------------
  ! returnToML is called from the runtime with
  ! thread pointer as 1st argument
- ! link value/return address as 2nd argument - this may or may not be the same saveregs[LINK]
+ ! link value/return address as 2nd argument - this may or may not be the same saveregs[RA]
  ! -------------------------------------------------------------------------------
 	.proc	07
 	.align  4
@@ -314,10 +338,10 @@ returnToML:
 	mov	%r4, ASMTMP2_REG
 	ld	[%r1+60], %r15				! restore r15 which we do no use to return to
 	ld	[%r1+16], %r4				! restore r4 which we use as temp	
-	ld	[%r1+LINK_DISP], LINK_REG		! restore return address register but not used to get back to ML
+	ld	[%r1+RA_DISP], RA_REG		! restore return address register but not used to get back to ML
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
-	jmpl	ASMTMP2_REG+8, %g0
-	nop
+	jmpl	ASMTMP2_REG+8, %g0			! use delay slot to restore ASMTMP2
+	ld	[THREADPTR_REG+MLsaveregs_disp+ASMTMP2_DISP], ASMTMP2_REG
 	call	abort
 	nop	
 	.size returnToML,(.-returnToML)
@@ -330,7 +354,7 @@ returnToML:
 	.proc	07
 	.align  4
 returnFromGCFromML:
-	ld	[CFIRSTARG_REG+LINK_DISP], CSECONDARG_REG
+	ld	[CFIRSTARG_REG+RA_DISP], CSECONDARG_REG
 	ba	returnToML
 	nop
 	call	abort
@@ -348,7 +372,7 @@ GCFromC:
 	mov	CFIRSTARG_REG, THREADPTR_REG
 	stw	%r1 , [THREADPTR_REG+Csaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+Csaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + Csaveregs_disp + LINK_DISP]	
+	stw	RA_REG, [THREADPTR_REG + Csaveregs_disp + RA_DISP]	
 								! don't change notInML
 	add	THREADPTR_REG, Csaveregs_disp, %r1		! use C save area of thread pointer
 	call	save_regs					
@@ -383,7 +407,7 @@ returnFromGCFromC:
 	call	load_regs				! don't need to save return address
 	nop						
 	ld	[%r1+16], %r4				! restore r4 which we use as temp
-	ld	[%r1+LINK_DISP], LINK_REG		! restore return address back to C code
+	ld	[%r1+RA_DISP], RA_REG		! restore return address back to C code
 	ld	[THREADPTR_REG+Csaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
 	ld	[THREADPTR_REG+Csaveregs_disp+8], THREADPTR_REG	! restore C's $r2 which does not hold threadptr
 	retl
@@ -403,7 +427,7 @@ returnFromYield:
 	mov	CFIRSTARG_REG, THREADPTR_REG
 	mov	THREADPTR_REG, %l0			! Calls from C expect thread reg in %l0
 	ld	[THREADPTR_REG + MLsaveregs_disp + SP_DISP], SP_REG	
-	ld	[THREADPTR_REG + MLsaveregs_disp + LINK_DISP], LINK_REG
+	ld	[THREADPTR_REG + MLsaveregs_disp + RA_DISP], RA_REG
 	retl
 	nop
 	call	abort

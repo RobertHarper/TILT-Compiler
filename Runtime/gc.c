@@ -697,6 +697,19 @@ int calleeSaveMask = 0;
 int calleeSaveMask = 0;
 #endif
 
+#ifdef solaris
+static val_t mkra(void* f) /* code address -> return address */
+{
+  val_t pc = (val_t)f;
+  return pc - 8;
+}
+#else
+static val_t mkra(void* f) /* code address -> return address */
+{
+  return (val_t)f;
+}
+#endif
+
 /* maxOffset is non-zero if the caller passed arguments on the stack */
 void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 {
@@ -704,11 +717,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
   mem_t sp = (mem_t) curThread->saveregs[SP];
   mem_t returnToCaller = (mem_t) curThread->saveregs[ASMTMP2];
   volatile reg_t* primaryRegs;
-#ifdef solaris
-  mem_t returnToCallee = (mem_t) curThread->saveregs[LINK];
-#else
   mem_t returnToCallee = (mem_t) curThread->saveregs[RA];
-#endif
   Stacklet_t *oldStacklet, *newStacklet;
   StackChain_t *stackChain = (StackChain_t *) curThread->stack;
 
@@ -722,7 +731,6 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
   }
   if (addOldStackletOnUnderflow && GCStatus != GCOff && oldStacklet->state == Inconsistent) {
     extern Stacklet_t *Stacklets;
-    /*    printf("GC %d: Adding stacklet %d\n", NumGC, oldStacklet - Stacklets); */
     oldStacklet->state = Pending;
     SetPush(&curThread->proc->work.stacklets, (ptr_t) oldStacklet);
   }
@@ -730,11 +738,8 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
   newStacklet = NewStacklet(stackChain);
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
   curThread->stackLimit = StackletPrimaryBottom(newStacklet);
-#ifdef solaris
-  curThread->saveregs[LINK] = (val_t) (&PopStackletFromML) - 8;
-#else
-  curThread->saveregs[RA] = (reg_t) (&PopStackletFromML);
-#endif
+  curThread->stackTop = StackletPrimaryTop(newStacklet);
+  curThread->saveregs[RA] = mkra(&PopStackletFromML);
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, returnToCallee);
   assert(0);
@@ -746,8 +751,9 @@ void PopStackletFromMutator(Thread_t *curThread)
   mem_t sp = (mem_t) curThread->saveregs[SP];
   Stacklet_t *newStacklet = NULL;
   volatile reg_t* primaryRegs;
-
-  EstablishStacklet(curThread->stack, sp);
+  Stacklet_t *oldStacklet;
+  
+  oldStacklet = EstablishStacklet(curThread->stack, sp);
   PopStacklet(curThread->stack);
   newStacklet = CurrentStacklet(curThread->stack);
   /* Even though we saved all registers, we only restore the callee-save ones */
@@ -757,12 +763,9 @@ void PopStackletFromMutator(Thread_t *curThread)
       curThread->saveregs[i] = primaryRegs[i];
 
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
-#ifdef solaris
-  curThread->saveregs[LINK] = (val_t) newStacklet->retadd; /* Not really necessary */
-#else
   curThread->saveregs[RA] = (val_t) newStacklet->retadd; /* Not really necessary */
-#endif
   curThread->stackLimit = StackletPrimaryBottom(newStacklet);
+  curThread->stackTop = StackletPrimaryTop(newStacklet);
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, newStacklet->retadd);
   assert(0);

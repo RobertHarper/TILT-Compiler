@@ -188,16 +188,11 @@ void UpdateJob(Proc_t *proc)
 
   /* Null out thread's version of allocation and write-list */
   stacklet = EstablishStacklet(th->stack, (mem_t) th->saveregs[SP]); /* updates stacklet->cursor */
-#ifdef solaris
-  stacklet->retadd = (mem_t) th->saveregs[LINK];
-#else
   stacklet->retadd = (mem_t) th->saveregs[RA];
-#endif
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;
   th->writelistAlloc = 0;
   th->writelistLimit = 0;
-
 }
 
 void ReleaseJob(Proc_t *proc)
@@ -1000,6 +995,7 @@ static void mapThread(Proc_t *proc, Thread_t *th)
   th->saveregs[THREADPTR] = (val_t) th;
   th->saveregs[SP] = (val_t) StackletPrimaryCursor(stacklet);
   th->stackLimit = StackletPrimaryBottom(stacklet);
+  th->stackTop = StackletPrimaryTop(stacklet);
 }
 
 /* Processor might be mapped */

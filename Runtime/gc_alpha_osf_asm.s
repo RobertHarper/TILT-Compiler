@@ -345,7 +345,7 @@ returnFromGCFromMLgetgp:
  # -------------------------------------------------------------------------------
  # returnToML is called from the runtime with
  # thread pointer as 1st argument
- # link value/return address as 2nd argument - this may or may not be the same saveregs[LINK]
+ # link value/return address as 2nd argument - this may or may not be the same saveregs[RA]
  # -------------------------------------------------------------------------------
 	.ent	returnToML
 .set noat
