@@ -1,16 +1,17 @@
 signature LINKALPHA =
 sig
-    val compile : string -> string list
-    val test : string -> string list
+    structure Rtl : RTL
+    val compile_prelude : bool * string -> string * Rtl.local_label
+    (* add table info into corresponding asm file *)
+    val link : string * (Rtl.local_label list) -> unit 
+    val compile : string -> string * Rtl.local_label
+    val test : string -> string * Rtl.local_label
 end
 
 structure Linkalpha : LINKALPHA =
 struct
-    val error = fn s => Util.error "linkalpha.sml" s
-
-local
+  val error = fn s => Util.error "linkalpha.sml" s
   open Linkrtl
-in
 
   val do_tailcalls = ref true
 
@@ -155,36 +156,45 @@ in
   end
 *)
 
-  fun comp (x,rtlmod) = 
+  fun comp (srcfile,rtlmod) = 
     let 
-	val files = []
-(*
-      val (prelude_nl,files) = 
-	(case (if (!Linkrtl.Tortl.HeapProfile) 
-		 then !prelude_modules_hprof else !prelude_modules) of
-	   NONE => 
-	     (error ("missing Alpha prelude modules: " ^ 
-		     "try Linkalpha.reparse_prelude(\"\",\"\")"))
-	 | (SOME (prelude_nl,files)) => (prelude_nl,files))
-*)
-      val xs = x^(asm_suffix())
-      val _ = Printutils.openOutput xs
+      val asm_file = srcfile ^ (asm_suffix())
+      val _ = Printutils.openOutput asm_file
       val _ = Rtltoalpha.allocateModule rtlmod
-      val (Rtl.MODULE{main=nl,...}) = rtlmod
-      val nls = [nl]
-      val _ = Rtltoalpha.dumpEntryTables nls
       val _ = Printutils.closeOutput()
-      val res = files @ [xs]
       val _ = print "Generation of assembly files complete\n"
-    in res
+    in asm_file
     end
 
-  fun compile' debug  str = ((* Linkrtl.Tortl.hasFullConditionalBranch := false; *)
-			     comp (str,(if debug then Linkrtl.test else Linkrtl.compile) str))
+  fun link (srcfile,local_labels) = 
+    let 
+      val asm_file = srcfile ^ (asm_suffix())
+      val _ = Printutils.openAppend asm_file
+      val _ = Rtltoalpha.dumpEntryTables local_labels 
+      val _ = Printutils.closeOutput()
+    in ()
+    end
 
-  val compile = compile' false
-  val test = compile' false
- end (* open *)
-end;
+  fun compile filename = 
+      let val rtlmod = Linkrtl.compile filename
+	  val Rtl.MODULE{main,...} = rtlmod
+      in  (comp(filename,rtlmod),main)
+      end
+  fun test filename = 
+      let val rtlmod = Linkrtl.test filename
+	  val Rtl.MODULE{main,...} = rtlmod
+      in  (comp(filename,rtlmod),main)
+      end
 
+  val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
+  fun compile_prelude (use_cache,filename) = 
+      case (use_cache, !cached_prelude) of
+	  (true, SOME mlabel) => mlabel
+	| _ => let val rtlmod = Linkrtl.compile_prelude(use_cache,filename)
+		   val Rtl.MODULE{main=label,...} = rtlmod
+		   val mlabel = (comp(filename,rtlmod),label)
+		   val _ = cached_prelude := SOME mlabel
+	       in  mlabel
+	       end
 
+end
