@@ -47,16 +47,10 @@ DESCRIPTION
 	Platform sets the environment variable $platform which is used
 	by runall and tilt to help find TILT executables.
 
-SEE ALSO
-	../Doc/tilt.1
-	README
-
-BUGS
-	TILT does not yet use exit code 10 to signal when source is
-	rejected.
-
+EXAMPLES
 	In order to use the harness, you must build command-line
-	versions of TILT.  The glorious details are:
+	versions of TILT and compile the test harness.  The glorious
+	details are:
 
 	1. Check out the sources.
 	2. Compile the runtime with gmake runtime inside ml96/Runtime.
@@ -69,6 +63,20 @@ BUGS
 	   ln -s til_slave_local_xterm til_slave inside ml96/Bin.
 
 	If you use -n, you can skip step (5).
+
+	Once these steps are complete, you can run individual tests:
+
+		cd ml96/Test
+		./Runtest.sparc.exe -n 0001 0003
+
+	Or you can run them all:
+
+		cd ml96/Test
+		./runall -n
+
+SEE ALSO
+	../Doc/tilt.1
+	README
 *)
 
 signature BUF =
