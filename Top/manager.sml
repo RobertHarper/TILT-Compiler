@@ -1,6 +1,4 @@
-(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl Linker MakeDep Compiler List SplayMapFn *)
-(* it is touching too many files so it's slow *)
-(* should add caching of import scans *)
+(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl List SplayMapFn SplaySetFn Compiler Linker MakeDep *)
 
 
 functor Manager (structure Parser: LINK_PARSE
@@ -51,6 +49,7 @@ struct
 	      val compare = String.compare
 	  end
   in  structure StringMap = SplayMapFn(StringKey)
+      structure StringSet = SplaySetFn(StringKey)
   end
 
   (* ---- memoize the result of getting file attributes ---- *)
@@ -182,6 +181,7 @@ struct
 		  imports_base  : unitname list option ref,
 		  includes_base : unitname list option ref,
 		  imports  : unitname list option ref,
+		  imports_link  : unitname list option ref,
 		  includes : unitname list option ref,
 		  fresh : fresh ref,
 		  context : Elaborator.context option ref}
@@ -205,6 +205,7 @@ struct
 					  imports_base = ref NONE,
 					  includes_base = ref NONE,
 					  imports = ref NONE,
+                                          imports_link = ref NONE,
 					  includes = ref NONE,
 					  fresh = ref STALE,
 					  context = ref NONE}
@@ -243,6 +244,10 @@ struct
       fun get_import unit = 
             let val UNIT{imports,...} = lookup unit
             in imports end
+
+      fun get_imports_link unit = 
+            let val UNIT{imports_link,...} = lookup unit
+            in imports_link end
 
       fun get_include unit =
             let val UNIT{includes,...} = lookup unit
@@ -333,13 +338,15 @@ struct
          | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 
 
+  local
+
   (* getImportTransitive:
    given a unit, find all the imports it depends on with leaves listed first;
    if the interface file is present, search the includes
    if the interface file is absent, search the imports *)
-  fun getImportTr use_imp unitname seenunits : unitname list =
+  fun getImportTr' use_imp linking unitname seenunits : unitname list =
      let val filebase = get_base unitname
-	 val impref = get_import unitname
+	 val impref = if linking then (get_imports_link unitname) else (get_import unitname)
 	 val incref = get_include unitname
 	 val smlfile = base2sml filebase
 	 val intfile = base2int filebase
@@ -349,7 +356,9 @@ struct
 	| (false,_, SOME i) => i (* cached interface includes *)
 	| _ =>
 	      let fun folder(import,acc) = 
-		      let val depends = getImportTr false import (import::seenunits)
+		      let val depends = getImportTr' linking
+                                          linking import 
+                                          (import::seenunits)
 			  fun adder(u, ac) = 
 			      if Listops.member(u,ac)
 				  then ac else u::ac
@@ -378,7 +387,15 @@ struct
 		      end
 	      end)
      end
+  in
 
+     fun getImportTr use_imp unitname = 
+           getImportTr' use_imp false unitname []
+
+     fun getImportTr_link unitname =
+           getImportTr' true true unitname []
+
+  end
 
   (* ----- get_latest ----- *)
   fun get_latest [] = (NONE, Time.zeroTime)
@@ -440,7 +457,7 @@ struct
           (* make sure all imports are fresh *)
 	  val _ = app (compile false) direct_imports
 
-	  val all_imports = getImportTr true unitname []
+	  val all_imports = getImportTr true unitname
 	  val all_imports_base = map get_base all_imports
 	  val all_imports_ui = map base2ui all_imports_base
 
@@ -531,12 +548,13 @@ struct
       let val sourcebase = get_base unitname
 	  val source_sml = base2sml sourcebase
 	  val source_int = base2int sourcebase
-      in  case (make_uo, exists source_int, exists source_sml) of
+          val full_compile = !eager orelse make_uo
+      in  case (full_compile, exists source_int, exists source_sml) of
 	  (true, true, true)   => (compileINT unitname; 
                                    compileSML true unitname)
 	| (false, true, true)  => compileINT unitname
 	| (false, true, false) => compileINT unitname
-	| (_, false, true)     => compileSML ((!eager) orelse make_uo) unitname
+	| (_, false, true)     => compileSML full_compile unitname
         | (true, _, false) => error ("Missing " ^ source_sml ^
                                      ": cannot generate .uo")
 	| _ => error ("Missing " ^ source_sml ^ " and " ^ source_int ^ 
@@ -659,7 +677,7 @@ struct
                           | (_,SOME f) => chat (f ^ " has changed.]\n")
                           | (_,NONE) => chat (sourcefile ^" has changed.]\n")))
 
-                val all_includes = getImportTr false unitname [] 
+                val all_includes = getImportTr false unitname
 
                 val (ctxt_for_elab,ctxt) = getContext all_includes
 
@@ -743,11 +761,27 @@ struct
      exeopt - if present, names the final executable 
      srcs    - .int, .uo, or .sml filenames *)
   fun compileThem(linkopt, exeopt, units) = 
-      let val bases = map get_base  units
-	  val _ = app (compile true) units
+      let val _ = app (compile true) units
 	  val tmp = OS.FileSys.tmpName()
 	  val tmp_uo = tmp ^ ".uo"
-	  val base_args = map get_base units
+
+          val unit_set = 
+               List.foldl 
+                 (fn (next, set) => 
+                     let val import_tr = getImportTr_link next
+                     in
+                       print "Imports for ";
+                       print next;
+                       print " are:\n   ";
+                       app (fn s => (print s; print " ")) import_tr;
+                       print "\n";
+                       StringSet.addList (set, import_tr)
+                     end)
+                 (StringSet.empty)
+                 units
+
+          val base_args = map get_base (StringSet.listItems unit_set)
+
       in
 	  (case (linkopt,exeopt) of
 	       (NONE,NONE) => ()
