@@ -28,6 +28,9 @@ struct
     exception NoEqExp
     and ReallyNoEqExp
 
+    fun fail (msg:string) : 'a =
+	(debugdo (fn () => (print ("NoEqExp: " ^ msg ^ "\n")));
+	 raise NoEqExp)
 
 
     local
@@ -118,7 +121,7 @@ struct
 	(maybe_bind_con (nameopt, ctxt, con, fn ctxt' => fn con' => xeq_step state ctxt' (con', con))
 	 handle NoEqExp =>
 	     let in
-		 debugdo(fn() => print "NoEqExp: xeq_step failed, try reduce\n");
+		 debugdo(fn() => print "NoEqExp: xeq_step failed, trying reduce\n");
 		 num := !num + 1;
 		 case IlStatic.con_reduce_once (ctxt, con)
 		   of NONE => raise ReallyNoEqExp
@@ -163,7 +166,8 @@ struct
 						 (* if it's not there, recurse *)
 						 PHRASE_CLASS_CON(_,_,SOME c,_) => self(SOME name,c)
 					       | _ => (debugdo (fn () =>
-								(print "No eq expression available for CON_VAR ";
+								(print "\n\ncontext="; Ppil.pp_context ctxt; print "\n\n";
+print "No eq expression available for CON_VAR ";
 								         Ppil.pp_var v;
 								 print " at label "; Ppil.pp_label eqlabel;
 								 print ".  Perhaps due to shadowing\n"));
@@ -175,7 +179,7 @@ struct
 	       | CON_INT is => (IlUtil.to_external_bool_eta ctxt (eq_int is,[]), #con_eqfun state con)
 	       | CON_UINT is => (IlUtil.ilto_external_bool_eta ctxt (eq_uint is,[]), #con_eqfun state con)
 	       (* no equality on floats *)
-	       | CON_FLOAT fs => raise NoEqExp
+	       | CON_FLOAT fs => fail "no equality for float"
 
 		  (*
 		     Simply do pair-wise comparison.
@@ -360,7 +364,7 @@ struct
 	       | CON_MODULE_PROJECT(m,l) =>
 		  let val e = MODULE_PROJECT(m,N.to_eq l)
 		  in (IlStatic.GetExpCon (ctxt,e)
-		      handle _ => raise NoEqExp);
+		      handle _ => fail "no eq exp in module (mono)");
 		      (e, #con_eqfun state con)
 		  end
 	       | CON_APP(c,types) =>
@@ -374,17 +378,17 @@ struct
 				   SIGNAT_STRUCTURE sdecs =>
 				       if (List.exists (fn (SDEC(l,_)) => N.eq_label(l,eql)) sdecs)
 					   then MOD_PROJECT(m, N.to_eq l)
-				       else raise NoEqExp
-				     | _ => raise NoEqExp
+				       else fail "no eq exp in module (poly)"
+				     | _ => fail "projection from non sdecs module"
 			       end
 			 | CON_VAR v =>
 			       let val SOME (type_label,_) = C.Context_Lookup_Var(ctxt,v)
 				   val eql = N.to_eq type_label
 			       in (case (IlStatic.Context_Lookup_Labels(ctxt,[eql])) of
 				       SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
-				     | _ => raise NoEqExp)
+				     | _ => fail "no eq exp at toplevel")
 			       end
-			 | _ => raise NoEqExp)
+			 | _ => fail "CON_APP of non-path")
 		      val s = IlStatic.GetModSig(ctxt,meq)
 		  in  case s
 		      of SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE sdecs,
@@ -401,12 +405,12 @@ struct
 				| translucentfy _ _ = elab_error "got strange sdec in eq compiler"
 			      val sdecs = translucentfy sdecs types
 			      val (new_sbnds,new_sdecs,new_types) = (case #polyinst_opt state (ctxt,sdecs) of
-									 NONE => raise NoEqExp
+									 NONE => fail "polymorphic instantiation failed"
 								       | SOME triple => triple)
 			  in (MODULE_PROJECT(MOD_APP(meq,MOD_STRUCTURE new_sbnds),U.it_lab),
 			      #con_eqfun state con)
 			  end
-		      | _ => raise NoEqExp
+		      | _ => fail "strange polymorphic equality function"
 		  end
 	       | CON_MU confun => xeq_mu state ctxt (SOME name,confun)
 	       (* if a tuple of mutually recursive types, generate the tuple of equality functions,
@@ -420,7 +424,7 @@ struct
 			     | _ => RECORD_PROJECT(fix_exp, U.generate_tuple_label (j+1), con_res))
 		  in  (exp_res, con_res)
 		  end
-	       | _ => raise NoEqExp
+	       | _ => fail "con not an eqtype"
 	end
 
     and xeq_mu (state : state) ctxt (munameopt, confun) =
@@ -518,7 +522,7 @@ struct
 		  con : con}) : (exp * con) option =
 	let val _ = debugdo (fn () => (print "equality compile called with con = ";
 				       Ppil.pp_con con; print "\n";
-				       print "context = "; (* Ppil.pp_context context; *) print "\n"))
+				       (* print "context = "; Ppil.pp_context context; *) print "\n"))
 
 	    val _ = num := 0
 	    (* We plan syntactic restrictions preventing the programmer from rebinding
