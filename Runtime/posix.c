@@ -3,6 +3,7 @@
 #include "general.h"
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <utime.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
 #include <sys/resource.h>
@@ -1224,11 +1225,25 @@ unit posix_filesys_fchown(int unused1, word unused2, word unused)
   UNIMP();
 }
 
-unit posix_filesys_utime(string unused1, int unused2, int unused)
+unit posix_filesys_utime(string filename, int atime, int modtime)
 {
-  UNIMP();
+  char* cfilename = mlstring2cstring_malloc(filename);
+  int r;
+  if (atime == -1) {
+    r = utime (cfilename, NULL);
+  } else {
+    struct utimbuf arg;
+    arg.actime = atime;
+    arg.modtime = modtime;
+    r = utime (cfilename, &arg);
+  }
+  if (r == -1) {
+    runtime_error(errno);
+    assert(0);			/* notreached */
+  }
+  free(cfilename);
+  return empty_record;
 }
-
 
 intpair posix_filesys_pathconf(string unusde1, string unused)
 {
