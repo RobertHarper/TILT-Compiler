@@ -17,6 +17,7 @@ functor Datatype(structure Il : IL
 
   
     val error = error "datatype.sml"
+    val error_sig = error_sig "datatype.sml"
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
@@ -283,7 +284,8 @@ functor Datatype(structure Il : IL
 			  print "\n"));
        (case (modsig_lookup(context,map symbol2label p)) of
 	  NONE=> NONE
-	| SOME (path_mod,m,constr_sig) => 
+	| SOME (path_mod,m,constr_sig as
+		SIGNAT_STRUCTURE(_ :: (SDEC(lab2,_)) :: (SDEC(lab3,_)) :: _)) => 
 	    let 
 	      val decs = context2decs context
 	      val (short_p,name) = (case path_mod of
@@ -292,14 +294,18 @@ functor Datatype(structure Il : IL
 				    | COMPOUND_PATH (v,ls) => (COMPOUND_PATH(v, butlast ls), List.last ls))
 	      val data_sig = GetModSig(decs,path2mod short_p)
 	      val _ = debugdo (fn () => (print "\ndata_sig "; pp_signat data_sig))
+		  handle NOTFOUND _ => error "constr_lookup's shortened path didn't find mod/sig"
 	    in
-	      SOME{name = name,
-		   constr_sig = constr_sig,
-		   datatype_path = short_p,
-		   datatype_sig = data_sig}
-	       handle NOTFOUND _ => error "constr_lookup's shortened path didn't find mod/sig"
+		if (eq_label(lab2,case_lab) andalso (eq_label(lab3,expose_lab)))
+		    then SOME{name = name,
+			      constr_sig = constr_sig,
+			      datatype_path = short_p,
+			      datatype_sig = data_sig}
+		else NONE
 	    end
-	  handle NOTFOUND _ => NONE))
+	| _ => NONE)
+	    handle NOTFOUND _ => NONE)
+
 
      fun is_const_constr signat = 
        (case signat of
@@ -407,6 +413,24 @@ functor Datatype(structure Il : IL
    end
 
 
-   
+   fun exn_lookup context path : {name : Il.label,
+				  carried_type : Il.con option} option =
+       (case (modsig_lookup(context,map symbol2label path)) of
+	  NONE=> NONE
+	| SOME (path_mod,m,exn_sig as 
+		SIGNAT_STRUCTURE [SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]) =>
+	      if (eq_label(lab1,it_lab) andalso eq_label(lab2,mk_lab))
+		  then 
+		      let val name = (case path_mod of
+					  SIMPLE_PATH v => error "exn_lookup found SIMPLE"
+					| COMPOUND_PATH (v,[]) => error "exn_lookup found degenerate COMPUOND_PATH"
+					| COMPOUND_PATH (v,ls) => List.last ls)
+		      in (case (ctag,cmk) of 
+			      (_, CON_ANY) => SOME {name=name, carried_type = NONE}
+			    | (CON_TAG c, _) => SOME {name=name, carried_type = SOME c}
+			    | _ => error_sig exn_sig "bad exn signature")
+		      end
+	      else NONE
+	| _ => NONE)
 
   end

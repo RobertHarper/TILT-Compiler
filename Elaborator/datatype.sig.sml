@@ -30,6 +30,10 @@ signature DATATYPE =
 						   datatype_path : Il.path,
 						   constr_sig : Il.signat,
 						   datatype_sig : Il.signat} option 
+
+    val exn_lookup : Il.context -> Ast.path -> {name : Il.label,
+						carried_type : Il.con option} option
+
     val is_const_constr : Il.signat -> bool
 
 

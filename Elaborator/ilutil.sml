@@ -728,8 +728,16 @@ functor IlUtil(structure Ppil : PPIL
 
     end  
 
+    fun error_obj pp_obj (obj_str : string) filename obj (str : string) = 
+	(print filename; ": Error while evaluating "; print obj_str; print ": ";
+	 print str; print "\n";
+	 pp_obj obj; print "\n\n";
+	 Util.error filename str)
 
-
+    val error_exp = error_obj pp_exp "expression"
+    val error_con = error_obj pp_con "constructor"
+    val error_mod = error_obj pp_mod  "module"
+    val error_sig = error_obj pp_signat "signature"
 
 
   end;

@@ -13,6 +13,7 @@ functor IlEval(structure Il : IL
     open Prim
 
     val error = error "ileval.sml"
+    val error_exp = error_exp "ileval.sml"
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
@@ -126,11 +127,7 @@ functor IlEval(structure Il : IL
 			   | SOME f => f)
     val float2str = Float.toString
 
-    fun error_exp exp (str : string) = 
-	(print "error while evaluating expression: ";
-	 print str; print "\n";
-	 Ppil.pp_exp exp; print "\n\n";
-	 error str)
+
 
     fun eval_con env (con : con) : con = 
 	(case con of

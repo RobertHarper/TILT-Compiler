@@ -284,86 +284,23 @@ else ();
 						 end
        | Ast.VectorExp elist => error "VectorExp not handler"
        | Ast.WhileExp {test,expr} => error "WhileExp not handled"
-       | Ast.HandleExp {expr,rules} => 
+       | Ast.HandleExp {expr,rules} => (* almost same as CaseExp except need to wrap with HANDLE *)
 		       let 
 			   val (exp',rescon) = xexp(context,expr)
-			   val default = ref NONE
-			   fun loop [] = []
-			     | loop ((Ast.Rule{pat,exp})::rest) = 
-			       let 
-				   fun helper thunk (p,_,SIGNAT_STRUCTURE[SDEC(_,DEC_EXP(_,ctag)),_]) =
-				       let val v = fresh_var()
-					   val con = case ctag of 
-					       (CON_TAG c) => c
-					     | _ => error "tag type not CON_NAME"
-					   val (e,c) = thunk(v,con)
-					   val _ = con_unify(context,"exnhandler type",rescon,
-							     "exp type",
-							     c,
-							     "return type of exnhandler")
-					   val body = #1(make_lambda(v,CON_ANY,c,e))
-					   val tag = path2exp(join_path_labels(p,[it_lab]))
-				       in (tag,con,body)::(loop rest)
-				       end
-				     | helper _ (_,_,s) = (Ppil.pp_signat s;
-							   error "expected exception signature")
-				   fun is_non_const (s : Symbol.symbol) = 
-				       (s = Symbol.varSymbol "ref") orelse
-				       (case (Datatype.constr_lookup context [s]) of
-					    NONE => false
-					  | (SOME {name,datatype_path,constr_sig,datatype_sig}) => 
-						not (Datatype.is_const_constr constr_sig))
-				   val fixtable = Context_Get_FixityTable context
-				   val pat = (case (InfixParse.parse_pat(fixtable, is_non_const, [pat])) of
-						  [p] => p
-						| _ => error "exnhandler patterns parsed to mult pats")
-			       in
-			   (case pat of
-				    Ast.WildPat => let val (e,c) = xexp(context,exp)
-						   in (default := (SOME(#1(make_lambda(fresh_var(),
-										       CON_ANY,c,e))));
-						       [])
-						   end
-				  | (Ast.VarPat [s]) => 
-					(case modsig_lookup(context,[symbol2label s]) of
-					     NONE => let 
-							 val lab = symbol2label s
-							 val var = fresh_var()
-							 val context' = add_context_var(context,lab,var,CON_ANY)
-							 val (resexp,rescon') = xexp(context',exp)
-							 val _ = con_unify(context,"exnhandler type",rescon,
-									   "exp type",
-									   rescon,
-									   "return type of exnhandler")
-							 val body = make_lambda(var,CON_ANY,rescon',resexp)
-						     in
-							 (default := SOME (#1 body); [])
-						     end
-					   | SOME pms => helper (fn _ => xexp(context,exp)) pms)
-				  | (Ast.AppPat {constr=Ast.VarPat[s],argument}) => 
-					(case modsig_lookup(context,[symbol2label s]) of
-					     NONE => error "constructor in exn handler not an exn"
-					   | SOME pms => let 
-								 fun thunk (v,c) = 
-								     let 
-									 val patarg = {context = context,
-										       typecompile = xty,
-										       expcompile = xexp,
-										       polyinst = poly_inst}
-								     in caseCompile{patarg = patarg,
-										    arms = [(argument,exp)],
-										    arg = (VAR v,c)}
-								     end
-							     in helper thunk pms
-							     end)
-				  | _ => (AstHelp.pp_pat pat;
-					     error "unexpected patterns in error handler"))
-			       end
 			   val v = fresh_var()
-			   val arms = loop rules
-			   val handler = #1(make_lambda(v,CON_ANY,rescon,
-						     EXN_CASE(VAR v, arms, !default)))
-		       in (HANDLE(exp',handler),rescon)
+			   val patarg = {context = context,
+					 typecompile = xty,
+					 expcompile = xexp,
+					 polyinst = poly_inst}
+			   val arms = map (fn (Ast.Rule{pat,exp})=>(pat,exp)) rules
+			   val handler_body = caseCompile{patarg = patarg,
+							  arms = arms,
+							  arg = (VAR v,CON_ANY)}
+			   val handler = make_lambda(v,CON_ANY,#2 handler_body,#1 handler_body)
+			   val _ = con_unify(context,"handle",
+					     rescon,"handle body type",
+					     #2 handler,"handler type")
+		       in (HANDLE(exp',#1 handler),rescon)
 		       end
        | Ast.RaiseExp e => let val (exp,con) = xexp(context,e)
 			       val _ = con_unify(context,"raise",CON_ANY,"ANY",con,"con")

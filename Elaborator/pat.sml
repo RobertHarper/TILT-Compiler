@@ -65,6 +65,11 @@ functor Pat(structure Il : IL
       (case Datatype.constr_lookup context p of
 	 SOME _ => true
        | NONE => false)
+    fun is_exn (modsig_lookup, context) (p : Ast.path) = 
+	(case Datatype.exn_lookup context p of
+	     NONE => false
+	   | SOME _ => true)
+
 
     (* ----- creates a let binding construct ----------------------------------
      It returns 
@@ -245,6 +250,45 @@ functor Pat(structure Il : IL
     end
 
 
+  and exn_case(arg1,args,
+	       accs: ((Ast.symbol * Ast.pat option) * arm) list,
+	       def : def) : bound list * (exp * con) = 
+      let
+	  val rescon = fresh_con()
+	  fun helper ((s,patopt),arm : arm) = 
+	      (case modsig_lookup(context,[symbol2label s]) of
+		   NONE => error "constructor in exn handler not an exn"
+		 | SOME (p,_,SIGNAT_STRUCTURE[SDEC(_,DEC_EXP(_,ctag)),_]) =>
+		       let val con = (case ctag of 
+					  (CON_TAG c) => c
+					| _ => error "tag type not CON_NAME")
+			    val v = fresh_var()
+			    val (bound',(e,c)) =
+				(case patopt of
+				     NONE => match(args,[arm],def)
+				   | SOME argpat =>
+					 let val (cl,bound,body) = arm
+					     val arm' = (argpat::cl,bound,body)
+					 in  match((CASE_VAR (v,con))::args,[arm'],def)
+					 end)
+			    val _ = con_unify(context,"exnhandler type",rescon,
+					      "exp type",
+					      c,
+					      "return type of exnhandler")
+			    val body = #1(make_lambda(v,CON_ANY,c,e))
+			    val tag = path2exp(join_path_labels(p,[it_lab]))
+		       in (bound',(tag,con,body))
+		       end
+		 | _ => error "expected exception signature")
+	  val (exnarg, exncon) = (case arg1 of
+				      CASE_VAR(v,con) => (VAR v, con)
+				    | CASE_NONVAR (_,binde,bindc) => (binde,bindc))
+	  val temp : (bound list * (exp * con * exp)) list = map helper accs
+	  val arms' = map #2 temp
+	  val bound' = map #1 temp
+      in (flatten bound',(EXN_CASE(exnarg,arms',mapopt #1 def),rescon))
+      end
+
 
   and constr_case (arg1,
 		   args,
@@ -415,6 +459,18 @@ functor Pat(structure Il : IL
 		  and then call the appropriate compiler for those patterns. 
               ----------------------------------------------------------------- *)
 	       val is_constr = is_constr(modsig_lookup, context)
+	       val is_exn    = is_exn(modsig_lookup, context)
+	       fun exn_dispatch() = 
+		   let 
+		       fun exnpred (Ast.VarPat [v]) = if (is_exn [v]) then SOME(v,NONE) else NONE
+			 | exnpred (Ast.AppPat{constr=Ast.VarPat [v],argument}) = if (is_exn [v]) 
+										    then SOME(v,SOME argument)
+										else NONE
+			 | exnpred _ = NONE
+		       val (accs,vc_ll2,def) = find_maxseq exnpred arms
+		   val (vc_ll,ec) = exn_case(arg1,argrest,accs,def)
+		   in (vc_ll @ vc_ll2, ec)
+		   end
 	       fun var_dispatch() = 
 		 let 
 		   fun varpred (Ast.VarPat [v]) = if (is_constr [v]) then NONE else SOME v
@@ -565,8 +621,15 @@ functor Pat(structure Il : IL
 							    CHAR (CharStr2char cs))
 		  | (Ast.RecordPat _ | Ast.TuplePat _) => tuple_record_dispatch()
 		  | (Ast.WildPat) => wild_dispatch()
-		  | (Ast.VarPat v) => if (is_constr v) then constructor_dispatch() else var_dispatch()
-		  | (Ast.AppPat _) => constructor_dispatch()
+		  | (Ast.VarPat p) => (if (is_constr p) then constructor_dispatch() 
+				      else if (is_exn p) then exn_dispatch() 
+					   else var_dispatch())
+	          | (Ast.AppPat {constr,argument}) =>
+			(case argument of
+			     ((Ast.VarPat p) | (Ast.MarkPat (Ast.VarPat p,_))) => 
+				 if (is_exn p) then exn_dispatch() 
+				 else constructor_dispatch()
+			   | _ => constructor_dispatch())
 		  | (Ast.LayeredPat _) => layer_dispatch()
 		  | (Ast.ListPat _) => error "should not get ListPat here"
 		  | (Ast.VectorPat _) => raise UNIMP
@@ -584,7 +647,10 @@ functor Pat(structure Il : IL
 	fun is_non_const (s : Symbol.symbol) = 
 	  (s = Symbol.varSymbol "ref") orelse
 	  (case (Datatype.constr_lookup context [s]) of
-	      NONE => false
+	      NONE => (case Datatype.exn_lookup context[s] of
+			   NONE => false
+			 | SOME {name,carried_type=NONE} => false
+			 | SOME {name,carried_type=SOME _} => true)
 	    | (SOME {name,datatype_path,constr_sig,datatype_sig}) => 
 		 not (Datatype.is_const_constr constr_sig))
 	val fixtable = Context_Get_FixityTable context

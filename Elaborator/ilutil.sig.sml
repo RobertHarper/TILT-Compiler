@@ -42,6 +42,11 @@ signature ILUTIL =
     val path2exp : Il.path -> exp
     val mod2path : mod -> Il.path
 
+    (* error functions *)
+    val error_exp : string -> Il.exp -> string -> 'a
+    val error_con : string -> Il.con -> string -> 'a
+    val error_mod : string -> Il.mod -> string -> 'a
+    val error_sig : string -> Il.signat -> string -> 'a
 
     (* derived forms *)
     val make_lambda : var * con * con * exp -> (exp * con)
