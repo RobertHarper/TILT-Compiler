@@ -12,9 +12,14 @@ struct
     val foldl = foldl
     val foldl_acc = Listops.foldl_acc
     val map = map
+    val maptolist = map
     val map2 = Listops.map2
+    val map_second = Listops.map_second
+    val mapcount = Listops.mapcount
     val app = app
     val all = List.all
+    val all2 = Listops.all2
+    val no_dups = Listops.no_dups
 
     fun lookup pred set key = 
 	let fun loop [] = NONE
@@ -22,10 +27,11 @@ struct
 	in loop set
 	end
 
-    fun find pred set =
-	let fun loop [] = NONE
-	      | loop ((a,b)::rest) = if (pred a) then SOME b else loop rest
-	in loop set
-	end
-
+    fun find pred seq  = 
+      let 
+	fun loop [] = NONE
+	  | loop ((a,b)::rest) = if (pred a) then SOME b else loop rest
+      in loop seq
+      end
+    
 end

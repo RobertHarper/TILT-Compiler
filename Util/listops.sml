@@ -159,6 +159,20 @@ structure Listops :> LISTOPS =
 	loop (init,list,[])
       end
     
+    fun foldl_acc2 ffun init (list1,list2) = 
+      let 
+	fun loop (state,[],[],acc1,acc2) = (rev acc1,rev acc2,state)
+	  | loop (state,fst1::rest1,fst2::rest2,acc1,acc2) =
+	  let
+	    val (fst1,fst2,state) = ffun (fst1,fst2,state)
+	  in
+	    loop (state,rest1,rest2,fst1::acc1,fst2::acc2)
+	  end
+	  | loop _ = error "foldl_acc2 given lists of different length"
+      in
+	loop (init,list1,list2,[],[])
+      end
+    
     fun foldl2 f init (l1,l2) = 
       let
 	fun loop ([],[],state) = state
@@ -166,6 +180,15 @@ structure Listops :> LISTOPS =
 	  | loop _ = error "foldl2 given lists of different length"
       in
 	loop (l1,l2,init)
+      end
+
+    fun foldl3 f init (l1,l2,l3) = 
+      let
+	fun loop ([],[],[],state) = state
+	  | loop (a::aa,b::bb,c::cc,state) = loop(aa,bb,cc,f (a,b,c,state))
+	  | loop _ = error "foldl3 given lists of different length"
+      in
+	loop (l1,l2,l3,init)
       end
 
     fun eq_len (l1,l2) = ((List.length l1) = (List.length l2))

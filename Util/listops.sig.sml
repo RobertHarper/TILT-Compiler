@@ -71,7 +71,7 @@ signature LISTOPS =
     val map_first : ('a -> 'b) -> ('a * 'c) list -> ('b * 'c) list
     val map_second : ('a -> 'b) -> ('c * 'a) list -> ('c * 'b) list
 
-    (* foldl_acc f s l => (s',l') where s' is equivalent to the result of
+    (* foldl_acc f s l => (l',s') where s' is equivalent to the result of
       * List.foldl (fn x => #2(f x)) s l
       * and l' is the accumulated list of the second result of f.
       * So foldl_acc (fn (x,y) => (x*x,y+x*x)) 0 [2,0,3,1] => ([4,0,9,1],14)
@@ -79,7 +79,12 @@ signature LISTOPS =
       *)
     val foldl_acc : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
 
-    val foldl2 : ('a * 'b * 'c -> 'c) -> 'c -> ('a list * 'b list) -> 'c
+    val foldl_acc2 : ('e1 * 'e2 * 'state -> 'd1 * 'd2 * 'state) 
+                         -> 'state -> 'e1 list * 'e2 list -> 'd1 list * 'd2 list * 'state
+
+    val foldl2 : ('a * 'b * 'state -> 'state) -> 'state -> ('a list * 'b list) -> 'state
+    val foldl3 : ('a * 'b * 'c * 'state -> 'state) -> 'state -> ('a list * 'b list * 'c list) -> 'state
+
     val foldl_list : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
     val eq_len : 'a list * 'b list -> bool
     val eq_len3 : 'a list *'b list * 'c list -> bool
