@@ -33,27 +33,26 @@ structure Render =
 	   | _ => raise (Error "Difference and Intersection not implemented"))
 
     fun primIntersect src dir obj = 
-	let val (t,result) = (case obj of
+	let val (t,(hit,l2,l3)) = (case obj of
 				  Sphere (m4, t) => (t,sphere(m4,src,dir))
 				| Plane (m4, t) => (t,plane(m4,src,dir))
 				| Cube (m4, t) => (t,cylinder(m4,src,dir))
 				| Cone (m4, t) => (t,cube(m4,src,dir))
 				| Cylinder (m4, t) => (t,cone(m4,src,dir))
 				| _ => raise (Error "primIntersect for non-primitive object"))
-	in  case result of
-	      ZERO => []
-	    | ONE r => [(t,r)]
-	    | TWO (r1,r2) => [(t,r1),(t,r2)]
+	in  if hit
+		then map (fn info => (t, info)) (l3 ())
+	    else []
 	end
 
     fun primHit src dir obj : bool = 
-	(case obj of
-	     Sphere (m4, _) => hits_sphere(m4,src,dir)
-	   | Plane (m4, _) => hits_plane(m4,src,dir)
-	   | Cube (m4, _) => hits_cylinder(m4,src,dir)
-	   | Cone (m4, _) => hits_cube(m4,src,dir)
-	   | Cylinder (m4, _) => hits_cone(m4,src,dir)
-	   | _ => raise (Error "primIntersect for non-primitive object"))
+	#1 (case obj of
+		Sphere (m4, _) => sphere(m4,src,dir)
+	      | Plane (m4, _) => plane(m4,src,dir)
+	      | Cube (m4, _) => cylinder(m4,src,dir)
+	      | Cone (m4, _) => cube(m4,src,dir)
+	      | Cylinder (m4, _) => cone(m4,src,dir)
+	      | _ => raise (Error "primIntersect for non-primitive object"))
 
     fun shadowed (hit, dir, []) = false
       | shadowed (hit, dir, obj::rest) = (primHit hit dir obj) orelse (shadowed (hit, dir, rest))
@@ -72,15 +71,17 @@ structure Render =
     fun cast (apply, Ia, viewerPos, dir, scene, lights, 0) : color =  black
       | cast (apply, Ia, viewerPos, dir, scene, lights, depth) : color =  
 	let val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
-	    fun greater ((_,{dist=d1,...}:ans),
-			 (_,{dist=d2,...}:ans)) = d1 > d2
+	    fun greater ((_,{dist=d1,...}:l3info),
+			 (_,{dist=d2,...}:l3info)) = d1 > d2
 	    val intersects = ListMergeSort.sort greater intersects
 	in  if (null intersects)
 		then black
-	    else let val (t, {u,v,face,N,S,theta,hit,dist}) = hd intersects
+	    else let val (t, {u,v,face,N,hit,dist}) = hd intersects
 		     (* Surface properties *)
 		     val (C, kd, ks, n) = apply(t,(face,u,v))
 		     (* Recursive reflection *)
+		     val incident = negate dir
+		     val S = reverseHalfway (incident, N)
 		     val Is = cast(apply, Ia, hit, S, scene, lights, depth - 1)
 		     (* Direct contribution of light sources *)
 		     val (diffuses, speculars) = ListPair.unzip (map (castShadow (hit,scene,negate dir,N,n)) lights)
