@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil *)
+(*$import List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil *)
 structure IlContext :> ILCONTEXT =
 struct
 

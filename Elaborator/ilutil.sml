@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats List *)
+(*$import PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats List *)
 (* Il Utility *)
 structure IlPrimUtil = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List Prim Int Il IlStatic IlUtil Ppil Util Listops Name IlContext Tyvar EQUAL Stats *)
+(*$import List Prim Int Il IlStatic IlUtil Ppil Util Listops Name IlContext Tyvar EQUAL Stats *)
 (* Equality compiler *)
 structure Equal
     :> EQUAL =

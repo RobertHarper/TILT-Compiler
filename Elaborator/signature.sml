@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Formatter List Int Listops Util Name Tyvar Il IlStatic IlUtil Ppil IlContext Error SIGNATURE Bool Stats Option *)
+(*$import Formatter List Int Listops Util Name Tyvar Il IlStatic IlUtil Ppil IlContext Error SIGNATURE Bool Stats Option *)
 
 (* Need to improve where_structure to use SIGNAT_OF *)
 

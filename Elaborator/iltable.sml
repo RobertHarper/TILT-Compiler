@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array Word32 Name Sequence Listops Il Prim Util TilWord64 String BinaryMapFn Option Tyvar Int *)
+(*$import Array Word32 Name Sequence Listops Il Prim Util TilWord64 String BinaryMapFn Option Tyvar Int *)
 
 (* Basically revamped from NIL version *)
 

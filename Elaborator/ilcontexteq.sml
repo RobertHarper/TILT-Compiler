@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int Name Il SplayMapFn Prim Tyvar Fixity List Listops IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util IlTable IntListMap Option *)
+(*$import Int Name Il SplayMapFn Prim Tyvar Fixity List Listops IlContext IlUtil Ppil Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats Util IlTable IntListMap Option *)
 (* Equality of contexts *)
 
 structure IlContextEq 

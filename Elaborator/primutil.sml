@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL *)
+(*$import TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL *)
 
 functor PrimUtil(structure PrimUtilParam : PRIMUTILPARAM)
     :> PRIMUTIL where type con = PrimUtilParam.con

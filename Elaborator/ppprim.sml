@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name TilWord64 Array TextIO PPPRIM PRIM Util Formatter Prim Stats Listops *)
+(*$import Name TilWord64 Array TextIO PPPRIM PRIM Util Formatter Prim Stats Listops *)
 (* Primitives pretty-printer. *)
 structure Ppprim :> PPPRIM =
   struct

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name Stats *)
+(*$import Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name Stats *)
 
 signature ILPRIMUTILPARAM =
 sig

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Fixity Symbol List Name Listops Ast Util INFIXPARSE Il Ppil AstHelp ListMergeSort Stats *)
+(*$import Fixity Symbol List Name Listops Ast Util INFIXPARSE Il Ppil AstHelp ListMergeSort Stats *)
 structure InfixParse
   :> INFIXPARSE =
   struct

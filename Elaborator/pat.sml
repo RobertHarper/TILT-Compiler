@@ -1151,14 +1151,13 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	val baseRules = map (fn r => reduceRule context (r, compile_args)) rules
 	fun default _ = RAISE(!shortCon, default_exn)
 	val almost_e = match(context,compile_args,baseRules,default,resCon)
-	val final_e = wrapper almost_e
+	val very_nearly_e = wrapper very_nearly_e
 	val final_e = (case (!do_result_type, !shortCon) of
-			   (true, CON_VAR v) => U.make_let([BND_CON(v,!fullCon)],final_e)
-			 | _ => final_e)
+			   (true, CON_VAR v) => U.make_let([BND_CON(v,!fullCon)], very_nearly_e)
+			 | _ => very_nearly_e)
 
     in  (final_e, !fullCon)
     end
-
 
 
     (* find all the variables that are bound by a pattern *)
@@ -1182,9 +1181,9 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
           | ListPat p => Listops.flatten(map (get_bound context) p)
           | TuplePat p => Listops.flatten(map (get_bound context) p)
 	  | FlatAppPat patfixes => error "flatapppat should be parsed away"
-          | AppPat {constr:pat,argument:pat} => get_bound context argument
-          | ConstraintPat {pattern:pat,constraint:ty} => get_bound context  pattern
-          | LayeredPat {varPat:pat,expPat:pat} => (get_bound context varPat) @ (get_bound context expPat)
+          | AppPat {constr:pat, argument:pat} => get_bound context argument
+          | ConstraintPat {pattern:pat, constraint:ty} => get_bound context  pattern
+          | LayeredPat {varPat:pat, expPat:pat} => (get_bound context varPat) @ (get_bound context expPat)
           | VectorPat p => Listops.flatten(map (get_bound context) p)
           | MarkPat (p,r) => get_bound context p)
 	end

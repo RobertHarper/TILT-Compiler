@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Prim Tyvar Name Int List Il IlContext IlContextEq PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
+(*$import Prim Tyvar Name Int List Il IlContext IlContextEq PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
 (* Static semantics *)
 structure IlStatic
   :> ILSTATIC =

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Symbol TextIO List Listops Name Il Formatter Prim Ppprim Tyvar Bool PPIL Stats Fixity *)
+(*$import Util Int Symbol TextIO List Listops Name Il Formatter Prim Ppprim Tyvar Bool PPIL Stats Fixity *)
 (* Il pretty-printer. *)
 structure Ppil :> PPIL =
 struct

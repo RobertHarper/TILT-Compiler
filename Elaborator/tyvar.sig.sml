@@ -1,4 +1,4 @@
-(*$import Prelude Util *)
+(*$import Util *)
 
 signature TYVAR = 
   sig

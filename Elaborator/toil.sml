@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
+(*$import Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
 
 (* todo : LetExp and CaseExp: valuability computation too conservative
           optimize coercion functors to recognize when it is entirely unndeeded 
