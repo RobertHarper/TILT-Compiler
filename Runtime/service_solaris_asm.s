@@ -215,6 +215,7 @@ scheduler:
 	.proc	07
 	.align	4
 global_exnhandler:
+	flushw
 	st	EXNARG_REG, [THREADPTR_REG + EXNARG_DISP]    ! note that this is return address of Yield
 	ld	[EXNPTR_REG + 4], SP_REG
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
@@ -235,22 +236,24 @@ global_exnhandler:
 	.proc	07
 	.align	4
 raise_exception_raw:
-	mov	%o0, THREADPTR_REG		
+	flushw
+	mov	%o0, THREADPTR_REG
+	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
 	mov	%o1, %r4				! save exn arg since load_regs leaves r4 alone
-	add	THREADPTR_REG, MLsaveregs_disp, %r1	
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs
 	nop
-	mov	%r4, EXNARG_REG			! restore exn arg from r4 temp (unmodified by load_regs)
-	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1		! restore r1 which was used as arg to load_regs
-	ld	[THREADPTR_REG+MLsaveregs_disp+16], %r4		! restore r4 which was used to save exn arg and unmodified by load_regs
-								! don't need to restore r15 as we will overwrite it by jumping
-								! at this point, all registers restored
-	ld	[EXNPTR_REG+4], ASMTMP_REG	! fetch sp of exn handler
-	setuw	primaryStackletOffset, ASMTMP2_REG ! expands to 2 instr
+	mov	%r4, EXNARG_REG				! restore exn arg from r4 temp (unmodified by load_regs)
+	ld	[%r1+16], %r4				! restore r4 which we used as temp
+							! don't need to restore normal return address to r15 (aka EXNARG_REG)
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
+							! at this point, all registers restored
+	ld	[EXNPTR_REG+4], ASMTMP_REG		! fetch sp of exn handler
+	setuw	primaryStackletOffset, ASMTMP2_REG	! expands to 2 instr
 	ld	[ASMTMP2_REG], ASMTMP2_REG
 	add	ASMTMP_REG, ASMTMP2_REG, %sp
-	ld	[EXNPTR_REG], ASMTMP_REG	! fetch pc of exn handler
-	jmpl	ASMTMP_REG, %g0			! jump not return and do not link
+	ld	[EXNPTR_REG], ASMTMP_REG		! fetch pc of exn handler
+	jmpl	ASMTMP_REG, %g0				! jump not return and do not link
 	nop
 	.size	raise_exception_raw,(.-raise_exception_raw)
 
@@ -261,6 +264,7 @@ raise_exception_raw:
 	.proc	07
 	.align  4
 OverflowFromML:
+	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
 	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
@@ -283,6 +287,7 @@ OverflowFromML:
 	.proc	07
 	.align  4
 DivFromML:
+	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
 	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
