@@ -151,7 +151,7 @@ struct
 					       add_eq_entry tyvar;
 					       (exp, eqcon)
 					   end
-					| (SOME c, SOME os) => 
+					| (SOME c, SOME os) =>  (* tyvar has been unified so hole is full *)
 					   let val exp = valOf (Util.oneshot_deref os)
 					   in  debugdo (fn () =>
 							(print "SOME/SOME grabbing from oneshot.\n";

@@ -2482,9 +2482,7 @@ structure Toil
 	       | NONE => (Error.warn_region_with "top-level unresolved tyvar -- setting to unit: ";
 			  pp_con (CON_TYVAR tv); print "\n";
 			  Stats.counter "toil.unresolved_tyvar" ();
-			  IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit);
-			  (* Tyvar.tyvar_set(tv,con_unit); *)
-			  ()))
+			  ignore(IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit))))
 
 	val _ = reset_elaboration (fp, unitNameOpt)
 	val _ = push_region(0,1000000)
