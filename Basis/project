@@ -22,6 +22,9 @@ unit TiltExnExtern : TiltExnExtern = "General/extern.sml" {TiltPrim}
 interface TiltPrelude = "Prelude.int" {TiltPrim}
 unit TiltPrelude : TiltPrelude = "Prelude.sml" {TiltPrim TiltExnExtern}
 
+interface TiltCleanUp = "cleanup.int" { TiltPrim TiltPrelude }
+unit TiltCleanUp : TiltCleanUp = "cleanup.sml" { TiltPrim TiltPrelude }
+
 interface TiltExn = "tiltexn.int" {TiltPrim TiltPrelude}
 unit TiltExn : TiltExn = "tiltexn.sml" {TiltPrim TiltPrelude}
 
@@ -485,22 +488,6 @@ unit TextPrimIO : TextPrimIO = "IO/text-prim-io.sml" {
 	TiltPrim TiltPrelude PRIM_IO TiltPrimIoFn Position CharVector
 	CharArray
 }
-interface TILT_CLEAN_UP = "NJ/cleanup-sig.sml" {
-	TiltPrim TiltPrelude
-}
-unit TILT_CLEAN_UP : TILT_CLEAN_UP = "NJ/cleanup-sig.sml" {
-	TiltPrim TiltPrelude
-}
-interface TiltCleanUp = "NJ/cleanup.int" {TiltPrim TILT_CLEAN_UP}
-unit TiltCleanUp : TiltCleanUp = "NJ/cleanup.sml" {
-	TiltPrim TiltPrelude TiltVectorEq List TILT_CLEAN_UP
-}
-interface TiltCleanIo = "IO/clean-io.int" {
-	TiltPrelude TiltPrim
-}
-unit TiltCleanIo : TiltCleanIo = "IO/clean-io.sml" {
-	TiltPrelude TiltPrim TiltExn
-}
 interface BinPrimIO = "IO/bin-prim-io.int" {
 	TiltPrim TiltPrelude PRIM_IO
 }
@@ -513,7 +500,7 @@ interface TiltBinIoFn = "IO/bin-io-fn.int" {
 unit TiltBinIoFn : TiltBinIoFn = "IO/bin-io-fn.sml" {
 	TiltPrim TiltPrelude TiltVectorEq Word8 Int Position IO
 	BIN_IO TILT_OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option
-	TiltCleanIo
+	TiltCleanUp
 }
 interface TIMER = "timer-sig.sml" {
 	TiltPrim TiltPrelude Time
@@ -685,7 +672,7 @@ unit TiltOsFileSys : TiltOsFileSys = "Unix/os-filesys.sml" {
 }
 interface TiltOsProcess = "Unix/os-process.int" {OS_PROCESS}
 unit TiltOsProcess : TiltOsProcess = "Unix/os-process.sml" {
-	TiltPrim TiltPrelude List Word8 TiltPreOs OS_PROCESS Posix
+	TiltPrim TiltPrelude Word8 TiltPreOs OS_PROCESS Posix
 	TiltCleanUp
 }
 interface TiltOsIo = "Unix/os-io.int" {OS_IO TiltPreOs}
@@ -705,7 +692,7 @@ interface TiltTextIoFn = "IO/text-io-fn.int" {
 }
 unit TiltTextIoFn : TiltTextIoFn = "IO/text-io-fn.sml" {
 	TiltPrim TiltPrelude TiltVectorEq Int CharArray CharVector
-	TextPrimIO TiltCleanIo Substring IO TILT_OS_PRIM_IO TEXT_IO OS Option
+	TextPrimIO TiltCleanUp Substring IO TILT_OS_PRIM_IO TEXT_IO OS Option
 	TiltExn
 }
 interface TiltPosixPrimIoFn = "Unix/posix-prim-io-fn.int" {

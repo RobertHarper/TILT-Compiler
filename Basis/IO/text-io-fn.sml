@@ -88,7 +88,7 @@ struct
 	    closed : bool ref,
 	    getPos : unit -> pos option,
 	    tail : more ref ref, (* points to the more cell of the last buffer *)
-	    cleanTag : CleanIO.tag
+	    cleanTag : TiltCleanUp.tag
 	  }
 
 	fun infoOfIBuf (IBUF{info, ...}) = info
@@ -166,7 +166,7 @@ struct
       (* terminate an input stream *)
 	fun terminate (INFO{tail, cleanTag, ...}) = (case !tail
 	       of (m as ref NOMORE) => (
-		    CleanIO.removeCleaner cleanTag;
+		    TiltCleanUp.remove cleanTag;
 		    m := TERMINATED)
 		| (m as ref TERMINATED) => ()
 	      (* end case *))
@@ -309,11 +309,7 @@ struct
 		    (* end case *))
 	      val more = ref NOMORE
 	      val closedFlg = ref false
-	      val tag = CleanIO.addCleaner {
-		      init = fn () => (closedFlg := true),
-		      flush = fn () => (),
-		      close = fn () => (closedFlg := true)
-		    }
+	      val tag = TiltCleanUp.atExit (fn () => closedFlg := true)
 	      val info = INFO{
 		      reader=reader, readVec=readVec', readVecNB=readVecNB',
 		      closed = closedFlg, getPos = getPos, tail = ref more,
@@ -438,7 +434,7 @@ struct
 	    writer : writer,
 	    writeArr : {buf : A.array, i : int, sz : int option} -> unit,
 	    writeVec : {buf : V.vector, i : int, sz : int option} -> unit,
-	    cleanTag : CleanIO.tag
+	    cleanTag : TiltCleanUp.tag
 	  }
 
 	fun outputExn (OSTRM{writer=PIO.WR{name, ...}, ...}, mlOp, exn) =
@@ -568,7 +564,7 @@ struct
 		else (
 		  flushBuffer (strm, "closeOut");
 		  closed := true;
-		  CleanIO.removeCleaner cleanTag;
+		  TiltCleanUp.remove cleanTag;
 		  close())
 
 	fun mkOutstream (wr as PIO.WR{chunkSize, writeArr, writeVec, ...}, mode) =
@@ -611,11 +607,7 @@ struct
 			  end
 		    (* end case *))
 	    (* install a dummy cleaner *)
-	      val tag = CleanIO.addCleaner {
-		      init = fn () => (),
-		      flush = fn () => (),
-		      close = fn () => ()
-		    }
+	      val tag = TiltCleanUp.atExit (fn () => ())
 	      val strm = OSTRM{
 		      buf = A.array(chunkSize, someElem),
 		      pos = ref 0,
@@ -627,11 +619,7 @@ struct
 		      cleanTag = tag
 		    }
 	      in
-		CleanIO.rebindCleaner (tag, {
-		    init = fn () => closeOut strm,
-		    flush = fn () => flushOut strm,
-		    close = fn () => closeOut strm
-		  });
+		TiltCleanUp.replace (tag, fn () => closeOut strm);
 		strm
 	      end
 
@@ -822,11 +810,7 @@ struct
 	    val (strm as SIO.ISTRM(SIO.IBUF{info=SIO.INFO{cleanTag, ...}, ...}, _)) =
 		  SIO.mkInstream(OSPrimIO.stdIn(), NONE)
 	    in
-	      CleanIO.rebindCleaner (cleanTag, {
-		  init = fn () => (),
-		  flush = fn () => (),
-		  close = fn () => ()
-		});
+	      TiltCleanUp.replace (cleanTag, fn () => ());
 	      strm
 	    end
       fun mkStdOut () = let
@@ -834,11 +818,7 @@ struct
 	    val (strm as SIO.OSTRM{cleanTag, ...}) =
 		  SIO.mkOutstream(wr, bufferMode wr)
 	    in
-	      CleanIO.rebindCleaner (cleanTag, {
-		 init = fn () => (),
-		 flush = fn () => SIO.flushOut strm,
-		 close = fn () => SIO.flushOut strm
-		});
+	      TiltCleanUp.replace (cleanTag, fn () =>  SIO.flushOut strm);
 	      strm
 	    end
 
@@ -846,11 +826,7 @@ struct
 	    val (strm as SIO.OSTRM{cleanTag, ...}) =
 		  SIO.mkOutstream(OSPrimIO.stdErr(), IO.NO_BUF)
 	    in
-	      CleanIO.rebindCleaner (cleanTag, {
-		 init = fn () => (),
-		 flush = fn () => SIO.flushOut strm,
-		 close = fn () => SIO.flushOut strm
-		});
+	      TiltCleanUp.replace (cleanTag, fn () => SIO.flushOut strm);
 	      strm
 	    end
     in
@@ -860,11 +836,6 @@ struct
     val stdOut = mkOutstream(mkStdOut())
     val stdErr = mkOutstream(mkStdErr())
 
-  (* Establish a hook function to rebuild the I/O stack *)
-    val _ = CleanIO.stdStrmHook := (fn () => (
-	  setInstream (stdIn, mkStdIn());
-	  setOutstream (stdOut, mkStdOut());
-	  setOutstream (stdErr, mkStdErr())))
     end (* local *)
 
     fun print s = (output (stdOut, s); flushOut stdOut)

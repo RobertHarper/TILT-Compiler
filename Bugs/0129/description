@@ -6,18 +6,43 @@ Date:        08/16/02
 Version:     CVS
 System:      any
 Severity:    major
-Problem:     when run in harness, the output does not agree; when run by hand, output is correct.  race condition?
+Problem:
+
+	When run in harness, the output does not agree; when run by hand,
+	output is correct.  race condition?
 
 	The harness collects output in a pipe.  It is likely that (1) if
 	output is not to a tty, then TextIO does not flush at the end of
 	each line and (2) OS.Process.exit does not flushing buffers.
 
-Code:        
-	val _ = (TextIO.output (TextIO.stdOut, "hello\n")
-		 ; OS.Process.exit OS.Process.success)
-Transcript:  
-Comments:    
-Fix:         
+	The problem can be reproduced outside the test harness by printing
+	less than a line of text.  The following code does not print
+	anything.
+
+Code:
+
+	val _ = TextIO.output(TextIO.stdOut, "hello")
+	val _ = OS.Process.exit OS.Process.success
+
+Transcript:
+Comments:
+
+	OS.Process.exit is properly invoking TiltCleanUp.  The problem is
+	this is the only place in the entire Basis library that
+	TiltCleanUp is used; the code to flush output buffers is not being
+	installed with TiltCleanUp by the IO libraries.
+
+		../../Basis/Unix/os-process.sml
+		../../Basis/IO/text-io-fn.sml
+		../../Basis/IO/bin-io-fn.sml
+
+Fix:
+
+	Replaced our copy of the NJ structures CleanUp and CleanIO with a
+	single structure TiltCleanUp that has a simpler interface.
+	Changed OS.Process.atExit, OS.Process.exit, TextIO, and BinIO to
+	use TiltCleanUp.
+
 Test: m0088
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

@@ -115,7 +115,7 @@
 0126 [closed]	parsing identifiers incorrectly
 0127 [closed]	integer overflow discrepancy
 0128 [closed]	bombing on nonuniform datatypes
-0129 [open]	printing is lost under test harness
+0129 [closed]	printing is lost under test harness
 0130 [closed]	type_of failed in Reify2
 0138 [open]	Unimplemented functions in structure Date.
 0139 [closed]	filesys discrepancies

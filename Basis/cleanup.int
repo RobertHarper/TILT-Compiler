@@ -1,0 +1,12 @@
+structure TiltCleanUp :
+sig
+
+	type tag
+
+	val atExit : (unit -> unit) -> tag
+	val remove : tag -> unit
+	val replace : tag * (unit -> unit) -> unit
+
+	val exitting : unit -> unit
+
+end

@@ -150,7 +150,7 @@ m0084	pass	non-exhaustive match
 m0085	pass	generativity
 m0086	pass	opaque types
 m0087	pass	open scoping
-m0088	fail	[Bug #0129] exit status
+m0088	pass	exit status
 m0089	pass	overloading
 m0090	pass	patterns
 m0091	pass	polymorphic equality

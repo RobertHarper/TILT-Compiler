@@ -11,7 +11,6 @@ structure OS_Process :> OS_PROCESS =
   struct
 
     structure P_Proc = Posix.Process
-    structure CU = CleanUp
 
     type status = PreOS.Process.status (* int *)
 
@@ -44,20 +43,12 @@ structure OS_Process :> OS_PROCESS =
 		end
 	  (* end case *))
 
-    local
-      val hooks = ref ([] : (unit -> unit) list)
-      val _ = CU.addCleaner (
-	    "OS.Process",
-	    [CU.AtExit],
-	    fn _ => List.app (fn f => (f ()) handle _ => ()) (! hooks))
-    in
-    fun atExit hook = hooks := hook :: !hooks
-    end
+    val atExit : (unit -> unit) -> unit =
+	ignore o TiltCleanUp.atExit
 
     fun terminate x = P_Proc.exit(Word8.fromInt x)
-    fun exit sts = (CU.clean CU.AtExit; terminate sts)
+    fun exit sts = (TiltCleanUp.exitting(); terminate sts)
 
     val getEnv = Posix.ProcEnv.getenv
 
   end
-
