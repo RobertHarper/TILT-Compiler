@@ -244,3 +244,5 @@ m0099	reals
 m0100	reals
 m0101	reals
 m0102	reals
+m0103	modules
+m0104	special constants
