@@ -1,0 +1,16 @@
+Number: 0118
+Title:       syntax discrepancies
+Keywords:    syntax
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     we do not parse this file 
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0053
+Owner: rwh
+Status: open
