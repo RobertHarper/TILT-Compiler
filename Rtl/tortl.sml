@@ -1642,7 +1642,11 @@ struct
 		   end
 	     | Coercion_c {vars,from,to} =>
 		   error "Coercion types are not supposed to be constructors."
-	     | Annotate_c (_,c) => xcon'(state,name,c))
+	     | Annotate_c (_,c) => xcon'(state,name,c)
+	     | c => (print "\nConstructor is: \n";
+		     Ppnil.pp_con c;
+		     error "xcon'' got unexpected constructor"
+		     ))
       end
 
   
