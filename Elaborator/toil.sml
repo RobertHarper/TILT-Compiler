@@ -9,6 +9,7 @@
 structure Toil :> TOIL =
   struct
 
+    (* See ../Bugs/0050/description *)
     val EqPayAsYouGo = Stats.tt "EqPayAsYouGo"
 
     open AstHelp Il IlStatic IlUtil Ppil Pat

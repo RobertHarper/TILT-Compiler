@@ -54,6 +54,7 @@ bug151b	pass	order of imports and effects are correct
 bug151c	pass	implicit imports do not conflict with explicit imports
 bug151d	pass	name-mangling test [x] <- * <- * -> [x]
 bug152	pass	Incorrect matching of eqtype specs.
+bug153	fail	Sharing abstract type and eqtype specs.
 bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug155	fail	Type sharing fails on corner case.
 bug159	fail	Datatype replication.
@@ -61,6 +62,7 @@ bug163	pass	Pattern compiler causing elaborator to bomb.
 bug165	pass	Elaborator shadowing variables.
 bug166	pass	Elaborator adding classifiers with unbound, free variables to context.
 bug167	pass	Elaborator bombs on toplevel raise/handle/raise.
+bug168	pass	Real.fromString fails on nan and inf.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	Type variable syntax.
@@ -338,4 +340,3 @@ n135	pass	Denmark Core-SML accept test
 n136	pass	Denmark Core-SML accept test
 n137	pass	Denmark Core-SML accept test
 n138	fail	Denmark Core-SML accept test
-bug168  pass    [Bug #0168] Real.fromString fails on nan and inf.

@@ -48,6 +48,6 @@ Error: toil.sml: unresolved equality
 
 Comments:    
 Fix:         
-Test: *
-Owner: *
+Test: bug153
+Owner: swasey
 Status: open
