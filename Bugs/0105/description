@@ -6,10 +6,35 @@ Date:        08/16/02
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     unresolved overloading in test case, may be a discrepancy with mlton, but i'm not sure what is right
-Code:        
+Problem:     unresolved overloading
+
+	There are two problems.
+
+	First, given a series of unresolved overloading errors, TILT
+	was printing the first then bombing.  The compiler should
+	print all the errors then reject the user program.
+
+	Second, the code should elaborate; that is, the overloaded
+	special constants appear in a context that constrains their
+	type to Word8.word.
+
+Code:
+
+	(*$import Word8Vector *)
+	val b : Word8Vector.vector = Word8Vector.fromList []
+	val test10a:unit = ignore(Word8Vector.map (fn x => 0w2*x) b)
+
 Transcript:  
-Comments:    
+Comments:
+
+	Resolve_all_overloads was resolving top-level overloads in
+	LIFO order.  Using FIFO order fixed the bug.
+
+	Resolve_overloads was resolving functor- and structure-level
+	overloads in LIFO order.  Thus, the compiler failed on the
+	code in bugs.sml and bugf.sml.  Using FIFO order fixed the
+	bug.
+
 Fix:         
 Test: m0030
 Owner: swasey
