@@ -203,7 +203,7 @@ struct
     (*
 	A child created by fork' prints information about uncaught
 	exceptions.  A child created by fork pipes uncaught exception
-	information to the parent.  Fork' returns a function (that can
+	information to the parent.  Fork returns a function (that can
 	only be called once) to read the pipe and raise a related
 	exception in the parent.
     *)
