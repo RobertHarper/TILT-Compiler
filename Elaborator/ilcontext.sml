@@ -532,8 +532,8 @@ exception XXX
 
 
 
-    local structure Blast = mkBlast(type t = int)
-	open Blast
+    local 
+	open Blaster
 	val indent = ref 0 
 	fun push() = indent := (!indent) + 2
 	fun pop() = indent := (!indent) - 2

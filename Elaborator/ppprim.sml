@@ -1,6 +1,6 @@
 (* Primitives pretty-printer. *)
 functor Ppprim(structure ArgPrim : PRIM)
-	: PPPRIM where structure Prim = ArgPrim =
+	: PPPRIM where Prim = ArgPrim =
   struct
 
     structure Prim = ArgPrim
