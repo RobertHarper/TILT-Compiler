@@ -7,6 +7,7 @@ signature SEQUENCE =
 
     val length     : ('a,'b) sequence -> int
     val foldl      : (('a*'b) * 'c -> 'c) -> 'c -> ('a,'b) sequence -> 'c (* like foldl *)
+    val foldr      : (('a*'b) * 'c -> 'c) -> 'c -> ('a,'b) sequence -> 'c (* like foldl *)
     val foldl_acc  : (('a*'b) * 'c -> ('d*'e) * 'c) -> 'c -> ('a,'b) sequence -> ('d,'e) sequence * 'c
     val map    : (('a*'b) -> ('c*'d)) -> ('a,'b) sequence -> ('c,'d) sequence
     val map2    : (('a*'b) * ('c*'d) -> ('e*'f)) -> (('a,'b) sequence * ('c,'d) sequence) -> ('e,'f) sequence

@@ -10,6 +10,7 @@ struct
     fun fromList x = x
     fun toList x = x
     val foldl = foldl
+    val foldr = foldr
     val foldl_acc = Listops.foldl_acc
     val map = map
     val maptolist = map
