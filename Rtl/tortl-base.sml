@@ -265,10 +265,11 @@ struct
   fun reduce_to_sum str ({env,...}:state) (Prim_c(Sum_c{tagcount,totalcount,known}, [Crecord_c[]])) = 
       (tagcount, known, [])
   | reduce_to_sum str ({env,...}:state) sumcon = 
-      let val _ = (print "reduce_to_sum called with "; Ppnil.pp_con sumcon; print "\n")
+      let (* val _ = (print "reduce_to_sum called with "; Ppnil.pp_con sumcon; print "\n") *)
 	  val res = Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype)
 	      (env,sumcon)
 	  val (a,b,cons) = res
+(*
 	  val _ = (print "reduce_to_sum returning with "; 
 		   print (Int.toString (TilWord32.toInt a));
 		   print "   ";
@@ -278,6 +279,7 @@ struct
 		   print "   ";
 		   app (fn c => (Ppnil.pp_con c; print " ")) cons;
 		   print "\n\n")
+*)
       in  res
       end
       handle e => (print "reduce_to_sum "; print str; print " failed\n"; raise e)
