@@ -11,7 +11,8 @@ functor Pat(structure IlStatic : ILSTATIC
    :> PAT =
   struct
 
-      val do_result_type = ref true
+    val do_result_type = Stats.bool("PatResultType")
+    val _ = do_result_type :=  true
     
     type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con

@@ -1,4 +1,4 @@
-(*$import Il ILCONTEXT ILUTIL PPIL Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool *)
+(*$import Il ILCONTEXT ILUTIL PPIL Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool Stats *)
 (* Equality of contexts *)
 
 functor IlContextEq (structure IlContext : ILCONTEXT
@@ -7,14 +7,15 @@ functor IlContextEq (structure IlContext : ILCONTEXT
     :> ILCONTEXTEQ =
     struct
 
-	val debug = ref false
+	val debug = Stats.ff("IlcontexteqDebug")
+	val blast_debug = Stats.ff("BlastDebug")
+
 	nonfix mod
 
 	open Util
 	open IlContext
 	open Il
 
-	val blast_debug = ref false
 	fun error s = Util.error "IlContextEq" s
 
 	fun foldand f [] = true

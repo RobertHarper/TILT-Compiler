@@ -1,4 +1,4 @@
-(*$import PPPRIM PRIM Util Formatter Prim *)
+(*$import PPPRIM PRIM Util Formatter Prim Stats *)
 (* Primitives pretty-printer. *)
 functor Ppprim()
 	:> PPPRIM =
@@ -7,7 +7,7 @@ functor Ppprim()
     open Prim Formatter Util
 
     val error = fn s => error "ppprim.sml" s
-    val elide = ref false
+    val elide = Stats.ff("HilElide")
 
     fun pp_is_real W8 = String "8"
       | pp_is_real W16 = String "16"

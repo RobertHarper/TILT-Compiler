@@ -1,4 +1,4 @@
-(*$import TYVAR Listops Name Util List *)
+(*$import TYVAR Listops Name Util List Stats *)
 
 (* Type variables parameterized over types *)
 structure Tyvar :> TYVAR =
@@ -7,7 +7,7 @@ structure Tyvar :> TYVAR =
     open Listops Name Util
 
     val error = fn s => error "tyvar.sml" s
-    val debug = ref false
+    val debug = Stats.ff("TyvarDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
     val stamp = ref 0

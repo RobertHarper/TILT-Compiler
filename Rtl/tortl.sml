@@ -2775,6 +2775,8 @@ val simplify_type = fn state =>
 				      mutable_objects = get_mutable_objects(),
 				      mutable_variables = get_mutable_variables()}
 
+	     val _ = resetDepth()
+	     val _ = resetWork()
 	     val _ = reset_global_state ([], Name.VarSet.empty)
 
 	 in module

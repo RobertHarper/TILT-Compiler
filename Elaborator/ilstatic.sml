@@ -1,4 +1,4 @@
-(*$import Il ILCONTEXT PRIMUTIL PPIL ILUTIL Util Listops ILSTATIC *)
+(*$import Il ILCONTEXT PRIMUTIL PPIL ILUTIL Util Listops ILSTATIC Stats *)
 (* Static semantics *)
 functor IlStatic(structure IlContext : ILCONTEXT
 		 structure PrimUtil : PRIMUTIL
@@ -18,8 +18,9 @@ functor IlStatic(structure IlContext : ILCONTEXT
     open Prim Tyvar Name
 
     val error = fn s => error "ilstatic.sml" s
-    val trace = ref false
-    val debug = ref false
+    val trace = Stats.ff("IlstaticTrace")
+    val debug = Stats.ff("IlstaticFebug")
+
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun debugdo' t = t()
     fun fail s = raise (FAILURE s)

@@ -1,4 +1,4 @@
-(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT EQUAL *)
+(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT EQUAL Stats *)
 (* Equality compiler *)
 functor Equal(structure IlStatic : ILSTATIC
 	      structure IlUtil : ILUTIL
@@ -12,7 +12,7 @@ struct
 
     val elab_error = fn s => error "equal.sml: elaborator impossibility" s
     val error = fn s => error "equal.sml" s
-    val debug = ref false
+    val debug = Stats.ff("EqualDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
     fun con_normalize (arg as (ctxt,con)) = IlStatic.con_normalize arg handle e => con

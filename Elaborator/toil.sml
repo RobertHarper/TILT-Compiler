@@ -42,9 +42,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     val pat_error = fn s => error "toil.sml: pattern impossibility" s
     val elab_error = fn s => error "toil.sml: elaborator impossibility" s
     val error = fn s => error "toil.sml" s
-    val debug = ref false
-    val debug_coerce = ref false
-    val debug_coerce_full = ref false
+
+    val debug = Stats.ff("ToilDebug")
+
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun debugdo' t = (t(); ())
     fun nada() = ()
@@ -2480,7 +2480,6 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	      | _ => let val _ = debugdo (fn() =>
 					  (print "eq_table had "; print (Int.toString (length eq_table));
 					   print " things\n"))
-(*			 val _ = reset_elaboration fp *)
 			 val _ = reset_eq()
 			 val _ = eq_table_push()
 			 val _ = app eq_help eq_table 
@@ -2494,7 +2493,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			  NoError => SOME res
 			| Warn => SOME res
 			| Error => NONE)
-	val _ = reset_elaboration fp
+	val _ = reset_elaboration (Error.nofilepos)
       in result
       end
     

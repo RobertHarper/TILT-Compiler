@@ -1,4 +1,4 @@
-(*$import IL PPIL ILCONTEXT PRIMUTIL ILUTIL ListMergeSort *)
+(*$import IL PPIL ILCONTEXT PRIMUTIL ILUTIL ListMergeSort Stats *)
 (* Il Utility *)
 functor IlUtil(structure Ppil : PPIL
 	       structure IlContext : ILCONTEXT
@@ -16,7 +16,7 @@ functor IlUtil(structure Ppil : PPIL
     type tyvar = (context,con) Tyvar.tyvar
     exception BUG
     exception UNIMP
-    val debug = ref false
+    val debug = Stats.ff("IlutilDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
     val error = fn s => error "ilutil.sml" s
 

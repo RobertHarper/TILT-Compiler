@@ -1,4 +1,4 @@
-(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT ERROR SIGNATURE Bool *)
+(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT ERROR SIGNATURE Bool Stats *)
 
 (* Need to improve where_structure to use SIGNAT_OF *)
 
@@ -22,8 +22,9 @@ functor Signature(structure IlStatic : ILSTATIC
     fun pat_error s : 'a= Util.error "signature.sml pattern impossibility" s
     fun elab_error s : 'a = Util.error "signature.sml elaborator impossibility" s
 
-    val debug = ref false
-    val debug_full = ref false
+    val debug = Stats.ff("SignatureDebug")
+    val debug_full = Stats.ff("SignatureDebugFull")
+
     fun debugdo t = if (!debug) then (t(); ()) else ()
     type labels = label list
 

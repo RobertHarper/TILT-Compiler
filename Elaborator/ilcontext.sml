@@ -1,4 +1,4 @@
-(*$import IL ILCONTEXT Util Listops Name PPIL *)
+(*$import IL ILCONTEXT Util Listops Name PPIL Stats *)
 functor IlContext(structure Ppil : PPIL)
     :> ILCONTEXT =
 struct
@@ -24,8 +24,7 @@ struct
 	
     val error = fn s => error "ilcontext.sml" s
 	
-    val blast_debug = ref false
-    val debug = ref false
+    val debug = Stats.ff("IlcontextDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun join_path_labels (SIMPLE_PATH v, l) = COMPOUND_PATH(v,l)
       | join_path_labels (COMPOUND_PATH (v,ls), l) = COMPOUND_PATH(v,ls @ l)

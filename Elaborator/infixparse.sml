@@ -1,4 +1,4 @@
-(*$import INFIXPARSE Il PPIL AstHelp ListMergeSort *)
+(*$import INFIXPARSE Il PPIL AstHelp ListMergeSort Stats *)
 functor InfixParse(structure Ppil : PPIL)
   :> INFIXPARSE =
   struct
@@ -11,7 +11,7 @@ functor InfixParse(structure Ppil : PPIL)
     open Il
     open Util AstHelp Listops Name
 
-    val debug = ref false
+    val debug = Stats.ff("InfixParseDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
     val error = fn s => error "infixparse.sml" s
 

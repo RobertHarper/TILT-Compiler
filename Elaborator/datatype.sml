@@ -1,4 +1,4 @@
-(*$import IL ILSTATIC ILUTIL ILCONTEXT Name PPIL Ast GraphUtil ListMergeSort AstHelp DATATYPE *)
+(*$import IL ILSTATIC ILUTIL ILCONTEXT Name PPIL Ast GraphUtil ListMergeSort AstHelp DATATYPE Stats *)
 
 (* Datatype compiler and destructures of datatype signatures. *)
 functor Datatype(structure IlStatic : ILSTATIC
@@ -13,10 +13,11 @@ functor Datatype(structure IlStatic : ILSTATIC
     open Util Listops Name Tyvar
     open IlContext
 
-    val do_inline = ref true
+    val do_inline = Stats.tt("DatatypeInline")
+    val debug = Stats.ff("DatatypeDebug")
+
     val error = fn s => error "datatype.sml" s
     val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s 
-    val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
 
