@@ -34,6 +34,7 @@ structure AlphaIntegerConvention
   val returnPointer	= 26
   val globalPointer	= 29
   val stackPointer	= 30
+  val handlerPointer    = 27
   val threadPointer     = 12
   val heapPointer	= 13
   val heapLimit		= 14
@@ -51,7 +52,7 @@ structure AlphaIntegerConvention
 
   val available = sort (results @ callerSaves @ calleeSaves @ arguments @ [callPointer])
       
-  (* We exclude temporary2 and callPointer from dedicated *)
+  (* We exclude temporary2, handlerPointer, and callPointer from dedicated *)
   val dedicated = [zero, returnPointer, stackPointer, threadPointer,
 		   heapPointer, heapLimit, exceptionPointer,
 		   temporary1]

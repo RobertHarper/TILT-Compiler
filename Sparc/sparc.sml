@@ -51,6 +51,7 @@ structure Machine =
 			      since exnarg is active only when about to raise
 			      an exception which means we are not normally returning *)
 
+    val Rhandler = R 17 (* This register contains the exception handler's addr as we jump to it *)
     val Rat2    = R 17  (* Put our second temporary in a volatile *)
     val Rexnptr = R 1   (* non-volatile *)
     val Rhlimit = R 5   (* non-volatile *)

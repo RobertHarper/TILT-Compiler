@@ -154,6 +154,7 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
   value_t *to_ptr = (value_t *)toheap->bottom;
   range_t from_range, to_range;
   Queue_t *root_lists, *loc_roots;
+  long alloc = 0;
 
 #ifdef SEMANTIC_GARBAGE
   assert(0); /* unimplemented */
@@ -175,6 +176,8 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 
   assert(allocptr <= alloclimit);
   assert(req_size >= 0);
+  alloc = allocptr - fromheap->alloc_start;
+  fromheap->alloc_start = allocptr;
 
   /* Start timing this collection */
   root_lists = curThread->root_lists;
@@ -184,6 +187,10 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 #ifdef DEBUG
   debug_and_stat_before(saveregs, req_size);
 #endif
+
+  if (paranoid) {
+    paranoid_check_heap_global(fromheap);
+  }
 
   /* Compute the roots from the stack and register set */
   local_root_scan(sysThread,curThread,fromheap);
@@ -249,13 +256,11 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 
     if (paranoid) {
       paranoid_check_stack(curThread,fromheap);
-      scan_heap("Paranoid check heap",toheap->bottom, toheap->alloc_start,
-		toheap->top, toheap, SHOW_HEAPS);
+      paranoid_check_heap_global(toheap);
     }
 
   /* Resize the tospace by using the oldspace size and liveness ratio */
     {
-      long alloc = allocptr - fromheap->alloc_start;
       long old = fromheap->top - fromheap->bottom;
       long copied = ((value_t)to_ptr) - toheap->bottom;
       double oldratio = (double)(copied) / old;
@@ -290,7 +295,7 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
   typed_swap(Heap_t *, fromheap, toheap);
 
   /* Update systhread's allocation variables */
-  fromheap->alloc_start = to_ptr;
+  fromheap->alloc_start = (value_t) to_ptr;
   sysThread->alloc = fromheap->alloc_start;
   sysThread->limit = fromheap->top;
 

@@ -129,7 +129,9 @@ struct
 	      end
 	  
       in  (case (is_tag, nontagcount) of
-	       (true, _) => (VALUE(TAG known), state)
+	       (true, _) => if (known < 256) 
+				then (VALUE(TAG known), state)
+			    else ("Tag too large " ^ (Int.toString (w2i known)))
 	     | (_, 0) => error "Can't get here"
 	     | (_, 1) => single()
 	     | _ => multi())

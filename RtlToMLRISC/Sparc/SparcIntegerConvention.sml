@@ -32,6 +32,7 @@ structure SparcIntegerConvention
   val heapLimit		= 5
   val exceptionPointer	= 1
   val exceptionArgument = returnPointer
+  val handlerPointer    = 17
   val temporary1	= 16
   val temporary2	= 17
 

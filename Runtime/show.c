@@ -15,9 +15,11 @@ int ptr_check(value_t *loc, Heap_t *curHeap)
     return 1;
   if (IsGlobalData(pointer))
     return 1;
+  if (pointer == 258) /* Uninitialized pointer */
+    return 1;
   if (curHeap != NULL && pointer >= curHeap->bottom && pointer < curHeap->alloc_start)
     return 1;
-  printf("TRACE ERROR: ptr_check %d at %d failed\n",pointer,loc);
+  printf("TRACE ERROR: ptr_check %d at %d failed.  GC #%d\n",pointer,loc,NumGC);
   return 0;
 }
 
@@ -27,9 +29,9 @@ extern int heapstart;
 int data_check(value_t *loc, Heap_t *curHeap)
 {
   value_t i = *loc;
-  if (curHeap != NULL && i >= curHeap->bottom && i < curHeap->alloc_start)
+  if (verbose && curHeap != NULL && i >= curHeap->bottom && i < curHeap->alloc_start)
     printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
-  else if (i > heapstart)
+  else if (verbose && i > heapstart)
     printf("TRACE WARNING: data_check given int that is large enough to be pointer %d\n", i);
   return 1;
 }
@@ -52,8 +54,10 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 	int i;
 	int len = GET_RECLEN(tag);
 	int mask = GET_RECMASK(tag);
-	if (mask >> len) 
-	  printf("TRACE ERROR: Bad record tag %d\n", tag);
+	if (mask >> len) {
+	  printf("TRACE ERROR: Bad record tag %d at %d\n", tag, start);
+	  assert(0);
+	}
 	if (!checkonly)
 	  printf("%ld: REC(%d)    ", obj,len);
 	for (i=0; i<len; i++) {
@@ -169,12 +173,16 @@ void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *
 {
   if (NumGC < LEAST_GC_TO_CHECK)
     return;
-  printf("--------------HEAP CHECK START GC %d ------------------------------\n",NumGC);
-  printf("%s %d <= %d < %d\n",label,start,finish,top);
-  printf("--------------------------------------------------------------\n");
+  if (show) {
+    printf("--------------HEAP CHECK START GC %d ------------------------------\n",NumGC);
+    printf("%s %d <= %d < %d\n",label,start,finish,top);
+    printf("--------------------------------------------------------------\n");
+  }
   while (start < finish)
       start = show_obj(start,!show,curHeap);
-  printf("--------------HEAP CHECK END-----------------------------------\n\n");
+  if (show) {
+    printf("--------------HEAP CHECK END-----------------------------------\n\n");
+  }
 }
 
 #ifdef SEMANTIC_GARBAGE  

@@ -35,7 +35,7 @@ structure Machine =
     val Rhlimit = R 14  (* non-volatile *)
     val Rheap   = R 13  (* non-volatile *)
     val Rth     = R 12  (* non-volatile *)
-
+    val Rhandler = R 27
 
     val Fzero   = F 31  (* Standard Alpha convention *)
     val Fat     = F 30  (* volatile *)

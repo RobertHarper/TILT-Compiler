@@ -19,7 +19,14 @@ sig
      In C parlance, C externs are r-values, while ML externs
      are l-values.*)
 
-  datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR | THREADPTR
+  (* Special registers at the RTL level translate to actual registers at the lower Alpha/Sparc level.
+     The HANDLER, EXNSTACK, EXNARG, and STACK are exposed at this level to allow exceptions to be compiled.
+     It would be nice if these last 4 registers are unnecssary.  However, the implementation of
+     an exception stack requires allocation and the lower levels cannot correctly insert
+     allocation code given that the RTL code has performed GC coaslescing.
+   *)
+  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT | 
+                   HANDLER | EXNSTACK | EXNARG | STACK
 
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
@@ -165,63 +172,68 @@ sig
 
     | RETURN of regi                 (* address to return to *)
 
-    (* exceptions --- we implement exceptions by saving the
-       control state of the machine and the point to jump to
-       if an exception occurs.    The exnptr points to a
-       record containing this information.
+    (* Exceptions are implemented by maintaining a stack
+       of exception record.  Each exception record contains the
+       handler, its free variables, and the stack pointer where
+       the handler was installed.  The stack itself is implemented
+       by chaining together the exception records.  Thus,
+       the exception pointer is always a record with
+       the following format:
 
-       The record has the following format:
+	   . the pc to jump to if an exception occurs
+	   . the stack pointer to restore
+           . the handler's free variables
+           . the previous value of the exnptr
 
-	   . the pc to jump to if an exception occurs.
-	   . the stack pointer to restore.
-           . the previous value of the exnptr.
-           . a subset of the integer registers.
-           . either the tag 0 or an array of the subset of
-             the fp registers.
+       Four RTL instructions (PUSH_EXN, POP_EXN, THROW_EXN, and CATCH_EXN)
+       are used in the translation of the Nil level Handle_e and Raise_e.
+       Though the creation, installation, de-installation, and use of the
+       exeption record is made explicit in the translation to RTL,
+       we retain these abstract instructions since some of them, 
+       notably CATCH_EXN, still translate into platform-dependent
+       code.  Currently, PUSH_EXN, POP_EXN, THROW_EXN are no-ops
+       while CATCH_EXN translate into code that records the fact that
+       a handler has entered and some special calling convention code
+       on the Alpha.
 
-       SAVE_EXN, END_EXN, RESTORE_EXN are used by the Rtl
-       interpreter and in the translation to Alpha machine code.
-       In the Rtl interpreter, they manipulate the implicit
-       call stack.  Note that the stack pointer register, although
-       bogus at this stage, is explicitly changed by the RTL code.
-
-       - SAVE_EXN saves the call stack on an exception stack
-       - END_EXN pops the top entry of the exception stack and
-         throws it away.
-       - RESTORE_EXN pops the top entry of the exception stack and 
-         installs it as the control stack.
+       - PUSH_EXN adds a new entry to the exception stack
+       - POP_EXN  discards the top entry of the exception stack
+       - THROW_EXN jumps to the handler on the exception stack
+       - CATCH_EXN __assumes__ the stack pointer has been restored 
+                   by THROW_EXN or the code itself.  It also
+		   pops the control stack.
          
-       A handler is installed by 
-         (1) Allocating a new record of the handler, 
-	     previous exn pointer, stack pointer, and other regs
-	     that are needed by the handler.
-	 (2) Installing this record into the exn pointer.
-	 (3) Doing a SAVE_EXN
+       Nil.Handle_e(e,h) becomes
 
-       The handler itself 
-         (1) Restores stack pointer
-	 (2) Recovers previous exn pointer
-	 (3) Restores other register
-         (4) RESTORE_EXN
-	 (5) exn handler code
+       The expression e with the handler is translated as
+         (1) Allocating a record free containing all variables that need to be saved.
+	     Include the handler, the stack pointer, and the previous exnptr as the first 3 fields.
+	 (2) PUSH_EXN - nop
+         (3) Evaluates the expression e into register d (an exception may be raised here)
+	 (4) pop the exn record
+         (5) POP_EXN - nop
+	 (6) branch to after the handler
 
-       The code after the handler
-         (1) A label for the main code to branch to
-         (2) Begins with an END_EXN
-         (3) A label for the handler to branch to
+       The handler h itself follows next as
+         (1) CATCH_EXN which performs action that occurs after stack pointer restored
+	 (2) restore free variable record and pops the exn stack
+	 (3) restore free variables from free variable record
+	 (4) move EXNARG into exception variable register
+	 (5) the handler code h evaluating to destination register d
+	 (6) fall through to the code after the handler
 
-       A raise is compiled as 
-         (1) extract the new pc value from the exnrecord
-         (2) move the value associated with the
-	     exception to the exnarg.
-	 (3) jump to the new pc value.
+       A Nil.Raise_e is compiled as 
+         (1) THROW_EXN - nop
+	 (2) move exception into EXNARG
+	 (3) restore the stack pointer of top record of the exception stack
+         (4) branch to the handler of the top record of the exception stack
 
-       The code for a handler restores the integer registers
-       and fp registers, including the exnptr and stackptr.*)
+  *)
 
-    | SAVE_EXN
-    | END_EXN
-    | RESTORE_EXN
+    | PUSH_EXN
+    | POP_EXN
+    | THROW_EXN
+    | CATCH_EXN
 
     | LOAD32I  of ea * regi           (* displacements not scaled *)
     | STORE32I of ea * regi           (* unchecked stores *)
@@ -243,8 +255,7 @@ sig
     | SOFT_ZBARRIER of traptype
     | HARD_VBARRIER of traptype
     | HARD_ZBARRIER of traptype
-    | HANDLER_ENTRY          (* mark beginning of handler, which is target
-			        of an interprocedural jump *)
+
     | ILABEL of label
     | IALIGN of align       (* alignment of blocks *)
     | HALT                  (* needed for termination of main *)    

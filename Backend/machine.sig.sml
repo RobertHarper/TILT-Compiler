@@ -31,6 +31,7 @@ signature MACHINE =
     val Rhlimit : register   (* Heap limit pointer *)
     val Rexnarg : register   (* Exception argument *)
     val Rexnptr : register   (* Pointer to most-recently saved context *)
+    val Rhandler : register   (* Contains the handler address as we jump to it *)
     val Rpv     : register option   
                   (* A register that holds the address that we are 
 		   branching or jumping to.  Some calling conventions

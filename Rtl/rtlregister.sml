@@ -57,12 +57,13 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
       IHash.filter (fn _ => false) fregs)
 
    fun ireg2int (REGI  (v,_)) = Name.var2int v
-     | ireg2int (SREGI HEAPPTR) = 0
+     | ireg2int (SREGI HEAPALLOC) = 0
      | ireg2int (SREGI HEAPLIMIT) = 1
-     | ireg2int (SREGI EXNPTR) = 2
+     | ireg2int (SREGI EXNSTACK) = 2
      | ireg2int (SREGI EXNARG) = 3
-     | ireg2int (SREGI STACKPTR) = 4
+     | ireg2int (SREGI STACK) = 4
      | ireg2int (SREGI THREADPTR) = 5
+     | ireg2int (SREGI HANDLER) = 6
 
    fun update_ireg(ri,v) = 
      let val rib = ireg2int ri

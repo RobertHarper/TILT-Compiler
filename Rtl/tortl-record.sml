@@ -83,8 +83,9 @@ struct
 				   in  (add_data(DLABEL fieldl);
 					add_data(INT32 uninit_val);
 					add_instr(LADDR(fieldl,0,addr));
-					storeWithBarrier(addr, r, rep);
-					())
+					if (storeWithBarrier(addr, r, rep))
+					    then is_mutable := true
+					else ())
 				   end
 			   else 
 			       storenew(heapptr(),offset,r,rep)

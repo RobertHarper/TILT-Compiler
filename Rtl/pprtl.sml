@@ -71,12 +71,13 @@ struct
        end
 
   and regi2s (REGI(v,tf)) = (if !symbolic_name then var2s v else i2s(Name.var2int v)) ^ (rep2s tf)
-    | regi2s (SREGI HEAPPTR)  = "HEAPPTR"
+    | regi2s (SREGI HEAPALLOC)  = "HEAPALLOC"
     | regi2s (SREGI HEAPLIMIT)  = "HEAPLIMIT"
-    | regi2s (SREGI STACKPTR) = "STACKPTR"
-    | regi2s (SREGI THREADPTR)   = "THREADPTR"
-    | regi2s (SREGI EXNPTR)   = "EXNPTR"
-    | regi2s (SREGI EXNARG)   = "EXNARG"
+    | regi2s (SREGI THREADPTR)  = "THREADPTR"
+    | regi2s (SREGI STACK)      = "STACK"
+    | regi2s (SREGI EXNSTACK)   = "EXNSTACK"
+    | regi2s (SREGI EXNARG)     = "EXNARG"
+    | regi2s (SREGI HANDLER)    = "HANDLER"
 
 
   and regf2s (REGF(v,tf)) =
@@ -244,9 +245,12 @@ struct
 		    else (HOVbox [String " saved = ",pp_RegList' save]),
 		    String "}"]
               | RETURN r => plain["return", regi2s r]
-	      | SAVE_EXN => String "save_exn"
-              | END_EXN => String "end_exn"
-	      | RESTORE_EXN => String "restore_exn"
+
+	      | PUSH_EXN => String "push_exn"
+              | POP_EXN => String "pop_exn"
+	      | THROW_EXN => String "throw_exn"
+	      | CATCH_EXN => String "catch_exn"
+
 	      | LOAD32I a       => op2li "ldl" a
 	      | STORE32I a      => op2si "stl" a
 	      | LOAD8I a       => op2li "ldb" a
@@ -265,7 +269,6 @@ struct
 	      | (SOFT_ZBARRIER tt) => String ("soft_zbarrier" ^ (tt2s tt))
 	      | (HARD_VBARRIER tt) => String ("hard_vbarrier" ^ (tt2s tt))
 	      | (HARD_ZBARRIER tt) => String ("hard_zbarrier" ^ (tt2s tt))
-	      | HANDLER_ENTRY    => String "handler_entry"
 	      | IALIGN x        => String (".align "^align2s x)
 	      | ILABEL l        => String (label2s l^":")
 	      | HALT            => String ("halt")

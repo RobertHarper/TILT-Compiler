@@ -46,6 +46,11 @@ signature INTEGER_CONVENTION = sig
   val threadPointer: id
 
   (*
+   * The address of the exception handler when we jump to it is put here.
+   *)
+  val handlerPointer: id
+
+  (*
    * The address of the next heap value to be allocated and the end of the
    * heap.
    *)

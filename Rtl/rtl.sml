@@ -1,4 +1,4 @@
-(*$import RTL TilWord32 Name *)
+(*$import RTL TilWord32 Name Util *)
 
 fun in_imm_range x =  TilWord32.ult(x,0w255)
 fun in_ea_disp_range x = x >= ~32768 andalso x<32768
@@ -11,12 +11,14 @@ struct
     val eq_var = Name.eq_var
     val fresh_var = Name.fresh_var
     val fresh_named_var = Name.fresh_named_var
-
+    fun error str = Util.error "rtl.sml" str
+    
     datatype label = ML_EXTERN_LABEL of string
                    | LOCAL_DATA of string
                    | LOCAL_CODE of string
 
-  datatype sregi = HEAPPTR | HEAPLIMIT | EXNPTR | EXNARG | STACKPTR | THREADPTR
+  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT | 
+                   HANDLER | EXNSTACK | EXNARG | STACK
   datatype regi = REGI of var * rep  (* int in var is register # *)
                 | SREGI of sregi
 
@@ -55,15 +57,19 @@ struct
     | eqreg (F fr1, F fr2) = eqregf(fr1,fr2)
     | eqreg _ = false
 
-  fun sregi2int HEAPPTR = 0
+  fun sregi2int HEAPALLOC = 0
     | sregi2int HEAPLIMIT = 1
-    | sregi2int STACKPTR = 2
+    | sregi2int STACK = 2
     | sregi2int THREADPTR = 3
-    | sregi2int EXNPTR = 4
+    | sregi2int EXNSTACK = 4
     | sregi2int EXNARG = 5
+    | sregi2int HANDLER = 6
 
   (* This is okay since variable number start at 256 *)
-  fun regi2int (REGI (v,_)) = Name.var2int v
+  fun regi2int (REGI (v,_)) = let val n = Name.var2int v
+				  val _ = if (n < 256) then error "variable number < 256" else ()
+			      in  n
+			      end
     | regi2int (SREGI sregi) = sregi2int sregi
 
  (* effective address: register + sign-extended displacement *) 
@@ -161,11 +167,11 @@ struct
 	       save : reg list}
     | RETURN of regi                 (* address to return to *)
 
-    (* see signature for comments *)
 
-    | SAVE_EXN
-    | END_EXN
-    | RESTORE_EXN
+    | PUSH_EXN
+    | POP_EXN
+    | THROW_EXN
+    | CATCH_EXN
 
     | LOAD32I    of ea * regi          
     | STORE32I   of ea * regi
@@ -186,7 +192,6 @@ struct
     | HARD_VBARRIER of traptype
     | HARD_ZBARRIER of traptype
 
-    | HANDLER_ENTRY
     | ILABEL of label
     | IALIGN of align
     | HALT

@@ -292,40 +292,16 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
 }
 
 
-void paranoid_check_heap(Heap_t *fromspace, Heap_t *tospace)
+void paranoid_check_heap_global(Heap_t *curSpace)
 {
     int count = 0, mi, i;
-  /* check to-space */
-    for (count = tospace->bottom; count < tospace->alloc_start; count +=4)
-      {
-	int *data_add = (int *)count;
-	int data = *data_add;
-	static int newval = 52000;
-	if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
-	  {
-	    printf("TRACE ERROR*(%d): to-space loc %d has from-space value %d changing to %d\n", 
-		   NumGC, data_add, data, newval);
-	    *data_add = newval;
-	    newval++;
-	  }
-      }
-  /* check globals */
+    scan_heap("Paranoid check heap",curSpace->bottom, curSpace->alloc_start, 
+	      curSpace->top, curSpace, SHOW_HEAPS);
+    /* check globals */
     for (mi=0; mi<module_count; mi++) {
-      value_t *current = (value_t *)((&GLOBALS_BEGIN_VAL)[mi]);
-      value_t *stop = (value_t *)((&GLOBALS_END_VAL)[mi]);
-      for ( ; current < stop; current++)
-	{
-	  static int newval = 72000;
-	  value_t data = *current;
-	  if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
-	    {
-	      printf("TRACE ERROR*: global has a from space value after collection");
-	      printf("   cursor = %d   data = %d",current,data);
-	      printf("      changing to %d\n", newval);
-	      *current = newval;
-	      newval++;
-	    }
-	}
+      value_t start = (&GLOBALS_BEGIN_VAL)[mi];
+      value_t stop = (&GLOBALS_END_VAL)[mi];
+      scan_heap("Paranoid check global",start,stop,stop, curSpace, SHOW_HEAPS);
     }
 }
 

@@ -307,14 +307,16 @@ struct
 
 
 
-   fun location2rep(REGISTER(_,I (SREGI HEAPPTR))) = NOTRACE_INT
+   fun location2rep(REGISTER(_,I (SREGI HEAPALLOC))) = NOTRACE_INT
      | location2rep(REGISTER(_,I (SREGI HEAPLIMIT))) = NOTRACE_INT
-     | location2rep(REGISTER(_,I (SREGI EXNPTR))) = TRACE
+     | location2rep(REGISTER(_,I (SREGI EXNSTACK))) = TRACE
      | location2rep(REGISTER(_,I (SREGI EXNARG))) = TRACE
-     | location2rep(REGISTER(_,I (SREGI STACKPTR))) = NOTRACE_INT
+     | location2rep(REGISTER(_,I (SREGI STACK))) = NOTRACE_INT
      | location2rep(REGISTER(_,I (SREGI THREADPTR))) = NOTRACE_INT
+     | location2rep(REGISTER(_,I (SREGI HANDLER))) = NOTRACE_CODE
      | location2rep(REGISTER(_,I (REGI (_,rep)))) = rep
-     | location2rep(REGISTER(_,F _)) = NOTRACE_REAL
+     | location2rep(REGISTER(_,F (REGF (_, NOTRACE_REAL)))) = NOTRACE_REAL
+     | location2rep(REGISTER(_,F _)) = error "float reg has weird rep. not NOTRACE_REAL"
      | location2rep(GLOBAL(_,rep)) = rep
    fun value2rep(VOID rep) = rep
      | value2rep(INT _) = NOTRACE_INT
@@ -364,34 +366,6 @@ struct
 			     in  pathcase(v,indices)
 			     end))
        end
-
-   fun loc2rep location =
-       (case location of
-	    REGISTER (_,reg) =>
-		(case reg of
-		     F (REGF(_,frep)) => frep
-		   | I (REGI(_,irep)) => irep
-		   | I (SREGI EXNPTR) => TRACE
-		   | I (SREGI EXNARG) => TRACE
-		   | I (SREGI HEAPPTR) => NOTRACE_INT
-		   | I (SREGI HEAPLIMIT) => NOTRACE_INT
-		   | I (SREGI STACKPTR) => NOTRACE_INT
-		   | I (SREGI THREADPTR) => NOTRACE_INT)
-	  | GLOBAL (_,rep) => rep)
-	    
-  fun val2rep value =
-      (case value of
-	   INT _ => NOTRACE_INT
-	 | TAG _ => TRACE
-	 | REAL _ => NOTRACE_REAL
-	 | RECORD _ => TRACE
-	 | LABEL _ => TRACE (* LABEL the whole idea of varval2rep is suspect *)
-	 | CODE _ => NOTRACE_CODE
-	 | VOID r => r)
-
-  fun term2rep (VALUE value) = val2rep value
-    | term2rep (LOCATION location) = loc2rep location
-
 
 
 
@@ -615,28 +589,11 @@ struct
 	    handle _ => NONE)
     | in_ea_range _ _ = NONE
 
-
-
-
-
-
  
-  (* printing functions *)
-  fun regi2s (Rtl.REGI (v,_)) = var2string v
-    | regi2s (Rtl.SREGI HEAPPTR) = "HEAPPTR"
-    | regi2s (Rtl.SREGI HEAPLIMIT) = "HEAPLIMIT"
-    | regi2s (Rtl.SREGI STACKPTR) = "STACKPTR"
-    | regi2s (Rtl.SREGI THREADPTR) = "THREADPTR"
-    | regi2s (Rtl.SREGI EXNPTR) = "EXNPTR"
-    | regi2s (Rtl.SREGI EXNARG) = "EXNARG"
 
-  fun regf2s (Rtl.REGF (v,_)) = var2string v
-  fun reg2s (I x) = regi2s x
-    | reg2s (F x) = regf2s x
-
-  val heapptr  = SREGI HEAPPTR
-  val stackptr = SREGI STACKPTR
-  val exnptr   = SREGI EXNPTR
+  val heapptr  = SREGI HEAPALLOC
+  val stackptr = SREGI STACK
+  val exnptr   = SREGI EXNSTACK
   val exnarg   = SREGI EXNARG
 
 
@@ -1162,9 +1119,7 @@ struct
       in merge (tmps,dest)
       end
     fun iclone (REGI(_,rep)) = alloc_regi(rep)
-      | iclone (SREGI EXNARG) = alloc_regi(TRACE)
-      | iclone (SREGI EXNPTR) = alloc_regi(TRACE)
-      | iclone (SREGI _) = alloc_regi(NOTRACE_INT)
+      | iclone (SREGI sreg) =  error "cannot shuffle special registers"
     fun fclone (_ : regf) = alloc_regf()
     fun clone (I ir) = I(iclone ir)
       | clone (F fr) = F(fclone fr)

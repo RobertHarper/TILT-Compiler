@@ -254,6 +254,9 @@ struct
 			       Prim_c(Int_c Prim.W8, []) => charVector()
 			     | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
 			     | _ => wordVector())
+		  val _ = if (numElem = 0w0)
+			       then add_data(INT32 0w0)
+			   else ()
 	      in  (VALUE(LABEL label), state)
 	      end
       in
@@ -498,13 +501,13 @@ struct
 				 new_gcstate state)))
 		  end
 
-	    | Raise_e (exp, _) =>
-		  let val (I ir,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
-		      val newpc = alloc_regi NOTRACE_CODE
+	    | Raise_e (exp, _) => (* Restore the stack pointer for CATCH_EXN to use *)
+		  let val (I except,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
 		      val rep = niltrace2rep state trace
-		  in  record_project(exnptr,0,newpc);
-		      add_instr(MV (ir,exnarg));
-		      add_instr (JMP(newpc,nil));
+		      val _ = add_instr(MV(except,exnarg))
+		      val _ = record_project(exnptr,0,SREGI HANDLER)
+		      val _ = record_project(exnptr,1,SREGI STACK)
+		  in  add_instr(JMP(SREGI HANDLER,[]));
 		      (VALUE(VOID rep), state)
 		  end
             (* --- We rely on the runtime to unwind the stack so we don't need to save the
@@ -514,115 +517,123 @@ struct
 		  let
 		      (* compute free variables that need to be saved for handler *)
 
-
 		      local
-			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,TraceKnown (valOf(TraceOps.get_trace (NilContext.empty (), NilUtil.exn_con))), NilUtil.match_exn)],
-						    handler_body)
-			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body')
-			  val evar_reps = map (fn v => #1(getrep state v)) free_evars
-			  val free_cvars = (List.filter 
+			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body)
+			  (* Include only constructors that have locations *)
+			  val cTerms = List.mapPartial
 					    (fn v => (case (getconvarrep' state v) of
-							  NONE => false
-							| SOME _ => true)) free_cvars)
-			  val cvar_reps = map (fn v => #1(getconvarrep state v)) free_cvars
-			  val vlopts = cvar_reps @ evar_reps
-			  fun loop [] (irep,ir,fr) = (irep,ir,fr)
-			    | loop (vlopt::rest) (irep,ir,fr) = 
-			      (case vlopt of
-				   SOME(REGISTER (_,I (r as (REGI (_,rep))))) => loop rest 
-				       (rep::irep,r::ir,fr)
-				 | SOME(REGISTER (_,I (SREGI _))) => error "SREGI free in handler!!!"
-				 | SOME(REGISTER (_,F r)) => loop rest (irep,ir,r::fr)
-				  (* don't need to save globals - or varval only *)
-				 | SOME(GLOBAL _) => loop rest (irep,ir,fr)
-				 | NONE => loop rest (irep,ir,fr))
-		      in
-			  val (local_int_reps,local_iregs, local_fregs) = loop vlopts ([],[],[])
+							  NONE => NONE
+							| SOME (SOME loc, _) => SOME (LOCATION loc)
+							| _ => NONE)) free_cvars
+			  (* Drop the exception variables - include only locations *)
+			  val eTerms = List.mapPartial 
+			                    (fn v => 
+					     if (eq_var(v,exnvar)) then NONE else
+					     (case (getrep state v) of
+							 (_, SOME v) => NONE
+						       | (SOME l, _) => SOME(LOCATION l)
+						       | _ => error "eTerm wrong")) free_evars
+			  val terms = eTerms @ cTerms
+			  fun folder (term, acc as (ir,it,fr,ft)) = 
+			      (case term of
+				   LOCATION(REGISTER (_,I (r as (REGI _)))) => (r::ir,term::it,fr,ft)
+				 | LOCATION(REGISTER (_,I (SREGI _))) => error "SREGI free in handler!!!"
+				 | LOCATION(REGISTER (_,F r)) =>  (ir,it,r::fr,term::ft)
+				  (* don't need to save globals locations or values *)
+				 | LOCATION(GLOBAL _) => acc
+				 | VALUE _ => acc)
+		      in  val (freeIregs, freeIterms, freeFregs, freeFterms) = 
+			            foldl folder ([],[],[],[]) terms
 		      end
 
 
-
 		      val hl = fresh_code_label "exn_handler"
-		      val body_after = fresh_code_label "exn_after"
-		      val handler_after = fresh_code_label "exn_after"
-		      val hlreg = alloc_regi NOTRACE_CODE
+		      val handler_after = fresh_code_label "exn_handler_after"
 
-		      val (fpbase,bstate) = (* --- save the floating point values, if any *)
-			  (case local_fregs of
+		      (* --- save the floating point values, if any *)
+		      val (fpbase,bstate) = 
+			  (case freeFterms of
 			       [] => (NONE,state)
-			     | _ => let val vv = map (fn freg => LOCATION(REGISTER(false,F freg))) local_fregs
-				        val (ir,state) = fparray(state,vv)
-				    in  (SOME ir, state)
+			     | _ => let val (farray,state) = fparray(state,freeFterms)
+				    in  (SOME farray, state)
 				    end)
 
+		      (* --- create the record of free variables *)
+		      val freeTerms = 
+			  (case fpbase of
+			       NONE => freeIterms 
+			     | SOME farrayTerm => freeIterms @ 
+				   [LOCATION(REGISTER (false, I farrayTerm))])
+		      val (freeRecTerm,bstate) = make_record(bstate, freeTerms)
 
-		      (* --- create the exn record and set the exnptr to it to install it *)
-		      val int_vallocs = (map (fn ireg => LOCATION(REGISTER(false,I ireg)))
-					 ([hlreg, stackptr,exnptr] @ local_iregs))
+		      (* --- create and install exn record --- *)
+		      val hlreg = alloc_regi NOTRACE_CODE
 		      val _ = add_instr(LADDR(hl,0,hlreg))
-		      val (new_exnrec,bstate) = make_record(bstate, int_vallocs)
-		      val _ = load_ireg_term(new_exnrec, SOME exnptr)
-		      val _ = add_instr SAVE_EXN 
+		      val handlerTerm = LOCATION(REGISTER (false, I hlreg))
+		      val stackptrTerm = LOCATION(REGISTER (false, I (SREGI STACK)))
+		      val exnptrTerm = LOCATION(REGISTER (false, I (SREGI EXNSTACK)))
+		      (* The ordering of fields in the exnrecord is used by the translation
+		         of Raise_e and the global_exnrec of service_*.s *)
+		      val (exnRecTerm,bstate) = make_record(bstate, [handlerTerm, stackptrTerm, 
+								     freeRecTerm, exnptrTerm])
+		      val freeRec = load_ireg_term(exnRecTerm,NONE)
+		      val _ = add_instr(MV(freeRec, SREGI EXNSTACK))
+		      val _ = add_instr PUSH_EXN
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
 		      val (reg,bstate) = xexp'(bstate,name,exp,trace,NOTID)
-		      val _ = record_project(exnptr,2,exnptr)
-		      val _ = add_instr(BR body_after)
-
+		      val _ = record_project(exnptr,3,exnptr)
+		      val _ = add_instr POP_EXN
+		      val _ = add_instr(BR handler_after)
 
 		      (* --- now the code for handler --- *)
-		      val _ = add_instr(ILABEL hl)
+		      val _ = add_instr (ILABEL hl)
+		      val _ = add_instr CATCH_EXN
+		                                     (* This translates to updating maxsp so it
+						       relies on stack pointer having been fixed
+						       already by Raise_e.
+						       This must occur first in the handler.
+						     *)
 
-		      (* --- restore the int registers - stack-pointer FIRST --- *)
+		      (* --- pop the exn record ---- *)
+		      val freeRec = alloc_regi TRACE
+		      val _ = record_project(exnptr,2,freeRec)
+		      val _ = record_project(exnptr,3,exnptr)
+
+		      (* --- restore the int registers ---- *)
 		      val _ = let 
-				  val int_regs =
-				      (case fpbase of
-					   SOME r => [stackptr, exnptr, r] 
-					 | NONE => [stackptr, exnptr]) @ local_iregs
 				  fun f (h :: t,offset) =
-				      let val _ = if eqregi(h,exnptr) 
-						      then ()
-						  else record_project(exnptr,offset,h)
-				      in  f (t,offset+1)
-				      end
-				    | f (nil,offset) = ()
-			      in f (int_regs,1)
+					 (record_project(freeRec,offset,h);
+					  f (t,offset+1))
+				    | f ([],offset) = ()
+			      in f ((case fpbase of
+					 SOME base => freeIregs @ [base]
+				       | _ => freeIregs), 0)
 			      end
 
-
-		      (* --- restore the float registers --- *)			  
-		      val _ = let fun f (base, h :: t,offset) = 
+		      (* --- restore the float registers, if any --- *)			  
+		      val _ = let fun f (base : regi, h :: t,offset) = 
 			                    (add_instr(LOADQF(EA(base,offset),h));
 					     f (base, t,offset+8))
 				    | f (base,nil,offset) = ()
 			      in (case fpbase of
-				      SOME base => f (base,local_fregs,0)
+				      SOME (base : regi)=> f (base,freeFregs,0)
 				    | NONE => ())
 			      end
-			  
-		      (* --- now that stack-pointer is restored, 
-		         ---    we can move the exn arg 
-		         ---    we can call new_gcstate 
-		         ---    note that since the exnarg and ra register are the same
-		                  the exn arg must be moved before the gc_check *)
-		      val xr = alloc_named_regi exnvar TRACE
-		      val _ = add_instr(MV(exnarg,xr))
-		      val _ = add_instr RESTORE_EXN (* This translates to updating maxsp *)
+
+		      val xr = alloc_regi TRACE
+		      val _ = add_instr(MV(SREGI EXNARG, xr))
 		      val hstate = new_gcstate state
 		      val hstate = add_reg (hstate,exnvar,Prim_c(Exn_c,[]),I xr)
 
-
-                      (* --- restore exnptr; compute the handler; move result into same register
+                      (* --- compute the handler; move result into same register
                              as result reg of expression; add after label; and fall-through *)
-		      val _ = record_project(exnptr,2,exnptr)
 		      val (hreg,hstate) = xexp'(hstate,name,handler_body,trace,context)
 		      val _ = (case (hreg,reg) of
 				   (I hreg,I reg) => add_instr(MV(hreg,reg))
 				 | (F hreg,F reg) => add_instr(FMV(hreg,reg))
 				 | _ => error "hreg/ireg mismatch in handler")
-		      val _ = add_instr(ILABEL body_after)
-		      val _ = add_instr RESTORE_EXN
 		      val _ = add_instr(ILABEL handler_after)
 
 		      val state = join_states[state,bstate,hstate]
@@ -1403,15 +1414,15 @@ struct
 	  fun mk_ptr' i = (true, VALUE (TAG (TW32.fromInt i)), state)
 	  fun mk_sum (state,preTerms,cons) = 
 	      let fun folder (c,(const,s)) =
-		       let val (const',c,s) = xcon'(s,fresh_named_var "xcon_sum",c)
-		       in (c,(const andalso const', s))
+		       let val (const',t,s) = xcon'(s,fresh_named_var "xcon_sum",c)
+		       in (t,(const andalso const', s))
 		       end
 		  val (postTerms,(const,state)) = foldl_list folder (true,state) cons
 		  val terms = preTerms @ postTerms
-		  val (lv,state) = if const 
+		  val (res,state) = if const 
 				       then make_record_const(state, terms, NONE)
 				   else make_record(state,terms)
-	      in (const, lv, state)
+	      in (const, res, state)
 	      end
 	  fun mktag i = (VALUE (INT (TW32.fromInt i)))
 	  open Prim
@@ -1773,6 +1784,8 @@ struct
 	     val _ = msg "tortl - returned from worklist now\n"
 
 	     val _ = add_data(COMMENT("Module closure"))
+	     val {dynamic,static=moduleClosureTag} = Rtltags.recordtag [NOTRACE_CODE, TRACE, TRACE]
+	     val _ = add_data(INT32(moduleClosureTag))
 	     val _ = add_data(DLABEL(mainName))
 	     val _ = add_data(DATA(mainCodeName))
 	     val _ = add_data(INT32(0w0))

@@ -549,6 +549,9 @@ Pprtl Rtl/pprtl
 TORTLBASE Rtl/tortl-base.sig
 TortlBase Rtl/tortl-base
 
+TORTLRECORD Rtl/tortl-record.sig
+TortlRecord  Rtl/tortl-record
+
 TORTLSUM Rtl/tortl-sum.sig
 TortlSum  Rtl/tortl-sum
 

@@ -106,6 +106,7 @@ thunk_loop:
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$2, 8($at)				# fetch term env
 	lda	EXNPTR_REG, global_exnrec		# install global handler
+	stl	$sp, 4(EXNPTR_REG)			# initialize the stack pointer
 	jsr	$26,  ($27)				# jump to thunk
 start_client_retadd_val:	
 	br	$gp, dummy
@@ -244,10 +245,11 @@ Divide_exncon:
 
  # a triple to represent the top-level exn record
 	.align 4
-	.long   (3 << 27) + (0 << 3) + 0
+	.long   (0 << 24) + (4 << 3) + 0
 global_exnrec:
 	.long	global_exnhandler
 	.long   0
+	.long   0	
 	.long	0
 
 	.align 4

@@ -101,12 +101,13 @@ struct
 					    translateRep Rtl.UNSET)
      | internal_translateRep _ rep = translateRep rep	
 
-   fun translateSReg Rtl.HEAPPTR = Rheap
+   fun translateSReg Rtl.HEAPALLOC = Rheap
      | translateSReg Rtl.HEAPLIMIT = Rhlimit
-     | translateSReg Rtl.STACKPTR = Rsp
+     | translateSReg Rtl.STACK = Rsp
      | translateSReg Rtl.THREADPTR = Rth
-     | translateSReg Rtl.EXNPTR = Rexnptr
+     | translateSReg Rtl.EXNSTACK = Rexnptr
      | translateSReg Rtl.EXNARG = Rexnarg
+     | translateSReg Rtl.HANDLER = Rhandler
      
    fun translateIReg (Rtl.REGI (v, rep)) = 	
        (tracemap := Regmap.insert(!tracemap,R (Name.var2int v),internal_translateRep v rep);
@@ -881,14 +882,18 @@ struct
      | translate (Rtl.RETURN rtl_Raddr) =
           emit (BASE (RTL (RETURN {results = ! current_res})))
 
-     | translate (Rtl.SAVE_EXN) = ()
-     | translate (Rtl.END_EXN) = ()
-     | translate (Rtl.RESTORE_EXN) = 
-	  let val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
+     | translate (Rtl.PUSH_EXN) = ()
+     | translate (Rtl.POP_EXN) = ()
+     | translate (Rtl.THROW_EXN) = ()
+     | translate (Rtl.CATCH_EXN) = 
+	  let val sp = Rtl.SREGI Rtl.STACK
+	      val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 	      val tmp2 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-	  in  translate(Rtl.LOAD32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
-	      translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACKPTR,Rtl.REG tmp1,tmp2));
-	      translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACKPTR), tmp1));
+	  in  emit (BASE (RTL HANDLER_ENTRY));                  (* indicator to restore callee-save *)
+	      emit (SPECIFIC (LOADI(LDGP, Rgp, 0, Rpv)));       (* fix GP *)
+	      translate(Rtl.LOAD32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
+	      translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACK,Rtl.REG tmp1,tmp2));
+	      translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACK), tmp1));
 	      translate(Rtl.STORE32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
 	  end
 
@@ -964,7 +969,6 @@ struct
 		     val end_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val store_loc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val Rskip = Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-		     val rtl_heap = Rtl.SREGI(Rtl.HEAPPTR)
 		     val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
 		 in  app translate [Rtl.LADDR(writelist_cursor,0,cursor_addr),
 				    Rtl.LOAD32I(Rtl.EA(cursor_addr,0),cursor_val),
@@ -1059,14 +1063,6 @@ struct
        (* HALT is a no-op from the translator's point of view *)
           ()
 
-
-       (* HANDLER_ENTRY: the start of handler. *)
-
-     | translate Rtl.HANDLER_ENTRY =  
-	 (* Fix $gp *)
-	 (emit (BASE (RTL HANDLER_ENTRY));
-	  emit (SPECIFIC (LOADI(LDGP, Rgp, 0, Rpv))))
-	  
 
    (* Translates an entire Rtl procedure *)
    fun translateProc (Rtl.PROC {name, args, code, known, results, return, 

@@ -1,4 +1,4 @@
-(*$import TopLevel BASIC_BLOCK CALL_CONVENTION_BASIS CELLS CALL_CONVENTION REGISTER_ALLOCATION FLOAT_CONVENTION INTEGER_CONVENTION REGISTER_LIVENESS DenseIntSet MLRISC_CONSTANT MLRISC_PSEUDO MLRISC_REGION MLTREECOMP MLTREE_EXTRA REGISTER_SPILL_MAP REGISTER_TRACE_MAP Name SPILL_RELOAD SPILL_FRAME TRACETABLE EMIT_RTL DenseRegisterMap Rtl Label Core *)
+(*$import TopLevel BASIC_BLOCK CALL_CONVENTION_BASIS CELLS CALL_CONVENTION REGISTER_ALLOCATION FLOAT_CONVENTION INTEGER_CONVENTION REGISTER_LIVENESS DenseIntSet MLRISC_CONSTANT MLRISC_PSEUDO MLRISC_REGION MLTREECOMP MLTREE_EXTRA REGISTER_SPILL_MAP REGISTER_TRACE_MAP Name SPILL_RELOAD SPILL_FRAME TRACETABLE EMIT_RTL DenseRegisterMap Rtl Label Core Util *)
 
 (* =========================================================================
  * EmitRtlMLRISC.sml
@@ -419,12 +419,13 @@ functor EmitRtlMLRISC(
        * -> the Rtl register id
        * <- the MLRISC register number
        *)
-      fun lookupSpecial Rtl.HEAPPTR   = IntegerConvention.heapPointer
+      fun lookupSpecial Rtl.HEAPALLOC   = IntegerConvention.heapPointer
 	| lookupSpecial Rtl.HEAPLIMIT = IntegerConvention.heapLimit
-	| lookupSpecial Rtl.EXNPTR    = IntegerConvention.exceptionPointer
+	| lookupSpecial Rtl.EXNSTACK    = IntegerConvention.exceptionPointer
 	| lookupSpecial Rtl.EXNARG    = IntegerConvention.exceptionArgument
-	| lookupSpecial Rtl.STACKPTR  = IntegerConvention.stackPointer
+	| lookupSpecial Rtl.STACK  = IntegerConvention.stackPointer
 	| lookupSpecial Rtl.THREADPTR  = IntegerConvention.threadPointer
+	| lookupSpecial Rtl.HANDLER  = IntegerConvention.handlerPointer
 
       fun lookupGeneral register =
 	    RegisterTraceMap.lookup lookupGeneral traceMap register
@@ -1228,15 +1229,16 @@ functor EmitRtlMLRISC(
 			       MLTree.MV(heapLimit, MLTree.LOAD32(limit, memory))]]
 	  end
 
-    fun RETURN _ =
-	  raise InvalidRtl "should have been translated to a branch"
+    fun error str = raise InvalidRtl str
+    fun RETURN _ = error "should have been translated to a branch"
 
-    fun SAVE_EXN() = []
-
-    fun RESTORE_EXN() =
+    fun PUSH_EXN _ = error "SAVE_EXN not done"
+    fun POP_EXN _ = error "POP_EXN not done"
+    fun CATCH_EXN _ = (* reset global pointer??? *)
 	  [MLTree.CODE(CallConventionBasis.getAssignment(Procedure.saves()))]
+    fun THROW_EXN _ = error "THROW_EXN not done"
 
-    fun END_EXN() = []
+
 
     fun LOAD32I(address, dest) =
 	  [MLTree.CODE[MLTree.MV(dest, MLTree.LOAD32(address, memory))]]
@@ -1312,8 +1314,6 @@ functor EmitRtlMLRISC(
     val HARD_ZBARRIER = []
 
     val HALT = []
-
-    val HANDLER_ENTRY = [] (* should set global pointer on alpha !!! *)
 
     fun ILABEL label =
 	  [MLTree.DEFINELABEL label]
@@ -1423,12 +1423,10 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.JMP(src, targets)) =
 	  JMP(srcReg src, map label targets)
 
-      | translateInstruction(Rtl.SAVE_EXN) =
-	  SAVE_EXN()
-      | translateInstruction(Rtl.END_EXN) =
-	  END_EXN()
-      | translateInstruction(Rtl.RESTORE_EXN) =
-	  RESTORE_EXN()
+      | translateInstruction(Rtl.PUSH_EXN) = PUSH_EXN()
+      | translateInstruction(Rtl.POP_EXN) = POP_EXN()
+      | translateInstruction(Rtl.THROW_EXN) = THROW_EXN()
+      | translateInstruction(Rtl.CATCH_EXN) = CATCH_EXN()
 
       | translateInstruction(Rtl.LOAD32I(address, dest)) =
 	  LOAD32I(ea address, destReg dest)
@@ -1472,8 +1470,6 @@ functor EmitRtlMLRISC(
 	  HARD_VBARRIER
       | translateInstruction(Rtl.HARD_ZBARRIER trap) =
 	  HARD_ZBARRIER
-      | translateInstruction(Rtl.HANDLER_ENTRY) =
-	  HANDLER_ENTRY
       | translateInstruction(Rtl.ILABEL target) =
 	  ILABEL(label target)
       | translateInstruction(Rtl.IALIGN align) =
@@ -1578,8 +1574,9 @@ functor EmitRtlMLRISC(
      * <- true if instructions contains and exception handler
      *)
     fun hasHandler nil		      = false
-      | hasHandler(Rtl.SAVE_EXN ::_)  = true
-      | hasHandler(Rtl.RESTORE_EXN::_) = true
+      | hasHandler((Rtl.PUSH_EXN)::_)  = true
+      | hasHandler((Rtl.POP_EXN)::_) = true
+      | hasHandler((Rtl.CATCH_EXN)::_) = true
       | hasHandler(_::instructions)   = hasHandler instructions
 
     (*

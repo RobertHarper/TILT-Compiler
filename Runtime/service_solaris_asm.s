@@ -105,6 +105,7 @@ thunk_loop:
 	ld	[ASMTMP_REG + 8], %o2			! fetch term env
         sethi   %hi(global_exnrec),EXNPTR_REG
 	or      EXNPTR_REG,%lo(global_exnrec),EXNPTR_REG  ! install global handler
+	st	%sp, [EXNPTR_REG + 4]			! initialize stack pointer of global handler
 	jmpl	LINK_REG, %o7				! jump to thunk
 	nop
 start_client_retadd_val:					! used by stack.c
@@ -236,13 +237,14 @@ Divide_exncon:
 
  ! a triple to represent the top-level exn record
 	.align 4
-	.word   (3 << 27) + (0 << 3) + 0
+	.word   (0 << 24) + (4 << 3) + 0
 global_exnrec:
 	.word	global_exnhandler
 	.word   0
 	.word	0
+	.word	0	
 	.type   global_exnrec,#object
-	.size   global_exnrec,4
+	.size   global_exnrec,(.-global_exnrec)
 	
 	.align 4
 $$errormsg:

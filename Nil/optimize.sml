@@ -434,7 +434,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		  | loop acc ((v,_,_,vklist,dep,vclist,vflist,_)::(rest as (next::_))) =
 		    let val vk = map #1 vklist
 			val vc = map #1 vclist
-			val info = Exp_b(#1 next,TraceKnown TraceInfo.Trace,
+			val info = Exp_b(#1 next,TraceUnknown,
 					 App_e(Open, Var_e v, map Var_c vk, map Var_e vc, map Var_e vflist))
 		    in  loop (info::acc) rest
 		    end
@@ -727,7 +727,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		     val return_con = #8(List.last wraps)
 		     val (bnds,tinfo) = 
 			 (case get_trace (temp_state, return_con) of
-			      SOME tinfo => ([],TraceKnown tinfo)
+			      SOME tinfo => ([],TraceUnknown)
 			    | NONE =>
 				  let val v' = Name.fresh_named_var "reify"
 				  in  ([Con_b(Runtime,Con_cb (v', return_con))], TraceCompute v')
@@ -1113,7 +1113,7 @@ fun pp_alias UNKNOWN = print "unknown"
 						            (TilWord32.uminus(known,tagcount)))
 			 in  case Normalize_reduce_hnf(get_env state, fieldcon) of
 			     (true, _) => 
-				 let val bnd = Exp_b(v,TraceKnown TraceInfo.Trace,
+				 let val bnd = Exp_b(v,TraceUnknown,
 						     Prim_e(NilPrimOp(project_known known),[sumcon],[Var_e sv]))
 				 in  SOME [bnd]
 				 end
