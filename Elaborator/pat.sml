@@ -211,23 +211,22 @@ struct
        expcompile will be Toil.expcompile.
     *)
     local
-	val cxexp = ref (NONE : (Il.context * Ast.exp -> Il.exp * Il.con * bool) option)
-	val cxty = ref (NONE : (Il.context * Ast.ty -> Il.con) option)
-	val cpolyinst = ref (NONE : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) option)
+	val cxexp : (Il.context * Ast.exp -> Il.exp * Il.con * bool) ref =
+	    ref (fn _ => error "expcompile not installed")
+	val cxty : (Il.context * Ast.ty -> Il.con) ref =
+	    ref (fn _ => error "typecompile not installed")
+	val cpolyinst : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) ref =
+	    ref (fn _ => error "polyinst not installed")
     in
-	fun installHelpers {typecompile, expcompile, polyinst} =
-	    let in
-		(case !cxexp of
-		     NONE => ()
-		   | SOME _ => print ("WARNING: installHelpers called more than once.\n" ^
-				      "         Possibly because CM.make does not have the semantics of a fresh make\n"));
-	        cxty := SOME typecompile;
-		cpolyinst := SOME polyinst;
-		cxexp := SOME expcompile
-	    end
-	fun typecompile arg = (Option.valOf (!cxty)) arg
-	fun polyinst arg = (Option.valOf (!cpolyinst)) arg
-	fun expcompile arg = (Option.valOf (!cxexp)) arg
+	fun installHelpers {typecompile : Il.context * Ast.ty -> Il.con,
+			    expcompile : Il.context * Ast.exp -> Il.exp * Il.con * bool,
+			    polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list} : unit =
+	    (cxexp := expcompile;
+	     cxty := typecompile;
+	     cpolyinst := polyinst)
+	fun typecompile arg = !cxty arg
+	fun polyinst arg = !cpolyinst arg
+	fun expcompile arg = !cxexp arg
     end
 
     (* If an overloaded expression is known, use it.

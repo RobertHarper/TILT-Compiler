@@ -19,20 +19,12 @@ structure IlUtil :> ILUTIL =
 
 
     local
-	val Clooklabs = ref (NONE : (Il.context * Il.label list -> (Il.path * Il.phrase_class) option) option)
+	val Clooklabs : (context * label list -> (path * phrase_class) option) ref =
+	    ref (fn _ => error "Context_Lookup_Labels not installed")
     in
-	fun installHelpers {Context_Lookup_Labels} =
-	    let val _ = (case !Clooklabs
-			   of NONE => ()
-			    | SOME _ =>
-			       (print "WARNING: installHelpers called more than once.\n";
-				print "         Possibly because CM.make does not have the semantics of a fresh make\n"))
-	    in
-		Clooklabs := SOME Context_Lookup_Labels
-	    end
-	fun Context_Lookup_Labels (arg : Il.context * Il.label list)
-		: (Il.path * Il.phrase_class) option =
-	    (valOf (!Clooklabs)) arg
+	fun installHelpers {Context_Lookup_Labels : context * label list -> (path * phrase_class) option} : unit =
+	    Clooklabs := Context_Lookup_Labels
+	fun Context_Lookup_Labels arg = !Clooklabs arg
     end
 
     (* -------------------------------------------------------- *)
@@ -115,7 +107,7 @@ structure IlUtil :> ILUTIL =
     val case_lab = internal_label "case"
     val expose_lab = internal_label "expose"
     val eq_lab = internal_label "eq"
-    val functor_arg_lab = internal_label "functor_arg"
+    val functor_arg_lab = to_open(internal_label "functor_arg")
 
 
     (* We can use Name.compare_label since it does respect the ordering of
