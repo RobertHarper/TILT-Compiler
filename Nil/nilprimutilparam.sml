@@ -48,16 +48,16 @@ structure NilPrimUtilParam
 		end
 	    fun bool2exp context b =
 		let val rv = NilContextPre.find_labelled_var (context,bool_import_r)
-		    val coercion_exp = Prim_e (NilPrimOp (select bool_in_lab),[Var_c rv],[])
+		    val coercion_exp = Prim_e (NilPrimOp (select bool_in_lab),[],[Var_c rv],[])
 		    val cv = NilContextPre.find_labelled_var (context,bool_import_c)
 		    val sum = Proj_c (Var_c cv, bool_sum_lab)
 		    val arm = TilWord32.fromInt (case b of false => 0 | true => 1)
-		    val inject_exp = Prim_e (NilPrimOp (inject arm), [sum], [])
+		    val inject_exp = Prim_e (NilPrimOp (inject arm), [],[sum], [])
 		in  Coerce_e (coercion_exp, [], inject_exp)
 		end
 	end
 	val con_unit = Prim_c(Record_c ([],NONE), [])
-	val unit_value = Prim_e(NilPrimOp(record []),[],[])
+	val unit_value = Prim_e(NilPrimOp(record []),[],[],[])
 
 	fun exp2value (Const_e v) = SOME v
 	  | exp2value _ = NONE

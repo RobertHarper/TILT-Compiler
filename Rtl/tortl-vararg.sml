@@ -38,7 +38,7 @@ val debug_full = ref false
     val onearg_support = map0count (fn n => Name.fresh_named_var 
 				    ("onearg_support_" ^ (Int.toString n))) (number_flatten + 1)
 	
-    fun xmake_vararg_support() = 
+(*    fun xmake_vararg_support() = 
 	let fun mapper(n,supportvar) = 
 	    let val cenv_var = Name.fresh_named_var "vararg_support_cenv"
 		val cenv_kind = kind_tuple(map0count (fn n => Type_k) (n+1))
@@ -164,7 +164,7 @@ val debug_full = ref false
 	    end
 	in  mapcount mapper onearg_support
 	end
-
+*)
     fun xmake_vararg xexp (state,argc,resc,function) = 
 	let val noflattenl = fresh_code_label "noflatten"
 	    val afterl = fresh_code_label "vararg_after"

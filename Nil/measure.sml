@@ -58,6 +58,7 @@ structure Measure :> MEASURE =
 	  val h = set_exp_binder  h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
 	  val h = set_sum_binder  h exp_var_xxx
+	  val h = set_exn_binder  h exp_var_xxx
 	in
 	  h
 	end
@@ -129,7 +130,8 @@ structure Measure :> MEASURE =
 	 | Crecord_c _           => "Crecord_c"
 	 | Closure_c _           => "Closure_c"
 	 | Typecase_c _          => "Typecase_c"
-	 | Annotate_c (_,c)      => "Annotate_c")
+	 | Annotate_c (_,c)      => "Annotate_c"
+	 | Coercion_c _          => "Coercion_c")
 
     end
   end

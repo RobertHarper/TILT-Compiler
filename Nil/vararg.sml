@@ -72,13 +72,21 @@ struct
 		let val labels = Listops.map0count (fn n => generate_tuple_label(n+1)) n
 		    val primcon = Record_c (labels, NONE)
 		    val vklist = Listops.map0count (fn _ => (fresh_var(),Type_k)) n
+
+
+		    (*Don't need to rename the types, since they bind no vars*)
 		    val vtrclist = map (fn (v,_) => (fresh_var(), TraceCompute v,
 						     Var_c v)) vklist
-		    val body = Linearize.linearize_exp
-			       (App_e(Open, Var_e funvar,[],
-				      [Prim_e(NilPrimOp(Nil.record labels),
-					      map #3 vtrclist,
-					      map Var_e (map #1 vtrclist))], []))
+
+		    val (vars,trs,types) = Listops.unzip3 vtrclist
+
+		    val rvar = Name.fresh_named_var "vararg_record_arg"
+
+		    val (bnds,rcrd) = NilUtil.mk_record_with_gctag(labels,SOME trs,types,map Var_e vars,SOME rvar)
+
+		    val body = 
+		      NilUtil.makeLetE Sequential bnds  (App_e(Open, Var_e funvar,[],[rcrd],[]))
+
 		    val rescon = Var_c range_tvar
 		    val funbnd = Function{effect=Partial,recursive=Arbitrary,isDependent=false,
 					  tFormals=[],eFormals=vtrclist,fFormals=[],
@@ -123,7 +131,7 @@ struct
 		    val rectypes = map (Var_c o #1) vklist
 		    val argtr = TraceKnown TraceInfo.Trace
 		    val argtype = Prim_c(Record_c (labels,NONE), rectypes)
-		    fun make_proj l = Prim_e(NilPrimOp(select l), [], [Var_e argv])
+		    fun make_proj l = Prim_e(NilPrimOp(select l), [],[], [Var_e argv])
 		    val projects = map make_proj labels
 		    val body = App_e(Open, Var_e funvar,[],projects,[])
 		    val rescon = Var_c range_tvar
@@ -426,8 +434,9 @@ struct
 	   (case exp of
 		  Var_e v => exp
 		| Const_e _ => exp
-		| Prim_e(p,clist,elist) => Prim_e(p,map (do_con state) clist, 
-						  map (do_exp state) elist)
+		| Prim_e(p,trlist,clist,elist) => Prim_e(p,trlist,
+							 map (do_con state) clist, 
+							 map (do_exp state) elist)
 		| Switch_e sw => Switch_e(do_switch state sw)
 		| Let_e (letsort,bnds,e) => 
 			let val (bnds,state) = do_bnds(bnds,state)
@@ -484,10 +493,15 @@ struct
 (*		     val argc = do_con state argc *)
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
 		     val vtrclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, NilRename.renameCon (do_con state c))) (vars,cons)
-		     val recordBnd = Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labels),[],map Var_e vars))
+		     val (_,trs,cons) = unzip3 vtrclist
+		     val (recordBnds,_) = NilUtil.mk_record_with_gctag(labels,
+								       SOME trs,
+								       map NilRename.renameCon cons,
+								       map Var_e vars,
+								       SOME v)
 		     val body = do_exp innerState body
 		     val body = NilSubst.substExpInExp subst body
-		     val body = makeLetE Sequential (recordBnd::extraBnds) body
+		     val body = makeLetE Sequential (recordBnds @ extraBnds) body
 		 in  (funvar,Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				       tFormals=[],fFormals=[],eFormals=vtrclist,
 				       body=body,body_type=body_type})
@@ -521,7 +535,7 @@ struct
 	 (case (is_record state argc) of
 	      NOT_RECORD => NONE
 	    | RECORD _ => NONE
-	    | DYNAMIC => SOME(var, Prim_e(NilPrimOp(make_vararg(Open,effect)),
+	    | DYNAMIC => SOME(var, Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
 					  [argc,do_con state body_type],[Var_e pvar]))
 	    | NOT_TYPE => error "ill-formed lambda type")
        | getExtra _ _ = NONE
@@ -536,7 +550,7 @@ struct
 		 if ((length labels) <= flattenThreshold)
 		     then 
 			 let val v = fresh_named_var "funarg"
-			     fun proj l = Prim_e(NilPrimOp(select l),[],[Var_e v])
+			     fun proj l = Prim_e(NilPrimOp(select l),[],[],[Var_e v])
 			     val args' = map proj labels
 			     val call = App_e(Open,f', [],args',[])
 			     val result = Let_e(Sequential,[Exp_b(v,TraceUnknown,arg')],call)
@@ -546,7 +560,7 @@ struct
 	     fun dynamic(openness,effect,argc,resc) =  
 		 let val v = fresh_named_var "oneargVersion"
 		     val result = App_e(openness,
-					Prim_e(NilPrimOp(make_onearg(openness,effect)), 
+					Prim_e(NilPrimOp(make_onearg(openness,effect)), [],
 					       [cr argc, cr resc],
 					       [f']),
 					[],[arg'],[])

@@ -25,7 +25,7 @@ signature NILUTIL =
 
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
-    val exp_tuple : Nil.exp list -> Nil.exp
+(*    val exp_tuple : Nil.exp list -> Nil.exp*)
     val con_tuple : Nil.con list -> Nil.con
     val con_tuple_inject : Nil.con list -> Nil.con
     val kind_tuple : Nil.kind list -> Nil.kind
@@ -162,4 +162,16 @@ signature NILUTIL =
     val project_from_kind_nondep : Nil.kind * Nil.label -> Nil.kind
 
     val path2con : Nil.var * Nil.label list -> Nil.con
+
+    val is_taglike : Nil.con -> bool
+
+    val sum_project_carrier_type : Nil.con -> Nil.con
+
+    (* If optional variable argument is present, then the record will be bound
+     * to that variable, and the expression returned will simply be that var
+     *)
+    val mk_record_with_gctag : 
+      (Nil.label list) * (Nil.niltrace list option) * 
+      (Nil.con list) * (Nil.exp list) * Nil.var option->  (Nil.bnd list * Nil.exp) 
+
   end

@@ -49,8 +49,8 @@ structure Reduce
        | (Fixcode_b vf_set) => (member_eq(eq_var,v,Sequence.maptolist #1 vf_set))
        | (Fixclosure_b (_,vc_set)) => (member_eq(eq_var,v,Sequence.maptolist #1 vc_set))) *)
       | exp_isval (Let_e _) = false
-      | exp_isval (Prim_e (NilPrimOp np,clist,elist)) = nilprim_isval(np,clist,elist)
-      | exp_isval (Prim_e (PrimOp _,_,_)) = false
+      | exp_isval (Prim_e (NilPrimOp np,_,clist,elist)) = nilprim_isval(np,clist,elist)
+      | exp_isval (Prim_e (PrimOp _,_,_,_)) = false
       | exp_isval (Switch_e _) = false
       | exp_isval (App_e _) = false
       | exp_isval (ExternApp_e _ ) = false
@@ -512,7 +512,7 @@ structure Reduce
 			  | _ => ())
 		  | (Let_e (_, bndlist , body)) => 
 			( app scan_bnd bndlist; scan_exp body )
-		  | (Prim_e ( allp, clist, elist)) =>
+		  | (Prim_e ( allp, _, clist, elist)) =>
 			( app scan_con clist; app scan_exp elist)
 		  | (Switch_e switch) => (scan_switch fset switch)
 		  | (App_e ( openness, efunc, clist, elist, eflist)) =>
@@ -748,7 +748,7 @@ structure Reduce
 			false)
 	  | ExternApp_e (exp, elist) =>
 		false
-	  | Prim_e (allp, _, _) =>
+	  | Prim_e (allp, _, _, _) =>
 		is_pure_allp allp
 	  | Let_e (_, bnds, exp) => 
 		let fun is_pure_bnd (Exp_b (v,c,exp)) = is_pure exp
@@ -884,7 +884,7 @@ structure Reduce
              
 		  (* --------------------- Term bindings ------------------------ *)
 
-		  | Exp_b ( x,nt, Prim_e (NilPrimOp (record labels), _, exps )) => 
+		  | Exp_b ( x,nt, Prim_e (NilPrimOp (record labels), _, _, exps )) => 
 		      let fun dec (Var_e a) =  update_count ESC (s(a)) ~1 fset
 			    | dec _ = ()
 			      
@@ -896,7 +896,7 @@ structure Reduce
 			      else
 				 let val _ = if !do_project_known 
 						 then HashTable.insert 
-						     bind ( x, R ( labels, exps)) 
+						     bind ( x, R ( labels, tl exps)) 
 					     else ()
 				     val (rest,body) = xbnds fset rest body
 				 in
@@ -905,13 +905,13 @@ structure Reduce
 					       (rest, body) )
 				     else 
 					 ( Exp_b ( x, nt,
-						  Prim_e (NilPrimOp (record labels), 
+						  Prim_e (NilPrimOp (record labels), [],
 							  [], map subst exps)) :: rest, body )
 				 end 
 			end 
 		    
 	  (* ------------------------ Term Record Projection --------------------- *)
-	  | Exp_b ( x, nt, Prim_e (NilPrimOp (select label), cons, [ Var_e a ] )) => 
+	  | Exp_b ( x, nt, Prim_e (NilPrimOp (select label), [],cons, [ Var_e a ] )) => 
 		let fun cleanup unit = 
 		    ( update_count ESC (s(a)) ~1 fset;
 		     app (fn (con) => (census_con fset (~1, con))) cons)
@@ -956,13 +956,13 @@ structure Reduce
 						  (cleanup ();
 						   (rest,body) )
 					      else
-						 ( Exp_b ( x, nt, Prim_e(NilPrimOp (select label),
+						 ( Exp_b ( x, nt, Prim_e(NilPrimOp (select label),[],
 									 map (xcon fset) cons, [ s(a) ]))::rest, body)
 					  end)
 			 | _ => error "compiler error 2" )
 		end
 	  (* ------------- Sum projection ... perhaps it was from a record ------------ *)
-	  | Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), sum_cons, [ Var_e a ] )) =>
+	  | Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), [],sum_cons, [ Var_e a ] )) =>
 		let fun cleanup unit = 
 		    ( update_count ESC (s(a)) ~1 fset; 
 		     app (fn (con) => (census_con fset (~1, con))) sum_cons )
@@ -980,7 +980,7 @@ structure Reduce
 				then (cleanup();
 				      (rest,body) )
 			    else
-				( Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), 
+				( Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), [],
 								    map (xcon fset) sum_cons, [(s a)]))::rest, body)
 			end 
 		end
@@ -1143,24 +1143,24 @@ structure Reduce
 			
 		    | Let_e (Parallel, _ , _) => raise UNIMP 
 		
-		    | Prim_e ( ap , clist, elist ) =>
+		    | Prim_e ( ap , trlist,clist, elist ) =>
 			  let val clist' = map (xcon fset) clist
 			      val elist' = map (xexp fset) elist
-			      val exp' = Prim_e (ap, clist', elist')
+			      val exp' = Prim_e (ap, trlist, clist', elist')
 			  in
 			      case exp' of 
 				  (* Unroll a  Roll *)
-				  Prim_e ( NilPrimOp (unroll), con , [ Prim_e (NilPrimOp (roll), clist2, [exp] ) ] ) =>
+				  Prim_e ( NilPrimOp (unroll), _, con , [ Prim_e (NilPrimOp (roll), _, _, [exp] ) ] ) =>
 				      (inc_click fold_click; exp)
 				(* box an unbox *)
-				| Prim_e ( NilPrimOp (box_float (sz1)), [], 
-					  [ Prim_e (NilPrimOp (unbox_float(sz2)), [], [ exp ] ) ] ) =>
+				| Prim_e ( NilPrimOp (box_float (sz1)), _, _,
+					  [ Prim_e (NilPrimOp (unbox_float(sz2)), _, _, [ exp ] ) ] ) =>
 				  if sz1 = sz2
 				      then (inc_click fold_click; exp)
 				  else exp'
 				(* unbox a box *)
-				| Prim_e ( NilPrimOp (unbox_float (sz1)), [], 
-						      [ Prim_e (NilPrimOp (box_float(sz2)), [], [ exp ] ) ] ) =>
+				| Prim_e ( NilPrimOp (unbox_float (sz1)), _, _ ,
+						      [ Prim_e (NilPrimOp (box_float(sz2)), _, _, [ exp ] ) ] ) =>
 				  if sz1 = sz2
 				      then (inc_click fold_click; exp)
 				  else exp'

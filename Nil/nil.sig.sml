@@ -76,6 +76,7 @@ sig
 		totalcount : w32,
                 known : w32 option}           (* sum types *)
     | Vararg_c of openness * effect           (* classifies make_vararg and make_onearg *)
+    | GCTag_c                                 (* Type of header word for heap values *)
 
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
@@ -139,7 +140,8 @@ sig
     | inj_exn of string          (* takes tag + value and give exn *)
     | make_vararg of openness * effect  (* given a function in onearg calling conv, convert to vararg *)
     | make_onearg of openness * effect  (* given a function in vararg calling conv, convert to onearg *)
-    | peq                        (* polymorphic equality: unused since HIL compiles away equality *)
+    | mk_record_gctag       (* Create the gc tag for a record *)
+    | mk_sum_known_gctag    (* Create the gc tag for a sum with a statically known carrier type *)
 
 
   and allprim = NilPrimOp of nilprim
@@ -183,7 +185,8 @@ sig
       Var_e of var                                   (* Term-level variables *)
     | Const_e of (con,exp) Prim.value                (* Term-level constants *)
     | Let_e of letsort * bnd list * exp              (* Binding construct *)
-    | Prim_e of allprim * (con list) * (exp list)    (* primops must be fully applied *)
+    | Prim_e of allprim * (niltrace list) * (con list) * (exp list)    
+                                                     (* primops must be fully applied *)
     | Switch_e of switch                             (* Switch statements *)
     | App_e of openness * exp * con list *           (* application of open funs, code, or closures *)
                        exp list * exp list           (* in the case of code, the first exp must be a var *)

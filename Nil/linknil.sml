@@ -19,6 +19,8 @@ structure Linknil :> LINKNIL  =
 				   Stats.ff("wcheck" ^ str),
 				   str)
     val phasesplit  = makeEntry (true, "Phasesplit")
+(*    val typeofelim1 = makeEntry (true, "TypeofElim1")
+    val typeofelim2 = makeEntry (true, "TypeofElim2"*)
     val cc          = makeEntry (true, "ClosureConv")
     val optimize1   = makeEntry (true, "Optimize1")
     val optimize2   = makeEntry (true, "Optimize2")
@@ -36,9 +38,9 @@ structure Linknil :> LINKNIL  =
 (*  val flatten     = makeEntry (false, "Flatten") *)
     val coerce_elim = makeEntry (false, "CoerceElim")
 
-    val measure_after_phaseplit = makeEntry (false, "MeasureAfterPhasesplit")
+    val measure_after_phaseplit = makeEntry (true, "MeasureAfterPhasesplit")
 (*    val measure_after_opts      = makeEntry (false, "MeasureAfterOpts")*)
-    val measure_after_cc        = makeEntry (false, "MeasureAfterCC")
+    val measure_after_cc        = makeEntry (true, "MeasureAfterCC")
 (*  val reorder     = makeEntry (false, "Reorder") *)
 
     val error = fn s => Util.error "linknil.sml" s

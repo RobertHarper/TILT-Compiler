@@ -87,8 +87,8 @@ struct
 	   Var_e _ => e
 	 | Const_e _ => e
 	 | Let_e(ls,bnds,e) => Let_e(ls,rbnds bnds,rexp e)
-	 | Prim_e (p, cons, exps) => 
-	       Prim_e (p, map rcon cons, map rexp exps)
+	 | Prim_e (p, trs,cons, exps) => 
+	       Prim_e (p, trs,map rcon cons, map rexp exps)
 	 | Switch_e sw => Switch_e(rswitch sw)
 	 | App_e (openness,f,cs,es1,es2) =>
 	       App_e (openness, rexp f, map rcon cs, 

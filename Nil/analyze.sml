@@ -158,7 +158,7 @@ struct
                | _ => 0 (* small constants *)
            end
          | Let_e(ls,bnds,e) => (doBnds bnds) + (doExp e)
-         | Prim_e(ap,cs,es) => 
+         | Prim_e(ap,_,cs,es) => 
 	     (if (NilUtil.allprim_uses_carg ap) then
                  doCons cs
 	      else

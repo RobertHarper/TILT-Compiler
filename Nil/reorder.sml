@@ -158,7 +158,7 @@ struct
 	       mergeCategories (bnds_category, body_category),
 	       mergeMovabilities (bnds_movability, body_movability))
 	  end
-      | rexp (exp as Prim_e(prim, cons, exps), env) =
+      | rexp (exp as Prim_e(prim, trs, cons, exps), env) =
 	  let
 	      val (prim_category,prim_movability) = 
 		  (case prim of 
@@ -179,9 +179,12 @@ struct
                         use peq, but if we did I doubt it would be inlined. *)
 		   | NilPrimOp (make_vararg _) => (APPLY, Movable)
 		   | NilPrimOp (make_onearg _) => (APPLY, Movable)
-		   | NilPrimOp peq => (APPLY, Movable)
                      (* We don't inline the typecasing code for polymorphic
                         array operations; they're turned into function calls *)
+
+		   | NilPrimOp mk_record_gctag   => (OTHER, Movable)
+		   | NilPrimOp mksum_known_gctag => (OTHER, Movable)
+
 		   | PrimOp (sub (OtherArray false)) => (APPLY, Immovable)
 		   | PrimOp (sub (OtherVector false)) => (APPLY, Immovable)
 		   | PrimOp (update (OtherArray false)) => (APPLY, Immovable)
@@ -219,7 +222,7 @@ struct
 	      val (exps, exps_vset, exps_category, exps_movability) = 
 		     rexps (exps, env)
 
-	      val exp        = Prim_e(prim, cons, exps)
+	      val exp        = Prim_e(prim, trs,cons, exps)
 	      val vset       = VS.union(cons_vset, exps_vset)
 	      val category   = mergeCategories 
 		                (mergeCategories(prim_category, cons_category),

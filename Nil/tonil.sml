@@ -226,7 +226,7 @@ struct
          of labels, produce the term corresponding to r.lbls
     *)
    fun selectFromRec (exp,[]) = exp
-     | selectFromRec (exp,lbl::lbls) = selectFromRec(Prim_e(NilPrimOp(select lbl), [], 
+     | selectFromRec (exp,lbl::lbls) = selectFromRec(Prim_e(NilPrimOp(select lbl), [], [],
 							    [exp]), lbls)
 
 
@@ -927,6 +927,7 @@ end (* local defining splitting context *)
    
      | xmod' context (Il.MOD_STRUCTURE sbnds, preferred_name) =
        let
+
            (* XXX is final_context =context ok, or should it be thrown away? *)
 	   val {final_context = context, 
 		cbnd_cat, ebnd_cat, record_c_con_items,
@@ -954,9 +955,24 @@ end (* local defining splitting context *)
 	   val ebnd_cat_new = 
 	       if specialize 
 		   then LIST[Exp_b (var_str_r, TraceUnknown, #2(hd record_r_exp_items))]
-	       else     LIST[Exp_b (var_str_r, TraceUnknown,
-				    Prim_e (NilPrimOp (record (map #1 record_r_exp_items)),
-					    [], map #2 record_r_exp_items))]
+	       else     
+		 let 
+		   val (labels,exps) = unzip record_r_exp_items
+
+		   val tvar = Name.fresh_named_var "struct_gctag"
+
+		   val r = Prim_e (NilPrimOp (record labels),[], [], (Var_e tvar)::exps)
+
+		   (*Note that exps will always be of the form (Var_e v)*)
+		   val rtype = Prim_c(Record_c(labels,NONE),map Typeof_c exps)
+
+		   val trs = map (fn _ => TraceUnknown) labels
+		 in
+		   LIST[Exp_b (tvar,TraceUnknown,
+			       Prim_e(NilPrimOp mk_record_gctag, trs,[rtype],[])),
+			Exp_b (var_str_r, TraceUnknown,r)]
+		 end
+	   
 	   val ebnd_str_cat = APPEND[ebnd_cat,ebnd_cat_new]
 
 
@@ -1079,7 +1095,7 @@ end (* local defining splitting context *)
         il_functions = Bodies of the functions in this mutually-recursive group *)
                val (internal_renamed_vars, nil_functions) = 
 		   let
-		       val Let_e (_,[Fixopen_b nil_fn_set],_) = xexp context il_exp
+		       val Let_e (_,(Fixopen_b nil_fn_set)::_,_) = xexp context il_exp
 		   in
 		       Listops.unzip (Sequence.toList nil_fn_set)
 		   end
@@ -1156,7 +1172,7 @@ end (* local defining splitting context *)
 	       val context' = update_NILctx_insert_kind(context', poly_var_c, 
 							knd_arg)
 
-	       val Let_e (_, [Fixopen_b set], _) = xexp context' il_exp
+	       val Let_e (_, (Fixopen_b set)::_, _) = xexp context' il_exp
 
                val (internal_vars, functions) = Listops.unzip (Sequence.toList set)
 
@@ -1715,7 +1731,7 @@ end (* local defining splitting context *)
      | xvalue context (Prim.uint (intsize, w)) = Const_e (Prim.uint (intsize, w))
 
      | xvalue context (Prim.float (floatsize, f)) = 
-        Prim_e (NilPrimOp (box_float floatsize),
+        Prim_e (NilPrimOp (box_float floatsize),[],
 		[], [Const_e (Prim.float (floatsize, f))])
 
      | xvalue context (Prim.array (il_con, a)) = 
@@ -1806,8 +1822,8 @@ end (* local defining splitting context *)
 				Prim_c(Float_c fs,[]) => Prim_c(BoxFloat_c fs,[])
 			      | _ => con)
 	   fun id (e : exp) = e
-	   fun box fs e = Prim_e(NilPrimOp(box_float fs), [], [e])
-	   fun unbox fs e = Prim_e(NilPrimOp(unbox_float fs), [], [e])
+	   fun box fs e = Prim_e(NilPrimOp(box_float fs),[], [], [e])
+	   fun unbox fs e = Prim_e(NilPrimOp(unbox_float fs), [],[], [e])
 	   fun float_float fs = (map (unbox fs) args, box fs)
 	   fun float_int fs = (map (unbox fs) args, id)
 	   fun int_float fs = (args, box fs)
@@ -1828,7 +1844,7 @@ end (* local defining splitting context *)
 		   | float2int => float_int F64
 		   | int2float => int_float F64
 		   | _ => (args,id))
-       in  wrap(Prim_e (PrimOp prim, cons, args))
+       in  wrap(Prim_e (PrimOp prim, [],cons, args))
 	   
        end
      | xexp' context (il_exp as (Il.ILPRIM (ilprim, il_cons, il_args))) = 
@@ -1839,17 +1855,17 @@ end (* local defining splitting context *)
 	   val one = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 1))
 	   val t = (Prim.OtherArray false)
        in  case ilprim of
-	     Prim.mk_ref => Prim_e(PrimOp(Prim.create_table t),
+	     Prim.mk_ref => Prim_e(PrimOp(Prim.create_table t),[],
 				   cons, one::args)
-	   | Prim.deref => Prim_e(PrimOp(Prim.sub t),
+	   | Prim.deref => Prim_e(PrimOp(Prim.sub t),[],
 				  cons, args @ [zero])
-	   | Prim.setref => Prim_e(PrimOp(Prim.update t),
+	   | Prim.setref => Prim_e(PrimOp(Prim.update t),[],
 				  cons, case args of
 				          [a,b] => [a,zero,b]
 					| _ => error "bad set_ref")
-	   | Prim.eq_ref => Prim_e(PrimOp(Prim.equal_table t),
+	   | Prim.eq_ref => Prim_e(PrimOp(Prim.equal_table t),[],
 				   cons, args)
-	   | _ => Prim_e (PrimOp (xilprim ilprim), cons, args)
+	   | _ => Prim_e (PrimOp (xilprim ilprim), [],cons, args)
        end
 
      | xexp' context (Il.VAR var) = 
@@ -1865,12 +1881,12 @@ end (* local defining splitting context *)
 	   val exp1 = xexp context il_exp1
 	   val exps2 = map (xexp context) il_exps2
 	   val Il.CON_ARROW(cons2,res_con,_,_) = il_con1
-	   fun mapper(e,Il.CON_FLOAT _) = Prim_e (NilPrimOp (unbox_float Prim.F64),[],[e])
+	   fun mapper(e,Il.CON_FLOAT _) = Prim_e (NilPrimOp (unbox_float Prim.F64),[],[],[e])
 	     | mapper(e,_) = e
 	   val exps2 = Listops.map2 mapper (exps2,cons2)
 	   val app = ExternApp_e (exp1, exps2)
        in  (case res_con of
-	     Il.CON_FLOAT _ => Prim_e (NilPrimOp (box_float Prim.F64),[],[app])
+	     Il.CON_FLOAT _ => Prim_e (NilPrimOp (box_float Prim.F64),[],[],[app])
 	   | _ => app)
        end
 
@@ -1896,29 +1912,69 @@ end (* local defining splitting context *)
 	   if (num_names = 1) then
                NilUtil.makeLetE Sequential [Fixopen_b set] (hd names)
            else
-	       NilUtil.makeLetE Sequential [Fixopen_b set]
-		         (Prim_e(NilPrimOp (record labels), [], names))
+	     let
+	       val types = map ((NilUtil.function_type Open) o #2) fbnds'
+	       val rtype = Prim_c(Record_c (labels,NONE),types)
+	       val cvar = Name.fresh_named_var "gctag_arg"
+	       val cbnd = makeConb (Con_cb(cvar,rtype))
+	       val evar = Name.fresh_named_var "gctag"
+	       val trs = map (fn _ => TraceUnknown) labels
+	       val tag = Prim_e(NilPrimOp mk_record_gctag,trs,[Var_c cvar],[])
+	       val ebnd = Exp_b (evar,TraceUnknown,tag)
+	       val fields = (Var_e evar)::names
+	     in
+	       (* Note: xsbnds_rewrite_2 relies on the Fixopen_b binding
+		* being first.  It drops everything else to eliminate the
+		* nest.
+		*)
+	       NilUtil.makeLetE Sequential [Fixopen_b set,
+					    cbnd,
+					    ebnd]
+		         (Prim_e(NilPrimOp (record labels), [],[], fields))
+	     end
        end
+
+     (*Empty record does not take gctag, so treat special
+      *)
+     | xexp' context (Il.RECORD [])    = (Prim_e (NilPrimOp (record []), [],[], []))
 
      | xexp' context (Il.RECORD rbnds) = 
        let
 	   val (labels,il_exps) = Listops.unzip rbnds
 	   val exps = map (xexp context) il_exps
-       in  Prim_e (NilPrimOp (record labels), [], exps)
+
+	   fun mapper e = let val v = Name.fresh_named_var "record_temp" 
+			  in (Exp_b (v,TraceUnknown,e),
+			      Typeof_c (Var_e v),
+			      TraceUnknown,
+			      Var_e v)
+			  end
+	   val (bnds,types,trs,exps) = Listops.unzip4 (map mapper exps)
+
+	   val rtype = Prim_c(Record_c (labels,NONE),types)
+
+	   val evar = Name.fresh_named_var "gctag"
+	   val tag = Prim_e(NilPrimOp mk_record_gctag, trs,[rtype],[])
+	   val tbnd = Exp_b (evar,TraceUnknown,tag)
+
+	   val fields = (Var_e evar)::exps
+       in  
+	 NilUtil.makeLetE Sequential (bnds @ [tbnd])
+	 (Prim_e (NilPrimOp (record labels), [],[], fields))
        end
 
      | xexp' context (Il.RECORD_PROJECT (il_exp, label, il_record_con)) =
        let
 	   val exp_record = xexp context il_exp
        in
-	   Prim_e (NilPrimOp (select label), [], [exp_record])
+	   Prim_e (NilPrimOp (select label), [],[], [exp_record])
        end
 
      | xexp' context (Il.SUM_TAIL (i,il_con, il_exp)) =
        let
 	   val exp = xexp context il_exp
 	   val sumcon = xcon context il_con
-       in  Prim_e (NilPrimOp (project (TilWord32.fromInt i)), [sumcon], [exp])
+       in  Prim_e (NilPrimOp (project (TilWord32.fromInt i)), [],[sumcon], [exp])
        end
 (*
 	       handle e => (print "SUM_TAIL error\n";
@@ -1958,7 +2014,7 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.NEW_STAMP il_con) = 
        let val con = xcon context il_con
-       in  Prim_e(NilPrimOp make_exntag, [con], [])
+       in  Prim_e(NilPrimOp make_exntag, [],[con], [])
        end
 
      | xexp' context (Il.EXN_INJECT (s, il_tag, il_exp)) =
@@ -1966,7 +2022,7 @@ end (* local defining splitting context *)
 	   val tag = xexp context il_tag
 	   val exp = xexp context il_exp
        in
-           Prim_e (NilPrimOp (inj_exn s), [], [tag, exp])
+           Prim_e (NilPrimOp (inj_exn s), [],[], [tag, exp])
        end
 
      | xexp' context (Il.COERCE(il_coercion,il_cons,il_exp)) = 
@@ -2093,11 +2149,12 @@ end (* local defining splitting context *)
      | xexp' context (Il.INJ {sumtype, field, inject = eopt}) =
        let
 	   val sumcon = xcon context sumtype
+	   val field =  TilWord32.fromInt field
 	   val elist = (case eopt of
 			    NONE => []
 			  | SOME il_exp => [xexp context il_exp])
        in
-	   Prim_e(NilPrimOp (inject (TilWord32.fromInt field)),[sumcon],elist)
+	   Prim_e(NilPrimOp (inject field),[],[sumcon],elist)
        end
 
 
@@ -2196,7 +2253,7 @@ end (* local defining splitting context *)
 	   if ((!elaborator_specific_optimizations) andalso is_it_proj) then
 	       module
 	   else
-               Prim_e (NilPrimOp (select label), [], [module])
+               Prim_e (NilPrimOp (select label), [],[], [module])
        end
 
      | xexp' context (Il.SEAL (exp,_)) = xexp context exp

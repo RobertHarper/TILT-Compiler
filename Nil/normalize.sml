@@ -44,6 +44,7 @@ struct
   val singletonize         = NilUtil.singletonize 
 
   (*From NilRename*)
+  val renameExp         = NilRename.renameExp
   val alphaCRenameExp   = NilRename.alphaCRenameExp
   val alphaCRenameCon   = NilRename.alphaCRenameCon
   val alphaCRenameKind  = NilRename.alphaCRenameKind
@@ -103,44 +104,6 @@ struct
   val debug = Stats.ff "normalize_debug"
   val show_calls = Stats.ff "normalize_show_calls"
   val show_context = Stats.ff "normalize_show_context"
-
-  fun pull (c,kind) = 
-    let open Nil NilUtil Name Util
-    in  (case kind of
-          Type_k => c
-	| SingleType_k c2 => c2
-	| Single_k c2 => c2
-	| Record_k elts => 
-	 let
-	   fun folder (((label,var),kind),subst) = 
-	     let
-	       val kind = substConInKind subst kind
-	       val con = pull (Proj_c (c,label),kind)
-	       val subst = add subst (var,con)
-	     in
-	       ((label,con),subst)
-	     end
-	   val (entries,subst) = Listops.foldl_acc folder (empty()) (Sequence.toList elts)
-	 in
-	   (Crecord_c entries)
-	 end
-	| Arrow_k (openness, formals, return) => 
-	 let
-	   val vars = map (fn (v,_) => (Var_c v)) formals
-	   val c = pull (App_c (c,vars),return)
-	   val var = fresh_named_var "pull_arrow"
-	 in
-	   (*Closures?  *)
-	   case openness of
-	        Open => Let_c (Sequential,[Open_cb (var,formals,c)],Var_c var)
-	      | Code => Let_c (Sequential,[Code_cb (var,formals,c)],Var_c var)
-	      | Closure => let val cenv = (fresh_named_var "pull_closure", 
-					   Record_k (Sequence.fromList []))
-			   in  Let_c (Sequential,[Code_cb (var,cenv::formals ,c)],
-				      Closure_c(Var_c var, Crecord_c []))
-			   end
-	 end)
-    end
 
   val warnDepth = 1000
   val maxDepth = 10000
@@ -785,11 +748,11 @@ struct
 	 in
 	   Let_e (letsort,bnds,exp)
 	 end
-	| Prim_e (prim,cons,exps) =>   
+	| Prim_e (prim,trs,cons,exps) =>   
 	 let
 	   val cons = map (con_normalize' state) cons
 	   val exps = map (exp_normalize' state) exps
-	 in Prim_e (prim,cons,exps)
+	 in Prim_e (prim,trs,cons,exps)
 	 end
 	| Switch_e switch => Switch_e (switch_normalize' state switch)
 	| (App_e (openness,app,cons,texps,fexps)) =>
@@ -902,6 +865,34 @@ struct
            | Annotate_c (_,c) => false)
 
 
+    (* Paths are not stable under substitution. 
+     * A return of (SOME subst,c) indicates that continuing may be fruitful
+     * A return of (NONE,c) indicates that c is as far as it can be reduced
+     * This process terminates because either this function tells you to stop,
+     * or it empties the subst.  So if no further progress can be made, 
+     * the subst will be empty next time around and we will return NONE
+     *)
+    fun find_kind_equation_subst (D,subst,c) =
+      let 
+	(*Since we are under a subst here, we may have an unbound variable in the path*)
+	val eqnopt = find_kind_equation(D,c) handle Unbound => NONE  
+      in
+	case eqnopt
+	  of SOME c => (SOME subst,c)                     (*We found an equation *)
+	   | NONE =>                                      (*No equation *)
+	    if NilSubst.C.is_empty subst then                  (*No equation, no subst, no further progress is possible*)
+	      (NONE,c)
+	    else                                          (*No equation, but carrying out subst may enable reductions *)
+	      let val c = substConInCon subst c
+	      in 
+		case find_kind_equation(D,c)
+		  of SOME c => (SOME (empty()),c)         (*Result of substitution had an equation, continue with empty subst*)
+		   | NONE => (SOME (empty()), c)          (*Result of substitution did not have an equation, but try to 
+							   * beta reduce further before giving up*)
+	      end
+      end
+
+
     fun expandMuType(D:context, mu_con:con) =
 	let 
 	       
@@ -941,7 +932,7 @@ struct
 					SOME c => error' "XXX var already in subst"
 				      | _ => ())
 				else ()
-		       val subst = add subst (var,substConInCon subst lambda)
+		       val subst = addr (subst,var,lambda)
 		   in  (PROGRESS,subst,Let_c(sort,rest,con))
 		   end
 	    end
@@ -1023,15 +1014,17 @@ struct
 	| (Annotate_c (annot,con)) => con_reduce state con)
 
 
+
     and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,empty()) con
 			      in  (case progress 
-				     of IRREDUCIBLE => (case find_kind_equation (D,c) 
-							  of SOME c => substConInCon subst c
-							   | NONE => substConInCon subst c)
+				     of IRREDUCIBLE => (case find_kind_equation_subst (D,subst,c) 
+							  of (SOME subst,c) => substConInCon subst c
+							   | (NONE,c) => c)
 				      | _ => substConInCon subst c)
 			      end
     and reduce_until (D,pred,con) = 
-        let fun loop n (subst,c : con) = 
+        let 
+	  fun loop n (subst,c : con) = 
             let val _ = if (n=warnDepth) 
 			    then (print "Warning: reduce_until exceeded "; 
 				  print (Int.toString warnDepth); print "iterations\n")
@@ -1045,24 +1038,35 @@ struct
 				  print "#"; print (Int.toString n); print ": "; Ppnil.pp_con c; print "\n")
 			else ()
 		val _ = if (n >= maxDepth + 10) then error' "reduce_until too many iterations" else ()
+
+		fun step (subst,c) = 
+		  let val (progress,subst,c) = con_reduce(D,subst) c
+		  in  case progress of
+		    PROGRESS => loop (n+1) (subst,c) 
+		  | HNF => 
+		      let val c = substConInCon subst c
+		      in (case pred c of
+			    SOME info => REDUCED info
+			  | NONE => UNREDUCED c)
+		      end
+		  | IRREDUCIBLE => 
+		      (case find_kind_equation_subst(D,subst,c) 
+			 of (SOME subst,c) => loop (n+1) (subst,c)
+			  | (NONE,c) => UNREDUCED c)
+		  end
 	    in  case (pred c) of
-                SOME info => REDUCED(valOf(pred (substConInCon subst c)))
-	      | NONE => let val (progress,subst,c) = con_reduce(D,subst) c
-			in  case progress of
-				PROGRESS => loop (n+1) (subst,c) 
-			      | HNF => (case pred (substConInCon subst c) of
-		                    SOME _ => REDUCED(valOf(pred (substConInCon subst c)))
-				  | NONE => UNREDUCED (substConInCon subst c))
-			      | IRREDUCIBLE => 
-				  (case find_kind_equation(D,c) 
-				     of SOME c => loop (n+1) (subst,c)
-				      | NONE => UNREDUCED (substConInCon subst c))
-			end
+                SOME info =>
+		  let val c = substConInCon subst c
+		  in case pred c of  (*Predicate may not be invariant under substitution*)
+		    SOME info => REDUCED info
+		  | NONE => step(empty(),c)
+		  end
+	      | NONE => step(subst,c)
 	    end
         in  loop 0 (empty(),con)
         end
-    and reduce_hnf (D,con) = 
-        let fun loop n (subst,c) = 
+    and reduce_hnf_list' keep_paths (D,con) = 
+        let fun loop n (subst,c,acc) = 
             let val _ = if (n>maxDepth) 
 			    then (print "reduce_hnf exceeded max reductions\n";
 				  Ppnil.pp_con (substConInCon subst c); print "\n\n";
@@ -1075,15 +1079,17 @@ struct
 			else ()
 	        val (progress,subst,c) = con_reduce(D,subst) c  
 	    in  case progress of
-			 PROGRESS => loop (n+1) (subst,c) 
-		       | HNF => (true, strip_annotate(substConInCon subst c))
+			 PROGRESS => loop (n+1) (subst,c,acc) 
+		       | HNF => (true, strip_annotate(substConInCon subst c),acc)  (*HNF is invariant under substitution*)
 		       | IRREDUCIBLE => 
-			   (case find_kind_equation(D,c)
-			      of SOME c => loop (n+1) (subst,c)
-			       | NONE => (false, strip_annotate(substConInCon subst c)))
+			   (case find_kind_equation_subst(D,subst,c)
+			      of (SOME subst',c') => loop (n+1) (subst',c',if keep_paths then (substConInCon subst c)::acc else acc)
+			       | (NONE,c) => (false,c,acc))
 	    end
-        in  loop 0 (empty(),con)
+        in  loop 0 (empty(),con,[])
         end
+    and reduce_hnf_list arg = reduce_hnf_list' true arg
+    and reduce_hnf (D,con) = let val (hnf,c,_) = reduce_hnf_list' false (D,con) in (hnf,c) end
     and reduce_hnf' (D,con,subst) = 
       let 
 	fun loop (subst,c) = 
@@ -1285,7 +1291,8 @@ struct
 	       end
 	in
 	 (case prim of
-	    record labs => Prim_c(Record_c (labs,NONE), map (fn e => type_of(D,e)) exps)
+	    record [] => NilUtil.unit_con
+	  | record labs => Prim_c(Record_c (labs,NONE), map (fn e => type_of(D,e)) (tl exps))
 	  | select lab => projectRecordType(D,type_of(D,hd exps),lab)
 	  | inject s => specialize_sumtype(s,hd cons)
 	  | inject_known s => specialize_sumtype(s,hd cons)
@@ -1310,7 +1317,9 @@ struct
 	       in  AllArrow_c{openness=openness,effect=effect,isDependent=false,
 			      tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
 	       end
-	  | peq => error' "peq not done")
+	  | mk_record_gctag => Prim_c(GCTag_c,[hd cons])
+	  | mk_sum_known_gctag => Prim_c(GCTag_c,[hd cons])
+)
 	end
 
    and type_of (D : context,exp : exp) : con = 
@@ -1339,10 +1348,10 @@ struct
 	      val (D,etypes,cbnds) = type_of_bnds (D,bnds)
 	      val c = type_of (D,exp)
 	    in
-	      removeDependence etypes (Let_c (Sequential,cbnds,c))
+	      removeDependence etypes (NilUtil.makeLetC cbnds c)
 	    end
-	   | Prim_e (NilPrimOp prim,cons,exps) => type_of_prim (D,prim,cons,exps)
-	   | Prim_e (PrimOp prim,cons,exps) =>   
+	   | Prim_e (NilPrimOp prim,_,cons,exps) => type_of_prim (D,prim,cons,exps)
+	   | Prim_e (PrimOp prim,_,cons,exps) =>   
 	    let 
 	      val (total,arg_types,return_type) = NilPrimUtil.get_type D prim cons
 	    in
@@ -1499,9 +1508,12 @@ struct
 	     in  (state,Closure_c(c1,c2),path)
 	     end
 
+	 (*Typeof may insert con bindings into the context which 
+	  * are already in the context.  Therefore, we must rename it first.
+	  *)
 	 | Typeof_c e => 
 	     let val (D,alpha) = state
-	     in context_beta_reduce((D,Alpha.empty_context()),type_of(D,alphaCRenameExp alpha e))
+	     in context_beta_reduce((D,Alpha.empty_context()),type_of(D,renameExp(alphaCRenameExp alpha e)))
 	     end
 	 | (Proj_c (c,lab)) => 
 	     (case context_beta_reduce (state,c) of

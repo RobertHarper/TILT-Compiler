@@ -621,7 +621,7 @@ struct
 		       | mapper (TAG w) = INT32 w
 		       | mapper (REAL l) =  DATA l
 		       | mapper (RECORD (l,_)) = DATA l
-		       | mapper (VOID _) = error "got a vvoid in xvector"
+		       | mapper (VOID _) = INT32 0w0
 		       | mapper (LABEL l) = DATA l
 		       | mapper (CODE l) = DATA l
 		 in  map mapper data

@@ -267,7 +267,7 @@ struct
 	       let 
 		   val v = 
 		       (case e of
-			    Prim_e(NilPrimOp (select l), _, [Var_e v]) =>
+			    Prim_e(NilPrimOp (select l),_, _, [Var_e v]) =>
 				let
 				    val vname = Name.var2name v
 				    val lname = Name.label2name l
@@ -309,7 +309,7 @@ struct
 			then (bnds @ bnds', e)
 		    else ([], NilUtil.makeLetE Sequential (bnds@bnds') e)
 		end
-	  | Prim_e (ap,clist,elist) =>
+	  | Prim_e (ap,trs,clist,elist) =>
 		let val _ = inc depth_lcon_prim
 		    (* val constr = Normalize.prim_uses_carg ap *)
 		    val cbnds_clist = map (lcon lift state) clist
@@ -319,7 +319,7 @@ struct
 		    val (bnds,elist) = map_unzip (lexp lift state) elist
 		    val bnds = flatten bnds
 		in  ((map (fn cb => Con_b(Runtime,cb)) cbnds) @ bnds,
-		     Prim_e(ap,clist,elist))
+		     Prim_e(ap,trs,clist,elist))
 		end
 	  | ExternApp_e (f,elist) =>
 		let val (bnds,f) = lexp lift state f

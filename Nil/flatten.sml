@@ -113,12 +113,10 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 		 val exps = map Var_e args 
 		 val _ = HashTable.insert flattened 
 		   (fnVar,(newFnVar, labels, (map #1 vklist), newcons))
+
+		 val (bnds,_) = NilUtil.mk_record_with_gctag (labels,NONE,newcons,exps,SOME recordArg)
 		 val newbody = 
-		   Let_e (Sequential, 
-			  [Exp_b (recordArg, 
-				  TraceUnknown,
-				  Prim_e (NilPrimOp (record labels), [], exps))],
-			  body)
+		   NilUtil.makeLetE Sequential bnds body
 		   
 		 (* We'll on the body later *)
 		 val newFn = (newFnVar,
@@ -194,7 +192,7 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 				      (fn (var, label) =>
 				       Exp_b (var, TraceUnknown, Prim_e 
 					      (NilPrimOp (select label),
-					       [], recvar))))
+					       [],[], recvar))))
 		  (args ,labels)
 	      in 
 		(bnds, (openness, Var_e newName, map xcon tactuals, newexps, map xexp elist2))
@@ -207,17 +205,17 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 	Var_e v => exp
       | Const_e c => exp
       (* Constant folding of primitives *)
-      | Prim_e (PrimOp p, cons, exps) => 
+      | Prim_e (PrimOp p, trs,cons, exps) => 
 	  (if List.all Reduce.exp_isval exps
 	     then 
 	      ( let val newexp = PrimUtil.apply p cons exps
 		in 
 		  (inc_click fold_click; newexp )
 		end 
-	       handle Util.UNIMP => Prim_e (PrimOp p, map xcon cons, map (xexp ) exps) )
-	  else Prim_e (PrimOp p, map xcon cons, map (xexp ) exps))
-      | Prim_e (allp, cons, exps) =>
-	  Prim_e (allp, map xcon cons, map( xexp ) exps)
+	       handle Util.UNIMP => Prim_e (PrimOp p, trs,map xcon cons, map (xexp ) exps) )
+	  else Prim_e (PrimOp p, trs,map xcon cons, map (xexp ) exps))
+      | Prim_e (allp, trs,cons, exps) =>
+	  Prim_e (allp, trs,map xcon cons, map( xexp ) exps)
       | Switch_e sw => 
 	  Switch_e (xswitch  sw)
       (* Change function call to new arguments *) 

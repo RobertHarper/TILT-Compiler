@@ -194,7 +194,7 @@ struct
 	   (case exp of
 		  Var_e v => escapeCandidate v
 		| Const_e _ => ()
-		| Prim_e(p,clist,elist) => app (scan_exp ctxt) elist
+		| Prim_e(p,trlist,clist,elist) => app (scan_exp ctxt) elist
 		| Switch_e sw => scan_switch ctxt sw
 		| Let_e (letsort,bnds,e) => 
 			let val ctxt = scan_bnds(bnds,ctxt)
@@ -305,7 +305,7 @@ struct
 	   (case exp of
 		  Var_e v => exp
 		| Const_e _ => exp
-		| Prim_e(p,clist,elist) => Prim_e(p, clist, do_explist elist)
+		| Prim_e(p,trlist,clist,elist) => Prim_e(p, trlist,clist, do_explist elist)
 		| Switch_e sw => Switch_e(do_switch sw)
 		| Let_e (letsort,bnds,e) => Let_e(letsort,do_bnds bnds, do_exp e)
 		| App_e(openness,Var_e v,clist,elist,[]) => 

@@ -1,5 +1,34 @@
 (*$import Prelude TopLevel Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util *)
 
+(* Assumptions:
+
+ * Assumes no duplicate variables in program.
+
+*)
+
+(* Known Bugs: 
+ 
+ * Doesn't handle Typeof_c correctly.  The problem is that cbnds and
+ * bnds being lifted are kept in separate lists, and when the bnds are
+ * extracted, the cbnds get tacked on the front.  So if a cbnd depends
+ * on variable at the same level (via Typeof), then that variable will
+ * be lifted out of scope.
+ *
+
+ * Fixing this is probably reasonably easy, but not worth doing unless
+ * we decide to keep typeof.  For the time being, it should be an
+ * invariant that we eliminate typeofs.
+
+ *
+ * Leaf  - 3/20/02
+
+ * I believe this may be handling traces incorrectly.  It does not 
+ * currently include the free variables of traces when deciding whether or
+ * not to lift something.
+ * Leaf - 3/21/02
+
+ *)
+
 (* Known problems:
       Loses phase annotations on term-level constructor bindings.
       So reifier must be re-run afterwards.
@@ -924,7 +953,7 @@ struct
 	  (exp, state, levels, eff, valuable)
       end
 
-    | rexp' (exp as Prim_e (prim,cons,exps), env, state) =
+    | rexp' (exp as Prim_e (prim,trs,cons,exps), env, state) =
       let
 	  val (cons, state, levels1) = rcons(cons, env, state)
 	  val (exps, state, levels2, eff_list, args_valuable) = 
@@ -933,7 +962,7 @@ struct
 	  (* we don't try very hard to track effect types through primops. *)
 	  val eff =
 	      (case (prim, eff_list) of
-		   (NilPrimOp (record lbls),  _) =>
+		   (NilPrimOp (record lbls),  tageff::eff_list) =>
 		       REC_EFF(ListPair.zip (lbls, eff_list))
                  | (NilPrimOp (select lbl), [eff]) =>
 		       ereclookup (eff, lbl)
@@ -942,7 +971,7 @@ struct
 	  val levels = mergeLevels(levels1, levels2)
 	  val valuable = (not (NilUtil.effect exp)) andalso args_valuable
       in
-	  (Prim_e (prim, cons, exps), state, levels, eff, valuable)
+	  (Prim_e (prim, trs,cons, exps), state, levels, eff, valuable)
       end
 
     | rexp' (Switch_e sw, env, state) = 

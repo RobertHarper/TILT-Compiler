@@ -26,7 +26,6 @@ signature NORMALIZE =
     val con_normalize : context -> con -> con
     val exp_normalize : context -> exp -> exp
     val module_normalize : context -> module -> module
-    val pull : con * kind -> con
 
     (*Normalizing functions with substitutions.
      * xxx_normalize' (context,subst) xxx is equivalent to
@@ -41,12 +40,17 @@ signature NORMALIZE =
     val con_normalize' : (context * (con_subst)) -> con -> con
     val exp_normalize' : (context * (con_subst)) -> exp -> exp
 
-    val is_hnf       : con -> bool
-    val reduce_hnf   : context * con -> bool * con   (* bool indicates whether HNF was reached *)
-    val reduce_hnf'   : context * con * NilSubst.con_subst -> NilSubst.con_subst * con   
-    val reduce_once  : context * con -> con
-    val reduce       : context * con -> con
-    val con_reduce   : context * con_subst -> con -> progress * con_subst * con
+    val is_hnf          : con -> bool
+    val reduce_hnf      : context * con -> bool * con   (* bool indicates whether HNF was reached *)
+    val reduce_hnf_list : context * con -> bool * con * con list
+                                                        (* same as reduce_hnf, but returns list of intermediate paths 
+							 * in reverse order: last found to first.  If initial arg was
+							 * a path, then it will be the last element of the list
+							 *)
+    val reduce_hnf'     : context * con * NilSubst.con_subst -> NilSubst.con_subst * con   
+    val reduce_once     : context * con -> con
+    val reduce          : context * con -> con
+    val con_reduce      : context * con_subst -> con -> progress * con_subst * con
     datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
     val reduce_until : context * (con -> 'a option) * con -> 'a ReduceResult
     val expandMuType : context * con -> con

@@ -11,6 +11,8 @@ sig
     type state = TortlBase.state
 
 
+    val record_tag_from_reps : rep list -> term
+
    (* If do_reject_nonValue is true, then static allocation occurs only if all fields are values.
       make_record              statically allocates if all fields are values or we are at top-level
       make_record_const        statically allocates because caller asserts non-value fields are invariant 
@@ -18,6 +20,7 @@ sig
     val do_reject_nonValue  : bool ref
     val empty_record        : term
     val make_record         : state * term list -> term * state
+    val make_record_with_tag: state * term * term list -> term * state
     val make_record_const   : state * term list * label option -> term * state
     val make_record_mutable : state * term list -> term * state
     val record_project      : regi * int * regi -> unit   (* register contaiing record, index of field, dest register *)

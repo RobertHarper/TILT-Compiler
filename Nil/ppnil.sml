@@ -225,7 +225,7 @@ structure Ppnil	:> PPNIL =
 		"(" ^ (TilWord32.toDecimalString tagcount) ^ ","
 		^ (TilWord32.toDecimalString totalcount) ^ ")")
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "VARARG[", pp_openness oness, pp_effect e, String "]"]
-
+      | pp_primcon GCTag_c = String "GCTAG"
     and pp_confun {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} = 
 	HOVbox[String "ALLARROW(",
 		pp_openness openness,
@@ -263,27 +263,27 @@ structure Ppnil	:> PPNIL =
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"
 		  | inj_exn s => "inj_exn[" ^ s ^ "]"
-		  | peq => "peq"
 		  | make_vararg (openness,effect) => "make_vararg[" ^ (openness2s openness) ^ "]"
 		  | make_onearg (openness,effect) => "make_onearg[" ^ (openness2s openness) ^ "]"
 		  | box_float Prim.F64 => "box_float_64"
 		  | box_float Prim.F32 => "box_float_32"
 		  | unbox_float Prim.F64 => "unbox_float_64"
-		  | unbox_float Prim.F32 => "unbox_float_32")
+		  | unbox_float Prim.F32 => "unbox_float_32"
+		  | mk_record_gctag      => "mk_record_gctag"
+		  | mk_sum_known_gctag   => "mk_sum_known_gctag")
 
     and pp_exp exp = 
 	(case exp of
 	     Var_e var => pp_var var
 	   | Const_e v => Ppprim.pp_value' (fn (Const_e v) => SOME v | _ => NONE) pp_exp pp_con v
-           | Prim_e (NilPrimOp (record labels), cons, exps) =>
+           | Prim_e (NilPrimOp (record []), _,cons, []) => String "record()"
+           | Prim_e (NilPrimOp (record labels), _,_, t::exps) =>
                  let
 		     fun pp_le (label, exp) = HOVbox[pp_label label, String ">",pp_exp exp]
-		     fun pp_lce (label, con, exp) = HOVbox[pp_label label, 
-							   String ": ", pp_con con,
-							   String "> ", pp_exp exp]
 		 in
 		     HOVbox
-		     [if (null cons) then String "record" else String "record_consXXX",
+		     [String "record",
+		      String "(",pp_exp t,String ")",
 		      if (length labels = length exps)
 			  then (pp_list pp_le (Listops.zip labels exps) 
 					("(",",",")",false))
@@ -291,13 +291,15 @@ structure Ppnil	:> PPNIL =
 				   String " :LENGTH_MISMATCH: ",
 				   pp_list pp_exp exps ("",",","", false)]]
 		 end
-	   | Prim_e (prim,cons,exps) => 
-		 let val p = (case prim of
-				  PrimOp p => pp_prim' p
-				| NilPrimOp p => pp_nilprimop p)
-		     val c = pp_list pp_con cons ("[",",","]",false)
-		     val e = pp_list pp_exp exps ("(",",",")",false)
-		 in HOVbox(if (!elide_prim) then [p,e] else [p,c,e])
+	   | Prim_e (prim,trs,cons,exps) => 
+		 let 
+		   val p = (case prim of
+			      PrimOp p => pp_prim' p
+			    | NilPrimOp p => pp_nilprimop p)
+		   val t = pp_list pp_trace trs ("{",",","}",false)
+		   val c = pp_list pp_con cons ("[",",","]",false)
+		   val e = pp_list pp_exp exps ("(",",",")",false)
+		 in HOVbox(if (!elide_prim) then [p,e] else [p,t,c,e])
 		 end
 	   | ExternApp_e (efun,exps) => 
 		 (pp_region ("ExternApp_(") ")" 
@@ -334,12 +336,14 @@ structure Ppnil	:> PPNIL =
 			 pp_exp exp,
 			 String " )"]
 	   | Fold_e (cvars,from,to) =>
-		 HOVbox [String "FOLD( ",pp_list'' pp_var cvars,
-			 String ",",pp_con from,String ",",pp_con to,
+		 HOVbox [String "FOLD ",
+			 pp_list pp_var cvars ("{",",","}",false),
+			 String "(",pp_con from,String "=>",pp_con to,
 			 String " )"]
 	   | Unfold_e (cvars,from,to) =>
-		 HOVbox [String "UNFOLD( ",pp_list'' pp_var cvars,
-			 String ",",pp_con from,String ",",pp_con to,
+		 HOVbox [String "UNFOLD ",
+			 pp_list pp_var cvars ("{",",","}",false),
+			 String "(",pp_con from,String "=>",pp_con to,
 			 String " )"]
 	   | Switch_e sw => pp_switch sw)
 

@@ -262,7 +262,6 @@ structure PpnilHtml :> PPNIL =
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"
 		  | inj_exn s => "inj_exn[" ^ s ^ "]"
-		  | peq => "peq"
 		  | make_vararg (openness,effect) => "make_vararg" 
 		  | make_onearg (openness,effect) => "make_onearg"
 		  | box_float Prim.F64 => "box_float_64"
@@ -274,7 +273,7 @@ structure PpnilHtml :> PPNIL =
 	(case exp of
 	     Var_e var => pp_var var
 	   | Const_e v => Ppprim.pp_value' (fn (Const_e v) => SOME v | _ => NONE) pp_exp pp_con v
-           | Prim_e (NilPrimOp (record labels), cons, exps) =>
+           | Prim_e (NilPrimOp (record labels), _, cons, exps) =>
                  let
 		     fun pp_le (label, exp) = HOVbox[pp_label label, String ">",pp_exp exp]
 		     fun pp_lce (label, con, exp) = HOVbox[pp_label label, 
@@ -292,15 +291,16 @@ structure PpnilHtml :> PPNIL =
 				   String " :LENGTH_MISMATCH: ",
 				   pp_list pp_exp exps ("",",","", false)]]
 		 end
-           | Prim_e (NilPrimOp (select label), _, [exp]) =>
+           | Prim_e (NilPrimOp (select label), _, _, [exp]) =>
                 Hbox[pp_exp exp, String ".", pp_label label]
-	   | Prim_e (prim,cons,exps) => 
+	   | Prim_e (prim,trs,cons,exps) => 
 		 let val p = (case prim of
 				  PrimOp p => pp_prim' p
 				| NilPrimOp p => pp_nilprimop p)
-		     val c = pp_list pp_con cons ("[",",","]",false)
-		     val e = pp_list pp_exp exps ("(",",",")",false)
-		 in HOVbox(if (!elide_prim) then [p,e] else [p,c,e])
+		   val t = pp_list pp_trace trs ("{",",","}",false)
+		   val c = pp_list pp_con cons ("[",",","]",false)
+		   val e = pp_list pp_exp exps ("(",",",")",false)
+		 in HOVbox(if (!elide_prim) then [p,e] else [p,t,c,e])
 		 end
 	   | ExternApp_e (efun,exps) => 
 		 (pp_region ("ExternApp_(") ")" 

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil *)
+(*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil Int *)
 
 (* Basically revamped from old version of Til *)
 
@@ -271,6 +271,10 @@ struct
 	 | ( Record_c _, _) => GREATER
 	 | (_, Record_c _) => LESS
 
+	 | (GCTag_c,GCTag_c) => EQUAL
+	 | (GCTag_c, _)      => GREATER
+	 | (_, GCTag_c)      => LESS
+
 	 | (Vararg_c (o1, e1), Vararg_c (o2, e2)) =>
 	       cmp_orders [cmp_int (hash_openness (o1), hash_openness(o2)),
 			   cmp_int (hash_effect e1, hash_effect e2)]
@@ -465,7 +469,13 @@ struct
 	  | ( ExternArrow_c _, _) => GREATER
 	  | ( _, ExternArrow_c _ ) => LESS
 
-	  | (Annotate_c _, Annotate_c _) => EQUAL
+	  | (Coercion_c {from=from1,to=to1,vars=vars1},
+	     Coercion_c {from=from2,to=to2,vars=vars2}) => 
+		    cmp_orders[cmp_con(from1,from2),cmp_con(to1,to2),cmp_list Name.compare_var (vars1,vars2)]
+	  | (Coercion_c _, _) => GREATER
+	  | (_, Coercion_c _) => LESS
+
+	  | (Annotate_c (_,c1), Annotate_c (_,c2)) => cmp_con (c1,c2)
 
     and cmp_allprim ((NilPrimOp p1), (NilPrimOp p2))= 
      (case (p1, p2) of 
@@ -473,6 +483,10 @@ struct
        | (record l, _) => GREATER
        | (_, record l) => LESS
 	     
+       | (partialRecord (labels1,i1), partialRecord (labels2,i2)) => cmp_orders[cmp_label_list (labels1, labels2),Int.compare (i1,i2)]
+       | (partialRecord _, _) => GREATER
+       | (_, partialRecord _) => LESS
+
        | (select l1, select l2) => Name.compare_label (l1, l2)
        | (select l, _ ) => GREATER
        | (_, select l) => LESS
@@ -540,8 +554,15 @@ struct
        | (make_onearg _, _) => GREATER
        | (_, make_onearg _ ) => LESS
 
+       | (mk_record_gctag ,mk_record_gctag) => EQUAL
+       | (mk_record_gctag,_) => GREATER
+       | (_,mk_record_gctag) => LESS
+
+       | (mk_sum_known_gctag,mk_sum_known_gctag) => EQUAL) 
+
+(*
        | (peq, peq) => EQUAL )
-(*       | (peq, _) => GREATER
+       | (peq, _) => GREATER
        | (_, peq) => LESS) *)
 
       | cmp_allprim (NilPrimOp _ , _ ) = GREATER
@@ -572,7 +593,7 @@ struct
        | (Let_e _, _) => GREATER
        | (_, Let_e _ ) => LESS
 	     
-       | (Prim_e (np1, clist1, elist1),  (Prim_e (np2, clist2, elist2))) =>
+       | (Prim_e (np1, _,clist1, elist1),  (Prim_e (np2, _,clist2, elist2))) =>
 	     ( case cmp_allprim (np1, np2) of
 		   EQUAL => (case cmp_exp_list (elist1, elist2) of
 				 EQUAL => cmp_con_list (clist1, clist2)
@@ -612,6 +633,21 @@ struct
        | (Raise_e _, _) => GREATER
        | (_, Raise_e _) => LESS
 	     
+       | (Fold_e (vs1,from1,to1),Fold_e (vs2,from2,to2)) =>
+		cmp_orders[cmp_con(from1,from2),cmp_con(to1,to2),cmp_list Name.compare_var (vs1,vs2)]
+       | (Fold_e _, _)  => GREATER
+       | (_, Fold_e _)  => LESS
+
+       | (Unfold_e (vs1,from1,to1),Unfold_e (vs2,from2,to2)) =>
+		cmp_orders[cmp_con(from1,from2),cmp_con(to1,to2),cmp_list Name.compare_var (vs1,vs2)]
+       | (Unfold_e _, _)  => GREATER
+       | (_, Unfold_e _)  => LESS
+
+       | (Coerce_e(q1,cons1,e1),Coerce_e(q2,cons2,e2)) =>
+		cmp_orders[cmp_exp(q1,q2),cmp_con_list (cons1,cons2),cmp_exp (e1,e2)]
+       | (Coerce_e _, _)  => GREATER
+       | (_, Coerce_e _)  => LESS
+
        | (Handle_e {body = body1, bound = bound1, 
 		    handler = handler1, result_type = result_type1},
           Handle_e {body = body2, bound = bound2, 

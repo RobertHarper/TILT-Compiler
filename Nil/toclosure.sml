@@ -105,7 +105,7 @@ struct
     (* c.l1.l2.l3 -> (c, [l1,l2,l3]) *)
     fun extract_cpath c = 
 	let fun loop acc (Proj_c(c,l)) = loop (l::acc) c
-	      | loop acc c = (c,rev acc)
+	      | loop acc c = (c,acc)
 	in loop [] c
 	end
 
@@ -660,14 +660,17 @@ struct
 			 | SOME (tr,copt) => let val frees = free_evar_add(frees,v,tr,copt)
 					     in  trace_find_fv(state, frees) tr
 					     end))
-	   | Prim_e (p,clist,elist) =>
+	   | Prim_e (p,trlist,clist,elist) =>
 		 let fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
+		     fun trfold(tr,f) = trace_find_fv(state,f) tr
+
 		     val frees = if (NilUtil.allprim_uses_carg p)
 				     then foldl cfold frees clist
 				 else foldl tfold frees clist
 		     val frees = foldl efold frees elist
+		     val frees = foldl trfold frees trlist
 		 in  frees
 		 end
 	   | Const_e v => 
@@ -989,7 +992,7 @@ struct
        ------------------------------------------------------------------------ *)
 
    fun cproj cvar i = Proj_c(Var_c cvar, generate_tuple_label(i+1))
-   fun eproj (evar,rectype) i = Prim_e(NilPrimOp(select (generate_tuple_label(i+1))),
+   fun eproj (evar,rectype) i = Prim_e(NilPrimOp(select (generate_tuple_label(i+1))),[],
 				       [],[Var_e evar])
 
 
@@ -1013,7 +1016,7 @@ struct
       free variables are zero or one in number.
     *)
 
-     local fun path_eq((v1,l1),(v2,l2)) = 
+(*     local fun path_eq((v1,l1),(v2,l2)) = 
 		(eq_var(v1,v2) andalso (Listops.eq_list(eq_label,l1,l2)))
 	   fun chandle subst (_,c) = 
 		let val (base,labels) = extract_cpath c
@@ -1032,6 +1035,7 @@ struct
      in  fun substConPathInCon (subst,c) = NilUtil.con_rewrite (handlers subst) c
          fun substConPathInKind (subst,k) = NilUtil.kind_rewrite (handlers subst) k
      end 
+*)
    fun fun_rewrite state vars (v,Function{effect,recursive,isDependent,
 					  tFormals,eFormals,fFormals,body,body_type}) =
        let 
@@ -1105,12 +1109,12 @@ struct
            fun is_float (TraceKnown TraceInfo.Notrace_Real) = true
 	     | is_float _ = false
 	   val boxfloat_type = Prim_c(BoxFloat_c Prim.F64, [])
-	   fun box e = Prim_e(NilPrimOp(box_float Prim.F64), [], [e])
-	   fun unbox e = Prim_e(NilPrimOp(unbox_float Prim.F64), [], [e])
+	   fun box e = Prim_e(NilPrimOp(box_float Prim.F64), [],[], [e])
+	   fun unbox e = Prim_e(NilPrimOp(unbox_float Prim.F64), [],[], [e])
 	   val trace_pointer = TraceKnown TraceInfo.Trace
 	   val trace_float = TraceKnown TraceInfo.Notrace_Real
 
-	   val (venv, code_bnds, venv_tr,venv_type) = 
+	   val (venv, code_bnds, venv_tr,venv_type_var,venv_type) = 
 	      (case (!do_single_venv, pc_free) of
 		(true, [(v,v',tr,_,t)]) => let val venv = e_rewrite state (Var_e v)
 					       val venv = if (is_float tr) then box venv else venv
@@ -1120,12 +1124,13 @@ struct
 					       val (tr,t) = if (is_float tr) 
 								then (trace_pointer,boxfloat_type) 
 								else (tr,t)
-					   in  (venv, [bnd], tr, t)
+					       val t_name = Name.fresh_named_var "singlevenvtype"
+					   in  (venv, [bnd], tr, t_name,t)
 					   end
 	      | _ => let  val labels = map #4 pc_free
 			  fun mapper (v,v',tr,l,t) =
 			      let val env_e = e_rewrite state (Var_e v)
-				  val code_e = Prim_e(NilPrimOp(select l), [],
+				  val code_e = Prim_e(NilPrimOp(select l), [],[],
 						 [Var_e venv_var])
 				  val code_tr = trace_rewrite inner_state tr
 				  val (env_e,env_tr,env_t) =
@@ -1139,20 +1144,31 @@ struct
 							   end
 						  else [Exp_b(v',code_tr,code_e)]
 			      in  (case env_e of 
-				       Var_e _ => (env_e, NONE, env_t, code_bnds)
+				       Var_e _ => (env_e, NONE, env_tr, env_t, code_bnds)
 				     | _ => let val v'' = derived_var v
-					    in  (Var_e v'', SOME(Exp_b(v'',env_tr,env_e)), env_t, code_bnds)
+					    in  (Var_e v'', SOME(Exp_b(v'',env_tr,env_e)), env_tr, env_t, code_bnds)
 					    end)
 			      end
-			  val fields_bndopts_types_codebnds = map mapper pc_free
-			  val fields = map #1 fields_bndopts_types_codebnds
-			  val bnds = List.mapPartial #2 fields_bndopts_types_codebnds
-			  val types = map #3 fields_bndopts_types_codebnds
-			  val code_bnds = Listops.flatten(map #4 fields_bndopts_types_codebnds)
-			  val venv = makeLetE Sequential bnds 
-			      (Prim_e(NilPrimOp(record labels),[], fields))
+			  val fields_bndopts_trs_types_codebnds = map mapper pc_free
+			  val fields = map #1 fields_bndopts_trs_types_codebnds
+			  val bnds = List.mapPartial #2 fields_bndopts_trs_types_codebnds
+			  val trs = map #3 fields_bndopts_trs_types_codebnds
+			  val types = map #4 fields_bndopts_trs_types_codebnds
+			  val code_bnds = Listops.flatten(map #5 fields_bndopts_trs_types_codebnds)
 			  val venv_type = Prim_c(Record_c (labels,NONE), types)
-		     in  (venv, code_bnds, TraceKnown TraceInfo.Trace, venv_type)
+			  val venv_type_name = Name.fresh_named_var "venvtype"
+			  val venv =  
+			    (case labels
+			       of [] => Prim_e(NilPrimOp(record []),[],[], [])
+				| _  => 
+				 let
+				   val venv_tag_name = Name.fresh_named_var "venvtag"
+				   val venv_tag_bnd = Exp_b(venv_tag_name,TraceKnown TraceInfo.Notrace_Int,
+							    Prim_e(NilPrimOp mk_record_gctag,trs,[Var_c venv_type_name],[]))
+				 in makeLetE Sequential (venv_tag_bnd::bnds) 
+				             (Prim_e(NilPrimOp(record labels),[],[], (Var_e venv_tag_name)::fields))
+				 end)
+		     in  (venv, code_bnds, TraceKnown TraceInfo.Trace, venv_type_name,venv_type)
 		     end)
 
 
@@ -1162,7 +1178,7 @@ struct
 	       in  (v, tr, c)
 	       end
 	   val vklist_code = (cenv_var,Single_k cenv) :: vklist_cl 
-	   val vtrclist_code = map vtrc_mapper ((venv_var,venv_tr,venv_type) :: eFormals)
+	   val vtrclist_code = map vtrc_mapper ((venv_var,venv_tr,Var_c venv_type_var) :: eFormals)
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
 				   eFormals=vtrclist_code,
@@ -1175,11 +1191,11 @@ struct
 			  venv = venv,
 			  tipe = Var_c fidtype_var}
 
-       in if escape then (is_recur,
-			  [(fidtype_var, closure_tipe)],
-			  [(code_var,code_fun)],
-			  [(v,closure)])
-	  else (false,[],[(code_var,code_fun)],[])
+       in if escape then (SOME(fidtype_var, closure_tipe),
+			  (venv_type_var,venv_type),
+			  (code_var,code_fun),
+			  SOME (is_recur,(v,closure)))
+	  else (NONE,(venv_type_var,venv_type),(code_var,code_fun),NONE)
        end
 
    and vklist_rewrite state vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
@@ -1197,19 +1213,30 @@ struct
 	       let 
 		   val var_fun_list = Sequence.toList var_fun_set
 		   val vars = map #1 var_fun_list
-		   val type_pfun_close = map (fun_rewrite state vars) var_fun_list
-		   val pfun_type = List.concat(map #2 type_pfun_close)
-		   val pfun_typebnds = map (fn (v,c) => (Con_b(Compiletime,Con_cb(v,c)))) pfun_type
-		   val pfun_list = List.concat(map #3 type_pfun_close)
+
+		   val (closure_types,venv_types,pfun_list,closures) = 
+		     Listops.unzip4 (map (fun_rewrite state vars) var_fun_list)
+
+		   val pfun_typebnds = 
+		     (List.mapPartial (fn (SOME (v,c)) => SOME (Con_b(Compiletime,Con_cb(v,c))) | NONE => NONE) closure_types)
+		     @ (map (fn (v,c) => (Con_b(Compiletime,Con_cb(v,c)))) venv_types)
+
 		   val pfun_bnd = Fixcode_b (Sequence.fromList pfun_list)
+
 		   fun make_fix (is_recur,[]) = []
 		     | make_fix (is_recur,ls) = [Fixclosure_b(is_recur,Sequence.fromList ls)]
+
 		   fun closure_loop recur (group,separate) [] = 
 		          (make_fix(false,separate)) @ (make_fix(recur,group))
-		     | closure_loop recur (group,separate) ((r,_,_,cl)::rest) = 
-			  closure_loop (recur orelse r)
-			    (if r then (cl@group,separate) else (group,cl@separate)) rest
-		   val closure_bnd_list = closure_loop false ([],[]) type_pfun_close
+		     | closure_loop recur (group,separate) (clos::rest) = 
+			  (case clos 
+			     of SOME (r,cl) =>
+			       closure_loop (recur orelse r)
+			       (if r then (cl::group,separate) else (group,cl::separate)) rest
+			      | NONE => closure_loop recur (group,separate) rest)
+
+		   val closure_bnd_list = closure_loop false ([],[]) closures
+
 	       in  pfun_typebnds @ (pfun_bnd :: closure_bnd_list)
 	       end)
 
@@ -1217,8 +1244,7 @@ struct
    and trace_rewrite state trace : niltrace = 
        let fun help c = 
 	   let val c = c_rewrite state c
-	       val (Var_c v, rev_labs) = extract_cpath c
-	       val labs = rev rev_labs
+	       val (Var_c v, labs) = extract_cpath c
 	   in  case labs of
 	       [] => TraceCompute v
 	     | _ => TraceKnown(TraceInfo.Compute(v,labs))
@@ -1241,7 +1267,6 @@ struct
 	   (* there are no function definitions within e_rewrite so we use same state *)
 	   val e_rewrite = e_rewrite state
 	   val c_rewrite = c_rewrite state
-
        in
        (case arg_exp of
 	    Var_e v =>
@@ -1251,15 +1276,15 @@ struct
 			NONE => arg_exp
 		      | SOME(v,_,_) => Var_e v
 	       end
-	  | Prim_e(NilPrimOp np,clist,elist) => 
+	  | Prim_e(NilPrimOp np,trlist,clist,elist) => 
 	       let val np = (case np of
 				 make_vararg(_,e) => make_vararg(Closure,e)
 			       | make_onearg(_,e) => make_onearg(Closure,e)
 			       | _ => np)
-	       in  Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
+	       in  Prim_e(NilPrimOp np,map (trace_rewrite state) trlist,map c_rewrite clist, map e_rewrite elist)
 	       end
-	  | Prim_e(p,clist,elist) => 
-	       Prim_e(p,map c_rewrite clist, map e_rewrite elist)
+	  | Prim_e(p,trlist,clist,elist) => 
+	       Prim_e(p,map (trace_rewrite state) trlist,map c_rewrite clist, map e_rewrite elist)
 	  | Const_e v => arg_exp
 	  | Switch_e switch => 
 		Switch_e(case switch of 

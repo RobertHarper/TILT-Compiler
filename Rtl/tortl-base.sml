@@ -329,7 +329,6 @@ struct
 	in  result
 	end
 
-
   fun reduce_to_sum str ({env,...}:state) c = 
       let fun slow() = subtimer("RTL_reduceToSum",Normalize.reduceToSumtype) (#1 env,c) 
       in  (case c of
@@ -345,6 +344,22 @@ struct
 	     | _ => slow())
       end
 
+  fun reduce_to_nondep_record ({env,...} : state) con =
+      (case #2 (subtimer("RTL_reduce_hnf",Normalize.reduce_hnf) (#1 env,con)) of
+	 Prim_c (Record_c (labs,vlopt),cons) =>
+	 (case vlopt of 
+	    NONE => (labs,cons)
+	  | SOME vs => 
+	    let
+	      fun loop ([],_,acc) = rev acc
+		| loop ((v,c)::rest,rev_vcl,acc) =
+		  let val c' = Normalize.removeDependence rev_vcl c (* should we use rev rev_vcl instead? *)
+		  in loop (rest,(v,c')::rev_vcl,c'::acc)
+		  end
+	    in (labs,loop (Listops.zip vs cons,[],[]))
+	    end)
+       | _ => error "reduce_to_record didn't get a record type")
+		  
 
   val maxRtlRecord = Rtltags.maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
 
@@ -468,7 +483,6 @@ struct
 			     in  pathcase(v,indices)
 			     end))
        end
-
 
 
   (* ----- Data structures for the current function being compiled 

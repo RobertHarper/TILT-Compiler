@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY *)
+(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops *)
 
 structure Reify :> REIFY =
 struct
@@ -77,17 +77,42 @@ struct
 
     fun reify_exp ctxt (e as Var_e v, pset) = (e, pset)
       | reify_exp ctxt (e as Const_e _, pset) = (e, pset)
-      | reify_exp ctxt (Prim_e (p, cons, exps), pset) =
+      | reify_exp ctxt (Prim_e (p, trs, cons, exps), pset) =
 	  let 
-             val pset' = 
-                   if (NilUtil.allprim_uses_carg p) then
-                      reify_cons_rt (cons, pset)
-                   else
-                      pset
+
+	    fun reify1 (con,tr,(bnds,pset)) = 
+	      let val (tr,bnd,pset) = do_reify(ctxt,con,tr,pset)
+	      in (con,tr,(bnd @ bnds,pset))
+	      end
+
+	    fun reify_record_gctag_con (trs,c,pset) =
+	      (case #2 (Normalize.reduce_hnf (ctxt,c)) of
+		 Prim_c (Record_c _,cons) => 
+		   let val (_,trs,(bnds,pset)) = Listops.foldl_acc2 reify1 ([],pset) (cons,trs)
+		   in (bnds,trs,pset)
+		   end
+	       | _ => error "record tag created with non record type")
+
+             val (bnds,trs,pset') = 
+	       case p of
+		 NilPrimOp mk_record_gctag     => reify_record_gctag_con(trs,hd cons,pset)
+	       | NilPrimOp mk_sum_known_gctag  => 
+		   let 
+		     val carrier = NilUtil.sum_project_carrier_type (#2 (Normalize.reduce_hnf (ctxt,hd cons)))
+		     val (tr,bnds,pset) = do_reify(ctxt,carrier,hd trs,pset)
+		   in (bnds,[tr],pset)
+		   end
+		 | _ =>
+                   ([],trs,
+		    if (NilUtil.allprim_uses_carg p) then
+		      reify_cons_rt (cons, pset)
+		    else
+		      pset)
 
              val (exps', pset'') = reify_exps ctxt (exps, pset')
 	  in  
-             (Prim_e (p, cons, exps'), pset'')
+             (NilUtil.makeLetE Sequential bnds (Prim_e (p, trs,cons, exps'))
+	      , pset'')
 	  end
 
       | reify_exp ctxt (App_e (openness, f, cons, exps0, exps1), pset) =

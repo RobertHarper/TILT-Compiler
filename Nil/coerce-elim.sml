@@ -52,7 +52,7 @@ structure CoerceElim :> COERCEELIM =
 
 	       val fun_name = Name.fresh_named_var "fold"
 	       val arg_name = Name.fresh_named_var "fold_arg"
-	       val body = N.Prim_e(N.NilPrimOp N.roll, [to_con],[N.Var_e arg_name])
+	       val body = N.Prim_e(N.NilPrimOp N.roll, [],[to_con],[N.Var_e arg_name])
 	       val lambda = N.Function {effect = N.Total,
 					  recursive = N.Leaf,
 					  isDependent = false,
@@ -72,7 +72,7 @@ structure CoerceElim :> COERCEELIM =
 
 	       val fun_name = Name.fresh_named_var "unfold"
 	       val arg_name = Name.fresh_named_var "unfold_arg"
-	       val body = N.Prim_e(N.NilPrimOp N.unroll, [from_con],[N.Var_e arg_name])
+	       val body = N.Prim_e(N.NilPrimOp N.unroll, [],[from_con],[N.Var_e arg_name])
 	       val lambda = N.Function {effect = N.Total,
 					  recursive = N.Leaf,
 					  isDependent = false,

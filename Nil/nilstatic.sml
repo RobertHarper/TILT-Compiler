@@ -161,7 +161,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val function_type          = NilUtil.function_type
   val convert_sum_to_special = NilUtil.convert_sum_to_special
   val kind_type_tuple        = NilUtil.kind_type_tuple
-  val exp_tuple              = NilUtil.exp_tuple
   val con_tuple              = NilUtil.con_tuple
 
   val bool_con               = NilUtil.bool_con
@@ -203,6 +202,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val strip_annotate    = NilUtil.strip_annotate
 
   val sub_effect        = NilUtil.sub_effect
+
+  val is_taglike        = NilUtil.is_taglike
 
   (*From Name*)
   val eq_var           = Name.eq_var
@@ -691,7 +692,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   val code_kind =  con_valid (D,code)
 	   (*Or could synthesize on the environment*)
 	   val ((v,klast),vklist,body_kind) = 
-	     case code_kind of
+	      case code_kind of
 	       Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
 	     | _ => (c_error(D,constructor,"Invalid closure: code has wrong kind"))
 		 
@@ -1456,6 +1457,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,Type_k,sk'),
 				   clist1,clist2)
 		 end
+
 	       (* This case is purely structural comparison; when
 		!equiv_shao_recursion is false all mu's will be
 		compared this way and no other way. *)
@@ -1773,9 +1775,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     let
       val con' = exp_valid(D,exp)
     in
-       ignore (subtimer("exp_analyze:st",subtype)(D,con',con) orelse 
-	       (perr_c_c (con,con');
-		e_error(D,exp,"Expression cannot be given required type")))
+      ignore (subtimer("exp_analyze:st",subtype)(D,con',con) orelse 
+	      (perr_c_c (con,con');
+	       e_error(D,exp,"Expression cannot be given required type")))
     end
   and exp_valid (D : context, exp : exp) : con = 
       let 
@@ -2104,10 +2106,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
       (* Check a primitive node
        *)
-      fun prim_valid (D,prim : nilprim,cons : con list,exps : exp list) : con = 
+      fun prim_valid (D,prim : nilprim,trs : niltrace list, cons : con list,exps : exp list) : con = 
 	let 
-	  val orig_exp = Prim_e(NilPrimOp prim,cons,exps)
-	    
+	  
+	  val orig_exp = Prim_e(NilPrimOp prim,trs,cons,exps)
+
+	  val _ = (app (curry2 niltrace_valid D) trs 
+		   handle _ => e_error (D,orig_exp,"Invalid trace args to prim_valid"))
+  
 	  fun project_sum_xxx (D,argcon : con, argexp : exp, k : w32) : con = 
 	    let
 	      val _ = type_analyze(D,argcon)
@@ -2116,6 +2122,18 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      val _ = exp_analyze (D,argexp,argcon')
 	    in projectSumType(D,argcon,k)  (*Already normal!*)
 	    end
+
+	  fun mkGCTagType special = Prim_c(GCTag_c,[special])
+
+	  fun assert_taglike c = 
+	    is_taglike c orelse
+	    c_error(D,c,"type is not taglike")
+
+	  fun assert_non_taglike c =
+	    not (is_taglike c) orelse
+	    c_error(D,c,"type is taglike")
+
+	  val is_known = is_hnf o con_head_normalize
 
 	  fun sum_helper(D,sumcon : con, sumtype : w32) : con * int * int * con =  
 	    let
@@ -2136,26 +2154,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	    in (inj_type,nontagcount,which,carrier)
 	    end
+	  
 
-	  fun inject_sum_nontag (check_con : context * con -> context * con list) 
-				(D,sumtype : w32,sumcon : con,exps : exp list) : con = 
-	    let
-	      val subtype    = subtimer("Tchk:Exp:Prim:Inj:st",subtype)
-	      val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
-	      val con_k = 
-		(case (Int.compare (which,0),Int.compare (nontagcount,1)) of
-		   (LESS,_) => e_error (D,orig_exp, "Injecting value into non tag field")
-		 | (_,LESS) => e_error(D,orig_exp,"Illegal injection - no non value fields!")
-		 | (EQUAL,EQUAL) => carrier
-		 | _ => Proj_c(carrier,NilUtil.generate_tuple_label (which + 1)))
+	  fun sum_project_carrier_type (which : int, nontagcount : int, carrier) = 
+	    (case (Int.compare (which,0),Int.compare (nontagcount,1)) of
+	       (LESS,_) => e_error (D,orig_exp, "Injecting value into non tag field")
+	     | (_,LESS) => e_error(D,orig_exp,"Illegal injection - no non value fields!")
+	     | (EQUAL,EQUAL) => carrier
+	     | _ => Proj_c(carrier,NilUtil.generate_tuple_label (which + 1)))
 
-	      val (D,cons) = check_con(D,con_k)
-	    in
-	      if all2 (fn (e,c) => subtype(D,exp_valid(D,e),c)) (exps,cons) then
-						inj_type
-	      else
-						e_error(D,orig_exp,"Injected arguments are don't have expected typs")
-	    end
 
 	  fun inject_sum_tag (D,sumtype : w32, sumcon : con) : con = 
 	    let
@@ -2165,7 +2172,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      else e_error(D,orig_exp,"Illegal injection - sumtype out of range" )
 	    end
 
-	  val is_known = is_hnf o con_head_normalize
 
 	  val res = 
 	    (case (prim,cons,exps) of
@@ -2179,32 +2185,62 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 let val con_k = project_sum_xxx(D,argcon,argexp,k)
 		 in projectRecordType (D,con_k,l)
 		 end
-	     | (record labels,[],exps) =>
-		 let val cons = map (curry2 exp_valid D) exps
-		 in if (labels_distinct labels) then Prim_c (Record_c (labels,NONE),cons)
-		    else e_error(D,orig_exp, "Fields not distinct" )
+	     | (record [],[],[]) => NilUtil.unit_con
+	     | (record labels,[],t::exps) =>
+		 let 
+		   val cons = map (curry2 exp_valid D) exps
+		   val rtype = Prim_c (Record_c (labels,NONE),cons)
+		   val _ = exp_analyze(D,t,mkGCTagType(rtype))
+		   val _ = (labels_distinct labels) orelse e_error(D,orig_exp, "Fields not distinct" )
+		   val _ = ((List.length labels) = (List.length exps)) orelse e_error(D,orig_exp, "Wrong number of fields")
+		 in rtype
 		 end	
 	     | (select label,[],[exp]) => projectRecordType (D,exp_valid (D,exp),label)
 
 	     | (inject sumtype,[sumcon],[]) => inject_sum_tag(D,sumtype,sumcon)
-	     | (inject sumtype,[sumcon],exps as [_])  => inject_sum_nontag (fn (D,c) => (D,[c])) (D,sumtype,sumcon,exps)
-
 	     | (inject_known sumtype,[sumcon],[]) => inject_sum_tag (D,sumtype,sumcon)
-	     | (inject_known sumtype,[sumcon],exps as [_]) => 
-		 let fun check (D,c) = if is_known(D,c) then (D,[c])
-				       else e_error(D,orig_exp,"inject_known injects into unknown type")
-		 in				     
-		   inject_sum_nontag check (D,sumtype,sumcon,exps)
+
+	     | (inject sumtype,[sumcon],exps as [v])  => 
+		 let
+		   val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
+		   val con_k = sum_project_carrier_type (which,nontagcount,carrier)
+		 in
+		   if subtype(D,exp_valid(D,v),con_k)
+		     then inj_type
+		   else e_error(D,orig_exp,"Injected argument doesn't have expected type")
 		 end
 
-	     | (inject_known_record sumtype, [sumcon], exps) => 
-		 let fun check (D,c) = (case strip_record(D,c) of
+	     | (inject_known sumtype,[sumcon],exps) => 
+		 let 				       
+		     val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
+		     val con_k = sum_project_carrier_type (which,nontagcount,carrier)
+		     val con_k = con_head_normalize (D,con_k)
+
+		     val _ = is_hnf con_k orelse
+		             e_error(D,orig_exp,"inject_known injects into unknown type")
+
+		     val v = case (exps,nontagcount)
+			       of ([v],1)   => (assert_non_taglike con_k;v)
+				| ([t,v],1) => (assert_taglike con_k;
+						exp_analyze(D,t,mkGCTagType(inj_type));
+						v)
+				| ([t,v],_) => (exp_analyze(D,t,mkGCTagType(inj_type));v)
+				| _         => e_error(D,orig_exp,"Wrong number of arguments for sumtype")
+
+		     val _ = subtype(D,exp_valid(D,v),con_k)
+		             orelse e_error(D,orig_exp,"Injected argument doesn't have expected type")
+
+		 in inj_type
+		 end
+
+	     | (inject_known_record sumtype, [sumcon], exps) => e_error(D,orig_exp,"inject_known_record is not used")
+(*		 let fun check (D,c) = (case strip_record(D,c) of
 					  (_,SOME vars,cons) => 
 					    (foldl2 (fn (v,c,D) => insert_con(D,v,c)) D (vars,cons),cons)
 					| (_,NONE,cons)      => (D,cons))
 		 in
 		   inject_sum_nontag check (D,sumtype,sumcon,exps)
-		 end
+		 end*)
 	     | (box_float floatsize,[],[exp]) => 
 		 if same_floatsize(strip_float(D,exp_valid (D,exp)),floatsize) then 
 		   Prim_c (BoxFloat_c floatsize,[])
@@ -2254,12 +2290,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       in AllArrow_c{openness=openness,effect=effect,isDependent=false,
 			     tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body_type=resc}
 	       end
-	    | (peq,cons,exps) => 
-		      (error (locate "prim_valid") "Polymorphic equality should not appear at this level" handle e => raise e)
-	    | (prim,cons,exps) => 
-			(perr_e (Prim_e (NilPrimOp prim,cons,exps));
-			 lprintl "No matching case in prim_valid";
-			 (error (locate "prim_valid") "Illegal primitive application" handle e => raise e)))
+	    | (mk_record_gctag, [c],[])   => (type_analyze(D,c);mkGCTagType c)
+	    | (mk_sum_known_gctag,[c],[]) => (type_analyze(D,c);mkGCTagType c)
+	    | (prim,cons,exps) => e_error(D,orig_exp,"No matching case in prim_valid"))
 	in
 	  res
 	end
@@ -2287,9 +2320,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       val con = exp_valid (D,exp)
 	     in removeDependence etypes (makeLetC cbnds con)
 	     end
-	 | Prim_e (NilPrimOp prim,cons,exps) => prim_valid (D,prim,cons,exps)
-	 | Prim_e (PrimOp prim,cons,exps) =>   
+	 | Prim_e (NilPrimOp prim,trs,cons,exps) => prim_valid (D,prim,trs,cons,exps)
+	 | Prim_e (PrimOp prim,trs,cons,exps) =>   
 	     let 
+	       val _ = app (curry2 niltrace_valid D) trs
 	       val _ = app (curry2 type_analyze D) cons
 	       val (total,arg_types,return_type) = NilPrimUtil.get_type D prim cons
 	       val _ = do_args (D,arg_types,exps)

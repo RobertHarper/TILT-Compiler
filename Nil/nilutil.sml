@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List TraceInfo Stats NilRewrite *)
+(*$import Prelude TopLevel Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List TraceInfo Stats NilRewrite Int *)
 
 (* This structure contains a miscellaneous collection of functions
  * for dealing with the NIL that have no other natural place.
@@ -50,10 +50,7 @@ struct
   val generate_tuple_symbol = IlUtil.generate_tuple_symbol
   val generate_tuple_label = IlUtil.generate_tuple_label
 
-  fun exp_tuple (elist : exp list) = 
-      let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) elist
-      in Prim_e(NilPrimOp(record labels),[],elist)
-      end
+
   fun con_tuple clist = 
       let fun mapper(i,_) = generate_tuple_label(i+1)
 	  val labs = Listops.mapcount mapper clist
@@ -72,15 +69,17 @@ struct
     | kind_type_tuple len = kind_tuple(Listops.map0count (fn _ => Type_k) len)
 
   val unit_con = con_tuple []
-  val unit_exp = exp_tuple []
+
+  val unit_exp = Prim_e(NilPrimOp(record []),[],[],[])
+
   val bool_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[con_tuple_inject[]])
   val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[con_tuple_inject[]])
   val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[con_tuple_inject[]])
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
-  val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[false_con],[])
-  val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[true_con],[])
+  val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[],[],[match_tag,unit_exp])
+  val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[],[false_con],[])
+  val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[],[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
   val exn_con = Prim_c(Exn_c, [])
@@ -103,9 +102,9 @@ struct
 
   fun effect (Var_e _) = false
     | effect (Const_e _) = false
-    | effect (Prim_e (NilPrimOp make_exntag, _, _)) = true
-    | effect (Prim_e (NilPrimOp _, _, _)) = false
-    | effect (Prim_e (PrimOp p, _, _)) = 
+    | effect (Prim_e (NilPrimOp make_exntag, _,_, _)) = true
+    | effect (Prim_e (NilPrimOp _, _,_, _)) = false
+    | effect (Prim_e (PrimOp p, _,_, _)) = 
       (case p of
 	   Prim.plus_uint _ => false
 	 | Prim.minus_uint _ => false
@@ -213,9 +212,9 @@ struct
     fun is_closed_value (Var_e v) = false
       | is_closed_value (Const_e v) = true
       | is_closed_value (Let_e _) = false
-      | is_closed_value (Prim_e (NilPrimOp np,clist,elist)) = 
+      | is_closed_value (Prim_e (NilPrimOp np,trlist,clist,elist)) = 
 	nilprim_is_closed_value(np,clist,elist)
-      | is_closed_value (Prim_e (PrimOp _,_,_)) = false
+      | is_closed_value (Prim_e (PrimOp _,_,_,_)) = false
       | is_closed_value (Switch_e _) = false
       | is_closed_value (App_e _) = false
       | is_closed_value (ExternApp_e _ ) = false
@@ -297,8 +296,10 @@ struct
 	       exp_var_bind   = null_binder,
 	       exp_var_define = null_binder,
 	       sum_var_bind   = null_binder,
+	       exn_var_bind    = null_binder,
 	       labelled_var   = null_label_binder
 	       }
+
     val {rewrite_con  = strip_con,
 	 ...} = rewriters all_handlers
       
@@ -415,7 +416,8 @@ struct
            | inj_exn _ => false
            | make_vararg _ => true
            | make_onearg _ => true
-           | peq => true)
+	   | mk_record_gctag  => false
+	   | mk_sum_known_gctag  => false)
 
   fun aggregate_uses_carg (Prim.OtherArray false) = true
     | aggregate_uses_carg (Prim.OtherVector false) = true
@@ -871,9 +873,9 @@ struct
 			  val body' = f_exp state' body
 		      in Let_e(sort,bnds',body')
 		      end
-		| (Prim_e (ap,clist,elist)) => 
+		| (Prim_e (ap,trlist,clist,elist)) => 
 		      let val state = if (allprim_uses_carg ap) then state else type_state state
-		      in  Prim_e(ap,map (f_con state) clist, map self elist)
+		      in  Prim_e(ap,map (f_niltrace state) trlist,map (f_con state) clist, map self elist)
 		      end
 		| (Switch_e switch) => Switch_e(f_switch state switch)
 		| ExternApp_e (func,elist) =>
@@ -1152,6 +1154,7 @@ struct
 	 | (Vararg_c (openness1,effect1),Vararg_c (openness2,effect2)) => 
 	  (same_openness (openness1,openness2) andalso
 	   same_effect (effect1,effect2))
+	 | (GCTag_c,GCTag_c) => true
 	 | _  => false
     end
 
@@ -1574,4 +1577,49 @@ struct
 	      | loop c (l::rest) = loop (Proj_c(c,l)) rest
 	in  loop (Var_c v) labs
 	end
+
+    fun is_taglike c = 
+      (case c
+	 of Prim_c(Int_c _, _)  => true
+	  | Prim_c(Sum_c _,_)   => true
+	  | Mu_c _              => true
+	  | Proj_c(Mu_c _,_)    => true
+	  | Prim_c(Exntag_c, _) => true
+	  | _                   => false)
+
+    fun sum_project_carrier_type (Prim_c(Sum_c {known=SOME sumtype,tagcount,totalcount},[carrier])) =
+      let
+	val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
+	val which = TilWord32.toInt(TilWord32.uminus(sumtype,tagcount))
+      in 
+	case (Int.compare (which,0),Int.compare (nontagcount,1)) of
+	  (LESS,_) => error ("Injecting value into non tag field")
+	| (_,LESS) => error("Illegal injection - no non value fields!")
+	| (EQUAL,EQUAL) => carrier
+	| _ => Proj_c(carrier,generate_tuple_label (which + 1))
+      end
+      | sum_project_carrier_type _ = error "projecting carrier from non-sum"
+
+    fun mk_record_with_gctag (labels,trs_opt,cons,exps,name_opt) : (bnd list * exp) = 
+      let 
+	val (bnds,rcrd) = 
+	  (case labels
+	     of [] => ([],Prim_e(NilPrimOp (record labels),[],[],[]))
+	      | _  => 
+	       let
+		 val rt = Prim_c (Record_c (labels,NONE),cons)
+		 val rtvar = Name.fresh_named_var "record_gctag_type"
+		 val rtbnd = Con_b(Compiletime,Con_cb(rtvar,rt))
+		 val trs = case trs_opt of SOME trs => trs | _ => map (fn _ => TraceUnknown) labels
+		 val gctag = Prim_e(NilPrimOp mk_record_gctag,trs,[Var_c rtvar],[])
+		 val gtvar = Name.fresh_named_var "record_gctag"
+		 val gtbnd = Exp_b(gtvar,TraceKnown TraceInfo.Notrace_Int,gctag)
+		 val rcrd = Prim_e(NilPrimOp (record labels),[],[],(Var_e gtvar)::exps)
+	       in ([rtbnd,gtbnd],rcrd)
+	       end)
+      in case name_opt 
+	   of SOME v => (bnds @ [Exp_b(v,TraceKnown TraceInfo.Trace,rcrd)],Var_e v)
+	    | _ => (bnds,rcrd)
+      end
+	
 end

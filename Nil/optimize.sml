@@ -1,4 +1,4 @@
-(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps Vararg NilPrimUtil *)
+(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps Vararg NilPrimUtil NilRename *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.
@@ -32,7 +32,7 @@ struct
 		let val c = Name.fresh_named_var "len_type"
 		    val agg = Name.fresh_named_var "len_agg"
 		    val body = Prim_e(PrimOp(Prim.length_table 
-					     (aggregate false)), [Var_c c], 
+					     (aggregate false)), [],[Var_c c], 
 				      [Var_e agg])
 		    val res_var = Name.fresh_named_var "len_result"
 		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown TraceInfo.Notrace_Int, body)],
@@ -50,7 +50,7 @@ struct
 			val agg = Name.fresh_named_var "subscript_agg"
 			val index = Name.fresh_named_var "subscript_index"
 			val res_var = Name.fresh_named_var "subscript_result"
-			val body = Prim_e(PrimOp(Prim.sub (aggregate false)), 
+			val body = Prim_e(PrimOp(Prim.sub (aggregate false)), [],
 					  [Var_c c], 
 					  [Var_e agg, Var_e index])
 			val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown (TraceInfo.Compute(c,[])), body)],
@@ -70,7 +70,7 @@ struct
 			val array = Name.fresh_named_var "update_array"
 			val index = Name.fresh_named_var "update_index"
 			val item = Name.fresh_named_var "update_item"
-			val body = Prim_e(PrimOp(Prim.update (aggregate false)), 
+			val body = Prim_e(PrimOp(Prim.update (aggregate false)), [],
 					  [Var_c c], 
 					  [Var_e array, Var_e index, Var_e item])
 			val res_var = Name.fresh_named_var "update_result"
@@ -91,7 +91,7 @@ struct
 			val size = Name.fresh_named_var "agg_size"
 			val item = Name.fresh_named_var "agg_item"
 			val body = Prim_e(PrimOp(Prim.create_table 
-					 (aggregate false)), [Var_c c], 
+					 (aggregate false)), [],[Var_c c], 
 					  [Var_e size, Var_e item])
 		    in  Function{effect = Partial, recursive = Leaf, isDependent = false,
 				 tFormals = [(c,Type_k)],
@@ -520,7 +520,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		       Var_e v =>
 			   (case lookup_alias(state,v) of
 				OPTIONALe 
-				(e as (Prim_e(PrimOp(Prim.eq_int is),[],
+				(e as (Prim_e(PrimOp(Prim.eq_int is),[],[],
 					      [Var_e v,Const_e (Prim.int(_,w))]))) => e
 			     | _ => arg)
 		     | (Let_e (_, [Exp_b(v, _, e)], Var_e v')) =>
@@ -528,7 +528,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		     | _ => arg)
 	    in
 		(case (arg,arms,default) of
-		     (Prim_e(PrimOp(Prim.eq_int is),[],
+		     (Prim_e(PrimOp(Prim.eq_int is),[],[],
 			     [Var_e v,Const_e (Prim.int(_,w))]),
 		      [(0w0,_,zeroexp), (0w1,_,oneexp)],
 		      NONE) => SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
@@ -833,37 +833,65 @@ fun pp_alias UNKNOWN = print "unknown"
 		       | _ => (t,clist))
 		val clist = map (do_con state) clist
 		val elist = map (do_exp state) elist
-	    in  Prim_e(PrimOp(constr t), clist, elist)
+	    in  Prim_e(PrimOp(constr t), [],clist, elist)
 	    end
 		 
 	and do_inject (state : state) (k, clist, elist) = 
-	    let fun default() = Prim_e(NilPrimOp (inject k),
+	    let fun default() = Prim_e(NilPrimOp (inject k),[],
 				       map (do_con state) clist, 
 				       map (do_exp state) elist)
 		val elist = 
 		    (case elist of
 			 [Var_e v] => 
 			     (case lookup_alias(state,v) of
-				  OPTIONALe (e as (Prim_e(NilPrimOp(record _),_,_))) => [e]
+				  OPTIONALe (e as (Prim_e(NilPrimOp(record _),_,_,_))) => [e]
 				| MUSTe e => [e]
 				| _ => elist)
 		       | _ => elist)
 	    in  
 	     (case elist of
-		 [] => do_prim state (NilPrimOp(inject_known k),clist,[])
+		 [] => do_prim state (NilPrimOp(inject_known k),[],clist,[])
 	       | [injectee] =>
 		     let val injectee_type = type_of(state,injectee)
+		       val sum_type = hd clist
 		     in  (case (reduce_hnf(state, injectee_type)) of
-			  (true, _) => let val e = Prim_e(NilPrimOp(inject_known k), clist, elist)
-				       in  do_exp state e
-				       end
+			  (true, injectee_hnf) => 
+			    (case (reduce_hnf (state, sum_type)) of
+				   (true,sum_hnf) => 
+				     let
+
+				       val has_one_carrier = 
+					 (case sum_hnf 
+					    of Prim_c (Sum_c {tagcount,totalcount,...},_) =>
+					      TilWord32.equal(TilWord32.uminus(totalcount,tagcount),0w1)
+					     | _=> error "Inject into non-sum!")
+
+				       val carrier_not_tagged = has_one_carrier andalso not (NilUtil.is_taglike injectee_hnf)
+
+				       val e = 
+					 if carrier_not_tagged then
+					   Prim_e(NilPrimOp(inject_known k), [],clist, elist)
+					 else
+					   let 
+					     val typname = Name.fresh_named_var "sumtype"
+					     val typbnd = Con_b(Compiletime,Con_cb(typname,NilRename.renameCon 
+										   (NilUtil.convert_sum_to_special (sum_hnf,k))))
+					     val tgname = Name.fresh_named_var "sumgctag"
+					     val tgbnd = Exp_b(tgname,TraceUnknown,Prim_e(NilPrimOp mk_sum_known_gctag,[TraceUnknown],[Var_c typname],[]))
+					     val e = Prim_e(NilPrimOp(inject_known k), [],clist, (Var_e tgname)::elist)
+					   in Let_e(Sequential,[typbnd,tgbnd],e)
+					   end
+				     in do_exp state e
+				     end
+
+				 | _ => error "Injectee has known type, but sum has no hnf")
 			| _ => default())
 		     end
 	       | _ => error "Inject got more than one argument")
 	    end
 
 
-	and do_prim (state : state) (prim, clist, elist) = 
+	and do_prim (state : state) (prim, trlist,clist, elist) = 
 	 let open Prim
 
 	     fun getVals [] = SOME []
@@ -882,11 +910,12 @@ fun pp_alias UNKNOWN = print "unknown"
 		    | _ => e)
 	       | help e = e
              fun default() = Prim_e(prim,
+				    map (do_niltrace state) trlist,
 				    map (do_con state) clist, 
 				    map (do_exp state) elist)
 
 	 in  case (prim,map help elist) of
-		 (NilPrimOp(select l),[Prim_e(NilPrimOp(record labs),_,elist)]) => 
+		 (NilPrimOp(select l),[Prim_e(NilPrimOp(record labs),_,_,gctag::elist)]) => 
 		     let val SOME new_exp = assoc_eq(Name.eq_label,l,zip labs elist)
                      in  (case (#doProjection (getParams state)) of
 			      NONE => default()
@@ -902,10 +931,10 @@ fun pp_alias UNKNOWN = print "unknown"
 	       | (PrimOp(sub t), _) => do_aggregate (state,sub,t,clist,elist)
 	       | (PrimOp(update t), _) => do_aggregate (state,update,t,clist,elist)
 	       | (PrimOp(length_table t), _) => do_aggregate (state,length_table,t,clist,elist)
-	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,[e])]) => do_exp state e
-	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,[e])]) => do_exp state e
-	       | (NilPrimOp (make_vararg oe), [Prim_e(NilPrimOp (make_onearg _), _, [e])]) => do_exp state e
-	       | (NilPrimOp (make_onearg oe), [Prim_e(NilPrimOp (make_vararg _), _, [e])]) => do_exp state e
+	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,_,[e])]) => do_exp state e
+	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,_,[e])]) => do_exp state e
+	       | (NilPrimOp (make_vararg oe), [Prim_e(NilPrimOp (make_onearg _), _, _, [e])]) => do_exp state e
+	       | (NilPrimOp (make_onearg oe), [Prim_e(NilPrimOp (make_vararg _), _, _, [e])]) => do_exp state e
                | (PrimOp p, _) => 
 		      (case (getVals elist) of
 			   NONE => default ()
@@ -939,7 +968,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				  end
 			    | Prim.refcell _ => exp
 			    | Prim.tag (t,c) => Const_e(Prim.tag(t,do_con state c)))
-		| Prim_e(p,clist,elist) => do_prim state (p,clist,elist)
+		| Prim_e(p,trlist,clist,elist) => do_prim state (p,trlist,clist,elist)
 		| Switch_e sw => do_switch state sw
 		| Let_e (letsort,bnds,e) => 
 			let (* we must put a wrapper in order to perform the filter *)
@@ -976,7 +1005,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					      val args' = map Var_e newvars
 					      fun mkbnd (l,v) = 
 						  Exp_b(v,TraceUnknown,
-							Prim_e(NilPrimOp(select l), [], args))
+							Prim_e(NilPrimOp(select l), [],[], args))
 					      val bnds' = Listops.map2 mkbnd (labels, newvars)
 					      val call = App_e(Open, Var_e orig_var, [], args', [])
 					      val new_exp = NilUtil.makeLetE Sequential bnds' call
@@ -1002,7 +1031,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			     Var_e v =>
 			         (case (lookup_alias(state,v)) of
 				      ETAe (1,uncurry,args)=> do_eta (uncurry,args)
-                                    | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),
+                                    | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),[],
 						       [c1,_],[Var_e v'])) =>
 					  ((do_onearg(c1, v, v', elist))
 	 handle e => (print "Error detected from do_onearg on expression ";
@@ -1064,14 +1093,14 @@ fun pp_alias UNKNOWN = print "unknown"
 		    
 		    val known_tag =
 			(case arg of 
-			     Prim_e(NilPrimOp (inject w), _, _) => SOME w
-			   | Prim_e(NilPrimOp (inject_known w), _, _) => SOME w
-			   | Prim_e(NilPrimOp (inject_known_record w), _, _) => SOME w
+			     Prim_e(NilPrimOp (inject w), _, _, _) => SOME w
+			   | Prim_e(NilPrimOp (inject_known w), _, _, _) => SOME w
+			   | Prim_e(NilPrimOp (inject_known_record w), _, _, _) => SOME w
 			   | Var_e v => 
 				 (case (lookup_alias(state,v)) of
-				      OPTIONALe(Prim_e(NilPrimOp (inject w), _, _)) => SOME w
-				    | OPTIONALe(Prim_e(NilPrimOp (inject_known w), _, _)) => SOME w
-				    | OPTIONALe(Prim_e(NilPrimOp (inject_known_record w), _, _)) => SOME w
+				      OPTIONALe(Prim_e(NilPrimOp (inject w), _, _, _)) => SOME w
+				    | OPTIONALe(Prim_e(NilPrimOp (inject_known w), _, _, _)) => SOME w
+				    | OPTIONALe(Prim_e(NilPrimOp (inject_known_record w), _, _, _)) => SOME w
 				    | _ => NONE)
 			   | _ => NONE)
 		in
@@ -1191,28 +1220,28 @@ fun pp_alias UNKNOWN = print "unknown"
 		   is guaranteed not to occur in this list.  This prevents looping. *)
 	      fun rewrite_bnd(v,niltrace,e) =
 		  (case e of
-		       Prim_e(NilPrimOp(record labs),_,elist) => 
+		       Prim_e(NilPrimOp(record labs),_, _,elist) => 
 	                 let fun check(Var_e v) = ()
 			       | check (Const_e v) = ()
 			       | check _ = error "record argument is not a variable"
 			 in  NONE
 			 end
 
-		     | Prim_e(NilPrimOp roll, _, [Var_e _]) => NONE
-		     | Prim_e(NilPrimOp roll, _, [Const_e _]) => NONE
-		     | Prim_e(NilPrimOp roll, clist,[injectee]) =>
+		     | Prim_e(NilPrimOp roll, _, _, [Var_e _]) => NONE
+		     | Prim_e(NilPrimOp roll, _, _, [Const_e _]) => NONE
+		     | Prim_e(NilPrimOp roll, _, clist,[injectee]) =>
 			 error "roll argument is not a value"
 
-		     | Prim_e(NilPrimOp (box_float _), _, [Var_e _]) => NONE
-		     | Prim_e(NilPrimOp (box_float _), _, [Const_e _]) => NONE
-		     | Prim_e(NilPrimOp (box_float _), _, _ ) => 
+		     | Prim_e(NilPrimOp (box_float _), _, _, [Var_e _]) => NONE
+		     | Prim_e(NilPrimOp (box_float _), _, _, [Const_e _]) => NONE
+		     | Prim_e(NilPrimOp (box_float _), _, _, _ ) => 
 			 error "box_float argument is not a value"
 
-		     | Prim_e(NilPrimOp (inject _), _, [Var_e _]) => NONE
-		     | Prim_e(NilPrimOp (inject _), _, [Const_e _]) => NONE
-		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) => error "inject argument is not a value"
+		     | Prim_e(NilPrimOp (inject _), _, _, [Var_e _]) => NONE
+		     | Prim_e(NilPrimOp (inject _), _, _, [Const_e _]) => NONE
+		     | Prim_e(NilPrimOp (inject k), _, clist,[injectee]) => error "inject argument is not a value"
 
-		     | Prim_e(NilPrimOp (project k),[sumcon],[Var_e sv]) =>
+		     | Prim_e(NilPrimOp (project k), _, [sumcon],[Var_e sv]) =>
 			 let val sv_con = find_con(state,sv)
 			     val (tagcount,k,clist) = reduceToSumtype(state,sv_con)
 			     val known = (case k of
@@ -1227,12 +1256,12 @@ fun pp_alias UNKNOWN = print "unknown"
 			 in  case reduce_hnf(state, fieldcon) of
 			     (true, _) => 
 				 let val bnd = Exp_b(v,TraceUnknown,
-						     Prim_e(NilPrimOp(project_known known),[sumcon],[Var_e sv]))
+						     Prim_e(NilPrimOp(project_known known),[],[sumcon],[Var_e sv]))
 				 in  SOME [bnd]
 				 end
 			     | _ => NONE
 			 end
-		     | Prim_e(NilPrimOp (project k), _, _) => error "project argument is not a value"
+		     | Prim_e(NilPrimOp (project k), _, _, _) => error "project argument is not a value"
 
 		     | _ => NONE)
 	  in	(case bnd of
@@ -1267,9 +1296,9 @@ fun pp_alias UNKNOWN = print "unknown"
 
 					     (* Constant Propagation *)
 					     | Const_e(Prim.int _) => (false, MUSTe e)
-					     | Prim_e(NilPrimOp (box_float _), _, _) =>
+					     | Prim_e(NilPrimOp (box_float _), _, _, _) =>
 						   (false, OPTIONALe e)
-					     | Prim_e(NilPrimOp roll, _, _) =>
+					     | Prim_e(NilPrimOp roll, _, _, _) =>
 						   (false, OPTIONALe e)
 
 					     | App_e(openness,Var_e v,clist,elist,eflist) => 

@@ -94,6 +94,7 @@ sig
    (* Type reduction and Representation functions *)
    val simplify_type : state -> con -> bool * con
    val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
+   val reduce_to_nondep_record : state -> con -> (Nil.label list * con list)
    val niltrace2rep : state -> Nil.niltrace -> rep
    val term2rep : term -> rep
    val type_of : state -> exp -> con

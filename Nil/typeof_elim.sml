@@ -38,6 +38,11 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 	in NilContext.insert_con (D,v,NilRename.renameCon sum)
 	end
 
+      fun exn_binder (D,v,exntag) = 
+	let val c = valOf (NilUtil.strip_exntag(Normalize.type_of(D,exntag)))
+	in NilContext.insert_con (D,v,c)
+	end
+
 (* NilContext.insert_exp)*)
       val all_handlers =  
 	let
@@ -49,6 +54,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 	  val h = set_exp_binder h (none NilContext.insert_con)
 	  val h = set_exp_definer h (none exp_definer)
           val h = set_sum_binder h (none sum_binder)
+          val h = set_exn_binder h (none exn_binder)
 	  val h = set_label_binder h label_binder
 	in
 	  h

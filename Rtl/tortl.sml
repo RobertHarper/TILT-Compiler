@@ -146,25 +146,30 @@ struct
 			  add_term(state,v,tipe,
 				   VALUE(LABEL(LOCAL_DATA(Name.var2string v))),NONE)
 		      val state = if toplevel then foldl folder state var_vcelist else state
+
+		      val backpatch = (not toplevel) andalso is_recur
+
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
 			  let val _ = incClosure()
 			      val (code_lv,state) = xexp(state,fresh_named_var "codereg",
 							   Var_e code, Nil.TraceUnknown, NOTID)
 			      val (_,con_lv,state) = xcon'(state,fresh_named_var "cenv", cenv)
+
 			      val (exp_lv,state) = 
-				  (case (toplevel,is_recur) of
-				       (true,_) => xexp(state,fresh_named_var "venv",venv,
-							Nil.TraceUnknown,NOTID)
-				     | (_,true) => (VALUE(TAG uninitVal),state)
-				     | (_,false) => xexp(state,fresh_named_var "venv",venv,
-							 Nil.TraceUnknown,NOTID))
+				if backpatch then
+				  (VALUE(TAG uninitVal),state)
+				else
+				  xexp(state,fresh_named_var "venv",venv, Nil.TraceUnknown,NOTID)
+
 			      val vls = [code_lv, con_lv, exp_lv]
+
 			      val (lv,state) = 
-				  (case (toplevel,is_recur) of
-				       (true,_) => make_record_const(state,vls,
-								     SOME(LOCAL_DATA(Name.var2string v)))
-				     | (_,true) => make_record_mutable(state,vls)
-				     | (_,false) => make_record(state,vls))
+				if backpatch then
+				  make_record_mutable(state,vls)
+				else if toplevel then
+				  make_record_const(state,vls,SOME(LOCAL_DATA(Name.var2string v)))
+				else make_record(state,vls)
+
 			      val ir = load_ireg_term(lv,NONE)
 			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
 			  in  (ir,s')
@@ -180,7 +185,8 @@ struct
 			         and so resides in the same generation *)
 			  in  (add_instr(STORE32I(REA(clregi,8), ir)); s)
 			  end
-		      val _ = if is_recur 
+
+		      val _ = if backpatch
 				  then (foldl2 dowrite rec_state (clregsi, var_vcelist); ())
 			      else ()
 		      val _ = add_instr(ICOMMENT ("done allocating " ^ 
@@ -219,7 +225,6 @@ struct
 		end
 	 | Code_cb (conwork as (name,vklist,c)) => 
 		let val funkind = Arrow_k(Code,vklist,Single_k c)
-		    val funcon = Let_c(Sequential,[cbnd],Var_c name)
 		    val l = LOCAL_CODE((get_unitname()) ^ "_" ^ (Name.var2string name))
 		    val _ = add_global name
 		    val state = add_conterm (state,name,funkind, SOME(VALUE(CODE l)))
@@ -327,8 +332,7 @@ struct
 	    | Const_e v => xconst(state,v)
 	    | Let_e (_, [], body) => xexp(state,name,body,trace,context)
 	    | Let_e (_, bnds, body) => 
-		  let val first_bnds = Listops.butlast bnds
-		      val last_bnd = List.last bnds
+		  let val (first_bnds,last_bnd) = Listops.split bnds
 		      fun folder (bnd,s) = xbnd s bnd
 		      val state = foldl folder state first_bnds
 		  in
@@ -339,9 +343,9 @@ struct
 			       else xexp(xbnd state last_bnd,fresh_var(),body,trace,context)
 			 | _ => xexp(xbnd state last_bnd,fresh_var(),body,trace,context))
 		  end
-	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(state,nilprim,clist,elist,
-								   context,trace)
-	    | Prim_e (PrimOp prim, clist, elist) => xprim(state,prim,clist,elist,context,trace)
+	    | Prim_e (NilPrimOp nilprim, trlist,clist, elist) => xnilprim(state,nilprim,trlist,clist,elist,
+									  context,trace)
+	    | Prim_e (PrimOp prim, _,clist, elist) => xprim(state,prim,clist,elist,context,trace)
 	    | Switch_e sw => xswitch(state,name,sw,trace,context)
 	    | ExternApp_e (f, elist) => (* there is no environment - not a closure *)
 		  let 
@@ -487,7 +491,7 @@ struct
 		  val state = 
 		    case coercion of 
 		      (Var_e _) => state
-		    | _ => #2 (xexp (state,name,coercion,
+		    | _ => #2 (xexp (state,fresh_named_var "coercion_app",coercion,
 				     Nil.TraceKnown TraceInfo.Notrace_Int,NOTID))
 	      in
 		  xexp (state,name,exp,trace,NOTID)
@@ -939,18 +943,20 @@ struct
       end
 
 
-  and xnilprim(state : state, nilprim,clist,elist,context,trace) : term * state = 
+  and xnilprim(state : state, nilprim,trlist,clist,elist,context,trace) : term * state = 
       let fun error' s = (print "NIL primexpression was:\n";
-			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
+			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, trlist,clist,elist));
 			  print "\n";
 			  error s)
       in
       (case nilprim of 
-	   Nil.record labels => 
+	   Nil.record [] => (empty_record,state)
+	 | Nil.record labels => 
 	       let val _ = incRecord()
 		   fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
 		   val (terms,state) = foldl_list folder state elist
-	       in  make_record(state,terms)
+		   val tagword::terms = terms
+	       in  make_record_with_tag(state,tagword,terms)
 	       end
          | partialRecord _ => error "partialRecord not implemented"
 	 | select label => 
@@ -977,21 +983,16 @@ struct
 	 | inject_known_record known => error "should not see inject_known_record"
 	 | inject_known known => 
 		let val _ = incSumInject()
-		    val (lvopt,state) = 
-		    (case elist of
-			 [] => (NONE,state)
-		       | [e] => let val (lv,state) = xexp(state,fresh_var(),hd elist,
-							    Nil.TraceUnknown,NOTID)
-				in  (SOME lv,state)
-				end)
-		in  TortlSum.xinject_sum_static ((state,known,hd clist),lvopt,trace)
+		  fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
+		  val (terms,state) = foldl_list folder state elist
+		in  TortlSum.xinject_sum_static ((state,known,hd clist),terms,trace)
 		end
 	 | inject known => 
 		(incSumDynInject();
 		 case elist of
 		    [] => (print "Warning: tortl encountered inject with no argument\n";
 			   print "         Converting to inject_known\n";
-			   TortlSum.xinject_sum_static ((state,known,hd clist),NONE,trace))
+			   TortlSum.xinject_sum_static ((state,known,hd clist),[],trace))
 		  | [e] =>
 			let val (e_lv,state) = xexp(state,fresh_var(),e,
 						      Nil.TraceUnknown,NOTID)
@@ -1080,7 +1081,18 @@ struct
 		       val e = App_e(Closure,Var_e localOnearg, [c1,c2], [e], [])
 		   in  xexp(state,fresh_var(),e,Nil.TraceKnown TraceInfo.Trace,NOTID)
 		   end
-	 | peq => error "peq not done")
+	 | mk_record_gctag => (record_tag_from_reps (map (niltrace2rep state) trlist),state)
+
+	 | mk_sum_known_gctag =>
+	   let val [ksumcon] = clist
+	       val (known,sumcon_hnf) =
+		   case #2 (simplify_type state ksumcon) of
+		       schnf as (Nil.Prim_c (Nil.Sum_c {known=SOME k,...},_)) => (k,schnf)
+		     | _ => error "mk_sum_known_gctag called with non-known-sum type" 
+	       val tr = hd trlist
+	   in (TortlSum.make_sum_tag_static ((state,known,sumcon_hnf),tr),state)
+	   end)
+
       end
 
 
@@ -1089,7 +1101,7 @@ struct
 
 	  open Prim
 	  fun error' s = (print "nilprimexpression was:\n";
-			  Ppnil.pp_exp (Nil.Prim_e(Nil.PrimOp prim, clist,elist));
+			  Ppnil.pp_exp (Nil.Prim_e(Nil.PrimOp prim, [],clist,elist));
 			  print "\n";
 			  error s)
 

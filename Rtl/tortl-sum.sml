@@ -38,6 +38,9 @@ struct
     val i2w = TW32.fromInt
 
     type typearg = state * TilWord32.word * con
+
+    (* State remains unchanged across call. Leaf - 3/22/02
+     *)
     fun help ((state,known,sumcon) : typearg) = 
 	let
 	  val (tagcount,_,sumtypes) = reduce_to_sum "xsum_???" state sumcon
@@ -116,39 +119,70 @@ struct
 		 end
 	end
     
-  fun xinject_sum_static (info, term_opt, trace) : term * state = 
+
+  fun xinject_sum_static (info, terms, trace) : term * state =
       let
+	open Prim
+	val  (state,known,sumcon,
+	      tagcount,nontagcount,single_carrier,is_tag,
+	      sumtypes,field_sub) = help info
+
+	fun single () = 
+	  let
+	    val field_type = List.nth(sumtypes, field_sub)
+	    val desti = alloc_regi(niltrace2rep state trace)
+	  in  if (needs_boxing state field_type)
+		then 
+		  (* I suppose [hd (tl terms)] is the same as (tl terms), since *)
+		  (* terms will have exactly 2 elements.                        *)
+		  make_record_with_tag(state,hd terms,[hd (tl terms)])
+	      else 
+		(hd terms,state)
+	  end
+	    
+	  
+	fun multi () =
+	    let val [tagword,term] = terms
+	    in make_record_with_tag(state,tagword,[VALUE (INT (i2w field_sub)),term])
+	    end
+
+      in  (case (is_tag, nontagcount) of
+	     (true, _) => if (known < 256) 
+			  then (VALUE(TAG (i2w known)), state)
+			  else error ("Tag too large " ^ (Int.toString known))
+	   | (_, 0) => error "Can't get here"
+	   | (_, 1) => single()
+	   | _ => multi())
+      end
+
+    fun make_sum_tag_static (info,tr) : term = 
+	let
 	  open Prim
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
 
-	  fun single () =
-	      let 
-		  val SOME term = term_opt
-		  val field_type = List.nth(sumtypes, field_sub)
-		  val desti = alloc_regi(niltrace2rep state trace)
-	      in  if (needs_boxing state field_type)
-		  then 
-		      make_record(state,[term])
-		  else 
-		      (term,state)
-	      end
-
-	  fun multi () =
-	      let val SOME term = term_opt
-		  val terms = [VALUE(INT (i2w field_sub)), term]
-	      in make_record(state,terms)
-	      end
-	  
-      in  (case (is_tag, nontagcount) of
-	       (true, _) => if (known < 256) 
-				then (VALUE(TAG (i2w known)), state)
-			    else error ("Tag too large " ^ (Int.toString known))
-	     | (_, 0) => error "Can't get here"
-	     | (_, 1) => single()
-	     | _ => multi())
-      end
+	in
+	  case (is_tag,nontagcount) of
+	    (true,_) => VALUE(INT 0w0) (* Tag will not be used *)
+	  | (_,0) => VALUE(INT 0w0) (* This one will never happen *)
+	  | (_,1) =>
+	    let
+	      val field_type = List.nth(sumtypes, field_sub)
+	    in  if (needs_boxing state field_type)
+		then 
+		  record_tag_from_reps([niltrace2rep state tr])
+		else 
+		  VALUE(INT 0w0) (* Tag will not be used *)
+		                 (* This case should never happen!*)
+	    end
+	  | _ =>
+	    let 
+		val field_type = List.nth(sumtypes, field_sub)
+		val rep = niltrace2rep state tr
+	    in record_tag_from_reps [NOTRACE_INT,rep]
+	    end
+      end	     
 
 
     fun xinject_sum_dynamic_single (info,
@@ -213,7 +247,7 @@ struct
 		  tagcount,nontagcount,single_carrier,is_tag,
 		  sumtypes,field_sub) = help info
 	in  if (known < tagcount)
-		then xinject_sum_static(info, NONE, trace)   (* Not really dynamic - just a tag *)
+		then xinject_sum_static(info, [], trace)   (* Not really dynamic - just a tag *)
 	    else (case nontagcount of
 		      0 => error "Cannot get here"
 		    | 1 => xinject_sum_dynamic_single(info,con_varloc,exp_varloc,trace)
