@@ -358,7 +358,8 @@ struct
 		
 	    fun flushSome ELABORATE = (IlCache.flushSome [Paths.ilFile paths];
 				       InfoCache.flushSome [Paths.infoFile paths])
-	      | flushSome GENERATE = Cache.flushSome [asmFile, asmzFile]
+	      | flushSome GENERATE = (Cache.flushSome [asmFile, asmzFile];
+				      InfoCache.flushSome [Paths.infoFile paths])
 	      | flushSome PREPARE = Cache.flushSome [asmFile]
 	      | flushSome ASSEMBLE = Cache.flushSome [Paths.objFile paths]
 	      | flushSome CLEANUP = Cache.flushSome [asmFile, asmzFile]
