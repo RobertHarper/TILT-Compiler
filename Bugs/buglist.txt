@@ -35,7 +35,7 @@
 0039 [open]	Real numbers are broken.
 0040 [closed]	Datatype replication doesn't work behind opaque ascription.
 0041 [closed]	Assertion failure when running TILT+wizard.
-0042 [open]	Runtime not being made up-to-date.
+0042 [closed]	Runtime not being made up-to-date.
 0043 [open]	Assembler warnings on Alpha.
 0045 [closed]	Equality for datatypes.
 0046 [closed]	Generativity.
