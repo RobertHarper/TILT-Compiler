@@ -422,8 +422,7 @@ struct
 				  | Code => "direct call "
 				  | Closure => (if (length elist = 0 andalso length eflist = 0)
 						    then "closure polycall"
-						else "closure call ")
-				    ^ (Int.toString callcount))
+						else "closure call "))
 
 		      local 
 			  fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
@@ -875,8 +874,7 @@ struct
 				       then () 
 				   else record_project(r,0,tag);
 				      load_tag_done := true)
-			  in  add_instr(ICOMMENT ("switch # : " ^ (Int.toString switchcount) ^ "case " 
-						  ^ (TW32.toDecimalString i)));
+			  in  
 			      (case (exhaustive andalso TW32.equal(TW32.uplus(i,0w1),total),
 				     TW32.ult(i,tagcount)) of
 				  (true,_) => ()
