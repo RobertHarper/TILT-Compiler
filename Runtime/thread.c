@@ -352,7 +352,7 @@ Thread_t *getThread(void)
 	printf("getProcPthread()  NULL\n");
       }
     }
-    assert(thread->proc == getProcPthread());
+    assert(thread->proc == proc2);
   }
   return thread;
 }
