@@ -25,7 +25,7 @@ struct
     val reject : Word8.word = 0w10	(* See ../Test/runtest.sml *)
 
     fun exitStatus (e : exn) : Word8.word =
-	if bomb e then reject else bug
+	if bomb e then bug else reject
 
     fun eprint (s : string) : unit = TextIO.output(TextIO.stdErr, s)
 
