@@ -24,10 +24,13 @@ struct
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
     val cached_prelude = ref (NONE : (string * Linkrtl.Rtl.local_label) option)
     fun specific_reparse_prelude arg = 
-	let val (prelude_file,prelude_label) = 
+	let val (littleEndian,compile_prelude) = 
 	    (case (!cur_platform) of
-		 ALPHA => Linkalpha.compile_prelude arg
-	       | PPC => error "no PPC") (* Linkppc.reparse_prelude arg *)
+		 ALPHA => (true,Linkalpha.compile_prelude)
+	       | PPC => (false,error "no PPC"))
+		 (* Linkppc.reparse_prelude arg *)
+	    val _ = (Stats.bool "littleEndian") := littleEndian
+            val (prelude_file,prelude_label) = compile_prelude arg
 	    val _ = cached_prelude := SOME(prelude_file,prelude_label)
 	in  prelude_file
 	end
