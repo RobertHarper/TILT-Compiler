@@ -553,7 +553,7 @@ struct
 		    
 		val (cbnds, levels', state') = 
 		    loop (limitlevel, [], levels, state)
-		val levels'' = limitLevels (limitlevel, levels')
+		val levels'' = limitLevels (currentlevel, levels')
 		val con' = NilUtil.makeLetC cbnds con
 	    in
 		(con', state', levels'')
@@ -590,7 +590,7 @@ struct
 		val (bnds, bnds_valuable, levels', state) = 
 		    loop (limitlevel, [], levels, state, true)
 
-		val levels'' = limitLevels (limitlevel, levels')
+		val levels'' = limitLevels (currentlevel, levels')
 (*
 		val _ = (print "limitExp:  levels' = ";
 			 app (print o Int.toString) levels'; 
@@ -756,10 +756,10 @@ struct
              there's no place to hoist these references to anyway.
              Further, typeof's don't affect space or time properties
              of generated code. *)
-	  val (e, _, _, _, _) = 
+	  val (e, _, levels, _, _) = 
 	      rexp_limited toplevel (e, env, empty_state)
       in
-	  (Typeof_c e, state, emptyLevels)
+	  (Typeof_c e, state, levels)
       end
   
     | rcon' (Closure_c(c1, c2), env, state) = 
