@@ -21,6 +21,20 @@ structure Stats :> STATS =
 *)
 	val entries : (string * entry) list ref = ref []
        val max_name_size = ref 10
+       fun clear_stats() = 
+	 let
+	   fun reset (s,TIME_ENTRY entry) = 
+	     let val z = Time.zeroTime
+	     in
+	       entry := (0,{gc=z,sys=z,usr=z})
+	     end
+	     | reset (s,COUNTER_ENTRY entry) = entry := 0
+	     | reset (s,INT_ENTRY entry) = entry := 0
+	     | reset (s,BOOL_ENTRY entry) = () (*entry := true*)
+	 in
+	   List.app reset (!entries)
+	 end
+
        fun reset_stats() = (max_name_size := 10; 
 			      entries := [])  (* StringMap.empty) *)
        fun find_entry entry_maker s : entry =
@@ -173,6 +187,3 @@ structure Stats :> STATS =
 			   print "\n\n")
 
    end
-
-
-
