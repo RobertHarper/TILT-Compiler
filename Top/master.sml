@@ -213,8 +213,7 @@ struct
 	     pos_ref := NONE)
 
 	fun add_eq (crc : Crc.crc, crc' : Crc.crc) : unit =
-(if crc <> crc' then print ("XXX " ^ Crc.toString crc ^ "=" ^ Crc.toString crc' ^ "\n") else ();
-	    equiv := Equiv.insert (!equiv, crc, crc'))
+	    equiv := Equiv.insert (!equiv, crc, crc')
 
 	fun eq (crcs : Crc.crc * Crc.crc) : bool =
 	    Equiv.equiv (!equiv) crcs

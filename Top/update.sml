@@ -37,11 +37,11 @@ struct
     val UpdateDebug = Stats.ff "UpdateDebug"
     fun debugdo f = if !UpdateDebug then (f(); ()) else ()
 
-    val UpdateDiag = Stats.tt("UpdateDiag")
+    val UpdateDiag = Stats.ff("UpdateDiag")
     fun msg str = if (!UpdateDiag) then print str else ()
 
     val ShowPlan = Stats.ff "ShowPlan"
-    val ShowStale = Stats.tt "ShowStale"
+    val ShowStale = Stats.ff "ShowStale"
     val KeepAsm = Stats.tt "KeepAsm"
     val CompressAsm = Stats.ff "CompressAsm"
     val UptoElaborate = Stats.ff "UptoElaborate"

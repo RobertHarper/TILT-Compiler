@@ -1,5 +1,5 @@
 SMLNJ=SML_VERSION=110 /usr/local/bin/sml
-TILTNJ=./Test/tilt-nj -v -fPrelinkDebug
+TILTNJ=./Test/tilt-nj -v
 
 # Use slaves (gmake slaves all to build)
 MASTER=-M
