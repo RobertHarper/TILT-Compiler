@@ -52,13 +52,18 @@ structure Toil
       val eq_table = ref ([] : (region * context * tyvar * exp Util.oneshot) list)
       val eq_stack = ref ([] : (region * dec list * context * tyvar * exp Util.oneshot) list list)
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
+      val unit_name = ref (NONE : string option)
     in
 	fun reset_eq() = (eq_table := []; eq_stack := [])
-	fun reset_elaboration fp = (Error.reset fp;
-				    reset_eq();
-				    tyvar_table := [];
-				    overload_table := [];
-				    flex_table := [])
+	fun reset_elaboration (fp, unitNameOpt) = (Error.reset fp;
+						   reset_eq();
+						   tyvar_table := [];
+						   overload_table := [];
+						   flex_table := [];
+						   unit_name := unitNameOpt)
+	fun get_unit_name () = (case !unit_name
+				  of NONE => error "unit name unavailable - get_unit_name"
+				   | SOME unitName => unitName)
 	fun get_tyvar_table () = !tyvar_table
 	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
 
@@ -1008,8 +1013,8 @@ val _ = print "plet0\n"
 			    local 
 				fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
 			    in 
-				val (var1,con1)::_ = arglist
-				val (bigbodyc,bigbodye) = foldr help (bodye,bodyc) (tl arglist)
+				val (var1,con1)::tlArglist = arglist
+				val (bigbodyc,bigbodye) = foldr help (bodye,bodyc) tlArglist
 			    end 
 			in (FBND(var',var1,con1,bigbodye,bigbodyc),func)
 			end)
@@ -1702,7 +1707,7 @@ val _ = print "plet0\n"
 		  fun renameSbndCtxt (SOME (SBND(l,bnd)),ctxtEntry as CONTEXT_SDEC(SDEC(_,dec))) =
 		      let val v = getVarFromDec dec
 			  val hide = not(Name.VarSet.member(ctxtFrees, v))
-			  val lbl = internal_label ("local_" ^ (IlUtil.label2name l))
+			  val lbl = internal_label ("local_" ^ (get_unit_name()) ^ "_" ^ (IlUtil.label2name l))
 			  val lbl = if hide then to_nonexport lbl else lbl
 		      in  (SOME (SBND(lbl,bnd)), CONTEXT_SDEC(SDEC(lbl,dec)))
 		      end
@@ -2421,7 +2426,7 @@ val _ = print "plet0\n"
 	end
 
     (* ------------ Exported interface to resolve overloading ------------ *)
-    fun overload_wrap fp xobj arg = 
+    fun overload_wrap unitNameOpt fp xobj arg = 
       let 
 	fun flex_help (l,ref(FLEXINFO(stamp,false,rdecs)),fieldc,eshot) = 
 	    (error_region();
@@ -2469,7 +2474,7 @@ val _ = print "plet0\n"
 		      else overload_loop true rest)
 	    end
 
-	val _ = reset_elaboration fp
+	val _ = reset_elaboration (fp, unitNameOpt)
 	val _ = push_region(0,1000000)
 	val _ = eq_table_push()
 	val res = xobj arg
@@ -2502,7 +2507,7 @@ val _ = print "plet0\n"
 			  NoError => SOME res
 			| Warn => SOME res
 			| Error => NONE)
-	val _ = reset_elaboration (Error.nofilepos)
+	val _ = reset_elaboration (Error.nofilepos, NONE)
       in result
       end
 
@@ -2510,17 +2515,17 @@ val _ = print "plet0\n"
     val expcompile = xexp
     val typecompile = xty
 
-    val xdec = fn (ctxt,fp,dec) => overload_wrap fp (xdec false) (ctxt,dec)
-    val xdecspec = fn (ctxt,fp,dec,fp2,spec) => 
-	(case xdec (ctxt,fp,dec) of
+    val xdec = fn (unitName, ctxt,fp,dec) => overload_wrap (SOME unitName) fp (xdec false) (ctxt,dec)
+    val xdecspec = fn (unitName, ctxt,fp,dec,fp2,spec) => 
+	(case xdec (unitName,ctxt,fp,dec) of
 	     NONE => NONE
-	   | SOME decresult => overload_wrap fp2 xdecspec (ctxt,decresult,spec))
-    val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)
-    val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap fp xstrexp (ctxt,strexp,sigc)
-    val xspec = fn (ctxt,fp,specs) => overload_wrap fp xspec (ctxt,specs)
-    val xsigexp = fn (ctxt,fp,se) => overload_wrap fp xsigexp (ctxt,se)
-    val xty = fn (ctxt,fp,ty) => overload_wrap fp xty (ctxt,ty)
-    val xtybind = fn (ctxt,fp,tyb) => overload_wrap fp xtybind (ctxt,tyb)
+	   | SOME decresult => overload_wrap (SOME unitName) fp2 xdecspec (ctxt,decresult,spec))
+    val xexp = fn (ctxt,fp,exp) => overload_wrap NONE fp xexp (ctxt,exp)
+    val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap NONE fp xstrexp (ctxt,strexp,sigc)
+    val xspec = fn (unitName,ctxt,fp,specs) => overload_wrap (SOME unitName) fp xspec (ctxt,specs)
+    val xsigexp = fn (ctxt,fp,se) => overload_wrap NONE fp xsigexp (ctxt,se)
+    val xty = fn (ctxt,fp,ty) => overload_wrap NONE fp xty (ctxt,ty)
+    val xtybind = fn (ctxt,fp,tyb) => overload_wrap NONE fp xtybind (ctxt,tyb)
 
 
   end;

@@ -89,7 +89,7 @@ struct
 
 
     fun elab_constrained(unit,ctxt,sourcefile,fp,dec,fp2,specs,uiFile,least_new_time) =
-	(case LinkIl.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
+	(case LinkIl.elab_dec_constrained(unit, ctxt, fp, dec, fp2,specs) of
 	     SOME (il_module as (ctxt, partial_ctxt, binds)) =>
 		 let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
 		     val _ = Help.chat ("  [writing " ^ uiFile)
@@ -102,7 +102,7 @@ struct
 	   | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
     
     fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
-	case LinkIl.elab_dec(pre_ctxt, fp, dec) of
+	case LinkIl.elab_dec(unit, pre_ctxt, fp, dec) of
 	    SOME (il_module as (ctxt, partial_ctxt, binds)) =>
 		let val partial_ctxt_export = IlContext.removeNonExport partial_ctxt
 		    val _ = Help.chat ("  [writing " ^ uiFile)

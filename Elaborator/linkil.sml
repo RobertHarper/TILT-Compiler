@@ -146,8 +146,8 @@ structure LinkIl :> LINKIL  =
 		    end)
 
 	type filepos = SourceMap.charpos -> string * int * int
-	fun elab_specs (base_ctxt, fp, specs) = 
-	    case xspec(base_ctxt, fp, specs) of
+	fun elab_specs (unitName, base_ctxt, fp, specs) = 
+	    case xspec(unitName, base_ctxt, fp, specs) of
 		SOME sdecs => 
 		    let val ctxts = map CONTEXT_SDEC sdecs
 			val new_ctxt = local_add_context_entries (base_ctxt,ctxts) 
@@ -156,11 +156,11 @@ structure LinkIl :> LINKIL  =
 		    end
 	      | NONE => NONE
 
-	fun elab_dec (base_ctxt, fp, dec) = 
+	fun elab_dec (unitName, base_ctxt, fp, dec) = 
 	  let val _ = if (!show_hilcontext)
 			  then (print "\nCONTEXT:\n"; Ppil.pp_context base_ctxt) 
 		      else ()
-	  in  case xdec(base_ctxt,fp,dec) of
+	  in  case xdec(unitName, base_ctxt,fp,dec) of
 	      SOME sbnd_ctxtent_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list
@@ -200,11 +200,11 @@ structure LinkIl :> LINKIL  =
 	       with interSbnds and interSdecs
 	*)
 
-	fun elab_dec_constrained (base_ctxt, fp, dec, fp2, specs : Ast.spec list) = 
+	fun elab_dec_constrained (unitName, base_ctxt, fp, dec, fp2, specs : Ast.spec list) = 
 	  let val _ = if (!show_hilcontext)
 			  then (print "\nCONTEXT:\n"; Ppil.pp_context base_ctxt) 
 		      else ()
-	  in  case Toil.xdecspec(base_ctxt,fp,dec,fp2,specs) of
+	  in  case Toil.xdecspec(unitName, base_ctxt,fp,dec,fp2,specs) of
 	      SOME sbnd_ctxtent_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list

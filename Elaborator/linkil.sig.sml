@@ -21,12 +21,12 @@ signature LINKIL =
       val initial_context : unit -> context
       val plus_context : context * Il.partial_context list -> Il.partial_context option list * context
 
-      (* Compiling interfaces to generate a new context *)
-      val elab_specs : context * filepos * Ast.spec list -> Il.partial_context option
+      (* Compiling interfaces to generate a new context. *)
+      val elab_specs : string * context * filepos * Ast.spec list -> Il.partial_context option
 
-      (* Compiling source files possibly with an interface constraint to produce some HIL code *)
-      val elab_dec : context * filepos * Ast.dec -> module option
-      val elab_dec_constrained : context * filepos * Ast.dec * filepos * Ast.spec list -> module option
+      (* Compiling source files possibly with an interface constraint to produce some HIL code. *)
+      val elab_dec : string * context * filepos * Ast.dec -> module option
+      val elab_dec_constrained : string * context * filepos * Ast.dec * filepos * Ast.spec list -> module option
 
 
   end
