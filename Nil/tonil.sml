@@ -2010,8 +2010,7 @@ end (* local defining splitting context *)
 			end)
 
        in
-	   if ((!elaborator_specific_optimizations) andalso
-	       (Name.eq_label(label, IlUtil.it_lab))) then
+	   if ((!elaborator_specific_optimizations) andalso is_it_proj) then
 	       module
 	   else
                Prim_e (NilPrimOp (select label), [], [module])
@@ -2225,35 +2224,22 @@ end (* local defining splitting context *)
 						arrow))))
 		     :: rest) = 
 	       if ( (! elaborator_specific_optimizations)
-		   andalso (Name.is_label_internal lbl)
-(****
-		   andalso (Util.substring("polyfun!",Name.label2string lbl))
-***)
-		   andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
-		   andalso (not (IlUtil.is_eq lbl))) then
-		   let
-(*		       val _ = print "entered poly optimization case\n" *)
+                   andalso (Name.eq_label (lbl, IlUtil.them_lab))) then
+                   (* if a polymorphic function has a "them" label rather than 
+                      an "it" label, then it is a polymorphic function nest whose
+                      code (i.e., this entire component) will be eliminated by the
+                      phase-splitter.  Therefore, the corresponding specification
+                      also is ignored. 
 
-		       val clist = (case il_con of
-					Il.CON_RECORD lclist => map #2 lclist
-				      | Il.CON_ARROW _ => [il_con]
-				      | _ => (print "can't optimize polyfun sdec with il_con =\n";
-					      Ppil.pp_con il_con;
-					      error "can't optimize polyfun sdec"))
-		       val numFunctions = length clist
-		       val (rest, external_labels, external_vars) = 
-			   getSdecNames numFunctions rest
-		       fun make_sdec (l,c) =
-			   let val inner_sig =
-			       Il.SIGNAT_STRUCTURE(NONE,[Il.SDEC(it_lbl,Il.DEC_EXP(Name.fresh_var(),c))])
-			   in  Il.SDEC(l,Il.DEC_MOD(top_var, true,
-						      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat, inner_sig, arrow)))
-			   end
-		   val sdecs' = Listops.map2 make_sdec (external_labels,clist)
-		   in  sdecs' @ (loop rest)
-		   end
+                      Note that the phase-splitter does some complicated transformations
+                      to the projections from such a nest, in order to turn polymorphic
+                      recursively-defined-functions into polymorphic recursion; however,
+                      the types of the projections are unchanged so we just continue
+                      here without doing anything special.
+                   *)
+		   loop rest
 	       else
-		   sdec::loop rest
+		   sdec :: (loop rest)
 	     | loop (sdec::rest) = sdec::(loop rest)
 	   val sdecs = if !elaborator_specific_optimizations
 			   then List.filter filter sdecs
