@@ -2250,7 +2250,8 @@ end (* local defining splitting context *)
 									    Il.DEC_EXP(_,il_con,_,_))]),
 						arrow))))
 		     :: rest) = 
-	       if ((Name.eq_label (them_lbl, IlUtil.them_lab))) then
+	       if ((!do_polyrec)
+	           andalso (Name.eq_label (them_lbl, IlUtil.them_lab))) then
                    (* if a polymorphic function has a "them" label rather than 
                       an "it" label, then it is a polymorphic function nest whose
                       code (i.e., this entire component) will be eliminated by the
@@ -2270,9 +2271,7 @@ end (* local defining splitting context *)
 	   val sdecs = if !elaborator_specific_optimizations
 			   then List.filter filter sdecs
 		       else sdecs
-       in  if !do_polyrec
-	       then loop sdecs
-	   else sdecs
+       in  loop sdecs
        end
    
    and xsdecs' context (con0, _, []) = {crdecs = nil, erdecs = nil}
