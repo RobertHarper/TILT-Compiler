@@ -8,7 +8,7 @@ fun top() =
       val rev_chars = rev(explode line)
       val mapfile = implode(rev(tl rev_chars))
       val _ = (print "Processing mapfile: '"; print mapfile; print "'\n")
-  in  Manager.tilc(mapfile,false,NONE,NONE,[])
+  in  Manager.tilc(mapfile,false,NONE,[])
   end
 
 val _ = top()
