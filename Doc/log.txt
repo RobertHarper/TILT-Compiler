@@ -92,4 +92,32 @@ trashed so I detected this quite quickly.  If it had been
 a normal physical register, this would have been very hard to 
 figure out.
 
+------------------------------------------------------------------------
+
+April 27
+
+Primitives have been changed in the following ways:
+
+(1) Reference operations are now HIL-only primitives.
+	During phase-splitting, these are converted 
+	to array primitives.
+
+(2) We now have Int(Array/vector), Float(Array/vector),
+	and Other(Array/vector).  The int and float
+	versions carry the int/float size of the items.
+	The bool on the "Other" version indicates whether
+	the type of the element is reducible to HNF.
+
+I fixed some nasty bugs in tortl-sum and tortl-array.
+
+TILT compilation times:
+				non-cumulative	cumulative
+Basis				11 min		1.5meg
+part of NJ lib used by TILT	3.5 min
+Util				3 min
+Parser				14.5 min	3.4meg
+=========================================================
+Total				92 min		9meg
+
+
 --------------------------------------------------------------------

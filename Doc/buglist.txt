@@ -1,3 +1,10 @@
+HIGH PRIORITY
+-------------
+(1) compilation manager should not trust the ordering in mapfiles
+
+
+NORMAL PRIORITY
+---------------
 (0) type of thunk prematurely made a rigid record
 fun g {a,b} = a + b + 3
 
@@ -21,8 +28,6 @@ fun mem_assoc dummy =
   let fun mem_rec (x : bool) : bool = (mem_rec x) 
   in mem_rec
   end
-
-
 
 (5) change xcoerce_transparent to copy only the needed type components
 	currently ilcontext, transparently ascribed generates a LOT of kinds in NIL	
