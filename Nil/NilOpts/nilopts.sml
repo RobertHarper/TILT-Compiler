@@ -3,7 +3,17 @@ struct
     val do_cse = ref true
     val do_flatten = ref true
     val do_reduce = ref true
-    
+    val do_inline = ref true
+    val do_uncurry = ref true
+    val do_fold_constants = ref false 
+
+    val print_pre = ref false
+    val print_anormalize = ref false
+    val print_flatten = ref false
+    val print_uncurry = ref false
+    val print_inline = ref false
+    val print_reduce = ref false 
+
     val max_name_size = ref 10
     type click = { name : string , last : int ref, total : int ref}
     val clicks = ref [] : (click list) ref
@@ -17,7 +27,7 @@ struct
     fun make_click str = 
 	let val _ = max_name_size := Int.max(size str, !max_name_size)
 	    val click = { name = str, last = ref 0, total = (ref 0) }
-	in ( clicks := click :: !clicks ;
+	in (  clicks := click :: !clicks ;
 	    click )
 	end
 

@@ -11,10 +11,11 @@ sig
 	    val compare : Nil.exp * Nil.exp -> order
 	end 
 
-    (* structure Valmap : ORD_MAP
-    sharing type Valmap.Key.ord_key = (Nil.con, Nil.exp) value *)
-
     structure Expmap : ORD_MAP
     sharing type Expmap.Key.ord_key = Nil.exp
+
+    structure Conmap : ORD_MAP
+    sharing type Conmap.Key.ord_key = Nil.con
+
 end
 

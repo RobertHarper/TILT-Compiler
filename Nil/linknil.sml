@@ -3,7 +3,7 @@ sig
     structure Il : IL
     structure Nil : NIL
     structure NilUtil : NILUTIL
-    structure NilContext : NILCONTEXT
+B    structure NilContext : NILCONTEXT
     structure NilStatic : NILSTATIC
     structure PpNil : PPNIL
 
@@ -22,7 +22,7 @@ structure Linknil (* : LINKNIL *) =
     val typecheck_after_opt = ref true
     val typecheck_after_cc = ref true
 
-    val do_opt = ref true
+    val do_opt = ref false
 
     val error = fn s => Util.error "linknil.sml" s
 
@@ -152,7 +152,9 @@ structure Linknil (* : LINKNIL *) =
 			       structure NilEval = NilEval
 			       structure NilStatic = NilStatic
 			       structure NilSubst = NilSubst
-			       structure NilUtil = NilUtil)
+			       structure NilUtil = NilUtil
+				   structure Linearize = Linearize
+)
 
     fun phasesplit (ctxt : LinkIl.Il.context, 
 		    sbnd_entries : (LinkIl.Il.sbnd option * LinkIl.Il.context_entry) list) : Nil.module = 

@@ -67,4 +67,7 @@ NilOpts/pass.sig.sml
 NilOpts/anormalize-cse.sml
 NilOpts/reduce.sml
 NilOpts/flattenargs.sml
+NilOpts/uncurry.sml
+NilOpts/inline.sml
 NilOpts/linkopt.sml
+

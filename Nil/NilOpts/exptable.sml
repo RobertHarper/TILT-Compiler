@@ -5,6 +5,9 @@
 
 
 functor ExpTable (structure Nil : NIL
+		  structure NilUtil : NILUTIL 
+		  structure Ppnil : PPNIL
+		  sharing Nil = NilUtil.Nil=Ppnil.Nil
 		      ) : EXPTABLE = 
     
 struct
@@ -43,115 +46,23 @@ struct
     fun cmp_bnd b = LESS
     fun cmp_seq s = LESS 
 
-(*    fun cmp_primcon p = 
-	case p of 
-	    ( Int_c sz1, Int_c sz2) => 
-	  | (Int_c _, _) => GREATER
-	  | (_, Int_c _ ) => LESS
-
-	 | (Float_c sz1, Float_c sz2) =>
-	 | (Float_c _, _) => GREATER
-	 | (_, Float_c _) => LESS
-    
-	 | (BoxFloat_c sz1, BoxFloat_x sz2) =>
-	 | (BoxFloat_c _, _) => GREATER
-	 | ( _, BoxFloat_c _) => LESS
-
-	 | (Exn_c , Exn_c ) => EQUAL
-	 | ( Exn_c , _) => GREATER
-	 | ( _, Exen_c) => LESS
-
-	 | ( Array_c , Array_c ) => EQUAL
-	 | (Array_c, _) => GREATER
-	 | (_, Array_c) => LESS
-
-	 | ( Vector_c, Vector_c) => EQUAL
-	 | (Vector_c, _) => GREATER
-	 | ( _, Vector_c) => LESS
-
-	 | (Ref_c, Ref_c) => EQUAL
-	 | ( Ref_c, _) => GREATER
-	 | (_, Ref_c) => LESS
-
-	 | (Exntag_c, Exntag_c) => EQUAL
-	 | ( Exntag_c, _) => GREATER
-	 | (_, Exntag_c) => LESS
- 
-	 | (Sum_c {t1, k1} , Sum_c {t2, k2}) => cmp_orders ( Word32.compare(t1, t2), Word32.compare(s1, s2))
-	 | ( Sum_c, _) => GREATER
-	 | (_, Sum_c) => LESS
-
-	 | (Record_c labels1, Record_c labels2) => cmp_list Name.compare_label (labels1, labels2)
-	 | ( Record_c, _) => GREATER
-	 | (_, Record_c) => LESS
-
-	 | (Vararg_c (o1, e1), Vararg_c (o2, e2)) =>
-	       cmp_orders ( cmp_int (hash_openness (o1), hash_openness(o2)),
-			   cmp_int (hash_effect e1, hash_effect e2))
-	 | ( Vararg_c, _) => GREATER
-	 | (_, Vararg_c) => LESS *)
-
-    fun cmp_con (c1, c2) = LESS
-(*        case (c1, c2) of
-	    ( Prim_c (p1, clist1), Prim_c (p2, clist2)) => 
-		cmp_compose [ cmp_primcon, cmp_con_list ]  [ (p1, p2) (clist1, clist2) ]
-	  | ( Prim_c _, _ ) => GREATER 
-	  | ( _ , Prim_c _ ) => LESS
-
-	  | (Mu_c (seq1, v1) , Mu_c (seq2,v2)) => cmp_compose [ cmp_seq , Name.compare_var ] [ (seq1, seq2), (v1, v2)]
-	  | (Mu_c _ , _) => GREATER
-	  | (_ , Mu_c _) =>LESS
-
-	  | ( AllArrow_c a1, AllArrow_c a2) => raise UNIMP
-	  | ( AllArrow_c _, _) => GREATER
-	  | ( _, AllArrow_c _ ) => LESS
-
-	  | (Var_c v1, Var_c v2) => Name.compare_var (v1, v2)
-	  | (Var_c _, _) => GREATER
-	  | (_, Var_c _) => LESS
-
-	  | ( Let_c (sort1, conbnds1, con1) , Let_c (sort2, conbnds2, con2)) => raise UNIMP
-	  | (Let_c _, _) => GREATER
-	  | (_, Let_c) => LESS
-
-	  | (Crecord_c lclist1, Crecord_c lclist2) => 
-		let val (labels1, cons1) = Listops.unzip lclist1
-		    val (labels2, cons2) = Listops.unzip lclist2
-		in 
-		    cmp_compose [ cmp_list Name.compare_label, cmp_list Name.compare_var]
-		    [  Listops.zip labels1 labels2, Listops.zip cons1, cons2 ] 
-		end
-	  | (Crecord_c _, _) => GREATER
-	  | (_, Crecord_c _) => LESS
-		
-	  | (Proj_c (con1, label1) , Proj_c (con2, label2) ) =>
-		cmp_compose [ Name.compare_label, Name.compare_var] [ (con1, con2) , (label1, label2) ]
-	  | (Proj_c _ , _) => GREATER
-	  | ( _, Proj_c _) => LESS
-
-	  | (Closure_c (code1, env1), Closure_c (code2, env2) ) => cmp_con_list [ (code1, code2) , (env1, env2) ]
-	  | (Closure_c _, _) =>GREATER
-	  | (_, Closure_c _) => LESS
-
-	  | (App_c (con1, clist1) , App_c (con2, clist2)) => 
-		cmp_compse [ cmp_con, cmp_con_list] [ (con1, con2), (clist1, clist2)]
-	  | (App_c _, _) => GREATER
-	  | (_, App_c _) => LESS
-
-	  | (Typecase_c rec1, Typecase_c rec2) => raise UNIMP
-	  | (Typecase_c _, _) => GREATER
-	  | (_, Typecase_c) => LESS
-
-	  | (Annotate_c _, Annotate_c) => raise UNIMP 
-*)
-
-
     fun cmp_orders (a, b) =
 	(* Takes 2 orders lexicographically to produce another *)
 	case a of
 	    EQUAL => b
 	  | _ => a
 
+
+    fun cmp_list cmp (a,b) =
+	let fun f (nil,nil) = EQUAL
+	      | f (nil,_ :: _) = GREATER
+	      | f (_ :: _,nil) = LESS
+	      | f (h::t,h'::t') =
+		(case cmp(h,h')
+		     of EQUAL => f(t,t')
+		   | r => r)
+	in f (a,b)
+	end 
 
     val sskip = 4
     val skip = 7*sskip 
@@ -167,6 +78,18 @@ struct
 	case sz of
 	    F32 => 0
 	  | F64 => 1
+
+    fun hash_openness ope =
+	case ope of 
+	    Open => 0
+	  | Code => 1
+	  | Closure => 2
+	  | ExternCode => 3
+
+    fun hash_effect eff =
+	case eff of 
+	    Total => 0
+	  | Partial => 1
 		
     fun hash_tt tt =
 	case tt of 
@@ -277,7 +200,65 @@ struct
 	  | close_out => 74 *skip
 	  | end_of_stream => 75 *skip
 
-     fun cmp_value (v1, v2) =
+
+    fun cmp_primcon p = 
+	case p of 
+	    ( Int_c sz1, Int_c sz2) =>  cmp_int (hash_intsize(sz1), hash_intsize(sz2))
+	  | (Int_c _, _) => GREATER
+	  | (_, Int_c _ ) => LESS
+
+	  | (Float_c sz1, Float_c sz2) =>cmp_int (hash_floatsize(sz1), hash_floatsize(sz2))
+	 | (Float_c _, _) => GREATER
+	 | (_, Float_c _) => LESS
+    
+	 | (BoxFloat_c sz1, BoxFloat_c sz2) =>cmp_int (hash_floatsize(sz1), hash_floatsize(sz2))
+	 | (BoxFloat_c _, _) => GREATER
+	 | ( _, BoxFloat_c _) => LESS
+
+	 | (Exn_c , Exn_c ) => EQUAL
+	 | ( Exn_c , _) => GREATER
+	 | ( _, Exn_c ) => LESS
+
+	 | ( Array_c , Array_c ) => EQUAL
+	 | (Array_c, _) => GREATER
+	 | (_, Array_c) => LESS
+
+	 | ( Vector_c, Vector_c) => EQUAL
+	 | (Vector_c, _) => GREATER
+	 | ( _, Vector_c) => LESS
+
+	 | (Ref_c, Ref_c) => EQUAL
+	 | ( Ref_c, _) => GREATER
+	 | (_, Ref_c) => LESS
+
+	 | (Exntag_c, Exntag_c) => EQUAL
+	 | ( Exntag_c, _) => GREATER
+	 | (_, Exntag_c) => LESS
+ 
+	 | (Sum_c {tagcount = t1, known= k1} , Sum_c {tagcount=t2, known=k2}) =>
+	       cmp_orders ( Word32.compare(t1, t2), cmp_option Word32.compare (k1, k2))
+	 | ( Sum_c _ , _) => GREATER
+	 | (_, Sum_c _ ) => LESS
+
+	 | (Record_c labels1, Record_c labels2) => cmp_list Name.compare_label (labels1, labels2)
+	 | ( Record_c _, _) => GREATER
+	 | (_, Record_c _) => LESS
+
+	 | (Vararg_c (o1, e1), Vararg_c (o2, e2)) =>
+	       cmp_orders ( cmp_int (hash_openness (o1), hash_openness(o2)),
+			   cmp_int (hash_effect e1, hash_effect e2))
+(* 	 | ( Vararg_c _ , _) => GREATER
+	 | (_, Vararg_c _ ) => LESS 
+*)
+
+
+    fun cmp_exp_list e = cmp_list cmp_exp e
+    and cmp_con_list e = cmp_list cmp_con e
+    and cmp_bnd_list e = cmp_list cmp_bnd e
+    and cmp_label_list e = cmp_list Name.compare_label e
+    and cmp_conbnd_list e = cmp_list cmp_conbnd e
+
+    and cmp_value (v1, v2) =
 	case (v1, v2) of 
 	    ( int(sz1, wd1), int(sz2, wd2) ) =>
 		cmp_orders (cmp_int(hash_intsize sz1, hash_intsize sz2), 
@@ -313,45 +294,87 @@ struct
 		cmp_orders( Name.compare_tag(t1,t2),
 			   cmp_con (con1, con2))
 
+    and cmp_conbnd (b1, b2) = 
+	case (b1,b2) of 
+	    ( Con_cb (v1,k1,c1), Con_cb(v2,k2,c2) ) => 
+		Name.compare_var (v1, v2) 
+	  | (Con_cb _, _) => GREATER
+	  | (_, Con_cb _) => LESS 
+	  | ( Open_cb (v1, _, _, _), Open_cb (v2, _, _, _) ) => 
+		Name.compare_var (v1, v2) 
+	  | (Open_cb _, _) => GREATER
+	  | (_, Open_cb _ ) => LESS
+	  | _ => raise UNIMP
 
-    fun hash_openness ope =
-	case ope of 
-	    Open => 0
-	  | Code => 1
-	  | Closure => 2
-	  | ExternCode => 3
+    and cmp_con (c1, c2) =
+        case (c1, c2) of
+	    ( Prim_c (p1, clist1), Prim_c (p2, clist2)) => 
+		cmp_orders (cmp_primcon(p1, p2), cmp_con_list (clist1, clist2))
+	  | ( Prim_c _, _ ) => GREATER 
+	  | ( _ , Prim_c _ ) => LESS
 
-    fun hash_effect eff =
-	case eff of 
-	    Total => 0
-	  | Partial => 1
+	  | (Var_c v1, Var_c v2) => Name.compare_var (v1, v2)
+	  | (Var_c _, _) => GREATER
+	  | (_, Var_c _) => LESS
 
-    fun cmp_list cmp (a,b) =
-	let fun f (nil,nil) = EQUAL
-	      | f (nil,_ :: _) = GREATER
-	      | f (_ :: _,nil) = LESS
-	      | f (h::t,h'::t') =
-		(case cmp(h,h')
-		     of EQUAL => f(t,t')
-		   | r => r)
-	in f (a,b)
-	end 
+	  | (Crecord_c lclist1, Crecord_c lclist2) => 
+		let val (labels1, cons1) = Listops.unzip lclist1
+		    val (labels2, cons2) = Listops.unzip lclist2
+		in 
+		    cmp_orders ( cmp_list Name.compare_label  (labels1, labels2), 
+				cmp_list cmp_con (cons1, cons2))
+		end
+	  | (Crecord_c _, _) => GREATER
+	  | (_, Crecord_c _) => LESS
+		
 
-    (* Takes a list of comparison ops and a list of things to compare *)
-    fun cmp_compose cmps args = 
-	let fun f nil (nil,nil) = EQUAL
-	      | f (cmp::rest) (h::t,h'::t') =
-		(case cmp(h,h')
-		     of EQUAL => f rest (t,t')
-		   | r => r)
-	in f cmps args
-	end 
+	  | (Proj_c (con1, label1) , Proj_c (con2, label2) ) =>
+		cmp_orders ( cmp_con (con1, con2) , Name.compare_label (label1, label2) )
+	  | (Proj_c _ , _) => GREATER
+	  | ( _, Proj_c _) => LESS
 
-    fun cmp_exp_list e = cmp_list cmp_exp e
-    and cmp_con_list e = cmp_list cmp_con e
-    and cmp_bnd_list e = cmp_list cmp_bnd e
-    and cmp_label_list e = cmp_list Name.compare_label e
+	  | (Closure_c (code1, env1), Closure_c (code2, env2) ) => cmp_con_list ( [code1, code2 ] , [env1, env2] )
+	  | (Closure_c _, _) =>GREATER
+	  | (_, Closure_c _) => LESS
 
+	  | (App_c (con1, clist1) , App_c (con2, clist2)) => 
+		cmp_orders (cmp_con (con1, con2), cmp_con_list (clist1, clist2))
+	  | (App_c _, _) => GREATER
+	  | (_, App_c _) => LESS
+
+
+	  | ( Let_c (sort1, conbnds1, con1) , Let_c (sort2, conbnds2, con2)) => 
+		cmp_orders (cmp_conbnd_list ( conbnds1, conbnds2), cmp_con (con1, con2))
+		
+	  | (Let_c _, _) =>  GREATER 
+	  | (_, Let_c _) =>  LESS
+
+	  | (Typecase_c rec1, Typecase_c rec2) => raise UNIMP
+	  | (Typecase_c _, _) =>  raise UNIMP (* GREATER *)
+	  | (_, Typecase_c _) =>  raise UNIMP (* LESS*)
+
+
+
+	  | (Mu_c (bool1, seq1, v1) , Mu_c (bool2, seq2,v2)) => if NilUtil.alpha_equiv_con (c1, c2) then EQUAL else 
+		Name.compare_var (v1,v2)
+		
+	  | (Mu_c _ , _) =>  GREATER
+	  | (_ , Mu_c _) =>  LESS
+
+          | ( AllArrow_c (op1, eff1, vklist1, clist1, w321, con1),
+	     AllArrow_c (op2, eff2, vklist2, clist2, w322, con2) ) => if NilUtil.alpha_equiv_con (c1, c2) then EQUAL else 
+	    let val return = 
+		if not ( null vklist1 ) then 
+		    if not (null vklist2 )
+			then Name.compare_var ((#1 (hd vklist1)), (#1 (hd vklist2)))
+		    else GREATER 
+		else cmp_orders( cmp_orders (cmp_con_list(clist1, clist2), cmp_con (con1, con2)), cmp_int (Word32.toInt w321, Word32.toInt w322))
+	    in if return = EQUAL then (Ppnil.pp_con c1 ; print "Should be equivalent to " ; Ppnil.pp_con c2 ; raise UNIMP)
+	       else return end 
+	  | ( AllArrow_c _, _) => GREATER
+	  | ( _, AllArrow_c _ ) => LESS
+
+	  | (Annotate_c _, Annotate_c _) => raise UNIMP 
 
     and cmp_allprim ((NilPrimOp p1), (NilPrimOp p2))= 
 	( case (p1, p2) of 
@@ -500,6 +523,14 @@ struct
 	end
 
     structure Expmap = BinaryMapFn(ExpKey)
+
+    structure ConKey = 
+	struct
+	    type ord_key = con
+	    val compare = cmp_con
+	end
+    structure Conmap = BinaryMapFn(ConKey)
+
 end
 	    
 

@@ -60,6 +60,8 @@ functor Squish(structure Nil : NIL
 		  | Raise_e (e,c) => #exp f (Raise_e (xexp f e, c))
 		  | Handle_e (e,fc) => #exp f (Handle_e (xexp f e, xfunction f fc))
 	    end
+
+	fun squish_con con = con
 	
 	fun squish exp = 
 	    let val id = fn x => x

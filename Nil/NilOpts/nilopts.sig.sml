@@ -3,6 +3,17 @@ sig
     val do_cse : bool ref
     val do_flatten : bool ref
     val do_reduce : bool ref 
+    val do_inline : bool ref
+    val do_uncurry : bool ref
+
+    val do_fold_constants : bool ref
+
+    val print_pre : bool ref
+    val print_anormalize : bool ref
+    val print_flatten : bool ref 
+    val print_uncurry : bool  ref
+    val print_inline : bool ref 
+    val print_reduce : bool  ref 
 
     type click
     val make_click : string -> click
