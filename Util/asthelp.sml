@@ -285,6 +285,19 @@ structure AstHelp : ASTHELP =
 	     in free_tvs
 	     end
 
+      fun free_tyvar_dec(d : Ast.dec, is_bound) : symbol list = 
+	     let 
+	       val tyvars = ref ([] : Ast.tyvar list)
+	    fun do_tyvar tyvar = (if ((is_bound (ty2sym tyvar)) orelse
+				      (tyvar_member(tyvar,!tyvars)))
+				      then ()
+				  else tyvars := tyvar :: (!tyvars);
+				      Ast.VarTy tyvar)
+	       val _ = f_dec (fn s => s, [],do_tyvar,[],fn v => Ast.VarExp v,[]) d
+	       val free_tvs = map tyvar_strip (!tyvars)
+	     in free_tvs
+	     end
+
       (* finds all free type variables in (e : Ast.exp) not in context *)
       fun free_tyc_ty(ty : Ast.ty, is_bound) : symbol list = 
 	let 

@@ -7,7 +7,7 @@ structure Name : NAME =
     val error = fn s => error "Name.sml" s
 
     datatype var   = GVAR of int * string
-    datatype label = GLABEL of int * string * bool
+    datatype label = GLABEL of int * string * bool  (* <-- bool indicates openness *)
                    | GBAR   of Symbol.symbol * bool
     type   labels = label list
     datatype path = SIMPLE_PATH   of var 
@@ -37,23 +37,29 @@ structure Name : NAME =
       end
 
     val var_counter = make_counter()
-    val label_counter = make_counter()
     val tag_counter = make_counter()
+    val label_counter = make_counter()
 
     fun fresh_named_var s = GVAR(var_counter(),s)
-    fun fresh_named_int_label s = GLABEL(label_counter(),s,false)
-    fun fresh_named_open_label s = GLABEL(label_counter(),s,true)
     fun fresh_named_tag s = GTAG(tag_counter(),s)
-      
     fun fresh_var   () = fresh_named_var "v"
+    fun fresh_tag  () = fresh_named_tag "t"
+    fun gen_var_from_symbol v = GVAR(var_counter(), Symbol.name v)
+
+    fun fresh_named_int_label s = GLABEL(0,s,false)
+    fun fresh_named_open_label s = GLABEL(0,s,true)
     fun fresh_int_label () = fresh_named_int_label "i"
     fun fresh_open_label () = fresh_named_open_label "i"
-    fun fresh_tag  () = fresh_named_tag "t"
-      
+
+    fun symbol_label (s : Symbol.symbol) = GBAR(s, false)
+    fun open_symbol_label (s : Symbol.symbol) = GBAR(s, true)
+    fun internal_label (s : string) = GLABEL(0,s, false)
+    fun fresh_internal_label (s : string) = GLABEL(label_counter(),s, false)
+    fun open_internal_label (s : string) = GLABEL(0,s, true)
+    fun fresh_open_internal_label (s : string) = GLABEL(label_counter(),s,true)
     fun openlabel (GLABEL (i,s,_)) = GLABEL(i,s,true)
       | openlabel (GBAR (sym,_)) = GBAR(sym,true)
-    fun symbol2label (s : Symbol.symbol) = GBAR(s, false)
-    fun gen_var_from_symbol (s : Symbol.symbol) = fresh_named_var(Symbol.name s)
+
 
     (* these values copied from NJ source env/env.sml *)
     val varInt = 0 and sigInt = 1 and strInt = 2 and fsigInt = 3 and 
@@ -75,9 +81,12 @@ structure Name : NAME =
 	fun help false s = s
 	  | help true s = "*" ^ s
       in (case l of
-	    (GLABEL (i,s,f)) => help f (s ^ "__" ^ (Int.toString i))
-	  | (GBAR (sym,f)) => help f (Symbol.name sym ^ "_" ^ (Int.toString 
-							       (namespace2int (Symbol.nameSpace sym)))))
+	    (GLABEL (0,s,f)) => help f (s ^ "_INT")
+	  | (GLABEL (i,s,f)) => help f (s ^ "_INT(" ^ (Int.toString i) ^ ")")
+	  | (GBAR (sym,f)) => help f (Symbol.name sym ^ 
+				      (case (namespace2int (Symbol.nameSpace sym)) of
+					   0 => ""
+					 | x => "_" ^ (Int.toString x))))
       end
     fun loc2string (GLOC i) = ("LOC_" ^ (Int.toString i))
     fun tag2string (GTAG (i,s)) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))

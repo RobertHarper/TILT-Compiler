@@ -41,6 +41,7 @@ signature ASTHELP =
 
     (* Misc equality, substitutions, and free variable computation on AST *)
     val eq_path        : Ast.path * Ast.path -> bool
+    val free_tyvar_dec : Ast.dec * (Ast.symbol -> bool) -> Ast.symbol list
     val free_tyvar_exp : Ast.exp * (Ast.symbol -> bool) -> Ast.symbol list
     val free_tyvar_ty  : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list
     val free_tyc_ty    : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list 
