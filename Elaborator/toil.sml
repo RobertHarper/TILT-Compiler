@@ -243,9 +243,9 @@ structure Toil
 			      NONE =>
 				  (error_region();
 				   print "abstract type escaping scope\n";
-				   print "let body type "; pp_con c; print "\n";
-				   print "   reduces to "; pp_con con; print "\n";
-				   print "escaping module variables are: ";
+				   print "  Let body type: "; pp_con c; print "\n";
+				   print "  Reduced type: "; pp_con con; print "\n";
+				   print "  Escaping: ";
 				   app (fn v => (pp_var v; print " ")) escVars;
 				   print "\n";
 				   Error.dummy_type (context, "escaped_type"))
