@@ -485,8 +485,8 @@ struct
 	      let 
 		  val (tFormals,state) = lvklist state tFormals
 		  val (eFormals,cbnds,state) = lvoptclist lift state eFormals
-		  val (cbnds2,body_type) = lcon state body_type
-	      in  (cbnds @ cbnds2,
+		  val body_type = lcon_lift' state body_type
+	      in  (cbnds,
 		   AllArrow_c {openness=openness,effect=effect,isDependent=isDependent,
 			       tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			       body_type=body_type})
