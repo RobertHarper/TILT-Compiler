@@ -259,7 +259,7 @@ struct
 			   | [unitname] =>
 			         if unitname = primUnitName
 				     then loop (n+1, PRIM :: acc)
-				 else fail (n,line,"specfies no source for a unit other than " ^ primUnitName)
+				 else fail (n,line,"specifies no source for a unit other than " ^ primUnitName)
 			   | [unitname, filebase] =>
 				 if unitname <> primUnitName
 				     then loop (n+1, compunit (unitname, filebase, false) :: acc)

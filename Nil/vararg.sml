@@ -202,18 +202,18 @@ struct
 					 exports = [ExportValue(oneargLabel,oneargVar),
 						    ExportValue(varargLabel,varargVar)]}
 (*		     val _ = Ppnil.pp_module {module = nilmod,
-					      name = "vararg nilmode before CC",
-					      header = "vararg nilmode before CC",
-					      pass = "vararg nilmode before CC"}
+					      name = "vararg nilmod before CC",
+					      header = "vararg nilmod before CC",
+					      pass = "vararg nilmod before CC"}
 *)
 		     val nilmod = Linearize.linearize_mod nilmod
 		     val nilmod = Reify.reify_mod nilmod 
 		     val nilmod = ToClosure.close_mod nilmod
 (*
 		     val _ = Ppnil.pp_module {module = nilmod,
-					      name = "vararg nilmode after CC",
-					      header = "vararg nilmode after CC",
-					      pass = "vararg nilmode after CC"}
+					      name = "vararg nilmod after CC",
+					      header = "vararg nilmod after CC",
+					      pass = "vararg nilmod after CC"}
 *)
 		     val MODULE{bnds,imports=[],
 				exports=[ExportValue(oneargLabel',oneargVar),

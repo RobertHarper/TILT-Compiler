@@ -45,6 +45,7 @@ signature LIL =
     | Float_c of size                         (* register floating-points *)
     | Boxed_c of size                         (* boxed values *)
     | Void_c
+    | Star_c
     | Tuple_c
     | Dyn_c                                   (* exceptions *)
     | Dyntag_c
@@ -57,76 +58,95 @@ signature LIL =
     | Exists_c
     | Forall_c
     | Rec_c
+    | Arrow_c
 
-    datatype con_ = 
-      Star_c
-    | Var_c of var
+    datatype scon_ = 
+      Var_c of var
     | Nat_c of int
-    | Lam_c of (var * kind) * con
-    | App_c of con * con
-    | LAM_c of var * con
-    | APP_c of con * kind
-    | Pair_c of con * con
-    | Proj_c of con * int
-    | Inj_c of kind * con * int
-    | Case_c of con * kind * (var * con) * (var * con)
-    | Fold_c of kind * con
-    | Pr_c of var * (var * kind) * kind * var * con
-    | Prim_c of primcon * con list
+    | App_c of scon * acon
+    | APP_c of scon * kind
+    | Pi1_c of scon
+    | Pi2_c of scon
+    | Prim_c of primcon
+    | Pr_c of var * (var * kind) * kind * var * scon
+    | Case_c of scon * (var * acon) * (var * acon)
+    | AtoS_c of acon * kind
 
-    withtype con = {c : con_ }
+    and acon_      = 
+      LAM_c of var * acon
+      | Lam_c of var * acon
+      | Pair_c of acon * acon
+      | Inr_c of con 
+      | Inl_c of con 
+      | Fold_c of con
+      | Let_c of cbnd list * acon
+      | StoA_c of scon
 
-    datatype v64 = Var_64 of var | Const_64 of (con,exp) Prim.value
-    and v32 = 
+    withtype cbnd = (var * kind * acon)
+    and scon = {c : scon_ }
+    and acon = {c : acon_ }
+
+    datatype sv64 = Var_64 of var | Const_64 of (con,exp) Prim.value
+    and sv32 = 
       Var of var 
       | Const of (con,exp) Prim.value
-      | Box of v64
-      | Tuple of v32 list
-      | Inj_tag of int * ( int * con) * v32
-      | Inj of int * (int * con) * v32
-      | Inj_dyn of con * v32 * v32
-      | Roll of con * v32
-      | Pack of v32 * con * con
-      | TApp of v32 * con
-      | ForgetKnown of v32
+    and v32 = 
+      Box of sv64
+      | Tuple of sv32 list
+      | Inj_tag of int * ( int * con) * sv32
+      | Inj of int * (int * con) * sv32
+      | Inj_dyn of con * sv32 * sv32
+      | Roll of con * sv32
+      | Pack of sv32 * con * con
+      | TApp of sv32 * con
+      | ForgetKnown of sv32
       | Tag of int
-    and op64 = Val_64 of v64 | Sub_64 of con * v32 * v32
+    and op64 = Val_64 of sv64 | Sub_64 of con * sv32 * sv32
     and op32 = 
-      Val of v32 
-      | Unroll of con * v32
-      | Select of int * v32
-      | Case of v32 * (var * exp) list
-      | Proj of int * v32
-      | Dyncase of v32 * (v32 * exp) list * exp
+      Val of sv32 
+      | Unroll of con * sv32
+      | Select of int * sv32
+      | Case of sv32 * (var * exp) list
+      | Proj of int * sv32
+      | Dyncase of sv32 * (sv32 * exp) list * exp
       | Dyntag of con
-      | Raise of con * v32
-      | Handle of con * v32 * (var * v32)
-      | Unbox of v32
-      | App of v32 * v32 list * v64 list
-      | Vcase of con * (con * (var * v32) * (var * exp))
-      | Array_32 of v32 * v32 
-      | Array_64 of v64 * v64
-      | Sub of v32 * v32
-      | Upd_32 of v32 * v32 * v32
-      | Upd_64 of v32 * v32 * v64
+      | Raise of con * sv32
+      | Handle of con * sv32 * (var * sv32)
+      | Unbox of sv32
+      | App of sv32 * sv32 list * sv64 list
+      | Vcase of con * (con * (var * sv32) * (var * exp))
+      | Array_32 of sv32 * sv32 
+      | Array_64 of sv64 * sv64
+      | Sub of sv32 * sv32
+      | Upd_32 of sv32 * sv32 * sv32
+      | Upd_64 of sv32 * sv32 * sv64
     and exp_ = 
-      Val_e of v32
+      Val_e of sv32
       | Let_e of bnd list * exp
     and bnd = 
-      Code_b of var * (var * kind) list * (var * con) list * (var * con) list * exp
+      Fixcode_b of (var * con) list  * function list
       | Exp32_b of var * op32
       | Exp64_b of var * op64
-      | Unpack_b of var * var * v32
+      | Unpack_b of var * var * sv32
       | Split_b of var * var * con
       | Unfold_b of var * con
+    and function = Function of {effect      : effect,
+				recursive   : recursive,
+				tFormals    : var list,
+				eFormals    : var list,
+				fFormals    : var list,
+				body        : exp}
+      
     withtype exp = { e: exp_ }
 
-
-    datatype import_entry = ImportValue of label * var * con
-                          | ImportType  of label * var * kind
-
-    datatype export_entry = ExportValue of label * var
-                          | ExportType  of label * var
+    datatype import_entry = 
+      ImportValue of label * var * con
+      | ImportType  of label * var * kind
+      | ImportBnd of var * con
+      
+    datatype export_entry = 
+      ExportValue of label * var
+    | ExportType  of label * var
 
     datatype module = MODULE of {bnds : bnd list,
 			         imports : import_entry list,

@@ -253,10 +253,7 @@ struct
 
 	(*First free occurrence*)
 	fun cvar_isfree (STATE{boundcvars,boundevars,...},{free_cvars,...}:frees,cvar) = 
-	    if (case (VarMap.find(free_cvars,cvar)) of
-		      NONE => false
-		    | _ => true)
-		then false
+	    if isSome (VarMap.find(free_cvars,cvar)) then false
 	    else (case (VarMap.find(boundcvars,cvar)) of
 			  SOME GLOBALc => false
 			| SOME LOCALc  => false
@@ -266,10 +263,7 @@ struct
 
 
 	fun evar_isfree (STATE{boundcvars,boundevars,...},{free_evars,...}:frees,evar) = 
-	    if (case VarMap.find(free_evars,evar) of
-		    NONE => false
-		  | _ => true)
-		then NONE
+	    if isSome(VarMap.find(free_evars,evar)) then NONE
 	    else 
 		(case (VarMap.find(boundevars,evar)) of
 		     SOME GLOBALe => NONE
@@ -446,6 +440,13 @@ struct
 			   callee = (callee_fid,state)::callee,
 			   frees = frees})
 	fun add_frees (fid,f) =
+	  let
+(*	    val _ = (print "\naddfun variable ";Ppnil.pp_var fid;
+		     print "with frees ";
+		     show_free f;
+		     print "\n")
+	*)      
+	  in
 	    (case (VarMap.find(!fids,fid)) of
 		 NONE => error ((Name.var2string fid) ^ "fid not found for add_frees")
 	       | SOME (r as (ref{static,escape,callee,frees : frees})) =>
@@ -453,7 +454,7 @@ struct
 			   escape = escape,
 			   callee = callee,
 			   frees = join_free(frees,f) : frees})
-
+	  end
 	fun augment_frees (fid,f) =
 	    (case (VarMap.find(!fids,fid)) of
 		 NONE => error ((Name.var2string fid) ^ "fid not found for aug_frees")

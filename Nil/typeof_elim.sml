@@ -95,7 +95,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 		let 
 		  val old = Measure.mod_size {cstring = Measure.cstring,count = [],count_in = []} nilmod
 		  val new = Measure.mod_size {cstring = Measure.cstring,count = [],count_in = []} nilmod'
-		  val pct = Real.fromInt(new) / Real.fromInt(old) * 100.0
+		  val pct = Real.fromInt(#total new) / Real.fromInt(#total old) * 100.0
 		  val pcti = Real.round pct
 		  val _ = if pcti > !max then max := pcti else ()
 		in

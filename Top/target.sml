@@ -37,8 +37,8 @@ struct
 				   TIL_SPARC)
 	    | Platform.DUNIX => (print "Alpha detected.  Using Til-Alpha.\n";
 				 TIL_ALPHA)
-	    | _ => (print "Unsupported platform detected.  Using Til-Alpha.\n";
-		    TIL_ALPHA))
+	    | _ => (print "Unsupported platform detected.  Using Til-Sparc.\n";
+		    TIL_SPARC))
 	      
     val targetPlatform = ref (defaultPlatform ())
 

@@ -3,7 +3,9 @@
 structure Measure :> MEASURE =
   struct
     open Nil NilRewrite
-      
+
+    val chatlev = ref 0
+    fun chat i s = if !chatlev > i then print s else ()
     local 
       
       type state = {cstring : con -> string,
@@ -66,8 +68,19 @@ structure Measure :> MEASURE =
       val {rewrite_con,rewrite_exp,rewrite_kind,rewrite_mod,...} = rewriters all_handlers
 
     in
-      
-      fun item_size rewrite_item {cstring : con -> string,
+
+      type measure = {cstring  : Nil.con -> string, 
+		      count    : string list,
+		      count_in : string list}
+
+      type size = {kinds :int,
+		   cons  :int,
+		   exps  :int,
+		   cvars :int,
+		   evars :int,
+		   total :int}
+
+      fun item_size rewrite_item {cstring  : con -> string,
 				  count    : string list,
 				  count_in : string list} item = 
 	let 
@@ -95,24 +108,52 @@ structure Measure :> MEASURE =
 
 	  val total = !exp + !con + !kind
 
-	in (print "\n";
-	    print "Con vars bound        = ";printi (!con_vars);print "\n";
-	    print "Exp vars bound        = ";printi (!exp_vars);print "\n";
-	    print "Kind Nodes            = ";printi (!kind);print "\n";
-	    print "Con  Nodes            = ";printi (!con);print "\n";
-	    print "Exp  Nodes            = ";printi (!exp);print "\n";
-	    print "All  Nodes            = ";printi (total);print "\n";
-
-	    List.app print_count counters;
-	    List.app print_container containers;
-
-	    print "\n";
-	    total)
+	in if !chatlev > 1 then
+	  (print "\n";
+	   print "Con vars bound        = ";printi (!con_vars);print "\n";
+	   print "Exp vars bound        = ";printi (!exp_vars);print "\n";
+	   print "Kind Nodes            = ";printi (!kind);print "\n";
+	   print "Con  Nodes            = ";printi (!con);print "\n";
+	   print "Exp  Nodes            = ";printi (!exp);print "\n";
+	   print "All  Nodes            = ";printi (total);print "\n";
+	   
+	   List.app print_count counters;
+	   List.app print_container containers;
+	   
+	   print "\n") else ();
+	  {kinds= !kind,cons= !con,exps= !exp,cvars= !con_vars,evars= !exp_vars,total=total}
 	end
       val con_size  = item_size rewrite_con
       val exp_size  = item_size rewrite_exp
       val kind_size = item_size rewrite_kind
       val mod_size  = item_size rewrite_mod
+
+      fun adds 
+	  {kinds=ks1,cons=cs1,exps=es1,cvars=cvs1,evars=evs1,total=t1}
+	  {kinds=ks2,cons=cs2,exps=es2,cvars=cvs2,evars=evs2,total=t2} = 
+	  {kinds=ks1+ks2,cons=cs1+cs2,exps=es1+es2,cvars=cvs1+cvs2,evars=evs1+evs2,total=t1+t2}
+
+      fun mod_size' args (MODULE {bnds,imports,exports}) =
+	let
+	  val _ = chat 0 "\nIMPORTS\n" 
+	  val impsize = mod_size args (MODULE {bnds=[],imports=imports,exports=[]})
+
+	  val _ = chat 0 "\nBNDS\n" 
+	  val bndsize = mod_size args (MODULE {bnds=bnds,imports=[],exports=[]})
+
+	  val _ = chat 0 "\nEXPORTS\n" 
+	  val exportsize = mod_size args (MODULE {bnds=[],imports=[],exports=exports})
+
+	  val total = adds impsize (adds bndsize exportsize)
+
+	  val _ = chat 0 ("\nBNDS size is "^(Int.toString (#total bndsize))^"\n")
+	  val _ = chat 0 ("\nEXPORTS size is "^(Int.toString (#total exportsize))^"\n")
+	  val _ = chat 0 ("\nIMPORTS size is "^(Int.toString (#total impsize))^"\n")
+	  val _ = chat 0 ("\nTOTAL size is "^(Int.toString (#total total))^"\n")
+	in (impsize,bndsize,exportsize)
+	end
+
+
 
       fun cstring con = 
 	(case con of

@@ -127,8 +127,10 @@ structure PpnilHtml :> PPNIL =
     and pp_labvarcon (l,v,c) = Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_con c]
 	
     and pp_con arg_con : format = 
-      (case arg_con of
-	   Var_c v => pp_var v
+      let 
+	val res = 
+	  (case arg_con of
+	     Var_c v => pp_var v
          | Prim_c(Record_c ([],NONE),[]) => HOVbox[String "UNIT"]
          | Prim_c (Record_c (labs,NONE), conlist) => 
               pp_list pp_labcon (Listops.zip labs conlist) ("{",",","}", false)
@@ -211,7 +213,8 @@ structure PpnilHtml :> PPNIL =
 	 | Annotate_c (annot,con) => HOVbox[String "ANNOTE_C(", String "annot not done", 
 					    String ",", 
 					    pp_con con, String ")"])
-
+      in res
+      end
 (*
     and pp_listcon (Nil_c k) = Hbox[String "NIL_C(", pp_kind k, String ")"]
       | pp_listcon Cons_c = String "CONS_C"

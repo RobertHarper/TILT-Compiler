@@ -819,7 +819,7 @@ struct
 			| scan(states,lab,(Record_c _, vklist,body)::rest) = 
 			  let 
 			      val arity = length vklist
-			      val next = fresh_code_label "exnarm"
+			      val next = fresh_code_label "typecasearm"
 			      fun loop (pos,[],state) = state
 				| loop (pos,(v,k)::rest,state) = 
 				  let val r = alloc_regi TRACE

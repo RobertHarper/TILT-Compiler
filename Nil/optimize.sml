@@ -1,4 +1,4 @@
-(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps Vararg NilPrimUtil NilRename *)
+(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.
@@ -550,18 +550,42 @@ fun pp_alias UNKNOWN = print "unknown"
 
 
 
-	fun de_alias f state e =
-	  (case e
-	     of Var_e v =>
-	       (case lookup_alias(state,v) 
-		  of OPTIONALe e => de_alias f state e
-		   | MUSTe e => de_alias f state e
-		   | _ => NONE)
-	      | Let_e (_, [Exp_b(v, _, e)], Var_e v') =>
-		    if (Name.eq_var(v,v')) then de_alias f state e 
-		    else NONE
-	      | _ => f state e)
-	     
+	(*Apply the given function to the result of looking up 
+	 * aliases and reducing let bnds@(x=e) in x  => let bnds in e.
+	 *
+	 * If f is applied, it is guaranteed to be applied to the first 
+	 * equivalent expression which is neither a variable nor a let 
+	 * whose body is a variable.
+	 *)
+	fun de_alias f state e = 
+	  let
+	    fun de_alias_var v =
+	      (case lookup_alias(state,v) 
+		 of OPTIONALe e => de_alias_e e
+		  | MUSTe e => de_alias_e e
+		  | _ => NONE)
+	    and de_alias_e e =
+	      (case e
+		 of Var_e v => de_alias_var v
+		  | Let_e (sort,bnds,e) =>
+		   let
+		     fun loop arg = 
+		       (case arg
+			  of ([],_) => de_alias f state e
+			   | (Exp_b(v, _, e)::rbnds, Var_e v') => 
+			    if (Name.eq_var(v,v')) then loop (rbnds,e)
+			    else de_alias_var v'
+			   | (rbnds, Var_e v) => de_alias_var v
+			   | (rbnds,e) => f state (Let_e (sort,rev rbnds,e)))
+		   in loop (rev bnds,e)
+		   end
+		  | _ => f state e)
+	  in de_alias_e e
+	  end
+	(* Given a de-aliased expression, 
+	 * check to see if it is an integer comparison with a constant
+	 * and if so return the operands and the size.
+	 *)
 	fun is_int_eq' state e = 
 	  (case e 
 	     of Prim_e(PrimOp(Prim.eq_int is),[],[],[v1,v2]) =>
@@ -569,11 +593,17 @@ fun pp_alias UNKNOWN = print "unknown"
 		  of (Var_e v,Const_e (Prim.int(_,w))) => SOME(is,v,w)
 		   | (Const_e (Prim.int(_,w)),Var_e v) => SOME(is,v,w)
 		   | _ => NONE)
+	      | Let_e (sort, bnds, e) => is_int_eq' state e
 	      | _ => NONE)
 
+	(* Given a de-aliased expression, 
+	 * check to see if it is a coercion application, and if so
+	 * return the argument to the coercion.
+	 *)
 	fun is_coerce' state e =
 	  (case e 
 	     of Coerce_e (q,[],e) => SOME e
+	      | Let_e (sort, bnds, Coerce_e (q,[],e)) => SOME (Let_e (sort,bnds,e))
 	      | _ => NONE)
 	     
 	val is_int_eq = de_alias is_int_eq'
@@ -1059,7 +1089,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			 fun do_onearg(arg_con, onearg_var, orig_var, args as [Var_e arg_var]) =
 			     (case reduce_hnf(state,arg_con) of
 				  (true, Prim_c(Record_c (labels,_), _)) =>
-				      if (List.length labels <= Vararg.flattenThreshold) then
+				      if (List.length labels <= (!Nil.flattenThreshold)) then
 					  let
 					      val newvars = map (fn _ => Name.fresh_var()) labels
 					      val args' = map Var_e newvars

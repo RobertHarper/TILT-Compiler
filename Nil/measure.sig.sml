@@ -3,6 +3,8 @@
 signature MEASURE = 
   sig 
 
+    val chatlev : int ref
+
     val cstring : Nil.con -> string
       (* Default string translation.
 	(case con of
@@ -22,8 +24,20 @@ signature MEASURE =
 	 | Typecase_c _          => "Typecase_c"
 	 | Annotate_c (_,c)      => "Annotate_c")
 	   *)
+    type measure = {cstring  : Nil.con -> string, 
+		    count    : string list,
+		    count_in : string list}
 
-    val mod_size   : {cstring  : Nil.con -> string, 
-		      count    : string list,
-		      count_in : string list} -> Nil.module -> int
+    type size = {kinds:int,
+		 cons:int,
+		 exps:int,
+		 cvars:int,
+		 evars:int,
+		 total:int}
+
+    val mod_size   :  measure -> Nil.module -> size
+
+    (*Measure imports, bnds, exports separately *)
+    val mod_size'   :  measure -> Nil.module -> (size*size*size)
+
   end

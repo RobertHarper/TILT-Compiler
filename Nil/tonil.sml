@@ -642,6 +642,8 @@ end (* local defining splitting context *)
 	    result
         end
 
+   (*Eagerly create and name projections from a module
+    *)
    and preproject (var_arg, il_signat, context) = 
 	let 
 	    fun find_structure_paths m acc 

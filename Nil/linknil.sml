@@ -19,6 +19,7 @@ structure Linknil :> LINKNIL  =
 				   Stats.ff("show" ^ str),
 				   Stats.ff("check" ^ str),
 				   Stats.ff("wcheck" ^ str),
+				   Stats.ff("measure" ^ str),
 				   str)
     val phasesplit  = makeEntry (true, "Phasesplit")
     val typeofelim1 = makeEntry (true, "TypeofElim1")
@@ -72,13 +73,14 @@ structure Linknil :> LINKNIL  =
     structure Reduce = Reduce 
 *)
 
+
     fun printBold str = (print "===== "; print str;
 			 print (Util.spaces (50 - (size str)));
 			 print " =====\n")
 
-    fun pass filename (ref false, _, _, _, _) (transformer,obj) =
+    fun pass filename (ref false, _, _, _, _, _) (transformer,obj) =
 	error "pass called with a false flag"
-      | pass filename (ref true, showphase, checkphase, wcheckphase, phasename) (transformer,obj) =
+      | pass filename (ref true, showphase, checkphase, wcheckphase, measurephase, phasename) (transformer,obj) =
 	let val str = "Starting " ^ phasename ^ ": " ^ filename
 	    val _ = Timestamp.timestamp()
 	    val _ = printBold str
@@ -109,15 +111,28 @@ structure Linknil :> LINKNIL  =
 	    val _ = if !wcheckphase orelse !wtypecheck then
 		      WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod)
 		    else ()
+	val _ = 
+	  if !measurephase then 
+	    let
+	      val (imps,bnds,exps) = Measure.mod_size' {cstring=Measure.cstring,count=[],count_in=[]} nilmod
+	      val impsr = Stats.int (phasename^"::importsize")
+	      val totcsr = Stats.int (phasename^"::totalconsize")
+	      val totsr = Stats.int (phasename^"::totalsize")
+	    in
+	       impsr := !impsr + (#total imps);
+	       totcsr := !totsr + (#cons imps) + (#cons bnds) + (#cons exps);
+	       totsr := !totsr + (#total imps) + (#total bnds) + (#total exps)
+	    end
+	  else ()
 	in  nilmod
 	end
 
-    fun transform filename (ref false,_,_,_,phasename) (_,nilmod) = 
+    fun transform filename (ref false,_,_,_,_,phasename) (_,nilmod) = 
 	let val str = "Skipping " ^ phasename ^ " : " ^ filename
 	in  (* printBold str;  *)
 	    nilmod
 	end
-      | transform filename (tr as (ref true,_,_,_,_)) arg =
+      | transform filename (tr as (ref true,_,_,_,_,_)) arg =
 	pass filename tr arg
 
 					    
@@ -141,6 +156,7 @@ structure Linknil :> LINKNIL  =
 	    val nilmod = transform typeofelim1 (typeof_elim, nilmod)
 
 	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
+
 
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
