@@ -316,7 +316,11 @@ struct
 	  | (mod_int is, [], _) => ibinary is TilWord64.smod
 	  | (quot_int is, [], _) => ibinary is TilWord64.squot
 	  | (rem_int is, [], _) => ibinary is TilWord64.smod
-
+      	  | (plus_uint is, [], _) => ibinary is TilWord64.uplus
+      	  | (minus_uint is, [], _) => ibinary is TilWord64.uminus
+      	  | (mul_uint is, [], _) => ibinary is TilWord64.umult
+      	  | (div_uint is, [], _) => ibinary is TilWord64.udiv
+      	  | (mod_uint is, [], _) => ibinary is TilWord64.umod
 	  | (lshift_int is, [], _) => isbinary is TilWord64.lshift
 	  | (rshift_int is, [], _) => isbinary is TilWord64.rshifta
 	  | (rshift_uint is, [], _) => isbinary is TilWord64.rshiftl
