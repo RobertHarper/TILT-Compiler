@@ -1,6 +1,11 @@
 structure ExnHandler :> EXN_HANDLER =
 struct
-    val Interactive = Stats.tt "Interactive"
+    (*
+	Not a Stats.bool because we want each process to
+	to have its own value; for example, when using
+	a command-line master to run interactive slaves.
+    *)
+    val Interactive : bool ref = ref true
 
     fun bomb (e:exn) : bool =
 	(case e

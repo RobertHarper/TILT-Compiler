@@ -105,8 +105,8 @@ struct
 	    | _ => error "slave got unexpected message")
 	 handle e =>
 	    let val _ = if !Standalone then ExnHandler.print e else ()
-		val _ = if !ExnHandler.Interactive then raise e else ()
 		val _ = send (comm, Comm.BOMB (ExnHandler.errorMsg e))
+		val _ = if !ExnHandler.Interactive then raise e else ()
 	    in  state
 	    end)
 
