@@ -1,4 +1,4 @@
-(*$import EXPTABLE String BinaryMapFn *)
+(*$import EXPTABLE String BinaryMapFn Ppnil *)
 
 (* Basically revamped from old version of Til *)
 
@@ -55,7 +55,6 @@ struct
 	  | (NONE, SOME b) => LESS
 	  | (NONE, NONE) => EQUAL
 
-    fun cmp_array arr = LESS (* replace these or something *)   
     fun cmp_func f = LESS
     fun cmp_bnd b = LESS
     fun cmp_seq s = LESS 
@@ -65,6 +64,31 @@ struct
       | cmp_orders (EQUAL::rest) = cmp_orders rest
       | cmp_orders (first::rest) = first
 
+
+    fun cmp_vectors ((c1, arr1), (c2, arr2)) =
+	let
+	    val length1 = Array.length arr1
+	    val length2 = Array.length arr2
+	    fun e2n (Nil.Const_e(Prim.uint(Prim.W8,n))) = n
+              | e2n _ = error "cmp_vectors: e2n: ill-formed string"
+	    fun loop i = 
+		if (i >= length1) then
+		    EQUAL
+		else
+		    (case cmp_uTilWord64 (e2n (Array.sub(arr1,i)), 
+					  e2n (Array.sub(arr2,i))) of
+			 EQUAL => loop (i+1)
+		       | ord => ord)
+	in
+	    (case (c1,c2) of
+		 (Prim_c(Int_c Prim.W8,[]), 
+		  Prim_c(Int_c Prim.W8,[])) => 
+		     (* Comparison of strings *)
+		     (case cmp_int(length1, length2) of
+			  EQUAL => loop 0
+			| ord => ord)
+	       | _ => LESS)
+	end
 
     fun cmp_list cmp (a,b) =
 	let fun f (nil,nil) = EQUAL
@@ -286,8 +310,7 @@ struct
 	  | (array a, _ ) => GREATER
 	  | (_, array a) => LESS 
 
-	  | (vector (con1, eArray1), (vector (con2, eArray2))) => 
-		cmp_orders [cmp_con (con1, con2) , cmp_array (eArray1, eArray2)]
+	  | (vector v1, (vector v2)) => cmp_vectors (v1, v2)
 	  | (vector v, _ ) => GREATER
 	  | (_, vector v) => LESS
 
