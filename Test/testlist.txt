@@ -191,3 +191,8 @@ n135    Denmark Core-SML accept test
 n136    Denmark Core-SML accept test
 n137    Denmark Core-SML accept test
 n138    Denmark Core-SML accept test
+m0053	val rec declarations
+m0054	bytes and characters
+m0055	character patterns
+m0056	word8, char, and general arrays
+m0057	tabulation of vectors
