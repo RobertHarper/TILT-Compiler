@@ -39,3 +39,12 @@ parse-sig.sml
 parse.sml
 
 parsestring.sml
+
+intersect.sig.sml
+intersect.sml
+
+light.sig.sml
+light.sml
+
+render.sig.sml
+render.sml
