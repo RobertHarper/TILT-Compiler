@@ -87,7 +87,7 @@ struct
 	Util.memoize(fn () =>
 		     let
 		     in
-			 {assembler = ["talc.exe", "--verify-link", "--verify-program"],
+			 {assembler = ["talc.exe", "-c", "--verify-link", "--verify-program"],
 			  linker    = ["talc.exe", "--verify-link", "--verify-program"],
 			  ldpre     = [],
 			  ldpost    = []  (* Obviously, these are not yet complete *)
