@@ -18,6 +18,11 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
   structure Pseudo   = AlphaMLRISCPseudo
   structure Region   = AlphaMLRISCRegion
 
+  structure IntSet = DenseIntSet(structure IntMap = IntBinaryMap
+				 structure WordN  = Word32)
+
+  structure RegisterMap = DenseRegisterMap(structure IntMap = IntBinaryMap)
+
   structure RegisterSpillMap =
     RegisterSpillMap(type offset	   = Constant.const
 		     structure RegisterMap = RegisterMap)
@@ -115,7 +120,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   structure RegisterTraceMap =
     RtlRegisterTraceMap(structure Cells		 = Alpha32Cells
-			structure IntSet	 = IntBinarySet
+			structure IntSet	 = IntSet
 			structure MLRISCConstant = Constant
 			structure RegisterMap	 = RegisterMap
 			structure Rtl		 = Rtl
@@ -123,18 +128,18 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   structure BasicBlock =
     BasicBlock(structure IntMap	      = IntBinaryMap
-	       structure IntSet	      = IntBinarySet
+	       structure IntSet	      = IntSet
 	       structure MLRISCPseudo = Pseudo
 	       structure MLTreeExtra  = MLTreeExtra)
 
   structure IntegerDataFlow =
-    IntegerDataFlow(structure IntSet	  = IntBinarySet
+    IntegerDataFlow(structure IntSet	  = IntSet
 		    structure MLTreeExtra = MLTreeExtra)
 
   structure IntegerLiveness =
     IntegerLiveness(structure BasicBlock      = BasicBlock
 		    structure IntegerDataFlow = IntegerDataFlow
-		    structure IntSet	      = IntBinarySet
+		    structure IntSet	      = IntSet
 		    structure MLTreeExtra     = MLTreeExtra)
 
   structure SpillReload = SpillReload(structure MLTreeExtra = MLTreeExtra)
@@ -149,7 +154,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 		  structure IntegerAllocation	= IntegerAllocation
 		  structure IntegerConvention	= Integer
 		  structure IntegerLiveness	= IntegerLiveness
-		  structure IntSet		= IntBinarySet
+		  structure IntSet		= IntSet
 		  structure MLRISCConstant	= Constant
 		  structure MLRISCPseudo	= Pseudo
 		  structure MLRISCRegion        = Region
