@@ -81,7 +81,7 @@ sig
    val add_term        : (state * var * con * term * exp option) -> state  (* equation optional *)
    val add_code        : (state * var * con * label) -> state
    val add_reg         : (state * var * con * reg) -> state
-   val add_conterm     : (state * var * kind * term option) -> state
+   val add_conterm     : (state * Nil.label option * var * kind * term option) -> state
 
    val getrep : state -> var -> term
    val getconvarrep' : state -> var -> convar_rep option
@@ -101,6 +101,12 @@ sig
    val term2rep : term -> rep
    val type_of : state -> exp -> con
    val std_kind_of : state -> con -> kind
+   val find_con : state -> var -> con
+   val reduce_to_arrow : state -> con -> {openness : Nil.openness, effect : Nil.effect,
+					  tFormals : (Nil.var*Nil.kind) list,
+					  eFormals : Nil.con list,
+					  fFormals : Nil.w32,
+					  body_type : Nil.con}
 
    (* Routines for loading RTL values *)
    val load_ireg_loc : location * regi option -> regi
@@ -183,4 +189,11 @@ sig
    val incPrim : unit -> unit
    val incMutate : unit -> unit
 
+   val print_kinds : state -> unit
+   val print_convars : state -> unit
+
+   val locToString : location -> string
+   val valToString : value -> string
+
+   val print_globals : unit -> unit
 end

@@ -194,15 +194,15 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = record_project(argc,2+n,tempi)
 			in  (n+1,
-			     add_conterm (state,convar,Type_k,
+			     add_conterm (state,NONE,convar,Type_k,
 					  SOME(LOCATION(REGISTER (false,I tempi)))))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_conterm (state,resconvar,Type_k,
+		    val state = add_conterm (state,NONE,resconvar,Type_k,
 					     SOME(LOCATION(REGISTER (false,I resc))))
-		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
+		    val funcon = AllArrow_c{openness=Closure, effect=Partial,
 					    tFormals=[], 
-					    eFormals=[(NONE,NilDefs.tuple_con(map Var_c convars))],
+					    eFormals=[NilDefs.tuple_con(map Var_c convars)],
 					    fFormals=0w0, body_type=Var_c resconvar}
 		    val state = add_term  (state,funvar,funcon, 
 					   LOCATION(REGISTER (false,I function)), NONE)
@@ -253,25 +253,25 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = record_project(argc,2+n,tempi)
 			in  (n+1,
-			     add_conterm (state,convar,Type_k,
+			     add_conterm (state,NONE,convar,Type_k,
 					  SOME(LOCATION(REGISTER (false,I tempi)))))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_conterm (state,resconvar,Type_k,
+		    val state = add_conterm (state,NONE,resconvar,Type_k,
 					     SOME(LOCATION(REGISTER (false,I resc))))
-		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
+		    val funcon = AllArrow_c{openness=Closure, effect=Partial,
 					    tFormals=[], 
-					    eFormals=[(NONE,NilDefs.tuple_con(map Var_c convars))],
+					    eFormals=[NilDefs.tuple_con(map Var_c convars)],
 					    fFormals=0w0, body_type=Var_c resconvar}
-		    val newfuncon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
+		    val newfuncon = AllArrow_c{openness=Closure, effect=Partial,
 					       tFormals=[], 
-					       eFormals=map (fn v => (NONE,Var_c v)) convars,
+					       eFormals=map Var_c convars,
 					       fFormals=0w0, body_type=Var_c resconvar}
 		    val targs = (map Var_c convars) @ [Var_c resconvar]
-		    val supportcon = AllArrow_c{openness=Code, effect=Total, isDependent=false,
+		    val supportcon = AllArrow_c{openness=Code, effect=Total,
 						tFormals = map (fn _ => (fresh_var(), Type_k)) targs,
 						fFormals = 0w0, 
-						eFormals = [(NONE, funcon)],
+						eFormals = [funcon],
 						body_type = newfuncon}
 		    val state = add_term (state,funvar,funcon,
 					  LOCATION(REGISTER (false,I function)), NONE)

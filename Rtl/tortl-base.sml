@@ -35,6 +35,10 @@ struct
     val maxAllocRequest = 2048   (* Measured in words *)
     val maxMutateRequest = 2048  (* Measured in writes *)
 
+    val get_con = NilContext.find_con
+
+    (*val _ = debug_bound := true*)
+
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
    (* ------------------ RTL statistics ------------------------------ *)
@@ -110,6 +114,9 @@ struct
 	REGISTER of bool * reg   (* flag indicates whether value is constant *)
       | GLOBAL   of label * rep  (* value resides at this label: includes unboxed real *)
 
+    fun locToString (REGISTER _) = "REGISTER"
+      | locToString (GLOBAL _) = "GLOBAL"
+
     datatype value =
 	VOID of rep             (* an undefined values *)
       | INT of TilWord32.word   (* an integer *)
@@ -119,6 +126,14 @@ struct
       | LABEL of label          (* the value of this label: e.g. boxed real *)
       | CODE of label           (* code that residing at this label *)
 	
+    fun valToString (VOID _) = "VOID"
+      | valToString (INT _) = "INT"
+      | valToString (TAG _) = "TAG"
+      | valToString (REAL _) = "REAL"
+      | valToString (RECORD _) = "RECORD"
+      | valToString (LABEL _) = "LABEL"
+      | valToString (CODE _) = "CODE"
+
    datatype term = LOCATION of location
                  | VALUE of value
 
@@ -199,11 +214,12 @@ struct
   (* Stats.subtimer(str,f) for real timing *)
   fun subtimer(str,f) = f
   fun type_of ({env,...}:state) e = 
-      subtimer("RTL_typeof",Normalize.type_of)(#1 env,e)
+       subtimer("RTL_typeof",Normalize.type_of)(#1 env,e)
 
   fun std_kind_of ({env,...}:state) c =
       subtimer("RTL_kind_of",NilContext.kind_of) (#1 env,c)
 
+  fun find_con ({env = (nilenv,_),...}:state) v = NilContext.find_con (nilenv, v)
 
   (* ---- Looking up and adding new variables --------------- *)
 
@@ -256,8 +272,30 @@ struct
        else ();
 	state_var_insert_eq' state arg)
 
+  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,l,k) : state = 
+      let val _ = if (!debug_bound)
+		      then (print "env adding v = ";
+			    Ppnil.pp_var v; print "\n")
+		  else ()
+	  val (env1, env2) = env
+	  val env1 = NilContext.insert_kind(env1,v,k)
+	  val env1 =
+	      case k of
+		  Single_k c => NilContext.insert_con(env1, v, c)
+		| _ => env1
+	  val env1 =
+	      case l of
+		  NONE => env1
+		| SOME l => NilContext.insert_label(env1, l, v)
+	  val env2 = VarMap.insert(env2, v, ref NONE)
+	  val newenv = (env1, env2)
+	  val newstate = {is_top=is_top,env=newenv,
+			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+      in  newstate
+      end
+
   fun state_convar_insert' ({is_top,convarmap,varmap,env,gcstate}:state) 
-                           (v,(vr,k)) : state =
+                           (v,l,(vr,k)) : state =
       let
 	val _ = if (!debug_bound)
 		  then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
@@ -267,16 +305,15 @@ struct
 		 | SOME _ => error ("convarmap already contains "
 				    ^ (Name.var2string v)))
 	val convarmap = VarMap.insert(convarmap,v,vr)
-	val newenv = (NilContext.insert_kind(#1 env,v,k),
-		      VarMap.insert(#2 env, v, ref NONE))
       in
-	{is_top=is_top,env=newenv,
+	{is_top=is_top,env=env,
 	 varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end  	
 
-  fun state_convar_insert state (arg as (v,(vr,k))) =
+  fun state_convar_insert state (arg as (v,l,(vr,k))) =
       let 
 	val state = state_convar_insert' state arg
+	val state = env_insert' state (v,l,k)
 	val _ = if (#is_top state)
 		    then global_state := state_convar_insert' (!global_state) arg
 		  else ()
@@ -284,11 +321,11 @@ struct
       end
 
   (* adding term-level variables and functions *)
-  fun add_term (s,v,con,term,NONE) = state_var_insert s (v,(term,con))
-    | add_term (s,v,con,term,SOME e) = state_var_insert_eq s (v,(term,e))
+  fun add_term_direct (s,v,con,term,NONE) = state_var_insert s (v,(term,con))
+    | add_term_direct (s,v,con,term,SOME e) = state_var_insert_eq s (v,(term,e))
 
   (* adding constructor-level variables and functions *)
-  fun add_conterm (s,v,kind,termOpt) = state_convar_insert s (v,(termOpt, kind))
+  fun add_conterm_direct (s,l,v,kind,termOpt) = state_convar_insert s (v,l,(termOpt, kind))
 
    fun getconvarrep' ({convarmap,...} : state) v = VarMap.find (convarmap,v) 
    fun getconvarrep state v : convar_rep = 
@@ -306,7 +343,13 @@ struct
        in either case, the returned type is possibly simpler than the argument type *)
 
     fun simplify_type ({env,...} : state) con : bool * con = 
-	let val result = subtimer("RTL_reduce_hnf",Normalize.reduce_hnf)(#1 env,con) 
+	let val nilenv = #1 env
+	    val result = subtimer("RTL_reduce_hnf",Normalize.reduce_hnf)(nilenv,con) 
+	    fun reduce_more (_, Prim_c(GCTag_c, [Var_c v])) = reduce_more (true, Prim_c(GCTag_c, [get_con (nilenv, v)]))
+	      | reduce_more x = x
+
+	    val result = reduce_more result
+
 	    val _ = if (!debug_simp)
 		    then (print (Real.toString (Stats.fetch_timer_last "RTL_reduce_hnf"));
 			  print "s  simplify on\n";  Ppnil.pp_con con;
@@ -331,10 +374,13 @@ struct
 	     | _ => slow())
       end
 
+  fun reduce_to_arrow ({env,...}:state) c = 
+      Normalize.strip_arrow_norm (#1 env) c
+
   fun reduce_to_nondep_record ({env,...} : state) con =
       (case #2 (subtimer("RTL_reduce_hnf",Normalize.reduce_hnf) (#1 env,con)) of
-	 Prim_c (Record_c (labs,vlopt),cons) =>
-	 (case vlopt of 
+	 Prim_c (Record_c labs, cons) => (labs, cons)
+	 (*(case vlopt of 
 	    NONE => (labs,cons)
 	  | SOME vs => 
 	    let
@@ -344,7 +390,7 @@ struct
 		  in loop (rest,(v,c')::rev_vcl,c'::acc)
 		  end
 	    in (labs,loop (Listops.zip vs cons,[],[]))
-	    end)
+	    end)*)
        | _ => error "reduce_to_record didn't get a record type")
 		  
 
@@ -1207,12 +1253,13 @@ struct
   val add_term = 
       fn arg as (s,v,con,term,e) =>
       if (Name.VarSet.member(!globals,v)) 
-	  then help_global(add_term, arg)
-      else add_term(s,v,con,term,e)
+	  then help_global(add_term_direct, arg)
+      else add_term_direct(s,v,con,term,e)
   fun add_reg (s,v,con,reg) = add_term (s,v,con,LOCATION(REGISTER(false,reg)), NONE)
   fun add_code(s,v,con,l)   = add_term (s,v,con,VALUE(CODE l),NONE)
 
   fun add_conglobal (state : state,
+		     l : Nil.label option,
 		     v : var,
 		     kind : kind,
 		     termOpt : term option) : state = 
@@ -1236,16 +1283,16 @@ struct
 		 SOME(LOCATION (REGISTER _)) => SOME(LOCATION(GLOBAL(label,TRACE)))
 	       | _ => termOpt)
 
-	val state' = add_conterm (state, v, kind, termOpt)
+	val state' = add_conterm_direct (state, l, v, kind, termOpt)
 
     in state'
     end
 
   val add_conterm = 
-      fn arg as (_,v,_,_) =>
+      fn arg as (_,_,v,_,_) =>
       if (Name.VarSet.member(!globals,v)) 
 	  then add_conglobal arg
-      else add_conterm arg
+      else add_conterm_direct arg
 
   fun unboxFloat regi : regf = let val fr = alloc_regf()
 				   val _ = add_instr(LOAD64F(REA(regi,0),fr))
@@ -1367,5 +1414,8 @@ struct
     val shuffle_regs  = shuffle (eqreg, clone, mv)
   end
 
+  fun print_kinds ({env = (context, _), ...} : state) = NilContext.print_kinds context
+  fun print_convars ({convarmap, ...} : state) = Name.VarMap.appi (fn (v, _) => (Ppnil.pp_var v; print "; ")) convarmap
+  fun print_globals () = Name.VarSet.app (fn v => (Ppnil.pp_var v; print "; ")) (!globals)
 
 end
