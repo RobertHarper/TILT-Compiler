@@ -3188,7 +3188,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		       fun loop [] _ = error "ill-formed Mu_c"
 			 | loop (((l',_),k)::vrest) n = if (eq_label(l,l')) 
 							    then (n,k) else loop vrest (n+1)
-		       val (which,fieldk) = (case (NilStatic.strip_singleton k) of 
+		       val (which,fieldk) = (case (NilUtil.strip_singleton k) of 
 						 Record_k lvk_seq => loop (sequence2list lvk_seq) 0
 					       | _ => error "bad kind to proj_c from")
 		       val dest = alloc_regi TRACE
@@ -3206,7 +3206,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 		   end
 	     | App_c (c,clist) => (* pass in env argument first *)
 		   let val (clregi,k) = xcon(state,fresh_named_var "closure",c)
-		       val resk = (case (NilStatic.strip_singleton k) of
+		       val resk = (case (NilUtil.strip_singleton k) of
 				       Arrow_k(_,_,resk) => resk
 				     | _ => (Ppnil.pp_kind k; print "\n";
 					     error "bad kind to App_c"))
