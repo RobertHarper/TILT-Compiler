@@ -1,0 +1,154 @@
+(* Parser for group files. *)
+
+structure S = ExtSyn
+%%
+%name Group
+%pos int
+%pure
+
+%term EOF | DOLLAR | DOT | CARAT | LPAREN | RPAREN | LBRACE | RBRACE | EQ
+  | SEQ | BEQ | LT | LE | GT | GE | COLON | ENV | IF | THEN | ELSE
+  | NOT | ANDALSO | ORELSE | DEFINED | INTERFACE | VAL | SOURCE
+  | COMPILED | AND | UNIT | PRIMITIVE | IMPORT | GROUP | INCLUDE | MAKE
+  | EXECUTABLE | LIBRARY | IF' | ELIF | ELSE' | ENDIF | ERROR
+  | ID of string | STRING of string | INT of int | BOOL of bool
+
+%keyword ENV IF THEN ELSE NOT ANDALSO ORELSE DEFINED INTERFACE VAL
+  SOURCE COMPILED AND UNIT PRIMITIVE IMPORT GROUP INCLUDE MAKE
+  EXECUTABLE LIBRARY ELIF ENDIF ERROR
+
+%value ID     ("bogusId")
+%value STRING ("bogusString")
+%value INT    (~1)
+%value BOOL   (false)
+
+%change -> THEN | -> ELSE | -> LPAREN | -> ELSE ID
+
+%eop EOF
+%noshift EOF
+%left ELSE
+%left ORELSE
+%left ANDALSO
+%left EQ SEQ BEQ LT LE GT GE
+%left CARAT
+
+%nonterm
+    aexp of S.exp
+  | dexp of S.exp
+  | exp of S.exp
+  | imps of string list
+  | imports of string list
+  | export of S.export
+  | exps of S.exports
+  | exports of S.exports
+  | cc of S.entries
+  | ent of S.entry
+  | ents of S.entries
+  | start of S.groupfile
+
+%start start
+%%
+aexp	: DOLLAR ID
+		(S.EXP_MARK(IDleft,S.EXP_VAR ID))
+	| STRING
+		(S.EXP_STR STRING)
+	| ENV ID
+		(S.EXP_MARK(IDleft,S.EXP_ENV ID))
+	| INT
+		(S.EXP_INT INT)
+	| BOOL
+		(S.EXP_BOOL BOOL)
+	| LPAREN exp RPAREN
+		(exp)
+dexp	: DOLLAR ID
+		(S.EXP_DEFV ID)
+	| ENV ID
+		(S.EXP_DEFE ID)
+	| UNIT ID
+		(S.EXP_DEFU ID)
+	| INTERFACE ID
+		(S.EXP_DEFI ID)
+	| LPAREN dexp RPAREN
+		(dexp)
+exp	: aexp
+		(aexp)
+	| exp CARAT exp
+		(S.EXP_MARK(CARATleft,S.EXP_CAT(exp1,exp2)))
+	| IF exp THEN exp ELSE exp
+		(S.EXP_MARK(IFleft,S.EXP_IF(exp1,exp2,exp3)))
+	| NOT aexp
+		(S.EXP_MARK(NOTleft,S.EXP_NOT aexp))
+	| exp ANDALSO exp
+		(S.EXP_MARK(ANDALSOleft,S.EXP_AND(exp1,exp2)))
+	| exp ORELSE exp
+		(S.EXP_MARK(ORELSEleft,S.EXP_OR(exp1,exp2)))
+	| exp SEQ exp
+		(S.EXP_MARK(SEQleft,S.EXP_SEQ(exp1,exp2)))
+	| exp BEQ exp
+		(S.EXP_MARK(BEQleft,S.EXP_BEQ(exp1,exp2)))
+	| exp EQ exp
+		(S.EXP_MARK(EQleft,S.EXP_IEQ(exp1,exp2)))
+	| exp LT exp
+		(S.EXP_MARK(LTleft,S.EXP_ILT(exp1,exp2)))
+	| exp LE exp
+		(S.EXP_MARK(LEleft,S.EXP_ILE(exp1,exp2)))
+	| exp GT exp
+		(S.EXP_MARK(GTleft,S.EXP_IGT(exp1,exp2)))
+	| exp GE exp
+		(S.EXP_MARK(GEleft,S.EXP_IGE(exp1,exp2)))
+	| DEFINED dexp
+		(dexp)
+imps	:	(nil)
+	| ID imps
+		(ID :: imps)
+imports	: LBRACE imps RBRACE
+		(imps)
+export	: INTERFACE ID
+		(S.EXPORTI ID)
+	| VAL ID
+		(S.EXPORTV ID)
+exps	:	(nil)
+	| export exps
+		(export :: exps)
+exports	: LBRACE exps RBRACE
+		(exps)
+cc	:	(nil)
+	| ELSE' ents
+		(ents)
+	| ELIF exp ents cc
+		([S.MARK(ELIFleft,S.IF(exp,ents,cc))])
+ent	: SOURCE INTERFACE ID EQ exp imports
+		(S.SRCI(ID,exp,imports))
+	| COMPILED INTERFACE ID EQ exp AND exp
+		(S.COMPI(ID,exp1,exp2))
+	| SOURCE UNIT ID EQ exp imports
+		(S.SRCU(ID,NONE,exp,imports))
+	| SOURCE UNIT ID COLON ID EQ exp imports
+		(S.SRCU(ID1,SOME ID2,exp,imports))
+	| COMPILED UNIT ID COLON ID EQ exp AND exp
+		(S.COMPU(ID1,ID2,exp1,exp2))
+	| PRIMITIVE UNIT ID imports
+		(S.PRIMU(ID,imports))
+	| IMPORT UNIT ID COLON ID
+		(S.IMPORTU(ID1,ID2))
+	| INCLUDE GROUP exp
+		(S.INCLUDE exp)
+	| IMPORT GROUP exp
+		(S.IMPORT exp)
+	| VAL ID EQ exp
+		(S.VAL(ID,exp))
+	| MAKE EXECUTABLE exp imports
+		(S.MAKE_EXE(exp,imports))
+	| MAKE LIBRARY exp
+		(S.MAKE_LIB(exp,nil))
+	| MAKE LIBRARY exp exports
+		(S.MAKE_LIB(exp,exports))
+	| IF' exp ents cc ENDIF
+		(S.MARK(IF'left,S.IF(exp,ents,cc)))
+	| ERROR exp
+		(S.MARK(ERRORleft,S.ERROR exp))
+ents	:	(nil)
+	| ent ents
+		(S.MARK(entleft,ent) :: ents)
+start	: ents
+		(ents)
