@@ -1,4 +1,5 @@
 Group is
+../Parser/parser.cm
 ../Elaborator/elaborator.cm
 ../Util/util.cm
 ../smlnj-lib.cm
@@ -10,7 +11,12 @@ Group is
 (*../RtlToMLRISC/Alpha/Alpha.cm*)
 (*../RtlToMLRISC/Sparc/Sparc.cm*)
 
-tophelp.sml
+extsyn.sml
+group.grm.sig group.grm.sml (* group.grm *)
+group.lex.sml (* group.lex *)
+group.sig.sml
+group.sml
+
 target.sig.sml
 target.sml
 paths.sig.sml
@@ -23,6 +29,8 @@ tools.sml
 
 filecache.sig.sml
 filecache.sml
+file.sig.sml
+file.sml
 compiler.sig.sml
 compiler.sml
 ue.sig.sml
@@ -31,8 +39,6 @@ prelink.sig.sml
 prelink.sml
 info.sig.sml
 info.sml
-updatehelp.sig.sml
-updatehelp.sml
 update.sig.sml
 update.sml
 (*
@@ -43,8 +49,6 @@ update.sml
    asmfile.sml
    objfile.sml
 *)
-delay.sig.sml
-delay.sml
 popen.sig.sml
 popen.sml
 dirs.sig.sml
@@ -53,6 +57,8 @@ communication.sig.sml
 communication.sml
 statistics.sig.sml
 statistics.sml
+exnhandler.sig.sml
+exnhandler.sml
 master.sig.sml
 master.sml
 slave.sig.sml

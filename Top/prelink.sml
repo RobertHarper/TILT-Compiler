@@ -1,21 +1,17 @@
-(*$import Stats PRELINK Crc Util UnitEnvironment *)
-
-structure Prelink
-    :> PRELINK
-        where type ue = UnitEnvironment.ue =
+structure Prelink :> PRELINK =
 struct
 
     val error = fn s => Util.error "prelink.sml" s
-	
+
     val doConsistent = Stats.tt "doConsistent"
-	
+
     structure Ue = UnitEnvironment
+    type equiv = Crc.crc * Crc.crc -> bool
     type ue = Ue.ue
     type package = {unit : string, imports : ue, exports : ue}
 
-    (* confine : string * ue * ue -> ue *)
-    fun confine (unitname, ue1, ue2) =
-	(case Ue.confine (ue1, ue2)
+    fun confine (eq : equiv) (unitname : string, ue1 : ue, ue2 : ue) : ue =
+	(case Ue.confine eq (ue1, ue2)
 	   of Ue.VALID ue3 =>
 	       let val printUe = Ue.appi (fn (str,_) => (print str; print "  "))
 		   val _ = if not (Ue.isEmpty ue3)
@@ -36,31 +32,28 @@ struct
 			Ue.confine' (ue1, ue2))
 	       end)
 
-    (* plus_overlap : string * ue * ue -> ue *)
-    fun plus_overlap (unitname, ue1, ue2) =
-	(case Ue.plus_overlap (ue1, ue2)
+    fun plus_overlap (eq : equiv) (unitname : string, ue1 : ue, ue2 : ue) : ue =
+	(case Ue.plus_overlap eq (ue1, ue2)
 	   of Ue.VALID ue3 => ue3
 	    | Ue.WITNESS name =>
 	       error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
 		      "on a version of " ^ name ^ " which is inconsistent\n" ^
 		      "with versions of " ^ name ^ " imported elsewhere."))
-	     
-    (* plus_no_overlap : string * ue * ue -> ue *)
-    fun plus_no_overlap (unitname, ue1, ue2) =
+
+    fun plus_no_overlap (unitname : string, ue1 : ue, ue2 : ue) : ue =
 	(case Ue.plus_no_overlap (ue1, ue2)
 	   of Ue.VALID ue3 => ue3
 	    | Ue.WITNESS name =>
 	       error ("Link Error: You are trying to link in the unit " ^ name ^ " more\n" ^
 		      "than once. This is not allowed."))
 
-    (* check : package list -> {imports:ue, exports:ue} *)
-    fun check packages =
+    fun check (eq : equiv) (packages : package list) : {imports:ue, exports:ue} =
       let
 	  fun li (iue0,eue0,[]) = (iue0,eue0)
 	    | li (iue0,eue0,{unit,imports=iue,exports=eue}::rest) =
-	      let val iue' = confine(unit,iue,eue0)
-		  val iue0' = confine(unit,iue0,eue)
-		  val iue_next = plus_overlap(unit,iue0',iue') 
+	      let val iue' = confine eq (unit,iue,eue0)
+		  val iue0' = confine eq (unit,iue0,eue)
+		  val iue_next = plus_overlap eq (unit,iue0',iue')
 		  val eue_next = plus_no_overlap(unit,eue0,eue)
 (*
 		  val _ = print "------------------------------------------------\n";
@@ -82,20 +75,19 @@ struct
       in  {imports = imports, exports = exports}
       end
 
-    (* checkTarget : string * package list -> unit *)
-    fun checkTarget (unit, packages) =
-	let val {imports, exports} = check packages
-		
+    fun checkTarget (eq : equiv) (what : string, packages : package list) : unit =
+	let val {imports, exports} = check eq packages
+
 	    fun pr_units [] = error "pr_units"
 	      | pr_units [a] = a
 	      | pr_units (a::rest) = (a ^ ", " ^ pr_units rest)
 	in
 	    if Ue.isEmpty imports then ()
 	    else
-		(print ("\nError! The units : [" ^ pr_units (map #1 (Ue.listItemsi imports)) ^ 
+		(print ("\nError! The units : [" ^ pr_units (map #1 (Ue.listItemsi imports)) ^
 			"] have not been resolved.\nExports were : [" ^
 			pr_units (map #1 (Ue.listItemsi exports)) ^
 			"].\n I cannot generate an executable for you.\n");
-		 error ("pre-link check failed for " ^ unit))
+		 error ("pre-link check failed for " ^ what))
 	end
 end

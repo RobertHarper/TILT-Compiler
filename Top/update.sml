@@ -1,374 +1,1081 @@
-(*$import UnitEnvironment Stats UPDATE UpdateHelp Paths TopHelp Time Util List Info *)
+(*
+	Values of type Info.info are compared to determine when
+	contexts, imports, or sources change.  These hold CRCs that
+	are compared to notice changes.
 
-structure Update
-    :> UPDATE
-        where type unit_paths = Paths.unit_paths
-	where type import = UpdateHelp.import =
+	Parameterized interface file CRCs, together with an
+	equivalence relation provided by the master, permit us to
+	efficiently determine when interfaces change.
+
+	Source file CRCs (compared with op=) permit us to determine
+	when source files change.  CRCs are more robust than time
+	stamps.  Some shared file systems get time stamps wrong
+	because of clock skew.  Interface files may be older than the
+	source files they describe.
+
+	XXX: Packed libraries do not include sources yet.  The group
+	file should include sources and the additional imports they
+	drag in.  Info files should have a stable flag to prevent
+	compilation.  When the flag is set, the planner should reject
+	when targets are missing or extant targets are out of date.
+	[I do not like the idea of putting sources into libraries. -dave]
+*)
+structure Update :> UPDATE =
 struct
 
     val error = fn s => Util.error "update.sml" s
-	
-    type unit_paths = Paths.unit_paths
-    type import = UpdateHelp.import
+    val reject = fn s => raise Compiler.Reject s
 
-    val showStale = Stats.ff "ShowStale"
-    val showPlan = Stats.tt "ShowPlan"
+    fun say (s : string) : unit =
+	if !Blaster.BlastDebug then (print s; print "\n") else ()
 
-    datatype reason =
-	Missing
-      | Because of string
-	
-    (* stale : string * reason -> unit *)
-    fun stale (what, reason) =
-	let val msg = case reason
-			of Missing => "missing"
-			 | Because why => ("stale: " ^ why)
-	in
-	    Help.chat "      ["; Help.chat what; Help.chat " is ";
-	    Help.chat msg; Help.chat "]\n"
-	end
-	
     structure Ue = UnitEnvironment
-    structure StringSet = Util.StringSet
-    structure Cache = UpdateHelp.Cache
-    structure InfoCache = UpdateHelp.InfoCache
-    structure IlCache = UpdateHelp.IlCache
+    structure FileCache = Compiler.FileCache
+    structure SM = Util.StringMap
+    structure W = TilWord64
+
+    val UpdateDebug = Stats.ff "UpdateDebug"
+    fun debugdo f = if !UpdateDebug then (f(); ()) else ()
+
+    val UpdateDiag = Stats.ff("UpdateDiag")
+    fun msg str = if (!UpdateDiag) then print str else ()
+
+    val ShowPlan = Stats.ff "ShowPlan"
+    val ShowStale = Stats.ff "ShowStale"
+    val KeepAsm = Stats.tt "KeepAsm"
+    val CompressAsm = Stats.ff "CompressAsm"
+    val UptoElaborate = Stats.ff "UptoElaborate"
+    val UptoAsm = Stats.ff "UptoAsm"
+
+    type iface = Compiler.iface
+    type precontext = Compiler.precontext
+    type imports = Compiler.imports
+    type ue = UnitEnvironment.ue
+    type equiv = Crc.crc * Crc.crc -> bool	(* interface CRC equivalence *)
+    type var = Name.var
+    type unit_help =
+	{parms : string -> var list,
+	 get_id : var -> string,
+	 get_unit_paths : var -> Paths.compunit option}
+    type iface_help =
+	{get_id : var -> string,
+	 fresh : ExtSyn.id -> ExtSyn.id,
+	 find : ExtSyn.id -> var,
+	 get_iface_paths : var -> Paths.iface option}
+    type importOnly = var -> bool
 
     (*
-	If a unit's source or imported interfaces have changed, we have to
-	recompile all the way to object.  If a unit's constraints (.int files)
-	have changed we either have to re-elaborate (if constraints don't
-	effect object code) or re-compile all the way to object.
+	Some plans have a bit mask.
+    *)
+    val Elaborate =	W.fromInt 1
+    val Generate =	W.fromInt 2
+    val Uncompress =	W.fromInt 4
+    val Assemble =	W.fromInt 8
+    val Link =		W.fromInt 16
+    val Compress =	W.fromInt 32
+    val Remove =	W.fromInt 64
 
-	 	Up to date checks
-		-----------------
-			Source		Constraint	Imported Interface
-	  Interface	 (1)		 (1),(2)	 (1)
-	  Assembler	 (3)		 (3),(2)	 (3)
-	  Object	 (3)		 (3),(2)	 (3)
+    fun test (flags : W.word, bits : W.word) : bool =
+	W.nequal (W.andb(flags,bits), W.zero)
 
-		(1): lastWritten(col) <= lastChecked(row)
-		(2): constraint hasn't appeared or disappeared
-		(3): lastWritten(col) <= lastWritten(row)
-     *)
+    datatype pack =
+	PACKU of Paths.compunit * ExtSyn.id list
+      | PACKI of Paths.iface * ExtSyn.id list
+      | PACKV of ExtSyn.id * ExtSyn.exp
 
-    type status = bool * bool * bool	(* interface uptodate, assembler uptodate, object uptodate *)
+    type inputs = (precontext * imports * iface option) option
+    (*
+	Invariants:
 
-    (* interfaceUptodate : status -> bool *)
-    fun interfaceUptodate (a, _, _) = a
-	
-    (* modTime : string -> Time.time *)
-    fun modTime file = if Cache.exists file then Cache.modTime file else Time.zeroTime
+	If UPATE_SRCU (_,inputs,flags,_) : plan,
+	then flags is non-zero
+	and inputs is NONE iff Elaborate and Generate are clear
+	and Elaborate is clear iff the unit's interface is up to date.
 
-    (* maxTime : Time.time list -> Time.time *)
-    val maxTime = List.foldl (fn (a, b) => if Time.>(a, b) then a else b) Time.zeroTime
+	If LINK (_,_,flags) : plan,
+	then flags is non-zero.
+    *)
+    datatype plan =
+	EMPTY_PLAN
+      | ELAB_SRCI of Paths.iface * precontext * imports * Info.info
+      | COMPILE of Paths.compunit * inputs * W.word * Info.info
+      | CHECK of precontext * Paths.compunit * Paths.iface
+      | LINK of Paths.exe * Paths.compunit list * W.word
+      | PACK of Paths.lib * pack list
 
-    (* readInfo : string -> Info.info *)
-    fun readInfo infoFile = #2 (InfoCache.read infoFile)
-		       
-    (* readInfoOption : string -> Info.info option *)
-    fun readInfoOption infoFile =
-	if InfoCache.exists infoFile
-	    then SOME (readInfo infoFile)
-	else NONE
-		       
-    (* ilLastChecked : info option * string -> Time.time *)
-    fun ilLastChecked (NONE : Info.info option, ilFile) = if IlCache.exists ilFile
-							      then IlCache.modTime ilFile
-							  else Time.zeroTime
-      | ilLastChecked (SOME {lastChecked, ...}, _) = lastChecked
+    val empty_plan : plan = EMPTY_PLAN
 
-    (* times : unit_paths * info option -> Time.time * Time.time * Time.time *)
-    fun times (target, info) =
-	let 
-	    val il_time = ilLastChecked (info, Paths.ilFile target)
-	    val asm_files = List.filter Cache.exists [Paths.asmFile target, Paths.asmzFile target]
-	    val asm_time = #2 (Cache.lastModTime asm_files)
-	    val obj_time = modTime (Paths.objFile target)
-	in
-	    (il_time, asm_time, obj_time)
+    fun isEmpty (plan : plan) : bool =
+	(case plan
+	   of EMPTY_PLAN => true
+	    | _ => false)
+
+    fun isReady (plan : plan) : bool =
+	(case plan
+	   of EMPTY_PLAN => true
+	    | ELAB_SRCI _ => false
+	    | COMPILE (_,_,flags,_) => not(test(flags,Elaborate))
+	    | CHECK _ => false
+	    | LINK _ => true
+	    | PACK _ => true)
+
+    fun sendToSlave (plan : plan) : bool =
+	(case plan
+	   of EMPTY_PLAN => false
+	    | ELAB_SRCI _ => true
+	    | COMPILE (_,_,flags,_) =>
+		test(flags, W.orb(Elaborate,Generate))
+	    | CHECK _ => true
+	    | LINK _ => false
+	    | PACK _ => false)
+
+    (*
+	We skip ACK_INTERFACE when there is nothing to do after
+	elaboration.
+    *)
+    fun ackInterface (plan : plan) : bool =
+	(case plan
+	   of EMPTY_PLAN => false
+	    | ELAB_SRCI _ => false
+	    | COMPILE (_,_,flags,_) =>
+		test(flags,Elaborate) andalso
+		test(flags,W.notb Elaborate)
+	    | CHECK _ => false
+	    | LINK _ => false
+	    | PACK _ => false)
+
+    structure B = Blaster
+    structure E = ExtSyn
+
+    val blastOutStrings : B.outstream -> string list -> unit =
+	B.blastOutList B.blastOutString
+    val blastInStrings : B.instream -> string list =
+	B.blastInList B.blastInString
+
+    fun blastOutValue (os : B.outstream) (value : E.exp) : unit =
+	(say "blastOutValue";
+	 (case value
+	    of E.EXP_STR s => (B.blastOutInt os 0; B.blastOutString os s)
+	     | E.EXP_INT i => (B.blastOutInt os 1; B.blastOutInt os i)
+	     | E.EXP_BOOL b => (B.blastOutInt os 2; B.blastOutBool os b)
+	     | _ => error "blasting out bad value"))
+    fun blastInValue (is : B.instream) : E.exp =
+	(say "blastInValue";
+	 (case B.blastInInt is
+	    of 0 => E.EXP_STR (B.blastInString is)
+	     | 1 => E.EXP_INT (B.blastInInt is)
+	     | 2 => E.EXP_BOOL (B.blastInBool is)
+	     | _ => error "bad value"))
+
+    fun blastOutPack (os : B.outstream) (pack : pack) : unit =
+	(say "blastOutPack";
+	 (case pack
+	    of PACKU (u,imports) =>
+		 (B.blastOutInt os 0; Paths.blastOutUnit os u;
+		  blastOutStrings os imports)
+	     | PACKI (I,imports) =>
+		 (B.blastOutInt os 1; Paths.blastOutIface os I;
+		  blastOutStrings os imports)
+	     | PACKV (id,value) =>
+		 (B.blastOutInt os 2; B.blastOutString os id;
+		  blastOutValue os value)))
+    fun blastInPack (is : B.instream) : pack =
+	(say "blastInPack";
+	 (case B.blastInInt is
+	    of 0 => PACKU (Paths.blastInUnit is, blastInStrings is)
+	     | 1 => PACKI (Paths.blastInIface is, blastInStrings is)
+	     | 2 => PACKV (B.blastInString is, blastInValue is)
+	     | _ => error "bad pack"))
+
+    fun blastOutContext (os : B.outstream) (c : precontext) : unit =
+	(say "blastOutContext";
+	 B.blastOutList (B.blastOutPair B.blastOutString B.blastOutString) os c)
+
+    fun blastInContext (is : B.instream) : precontext =
+	(say "blastInContext";
+	 B.blastInList (B.blastInPair B.blastInString B.blastInString) is)
+
+    fun blastOutImports (os : B.outstream) (I : imports) : unit =
+	(say "blastOutImports"; B.blastOutList B.blastOutString os I)
+    fun blastInImports (is : B.instream) : imports =
+	(say "blastInImports"; B.blastInList B.blastInString is)
+
+    fun blastOutInputs (os : B.outstream) (I : inputs) : unit =
+	(say "blastOutInputs";
+	 B.blastOutOption (B.blastOutTriple
+			   blastOutContext blastOutImports
+			   (B.blastOutOption B.blastOutString)) os I)
+    fun blastInInputs (is : B.instream) : inputs =
+	(say "blastInInputs";
+	 B.blastInOption (B.blastInTriple
+			  blastInContext blastInImports
+			  (B.blastInOption B.blastInString)) is)
+
+    fun blastOutPlan (os : B.outstream) (plan : plan) : unit =
+	(say "blastOutPlan";
+	 (case plan
+	    of EMPTY_PLAN => B.blastOutInt os 0
+	     | ELAB_SRCI (iface,context,imports,info) =>
+		(B.blastOutInt os 1; Paths.blastOutIface os iface;
+		 blastOutContext os context; blastOutImports os imports;
+		 Info.blastOutInfo os info)
+	     | COMPILE (unit,inputs,flags,info) =>
+		(B.blastOutInt os 2; Paths.blastOutUnit os unit;
+		 blastOutInputs os inputs; B.blastOutWord64 os flags;
+		 Info.blastOutInfo os info)
+	     | CHECK (context,U,I) =>
+		(B.blastOutInt os 3; blastOutContext os context;
+		 Paths.blastOutUnit os U; Paths.blastOutIface os I)
+	     | LINK (exe,units,flags) =>
+		(B.blastOutInt os 4; Paths.blastOutExe os exe;
+		 B.blastOutList Paths.blastOutUnit os units;
+		 B.blastOutWord64 os flags)
+	     | PACK (lib, exports) =>
+		(B.blastOutInt os 5; Paths.blastOutLib os lib;
+		 B.blastOutList blastOutPack os exports)))
+    fun blastInPlan (is : B.instream) : plan =
+	(say "blastInPlan";
+	 (case B.blastInInt is
+	    of 0 => EMPTY_PLAN
+	     | 1 => ELAB_SRCI (Paths.blastInIface is, blastInContext is,
+			      blastInImports is, Info.blastInInfo is)
+	     | 2 => COMPILE (Paths.blastInUnit is, blastInInputs is,
+			     B.blastInWord64 is, Info.blastInInfo is)
+	     | 3 => CHECK (blastInContext is, Paths.blastInUnit is,
+			  Paths.blastInIface is)
+	     | 4 => LINK (Paths.blastInExe is,
+			 B.blastInList Paths.blastInUnit is,
+			 B.blastInWord64 is)
+	     | 5 => PACK (Paths.blastInLib is, B.blastInList blastInPack is)
+	     | _ => error "bad plan"))
+
+    val (blastOutPlan, blastInPlan) =
+	B.magic (blastOutPlan, blastInPlan, "plan $Revision$")
+
+    val elaborate = "elaborate"
+
+    fun flagStrings (flags : W.word) : string list =
+	let fun add ((bit, name), r) =
+		if test(flags,bit) then name :: r else r
+	in  foldr add nil
+	    [(Elaborate,elaborate), (Generate,"generate"),
+	     (Uncompress,"uncompress"), (Assemble,"assemble"),
+	     (Link,"link"), (Compress,"compress"), (Remove,"remove")]
 	end
 
-    (* joinStatus : bool * bool * bool -> bool *)
-    fun joinStatus (v_source, v_interface, v_import) =
-	v_source andalso v_interface andalso v_import
+    fun planStrings (plan : plan) : string list =
+	(case plan
+	   of EMPTY_PLAN => []
+	    | ELAB_SRCI _ => [elaborate]
+	    | COMPILE (_,_,flags,_) => flagStrings flags
+	    | CHECK _ => ["check"]
+	    | LINK (_,_,flags) => flagStrings flags
+	    | PACK _ => ["pack"])
 
-    (* chatStatus : bool -> string * time * bool * bool * bool -> unit *)
-    fun chatStatus interface_same (what, time, v_source, v_interface, v_import) =
-	if time = Time.zeroTime then
-	    stale (what, Missing)
+    fun showPlan (what : string, plan : plan) : unit =
+	if isEmpty plan orelse not (!ShowPlan) then ()
 	else
-	    let
-		val _ = if v_source then ()
-			else stale (what, Because "older than source")
-		val _ = if v_interface orelse not interface_same then ()
-			else stale (what, Because "older than interface")
-		val _ = if v_import then ()
-			else stale (what, Because "older than imported interfaces")
-	    in  ()
+	    let val plan = concat(Listops.join " " (planStrings plan))
+	    in  msg ("  Plan: " ^ plan ^ "\n")
 	    end
-    
-    (* We assmume target .sml and imported .il and .info files exist. *)
-    (* fileStatus : unit_paths * unit_paths list -> status *)
-    fun fileStatus (target, imports) =
-	let
-	    val sourceFile = Paths.sourceFile target
-	    val source_time = Cache.modTime sourceFile
-	    val infoFile = Paths.infoFile target
-	    val info = readInfoOption infoFile
-		
-	    val (il_time, asm_time, obj_time) = times (target, info)
-	    val il_v_source = Time.<= (source_time, il_time)
-	    val asm_v_source = Time.<= (source_time, asm_time)
-	    val obj_v_source = Time.<= (source_time, obj_time)
 
-	    val interfaceFile = Paths.interfaceFile target
-	    val interface_time = modTime interfaceFile
-	    val interface_same = case info
-				   of NONE => false
-				    | SOME {constrained,...} => constrained = Cache.exists interfaceFile
-	    val v_interface = (if interface_same then
-				   fn time => Time.<= (interface_time, il_time)
-			       else
-				   fn _ => false)
-	    val il_v_interface = v_interface il_time
-	    val asm_v_interface = v_interface asm_time
-	    val obj_v_interface = v_interface obj_time
-				       
-	    val import_time = maxTime (map ((#lastWritten) o readInfo o Paths.infoFile) imports)
-	    val il_v_import = Time.<= (import_time, il_time)
-	    val asm_v_import = Time.<= (import_time, asm_time)
-	    val obj_v_import = Time.<= (import_time, obj_time)
+    datatype status =
+	OK
+      | Bad of string
+      | Join of status list
 
-	    val _ = if not (!showStale) then ()
-		    else
-			let
-			    val info_exists = isSome info
-			    val _ = if info_exists then ()
-				    else stale (infoFile, Missing)
-			    val _ = if interface_same orelse (not info_exists) then ()
-				    else stale (sourceFile, Because "interface file has been created or removed")
-			    val chatStatus = chatStatus interface_same
-				
-			    val _ = chatStatus (Paths.ilFile target, il_time, il_v_source, il_v_interface, il_v_import)
-			    val _ = if not (Help.wantAssembler()) then ()
-				    else chatStatus (Paths.asmFile target, asm_time, asm_v_source, asm_v_interface, asm_v_import)
-			    val _ = if not (Help.wantBinaries()) then ()
-				    else chatStatus (Paths.objFile target, obj_time, obj_v_source, obj_v_interface, obj_v_import)
-		    in ()
-		    end
-	in
-	    (joinStatus (il_v_source,  il_v_interface,  il_v_import),
-	     joinStatus (asm_v_source, asm_v_interface, asm_v_import),
-	     joinStatus (obj_v_source, obj_v_interface, obj_v_import))
+    fun uptodate (status : status) : bool =
+	(case status
+	   of OK => true
+	    | Bad _ => false
+	    | Join ss => List.all uptodate ss)
+
+    fun showStale' (status : status) : unit =
+	(case status
+	   of OK => ()
+	    | Bad s => msg ("  Stale: " ^ s ^ "\n")
+	    | Join ss => app showStale' ss)
+
+    fun showStale (status : status) : unit =
+	if !ShowStale then showStale' status
+	else ()
+
+    fun check_ue (what : string, equiv, ue, uefile : string) : unit =
+	let val _ = msg ("[checking " ^ what ^ "]\n")
+	    val ue' = FileCache.read_ue uefile
+	in  (case Ue.confine equiv (ue',ue)
+	       of Ue.VALID ue'' =>
+		    if Ue.isEmpty ue'' then ()
+		    else error (what ^ " compiled against units that are\
+				\ no longer available")
+		| Ue.WITNESS u =>
+		    reject (what ^ " compiled against unit " ^ u ^
+			    " whose interface has changed"))
 	end
 
-    datatype todo = ELABORATE | GENERATE | PREPARE | ASSEMBLE | CLEANUP
-    type plan = todo list
+    fun plan_compi (equiv, ue, iface : Paths.iface) : plan =
+	(check_ue ("compiled interface " ^ Paths.ifaceName iface,
+		   equiv, ue, Paths.ifaceUeFile iface);
+	 EMPTY_PLAN)
 
-    local 
-	val elaborate = "elaborate"
-	val generate = "generate"
-	val prepare = "prepare"
-	val assemble = "assemble"
-	val cleanup = "cleanup"
-    in
-	(* toString : todo -> string *)
-	fun toString ELABORATE = elaborate
-	  | toString GENERATE = generate
-	  | toString PREPARE = prepare
-	  | toString ASSEMBLE = assemble
-	  | toString CLEANUP = cleanup
+    fun plan_compu (equiv, ue, unit : Paths.compunit) : plan =
+	(check_ue ("compiled unit " ^ Paths.unitName unit,
+		   equiv, ue, Paths.ueFile unit);
+	 EMPTY_PLAN)
 
-	(* fromString : string -> todo *)
-	fun fromString s =
-	    if s = elaborate then ELABORATE
-	    else if s = generate then GENERATE
-	    else if s = prepare then PREPARE
-	    else if s = assemble then ASSEMBLE
-	    else if s = cleanup then CLEANUP
-	    else error ("not a valid todo - " ^ s)
+    fun check_context (eq : equiv, current : ue, past : ue) : status =
+	(case Ue.confine eq (past,current)
+	   of Ue.VALID ue'' =>
+		if Ue.isEmpty ue'' then OK
+		else
+		    Join (map (fn (u,_) =>
+			       Bad ("unit " ^ u ^ " no longer available"))
+			  (Ue.listItemsi ue''))
+	    | Ue.WITNESS u =>
+		Bad ("interface of unit " ^ u ^ " has changed"))
+
+    fun check_imports (current : Info.imports, past : Info.imports) : status =
+	let val mismatch = Bad "import length/order mismatch"
+	    fun loop (c,p) =
+		(case (c,p)
+		   of (nil,nil) => OK
+		    | (u :: c, u' :: p) =>
+			if u = u' then loop(c,p)
+			else mismatch
+		    | (_ :: _, nil) => mismatch
+		    | (nil, _ :: _) => mismatch)
+	in  loop(current,past)
+	end
+
+    fun check_source (current : Crc.crc, past : Crc.crc) : status =
+	if current = past then OK
+	else Bad "source file changed"
+
+    fun check_iface (eq : equiv, current : Crc.crc option,
+		     past : Crc.crc option) : status =
+	(case (current, past)
+	   of (SOME crc, SOME crc') =>
+		if eq(crc,crc') then OK
+		else Bad "exlicit interface changed"
+	    | (NONE, NONE) => OK
+	    | (SOME _, NONE) => Bad "explicit interface added"
+	    | (NONE, SOME _) => Bad "explicit interface removed")
+
+    fun check_info (eq : equiv, current : Info.info,
+		    past : Info.info) : status =
+	(case (current, past)
+	   of (Info.SRCI (context,imports,src),
+	       Info.SRCI (context',imports',src')) =>
+		Join [check_context (eq, context, context'),
+		      check_imports (imports, imports'),
+		      check_source (src, src')]
+	    | (Info.SRCU (context,imports,src,iface),
+	       Info.SRCU (context',imports',src',iface')) =>
+		Join [check_context (eq, context, context'),
+		      check_imports (imports, imports'),
+		      check_source (src, src'),
+		      check_iface (eq, iface, iface')]
+	    | (Info.PRIMU, Info.PRIMU) => Bad "primitive unit"
+	    | _ => Bad "bad info file")
+
+    fun check_info_file (eq : equiv, infoFile : string,
+			 current : Info.info) : status =
+	if FileCache.exists infoFile then
+	    check_info (eq, current, FileCache.read_info infoFile)
+	else Bad "first compilation"
+
+    fun check (eq : equiv, infoFile : string, current : Info.info) : bool =
+	let val status = check_info_file (eq,infoFile,current)
+	    val _ = showStale status
+	in  uptodate status
+	end
+
+    fun make_ue precontext : ue =
+	(foldl (fn ((u,i),ue) => Ue.insert(ue,u,FileCache.crc i))
+	 Ue.empty precontext)
+
+    fun srci_info (precontext, imports, iface : Paths.iface) : Info.info =
+	Info.SRCI (make_ue precontext, imports,
+		   FileCache.crc (Paths.ifaceSourceFile iface))
+
+    fun srcu_info (precontext, imports, iface : iface option,
+		   unit : Paths.compunit) : Info.info =
+	Info.SRCU (make_ue precontext, imports,
+		   FileCache.crc (Paths.sourceFile unit),
+		   Option.map FileCache.crc iface)
+
+    fun writeInfo (infoFile : string, info : Info.info) : unit =
+	if FileCache.exists infoFile then ()
+	else FileCache.write_info (infoFile, info)
+
+    fun plan_srci (equiv, precontext, imports, iface : Paths.iface) : plan =
+	let val what = Paths.ifaceName iface
+	    val _ = msg ("[checking interface " ^ what ^ "]\n")
+	    val infoFile = Paths.ifaceInfoFile iface
+	    val info = srci_info (precontext, imports, iface)
+	    val uptodate = check (equiv, infoFile, info)
+	    val exists = FileCache.exists (Paths.ifaceFile iface)
+	    val plan = if uptodate andalso exists
+		       then (writeInfo (infoFile,info); EMPTY_PLAN)
+		       else ELAB_SRCI (iface,precontext,imports,info)
+	    val _ = showPlan (what, plan)
+	in  plan
+	end
+
+    fun plan_compile (equiv, precontext, imports, unit : Paths.compunit) : plan =
+	let val what = Paths.unitName unit
+	    val _ = msg ("[checking unit " ^ what ^ "]\n")
+	    val infoFile = Paths.infoFile unit
+	    val src = Paths.isSrcUnit unit
+	    val iface : Paths.iface = Paths.unitIface unit
+	    val iface : iface option =
+		if Paths.isUnitIface iface then NONE
+		else SOME (Paths.ifaceFile iface)
+	    val info = if Paths.isSrcUnit unit
+		       then srcu_info (precontext, imports, iface, unit)
+		       else Info.PRIMU
+	    val uptodate = check (equiv, infoFile, info)
+	    val uptoElaborate = !UptoElaborate
+	    val uptoAsm = !UptoAsm
+	    val keepAsm = !KeepAsm
+	    val compressAsm = !CompressAsm
+
+	    val remove : (Paths.compunit -> string) -> unit =
+		if uptodate then fn path => ()
+		else fn path => FileCache.remove (path unit)
+	    val _ =
+		if uptoElaborate orelse uptoAsm then
+		    remove Paths.objFile
+		else ()
+	    val _ =
+		if uptoElaborate then
+		    app remove [Paths.asmFile, Paths.asmzFile]
+		else ()
+
+	    val have : (Paths.compunit -> string) -> bool =
+		if uptodate then fn path => FileCache.exists (path unit)
+		else fn path => false
+	    val dont_elaborate =
+		isSome iface orelse
+		have (Paths.ifaceFile o Paths.unitIface)
+	    val dont_generate =
+		uptoElaborate orelse
+		(uptoAsm andalso not keepAsm) orelse
+		have Paths.asmFile orelse
+		have Paths.asmzFile
+	    val inputs : inputs =
+		(case (dont_elaborate,dont_generate)
+		   of (true,true) => NONE
+		    | _ => SOME (precontext,imports,iface))
+
+	    fun add_flag ((bit : W.word, dont_add : bool),
+			  flags : W.word) : W.word =
+		if dont_add then flags else W.orb (flags,bit)
+	    val flags =
+		foldl add_flag W.zero
+		[(Elaborate,dont_elaborate),
+		 (Generate,dont_generate),
+		 (Uncompress,
+		  uptoElaborate orelse
+		  uptoAsm orelse
+		  have Paths.objFile orelse
+		  not (have Paths.asmzFile) orelse
+		  have Paths.asmFile),
+		 (Assemble,
+		  uptoElaborate orelse
+		  uptoAsm orelse
+		  have Paths.objFile),
+		 (Compress,
+		  uptoElaborate orelse
+		  not keepAsm orelse
+		  not compressAsm orelse
+		  have Paths.asmzFile),
+		 (Remove,
+		  uptoElaborate orelse
+		  keepAsm)]
+	    val plan =
+		if W.equal(W.zero, flags) then
+		    (writeInfo (infoFile, info); EMPTY_PLAN)
+		else COMPILE (unit,inputs,flags,info)
+	    val _ = showPlan (what, plan)
+	in  plan
+	end
+
+    fun plan_checku (eq : equiv, precontext, U : Paths.compunit,
+		     I : Paths.iface) : plan =
+	let val what = Paths.unitName U
+	    val Uiface = Paths.ifaceFile (Paths.unitIface U)
+	    val Iiface = Paths.ifaceFile I
+	    val Ucrc = FileCache.crc Uiface
+	    val Icrc = FileCache.crc Iiface
+	    val plan = if eq (Ucrc,Icrc) then EMPTY_PLAN
+		       else CHECK (precontext, U, I)
+	    val _ = showPlan (what, plan)
+	in  plan
+	end
+
+    structure VL =
+    struct
+	type 'a varlist = Name.VarSet.set * 'a list
+	val empty : 'a varlist = (Name.VarSet.empty, nil)
+	fun has (vl : 'a varlist, v : var)	: bool =
+	    Name.VarSet.member (#1 vl, v)
+	fun append (vl : 'a varlist, v : var, x : 'a) : 'a varlist =
+	    (Name.VarSet.add (#1 vl, v), x :: (#2 vl))
+	fun finish (vl : 'a varlist) : 'a list = rev (#2 vl)
     end
 
-    (* Basic Plan
-     
-	Given the status of a unit's interface, assembler, and object
-	files, we can easily make a basic plan of action.
-    *)
-	
-    (* basicPlan : status -> plan *)
-    (* Note: we always have uptodate assembler source prior to ASSEMBLE. *)
-    fun basicPlan (true, true, true) = nil
-      | basicPlan (true, true, false) = [ASSEMBLE]
-      | basicPlan (true, false, true) = [GENERATE]
-      | basicPlan (true, false, false) = [GENERATE, ASSEMBLE]
-      | basicPlan (false, true, true) = [ELABORATE]
-      | basicPlan (false, true, false) = [ELABORATE, ASSEMBLE]
-      | basicPlan (false, false, true) = [ELABORATE, GENERATE]
-      | basicPlan (false, false, false) = [ELABORATE, GENERATE, ASSEMBLE]
+    fun showParms (get_id : var -> string) (v : var, parms : var list) : unit =
+	debugdo(fn () =>
+		let val parms = concat(Listops.join " " (map get_id parms))
+		in  print ("  " ^ get_id v ^ " -> " ^ parms ^ "\n")
+		end)
 
-    (* keep_asm, compress_asm, and compressed assembler source
-
-	The basic plan ignores some steps for munging different
-	versions of assembler source.
-     
-	We insert a PREPARE step before each ASSEMBLE and a CLEANUP
-    	step at the end of every plan.  The former ensures that that
-    	the up-to-date assembler is available in uncompressed form and
-    	the latter deletes extra assembler files to respect the
-    	keep_asm and compress_asm flags.
-    *)
-	
-    (* addTrivialSteps : plan -> plan *)
-    fun addTrivialSteps plan =
-	let
-	    fun folder (ASSEMBLE, acc) = ASSEMBLE :: PREPARE :: acc
-	      | folder (x, acc) = x :: acc
-	    val result_rev = foldl folder nil plan
-	    val result_rev = CLEANUP :: result_rev
-	in  rev result_rev
-	end
-
-    (* "Upto" flags
-
-        The basic plan ignores the effects of the "Upto" flags.  It assumes
-	that we want to compile all the way to object code.
-
-	Most of the effect of the "Upto" flags can be handled by removing
-	things from the todo list.  (That is, without complicating the tools.)
-	The exception is that GENERATE is aware of these flags and stops
-	after the appropriate phase.
-
- 	UptoElaborate: any GENERATE, prepare, ASSEMBLE, and cleanup steps are removed from todo list.
-	UptoNil/Rtl: any prepare, ASSEMBLE, and cleanup steps are removed from todo list.
-	UptoAsm: any prepare and ASSEMBLE steps are removed from the todo list.
-    *)
-
-    (* handleUptoFlags : plan -> plan *)
-    fun handleUptoFlags plan =
-	let
-	    val uptoElaborate = !Help.uptoElaborate
-	    val uptoNil = (!Help.uptoPhasesplit orelse !Help.uptoClosureConvert)
-	    val uptoRtl = !Help.uptoRtl
-	    val uptoAsm = !Help.uptoAsm
-
-	    (*If the interface is up to date and we are only compiling to
-	     * NIL or RTL, then don't redo the generation phase
-	     *)
-	    val elaborating = List.exists (fn todo => todo = ELABORATE) plan
-	    val removeGenerate = uptoElaborate orelse  ( not elaborating andalso (uptoNil orelse uptoRtl))
-	    val removePrepare = (uptoElaborate orelse uptoNil orelse uptoRtl orelse uptoAsm)
-	    val removeAssemble = removePrepare
-	    val removeCleanup = (uptoElaborate orelse uptoNil orelse uptoRtl)
-	    fun keep (ELABORATE) = true
-	      | keep (GENERATE)  = not removeGenerate 
-	      | keep (PREPARE)   = not removePrepare
-	      | keep (ASSEMBLE)  = not removeAssemble
-	      | keep (CLEANUP)   = not removeCleanup
-	in List.filter keep plan
-	end
-
-    (* The plan generated here is correct but imperfect. *)
-    val basicPlan = handleUptoFlags o addTrivialSteps o basicPlan
-
-    (* We eliminate unnecessary CLEANUP actions. *)
-    datatype asmfiles = datatype UpdateHelp.asmfiles
-    datatype asmstatus =
-	UTD of asmfiles
-      | OOD of asmfiles
-    fun eqAsmFiles (COMPRESSED, COMPRESSED) = true
-      | eqAsmFiles (UNCOMPRESSED, UNCOMPRESSED) = true
-      | eqAsmFiles (NEITHER, NEITHER) = true
-      | eqAsmFiles (BOTH, BOTH) = true
-      | eqAsmFiles _ = false
-    fun eqAsmStatus (UTD a, UTD b) = eqAsmFiles (a, b)
-      | eqAsmStatus (OOD a, OOD b) = eqAsmFiles (a, b)
-      | eqAsmStatus _ = false
-    (* eliminateCleanup' : asmfiles * asmstatus * plan -> plan *)
-    fun eliminateCleanup' (goalFiles, startStatus, plan) =
-	let
-	    fun simulate (ELABORATE, status) = status
-	      | simulate (GENERATE, _) = UTD UNCOMPRESSED
-	      | simulate (PREPARE, UTD COMPRESSED) = UTD BOTH
-	      | simulate (PREPARE, status) = status
-	      | simulate (ASSEMBLE, status) = status
-	      | simulate (CLEANUP, _) = UTD goalFiles
-	    val simulate : plan -> asmstatus =
-		foldl simulate startStatus
-	    val plan' = List.filter (fn todo => todo <> CLEANUP) plan
+    fun linkunits (unit_help : unit_help, what : string,
+		   roots : var list) : Paths.compunit list =
+	let val {parms, get_id, get_unit_paths} = unit_help
+	    val showParms = showParms get_id
+	    type unitlist = Paths.compunit VL.varlist
+	    fun add (v : var, ul : unitlist) : unitlist =
+		if VL.has (ul, v) then ul
+		else
+		    (case get_unit_paths v
+		       of NONE => ul
+			| SOME u =>
+			    let val ue = Paths.ueFile u
+				val parms = #parms unit_help ue
+				val _ = showParms (v,parms)
+				val ul = add' (parms, ul)
+			    in	VL.append (ul,v,u)
+			    end)
+	    and add' (vs : var list, ul : unitlist) : unitlist =
+		foldl add ul vs
+	    val units = VL.finish (add' (roots, VL.empty))
+	    val (imports,units) = List.partition Paths.isImportUnit units
 	in
-	    if eqAsmStatus (simulate plan, simulate plan') then
-		plan'
+	    if null imports then units
 	    else
-		plan
-	end
-    (* currentAsmFiles : unit_paths -> asmfiles *)
-    fun currentAsmFiles target =
-	case (Cache.exists (Paths.asmFile target), Cache.exists (Paths.asmzFile target))
-	  of (true, true) => BOTH
-	   | (true, false) => UNCOMPRESSED
-	   | (false, true) => COMPRESSED
-	   | (false, false) => NEITHER
-    (* eliminateCleanup : bool * unit_paths -> plan -> plan *)
-    fun eliminateCleanup (asmUptodate, target) plan =
-	let val startStatus = (if asmUptodate then UTD else OOD) (currentAsmFiles target)
-	in  eliminateCleanup' (UpdateHelp.goalAsmFiles(), startStatus, plan)
+		(msg ("  " ^ Int.toString(length imports) ^
+		      " unimplemented units; can not link\n");
+		 nil)
 	end
 
-    (* eliminateGenerate' : bool * plan -> plan *)
-    (* If assembler is not going to be kept and is not used for
-     * assembly, then eliminate any GENERATE/CLEANUP.
-     *)
-    fun eliminateGenerate' (true, plan) = plan
-      | eliminateGenerate' (false, plan) =
-	if List.exists (fn todo => todo = ASSEMBLE) plan then plan
-	else List.filter (fn GENERATE => false
-			   | CLEANUP => false
-			   (* PREPARE always lives or dies with ASSEMBLE *)
-			   | todo => true) plan
-    (* eliminateGenerate : plan -> plan *)
-    fun eliminateGenerate plan = eliminateGenerate' (!Help.keepAsm, plan)
-	    
-    (* plan : unit_paths * unit_paths list -> plan *)
-    fun plan (arg as (target, _)) =
-	let val status = fileStatus arg
-	    val plan = basicPlan status
-	    val plan = eliminateCleanup (#2 status, target) plan
-	    val plan = eliminateGenerate plan
-	    val _ = if null plan orelse not (!showPlan) then ()
-		    else (Help.chat ("  [Plan for " ^ Paths.unitName target ^ ": ");
-			  Help.chat_strings 40 (map toString plan);
-			  Help.chat "]\n")
-	in  (status, plan)
+    fun unitPackage (unit : Paths.compunit) : Prelink.package =
+	let val name = Paths.unitName unit
+	    val iface = Paths.unitIface unit
+	    val ueFile = Paths.ueFile unit
+	    val imports = FileCache.read_ue ueFile
+	    val ifaceFile = Paths.ifaceFile iface
+	    val crc = FileCache.crc ifaceFile
+	    val exports = Ue.insert (Ue.empty, name, crc)
+	in  {unit=name, imports=imports, exports=exports}
 	end
 
-    (* flush : unit_paths * plan -> unit *)
-    fun flush (paths, plan) =
-	let
-	    val asmFile = Paths.asmFile paths
-	    val asmzFile = Paths.asmzFile paths
-		
-	    fun flushSome ELABORATE = (IlCache.flushSome [Paths.ilFile paths];
-				       InfoCache.flushSome [Paths.infoFile paths])
-	      | flushSome GENERATE = (Cache.flushSome [asmFile, asmzFile];
-				      InfoCache.flushSome [Paths.infoFile paths])
-	      | flushSome PREPARE = Cache.flushSome [asmFile]
-	      | flushSome ASSEMBLE = Cache.flushSome [Paths.objFile paths]
-	      | flushSome CLEANUP = Cache.flushSome [asmFile, asmzFile]
-	in
-	    app flushSome plan
+    (*
+	XXX: We could be a lot smarter about how we generate
+	executables.  For example, noticing when extant targets are up
+	to date and tuning the plan to avoid unnecessary work.  It
+	would be especially nice to skip the link completely when the
+	executable is up to date.
+    *)
+    fun plan_link (eq : equiv, unit_help : unit_help, roots : var list,
+		   exe : Paths.exe) : plan =
+	let val what = Paths.exeFile exe
+	    val _ = msg ("[checking " ^ what ^ "]\n")
+	    val uptoElaborate = !UptoElaborate
+	    val uptoAsm = !UptoAsm
+	    val keepAsm = !KeepAsm
+	    val compressAsm = !CompressAsm
+	    val units = if uptoElaborate then nil
+			else linkunits (unit_help, what, roots)
+	    val _ = Prelink.checkTarget eq (what, map unitPackage units)
+
+	    fun remove (p : Paths.exe -> string) : unit =
+		FileCache.remove (p exe)
+	    val _ =
+		if uptoElaborate orelse uptoAsm then
+		    app remove [Paths.exeObjFile, Paths.exeFile]
+		else ()
+	    val _ =
+		if uptoElaborate then
+		    app remove [Paths.exeAsmFile, Paths.exeAsmzFile]
+		else ()
+
+	    fun add_flag ((bit : W.word, dont_add : bool),
+			  flags : W.word) : W.word =
+		if dont_add then flags else W.orb (flags,bit)
+	    val flags =
+		foldl add_flag W.zero
+		[(Generate,
+		  uptoElaborate orelse
+		  (uptoAsm andalso not keepAsm)),
+		 (Link,
+		  uptoElaborate orelse
+		  uptoAsm),
+		 (Compress,
+		  uptoElaborate orelse
+		  not keepAsm orelse
+		  not compressAsm),
+		 (Remove,
+		  uptoElaborate orelse
+		  keepAsm)]
+	    val plan =
+		if null units orelse W.equal(W.zero,flags) then EMPTY_PLAN
+		else LINK (exe,units,flags)
+	    val _ = showPlan (what, plan)
+	in  plan
 	end
 
-    (* flushAll : unit -> unit *)
-    fun flushAll () = (Cache.flushAll(); IlCache.flushAll(); InfoCache.flushAll())
+    fun packlist (unit_help : unit_help, iface_help : iface_help,
+		  importOnly : importOnly, what : string,
+		  roots : var list) : pack list =
+	let val {parms, get_unit_paths, ...} = unit_help
+	    val {get_id, fresh, find, get_iface_paths} = iface_help
+	    val showParms = showParms get_id
+	    type packlist = pack VL.varlist
+	    val force_import = !UptoElaborate orelse !UptoAsm
+	    fun iface (p : Paths.compunit, p' : Paths.iface) : Paths.iface =
+		let val id =
+			if Paths.isUnitIface p' then
+			    fresh (Paths.unitName p)
+			else Paths.ifaceName p'
+		in  Paths.compi {id=id, file=Paths.ifaceFile p',
+				 uefile=Paths.ifaceUeFile p'}
+		end
+	    fun compunit (p : Paths.compunit,
+			  p' : Paths.iface) : Paths.compunit =
+		Paths.compu {id=Paths.unitName p, file=Paths.objFile p,
+			     uefile=Paths.ueFile p, iface=p'}
 
-    type state = UpdateHelp.state
-    val init = UpdateHelp.init
+	    fun addI (v : var, p : Paths.iface, pl : packlist) : packlist =
+		let val ue = Paths.ifaceUeFile p
+		    val parms = parms ue
+		    val pl = add' (parms, pl)
+		    val pack = PACKI (p,	nil)
+		    val _ = showParms (v, parms)
+		in  VL.append (pl,v,pack)
+		end
 
-    (* execute : todo * state -> state *)
-    fun execute (ELABORATE, state) = UpdateHelp.elaborate state
-      | execute (GENERATE, state)  = UpdateHelp.generate state
-      | execute (PREPARE, state)   = UpdateHelp.prepare state
-      | execute (ASSEMBLE, state)  = UpdateHelp.assemble state
-      | execute (CLEANUP, state)   = UpdateHelp.cleanup state
+	    and addUI (p : Paths.compunit,
+		       pl : packlist) : Paths.iface * packlist =
+		let val p' = Paths.unitIface p
+		    val p' = iface (p, p')
+		    val v = find (Paths.ifaceName p')
+		    val pl = if VL.has (pl,v) then pl
+			     else addI (v, p', pl)
+		in  (p',pl)
+		end
+
+	    and addUImport (v : var, p : Paths.compunit,
+			    p' : Paths.iface, pl : packlist) : packlist =
+		let val p = Paths.importu {id=Paths.unitName p,
+					   iface=p'}
+		    val pack = PACKU (p,nil)
+		in  VL.append (pl, v, pack)
+		end
+
+	    and addUDef (v : var, p : Paths.compunit,
+			 p' : Paths.iface, pl : packlist) : packlist =
+		let val p = compunit (p,p')
+		    val ue = Paths.ueFile p
+		    val parms = parms ue
+		    val pl = add' (parms, pl)
+		    val pack = PACKU (p,nil)
+		    val _ = showParms (v, parms)
+		in  VL.append (pl, v, pack)
+		end
+
+	    and addU (v : var, p : Paths.compunit,
+		      pl : packlist) : packlist =
+		let val (p', pl) = addUI (p, pl)
+		    val import =
+			force_import orelse
+			Paths.isImportUnit p orelse
+			importOnly v
+		    val adder = if import then addUImport else addUDef
+		in  adder(v, p, p', pl)
+		end
+
+	    and add (v : var, pl : packlist) : packlist =
+		if VL.has (pl, v) then pl
+		else
+		    (case get_unit_paths v
+		       of SOME p => addU (v, p, pl)
+			| NONE =>
+			    (case get_iface_paths v
+			       of SOME p => addI (v, p, pl)
+				| NONE => error "pack saw strange var"))
+
+	    and add' (vs : var list, pl : packlist) : packlist =
+		foldl add pl vs
+
+	    val pl = add' (roots, VL.empty)
+	in  VL.finish pl
+	end
+
+    (*
+	XXX: We could be a lot smarter about how we generate
+	libraries.  For example, not packing stuff that has not
+	changed since the last pack.  For example, supporting multiple
+	runs to pack different targets into the same directory.
+    *)
+    fun plan_pack (eq : equiv, unit_help : unit_help, iface_help : iface_help,
+		   import : importOnly, roots : var list,
+		   lib : Paths.lib) : plan =
+	let val what = Paths.libDir lib
+	    val _ = msg ("[checking " ^ what ^ "]\n")
+	    val packs = packlist (unit_help, iface_help, import, what, roots)
+	    (* XXX: Check interfaces unit environments too. *)
+	    val units = (List.mapPartial
+			 (fn pack =>
+			  (case pack
+			     of PACKU (Paths.IMPORTU _,_) => NONE
+			      | PACKU (u,_) => SOME u
+			      | _ => NONE))
+			 packs)
+	    val _ = Prelink.checkTarget eq (what, map unitPackage units)
+	    val plan =
+		if null packs then EMPTY_PLAN
+		else PACK (lib, packs)
+	    val _ = showPlan (what, plan)
+	in  plan
+	end
+
+    val done = fn () => EMPTY_PLAN
+
+    fun elab_srci (iface : Paths.iface, precontext, imports,
+		   info : Info.info) : unit -> plan =
+	let val name = Paths.ifaceName iface
+	    val _ = msg ("[compiling interface " ^ name ^ "]\n")
+	    val source = Paths.ifaceSourceFile iface
+	    val ifaceTarget = Paths.ifaceFile iface
+	    val ueTarget = Paths.ifaceUeFile iface
+	    val infoTarget = Paths.ifaceInfoFile iface
+	    val args = {precontext=precontext,
+			imports=imports,
+			ifacename=name,
+			source=source,
+			ifaceTarget=ifaceTarget,
+			ueTarget=ueTarget}
+	    val _ = Compiler.elaborate_srci args
+	    val _ = FileCache.write_info (infoTarget,info)
+	in  done
+	end
+
+    fun getinputs (inputs : inputs) : precontext * imports * iface option =
+	(case inputs
+	   of SOME r => r
+	    | NONE => error "plan invokes compiler with no inputs")
+
+    fun elab (unit : Paths.compunit, ready : bool,
+	      inputs : inputs) : Compiler.il_module =
+	let val unitname = Paths.unitName unit
+	    val source =
+		if Paths.isSrcUnit unit then
+		    SOME (Paths.sourceFile unit)
+		else NONE
+	    val (precontext,imports,iface) = getinputs inputs
+	    val iface = Paths.unitIface unit
+	    val ifaceTarget = Paths.ifaceFile iface
+	    val ueTarget = Paths.ifaceUeFile iface
+	    val (il, written) =
+		(case (source,Paths.isUnitIface iface)
+		   of (SOME source, false) =>
+			(Compiler.elaborate_srcu' {precontext=precontext,
+						   imports=imports,
+						   unitname=unitname,
+						   source=source,
+						   interface=ifaceTarget},
+			 false)
+		    | (SOME source, true) =>
+			Compiler.elaborate_srcu {precontext=precontext,
+						 imports=imports,
+						 unitname=unitname,
+						 source=source,
+						 ifaceTarget=ifaceTarget,
+						 ueTarget=ueTarget}
+		    | (NONE, _) =>
+			Compiler.elaborate_primu {precontext=precontext,
+						 imports=imports,
+						 unitname=unitname,
+						 ifaceTarget=ifaceTarget,
+						 ueTarget=ueTarget})
+	in  
+	    if written andalso ready then
+		error ("overwrote up to date interface file: " ^ ifaceTarget)
+	    else il
+	end
+
+    fun gen (unit : Paths.compunit, il : Compiler.il_module,
+	     inputs : inputs) : unit =
+	let val unitname = Paths.unitName unit
+	    val nilmod = Compiler.il_to_nil (unitname,il)
+	    val rtl = Compiler.nil_to_rtl (unitname,nilmod)
+	    val asmTarget = Paths.asmFile unit
+	    val ueTarget = Paths.ueFile unit
+	    val precontext = #1 (getinputs inputs)
+	in  Compiler.rtl_to_asm {precontext=precontext,
+				 asmTarget=asmTarget,
+				 ueTarget=ueTarget,
+				 rtl_module=rtl}
+	end
+
+    fun uncompress (asmzFile : string, asmFile : string) : unit =
+	let val _ = Tools.uncompress {src=asmzFile, dest=asmFile}
+	    val _ = FileCache.flushSome [asmFile]
+	in  ()
+	end
+
+    fun assemble' (asmFile : string, objFile : string) : unit =
+	let val _ = Timestamp.timestamp()
+	    val _ = Tools.assemble (asmFile, objFile)
+	    val _ = FileCache.flushSome [objFile]
+	in  ()
+	end
+
+    fun compress (asmFile : string, asmzFile : string) : unit =
+	let val _ = Tools.compress {src=asmFile, dest=asmzFile}
+	    val _ = FileCache.flushSome [asmzFile]
+	    val _ = FileCache.remove asmFile
+	in  ()
+	end
+
+    fun remove (asmFile : string, asmzFile : string) : unit =
+	app FileCache.remove [asmFile, asmzFile]
+
+    fun finish (U : Paths.compunit, flags : W.word, info : Info.info) : plan =
+	let val _ = if test(flags,Compress) then
+			compress (Paths.asmFile U,Paths.asmzFile U)
+		    else ()
+	    val _ = if test(flags,Remove) then
+			remove (Paths.asmFile U,Paths.asmzFile U)
+		    else ()
+	    val infoTarget = Paths.infoFile U
+	    val _ = FileCache.write_info (infoTarget, info)
+	in  EMPTY_PLAN
+	end
+
+    fun assemble (U : Paths.compunit, flags : W.word,
+		  info : Info.info) : plan =
+	let val _ = if test(flags,Uncompress) then
+			uncompress (Paths.asmzFile U,Paths.asmFile U)
+		    else ()
+	in  if test(flags,Assemble) then
+		if Target.native() then
+		    (assemble' (Paths.asmFile U,Paths.objFile U);
+		     finish (U,flags,info))
+		else
+		    let val inputs = NONE
+			val mask = W.orb(Compress,Remove)
+			val flags = W.andb(flags,mask)
+		    in  COMPILE (U, inputs, flags, info)
+		    end
+	    else finish (U,flags,info)
+	end
+
+    fun compile' (U : Paths.compunit, inputs : inputs, flags : W.word,
+		  info : Info.info) : unit -> plan =
+	let val _ = msg ("[compiling unit " ^ Paths.unitName U ^ "]\n")
+	    val ready = not (test(flags,Elaborate))
+	    val il = Util.memoize (fn () => elab (U, ready, inputs))
+	    val _ = if ready then () else ignore(il())
+	in  fn () =>
+	    let val _ = if test(flags,Generate) then
+			    gen (U,il(),inputs)
+			else ()
+	    in  assemble (U,flags,info)
+	    end
+	end
+
+    fun check (precontext, U : Paths.compunit,
+	       I : Paths.iface) : unit -> plan =
+	let val what = Paths.unitName U
+	    val _ = msg ("[checking unit " ^ what ^ "]\n")
+	    val Uiface = Paths.ifaceFile (Paths.unitIface U)
+	    val Iiface = Paths.ifaceFile I
+	    val _ =
+		if Compiler.eq (what,precontext,Iiface,Uiface) then ()
+		else reject ("unit " ^ what ^ " does not match interface " ^
+			     Paths.ifaceName I)
+	in  done
+	end
+
+    fun gen_link (exe : Paths.exe, units : Paths.compunit list) : unit =
+	let val what = Paths.exeFile exe
+	    val asmFile = Paths.exeAsmFile exe
+	    val unitnames = map Paths.unitName units
+	    val _ = Compiler.link {asmTarget = asmFile,
+				   unitnames = unitnames}
+	in  ()
+	end
+
+    fun link_link (exe : Paths.exe, units : Paths.compunit list) : unit =
+	let val exeFile = Paths.exeFile exe
+	    val objFile = Paths.exeObjFile exe
+	    val objectFiles = (map (Paths.objFile) units) @ [objFile]
+	    val _ = Tools.link (objectFiles, exeFile)
+	in  ()
+	end
+
+    fun finish_link (exe : Paths.exe, flags : W.word) : plan =
+	let val _ = if test(flags,Compress) then
+			compress (Paths.exeAsmFile exe,
+				  Paths.exeAsmzFile exe)
+		    else ()
+	    val _ = if test(flags,Remove) then
+			remove (Paths.exeAsmFile exe,
+				Paths.exeAsmzFile exe)
+		    else ()
+	in  EMPTY_PLAN
+	end
+
+    fun link (exe : Paths.exe, units : Paths.compunit list, flags : W.word)
+	     () : plan =
+	let val _ = if test(flags,Generate) then
+			gen_link (exe,units)
+		    else ()
+	in  if test(flags,Link) then
+		if Target.native() then
+		    (msg ("[linking " ^ Paths.exeFile exe ^ "]\n");
+		     assemble' (Paths.exeAsmFile exe,Paths.exeObjFile exe);
+		     link_link (exe,units);
+		     finish_link (exe,flags))
+		else
+		    let val mask = W.orb(Compress,Remove)
+			val flags = W.andb(flags,mask)
+		    in  LINK (exe, units, flags)
+		    end
+	    else finish_link (exe,flags)
+	end
+
+    fun ifaceFiles (i : Paths.iface) : (Paths.iface -> string) list =
+	(case i
+	   of Paths.SRCI _ => [Paths.ifaceSourceFile, Paths.ifaceInfoFile,
+			       Paths.ifaceFile, Paths.ifaceUeFile]
+	    | Paths.COMPI _ => [Paths.ifaceFile, Paths.ifaceUeFile]
+	    | Paths.UNITI _ => [Paths.ifaceFile, Paths.ifaceUeFile])
+
+    fun unitFiles (u : Paths.compunit) : (Paths.compunit -> string) list =
+	(case u
+	   of Paths.SRCU _ => [Paths.sourceFile, Paths.infoFile, Paths.ueFile,
+			       Paths.objFile]
+	    | Paths.COMPU _ => [Paths.ueFile, Paths.objFile]
+	    | Paths.PRIMU _ => [Paths.infoFile, Paths.ueFile, Paths.objFile]
+	    | Paths.IMPORTU _ => [])
+
+    fun ifaceEntry (file : string -> E.exp, i : Paths.iface,
+		    imports : E.id list) : E.entry =
+	(case i
+	   of Paths.SRCI (I,_,src) => E.SRCI (I, file src, imports)
+	    | Paths.COMPI (I,iface,ue) => E.COMPI (I, file iface, file ue)
+	    | Paths.UNITI _ => error "pack saw a UNITI")
+
+    fun unitEntry (file : string -> E.exp, u : Paths.compunit,
+		   imports : E.id list) : E.entry =
+	(case u
+	   of Paths.SRCU (U,_,src,i) =>
+		let val Iopt = if Paths.isUnitIface i then NONE
+			       else SOME (Paths.ifaceName i)
+		in  E.SRCU (U, Iopt, file src, imports)
+		end
+	    | Paths.COMPU (U,obj,ue,i) =>
+		let val I = Paths.ifaceName i
+		in  E.COMPU (U, I, file obj, file ue)
+		end
+	    | Paths.PRIMU (U,_,_) => E.PRIMU (U, imports)
+	    | Paths.IMPORTU (U, i) =>
+		let val I = Paths.ifaceName i
+		in  E.IMPORTU (U, I)
+		end)
+
+    fun copyFiles (old : 'a, new : 'a, files : ('a -> string) list) =
+	let fun copy file : unit = File.copy (file old, file new)
+	in  app copy files
+	end
+
+    fun pack' (lib : Paths.lib, packs : pack list) : ExtSyn.groupfile =
+	let val iface = Paths.libIface lib
+	    val unit = Paths.libUnit lib
+	    val dir = Paths.libDir lib
+	    val n = size dir + 1
+	    fun file (p : string) : E.exp =
+		E.EXP_STR (String.extract(p,n,NONE))
+	    fun pack (p : pack) : ExtSyn.entry =
+		(case p
+		   of PACKU (u,imports) =>
+			let val u' = unit u
+			    val _ = copyFiles (u, u', unitFiles u)
+			in  unitEntry (file,u',imports)
+			end
+		    | PACKI (i,imports) =>
+			let val i' = iface i
+			    val _ = copyFiles (i, i', ifaceFiles i)
+			in  ifaceEntry (file,i',imports)
+			end
+		    | PACKV arg => E.VAL arg)
+	in  map pack packs
+	end
+
+    fun pack (lib : Paths.lib, packs : pack list) () : plan =
+	let val _ = msg("[packing " ^ Paths.libDir lib ^ "]\n")
+	    val group = pack' (lib, packs)
+	    val groupFile = Paths.libGroupFile lib
+	    val _ = Group.write (groupFile, group)
+	in  EMPTY_PLAN
+	end
+
+    fun compile (plan : plan) : unit -> plan =
+	(case plan
+	   of EMPTY_PLAN => done
+	    | ELAB_SRCI arg => elab_srci arg
+	    | COMPILE arg => compile' arg
+	    | CHECK arg => check arg
+	    | LINK arg => link arg
+	    | PACK arg => pack arg)
+
+    fun add_path (flags : W.word)
+		 ((bit : W.word, path : 'a -> string),
+		  acc : ('a -> string) list) : ('a -> string) list =
+	if test(flags,bit) then path :: acc else acc
+
+    fun targets (plan : plan) : string list =
+	(case plan
+	   of EMPTY_PLAN => []
+	    | ELAB_SRCI (iface,_,_,_) =>
+		(map (fn p => p iface)
+		 [Paths.ifaceInfoFile, Paths.ifaceUeFile, Paths.ifaceFile])
+	    | COMPILE (unit,_,flags,_) =>
+		let val paths =
+			foldl (add_path flags) nil
+			[(Elaborate, Paths.ifaceUeFile o Paths.unitIface),
+			 (Elaborate, Paths.ifaceFile o Paths.unitIface),
+			 (Generate, Paths.asmFile),
+			 (Generate, Paths.ueFile),
+			 (Uncompress, Paths.asmFile),
+			 (Assemble, Paths.objFile),
+			 (Compress, Paths.asmzFile),
+			 (Remove, Paths.asmFile),
+			 (Remove, Paths.asmFile)]
+		in  map (fn p => p unit) paths
+		end
+	    | CHECK _ => []
+	    | LINK (exe,_,flags) =>
+		let val paths =
+			foldl (add_path flags) nil
+			[(Generate, Paths.exeAsmFile),
+			 (Link, Paths.exeObjFile),
+			 (Link, Paths.exeFile),
+			 (Compress, Paths.exeAsmzFile),
+			 (Remove, Paths.exeAsmFile),
+			 (Remove, Paths.exeAsmFile)]
+		in  map (fn p => p exe) paths
+		end
+	    | PACK _ => []) (* XXX: each item in packlist is several targets *)
+
+    fun flush (plan : plan) : unit = FileCache.flushSome (targets plan)
+
+    fun flushAll () : unit =
+	(File.flush_dir_cache();
+	 FileCache.flushAll();
+	 Name.reset_varmap())
 end

@@ -1,23 +1,23 @@
-(*$import UnitEnvironment Time *)
-
-(* XXX: info should be abstract and should support
- * per-target information.  lastWritten is silly..
- *)
-
+(*
+	An info records the state in which an interface or unit was
+	compiled.  A file is out of date if this state changes.  Note
+	that no context and imports are recorded for the primitive
+	unit because it is always assumed to be out of date.
+*)
 signature INFO =
 sig
 
-    (* Invariant: lastWritten <= lastChecked *)
-    type info = {unit : string,				(* Unit name. *)
-		 lastWritten : Time.time,		(* When unit's exports were generated. *)
-		 lastChecked : Time.time,		(* When unit was last elaborated (and exports were checked). *)
-		 constrained : bool,			(* Was last elaboration constrained?  *)
-		 imports : UnitEnvironment.ue,		(* Contexts imported during last elaboration. *)
-		 exports : UnitEnvironment.ue}		(* Contexts provided by last elaboration. *)
+    type unitname = string
+    type crc = Crc.crc
+    type context = UnitEnvironment.ue
+    type imports = unitname list
 
-    val validUnit : string -> bool	(* Check unit name *)
-    val read : string -> info
-    val write : string * info -> unit
-    val equal : info * info -> bool
-	
+    datatype info =
+	SRCI of context * imports * crc
+      | PRIMU
+      | SRCU of context * imports * crc * crc option
+
+    val blastOutInfo : Blaster.outstream -> info -> unit
+    val blastInInfo : Blaster.instream -> info
+
 end
