@@ -107,7 +107,9 @@ struct
 
     type channel = string * string
     local
-	val SOME selfName = OS.Process.getEnv "HOST"
+	val selfName = (case OS.Process.getEnv "HOST" of
+                            NONE => error "HOST environment variable unset"
+                          | SOME selfName => selfName)
 	val selfName = (case Util.substring(".cs.cmu.edu",selfName) of
 			    NONE => error "cannot strip of realm name .cs.cmu.edu"
 			  | SOME pos => String.substring(selfName,0,pos))
