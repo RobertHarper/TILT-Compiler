@@ -334,12 +334,12 @@ struct
 
 	   val il_signat = gms (HILctx_of context, il_mod)
 
-(*           val _ = (print "About to look up :\n";
+           val _ = (print "About to look up :\n";
 		    Ppnil.pp_exp (Var_e var_mod_r);
 		    print " and ";
                     Ppnil.pp_con (Var_c var_mod_c);
 		    print "\n")
-*)
+
            val (SOME knd_c) = Nilcontext.find_kind (NILctx_of context, var_mod_c)
            val (SOME type_r) = Nilcontext.find_con (NILctx_of context, var_mod_r)
 
@@ -560,7 +560,7 @@ struct
 	       chooseName (preferred_name, vmap_of context)
 
 	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, erfields, ercons,
-		il_sdecs, valuable} = xsbnds context sbnds
+		il_sdecs, valuable, vmap_out} = xsbnds context sbnds
 
            val name_str_c = Var_c var_str_c
 	   val name_str_r = Var_e var_str_r
@@ -655,7 +655,8 @@ struct
        {cbnd_cat = LIST nil, crbnds = nil, 
 	ebnd_cat = LIST nil, erlabels = nil, 
 	erfields = nil, ercons = nil,
-	il_sdecs = nil,	valuable = true}
+	il_sdecs = nil,	valuable = true,
+	vmap_out = vmap_of context}
 
      | xsbnds context (Il.SBND(lab, Il.BND_EXP(var, il_exp)) :: rest) = 
        let
@@ -669,7 +670,7 @@ struct
 	   val (exp, tipe, valuable') = xexp context il_exp
 
 	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, 
-		erfields, ercons, il_sdecs, valuable} = 
+		erfields, ercons, il_sdecs, valuable, vmap_out} = 
 	       let
 		   fun cont1 NILctx' =
 		       let
@@ -694,7 +695,8 @@ struct
 	    erfields = (Var_e var) :: erfields,
 	    ercons = tipe :: ercons,
 	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
-	    valuable = valuable andalso valuable'}
+	    valuable = valuable andalso valuable',
+	    vmap_out = vmap_out}
        end
 
      | xsbnds context (Il.SBND(lab, Il.BND_CON(var, il_con)) :: rest) = 
@@ -705,7 +707,7 @@ struct
            val (con,knd) = xcon context il_con
 
 	   val {cbnd_cat, crbnds, ebnd_cat, erlabels, 
-		erfields, ercons, il_sdecs, valuable} = 
+		erfields, ercons, il_sdecs, valuable, vmap_out} = 
 	       let
 		   fun cont1 NILctx' =
 		       let
@@ -730,7 +732,8 @@ struct
 	    erfields = erfields,
 	    ercons = ercons,
 	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
-	    valuable = valuable}
+	    valuable = valuable,
+	    vmap_out = vmap_out}
        end
 
     | xsbnds context (Il.SBND(lab, Il.BND_MOD(var', il_mod)) :: rest) =
@@ -745,7 +748,7 @@ struct
 	  val (knd, con) = xsig context (Var_c var'_c, il_signat)
 
 	  val {cbnd_cat = cbnd_cat', crbnds, ebnd_cat = ebnd_cat', erlabels, 
-	       erfields, ercons, il_sdecs, valuable} = 
+	       erfields, ercons, il_sdecs, valuable, vmap_out} = 
 	       let
 		   fun cont1 NILctx' =
 		       Nilcontext.c_insert_con (NILctx', var'_r, con, cont2)
@@ -772,7 +775,8 @@ struct
 	   erfields = (Var_e var'_r) :: erfields,
 	   ercons = con :: ercons,
 	   il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
-	   valuable = valuable andalso valuable'}
+	   valuable = valuable andalso valuable',
+	   vmap_out = vmap_out}
       end
 
    and xflexinfo context (ref (Il.INDIRECT_FLEXINFO f)) = 
@@ -1728,10 +1732,8 @@ struct
 		      makeKindTuple m)
 	 end
 
-   fun xcompunit HILctx il_sbnds =
+   fun xcompunit HILctx vmap il_sbnds =
        let
-	   val vmap = empty_vmap
-
 	   val (cuvar, cuvar_c, cuvar_r, vmap') = splitFreshVar vmap
 
            val initial_splitting_context = 
@@ -1739,22 +1741,16 @@ struct
 			 NILctx = Nilcontext.empty(),
 			 vmap = vmap'}
 
-	   val {name_c, name_r, knd_c, type_r, cbnd_cat, ebnd_cat, ...} =
-		xmod initial_splitting_context
-		(Il.MOD_STRUCTURE il_sbnds, SOME (cuvar, cuvar_c, cuvar_r))
+	   val {cbnd_cat, ebnd_cat, vmap_out, ...} =
+	       xsbnds initial_splitting_context il_sbnds
+
 	   val cu_c_list = map Con_b (flattenCatlist cbnd_cat)
-           val cu_r_var = Name.fresh_var ()
 
 	   val cu_r_list = flattenCatlist ebnd_cat
 
-	   val cu_r_type = AllArrow_c(Open, Total, [(cuvar_c, knd_c)], [], w0, type_r)
-
        in
 	   {cu_bnds = cu_c_list @ cu_r_list,
-	    cu_c_var = cuvar_c,
-	    cu_c_kind = knd_c,
-	    cu_r_var = cuvar_r,
-	    cu_r_type = cu_r_type}
+	    vmap = vmap_out}
        end
 			     
 			     
