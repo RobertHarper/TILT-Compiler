@@ -114,23 +114,31 @@ struct
 		      val var_vcelist = Sequence.toList var_varconexpset
 		      val _ = add_instr(ICOMMENT ("allocating " ^ 
 						  (Int.toString (length var_vcelist)) ^ " closures"))
+		      val toplevel = istoplevel()
+		      fun folder((v,{code,cenv,venv,tipe}),state) = 
+			  add_global(state,v,tipe,VAR_VAL(VLABEL(LOCAL_DATA(Name.var2string v))))
+		      val state = if toplevel then foldl folder state var_vcelist else state
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
-			  let val (code_lv,_,state) = xexp(state,fresh_named_var "codereg",Var_e code,NONE,NOTID)
+			  let val (code_lv,_,state) = xexp(state,fresh_named_var "codereg",
+							   Var_e code,NONE,NOTID)
 			      val (_,con_lv,_,state) = xcon'(state,fresh_named_var "cenv", cenv,NONE)
-			      val (exp_lv,_,state) = if is_recur
-					       then (VAR_VAL(VTAG 0w0),Crecord_c[],state)
-					   else xexp(state,fresh_named_var "venv",venv,NONE,NOTID)
+			      val (exp_lv,_,state) = 
+				  (case (toplevel,is_recur) of
+				       (true,_) => xexp(state,fresh_named_var "venv",venv,NONE,NOTID)
+				     | (_,true) => (VAR_VAL(VTAG uninit_val),Crecord_c[],state)
+				     | (_,false) => xexp(state,fresh_named_var "venv",venv,NONE,NOTID))
 			      val vls = [code_lv,
 					 con_lv,
 					 exp_lv]
 			      val reps = [NOTRACE_CODE, TRACE, TRACE]
-			      val (lv,state) = if is_recur
-						   then make_record_mutable(state,NONE,reps,vls)
-					       else make_record(state,NONE,reps,vls)
+			      val (lv,state) = 
+				  (case (toplevel,is_recur) of
+				       (true,_) => make_record_const(state,NONE,reps,vls,
+								     SOME(LOCAL_DATA(Name.var2string v)))
+				     | (_,true) => make_record_mutable(state,NONE,reps,vls)
+				     | (_,false) => make_record(state,NONE,reps,vls))
 			      val ir = load_ireg_locval(lv,NONE)
-			      val s' = if (istoplevel())
-					   then add_global(state,v,tipe,lv)
-				       else add_reg (state,v,tipe,I(load_ireg_locval(lv,NONE)))
+			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
 			  in  (ir,s')
 			  end
 		      val (clregsi,rec_state) = foldl_list loadcl state var_vcelist
@@ -345,10 +353,19 @@ struct
 			    | (SOME vl,_,c) => (VAR_LOC vl, c, state)
 			    | (NONE,NONE,_) => error "no info on var")
 	    | Const_e v => xconst(state,v)
+	    | Let_e (_, [], body) => xexp(state,name,body,traceinfo_opt,context)
 	    | Let_e (_, bnds, body) => 
-		  let fun folder (bnd,s) = xbnd s bnd
-		      val state = foldl folder state bnds
-		      val (lv,c,state) = xexp(state,fresh_var(),body,traceinfo_opt,context)
+		  let val first_bnds = Listops.butlast bnds
+		      val last_bnd = List.last bnds
+		      fun folder (bnd,s) = xbnd s bnd
+		      val state = foldl folder state first_bnds
+		      val (lv,c,state) = 
+			  (case (last_bnd,body) of
+			       (Exp_b(v,nt,e),Var_e v') => 
+				   if (eq_var(v,v'))
+				       then xexp(state,name,e,SOME nt,context)
+				   else xexp(xbnd state last_bnd,fresh_var(),body,traceinfo_opt,context)
+			     | _ => xexp(xbnd state last_bnd,fresh_var(),body,traceinfo_opt,context))
 		      val cbnds = List.mapPartial (fn (Con_b (_,cb)) => SOME cb
 		                                    | _ => NONE) bnds
 		      val c' = Let_c(Sequential,cbnds,c)
@@ -759,7 +776,7 @@ struct
 	  fun no_match state = 
 	      (case (!rescon) of
 		   SOME c => let val (r,c,newstate) = xexp'(state,fresh_var(),Raise_e(NilUtil.match_exn,c),
-				       NONE, NOTID)
+							    NONE, context)
 			     in  mv(r,c); newstate
 			     end
 		 | NONE => error "empty switch statement")
@@ -1517,7 +1534,7 @@ struct
 				  NONE => Type_k
 				| SOME kinder => kinder con_kinds)
 		  val (lv,state) = if const 
-				       then make_record_const(state,NONE,reps, indices' @ cons')
+				       then make_record_const(state,NONE,reps, indices' @ cons', NONE)
 				   else make_record(state,NONE,reps, indices' @ cons')
 	      in (const, lv, kind, state)
 	      end
@@ -1557,9 +1574,9 @@ struct
 		       else let val kind = kind_tuple(Listops.map0count (fn _ => k) num_mu)
 				val reps = Listops.map0count (fn _ => TRACE) num_mu
 				val vl = Listops.map0count (fn _ => lv) num_mu
-				val (lv,state) = if const 
-						     then make_record_const(state,NONE,reps,vl)
-						 else make_record_const(state,NONE,reps,vl)
+				val (lv,state) = if const (* all out mus are degenerate now *)
+						     then make_record_const(state,NONE,reps,vl,NONE)
+						 else make_record_const(state,NONE,reps,vl,NONE)
 			    in  (const,lv,kind,state)
 			    end
 		   end
@@ -1643,7 +1660,7 @@ struct
 		       val (lv,state) = (case (!do_single_crecord,lclist) of
 					     (true,[_]) => (hd lvs, state)
 					   | _ => if const 
-						    then make_record_const(state,NONE,reps,lvs)
+						    then make_record_const(state,NONE,reps,lvs,NONE)
 						  else make_record(state,NONE,reps,lvs))
 		   in  (const,lv,kind,state)
 		   end
@@ -1925,8 +1942,7 @@ struct
 	     val module = Rtl.MODULE {procs = procs,
 				      data = rev(!dl),
 				      main= mainName,
-				      mutable_objects = get_mutable_objects(),
-				      mutable_variables = get_mutable_variables()}
+				      mutable = get_mutable()}
 
 	     val _ = resetDepth()
 	     val _ = resetWork()

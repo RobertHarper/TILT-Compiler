@@ -1,5 +1,7 @@
 (*$import Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool *)
 
+(* 258 is the value for an uninitialied slot *)
+
 structure TortlBase
     :> TORTL_BASE 
    =
@@ -64,6 +66,7 @@ struct
                        | VAR_VAL of var_val
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep' VarMap.map
+   val uninit_val = 0w258 : TilWord32.word
    val unitval = VTAG 0w256
    val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c ([],NONE),[]))
 
@@ -73,9 +76,7 @@ struct
   (* ----- Global data structures ------------------------------
    dl: list of data for module
    pl: list of procedures for the entire module
-   mutable_objects : objects in global data area that can point to heap objects
-                     (e.g.) pointer arrays
-   mutable_variables : global variables that may contain pointers to heap objects
+   mutable : global variables that may contain pointers to heap objects
    gvarmap: how a top-level NIL code variable is represented at the RTL level
    gconvarmap: how a top-level NIL code type variable is represented at the RTL level
    varmap: how a NIL variable is represented at the RTL level
@@ -107,14 +108,10 @@ struct
 	print "\n\n")
 
    local
-       val mutable_objects : label list ref = ref nil
-       val mutable_variables : (label * rep) list ref = ref nil
-   in  fun add_mutable_object l = mutable_objects := l :: !mutable_objects
-       fun get_mutable_objects () = !mutable_objects
-       fun reset_mutable_objects() = mutable_objects := nil
-       fun add_mutable_variable (l,r) = mutable_variables := (l,r) :: !mutable_variables
-       fun get_mutable_variables () = !mutable_variables
-       fun reset_mutable_variables() = mutable_variables := nil
+       val mutable : (label * rep) list ref = ref nil
+   in  fun add_mutable lr = mutable := lr :: !mutable
+       fun get_mutable() = !mutable
+       fun reset_mutable() = mutable := nil
    end
    fun add_proc p = pl := p :: !pl
 
@@ -638,8 +635,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		globals := ngset;
 		dl := nil;
 		pl := nil;
-		reset_mutable_objects();
-		reset_mutable_variables();
+		reset_mutable();
 		reset_state(false,(fresh_named_var "code", fresh_code_label "code")))
 	   end
 
@@ -988,11 +984,10 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 
   fun allocate_global (label,labels,rtl_rep,lv) = 
       let 
-	  val _ = (case rtl_rep of
-		       TRACE  => add_mutable_variable(label,rtl_rep)
-		     | COMPUTE _ => add_mutable_variable(label,rtl_rep)
-		     | _ => ())
-	      
+	  val is_pointer = (case rtl_rep of
+				TRACE  => true
+			      | COMPUTE _ => true
+			      | _ => false)
 	  val _ = (case lv of
 		       VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
 		     | _ => ())
@@ -1001,21 +996,24 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	  val addr = alloc_regi LABEL
 	  val loc = alloc_regi LABEL
       in  (case lv of
-	       VAR_LOC (VREGISTER (_,reg)) => 
-		   (add_instr(LADDR(label,0,addr));
-		    (case reg of
-			 I r => (add_data(INT32(i2w 0));
-				 add_instr(STORE32I(EA(addr,0),r)))
-		       | F r => (add_data(FLOAT "0.0");
-				 add_instr(STOREQF(EA(addr,0),r)))))
-	     | VAR_LOC (VGLOBAL (l,rep)) => 
-		   let val value = alloc_regi rep
-		   in  (add_data(INT32 0w99);
-			add_instr(LADDR(label,0,addr));
-			add_instr(LADDR(l,0,loc));
-			add_instr(LOAD32I(EA(loc,0),value));
-			add_instr(STORE32I(EA(addr,0),value)))
-		   end
+	     VAR_LOC varloc =>
+		(add_mutable(label,rtl_rep);
+		 case varloc of
+		     VREGISTER (_,reg) => 
+			 (add_instr(LADDR(label,0,addr));
+			  (case reg of
+			       I r => (add_data(INT32 uninit_val);
+				       add_instr(STORE32I(EA(addr,0),r)))
+			     | F r => (add_data(FLOAT "0.0");
+				       add_instr(STOREQF(EA(addr,0),r)))))
+		   | VGLOBAL (l,rep) => 
+			 let val value = alloc_regi rep
+			 in  (add_data(INT32 uninit_val);
+			      add_instr(LADDR(label,0,addr));
+			      add_instr(LADDR(l,0,loc));
+			      add_instr(LOAD32I(EA(loc,0),value));
+			      add_instr(STORE32I(EA(addr,0),value)))
+			 end)
 	     | VAR_VAL (VVOID _) => error "alloc_global got nvoid"
 	     | VAR_VAL (VINT w32) => add_data(INT32 w32)
 	     | VAR_VAL (VTAG w32) => add_data(INT32 w32)
@@ -1222,8 +1220,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
    and the rest of the fields, which are values *)
 
 
-  fun make_record_help (const, state, destopt, _ , []) : loc_or_val * state = (VAR_VAL unitval, state)
-    | make_record_help (const, state, destopt, reps : rep list, vl : loc_or_val list) = 
+  fun make_record_help (const, state, destopt, _ , [], _) : loc_or_val * state = (VAR_VAL unitval, state)
+    | make_record_help (const, state, destopt, reps : rep list, vl : loc_or_val list, labopt) = 
     let 
 
 	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
@@ -1250,8 +1248,9 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		 in  (fn _ => heapptr, state)
 		 end
 
-	fun scan_vals (offset,[]) = offset
-	  | scan_vals (offset,vl::vls) =
+	fun scan_vals (offset,_,[]) = offset
+	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
+	  | scan_vals (offset,rep::reps,vl::vls) =
 	    ((case (const,vl) of
 		  (true, VAR_VAL (VINT w32)) => add_data(INT32 w32)
 		| (true, VAR_VAL (VTAG w32)) => add_data(INT32 w32)
@@ -1266,13 +1265,14 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 				   let val fieldl = fresh_data_label "var_loc"
 				       val addr = alloc_regi LABEL
 				   in  (add_data(DLABEL fieldl);
-					add_data(INT32 0w49);
+					add_mutable (fieldl, rep);
+					add_data(INT32 uninit_val);
 					add_instr(LADDR(fieldl,0,addr));
 					add_instr(STORE32I(EA(addr,0),r)))
 				   end
 			   else add_instr(STORE32I(EA(heapptr(),offset),r))  (* allocation - not a mutation *)
 		       end);
-	    scan_vals(offset+4,vls))
+	    scan_vals(offset+4,reps,vls))
 
         (* sometime the tags must be computed at run-time *)
 	fun do_dynamic (r,{bitpos,path}) =
@@ -1321,15 +1321,15 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       val offset = scantags(offset,tagwords);
       val (result,templabelopt) = 
 	  if const
-	      then let val label = fresh_data_label "record"
-		   in  (
-			add_mutable_object label; 
-			add_data(DLABEL label);
+	      then let val label = (case labopt of
+					SOME lab => lab
+				      | NONE => fresh_data_label "record")
+		   in  (add_data(DLABEL label);
 			(VAR_VAL(VLABEL label), SOME label))
 		   end
 	  else (VAR_LOC (VREGISTER (false,I dest)), NONE)
 
-      val offset = scan_vals (offset, vl)
+      val offset = scan_vals (offset, reps, vl)
       val _ = if const
 		  then ()
 	      else (add(heapptr(),4 * length tagwords,dest);
@@ -1343,14 +1343,27 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       let fun is_varval (VAR_VAL vv) = true 
 	    | is_varval _ = false
 	  val const = (!do_constant_records andalso (andfold is_varval vl))
-      in  make_record_help(const,state,destopt,reps,vl)
+      in  make_record_help(const,state,destopt,reps,vl,NONE)
       end
 
-  and make_record_const (state, destopt, reps, vl) = 
-      make_record_help(!do_forced_constant_records,state, destopt, reps, vl)
+  and make_record_const (state, destopt, reps, vl, labopt) = 
+      let val res as (lv,_) = make_record_help(!do_forced_constant_records,state, 
+					       destopt, reps, vl, labopt)
+	  val labopt2 = (case lv of
+			     VAR_VAL(VRECORD(lab,_)) => SOME lab
+			   | VAR_VAL(VLABEL lab) => SOME lab
+			   | _ => NONE)
+	  val _ = (case (labopt,labopt2) of
+		       (NONE,_) => ()
+		     | (SOME lab, SOME lab') =>
+			   if (Rtl.eq_label(lab,lab'))
+			       then () else error "make_record_const failed"
+		     | _ => error "make_record_const failed")
+      in  res
+      end
 
   and make_record_mutable (state, destopt, reps, vl) = 
-      make_record_help(false,state, destopt, reps, vl)
+      make_record_help(false,state, destopt, reps, vl,NONE)
 
 
 end

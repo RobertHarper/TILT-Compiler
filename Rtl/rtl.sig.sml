@@ -308,23 +308,18 @@ sig
      the heap, it needs to update the pointers to these
      objects in static data.
 
-     mutable_variables is a list of static data memory locations
-     whose contents may (1) be traceable and (2) be pointers to
-     objects in the heap.   These are analogous to C global variables
-     which contain pointers to the heap.   The rep for a variable
-     is either TRACE or COMPUTE; COMPUTEs may arise from imported
-     modules.
-
-     mutable_objects is a list of addresses of static data objects
-     which (1) are traceable and (2) may contain pointers to objects
-     in the heap.*)
+     mutable is a list of addresses whose contents may be initialized 
+        once during program execution by a pointer into the heap.
+        This list is used to represent globals and cells of statically
+	allocated byt uninitialized objects.  The rep for a mutable
+        is either TRACE or COMPUTE (COMPUTEs may arise from imports)
+  *)
  
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,
 			   main : label,
-			   mutable_objects : label list,
-			   mutable_variables : (label * rep) list}
+			   mutable : (label * rep) list}
 
 end (* RTL *)
 

@@ -44,6 +44,7 @@ sig
 
    type var_rep = var_loc option * var_val option * con
    type convar_rep = var_loc option * var_val option * kind
+   val uninit_val : TilWord32.word
 (*
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep VarMap.map
@@ -56,8 +57,7 @@ sig
    val set_args : (regi list * regf list) * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 
-   val get_mutable_variables : unit -> (label * rep) list
-   val get_mutable_objects : unit -> label list
+   val get_mutable : unit -> (label * rep) list
    val pl : Rtl.proc list ref
    val dl : Rtl.data list ref
    
@@ -150,7 +150,7 @@ sig
      make_record_const will always statically allocate
      make_record_mutable will never statically allocate *)
    val make_record : state * regi option * rep list * loc_or_val list -> loc_or_val * state
-   val make_record_const : state * regi option * rep list * loc_or_val list -> loc_or_val * state
+   val make_record_const : state * regi option * rep list * loc_or_val list * label option -> loc_or_val * state
    val make_record_mutable : state * regi option * rep list * loc_or_val list -> loc_or_val * state
 
 

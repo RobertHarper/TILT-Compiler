@@ -364,7 +364,7 @@ struct
 		      pp_code' code,
 		      String "}", Break])
 	   
-  fun pp_Module' (MODULE{procs,data,main,mutable_objects,mutable_variables}) =
+  fun pp_Module' (MODULE{procs,data,main,mutable}) =
       Vbox0 0 1 ([Break,
 		 String ("main = "^(label2s main)),
 		 Break, Break]
@@ -375,11 +375,8 @@ struct
 		  Break,
 		  pp_DataList'  data,
 		  Break,
-		  HOVbox[String "mutable objects = ",
-			 pp_List' (String o label2s) mutable_objects],
-		  Break,
 		  HOVbox[String "mutable vars = ",
-			 pp_List' pp_LabelPair' mutable_variables],
+			 pp_List' pp_LabelPair' mutable],
 		  Break])
 
   fun pp_rep_path _ = String "rep_path_not_done"
