@@ -28,7 +28,7 @@ structure Listops : LISTOPS =
     fun map4count F (a,b,c,d) = map5 F (count(length a),a,b,c,d)
     fun map5count F (a,b,c,d,e) = map6 F (count(length a),a,b,c,d,e)
     fun map6count F (a,b,c,d,e,f) = map7 F (count(length a),a,b,c,d,e,f)
-    fun flatten arg = foldl (op @) [] arg
+    fun flatten arg = foldr (op @) [] arg
     fun member (elem,[]) = false
       | member (elem,a::rest) = (elem = a) orelse member(elem,rest)
     fun member_eq (eq,elem,[]) = false

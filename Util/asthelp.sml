@@ -358,7 +358,8 @@ structure AstHelp : ASTHELP =
        | Ast.TuplePat pats => pp_list pp_pat pats ("(",", ",")",false)
        | Ast.FlatAppPat _ => String "FlatAppPatUNIMPED"
        | Ast.AppPat {constr,argument} => pp_region "(" ")" [pp_pat constr, String " ", pp_pat argument]
-       | Ast.ConstraintPat _ => String "ConstraintPatUNIMPED"
+       | Ast.ConstraintPat {pattern,constraint} => 
+	     pp_region "(" ")" [pp_pat pattern, String ":", pp_ty constraint]
        | Ast.LayeredPat _ => String "LayeredPatUNIMPED"
        | Ast.VectorPat pats => String "VectorPatUNIMPED"
        | Ast.MarkPat (p,r) => pp_pat p

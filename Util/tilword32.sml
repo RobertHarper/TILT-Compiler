@@ -42,18 +42,22 @@ struct
   val umod = Word32.mod
   fun umult'(a,b) = 
       let 
-	  val alow = andb(low_mask,a)
-	  val blow = andb(low_mask,b)
-	  val ahigh = andb(high_mask,a)
-	  val bhigh = andb(high_mask,b)
+	  val half_size = wordsize div 2
+	  fun get_low x = andb(low_mask,x)
+	  fun get_high x = rshiftl(andb(high_mask,x),half_size)
+	  val alow = get_low a
+	  val blow = get_low b
+	  val ahigh = get_high a
+	  val bhigh = get_high b
 	  val low = Word32.*(alow,blow)
 	  val med = Word32.+(Word32.*(alow,bhigh),Word32.*(ahigh,blow))
 	  val high = Word32.*(ahigh,bhigh)
-	  val low' = andb(low,low_mask)
-	  val med_temp = Word32.+(andb(low,high_mask),med)
-	  val med' = andb(med_temp,low_mask)
-	  val high' = Word32.+(andb(med_temp,high_mask),high)
-      in  (high',orb(low',med'))
+	  val low' = get_low low
+	  val low_carry = get_high low
+	  val med_temp = Word32.+(low_carry,med)
+	  val med' = get_low med_temp
+	  val high' = Word32.+(get_high med_temp,high)
+      in  (high',orb(lshift(med',half_size),low'))
       end
   fun uplus'(a,b) =
       let 
@@ -167,7 +171,18 @@ struct
 					 then fromDecimalString (substring(ws,2,(size ws) - 2))
 				     else error ("fromWordStringLiteral got an illegal string: " ^ ws)
 
-  fun toHexString str = raise Util.UNIMP
+  fun toHexString num = 
+      let 
+	  val pos = rev(Listops.count 8)
+	  fun help i = 
+	      let val x = toInt(andb(fromInt 15, rshiftl(num,i*4)))
+	      in if (x < 10) 
+		     then chr(ord #"0" + x)
+		 else chr(ord #"a" + (x - 10))
+	      end
+	  val chars = map help pos
+      in implode chars
+      end
   fun toDecimalString str = raise Util.UNIMP
 
 (*

@@ -16,7 +16,7 @@ structure TilWord64 : TILWORD =
   val ten = (W.zero, W.fromInt 10)
 
   (* ------ EQUALITY OPERATIONS --------- *)
-  fun equal((x1,x2):word,(y1,y2)) = (x1 = y1) andalso (x2 = y2)
+  fun equal((x1,x2):word,(y1,y2)) = W.equal(x1,y1) andalso W.equal(x2,y2)
   fun nequal(x:word,y) = not(equal(x,y))
 
 
@@ -186,6 +186,7 @@ structure TilWord64 : TILWORD =
   fun srem _ = raise Util.UNIMP
 
   (* ----- Conversion Operations ------ *)
+  fun toHexString (high,low) = W.toHexString(high) ^ W.toHexString(low)
   fun fromInt i = 
       let val low = W.fromInt i
 	  val high = if (W.sign low = ~1) then W.neg_one else W.zero
@@ -195,7 +196,9 @@ structure TilWord64 : TILWORD =
       (case (W.equal(high,W.zero),W.equal(high,W.neg_one),W.sign low) of
 	   (true,_,(0 | 1)) => W.toInt low
 	 | (_,true,~1) => W.toInt low
-	 | _ => raise Overflow)
+	 | _ => (print "TilWord64.toInt overflowed with ";
+		 print (toHexString(high,low)); print "\n";
+		 raise Overflow))
 
   fun fromHexString s = 
       let 
@@ -235,7 +238,7 @@ structure TilWord64 : TILWORD =
 					 substring(ws,0,2) = "0w")
 					 then fromDecimalString (substring(ws,2,(size ws) - 2))
 				     else error ("fromWordString got an illegal string: " ^ ws)
-  fun toHexString (high,low) = W.toHexString(high) ^ W.toHexString(low)
+
   fun toDecimalString w =
       let
 	  val is_neg = sign w = ~1
