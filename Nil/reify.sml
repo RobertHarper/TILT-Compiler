@@ -309,26 +309,26 @@ struct
                          (ctxt, (map (fn (v,f) => (v, getftype f)) vflist))
 
              fun loop ([], pset) = ([], [], pset)
-               | loop ((f, Function(eff,recur,vks,dep,vcs,fs,e,c))::fns, pset)=
+               | loop ((f, Function{effect=eff,recursive=recur,isDependent=dep,
+				    tFormals=vks,eFormals=vtcs,
+				    fFormals=fs,body=e,body_type=(trace,c)})::fns, pset)=
                    let
                       val (fns', bnds, pset) = loop (fns, pset)
                       val ctxt = NilContext.insert_kind_list (ctxt,vks)
                       val vks_length = List.length vks
                       fun loop' _ [] pset = (bnds, [], pset)
-                        | loop' ctxt ((v,c)::vcs) pset =
+                        | loop' ctxt ((v,tr,c)::vtcs) pset =
 	                    let
                                val ctxt' = 
 				   if dep then
 				       NilContext.insert_con (ctxt, v, c)
 				   else
 				       ctxt
-                               val (bnds, vcs', pset) = loop' ctxt' vcs pset
+                               val (bnds, vtcs', pset) = loop' ctxt' vtcs pset
                             in 
 			       case TraceOps.get_trace (ctxt, c) of
-				   SOME _ => 
-				       (* XXX: No way to record trace info, so
-					  tortl will have to recompute this *)
-				       (bnds, (v,c)::vcs',pset)
+				   SOME tinfo => 
+				       (bnds, (v,TraceKnown tinfo,c)::vtcs',pset)
 				 | NONE => 
 				       if (vks_length = 0) then
 					   let 
@@ -336,18 +336,23 @@ struct
 					       val pset' = reify_con_rt(c,pset)
 					   in
 					       (Con_b(Runtime,Con_cb (v', c))::bnds,
-						(v,Var_c v')::vcs',
+						(v,TraceCompute v',Var_c v')::vtcs',
 						pset')
 					   end
 				       else
 					   error ("reify_vflist: Cannot hoist from" ^
 						  " Lambda-lambda function")
                             end
-                      val (bnds', vcs', pset) = loop' ctxt vcs pset
-                      val ctxt = NilContext.insert_con_list (ctxt,vcs)
+                      val (bnds', vtcs', pset) = loop' ctxt vtcs pset
+                      val ctxt = NilContext.insert_con_list (ctxt,
+							     (map (fn (v,t,c) => (v,c)) vtcs))
                       val (e', pset) = reify_exp ctxt (e, pset)
+		      (* XXXX Chris I think trace' needs to be computed from e' *)
+		      val trace' = trace 
                    in
-                      ((f, Function(eff,recur,vks,dep,vcs',fs,e',c))::fns',
+                      ((f, Function{effect=eff,recursive=recur,isDependent=dep,
+				    tFormals=vks,eFormals=vtcs',fFormals=fs,
+				    body=e',body_type=(trace',c)})::fns',
                        bnds', pset)
                    end
 

@@ -337,9 +337,14 @@ struct
       val subst = add subst (var,Var_c var')
     in ((var',con),(D,subst))
     end
+
+  and bind_at_tracecon ((var,trace,con),state) = 
+      let val ((v,c),state) = bind_at_con ((var,con),state)
+      in ((v,trace,c),state)
+      end
   
   and bind_at_cons state vclist = foldl_acc bind_at_con state vclist
-
+  and bind_at_tracecons state vtclist = foldl_acc bind_at_tracecon state vtclist
  
   and kind_normalize' (state as (D,subst)) (kind : kind) : kind = 
     if !debug then
@@ -463,17 +468,22 @@ struct
 	   val defs = Sequence.fromList (zip vars cons)
 	 in Mu_c (recur,defs)
 	 end
-	| (AllArrow_c (openness,effect,tformals,vlist,clist,numfloats,body)) =>
+	| (AllArrow_c {openness,effect,isDependent,
+		       tFormals,eFormals,fFormals,body}) =>
 	 let
-	   val (tformals,state) = bind_at_kinds state tformals
-	   val (vlist,clist,state) = 
-	       case vlist of
-		   SOME vars => let val (vclist,state) = bind_at_cons state (Listops.zip vars clist)
-				in  (SOME (map #1 vclist), map #2 vclist, state)
-				end
-		 | NONE => (NONE, map (con_normalize' state) clist, state)
+	   val (tFormals,state) = bind_at_kinds state tFormals
+	   fun folder ((vopt,c),state) = 
+	       (case vopt of
+		    NONE => ((vopt, con_normalize' state c), state)
+		  | SOME v => 
+			let val ((v,c),state) = bind_at_con ((v,c),state)
+			in  ((SOME v, c), state)
+			end)
+	   val (eFormals,state) = foldl_acc folder state eFormals
 	   val body = con_normalize' state body
-	 in AllArrow_c (openness,effect,tformals,vlist,clist,numfloats,body)
+	 in AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
+		       tFormals = tFormals, eFormals = eFormals, 
+		       fFormals = fFormals, body = body}
 	 end
 	| ExternArrow_c (args,body) => 
 	 let 
@@ -633,14 +643,19 @@ struct
 	 end)
 *)
 
-  and function_normalize' state (Function (effect,recursive,tformals,dep,
-						 formals,fformals,body,return)) = 
+  and function_normalize' state (Function {effect,recursive,isDependent,
+					   tFormals,eFormals,fFormals,
+					   body,body_type}) =
     let
-      val (tformals,state) = bind_at_kinds state tformals
-      val (formals,state) = bind_at_cons state formals
+      val (tFormals,state) = bind_at_kinds state tFormals
+      val (eFormals,state) = bind_at_tracecons state eFormals
       val body = exp_normalize' state body
-      val return = con_normalize' state return
-    in Function (effect,recursive,tformals,dep,formals,fformals,body,return)
+      val (trace,con) = body_type
+      val con = con_normalize' state con
+      val body_type = (trace,con)
+    in Function{effect = effect , recursive = recursive, isDependent = isDependent,
+		tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
+		body = body, body_type = body_type}
     end
 
   and cfunction_normalize' state (tformals,body,return) = 
@@ -1072,12 +1087,15 @@ struct
 
    and reduce_vararg(D:context,openness,effect,argc,resc) = 
        let val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
-	   val no_flatten = AllArrow_c(openness,effect,[],NONE,[argc],0w0,resc)
+	   val no_flatten = AllArrow_c{openness=openness,effect=effect,isDependent=false,
+				       tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
+				       body=resc}
        in  case (reduce_hnf(D,argc)) of
 	   (_,Prim_c(Record_c (labs,_),cons)) => 
 	       if (length labs > !number_flatten) then no_flatten 
-	       else AllArrow_c(openness,effect,[],
-			       NONE,cons,0w0,resc)
+	       else AllArrow_c{openness=openness,effect=effect,isDependent=false,
+			       tFormals=[], eFormals=map (fn c => (NONE,c)) cons,
+			       fFormals=0w0, body=resc}
 	 | (true,_) => no_flatten
 	 | _ => irreducible
        end
@@ -1192,8 +1210,8 @@ struct
 	       end
 	  | make_onearg (openness,effect) => 
 	       let val [argc,resc] = cons
-	       in  AllArrow_c(openness,effect,[],NONE,
-			      [argc],0w0,resc)
+	       in  AllArrow_c{openness=openness,effect=effect,isDependent=false,
+			      tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,body=resc}
 	       end
 	  | peq => error "peq not done")
 
@@ -1244,10 +1262,9 @@ struct
 	   | (App_e (openness,app,cons,texps,fexps)) =>
 	    let
 	      val app_con : con = type_of (D,app)
-	      val  (tformals,formals,body) = 
+	      val  (tformals,eformals,body) = 
 		(case #2(reduce_hnf(D,app_con)) of
-		     AllArrow_c(_,_,tformals,SOME vlist, clist,_,c) => (tformals,Listops.zip vlist clist,c)
-		   | AllArrow_c(_,_,tformals,NONE,_,_,c) => (tformals,[],c)
+		     AllArrow_c{tFormals,eFormals,body,...} => (tFormals,eFormals,body)
 		   | Prim_c(Vararg_c _, [_,c]) => ([],[],c)
 		   | c => (print "Ill Typed expression - not an arrow type.\n app_con = \n";
 			      Ppnil.pp_con app_con;
@@ -1262,7 +1279,8 @@ struct
 	      val con = NilSubst.substConInCon subst body
 		  
 	    in  removeDependence 
-		  (map (fn (v,c) => (v,substConInCon subst c)) formals)
+		  (map (fn (SOME v,c) => (v,substConInCon subst c)
+		         | (NONE, c) => (fresh_var(), c)) eformals)
 		  con
 	    end
 

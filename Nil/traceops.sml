@@ -30,12 +30,9 @@ struct
        case c' of
           Prim_c (p, cs) =>
             get_trace_primcon (ctxt, p, cs)
-        | AllArrow_c (Open,_,_,_,_,_,_) =>
-            SOME TI.Trace
-        | AllArrow_c (Closure,_,_,_,_,_,_) =>
-            SOME TI.Trace
-        | AllArrow_c (Code,_,_,_,_,_,_) =>
-            SOME TI.Notrace_Code
+        | AllArrow_c {openness=Open,...} => SOME TI.Trace
+        | AllArrow_c {openness=Closure,...} => SOME TI.Trace
+        | AllArrow_c {openness=Code,...} => SOME TI.Notrace_Code
         | ExternArrow_c _ => 
             SOME TI.Notrace_Code
         | Mu_c _ => 
