@@ -1,4 +1,4 @@
-(*$import Firstlude TiltPrim Prelude ARRAY General List *)
+(*$import Firstlude TiltPrim Prelude ARRAY General PreVector *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -29,44 +29,24 @@ structure Array :> ARRAY where type 'a array = 'a array
 
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
+
+    val maxLen = PreVector.maxLen
+    val checkLen = PreVector.checkLen
+    val fromList' = PreVector.arrayFromList'
+    val fromList = PreVector.arrayFromList
+
     type 'a array = 'a array
     type 'a vector = 'a vector
-
-    val maxLen = 1024 * 1024
 
     val array0 : 'a array = empty_array
     val vector0 : 'a vector = empty_vector
 
     fun array (0, _) = array0
-      | array (n, init) = 
-	if (maxLen < n) 
-	    then raise General.Size 
-	else unsafe_array(int32touint32 n, init)
+      | array (n, init) = (checkLen n;
+			   unsafe_array(int32touint32 n, init))
 
-    fun checkLen n = if maxLen < n then raise General.Size else ()
     fun rev ([], l) = l
       | rev (x::r, l) = rev (r, x::l)
-    fun fromList'(n,l) = 
-	let val _ = checkLen n
-	in
-	    if (n = 0)
-		then array0
-	    else let val ar = unsafe_array(int32touint32 n, List.hd l)
-		     fun loop [] _ = ()
-		       | loop (a::b) n = (unsafe_update(ar,n,a);
-					  loop b (uplus(n,0w1)))
-		     val _ = loop l 0w0
-		 in  ar
-		 end
-	end
-    fun fromList l = 
-	let
-	    fun len ([], n) = n
-	      | len ([_], n) = n+1
-	      | len (_::_::r, n) = len(r, n+2)
-	    val n = len (l, 0)
-	in  fromList'(n,l)
-	end
 
     fun tabulate (0, _) = array0
       | tabulate (n, f) : 'a array = 

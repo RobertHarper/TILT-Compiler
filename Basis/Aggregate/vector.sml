@@ -1,4 +1,4 @@
-(*$import Firstlude TiltPrim Prelude VECTOR General List Array *)
+(*$import Firstlude TiltPrim Prelude VECTOR General Array PreVector *)
 (* vector.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -26,31 +26,17 @@ structure Vector :> VECTOR where type 'a vector = 'a vector =
 	
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
-	
+
+    val maxLen = PreVector.maxLen
+    val checkLen = PreVector.checkLen
+    val fromList' = PreVector.vectorFromList'
+    val fromList = PreVector.vectorFromList
+
     type 'a vector = 'a vector
 
-    val maxLen = 1024 * 1024
-
-    fun checkLen n = if maxLen < n then raise General.Size else ()
     val vector0 : 'a vector = empty_vector
 
-    fun fromList'(n,l) = 
-	let val _ = checkLen n
-	in
-	    if (n = 0)
-		then vector0
-	    else let val ar = unsafe_array(int32touint32 n, List.hd l)
-		     fun loop [] _ = ()
-		       | loop (a::b) n = (unsafe_update(ar,n,a);
-					  loop b (uplus(n,0w1)))
-		     val _ = loop l 0w0
-		 in  unsafe_array2vector ar
-		 end
-	end
-
-    fun fromList l = unsafe_array2vector(Array.fromList l)
     fun tabulate(n,f) = unsafe_array2vector(Array.tabulate(n,f))
-
     fun length (a : 'a vector) : int = uint32toint32(vector_length a)
     fun sub (a : 'a vector, index :int) : 'a =
 	let val index = int32touint32 index

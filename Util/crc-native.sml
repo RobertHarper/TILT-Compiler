@@ -35,8 +35,8 @@ structure Crc :> CRC =
       val rshiftsig_ : int -> int -> int = fn a => fn b => ti(Word32.~>>(fi a, fi b))
     end
 
-    val table =
-    #[
+    val table = Vector.fromList
+     [
 	0,   225,   450,   291,   900,   869,   582,   679,
      1800,  2025,  1738,  1579,  1164,  1133,  1358,  1455,
      3600,  3825,  4050,  3891,  3476,  3445,  3158,  3255,

@@ -25,6 +25,7 @@ Substring   Text/substring
 PreInt      Numeric/pre-int
 PreReal     Numeric/pre-real
 PreWord     Numeric/pre-word
+PreVector   Aggregate/pre-vector
 NumScan     Text/num-scan
 INTEGER     Numeric/integer-sig
 Int32       Numeric/int32
