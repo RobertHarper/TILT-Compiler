@@ -1,4 +1,4 @@
-(*$import Util Listops Name Int Normalize List Prim Sequence Nil NilUtil Ppnil LibBase SPECIALIZE NilContext NilDefs NilStatic ListPair *)
+(*$import Util Listops Name Int Normalize List Prim Sequence Nil NilUtil Ppnil LibBase SPECIALIZE NilContext NilDefs NilStatic ListPair Stats *)
 
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert
