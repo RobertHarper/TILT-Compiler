@@ -3,14 +3,21 @@
  * Alpha.cm
  * ========================================================================= *)
 
-group is
+group
 
+structure AlphaLink
+
+is
+
+(*
 ../../Alpha/alpha.cm
-../../Backend/backend.cm
-../../MLRISC.cm
+*)
 ../../smlnj-lib.cm
 
+../Backend/backend.cm
+
 ../RtlToMLRISC.cm
+../MLRISC.cm
 
 AlphaFloatAllocation.sml
 AlphaFloatConvention.sml
@@ -19,6 +26,8 @@ AlphaIntegerConvention.sml
 AlphaLink.sml
 AlphaMLRISCConstant.sml
 AlphaMLRISCPseudo.sml
+AlphaMLRISCRegion.sml
+AlphaPseudoInstr.sml
 AlphaStackFrame.sml
 AlphaStandardConvention.sml
 
