@@ -1,8 +1,7 @@
-\documentclass[twoside]{article}
-\usepackage{code}
-\usepackage{latexsym}
-\usepackage{fullpage}
+\documentclass[]{article}
+\usepackage{code,latexsym,fullpage,fleqn}
 \include{lambda}
+
 \title{Typechecking a Simplified MIL}
 
 %\author{Chris Stone \and Perry Cheng \and Bob Harper}
@@ -11,6 +10,10 @@
 %\setlength{\belowdisplayskip}{0ptplus4pt}
 %\setlength{\abovedisplayshortskip}{0ptplus4pt}
 %\setlength{\belowdisplayshortskip}{0ptplus4pt}
+
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+
 \begin{document}
 
 \maketitle
@@ -23,6 +26,11 @@
 \renewcommand{\cfunction}[3]{\lambda #1{:}#2.#3}
 \newcommand{\cpi}[2]{\capply{\pi_{#1}}{#2}}
 \newcommand{\cpair}[2]{\langle{#1},{#2}\rangle}
+\renewcommand{\kind}{A}
+\renewcommand{\cvar}{x}
+\renewcommand{\constructor}{M}
+\renewcommand{\substitute}[2]{\{#1{\mapsto}#2\}}
+
 
 \[
 \begin{array}{rll}
@@ -74,38 +82,16 @@
   {\validkind{\context}
      {\ksigma{\cvar}{\kind_1}{\kind_2}}}
 
-\sectionrule{Kind Equivalence}{\equivkind{\context}{\kind}{\kind'}}
-
-\infrule
-  {\validcontext{\context}}
-  {\equivkind{\context}{\ktype}{\ktype}}
-
-\infrule
-  {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
-  {\equivkind{\context}{\ksingleton{\constructor}}
-       {\ksingleton{\constructor'}}}
-
-\infrule
-  {\equivkind{\context}{\kind_1}{\kind'_1}\qquad
-      \equivkind{\context,\sbindconstructor{\cvar}{\kind_1}}
-                {\kind_2}{\kind'_2}}
-  {\equivkind{\context}
-      {\kpi{\cvar}{\kind_1}{\kind_2}}
-      {\kpi{\cvar}{\kind'_1}{\kind'_2}}}
-
-\infrule
-  {\equivkind{\context}{\kind_1}{\kind'_1}\quad
-   \equivkind{\context,\sbindconstructor{\cvar}{\kind_1}}
-        {\kind_2}{\kind'_2}}
-  {\equivkind{\context}
-     {\ksigma{\cvar}{\kind_1}{\kind_2}}
-     {\ksigma{\cvar}{\kind'_1}{\kind'_2}}}
-
 \sectionrule{Subkinding}{\subkind{\context}{\kind}{\kind'}}
 
 \infrule
-  {\equivkind{\context}{\kind}{\kind'}}
-  {\subkind{\context}{\kind'}{\kind'}}
+  {\validkind{\context}{\kind}}
+  {\subkind{\context}{\kind}{\kind}}
+
+\infrule
+  {\subkind{\context}{\kind_1}{\kind_2}\qquad
+   \subkind{\context}{\kind_2}{\kind_3}}
+  {\subkind{\context}{\kind_1}{\kind_3}}
 
 \infrule
   {\validkind{\context}{\ksingleton{\constructor}}}
@@ -168,10 +154,27 @@
   {\validconstructor{\context}{\cpair{\constructor_1}{\constructor_2}}
       {\ksigma{\cvar}{\kind_1}{\kind_2}}}
 
-\infrule
-  {\validconstructor{\context}{\constructor}{\kind}}
-  {\validconstructor{\context}{\constructor}
-    {\mbox{``$\ksingleton{\constructor}$''}}}
+\infrule{\validconstructor{\context}{\constructor}{\ktype}}
+     {\validconstructor{\context}{\constructor}{\ksingleton{\constructor}}}
+
+\infrule{\validconstructor{\context}{\constructor}
+                       {\ksigma{\cvar}{\kind_1}{\kind_2}}\qquad
+      \validconstructor{\context}{\cpi{1}{\constructor}}{\kind'_1}}
+     {\validconstructor{\context}{\constructor}
+                       {\ksigma{\cvar}{\kind'_1}{\kind_2}}}
+
+\infrule{\validconstructor{\context}{\constructor}
+                       {\ksigma{\cvar}{\kind_1}{\kind_2}}\qquad
+      \validconstructor{\context}{\cpi{2}{\constructor}}{\kind'_2}}
+     {\validconstructor{\context}{\constructor}
+                       {\ksigma{\cvar}{\kind_1}{\kind'_2}}}
+
+\infrule{\validconstructor{\context}{\constructor}
+                       {\kpi{\cvar}{\kind_1}{\kind_2}}\qquad
+      \validconstructor{\context,\cvar{:}\kind_1}
+                       {\capply{\constructor}{\cvar}}{\kind'_2}}
+     {\validconstructor{\context}{\constructor}
+                       {\kpi{\cvar}{\kind_1}{\kind'_2}}}
 
 \infrule
   {\validconstructor{\context}{\constructor}{\kind}\qquad
@@ -222,8 +225,8 @@
 
 \infrule
   {\equivconstructor{\context}{\constructor_1}{\constructor'_1}{\kind_1}\qquad
-   \equivconstructor{\context}{\constructor_2}{\constructor'_2}{\kind_2}\qquad
-   \cvar\not\in\BV{\Gamma}}
+   \equivconstructor{\context}{\constructor_2}{\constructor'_2}
+       {\substitute{\cvar}{\constructor_1}\kind_2}}
   {\equivconstructor{\context}
      {\cpair{\constructor_1}{\constructor_2}}
      {\cpair{\constructor'_1}{\constructor'_2}}
@@ -235,8 +238,8 @@
    \equivconstructor{\context}
                     {\constructor_1}{\constructor'_1}{\kind_1}}
   {\equivconstructor{\context}
-     {\capply{\constructor}{\constructor'}}
-     {\capply{\constructor_1}{\constructor'_1}}
+     {\capply{\constructor}{\constructor_1}}
+     {\capply{\constructor'}{\constructor'_1}}
      {\substitute{\cvar}{\constructor_1}{\kind_2}}}
 
 \infrule
@@ -294,7 +297,7 @@ E ::= &\hole\\
 \newcommand{\headnormsto}[4]{#1\vdash #2 : #3 \Rightarrow^{*} #4}
 \newcommand{\reconstruct}[3]{#1\vdash #2 \uparrow #3}
 \[
-\begin{array}{ll}
+\!\!\!\!\!\!\!\begin{array}{ll}
 \headnormto{\context}
    {E[\capply{(\cfunction{\cvar}{\kind}{\constructor})}
              {\constructor'}]}
@@ -380,9 +383,175 @@ $\validconstructor{\context}{\constructor'}{\kind}$, and
 $\conequiv{\context}{\constructor}{\constructor'}{\kind}$.
 \end{claim}
 
+\section{Correctness}
+
+\newcommand{\semanticvalidtype}[2]{{#2}\mathrm{\ type\ }[#1]}
+\newcommand{\semanticequivtype}[3]{{#2}\mathrm{\ is\ }{#3}\ [#1]}
+\newcommand{\semanticsubtype}[3]{{#2}\mathrm{\ sub\ }{#3}\ [#1]}
+\newcommand{\semanticvalidterm}[3]{{#2}\mathrm{\ in\ }{#3}\ [#1]}
+\newcommand{\semanticequivterm}[4]{{#2}\mathrm{\ is\ }{#3}\mathrm{\ in\ }{#4}\ [#1]}
+\newcommand{\world}{\Delta}
+\newcommand{\semanticcontext}[1]{{#1}\,\mbox{ctxt}}
+\newcommand{\normterm}[3]{{#1}\vdash{#2}\mbox{\ norm\ }{#3}}
+\newcommand{\normtype}[2]{{#1}\vdash{#2}\mbox{\ norm\ }}
+\newcommand{\normE}[4]{{#1}\vdash({#2}:{#3})\ #4\ \mbox{norm}}
+\newcommand{\algorithmicequivterm}[4]{#1\vdash #2 \iff #3 : #4}
+\newcommand{\algorithmicequivtype}[3]{#1\vdash #2 \iff #3}
+\newcommand{\algorithmicwhnf}[4]{#1\vdash #2 : #3 \Rightarrow^{*} #4\mbox{\ whnf}}
+
+
+
+\begin{itemize}
+\item
+$\semanticcontext{\world}$ iff
+%\begin{list}{}
+%\item $\world = \emptysequence$
+%\item Or, $\world = \world',\cvar{:}\kind$ and $\semanticcontext{\world'}$ and
+%$\normtype{\world'}{\kind}$.
+%\end{list}
+$\validcontext{\world}$.
+
+\item
+$\semanticvalidtype{\world}{\kind}$ iff
+\begin{enumerate}
+\item $\semanticcontext{\world}$
+\item $\validkind{\world}{\kind}$
+\item
+\begin{list}{}
+\item $\kind = \ktype$
+\item Or, $\kind = \ksingleton{\constructor}$ and 
+$\semanticvalidterm{\world}{\constructor}{\ktype}$ and
+$\normterm{\world}{\constructor}{\ktype}$
+\item Or, $\kind = \kpi{\evar}{\kind_1}{\kind_2}$ and
+$\semanticvalidtype{\world}{\kind_1}$ and
+$\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor}{\kind_1}$
+then $\semanticvalidtype{\world'}{\substitute{\cvar}{\constructor}{\kind_2}}$ and
+if $\semanticequivterm{\world'}{\constructor}{\constructor'}{\kind_1}$ then
+$\semanticsubtype{\world'}{\substitute{\cvar}{\constructor}{\kind_2}}{\substitute{\cvar}{\constructor'}{\kind_2}}$.
+\item Or, $\kind = \ksigma{\evar}{\kind_1}{\kind_2}$ and
+$\semanticvalidtype{\world}{\kind_1}$ and
+$\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor}{\kind_1}$
+then $\semanticvalidtype{\world'}{\substitute{\cvar}{\constructor}{\kind_2}}$ and
+if $\semanticequivterm{\world'}{\constructor}{\constructor'}{\kind_1}$ then
+$\semanticsubtype{\world'}{\substitute{\cvar}{\constructor}{\kind_2}}{\substitute{\cvar}{\constructor'}{\kind_2}}$.
+\end{list}
+\end{enumerate}
+
+\item $\semanticsubtype{\world}{\kind_1}{\kind_2}$ iff
+\begin{enumerate}
+\item $\semanticcontext{\world}$
+\item $\subkind{\world}{\kind_1}{\kind_2}$
+\item $\forall \constructor$: $\semanticvalidterm{\world}{\constructor}{\kind_1}$ implies
+$\semanticvalidterm{\world}{\constructor}{\kind_2}$
+\item $\forall \constructor,\constructor'$: 
+$\semanticequivterm{\world}{\constructor}{\constructor'}{\kind_1}$ implies
+$\semanticequivterm{\world}{\constructor}{\constructor'}{\kind_2}$.
+\end{enumerate}
+
+\item $\semanticvalidterm{\world}{\constructor}{\kind}$ iff
+\begin{enumerate}
+\item $\semanticcontext{\world}$
+\item $\semanticvalidtype{\world}{\kind}$
+\item $\validconstructor{\world}{\constructor}{\kind}$
+\item 
+\begin{list}{}
+\item $\kind = \ktype$ and $\normterm{\world}{\constructor}{\ktype}$
+\item Or, $\kind = \ksingleton{\constructor'}$ and 
+$\algorithmicequivterm{\world}{\constructor}{\constructor'}{\ktype}$ and
+$\normterm{\world}{\constructor}{\ktype}$ and $\normterm{\world}{\constructor'}{\ktype}$.
+\item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
+$\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor'}{\kind_1}$
+then $\semanticvalidterm{\world'}{\capply{\constructor}{\constructor'}}{\substitute{\cvar}{\constructor'}{\kind_2}}$ and
+if $\semanticequivterm{\world'}{\constructor'}{\constructor''}{\kind_1}$ then
+$\semanticequivterm{\world'}{\capply{\constructor}{\constructor'}}{\capply{\constructor}{\constructor''}}{\substitute{\cvar}{\constructor'}{\kind_2}}$.
+\item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
+$\semanticvalidterm{\world}{\cpi{1}{\constructor}}{\kind_1}$ and
+$\semanticvalidterm{\world}{\cpi{2}{\constructor}}{\substitute{\cvar}{\cpi{1}{\constructor}}{\kind_2}}$.
+\end{list}
+\end{enumerate}
+
+\item $\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\kind}$ iff
+\begin{enumerate}
+\item $\semanticcontext{\world}$
+\item $\semanticvalidtype{\world}{\kind}$
+\item $\equivconstructor{\world}{\constructor_1}{\constructor_2}{\kind}$
+\item
+\begin{list}{}
+\item $\kind = \ktype$ and $\normterm{\world}{\constructor_1}{\ktype}$ and
+$\normterm{\world}{\constructor_2}{\ktype}$ and
+$\algorithmicequivterm{\world}{\constructor_1}{\constructor_2}{\ktype}$.
+\item Or, $\kind = \ksingleton{\constructor''}$
+\item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
+$\forall \world'\supseteq\world$ if $\semanticvalidterm{\world'}{\constructor}{\kind_1}$
+then $\semanticequivterm{\world'}{\capply{\constructor_1}{\constructor}}{\capply{\constructor_2}{\constructor}}{\substitute{\cvar}{\constructor}{\kind_2}}$.
+\item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
+$\semanticequivterm{\world}{\cpi{1}{\constructor_1}}{\cpi{1}{\constructor_2}}{\kind_1}$ and
+$\semanticequivterm{\world}{\cpi{2}{\constructor_1}}{\cpi{2}{\constructor_2}}{\substitute{\cvar}{\cpi{1}{\constructor_1}}{\kind_2}}$.
+\end{list}
+\end{enumerate}
+
+\item $\normtype{\context}{\kind}$ iff
+\begin{list}{}
+\item $\kind = \ktype$
+\item Or, $\kind = \ksingleton{\constructor}$ and $\normterm{\context}{\constructor}{\ktype}$
+\item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
+$\normtype{\context}{\kind_1}$ and $\normtype{\context,\cvar{:}\kind_1}{\kind_2}$.
+\item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
+$\normtype{\context}{\kind_1}$ and $\normtype{\context}{\kind_2}$.
+\end{list}
+
+\item $\normterm{\context}{\constructor}{\kind}$ iff
+\begin{enumerate}
+\item $\validconstructor{\context}{\constructor}{\kind}$
+\item $\algorithmicwhnf{\context}{\constructor}{\kind}{\constructor'}$
+\item
+\begin{list}{}
+\item $\kind = \ktype$ and $\constructor' = \basetype$
+\item Or, $\kind = \ktype$ and $\constructor' = E[\cvar]$ and
+$\normE{\context}{E}{\context(\cvar)}{\cvar}$
+\item Or, $\kind = \ksingleton{\constructor''}$
+\item Or, $\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
+$\normtype{\context}{\kind_1}$ and 
+$\normterm{\context,\cvar{:}\kind_1}{\capply{\constructor'}{\cvar}}{\kind_2}$.
+\item Or, $\kind = \ksigma{\cvar}{\kind_1}{\kind_2}$ and
+$\normterm{\context}{\cpi{1}{\constructor'}}{\kind_1}$ and 
+$\normtype{\context}{\cpi{2}{\constructor'}}{\kind_2}$.
+\end{list}
+\end{enumerate}
+
+\item $\normE{\context}{E}{\kind}{\constructor}$ iff
+\begin{enumerate}
+\item $\validconstructor{\context}{\constructor}{\kind}$
+\item $\validconstructor{\context}{E[\constructor]}{\ktype}$
+\item 
+\begin{list}{}
+\item $E = \emptysequence$
+\item Or, $E=E'[\cpi{1}{\hole}]$ and $\kind=\ksigma{\cvar}{\kind_1}{\kind_2}$ and
+$\normE{\context}{E'}{\kind_1}{(\cpi{1}{\constructor})}$
+\item Or, $E=E'[\cpi{2}{\hole}]$ and $\kind=\ksigma{\cvar}{\kind_1}{\kind_2}$ and
+$\normE{\context}{E'}{\substitute{\cvar}{\cpi{1}{\constructor}}}{(\cpi{2}{\constructor})}$
+\item Or, $E=E'[\capply{\hole}{\constructor'}]$ and 
+$\kind = \kpi{\cvar}{\kind_1}{\kind_2}$ and
+$\normterm{\context}{\constructor'}{\kind_1}$ and
+$\normE{\context}{E'}{\substitute{\cvar}{\constructor'}{\constructor}}{(\capply{\constructor}{\constructor'})}$.
+\end{list}
+\end{enumerate}
+
+\end{itemize}
+
+\begin{theorem}
+\begin{enumerate}
+\item If $\validkind{\world}{\kind}$ then $\semanticvalidtype{\world}{\kind}$.
+\item If $\subkind{\world}{\kind_1}{\kind_2}$ then
+$\semanticsubtype{\world}{\kind_1}{\kind_2}$.
+\item If $\validconstructor{\world}{\constructor}{\kind}$ then
+$\semanticvalidterm{\world}{\constructor}{\kind}$.
+\item If $\equivconstructor{\world}{\constructor_1}{\constructor_2}{\kind}$
+then $\semanticequivterm{\world}{\constructor_1}{\constructor_2}{\kind}$.
+\end{enumerate}
+\end{theorem}
+
 %\bibliographystyle{plain}
 %\bibliography{bib}
 
 \end{document}
-
-
