@@ -49,7 +49,7 @@ FORCE:
 heap tilt-heap: FORCE
 	$(mkheap) sources.cm Bin/heap/tilt Main.main
 dump-heap: FORCE
-	$(mkheap) sources.cm Bin/heap/dump Dump.main
+	$(mkheap) sources.cm Bin/heap/tilt-dump Dump.main
 
 # TILT-compiled libraries
 
@@ -72,7 +72,7 @@ runtime: FORCE
 tilt: FORCE
 	$(tilt) -oBin/$(cputype)/tilt -c Top Top/project
 dump: FORCE
-	$(tilt) -oBin/$(cputype)/dump -c DumpTop Top/project
+	$(tilt) -oBin/$(cputype)/tilt-dump -c DumpTop Top/project
 runtest: FORCE
 	if test -d Test; then $(tilt) -oBin/$(cputype)/runtest -c Runtest Test/project; fi
 
@@ -94,15 +94,15 @@ install: FORCE
 	-mkdir $(PREFIX)/lib/tilt
 	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)
 	if test -f Bin/$(cputype)/tilt; then strip Bin/$(cputype)/tilt; fi
-	if test -f Bin/$(cputype)/dump; then strip Bin/$(cputype)/dump; fi
+	if test -f Bin/$(cputype)/tilt-dump; then strip Bin/$(cputype)/tilt-dump; fi
 	tar cf - License Bin Lib Doc | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/man/man4
 	cp Doc/tilt.man $(PREFIX)/man/man1/tilt.1 && chmod 644 $(PREFIX)/man/man1/tilt.1
-	cp Doc/project.man $(PREFIX)/man/man4/project.4 && chmod 644 $(PREFIX)/man/man4/project.4
+	cp Doc/tilt-project.man $(PREFIX)/man/man4/tilt-project.4 && chmod 644 $(PREFIX)/man/man4/tilt-project.4
 	-mkdir $(PREFIX)/bin
-	for name in tilt tilt-nj tilt-slaves dump dump-nj; do \
+	for name in tilt tilt-nj tilt-slaves tilt-dump tilt-dump-nj; do \
 		(echo '#!/bin/sh'; \
 		 echo 'exec $(RUNPREFIX)/lib/tilt/Bin/'$$name' $${1+"$$@"}'; \
 		)>$(PREFIX)/bin/$$name && chmod 755 $(PREFIX)/bin/$$name; \

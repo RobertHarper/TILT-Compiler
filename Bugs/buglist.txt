@@ -117,7 +117,6 @@
 0128 [closed]	bombing on nonuniform datatypes
 0129 [open]	printing is lost under test harness
 0130 [closed]	type_of failed in Reify2
-0137 [open]	syntax of special constants
 0138 [open]	date failure
 0139 [closed]	filesys discrepancies
 0140 [open]	discrepancies on string tests

@@ -3,10 +3,10 @@ bindir=`dirname "$0"`
 cputype=`"$bindir"/cputype`
 case $cputype in
 unsupported)
-	echo 1>&2 "dump: unsupported architecture; try dump-nj"
+	echo 1>&2 "tilt-dump: unsupported architecture; try tilt-dump-nj"
 	exit 1
 	;;
 *)
-	exec "$bindir"/$cputype/dump ${1+"$@"}
+	exec "$bindir"/$cputype/tilt-dump ${1+"$@"}
 	;;
 esac

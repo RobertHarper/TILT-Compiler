@@ -170,7 +170,7 @@ A compilation unit may be declared either as a separately compiled
 unit with specified interface, or as a source unit bound to a unit
 identifier.
 (See
-.IR project (4)
+.IR tilt-project (4)
 for the full syntax of projection description files.)
 .PP
 A source unit consists of an SML top-level declaration
@@ -189,7 +189,7 @@ An interface is a top-level specification
 .RI ( topspec ),
 stored in a file.
 (See
-.IR project (4)
+.IR tilt-project (4)
 for the full syntax of interfaces.)
 The interface declaration
 .EX
@@ -483,4 +483,4 @@ A demonstration of separate compilation:
 	(* \fIuse c.sml from previous example\fP *)
 .EE
 .SH SEE ALSO
-.IR project (4)
+.IR tilt-project (4)
