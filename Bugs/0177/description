@@ -1,16 +1,41 @@
 Number: 0177
 Title:       nonexhaustive match warning is overly pessimistic
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    pattern compilation
 Submitter:   tom7
 Date:        02/09/04
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of execution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     release candidate  9 Feb 2004
+System:      any
+Severity:    minor
+Problem:     
+
+             We sometimes report a nonexhaustive match for exhaustive
+             patterns.
+
+Code:        
+
+            fun merge a nil = a
+              | merge nil b = b
+              | merge (aa as (a::ta)) (bb as (b::tb)) =
+                case Int.compare (a, b) of
+                    EQUAL => (a :: b :: merge ta tb)
+                  | LESS => (a :: merge ta bb)
+                  | GREATER => (b :: merge aa tb)
+
+
+Transcript:
+Comments:    
+
+        I added the code to emit this warning during TILT week
+        last year. It lives in the thunks that compute the
+        defaults (which raise Match or Bind) during pattern
+        compilation. However, our pattern compilation strategy
+	evaluates these thunks even on exhaustive patterns such
+        as the above. This may also mean that we create unreachable
+	"raise Match" code.
+
+        I am pretty sure that the Definition requires nonexhaustive
+        and redundant match warnings, but I don't have it handy.
+Fix: 
 Test: *
 Owner: *
 Status: open
