@@ -24,7 +24,7 @@
 0006    fail	More infix decls that should be accepted.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
-m0003	fail	[Bug# 0098] Type variable syntax.
+m0003	pass	[Bug# 0098] Type variable syntax.
 m0004	pass	Deep loop, unused handler.
 m0005	pass	Verifies that signature constraints change status.
 m0006	pass	Check ref's and polymorphism.
