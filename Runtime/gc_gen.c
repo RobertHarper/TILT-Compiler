@@ -555,17 +555,19 @@ void gc_gen(Thread_t *curThread, int isMajor)
     sysThread->alloc = nursery->bottom;
     sysThread->limit = nursery->top;
 
-  if (GCtype != Minor)
-    NumMajorGC++;
-  NumGC++;
-
   /* More debugging and stat-gathering procedure */
   measure_semantic_garbage_after();    
   if (paranoid) {
     paranoid_check_stack(curThread,nursery);
-    check_heap("Paranoid check heap",old_fromheap->bottom, old_fromheap->alloc_start, old_fromheap->top, old_fromheap);
+    scan_heap("Paranoid check heap",old_fromheap->bottom, old_fromheap->alloc_start, 
+	       old_fromheap->top, old_fromheap, SHOW_HEAPS);
     /*    paranoid_check_heap(nursery,old_fromheap);  */
   }
+
+  if (GCtype != Minor)
+    NumMajorGC++;
+  NumGC++;
+
   /* stop timer */
   stop_timer(&sysThread->gctime); 
 

@@ -9,7 +9,7 @@
 #include "create.h"
 #include "mllib.h"
 
-int exncounter = 4200;
+int exncounter = 4000;
 
 
 

@@ -5,7 +5,6 @@
 
 #include "tag.h"
 #include "queue.h"
-#include "show.h"
 #include "forward.h"
 #include "gc.h"
 #include "memobj.h"
@@ -15,6 +14,7 @@
 #include "bitmap.h"
 #include "stats.h"
 #include "gcstat.h"
+#include "show.h"
 
 /* XXX for temp debugging */
 extern int NumThread;

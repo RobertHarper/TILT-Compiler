@@ -162,6 +162,7 @@ structure Manager :> MANAGER =
   fun base2sml (f : string) = f ^ ".sml"
   fun base2int (f : string) = f ^ ".int"
   val base2ui = Compiler.base2ui
+  val base2s = Compiler.base2s
   val base2o = Compiler.base2o
   val base2uo = Compiler.base2uo
 
@@ -779,8 +780,9 @@ structure Manager :> MANAGER =
 	      let val base = get_base unit
 		  val ui = base2ui base
 		  val uo = base2uo base
+		  val s = base2s base
 		  val obj = base2o base
-		  val command = "rm -f " ^ ui ^ "; rm -f " ^ ui ^ "; rm -f " ^ obj
+		  val command = "rm -f " ^ ui ^ "; rm -f " ^ s ^ "; rm -f " ^ uo ^ "; rm -f " ^ obj
 	      in  (Util.system command; ())
 
 	      end

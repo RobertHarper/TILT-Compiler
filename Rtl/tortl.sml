@@ -135,13 +135,12 @@ struct
 				     | (_,false) => xexp(state,fresh_named_var "venv",venv,
 							 Nil.TraceUnknown,NOTID))
 			      val vls = [code_lv, con_lv, exp_lv]
-			      val reps = [NOTRACE_CODE, TRACE, TRACE]
 			      val (lv,state) = 
 				  (case (toplevel,is_recur) of
-				       (true,_) => make_record_const(state,reps,vls,
+				       (true,_) => make_record_const(state,vls,
 								     SOME(LOCAL_DATA(Name.var2string v)))
-				     | (_,true) => make_record_mutable(state,reps,vls)
-				     | (_,false) => make_record(state,reps,vls))
+				     | (_,true) => make_record_mutable(state,vls)
+				     | (_,false) => make_record(state,vls))
 			      val ir = load_ireg_term(lv,NONE)
 			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
 			  in  (ir,s')
@@ -560,9 +559,8 @@ struct
 		      (* --- create the exn record and set the exnptr to it to install it *)
 		      val int_vallocs = (map (fn ireg => LOCATION(REGISTER(false,I ireg)))
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
-		      val reps = (NOTRACE_CODE :: NOTRACE_LABEL :: TRACE :: local_int_reps)
 		      val _ = add_instr(LADDR(hl,0,hlreg))
-		      val (new_exnrec,bstate) = make_record(bstate, reps, int_vallocs)
+		      val (new_exnrec,bstate) = make_record(bstate, int_vallocs)
 		      val _ = load_ireg_term(new_exnrec, SOME exnptr)
 		      val _ = add_instr SAVE_EXN 
 
@@ -900,8 +898,7 @@ struct
 	   Nil.record labels => 
 	       let fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
 		   val (terms,state) = foldl_list folder state elist
-		   val reps = map valloc2rep terms
-	       in  make_record(state,reps,terms)
+	       in  make_record(state,terms)
 	       end
          | partialRecord _ => error "partialRecord not implemented"
 	 | select label => 
@@ -982,7 +979,10 @@ struct
 		   in  xexp(state,fresh_var(),e,Nil.TraceUnknown,context)
 		   end
 	 | make_exntag => 
-		   let val desti = alloc_regi NOTRACE_INT
+		   let val _ = (case trace of
+				    Nil.TraceKnown TraceInfo.Notrace_Int => ()
+				  | _ => error "make_exntag result has funny trace")
+		       val desti = alloc_regi NOTRACE_INT
 		       val addr = alloc_regi TRACE
 		       val tmp = alloc_regi NOTRACE_INT
 		       val _ = (add_instr(LADDR(exncounter_label,0,addr));
@@ -999,9 +999,8 @@ struct
 		       fun char2val c = Const_e(Prim.uint(Prim.W8, TW64.fromInt (ord c)))
 		       val name_array = Array.fromList (map char2val (explode name))
 		       val (vl3,state) = xconst(state, Prim.vector(char_con,name_array))
-		       val vallocs = [vl1,vl2,vl3]
-		       val reps = map valloc2rep vallocs
-		   in  make_record(state,reps,vallocs)
+		       val terms = [vl1,vl2,vl3]
+		   in  make_record(state,terms)
 		   end
 	 | make_vararg oe => 
 		   let fun local_xexp (s,e) = 
@@ -1402,21 +1401,19 @@ struct
       let 
 	  fun mk_ptr  i = (true, VALUE (TAG (TW32.fromInt i)), state)
 	  fun mk_ptr' i = (true, VALUE (TAG (TW32.fromInt i)), state)
-	  fun mk_sum_help (state,indices,cons) = 
-	      let val indices' = map (fn i => VALUE(INT (TW32.fromInt i))) indices
-	          fun folder (c,(const,s)) =
+	  fun mk_sum (state,preTerms,cons) = 
+	      let fun folder (c,(const,s)) =
 		       let val (const',c,s) = xcon'(s,fresh_named_var "xcon_sum",c)
 		       in (c,(const andalso const', s))
 		       end
-		  val (cons',(const,state)) = foldl_list folder (true,state) cons
-		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
+		  val (postTerms,(const,state)) = foldl_list folder (true,state) cons
+		  val terms = preTerms @ postTerms
 		  val (lv,state) = if const 
-				       then make_record_const(state,reps, indices' @ cons', NONE)
-				   else make_record(state,reps, indices' @ cons')
+				       then make_record_const(state, terms, NONE)
+				   else make_record(state,terms)
 	      in (const, lv, state)
 	      end
-	  fun mk_sum' (s,indices,cons) = mk_sum_help(s,indices,cons)
-	  fun mk_sum (s,index,cons) = mk_sum_help(s,[index],cons)
+	  fun mktag i = (VALUE (INT (TW32.fromInt i)))
 	  open Prim
       in
 	  (case arg_con of
@@ -1429,31 +1426,30 @@ struct
 	     | Prim_c(BoxFloat_c F32, []) => mk_ptr 10
 	     | Prim_c(BoxFloat_c F64, []) => mk_ptr 11
 	     | Prim_c(Exn_c,[]) => mk_ptr 12
-	     | Prim_c(Exntag_c,[c]) => mk_sum(state,12,[c])
-	     | Prim_c(Array_c,[c]) => mk_sum(state,0,[c])
-	     | Prim_c(Vector_c,[c]) => mk_sum(state,1,[c])
+	     | Prim_c(Exntag_c,[c]) => mk_sum(state,[mktag 12],[c])
+	     | Prim_c(Array_c,[c]) => mk_sum(state,[mktag 0],[c])
+	     | Prim_c(Vector_c,[c]) => mk_sum(state,[mktag 1],[c])
 	     | Prim_c(Loc_c,_) => error "LOC cannot be a constructor"
 	     | Prim_c(Sum_c {known,totalcount,tagcount},[c]) => 
-		   mk_sum'(state,
-			   [4,(case known of
-				   NONE => ~1
-				 | SOME w => TW32.toInt w), 
-			    TW32.toInt tagcount,
-			    TW32.toInt totalcount],[c])
+		   mk_sum(state,
+			   [mktag 4,mktag (case known of
+					   NONE => ~1
+					 | SOME w => TW32.toInt w), 
+			    mktag (TW32.toInt tagcount),
+			    mktag (TW32.toInt totalcount)],[c])
 	     | Prim_c(Sum_c {known,totalcount,tagcount},_) => error "Sum_c does not have 1 type arg"
-	     | Prim_c(Record_c _,cons) => mk_sum_help(state,[5,length cons],cons)
-	     | Prim_c(Vararg_c _,cons) => mk_sum(state,6,cons)
+	     | Prim_c(Record_c _,cons) => mk_sum(state,[mktag 5,mktag(length cons)],cons)
+	     | Prim_c(Vararg_c _,cons) => mk_sum(state,[mktag 6],cons)
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (is_recur,vcset) => 
-		   let val (const,lv,state) = mk_sum_help(state,[8],[])
+		   let val (const,lv,state) = mk_sum(state,[mktag 8],[])
 		       val num_mu = Sequence.length vcset
 		   in  if (num_mu = 1) then (const,lv,state)
-		       else let val reps = Listops.map0count (fn _ => TRACE) num_mu
-				val terms = Listops.map0count (fn _ => lv) num_mu
+		       else let val terms = Listops.map0count (fn _ => lv) num_mu
 				val (result,state) = 
 				    if const (* all mus are base-case/degenerate now *)
-					then make_record_const(state,reps,terms,NONE)
-				    else make_record_const(state,reps,terms,NONE)
+					then make_record_const(state,terms,NONE)
+				    else make_record_const(state,terms,NONE)
 			    in  (const,result,state)
 			    end
 		   end
@@ -1462,8 +1458,8 @@ struct
 		       fun loop _ [] (s,rev_lvs) = (s,rev rev_lvs)
 			 | loop n ((v',c)::vrest) (s,rev_lvs) = 
 			   let val (lv,k,s) = if is_recur
-						then mk_sum'(s,[7,0],[])
-					    else mk_sum(s,7,[c])
+						then mk_sum(s,[mktag 7,mktag 0],[])
+					    else mk_sum(s,[mktag 7],[c])
 			   in  loop (n+1) vrest (s,lv::rev_lvs)
 			   end
 		       val (state,lvs) = loop 0 vclist (state,[])
@@ -1488,21 +1484,20 @@ struct
 		   in (case lvs of
 			   [lv] => (lv, Word_k Runtime, state)
 			 | _ => let val kind = kind_tuple (map (fn _ => Word_k Runtime) lvs)
-				    val reps = map (fn _ => TRACE) lvs
-				    val (lv,state) = make_record(state,reps,lvs)
+				    val (lv,state) = make_record(state,lvs)
 				in  (lv,kind,state)
 				end)
 		   end
 *)
 	     | AllArrow_c {openness=Open,...} => error "open Arrow_c"
 	     | AllArrow_c {openness=Closure,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
-		   mk_sum_help(state,[9],[])
+		   mk_sum(state,[mktag 9],[])
 (*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
 	     | AllArrow_c {openness=Code,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
-		   mk_sum_help(state,[10],[])
+		   mk_sum(state,[mktag 10],[])
 (*		   mk_sum_help(state,[10,TW32.toInt numfloat],c::clist) *)
 	     | ExternArrow_c _ =>
-		   mk_sum_help(state,[11],[])
+		   mk_sum(state,[mktag 11],[])
 (*		   mk_sum_help(NONE,[11,TW32.toInt numfloat],c::clist) *)
 	     | Var_c v => 
 		   let val (vl,vv) = 
@@ -1534,11 +1529,9 @@ struct
 			   (case (!do_single_crecord,terms) of
 				(true,[term]) => (term, state)
 			      | _ =>
-				    let val reps = map (fn _ => TRACE) terms
-				    in  if const 
-					    then make_record_const(state,reps,terms,NONE)
-					else make_record(state,reps,terms)
-				    end)
+				    if const 
+					then make_record_const(state,terms,NONE)
+				    else make_record(state,terms))
 		   in  (const,result,state)
 		   end
 	     | Proj_c (c, l) => 
@@ -1568,7 +1561,8 @@ struct
 			   in  Arrow_k(Closure,vklist',k)
 			   end
 			 | kinder _ = error "bad Closure_c"
-		   in  mk_sum_help(state,[],[c1,c2])
+		       val (_,codeTerm,state) = xcon'(state,fresh_named_var "xcon_code",c1)
+		   in  mk_sum(state,[codeTerm],[c2])
 		   end
 	     | Typecase_c _ => error "typecase_c not implemented"
 	     | App_c (c,clist) => (* pass in env argument first *)

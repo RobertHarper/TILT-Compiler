@@ -17,9 +17,9 @@ sig
       make_record_const will always statically allocate
       make_record_mutable will never statically allocate *)
    val empty_record        : term
-   val make_record         : state * rep list * term list -> term * state
-   val make_record_const   : state * rep list * term list * label option -> term * state
-   val make_record_mutable : state * rep list * term list -> term * state
+   val make_record         : state * term list -> term * state
+   val make_record_const   : state * term list * label option -> term * state
+   val make_record_mutable : state * term list -> term * state
    val record_project      : regi * int * regi -> unit   (* register contaiing record, index of field, dest register *)
 
    (* Add an extra field to the beginning of a record

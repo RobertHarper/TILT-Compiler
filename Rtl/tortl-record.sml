@@ -12,7 +12,7 @@ struct
     open Rtltags 
     open TortlBase
 	
-    fun error s = Util.error "tortl-base.sml" s
+    fun error s = Util.error "tortl-record.sml" s
     structure TW32 = TilWord32
     structure TW64 = TilWord64
 
@@ -25,12 +25,12 @@ struct
     val maxRtlRecord = maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
 
 
-  fun make_record_core (const, state, reps, vl : term list, labopt) = 
+  fun make_record_core (const, state, reps, terms, labopt) = 
     let 
-	val _ = if (length vl > maxRtlRecord) then error "max_record_core given too maxn terms" else ()
+	val _ = if (length terms > maxRtlRecord) then error "max_record_core given too maxn terms" else ()
 
 	val is_mutable = ref false
-	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
+	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length terms)) ^ "-record"))
 	val tagword = recordtag reps
 	val dest = alloc_regi TRACE
 
@@ -39,7 +39,7 @@ struct
 		then [tagword]
 	    else [{dynamic=nil,static=MakeProfileTag()}, tagword]
         (* total number of words needed *)
-	val words_alloced = length vl+length tagwords
+	val words_alloced = length terms+length tagwords
 
 
 	(* shadow heapptr with thunk to prevent accidental use *)
@@ -125,7 +125,7 @@ struct
 			(VALUE(LABEL label), SOME label))
 		   end
 	  else (LOCATION (REGISTER (false,I dest)), NONE)
-      val offset = scan_vals (offset, reps, vl)
+      val offset = scan_vals (offset, reps, terms)
 
       (* The test for is_mutable and call to add_mutable must FOLLOW scan_vals *)
       val _ = (case (const andalso !is_mutable, templabelopt) of
@@ -136,21 +136,23 @@ struct
 		  then ()
 	      else (add(heapptr(),4 * length tagwords,dest);
 		    add(heapptr(),4 * words_alloced,heapptr()))
-      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length vl)) ^ " record"))
+      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length terms)) ^ " record"))
     in  (result, state)
     end
 
-  fun make_record_help (const, state, _ , [], _) = (empty_record, state)
+  fun make_record_help (const, state, reps, [], _) = (empty_record, state)
     | make_record_help (const, state, reps, terms, labopt) =
       let fun loop (state,reps,terms,labopt) =
 	  if (length terms < maxRtlRecord)
 	      then make_record_core(const, state, reps, terms, labopt)
 	  else let val _ = print ("make_record_help encountered large record " ^ (Int.toString (length terms)) ^ "\n")
 		   fun split(ls,n) = (List.take(ls,n), List.drop(ls,n))
-		   val (reps1,reps2) = split(reps,maxRtlRecord-1)
 		   val (terms1,terms2) = split(terms,maxRtlRecord-1)
+		   val (reps1,reps2) = split(reps,maxRtlRecord-1)
 		   val (record2,state) = loop (state,reps2,terms2,NONE)
-	       in  make_record_core(const,state, reps1 @ [TRACE], terms1 @ [record2], labopt)
+		   val terms = terms1 @ [record2]
+		   val reps = reps1 @ [TRACE]
+	       in  make_record_core(const,state, map term2rep terms, terms, labopt)
 	       end
 	  fun check [] = loop (state,reps,terms,labopt)
 	    | check ((VALUE (VOID _))::_) = (VALUE(VOID Rtl.TRACE), state)
@@ -159,19 +161,20 @@ struct
       end
 
   (* These are the interface functions: determines static allocation *)
-  fun make_record (state, reps, vl) = 
-      let fun is_varval (VALUE vv) = true 
-	    | is_varval _ = false
+  fun make_record (state, terms) = 
+      let fun is_value (VALUE _) = true 
+	    | is_value _ = false
+	  val reps = map term2rep terms
 	  fun is_static (COMPUTE _) = false
 	    | is_static _ = true
-	  val const = (istoplevel() orelse (andfold is_varval vl)) andalso (andfold is_static reps)
+	  val const = (istoplevel() orelse (andfold is_value terms)) andalso (andfold is_static reps)
 	  val const = const andalso (!do_constant_records)
-      in  make_record_help(const,state,reps,vl,NONE)
+      in  make_record_help(const,state,reps,terms,NONE)
       end
 
-  fun make_record_const (state, reps, vl, labopt) = 
-      let val res as (lv,_) = make_record_help(!do_forced_constant_records,state, 
-					       reps, vl, labopt)
+  fun make_record_const (state, terms, labopt) = 
+      let val reps = map term2rep terms
+	  val res as (lv,_) = make_record_help(!do_forced_constant_records,state, reps, terms, labopt)
 	  val labopt2 = (case lv of
 			     VALUE(RECORD(lab,_)) => SOME lab
 			   | VALUE(LABEL lab) => SOME lab
@@ -185,8 +188,10 @@ struct
       in  res
       end
 
-  fun make_record_mutable (state, reps, vl) = 
-      make_record_help(false,state, reps, vl,NONE)
+  fun make_record_mutable (state, terms) = 
+      let val reps = map term2rep terms
+      in  make_record_help(false,state,reps,terms,NONE)
+      end
 
   fun record_project (src, index, dest) = 
       if (index >= 0 andalso index < (maxRtlRecord-1))

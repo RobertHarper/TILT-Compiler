@@ -371,7 +371,12 @@ struct
 		(case reg of
 		     F (REGF(_,frep)) => frep
 		   | I (REGI(_,irep)) => irep
-		   | I (SREGI _) => error "tracetable_value on SREG")
+		   | I (SREGI EXNPTR) => TRACE
+		   | I (SREGI EXNARG) => TRACE
+		   | I (SREGI HEAPPTR) => NOTRACE_INT
+		   | I (SREGI HEAPLIMIT) => NOTRACE_INT
+		   | I (SREGI STACKPTR) => NOTRACE_INT
+		   | I (SREGI THREADPTR) => NOTRACE_INT)
 	  | GLOBAL (_,rep) => rep)
 	    
   fun val2rep value =
@@ -384,8 +389,8 @@ struct
 	 | CODE _ => NOTRACE_CODE
 	 | VOID r => r)
 
-  fun valloc2rep (VALUE value) = val2rep value
-    | valloc2rep (LOCATION location) = loc2rep location
+  fun term2rep (VALUE value) = val2rep value
+    | term2rep (LOCATION location) = loc2rep location
 
 
 

@@ -315,19 +315,23 @@ structure Machine =
     | msInstr' (CBRANCHF (instr, Rtest, label)) =
                                 (tab ^ (cbrf_to_ascii instr) ^ tab ^
 				 (msReg Rtest) ^ comma ^ (msLabel label))
-    | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
-				(* XXX MULLV $at, 10, $at gets generated *)
-				let val forbidAt = (false andalso case (instr,Rsrc1) of 
-							(MULLV, R 28) => true
-						      | (MULL, R 28) => true
-						      | _ => false)
-				    val instr = (tab ^ (int_to_ascii instr) ^ tab ^
-						 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
-						 comma ^ (msReg Rdest))
-				in  if forbidAt
-					then (tab ^ ".set noat\n" ^ instr ^ "\n" ^ tab ^ ".set at")
-				    else instr
+    (* the assembler doesn't like mull or mullv with $at and an immediate operand *)
+    | msInstr' (INTOP(MULL, R 28, oper as (IMMop _), R 28)) =  
+				let val mv1 = tab ^ "mv $at, $25"
+				    val mul = tab ^ "mull $25, " ^ (msOperand oper) ^ ", $25"
+				    val mv2 = tab ^ "mv $25, $at"
+				in  mv1 ^ "\n" ^ mul ^ "\n" ^ mv2
 				end
+    | msInstr' (INTOP(MULLV, R 28, oper as (IMMop _), R 28)) =
+				let val mv1 = tab ^ "mv $at, $25"
+				    val mul = tab ^ "mullv $25, " ^ (msOperand oper) ^ ", $25"
+				    val mv2 = tab ^ "mv $25, $at"
+				in  mv1 ^ "\n" ^ mul ^ "\n" ^ mv2
+				end
+    | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
+				(tab ^ (int_to_ascii instr) ^ tab ^
+				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
+				 comma ^ (msReg Rdest))
     | msInstr' (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =
 (* this is terrible to have traps everywhere... *)
                                 ((tab ^ (fp_to_ascii instr)^ tab ^

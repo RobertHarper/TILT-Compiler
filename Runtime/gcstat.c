@@ -1,7 +1,7 @@
 #include "queue.h"
 #include "hash.h"
 #include "tag.h"
-#include "show.h"
+#include "general.h"
 #include "gc.h"
 #include "memobj.h"
 #include "global.h"
@@ -13,7 +13,7 @@
 #include <sys/resource.h>
 #include "stats.h"
 #include "gcstat.h"
-#include "general.h"
+#include "show.h"
 
 #ifdef alpha_osf
 #include "interface_osf.h"

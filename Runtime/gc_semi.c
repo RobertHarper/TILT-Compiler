@@ -8,13 +8,13 @@
 #include "thread.h"
 #include "tag.h"
 #include "queue.h"
-#include "show.h"
 #include "forward.h"
 #include "gc.h"
 #include "global.h"
 #include "bitmap.h"
 #include "stats.h"
 #include "gcstat.h"
+#include "show.h"
 
 
 extern int TotalBytesAllocated;
@@ -249,7 +249,8 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 
     if (paranoid) {
       paranoid_check_stack(curThread,fromheap);
-      paranoid_check_heap(fromheap,toheap);
+      scan_heap("Paranoid check heap",toheap->bottom, toheap->alloc_start,
+		toheap->top, toheap, SHOW_HEAPS);
     }
 
   /* Resize the tospace by using the oldspace size and liveness ratio */

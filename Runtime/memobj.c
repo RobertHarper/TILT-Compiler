@@ -81,16 +81,16 @@ int StackSize = 512; /* mesaure in Kb */
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
 #ifdef alpha_osf
-static const int stackstart = 256 * 1024 * 1024;
-static const int heapstart  = 512 * 1024 * 1024;
+const int stackstart = 256 * 1024 * 1024;
+const int heapstart  = 512 * 1024 * 1024;
 #endif
 #ifdef solaris 
-static const int stackstart = 256 * 1024 * 1024;
-static const int heapstart  = 512 * 1024 * 1024;
+const int stackstart = 256 * 1024 * 1024;
+const int heapstart  = 512 * 1024 * 1024;
 #endif
 #ifdef rs_aix
-static const int stackstart = 768 * 1024 * 1024;
-static const int heapstart  = 780 * 1024 * 1024;
+const int stackstart = 768 * 1024 * 1024;
+const int heapstart  = 780 * 1024 * 1024;
 #endif
 
 int pagesize = 0;

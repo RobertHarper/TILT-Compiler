@@ -8,24 +8,29 @@
 
 
 /* Check that pointer is either a tag, a global, or a current heap value */
-int ptr_check(value_t pointer, Heap_t *curHeap)
+int ptr_check(value_t *loc, Heap_t *curHeap)
 {
+  value_t pointer = *loc;
   if (IsConstructorData(pointer))
     return 1;
   if (IsGlobalData(pointer))
     return 1;
   if (curHeap != NULL && pointer >= curHeap->bottom && pointer < curHeap->alloc_start)
     return 1;
-  printf("ptr_check %d failed\n",pointer);
+  printf("TRACE ERROR: ptr_check %d at %d failed\n",pointer,loc);
   return 0;
 }
 
+extern int heapstart;
 
 /* If i looks like a printer, issue a warning. */
-int data_check(value_t i, Heap_t *curHeap)
+int data_check(value_t *loc, Heap_t *curHeap)
 {
+  value_t i = *loc;
   if (curHeap != NULL && i >= curHeap->bottom && i < curHeap->alloc_start)
-    printf("TRACE WARNING: data_check given int that looks like a pointer %d\n", i);
+    printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
+  else if (i > heapstart)
+    printf("TRACE WARNING: data_check given int that is large enough to be pointer %d\n", i);
   return 1;
 }
 
@@ -48,7 +53,7 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 	int len = GET_RECLEN(tag);
 	int mask = GET_RECMASK(tag);
 	if (mask >> len) 
-	  printf("Bad record tag %d\n", tag);
+	  printf("TRACE ERROR: Bad record tag %d\n", tag);
 	if (!checkonly)
 	  printf("%ld: REC(%d)    ", obj,len);
 	for (i=0; i<len; i++) {
@@ -57,12 +62,12 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 	  if (isPointer) {
 	    if (!checkonly)
 	      printf("P(%5d)  ",field);
-	    ptr_check(field,curHeap);
+	    ptr_check(obj+i,curHeap);
 	  }
 	  else {
 	    if (!checkonly)
 	      printf("I(%5d)  ",field);
-	    data_check(field,curHeap);
+	    data_check(obj+i,curHeap);
 	  }
 	}
 	if (!checkonly)
@@ -110,29 +115,33 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 	  assert(0);
 
 	for (i=0; i<((type==IARRAY_TAG)?wordlen:loglen); i++) {
+	  if (!checkonly && ((i) / 8 * 8) == (i) && (i != 0))
+	    printf("        ");
 	  switch (type) {
 	    case IARRAY_TAG: {
 	      value_t field = obj[i];
 	      if (!checkonly)
 		printf("I(%ld)  ",field);
-	      data_check(field,curHeap);
+	      data_check(obj+i,curHeap);
 	      break;
 	    }
 	    case PARRAY_TAG: {
 	      value_t field = obj[i];
 	      if (!checkonly)
-		printf("%ld     ",field);
-	      ptr_check(field,curHeap);
+		printf("%ld   ",field);
+	      ptr_check(obj+i,curHeap);
 	      break;
 	    }
 	    case RARRAY_TAG: {
 	      if (!checkonly)
-		printf("%lf     ",((double *)obj)[i]);
+		printf("%lf   ",((double *)obj)[i]);
 	      break;
 	    }
 	  default : 
 	    assert(0);
 	  }
+	  if (!checkonly && ((i+1) / 8 * 8) == (i+1))
+	    printf("\n");
 	}
 	if (wordlen == 0)
 	  end = obj + 1;
@@ -144,8 +153,9 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
       if (!checkonly)
 	printf("%ld: SKIP\n", start);
       end = obj;
+      break;
     default:
-      printf("\ntag = %d(%d)  at add = %d",tag,GET_TYPE(tag),s);
+      printf("\ntag = %d(%d)  at add = %d\b",tag,GET_TYPE(tag),s);
       BUG("IMPOSSIBLE\n");
       break;
     }
@@ -153,20 +163,9 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 }
 
 
-void show_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *curHeap)
-{
-  if (NumGC < LEAST_GC_TO_CHECK)
-    return;
-  printf("--------------HEAP SHOW START GC %d ------------------------------\n",NumGC);
-  printf("%s %d <= %d < %d\n",label,start,finish,top);
-  printf("--------------------------------------------------------------\n");
-  while (start < finish)
-      start = show_obj(start,0,curHeap);
-  printf("--------------HEAP SHOW END-----------------------------------\n\n");
-}
 
 
-void check_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *curHeap)
+void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *curHeap, int show)
 {
   if (NumGC < LEAST_GC_TO_CHECK)
     return;
@@ -174,7 +173,7 @@ void check_heap(char *label, value_t start, value_t finish, value_t top, Heap_t 
   printf("%s %d <= %d < %d\n",label,start,finish,top);
   printf("--------------------------------------------------------------\n");
   while (start < finish)
-      start = show_obj(start,1,curHeap);
+      start = show_obj(start,!show,curHeap);
   printf("--------------HEAP CHECK END-----------------------------------\n\n");
 }
 

@@ -9,10 +9,10 @@
 
 #include "tag.h"
 #include "queue.h"
-#include "show.h"
 #include "gc.h"
 #include "memobj.h"
 #include "thread.h"
+#include "show.h"
 #ifdef alpha_osf
 #include <c_asm.h>
 #endif

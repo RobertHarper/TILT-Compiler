@@ -66,13 +66,23 @@ struct
      m and n denote the number of non value-carrying components and n
      the number of value-carrying components.  There are various cases.
 
+     INVARIANT: Values of sum type always look like pointers or tags, but not an int.
+
          1. n=0         we use a tag to represent the datatype
-	 2. m=0, n=1    we use the argument type to represent the datatype; 
 	 3. m>0, n=1    we use a tag for the non-carriers;
 	                the carrier is boxed only if the carried type might look like a tag 
 			(e.g., ints, sums, mu's)
          4. n>1         we use tags for the non-carriers and box all carriers
 
+     NOTE: It might seem that we can further specialize the case where m=0 and n=1
+           where the sum is represented by the type carried by the one constructor.
+	   This is possible at some additional complexity:
+	   (1) Sums might look like ints now.
+	   (2) The GC must now decode sum types to check for this case.
+	       This potentially requires repeated decoding of nested sum types
+	       and mu types.  The current representation of mu types is that
+	       it is a base case and has a pointer type which is possible 
+	       because we only have mu's of sums.
   *)
 
     (* (1) Falls through to nobox case 
@@ -107,9 +117,7 @@ struct
 		  val desti = alloc_regi(niltrace2rep state trace)
 	      in  if (needs_boxing state field_type)
 		  then 
-		      let val rep = valloc2rep term
-		      in  make_record(state,[rep],[term])
-		      end
+		      make_record(state,[term])
 		  else 
 		      (term,state)
 	      end
@@ -117,18 +125,14 @@ struct
 	  fun multi () =
 	      let val SOME term = term_opt
 		  val terms = [VALUE(INT field_sub), term]
-		  val reps = map valloc2rep terms
-	      in make_record(state,reps,terms)
+	      in make_record(state,terms)
 	      end
 	  
-      in  if is_tag
-	      then (VALUE(TAG known), state)
-	  else (case (tagcount,nontagcount) of
-		    (0w0, 1) => let val SOME term = term_opt
-				in  (term, state)
-				end
-		  | (_, 1) => single()
-		  | _ => multi())
+      in  (case (is_tag, nontagcount) of
+	       (true, _) => (VALUE(TAG known), state)
+	     | (_, 0) => error "Can't get here"
+	     | (_, 1) => single()
+	     | _ => multi())
       end
 
 
@@ -155,7 +159,7 @@ struct
 		   add_instr(BR afterl))
 	  (* box case *)
 	  val _ = add_instr(ILABEL boxl)
-	  val (lv,state) = make_record(state,[valloc2rep exp_varloc],[exp_varloc])
+	  val (lv,state) = make_record(state,[exp_varloc])
 	  val rec_ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(rec_ir,desti))
 
@@ -177,7 +181,7 @@ struct
 
 	  val dest = alloc_regi(niltrace2rep state trace)
 	  val vls = [VALUE(INT field_sub),exp_varloc]
-	  val (lv,state1) = make_record(state,map valloc2rep vls,vls)
+	  val (lv,state1) = make_record(state,vls)
 	  val ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(ir,dest))
 	      
@@ -231,7 +235,6 @@ struct
 	      end
 	  val state = (case (tagcount,nontagcount) of
 			   (_, 0) => error "xproject_sum_dybnamic projecting from non-carrier"
-			 | (0w0, 1) => (add_instr(MV(exp_ir,desti)); state)
 			 | (_, 1) => single_case()
 			 | _ => multi_case())
 
@@ -254,7 +257,6 @@ struct
 
       in  (case (tagcount,nontagcount) of
 	       (_, 0) => error "xproject_sum_static projectin from non-carrier"
-	     | (0w0, 1) => (lv, state)
 	     | (_, 1) => let val summand_type = (List.nth(sumtypes,w2i field_sub)
 						 handle _ => error "bad project_sum: record_con")
 			 in  if (needs_boxing state summand_type)

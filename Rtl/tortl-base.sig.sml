@@ -88,7 +88,7 @@ sig
    val simplify_type : state -> con -> bool * con
    val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
    val niltrace2rep : state -> Nil.niltrace -> rep
-   val valloc2rep : term -> rep
+   val term2rep : term -> rep
    val type_of : state -> exp -> con
    val std_kind_of : state -> con -> kind
 

@@ -5,7 +5,6 @@
 
 #include "tag.h"
 #include "queue.h"
-#include "show.h"
 #include "forward.h"
 #include "gc.h"
 #include "thread.h"
@@ -14,7 +13,7 @@
 #include "bitmap.h"
 #include "stats.h"
 #include "gcstat.h"
-
+#include "show.h"
 
 
 
@@ -266,7 +265,7 @@ static void stop_copy(SysThread_t *sysThread)
       /* Check the tospace heap - zero out all of fromspace */
       if (paranoid) {
 	value_t *from_alloc = (value_t *)fromheap->bottom;
-	paranoid_check_heap(fromheap,toheap);
+	scan_heap("Scan Heap",fromheap->bottom,fromheap->alloc_start,fromheap->top,fromheap,0);
 	while (from_alloc < (value_t *)fromheap->top)
 	  *(from_alloc++) = 0;
       }
