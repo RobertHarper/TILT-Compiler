@@ -90,7 +90,7 @@ mkdir $bugno
 	field 'Comments:    ' '<additional comments>' ''
 	field 'Fix:         ' '<optional - but you get extra credit>' ''
 	field 'Test: ' '*' ''
-	field 'Owner: ' '*' `{whoami}
+	field 'Owner: ' '*' ''
 	echo 'Status: open'
 } > $bugno/description
 run cvs add $bugno
