@@ -20,7 +20,6 @@ structure Intersect : INTERSECT =
     type result = l1 * (unit -> l2) * (unit -> l3)
 
     val invert    = Matrix.invert
-    val apply     = Matrix.applyV3
 
     val dot       = Vect.dp 
     val distance  = Vect.distance
@@ -42,9 +41,9 @@ structure Intersect : INTERSECT =
 
     (* Where does the plane y=0 transformed by m4 intersect the vector originating from src0 in the direction of dir0 *)
     fun plane (m4, src0, dir0) = (* Plane is Ax + By + Cz = D *)
-	let val newOrigin = v4tov3 (Matrix.apply(m4, (0.0, 0.0, 0.0, 1.0)))
-	    val newNormalPoint = v4tov3 (Matrix.apply(m4, (0.0, 1.0, 0.0, 1.0)))
-	    val N = makeDir(newOrigin, newNormalPoint)
+	let val newOrigin = Matrix.applyPoint(m4, (0.0, 0.0, 0.0))
+	    val oldNormal = (0.0, 1.0, 0.0)
+	    val N = normalize(Matrix.applyVector (m4, oldNormal))
 	    val D = dp(N, newOrigin)
 	    val numerator = D - dp(N, src0)
 	    val denominator = dp(N, dir0)
@@ -69,16 +68,18 @@ structure Intersect : INTERSECT =
 				     end
 		     val l2 = memoize l2
 		     fun l3() : l3 = let val [{hit, dist}] = l2()
-				    val (u,_,v) = v4tov3(Matrix.apply(Matrix.invert m4, v3tov4 hit))
-				    val tPos = t > 0.0
-				    val dpNeg = dp(dir0, N) < 0.0
-				    val N = if ((tPos andalso dpNeg) orelse
-						(not tPos andalso not dpNeg))
-						then N
-					    else negate N
-				in  [{u = u, v = v, face = 0, N = N,
-				      hit = hit, dist = dist}]
-				end
+					 val _ = (print "plane hit at "; printV3 hit; print "\n")
+					 val _ = (print "forward transform is:\n"; Matrix.printM4 m4; print "\n")
+					 val (u,_,v) = Matrix.applyPoint(Matrix.invert m4, hit)
+					 val tPos = t > 0.0
+					 val dpNeg = dp(dir0, N) < 0.0
+					 val N = if ((tPos andalso dpNeg) orelse
+						     (not tPos andalso not dpNeg))
+						     then N
+						 else negate N
+				     in  [{u = u, v = v, face = 0, N = N,
+					   hit = hit, dist = dist}]
+				     end
 		     val l3 = memoize l3
 		 in  if (t < 0.0)
 			 then noIntersect
@@ -92,9 +93,10 @@ structure Intersect : INTERSECT =
     fun sphere (M: m4,orig:v3,dir:v3) : result = 
       let
 	local
+
 	  fun l2info p = 
 	    let 
-	      val hit = apply (M,p)
+	      val hit = Matrix.applyPoint (M,p)
 	      val dist = distance (orig,hit)
 	    in {hit = hit,dist = dist}
 	    end
@@ -131,8 +133,8 @@ structure Intersect : INTERSECT =
 	end
 
 	val M' = invert M
-	val orig_oc as (x0,y0,z0) = apply (M',orig)
-	val dir_oc  as (xd,yd,zd) = apply (M',dir)
+	val orig_oc as (x0,y0,z0) = Matrix.applyPoint (M',orig)
+	val dir_oc  as (xd,yd,zd) = Matrix.applyVector (M',dir)
 
 	fun intersect t = (x0 + t*xd, 
 			   y0 + t*yd,
@@ -143,28 +145,79 @@ structure Intersect : INTERSECT =
 	val c = dot (orig_oc,orig_oc) - 1.0        (*x0*x0 + y0*y0 + z0*z0 - 1.0*)
 	val disc = b*b - 4.0*a* c
       in
-	if iszero disc then 
+	if iszero disc then              (* ray is tangent *)
 	  let val t = ~b / (2.0*a)
 	  in if t < 0.0 then NO ()
 	     else YES [intersect t]
 	  end
-	else if disc < 0.0 then NO ()
+	else if disc < 0.0 then NO ()    (* ray does not hit sphere *)
 	else 
 	  let
 	    val d = Math.sqrt disc
 	    val t0 = (~b + d) / (2.0*a)
 	    val t1 = (~b - d) / (2.0*a)
 	  in
-	    if t0 < 0.0 then NO ()     (* t0 is always larger then t1*)
-	    else if t1 < 0.0 then YES [intersect t0]
-	    else YES [intersect t1,intersect t0]
+	    if t0 < 0.0 then NO ()     (* t0 is always larger then t1*) (* both points behind us *)
+	    else if t1 < 0.0 then YES [intersect t0]                    (* inside sphere *)
+	    else YES [intersect t1,intersect t0]                        (* both points in front of us *)
 	  end
       end
 
-    fun dummy _ : result = raise Div
 
-    val cylinder : m4 * v3 * v3 -> result = dummy
-    val cube     : m4 * v3 * v3 -> result = dummy
-    val cone     : m4 * v3 * v3 -> result = dummy
+
+    fun cube (M: m4,orig:v3,dir:v3) : result = 
+      let
+
+	  val bottom = Matrix.ident
+	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)
+	  val left = Matrix.rotzM(90.0,Matrix.ident)
+	  val right = Matrix.translateM(1.0,0.0,0.0,left)
+	  val front = Matrix.rotxM(~90.0,bottom)
+	  val back = Matrix.translateM(0.0,0.0,1.0,front)
+
+	  val bottom = M
+	  val top = Matrix.combine(M, top)
+	  val left = Matrix.combine(M, left)
+	  val right = Matrix.combine(M, right)
+	  val front = Matrix.combine(M, front)
+	  val back = Matrix.combine(M, back)
+
+	  fun doFace (p,face) = 
+	      let val (hit, _, l3) = plane(p, orig, dir)
+	      in  if (hit)
+		      then
+			  let val [{u,v,face=_,N,hit,dist}] = l3()
+			      val _ = (print "hit cube plane  u = "; printR u; print "   v = "; printR v; print "\n")
+			  in  if (u >= 0.0 andalso u < 1.0 andalso
+				  v >= 0.0 andalso v < 1.0)
+				  then [{u=u,v=v,face=face,N=N,hit=hit,dist=dist}]
+			      else []
+			  end
+		  else []
+	      end
+
+	  fun l3() = 
+	      let val res = (doFace(front, 0)) @  
+		            (doFace(back, 1))  @ 
+			    (doFace(left, 2)) @ 
+		            (doFace(right, 3)) @ 
+			    (doFace(top, 4)) @ 
+		            (doFace(bottom, 5)) 
+	      in  res
+	      end
+	  val l3 = memoize l3
+	  fun l2() = let fun get{hit,dist,u,v,face,N} = {hit=hit,dist=dist}
+		     in  map get (l3())
+		     end
+
+	  val res = l3()
+      in  if (null res)
+	      then noIntersect
+	  else (true, l2, l3)
+      end
+
+
+    fun cylinder _ = raise (Base.Unimplemented "no cylinder")
+    fun cone _ = raise (Base.Unimplemented "no cone")
 
   end

@@ -2,7 +2,7 @@
 structure Base = 
 struct
 
-    exception Unimplemented
+    exception Unimplemented of string
     exception Eval of string
 
     type m4 = Matrix.m4

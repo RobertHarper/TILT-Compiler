@@ -5,7 +5,8 @@ structure Render : RENDER =
     open Intersect
     open Vect
     exception Error of string
-	
+
+    val chat = ref 0	
     val i2r = Real.fromInt
     val black = (0.0, 0.0, 0.0)
 
@@ -31,9 +32,9 @@ structure Render : RENDER =
 	let val (t,name,(hit,l2,l3)) = (case obj of
 				  Sphere (name, m4,t) => (t,name,sphere(m4,src,dir))
 				| Plane (name, m4,t) => (t,name,plane(m4,src,dir))
-				| Cube (name, m4,t) => (t,name,cylinder(m4,src,dir))
-				| Cone (name, m4,t) => (t,name,cube(m4,src,dir))
-				| Cylinder (name, m4,t) => (t,name,cone(m4,src,dir))
+				| Cube (name, m4,t) => (t,name,cube(m4,src,dir))
+				| Cone (name, m4,t) => (t,name,cone(m4,src,dir))
+				| Cylinder (name, m4,t) => (t,name,cylinder(m4,src,dir))
 				| _ => raise (Error "primIntersect for non-primitive object"))
 	in  if hit
 		then map (fn info => (t, name, info)) (l3 ())
@@ -44,9 +45,9 @@ structure Render : RENDER =
 	#1 (case obj of
 		Sphere (_, m4, _) => sphere(m4,src,dir)
 	      | Plane (name, m4, _) => plane(m4,src,dir)
-	      | Cube (name, m4, _) => cylinder(m4,src,dir)
-	      | Cone (name, m4, _) => cube(m4,src,dir)
-	      | Cylinder (name, m4, _) => cone(m4,src,dir)
+	      | Cube (name, m4, _) => cube(m4,src,dir)
+	      | Cone (name, m4, _) => cone(m4,src,dir)
+	      | Cylinder (name, m4, _) => cylinder(m4,src,dir)
 	      | _ => raise (Error "primIntersect for non-primitive object"))
 
     fun shadowed (hit, dir, []) = false
@@ -66,21 +67,25 @@ structure Render : RENDER =
     fun cast (apply, Ia, viewerPos, dir, scene, lights, 0) : color =  black
       | cast (apply, Ia, viewerPos, dir, scene, lights, depth) : color =  
 	let 
-(*	    val _ = say "." *)
-(*	    val _ = (print "Casting in direction "; printV3 dir; print "\n") *)
+	    val _ = if (!chat >= 1)
+			then say "." else ()
+	    val _ = if (!chat >= 2)
+			then (print "Casting in direction "; printV3 dir; print "\n") 
+		    else ()
 	    val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
 	    fun greater ((_,_,{dist=d1,...}:l3info),
 			 (_,_,{dist=d2,...}:l3info)) = d1 > d2
 	    val intersects = ListMergeSort.sort greater intersects
-(*
-	    val _ = for (0, (length intersects),
-			 fn i => let val intersect = List.nth(intersects, i)
-				     val (_,name,{hit, dist, u,v,face,N}) = intersect
-				 in   (print "Intersect #"; print (Int.toString i);
-				       print " at distance "; printR dist;
-				       print " and intersection "; printV3 hit; print "\n")
-				 end)
-*)
+	    val _ = if (!chat >= 2)
+			then for (0, (length intersects),
+				  fn i => let val intersect = List.nth(intersects, i)
+					      val (_,name,{hit, dist, u,v,face,N}) = intersect
+					  in   (print "Intersect #"; print (Int.toString i);
+						print " with face "; print (Int.toString face);
+						print " at distance "; printR dist;
+						print " and intersection "; printV3 hit; print "\n")
+					  end)
+		    else ()
 	in  if (null intersects)
 		then black
 	    else let val (t, name, {u,v,face,N,hit,dist}) = hd intersects
@@ -131,7 +136,9 @@ structure Render : RENDER =
 						  upperLeftY - (i2r row + 0.5) * pixelSize, 1.0)
 				  val dir = normalize toScreen
 				  val _ = if (col mod 10 = 0) then say "!" else ()
-(*				  val _ = (print "\nDrawing pixel: "; printV3 toScreen; print "\n") *)
+				  val _ = if (!chat >= 1)
+					      then (print "\nDrawing pixel: "; printV3 toScreen; print "\n") 
+					  else ()
 				  val color = cast (apply, amb, viewPos, dir, scene, lights, depth)
 			      in  Ppm.pxl(col,row,Ppm.colortorgb color, image)
 			      end)))

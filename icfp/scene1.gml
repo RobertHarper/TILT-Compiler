@@ -1,16 +1,9 @@
 
 % Our first scene! - Tom 7, Team Fixed-point
 
-% Get file with:
-%   val str = (Stdin.stdintostring ())
-%   (paste this file)
-% Or with:
-%   val str = ParseString.file2string "scene1.gml"
-% val parse = ParseString.parse string
-% val res = Eval.eval (valOf parse) 
-%           handle Base.Eval s => (print s; raise Base.Eval s)
-% <- probably want to patch this to call render instead of
-%    raising an exception!
+% yellow ceiling, green floor, red wall ahead, blue wall to left
+
+% Test with: Top.runFile <name of this file>
 
 % /q is used to delete arguments from the stack
 % without using them.
@@ -34,12 +27,12 @@
 [ ]   % lights (none!)
 
 % wall facing us (z=0), push back
-red solid-color apply "red back wall" plane 
+red solid-color apply plane 
         90.0 rotatex
         0.0 0.0 5.0 translate 
 
 % wall to our left, (x=0), push left
-blue solid-color apply "blue left wall" plane
+blue solid-color apply plane
         90.0 rotatez
 	-3.0 0.0 0.0 translate
 
@@ -63,8 +56,8 @@ union
 
 1     % depth
 90.0  % fov
-50   % width
-50   % height
+100   % width
+100   % height
 "scene1.ppm"   % file output
 
 render

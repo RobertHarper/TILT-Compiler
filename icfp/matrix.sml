@@ -20,6 +20,21 @@ struct
   val cos = Math.cos
   fun d2r angle = angle * (Math.pi / 180.0)
 
+  val printR = Vect.printR
+  fun printM4 (((a1,a2,a3,a4,
+		 b1,b2,b3,b4,
+		 c1,c2,c3,c4,
+		 d4),_) : m4) = 
+      let val d1 = 0.0
+	  val d2 = 0.0
+	  val d3 = 0.0
+      in  (print "["; 
+	   printR a1; print ", "; printR a2; print ", "; printR a3; print ", "; printR a4; print ",\n";
+	   printR b1; print ", "; printR b2; print ", "; printR b3; print ", "; printR b4; print ",\n"; 
+	   printR c1; print ", "; printR c2; print ", "; printR c3; print ", "; printR c4; print ",\n";
+	   printR d1; print ", "; printR d2; print ", "; printR d3; print ", "; printR d4; print "]\n")
+      end
+  
   val ident =
     ((1.0, 0.0, 0.0, 0.0,
       0.0, 1.0, 0.0, 0.0,
@@ -94,10 +109,10 @@ struct
      a44*w)
     
     
-  fun applyV3(((a11, a12, a13, a14,
-		a21, a22, a23, a24,
-		a31, a32, a33, a34,
-		a44), _):m4, (x, y, z):v3):v3 =
+  fun applyPoint(((a11, a12, a13, a14,
+		   a21, a22, a23, a24,
+		   a31, a32, a33, a34,
+		   a44), _):m4, (x, y, z):v3):v3 =
     let
       val w = a44
     in
@@ -105,6 +120,20 @@ struct
        (a24 + a21*x + a22*y + a23*z)/w,
        (a34 + a31*x + a32*y + a33*z)/w)
     end
+
+  fun applyVector(((a11, a12, a13, a14,
+		   a21, a22, a23, a24,
+		   a31, a32, a33, a34,
+		   a44), _):m4, (x, y, z):v3):v3 =
+    (* applyVector v = applyPoint v - applyPoint origin *)
+    let
+      val w = a44
+    in
+      ((a11*x + a12*y + a13*z)/w,
+       (a21*x + a22*y + a23*z)/w,
+       (a31*x + a32*y + a33*z)/w)
+    end
+
 
   fun combine(((a11, a12, a13, a14,
 		a21, a22, a23, a24,

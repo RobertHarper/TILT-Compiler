@@ -4,7 +4,7 @@ struct
 
     open Base
 
-    val real_render : (stack -> stack) ref = ref (fn _ => raise Unimplemented)
+    val real_render : (stack -> stack) ref = ref (fn _ => raise (Unimplemented "real_render empty"))
 
 structure T :> 
     sig
@@ -14,8 +14,7 @@ structure T :>
     end =
 struct
 
-    fun u (s : stack) = 
-	(raise Unimplemented; s)
+    fun u (s : stack) = (raise (Unimplemented "u (render) called"); s)
 
     fun addi ((Int n2) :: (Int n1) :: s) = (Int (n2 + n1)) :: s
     fun addf ((Real n2) :: (Real n1) :: s) = (Real (n2 + n1)) :: s
