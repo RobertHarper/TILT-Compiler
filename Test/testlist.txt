@@ -221,7 +221,7 @@ m0057	pass	tabulation of vectors
 m0058	pass	command line
 m0059	pass	signature constraints
 m0060	fail	infinite integer conversion tests
-m0061	fail	[Bug #0122] infinite integers
+m0061	fail	infinite integers
 m0062	pass	mutual recursion
 m0063	pass	exhaustiveness
 m0064	pass	exceptions
