@@ -1,10 +1,6 @@
 (*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay *)
 
-structure Compiler
-    :> COMPILER
-        where type il_module = LinkIl.module
-	where type nil_module = Nil.module
-	where type rtl_module = Rtl.module =
+structure Compiler :> COMPILER =
 struct
 
     val error = fn x => Util.error "compiler.sml" x
@@ -137,7 +133,7 @@ struct
 	      of SOME intFile' =>
 		  let val (_,fp2, _, specs) = LinkParse.parse_inter intFile'
 		      val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
-		      val _ = Help.chat ("Not compatiable with our notion of freshness.]\n")
+		      val _ = Help.chat ("Not compatible with our notion of freshness.]\n")
 		      val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
 		  in elab_constrained(unit,ctxt,smlFile,fp,dec,fp2,specs,targetIlFile,Time.zeroTime)
 		  end
