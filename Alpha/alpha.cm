@@ -1,11 +1,11 @@
 Group is
 
-smlnj-lib.cm             (* ------ SML/NJ library ------- *)
-Util/util.cm             (* ------ Our own utilities ---- *)
-Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
-Nil/nil.cm               (* ------ Nil Stuff ------------ *)
-Rtl/rtl.cm
-Backend/backend.cm
+../smlnj-lib.cm             (* ------ SML/NJ library ------- *)
+../Util/util.cm             (* ------ Our own utilities ---- *)
+../Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
+../Nil/nil.cm               (* ------ Nil Stuff ------------ *)
+../Rtl/rtl.cm
+../Backend/backend.cm
 
 decalpha.sig.sml
 decalpha.sml

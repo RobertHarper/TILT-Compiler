@@ -1,9 +1,9 @@
 Group is
 
-smlnj-lib.cm             (* ------ SML/NJ library ------- *)
-Util/util.cm             (* ------ Our own utilities ---- *)
-Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
-Nil/nil.cm               (* ------ Nil Stuff ------------ *)
+../smlnj-lib.cm             (* ------ SML/NJ library ------- *)
+../Util/util.cm             (* ------ Our own utilities ---- *)
+../Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
+../Nil/nil.cm               (* ------ Nil Stuff ------------ *)
 
 (* ------ Rtl stuff ------ *)
 rtl.sig.sml

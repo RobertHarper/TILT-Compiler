@@ -30,7 +30,7 @@ fun simplify_type _ = raise XXX
 
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
-    val error = fn s => (error "tortl.sml" s)
+    val error = fn s => (Util.error "tortl.sml" s)
     structure W32 = TilWord32
     structure W64 = TilWord64
 
@@ -947,7 +947,9 @@ fun simplify_type _ = raise XXX
 		  end
 		  fun char_packager vals = 
 		      let fun getword(Const_e(uint(_,w))) = TilWord64.toUnsignedHalf w
-			    | getword _ = error "bad string"
+			    | getword v = (print "bad character in vector: ";
+					   Ppnil.pp_exp v; print "\n";
+					   error "bad string")
 			  val (a,b,c,d) = (case (map getword vals) of
 					       [a,b,c,d] => (a,b,c,d)
 					     | [a,b,c] => (a,b,c,W32.zero)
@@ -1317,17 +1319,20 @@ fun simplify_type _ = raise XXX
 					  case default of
 					      NONE => no_match()
 					    | SOME e => mv(xexp'(fresh_var(),e,arg_c,context)))
-			| scan(lab,(i,Function(_,_,_,[(v,spcon)],_,body,con))::rest) = 
+			| scan(lab,(i,Function(_,_,_,elist,_,body,con))::rest) = 
 			  let val next = alloc_code_label()
 			      val test = alloc_regi(NOTRACE_INT)
 			      val _ = add_instr(ILABEL lab)
 			      val tag = if (TilWord32.ult(i,tagcount))
 					    then r
-					else let val tag = alloc_regi(NOTRACE_INT)
-						 val _ = add_var(v,I r,spcon)
-					     in  (add_instr(LOAD32I(EA(r,0),tag));
-						  tag)
-					     end
+					else (case elist of
+						  [(v,spcon)] =>
+						      let val tag = alloc_regi(NOTRACE_INT)
+							  val _ = add_var(v,I r,spcon)
+						      in  (add_instr(LOAD32I(EA(r,0),tag));
+							   tag)
+						      end
+						| _ => error "bad function for carrier case of sum switch")
 			  in  if in_imm_range(w2i i) then
 			      add_instr(CMPSI(EQ,tag,IMM(w2i i),test))
 			      else 
