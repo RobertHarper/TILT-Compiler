@@ -106,6 +106,72 @@ structure Intersect : INTERSECT =
       in (disc,roots)
       end
 
+   fun cone (M: m4,orig:v3,dir:v3) : result = 
+      let
+	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)
+	  val top = Matrix.combine(M, top)
+
+	  fun l3() = 
+	      let val baseResult = 
+		  let val (hit, _, l3) = plane(top, orig, dir)
+		  in  if hit
+			  then
+			      let val [{u,v,face=_,N,hit,dist}] = l3()
+			      in  if (u*u+v*v > 1.0)
+				      then []
+				  else let val u' = (u + 1.0) / 2.0
+					   val v' = (v + 1.0) / 2.0
+(*
+					   val _ = (print "u  = "; printR u;  print "v  = "; printR v; print "\n")
+					   val _ = (print "u' = "; printR u';  print "v' = "; printR v'; print "\n")
+*)
+				       in  [{u=u',v=v',face=1,N=N,hit=hit,dist=dist}]
+				       end
+			      end
+		      else []
+		  end
+		  val sideResult = 
+		      let val M' = invert M
+			  val orig' as (px,py,pz) = Matrix.applyPoint (M',orig)
+			  val dir'  as (dx,dy,dz) = Matrix.applyVector (M',dir)
+			  val A = dx*dx - dy*dy + dz*dz
+			  val B = 2.0 * (px*dx - py*dy + pz*dz)
+			  val C = px*px - py*py + pz*pz
+			  val (disc,roots) = quad(A,B,C)
+			  fun getRes t = 
+			      let val hit' = add(orig', scale(t, dir'))
+				  val (hitx', hity', hitz') = hit'
+				  val v = hity'
+(*				  val _ = (print "v = "; printR v; print "\n") *)
+			      in  if (v <= 0.0 orelse v >= 1.0)
+				      then NONE
+				  else let val (vSinu, _, vCosu) = hit'
+					   val narrowConv = 0.999999999999
+					   val uRadPrin = if (Real.abs vSinu > 0.3)
+							      then Math.asin (narrowConv * vSinu / v)
+							  else Math.acos (narrowConv * vCosu / v)
+					   val uDegPrin = rad2deg uRadPrin
+					   val u = if (vSinu > 0.0) then uDegPrin else uDegPrin + 180.0
+					   val hit = Matrix.applyPoint(M, hit')
+					   val dist = (if t > 0.0 then 1.0 else ~1.0) * (distance(orig, hit))
+					   val N' = (hitx', hitz', ~hity')  (* Differentiate x*x - y*y + z*z component-wise *)
+					   val N = normalize(Matrix.applyVector(M, N'))
+				       in  SOME {u=u,v=v,face=0,N=N,hit=hit,dist=dist}
+				       end
+			      end
+		      in  List.mapPartial getRes roots
+		      end
+	      in  baseResult @ sideResult
+	      end
+	  val l3 = memoize l3
+	  fun l2() = let fun get{hit,dist,u,v,face,N} = {hit=hit,dist=dist}
+		     in  map get (l3())
+		     end
+	  val res = l3()
+      in  if (null res)
+	      then noIntersect
+	  else (true, l2, l3)
+      end
 
     fun sphere (M: m4,orig:v3,dir:v3) : result = 
       let
@@ -181,6 +247,9 @@ structure Intersect : INTERSECT =
 
 
 
+
+
+
     fun cube (M: m4,orig:v3,dir:v3) : result = 
       let
 
@@ -235,6 +304,5 @@ structure Intersect : INTERSECT =
 
 
     fun cylinder _ = raise (Base.Unimplemented "no cylinder")
-    fun cone _ = raise (Base.Unimplemented "no cone")
 
   end
