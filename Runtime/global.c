@@ -27,7 +27,6 @@ extern unsigned long _end;
 value_t DivideByZeroExn = 0;
 value_t OverflowExn = 0;
 value_t datastart, dataend;
-double FPTOFROMINT;
 
 /* Little allocation area for data allocated by the runtime. */
 static value_t RuntimeGlobalData_Start;
