@@ -365,7 +365,8 @@ struct
 	      | is_open_internal_path (pathmap,PATH(v,labs)) = 
 		(case labs of
 		     [lab] => (case PathMap.find(pathmap,(v,[])) of
-				   NONE => raise Div
+				   NONE => (print "!!!Could not find "; pp_var v; print ": probably bug with SplayMapFn.unionWithi\n"; 
+					    false)
 				 | SOME (l,_) => is_open l andalso is_label_internal lab)
 		   | _ => let val len = length labs
 			  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
@@ -378,9 +379,11 @@ struct
 	    val _ = print "pathmap2 ok\n"
 	    val labelMap = LabelMap.unionWithi 
 		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
-			     if (is_open_internal_path(pm1,p1) handle e => (print "first\n"; pp_context ctxt; 
-									    print "\n\n\n"; false) orelse 
-				 is_open_internal_path(pm2,p2) handle e => (print "second\n"; false))
+			     if (is_open_internal_path(pm1,p1) orelse
+				 is_open_internal_path(pm2,p2) orelse
+				 is_open_internal_path(pm1,p2) orelse   (* last two are needed only if there's a bug in 
+									   SplayMapFn.unionWithi *)
+				 is_open_internal_path(pm2,p1))
 				 then second
 			     else (print "p1 = "; pp_path p1; print " :\n";
 				   pp_phrase_class pc1; print "\n\n";
@@ -416,7 +419,6 @@ struct
 				print "ce2 is "; app (fn (c,e) => (pp_exp e; print ":"; pp_con c; print "\n")) ce2; print "\n";
 *)				ce_add(almostFinalContext,ce1, ce2)))
 			      (om1,om2)
-(*	    val _ = print "!!JUST MADE overloadmap!!\n" *)
 	in  (pctxt_option,
 	     CONTEXT{fixityMap = fixityMap,
 		     overloadMap = overloadMap,
