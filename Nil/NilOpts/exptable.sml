@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil Int *)
+(*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil Int TraceInfo *)
 
 (* Basically revamped from old version of Til *)
 (* This sucks.  There's got to be better ways to do this.
@@ -258,6 +258,49 @@ struct
     end
 	
 
+    fun cmp_ti ti =
+      (case ti 
+	 of (TraceInfo.Trace,TraceInfo.Trace) => EQUAL
+	  | (TraceInfo.Trace,_) => GREATER
+	  | (_,TraceInfo.Trace) => LESS
+
+	  | (TraceInfo.Unset,TraceInfo.Unset) => EQUAL
+	  | (TraceInfo.Unset,_) => GREATER
+	  | (_,TraceInfo.Unset) => LESS
+
+	  | (TraceInfo.Notrace_Int, TraceInfo.Notrace_Int) => EQUAL
+	  | (TraceInfo.Notrace_Int, _) => GREATER
+	  | (_, TraceInfo.Notrace_Int) => LESS
+
+	  | (TraceInfo.Notrace_Code, TraceInfo.Notrace_Code) => EQUAL
+	  | (TraceInfo.Notrace_Code, _) => GREATER
+	  | (_, TraceInfo.Notrace_Code) => LESS
+
+	  | (TraceInfo.Notrace_Real, TraceInfo.Notrace_Real) => EQUAL
+	  | (TraceInfo.Notrace_Real, _) => GREATER
+	  | (_, TraceInfo.Notrace_Real) => LESS
+
+	  | (TraceInfo.Label, TraceInfo.Label) => EQUAL
+	  | (TraceInfo.Label, _) => GREATER
+	  | (_, TraceInfo.Label) => LESS
+
+	  | (TraceInfo.Locative, TraceInfo.Locative) => EQUAL
+	  | (TraceInfo.Locative, _) => GREATER
+	  | (_, TraceInfo.Locative) => LESS
+
+	  | (TraceInfo.Compute (v1,l1), TraceInfo.Compute (v2,l2)) => cmp_orders[cvar_cmp (v1,v2),cmp_list Name.compare_label (l1,l2)])
+
+    fun cmp_tr p = 
+      (case p
+	 of (TraceUnknown, TraceUnknown) => EQUAL
+	  | (TraceUnknown, _)  => GREATER
+	  | (_,TraceUnknown)    => LESS
+	  | (TraceCompute v1,TraceCompute v2 ) => cvar_cmp (v1,v2)
+	  | (TraceCompute _, _) => GREATER
+	  | (_, TraceCompute _) => LESS
+	  | (TraceKnown ti1,TraceKnown ti2) => cmp_ti (ti1,ti2))
+
+
     fun cmp_primcon p = 
 	case p of 
 	    ( Int_c sz1, Int_c sz2) =>  cmp_int (hash_intsize(sz1), hash_intsize(sz2))
@@ -324,7 +367,7 @@ struct
     and cmp_bnd_list e = cmp_list cmp_bnd e
     and cmp_label_list e = cmp_list Name.compare_label e
     and cmp_conbnd_list e = cmp_list cmp_conbnd e
-
+    and cmp_tr_list e = cmp_list cmp_tr e
     and cmp_value (v1, v2) =
 	case (v1, v2) of 
 	    ( int(sz1, wd1), int(sz2, wd2) ) =>
@@ -630,10 +673,12 @@ struct
        | (Let_e _, _) => GREATER
        | (_, Let_e _ ) => LESS
 	     
-       | (Prim_e (np1, _,clist1, elist1),  (Prim_e (np2, _,clist2, elist2))) =>
+       | (Prim_e (np1, trlist1,clist1, elist1),  (Prim_e (np2, trlist2,clist2, elist2))) =>
 	     ( case cmp_allprim (np1, np2) of
 		   EQUAL => (case cmp_exp_list (elist1, elist2) of
-				 EQUAL => cmp_con_list (clist1, clist2)
+				 EQUAL => (case cmp_con_list (clist1, clist2)
+					     of EQUAL => cmp_tr_list (trlist1,trlist2)
+					      | r => r)
 			       | r => r)
 		 | r => r)
 		   
