@@ -18,6 +18,8 @@ structure Signature :> SIGNATURE =
 
     val debug = Stats.ff("SignatureDebug")
     val diag = Stats.ff("SignatureDiag")
+    val PermissiveSharing = Stats.tt("PermissiveSharing")
+
     fun msg s = if !debug then print s else ()
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
@@ -118,6 +120,12 @@ structure Signature :> SIGNATURE =
       in  foldl folder ([],[]) slots
       end
 
+  fun splitAbstract slot_pairs = 
+      let fun mapper (ABSTRACT(labs1,k1),ABSTRACT (labs2,k2)) = if eq_kind(k1,k2) then SOME [labs1,labs2] else NONE
+	    | mapper _ = NONE
+      in  List.mapPartial mapper slot_pairs
+      end
+
   fun pp_typeslot (ABSTRACT (labels,k)) = (print "ABSTRACT ";
 					   pp_lpath labels;
 					   print "  -->  ";
@@ -131,12 +139,11 @@ structure Signature :> SIGNATURE =
 
   (* this function is staged to reduce repeated selfification *)
   fun follow_labels (pathopt,sdecs,ctxt) =
-      let val signat = SIGNAT_STRUCTURE sdecs
-	  val (v,path,ctxt) = 
+      let val (v,path,ctxt) = 
 	      (case pathopt of
 		   NONE => let val v = fresh_named_var "modtemp"
 			       val path = PATH(v,[])
-			       val signat = SelfifySig ctxt (path, signat)
+			       val signat = SelfifySig ctxt (path, SIGNAT_STRUCTURE sdecs)
 			       val ctxt = add_context_mod'(ctxt,v,signat)
 			   in  (v,path,ctxt)
 			   end
@@ -297,7 +304,7 @@ structure Signature :> SIGNATURE =
 
 
       fun xsig_sharing_rewrite (ctxt,sdecs) = 
-        let val v = fresh_named_var "modtemp"
+        let val v = fresh_named_var "mod_sharing_temp"
 	    val s = SIGNAT_STRUCTURE sdecs
 	    val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt (PATH (v,[]), s))
 	    fun combine_path first [] = path2con(vlpath2path first)
@@ -309,19 +316,32 @@ structure Signature :> SIGNATURE =
 			      else path2con(vlpath2path first)
 	in  fn (typeslots : lpath list list, sdecs) =>
             let 
+(*	      val _ = (print "\nrewrite called with:\n\t";
+		       app (fn l => (app (fn p => (pp_lpath p;print "   ")) l;print "\n\t")) typeslots;
+		       print "\n")*)
+
 	      val table = map (fn slots => (ref NONE, slots)) typeslots
-	      fun find_representative (curpath : lpath) : vlpath option ref =
-		  let fun loop [] = error "find_representative failed"
-			| loop ((rep,tslots : lpath list)::rest) = 
+	      fun find_representative (curpath : lpath) : vlpath option ref list =
+		  let fun loop ([],[]) = error "find_representative failed"
+			| loop ([],acc) = acc
+			| loop ((rep,tslots : lpath list)::rest,acc) = 
 		      if (Listops.member_eq(eq_lpath',curpath,tslots))
-			  then rep else loop rest
-		  in  loop table
+			  then loop(rest,rep::acc)  else loop (rest,acc)
+		  in  loop (table,[])
 		  end
               fun transparent (curpath : (var * label) list, copt) =
-		  let val rep = (find_representative (map #2 curpath))
-		  in  (case !rep of
-			   SOME rep_path => SOME(combine_path rep_path curpath)
-			 | NONE => (rep := SOME curpath; copt))
+		  let 
+		    val reps = (find_representative (map #2 curpath))
+		    fun loop [rep as ref NONE] = NONE
+		      | loop ((rep as ref NONE)::rest) = loop rest
+		      | loop (rep::rest) = !rep
+		    val repopt = loop reps
+		    val (rep,res) = 
+		      case repopt 
+			of NONE => (curpath,copt) 
+			 | SOME path => (path,SOME (combine_path path curpath))
+		    val _ = app (fn (r as ref NONE) => r := SOME rep | _ => ()) reps
+		  in res
 		  end
 	      fun separate (target : vlpath) (candidates : lpath list) =
 		let val target = map #2 target
@@ -333,6 +353,8 @@ structure Signature :> SIGNATURE =
 							else (match,cur::mismatch)
 		in  foldl folder ([],[]) candidates
 		end
+
+		
 	      fun traverse (_,[]) [] = [] 
 		| traverse (_,typeslots) [] = (print "traverse finished but there are leftover typeslots\n";
 					       app (fn lp => (pp_lpath lp; print "\n")) typeslots;
@@ -357,9 +379,7 @@ structure Signature :> SIGNATURE =
 				       SIGNAT_STRUCTURE sdecs =>
 					   let val is_first = 
 					       (case this_typeslots of
-						    [this] => (case !(find_representative this) of
-								   NONE => true
-								 | SOME _ => false)
+						    [this] => andfold (fn x => not (isSome (!x))) (find_representative this)
 						  | _ => false)
 					       val sdecs' = traverse(cur_path',this_typeslots) sdecs
 					   in  DEC_MOD(v,b,if is_first then s
@@ -506,37 +526,47 @@ structure Signature :> SIGNATURE =
 	  val slabs1 = map #2 (find_labels_sdecs ctxt' sdecs1)
 	  val slabs2 = map #2 (find_labels_sdecs ctxt' sdecs2)
 	  val slabs = inter_lpaths slabs1 slabs2
-	  val slots1 = map (follow_labels(SOME path1, sdecs1, ctxt')) slabs
-	  val slots2 = map (follow_labels(SOME path2, sdecs2, ctxt')) slabs
-	  val (slabs_abs1, slabs_conc1) = splitAbstractConcrete slots1
-	  val (slabs_abs2, slabs_conc2) = splitAbstractConcrete slots2
-	  val slabs_abs_both = Listops.transpose [slabs_abs1, slabs_abs2]
-	  val sdecsAbstractEqual = xsig_sharing_rewrite(ctxt,sdecs) (slabs_abs_both,sdecs)
+	  val slabs_abs = 
+	    let
+	      val f1 = (follow_labels(SOME path1, sdecs1, ctxt'))
+	      val f2 = (follow_labels(SOME path2, sdecs2, ctxt'))
+	      val slot_pairs = map (fn ls => (f1 ls,f2 ls)) slabs
+	    in splitAbstract slot_pairs
+	    end
+	  val sdecsAbstractEqual = xsig_sharing_rewrite(ctxt,sdecs) (slabs_abs,sdecs)
+	  val _ = (print "\n";pp_signat (SIGNAT_STRUCTURE(sdecsAbstractEqual));print "\n")
 	  val sigAbstractEqual= SelfifySig ctxt(mpath,SIGNAT_STRUCTURE(sdecsAbstractEqual))
 	  val ctxt'' = add_context_mod'(ctxt,mjunk,sigAbstractEqual)
 
-	  fun eq_concrete (labs,labs') = 
-	      let val c = path2con(join_path_labels(path1,labs))
-		  val c' = path2con(join_path_labels(path2,labs'))
-		  val res = (Name.is_label_internal(List.last labs) andalso 
-			     Name.is_label_internal(List.last labs))
-		      orelse eq_con(ctxt'',c,c')
-		  val _ = if res then () 
-			  else 
-			      let val reduced_c = con_normalize(ctxt'',c)
-				  val reduced_c' = con_normalize(ctxt'',c')
-			      in  (print "both concrete but type not equal\n";
-				   print "c = "; pp_con c; print "\n";
-				   print "c' = "; pp_con c'; print "\n";
-				   print "reduced c = "; pp_con reduced_c; print "\n";
-				   print "reduced c' = "; pp_con reduced_c'; print "\n";
-				   print "\n\n")
-			      end
-	      in  res
+	  fun check labs = 
+	    let 
+	      val c  = path2con(join_path_labels(path1,labs))
+	      val c' = path2con(join_path_labels(path2,labs))
+	      val res = (Name.is_label_internal(List.last labs))
+		orelse eq_con(ctxt'',c,c')
+	      in
+		if res then () 
+		else 
+		  let 
+		    val A = lpath1
+		    val B = lpath2
+		    val At = lpath1 @ labs
+		    val Bt = lpath2 @ labs
+		    val reduced_c = con_normalize(ctxt'',c)
+		    val reduced_c' = con_normalize(ctxt'',c')
+		    val yell = if !PermissiveSharing then warn_region_with else error_region_with
+		  in  
+		    yell "Incompatible types encountered while expanding sharing spec:\n";
+		    print "\t\t"; print "sharing "; pp_lpath A; print " = "; pp_lpath B; print "\n";
+		    print "\t\t"; pp_lpath At; print " = "; pp_con reduced_c; print "\n";
+		    print "\t\t"; pp_lpath Bt; print " = "; pp_con reduced_c'; print "\n";
+		    print "\t\t"; print "Types cannot be made equal!\n";
+		    print "\n\n"
+		  end
 	      end
-      in  if (eq_list(eq_concrete,slabs_conc1,slabs_conc2))
-	      then sdecsAbstractEqual
-	  else sdecs
+      in  
+	app check slabs;
+	sdecsAbstractEqual
       end
 
   and xsig_sharing_structure_fast(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
