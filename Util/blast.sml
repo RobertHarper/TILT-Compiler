@@ -85,6 +85,16 @@ struct
 	 ((fn os => fn x => (writeMagic (os, magic); aout os x)),
 	  (fn is => (readMagic (is, magic); ain is))))
 
+    fun checkMagic ({is,...} : instream) : string option =
+	(case B.input1 is
+	   of SOME c =>
+		(let val len = Word8.toInt c
+		     val bytes = B.inputN (is, len)
+		     val s = Byte.bytesToString bytes
+		 in  SOME s
+		 end handle _ => NONE)
+	    | NONE => NONE)
+
     fun endOfStream ({is, ...} : instream) : bool = B.endOfStream is
 
     fun blastOutWord8 ({os, ...} : outstream) (w : Word8.word) : unit =

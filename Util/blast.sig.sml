@@ -30,6 +30,7 @@ sig
 	bin.  Bin' may raise BadMagicNumber.
     *)
     val magic : 'a blastout * 'a blastin * string -> 'a blastout * 'a blastin
+    val checkMagic : instream -> string option	(* For debugging *)
 
     val blastOutWord8 : outstream -> Word8.word -> unit
     val blastInWord8 : instream -> Word8.word
