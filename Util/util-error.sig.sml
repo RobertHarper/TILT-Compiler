@@ -1,5 +1,3 @@
-(*$import *)
-
 (*Pulled out of Util so that Platform can use Error while Util uses Platform.*)
 signature UTIL_ERROR =
 sig
@@ -8,9 +6,11 @@ sig
 
     val showErrors : bool ref
 
+    val dontShow : ('a -> 'b) -> 'a -> 'b
+
     (* takes error msg *)
     val raise_error : string -> 'a
-	
+
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 

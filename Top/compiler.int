@@ -1,3 +1,1 @@
-(*$import COMPILER *)
-
 structure Compiler : COMPILER

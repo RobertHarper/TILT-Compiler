@@ -1,5 +1,3 @@
-(*$import WNIL *)
-
 (* The interface to the curtain
  *)
 

@@ -1,5 +1,3 @@
-(*$import Nil NilContextPre NilSubst *)
-
 signature NORMALIZE = 
   sig
 

@@ -1,6 +1,17 @@
-(*$import ORD_MAP ORD_SET *)
-
 (*Non IL specific utility routines *)
+
+(* A set with an ordering maintained by a list *)
+signature ORDERED_SET =
+sig
+    type item
+    type set
+    val empty : set
+    val member : item * set -> bool
+    val cons : item * set -> set
+    val append : set * set -> set
+    val toList : set -> item list (* respects ordering of cons and append calls *)
+end
+
 signature UTIL =
 sig
 
@@ -8,7 +19,7 @@ sig
 
     (* takes error msg *)
     val raise_error : string -> 'a
-	
+
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 
@@ -65,14 +76,7 @@ sig
 	where type Key.ord_key = string
 
     (* A set with an ordering maintained by a list *)
-    structure StringOrderedSet :
-    sig
-	type set
-	val empty : set
-	val member : string * set -> bool
-	val cons : string * set -> set
-	val append : set * set -> set
-	val toList : set -> string list (* respects ordering of cons and append calls *)
-    end
-    
+    structure StringOrderedSet : ORDERED_SET
+	where type item = string
+
 end

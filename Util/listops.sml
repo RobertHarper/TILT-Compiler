@@ -1,6 +1,4 @@
-(*$import LISTOPS List Util ListPair Substring StringCvt Int *)
-
-structure Listops :> LISTOPS = 
+structure Listops :> LISTOPS =
   struct
 
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
@@ -9,7 +7,7 @@ structure Listops :> LISTOPS =
     fun copy (0,_) = []
       | copy (n,x) = x::(copy(n-1,x))
     val error = fn s => Util.error "util.sml" s
-			      
+
     fun zip [] [] = []
       | zip (a::arest) (b::brest) = (a,b) :: (zip arest brest)
       | zip _ _ = error "zip got lists of different lengths"
@@ -20,29 +18,29 @@ structure Listops :> LISTOPS =
     fun zip7 a b c d e f g = (map (fn ((a,b,c),(d,e,f,g)) => (a,b,c,d,e,f,g)) (zip (zip3 a b c) (zip4 d e f g)))
 
 
-    fun unzip ab_list = 
+    fun unzip ab_list =
 	let fun unzip_loop [] (aa,bb) = (rev aa, rev bb)
 	      | unzip_loop ((a,b)::rest) (aa,bb) = unzip_loop rest (a::aa,b::bb)
 	in unzip_loop ab_list ([],[])
 	end
 
-    fun unzip3 abc_list = 
+    fun unzip3 abc_list =
 	let fun unzip3_loop [] (aa,bb,cc) = (rev aa, rev bb, rev cc)
 	      | unzip3_loop ((a,b,c)::rest) (aa,bb,cc) = unzip3_loop rest (a::aa,b::bb,c::cc)
 	in unzip3_loop abc_list ([],[],[])
 	end
 
-    fun unzip4 abcd_list = 
+    fun unzip4 abcd_list =
 	let fun unzip4_loop [] (aa,bb,cc,dd) = (rev aa, rev bb, rev cc, rev dd)
-	      | unzip4_loop ((a,b,c,d)::rest) (aa,bb,cc,dd) = 
+	      | unzip4_loop ((a,b,c,d)::rest) (aa,bb,cc,dd) =
 	  unzip4_loop rest (a::aa,b::bb,c::cc,d::dd)
 	in unzip4_loop abcd_list ([],[],[],[])
 	end
 
-    fun unzip5 abcde_list = 
-	let fun unzip5_loop [] (aa,bb,cc,dd,ee) = 
+    fun unzip5 abcde_list =
+	let fun unzip5_loop [] (aa,bb,cc,dd,ee) =
 	          (rev aa, rev bb, rev cc, rev dd, rev ee)
-	      | unzip5_loop ((a,b,c,d,e)::rest) (aa,bb,cc,dd,ee) = 
+	      | unzip5_loop ((a,b,c,d,e)::rest) (aa,bb,cc,dd,ee) =
 	  unzip5_loop rest (a::aa,b::bb,c::cc,d::dd,e::ee)
 	in unzip5_loop abcde_list ([],[],[],[],[])
 	end
@@ -53,24 +51,24 @@ structure Listops :> LISTOPS =
        (ListPair.all op= ([], [1])) = true,
        but (all2 op= ([], [1])) = false
       *)
-    fun all2 pred = 
+    fun all2 pred =
       let
 	fun check ([],[]) = true
-	  | check (a::arest,b::brest) = 
+	  | check (a::arest,b::brest) =
 	  (pred (a,b)) andalso check (arest,brest)
 	  | check _ = false
       in
-	check 
+	check
       end
 
-    fun all3 pred = 
+    fun all3 pred =
       let
 	fun check ([],[],[]) = true
-	  | check (a::arest,b::brest,c::crest) = 
+	  | check (a::arest,b::brest,c::crest) =
 	  (pred (a,b,c)) andalso check (arest,brest,crest)
 	  | check _ = false
       in
-	check 
+	check
       end
     val map = List.map
     fun map2 F (a,b) = map F (zip a b)
@@ -88,8 +86,8 @@ structure Listops :> LISTOPS =
     fun map4count F (a,b,c,d) = map5 F (count(length a),a,b,c,d)
     fun map5count F (a,b,c,d,e) = map6 F (count(length a),a,b,c,d,e)
     fun map6count F (a,b,c,d,e,f) = map7 F (count(length a),a,b,c,d,e,f)
-      
-    fun app2 f = 
+
+    fun app2 f =
       let
 	fun loop ([],[]) = ()
 	  | loop (a::aa,b::bb) = (f (a,b);loop (aa,bb))
@@ -98,7 +96,7 @@ structure Listops :> LISTOPS =
 	loop
       end
 
-    fun app3 f = 
+    fun app3 f =
       let
 	fun loop ([],[],[]) = ()
 	  | loop (a::aa,b::bb,c::cc) = (f (a,b,c);loop (aa,bb,cc))
@@ -131,12 +129,12 @@ structure Listops :> LISTOPS =
     fun list_diff ([],_) = []
       | list_diff (a::rest,b) = if (member(a,b)) then list_diff(rest,b) else a::(list_diff (rest,b))
     fun list_diff_eq (_,[],_) = []
-      | list_diff_eq (p,a::rest,b) = if (member_eq(p,a,b)) then list_diff_eq(p,rest,b) 
+      | list_diff_eq (p,a::rest,b) = if (member_eq(p,a,b)) then list_diff_eq(p,rest,b)
 				     else a::(list_diff_eq (p,rest,b))
     fun list_inter ([],_) = []
-      | list_inter (a::rest,b) = if (member(a,b)) then a::(list_inter(rest,b)) else list_inter(rest,b) 
+      | list_inter (a::rest,b) = if (member(a,b)) then a::(list_inter(rest,b)) else list_inter(rest,b)
     fun list_inter_eq (_,[],_) = []
-      | list_inter_eq (p,a::rest,b) = if (member_eq(p,a,b)) then a::(list_inter_eq(p,rest,b)) else list_inter_eq(p,rest,b) 
+      | list_inter_eq (p,a::rest,b) = if (member_eq(p,a,b)) then a::(list_inter_eq(p,rest,b)) else list_inter_eq(p,rest,b)
 
 
     fun eq_list (f, [] : 'a list, [] : 'b list) = true
@@ -165,11 +163,11 @@ structure Listops :> LISTOPS =
 				     in b orelse (orfold' pred acc' rest)
 				     end
 
-    fun map_second f = List.map (fn (x,v) => (x,f v)) 
-    fun map_first f = List.map (fn (x,v) => (f x,v)) 
+    fun map_second f = List.map (fn (x,v) => (x,f v))
+    fun map_first f = List.map (fn (x,v) => (f x,v))
 
-    fun foldl_acc ffun init list = 
-      let 
+    fun foldl_acc ffun init list =
+      let
 	fun loop (state,[],acc) = (rev acc,state)
 	  | loop (state,fst::rest,acc) =
 	  let
@@ -180,9 +178,9 @@ structure Listops :> LISTOPS =
       in
 	loop (init,list,[])
       end
-    
-    fun foldl_acc2 ffun init (list1,list2) = 
-      let 
+
+    fun foldl_acc2 ffun init (list1,list2) =
+      let
 	fun loop (state,[],[],acc1,acc2) = (rev acc1,rev acc2,state)
 	  | loop (state,fst1::rest1,fst2::rest2,acc1,acc2) =
 	  let
@@ -194,8 +192,8 @@ structure Listops :> LISTOPS =
       in
 	loop (init,list1,list2,[],[])
       end
-    
-    fun foldl2 f init (l1,l2) = 
+
+    fun foldl2 f init (l1,l2) =
       let
 	fun loop ([],[],state) = state
 	  | loop (a::aa,b::bb,state) = loop(aa,bb,f (a,b,state))
@@ -204,7 +202,7 @@ structure Listops :> LISTOPS =
 	loop (l1,l2,init)
       end
 
-    fun foldl3 f init (l1,l2,l3) = 
+    fun foldl3 f init (l1,l2,l3) =
       let
 	fun loop ([],[],[],state) = state
 	  | loop (a::aa,b::bb,c::cc,state) = loop(aa,bb,cc,f (a,b,c,state))
@@ -213,7 +211,7 @@ structure Listops :> LISTOPS =
 	loop (l1,l2,l3,init)
       end
 
-    fun foldl4 f init (l1,l2,l3,l4) = 
+    fun foldl4 f init (l1,l2,l3,l4) =
       let
 	fun loop ([],[],[],[],state) = state
 	  | loop (a::aa,b::bb,c::cc,d::dd,state) = loop(aa,bb,cc,dd,f (a,b,c,d,state))
@@ -229,7 +227,7 @@ structure Listops :> LISTOPS =
       | eq_len3 _ = false
 
 
-    fun split ls = 
+    fun split ls =
       let fun split' _ [] = error "split given empty list"
 	    | split' acc [x] = (rev acc,x)
 	    | split' acc (a::rest) = split' (a::acc) rest
@@ -239,7 +237,7 @@ structure Listops :> LISTOPS =
     fun opt_cons a (SOME aa) = (a::aa)
       | opt_cons a (NONE) = [a]
 
-    fun find2 p listpair = 
+    fun find2 p listpair =
       let
 	fun find_one (a,b,NONE) = if p(a,b) then SOME (a,b) else NONE
 	  | find_one (_,_,state) = state
@@ -247,10 +245,10 @@ structure Listops :> LISTOPS =
 	ListPair.foldl find_one NONE listpair
       end
 
-    fun insertion_sort compare = 
+    fun insertion_sort compare =
       let
 	fun insert (a,[]) = [a]
-	  | insert (a,bs as b::bb) = 
+	  | insert (a,bs as b::bb) =
 	  case compare (a,b)
 	    of GREATER => (b::(insert (a,bb)))
 	     | _ => a::bs
@@ -259,7 +257,7 @@ structure Listops :> LISTOPS =
       in sort
       end
 
-    fun exist_pair pred = 
+    fun exist_pair pred =
       let
 	fun loop [] = false
 	  | loop [_] = false
@@ -268,7 +266,7 @@ structure Listops :> LISTOPS =
 	loop
       end
 
-    fun no_dups compare list = 
+    fun no_dups compare list =
       let
 	val list = insertion_sort compare list
 	fun eq (a,b) = case compare (a,b) of EQUAL => true | _ => false
@@ -284,10 +282,10 @@ structure Listops :> LISTOPS =
      | SINGLETON of 'a
      | NIL
 
-   fun flattenCatlist ps = 
+   fun flattenCatlist ps =
        let
 	   fun flatten' (ps as LIST lst, accum) = lst @ accum
-             | flatten' (APPEND (ps::pss), accum) = 
+             | flatten' (APPEND (ps::pss), accum) =
 	       let
 		   val accum' = flatten' (APPEND pss, accum)
 	       in
@@ -306,7 +304,7 @@ structure Listops :> LISTOPS =
    fun join s [] = []
      | join s [a] = [a]
      | join s (a::aa) = a::s::(join s aa)
-       
+
    (* toString : ('a -> string) -> 'a list -> string *)
    fun toString f L =
        let
@@ -315,7 +313,7 @@ structure Listops :> LISTOPS =
        in
 	   foldl (fn (v, acc) => acc ^ string (f v)) (int (length L)) L
        end
-   
+
    (* fromString' : (string -> 'a option) -> string -> ('a list * substring) option *)
    fun fromString' f s =
        let
@@ -326,32 +324,32 @@ structure Listops :> LISTOPS =
 				  Substring.sub (ss', 0) <> #".")
 				  then NONE
 			      else SOME (i, Substring.triml 1 ss')
-				  
+
 	   fun string ss = case int ss
 			     of NONE => NONE
 			      | SOME (size, ss') =>
 				 SOME (Substring.string (Substring.slice (ss', 0, SOME size)),
 				       Substring.triml size ss')
-				 
+
 	   fun value ss = case string ss
 			    of NONE => NONE
 			     | SOME (s, ss') =>
 				(case f s
 				   of NONE => NONE
 				    | SOME v => SOME (v, ss'))
-				     
+
 	   fun values (ss, 0, acc) = SOME (rev acc, ss)
 	     | values (ss, i, acc) = case value ss
 				       of NONE => NONE
 					| SOME (v, ss') =>
 					   values (ss', i-1, v::acc)
-					   
+
 	   fun list ss = case int ss
 			   of NONE => NONE
 			    | SOME (length, ss') => values (ss', length, nil)
        in  list (Substring.all s)
        end
-   
+
    (* fromString : (string -> 'a option) -> string -> 'a list option *)
    fun fromString f s = case fromString' f s
 			  of NONE => NONE

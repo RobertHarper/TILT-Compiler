@@ -1,5 +1,3 @@
-(*$import Nil Name *)
-
 signature ALPHA = 
   sig
 

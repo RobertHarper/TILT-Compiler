@@ -1,6 +1,4 @@
-(*$import TILWORD Word32 *)
-
-(* TIL2/ML Compiler Source, 
+(* TIL2/ML Compiler Source,
  * Copyright (c) 1997:  Perry Cheng, Chris Stone, Greg Morrisett,
  * Robert Harper, and Peter Lee.
  *)
@@ -32,7 +30,7 @@ struct
     fun lshift(w,i) = Word32.<<(w,Word31.fromInt i)
     fun rshiftl(w,i) = Word32.>>(w,Word31.fromInt i)
     fun rshifta(w,i) = Word32.~>>(w,Word31.fromInt i)
-	
+
     (* ------ UNSIGNED OPERATIONS --------- *)
     val uplus = Word32.+
     val uminus = Word32.-
@@ -44,8 +42,8 @@ struct
     val ulte = Word32.<=
     val ugte = Word32.>=
     val umod = Word32.mod
-    fun umult'(a,b) = 
-	let 
+    fun umult'(a,b) =
+	let
 	  val half_size = wordsize div 2
 	  fun get_low x = andb(low_mask,x)
 	  fun get_high x = rshiftl(andb(high_mask,x),half_size)
@@ -64,7 +62,7 @@ struct
       in  (high',orb(lshift(med',half_size),low'))
       end
   fun uplus'(a,b) =
-      let 
+      let
 	  val low = uplus(a,b)
 	  val high = if (ugte(low,a) andalso ugte(low,b))
 			 then zero else one
@@ -73,8 +71,8 @@ struct
 
 
   (* ------ SIGNED OPERATIONS --------- *)
-  fun sign (x:word):int = 
-      if x= 0wx0 then 0 
+  fun sign (x:word):int =
+      if x= 0wx0 then 0
       else if (Word32.>>(x,0w31) = 0wx0) then 1 else ~1
   fun isneg (x:word):bool = (sign x) = ~1
   fun iszero (x:word):bool = (sign x) = 0
@@ -94,14 +92,14 @@ struct
 	  val sign_z = sign z
 	  val sign_x = sign x
 	  val sign_y = sign y
-	  val nooverflow = 
-	      not((sign_x <> sign_y) andalso (sign_x <> 0) andalso 
+	  val nooverflow =
+	      not((sign_x <> sign_y) andalso (sign_x <> 0) andalso
 		  (sign_x <> sign_z))
       in
 	  if nooverflow then z else raise Overflow
       end
   fun snegate x = sminus(0wx0,x)
-  fun absolute x = if (equal(x,most_neg)) 
+  fun absolute x = if (equal(x,most_neg))
 		       then raise Overflow
 		   else if (sign x >= 0) then x else snegate x
   fun smult (x,y) =
@@ -112,14 +110,14 @@ struct
       end
   fun sdiv (x,y : word) =
       if x = uminus(0wx0,0wx1) andalso y=neg_one then raise Overflow
-      else 
+      else
 	  let
 	      val signx = sign x
 	      val signy = sign y
 	      val signres = signx * signy
 	      val ux = if (signx<0) then snegate x else x
 	      val uy = if (signy<0) then snegate y else y
-	      val ures = udiv(ux,uy)   (* udiv raises Div when uy is zero, 
+	      val ures = udiv(ux,uy)   (* udiv raises Div when uy is zero,
 					so we don't have to worry about that *)
 	      val res = if (signres<0) then snegate ures else ures
 	  in res
@@ -128,7 +126,7 @@ struct
   fun squot arg = raise Util.UNIMP
   fun srem arg = raise Util.UNIMP
 
-  fun slt(x:word,y:word) = 
+  fun slt(x:word,y:word) =
       case (isneg x,isneg y) of
 	  (false,false) => ult(x,y)
 	| (true,false) => true
@@ -158,12 +156,12 @@ struct
 			       SOME res => res
 			     | NONE => error "fromHexString: got a non Hex-String")
 
-  fun fromDecimalString str = 
+  fun fromDecimalString str =
       let val ten = fromInt 10
 	  val (sign,chars) = (case (String.explode str) of
 				  (#"~" :: rest) => (neg_one,rest)
 				| all => (one,all))
-	  fun digit d = if (Char.isDigit d) 
+	  fun digit d = if (Char.isDigit d)
 			    then fromInt(ord d - ord #"0")
 			else error "fromDecimalString called with non-decimal string"
 	  fun loop acc [] = acc
@@ -179,12 +177,12 @@ struct
 					 then fromDecimalString (substring(ws,2,(size ws) - 2))
 				     else error ("fromWordStringLiteral got an illegal string: " ^ ws)
 
-  fun toHexString num = 
-      let 
+  fun toHexString num =
+      let
 	  val pos = rev(Listops.count 8)
-	  fun help i = 
+	  fun help i =
 	      let val x = toInt(andb(fromInt 15, rshiftl(num,i*4)))
-	      in if (x < 10) 
+	      in if (x < 10)
 		     then chr(ord #"0" + x)
 		 else chr(ord #"a" + (x - 10))
 	      end
@@ -194,7 +192,7 @@ struct
   fun toDecimalString w =
       let
 	  val is_neg = sign w = ~1
-	  val (is_least,w) = if (equal(w,most_neg)) 
+	  val (is_least,w) = if (equal(w,most_neg))
 				 then (true,absolute(splus(w,one))) else (false,absolute w)
 	  fun loop w = if (equal(w,zero)) then []
 		       else let val q = udiv(w,ten)
@@ -210,8 +208,8 @@ struct
 
 (*
   val uwordToString = fn (x:word) => Word32.toString x
-  fun uwordToRealString w = 
-    let 
+  fun uwordToRealString w =
+    let
       val d = Word32.fromInt(1000000)
       val upper = Word32.div(w,d)
       val lower = Word32.mod(w,d)
@@ -219,19 +217,19 @@ struct
       val lower_str = Int.toString(Word32.toInt lower)
       fun loop 0 = ""
 	| loop n = "0" ^ (loop (n-1))
-    in (if (upper = 0w0) 
+    in (if (upper = 0w0)
 	  then lower_str
 	else upper_str ^ (loop (6 - size lower_str) ^ lower_str))
       ^ ".0"
     end
 
-  fun log_2 (i:word) : word * bool = 
-      let fun loop(pos:int,j:word,highest:int,first) = 
+  fun log_2 (i:word) : word * bool =
+      let fun loop(pos:int,j:word,highest:int,first) =
 	  if pos > 31 then (highest,first)
-	  else 
-	  let val (highest',first') = 
-	      if andb(j,0wx1)= 0wx1 then 
-		  if first = ~1 then 
+	  else
+	  let val (highest',first') =
+	      if andb(j,0wx1)= 0wx1 then
+		  if first = ~1 then
 		      (pos,pos)
 		  else (pos,first)
 	      else (highest,first)
@@ -252,12 +250,12 @@ struct
   val wmod' : word = Word32.fromInt (256*256)
   val wmod_real : real = real (256 * 256)
  in
-  fun sword_to_real w : real = 
-	let 
+  fun sword_to_real w : real =
+	let
 
             val bottom : int = Word32.toInt(Word32.mod(w,wmod'));
             val top : int = Word32.toInt(Word32.div(w,wmod'));
-            val neg : real = if (top > 128 * 256) 
+            val neg : real = if (top > 128 * 256)
 			then (wmod_real) * (wmod_real)
 			else 0.0
          in (real bottom) + wmod_real * (real top) - neg
@@ -274,7 +272,7 @@ struct
 
 
 
-      
+
 
 
 
@@ -285,15 +283,15 @@ struct
 
 
   fun wordToString x =
-      if x = (intToWord ~1) then "~1" else 
-	  let val (sign,num) = 
+      if x = (intToWord ~1) then "~1" else
+	  let val (sign,num) =
 	      if lessThanZero(x) then ("~",uminus(0wx0,x))
 	      else ("",x)
 	  in
 	      sign ^ (uwordToString x)
 	  end
   fun wordToRealString x =
-	  let val (sign,num) = 
+	  let val (sign,num) =
 	      if lessThanZero(x) then ("-",uminus(0wx0,x))
 	      else ("",x)
 	  in
@@ -301,7 +299,7 @@ struct
 	  end
 (*
   (* depends upon little endian *)
-  fun sub_word_little(s,i:int) = 
+  fun sub_word_little(s,i:int) =
       let val w = intToWord
 	  val b0 = w(ord(String.sub(s,i))) handle Subscript => 0wx0
 	  val b1 = w(ord(String.sub(s,i+1))) handle Subscript => 0wx0
@@ -311,7 +309,7 @@ struct
 	  orb(orb(orb(b0,lshift(b1,8)),lshift(b2,16)),lshift(b3,24))
       end
 
-  fun sub_word_big(s,i:int) = 
+  fun sub_word_big(s,i:int) =
       let val w = intToWord
 	  val b3 = w(ord(String.sub(s,i))) handle Subscript => 0wx0
 	  val b2 = w(ord(String.sub(s,i+1))) handle Subscript => 0wx0

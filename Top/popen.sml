@@ -1,5 +1,3 @@
-(*$import POPEN TextIO OS Util *)
-
 structure Popen : POPEN =
 struct
     val error = fn s => Util.error "popen.sml" s
@@ -12,7 +10,7 @@ struct
 	in
 	    result
 	end
-	
+
     (* readFile : string -> string *)
     val readFile = withFile TextIO.inputAll
 
@@ -34,4 +32,4 @@ struct
 	in
 	    withTmpName gather
 	end
-end    
+end

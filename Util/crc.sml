@@ -1,6 +1,5 @@
-(*$import CRC Vector *)
 (* CRC.sml -- written by Andrew Appel for SML/NJ, modified by PS 1994-10-24,
-   modified by Martin Elsman 1997-05-30 
+   modified by Martin Elsman 1997-05-30
 *)
 
   (* 128-bit CRC.
@@ -13,6 +12,8 @@
 
 structure Crc :> CRC =
   struct
+
+    val error = fn s => Util.error "crc.sml" s
 
     fun for f i j =
       if i > j then () else (f i : unit; for f (i+1) j)
@@ -125,7 +126,7 @@ structure Crc :> CRC =
 (*	  fun loop () =
 	    case BinIO.canInput(is,n)
 	      of SOME n' => let val v = BinIO.inputN(is,n')
-				val _ = Word8Vector.foldl (fn (e,_) => 
+				val _ = Word8Vector.foldl (fn (e,_) =>
 crc_append arr (Word8.toInt e)) () v
 			    in if n=n' then loop()
 			       else ()
@@ -134,24 +135,23 @@ crc_append arr (Word8.toInt e)) () v
 *)
 	  fun loop () =
 		  let val v = BinIO.inputN(is,n)
-		      val _ = Word8Vector.foldl (fn (e,_) => 
+		      val _ = Word8Vector.foldl (fn (e,_) =>
 						 crc_append arr (Word8.toInt e)) () v
 		  in if (Word8Vector.length v > 0) then loop()
 		     else ()
 		  end
       in loop(); BinIO.closeIn is; crc_extract arr
-      end 
-	    
+      end
+
 
     type crc = string
-    val output_crc = BinIO_Util.output_string
-	
-    exception InputCrc
-    fun input_crc is = 
-      case BinIO_Util.input_string (is,20)
-	of SOME s => s
-	 | NONE => raise InputCrc
-	    
+    val blastOutCrc = Blaster.blastOutString
+    fun blastInCrc (is : Blaster.instream) : crc =
+	let val s = Blaster.blastInString is
+	in  if size s = 20 then s
+	    else error "bad CRC"
+	end
+
     fun toString (crc : crc) =
 	let fun w2s w = if w > 0w15 then Word8.toString w
 			else "0" ^ Word8.toString w
@@ -170,7 +170,7 @@ crc_append arr (Word8.toInt e)) () v
 	    in  loop (0,0)
 	    end
 	else NONE
-	    
+
 (*
     structure Test =
      struct
@@ -203,7 +203,7 @@ crc_append arr (Word8.toInt e)) () v
        val _ = out crc2
        val crc2' = input()
        val _ = eq_test(crc2,crc2',true,"test3")
-       val _ = eq_test(crc1',crc2',false,"test4")     
+       val _ = eq_test(crc1',crc2',false,"test4")
      end
 *)
   end

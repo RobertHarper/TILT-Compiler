@@ -1,5 +1,3 @@
-(*$import *)
-
 signature GETOPT =
 sig
 
@@ -22,5 +20,5 @@ sig
      * converted to (c, NONE).
      *)
     val optstring : string -> (char * string option) opt list
-	
+
 end

@@ -1,5 +1,3 @@
-(*$import Nil NilSubst Alpha *)
-
 signature NILUTIL =
   sig
 

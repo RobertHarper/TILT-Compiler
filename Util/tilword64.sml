@@ -1,5 +1,3 @@
-(*$import TILWORD TilWord32 Util Char String *)
-
 structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
  struct
 
@@ -68,8 +66,8 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun uplus(arg1,arg2) = #2(uplus'(arg1,arg2))
   fun unegate (n:word):word = uplus(one,notb n)  (* does not check for overflow *)
   fun uminus(n1,n2) = uplus(n1, unegate n2)
-  fun umult'((h1, l1), (h2, l2)) : word * word = 
-      let 
+  fun umult'((h1, l1), (h2, l2)) : word * word =
+      let
 	  val (low_high,low_low) = W.umult'(l1,l2)
 	  val (med1_high,med1_low) = W.umult'(l1,h2)
 	  val (med2_high,med2_low) = W.umult'(h1,l2)
@@ -86,11 +84,11 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun ulte((h1, l1), (h2, l2)) = W.ult(h1,h2) orelse (W.equal(h1,h2) andalso (W.ulte(l1,l2)))
   fun ugt(a,b) = not(ulte(a,b))
   fun ugte(a,b) = not(ult(a,b))
-  fun udiv(a,b) = 
+  fun udiv(a,b) =
       let
 	  fun high_bit ((high, _):word) = W.equal(W.one,W.rshiftl (high, W.wordsize - 1))
 	  fun find_shift (n1, n2) =
-	      if (ult(n1,n2) orelse high_bit n2) 
+	      if (ult(n1,n2) orelse high_bit n2)
 		  then 0
 	      else 1 + find_shift (n1, lshift (n2, 1))
 
@@ -102,7 +100,7 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 	      else
 		  uplus(lshift (one, shifts),
 			div_loop (uminus(n1,n2), rshiftl (n2, 1), shifts-1))
-		  
+
       in
 	  if equal(b,zero) then raise Div
 	  else
@@ -115,7 +113,7 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   (* ------- SIGNED OPERATIONS ------------- *)
   fun sign arg = if equal(arg,zero) then 0
 		 else if equal(rshiftl(arg,wordsize-1),zero) then 1 else ~1
-  fun slt(a as (ah,al),b as (bh,bl)) = 
+  fun slt(a as (ah,al),b as (bh,bl)) =
       (case (sign a, sign b) of
 	   (~1,~1) => ult(a,b)
 	 | (~1,_) => true
@@ -127,8 +125,8 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun slte(a,b) = slt(a,b) orelse equal(a,b)
   fun sgt(a,b) = not(slte(a,b))
   fun sgte(a,b) = not(slt(a,b))
-  fun splus (v1 as (h1,l1),v2 as (h2,l2)) = 
-      let 
+  fun splus (v1 as (h1,l1),v2 as (h2,l2)) =
+      let
 	  val s1 = sign v1
 	  val s2 = sign v2
 	  val (low_high,low_low) = W.uplus'(l1,l2)
@@ -146,16 +144,16 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun snegate arg = if (equal(arg,most_neg))
 			 then raise Overflow
 		     else splus(one,notb arg)
-  fun absolute x = if (equal(x,most_neg)) 
+  fun absolute x = if (equal(x,most_neg))
 		       then raise Overflow
 		   else if (sign x >= 0) then x else snegate x
-  fun sminus(a as (h1,l1) : word, b as (h2,l2) : word) = 
+  fun sminus(a as (h1,l1) : word, b as (h2,l2) : word) =
       let fun doit() = splus(a,unegate b)
       in  if (equal(b,neg_one))
 	      then if (sign a = 1) then raise Overflow else doit()
 	  else doit()
       end
-  fun smult(a as (ah,al),b as (bh,bl)) = 
+  fun smult(a as (ah,al),b as (bh,bl)) =
       let
 	  val (sa,sb) = (sign a, sign b)
 	  fun help(a,b) = (* both a and b are positive now *)
@@ -173,21 +171,21 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 	| (~1,~1) => help(snegate a,snegate b)
 	| _ => error "sign did not return -1, 0, or 1"
       end
-  fun sdiv(a,b) = 
+  fun sdiv(a,b) =
       (case (sign b = 0, equal(b,most_neg), equal(a,most_neg)) of
 	   (true,_,_) => raise Div
 	 | (_,true,_) => if (sign a <= 0) then zero else neg_one
 	 | (_,_,true) => if (sign b > 0) then (splus(sdiv(splus(a,b),b),one))
 			 else (splus(sdiv(sminus(a,b),b),one))
-	 | (false,false,false) => 
-	       let 
+	 | (false,false,false) =>
+	       let
 		   val (sa,sb) = (sign a, sign b)
 		   val flip = (sa * sb = ~1)
 		   val pa = if (sa = ~1) then snegate a else a
 		   val pb = if (sb = ~1) then snegate b else b
 		   val pq = udiv(pa,pb)
 		   val divisible = equal(pa, umult(pq,pb))
-		   val pq' = if (not divisible andalso flip) 
+		   val pq' = if (not divisible andalso flip)
 				 then splus(pq,one) else pq
 	       in if flip then snegate pq' else pq
 	       end)
@@ -207,12 +205,12 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 				   else error "toSignedHalf failed"
 				end
   fun toHexString (high,low) = W.toHexString(high) ^ W.toHexString(low)
-  fun fromInt i = 
+  fun fromInt i =
       let val low = W.fromInt i
 	  val high = if (W.sign low = ~1) then W.neg_one else W.zero
       in (high,low)
       end
-  fun toInt(high,low) = 
+  fun toInt(high,low) =
       (case (W.equal(high,W.zero),W.equal(high,W.neg_one),W.sign low) of
 	   (true,_,0) => W.toInt low
 	 | (true,_,1) => W.toInt low
@@ -221,17 +219,17 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 		 print (toHexString(high,low)); print "\n";
 		 raise Overflow))
 
-  fun fromHexString s = 
-      let 
+  fun fromHexString s =
+      let
 	  open Char
-	  fun hexchar2int c = if (isDigit c) 
+	  fun hexchar2int c = if (isDigit c)
 				  then ord(c) - ord #"0"
 			      else if (isHexDigit c)
 				       then 10 + (ord(toLower c) - ord #"a")
 				   else error ("fromHexString got an illegal string: " ^ s)
 	  fun loop acc [] = acc
-	    | loop acc (c::rest) = 
-	      let 
+	    | loop acc (c::rest) =
+	      let
 		  val digit = fromInt(hexchar2int c)
 		  val acc' = orb(lshift(acc,4),digit)
 	      in loop acc' rest
@@ -239,13 +237,13 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
       in loop zero (explode s)
       end
 
-				    
-  fun fromDecimalString str = 
-      let 
+
+  fun fromDecimalString str =
+      let
 	  val (sign,chars) = (case (String.explode str) of
 				  (#"~" :: rest) => (neg_one,rest)
 				| all => (one,all))
-	  fun digit d = if (Char.isDigit d) 
+	  fun digit d = if (Char.isDigit d)
 			    then fromInt(ord d - ord #"0")
 			else error "fromDecimalString called with non-decimal string"
 	  fun loop acc [] = acc
@@ -263,7 +261,7 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun toDecimalString w =
       let
 	  val is_neg = sign w = ~1
-	  val (is_least,w) = if (equal(w,most_neg)) 
+	  val (is_least,w) = if (equal(w,most_neg))
 				 then (true,absolute(splus(w,one))) else (false,absolute w)
 	  fun loop w = if (equal(w,zero)) then []
 		       else let val q = udiv(w,ten)
@@ -278,8 +276,8 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 
 (*
 
-  fun toString (w1,w2) = 
-      let 
+  fun toString (w1,w2) =
+      let
 	  val s1 = Word32.toString w1
 	  val s2 = Word32.toString w1
 	  fun extend str = if (Int.<(size s1,8))

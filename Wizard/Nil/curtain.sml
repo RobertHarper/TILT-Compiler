@@ -1,5 +1,3 @@
-(*$import CURTAIN *)
-
 structure Curtain :> CURTAIN = 
   struct 
 

@@ -1,10 +1,9 @@
-(*$import Word32 *)
-
-signature PLATFORM = 
+signature PLATFORM =
 sig
-    datatype platform = NT | DUNIX | SOLARIS | LINUX
-	
+    datatype platform = DUNIX | SOLARIS | GENERIC
+
     val platform : unit -> platform
+    val platformName : platform -> string
     val hostname : unit -> string
     val pid : unit -> Word32.word
     val sleep : real -> unit

@@ -1,6 +1,20 @@
-(*$import Array String UtilError Platform UTIL OS TextIO SplayMapFn SplaySetFn *)
+functor OrderedSet (Set : ORD_SET)
+    :> ORDERED_SET
+	where type item = Set.item =
+struct
+    type item = Set.item
+    type set = Set.set * item list
+    val empty = (Set.empty, [])
+    fun member (i : item,(set,_) : set) : bool = Set.member(set,i)
+    fun cons (i : item,(set,list) : set) : set =
+	if (Set.member(set,i))
+	    then (set,list)
+	else (Set.add(set,i), i::list)
+    fun toList ((_,list) : set) : item list = list
+    fun append (s1 : set, s2 : set) : set = foldr cons s2 (toList s1)
+end
 
-structure Util :> UTIL = 
+structure Util :> UTIL =
 struct
     exception UNIMP
 
@@ -10,11 +24,11 @@ struct
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
     fun count n = loop 0 (n-1)
 
-    local 
+    local
 	val precomputeMax = 10
 	fun rawSpaces 0 = ""
 	  | rawSpaces 1 = " "
-	  | rawSpaces n = 
+	  | rawSpaces n =
 	    let val _ = if (n < 2) then localerror "rawSpaces given negative number" else ()
 		val a = n div 2
 		val b = n - a
@@ -24,7 +38,7 @@ struct
 	    in  aSpace ^ bSpace
 	    end
 	val precompute = Array.tabulate(precomputeMax, rawSpaces)
-    in  fun spaces n = 
+    in  fun spaces n =
 	if (n < 0)
 	    then ""
 	else if (n < precomputeMax)
@@ -73,65 +87,42 @@ struct
     fun curry2 f = fn a => fn b => f (a,b)
     fun curry3 f = fn a => fn b => fn c => f (a,b,c)
 
-    fun all_pairs p = 
+    fun all_pairs p =
       let
 	fun loop [] = true
 	  | loop [_]= true
-	  | loop (fst::snd::rest) = 
+	  | loop (fst::snd::rest) =
 	  (p (fst,snd)) andalso (loop (snd::rest))
       in
 	loop
       end
 
-   fun memoize thunk = 
-       let val result = ref NONE
-       in  fn() =>
-	   (case !result of
-		NONE => let val res = thunk()
-			    val _ = result := SOME res
-			in  res
-			    end
-	      | SOME res => res)
-       end
+    fun memoize thunk =
+	let val cell = ref thunk
+	    val _ = cell := (fn () =>
+			     let val r = thunk()
+			     in  (cell := (fn () => r);
+				  r)
+			     end handle e =>
+				 (cell := (fn () => raise e);
+				  raise e))
+	in  fn () => !cell()
+	end
 
-   (* isUnix : unit -> bool *)
-   fun isUnix () = Platform.platform() <> Platform.NT
-       
-   fun system command = 
-       if not (isUnix())
-	   then 
-	       let val os = TextIO.openOut "worklist"
-		   val _ = TextIO.output(os,command)
-		   val _ = TextIO.closeOut os
-		   fun count 0 = () | count n = count(n-1)
-		   fun sleep 0 = () | sleep n = (count 1000000; sleep(n-1))
-		   fun loop() = if OS.FileSys.access("worklist",[])
-				    then (sleep 10; loop()) else ()
-	       in  loop(); true
-	       end
-       else (OS.Process.system command <> OS.Process.failure)
+   fun system (command : string) : bool =
+       OS.Process.system command <> OS.Process.failure
 
     val raise_error = UtilError.raise_error
     val error = UtilError.error
 
     local
-	structure StringKey = 
+	structure StringKey =
 	struct
 	    type ord_key = string
 	    val compare = String.compare
 	end
     in  structure StringMap = SplayMapFn(StringKey)
 	structure StringSet = SplaySetFn(StringKey)
-	structure StringOrderedSet = 
-	struct
-	    type set = StringSet.set * string list
-	    val empty = (StringSet.empty, [])
-	    fun member (str,(set,_) : set) = StringSet.member(set,str)
-	    fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
-							then (set,list)
-						    else (StringSet.add(set,str), str::list)
-	    fun toList ((set,list) : set) = list
-	    fun append (s1, s2) = foldr cons s2 (toList s1)
-	end
+	structure StringOrderedSet = OrderedSet(StringSet)
     end
 end

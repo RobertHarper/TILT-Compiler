@@ -1,5 +1,3 @@
-(*$import Nil *)
-
 signature NILREWRITE = 
   sig
     datatype 'a changeopt = NOCHANGE | NORECURSE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a

@@ -1,5 +1,3 @@
-(*$import STATISTICS Vector Real Math *)
-
 structure VectorStats :> STATISTICS where type seq = real Vector.vector =
 struct
 
@@ -13,11 +11,11 @@ struct
     val min = extract Real.min
     fun median v = raise Unimplemented
     val max = extract Real.max
-        
+
     fun square (x:real) = x*x
     fun sum (v, f) = V.foldl (fn (x,y) => y + f x) 0.0 v
     val len : seq -> real = Real.fromInt o V.length
-        
+
     fun mean v = if V.length v >= 1 then sum(v, fn x => x) / len v
                  else raise Domain
 
@@ -32,7 +30,7 @@ struct
                  (var - err) / (n - 1.0)
              end
         else raise Domain
-                      
+
     val stddev = Math.sqrt o variance
 
     fun absdev v = if V.length v >= 1
@@ -40,7 +38,7 @@ struct
                         in  sum(v, fn x => Real.abs (x - mean)) / len v
                         end
                    else raise Domain
-                     
+
 end
 
 structure ListStats :> STATISTICS where type seq = real list =

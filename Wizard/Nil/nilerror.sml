@@ -1,5 +1,3 @@
-(*$import Ppnil NILERROR *)
-
 structure NilError :> NILERROR =
   struct
     val printl = Util.printl

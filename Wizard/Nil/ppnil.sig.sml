@@ -1,4 +1,3 @@
-(*$import WNil Formatter *)
 (* Pretty-printing routines for the NIL *)
 signature PPNIL =
   sig

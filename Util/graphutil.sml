@@ -1,5 +1,3 @@
-(*$import GRAPHUTIL List Array *)
-
 (* Chris Okasaki
    School of Computer Science
    Carnegie Mellon University
@@ -76,7 +74,7 @@ struct
   fun tsort n edges = rev (postorder (dff n edges))
 
   fun topsort n edgelist = tsort n (buildgraph n edgelist)
-        
+
   fun scc n edgelist =
     let val (forwedges,backedges) = builddualgraph n edgelist
     in

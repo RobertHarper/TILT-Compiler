@@ -1,10 +1,8 @@
-(*$import Util SEQUENCE Listops List *)
-
 structure Sequence :> SEQUENCE =
 struct
 
     val error = fn s => Util.error "sequence.sml" s
- 
+
     type ('a,'b) sequence = ('a*'b) list
     val length = length
     fun fromList x = x
@@ -23,17 +21,17 @@ struct
     val all2 = Listops.all2
     val no_dups = Listops.no_dups
 
-    fun lookup pred set key = 
+    fun lookup pred set key =
 	let fun loop [] = NONE
 	      | loop ((a,b)::rest) = if (pred(a,key)) then SOME b else loop rest
 	in loop set
 	end
 
-    fun find pred seq  = 
-      let 
+    fun find pred seq  =
+      let
 	fun loop [] = NONE
 	  | loop ((a,b)::rest) = if (pred a) then SOME b else loop rest
       in loop seq
       end
-    
+
 end

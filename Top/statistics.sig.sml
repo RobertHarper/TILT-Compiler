@@ -1,9 +1,7 @@
-(*$import *)
-
 signature STATISTICS =
 sig
     type seq				(* of reals *)
-	
+
     val min      : seq -> real		(* raises Domain if |seq| = 0 *)
     val median   : seq -> real		(* raises Domain if |seq| = 0 *)
     val max      : seq -> real		(* raises Domain if |seq| = 0 *)

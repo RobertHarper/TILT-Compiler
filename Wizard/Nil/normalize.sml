@@ -1,5 +1,3 @@
-(*$import Ppnil NilUtil NilContextPre NilSubst NORMALIZE Alpha *)
-
 structure Normalize :> NORMALIZE =
 struct	
 

@@ -1,4 +1,3 @@
-(*$import Nil *)
 signature NILERROR = 
   sig
     exception FailedAssert of string

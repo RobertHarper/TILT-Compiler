@@ -1,21 +1,22 @@
-(*$import *)
-
 signature TARGET =
 sig
 
-    val littleEndian : bool ref					(* Is target little endian? *)
-	
-    datatype platform = TIL_ALPHA | TIL_SPARC (* | MLRISC_ALPHA | MLRISC_SPARC *)
+    val littleEndian : bool ref	(* Is target little endian? *)
 
-    val setTargetPlatform : platform -> unit			(* also sets endian-ness *)
-    val getTargetPlatform : unit -> platform 
+    datatype platform = TIL_ALPHA | TIL_SPARC
+
+    val blastOutPlatform : Blaster.outstream -> platform -> unit
+    val blastInPlatform : Blaster.instream -> platform
+
+    val setTargetPlatform : platform -> unit	(* also sets endian-ness *)
+    val getTargetPlatform : unit -> platform
 
     val platformName : platform -> string
-    val platformFromName : string -> platform
+    val platformFromName : string -> platform option
 
-    val importantFlags : (string * bool ref * bool) list	(* name, ref, default value *)
-    val platformString : unit -> string				(* depends on importantFlags *)
-	
+    val importantFlags : (string * bool ref * bool) list
+    val platformString : unit -> string	(* depends on importantFlags *)
+
     val native : unit -> bool
 
     val checkNative : unit -> unit

@@ -1,16 +1,14 @@
-(*$import *)
-
 (* List utility routines not specific to any part of the compiler *)
-signature LISTOPS = 
+signature LISTOPS =
   sig
 
     (* different arities of zip and map *)
     val zip  : 'a list -> 'b list -> ('a * 'b) list
     val zip3 : 'a list -> 'b list -> 'c list -> ('a * 'b * 'c) list
     val zip4 : 'a list -> 'b list -> 'c list -> 'd list -> ('a * 'b * 'c * 'd) list
-    val zip5 : 'a list -> 'b list -> 'c list -> 'd list -> 'e list -> 
+    val zip5 : 'a list -> 'b list -> 'c list -> 'd list -> 'e list ->
                             ('a * 'b * 'c * 'd * 'e) list
-    val zip6 : 'a list -> 'b list -> 'c list -> 'd list -> 'e list -> 'f list -> 
+    val zip6 : 'a list -> 'b list -> 'c list -> 'd list -> 'e list -> 'f list ->
                             ('a * 'b * 'c * 'd * 'e * 'f) list
 
     val unzip : ('a * 'b) list -> ('a list * 'b list)
@@ -26,11 +24,11 @@ signature LISTOPS =
     val map : ('a -> 'b) -> 'a list -> 'b list
     val map2 : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
     val map3 : ('a * 'b * 'c -> 'd) -> 'a list * 'b list * 'c list -> 'd list
-    val map4 : ('a * 'b * 'c * 'd -> 'e) -> 
+    val map4 : ('a * 'b * 'c * 'd -> 'e) ->
                 'a list * 'b list * 'c list * 'd list -> 'e list
-    val map5 : ('a * 'b * 'c * 'd * 'e -> 'f) -> 
+    val map5 : ('a * 'b * 'c * 'd * 'e -> 'f) ->
                 'a list * 'b list * 'c list * 'd list * 'e list -> 'f list
-    val map6 : ('a * 'b * 'c * 'd * 'e * 'f -> 'g) -> 
+    val map6 : ('a * 'b * 'c * 'd * 'e * 'f -> 'g) ->
                 'a list * 'b list * 'c list * 'd list * 'e list * 'f list -> 'g list
     val mapmap    : ('a -> 'b) -> 'a list list -> 'b list list
     val mapmapmap    : ('a -> 'b) -> 'a list list list -> 'b list list list
@@ -44,11 +42,11 @@ signature LISTOPS =
     val mapcount  : (int * 'a -> 'b) -> 'a list -> 'b list
     val map2count : (int * 'a * 'b -> 'c) -> 'a list * 'b list -> 'c list
     val map3count : (int * 'a * 'b * 'c -> 'd) -> 'a list * 'b list * 'c list -> 'd list
-    val map4count : (int * 'a * 'b * 'c * 'd -> 'e) -> 
+    val map4count : (int * 'a * 'b * 'c * 'd -> 'e) ->
                            'a list * 'b list * 'c list * 'd list -> 'e list
-    val map5count : (int * 'a * 'b * 'c * 'd * 'e -> 'f) -> 
+    val map5count : (int * 'a * 'b * 'c * 'd * 'e -> 'f) ->
                            'a list * 'b list * 'c list * 'd list * 'e list -> 'f list
-    val map6count : (int * 'a * 'b * 'c * 'd * 'e * 'f -> 'g) -> 
+    val map6count : (int * 'a * 'b * 'c * 'd * 'e * 'f -> 'g) ->
                            'a list * 'b list * 'c list * 'd list * 'e list * 'f list -> 'g list
 
     val app2 : ('a * 'b -> 'c) -> ('a list * 'b list) -> unit
@@ -105,7 +103,7 @@ signature LISTOPS =
       *)
     val foldl_acc : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
 
-    val foldl_acc2 : ('e1 * 'e2 * 'state -> 'd1 * 'd2 * 'state) 
+    val foldl_acc2 : ('e1 * 'e2 * 'state -> 'd1 * 'd2 * 'state)
                          -> 'state -> 'e1 list * 'e2 list -> 'd1 list * 'd2 list * 'state
 
     val foldl2 : ('a * 'b * 'state -> 'state) -> 'state -> ('a list * 'b list) -> 'state
@@ -115,7 +113,7 @@ signature LISTOPS =
     val eq_len : 'a list * 'b list -> bool
     val eq_len3 : 'a list *'b list * 'c list -> bool
     val split : 'a list -> 'a list * 'a
-    val opt_cons : 'a -> ('a list option) -> 'a list 
+    val opt_cons : 'a -> ('a list option) -> 'a list
     val find2 : ('a * 'b -> bool) -> ('a list * 'b list) -> ('a * 'b) option
     val insertion_sort : ('a * 'a -> order) -> 'a list -> 'a list
     val no_dups : ('a * 'a -> order) -> 'a list -> bool
@@ -138,5 +136,5 @@ signature LISTOPS =
    val toString : ('a -> string) -> 'a list -> string
    val fromString' : (string -> 'a option) -> string -> ('a list * substring) option
    val fromString : (string -> 'a option) -> string -> 'a list option
-       
+
   end

@@ -1,5 +1,3 @@
-(*$import Name *)
-
 (*Abstract substitutions used in NILSUBST*)
 signature SUBST = 
   sig

@@ -1,5 +1,3 @@
-(*$import Ppnil NILRENAME Stats NilError NilRewrite Option Alpha *)
-
 structure NilRename :> NILRENAME = 
   struct
     open Curtain

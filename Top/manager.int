@@ -1,5 +1,3 @@
-(*$import MANAGER *)
-
 structure Manager : MANAGER
 
 structure Boot : MANAGER

@@ -1,5 +1,3 @@
-(*$import WNil *)
-
 (*The signature of the true implementation of contexts.  In order to 
  * eliminate cyclic dependencies, the main implementation is paramaterized
  * over a few functions that are filled in later.  Most modules will use the

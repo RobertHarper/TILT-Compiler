@@ -1,5 +1,3 @@
-(*$import Ppnil NILSUBST Stats NilError NilRewrite WNilRename Option *)
-
 (* This stucture implements and abstract type of substitutions, supporting
  * both simultaneuous (parallel) and sequential substitutions.  Included
  * are notions of composition of substitutions

@@ -1,5 +1,3 @@
-(*$import *)
-
 signature SEQUENCE =
   sig
 

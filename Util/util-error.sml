@@ -1,12 +1,21 @@
-(*$import UTIL_ERROR TextIO *)
-
-(*Pulled out of Util so that Platform can use Error while Util uses Platform.*)
-structure UtilError :> UTIL_ERROR = 
+(*
+	I think we should do away with showErrors and dontShow and
+	move the printing out of raise_error and into the top-level
+	exception handler in main.
+*)
+structure UtilError :> UTIL_ERROR =
 struct
     exception BUG of string
 
     val showErrors = ref true
-	
+
+    fun dontShow (f : 'a -> 'b) (x : 'a) : 'b =
+	let val old = !showErrors
+	    val _ = showErrors := false
+	in  (f x before (showErrors := old)
+	     handle e => (showErrors := old; raise e))
+	end
+
     (* raise_error : string -> 'a *)
     fun raise_error s = let in
 	                   if !showErrors
@@ -14,7 +23,7 @@ struct
 			   else ();
 			   raise BUG s
 			end
-	
+
     (* error : string -> string -> 'a *)
     fun error filename str = raise_error (filename ^ ": " ^ str)
 end

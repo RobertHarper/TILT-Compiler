@@ -1,11 +1,9 @@
-(*$import Posix Word8 OS RUN CommandLine *)
-
 structure Run : RUN =
 struct
 
     (* exit : int -> 'a *)
     fun exit n = Posix.Process.exit (Word8.fromInt n)
-	
+
     (* run : (string * string list -> OS.Process.status) -> unit *)
     fun run main =
 	let

@@ -1,4 +1,3 @@
-(*$import Nil Ppprim Formatter PPNIL *)
 (* Nil pretty-printer. *)
 
 structure Ppnil	:> PPNIL =

@@ -1,5 +1,3 @@
-(*$import Name TRACEINFO *)
-
 structure TraceInfo :> TRACEINFO = 
 struct
 

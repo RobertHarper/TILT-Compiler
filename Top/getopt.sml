@@ -1,5 +1,3 @@
-(*$import GETOPT String Char List *)
-
 structure Getopt :> GETOPT =
 struct
 
@@ -14,7 +12,7 @@ struct
     fun fst s = String.sub (s, 0)
     fun snd s = String.sub (s, 1)
     fun tail s = String.extract (s, 1, NONE)
-	
+
     (* optarg : string * string list -> (string * string list) option *)
     fun optarg ("", nil) = NONE
       | optarg ("", arg::args) = SOME (arg, args)
@@ -62,15 +60,15 @@ struct
     (* stateToResult : 'a state -> 'a result *)
     fun stateToResult ({args, options,...} : 'a state) =
 	Success (rev options, args)
-	
+
     (* charof : 'a opt -> char *)
     fun charof (Noarg (c, _)) = c
       | charof (Arg (c, _)) = c
-	
+
     (* matches : char -> 'a opt -> bool *)
     fun matches c opt = (c = charof opt)
-	
-    (* lookup : 'a opt list -> char -> 'a opt option *) 
+
+    (* lookup : 'a opt list -> char -> 'a opt option *)
     fun lookup opts c = List.find (matches c) opts
 
     (* getopt : 'a opt list * string list -> 'a result *)
@@ -95,5 +93,5 @@ struct
 	in
 	    convert (String.explode s) nil
 	end
-    
+
 end

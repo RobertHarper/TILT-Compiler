@@ -1,4 +1,3 @@
-(*$import Nil *)
 (*Code that is specific to the Nil substitutions *)
 signature NILSUBST = 
   sig

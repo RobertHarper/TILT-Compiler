@@ -1,4 +1,3 @@
-(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha NilRewrite NilRename*)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 

@@ -1,5 +1,3 @@
-(*$import Nil Listops ALPHA Option ListPair *)
-
 structure Alpha
     :> ALPHA =
   struct

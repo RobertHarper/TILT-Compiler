@@ -1,5 +1,3 @@
-(*$import Name *)
-
 signature TRACEINFO = 
 sig
 

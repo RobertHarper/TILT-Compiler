@@ -1,5 +1,3 @@
-(*$import Nil *)
-
 signature NILSTATIC = 
   sig
 

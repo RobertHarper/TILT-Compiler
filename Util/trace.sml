@@ -1,5 +1,3 @@
-(*$import Int Time List *)
-
 signature TRACE = sig
   type trace
 
@@ -22,16 +20,16 @@ structure Trace :> TRACE = struct
       fun spaces n =
         if (n > 60) then ("*" :: spaces (n - 60)) else (spaces' n)
   end
-  
+
 
   fun reset () = (tracecount := 0)
 
   type trace = {name : string,
                 calls : int ref,
                 callstack : (Time.time * int) list ref}
-		
 
-  fun newtrace s : trace = 
+
+  fun newtrace s : trace =
       {name = s ^ " : ", calls = ref 0, callstack = ref nil}
 
   fun enter {name, calls as ref call_number, callstack} =
@@ -56,14 +54,14 @@ structure Trace :> TRACE = struct
 	 val _ = List.app print (spaces (!tracecount))
 	 val _ = print name
 	 val _ = print (Int.toString call_number)
-	 val _ = if (Time.>(elapsed, !mintime)) then 
+	 val _ = if (Time.>(elapsed, !mintime)) then
 	            (print " time = "; print (Time.toString elapsed))
                  else ()
 	 val _ = print "\n"
 	 val _ = callstack := rest
-     in 
+     in
 	 elapsed
-     end             
+     end
 
 
 end

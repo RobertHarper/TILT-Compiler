@@ -1,5 +1,3 @@
-(*$import *)
-
 signature STATS =
    sig
 
@@ -41,6 +39,6 @@ signature STATS =
 	   }
 
      val fetch_counter : string -> int
-	     
+
    end
 

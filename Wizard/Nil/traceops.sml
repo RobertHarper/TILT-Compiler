@@ -1,5 +1,3 @@
-(*$import TraceInfo Nil NilContext Util Normalize TRACEOPS *)
-
 structure TraceOps :> TRACEOPS = 
 struct
 
