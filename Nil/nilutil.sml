@@ -18,7 +18,6 @@ struct
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
      
   fun fresh_var()  = Name.fresh_named_var "nilutil"
-  fun fresh_var'() = Name.fresh_named_var' "nilutil"
 
   val unzip = ListPair.unzip
   val zip = ListPair.zip
@@ -53,7 +52,7 @@ struct
       let val lc_list = Listops.mapcount (fn (i,c) => (generate_tuple_label(i+1),c)) clist
       in  Crecord_c lc_list
       end
-  fun kind_tuple klist = let fun doer(i,k) = ((generate_tuple_label(i+1),fresh_var'()),k)
+  fun kind_tuple klist = let fun doer(i,k) = ((generate_tuple_label(i+1),fresh_var()),k)
 			     val lvk_list = Listops.mapcount doer klist
 			 in  Record_k(Sequence.fromList lvk_list)
 			 end

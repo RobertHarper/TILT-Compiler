@@ -78,7 +78,7 @@ struct
 
 
     (* labels are passed backwards *)
-    fun project (base, labs) = 
+    fun projecte (base, labs) = 
 	let fun loop [] = base
 	      | loop (l::rest) = Prim_e(NilPrimOp(select l),[],[loop rest])
 	in  loop labs 
@@ -91,7 +91,7 @@ struct
 	in loop [] e
 	end
 
-    fun path2exp(var,labs) = project(Var_e var, labs)
+    fun path2exp(var,labs) = projecte(Var_e var, labs)
 
 
     fun projectc (base, labs) = 

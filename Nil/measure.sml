@@ -1,4 +1,4 @@
-(*$import MEASURE NilRewrite Stats *)
+(*$import MEASURE NilRewrite Stats Option *)
 
 structure Measure :> MEASURE =
   struct
@@ -43,7 +43,7 @@ structure Measure :> MEASURE =
 		   val state = bind_var(state,v,flag)
 		   val rest = loop (rest,state)
 		 in
-		   if !flag then ((l,v),k)::rest else ((l,Name.derived_var' v),k)::rest
+		   if !flag then ((l,v),k)::rest else ((l,Name.derived_var v),k)::rest
 		 end
 	       val lvk_list = loop (Sequence.toList lvk_seq,state)
 	       val kind = Record_k (Sequence.fromList lvk_list)
@@ -61,7 +61,7 @@ structure Measure :> MEASURE =
 		   val state = bind_var(state,v,flag)
 		   val (rest,body) = loop (rest,state)
 		 in
-		   if !flag then ((v,k)::rest,body) else ((Name.derived_var' v,k)::rest,body)
+		   if !flag then ((v,k)::rest,body) else ((Name.derived_var v,k)::rest,body)
 		 end
 	       val (vk_list,body) = loop (vk_list,state)
 	     in
@@ -94,4 +94,107 @@ structure Measure :> MEASURE =
 	end
     end
   
+    local 
+      
+      type state = {con:int ref,exp:int ref,kind:int ref,
+		    active:(string*(int ref)) list,counters:(string*(int ref)) list,
+		    containers:(string*(int ref)) list}
+	
+      fun cstring con = 
+	(case con of
+	   Prim_c (Sum_c _,_)    => "Sum_c"
+	 | Prim_c (Record_c _,_) => "Record_c"
+	 | Prim_c(pc,clist)      => "Prim_c"
+	 | AllArrow_c _          => "AllArrow_c"
+	 | ExternArrow_c _       => "ExternArrow_c"
+	 | Var_c _               => "Var_c"
+	 | Let_c _               => "Let_c"
+	 | Mu_c _                => "Mu_c"
+	 | Proj_c _              => "Proj_c"
+	 | Typeof_c _            => "Typeof_c"
+	 | App_c _               => "App_c"
+	 | Crecord_c _           => "Crecord_c"
+	 | Closure_c _           => "Closure_c"
+	 | Typecase_c _          => "Typecase_c"
+	 | Annotate_c (_,c)      => "Annotate_c")
+
+      fun inc x = x := !x + 1
+
+      fun incl clist = List.app (fn (s,x) => inc x) clist
+
+      fun find c clist = let val s = cstring c in List.find (fn (s',x) => s' = s) clist end
+
+      fun inc1 c clist = 
+	(case find c clist
+	   of SOME(_,x) => inc x
+	    | NONE => ())
+
+      fun contains clist c = Option.isSome (find c clist)
+
+      fun conhandler ({exp,con,kind,active,counters,containers} : state,c : con) = 
+	(inc con;
+	 incl active;
+	 inc1 c counters;
+	 if contains active c then NOCHANGE
+	 else (case find c containers of
+		 NONE => NOCHANGE
+	       | SOME entry => CHANGE_RECURSE ({con = con,exp = exp,kind = kind,
+						active = entry::active,counters = counters,containers=containers},c))
+	 )
+
+      fun kindhandler ({kind,active,counters,...} : state,k : kind) =  (inc kind; incl active; NOCHANGE)
+
+      fun exphandler ({exp,active,...} : state,_ : exp) = (inc exp;incl active; NOCHANGE)
+
+      val all_handlers =  
+	let
+	  val h = set_kindhandler default_handler kindhandler
+	  val h = set_conhandler h conhandler
+	  val h = set_exphandler h exphandler
+	in
+	  h
+	end
+
+      val {rewrite_con,rewrite_exp,rewrite_kind,...} = rewriters all_handlers
+      val printi = print o Int.toString
+    in
+      
+      fun item_size rewrite_item item = 
+	let val exp = ref 0
+	  val con = ref 0
+	  val kind = ref 0
+	  val in_mu = ref 0
+	  val mu_count = ref 0
+	  val in_prim = ref 0
+	  val prim_count = ref 0
+	  val in_sum = ref 0
+	  val sum_count = ref 0
+	  val in_record = ref 0
+	  val record_count = ref 0
+	  val state : state = {con = con,exp = exp,kind = kind,active=[],
+			       containers = [("Mu_c",in_mu),("Prim_c",in_prim),
+					     ("Sum_c",in_sum),("Record_c",in_record)],
+			       counters   = [("Mu_c",mu_count),("Prim_c",prim_count),
+					     ("Sum_c",sum_count),("Record_c",record_count)]}
+	    
+	  val _ = rewrite_item state item
+	in (print "\n";
+	    print "Kind Nodes            = ";printi (!kind);print "\n";
+	    print "Con  Nodes            = ";printi (!con);print "\n";
+	    print "Exp  Nodes            = ";printi (!exp);print "\n";
+	    print "Nodes in Mu_c         = ";printi (!in_mu);print "\n";
+	    print "Nodes in Sum_c        = ";printi (!in_sum);print "\n";
+	    print "Nodes in Record_c     = ";printi (!in_record);print "\n";
+	    print "Nodes in Other Prim_c = ";printi (!in_prim);print "\n";
+	    print "Mu_c Nodes            = ";printi (!mu_count);print "\n";
+	    print "Sum_c Nodes           = ";printi (!sum_count);print "\n";
+	    print "Record_c Nodes        = ";printi (!record_count);print "\n";
+	    print "Other Prim_c Nodes    = ";printi (!prim_count);print "\n";
+	    print "\n";
+	    !exp + !con + !kind)
+	end
+      val con_size  = item_size rewrite_con
+      val exp_size  = item_size rewrite_exp
+      val kind_size = item_size rewrite_kind
+    end
   end

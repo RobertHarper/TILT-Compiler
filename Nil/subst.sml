@@ -16,7 +16,6 @@ structure NilSubst :> NILSUBST =
       (Stats.counter "subst_counter",
        Stats.int "subst_total_size")
 
-    val trimmed = Stats.counter "subst_trimmed"
     val ignored = Stats.counter "subst_is_empty"
     val non_empty = Stats.counter "subst_non_empty"
 
@@ -108,7 +107,20 @@ structure NilSubst :> NILSUBST =
 	     (case substitute (csubst,var)
 		of SOME con_delay => 
 		  (subst_counter(); 
-		   CHANGE_NORECURSE (state,annotate(thaw con_delay)))
+		   CHANGE_NORECURSE (state,thaw con_delay))
+		 | _ => NORECURSE)
+	    | (Proj_c (Var_c var,label)) => 
+	     (case substitute (csubst,var)
+		of SOME con_delay => 
+		  let val con2 = thaw con_delay
+		      val res = (case con2 of
+				   (Crecord_c entries) => 
+				     #2(valOf(List.find (fn ((l,_)) => Name.eq_label (l,label)) entries ))
+				 | _ => Proj_c(con2,label))
+		  in
+		    (subst_counter(); 
+		     CHANGE_NORECURSE (state,res))
+		  end
 		 | _ => NORECURSE)
 	    | (Annotate_c (SUBST_RESULT,_)) => (repeated_subst();NOCHANGE)
 	    | _ => NOCHANGE)
@@ -167,9 +179,8 @@ structure NilSubst :> NILSUBST =
 	else
 	  (non_empty();substituter (empty_state (empty(), csubst)) item)
 
-      fun wrap substXXXInCon = fn s => fn c => annotate(substXXXInCon s c)
+      fun wrap substXXXInCon = fn s => fn c => substXXXInCon s c
     in
-
       val substConInCon   = fn s => subtimer("Subst:substConInCon",wrap (substConInXXX substExpConInCon') s)
       val substExpInExp   = fn s => subtimer("Subst:substExpInExp",substExpInXXX substExpConInExp' s)
       val substExpInCon   = fn s => subtimer("Subst:substExpInCon",wrap (substExpInXXX substExpConInCon') s)
@@ -244,7 +255,6 @@ structure NilSubst :> NILSUBST =
       type item = item
       type item_subst = item_subst
 
-      val used_var = Name.used_var
 
       fun rename (item :item) : item delay = delay (fn () => renameItem item)
 
@@ -254,23 +264,19 @@ structure NilSubst :> NILSUBST =
 	
       fun toList (subst : item_subst) = map_second thaw (VarMap.listItemsi subst)
 	
-      fun sim_add subst (var,value) : item_subst = if used_var var then VarMap.insert (subst,var,rename value) else (trimmed();subst)
+      fun sim_add subst (var,value) : item_subst = VarMap.insert (subst,var,rename value) 
       
       fun addl (var,item,subst) = 
-	if used_var var then 
-	  let
-	    val item_delay = rename item
-	    val map_subst = VarMap.insert (empty(),var,item_delay)
-	    fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
-	  in
-	    VarMap.insert (VarMap.map domap subst,var,item_delay)
-	  end
-	else (trimmed();subst)
+	let
+	  val item_delay = rename item
+	  val map_subst = VarMap.insert (empty(),var,item_delay)
+	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
+	in
+	  VarMap.insert (VarMap.map domap subst,var,item_delay)
+	end
       
       fun addr  (subst,var,item) = 
-	if used_var var then
-	  VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem item)))
-	else (trimmed();subst)
+	VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem item)))
 
       fun is_empty subst = (VarMap.numItems subst) = 0
 	
@@ -332,5 +338,16 @@ structure NilSubst :> NILSUBST =
 			  val substItemInItem = substExpInExp
 			  val renameItem = NilRename.renameExp
 			  val printer = Ppnil.pp_exp)
+
+(*    val substConInKind = 
+      fn s => fn k => let val _ = if (Trace.enter trace) = 17831 
+				    then ()(*(print "Calling substConInKind with subst = \n";
+					  C.print s;
+					  print "\nand kind = \n";
+					  Ppnil.pp_kind k)*)
+				  else ()
       
+			  val res = substConInKind s k
+			  val _ = Trace.exit trace
+		      in res end      *)
   end

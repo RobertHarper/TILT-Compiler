@@ -171,7 +171,11 @@ structure Linknil :> LINKNIL  =
 		    else ()
 
 	    val nilmod = transform rename1 (Linearize.linearize_mod, nilmod)
+
+ 	    val nilmod = transform measure (Measure.measureMod, nilmod)
+
  	    val nilmod = transform typecheck_before_opt (typecheck, nilmod)
+
 	    val nilmod = transform optimize1 
 				   (Optimize.optimize {lift_array = true,
 						       dead = true, projection = true, 
@@ -205,7 +209,7 @@ structure Linknil :> LINKNIL  =
 
  	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
- 	    val nilmod = transform measure (Measure.measureMod, nilmod)
+
  	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
 
 	in  nilmod

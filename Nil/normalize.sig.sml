@@ -45,6 +45,7 @@ signature NORMALIZE =
     val reduce_hnf   : context * con -> bool * con   (* bool indicates whether HNF was reached *)
     val reduce_once  : context * con -> con
     val reduce       : context * con -> con
+    val con_reduce   : context * con_subst -> con -> progress * con_subst * con
     datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
     val reduce_until : context * (con -> 'a option) * con -> 'a ReduceResult
     val expandMuType : context * con -> con

@@ -881,8 +881,14 @@ struct
            | Typecase_c _ => false
            | Annotate_c (_,c) => false)
 
-    fun expandMuType(D:context, mu_con:con) =
-	let fun extract mu_tuple_con (defs,which) =
+(*    fun expandMuType(D:context, mu_con:con) =
+	let 
+	  fun to_proj (Annotate_c (_,c)) = to_proj c
+	    | to_proj (con as Proj_c _)  = SOME con
+	    | to_proj (con as Mu_c _)    = SOME con
+	    | to_proj _                  = NONE
+	       
+	  fun extract mu_tuple_con (defs,which) =
 	    let val defs = Sequence.toList defs
 		fun mapper (n,(v,_)) = 
 		    if (length defs = 1) 
@@ -892,15 +898,81 @@ struct
 		val (_,c) = List.nth(defs,which-1)
 	    in  substConInCon subst c
 	    end
-	in  (case #2(reduce_hnf(D,mu_con)) of
-		 mu_tuple as (Mu_c (_,defs)) => extract mu_tuple (defs,1)
-	       | Proj_c(mu_tuple as (Mu_c (_,defs)), l) => extract mu_tuple 
-		                                           (defs, lab2int l (Sequence.length defs))
-	       | c => (print "expandMuType reduced to non-mu type";
-		       Ppnil.pp_con c;
-		       error "expandMuType reduced to non-mu type"))
+	  fun loop (subst,c) = 
+	    case (to_proj c) of
+	      SOME c => substConInCon subst c
+	    | NONE => let val (progress,subst,c) = con_reduce(D,subst) c
+		      in  case progress of
+			PROGRESS => loop (subst,c) 
+		      | HNF => (case to_proj (substConInCon subst c) of
+				  SOME c => c
+				| NONE => error "Unable to reduce to proj or mu")
+		      | IRREDUCIBLE => 
+			  (case NilContext.find_kind_equation(D,c) 
+			     of SOME c => loop (subst,c)
+			      | NONE => error "Unable to reduce to proj or mu")
+		      end
+	  val mu_con' = loop (empty(),mu_con)
+
+	in 
+	  case strip_annotate mu_con' of  
+	    (Mu_c (_,defs)) => extract mu_con (defs,1)
+	  | (Proj_c (mu_tuple, l))  => 
+	      (case strip_annotate(#2(reduce_hnf(D,mu_con'))) of
+		 (Mu_c (_,defs)) => extract mu_con (defs,1)
+	       | (Proj_c (Mu_c (_,defs),_)) => extract mu_tuple (defs, lab2int l (Sequence.length defs))
+	       | c => (Ppnil.pp_con c;
+		       error "expandMuType projects from non-mu type"))
+	  | _ => error "expandMuType reduced to non-mu type"
+	end
+*)
+    fun expandMuType(D:context, mu_con:con) =
+	let 
+	       
+	  fun extract mu_tuple_con (defs,which) =
+	    let 
+	      val var' = Name.fresh_named_var "mu_bnd"
+	      val defs = Sequence.toList defs
+	      fun mapper (n,(v,_)) = 
+		if (length defs = 1) 
+		  then Con_cb (v,Var_c var')
+		else Con_cb (v,Proj_c(Var_c var',NilUtil.generate_tuple_label(n+1)))
+	      val bnds = Listops.mapcount mapper defs
+	      val bnds = (Con_cb (var',mu_tuple_con))::bnds
+	      val (_,c) = List.nth(defs,which-1)
+	      val con = Let_c(Sequential,bnds,c)
+	    in  con
+	    end
+
+	in 
+	  case #2(reduce_hnf(D,mu_con)) of  
+	    (Mu_c (_,defs)) => extract mu_con (defs,1)
+	  | (Proj_c (mu_tuple as Mu_c (_,defs), l))  => extract mu_tuple (defs, lab2int l (Sequence.length defs))
+	  | _ => error "expandMuType reduced to non-mu type"
 	end
 
+(*    fun expandMuType(D:context, mu_con:con) =
+      let 
+	       
+	fun extract mu_tuple_con (defs,which) =
+	  let 
+	    val defs = Sequence.toList defs
+	    fun mapper (n,(v,_)) = 
+	      if (length defs = 1) 
+		then  (v,mu_con)
+	      else (v,Proj_c(mu_tuple_con,NilUtil.generate_tuple_label(n+1)))
+	      val subst = fromList(Listops.mapcount mapper defs)
+	      val (_,c) = List.nth(defs,which-1)
+
+	    in  substConInCon subst c
+	    end
+
+	in 
+	  case #2(reduce_hnf(D,mu_con)) of  
+	    (Mu_c (_,defs)) => extract mu_con (defs,1)
+	  | (Proj_c (mu_tuple as Mu_c (_,defs), l))  => extract mu_tuple (defs, lab2int l (Sequence.length defs))
+	  | _ => error "expandMuType reduced to non-mu type"
+	end*)
   and con_reduce_letfun state (sort,coder,var,formals,body,rest,con) = 
 	    let
 	      val (D,subst) = state
