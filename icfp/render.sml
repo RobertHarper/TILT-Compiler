@@ -23,10 +23,30 @@ structure Render =
 	   | Union (obj1, obj2) => (scene2primobjs obj1) @ (scene2primobjs obj2)
 	   | _ => raise (Error "Difference and Intersection not implemented"))
 
+    fun primIntersect src dir obj : result = 
+	let val (t,result) = (case obj
+				  Sphere (m4, t) => (t,sphere(m4,src,dir))
+				| Plane (m4, t) => (t,plane(m4,src,dir))
+				| Cube (m4, t) => (t,cylinder(m4,src,dir))
+				| Cone (m4, t) => (t,cube(m4,src,dir))
+				| Cylinder (m4, t) => (t,cone(m4,src,dir))
+				| _ => raise (Error "primIntersect for non-primitive object"))
+	in  case result of
+	      ZERO => []
+	    | ONE of r => [(t,r)]
+	    | TWO of (r1,r2) => [(t,r1),(t,r2)]
+	end
+
     fun cast (viewerPos, direction, scene, depth) : color =  
 	let val primObjs = scene2primObjs scene
-	in  raose (Error "Cast not done")
+	    val dir = normalize direction
+	    val intersects = List.flatten (map (primIntersect viewerPos dir) primObjs)
+	    fun greater (_,{dist=d1,...}:ans, 
+			 _,{dist=d2,...}:ans) = Real.compare(d1,d2)
+	    val intersects = sort greater intersects
+	in  raise (Error "Cast not done")
 	end
+
 
     fun render {amb    : color,
 		lights : light vector,
@@ -35,6 +55,7 @@ structure Render =
 		hfov   : real,
 		hres   : int,
 		vres   : int} : Ppm.bmp = 
+
 	let val hresR = i2r hres
 	    val vresR = i2r vres
 	    val width = 2.0 * tan (0.5 * hfov)
