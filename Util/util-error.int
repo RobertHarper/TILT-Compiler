@@ -1,0 +1,1 @@
+structure UtilError : UTIL_ERROR

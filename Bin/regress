@@ -18,7 +18,7 @@
 # build the runtime
 if make runtime ; then echo "Compiled runtime" ; else echo "Runtime didn't compile" ; exit 1 ; fi
 
-# gmake heap doesn't return an exit status correctly, so remove tilt-nj and then check whether it exists
+# make heap doesn't return an exit status correctly, so remove tilt-nj and then check whether it exists
 
 case `./Bin/cputype` in
     sparc) platform=sparc-solaris;;
@@ -31,7 +31,7 @@ rm -f ./Heaps/tilt.$platform
 # build NJ tilt.  
 make tilt-heap
 
-# Did gmake heap succeed?
+# Did make heap succeed?
 if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
 
 # build the basis
