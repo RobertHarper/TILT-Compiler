@@ -1,4 +1,4 @@
-(*$import Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn Util *)
+(*$import Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn Util Stats *)
 
 functor SparcTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Sparc.specific_instruction

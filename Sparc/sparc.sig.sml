@@ -1,10 +1,8 @@
-(*$import MACHINE *)
+(*$import MACHINE Core *)
 signature SPARC =
 sig
 
-  structure Machine : MACHINE
-
-  type register = Machine.register
+  type register = Core.register
   type label = Rtl.label
   type align = Rtl.align
 
@@ -59,6 +57,6 @@ sig
   | FPMOVE  of fpmove_instruction * register * register
   | TRAP of trap_instruction
 
-  sharing type Machine.specific_instruction = specific_instruction
+  structure Machine : MACHINE where type specific_instruction = specific_instruction
 
 end

@@ -1,4 +1,4 @@
-(*$import Sparc MACHINEUTILS CALLCONV Util *)
+(*$import Sparc SparcUtils CALLCONV Util *)
 
 structure SparcCallconv
     :> CALLCONV where Machine = Sparc.Machine =

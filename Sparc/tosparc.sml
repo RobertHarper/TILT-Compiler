@@ -1,4 +1,4 @@
-(*$import PPRTL Sparc MACHINEUTILS TRACETABLE BBLOCK TOASM Util *)
+(*$import Sparc MACHINEUTILS TRACETABLE BBLOCK TOASM Util Pprtl *)
 
 (* Translation from Rtl to Sparc pseudoregister-assembly. 
    Assumptions:
