@@ -522,8 +522,7 @@ fun trap() =
 	in  update_ireg(dest,lpack (O.bool_to_freg_val(res)))
 	end
       | step (BR(label)) = pc_label_change (LOCAL_LABEL label)
-      | step (BCNDI2 _) = error "unimplemented: BCNDI2"
-      | step (BCNDF2 _) = error "unimplemented: BCNDF2"
+(*
       | step (BCNDI(cmp,ri,label,predict)) = 
 	let val (a,b) = (getlowival(ri),wzero)
         in
@@ -535,6 +534,7 @@ fun trap() =
 	if ((O.cmpf_to_fun cmp) (getfval(ri),0.0))
 	  then pc_label_change (LOCAL_LABEL label)
 	else ()
+*)
       | step (JMP(ri,_)) = pc_abs_change (getlowival ri)
       | step (LOAD32I(ea,ri)) = 
 	setireg(ri,LONGS(WORD wzero,WORD (H.lookuplong(ea_to_val(ea,4)))))

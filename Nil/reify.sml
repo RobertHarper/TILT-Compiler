@@ -45,12 +45,12 @@ struct
              (Runtime, reify_con_rt (c, pset))
           else
              (Compiletime, pset)
-      | decide_con_b_phase ctxt (Open_cb (v,_,c,_), pset) =
+      | decide_con_b_phase ctxt (Open_cb (v,_,c), pset) =
           if pset_member (pset, v) then
              (Runtime, reify_con_rt (c, pset))
           else
              (Compiletime, pset)
-      | decide_con_b_phase ctxt (Code_cb (v,_,c,_), pset) =
+      | decide_con_b_phase ctxt (Code_cb (v,_,c), pset) =
           if pset_member (pset, v) then
              (Runtime, reify_con_rt (c, pset))
           else
@@ -116,7 +116,7 @@ struct
 
       | reify_exp ctxt (Handle_e (e1, v, e2), pset) =
           let
-              val (e1', pset') = reify_exp ctxt (e1, pset)
+              val (e1', pset) = reify_exp ctxt (e1, pset)
               val ctxt = NilContext.insert_con(ctxt, v, Prim_c(Exn_c,[]))
               val (e2', pset) = reify_exp ctxt (e2, pset)
           in

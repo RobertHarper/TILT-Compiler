@@ -93,8 +93,8 @@ struct
     
   (* get the bound var from a conbnd *)
   fun get_conbnd_var (Con_cb (v,c)) = v
-    | get_conbnd_var (Open_cb (v,_,_,_)) = v
-    | get_conbnd_var (Code_cb (v,_,_,_)) = v
+    | get_conbnd_var (Open_cb (v,_,_)) = v
+    | get_conbnd_var (Code_cb (v,_,_)) = v
 
   (* get the bound vars from a list of bnds *)
   fun getBoundVars bnd_list = 
@@ -225,11 +225,11 @@ struct
 
     (*** should these move? *)
     (*** if this is changed (ie to hoist open_cbs) then code_cb wont work *)
-    | rconbnd (cb as Open_cb(v,vklist,con',kind'), cvs) = 
+    | rconbnd (cb as Open_cb(v,vklist,con'), cvs) = 
 	let
 	  val (con'',bvl') = rcon (con',cvs)
 	in
-	  (CSTAY(Open_cb(v,vklist,con'',kind')),bvl')
+	  (CSTAY(Open_cb(v,vklist,con'')),bvl')
 	end
 
     | rconbnd (cb as (Code_cb goo), cvs) = 

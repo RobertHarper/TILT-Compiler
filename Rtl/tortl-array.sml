@@ -97,10 +97,8 @@ struct
 	  val floatl = fresh_code_label "sub_float"
 	  val charl = fresh_code_label "sub_char"
 	  val nonfloatl = fresh_code_label "sub_nonfloat"
-	  val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-		   add_instr(BCNDI(NE,tmp,floatl,false));
-		   add_instr(CMPUI(EQ, r, IMM 0, tmp));
-		   add_instr(BCNDI(NE,tmp,charl,false)))
+	  val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
+		   add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
 	  val _ = add_instr(ILABEL nonfloatl)
 	  val (I desti,w32_state) = nonfloatcase(state, Prim.W32)
 	  val _ = add_instr(BR afterl)
@@ -210,12 +208,9 @@ struct
 	   val floatl = fresh_code_label "update_float"
 	   val intl = fresh_code_label "update_int"
 	   val charl = fresh_code_label "update_char"
-	   val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-		    add_instr(BCNDI(NE,tmp,floatl,false));
-		    add_instr(CMPUI(EQ, r, IMM 2, tmp));
-		    add_instr(BCNDI(NE,tmp,intl,false));
-		    add_instr(CMPUI(EQ, r, IMM 0, tmp));
-		    add_instr(BCNDI(NE,tmp,charl,false)))
+	   val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
+		    add_instr(BCNDI(EQ, r, IMM 2, intl, false));
+		    add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
 	   val _ = xptrupdate(state,c) (vl1,vl2,vl3)
 	   val _ = add_instr(BR afterl)
 	   val _ = add_instr(ILABEL intl)
@@ -273,10 +268,8 @@ struct
 	  val afterl = fresh_code_label "length_after"
 	  val floatl = fresh_code_label "length_float"
 	  val charl = fresh_code_label "length_char"
-	  val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-		   add_instr(BCNDI(NE,tmp,floatl,false));
-		   add_instr(CMPUI(EQ, r, IMM 0, tmp));
-		   add_instr(BCNDI(NE,tmp,charl,false));
+	  val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
+		   add_instr(BCNDI(EQ, r, IMM 0, charl, false));
 		   add_instr(SRL(dest,IMM (2+int_len_offset),dest));
 		   add_instr(BR afterl);
 		   add_instr(ILABEL floatl);
@@ -309,7 +302,6 @@ struct
 	    val i = alloc_regi(NOTRACE_INT)
 	    val tmp = alloc_regi(NOTRACE_INT)
 	    val gctemp  = alloc_regi(NOTRACE_INT)
-	    val cmptemp = alloc_regi(NOTRACE_INT)
 	    val fsmall_alloc = fresh_code_label "array_float_smallalloc"
 	    val fafter       = fresh_code_label "array_float_after" 
 	    val fbottom      = fresh_code_label "array_float_bottom"
@@ -319,9 +311,7 @@ struct
 
 	in 
 	    (* if array is too large, call runtime to allocate *)
-	    add_instr(LI(0w4096,cmptemp));
-	    add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
-	    add_instr(BCNDI(NE,cmptemp,fsmall_alloc,true));
+	    add_instr(BCNDI(LE, len, IMM 4096, fsmall_alloc, true));
 	    add_instr(CALL{call_type = C_NORMAL,
 			   func = LABEL' (C_EXTERN_LABEL "alloc_bigfloatarray"),
 			   args = (case ptag_opt of 
@@ -364,7 +354,7 @@ struct
 	    add_instr(STOREQF(EA(tmp,0),fr));  (* initialize value *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL fbottom);
-	    add_instr(BCNDI(GE,i,ftop,true));
+	    add_instr(BCNDI(GE,i,IMM 0,ftop,true));
 	    add_instr(ILABEL fafter);
 	    (LOCATION(REGISTER(false, I dest)),
 	     Prim_c(Array_c, [Prim_c(Float_c Prim.F64,[])]),
@@ -415,7 +405,7 @@ struct
 	    else add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL gbottom);
-	    add_instr(BCNDI(GE,i,gtop,true));
+	    add_instr(BCNDI(GE,i,IMM 0,gtop,true));
 	    add_instr(ILABEL gafter)
       end
 
@@ -423,7 +413,6 @@ struct
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val dest  = alloc_regi TRACE
 		val gctemp  = alloc_regi(NOTRACE_INT)
-		val cmptemp = alloc_regi(NOTRACE_INT)
 		val i       = alloc_regi(NOTRACE_INT)
 		val tmp     = alloc_regi(LOCATIVE)
 		val vtemp = load_ireg_term(vl2,NONE)
@@ -467,9 +456,7 @@ struct
 		val gafter = fresh_code_label "array_int_after"
 		val ismall_alloc = fresh_code_label "array_int_small"
 		fun check() = 
-		    (add_instr(LI(i2w 4096,cmptemp));
-		     add_instr(CMPUI(LE, wordlen, REG cmptemp, cmptemp));
-		     add_instr(BCNDI(NE,cmptemp,ismall_alloc,true));
+		    (add_instr(BCNDI(LE, wordlen, IMM 4096, ismall_alloc, true));
 		     add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
 				    args = (case ptag_opt of
@@ -518,7 +505,6 @@ struct
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val dest = alloc_regi TRACE
 		val gctemp  = alloc_regi(NOTRACE_INT)
-		val cmptemp = alloc_regi(NOTRACE_INT)
 		val i       = alloc_regi(NOTRACE_INT)
 		val tmp     = alloc_regi(LOCATIVE)
 		val ptag_opt = make_ptag_opt()
@@ -527,9 +513,7 @@ struct
 		val gafter = fresh_code_label "array_ptr_aftert"
 		val psmall_alloc = fresh_code_label "array_ptr_alloc"
 		val state = new_gcstate state
-	    in  (add_instr(LI((i2w 4096),cmptemp));
-		 add_instr(CMPUI(LE, len, REG cmptemp, cmptemp));
-		 add_instr(BCNDI(NE,cmptemp,psmall_alloc,true));
+	    in  (add_instr(BCNDI(LE, len, IMM 4096, psmall_alloc, true));
 		 add_instr(CALL{call_type = C_NORMAL,
 				func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
 				args = (case ptag_opt of
@@ -579,12 +563,9 @@ struct
 	val floatl = fresh_code_label "array_float"
 	val intl = fresh_code_label "array_int"
 	val charl = fresh_code_label "array_char"
-	val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-		 add_instr(BCNDI(NE,tmp,floatl,false));
-		 add_instr(CMPUI(EQ, r, IMM 2, tmp));
-		 add_instr(BCNDI(NE,tmp,intl,false));
-		 add_instr(CMPUI(EQ, r, IMM 0, tmp));
-		 add_instr(BCNDI(NE,tmp,charl,false)))
+	val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
+		 add_instr(BCNDI(EQ, r, IMM 2, intl, false));
+		 add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
 	val ptr_state = 
 	    let val (LOCATION(REGISTER(_, I tmp)),_,state) = xarray_ptr(state,c) (vl1,vl2)
 		val _ = add_instr(MV(tmp,dest))

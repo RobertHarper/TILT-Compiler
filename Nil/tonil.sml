@@ -838,8 +838,7 @@ end (* local defining splitting context *)
            val con_body = NilUtil.makeLetC cbnds_body name_body_c
            val cbnd_fun_cat = 
 	       LIST[Open_cb(var_fun_c, [(var_arg_c, knd_arg)],
-			    con_body,
-			    Single_k(con_body))]
+			    con_body)]
 
 	   val ebnd_fun_cat =  
 	       LIST[Fixopen_b (Sequence.fromList
@@ -1607,8 +1606,8 @@ end (* local defining splitting context *)
 	   val con1 = xcon context' il_con1
 
 	   val fun_name = Name.fresh_var ()
-	   val con = NilUtil.makeLetC ([Open_cb(fun_name, args, con1, Single_k(con1))])
-	       (Var_c fun_name)
+	   val con = NilUtil.makeLetC [Open_cb(fun_name, args, con1)]
+			       (Var_c fun_name)	
        in  con
        end
 

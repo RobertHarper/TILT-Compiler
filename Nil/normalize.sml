@@ -112,11 +112,11 @@ struct
 	 in
 	   (*Closures?  *)
 	   case openness of
-	        Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
-	      | Code => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
+	        Open => Let_c (Sequential,[Open_cb (var,formals,c)],Var_c var)
+	      | Code => Let_c (Sequential,[Code_cb (var,formals,c)],Var_c var)
 	      | Closure => let val cenv = (fresh_named_var "pull_closure", 
 					   Record_k (Sequence.fromList []))
-			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c,return)],
+			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c)],
 				      Closure_c(Var_c var, Crecord_c []))
 			   end
 	 end)
@@ -221,7 +221,7 @@ struct
 
   fun eta_confun lambda = 
     let
-	fun help(var, formals,body,body_kind) = 
+	fun help(var, formals,body) =
 	    (case strip_app body of
 		 SOME (con,actuals) =>
 		     let
@@ -240,10 +240,10 @@ struct
 			     lambda
 		     end
 	       | NONE => lambda)
-      fun eta_confun' (Let_c (sort,[Open_cb (var,formals,body,body_kind)],Var_c var')) = 
-	  if (eq_var(var,var')) then help(var,formals,body,body_kind) else lambda
-        | eta_confun' (Let_c (sort,[Code_cb (var,formals,body,body_kind)],Var_c var')) = 
-	  if (eq_var(var,var')) then help(var,formals,body,body_kind) else lambda
+      fun eta_confun' (Let_c (sort,[Open_cb (var,formals,body)],Var_c var')) = 
+	  if (eq_var(var,var')) then help(var,formals,body) else lambda
+        | eta_confun' (Let_c (sort,[Code_cb (var,formals,body)],Var_c var')) = 
+	  if (eq_var(var,var')) then help(var,formals,body) else lambda
 	| eta_confun' _ = lambda
     in
       map_annotate eta_confun' lambda
@@ -276,7 +276,7 @@ struct
 
   and beta_confun' once D (app as (App_c (con,actuals))) =
     let
-	  fun reduce actuals (formals,body,body_kind) = 
+	  fun reduce actuals (formals,body) = 
 	       (true,
 		let
 		 val (vars,_) = unzip formals
@@ -287,21 +287,21 @@ struct
 	       end)
 	  fun beta_confun'' actuals confun = 
 	      (case confun of
-		   Let_c (_,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
+		   Let_c (_,[Open_cb (var,formals,body)],Var_c v) =>
 		     if eq_var(var,v)
-			 then reduce actuals (formals,body,body_kind) 
+			 then reduce actuals (formals,body) 
 		     else (false,app)
-		 | Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
+		 | Let_c (_,[Code_cb (var,formals,body)],Var_c v) =>
 		     if eq_var(var,v)
-			 then reduce actuals (formals,body,body_kind) 
+			 then reduce actuals (formals,body)
 		     else (false,app)
-	         | Let_c (_,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,env)) =>
+	         | Let_c (_,[Code_cb (var,formals,body)],Closure_c(Var_c v,env)) =>
 		   if eq_var(var,v)
-		       then reduce (actuals @ [env]) (formals,body,body_kind) 
+		       then reduce (actuals @ [env]) (formals,body)
 		   else (false,app)
-		 | Closure_c(Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v), env) =>
+		 | Closure_c(Let_c (_,[Code_cb (var,formals,body)],Var_c v), env) =>
 		       if eq_var(var,v)
-			   then reduce (actuals @ [env]) (formals,body,body_kind) 
+			   then reduce (actuals @ [env]) (formals,body)
 		       else (false,app)
 		 | _ => (false,app))
 	in  beta_confun'' actuals con
@@ -407,7 +407,7 @@ struct
     else
       con_normalize state con
 
-  and con_normalize_letfun state (sort,constructor,var,formals,body,body_kind,rest,letbody) = 
+  and con_normalize_letfun state (sort,constructor,var,formals,body,rest,letbody) = 
 	    let
 	      val old_state = state
 
@@ -416,8 +416,7 @@ struct
 		   then
 		       let val (formals,state) = bind_at_kinds state formals
 			   val body = con_normalize' state body
-			   val body_kind = kind_normalize' state body_kind
-			   val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+			   val lambda = (Let_c (sort,[constructor (var,formals,body)],
 						Var_c var))
 			   val lambda = eta_confun lambda
 		       in  lambda
@@ -425,7 +424,7 @@ struct
 	       else
 		   let 
 
-		       val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+		       val lambda = (Let_c (sort,[constructor (var,formals,body)],
 					    Var_c var))
 		       val _ = 
 			   (case (substitute (#2 old_state) var)  of
@@ -504,10 +503,10 @@ struct
 		      | NONE => Var_c var))
 	 in con
 	 end
-        | (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest),letbody)) =>
-	 con_normalize_letfun state (sort,Open_cb,var,formals,body,body_kind,rest,letbody)
-        | (Let_c (sort,((cbnd as Code_cb (var,formals,body,body_kind))::rest),letbody)) =>
-	 con_normalize_letfun state (sort,Code_cb,var,formals,body,body_kind,rest,letbody)
+        | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),letbody)) =>
+	 con_normalize_letfun state (sort,Open_cb,var,formals,body,rest,letbody)
+        | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),letbody)) =>
+	 con_normalize_letfun state (sort,Code_cb,var,formals,body,rest,letbody)
 
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let
@@ -656,12 +655,11 @@ struct
 		body = body, body_type = body_type}
     end
 
-  and cfunction_normalize' state (tformals,body,return) = 
+  and cfunction_normalize' state (tformals,body) = 
     let
       val (tformals,state) = bind_at_kinds state tformals
       val body = con_normalize' state body
-      val return = kind_normalize' state return
-    in (tformals,body,return)
+    in (tformals,body)
     end
 
   and bnds_normalize' state bnds = 
@@ -681,14 +679,14 @@ struct
 		let val con = con_normalize' state c
 		in  (Con_cb(v,con), v, Single_k con)
 		end
-	      | Open_cb(v,vklist,c,k) => 
-		let val (vklist,c,k) = cfunction_normalize' state (vklist,c,k)
-		    val cbnd = Open_cb(v,vklist,c,k)
+	      | Open_cb(v,vklist,c) => 
+		let val (vklist,c) = cfunction_normalize' state (vklist,c)
+		    val cbnd = Open_cb(v,vklist,c)
 		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
 		end
-	      | Code_cb(v,vklist,c,k) =>
-		let val (vklist,c,k) = cfunction_normalize' state (vklist,c,k)
-		    val cbnd = Code_cb(v,vklist,c,k)
+	      | Code_cb(v,vklist,c) =>
+		let val (vklist,c) = cfunction_normalize' state (vklist,c)
+		    val cbnd = Code_cb(v,vklist,c)
 		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
 		end)
 	   val bnd = Con_b (p,cbnd)
@@ -878,10 +876,10 @@ struct
 		       error "expandMuType reduced to non-mu type"))
 	end
 
-  and con_reduce_letfun state (sort,coder,var,formals,body,body_kind,rest,con) = 
+  and con_reduce_letfun state (sort,coder,var,formals,body,rest,con) = 
 	    let
 	      val (D,subst) = state
-	      val lambda = (Let_c (sort,[coder (var,formals,body,body_kind)],Var_c var))
+	      val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
 	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
 		   then (HNF, subst, lambda)
 	       else
@@ -912,11 +910,11 @@ struct
 		      | NONE => (IRREDUCIBLE, subst, Var_c var)))*)
 	 end
 
-        | (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest),con)) =>
-	 con_reduce_letfun state (sort,Open_cb,var,formals,body,body_kind,rest,con)
+        | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
+	 con_reduce_letfun state (sort,Open_cb,var,formals,body,rest,con)
 
-        | (Let_c (sort,((cbnd as Code_cb (var,formals,body,body_kind))::rest),con)) =>
-	 con_reduce_letfun state (sort,Code_cb,var,formals,body,body_kind,rest,con)
+        | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
+	 con_reduce_letfun state (sort,Code_cb,var,formals,body,rest,con)
 
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let val (D,subst) = state
@@ -1162,8 +1160,8 @@ struct
 		   let val (v,c) = 
 			   (case cbnd of
 				Con_cb (v,c) => (v,c)
-			      | Open_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v))
-			      | Code_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v)))
+			      | Open_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v))
+			      | Code_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v)))
 		       val c = substConInCon subst c
 		       val D = NilContext.insert_equation(D,v,c)
 		       val subst = add subst (v,c)

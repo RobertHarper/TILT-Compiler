@@ -792,24 +792,22 @@ struct
   and cbnd_valid (cbnd,D) =
     let
 
-      fun con_valid_letfun' (D : context, var, formals,body,body_kind) : unit = 
+      fun con_valid_letfun' (D : context, var, formals,body) : unit = 
 	let
 	  fun folder ((v,k),D) = (kind_valid (D,k);insert_kind(D,v,k))
 	  val D = foldl folder D formals
-	  val _ = kind_valid(D,body_kind)
-
 	in ()
 	end
       
-      fun bnd_checker maker (var,formals,body,body_kind) = 
+      fun bnd_checker maker (var,formals,body) =
 	let
 	    val _ = if (!trace)
 			then (print "{Processing Open_cb/Code_cb with var = ";
 			      pp_var var; print "\n")
 		    else ()
-	  val _ = con_valid_letfun'(D,var,formals,body,body_kind)
+	  val _ = con_valid_letfun'(D,var,formals,body)
 	  val var' = derived_var var
-	  val bnd = maker (var',formals,body,body_kind)
+	  val bnd = maker (var',formals,body)
 	  val con = Let_c (Sequential,[bnd],Var_c var')
 	  val D = insert_kind(D,var,Single_k con)
 	    val _ = if (!trace)
@@ -1785,8 +1783,8 @@ struct
 	     val (v,c) = 
 	       (case cbnd of
 		  Con_cb (v,c) => (v,c)
-		| Open_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v))
-		| Code_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v)))
+		| Open_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v))
+		| Code_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v)))
 	     val subst = addr (subst,v,c)
 	   in  (D,subst)
 	   end

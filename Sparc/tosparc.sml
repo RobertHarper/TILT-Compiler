@@ -272,6 +272,21 @@ struct
 	 	     else (emit(SPECIFIC(INTOP(OR,Rdest,IMMop low, Rdest)))))
 	  end
 
+   fun translate_icmp Rtl.EQ = BE
+     | translate_icmp Rtl.NE = BNE
+     | translate_icmp Rtl.GT = BG
+     | translate_icmp Rtl.GE = BGE
+     | translate_icmp Rtl.LT = BL
+     | translate_icmp Rtl.LE = BLE
+
+
+   fun translate_fcmp Rtl.EQ = FBE
+     | translate_fcmp Rtl.NE = FBNE
+     | translate_fcmp Rtl.GT = FBG
+     | translate_fcmp Rtl.GE = FBGE
+     | translate_fcmp Rtl.LT = FBL
+     | translate_fcmp Rtl.LE = FBLE
+
    fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
      | translate (Rtl.LADDR (label, offset, rtl_Rdest)) =
           let
@@ -304,7 +319,7 @@ struct
 		 | Rtl.GE =>  BGE
 		 | Rtl.LT =>  BL
 		 | Rtl.LE =>  BLE)
-       in emit(SPECIFIC(CMP (Rsrc1, Rzero)));
+       in emit(SPECIFIC(CMP (Rsrc1, IMMop 0)));
 	  emit(SPECIFIC(CBRANCHI(br,label)));
 	  emit(SPECIFIC NOP);
 	  emit(SPECIFIC(INTOP(OR, Rzero, Rop2, Rdest)));
@@ -464,10 +479,11 @@ struct
 		 | Rtl.GE =>  BGE
 		 | Rtl.LT =>  BL
 		 | Rtl.LE =>  BLE)
-         val label = Rtl.fresh_code_label "cmv"
-       in emit(SPECIFIC(INTOP(OR, Rsrc1, op2, Rzero)));
-	  emit(SPECIFIC(CBRANCHI(br,label)));
+         val label = Rtl.fresh_code_label "cmpsi"
+       in emit(SPECIFIC(CMP(Rsrc1, op2)));
 	  load_imm(0w1, Rdest);
+	  emit(SPECIFIC(CBRANCHI(br,label)));
+	  emit(SPECIFIC NOP);
 	  load_imm(0w0, Rdest);
           translate(Rtl.ILABEL label)
        end
@@ -484,10 +500,11 @@ struct
 		 | Rtl.GE =>  BCC
 		 | Rtl.LT =>  BCS
 		 | Rtl.LE =>  BLEU)
-         val label = Rtl.fresh_code_label "cmv"
-       in emit(SPECIFIC(INTOP(OR, Rsrc1, op2, Rzero)));
-	  emit(SPECIFIC(CBRANCHI(br,label)));
+         val label = Rtl.fresh_code_label "cmpui"
+       in emit(SPECIFIC(CMP(Rsrc1, op2)));
 	  load_imm(0w1, Rdest);
+	  emit(SPECIFIC(CBRANCHI(br,label)));
+	  emit(SPECIFIC NOP);
 	  load_imm(0w0, Rdest);
           translate(Rtl.ILABEL label)
        end
@@ -642,55 +659,36 @@ struct
 		 | Rtl.LT =>  FBL
 		 | Rtl.LE =>  FBLE)
        in emit(SPECIFIC(FCMPD(Fsrc1, Fsrc2)));
-	  emit(SPECIFIC(CBRANCHF(br,label)));
 	  load_imm(0w1, Rdest);
+	  emit(SPECIFIC(CBRANCHF(br,label)));
+	  emit(SPECIFIC NOP);
 	  load_imm(0w0, Rdest);
           translate(Rtl.ILABEL label)
        end
 
      | translate (Rtl.BR ll) =  emit (BASE (BR ll))
 
-     | translate (Rtl.BCNDI2 (comparison, rtl_Rsrc1, rtl_Rsrc2, loc_label, pre)) =
-       let val rtl_tmp =  Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
+     | translate (Rtl.BCNDI (comparison, rtl_Rsrc1, rtl_op2, loc_label, pre)) =
+       let val Rsrc1 = translateIReg rtl_Rsrc1
+	   val op2 = translateOp rtl_op2
+	   val cmp = translate_icmp comparison
        in 
-	 translate (Rtl.CMPSI(comparison,rtl_Rsrc1,rtl_Rsrc2,rtl_tmp));
-         translate(Rtl.BCNDI (Rtl.NE, rtl_tmp, loc_label, pre))
+	   emit(SPECIFIC(CMP(Rsrc1,op2)));
+	   emit(SPECIFIC(CBRANCHI(cmp, loc_label)));
+	   emit(SPECIFIC NOP)
        end
-     | translate (Rtl.BCNDF2 (cmp, rtl_Fsrc1, rtl_Fsrc2, loc_label, pre)) =
+
+     | translate (Rtl.BCNDF (cmp, rtl_Fsrc1, rtl_Fsrc2, loc_label, pre)) =
        let 
 	 val Fsrc1 = translateFReg rtl_Fsrc1
          val Fsrc2 = translateFReg rtl_Fsrc2
-         val br = (case cmp of
-		   Rtl.EQ =>  FBE
-		 | Rtl.NE =>  FBNE
-		 | Rtl.GT =>  FBG
-		 | Rtl.GE =>  FBGE
-		 | Rtl.LT =>  FBL
-		 | Rtl.LE =>  FBLE)
+         val cmp = translate_fcmp cmp
        in 
 	 emit (SPECIFIC (FCMPD(Fsrc1, Fsrc2)));
-	 emit (SPECIFIC (CBRANCHF(br, loc_label)));
-	  emit(SPECIFIC NOP)
+	 emit (SPECIFIC (CBRANCHF(cmp, loc_label)));
+	 emit(SPECIFIC NOP)
        end
 
-     | translate (Rtl.BCNDI (cmp, rtl_Rsrc, loc_label, _)) =
-       let
-         val br = (case cmp of
-		   Rtl.EQ =>  BE
-		 | Rtl.NE =>  BNE
-		 | Rtl.GT =>  BG
-		 | Rtl.GE =>  BGE
-		 | Rtl.LT =>  BL
-		 | Rtl.LE =>  BLE)
-	 val Rsrc = translateIReg rtl_Rsrc
-       in
-	 emit (SPECIFIC (CMP(Rsrc, Rzero)));
-	 emit (SPECIFIC (CBRANCHI(br, loc_label)));
-	  emit(SPECIFIC NOP)
-       end
-
-     | translate (Rtl.BCNDF (comparison, rtl_Fsrc, ll, _)) =
-	 error "Rtl.BCNDF not yet done - need Fzero"
 
      | translate (Rtl.JMP (rtl_Raddr, rtllabels)) =
        let
@@ -707,13 +705,14 @@ struct
        in
 	   (case call_type of
 		Rtl.C_NORMAL =>
+		    (emit(SPECIFIC(INTOP(SUB, Rsp, IMMop 256, Rsp)));
 		    emit(BASE(RTL (CALL{calltype = Rtl.C_NORMAL,
 					func = DIRECT(Rtl.C_EXTERN_LABEL "save_iregs", NONE),
 					args = [],
 					results = [],
 					argregs = NONE,
 					resregs = NONE,
-					destroys = NONE})))
+					destroys = NONE}))))
 	      | _ => ());
 
 	  emit (BASE(RTL (CALL{calltype = call_type,
@@ -726,13 +725,14 @@ struct
 
 	   (case call_type of
 		Rtl.C_NORMAL =>
-		    emit(BASE(RTL (CALL{calltype = Rtl.C_NORMAL,
+		    (emit(BASE(RTL (CALL{calltype = Rtl.C_NORMAL,
 					func = DIRECT(Rtl.C_EXTERN_LABEL "load_iregs", NONE),
 					args = [],
 					results = [],
 					argregs = NONE,
 					resregs = NONE,
-					destroys = NONE})))
+					destroys = NONE})));
+		     emit(SPECIFIC(INTOP(ADD,Rsp, IMMop 256, Rsp))))
 	      | _ => ());
 
 	   (* Have a return for tailcalls in case we cannot do tailcalls from overflowing arguments *)
@@ -805,7 +805,7 @@ struct
 		NONE => logwrite()
 	      | SOME isptr =>
 		    let val after = Rtl.fresh_code_label "dynmutate_after"
-		    in  translate (Rtl.BCNDI(Rtl.EQ,isptr,after,false));
+		    in  translate (Rtl.BCNDI(Rtl.EQ,isptr,Rtl.IMM 0,after,false));
 			logwrite();
 			translate (Rtl.ILABEL after)
 		    end)
@@ -826,7 +826,7 @@ struct
        in
 	 emit (SPECIFIC (INTOP   (SLL, Rsize, IMMop 2, Rat)));
 	 emit (SPECIFIC (INTOP   (ADD, Rat, REGop Rheap, Rat)));
-	 emit (SPECIFIC (CMP     (Rat, Rhlimit)));
+	 emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
 	 emit (SPECIFIC (CBRANCHI(BL, rtl_loclabel)));
 	  emit(SPECIFIC NOP);
 	 emit (SPECIFIC (INTOP   (SLL, Rsize, IMMop 2, Rhlimit)));
@@ -850,7 +850,7 @@ struct
 	 else
 	   (load_imm(i2w size, Rat);
 	    emit (SPECIFIC (INTOP (ADD, Rheap, REGop Rat, Rat))));
-	 emit (SPECIFIC (CMP   (Rat, Rhlimit)));
+	 emit (SPECIFIC (CMP   (Rat, REGop Rhlimit)));
 	 emit (SPECIFIC (CBRANCHI(BL, rtl_loclabel)));
 	  emit(SPECIFIC NOP);
 	 load_imm(i2w size, Rhlimit);

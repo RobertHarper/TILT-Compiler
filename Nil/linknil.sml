@@ -27,7 +27,6 @@ structure Linknil :> LINKNIL  =
     val show_two_optimize = Stats.ff("showOptimize2")
     val show_hoist = Stats.ff("showHoist")
     val show_reify = Stats.ff("showReify")
-    val show_reify2 = Stats.ff("showReify2")
     val show_cse = Stats.ff("showCSE")
     val show_specialize = Stats.ff("showSpecialize")
     val show_cc = Stats.ff("showCC")
@@ -246,8 +245,8 @@ structure Linknil :> LINKNIL  =
 				   "Inline", 
 				   inline_domod, filename, nilmod)
 
-            val nilmod = transform(do_reify, show_reify2,
-                                   "Reification2",
+            val nilmod = transform(do_reify, show_reify,
+                                   "Reification",
                                    Reify.reify_mod,
                                    filename, nilmod)
 

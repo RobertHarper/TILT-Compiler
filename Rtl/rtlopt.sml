@@ -79,10 +79,8 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 	      case i of
 		(LADDR (l,_,_))             => l :: acc
 	      | (BR (ll))                   => (LOCAL_LABEL ll) :: acc
-	      | (BCNDI (_,_,ll,_))          => (LOCAL_LABEL ll) :: acc
-	      | (BCNDF (_,_,ll,_))          => (LOCAL_LABEL ll) :: acc
-	      | (BCNDI2 (_,_,_,ll,_))       => (LOCAL_LABEL ll) :: acc
-	      | (BCNDF2 (_,_,_,ll,_))       => (LOCAL_LABEL ll) :: acc
+	      | (BCNDI (_,_,_,ll,_))       => (LOCAL_LABEL ll) :: acc
+	      | (BCNDF (_,_,_,ll,_))       => (LOCAL_LABEL ll) :: acc
 	      | (JMP (_,ls))                => (map LOCAL_LABEL ls) @ acc
 	      | (CALL{func=(LABEL' l),...}) => l :: acc
 	      | SAVE_CS l                   => (LOCAL_LABEL l) :: acc
@@ -188,11 +186,9 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 	| CMPF   (_) => nil
 	
 	| BR     (_) => nil
-	| BCNDI  (_,r,_,_) => [r]
-	| BCNDF  (_,_,_,_) => nil
-	| BCNDI2 (_,r,REG a,_,_) => [r,a]
-	| BCNDI2 (_,r,IMM _,_,_) => [r]
-	| BCNDF2 (_,_,_,_,_) => nil
+	| BCNDI (_,r,REG a,_,_) => [r,a]
+	| BCNDI (_,r,IMM _,_,_) => [r]
+	| BCNDF (_,_,_,_,_) => nil
 	| JMP    (r,_) => [r]
 	    
 	| CALL  {extern_call, func: reg_or_label, return,args,results, tailcall,save} => 
@@ -633,13 +629,9 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 		  | hloop ((NEEDGC (IMM b))::more) (SOME a) labs = loop more (SOME(a+b)) labs
 		  | hloop ((BR    l)::more) gcacc labs = 
 		    loop more gcacc (LOCAL_LABEL l::labs)
-		  | hloop ((BCNDI (_,_,l,_))::more) gcacc labs = 
+		  | hloop ((BCNDI (_,_,_,l,_))::more) gcacc labs = 
 		    loop more gcacc (LOCAL_LABEL l::labs)
-		  | hloop ((BCNDF (_,_,l,_))::more) gcacc labs = 
-		    loop more gcacc (LOCAL_LABEL l::labs)
-		  | hloop ((BCNDI2 (_,_,_,l,_))::more) gcacc labs = 
-		    loop more gcacc (LOCAL_LABEL l::labs)
-		  | hloop ((BCNDF2 (_,_,_,l,_))::more) gcacc labs = 
+		  | hloop ((BCNDF (_,_,_,l,_))::more) gcacc labs = 
 		    loop more gcacc (LOCAL_LABEL l::labs)
 		  | hloop ((JMP (_,ls))::more) gcacc labs = 
 		    loop more gcacc ((map LOCAL_LABEL ls) @ labs)

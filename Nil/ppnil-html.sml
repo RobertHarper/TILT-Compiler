@@ -8,8 +8,7 @@ structure PpnilHtml :> PPNIL =
     open Util Name Prim Ppprim
 
     val error = fn s => error "ppnil-html.sml" s
-    val elide_prim = ref false
-    val elide_bnd = ref false
+    val elide_prim = Stats.tt("PpnilHtmlElidePrim")
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
     fun separate [] sep = []
@@ -104,22 +103,20 @@ structure PpnilHtml :> PPNIL =
 
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_bound_var v, String " = ", pp_con c]
-      | pp_conbnd (Open_cb(v,vklist,c,k)) = 
+      | pp_conbnd (Open_cb(v,vklist,c)) = 
 	HOVbox[pp_bound_var v, String " = ", Break,
 	       HOVbox[String "FUN_C",
 		      (pp_list' (fn (v,k) => Hbox[pp_bound_var v, String " :: ", pp_kind k])
 		       vklist),
 		      Break0 0 5,
-		      String " : ", pp_kind k, String " = ",
+		      String " = ",
 		      Break0 0 5,
 		      pp_con c]]
-      | pp_conbnd (Code_cb(v,vklist,c,k)) = 
+      | pp_conbnd (Code_cb(v,vklist,c)) = 
 	HOVbox[pp_bound_var v, String " =Code= ", Break,
 	       (pp_list' (fn (v,k) => Hbox[pp_bound_var v, String " :: ", pp_kind k])
 		vklist),
 	       Break0 0 5,
-	       String " :: ",
-	       pp_kind k,
 	       String " = ",
 	       Break0 0 5,
 	       pp_con c]
@@ -396,7 +393,7 @@ structure PpnilHtml :> PPNIL =
 		    in pp_list (fn (v,{code,cenv,venv,tipe}) => 
 				HOVbox[if recur then String "& " else String "",
 				       pp_bound_var v, 
-				       HOVbox(if (!elide_bnd) then [] else [String " : ", pp_con tipe]),
+				       String " : ", pp_con tipe,
 				       String " = ",
 				       String "(",
 				       pp_var code, String ",",

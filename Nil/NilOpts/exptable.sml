@@ -347,11 +347,10 @@ struct
 	  | (Con_cb _, _) => GREATER
 	  | (_, Con_cb _) => LESS
  
-	  | ( Open_cb (v1, vklist1, con1, kind1), Open_cb (v2, vklist2, con2, kind2) ) =>
+	  | ( Open_cb (v1, vklist1, con1), Open_cb (v2, vklist2, con2) ) =>
 		(case Name.compare_var (v1, v2) of
 		     EQUAL => (case cmp_vklist (vklist1,vklist2) of
-				   EQUAL => cmp_orders[cmp_con(con1,con2),
-						       cmp_kind(kind1,kind2)]
+				   EQUAL => cmp_con(con1,con2)
 				 | r => r)
 		   | r => r)
 

@@ -107,18 +107,18 @@ structure NilRewrite :> NILREWRITE =
 	and rewrite_cbnd (state : 'state) (cbnd : conbnd) : (conbnd list option * 'state) =
 	  let
 
-	    fun define wrap (var,vklist,c,k) state = 
+	    fun define wrap (var,vklist,c) state = 
 	      let
 		val var' = Name.derived_var var
-		val con = Let_c (Sequential,[wrap (var',vklist,c,k)],Var_c var')
+		val con = Let_c (Sequential,[wrap (var',vklist,c)],Var_c var')
 		val (state,varopt) = con_var_define(state,var,con)
 	      in 
 		case varopt 
-		  of SOME var => (SOME (wrap(var, vklist, c, k)), state)
+		  of SOME var => (SOME (wrap(var, vklist, c)), state)
 		   | NONE => (NONE,state)
 	      end
 
-	    fun cbnd_recur wrap (var, vklist, c, k) oldstate = 
+	    fun cbnd_recur wrap (var, vklist, c) oldstate = 
 	      let 
 
 		fun folder changed ((v,k),state) = 
@@ -130,13 +130,12 @@ structure NilRewrite :> NILREWRITE =
 		val changed = ref false
 		val (vklist,state) = foldl_acc_f folder changed state vklist
 		val c = recur_c changed state c
-		val k = recur_k changed state k
 	      in
-		case define wrap (var,vklist,c,k) oldstate
+		case define wrap (var,vklist,c) oldstate
 		  of (SOME bnd,state) => (SOME bnd,state)
 		   | (NONE,state) => 
 		    if !changed then 
-		      (SOME (wrap (var,vklist,c,k)),state)
+		      (SOME (wrap (var,vklist,c)),state)
 		    else
 		      (NONE,state)
 	      end
@@ -153,7 +152,7 @@ structure NilRewrite :> NILREWRITE =
 		     val (state,var) = define_c changed(state,var,con)
 		   in if !changed then (SOME (Con_cb(var, con)), state) else (NONE,state)
 		   end
-		  | Open_cb (args as (var, vklist, c, k)) =>
+		  | Open_cb args =>
 		   (if recur then
 		      cbnd_recur Open_cb args state 
 		    else 

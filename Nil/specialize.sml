@@ -255,9 +255,9 @@ struct
 		   | Con_b(p,cbnd) => 
 			 (case cbnd of
 			      Con_cb(v,c) => add_var(state,v,SOME c)
-			    | Open_cb (v,_,_,_) => add_var(state,v,SOME
+			    | Open_cb (v,_,_) => add_var(state,v,SOME
 							   (Let_c(Sequential,[cbnd],Var_c v)))
-			    | Code_cb (v,_,_,_) => add_var(state,v,SOME
+			    | Code_cb (v,_,_) => add_var(state,v,SOME
 							   (Let_c(Sequential,[cbnd],Var_c v))))
 		   | Fixopen_b vfset =>
 		      let val vflist = (Sequence.toList vfset)

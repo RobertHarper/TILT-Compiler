@@ -25,7 +25,7 @@ struct
 
     val error = fn s => error "toclosure.sml" s
     val debug = Stats.ff("ToclosureDebug")
-    val debug_full = ref false
+
     val float64 = Prim_c(Float_c Prim.F64,[])
     structure FidSet = VarSet
     structure FidMap = VarMap
@@ -611,9 +611,7 @@ struct
     and e_find_fv' (state : state, frees : frees) exp : frees =
 	(if (!debug)
 	     then (print "exp_find_fv called on\n";
-		   if (!debug_full)
-		       then Ppnil.pp_exp exp
-		   else (); print "\n\n")
+		   Ppnil.pp_exp exp; print "\n\n")
 	 else ();
 	 case exp of
 	     Var_e v => 
@@ -693,9 +691,7 @@ struct
 	    let 
 		val _ = if (!debug)
 			    then (print "c_find_fv called on\n";
-				  if (!debug_full)
-				      then Ppnil.pp_con con
-				  else (); print "\n\n")
+				  Ppnil.pp_con con; print "\n\n")
 			else ()
 		val res = c_find_fv' (state,frees) con 
 		handle e => 
@@ -745,15 +741,14 @@ struct
 				val state = add_boundcvar(s,v)
 			    in (f',state)
 			    end
-	   | (Code_cb(v,vklist,c,k)) => (f,s)
-	   | (Open_cb(v,vklist,c,k)) =>
+	   | (Code_cb(v,vklist,c)) => (f,s)
+	   | (Open_cb(v,vklist,c)) =>
 			    let val _ = add_fun v
 				val ls = copy_state s (v,[v])
 				val (f,ls) = vklist_find_fv (vklist,(f,ls))
-				val f' = k_find_fv (ls,f) k
-				val f'' = c_find_fv (ls,f') c
-				val _ = add_frees(v,f'')
-			    in  (remove_free(s,f''), add_boundcvar(s,v))
+				val f' = c_find_fv (ls,f) c
+				val _ = add_frees(v,f')
+			    in  (remove_free(s,f'), add_boundcvar(s,v))
 			    end)
 			
     and c_find_fv' (state : state, frees : frees) con : frees =
@@ -1239,46 +1234,41 @@ struct
 
    and cbnd_rewrite state (Con_cb(v,c)) : conbnd list = 
 	    [Con_cb(v,c_rewrite state c)]
-     | cbnd_rewrite state (Open_cb(v,vklist,c,ret_k)) = 
+     | cbnd_rewrite state (Open_cb(v,vklist,c)) =
          let val _ = if (!debug)
 			 then (print "  cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		     else ()
-	     val (code_var,cenv_var,vkl_free) = 
+	     val (code_var, cenv_var, vkl_free, cbnds, subst) = 
 		 if (is_fid v)
 		     then let val {code_var, cenv_var, ...} = get_static v
 			      (* freeevars/free_evars must be empty *)
 			      val {free_cvars,...} = get_frees v 
-			      val vkl_free = 
-				  map (fn (v,_) => let val k = Single_k(Var_c v)
-						       val l = Name.internal_label(Name.var2string v)
-					           in  (v,k,l)
-					           end)
-				  (VarMap.listItemsi free_cvars)
-			  in  (code_var, cenv_var, vkl_free)
+			      fun folder ((v,v'),subst) = 
+				let val k = Single_k(Var_c v)
+				    val l = Name.internal_label(Name.var2string v)
+				    val c = Proj_c(Var_c cenv_var, l)
+				in  (((v,k,l), Con_cb(v',c)), NilSubst.C.sim_add subst (v,c))
+				end
+			      val (temp, subst) = foldl_acc folder (NilSubst.C.empty()) 
+							(VarMap.listItemsi free_cvars)
+			      val (vkl_free, cbnds) = Listops.unzip temp
+			  in  (code_var, cenv_var, vkl_free, cbnds, subst)
 			  end
 		 else  (Name.fresh_named_var "unclosed_open_cb",
 			Name.fresh_named_var "unclosed_open_cb_cenv",
-			[])
+			[], [], NilSubst.C.empty())
 
 
-	     val subst = NilSubst.C.simFromList(map (fn (v,_,l) => (v,Proj_c(Var_c cenv_var,l))) vkl_free)
-	     val ret_k = k_rewrite state ret_k
-	     val ret_k = NilSubst.substConInKind subst ret_k
-
-
-	     fun get_cbnd (v,k,l) = Con_cb(v, Proj_c(Var_c cenv_var,l))
 	     val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
 	     val vkl_free = map (fn (v,k,l) => (v,k_rewrite state k,l)) vkl_free
 	     val vkl_free_kind = Record_k(Sequence.fromList(map
-							    (fn (v,k,l) => ((l, v), k))
+							    (fn (v,k,l) => ((l, derived_var v), k))
 							    vkl_free))
-	     val cbnds = map get_cbnd vkl_free
+
 	     val vklist' = vklist @ [(cenv_var, vkl_free_kind)]
-	     val code_cb = Code_cb(code_var, vklist',
-				c_rewrite (copy_state(state ,v)) c, ret_k)
+	     val body    = c_rewrite (copy_state(state ,v)) c
+	     val code_cb = Code_cb(code_var, vklist',Let_c(Sequential,cbnds,body))
 	     val con_env = Crecord_c(map (fn (v,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
-	     val k' = NilSubst.substConInKind 
-			(NilSubst.C.simFromList [(cenv_var,NilRename.renameCon con_env)]) (NilRename.renameKind ret_k)
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
 	 in  [code_cb, closure_cb]
 	 end			

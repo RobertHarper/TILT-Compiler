@@ -20,7 +20,7 @@ struct
 			   num_fps_spilled : int ref,
 			   num_args  : int ref}
 
-  val debug = ref false
+  val debug = Stats.ff("SparcTrackstorage")
   fun inc x = x := (!x + 1)
 
   val error = fn s => Util.error "alpha/trackstorage.sml" s
@@ -55,8 +55,8 @@ struct
     | Args passed to |
     | this procedure |
     | in memory      | 
-    | 8 bytes ea.    | <--- Previous $sp
-    |================|
+    | 8 bytes ea.    |
+    |================| <--- Previous $sp
     | Spilled FPs    |
     |   (unordered)  |
     | 8 bytes ea.    | 
@@ -75,15 +75,18 @@ struct
     | Save Regs    : | } return address register!
     | 8 bytes ea. $0 | }
     |----------------|
-    | Return         | 
-    | Address        | 
-    | 8 bytes        | 
+    | Additional     |
+    | args, if any   |
     |----------------|
-    | Room for args  |                    } Space is allocated for the most
-    | passed in mem. |                    } arguments for any callee.  If a
-    | from this proc.|                    } particular call needs fewer args,
-    | 8 bytes ea.    | <--- Current $sp   } they start at 0($sp) and go UP;
-    |================|                      (ints & fps not separated)
+    | 6 words which  | 
+    | callee may     | 
+    | store reg args |
+    |----------------|
+    | 16 words to    | <--- Return address as stored in last position (as though there were windows)
+    | save "in" and  |                 
+    | "local" regs   |                 
+    | of  window     | 
+    |================| <--- Current $sp
 
       (low memory)
  
@@ -147,21 +150,20 @@ struct
 		      num_ints_spilled, num_fps_spilled,
 		      num_args}) = 
     let
-      val ra_offset = 8 * (! num_args)
+      val ra_offset = 4 * 15
 
       val saved_int_regs = 
 	Regset.listItems
 	 (Regset.intersection
 	  (Regset.intersection(listToSet int_regs, callee_saves), ! regs_destroyed))
-
-      val num_ints_saved = length saved_int_regs
-     
       val saved_fp_regs =
 	(Regset.listItems o Regset.intersection)
 	(Regset.intersection(listToSet fp_regs, callee_saves), ! regs_destroyed)
+      val num_ints_saved = length saved_int_regs
+
       val num_fps_saved = length saved_fp_regs
 
-      val callee_save_int_offset = ra_offset + 8
+      val callee_save_int_offset = 4 * 16 + 4 * 6 + 4 * (!num_args)
       val callee_save_fp_offset  = callee_save_int_offset + 
 	                           8 * num_ints_saved
 
@@ -194,12 +196,12 @@ struct
       val stackframe_size = stackAlign(spilled_fp_offset +
 				       8 * (! num_fps_spilled + 1))
 
-      fun fixStackOffset (THIS_FRAME_ARG i) = ACTUAL8 (8 * i)
+      fun fixStackOffset (THIS_FRAME_ARG i) = ACTUAL4 (4 * i)
 	| fixStackOffset (SPILLED_INT i) = ACTUAL4(spilled_int_offset + 4*i)
 	| fixStackOffset (SPILLED_FP i) = ACTUAL8(spilled_fp_offset + 8*i)
-	| fixStackOffset (CALLER_FRAME_ARG i) = ACTUAL8(stackframe_size + 
-							8 * i)
-	| fixStackOffset (RETADD_POS) = ACTUAL8 ra_offset
+	| fixStackOffset (CALLER_FRAME_ARG i) = ACTUAL4(stackframe_size + 
+							4 * i)
+	| fixStackOffset (RETADD_POS) = ACTUAL4 ra_offset
         | fixStackOffset x = x
       fun tailcallImpossible () = (! num_args) > 0
 

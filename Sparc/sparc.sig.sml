@@ -45,7 +45,7 @@ sig
     IALIGN of align
   | NOP  (* stylized for easier reading *)
   | SETHI  of int * register
-  | CMP    of register * register
+  | CMP    of register * operand
   | FCMPD  of register * register
   | STOREI of storei_instruction * register * int * register
   | LOADI  of loadi_instruction * register * int * register

@@ -142,13 +142,10 @@ struct
 
     | BR     of label
 
-    (* BCNDI, BCNDF: compare against 0 and branch.  bool = whether
-       predicted taken or not; the comparison is signed  *)
-
-    | BCNDI2  of cmp * regi * sv  * label * bool  (* signed *)
-    | BCNDF2  of cmp * regf * regf * label * bool
-    | BCNDI   of cmp * regi * label * bool  
-    | BCNDF   of cmp * regf * label * bool
+    (* BCND(I/F): compare operands with cmp and branch is cmp succeeds 
+                  bool predicts whether branch taken or not *)
+    | BCNDI  of cmp * regi * sv * label * bool  
+    | BCNDF  of cmp * regf * regf * label * bool
     | JMP    of regi * label list
 
     (* procedure call and return: these are "heavyweight" operations in

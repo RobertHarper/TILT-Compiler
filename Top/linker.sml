@@ -7,7 +7,7 @@ structure Linker :> LINKER =
     val as_path = "as"
     fun preld() = 
 	let val alpha = "ld -r " 
-	    val solaris = "ld"
+	    val solaris = "ld -r "
 	in   case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
@@ -272,8 +272,8 @@ structure Linker :> LINKER =
 		   val _ = (case !Til.platform of
 				Til.TIL_ALPHA => Linkalpha.link
 			      |	Til.TIL_SPARC => Linksparc.link
-(*			      | Til.MLRISC_ALPHA => AlphaLink.link 
-			      | Til.MLRISC_SPARC => SparcLink.link*))
+			      | Til.MLRISC_ALPHA => AlphaLink.link 
+			      | Til.MLRISC_SPARC => SparcLink.link)
 
 		       (link_s, local_labels)
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)

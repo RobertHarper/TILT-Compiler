@@ -15,6 +15,7 @@ structure Machine =
 	             | IMMop of int
 
     val Rpv     = NONE
+    val Rcc     = R (~1) (* useful for defining interferences WRT status register *)
     val Rzero   = R 0   (* Standard Sparc convention *)
     val Rsp     = R 14  (* Standard Sparc convention *)
     val Rat     = R 16  (* Standard Sparc convention *)
@@ -62,7 +63,7 @@ structure Machine =
     IALIGN of align
   | NOP  (* stylized for easier reading *)
   | SETHI  of int * register
-  | CMP    of register * register
+  | CMP    of register * operand
   | FCMPD  of register * register
   | STOREI of storei_instruction * register * int * register
   | LOADI  of loadi_instruction * register * int * register
@@ -89,7 +90,7 @@ structure Machine =
     fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
 	
     fun msReg (R 14) = "%sp"
-      | msReg (R 16) = "%at"
+      | msReg (R 30) = "%fp"
       | msReg (R n) = "%r" ^ (ms n)
       | msReg (F n) = "%f" ^ (ms (2 * n))
 	
@@ -253,9 +254,9 @@ structure Machine =
     | msInstr' (SETHI (value, Rdest)) =
                                 (tab ^ "sethi" ^ tab ^
 				 (ms value) ^ comma ^ (msReg Rdest))
-    | msInstr' (CMP (Rsrc1, Rsrc2)) =
+    | msInstr' (CMP (Rsrc1, op2)) =
                                 (tab ^ "cmp" ^ tab ^
-				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2))
+				 (msReg Rsrc1) ^ comma ^ (msOperand op2))
     | msInstr' (FCMPD (Rsrc1, Rsrc2)) =
                                 (tab ^ "cmp" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2))
@@ -319,8 +320,8 @@ structure Machine =
                                 ("\tPOP\t" ^ (msReg Rdest) ^ comma ^ (msStackLocation sloc))
     | msInstr_base (PUSH_RET NONE) = "PUSH_RET none"
     | msInstr_base (POP_RET NONE) = "POP_RET none"
-    | msInstr_base (PUSH_RET (SOME(ACTUAL8 offset))) = msInstr'(STOREI(ST,Rsp,offset * 8, Rra))
-    | msInstr_base (POP_RET (SOME(ACTUAL8 offset))) = msInstr'(LOADI(LD,Rsp,offset * 8, Rra))
+    | msInstr_base (PUSH_RET (SOME(ACTUAL4 offset))) = msInstr'(STOREI(ST,Rra,offset, Rsp))
+    | msInstr_base (POP_RET (SOME(ACTUAL4 offset))) = msInstr'(LOADI(LD,Rra,offset, Rsp))
     | msInstr_base (PUSH_RET (SOME sloc)) = ("\tPUSH_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (POP_RET (SOME sloc)) =  ("\tPOP_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (GC_CALLSITE label) = ("\tGC CALLING SITE\t" ^ (msLabel label))
@@ -447,14 +448,8 @@ structure Machine =
       | defUse (BASE(BR _))                       = ([], [])
       | defUse (BASE(BSR (_,NONE,{regs_modified,regs_destroyed,args}))) = (Rra::regs_destroyed, args)
       | defUse (BASE(BSR (_, SOME sra, {regs_modified,regs_destroyed,args}))) = (sra::regs_destroyed, args)
-      | defUse (SPECIFIC(INTOP (opcode, Rsrc1, sv, Rdest))) =
-	let
-	    val temp = (case sv of 
-		              REGop r => [r]
-			    | _       => [])
-	in
-	    ([Rdest],Rsrc1::temp)
-	end
+      | defUse (SPECIFIC(INTOP (opcode, Rsrc1, REGop Rsrc2, Rdest))) = ([Rdest], [Rsrc1, Rsrc2])
+      | defUse (SPECIFIC(INTOP (opcode, Rsrc1, IMMop _, Rdest))) = ([Rdest], [Rsrc1])
       | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) = ([Fdest],[Fsrc1,Fsrc2])
       | defUse (SPECIFIC(FPMOVE (opcode, Fsrc, Fdest))) = ([Fdest],[Fsrc])
       | defUse (SPECIFIC(FPCONV (_, Fsrc, Fdest)))      = ([Fdest], [Fsrc])
@@ -484,8 +479,9 @@ structure Machine =
       | defUse (SPECIFIC (IALIGN _))               = ([], [])
       | defUse (SPECIFIC NOP)                      = ([], [])
       | defUse (SPECIFIC (SETHI (_,Rdest)))        = ([Rdest], [])
-      | defUse (SPECIFIC (CMP (Rsrc1, Rsrc2)))     = ([Rsrc1, Rsrc2], [])
-      | defUse (SPECIFIC (FCMPD (Rsrc1, Rsrc2)))     = ([Rsrc1, Rsrc2], [])
+      | defUse (SPECIFIC (CMP (Rsrc1, REGop Rsrc2)))     = ([],[Rsrc1, Rsrc2])
+      | defUse (SPECIFIC (CMP (Rsrc1, IMMop _)))     = ([],[Rsrc1])
+      | defUse (SPECIFIC (FCMPD (Rsrc1, Rsrc2)))   = ([],[Rsrc1, Rsrc2])
       | defUse (BASE(ILABEL _))                    = ([], [])
       | defUse (BASE(ICOMMENT _))                  = ([], [])
 
@@ -528,7 +524,8 @@ structure Machine =
 	 | xspec (IALIGN ia) = IALIGN ia
 	 | xspec NOP = NOP
 	 | xspec (SETHI (value, Rdest)) = SETHI(value, fd Rdest)
-	 | xspec (CMP (Rsrc1, Rsrc2)) = CMP(fs Rsrc1, fs Rsrc2)
+	 | xspec (CMP (Rsrc1, op2 as (IMMop _))) = CMP(fs Rsrc1, op2)
+	 | xspec (CMP (Rsrc1, REGop Rsrc2)) = CMP(fs Rsrc1, REGop(fs Rsrc2))
 	 | xspec (FCMPD (Rsrc1, Rsrc2)) = FCMPD(fs Rsrc1, fs Rsrc2)
        fun xbase (MOVI(src,dest)) = MOVI(fs src, fd dest)
          | xbase (MOVF(src,dest)) = MOVF(fs src, fd dest)
@@ -580,11 +577,11 @@ structure Machine =
     | assign2s (HINT r) = "HINT(" ^ (msReg r) ^ ")"
     | assign2s UNKNOWN = "UNKNOWN"    
 
-   val special_iregs = listunique[Rzero, Rat, Rsp, Rth, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rra]
+   val special_iregs = listunique[Rzero, Rexnptr, Rth, R 3, Rheap, Rhlimit, R 6, R 7,
+				  Rat, Rat2, Rsp, Rexnarg, Rra]
    val special_fregs = listunique[Fat, Fat2]
 
-   val general_iregs = listdiff(listdiff(int_regs,special_iregs),
-				(map ireg exclude_intregs))
+   val general_iregs = listdiff(int_regs, listunion(special_iregs, map ireg exclude_intregs))
    val general_fregs = listdiff(fp_regs,special_fregs)
 
    val special_regs  = listunion(special_iregs, special_fregs) 

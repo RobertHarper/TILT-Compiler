@@ -95,9 +95,9 @@ struct
 		     kind : kind }        (* Constructor-level typecase *)
     | Annotate_c of kind annotation * con                   (* General-purpose place to hang information *)
 
-  and conbnd = Con_cb of (var * con)
-             | Open_cb of (var * (var * kind) list * con * kind)
-             | Code_cb of (var * (var * kind) list * con * kind)
+  and conbnd = Con_cb  of (var * con)
+             | Open_cb of (var * (var * kind) list * con)
+             | Code_cb of (var * (var * kind) list * con)
 
 
   and nilprim = 

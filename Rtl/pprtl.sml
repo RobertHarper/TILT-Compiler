@@ -209,27 +209,15 @@ struct
 	      | CVT_INT2REAL a => opif "int2real" a
 	      | CMPF (cmp,r,v,dest) => opffi (cmpf2s cmp) (r,v,dest)
               | BR l => String("br "^label2s l)
-              | BCNDI (cmp,regi,dest,pred) =>
+              | BCNDI (cmp,regi1,sv2,dest,pred) =>
 		    plain("b"^(cmpi2s cmp true) ::
-			  regi2s regi ::
-			  label2s dest ::
-			  (if !predicted then [pred2s pred]
-			   else nil))
-              | BCNDF (cmp,regf,dest,pred) =>
-		    plain("br"^cmpf2s cmp ::
-			  regf2s regf ::
-			  label2s dest ::
-			  (if !predicted then [pred2s pred]
-			  else nil))
-              | BCNDI2 (cmp,regi1,sv2,dest,pred) =>
-		    plain("b"^(cmpi2s cmp true)^"2" ::
 			  regi2s regi1 ::
 			  sv2s sv2 ::
 			  label2s dest ::
 			  (if !predicted then [pred2s pred]
 			   else nil))
-              | BCNDF2 (cmp,regf1,regf2,dest,pred) =>
-		    plain("br"^(cmpf2s cmp)^"2" ::
+              | BCNDF (cmp,regf1,regf2,dest,pred) =>
+		    plain("br"^(cmpf2s cmp) ::
 			  regf2s regf1 ::
 			  regf2s regf2 ::
 			  label2s dest ::

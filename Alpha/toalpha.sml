@@ -287,6 +287,13 @@ struct
 			  emit(SPECIFIC(LOADI (LDAH, Rdest, ~32768, Rtemp)))
 	  end
 
+   fun translate_cmp Rtl.EQ  = BEQ
+     | translate_cmp Rtl.LE  = BLE
+     | translate_cmp Rtl.LT  = BLT
+     | translate_cmp Rtl.GE  = BGE
+     | translate_cmp Rtl.GT  = BGT
+     | translate_cmp Rtl.NE  = BNE
+
    fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
      | translate (Rtl.LADDR (label, offset, rtl_Rdest)) =
           let
@@ -778,18 +785,23 @@ struct
 
      | translate (Rtl.BR ll) =  emit (BASE (BR ll))
 
-     | translate (Rtl.BCNDI2 (comparison, rtl_Rsrc1, rtl_Rsrc2, loc_label, pre)) =
-       let val rtl_tmp =  Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
-       in 
-	 translate (Rtl.CMPSI(comparison,rtl_Rsrc1,rtl_Rsrc2,rtl_tmp));
-         translate(Rtl.BCNDI (Rtl.NE, rtl_tmp, loc_label, pre))
+     | translate (Rtl.BCNDI (comparison, rtl_Rsrc, Rtl.IMM 0, loc_label, pre)) =
+       let val Rsrc = translateIReg rtl_Rsrc
+	   val cmp = translate_cmp comparison
+       in
+         emit(SPECIFIC(CBRANCHI(cmp, Rsrc, loc_label)))
        end
-     | translate (Rtl.BCNDF2 (comparison, rtl_Fsrc1, rtl_Fsrc2, loc_label, pre)) =
+
+     | translate (Rtl.BCNDI (comparison, rtl_Rsrc1, rtl_Rsrc2, loc_label, pre)) =
+       let val rtl_tmp =  Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
+	   val Rtmp = translateIReg rtl_tmp
+       in  translate(Rtl.CMPSI(comparison,rtl_Rsrc1,rtl_Rsrc2,rtl_tmp));
+           emit(SPECIFIC(CBRANCHI(BNE, Rtmp, loc_label)))
+       end
+     | translate (Rtl.BCNDF (comparison, rtl_Fsrc1, rtl_Fsrc2, loc_label, pre)) =
        let 
 	 val rtl_Ftemp = Rtl.REGF(Name.fresh_var(),Rtl.NOTRACE_REAL)
 	 val Ftemp = translateFReg rtl_Ftemp
-	 val Fsrc1 = translateFReg rtl_Fsrc1
-         val Fsrc2 = translateFReg rtl_Fsrc2
 	 val (fop,reverse_operand, reverse_result) = 
 		(case comparison of
 		   Rtl.EQ =>  (CMPTEQ, false, false)
@@ -798,39 +810,16 @@ struct
 		 | Rtl.GE =>  (CMPTLE, true, false)
 		 | Rtl.GT =>  (CMPTLT, true, false)
 		 | Rtl.NE =>  (CMPTEQ, false, true))
+	 val Fsrc1 = translateFReg rtl_Fsrc1
+         val Fsrc2 = translateFReg rtl_Fsrc2
+	 val (Fsrc1,Fsrc2) = if reverse_operand
+				 then (Fsrc2, Fsrc1) 
+			     else (Fsrc1, Fsrc2)
        in 
-	 if (not reverse_operand)
-	   then emit (SPECIFIC (FPOP(fop, Fsrc1, Fsrc2, Ftemp)))
-	 else emit (SPECIFIC (FPOP(fop, Fsrc2, Fsrc1, Ftemp)));
-	 translate(Rtl.BCNDF (if (not reverse_result) then Rtl.NE else Rtl.EQ, 
-				  rtl_Ftemp, loc_label, pre))
+	 emit (SPECIFIC (FPOP(fop, Fsrc1, Fsrc2, Ftemp)));
+	 emit (SPECIFIC (CBRANCHF(if reverse_result then FBNE else FBEQ, Ftemp, loc_label)))
        end
 
-     | translate (Rtl.BCNDI (comparison, rtl_Rsrc, ll, _)) =
-       let
-	 val Rsrc = translateIReg rtl_Rsrc
-       in
-          case comparison of
-	    Rtl.EQ  => emit (SPECIFIC (CBRANCHI (BEQ,  Rsrc, ll)))
-	  | Rtl.LE  => emit (SPECIFIC (CBRANCHI (BLE,  Rsrc, ll)))
-	  | Rtl.LT  => emit (SPECIFIC (CBRANCHI (BLT,  Rsrc, ll)))
-	  | Rtl.GE  => emit (SPECIFIC (CBRANCHI (BGE,  Rsrc, ll)))
-	  | Rtl.GT  => emit (SPECIFIC (CBRANCHI (BGT,  Rsrc, ll)))
-	  | Rtl.NE  => emit (SPECIFIC (CBRANCHI (BNE,  Rsrc, ll)))
-       end
-
-     | translate (Rtl.BCNDF (comparison, rtl_Fsrc, ll, _)) =
-       let
-	 val Fsrc = translateFReg rtl_Fsrc
-       in
-          (case comparison of
-	     Rtl.EQ => emit (SPECIFIC (CBRANCHF(FBEQ, Fsrc, ll)))
-           | Rtl.LE => emit (SPECIFIC (CBRANCHF(FBLE, Fsrc, ll)))
-           | Rtl.LT => emit (SPECIFIC (CBRANCHF(FBLT, Fsrc, ll)))
-           | Rtl.GE => emit (SPECIFIC (CBRANCHF(FBGE, Fsrc, ll)))
-           | Rtl.GT => emit (SPECIFIC (CBRANCHF(FBGT, Fsrc, ll)))
-           | Rtl.NE => emit (SPECIFIC (CBRANCHF(FBNE, Fsrc, ll))))
-       end
 
      | translate (Rtl.JMP (rtl_Raddr, rtllabels)) =
        let
@@ -945,7 +934,7 @@ struct
 		NONE => logwrite()
 	      | SOME isptr =>
 		    let val after = Rtl.fresh_code_label "dynmutate_after"
-		    in  translate (Rtl.BCNDI(Rtl.EQ,isptr,after,false));
+		    in  translate (Rtl.BCNDI(Rtl.EQ,isptr,Rtl.IMM 0,after,false));
 			logwrite();
 			translate (Rtl.ILABEL after)
 		    end)

@@ -369,7 +369,6 @@ struct
        
 
        val _ = app emitString programHeader;
-       val _ = emitString ("\t.globl "^main'^"\n");
        val _ = dumpDatalist (Tracetable.MakeTableHeader main');
 
        val _ = initSigs procs;

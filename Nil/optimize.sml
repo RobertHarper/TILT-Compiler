@@ -480,12 +480,23 @@ fun pp_alias UNKNOWN = print "unknown"
 
 
 	fun is_sumsw_int state (Switch_e(Sumsw_e{sumtype,bound,arg,arms,default,...})) = 
-	    (case (arg,arms,default) of
-		 (Prim_e(PrimOp(Prim.eq_int is),[],
-			 [Var_e v,Const_e (Prim.int(_,w))]),
-		  [(0w0,_,zeroexp), (0w1,_,oneexp)],
-		  NONE) => SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
-		 | _ => NONE)
+	    let	val arg = 
+		  (case arg of
+		       Var_e v =>
+			   (case lookup_alias(state,v) of
+				OPTIONALe 
+				(e as (Prim_e(PrimOp(Prim.eq_int is),[],
+					      [Var_e v,Const_e (Prim.int(_,w))]))) => e
+			     | _ => arg)
+		     | _ => arg)
+	    in
+		(case (arg,arms,default) of
+		     (Prim_e(PrimOp(Prim.eq_int is),[],
+			     [Var_e v,Const_e (Prim.int(_,w))]),
+		      [(0w0,_,zeroexp), (0w1,_,oneexp)],
+		      NONE) => SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
+		    | _ => NONE)
+	    end
 	  | is_sumsw_int state _ = NONE
 
 	fun convert_sumsw state (sum_sw as {result_type,...}) =
@@ -500,13 +511,14 @@ fun pp_alias UNKNOWN = print "unknown"
 				      then loop ((w,oneexp)::acc) zeroexp
 				  else (acc,e))
 			 val (clauses,base) = loop [] exp
-		     in  if (length clauses > 1)
-			     then Intsw_e{size=is,arg=Var_e commonv,
-					  arms=rev clauses,default=SOME base,
-					  result_type = result_type}
-			 else Sumsw_e sum_sw
+		     in  if (null clauses)
+			     then NONE
+			 else (SOME{size=is,arg=Var_e commonv,
+				    arms=rev clauses,default=SOME base,
+				    result_type = result_type})
+			 
 		     end
-	       | _ => Sumsw_e sum_sw)
+	       | _ => NONE)
 	    end	     
 
 
@@ -658,7 +670,11 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
 	   (case cbnd of
-		Con_cb(v,c) => 
+		Con_cb(v,Let_c(_,[Open_cb(v',vklist,c)],Var_c v'')) => 
+		    if (Name.eq_var(v',v''))
+			then do_cbnd(Open_cb(v,vklist,c), state)
+		    else do_cbnd(Con_cb(v,Var_c v''),state)
+	      |	Con_cb(v,c) => 
 		    let val state = add_var(state,v)
 			val state' = enter_var(state,v)
 			val c = do_con state' c
@@ -678,22 +694,20 @@ fun pp_alias UNKNOWN = print "unknown"
 			val state = add_alias(state,v,alias)
 		    in  (Con_cb(v,c), state)
 		    end
-	      | Open_cb(v,vklist,c,k) => let val state = add_var(state,v)
-					     val state' = enter_var(state,v)
-					     val state = add_kind(state,v,
+	      | Open_cb(v,vklist,c) => let val state = add_var(state,v)
+					   val state' = enter_var(state,v)
+					   val state = add_kind(state,v,
+							  Single_k (#2(extractCbnd cbnd)))
+					   val (vklist,state') = do_vklist state' vklist
+					in  (Open_cb(v,vklist, do_con state' c), state)
+					end	
+	      | Code_cb(v,vklist,c) => let val state = add_var(state,v)
+					   val state' = enter_var(state,v)
+					   val state = add_kind(state,v,
 								  Single_k (#2(extractCbnd cbnd)))
-					     val (vklist,state') = do_vklist state' vklist
-					 in  (Open_cb(v,vklist,
-						      do_con state' c, do_kind state' k), state)
-					 end
-	      | Code_cb(v,vklist,c,k) => let val state = add_var(state,v)
-					     val state' = enter_var(state,v)
-					     val state = add_kind(state,v,
-								  Single_k (#2(extractCbnd cbnd)))
-					     val (vklist,state') = do_vklist state' vklist
-					 in  (Code_cb(v,vklist, 
-						do_con state' c, do_kind state' k), state)
-					 end)
+					   val (vklist,state') = do_vklist state' vklist
+				        in  (Code_cb(v,vklist, do_con state' c), state)
+					end)
 
 		 
 	and rewrite_uncurry ((name,function),orig_state) : (var * function) list * state =
@@ -936,9 +950,63 @@ fun pp_alias UNKNOWN = print "unknown"
 			in  Handle_e(do_exp state e, v, do_exp state handler)
 			end)
 
+
+
 	and do_switch (state : state) (switch : switch) : exp = 
-	    (case switch of
-		 Intsw_e {size,arg,arms,default,result_type} =>
+	    let fun sum_switch {sumtype,arg,bound,arms,default,result_type} =
+		let val arg = do_exp state arg
+		    val (tagcount,_,carrier) = Normalize_reduceToSumtype(get_env state,sumtype) 
+		    val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))	
+		    fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,
+						   totalcount=totalcount,
+						   known=SOME i},
+					     case carrier of
+						 [_] => carrier
+					       | _ => [con_tuple_inject carrier])
+		    fun do_arm(n,tr,body) = 
+			let val ssumtype = make_ssum n
+			    val tr = do_niltrace state tr
+			    val (_,state) = do_vclist state[(bound,ssumtype)]
+			in  (n,tr,do_exp state body)
+			end
+		    
+		    val known_tag =
+			(case arg of 
+			     Prim_e(NilPrimOp (inject w), _, _) => SOME w
+			   | Var_e v => 
+				 (case (lookup_alias(state,v)) of
+				      OPTIONALe(Prim_e(NilPrimOp (inject w), _, _)) =>
+					  SOME w
+				    | _ => NONE)
+			   | _ => NONE)
+		in
+		    case known_tag of
+			SOME w => 
+			    (* Reduce known switch *)
+			    (case List.find (fn (w',_,_) => w = w') arms of
+				 SOME (_,_,arm_body) =>
+				     do_exp state
+				     (Let_e(Sequential,
+					    [Exp_b(bound,TraceUnknown,
+						   arg)],
+					    arm_body))
+			       | NONE =>
+				     do_exp state
+				     (Let_e(Sequential,
+					    [Exp_b(bound,TraceUnknown,arg)],
+					    Option.valOf default)))
+		      | _ => let
+				 val sumtype = do_con state sumtype
+				 val result_type = do_con state result_type
+				 val arms = map do_arm arms
+				 val default = Util.mapopt (do_exp state) default
+			     in  
+				 Switch_e(Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
+						   arms=arms,default=default,
+						   result_type = result_type})
+			     end
+		end
+		fun int_switch {size,arg,arms,default,result_type} =
 		     (case (do_exp state arg) of
 			  Const_e (Prim.int(_,n)) => 
 			      let val n32 = TilWord64.toSignedHalf n
@@ -956,61 +1024,14 @@ fun pp_alias UNKNOWN = print "unknown"
 			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default,
 						    result_type=result_type})
 			      end)
-
-	       | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
-		     let val arg = do_exp state arg
-			 val (tagcount,_,carrier) = Normalize_reduceToSumtype(get_env state,sumtype) 
-		 	 val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))	
-			 fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,
-							totalcount=totalcount,
-							known=SOME i},
-						        case carrier of
-							  [_] => carrier
-							 | _ => [con_tuple_inject carrier])
-			 fun do_arm(n,tr,body) = 
-			     let val ssumtype = make_ssum n
-				 val tr = do_niltrace state tr
-				 val (_,state) = do_vclist state[(bound,ssumtype)]
-			     in  (n,tr,do_exp state body)
-			     end
-
-			 val known_tag =
-			     (case arg of 
-				  Prim_e(NilPrimOp (inject w), _, _) => SOME w
-                                | Var_e v => 
-				      (case (lookup_alias(state,v)) of
-					   OPTIONALe(Prim_e(NilPrimOp (inject w), _, _)) =>
-					       SOME w
-					 | _ => NONE)
-				| _ => NONE)
-		     in
-			 case known_tag of
-			     SOME w => 
-				 (* Reduce known switch *)
-				 (case List.find (fn (w',_,_) => w = w') arms of
-				      SOME (_,_,arm_body) =>
-					  do_exp state
-					  (Let_e(Sequential,
-						   [Exp_b(bound,TraceUnknown,
-							  arg)],
-						   arm_body))
-				    | NONE =>
-					  do_exp state
-					    (Let_e(Sequential,
-						   [Exp_b(bound,TraceUnknown,
-							  arg)],
-						   Option.valOf default)))
-			   | _ => let
-				      val sumtype = do_con state sumtype
-				      val result_type = do_con state result_type
-				      val arms = map do_arm arms
-				      val default = Util.mapopt (do_exp state) default
-				  in  
-				      Switch_e(Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
-							arms=arms,default=default,
-							result_type = result_type})
-				  end
-		     end
+			  
+	    in
+	    (case switch of
+		 Intsw_e int_sw => int_switch int_sw
+	       | Sumsw_e sum_sw =>
+			  (case convert_sumsw state sum_sw of
+			       NONE => sum_switch sum_sw
+			     | SOME int_sw => int_switch int_sw)
 	       | Exncase_e {arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
 			 val result_type = do_con state result_type
@@ -1030,6 +1051,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					     result_type = result_type})
 		     end
 	       | Typecase_e _ => error "typecase not done")
+	    end
 
 	and do_function (state : state) (v,Function{effect,recursive,isDependent,
 						    tFormals, eFormals, fFormals,

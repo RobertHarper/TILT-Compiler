@@ -300,9 +300,7 @@ struct
 	  | Prim_e (ap,clist,elist) =>
 		let val _ = inc depth_lcon_prim
 		    (* val constr = Normalize.prim_uses_carg ap *)
-		    val cbnds_clist = map (lcon (case ap of
-					       NilPrimOp _ => false
-					     | PrimOp _ => lift) state) clist
+		    val cbnds_clist = map (lcon lift state) clist
 		    val (cbnds,clist) = Listops.unzip cbnds_clist
 		    val cbnds = flatten cbnds 
 		    val _ = dec depth_lcon_prim
@@ -342,12 +340,11 @@ struct
 
    and lcbnd lift state arg_cbnd : conbnd list * state =
        let val _ = state_stat "lcbnd" state
-	   fun lconfun wrapper (v,vklist,c,k) = 
+	   fun lconfun wrapper (v,vklist,c) = 
 	   let val (vklist,state) = lvklist state vklist
 	       val c = lcon_flat state c
-	       val k = lkind state k
 	       val (state,v) = add_var(state,v)
-	       val cbnd = wrapper(v,vklist,c,k)
+	       val cbnd = wrapper(v,vklist,c)
 	       val _ = state_stat "lcbnd: lconfun" state
 	   in  ([cbnd], state)
 	   end

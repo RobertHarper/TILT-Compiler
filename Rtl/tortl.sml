@@ -72,7 +72,7 @@ struct
 
 
    datatype work = FunWork of (state * var * function)
-                 | ConFunWork of (state * var * (var * kind) list * con * kind)
+                 | ConFunWork of (state * var * (var * kind) list * con)
    local
        val worklist : work list ref = ref nil
        val workcount = ref 0
@@ -169,30 +169,31 @@ struct
 
   and xconbnd state (phase, cbnd : conbnd) : state = 
       (case cbnd of
-	   Con_cb (v,c) => let 
-			       val (termOpt,k,state) = 
-				   if (phase = Compiletime)
-				       then (NONE, Type_k, state)
-				   else
-				       let val _ = if (!show_cbnd)
-						     then (print "Con_cb: "; Ppnil.pp_var v;
-							   print " = "; Ppnil.pp_con c; print "\n")
-						   else ()
-					   val (_,term,k,state) = xcon'(state,v,c,NONE)
-				       in  (SOME term,k,state)
-				       end
-			   in  if istoplevel()
-				   then add_conglobal (state,v,k,SOME c,termOpt)
-			       else add_conterm (state,v,k,SOME c,termOpt)
-			   end
-	 | Code_cb (conwork as (name,vklist,c,k)) => 
-			     let val funkind = Arrow_k(Code,vklist,k)
+	   Con_cb (v,c) => 
+		let 
+		      val (termOpt,k,state) = 
+			   if (phase = Compiletime)
+			       then (NONE, Type_k, state)
+			   else
+			       let val _ = if (!show_cbnd)
+					     then (print "Con_cb: "; Ppnil.pp_var v;
+						   print " = "; Ppnil.pp_con c; print "\n")
+					   else ()
+				   val (_,term,k,state) = xcon'(state,v,c,NONE)
+			       in  (SOME term,k,state)
+			       end
+		   in  if istoplevel()
+			   then add_conglobal (state,v,k,SOME c,termOpt)
+		       else add_conterm (state,v,k,SOME c,termOpt)
+		   end
+	 | Code_cb (conwork as (name,vklist,c)) => 
+			     let val funkind = Arrow_k(Code,vklist,Single_k c)
 				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
 				 val l = LOCAL_CODE(Name.var2string name)
 				 val state = add_concode (state,name,funkind, SOME funcon,l)
 				 val _ = if phase = Compiletime
 					     then ()
-					 else addWork (ConFunWork(promote_maps state,name,vklist,c,k))
+					 else addWork (ConFunWork(promote_maps state,name,vklist,c))
 			     in  state
 			     end
 	 | Open_cb _ => (print "open Fun_cb:\n";
@@ -697,7 +698,7 @@ struct
 	      val thenl = fresh_code_label "zero_case"
 	      val elsel = fresh_code_label "one_case"
 	      val afterl = fresh_code_label "after_zeroone"
-	      val _ = add_instr(BCNDI(NE,r,elsel,false))
+	      val _ = add_instr(BCNDI(NE,r,IMM 0,elsel,false))
 	      val _ = add_instr(ILABEL thenl)
 	      val (zero,zcon,state_zero) = xexp'(state,fresh_named_var "zero_result", 
 						 zeroexp, trace, context)
@@ -765,16 +766,13 @@ struct
 					   end)
 				| scan(states,lab,(i,body)::rest) =
 				  let val next = fresh_code_label "intarm"
-				      val test = alloc_regi(NOTRACE_INT)
 				  in  add_instr(ILABEL lab);
-				      (if in_imm_range i then
-					  add_instr(CMPSI(EQ,r,IMM(w2i i),test))
-				      else 
-					  let val tmp = alloc_regi(NOTRACE_INT)
-					  in add_instr(LI(i,tmp));
-					      add_instr(CMPSI(EQ,r,REG tmp,test))
-					  end);
-				      add_instr(BCNDI(EQ,test,next,true));
+				      if in_imm_range i
+					  then add_instr(BCNDI(NE,r,IMM (w2i i), next,true))
+				      else let val tmp = alloc_regi(NOTRACE_INT)
+					   in add_instr(LI(i,tmp));
+					      add_instr(BCNDI(NE,r,REG tmp, next,true))
+					   end;
 				      let val (r,c,newstate) = 
 					  xexp'(state,fresh_var(),body,trace,context)
 				      in  move(r,c);
@@ -828,8 +826,7 @@ struct
 						  I ir => ir
 						| _ => error "carried value is an unboxed float")
 			      val state = add_reg (state,bound,c,carried)
-			  in  add_instr(CMPSI(EQ,exntag,REG armtagi,test));
-			      add_instr(BCNDI(EQ,test,next,true));
+			  in  add_instr(BCNDI(NE,exntag,REG armtagi,next,true));
 			      add_instr(LOAD32I(EA(exnarg,4),carriedi));
 			      let val (r,c,state) = xexp'(state,fresh_var(),body,
 							  trace,context)
@@ -899,21 +896,21 @@ struct
 				  if (TW32.ult(i,tagcount))
 				      then state
 				  else add_reg (state,bound,spcon i, I r)
-			       (* perform check and branch to next case *)
-			      fun check lbl cmp i tag = (if in_imm_range i
-						     then add_instr(CMPSI(cmp,tag,IMM(w2i i),test))
-						 else 
-						     let val tmp = alloc_regi(NOTRACE_INT)
-						     in  add_instr(LI(i,tmp));
-							 add_instr(CMPSI(cmp,tag,REG tmp,test))
-						     end;
-						  add_instr(BCNDI(EQ,test,lbl,true)))
+			      (* If tag cmp i, branch to label *)
+			      fun check lbl cmp i tag = 
+				  (if in_imm_range i
+				       then add_instr(BCNDI(cmp,tag,IMM (w2i i), lbl, true))
+				   else 
+				       let val tmp = alloc_regi(NOTRACE_INT)
+				       in  add_instr(LI(i,tmp));
+					   add_instr(BCNDI(cmp,tag,REG tmp,lbl, true))
+				       end)
 			      val check_ptr_done = ref (TW32.equal(tagcount,0w0))
 			      val load_tag_done = ref false
 			      fun check_ptr() = 
 				  (if (!check_ptr_done) 
 				       then () 
-				   else check nomatchl GT 0w255 r;
+				   else check nomatchl LE 0w255 r;
 				       check_ptr_done := true)
 			      fun load_tag() = 
 				  (if (!load_tag_done) 
@@ -925,12 +922,12 @@ struct
 			      (case (exhaustive andalso TW32.equal(TW32.uplus(i,0w1),total),
 				     TW32.ult(i,tagcount)) of
 				  (true,_) => ()
-				| (_,true) => check next EQ i r
+				| (_,true) => check next NE i r
 				| (_,false) => (if exhaustive then () else check_ptr();
 						if one_carrier
 						    then ()
 						else (load_tag();
-						     check next EQ (TW32.uminus(i,tagcount)) tag)));
+						     check next NE (TW32.uminus(i,tagcount)) tag)));
 			      let val (r,c,state) = xexp'(state,fresh_var(),body,
 							  trace,context)
 			      in move(r,c);
@@ -1696,7 +1693,7 @@ struct
   
 
   local 
-      fun doconfun is_top (state,vname,vklist,body,kind) = 
+      fun doconfun is_top (state,vname,vklist,body) =
 	  let 
 	      val name = (case (Name.VarMap.find(!exports,vname)) of
 			      NONE => LOCAL_CODE (Name.var2string vname)
@@ -1787,11 +1784,11 @@ struct
 		       val _ = (msg "*** Finished "; msg temp; msg "\n")
 		   in  worklist_loop()
 		   end
-	     | SOME (n,ConFunWork vvkck) => 
+	     | SOME (n,ConFunWork vvkc) => 
 		   let val _ = curfun := n
-		       val temp = "con_function " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vvkck))
+		       val temp = "con_function " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vvkc))
 		       val _ = (msg "*** Working on "; msg temp; msg "\n")
-		       val _ = doconfun false vvkck
+		       val _ = doconfun false vvkc
 		       val _ = (msg "*** Finished "; msg temp; msg "\n")
 		   in  worklist_loop()
 		   end)

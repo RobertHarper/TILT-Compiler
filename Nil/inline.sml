@@ -171,8 +171,8 @@ arms)
 	       | Open_cb arrowcon => aarrowcon arrowcon
 	       | Code_cb arrowcon => aarrowcon arrowcon)
       (* analyze a dependent arrow-like constructor *)
-      and aarrowcon (v:var,vks:(var * kind) list,c:con,k:kind):int = 
-	  (avks vks) + (acon c) + (akind k)
+      and aarrowcon (v:var,vks:(var * kind) list,c:con):int = 
+	  (avks vks) + (acon c) 
       (* analyze a list of constructors *)
       and acons (cons:con list) : int = alist acon cons
       (* analyze an expression *)

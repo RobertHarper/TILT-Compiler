@@ -476,10 +476,9 @@ structure Reduce
 	and scan_conbnd fset conbnd = 
 	  case conbnd of 
 	    Con_cb (var, con) => scan_con fset con
-	  | Open_cb (var, vklist, con, kind) => 
+	  | Open_cb (var, vklist, con) =>
 	      (app (fn (v,k) => (scan_kind fset k)) vklist; 
-	       scan_con fset con;
-	       scan_kind fset kind)
+	       scan_con fset con)
 	  | Code_cb _ =>raise UNIMP
 			    
 	(* Scan expressions, counting the number of times a variable is used
@@ -779,11 +778,10 @@ structure Reduce
 	    case cb of 
 	      Con_cb (var, con) =>
 		(Con_cb (var, xcon fset con))
-	    | Open_cb (v, vklist, con, kind) =>
+	    | Open_cb (v, vklist, con) =>
 		 Open_cb (v, 
 			  map (fn (v,k) => (v, xkind fset k)) vklist,
-			  xcon fset con,
-			  xkind fset kind)
+			  xcon fset con)
 	    | Code_cb _ => raise UNIMP
 
 	  and xcon fset c =

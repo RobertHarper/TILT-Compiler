@@ -356,10 +356,10 @@ structure NilContextPre
 		      kind
 		    end		  
 
-		  fun add_bnd (D,subst) maker (var,formals,body,body_kind) = 
+		  fun add_bnd (D,subst) maker (var,formals,body) = 
 		    let
 		      val var' = derived_var var
-		      val bnd = maker (var',formals,body,body_kind)
+		      val bnd = maker (var',formals,body)
 		      val con = Let_c (sort,[bnd],Var_c var')
 		      val con = substConInCon subst con
 		      val subst = add subst (var,con)
@@ -373,12 +373,12 @@ structure NilContextPre
 		  fun loop ([],(D,subst)) = (subst,kind_of(D,let_body))
 		    | loop (bnd::rest,state as (D,subst)) =
 		    (case bnd
-		       of Open_cb (args as (var,formals,body,body_kind)) =>
+		       of Open_cb (args as (var,formals,body)) =>
 			 if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
 			   (subst,Pi(D,Open,formals,body))
 			 else loop(rest,add_bnd state Open_cb args)
 
-			| Code_cb (args as (var,formals,body,body_kind)) => 
+			| Code_cb (args as (var,formals,body)) => 
 			   if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
 			     (subst,Pi(D,Code,formals,body))
 			   else loop(rest,add_bnd state Code_cb args)

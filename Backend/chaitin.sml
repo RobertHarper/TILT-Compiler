@@ -71,7 +71,7 @@ struct
    structure Machineutils = Machineutils
    structure Tracetable = Tracetable
 
-   val debug = ref false
+   val debug = Stats.ff("ChaitinDebug")
    val msgs = ref false
    val delete_moves = ref true
 

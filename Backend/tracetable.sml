@@ -22,7 +22,7 @@ OLD   4 bytes to indiate return address position in frame
         the lowest 10 bits represent table entry size
         the next higher 10 bits represent frame size
         the next higher 10 bits represent byte section size
-        the highest 2 bits represent the octaword offset of return address
+        the highest 2 bits represent the quadword offset of return address
       Note that |word section| = |table entry| - |byte section| - |fixed fields|
    8 bytes to indicate the states of the registers
       the two words are defined so that:
@@ -375,20 +375,20 @@ functor Tracetable(val little_endian    : bool)
 				     (bitlist2wordlist regtracebits_b)
 	    end
 	    val labeldata       = DATA lab
-	    val (bytedata,octa_ra_offset_word) =
+	    val (bytedata,quad_ra_offset_word) =
 	      if ((retaddpos >= 0) andalso
-		  ((retaddpos mod 8) = 0))
+		  ((retaddpos mod 4) = 0))
 		then 
-		  if (retaddpos <= 14 * 8)
-		    then (getbytes(),i2w (retaddpos div 8))
-		  else if (retaddpos <= 255 * 8)
-			 then (addbyte_at_beginning(retaddpos div 8);
+		  if (retaddpos < 31 * 4)
+		    then (getbytes(),i2w (retaddpos div 4))
+		  else if (retaddpos <= 255 * 4)
+			 then (addbyte_at_beginning(retaddpos div 4);
 			       (getbytes(),i2w 15))
 		       else error 
 			 ("illegal retadd stack pos too large = " ^
 			  (Int.toString retaddpos))
 	      else error
-		("illegal retadd negative or non mult of 8 = " ^
+		("illegal retadd negative or non mult of 4 = " ^
 		 (Int.toString retaddpos))
 	    val specdata = bytedata @ (getwords())
 	    val calldata = 
@@ -410,16 +410,16 @@ functor Tracetable(val little_endian    : bool)
 	    val bytestuffsizeword = (i2w (datalength bytedata))
 	    val sizedata = 
 		let 
-		    val _ = if (W.ugte(entrysizeword,i2w 1024))
+		    val _ = if (W.ugte(entrysizeword,i2w 5124))
 				then error "giant frame: entrysizeword too big" else ()
 		    val _ = if (W.ugte(framesizeword,i2w 512))
 				then error "giant frame: framesizeword too big" else ()
 		    val _ = if (W.ugte(bytestuffsizeword,i2w 512))
 				then error "giant frame: bytestuffsizeword too big" else ()
 		    val t1 = bitshift(entrysizeword,0)
-		    val t2 = bitshift(framesizeword,10)
-		    val t3 = bitshift(bytestuffsizeword,19)
-		    val t4 = bitshift(octa_ra_offset_word,28)
+		    val t2 = bitshift(framesizeword,9)
+		    val t3 = bitshift(bytestuffsizeword,18)
+		    val t4 = bitshift(quad_ra_offset_word,27)
 		in
 		    INT32 (W.orb(W.orb(t1,t2),W.orb(t3,t4)))
 		end

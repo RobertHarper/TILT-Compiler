@@ -96,15 +96,11 @@ struct
 	  val noboxl = fresh_code_label (str ^ "_nobox")
 	  val _ = 
 	      (add_instr(LOAD32I(EA(con_ir,4*4),field_con_ir));
-	       add_instr(CMPUI(LE, field_con_ir, IMM 4, tmp)); (* check ints *)
-	       add_instr(BCNDI(NE, tmp, boxl, false));
-	       add_instr(CMPUI(LE, field_con_ir, IMM 255, tmp)); (* check for other small types *)
-	       add_instr(BCNDI(NE, tmp, noboxl, false));
+	       add_instr(BCNDI(LE, field_con_ir, IMM 4, boxl, false));     (* check for int types *)
+	       add_instr(BCNDI(LE, field_con_ir, IMM 255, noboxl, false)); (* check for other small types *)
 	       add_instr(LOAD32I(EA(field_con_ir,0),tag));
-	       add_instr(CMPUI(EQ, tag, IMM 4, tmp)); (* check for sums *)
-	       add_instr(BCNDI(NE, tmp, boxl, false));
-	       add_instr(CMPUI(EQ, tag, IMM 8, tmp)); (* check mus *)
-	       add_instr(BCNDI(NE, tmp, boxl, false)))
+	       add_instr(BCNDI(EQ, tag, IMM 4, boxl, false));                (* check for sums *)
+	       add_instr(BCNDI(EQ, tag, IMM 8, boxl, false)))                (* check mus *)
 	in  (boxl, noboxl)
 	end
 
@@ -115,11 +111,9 @@ struct
 	  val tag = alloc_regi NOTRACE_INT
 	  val recordl = fresh_code_label (str ^ "_box")
 	  val nonrecordl = fresh_code_label (str ^ "_nobox")
-	  val _ = (add_instr(CMPUI(GE, field_con_ir, IMM 255, tmp));
-		   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
+	  val _ = (add_instr(BCNDI(LT, field_con_ir, IMM 255, nonrecordl, false));
 		   add_instr(LOAD32I(EA(field_con_ir,0),tag));
-		   add_instr(CMPUI(EQ, tag, IMM 5, tmp));
-		   add_instr(BCNDI(NE, tmp, recordl, false)))
+		   add_instr(BCNDI(EQ, tag, IMM 5, recordl, false)))
 	in  (recordl,nonrecordl)
 	end
 
@@ -235,8 +229,7 @@ struct
 		   add_instr(ANDB(oldmask,IMM 1, tmp));
 		   add_instr(SRL(oldmask, IMM 1, oldmask));
 		   add_instr(INIT(EA(destcursor,0),data,SOME tmp));
-		   add_instr(CMPUI(LE,srccursor,REG vl_ir, tmp));
-		   add_instr(BCNDI(EQ, tmp, loopl,false)))  (* loop will copy record fields *)
+		   add_instr(BCNDI(GT,srccursor,REG vl_ir,loopl,false))) (* loop will copy record fields *)
 	      
 	  val _ = add_instr(ADD(heapptr,IMM 4, desti))
 	  val _ = add_instr(S4ADD(gctemp, REG heapptr, heapptr))
@@ -403,8 +396,7 @@ struct
 			   add_instr(INIT(EA(destcursor,0),data,SOME tmp));
 			   add_instr(SUB(srccursor,IMM 4, srccursor));
 			   add_instr(SUB(destcursor,IMM 4, destcursor));
-			   add_instr(CMPUI(EQ,destcursor,REG heapptr, tmp));
-			   add_instr(BCNDI(EQ, tmp, loopl,false)); (* loop will copy record fields *)
+			   add_instr(BCNDI(NE,destcursor,REG heapptr, loopl, false)); (* loop will copy record fields *)
 			   add_instr(ADD(heapptr,IMM 4, desti));
 			   add_instr(S4ADD(gctemp, REG heapptr,heapptr)))
 

@@ -106,11 +106,11 @@ structure NilHNF :> NILHNF =
 		SOME c => (c,is_path c)
 	      | NONE => (constructor,true))
 
-	   | (Let_c (sort,((cbnd as Open_cb (var,formals,body,body_kind))::rest),con)) =>
-	     con_reduce_letfun state (sort,fn x => Open_cb x,var,formals,body,body_kind,rest,con)
+	   | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
+	     con_reduce_letfun state (sort,fn x => Open_cb x,var,formals,body,rest,con)
 
-	   | (Let_c (sort,((cbnd as Code_cb (var,formals,body,body_kind))::rest),con)) =>
-	     con_reduce_letfun state (sort,fn x => Code_cb x,var,formals,body,body_kind,rest,con)
+	   | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
+	     con_reduce_letfun state (sort,fn x => Code_cb x,var,formals,body,rest,con)
 
 	   | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	     let 
@@ -176,7 +176,7 @@ structure NilHNF :> NILHNF =
 		    
 		     (*Note actuals = actuals @ [env] may be true
 		      *)
-		     fun reduce actuals (formals,body,body_kind) = 
+		     fun reduce actuals (formals,body) = 
 		       let
 			 val (vars,_) = unzip formals
 			 val subst3 = fromList (zip vars actuals)
@@ -186,21 +186,21 @@ structure NilHNF :> NILHNF =
 
 		   in
 		     (case cfun 
-			of Let_c (_,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
+			of Let_c (_,[Open_cb (var,formals,body)],Var_c v) =>
 			  if eq_var(var,v)
-			    then reduce actuals (formals,body,body_kind) 
+			    then reduce actuals (formals,body)
 			  else error (locate "con_reduce") "redex not in HNF"
-			 | Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
+			 | Let_c (_,[Code_cb (var,formals,body)],Var_c v) =>
 			  if eq_var(var,v)
-			    then reduce actuals (formals,body,body_kind) 
+			    then reduce actuals (formals,body) 
 			  else error (locate "con_reduce") "redex not in HNF"
-			 | Let_c (_,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,env)) =>
+			 | Let_c (_,[Code_cb (var,formals,body)],Closure_c(Var_c v,env)) =>
 			  if eq_var(var,v)
-			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body,body_kind) 
+			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body)
 			  else error (locate "con_reduce") "redex not in HNF"
-			 | Closure_c(Let_c (_,[Code_cb (var,formals,body,body_kind)],Var_c v), env) =>
+			 | Closure_c(Let_c (_,[Code_cb (var,formals,body)],Var_c v), env) =>
 			  if eq_var(var,v)
-			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body,body_kind) 
+			    then reduce (actuals @ [#1(con_reduce (D,subst2) env)]) (formals,body)
 			  else error (locate "con_reduce") "redex not in HNF"
 			 | _ => (perr_c cfun;
 				 error (locate "con_reduce") "redex not in HNF"))
@@ -215,16 +215,15 @@ structure NilHNF :> NILHNF =
     and con_reduce_letfun 
       (state : (context * con_subst)) 
       (sort : letsort,
-       coder : var * (var * kind) list * con * kind -> conbnd,
+       coder : var * (var * kind) list * con -> conbnd,
        var : var,
        formals : (var * kind) list,
        body : con,
-       body_kind : kind,
        rest : conbnd list,
        con : con) : (con * bool) = 
       let
 	val (D,subst) = state
-	val lambda = (Let_c (sort,[coder (var,formals,body,body_kind)],Var_c var))
+	val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
       in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
 	   then (substConInCon subst lambda,false)
 	 else

@@ -41,10 +41,10 @@ struct Callinfo
 #ifdef GCTABLE_HASENTRYID
   int     entryid;
 #endif
-  int     sizes;             /* low 10 bits = entry size in words; 
-                                next 9 bits = frame size in words;
-                                next 9 bits = byte section size in words 
-				upper 4 bits = octa_offset of return address
+  int     sizes;             /* low   9 bits = entry size in words; 
+                                next  9 bits = frame size in words;
+                                next  9 bits = byte section size in words 
+				upper 5 bits = quad_offset of return address
 			     */
   int     regtrace_a;       /* ab=10: YES      ab=00:NO  */
   int     regtrace_b;       /* ab=11 CALLEE    ab=01:SPEC */
@@ -131,10 +131,10 @@ bot LookupStackBot(Callinfo_t *callinfo, int pos)
 
 #endif
 
-#define GET_ENTRYSIZE(x)      ( x        & 1023)
-#define GET_FRAMESIZE(x)      ((x >> 10) & 511)
-#define GET_BYTESTUFFSIZE(x)  ((x >> 19) & 511)
-#define GET_OCTA_RA_OFFSET(x) ((x >> 28) & 15)
+#define GET_ENTRYSIZE(x)      ( x        & 511)
+#define GET_FRAMESIZE(x)      ((x >> 9)  & 511)
+#define GET_BYTESTUFFSIZE(x)  ((x >> 18) & 511)
+#define GET_QUAD_RA_OFFSET(x) ((x >> 27) & 31)
 
 int LookupSpecialByte(Callinfo_t *callinfo, int pos)
 {
@@ -306,7 +306,7 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
   while ((frame_to_trace--)>0)
     {
       Callinfo_t *callinfo = 0;
-      int octa_offset = 0;
+      int quad_offset = 0;
       callinfo = LookupCallinfo(cur_retadd);
       if (callinfo == NULL) /* hit a stub routine */
 	break;
@@ -319,9 +319,9 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
 	  overflowed = 1;
 	}
       Enqueue(q,(void *)cur_retadd);
-      octa_offset = GET_OCTA_RA_OFFSET((value_t) callinfo->sizes);
-      if (octa_offset == 15)
-	octa_offset = LookupSpecialByte(callinfo,0);
+      quad_offset = GET_QUAD_RA_OFFSET((value_t) callinfo->sizes);
+      if (quad_offset == 31)
+	quad_offset = LookupSpecialByte(callinfo,0);
 #ifdef GCTABLE_HASENTRYID
       if (SHOW_GCDEBUG) 
 	printf("%d: id=%d cur_retadd %12d      sp/top %d %d\n",
@@ -333,7 +333,7 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
 #endif
 
 #ifdef alpha_osf
-      cur_retadd = *((int *)(sp+8*octa_offset));
+      cur_retadd = *((int *)(sp+4*quad_offset));
 #else
 #ifdef solaris
       /* We add 8 because the return address actually contains the calling instruction and
@@ -516,14 +516,14 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
       int stacktrace_bytesize = (stacktrace_rawbytesize + 3) & (~3);
       char *special_byte = callinfo->__rawdata + stacktrace_bytesize;
 
-      unsigned int octa_offset = GET_OCTA_RA_OFFSET((value_t) callinfo->sizes);
+      unsigned int quad_offset = GET_QUAD_RA_OFFSET((value_t) callinfo->sizes);
       cur_sp -= framesize_word << 2;
-      if (octa_offset == 15)
+      if (quad_offset == 31)
 	{
-	  octa_offset = LookupSpecialByte(callinfo,0);
+	  quad_offset = LookupSpecialByte(callinfo,0);
 	  byte_offset = 1;
 	}
-      res = (value_t)((int *)(cur_sp+8*octa_offset));
+      res = (value_t)((int *)(cur_sp+4*quad_offset));
 #ifdef DEBUG
       if (SHOW_GCDEBUG)
 	{
@@ -778,10 +778,10 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 	  value_t next_retaddid = (value_t)QueuePopPeek(retadd_queue);
 	  Callinfo_t *callinfo  = LookupCallinfo(next_retaddid);
 	  value_t next_ra_add = bot_sp - (GET_FRAMESIZE(callinfo->sizes)<<2);
-	  unsigned int octa_offset = GET_OCTA_RA_OFFSET(callinfo->sizes);
-	  if (octa_offset == 15)
-	    octa_offset = LookupSpecialByte(callinfo,0);
-	  next_ra_add += octa_offset << 3;
+	  unsigned int quad_offset = GET_QUAD_RA_OFFSET(callinfo->sizes);
+	  if (quad_offset == 31)
+	    quad_offset = LookupSpecialByte(callinfo,0);
+	  next_ra_add += quad_offset << 2;
 
 	  th->last_snapshot++; 
 	  th->snapshots[th->last_snapshot].roots = r;

@@ -8,8 +8,7 @@ structure Ppnil	:> PPNIL =
     open Util Name Prim Ppprim
 
     val error = fn s => error "ppnil.sml" s
-    val elide_prim = ref true
-    val elide_bnd = ref true
+    val elide_prim = ref false
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
     fun separate [] sep = []
@@ -109,25 +108,21 @@ structure Ppnil	:> PPNIL =
 
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", Break0 0 5, pp_con c]
-      | pp_conbnd (Open_cb(v,vklist,c,k)) = 
+      | pp_conbnd (Open_cb(v,vklist,c)) = 
 	HOVbox[pp_var v, String " = ", Break,
 	       HOVbox[String "FUN",
 		      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", Break, pp_kind k])
 		       vklist),
-		      Break0 0 5,
-		      String " : ", pp_kind k, String " = ",
-		      Break0 0 5,
+		      Break0 0 3,
+		      String " = ",
 		      pp_con c]]
-      | pp_conbnd (Code_cb(v,vklist,c,k)) = 
-	HOVbox[pp_var v, String " = ",
-	       String "CODE", Break,
+      | pp_conbnd (Code_cb(v,vklist,c)) = 
+	HOVbox[pp_var v, String " = ", Break0 0 5,
+	       String "CODE", Break0 0 2,
 	       (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
 		vklist),
-	       Break0 0 5,
-	       String " :: ",
-	       pp_kind k,
+	       Break0 0 3,
 	       String " = ",
-	       Break0 0 5,
 	       pp_con c]
 
 	
@@ -307,13 +302,13 @@ structure Ppnil	:> PPNIL =
 						  Break,
 						  String "End"]
 
-	   | Raise_e (e,c) => pp_region "RAISE(" ")" [pp_exp e, String ",", pp_con c]
+	   | Raise_e (e,c) => pp_region "Raise(" ")" [pp_exp e, String ",", pp_con c]
 	   | Handle_e (body,v,handler) => 
-		 Vbox[HOVbox[String "HANDLE ",
+		 Vbox[HOVbox[String "Handle ",
 			     pp_exp body],
 		      Break0 0 0,
-		      HOVbox[String "WITH ", pp_var v, 
-			     String ": EXN . ",
+		      HOVbox[String "With ", pp_var v, 
+			     String ": EXN = ", Break0 0 5,
 			     pp_exp handler]]
 	   | Switch_e sw => pp_switch sw)
 
@@ -390,7 +385,7 @@ structure Ppnil	:> PPNIL =
 		    in pp_list (fn (v,{code,cenv,venv,tipe}) => 
 				HOVbox[if recur then String "& " else String "",
 				       pp_var v, 
-				       HOVbox(if (!elide_bnd) then [] else [String " : ", pp_con tipe]),
+				       String " : ", pp_con tipe,
 				       String " = ", Break0 0 5,
 				       String "(",
 				       pp_var code, String ",", Break0 0 5,

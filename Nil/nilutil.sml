@@ -21,16 +21,16 @@ struct
   val foldl_acc = Listops.foldl_acc
 
    fun extractCbnd (Con_cb(v,c)) = (v,c)
-     | extractCbnd (Open_cb(v,vklist,c,k)) = 
+     | extractCbnd (Open_cb(v,vklist,c)) = 
        let val v' = Name.derived_var v
        in  (v,Let_c(Sequential,
-		    [Open_cb(v',vklist,c,k)],
+		    [Open_cb(v',vklist,c)],
 		    Var_c v'))
        end
-     | extractCbnd (Code_cb(v,vklist,c,k)) = 
+     | extractCbnd (Code_cb(v,vklist,c)) = 
        let val v' = Name.derived_var v
        in  (v,Let_c(Sequential,
-		    [Code_cb(v',vklist,c,k)],
+		    [Code_cb(v',vklist,c)],
 		    Var_c v'))
        end
 
@@ -379,7 +379,7 @@ end
     fun f_cbnd (state : state) (cbnd : conbnd) : (conbnd list * state) = 
 	let 
 	    val (STATE{bound,cbndhandler,...}) = state
-	    fun cbnd_help wrap (var, vklist, c, k) state openness = 
+	    fun cbnd_help wrap (var, vklist, c) state openness = 
 		let fun folder((v,k),(vklist,s)) = 
 		    let val k' = f_kind state k
 			val s' = add_convar (s,v)
@@ -387,10 +387,8 @@ end
 		    end
 		    val (rev_vklist',state') = foldl folder ([],state) vklist
 		    val c' = f_con state' c
-		    val k' = f_kind state' k
 		    val vklist' = rev rev_vklist'
-		    val funk = Arrow_k(openness,vklist',k')
-		in (wrap(var, vklist', c', k'), add_convar(state,var))
+		in (wrap(var, vklist', c'), add_convar(state,var))
 		end
 	    fun do_cbnd (Con_cb(var, con),state) = 
 		let val con' = f_con state con
@@ -1136,8 +1134,8 @@ end
 	       (alpha_equiv_con' (!conref) (con1,con2))
 	       before (conref := alpha_equate_pair(!conref,(var1,var2)))
 	       
-	       | equiv_one (Open_cb(var1,formals1,con1,k1),
-			     Open_cb(var2,formals2,con2,k2)) =
+	       | equiv_one (Open_cb(var1,formals1,con1),
+			     Open_cb(var2,formals2,con2)) =
 	       let
 		 val conref' = ref (!conref)
 		 fun equiv_one ((var1,kind1),(var2,kind2))= 
@@ -1148,8 +1146,8 @@ end
 		  andalso alpha_equiv_con' (!conref') (con1,con2))
 		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
 	       end
-	       | equiv_one (Code_cb(var1,formals1,con1,k1),
-			    Code_cb(var2,formals2,con2,k2)) =
+	       | equiv_one (Code_cb(var1,formals1,con1),
+			    Code_cb(var2,formals2,con2)) =
 	       let
 		 val conref' = ref (!conref)
 		 fun equiv_one ((var1,kind1),(var2,kind2))= 
@@ -1376,8 +1374,8 @@ end
 	    fun vf_mem(v,_) = VarSet.member(fv,v)
 
 	    fun bnd_check (Con_b(_,Con_cb(v,_))) = VarSet.member(fv,v)
-	      | bnd_check (Con_b(_,Open_cb(v,_,_,_))) = VarSet.member(fv,v)
-	      | bnd_check (Con_b(_,Code_cb(v,_,_,_))) = VarSet.member(fv,v)
+	      | bnd_check (Con_b(_,Open_cb(v,_,_))) = VarSet.member(fv,v)
+	      | bnd_check (Con_b(_,Code_cb(v,_,_))) = VarSet.member(fv,v)
 	      | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
 	      | bnd_check (Fixopen_b vfset) = Listops.orfold vf_mem (Sequence.toList vfset)
 	      | bnd_check (Fixcode_b vfset) = Listops.orfold vf_mem (Sequence.toList vfset)
