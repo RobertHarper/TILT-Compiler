@@ -11,7 +11,7 @@ structure Til : COMPILER =
 	val as_path = "as"
 	val has_sys = OS.Process.system "sys" = OS.Process.success
 
-	val debug_asm = ref false
+	val debug_asm = ref true
 	fun get_debug_flag() = if (!debug_asm) then " -g " else ""
 	fun assemble(s_file,o_file) =
 	    let val command = as_path ^ (get_debug_flag()) ^ " -c -o " ^ o_file ^ " " ^ s_file

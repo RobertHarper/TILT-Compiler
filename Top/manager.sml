@@ -7,7 +7,7 @@ functor Manager (structure Parser: LINK_PARSE
 		 structure Makedep: MAKEDEP
 		 sharing type Elaborator.sbnd = Compiler.sbnd
 		 sharing type Elaborator.context_entry = Compiler.context_entry
-		 sharing type Elaborator.context = Compiler.context
+		 sharing type Elaborator.context = Compiler.context 
 		) : MANAGER = 
 struct
 
@@ -309,6 +309,8 @@ struct
 	      else let val _ = chat ("  [Elaborating " ^ smlfile ^ " non-constrained]\n")
 		   in elab_nonconstrained(mapping,unit,ctxt_for_elab,smlfile,fp,dec,uiFile,least_new_time)
 		   end
+
+
 	  val _ = if (!up_to_elaborate)
 		      then ()
 		  else if (!up_to_phasesplit)
