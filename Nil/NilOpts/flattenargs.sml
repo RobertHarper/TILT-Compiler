@@ -171,7 +171,7 @@ struct
 		
 		(* Clear out the hash table *)
 	    val _ = HashTable.appi ( fn (key, item) => ignore (HashTable.remove  flattened key)) flattened
-	    val temp =  Let_e(Sequential,bnds, Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])  ) (* true! *)
+	    val temp =  Let_e(Sequential,bnds, Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])  ) (* true! *)
 	    val Let_e(Sequential,bnds,_) = Squish.squish (xexp temp)
 	    val imports = imports
 	    val exports = map reduceExport exports

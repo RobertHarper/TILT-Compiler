@@ -310,13 +310,13 @@ struct
 			  | _ => Switch_e (Intsw_e sw)
 		    fun sumopt ( sw as {arms,default,arg,info }) =
 			(case arg of 
-			     Prim_e (NilPrimOp (inject {tagcount, field}), clist, elist) =>
+			     Prim_e (NilPrimOp (inject {tagcount, sumtype}), clist, elist) =>
 				 let (* val _ = print "Switching on a value \n" *)
 				     fun loop [] = ( case default of 
 					       NONE => Switch_e (Sumsw_e sw)
 					     | SOME e => (inc_click switch_click; e )) (* Replace with default *)
 				       | loop ((t, Function(_,_,[],vcs,[],reducedexp, con)) :: rest ) = 
-					 if ( TilWord32.equal ( field, t) ) then 
+					 if ( TilWord32.equal ( sumtype, t) ) then 
 					     if ( TilWord32.ult(t, tagcount))
 						 then (inc_click switch_click;
 						       reducedexp)

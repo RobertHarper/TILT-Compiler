@@ -36,6 +36,8 @@ struct
 
     open Nil Name Util Nil.Prim
 
+    val error = fn s => error "anormalize.sml" s
+
     exception UNIMP
     exception BUG
     
@@ -112,16 +114,18 @@ struct
 		      val SOME con =  Listops.find2 (fn (l,c) => eq_label (l,label)) (labels,cons)
 		  in #2 con
 		  end 
-	    | (inject {tagcount,field},cons,exps as ([] | [_])) => 
+	    | (inject {tagcount,sumtype},cons,exps as ([] | [_])) => 
 		  Prim_c (Sum_c {tagcount=tagcount,known=NONE},cons)
-	    | (inject_record {tagcount,field},argcons,argexps) => 
+	    | (inject_record {tagcount,sumtype},argcons,argexps) => 
 		  Prim_c (Sum_c {tagcount=tagcount,known=NONE},argcons)
-	    | (project_sum {tagcount,sumtype=field},argcons,[argexp]) =>
-		  List.nth (argcons,Word32.toInt (field - tagcount))
+	    | (project_sum {tagcount,sumtype},argcons,[argexp]) =>
+		  List.nth (argcons,Word32.toInt (sumtype - tagcount))
 	    | (project_sum_record {tagcount,sumtype,field},argcons,[argexp]) => 
 		  let val  con_i = List.nth (argcons,Word32.toInt (sumtype - tagcount))
 		      val SOME (labels,cons) = NilUtil.strip_record con_i
-		  in  List.nth (cons,Word32.toInt field)
+		  in  (case (Listops.assoc_eq(Name.eq_label,field,Listops.zip labels cons)) of
+			   NONE => error "bad project_sum_record"
+			 | SOME c => c)
 		  end 
 	    | (box_float floatsize,[],[exp]) => 
 	      Prim_c (BoxFloat_c floatsize,[])
