@@ -19,12 +19,12 @@
 #define GET_SPECIAL_STACK_REC_POS(type) ((type >> 2) & 63)
 #define GET_SPECIAL_STACK_REC_POS2(type) ((type >> 8) & 63)
 #define GET_SPECIAL_STACK_REC_POS3(type) ((type >> 14) & 63)
-#define GET_SPECIAL_STACK_REC_POS3(type) ((type >> 20) & 63)
+#define GET_SPECIAL_STACK_REC_POS4(type) ((type >> 20) & 63)
 
 #define GET_SPECIAL_STACK_GLOBAL_POS(type) ((type >> 2) & 63)
 #define GET_SPECIAL_STACK_GLOBAL_POS2(type) ((type >> 8) & 63)
 #define GET_SPECIAL_STACK_GLOBAL_POS3(type) ((type >> 14) & 63)
-#define GET_SPECIAL_STACK_GLOBAL_POS3(type) ((type >> 20) & 63)
+#define GET_SPECIAL_STACK_GLOBAL_POS4(type) ((type >> 20) & 63)
 
 
 void show_stack(value_t sp, value_t cur_retadd, value_t top);

@@ -9,7 +9,7 @@
 #include "general.h"
 #include "stats.h"
 
-
+#define DEBUG
 #ifdef DEBUG
 #include "memobj.h"
 extern HeapObj_t *fromheap, *toheap;
@@ -492,7 +492,12 @@ int should_trace_big(unsigned long trace,
       return 1;
     }
   else if (IS_TRACE_NO(trace))
-    return 0;
+    {
+      if (SHOW_GCDEBUG)
+	printf("no: stack trace value %d at loc %d val=%d\n",
+	       data_add,i*4,data);
+      return 0;
+    }
 #endif
    
 #ifdef DEBUG
@@ -537,22 +542,28 @@ int should_trace_big(unsigned long trace,
 	  int rec_pos = GET_SPECIAL_STACK_REC_POS(special_type);
 	  int rec_pos2 = GET_SPECIAL_STACK_REC_POS2(special_type);
 	  int rec_pos3 = GET_SPECIAL_STACK_REC_POS3(special_type);
+	  int rec_pos4 = GET_SPECIAL_STACK_REC_POS4(special_type);
 	  res = ((int *)((int *)cur_sp)[special_data/4])[rec_pos];
 	  if (rec_pos2 > 0)
 	    res = ((int *)res)[rec_pos2-1];
 	  if (rec_pos3 > 0)
 	    res = ((int *)res)[rec_pos3-1];
+	  if (rec_pos4 > 0)
+	    res = ((int *)res)[rec_pos4-1];
 	}
       else if (IS_SPECIAL_GLOBAL_REC(special_type))
 	{
 	  int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
 	  int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
 	  int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
+	  int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
 	  res = ((int *)(*((int *)special_data)))[rec_pos];
 	  if (rec_pos2 > 0)
 	    res = ((int *)res)[rec_pos2-1];
 	  if (rec_pos3 > 0)
 	    res = ((int *)res)[rec_pos3-1];
+	  if (rec_pos4 > 0)
+	    res = ((int *)res)[rec_pos4-1];
 	}
       else
 	printf("impossible trace_special wordpair entry: %d %d\n",
