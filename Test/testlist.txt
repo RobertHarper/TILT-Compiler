@@ -27,3 +27,6 @@ m0022	Null tuple.
 m0024   Merge sort.
 m0025	Word value ranges.
 m0026	Word32 checks.
+m0027	Word checks.
+m0027	Word sub checks.
+m0028	Word stuff.
