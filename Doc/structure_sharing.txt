@@ -1,0 +1,146 @@
+This topic came up a while back in the context of the TILT compiler,
+and we spent quite a bit of time heatedly hashing this out.  The
+consensus was that structure sharing as defined by the Definition is
+useless, since you can never share structures whose signatures contain
+any type definitions (rigid types).  SML/NJ extends the Definition to
+allow structures sharing between structures whose signatures are the
+same signature *variable*.  This seems to cover most cases that come
+up in practice, but the limitation to structure variables was felt to
+be somewhat arbitrary.  Our goal therefore was to come up with a
+solution that was a conservative extension of both the Definition and
+SML/NJ, but that was reasonably clean and uniform, and also relatively
+easy to implement.
+
+Below is a description of the exact proposal that we implement,
+followed by a discussion of the reasoning that went into our
+decisions.  
+
+PROPOSAL
+____________________________________________________________________
+
+The core proposal is that structure sharing will induce type sharing
+constraints between all pairs of flexible type components of the same
+name and arity (and only those components).  This completely defines
+what spec is generated from the structure sharing constraint.
+
+The remainder of the proposal involves what extra checks are performed 
+after the sharing between the flexible components has been added to
+the spec.  There are two variations to this, both of which are
+implemented in almost exactly the same way.  The plan is to make the
+choice between them a flag in the compiler.
+
+In both proposals, any pair of concrete components in the resulting
+spec which are equivalent will be silently accepted.
+
+In the first proposal, all other non-flexible pairs will generate a
+compiler warning.
+
+In the second proposal, all other non-flexible pairs will generate a
+compiler error.
+
+So for example,
+
+A spec          B spec		proposal 1	proposal 2
+-------------------------------------------------------------
+type t		type t		A.t = B.t	A.t = B.t
+-------------------------------------------------------------
+type t = int	type t = int	silent accept	silent accept
+-------------------------------------------------------------
+type t		type t = int	warning		reject (error)
+-------------------------------------------------------------
+type t = int	type t = bool	warning		reject (error)
+
+Note that the sharing between flexible components will be added to the 
+spec first before the extra checks are performed.  So in the following 
+example:
+
+structure A : sig type t type s = t * int end
+structure B : sig type t type s = t * int end
+sharing A = B
+
+It is important to share the respective t's before checking the
+equivalence of the s's, since otherwise the equivalence check fails. 
+
+
+DISCUSSION
+___________________________________________________________________
+
+For type names that appear in both signatures of the structures to be
+shared, there are four possible situations:
+
+1) Both are flexible, e.g.
+ A spec          B spec
+ ----------------------
+ type t		 type t
+
+In this case, clearly the structure sharing should succeed, and a type 
+sharing spec should be introduced between the two.
+
+2) Both are rigid, but equivalent:
+ A spec          B spec
+ ----------------------
+ type t = int	 type t = int
+
+The Definition says that this should be rejected, but structure
+sharing is essentially useless without this.  NJ will accept this, but
+only if both signatures are the same variable.  We believe that this
+should be accepted in all cases.
+
+3) One is flexible, and one is rigid:
+ A spec          B spec
+ ----------------------
+ type t		 type t = int
+
+The Definition says to reject this.  One could consider allowing this
+and introducing a where type spec to give A.t a definition, but it is
+unclear that it is always possible to do so in a sensible manner.
+Consider for example,
+
+structure A : sig type a  type t        type s = a*a end
+structure B : sig type b  type t = b*b  type s end
+ sharing A = B
+
+Therefore, we decided that no definitions would be introduced in this
+case, and that the compiler would emit either a warning or an error on 
+seeing code of this form (depending on a flag).  
+
+The argument for raising an error is that in some sense a structure
+sharing spec can be thought of as a check, in addition to simply as a
+mechanism for introducing type sharing specs.  It seems
+counter-intuitive that a structure sharing spec can succeed without
+all of the types present in both signatures being equal.  Raising an
+error means that if a sharing spec is actually accepted, then any two
+types in common between the two signatures are known to be equal.
+
+The argument for a warning is that the programmer might wish to share
+two such signatures without expecting that all of the types will be
+made equal, and hence should be allowed to do so.  However, at the
+least a warning is desired to indicate that not all types common to
+the signatures can be made equal.
+
+4) Both are rigid, and unequal:
+ A spec          B spec
+ ----------------------
+ type t = int	 type t = bool
+
+No definitions can be introduced.  The compiler shall emit either a
+warning or an error on seeing code of this form (depending on the same 
+flag as in 3).  
+
+The arguments for error/warning are much as described in #3.  
+
+
+CREDITS
+_______________________________________________________________________
+
+This proposal arose out of extended discussions among the TILT
+developers:
+  Robert Harper
+  Karl Crary 
+  Perry Cheng
+  Derek Dreyer 
+  Joshua Dunfield
+  Tom Murphy
+  Leaf Petersen
+  Chris Stone
+  Joe Vanderwaart
