@@ -8,8 +8,8 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
 		  sharing ArgNil = Alpha.Nil
-		  and Prim = PrimUtil.Prim = ArgNil.Prim) :>
-  NILUTIL where structure Nil = ArgNil and type alpha_context = Alpha.alpha_context =
+		  and Prim = PrimUtil.Prim = ArgNil.Prim) 
+  : (*>*) NILUTIL where structure Nil = ArgNil and type alpha_context = Alpha.alpha_context =
 struct
 
   structure Nil = ArgNil
@@ -46,6 +46,25 @@ struct
   val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
+
+  fun effect (e : exp) = true (* very conservative *)
+
+   fun letc ([],c) = c
+     | letc (cbnds,c) = Let_c(Sequential,cbnds,c)
+   fun lete ([],e) = e
+     | lete (ebnds,e) = Let_e(Sequential,ebnds,e)
+
+  fun cbnd2bnd (Con_cb vkc) = Con_b vkc
+    | cbnd2bnd (Open_cb (confuns as (v,vklist,_,resk))) = 
+      let val v' = Name.derived_var v
+	  val k = Arrow_k(Open,vklist,resk)
+      in  Con_b(v',k,Let_c(Sequential,[Open_cb confuns], Var_c v))
+      end
+    | cbnd2bnd (Code_cb (confuns as (v,vklist,_,resk))) = 
+      let val v' = Name.derived_var v
+	  val k = Arrow_k(Code,vklist,resk)
+      in  Con_b(v',k,Let_c(Sequential,[Code_cb confuns], Var_c v))
+      end
 
   (* Local rebindings from imported structures *)
 
@@ -581,10 +600,15 @@ struct
     fun substConInKind conmap = f_kind (cstate conmap)
     fun substConInExp conmap = f_exp (cstate conmap)
     fun substExpInExp expmap = f_exp (estate expmap)
-    fun freeExpVarInExp e = 
+    fun freeExpConVarInExp e = 
 	let val (evars_ref,cvars_ref,handler) = free_handler()
-	in  (f_exp handler e;
-	     !evars_ref)
+	in  f_exp handler e;
+	    (!evars_ref, !cvars_ref)
+	end
+    fun freeConVarInCon c =
+	let val (evars_ref,cvars_ref,handler) = free_handler()
+	in  f_con handler c;
+	    !cvars_ref
 	end
   end
 

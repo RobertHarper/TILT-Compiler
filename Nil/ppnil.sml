@@ -110,6 +110,30 @@ functor Ppnil(structure Nil : NIL
       | pp_primcon (List_c listcon) = pp_listcon listcon
 *)
 
+    and pp_conbnd (Con_cb(v,k,c)) : format = Hbox[pp_var v, String " : ",
+						  pp_kind k, String " = ", 
+						  pp_con c]
+      | pp_conbnd (Open_cb(v,vklist,c,k)) = 
+	HOVbox[pp_var v, String " = ",
+	       HOVbox[String "FUN_C",
+		      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
+		       vklist),
+		      Break0 0 5,
+		      String " : ", pp_kind k, String " = ",
+		      pp_con c]]
+      | pp_conbnd (Code_cb(v,vklist,c,k)) = 
+	HOVbox[pp_var v, String " = ",
+	       String "CODE_CB", Break,
+	       (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
+		vklist),
+	       Break0 0 5,
+	       String " :: ",
+	       pp_kind k,
+	       String " = ",
+	       Break0 0 5,
+	       pp_con c]
+
+	
     and pp_con arg_con : format = 
       (case arg_con of
 	   Var_c v => pp_var v
@@ -121,37 +145,15 @@ functor Ppnil(structure Nil : NIL
 				  lc_list ("CREC_C{", ",","}", false))
 	 | Proj_c (c,l) => HOVbox[String "PROJ_C(", pp_con c, String ",", pp_label l, String ")"]
 	 | Let_c (letsort,cbnds,cbody) =>
-	       let fun do_cbnd (Con_cb(v,k,c)) = Hbox[pp_var v, String " : ",
-							   pp_kind k, String " = ", 
-							   pp_con c]
-		     | do_cbnd (Open_cb(v,vklist,c,k)) = 
-		       HOVbox[pp_var v, String " = ",
-			      HOVbox[String "FUN_C",
-				     (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
-				      vklist),
-				     Break0 0 5,
-				     String " : ", pp_kind k, String " = ",
-				     pp_con c]]
-		     | do_cbnd (Code_cb(v,vklist,c,k)) = 
-		       HOVbox[pp_var v, String " = ",
-			      String "CODE_CB", Break,
-			      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
-			       vklist),
-			      Break0 0 5,
-			      pp_con c,
-			      Break0 0 5,
-			      pp_kind k]
-	       in
 		   Vbox0 0 1 [String (case letsort of
 					  Sequential => "LET  "
 					| Parallel => "LETP "),
-			      Vbox(separate (map do_cbnd cbnds) (Break0 0 0)),
+			      Vbox(separate (map pp_conbnd cbnds) (Break0 0 0)),
 			      Break,
 			      String "IN   ",
 			      pp_con cbody,
 			      Break,
 			      String "END"]
-	       end
 	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
 				       pp_con c2, String ")"]
 	 | Typecase_c {arg, arms, default, kind} =>
@@ -215,7 +217,7 @@ functor Ppnil(structure Nil : NIL
       | pp_primcon (Sum_c {known = opt,tagcount,...}) = 
 	String ("SUM" ^ (case opt of NONE => "" | SOME i => "_" ^ (TilWord32.toDecimalString i)) ^
 		"(" ^ (TilWord32.toDecimalString tagcount) ^ ")")
-      | pp_primcon (Record_c labels) = String "RECORD"
+      | pp_primcon (Record_c labels) = pp_list pp_label labels ("RECORD[", ",", "]", false)
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
 
     and pp_confun (openness,effect,vklist,clist,numfloats,con) = 
@@ -288,7 +290,7 @@ functor Ppnil(structure Nil : NIL
 
 	 
     and pp_function (Function(effect,recursive,vklist,vclist,vflist,exp,c)) = 
-	HOVbox[String "/\\",
+	HOVbox[String(case recursive of Leaf => "/Leaf\\" | Nonleaf => "/\\"),
 	       (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
 		vklist),
 	       (pp_list' (fn (v,c) => Hbox[pp_var v,pp_con c])
@@ -371,10 +373,10 @@ functor Ppnil(structure Nil : NIL
 	    val temp = (length vclist) + (length vflist)
 	in
 	    Vbox([String (if is_code then "/CODE\\" else "/\\ "),
-		    pp_var v,
+		    pp_var v, Break,
 		    pp_region "(" ")"
 		    [HVbox(vkformats @
-		     (if (false andalso temp > 0) then [String " ;; ", Break0 0 8] else [String " ;; "]) @
+		     (if (temp > 0) then [String " ;; ", Break0 0 8] else [String " ;; "]) @
 			  vcformats @ [String " ;; "] @ vfformats)],
 		    Break0 0 5,
 		    String (case effect of 
@@ -413,6 +415,7 @@ functor Ppnil(structure Nil : NIL
     val pp_con' = help pp_con
     val pp_kind' = help pp_kind
     val pp_bnd' = help pp_bnd
+    val pp_conbnd' = help pp_conbnd
     val pp_bnds' = help pp_bnds
     val pp_exp' = help pp_exp
     val pp_module' = help pp_module
@@ -423,6 +426,7 @@ functor Ppnil(structure Nil : NIL
     val pp_kind = help' pp_kind
     fun pp_list doer data = help' (pp_list' doer data)
     val pp_bnd = help' pp_bnd
+    val pp_conbnd = help' pp_conbnd
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
     val pp_module = help' pp_module

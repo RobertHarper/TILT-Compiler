@@ -1,12 +1,13 @@
 functor Linearize(structure Nil : NIL
 		  structure NilUtil : NILUTIL
-		  sharing NilUtil.Nil = Nil) 
+		  structure Ppnil : PPNIL
+		  sharing NilUtil.Nil = Ppnil.Nil = Nil) 
     : LINEARIZE = 
 struct
 
     val error = fn s => Util.error "linearize.sml" s
     structure Nil = Nil
-    open Nil Name
+    open Nil Name NilUtil
     val flatten = Listops.flatten
     val list2set = Util.list2set
     val set2list = Util.set2list
@@ -17,12 +18,34 @@ struct
     val debug = ref false
 
     local
-	type state = var VarMap.map
+	datatype cell = Use | Defer of cellref list
+	withtype cellref = (var * cell) ref
+	type state = (cellref list) * (var * cellref) VarMap.map
 	val seen : VarSet.set ref = ref VarSet.empty
+	fun augmentCell (r1,r2) = 
+	    (if (r1 = r2)
+		 then ()
+	     else (case !r1 of
+		       (_,Use) => ()
+		     | (v,Defer list) => r1 := (v,Defer(r2 :: list))))
+	fun skip 0 = ()
+	  | skip n = (print " "; skip (n-1))
+	fun cellref2bool tab (ref(v,c)) = 
+	    ((* skip tab;
+	     print "cellref2bool on v = "; Ppnil.pp_var v; *)
+	     let val res = (case c of
+				Use => ((* print "Use\n"; *) true)
+			      | Defer cells => ((* print "Defer\n"; *) Listops.orfold (cellref2bool (tab+5)) cells))
+(*		 val _ = (skip tab; print "cellref2bool on v = "; Ppnil.pp_var v; 
+			  print " = "; print (Bool.toString res); print "\n") *)
+	     in  res
+	     end)
+	val cellref2bool = fn arg => cellref2bool 0 arg
     in
 	type state = state
-	fun reset_state() : state = (seen := VarSet.empty; VarMap.empty)
-	fun state_stat str (m : state) : unit = 
+	fun reset_state() : state = (seen := VarSet.empty; ([ref (fresh_named_var "outer", Use)], VarMap.empty))
+	fun copy_state ((curcells,s) : state) = ((ref(fresh_named_var "copy",Use)) :: curcells,s)
+	fun state_stat str ((_,m) : state) : unit = 
 	    let val _ = if (!debug)
 			    then (print str; print "----\n";
 				  print "state map has ";
@@ -32,11 +55,19 @@ struct
 			else ()
 	    in ()
 	    end
-	fun find_var (m : state,v : var) : var = 
-	    (case (VarMap.find(m,v)) of
+	fun is_used ((_,s) : state, v) =
+	    (case (VarMap.find(s,v)) of
+		 NONE => error ("is_used failed on " ^ (Name.var2string v))
+	       | SOME (_,cellref) => cellref2bool cellref)
+
+	fun find_var ((curcells,s) : state,v : var) : var = 
+	    ((* print "find_var called on "; Ppnil.pp_var v; print "\n"; *)
+	     case (VarMap.find(s,v)) of
 		 NONE => error ("find_var failed on " ^ (Name.var2string v))
-	       | SOME v' => v')
-	fun add_var (m : state, v : var) : state * var = 
+	       | SOME (v',r) => (augmentCell(r,hd curcells); v'))
+
+	    
+	fun add_var ((curcells,m) : state, v : var) : state * var = 
 	    let val is_seen = VarSet.member(!seen,v)
 		val _ = if (!debug)
 			    then (print ("add_var on " ^ (Name.var2string v));
@@ -45,25 +76,18 @@ struct
 			else ()
 		val _ = seen := (if is_seen then !seen else VarSet.add(!seen,v))
 		val v' = if is_seen then derived_var v else v
+		val newcurcell = ref (v',Use)
 		val m = (case (VarMap.find(m,v)) of
-			     NONE => VarMap.insert(m,v,v')
-			   | SOME vars => VarMap.insert(#1(VarMap.remove(m,v)),v,v'))
-	    in  (m,v')
+			     NONE => VarMap.insert(m,v,(v',newcurcell))
+			   | SOME _ => VarMap.insert(#1(VarMap.remove(m,v)),v,(v',newcurcell)))
+	    in  ((newcurcell::curcells,m),v')
 	    end
+
+	fun pop_var([],m) = error "pop_var got empty stack"
+	  | pop_var(topcell::curcells,m) : state = (topcell := (#1(!topcell), Defer[]);
+						    (curcells,m))
+
     end
-
-    fun cbnd2bnd (Con_cb vkc) = Con_b vkc
-      | cbnd2bnd (Open_cb (confuns as (v,vklist,_,resk))) = 
-	let val v' = derived_var v
-	    val k = Arrow_k(Open,vklist,resk)
-	in  Con_b(v',k,Let_c(Sequential,[Open_cb confuns], Var_c v))
-	end
-      | cbnd2bnd (Code_cb (confuns as (v,vklist,_,resk))) = 
-	let val v' = derived_var v
-	    val k = Arrow_k(Code,vklist,resk)
-	in  Con_b(v',k,Let_c(Sequential,[Open_cb confuns], Var_c v))
-	end
-
 
    fun lsw lexp lfunction state do_info do_arg do_prearm ({info,arg,arms,default} : ('info,'arg,'t) sw) 
        : bnd list * ('info,'arg,'t) sw = 
@@ -90,10 +114,12 @@ struct
 
    fun lbnd state arg_bnd : state * bnd list =
        let val _ = state_stat "lbnd" state
-	   fun add_vars state vx_set = foldl (fn ((v,_),s) => #1(add_var(s,v))) state (set2list vx_set)
+	   fun add_vars state vx_list = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vx_list
+	   fun pop_vars state vx_list = foldl (fn (_,s) => pop_var s) state vx_list
 	   fun vf_help wrapper vf_set = 
 	       let val vf_list = set2list vf_set
-		   val state = add_vars state vf_set
+		   val state = add_vars state vf_list
+		   val state = pop_vars state vf_list
 		   val vf_list = map (fn (v,f) => (find_var(state,v),
 						   lfunction state f)) vf_list
 	       in  (state, [wrapper (list2set vf_list)])
@@ -108,45 +134,51 @@ struct
 	   fun mapset f s = list2set(map f (set2list s))
 
        in  (case arg_bnd of
-		Con_b (v,k,c) => let val (cbnds,c) = lcon state c
+		Con_b (v,k,c) => let val (state,v) = add_var(state,v)
+				     val (cbnds,c) = lcon state c
 				     val (cbnds_k,k) = lkind state k
-				     val (state,v) = add_var(state,v)
 				     val cbnd = Con_cb(v,k,c)
-				 in  (state, map cbnd2bnd (cbnds @ cbnds_k @ [cbnd]))
+				     val state = pop_var state
+				 in  (state, map NilUtil.cbnd2bnd (cbnds @ cbnds_k @ [cbnd]))
 				 end
-	      | Exp_b (v,c,e) => let val (bnds,e) = lexp state e
+	      | Exp_b (v,c,e) => let val (state,v) = add_var(state,v)
+				     val (bnds,e) = lexp state e
 				     val (bnds_c,c) = lcon2 state c
-				     val (state,v) = add_var(state,v)
 				     val bnd = Exp_b(v,c,e)
+				     val state = pop_var state
 				 in  (state, bnds @ bnds_c @ [bnd])
 				 end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
 	      | Fixclosure_b vcl_set => let val state' = add_vars state vcl_set
+					    val state' = pop_vars state vcl_set
 					    val vcl_list = set2list vcl_set
 					    val bnd_vcl = map vcl_help vcl_list
 					    val fixbnd = Fixclosure_b(list2set(map #2 bnd_vcl))
 					    val bnds = flatten (map #1 bnd_vcl)
+					    val state' = pop_var state'
 					in  (state',bnds @ [fixbnd])
 					end)
        end
 
    and lfunction state (Function(effect,recur,vklist,vclist,vflist,e,c)) : function =
        let 
+	   val state = copy_state state
 	   val (cbnds_vk,vklist,state) = lvklist state vklist
 	   val (cbnds_vc,vclist,state) = lvclist state vclist
 	   fun vfolder(v,(acc,state)) = 
 	       let val (state,v) = add_var(state,v)
+		   val state = pop_var state
 	       in (v::acc,state)
 	       end
 	   val (rev_vflist',state) = foldl vfolder ([],state) vflist
 	   val vflist = rev rev_vflist'
 	   val (bnds_e,e) = lexp state e
 	   val (bnds_c,c) = lcon2 state c
-	   val bnds = (map cbnd2bnd cbnds_vk) @ (map cbnd2bnd cbnds_vc) @ bnds_e @ bnds_c
+	   val bnds = (map NilUtil.cbnd2bnd cbnds_vk) @ (map NilUtil.cbnd2bnd cbnds_vc) @ bnds_e @ bnds_c
 	   val e = (case bnds of 
 			  [] => e
-			| bnds => Let_e(Sequential,bnds,e))
+			| bnds => lete(bnds,e))
        in  Function(effect,recur,vklist,vclist,vflist,e,c)
        end
 
@@ -170,11 +202,27 @@ struct
 	  | Const_e _ => ([],arg_exp)
 	  | Let_e (_,bnds,e) => 
 		let fun folder (bnd,(s,acc)) = let val (s,bnds) = lbnd s bnd
-					       in  (s,(rev bnds) @ acc)
+					       in  (s, (bnd,bnds) :: acc)
 					       end
-		    val (state,rev_bnds') = foldl folder (state,[]) bnds
+		    val (state,rev_bnd_bnds) = foldl folder (state,[]) bnds
 		    val (bnds'',e') = lexp state e
-		in  ([],Let_e(Sequential, (rev rev_bnds') @ bnds'', e'))
+		    fun folder ((orig_bnd,bnds),acc) = 
+			 let val res = case orig_bnd of
+			     Con_b(v,k,c) => if (is_used(state,v)) (* constructors never have an effect *)
+						 then bnds@acc
+					     else (print "discarding con variable ";
+						   Ppnil.pp_var v; print "\n";
+						   acc)
+			   | Exp_b(v,c,e) => if ((is_used(state,v)) orelse (NilUtil.effect e))
+						 then bnds@acc
+					     else (print "discarding exp variable ";
+						   Ppnil.pp_var v; print "\n";
+						   acc)
+			   | _ => bnds @ acc
+			 in res
+			 end
+		    val final_bnds = foldl folder bnds'' rev_bnd_bnds
+		in  ([],lete(final_bnds, e'))
 		end
 	  | Prim_e (ap,clist,elist) =>
 		let val cbnds_con_list = map (lcon state) clist
@@ -183,7 +231,7 @@ struct
 		    val bnds_exp_list = map (lexp state) elist
 		    val elist' = map #2 bnds_exp_list
 		    val bnds = flatten (map #1 bnds_exp_list)
-		in  (bnds @ (map cbnd2bnd cbnds), Prim_e(ap,clist',elist'))
+		in  (bnds @ (map NilUtil.cbnd2bnd cbnds), Prim_e(ap,clist',elist'))
 		end
 	  | App_e (openness,f,clist,elist,flist) =>
 		let val cbnds_con_list = map (lcon state) clist
@@ -196,12 +244,12 @@ struct
 		    val flist' = map #2 fbnds_fexp_list
 		    val fbnds = flatten (map #1 fbnds_fexp_list)
 		    val (fbnd,f') = lexp state f
-		in  (fbnd @ bnds @ fbnds @ (map cbnd2bnd cbnds), App_e(openness,f',clist',elist',flist'))
+		in  (fbnd @ bnds @ fbnds @ (map NilUtil.cbnd2bnd cbnds), App_e(openness,f',clist',elist',flist'))
 		end
 	  | Raise_e (e,c) => 
 		let val (bnd,e') = lexp state e
 		    val (cbnd,c') = lcon state c
-		in  (bnd @ (map cbnd2bnd cbnd), Raise_e(e',c'))
+		in  (bnd @ (map NilUtil.cbnd2bnd cbnd), Raise_e(e',c'))
 		end
 	  | Switch_e switch =>
 		let fun lsw'() = lsw lexp lfunction state 
@@ -211,7 +259,7 @@ struct
 			end
 		    fun nada arg = ([],arg)
 		    fun sumhelp (w,cons) = let val cbnds_cons = map (lcon state) cons
-					       fun help (cbnds,_) = map cbnd2bnd cbnds
+					       fun help (cbnds,_) = map NilUtil.cbnd2bnd cbnds
 					       val cbnds = flatten(map help cbnds_cons)
 					   in  (cbnds, (w,map #2 cbnds_cons))
 					   end
@@ -231,13 +279,15 @@ struct
 
    and lcon2 state arg_con : bnd list * con = 
        let val (cbnds,c) = lcon state arg_con
-       in  (map cbnd2bnd cbnds, c)
+       in  (map NilUtil.cbnd2bnd cbnds, c)
        end
 
    and lcbnd state arg_cbnd : state * conbnd list = 
        let val _ = state_stat "lcbnd" state
 	   fun lconfun wrapper (v,vklist,c,k) = 
-	   let val (state',v) = add_var(state,v)
+	   let val state = copy_state state 
+	       val (state',v) = add_var(state,v)
+	       val state' = pop_var state'
 	       val (cbnds_vk,vklist,state) = lvklist state' vklist
 	       val (cbnds_c,c) = lcon state c
 	       val (cbnds_k,k) = lkind state k
@@ -246,9 +296,10 @@ struct
 	   in  (state', cbnds_vk @ cbnds_c @ cbnds_k @ [cbnd])
 	   end
        in (case arg_cbnd of
-	       Con_cb (v,k,c) => let val (cbnd_k,k) = lkind state k
+	       Con_cb (v,k,c) => let val (state,v) = add_var(state,v)
+				     val (cbnd_k,k) = lkind state k
 				     val (cbnd_c,c) = lcon state c
-				     val (state,v) = add_var(state,v)
+				     val state = pop_var state
 				 in  (state, cbnd_k @ cbnd_c @ [Con_cb(v,k,c)])
 				 end
 	     | Open_cb arg => lconfun Open_cb arg
@@ -285,12 +336,30 @@ struct
 		    fun folder(cbnd,(acc,state)) = 
 			let val (state,cbnds') = lcbnd state cbnd
 			    val _ = state_stat "let_c folder: after call" state
-			in  ((rev cbnds') @ acc, state)
+			in  (cbnds' :: acc, state)
 			end
-		    val (rev_cbnds',state) = foldl folder ([],state) cbnds
+		    val (rev_cbnds,state) = foldl folder ([],state) cbnds
 		    val _ = state_stat "let_c after fold" state
-		    val (cbnds,c') = lcon state c
-		in  ([], Let_c(letsort,(rev rev_cbnds') @ cbnds,c'))
+(*
+		    val _ = (print "rev_cbnds are: ";
+			     app (fn cbnds => (Ppnil.pp_list Ppnil.pp_conbnd' cbnds ("","","",true);
+					       print "\n")) rev_cbnds;
+			     print "\n")
+*)
+		    val (cbnds',c') = lcon state c
+		    fun folder ((orig_cbnd,cbnds),acc) = 
+			(case orig_cbnd of
+			     Con_cb(v,_,_) => if (is_used (state,v)) (* constructors never have an effect *)
+						 then cbnds@acc
+					     else acc
+			   | _ => cbnds@acc)
+		    val final_cbnds = foldl folder cbnds' (Listops.zip cbnds rev_cbnds)
+(*
+		    val _ = (print "final_cbnds are: ";
+			     Ppnil.pp_list Ppnil.pp_conbnd' cbnds ("","","",true);
+			     print "\n")
+*)
+		in  ([], Let_c(letsort, final_cbnds, c'))
 		end
 	  | Crecord_c lc_list => let val cbnd_lclist = map (fn (l,c) => 
 							    let val (cbnd,c) = lcon state c
@@ -338,6 +407,7 @@ struct
    and lvklist state vklist = 
        let fun vkfolder((v,k),(cbnds,acc,state)) = 
 	   let val (state,v) = add_var(state,v)
+	       val state = pop_var state
 	       val (cbnd,k) = lkind state k
 	   in  ((rev cbnd)@cbnds, (v,k)::acc, state)
 	   end
@@ -348,6 +418,7 @@ struct
    and lvclist state vclist = 
        let fun vcfolder((v,c),(cbnds,acc,state)) = 
 	   let val (state,v) = add_var(state,v)
+	       val state = pop_var state
 	       val (cbnd,c) = lcon state c
 	   in  ((rev cbnd)@cbnds, (v,c)::acc, state)
 	   end
@@ -375,10 +446,11 @@ struct
 					  in  (cbnds_vk @ cbnds_k, Arrow_k(openness,vklist,k))
 					  end)
 
+
    fun lexport state (ExportValue(l,e,c)) = 
        let val (bnds,e) = lexp state e
 	   val (cbnds,c) = lcon state c
-       in  ExportValue(l,Let_e(Sequential,bnds,e),Let_c(Sequential,cbnds,c))
+       in  ExportValue(l,lete(bnds,e),letc(cbnds,c))
        end
      | lexport state (ExportType(l,c,k)) = 
        let val (cbnds_c,c) = lcon state c
@@ -386,12 +458,12 @@ struct
 	   val _ = (case cbnds_k of
 			[] => ()
 		      | _ => error "lexport: ExportType has nontrivial kind")
-       in  ExportType(l,Let_c(Sequential,cbnds_c,c),k)
+       in  ExportType(l,letc(cbnds_c,c), k)
        end
 
    fun linearize_mod (MODULE{bnds,imports,exports}) = 
        let val state = reset_state()
-	   fun import_folder (((ImportValue(_,v,_)) | (ImportType(_,v,_))),s) = #1(add_var(s,v))
+	   fun import_folder (((ImportValue(_,v,_)) | (ImportType(_,v,_))),s) = pop_var(#1(add_var(s,v)))
 	   val state = foldl import_folder state imports
 	   fun folder (bnd,(acc,state)) = let val (state,bnds) = lbnd state bnd
 					  in  (rev bnds @ acc, state)

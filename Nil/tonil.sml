@@ -1,5 +1,6 @@
 (* We box all floats and translate floating point operations accordingly.
-   Thus, kind type is replaced by work types *)
+   Thus, kind type is replaced by work types.
+   Also note that all record fields must be sorted by their labels. *)
 
 functor Tonil(structure Il : IL
               structure Ilutil : ILUTIL
@@ -33,9 +34,20 @@ struct
 *)
 
    val elaborator_specific_optimizations = ref true
+   val optimize_empty_structure = ref true
 
    fun error msg = Util.error "tonil.sml" msg
 
+
+   fun gt_label_pair ((l1,_),(l2,_)) = (case Name.compare_label (l1,l2) of
+							 GREATER => true
+						       | _ => false)
+   fun gt_label_pairpair (((l1,_),_),((l2,_),_)) = (case Name.compare_label (l1,l2) of
+							GREATER => true
+						      | _ => false)
+   fun gt_label_triple ((l1,_,_),(l2,_,_)) = (case Name.compare_label (l1,l2) of
+							 GREATER => true
+						       | _ => false)
 
    (* Variable-splitting mapping.  
 
@@ -151,7 +163,7 @@ struct
                    :: makeFields (i+1)
 	       else
 		   nil
-       in
+       in  (* already sorted *)
 	   Record_k (Util.list2sequence (makeFields n))
        end
 
@@ -399,6 +411,10 @@ struct
 		valuable = valuable_fun
 		} = xmod context (ilmod_fun, NONE)
 
+(*
+val _ = (print "\nMOD_APP: type_fun_r = \n";
+	 Ppnil.pp_con type_fun_r; print "\n\n\n")
+*)
 	   val {cbnd_cat = cbnd_cat_arg,
 		ebnd_cat = ebnd_cat_arg,
                 name_c = name_arg_c as (Var_c var_arg_c),
@@ -408,6 +424,9 @@ struct
 		valuable = valuable_arg
 		} = xmod context (ilmod_arg, NONE)
 
+	   val is_type_arg_unit = (case type_arg_r of
+				       Prim_c(Record_c _,[]) => true
+				     | _ => false)
            val name_c = Var_c var_c
 	   val name_r = Var_e var_r
 
@@ -415,7 +434,6 @@ struct
 	       val (Arrow_k(_, [(v_c, _)], con_body_kind)) = knd_fun_c
 	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_arg_c
 	       val reduced_argument_c = Nilstatic.con_reduce (NILctx_of context, argument_c)
-
                val (AllArrow_c(_,effect,[(var_body_arg_c,_)],_,_,exp_body_type)) = type_fun_r
 
                fun subst v = 
@@ -433,7 +451,6 @@ struct
 
 	       val knd_c = Nilstatic.kind_reduce (NILctx_of context,
 						  Nilutil.substConInKind subst con_body_kind)
-
 	       val cbnd_cat = APP[cbnd_cat_fun, 
 				  cbnd_cat_arg,
 				  LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
@@ -462,6 +479,15 @@ struct
                                 handle _ => NILctx' *)
 	       val NILctx'' = (Nilcontext.insert_con(NILctx', var_arg_r, type_arg_r))
                                 handle _ => NILctx'
+(*
+val _ = (print "-----about to compute type_r;  exp_body_type =\n";
+	 Ppnil.pp_con exp_body_type;
+	 print "\n-----about to compute type_r = con_reduce of\n";
+	 Ppnil.pp_con (Nilutil.substConInCon subst2 exp_body_type);
+	 print "\nand context is";
+	 Nilcontext.print_context NILctx'';
+	 print "\n\n")
+*)
 	       val type_r = Nilstatic.con_reduce (NILctx'', Nilutil.substConInCon subst2 exp_body_type)
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
@@ -472,7 +498,10 @@ struct
 					 App_e(Open,
 					       name_fun_r,
 					       [name_arg_c],
-					       [name_arg_r], []))]]
+					       if (is_type_arg_unit andalso !optimize_empty_structure)
+						   then []
+					       else [name_arg_r], 
+					       []))]]
        in
 	   {cbnd_cat  = cbnd_cat,
 	    ebnd_cat  = ebnd_cat,
@@ -513,6 +542,11 @@ struct
 
 	       val (_,knd_proj_c) = Nilstatic.con_valid(Nilcontext.insert_kind(NILctx_of context, v, knd_mod_c),
 							selectFromCon(Var_c v, lbls))
+(*
+	       val _ = (print "calling projectFromRecord with type_mod_r' = ";
+			Ppnil.pp_con type_mod_r'; print "\n and hd lbls = ";
+			Ppnil.pp_label (hd lbls); print "\n")
+*)
 	       val type_proj_r = projectFromRecord type_mod_r' lbls
 	   end
 
@@ -539,6 +573,9 @@ struct
 	   (* Split the argument parameter *)
 	   val (var_arg_c, var_arg_r, vmap') = splitVar (var_arg, vmap_of context)
 	   val (knd_arg, con_arg) = xsig context (Var_c var_arg_c, il_arg_signat)
+	   val is_con_arg_unit = (case con_arg of
+				      Prim_c(Record_c _,[]) => true
+				    | _ => false)
 
            val context' = update_vmap(context, vmap')
 
@@ -586,7 +623,10 @@ struct
 
 	   val knd_fun_c = Arrow_k(Open, [(var_arg_c, knd_arg)], knd_body_c)
 	   val type_fun_r = AllArrow_c(Open, effect, [(var_arg_c, knd_arg)], 
-				       [con_arg], w0,
+				       if (is_con_arg_unit andalso !optimize_empty_structure)
+					   then []
+				       else [con_arg], 
+				       w0,
 				       type_body_r)
 
            val cbnd_fun_cat = 
@@ -601,7 +641,9 @@ struct
 			      [(var_fun_r,
 			       Function(effect, Leaf,
 					 [(var_arg_c, knd_arg)],
-					 [(var_arg_r, con_arg)],
+					 if (is_con_arg_unit andalso !optimize_empty_structure)
+					   then []
+					 else [(var_arg_r, con_arg)],
 					 [],
 					 Let_e(Sequential,
 					       (map Con_b cbnds_body) @ ebnds_body,
@@ -629,9 +671,18 @@ struct
 		record_r_exp_items} = 
 		xsbnds context (!elaborator_specific_optimizations, true, sbnds)
 
+	   val (record_r_labels,record_r_field_types,record_r_exp_items) = 
+	       let 
+		   val temp = (ListMergeSort.sort gt_label_triple
+			       (Listops.zip3 record_r_labels record_r_field_types record_r_exp_items))
+	       in  (map #1 temp, map #2 temp, map #3 temp)
+	       end
+
            val name_str_c = Var_c var_str_c
 	   val name_str_r = Var_e var_str_r
 
+           val record_c_knd_items = ListMergeSort.sort gt_label_pairpair record_c_knd_items
+           val record_c_con_items = ListMergeSort.sort gt_label_pair record_c_con_items
 
 	   val knd_str_c = Record_k (Util.list2sequence record_c_knd_items)
            val cbnd_str_cat = 
@@ -672,7 +723,7 @@ struct
     | xmod' context (il_let_mod as (Il.MOD_LET (var_loc, il_loc_mod, il_body_mod)),
 		   preferred_name) =
        let
-	   val (var_loc_c, var_loc_r,_) = splitVar (var_loc, vmap_of context)
+	   val (var_loc_c, var_loc_r, vmap') = splitVar (var_loc, vmap_of context)
 
 	   val {cbnd_cat = cbnd_loc_cat,
 		ebnd_cat = ebnd_loc_cat,
@@ -691,13 +742,13 @@ struct
 		valuable = body_valuable,
                 ...} =  let
 			    fun cont1 NILctx' =
-				Nilcontext.c_insert_con(NILctx', var_loc_r, type_loc_r, cont2)
+				Nilcontext.c_insert_con(NILctx',var_loc_r, type_loc_r, cont2)
 				
 			    and cont2 NILctx'' =
 				let
 				    val context' = 
 					update_NILctx
-					(context, NILctx'')
+					(update_vmap(context,vmap'), NILctx'')
 				in
 				    xmod context' (il_body_mod, preferred_name)
 				end
@@ -756,6 +807,85 @@ struct
 	record_r_field_types = nil,
 	record_r_exp_items = nil}
 
+     | xsbnds' context (true, true, sbnds as 
+		       Il.SBND(lbl, Il.BND_EXP(top_var, il_exp as Il.FIX(is_recur, arrow, fbnds)))
+			       :: rest) =
+       (if (Util.substring("polyfun",Name.var2string top_var)) then
+				  
+	   let
+	       val numFunctions = length fbnds
+	       fun getFunctionNames 0 (ls, vs, rest) = (rev ls, rev vs, rest)
+                 | getFunctionNames n (ls, vs, Il.SBND(lbl,Il.BND_EXP(var,il_exp))::rest) = 
+		       getFunctionNames (n-1) (lbl::ls, var::vs, rest)
+                 | getFunctionNames _ _ = error "xsbnds: Can't optimize mono function"
+		   
+	       val (external_labels, external_vars, rest') = 
+		   getFunctionNames numFunctions (nil, nil, rest)
+
+	       val (Let_e (_, [Fixopen_b set], _), _, _) = xexp context il_exp
+
+               val (internal_vars, functions) = myunzip (Util.set2list set)
+
+               fun subst v =
+		   let fun loop (nil,nil) = NONE
+			 | loop (v'::vs, n::ns) =
+			   if (Name.eq_var (v,v'))
+			       then SOME (Var_e n)
+			   else
+			       loop (vs,ns)
+		   in
+		       loop (internal_vars, external_vars)
+		   end
+
+               fun reviseFunction (external_var,
+				   Function(effect,recursive,[],
+					    vclist,[],body,body_con)) =
+		   let val body' = Nilutil.substExpInExp subst body
+		   in  (external_var,
+		       Function(effect,recursive,[],
+                       	        vclist,	[], body', body_con))
+                   end
+
+
+               val ebnd_entries = Listops.map2 reviseFunction (external_vars, functions)
+
+               val ebnd_types = map (fn (_,Function(_,_,carg,vclist,w,_,body_type)) =>
+				     AllArrow_c(Open,Total,carg,map #2 vclist,
+						Word32.fromInt (List.length w),body_type)) 
+                                    ebnd_entries
+
+	       val ebnds = [Fixopen_b (Util.list2set ebnd_entries)]
+
+               val nil_edecs = map (fn (n_r,Function(effect,_,a1,a2,_,_,a4)) =>
+				    (n_r, AllArrow_c(Open,effect,a1,map #2 a2,w0,a4)))
+		                   ebnd_entries
+
+
+               val context'' = 
+		   update_NILctx
+		    (context,
+		     Nilcontext.c_insert_con_list 
+	             (NILctx_of context,
+		     nil_edecs, fn x => x))
+
+	       val {final_context, cbnd_cat, ebnd_cat, valuable, record_c_con_items,
+		    record_c_knd_items, record_r_labels, record_r_field_types,
+		    record_r_exp_items} = xsbnds context'' (true, true, rest')
+		    
+	   in
+	       {final_context = final_context,
+		cbnd_cat = cbnd_cat,
+		ebnd_cat = APP [LIST ebnds, ebnd_cat],
+		valuable = valuable,
+		record_c_con_items = record_c_con_items,
+		record_c_knd_items = record_c_knd_items,
+		record_r_labels = external_labels @ record_r_labels,
+		record_r_field_types = ebnd_types @ record_r_field_types,
+		record_r_exp_items = (map Var_e external_vars) @ record_r_exp_items}
+	   end
+       else
+	   xsbnds context (true,false,sbnds))
+
      | xsbnds' context (do_optimize, _, Il.SBND(lbl, Il.BND_EXP(var, il_exp)) :: rest) =
        let
 	   val (exp, con, exp_valuable) = xexp context il_exp
@@ -802,6 +932,7 @@ struct
 	    record_r_exp_items = record_r_exp_items}
        end
 
+
      | xsbnds' context (true, true, sbnds as 
 		       Il.SBND(lbl, 
 			       Il.BND_MOD
@@ -810,19 +941,20 @@ struct
 					       Il.MOD_STRUCTURE
 					       [Il.SBND(it_lbl,
 							Il.BND_EXP
-							(_, il_exp as Il.FIX(arrow, fbnds)))])))
+							(_, il_exp as Il.FIX(is_recur, arrow, fbnds)))])))
 			       :: rest) =
        if ((Name.eq_label (it_lbl, Ilutil.it_lab))
-	   andalso (Name.is_label_internal lbl)
+	   andalso ((Name.is_label_internal lbl)  (* this or is needed to handler bnds *)
+		    orelse (Util.substring("polyfun",Name.var2string top_var)))
 	   andalso (not (Name.eq_label (lbl, Ilutil.expose_lab)))
 	   andalso (not (Ilutil.is_eq_lab lbl))) then
 				  
 	   let
 	       val numFunctions = length fbnds
 	       fun getFunctionNames 0 (ls, vs, rest) = (rev ls, rev vs, rest)
-                 | getFunctionNames n (ls, vs, Il.SBND(lbl,Il.BND_MOD(var,il_module))::rest) = 
+                 | getFunctionNames n (ls, vs, Il.SBND(lbl,Il.BND_MOD(var,il_mod))::rest) = 
 		       getFunctionNames (n-1) (lbl::ls, var::vs, rest)
-                 | getFunctionNames _ _ = error "xsbnds: Can't optimize function"
+                 | getFunctionNames _ _ = error "xsbnds: Can't optimize poly function"
 		   
 	       val (external_labels, external_vars, rest') = 
 		   getFunctionNames numFunctions (nil, nil, rest)
@@ -840,7 +972,9 @@ struct
 
 	       val (poly_var_c, poly_var_r, vmap'') = splitVar (poly_var, vmap')
 	       val (knd_arg, con_arg) = xsig context (Var_c poly_var_c, il_arg_signat)
-		   
+	       val is_con_arg_unit = (case con_arg of
+					  Prim_c(Record_c _,[]) => true
+					| _ => false)
 	       val context' = 
 		   update_NILctx(update_vmap(context, vmap''),
 				  Nilcontext.insert_con
@@ -851,38 +985,44 @@ struct
 	       val (Let_e (_, [Fixopen_b set], _), _, _) = xexp context' il_exp
 
                val (internal_vars, functions) = myunzip (Util.set2list set)
+	       val inner_vars = map (fn v => Name.fresh_named_var((Name.var2name v) ^ "_inner")) external_vars_r
 
                fun subst v =
-		   let fun loop (nil,nil) = NONE
-			 | loop (v'::vs, n::ns) = 
+		   let fun loop (nil,nil,nil) = NONE
+			 | loop (v'::vs, n::ns, iv::ivs) = 
 			   if (Name.eq_var (v,v')) then 
-			       SOME (App_e(Open, Var_e n, 
+(*			       SOME (App_e(Open, Var_e n, 
 					   [Var_c poly_var_c], 
-					   [Var_e poly_var_r], []))
+					   if (is_con_arg_unit andalso !optimize_empty_structure)
+					       then []
+					   else [Var_e poly_var_r], 
+					   [])) *)
+			       SOME (Var_e iv)
 			   else
-			       loop (vs,ns)
+			       loop (vs,ns,ivs)
 		   in
-		       loop (internal_vars, external_vars_r)
+		       loop (internal_vars, external_vars_r, inner_vars)
 		   end
 
-               fun reviseFunction (Function(effect,recursive,[],
+               fun reviseFunction (external_var_r, inner_var,
+				   Function(effect,recursive,[],
 					    [(arg_var,arg_con)],[],body,body_con)) =
-		   let
-		       val var' = Name.fresh_var ()
-		       val body' = Nilutil.substExpInExp subst body
-		   in
+		   let val body' = Nilutil.substExpInExp subst body
+		   in  (external_var_r,
 		       Function(Total, Leaf, 
 				[(poly_var_c, knd_arg)],
-				[(poly_var_r, con_arg)],
+				if (is_con_arg_unit andalso !optimize_empty_structure)
+				    then []
+				else [(poly_var_r, con_arg)],
 				[],
 				Let_e (Sequential,
 				       [Fixopen_b
 					(Util.list2set 
-					 [(var', Function(effect,recursive,[],
+					 [(inner_var, Function(effect,recursive,[],
 							  [(arg_var,arg_con)],[],
 							  body',body_con))])],
-				       Var_e var'),
-				AllArrow_c(Open, effect, [], [arg_con], w0, body_con))
+				       Var_e inner_var),
+				AllArrow_c(Open, effect, [], [arg_con], w0, body_con)))
 		   end
 
                val nullfunction_c = 
@@ -906,14 +1046,12 @@ struct
 
                val cbnd_knds = map (fn _ => nullfunction_k) external_vars_c
 
-               val revised_functions = map reviseFunction functions
+               val ebnd_entries = Listops.map3 reviseFunction (external_vars_r, inner_vars, functions)
 
-               val ebnd_entries = Listops.zip external_vars_r revised_functions
-
-               val ebnd_types = map (fn Function(_,_,carg,[(_,earg)],w,_,body_type) =>
-				     AllArrow_c(Open,Total,carg,[earg],
+               val ebnd_types = map (fn (_,Function(_,_,carg,vclist,w,_,body_type)) =>
+				     AllArrow_c(Open,Total,carg,map #2 vclist,
 						Word32.fromInt (List.length w),body_type)) 
-                                    revised_functions
+                                    ebnd_entries
 
 	       val ebnds = [Fixopen_b (Util.list2set ebnd_entries)]
 
@@ -987,7 +1125,7 @@ struct
      | xflexinfo context (ref (Il.FLEXINFO(_,true, recs))) = 
        let
 	   val (lbls, cons) = xrdecs context recs
-	   val con = Prim_c(Record_c lbls, cons)
+	   val con = Prim_c(Record_c lbls, cons) (* already sorted *)
        in
 	   (con, Singleton_k (Runtime, Word_k Runtime, con))
        end
@@ -1159,7 +1297,7 @@ struct
      | xcon' context (Il.CON_RECORD rdecs) = 
        let
 	   val (lbls, cons) = xrdecs context rdecs
-	   val con = Prim_c (Record_c lbls, cons)
+	   val con = Prim_c (Record_c lbls, cons) (* already sorted *)
        in
 	   (con, Word_k Runtime)
        end
@@ -1179,6 +1317,7 @@ struct
 			 | _ => let fun mapper (n,_) = ((Nilutil.generate_tuple_label (n+1),
 							 Name.fresh_var()),Word_k Runtime)
 				    val arg_var = Name.fresh_var()
+					(* already sorted *)
 				    val arg_kind = Record_k(Util.sequence2list
 							    (Listops.mapcount mapper vars))
 				    fun mapper (n,v) = 
@@ -1221,6 +1360,7 @@ struct
 	   val tuple_length = List.length cons
 	   val labels = makeLabels tuple_length
 	   val vars = makeVars tuple_length
+	(* already sorted *)
 	   val con = Crecord_c(Listops.zip labels cons)
 	   val knd = Record_k (Util.list2sequence 
 			       (Listops.zip (Listops.zip labels vars) knds))
@@ -1454,7 +1594,7 @@ struct
 		end
 	  | SOME il_exp => xexp context il_exp)
 
-     | xexp' context (Il.FIX (il_arrow, fbnds)) = 
+     | xexp' context (Il.FIX (is_recur, il_arrow, fbnds)) = 
        let
 	   val fbnds'= xfbnds context fbnds
            val set = Util.list2set fbnds'
@@ -1464,7 +1604,7 @@ struct
                         AllArrow_c(Open, effect, [], [con1], w0, con2))
                 fbnds'
            val num_names = List.length types
-           val labels = makeLabels num_names
+           val labels = makeLabels num_names (* already sorted *)
        in
 	   if (List.length names = 1) then
                (Let_e (Sequential, [Fixopen_b set], hd names),
@@ -1478,9 +1618,9 @@ struct
      | xexp' context (Il.RECORD rbnds) = 
        let
 	   val (labels, exps, cons, valuable) = xrbnds context rbnds
-       in
+       in  (* labels already sorted *)
 	   (Prim_e (NilPrimOp (record labels), cons, exps),
-	    Prim_c (Record_c labels, cons), valuable)
+	    Prim_c (Record_c labels, cons), valuable) 
        end
 
      | xexp' context (il_exp0 as (Il.RECORD_PROJECT (il_exp, label, il_record_con))) =
@@ -1664,23 +1804,28 @@ struct
 	              (flattenCatlist ebnd_cat)
 
 
+	   val _ = (print "tonil.sml: MODULE_PROEJCT case.  type_r =\n";
+		    Ppnil.pp_con type_r;
+		    print "\n\n")
+
            val unnormalized_con = 
 	       makeLetC (map Con_cb cbnds) 
 	                (if specialize then 
 			     type_r 
 			 else
 			     projectFromRecord type_r [label])
-(*
+
            val _ = (print "unnormalized con = ";
 		    Ppnil.pp_con unnormalized_con;
-		    print "\n")
-*)
+		    print "\n\nwith a context of\n";
+		    NilContext.print_context (NILctx_of context); print "\n")
+
            val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
-(*
+
            val _ = (print "normalized con = ";
 		    Ppnil.pp_con con;
 		    print "\n")
-*)
+
 	   val let_body = 
 	       if specialize then 
 		   name_r
@@ -1812,8 +1957,15 @@ struct
 			     (Il.SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...}))) =
        let
 	   val {crdecs, erlabs, ercons} = 
-	       xsdecs context (con0, fn _ => NONE, sdecs)
+	       xsdecs context (!elaborator_specific_optimizations,true,con0, fn _ => NONE, sdecs)
+	   val crdecs = ListMergeSort.sort gt_label_pairpair crdecs
 	   val kind = Record_k (Util.list2sequence crdecs)
+	   val (erlabs,ercons) = 
+	       let 
+		   val temp = ListMergeSort.sort gt_label_pair
+					 (Listops.zip erlabs ercons)
+	       in  (map #1 temp, map #2 temp)
+	       end
 	   val default = (kind,Prim_c(Record_c erlabs, ercons))
        in  (case (!elaborator_specific_optimizations,sdecs,erlabs,ercons) of
 		(true,[Il.SDEC(it_lbl,_)],[erlab],[ercon]) =>
@@ -1851,7 +2003,7 @@ struct
        end
 		    
        
-   and xsdecs context (args as (_,_,sdecs)) =
+   and xsdecs context (args as (_,_,_,_,sdecs)) =
        let
 	   val this_call = ! xmod_count
 	   val _ = if (! debug) then
@@ -1869,53 +2021,83 @@ struct
 	   result
        end
 
-   and xsdecs'' context (con0,subst,sdecs) = 
+   and xsdecs'' context (elab_spec,firstpass,con0,subst,sdecs) = 
        let 
 	   fun loop [] = []
+	     | loop ((sdec as 
+		     Il.SDEC(_,Il.DEC_EXP(top_var,il_con))) :: rest) = 
+	        if (Util.substring("polyfun",Name.var2string top_var)) then
+		   let
+		       val _ = print "entered mono optimization case\n"
+		       val clist = (case il_con of
+					Il.CON_RECORD lclist => map #2 lclist
+				      | Il.CON_ARROW _ => [il_con]
+				      | _ => error "can't optimize mono fun")
+		       val numFunctions = length clist
+		       fun getFunctionNames 0 (ls, vs, rest) = (rev ls, rev vs, rest)
+			 | getFunctionNames n (ls, vs, Il.SDEC(lbl,Il.DEC_EXP(var,il_module))::rest) = 
+			   getFunctionNames (n-1) (lbl::ls, var::vs, rest)
+			 | getFunctionNames _ _ = error "xsbnds: Can't optimize mono function"
+		       val (external_labels, external_vars, rest) = 
+			   getFunctionNames numFunctions (nil, nil, rest)
+		       fun make_sdec (lbl,c) = Il.SDEC(lbl,Il.DEC_EXP(Name.fresh_var(),c))
+		       val sdecs' = Listops.map2 make_sdec (external_labels,clist)
+		   in  sdecs' @ (loop rest)
+		   end
+	       else
+		   sdec::loop rest
 	     | loop ((sdec as 
 		     Il.SDEC(lbl,
 			     Il.DEC_MOD
 			     (top_var, s as
 			      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat,
 						Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,
-									    Il.DEC_EXP(_,il_con as 
-										       Il.CON_RECORD lclist))]),
+									    Il.DEC_EXP(_,il_con))]),
 						arrow))))
 		     :: rest) = 
 	       if ((Name.eq_label (it_lbl, Ilutil.it_lab))
 		   andalso (Name.is_label_internal lbl)
+		   andalso (Util.substring("polyfun",Name.var2string top_var))
 		   andalso (not (Name.eq_label (lbl, Ilutil.expose_lab)))
 		   andalso (not (Ilutil.is_eq_lab lbl))) then
 		   let
-		       val _ = print "entered optimization case\n"
-		       val numFunctions = length lclist
+		       val _ = print "entered poly optimization case\n"
+		       val clist = (case il_con of
+					Il.CON_RECORD lclist => map #2 lclist
+				      | Il.CON_ARROW _ => [il_con]
+				      | _ => (print "can't optimize polyfun sdec with il_con =\n";
+					      Ppil.pp_con il_con;
+					      error "can't optimize polyfun sdec"))
+		       val numFunctions = length clist
 		       fun getFunctionNames 0 (ls, vs, rest) = (rev ls, rev vs, rest)
 			 | getFunctionNames n (ls, vs, Il.SDEC(lbl,Il.DEC_MOD(var,il_module))::rest) = 
 			   getFunctionNames (n-1) (lbl::ls, var::vs, rest)
-			 | getFunctionNames _ _ = error "xsbnds: Can't optimize function"
-		       val (external_labels, external_vars, rest') = 
+			 | getFunctionNames _ _ = error "xsdecs: Can't optimize poly function sdec"
+		       val (external_labels, external_vars, rest) = 
 			   getFunctionNames numFunctions (nil, nil, rest)
-		       fun make_sdec (l,c) = 
+		       fun make_sdec (l,c) =
 			   let val inner_sig =
 			       Il.SIGNAT_STRUCTURE(NONE,[Il.SDEC(it_lbl,Il.DEC_EXP(Name.fresh_var(),c))])
-			   in  Il.SDEC(lbl,Il.DEC_MOD(top_var,
+			   in  Il.SDEC(l,Il.DEC_MOD(top_var,
 						      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat, inner_sig, arrow)))
 			   end
-		   val sdecs' = (map make_sdec lclist)
+		   val sdecs' = Listops.map2 make_sdec (external_labels,clist)
 		   in  sdecs' @ (loop rest)
 		   end
 	       else
 		   sdec::loop rest
 	     | loop (sdec::rest) = sdec::(loop rest)
-	   val sdecs' = if (!elaborator_specific_optimizations)
+(*	   val _ = (print "before loop: length sdecs = "; print (Int.toString (length sdecs)); print "\n") *)
+	   val sdecs' = if (elab_spec andalso firstpass)
 			    then loop sdecs
 			else sdecs
-       in  xsdecs' context (con0,subst,sdecs')
+(* 	   val _ = (print "after loop: length sdecs' = "; print (Int.toString (length sdecs')); print "\n") *)
+       in  xsdecs' context (elab_spec,firstpass,con0,subst,sdecs')
        end
    
-   and xsdecs' context (con0, _, []) = {crdecs = nil, erlabs = nil, ercons = nil}
+   and xsdecs' context (_,_,con0, _, []) = {crdecs = nil, erlabs = nil, ercons = nil}
 
-     | xsdecs' context (con0, subst,  
+     | xsdecs' context (elab_spec,_,con0, subst,  
 		    Il.SDEC(lbl, d as Il.DEC_MOD(var,signat)) :: rest) =
        let
 	   val (var_c, var_r, vmap') = splitVar (var, vmap_of context)
@@ -1933,7 +2115,7 @@ struct
 			NILctx'')
 		       
 		   val {crdecs, erlabs, ercons} =
-		       xsdecs context' (con0, extendmap (subst, var_c, Proj_c(con0, lbl)),
+		       xsdecs context' (elab_spec,false,con0, extendmap (subst, var_c, Proj_c(con0, lbl)),
 					rest)
 	       in
 		   {crdecs = ((lbl, var_c), knd) :: crdecs,
@@ -1944,7 +2126,7 @@ struct
 	   Nilcontext.c_insert_kind(NILctx_of context, var_c, knd, cont1)
        end
 
-     | xsdecs' context(con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,con)) :: rest) =
+     | xsdecs' context(elab_spec,_,con0, subst, Il.SDEC(lbl, d as Il.DEC_EXP(var,con)) :: rest) =
        let
 	   val (con',_) = xcon context con
 
@@ -1954,7 +2136,7 @@ struct
 		       update_NILctx
 		       (context, NILctx')
 		       
-		   val {crdecs, erlabs, ercons} = xsdecs context' (con0, subst, rest)
+		   val {crdecs, erlabs, ercons} = xsdecs context' (elab_spec,false,con0, subst, rest)
 	       in
 		   {crdecs = crdecs,
 		    erlabs = lbl :: erlabs,
@@ -1964,7 +2146,7 @@ struct
 	   Nilcontext.c_insert_con(NILctx_of context, var, con', cont1)
        end
 
-     | xsdecs' context (con0, subst, sdecs as Il.SDEC(lbl, d as Il.DEC_CON(var, knd, 
+     | xsdecs' context (elab_spec,_,con0, subst, sdecs as Il.SDEC(lbl, d as Il.DEC_CON(var, knd, 
 									maybecon))::rest)=
        let
 	   val knd' = xkind context knd
@@ -1982,7 +2164,7 @@ struct
 		       (context, NILctx')
 		       
 		   val {crdecs, erlabs, ercons} = 
-		       xsdecs context' (con0, extendmap (subst, var, Proj_c(con0, lbl)),
+		       xsdecs context' (elab_spec,false,con0, extendmap (subst, var, Proj_c(con0, lbl)),
 					rest)
 	       in
 		   {crdecs = ((lbl, var), knd'') :: crdecs,
@@ -1999,7 +2181,7 @@ struct
 		  [(Name.fresh_var(), Word_k Runtime)], 
 		  makeKindTuple m)
      | xkind context (Il.KIND_ARROW (n,m)) = 
-         let
+         let (* already sorted *)
 	     val (Record_k args) = makeKindTuple n
 	 in
 	     Arrow_k (Open,

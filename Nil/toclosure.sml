@@ -19,6 +19,7 @@ struct
 
     val error = fn s => error "toclosure.sml" s
     val debug = ref false
+    val liftCode = ref true
     val float64 = Prim_c(Float_c Prim.F64,[])
     structure FidSet = VarSet
     type fid = var
@@ -64,9 +65,11 @@ struct
     fun remove_bound({freeevars=e,freecvars=c},bounds) =
 	{freeevars=map_set_remove(e,bounds), freecvars=map_set_remove(c,bounds)}
 
-    fun show_free({freeevars, freecvars,...} : frees) =
+    fun show_free({freeevars, freecvars,boundevars,boundcvars} : frees) =
 	(print "freeevars are: "; VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) freeevars; print "\n";
-	 print "freecvars are: "; VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) freecvars; print "\n")
+	 print "freecvars are: "; VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) freecvars; print "\n";
+	 print "boundevars are: "; VarSet.app (fn (v) => (Ppnil.pp_var v; print " ")) boundevars; print "\n";
+	 print "boundcvars are: "; VarSet.app (fn (v) => (Ppnil.pp_var v; print " ")) boundcvars; print "\n")
 
     (* -------------- types and values manipulating functions and related information ------- *)
     type funentry = {static : {fid : fid, 
@@ -146,7 +149,14 @@ struct
 	    (case (VarMap.find(!fids,fid)) of
 		 NONE => error ((Name.var2string fid) ^ "fid not found for aug_frees")
 	       | SOME (r as (ref{static,escape,callee,frees})) =>
-		     let val f = {freeevars=evars,
+		     let (* val _ = (print "augment_frees called on fid = ";
+				  Ppnil.pp_var fid; print "\nwith\n";
+				  print "evars are: "; 
+				  VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) evars; print "\n";
+				  print "cvars are: "; 
+				  VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) cvars; 
+				  print "\n") *)
+			 val f = {freeevars=evars,
 				  freecvars=cvars,
 				  boundevars=VarSet.empty,
 				  boundcvars=VarSet.empty}
@@ -261,10 +271,12 @@ struct
 
 
 
-	fun initial_state topfid = STATE{is_top = true,
-					 curfid=topfid,boundfids=VarSet.empty,
-					 boundevars = VarMap.empty,
-					 boundcvars = VarMap.empty}
+	fun initial_state topfid = let val _ = add_fun topfid
+				   in   STATE{is_top = true,
+					      curfid=topfid,boundfids=VarSet.empty,
+					      boundevars = VarMap.empty,
+					      boundcvars = VarMap.empty}
+				   end
 
 	fun copy_state (STATE{boundevars,boundcvars,boundfids,...}) fid = 
 	    let fun epromote (LOCALe c) = SHADOWe c
@@ -586,10 +598,9 @@ struct
 
    local
        fun close_fun (curfid,nextset) = 
-	   let val fvs = get_frees curfid
-	       val callees = get_callee curfid
+	   let val callees = get_callee curfid
 	       val callee_fvs = VarSet.foldl (fn (f,fv) => join_free(get_frees f, fv)) empty_frees callees
-	       val {freeevars=fe,freecvars=fc,...} = fvs
+	       val {freeevars=fe,freecvars=fc,...} = callee_fvs
 	       val changed = augment_frees(curfid,fe,fc)
 	   in if changed
 		  then VarSet.add(nextset,curfid)
@@ -597,7 +608,7 @@ struct
 	   end
    in  fun close_funs workset = 
        let  val _ = if (!debug)
-			then (print "before close_funs";
+			then (print "before close_funs\n";
 			      VarSet.app (fn fid => (print ("fid = ");
 						     Ppnil.pp_var fid; print " --   callees are "; 
 						     VarSet.app (fn fid => (Ppnil.pp_var fid; print " ")) 
@@ -610,9 +621,9 @@ struct
 			 then ()
 		     else close_funs (VarSet.foldl close_fun VarSet.empty workset)
 	   val _ = if (!debug)
-		       then (print "after close_funs";
+		       then (print "after a round of close_funs\n";
 			     VarSet.app (fn fid => (print ("fid = ");
-						    Ppnil.pp_var fid; print " -- "; 
+						    Ppnil.pp_var fid; print "\n"; 
 						    show_free(get_frees fid))) (get_fids());
 			     print "\n\n")
 		   else ()
@@ -645,7 +656,19 @@ struct
 				       rectype, [Var_e evar])
 
 
-   and fun_rewrite(v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
+   local
+       val ebnds = ref ([] : bnd list)
+       val cbnds = ref ([] : conbnd list)
+   in
+       fun reset_bnds() = (ebnds := []; cbnds := [])
+       fun get_bnds() = (!ebnds,!cbnds)
+       fun eadder eb = ((* print "adding ebnd\n";  *)
+			ebnds := (eb :: (!ebnds)))
+       fun cadder cb = ((* print "adding cbnd\n"; Ppnil.pp_conbnd cb; print " end of cbnd\n"; *)
+			cbnds := (cb :: (!cbnds)))
+   end
+
+   fun fun_rewrite lift (v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
        let 
 	   val _ = if (!debug)
 		       then (print "fun_rewrite v = "; Ppnil.pp_var v; print "\n")
@@ -653,12 +676,12 @@ struct
 	   val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars,...} = get_frees v
 	   val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
-	   val vclist = map (fn (v,c) => (v,c_rewrite c)) vclist
+	   val vclist = map (fn (v,c) => (v,c_rewrite lift c)) vclist
 	   val escape = get_escape v
 	   val vk_free = (VarMap.listItemsi freecvars)
 	   val vc_free = (VarMap.listItemsi freeevars)
 	   val vk_free = map (fn (v,k) => (v,k_rewrite k)) vk_free
-	   val vc_free = map (fn (v,c) => (v,c_rewrite c)) vc_free
+	   val vc_free = map (fn (v,c) => (v,c_rewrite lift c)) vc_free
 	   val _ = if (!debug)
 		       then (print "fun_rewrite v = "; Ppnil.pp_var v;
 			     print "\nvk_free are "; 
@@ -687,14 +710,14 @@ struct
 	       end
 	   val vklist_unpack = map (fn (v,k) => (v,NilUtil.substConInKind subst k)) vklist_unpack_almost
 	   val vclist_unpack = map (fn (v,c) => (v,NilUtil.substConInCon subst c)) vclist_unpack_almost
-	   val codebody_tipe = c_rewrite tipe
+	   val codebody_tipe = c_rewrite lift tipe
 	   val unpackbody_tipe = NilUtil.substConInCon subst codebody_tipe
 	   val closure_tipe = AllArrow_c(Closure,effect,
 					 vklist,map #2 vclist,
 					 TilWord32.fromInt(length vflist),codebody_tipe)
 	   val code_fun = Function(effect,recur,
 				   vklist_code,vclist_code,vflist,
-				   e_rewrite body, codebody_tipe)
+				   e_rewrite lift body, codebody_tipe)
 	   val unpack_body = 
 	       App_e(Code,Var_e code_var,
 		     (map (Var_c o #1) vklist) @ 
@@ -715,7 +738,7 @@ struct
 	  else ([(code_var,code_fun)],[])
        end
 
-   and bnd_rewrite' (bound,bnd) : bnd list changeopt = 
+   and bnd_rewrite' lift (bound,bnd) : bnd list changeopt = 
        let
 	   fun funthing_helper rewriter var_thing_set =
 	       let 
@@ -726,30 +749,42 @@ struct
 		       (case (List.concat(map #2 pfun_close)) of
 			    [] => []
 			  | close_list => [Fixclosure_b(list2set close_list)])
-	       in  pfun_bnd :: closure_bnd_list
+	       in  if lift
+		       then ((* print "calling adder in bnd_rewrite'\n"; *)
+			     eadder pfun_bnd;
+			     closure_bnd_list)
+		   else pfun_bnd :: closure_bnd_list
 	       end
        in CHANGE_NORECURSE
 	   (case bnd of
-		(Con_b(v,k,c)) => [Con_b(v,k_rewrite k, c_rewrite c)]
-	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite c, e_rewrite e)]
+		(Con_b(v,k,c)) => [Con_b(v,k_rewrite k, c_rewrite lift c)]
+	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite lift c, e_rewrite lift e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
-	      | (Fixopen_b var_fun_set) => funthing_helper fun_rewrite var_fun_set)
+	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite lift) var_fun_set)
        end
 
-   and make_handlers() = (e_rewrite', 
-			  bnd_rewrite',
-			  c_rewrite',
-			  fn (_,cb : conbnd) => NOCHANGE,
-			  k_rewrite')
+   and make_handlers lift = 
+	    (e_rewrite' lift, 
+	     bnd_rewrite' lift,
+	     c_rewrite' lift,
+	     fn (_,cb : conbnd) => NOCHANGE,
+	     k_rewrite')
 
-   and bnd_rewrite (arg_bnd : bnd) : bnd list =
-       NilUtil.bnd_rewrite (make_handlers()) arg_bnd
 
-   and e_rewrite (arg_exp : exp) : exp  = 
-       NilUtil.exp_rewrite (make_handlers()) arg_exp
+   and bnd_rewrite lift (arg_bnd : bnd) : bnd list =
+       let val handlers = make_handlers lift
+	   val bnds = NilUtil.bnd_rewrite handlers arg_bnd
+       in  bnds
+       end
 
-   and e_rewrite' (bound,arg_exp) : exp changeopt =
+   and e_rewrite lift (arg_exp : exp) : exp  = 
+       let val handlers = make_handlers lift
+	   val e = NilUtil.exp_rewrite handlers arg_exp
+       in  e
+       end
+
+   and e_rewrite' lift (bound,arg_exp) : exp changeopt =
        (case arg_exp of
 	    Var_e v => NOCHANGE (* closures retain their name *)
 	  | Const_e v => NOCHANGE
@@ -758,15 +793,15 @@ struct
 	  | Let_e(letsort,bnds,e) => NOCHANGE
 	  | App_e ((Code | Closure), _,_,_,_) => error "App_e(Code|Closure,...) during closure conversion"
 	  | App_e (Open, e, clist, elist, eflist) => 
-		let val clist' = map c_rewrite clist
-		    val elist' = map e_rewrite elist
-		    val eflist' = map e_rewrite eflist
+		let val clist' = map (c_rewrite lift) clist
+		    val elist' = map (e_rewrite lift) elist
+		    val eflist' = map (e_rewrite lift) eflist
 		    fun docall (cv,{freeevars, freecvars,...} : frees) = 
 			let val clist'' = map (fn (v,_) => Var_c v) (VarMap.listItemsi freecvars)
 			    val elist'' = map (fn (v,_) => Var_e v) (VarMap.listItemsi freeevars)
 			in App_e(Code, Var_e cv, clist' @ clist'', elist' @ elist'', eflist')
 			end
-		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist')
+		    fun default() = App_e(Closure,e_rewrite lift e, clist', elist', eflist')
 		in CHANGE_NORECURSE
 		    (case e of
 			 Var_e v => if (is_fid v)
@@ -779,8 +814,8 @@ struct
 	  | Raise_e (e,c) => NOCHANGE
 	  | Handle_e _ => NOCHANGE)
 
-   and cbnd_rewrite (Con_cb(v,k,c)) = [Con_cb(v,k_rewrite k, c_rewrite c)]
-     | cbnd_rewrite (Open_cb(v,vklist,c,k)) = 
+   and cbnd_rewrite lift (Con_cb(v,k,c)) = [Con_cb(v,k_rewrite k, c_rewrite lift c)]
+     | cbnd_rewrite lift (Open_cb(v,vklist,c,k)) = 
        let val _ = if (!debug)
 		       then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
@@ -793,15 +828,17 @@ struct
 	   val cbnds = Listops.mapcount get_cbnd vk_free
 	   val vklist' = vklist @ [(cfv_var, kind_tuple(map #2 vk_free))]
 	   val code_cb = Code_cb(code_var, vklist',
-				Let_c(Sequential,cbnds,c_rewrite c), k)
+				letc(cbnds,(c_rewrite lift c)), k)
 	   val con_env = con_tuple_inject(map (fn (v,k) => Var_c v) vk_free)
 	   val closure_cb = Con_cb(v,Arrow_k(Closure,vklist,k),
 				   Closure_c (Var_c code_var, con_env))
-       in  [code_cb, closure_cb]
+       in  if lift
+	       then (cadder code_cb; [closure_cb])
+	   else [code_cb, closure_cb]
        end			
-     | cbnd_rewrite (Code_cb _) = error "found Code_cb during closure-conversion"
+     | cbnd_rewrite _ (Code_cb _) = error "found Code_cb during closure-conversion"
 
-   and c_rewrite' (bound, arg_con) : con changeopt = 
+   and c_rewrite' lift (bound, arg_con) : con changeopt = 
        (case arg_con of
 	    Prim_c (primcon,clist) => NOCHANGE
 	  | Mu_c (vc_set,v) =>  NOCHANGE
@@ -809,12 +846,19 @@ struct
 	  | AllArrow_c (Open,effect,vklist,clist,numfloats,c) => 
 		let val vklist' = map (fn(v,k) => (v,k_rewrite k)) vklist
 		in  CHANGE_NORECURSE(AllArrow_c(Closure,effect,vklist',
-					      map c_rewrite clist,numfloats,c_rewrite c))
+						map (c_rewrite lift) clist,
+						numfloats,c_rewrite lift c))
 		end
 	  | AllArrow_c ((Code | Closure),_,_,_,_,_) => error "All_c(Closure,...) during closure-conversion"
 	  | Let_c (letsort,cbnds,c) => 
-		let val cbnds' = List.concat(map cbnd_rewrite cbnds)
-		in  CHANGE_NORECURSE(Let_c(letsort,cbnds',c_rewrite c))
+		let val cbnds' = List.concat(map (cbnd_rewrite lift) cbnds)
+		    val c = c_rewrite lift c
+		in  CHANGE_NORECURSE(case (c,cbnds') of
+					 (_,[]) => c
+				       | (Var_c v, [Con_cb(v',_,c')]) => if (eq_var(v,v'))
+									    then c'
+									else Let_c(letsort,cbnds',c)
+				       | _ => Let_c(letsort,cbnds',c))
 		end
 	  | Typecase_c {arg,arms,default,kind} => NOCHANGE
 	  | Crecord_c lclist => NOCHANGE
@@ -824,10 +868,16 @@ struct
 	  | Annotate_c (annot,c) => NOCHANGE)
 
    and k_rewrite arg_kind : kind = 
-       NilUtil.kind_rewrite (make_handlers()) arg_kind
+       let val handlers = make_handlers(false)
+	   val k = NilUtil.kind_rewrite handlers arg_kind
+       in  k
+       end
 
-   and c_rewrite arg_con : con =
-       NilUtil.con_rewrite (make_handlers()) arg_con
+   and c_rewrite lift arg_con : con =
+       let val handlers = make_handlers lift
+	   val c = NilUtil.con_rewrite handlers arg_con
+       in  c
+       end
 
    and k_rewrite' (bound,arg_kind) : kind changeopt = 
        (case arg_kind of 
@@ -840,11 +890,10 @@ struct
 		end
 	  | Arrow_k _ => error "cannot encounter arrow_k(Code/Closure,...) during closure-conversion")
 
-
+(*
    fun close_exp arg_exp = 
        let val _ = reset_table []
 	   val top_fid = fresh_named_var "top_fid"
-	   val _ = add_fun top_fid
 	   val state = initial_state top_fid
 	   val {freeevars,freecvars,...} = e_find_fv state arg_exp
 	   val _ = if (!debug)
@@ -858,12 +907,12 @@ struct
 	   val _ = if (!debug)
 		       then print "Done with close_funs\n"
 		   else ()
-	   val result = e_rewrite arg_exp
+	   val result = e_rewrite lift arg_exp
        in  result
        end	   
-
+*)
    fun close_con' state arg_con = 
-       let val _ = reset_table []
+       let 
 	   val {freeevars,freecvars,...} = c_find_fv state arg_con
 	   val _ = if (!debug)
 		       then (print "Done with c_find_fv\n";
@@ -876,12 +925,16 @@ struct
 	   val _ = if (!debug)
 		       then print "Done with close_funs\n"
 		   else ()
-	   val result = c_rewrite arg_con
-       in  result
+	   val _ = reset_bnds()
+	   val result = c_rewrite true arg_con
+	   val (bnds,cbnds) = get_bnds()
+       in  (case (bnds,cbnds) of
+		([],cbnds) => letc(rev cbnds, result)
+	      | _ => error "c_rewrite has bnds")
        end	   
 
    fun close_kind' state arg_kind = 
-       let val _ = reset_table []
+       let 
 	   val {freeevars,freecvars,...} = k_find_fv state arg_kind
 	   val _ = if (!debug)
 		       then 
@@ -895,17 +948,22 @@ struct
 	   val _ = if (!debug)
 		       then print "Done with close_funs\n"
 		   else ()
+	   val _ = reset_bnds()
 	   val result = k_rewrite arg_kind
        in  result
        end	   
 
-   fun close_con con = close_con' (initial_state (fresh_named_var "top_fid")) con
-   fun close_kind kind = close_kind' (initial_state (fresh_named_var "top_fid")) kind
-
+   fun close_con con = 
+       let val _ = reset_table []
+       in close_con' (initial_state (fresh_named_var "top_fid")) con
+       end 
+   fun close_kind kind = 
+       let val _ = reset_table []
+       in  close_kind' (initial_state (fresh_named_var "top_fid")) kind 
+       end
    fun close_mod (MODULE{bnds, imports, exports}) = 
        let val _ = reset_table []
 	   val top_fid = fresh_named_var "top_fid"
-	   val _ = add_fun top_fid
 	   val state = initial_state top_fid
 	   fun import_mapper (ImportValue(l,v,c),(imports,state)) = 
 	       let 
@@ -937,9 +995,17 @@ struct
 	   val _ = if (!debug)
 		       then print "Done with close_funs\n"
 		   else ()
-	   val Let_e(_,bnds',_) = e_rewrite (Let_e(Sequential, bnds, true_exp))
-	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite e,c_rewrite c)
-	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite c,k_rewrite k)
+
+	   fun folder (bnd,acc) = 
+	       let val _ = reset_bnds()
+		   val bnds = bnd_rewrite (!liftCode) bnd
+		   val (ebnds,cbnds) = get_bnds()
+		   val bnds' = (map cbnd2bnd (rev cbnds)) @ (rev ebnds) @ bnds
+	       in  acc @ bnds'
+	       end
+	   val bnds' = foldl folder [] bnds
+	   fun export_rewrite (ExportValue(l,e,c)) = ExportValue(l,e_rewrite false e,c_rewrite false c)
+	     | export_rewrite (ExportType(l,c,k)) = ExportType(l,c_rewrite false c,k_rewrite k)
 	   val exports' = map export_rewrite exports
        in  MODULE{bnds = bnds', imports = imports, exports = exports'}
        end	   

@@ -51,3 +51,7 @@ linknil.sml
 (*linkstatic.sml*)
 linearize.sig.sml
 linearize.sml
+cleanup.sig.sml
+cleanup.sml
+betareduce.sig.sml
+betareduce.sml

@@ -9,6 +9,7 @@ signature PPNIL =
 
     (* these don't do actual output *)
     val pp_bnd'     : Nil.bnd -> Formatter.format
+    val pp_conbnd'  : Nil.conbnd -> Formatter.format
     val pp_bnds'    : Nil.bnd list -> Formatter.format
     val pp_exp'     : Nil.exp -> Formatter.format
     val pp_con'     : Nil.con -> Formatter.format
@@ -22,6 +23,7 @@ signature PPNIL =
 
     (* these go to std_out *)
     val pp_bnd     : Nil.bnd -> unit
+    val pp_conbnd  : Nil.conbnd -> unit
     val pp_bnds    : Nil.bnd list -> unit
     val pp_exp     : Nil.exp -> unit
     val pp_con     : Nil.con -> unit

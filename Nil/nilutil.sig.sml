@@ -7,7 +7,8 @@ signature NILUTIL =
     val substConInKind : (Nil.var -> Nil.con option) -> Nil.kind -> Nil.kind
     val substExpInExp : (Nil.var -> Nil.exp option) -> Nil.exp -> Nil.exp
 
-    val freeExpVarInExp : Nil.exp -> Nil.var list (* returns free term-level free variables *)
+    val freeExpConVarInExp : Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
+    val freeConVarInCon    : Nil.con -> Nil.var list (* free type level vars *)
 
     val muExpand : (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
@@ -24,6 +25,12 @@ signature NILUTIL =
     val false_exp : Nil.exp
     val int_con : Nil.con   (* 32-bit ints *)
     val char_con : Nil.con  (* 8-bit ints *)
+
+    val letc : Nil.conbnd list * Nil.con -> Nil.con
+    val lete : Nil.bnd list * Nil.exp -> Nil.exp
+    val cbnd2bnd : Nil.conbnd -> Nil.bnd
+
+    val effect : Nil.exp -> bool (* could the expression have an effect *)
 
     val con_free_convar : Nil.con -> Name.var list
     val convar_occurs_free : Name.var * Nil.con -> bool

@@ -1,4 +1,4 @@
-functor Alpha(structure ArgNil : NIL) :> 
+functor Alpha(structure ArgNil : NIL) :(*>*)
    ALPHA where structure Nil = ArgNil =
   struct
 

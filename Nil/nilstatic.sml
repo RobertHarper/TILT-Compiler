@@ -11,7 +11,7 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    and Prim = ArgNil.Prim = PrimUtil.Prim
 		    and type NilUtil.alpha_context = Alpha.alpha_context
 		    and type PrimUtil.con = ArgNil.con
-		    and type PrimUtil.exp = ArgNil.exp) :>
+		    and type PrimUtil.exp = ArgNil.exp) :(*>*)
   NILSTATIC where structure Nil = ArgNil and type context = NilContext.context = 
 struct	
   
@@ -25,7 +25,7 @@ struct
   (* Local rebindings from imported structures *)
 
   local
-    structure C :>
+    structure C :(*>*)
       sig 
 	type context = NilContext.context
 	val empty : unit -> context
@@ -54,7 +54,7 @@ struct
 	  -> context -> 'elt list -> 'a
       end = NilContext
 
-    structure NU :> 
+    structure NU :(*>*)
       sig 
 	val substConInExp : (Nil.var -> Nil.con option) -> Nil.exp -> Nil.exp
 	val substConInCon : (Nil.var -> Nil.con option) -> Nil.con -> Nil.con
@@ -558,20 +558,31 @@ struct
 	   (* Assumes that set implementation guarantees entries are 
 	    * all distinct - i.e., no duplicates
 	    *)
+
+val _ = (print "nilstatic.sml: MU_C case 0 with constructor =\n";
+	 PpNil.pp_con constructor; print "\n")
 	   val def_list = sequence2list defs
+
 	   val var_kinds = map (fn (var,con) => (var,Word_k Runtime)) def_list
-	     
+val _ = print "nilstatic.sml: MU_C case 1\n"	     
 	   fun check_one D ((var,con),(cons,kinds)) =
 	     let
+		 val _ = (print "check_ont with con = ";
+			  PpNil.pp_con con; print "\n")
 	       val (con,kind) = (con_valid (D,con))
 	     in
 	       ((var,con)::cons,kind::kinds)
 	     end
 
 	   fun cont D = (List.foldr (check_one D) ([],[]) def_list)
+val _ = print "nilstatic.sml: MU_C case 2\n"
 	   val (cons,kinds) = c_insert_kind_list (D,var_kinds,cont)
+
+val _ = print "nilstatic.sml: MU_C case 3\n"
 	   val con' = Mu_c (list2sequence cons,var)
+
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con')
+val _ = print "nilstatic.sml: MU_C case 4\n"
 	 in
 	   if c_all is_word b_perr_k kinds then
 	     (con',kind)

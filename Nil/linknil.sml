@@ -98,7 +98,18 @@ struct
 			    structure Ppil = LinkIl.Ppil)
 
     structure Linearize = Linearize(structure Nil = Nil
-				    structure NilUtil = NilUtil)
+				    structure NilUtil = NilUtil
+				    structure Ppnil = PpNil)
+
+    structure BetaReduce = BetaReduce(structure Nil = Nil
+				      structure NilUtil = NilUtil
+				      structure Ppnil = PpNil
+				      structure IlUtil = LinkIl.IlUtil)
+
+    structure Cleanup = Cleanup(structure Nil = Nil
+				structure NilUtil = NilUtil
+				structure Ppnil = PpNil
+				structure IlUtil = LinkIl.IlUtil)
 
     structure ToClosure = ToClosure(structure Nil = Nil
 				    structure Ppnil = PpNil
@@ -360,6 +371,13 @@ struct
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val nilmod = phasesplit debug (ctxt,sbnds,sdecs)
+	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
+	    val _ = if debug 
+			then (print "\n\n=======================================\n\n";
+			      print "cleanup results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "cleanup complete\n"
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
 	    val _ = if debug 
 			then (print "\n\n=======================================\n\n";
@@ -367,6 +385,13 @@ struct
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else print "Renaming complete\n"
+	    val nilmod = (Stats.timer("Beta-reduction",BetaReduce.reduceModule)) nilmod
+	    val _ = if debug 
+			then (print "\n\n=======================================\n\n";
+			      print "beta-reduction results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Beta-reduction complete\n"
 	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
 	    val _ = if debug
 			then (print "\n\n=======================================\n\n";
