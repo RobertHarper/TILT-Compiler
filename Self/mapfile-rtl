@@ -561,3 +561,4 @@ Tortl     Rtl/tortl
 LINKRTL Rtl/linkrtl.sig
 Linkrtl Rtl/linkrtl
 
+rtltest Self/rtltest

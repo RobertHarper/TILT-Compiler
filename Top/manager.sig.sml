@@ -51,5 +51,7 @@ signature MANAGER = sig
 
   val stat_each_file : bool ref
   val tilc : string * bool * string option * string option * string list  -> unit  (* mapfile * args  *)
+  val purge : string -> unit  (* given a mapfile, remove all compiled .ui and .uo and .o files *)
+  val buildRuntime : unit -> unit
   val command : string * string list  -> int  (* to be exported *)
 end

@@ -1,4 +1,4 @@
-(*$import RTL SPARC String Rtl Util Char *)
+(*$import RTL SPARC String Rtl Util Char Listops *)
 
 structure  Sparc :> SPARC =
 struct

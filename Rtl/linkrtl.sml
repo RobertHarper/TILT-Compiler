@@ -40,14 +40,6 @@ struct
 	    val _ = print "\n============================================\n";
 	    val _ = print "Starting translation to RTL\n"
 	    val rtlmod = Tortl.translate unitname translate_params nilmodule
-(*	    val rtlmod = Rtlopt.opt translate_params rtlmod *)
-
-	    val _ = print "  Not doing Rtlopt.GCmerge\n"
-(*
-	    val _ = print "Starting Rtlopt.GCmerge\n"
-	    val rtlmod = Rtlopt.GCmerge rtlmod
-	    val _ = print "Finished Rtlopt.GCmerge\n"
-*)
 	    val _ = print "Translation to RTL complete\n"
 	    val _ = if debug orelse !show_rtl
 			then (print "RTL code:\n";

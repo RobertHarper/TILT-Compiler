@@ -1115,6 +1115,7 @@ struct
 	  fun get_addr() = let val addr = alloc_regi NOTRACE_LABEL
 			   in  add_instr(LADDR(label,0,addr)); addr
 			   end
+	  val _ = add_data(COMMENT "global here");
       in  (case lv of
 	     LOCATION (REGISTER (_,reg)) =>
 		 (case reg of

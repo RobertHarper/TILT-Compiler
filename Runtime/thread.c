@@ -410,6 +410,7 @@ void thread_go(value_t start_adds, int num_add)
     printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
     pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr,256 * 1024);
     pthread_attr_setscope(&attr,PTHREAD_SCOPE_SYSTEM); 
     pthread_create(&(SysThreads[i].pthread),&attr,systhread_go,NULL);
     printf("Systhread %d:  processor %d and pthread = %d\n",

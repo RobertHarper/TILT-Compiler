@@ -808,6 +808,7 @@ structure Manager :> MANAGER =
       in  loop 0
       end
 
+
   fun tilc(mapfile : string, cs : bool, rs : string option, 
 	   os : string option, srcs : string list) =
 	let val _ = if !(Stats.tt "Reset stats between calls") then Stats.clear_stats() else ()
@@ -827,6 +828,24 @@ structure Manager :> MANAGER =
 		  | (true, _, _) =>           error "Cannot specify -c and -o/-r");
 	    Stats.print_stats()
 	end
+
+
+  fun purge(mapfile : string) =
+      let val _ = setMapping mapfile
+	  val units = list_units()
+	  fun remove unit = 
+	      let val base = get_base unit
+		  val ui = base2ui base
+		  val uo = base2uo base
+		  val obj = base2o base
+		  val command = "rm -f " ^ ui ^ "; rm -f " ^ ui ^ "; rm -f " ^ obj
+	      in  (Util.system command; ())
+
+	      end
+      in  app remove units
+      end
+
+  fun buildRuntime() = (Util.system("cd Runtime; gmake purge; gmake runtime"); ())
 
   fun command(env : string, args : string list) : int =
     case args of 
