@@ -1,9 +1,10 @@
 (*$import RTL DECALPHA String Rtl Util Char *)
-functor Decalpha (val exclude_intregs : int list) :> DECALPHA  =
 
+structure Decalpha :> DECALPHA  =
 
 struct
       
+    val exclude_intregs = []
     val error = fn s => Util.error "decalpha.sml" s
 
 structure Machine = 
@@ -437,13 +438,6 @@ structure Machine =
     | msData (INT32 (w))  = single (".long " ^ (wms w))
     | msData (FLOAT (f))  = single (".t_floating " ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
-    | msData (ARRAYI (count, w)) = single (".long " ^ (wms w) ^ " : " ^ (Int.toString count))
-    | msData (ARRAYF (count, f)) = single (".t_floating " ^ (fixupFloat f) ^ 
-					       " : " ^ (Int.toString count))
-    | msData (ARRAYP (count, PTR label)) = single (".long " ^ (msLabel label) ^
-							   (" : ") ^ (Int.toString count))
-    | msData (ARRAYP (count, TAG w)) = single (".long " ^ (wms w) ^ " : " ^ 
-		       (Int.toString count))
     | msData (ALIGN (LONG)) = single (".align 2")
     | msData (ALIGN (QUAD)) = single (".align 3")
     | msData (ALIGN (ODDLONG)) = [(1, "\t.align 3\t\t# ODDLONG\n"),
@@ -660,25 +654,6 @@ structure Machine =
    val pv = (case Rpv of
                  NONE => error "no Rpv for Alpha"
                | SOME x => x)
-
-   fun increase_stackptr sz = SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))
-   fun decrease_stackptr (sz : int) = SPECIFIC(LOADI(LDA, Rsp, ~sz, Rsp))
-   fun std_entry_code() = [SPECIFIC(LOADI(LDGP, Rgp, 0, pv))]
-   fun std_return_code(NONE) = [SPECIFIC(LOADI(LDGP, Rgp, 0, Rra))]
-     | std_return_code(SOME sra) = [SPECIFIC(LOADI(LDGP, Rgp, 0, sra))]
-   fun push (src,actual_location) =
-       case (src,actual_location)
-       of (R _, ACTUAL8 offset) => SPECIFIC(STOREI(STQ, src, offset, Rsp))
-        | (R _, ACTUAL4 offset) => SPECIFIC(STOREI(STL, src, offset, Rsp))
-        | (F _, ACTUAL8 offset) => SPECIFIC(STOREF(STT, src, offset, Rsp))
-        | _ => error "push"
-
-   fun pop (dst,actual_location) = 
-       case (dst,actual_location)
-       of (R _,ACTUAL8 offset) => SPECIFIC(LOADI(LDQ, dst, offset, Rsp))
-        | (R _,ACTUAL4 offset) => SPECIFIC(LOADI(LDL, dst, offset, Rsp))
-        | (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDT, dst, offset, Rsp))
-        | _ => error "allocateBlock: pop"
 
 
    val special_iregs = listunique[Rzero, Rgp, Rat, Rsp, Rth, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rpv', Rra]

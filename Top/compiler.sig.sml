@@ -5,7 +5,7 @@
 signature COMPILER =
  sig
 
-   datatype platform = TIL_ALPHA | MLRISC_ALPHA | MLRISC_SPARC
+   datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
    val platform : platform ref
 
    type sbnd and context_entry and context

@@ -100,8 +100,7 @@ struct
        | LT => "lt" 
        | GE => "ge"
        | GT => "gt"
-       | LBS => "lbs"
-       | LBC => "lbc"
+
 
   fun cmpi2s c signflag = (if signflag then "" else "u")^(cmpf2s c)
 
@@ -292,12 +291,6 @@ struct
 	| INT32 (bi) =>  String (".long "^(word2str bi))
 	| FLOAT s =>  String (".double "^s)
 	| DATA (l) => String(".data "^(label2s l))
-	| ARRAYI (size,bi) =>  String (".long "^word2str bi^" : "^
-				     (i2s size))
-	| ARRAYF (size,s) =>  String (".double "^s^" : "^
-				    (i2s size))
-	| ARRAYP (size,l) => String (".data "^labelortag2s l^" : "^
-				   (i2s size))
 	| ALIGN (a) =>  String (".align "^(align2s a))
 	| DLABEL (l) =>  String (label2s l^":")
 

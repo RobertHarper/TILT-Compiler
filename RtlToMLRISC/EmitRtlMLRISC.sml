@@ -784,8 +784,6 @@ functor EmitRtlMLRISC(
       | complement Rtl.GE  = Rtl.LT
       | complement Rtl.GT  = Rtl.LE
       | complement Rtl.NE  = Rtl.EQ
-      | complement Rtl.LBC = Rtl.LBS
-      | complement Rtl.LBS = Rtl.LBC
 
     (*
      * Return an MLRISC condition and conditional expression for a given
@@ -807,12 +805,6 @@ functor EmitRtlMLRISC(
 	  (MLTree.GT, MLTree.CMP(MLTree.GT, left, right, MLTree.LR))
       | translate(Rtl.NE, left, right) =
 	  (MLTree.NEQ, MLTree.CMP(MLTree.NEQ, left, right, MLTree.LR))
-      | translate(Rtl.LBC, left, right) =
-	  (MLTree.EQ, MLTree.CMP(MLTree.EQ, MLTree.ANDB(left, MLTree.LI 1),
-				 MLTree.LI 0, MLTree.LR))
-      | translate(Rtl.LBS, left, right) =
-	  (MLTree.NEQ, MLTree.CMP(MLTree.NEQ, MLTree.ANDB(left, MLTree.LI 1),
-				  MLTree.LI 0, MLTree.LR))
 
     (*
      * Return an unsigned MLRISC condition and conditional expression for a
@@ -853,8 +845,6 @@ functor EmitRtlMLRISC(
 	  (MLTree.>, MLTree.FCMP(MLTree.>, left, right, MLTree.LR))
       | translateFloat(Rtl.NE, left, right) =
 	  (MLTree.<>, MLTree.FCMP(MLTree.<>, left, right, MLTree.LR))
-      | translateFloat(_, _, _) =
-	  raise InvalidRtl "invalid floating-point comparison"
 
     (*
      * Return an MLRISC condition and conditional expression for a given
@@ -1530,19 +1520,6 @@ functor EmitRtlMLRISC(
     fun DATA label =
 	  [MLTree.PSEUDO_OP(MLRISCPseudo.Label label)]
 
-    fun ARRAYI(size, value) =
-	  [MLTree.PSEUDO_OP(MLRISCPseudo.IntegerArray(size, value))]
-
-    fun ARRAYF(size, value) =
-	  [MLTree.PSEUDO_OP(MLRISCPseudo.FloatArray(size, value))]
-
-    fun ARRAYP(size, Rtl.PTR label) =
-	  [MLTree.PSEUDO_OP(
-	     MLRISCPseudo.LabelArray(size, Label'.translate label))]
-      | ARRAYP(size, Rtl.TAG immediate) =
-	  [MLTree.PSEUDO_OP(
-	     MLRISCPseudo.IntegerArray(size, immediate))]
-
     fun ALIGN alignment =
 	  [MLTree.PSEUDO_OP alignment]
 
@@ -1569,12 +1546,6 @@ functor EmitRtlMLRISC(
 	  FLOAT string
       | translateData(Rtl.DATA label) =
 	  DATA(Label'.translate label)
-      | translateData(Rtl.ARRAYI(size, value)) =
-	  ARRAYI(size, value)
-      | translateData(Rtl.ARRAYF(size, value)) =
-	  ARRAYF(size, value)
-      | translateData(Rtl.ARRAYP(size, value)) =
-	  ARRAYP(size, value)
       | translateData(Rtl.ALIGN align) =
 	  ALIGN(Alignment.translate align)
       | translateData(Rtl.DLABEL label) =

@@ -1143,8 +1143,7 @@ struct
 	    | flip GE = LE
 	    | flip GT = LT
 	    | flip NE = NE
-	    | flip LBS = error "flip: LBS shouldn't be here"
-	    | flip LBC = error "flip: LBC shouldn't be here"
+
 	  fun swap (a,v1 as VALUE(INT i),v2) = 
 	      if in_imm_range i 
 		  then (flip a,v2,v1)

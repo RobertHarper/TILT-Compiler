@@ -1006,7 +1006,8 @@ struct
 	       let val cbnds = map (fn (_,v',_,l) => Con_b(Runtime, (Con_cb(v',
 								Proj_c(Var_c cenv_var, l))))) vkl_free
 		   val cenv = Crecord_c(map (fn (v,_,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
-		   val kind = Record_k(Sequence.fromList(map (fn (v,_,k,l) => ((l,v),k)) vkl_free))
+		   val kind = Record_k(Sequence.fromList
+				       (map (fn (v,_,k,l) => ((l,derived_var v),k)) vkl_free))
 		   val subst = foldl (fn ((v,_,_,l),s) => NilSubst.C.sim_add s (v,Proj_c(Var_c cenv_var, l)))
 				(NilSubst.C.empty()) vkl_free
 	       in  (subst, cbnds, cenv, kind)

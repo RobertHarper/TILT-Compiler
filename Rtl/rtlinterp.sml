@@ -205,30 +205,10 @@ fun replace_all_stack(arg) = stack := arg
 	  | dataitem_layout wh (INT32(w)) _ = (H.storelong(i2w wh,w); 4)
 	  | dataitem_layout wh (FLOAT(strf)) _ = 
 	    (H.storefloat(i2w wh,O.str_to_real strf); 8)
-	  | dataitem_layout wh (ARRAYI(0,_)) _ = 0
-	  | dataitem_layout wh (ARRAYI(n,v)) f = 
-	    let val sz = dataitem_layout wh (INT32 (v)) f
-	    in  sz + (dataitem_layout (wh+sz) (ARRAYI(n-1,v)) f)
-	    end
-	  | dataitem_layout wh (ARRAYF(0,_)) _ = 0
-	  | dataitem_layout wh (ARRAYF(n,v)) f = 
-	    let val sz = dataitem_layout wh (FLOAT (v)) f
-	    in  sz + (dataitem_layout (wh+sz) (ARRAYF(n-1,v)) f)
-	    end
 	  | dataitem_layout wh (DATA(l)) false = 4 
 	  | dataitem_layout wh (DATA(l)) true = 
 	    dataitem_layout wh 
 	    (INT32 (i2w(label_to_address (!label_table) l))) true
-	  | dataitem_layout wh (ARRAYP(0,_)) _ = 0
-	  | dataitem_layout wh (ARRAYP(n,l)) false = 4 * n
-	  | dataitem_layout wh (ARRAYP(n,l)) true = 
-	    let val data = 
-		     case l
-		     of TAG i => INT32 (i)
-		      | PTR l => INT32(i2w(label_to_address (!label_table) l))
-		val sz = dataitem_layout wh data true
-	    in  sz + (dataitem_layout (wh+sz) (ARRAYP(n-1,l)) true)
-	    end
 	  | dataitem_layout wh (DLABEL _) _ = 0
 	  | dataitem_layout wh (ALIGN (LONG)) _ = (4 - (wh mod 4)) mod 4
 	  | dataitem_layout wh (ALIGN (QUAD)) _ = (8 - (wh mod 8)) mod 8

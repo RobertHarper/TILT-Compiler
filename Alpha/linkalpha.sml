@@ -1,4 +1,4 @@
-(*$import LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm ToAlpha Recursion *)
+(*$import LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm Recursion *)
 
 
 structure Linkalpha :> LINKASM =
@@ -7,13 +7,11 @@ struct
   open Linkrtl
 
 
-  structure Decalpha = Decalpha(val exclude_intregs = [] : int list
-				structure Rtl = Rtl)
+  structure Decalpha = Decalpha
   structure Machine = Decalpha.Machine
-  structure Decalphautils = Decalphautils(structure Decalpha = Decalpha)
-  structure Callconv   = DecalphaCallconv (structure Decalpha = Decalpha
-					   structure Machineutils = Decalphautils)
-  structure Ifgraph   = Ifgraph    (structure Machine = Machine)
+  structure Decalphautils = Decalphautils
+  structure Callconv = DecalphaCallconv
+  structure Ifgraph = Ifgraph(structure Machine = Machine)
   structure Tracetable = Tracetable(val little_endian = true
 				    structure ArgMachine = Decalpha.Machine)
 
@@ -22,12 +20,9 @@ struct
 			    structure Tracetable = Tracetable)
 
 
-  structure Divmult = Divmult(structure Decalpha = Decalpha
-			      structure MU = Decalphautils)
+  structure Divmult = Divmult
 
-  structure Toalpha = Toalpha(structure Decalpha = Decalpha
-			      structure Pprtl = Pprtl
-			      structure Machineutils = Decalphautils
+  structure Toalpha = Toalpha(structure Machineutils = Decalphautils
 			      structure ArgTracetable = Tracetable
 			      structure Bblock = Bblock
 			      structure DM = Divmult)
@@ -42,14 +37,10 @@ struct
 
   structure Graph = Labelgraph()
 
-  structure Recursion = Recursion(structure Pprtl = Pprtl
-				  structure Graph = Graph
+  structure Recursion = Recursion(structure Graph = Graph
 				  structure Printutils = Printutils)
 
- 
-
-  structure Trackstorage = AlphaTrackstorage(structure Decalpha = Decalpha
-					     structure Printutils = Printutils					     
+  structure Trackstorage = AlphaTrackstorage(structure Printutils = Printutils	
 					     structure Machineutils = Decalphautils)
 
 

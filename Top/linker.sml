@@ -9,6 +9,7 @@ structure Linker :> LINKER =
 	in   case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
+	     | Til.TIL_SPARC => solaris
 	     | Til.MLRISC_SPARC => solaris
 	end
     fun ld() = 
@@ -17,6 +18,7 @@ structure Linker :> LINKER =
 	in   case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
+	     | Til.TIL_SPARC => solaris
 	     | Til.MLRISC_SPARC => solaris
 	end
     fun crt() = 
@@ -25,6 +27,7 @@ structure Linker :> LINKER =
 	in   case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
+	     | Til.TIL_SPARC => solaris
 	     | Til.MLRISC_SPARC => solaris
 	end
     fun ld_libs() = 
@@ -33,6 +36,7 @@ structure Linker :> LINKER =
 	in  case !Til.platform of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
+	     | Til.TIL_SPARC => solaris
 	     | Til.MLRISC_SPARC => solaris
 	end
     val error = fn x => Util.error "Linker" x
@@ -261,6 +265,7 @@ structure Linker :> LINKER =
 					   ("main_" ^ un ^ "_doit")) unitnames
 		   val _ = (case !Til.platform of
 				Til.TIL_ALPHA => Linkalpha.link
+			      |	Til.TIL_SPARC => Linksparc.link
 (*			      | Til.MLRISC_ALPHA => AlphaLink.link 
 			      | Til.MLRISC_SPARC => SparcLink.link*))
 

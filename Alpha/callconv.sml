@@ -1,11 +1,10 @@
 (*$import DECALPHA MACHINEUTILS CALLCONV Util *)
 
-functor DecalphaCallconv(structure Decalpha : DECALPHA
-			 structure Machineutils : MACHINEUTILS)
+structure DecalphaCallconv
     :> CALLCONV where Machine = Decalpha.Machine =
 struct
 
-  structure Machineutils = Machineutils
+  structure Machineutils = Decalphautils
   open Machineutils 
   open Decalpha
   open Machine

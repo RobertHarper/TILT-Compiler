@@ -4,7 +4,7 @@ structure Til : COMPILER =
 
     val littleEndian = Stats.tt("littleEndian")
 
-    datatype platform = TIL_ALPHA | MLRISC_ALPHA | MLRISC_SPARC
+    datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
     val platform = ref TIL_ALPHA
 
     type sbnd = Il.sbnd
@@ -20,6 +20,7 @@ structure Til : COMPILER =
     fun as_flag() = 
 	(case !platform of
 	     TIL_ALPHA => if (!debug_asm) then " -g " else ""
+	   | TIL_SPARC => if (!debug_asm) then " -g " else ""
 	   | MLRISC_ALPHA => if (!debug_asm) then " -g " else ""
 	   | MLRISC_SPARC => "-xarch=v8plus")
     fun assemble(s_file,o_file) =
@@ -63,10 +64,11 @@ structure Til : COMPILER =
 
 		(* rtl_to_asm creates unitName.s file with main label * `unitName_doit' *)
 		val rtl_to_asm = 
-		    (case !platform of
+		    case !platform of
 			 TIL_ALPHA => Linkalpha.rtl_to_asm
+		       | TIL_SPARC => Linksparc.rtl_to_asm
 (*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm 
-		       | MLRISC_SPARC => SparcLink.rtl_to_asm*))
+		       | MLRISC_SPARC => SparcLink.rtl_to_asm *)
 		val _ = rtl_to_asm(unitName ^ ".s", rtlmod)    
 		val _ = if (!uptoAsm) then raise Stop else ()
 

@@ -1,12 +1,11 @@
 (*$import DECALPHA MACHINEUTILS TilWord64 DIVMULT Util *)
-functor Divmult(structure Decalpha : DECALPHA 
-		structure MU : MACHINEUTILS)
+structure Divmult
   :> DIVMULT where DA = Decalpha = 
   struct
     open Decalpha
     open Machine
     open Core
-    structure MU = MU
+    structure MU = Decalphautils
     structure DA = Decalpha
       
     val N = 32

@@ -1,6 +1,6 @@
-(*$import PPRTL GRAPH PRINTUTILS RECURSION Util *)
-functor Recursion(structure Pprtl : PPRTL
-		  structure Graph : DIRECTEDGRAPH where type node = Rtl.label
+(*$import Pprtl GRAPH PRINTUTILS RECURSION Util *)
+
+functor Recursion(structure Graph : DIRECTEDGRAPH where type node = Rtl.label
 		  structure Printutils : PRINTUTILS)
     :> RECURSION =
 struct

@@ -1,6 +1,5 @@
 (*$import DECALPHA PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn Util *)
-functor AlphaTrackstorage(structure Decalpha : DECALPHA
-			  structure Printutils : PRINTUTILS 
+functor AlphaTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Decalpha.specific_instruction
 			      where type Machine.instruction = Decalpha.Machine.instruction
 			  structure Machineutils : MACHINEUTILS)

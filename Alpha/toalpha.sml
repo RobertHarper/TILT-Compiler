@@ -9,9 +9,7 @@
 
 *)
          
-functor Toalpha(structure Decalpha: DECALPHA 
-                structure Pprtl: PPRTL
-                structure Machineutils : MACHINEUTILS 
+functor Toalpha(structure Machineutils : MACHINEUTILS 
 	        structure ArgTracetable : TRACETABLE 
                 structure Bblock : BBLOCK
 		    where type Machine.specific_instruction = Decalpha.specific_instruction
@@ -320,9 +318,7 @@ struct
 	 | Rtl.GT =>  (CMOVGT,  Rsrc1, translateOp op2, Rdest)
 	 | Rtl.GE =>  (CMOVGE,  Rsrc1, translateOp op2, Rdest)
 	 | Rtl.LT =>  (CMOVLT,  Rsrc1, translateOp op2, Rdest)
-	 | Rtl.LE =>  (CMOVLE,  Rsrc1, translateOp op2, Rdest)
-	 | Rtl.LBS => (CMOVLBS, Rsrc1, translateOp op2, Rdest)
-	 | Rtl.LBC => (CMOVLBC, Rsrc1, translateOp op2, Rdest))
+	 | Rtl.LE =>  (CMOVLE,  Rsrc1, translateOp op2, Rdest))
        end
 
      | translate (Rtl.FMV (rtl_Fsrc, rtl_Fdest)) =
@@ -539,7 +535,6 @@ struct
 	 | Rtl.GT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc2, REGop (Rsrc1), Rdest)))
 	 | Rtl.NE => (emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, REGop (Rsrc2), Rdest)));
 		      emit (SPECIFIC (INTOP (CMPEQ, Rdest, REGop Rzero, Rdest))))
-	 | _ => error ("translate/CMPSI/reg: bad comparison")
        end
 
      | translate (Rtl.CMPSI (comparison, rtl_Rsrc1, Rtl.IMM src2, rtl_Rdest)) =
@@ -561,8 +556,7 @@ struct
 			 else (emit (SPECIFIC(INTOP (OR,    Rzero, IMMop src2,  Rat)));
 			       emit (SPECIFIC(INTOP (CMPLT, Rat,   REGop Rsrc1, Rdest))))
 	    | Rtl.NE => (emit (SPECIFIC(INTOP (CMPEQ, Rsrc1, IMMop src2,  Rdest)));
-			 emit (SPECIFIC(INTOP (CMPEQ, Rdest, REGop Rzero, Rdest))))
-	    | _ => error ("translate/CMPSI/imm: bad comparison"))
+			 emit (SPECIFIC(INTOP (CMPEQ, Rdest, REGop Rzero, Rdest)))))
 	 else
 	   error ("CMPSI: Immediate out of range: " ^ (Int.toString src2))
        end
@@ -582,7 +576,6 @@ struct
 	 | Rtl.GT =>  emit (SPECIFIC (INTOP (CMPULT, Rsrc2, REGop Rsrc1, Rdest)))
 	 | Rtl.NE => (emit (SPECIFIC (INTOP (CMPEQ,  Rsrc1, REGop Rsrc2, Rdest)));
 		      emit (SPECIFIC (INTOP (CMPEQ,  Rdest, REGop Rzero, Rdest))))
-	 | _ => error ("translate/CMPUI/reg: bad comparison")
        end
 
      | translate (Rtl.CMPUI (comparison, rtl_Rsrc1, Rtl.IMM src2, rtl_Rdest)) =
@@ -600,8 +593,7 @@ struct
 	    | Rtl.GT => (emit (SPECIFIC (INTOP (OR,     Rzero, IMMop src2, Rat)));
 			 emit (SPECIFIC (INTOP (CMPULT, Rat, REGop Rsrc1, Rdest))))
 	    | Rtl.NE => (emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, IMMop src2, Rdest)));
-			 emit (SPECIFIC (INTOP (CMPEQ, Rdest, REGop Rzero, Rdest))))
-	    | _ => error ("translate/CMPUI/imm: bad comparison"))
+			 emit (SPECIFIC (INTOP (CMPEQ, Rdest, REGop Rzero, Rdest)))))
 	  else
             error ("translate/CMPUI/imm: Immediate out of range: " ^ 
                    (Int.toString src2))
@@ -772,8 +764,7 @@ struct
 		 | Rtl.LT =>  (CMPTLT, false, false)
 		 | Rtl.GE =>  (CMPTLE, true, false)
 		 | Rtl.GT =>  (CMPTLT, true, false)
-		 | Rtl.NE =>  (CMPTEQ, false, true)
-		 | _ => error ("translate/CMPF: bad comparison"))
+		 | Rtl.NE =>  (CMPTEQ, false, true))
 	val (fail_test, pass_test) = if (not reverse_result) then (0,1) else (1,0)
        in
          emit (SPECIFIC (LOADI (LDA, Rdest, fail_test, Rzero)));
@@ -806,8 +797,7 @@ struct
 		 | Rtl.LT =>  (CMPTLT, false, false)
 		 | Rtl.GE =>  (CMPTLE, true, false)
 		 | Rtl.GT =>  (CMPTLT, true, false)
-		 | Rtl.NE =>  (CMPTEQ, false, true)
-		 | _ => error ("translate/CMPF: bad comparison"))
+		 | Rtl.NE =>  (CMPTEQ, false, true))
        in 
 	 if (not reverse_operand)
 	   then emit (SPECIFIC (FPOP(fop, Fsrc1, Fsrc2, Ftemp)))
@@ -827,8 +817,6 @@ struct
 	  | Rtl.GE  => emit (SPECIFIC (CBRANCHI (BGE,  Rsrc, ll)))
 	  | Rtl.GT  => emit (SPECIFIC (CBRANCHI (BGT,  Rsrc, ll)))
 	  | Rtl.NE  => emit (SPECIFIC (CBRANCHI (BNE,  Rsrc, ll)))
-	  | Rtl.LBC => emit (SPECIFIC (CBRANCHI (BLBC, Rsrc, ll)))
-	  | Rtl.LBS => emit (SPECIFIC (CBRANCHI (BLBS, Rsrc, ll)))
        end
 
      | translate (Rtl.BCNDF (comparison, rtl_Fsrc, ll, _)) =
@@ -841,17 +829,13 @@ struct
            | Rtl.LT => emit (SPECIFIC (CBRANCHF(FBLT, Fsrc, ll)))
            | Rtl.GE => emit (SPECIFIC (CBRANCHF(FBGE, Fsrc, ll)))
            | Rtl.GT => emit (SPECIFIC (CBRANCHF(FBGT, Fsrc, ll)))
-           | Rtl.NE => emit (SPECIFIC (CBRANCHF(FBNE, Fsrc, ll)))
-           | _ => error ("translate/BCNDF: bad comparison"))
+           | Rtl.NE => emit (SPECIFIC (CBRANCHF(FBNE, Fsrc, ll))))
        end
 
      | translate (Rtl.JMP (rtl_Raddr, rtllabels)) =
        let
 	 val Raddr = translateIReg rtl_Raddr
        in (* JMP must first restore callee-save registers first *)
-(*	 emit (BASE (MOVI (Raddr,Rpv)));
-	 emit (BASE (JSR (false, Raddr, 1, loclabels)))
-*)
 	   emit (BASE (RTL (JMP (Raddr, rtllabels))))
        end
 
@@ -1003,7 +987,7 @@ struct
 	   emit (SPECIFIC (LOADI (LDA, Rat, size, Rheap)))
 	 else
 	   (load_imm(i2w size, Rat);
-	    emit (SPECIFIC (INTOP (ADDL, Rheap, REGop Rat, Rheap))));
+	    emit (SPECIFIC (INTOP (ADDL, Rheap, REGop Rat, Rat))));
 	 emit (SPECIFIC (INTOP   (CMPULE, Rhlimit, REGop Rat, Rat)));
 	 emit (SPECIFIC (CBRANCHI(BEQ, Rat, rtl_loclabel)));
 	 load_imm(i2w size, Rhlimit);

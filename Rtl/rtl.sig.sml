@@ -69,7 +69,7 @@ sig
 
   val in_imm_range : TilWord32.word -> bool
 
-  datatype cmp = EQ | LE | LT | GE | GT | NE | LBC | LBS
+  datatype cmp = EQ | LE | LT | GE | GT | NE 
 
 
   datatype align = LONG    (* 4 bytes *)
@@ -244,9 +244,6 @@ sig
     | INT32    of TilWord32.word      
     | FLOAT    of string                  (* double-precision float point literal *)
     | DATA     of label                   (* address value - label as value *)
-    | ARRAYI   of int * TilWord32.word    (* array of i words initialized to word32 *)
-    | ARRAYF   of int * string            (* array of i words initialized to fp value in string *)
-    | ARRAYP   of int * labelortag        (* array of i words initialized to label or small int *)
     | ALIGN    of align
 
   (* _return is where the return address is expected to be passed in

@@ -121,8 +121,7 @@ fun multop((a1,a2),(b1,b2),tflag)   =
        | cmpiu_to_fun LT (a,b) = W.ulte(a,b)
        | cmpiu_to_fun GE (a,b) = W.ugte(a,b)
        | cmpiu_to_fun GT (a,b) = W.ugt(a,b)
-       | cmpiu_to_fun LBC (a,b) = (W.andb(a,wone) = wzero)
-       | cmpiu_to_fun LBS (a,b) = (W.andb(a,wone) = wone)
+
 	 
      fun cmpis_to_fun EQ (a,b) = (a = b)
        | cmpis_to_fun NE (a,b) = not (a = b)
@@ -130,8 +129,7 @@ fun multop((a1,a2),(b1,b2),tflag)   =
        | cmpis_to_fun LT (a,b) = (sword_to_real a) <  (sword_to_real b)
        | cmpis_to_fun GE (a,b) = (sword_to_real a) >= (sword_to_real b)
        | cmpis_to_fun GT (a,b) = (sword_to_real a) >  (sword_to_real b)
-       | cmpis_to_fun LBC (a,b) = (W.andb(a,wone) = wzero)
-       | cmpis_to_fun LBS (a,b) = (W.andb(a,wone) = wone)
+
 	 
      fun cmpf_to_fun EQ (a : real,b) = Real.==(a,b)
        | cmpf_to_fun NE (a,b) = not (Real.==(a,b))
@@ -139,8 +137,7 @@ fun multop((a1,a2),(b1,b2),tflag)   =
        | cmpf_to_fun LT (a,b) = a < b
        | cmpf_to_fun GE (a,b) = a >= b
        | cmpf_to_fun GT (a,b) = a > b
-       | cmpf_to_fun LBC (a,b) = error "floating point LBC makes no sense"
-       | cmpf_to_fun LBS (a,b) = error "floating point LBS makes no sense"
+
 	 
      fun bool_to_ireg_val(f) = (wzero,(i2w (if f then 1 else 0)));
 	 

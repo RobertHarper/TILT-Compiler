@@ -86,7 +86,7 @@ struct
 
   datatype align = LONG | QUAD | ODDLONG | OCTA | ODDOCTA
 
-  datatype cmp =  EQ | LE  | LT  | GE  | GT | NE | LBC | LBS
+  datatype cmp =  EQ | LE  | LT  | GE  | GT | NE 
 
   datatype traptype = INT_TT | REAL_TT | BOTH_TT
   datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
@@ -201,9 +201,6 @@ struct
     | INT32    of TilWord32.word      
     | FLOAT    of string                  (* double-precision float point literal *)
     | DATA     of label                   (* address value - label as value *)
-    | ARRAYI   of int * TilWord32.word    (* array of i words initialized to word32 *)
-    | ARRAYF   of int * string            (* array of i words initialized to fp value in string *)
-    | ARRAYP   of int * labelortag        (* array of i words initialized to label or small int *)
     | ALIGN    of align
 
   (* see sig for comments *)
