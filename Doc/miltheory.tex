@@ -1,0 +1,388 @@
+\documentclass[twoside]{article}
+\usepackage{code}
+\usepackage{latexsym}
+\usepackage{fullpage}
+\include{lambda}
+\title{Typechecking a Simplified MIL}
+
+%\author{Chris Stone \and Perry Cheng \and Bob Harper}
+
+%\setlength{\abovedisplayskip}{0ptplus4pt}
+%\setlength{\belowdisplayskip}{0ptplus4pt}
+%\setlength{\abovedisplayshortskip}{0ptplus4pt}
+%\setlength{\belowdisplayshortskip}{0ptplus4pt}
+\begin{document}
+
+\maketitle
+
+\section{Simplified MIL}
+
+\subsection{Abstract Syntax}
+
+\renewcommand{\ksingleton}[1]{S(#1)}
+\renewcommand{\cfunction}[3]{\lambda #1{:}#2.#3}
+\newcommand{\cpi}[2]{\capply{\pi_{#1}}{#2}}
+\newcommand{\cpair}[2]{\langle{#1},{#2}\rangle}
+
+\[
+\begin{array}{rll}
+\kind ::= &\ktype&\mbox{kind of types}\\
+    |&\ksingleton{\constructor}&\mbox{singleton kind}\\
+    |&\kpi{\cvar}{\kind_1}{\kind_2}&\mbox{function kind}\\
+    |&\ksigma{\cvar}{\kind_1}{\kind_2}&\mbox{dependent pair kind}\\[10pt]
+
+\constructor ::= &\basetype&\mbox{base type}\\
+    |&\cvar&\mbox{constructor variable}\\
+    |&\cfunction{\cvar}{\kind}{\constructor}
+         &\mbox{constructor function}\\
+    |&\capply{\constructor}{\constructor'}&\mbox{constructor application}\\
+    |&\cpair{\constructor}{\constructor'}&\mbox{constructor pair}\\
+    |&\cpi{i}{\constructor}&\mbox{constructor projection}\\
+\end{array}
+\]
+
+\subsection{Static Semantics}
+
+\sectionrule{Well-Formed Context}{\validcontext{\context}}
+
+\infrule
+  {}
+  {\validcontext{\emptycontext}}
+
+\infrule
+  {\validkind{\context}{\kind}\qquad
+     \cvar\not\in\BV{\context}}
+  {\validcontext{\emptycontext,\sbindconstructor{\cvar}{\kind}}}
+
+
+\sectionrule{Well-Formed Kind}{\validkind{\context}{\kind}}
+
+\infrule
+  {\validcontext{\context}}
+  {\validkind{\context}{\ktype}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\ktype}}
+  {\validkind{\context}{\ksingleton{\constructor}}}
+
+\infrule
+  {\validkind{\context,\sbindconstructor{\cvar}{\kind_1}}{\kind_2}}
+  {\validkind{\context}{\kpi{\cvar}{\kind_1}{\kind_2}}}
+
+\infrule
+  {\validkind{\context,\sbindconstructor{\cvar}{\kind_1}}{\kind_2}}
+  {\validkind{\context}
+     {\ksigma{\cvar}{\kind_1}{\kind_2}}}
+
+\sectionrule{Kind Equivalence}{\equivkind{\context}{\kind}{\kind'}}
+
+\infrule
+  {\validcontext{\context}}
+  {\equivkind{\context}{\ktype}{\ktype}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+  {\equivkind{\context}{\ksingleton{\constructor}}
+       {\ksingleton{\constructor'}}}
+
+\infrule
+  {\equivkind{\context}{\kind_1}{\kind'_1}\qquad
+      \equivkind{\context,\sbindconstructor{\cvar}{\kind_1}}
+                {\kind_2}{\kind'_2}}
+  {\equivkind{\context}
+      {\kpi{\cvar}{\kind_1}{\kind_2}}
+      {\kpi{\cvar}{\kind'_1}{\kind'_2}}}
+
+\infrule
+  {\equivkind{\context}{\kind_1}{\kind'_1}\quad
+   \equivkind{\context,\sbindconstructor{\cvar}{\kind_1}}
+        {\kind_2}{\kind'_2}}
+  {\equivkind{\context}
+     {\ksigma{\cvar}{\kind_1}{\kind_2}}
+     {\ksigma{\cvar}{\kind'_1}{\kind'_2}}}
+
+\sectionrule{Subkinding}{\subkind{\context}{\kind}{\kind'}}
+
+\infrule
+  {\equivkind{\context}{\kind}{\kind'}}
+  {\subkind{\context}{\kind'}{\kind'}}
+
+\infrule
+  {\validkind{\context}{\ksingleton{\constructor}}}
+  {\subkind{\context}{\ksingleton{\constructor}}{\ktype}}
+
+\infrule
+  {\subkind{\context}{\kind'_1}{\kind_1}\qquad
+      \subkind{\context,\sbindconstructor{\cvar}{\kind'_1}}
+                {\kind_2}{\kind'_2}}
+  {\subkind{\context}
+      {\kpi{\cvar}{\kind_1}{\kind_2}}
+      {\kpi{\cvar}{\kind'_1}{\kind'_2}}}
+
+\infrule
+  {\subkind{\context}{\kind_1}{\kind'_1}\quad
+   \subkind{\context,\sbindconstructor{\cvar}{\kind_1}}
+        {\kind_2}{\kind'_2}}
+  {\subkind{\context}
+     {\ksigma{\cvar}{\kind_1}{\kind_2}}
+     {\ksigma{\cvar}{\kind'_1}{\kind'_2}}}
+
+\sectionrule{Well-Formed Constructor}
+   {\validconstructor{\context}{\constructor}{\kind}}
+
+\infrule
+  {\validcontext{\context}}
+  {\validconstructor{\context}{\basetype}{\ktype}}
+
+\infrule
+  {\validcontext{\context}}
+  {\validconstructor{\context}{\cvar}{\context(\cvar)}}
+
+\infrule
+  {\validconstructor{\context,\sbindconstructor{\cvar}{\kind_1}}
+          {\constructor}{\kind_2}}
+  {\validconstructor{\context}
+     {\cfunction{\cvar}{\kind_1}{\constructor}}
+     {\kpi{\cvar}{\kind_1}{\kind_2}}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\kpi{\cvar}{\kind_1}{\kind_2}}
+   \qquad
+   \validconstructor{\context}{\constructor_1}{\kind_1}}
+  {\validconstructor{\context}{\capply{\constructor}{\constructor_1}}
+      {\substitute{\cvar}{\constructor_1}{\kind_2}}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\ksigma{\cvar}{\kind_1}{\kind_2}}}
+  {\validconstructor{\context}{\cpi{1}{\constructor}}{\kind_1}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\ksigma{\cvar}{\kind_1}{\kind_2}}}
+  {\validconstructor{\context}{\cpi{2}{\constructor}}
+          {\substitute{\cvar}{\cpi{1}{\constructor}}{\kind_2}}}
+
+\infrule
+  {\validconstructor{\context}{\constructor_1}{\kind_1}\qquad
+   \validconstructor{\context}{\constructor_2}{\kind_2}\qquad
+   \cvar\not\in\BV{\context}}
+  {\validconstructor{\context}{\cpair{\constructor_1}{\constructor_2}}
+      {\ksigma{\cvar}{\kind_1}{\kind_2}}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\kind}}
+  {\validconstructor{\context}{\constructor}
+    {\mbox{``$\ksingleton{\constructor}$''}}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\kind}\qquad
+     \subkind{\context}{\kind}{\kind'}}
+  {\validconstructor{\context}{\constructor}{\kind'}}
+
+\sectionrule{Constructor Equivalence}
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\kind}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}{\kind}}
+  {\equivconstructor{\context}{\constructor}{\constructor}{\kind}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor'}{\constructor}{\kind}}
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\kind}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\kind}\qquad
+   \equivconstructor{\context}{\constructor'}{\constructor''}{\kind}}
+  {\equivconstructor{\context}{\constructor}{\constructor''}{\kind}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}
+     {\ksingleton{\constructor'}}}
+  {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
+
+\infrule
+  {\equivconstructor{\context,\sbindconstructor{\cvar}{\kind_1}}
+     {\constructor}{\constructor'}{\kind_2}}
+  {\equivconstructor{\context}
+     {\cfunction{\cvar}{\kind_1}{\constructor}}
+     {\cfunction{\cvar}{\kind_1}{\constructor'}}
+     {\kpi{\cvar}{\kind_1}{\kind_2}}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor}{\constructor'}
+     {\ksigma{\cvar}{\kind_1}{\kind_2}}}
+  {\equivconstructor{\context}
+     {\cpi{1}{\constructor}}{\cpi{1}{\constructor'}}{\kind_1}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor}{\constructor'}
+     {\ksigma{\cvar}{\kind_1}{\kind_2}}}
+  {\equivconstructor{\context}
+     {\cpi{2}{\constructor}}{\cpi{2}{\constructor'}}
+     {\substitute{\cvar}{\cpi{1}{\constructor}}\kind_2}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor_1}{\constructor'_1}{\kind_1}\qquad
+   \equivconstructor{\context}{\constructor_2}{\constructor'_2}{\kind_2}\qquad
+   \cvar\not\in\BV{\Gamma}}
+  {\equivconstructor{\context}
+     {\cpair{\constructor_1}{\constructor_2}}
+     {\cpair{\constructor'_1}{\constructor'_2}}
+     {\ksigma{\cvar}{\kind_1}{\kind_2}}}
+
+\infrule
+  {\equivconstructor{\context}{\constructor}{\constructor'}
+                    {\kpi{\cvar}{\kind_1}{\kind_2}}\qquad
+   \equivconstructor{\context}
+                    {\constructor_1}{\constructor'_1}{\kind_1}}
+  {\equivconstructor{\context}
+     {\capply{\constructor}{\constructor'}}
+     {\capply{\constructor_1}{\constructor'_1}}
+     {\substitute{\cvar}{\constructor_1}{\kind_2}}}
+
+\infrule
+  {\validconstructor{\context}{\constructor}
+     {\kpi{\cvar}{\kind}{\kind'}}}
+  {\equivconstructor{\context}
+     {\cfunction{\cvar}{\kind}{(\capply{\constructor}{\cvar})}}
+     {\constructor}{\kpi{\cvar}{\kind}{\kind'}}}
+
+\infrule
+  {\validconstructor{\context}
+     {\cfunction{\cvar}{\kind_2}{\constructor}}
+     {\kpi{\cvar}{\kind_2}{\kind}}\qquad
+   \validconstructor{\context}{\constructor_2}{\kind_2}}
+  {\equivconstructor{\context}
+     {\capply{(\cfunction{\cvar}{\kind_2}{\constructor})}
+             {\constructor_2}}
+     {\substitute{\cvar}{\constructor_2}{\constructor}}
+     {\substitute{\cvar}{\constructor_2}{\kind}}}
+
+\infrule
+  {\validconstructor{\context}{\cpair{\constructor}{\constructor'}}
+     {\ksigma{\cvar}{\kind}{\kind'}}}
+  {\equivconstructor{\context}
+     {\cpi{1}{\cpair{\constructor}{\constructor'}}}
+     {\constructor}{\kind}}
+
+\infrule
+  {\validconstructor{\context}{\cpair{\constructor}{\constructor'}}
+     {\ksigma{\cvar}{\kind}{\kind'}}}
+  {\equivconstructor{\context}
+     {\cpi{2}{\cpair{\constructor}{\constructor'}}}
+     {\constructor'}{\substitute{\cvar}{\constructor}{\kind'}}}
+
+\section{Algorithm for Constructor Equivalence}
+
+\subsection{Elimination Contexts}
+
+\newcommand{\hole}{\bullet}
+
+\[
+\begin{array}{rll}
+E ::= &\hole\\
+    |&\capply{E}{\constructor}\\
+    |&\cpi{1}{E}\\
+    |&\cpi{2}{E}\\
+\end{array}
+\]
+
+\subsection{Equivalence algorithm}
+
+\newcommand{\weakconequiv}[4]{#1\vdash #2 \sim #3 : #4}
+\newcommand{\conequiv}[4]{#1\vdash #2 \iff #3 : #4}
+\newcommand{\headnormto}[4]{#1\vdash #2 : #3 \Rightarrow #4}
+\newcommand{\headnormsto}[4]{#1\vdash #2 : #3 \Rightarrow^{*} #4}
+\newcommand{\reconstruct}[3]{#1\vdash #2 \uparrow #3}
+\[
+\begin{array}{ll}
+\headnormto{\context}
+   {E[\capply{(\cfunction{\cvar}{\kind}{\constructor})}
+             {\constructor'}]}
+   {\kind}
+   {E[\substitute{\cvar}{\constructor'}{\constructor}]}\hidewidth\\
+\headnormto{\context}
+   {E[\cpi{1}{\cpair{\constructor_1}{\constructor_2}}]}
+   {\kind}
+   {\constructor_1}\\
+\headnormto{\context}
+   {E[\cpi{2}{\cpair{\constructor_1}{\constructor_2}}]}
+   {\kind}
+   {\constructor_2}\\
+\headnormto{\context}{E[\cvar]}{\ktype}{\constructor}&
+   \mbox{if}\ 
+   \reconstruct{\context}{E[\cvar]}{\ksingleton{\constructor}}\\[10pt]
+
+\reconstruct{\context}{\cvar}{\context(\cvar)}\\
+\reconstruct{\context}{\cpi{1}{E[\cvar]}}{\kind_1}&
+  \mbox{if}\
+  \reconstruct{\context}{E[\cvar]}{\ksigma{\beta}{\kind_1}{\kind_2}}\\
+\reconstruct{\context}{\cpi{2}{E[\cvar]}}
+  {\substitute{\beta}{\cpi{1}{E[\cvar]}}\kind_2}&
+  \mbox{if}\
+  \reconstruct{\context}{E[\cvar]}{\ksigma{\beta}{\kind_1}{\kind_2}}\\
+\reconstruct{\context}{\capply{E[\cvar]}{\constructor}}
+  {\substitute{\beta}{\constructor}{\kind_2}}&
+  \mbox{if}\ 
+  \reconstruct{\context}{E[\cvar]}{\kpi{\beta}{\kind_1}{\kind_2}}\\[10pt]
+
+\conequiv{\context}{\constructor}{\constructor'}{\kind}&
+  \mbox{if}\ 
+    \validconstructor{\context}{\constructor}{\kind},\
+    \validconstructor{\context}{\constructor'}{\kind},\
+    \headnormsto{\context}{\constructor}{\kind}{\constructor_1},\
+    \headnormsto{\context}{\constructor'}{\kind}{\constructor'_1}\
+    \weakconequiv{\context}{\constructor_1}{\constructor'_1}{\kind}\\[10pt]
+
+\weakconequiv{\context}{\basetype}{\basetype}{\ktype}\\
+\weakconequiv{\context}{\constructor}{\constructor'}{\ksingleton{\constructor''}}\\
+\weakconequiv{\context}{E[\alpha]}{E'[\beta]}{\ktype}&
+  \mbox{if}\ \alpha = \beta,\ \context(\alpha) = \kind,\
+  \weakconequiv{\context}{E}{E'}{\kind}\\
+\weakconequiv{\context}{\constructor}{\constructor'}
+  {\kpi{\cvar}{\kind_1}{\kind_2}}&
+  \mbox{if}\ \weakconequiv{\context,\cvar{:}\kind_1}
+  {\capply{\constructor}{\cvar}}{\capply{\constructor'}{\cvar}}
+  {\kind_2}\\
+\weakconequiv{\context}{\constructor}{\constructor'}
+  {\ksigma{\cvar}{\kind_1}{\kind_2}}&
+  \mbox{if}\ 
+  \weakconequiv{\context}{\cpi{1}{\constructor}}{\cpi{1}{\constructor}}
+   {\kind_1},\
+  \weakconequiv{\context}{\cpi{1}{\constructor}}{\cpi{1}{\constructor}}
+     {\substitute{\cvar}{\cpi{1}{\constructor}}{\kind_2}}\\[10pt]
+
+\weakconequiv{\context}{\hole}{\hole}{\ktype}\\
+\weakconequiv{\context}{\hole}{\hole}{\ksingleton{\constructor}}\\
+\weakconequiv{\context}{E[\cpi{1}{\hole}]}{E'[\cpi{1}{\hole}]}
+   {\ksigma{\cvar}{\kind_1}{\kind_2}}&
+   \mbox{if}\ 
+   \weakconequiv{\context}{E}{E'}{\kind_1}\\
+\weakconequiv{\context}{E[\cpi{2}{\hole}]}{E'[\cpi{2}{\hole}]}
+   {\ksigma{\cvar}{\kind_1}{\kind_2}}&
+   \mbox{if}\ 
+   \weakconequiv{\context}{E}{E'}{\substitute{\cvar}{\cpi{1}{\hole}}\kind_2}\\
+\weakconequiv{\context}{E[\capply{\hole}{\constructor}]}
+   {E'[\capply{\hole}{\constructor'}]}{\kpi{\cvar}{\kind_1}{\kind_2}}&
+   \mbox{if}\
+   \conequiv{\context}{\constructor}{\constructor'}{\kind_1},\
+   \weakconequiv{\context}{E}{E'}{\kind_2}\\
+\end{array}
+\]
+
+\section{Claims}
+
+\newtheorem{claim}{Claim}
+
+\begin{claim}
+We have $\equivconstructor{\context}{\constructor}{\constructor'}{\kind}$ if
+and only if $\validconstructor{\context}{\constructor}{\kind}$, 
+$\validconstructor{\context}{\constructor'}{\kind}$, and 
+$\conequiv{\context}{\constructor}{\constructor'}{\kind}$.
+\end{claim}
+
+%\bibliographystyle{plain}
+%\bibliography{bib}
+
+\end{document}
+
+
