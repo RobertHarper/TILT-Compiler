@@ -10,7 +10,7 @@
 
 *)
 
-
+val _ =
 let datatype t = A of (t -> t) | B in B = B end;
 
 (* 17, 26, 42, 35, 9, 6, 19, 29, 30, 50, 49, 49,

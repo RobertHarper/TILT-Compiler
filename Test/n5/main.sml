@@ -11,6 +11,7 @@
 *)
 
 
+val _ =
 let 4 in 3 end;
 
 

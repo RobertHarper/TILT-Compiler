@@ -101,28 +101,28 @@ n44     scoping of "and" in type definition
 n45     opaque datatypes and shadowing
 n46     opaque datatypes and shadowing
 n47     polymorphic exception
-n49     Denmark Core-SML failure test
-n50     Denmark Core-SML failure test
-n51     Denmark Core-SML failure test
-n52     Denmark Core-SML failure test
-n53     Denmark Core-SML failure test
-n54     Denmark Core-SML failure test
-n55     Denmark Core-SML failure test
-n56     Denmark Core-SML failure test
-n57     Denmark Core-SML failure test
-n58     Denmark Core-SML failure test
-n59     Denmark Core-SML failure test
-n60     Denmark Core-SML failure test
-n61     Denmark Core-SML failure test
-n62     Denmark Core-SML failure test
-n63     Denmark Core-SML failure test
-n64     Denmark Core-SML failure test
-n65     Denmark Core-SML failure test
-n66     Denmark Core-SML failure test
-n67     Denmark Core-SML failure test
-n68     Denmark Core-SML failure test
-n69     Denmark Core-SML failure test
-n70     Denmark Core-SML failure test
+n49     type inference with records
+n50     type inference with records
+n51     type inference with records
+n52     type inference with records
+n53     type inference with type constructors
+n54     type inference
+n55     value restriction
+n56     duplicate id pattern
+n57     duplicate label in record
+n58     duplicate label in record pattern
+n59     duplicate label in record type
+n60     duplicate id in "and" binding
+n61     duplicate id in "and" type binding
+n62     duplicate id in "and" type binding
+n63     duplicate constructor in datatype
+n64     duplicate constructor in exception "and" declaration
+n65     duplicate type id in multi-datatype declaration
+n66     duplicate constructor in multi-datatype declaration
+n67     duplicate type argument in type definition
+n68     duplicate type argument in datatype
+n69     duplicate type argument in abstype
+n70     unbound type variable in datatype
 n71     Denmark Core-SML failure test
 n72     Denmark Core-SML failure test
 n73     Denmark Core-SML failure test
