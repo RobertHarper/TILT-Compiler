@@ -132,15 +132,21 @@ struct
        If a compilation unit named U exports a name N, then the linker
        sees U.N rather than N.  For this to make sense, unit names can
        not contain #".".  This mangling is orthogonal to the ML + C +
-       LINK external label distinction.  *)
+       LINK external label distinction (handled by msLabel).
+     *)
 
     fun mangle (unitname : string) (name : string) : string = unitname ^ "." ^ name
 
     fun mangleLabel (unitname : string) (l : Nil.label) : string =
 	mangle unitname (Name.label2string l)
 
-    fun mangleVar (unitname : string) (v : Nil.var) : string =
-	mangle unitname (Name.var2string v)
+    (*
+       As far as the linker is concerned, there is no reason to mangle
+       LOCAL labels.  We use decorateVar at certain key points because
+       having the unit name in the label can be useful when debugging.
+     *)
+    fun decorateVar (v : Nil.var) : Rtl.label =
+	LOCAL_CODE (mangle (get_unitname()) (Name.var2string v))
 	
     val exncounter_label = C_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
@@ -212,7 +218,7 @@ struct
 		      val _ = msg "working on fixcode_b\n"
 		      fun folder (((v,funcon),function),s) =
 			  let val _ = add_global v
-			  in  add_code (s, v, funcon, LOCAL_CODE (mangleVar (get_unitname()) v))
+			  in  add_code (s, v, funcon, decorateVar v)
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
 		      val state = foldl folder state var_fun_list
@@ -325,7 +331,7 @@ struct
 		end
 	 | Code_cb (conwork as (name,vklist,c)) => 
 		let val funkind = Arrow_k(Code,vklist,Single_k c)
-		    val l = LOCAL_CODE(mangleVar (get_unitname()) name)
+		    val l = decorateVar name
 		    val _ = add_global name
 		    val state = add_conterm (state,NONE,name,funkind, SOME(VALUE(CODE l)))
 		    val _ = if phase = Compiletime
@@ -1736,7 +1742,7 @@ struct
       fun doconfun is_top (state,vname,vklist,body) =
 	  let 
 	      val name = (case (Name.VarMap.find(!exports,vname)) of
-			      NONE => LOCAL_CODE (mangleVar (get_unitname()) vname)
+			      NONE => decorateVar vname
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
 	      val _ = incFun()
@@ -1771,7 +1777,7 @@ struct
 				     eFormals=vclist,
 				     fFormals=vflist,body,...}) =
 	  let 
-	      val name = LOCAL_CODE (mangleVar (get_unitname()) vname)
+	      val name = decorateVar vname
 	      val _ = reset_state(is_top, (vname, name))
 	      val _ = incFun()
 	      val _ = msg ("-----dofun_help : " ^ (Pprtl.label2s name) ^ "\n")
@@ -1913,7 +1919,28 @@ struct
       in  globals
       end
 
-   (* A unitmap takes a label to its mangled form. *)
+   (*
+      A unitmap takes a label to its mangled form.  Unit maps are
+      constructed in two ways: One way for most user-level compilation
+      units and one way for the special link unit.
+
+      While building an elaboration context, the manager builds a
+      unitmap by calling extend for every label that MIGHT become an
+      import.  After GCing the IL module's context, the manager uses
+      restrict to trim its unitmap (this is a premature optimization).
+      The translation to RTL further extends this unitmap because
+      every compilation unit imports vararg and friends from the link
+      unit.  Unitmaps built in this way contain only ML_EXTERN labels.
+      Neither the manager nor its unitmap distinguishes between
+      C/extern and ML labels.  That distinction is more easily handled
+      during the translation to RTL.
+
+      The link unit has to import every compilation unit's main entry
+      point.  The function linkUnit generates fresh Nil labels to
+      "import" and uses extend' to map those fresh labels to the right
+      Rtl labels.
+    *)
+
    type unitmap = Rtl.label Name.LabelMap.map
 
    val empty : unitmap = Name.LabelMap.empty
@@ -1928,11 +1955,11 @@ struct
    fun extend (map : unitmap, l : Nil.label, unitname : string) : unitmap =
        extend' (map, l, ML_EXTERN_LABEL (mangleLabel unitname l))
 
-    fun restrict (map : unitmap, domain : Nil.label list) : unitmap =
-	let val set = Name.LabelSet.addList(Name.LabelSet.empty, domain)
-	    fun p (l,_) = Name.LabelSet.member(set,l)
-	in  Name.LabelMap.filteri p map
-	end
+   fun restrict (map : unitmap, domain : Nil.label list) : unitmap =
+       let val set = Name.LabelSet.addList(Name.LabelSet.empty, domain)
+	   fun p (l,_) = Name.LabelSet.member(set,l)
+       in  Name.LabelMap.filteri p map
+       end
     
    fun lookupImport (map : unitmap) (l : Nil.label) : Rtl.label =
        (case Name.LabelMap.find (map, l)

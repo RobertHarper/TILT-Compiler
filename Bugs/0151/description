@@ -43,7 +43,7 @@ Comments:
 	indirect imports can not appear free in a compilation unit's
 	source code.  The restriction (2) could be lifted by imposing
 	an order on compilation units.  (The mapfile order is an
-	obvious canidate.)
+	obvious candidate.)
 
 	The current situation is as follows.  The compiler's
 	implementation of (2) is flawed: It bombs on that code.  The
@@ -57,6 +57,36 @@ Fix:
 	global identifier A.x rather than a global identifier x.  This
 	avoids all link-time multiply-defined identifier errors
 	because unit names are unique within a mapfile.
+
+	While implementing this, I took the opportunity to clean up
+	some related code:
+
+	* I added a third type of external RTL labels; an extern can
+	be C, ML, or LINK.  LINK labels are used to name things needed
+	by the backend, runtime, or link unit to link compilation
+	units.  Since LINK names no longer conflict with ML names, I
+	made them less ugly; for example, we now have link_gctable
+	rather than ml_GCTABLE_BEGIN_VAL.
+
+	* I moved the msLabel function from the Sparc and Alpha
+	backends into the backend core.sml so that we have only one
+	copy.  (We do not want platform-specific name mangling; the
+	Runtime has to know how some identifiers are mangled.)
+
+	* I changed the msLabel mangling so that well-chosen unit
+	names can not cause multiply-defined identifiers.  For
+	example, under the old scheme both A[bDOTc] and ADOTb[c] would
+	mangle as ADOTbDOTc.  The new scheme uses _ as a
+	meta-character to introduce other special characters
+	(including _); we have A_DOTbDOTc vs ADOTb_DOTc.
+
+	* I eliminated some ad hoc mangling in the backend.  An RTL
+	module now has a record of entry point labels rather than a
+	single label main.  Backend components no longer mangle main,
+	they just project out the labels they are interested in.
+
+	* The Sparc backend and printutils were marking too many
+	labels .globl.
 
 Test: m0131, 0010, 0011, 0012
 Owner: swasey
