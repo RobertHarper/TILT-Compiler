@@ -72,9 +72,9 @@ functor Pat(structure Il : IL
       in res
       end
     fun is_exn (modsig_lookup, context) (p : Ast.path) = 
-	(case Datatype.exn_lookup context p of
-	     NONE => false
-	   | SOME _ => true)
+	 case Datatype.exn_lookup context p of
+		NONE => false
+	      | SOME _ => true
 
 
     (* ----- creates a let binding construct ----------------------------------
@@ -217,11 +217,11 @@ functor Pat(structure Il : IL
 
 
   and exn_case(arg1,args,
-	       accs: ((Ast.symbol * Il.exp * Il.con option * Ast.pat option) * arm) list,
+	       accs: ((Ast.symbol list * Il.exp * Il.con option * Ast.pat option) * arm) list,
 	       def : def) : bound list * (exp * con) = 
       let
 	  val rescon = fresh_con context
-	  fun helper ((s,stamp,carried_type,patopt),arm : arm) = 
+	  fun helper ((path,stamp,carried_type,patopt),arm : arm) = 
 	      let val con = (case carried_type of 
 				 SOME c => c
 			       | _ => con_unit)
@@ -237,7 +237,7 @@ functor Pat(structure Il : IL
 		  val _ = con_unify'(context,"exnhandler type",
 				     ("exp type",rescon),
 				     ("return type of exnhandler",c), nada)
-		  val body = #1(make_lambda(v,CON_ANY,c,e))
+		  val body = #1(make_lambda(v,con,c,e))
 	      in (bound',(stamp,con,body))
 	      end
 	  val (exnarg, exncon) = (case arg1 of
@@ -426,12 +426,12 @@ functor Pat(structure Il : IL
 	       val is_exn    = is_exn(modsig_lookup, context)
 	       fun exn_dispatch() = 
 		   let 
-		       fun general(v,patopt) = 
-			   case Datatype.exn_lookup context [v] of
+		       fun general(p,patopt) = 
+			   case Datatype.exn_lookup context p of
 			       NONE => NONE
-			     | SOME {stamp,carried_type} => SOME(v,stamp,carried_type,patopt)
-		       fun exnpred (Ast.VarPat [v]) = general(v,NONE)
-			 | exnpred (Ast.AppPat{constr=Ast.VarPat [v],argument}) = general(v,SOME argument)
+			     | SOME {stamp,carried_type} => SOME(p,stamp,carried_type,patopt)
+		       fun exnpred (Ast.VarPat p) = general(p,NONE)
+			 | exnpred (Ast.AppPat{constr=Ast.VarPat p,argument}) = general(p,SOME argument)
 			 | exnpred _ = NONE
 		       val (accs,vc_ll2,def) = find_maxseq exnpred arms
 		   val (vc_ll,ec) = exn_case(arg1,argrest,accs,def)
@@ -601,7 +601,7 @@ functor Pat(structure Il : IL
 				      else if (is_exn p) then exn_dispatch() 
 					   else var_dispatch())
 	          | (Ast.AppPat {constr,argument}) =>
-			(case argument of
+			(case constr of
 			     ((Ast.VarPat p) | (Ast.MarkPat (Ast.VarPat p,_))) => 
 				 if (is_exn p) then exn_dispatch() 
 				 else constructor_dispatch()
@@ -630,7 +630,8 @@ functor Pat(structure Il : IL
 	    | (SOME {name,datatype_path,constr_sig,datatype_sig}) => 
 		 not (Datatype.is_const_constr constr_sig))
 	val fixtable = Context_Get_FixityTable context
-      in InfixParse.parse_pat(fixtable, is_non_const, pats)
+	val res = InfixParse.parse_pat(fixtable, is_non_const, pats)
+      in res
       end
 
     fun parse_pat (patarg,pat) : Ast.pat = (case (parse_pats(patarg,[pat])) of

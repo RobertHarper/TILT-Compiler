@@ -122,10 +122,11 @@ functor Basis(structure Il : IL
 	val context = 
 	   let
 	       datatype X = A | B
-	       fun con_thunk exp_oneshot x = (case (oneshot_deref exp_oneshot,x) of
-						  (NONE,_) => ()
-						| (_,A) => oneshot_set(exp_oneshot,PRIM (plus_int W32,[]))
-						| (_,B) => oneshot_set(exp_oneshot,PRIM (plus_float F64,[])))
+	       fun con_thunk exp_oneshot x = 
+		   (case (oneshot_deref exp_oneshot,x) of
+			(SOME _,_) => ()
+		      | (NONE,A) => oneshot_set(exp_oneshot,PRIM (plus_int W32,[]))
+		      | (NONE,B) => oneshot_set(exp_oneshot,PRIM (plus_float F64,[])))
 	       fun constraints (c,res) (tyvar, 
 					helpers as  {hard : con * con -> bool,
 						     soft : con * con -> bool},
