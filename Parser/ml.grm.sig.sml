@@ -3,6 +3,7 @@ signature ML_TOKENS =
 sig
 type ('a,'b) token
 type svalue
+val PLET:  'a * 'a -> (svalue,'a) token
 val CCALL:  'a * 'a -> (svalue,'a) token
 val EXTERN:  'a * 'a -> (svalue,'a) token
 val DOLLAR:  'a * 'a -> (svalue,'a) token
