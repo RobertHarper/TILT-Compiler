@@ -10,7 +10,10 @@ Problem:     test case reports "wrong" results
 Code:        
 Transcript:  
 Comments:    
+	[Leaf] The print statements in the file were changed without changing
+	       the result files (renaming check to chck).
 Fix:         
+	[Leaf] Renamed back to chck, since name clash with runtime is gone.
 Test: m0032
 Owner: rwh
-Status: open
+Status: closed

@@ -9,8 +9,9 @@ Severity:    minor
 Problem:     we do not parse identifiers properly
 Code:        
 Transcript:  
-Comments:    
+Comments:  
+	[Leaf] This is fixed.  I think maybe Tom fixed it?  
 Fix:         
 Test: m0076
 Owner: 
-Status: open
+Status: closed

@@ -33,8 +33,8 @@ struct
 
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
 
-  val unzip     = ListPair.unzip
-  val zip       = ListPair.zip
+  val unzip     = Listops.unzip
+  val zip       = Listops.zip
 
   val foldl_acc = Listops.foldl_acc
   val foldl2    = Listops.foldl2
@@ -247,7 +247,7 @@ struct
 	 end
      | Arrow_k (openness,args,return) => 
 	 let
-	   val (formal_vars,_) = ListPair.unzip args
+	   val (formal_vars,_) = unzip args
 	   val args = Listops.map_second (NilSubst.substConInKind subst) args
 	   val actuals = List.map Var_c formal_vars
 	 in
@@ -384,10 +384,10 @@ struct
 	       
 	     | (Mu_c (flag,defs)) =>
 		   let
-		       val (con_vars,cons) = ListPair.unzip (Sequence.toList defs)
+		       val (con_vars,cons) = unzip (Sequence.toList defs)
 		       val state' = add_convars (state,con_vars)
 		       val cons' = List.map (f_con state' ) cons
-		       val defs' = Sequence.fromList (ListPair.zip (con_vars,cons'))
+		       val defs' = Sequence.fromList (zip con_vars cons')
 		   in  Mu_c (flag,defs')
 		   end
 	       
@@ -1102,8 +1102,8 @@ struct
 		let
 		  val def_list1 = Sequence.toList defs1
 		  val def_list2 = Sequence.toList defs2
-		  val (var_list1,con_list1) = ListPair.unzip def_list1
-		  val (var_list2,con_list2) = ListPair.unzip def_list2
+		  val (var_list1,con_list1) = unzip def_list1
+		  val (var_list2,con_list2) = unzip def_list2
 		  val context = if flag1 then alpha_equate_pairs (context,(var_list1,var_list2)) else context
 		in alpha_subequiv_con_list false context (con_list1,con_list2)
 		end
@@ -1340,14 +1340,15 @@ struct
     (* Rename the constructor parameters in an arrow type *)
     fun rename_arrow ({openness, effect, tFormals, eFormals, fFormals, body_type}, tFormals') =
 	let
-	    val (tFormals, ac) = foldl_acc (fn (((v, k), v'), ac) => ((v', NilRename.alphaCRenameKind ac k), Alpha.rename (ac, v, v')))
-		(Alpha.empty_context()) (zip (tFormals, tFormals'))
-	    val ren = NilRename.alphaCRenameCon ac
-	    val eFormals = map ren eFormals
-	    val body_type = ren body_type
+	  val tfps = (zip tFormals tFormals') handle _ => error "rename_arrow got lists of different length"
+	  val (tFormals, ac) = foldl_acc (fn (((v, k), v'), ac) => ((v', NilRename.alphaCRenameKind ac k), Alpha.rename (ac, v, v')))
+	    (Alpha.empty_context()) tfps
+	  val ren = NilRename.alphaCRenameCon ac
+	  val eFormals = map ren eFormals
+	  val body_type = ren body_type
 	in
-	    {openness = openness, effect = effect, tFormals = tFormals, eFormals = eFormals,
-	     fFormals = fFormals, body_type = body_type}
+	  {openness = openness, effect = effect, tFormals = tFormals, eFormals = eFormals,
+	   fFormals = fFormals, body_type = body_type}
 	end
-
+      
 end

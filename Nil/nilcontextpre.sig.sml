@@ -29,6 +29,10 @@ signature NILCONTEXTPRE =
      *)
     val insert_exp_pre  : ((context * exp) -> con) -> context * var * exp -> context
 
+    val insert_cbnd     : context * Nil.conbnd -> context
+
+    val insert_bnd_pre  : ((context * exp) -> con) -> context * Nil.bnd -> context
+
     val insert_con_list : context * (var * con) list -> context
 
     val find_con        : context * var -> con

@@ -132,9 +132,9 @@ structure NilRename :> NILRENAME =
 	  (hd bnds,con_subst)
 	end
 
-      fun renameFunction(f : function, c : con) = 
-	  let val v = Name.fresh_var()
-	      val bnd = Fixopen_b (Sequence.fromList[((v, c),f)])
+      fun renameFunction(f : function) = 
+	  let val v = Name.fresh_var()                    (* junk type *)
+	      val bnd = Fixopen_b (Sequence.fromList[((v, Prim_c(Exn_c,[])),f)])
 	  in  (case renameBnd bnd of
 		   (Fixopen_b vfSeq, _) => 
 		       (case Sequence.toList vfSeq of
@@ -500,6 +500,8 @@ structure NilRename :> NILRENAME =
 	if (Alpha.is_empty alpha_e) andalso (Alpha.is_empty alpha_c) then item
 	else rewriter {alpha_c = alpha_c,alpha_e = alpha_e} item
     in
+      val alphaERenameExp  = rewriteItem_e rewrite_exp
+
       val alphaCRenameExp  = rewriteItem_c rewrite_exp
       val alphaCRenameCon  = rewriteItem_c rewrite_con
       val alphaCRenameKind = rewriteItem_c rewrite_kind

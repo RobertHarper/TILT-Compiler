@@ -59,7 +59,7 @@ structure Typeof_Elim :> TYPEOF_ELIM =
 	end
 
       fun exn_binder (D,v,exntag) = 
-	let val c = valOf (NilUtil.strip_exntag(Normalize.type_of(D,exntag)))
+	let val c = valOf (NilUtil.strip_exntag(#2 (Normalize.reduce_hnf(D,Normalize.type_of(D,exntag)))))
 	in NilContext.insert_con (D,v,c)
 	end
 

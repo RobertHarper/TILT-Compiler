@@ -1459,11 +1459,11 @@ struct
       rexpopt'(SOME limit, expopt, env, state)
 
   and rfun ((fnvar, con), 
-	    Function{effect,recursive,tFormals,eFormals,
+	    Function{recursive,tFormals,eFormals,
 		     fFormals, body, ...},
 	    env, state) = 
       let
-	  val {openness, tFormals=tFa, eFormals=eFa, fFormals=fFa, body_type, ...} = stripArrow (env, con)
+	  val {openness, effect, tFormals=tFa, eFormals=eFa, fFormals=fFa, body_type, ...} = stripArrow (env, con)
 
 	  (* rfun is only called to process a part of a FixOpen_b.
 	     Therefore, the current level has already been bumped. *)

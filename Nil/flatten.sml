@@ -2,6 +2,13 @@
 
 (* This file is currently OBSOLETE, with its functions subsumed by Optimize and Vararg. *)
 
+(* This could actually still be useful to run later in the compiler, after
+ * vararg has been run and lots of inlining has occurred, since inlining
+ * may monomorphisize things, and enable flattenning.  Alternatively, we 
+ * could try running vararg later in the compiler.
+ * -leaf
+ *)
+
 (* 
 
  Flatten functions which take records for and argument and  

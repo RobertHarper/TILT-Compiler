@@ -1,6 +1,9 @@
 #include mapfile-lib
 
 
+GETOPT 		../Top/getopt.sig.sml
+Getopt 		../Top/getopt.sml
+
 life		life.sml		
 leroy		leroy.sml
 fft		fft.sml
@@ -11,5 +14,13 @@ msort		msort.sml
 pia		pia.sml
 lexgen		lexgen.sml
 frank		frank.sml
+Arithmetic 	arithmetic.sml
+BarnesHut 	barnes-hut.sml
+PQueens 	pqueens.sml
+Quicksort 	quicksort.sml
+Quicksort2 	quicksort2.sml
+Isort 		sort.sml
+Takc 		takc.sml
+Taku 		taku.sml
 
 bench_times	bench_times.sml	TARGET

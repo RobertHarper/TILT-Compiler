@@ -355,6 +355,19 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Util.raise_error explanation
     )
 
+  fun cc_error (D,con1,con2,explanation) = 
+    (
+     printem ["\n","TYPE ERROR: Problem with constructors:\n\t",
+		explanation,"\n",
+		"Con 1 is:\n"];
+     Ppnil.pp_con con1;
+     print "\nCon 2 is \n";
+     Ppnil.pp_con con2;
+     lprintl "\nWITH MINIMAL CONTEXT AS";
+     print_context (cons_error_context (D,[con1,con2]));
+     Util.raise_error explanation
+    )
+
 
   fun strip_sum (D,con) = 
     (case NilUtil.strip_sum (con_head_normalize(D,con)) of
@@ -1135,7 +1148,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       (case (constructor,kind) of
 	 (constructor,SingleType_k c) => 
 	 let val _ = type_analyze D constructor
-	     val _ = type_equiv(D,constructor,c)
+	     val _ = if type_equiv(D,constructor,c) then ()
+		     else cc_error (D,constructor,c,"c=/=c' in c::S(c')")
 	 in ()
 	 end
        | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
@@ -1654,11 +1668,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val closure_type = varConConSubst clos_tv cenv closure_type
 	    
 	  val _ = 
-	    (type_equiv (D,closure_type,tipe)) orelse
-	    (perr_c_c (tipe,closure_type);
-	     print "code_type is "; pp_con code_type; print "\n";
-	     print "con is "; pp_con closure_type; print "\n";
-	     (error (locate "bnd_valid") "Type error in closure" handle e => raise e))
+	    (sub_type (D,closure_type,tipe)) orelse
+	    (cc_error (D,closure_type,tipe,"Type error in closure"))
 	in ()
 	end
 
@@ -2120,17 +2131,21 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | (record labels,[],t::exps) =>
 		 let 
 		   val gctag_type = exp_valid (D,t)
+		   val cons  = map (curry2 exp_valid D) exps
+
 		   val rtype = (case con_head_normalize (D,gctag_type)
 				  of Prim_c(GCTag_c,[rtype]) => rtype
 				   | _ => e_error(D,t,"Expression does not have GCTag type"))
-		   val cons  = map (curry2 exp_valid D) exps
-		   val rtype' = Prim_c (Record_c labels,cons)
-		   val _ = if sub_type (D,rtype',rtype) then ()
+		   val atype = Prim_c (Record_c labels,cons)
+
+		   val _ = if sub_type (D,atype,rtype) then ()
 			   else e_error(D,orig_exp,"Type of record does not agree with GCTag")
+
 		   val _ = (labels_distinct labels) orelse e_error(D,orig_exp, "Fields not distinct" )
+
 		   val _ = ((List.length labels) = (List.length exps)) orelse e_error(D,orig_exp, "Wrong number of fields")
-		 in rtype'
-		 end
+		 in atype
+		 end	
 	     | (select label,[],[exp]) => projectRecordType (D,exp_valid (D,exp),label)
 
 	     | (inject sumtype,[sumcon],[]) => inject_sum_tag(D,sumtype,sumcon)

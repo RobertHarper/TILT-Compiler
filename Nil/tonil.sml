@@ -239,6 +239,8 @@ struct
 	    NONE => error "(derefTyvar)  tyvar unset"
           | SOME x => x)
 
+   fun setTyvar tyvar con = Tyvar.tyvar_reset (tyvar,con)
+
    fun derefOvar ovar = derefTyvar (Tyvar.ocon_deref ovar)
 
    (* selectFromCon.  Given con and a list lbls of labels,
@@ -500,6 +502,8 @@ in (* local *)
 
      fun get_used (CONTEXT{used,...}) = !used
        
+     fun var_is_used (CONTEXT{used,...}) var = N.VarSet.member(!used,var)
+
      fun find_sig(CONTEXT{sigmap,...},v) = N.VarMap.find(sigmap,v)
 
      fun var_is_polyfun (CONTEXT{polyfuns,...}, v) = 
@@ -1367,7 +1371,7 @@ end (* local defining splitting context *)
 	   val ebnd_fun_cat =  
 	       SINGLETON(Fixopen_b (Sequence.fromList
 			      [((var_fun_r, con_fun_r),
-			       Function{recursive = Leaf,
+			       Function{recursive = NonRecursive,
 					effect = effect,
 					tFormals = [var_arg_c],
 					eFormals = [(var_arg_r, TraceUnknown)],
@@ -1907,7 +1911,6 @@ end (* local defining splitting context *)
 
 		       val body' = wrap(internal_var, inner_var, body)
 
-		       (*XXX These should be named. -leaf *)
 		       val outer_body_type = AllArrow_c{openness = Open, effect = effect, 
 							tFormals = [], 
 							eFormals = [arg_con], 
@@ -1947,7 +1950,7 @@ end (* local defining splitting context *)
 
 	       val (outer_bnds, ebnd_entries) = Listops.unzip ebnd_entries
 
-	       val ebnds = outer_bnds @ [Fixopen_b (Sequence.fromList ebnd_entries)]
+	       val ebnds = outer_bnds @ [Fixopen_b ebnd_entries]
 
                (* Currently unused, but will be needed if we start
                   returning contexts with types, to avoid requiring
@@ -2027,12 +2030,24 @@ end (* local defining splitting context *)
 	     
 	   val (var',context') = insert_rename_var (var, context)
 
+	   val reset = case il_con 
+			 of Il.CON_TYVAR tv => 
+			   let 
+			     val il_con = derefTyvar tv
+			     val _ = setTyvar tv (Il.CON_VAR var) ;
+			   in fn () => setTyvar tv il_con
+			   end
+			  | _ => fn () => ()
+
            val context'' = update_NILctx_insert_kind_equation(context', 
 							      var', con) 
 
 	   val {final_context, cbnd_cat, ebnd_cat, record_c_con_items,
 		record_c_knd_items,
 		record_r_exp_items} = xsbnds context'' rest_il_sbnds
+
+	   val _ = reset()
+
        in
 	   {final_context = final_context,
 	    cbnd_cat = CONS (Con_cb(var', con), cbnd_cat),
@@ -2452,10 +2467,15 @@ end (* local defining splitting context *)
 					    map (fn v => (v,Type_k)) vars')
 	       
 	   val cons'= map (xcon context'') cons
+
 	   val freevars = foldl N.VarSet.union N.VarSet.empty
 	                  (map IlUtil.con_free cons)
-	   val is_recur = Listops.orfold (fn v => N.VarSet.member(freevars,v))
+	   val is_recur' = Listops.orfold (fn v => N.VarSet.member(freevars,v))
 	                                 vars
+	   val is_recur = List.exists (var_is_used context) vars'
+
+	   val _ = if is_recur <> is_recur then error "is_recur disagrees!" else ()
+
 	   val con = Mu_c (is_recur,
 			   Sequence.fromList (Listops.zip vars' cons'))
 
@@ -2470,7 +2490,12 @@ end (* local defining splitting context *)
 	       
 	   val con' = xcon context'' con
 	   val freevars = IlUtil.con_free con
-	   val is_recur = N.VarSet.member(freevars,var)
+	   val is_recur' = N.VarSet.member(freevars,var)
+
+	   val is_recur = var_is_used context var'
+
+	   val _ = if is_recur <> is_recur then error "is_recur disagrees2!" else ()
+
 	   val con = Mu_c (is_recur,Sequence.fromList [(var', con')])
        in
 	   con
@@ -3327,8 +3352,12 @@ end (* local defining splitting context *)
 	   val fun_names = map (fn Il.FBND(v,_,_,_,_) => v) fbnds
 	   val (fun_names', context') = insert_rename_vars (fun_names, context)
 
-	   (*Should give names
-	    *)
+
+	   fun mark_non_recur ((v,c),Function {recursive, effect, tFormals, eFormals, fFormals, body}) = 
+	       ((v,c),Function{recursive = NonRecursive, effect=effect, 
+			   tFormals=tFormals, eFormals=eFormals, fFormals=fFormals, 
+			   body=body})
+
 	   fun t from to = AllArrow_c{effect = totality, openness = Open,
 						  tFormals = [], eFormals = [from], fFormals = 0w0,
 						  body_type = to}
@@ -3338,7 +3367,7 @@ end (* local defining splitting context *)
 		   val con1 = xcon context' il_con1
 		   val con2 = xcon context' il_con2
 		   val con = t con1 con2
-		   val ftype = Name.fresh_named_var (Name.var2string var1' ^ "_type")
+		   val ftype = Name.fresh_named_var (Name.var2name var1' ^ "_type")
 	       in
 		   (var1', con1, con2, ftype, con)
 	       end
@@ -3368,8 +3397,18 @@ end (* local defining splitting context *)
 			       tFormals = [], eFormals = [(var2', TraceUnknown)], 
 			       fFormals=[], body = body'}))
 	       end
-       in
-	   unzip (ListPair.map mapper (pre, fbnds))
+
+	   val (bnds,vcflist) = unzip (ListPair.map mapper (pre,fbnds))
+
+	   (* If none of the variables have been used at all yet, then we know
+	    * that none of the functions are actually recursive.  This is a conservative
+	    * approximation that catches most cases.
+	    *)
+	   val vcflist = if List.exists (var_is_used context') fun_names' 
+			  then vcflist
+			else map mark_non_recur vcflist
+
+       in (bnds,vcflist)
        end
          handle e => (print "uncaught exception in xfbnds\n";
 		      raise e)

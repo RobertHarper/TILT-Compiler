@@ -53,13 +53,22 @@ val default_which = ["Phasesplit",
 		     "Optimize1",
 		     "Optimize2",
 		     "ClosureConv"]
-val _ = 
-  if !LoadVars.first then
+fun reset () = 
     (
      LoadVars.show_which := default_which;
      LoadVars.typecheck_which := default_which;
      toExe();
-(*     typecheck_some true;*)
+     typecheck_some true;
+     show_some false;
+     typecheck false;
+     show false;
+     show_hil false
+   )
+
+val _ = 
+  if !LoadVars.first then
+    (
+     reset();
      LoadVars.first := false
    )
   else if !LoadVars.sticky then

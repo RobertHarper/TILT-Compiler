@@ -140,7 +140,14 @@ fun test_sort sort_fun size =
 
 fun main () =
   (test_sort qsort 50000;
+   test_sort qsort 50000;
+   test_sort qsort 50000;
+   test_sort qsort2 50000;
+   test_sort qsort2 50000;
    test_sort qsort2 50000)
+
 in
-  val quicksort2Result = main()
+
+  fun runQuicksort2 () = main()
+(*  val quicksort2Result = main()*)
 end

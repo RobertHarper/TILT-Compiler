@@ -696,41 +696,6 @@ struct
        in  foldl_acc vkfolder state vklist
        end
 
-   (*
-    val lvc : bool -> state -> var * con -> (conbnd list * (var * con)) * state
-    lvc lift state (v, c) ==> ((cbnds, (v', c')), state'), such that v' is the renaming of v in state' and
-	Let cbnds In c' End is an A-normalized version of c
-   *)
-   and lvc lift state (v,c) : (conbnd list * (var * con)) * state = 
-	   let val (cbnds,c) = lcon lift state c
-	       val (state,v) = add_var(state,v)
-	   in  ((cbnds,(v,c)), state)
-	   end
-
-   (*
-    val lvclist : state -> (var * con) list -> cbnds list * (var * con) list * state
-    lvclist state vclist ==> folding of lvc over vclist using state
-   *)
-   and lvclist state vclist = 
-       let val (temp,state) = foldl_acc (fn (vc,s) => (lvc true s vc)) state vclist
-       in  (flatten(map #1 temp), map #2 temp, state)
-       end
-
-   (*
-    val lvtrclist_flat : state -> (var * niltrace * con) list -> (var * niltrace * con) list * state
-    lvtrclist_flat state vtrclist ==> (vtrclist', state'), where vtrclist' is vtrclist with variables renamed
-	(and state' updated from state appopriately) and constructors replaced with flat A-normal versions
-   *)
-   and lvtrclist_flat state vtrclist = 
-       let fun vtrcfolder((v,tr,c),state) =
-	   let val _ = inc depth_lcon_function
-	       val c = lcon_flat state c
-               val _ = dec depth_lcon_function
-	       val (state,v) = add_var(state,v)
-	   in  ((v,tr,c), state)
-	   end
-       in  foldl_acc vtrcfolder state vtrclist
-       end
 
    and lvtrlist_flat state vtrlist = 
        let fun vtrfolder((v,tr),state) =

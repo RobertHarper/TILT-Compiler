@@ -126,5 +126,6 @@ fun main () =
    test_sort qsort2 50000;
    test_sort qsort2 50000)
 in
-  val quicksortResult = main()
+  fun runQuicksort () = main()
+(*  val quicksortResult = main()*)
 end

@@ -202,8 +202,9 @@ structure IlUtil :> ILUTIL =
 					false, oneshot_init PARTIAL)
 
     fun make_lambda_help totality (var,con,rescon,e) 
-      : exp * con = let val funvar = fresh_named_var "anonfun"
-			val fbnd = FBND(funvar,var,con,rescon,e)
+      : exp * con = let 
+		      val funvar = fresh_named_var "anonfun"
+		      val fbnd = FBND(funvar,var,con,rescon,e)
 		    in (FIX(false,totality,[fbnd]), CON_ARROW([con],rescon,false,oneshot_init totality))
 		    end
     val make_total_lambda = make_lambda_help TOTAL

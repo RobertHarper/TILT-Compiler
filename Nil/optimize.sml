@@ -1,4 +1,4 @@
-(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs ListPair NilStatic *)
+(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs ListPair NilStatic Vararg *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.
@@ -10,6 +10,9 @@
         Propagate constants
 *	Convert project_sum to project_known
 	Cancel make_vararg and make_onearg
+*       Reduce vararg
+*	Cancel fold and unfold
+*       Cancel coercions	
         Fold constant expressions
 	Convert Sumsw to Intsw
 	Flatten int switches.
@@ -32,13 +35,55 @@ struct
 
 	fun inc r = r := !r + 1
 
+	val coercion_cancel = Stats.tt "CancelCoercions"
+	val reduce_varargs = Stats.tt "ReduceVarargs"
+	val reduce_oneargs = Stats.tt "ReduceOneargs"
+	val reduce_onearg_apps = Stats.tt "ReduceOneargApps"
+
+	val chat = Stats.ff "OptimizeChat"
 	val folds_reduced = ref 0
 	val coercions_cancelled = ref 0
-	val switches_flattened = ref 0
-	val switches_reduced = ref 0
+	val switches_flattened  = ref 0
+	val switches_reduced    = ref 0
+	val varargs_reduced = ref 0
+	val oneargs_reduced = ref 0
+	val onearg_apps_reduced = ref 0
+	fun reset_stats() = 
+	  let in
+	    folds_reduced :=  0;
+	    coercions_cancelled := 0;
+	    switches_flattened := 0;
+	    switches_reduced := 0;
+	    varargs_reduced := 0;
+	    oneargs_reduced := 0;
+	    onearg_apps_reduced := 0
+	  end
 
-	val coercion_cancel = Stats.tt "CancelCoercions"
-	val chat = Stats.ff "OptimizeChat"
+	fun chat_stats () = 
+	  if !chat then
+	    (print "\t";
+	     print (Int.toString (!folds_reduced));
+	     print " fold/unfold pairs reduced\n";
+	     print "\t";
+	     print (Int.toString (!coercions_cancelled));
+	     print " coercion pairs reduced\n";
+	     print "\t";
+	     print (Int.toString (!switches_flattened));
+	     print " int switches flattened\n" ;
+	     print "\t";
+	     print (Int.toString (!switches_reduced));
+	     print " known switches reduced\n" ;
+	     print "\t";
+	     print (Int.toString (!varargs_reduced));
+	     print " varargs reduced\n";
+	     print "\t";
+	     print (Int.toString (!oneargs_reduced));
+	     print " oneargs reduced\n" ;
+	     print "\t";
+	     print (Int.toString (!onearg_apps_reduced));
+	     print " onearg apps reduced\n" 
+	     ) else ()
+
 
         (* Generate polymorphic aggregrate handling functions that use PrimOp's *)
 	local
@@ -415,6 +460,12 @@ struct
 	  fun sub_type(STATE{equation,...},c1,c2) = 
 	      subtimer("optimizeSubType", NilStatic.sub_type)(equation,c1,c2)
 
+	  fun reduce_vararg(STATE{equation,...},openness,effect,argc,resc,arg) = 
+	      subtimer("optimizeReduceVararg", Vararg.reduce_vararg)(equation,openness,effect,argc,resc,arg)
+
+	  fun reduce_onearg(STATE{equation,...},openness,effect,argc,resc,arg) = 
+	      subtimer("optimizeReduceOnearg", Vararg.reduce_onearg)(equation,openness,effect,argc,resc,arg)
+
 
 	  fun find_availC(STATE{avail,params,...},c) = 
 	      if (#doCse params) then ExpTable.Conmap.find(#2 avail,c) else NONE
@@ -528,22 +579,40 @@ struct
 	   * has Done the Right Thing. -Leaf
 	   *)
 	  fun get_trace(STATE_,t) = TraceOps.get_trace' t
+	  val con2trace = TraceOps.con2trace 
+	  fun con2trace' t = 
+	    (case TraceOps.get_trace' t
+	       of SOME ti => ([],TraceKnown ti)
+		| NONE => 
+		 let
+		   val v' = Name.fresh_named_var "tracevar"
+		   val t = NilRename.renameCon t
+		 in
+		   ([Con_b(Runtime,Con_cb (v', t))],
+		    TraceCompute v')
+		 end)
 
 	end
 
         (* Helper functions for uncurry optimizations *)
 	fun get_lambda (Let_e(_,[Fixopen_b vfset],Var_e v)) =
-	    (case (Sequence.toList vfset) of
+	    (case (vfset) of
 		 [((v',c),f)] => if (Name.eq_var(v,v')) 
 				then SOME ((v,c),f)
 			    else NONE
 	       | _ => NONE)
 	  | get_lambda _ = NONE
 
-	fun make_lambda ((v,c),f) = Let_e(Sequential,[Fixopen_b(Sequence.fromList[((v,c),f)])],Var_e v)
+	fun make_lambda ((v,c),f) = Let_e(Sequential,[Fixopen_b([((v,c),f)])],Var_e v)
 
-	datatype wrap = WRAP of {v: var, openness: openness, eff: effect, r: recursive, vklist: (var * kind) list,
-	            clist: con list, vtlist: (var * niltrace) list, vflist: var list, body_type: con}
+	datatype wrap = WRAP of {v: var, 
+				 openness: openness, eff: effect, 
+				 r: recursive, 
+				 vklist: (var * kind) list,
+				 clist: con list, 
+				 vtlist: (var * niltrace) list, 
+				 vflist: var list, 
+				 body_type: con}
         (* 1: Function name
 	 * 2: Function effect
 	 * 3: Function recursion status
@@ -564,51 +633,60 @@ struct
 	fun wrap_get_body_type (WRAP {body_type,...}) = body_type
 
 	fun extract_lambdas state vf = 
-	    let val e = make_lambda vf
-		fun loop acc e = 
-		    (case get_lambda e of
-			 NONE => (rev acc, e)
-		       | SOME ((v, c),Function{effect=eff,recursive=r,
-					  eFormals=vtlist,fFormals=vflist,body=body,...}) =>
-			     let
-				 val {openness, tFormals = vklist, eFormals = clist,body_type,...} = strip_arrow (state, c)
-			     in
-				 loop (WRAP {v = v, openness = openness, eff = eff, r = r, vklist = vklist, vtlist = vtlist,
-					     clist = clist, vflist = vflist, body_type = body_type}::acc) body
-			     end)
+	    let 
+	      val e = make_lambda vf
+	      fun loop acc e = 
+		(case get_lambda e 
+		   of NONE => (rev acc, e)
+		   | SOME ((v, c),Function{effect=eff,recursive=r,tFormals,
+					   eFormals=vtlist,fFormals=vflist,body=body,...}) =>
+		     let
+		       val {openness, tFormals = vklist, eFormals = clist,body_type,...} = rename_arrow(strip_arrow (state, c),tFormals)
+		     in
+		       loop (WRAP {v = v, openness = openness, eff = eff, r = r, vklist = vklist, vtlist = vtlist,
+				   clist = clist, vflist = vflist, body_type = body_type}::acc) body
+		     end)
 	    in  loop [] e
 	    end
 
 	fun create_lambdas ([],_) = error "no wraps to create_lambdas"
 	  | create_lambdas (wraps,body) = 
-	    let fun loop [] body = body
-		  | loop (WRAP {v,eff,r,vklist,clist,vtlist,vflist,body_type,openness,...}::rest) body = 
-					 make_lambda(((v,AllArrow_c {openness = openness, effect = eff, tFormals = vklist, eFormals = clist, fFormals = TilWord32.fromInt(length vflist), body_type = body_type}),
-						      Function{effect=eff,recursive=r,
-							       tFormals=map #1 vklist,eFormals=vtlist,fFormals=vflist,
-							       body=loop rest body}))
-		val lambda = loop wraps body
-		val SOME vf = get_lambda lambda 
-	    in  vf
-	    end
+	  let 
+	    fun loop [] body = body
+	      | loop (WRAP {v,eff,r,vklist,clist,vtlist,vflist,body_type,openness,...}::rest) body = 
+	      let
+		val c = AllArrow_c {openness = openness, effect = eff, 
+				    tFormals = vklist, eFormals = clist, fFormals = TilWord32.fromInt(length vflist), 
+				    body_type = body_type}
+		val f = Function{effect=eff,recursive=r,
+				 tFormals=map #1 vklist,eFormals=vtlist,fFormals=vflist,
+				 body=loop rest body}
+	      in
+		make_lambda((v,c),f)
+	      end
+	    val lambda = loop wraps body
+	    val SOME vf = get_lambda lambda 
+	  in  vf
+	  end
 	    
 	fun wraps2args_bnds (wraps : wrap list) = 
-	    let fun loop acc ([] : wrap list) = error "no wraps to wraps2args_bnds"
-		  | loop acc [_] = rev acc
-		  | loop acc (WRAP {v,vklist,vtlist,vflist,...} ::(rest as (next::_))) =
-		    let val vk = map #1 vklist
-			val vc = map #1 vtlist
-			val info = Exp_b(wrap_get_v next,TraceUnknown,
-					 App_e(Open, Var_e v, map Var_c vk, map Var_e vc, map Var_e vflist))
-		    in  loop (info::acc) rest
-		    end
-		val vklist = Listops.flatten(map wrap_get_vklist wraps)
-		val clist = Listops.flatten(map wrap_get_clist wraps)
-		val vtlist = Listops.flatten(map wrap_get_vtlist wraps)
-		val vflist = Listops.flatten(map wrap_get_vflist wraps)
+	    let 
+	      fun loop acc ([] : wrap list) = error "no wraps to wraps2args_bnds"
+		| loop acc [_] = rev acc
+		| loop acc (WRAP {v,vklist,vtlist,vflist,...} ::(rest as (next::_))) =
+		let val vk = map #1 vklist
+		  val vc = map #1 vtlist
+		  val info = Exp_b(wrap_get_v next,TraceUnknown,
+				   App_e(Open, Var_e v, map Var_c vk, map Var_e vc, map Var_e vflist))
+		in  loop (info::acc) rest
+		end
+	      val vklist = Listops.flatten(map wrap_get_vklist wraps)
+	      val clist = Listops.flatten(map wrap_get_clist wraps)
+	      val vtlist = Listops.flatten(map wrap_get_vtlist wraps)
+	      val vflist = Listops.flatten(map wrap_get_vflist wraps)
 	    in  ((vklist,clist,vtlist,vflist), loop [] wraps)
 	    end
-
+	  
 	fun create_flatlambda(_,[],_) = error "no wraps to create_flatlamba"
 	  | create_flatlambda(name,wraps,body) = 
 	    let val WRAP {eff,r,body_type,openness,...} = List.last wraps
@@ -931,7 +1009,11 @@ struct
 
 	and do_con' (state : state) (con : con) : con =
 	   (case con of
-		Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
+	      Prim_c(Vararg_c _,clist) => 
+		  (case reduce_hnf(state,con)  (* Try to reduce Varargs if possible *)
+		     of (_,Prim_c(pc,clist)) => Prim_c(pc, map (do_con state) clist)
+		      | (_,con) => do_con state con)
+	      | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
 	      | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
 	      | ExternArrow_c(clist,c) =>
@@ -1137,7 +1219,10 @@ struct
 					     val typbnd = Con_b(Compiletime,Con_cb(typname,NilRename.renameCon 
 										   (NilUtil.convert_sum_to_special (sum_hnf,k))))
 					     val tgname = Name.fresh_named_var "sumgctag"
-					     val tgbnd = Exp_b(tgname, TraceUnknown,Prim_e(NilPrimOp mk_sum_known_gctag,[TraceUnknown],[Var_c typname],[]))
+					     val tgtr = con2trace (Prim_c(GCTag_c,[Var_c typname]))
+					     (* This will always be known, since we have a hnf *)
+					     val tr = con2trace injectee_hnf
+					     val tgbnd = Exp_b(tgname,tgtr ,Prim_e(NilPrimOp mk_sum_known_gctag,[tr],[Var_c typname],[]))
 					     val e = Prim_e(NilPrimOp(inject_known k), [],clist, (Var_e tgname)::elist)
 					   in Let_e(Sequential,[typbnd,tgbnd],e)
 					   end
@@ -1194,6 +1279,22 @@ struct
 	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,_,[e])]) => do_exp state e
 	       | (NilPrimOp (make_vararg oe), [Prim_e(NilPrimOp (make_onearg _), _, _, [e])]) => do_exp state e
 	       | (NilPrimOp (make_onearg oe), [Prim_e(NilPrimOp (make_vararg _), _, _, [e])]) => do_exp state e
+	       | (NilPrimOp (make_vararg (openness,effect)), _) => 
+		   let 
+		     val [arg] = elist (* Original unaliased version *)
+		     val [argc,resc] = clist
+		   in case reduce_vararg (state,openness,effect,argc,resc,arg) 
+			of SOME e => (inc varargs_reduced;if !reduce_varargs then do_exp state e else default())
+			 | NONE => default()
+		   end
+	       | (NilPrimOp (make_onearg (openness,effect)), _) => 
+		   let 
+		     val [arg] = elist (* Original unaliased version *)
+		     val [argc,resc] = clist
+		   in case reduce_onearg (state,openness,effect,argc,resc,arg) 
+			of SOME e => (inc oneargs_reduced;if !reduce_oneargs then do_exp state e else default())
+			 | NONE => default()
+		   end
                | (PrimOp p, _) => 
 		      (case (getVals elist) of
 			   NONE => default ()
@@ -1265,25 +1366,35 @@ struct
 			     in  do_exp state new_exp
 			     end
 			 fun do_onearg(arg_con, onearg_var, orig_var, args as [Var_e arg_var]) =
-			     (case reduce_hnf(state,arg_con) of
-				  (true, Prim_c(Record_c labels, _)) =>
-				      if (List.length labels <= (!Nil.flattenThreshold)) then
-					  let
-					      val newvars = map (fn _ => Name.fresh_var()) labels
-					      val args' = map Var_e newvars
-					      fun mkbnd (l,v) = 
-						  Exp_b(v,TraceUnknown,
-							Prim_e(NilPrimOp(select l), [],[], args))
-					      val bnds' = Listops.map2 mkbnd (labels, newvars)
-					      val call = App_e(Open, Var_e orig_var, [], args', [])
-					      val new_exp = NilUtil.makeLetE Sequential bnds' call
-					  in
-					      do_exp state new_exp
-					  end
-				      else
-					  default()
-                                | (true, _) => do_exp state (App_e(Open, Var_e orig_var, [], args, []))
-				| _ => default())
+			   let
+			     val (reducible,con) = reduce_hnf(state,arg_con) 
+			     val _ = if reducible then inc onearg_apps_reduced else ()
+			     val res = 
+			       if reducible then
+				 case con
+				   of Prim_c(Record_c labels, rcons) =>
+				     if (List.length labels <= (!Nil.flattenThreshold)) then
+				       let
+					 val newvars = map (fn _ => Name.fresh_var()) labels
+					 val args' = map Var_e newvars
+					 fun mkbnds (l,v,c) = 
+					   let val (bnds,tr) = con2trace' c
+					   in 
+					     bnds @ [Exp_b(v,tr,
+							   Prim_e(NilPrimOp(select l), [],[], args))]
+					   end
+					 val bndss' = Listops.map3 mkbnds (labels, newvars,rcons)
+					 val bnds'  = Listops.flatten bndss'
+					 val call = App_e(Open, Var_e orig_var, [], args', [])
+					 val new_exp = NilUtil.makeLetE Sequential bnds' call
+				       in
+					 do_exp state new_exp
+				       end
+				     else do_exp state (App_e(Open, Var_e orig_var, [], args, []))
+				 | _ => do_exp state (App_e(Open, Var_e orig_var, [], args, []))
+			       else default()
+			   in res
+			   end
                            | do_onearg (_,onearg_var, orig_var, args) = 
 	                                   (print "do_onearg: bad app ";
 	                                    Ppnil.pp_var onearg_var;
@@ -1301,11 +1412,11 @@ struct
 				      ETAe (1,uncurry,args)=> do_eta (uncurry,args)
                                     | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),[],
 						       [c1,_],[Var_e v'])) =>
-					  ((do_onearg(c1, v, v', elist))
-					   handle e => (print "Error detected from do_onearg on expression ";
-							Ppnil.pp_exp exp; 
-							print "\nwhere the function part has alias ";
-							Ppnil.pp_exp alias_exp; print "\n"; raise e))
+					  ((if !reduce_onearg_apps then do_onearg(c1, v, v', elist) else default())
+					      handle e => (print "Error detected from do_onearg on expression ";
+							   Ppnil.pp_exp exp; 
+							   print "\nwhere the function part has alias ";
+							   Ppnil.pp_exp alias_exp; print "\n"; raise e))
 						     | _ => default())
 			   | _ => default())
 		     end
@@ -1410,19 +1521,20 @@ struct
 			SOME w => 
 			  let
 			    val _ = inc switches_reduced
+			    val (bnds,tr) = con2trace' result_type
 			  in
 			    (* Reduce known switch *)
 			    (case List.find (fn (w',_,_) => w = w') arms of
 				 SOME (_,_,arm_body) =>
 				     do_exp state
 				     (Let_e(Sequential,
-					    [Exp_b(bound,TraceUnknown,
+					    bnds@[Exp_b(bound,tr,
 						   arg)],
 					    arm_body))
 			       | NONE =>
 				     do_exp state
 				     (Let_e(Sequential,
-					    [Exp_b(bound,TraceUnknown,arg)],
+					    bnds@[Exp_b(bound,tr,arg)],
 					    Option.valOf default)))
 				 (* A switch which does not either cover all of
 				  * the possibilities, or have a default, is 
@@ -1522,10 +1634,7 @@ struct
 	      let 
 		val c = NilDefs.path2con path
 		val c = do_con state c
-	      in
-		case get_trace (state,c)
-		  of SOME ti => TraceKnown ti
-		   | NONE => TraceUnknown
+	      in con2trace c
 	      end
 	    val res = 
 	      case niltrace of
@@ -1584,7 +1693,7 @@ struct
 						            (TilWord32.uminus(known,tagcount)))
 			 in  case reduce_hnf(state, fieldcon) of
 			     (true, _) => 
-				 let val bnd = Exp_b(v,TraceUnknown,
+				 let val bnd = Exp_b(v,niltrace,
 						   Prim_e(NilPrimOp(project_known known),[],[sumcon],[Var_e sv]))
 				 in  SOME [bnd]
 				 end
@@ -1712,10 +1821,7 @@ struct
 	fun optimize params (MODULE{imports, exports, bnds}) =
 	  let 
 	      val _ = reset_debug()
-	      val _ = folds_reduced :=  0
-	      val _ = coercions_cancelled := 0
-	      val _ = switches_flattened := 0
-	      val _ = switches_reduced := 0
+	      val _ = reset_stats()
 
 	      val state = newState params
 	      val (imports,state) = foldl_acc do_import state imports
@@ -1729,21 +1835,8 @@ struct
 	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
               val bnds = List.mapPartial (bnd_used state) bnds
 	      val bnds = flattenBnds bnds
+	      val _ = chat_stats ()
 
-	      val _ = if !chat then
-		(print "\t";
-		 print (Int.toString (!folds_reduced));
-		 print " fold/unfold pairs reduced\n";
-		 print "\t";
-		 print (Int.toString (!coercions_cancelled));
-		 print " coercion pairs reduced\n";
-		 print "\t";
-		 print (Int.toString (!switches_flattened));
-		 print " int switches flattened\n" ;
-		 print "\t";
-		 print (Int.toString (!switches_reduced));
-		 print " known switches reduced\n" 
-		 ) else ()
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end
 

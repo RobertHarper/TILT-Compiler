@@ -4,8 +4,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun chck b = if b then "OK" else "WRONG";
-fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun check b = if b then "OK" else "WRONG";
+fun check' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -13,11 +13,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun chckrange bounds = chck o range bounds;
+fun checkrange bounds = check o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (chck  b);
-fun tst' s f = tst0 s (chck' f);
+fun tst  s b = tst0 s (check  b);
+fun tst' s f = tst0 s (check' f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -64,12 +64,12 @@ local
 in 
     fun reset () = v := 0;
     fun incrv i = v := 2 * !v + i;
-    fun chckv () = tst "chckv" (!v = isum);
+    fun checkv () = tst "checkv" (!v = isum);
 end;
 
-val test3b = (reset (); map (incrv o #1) (a, b) seq (); chckv());
+val test3b = (reset (); map (incrv o #1) (a, b) seq (); checkv());
 
-val test4 = (reset (); app (incrv o #1) (a, b); chckv());
+val test4 = (reset (); app (incrv o #1) (a, b); checkv());
 
 val test5a = tst "test5a" (all (fn _ => false) (a, [])
 		   andalso not (exists (fn _ => true) ([], b))); 
@@ -83,9 +83,9 @@ val test5c = tst "test5c" (not (exists (fn (x, y) => x = 5) (a, b))
 		   andalso all (fn (x, y) => y <> 6) (b, a));
 
 val test5d = (reset(); all (fn (x,y) => (incrv x; true)) (a, b) seq (); 
-	      chckv());
+	      checkv());
 val test5e = (reset(); exists (fn (x,y) => (incrv x; false)) (a, b) seq (); 
-	      chckv());
+	      checkv());
 
 local 
     fun foldrchk f e xs ys = 

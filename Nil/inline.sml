@@ -38,7 +38,14 @@ struct
   fun debugpr s = if (!debug) then print s else ()
   fun inc(r:int ref) = r := (!r) + 1
 
-  datatype inlineStatus = NoInline | InlineOnce | InlineMany
+  datatype inlineStatus = 
+    NoInline | InlineOnce 
+    | InlineMany of int (* Inline if inlined version is below threshold *)
+
+  (*Keep list of the functions we are currently in, so that we can update
+   * their sizes when we inline
+   *)
+  val functionList = ref ([] : var list )
   val analyzeTable = ref (Name.VarMap.empty : Analyze.funinfo Name.VarMap.map)
   val optimizeTable = ref (Name.VarMap.empty : inlineStatus Name.VarMap.map)
   val inlineOnce = ref 0
@@ -46,11 +53,32 @@ struct
   val inlineManyCall = ref 0
   val hasCandidates  = ref false
 
-  fun updateDefinition(v,c,f) = 
+  fun updateDefinition(v,f) = 
       let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v) 
-      in  analyzeTable := (Name.VarMap.insert(table,v,{definition=(c,f),size=size,occurs=occurs}))
+      in  analyzeTable := (Name.VarMap.insert(table,v,{definition=f,size=size,occurs=occurs}))
       end
 
+  fun size v = 
+    (case Name.VarMap.find(!analyzeTable,v)
+       of SOME {size,...} => size
+	| NONE => error "Must have definition to get size")
+
+  fun updateSize(v,s) = 
+      let val (table, {definition, size, occurs}) = Name.VarMap.remove(!analyzeTable, v) 
+      in  analyzeTable := (Name.VarMap.insert(table,v,{definition=definition,size=size+s,occurs=occurs}))
+      end
+
+  fun updateSizes s = map (fn v => updateSize(v,s)) (!functionList)
+
+  fun enterFunction f  = functionList := f :: (!functionList)
+  fun leaveFunction () = functionList := tl (!functionList)
+
+  fun makeNoInline v = 
+    let 
+      val _ = if !chat then (print "\tMarking function ";Ppnil.pp_var v;print " NoInline\n") else ()
+      val (table,_) = Name.VarMap.remove(!optimizeTable, v) 
+    in optimizeTable := Name.VarMap.insert(table,v,NoInline)
+    end
 
   fun showFunInfo(v,size,occurs,status) = 
     let 
@@ -66,13 +94,13 @@ struct
       print (case status 
 	       of NoInline => "NoInline"
 		| InlineOnce => "InlineOnce"
-		| InlineMany => "InlineMany");
+		| InlineMany n => "InlineMany "^(Int.toString n));
       print "\n"
     end
 
   val inline_tiny = Stats.tt "inline_tiny" 
 
-  fun analyzeInfo {sizeThreshold, occurThreshold}
+  fun analyzeInfo {iterate,tinyThreshold, sizeThreshold, occurThreshold}
       (v,{size : int,
 	definition = _,
 	occurs} : Analyze.funinfo) : inlineStatus =
@@ -83,9 +111,13 @@ struct
 	  val recursive = Listops.orfold #1 occurs
 	  val escaping = Listops.orfold (fn (_, level) => level = 0) occurs
 	  val has_nonescape = Listops.orfold (fn (_, level) => level > 0) occurs
-	  val verysmall = if !inline_tiny then size <= 10 else false
-	  val small = (size <= sizeThreshold) andalso 
-	              (length occurs) <= (occurThreshold)
+	  val verysmall = size <= tinyThreshold
+	  val numapps = length occurs
+
+	  val small = numapps * size < occurThreshold * sizeThreshold
+	  (*(size <= sizeThreshold) andalso 
+	   numapps <= (occurThreshold)*)
+
 	  val status =  
 	    (* We don't inline any recursive functions.  
 	     * We may want to consider inlining functions
@@ -97,8 +129,8 @@ struct
 	     *)
 	    if recursive orelse (not has_nonescape) then NoInline
 	    else if calledOnce                      then InlineOnce
-	    else if verysmall                       then InlineMany
-	    else if (not escaping andalso small)    then InlineMany
+	    else if (not escaping andalso small)    then InlineMany (sizeThreshold * occurThreshold div numapps)
+	    else if verysmall                       then InlineMany tinyThreshold
             else                                         NoInline
 
 	  val _ = case status of NoInline => () |  _ => hasCandidates := true
@@ -111,20 +143,8 @@ struct
 
   fun rbnds bnds = List.concat(map rbnd bnds)
 
-  (* Is this code only necessary if Typeof is used? *)
-
-  and make_handlers () =
-      {exphandler = fn (b,e) =>
-                    let val newexp = rexp e
-		    in NilUtil.CHANGE_NORECURSE newexp
-		    end,
-       bndhandler = fn (b, bnd) => error "Shouldn't get here",
-       conhandler = NilUtil.default_conhandler,
-       kindhandler = NilUtil.default_kindhandler,
-       cbndhandler = NilUtil.default_cbndhandler}
-
-  and rcon con = NilUtil.con_rewrite (make_handlers ()) con
-  and rcbnd conbnd = NilUtil.cbnd_rewrite (make_handlers ()) conbnd
+  and rcon con = con
+  and rcbnd conbnd = conbnd
       
   and rexp e = 
       (case e of
@@ -161,13 +181,17 @@ struct
 				     SOME NoInline => NONE
 				   | SOME InlineOnce => 
 					 (case funinfoOpt of
-					      SOME {definition, ...} => (inlineOnce := 1 + (!inlineOnce);
-									 SOME definition)
+					      SOME {definition,size, ...} => 
+						(inlineOnce := 1 + (!inlineOnce);
+						 updateSizes size;
+						 SOME definition)
 					    | _ => error "must have definition here")
-				   | SOME InlineMany => 
+				   | SOME (InlineMany _) => 
 					 (case funinfoOpt of
-					      SOME {definition=(c,f), ...} => (inlineManyCall := 1 + (!inlineManyCall);
-									 SOME (NilRename.renameCon c, NilRename.renameFunction (f,c)))
+					      SOME {definition,size, ...} => 
+						  (inlineManyCall := 1 + (!inlineManyCall);
+						   updateSizes size;
+						   SOME (NilRename.renameFunction definition))
 					    | _ => error "must have definition here")
 				   | NONE => NONE)
 			    val cs = map rcon cs
@@ -175,7 +199,7 @@ struct
 			    val es2 = map rexp es2
 			in  (case defOpt of
 				 NONE => [Exp_b(v,nt,App_e(Open,Var_e f,cs,es1,es2))]
-			       | SOME (_,Function{tFormals,eFormals,fFormals,body,...}) => 
+			       | SOME (Function{tFormals,eFormals,fFormals,body,...}) => 
 				 let  val bnd1 = 
 					 Listops.map2 (fn (v,c) =>
 						       Con_b(Runtime,Con_cb(v,c)))(tFormals,cs)
@@ -213,24 +237,26 @@ struct
 					 *)
 					let
 					  val f = rfunction f
-					  val _ = updateDefinition(v,c,f)
+					  val _ = updateDefinition(v,f)
 					in NONE
 					end
-				    | SOME InlineMany => 
+				    | SOME (InlineMany n) => 
 					  let val _ = inlineManyFun := 1 + (!inlineManyFun)
-					      val c = rarrow c
+					      val c = rcon c
+					      val _ = enterFunction v
 					      val f = rfunction f
-					      val _ = updateDefinition(v,c,f)
+					      val _ = leaveFunction ()
+					      val _ = if size v <= n then updateDefinition(v,f) else makeNoInline v
 					  in  SOME ((v,c),f)
 					  end
-				    | _ => SOME((v,rarrow c),rfunction f))) vf
+				    | _ => SOME((v,rcon c),rfunction f))) vf
 	    in  (case vf of
 		     [] => []
-		   | _ => [Fixopen_b(Sequence.fromList vf)])
+		   | _ => [Fixopen_b vf])
 	    end
 	| Fixcode_b vfs => 
 	      [Fixcode_b(Sequence.fromList
-			 (List.map(fn ((v,c),f) => ((v,rarrow c),rfunction f))
+			 (List.map(fn ((v,c),f) => ((v,rcon c),rfunction f))
 			  (Sequence.toList vfs)))]
 	| Fixclosure_b _ => [b])
       and rfunction(Function{effect,recursive,
@@ -239,7 +265,6 @@ struct
 	  Function{effect=effect,recursive=recursive,
 		   tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 		   body=rexp body}
-      and rarrow x = x
 
       and rswitch sw = 
 	(case sw of
@@ -259,21 +284,66 @@ struct
 	 | Typecase_e {arg,arms,default,result_type} => 
 	       Typecase_e{arg=rcon arg,
 			  arms=List.map(fn (pc,vks,e) => (pc,vks,rexp e)) arms,
-			  default= rexp default, result_type = rcon result_type})
+			  default= rexp default,
+			  result_type = rcon result_type})
+
+  fun reset () = 
+    let in
+      hasCandidates := false;
+      inlineOnce := 0;
+      inlineManyCall := 0;
+      inlineManyFun := 0
+    end
+
+  fun inline_once iterate nilmod =
+    let 
+      val _ = reset();
+      val threshold = {iterate=iterate,tinyThreshold=0,sizeThreshold=0,occurThreshold=0}
+
+      fun loop (nilmod,n) = 
+	let
+	  val _ = print ("  "^(Int.toString n))
+
+	  val _ = hasCandidates := false
+	  val _ = functionList := []
+	  val _ = analyzeTable := Analyze.analyze nilmod
+	  val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
+
+	  val MODULE{bnds,imports,exports} = nilmod
+	  val bnds = if !hasCandidates then rbnds bnds else bnds
+	  val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
+
+	  val _ = functionList := []
+	  val _ = analyzeTable := Name.VarMap.empty
+	  val _ = optimizeTable := Name.VarMap.empty
+
+	in if !hasCandidates andalso iterate then loop (nilmod,n+1)
+	   else nilmod
+	end
+
+      val nilmod = loop (nilmod,1)
+	
+      val _ = 
+	(print "\n  "; 
+	 print (Int.toString (!inlineOnce));
+	 print " functions inlined once.\n")
+	
+    in  nilmod
+    end
 
   fun inline threshold nilmod = 
       let 
-	val _ = hasCandidates := false
+	val _ = reset()
+	val _ = functionList := []
 	val _ = analyzeTable := Analyze.analyze nilmod
 	val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
-	val _ = inlineOnce := 0
-	val _ = inlineManyCall := 0
-	val _ = inlineManyFun := 0
 	val MODULE{bnds,imports,exports} = nilmod
 	val bnds = if !hasCandidates then rbnds bnds else bnds
 	val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
+	val _ = functionList := []
 	val _ = analyzeTable := Name.VarMap.empty
 	val _ = optimizeTable := Name.VarMap.empty
+
 	val _ = 
 	  if !hasCandidates then 
 	    (print "  "; 
@@ -286,6 +356,11 @@ struct
 	  else
 	    (print "  No candidate functions for inlining\n"
 	     )
+
+	val nilmod = if !hasCandidates andalso #iterate threshold 
+		       then (print "  Iterating.....";
+			     inline_once (#iterate threshold) nilmod)
+		     else nilmod
       in  nilmod
       end
 

@@ -53,4 +53,4 @@ Comments:
 Fix:    Figure out why equality compiler is raising NoEqExp on that tyvar.
 Test:   m0031
 Owner: swasey
-Status: open
+Status: closed

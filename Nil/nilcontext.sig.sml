@@ -10,4 +10,7 @@ signature NILCONTEXT =
 
     (* insert_exp (ctx,v,e) ==> ctx,v:t where ctx |- e : t *)
     val insert_exp : context * var *exp -> context
+
+    val insert_bnd  : context * Nil.bnd -> context
+
   end

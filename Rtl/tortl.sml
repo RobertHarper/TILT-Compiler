@@ -25,9 +25,14 @@
    variables to "terms" (maintained by add_term and friends in TortlBase) obviously
    cannot allow multiple entries for the same variable.
 
-   - Tortl looks like it should deal pretty well with code that is not in A-normal form.
-
       joev 8/2002
+*)
+
+(*
+ toRtl currently relies somewhat on the code being in a-normal form.  In particular,
+ it relies on having traceability for almost all terms, which only happens if all
+ terms are named.
+ -leaf 9/2002
 *)
 
 (* (1) This translation relies on the layout of the thread structure which is
@@ -554,7 +559,7 @@ struct
 
 	    | Raise_e (exp, _) =>
 		  let val _ = add_instr THROW_EXN
-		      val (I except,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
+		      val (I except,state) = xexp'(state,name,exp,Nil.TraceKnown TraceInfo.Trace,NOTID)
 		      val rep = niltrace2rep state trace
 		      val _ = add_instr(MV(except,exnarg))
 		      val _ = record_project(exnptr,0,SREGI HANDLER)
@@ -720,7 +725,7 @@ struct
 	      val _ = add_instr(ILABEL thenl)
 	      val (zero,state_zero) = xexp' (state,fresh_named_var "zero_result", 
 						 zeroexp, trace, context)
-	      val (_,dest) = alloc_reg_trace state trace
+	      val (_,dest) = alloc_reg_trace  state trace
 	      val _ = add_instr(mv(zero, dest))
 	      val _ = add_instr(BR afterl)
 	      val _ = add_instr(ILABEL elsel)
@@ -755,7 +760,7 @@ struct
 	  fun move r = 
 	    let val d = case !dest of
 	                     SOME d => d
-			   | NONE => let val d = #2(alloc_reg_trace state trace)
+			   | NONE => let val d = #2(alloc_reg_trace  state trace)
 				     in dest := SOME d; d
 				     end
 	    in add_instr(mv(r,d))
@@ -792,7 +797,7 @@ struct
 	  case sw of
 	      Intsw_e {size, arg, arms, default, ...} => 
 		  let val (I r,state) = xexp' (state,fresh_named_var "intsw_arg",arg,
-					      Nil.TraceUnknown,NOTID)
+					       Nil.TraceKnown TraceInfo.Notrace_Int,NOTID)
 		  in  case (arms,default) of
 		      ([(0w0,z)],SOME e) => zero_one(state, r, trace, z, e, context)
 		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, trace, z, one, context)
@@ -825,7 +830,7 @@ struct
 	    | Exncase_e {arg, bound, arms, default, ...} => 
 		  let
 		      val (I exnarg,state) = xexp' (state,fresh_named_var "exncase_arg",arg,
-						     Nil.TraceUnknown,NOTID)
+						     Nil.TraceKnown TraceInfo.Trace,NOTID)
 
 		      val exntag = alloc_regi(NOTRACE_INT)
 		      val _ = record_project(exnarg,0,exntag)
@@ -847,8 +852,8 @@ struct
 			  let 
 			      val _ = add_instr(ILABEL lab)
 			      val tagcon = type_of state armtag
-			      val (I armtagi,state) = xexp' (state,fresh_var(),armtag,
-								   Nil.TraceUnknown,NOTID)
+			      val (I armtagi,state) = xexp'(state,fresh_var(),armtag,
+								   Nil.TraceKnown TraceInfo.Notrace_Int,NOTID)
 			      val (_,Prim_c(Exntag_c,[c])) = simplify_type state tagcon
 			      val next = fresh_code_label "exnarm"
 			      val test = alloc_regi(NOTRACE_INT)
@@ -924,13 +929,13 @@ struct
 	      in 
 	       (case (tagcount,cons,arms, default) of
 		  (0w2,[], [(0w0,_,zeroexp),(0w1,_,oneexp)], NONE) => 
-			let val (I r,state) = xexp' (state,fresh_named_var "intsw_arg",arg,
-						    Nil.TraceUnknown,NOTID)
+			let val (I r,state) = xexp'(state,fresh_named_var "intsw_arg",arg,
+						    Nil.TraceKnown TraceInfo.Trace,NOTID)
 			in  zero_one(state,r, trace, zeroexp, oneexp, context)
 			end
 		| _ =>
-		  let val (I r,state) = xexp' (state,fresh_named_var "sumsw_arg",arg,
-						Nil.TraceUnknown,NOTID)
+		  let val (I r,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,
+						Nil.TraceKnown TraceInfo.Trace,NOTID)
 		    val nomatchl = fresh_code_label "nomatch_sum"
 		      val one_carrier = (length cons) = 1
 		      val total = TW32.uplus(tagcount, i2w(length cons))
@@ -1074,14 +1079,14 @@ struct
 	 | box_float Prim.F64 => 
 	       let val _ = incPrim()
 		   val [e] = elist
-		   val (lv,state) = xexp (state,fresh_var(),e,Nil.TraceUnknown,NOTID)
+		   val (lv,state) = xexp(state,fresh_var(),e,Nil.TraceKnown TraceInfo.Notrace_Real,NOTID)
 		   val (vl,state) = boxFloat_vl(state,lv)
 	       in (vl, state)
 	       end
 	 | unbox_float Prim.F64 => 
 	       let val _ = incPrim()
 		   val [e] = elist
-		   val (I ir,state) = xexp' (state,fresh_var(),e,Nil.TraceUnknown,NOTID)
+		   val (I ir,state) = xexp'(state,fresh_var(),e,Nil.TraceKnown TraceInfo.Trace,NOTID)
 		   val fr = unboxFloat ir
 	       in (LOCATION(REGISTER(false, F fr)), state)
 	       end

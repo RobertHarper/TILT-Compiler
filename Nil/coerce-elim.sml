@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Nil TypedNilRewrite Stats COERCEELIM Ppnil NilStatic NilRename List Int Name Sequence *)
+(*$import Prelude TopLevel Nil NilRewrite Stats COERCEELIM Ppnil NilStatic NilRename List Int Name Sequence NilRename *)
 
 structure CoerceElim :> COERCEELIM =
   struct
@@ -6,23 +6,41 @@ structure CoerceElim :> COERCEELIM =
     val debug = Stats.ff "coerce_elim_debug"
 
     local
-      open TypedNilRewrite
+      open NilRewrite
       structure N = Nil
     
       type state = int ref
+
+      fun c_inner_arrow (from_con,to_con) =
+	let
+	  val inner_arrow = N.AllArrow_c {openness    = N.Open,
+					  effect      = N.Total,
+					  tFormals    = [],
+					  eFormals    = [from_con],
+					  fFormals    = 0w0,
+					  body_type   = to_con}
+	in inner_arrow
+	end
+
+      fun coercion2arrow (vars,from_con,to_con) = 
+	let 
+	  val tformals = map (fn v => (v,N.Type_k)) vars
+	  val inner_arrow = c_inner_arrow (from_con,to_con)
+	    
+	  val arrow = N.AllArrow_c {openness    = N.Open,
+				    effect      = N.Total,
+				    tFormals    = tformals,
+				    eFormals    = [],
+				    fFormals    = 0w0,
+				    body_type   = inner_arrow}
+	in arrow
+	end
 
       fun conhandler (i : state, c : N.con) = 
 	(case c
 	   of N.Coercion_c {vars=vars,from=from_con,to=to_con} => 
 	     let 
-	       val tformals = map (fn v => (v,N.Type_k)) vars
-	       val arrow = N.AllArrow_c {openness    = N.Open,
-					 effect      = N.Total,
-					 isDependent = false,
-					 tFormals    = tformals,
-					 eFormals    = [(NONE,from_con)],
-					 fFormals    = 0w0,
-					 body_type   = to_con}
+	       val arrow = coercion2arrow(vars,from_con,to_con)
 	       val _ = 
 		 if !debug then (
 		   print "\nRewrote ";
@@ -38,55 +56,56 @@ structure CoerceElim :> COERCEELIM =
 	    | _ => NOCHANGE)
 
       fun exphandler (i : state, e : N.exp) =
-	(case e
-	   of N.Coerce_e (coercion,cargs,earg) =>
-	     let
-	       val e' = N.App_e(N.Open,coercion,cargs,[earg],[])
-	     in
-	       i := !i + 1;
-	       CHANGE_RECURSE (i,e')
-	     end
-	 | N.Fold_e (cvars,from_con,to_con) =>
-	     let
-	       val tformals = map (fn v => (v,N.Type_k)) cvars
+	let
+	  fun dofoldunfold name (cvars,from_con,to_con) = 
+	    let
+	      val arrow= coercion2arrow(cvars,from_con,to_con)
+	      val arrow = NilRename.renameCon arrow
+	      val coercion = NilRename.renameExp e
 
-	       val fun_name = Name.fresh_named_var "fold"
-	       val arg_name = Name.fresh_named_var "fold_arg"
-	       val body = N.Prim_e(N.NilPrimOp N.roll, [],[to_con],[N.Var_e arg_name])
-	       val lambda = N.Function {effect = N.Total,
-					  recursive = N.Leaf,
-					  isDependent = false,
-					  tFormals = tformals,
-					  eFormals = [(arg_name,N.TraceUnknown,from_con)],
-					  fFormals = [],
-					  body = body,
-					  body_type = to_con}
-	       val e' = N.Let_e (N.Sequential,[N.Fixopen_b (Sequence.fromList [(fun_name,lambda)])],N.Var_e fun_name)
-	     in
-	       i := !i + 1;
-	       CHANGE_RECURSE (i,e')
-	     end
-	 | N.Unfold_e (cvars,from_con,to_con) =>
-	     let
-	       val tformals = map (fn v => (v,N.Type_k)) cvars
+	      val inner_arrow = c_inner_arrow (from_con,to_con)
+		
+	      val fun_name = Name.fresh_named_var name
+	      val inner_fun_name = Name.fresh_named_var (name^"_inner")
+	      val arg_name = Name.fresh_named_var (name ^"_arg")
 
-	       val fun_name = Name.fresh_named_var "unfold"
-	       val arg_name = Name.fresh_named_var "unfold_arg"
-	       val body = N.Prim_e(N.NilPrimOp N.unroll, [],[from_con],[N.Var_e arg_name])
-	       val lambda = N.Function {effect = N.Total,
-					  recursive = N.Leaf,
-					  isDependent = false,
-					  tFormals = tformals,
-					  eFormals = [(arg_name,N.TraceUnknown,from_con)],
-					  fFormals = [],
-					  body = body,
-					  body_type = to_con}
-	       val e' = N.Let_e (N.Sequential,[N.Fixopen_b (Sequence.fromList [(fun_name,lambda)])],N.Var_e fun_name)
-	     in
-	       i := !i + 1;
-	       CHANGE_RECURSE (i,e')
-	     end
-	 | _ => NOCHANGE)
+	      val body = N.Coerce_e(coercion,map N.Var_c cvars,N.Var_e arg_name)
+
+	      val inner_lambda = N.Function {effect = N.Total,
+					     recursive = N.Leaf,
+					     tFormals = [],
+					     eFormals = [(arg_name,N.TraceUnknown)],
+					     fFormals = [],
+					     body = body}
+
+	      val body = N.Let_e (N.Sequential,[N.Fixopen_b ([((inner_fun_name,inner_arrow),inner_lambda)])],N.Var_e inner_fun_name)
+
+	      val lambda = N.Function {effect = N.Total,
+				       recursive = N.Leaf,
+				       tFormals = cvars,
+				       eFormals = [],
+				       fFormals = [],
+				       body = body}
+		
+	      val e' = N.Let_e (N.Sequential,[N.Fixopen_b ([((fun_name,arrow),lambda)])],N.Var_e fun_name)
+	    in
+	      i := !i + 1;
+	      CHANGE_NORECURSE (i,e')
+	    end
+	in
+	  case e
+	    of N.Coerce_e (coercion,cargs,earg) =>
+	      let
+		val e' = N.App_e(N.Open,N.App_e(N.Open,coercion,cargs,[],[]),[],[earg],[])
+	      in
+		i := !i + 1;
+		CHANGE_RECURSE (i,e')
+	      end
+	     | N.Fold_e args => dofoldunfold "fold" args
+	     | N.Unfold_e args => dofoldunfold "unfold" args
+	     | _ => NOCHANGE
+	end
+
 	     
 
       val all_handlers = 

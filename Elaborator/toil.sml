@@ -999,6 +999,7 @@ structure Toil
 			let val {body = (bodye,bodyc), arglist} = 
 			         funCompile {context = context'',
 					     rules = matches}
+
 			    fun con_folder ((_,c),acc) = CON_ARROW([c],acc,false,oneshot_init PARTIAL)
 			    val func = foldr con_folder bodyc arglist
 			    val _ = if eq_con(context'',body_con,bodyc)
@@ -1020,10 +1021,10 @@ structure Toil
 			    local 
 				fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
 			    in 
-				val (var1,con1)::tlArglist = arglist
-				val (bigbodyc,bigbodye) = foldr help (bodye,bodyc) tlArglist
+			      val (var1,con1)::tlArglist = arglist
+			      val (bigbodye,bigbodyc) = foldr help (bodye,bodyc) tlArglist
 			    end 
-			in (FBND(var',var1,con1,bigbodye,bigbodyc),func)
+			in (FBND(var',var1,con1,bigbodyc,bigbodye),func)
 			end)
 		 dec_list)
 		 

@@ -3,8 +3,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun chck b = if b then "OK" else "WRONG";
-fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun check b = if b then "OK" else "WRONG";
+fun check' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -12,11 +12,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun chckrange bounds = chck o range bounds;
+fun checkrange bounds = check o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (chck  b);
-fun tst' s f = tst0 s (chck' f);
+fun tst  s b = tst0 s (check  b);
+fun tst' s f = tst0 s (check' f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -64,10 +64,10 @@ local
 in 
     fun reset () = v := 0;
     fun incrv i = v := 2 * !v + i;
-    fun chckv () = tst "chckv" (!v = isum);
+    fun checkv () = tst "checkv" (!v = isum);
 end;
 
-val test14 = (reset (); app incrv v16; chckv);
+val test14 = (reset (); app incrv v16; checkv);
 
 val test15 = tst "test15" ([2,4,6,8,10,12] = map (fn i=>i*2) v16);
 
@@ -83,17 +83,17 @@ val test19 = tst "test19" (NONE = find (fn _ => true) []);
 
 val test20 = tst "test20" ([2,4,6] = filter even v16);
 
-val test21 = (reset (); filter (fn i => (incrv i; true)) v16 seq chckv());
+val test21 = (reset (); filter (fn i => (incrv i; true)) v16 seq checkv());
 
 val test22 = tst "test22" (([2,4,6], [1,3,5]) = partition even v16);
 
-val test23 = (reset (); partition (fn i => (incrv i; true)) v16 seq chckv());
+val test23 = (reset (); partition (fn i => (incrv i; true)) v16 seq checkv());
 
 val test24 = tst "test24" (v16 = foldr op:: [] v16);
 val test25 = tst "test25" (rev v16 = foldl op:: [] v16);
 
-val test26 = (reset(); foldr (fn (i,r) => incrv i) () (rev v16); chckv());
-val test27 = (reset(); foldl (fn (i,r) => incrv i) () v16; chckv());
+val test26 = (reset(); foldr (fn (i,r) => incrv i) () (rev v16); checkv());
+val test27 = (reset(); foldl (fn (i,r) => incrv i) () v16; checkv());
 
 val test28 = tst "test28" (21 = foldr op+ 0 v16 andalso 21 = foldl op+ 0 v16);
 
@@ -105,7 +105,7 @@ val test30 = tst "test30" (exists even [1,1,1,1,1,1,2,1]
 
 val test31 = tst "test31" (v16 = tabulate (6, fn i => i+1));
 
-val test32 = (reset(); tabulate (6, fn i => (incrv (i+1); 127)) seq chckv());
+val test32 = (reset(); tabulate (6, fn i => (incrv (i+1); 127)) seq checkv());
 
 val test33 = tst "test33" ([] = tabulate (0, fn i => 1 div i));
 

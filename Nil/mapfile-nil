@@ -107,8 +107,8 @@ Inline inline.sml
 
 Reorder reorder.sml
 
-//COERCEELIM coerce-elim.sig.sml
-//CoerceElim coerce-elim.sml
+COERCEELIM coerce-elim.sig.sml
+CoerceElim coerce-elim.sml
 
 LINKNIL linknil.sig.sml
 Linknil linknil.sml

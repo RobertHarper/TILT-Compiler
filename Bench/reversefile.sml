@@ -13,6 +13,7 @@
 
 *)
 
+local
 val bufsize = 4096
 val rdbufsize = 4096
 
@@ -95,4 +96,7 @@ fun loop (b, s) =
     | _ => loop (bb, bs)
   end
 
-val _ = loop (MORE(ref bufsize, Word8Array.array (bufsize,0w0), END), 0)
+in
+  fun runReverse () = loop (MORE(ref bufsize, Word8Array.array (bufsize,0w0), END), 0)
+(*val _ = loop (MORE(ref bufsize, Word8Array.array (bufsize,0w0), END), 0)*)
+end

@@ -8,10 +8,9 @@ struct
     open Il Formatter
     open Prim Ppprim Tyvar
 
-    val convarMode = Stats.int("convarMode")
     val showOnlyModule = Stats.ff("showOnlyModule")
 
-    val _ = convarMode := 0  (* 0 - value only; 1 - variable only; 2 - variable and value *)
+    val convarMode = ref 2  (* 0 - value only; 1 - variable only; 2 - variable and value *)
     val error = fn s => error "ppil.sml" s
 
     fun pp_region s1 s2 fmt = HOVbox[String s1,HOVbox fmt,String s2]

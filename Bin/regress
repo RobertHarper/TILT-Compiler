@@ -18,8 +18,21 @@
 # build the runtime
 if (cd Runtime; gmake runtime) ; then echo "Compiled runtime" ; else echo "Runtime didn't compile" ; exit 1 ; fi
 
-# build NJ tilt
-if gmake heap ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
+# gmake heap doesn't return an exit status correctly, so remove tilt-nj and then check whether it exists
+
+case `uname -s` in
+    SunOS) platform=sparc-solaris;;
+    OSF1)  platform=alpha32-dunix ;;
+    *)	  echo >[2=1] 'can not run TILT binaries on this platform'; exit 1 ;;
+esac
+
+rm -f ./Heaps/tilt.$platform
+
+# build NJ tilt.  
+gmake heap
+
+# Did gmake heap succeed?
+if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
 
 # build the basis
 if ./Test/tilt-nj -b ; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi

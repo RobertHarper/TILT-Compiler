@@ -46,6 +46,10 @@ signature LOAD =
      *)
     val show : bool -> unit
 
+    (* Return all load controlled values to their defaults.
+     *)
+    val reset : unit -> unit
+
     (* typecheck_some true turns on some NIL typechecking 
      * typecheck_some false turns off some NIL typechecking.
      *

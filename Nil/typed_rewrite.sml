@@ -1,6 +1,27 @@
-(* Doesn't work yet *)
-
 (*$import Prelude TopLevel Name List Sequence Prim Array TraceInfo Listops Util Nil *)
+
+(*
+ * A simple rewriter that does not try to synthesize types.
+ *
+ * The idea is to provide a generic traversal algorithm that crawls over 
+ * a parse tree in simple block structured fashion.  At every node, it
+ * provides the client code with the current node under consideration 
+ * and a current state.  The client then returns 
+ * 
+ * NOCHANGE        if the node was not changed, and should be
+ *                 recursively traversed
+ * NORECURSE       if the node was not changed, and should not be 
+ *                 recursively traversed
+ * CHANGE_RECURSE (state,term)
+ *                 if the node was changed to "term" with new state "state",
+ *                 and the new term should be recursively traversed
+ * CHANGE_NORECURSE (state,term)
+ *                 if the node was changed to "term" with new state "state",
+ *                 and the new term should not be recursively traversed
+ *
+ * One benefit of using this code is that it tries extremely hard to preserve
+ * physical sharing. 
+ *)
 
 signature TYPEDNILREWRITE = 
   sig

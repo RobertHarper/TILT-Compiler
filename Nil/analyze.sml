@@ -61,7 +61,7 @@ struct
   fun debugdo f = if !debug then f() else ()
 
   type funinfo = {size : int,
-		  definition : con * function,
+		  definition : function,
 		  occurs : (bool * int) list}
 
   local
@@ -71,7 +71,7 @@ struct
 	   * 3: currently determined highest possible level
 	   *)
 
-      val sizeDefs = ref (Name.VarMap.empty : (int * Nil.con * Nil.function) Name.VarMap.map)
+      val sizeDefs = ref (Name.VarMap.empty : (int * Nil.function) Name.VarMap.map)
 	  (* 1: size of function body
 	   * 2: function type
 	   * 3: function itself
@@ -89,8 +89,8 @@ struct
 			      NONE => false
 			    | SOME _ => true)
   in
-      fun reset() = (sizeDefs := Name.VarMap.empty; occurs := [])
-      fun addFunction(v,i,c,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, c, f))
+      fun reset() = (sizeDefs := Name.VarMap.empty; occurs := []; constraints := Name.VarMap.empty)
+      fun addFunction(v,i,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, f))
       fun addConstraint(v, n, r) = constraints := Name.VarMap.insert(!constraints, v, (n,r))
 
       (* Add level constraints for a particular sequence of applications starting from a curried function. *)
@@ -130,7 +130,7 @@ struct
 	end
       (* Create the map to be returned based on data kept in sizeDefs and occurs *)
       fun collect() : funinfo Name.VarMap.map =
-	  let val table = Name.VarMap.map (fn (i,c,f) => {size = i, definition = (c,f), occurs = []}) (!sizeDefs)
+	  let val table = Name.VarMap.map (fn (i,f) => {size = i, definition = f, occurs = []}) (!sizeDefs)
 	      fun folder ((v, inside, ref level), table) = 
 		  (case Name.VarMap.find(table, v) of
 		       NONE => table  (* application variable not a function *)
@@ -183,20 +183,22 @@ struct
 		 Con_cb(v,c) => doCon c
 	       | Open_cb (v,vks,c) => (doVklist vks) + (doCon c)
 	       | Code_cb (v,vks,c) => (doVklist vks) + (doCon c))
-
+  and doType t = 0
+  and doTypes ts = 0
+  and doTbnd tb = 0
   (* This is the function where variable occurrences are noticed and possibly used to update function max levels. *)
   and doExp (exp:exp) : int = 
 	1 + 
         (case exp of
            Var_e v => (varOccur v; 0)
 	 | Const_e pv =>
-	   let fun doArray(c,ea) = Array.foldl (fn (e,s) => (s + (doExp e))) (doCon c) ea
+	   let fun doArray(c,ea) = Array.foldl (fn (e,s) => (s + (doExp e))) (doType c) ea
            in
 	      case pv of
 		 Prim.array cea => doArray(cea)
 	       | Prim.vector cea => doArray(cea)
                | Prim.refcell(er) => doExp (!er)
-               | Prim.tag(t,c) => doCon c
+               | Prim.tag(t,c) => doType c
                | _ => 0 (* small constants *)
            end
          | Let_e(ls,bnds,e) => (doBnds bnds) + (doExp e)
@@ -204,17 +206,17 @@ struct
 	     (if (NilDefs.allprim_uses_carg ap) then
                  doCons cs
 	      else
-	         (doCons cs; 0)) 
+	         (doTypes cs; 0)) 
              + (doExps es)
          | Switch_e sw => doSwitch sw
-         | App_e(ot,e,cs,es1,es2) => (doCons cs) + (doExps (e :: (es1 @ es2))) 
+         | App_e(ot,e,cs,es1,es2) => (doCons cs) + (doExp e) + (doExps es1) + (doExps es2)
          | ExternApp_e(e,es) => doExps (e::es)
-         | Raise_e (e, c) => doExp e + doCon c
-         | Handle_e{body,bound,handler,result_type} => doExps [body,handler] + doCon result_type
+         | Raise_e (e, c) => doExp e + doType c
+         | Handle_e{body,bound,handler,result_type} => doExps [body,handler] + doType result_type
 	 | Coerce_e (coercion,cargs,exp) =>
-	   (doCons cargs) + (doExp coercion) + (doExp exp)
-	 | Fold_e (vars,from,to) => (doCon from) + (doCon to)
-	 | Unfold_e (vars,from,to) => (doCon from) + (doCon to))
+	   (doTypes cargs) + (doExp coercion) + (doExp exp)
+	 | Fold_e (vars,from,to) => (doType from) + (doType to)
+	 | Unfold_e (vars,from,to) => (doType from) + (doType to))
 
       and doExps (exps:exp list) : int = doList doExp exps
     
@@ -253,14 +255,15 @@ struct
         1 + 
 	(case bnd of
 	   Con_b(Runtime,cb) => doCbnd cb
-         | Con_b(Compiletime,cb) => (doCbnd cb; 0)
+         | Con_b(Compiletime,cb) => (doTbnd cb; 0)
          | Exp_b(v,nt,e) => doExp e
          | Fixopen_b vfSeq => 
 	     let val vf = Sequence.toList vfSeq
 		 fun doFunction((v, c),
 				f as Function{body,...}) = 
 	            let 
-	              val size = doExp body + doCon c
+		      val _ = doType c
+	              val size = doExp body
 	              val _ = if (!debug) then 
 	                         (print "size of ";
 	                          Ppnil.pp_var v;
@@ -269,7 +272,7 @@ struct
 	                          print "\n")
 	                      else ()
 	            in
-		      (v, size, c, f)
+		      (v, size, f)
                     end
 		 val vsizedef = map doFunction vf
 		 val _ = map addFunction vsizedef
@@ -285,7 +288,7 @@ struct
         (case switch of
            Intsw_e{arg,size,arms,default,result_type} =>
 	       (doExps (arg :: (map #2 arms))) +
-	       (doExpopt default)
+	       (doExpopt default) 
          | Sumsw_e{arg,sumtype,bound,arms,default,result_type} =>
 	       (doExps (arg :: (map #3 arms))) + 
 	       (doExpopt default)

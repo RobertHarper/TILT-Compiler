@@ -135,4 +135,8 @@ struct
     NilContext.bound_con (ctxt, v)
     | valid_trace (_, TraceUnknown) = false
 
+  fun con2trace c = 
+    (case get_trace' c
+       of SOME ti => TraceKnown ti
+	| NONE => TraceUnknown)
 end

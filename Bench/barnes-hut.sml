@@ -1,6 +1,10 @@
-(*$import Int List Math Real String Help *)
+(*$import Int List Math64 Real String *)
 
 (* Thread safety due to no top-level refs *)
+
+(*This has both parallel and non-parallel versions.  The parallel version are 
+ * currently commented out so that the code can be run as a standard benchmark
+ *)
 
 local
 
@@ -479,7 +483,7 @@ fun createTree (_ : box, [] : particle list) : tree = Empty
     in
 	Node (b, p, (t1, t2, t3, t4))
     end
-
+(*
 (* ------- Parallel version of createTree --------- *)
 fun createTreeP (_ : box, [] : particle list) : tree = Empty
   | createTreeP (_, [i]) = Leaf i
@@ -509,7 +513,7 @@ fun createTreeP (_ : box, [] : particle list) : tree = Empty
     in
 	Node (b, p, (t1, t2, t3, t4))
     end
-
+*)
 
 (*
  * The force of a collection of particles (represented by a tree)
@@ -568,7 +572,7 @@ fun bhForces ([] : particle list) : force list = []
     in
 	map (fn s => treeForce (tree, s)) ss
     end
-
+(*
 fun bhForcesP ([] : particle list) : force list = []
   | bhForcesP [_] = [vecZero]
   | bhForcesP ss =
@@ -579,7 +583,7 @@ fun bhForcesP ([] : particle list) : force list = []
     in
 	res
     end
-
+*)
 (*
  * Given a list of particles, a corresponding list of forces on them, and an amount of time,
  *   update each particle's velocities by applying the force on it for the given amount of time,
@@ -649,6 +653,7 @@ let
 in  ()
 end;
 
+(*
 fun bhP numParticles numIterations numCheckpoint = 
 let 
     val particles = randomParticles numParticles
@@ -656,6 +661,7 @@ let
     val _ = simulate bhForcesP particles 0.00001 0 numIterations (fn n => n mod numCheckpoint = 0)
 in  ()
 end;
+*)
 
 (* There are 3 version:
    (1) standard - Standard nbody simulation
@@ -667,6 +673,13 @@ end;
 (* val _ = bh 1000 10 1000  *)
 
 in
-    fun runBarnesHut() = bhP 1000 10 1000  
+    fun runBarnesHut() = 
+      let 
+	val _ = standard 1000 2 1000 
+	val _ = bh 1000 10 1000  
+(*	val _ = bhP 1000 10 1000  *)
+      in
+	()
+      end
 end
 

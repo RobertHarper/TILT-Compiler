@@ -10,7 +10,9 @@ Problem:     tilt fails with exception Option
 Code:        
 Transcript:  
 Comments:    
+	[Leaf] Not sure when this got fixed, but the test case passes, so I'm
+	marking it as closed.
 Fix:         
 Test: m0031
 Owner: rwh
-Status: open
+Status: closed

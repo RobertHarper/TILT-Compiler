@@ -110,21 +110,16 @@ trail.sml
 (*bound_check.sml
 bound_check.sig.sml
 
+
 typeof_elim.sml
 typeof_elim.sig.sml
-
+*)
 coerce-elim.sig.sml
 coerce-elim.sml
 
 
-cleanup.sig.sml
-cleanup.sml
-betareduce.sig.sml
-betareduce.sml
-cont.sig.sml
-cont.sml
-nileval.sig.sml
-nileval.sml *)
+singleton-elim.sml
+singleton-elim.sig.sml
 
 
 NilOpts/exptable.sig.sml

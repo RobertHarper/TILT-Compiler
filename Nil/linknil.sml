@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Real Timestamp *)
+(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim *)
 
 (* Reorder *)
 
@@ -31,18 +31,22 @@ structure Linknil :> LINKNIL  =
     val optimize2   = makeEntry (true, "Optimize2")
     val optimize3   = makeEntry (true, "Optimize3")
     val optimize4   = makeEntry (true, "Optimize4")
+    val optimize5   = makeEntry (true, "Optimize5")
     val reify1      = makeEntry (true, "Reify1")
     val reify2      = makeEntry (true, "Reify2")
     val vararg      = makeEntry (true, "Vararg")
-    val specialize  = makeEntry (true, "Specialize")
+    val specialize1 = makeEntry (true, "Specialize1")
+    val specialize2 = makeEntry (true, "Specialize2")
     val rename      = makeEntry (true, "Rename")
-    val hoist       = makeEntry (true, "Hoist")
+    val hoist1      = makeEntry (true, "Hoist1")
+    val hoist2      = makeEntry (true, "Hoist2")
+    val inlineOnce1 = makeEntry (true, "InlineOnce1")
+    val inlineOnce2 = makeEntry (true, "InlineOnce2")
     val inline1     = makeEntry (true, "Inline1")
     val inline2     = makeEntry (true, "Inline2")
     val inline3     = makeEntry (true, "Inline3")
-(*  val reduce      = makeEntry (false, "Reduce") *)
-(*  val flatten     = makeEntry (false, "Flatten") *)
     val coerce_elim = makeEntry (false, "CoerceElim")
+    val sing_elim   = makeEntry (false, "SingElim")
 
     val walk         = makeEntry (true, "Walk")
     val context_walk = makeEntry (true, "ContextWalk")
@@ -77,9 +81,6 @@ structure Linknil :> LINKNIL  =
     structure Linearize = Linearize
     structure ToClosure = ToClosure
 
-(*    structure Flatten = Flatten(structure PrimUtil = NilPrimUtil) 
-    structure Reduce = Reduce 
-*)
 
 
     fun printBold str = (print "===== "; print str;
@@ -148,7 +149,12 @@ structure Linknil :> LINKNIL  =
 
     (* (1) Rename must precede everything.
        (2) Vararg must precede Reify because vararg changes traceability
-       (3) Reify must occur before uncurrying which is in optimize2.
+       (3) Reify must occur before uncurrying.  This is 
+           because we do not allow type applications in traceability annotations.
+	   Therefore, we allow reify to insert any needed type applications 
+	   between the type lambda and the term lambda before we try to uncurry,
+	   so that we block uncurrying when it would force us to place applications
+	   in the trace annotations.
        (4) Reify2 is needed because some optimizations create TraceUnknowns.
     *)
     fun compile' (filename,(ctxt,_,sbnd_entries) : Il.module) =
@@ -164,69 +170,126 @@ structure Linknil :> LINKNIL  =
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
 		    else ()
+
+	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
+
 	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
+
+
+(*
+
+	    val nilmod = transform sing_elim (SingletonElim.R_module, nilmod)*)
+
+	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
+
+	    val nilmod = transform hoist1 (Hoist.optimize, nilmod)
 
 	    val nilmod = transform optimize1 
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
-						       doCse = false, 
+						       doCse = true, 
 						       doUncurry = false},
 				    nilmod)
 
+	    val nilmod = transform inlineOnce1 (Inline.inline_once  true, nilmod)
+
+	    (* It is very important that specialize be run before any speculative 
+	     * inlining (that is, before inlining anything except functions called
+	     * only once).  Otherwise, the inliner may generate lots of copies of 
+	     * the same function applied at the same type, which is a complete loss.
+	     * We would much rather specialize them to get a single monomorphic copy,
+	     * and then inline that single copy as necessary.
+	     *)
+	    val nilmod = transform specialize1 (Specialize.optimize, nilmod)
+
+	    val nilmod = transform optimize2
+				   (Optimize.optimize {doDead = true, 
+						       doProjection = SOME 50,
+						       doCse = true, 
+						       doUncurry = false},
+				    nilmod)
+
+	    val nilmod = transform inlineOnce2 (Inline.inline_once  true, nilmod)
+
 	    val nilmod = transform vararg (Vararg.optimize, nilmod)
 
+
+	    (* It might be a good idea to iterate inline (and possibly optimize) 
+	     * with the thresholds set to zero until the code reaches a fixpoint.
+	     * The idea would be to inline all functions called only once right 
+	     * off the bat.  This is more inline with Tarditi's thesis.  As it stands,
+	     * some functions only called once will not get inlined, or will not get
+	     * inlined until the last inline stage, because they are deeply curried.
+	     * Another alternative might be to have a special "inlineOnce" pass, since
+	     * the analysis could be much simpler.
+	     * -leaf
+	     *)
 	    val nilmod = transform inline1
-		                   (Inline.inline {sizeThreshold = 50, 
+		                   (Inline.inline {iterate = false,
+						   tinyThreshold = 10,
+						   sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
 
             val nilmod = transform reify1 (Reify.reify_mod, nilmod)
 
-	    val nilmod = transform specialize (Specialize.optimize, nilmod)
 
-	    (*val _ = transform walk (Walker.walk, nilmod)
-	    val _ = transform context_walk (Walker.context_walk, nilmod)
-	    val _ = transform bind_walk (Walker.bind_walk, nilmod)
-	    val _ = transform worst_walk (Walker.worst_walk, nilmod)*)
+	    val nilmod = transform hoist2 (Hoist.optimize, nilmod)
 
-	    val nilmod = transform hoist (Hoist.optimize, nilmod)
-
-	    val nilmod = transform optimize2
-				   (Optimize.optimize {doDead = true, 
-						       doProjection = SOME 50,
-						       doCse = !do_cse, 
-						       doUncurry = !do_uncurry},
-				   nilmod) 
+	    val nilmod = transform optimize3 (Optimize.optimize {doDead = true, 
+								 doProjection = SOME 50,
+								 doCse = !do_cse, 
+								 doUncurry = !do_uncurry},
+					      nilmod) 
 	    val nilmod = transform inline2 
-		                   (Inline.inline {sizeThreshold = 50, 
-						   occurThreshold = 5},
-				    nilmod)
-	    val nilmod = transform optimize3
-				   (Optimize.optimize {doDead = true, 
-						       doProjection = SOME 50,
-						       doCse = !do_cse, 
-						       doUncurry = !do_uncurry},
-				   nilmod) 
-	    val nilmod = transform inline3 
-		                   (Inline.inline {sizeThreshold = 50, 
+		                   (Inline.inline {iterate = false,
+						   tinyThreshold = 10,
+						   sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
 
-	    (* Optimizing after every inlining is a good thing.  
-	     * We could notice when the inliner failed to do anything
-	     * and not do this pass in that case.  This would be
-	     * especially true if the optimizer was actually idempotent
-	     * (which it tries to be).
-	     *)
 	    val nilmod = transform optimize4
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
 						       doCse = !do_cse, 
 						       doUncurry = !do_uncurry},
 				   nilmod) 
+
+	    val nilmod = transform specialize2 (Specialize.optimize, nilmod)
+
+	    val nilmod = transform inline3
+		                   (Inline.inline {iterate = true,
+						   tinyThreshold = 10,
+						   sizeThreshold = 50, 
+						   occurThreshold = 5},
+				    nilmod)
+
+	    (* Optimizing after every inlining is a good thing.  
+	     * We could notice when the inliner failed to do anything
+	     * and not do this pass in that case.  This would be
+	     * especially true if the optimizer were actually idempotent
+	     * (which it tries to be).
+	     * -leaf
+	     *)
+	    val nilmod = transform optimize5
+				   (Optimize.optimize {doDead = true, 
+						       doProjection = SOME 50,
+						       doCse = !do_cse, 
+						       doUncurry = !do_uncurry},
+				   nilmod) 
+
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
+
+	    (* We should consider experimenting with some optimizations
+	     * after closure conversion.  CSE and hoisting could definitely
+	     * be done, and dead-code elimination?  Other optimizations discussed
+	     * in Greg and Bob's paper?
+	     * -leaf
+	     *)
+
+(*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
 
 	in  nilmod
 	end

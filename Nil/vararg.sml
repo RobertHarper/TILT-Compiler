@@ -1,4 +1,4 @@
-(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs ListPair Prim *)
+(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs ListPair Prim Alpha *)
 
 (* Converting functions with either statically and dynamically known parameter types such that they take a single record
  * argument to use multiple arguments, as well as generating code to apply vararg/onearg at runtime
@@ -74,7 +74,12 @@ struct
 	    val vtrclist = [(funvar,TraceKnown TraceInfo.Trace,funtype)]
 	    val newfuntype = Prim_c(Vararg_c(Open,Partial),[Var_c domain_tvar, Var_c range_tvar])
 	    fun make_arm n = 
-		let val labels = Listops.map0count (fn n => generate_tuple_label(n+1)) n
+		let 
+		    (*XXX technically, this is wrong.  The function is expecting a record
+		     * with particular labels, and we pass it a tuple.  Since we never
+		     * actually typecheck applications of this, however.....
+		     *)
+		    val labels = Listops.map0count (fn n => generate_tuple_label(n+1)) n
 		    val primcon = Record_c labels
 		    val vklist = Listops.map0count (fn _ => (fresh_var(),Type_k)) n
 
@@ -228,7 +233,9 @@ struct
 	    STATE{ctxt=NilContext.insert_label(ctxt,l,v), count=count}
 	fun get_count(STATE{count,...}) = count
 	fun type_of(STATE{ctxt,...},e) = Normalize.type_of(ctxt,e)
-	fun reduce (STATE{ctxt,...}) (pred : con -> 'a option) (con : con) = Normalize.reduce_until(ctxt,pred,con)
+
+	fun reduce (STATE{ctxt,...}) pred c = Normalize.reduce_until(ctxt, pred, c)
+
 	fun reduce_hnf (STATE{ctxt,...}) c = Normalize.reduce_hnf(ctxt, c)
 	fun strip_arrow_norm (STATE{ctxt,...}) c = Normalize.strip_arrow_norm ctxt c
     end
@@ -261,29 +268,29 @@ struct
      * and arrows that take no type argument and having exactly one term argument.
      *)
 
-    datatype recordtype = NOT_RECORD | RECORD of label list * con list | DYNAMIC | NOT_TYPE
+    datatype recordtype = NOT_RECORD | RECORD of label list * con list | DYNAMIC 
 
+    (* Given an HNF constructor, return the appropriate abstraction of its type.
+     *)
     fun getrecord argc =
 	(case argc of
-	     Prim_c(Record_c labs, cons) => SOME(RECORD(labs, cons))
-	   | (Prim_c _) => SOME NOT_RECORD
-	   | (Mu_c _) => SOME NOT_TYPE
-	   | (AllArrow_c _) => SOME NOT_RECORD
-	   | (Crecord_c _) => SOME NOT_TYPE
-	   | (Closure_c _) => SOME NOT_TYPE
-	   | Proj_c(Mu_c _, _) => SOME NOT_RECORD
-	   | _ => NONE)
+	     Prim_c(Record_c labs,cons) => RECORD(labs, cons)
+	   | Prim_c _          => NOT_RECORD
+	   | AllArrow_c _      => NOT_RECORD
+	   | ExternArrow_c _   => NOT_RECORD
+	   | Coercion_c _      => NOT_RECORD
+	   | Proj_c(Mu_c _, _) => NOT_RECORD
+	   | _ => error "Function argument type is not a Type, or reduce_hnf lied about HNF")
 
     fun is_record state arg =
-	(case reduce state getrecord arg of (* reduce here will simplify the constructor until getrecord returns SOME _ or
-					     * no more reduction is possible
-					     *)
-	     Normalize.REDUCED rt => rt
-	   | Normalize.UNREDUCED c => (if (!debug) 
-					  then (print "is_record returning DYNAMIC with con = ";
-						Ppnil.pp_con c; print "\n")
-					else ();
-					DYNAMIC))
+	(case reduce_hnf state arg 
+	   of (false,_) => (if (!debug) 
+			      then (print "is_record returning DYNAMIC with con = ";
+				    Ppnil.pp_con arg; print "\n")
+			    else ();
+			    DYNAMIC)
+	    | (_,arg) => getrecord arg)
+
 
      (* Transform kinds, cons, and con bindings *)
 
@@ -366,8 +373,7 @@ struct
 	 in  (case (is_record state argc) of
 		 NOT_RECORD => nochange()
 	       | RECORD(ls,cs) => change(ls,cs)
-	       | DYNAMIC => Prim_c(Vararg_c(openness,effect),[cr argc,cnr resc])
-	       | NOT_TYPE => error "ill-formed arrow type")
+	       | DYNAMIC => Prim_c(Vararg_c(openness,effect),[cr argc,cnr resc]))
 	 end
 
       and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
@@ -458,116 +464,112 @@ struct
 			  tFormals,fFormals,eFormals,
 			  body,...},
 		 pvar) =
-	 let val arg as {openness,body_type,tFormals=tFa,eFormals=eFa,fFormals=fFa,...} = strip_arrow_norm state c
-	     val arrow = AllArrow_c arg
-	     fun folder ((v,e),subst) = let val v' = derived_var v
+	 let val arg as {openness,body_type,tFormals=tFa,eFormals=eFa,fFormals=fFa,...} = rename_arrow (strip_arrow_norm state c,tFormals)
+
+	     fun folder ((v,e),alpha) = let val v' = derived_var v
 	                                    val e' = NilRename.renameExp e
 					in  
 					    (Exp_b(v',TraceUnknown,e'), 
-					     NilSubst.E.addr(subst, v, Var_e v'))
+					     Alpha.rename(alpha, v, v'))
 					end
-	     val (extraBnds,subst) = foldl_acc folder (NilSubst.E.empty()) extras
+
+	     val (extraBnds,alpha) = 
+	       (case recursive 
+		  of NonRecursive => ([],Alpha.empty_context())
+		   | _ => foldl_acc folder (Alpha.empty_context()) extras)
+
 	     fun change(v,argc,labels,cons) = 
 		 let
-		     val body_type = NilRename.renameCon(do_con state body_type)
 		     val innerState = add_con(state,v,argc)
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
-
 		     val cons = map (fn c => NilRename.renameCon (do_con state c)) cons
 		     val vtrlist = map (fn v => (v, TraceUnknown)) vars
-
 		     val trs = map (fn _ => TraceUnknown) vars
 
-		     val newarrow = AllArrow_c{openness=openness,effect=effect,
-					       tFormals=[],fFormals=0w0,eFormals=cons,body_type=body_type}
-		     val newtvar = Name.fresh_named_var (Name.var2string funvar ^ "_type")
-		     val newbnd = Con_b(Compiletime, Con_cb(newtvar, newarrow))
+		     val body_type = NilRename.renameCon (do_con innerState body_type)
+
+		     val c = AllArrow_c{openness=openness,effect=effect,
+					tFormals=[],fFormals=0w0,eFormals=cons,body_type=body_type}
+
+		     val cvar   = Name.fresh_named_var (Name.var2string funvar ^ "_type")
+		     val cbnd = Con_b(Compiletime, Con_cb(cvar, c))
 
 		     val (recordBnds,_) = NilDefs.mk_record_with_gctag(labels,
 								       SOME trs,
 								       map NilRename.renameCon cons,
 								       map Var_e vars,
 								       SOME v)
-			 (* Create a record that collects the flattened arguments in the form the original function used.
-			  * Hopefully known projection optimizations will reduce projections from this record,
-			  * and then it will be removed by dead code checks.
-			  *)
+		     (* Create a record that collects the flattened arguments in the form the original function used.
+		      * Hopefully known projection optimizations will reduce projections from this record,
+		      * and then it will be removed by dead code checks.
+		      *)
 		     val body = do_exp innerState body
-		     val body = NilSubst.substExpInExp subst body
+		     val body = NilRename.alphaERenameExp alpha body
 		     val body = makeLetE Sequential (recordBnds @ extraBnds) body
-		 in  (SOME newbnd, ((funvar, Var_c newtvar),
-		      Function{effect=effect,recursive=recursive,
-			       tFormals=[],fFormals=[],eFormals=vtrlist,
-			       body=body}))
+		 in  (cbnd, ((funvar, Var_c cvar),
+			    Function{effect=effect,recursive=recursive,
+				     tFormals=[],fFormals=[],eFormals=vtrlist,
+				     body=body}))
 		 end
-	     fun default (isDyn, fvar) =
+	     fun default fvar =
 		 let 
-		     val (_,state') = do_vklist state (ListPair.map (fn (v, (_, k)) => (v, k)) (tFormals, tFa))
-
-		     val kindSubst = ListPair.foldl (fn (v, (v', _), subst) => NilSubst.C.addr(subst, v', Var_c v))
-			 (NilSubst.C.empty()) (tFormals, tFa)
-
-		     val (_,state') = do_vtrclist state' (ListPair.zip (eFormals, map (NilSubst.substConInCon kindSubst) eFa))
+  		     val (tFa,state') = do_vklist state tFa
+		     val eFormals = zip eFormals eFa
+		     val (eFormals,state') = do_vtrclist state' eFormals
 
 		     val state' = foldl (fn (v, state) => add_con(state, v, float64)) state' fFormals
+		     val body_type = do_con state' body_type
 
 		     val body = do_exp state' body
-		     val body = NilSubst.substExpInExp subst body
+		     val body = NilRename.alphaERenameExp alpha body
 		     val body = makeLetE Sequential extraBnds body
 
-		     val c =
-			  if isDyn then
-			      c
-			  else
-			      do_con state' c
-			 (*case c of
-			     AllArrow_c{effect, ...} =>
-				 let
-				     val (tFa,state) = do_vklist state tFa
-				     val (eForms,state) = do_vtrclist state (ListPair.zip (eFormals, eFa))
-				     val body_type = do_con state body_type
-				     val (eFormals,eFa) = ListPair.unzip eForms
-				 in
-				     AllArrow_c{openness = openness, effect = effect,
-						tFormals = tFa, eFormals = eFa, fFormals = fFa,
-						body_type = body_type}
-				 end
-			   | c => do_con state' c*)
-		 in  (NONE, ((fvar, c),
-		      Function{effect=effect,recursive=recursive,
-			       tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
-			       body=body}))
+		     val (eFormals,eFa) = unzip eFormals
+
+		     val c = 
+		       AllArrow_c{openness=openness,effect=effect,
+				  tFormals=tFa,fFormals=fFa,eFormals=eFa,body_type=body_type}
+		     val c = NilRename.renameCon c
+		     val cvar = Name.fresh_named_var (Name.var2string funvar ^ "_def_type")
+		     val cbnd = Con_b(Compiletime,Con_cb(cvar,c))
+		 in  (cbnd, ((fvar, Var_c cvar),
+			       Function{effect=effect,recursive=recursive,
+					tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
+					body=body}))
 		 end
 	 
 	 in  (case (tFormals,fFormals,eFormals,eFa) of
 		  ([],[],[(v,_)],[argc]) =>
 		      (case (is_record state argc) of
-			   NOT_RECORD => default (false, funvar)
+			   NOT_RECORD => default funvar
 			 | RECORD(ls,cs) => if ((length ls) <= get_count state)
 						then change(v,argc,ls,cs)
-					    else default (false, funvar)
-			 | DYNAMIC => default (true, pvar) (* Keep the old function, but give it a new name.
+					    else default funvar
+			 | DYNAMIC => default pvar)(* Keep the old function, but give it a new name.
 						    * The old name will be a varargification of the new one, supplied by
 						    * the getExtra function below.
 						    *)
-			 | NOT_TYPE => error "ill-formed lambda")
-		| _ => default (false, funvar))
+		| _ => default funvar)
 	 end
 
      (* Get extra binding creating a vararg version of the given function with var as the vararg'd name and pvar as the original,
       * if the function is eligible to be vararg'd.
-      *)	 
-     and getExtra state (var,c,Function{tFormals=[],fFormals=[],effect,...},pvar) =
+      *)
+
+     and getExtra state (var,c,Function{tFormals=[],fFormals=[],eFormals=[_],effect,...}, pvar) =
 	 (case strip_arrow_norm state c of
 	     {body_type,eFormals=[argc],...} =>
-		 (case (is_record state argc) of
-		      NOT_RECORD => NONE
-		    | RECORD _ => NONE
-		    | DYNAMIC => SOME((var, Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
-						  [do_con state argc,do_con state body_type],[Var_e pvar])),
-				      (Name.fresh_named_var (Name.var2string var ^ "_type"), effect, argc, body_type))
-		    | NOT_TYPE => error "ill-formed lambda type")
-	   | _ => NONE)
+	       (case (is_record state argc) of
+		  NOT_RECORD => NONE
+		| RECORD _ => NONE
+		| DYNAMIC => 
+		    let
+		      val mkvararg = 
+			Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
+			       [do_con state argc,do_con state body_type],[Var_e pvar])
+		    in SOME (var,mkvararg)
+		    end)
+	   | _ => error "Function type is not an arrow")
        | getExtra _ _ = NONE
 
      and do_app state (f,arg) =
@@ -600,20 +602,14 @@ struct
 		  Normalize.REDUCED arrowType =>
 		    (case arrowType of
 			 Transform(openness,effect,argc,resc) =>
-			 (case (is_record state argc) of
-			      NOT_RECORD => nochange
-			    | RECORD(ls,_) => change(ls)
-			    | DYNAMIC => dynamic(openness,effect,argc,resc)
-			    | NOT_TYPE => error "ill-formed application")
-		       | NoTransform _ =>
-			      (print "application in which function does not have mono arrow type: \n";
-			       Ppnil.pp_con con; print "\n";
-			       print "\nFunction: ";
-			       Ppnil.pp_exp f;
-			       print "\nParam: ";
-			       Ppnil.pp_exp arg;
-			       print "\n";
-			       error "application in which function does not have mono arrow type"))
+			     (case (is_record state argc) of
+				  NOT_RECORD => nochange
+				| RECORD(ls,_) => change(ls)
+				| DYNAMIC => dynamic(openness,effect,argc,resc))
+	               | NoTransform _ =>
+				  (print "application in which function does not have mono arrow type: \n";
+				   Ppnil.pp_con con; print "\n";
+				   error "application in which function does not have mono arrow type"))
 		| _ => (print "application in which function does not have arrow type: \n";
 			 Ppnil.pp_con con; print "\n";
 			 error "application in which function does not have arrow type"))
@@ -688,42 +684,19 @@ struct
 		| Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
 				   in  ([Con_b(p,cbnd)], state)
 				   end
-		| Fixopen_b vfset => 
-		       let val vflist = Sequence.toList vfset
-			   val varFunPvar = map (fn ((v,c),f) => (v,c,f,derived_var v)) vflist
+		| Fixopen_b vcflist => 
+		       let 
+			   val varFunPvar = map (fn ((v,c),f) => (v,c,f,derived_var v)) vcflist
+
+			   val extras = List.mapPartial (getExtra state) varFunPvar
 
 			   val state = foldl (fn ((v,c,f,_),s) => add_con(s,v,c))
 			       state varFunPvar
 
-			   val (varFunPvar', ftbnds, state, extras) =
-			       foldr (fn (pv as (v,c,f,v'), (pvs, ftbnds, state, extras)) =>
-				      case getExtra state pv of
-					  NONE => ((v,c,f,v')::pvs, ftbnds, state, extras)
-					| SOME (extra, (tv, effect, dom, ran)) =>
-					      let
-						  val dom = NilRename.renameCon (do_con state dom)
-						  val ran = NilRename.renameCon (do_con state ran)
-						  val arrow = AllArrow_c{effect = effect, openness = Open,
-									 tFormals = [], fFormals = 0w0,
-									 eFormals = [dom], body_type = ran}
-					      in
-						  ((v,Var_c tv,f,v')::pvs,
-						   Con_b(Runtime, Con_cb(tv, arrow)) :: ftbnds,
-						   add_equation(state, tv, arrow),
-						   extra::extras)
-					      end) ([], [], state, []) varFunPvar
-
-			   (*val extras = List.mapPartial (getExtra state) varFunPvar*)
-
-
-			   val (bnds, vflist) = foldr (fn (x, (bnds, vfs))  =>
-						       case do_fun (state, extras) x of
-							   (NONE, vf) => (bnds, vf::vfs)
-							 | (SOME bnd, vf) => (bnd::bnds, vf::vfs)) ([], []) varFunPvar'
-			   (*val vflist = map (do_fun (state, extras)) varFunPvar'*)
+			   val (bnds,vcflist) = unzip (map (do_fun (state, extras)) varFunPvar)
 
 			   val extraBnds = map (fn (v,e) => (Exp_b(v,TraceUnknown,NilRename.renameExp e))) extras
-		       in  (ftbnds @ bnds @ ((Fixopen_b(Sequence.fromList vflist))::extraBnds), state)
+		       in  (bnds @ ((Fixopen_b vcflist)::extraBnds), state)
 		       end
 		| Fixcode_b vfset => error "fixcode not handled"
 		| Fixclosure_b (recur,vclset) => error "fixclosure not handled")
@@ -752,5 +725,99 @@ struct
 			      error "bound variable reuse")
 	    in  result
 	    end
+
+	fun reduce_vararg (D,openness,effect,argc,resc,arg) = 
+	  let
+	    val res = 
+	      case Normalize.reduce_hnf (D,argc)
+		of (false,_) => NONE
+		 | (_,argc) => 
+		  SOME(case getrecord argc
+			 of NOT_RECORD => arg
+			  | RECORD(labels,cons) => 
+			   if ((length labels) <= flattenThreshold) then	    
+			     let 
+			       val vtrlist = List.map (fn c => (fresh_named_var "varg_local", TraceOps.con2trace c)) cons
+
+			       val (vars,trs) = unzip vtrlist
+
+			       val rvar = Name.fresh_named_var "rdcd_varg_arg"
+
+			       val (bnds,rcrd) = NilDefs.mk_record_with_gctag(labels,SOME trs,cons,map Var_e vars,SOME rvar)
+
+			       val avar = Name.fresh_named_var "rdcd_varg_app"
+			       val body = 
+				 NilUtil.makeLetE Sequential (bnds @ [Exp_b(avar,TraceOps.con2trace resc,App_e(Open, arg,[],[rcrd],[]))]) (Var_e avar)
+
+			       val funbnd = Function{effect=effect,recursive=NonRecursive,
+						     tFormals=[],eFormals=vtrlist,fFormals=[],
+						     body=body}
+			       val c = AllArrow_c{openness=Open,effect=Partial,
+						  tFormals=[],fFormals=0w0,
+						  eFormals=cons,
+						  body_type=resc} 
+			       val cvar = fresh_named_var "rdcd_varg_fn_type"
+			       val cbnd = Con_b(Compiletime,Con_cb(cvar,c))
+
+			       val newfunvar = fresh_named_var "rdcd_varg_fn"
+
+			       val bnd = Fixopen_b(Sequence.fromList[((newfunvar,Var_c cvar),funbnd)])
+			       val res = Let_e(Sequential,[cbnd,bnd],Var_e newfunvar)
+			     in  res
+			     end
+			   else arg)
+	  in res
+	  end
+
+	fun reduce_onearg (D,openness,effect,argc,resc,arg) = 
+	  let
+	    val res = 
+	      case Normalize.reduce_hnf (D,argc)
+		of (false,_) => NONE
+		 | (_,argc) => 
+		  SOME(case getrecord argc
+			 of NOT_RECORD => arg
+			  | RECORD(labels,cons) => 	    
+			   if ((length labels) <= flattenThreshold) then
+			     let 
+			       val argv = fresh_named_var "rdcd_1arg_arg"
+			       val argtr = TraceKnown TraceInfo.Trace
+			       val argtype = Prim_c(Record_c labels, cons)
+
+			       val trs = map TraceOps.con2trace cons
+			       val pvars = map (Name.fresh_named_var o Name.label2name) labels
+			       fun make_proj (v,l,tr) = Exp_b(v,tr,Prim_e(NilPrimOp(select l), [],[], [Var_e argv]))
+
+
+			       val pbnds = Listops.map3 make_proj (pvars,labels,trs)
+
+			       val projects = map Var_e pvars
+
+			       val avar = Name.fresh_named_var "rdcd_1arg_app"
+
+			       val bnds = pbnds@[Exp_b(avar,TraceOps.con2trace resc,App_e(Open, arg,[],projects,[]))]
+
+			       val body = Let_e (Sequential, bnds ,Var_e avar)
+
+			       val funbnd = Function{effect=effect,recursive=NonRecursive,
+						     tFormals=[],fFormals=[],eFormals=[(argv,argtr)],
+						     body=body}
+
+			       val c = AllArrow_c{openness=Open,effect=Partial,
+							  tFormals=[],eFormals=[argtype],fFormals=0w0,
+							  body_type=resc}
+
+			       val newfunvar = fresh_named_var "rdcd_1arg_fn"
+
+			       val cvar = fresh_named_var "rdcd_1arg_fn_type"
+			       val cbnd = Con_b(Compiletime,Con_cb(cvar,c))
+
+			       val bnd = Fixopen_b(Sequence.fromList[((newfunvar,Var_c cvar),funbnd)])
+			       val res = Let_e(Sequential,[cbnd,bnd],Var_e newfunvar)
+			     in  res
+			     end
+			   else arg)
+	  in res
+	  end
 
 end

@@ -100,10 +100,10 @@
 0103 [open]	word8 problems
 0104 [open]	hidden hidden name clash
 0105 [open]	overloading with words
-0106 [open]	internal Option failure
+0106 [closed]	internal Option failure
 0107 [closed]	tilt option failure
 0108 [open]	Parsing of infix(r) declarations is not correct.
-0109 [open]	listpair discrepancies
+0109 [closed]	listpair discrepancies
 0110 [open]	math discrepancies
 0111 [closed]	runtime error: failed assertion
 0112 [closed]	option exception
@@ -119,7 +119,7 @@
 0123 [open]	possible nontermination
 0124 [open]	flexible records
 0125 [open]	BUG in get_record
-0126 [open]	parsing identifiers incorrectly
+0126 [closed]	parsing identifiers incorrectly
 0127 [closed]	integer overflow discrepancy
 0128 [open]	discrepancy on arguments to datatypes
 0129 [open]	os exit status and textio

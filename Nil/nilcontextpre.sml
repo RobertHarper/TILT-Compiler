@@ -247,20 +247,6 @@ structure NilContextPre
 	counter = counter}
      end
 
-   fun insert_exp_pre (typeof : context*exp -> con) (ctx as {conmap,kindmap,varmap,counter}:context,var,exp:exp) :context = 
-     let
-       val _ = 
-	 if !debug then
-	   assert (locate "insert_exp_pre") []
-	 else ()
-       val cthunk = fn () => typeof(ctx,exp)
-       val c_entry = delay cthunk
-     in
-       {conmap = Vinsert (conmap, var, c_entry), 
-	kindmap = kindmap,
-	varmap = varmap,
-	counter = counter}
-     end
 
    fun insert_con_list (C:context,defs : (var * con) list) =
      List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
@@ -369,6 +355,7 @@ structure NilContextPre
 	varmap = varmap,
 	kindmap = Vinsert (kindmap, var, entry)}
      end
+
 
    (* Normal kind standardization: eliminate undecorated singletons from the kind
     * (though not necessarily from constructors contained in the kind).
@@ -625,6 +612,50 @@ structure NilContextPre
 
   fun insert_kind_list (C:context,vklist) = 
     foldl (fn ((v,k),C) => insert_kind (C,v,k)) C vklist
+
+
+   fun insert_exp_pre (typeof : context*exp -> con) (ctx as {conmap,kindmap,varmap,counter}:context,var,exp:exp) :context = 
+     let
+       val _ = 
+	 if !debug then
+	   assert (locate "insert_exp_pre") []
+	 else ()
+       val cthunk = fn () => typeof(ctx,exp)
+       val c_entry = delay cthunk
+     in
+       {conmap = Vinsert (conmap, var, c_entry), 
+	kindmap = kindmap,
+	varmap = varmap,
+	counter = counter}
+     end
+
+   fun insert_cbnd (ctxt:context,cbnd:conbnd) :context = 
+     (case cbnd of
+	Con_cb(v,c) => insert_equation(ctxt,v,c)
+      | Open_cb (v,vklist,c) => 
+	  let 
+	    val k = Arrow_k(Open,vklist,Single_k c)
+	  in  
+	    insert_kind(ctxt,v,k)
+	  end
+      | Code_cb (v,vklist,c) => 
+	  let 
+	    val k = Arrow_k(Code,vklist,Single_k c)
+	  in  
+	    insert_kind(ctxt,v,k)
+	  end)
+
+   fun insert_bnd_pre (typeof : context*exp -> con) (ctxt as {conmap,kindmap,varmap,counter}:context,bnd:bnd) :context = 
+     (case bnd of
+	Exp_b(v,_,e) => insert_exp_pre typeof (ctxt,v,e)
+      | Con_b(p,cbnd) => insert_cbnd (ctxt,cbnd)
+      | Fixopen_b vcfset =>
+        foldl (fn (((v,c),_),ctxt) => insert_con (ctxt, v, c)) ctxt vcfset
+      | Fixcode_b vcfset => 
+	foldl (fn (((v,c),_),ctxt) => insert_con (ctxt, v, c)) ctxt vcfset
+      | Fixclosure_b (_,vccset) => 
+	foldl (fn (((v,c),_),ctxt) => insert_con (ctxt, v, c)) ctxt vccset)
+
 
   (*PRE:  con :: T or W *)
   fun find_kind_equation (s as {kindmap,...}:context,con) : con option = 

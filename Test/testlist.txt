@@ -51,8 +51,8 @@ m0027	pass	Word sub checks.
 m0028	fail	[Bug #0103] Word stuff.
 m0029	fail	[Bug #0104] Word8 array
 m0030	fail	[Bug #0105] Word8 vector
-m0031	fail	[Bug #0091, #0106] List
-m0032	fail	[Bug #0109] List pair
+m0031	pass	[Bug #0091, #0106(closed)] List
+m0032	pass	[Bug #0109(closed)] List pair
 m0033	fail	[Bug #0110] Math
 m0034	pass	Local ref's.
 m0035	pass	Lists and ref's
@@ -234,7 +234,7 @@ m0073	pass	functors
 m0074	fail	[Bug #0125] general basis items
 m0075	pass	deep raise
 m0075	pass	deep raise
-m0076	fail	[Bug #0126] identifier syntax
+m0076	pass	[Bug #0126(closed)] identifier syntax
 m0077	pass	integer overflow
 m0078	pass	integers
 m0079	pass	list tabulation

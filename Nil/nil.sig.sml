@@ -94,6 +94,17 @@ sig
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						    a recursive type; bool indicates if it
 						    is really recursive *)
+
+    (* The AllArrow constructor combines the universal and arrow type constructors into a
+     * single type constructor.  This permits use to pass type and term constructors
+     * together in a single function call, instead of a double function call for
+     * every function.  
+     * We do not often use this however, since we wish to be able to hoist polymorphic 
+     * applications to the top-level, and thereby do all of the type computations once
+     * at the top-level (for ml anyway).  
+     * Currrently used only by the closure converter, and for equality functions and true
+     * functors.
+     *)
     | AllArrow_c of {openness : openness, (* open functions, code functions, and closures *)
 		     effect : effect,
 		     tFormals : (var * kind) list,
