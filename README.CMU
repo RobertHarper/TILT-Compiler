@@ -153,6 +153,9 @@ Creating a misc collection release
 	afs misc release /afs/.cs.cmu.edu/local/tilt/alpha_dux40
 	afs misc release /afs/.cs.cmu.edu/local/tilt/sun4_55
 
+  This copies the read/write volumes under /afs/.cs.cmu.edu to their
+  read-only counterparts under /afs/cs.cmu.edu.
+
 * Optionally, have depot install the collection on your test machines
   immediately (as opposed to overnight) by running
 
