@@ -396,8 +396,8 @@ struct
 	 in
 	     (case G.getopt (opts,args)
 		of G.Error msg =>
-		    raise fail (msg ^ "\nusage: " ^ CommandLine.name() ^
-				" [-fncES] testdir ...")
+		    fail (msg ^ "\nusage: " ^ CommandLine.name() ^
+			  " [-fncES] testdir ...")
 		 | G.Success (flags, args) =>
 			let
 			    fun has (flag : char) : bool =
@@ -411,7 +411,7 @@ struct
 
 			    val (fail,succeed) =
 			      (case (has #"F",has #"S")
-				 of (true,true) => raise fail "S and F flags are mutually exclusive"
+				 of (true,true) => fail "S and F flags are mutually exclusive"
 				  | (false,false) => (onfail,fn ()=>())
 				  | (true,false)  => (onfail,warn_on_success)
 				  | (false,true)  => (onfail o warn_on_failure,fn () => ()))
