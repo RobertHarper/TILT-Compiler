@@ -1,0 +1,24 @@
+
+(* =========================================================================
+ * Alpha.cm
+ * ========================================================================= *)
+
+group is
+
+../../Alpha/alpha.cm
+../../Backend/backend.cm
+../../MLRISC/MLRISC.cm
+../../smlnj-lib.cm
+
+../RtlToMLRISC.cm
+
+AlphaFloatAllocation.sml
+AlphaFloatConvention.sml
+AlphaIntegerAllocation.sml
+AlphaIntegerConvention.sml
+AlphaLink.sml
+AlphaMLRISCConstant.sml
+AlphaMLRISCPseudo.sml
+AlphaStackFrame.sml
+AlphaStandardConvention.sml
+
