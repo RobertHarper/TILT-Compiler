@@ -1,39 +1,47 @@
-(*$import Il PPPRIM PPIL ILUTIL ILCONTEXT ILSTATIC BASIS ILCONTEXTEQ Ast SourceMap *)
+signature LINKIL =
+sig
 
-signature LINKIL = 
-  sig
-      structure Ppprim : PPPRIM
-      structure Ppil : PPIL
-      structure IlUtil : ILUTIL
-      structure IlContext : ILCONTEXT
-      structure IlContextEq : ILCONTEXTEQ
-      structure IlStatic : ILSTATIC
+    type filepos = LinkParse.filepos
+    type label = Il.label
+    type module = Il.module
 
+    val LinkIlDiag : bool ref
+    val ShowHIL : bool ref
+    val ShowInterface : bool ref
+    val ShowContext : bool ref
+    val LinkIlDebug : bool ref
 
-      type sbnd = Il.sbnd
-      type context_entry = Il.context_entry
-      type context = Il.context
-      type filepos = SourceMap.charpos -> string * int * int
-      type module = Il.module
+    type context
+    type interface
+    type pinterface
 
-      val show_hil : bool ref		(* Show HIL from elaboration. *)
-      val show_hilcontext : bool ref	(* Show elaboration contexts. *)
+    val blastOutPinterface : Blaster.outstream -> pinterface -> unit
+    val blastInPinterface  : Blaster.instream -> pinterface
 
-      val empty_context : context
-      val tiltprim : context -> Il.partial_context
-      val plus_context : context * Il.partial_context -> Il.partial_context option * context
+    val parameters : pinterface -> Name.LabelSet.set
+    val slice : context * Name.LabelSet.set -> Name.LabelSet.set
 
-      (* The elab??? functions take
-      	   (1) the unit name for making unique labels
-	   (2) the context in which to elaborate
-	   (3) position info for (4), used for error messages
-	   (4) the objects to elaborate
-      *)
-      (* Compile interfaces to generate a new context. *)
-      val elab_specs           : string * context * filepos * Ast.spec list -> Il.partial_context option
-      (* Compile source files possibly with interface constraint to produce some HIL code. *)
-      val elab_dec             : string * context * filepos * Ast.dec -> module option
-      val elab_dec_constrained : string * context * filepos * Ast.dec * filepos * Ast.spec list -> module option
+    val empty : context
+    val add_unit : context * label * interface -> context
 
+    val instantiate  : context * pinterface -> interface option
 
-  end
+    (*
+	For eq and seal, both objects must have been created or
+	instantiated in a prefix of the given context.
+    *)
+    val eq   : context * interface * interface -> bool
+    val seal : context * module * interface -> module option
+
+    val unitlabel : string -> label
+    type imports = Il.labels
+
+    val tiltprim : context * label * imports -> module * pinterface
+
+    val elab_dec : context * label * imports * filepos * Ast.dec
+	-> (module * pinterface) option
+
+    val elab_specs : context * imports * filepos * Ast.spec list
+	-> pinterface option
+
+end
