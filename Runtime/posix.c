@@ -1,7 +1,10 @@
 #include <string.h>
 #include "general.h"
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/time.h>
+#include <sys/timeb.h>
+#include <sys/resource.h>
 #include <math.h>
 #include <sys/wait.h>
 #include <stdio.h>
@@ -1184,4 +1187,25 @@ void posix_io_fcntl_gfd()
 { 
   printf("POSIX function not defined at line %d\n", __LINE__);
   assert(0);
+}
+
+value_t til_selfusage()
+{
+  value_t fields[4];
+  int masks[4];
+  struct rusage rusage;
+  getrusage(RUSAGE_SELF, &rusage);
+  fields[0] = rusage.ru_utime.tv_sec;
+  fields[1] = rusage.ru_utime.tv_usec;
+  fields[2] = rusage.ru_stime.tv_sec;
+  fields[3] = rusage.ru_stime.tv_usec;
+  masks[0] = masks[1] = masks[2] = masks[3] = 0;
+  return alloc_record(fields, masks, 4);
+}
+
+value_t til_realtime()
+{
+  struct timeb tp;
+  ftime(&tp);
+  return alloc_intint(tp.time, tp.millitm);
 }

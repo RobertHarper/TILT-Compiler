@@ -1,3 +1,4 @@
+ # (0) Remember to be careful about the usage of $gp
  # (1) Assumes that the save area begins with 32 longs and then 32 doubles
  # (2) Assumes that the thread pointer is unmodified by call to gcFomrML
 		
@@ -30,8 +31,9 @@
  # r1 is skipped so the caller can use it as a temp register
  # r12 is skipped because it is the THREADPTR_REG
  # r26 is skipped because it is our return address
+ # r29 is skipped because it is the gp register which is needed by caller
  # r31 is skipped because it is the zero register
- # The called must take care to save r0, r1, and r26 manually
+ # The called must take care to save r0, r1, r26, r29 manually
  # ----------------------------------------------------------
 	.ent	save_regs
 	.frame $sp, 0, $26
@@ -66,7 +68,7 @@ save_regs:
  #	stq	$26, 208($0)		# skip return address register
 	stq	$27, 216($0)
 	stq	$28, 224($0)
-	stq	$29, 232($0)
+ #	stq	$29, 232($0)		# skip GP register
 	stq	$30, 240($0)
  #	stq	$31, 248($0)		# skip zero register
 	stt	$f0, 256($0)   
@@ -123,8 +125,8 @@ save_regs_ok:
  # The save area begins with the GP area and then the FP area.   
  #	
  # See the comment for save_regs for why these register are skipped:	
- # r0, r1, r12, r26, r31 are skipped
- # The called must take care to restore r0, r1, and r26 manually
+ # r0, r1, r12, r26, r29, r31 are skipped
+ # The called must take care to restore r0, r1, r26, r29 manually
  # ----------------------------------------------------------
 	.ent	load_regs
 	.frame $sp, 0, $26
@@ -159,7 +161,7 @@ load_regs:
  #	ldq	$26, 208($0)		# skip return address register
 	ldq	$27, 216($0)
 	ldq	$28, 224($0)
-	ldq	$29, 232($0)
+ #	ldq	$29, 232($0)		# skip gp
 	ldq	$30, 240($0)
  #	ldq	$31, 248($0)		# skip zero register
 	ldt	$f0, 256($0)   
@@ -220,25 +222,26 @@ load_regs_ok:
 	.prologue 0
 GCFromML:	
 .set noat
-	stq	$0,  MLsaveregs_disp(THREADPTR_REG)	# save $0, $1, $26 manually
-	stq	$1,  MLsaveregs_disp+8(THREADPTR_REG)	# save $0, $1, $26 manually	
+	stq	$0,  MLsaveregs_disp(THREADPTR_REG)	# save $0, $1, $26, $29 manually
+	stq	$1,  MLsaveregs_disp+8(THREADPTR_REG)	
 	stq	$26, RA_DISP(THREADPTR_REG)
+	stq	$29, MLsaveregs_disp+232(THREADPTR_REG)
+	br	$gp, GCFromMLgetgp1
+GCFromMLgetgp1:	
+	ldgp	$gp, 0($gp)				# compute self-gp for save_regs/gc
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer
 	bsr	save_regs
 	subl	$at, ALLOCPTR_REG, $at			# compute how many bytes requested
 	stl	$at, requestInfo_disp(THREADPTR_REG)	# record bytes needed
 	lda	$at, GCRequestFromML($31)
 	stl	$at, request_disp(THREADPTR_REG)	# record that this is an MLtoGC request
-	br	$gp, GCFromMLgetgp
-GCFromMLgetgp:	
-	ldgp	$gp, 0($gp)				# compute correct gp for self
 	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
 	ldl	$sp, ($at)				# run on system thread stack
 	mov	THREADPTR_REG, $16			# pass user thread pointer as arg
 	jsr	$26, gc					
 	br	$gp, GCFromMLgetgp2
 GCFromMLgetgp2:	
-	ldgp	$gp, 0($gp)				# compute correct gp for self
+	ldgp	$gp, 0($gp)				# compute self-gp for abort
 	jsr	abort
 	nop
 .set at
@@ -251,6 +254,7 @@ GCFromMLgetgp2:
 	.ent	returnFromGCFromML
 .set noat
 returnFromGCFromML:	
+	ldgp	$gp, 0($27)				# compute self-gp for load_regs
 	mov	CFIRSTARG_REG, THREADPTR_REG		# restore THREADPTR_REG
 	stq	$31, notinml_disp(THREADPTR_REG)	# set notInML to zero
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
@@ -258,6 +262,7 @@ returnFromGCFromML:
 	ldq	$1, MLsaveregs_disp+8(THREADPTR_REG)	# restore r1 temp
 	ldq	$0, MLsaveregs_disp+0(THREADPTR_REG)	# restore r0 which was used as arg to load_regs
 	ldq	$26, MLsaveregs_disp+RA_DISP(THREADPTR_REG)	# restore r26 return address
+	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG)		# restore r29/gp return address	
 	ret	$31, ($26), 1
 	jsr	abort
 	nop
@@ -278,6 +283,10 @@ GCFromC:
 	stq	$0 , Csaveregs_disp(THREADPTR_REG)		# we save $0, $1, $26 manually 
 	stq	$1 , Csaveregs_disp+8(THREADPTR_REG)	
 	stq	$26, Csaveregs_disp + RA_DISP(THREADPTR_REG)
+	stq	$29, Csaveregs_disp+232(THREADPTR_REG)
+	br	$gp, GCFromCgetgp1
+GCFromCgetgp1:	
+	ldgp	$gp, 0($gp)					# compute self-gp for save_regs/gc
 	addq	THREADPTR_REG, Csaveregs_disp, $0		# use C save area of thread pointer
 	bsr	save_regs					
 	stq	CSECONDARG_REG, requestInfo_disp(THREADPTR_REG)	# record bytes needed
@@ -292,7 +301,7 @@ MinorGCFromC:
 	ldq	ASMTMP_REG, sysThread_disp(THREADPTR_REG)	# must use temp so SP always correct
 	ldq	$sp, (ASMTMP_REG)				# run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			# pass user thread pointer as arg
-	bsr	gc						# call runtime GC
+	jsr	gc						# call runtime GC
 	jsr	abort
 	nop
 .set at
@@ -306,6 +315,7 @@ MinorGCFromC:
 	.prologue
 returnFromGCFromC:
 .set noat
+	ldgp	$gp, 0($27)				# compute self-gp for load_regs
 	mov	CFIRSTARG_REG, THREADPTR_REG		# restore THREADPTR_REG
 							# don't change notInML
 	addq	THREADPTR_REG, Csaveregs_disp, $0	# use C save area of thread pointer structure
@@ -314,13 +324,12 @@ returnFromGCFromC:
 	ldq	$26, Csaveregs_disp+RA_DISP(THREADPTR_REG) # restore return address to C code
 	ldq	$1, Csaveregs_disp+8(THREADPTR_REG)	# restore $1 - temp not saved by load_regs
 							# C functions don't touch THREADPTR_REG
+	ldq	$gp, Csaveregs_disp+232(THREADPTR_REG)		# restore r29/gp return address	
 	ret	$31, ($26), 1
 	jsr	abort
 	nop	
 .set at
 	.end returnFromGCFromC
-
-
 
 
 
@@ -358,6 +367,10 @@ save_regs_MLtoC:
 	addq	$26, 8, $26				# we want C to return to load_regs_MLtoC
 							# and NOT to the C call again so we skip
 							# 2 instructions (jsr and ldgp)
+	stq	$29, MLsaveregs_disp+232(THREADPTR_REG)
+	br	$gp, save_regs_MLtoC_getgp
+save_regs_MLtoC_getgp:	
+	ldgp	$gp, 0($gp)				# compute self-gp for save_regs/gc
 	stq	$26 , MLsaveregs_disp+RA_DISP(THREADPTR_REG)	# save_regs does not save o7
 	jsr	save_regs
 	mov	$1, $26					# restore return address
@@ -365,6 +378,7 @@ save_regs_MLtoC:
 	stq	$1, notinml_disp(THREADPTR_REG)		# set notInML to one
 	ldq	$1, 8($0)				# restore $1 which we use as temp
 	ldq	$0, MLsaveregs_disp(THREADPTR_REG)	# restore $0 which was used as arg to save_regs
+	ldq	$29, MLsaveregs_disp+232(THREADPTR_REG) # restore gp to caller's version
 	ret	$31, ($26), 1
 	jsr	abort
         .end save_regs_MLtoC
@@ -379,6 +393,9 @@ save_regs_MLtoC:
 	.frame	$sp, 0, $26
 	.prologue
 load_regs_MLtoC:
+	br	$gp, load_regs_MLtoC_getgp
+load_regs_MLtoC_getgp:	
+	ldgp	$gp, 0($gp)				# compute self-gp for save_regs/gc
 							# THREADPTR_REG is already correct
 	stq	$31, notinml_disp(THREADPTR_REG)	# set notInML to zero
 	stq	$0, MLsaveregs_disp(THREADPTR_REG)	# overwrite GP result register
@@ -389,6 +406,7 @@ load_regs_MLtoC:
 	mov	$1, $26					# restore return address
 	ldq	$1, 8($0)				# restore $1 which we use as temp
 	ldq	$0, MLsaveregs_disp(THREADPTR_REG) 	# restore $0 which was used as arg to load_regs
+	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG) 	# restore $gp which was used locally
 	ret	$31, ($26), 1
 	jsr	abort
         .end load_regs_MLtoC

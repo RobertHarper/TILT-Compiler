@@ -240,6 +240,7 @@ GCFromML:
 	.proc	07
 	.align  4
 returnFromGCFromML:
+	flushw	
 	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
 	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure

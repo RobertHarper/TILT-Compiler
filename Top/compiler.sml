@@ -107,7 +107,7 @@ structure Til :> COMPILER =
 		let val as_command = as_path ^ " " ^ (as_flag()) ^ " -o " ^ o_file 
 		                       ^ " " ^ s_file
 		    val rm_command = "rm " ^ s_file
-		    val compress_command = "gzip -f " ^ s_file
+		    val compress_command = "gzip -q -f " ^ s_file
 		    val command = 
 			(case (!keep_asm, !compress_asm) of
 			     (false, _) => as_command ^ "; " ^ rm_command

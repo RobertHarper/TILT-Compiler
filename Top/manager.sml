@@ -1185,7 +1185,13 @@ struct
 		end
 	    fun makeExe(exe, units) = 
 		let val _ = showTime "Start linking" 
-		    val exe = if exe = "" then (List.last units) ^ ".exe" else exe
+		    val exe = if exe = "" 
+				  then (List.last units) ^ 
+				      (case Til.getTargetPlatform() of
+					   Til.TIL_ALPHA => ".alpha.exe" 
+					 | Til.TIL_SPARC => ".sparc.exe" 
+					 | _ => error "MLRISC unsupported")
+			      else exe
 		    val unit_set = 
 		    List.foldl 
 		    (fn (next, set) => 

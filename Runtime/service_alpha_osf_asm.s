@@ -147,7 +147,7 @@ Yield:
 .set noat
 	br	$gp, Yield_getgp
 Yield_getgp:	
-	ldgp	$gp, 0($gp)			# compute correct gp for self	
+	ldgp	$gp, 0($gp)			# compute correct gp for self to we can jsr	
 	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
 	ldl	$sp, ($at)		        # run on system thread stack
 	jsr	$26, YieldRest			# no need to restore $gp after this call
