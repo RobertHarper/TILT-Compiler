@@ -8,7 +8,7 @@ I don't know what that means and there is nothing recursive in the types
 below.  Can you clarify?***}, with the addition of interfaces. Interfaces
 specify the exports of a module (and their types), allowing us to compile
 code which uses the module before it has been implemented. Interfaces
-play a role in cutoff recompilation and in our parallel make facility.
+play a role in cutoff recompilations and in our parallel make facility.
 
 An interface file contains a list of declarations as they might appear
 in a signature ('spec' in the Definition; p14).  An example:
@@ -91,7 +91,7 @@ a project description might look like:
 		  includes=[QUEUE]
 
 Note that module QUEUE is needed to elaborate the source file queue.sml
-and the interfaec file queue.int so its listed as an import and an
+and the interface file queue.int so its listed as an import and an
 include.
 
 Steve Weeks asked that there be an easy way to go from a project
