@@ -104,17 +104,14 @@ struct
     val flush = "FLUSH"
     val request = "REQUEST"
 
-    fun prints s = (print "\n"; app (fn s => print (s ^ " &&& ")) s; print "\n")
-
     fun changeFiles f (platform::unit::absBase::absImportBases) =
 	(platform::unit::(f absBase)::(map f absImportBases))
       | changeFiles f _ = error "wrong number of words - bad msg"
 	
     fun jobToWords job = changeFiles (Dirs.encode (Dirs.getDirs())) job
     fun wordsToJob words = 
-         let val _ = prints words
+         let 
              val result = changeFiles (Dirs.decode (Dirs.getDirs())) words
-             val _ = prints result
          in
              result
          end
@@ -125,8 +122,7 @@ struct
       | messageToWords (ACK_OBJECT job) = ack_object :: (jobToWords job)
       | messageToWords (ACK_ERROR job) = ack_error :: (jobToWords job)
       | messageToWords (FLUSH job) = flush :: job
-      | messageToWords (REQUEST job) = (print "job = "; prints job;
-                                        request :: (jobToWords job))
+      | messageToWords (REQUEST job) = request :: (jobToWords job)
     fun wordsToMessage [] = error "no words - bad msg"
       | wordsToMessage (first::rest) = 
 	if (first = ready andalso null rest)
@@ -989,6 +985,7 @@ struct
 	(* readAssociation : string -> (string * string * bool) list *)
 	fun readAssociation mapfile = 
 	    let
+                val _ = chat ("Reading mapfile " ^ mapfile)
 		val dir = Dirs.dir mapfile
 		val findMapfile = Dirs.accessPath (mapfilePath dir, [OS.FileSys.A_READ])
 		fun relative file = Dirs.relative (dir, file)
@@ -1032,8 +1029,10 @@ struct
 		val _ = reset_graph()
 		val association = readAssociation mapFile
 		fun mapper (n, (unitname, filebase, isTarg)) = 
-		    let val nodeWeight = Cache.size(base2sml filebase)
+		    let 
 			val absBase = OS.Path.mkAbsolute(filebase, OS.FileSys.getDir())
+                        val _ = (print ("unitname = " ^ unitname ^ "\nfilebase = " ^ filebase ^ "\nabsBase = " ^ absBase ^ "\n"))
+                        val nodeWeight = Cache.size(base2sml filebase)
 			val info = 
 			    {position = n,
 			     relBase = filebase,
@@ -1172,6 +1171,7 @@ struct
 				| Til.TIL_SPARC => "solaris"
 				| _ => error "MLRISC not supported"
 	    in  showSlave (Comm.destination chan); 
+	        print "\nREQUEST = ";
 		Comm.send (chan, Comm.REQUEST (platform::msg))
 	    end
 	(* Kill active slave channels to restart and send flush slave's file caches *)

@@ -6,6 +6,14 @@ struct
     (* error : string -> 'a *)
     val error = fn s => Util.error "dirs.sml" s
 	
+    val fixslash =
+        if (Platform.platform () = Platform.NT) then
+          (String.implode o
+           (map (fn c => if c = #"/" then #"\\" else c))
+           o String.explode)
+        else
+           fn (s : string) => s
+
     (* dir : string -> string *)
     fun dir s =
 	if (Platform.platform() = Platform.NT) then
@@ -28,7 +36,12 @@ struct
 			    then OS.Path.joinDirFile {dir=dir, file=file}
 			else file
 	in
-	    OS.Path.mkCanonical file'
+            (* need fixslash.  Under Windows, a path with mixed slashes like
+                  foo/bar\..\baz
+               canonicalizes into baz rather than foo\baz because
+               unlike the actual OS, OS.Path.mkCanonical doesn't realize
+               that / is a path separator. *)
+	    OS.Path.mkCanonical (fixslash file')
 	end
 
     (* accessPath : string list * OS.FileSys.access_mode list -> string -> string option *)
