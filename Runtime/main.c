@@ -270,6 +270,8 @@ void process_option(int argc, char **argv)
 	case 1 : printf("int = %d", *(int *)(table[i].item)); break;
 	case 2 : printf("long = %d", *(long *)(table[i].item)); break;
 	case 3 : printf("double = %lf", *(double *)(table[i].item)); break;
+        case 4 : printf("byte = %d", *(int *)(table[i].item)); break;
+        case 5 : printf("string option = %s", *(char**)(table[i].item) ? *(char**)(table[i].item) : "NONE"); break;
 	default : printf("Unknown type!!!", table[i].name); assert(0);
       }
       printf(" -- %s\n", table[i].description);
