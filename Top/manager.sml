@@ -790,8 +790,9 @@ struct
 	    val srcs = if srcs = [] 
 			   then list_units()
 		       else srcs
+	    val default_exe = (List.last srcs) ^ ".exe"
 	in  (case (cs, rs, os) of
-		    (false, NONE, NONE) =>    compileThem(NONE, SOME "a.out", srcs)
+		    (false, NONE, NONE) =>    compileThem(NONE, SOME default_exe, srcs)
 		  | (false, SOME f, NONE) =>  compileThem(SOME f, NONE, srcs)
 		  | (false, NONE, SOME f) =>  compileThem(NONE, SOME f, srcs)
 		  | (false, SOME f, SOME g)=> compileThem(SOME f, SOME g, srcs)
