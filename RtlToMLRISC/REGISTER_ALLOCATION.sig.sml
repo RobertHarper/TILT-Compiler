@@ -8,23 +8,28 @@ signature REGISTER_ALLOCATION = sig
   (* -- types -------------------------------------------------------------- *)
 
   (*
-   * Maps register ids to spill/reload offsets.
+   * Identifies a register.
    *)
-  type spillMap
+  type id
+
+  (*
+   * Designates a location on the stack.
+   *)
+  type offset
 
   (*
    * An MLRISC cluster type.
    *)
   type cluster
 
-  (* -- values ------------------------------------------------------------- *)
+  (* -- functions ---------------------------------------------------------- *)
 
   (*
-   * The spill/reload map for pseudo-registers.
+   * Set the spill and reload lookup functions for the next cluster to have
+   * registers allocated to it.
+   * lookupSpill, lookupReload -> the spill and reload lookup functions
    *)
-  val spillMap: spillMap
-
-  (* -- functions ---------------------------------------------------------- *)
+  val setLookup: (id -> offset) * (id -> offset) -> unit
 
   (*
    * Allocate physical registers to the pseudo-registers of a given cluster
