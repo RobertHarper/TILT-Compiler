@@ -437,8 +437,9 @@ structure PpnilHtml :> PPNIL =
 
     fun pp_module (MODULE{bnds,imports,exports}) = 
 	let 
-	    fun pp_importentry (ImportValue (l,v,c)) = 
-		Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_con c]
+	    fun pp_importentry (ImportValue (l,v,nt,c)) = 
+		Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", 
+		     pp_trace nt, String " : ", pp_con c]
 	      |  pp_importentry (ImportType (l,v,k)) = 
 		Hbox[pp_label l, String " > ", pp_bound_var v, String " :: ", pp_kind k]
 	    fun pp_exportentry (ExportValue (l,v)) = 

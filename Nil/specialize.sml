@@ -281,7 +281,7 @@ struct
 		   | Fixcode_b _ => error "sorry: Fixcode not handled"
 		   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
 
-	fun scan_import(ImportValue(l,v,c),state) : state = state
+	fun scan_import(ImportValue _,state) : state = state
 	  | scan_import(ImportType(l,v,k),state)  = add_var(state,v,NONE)
 
 	fun scan_export state (ExportValue(l,v)) : unit = ()

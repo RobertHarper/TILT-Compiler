@@ -828,7 +828,7 @@ struct
 
 	  (* collect the 'top level' var names *)
 	  fun split ([],cvs,ectx) = (cvs,ectx)
-	    | split (ImportValue(l,v,c)::rest,cvs,ectx) = 
+	    | split (ImportValue(l,v,_,c)::rest,cvs,ectx) = 
 	      split(rest,Set.add(cvs,v),Map.insert(ectx,v,con2eff c))
 	    | split (ImportType(l,v,k)::rest,cvs,ectx) = 
 		    split(rest,add(cvs,v), ectx)

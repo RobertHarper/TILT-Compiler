@@ -1585,7 +1585,7 @@ struct
 	   val state = initial_state top_fid
 
 	   (* Scan module for free variables *)
-	   fun import_folder (ImportValue(l,v,tr,c),state) = 
+	   fun import_folder (ImportValue(l,v,_,c),state) = 
 	       let val f = c_find_fv (state,empty_frees) c
 	       in  add_gboundevar(state,v,c)
 	       end
@@ -1625,9 +1625,9 @@ struct
 	   (* Rewrite module *)
 	   val initial_state = new_state top_fid
 
-	   fun import_mapper (ImportValue(l,v,c)) =
+	   fun import_mapper (ImportValue(l,v,nt,c)) =
 	       let val c = c_rewrite initial_state c
-	       in  ImportValue(l,v,c)
+	       in  ImportValue(l,v,nt,c)
 	       end
 	     | import_mapper (ImportType(l,v,k)) =
 	       let val k = k_rewrite initial_state k
