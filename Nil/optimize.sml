@@ -300,8 +300,15 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	  fun find_availE(STATE{avail,...},e) = 
 	      if (!do_cse) then ExpTable.Expmap.find(#1 avail,e) else NONE
+
+          fun anormal_valuable (ctxt, App_e(_,Var_e v,_,_,_)) = 
+	      (case NilContext.find_con (ctxt,v) of
+		   AllArrow_c{effect=Total,...} => true
+                 | _ => false)
+            | anormal_valuable (ctxt, e) = not (NilUtil.effect e)
+
 	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail},e,v) = 
-	      if (!do_cse andalso (not (NilUtil.effect e)))
+	      if (!do_cse andalso anormal_valuable(equation,e))
 		  then STATE{mapping=mapping,current=current,
 			     curry_processed = curry_processed,
 			     equation=equation,
@@ -1133,7 +1140,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					     | SOME v' => let val _ = use_var(state',v')
 							  in  Var_e v'
 							  end)
-				      val eff = (NilUtil.effect e) 
+				      val eff = not (anormal_valuable(get_env(state),e))
 				      val (effect,alias) = 
 					  (case e of
 					       
