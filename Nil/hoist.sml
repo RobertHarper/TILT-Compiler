@@ -1,5 +1,18 @@
 (*$import Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util TraceInfo NilDefs *)
 
+(* Purpose:  
+     (1) Tries to lift computations as early as possible in the program,
+         (to improve the possibilities for CSE), without causing the
+         program to do too much extra work.
+
+     (2) Because this phase is computing the valuability of each
+         subexpression (to see whether it's safe to move), we take
+         advantage of this information to mark functions as total 
+         when their bodies are valuable, even if the elaborator
+	 originally marked them as partial because they weren't
+	 constructors or built-in equality functions.
+*)
+
 (* Assumptions:
 
  * Assumes no duplicate variables in program.
@@ -180,6 +193,11 @@ struct
      type lambda.  For SML, this effectively lets us do all the
      required type computations "first" and then just refer to
      closures later [see optimal type lifting, etc.].
+
+     [This last claim isn't quite true because the phase-splitter
+     is currently implementing polymorphic recursive functions with
+     polymorphic recursion.  If this "optimization" (?) were turned
+     off, the claim would hold.]
      ************************************************************************)
 
     type level     = int
@@ -1176,7 +1194,22 @@ struct
 	    (* Inside the recursion we cannot treat these functions
                as total, even if their bodies are lambdas.  Otherwise
                we might hoist applications of these functions to the
-               top of the function body, introducing an infinite loop. *)
+               top of the function body, introducing an infinite loop.
+
+               E.g., turning
+
+                    f = /\t. \x:t.  f[t](x)
+
+               into
+
+                    f = /\t. let f' = f[t] in \x:t.  f'(x)
+
+               would be bad because the function would go into
+               an infinite loop as soon as it was instantiated,
+               rather than once an argument is applied.  Similar
+               problems can occur with mutually-recursive 
+               polymorphic-recursive functions.
+             *)
 	    val partial_effs = map (fn _ => UNKNOWN_EFF) functions
             val env = bindsEff(env, vars, partial_effs)
 
@@ -1412,7 +1445,7 @@ struct
 	  (* The effect annotation on the function may have been
 	     overly conservative, saying Partial where the function
              is really Total.  The effect is always sound, so if it
-	     sead Total it's still going to be Total. (Hoisting ought
+	     said Total it's still going to be Total. (Hoisting ought
 	     not change valuability).  However, our estimation of
 	     valuability is also sound, so if it says the body is
 	     valuable then this is also correct regardless of the
