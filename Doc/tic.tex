@@ -1,48 +1,54 @@
-\documentclass[12pt,twoside]{article}
+\documentclass[twoside]{article}
 \usepackage{fullpage, latexsym, code}
 \include{mymac}
 
 \begin{document}
 \title{The Design of the TILT Compiler for SML}
-\author{Perry Cheng\and Robert Harper\and 
-        Leaf Petersen\and Christopher Stone}
+\author{P.~Cheng\and R.~Harper\and 
+        G.~Morrisett\and L.~Petersen\and C.~Stone}
 \date{\today}
+\maketitle
 
 \section{The Structure of TILT}
 
-The TILT compiler consists of 3 main phases which we will call the
-front end, the middle end, and the back end.  The front end, also
-called the elaborator, is responsible for type-checking the source ML
-program and converts the program to HIL or high-intermediate language.
-The HIL program is then phase-split to remove modules and signatures,
-resulting in a MIL (middle-intermediate-language) program.  MIL
-programs are optimized and closure-converted before being converted to
-RTL.  Until the translation to RTL, the program remains explicitly
-typed.  In the back end, RTL is then converted to a machine-specific
-assembly program.  At this time, register allocation and stack layout
-is determined.  The result is an assembly file which is sent to the
-system assembler, producing an object file that is linked with the
-runtime.
+The TILT compiler consists of 3 main phases: the front end, the middle
+end, and the back end.  The front end, also called the elaborator, is
+responsible for type-checking the source ML program and converting the
+program into our high-level intermediate language (HIL); the HIL can
+be considered an explicitly typed, stripped-down version of SML.  Code
+is then converted via a transformation called phase-splitting which
+removes modules and signatures; this yields a program in the mid-level
+intermediate language (MIL).  Optimization and closure conversion are
+implemented as transformations mapping MIL code to MIL code; we are
+able to typecheck the program throughout the process, even after
+closure conversion.  Finally, we convert the program to a RTL
+pseudo-assembly program, which the back end immediately translates to
+register-allocated machine-specific assembly code.  We currently use
+the system asembler to produce object files linkable with the runtime.
 
 \section{Front End}
 
+The specification of the HIL and the elaborator have been
+discussed elsewhere~\cite{HS:milnervolume, HS:techreport}.
+We here only give a high-level overview.
+
 \subsection{High-Level Intermediate Language}
 
-HIL is a strongly-typed language with expressions, types, kinds,
-signatures, and modules.  The elaborator type checks an ML program and
-generates a fully-typed HIL program.  During elaboration, we compile
-datatype, patterns, and polymorphism to the more primitive constructs
-of HIL.  Equality types, coercions, and hidden types are made explicit
-in HIL as well.
+The HIL is an explicitly typed language containing both 
+core and module-level parts.  The syntactic classes
+include expressions, constructors (types, record of types,
+and functions from types to types), kinds, modules, and signatures.
+Expressions are classified by types, and constructors are classified
+by kinds.  Similarly, modules are classified by signatures.
+
+Like SML, the HIL has first-class functions, exceptions, references,
+and a module system.  Unlike SML, there is no polymorphism or
+pattern-matching.  Rather than built-in datatypes, the HIL has generic
+recursive type constructors and sum types.
 
 \subsection{Elaboration}
 
-
-
 \subsubsection{Highlights}
-
-The specification of the elaborator (and the HIL) have been
-discussed elsewhere~\cite{HS:milnervolume, HS:techreport}.
 The major jobs of the elaborator include:
 
 \begin{itemize}
@@ -116,11 +122,14 @@ their types.
 
 \subsubsection{Implementation Issues}
 
-Throughout elaboration, types are inferred using a standard
-unification algorithm.  To achieve type inference for ML, three type
-constructs (type meta-variable, flexible record types, and overloaded
-types) and one term constrct (overloaded expression) were added to
-HIL.
+\begin{itemize}
+
+\item \textbf{Type inference. } [This section is fairly standard and
+should probably be omitted.]  Throughout elaboration, types are
+inferred using a standard unification algorithm.  To achieve type
+inference for ML, three type constructs (type meta-variable, flexible
+record types, and overloaded types) and one term constrct (overloaded
+expression) were added to HIL.
 
 Whenever we encounter a variable binding without an explicit type, we
 create a new type meta-variable to stand for the unknown type.  For a
@@ -158,6 +167,7 @@ the unknown type and an equality function at that type.  The
 translation of an ML polymorphic value is a HIL module which takes a
 structure containing types and equality functions.
 
+\item \textbf{Representation of Contexts. }
 When a signature is added to the translation context, the signature is
 "selfifed" with respect to the path that the signature describes.
 This permits the classifier of the translations of paths to be
@@ -174,20 +184,22 @@ normalization will not enter a loop.
 
 When a structure path is locally bound (just inside a let or local),
 the bound variable becomes an alias.  Occurrences of that variable will
-be replaced by the path.  This may be irrelevant given the pre-projection
-performed in phase-splitting.
+be replaced by the path.  [This may be irrelevant given the pre-projection
+performed in phase-splitting.]
 
 Given a label, the context normally returns a path and a classifier.
 Sometimes, an expression rather than a path is returned.  This permits
 primitives and datatype constructors to be inlined.  This may be extended
 to inline expressions, types, and modules.
 
+\item \textbf{Beta Reduction. }
 Whenever there is an application in the ML code, the translation is
 reduced if the function is a lambda.  If the argument is a variable,
 the varible is substituted into body; otherwise, the argument is
 let-bound around the body.  In conjunction with the inlining, this
 will get rid of many small functions and their calls.
 
+\item \textbf{Primitives. }
 The HIL datatype also contains eta-expanded primitives (primitives
 that are applied only to their type arguments) in addition to
 fully-applied primitives.  This theoretically permits only one copy of
@@ -199,6 +211,7 @@ Since most primitives in ML are imediately applied,
 their translation becomes applications of eta-expanded primitives 
 which are immediately reduced by beta-reduction.
 
+\item \textbf{Differences from the Specification. }
 There are other minor differences from the "Tech Report."  For
 efficiency reasons, "let" is not a derived form.  Cases analysis on
 exception tags are n-ary.  Pattern compilation is different.  (No
@@ -208,6 +221,7 @@ Polymorphic arguments are compiled to be a flat structure taking types
 and equality functions rather than a list of strucutres each
 containing one type and possibly one equality function.
 
+\end{itemize}
 
 \section{Middle End}
 
@@ -218,10 +232,10 @@ polymorphic lambda calculus.  In contrast to the HIL, polymorphism is
 directly supported but there are no module constructs.  
 
 The kind structure is rather complex, and has a subkinding
-relation.  All types classifying values have kind $\mathsf{T}$, but
+relation.  All types classifying values have kind \cd{T}, but
 all types classifying values which fit in one machine word
 (for TIL, everything except unboxed floating-point values) have
-the more-specific kind $\mathsf{W}$.  Furthermore, we allow
+the more-specific kind \cd{W}.  Furthermore, we allow
 still more-precise \textit{singleton kinds}~\cite{???}, 
 the kind of types equivalent to a particular type.
 For technical reasons, we restrict singleton kinds to
@@ -292,33 +306,37 @@ when boxing and unboxing should occur.
 \subsubsection{Representation of sums}
 
 It is very important to optimize the representation of datatypes.
-[Give an example? \cd{list}?]
+[Explain what would happen to \cd{list} if we were very naive?]
 
-To optimize datatype constructors that are not value-carrying, we
-specialize sum types by designating the number of non value-carrying
-arms carried by the sum.  (The other possibility is to convert
-non-value-carrying arms into arms that carry unit.)  By doing so, the
-data representation of sums can be made more efficient.  In
-particular, non value-carrying constructors are now represented by a
-tag rather than a pointer to a tag.  This augmentation of sum types
-makes the distinction between value-carrying and non-value-carrying
-constructors explicit in the sum type, avoiding extra runtime checks
-needed in certain datatypes like:
+For example, the datatype 
+\begin{code}
+datatype bool = true | false
+\end{code}
+is represented by the type \cd{unit + unit}, whose values
+can be represented as the integers 0 and 1.  Similarly, the datatype
+\begin{code}
+datatype intoption = NONE | SOME of int
+\end{code}
+which encodes the type \cd{unit + int} would be represented as either
+the null pointer (the integer 0), or a pointer to an integer.
 
+Note that the representation of the second case of the sum
+varies with the type.  Naively certain datatypes such as 
 \begin{code}
 datatype 'a option = NONE | SOME of 'a 
 \end{code}
-
-Depending on whether \cd{'a} is \cd{unit} or not, the above
-optimizations would give different representations for applications of
-\cd{B}.  Therefore, if no special care were taken, then the
-constructor \cd{B} would be forced to check, possibly at run-time if
-not determinable earlier, whether \cd{'a} is \cd{unit}.  
+would therefore require the \cd{SOME} datatype constructor to
+test whether the type of its argument is \cd{unit} or not, in
+order to choose the correct representation.
 
 In our scheme, we decide at compile-time that we will never specialize
-\cd{B} whether \cd{'a} is instantiated at type \cd{unit} or not;
-the result of applying \cd{B} will always be a pointer to a 
-value of type \cd{'a}.
+the result of applying \cd{SOME} whether \cd{'a} is instantiated at
+type \cd{unit} or not; the result of \cd{SOME ()} will always be a
+pointer to the unit value.  This is represented by recording
+within our sum types a constant integer which represents the
+minimal number of \cd{unit} arms which we are sure are present,
+and whose representations should be optimized to small integers
+as in the \cd{bool} case above.  
 \smallskip
 
 Furthermore, since datatype constructors carrying records are a common
@@ -402,7 +420,7 @@ We also eliminate "trivial" constructors, such as empty records of
 constructors or functions returning such empty records.  Sometimes
 they cannot be eliminated entirely, but can be simplified.  
 
-Early projection?
+Early projection? [Perry]
 
 One optimization we would like to add is to preserve the
 sharing of types generated by the elaborator's unification
@@ -413,7 +431,9 @@ metavariables thus generate several translations of the type.
 In contrast, we could do some on-the-fly CSE guided by
 this sharing information we get for free.
 
-"avoiding inlining (hence duplication) of constructors" ?
+
+
+"avoiding inlining (hence duplication) of constructors" 
 
 \section{Reflections}
 
