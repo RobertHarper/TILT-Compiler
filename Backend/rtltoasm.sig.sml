@@ -1,5 +1,3 @@
-(*$RTLTOASM : RTL *)
-
 signature RTLTOASM =
 sig
 

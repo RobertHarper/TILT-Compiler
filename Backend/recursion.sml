@@ -1,7 +1,7 @@
 functor Recursion(structure Pprtl : PPRTL
-		  structure Graph : DIRECTEDGRAPH
-		  structure Printutils : PRINTUTILS
-		    sharing type Graph.node = Pprtl.Rtl.var) : RECURSION =
+		  structure Graph : DIRECTEDGRAPH where type node = Pprtl.Rtl.var
+		  structure Printutils : PRINTUTILS)
+    : RECURSION =
 struct
 
   structure Rtl = Pprtl.Rtl

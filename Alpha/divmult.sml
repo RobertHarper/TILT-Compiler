@@ -1,7 +1,6 @@
-functor Divmult(structure MU : MACHINEUTILS
-		structure DA : DECALPHA
-		sharing MU.Machine = DA)
-  : DIVMULT  = 
+functor Divmult(structure DA : DECALPHA 
+		structure MU : MACHINEUTILS where structure Machine = DA)
+  : DIVMULT = 
   struct
     open DA
     structure MU = MU

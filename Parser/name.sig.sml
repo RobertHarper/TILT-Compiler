@@ -49,19 +49,19 @@ signature NAME =
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
 
     structure VarSet : ORD_SET
-    sharing type VarSet.Key.ord_key = var
+    where type Key.ord_key = var
 
     structure VarMap : ORD_MAP
-    sharing type VarMap.Key.ord_key = var
+    where type Key.ord_key = var
 
     structure LabelMap : ORD_MAP
-    sharing type LabelMap.Key.ord_key = label
+    where type Key.ord_key = label
 
     structure TagMap : ORD_MAP
-    sharing type TagMap.Key.ord_key = tag
+    where type Key.ord_key = tag
 
     type vpath = var * label list
     structure PathMap : ORD_MAP
-    sharing type PathMap.Key.ord_key = vpath
+    where type Key.ord_key = vpath
 
   end

@@ -1,6 +1,6 @@
-functor DecalphaCallconv(structure Machineutils : MACHINEUTILS
-			 structure Decalpha : DECALPHA
-			 sharing Decalpha = Machineutils.Machine) : CALLCONV =
+functor DecalphaCallconv(structure Decalpha : DECALPHA
+			 structure Machineutils : MACHINEUTILS where structure Machine = Decalpha) 
+    : CALLCONV =
 struct
   structure Machine = Machineutils.Machine
   structure Machineutils = Machineutils

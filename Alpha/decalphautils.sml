@@ -1,12 +1,8 @@
 functor Decalphautils(structure Decalpha: DECALPHA 
-		      structure Labelmap : ORD_MAP
-		      structure Regmap : ORD_MAP
-                      structure Regset : ORD_SET
-                      sharing type Decalpha.register 
-			     = Regmap.Key.ord_key
-			     = Regset.Key.ord_key
-		      sharing type Decalpha.loclabel = Labelmap.Key.ord_key)
-                          : MACHINEUTILS =
+		      structure Labelmap : ORD_MAP where type Key.ord_key = Decalpha.loclabel
+		      structure Regmap : ORD_MAP where type Key.ord_key = Decalpha.register
+                      structure Regset : ORD_SET where type Key.ord_key = Decalpha.register)
+    : MACHINEUTILS =
 struct
 
    structure Labelmap = Labelmap

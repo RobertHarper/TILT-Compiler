@@ -3,15 +3,14 @@ functor Rtlinterp(structure Pprtl : PPRTL
 		  structure Rtltags : RTLTAGS
 		  structure Heap : RTLHEAP
 		  structure Registerset : REGISTERSET
+                  structure Operations : OPERATIONS
 		  sharing type Heap.iword = Registerset.iword
 		  sharing type Heap.quad_val = Registerset.quad_val
 		  sharing type Heap.instr = Rtl.instr = Registerset.instr
-			  and type Registerset.regi = Rtl.regi
-			      and type Registerset.regf = Rtl.regf
-				  and type Heap.w32 = Word32.word
-		   sharing Rtl = Pprtl.Rtl = Rtltags.Rtl
-                   structure Operations : OPERATIONS
-                   sharing type Operations.cmp = Rtl.cmp
+		  sharing type Registerset.regi = Rtl.regi
+		  sharing type Registerset.regf = Rtl.regf
+                  sharing type Operations.cmp = Rtl.cmp
+		  sharing Rtl = Pprtl.Rtl = Rtltags.Rtl
  		) 
  : RTLINTERP  = 
   struct

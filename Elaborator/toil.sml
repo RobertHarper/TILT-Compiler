@@ -819,6 +819,43 @@ functor Toil(structure Il : IL
        end
 
 
+   and xdatatype (context,datatycs,withtycs) : (sbnd * sdec) list =
+       let val sbnd_sdecs = Datatype.compile{context=context,
+					     typecompile=xty,
+					     datatycs=datatycs,
+					     withtycs=withtycs,
+					     eq_compile=xeqopt}
+	   (* we want to eventually expose all the types;
+	    we want to inline all the structures now though *)
+	   fun revise ((sbnd as SBND(l,bnd),sdec as SDEC(_,dec)), (context,acc)) = 
+	       let val (dec,dec_local) = 
+		   (case (bnd,dec) of
+			       (BND_CON(v,c),DEC_CON(_,k,copt)) => 
+				   let val k' = KIND_INLINE(k,c)
+				   in  (DEC_CON(v,k',copt), DEC_CON(v,k',SOME c))
+				   end
+			     | (BND_MOD(v,MOD_STRUCTURE sbnds),
+				   DEC_MOD(_,SIGNAT_STRUCTURE(_,sdecs))) =>
+				   let val imp_sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
+				       val s' = SIGNAT_INLINE_STRUCTURE{self = NONE,
+									code = sbnds,
+									abs_sig = sdecs,
+									imp_sig = imp_sdecs}
+				   in  (DEC_MOD(v,s'), DEC_MOD(v,s'))
+				   end
+				 | _ => (dec,dec))
+		   val context = add_context_sdec(context,SDEC(l,SelfifyDec dec_local))
+	       in  (context,(sbnd,SDEC(l,dec))::acc)
+	       end
+(*
+	   val _ = (print "calling revise on sbnd_sdecs. sbnds :\n";
+		    Ppil.pp_sbnds (map #1 sbnd_sdecs); print "\n\nsdecs:\n";
+		    Ppil.pp_sdecs (map #2 sbnd_sdecs); print "\n\n")
+*)
+	   val (_,rev_sbnd_sdecs) = foldl revise (context,[]) sbnd_sdecs
+       in rev rev_sbnd_sdecs
+       end
+	   
      and xdec (context : context, d : Ast.dec) : (sbnd option * context_entry) list =
        (case d of
           (* --- The tricky thing about this value declarations is figuring 
@@ -1215,57 +1252,9 @@ functor Toil(structure Il : IL
 	      end
 	| Ast.TypeDec tblist => xtybind(context,tblist) 
 	| Ast.DatatypeDec {datatycs,withtycs} => 
-	      let val sbnd_sdecs = Datatype.compile{context=context,
-						    typecompile=xty,
-						    datatycs=datatycs,
-						    withtycs=withtycs,
-						    eq_compile=xeqopt}
-		  (* we want to eventually expose all the types;
-                  we want to inline all the structures now though *)
-		  fun revise ((sbnd as SBND(l,bnd),sdec as SDEC(_,dec)), (context,acc)) = 
-		      let val (dec,dec_local) = 
-			  (case (bnd,dec) of
-			       (BND_CON(v,c),DEC_CON(_,k,copt)) => 
-				   let val k' = KIND_INLINE(k,c)
-				   in  (DEC_CON(v,k',copt), DEC_CON(v,k',SOME c))
-				   end
-			     | (BND_MOD(v,MOD_STRUCTURE sbnds),
-				   DEC_MOD(_,SIGNAT_STRUCTURE(_,sdecs))) =>
-				   let val imp_sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
-				       val s' = SIGNAT_INLINE_STRUCTURE{self = NONE,
-									code = sbnds,
-									abs_sig = sdecs,
-									imp_sig = imp_sdecs}
-				   in  (DEC_MOD(v,s'), DEC_MOD(v,s'))
-				   end
-			      | _ => (dec,dec))
-			  val context = add_context_sdec(context,SDEC(l,SelfifyDec dec_local))
-		      in  (context,(sbnd,SDEC(l,dec))::acc)
-		      end
-		  val _ = (print "calling revise on sbnd_sdecs. sbnds :\n";
-			   Ppil.pp_sbnds (map #1 sbnd_sdecs); print "\n\nsdecs:\n";
-			   Ppil.pp_sdecs (map #2 sbnd_sdecs); print "\n\n")
-		  val (_,rev_sbnd_sdecs) = foldl revise (context,[]) sbnd_sdecs
-		  val _ = print "returned from revise\n"
-		  val sbnd_sdecs = rev rev_sbnd_sdecs
-	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs
+	      let val sbnd_sdecs = xdatatype(context,datatycs,withtycs)
+	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs 
 	      end
-(*		  val sbnds = map #1 sbnd_sdecs
-		  val sdecs = map #2 sbnd_sdecs
-		  val sdecs_imp = IlStatic.GetSbndsSdecs(context,sbnds)
-		  val m = MOD_STRUCTURE sbnds
-		  val s = SIGNAT_INLINE_STRUCTURE{self=NONE,
-						  code = sbnds,
-						  abs_sig = sdecs,
-						  imp_sig = sdecs_imp}
-		    val lbl = fresh_open_internal_label "datatype"
-		    val v = fresh_named_var "datatype"
-		  val sbnd = SBND(lbl,BND_MOD(v,m))
-		  val sdec = SDEC(lbl,DEC_MOD(v,s))
-	      in [(SOME sbnd, CONTEXT_SDEC sdec)]
-	      end
-*)
-
 	| Ast.StrDec strblist => xstrbinds(context,strblist) 
  	| Ast.FctDec fctblist => xfctbind(context,fctblist) 
 
@@ -1672,28 +1661,11 @@ functor Toil(structure Il : IL
 			end
 		      in ADDITIONAL(map doer exlist)
 		      end
-	   | (Ast.DataSpec {datatycs=datatycs, withtycs=withtycs}) =>
-	        let val sbnd_sdecs = Datatype.compile{context=context,
-						      eq_compile = xeqopt,
-						      typecompile=xty,
-						      datatycs=datatycs,
-						      withtycs=withtycs}
+	   | (Ast.DataSpec {datatycs, withtycs}) =>
+	        let val sbnd_sdecs = xdatatype(context,datatycs,withtycs)
 		    val sdecs = map #2 sbnd_sdecs
 		in  ADDITIONAL sdecs
 		end
-(*		    val sbnds = map #1 sbnd_sdecs
-		    val sdecs = map #2 sbnd_sdecs
-		    val sdecs_imp = IlStatic.GetSbndsSdecs(context,sbnds)
-		    val s = SIGNAT_INLINE_STRUCTURE{self=NONE,
-						    code = sbnds,
-						    abs_sig = sdecs,
-						    imp_sig = sdecs_imp}
-		    val lbl = fresh_open_internal_label "datatype"
-		    val v = fresh_named_var "datatype"
-		    val sdec = SDEC(lbl,DEC_MOD(v,s))
-		in ADDITIONAL [sdec]
-		end
-*)
 	   | (Ast.ShatycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
 	   | (Ast.ShareSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
 	   | (Ast.FixSpec _) => parse_error "fixity specs not supported"

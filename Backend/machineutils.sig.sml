@@ -1,14 +1,10 @@
 signature MACHINEUTILS =
 sig
 
-   structure Machine : MACHINE
-   structure Labelmap : ORD_MAP 
-   structure Regmap : ORD_MAP 
-   structure Regset : ORD_SET 
-
-   sharing type Machine.register = Regmap.Key.ord_key = Regset.Key.ord_key
-   sharing type Labelmap.Key.ord_key = Machine.loclabel
-
+   structure Machine  : MACHINE 
+   structure Labelmap : ORD_MAP where type Key.ord_key = Machine.loclabel
+   structure Regmap   : ORD_MAP where type Key.ord_key = Machine.register
+   structure Regset   : ORD_SET where type Key.ord_key = Machine.register
 
 
    val unsaved_regs  : Machine.register list (* Not to be saved across C call *)

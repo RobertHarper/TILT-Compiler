@@ -391,7 +391,7 @@ struct
 		(true, SOME m) => m
 	      | _ => let val (ctxt,sbnds,sdecs) = 
 				LinkIl.compile_prelude(use_cache,filename)
-			 val m = compile' true (ctxt,sbnds,sdecs)
+			 val m = compile' false (ctxt,sbnds,sdecs)
 			 val _ = cached_prelude := SOME m
 		     in  m
 		     end
