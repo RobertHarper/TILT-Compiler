@@ -29,9 +29,13 @@
 
 
 /* Thread Status:
-   -1 : Thread is done
-   0 : Thread is ready to be scheduled
-   1 or more : Thread is running already or is blocked; not eligible to be run
+     -1 : Thread is done
+     0 : Thread is ready to be scheduled
+     1 or more : Thread is running already or is blocked; not eligible to be run
+   Request:
+     0 or more: allocating specified number of bytes;l; 
+                must check that this is satisfied before resumption
+     -1 : Yield was called		
 */
 
 
@@ -50,6 +54,7 @@ struct Thread__t
   int                tid;              /* Thread ID */
   int                id;               /* Structure ID */
   int                status;           /* Thread status */
+  int                request;          /* Why pre-empted? */
   struct Thread__t   *parent;
   value_t            oneThunk[1];      /* Avoid allocation by optimizing for common case */
   value_t            thunks;           /* Array of num_add unit -> unit */
@@ -58,9 +63,6 @@ struct Thread__t
   Queue_t            *reg_roots;
   Queue_t            *root_lists;
   Queue_t            *loc_roots;
-  timer_mt           gctime;
-  timer_mt           stacktime;
-  timer_mt           majorgctime;
   int pad;
 };
 
@@ -78,6 +80,9 @@ struct SysThread__t
   value_t            LocalStack[1024];  /* Used by parallel collector */
   int                LocalCursor;
   int temp;
+  timer_mt           gctime;
+  timer_mt           stacktime;
+  timer_mt           majorgctime;
 };
 
 typedef struct SysThread__t SysThread_t;
@@ -98,6 +103,8 @@ Thread_t *YieldRest(void);
 
 int thread_total(void);
 int thread_max(void);
+
+extern Thread_t    *Threads;
 
 #endif
 #endif

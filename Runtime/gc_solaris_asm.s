@@ -15,20 +15,12 @@
 	.globl	cur_alloc_ptr
 	.globl	save_regs
 	.globl	load_regs
-	.globl	save_iregs
-	.globl	load_iregs
 	.globl	save_regs_forC
 	.globl	load_regs_forC
 	
- ! ----------------- save_regs---------------------------------
- ! saves entire register set except for the return address register
- ! does not use a stack frame or change any registers
- ! ----------------------------------------------------------
-	.proc	07
-	.align  4
-save_regs:
-save_regs_forC:		
+save_fregs:	
 	std	%f0 , [THREADPTR_SYMREG + 128]
+save_most_fregs:	
 	std	%f2 , [THREADPTR_SYMREG + 136]
 	std	%f4 , [THREADPTR_SYMREG + 144]
 	std	%f6 , [THREADPTR_SYMREG + 152]
@@ -59,11 +51,15 @@ save_regs_forC:
 	std	%f56, [THREADPTR_SYMREG + 352]
 	std	%f58, [THREADPTR_SYMREG + 360]
 	std	%f60, [THREADPTR_SYMREG + 368]
-	std	%f62, [THREADPTR_SYMREG + 376]
-save_iregs:	
+	std	%f62, [THREADPTR_SYMREG + 376]	
+	retl
+	nop
+	.size	save_fregs,(.-save_fregs)
+	.size	save_most_fregs,(.-save_most_fregs)
+	
+ !	save iregs all iregs skipping r1 and r2	
+save_most_iregs:	
  !	stw	%r0, [THREADPTR_SYMREG+0]         g0 - no std role                           
- 	stw	%r1 , [THREADPTR_SYMREG+4]      ! g1 - no std role(volatile);     EXNPTR     
- 	stw	%r2 , [THREADPTR_SYMREG+8]      ! g2 - reserved for app software; THREADPTR  
  ! 	stw	%r3 , [THREADPTR_SYMREG+12]       g3 - reserved for app software
  	stw	%r4 , [THREADPTR_SYMREG+16]     ! g4 - no std role (volatile);    ALLOCPTR   
  	stw	%r5 , [THREADPTR_SYMREG+20]     ! g5 - no std role (volatile);    ALLOCLIMIT           
@@ -93,19 +89,72 @@ save_iregs:
  	stw	%r29, [THREADPTR_SYMREG+ 116]
 						! skip frame pointer so it remains valid for OS
  	stw	%r31, [THREADPTR_SYMREG+ 124]
+	stbar
 	retl
 	nop
-	
-        .size save_regs,(.-save_regs)
-
- ! ----------------- load_regs---------------------------------
- ! loads entire register set except for the return address register
+	.size	save_most_iregs,(.-save_most_iregs)
+					
+ ! ----------------- save_regs---------------------------------
+ ! saves entire register set except for the return address register
  ! does not use a stack frame or change any registers
  ! ----------------------------------------------------------
 	.proc	07
 	.align  4
-load_regs:	
+save_regs:
+ 	stw	%r1 , [THREADPTR_SYMREG+4]      ! g1 - no std role(volatile);     EXNPTR
+						! g2 - reserved for app software; THREADPTR
+	ld	[THREADPTR_SYMREG+8], %r1       ! use g1 as temp
+	cmp	%r1, %r2			! check that g2 consistent with pointed to struct
+	be	save_regs_ok
+	nop
+	mov	%r1, %o0
+	mov	%r2, %o1
+	call	save_regs_fail
+	nop
+save_regs_ok:
+	mov	%o7, %r1			! use g1 to hold return address
+	call	save_most_iregs
+	nop
+	call	save_fregs
+	nop
+	mov	%r1, %o7			! restore return address
+	ld	[THREADPTR_SYMREG+4], %r1       ! restore g1 which we use as temp
+	retl
+	nop
+        .size save_regs,(.-save_regs)
+
+
+save_regs_forC:		
+ 	stw	%r1 , [THREADPTR_SYMREG+4]      ! g1 - no std role(volatile);     EXNPTR
+						! g2 - reserved for app software; THREADPTR
+	ld	[THREADPTR_SYMREG+8], %r1       ! use g1 as temp
+	cmp	%r1, %r2			! check that g2 consistent with pointed to struct
+	be	save_regs_forC_ok
+	nop
+	mov	%r1, %o0
+	mov	%r2, %o1
+	call	save_regs_fail
+	nop
+save_regs_forC_ok:
+	mov	%o7, %r1			! use g1 to hold return address
+	call	save_most_iregs
+	nop
+	call	save_most_fregs
+	nop
+	mov	%r1, %o7			! restore return address
+	ld	[THREADPTR_SYMREG+4], %r1       ! restore g1 which we use as temp
+	mov	1, %l0
+	st	%l0, [THREADPTR_SYMREG + notinml_disp]	! set notInML to one
+	mov	THREADPTR_SYMREG, %l0		! when calling C code, %l0 will be retained but %g2 destroyed
+	retl
+	nop	
+        .size save_regs_forC,(.-save_regs_forC)
+
+	.proc	07
+	.align  4
+load_fregs:	
 	ldd	[THREADPTR_SYMREG + 128], %f0 
+load_most_fregs:	
 	ldd	[THREADPTR_SYMREG + 136], %f2 
 	ldd	[THREADPTR_SYMREG + 144], %f4 
 	ldd	[THREADPTR_SYMREG + 152], %f6 
@@ -137,13 +186,14 @@ load_regs:
 	ldd	[THREADPTR_SYMREG + 360], %f58
 	ldd	[THREADPTR_SYMREG + 368], %f60
 	ldd	[THREADPTR_SYMREG + 376], %f62
+	retl
+	nop
+	.size	load_fregs,(.-load_fregs)
+	.size	load_most_fregs,(.-load_most_fregs)	
 
-load_iregs:	
-	ld	[THREADPTR_SYMREG+32], %r8 
-load_regs_forC:	
+ !	load all regs but r1, r2, r8
+load_most_iregs:	
  !	ld	[THREADPTR_SYMREG+0], %r0         g0 - no std role              
- 	ld	[THREADPTR_SYMREG+4], %r1	! g1 - no std role(volatile);     EXNPTR
- 	ld	[THREADPTR_SYMREG+8], %r2	! g2 - reserved for app software; THREADPTR 
  !	ld	[THREADPTR_SYMREG+12], %r3        g3 - reserved for app software
  	ld	[THREADPTR_SYMREG+16], %r4      ! g4 - no std role (volatile);    ALLOCPTR
  	ld	[THREADPTR_SYMREG+20], %r5      ! g5 - no std role (volatile);    ALLOCLIMIT
@@ -172,11 +222,65 @@ load_regs_forC:
  	ld	[THREADPTR_SYMREG+ 116], %r29
 						! skip frame pointer so it remains valid for OS
  	ld	[THREADPTR_SYMREG+ 124], %r31
-
 	retl
 	nop
-	
+        .size load_most_iregs,(.-load_most_iregs)
+
+			
+ ! ----------------- load_regs---------------------------------
+ ! loads entire register set except for the return address register
+ ! does not use a stack frame or change any registers
+ ! ----------------------------------------------------------
+load_regs:	
+						! g2 - reserved for app software; THREADPTR
+	ld	[THREADPTR_SYMREG+8], %r1       ! use g1 as temp for thread-structure's copy of g2
+	cmp	%r1, %r2			! check that g2 consistent with temp
+	be	load_regs_ok
+	nop
+	mov	%r1, %o0
+	mov	%r2, %o1
+	call	load_regs_fail
+	nop
+load_regs_ok:
+	mov	%o7, %r1			! save return address in g1 temp
+	call	load_fregs
+	nop
+	call	load_most_iregs
+	nop	
+	ld	[THREADPTR_SYMREG+32], %r8	! load_most_iregs skips r8 so load_regs_forC can use it
+	mov	%r1, %o7			! restore return address
+						! g1 - no std role(volatile);     EXNPTR
+	ld	[THREADPTR_SYMREG+4], %r1       ! used g1 as temp;  restore now
+	retl
+	nop
         .size load_regs,(.-load_regs)
+
+
+load_regs_forC:
+	mov	%l0, THREADPTR_SYMREG
+	st	%g0, [THREADPTR_SYMREG + notinml_disp]	! set notInML to zero
+						! g2 - reserved for app software; THREADPTR
+	ld	[THREADPTR_SYMREG+8], %r1       ! use g1 as temp for thread-structure's copy of g2
+	cmp	%r1, %r2			! check that g2 consistent with temp
+	be	load_regs_forC_ok
+	nop
+	mov	%r1, %o0
+	mov	%r2, %o1
+	call	load_regs_fail
+	nop
+load_regs_forC_ok:
+	mov	%o7, %r1			! save return address in g1 temp
+	call	load_most_fregs
+	nop
+	call	load_most_iregs
+	nop	
+	mov	%r1, %o7			! restore return address
+						! g1 - no std role(volatile);     EXNPTR
+	ld	[THREADPTR_SYMREG+4], %r1       ! used g1 as temp;  restore now
+	retl
+	nop
+        .size load_regs_forC,(.-load_regs_forC)
+		
 		
  ! ----------------- gc_raw ---------------------------------
  ! return address comes in normal return address register
@@ -213,8 +317,6 @@ gc_raw:
 old_alloc:
 	call	abort
 	nop
-
-
 
 
 	.proc	07
@@ -289,3 +391,4 @@ temptemptemp:
 cur_alloc_ptr:	
 	.word	0
 	.word	0
+

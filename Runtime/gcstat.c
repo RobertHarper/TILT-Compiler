@@ -34,9 +34,9 @@ extern int NumGC;
 
 
 
-long TotalBytesAllocated = 0;
-long TotalBytesCollected = 0;
-long TotalGenBytesCollected = 0;
+int TotalBytesAllocated = 0;
+int TotalBytesCollected = 0;
+int TotalGenBytesCollected = 0;
 
 void object_profile_init(Object_Profile_t *p)
 {

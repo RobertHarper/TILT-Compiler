@@ -754,7 +754,7 @@ struct
 			       BASE(ILABEL return_label)] @
 			      (std_return_code sraOpt) @
 			      [BASE(BSR (ML_EXTERN_LABEL "load_regs_forC", NONE, no_moddef_info))] @
-			      (std_return_code sraOpt)
+			      (std_return_code NONE)
 
 			| (C_NORMAL, DIRECT (l, _)) => 
 			      (print "C_NORMAL call non-ML_EXTERN_LABEL"; print (msLabel l); print "\n";

@@ -5,7 +5,11 @@ structure Stats :> STATS =
 
        val error = fn s => Util.error "stats.sml" s
        type time = Time.time
-       type time_entry = (int * real * bool * {gc : time, sys: time, usr: time, real : time})  ref
+       type time_entry = {count : int,
+			  max : real,
+			  last : real,
+			  top_timer : bool,
+			  sum : {gc : time, sys: time, usr: time, real : time}}  ref
        type counter_entry = int ref
        type int_entry = int ref
        type bool_entry = bool ref
@@ -27,7 +31,11 @@ structure Stats :> STATS =
 	 let
 	   fun reset (s,TIME_ENTRY entry) =
 	       let val z = Time.zeroTime
-	       in  entry := (0,0.0,#3 (!entry),{gc=z,sys=z,usr=z,real=z})
+	       in  entry := {count = 0,
+			     max = 0.0,
+			     last = 0.0, 
+			     top_timer = #top_timer (!entry),
+			     sum = {gc=z,sys=z,usr=z,real=z}}
 	       end
 	     | reset (s,COUNTER_ENTRY entry) = entry := 0
 	     | reset (s,INT_ENTRY entry) = entry := 0
@@ -49,7 +57,11 @@ structure Stats :> STATS =
 			end)
       fun find_time_entry s disjoint = 
 	let val z = Time.zeroTime
-	    fun maker () = TIME_ENTRY(ref(0,0.0,disjoint,{gc=z,sys=z,usr=z,real=z}))
+	    fun maker () = TIME_ENTRY(ref{count = 0,
+					  max = 0.0,
+					  last = 0.0,
+					  top_timer = disjoint,
+					  sum = {gc=z,sys=z,usr=z,real=z}})
         in  case (find_entry maker s) of
 		TIME_ENTRY res => res
 	      | _ => error "find_time_entry: did not find a TIME_ENTRY"
@@ -72,10 +84,8 @@ structure Stats :> STATS =
 		BOOL_ENTRY res => res
 	      | _ => error "find_bool_entry: did not find a BOOL_ENTRY"
 
-      fun fetch_timer_max name = 
-	  let val (_,max,_,_) = !(find_time_entry name false)
-	  in max
-	  end
+      fun fetch_timer_max name = #max(!(find_time_entry name false))
+      fun fetch_timer_last name = #last(!(find_time_entry name false))
 
       val int = find_int_entry
       fun bool str = find_bool_entry 
@@ -96,13 +106,18 @@ structure Stats :> STATS =
 	       val {gc,sys,usr} =  Timer.checkCPUTimer cpu_timer
 	       val real =  Timer.checkRealTimer real_timer
 	       val entry_ref = find_time_entry str disjoint
-	       val (count,max,disjoint,{gc=gc',sys=sys',usr=usr', real=real'}) = !entry_ref
-	       val new_entry = (count+1, Real.max(Time.toReal(Time.+(gc,Time.+(sys,usr))),max),
-				disjoint, 
-				{gc = Time.+(gc,gc'),
-				 sys = Time.+(sys,sys'),
-				 usr = Time.+(usr,usr'),
-				 real = Time.+(real,real')})
+	       val {count,max,last=_,top_timer,
+		    sum = {gc=gc',sys=sys',usr=usr', real=real'}} = !entry_ref
+	       val new_sum = {gc = Time.+(gc,gc'),
+			      sys = Time.+(sys,sys'),
+			      usr = Time.+(usr,usr'),
+			      real = Time.+(real,real')}
+	       val cur = Time.toReal(Time.+(gc,Time.+(sys,usr)))
+	       val new_entry = {count = count+1, 
+				last = cur,
+				max = Real.max(cur,max),
+				top_timer = top_timer,
+				sum = new_sum}
 	       val _ = entry_ref := new_entry
 	   in r
 	   end
@@ -122,8 +137,8 @@ structure Stats :> STATS =
 	   fun triple2real ({gc:time,sys:time,usr:time,real:time}) = Time.toReal real
 	     
 	   val entries = rev(!entries)
-	   fun folder ((_,TIME_ENTRY (ref(_,_,true,t))),(acc_cpu,acc_real)) = 
-	     (acc_cpu+(triple2cpu t), acc_real+(triple2real t))
+	   fun folder ((_,TIME_ENTRY (ref{top_timer=true,sum,...})),(acc_cpu,acc_real)) = 
+	     (acc_cpu+(triple2cpu sum), acc_real+(triple2real sum))
 	     | folder (_,acc) = acc
 	   val (total_cpu, total_real) = foldr folder (0.0,0.0) entries
 	   fun real2string r = Real.fmt (StringCvt.FIX (SOME 3)) r
@@ -150,10 +165,10 @@ structure Stats :> STATS =
 	      fprint 6 warning_flag;
 	      print "\n")
 
-	   fun pritem (name,TIME_ENTRY(ref (count,max,disjoint,triple))) =
+	   fun pritem (name,TIME_ENTRY(ref {count,max,top_timer,sum,...})) = 
 	     let 
-	       val time_cpu = triple2cpu triple
-	       val time_real = triple2real triple
+	       val time_cpu = triple2cpu sum
+	       val time_real = triple2real sum
 	       val per_call = (time_cpu * 1000.0)/(Real.fromInt count) (*In milliseconds!*)
 	       val per_call = (Real.realFloor(per_call * 10.0)) / 10.0
 	       val time_cpu_string = real2string time_cpu
@@ -162,11 +177,11 @@ structure Stats :> STATS =
 	       val per_call_string = real2stringWith 1 per_call
 	       val max_string = Int.toString (Real.trunc (max*1000.0)) (*In milliseconds (truncate, since beyond resolution)*)
 	       val percent_cpu_string = 
-		 if disjoint then 
+		 if top_timer then 
 		   ("(" ^ (real2stringWith 1 (time_cpu/total_cpu * 100.0)) ^ "%)") 
 		 else ""
 	       val percent_real_string = 
-		 if disjoint then 
+		 if top_timer then 
 		   ("(" ^ (real2stringWith 1 (time_real/total_real * 100.0)) ^ "%)") 
 		 else ""
 	       val warning_flag = (if (time_real > time_cpu * 2.0)

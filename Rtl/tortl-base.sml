@@ -65,13 +65,11 @@ struct
    datatype term = LOCATION of location
                  | VALUE of value
 
-
    type var_rep     = location option * value option
-   type convar_rep' = location option * value option
-   type convar_rep  = location option * value option
+   type convar_rep  = location option * value option 
 
    type varmap = var_rep VarMap.map
-   type convarmap = convar_rep' VarMap.map
+   type convarmap = convar_rep VarMap.map
    val uninit_val = 0w258 : TilWord32.word
    val unit_term = VALUE (TAG 0w256)
 
@@ -93,13 +91,14 @@ struct
    val globals = ref VarSet.empty
    val dl : Rtl.data list ref = ref nil
    val pl : Rtl.proc list ref = ref nil
+   type suminfo     = TilWord32.word * TilWord32.word option * con list
    type state = {is_top : bool,
-		 env : NilContext.context,
+		 env : NilContext.context * suminfo option ref VarMap.map,
 		 varmap : varmap,
 		 convarmap : convarmap,
 		 gcstate : gcstate}
    fun make_state() : state = {is_top = true,
-			       env = NilContext.empty(),
+			       env = (NilContext.empty(), VarMap.empty),
 			       varmap = VarMap.empty,
 			       convarmap = VarMap.empty,
 			       gcstate = [GC_INF]}
@@ -109,7 +108,7 @@ struct
        (VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) convarmap; print "\n\n")
    fun show_state ({env,...} : state) = 
        (print "Showing environment part of state:\n";
-	NilContext.print_context env;
+	NilContext.print_context (#1 env);
 	print "\n\n")
 
    local
@@ -122,10 +121,10 @@ struct
 
 
   fun type_of ({env,...}:state) e = 
-      Stats.subtimer("RTL_typeof",Normalize.type_of)(env,e)
+      Stats.subtimer("RTL_typeof",Normalize.type_of)(#1 env,e)
 
   fun std_kind_of ({env,...}:state) c =
-      Stats.subtimer("RTL_kind_of",NilContext.kind_of) (env,c)
+      Stats.subtimer("RTL_kind_of",NilContext.kind_of) (#1 env,c)
 
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
@@ -150,7 +149,7 @@ struct
 		  NONE => ()
 		| SOME _ => error ("varmap already contains "
 					    ^ (Name.var2string v))
-	  val env = NilContext.insert_con(env,v,c)
+	  val env = (NilContext.insert_con(#1 env,v,c), #2 env)
 	  val varmap = VarMap.insert(varmap,v,(lc,lv))
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
@@ -165,7 +164,7 @@ struct
 		  NONE => ()
 		| SOME _ => error ("varmap already contains "
 					    ^ (Name.var2string v))
-	  val env = NilContext.insert_exp(env,v,e)
+	  val env = (NilContext.insert_exp(#1 env,v,e), #2 env)
 	  val varmap = VarMap.insert(varmap,v,(lc,lv))
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
@@ -201,7 +200,8 @@ struct
 		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "\n")
 		  else ()
-	  val newenv = NilContext.insert_kind(env,v,k)
+	  val newenv = (NilContext.insert_kind(#1 env,v,k),
+			VarMap.insert(#2 env, v, ref NONE))
 	  val newstate = {is_top=is_top,env=newenv,
 			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       in  newstate
@@ -236,7 +236,6 @@ struct
     | add_conterm (s,v,kind,SOME(VALUE value)) = convarmap_insert s (v,(NONE, SOME value, kind))
 
    fun getconvarrep' ({convarmap,...} : state) v = VarMap.find (convarmap,v) 
-
    fun getconvarrep state v : convar_rep = 
        (case getconvarrep' state v of
 	    NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
@@ -253,37 +252,31 @@ struct
 
     fun simplify_type ({env,...} : state) con : bool * con = 
 	let val result = Stats.subtimer("RTL_reduce_hnf",
-					Normalize.reduce_hnf)(env,con)
+					Normalize.reduce_hnf)(#1 env,con)
 	    val _ = if (!debug_simp)
-		    then (print "simplify on\n";  Ppnil.pp_con con;
+		    then (print (Real.toString (Stats.fetch_timer_last "RTL_reduce_hnf"));
+			  print "s  simplify on\n";  Ppnil.pp_con con;
 			  print "\nreduced to\n"; Ppnil.pp_con (#2 result);
 			  print "\n")
 		    else ()
 	in  result
 	end
 
-  fun reduce_to_sum str ({env,...}:state) (Prim_c(Sum_c{tagcount,totalcount,known}, [Crecord_c[]])) = 
-      (tagcount, known, [])
-  | reduce_to_sum str ({env,...}:state) sumcon = 
-      let (* val _ = (print "reduce_to_sum called with "; Ppnil.pp_con sumcon; print "\n") *)
-	  val res = Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype)
-	      (env,sumcon)
-	  val (a,b,cons) = res
-(*
-	  val _ = (print "reduce_to_sum returning with "; 
-		   print (Int.toString (TilWord32.toInt a));
-		   print "   ";
-		   (case b of 
-			NONE => print "NONE"
-		      | SOME b => (print "SOME "; print (Int.toString (TilWord32.toInt b))));
-		   print "   ";
-		   app (fn c => (Ppnil.pp_con c; print " ")) cons;
-		   print "\n\n")
-*)
-      in  res
-      end
-      handle e => (print "reduce_to_sum "; print str; print " failed\n"; raise e)
 
+  fun reduce_to_sum str ({env,...}:state) c = 
+      let fun slow() = Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype) (#1 env,c)
+      in  (case c of
+	       Var_c v => 
+		   let val SOME cache = VarMap.find(#2 env,v)
+		   in  (case (!cache) of
+			    SOME suminfo => suminfo
+			  | NONE => let val suminfo = slow()
+					val _ = cache := SOME suminfo
+				    in  suminfo
+				    end)
+		   end
+	     | _ => slow())
+      end
 
 
   (* Takes a constructor and returns the RTL representation.
@@ -304,8 +297,7 @@ struct
 	  in  loop acc con rest
 	  end
 	    | loop acc (Single_k c) labs = 
-	  let val k = Stats.subtimer("RTLkind_of0",
-				     NilContext.kind_of)  (#env state,c)
+	  let val k = Stats.subtimer("RTLkind_of0", NilContext.kind_of) (#1 (#env state),c)
 	  in  loop acc k labs
 	  end
 	    | loop acc (SingleType_k c) labs = 
@@ -869,15 +861,14 @@ struct
    and the rest of the fields, which are values *)
 
 
-  fun make_record_core (const, state, destopt, reps, vl : term list, labopt) = 
+  fun make_record_core (const, state, reps, vl : term list, labopt) = 
     let 
 
 	val is_mutable = ref false
 	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
 	val tagwords = mk_recordtag reps
-	val dest = (case destopt of
-			NONE => alloc_regi TRACE
-		      | SOME d => d)
+	val dest = alloc_regi TRACE
+
 	val tagwords = 
 	    if (not (!HeapProfile))
 		then tagwords
@@ -1001,28 +992,28 @@ struct
     in  (result, state)
     end
 
-  fun make_record_help (const, state, destopt, _ , [], _) = (unit_term, state)
-    | make_record_help (const, state, destopt, reps, terms, lapopt) =
-      let  fun check [] = make_record_core(const, state, destopt, reps, terms, lapopt)
+  fun make_record_help (const, state, _ , [], _) = (unit_term, state)
+    | make_record_help (const, state, reps, terms, lapopt) =
+      let  fun check [] = make_record_core(const, state, reps, terms, lapopt)
 	     | check ((VALUE (VOID _))::_) = (VALUE(VOID Rtl.TRACE), state)
 	     | check (_::rest) = check rest
       in   check terms
       end
 
   (* These are the interface functions: determines static allocation *)
-  fun make_record (state, destopt, reps, vl) = 
+  fun make_record (state, reps, vl) = 
       let fun is_varval (VALUE vv) = true 
 	    | is_varval _ = false
 	  fun is_static (COMPUTE _) = false
 	    | is_static _ = true
 	  val const = (istoplevel() orelse (andfold is_varval vl)) andalso (andfold is_static reps)
 	  val const = const andalso (!do_constant_records)
-      in  make_record_help(const,state,destopt,reps,vl,NONE)
+      in  make_record_help(const,state,reps,vl,NONE)
       end
 
-  and make_record_const (state, destopt, reps, vl, labopt) = 
+  fun make_record_const (state, reps, vl, labopt) = 
       let val res as (lv,_) = make_record_help(!do_forced_constant_records,state, 
-					       destopt, reps, vl, labopt)
+					       reps, vl, labopt)
 	  val labopt2 = (case lv of
 			     VALUE(RECORD(lab,_)) => SOME lab
 			   | VALUE(LABEL lab) => SOME lab
@@ -1036,8 +1027,8 @@ struct
       in  res
       end
 
-  and make_record_mutable (state, destopt, reps, vl) = 
-      make_record_help(false,state, destopt, reps, vl,NONE)
+  fun make_record_mutable (state, reps, vl) = 
+      make_record_help(false,state, reps, vl,NONE)
 
 
   fun allocate_global (label,labels,rtl_rep,lv) = 

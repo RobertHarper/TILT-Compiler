@@ -12,12 +12,9 @@
 #endif
 
 #undef GCTABLE_HASENTRYID
-#undef DIAG
 #undef PARANOID
 #undef STACKDEBUG
-#undef SUPPRESS
 #undef SEMANTIC_GARBAGE 
-#undef SHOW_MMAP
 #define WRITE
 #define OLD_ALLOC
 
@@ -39,27 +36,28 @@
 int FetchAndAdd(int *, int);
 int TestAndSet(int *);
 
-extern long LEAST_GC_TO_CHECK;
-extern long SHOW_GCSTATS;
-extern long SHOW_GCFORWARD;
-extern long SHOW_GCDEBUG;
-extern long SHOW_GCERROR;
-extern long SHOW_HEAPS;
-extern long MinHeap, MaxHeap;
+extern int LEAST_GC_TO_CHECK;
+extern int SHOW_GCSTATS;
+extern int SHOW_GCFORWARD;
+extern int SHOW_GCDEBUG;
+extern int SHOW_GCERROR;
+extern int SHOW_HEAPS;
+extern int MinHeap, MaxHeap;
 extern double TargetRatio;
-extern long StackSize;
-extern long YoungHeapByte;
-extern long save_rate;
-extern long use_stack_gen;
+extern int StackSize;
+extern int YoungHeapByte;
+extern int save_rate;
+extern int use_stack_gen;
 extern int collector_type;
-extern long paranoid;
-extern long diag;
+extern int paranoid;
+extern int diag;
 extern int NumSysThread;
 extern int NumThread;
 extern int NumStack;
 extern int NumStackChain;
 extern int NumHeap;
 extern int NumGC, NumMajorGC;
+extern int shortSummary;
 #endif
 
 

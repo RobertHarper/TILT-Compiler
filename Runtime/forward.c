@@ -50,7 +50,7 @@ value_t *forward(value_t *vpp, value_t *alloc_ptr)
   /* read some garbage to simulate write-allocate */
   int foobar = *(alloc_ptr + 4); 
 
-#ifdef DIAG
+#ifdef HEAPPROFILE
   update_object_profile(&collected_object_profile,v);
 #endif
   tag = v[-1];
@@ -299,8 +299,8 @@ value_t *forward(value_t *vpp, value_t *alloc_ptr)
 void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap)
 {
   value_t *white = (value_t *)(*vpp); /* old object */
-  value_t *obj;                   /* forwarded object */
-  int tmp,tag;
+  value_t *obj;                       /* forwarded object */
+  value_t tag;                        /* original tag */
   value_t *alloc = *alloc_ptr;
   value_t *limit = *limit_ptr;
 
@@ -333,16 +333,16 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 #ifdef sparc
     {
        value_t *tagloc = white - 1;
-       value_t tag = * tagloc;
-       value_t newval = stall;
+       value_t localStall = stall;
+       tag = * tagloc;
        if (tag == stall || tag == FORWARD_TAG)
 	 ;
        else {
-	 /* Excample of a SPARC ld statement with gcc asm
+	 /* Example of a SPARC ld statement with gcc asm
 	    int *ptr;
 	    int val;
 	    asm("ld   [%1],%0" : "=r" (val) : "r" (ptr)); */
-	 asm("cas [%1],%2,%0" : "=r" (newval) : "r" (tagloc), "r" (tag)); 
+	 asm("cas [%1],%2,%0" : "=r" (localStall) : "r" (tagloc), "r" (tag)); 
        }
     }
 #endif
@@ -355,7 +355,6 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 
 
   /* In the ensuing code, the tag must be restored only after the forwarding address is written */
-
   switch (tag)
     {
     case TAG_REC_EMPTY: /* empty records have one word of storage */
@@ -465,7 +464,10 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	  curtag = white[-(numtags+1)];
 	}
 	/* records with less than 3 components already handled */
-	assert(numfields > 2);
+	if (numfields <= 2) {
+	  printf("bad record tag %d\n",tag);
+	  assert(0);
+	}
 
 	if (alloc+numtags+numfields >= limit) {
 	  GetHeapArea(toheap,pagesize,&alloc,limit_ptr);

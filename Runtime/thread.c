@@ -15,7 +15,7 @@
 
 
 
-static Thread_t    *Threads;                  /* array of NumUserThread user threads */
+Thread_t    *Threads;                  /* array of NumUserThread user threads */
 static SysThread_t *SysThreads;               /* array of NumSystemThread system threads */
 
 static int totalThread = 0;                   /* Number of create user threads */
@@ -38,6 +38,7 @@ void LocalLock(void)
 {
   while (!TestAndSet(&local_lock))
     ;
+  assert(local_lock == 1);
 }
 
 void LocalUnlock(void)
@@ -125,7 +126,7 @@ void ReleaseJob(SysThread_t *sth)
   }
   assert(sth->limit == th->saveregs[ALLOCLIMIT_REG]);
   if (diag)
-    printf("SysThread %d: unmapping with %d (< %d)\n",sth->stid,sth->alloc,th->saveregs[ALLOCLIMIT_REG]);
+    printf("Proc %d: unmapping with %d (< %d)\n",sth->stid,sth->alloc,th->saveregs[ALLOCLIMIT_REG]);
   if (paranoid)
     for (i=0; i<4; i++) {
       int *addr = ((int *)sth->alloc) + i;
@@ -135,7 +136,10 @@ void ReleaseJob(SysThread_t *sth)
     }
   th->saveregs[ALLOCPTR_REG] = 0;
   th->saveregs[ALLOCLIMIT_REG] = 0;
+  flushStore();                          /* make sure thread info is flushed to memory */
   FetchAndAdd(&(th->status),-1);
+  if (diag)
+    printf("Thread %d released; status = %d\n",th->tid,th->status);
   sth->userThread = NULL;
   th->sysThread = NULL;
 }
@@ -148,9 +152,7 @@ void DeleteJob(SysThread_t *sth)
   FetchAndAdd(&(th->status),1);  /* We increment status so it doesn't get scheduled when released */
   ReleaseJob(sth);
   LocalLock();
-  printf("DeleteJob entered with topThread = %d\n",topThread);
   for (i=0; i<NumThread; i++) {
-    printf("DeleteJob i = %d\n",i);
     if (JobQueue[i] == th) {
       if (th->parent)
 	FetchAndAdd(&(th->parent->status),-1);
@@ -162,7 +164,6 @@ void DeleteJob(SysThread_t *sth)
       pthread_cond_signal(&EmptyCond);
       LocalUnlock();
       th->status = ThreadDone;  /* Now, we put it back in the free pool */
-      printf("DeleteJob returning with topThread = %d\n",topThread);
       return;
     }
   }
@@ -209,14 +210,21 @@ void thread_init()
       Threads[i].status = ThreadDone;
       Threads[i].id = i;
       Threads[i].tid = -1;
-      reset_timer("stacktime",&(Threads[i].stacktime));
-      reset_timer("gctime",&(Threads[i].gctime));
-      reset_timer("majorgctime",&(Threads[i].majorgctime));
     }
   for (i=0; i<NumSysThread; i++) {
+    char *temp;
     SysThreads[i].stid = i;
     SysThreads[i].alloc = StartHeapLimit;
     SysThreads[i].limit = StartHeapLimit;
+    temp = malloc(20 * sizeof(char));
+    sprintf(temp, "stacktime_%d", i);
+    reset_timer(temp,&(SysThreads[i].stacktime));
+    temp = malloc(20 * sizeof(char));
+    sprintf(temp, "gctime_%d", i);
+    reset_timer(temp,&(SysThreads[i].gctime));
+    temp = malloc(20 * sizeof(char));
+    sprintf(temp, "majorgcime_%d", i);
+    reset_timer(temp,&(SysThreads[i].majorgctime));
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -253,6 +261,7 @@ Thread_t *thread_create(Thread_t *parent, value_t start_adds, int num_add)
   assert(th != NULL);
   assert(th->status == 0);
 
+  th->request = 0;
   th->parent = parent;
   th->maxSP = 0;
   th->snapshots = (StackSnapshot_t *)malloc(NUM_STACK_STUB * sizeof(StackSnapshot_t));
@@ -264,6 +273,7 @@ Thread_t *thread_create(Thread_t *parent, value_t start_adds, int num_add)
       th->snapshots[i].saved_regstate = 0;
       th->snapshots[i].roots = (i == 0) ? QueueCreate(0,50) : NULL;
     }
+  th->saveregs[THREADPTR_REG] = th;
   th->saveregs[ALLOCLIMIT_REG] = 0;
   th->retadd_queue = QueueCreate(0,2000);
   th->tid = totalThread++;
@@ -288,6 +298,30 @@ Thread_t *thread_create(Thread_t *parent, value_t start_adds, int num_add)
 }
 
 
+void load_iregs_fail(int memValue, int regValue)
+{
+  printf("load_iregs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
+  assert(0);
+}
+
+void save_iregs_fail(int memValue, int regValue)
+{
+  printf("save_iregs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
+  assert(0);
+}
+
+void load_regs_fail(int memValue, int regValue)
+{
+  printf("load_regs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
+  assert(0);
+}
+
+void save_regs_fail(int memValue, int regValue)
+{
+  printf("save_regs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
+  assert(0);
+}
+
 
 void work(SysThread_t *sth)
 {
@@ -297,7 +331,7 @@ void work(SysThread_t *sth)
   assert(th == NULL);
 
   if (diag)
-    printf("SysThread %d: entered work\n", sth->stid);
+    printf("Proc %d: entered work\n", sth->stid);
 
   /* Wait for next user thread and remove from queue. Map system thread. */
   while (th == NULL) {
@@ -318,8 +352,9 @@ void work(SysThread_t *sth)
       poll();
   }
 
-
-  assert(th->status == 1);
+  if (th->status != 1)
+    printf("Proc %d: thread %d  has status = %d\n", sth->stid,th->tid,th->status);
+  assert(th->status == 1); /* FetchJob increments status from 0 to 1 */
   if (th->nextThunk == 0)  /* Starting thread for the first time */
     {
       value_t stack_top = th->stackchain->stacks[0]->top;
@@ -329,9 +364,9 @@ void work(SysThread_t *sth)
       th->saveregs[ALLOCLIMIT_REG] = sth->limit;
 
       if (diag) {
-	printf("SysThread %d: starting user thread %d (%d) with %d <= %d\n",
-	     sth->stid, th->tid, th->id, 
-	     th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
+	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
+	       sth->stid, th->tid, th->id, 
+	       th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
 	assert(th->saveregs[ALLOCPTR_REG] <= th->saveregs[ALLOCLIMIT_REG]);
       }
 
@@ -342,9 +377,10 @@ void work(SysThread_t *sth)
     }
   else  /* Thread not starting for first time */
     {
-      int request = th->saveregs[ASMTMP_REG] - th->saveregs[ALLOCPTR_REG];
+      int request = th->request;
       value_t stack_top = th->stackchain->stacks[0]->top;
-      if (request + sth->alloc >= sth->limit) {
+      if ((request >= 0) && (request + sth->alloc >= sth->limit)) {
+	printf("Proc %d: cannot resume user thread %d (%d); calling GC\n");
 	gc(th); /* this call will not return if real gc */
 	if (!(request + sth->alloc < sth->limit))
 	  printf("request = %d  alloc = %d  limit = %d\n",
@@ -354,9 +390,9 @@ void work(SysThread_t *sth)
       th->saveregs[ALLOCPTR_REG] = sth->alloc;
       th->saveregs[ALLOCLIMIT_REG] = sth->limit;
       if (diag)
-	printf("SysThread %d: resuming user thread %d (%d) with %d < %d\n",
-	       sth->stid, th->tid,th->id,
-	       th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
+	printf("Proc %d: resuming user thread %d (%d) with request = %d  and %d < %d\n",
+	       sth->processor, th->tid,th->id,
+	       request, th->saveregs[ALLOCPTR_REG], th->saveregs[ALLOCLIMIT_REG]);
       context_restore(th);
     }
 
@@ -372,12 +408,11 @@ static void* systhread_go(void* unused)
   if (status != 0)
     printf("processor_bind failed with %d\n",status);
 #else
+  if (diag)
     printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
   install_signal_handlers(0);
   st->stack = (int)(&st) & (~255);
-  if (diag)
-    printf("SysThread %d: has stack %d\n", st->stid, st->stack);
   work(st);
   assert(0);
 }
@@ -387,7 +422,7 @@ void thread_go(value_t start_adds, int num_add)
   int curproc = -1;
   int i;
 
-  Thread_t *th = thread_create(0,start_adds,num_add);
+  Thread_t *th = thread_create(NULL,start_adds,num_add);
   AddJob(th);
 
   /* Create system threads that run off the user thread queue */
@@ -407,20 +442,23 @@ void thread_go(value_t start_adds, int num_add)
       }
     }
 #else
-    printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
+    if (diag)
+      printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr,256 * 1024);
     pthread_attr_setscope(&attr,PTHREAD_SCOPE_SYSTEM); 
     pthread_create(&(SysThreads[i].pthread),&attr,systhread_go,NULL);
-    printf("Systhread %d:  processor %d and pthread = %d\n",
-	   SysThreads[i].stid, SysThreads[i].processor, SysThreads[i].pthread);
+    if (diag)
+      printf("Proc %d:  processor %d and pthread = %d\n",
+	     SysThreads[i].stid, SysThreads[i].processor, SysThreads[i].pthread);
   }
   install_signal_handlers(1);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
   while ((i = NumTotalJob()) > 0) {
+    if (diag)
       printf("Main thread found %d jobs.\n", i);
-      pthread_cond_wait(&EmptyCond,&EmptyLock);
+    pthread_cond_wait(&EmptyCond,&EmptyLock);
   }
 }
 
@@ -430,7 +468,10 @@ void Spawn(value_t thunk)
 {
   SysThread_t *sth = getSysThread();
   Thread_t *parent = sth->userThread;
-  Thread_t *child = thread_create(parent,thunk, 0);    /* zero indicates closure */
+  Thread_t *child = NULL;
+
+  tempdebug(sth,"spawnbefore",1);
+  child = thread_create(parent,thunk, 0);    /* zero indicates closure */
 
   if (collector_type != Parallel) {
     printf("!!! Spawn called in a sequential collector\n");
@@ -438,27 +479,32 @@ void Spawn(value_t thunk)
   }
   AddJob(child);
   if (diag)
-    printf("SysThread %d: user thread %d spawned user thread %d (status = %d)\n",
+    printf("Proc %d: user thread %d spawned user thread %d (status = %d)\n",
 	   sth->stid,parent->tid,child->tid,child->status);
+  tempdebug(sth,"spawnafter",1);
 }
 
 void Finish()
 {
   SysThread_t *sth = getSysThread();
   Thread_t *th = sth->userThread;
-  if (diag) printf("SysThread %d: finished user thread %d\n",sth->stid,th->tid);
+  if (diag) printf("Proc %d: finished user thread %d\n",sth->stid,th->tid);
   gc_finish();
-  stats_finish_thread(&th->stacktime,&th->gctime,&th->majorgctime);
+  stats_finish_thread(&sth->stacktime,&sth->gctime,&sth->majorgctime);
   DeleteJob(sth);
   work(sth);
+  assert(0);
 }
 
+/* Mutator calls Yield which is defined in the service_platform_asm.s assembly file */
 Thread_t *YieldRest()
 {
   SysThread_t *sth = getSysThread();
+  sth->userThread->request = -1;               /* Record why this thread pre-empted */
+  sth->userThread->saveregs[RESULT_REG] = 256; /* ML representation of unit */
   ReleaseJob(sth);
   work(sth);
-  return sth->userThread;
+  assert(0);
 }
 
 /* Should be called from the timer handler.  Causes the current user thread to GC soon. */ 
@@ -483,6 +529,7 @@ void scheduler()
     ReleaseJob(sth);
   }
   work(sth);
+  assert(0);
 }
 
 

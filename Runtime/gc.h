@@ -31,7 +31,6 @@ value_t alloc_bigfloatarray_gen (int loglen, double value, int tag);
 value_t alloc_bigfloatarray_para(int loglen, double value, int tag);
 
 
-extern long YoungHeapByte, MaxHeap, MinHeap;
 extern double TargetRatio, MaxRatio;
 extern double UpperRatioReward, LowerRatioReward;
 extern double TargetSize, SizePenalty;
@@ -39,10 +38,10 @@ extern value_t writelist_cursor;
 extern value_t writelist_start;
 extern value_t writelist_end;
 extern value_t write_count;
-extern long NumLocatives;
-extern long NumRoots;
-extern long TotalBytesAllocated, TotalBytesCollected;
-extern long TotalGenBytesCollected;
+extern int NumLocatives;
+extern int NumRoots;
+extern int TotalBytesAllocated, TotalBytesCollected;
+extern int TotalGenBytesCollected;
 
 long ComputeHeapSize(long oldsize, double oldratio);
 void paranoid_check_stack(Thread_t *, Heap_t *fromspace);

@@ -50,6 +50,7 @@ value_t alloc_bigintarray_gen(int word_len, value_t init_val, int ptag)
   long *saveregs = curThread->saveregs;
   value_t *res = 0;
   int i, tag = IARRAY_TAG | word_len << (2 + ARRLEN_OFFSET);
+  int real_byte_len = 4 * (word_len + 1);
 
 #ifdef DEBUG
   printf("\nint_alloc called with word_len = %d   init_val = %d\n",
@@ -58,22 +59,23 @@ value_t alloc_bigintarray_gen(int word_len, value_t init_val, int ptag)
 
 
     {
-      if (old_fromheap->alloc_start + (word_len + 1) >= old_fromheap->top) {
-	saveregs[ALLOCLIMIT_REG] = 4;
+      if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) {
+	curThread->request = 4;
 	gc_gen(curThread,0);
       }
-     if (old_fromheap->alloc_start + (word_len + 1) >= old_fromheap->top)
+     if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top)
        {
-	 printf("old_fromheap->alloc_start + (word_len + 1) < old_fromheap->top\n%d + %d < %d\n",
-		old_fromheap->alloc_start, (word_len + 1), old_fromheap->top);
+	 printf("old_fromheap->alloc_start + 4*(word_len + 1) < old_fromheap->top\n%d + %d < %d\n",
+		old_fromheap->alloc_start, real_byte_len, old_fromheap->top);
 	 assert(0);
        }
 #ifdef HEAPPROFILE
+      real_byte_len needs to be 4 bigger if we profile objects
       *(value_t *)(old_fromheap->alloc_start) = 30007;
       old_fromheap->alloc_start += 4;
 #endif
       res = (value_t *)(old_fromheap->alloc_start + 4);
-      old_fromheap->alloc_start = (value_t)(res + word_len);
+      old_fromheap->alloc_start += real_byte_len;
       old_alloc_ptr = old_fromheap->alloc_start;
       assert(old_fromheap->alloc_start < old_fromheap->top);
     }
@@ -94,22 +96,23 @@ value_t alloc_bigptrarray_gen(int log_len, value_t init_val, int ptag)
   long *saveregs = curThread->saveregs;
   value_t *res = 0;
   int i, tag = PARRAY_TAG | log_len << (2 + ARRLEN_OFFSET);
-
+  int real_byte_len = 4 * (log_len + 1);
 
     {
       /* we collect if init_val is from young area */
-      if ((old_fromheap->alloc_start + 4 * (log_len + 2) >= old_fromheap->top) ||
+      if ((old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) ||
 	  (init_val >= nursery->bottom && init_val < nursery->top)) {
-	saveregs[ALLOCLIMIT_REG] = 4;
+	curThread->request = 4;
 	gc_gen(curThread,0);
       }
-      assert(old_fromheap->alloc_start + 4 * (log_len + 2) < old_fromheap->top);
+      assert(old_fromheap->alloc_start + real_byte_len < old_fromheap->top);
 #ifdef HEAPPROFILE
+      real_byte_len needs to be 4 bigger if we profile objects
       *(value_t *)(old_fromheap->alloc_start) = 30009;
       old_fromheap->alloc_start += 4;
 #endif
       res = (value_t *)(old_fromheap->alloc_start + 4);
-      old_fromheap->alloc_start = (value_t)(res + log_len);
+      old_fromheap->alloc_start += real_byte_len;
       assert(old_fromheap->alloc_start < old_fromheap->top);
       old_alloc_ptr = old_fromheap->alloc_start;
     }
@@ -129,6 +132,7 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
   int pos, tag = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
+  int real_byte_len = 8 * (log_len + 1);
 
 #ifdef DEBUG
   printf("(log_len,init_val)  is  (%d, %lf)\n",log_len,init_val);
@@ -137,8 +141,8 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
 
     {
       assert(log_len >= 4096);
-      assert(4*(2*log_len+2) < floatheapsize);
-      pos = AllocBitmapRange(floatbitmap,DivideUp(4*(2*log_len+2),floatbitmapsize));
+      assert(real_byte_len < floatheapsize);
+      pos = AllocBitmapRange(floatbitmap,DivideUp(real_byte_len,floatbitmapsize));
 
       if (pos < 0)
 	{
@@ -147,7 +151,7 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
 	  printf("Have to do a GC while doing a float_alloc.  Hope this works.\n");
 #endif
 	  QueueClear(float_roots);    
-	  saveregs[ALLOCLIMIT_REG] = 4;
+	  curThread->request = 4;
 	  gc_gen(curThread,1);
 #ifdef DEBUG
 	  printf("float_roots has %d items\n",QueueLength(float_roots));
@@ -179,10 +183,10 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
 		     bitmap_start,bitmap_end,bitmap_size,word_len);
 #endif
 	    }
-	  pos = AllocBitmapRange(floatbitmap,DivideUp(4*(2*log_len+2),floatbitmapsize));
+	  pos = AllocBitmapRange(floatbitmap,DivideUp(real_byte_len,floatbitmapsize));
 #ifdef DEBUG
 	  printf("pos = %d, size = %d start = %d, safeend = %d\n",
-		 pos,DivideUp(4*(2*log_len+2),floatbitmapsize),
+		 pos,DivideUp(real_byte_len,floatbitmapsize),
 		 (double *)(floatheap->bottom + floatbitmapsize * pos),
 		 (double *)(floatheap->bottom + floatbitmapsize * pos) + (log_len + 1));
 #endif
@@ -191,7 +195,7 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
       
       rawstart = (double *)(floatheap->bottom + floatbitmapsize * pos);
       res = (value_t *)(rawstart + 1);
-      TotalBytesAllocated += RoundUp(4*(2*log_len+2),floatbitmapsize);
+      TotalBytesAllocated += RoundUp(real_byte_len,floatbitmapsize);
     }
 #ifdef HEAPPROFILE
   ((int *)res)[-2] = 30011;
@@ -300,7 +304,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
   long *saveregs = curThread->saveregs;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
-  int req_size = saveregs[ASMTMP_REG] - saveregs[ALLOCPTR_REG];
+  int req_size = curThread->request;
 
   struct rusage start,finish;
   Queue_t *root_lists, *loc_roots;
@@ -308,6 +312,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
   value_t to_allocptr;
 
   /* Check for first time heap value needs to be initialized */
+  assert(sysThread->userThread == curThread);
   if (alloclimit == StartHeapLimit)
     {
       saveregs[ALLOCPTR_REG] = nursery->bottom;
@@ -325,7 +330,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
   /* start timer */
   root_lists = curThread->root_lists;
   loc_roots = curThread->loc_roots;
-  start_timer(&curThread->gctime);
+  start_timer(&sysThread->gctime);
 
   /* these are debugging and stat-gatherting procedure */
 #ifdef DEBUG
@@ -334,7 +339,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 #endif
 
   /* Compute the roots from the stack and register set */
-  local_root_scan(curThread,nursery);
+  local_root_scan(sysThread,curThread,nursery);
 
   /* -------------- the actual heap collection ---------------------- */
     {
@@ -422,11 +427,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	     than the size of the nursery, then trigger a major GC */
 	  if ((old_fromheap->top - old_fromheap->alloc_start) < 
 	      (nursery->top - nursery->bottom))
-	    {
-	      printf("ForcedMajorGC\n");
-	      GCtype = ForcedMajor;
-	    }
-
+	    GCtype = ForcedMajor;
 	}
 
       /* Perform a major GC if 
@@ -439,7 +440,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  value_t *to_ptr = (value_t *)old_toheap->bottom;
 
 	  int i, newsize;
-	  start_timer(&(curThread->majorgctime));
+	  start_timer(&(sysThread->majorgctime));
 	  newsize = ((old_fromheap->alloc_start - old_fromheap->bottom) +
 		     (nursery->top - nursery->bottom));
 	  if ((newsize >= (Heap_Getsize(old_toheap))) && (MinHeap != MaxHeap))
@@ -455,7 +456,10 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  newsize = Heap_Getsize(old_toheap);
 	  Heap_Resize(old_toheap,newsize);
 	  Heap_Unprotect(old_toheap); 	  
-	  fprintf(stderr,"--------DOING MAJOR GC %d at GC %d---------\n",NumMajorGC, NumGC);
+	  if (GCtype == ForcedMajor)
+	      fprintf(stderr,"--------MAJOR GC %d at GC %d---------\n",NumMajorGC, NumGC);
+	  else 
+	      fprintf(stderr,"--------FORCED MAJOR GC %d at GC %d---------\n",NumMajorGC, NumGC);
 #ifdef DEBUG
 	  printf("nursery->bottom, nursery->top: %d %d\n",
 		 nursery->bottom, nursery->top);
@@ -464,7 +468,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 #endif
 
 	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
-	  global_root_scan(global_roots,nursery);
+	  global_root_scan(sysThread,global_roots,nursery);
 	  Enqueue(root_lists,global_roots);
 	  SetRange(&from_range,nursery->bottom, nursery->top);
 	  SetRange(&from2_range,old_fromheap->bottom, old_alloc_ptr);
@@ -513,7 +517,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  typed_swap(Heap_t *, old_fromheap, old_toheap);
 
 
-	  stop_timer(&curThread->majorgctime);
+	  stop_timer(&sysThread->majorgctime);
 	}
 
 
@@ -564,7 +568,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
   paranoid_check_heap(nursery,old_fromheap); 
 #endif
   /* stop timer */
-  stop_timer(&curThread->gctime); 
+  stop_timer(&sysThread->gctime); 
 
 }
 

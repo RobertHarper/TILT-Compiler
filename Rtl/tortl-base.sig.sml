@@ -143,9 +143,9 @@ sig
    (* make_record statically allocates if all the arguments are values or we are at top-level
      make_record_const will always statically allocate
      make_record_mutable will never statically allocate *)
-   val make_record : state * regi option * rep list * term list -> term * state
-   val make_record_const : state * regi option * rep list * term list * label option -> term * state
-   val make_record_mutable : state * regi option * rep list * term list -> term * state
+   val make_record         : state * rep list * term list -> term * state
+   val make_record_const   : state * rep list * term list * label option -> term * state
+   val make_record_mutable : state * rep list * term list -> term * state
 
 
    (* Tag-related Operations *)

@@ -14,8 +14,8 @@
 
 
 int GCTableEntryIDFlag = 0;  /* let the user code set it if it thinks it's on */
-long save_rate = 70;
-long use_stack_gen = 0;
+int save_rate = 70;
+int use_stack_gen = 0;
 
 
 static value_t *GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
@@ -706,6 +706,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 			     Queue_t *root_lists, value_t last_exnptr, value_t this_exnptr,
 			     Heap_t *fromspace)
 {
+  SysThread_t *sth = th->sysThread;
   Queue_t *retadd_queue = th->retadd_queue;
   value_t cur_sp;
   value_t max_sp = th->maxSP;
@@ -920,7 +921,7 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask,
 #endif
 }
 
-void local_root_scan(Thread_t *th, Heap_t *fromspace)
+void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
 {
   Queue_t *root_lists = th->root_lists;
   Queue_t *reg_roots = th->reg_roots;
@@ -928,7 +929,7 @@ void local_root_scan(Thread_t *th, Heap_t *fromspace)
   unsigned long i;
   int regmask = 0;
 
-  start_timer(&th->stacktime);
+  start_timer(&sth->stacktime);
   QueueClear(root_lists);
   QueueClear(reg_roots);
   
@@ -951,11 +952,11 @@ void local_root_scan(Thread_t *th, Heap_t *fromspace)
   debug_after_rootscan(saveregs,regmask,root_lists);
 #endif
 
-  stop_timer(&th->stacktime);
+  stop_timer(&sth->stacktime);
 
 }
 
-void global_root_scan(Queue_t *global_roots, Heap_t *fromspace)
+void global_root_scan(SysThread_t *sth, Queue_t *global_roots, Heap_t *fromspace)
 {
   static Queue_t *uninit_global_roots;
   static Queue_t *temp;

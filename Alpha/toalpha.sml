@@ -415,7 +415,7 @@ struct
 	     val Rsrc2 = freshIreg ()
 	   in
 	     emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
-	     emit (BASE(RTL (CALL{calltype = Rtl.C_NORMAL,
+	     emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
 				  func = DIRECT (Rtl.ML_EXTERN_LABEL "__divl",SOME (ireg 23)),
 				  args = [Rsrc1, Rsrc2],
 				  results = [Rdest],
@@ -434,7 +434,7 @@ struct
 	 (* This is a special call to the libc __reml routine, which
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27 and the pv in $23. *)
-		   emit (BASE(RTL (CALL{calltype = Rtl.C_NORMAL,
+		   emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
 					func = DIRECT (Rtl.ML_EXTERN_LABEL "__reml",SOME(ireg 23)),
 					args = [Rsrc1, Rsrc2],
 					results = [Rdest],
@@ -451,7 +451,7 @@ struct
 	 val Rsrc2 = freshIreg ()
        in
 	 emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
-	 emit (BASE(RTL (CALL{calltype = Rtl.C_NORMAL,
+	 emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
 			      func = DIRECT (Rtl.ML_EXTERN_LABEL "__reml",SOME(ireg 23)),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],

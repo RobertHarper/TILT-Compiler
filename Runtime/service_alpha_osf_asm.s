@@ -16,6 +16,13 @@
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
+	.globl	flushStore
+
+ # XXX dummy function	
+        .ent flushStore
+flushStore:
+        ret     $31, ($26), 1
+	.end flushStore
 	
  # ----------------------------------------------------------------------------	
  # FetchAndAdd takes the address of the variable to be incremented and the increment

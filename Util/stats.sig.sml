@@ -18,6 +18,7 @@ signature STATS =
      val ff      : string -> bool ref (* initialized to false *)
 
      val fetch_timer_max : string -> real (* in seconds *)
+     val fetch_timer_last : string -> real (* in seconds *)
 
    end
 

@@ -20,9 +20,15 @@
 
 
 /* use generational by default */
-long paranoid = 0;
-long diag = 0;
+int paranoid = 0;
+int diag = 0;
 int collector_type = Generational;
+int SHOW_GCDEBUG_FORWARD = 0;
+int SHOW_GCERROR   = 1;
+int SHOW_GCSTATS   = 0;
+int SHOW_GCDEBUG   = 0;
+int SHOW_HEAPS     = 0;
+int SHOW_GCFORWARD = 0;
 
 #ifdef HEAPPROFILE
 int HeapProfileFlag = 0;
@@ -37,18 +43,10 @@ value_t writelist_end = 0;
 value_t write_count = 0;
 #endif
 
-long SHOW_GCDEBUG_FORWARD = 0;
-long SHOW_GCERROR   = 1;
-long SHOW_GCSTATS   = 0;
-long SHOW_GCDEBUG   = 0;
-long SHOW_HEAPS     = 0;
-long SHOW_GCFORWARD = 0;
-
-
 int NumGC = 0;
 int NumMajorGC = 0;
-long NumLocatives = 0;
-long NumRoots = 0;
+int NumLocatives = 0;
+int NumRoots = 0;
 
 #ifdef HEAPPROFILE
 Object_Profile_t allocated_object_profile;
@@ -63,7 +61,7 @@ extern value_t GLOBALS_END_VAL;
 static range_t null_range;
 
 
-long YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
+int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double TargetRatio = 0.0, MaxRatio = 0.0;
 double UpperRatioReward = 0.0, LowerRatioReward = 0.0;
 double TargetSize = 0.0, SizePenalty = 0.0;
@@ -425,26 +423,19 @@ Thread_t *gc(Thread_t *curThread)
       assert(0);
     }
 
-
-  /*  printf("NumGC = %d started\n",NumGC); */
+  /* If real GC, then store request size */
+  curThread->request = curThread->saveregs[ASMTMP_REG] - curThread->saveregs[ALLOCPTR_REG];
+  assert(curThread->request >= 0);
 
   switch (collector_type) 
     {
     case Semispace : { gc_semi(curThread); break; }
     case Generational : { gc_gen(curThread,0); break; }
-    case Parallel : { gc_para(curThread); break; }
+    case Parallel : { flushStore();
+                      tempdebug(curThread->sysThread,"gc",0);
+                      gc_para(curThread); 
+                      break; }
     }
-
-  {
-    static int count = 0;
-    count++;
-    if (count >= 33) {
-      return;
-    }
-    /*       printf("count = %d\n", count); */
-  }
-
-  /*  printf("NumGC = %d over\n",NumGC); */
 
   return curThread;
 }

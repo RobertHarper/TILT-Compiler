@@ -138,7 +138,7 @@ struct
 		   add_instr(BR afterl))
 	  (* box case *)
 	  val _ = add_instr(ILABEL boxl)
-	  val (lv,state) = make_record(state,NONE,[valloc2rep exp_varloc],[exp_varloc])
+	  val (lv,state) = make_record(state,[valloc2rep exp_varloc],[exp_varloc])
 	  val rec_ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(rec_ir,desti))
 
@@ -191,7 +191,7 @@ struct
 	  (* easier non-record case *)
 	  val _ = add_instr(ILABEL nonrecordl) 
 	  val vls = [VALUE(INT field_sub),exp_varloc]
-	  val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
+	  val (lv,state) = make_record(state,map valloc2rep vls,vls)
 	  val ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(ir,desti))
 	  val _ = add_instr(BR afterl)
@@ -266,7 +266,7 @@ struct
 	      in  if (needs_boxing state field_type)
 		  then 
 		      let val rep = valloc2rep varloc
-		      in  make_record(state,NONE,[rep],[varloc])
+		      in  make_record(state,[rep],[varloc])
 		      end
 		  else 
 		      (varloc,state)
@@ -276,7 +276,7 @@ struct
 	      let val SOME varloc = varloc_opt
 		  val varlocs = [VALUE(INT field_sub), varloc]
 		  val reps = map valloc2rep varlocs
-	      in make_record(state,NONE,reps,varlocs)
+	      in make_record(state,reps,varlocs)
 	      end
 	  
       in  if is_tag
@@ -298,7 +298,7 @@ struct
 				    then varlocs
 				else (VALUE(INT field_sub)) :: varlocs
 		  val reps = map valloc2rep varlocs
-		  val (vl,state) = make_record(state,NONE,reps,varlocs)
+		  val (vl,state) = make_record(state,reps,varlocs)
 	      in  (vl,state)
 	      end
       end

@@ -17,8 +17,7 @@
 #include "gcstat.h"
 
 
-extern long TotalGenBytesCollected;
-extern long TotalBytesAllocated;
+extern int TotalBytesAllocated;
 extern int NumGC;
 extern Queue_t *ScanQueue;
 extern value_t MUTABLE_TABLE_BEGIN_VAL;
@@ -48,7 +47,7 @@ value_t alloc_bigwordarray_semi(int tagType, int word_len, value_t init_val, int
 #ifdef DEBUG
       printf("DOING GC inside int_alloc with a semispace collector\n");
 #endif
-      saveregs[ALLOCLIMIT_REG] = 4 * (word_len + 1);
+      curThread->request = 4 * (word_len + 1);
       gc_semi(curThread);
       alloc_ptr = saveregs[ALLOCPTR_REG];
       alloc_limit = saveregs[ALLOCLIMIT_REG];
@@ -151,7 +150,7 @@ void gc_semi(Thread_t *curThread)
   long *saveregs = curThread->saveregs;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
-  int req_size = saveregs[ASMTMP_REG] - allocptr;
+  int req_size = curThread->request;
   value_t *to_ptr = (value_t *)toheap->bottom;
   range_t from_range, to_range;
   Queue_t *root_lists, *loc_roots;
@@ -160,6 +159,7 @@ void gc_semi(Thread_t *curThread)
   assert(0); /* unimplemented */
 #endif
 
+  assert(sysThread->userThread == curThread);
   /* Check for first time heap value needs to be initialized */
   if (sysThread->limit == StartHeapLimit)
     {
@@ -176,15 +176,15 @@ void gc_semi(Thread_t *curThread)
   /* Start timing this collection */
   root_lists = curThread->root_lists;
   loc_roots = curThread->loc_roots;
-  start_timer(&curThread->gctime);
+  start_timer(&sysThread->gctime);
 
 #ifdef DEBUG
   debug_and_stat_before(saveregs, req_size);
 #endif
 
   /* Compute the roots from the stack and register set */
-  local_root_scan(curThread,fromheap);
-  global_root_scan(global_roots,fromheap);
+  local_root_scan(sysThread,curThread,fromheap);
+  global_root_scan(sysThread,global_roots,fromheap);
   Enqueue(root_lists,global_roots);
 
   /* Also add in the locative roots */
@@ -294,7 +294,7 @@ void gc_semi(Thread_t *curThread)
   NumGC++;
 
   /* Stop timer for collection */
-  stop_timer(&curThread->gctime);
+  stop_timer(&sysThread->gctime);
 }
 
 #define INT_INIT(x,y) { if (x == 0) x = y; }

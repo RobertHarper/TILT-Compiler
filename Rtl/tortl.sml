@@ -41,9 +41,9 @@ struct
   open Nil NilUtil
   open Rtl Rtltags Pprtl TortlBase
 
-  val maxsp_disp = 8 * 32 + 8 * 32
-  val notinml_disp = 8 * 32 + 8 * 32 + 8 + 8 + 8
-
+  fun maxsp_disp() =
+      (print "Warning: maxsp_disp used but is not platform-independent; works only for alpha\n"; 
+       8 * 32 + 8 * 32)
 
     val show_cbnd = Stats.ff("show_cbnd")
 
@@ -62,10 +62,10 @@ struct
 			cbnd_depth := 0)
 
       
-   type translate_params = { HeapProfile : int option, do_write_list : bool, 
-                             codeAlign : Rtl.align, FullConditionalBranch : bool, 
-                             elim_tail_call : bool, recognize_constants : bool }
-   val cur_params = ref { HeapProfile = NONE : int option, 
+   type translate_params = {HeapProfile : int option, do_write_list : bool, 
+			    codeAlign : Rtl.align, FullConditionalBranch : bool, 
+			    elim_tail_call : bool, recognize_constants : bool}
+   val cur_params = ref {HeapProfile = NONE : int option, 
 			 do_write_list = true,
 			 codeAlign = Rtl.OCTA, FullConditionalBranch = false, 
 			 elim_tail_call = true, recognize_constants = true}
@@ -141,10 +141,10 @@ struct
 			      val reps = [NOTRACE_CODE, TRACE, TRACE]
 			      val (lv,state) = 
 				  (case (toplevel,is_recur) of
-				       (true,_) => make_record_const(state,NONE,reps,vls,
+				       (true,_) => make_record_const(state,reps,vls,
 								     SOME(LOCAL_DATA(Name.var2string v)))
-				     | (_,true) => make_record_mutable(state,NONE,reps,vls)
-				     | (_,false) => make_record(state,NONE,reps,vls))
+				     | (_,true) => make_record_mutable(state,reps,vls)
+				     | (_,false) => make_record(state,reps,vls))
 			      val ir = load_ireg_term(lv,NONE)
 			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
 			  in  (ir,s')
@@ -358,8 +358,6 @@ struct
 	    | Switch_e sw => xswitch(state,name,sw,trace,context)
 	    | ExternApp_e (f, elist) => (* assume the environment is passed in first *)
 		  let 
-		      val tmp1 = alloc_regi NOTRACE_INT
-		      val tmp2 = alloc_regi NOTRACE_INT
 		      val _ = add_instr (ICOMMENT ("making external call"))
 		      fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
 		      fun efolder(e,(eregs,fregs,state)) = 
@@ -393,15 +391,11 @@ struct
 				     
 				     
 		      val (_,dest) = alloc_reg_trace state trace
-		      val _ = add_instr(LI(0w1,tmp1))
-		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp1))
 		      val _ = add_instr(CALL{call_type = C_NORMAL,
 					     func = fun_reglabel,
 					     args = args,
 					     results = [dest],
 					     save = getLocals()})
-		      val _ = add_instr(LI(0w0,tmp2))
-		      val _ = add_instr(STORE32I(EA(SREGI THREADPTR,notinml_disp),tmp2))
 		      val result = (LOCATION(REGISTER (false,dest)), new_gcstate state)
 		      val _ = add_instr (ICOMMENT ("done making external call"))
 			  
@@ -568,8 +562,8 @@ struct
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
 		      val reps = (NOTRACE_CODE :: NOTRACE_LABEL :: TRACE :: local_int_reps)
 		      val _ = add_instr(LADDR(hl,0,hlreg))
-		      val (_,bstate) = make_record(bstate,SOME exnptr,reps, int_vallocs)
-			  
+		      val (new_exnrec,bstate) = make_record(bstate, reps, int_vallocs)
+		      val _ = load_ireg_term(new_exnrec, SOME exnptr)
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
@@ -615,6 +609,7 @@ struct
 		                  the exn arg must be moved before the gc_check *)
 		      val tmp1 = alloc_regi(NOTRACE_INT)
 		      val tmp2 = alloc_regi(NOTRACE_INT)
+		      val maxsp_disp = maxsp_disp()
 		      val _ = add_instr(LOAD32I(EA(SREGI THREADPTR,maxsp_disp),tmp1))
 		      val _ = add_instr(CMPUI(GT,SREGI STACKPTR,REG tmp1,tmp2))
 		      val _ = add_instr(CMV(NE,tmp2,REG(SREGI STACKPTR), tmp1))
@@ -908,7 +903,7 @@ struct
 	       let fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
 		   val (terms,state) = foldl_list folder state elist
 		   val reps = map valloc2rep terms
-	       in  make_record(state,NONE,reps,terms)
+	       in  make_record(state,reps,terms)
 	       end
          | partialRecord _ => error "partialRecord not implemented"
 	 | select label => 
@@ -1019,7 +1014,7 @@ struct
 		       val (vl3,state) = xconst(state, Prim.vector(char_con,name_array))
 		       val vallocs = [vl1,vl2,vl3]
 		       val reps = map valloc2rep vallocs
-		   in  make_record(state,NONE,reps,vallocs)
+		   in  make_record(state,reps,vallocs)
 		   end
 	 | make_vararg oe => 
 		   let fun local_xexp (s,e) = 
@@ -1429,8 +1424,8 @@ struct
 		  val (cons',(const,state)) = foldl_list folder (true,state) cons
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
 		  val (lv,state) = if const 
-				       then make_record_const(state,NONE,reps, indices' @ cons', NONE)
-				   else make_record(state,NONE,reps, indices' @ cons')
+				       then make_record_const(state,reps, indices' @ cons', NONE)
+				   else make_record(state,reps, indices' @ cons')
 	      in (const, lv, state)
 	      end
 	  fun mk_sum' (s,indices,cons) = mk_sum_help(s,indices,cons)
@@ -1470,8 +1465,8 @@ struct
 				val terms = Listops.map0count (fn _ => lv) num_mu
 				val (result,state) = 
 				    if const (* all mus are base-case/degenerate now *)
-					then make_record_const(state,NONE,reps,terms,NONE)
-				    else make_record_const(state,NONE,reps,terms,NONE)
+					then make_record_const(state,reps,terms,NONE)
+				    else make_record_const(state,reps,terms,NONE)
 			    in  (const,result,state)
 			    end
 		   end
@@ -1506,7 +1501,7 @@ struct
 			   [lv] => (lv, Word_k Runtime, state)
 			 | _ => let val kind = kind_tuple (map (fn _ => Word_k Runtime) lvs)
 				    val reps = map (fn _ => TRACE) lvs
-				    val (lv,state) = make_record(state,NONE,reps,lvs)
+				    val (lv,state) = make_record(state,reps,lvs)
 				in  (lv,kind,state)
 				end)
 		   end
@@ -1553,8 +1548,8 @@ struct
 			      | _ =>
 				    let val reps = map (fn _ => TRACE) terms
 				    in  if const 
-					    then make_record_const(state,NONE,reps,terms,NONE)
-					else make_record(state,NONE,reps,terms)
+					    then make_record_const(state,reps,terms,NONE)
+					else make_record(state,reps,terms)
 				    end)
 		   in  (const,result,state)
 		   end
@@ -1844,3 +1839,4 @@ struct
          end
 
 end
+

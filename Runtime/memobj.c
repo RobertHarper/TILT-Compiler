@@ -23,9 +23,8 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
     }
   else
     {
-#ifdef SHOW_MMAP
-      printf ("mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
-#endif
+      if (paranoid)
+	printf ("mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
     }
 }
 
@@ -47,16 +46,16 @@ int my_mmap(caddr_t start, int size, int prot)
   v = mmap((caddr_t) start, size, prot,
 	      MAP_ANONYMOUS | MAP_FIXED, fd, 0);
 #endif
-#ifdef SHOW_MMAP
-  printf ("mmap (%d,%d,%d)\n",start,size,prot);
-  if (prot == (PROT_READ | PROT_WRITE)) {
-    caddr_t end = start + size - 4;
-    *((int *)(start)) = 666;
-    *((int *)(end)) = 666;
-    printf("written 666 to %u: read back %d\n",start,*((int *)(start)));
-    printf("written 666 to %u: read back %d\n",end,*((int *)(end)));
+  if (paranoid) {
+    printf ("mmap (%d,%d,%d)\n",start,size,prot);
+    if (prot == (PROT_READ | PROT_WRITE)) {
+      caddr_t end = start + size - 4;
+      *((int *)(start)) = 666;
+      *((int *)(end)) = 666;
+      printf("written 666 to %u: read back %d\n",start,*((int *)(start)));
+      printf("written 666 to %u: read back %d\n",end,*((int *)(end)));
+    }
   }
-#endif
   return v;
 }
 
@@ -78,7 +77,7 @@ static Heap_t  *Heaps;
 value_t StopHeapLimit = 1;  /* A user thread heap limit used to indicates that it has been interrupted */
 value_t StartHeapLimit = 2; /* A user thread heap limit used to indicates that it has not been given space */
 
-long StackSize = 512; /* mesaure in Kb */
+int StackSize = 512; /* mesaure in Kb */
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
 #ifdef alpha_osf

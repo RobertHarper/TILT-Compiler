@@ -17,7 +17,15 @@
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
-	
+	.globl	flushStore
+
+	.proc	07
+	.align	4
+flushStore:
+	membar	#StoreStore | #StoreLoad
+	retl
+	nop
+			
  ! ----------------------------------------------------------------------------	
  ! FetchAndAdd takes the address of the variable to be incremented (%o0) and the increment (%o1)
  ! Returns the pre-incremented value (%o0)
@@ -50,7 +58,7 @@ FetchAndAdd:
 TestAndSet:
 	mov	1, %o1
 	cas	[%o0], %g0, %o1
-	not	%o1, %o0
+	xor	%o1, 1, %o0
         retl     
 	nop
 	.size   TestAndSet,(.-TestAndSet)
@@ -81,7 +89,7 @@ start_client:
 	mov	%o0, THREADPTR_SYMREG		! initialize thread ptr outside loop
 	st	%o1, [THREADPTR_SYMREG + ASMTMP_DISP]
 	st	%o2, [THREADPTR_SYMREG + ASMTMP2_DISP]
-	call	load_iregs			! restore dedicated pointers like
+	call	load_regs			! restore dedicated pointers like
 						! heap pointer, heap limit, and stack pointer
 	nop
 	sub	SP_SYMREG, 96, SP_SYMREG	! allocate a little space on systhread stack
@@ -181,7 +189,7 @@ global_exnhandler:
 	.align	4
 raise_exception_raw:
 	mov	%o0, THREADPTR_SYMREG		! save where regs are
-	mov	%o1, RESULT_SYMREG	! load_Iregs_forC does not change this reg
+	mov	%o1, RESULT_SYMREG		! load_Iregs_forC does not change this reg
 	st	%o2, [SP_SYMREG + 24]		! save handler address
 	call	load_regs_forC
 	nop

@@ -18,8 +18,8 @@
 
 
 
-extern long TotalGenBytesCollected;
-extern long TotalBytesAllocated;
+extern int TotalGenBytesCollected;
+extern int TotalBytesAllocated;
 extern int NumGC;
 extern Queue_t *ScanQueue;
 extern value_t MUTABLE_TABLE_BEGIN_VAL;
@@ -67,7 +67,6 @@ static int Gate = 0, Turn1 = 0, Turn2 = 0;
 static void SynchStart(SysThread_t *sth)
 {
   while (Gate);
-  sth->temp = &Turn1;
   FetchAndAdd(&Turn1, 1);
   while (Gate)
     {
@@ -93,6 +92,29 @@ static void SynchEnd(void)
   }
 }
 
+/* XXX */
+void tempdebug(SysThread_t *sysThread, char *where, int cont)
+{
+  int i, fail = 0;
+  return;
+  for (i=0; i<=3; i++) {
+    int match = (&Threads[i]) == sysThread->userThread;
+    int bad = match && (Threads[i].saveregs[ASMTMP_REG] < Threads[i].saveregs[ALLOCPTR_REG]);
+    int consistent = (Threads[i].tid >= 0) ?
+                     (Threads[i].saveregs[THREADPTR_REG]) == (int)(&(Threads[i])) :
+                     (Threads[i].saveregs[ASMTMP_REG] == 0 &&
+		      Threads[i].saveregs[ALLOCPTR_REG] == 0);
+    printf("Proc %d: thread %d (%d) has tmp = %d, ptr = %d   %s %s %s %s\n",
+	   sysThread->stid,Threads[i].tid, Threads[i].id,
+	   Threads[i].saveregs[ASMTMP_REG], Threads[i].saveregs[ALLOCPTR_REG],
+	   where, match ? " <-- " : "", bad ? " *** " : "",
+	   consistent ? "" : "INCONSISTENT");
+    if (bad)
+      fail = 1;
+  }
+  if (fail && (!cont))
+    assert(0);
+}
 
 static void stop_copy(SysThread_t *sysThread)
 {
@@ -116,12 +138,15 @@ static void stop_copy(SysThread_t *sysThread)
 
   /* Wait for all threads to reach this point; note that the first thread is counted twice */
   if (diag)
-    printf("SysThread %d: %s waiting for %d systhreads to stop mutator\n",
-	 sysThread->stid, isFirst ? "First" : "", (NumSysThread + 1) - numWaitThread);
+    printf("Proc %d: waiting for %d systhreads to stop mutator %s\n",
+	 sysThread->stid, (NumSysThread + 1) - numWaitThread, isFirst ? "First" : "");
   while (numWaitThread < (NumSysThread + 1)) 
     ;
+  if (diag)
+    printf("Proc %d: proceeding to colection\n", sysThread->stid);
   numDoneThread = 0;
 
+  tempdebug(sysThread,"after mutation stopped",0);
 
   /* Get local ranges ready for use */
   SetRange(&from_range, fromheap->bottom, fromheap->top);
@@ -132,7 +157,7 @@ static void stop_copy(SysThread_t *sysThread)
   if (isFirst)
     {
       /* Since it's semispace, we must consider the global_roots each time */
-      global_root_scan(global_roots,fromheap);
+      global_root_scan(sysThread,global_roots,fromheap);
       while (!(QueueIsEmpty(global_roots))) {
 	value_t *root = Dequeue(global_roots);
 	value_t temp = *root;
@@ -144,8 +169,11 @@ static void stop_copy(SysThread_t *sysThread)
   {
     Thread_t *curThread = NULL;
     while ((curThread = NextJob()) != NULL) {
+
+      tempdebug(sysThread,"before forward_roots",0);
+
       /* Compute the roots from the stack and register set */
-      local_root_scan(curThread,fromheap);
+      local_root_scan(sysThread,curThread,fromheap);
       /* Also add in the locative roots */
       QueueClear(curThread->loc_roots);
       for (i=0; i<QueueLength(ScanQueue); i++)
@@ -180,7 +208,11 @@ static void stop_copy(SysThread_t *sysThread)
 	paranoid_check_stack(curThread,fromheap);
 
       if (diag)
-	printf("SysThread %d:    forwarded local roots of userThread %d\n",sysThread->stid,curThread->tid);      
+	printf("Proc %d:    forwarded local roots of userThread %d\n",
+	       sysThread->stid,curThread->tid);      
+
+      tempdebug(sysThread,"after forward_roots",0);
+
     }
   }
   
@@ -197,7 +229,7 @@ static void stop_copy(SysThread_t *sysThread)
     FetchAndAdd(&numGlobalThread,1);
   }
   if (diag)
-    printf("SysThread %d: Entering global state\n",sysThread->stid);
+    printf("Proc %d: Entering global state\n",sysThread->stid);
 
   /* Get work from global stack; operate on local stack; put work back on global stack 
      If global stack is empty between SynchEnd and SynchStart, then we are done. 
@@ -231,7 +263,7 @@ static void stop_copy(SysThread_t *sysThread)
   }
 
   if (diag)
-    printf("SysThread %d: emptied work stack\n",sysThread->stid);
+    printf("Proc %d: emptied work stack\n",sysThread->stid);
 
   /* Zero out rest of to-space page */
   if (paranoid) 
@@ -242,7 +274,7 @@ static void stop_copy(SysThread_t *sysThread)
   /* Wait for all active threads to reach this point so all forwarding is complete */
   FetchAndAdd(&numReadyThread,1);
   if (diag)
-    printf("SysThread %d: waiting for %d systhreads to finish collecting\n",sysThread->stid, 
+    printf("Proc %d: waiting for %d systhreads to finish collecting\n",sysThread->stid, 
 	 NumSysThread - numReadyThread);
   while (numReadyThread < NumSysThread)
     ;
@@ -294,7 +326,7 @@ static void stop_copy(SysThread_t *sysThread)
   /* Resume normal scheduler work and start mutators */
   FetchAndAdd(&numDoneThread,1);
   if (diag)
-    printf("SysThread %d: waiting for %d threads to sync on space flip\n",sysThread->stid, 
+    printf("Proc %d: waiting for %d threads to sync on space flip\n",sysThread->stid, 
 	   NumSysThread - numDoneThread);
   while (numDoneThread < NumSysThread)
     ;
@@ -318,13 +350,22 @@ void gc_para(Thread_t *curThread)
   value_t *alloc = (value_t *) saveregs[ALLOCPTR_REG];
   value_t *limit = (value_t *) saveregs[ALLOCLIMIT_REG];
   value_t *tmp1, *tmp2;
-  int req_size = saveregs[ASMTMP_REG] - (int) alloc;
+  int req_size = curThread->request;
+
+  flushStore();                          /* make sure thread info is flushed to memory */
 
   if (!(alloc <= limit)) 
     printf("alloc = %d   limit = %d\n",alloc,limit);
   assert(alloc <= limit);    
   assert(writelist_cursor <= writelist_end); /* XXX writelist is not synchronized */
-  
+  assert(req_size >= 0);
+
+  {
+    char tempbuf[30];
+    sprintf(tempbuf,"gc_para %d",NumGC);
+    tempdebug(sysThread,tempbuf,0);  
+  }
+
   /* See if we can grab another page from the fromspace; if not, then it's time to stop and copy */
   GetHeapArea(fromheap,pagesize,&tmp1,&tmp2);
   if (tmp1) {
@@ -332,20 +373,25 @@ void gc_para(Thread_t *curThread)
     sysThread->limit = (int)tmp2;
     saveregs[ALLOCPTR_REG] = (long)tmp1;
     saveregs[ALLOCLIMIT_REG] = (long)tmp2;
-    if (diag)
-      printf("SysThread %d: user thread %d: Mutator grabbed a page at %d\n",
+    if (diag) {
+      printf("Proc %d: user thread %d: Mutator grabbed a page at %d\n",
 	     stid,tid,saveregs[ALLOCPTR_REG]);
+    }
     if (req_size > pagesize) {
       printf("req_size = %d   <=  pagesize = %d\n",req_size,pagesize);
       assert(0);
     }
+    flushStore();                          /* make sure thread info is flushed to memory */
+    tempdebug(sysThread,"grabbed page",1);  
     return;
   }
-  
+
+  tempdebug(sysThread,"invoking stop-copy1",0);  
   if (diag)
-    printf("SysThread %d: user thread %d: invoking stop-and-copy; requesting %d\n",
+    printf("Proc %d: user thread %d: invoking stop-and-copy; requesting %d\n",
 	   stid,tid, req_size);
-  
+  tempdebug(sysThread,"invoking stop-copy2",0);
+
   sysThread->alloc = saveregs[ALLOCPTR_REG];
   FetchAndAdd(&curThread->status,-1);
   sysThread->userThread = NULL;

@@ -23,12 +23,7 @@
 #endif
 
 #define WRITE
-#undef gprintf
-#ifndef SUPPRESS
-#define gprintf printf
-#else
-#define gprintf
-#endif
+
 
 #ifdef alpha_osf
 long GetPc(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_pc); }
@@ -245,7 +240,7 @@ void memfault_handler(int signum,
       switch (code)
 	{ 
 	case SEGV_MAPERR:
-	  printf("SEGV_MAPERR  address %d not mapped\n",sth->stid,badaddr);
+	  printf("SEGV_MAPERR  address %d not mapped\n",badaddr);
 	  break;
 	case SEGV_ACCERR:
 	  printf("SEGV_ACCERR  invalid permissions for address %d\n",
@@ -339,45 +334,39 @@ void fpe_handler(int signum,
   switch (code)
     {
     case FPE_INTDIV:
-      gprintf("%d %d ",errno,code);
-      gprintf("Integer divide by zero\n");
+      if (paranoid) 
+	printf("Integer divide by zero: %d %d ",errno,code);
       raise_exception(uctxt,divide_exn);
       break;
     case FPE_FLTDIV:
-      gprintf("%d %d ",errno,code);
-      gprintf("Float   divide by zero\n");
+      if (paranoid) 
+	printf("Float divide by zero: %d %d ",errno,code);
       raise_exception(uctxt,divide_exn);
       break;
     case FPE_INTOVF:
-      gprintf("%d %d ",errno,code);
-      gprintf("Integer overflow: too bad we never get this\n");
+      if (paranoid) 
+	printf("Integer overflow: we are not getting this... %d %d ",errno,code);
       raise_exception(uctxt,overflow_exn);
       break;
     case FPE_FLTOVF:
-      gprintf("%d %d ",errno,code);
-      gprintf("Float overflow: or could be integer overflow\n");
+      if (paranoid)
+	printf("Float OR integer overflow: %d %d ",errno,code);
       raise_exception(uctxt,overflow_exn);
       break;
     case FPE_FLTUND:
-      printf("%d %d ",errno,code);
-      printf("Float Underflow\n");
+      printf("Float underflow: %d %d ",errno,code);
       break;
     case FPE_FLTRES:
-      printf("%d %d ",errno,code);
-      printf("Float Inexact result\n");
+      printf("Float inexact result: %d %d ",errno,code);
       break;
     case FPE_FLTINV:
-      printf("%d %d ",errno,code);
-      printf("Float Invalid operation\n");
+      printf("Float invalid operation: %d %d ",errno,code);
       return;
-      break;
     case FPE_FLTSUB:
-      printf("%d %d ",errno,code);
-      printf("Float Subscript out of range\n");
+      printf("Float subscript out of range: %d %d ",errno,code);
       break;
     default:
-      printf("%d %d ",errno,code);
-      printf("Unknown FPE signal\n");
+      printf("Unknown FPE signal: %d %d ",errno,code);
       break;
     }
   exit(-1);

@@ -18,13 +18,21 @@
 #include "client.h"
 
 int ThreadedVersion = THREADED_VERSION;
-long LEAST_GC_TO_CHECK = -1;
+int LEAST_GC_TO_CHECK = -1;
 
 int NumHeap       = 20;
 int NumStack      = 100;
 int NumStackChain = 100;
 int NumThread     = 100;
 int NumSysThread  = 1;
+
+int process_bool(int *var, char *item, char *option)
+{
+  int match = !strcmp(item,option);
+  if (match) 
+    *var = 1;
+  return match;
+}
 
 int process_string(char *var, char *item, char *option)
 {
@@ -81,67 +89,100 @@ int process_double(double *var, char *item, char *option)
   return 1;
 }
 
+struct option_entry {
+  int type; /* 0 for bool, 1 for int, 2 for long, 3 for double */
+  char *name; 
+  void *item;
+  char *description;
+};
+
+static int help=0, semi=0, gen=0, para=0, fixheap=0, youngheap=0;
+struct option_entry table[] = 
+  {0, "help", &help, "Print help info but do not execute program",
+   0, "semi", &semi, "Use the semispace garbage collector",
+   0, "gen", &gen,   "Use the generational garbage collector",
+   0, "para", &para, "Use the semispace, parallel garbage collector",
+   0, "paranoid", &paranoid, "Run in paranoid mode",
+   0, "diag", &diag, "Run in diagnostic mode",
+   0, "gcstats", &SHOW_GCSTATS, "Show GC statistics during execution",
+   0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
+   0, "gcforward", &SHOW_GCFORWARD, "Show object forwarding infomation during GC",
+   0, "gcerror", &SHOW_GCERROR, "Show GC errors",
+   0, "gcheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
+   1, "stacksize", &StackSize, "Stack size of threads measured in Kbytes",
+   1, "proc", &NumSysThread, "Use this many processors",
+   1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
+   1, "maxheap", &MaxHeap, "Set maximum size of heap in Kbytes",
+   1, "fixheap", &fixheap, "Set the size of heap in Kbytes",
+   1, "nursery", &youngheap, "Set size of nursery in Kbytes",
+   1, "nurserybyte", &YoungHeapByte, "Set size of nursery in bytes",
+   2, "targetratio", &TargetRatio, "Set the target ratio of live objects",
+   0, "short", &shortSummary, "Print short summary of execution"};
+
 void process_option(int argc, char **argv)
 {
+  int i;
   char **cur;
   for (cur=argv+1; *cur != NULL; cur++)
     {
+      int matched = 0;
       char *poss_option = *cur;
       char *option = poss_option+1;
-      char buf[100];
       if (*poss_option != '@')
 	{
 	  printf("Ignoring non-option argument '%s'\n",poss_option);
 	  continue;
 	}
-      if (process_string(buf,"GC_METHOD",option))
-	{
-	  if (!strcmp(buf,"semi")) {
-	    collector_type = Semispace;
-	    continue;
+      for (i=0; i<sizeof(table) / sizeof(struct option_entry); i++) {
+	switch (table[i].type) {
+	  case 0 : {
+	    matched = process_bool(table[i].item, table[i].name, option);
+	    break;
 	  }
-	  if (!strcmp(buf,"gen")) {
-	    collector_type = Generational;
-	    continue;
+	  case 1 : {
+	    matched = process_int(table[i].item, table[i].name, option);
+	    break;
 	  }
-	  if (!strcmp(buf,"para")) {
-	    collector_type = Parallel;
-	    continue;
+	  case 2 : {
+	    matched = process_long(table[i].item, table[i].name, option);
+	    break;
+	  }
+	  case 3 : {
+	    matched = process_double(table[i].item, table[i].name, option);
+	    break;
+	  }
+	  default: {
+	    printf("Unknown type for option entry %d", table[i].name);
+	    assert(0);
 	  }
 	}
-      if (process_long(&paranoid,"paranoid",option))  continue;
-      if (process_long(&diag,"diag",option))  continue;
-      if (process_long(&SHOW_GCSTATS,"SHOW_GCSTATS",option))  continue;
-      if (process_long(&SHOW_GCDEBUG,"SHOW_GCDEBUG",option))  continue;
-      if (process_long(&SHOW_GCFORWARD,"SHOW_GCFORWARD",option))  continue;
-      if (process_long(&SHOW_GCERROR,"SHOW_GCERROR",option))  continue;
-      if (process_long(&SHOW_HEAPS,"SHOW_HEAPS",option))      continue;
-      if (process_long(&StackSize,"StackSize",option))       continue;
-      if (process_double(&TargetRatio,"TargetRatio",option)) continue;
-      if (process_long(&MinHeap,"MinHeap",option))           continue;
-      if (process_long(&MaxHeap,"MaxHeap",option))           continue;
-      if (process_int(&NumSysThread,"NumSysThread",option)) continue;
-      {
-	long FixHeap = 0;
-	if (process_long(&FixHeap,"FixHeap",option))
-	  {
-	    MinHeap = MaxHeap = FixHeap;
-	    continue;
-	  }
+	if (matched) break;
       }
-      if (process_long(&YoungHeapByte,"YoungHeapByte",option))   continue;
-      {
-	long YoungHeap = 0;
-	if (process_long(&YoungHeap,"YoungHeap",option))         
-	  {
-	    YoungHeapByte = 1024 * YoungHeap;
-	    continue;
-	  }
-      }
-      if (process_long(&save_rate,"save_rate",option))           continue;
-      if (process_long(&use_stack_gen,"use_stack_gen",option))   continue;
-      printf("Unknown option argument '%s'\n",option);
+      if (!matched)
+	printf("Unknown option argument '%s'\n",option);
     }
+  if (semi) collector_type = Semispace;
+  if (gen) collector_type = Generational;
+  if (para) collector_type = Parallel;
+  if (fixheap) MinHeap = MaxHeap = fixheap;
+  if (youngheap) YoungHeapByte = 1024 * youngheap;
+  if (help) {
+    printf("Boolean options are activated like this: @diag\n");
+    printf("Int, long, and double options are activated like this: @nursery=512\n");
+    printf("The following options are available.\n");
+    for (i=0; i<sizeof(table) / sizeof(struct option_entry); i++) {
+      char *type;
+      switch (table[i].type) {
+	case 0 : type = "bool"; break;
+	case 1 : type = "int"; break;
+	case 2 : type = "long"; break;
+	case 3 : type = "double"; break;
+	default : printf("Unknown type for option entry %d", table[i].name); assert(0);
+      }
+      printf("%12s : %6s -- %s\n", table[i].name, type, table[i].description);
+    }
+    exit(-1);
+  }
 }
 
 int main(int argc, char **argv)

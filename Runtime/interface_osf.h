@@ -8,6 +8,7 @@
 #define CFOURTHARG_REG   19
 #define CFIFTHARG_REG    20
 #define CSIXTHARG_REG    21
+#define RESULT_REG       16
 
 #define FTMP_REG         30
 #define ASMTMP_REG       28
