@@ -6,6 +6,7 @@ signature ILSTATIC =
     sharing Il.Prim = PrimUtil.Prim
     sharing type Il.con = PrimUtil.con
     sharing type Il.exp = PrimUtil.exp
+    val trace : bool ref
     val debug : bool ref
  
 

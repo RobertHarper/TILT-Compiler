@@ -78,7 +78,11 @@ functor Pat(structure Il : IL
 
     fun arm2sdecs(_,svc_list,_) = map (fn (s,v,c) => (SDEC(symbol_label s,
 							   DEC_EXP(v,c)))) svc_list
-    fun arm_addbind(s,v,c,(cl,svc_list,expopt) : arm) = (cl,(s,v,c)::svc_list,expopt)
+    fun arm_addbind(s,v,c,(cl,svc_list,expopt) : arm) = 
+	let fun notshadow (s2,_,_) = not(Symbol.eq(s,s2))
+	    val svc_list' = List.filter notshadow svc_list
+	in  (cl,(s,v,c)::svc_list',expopt)
+	end
     fun is_constr context (p : Ast.path) = 
       let val res = (case Datatype.constr_lookup context p of
 			 SOME _ => true

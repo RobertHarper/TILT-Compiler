@@ -24,6 +24,13 @@ functor Toil(structure Il : IL
     open Util Listops Name IlContext Tyvar
     open Prim
 
+fun Sig_IsSub arg = IlStatic.Sig_IsSub arg handle e => false
+fun sub_con arg = IlStatic.sub_con arg handle e => false
+fun eq_con arg = IlStatic.eq_con arg handle e => false
+fun soft_eq_con arg = IlStatic.soft_eq_con arg handle e => false
+fun con_normalize (arg as (ctxt,con)) = IlStatic.con_normalize arg handle e => con
+fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg handle e => con
+
     val parse_error = fn s => error "toil.sml: parse impossibility" s
     val pat_error = fn s => error "toil.sml: pattern impossibility" s
     val elab_error = fn s => error "toil.sml: elaborator impossibility" s
@@ -96,6 +103,7 @@ functor Toil(structure Il : IL
 			      print "Error at "; print (peek_region()); print ", ")
 	fun warn_region() = (error_level := error_max(!error_level,Warn);
 			     print "Warning at "; print (peek_region()); print ", ")
+
 	    
 
 	fun get_tyvar_table () = !tyvar_table
@@ -1387,11 +1395,12 @@ functor Toil(structure Il : IL
 			   val itvar = fresh_named_var "exn_tag"
 			   val mkvar = fresh_named_var "exn_injector"
 			   val modvar = fresh_named_var "exn_structure"
-			   val inner_mod = MOD_STRUCTURE[SBND(mk_lab, BND_EXP(mkvar,path_mk_exp)),
-							 SBND(stamp_lab, BND_EXP(itvar,path_stamp_exp))]
+			   val inner_mod = MOD_STRUCTURE[SBND(stamp_lab, BND_EXP(itvar,path_stamp_exp)),
+							 SBND(mk_lab, BND_EXP(mkvar,path_mk_exp))]
+
 			   val inner_sig = SIGNAT_STRUCTURE(NONE,
-							    [SDEC(stamp_lab, DEC_EXP(itvar,path_mk_con)),
-							     SDEC(mk_lab, DEC_EXP(mkvar,path_stamp_con))])
+							    [SDEC(stamp_lab, DEC_EXP(itvar,path_stamp_con)),
+							     SDEC(mk_lab, DEC_EXP(mkvar,path_mk_con))])
 		       in [(SOME(SBND(id_bar,BND_MOD(modvar,inner_mod))),
 			    CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(modvar,inner_sig))))]
 		       end
@@ -1731,7 +1740,7 @@ functor Toil(structure Il : IL
 	   | (Ast.TycSpec (typdesc_list,is_eq)) => ADDITIONAL(xtypedesc(context,typdesc_list,is_eq))
 	   | (Ast.ExceSpec exlist) => (* Rules 260 - 261 *)
 		      let fun doer (sym,tyopt) = 
-			let val (mk_con,it_con) = 
+			let val (mk_con,stamp_con) = 
 			  (case tyopt of
 			     NONE => (CON_ANY, CON_TAG con_unit)
 			   | (SOME ty) => let val con = xty(context,ty)
@@ -1740,8 +1749,8 @@ functor Toil(structure Il : IL
 					  end)
 			    val inner_sig = 
 			      SIGNAT_STRUCTURE(NONE,
-					       [SDEC(it_lab,
-						    DEC_EXP(fresh_var(),it_con)),
+					       [SDEC(stamp_lab,
+						    DEC_EXP(fresh_var(),stamp_con)),
 					       SDEC(mk_lab,
 						    DEC_EXP(fresh_var(),mk_con))])
 			in SDEC(symbol_label sym, DEC_MOD(fresh_var(),inner_sig))
@@ -1846,24 +1855,34 @@ functor Toil(structure Il : IL
 			
 	 let
 	     val (free_convars,free_modvars) = sig_free_conmodvar tsig
-	     fun sdec_copy m (SDEC(l,DEC_EXP _)) = NONE
-	       | sdec_copy m (SDEC(l,DEC_EXCEPTION _)) = NONE
-	       | sdec_copy m (SDEC(l,DEC_CON(v,k,c))) = 
-		 SOME(SBND(l,BND_CON(v,CON_MODULE_PROJECT(m,l))),
-		      SDEC(l,DEC_CON(v,k,c)))
-	       | sdec_copy m (SDEC(l,DEC_MOD(v,s))) =
-		 (case mod_copy' (MOD_PROJECT(m,l)) s of
-		      SOME(m',s') => SOME(SBND(l,BND_MOD(v,m')),
-					  SDEC(l,DEC_MOD(v,s')))
-		    | NONE => NONE)
-	     and mod_copy' m (SIGNAT_STRUCTURE(_,sdecs)) = 
-		 let val sbnds_sdecs = List.mapPartial (sdec_copy m) sdecs
+	     fun sdec_copy m (SDEC(l,DEC_EXP _),acc) = acc
+	       | sdec_copy m (SDEC(l,DEC_EXCEPTION _),acc) = acc
+	       | sdec_copy m (SDEC(l,DEC_CON(v,k,c)),(csubst,msubst,sbnd_sdec)) = 
+		 let val csubst' = (v,CON_MODULE_PROJECT(m,l))::csubst
+		     val c' = (case c of
+				   SOME con => SOME(con_subst_conmodvar(con,csubst,msubst))
+				 | NONE => NONE)
+		     val sbnd_sdec' = (SBND(l,BND_CON(v,CON_MODULE_PROJECT(m,l))),
+				       SDEC(l,DEC_CON(v,k,c'))) :: sbnd_sdec
+		 in  (csubst',msubst,sbnd_sdec')
+		 end
+	       | sdec_copy m (SDEC(l,DEC_MOD(v,s)),(csubst,msubst,sbnd_sdec)) =
+		 let val msubst' = (v,MOD_PROJECT(m,l))::msubst
+		     val sbnd_sdec' = (case mod_copy' (MOD_PROJECT(m,l),csubst,msubst) s of
+					   SOME(m',s') => (SBND(l,BND_MOD(v,m')),
+							   SDEC(l,DEC_MOD(v,s')))::sbnd_sdec
+					 | NONE => sbnd_sdec)
+		 in  (csubst,msubst',sbnd_sdec')
+		 end
+	     and mod_copy' (m,csubst,msubst) ((SIGNAT_STRUCTURE(_,sdecs)) |
+			      (SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs, ...})) = 
+		 let val (_,_,sbnds_sdecs) = foldl (sdec_copy m) (csubst,msubst,[]) sdecs
 		 in SOME(MOD_STRUCTURE(map #1 sbnds_sdecs),
 			 SIGNAT_STRUCTURE(NONE, map #2 sbnds_sdecs))
 		 end
 	       | mod_copy' _ (SIGNAT_FUNCTOR _) = NONE
-	     fun mod_copy ((sbnds,sdecs),l,vm,s) = 
-		 case (mod_copy' (MOD_PROJECT(MOD_VAR avar, l)) s) of
+	     fun mod_copy ((csubst,msubst,(sbnds,sdecs)),l,vm,s) = 
+		 case (mod_copy' (MOD_PROJECT(MOD_VAR avar, l),csubst,msubst) s) of
 		     SOME(pruned_mod,pruned_sig) =>
 			 let val hidden_lbl = fresh_internal_label "hidden_mod"
 			     val sbnd = SBND(hidden_lbl, BND_MOD(vm,pruned_mod))
@@ -1877,19 +1896,24 @@ functor Toil(structure Il : IL
 		     val sdec = SDEC(hidden_lbl, DEC_CON(vt, k, SOME(CON_MODULE_PROJECT(MOD_VAR avar,l))))
 		 in (sbnd::sbnds, sdec::sdecs)
 		 end
-	     fun loop acc [] = acc
-	       | loop acc (SDEC(la,deca)::resta) =
-		     let val acc' = 
+	     fun loop (_,_,acc) [] = acc
+	       | loop (triple as (csubst,msubst,acc)) (SDEC(la,deca)::resta) =
+		     let val triple' = 
 			 (case deca of
-			      DEC_MOD (vm,s) => mod_copy(acc,la,vm,s)
-			    | DEC_CON (vt,k,copt) => if (true orelse member_eq(eq_var,vt,free_convars))
-							 then type_copy(acc,la,vt,k,copt)
-						     else acc
-			    | DEC_EXP _ => acc
-			    | DEC_EXCEPTION _ => acc)
-		     in loop acc' resta
+			      DEC_MOD (vm,s) => (csubst,
+						 (vm,MOD_PROJECT(MOD_VAR avar,la))::msubst,
+						 mod_copy(triple,la,vm,s))
+			    | DEC_CON (vt,k,copt) => 
+				  ((vt,CON_MODULE_PROJECT(MOD_VAR avar,la))::csubst,
+				   msubst,
+				   if (true orelse member_eq(eq_var,vt,free_convars))
+				       then type_copy(acc,la,vt,k,copt)
+				   else acc)
+			    | DEC_EXP _ => triple
+			    | DEC_EXCEPTION _ => triple)
+		     in loop triple' resta
 		     end
-	 in loop ([],[]) all_sdecs (* target_sdecs *)
+	 in loop ([],[],([],[])) all_sdecs (* target_sdecs *)
 	 end
        | extract_hidden _ = elab_error "extract_hidden not passed SIGNAT_STRUCTURE"
      and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp) 
@@ -1958,8 +1982,13 @@ functor Toil(structure Il : IL
 							      SelfifySig(SIMPLE_PATH newvar, sig1'))
 			      val _ = if Sig_IsSub(context',fsig,fsig')
 					  then ()
-				      else (error_region();
-					    print "functor application failed\n")
+				      else (error_region();  
+					    print "functor application failed\n";
+					    print "Expected signature";
+					    pp_signat fsig';
+					    print "\nActual signature";
+					    pp_signat fsig;
+					    print "\n")
 
 			      val temp = mod_subst_modvar(modc_body,
 							  [(modc_v0,argmod)])
@@ -2195,18 +2224,26 @@ functor Toil(structure Il : IL
 	 components;  we search for the one that occurs first and
          then transparently type-abbreviate all of the rest to the first one *)
       and xsig_sharing_rewrite(sdecs,labels) : sdecs = 
-        let local val firstcon = ref NONE
-            in fun transparent curpath = 
-		case (!firstcon) of
-		  SOME c => SOME c
-                | NONE => 
-		  case curpath of
-		    [] => elab_error "transparent got empty path"
-		  | (v,_)::vlrest => let val p = COMPOUND_PATH(v,map #2 vlrest)
-					 val c = path2con p
-					 val _ = firstcon := (SOME c)
-				     in NONE
-				     end
+        let local val firstpath = ref NONE
+            in fun transparent (curpath : (var * label) list) = 
+		case (!firstpath) of
+		  SOME firstpath => 
+		      let fun vlpath2con [] = elab_error "transparent got empty path"
+			    | vlpath2con ((v,_)::vlrest) = 
+				    let val p = COMPOUND_PATH(v,map #2 vlrest)
+				    in  SOME(path2con p)
+				    end
+			  fun combine_path first [] = vlpath2con first
+			    | combine_path [] _ = error "bad paths"
+			    | combine_path (first as ((v,_)::firstrest))
+			      ((v',_)::secondrest) = 
+			      if (eq_var(v,v')) 
+				  then combine_path firstrest secondrest
+			      else vlpath2con first
+		      in  combine_path firstpath curpath
+		      end
+                | NONE => (firstpath := SOME curpath; NONE)
+
 	    end
             fun match l labels = 
 	    let fun folder(lab::labs,(match,mismatch)) = 
@@ -2255,14 +2292,17 @@ functor Toil(structure Il : IL
 	      (case sig_actual_self of
 		   SIGNAT_STRUCTURE (_,self_sdecs) =>
 		       Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl])
+		 | SIGNAT_INLINE_STRUCTURE {abs_sig = self_sdecs,...} =>
+		       Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl])
 		 | SIGNAT_FUNCTOR _ => NONE)
 
         (* ---- coercion of a polymorphic component to a mono or polymorphic specification --- *)
 	fun polyval_case (ctxt : context) (lbl,v,con : con,varsig_option) : (bnd * dec * dec) option = 
 	    let 
 		fun bad i = (error_region();
-			     print "coercion of a polymorphic value component to a ";
-			     print "monomorphic/polymorphic specification failed at ";
+			     print "Coercion of a polymorphic value component to a\n";
+			     error_region();
+			     print "  monomorphic/polymorphic specification failed at ";
 			     pp_label lbl;
 			     print "\n";
 			     NONE)
@@ -2282,11 +2322,12 @@ functor Toil(structure Il : IL
 						  SIGNAT_STRUCTURE(NONE,[SDEC(maybe_it_lab,con'')]),_)) =>
 		    let 
 			val itsig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,DEC_EXP(fresh_var(),con))])
-			val (bnd,dec,sdecs_poly,ctxt') = 
+			val (formal_vp,bnd,dec,sdecs_poly,ctxt') = 
 			    (case varsig_option of
 				 NONE => let val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt,sig_poly_sdecs)
 					     val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
-					 in (BND_EXP(v,MODULE_PROJECT(mtemp,it_lab)),
+					 in (fresh_var(),
+					     BND_EXP(v,MODULE_PROJECT(mtemp,it_lab)),
 					     DEC_EXP(v,con),
 					     sdecs_poly,
 					     ctxt)
@@ -2296,7 +2337,8 @@ functor Toil(structure Il : IL
 								      SelfifySig(SIMPLE_PATH v1, s1))
 					 val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt',sig_poly_sdecs)
 					 val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
-				     in (BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
+				     in (v1,
+					 BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
 					 DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,TOTAL)),
 					 sdecs_poly,
 					 ctxt')
@@ -2309,7 +2351,10 @@ functor Toil(structure Il : IL
 			else (print "s is "; pp_signat s;
 			      print "\ns'' is "; pp_signat s'';
 			      bad(4)))
-			handle e => bad(5)
+			handle e => (print "s is "; pp_signat s;
+			      print "\ns'' is "; pp_signat s'';
+			      print "\nctxt' is "; pp_context ctxt';
+			      bad(5))
 		    end
 		| _ => bad(6))
 	    end
@@ -2341,22 +2386,42 @@ functor Toil(structure Il : IL
 					     print " with label = "; pp_label lbl;
 					     print "\nand sig_actual = "; pp_signat sig_actual;
 					     print "\ngot back "; pp_con con; print "\n"));
-				  if (eq_con(ctxt,c,con)) 
+				  if (sub_con(ctxt,con,c))
 				      then
 					  let val bnd = BND_EXP(v,path2exp(COMPOUND_PATH(v0,lbls)))
 					      val dec = DEC_EXP(v,con)
 					  in SOME(bnd,dec,dec)
 					  end
 				  else (error_region();
-					print "coercion of a monomorphic value component to a ";
+					print "coercion of a monomorphic value component to a\n";
+					error_region();
 					print "monomorphic value specification failed\n";
+					print "Component name: ";
+					pp_label lbl;
+					print "\nExpected type:\n";
+					pp_con c;
+					print "\nFound type:\n";
+					pp_con con;
+					print "\n";
 					NONE))
 			    | SOME(lbls,PHRASE_CLASS_MOD (_,s)) => 
 				  polyval_case ctxt (lbl,v,c,NONE)  (* rule 250 *)
-			    | _ => (error_region();
-				    print "coercion of a polymorphic non-value component to a ";
-				    print "monomorphic specification failed\n";
-				    NONE))
+			    | SOME(_,PHRASE_CLASS_CON _) => 
+				  (error_region();
+				   print "value specification but type component";
+				   NONE)
+			    | SOME(_,PHRASE_CLASS_SIG _) => 
+				  (error_region();
+				   print "value specification but signature component";
+				   NONE)
+			    | SOME(_,PHRASE_CLASS_OVEREXP _) => 
+				  (error_region();
+				   print "value specification but OVEREXP";
+				    NONE)
+			    | NONE => (error_region();
+				       print ((label2string lbl) ^ 
+					      "component in signature not in structure\n");
+				       NONE))
 
 	           (* ----- check for polymorphic specification case first ---- *)
 		   | DEC_MOD(v,s as (SIGNAT_FUNCTOR(v1,s1,SIGNAT_STRUCTURE (NONE,
@@ -2422,15 +2487,22 @@ functor Toil(structure Il : IL
 			 in (MOD_FUNCTOR(v2,s2,modexp),
 			     SIGNAT_FUNCTOR(v2,s2,s,a1))
 			 end
-		     | (_,SIGNAT_STRUCTURE (NONE,sdecs)) => 
+		      | (((SIGNAT_STRUCTURE _) | (SIGNAT_INLINE_STRUCTURE _)),
+			 ((SIGNAT_STRUCTURE (NONE,sdecs)) 
+			   | (SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs,...}))) => 
 			   let 
 			       val (sbnds,sdecs) = sdecs_loop context sdecs
 			   in (MOD_STRUCTURE sbnds,
 			       SIGNAT_STRUCTURE (NONE, sdecs))
 			   end
-		     | _ => (error_region();
-			     print "cannot coerce a functor to a structure or vice-versa";
-			     (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]))))
+		     | (SIGNAT_FUNCTOR _, ((SIGNAT_STRUCTURE _) | (SIGNAT_INLINE_STRUCTURE _))) => 
+			   (error_region();
+			    print "cannot coerce a functor to a structure\n";
+			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[])))
+		     | (((SIGNAT_STRUCTURE _) | (SIGNAT_INLINE_STRUCTURE _)),SIGNAT_FUNCTOR _) => 
+			   (error_region();
+			    print "cannot coerce a structure to a functor\n";
+			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]))))
       in (m,s)
       end
 

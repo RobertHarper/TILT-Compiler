@@ -20,6 +20,7 @@ functor IlStatic(structure Il : IL
     open Prim Tyvar Name
 
     val error = fn s => error "ilstatic.sml" s
+    val trace = ref false
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun debugdo' t = t()
@@ -436,7 +437,15 @@ functor IlStatic(structure Il : IL
      in (soft_unify,table,constr_con,useeq_con)
      end
    and eq_con (con1,con2,decs) = meta_eq_con (true,hard_unifier) false (con1,con2,decs,false)
-   and sub_con (con1,con2,decs) = meta_eq_con (false,hard_unifier) false (con1,con2,decs,true)
+   and sub_con (con1,con2,ctxt) = 
+     let fun msg() = (print "subcon called with con1 = \n";
+			 pp_con con1; print "\nand con2 = \n";
+			 pp_con con2; print "\nand ctxt = \n";
+			 pp_context ctxt; print "\n")
+     in  ((meta_eq_con (false,hard_unifier) false (con1,con2,ctxt,true))
+	  handle e => (if !trace then msg() else (); raise e))
+     end
+
    and soft_eq_con (con1,con2,ctxt) = 
      let val (soft_unify,table,constr_con,useeq_con) = soft_unifier()
      in  if (meta_eq_con (false,soft_unify) false (con1,con2,ctxt,false))
@@ -458,8 +467,17 @@ functor IlStatic(structure Il : IL
 		(eq_label(l,l') andalso eq_mod(m,m')) orelse
 		(meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub))
 	  | _ => (meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub)))
-	   
+
    and meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
+     let fun msg() = (print "meta_eq_con_hidden called with con1 = \n";
+			 pp_con con1; print "\nand con2 = \n";
+			 pp_con con2; print "\nand ctxt = \n";
+			 pp_context ctxt; print "\n")
+in (meta_eq_con_hidden' (is_hard,unifier) constrained (con1,con2,ctxt,is_sub))
+	  handle e => (if !trace then msg() else (); raise e)
+end
+
+   and meta_eq_con_hidden' (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
      let 
 
        val _ = debugdo (fn () => (print "\nUnifying"; 
@@ -711,6 +729,15 @@ functor IlStatic(structure Il : IL
 
   (* Rules 35 - 48 *)
    and GetConKind (arg : con, ctxt : context) : kind = 
+     let fun msg() = (print "GetConKind called with con = \n";
+			 pp_con arg; print "\nand ctxt = \n";
+			 pp_context ctxt; print "\n")
+	val _ = debugdo msg
+     in GetConKind'(arg,ctxt)
+	  handle e => (if !trace then msg() else (); raise e)
+     end
+
+   and GetConKind' (arg : con, ctxt : context) : kind = 
      let fun ksimp (KIND_INLINE(k,_)) = ksimp k
 	   | ksimp k = k
 	 val con = arg (* Normalize(arg,ctxt) *)
@@ -719,8 +746,8 @@ functor IlStatic(structure Il : IL
      | (CON_VAR v) => 
 	   (case Context_Lookup'(ctxt,v) of
 		SOME(_,PHRASE_CLASS_CON(_,k)) => k
-	      | SOME _ => error "CON_VAR v with v bound to a non-con"
-	      | NONE => error "CON_VAR v with v unbound")
+	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
+	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
      | (CON_OVAR ocon) => raise UNIMP
      | (CON_INT _) => KIND_TUPLE 1
      | (CON_FLOAT _) => KIND_TUPLE 1
@@ -787,10 +814,16 @@ functor IlStatic(structure Il : IL
 
    (* --------- Rules 69 to 96 ----------- *)
    and GetExpCon (exparg,ctxt) : bool * con = 
-     (debugdo (fn () => (print "GetExpCon called with exp = \n";
+     let fun msg() = (print "GetExpCon called with exp = \n";
 			 pp_exp exparg; print "\nand ctxt = \n";
-			 pp_context ctxt; print "\n"));
-     case exparg of
+			 pp_context ctxt; print "\n")
+	val _ = debugdo msg
+     in GetExpCon'(exparg,ctxt) 
+	  handle e => (if !trace then msg() else (); raise e)
+     end
+
+   and GetExpCon' (exparg,ctxt) : bool * con = 
+     (case exparg of
        SCON scon => (true,GetSconCon(ctxt,scon))
      | OVEREXP (con,va,eone) => (case oneshot_deref eone of
 				     SOME e => if va then (va,con)
@@ -1173,11 +1206,16 @@ functor IlStatic(structure Il : IL
 
    (* ------------ Return a module's signature    -------------- *)
    and GetModSig (module, ctxt : context) : bool * signat =
-     (debugdo (fn () => (print "GetModSig called with module = \n";
+     let fun msg() = (print "GetModSig called with module = \n";
 			 pp_mod module; print "\nand ctxt = \n";
-			 pp_context ctxt; print "\n"));
-	       
-      case module of
+			 pp_context ctxt; print "\n")
+	 val _ = debugdo msg
+     in GetModSig'(module,ctxt)
+	  handle e => (if !trace then msg() else (); raise e)
+     end
+
+   and GetModSig' (module, ctxt : context) : bool * signat =
+     (case module of
        (MOD_VAR v) => 
 	   (case Context_Lookup'(ctxt,v) of
 		SOME(_,PHRASE_CLASS_MOD(_,s)) => (true,s)
@@ -1281,6 +1319,14 @@ functor IlStatic(structure Il : IL
 			 end)
 
     and HeadNormalize (arg,ctxt) : (bool * con) = 
+	let fun msg() = (print "HeadNormalize called with con =\n";
+			 pp_con arg; print "\n and ctxt = \n";
+			 pp_context ctxt; print "\n")
+	in  HeadNormalize'(arg,ctxt)
+	  handle e => (if !trace then msg() else (); raise e)
+	end
+
+    and HeadNormalize' (arg,ctxt) : (bool * con) = 
 	 (case arg of
 	      CON_FUN ([v],CON_APP(c,CON_VAR v')) => 
 		  if (eq_var(v,v')) then HeadNormalize(c,ctxt) else (false,arg)
@@ -1301,8 +1347,8 @@ functor IlStatic(structure Il : IL
 						  | _ => (false, CON_VAR v))
 				      else HeadNormalize(CON_VAR v',ctxt)
 				| SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)
-				| SOME _ => error "Normalize given CON_VAR v with v bound to a non-con"
-				| NONE => error "Normalize given CON_VAR v with v unbound")
+				| SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
+				| NONE => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound"))
 	    | CON_TUPLE_PROJECT (i,c) => 
 		  let val (f,c) = HeadNormalize(c,ctxt)
 		  in case c of
@@ -1620,9 +1666,8 @@ functor IlStatic(structure Il : IL
 		| (SIGNAT_STRUCTURE (SOME p,sdecs1), 
 		   SIGNAT_STRUCTURE (NONE, sdecs2)) => help(ctxt,sdecs1,SelfifySdecs(p,sdecs2))
 		| (SIGNAT_STRUCTURE (SOME p1,sdecs1), 
-		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => if (eq_path(p1,p2))
-							       then help(ctxt,sdecs1,sdecs2)
-							   else false
+		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => eq_path(p1,p2)
+							  orelse help(ctxt,sdecs1,sdecs2)
 		| (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,a1), 
 		   SIGNAT_FUNCTOR(v2,s2_arg,s2_res,a2)) =>
 		  ((eq_arrow(a1,a2,true)) andalso 
@@ -1640,10 +1685,13 @@ functor IlStatic(structure Il : IL
 	 end
 
      and Sig_IsSub (ctxt,s1,s2) = 
-	 let val _ = debugdo (fn () => (print "Sig_issub with s1 = \n";
+	 let fun msg() = (print "Sig_issub with s1 = \n";
 					pp_signat s1; print "\n\nand s2 = ";
-					pp_signat s2; print "\n\n\n"))
+					pp_signat s2; print "\nand ctxt = ";
+					pp_context ctxt; print "\n\n")
+	     val _ = debugdo msg
 	 in Sig_IsSub'(ctxt,s1,s2)
+	  handle e => (if !trace then msg() else (); raise e)
 	 end
 
 
