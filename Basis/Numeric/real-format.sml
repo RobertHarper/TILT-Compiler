@@ -10,9 +10,6 @@
 structure RealFormat : sig
 
     val fmtReal : StringCvt.realfmt -> real -> string
-(** The type should be:
-    val fmtReal : StringCvt.realfmt -> LargeReal.real -> string
- **)
 
   end = struct
     val float_eq = TiltPrim.float_eq
@@ -22,19 +19,6 @@ structure RealFormat : sig
     val unsafe_vsub = TiltPrim.unsafe_vsub8
 
     infix 4 == !=
-(*
-    val op +  = InlineT.Real64.+
-    val op -  = InlineT.Real64.-
-    val op *  = InlineT.Real64.*
-    val op /  = InlineT.Real64./
-    val op ~  = InlineT.Real64.~
-    val op <  = InlineT.Real64.<
-    val op >  = InlineT.Real64.>
-    val op >= = InlineT.Real64.>=
-    val op == = InlineT.Real64.==
-    val floor = Assembly.A.floor
-    val real  = InlineT.real
-   structure I = InlineT.DfltInt *)
 
     val plus : int * int -> int = op +
     val minus : int * int -> int = op -
@@ -73,7 +57,7 @@ structure RealFormat : sig
     fun zeroLPad (s, wid) = StringCvt.padLeft #"0" wid s
     fun zeroRPad (s, wid) = StringCvt.padRight #"0" wid s
 
-    fun mkDigit d = unsafe_vsub("0123456789abcdef", int32touint32 d)
+    fun mkDigit d = unsafe_vsub("0123456789", int32touint32 d)
 
   (* decompose a non-zero real into a list of at most maxPrec significant digits
    * (the first digit non-zero), and integer exponent. The return value
@@ -89,10 +73,13 @@ structure RealFormat : sig
 		if (x < 1.0) then scaleUp(10.0*x, dec e) else (x, e)
 	  fun scaleDn (x, e) =
 		if (x >= 10.0) then scaleDn(0.1*x, inc e) else (x, e)
-	  fun mkdigits (f, 0) = ([], if f < 5.0 then 0 else 1)
-	    | mkdigits (f, i) = let
+	  fun mkdigits (f, 0, odd) = ([], if f < 5.0 then 0
+					  else if f > 5.0 then 1
+					  else odd)
+	    | mkdigits (f, i, _) = let 
 		val d = floor f
-		val (digits, carry) = mkdigits (10.0 * (f - real d), dec i)
+		val (digits, carry) = mkdigits (10.0 * (f - real d), dec i,
+						PreInt.imod(d,2))
 		val (digit, c) = (case (d, carry)
 		       of (9, 1) => (0, 1)
 			| _ => (plus(d, carry), 0)
@@ -105,7 +92,7 @@ structure RealFormat : sig
 		else if (f >= 10.0)
 		  then scaleDn (f, e)
 		  else (f, e)
-	  val (digits, carry) = mkdigits(f, max(0, min(precisionFn e, maxPrec)))
+	  val (digits, carry) = mkdigits(f, max(0, min(precisionFn e, maxPrec)),0)
 	  in
 	    case carry
 	     of 0 => (digits, e)
@@ -235,6 +222,7 @@ structure RealFormat : sig
 	then let
 	  val {sign, mantissa, exp} = realEFormat (r, prec)
 	  in
+	    (* minimum size exponent string, no padding *)
 	    concat[sign, mantissa, "E", atoi exp]
 	  end
         else fmtInfNan r
@@ -252,21 +240,14 @@ structure RealFormat : sig
 	  end
         else fmtInfNan x
 
-      fun realToGenStr prec r =
+      fun realToGenStr prec r = 
 	if ~infinity < r andalso r < infinity
 	then let
   	  val {sign, whole, frac, exp} = realGFormat(r, prec)
- 	  val (frac,expStr) = (case exp
- 		 of NONE => if (frac = "")
-		      then (".0", "")
-		      else ("." ^ frac, "")
- 		  | (SOME e) => let
-		      val expStr = if lt(e, 0)
-			    then "e~" ^ zeroLPad(atoi(negate e), 2)
-			    else "e" ^ zeroLPad(atoi e, 2)
- 		      in
- 			((if (frac = "") then "" else ("." ^ frac)), expStr)
- 		      end
+	  val frac = if (frac = "") then frac else "." ^ frac
+	  val expStr = (case exp
+ 		 of NONE => ""
+ 		  | (SOME e) => "E" ^ atoi e
   		(* end case *))
   	  in
   	    concat[sign, whole, frac, expStr]
@@ -279,6 +260,8 @@ structure RealFormat : sig
       | fmtReal (StringCvt.FIX(SOME prec)) = realToFixStr prec
       | fmtReal (StringCvt.GEN NONE) = realToGenStr 12
       | fmtReal (StringCvt.GEN(SOME prec)) = realToGenStr prec
+      | fmtReal StringCvt.EXACT =
+	raise TiltExn.LibFail "RealFormat: fmtReal: EXACT not supported"
 
   end
 
