@@ -56,7 +56,10 @@ source unit TOASM = "toasm.sig.sml" {
 source unit INTRAPROC = "intraproc.sig.sml" {
 	Core BBLOCK TRACETABLE
 }
-source unit Chaitin = "chaitin.sml" {
+source interface Chaitin = "chaitin.int" {
+	COLOR PRINTUTILS MACHINEUTILS CALLCONV INTRAPROC
+}
+source unit Chaitin : Chaitin = "chaitin.sml" {
 	Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH
 	COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops
 	List UtilError

@@ -1,5 +1,23 @@
 (*
 	Basis library group file.
+
+	XXX: We can combine Firstlude and TiltPrim.
+
+	XXX: The following units are specific to the implementation of
+	the Basis: Firstlude, TiltPrim, VectorEq, Prelude, TiltExn,
+	General_extern, PreString, NumFormat, PreInt, PreReal,
+	PreWord, PreVector, NumScan, SysInt, RealFormat,
+	CommandLineHelp, Time_extern, OS_PathFn, PreOS, OS_PRIM_IO,
+	PrimIOFn, CleanUp (it work?), CleanIO, BinIOFn, POSIX_extern,
+	PrePosix, POSIX_Error, POSIX_FileSys, POSIX_Signal,
+	POSIX_Process, POSIX_IO_Str, POSIX_Tty, POSIX_Sys_DB, OS_Path,
+	OS_FileSys, OS_Process, OS_IO_Str, TextIOFn, PosixPrimIOFn,
+	PosixBinPrimIO, PosixTextPrimIO, and TopLevel.  We should
+	probably rename them to all have a Tilt prefix.
+
+	XXX: Word31 is neither required by the basis nor our basis
+	implementation.  It is abstract and should probably be
+	eliminated.
 *)
 
 source unit Firstlude = "Firstlude.sml" {}
@@ -13,7 +31,8 @@ source unit GENERAL = "General/general.sig.sml" {
 source unit General_extern = "General/extern.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit General = "General/general.sml" {
+source interface General = "General/general.int" {TiltPrim Prelude GENERAL}
+source unit General : General = "General/general.sml" {
 	Firstlude TiltPrim Prelude GENERAL General_extern TiltExn
 }
 source unit OPTION = "General/option-sig.sml" {
@@ -27,21 +46,24 @@ source unit PreString = "Text/pre-string.sml" {
 	Firstlude TiltPrim Prelude
 }
 source unit STRING_CVT = "Text/string-cvt-sig.sml" {
-	Firstlude TiltPrim Prelude OPTION
+	Firstlude TiltPrim Prelude
 }
-source unit StringCvt = "Text/string-cvt.sml" {
+source interface StringCvt = "Text/string-cvt.int" {STRING_CVT}
+source unit StringCvt : StringCvt = "Text/string-cvt.sml" {
 	Firstlude TiltPrim Prelude STRING_CVT PreString
 }
 source unit BOOL = "General/bool-sig.sml" {
 	Firstlude TiltPrim Prelude StringCvt
 }
-source unit Bool = "General/bool.sml" {
+source interface Bool = "General/bool.int" {Firstlude BOOL}
+source unit Bool : Bool = "General/bool.sml" {
 	Firstlude TiltPrim Prelude PreString StringCvt BOOL
 }
 source unit LIST = "Aggregate/list-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit List = "Aggregate/list.sml" {
+source interface List = "Aggregate/list.int" {Prelude LIST}
+source unit List : List = "Aggregate/list.sml" {
 	Firstlude TiltPrim Prelude LIST
 }
 source unit NumFormat = "Text/num-format.sml" {
@@ -97,24 +119,27 @@ source unit Int32 : Int32 = "Numeric/int32.sml" {
 	Firstlude TiltPrim Prelude StringCvt PreInt General NumScan
 	NumFormat INTEGER
 }
-source unit Int = "Numeric/int.sml" {Int32}
-source unit Position = "Numeric/position.sml" {Int32}
-source unit LargeInt = "Numeric/large-int.sml" {Int32}
+source interface Int = "Numeric/int.int" {TiltPrim INTEGER}
+source unit Int : Int = "Numeric/int.sml" {Int32}
+source interface Position = "Numeric/position.int" {TiltPrim INTEGER}
+source unit Position : Position = "Numeric/position.sml" {Int32}
+source interface LargeInt = "Numeric/large-int.int" {TiltPrim INTEGER}
+source unit LargeInt : LargeInt = "Numeric/large-int.sml" {Int32}
 source unit SysInt = "Numeric/sys-int.sml" {Int32}
 source unit MATH = "Numeric/math-sig.sml" {
 	Firstlude TiltPrim
 }
-source interface Math64 = "Numeric/math64c.int" {
-	TiltPrim Prelude MATH
-}
+source interface Math64 = "Numeric/math64c.int" {TiltPrim MATH}
 source unit Math64 : Math64 = "Numeric/math64c.sml" {
 	Firstlude TiltPrim Prelude MATH PreReal PreInt
 }
-source unit Math = "Numeric/math.sml" {Math64}
+source interface Math = "Numeric/math.int" {TiltPrim MATH}
+source unit Math : Math = "Numeric/math.sml" {Math64}
 source unit IEEE_REAL = "Numeric/ieee-real-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit IEEEReal = "Numeric/ieee-real.sml" {
+source interface IEEEReal = "Numeric/ieee-real.int" {IEEE_REAL}
+source unit IEEEReal : IEEEReal = "Numeric/ieee-real.sml" {
 	Firstlude TiltPrim Prelude IEEE_REAL String Int PreReal
 }
 source unit REAL = "Numeric/real-sig.sml" {
@@ -124,46 +149,52 @@ source unit RealFormat = "Numeric/real-format.sml" {
 	Firstlude TiltPrim Prelude VectorEq PreString General String
 	StringCvt NumFormat List
 }
-source interface Real64 = "Numeric/real64.int" {Firstlude TiltPrim Prelude REAL}
+source interface Real64 = "Numeric/real64.int" {TiltPrim REAL}
 source unit Real64 : Real64 = "Numeric/real64.sml" {
 	Firstlude TiltPrim Prelude REAL IEEEReal StringCvt Math64 General
 	Bool Int32 RealFormat NumScan PreReal TiltExn
 }
-source unit Real = "Numeric/real.sml" {Real64}
-source unit LargeReal = "Numeric/large-real.sml" {Real64}
+source interface Real = "Numeric/real.int" {TiltPrim REAL}
+source unit Real : Real = "Numeric/real.sml" {Real64}
+source interface LargeReal = "Numeric/large-real.int" {TiltPrim REAL}
+source unit LargeReal : LargeReal = "Numeric/large-real.sml" {Real64}
 source unit WORD = "Numeric/word-sig.sml" {
-	Firstlude TiltPrim Prelude StringCvt PreInt PreWord
+	Firstlude TiltPrim Prelude StringCvt PreWord PreInt
 }
 source interface Word8 = "Numeric/word8.int" {
-	TiltPrim Prelude WORD
+	TiltPrim WORD
 }
 source unit Word8 : Word8 = "Numeric/word8.sml" {
 	WORD Firstlude TiltPrim Prelude PreWord StringCvt General
 	NumFormat NumScan TiltExn
 }
-source interface Word32 = "Numeric/word32.int" {
-	TiltPrim Prelude WORD
-}
+source interface Word32 = "Numeric/word32.int" {TiltPrim WORD}
 source unit Word32 : Word32 = "Numeric/word32.sml" {
 	WORD Firstlude TiltPrim Prelude PreWord StringCvt NumFormat
 	NumScan TiltExn
 }
-source unit Word = "Numeric/word.sml" {Word32}
-source unit LargeWord = "Numeric/large-word.sml" {Word32}
-source unit SysWord = "Numeric/sys-word.sml" {Word32}
-source unit Word31 = "Numeric/word31.sml" {
+source interface Word = "Numeric/word.int" {TiltPrim WORD}
+source unit Word : Word = "Numeric/word.sml" {Word32}
+source interface LargeWord = "Numeric/large-word.int" {TiltPrim WORD}
+source unit LargeWord : LargeWord = "Numeric/large-word.sml" {Word32}
+source interface SysWord = "Numeric/sys-word.int" {TiltPrim WORD}
+source unit SysWord : SysWord = "Numeric/sys-word.sml" {Word32}
+source interface Word31 = "Numeric/word31.int" {WORD}
+source unit Word31 : Word31 = "Numeric/word31.sml" {
 	Firstlude TiltPrim Prelude WORD Word32 TiltExn
 }
 source unit ARRAY = "Aggregate/array-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit Array = "Aggregate/array.sml" {
+source interface Array = "Aggregate/array.int" {TiltPrim Prelude ARRAY}
+source unit Array : Array = "Aggregate/array.sml" {
 	Firstlude TiltPrim Prelude VectorEq ARRAY General PreVector
 }
 source unit VECTOR = "Aggregate/vector-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit Vector = "Aggregate/vector.sml" {
+source interface Vector = "Aggregate/vector.int" {TiltPrim Prelude VECTOR}
+source unit Vector : Vector = "Aggregate/vector.sml" {
 	Firstlude TiltPrim Prelude VectorEq VECTOR General Array PreVector
 }
 source unit MONO_VECTOR = "Aggregate/mono-vector-sig.sml" {
@@ -172,25 +203,33 @@ source unit MONO_VECTOR = "Aggregate/mono-vector-sig.sml" {
 source unit MONO_ARRAY = "Aggregate/mono-array-sig.sml" {
 	Firstlude TiltPrim Prelude MONO_VECTOR
 }
-source unit Word8Vector = "Aggregate/word8-vector.sml" {
+source interface Word8Vector = "Aggregate/word8-vector.int" {
+	TiltPrim Prelude MONO_VECTOR
+}
+source unit Word8Vector : Word8Vector = "Aggregate/word8-vector.sml" {
 	Firstlude TiltPrim Prelude VectorEq General Array MONO_VECTOR
 	Vector List
 }
-source unit Word8Array = "Aggregate/word8-array.sml" {
+source interface Word8Array = "Aggregate/word8-array.int" {
+	TiltPrim Prelude MONO_ARRAY
+}
+source unit Word8Array : Word8Array = "Aggregate/word8-array.sml" {
 	Firstlude TiltPrim Prelude VectorEq General MONO_ARRAY Array
 	List Word8Vector
 }
 source unit PACK_WORD = "Aggregate/pack-word-sig.sml" {
 	Firstlude TiltPrim Prelude Word8Vector Word8Array LargeWord
 }
-source unit Pack32Big = "Aggregate/pack-word-b32.sml" {
+source interface Pack32Big = "Aggregate/pack-word-b32.int" {PACK_WORD}
+source unit Pack32Big : Pack32Big = "Aggregate/pack-word-b32.sml" {
 	Firstlude TiltPrim Prelude PACK_WORD Word8 Word32 Word8Vector
 	Word8Array TiltExn
 }
 source unit BYTE = "Numeric/byte-sig.sml" {
 	Firstlude TiltPrim Prelude Word8 Word8Vector Word8Array Substring
 }
-source unit Byte = "Numeric/byte.sml" {
+source interface Byte = "Numeric/byte.int" {BYTE}
+source unit Byte : Byte = "Numeric/byte.sml" {
 	Firstlude TiltPrim Prelude Word8 Word8Array Word8Vector Substring
 	Array BYTE PreString
 }
@@ -198,11 +237,15 @@ source interface CharVector = "Aggregate/char-vector.int" {
 	Prelude TiltPrim MONO_VECTOR
 }
 source unit CharVector : CharVector = "Aggregate/char-vector.sml" {Word8Vector}
-source unit CharArray = "Aggregate/char-array.sml" {Word8Array}
+source interface CharArray = "Aggregate/char-array.int" {
+	TiltPrim Prelude MONO_ARRAY
+}
+source unit CharArray : CharArray = "Aggregate/char-array.sml" {Word8Array}
 source unit LIST_PAIR = "Aggregate/list-pair-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit ListPair = "Aggregate/list-pair.sml" {
+source interface ListPair = "Aggregate/list-pair.int" {LIST_PAIR}
+source unit ListPair : ListPair = "Aggregate/list-pair.sml" {
 	Firstlude TiltPrim Prelude LIST_PAIR
 }
 
@@ -212,17 +255,19 @@ source unit COMMAND_LINE = "OS/commandline.sig.sml" {
 source unit CommandLineHelp = "OS/commandline-help.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit CommandLine = "OS/commandline.sml" {
+source interface CommandLine = "OS/commandline.int" {COMMAND_LINE}
+source unit CommandLine : CommandLine = "OS/commandline.sml" {
 	Firstlude TiltPrim Prelude COMMAND_LINE CommandLineHelp
 }
 source unit TIME = "OS/time-sig.sml" {
 	Firstlude TiltPrim Prelude StringCvt
 }
-source unit PreTime = "OS/pre-time.sml" {
+source unit Time_extern = "OS/pre-time.sml" {
 	Firstlude TiltPrim Prelude
 }
-source unit Time = "OS/time.sml" {
-	Firstlude TiltPrim Prelude Int String StringCvt TIME PreTime
+source interface Time = "OS/time.int" {TIME}
+source unit Time : Time = "OS/time.sml" {
+	Firstlude TiltPrim Prelude Int String StringCvt TIME Time_extern
 	Real Bool NumFormat Char
 }
 source unit OS_FILE_SYS = "OS/os-filesys-sig.sml" {
@@ -250,7 +295,8 @@ source unit PreOS = "Unix/pre-os.sml" {
 source unit IO_SIG = "IO/io-sig.sml" {
 	Firstlude Prelude TiltPrim
 }
-source unit IO = "IO/io.sml" {
+source interface IO = "IO/io.int" {IO_SIG}
+source unit IO : IO = "IO/io.sml" {
 	Firstlude TiltPrim Prelude IO_SIG
 }
 source unit STREAM_IO = "IO/stream-io-sig.sml" {
@@ -279,7 +325,7 @@ source unit PrimIOFn = "IO/prim-io-fn.sml" {
 	Option General
 }
 source interface TextPrimIO = "IO/text-prim-io.int" {
-	Firstlude TiltPrim Prelude PRIM_IO
+	TiltPrim Prelude PRIM_IO
 }
 source unit TextPrimIO : TextPrimIO = "IO/text-prim-io.sml" {
 	Firstlude TiltPrim Prelude PRIM_IO PrimIOFn Position CharVector
@@ -308,8 +354,9 @@ source unit BinIOFn = "IO/bin-io-fn.sml" {
 source unit TIMER = "timer-sig.sml" {
 	Firstlude TiltPrim Prelude Time
 }
-source unit Timer = "useless-timer.sml" {
-	Firstlude TiltPrim Prelude TIMER PreTime Time
+source interface Timer = "timer.int" {TIMER}
+source unit Timer : Timer = "useless-timer.sml" {
+	Firstlude TiltPrim Prelude TIMER Time_extern Time
 }
 source unit POSIX_extern = "extern.sml" {
 	Firstlude TiltPrim Prelude VectorEq Word8Vector Position
@@ -321,17 +368,15 @@ source unit PrePosix = "Posix/pre-posix.sml" {
 source unit DATE = "date-sig.sml" {
 	Firstlude TiltPrim Prelude StringCvt Time
 }
-source unit Date = "date.sml" {
-	Firstlude TiltPrim Prelude List PreTime DATE Time POSIX_extern
+source interface Date = "date.int" {DATE}
+source unit Date : Date = "date.sml" {
+	Firstlude TiltPrim Prelude List DATE Time POSIX_extern
 	Vector StringCvt Int TiltExn
 }
 source unit POSIX_ERROR = "Posix/posix-error.sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source interface POSIX_Error = "Posix/posix-error.int" {
-	TiltPrim Prelude POSIX_ERROR
-}
-source unit POSIX_Error : POSIX_Error = "Posix/posix-error.sml" {
+source unit POSIX_Error = "Posix/posix-error.sml" {
 	Firstlude TiltPrim Prelude POSIX_ERROR POSIX_extern
 }
 source unit POSIX_FLAGS = "Posix/posix-flags-sig.sml" {
@@ -344,10 +389,7 @@ source unit POSIX_IO = "Posix/posix-io-sig.sml" {
 source unit POSIX_FILE_SYS = "Posix/posix-filesys-sig.sml" {
 	Firstlude TiltPrim Prelude Position PreOS SysWord POSIX_FLAGS Time
 }
-source interface POSIX_FileSys = "Posix/posix-filesys.int" {
-	PrePosix POSIX_FILE_SYS
-}
-source unit POSIX_FileSys : POSIX_FileSys = "Posix/posix-filesys.sml" {
+source unit POSIX_FileSys = "Posix/posix-filesys.sml" {
 	Firstlude TiltPrim Prelude PrePosix Position Word SysWord PreOS
 	POSIX_extern List Time POSIX_FILE_SYS String TiltExn
 }
@@ -357,21 +399,14 @@ source unit POSIX_PROCESS = "Posix/posix-process-sig.sml" {
 source unit POSIX_SIGNAL = "Posix/posix-signal-sig.sml" {
 	Firstlude TiltPrim SysWord
 }
-source interface POSIX_Signal = "Posix/posix-signal.int" {POSIX_SIGNAL}
-source unit POSIX_Signal : POSIX_Signal = "Posix/posix-signal.sml" {
+source unit POSIX_Signal = "Posix/posix-signal.sml" {
 	Firstlude Word32 SysInt SysWord POSIX_extern POSIX_SIGNAL
 }
-source interface POSIX_Process = "Posix/posix-process.int" {
-	POSIX_PROCESS POSIX_Signal
-}
-source unit POSIX_Process : POSIX_Process = "Posix/posix-process.sml" {
+source unit POSIX_Process = "Posix/posix-process.sml" {
 	Firstlude TiltPrim Prelude PrePosix List POSIX_Signal SysWord
 	SysInt Time Word8 POSIX_extern POSIX_PROCESS TiltExn
 }
-source interface POSIX_IO_Str = "Posix/posix-io.int" {
-	PrePosix POSIX_IO POSIX_FileSys
-}
-source unit POSIX_IO_Str : POSIX_IO_Str = "Posix/posix-io.sml" {
+source unit POSIX_IO_Str = "Posix/posix-io.sml" {
 	Firstlude TiltPrim Prelude PrePosix SysInt Int Position
 	Word8Vector Word8Array List POSIX_IO POSIX_FileSys POSIX_Process
 	SysWord POSIX_extern String TiltExn
@@ -379,10 +414,7 @@ source unit POSIX_IO_Str : POSIX_IO_Str = "Posix/posix-io.sml" {
 source unit POSIX_PROC_ENV = "Posix/posix-procenv-sig.sml" {
 	Firstlude TiltPrim Prelude SysWord Time
 }
-source interface POSIX_ProcEnv = "Posix/posix-procenv.int" {
-	PrePosix POSIX_PROC_ENV POSIX_FileSys POSIX_Process
-}
-source unit POSIX_ProcEnv : POSIX_ProcEnv = "Posix/posix-procenv.sml" {
+source unit POSIX_ProcEnv = "Posix/posix-procenv.sml" {
 	Firstlude TiltPrim Prelude PrePosix Time Real SysInt List
 	POSIX_FileSys POSIX_Process SysWord POSIX_PROC_ENV POSIX_Process
 	POSIX_extern
@@ -390,10 +422,7 @@ source unit POSIX_ProcEnv : POSIX_ProcEnv = "Posix/posix-procenv.sml" {
 source unit POSIX_TTY = "Posix/posix-tty-sig.sml" {
 	Firstlude TiltPrim Prelude SysWord POSIX_FLAGS General
 }
-source interface POSIX_Tty = "Posix/posix-tty.int" {
-	POSIX_TTY POSIX_Process POSIX_FileSys
-}
-source unit POSIX_Tty : POSIX_Tty = "Posix/posix-tty.sml" {
+source unit POSIX_Tty = "Posix/posix-tty.sml" {
 	Firstlude TiltPrim Prelude VectorEq List Word8Vector
 	Word8Array SysInt POSIX_FileSys POSIX_Process SysWord Byte
 	POSIX_TTY POSIX_extern
@@ -401,10 +430,7 @@ source unit POSIX_Tty : POSIX_Tty = "Posix/posix-tty.sml" {
 source unit POSIX_SYS_DB = "Posix/posix-sysdb-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
-source interface POSIX_Sys_DB = "Posix/posix-sysdb.int" {
-	PrePosix POSIX_SYS_DB POSIX_FileSys
-}
-source unit POSIX_Sys_DB : POSIX_Sys_DB = "Posix/posix-sysdb.sml" {
+source unit POSIX_Sys_DB = "Posix/posix-sysdb.sml" {
 	Firstlude TiltPrim Prelude PrePosix SysWord POSIX_SYS_DB
 	POSIX_extern
 }
@@ -430,9 +456,8 @@ source unit OS_Process = "Unix/os-process.sml" {
 	Firstlude TiltPrim Prelude List Word8 PreOS OS_PROCESS Posix
 	CleanUp
 }
-source interface OS_IO_Str = "Unix/os-io.int" {OS_IO PreOS}
-source unit OS_IO_Str : OS_IO_Str = "Unix/os-io.sml" {
-	Firstlude TiltPrim Prelude VectorEq PreTime List Word SysWord
+source unit OS_IO_Str = "Unix/os-io.sml" {
+	Firstlude TiltPrim Prelude VectorEq Time List Word SysWord
 	Int OS_IO PreOS Posix POSIX_extern
 }
 source interface OS = "Unix/os.int" {
@@ -451,16 +476,10 @@ source unit PosixPrimIOFn = "Unix/posix-prim-io-fn.sml" {
 	Firstlude TiltPrim Prelude Position PRIM_IO Word8Vector Word8Array
 	Posix IO BinPrimIO OS_PRIM_IO OS
 }
-source interface PosixBinPrimIO = "Unix/posix-bin-prim-io.int" {
-	PRIM_IO OS_PRIM_IO BinPrimIO Posix
-}
-source unit PosixBinPrimIO : PosixBinPrimIO = "Unix/posix-bin-prim-io.sml" {
+source unit PosixBinPrimIO = "Unix/posix-bin-prim-io.sml" {
 	PRIM_IO PosixPrimIOFn BinPrimIO OS_PRIM_IO
 }
-source interface PosixTextPrimIO = "Unix/posix-text-prim-io.int" {
-	Firstlude TiltPrim Prelude OS_PRIM_IO TextPrimIO Posix
-}
-source unit PosixTextPrimIO : PosixTextPrimIO = "Unix/posix-text-prim-io.sml" {
+source unit PosixTextPrimIO = "Unix/posix-text-prim-io.sml" {
 	Firstlude TiltPrim Prelude String Int IO PosixPrimIOFn
 	PosixBinPrimIO TextPrimIO CharArray OS_PRIM_IO Posix
 }
@@ -470,7 +489,9 @@ source interface TextIO = "Unix/posix-text-io.int" {
 source unit TextIO : TextIO = "Unix/posix-text-io.sml" {
 	TextIOFn TEXT_IO PosixTextPrimIO TextPrimIO
 }
-source interface BinIO = "Unix/posix-bin-io.int" {BIN_IO BinPrimIO TiltPrim}
+source interface BinIO = "Unix/posix-bin-io.int" {
+	TiltPrim Prelude BIN_IO BinPrimIO
+}
 source unit BinIO : BinIO = "Unix/posix-bin-io.sml" {
 	BinIOFn PosixBinPrimIO BinPrimIO TextPrimIO
 }
@@ -486,12 +507,13 @@ source unit Unix : Unix = "Unix/unix.sml" {
 }
 source unit TopLevel = "toplevel.sml" {
 	Firstlude TiltPrim Prelude PreString PreInt Real Char String
-	Option List General TextIO Vector Word31 TiltExn
+	Option List General TextIO Vector TiltExn
 }
 source unit SML90_SIG = "General/sml90.sig.sml" {
 	Firstlude Prelude TiltPrim
 }
-source unit SML90 = "General/sml90.sml" {
+source interface SML90 = "General/sml90.int" {SML90_SIG}
+source unit SML90 : SML90 = "General/sml90.sml" {
 	Firstlude TiltPrim Prelude General SML90_SIG Math Real Char
 	CharVector String TextIO
 }

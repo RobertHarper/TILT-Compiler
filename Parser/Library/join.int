@@ -1,0 +1,26 @@
+(*
+	We provide the sharing specified in Section 9 of the
+
+	"ML-Yacc User's Manual, Version 2.3"
+	David R. Tarditi
+	Andrew W. Appel
+	October 6, 1994
+
+	We may share fewer types than the SML/NJ ml-yacc sources which
+	seal the functor result signature transparantly.
+*)
+functor Join(structure Lex : LEXER
+	     structure ParserData: PARSER_DATA
+	     structure LrParser : LR_PARSER
+	     sharing ParserData.LrTable = LrParser.LrTable
+	     sharing ParserData.Token = LrParser.Token
+	     sharing type Lex.UserDeclarations.svalue = ParserData.svalue
+	     sharing type Lex.UserDeclarations.pos = ParserData.pos
+	     sharing type Lex.UserDeclarations.token = ParserData.Token.token)
+		 : PARSER
+			where Token = LrParser.Token
+			where Stream = LrParser.Stream
+			where type arg = ParserData.arg
+			where type result = ParserData.result
+			where type pos = ParserData.pos
+			where type svalue = ParserData.svalue

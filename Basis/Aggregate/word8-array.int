@@ -1,0 +1,5 @@
+structure Word8Array : MONO_ARRAY
+	where type elem = char
+	where type array = char array
+	where type Vector.vector = string
+	where type Vector.elem = char

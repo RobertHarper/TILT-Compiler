@@ -1,0 +1,1 @@
+structure AtomBinaryMap : ORD_MAP where type Key.ord_key = Atom.atom

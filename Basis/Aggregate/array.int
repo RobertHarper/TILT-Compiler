@@ -1,0 +1,3 @@
+structure Array : ARRAY
+	where type 'a array = 'a array
+	where type 'a vector = 'a vector

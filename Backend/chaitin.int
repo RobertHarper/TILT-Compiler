@@ -1,0 +1,14 @@
+functor Chaitin(val commentHeader: string
+		structure Color : COLOR
+		structure Printutils : PRINTUTILS
+		structure Machineutils : MACHINEUTILS
+		structure Callconv : CALLCONV
+
+		sharing Printutils.Bblock.Machine
+		      = Printutils.Machine
+		      = Callconv.Machine
+
+		sharing Printutils.Tracetable = Printutils.Bblock.Tracetable
+
+		  ) : PROCALLOC where Bblock = Printutils.Bblock
+                                where Tracetable = Printutils.Tracetable

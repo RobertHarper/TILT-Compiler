@@ -14,10 +14,12 @@ source unit Version = "version.sml" {Int}
 
 source unit ExtSyn = "extsyn.sml" {}
 source unit Group_TOKENS = "group.grm.sig" {PARSER_DATA}
-source unit GroupLrValsFun = "group.grm.sml" {
+source interface GroupLrValsFun = "group.grm.int" {TOKEN Group_TOKENS ExtSyn}
+source unit GroupLrValsFun : GroupLrValsFun = "group.grm.sml" {
 	TOKEN PARSER_DATA Group_TOKENS ExtSyn Char String Array
 }
-source unit GroupLexFun = "group.lex.sml" {
+source interface GroupLexFun = "group.lex.int" {ARG_LEXER Group_TOKENS ExtSyn}
+source unit GroupLexFun : GroupLexFun = "group.lex.sml" {
 	Group_TOKENS ExtSyn List Char Vector String
 }
 source unit TARGET = "target.sig.sml" {Blaster}
@@ -25,7 +27,10 @@ source unit Target = "target.sml" {
 	TARGET Stats Word32 Util Platform Linkrtl Core Blaster
 }
 source unit PATHS = "paths.sig.sml" {Blaster Formatter}
-source unit Paths = "paths.sml" {PATHS Target OS Blaster Util Formatter Int Platform String Word32}
+source unit Paths = "paths.sml" {
+	PATHS Target OS Blaster Util Formatter Int Platform String
+	Word32 Platform String Int Word32
+}
 source unit FILE = "file.sig.sml" {Blaster}
 source interface FILE = "file.int" {FILE}
 source unit File : FILE = "file.sml" {
@@ -38,7 +43,8 @@ source unit Dirs = "dirs.sml" {OS DIRS Util String Paths File}
 source unit FILECACHE = "filecache.sig.sml" {Time Crc}
 source unit FileCache = "filecache.sml" {Util Time Crc FILECACHE OS}
 source unit TOOLS = "tools.sig.sml" {}
-source unit Tools = "tools.sml" {
+source interface Tools = "tools.int" {TOOLS}
+source unit Tools : Tools = "tools.sml" {
 	String List TOOLS Util Stats OS Dirs Target Popen Listops Paths
 }
 source unit UNIT_ENVIRONMENT = "ue.sig.sml" {Crc Blaster Formatter}
@@ -98,7 +104,8 @@ source unit Background = "background.sml" {
 	Util Stats ExnHandler
 }
 source unit MASTER = "master.sig.sml" {Time}
-source unit Master = "master.sml" {
+source interface Master = "master.int" {MASTER ExtSyn}
+source unit Master : Master = "master.sml" {
 	Util Stats Update Time GRAPH Graph Compiler Real Vector String
 	Int Listops SplayMapFn ListMergeSort MASTER Communication
 	Background List Platform Target Paths Statistics
@@ -121,7 +128,8 @@ source unit Manager : Manager = "manager.sml" {
 source unit RUN = "run.sig.sml" {OS}
 source unit Run = "run.sml" {Posix Word8 OS RUN CommandLine}
 source unit MAIN = "main.sig.sml" {OS}
-source unit Main = "main.sml" {
+source interface Main = "main.int" {MAIN}
+source unit Main : Main = "main.sml" {
 	List String Int OS MAIN Manager Stats Arg Dirs Target Compiler
 	ExnHandler Version TextIO
 }

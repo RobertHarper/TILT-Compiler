@@ -1,0 +1,10 @@
+structure IlTable  :
+sig
+	structure Conmap :
+	sig
+		type 'a map
+		val empty : 'a map
+		val find : 'a map * Il.con -> 'a option
+		val insert : 'a map * Il.con * 'a -> 'a map
+	end
+end

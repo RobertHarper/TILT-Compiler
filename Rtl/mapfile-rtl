@@ -24,7 +24,8 @@ source unit Pprtl = "pprtl.sml" {
 source unit TORTLBASE = "tortl-base.sig.sml" {
 	Name Rtl Nil TilWord32
 }
-source unit TortlBase = "tortl-base.sml" {
+source interface TortlBase = "tortl-base.int" {TORTLBASE}
+source unit TortlBase : TortlBase = "tortl-base.sml" {
 	Util Real Sequence Array TraceInfo Name TilWord32 TilWord64
 	Int Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize
 	TORTLBASE Listops Stats Bool List NilStatic
@@ -49,13 +50,15 @@ source unit TortlSum = "tortl-sum.sml" {
 source unit TORTLARRAY = "tortl-array.sig.sml" {
 	Nil Rtl Prim TortlBase Name
 }
-source unit TortlArray = "tortl-array.sml" {
+source interface TortlArray = "tortl-array.int" {TORTLARRAY}
+source unit TortlArray : TortlArray = "tortl-array.sml" {
 	TORTLARRAY TilWord32 Util Prim Name TraceInfo String Int Rtl
 	Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats
 }
 
 source unit TORTL = "tortl.sig.sml" {Rtl Nil}
-source unit Tortl = "tortl.sml" {
+source interface Tortl = "tortl.int" {TORTL}
+source unit Tortl : Tortl = "tortl.sml" {
 	Util Listops Name TilWord32 TilWord64 Int Sequence Prim List
 	Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum
 	TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps

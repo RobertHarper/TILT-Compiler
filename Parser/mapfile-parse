@@ -54,7 +54,8 @@ source unit Ast = "ast.sml" {
 source unit ASTHELP = "asthelp.sig.sml" {
 	Ast Symbol Formatter
 }
-source unit AstHelp = "asthelp.sml" {
+source interface AstHelp = "asthelp.int" {ASTHELP}
+source unit AstHelp : AstHelp = "asthelp.sml" {
 	TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter
 }
 
@@ -107,17 +108,19 @@ source unit ML_TOKENS = "ml.grm.sig" {
 source unit TokenTable = "tokentable.sml" {
 	ML_TOKENS Symbol StrgHash IntStrMap
 }
-source unit MLLexFun = "ml.lex.sml" {
+source interface MLLexFun = "ml.lex.int" {
+	ARG_LEXER ML_TOKENS SourceMap ErrorMsg
+}
+source unit MLLexFun : MLLexFun = "ml.lex.sml" {
 	StrgHash Control SourceMap Int String Char ML_TOKENS Symbol
 	ErrorMsg TilWord64 TokenTable Vector
 }
 
-
-source unit MLLrValsFun = "ml.grm.sml" {
+source interface MLLrValsFun = "ml.grm.int" {TOKEN ML_TOKENS ErrorMsg Ast}
+source unit MLLrValsFun : MLLrValsFun = "ml.grm.sml" {
 	Fixity Char String TilWord64 TOKEN PARSER_DATA ML_TOKENS
 	Symbol Ast ErrorMsg AstUtil StrgHash Array
 }
-
 
 source unit FRONTEND = "frontend.sig.sml" {Ast Source}
 source unit FrontEnd = "frontend.sml" {

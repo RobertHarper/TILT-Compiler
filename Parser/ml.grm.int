@@ -1,0 +1,6 @@
+functor MLLrValsFun(structure Token : TOKEN) : ML_LRVALS
+	where type ParserData.pos = int
+	where type ParserData.arg = int * int -> ErrorMsg.complainer
+	where type ParserData.result = Ast.top
+	where ParserData.LrTable = Token.LrTable
+	where type ('a,'b) ParserData.Token.token = ('a,'b) Token.token

@@ -7,7 +7,8 @@ include group "../Backend/mapfile"
 source unit SPARC = "sparc.sig.sml" {
 	Word32 Rtl MACHINE Core
 }
-source unit Sparc = "sparc.sml" {
+source interface Sparc = "sparc.int" {SPARC}
+source unit Sparc : Sparc = "sparc.sml" {
 	TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops
 	Stats List
 }
@@ -21,11 +22,15 @@ source unit SparcTrackStorage = "sparctrackstorage.sml" {
 	Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET
 	TRACKSTORAGE SplaySetFn Util Stats
 }
-source unit ToSparc = "tosparc.sml" {
+source interface ToSparc = "tosparc.int" {
+	MACHINEUTILS TRACETABLE BBLOCK TOASM Sparc
+}
+source unit ToSparc : ToSparc = "tosparc.sml" {
 	TilWord32 Core Name Rtl Int Array Sparc MACHINEUTILS TRACETABLE
 	BBLOCK TOASM Util Pprtl
 }
-source unit Linksparc = "linksparc.sml" {
+source interface Linksparc = "linksparc.int" {LINKASM}
+source unit Linksparc : Linksparc = "linksparc.sml" {
 	Util Rtl Stats LINKASM Linkrtl Sparc SparcUtils
 	IfGraph SparcCallConv Bblock Tracetable ToSparc PrintUtils
 	SparcTrackStorage Color Chaitin RtlToAsm Recursion

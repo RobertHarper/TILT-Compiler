@@ -1,0 +1,13 @@
+functor MLLexFun (structure Tokens : ML_TOKENS) :
+ARG_LEXER
+	where type UserDeclarations.svalue = Tokens.svalue
+	where type UserDeclarations.pos = int
+	where type ('a,'b) UserDeclarations.token = ('a,'b) Tokens.token
+	where type UserDeclarations.arg =
+		{comLevel : int ref,
+		 sourceMap : SourceMap.sourcemap,
+		 charlist : string list ref,
+		 stringtype : bool ref,
+		 stringstart : int ref,
+		 brack_stack : int ref list ref,
+		 err : int*int -> ErrorMsg.complainer}

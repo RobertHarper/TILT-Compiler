@@ -1,7 +1,3 @@
-(*
-	XXX: Provide interfaces for Join and JoinWithArg.
-*)
-
 source unit STREAM = "stream.sig.sml" {}
 source unit LR_TABLE = "lr-table.sig.sml" {}
 source unit TOKEN = "token.sig.sml" {LR_TABLE}
@@ -12,9 +8,13 @@ source unit PARSER_DATA = "parser-data.sig.sml" {LR_TABLE TOKEN}
 source unit PARSER = "parser.sig.sml" {STREAM TOKEN}
 source unit ARG_PARSER = "arg-parser.sig.sml" {STREAM TOKEN}
 
-source unit Join = "join.sml" {LR_PARSER LEXER PARSER_DATA PARSER}
+source interface JOIN = "join.int" {LR_PARSER LEXER PARSER_DATA PARSER}
+source unit Join : JOIN = "join.sml" {LR_PARSER LEXER PARSER_DATA PARSER}
 
-source unit JoinWithArg = "joinwitharg.sml" {
+source interface JOIN_WITH_ARG = "joinwitharg.int" {
+	LR_PARSER ARG_LEXER PARSER_DATA ARG_PARSER
+}
+source unit JoinWithArg : JOIN_WITH_ARG = "joinwitharg.sml" {
 	LR_PARSER ARG_LEXER PARSER_DATA ARG_PARSER
 }
 

@@ -1,0 +1,1 @@
+structure AtomBinarySet : ORD_SET where type Key.ord_key = Atom.atom

@@ -1,0 +1,1 @@
+structure ArrayQSort : ARRAY_SORT where type 'a array = 'a array

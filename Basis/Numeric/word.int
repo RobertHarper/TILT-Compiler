@@ -1,0 +1,1 @@
+structure Word : WORD where type word = word

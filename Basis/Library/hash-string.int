@@ -1,0 +1,4 @@
+structure HashString :
+sig
+    val hashString : string -> word
+end

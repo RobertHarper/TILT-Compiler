@@ -1,0 +1,2 @@
+structure Vector : VECTOR
+	where type 'a vector = 'a vector

@@ -1,0 +1,1 @@
+structure IntBinarySet : ORD_SET where type Key.ord_key = int

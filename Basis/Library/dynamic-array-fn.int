@@ -1,0 +1,1 @@
+functor DynamicArrayFn (A : MONO_ARRAY) : MONO_DYNAMIC_ARRAY where type elem = A.elem

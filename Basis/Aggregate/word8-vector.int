@@ -1,0 +1,3 @@
+structure Word8Vector : MONO_VECTOR
+	where type elem = char
+	where type vector = string

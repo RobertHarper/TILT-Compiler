@@ -1,0 +1,1 @@
+structure SplayTree : SPLAY_TREE

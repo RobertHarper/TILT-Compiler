@@ -1,0 +1,6 @@
+structure IlPrimUtil : PRIMUTIL
+	where type con = Il.con
+	where type exp = Il.exp
+	where type context = Il.context
+
+structure IlUtil : ILUTIL

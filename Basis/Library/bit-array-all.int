@@ -1,0 +1,2 @@
+structure BitArray : BIT_ARRAY
+structure BitVector : BIT_VECTOR

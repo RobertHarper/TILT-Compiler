@@ -1,0 +1,3 @@
+structure Real : REAL
+	where type real = real
+	where type Math.real = real

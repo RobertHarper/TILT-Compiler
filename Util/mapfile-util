@@ -42,7 +42,8 @@ source unit TILWORD = "tilword.sig.sml" {Word32}
 source unit TilWord32 = "tilword32-native.sml" {
 	TILWORD Word32 Util Char Listops String
 }
-source unit TilWord64 = "tilword64.sml" {
+source interface TilWord64 = "tilword64.int" {TILWORD TilWord32}
+source unit TilWord64 : TilWord64 = "tilword64.sml" {
 	TILWORD TilWord32 Util Char String
 }
 
@@ -72,7 +73,7 @@ source unit Crc = "crc-native.sml" {
 
 source unit GRAPH = "graph.sig.sml" {}
 source interface GRAPH = "graph.int" {GRAPH HASH_KEY}
-source unit Graph (*: GRAPH*) = "graph.sml" {
+source unit Graph : GRAPH = "graph.sml" {
 	GRAPH HASH_KEY HashTableFn Int List Listops Array Stats
 }
 

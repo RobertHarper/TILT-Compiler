@@ -1,0 +1,9 @@
+functor Tosparc(structure Machineutils : MACHINEUTILS
+	        structure ArgTracetable : TRACETABLE
+                structure Bblock : BBLOCK
+		    where type Machine.specific_instruction = Sparc.specific_instruction
+		    where type Machine.instruction = Sparc.Machine.instruction
+		sharing ArgTracetable = Bblock.Tracetable)
+  : TOASM where Machine = Sparc.Machine
+	  where Bblock = Bblock
+	  where Tracetable = ArgTracetable

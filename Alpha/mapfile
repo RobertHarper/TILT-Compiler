@@ -19,7 +19,10 @@ source unit DIVMULT = "divmult.sig.sml" {DECALPHA Word32}
 source unit DivMult = "divmult.sml" {
 	Core TilWord32 DecAlpha DecAlphaUtils Util TilWord64 DIVMULT
 }
-source unit ToAlpha = "toalpha.sml" {
+source interface ToAlpha = "toalpha.int" {
+	MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM DecAlpha
+}
+source unit ToAlpha : ToAlpha = "toalpha.sml" {
 	TilWord32 Core Name Rtl Int Array Pprtl DecAlpha MACHINEUTILS
 	TRACETABLE BBLOCK DIVMULT TOASM Util
 }

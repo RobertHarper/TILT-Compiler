@@ -1,0 +1,3 @@
+structure IOUtil : IO_UTIL
+	where type instream = TextIO.instream
+	where type outstream = TextIO.outstream

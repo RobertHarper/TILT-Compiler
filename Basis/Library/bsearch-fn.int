@@ -1,0 +1,11 @@
+functor BSearchFn (A : MONO_ARRAY) :
+sig
+    structure A : MONO_ARRAY
+
+    val bsearch : (('a * A.elem) -> order)
+	  -> ('a * A.array) -> (int * A.elem) option
+	(* binary search on ordered monomorphic arrays. The comparison function
+	 * cmp embeds a projection function from the element type to the key
+	 * type.
+	 *)
+end where A = A

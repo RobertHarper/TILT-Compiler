@@ -1,0 +1,1 @@
+structure TilWord64 : TILWORD where type halfword = TilWord32.word

@@ -1,0 +1,1 @@
+structure NilStatic : NILSTATIC where type context = NilContext.context

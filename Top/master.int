@@ -1,0 +1,4 @@
+functor Master (val basis :
+		    {group : unit -> string,
+		     fixup : ExtSyn.groupfile -> ExtSyn.groupfile} option)
+    : MASTER
