@@ -420,6 +420,7 @@ void thread_init()
     allocStack(&proc->minorSegmentStack, 16384);
     allocStack(&proc->majorSegmentStack, 1024);
     allocStack(&proc->majorRegionStack, 1024);
+    proc->barrierPhase = 0;
     proc->allocStart = (mem_t) StartHeapLimit;
     proc->allocCursor = (mem_t) StartHeapLimit;
     proc->allocLimit = (mem_t) StartHeapLimit;
@@ -459,6 +460,7 @@ void thread_init()
     reset_histogram(&proc->gcFlipOffHistogram);
     reset_histogram(&proc->gcFlipOnHistogram);
     reset_histogram(&proc->gcFlipBothHistogram);
+    reset_histogram(&proc->gcFlipTransitionHistogram);
     reset_statistic(&proc->gcStackStatistic);
     reset_statistic(&proc->gcGlobalStatistic);
     reset_statistic(&proc->gcReleaseStatistic);
@@ -514,6 +516,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
   case Scheduler: {
     int flipOn = (proc->segmentType & FlipOn);
     int flipOff = (proc->segmentType & FlipOff);
+    int flipTransition = (proc->segmentType & FlipTransition);
 
     proc->schedulerTime += diff;
     if (procState == Mutator || procState == Done) {  /* Reset GC-related info once we enter mutator */
@@ -545,6 +548,8 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
 	add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
       else if (flipOn) 
 	add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);     
+      if (flipTransition)
+	add_histogram(&proc->gcFlipTransitionHistogram, proc->gcTime);     
       add_statistic(&proc->schedulerStatistic, proc->schedulerTime);
       proc->segmentNumber++;
       proc->segmentType = 0;

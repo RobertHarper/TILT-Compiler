@@ -12,6 +12,7 @@
 #include "til-signal.h"
 #include <fcntl.h>
 #include "stats.h"
+#include "thread.h"
 
 Stacklet_t *Stacklets; /* XXXX should be static */
 static StackChain_t *StackChains;
@@ -458,12 +459,13 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   return res;
 }
 
-int Heap_ResetFreshPages(Heap_t *h)
+int Heap_ResetFreshPages(Proc_t *proc, Heap_t *h)
 {
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
   int i, pages = DivideUp(MaxSize,pagesize);
   return 0;
   memset(h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
+  proc->segUsage.pagesTouched += pages / 100;   /* These refer to pages of the pageMap itself */
   return pages;
 }
 

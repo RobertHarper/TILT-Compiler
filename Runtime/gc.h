@@ -13,8 +13,8 @@ extern int forceMirrorArray, mirrorGlobal, mirrorArray;  /* Are we flipping glob
 extern int primaryGlobalOffset, replicaGlobalOffset;     /* Used by concurrent collector to support global root redirection */
 extern int primaryArrayOffset, replicaArrayOffset;       /* Used by generational, concurrent collector to support atomic redirection */
 
-/* State of the collector */
-typedef enum GCStatus__t { GCOff, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
+/* States of the collector */
+typedef enum GCStatus__t { GCOff, GCPendingAgressive, GCAgressive, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
 typedef enum GCType__t   { Minor, Major } GCType_t;
                             /* Semi and SemiPara has no state variables */
 extern GCType_t GCType;     /* Used by Gen, GenPara, GenConc */
@@ -127,6 +127,7 @@ extern int rootLocFetchSize;             /* Number of root locs to fetch from gl
 extern int objFetchSize;                 /* Number of objects to fetch from global pool */
 extern int segFetchSize;                 /* Number of (large object) segments to fetch from global pool */
 extern int doCopyCopySync;               
+extern int doAgressive;
 extern int localWorkSize;
 extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    An array of more than arraySegmentSize bytes is considered large and

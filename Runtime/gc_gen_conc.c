@@ -143,6 +143,8 @@
 */
 
 
+int multiPhase = 1;  /* Allow the collector to flip on, work, flip off in same segment */
+
 /* weights can be reset in init routine */
 static int reducedNurserySize = 0, expandedNurserySize = 0;
 static int reducedTenuredSize = 0, expandedTenuredSize = 0;
@@ -238,13 +240,11 @@ static void CollectorOn(Proc_t *proc)
      prelimiary work.  This work must be completed before any processor begins collection.
      As a result, the "first" processor is counted twice.
   */
-  isFirst = (weakBarrier(barriers,0) == 0);
+  isFirst = (weakBarrier(barriers,&proc->barrierPhase) == 0);
   if (isFirst) {
-    Heap_ResetFreshPages(nursery);
-    if (GCType == Major) {
-      int pages = Heap_ResetFreshPages(fromSpace);
-      proc->segUsage.pagesTouched += pages / 100;  /* These refer to pages of the pageMap itself */
-    }
+    Heap_ResetFreshPages(proc,nursery);
+    if (GCType == Major) 
+      Heap_ResetFreshPages(proc,fromSpace);
     if (GCType == Minor) {
       if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery)) {
 	printf("Warning: fromSpace has less available space than total nursery size.\n"
@@ -258,7 +258,7 @@ static void CollectorOn(Proc_t *proc)
     totalReplicated = 0;
     ResetJob();                               /* Reset counter so all user threads are scanned */
   }
-  strongBarrier(barriers,1);
+  strongBarrier(barriers,&proc->barrierPhase);
 
   /* Reset root lists, compute thread-specific roots in parallel,
      determine whether a major GC was explicitly requested. */
@@ -266,13 +266,13 @@ static void CollectorOn(Proc_t *proc)
   FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   assert(isEmptyStack(proc->rootLocs));
   while ((threadIterator = NextJob()) != NULL) {
-    Thread_t *thread = initial_root_scan(proc,threadIterator);
-    if (thread != NULL)
-      pushStack(&proc->threads, (ptr_t) thread);
+    int started = initial_root_scan(proc,threadIterator);
+    if (started)
+      pushStack(&proc->threads, (ptr_t) threadIterator);
     if (threadIterator->requestInfo >= 0)  /* Allocation request */
       FetchAndAdd(&totalRequest, threadIterator->requestInfo);
   }
-  strongBarrier(barriers,2);
+  strongBarrier(barriers,&proc->barrierPhase);
 
   /* The "first" processor is in charge of the globals but
      must wait until all threads are processed before knowing if GC is major. 
@@ -293,7 +293,7 @@ static void CollectorOn(Proc_t *proc)
       Heap_Resize(nursery,expandedNurserySize,0);
     }
   }
-  strongBarrier(barriers, 3);
+  strongBarrier(barriers, &proc->barrierPhase);
 
   /* Check local stack empty, prepare copy range,
      forward all the roots (first proc handles backpointers),
@@ -311,9 +311,9 @@ static void CollectorOn(Proc_t *proc)
   proc->numRoot += lengthStack(proc->rootLocs) + lengthStack(proc->globalLocs);
 
   /* Omit popSharedObjStack */
-  pushSharedStack(workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
+  pushSharedStack(0,workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
   GCStatus = GCOn;
-  strongBarrier(barriers,4);
+  strongBarrier(barriers, &proc->barrierPhase);
 }
 
 INLINE(flipRootLoc)
@@ -348,7 +348,7 @@ static void CollectorOff(Proc_t *proc)
   assert(GCStatus == GCPendingOff);
   flushStore();
 
-  isFirst = (weakBarrier(barriers,5) == 0);
+  isFirst = (weakBarrier(barriers,&proc->barrierPhase) == 0);
   if (isFirst) {
     if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery)) {
       /*  The next GC needs to be a major GC so we must begin allocation in the fromSpace immediately. 
@@ -362,7 +362,7 @@ static void CollectorOff(Proc_t *proc)
       GCType = Minor;
     ResetJob();
   }
-  strongBarrier(barriers,6);
+  strongBarrier(barriers,&proc->barrierPhase);
 
   /* Local stacks must be empty. */
   assert(isEmptyStack(&proc->majorObjStack));
@@ -393,7 +393,7 @@ static void CollectorOff(Proc_t *proc)
     flipRootLoc(curGCType, replicaLoc);
   }
   FetchAndAdd(&totalReplicated, proc->segUsage.bytesReplicated + proc->cycleUsage.bytesReplicated);
-  strongBarrier(barriers,7);
+  strongBarrier(barriers,&proc->barrierPhase);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
@@ -438,10 +438,10 @@ static void CollectorOff(Proc_t *proc)
   proc->allocLimit = StartHeapLimit;
   proc->writelistCursor = proc->writelistStart;
 
-  strongBarrier(barriers,8);
+  strongBarrier(barriers,&proc->barrierPhase);
 }
 
-static void do_work(Proc_t *proc, int workToDo, int local)
+static void do_work(Proc_t *proc, int workToDo)
 {
   int done = 0;
   Stack_t *objStack = (GCType == Minor) ? &proc->majorObjStack : &proc->majorObjStack;
@@ -457,11 +457,10 @@ static void do_work(Proc_t *proc, int workToDo, int local)
     ptr_t backObj, largeObj, gray;
     int largeStart, largeEnd;
     /* Get shared work */
-    if (!local)
-      popSharedStack(workStack, &proc->threads, threadFetchSize, 
-		     proc->globalLocs, globalLocFetchSize,
-		     proc->rootLocs, rootLocFetchSize, 
-		     objStack, objFetchSize, segmentStack, segFetchSize);
+    popSharedStack(workStack, &proc->threads, threadFetchSize, 
+		   proc->globalLocs, globalLocFetchSize,
+		   proc->rootLocs, rootLocFetchSize, 
+		   objStack, objFetchSize, segmentStack, segFetchSize);
     /* Do the thread stacklets - we can afford to call updateWorkDone often */
     while (updateWorkDone(proc) < workToDo && 
 	   !isEmptyStack(&proc->threads)) {
@@ -557,16 +556,9 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 	     ((gray = popStack(objStack)) != NULL))
 	transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(proc,gray,objStack,segmentStack,copyRange,srcRange,largeSpace);
     /* Put work back on shared stack */
-    if (!local) {
-      int sharedWorkDone = pushSharedStack(workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
-      if (sharedWorkDone) {
-	GCStatus = GCPendingOff;
-	done = 1;
-      }
-    }
-    else {
-      if (isEmptyStack(objStack) && isEmptyStack(segmentStack) && 
-	  isEmptyStack(proc->backObjs) && isEmptyStack(proc->backLocs))
+    if (pushSharedStack(0,workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack)) {
+      GCStatus = GCPendingOff;
+      if (isEmptyStack(proc->backObjs) && isEmptyStack(proc->backLocs))  /* XXXX not shared */
 	done = 1;
     }
     done |= (updateWorkDone(proc) >= workToDo);
@@ -776,7 +768,7 @@ void GCRelease_GenConc(Proc_t *proc)
   } /* while */
   
   if (isGCOn) {
-    condPushSharedStack(workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
+    pushSharedStack(1,workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
   }
   flushStore();
 
@@ -838,22 +830,24 @@ void GC_GenConc(Proc_t *proc, Thread_t *th)
 	goto satisfied;
       CollectorOn(proc);                                 /* Off, PendingOn; On, PendingOff */
       assert(GCStatus == GCOn || GCStatus == GCPendingOff);
-      goto retry;  
+      if (multiPhase)
+	goto retry;  
       if (GC_GenConcHelp(th, proc, roundOnSize))         /* On, PendingOff; same */
         goto satisfied;
       if (GCStatus == GCPendingOff)                      /* If PendingOff, must loop */
         goto retry;
       goto failed;
     case GCOn:
-      do_work(proc, GCType == Minor ? minorWorkToDo : majorWorkToDo, 0);
-      if ((updateWorkDone(proc) < (GCType == Minor ? minorWorkToDo : majorWorkToDo)) &&
+      do_work(proc, GCType == Minor ? minorWorkToDo : majorWorkToDo);
+      if (multiPhase &&
+	  (updateWorkDone(proc) < (GCType == Minor ? minorWorkToDo : majorWorkToDo)) &&
 	  GCStatus == GCPendingOff)
 	goto retry;
       if (GC_GenConcHelp(th,proc,roundOnSize)) 
 	goto satisfied;
       goto failed;
     case GCPendingOff:                                  /* If PendingOff, shared work is completed. */
-      do_work(proc, MAXINT, 1);                         /* Actually bounded by the allocation of one processor */
+      do_work(proc, MAXINT);                            /* Actually bounded by the allocation of one processor */
       if (GCType == Minor) 
 	PadCopyRange(&proc->minorRange);                 /* Pad so that paranoid check works */
       else if (GCType == Major) {                        /* Carry over minor ranges across minor GCs */

@@ -523,7 +523,7 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
 }
 
-Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
+int initial_root_scan(Proc_t *proc, Thread_t *th)
 {
   int i, numFrames = 0, numWords = 0;
   StackChain_t *stack = th->stack;
@@ -536,7 +536,7 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
       th->snapshotThunk = thunk;
       pushStack(proc->rootLocs, (ptr_t) &th->snapshotThunk);
     }
-    return NULL;   /* Thunk not yet started and so no more roots */
+    return 0;   /* Thunk not yet started and so no more roots */
   }
   assert(stack->cursor > 0);
   assert(th->snapshot == NULL);
@@ -548,7 +548,7 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
     th->snapshotRegs[i] = th->saveregs[i];  
 
   assert(th->snapshot->cursor > 0);
-  return th;
+  return 1;
 }
 
 /* This will fill up rootLocs */
@@ -690,6 +690,23 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
     showPerfMon(0);
   }
 #endif
+}
+
+
+/* Cleans up like complete_root_scan but does not actually scan - used for CollectorTransition */
+void discard_root_scan(Proc_t *proc, Thread_t *th)
+{
+  int i, regMask;
+  StackChain_t *stack= th->stack;
+  int firstActive = stack->cursor;
+
+  /* Thread might not be really be live but was pinned to preserve liveness so 
+     that snapshot, snapshotThunk, and snapshotRegs can be used */
+  Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
+  if (th->snapshot != NULL) {
+    StackChain_Dealloc(th->snapshot);
+    th->snapshot = NULL;
+  }
 }
 
 /* ----------------------------------------------------- 

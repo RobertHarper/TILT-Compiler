@@ -8,8 +8,8 @@ typedef struct Barriers__t {
 } Barriers_t;
 
 Barriers_t *createBarriers(int size, int phase);
-int strongBarrier(Barriers_t *, int which); /* Returns index of arrival after all processors have reached barrier */
-int weakBarrier(Barriers_t *, int which);   /* Returns index of arrival immediately - no barrier semantics */
+int strongBarrier(Barriers_t *, int *which); /* Returns index of arrival after all processors have reached barrier */
+int weakBarrier(Barriers_t *, int *which);   /* Returns index of arrival immediately - no barrier semantics */
 int checkBarrier(Barriers_t *, int which);  /* Returns next index of arrival immediately */
 
 #endif

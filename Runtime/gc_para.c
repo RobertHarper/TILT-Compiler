@@ -37,8 +37,8 @@ SharedStack_t *SharedStack_Alloc(int stackletSize, int globalLocSize, int rootLo
   allocStack(&ss->obj, objSize);
   allocStack(&ss->segment, segmentSize);
   ss->numLocalStack = 0;
-  ss->twoRoom = createRooms(2);
-  assignExitCode(ss->twoRoom, 1, &finalizer, (void *) ss);  /* check if stack empty in push room */
+  ss->threeRoom = createRooms(3);
+  assignExitCode(ss->threeRoom, 1, &finalizer, (void *) ss);  /* check if stack empty in push room */
   return ss;
 }
 
@@ -81,15 +81,14 @@ static int getFromSharedStack(Stack_t *to, Stack_t *from, long numToFetch)
 int isEmptySharedStack(SharedStack_t *ss)
 {
   int empty;
-  enterRoom(ss->twoRoom,1);               /* Enter push room */
+  enterRoom(ss->threeRoom,1);             /* Enter push room */
   empty = internalIsEmptySharedStack(ss); /* If empty in push room, stack is really empty at this point */
-  exitRoom(ss->twoRoom);
+  exitRoom(ss->threeRoom);
   return empty;
 }
 
 void resetSharedStack(SharedStack_t *ss, int n)
 {
-  assert(isEmptySharedStack(ss));
   ss->numLocalStack = n;
 }
 
@@ -104,7 +103,7 @@ void popSharedStack(SharedStack_t *ss,
 		    Stack_t *segment,      int segRequest)
 {
   int stackletFetched, globalLocFetched, rootLocFetched, objFetched;
-  enterRoom(ss->twoRoom,0);
+  enterRoom(ss->threeRoom,0);
   stackletFetched = getFromSharedStack(stacklet, &ss->stacklet, stackletRequest);
   globalLocRequest = MakeFraction(globalLocRequest, stackletRequest, stackletFetched);
   if (globalLocRequest > 0) {
@@ -124,7 +123,7 @@ void popSharedStack(SharedStack_t *ss,
   assert(ss->numLocalStack >= 0);
   FetchAndAdd(&ss->numLocalStack,1);  /* Local stack is possibly non-empty now; note that we must increment even when empty since 
 					 we don't know how to conditionally decrement later */
-  exitRoom(ss->twoRoom);
+  exitRoom(ss->threeRoom);
 }
 
 static void helpPushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, Stack_t *rootLoc,
@@ -138,28 +137,16 @@ static void helpPushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *g
 }
 
 
-int pushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, Stack_t *rootLoc, Stack_t *obj, Stack_t *segment)
+int pushSharedStack(int conditional,
+		    SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, 
+		    Stack_t *rootLoc, Stack_t *obj, Stack_t *segment)
 {
   int empty;
-  enterRoom(ss->twoRoom,1);
+  enterRoom(ss->threeRoom,conditional ? 2 : 1);
   helpPushSharedStack(ss, stacklet, globalLoc, rootLoc, obj, segment);
-  FetchAndAdd(&ss->numLocalStack,-1);  /* Local stack is non-empty now */
+  if (!conditional)
+    FetchAndAdd(&ss->numLocalStack,-1);  
   assert(ss->numLocalStack >= 0);
-  empty = (exitRoom(ss->twoRoom) == StackEmpty);
+  empty = (exitRoom(ss->threeRoom) == StackEmpty);
   return empty;
 }
-
-int condPushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, Stack_t *rootLoc, Stack_t *obj, Stack_t *segment)
-{
-  int empty;
-  enterRoom(ss->twoRoom,1);
-  empty = internalIsEmptySharedStack(ss);
-  if (!empty) 
-    helpPushSharedStack(ss, stacklet, globalLoc, rootLoc, obj, segment);
-  exitRoom(ss->twoRoom);
-  return !empty;   /* we pushed only if it was not empty */
-}
-
-
-
-

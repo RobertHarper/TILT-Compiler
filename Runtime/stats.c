@@ -23,7 +23,7 @@ int ftime(struct timeb *tp);   /* Not in header file */
 static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
 
-int shortSummary = 0, skipHistogram = 0;
+int information = 1;
 int	prof_fd = 1;
 static double time_diff(),time2double();
 static double eps=1e-7;
@@ -392,7 +392,7 @@ void stats_finish(void)
 
   printf("\n\n");
 
-  if (!shortSummary) {
+  if (information >= 1) {
     for (i=0; i<NumProc; i++) {
       Proc_t *proc = getNthProc(i);
       printf("PROC #%d: Allocated  = %8.0f kb\n", i, proc->bytesAllocatedStatistic.sum / 1024.0);
@@ -404,14 +404,16 @@ void stats_finish(void)
       show_time_statistic(" Mutator    ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
       show_time_statistic(" GCNone     ", &proc->gcNoneStatistic, proc->totalTimer.last);
       show_time_statistic(" GCWork     ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
-      show_time_statistic("  GCRelease ", &proc->gcReleaseStatistic, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCGlobal  ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCStack   ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCMajor   ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCFlipBoth", &proc->gcFlipBothHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCFlipOn  ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_time_statistic("  GCFlipOff ", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      if (!skipHistogram) {
+      if (information >= 2) {
+	show_time_statistic("  GCRelease ", &proc->gcReleaseStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCGlobal  ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCStack   ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCMajor   ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCFlipBoth", &proc->gcFlipBothHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCFlipOn  ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCFlipOff ", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      }
+      if (information >= 3) {
 	show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
 	show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
 	show_histogram(" GCFlipBoth  Hist", &proc->gcFlipOffHistogram);
@@ -434,10 +436,11 @@ void stats_finish(void)
   if (bytesReplicated)
     printf("                                    Replicated   = %9.0f kb\n",
 	   bytesReplicated/1024.0);
-  printf("       NumGC         = %8d     NumRoot      = %9d      NumConflict  = %8d    AvgFrameSize = %4.0f\n"
-	 "       NumMajorGC    = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
-	 NumGC,                          NumRoots,                NumContention,   AvgStackFrameSize,
-	 NumMajorGC,                     NumWrites,               NumLocatives);
+  if (information >= 1)
+    printf("       NumGC         = %8d     NumRoot      = %9d      NumConflict  = %8d    AvgFrameSize = %4.0f\n"
+	   "       NumMajorGC    = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
+	   NumGC,                          NumRoots,                NumContention,   AvgStackFrameSize,
+	   NumMajorGC,                     NumWrites,               NumLocatives);
   if(useGenStack)
     printf("       newStkDepth   = %4.0f\n",  AvgNewStackDepth);
   printf("MISC:  Total time    = %8.2f s   maxPhysMem   = %9d      minPageFault = %8d    invCtxtSwap  = %5d\n"

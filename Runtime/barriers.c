@@ -14,9 +14,11 @@ Barriers_t *createBarriers(int size, int phase)
   return b;
 }
 
-int strongBarrier(Barriers_t *b, int which)
+int strongBarrier(Barriers_t *b, int *whichRef)
 {
+  int which = *whichRef;
   int index = FetchAndAdd(&b->barriers[which], 1);
+  *whichRef = (which + 1) % b->phase;
   if (collectDiag >= 2)
     printf("Waiting at barrier %d for %d more processors\n", which, b->size - b->barriers[which]);
   while (b->barriers[which] < b->size) 
@@ -27,9 +29,11 @@ int strongBarrier(Barriers_t *b, int which)
   return index;
 }
 
-int weakBarrier(Barriers_t *b, int which)
+int weakBarrier(Barriers_t *b, int *whichRef)
 {
+  int which = *whichRef;
   int index = FetchAndAdd(&b->barriers[which], 1);
+  *whichRef = (which + 1) % b->phase;
   b->barriers[which ? which - 1 : b->phase - 1] = 0;  /* Reset previous phases's counter */
   flushStore();
   return index;

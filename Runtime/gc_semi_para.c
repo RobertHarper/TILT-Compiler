@@ -68,7 +68,7 @@ static void stop_copy(Proc_t *proc)
      while other processors have not reached the barrier and are still in the mutator.
      We use a strong barrier to prevent  other threads from proceeding until the first thread has finished.
   */
-  isFirst = (weakBarrier(barriers,0) == 0);
+  isFirst = (weakBarrier(barriers,&proc->barrierPhase) == 0);
   if (isFirst) {
     assert(isEmptyStack(&proc->majorObjStack));
     assert(isEmptySharedStack(workStack));
@@ -77,7 +77,7 @@ static void stop_copy(Proc_t *proc)
     ResetJob();                        /* Reset counter so all user threads are scanned */
     totalRequest = totalUnused = 0;
   }
-  strongBarrier(barriers,1);
+  strongBarrier(barriers,&proc->barrierPhase);
 
   proc->segmentType |= (MajorWork | FlipOff | FlipOn);
 
@@ -114,7 +114,7 @@ static void stop_copy(Proc_t *proc)
   while (globalLoc = (ploc_t) popStack(proc->globalLocs))
     locCopy1_copyCopySync_replicaStack(proc, globalLoc,
 				       &proc->majorObjStack,&proc->majorRange,fromSpace); 
-  pushSharedStack(workStack,&proc->threads, proc->globalLocs, proc->rootLocs,
+  pushSharedStack(0,workStack,&proc->threads, proc->globalLocs, proc->rootLocs,
 		  &proc->majorObjStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
 
   while (1) {
@@ -132,13 +132,13 @@ static void stop_copy(Proc_t *proc)
       scanObj_locCopy1_copyCopySync_replicaStack(proc,gray,&proc->majorObjStack,&proc->majorRange,fromSpace);
     }
 
-    globalEmpty = pushSharedStack(workStack,&proc->threads,proc->globalLocs, proc->rootLocs, 
+    globalEmpty = pushSharedStack(0,workStack,&proc->threads,proc->globalLocs, proc->rootLocs, 
 				  &proc->majorObjStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
     if (globalEmpty)
       break;
   }
   ClearCopyRange(&proc->majorRange);
-  strongBarrier(barriers,2);
+  strongBarrier(barriers,&proc->barrierPhase);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
@@ -164,7 +164,7 @@ static void stop_copy(Proc_t *proc)
   assert(proc->writelistCursor == proc->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
-  strongBarrier(barriers,3);
+  strongBarrier(barriers,&proc->barrierPhase);
 }
 
 void GCPoll_SemiPara(Proc_t *proc)

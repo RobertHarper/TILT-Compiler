@@ -80,7 +80,7 @@ static void GCCollect_GenPara(Proc_t *proc)
      prelimiary work.  This work must be completed before any processor begins collection.
      As a result, the "first" processor is counted twice.
   */
-  isFirst = (weakBarrier(barriers, 0) == 0);
+  isFirst = (weakBarrier(barriers, &proc->barrierPhase) == 0);
   if (isFirst) {
     paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
     /* A Major GC is forced if the tenured space is potentially too small */
@@ -92,7 +92,7 @@ static void GCCollect_GenPara(Proc_t *proc)
     resetSharedStack(workStack, NumProc);
     ResetJob();                        /* Reset counter so all user threads are scanned */
   }
-  strongBarrier(barriers, 1);
+  strongBarrier(barriers, &proc->barrierPhase);
 
   /* Get local ranges ready for use; check local stack empty; reset root lists */
   assert(isEmptyStack(&proc->minorObjStack));
@@ -111,7 +111,7 @@ static void GCCollect_GenPara(Proc_t *proc)
     if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
       GCType = Major;      
   }
-  strongBarrier(barriers, 2);
+  strongBarrier(barriers, &proc->barrierPhase);
 
   /* After barrier, we know if GC is major */
   proc->segmentType |= (FlipOff | FlipOn | ((GCType == Minor) ? MinorWork : MajorWork));
@@ -134,7 +134,7 @@ static void GCCollect_GenPara(Proc_t *proc)
       gc_large_startCollect();
     }
   }
-  strongBarrier(barriers, 3);
+  strongBarrier(barriers, &proc->barrierPhase);
 
   procChangeState(proc, GC);
 
@@ -184,7 +184,7 @@ static void GCCollect_GenPara(Proc_t *proc)
   }
 
   /* Move everything from local stack to global stack to balance work; note the omitted popSharedStack */
-  pushSharedStack(workStack, 
+  pushSharedStack(0,workStack, 
 		  &proc->threads, proc->globalLocs, proc->rootLocs, 
 		  (GCType == Minor) ? &proc->minorObjStack : &proc->majorObjStack,
 		  (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack);
@@ -213,7 +213,7 @@ static void GCCollect_GenPara(Proc_t *proc)
 	(void) transferScanObj_locCopy2L_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorRange,
 								  nursery,fromSpace,largeSpace);
     }
-    globalEmpty = pushSharedStack(workStack, 
+    globalEmpty = pushSharedStack(0,workStack, 
 				  &proc->threads, proc->globalLocs, proc->rootLocs,
 				  (GCType == Minor) ? &proc->minorObjStack : &proc->majorObjStack,
 				  (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack);
@@ -233,8 +233,7 @@ static void GCCollect_GenPara(Proc_t *proc)
   }
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
-  strongBarrier(barriers, 4);
-
+  strongBarrier(barriers, &proc->barrierPhase);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
@@ -274,7 +273,7 @@ static void GCCollect_GenPara(Proc_t *proc)
   assert(proc->writelistCursor == proc->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
-  strongBarrier(barriers, 5);
+  strongBarrier(barriers, &proc->barrierPhase);
 }
 
 void GC_GenPara(Proc_t *proc, Thread_t *th)

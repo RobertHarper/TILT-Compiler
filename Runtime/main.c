@@ -140,12 +140,12 @@ struct option_entry table[] =
    1, "objFetchSize", &objFetchSize, "Number of items to fetch from the shared work stack",
    1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
    1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
+   1, "doAgressive", &doAgressive, "Use 2 phase concurrent collection",
    3, "majorCollectionRate", &majorCollectionRate, "Rate of concurrent collector",
 #ifdef solaris
    1, "perfType", &perfType, "Type of performance counters",
 #endif
-   0, "skipHistogram", &skipHistogram, "Skip printing histograms",
-   0, "short", &shortSummary, "Print short summary of execution"};
+   1, "info", &information, "Level of information to print"};
 
 void process_option(int argc, char **argv)
 {

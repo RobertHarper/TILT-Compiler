@@ -189,6 +189,7 @@ typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done,
 #define MajorWork 2
 #define FlipOn    4
 #define FlipOff   8
+#define FlipTransition 16
 
 typedef struct Proc__t
 {
@@ -221,6 +222,8 @@ typedef struct Proc__t
   Stack_t            majorSegmentStack;  
   Stack_t            majorRegionStack; /* Possibly used by a generational concurrent collector */
 
+  int                barrierPhase;   
+
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
   int                segmentNumber;  /* Counts the Number of times we are in a GC since running a mutator */
@@ -250,6 +253,7 @@ typedef struct Proc__t
   Histogram_t        gcFlipOffHistogram;
   Histogram_t        gcFlipOnHistogram;
   Histogram_t        gcFlipBothHistogram;
+  Histogram_t        gcFlipTransitionHistogram;
 
 
   CopyRange_t        minorRange;   /* Used only by generational collector */

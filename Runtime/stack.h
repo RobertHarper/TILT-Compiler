@@ -39,8 +39,9 @@ val_t GetGlobal(ptr_t);
 
 void thread_root_scan(Proc_t *, Thread_t *);  /* Scan all root locations in primaryStack */
 
-Thread_t *initial_root_scan(Proc_t *, Thread_t *); /* Initialize snaphosts */
+int initial_root_scan(Proc_t *, Thread_t *); /* Initialize snaphosts - returns 1 if thread as started */
 int work_root_scan(Proc_t *, Thread_t *, int workToDo); /* Obtain roots from startStack; returns one when stack complete */
+void discard_root_scan(Proc_t *, Thread_t *);  /* Clean up thread but don't do flip - for CollectorTransition */
 void complete_root_scan(Proc_t *, Thread_t *); /* Perform flip */
 
 extern int useGenStack;
