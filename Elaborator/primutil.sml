@@ -11,6 +11,7 @@ struct
     open PrimUtilParam Prim
     type con = con
     type exp = PrimUtilParam.exp
+
     type context = PrimUtilParam.context
 
     type value = (con,exp) Prim.value
@@ -304,13 +305,24 @@ struct
 
 	    fun ibinary is op2 = objbinary (value2int is) (value2int is) (int o (filter is) o op2)
 	    fun iunary is op1 = objunary (value2int is) (int o (filter is) o op1)
-	    fun fbinary fs op2 = objbinary (value2float fs) (value2float fs)
+
+(*	    fun fbinary fs op2 = objbinary (value2float fs) (value2float fs)
 		                   ((fn f => (float(fs,Float.toString f))) o op2)
 	    fun funary fs op1 = objunary (value2float fs)
 		                   ((fn f => (float(fs,Float.toString f))) o op1)
-	    fun isbinary is op2 = objbinary (value2int is) (value2int' is) (int o (filter is) o op2)
 
 	    fun fpred fs pred = objpred (value2float fs) pred
+*)
+
+	    (* Unless we're really sure we can get the rounding semantics right,
+	     * don't try to evaluate floating point ops.  Note: NJ floats are fucked.
+	     *)
+	    fun fbinary fs op2 = raise Div
+	    fun funary fs op1  = raise Div
+	    fun fpred fs pred  = raise Div
+
+	    fun isbinary is op2 = objbinary (value2int is) (value2int' is) (int o (filter is) o op2)
+
 	    fun ipred is pred = objpred (value2int is) pred
 
 	in
