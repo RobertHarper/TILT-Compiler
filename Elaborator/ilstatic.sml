@@ -534,7 +534,7 @@ structure IlStatic
 	       let val c1 = ConUnroll con1
 		   val c2 = ConUnroll con2
 		   val equations = (con1,con2)::equations
-	       in  self (c1,c2,ctxt)
+	       in  meta_eq_con (setter,constrain,is_sub,equations) (c1,c2,ctxt)
 	       end
 	   end
      in
