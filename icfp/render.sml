@@ -15,9 +15,10 @@ structure Render : RENDER =
 	in  (x+x2, y+y2)
 	end
     fun say s = (print s; TextIO.flushOut TextIO.stdOut)
+    fun weakAttenuate d = 100.0 / (99.0 + Math.pow(d, 0.25))
 
     (* bump depends on how far we are from the source *)
-    fun bump (hit, dir, dist) = let val f = (Real.abs dist) / 1e5
+    fun bump (hit, dir, dist) = let val f = (Real.abs dist) / 1e7
 				in  add(hit, scale(f, dir))
 				end
 
@@ -194,7 +195,7 @@ structure Render : RENDER =
 		     val _ = (print "finalDiffuse is "; printV3 finalDiffuse; print "\n")
 		     val _ = (print "finalIntensity is "; printV3 finalIntensity; print "\n")
 *)
-		 in  finalIntensity
+		 in  scale(weakAttenuate dist, finalIntensity)
 		 end
 	end
 
