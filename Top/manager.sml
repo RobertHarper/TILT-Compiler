@@ -124,9 +124,9 @@ struct
     fun source(from, to) = from
     fun destination(from, to) = to
     fun reverse(from, to) = (to, from)
-    fun channelToName(from, to) = from ^ "->" ^ to
+    fun channelToName(from, to) = from ^ "-to-" ^ to
     fun nameToChannel name : channel option = 
-	(case Util.substring ("->", name) of
+	(case Util.substring ("-to-", name) of
 	     NONE => NONE
 	   | SOME pos => if (String.sub(name,0) = #"!" orelse
 			     String.sub(name,0) = #"?")
@@ -136,18 +136,22 @@ struct
 			      in  SOME(from, to) 
 			      end)
 
-    fun remove (file : string) = if (OS.FileSys.access(file, [OS.FileSys.A_READ]))
-				     then OS.FileSys.remove file
-				 else ()
+    fun remove (file : string) = 
+	if (OS.FileSys.access(file, []) andalso
+	    OS.FileSys.access(file, [OS.FileSys.A_READ]))
+	    then OS.FileSys.remove file
+	else ()
     fun erase channel = let val file = channelToName channel
 			in  remove file
 			end
     fun exists channel = 
 	let val filename = channelToName channel
-	in  OS.FileSys.access(filename,[OS.FileSys.A_READ])
-	    andalso (if (OS.FileSys.fileSize filename > 0)
-			 then true
-		     else (print "XXX exists found existing but empty channel\n"; false))
+	in  OS.FileSys.access(filename, []) andalso
+	    OS.FileSys.access(filename,[OS.FileSys.A_READ]) andalso
+	    (if (OS.FileSys.fileSize filename > 0) then
+	       true
+             else 
+	       (print "XXX exists found existing but empty channel\n"; false))
 	end
 
     fun send (channel, message) = 
@@ -163,7 +167,8 @@ struct
 	    val message = loop (messageToWords message)
 	    val temp = "!" ^ filename
 	    val _ = remove temp
-	    val fd = TextIO.openAppend temp
+            (* CS: was openAppend, but NT can't do this if file doesn't exist*)
+	    val fd = TextIO.openOut temp 
 	    val _ = TextIO.output(fd, message)
 	    val _ = TextIO.closeOut fd
 	    val _ = OS.FileSys.rename{old=temp, new=(channelToName channel)}
