@@ -326,7 +326,7 @@ structure IlUtil
 					       NONE => con
 					     | SOME c => self c)
 		     | CON_VAR _ => con
-		     | (CON_OVAR ocon) => (self (CON_TYVAR (ocon_deref ocon)); con)
+		     | (CON_OVAR ocon) => self (CON_TYVAR (ocon_deref ocon))
 		     | CON_INT _ => con
 		     | CON_FLOAT _  => con
 		     | CON_UINT _  => con
