@@ -21,6 +21,8 @@ signature MLRISC_PSEUDO = sig
   | DataTrailer
   | TableHeader
   | TableTrailer
+  | ClusterHeader
+  | ClusterTrailer
   | ProcedureHeader of Label.label
   | ProcedureTrailer of Label.label
   | Export of Label.label
