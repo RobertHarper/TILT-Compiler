@@ -87,4 +87,5 @@
 0087 [closed]   Possible "conservative" bug in Analyze avoiding desired optimizations
 0088 [open]	Tests that fail.
 0089 [open]	Printing from runtime.
-0090 [open] Shadowing type "bool" causes equality compiler to fail.
+0090 [open]     Shadowing type "bool" causes equality compiler to fail.
+0091 [open]     Unresolved equality expressions breaking elaborator
