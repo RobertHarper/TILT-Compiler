@@ -68,8 +68,17 @@ functor Squish(structure Nil : NIL
 		  | Handle_e (e,fc) => #exp f (Handle_e (xexp f e,
 							 xfunction f fc))
 	    end
-
-	fun squish_con con = con
+       
+fun squish_con con = 
+    case con of 
+	Let_c (sort, conbnds, Let_c (sort2, conbnds2, con)) =>
+	    let val Let_c (sort2, conbnds2, con) = squish_con con
+	    in 
+		if (sort = sort2) then 
+		    Let_c (sort, conbnds @ conbnds2, con) 
+		else con
+	    end
+      | _=> con
 	    
 	fun squish exp = 
 	    let val id = fn x => x
@@ -85,4 +94,7 @@ functor Squish(structure Nil : NIL
 		xexp { exp = sq, switch = id , 
 		      bnd = fn bnd:bnd => bnd, func =id  } exp
 	    end 
-    end (* local for squish *)
+    end 
+
+
+

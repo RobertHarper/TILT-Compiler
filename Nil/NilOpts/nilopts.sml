@@ -6,6 +6,11 @@ struct
     val do_cse = ref true
     val do_flatten = ref true
     val do_reduce = ref true
+	val do_dead = ref true
+	val do_inline_once = ref true
+	val do_project_known = ref true
+
+
     val do_inline = ref true
     val do_uncurry = ref true
     val do_fold_constants = ref false 

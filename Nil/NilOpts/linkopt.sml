@@ -144,18 +144,18 @@ struct
 			       print "Inlined functions:\n";
 			       PpNil.pp_module nilmod;
 			       print "\n") 
-		     else print "Functions inlined\n";
+		     else if !do_inline then print "Functions inlined\n" else ();
 
 	    (* As I'm not doing renaming during the general inlining, should do it now.... *)
 	    val nilmod = if !do_inline then 
 		(Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
 		else nilmod
-	    val _ = if !NilOpts.print_inline andalso !do_inline 
+	    val _ = if !NilOpts.print_inline andalso !do_inline
 			then (print "\n\n=======================================\n\n";
 			      print "renaming results:\n";
 			      PpNil.pp_module nilmod;
 			      print "\n")
-		    else print "Renaming complete\n"
+		    else if !do_inline then print "Renaming complete\n" else ()
 			
 	    val nilmod = if !do_reduce then
 		let val nilmod = (Stats.timer("Reduce", Reduce.doModule debug)) nilmod

@@ -20,9 +20,9 @@ functor Reduce  (
 			) : PASS =
 
 struct 
-    val do_inline = true
-    val do_project_known = true
-    val do_dead = true
+    val do_inline = NilOpts.do_inline_once
+    val do_project_known = NilOpts.do_project_known
+    val do_dead = NilOpts.do_dead
     
     open Nil Name Util Nil.Prim
     structure Nil = Nil
@@ -316,7 +316,7 @@ struct
 		    case conbnd of 
 			Con_cb (var, kind, con) => (declare var; scan_kind fset kind ; scan_con fset con)
 		      | Open_cb (var, vklist, con, kind) => 
-			    (declare var; app (fn (v,k) => (declare v; scan_kind fset k)) vklist; scan_con fset con)
+			    (declare var; app (fn (v,k) => (declare v; scan_kind fset k)) vklist; scan_con fset con; scan_kind fset kind)
 		      | Code_cb _ =>raise UNIMP
 			    
 
@@ -431,6 +431,12 @@ struct
 	    (if not ((!use) = 0) then   
 		( print str;  Ppnil.pp_var var; print " : "; print (Int.toString (!use)); print "\n")
 		 else ())
+	val print_exp = fn (var, newexp) =>  
+	    ( print "exp var "; Ppnil.pp_var var; print " maps to "; Ppnil.pp_exp newexp; print "\n")
+
+	val print_con = fn (var, newvar) =>
+	    ( print "con var "; Ppnil.pp_var var; print " maps to "; Ppnil.pp_con newvar; print "\n")
+
 	fun print_stats unit = 
 	    ( print "****************************************************\n"; 
 	     print "APP TABLE\n";
@@ -439,20 +445,26 @@ struct
 	     HashTable.appi (print_table "esc ") count_esc;
 	     print "\nREC TABLE\n";
 	     HashTable.appi (print_table "rec ")count_rec;
-	     print "****************************************************\n" ) 
+	     print "****************************************************\n"; 
+	     print "\nExp var substitution\n";
+	     HashTable.appi print_exp sigma;
+	     print "\nCon var substitution\n";
+	     HashTable.appi print_con sigma_c;
+	     print "****************************************************\n"
+	     ) 
 
 
 	    (* The following functions implement the ncontract algorithm *)
 
 	local 
 	    fun dead_var x =
-		if (do_dead andalso look count_app x = 0 andalso look count_esc x = 0 andalso look count_rec x = 0)
+		if (!do_dead andalso look count_app x = 0 andalso look count_esc x = 0 andalso look count_rec x = 0)
 		    then ( if debug then ( Ppnil.pp_var x; print " is dead\n" ) else () ;
 			  inc_click dead_click ; true )
 		else false
 
 	    fun dead_funcs xs = 
-		let fun dead x = (do_dead andalso look count_app x = 0 andalso look count_esc x = 0) (* Don't count recursive apps of funcs *)
+		let fun dead x = (!do_dead andalso look count_app x = 0 andalso look count_esc x = 0) (* Don't count recursive apps of funcs *)
 		in 
 		    if ( Listops.andfold dead xs ) 
 			then   ( (* app Ppnil.pp_var xs; print " are dead\n"; *) inc_click dead_click ; true )
@@ -545,7 +557,7 @@ struct
 		     if (dead_var x) 
 			 then ( cleanup()  ; do_body() )
 		     else 
-			 let val _ = if do_project_known then HashTable.insert bind ( x, RC ( labels,  cons)) else ()
+			 let val _ = if !do_project_known then HashTable.insert bind ( x, RC ( labels,  cons)) else ()
 			      val N' = do_body()
 			 in
 			     if (dead_var x)
@@ -655,7 +667,7 @@ struct
 			let val new_app = App_c (sc(f), map (xcon fset) cons)
 			    val Var_c sf = sc(f) 
 			in 
-			    if do_inline andalso look count_app sf = 1 andalso look count_esc sf = 0 
+			    if !do_inline andalso look count_app sf = 1 andalso look count_esc sf = 0 
 				then ( case (HashTable.find bind sf) of
 				      SOME (FC ( vklist, con, kind)) =>
 					  let val _ = inc_click con_inline_click
@@ -847,7 +859,7 @@ struct
 				        xbnds fset rest body )
 					    
 			      else
-				  let val _ = if do_project_known then HashTable.insert bind ( x, R ( labels, exps)) else ()
+				  let val _ = if !do_project_known then HashTable.insert bind ( x, R ( labels, exps)) else ()
 				      val (rest,body) = xbnds fset rest body
 				  in
 				      if (dead_var x )
@@ -927,7 +939,7 @@ struct
 				   xbnds fset rest body) 
 			 else 
 			     let 
-				 val _ = if do_project_known then HashTable.insert bind ( x, S (a, sum, sum_cons)) else ()
+				 val _ = if !do_project_known then HashTable.insert bind ( x, S (a, sum, sum_cons)) else ()
 				 val (rest,body) = xbnds fset rest body
 			     in
 				 if (dead_var x )
@@ -958,7 +970,7 @@ struct
 			let val vclist = Util.set2list vcset
 			    val vars = map #1 vclist
 			    fun possible_func  v  =
-				do_inline andalso look count_app v = 1 andalso look count_esc v = 0 
+				!do_inline andalso look count_app v = 1 andalso look count_esc v = 0 
 				
 				(* Even when we inline the function, the cons & kinds on the args and the return con
 				   go away, so we need to update the counts for them *)
@@ -1139,7 +1151,7 @@ struct
 			(* val _ = (print "S(f) is "; Ppnil.pp_exp (s(f)) ; print "\n") *)
 			val Var_e sf = s(f)
 		    in 
-			if do_inline andalso look count_app sf = 1 andalso look count_esc sf = 0 
+			if !do_inline andalso look count_app sf = 1 andalso look count_esc sf = 0 
 			    then 
 				( case (HashTable.find bind sf) of
 				      SOME (F (Function( effect, recur, vklist, vclist, vlist, exp, con))) =>

@@ -8,6 +8,9 @@ sig
     val do_reduce : bool ref 
     val do_inline : bool ref
     val do_uncurry : bool ref
+	val do_inline_once : bool ref
+	val do_project_known : bool ref
+	val do_dead : bool ref
 
     val do_fold_constants : bool ref
 
@@ -31,3 +34,6 @@ sig
     val print_round_clicks : click list -> unit 
 
 end 
+
+
+

@@ -8,16 +8,18 @@ Also does cse of constructors and expressions as it names each
 intermediate value. 
 
 A-normal form 'linearizes' the code. Actually the form I use is even
-more restricted as it doesn't allow unnamed functions in the code.
+more restricted as it doesn't allow unnamed functions in the code, or Lets nested as
+Let x= let y = 5 in y end
+in x end
 
 sc := Var_c v | Prim_c (primcon, [])        (Variables or constant primitives)
 
-con := Prim_c primcon * sc list
+con1 := sc 
+     | Prim_c primcon * sc list
      | Mu_c bool * (var, con) seq * var            (can't make this (var, sc) seq as var will be unbound)
      | AllArrow_c openness * effect *       (Likewise, can't make con list and con be sc list and sc,
                     (var * kind) list *      as they could refer to type arguments.)
                     con list * w32 *con
-     | Let_c letsort * conbnd list * con
      | Proj_c sc * label
      | Crecord_c (label*sc) list
      | App_c (Var_c f) * sc list            (con function must be named)
@@ -28,21 +30,27 @@ con := Prim_c primcon * sc list
 		       kind : kind }
      | Annotate_c of annot * con 
 
+
+con := con1
+     | Let_c letsort * conbnd list * con
+
 conbnd :=                                   (same as nil) 
-     Con_cb ( var * kind * con)          
+     Con_cb ( var * kind * con1 )          
      | Open_cb ( var * ( var * kind ) list * con * kind )
      | Code_cb ( var * ( var * kind ) list * con * kind )      (Unimplemented) 
 
 
 se := Var_e v | Const_e c 
 
-exp := se
-     | Let_e letsort * bnd list * exp
+exp1 := exp := se
      | Prim_e allprim * con list * se list 
      | Switch_e of switch
      | App_e openness * Var_e f * con list * se list * se list
      | Raise_e se * con
      | Handle_e exp * function              ( Note -- this is exp NOT se )
+
+exp := exp1
+     | Let_e letsort * bnd list * exp
 
 switch := 
      Intsw_e of (Prim.intsize, se, w32) sw
@@ -50,12 +58,14 @@ switch :=
      | Exncase_e of (unit, se, se) sw
      | Typecase_e of (unit, con, primcon) sw
 
-bnd := (same as nil )
+bnd := 
+     Con_b of var * kind * con1
+     | Exp_b of var * con1 * exp1
+     | Fixopen_b of (var, function) set
+     | Fixcode_b of (var,function) set    (Unimplemented)
+     | Fixclosure_b of bool * (var, {code:var, cenv:con, venv:exp, tipe:con}) set  (Unimplemented)
+
 function := (same as nil)
-
-
-
-
 
 *)
 signature ANORMALIZE =
@@ -192,6 +202,7 @@ struct
 	(case con of 
 	    ( Prim_c _ | Crecord_c _ | Proj_c _ | App_c _ ) => true
 	  | ( AllArrow_c _ | Mu_c _ ) => !agressive_cse
+	  |  Let_c (s1, [Open_cb f1], Var_c v1) => !agressive_cse      
 	  | _ => false)
 
     (* Should really check the kinds here as well to see if they match *)
@@ -280,6 +291,19 @@ struct
 				    else (ae, ac)
 		 | Fixopen_b vfset => (ae,ac)
 		 | _ => raise UNIMP) (ae,ac) bnds
+   
+    fun avail_con_bnds (ae,ac) (bnds:conbnd list) = 
+	foldl (fn (bnd, D) => 
+	       case bnd of 
+		   Con_cb(v,k, c) => if (is_elim_con c) then (ae, Conmap.insert (ac, c, v))
+		       else (ae, ac)
+			   
+		 (* In order to do CSE of con-funs *)
+		 | Open_cb (v, vklist, con, kind) =>
+		       (ae, if !agressive_cse then Conmap.insert (ac, Let_c (Sequential, [bnd], Var_c v), v) else ac)
+		       
+		 | _ => raise UNIMP
+		 ) (ae,ac) bnds
 
 
     fun extend_con_bnds D bnds  =
@@ -290,6 +314,15 @@ struct
 		       insert_kind (D, var, Arrow_k (Open, vklist, kind))
 		 | Code_cb (var, vklist, con, kind) =>
 		       insert_kind (D, var, Arrow_k (Code, vklist, kind))) D bnds
+    fun con2bnd conbnd = 
+	case conbnd of
+	    Con_cb (v,k,c) => Con_b (v,k,c)
+	  | Open_cb (var, vklist, con, kind) =>
+		let val t = Name.fresh_var()
+		in 
+		    Con_b (var, Arrow_k( Open, vklist, kind), Let_c (Sequential, [ Open_cb(t, vklist, con,kind) ], Var_c t))
+		end
+	  | _ => raise UNIMP
 
     fun contype  (D, con) =
 (*	let val (con, kind) = NilStatic.con_valid (D, con)
@@ -656,7 +689,7 @@ struct
        | normalize_con_bnds [] D avail =  ([], D, avail) 
 	
      (******* ACK!!!!!!!!!!!!!!!!!!!!!!!! ***********************)
-    and normalize_con_bnd bnd D (avail as (ae,ac)) (k:conbnd list*context*avail->conbnd list*context*avail ) = 
+    and normalize_con_bnd (bnd:conbnd) D (avail as (ae,ac)) (k:conbnd list*context*avail->conbnd list*context*avail ) = 
 	case bnd of 
        Con_cb(var, kind, con) => 
 	   let val CONBNDLIST return = normalize_con con D avail 
@@ -664,26 +697,22 @@ struct
 		(fn (con, D, (ae,ac)) =>
 		 let val kind =  normalize_kind kind D (ae,ac) 
 		     val _ = HashTable.insert env (var, con)
-		       
-		       (* We have to have this, as if it has a singleton kind 
-                                      then we want it to reflect the new con *)
-		       
-		       val ac = if !do_cse andalso (is_elim_con con) then 
-			   Conmap.insert (ac, con, var)
-				else 
-				    ac
-		   in 
-				   (*  
-				    Figure something out here.... might be difficult
-				    case con of 
-					Let_c ( sort, bnds, bdy) =>
-					    let val Let_c(sort, bnds, bdy) = Squish.squish_con con
-			     val D = extend_bnds D bnds
-			 in 
-			     k ( bnds @ [ Con_cb  (var, kind, bdy) ], insert_kind (D, var, kind), (ae,ac))
-			 end 
-		   | _ => *) 
-		       CONBNDLIST (k ( [ Con_cb(var,kind, con)] , insert_kind (D, var, kind), (ae,ac) ))
+			 
+		     val ac = if !do_cse andalso (is_elim_con con) then 
+			 Conmap.insert (ac, con, var)
+			      else 
+				  ac
+		 in 
+		     case con of 
+			 Let_c ( sort, bnds, bdy) =>
+			     let val Let_c(sort, bnds, bdy) = Squish.squish_con con
+				 val D = extend_con_bnds D bnds
+				 val (ae,ac) = avail_con_bnds (ae,ac) bnds
+			     in 
+				 CONBNDLIST (k ( bnds @ [ Con_cb  (var, kind, bdy) ], insert_kind (D, var, kind), (ae,ac)))
+			     end 
+		       | _ =>
+			     CONBNDLIST (k ( [ Con_cb(var,kind, con)] , insert_kind (D, var, kind), (ae,ac) ))
 		 end))
 	   in return 
 	   end 
@@ -694,12 +723,20 @@ struct
 		val kind = normalize_kind kind D avail 
 		val newD = insert_kind_list (D, vklist)
 		val returnD = insert_kind (D, v, Arrow_k (Open, vklist, kind))
-		val CONBNDLIST return = normalize_con con newD avail 
-		    (TOCONBNDLIST,
-		     (fn (con, D, avail) => 
-		      CONBNDLIST (k ( [Open_cb(v, vklist, con, kind) ] ,  returnD, avail ))))
+		val CON body = normalize_con con newD avail (TOCON, CONk)
+	    in 
+		   case Conmap.find (ac, Let_c (Sequential, [bnd], Var_c v)) of 
+		       SOME var => ( inc_click cse_con_click; 
+				     k ( [Con_cb (v, Arrow_k (Open, vklist, kind), Var_c var)], returnD, avail))
+		     | _ => 
+			   k ( [Open_cb (v,vklist, body, kind) ] , returnD, 
+			      (ae, Conmap.insert (ac, Let_c (Sequential, [bnd], Var_c v), v)))
+	    end	
+
+	  (*  (fn (con, D, avail) => 
+	   CONBNDLIST (k ( [Open_cb(v, vklist, con, kind) ] ,  returnD, avail ))))
 	    in return
-	    end 
+	    end *)	 
       | Code_cb _ => raise UNIMP (* Should be the same as Open_cb *)
 	
     and normalize_typecase (sw as { kind, arg, arms, default }) D avail (bind, k) =
@@ -833,8 +870,24 @@ struct
 					 Conmap.insert (ac, con, v)
 					      else ac
 				 in 
-				     BNDLIST ( HashTable.insert env (v, con) ; 
-					      k ([ Con_b(v,knd, c) ], insert_kind (D, v, knd), (ae, ac)))
+				     case con of 
+					 (* If it is only one con-fun leave it where it is *)
+					 Let_c (sort, [Open_cb _ ], bdy) => 
+						BNDLIST ( HashTable.insert env (v, con) ; 
+							 k ([ Con_b(v,knd, con) ], insert_kind (D, v, knd), (ae, ac)))
+
+				       | Let_c ( sort, bnds, bdy) =>
+					     let val Let_c(sort, conbnds, bdy) = Squish.squish_con con
+						 val bnds = map con2bnd conbnds
+						 val D = extend_bnds D bnds
+						 val (ae,ac) = avail_bnds (ae,ac) bnds
+					     in 
+					       BNDLIST (HashTable.insert env (v,con) ;
+							k ( bnds @ [ Con_b  (v, knd, bdy) ], insert_kind (D, v, knd), (ae,ac)))
+					     end 
+				       | _ => 
+					     BNDLIST ( HashTable.insert env (v, con) ; 
+						      k ([ Con_b(v,knd, con) ], insert_kind (D, v, knd), (ae, ac)))
 				 end ))
 		in returnbnds end 
 	    
