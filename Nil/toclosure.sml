@@ -782,6 +782,7 @@ struct
 	   val code_fun = Function(effect,recur,
 				   vklist_code,vclist_code,vflist,
 				   e_rewrite lift body, codebody_tipe)
+	   (*val vc_free_types = map (Subst.substConInCon subst) vc_free_types  (*Maybe??*)*)
 	   val unpack_body = 
 	       App_e(Code,Var_e code_var,
 		     (map (Var_c o #1) vklist) @ 
