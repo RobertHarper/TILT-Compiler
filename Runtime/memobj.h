@@ -122,7 +122,7 @@ Heap_t* GetHeap(ptr_t);
 int inSomeHeap(ptr_t v);
 void Heap_Check(Heap_t*);
 void Heap_Reset(Heap_t *);
-void Heap_ResetFreshPages(Heap_t *);
+int Heap_ResetFreshPages(Heap_t *);
 INLINE1(Heap_TouchPage)
 INLINE2(Heap_TouchPage)
 int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */

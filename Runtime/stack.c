@@ -349,7 +349,7 @@ static int uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOffs
     curRA = nextRA;
     if (curRA == (mem_t)(&start_client_retadd_val))
       assert(curSP == top);
-    proc->segUsage.stackSlotsProcessed += 2;
+    proc->segUsage.stackSlotsProcessed += 4;
   }
   assert(curSP == top);
 }
@@ -510,11 +510,12 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
   assert(stack->cursor > 0);
   assert(th->snapshot == NULL);
   snapshot = StackChain_Copy(stack);        /* New stack chain and copy stacklet from primary to replica area */
-  proc->segUsage.stackSlotsProcessed += (StackChain_Size(snapshot) / 4) / 4;
+  proc->segUsage.stackSlotsProcessed += (StackChain_Size(snapshot) / sizeof(val_t)) / 4;
 
   th->snapshot = snapshot;
   for (i=0; i<32; i++)
     th->snapshotRegs[i] = th->saveregs[i];  
+
 
   /* Do the uptrace to initialize stacklet starting with most recent stacklet */
   for (i=snapshot->cursor-1; i>=0; i--) {
@@ -529,17 +530,37 @@ Thread_t *initial_root_scan(Proc_t *proc, Thread_t *th)
   TotalStackSize += numWords * sizeof(val_t);
 
   assert(snapshot->cursor > 0);
+
   return th;
 }
 
 /* This will fill up rootLocs */
 int work_root_scan(Proc_t *proc, Thread_t *th, int workToDo)
 {
-  int i, done;
+  double start, stop;
+  int i, done, uptraceDone = 1;
   StackChain_t *snapshot = th->snapshot;
 
+  start = segmentTime(proc);
   assert(!useGenStack);
   assert(snapshot->cursor>0);
+  /*
+  for (i=snapshot->cursor-1; i>=0; i--) 
+    if (lengthStack(snapshot->stacklets[i]->callinfoStack) == 0)
+      uptraceDone = 0;
+  if (!uptraceDone) {
+    int numFrames = 0, numWords = 0;
+    for (i=snapshot->cursor-1; i>=0; i--) {
+      Stacklet_t *stacklet = snapshot->stacklets[i];
+      uptrace_stacklet(proc, stacklet, replicaStackletOffset);
+      numFrames += lengthStack(stacklet->callinfoStack);
+      numWords += stacklet->baseTop - stacklet->baseCursor;
+    }
+    TotalStackDepth += numFrames;
+    MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames;
+    TotalStackSize += numWords * sizeof(val_t);
+  }
+*/
   while (snapshot->cursor>0) {
     /* Get the oldest stacklet */
     Stacklet_t *stacklet = snapshot->stacklets[0];
@@ -557,11 +578,17 @@ int work_root_scan(Proc_t *proc, Thread_t *th, int workToDo)
     if (updateWorkDone(proc) > workToDo)
       break;
   }
+  stop = segmentTime(proc);
+  if (timeDiag) {
+    char temp[200];
+    sprintf(temp, "work_root_scan:  %.1f ms\n", stop - start);
+    add_statString(temp);
+  }
   return (snapshot->cursor == 0);
 }
 
 int stkSize = 0;
-double s1, s2, s3, s4;
+
 /* Will fill up rootsLocs */
 void complete_root_scan(Proc_t *proc, Thread_t *th)
 {
@@ -575,7 +602,6 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   if (th->used == 0)  /* Thread is actually dead now.  Was live only due to pinning */
     return;
 
-  s1 = segmentTime(proc);
   if (th->snapshot != NULL) {
     StackChain_Dealloc(th->snapshot);
     th->snapshot = NULL;
@@ -596,17 +622,17 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   }
   assert(firstActive <= stack->cursor);  /* Could equal if collection finished in first segment */
 
-  s2 = segmentTime(proc);
+
   for (i=stack->cursor-1; i>=firstActive; i--) {
     stkSize = stack->stacklets[i]->baseTop - stack->stacklets[i]->baseCursor;
     uptrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset);
   }
-  s3 = segmentTime(proc);
+
   for (i=firstActive; i<stack->cursor; i++)
     downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
   regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
   addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
-  s4 = segmentTime(proc);
+
 }
 
 /* ----------------------------------------------------- 
@@ -656,17 +682,29 @@ void do_global_work(Proc_t *proc, int workToDo)
   proc->segUsage.globalsProcessed += lengthStack(potentialGlobal);
   while (global = (mem_t) popStack(potentialGlobal)) {
     tag_t tag = global[-1];
-    if (GET_TYPE(tag) == SKIP_TYPE) /* Not yet initialized */
+    if (IS_SKIP_TAG(tag))  /* Not yet initialized */
       pushStack(potentialGlobalTemp, global);
     else {
       proc->segUsage.globalsProcessed++;
-      assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
-      if (tag == TAG_REC_INTINT) 
-	DupGlobal(global);
-      else if (tag == TAG_REC_TRACETRACE) 
-	pushStack(&promotedGlobal, global);
-      else
+      if (tag == TAG_REC_INT) 
+	;
+      else if (tag == TAG_REC_TRACE) {
+	ptr_t globalVal = (ptr_t) *global;
+	if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
+	  pushStack(&promotedGlobal, global);
+      }
+      else if (tag == MIRROR_GLOBAL_PTR_TAG) {
+	ptr_t globalVal = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
+	assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
+	if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
+	  pushStack(&promotedGlobal, global);
+	else
+	  DupGlobal(global);
+      }
+      else {
+	printf("do_global_work: Bad tag: %d\n", tag);
 	assert(0);
+      }
     }
   }
   typed_swap(Stack_t *, potentialGlobal, potentialGlobalTemp);
@@ -697,7 +735,7 @@ void major_global_scan(Proc_t *proc)
 void NullGlobals(int globalOffset)
 {
   int mi;
-  /* Null out reeplica global vars */
+  /* Null out replica global vars */
   for (mi=0; mi<module_count; mi++) {
     mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
     mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);

@@ -196,6 +196,7 @@ void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
   th->saveregs[THREADPTR] = (long) th;
   th->saveregs[ALLOCLIMIT] = 0;
   th->globalOffset = 0;
+  th->arrayOffset = 0;
   th->stackletOffset = 0;
   th->thunk = thunk;
   if (th->stack == NULL)
@@ -316,6 +317,8 @@ void resetUsage(Usage_t *u)
   u->globalsProcessed = 0;
   u->stackSlotsProcessed = 0;
   u->workDone = 0;
+  u->lastWorkDone = 0;
+  u->counter = 0;
 }
 
 long updateWorkDone(Proc_t *proc)
@@ -403,11 +406,11 @@ void thread_init()
       proc->writelist[j] = 0;
     proc->globalLocs = createStack(8192);
     proc->rootLocs = createStack(4096);
+    proc->backObjs = createStack(1024);
+    proc->backObjsTemp = createStack(1024);
+    proc->backLocs = createStack(64 * 1024);
+    proc->backLocsTemp = createStack(64 * 1024);
     allocStack(&proc->threads, 100);
-    proc->primaryReplicaObjRoots = createStack(200);
-    proc->primaryReplicaObjFlips = createStack(200);
-    proc->primaryReplicaLocRoots = createStack(500);
-    proc->primaryReplicaLocFlips = createStack(1000);
     reset_timer(&(proc->totalTimer));
     reset_timer(&(proc->currentTimer));
     proc->state = Scheduler;
@@ -478,46 +481,47 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
     proc->gcTime += diff;
 
   switch (proc->state) {
-  case Scheduler:
+  case Scheduler: {
+    int flipOn = (proc->gcSegment2 == FlipOn);
+    int flipOff = (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth);
+
     proc->schedulerTime += diff;
     if (procState == Mutator || procState == Done) {  /* Reset GC-related info once we enter mutator */
-      /* First do the segment-related statistics */
+      /* First do statistics dependent on whether GC is major or minor */
       if (proc->gcSegment1 == MinorWork) {
 	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
 	attributeUsage(&proc->segUsage, &proc->minorUsage);
-      }
-      else if (proc->gcSegment1 == MajorWork) {
-	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
-	add_histogram(&proc->gcMajorWorkHistogram, proc->gcTime);
-	attributeUsage(&proc->segUsage, &proc->majorUsage);
-      }
-      else {
-	add_statistic(&proc->gcNoneStatistic, proc->gcTime);
-	resetUsage(&proc->segUsage);
-      }
-      /* Collect statistics for start/end of a collection cycle */
-      if (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth) {
-	add_statistic(&proc->heapSizeStatistic, Heap_GetSize(fromSpace) / 1024);
-      }
-      if (proc->gcSegment1 == MajorWork) {
-	if (proc->gcSegment2 == FlipOn)
-	  add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);
-	else if (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth) {
-	  add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
-	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->majorUsage.fieldsCopied);
-	  resetUsage(&proc->majorUsage);
-	}
-      }
-      else if (proc->gcSegment1 == MinorWork) {
-	if (proc->gcSegment2 == FlipOn)
-	  add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);
-	else if (proc->gcSegment2 == FlipOff || proc->gcSegment2 == FlipBoth) {
-	  add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
+	if (flipOff) {
 	  add_statistic(&proc->bytesAllocatedStatistic, proc->minorUsage.bytesAllocated);
 	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->minorUsage.fieldsCopied);
 	  proc->majorUsage.bytesAllocated += 4 * proc->minorUsage.fieldsCopied;
 	  resetUsage(&proc->minorUsage);
 	}
+      }
+      else if (proc->gcSegment1 == MajorWork) {
+	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
+	add_histogram(&proc->gcMajorWorkHistogram, proc->gcTime);
+	attributeUsage(&proc->segUsage, &proc->majorUsage);
+	if (flipOff) {
+	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->majorUsage.fieldsCopied);
+	  resetUsage(&proc->majorUsage);
+	}
+      }
+      else {
+	add_statistic(&proc->gcNoneStatistic, proc->gcTime);
+	resetUsage(&proc->segUsage);
+      }
+      /* Add statistics related to flipping on/off collector - independent of whether GC is major or minor */
+      if (flipOn) {
+	add_histogram(&proc->gcFlipOnHistogram, proc->gcTime);     
+	if (timeDiag)
+	  printf("FlipOn  %5d:  %3.1f ms %s\n\n", proc->segmentNumber, proc->gcTime, proc->gcTime > 4.0 ? "******" :"");
+      }
+      else if (flipOff) {
+	add_histogram(&proc->gcFlipOffHistogram, proc->gcTime);
+	add_statistic(&proc->heapSizeStatistic, Heap_GetSize(fromSpace) / 1024);
+	if (timeDiag)
+	  printf("FlipOff %5d: %3.1f ms %s\n\n", proc->segmentNumber, proc->gcTime, proc->gcTime > 4.0 ? "******" :"");
       }
       add_statistic(&proc->schedulerStatistic, proc->schedulerTime);
       proc->segmentNumber++;
@@ -528,7 +532,9 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
       proc->numSegment++;
     }
     break;
+  }
   case Mutator:
+    assert(procState == Scheduler);
     add_histogram(&proc->mutatorHistogram, diff);
     break;
   case GC:
@@ -617,6 +623,7 @@ static void mapThread(Proc_t *proc, Thread_t *th)
   th->writelistAlloc = proc->writelistCursor;
   th->writelistLimit = proc->writelistEnd;
   th->globalOffset = primaryGlobalOffset;
+  th->arrayOffset = primaryArrayOffset;
   th->stackletOffset = primaryStackletOffset;
   th->saveregs[THREADPTR] = (val_t) th;
   th->saveregs[SP] = (val_t) StackletPrimaryCursor(stacklet);

@@ -270,6 +270,7 @@ StackChain_t* StackChain_Copy(StackChain_t *src)
   for (i=0; i<src->cursor; i++) {
     res->stacklets[i] = src->stacklets[i];
     src->stacklets[i]->count++;
+    res->stacklets[i]->active = 0;
     Stacklet_Copy(src->stacklets[i]);
   }
   return res;
@@ -349,7 +350,7 @@ void PadHeapArea(mem_t bottom, mem_t top)
 {
   assert(bottom <= top);
   if (bottom < top)
-    *bottom = SKIP_TYPE | ((top - bottom) << SKIPLEN_OFFSET);
+    *bottom = MAKE_SKIP(top - bottom);
 }
 
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top)
@@ -433,12 +434,13 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   return res;
 }
 
-void Heap_ResetFreshPages(Heap_t *h)
+int Heap_ResetFreshPages(Heap_t *h)
 {
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
   int i, pages = DivideUp(MaxSize,pagesize);
   for (i=0; i<pages; i++)
     h->freshPages[i] = 1;
+  return pages;
 }
 
 int Heap_GetMaximumSize(Heap_t *h)

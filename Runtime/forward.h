@@ -27,14 +27,6 @@ void ClearCopyRange(CopyRange_t *copyRange);
    Also returns the start (including tags) of object */
 unsigned long objectLength(ptr_t obj, mem_t *start);
 
-/* getNontagNonglobalPointerLocations - used for processing globals
-   (1) Takes an (initilaized) object and a queue of pointer locations
-   (2) Decodes the object using its tag and place into the queue 
-       all the pointer fields that do not contain
-       tags (small constructor values) or addresses of globals
-*/
-
-int getNontagNonglobalPointerLocations(ptr_t obj, Stack_t *locs);
 
 
 /* A few definition
@@ -146,6 +138,20 @@ void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange,
     gc_large_addRoot(obj);
 }
 
+/* copy2L_noSpaceCheck */
+INLINE1(copy2L_noSpaceCheck)
+INLINE2(copy2L_noSpaceCheck)
+void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange,
+			 Heap_t *from, Heap_t *from2, Heap_t *large)
+{ 
+  if (((val_t) obj - (val_t) from->range.low < from->range.diff) ||  
+      ((val_t) obj - (val_t) from2->range.low < from2->range.diff)) {
+    copy_noSpaceCheck(proc,obj,copyRange);
+  }
+  else if ((val_t) obj - (val_t) large->range.low < large->range.diff)
+    gc_large_addRoot(obj);
+}
+
 /* splitAlloc_primaryStack
    (1) Returns the size of the object (which equals bytesCopied if object was copied).
        Otherwise, object was already copied.
@@ -247,6 +253,23 @@ void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *local
   ptr_t white = *loc;							
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
+    ptr_t gray = (ptr_t) white[-1];
+    *loc = gray;
+    if (bytesCopied) {
+      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      pushStack(localStack, white);
+    }
+  }
+}
+
+/* locSplitCopy1_copyCopySync_primaryStack */
+INLINE1(locSplitCopy1_copyCopySync_primaryStack)
+INLINE2(locSplitCopy1_copyCopySync_primaryStack)
+void locSplitCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
+{ 
+  ptr_t white = *loc;							
+  if ((val_t) white - (val_t)from->range.low < from->range.diff) {
+    int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
@@ -456,8 +479,6 @@ void scanUntil_locCopy2L_noSpaceCheck(Proc_t *, mem_t start_scan, CopyRange_t *,
 
 void scanObj_locCopy1_copyCopySync_replicaStack(Proc_t *, ptr_t gray_obj, Stack_t *, CopyRange_t *copyRange,
 						Heap_t *from_range);
-void scanObj_locCopy2L_copyCopySync_replicaStack(Proc_t *, ptr_t gray_obj, Stack_t *, CopyRange_t *copyRange,
-						Heap_t *from_range, Heap_t *from2_range, Heap_t *large_range);
 
 void scanObj_copy1_copyCopySync_primaryStack(Proc_t *, ptr_t replicaGray, Stack_t *, CopyRange_t *copyRange,
 					     Heap_t *from_range);
@@ -465,23 +486,40 @@ void scanObj_locCopy1_copyCopySync_primaryStack(Proc_t *, ptr_t replicaGray, Sta
 						Heap_t *from_range);
 void scanObj_locCopy1L_copyCopySync_primaryStack(Proc_t *, ptr_t replicaGray, Stack_t *, CopyRange_t *copyRange,
 						 Heap_t *from_range, Heap_t *large_range);
+
+
 void transferScanObj_locCopy1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, Stack_t *, CopyRange_t *copyRange,
+							Heap_t *from_range);
+void selfTransferScanObj_locAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, Stack_t *, Stack_t *, CopyRange_t *copyRange,
+							Heap_t *from_range);
+void selfTransferScanObj_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, Stack_t *, Stack_t *, CopyRange_t *copyRange,
 							Heap_t *from_range);
 void transferScanObj_locCopy2L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, Stack_t *, CopyRange_t *copyRange,
 							Heap_t *from_range, Heap_t *from2_range, Heap_t *large_range);
 
+
 void transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, 
 									    Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
 									    Heap_t *from_range);
-void transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, 
-									     Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
-									     Heap_t *from_range, Heap_t *large_range);
+
+void transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
+								       Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
+								       Heap_t *from_range, Heap_t *large_range);
+
+
 void transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, int start, int end,
+										Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
+										Heap_t *from_range);
+void selfTransferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, int start, int end,
 										Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
 										Heap_t *from_range);
 void transferScanSegment_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, int start, int end,
 										 Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
 										 Heap_t *from_range, Heap_t *large_range);
+void selfTransferScanSegment_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *, ptr_t primaryGray, int start, int end,
+										 Stack_t *obj, Stack_t *seg, CopyRange_t *copyRange,
+										 Heap_t *from_range, Heap_t *large_range);
+
 
 
 #endif

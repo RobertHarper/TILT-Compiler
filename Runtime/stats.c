@@ -264,7 +264,7 @@ static void show_histogram(char *name, Histogram_t *h)
 }
 
 int statStringCursor = 0;
-char statString[1000000];
+char statString[2000000];
 void add_statString(char *msg)
 {
   strcat(&statString[statStringCursor], msg);
@@ -338,6 +338,7 @@ void stats_finish()
       show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
       show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
       show_histogram(" GCFlipOff   Hist", &proc->gcFlipOffHistogram);
+      show_histogram(" GCFlipOn    Hist", &proc->gcFlipOnHistogram);
       /*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
       show_statistic("MinSurvRate", &proc->minorSurvivalStatistic, -1.0);
       show_statistic("MajSurvRate", &proc->majorSurvivalStatistic, -1.0);
@@ -379,4 +380,38 @@ void stats_finish()
   fclose(fd);
 }
 
+/* --------------- Debugging Stuff ---------------- */
+static double times[1000];
+static int which[1000];
+static int data[1000];
+int cursor = 0;
+
+void resetTimeList()
+{
+  cursor = 0;
+}
+
+void addTimeList(void *procVoid, int w, int d)
+{
+  Proc_t *proc = (Proc_t *)procVoid;
+  which[cursor] = w;
+  data[cursor] = d;
+  times[cursor] = segmentTime(proc);
+  cursor++;
+  assert(cursor < 1000);
+}
+
+int showTimeList(double min)
+{
+  int i;
+  if (cursor == 0 || times[cursor-1] < min)
+    return 0;
+  for (i=0; i<cursor; i++) {
+    printf("%2d - %5d  %4.2lf ms   ", which[i], data[i], times[i]);
+    if ((i % 6) == 5)
+      printf("\n");
+  }
+  printf("\n\n");
+  return 1;
+}
 

@@ -18,7 +18,8 @@ sig
 		     | ACK_ASSEMBLY of job   (* Slave signals that asm file has compiled but cannot assemble *)
 		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
 		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
-                     | FLUSH                 (* Master signals that slaves should flush file cache *)
+                     | FLUSH of job          (* Master signals that slaves should flush file cache and set boolean flags -
+					        each flag is a pair of the flag name and "true" or "false" *)
 	             | REQUEST of job        (* Master requests slave to compile file *)
 
     (* These are all non-blocking. *)
@@ -29,6 +30,8 @@ sig
     val findToMasterChannels : unit -> channel list  (* Find all ready channels to master. *)
     val findFromMasterChannels : unit -> channel list  (* Find all ready channels from master. *)
 
+    val getFlags : unit -> string list
+    val doFlags : string list -> unit
 end
 
 signature HELP = 

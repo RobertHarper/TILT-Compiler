@@ -29,8 +29,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#define cassert(x) 
-/* #define cassert(x) assert(x) */
+#ifdef DEBUG
+#define fastAssert(x)  assert(x)
+#else
+#define fastAssert(x) 
+#endif
 
 #define DivideUp(a,div) (((a) + (div) - 1) / (div))
 #define DivideDown(a,div) ((a)  / (div))
@@ -72,6 +75,7 @@ extern int paranoid;
 extern int debug;
 extern int debugStack;
 extern int verbose;
+extern int timeDiag;
 extern int diag;
 extern int threadDiag;
 extern int NumProc;

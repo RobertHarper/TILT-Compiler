@@ -11,7 +11,6 @@
 int traceError = 0;
 
 
-
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   while (1) {
@@ -34,7 +33,9 @@ int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 }
 
 /* Check that pointer is either a tag, a global, or a current heap value */
-static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica, int i, Heap_t **legalHeaps, Bitmap_t **legalStarts)
+static int show_field(int show, Field_t fieldType, 
+		      ptr_t primary, ptr_t replica, int i, int ri,
+		      Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   int isNonheapPointer;
   ptr_t primaryField, replicaField;
@@ -43,12 +44,12 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
   if (fieldType == DoubleField) {
     primaryDoubleField = ((double *) primary)[i];
     if (replica)
-      replicaDoubleField = ((double *) replica)[i];
+      replicaDoubleField = ((double *) replica)[ri];
   }
   else {
     primaryField = (ptr_t) primary[i];
     if (replica)
-      replicaField = (ptr_t) replica[i];
+      replicaField = (ptr_t) replica[ri];
   }
 
   isNonheapPointer = ((fieldType == PointerField) &&
@@ -58,9 +59,11 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
 
   switch (fieldType) {
     case PointerField: 
+    case OldPointerField: 
       if (show) 
 	printf("P(%5d)  ", primaryField);     
-      if (isNonheapPointer ||
+      if ((isNonheapPointer && (fieldType == PointerField)) ||
+	  fieldType == OldPointerField ||
 	  (inHeaps(primaryField,legalHeaps,legalStarts)))
 	;
       else {
@@ -73,7 +76,7 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
 	  if (primaryField != replicaField) {
 	    traceError = 1;
 	    printf("\n  !!!!TRACE ERROR at GC %2d: replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
-	    printf("\n                                              %d[%d] = *%d*\n",replica,i,replicaField);
+	    printf("\n                                              %d[%d] = *%d*\n",replica,ri,replicaField);
 	    return 0;
 	  }
 	}
@@ -81,8 +84,10 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
 	  if (primaryField != replicaField &&               /* Primary and replica may share in a generational collector */
 	      (ptr_t) primaryField[-1] != replicaField) {
 	    traceError = 1;
-	    printf("\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,primary,i,primaryField,primaryField[-1]);
-	    printf("\n                                                  %d[%d] = *%d*\n",replica,i,replicaField);
+	    printf("\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,
+		   primary,i,primaryField,primaryField[-1]);
+	    printf("\n                                                  %d[%d] = *%d*\n",
+		   replica,ri,replicaField);
 	    return 0;
 	  }
 	}
@@ -97,7 +102,7 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
       if (replica && primaryField != replicaField) {
 	traceError = 1;
 	printf("\n  !!!!TRACE ERROR at GC %2d: int replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
-	printf("\n                                                  %d[%d] = *%d*\n",replica,i,replicaField);
+	printf("\n                                                  %d[%d] = *%d*\n",replica,ri,replicaField);
 	return 0;
       }
       break;
@@ -106,7 +111,7 @@ static int show_field(int show, Field_t fieldType, ptr_t primary, ptr_t replica,
 	printf("R(%10g)  ", primaryDoubleField); 
       if (replica && !(isnan(primaryDoubleField) && isnan(replicaDoubleField)) && primaryDoubleField != replicaDoubleField) {
 	printf("\n  !!!!TRACE ERROR at GC %2d: double replica mismatch: %d[%d] = *%g*",NumGC,primary,i,primaryDoubleField);
-	printf("\n                                                     %d[%d] = *%g*\n",replica,i,replicaDoubleField);
+	printf("\n                                                     %d[%d] = *%g*\n",replica,ri,replicaDoubleField);
 	return 0;
       }
       break;
@@ -127,14 +132,14 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
   tag_t tag;
   ptr_t obj, replica;                 
 
-  /* Skip past all the extra OTHER_TYPE tags at the beginning */
-  for (temp = start; GET_TYPE(*temp) == OTHER_TYPE; temp++)
+  /* Skip past all extra tags (belonging to the obj) at the beginning */
+  for (temp = start; (*temp == SEGSTALL_TAG) || (*temp == SEGPROCEED_TAG); temp++)
     ;
   tag = *temp;
   obj = temp + 1;
   replica = obj;                       /* replica ultimately is 0 if equal to obj */
 
-  if (show && (GET_TYPE(tag) != SKIP_TYPE)) {
+  if (show && !IS_SKIP_TAG(tag)) {
     printf("%ld:  ", start);
     if (start < obj - 1) {
       printf("[");
@@ -171,39 +176,72 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
       for (i=0; i<len; i++) {
 	val_t field = obj[i];
 	int isPointer = 1 & (mask >> i);
-	show_field(show, isPointer ? PointerField : IntField, obj, replica, i, legalHeaps, legalStarts);
+	show_field(show, isPointer ? PointerField : IntField, obj, replica, i, i, legalHeaps, legalStarts);
       }
       if (show)
 	printf("\n");
       end = obj + len;
     }
     break;
-    case IARRAY_TYPE:
-    case PARRAY_TYPE:
-    case RARRAY_TYPE:
+    case MIRROR_PTR_ARRAY_TYPE: {
+      unsigned int bytelen = GET_ANY_ARRAY_LEN(tag);
+      unsigned int wordlen = (bytelen + 3) / 4;
+      unsigned int loglen = wordlen / 2;
+      int i;
+      if (show) 
+	printf("MPA(%ld/%ld)  %ld: ",wordlen,loglen,obj);
+      for (i=0; i<loglen; i++) {
+	if (show && ((i) / 4 * 4) == (i) && (i != 0))
+	  printf("        ");
+	if (!mirrorArray) {
+	  assert(primaryArrayOffset == 0);
+	  show_field(show, PointerField, obj, replica, 2*i, 2*i, legalHeaps, legalStarts);
+	}
+	else {
+	  replica = (doReplica && replica == NULL) ? obj : replica;
+	  if (primaryArrayOffset == 0) {
+	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 2*i,   2*i+1, legalHeaps, legalStarts);
+	    show_field(show, doReplica ? PointerField     : IntField,     obj, NULL,    2*i+1, 2*i,   legalHeaps, legalStarts);
+	  }
+	  else {
+	    show_field(show, doReplica ? PointerField     : IntField,     obj, NULL,    2*i,   2*i+1, legalHeaps, legalStarts);
+	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 2*i+1, 2*i,   legalHeaps, legalStarts);
+	  }
+	  printf("   ");
+	}
+      }
+      if (show)
+	printf("\n");
+	end = obj + wordlen;
+      break;
+    }
+    case WORD_ARRAY_TYPE:
+    case QUAD_ARRAY_TYPE:
+    case PTR_ARRAY_TYPE:
       {
-	unsigned int bytelen = GET_ARRLEN(tag);
+	unsigned int bytelen = GET_ANY_ARRAY_LEN(tag);
 	unsigned int wordlen = (bytelen + 3) / 4;
 	unsigned int loglen, fieldlen;
 	char *typeDesc = NULL;
 
-	if (type == IARRAY_TYPE) {
-	  loglen = bytelen;
-	  fieldlen = wordlen;
-	  typeDesc = "IAR";
+	switch (type) {
+	  case WORD_ARRAY_TYPE:
+	    loglen = bytelen;
+	    fieldlen = wordlen;
+	    typeDesc = "IAR";
+	    break;
+	  case QUAD_ARRAY_TYPE:
+	    loglen = bytelen / 8;
+	    fieldlen = loglen;
+	    typeDesc = "RAR";
+	    break;
+          case PTR_ARRAY_TYPE:
+	    loglen = bytelen / 4;
+	    fieldlen = loglen;
+	    typeDesc = "PAR";
+	    break;
+	  default: assert(0);
 	}
-	else if (type == RARRAY_TYPE) {
-	  loglen = bytelen / 8;
-	  fieldlen = loglen;
-	  typeDesc = "RAR";
-	}
-	else if (type == PARRAY_TYPE) {
-	  loglen = bytelen / 4;
-	  fieldlen = loglen;
-	  typeDesc = "PAR";
-	}
-	else 
-	  assert(0);
 	if (show) 
 	  printf("%s(%ld/%ld)  %ld: ",typeDesc,wordlen,loglen,obj);
 	
@@ -211,14 +249,9 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 	  if (show && ((i) / 8 * 8) == (i) && (i != 0))
 	    printf("        ");
 	  switch (type) {
-	    case IARRAY_TYPE: 
-	      show_field(show,IntField,obj,replica,i,legalHeaps,legalStarts);
-	      break;
-	    case PARRAY_TYPE: 
-	      show_field(show,PointerField,obj,replica,i,legalHeaps,legalStarts);
-	      break;
-	    case RARRAY_TYPE: 
-	      show_field(show,DoubleField,obj,replica,i,legalHeaps,legalStarts);
+	    case WORD_ARRAY_TYPE: show_field(show,IntField,obj,replica,i,i,legalHeaps,legalStarts);  break;
+	    case PTR_ARRAY_TYPE: show_field(show,PointerField,obj,replica,i,i,legalHeaps,legalStarts); break;
+	    case QUAD_ARRAY_TYPE: show_field(show,DoubleField,obj,replica,i,i,legalHeaps,legalStarts); break;
 	      break;
 	    default : 
 	      assert(0);
@@ -231,17 +264,41 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 	end = obj + wordlen;
 	break;
       }
-    case SKIP_TYPE: {
-      int wordsSkipped = tag >> SKIPLEN_OFFSET;
-      end = start + wordsSkipped;
-      if (show)
-	printf("%ld - %ld: SKIP %d words\n", start, end, wordsSkipped);
-      assert(wordsSkipped > 0);
+    case OTHER_TYPE: 
+      if (IS_SKIP_TAG(tag)) {
+	int wordsSkipped = GET_SKIPWORD(tag);
+	end = start + wordsSkipped;
+	if (show)
+	  printf("%ld - %ld: SKIP %d words\n", start, end, wordsSkipped);
+	assert(wordsSkipped > 0);
+      }
+      else if (tag == MIRROR_GLOBAL_PTR_TAG) {
+	if (show)
+	  printf("MIRROR_GLOBAL   %ld: ", obj);
+	if (!mirrorGlobal) {
+	  assert(primaryGlobalOffset == 0);
+	  show_field(show, PointerField, obj, replica, 0, 0, legalHeaps, legalStarts);
+	}
+	else {
+	  replica = (doReplica && replica == NULL) ? obj : replica;
+	  if (primaryArrayOffset == 0) {
+	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 0, 1, legalHeaps, legalStarts);
+	    show_field(show, doReplica ? PointerField : IntField, obj, NULL, 1, 0, legalHeaps, legalStarts);
+	  }
+	  else {
+	    show_field(show, doReplica ? PointerField : IntField, obj, NULL, 0, 1,  legalHeaps, legalStarts);
+	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 1, 0, legalHeaps, legalStarts);
+	  }
+	}
+	if (show)
+	  printf("\n");
+	end = obj + 2;
+      }
+      else {
+	printf("\nshow_obj  tag = %d(%d) at address = %d\n",tag,GET_TYPE(tag),obj);
+	assert(0);
+      }
       break;
-    }
-    default:
-      printf("\nshow_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
-      assert(0);
   }
   *objRef = obj;
   return end;

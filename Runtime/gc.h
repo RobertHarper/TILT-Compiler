@@ -8,7 +8,9 @@
 #include "gc_para.h"
 
 extern int NumGC;
-extern int primaryGlobalOffset, replicaGlobalOffset;   /* Used by concurrent collector to support global root redirection */
+extern int forceMirrorArray, mirrorGlobal, mirrorArray;  /* Are we flipping globals and arrays? */
+extern int primaryGlobalOffset, replicaGlobalOffset;     /* Used by concurrent collector to support global root redirection */
+extern int primaryArrayOffset, replicaArrayOffset;       /* Used by generational, concurrent collector to support atomic redirection */
 
 /* State of the collector */
 typedef enum GCStatus__t { GCOff, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
@@ -18,7 +20,7 @@ extern GCType_t GCType;     /* Used by Gen, GenPara, GenConc */
 extern GCStatus_t GCStatus; /* Used by SemiConc, GenConc */
 
 /* Array value */
-typedef enum Field__t {PointerField, IntField, DoubleField} Field_t;
+typedef enum Field__t {PointerField, IntField, DoubleField, MirrorPointerField, OldPointerField} Field_t; 
 typedef struct ArraySpec__t {
   Field_t type;
   int     elemLen;  /* bytes for intField, words for pointerField, doublewords for doubleField */
@@ -110,8 +112,8 @@ extern int globalLocFetchSize;           /* Number of globals to fetch from glob
 extern int rootLocFetchSize;             /* Number of root locs to fetch from global pool */
 extern int objFetchSize;                 /* Number of objects to fetch from global pool */
 extern int segFetchSize;                 /* Number of (large object) segments to fetch from global pool */
-extern int localWorkSize;                /* Number of objects to work on from local pool */
 extern int doCopyCopySync;               
+extern int localWorkSize;
 extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    An array of more than arraySegmentSize bytes is considered large and
 					    broken into segments for incremental copying.

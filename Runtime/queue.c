@@ -123,8 +123,10 @@ void QueueCopy(Queue_t *target, Queue_t *src)
 void copyStack(Stack_t *from, Stack_t *to)      /* non-destructive operation on from */
 {
   int i;
+  if (from->cursor == 0)
+    return;
   if (from->cursor + to->cursor + 1 >= to->size)
-    resizeStack(to, from->cursor + to->size);
+    resizeStack(to, from->cursor + to->size + 1);
   memcpy(&to->data[to->cursor], &from->data[0], from->cursor * sizeof(ptr_t));
   to->cursor += from->cursor;
   assert(to->cursor < to->size);

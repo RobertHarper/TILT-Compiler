@@ -19,7 +19,8 @@ test:
 	echo ${asm_name}
 	echo ${META_ASFLAGS}
 	echo ${ASFLAGS}
-
+	echo ${DEBUG}
+	echo ${DEBUG2}
 
 # ------------------------------ General macros --------------------------
 alpha_osf20_sys_name = alpha_osf
@@ -64,6 +65,12 @@ else
 endif
 endif
 
+ifeq ($(DEBUG),1)
+	DODEBUG=-DDEBUG
+else 
+	DODEBUG=
+endif
+
 # --------------------------- C and asm flags ---------------------------
 #CC=gcc -D__C_ASM_H -DGCC
 alpha_osf_cc=cc
@@ -74,9 +81,9 @@ solaris_cc=gcc
 # The xtaso flag instructs the Alpha compiler to honor #pragma pointer_size directives
 # This allows the runtime to use pointer type that are 32-bit when interacting with ML.
 # -std will define __STDC__ 
-alpha_osf_cflags=-newc -xtaso -w0 -warnprotos -std -c -inline size -g3 -D${sys_name}
-solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g -D${sys_name}
-CC=${${sys_name}_cc}
+alpha_osf_cflags=-newc -xtaso -w0 -warnprotos -std -c -inline size -g3 
+solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g 
+CC=${${sys_name}_cc} -D${sys_name} ${DODEBUG}
 CFLAGS=${${sys_name}_cflags}
 
 # --------------------------- assembler flag ----------------------------

@@ -165,7 +165,7 @@ ptr_t peekStack(Stack_t *oStack)
 /* Returns NULL if stack is empty */
 INLINE1(popStack2)
 INLINE2(popStack2)
-ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
+ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref)
 {
   if (oStack->cursor > 1) {
     *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */

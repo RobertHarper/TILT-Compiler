@@ -22,6 +22,7 @@
 int paranoid = 0;
 int verbose = 0;
 int diag = 0;
+int timeDiag = 0;
 int debug = 0;
 int collector_type = Generational;
 int SHOW_GCDEBUG_FORWARD = 0;
@@ -42,7 +43,9 @@ SharedStack_t *workStack = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
+int forceMirrorArray = 0, mirrorGlobal = 0, mirrorArray = 0;
 int primaryGlobalOffset = 0, replicaGlobalOffset = sizeof(val_t);
+int primaryArrayOffset = 0, replicaArrayOffset = sizeof(val_t);
 
 extern int module_count;
 extern val_t GLOBALS_BEGIN_VAL;
@@ -58,7 +61,6 @@ int globalLocFetchSize = 50;
 int rootLocFetchSize = 50;
 int objFetchSize = 100;
 int segFetchSize = 2;             
-int localWorkSize = 200;          /* Number of objects to work on from local pool */
 /* Copy does not actually copy fields - work is per-byte */
 double objCopyWeight = 2.5;      /* Corresponds to tag */
 double objScanWeight = 1.5;
@@ -66,8 +68,9 @@ double fieldCopyWeight = 1.0;    /* Corresponds to fields */
 double fieldScanWeight = 3.0;
 double globalWeight = 1.0;
 double stackSlotWeight = 10.0;
-double pageWeight = 50.0;
+double pageWeight = 100.0;
 int arraySegmentSize = 0;         /* Either zero for off or must be greater than the compiler's maxByteRequest - notion of large array */
+int localWorkSize = 8192;
 
 double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
 double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */
@@ -204,16 +207,19 @@ void GCInit(void)
   default: 
     assert(0);
   }
+  if (forceMirrorArray)
+    mirrorArray = 1;
+}
+
+void AssertMirrorPtrArray(int moduleMirrorArray)
+{
+  assert(moduleMirrorArray == mirrorArray);
 }
 
 void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalStarts, int doReplica)
 {
   int count = 0, mi, i;
   char buffer[100];
-  printf("Skipping paranoid_check_global\n");
-  return;
-  /* Existence of replica means at the end of GC cycle */
-  NullGlobals(doReplica ? primaryGlobalOffset : replicaGlobalOffset);
   /* check globals */
   for (mi=0; mi<module_count; mi++) {
     mem_t start = (mem_t) (&GLOBALS_BEGIN_VAL)[mi];
@@ -331,18 +337,18 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
       legalReplicaHeaps[1] = largeSpace;
   }
   sprintf(msg, "%s: first primary heap", when);
-  paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps, legalPrimaryStarts[0], 0);
+  paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps, legalPrimaryStarts[0], doReplica);
   if (secondPrimary != NULL) {
     sprintf(msg, "%s: second primary heap", when);
-    paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps, legalPrimaryStarts[1], 0);
+    paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps, legalPrimaryStarts[1], doReplica);
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts[0], 0);
+    paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts[0], doReplica);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts[1], 0);
+    paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts[1], doReplica);
   }
 
   if (firstReplica == NULL) {
@@ -370,11 +376,11 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    paranoid_check_heap_with_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts, 0);
+    paranoid_check_heap_with_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts, doReplica);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts, 0);
+    paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts, doReplica);
   }
 
   if (traceError) {
@@ -392,7 +398,7 @@ void AlignMemoryPointer(mem_t *allocRef, Align_t align)
   int curEven = (((val_t)(*allocRef)) & 7) == 0;
   if ((align == OddWordAlign && curEven) ||
       (align == EvenWordAlign && !curEven))
-    *((*allocRef)++) = SKIP_TYPE | (1 << SKIPLEN_OFFSET);
+    *((*allocRef)++) = MAKE_SKIP(1);
 }
 
 mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* bytesToAlloc does not include alignment */
@@ -454,10 +460,16 @@ ptr_t alloc_bigintarray(int elemLen, int initVal, int ptag)
 ptr_t alloc_bigptrarray(int elemLen, ptr_t initVal, int ptag)
 {  
   ArraySpec_t spec;
-  spec.type = PointerField;
   spec.elemLen = elemLen;
-  spec.byteLen = 4 * elemLen;      /* excluding tag */
   spec.pointerVal = initVal;
+  if (mirrorArray) {
+    spec.type = MirrorPointerField;
+    spec.byteLen = 8 * elemLen;      /* excluding tag */
+  }
+  else {
+    spec.type = PointerField;
+    spec.byteLen = 4 * elemLen;      /* excluding tag */
+  }
   return alloc_bigdispatcharray(&spec);
 }
 
@@ -487,12 +499,10 @@ int GCSatisfied(Proc_t *proc, Thread_t *th)
     if ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd)
       return 1;
   } 
-  else if (th->requestInfo > 0) {
+  else if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
     if (th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit) 
       return 1; 
   }
-  else 
-    assert(0);
   return 0;
 }
 
@@ -588,7 +598,15 @@ void PopStackletFromMutator(Thread_t *curThread)
   Stacklet_t *newStacklet = NULL;
 
   EstablishStacklet(curThread->stack, sp);
-
+  /* XXX
+     printf("PopStackletFromMutator: %d -> %d            ", curThread->stack->cursor, curThread->stack->cursor-1);
+  {
+    int i;
+    for (i=0; i<curThread->stack->cursor-1; i++)
+      printf("%d : %s         ", i, curThread->stack->stacklets[i]->active ? "  active" : "inactive"); 
+    printf("\n");
+  }
+  */
   PopStacklet(curThread->stack);
   newStacklet = CurrentStacklet(curThread->stack);
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);

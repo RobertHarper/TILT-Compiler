@@ -50,7 +50,7 @@ mem_t AllocBigArray_GenPara(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                        pushStack(proc->primaryReplicaObjRoots, obj);        
+			pushStack(proc->backObjs, obj);
                         break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
@@ -199,25 +199,24 @@ void GCStop_GenPara(Proc_t *proc)
     while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
       locCopy1_copyCopySync_primaryStack(proc, rootLoc,
 					 &proc->minorObjStack,&proc->minorRange,nursery);
+    while (PRObj = popStack(proc->backObjs)) {
+      /* Not transferScanObj_* since this object is a primaryReplica.
+         Since this is a stop-copy collector, we can use _locCopy_ immediately */
+      scanObj_locCopy1_copyCopySync_primaryStack(proc, PRObj, &proc->minorObjStack,&proc->minorRange,nursery);
+    }
     while (globalLoc = (ploc_t) popStack(proc->globalLocs))
       locCopy1_copyCopySync_primaryStack(proc, globalLoc,
 					 &proc->minorObjStack,&proc->minorRange,nursery);
-    while (PRObj = popStack(proc->primaryReplicaObjRoots)) {
-      /* Not transferScanObj_* since this object is a primaryReplica.
-	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
-      scanObj_locCopy1_copyCopySync_primaryStack(proc, PRObj, &proc->minorObjStack,&proc->minorRange,nursery);
-    }
   }
   else { /* Major collection */
     while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
       locCopy2L_copyCopySync_primaryStack(proc, rootLoc,
 					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
+    resetStack(proc->backObjs);
     while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
       locCopy2L_copyCopySync_primaryStack(proc, globalLoc,
 					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
-    resetStack(proc->primaryReplicaObjRoots);
   }
-  assert(isEmptyStack(proc->primaryReplicaObjFlips));
 
   /* Move everything from local stack to global stack to balance work; note the omitted popSharedStack */
   pushSharedStack(workStack, 
@@ -227,6 +226,7 @@ void GCStop_GenPara(Proc_t *proc)
 
   /* Get work from global stack; operate on local stack; put work back on global stack */
   while (1) {
+    ptr_t gray;
     int i, globalEmpty;
     popSharedStack(workStack, 
 		   &proc->threads, threadFetchSize,
@@ -238,21 +238,15 @@ void GCStop_GenPara(Proc_t *proc)
     assert(isEmptyStack(proc->globalLocs));
     assert(isEmptyStack(proc->rootLocs));
     if (GCType == Minor) {
-      for (i=0; i < localWorkSize; i++) {
-	ptr_t gray = popStack(&proc->minorObjStack);
-	if (gray == NULL)
-	  break;
+      while (!recentWorkDone(proc, localWorkSize) &&
+	     ((gray = popStack(&proc->minorObjStack)) != NULL)) 
 	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->minorObjStack,&proc->minorRange,nursery);
-      }
     }
     else {
-      for (i=0; i < localWorkSize; i++) {
-	ptr_t gray = popStack(&proc->majorObjStack);
-	if (gray == NULL)
-	  break;
+      while (!recentWorkDone(proc, localWorkSize) &&
+	     ((gray = popStack(&proc->majorObjStack)) != NULL)) 
 	(void) transferScanObj_locCopy2L_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorRange,
 								  nursery,fromSpace,largeSpace);
-      }
     }
     globalEmpty = pushSharedStack(workStack, 
 				  &proc->threads, proc->globalLocs, proc->rootLocs,

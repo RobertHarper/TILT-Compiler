@@ -74,7 +74,9 @@ typedef struct Usage__t
   long pagesTouched;
   long globalsProcessed;
   long stackSlotsProcessed;
-  long workDone;         /* Weighted average of bytesCopied, bytesScanned, and rootProcessed */
+  long workDone;         /* Weighted average of bytesCopied, bytesScanned, and rootProcessed - not always up-to-date */
+  long lastWorkDone;     /* Some snapshot of the past - upadted when sufficiently different from workDone */
+  long counter;          /* Cycles down from localWorksize to zero repeatedly.  When zero, workDone is updated. */
 } Usage_t;
 
 /* Finally, these types actually do belong here */
@@ -110,6 +112,7 @@ typedef struct Thread__t
   mem_t              stackLimit;       /* Bottom of current stack */
   int                globalOffset;     /* zero or four */
   int                stackletOffset;   /* zero or stackletSize * 1024 */
+  int                arrayOffset;      /* zero or four */
 
   /* ---- The remaining fields not accessed by assembly code or mutator ---- */
   StackChain_t       *stack;
@@ -151,18 +154,21 @@ typedef struct Proc__t
   pthread_t          pthread;        /* pthread that this system thread is implemented as */
   Thread_t           *userThread;    /* current user thread mapped to this system thread */
 
-  Stack_t            *globalLocs;             /* Global variables */
-  Stack_t            *rootLocs;               /* Stack root locations containing root values */
-  Stack_t            threads;                /* Used by incremental collector for breaking up scanning stacks */
+  Stack_t            *globalLocs;       /* Global variables */
+  Stack_t            *rootLocs;         /* Stack root locations containing root values */
+  /* In a generation, concurrent collector, backLocs and backObjs have to be processed twice.
+     So, each entry is a pair containing the location/object and a count, initially 0. 
+     The temp versions are necessary so we have a place to push.  At the end of the GC,
+     we swap the two versions.
+  */
+  Stack_t            *backLocs, *backLocsTemp;  /* All modified pointer array field for generational, concurrent collector */
+  Stack_t            *backObjs, *backObjsTemp;  /* Pointer arrays allocated in generational collector */
+  Stack_t            threads;           /* Used by incremental collector for breaking up scanning stacks */
   Stack_t            minorObjStack;     /* Used by parallel/concurrent generational collector */
   Stack_t            minorSegmentStack; 
   Stack_t            majorObjStack;     /* Used by parallel/concurrent collector */
   Stack_t            majorSegmentStack;  
   Stack_t            majorRegionStack; /* Possibly used by a generational concurrent collector */
-  Stack_t            *primaryReplicaObjRoots; /* PR objects whose values serve as roots - allocated ptr array */
-  Stack_t            *primaryReplicaObjFlips; /* PR objects whose locs must be flipped when minor collector goes off - allocated ptr array */
-  Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - modified ptr array loc */
-  Stack_t            *primaryReplicaLocFlips; /* Locations of PRs which need to be flipped when collectors goes off - modified ptr array loc */
 
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
@@ -211,12 +217,31 @@ typedef struct Proc__t
 void procChangeState(Proc_t *, ProcessorState_t);
 
 long updateWorkDone(Proc_t *proc);
+
 INLINE1(getWorkDone)
 INLINE2(getWorkDone)
 long getWorkDone(Proc_t *proc)
 {
+  if (--proc->segUsage.counter) {
+    proc->segUsage.counter = 50;
+    updateWorkDone(proc);
+  }
   return proc->segUsage.workDone;
 }
+
+INLINE1(recentWorkDone)
+INLINE2(recentWorkDone)
+long recentWorkDone(Proc_t *proc, int recentWorkThreshold)
+{
+  int workDone = getWorkDone(proc);
+  if ((workDone - proc->segUsage.lastWorkDone) > recentWorkThreshold) {
+    proc->segUsage.lastWorkDone = workDone;
+    return 1;
+  }
+  return 0;
+}
+
+
 Thread_t *getThread(void);
 Proc_t *getProc(void);
 Proc_t *getNthProc(int);

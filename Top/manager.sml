@@ -52,9 +52,14 @@ struct
     val start = ref (NONE : Time.time option)
     val msgs = ref ([] : string list)
     fun showTime (printTime,str) = 
-	let val cur = Time.now()
+	let 
+	    val cur = Time.now()
 	    val curString = if (printTime)
-				then Date.toString(Date.fromTimeLocal cur)
+				then let 
+					 val temp = (Date.fromTimeLocal cur)
+					 val res = Date.toString temp
+				     in  res
+				     end
 			    else ""
 	    val diff = Time.-(cur, (case !start of
 					NONE => error "no start time"
@@ -68,7 +73,9 @@ struct
 		       (Real.toString diff) ^ " seconds since start.\n")
 	in  msgs := msg :: (!msgs); chat msg
 	end
-    fun startTime str = (msgs := []; start := SOME(Time.now()); showTime (true,str))
+    fun startTime str = (msgs := []; 
+			 start := SOME(Time.now()); 
+			 showTime (true,str))
     fun reshowTimes() = (chat "\n\n"; app chat (rev (!msgs)); msgs := []; start := NONE)
 end
 
@@ -84,7 +91,8 @@ struct
 		     | ACK_ASSEMBLY of job   (* Slave signals that asm file has compiled but cannot assemble *)
 		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
 		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
-                     | FLUSH                 (* Master signals that slaves should flush file cache *)
+                     | FLUSH of job          (* Master signals that slaves should flush file cache and set boolean flags -
+					        each flag is a pair of the flag name and "true" or "false" *)
 	             | REQUEST of job        (* Master requests slave to compile file *)
     val delimiter = #"|"
     val ready = "READY"
@@ -107,14 +115,14 @@ struct
       | messageToWords (ACK_ASSEMBLY job) = ack_assembly :: (jobToWords job)
       | messageToWords (ACK_OBJECT job) = ack_object :: (jobToWords job)
       | messageToWords (ACK_ERROR job) = ack_error :: (jobToWords job)
-      | messageToWords FLUSH = [flush]
+      | messageToWords (FLUSH job) = flush :: job
       | messageToWords (REQUEST job) = request :: (jobToWords job)
     fun wordsToMessage [] = error "no words - bad msg"
       | wordsToMessage (first::rest) = 
 	if (first = ready andalso null rest)
 	    then READY
-	else if (first = flush andalso null rest)
-	    then FLUSH
+	else if (first = flush)
+	    then FLUSH rest
 	else if (first = ack_interface)
 		 then ACK_INTERFACE (wordsToJob rest)
 	else if (first = ack_assembly)
@@ -126,6 +134,26 @@ struct
         else if (first = request)
 		 then REQUEST (wordsToJob rest)
 	else error ("strange header word " ^ first ^ " - bad msg")
+
+    local
+	val flags = ["PtrWriteBarrier", "FullWriteBarrier", "MirrorGlobal", "MirrorPtrArray"]
+	fun getFlag (flag,rest) = let val flagRef = Stats.bool flag
+				      val truthValue = Bool.toString (!flagRef)
+				  in  rest @ [flag, truthValue]
+				  end
+    in  fun getFlags() = foldl getFlag [] flags 
+    end
+
+    fun doFlags [] = ()
+      | doFlags [_] = error "doFlags got list of odd length"
+      | doFlags (flagName::truthValue::rest) = 
+	let val _ = (print "Setting "; print flagName; print " to "; print truthValue; print "\n")
+	    val flagRef = Stats.bool flagName
+	    val _ = flagRef := (case (Bool.fromString truthValue) of
+				 SOME b => b
+			       | _ => error ("doFlags got funny truth value string " ^ truthValue))
+	in  doFlags rest
+	end
 
     type channel = (string * string) Delay.value
     fun eq (chan, chan') = (Delay.force chan) = (Delay.force chan')
@@ -182,7 +210,7 @@ struct
 	(if (OS.FileSys.access(file, [OS.FileSys.A_READ]))
 	    then OS.FileSys.remove file
 	 else ())
-	    handle e => (print "WARNING: remove - file exists but then remove failed\n"; ())
+	    handle e => (print ("WARNING: remove - file " ^ file ^ " exists but then remove failed\n"); ())
 			 
     fun erase channel = let val file = channelToName channel
 			in  remove file
@@ -626,7 +654,9 @@ struct
 	   | SOME (Comm.ACK_INTERFACE _) => error "Slave got an ack_interface message"
 	   | SOME (Comm.ACK_OBJECT _) => error "Slave got an ack_object message"
 	   | SOME (Comm.ACK_ERROR _) => error "Slave got an ack_error message"
-	   | SOME Comm.FLUSH => (Cache.flushAll(); chat "Slave received FLUSH.\n"; READY)
+	   | SOME (Comm.FLUSH flags)=> (Cache.flushAll(); chat "Slave received FLUSH.\n"; 
+					Comm.doFlags flags;
+					READY)
 	   | SOME (Comm.REQUEST (job as (platform::unit::absBase::absImportBases))) => 
 		       (* It's okay for the first acknowledgement to be missed. 
 			  In fact, we skip the acknowledgement if the expected compilation 
@@ -1078,7 +1108,7 @@ struct
 			 (case Comm.receive ch of
 			      NONE => error ("Ready channel became empty: " ^ 
 					     (Comm.source ch) ^ " to " ^ (Comm.destination ch))
-			    | SOME Comm.FLUSH => error ("slave " ^ (Comm.source ch) ^ " sent flush")
+			    | SOME (Comm.FLUSH _) => error ("slave " ^ (Comm.source ch) ^ " sent flush")
 			    | SOME (Comm.REQUEST _) => error "slave sent request"
 			    | SOME Comm.READY => ()
 			    | SOME (Comm.ACK_ERROR (_::u::imps)) => 
@@ -1131,7 +1161,7 @@ struct
 				val _ = app Comm.erase fromMaster
 				fun flush toMaster = 
 				    let val toSlave = Comm.reverse toMaster
-				    in  Comm.send(toSlave,Comm.FLUSH)
+				    in  Comm.send(toSlave,Comm.FLUSH(Comm.getFlags()))
 				    end
 			    in  app flush toMaster
 			    end
@@ -1219,10 +1249,15 @@ struct
 		  end)
 
     (* platformName : unit -> string *)
-    fun platformName (base, ext) = (base ^ (case Til.getTargetPlatform()
+    fun platformName (base, ext) = 
+	let val platform = (case Til.getTargetPlatform()
 					      of Til.TIL_ALPHA => ".alpha"
 					       | Til.TIL_SPARC => ".sparc"
-					       | _ => error "MLRISC unsupported") ^ ext)
+					       | _ => error "MLRISC unsupported")
+	    val extra = if !(Stats.bool "MirrorPtrArray")
+			    then ".mirror" else ".nomirror"
+	in  base ^ extra ^ platform ^ ext
+	end
     (* exeName : string * string list -> string *)
     fun exeName ("", units) = platformName (List.last units, ".exe")
       | exeName (exe, _) = exe

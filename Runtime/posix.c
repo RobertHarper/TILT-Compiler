@@ -161,8 +161,8 @@ static int stringlen(ptr_t string)
   int len;
   while (TYPE_IS_FORWARD(GET_TYPE(tag)))
     tag = ((ptr_t)tag) [-1];
-  assert(GET_TYPE(tag) == IARRAY_TYPE);
-  len = GET_ARRLEN(tag);
+  assert(GET_TYPE(tag) == WORD_ARRAY_TYPE);
+  len = GET_WORD_ARRAY_LEN(tag);
   return len;
 }
 
@@ -1287,13 +1287,58 @@ string_list commandline_arguments(unit ignored)
 }
 
 /* debugging */
-ptr_t printAddr(ptr_t addr1, ptr_t addr2, ptr_t addr3)
+/*
+ptr_t printSize(int size)
+{
+  printf("YYYYYYYYY size = %d\n", size);
+}
+
+
+ptr_t printAddr(ptr_t addr1, ptr_t addr2)
 {
   static int count = 0;
-  int i, size = 10000;
-  printf("XXX printAddr #%d: %u   %u = (%u, %u)    %u = (%u, %u)\n", count++, addr1, addr2, addr2[0], addr2[1], addr3, addr3[0], addr3[1]);
-  for (i=0; i<size; i++)
-    if ((ptr_t)addr1[i] == addr2)
-      printf("     First point found at index %d\n", i);
+  int i, size = 20000, found = 0;
+  printf("XXX printAddr #%d: %u   %u -> (%u, %u) ->  %lf   %lf\n", count++, addr1, addr2, addr2[0], addr2[1], 
+	 *((double *)addr2[0]), *((double *)addr2[1]));
+  for (i=0; i<size && found < 4; i++)
+    if ((ptr_t)addr1[i] == addr2) {
+      printf("     %d:  point found at index %d   arrayOffset = %d\n", found, i, primaryArrayOffset);
+      found++;
+    }
   return empty_record;
 }
+
+
+
+ptr_t printAllAddr(ptr_t addr1)
+{
+  int i, size = 20000;
+  printf("     arrayOffset = %d\n", primaryArrayOffset);
+  for (i=0; i<size; i++) {
+    ploc_t elem = (ploc_t) addr1[i];
+    if ((i % 2) == (primaryGlobalOffset / sizeof(val_t)))
+      printf("     %u[%5d] = %u -> (%u, %u) -> %lf   %lf\n",
+	     addr1, i, elem, 
+	     elem[0], elem[1], 
+	     *((double *)elem[0]), *((double *)elem[1]));
+    else
+      printf("     %u[%5d] = %u -> (%u, %u) ->  ***\n",
+	     addr1, i, elem, 
+	     elem[0], elem[1]);
+  }
+  return empty_record;
+}
+
+
+ptr_t printCheck(ptr_t array, int index)
+{
+  ptr_t p1 = array[2*(index-1) + primaryArrayOffset/sizeof(val_t)];
+  ptr_t p2 = array[2*index     + primaryArrayOffset/sizeof(val_t)];
+  ptr_t x1 = p1[0];
+  ptr_t x2 = p2[0];
+  printf("printCheck: %10d    i = %5d    x1 = %d -> %lf     x2 = %d -> %lf\n",
+	 array, index, x1, *((double *)x1), x2, *((double *)x2));
+  return empty_record;
+}
+
+*/

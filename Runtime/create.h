@@ -22,6 +22,7 @@ ptr_t alloc_record(val_t *fields, int *masks, int orig_count);
 
 void init_iarray(ptr_t obj, int byteLen, int v);
 void init_parray(ptr_t obj, int wordLen, ptr_t v);
+void init_double_ptr_array(ptr_t obj, int logLen, ptr_t v); /* wordLen is double logical length */
 void init_farray(ptr_t obj, int doubleLen, double v);
 
 /* these two functions should be used with care */

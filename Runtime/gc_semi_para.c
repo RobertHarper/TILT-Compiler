@@ -127,6 +127,7 @@ static void stop_copy(Proc_t *proc)
 
   while (1) {
     int i, globalEmpty;
+    ptr_t gray;
     popSharedStack(workStack,&proc->threads, threadFetchSize, 
 		   proc->globalLocs, globalLocFetchSize, 
 		   proc->rootLocs, rootLocFetchSize,
@@ -134,11 +135,10 @@ static void stop_copy(Proc_t *proc)
     assert(isEmptyStack(&proc->threads));
     assert(isEmptyStack(proc->globalLocs));
     assert(isEmptyStack(proc->rootLocs));
-    for (i=0; i < localWorkSize; i++) {
-      ptr_t gray = popStack(&proc->majorObjStack);
-      if (gray != NULL)
-	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorRange,fromSpace);
-    }
+    while (!recentWorkDone(proc, localWorkSize) &&
+	   (gray = popStack(&proc->majorObjStack)) != NULL) 
+      (void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorRange,fromSpace);
+
     globalEmpty = pushSharedStack(workStack,&proc->threads,proc->globalLocs, proc->rootLocs, 
 				  &proc->majorObjStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
     if (globalEmpty)

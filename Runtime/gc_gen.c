@@ -49,9 +49,9 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
-  case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                      pushStack(proc->primaryReplicaObjRoots, obj);
-		      break;
+    case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
+                        pushStack(proc->backObjs, obj);
+		        break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
   return obj;
@@ -152,14 +152,14 @@ void GCStop_Gen(Proc_t *proc)
     proc->minorRange.stop = fromSpace->top;
     while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
       locCopy1_noSpaceCheck(proc, rootLoc, &proc->minorRange, nursery);
+    while (PRObj = popStack(proc->backObjs)) {
+      /* Not transferScanObj_* since this object is a primaryReplica.
+         Since this is a stop-copy collector, we can use _locCopy_ immediately */
+      scanObj_locCopy1_noSpaceCheck(proc, PRObj, &proc->minorRange, nursery);
+    }
     assert(primaryGlobalOffset == 0);
     while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
       locCopy1_noSpaceCheck(proc, globalLoc, &proc->minorRange, nursery);
-    while (PRObj = popStack(proc->primaryReplicaObjRoots)) {
-      /* Not transferScanObj_* since this object is a primaryReplica.
-	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
-      scanObj_locCopy1_noSpaceCheck(proc, PRObj, &proc->minorRange, nursery);
-    }
     scanUntil_locCopy1_noSpaceCheck(proc, scanStart, &proc->minorRange, nursery);
     fromSpace->cursor = proc->minorRange.cursor;
     proc->minorRange.stop = proc->minorRange.cursor;
@@ -193,13 +193,11 @@ void GCStop_Gen(Proc_t *proc)
        then the usual Cheney scan followed by sweeping the large-object region */
     gc_large_startCollect();
     while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
-      locCopy2L_noSpaceCheck(proc, rootLoc, &proc->majorRange,
-			     nursery, fromSpace, largeSpace);
+      locCopy2L_noSpaceCheck(proc, rootLoc, &proc->majorRange, nursery, fromSpace, largeSpace);
+    resetStack(proc->backObjs);
     assert(primaryGlobalOffset == 0);
     while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
-      locCopy2L_noSpaceCheck(proc, globalLoc, &proc->majorRange,
-			    nursery, fromSpace, largeSpace);
-    resetStack(proc->primaryReplicaObjRoots);
+      locCopy2L_noSpaceCheck(proc, globalLoc, &proc->majorRange, nursery, fromSpace, largeSpace);
     scanUntil_locCopy2L_noSpaceCheck(proc,scanStart, &proc->majorRange,
 				    nursery, fromSpace, largeSpace);
     assert(proc->majorRange.cursor < toSpace->top);
