@@ -1,58 +1,74 @@
 (*
-	We cache a file's size and contents, CRC, or both.
+    An attribute/datum pair is called an entry.  The cache maintains
+    a list of entries for each name.  The size of an entry is the size
+    of its datum.
 
-	If the size of a file exceeds max_file_size, then its contents
-	are not kept in the cache.  When this limit is enforced, we
-	say that the file was demoted.  The cache may still hold a CRC
-	for such a file.
+    If the size of a datum exceeds datum_high, then it is not kept
+    in the cache.
 
-	The number of entries in the cache can not exceed
-	entries_high.  When this limit is exceeded, the oldest entries
-	are evicted until the cache has entries_low entries.
+    The number of entries in the cache can not exceed
+    entries_high.  When this limit is exceeded, the oldest entries
+    are discarded until the cache has entries_low entries.
 
-	The total size of cached data can not exceed data_high.  When
-	this limit is exceeded, the oldest entries are vacated (their
-	data is discarded) until the data size is under data_low.
+    The total size of cached data can not exceed data_high.  When
+    this limit is exceeded, the oldest entries with nonzero size
+    are discarded until the data size is under data_low.
 
-	The parameters in FILECACHE_ARG must satisfy:
+    The parameters in CACHEARG must satisfy:
 
-		0 <= data_low, max_file_size <= data_high
-		0 <= entries_low <= entries_high
+        0 <= data_low, datum_high <= data_high
+        0 <= entries_low <= entries_high
 
-	The cache maintains the invariants:
+    The cache maintains the invariants:
 
-		for every entry, 0 < datum_size(entry) <= max_file_size
-		total data size <= data_high
-		#entries <= entries_high
+        for every entry, 0 < size(entry) <= datum_high
+        total data size <= data_high
+        #entries <= entries_high
 *)
 
-signature FILECACHE_ARG =
+signature CACHEARG =
 sig
-    type name
-    type internal
+    structure Name :
+    sig
+        type t
+        val hash : t -> word
+        val eq : t * t -> bool
+        val tostring : t -> string  (* for debugging *)
+    end
 
-    val filename : name -> string
-    val reader : name -> internal
-    val writer : string * internal -> unit
+    structure Attr :
+    sig
+        type t
+        val eq : t * t -> bool
+    end
 
-    val max_file_size : int
+    type size = int
+    type datum
+
+    val get : Name.t * Attr.t -> datum * size
+    val put : Name.t * Attr.t * datum -> size
+
+    val datum_high : int
     val data_high : int
     val data_low : int
     val entries_high : int
     val entries_low : int
 end
 
-signature FILECACHE =
+signature CACHE =
 sig
-    type file = string
+    type size = int
     type name
-    type internal
+    type attr
+    type datum
 
     val flush_all : unit -> unit
-    val flush_some : file list -> unit
-    val exists : file -> bool
-    val crc : file -> Crc.crc
-    val remove : file -> unit
-    val read : name -> internal
-    val write : file * internal -> unit
+    val flush : name -> unit
+    val cached : name -> bool
+    val peek' : name * attr -> (datum * size) option
+    val get' : name * attr -> datum * size
+    val put' : name * attr * datum -> size
+    val peek : name * attr -> datum option
+    val get : name * attr -> datum
+    val put : name * attr * datum -> unit
 end

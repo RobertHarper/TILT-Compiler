@@ -39,7 +39,8 @@ sig
 
     val all_pairs : ('a * 'a -> bool) -> 'a list -> bool
 
-    val memoize : (unit -> 'a) -> (unit -> 'a)
+    val apply : ('a -> 'b) * 'a -> unit -> 'b
+    val memoize : (unit -> 'a) -> unit -> 'a
 
     val run : string list -> unit
     val outputOf : string list -> string

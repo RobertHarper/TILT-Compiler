@@ -17,16 +17,17 @@ struct
 	let fun run_slave () =
 		(Slave.Standalone := false; Slave.slave())
 	    val kill_slave = Util.background' run_slave
-	    val r = f x handle e => (kill_slave(); raise e)
+	    val r = Util.apply(f,x)
 	    val _ = kill_slave()
-	in  r
+	in  r()
 	end
 
     fun Stats (f : 'a -> 'b) (x : 'a) : 'b =
 	let val _ = if !ResetStats then Stats.clear_measurements() else ()
-	    val r = f x
+	    val _ = if !PrintStats then Stats.SendMeasurements := true else ()
+	    val r = Util.apply(f,x)
 	    val _ = if !PrintStats then Stats.print_stats() else ()
-	in  r
+	in  r()
 	end
 
     (*

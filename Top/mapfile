@@ -21,13 +21,12 @@ unit Target = "target.sml" {
 
 unit FILECACHE = "filecache.sig.sml" {Crc}
 unit FileCache = "filecache.sml" {
-	Util Int Crc FILECACHE OS Stats HASH_KEY HashString
-	MONO_HASH_TABLE ListMergeSort List HashTableFn
+	Util Int FILECACHE Stats ListMergeSort List HashTableFn Option
 }
 unit FS = "fs.sig.sml" {LinkIl Blaster Name Crc}
 unit Fs = "fs.sml" {
 	FS FileCache LinkIl Blaster Name Util Platform String Int
-	Word32 OS List BinIO Word8Vector
+	Word32 OS List BinIO Word8Vector Crc HashString Stats
 }
 
 unit POS = "pos.sig.sml" {Blaster Formatter}
@@ -76,7 +75,7 @@ unit Compiler : Compiler = "compiler.sml" {
 }
 
 unit COMMUNICATION = "communication.sig.sml" {
-	Name IntSyn Blaster Formatter Platform
+	Name IntSyn Blaster Formatter Platform Stats
 }
 unit Communication = "communication.sml" {
 	COMMUNICATION Queue Util Blaster Formatter

@@ -1,5 +1,5 @@
 (*
-	The per-stream codec can be reset with resetIn and resetOut.
+    The per-stream codec can be reset with resetIn and resetOut.
 *)
 
 signature BLASTER =
@@ -21,16 +21,18 @@ sig
     val closeIn : instream -> unit
     val closeOut : outstream -> unit
 
+    val getPosIn : instream -> int
+    val getPosOut : outstream -> int
     val endOfStream : instream -> bool
 
     (*
-	If (bout',bin') = magic (bout,bin,m),
-	then bout' writes magic number m before invoking bout
-	and bin' checks for magic number m before invoking
-	bin.  Bin' may raise BadMagicNumber.
+        If (bout',bin') = magic (bout,bin,m),
+        then bout' writes magic number m before invoking bout
+        and bin' checks for magic number m before invoking
+        bin.  Bin' may raise BadMagicNumber.
     *)
     val magic : 'a blastout * 'a blastin * string -> 'a blastout * 'a blastin
-    val checkMagic : instream -> string option	(* For debugging *)
+    val checkMagic : instream -> string option  (* For debugging *)
 
     val blastOutWord8 : outstream -> Word8.word -> unit
     val blastInWord8 : instream -> Word8.word

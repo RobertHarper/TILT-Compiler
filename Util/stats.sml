@@ -6,11 +6,6 @@ struct
 
     val error = fn s => Util.error "stats.sml" s
 
-    fun apply (f:'a -> 'b) (x:'a) : (unit -> 'b) =
-        let val r = f x
-        in  fn () => r
-        end handle e => fn () => raise e
-
     (*
         Counters
     *)
@@ -37,6 +32,15 @@ struct
     fun make_counter (combine:combine) : counter =
         {count = ref 0,
          combine = combine}
+
+    fun counter_apply (counter:counter, f:'a -> 'b) : 'a -> 'b =
+        let val {count,...} = counter
+        in  fn x =>
+                let val r = Util.apply(f,x)
+                    val _ = count := !count + 1
+                in  r()
+                end
+        end
 
     fun counter_fetch (counter:counter) : int =
         let val {count,...} = counter
@@ -108,10 +112,10 @@ struct
              real = reala + realb}
         end
 
-    fun time_apply (f:'a -> 'b) (x:'a) : time * (unit -> 'b) =
+    fun time_apply (app:('a -> 'b) * 'a) : time * (unit -> 'b) =
         let val cpu = Timer.startCPUTimer()
             val real = Timer.startRealTimer()
-            val r = apply f x
+            val r = Util.apply app
             val {usr,sys,gc} = Timer.checkCPUTimer cpu
             val real = Time.toReal(Timer.checkRealTimer real)
             val gc = Time.toReal gc
@@ -209,13 +213,14 @@ struct
         in  !active
         end
 
-    fun timer_apply (timer:timer) (f:'a -> 'b) (x:'a) : 'b =
+    fun timer_apply (timer:timer, f:'a -> 'b) : 'a -> 'b =
         let val {avoid_overlap, active, times, ...} = timer
-        in  if avoid_overlap andalso !active then
+        in  fn x =>
+            if avoid_overlap andalso !active then
                 f x
             else
                 let val _ = active := true
-                    val (time,r) = time_apply f x
+                    val (time,r) = time_apply(f,x)
                     val _ = active := false
                     val _= times := times_addtime(!times,time)
                 in  r()
@@ -266,7 +271,8 @@ struct
             fun measure (f:'a -> 'b, x:'a) : int * real =
                 let fun loop (n:int) : int * real =
                         let val timer = make_timer(true,false)
-                            val _ = iter (timer_apply timer f,x,n)
+                            val timed = timer_apply(timer,f)
+                            val _ = iter (timed,x,n)
                             val {total,...} = timer_fetch timer
                             val {cpu,...} = total
                         in  if cpu >= target_time then
@@ -280,7 +286,7 @@ struct
 
             (* Measure the same number of normal function applications. *)
             fun measure (f:'a -> 'b, x:'a) : real =
-                let val (time,_) = time_apply iter (f,x,count)
+                let val (time,_) = time_apply(iter,(f,x,count))
                     val {cpu,...} = time
                 in  cpu
                 end
@@ -388,11 +394,6 @@ struct
             |   stat => mismatch (name,Int,stat))
         end
 
-    fun require_int (name:string) : int ref =
-        (case (require_stat (Int,name)) of
-            FLAG (INT r) => r
-        |   stat => mismatch (name,Int,stat))
-
     fun get_bool (default:bool) (name:string) : bool ref =
         let fun maker () = FLAG(BOOL(ref default))
         in
@@ -413,11 +414,6 @@ struct
                 MEAS (COUNTER c) => c
             |   stat => mismatch(name,Counter,stat))
         end
-
-    fun require_counter (name:string) : counter =
-        (case (require_stat (Counter,name)) of
-            MEAS (COUNTER c) => c
-        |   stat => mismatch(name,Counter,stat))
 
     fun get_timer (options:bool * bool) (name:string) : timer =
         let fun maker () = MEAS(TIMER(make_timer options))
@@ -449,9 +445,15 @@ struct
     val counter' : string -> counter =
         get_counter MAX
 
+    val count' : counter * ('a -> 'b) -> 'a -> 'b =
+        counter_apply
+
+    fun count (name:string, f:'a -> 'b) : 'a -> 'b =
+        count' (counter name,f)
+
     fun timer_help (options:bool*bool) (name:string, f:'a -> 'b) : 'a -> 'b =
         let val timer = get_timer options name
-        in  timer_apply timer f
+        in  timer_apply(timer,f)
         end
 
     val timer : string * ('a -> 'b) -> 'a -> 'b =
@@ -690,6 +692,9 @@ struct
     (*
         Communication
     *)
+
+    val SendMeasurements = ff"SendMeasurements"
+
     datatype flagv =
         INTV of int
     |   BOOLV of bool
@@ -749,30 +754,32 @@ struct
     type measurements = (string * measv) list
 
     fun get_measurements () : measurements =
-        let val order = entries false
-            fun measv (name:string) : (string * measv) option =
-                (case (lookup_stat) name of
-                    SOME (MEAS (COUNTER c)) =>
-                        if counter_changed c then
-                            let val {combine,...} = c
-                                val count = counter_fetch c
-                                val counterv = COUNTERV (combine,count)
-                            in  SOME (name,counterv)
-                            end
-                        else NONE
-                |   SOME (MEAS (TIMER t)) =>
-                        if timer_changed t then
-                            let val {toplevel,avoid_overlap,...} = t
-                                val times = timer_fetch t
-                                val timerv =
-                                    TIMERV ((toplevel,avoid_overlap),times)
-                            in  SOME (name, timerv)
-                            end
-                        else NONE
-                |   _ => NONE)
-            val changed = List.mapPartial measv order
-        in  changed
-        end
+        if !SendMeasurements then
+            let val order = entries false
+                fun measv (name:string) : (string * measv) option =
+                    (case (lookup_stat) name of
+                        SOME (MEAS (COUNTER c)) =>
+                            if counter_changed c then
+                                let val {combine,...} = c
+                                    val count = counter_fetch c
+                                    val counterv = COUNTERV (combine,count)
+                                in  SOME (name,counterv)
+                                end
+                            else NONE
+                    |   SOME (MEAS (TIMER t)) =>
+                            if timer_changed t then
+                                let val {toplevel,avoid_overlap,...} = t
+                                    val times = timer_fetch t
+                                    val timerv =
+                                        TIMERV ((toplevel,avoid_overlap),times)
+                                in  SOME (name, timerv)
+                                end
+                            else NONE
+                    |   _ => NONE)
+                val changed = List.mapPartial measv order
+            in  changed
+            end
+        else nil
 
     fun add_measurements (changed:measurements) : unit =
         let fun add (name:string, measv:measv) : unit =

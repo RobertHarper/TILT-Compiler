@@ -215,6 +215,7 @@ unit ToNil : ToNil = "tonil.sml" {
 
 unit PASS = "pass.sig.sml" {Nil}
 
+(*
 unit NILREDUCE = "reduce.sig.sml" {Nil}
 unit NilReduce = "reduce.sml" {
 	Nil NilUtil Ppnil PrimUtil NilSubst NILREDUCE
@@ -223,6 +224,7 @@ unit NilReduce = "reduce.sml" {
 unit Flatten = "flatten.sml" {
 	Nil NilUtil Ppnil PrimUtil NilSubst NilReduce PASS PRIMUTIL
 }
+*)
 
 unit HOIST = "hoist.sig.sml" {Nil}
 interface Hoist = "hoist.int" {HOIST}
@@ -244,10 +246,12 @@ unit Inline = "inline.sml" {
 	NilUtil NilSubst INLINE Analyze Bool Ppnil Stats
 }
 
+(*
 unit Reorder = "reorder.sml" {
 	Nil NilUtil Stats Name Util Sequence TraceOps Listops Ppnil
 	NilDefs
 }
+*)
 
 unit COERCEELIM = "coerce-elim.sig.sml" {Nil}
 unit CoerceElim = "coerce-elim.sml" {

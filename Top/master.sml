@@ -566,13 +566,22 @@ struct
 			   of NONE => ()
 			    | SOME Comm.READY => ()
 			    | SOME (Comm.ACK_INTERFACE job) =>
-				markProceeding job
+(case (get_status job) of
+	PROCEEDING _ => ((*print "XXX: duplicate ACK_INTERFACE message\n"*))
+|	_ =>
+				markProceeding job)
 			    | SOME (Comm.ACK_FINISHED (job, meas)) =>
+(case (get_status job) of
+	DONE _ => ((*print "XXX: duplicate ACK_FINISHED message\n"*))
+|	_ =>
 			       (markDone job;
-				update(slave,meas))
+				update(slave,meas)))
 			    | SOME (Comm.ACK_UNFINISHED (job, meas)) =>
+(case (get_status job) of
+	PENDING' _ => ((*print "XXX: duplicate ACK_UNFINISHED message\n"*))
+|	_ =>
 			       (markPending' job;
-				update(slave,meas))
+				update(slave,meas)))
 			    | SOME (Comm.ACK_REJECT (job,msg)) =>
 			       (print ("slave " ^ Comm.name slave ^
 				       " found an error in " ^

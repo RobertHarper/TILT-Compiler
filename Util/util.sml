@@ -85,15 +85,18 @@ struct
 	loop
       end
 
-    fun memoize thunk =
-	let val cell = ref thunk
+    fun apply (f:'a -> 'b, x:'a) : (unit -> 'b) =
+	let val r = f x
+	in  fn () => r
+	end handle e => fn () => raise e
+
+    fun memoize (f:unit -> 'a) : unit -> 'a =
+	let val cell = ref f
 	    val _ = cell := (fn () =>
-			     let val r = thunk()
-			     in  (cell := (fn () => r);
-				  r)
-			     end handle e =>
-				 (cell := (fn () => raise e);
-				  raise e))
+			     let val r = apply(f,())
+				 val _ = cell := r
+			     in  r()
+			     end)
 	in  fn () => !cell()
 	end
 

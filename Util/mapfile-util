@@ -37,7 +37,7 @@ interface BLASTER = "blast.int" {BLASTER}
 unit Blaster : BLASTER = "blast.sml" {
 	BLASTER BinIO Util TilWord64 Word8Vector Word8 Word32 Int String
 	IntListMap Option HashTableFn HashString Byte Real64 LargeReal
-	IEEEReal Time Real
+	IEEEReal Time Real Position
 }
 
 unit STATS = "stats.sig.sml" {Blaster}
