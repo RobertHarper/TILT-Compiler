@@ -60,8 +60,10 @@ functor EmitRtlMLRISC(
 	      and type MLTreeExtra.MLTree.rexp =
 		       CallConventionBasis.rexp =
 		       ExternalConvention.rexp =
+		       IntegerConvention.rexp =
 		       SpillReload.rexp
 	      and type MLTreeExtra.MLTree.fexp =
+		       FloatConvention.fexp =
 		       SpillReload.fexp
 	      and type MLTreeExtra.MLTree.stm =
 		       CallConventionBasis.stm
@@ -1683,19 +1685,19 @@ functor EmitRtlMLRISC(
 	    fun integerSpill id	 = if integerSpills id then
 				     Register.spill id
 				   else
-				     MLTree.REG id
+				     IntegerConvention.expression id
 	    fun integerReload id = if integerSpills id then
 				     Register.reload id
 				   else
-				     MLTree.REG id
+				     IntegerConvention.expression id
 	    fun floatSpill id	 = if floatSpills id then
 				     FloatRegister.spill id
 				   else
-				     MLTree.FREG id
+				     FloatConvention.expression id
 	    fun floatReload id	 = if floatSpills id then
 				     FloatRegister.reload id
 				   else
-				     MLTree.FREG id
+				     FloatConvention.expression id
 	  in
 	    SpillReload.transform((integerSpill, integerReload),
 				  (floatSpill, floatReload))
