@@ -12,6 +12,8 @@ tags.sig.sml
 tags.sml
 pprtl.sig.sml
 pprtl.sml
+tortl-base.sig.sml
+tortl-base.sml
 tortl.sig.sml
 tortl.sml
 (* tortl_array.sml *)

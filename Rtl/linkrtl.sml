@@ -4,6 +4,7 @@ sig
     structure Tortl : TORTL
     structure Rtl : RTL
     structure Pprtl : PPRTL
+    structure TortlBase : TORTL_BASE
 
     val show_rtl : bool ref
     val compile_prelude : bool * string -> Rtl.module
@@ -36,11 +37,21 @@ struct
     structure Pprtl = Pprtl(structure Rtl = Rtl
 			    structure Rtltags = Rtltags)
     
+    structure TortlBase = TortlBase(structure Nil = Linknil.Nil
+			    structure NilContext = Linknil.NilContext
+			    structure NilStatic = Linknil.NilStatic
+			    structure Rtl = Rtl
+			    structure Pprtl = Pprtl
+			    structure Rtltags = Rtltags
+			    structure NilUtil = Linknil.NilUtil
+			    structure Ppnil = Linknil.PpNil)
+
     structure Tortl = Tortl(structure Nil = Linknil.Nil
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
 			    structure Rtl = Rtl
 			    structure Pprtl = Pprtl
+			    structure TortlBase = TortlBase
 			    structure Rtltags = Rtltags
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
