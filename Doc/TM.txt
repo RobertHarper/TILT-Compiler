@@ -224,10 +224,10 @@ file map.sml and for an external interface in map.int.
 
 ** Dependencies
 
-Inside an SML file, the (direct) file dependencies for the
-implementation are given using the import directive (a special
-comment). Import directives specify unit names as defined in the
-mapfile, not file names. For example, map.sml might contain:
+The (direct) file dependencies for implementation and external interface
+files are are given using an import directive (a special comment).
+Import directives specify unit names as defined in the mapfile, not file
+names. For example, map.sml might contain:
 
 	(*$import MAP SplayTree *)
 
@@ -236,15 +236,11 @@ mapfile, not file names. For example, map.sml might contain:
 	...
 	end
 
-Inside an external interface file, the file dependencies are given
-with a similar include directive. For example, map.int might contain:
+and map.int might contain:
 
-	(*$include MAP *)
+	(*$import MAP *)
 
 	structure Map : MAP
-
-Import directives only appear within an implementation, and include
-directives only appear within an external interface.
 
 Another reasonable design would have been to store dependency
 information outside of the source and external interface files. For
