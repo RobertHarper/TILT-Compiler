@@ -8,21 +8,24 @@ Please send comments and bug reports to
 INSTALLING TILT
 ---------------
 
-This release is set up to compile TILT using SML/NJ 110.0.3 or 110.0.7
-available from
+This release is set up to compile TILT using SML/NJ 110.0.7 available
+from
 
 	http://www.smlnj.org/
 
-The architectures and operating systems supported by TILT are listed
-in the manual page (Doc/tilt.txt).  Take a look at the comments and
-commands in Makefile and Runtime/Makefile and then try
+TILT supports the SPARC V9 and Alpha architectures running SunOS
+5.5.1, SunOS 5.7, SunOS 5.8, and Digital Unix V4.0D but can run on any
+Unix system supported by SML/NJ.  Unsupported architectures can be
+used as compilation slaves (for any supported architecture) but TILT
+can not generate binaries for them.
+
+Take a look at the comments and commands in Makefile and
+Runtime/Makefile and then try
 
 	make
 
-to compile TILT.  Unsupported architectures can be used as compilation
-slaves (for any architecture) but TILT can not generate binaries for
-them; on such systems, the final message will be "tilt: unable to
-link".
+to compile TILT.  On unsupported architectures, the final message will
+be "tilt: unable to link".
 
 Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
 TILT out of the current directory; alternatively, you can use

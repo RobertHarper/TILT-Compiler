@@ -1,0 +1,54 @@
+.\" NB Sentences should start on a new line.
+.\" EX uses a fixed width font; typically "C", "CW(", or "LucidaCW".
+.\" Ideally we'd change .B, .BI, etc. to use the same font.
+.de EX
+.if t .ft C
+.nf
+..
+.de EE
+.ft R
+.fi
+..
+.TH INTERFACE 4
+.SH NAME
+interface \- TILT interface files
+.SH DESCRIPTION
+A source interface is a top-level specification
+.I topspec
+stored in a file.
+The character set and lexical conventions for a
+.I topspec
+are those specified in the Definition of Standard ML (Revised).
+The syntax of a
+.I topspec
+is built up from the syntactic categories
+.IR spec ,
+.IR sigbind ,
+.IR sigexp ,
+.IR funid ,
+.IR strid ,
+.IR vid ,
+and
+.I d
+from the Definition:
+.EX
+	\fItopspec\fP
+		::=	\fIspec\fP
+		|	functor \fIfundesc\fP
+		|	signature \fIsigbind\fP
+		|	infix <\fId\fP> \fIvids\fP
+		|	infixr <\fId\fP> \fIvids\fP
+		|	nonfix \fIvids\fP
+		|	\fItopspec1\fP <;> \fItopspec2\fP
+	\fIfundesc\fP
+		::=	\fIfunid\fP ( \fIstrid\fP : \fIsigexp\fP ) : \fIsigexp\fP
+		|	\fIfunid\fP ( \fIspec\fP ) : \fIsigexp\fP
+		|	\fIfundesc\fP and \fIfundesc\fP
+	\fIvids\fP	::=	\fIvid\fP <\fIvids\fP>
+.EE
+As in the Definition, we use
+.BI < phrase >
+to indicate an optional
+.IR phrase .
+.SH SEE ALSO
+.IR tilt (1)

@@ -1,6 +1,8 @@
-." NB Sentences should start on a new line.
+.\" NB Sentences should start on a new line.
+.\" EX uses a fixed width font; typically "C", "CW(", or "LucidaCW".
+.\" Ideally we'd change .B, .BI, etc. to use the same font.
 .de EX
-.if t .ft L
+.if t .ft C
 .nf
 ..
 .de EE
@@ -177,7 +179,7 @@ up-to-date compiled files and will complain if they do not exist.
 Pre-compiled interfaces are used by the project description files
 generated for libraries.
 .PP
-The remaining interface expressions are used by the Basis library
+The remaining interface expressions are used by the basis library
 implementation and are not described further.
 .SS Unit expressions
 .PP
@@ -213,7 +215,7 @@ for libraries if the compiler flag
 .B PackUnitSource
 is set to true.
 .PP
-The fourth form of unit expression is used by the Basis library
+The fourth form of unit expression is used by the basis library
 implementation and is not described further.
 .SS Declarations
 .PP
@@ -261,11 +263,11 @@ The eight form of declaration causes TILT to terminate with
 an error message containing
 .IR ve .
 .SS Basis library
-TILT makes the Basis library available by syntactically rewriting
+TILT makes the basis library available by syntactically rewriting
 every non-basis project description file.  Each project description
-file is changed to include the compiled Basis library and each source
+file is changed to include the compiled basis library and each source
 unit and interface with a list of opened units is changed to
-open the Basis library units that define the standard top-level
+open the basis library units that define the standard top-level
 environment.
 .SS Static checks
 .PP
@@ -315,7 +317,7 @@ The balance of this section informally describes what this means.
 .PP
 All identifiers must be bound before they are used.
 The bindings for environment variables, predefined variables, and the
-Basis library unit and interface identifiers are not syntactically
+basis library unit and interface identifiers are not syntactically
 evident.
 .PP
 File names in project description files are in Unix syntax and
@@ -429,7 +431,7 @@ TILT's version number; the string has the form
 .IR major.minor .
 .TP
 .B libdir : string
-Absolute path to a directory containing (at least) compiled Basis
+Absolute path to a directory containing (at least) compiled basis
 and SML/NJ libraries.
 .TP
 .B linking : bool
@@ -442,6 +444,6 @@ when the compiler flag
 .B Bootstrap
 is set to
 .BR true ;
-used to compile the Basis library.
+used to compile the basis library.
 .SH SEE ALSO
 .IR tilt (1)

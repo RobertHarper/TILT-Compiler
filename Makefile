@@ -94,9 +94,10 @@ install: FORCE
 	tar cf - Bin Lib | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
-	-mkdir $(PREFIX)/man/man6
-	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1/tilt.1
-	cp Doc/project.6 $(PREFIX)/man/man6 && chmod 644 $(PREFIX)/man/man6/project.6
+	-mkdir $(PREFIX)/man/man4
+	cp Doc/tilt.man $(PREFIX)/man/man1/tilt.1 && chmod 644 $(PREFIX)/man/man1/tilt.1
+	cp Doc/project.man $(PREFIX)/man/man4/project.4 && chmod 644 $(PREFIX)/man/man4/project.4
+	cp Doc/interface.man $(PREFIX)/man/man4/interface.4 && chmod 644 $(PREFIX)/man/man4/interface.4
 	-mkdir $(PREFIX)/bin
 	for name in tilt tilt-nj tilt-slaves dump dump-nj; do \
 		(echo '#!/bin/sh'; \
