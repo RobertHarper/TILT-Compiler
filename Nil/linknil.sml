@@ -17,7 +17,7 @@ structure Linknil (* :> LINKNIL  *) =
     val do_hoist = Stats.tt("doHoist")
     val do_reify = Stats.tt("doReify")
     val do_cse = Stats.tt("doCSE")
-    val do_uncurry = Stats.ff("doUncurry")
+    val do_uncurry = Stats.tt("doUncurry")
     val do_reduce = Stats.tt("doReduce")
     val do_flatten = Stats.tt("doFlatten")
     val do_inline = Stats.tt ("doInline")
@@ -200,6 +200,11 @@ structure Linknil (* :> LINKNIL  *) =
 				   "Inline", 
 				   inline_domod, filename, nilmod)
 
+ 	    val nilmod = check (typecheck_before_opt,show_typecheck,
+				    "Nil_typecheck_pre-opt",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
+
 	    val nilmod = transform(do_one_optimize, show_one_optimize,
 				 "Optimize1", 
 				 Optimize.optimize
@@ -228,6 +233,29 @@ structure Linknil (* :> LINKNIL  *) =
 				 "Hoist", 
 				 Hoist.optimize,
 				 filename, nilmod)
+
+(****
+
+
+	    val nilmod = transform(do_reduce, show_reduce,
+				   "Reduce", Reduce.doModule, 
+				   filename, nilmod)
+
+	    val nilmod = transform(do_flatten, show_flatten,
+				   "Flatten", Flatten.doModule, 
+				   filename, nilmod)
+
+	    val nilmod = transform(do_inline, show_inline,
+				   "Inline", 
+				   inline_domod, filename, nilmod)
+
+
+****)
+ 	    val nilmod = check (typecheck_before_opt,show_typecheck,
+				    "Nil_typecheck_pre-opt",
+				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
+				    filename, nilmod)
+
 
             val nilmod = transform(do_reify, show_reify,
                                    "Reification",

@@ -26,9 +26,13 @@ definition
 
    A function should be inlined (and the definition removed) if:
         * (3) = 0 (the function is non-recursive)
-        * (4) = (3) (the function does not escape)
         * (2) = 1 or else
         * (1)*(2) <= threshold
+
+   [CS: We now inline at applications of escaping functions
+        (i.e., even when (4) > (3)).  If the function does escape,
+        we don't remove the original definition, of course.]
+
 
    The transformation pass inlines and removes definitions according to the
    rules above.  Care must be taken when substituting the definition of the
@@ -48,10 +52,10 @@ structure Inline :> INLINE =
 struct
   open Nil Name NilUtil
 
-  val threshold = ref 50
+  val threshold = ref 150
   val occur_threshold = ref 20
   val error = fn s => Util.error "inline.sml" s
-  val debug = ref true
+  val debug = ref false
   fun debugpr s = if (!debug) then print s else ()
   fun inc(r:int ref) = r := (!r) + 1
 
@@ -67,7 +71,6 @@ struct
   fun should_inline
 ({size,num_nonrec_calls,num_rec_calls,num_occurs,...}:fun_info) =
       ((!num_rec_calls) = 0) andalso   (* no recursive functions *)
-      ((!num_occurs) = (!num_nonrec_calls)) andalso (* no escaping functions*)
       (((!num_nonrec_calls) <= 1) orelse
        ((!size) <= (!threshold) andalso (!num_nonrec_calls) <=
 (!occur_threshold)))
@@ -272,8 +275,10 @@ e))
       (* print "analyzing module\n"; *)
       amodule m;
       update_table();
-      (* print "function information\n"; 
-       print_table(); *)
+      if (!debug) then
+         (print "function information\n"; 
+          print_table())
+        else ();
       (!inline_count,find_fun)
   end
 
@@ -378,9 +383,18 @@ e))
 	| Fixopen_b vfs => 
 	    (case Sequence.toList vfs of
 	       [(v,f)] =>
+
 		 (case find_fun v of
-		    SOME {definition=ref(SOME _),...} => []
+		    SOME {definition=ref(SOME _),num_occurs,
+			  num_nonrec_calls, already_inlined, ...} => 
+		         if (!num_occurs) = (!num_nonrec_calls)	then
+                            []  (* delete definition when fn does not escape 
+                                   and will be inlined everywhere *)
+                         else
+                            (already_inlined := true;
+                             [Fixopen_b(Sequence.fromList[(v,rfunction f)])])
 		  | _ => [Fixopen_b(Sequence.fromList[(v,rfunction f)])])
+
 	     | vfl => 
 		   [Fixopen_b(Sequence.fromList
 			      (List.map(fn (v,f) => (v,rfunction f)) vfl))])

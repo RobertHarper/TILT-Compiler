@@ -706,14 +706,16 @@ structure Reduce
 	      (*  | input | input1 | lookahead |open_in | open_out |close_in
 	      | output | flush_out | close_out | end_of_stream ) => false *)
 
+(* 
+              | create_table _ => true
+              | create_empty_table _  => true
+*)
 		update _ => false
-              | create_table _ => false
-              | create_empty_table _  => false
 	      | soft_vtrap _ => false
               | soft_ztrap _ => false
               | hard_vtrap _ => false
               | hard_ztrap _  => false
-	      | ( sub _ ) => true
+	      | ( sub _ ) => false
 	      | _ => true
 		   
     fun is_pure exp = 

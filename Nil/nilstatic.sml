@@ -748,11 +748,13 @@ struct
 	  fun folder ((v,k),D) = (kind_valid (D,k);insert_kind(D,v,k))
 	  val D = foldl folder D formals
 	  val _ = kind_valid(D,body_kind)
+(*XXX CS
 	  val found_body_kind = con_valid (D,body)
 	  val _ = 
 	    (sub_kind (D,found_body_kind,body_kind)) orelse
 	    (perr_c_k_k (body,body_kind,found_body_kind);
 	     (error (locate "con_valid_letfun'") "invalid return kind for constructor function" handle e => raise e))
+*)
 	in ()
 	end
       

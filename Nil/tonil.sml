@@ -2024,7 +2024,7 @@ end (* local defining splitting context *)
 
    and xfbnds context (is_recur, il_arrow, fbnds) = 
        let
-	   val recursive = if is_recur then Arbitrary else Leaf
+	   val recursive = if is_recur then Arbitrary else NonRecursive
 	   val totality = xeffect il_arrow
 	   fun mapper (Il.FBND(var, var', il_con1, il_con2, body)) = 
 	       let
