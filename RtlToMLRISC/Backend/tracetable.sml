@@ -235,6 +235,31 @@ functor Tracetable(val little_endian    : bool
     val Count_global_rec = ref 0;
     fun inc x = x := (!x + 1)
 
+    local
+	val factor = 64
+	val maxindices = 4
+	fun folder (i,(curfactor,acc)) = 
+	    let val i = if (curfactor = 1) then i else i + 1
+	    in  if (i < factor) then (factor*curfactor, acc + i * curfactor)
+		else error "projection too big"
+	    end
+    in
+	fun indices2int indices = 
+	    let val len = length indices
+	        val res = if (len = 0)
+		    then error "no index"
+		else if (len > maxindices)
+			 then error ("more than 3 index(" ^ (Int.toString len) ^ ")")
+		     else #2(foldl folder (1,0) indices)
+		val _ = (print ("indices2int: ");
+			 app (fn m => (print (Int.toString m);
+				       print "  ")) indices;
+			 print " --> ";
+			 print (Int.toString res);
+			 print "\n")
+	    in res
+	    end
+    end
 
     fun tr2bot TRACE_NO                  = (inc Count_no; 0)
       | tr2bot TRACE_YES                 = (inc Count_yes; 1)
@@ -245,23 +270,23 @@ functor Tracetable(val little_endian    : bool
 	addword_int (i2w (~1)); addword_int (i2w (~1)); 3) 
       | tr2bot (TRACE_STACK sloc) = 
 	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (sloc2int sloc)); 3) 
-      | tr2bot (TRACE_STACK_REC (sloc,[i])) = 
-        let val pos = sloc2int sloc
-	in  (if (!ShowDebug)
-	     then (print ("trace_stack_rec  pos,i,val" ^ 
-			  (Int.toString pos) ^ "," ^ (Int.toString i) ^ "," ^
-			  (Int.toString (2+2*i)) ^ "\n"))
-	 else ();
-	     (inc Count_stack_rec; addword_int (i2w (2+2*i)); 
-	      addword_int (i2w pos); 3))
-        end
       | tr2bot (TRACE_GLOBAL lab)        = 
 	(inc Count_global; addword_int (i2w 1); addword_label lab; 3)
-      | tr2bot (TRACE_GLOBAL_REC (lab,[i]))= 
-	(inc Count_global_rec; addword_int (i2w (3+2*i)); 
+      | tr2bot (TRACE_STACK_REC (sloc,indices)) =
+        let val pos = sloc2int sloc
+	    val res = 2 + 4 * (indices2int indices)
+	    val _ = if (!ShowDebug)
+			 then (print ("trace_stack_rec  pos,i,val" ^ 
+				      (Int.toString pos) ^ "," ^ (Int.toString (hd indices)) ^ "," ^
+				      (Int.toString res) ^ "\n"))
+		     else ()
+	in
+	    (inc Count_stack_rec; addword_int (i2w res);
+	     addword_int (i2w pos); 3)
+        end
+      | tr2bot (TRACE_GLOBAL_REC (lab,indices)) =
+	(inc Count_global_rec; addword_int (i2w (3+4*(indices2int indices)));
 	 addword_label lab; 3)
-      | tr2bot (TRACE_STACK_REC (lab,_)) = error "TRACE_STACK_REC with list of length > 1 not done"
-      | tr2bot (TRACE_GLOBAL_REC (lab,_)) = error "TRACE_GLOBAL_REC with list of length > 1 not done"
       | tr2bot TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
@@ -276,23 +301,9 @@ functor Tracetable(val little_endian    : bool
 	(inc Count_unset_reg; addword_int (i2w (~1)); addword_int (i2w (~1)); (0,1))
       | regtr2bits _ (TRACE_STACK sloc) = 
 	(inc Count_stack; addword_int (i2w 0); addword_int (i2w (sloc2int sloc)); (0,1))
-      | regtr2bits _ (TRACE_STACK_REC (sloc, [i])) = 
-        let val pos = sloc2int sloc
-	in (if (!ShowDebug)
-	     then (print ("trace_stack_rec  pos,i,val" ^ 
-			  (Int.toString pos) ^ "," ^ (Int.toString i) ^ "," ^
-			  (Int.toString (2+2*i)) ^ "\n"))
-	 else ();
-	     (inc Count_stack_rec; addword_int (i2w (2+2*i)); 
-	      addword_int (i2w pos); (0,1)))
-        end
-      | regtr2bits _ (TRACE_GLOBAL lab)        = 
-	(inc Count_global; addword_int (i2w 1); addword_label lab; (0,1))
-      | regtr2bits _ (TRACE_GLOBAL_REC (lab,[i]))= 
-	(inc Count_global_rec; addword_int (i2w (3+2*i)); 
-	 addword_label lab; (0,1))
-      | regtr2bits _ (TRACE_STACK_REC (lab,_)) = error "TRACE_STACK_REC with list of length > 1 not done"
-      | regtr2bits _ (TRACE_GLOBAL_REC (lab,_)) = error "TRACE_GLOBAL_REC with list of length > 1 not done"
+      | regtr2bits _ (tr as TRACE_STACK_REC _) = (tr2bot tr; (0,1))
+      | regtr2bits _ (tr as TRACE_GLOBAL _)        = (tr2bot tr; (0,1))
+      | regtr2bits _ (tr as TRACE_GLOBAL_REC _) =  (tr2bot tr; (0,1))
       | regtr2bits _ TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
@@ -440,10 +451,12 @@ functor Tracetable(val little_endian    : bool
 	    val bytestuffsizeword = (i2w (datalength bytedata))
 	    val sizedata = 
 		let 
-		    val _ = if (W.ugte(entrysizeword,i2w 1024) orelse
-				W.ugte(framesizeword,i2w 512) orelse 
-				W.ugte(bytestuffsizeword,i2w 512))
-				then error "sizes too big" else ()
+		    val _ = if (W.ugte(entrysizeword,i2w 1024))
+				then error "giant frame: entrysizeword too big" else ()
+		    val _ = if (W.ugte(framesizeword,i2w 512))
+				then error "giant frame: framesizeword too big" else ()
+		    val _ = if (W.ugte(bytestuffsizeword,i2w 512))
+				then error "giant frame: bytestuffsizeword too big" else ()
 		    val t1 = bitshift(entrysizeword,0)
 		    val t2 = bitshift(framesizeword,10)
 		    val t3 = bitshift(bytestuffsizeword,19)
