@@ -514,14 +514,14 @@ struct
 	end
 
     fun assemble (unit,base,importBases) = 
-	let val intFile = Help.base2int base
-	    val smlFile = Help.base2sml base
-	    val uiFile = Help.base2ui base
-            val _ = Platform.sleep 0.5
+	let val sFile = Help.base2ui base
+	    val oFile = Help.base2o base
+            val _ = if (Cache.exists sFile)
+			then ()
+		    else Platform.sleep 0.5
 	    val _ = Help.chat ("  [Assembling to object file ...")
 	    val _ = Til.assemble base;
 	    val _ =  Help.chat "]\n"
-	    val oFile = base2s base
 	    val _ = Cache.flushSome [oFile]
 (*
 	    val _ = if (!stat_each_file)
@@ -818,33 +818,49 @@ struct
 	    in  foldl folder ([],[],[],[],[],[]) units
 	    end
 
+	fun readAssociation mapfile = 
+	    let val is = TextIO.openIn mapfile
+		fun dropper s = let val len = size s
+				in  String.sub(s,0) = #";" orelse
+				    (len >= 2 andalso String.substring(s,0,2) = "//")
+				end
+		fun loop (n, acc) = 
+		    if (TextIO.endOfStream is)
+			then rev acc
+		    else 
+			let val line = TextIO.inputLine is
+			in  (case (split_line dropper line) of
+				 ["#include", innerMapfile] => 
+				     let val dir = OS.Path.dir mapfile
+					 val innerMapfile = dir ^ "/" ^ innerMapfile
+					 val innerAssociation = readAssociation innerMapfile
+				     in  loop (n, (rev innerAssociation) @ acc)
+				     end
+			       | [unitname, filebase] => loop (n+1, (unitname, filebase) :: acc)
+			       | [] => loop (n, acc)
+			       | _ => error ("Line " ^ (Int.toString n) ^ 
+					     " of " ^ mapfile ^ " is ill-formed: " ^ line ^ "\n"))
+			end
+		val result = loop (0, [])
+		val _ = TextIO.closeIn is
+	    in  result
+	    end
 
 	fun setMapping (mapFile, getImports) =
 	    let val _ = Cache.flushAll()
-		val is = TextIO.openIn mapFile
 		val _ = reset_graph()
-		fun loop n = 
-		    if (TextIO.endOfStream is)
-			then ()
-		    else 
-			let fun dropper s = String.sub(s,0) = #"#"
-			    val line = TextIO.inputLine is
-			in  (case (split_line dropper line) of
-				 [unitname, filebase] => 
-				     let val nodeWeight = Cache.size(base2sml filebase)
-					 val info = 
-					     {position = n,
-					      filebase = filebase,
-					      status = ref WAITING}
-					 val _ = add_node(unitname, nodeWeight, info)
-				     in  loop (n+1)
-				     end
-			       | [] => loop n
-			       | _ => error ("ill-formed map line: " ^ line))
-			end
-		val _ = loop 0
-		val _ = TextIO.closeIn is
-		val _ = chat ("Mapfile " ^ mapFile ^ " read.\n")
+		val association = readAssociation mapFile
+		fun mapper (n, (unitname, filebase)) = 
+		    let val nodeWeight = Cache.size(base2sml filebase)
+			val info = 
+			    {position = n,
+			     filebase = filebase,
+			     status = ref WAITING}
+		    in  add_node(unitname, nodeWeight, info)
+		    end
+		val _ = Listops.mapcount mapper association
+		val _ = chat ("Mapfile " ^ mapFile ^ " with " ^ (Int.toString (length association)) 
+			      ^ " units processed.\n")
 		fun read_import unit = 
 		    let val filebase = get_base unit
 			val imports = parse_impl_import(base2sml filebase)

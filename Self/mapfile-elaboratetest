@@ -1,0 +1,3 @@
+#include mapfile-elaborate
+
+elabtest Self/elabtest
