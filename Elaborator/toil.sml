@@ -1633,7 +1633,7 @@ structure Toil
 			let val inline =
 			    (case path of
 			       PATH (v,labs) =>
-			          Util.substring("inline",Name.var2name v) orelse 
+			          IlUtil.is_dt_var v orelse
 				  Listops.orfold IlUtil.is_dt labs)
 			    val con = if inline then inline_con 
 					     else path2con path

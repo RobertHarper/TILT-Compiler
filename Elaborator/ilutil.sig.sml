@@ -86,11 +86,13 @@ signature ILUTIL =
     val to_nonexport : label -> label
     val to_dt : label -> label 
     val to_eq: label -> label       
+    val to_dt_var : var -> var
 
     val is_open : label -> bool
     val is_nonexport : label -> bool
     val is_dt : label -> bool 
     val is_eq : label -> bool
+    val is_dt_var : var -> bool	
 
     (* special values *)
     val con_unit : con

@@ -1010,7 +1010,7 @@ structure Datatype
        fun help path = 
 	   let val is_inline = 
 	       (case path of 
-		   (PATH (v,ls)) => (Util.substring("inline",Name.var2name v) orelse
+		   (PATH (v,ls)) => (IlUtil.is_dt_var v orelse
 					       orfold IlUtil.is_dt ls))
 	   in  if is_inline
 		   then (case (Context_Lookup_Path(context,path)) of

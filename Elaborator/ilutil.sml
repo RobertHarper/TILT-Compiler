@@ -1185,6 +1185,7 @@ structure IlUtil
     fun is_nonexport lab =  substring (nonexport_str,label2name lab)
     fun is_dt lab =  substring (dt_str,label2name lab)
     fun is_eq lab = substring (eq_str,label2name lab)
+    fun is_dt_var v = Util.substring("*inline_",Name.var2name v)
 
     local
 	fun to_meta_lab meta_str lab =
@@ -1198,7 +1199,7 @@ structure IlUtil
 	fun to_dt lab = to_meta_lab (open_str ^ nonexport_str ^ dt_str) lab
 	fun to_eq lab = to_meta_lab eq_str lab
     end
-
+    fun to_dt_var v = fresh_named_var("*inline_ " ^ (Name.var2name v))
 
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e

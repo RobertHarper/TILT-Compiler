@@ -132,7 +132,7 @@ structure Basis
 	      fun add_basetype (s,c) =
 		  result := add_context_inline(!result,
 					       symbol_label (Symbol.tycSymbol s),
-					       fresh_named_var ("inline_" ^ s),
+					       IlUtil.to_dt_var(fresh_named_var s),
 					       INLINE_CONKIND(c,IlStatic.GetConKind(empty_context,c)))
 	  in
 	      val _ = app add_basetype basetype_list
