@@ -47,17 +47,17 @@ DESCRIPTION
 
 	Runall runs the tests listed in testlist.txt.
 
-	Regress is a one-step tool to compile the compilers, compile
-	the regression harness, and run the regression tests.  The
-	first option determines what version(s) of TILT to test:
+	Regress is a one-step tool to compile the compiler, compile
+	runtest, and run the tests.  The first option determines what
+	version(s) of TILT to test:
 
 	nj	TILT compiled by SML/NJ (default)
 	tilt	TILT compiled by TILT
 	all	both versions
 
-	The second option the file to store output.  The default is
-	RegressionResults.`date`.txt.
-	
+	The second option says where to put runtest output.  The
+	default is RegressionResults.`date`.txt.
+
 	Tilt and tilt-nj are the TILT executables used by runtest.
 
 	Platform sets the environment variable $platform which is used
