@@ -1,12 +1,11 @@
-(*$import Prim Tyvar Name Int List Il IlContext IlContextEq PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
 (* Static semantics *)
 structure IlStatic
   :> ILSTATIC =
   struct
 
     open Util Listops
-    open Il Ppil IlUtil 
-    open IlContext 
+    open Il Ppil IlUtil
+    open IlContext
     open Prim Tyvar Name
 
     val error = fn s => error "ilstatic.sml" s
@@ -31,13 +30,13 @@ structure IlStatic
 			    end
    end
 
-   fun reduce_sigvar(context,v) = 
+   fun reduce_sigvar(context,v) =
 	(case (Context_Lookup_Var(context,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
 	   | SOME _ => error "reduce_sigvar given non SIGVAR"
 	   | NONE => error "reduce_sigvar given unbound SIGVAR")
 
-   fun sig_subst_modvar(signat,vmlist) = 
+   fun sig_subst_modvar(signat,vmlist) =
        let val subst = list2subst([],[],vmlist)
        in  sig_subst(signat,subst)
        end
@@ -50,14 +49,14 @@ structure IlStatic
 
 
    (* ------- checks for the syntactic valuability of ------- *)
-   fun Exp_IsSyntacticValue exp = 
+   fun Exp_IsSyntacticValue exp =
      (case exp of
 	SCON _ => true
       | PRIM _ => true
       | ILPRIM _ => true
       | VAR _ => true
       | MODULE_PROJECT(m,_) => Option.isSome(mod2path m)
-      | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
+      | RECORD rbnds => foldr (fn (a,b) => a andalso b) true
 	                (map (fn (l,e) => Exp_IsSyntacticValue e) rbnds)
       | FIX _ => true
       | INJ {inject=NONE,...} => true
@@ -65,14 +64,14 @@ structure IlStatic
       | FOLD _ => true
       | UNFOLD _ => true
       | _ => false)
-   and Module_IsSyntacticValue module = 
+   and Module_IsSyntacticValue module =
       (case module of
-	 MOD_STRUCTURE sbnds => foldr (fn (a,b) => a andalso b) true 
+	 MOD_STRUCTURE sbnds => foldr (fn (a,b) => a andalso b) true
 	                        (map (fn SBND(l,b) => Bnd_IsSyntacticValue b) sbnds)
        | MOD_LET (v,m1,m2) => (Module_IsSyntacticValue m1) andalso (Module_IsSyntacticValue m2)
        | (MOD_FUNCTOR _) => true
        | _ => false)
-   and Bnd_IsSyntacticValue bnd = 
+   and Bnd_IsSyntacticValue bnd =
      (case bnd of
        BND_EXP (_,e) => Exp_IsSyntacticValue e
      | BND_MOD (_,_,m) => Module_IsSyntacticValue m
@@ -94,13 +93,13 @@ structure IlStatic
       oneshot arrow unifier: note that unset does NOT unify with unset
      ---------------------------------------------------------------- *)
    fun eq_arrow(ax,ay,is_sub) = (ax = ay) orelse (is_sub andalso ax = TOTAL)
-   fun eq_comp (comp1,comp2,is_sub) = 
+   fun eq_comp (comp1,comp2,is_sub) =
        (case (oneshot_deref comp1,oneshot_deref comp2) of
 	    (SOME x, SOME y) => eq_arrow(x,y,is_sub)
 	  | (SOME x, NONE) => (oneshot_set(comp2,x); true)
 	  | (NONE, SOME x) => (oneshot_set(comp1,x); true)
 	  | (NONE, NONE) => ((eq_oneshot(comp1,comp2)) orelse
-			     (oneshot_set(comp1,PARTIAL); 
+			     (oneshot_set(comp1,PARTIAL);
 			      oneshot_set(comp2,PARTIAL); true)))
    fun eq_onearrow (a1,a2) = eq_comp(a1,a2,false)
 
@@ -112,7 +111,7 @@ structure IlStatic
 
 
 
-   (* ------------------------------------------------------------ 
+   (* ------------------------------------------------------------
       type (sub)-equality:
 	 First, normalize argument types:
            (1) a module projection whose type is known to the known type
@@ -123,12 +122,12 @@ structure IlStatic
 	     is called with the type variable and the given type.
 	     The unifier may be side-effecting or not.
     -------------------------------------------------------------- *)
-	
+
     (* find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag indicating
                             whether it occurred inside a CON_REF, CON_ARRAY, or CON_APP which never
                             uses equality at that type and all flexinfo refs in con.  Also performs
                             path compression on chains of CON_TYVARs.  *)
-    fun find_tyvars_flexes (con,ctxt) = 
+    fun find_tyvars_flexes (con,ctxt) =
 	let val tyvars = ref []
 	    val flexes = ref []
 	    val _ = debugdo (fn () =>
@@ -156,7 +155,7 @@ structure IlStatic
 		let val (_,s) = GetModSig (m,ctxt)
 		in
 		    (case Signat_Project (ctxt,m,s,to_eq l)
-		       of SOME (PHRASE_CLASS_MOD(_,_,signat)) => SOME signat
+		       of SOME (PHRASE_CLASS_MOD(_,_,signat,_)) => SOME signat
 			| SOME _ => error ("find_tyvars_flexes: eq label not bound to structure")
 			| NONE => NONE)
 		end
@@ -170,13 +169,13 @@ structure IlStatic
 					 " not bound"))
 		    val eql = to_eq l
 		in  case Context_Lookup_Labels(ctxt,[eql])
-		      of SOME(_,PHRASE_CLASS_MOD(_,_,signat)) => SOME signat
+		      of SOME(_,PHRASE_CLASS_MOD(_,_,signat,_)) => SOME signat
 		       | SOME _ => error ("find_tyvars_flexes: label " ^ (label2string eql) ^
 					  " not bound to a module")
 		       | NONE => NONE
 		end
 	      | geteqmodsig _ = error "find_tyvars_flexes: expected CON_MODULE_PROJECT or CON_VAR"
-	    fun help in_array_ref argcon = 
+	    fun help in_array_ref argcon =
 		let
 		    fun con_handler (c : con) =
 			(case c of
@@ -234,8 +233,8 @@ structure IlStatic
 	    (!tyvars, !flexes)
 	end
 
-	
-   and unify_maker () = 
+
+   and unify_maker () =
      let
 	 (* Commit establishes the invariant that a tyvar which wants equality is set
 	  * iff its eq_hole is filled.
@@ -243,20 +242,20 @@ structure IlStatic
        datatype undo_info =
 	   UNDO_TYVAR of {saved : (context,con,exp) tyvar, active : (context,con,exp) tyvar}
 	 | UNDO_FLEX of flexinfo ref * stamp
-	   
+
        datatype commit_info =
 	   COMMIT_EQEXP of {hole : exp oneshot,
 			    exp : exp,
 			    tyvar : (context,con,exp) tyvar,
 			    con : con}
 
-       local 
+       local
 	   fun undo_flex (r as (ref (FLEXINFO (_,resolved,rdecs))), stamp) = r := FLEXINFO(stamp,resolved,rdecs)
 	     | undo_flex (ref (INDIRECT_FLEXINFO rf), stamp) = undo_flex (rf,stamp)
-	       
+
 	   fun undo' (UNDO_TYVAR {saved, active}) = tyvar_update(active,saved)
 	     | undo' (UNDO_FLEX arg) = undo_flex arg
-	       
+
 	   fun commit' (COMMIT_EQEXP {hole, exp, tyvar, con}) =
 	       let val _ = debugdo (fn () =>
 				    (print "unification committing to equality function\n";
@@ -265,7 +264,7 @@ structure IlStatic
 				     print "  exp = "; pp_exp exp; print "\n"))
 	       in  oneshot_set(hole, exp)
 	       end
-	       
+
 	   val undo_table = ref ([] : undo_info list)
 	   val commit_table = ref ([] : commit_info list)
        in
@@ -284,13 +283,13 @@ structure IlStatic
 			   commit_table := commit
 		       end
 	       in  restore
-	       end		   
+	       end
        end
-   
+
        fun constrain(bools_tyvars,flexes,
 		     {gen_constrain,eq_constrain,constrain_ctxts,stamp}) =
 	   let
-	       fun do_tyvar (in_ref,tv) = 
+	       fun do_tyvar (in_ref,tv) =
 		   let val saved = tyvar_copy tv
 		       val _ = if gen_constrain then tyvar_constrain tv else ()
 		       val _ = if (eq_constrain andalso not in_ref)
@@ -309,7 +308,7 @@ structure IlStatic
 	       app do_flex flexes
 	   end
 
-       fun set (ctxt,tyvar,c) = 
+       fun set (ctxt,tyvar,c) =
 	   let
 	       (* If tyvar is marked for equality its oneshot will be set UNLESS the equality
 		* compiler fails for c.  In that case, unification fails.  *)
@@ -317,7 +316,7 @@ structure IlStatic
 	       val _ = (case (tyvar_deref tyvar) of
 			    NONE => ()
 			  | (SOME c') => error "cannot set an already set tyvar")
-	       fun follow_tyvar (c as (CON_TYVAR tv)) = 
+	       fun follow_tyvar (c as (CON_TYVAR tv)) =
 		         (case tyvar_deref tv of
 			      NONE => c
 			    | SOME c => follow_tyvar c)
@@ -327,9 +326,9 @@ structure IlStatic
 	       val _ =  if (!showing)
 			    then (print "unification setting ";
 				  print (tyvar2string tyvar); print " == ";
-				  pp_con (CON_TYVAR tyvar); print "\n  to "; 
+				  pp_con (CON_TYVAR tyvar); print "\n  to ";
 				  pp_con c; print "\n";
-				  print "  tyvars are "; 
+				  print "  tyvars are ";
 				  app (fn (_,tv) => (print (tyvar2string tv); print " == ";
 						     pp_con (CON_TYVAR tv); print "   ")) tyvars;
 				  print "\n\n")
@@ -373,9 +372,9 @@ structure IlStatic
 	   end
 
 (*
-       val set = fn (arg as (_,c)) => 
-	   let 
-	       val islong_before = (Stats.fetch_timer_max "Elab-set") > 0.5 
+       val set = fn (arg as (_,c)) =>
+	   let
+	       val islong_before = (Stats.fetch_timer_max "Elab-set") > 0.5
 	       val res = Stats.subtimer("Elab-set",set) arg
                val islong_after = (Stats.fetch_timer_max "Elab-set") > 0.5
 	       val _ = if (not islong_before andalso islong_after)
@@ -389,7 +388,7 @@ structure IlStatic
      end
 
 
-   and meta_eq_con (setter,constrain,is_sub,equations) (con1,con2,ctxt) = 
+   and meta_eq_con (setter,constrain,is_sub,equations) (con1,con2,ctxt) =
        let val self = meta_eq_con (setter, constrain, is_sub, equations)
 	   val _ = if (!showing)
 		       then (print "meta_eq_con called on:-------------\n";
@@ -414,14 +413,14 @@ structure IlStatic
 			NONE => setter(ctxt,tv2,con1)
 		      | SOME c => self (con1,c,ctxt))
 	     | _ =>
-		   let val same = 
+		   let val same =
 		       (case (con1,con2) of
 			    (CON_APP(c1,a1),CON_APP(c2,a2)) =>
 				(self (c2,c1,ctxt)
 				 andalso (andfold (fn (c1,c2) => self (c1,c2,ctxt)) (zip a1 a2)))
 			  | _ => eq_cpath(con1,con2))
 		   in  same orelse
-		       let 			   
+		       let
 			   val (_, con1, path1) = HeadNormalize(con1,ctxt)
 			   val (_, con2, path2) = HeadNormalize(con2,ctxt)
 		       in  (path_match path1 path2) orelse
@@ -432,8 +431,8 @@ structure IlStatic
 
 
    (* ------------ con1 and con2 are head-normalized *)
-   and meta_eq_con_hidden (setter,constrain,is_sub,equations) (con1,con2,ctxt) = 
-     let 
+   and meta_eq_con_hidden (setter,constrain,is_sub,equations) (con1,con2,ctxt) =
+     let
 	   val _ = if (!showing)
 		       then (print "meta_eq_con_hidden called on:-------------\n";
 			     print "con1 = "; pp_con con1; print "\n";
@@ -444,16 +443,16 @@ structure IlStatic
        (* the flex record considered as an entirety is not generalizeable
 	  but its subparts are generalizable *)
        fun dorecord () =
-		let 
-		    fun match rdecs1 rdecs2 = 
-			let fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2) 
+		let
+		    fun match rdecs1 rdecs2 =
+			let fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2)
 			    andalso self(c1,c2,ctxt)
 			in  eq_list(help,rdecs1,rdecs2)
 			end
 		    local
 			fun check_one addflag (l,c) rdecs =
 			    let fun loop [] = if addflag then SOME((l,c)::rdecs) else NONE
-				  | loop ((l',c')::rest) = 
+				  | loop ((l',c')::rest) =
 				    if (eq_label(l,l'))
 					(* do we need to flip arguments for subbing *)
 					then (if (self(c,c',ctxt))
@@ -464,17 +463,17 @@ structure IlStatic
 			    end
 		    in
 			fun union [] rdecs = SOME(sort_labelpair rdecs)
-			  | union (rdec::rest) rdecs = 
+			  | union (rdec::rest) rdecs =
 			    (case (check_one true rdec rdecs) of
 				 NONE => NONE
 			       | SOME x => (union rest x))
 			fun subset ([]) rdecs = true
-			  | subset (rdec::rest) rdecs = 
+			  | subset (rdec::rest) rdecs =
 			    (case (check_one false rdec rdecs) of
 				 NONE => false
 			       | SOME _ => subset rest rdecs)  (* _ should be same as rdecs here *)
 		    end
-		    fun stamp_constrain stamp rdecs = 
+		    fun stamp_constrain stamp rdecs =
 			let val temp = CON_RECORD rdecs
 			    val (tyvars, flexes) = find_tyvars_flexes (temp,ctxt)
 			in  constrain(tyvars,flexes,
@@ -488,7 +487,7 @@ structure IlStatic
 		      | follow c = c
 		in (case (follow con1, follow con2) of
 			(CON_RECORD r1, CON_RECORD r2) => match r1 r2
-		      | (CON_RECORD rdecs, 
+		      | (CON_RECORD rdecs,
 			    CON_FLEXRECORD(r as ref(FLEXINFO(stamp,false,flex_rdecs)))) =>
 			((subset flex_rdecs rdecs) andalso (stamp_constrain stamp rdecs;
 							    r := FLEXINFO(stamp,true,rdecs);
@@ -499,7 +498,7 @@ structure IlStatic
 							    r := FLEXINFO(stamp,true,rdecs);
 							    true))
 		      | (CON_FLEXRECORD(ref1 as (ref (FLEXINFO (stamp1,false,rdecs1)))),
-			 CON_FLEXRECORD(ref2 as (ref (FLEXINFO (stamp2,false,rdecs2))))) => 
+			 CON_FLEXRECORD(ref2 as (ref (FLEXINFO (stamp2,false,rdecs2))))) =>
 			(case (union rdecs1 rdecs2) of
 			     NONE => false
 			   | SOME rdecs => (let val stamp = stamp_join(stamp1,stamp2)
@@ -513,8 +512,8 @@ structure IlStatic
 		       | _ => error "must have a CON_RECORD or CON_FLEXRECORD here")
 		end
        fun domu () =
-	   let fun eq_con2((c1,c2),(c3,c4)) = 
-	       (IlContextEq.eq_con(c1,c3)) andalso (IlContextEq.eq_con(c2,c4))
+	   let fun eq_con2((c1,c2),(c3,c4)) =
+	           (IlEq.eq_con(c1,c3)) andalso (IlEq.eq_con(c2,c4))
 	   in  (member_eq(eq_con2, (con1,con2), equations)) orelse
 	       let val c1 = ConUnroll con1
 		   val c2 = ConUnroll con2
@@ -527,8 +526,8 @@ structure IlStatic
 	    (CON_TYVAR _, _) => self(con1,con2,ctxt)
 	  | (_, CON_TYVAR _) => self(con1,con2,ctxt)
 	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
-	  | (CON_APP(c1_f,c1_args), CON_APP(c2_f,c2_args)) => 
-		self(c2_f,c1_f,ctxt) 
+	  | (CON_APP(c1_f,c1_args), CON_APP(c2_f,c2_args)) =>
+		self(c2_f,c1_f,ctxt)
 		andalso (andfold (fn (c1,c2) => self(c1,c2,ctxt)) (zip c1_args c2_args))
 	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => eq_cpath(con1,con2)
 	  | (CON_INT is1, CON_INT is2) => is1 = is2
@@ -539,8 +538,8 @@ structure IlStatic
 	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,ctxt)
 	  | (CON_REF c1, CON_REF c2) => self(c1,c2,ctxt)
 	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,ctxt)
-	  | (CON_ARROW (c1_a,c1_r,flag1,comp1), CON_ARROW(c2_a,c2_r,flag2,comp2)) => 
-		(flag1 = flag2 
+	  | (CON_ARROW (c1_a,c1_r,flag1,comp1), CON_ARROW(c2_a,c2_r,flag2,comp2)) =>
+		(flag1 = flag2
 		 andalso eq_comp(comp1,comp2,is_sub)
 		 andalso (length c1_a = length c2_a andalso
 			  Listops.andfold (fn (c2,c1) => self (c2,c1,ctxt)) (zip c1_a c2_a))
@@ -549,7 +548,7 @@ structure IlStatic
 	  | (CON_RECORD _, CON_FLEXRECORD _) => dorecord()
 	  | (CON_FLEXRECORD _, CON_RECORD _) => dorecord()
 	  | (CON_FLEXRECORD _, CON_FLEXRECORD _) => dorecord()
-	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) => 
+	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) =>
 		(length vs1 = length vs2) andalso
 		let fun folder ((v1,v2),(ctxt,subst)) = (add_context_con'(ctxt,v1,KIND, NONE),
 							 subst_add_convar(subst,v2,CON_VAR v1))
@@ -564,7 +563,7 @@ structure IlStatic
 		    val (ctxt',subst) = foldl folder (ctxt,empty_subst) (zip tyvars tyvars')
 		    val c1'' = con_subst(c1',subst)
 		    val c2'' = con_subst(c2',subst)
-		in 
+		in
 		    self(c1,c1'',ctxt') andalso self(c2,c2'',ctxt')
 		end
 	  | (CON_SUM {names=n1,noncarriers=nc1,carrier=c1,special=i1},
@@ -574,27 +573,27 @@ structure IlStatic
 		              (nc1=nc2) andalso self(c1,c2,ctxt)
 		in  res
 		end
-	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
+	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) =>
 		eq_list (fn (a,b) => self(a,b,ctxt), cs1, cs2)
 
 	  (* projection from a mu type *)
-	  | (CON_TUPLE_PROJECT (i1, CON_MU c1), 
-	     CON_TUPLE_PROJECT (i2, CON_MU c2)) => 
+	  | (CON_TUPLE_PROJECT (i1, CON_MU c1),
+	     CON_TUPLE_PROJECT (i2, CON_MU c2)) =>
 		(i1 = i2 andalso self(c1,c2,ctxt)) orelse domu()
 	  | (CON_TUPLE_PROJECT (_, CON_MU _), CON_MU _) => domu()
 	  | (CON_MU _, CON_TUPLE_PROJECT (_, CON_MU _)) => domu()
-	  | (CON_MU (c1 as (CON_FUN ([_], _))), CON_MU c2) => 
+	  | (CON_MU (c1 as (CON_FUN ([_], _))), CON_MU c2) =>
 		self(c1,c2,ctxt) orelse domu()
 
-	  | (CON_MU c1, CON_MU c2) => self(c1,c2,ctxt) 
-	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
+	  | (CON_MU c1, CON_MU c2) => self(c1,c2,ctxt)
+	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) =>
 		(i1 = i2) andalso (self(c1,c2,ctxt))
 	  | _ => false)
 
      end
 
-   and eq_con (ctxt, con1, con2) = 
-       let val _ = if (!showing) 
+   and eq_con (ctxt, con1, con2) =
+       let val _ = if (!showing)
 		       then print "eq_con calling meta_eq_con\n"
 		   else ()
 	   val (setter,constrain,undo,commit) = unify_maker()
@@ -604,8 +603,8 @@ structure IlStatic
        in  is_eq
        end
 
-   and sub_con (arg as (ctxt, con1, con2)) = 
-       let val _ = if (!showing) 
+   and sub_con (arg as (ctxt, con1, con2)) =
+       let val _ = if (!showing)
 		       then print "sub_con calling meta_eq_con\n"
 		   else ()
 	   val (setter,constrain,undo,commit) = unify_maker()
@@ -615,8 +614,8 @@ structure IlStatic
        in  is_sub
        end
 
-   and soft_eq_con (ctxt,con1,con2) = 
-       let val _ = if (!showing) 
+   and soft_eq_con (ctxt,con1,con2) =
+       let val _ = if (!showing)
 		       then print "soft_eq_con calling meta_eq_con\n"
 		   else ()
 	   val (setter,constrain,undo,commit) = unify_maker()
@@ -625,8 +624,8 @@ structure IlStatic
        in  is_eq
        end
 
-   and semi_sub_con (ctxt,con1,con2) = 
-       let val _ = if (!showing) 
+   and semi_sub_con (ctxt,con1,con2) =
+       let val _ = if (!showing)
 		       then print "semi_soft_con calling meta_eq_con\n"
 		   else ()
 	   val (setter,constrain,undo,commit) = unify_maker()
@@ -644,7 +643,7 @@ structure IlStatic
 			  val _ = debugdo (fn () =>
 					   (print "exp_isvaluable: app case: e1_con is: \n";
 					    Ppil.pp_con e1_con; print "\n"))
-			  val e1_con_istotal = 
+			  val e1_con_istotal =
 			      (case e1_con of
 				   CON_ARROW(_,_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
 				 | _ => false)
@@ -654,17 +653,17 @@ structure IlStatic
 			  val _ = debugdo (fn () =>
 					   (print "exp_isvaluable: app case: e1_con is: \n";
 					    Ppil.pp_con e1_con; print "\n"))
-			  val e1_con_istotal = 
+			  val e1_con_istotal =
 			      (case e1_con of
 				   CON_ARROW(_,_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
 				 | _ => false)
 		      in va1 andalso e1_con_istotal
 			  andalso (Listops.andfold (fn e2 => Exp_IsValuable (ctxt,e2)) es2)
 		      end
-     | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
+     | RECORD rbnds => foldr (fn (a,b) => a andalso b) true
                        (map (fn (_,e) => Exp_IsValuable(ctxt,e)) rbnds)
      | RECORD_PROJECT(e,_,_) => Exp_IsValuable(ctxt,e)
-     | LET (bnds,e) => (case (Bnds_IsValuable' bnds ctxt) of 
+     | LET (bnds,e) => (case (Bnds_IsValuable' bnds ctxt) of
 			  NONE => false
 			| SOME ctxt' => Exp_IsValuable(ctxt',e))
      | COERCE(coercion,cons,e) => Exp_IsValuable(ctxt,coercion) andalso Exp_IsValuable(ctxt,e)
@@ -680,7 +679,7 @@ structure IlStatic
 
    (* Rules 140 - 143 *)
    and Bnds_IsValuable' [] ctxt = SOME ctxt
-     | Bnds_IsValuable' (bnd::rest) ctxt = 
+     | Bnds_IsValuable' (bnd::rest) ctxt =
        let val self = Bnds_IsValuable' rest
        in  (case bnd of
 		BND_EXP (v,e) => if (Exp_IsValuable(ctxt,e))
@@ -697,7 +696,7 @@ structure IlStatic
 					NONE => false
 				      | SOME decs => true)
    and Sbnds_IsValuable sbnds ctxt = Bnds_IsValuable (map (fn (SBND(_,b)) => b) sbnds) ctxt
-     
+
    (* Rules 144 - 147 *)
    and Module_IsValuable m ctxt =
      (Module_IsSyntacticValue m) orelse
@@ -716,12 +715,12 @@ structure IlStatic
 			    | _ => false
 			  end
      | _ => false)
-	
+
    and GetSconCon(ctxt,scon) : con = IlPrimUtil.value_type (fn e => #2(GetExpCon(e,ctxt))) scon
 
 
   (* Rules 35 - 48 *)
-   and GetConKind (arg : con, ctxt : context) : kind = 
+   and GetConKind (arg : con, ctxt : context) : kind =
      let fun msg() = (print "GetConKind called with con = \n";
 			 pp_con arg; print "\n")
 	val _ = debugdo msg
@@ -729,10 +728,10 @@ structure IlStatic
 	  handle e => (if !trace then msg() else (); raise e)
      end
 
-   and GetConKind' (con : con, ctxt : context) : kind = 
+   and GetConKind' (con : con, ctxt : context) : kind =
       (case con of
        (CON_TYVAR tv) => KIND
-     | (CON_VAR v) => 
+     | (CON_VAR v) =>
 	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
@@ -748,7 +747,7 @@ structure IlStatic
      | (CON_TAG _) => KIND
      | (CON_ARROW _) => KIND
      | (CON_COERCION _) => KIND             (* XXX Is this correct? XXX *)
-     | (CON_APP (c1,cargs)) => 
+     | (CON_APP (c1,cargs)) =>
 	   let val k1 = GetConKind(c1,ctxt)
 	       val kargs = map (fn c => GetConKind(c,ctxt)) cargs
 	       val b = length kargs
@@ -767,7 +766,7 @@ structure IlStatic
 		       else (debugdo (fn () =>
 				      (print "GetConKind: kind mismatch in "; pp_con con;
 				       print "\nDomain arity = "; print (Int.toString a);
-				       print "\nNumber of arguments = "; 
+				       print "\nNumber of arguments = ";
 				       print (Int.toString b); print "\n"));
 			     error "GetConKind: kind mismatch in CON_APP")
 		 | _ => (debugdo (fn () =>
@@ -780,7 +779,7 @@ structure IlStatic
 		      | _ => error "kind of CON_MU argument not KIND_ARROW")
      | (CON_FLEXRECORD _) => KIND
      | (CON_RECORD _) => KIND
-     | (CON_FUN (vs,c)) => 
+     | (CON_FUN (vs,c)) =>
 	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND,NONE)
 	       val ctxt' = foldl folder ctxt vs
 	       val kbody = GetConKind(c,ctxt')
@@ -820,11 +819,11 @@ structure IlStatic
 
 
    (* --------- Rules 69 to 96 ----------- *)
-   and GetExpCon (exparg,ctxt) : bool * con = 
+   and GetExpCon (exparg,ctxt) : bool * con =
      let fun msg() = (print "GetExpCon called with exp = \n";
 		      pp_exp exparg; print "\n")
 	val _ = debugdo msg
-     in GetExpCon'(exparg,ctxt) 
+     in GetExpCon'(exparg,ctxt)
 	  handle e => (if !trace then msg() else (); raise e)
      end
 
@@ -833,8 +832,8 @@ structure IlStatic
 		    | CON_ARROW(cons,rescon,b,a) => CON_ARROW([con_tuple cons],rescon,b,a)
 		    | _ => c)
 
-   and GetExpAppCon' (exparg,ctxt) : bool * con = 
-	   let val ((va1,con1),es2) = 
+   and GetExpAppCon' (exparg,ctxt) : bool * con =
+	   let val ((va1,con1),es2) =
 	       (case exparg of
 		    APP(e1,e2) => (GetExpCon(e1,ctxt),[e2])
 		  | EXTERN_APP(_,e1,es2) => (GetExpCon(e1,ctxt),es2)
@@ -846,12 +845,12 @@ structure IlStatic
 	       val va2 = Listops.andfold #1 vacon2
 	       val cons2 = map #2 vacon2
 	       val res_con = fresh_con ctxt
-	       val (guesscon,arrow) = 
+	       val (guesscon,arrow) =
 		   (case con1 of
-			CON_ARROW(_,_,closed,arrow) => 
+			CON_ARROW(_,_,closed,arrow) =>
 			    (CON_ARROW(cons2,res_con,closed,arrow),arrow)
 		      | _ => (CON_ARROW (cons2,res_con,false,oneshot()), oneshot()))
-	       val is_sub = sub_con(ctxt,guesscon,con1) 
+	       val is_sub = sub_con(ctxt,guesscon,con1)
 	       val total = (case oneshot_deref arrow of
 				NONE => false
 			      | SOME PARTIAL => false
@@ -869,7 +868,7 @@ structure IlStatic
 		     error "Type mismatch in expression application")
 	   end
 
-   and GetExpRollCon' (ctxt,isroll,e,c) : bool * con = 
+   and GetExpRollCon' (ctxt,isroll,e,c) : bool * con =
        let val (_,cNorm,_) = HeadNormalize(c,ctxt)
 	   val (va,econ) = GetExpCon(e,ctxt)
 	   val error = fn str => (debugdo (fn () =>
@@ -877,7 +876,7 @@ structure IlStatic
 					    Ppil.pp_exp e;
 					    print "\n"));
 				  error str)
-	   val (i,cInner) = 
+	   val (i,cInner) =
 	       (case cNorm of
 		    CON_TUPLE_PROJECT(i,CON_MU cInner) => (i, cInner)
 		  | _ => (debugdo (fn () =>
@@ -890,8 +889,8 @@ structure IlStatic
 	   (case GetConKind(cInner,ctxt) of
 		KIND_ARROW(n,KIND_TUPLE n') =>
 		    (if ((n = n') andalso (0 <= i) andalso (i < n))
-			 then 
-			     let 
+			 then
+			     let
 				 fun mapper j = CON_TUPLE_PROJECT(j,CON_MU cInner)
 				 val cUnroll = CON_TUPLE_PROJECT(i,CON_APP(cInner, map0count mapper n))
 				 val (_,cUnroll,_) = HeadNormalize(cUnroll,ctxt)
@@ -905,7 +904,7 @@ structure IlStatic
 							(Ppil.pp_con econ; print "\n";
 							 Ppil.pp_con cUnroll; print "\n"));
 					       error "ROLL: expression type does not match decoration"))
-				 else 
+				 else
 				     (if (eq_con(ctxt,econ,cNorm))
 					  then cUnroll
 				      else (debugdo (fn () =>
@@ -918,7 +917,7 @@ structure IlStatic
 	      | _ => error "projected decoration has the wrong kind"))
        end
 
-   and GetExpCon' (exparg,ctxt) : bool * con = 
+   and GetExpCon' (exparg,ctxt) : bool * con =
        (case exparg of
        SCON scon => (true,GetSconCon(ctxt,scon))
      | OVEREXP (con,va,eone) => (case oneshot_deref eone of
@@ -929,6 +928,7 @@ structure IlStatic
      | ETAILPRIM (ip,cs) => (true, etaize(IlPrimUtil.get_iltype' ctxt ip cs))
      | VAR v => (case Context_Lookup_Var(ctxt,v) of
 		     SOME(_,PHRASE_CLASS_EXP(_,c,_,_)) => (true,c)
+		   | SOME(_,PHRASE_CLASS_EXT(_,_,c)) => (true,c)
 		   | SOME _ => let val str = Name.var2string v
 			       in  error ("VAR " ^ str ^ " looked up to a non-value")
 			       end
@@ -942,7 +942,7 @@ structure IlStatic
 	       val res_type = (case fbnds of
 				   [fbnd] => get_arm_type fbnd
 				 | _ => con_tuple(map get_arm_type fbnds))
-	       fun folder (FBND(v',v,c,c',e), ctxt) = 
+	       fun folder (FBND(v',v,c,c',e), ctxt) =
 		   add_context_exp'(ctxt,v',CON_ARROW([c],c',false,oneshot_init PARTIAL))
 	       val full_ctxt = foldl folder ctxt fbnds
 	       fun ttest lctxt (FBND(v',v,c,c',e)) =
@@ -977,7 +977,7 @@ structure IlStatic
 					 pp_exp exparg; print "\n"));
 			       error "could not type-check TOTALFIX expression"))
 	   end
-     | (RECORD (rbnds)) => 
+     | (RECORD (rbnds)) =>
 	   let fun help (l,e) = let val (va,c) = GetExpCon(e,ctxt)
 				in (va,(l,c))
 				end
@@ -986,8 +986,8 @@ structure IlStatic
 	       val rdecs = sort_labelpair(map #2 temp)
 	   in (va, CON_RECORD rdecs)
 	   end
-     | (RECORD_PROJECT (exp,l,c)) => 
-	   let 
+     | (RECORD_PROJECT (exp,l,c)) =>
+	   let
 	       val (va,con) = GetExpCon(exp,ctxt)
 	       val con' = #2(HeadNormalize(con,ctxt))
 	       fun RdecLookup (label,[]) = (debugdo (fn () =>
@@ -1009,8 +1009,8 @@ structure IlStatic
 	   end
      | (SUM_TAIL (_,c,e)) =>
 	   (case c
-	      of CON_SUM{names,noncarriers,carrier,special=SOME i} => 
-		  if (i<noncarriers) 
+	      of CON_SUM{names,noncarriers,carrier,special=SOME i} =>
+		  if (i<noncarriers)
 		      then error "SUM_TAIL projecting noncarrier"
 		  else
 		      let val (va,con) = GetExpCon(e,ctxt)
@@ -1028,7 +1028,7 @@ structure IlStatic
 			       (print "SUM_TAIL: adornment not a special sum\n";
 				print "adornment type: "; pp_con c; print "\n"));
 		       error "SUM_TAIL: adornment not a special sum"))
-     | (HANDLE (con,body,handler)) => 
+     | (HANDLE (con,body,handler)) =>
 	   let val (_,bcon) = GetExpCon(body,ctxt)
 	       val (_,hcon) = GetExpCon(handler,ctxt)
 	       val con' = CON_ARROW ([CON_ANY],con,false,oneshot())
@@ -1036,15 +1036,15 @@ structure IlStatic
 		   then (false,con)
 	       else error "Type mismatch between handler and body of HANDLE"
 	   end
-     | (RAISE (c,e)) => 
+     | (RAISE (c,e)) =>
 	   let val (_,econ) = GetExpCon(e,ctxt)
-	       val _ = (GetConKind(c,ctxt) 
+	       val _ = (GetConKind(c,ctxt)
 		   handle _ => error "RAISE: con decoration ill-formed")
 	   in (case econ of
 		   CON_ANY => (false,c)
 		 | _ => error "type of expression raised is not ANY")
 	   end
-     | (LET (bnds,e)) => 
+     | (LET (bnds,e)) =>
 	   let fun sfolder (bnd,subst) = (case bnd
 					    of BND_EXP _ => subst
 					     | BND_CON (v,c) => subst_add_convar(subst,v,c)
@@ -1059,15 +1059,15 @@ structure IlStatic
 	   end
      | (NEW_STAMP con) => ((GetConKind(con,ctxt); (true,CON_TAG con))
 			   handle _ => error "NEW_STAMP: type is ill-formed")
-     | (EXN_INJECT (_,e1,e2)) => 
-	   let 
+     | (EXN_INJECT (_,e1,e2)) =>
+	   let
 	       val (va1,c1) = GetExpCon(e1,ctxt)
 	       val (va2,c2) = GetExpCon(e2,ctxt)
 	   in if (eq_con(ctxt,c1,CON_TAG c2))
 		  then (va1 andalso va2, CON_ANY)
 	      else error "EXN_INJECT tag type and value: type mismatch"
 	   end
-     | COERCE(coercion,cons,e) => 
+     | COERCE(coercion,cons,e) =>
 	   let
 	       val (va1,ctyp) = GetExpCon(coercion,ctxt)
 	       val (tyvars,c1,c2) = (case ctyp of CON_COERCION info => info
@@ -1105,25 +1105,25 @@ structure IlStatic
      | UNROLL(c,_,e) => GetExpRollCon'(ctxt,false,e,c)
      | (INJ {sumtype,field,inject}) =>
 	   let val (_,sumtype,_) = HeadNormalize(sumtype,ctxt)
-	       val {names,carrier,noncarriers,...} = 
+	       val {names,carrier,noncarriers,...} =
 		   (case sumtype of
 			CON_SUM info => info
 		      | _ => error "INJ's decoration not reducible to a sumtype")
-	   in  
+	   in
 	       (case (field<noncarriers,inject) of
-		    (true,NONE) => 
+		    (true,NONE) =>
 			(true,CON_SUM{names=names,
 				      noncarriers=noncarriers,
 				      carrier=carrier,
 				      special=NONE})
 		  | (false, NONE) => error "INJ: bad injection"
-		  | (true,SOME e) => error "INJ: bad injection" 
-		  | (false, SOME e) => 
+		  | (true,SOME e) => error "INJ: bad injection"
+		  | (false, SOME e) =>
 		      let val (va,econ) = GetExpCon(e,ctxt)
 			  val (_,carrier,_) = HeadNormalize(carrier,ctxt)
 			  val i = field - noncarriers (* i >= 0 *)
-			  val (n,fieldcon_opt) = 
-			      (case carrier of 
+			  val (n,fieldcon_opt) =
+			      (case carrier of
 				   CON_TUPLE_INJECT [] => (0,NONE)
 				 | CON_TUPLE_INJECT clist => (length clist, SOME(List.nth(clist,i)))
 				 | _ => (1,SOME carrier))
@@ -1146,12 +1146,12 @@ structure IlStatic
 		      end)
 	   end
      | (EXN_CASE {arg,arms,default,tipe}) =>
-	   let 
+	   let
 	       val (_,argcon) = GetExpCon(arg,ctxt)
 	       val _ = if (eq_con(ctxt,argcon,CON_ANY))
-			   then () 
+			   then ()
 		       else error "arg not a CON_ANY in EXN_CASE"
-	       fun checkarm(e1,c,e2) = 
+	       fun checkarm(e1,c,e2) =
 		   let val (_,c1) = GetExpCon(e1,ctxt)
 		       val (_,c2) = GetExpCon(e2,ctxt)
 		   in if ((eq_con(ctxt,c1,CON_TAG c))
@@ -1160,8 +1160,8 @@ structure IlStatic
 		      else error "rescon does not match in EXN_CASE"
 		   end
 	       val _ = app checkarm arms
-	       val _ = 
-		   (case default of 
+	       val _ =
+		   (case default of
 			NONE => ()
 		      | (SOME e) =>
 			    let val (_,optcon) = GetExpCon(e,ctxt)
@@ -1177,12 +1177,12 @@ structure IlStatic
 			    end)
 	   in (false, tipe)
 	   end
-     | (CASE {sumtype,arg,bound,arms,tipe,default}) => 
-	   let 
+     | (CASE {sumtype,arg,bound,arms,tipe,default}) =>
+	   let
 	       val sumtype = (case sumtype of
 				  CON_SUM _ => sumtype
 				| _ => #2(HeadNormalize(sumtype,ctxt)))
-	       val {names,carrier,noncarriers,special=_} = 
+	       val {names,carrier,noncarriers,special=_} =
 		   (case sumtype of
 			CON_SUM info => info
 		      | _ => (debugdo (fn () =>
@@ -1196,17 +1196,17 @@ structure IlStatic
 				     special = NONE,
 				     carrier = carrier,
 				     noncarriers = noncarriers}
-	       fun loop _ va [] =  
-		   (case default of 
+	       fun loop _ va [] =
+		   (case default of
 			NONE => (va, tipe)
-		      | SOME edef => 
+		      | SOME edef =>
 			    let val (va',defcon) = GetExpCon(edef,ctxt)
 			    in  if (sub_con(ctxt,defcon,tipe))
 				    then (va andalso va', tipe)
 				else error "default arm type mismatch"
 			    end)
 		 | loop n va (NONE::rest) = loop (n+1) va rest
-		 | loop n va ((SOME exp)::rest) = 
+		 | loop n va ((SOME exp)::rest) =
 			let val ctxt =  if (n < noncarriers) then ctxt
 					else add_context_exp'(ctxt,bound,CON_SUM{names = names,
 										 special = SOME n,
@@ -1214,7 +1214,7 @@ structure IlStatic
 										 noncarriers = noncarriers})
 			    val (va',c) = GetExpCon(exp,ctxt)
 			    val va = va andalso va'
-			in  
+			in
 			    if (sub_con(ctxt,c,tipe))
 				then loop (n+1) va rest
 			    else (debugdo (fn () =>
@@ -1227,7 +1227,7 @@ structure IlStatic
 			end
 	   in if (eq_con(ctxt,eargCon,sumcon))
 		  then (loop 0 va arms)
-	      else 
+	      else
 		  (debugdo (fn () =>
 			    (print "CASE: expression's type and decoration type are unequal\n";
 			     print "  eargCon = "; pp_con eargCon; print "\n";
@@ -1235,7 +1235,7 @@ structure IlStatic
 			     print "  CASE exp = "; pp_exp exparg; print "\n"));
 		   error "CASE: expression type and decoration type are unequal")
 	   end
-     | (MODULE_PROJECT(m,l)) => 
+     | (MODULE_PROJECT(m,l)) =>
 	   let val (va,signat) = GetModSig(m,ctxt)
 	       val c = (case Signat_Project (ctxt,m,signat,l)
 			  of (SOME (PHRASE_CLASS_EXP(_,c,_,_))) => c
@@ -1262,7 +1262,7 @@ structure IlStatic
      | GetBndDec (ctxt,BND_CON (v,c))  = (true,DEC_CON(v,GetConKind(c,ctxt),SOME c,false))
    and GetBndsDecs (ctxt,bnds) = GetBndsDecs'(ctxt,bnds,[])
    and GetBndsDecs' (ctxt,[],acc) = rev acc
-     | GetBndsDecs' (ctxt,bnd::rest,acc) = 
+     | GetBndsDecs' (ctxt,bnd::rest,acc) =
        let val (va,d) = GetBndDec(ctxt,bnd)
 	   val ctxt' = add_context_dec(ctxt,d)
        in GetBndsDecs' (ctxt',rest, (va,d)::acc)
@@ -1272,7 +1272,7 @@ structure IlStatic
 					  end
 
    and GetSbndsSdecs (ctxt, []) = []
-     | GetSbndsSdecs (ctxt, (sbnd as (SBND(l,bnd))) :: rest) = 
+     | GetSbndsSdecs (ctxt, (sbnd as (SBND(l,bnd))) :: rest) =
        let val (va,dec) = GetBndDec(ctxt,bnd)
 	   val sdec = SDEC(l,dec)
 	   val ctxt' = add_context_dec(ctxt, dec)
@@ -1295,15 +1295,15 @@ structure IlStatic
 
    and GetModSig' (module, ctxt : context) : bool * signat =
      (case module of
-       (MOD_VAR v) => 
+       (MOD_VAR v) =>
 	   (case Context_Lookup_Var(ctxt,v) of
-		SOME(_,PHRASE_CLASS_MOD(_,_,s)) => (true,s)
+		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => (true,s)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
 	      | NONE => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound"))
-     | MOD_STRUCTURE (sbnds) => 
+     | MOD_STRUCTURE (sbnds) =>
 	   let fun loop va [] acc ctxt = (va,rev acc)
-		 | loop va (sb::sbs) acc ctxt = 
-		   let 
+		 | loop va (sb::sbs) acc ctxt =
+		   let
 		       val (lva,sdec) = GetSbndSdec(ctxt,sb)
 		       val SDEC(_,dec) = sdec
 		   in loop (va andalso lva) sbs (sdec::acc) (add_context_dec(ctxt,dec))
@@ -1312,18 +1312,18 @@ structure IlStatic
 	       val res = SIGNAT_STRUCTURE sdecs
 	   in (va,res)
 	   end
-     | MOD_FUNCTOR (a,v,s,m,s2) => 
+     | MOD_FUNCTOR (a,v,s,m,s2) =>
 	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,false,s))
 	       val (va,signat) = GetModSig(m,ctxt')
-	       val a = 
+	       val a =
 		case a of
-		 TOTAL => if va then TOTAL 
+		 TOTAL => if va then TOTAL
 			else error "TOTAL annotation on non-valuable functor"
 		| PARTIAL => a
 	       (* check equivalence of s2 and signat *)
 	   in  (true,SIGNAT_FUNCTOR(v,s,s2,a))
 	   end
-     | MOD_APP (a,b) => 
+     | MOD_APP (a,b) =>
 	   let val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig\n";
 					  print "a is\n"; pp_mod a; print "\n";
 					  print "b is\n"; pp_mod b; print "\n"))
@@ -1337,22 +1337,22 @@ structure IlStatic
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
 		       then (vaa andalso vab andalso (ar = TOTAL),
 			     sig_subst_modvar(dsignat,[(v,b)]))
-			    else error ("Module Application where" ^ 
+			    else error ("Module Application where" ^
 					" argument and parameter signature mismatch")
 	     | SIGNAT_STRUCTURE _ => error "Can't apply a structure"
 	     | _ => error "signat_var or signat_of is not reduced"
 	   end
-     | MOD_LET (v,m1,m2) => 
+     | MOD_LET (v,m1,m2) =>
 	   let val (va1,s1) = GetModSig(m1,ctxt)
 	       val ctxt' = add_context_mod'(ctxt,v,s1)
 	       val (va2,s2) = GetModSig(m2,ctxt')
 	   in (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
 	   end
-     | MOD_PROJECT (m,l) => 
-	   let 
+     | MOD_PROJECT (m,l) =>
+	   let
 	       val (va,signat) = GetModSig(m,ctxt)
 	       val s = (case Signat_Project (ctxt,m,signat,l)
-			  of (SOME (PHRASE_CLASS_MOD(_,_,s))) => s
+			  of (SOME (PHRASE_CLASS_MOD(_,_,s,_))) => s
 			   | pcopt => error "MOD_PROJECT lookup failed")
 	   in  if va then (va,s)
 	       else error "trying to obtain signature of invaluable projection"
@@ -1363,7 +1363,7 @@ structure IlStatic
 			 in (va,s)
 			 end)
 
-    and Normalize (con,ctxt) : (bool * con) = 
+    and Normalize (con,ctxt) : (bool * con) =
 	let fun msg() = (print "Normalize called with con =\n";
 			 pp_con con; print "\n")
 	    val _ = debugdo msg
@@ -1386,7 +1386,7 @@ structure IlStatic
 	end
 
 
-    and HeadNormalize (con,ctxt) : (bool * con * path list) = 
+    and HeadNormalize (con,ctxt) : (bool * con * path list) =
 	let fun msg() = (print "HeadNormalize called with con =\n";
 			 pp_con con; print "\n")
 	    val _ = debugdo msg
@@ -1396,8 +1396,8 @@ structure IlStatic
 	  handle e => (if !trace then msg() else (); raise e)
 	end
 
-    
-    and Reduce how (argcon,ctxt) : (con * path list) option = 
+
+    and Reduce how (argcon,ctxt) : (con * path list) option =
        let
 	    fun msg() = (print "Reduce called with argcon =\n";
 			 pp_con argcon; print "\n")
@@ -1410,7 +1410,7 @@ structure IlStatic
 		(case Reduce how (c,ctxt) of
 		     NONE => SOME(c, [p])
 		   | SOME(c,paths) => SOME(c, p :: paths))
-	    fun helplist constr clist = 
+	    fun helplist constr clist =
 	      (case how of
 		   HEAD => NONE
 		 | _ => let fun folder (c,change) =
@@ -1441,11 +1441,11 @@ structure IlStatic
 					     special=special}
 		  in  help constr carrier
 		  end
-	    | CON_COERCION ([],c1,c2) => 
+	    | CON_COERCION ([],c1,c2) =>
 		  let fun constr [c1,c2] = CON_COERCION([],c1,c2)
 		  in helplist constr [c1,c2]
 		  end
-	    | CON_COERCION (tyvars,c1,c2) => 
+	    | CON_COERCION (tyvars,c1,c2) =>
 		  let fun folder (v,ctxt) = add_context_con'(ctxt,v,KIND,NONE)
 		      val ctxt' = foldl folder ctxt tyvars
 		  in (case Reduce how (CON_COERCION([],c1,c2),ctxt') of
@@ -1458,20 +1458,20 @@ structure IlStatic
 			| constr (cres :: cargs) = CON_ARROW(cargs, cres, closed, comp)
 		  in  helplist constr (cres :: cargs)
 		  end
-	    | CON_RECORD rdecs => 
+	    | CON_RECORD rdecs =>
 		  let val (labs,cons) = Listops.unzip rdecs
 		      fun constr cons = CON_RECORD(Listops.zip labs cons)
 		  in  helplist constr cons
 		  end
 	    | CON_TUPLE_INJECT cons => helplist CON_TUPLE_INJECT cons
 
-	    | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf)) => 
+	    | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf)) =>
 		  ReduceAgain (CON_FLEXRECORD rf)
-	    | CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs))) => 
+	    | CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs))) =>
 		  let val (labs,cons) = Listops.unzip rdecs
-		      fun constr cons = 
+		      fun constr cons =
 			  let val rdecs = Listops.zip labs cons
-			      val _ = r := FLEXINFO(stamp,flag,rdecs) 
+			      val _ = r := FLEXINFO(stamp,flag,rdecs)
 			  in  CON_FLEXRECORD r
 			  end
 		  in  helplist constr cons
@@ -1480,15 +1480,15 @@ structure IlStatic
 	    | CON_TYVAR tv => (case tyvar_deref tv of
 				    NONE => NONE
 				  | SOME c => ReduceAgain c)
-	    | CON_VAR v => 
+	    | CON_VAR v =>
 		   (case (Context_Lookup_Var(ctxt,v)) of
-			SOME(_,PHRASE_CLASS_CON (_,_,SOME c,_)) => 
+			SOME(_,PHRASE_CLASS_CON (_,_,SOME c,_)) =>
 			    ReduceAgainWith(c,PATH(v,[]))
 		      | SOME(_,PHRASE_CLASS_CON (_,_,NONE,_)) => NONE
 		      | SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
 		      | NONE => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound"))
-	    | CON_TUPLE_PROJECT (i,c) => 
-		  let fun reducible cons = 
+	    | CON_TUPLE_PROJECT (i,c) =>
+		  let fun reducible cons =
 		      let val len = length cons
 			  val _ = if (i >= 0 andalso i < len)
 				      then ()
@@ -1515,7 +1515,7 @@ structure IlStatic
 		end
 	    | CON_FUN(formals,_) => NONE
 	    | CON_APP(f as CON_FUN(vars,body),args) => ReduceAgain(ConApply(false,f,args))
-	    | CON_APP(c1,cargs) => 
+	    | CON_APP(c1,cargs) =>
 		  let val c1' = Reduce how (c1,ctxt)
 		      fun folder(carg,reduced) = (case Reduce how (carg,ctxt) of
 						      NONE => (carg, reduced)
@@ -1532,7 +1532,7 @@ structure IlStatic
 		(let
 		   val (va,s) = GetModSig(m,ctxt)
 		   val cOpt = (case Signat_Project (ctxt,m,s,l)
-				 of SOME(PHRASE_CLASS_CON(_,_,cOpt,_)) => cOpt
+				 of SOME(PHRASE_CLASS_CON(c,_,cOpt,_)) => cOpt
 				  | _ => error "CON_MODULE_PROJECT lookup failed")
 		   val reducedOpt =
 		       Option.mapPartial
@@ -1548,7 +1548,7 @@ structure IlStatic
 		      if va then (c,[])
 		      else error "reduced invaluable con projection") reducedOpt
 		 end))
-       end	
+       end
 
      and Kind_Valid (KIND,_) = true
        | Kind_Valid (KIND_TUPLE n,_)     = n >= 0
@@ -1557,14 +1557,14 @@ structure IlStatic
      and Context_Valid ctxt = raise Util.UNIMP
 
      and Decs_Valid (ctxt,[]) = true
-       | Decs_Valid (ctxt,a::rest) = (Dec_Valid(ctxt,a) andalso 
+       | Decs_Valid (ctxt,a::rest) = (Dec_Valid(ctxt,a) andalso
 				      Decs_Valid(add_context_dec(ctxt,a),rest))
 
-     and Dec_Valid (ctxt : context, dec) = 
+     and Dec_Valid (ctxt : context, dec) =
 	 let fun var_notin v  = not (isSome (Context_Lookup_Var_Raw(ctxt,v)))
        in  (case dec of
-	      DEC_EXP(v,c,eopt,_) => 
-		  (var_notin v) andalso 
+	      DEC_EXP(v,c,eopt,_) =>
+		  (var_notin v) andalso
 		  (case GetConKind(c,ctxt) of
 		       KIND => true
 		     | _ => false) andalso
@@ -1572,42 +1572,46 @@ structure IlStatic
 		       SOME e => eq_con(ctxt,c,#2 (GetExpCon(e,ctxt)))
 		     | NONE => true)
 	    | DEC_CON (v,k,NONE, _) => (var_notin v) andalso (Kind_Valid(k,ctxt))
-	    | DEC_CON (v,k,SOME c, _) => (var_notin v) andalso (Kind_Valid(k,ctxt)) 
+	    | DEC_CON (v,k,SOME c, _) => (var_notin v) andalso (Kind_Valid(k,ctxt))
 		       andalso (GetConKind(c,ctxt); true)
 	    | DEC_MOD(v,_,s) => (var_notin v) andalso (Sig_Valid(ctxt,s)))
        end
-				
+
 
      and Sdecs_Domain sdecs = map (fn SDEC(l,_) => l) sdecs
      and Sdecs_Valid (ctxt, []) = Context_Valid ctxt
-       | Sdecs_Valid (ctxt, (SDEC(label,dec)::rest)) = 
-	 (Dec_Valid(ctxt,dec) andalso 
-	  Sdecs_Valid(add_context_dec(ctxt,dec),rest) andalso 
+       | Sdecs_Valid (ctxt, (SDEC(label,dec)::rest)) =
+	 (Dec_Valid(ctxt,dec) andalso
+	  Sdecs_Valid(add_context_dec(ctxt,dec),rest) andalso
 	  (not (List.exists (fn l => eq_label(label,l))
 		(Sdecs_Domain rest))))
 
      and Sig_Valid (ctxt : context, SIGNAT_STRUCTURE sdecs) = Sdecs_Valid(ctxt,sdecs)
-       | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) = 
-	 (Sig_Valid(ctxt,s_arg) andalso 
+       | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,arrow)) =
+	 (Sig_Valid(ctxt,s_arg) andalso
 	  Sig_Valid(add_context_mod'(ctxt,v,s_arg),s_res))
        | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
-       | Sig_Valid (ctxt : context, SIGNAT_OF p) = ((GetModSig(path2mod p,ctxt); true) handle _ => false)
+       | Sig_Valid (ctxt : context, SIGNAT_OF p) =
+	    ((UtilError.dontShow GetModSig (path2mod p,ctxt); true)
+	     handle _ => false)
 
-     and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2) 
-     and Dec_IsEqual (ctxt,d1,d2) = Dec_IsSub' false (ctxt,d1,d2) 
+     and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2)
+     and Dec_IsEqual (ctxt,d1,d2) = Dec_IsSub' false (ctxt,d1,d2)
 
-     and Dec_IsSub' isSub (ctxt,d1,d2) = 
+     and Dec_IsSub' isSub (ctxt,d1,d2) =
 	 (case (d1,d2) of
-	      (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) => 
-		  eq_var(v1,v2) andalso (b1 = b2) andalso 
+	      (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) =>
+		  eq_var(v1,v2) andalso (b1 = b2) andalso
                   (if isSub then Sig_IsSub(ctxt,s1,s2) else Sig_IsEqual(ctxt,s1,s2))
-	    | (DEC_CON(v1,k1,SOME c1,inline1),DEC_CON(v2,k2,NONE,inline2)) => 
-		  isSub andalso eq_var(v1,v2) andalso eq_kind(k1,k2) 
+	    | (DEC_CON(v1,k1,NONE,inline1),DEC_CON(v2,k2,NONE,inline2)) =>
+		  eq_var(v1,v2) andalso eq_kind(k1,k2) andalso inline1=inline2
+	    | (DEC_CON(v1,k1,SOME c1,inline1),DEC_CON(v2,k2,NONE,inline2)) =>
+		  isSub andalso eq_var(v1,v2) andalso eq_kind(k1,k2)
 		  andalso eq_kind(k1,GetConKind(c1,ctxt))
 		  andalso inline1=inline2
 	    | (DEC_CON(v1,k1,NONE,_),DEC_CON(v2,k2,SOME _,_)) => false
-	    | (DEC_CON(v1,k1,SOME c1,inline1),DEC_CON(v2,k2,SOME c2,inline2)) => 
-		  eq_var(v1,v2) andalso eq_kind(k1,k2) 
+	    | (DEC_CON(v1,k1,SOME c1,inline1),DEC_CON(v2,k2,SOME c2,inline2)) =>
+		  eq_var(v1,v2) andalso eq_kind(k1,k2)
 		  andalso if isSub then sub_con(ctxt,c1,c2) else eq_con(ctxt,c1,c2)
 		  andalso inline1=inline2
 	    | (DEC_EXP(v1,c1,eopt1,inline1),DEC_EXP(v2,c2,eopt2,inline2)) =>
@@ -1620,17 +1624,39 @@ structure IlStatic
 		  andalso inline1=inline2
 	    | _ => false)
 
-     (* XXX We should get rid of eq_exp if Perry approves of the change to signature.sml
-            to assume that inlined expressions match inlined specs.  No one else calls this function. XXX *)
+     (*
+	We should get rid of eq_exp if Perry approves of the change to
+	signature.sml to assume that inlined expressions match inlined
+	specs.
 
-     and eq_exp(ctxt,exp1,exp2) = 
+	Eq_exp gets called as part of interface equality and the
+	TiltPrim unit inlines all primitives.
+    *)
+
+     and eq_exp(ctxt,exp1,exp2) =
 	 let fun find subst v = (case Listops.assoc_eq(eq_var,v,subst) of
 				     NONE => v
 				   | SOME v => v)
+	     fun eq_cons (cs, cs') =
+		 andfold (fn (c1,c2) => eq_con(ctxt,c1,c2)) (zip cs cs')
 	     fun add subst (v1,v2) = (v1,v2)::subst
-	     fun eq (e1,e2,subst) = 
+	     fun eq_exps (es, es', subst) =
+		 andfold (fn (e1,e2) => eq(e1,e2,subst)) (zip es es')
+	     and eq (e1,e2,subst) =
 	     (case (e1,e2) of
-		  (VAR v1, VAR v2) => let val v2 = find subst v2
+		 (PRIM (p1,cs1,es1), PRIM (p2,cs2,es2)) =>
+		     Prim.same_prim (p1,p2) andalso
+		     eq_cons (cs1,cs2) andalso
+		     eq_exps (es1,es2,subst)
+	       | (ILPRIM (p1,cs1,es1), ILPRIM (p2,cs2,es2)) =>
+		     Prim.same_ilprim (p1,p2) andalso
+		     eq_cons (cs1,cs2) andalso
+		     eq_exps (es1,es2,subst)
+	       | (ETAPRIM (p1,cs1), ETAPRIM (p2,cs2)) =>
+		     Prim.same_prim (p1,p2) andalso eq_cons (cs1,cs2)
+	       | (ETAILPRIM (p1,cs1), ETAILPRIM (p2,cs2)) =>
+		     Prim.same_ilprim (p1,p2) andalso eq_cons (cs1,cs2)
+	       | (VAR v1, VAR v2) => let val v2 = find subst v2
 				      in  eq_var(v1,v2)
 				      end
 	       | (FIX(b1,a1,fbnds1), FIX(b2,a2,fbnds2)) =>
@@ -1639,15 +1665,18 @@ structure IlStatic
 			                ((FBND(v2,_,_,_,_)) :: rest2) = loop (add subst (v2,v1)) rest1 rest2
 			   | loop subst _ _ = subst
 			 val subst = loop subst fbnds1 fbnds2
-			 fun eq_fbnd (FBND(_,v1,c1,_,b1),FBND(_,v2,c2,_,b2)) = 
+			 fun eq_fbnd (FBND(_,v1,c1,_,b1),FBND(_,v2,c2,_,b2)) =
 			     let val subst = add subst (v2,v1)
 			     in  eq(b1,b2,subst) andalso eq_con(ctxt,c1,c2)
 			     end
 		     in  b1 = b2 andalso a1 = a2 andalso eq_list(eq_fbnd,fbnds1,fbnds2)
 		     end
-	       | (COERCE (coercion,cs,e), COERCE (coercion',cs',e')) => 
+	       | (RECORD_PROJECT (e1,l1,c1), RECORD_PROJECT (e2,l2,c2)) =>
+		     eq(e1,e2,subst) andalso eq_label(l1,l2) andalso
+		     eq_con(ctxt,c1,c2)
+	       | (COERCE (coercion,cs,e), COERCE (coercion',cs',e')) =>
 		     eq(coercion,coercion',subst) andalso eq(e,e',subst) andalso
-		     andfold (fn (c1,c2) => eq_con(ctxt,c1,c2)) (zip cs cs')
+		     eq_cons(cs,cs')
 	       | (UNROLL (c1,d1,e1), UNROLL(c2,d2,e2)) =>
 		     eq_con(ctxt,c1,c2) andalso  eq_con(ctxt,d1,d2) andalso eq(e1,e2,subst)
 	       | (ROLL (c1,e1), ROLL(c2,e2)) =>
@@ -1656,11 +1685,12 @@ structure IlStatic
 		     i1 = i2 andalso eq_con(ctxt,c1,c2) andalso eq(e1,e2,subst)
 	       | (INJ {sumtype=s1,field=f1,inject=e1opt},
 		  INJ {sumtype=s2,field=f2,inject=e2opt}) =>
-		     eq_con(ctxt,s1,s2) andalso f1 = f2 andalso 
+		     eq_con(ctxt,s1,s2) andalso f1 = f2 andalso
 		     Util.eq_opt(fn (e1,e2) => eq(e1,e2,subst), e1opt, e2opt)
+	       | (MODULE_PROJECT _, MODULE_PROJECT _) => eq_epath(e1,e2)
 	       | _ => (debugdo (fn () =>
 				(print "eq_exp failed with \n    exp1 = ";
-				 pp_exp e1; print "\n\nand exp2 = "; 
+				 pp_exp e1; print "\n\nand exp2 = ";
 				 pp_exp e2; print "\n\n"));
 		       false))
 	 in  eq(exp1,exp2,[])
@@ -1671,12 +1701,12 @@ structure IlStatic
      and Sdecs_IsEqual (ctxt,sdecs1,sdecs2) = Sdecs_IsSub' false (ctxt,sdecs1,sdecs2)
 
      and Sdecs_IsSub' isSub (ctxt,sdecs1,sdecs2) =
-	 let 
+	 let
 	     exception NOPE
 	     fun match_var subst [] [] = []
-	       | match_var subst (SDEC(l1,dec1)::rest1) ((sdec2 as (SDEC(l2,dec2)))::rest2) : sdec list = 
+	       | match_var subst (SDEC(l1,dec1)::rest1) ((sdec2 as (SDEC(l2,dec2)))::rest2) : sdec list =
 		 if (eq_label (l1,l2))
-		     then 
+		     then
 		       (case (dec1,dec2) of
 			    (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) =>
 				   let val s2 = sig_subst(s2,subst)
@@ -1712,7 +1742,7 @@ structure IlStatic
 	       | match_var _ _ _ = (debugdo (fn () => print "Sdecs_IsSub: length mismatch\n");
 				    raise NOPE)
 	     fun loop ctxt [] [] = true
-	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) = 
+	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) =
 		 (Dec_IsSub' isSub (ctxt,dec1,dec2)
 		  andalso loop (add_context_dec(ctxt,dec1)) rest1 rest2)
 	       | loop ctxt _ _ = false
@@ -1724,15 +1754,15 @@ structure IlStatic
      and Sig_IsSub (ctxt, sig1, sig2) = Sig_IsSub' true (ctxt, sig1, sig2)
      and Sig_IsEqual (ctxt, sig1, sig2) = Sig_IsSub' false (ctxt, sig1, sig2)
 
-     and Sig_IsSub' isSub (ctxt, sig1, sig2) = 
+     and Sig_IsSub' isSub (ctxt, sig1, sig2) =
 	 (case (reduce_signat ctxt sig1,reduce_signat ctxt sig2)
 	    of (SIGNAT_STRUCTURE sdecs1, SIGNAT_STRUCTURE sdecs2) =>
 		Sdecs_IsSub' isSub (ctxt,sdecs1,sdecs2)
 	      | (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,a1),SIGNAT_FUNCTOR(v2,s2_arg,s2_res,a2)) =>
-		((eq_arrow(a1,a2,isSub)) andalso 
+		((eq_arrow(a1,a2,isSub)) andalso
 		 let val s1_res = if (eq_var(v1,v2)) then s1_res
 				  else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
-		     val b1 = Sig_IsSub' isSub (ctxt,s2_arg,s1_arg) 
+		     val b1 = Sig_IsSub' isSub (ctxt,s2_arg,s1_arg)
 		     val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,false,s2_arg))
 		     val b2 = Sig_IsSub' isSub (ctxt',s1_res,s2_res)
 		     val _ = debugdo (fn () =>
@@ -1756,15 +1786,15 @@ structure IlStatic
 		    let val p = (m,l)
 			val pc =
 			    (case d
-			       of DEC_EXP (_,c,eopt,inline) => 
+			       of DEC_EXP (_,c,eopt,inline) =>
 				   PHRASE_CLASS_EXP(MODULE_PROJECT p,c,eopt,inline)
 				| DEC_CON (_,k,copt,inline) =>
 				   PHRASE_CLASS_CON(CON_MODULE_PROJECT p,k,copt,inline)
 				| DEC_MOD (_,poly,s) =>
-				   PHRASE_CLASS_MOD(MOD_PROJECT p,poly,s))
+				   PHRASE_CLASS_MOD(MOD_PROJECT p,poly,s,fn () => s))
 		    in  SOME ([l],pc)
 		    end
-		else 
+		else
 		    (case (doOpen andalso is_open l, d)
 		       of (true, DEC_MOD(_,_,s)) =>
 			   (case reduce_signat ctxt s
@@ -1776,7 +1806,7 @@ structure IlStatic
 			| _ => find rest)
 	in  find (rev sdecs)
 	end
-	    
+
     and Sdecs_Lookup_Help (doOpen : bool) (ctxt : context) (m : mod, sdecs, labs : labels)
 	: (labels * phrase_class) option =
 	(case labs
@@ -1784,7 +1814,7 @@ structure IlStatic
 	    | [lbl] => Sdecs_Lookup_Label (doOpen,ctxt,lbl) (m,sdecs)
 	    | (lbl :: lbls) =>
 	       (case Sdecs_Lookup_Label (doOpen,ctxt,lbl) (m,sdecs)
-		  of SOME(labs,PHRASE_CLASS_MOD (m',_,s')) =>
+		  of SOME(labs,PHRASE_CLASS_MOD (m',_,s',_)) =>
 		      (case reduce_signat ctxt s'
 			 of SIGNAT_STRUCTURE sdecs' =>
 			     (case Sdecs_Lookup_Help doOpen ctxt (m',sdecs',lbls)
@@ -1792,7 +1822,7 @@ structure IlStatic
 				 | NONE => NONE)
 			  | _ => NONE)
 		   | _ => NONE))
-	     
+
     and Signat_Project (ctxt, m, s, l) : phrase_class option =
 	(case reduce_signat ctxt s
 	   of SIGNAT_STRUCTURE sdecs => Option.map #2 (Sdecs_Lookup_Help false ctxt (m,sdecs,[l]))
@@ -1800,10 +1830,10 @@ structure IlStatic
 
     and Sdecs_Lookup ctxt args : (labels * phrase_class) option = Sdecs_Lookup_Help true ctxt args
 
-    and Context_Lookup_Path (ctxt, p as PATH (v,labs)) = 
+    and Context_Lookup_Path (ctxt, p as PATH (v,labs)) =
 	(case (Context_Lookup_Var (ctxt,v),labs)
 	   of (SOME (_,pc),nil) => SOME(p,pc)
-	    | (SOME (_,PHRASE_CLASS_MOD (_,_,signat)),_) =>
+	    | (SOME (_,PHRASE_CLASS_MOD (_,_,signat,_)),_) =>
 	       (case signat
 		  of SIGNAT_STRUCTURE sdecs =>
 		      (case Sdecs_Lookup ctxt (MOD_VAR v,sdecs,labs)
@@ -1811,7 +1841,7 @@ structure IlStatic
 			  | NONE => NONE)
 		   | _ => NONE)
 	    | _ => NONE)
-	     
+
     and Context_Lookup_Labels (ctxt : context, labs : labels) : (path * phrase_class) option =
 	(case labs
 	   of nil => NONE
@@ -1820,10 +1850,10 @@ structure IlStatic
 		  of NONE => NONE
 		   | SOME (PATH(v,labs2)) => Context_Lookup_Path (ctxt, PATH(v,labs2 @ labs1))))
 
-    fun supertype (arg_con : con) : con = 
+    fun supertype (arg_con : con) : con =
 	let fun exp_handler (e : exp) : exp option = NONE
 	    fun mod_handler (m : mod) : mod option = NONE
-	    fun con_handler (c : con) : con option = 
+	    fun con_handler (c : con) : con option =
 		(case c of
 		   CON_SUM {names,noncarriers,carrier,special} =>
 		       SOME(CON_SUM{names = names,
