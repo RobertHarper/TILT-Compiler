@@ -1,5 +1,6 @@
 #include "general.h"
 #include "queue.h"
+#include <string.h>
 
 
 Queue_t *QueueCreate(long size)

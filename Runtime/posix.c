@@ -174,7 +174,7 @@ static void unimplemented(int lineno)
 {
   runtime_error_fmt("function not implemented at %s:%d", __FILE__, lineno);
 }
-#define UNIMP() unimplemented(__LINE__); assert(0);
+#define UNIMP() unimplemented(__LINE__); assert(0); return 0
 
 static void* emalloc(size_t size)
 {
@@ -1066,7 +1066,9 @@ unit posix_filesys_mkdir(string mlDir, word mode)
     printf("mlDir = %d\n", mlDir);
     printf("mlDir = *%20s*\n", mlDir);
     printf("trying mkdir (\"%s\", %x) failed\n", cDir, mode);
-status = mkdirp(cDir,mode);
+/*status = mkdirp(cDir,mode);  If you want mkdirp, implement it for
+  alpha */
+    status = mkdir(cDir,mode);
   if (status) {
     printf("mkdir (\"%s\", %x) failed with errno = %d\n", cDir, mode, status);
     UNIMP();

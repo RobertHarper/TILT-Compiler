@@ -2,8 +2,8 @@
 #define _global_h
 
 /* From Basis - access is safe only though GetGlobal */
-ptr_t getOverflowExn();
-ptr_t getDivExn();
+ptr_t getOverflowExn(void);
+ptr_t getDivExn(void);
 
 /* extern mem_t RuntimeGlobalData_Start, RuntimeGlobalData_Cur, RuntimeGlobalData_End; */
 extern mem_t datastart, dataend;

@@ -101,7 +101,7 @@ long pic2[1024], pic3[1024];  /* Splitting into two areas */
 enum PerfType {UserBasic = 0, SysBasic, BothBasic, UserDCache, SysDCache, UserECache, SysECache, UserEWrite, UserESnoop};
 int perfType = (int) UserBasic;
 
-void initializePerfMon()
+void initializePerfMon(void)
 {
   int fd, rc;
   unsigned long long tmp;

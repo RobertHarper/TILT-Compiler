@@ -31,12 +31,12 @@ mem_t textstart, textend;
 
 extern val_t Div_r_INT, Overflow_r_INT;   /* Must use & to get global's address */
   
-ptr_t getOverflowExn()
+ptr_t getOverflowExn(void)
 {
   return (ptr_t) GetGlobal(&Div_r_INT);
 }
 
-ptr_t getDivExn()
+ptr_t getDivExn(void)
 {
   return (ptr_t) GetGlobal(&Overflow_r_INT);
 }

@@ -279,7 +279,7 @@ void stats_init()
   clock_gettime(CLOCK_REALTIME, &start_tp);
 }
 
-const char *collectorTypeString()
+const char *collectorTypeString(void)
 {
   return (collector_type == Semispace) ? "Semi" : 
     ((collector_type == Generational) ? "Gen" : 

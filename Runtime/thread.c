@@ -115,7 +115,7 @@ void AddJob(Thread_t *th)
   LocalUnlock();
 }
 
-Thread_t *FetchJob()
+Thread_t *FetchJob(void)
 {
   int i;
   LocalLock();
@@ -778,7 +778,9 @@ static void* proc_go(void* unused)
   if (threadDiag)
     printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
 #endif
+#ifdef solaris
   initializePerfMon();
+#endif
   install_signal_handlers(0);
   proc->stack = (int)(&proc) & (~255);
   FetchAndAdd(&NumActiveProc, 1);

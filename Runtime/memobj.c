@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <errno.h>
+#include <string.h>
 #include "general.h"
 #include "til-signal.h"
 #include <fcntl.h>
@@ -120,7 +121,7 @@ void Stacklet_KillReplica(Stacklet_t *stacklet)
   stacklet->active = 1;
 }
 
-static Stacklet_t* Stacklet_Alloc()
+static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
 {
   int i;
   Stacklet_t *res = NULL;
@@ -248,7 +249,7 @@ void DequeueStacklet(StackChain_t *stackChain)
   assert(stackChain->cursor>=0);
 }
 
-StackChain_t* StackChain_BaseAlloc()
+StackChain_t* StackChain_BaseAlloc(void)
 {
   int i;
   for (i=0; i<NumStackChain; i++)
@@ -508,6 +509,7 @@ mem_t StackError(struct ucontext *ucontext, mem_t badadd)
   printf("\n------------------StackError---------------------\n");
   printf("sp, badreference:  %u   %u\n",sp,badadd);
   assert(0);
+  return sp; /* Bogus!  silence warnings. */
 }
 
 extern mem_t datastart;

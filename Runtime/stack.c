@@ -129,7 +129,7 @@ long SMLGlobalSize = 0;
 long GlobalTableSize = 0;
 long MutableTableSize = 0;
 
-void global_root_init();
+void global_root_init(void);
 
 void stack_init()
 {
@@ -322,7 +322,7 @@ int should_trace(unsigned long trace,
     return should_trace_special(cursor, cur_sp, regstate, data_add, i);
 }
 
-static int uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOffset)
+static void uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOffset)
 {
   Stack_t *callinfoStack = stacklet->callinfoStack;
   int count = 0;
@@ -362,7 +362,8 @@ done, bot_sp will point to the bottom of the last processed frame.
 
 */
 static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
-				       int stackletOffset, long *saveregs)
+				       int stackletOffset,
+				       unsigned long *saveregs)
 {
   int i, j, k;
   mem_t cur_sp = stacklet->baseTop + stackletOffset / sizeof(val_t);
@@ -649,7 +650,7 @@ static Stack_t tenuredGlobal;        /* Accumulates the contents of promotedGlob
 					across all previous calls to minor_global_promote */
 
 
-void global_root_init()
+void global_root_init(void)
 {
   int mi, numGlobals = 0;  
   for (mi=0; mi<module_count; mi++) {

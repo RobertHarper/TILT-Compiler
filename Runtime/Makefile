@@ -77,8 +77,12 @@ endif
 
 M4=m4
 M4FLAGS=-D${sys_name} prelude.m4
+
+# -std will define __STDC__ 
+alpha_osf_cppflags=-newc -std
+solaris_cppflags=
 CPP=${CC} -E
-CPPFLAGS=-D${sys_name} ${DODEBUG}
+CPPFLAGS=${${sys_name}_cppflags} -D${sys_name} ${DODEBUG}
 
 # --------------------------- C flags ----------------------------------
 alpha_osf_cc=cc
@@ -88,8 +92,7 @@ solaris_cc=gcc
 
 # The xtaso flag instructs the Alpha compiler to honor #pragma pointer_size directives
 # This allows the runtime to use pointer type that are 32-bit when interacting with ML.
-# -std will define __STDC__ 
-alpha_osf_cflags=-newc -xtaso -w0 -warnprotos -std -c -inline size -g3 
+alpha_osf_cflags=-warnprotos -xtaso -inline size -w0 -c -g3
 solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g 
 CC=${${sys_name}_cc}
 CFLAGS=${CPPFLAGS} ${${sys_name}_cflags}
@@ -153,15 +156,16 @@ endif
 
 # ------------------------------ Compiling -----------------------------
 
+# Note C compilers usually assume .i means already preprocessed.
 ${objdir}/%.o: %.c
-	${CPP} ${CPPFLAGS} $< | ${M4} ${M4FLAGS} - > $<.m4.c
-	${CC} -o $@ ${CFLAGS} $<.m4.c
-	rm $<.m4.c
+	${CPP} ${CPPFLAGS} $< | ${M4} ${M4FLAGS} - > $(<:.c=.i)
+	${CC} -o $@ ${CFLAGS} $(<:.c=.i)
+	rm $(<:.c=.i)
 
 ${objdir}/%.hprof.o: %.c
-	${CPP} ${CPPFLAGS} -DHEAPPROFILE $< | ${M4} ${M4FLAGS} - > $<.m4.c
-	${CC} -o $@ ${CFLAGS} $<.m4.c
-	rm $<.m4.c
+	${CPP} ${CPPFLAGS} -DHEAPPROFILE $< | ${M4} ${M4FLAGS} - > $(<:.c=.i)
+	${CC} -o $@ ${CFLAGS} $(<:.c=.i)
+	rm $(<:.c=.i)
 
 ${objdir}/%.o: %.s
 	$(AS) -o $@ ${ASFLAGS} $<
