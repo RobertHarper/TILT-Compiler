@@ -1,4 +1,4 @@
-(*$import List String Int OS MAIN Manager Stats Getopt UtilError Dirs Target Compiler *)
+(*$import List String Int OS MAIN Manager Stats Getopt UtilError Dirs Target Compiler TextIO Posix *)
 
 structure Main : MAIN =
 struct
