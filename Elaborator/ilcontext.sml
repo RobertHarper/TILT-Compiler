@@ -321,31 +321,35 @@ struct
     type varMap = (label * phrase_class) VarMap.map
     type labelMap = vpath LabelMap.map
     type overloadMap = ovld LabelMap.map
+
+    fun labelmap_remove x = #1(LabelMap.remove x)
 	
-    (* Prepare for the possible shadowing of a label. *)
-    fun shadow (vm : varMap, lm : labelMap, om : overloadMap, l : label)
+    (* Prepare for the possible shadowing of a label.
+
+       When shadowing a convar's label, we also change its equality
+       function's label.
+    *)
+	
+    fun shadow' (vm : varMap, lm : labelMap, om : overloadMap, l : label, labopt : label option)
 	: varMap * labelMap * overloadMap =
 	(case (LabelMap.find(om,l), LabelMap.find(lm,l))
-	   of (SOME _, NONE) =>
-	       let val (om,_) = LabelMap.remove(om,l)
-	       in  (vm,lm,om)
+	   of (SOME _, NONE) => (vm,lm,labelmap_remove(om,l))
+	    | (NONE, SOME (v,nil)) =>
+	       let val l' = (case labopt
+			       of SOME l' => l'
+				| NONE => fresh_internal_label(label2name' l))
+		   val SOME (_,pc) = VarMap.find(vm,v)
+		   val vm = VarMap.insert (vm,v,(l',pc))
+		   val lm = labelmap_remove(lm,l)
+		   val lm = LabelMap.insert (lm,l',(v,nil))
+	       in  (case pc
+		      of PHRASE_CLASS_CON _ => shadow' (vm,lm,om,to_eq l,SOME (to_eq l'))
+		       | _ => (vm,lm,om))
 	       end
-	    | (NONE, SOME vpath) =>
-	       let val (lm,_) = LabelMap.remove(lm,l)
-		   val (vm,lm) =
-		       (case vpath
-			  of (v,nil) =>
-			      let val newlab = fresh_internal_label(label2name' l)
-				  val SOME (_,pc) = VarMap.find (vm,v)
-				  val vm = VarMap.insert (vm,v,(newlab,pc))
-				  val lm = LabelMap.insert (lm,newlab,vpath)
-			      in  (vm,lm)
-			      end
-			   | _ => (vm,lm))
-	       in  (vm,lm,om)
-	       end
+	    | (NONE, SOME _) => (vm,labelmap_remove(lm,l),om)
 	    | (NONE, NONE) => (vm,lm,om)
 	    | (SOME _, SOME _) => error "overloadMap and labelMap labels not disjoint")
+    fun shadow (vm,lm,om,l) = shadow' (vm,lm,om,l,NONE)
 
     local
 	fun print_binding (l, v, pc) = (pp_label l; print " > "; pp_var v;
