@@ -322,6 +322,12 @@ structure IlUtil :> ILUTIL =
 		 bound_var = bound_var,
 		 bound_modvar = v :: bound_modvar},handlers)
 
+      fun add_decvar (state : state, dec : dec) : state =
+	  (case dec
+	     of DEC_EXP (v,_,_,_) => add_var(state,v)
+	      | DEC_CON (v,_,_,_) => add_convar(state,v)
+	      | DEC_MOD (v,_,_) => add_modvar(state,v))
+		 
       fun f_exp (state as STATE({bound_var,...},{exp_handler,...})) (exp : exp) : exp =
 	let val self = f_exp state
 	in
@@ -346,13 +352,8 @@ structure IlUtil :> ILUTIL =
 	   | SUM_TAIL (i,c,e) => SUM_TAIL(i,f_con state c, self e)
 	   | HANDLE (c,e1,e2) => HANDLE(f_con state c, self e1, self e2)
 	   | RAISE (c,e) =>  RAISE(f_con state c, self e)
-	   | LET (bnds,e) => let fun loop [] h = h
-				   | loop ((BND_EXP(v,_))::rest) h = loop rest (add_var(h,v))
-				   | loop ((BND_CON(v,_))::rest) h = loop rest (add_convar(h,v))
-				   | loop ((BND_MOD(v,_,_))::rest) h = loop rest (add_modvar(h,v))
-				 val state' = loop bnds state
-			     in LET(map (f_bnd state) bnds, 
-				    f_exp state' e)
+	   | LET (bnds,e) => let val (bnds, state') = foldl_acc f_bnd state bnds
+			     in LET(bnds, f_exp state' e)
 			     end
 	   | NEW_STAMP con => NEW_STAMP(f_con state con)
 	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,self e1, self e2)
@@ -448,7 +449,10 @@ structure IlUtil :> ILUTIL =
 	     | NONE =>
 	(case m of
 	   MOD_VAR _ => m
-	 | MOD_STRUCTURE sbnds => MOD_STRUCTURE (map (f_sbnd state) sbnds)
+	 | MOD_STRUCTURE sbnds =>
+	       let val (sbnds, _) = foldl_acc f_sbnd state sbnds
+	       in  MOD_STRUCTURE sbnds
+	       end
 	 | MOD_FUNCTOR (a,v,s1,m,s2) => MOD_FUNCTOR (a,v, f_signat state s1, 
 						   f_mod state m, f_signat state s2)
 	 | MOD_APP (m1,m2) => MOD_APP (f_mod state m1, f_mod state m2)
@@ -465,14 +469,12 @@ structure IlUtil :> ILUTIL =
 	   | SIGNAT_OF p => (case mod2path (f_mod state (path2mod p)) of
 				 NONE => error "f_signat transformed path to non-path with SIGNAT_OF"
 			       | SOME p => SIGNAT_OF p)
-	   | SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (map (f_sdec state) sdecs)
-	   | SIGNAT_SELF (p, unselfOpt, self) => (case mod2path (f_mod state (path2mod p)) of
-						      NONE => error "f_signat transformed path to non-path with SIGNAT_SELF"
-						    | SOME p => SIGNAT_SELF (p,
-									     Util.mapopt (f_signat state) unselfOpt,
-									     f_signat state self))
-	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
-							   f_signat state s2, a)))
+	   | SIGNAT_STRUCTURE sdecs =>
+		 let val (sdecs,_) = foldl_acc f_sdec state sdecs
+		 in  SIGNAT_STRUCTURE sdecs
+		 end
+	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1,
+							  f_signat (add_modvar(state,v)) s2, a)))
 
       and f_rbnd state (l,e) = (l, f_exp state e)
       and f_fbnd state (FBND(vname,varg,carg,cres,e)) : fbnd =
@@ -480,28 +482,54 @@ structure IlUtil :> ILUTIL =
 	   in FBND(vname,varg,f_con state' carg,f_con state' cres,f_exp state' e)
 	   end
       and f_rdec (state) (l,c) = (l, f_con state c)
-      and f_sbnd (state) (SBND(l,bnd)) : sbnd = SBND(l, f_bnd state bnd)
-      and f_sdec (state as STATE(_,{sdec_handler,...})) (sdec as (SDEC(l,dec))) : sdec = 
-	  (case (sdec_handler (state,sdec)) of
-	       NONE => SDEC(l, f_dec state dec)
-	     | SOME x => x)
-	       
-      and f_bnd (state : state) (bnd : bnd) : bnd =
+      and f_sbnd (sbnd : sbnd, state : state) : sbnd * state =
+	  let val SBND(l,bnd) = sbnd
+	      val (bnd,state) = f_bnd (bnd,state)
+	  in  (SBND(l,bnd), state)
+	  end
+      and f_sdec (sdec : sdec, state : state) : sdec * state =
+	  let val SDEC (l,dec) = sdec
+	      val STATE (_,{sdec_handler,...}) = state
+	  in
+	      (case sdec_handler (state,sdec)
+		 of NONE =>
+		     let val (dec,state) = f_dec (dec,state)
+		     in  (SDEC(l,dec), state)
+		     end
+		  | SOME sdec' =>
+		     let val SDEC(_,dec') = sdec'
+		     in  (sdec', add_decvar(state,dec'))
+		     end)
+	  end
+      and f_bnd (bnd : bnd, state : state) : bnd * state =
 	(case bnd of
-	   BND_EXP(v,e) => BND_EXP(v, f_exp state e)
-	 | BND_MOD(v,b,m) => BND_MOD(v, b,f_mod state m)
-	 | BND_CON(v,c) => BND_CON(v, f_con state c))
+	   BND_EXP(v,e) => (BND_EXP(v, f_exp state e), add_var(state,v))
+	 | BND_MOD(v,b,m) => (BND_MOD(v, b,f_mod state m), add_modvar(state,v))
+	 | BND_CON(v,c) => (BND_CON(v, f_con state c), add_convar(state,v)))
 
       and f_kind (state : state) (kind : kind) : kind = kind
 
-      and f_dec (state : state) (dec : dec) : dec =
-	(case dec of
-	   DEC_EXP(v,c,NONE, inline)   => DEC_EXP(v, f_con state c, NONE, inline)
-	 | DEC_EXP(v,c,SOME e, inline) => DEC_EXP(v, f_con state c, SOME (f_exp state e), inline)
-	 | DEC_CON(v,k,NONE, inline)   => DEC_CON(v, f_kind state k, NONE, inline)
-	 | DEC_CON(v,k,SOME c, inline) => DEC_CON(v, f_kind state k, SOME (f_con state c), inline)
-	 | DEC_MOD(v,b,s)      => DEC_MOD(v, b, f_signat state s))
+      and f_dec (dec : dec, state : state) : dec * state =
+	  let val dec' =
+	      (case dec
+		 of DEC_EXP(v,c,NONE,   inline) => DEC_EXP(v, f_con state c, NONE, inline)
+		  | DEC_EXP(v,c,SOME e, inline) => DEC_EXP(v, f_con state c, SOME (f_exp state e), inline)
+		  | DEC_CON(v,k,NONE,   inline) => DEC_CON(v, f_kind state k, NONE, inline)
+		  | DEC_CON(v,k,SOME c, inline) => DEC_CON(v, f_kind state k, SOME (f_con state c), inline)
+		  | DEC_MOD(v,poly,s)           => DEC_MOD(v, poly, f_signat state s))
+	  in  (dec', add_decvar(state,dec))
+	  end
 
+      local
+	  fun wrap (f : 'a * state -> 'a * state) : state -> 'a -> 'a =
+	      fn state => fn x => #1 (f(x,state))
+      in
+	  val f_bnd' = wrap f_bnd
+	  val f_dec' = wrap f_dec
+	  val f_sbnd' = wrap f_sbnd
+	  val f_sdec' = wrap f_sdec
+      end
+  
       fun f_ovld(state : state) (OVLD (celist, default) : ovld) : ovld =
 	  OVLD (map (fn (c,e) => (f_con state c,
 				  f_exp state e)) celist,
@@ -509,7 +537,7 @@ structure IlUtil :> ILUTIL =
 
       fun f_entry(state : state) (entry : context_entry) : context_entry = 
 	  (case entry of
-	       CONTEXT_SDEC sdec => CONTEXT_SDEC (f_sdec state sdec)
+	       CONTEXT_SDEC sdec => CONTEXT_SDEC (f_sdec' state sdec)
 	     | CONTEXT_SIGNAT (l, v, s) => CONTEXT_SIGNAT (l, v, f_signat state s)
 	     | CONTEXT_FIXITY _ => entry
 	     | CONTEXT_OVEREXP (l, ovld) => CONTEXT_OVEREXP (l, f_ovld state ovld))
@@ -545,8 +573,8 @@ structure IlUtil :> ILUTIL =
 	   fun con_handle handlers = f_con (all_handlers handlers)
 	   fun mod_handle handlers = f_mod (all_handlers handlers)
 	   fun sig_handle handlers = f_signat (all_handlers handlers)
-	   fun bnd_handle handlers = f_bnd (all_handlers handlers)
-	   fun dec_handle handlers = f_dec (all_handlers handlers)
+	   fun bnd_handle handlers = f_bnd' (all_handlers handlers)
+	   fun dec_handle handlers = f_dec' (all_handlers handlers)
        end
 
 
@@ -760,6 +788,33 @@ structure IlUtil :> ILUTIL =
 	  val sig_subst = wrap f_signat
 	  val con_subst' = wrap' f_con
 	  val sig_subst' = wrap' f_signat
+
+	  fun pc_subst (pc,subst) = 
+	      (case pc of
+		   PHRASE_CLASS_EXP(e,con,eopt,inline) => 
+		       let val e = exp_subst(e,subst)
+			   val con = con_subst(con,subst)
+			   val eopt = (case eopt of
+					   NONE => NONE
+					 | SOME e => SOME(exp_subst(e,subst)))
+		       in  PHRASE_CLASS_EXP(e,con,eopt,inline)
+		       end
+		 | PHRASE_CLASS_CON(con,kind,copt,inline) => 
+		       let val con = con_subst(con,subst)
+			   val copt = (case copt of
+					   NONE => NONE
+					 | SOME c => SOME(con_subst(c,subst)))
+		       in  PHRASE_CLASS_CON(con,kind,copt,inline)
+		       end
+		 | PHRASE_CLASS_MOD(m,b,signat) => 
+		       let val m = mod_subst(m,subst)
+			   val signat = sig_subst(signat,subst)
+		       in  PHRASE_CLASS_MOD(m,b,signat)
+		       end
+		 | PHRASE_CLASS_SIG (v,s) => 
+		       let val s = sig_subst(s,subst)
+		       in  PHRASE_CLASS_SIG(v,s)
+		       end)
       end
 
 
@@ -823,8 +878,32 @@ structure IlUtil :> ILUTIL =
 	  val con_free = wrap f_con
 	  val mod_free = wrap f_mod
 	  val sig_free = wrap f_signat
-	  val sbnd_free = wrap f_sbnd
+	  val sbnd_free = wrap f_sbnd'
 	  val entry_free = wrap f_entry
+	      
+	  fun classifier_free (pc : phrase_class) : Name.VarSet.set =
+	      (case pc
+		 of PHRASE_CLASS_EXP (_,c,eopt,_) => 
+		     let val set = con_free c
+		     in  (case eopt of
+			      NONE => set
+			    | SOME e => VarSet.union(set, exp_free e))
+		     end
+		  | PHRASE_CLASS_CON (_,_,copt,_) => 
+		     (case copt of
+			  NONE => VarSet.empty
+			| SOME c => con_free c)
+		  | PHRASE_CLASS_MOD (_,_,s) => sig_free s
+		  | PHRASE_CLASS_SIG (_, s) => sig_free s)
+		   
+	  fun pc_free (pc : phrase_class) : Name.VarSet.set =
+	      let val set = (case pc
+			       of PHRASE_CLASS_EXP (e,_,_,_) => exp_free e
+				| PHRASE_CLASS_CON (c,_,_,_) => con_free c
+				| PHRASE_CLASS_MOD (m,_,_) => mod_free m
+				| PHRASE_CLASS_SIG (v,_) => VarSet.singleton v)
+	      in  VarSet.union (set,classifier_free pc)
+	      end
       end
 
 
@@ -911,7 +990,7 @@ structure IlUtil :> ILUTIL =
       in
 	  val con_size = wrap f_con
 	  val mod_size = wrap f_mod
-	  val bnd_size = wrap f_bnd
+	  val bnd_size = wrap f_bnd'
 	  val sig_size = wrap f_signat
       end
 
