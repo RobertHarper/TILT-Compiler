@@ -871,7 +871,7 @@ struct
 				     let val dir = OS.Path.dir mapfile
 					 val innerMapfile = dir ^ "/" ^ innerMapfile
 					 val innerAssociation = readAssociation innerMapfile
-				     in  loop (n, (rev innerAssociation) @ acc)
+				     in  loop (n+1, (rev innerAssociation) @ acc)
 				     end
 			       | [unitname, filebase] => loop (n+1, (unitname, filebase) :: acc)
 			       | [] => loop (n, acc)
