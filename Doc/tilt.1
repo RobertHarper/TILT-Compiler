@@ -13,12 +13,14 @@
 .nf	\" no filling
 .sp	\" vertical space
 .in +5	\" indent
+.ft C	\" courier font
 ..
 .\" EE
 .de EE
 .fi	\" filling
 .sp	\" vertical space
 .in -5	\" indent
+.ft R	\" roman font
 ..
 .\"
 .TH TILT 1 "27 January 2000" "Version 0.1"
@@ -148,10 +150,9 @@ will not compile because TextIO is missing from the import list.
 When processing a mapfile, TILT recompiles any files which are
 out-of-date and generates an executable file named after the last
 module in the mapfile.
-There is no analogue of C's function main().
-Top-level declarations are executed at runtime.
-The order of modules in a mapfile determines the order in which these
-top-level declarations are processed.
+See
+.B PROGRAM EXECUTION
+below for information on what happens when this executable is run.
 .PP
 Suppose you have a directory of SML files called twelf.
 To get twelf to compile with TILT, the first thing needed is to create
@@ -162,6 +163,33 @@ Then each of the SML source files in the twelf directory must be
 listed in the mapfile along with its assigned logical name.
 Then the proper dependencies among the modules needs to be inserted by
 adding import lines to each source file.
+.SH PROGRAM EXECUTION
+TILT has no analogue of C's function main().
+Instead, TILT-generated executables evaluate their top-level
+declarations.
+The order of modules in a mapfile determines the order in which these
+top-level declarations are processed.
+Command line arguments and environment variables are available via
+the standard basis library.
+The following are particularly useful:
+.BE
+CommandLine.name      : unit -> string
+CommandLine.arguments : unit -> string list
+OS.Process.getEnv     : string -> string option
+.EE
+For example, here is an SML program which behaves similar to
+.BR echo (1):
+.BE
+(*$import CommandLine OS TopLevel *)
+
+(* echo : string list -> unit *)
+fun echo nil = print "\\n"
+  | echo (s::nil) = (print s; print "\\n")
+  | echo (s1::(ss as _::_)) = (print s1; print " "; echo ss)
+    
+val _ = echo (CommandLine.arguments())
+val _ = OS.Process.exit (OS.Process.success)
+.EE
 .SH FILES
 .TP
 /usr/local/lib/tilt
