@@ -1315,7 +1315,7 @@ struct
        (case exp 
 	  of Var_e var => 
 	    (NilContext.find_con (D,var)
-	     handle Unbound =>
+	     handle NilContext.Unbound =>
 	       error 
 	       ("Encountered undefined variable " ^ (Name.var2string var) 
 		^ "in type_of"))

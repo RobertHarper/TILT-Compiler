@@ -12,14 +12,15 @@ signature NILREWRITE =
 		   * will result in cbnds being bound in state before being returned.
 		   *)
 
-		  conhandler : 'state * Nil.con -> ('state * Nil.con) changeopt,
-		  exphandler : 'state * Nil.exp -> ('state * Nil.exp) changeopt,
-		  kindhandler : 'state * Nil.kind -> ('state * Nil.kind) changeopt,
+		  conhandler   : 'state * Nil.con -> ('state * Nil.con) changeopt,
+		  exphandler   : 'state * Nil.exp -> ('state * Nil.exp) changeopt,
+		  kindhandler  : 'state * Nil.kind -> ('state * Nil.kind) changeopt,
 		  tracehandler : 'state * Nil.niltrace -> ('state * Nil.niltrace) changeopt,
-		  con_var_bind : 'state * Nil.var * Nil.kind -> ('state * Nil.var option),
+		  con_var_bind   : 'state * Nil.var * Nil.kind -> ('state * Nil.var option),
 		  con_var_define : 'state * Nil.var * Nil.con -> ('state * Nil.var option),
-		  exp_var_bind : 'state * Nil.var * Nil.con -> ('state * Nil.var option),
-		  exp_var_define : 'state * Nil.var * Nil.exp -> ('state * Nil.var option)
+		  exp_var_bind   : 'state * Nil.var * Nil.con -> ('state * Nil.var option),
+		  exp_var_define : 'state * Nil.var * Nil.exp -> ('state * Nil.var option),
+		  sum_var_bind   : 'state * Nil.var * (Nil.con * Nil.w32) -> ('state * Nil.var option)
 		  }
 
     val rewriters : 'state handler -> {
@@ -31,6 +32,9 @@ signature NILREWRITE =
 				       rewrite_trace : 'state -> Nil.niltrace -> Nil.niltrace,
 				       rewrite_mod : 'state -> Nil.module -> Nil.module
 				       }
+    val null_handler        : 'state * 'a -> ('state * 'b) changeopt
+
+    val null_binder         : 'state * Nil.var * 'a -> ('state * Nil.var option)
 
     val default_handler     : 'state handler
     val set_kindhandler     : 'state handler -> ('state * Nil.kind -> ('state * Nil.kind) changeopt) -> 'state handler
@@ -42,5 +46,7 @@ signature NILREWRITE =
 
     val set_exp_binder      : 'state handler -> ('state * Nil.var * Nil.con -> ('state * Nil.var option)) -> 'state handler
     val set_exp_definer     : 'state handler -> ('state * Nil.var * Nil.exp -> ('state * Nil.var option)) -> 'state handler
+
+    val set_sum_binder      : 'state handler -> ('state * Nil.var * (Nil.con * Nil.w32) -> ('state * Nil.var option)) -> 'state handler
 
   end

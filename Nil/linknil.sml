@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy *)
+(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy Typeof_Elim Real *)
 
 (* Reorder *)
 
@@ -28,7 +28,10 @@ structure Linknil :> LINKNIL  =
     val inline3     = makeEntry (true, "Inline3")
 (*  val reduce      = makeEntry (false, "Reduce") *)
 (*  val flatten     = makeEntry (false, "Flatten") *)
-    val measure     = makeEntry (false, "NilMeasure")
+
+    val measure_after_phaseplit = makeEntry (false, "MeasureAfterPhasesplit")
+(*    val measure_after_opts      = makeEntry (false, "MeasureAfterOpts")*)
+    val measure_after_cc        = makeEntry (false, "MeasureAfterCC")
 (*  val reorder     = makeEntry (false, "Reorder") *)
 
     val typecheck_after_phasesplit = makeEntry(false,"TypecheckAfterPhasesplit")
@@ -116,6 +119,28 @@ structure Linknil :> LINKNIL  =
      *)
     fun wtypecheck nilmod = (WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod); nilmod)
 
+    val typeof_count1 = ("PS",Stats.int "PostPS_Size", Stats.int "PostPS_Diff",Stats.int "PS_Max%_Increase")
+    val typeof_count2 = ("CC",Stats.int "PostCC_Size", Stats.int "PostCC_Diff",Stats.int "CC_Max%_Increase")
+
+
+    fun do_measure (pass,size,diff,max) filename nilmod = 
+      let
+
+	val meas   = Measure.mod_size {cstring = Measure.cstring,count = ["Typeof_c"], count_in = []} 
+	val pre    = meas nilmod
+	val nilmod = Typeof_Elim.mod_elim (NilContext.empty ()) nilmod
+	val post   = meas nilmod
+	val incr   = if pre > 0 then Real.round(100.0 * (Real.fromInt (post - pre) / Real.fromInt pre)) else 0
+      in 
+	size := !size + pre;
+	diff := !diff + (post - pre);
+	if incr > !max then 
+	  (print ("\nNew "^pass^" Max: "^(Int.toString incr)^"% increase in file "^filename^"\n");
+	   max := incr)
+	else ();
+	nilmod
+      end
+					    
     exception Stop of Nil.module
 
     (* (1) Rename must precede everything.
@@ -132,6 +157,8 @@ structure Linknil :> LINKNIL  =
 	    val D = NilContext.empty()
 
 	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
+
+	    val nilmod = transform measure_after_phaseplit (do_measure typeof_count1 filename, nilmod)
 
 	    val nilmod = transform typecheck_after_phasesplit  (typecheck, nilmod)
 	    val nilmod = transform wtypecheck_after_phasesplit (wtypecheck, nilmod)
@@ -196,6 +223,9 @@ structure Linknil :> LINKNIL  =
  	    val nilmod = transform wtypecheck_after_opt2 (wtypecheck, nilmod)
 
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
+
+	    val nilmod = transform measure_after_cc (do_measure typeof_count2 filename,nilmod)
+
 (*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
  	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
  	    val nilmod = transform wtypecheck_after_cc (wtypecheck, nilmod)

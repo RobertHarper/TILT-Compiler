@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilRewrite NilSubst INLINE Analyze *)
+(*$import Prelude TopLevel List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilSubst INLINE Analyze *)
 
 (* Inline functions that are non-recursive and either are called once
    or else are sufficiently small and called a sufficiently small number

@@ -31,5 +31,16 @@ signature STATS =
      val fetch_timer_max : string -> real (* in seconds *)
      val fetch_timer_last : string -> real (* in seconds *)
 
+     val fetch_timer : string ->
+	  {count : int,
+	   max   : real, (*seconds*)
+	   last  : real, (*seconds*)
+	   gc    : real, (*seconds*)
+	   cpu   : real, (*seconds*)
+	   real  : real  (*seconds*)
+	   }
+
+     val fetch_counter : string -> int
+	     
    end
 

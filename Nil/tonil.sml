@@ -23,6 +23,8 @@ struct
    val keep_hil_numbers = Stats.ff("keep_hil_numbers")
    val do_polyrec = Stats.tt("do_polyrec")
 
+   val typeof_count = Stats.counter "PS_Typeofs"
+     
    val elaborator_specific_optimizations = ref true
    fun error msg = Util.error "tonil.sml" msg
 
@@ -2109,7 +2111,7 @@ end (* local defining splitting context *)
 	      val e = NilUtil.makeLetE Sequential
 		      (cbnds' @ ebnds)
 		      name_mod_r
-
+	      val _ = typeof_count()
 	  in  (Single_k(con_mod), Typeof_c e)
 	  end
 

@@ -35,6 +35,10 @@ structure NilRename :> NILRENAME =
 	  ({exp_subst = exp_subst,con_subst = con_subst},SOME var')
 	end
 
+      (*XXX This is broken, but don't fuck with switch vars right now -Leaf
+       *)
+      fun sum_var_bind (state as {exp_subst,con_subst} : state,var,any) = (state,NONE)
+
       fun con_var_xxx ({exp_subst,con_subst} : state,var,any) = 
 	let
 	  val var' = Name.derived_var var
@@ -65,6 +69,7 @@ structure NilRename :> NILRENAME =
 	  val h = set_exphandler default_handler exphandler
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
+	  val h = set_sum_binder h sum_var_bind
 	in
 	  h
 	end
@@ -165,6 +170,9 @@ structure NilRename :> NILRENAME =
 	  end
 	else (state,NONE)
 
+      (*XXX See above -Leaf *)
+      fun sum_var_bind (state :state as {esubst,csubst,epred,cpred},var,any) = (state,NONE)
+
       fun con_var_xxx (state :state as {esubst,csubst,epred,cpred},var,any) = 
 	if cpred var then
 	  let
@@ -196,6 +204,7 @@ structure NilRename :> NILRENAME =
 	  val h = set_exphandler default_handler exphandler
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
+	  val h = set_sum_binder h sum_var_bind
 	  val h = set_conhandler h conhandler
 	  val h = set_con_binder h con_var_xxx
 	  val h = set_con_definer h con_var_xxx
@@ -271,6 +280,7 @@ structure NilRename :> NILRENAME =
 	  val h = set_con_definer h con_var_xxx
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
+	  val h = set_sum_binder h exp_var_xxx
 	in
 	  h
 	end
@@ -345,6 +355,7 @@ structure NilRename :> NILRENAME =
 	  val h = set_con_definer h con_var_xxx
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_con_binder h exp_var_xxx
+	  val h = set_sum_binder h exp_var_xxx
 	in h 
 	end
 
@@ -407,6 +418,7 @@ structure NilRename :> NILRENAME =
 	  val h = set_con_definer h con_var_xxx
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
+	  val h = set_sum_binder h exp_var_xxx
 	in
 	  h
 	end
@@ -481,6 +493,7 @@ structure NilRename :> NILRENAME =
 	  val h = set_con_definer h con_var_xxx
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
+	  val h = set_sum_binder h exp_var_xxx
 	in
 	  h
 	end

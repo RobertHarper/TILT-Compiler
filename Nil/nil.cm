@@ -57,6 +57,7 @@ normalize.sig.sml
 normalize.sml
 rewrite.sig.sml
 rewrite.sml
+typed_rewrite.sml
 
 nilstatic.sig.sml
 nilstatic.sml 
@@ -106,6 +107,9 @@ trail.sml
 
 bound_check.sml
 bound_check.sig.sml
+
+typeof_elim.sml
+typeof_elim.sig.sml
 
 (*
 cleanup.sig.sml

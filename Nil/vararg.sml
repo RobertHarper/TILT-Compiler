@@ -39,10 +39,10 @@ struct
      *   | _ => f
      *
      * Vararg[c,c'] = 
-     *   Typecase t of
+     *   Typecase c of
      *     record[] => Arrow((); c')
      *   | ...
-     *   | record[c1,...,cn] => Arrow((c1, ..., cn); t')
+     *   | record[c1,...,cn] => Arrow((c1, ..., cn); c')
      *   | _ => Arrow(c; c')
      *)
 

@@ -99,7 +99,9 @@ sig
     | Closure_c of con * con                      (* Constructor-level closure: 
                                                        code and environment *)
     | App_c of con * con list                     (* Constructor-level application 
-						       of open or closed constructor function *)
+						       of open or closed constructor function 
+							 or a closure
+							 *)
     | Typecase_c of {arg : con,
                      arms : (primcon * (var * kind) list * con) list,
                      default : con,
@@ -124,7 +126,7 @@ sig
 
     | project of TilWord32.word  (* corresponds to inject *)
     | project_known of TilWord32.word  (* corresponds to inject_known *)
-    | project_known_record of TilWord32.word * label (* corresponds to inkject_known_record *)
+    | project_known_record of TilWord32.word * label (* corresponds to inject_known_record *)
 
 
     | box_float of Prim.floatsize   (* boxing floating-points *)

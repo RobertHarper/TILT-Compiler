@@ -63,13 +63,14 @@ structure BoundCheck :> BOUNDCHECK =
 		)
 	    | _ => NOCHANGE)
 
+
       val all_handlers =  
 	let
 	  val h = set_con_binder default_handler con_var_xxx
 	  val h = set_con_definer h con_var_xxx
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
-
+	  val h = set_sum_binder h exp_var_xxx
 	  val h = set_exphandler h exphandler
 	  val h = set_conhandler h conhandler
 	in

@@ -284,8 +284,6 @@ struct
       else 
 	NORECURSE
 
-    fun null_binder (state,_,_) = (state,NONE)
-
     val all_handlers = 
       HANDLER {
 	       conhandler     = conhandler,
@@ -297,7 +295,8 @@ struct
 	       con_var_bind   = null_binder,
 	       con_var_define = null_binder,
 	       exp_var_bind   = null_binder,
-	       exp_var_define = null_binder
+	       exp_var_define = null_binder,
+	       sum_var_bind   = null_binder
 	       }
     val {rewrite_con  = strip_con,
 	 ...} = rewriters all_handlers

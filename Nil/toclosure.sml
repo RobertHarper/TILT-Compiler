@@ -21,6 +21,7 @@ struct
     val do_single_venv = Stats.tt("Closure_TermCompress")
     val closure_print_free = Stats.ff "closure_print_free"
 
+    val typeof_count = Stats.counter "CC_typeofs"
 
     open Util NilUtil Name Nil Ppnil Listops
     structure Nil = Nil
@@ -961,7 +962,7 @@ struct
 				     c_rewrite state 
 				       (case copt of
 					   SOME c => c
-				         | _ => Typeof_c (Var_e v)))
+				         | _ => (typeof_count();Typeof_c (Var_e v))))
 				 end
 			 in  map mapper temp
 			 end

@@ -45,17 +45,19 @@ structure Stats :> STATS =
 	 end
 
        fun reset_stats() = (entries := [])  (* StringMap.empty) *)
+
+       fun fetch_entry name = 
+	 Listops.assoc_eq((op =): string * string -> bool,name, !entries)
+
        fun find_entry entry_maker s : entry =
-(*	   (case (StringMap.find(!entries,s)) of *)
-	   (case (Listops.assoc_eq((op =): string * string -> bool,
-			s, !entries)) of
-		SOME entry => entry
-	      | NONE => let val entry = entry_maker()
-(*			    val entries' = StringMap.insert(!entries,s,entry) *)
-			    val entries' = (s,entry) :: (!entries)
-			    val _ = entries := entries'
-			in entry
-			end)
+	 (case fetch_entry s of
+	    SOME entry => entry
+	  | NONE => let val entry = entry_maker()
+			val entries' = (s,entry) :: (!entries)
+			val _ = entries := entries'
+		    in entry
+		    end)
+
       fun find_time_entry s disjoint = 
 	let val z = Time.zeroTime
 	    fun maker () = TIME_ENTRY(ref{count = 0,
@@ -88,6 +90,30 @@ structure Stats :> STATS =
       fun fetch_timer_max name = #max(!(find_time_entry name false))
       fun fetch_timer_last name = #last(!(find_time_entry name false))
 
+      fun fetch_timer name = 
+	let 
+	  val ref {count,max,last,sum as {gc, sys, usr, real},...} = 
+	    (case fetch_entry name
+	       of SOME (TIME_ENTRY res) => res
+		| _ => error ("fetch_timer: no TIME_ENTRY of name "^name))
+	in
+	  {count = count,
+	   max   = max,
+	   last  = last,
+	   gc    = Time.toReal gc,
+	   cpu   = Time.toReal(Time.+(sys,usr)),
+	   real  = Time.toReal real}
+	end
+
+      fun fetch_counter name =
+	let
+	  val ref count = 
+	    (case fetch_entry name
+	       of SOME (COUNTER_ENTRY res) => res
+		| _ => error ("fetch_counter: no COUNTER_ENTRY of name "^name))
+	in count
+	end
+	     
       val int = find_int_entry
       fun bool str = find_bool_entry 
 	             (fn() => error ("trying to get an uninitialized bool " ^ str)) str
