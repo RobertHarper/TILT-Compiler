@@ -27,15 +27,13 @@ datatype 'a option = NONE | SOME of 'a
 datatype order = LESS | EQUAL | GREATER
 datatype 'a list = nil | :: of 'a * 'a list
 
-type string = string (* TiltPrim *)
-
 (* exceptions *)
 exception Bind
 exception Chr
 exception Domain
 exception Empty
 exception Fail of string
-exception Match 
+exception Match
 exception Option
 exception Size
 exception Span

@@ -16,23 +16,9 @@ structure List :> LIST where type 'a list = 'a list =
     val op >= = InlineT.DfltInt.>=
     val op =  = InlineT.=
 *)
-
-    infix  6 + -
-    infix  4 = <> > >= < <=
-
-    (* Note: not overloaded yet *)
-    val op + = TiltPrim.iplus
-    val op - = TiltPrim.iminus
-    val op < = TiltPrim.ilt
-    val op > = TiltPrim.igt
-    val op <= = TiltPrim.ilte
-    val op >= = TiltPrim.igte
-
     datatype list = datatype list
 
-    infixr 5 :: @
-
-    exception Empty 
+    exception Empty = Empty
 
     fun null [] = true | null _ = false
 
@@ -74,6 +60,16 @@ structure List :> LIST where type 'a list = 'a list =
             | loop(acc, _::x) = loop(acc+1,x)
           in loop(0,l) end
 
+(*
+    fun rev l = let
+          fun loop ([], acc) = acc
+            | loop (a::r, acc) = loop(r, a::acc)
+          in
+	    loop (l, [])
+	  end
+*)
+    val rev = rev
+
     fun op @(x,[]) = x
       | op @(x,l) = let
           fun f([],l) = l
@@ -88,12 +84,6 @@ structure List :> LIST where type 'a list = 'a list =
 
     fun revAppend ([],l) = l
       | revAppend (h::t,l) = revAppend(t,h::l)
-
-    fun rev l =
-      let fun revappend([],x) = x
-	    | revappend(hd::tl,x) = revappend(tl,hd::x)
-      in  revappend(l,[])
-      end
 
     fun app f = let
           fun a2 (e::r) = (f e; a2 r) | a2 [] = ()

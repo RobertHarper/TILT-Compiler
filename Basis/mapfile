@@ -28,7 +28,6 @@ unit TiltExn : TiltExn = "tiltexn.sml" {TiltPrim TiltPrelude}
 interface GENERAL = "General/general.sig.sml" {
 	TiltPrim TiltPrelude
 }
-
 unit GENERAL : GENERAL = "General/general.sig.sml" {
 	TiltPrim TiltPrelude
 }
@@ -41,7 +40,6 @@ unit General : General = "General/general.sml" {
 interface OPTION = "General/option-sig.sml" {
 	TiltPrim TiltPrelude
 }
-
 unit OPTION : OPTION = "General/option-sig.sml" {
 	TiltPrim TiltPrelude
 }

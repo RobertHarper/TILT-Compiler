@@ -1,4 +1,4 @@
 structure General : GENERAL
 	where type unit = unit
 	where type exn = exn
-
+	where type order = order
