@@ -294,7 +294,7 @@ TilWord32 Util/tilword32-native
 TilWord64 Util/tilword64
 
 FORMATTER Util/formatter.sig
-Formatter Util/formatter.fails
+Formatter Util/formatter
 
 BINIOUTIL Util/bin_io_util.sig
 BinIoUtil Util/bin_io_util
