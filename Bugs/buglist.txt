@@ -85,7 +85,6 @@
 0085 [open]     Elaborator/Pattern compiler not using correct exceptions.
 0086 [open]     Matching against an external interface file is broken.
 0087 [closed]   Possible "conservative" bug in Analyze avoiding desired optimizations
-0088 [open]	Tests that fail.
 0089 [open]	Printing from runtime.
 0090 [open]     Shadowing type "bool" causes equality compiler to fail.
 0091 [open]     Unresolved equality expressions breaking elaborator
@@ -93,8 +92,6 @@
 0093 [open]	TILT does not support separate compilation.
 0094 [open]	The Runtime uses too much virtual memory.
 0095 [open]	Errno is sometimes clobbered.
-0096 [open]	Does not parse type variables properly.
-0097 [open]	does not parse type variables properly
 0098 [open]	does not parse type variables properly
 0099 [closed]	exceptions as values
 0100 [open]	hidden hidden clashes
