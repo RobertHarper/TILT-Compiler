@@ -702,7 +702,10 @@ val debug = ref false
 				  NONE => alloc_regi rep
 				| SOME d => d)
       in case value of
-	  VVOID rep => pickdest rep
+	  VVOID rep => let val r = pickdest rep
+		       in  add_instr (LI(0w0,r)); (* zero is a safe bit-pattern for values of any rep *)
+			   r
+		       end
 	| VINT i => let val r = pickdest NOTRACE_INT
 			in  add_instr (LI(i,r));
 			    r

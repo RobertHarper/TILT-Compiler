@@ -102,5 +102,7 @@ struct
 			 val _ = cached_prelude := SOME m
 		     in  m
 		     end
-
+    val compile = Stats.timer("Translation to RTL",compile)
+    val compiles = Stats.timer("Translation to RTL",compiles)
+    val compile_prelude = Stats.timer("Translation to RTL",compile_prelude)
 end
