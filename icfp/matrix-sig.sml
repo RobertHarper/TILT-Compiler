@@ -1,22 +1,19 @@
 signature MATRIX =
 sig
 
-  type m4 =  real * real * real * real * 
-             real * real * real * real * 
-             real * real * real * real *
-             real * real * real * real
+  type m4
 	type v4 =  real * real * real * real
   type v3 =  real * real * real
 
 	val ident: m4
-
+(*
   val translate: real * real * real -> m4
   val scale : real * real * real -> m4
 	val uscale: real -> m4
   val rotx : real -> m4
   val roty : real -> m4
   val rotz : real -> m4
-
+*)
   val apply : m4 * v4 -> v4
 	val applyV3: m4 * v3 -> v3
   val combine : m4 * m4 -> m4

@@ -6,7 +6,7 @@ struct
     exception Eval of string
 
     type m4 = Matrix.m4
-   type v3 = Matrix.v3
+    type v3 = Matrix.v3
 
     type color = v3
         
@@ -226,9 +226,17 @@ fun plane ((Closure c) :: s) = Object (Plane(M4.ident, c)) :: s
 
 (* FIXME *)
 
-val pointlight = u
-val spotlight = u
-val light = u
+fun light ((Point c) :: (Point dir) :: s) =
+    Light (Sunlight (dir, c)) :: s
+fun pointlight ((Point c) :: (Point pos) :: s) =
+    Light (Pointlight (pos, c)) :: s
+fun spotlight ((Real exp) :: (Real cutoff) :: (Point c) :: 
+	   (Point dest) :: (Point src) :: s) =
+    Light (Spotlight { pos = src,
+		       dir = Vect.makeDir (src, dest),
+		       color = c,
+		       cutoff = cutoff,
+		       att = exp }) :: s
     
     val opers = 
 	foldl (fn ((oo,dd), m) => Envmap.insert (m, oo, dd)) Envmap.empty
