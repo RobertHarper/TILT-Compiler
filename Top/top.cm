@@ -51,6 +51,8 @@ dirs.sig.sml
 dirs.sml
 communication.sig.sml
 communication.sml
+statistics.sig.sml
+statistics.sml
 master.sig.sml
 master.sml
 slave.sig.sml

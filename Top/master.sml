@@ -1,4 +1,4 @@
-(*$import MASTER Communication TopHelp Prelink LinkParse Tools Background OS List Platform Dirs Target Paths *)
+(*$import MASTER Communication TopHelp Prelink LinkParse Tools Background OS List Platform Dirs Target Paths Statistics *)
 
 (* 
    The master sets up by deleting all channels and then takes master steps which are:
@@ -31,16 +31,20 @@ struct
     val chat_strings = Help.chat_strings
     val chat_verbose = Help.chatVerbose
 
-    (* We measure the time taken to go from READY to DONE. *)
+    (* See status.dot for a view of the status transition graph.  We measure the following times:
+     * total time:  time to go from READY to DONE
+     * slave time:  time spent in WORKING and PROCEEDING
+     * master time: time spent in WORKING'
+     *)
     datatype status =
-	WAITING					(* Waiting for imports to be up to date. *)
-      | READY of Time.time			(* Ready for dependency analysis; imports are up to date.  Ready time. *)
-      | PENDING of Time.time * Update.plan	(* Pending work on a slave.  Ready time. Work to do.*)
-      | WORKING of Time.time * Update.plan	(* Slave working.  Ready time. *)
-      | PROCEEDING of Time.time * Update.plan	(* Slave working, but interface up to date.  Ready time. *)
-      | PENDING' of Time.time * Update.plan	(* Pending work on the master.  Ready time. Work to do. *)
-      | WORKING' of Time.time * Update.plan	(* Master working.  Ready time. *)
-      | DONE of Time.time			(* Total compilation time. *)
+	WAITING							(* Waiting for imports to be up to date. *)
+      | READY of Time.time					(* Pending up-to-date check.  Ready time. *)
+      | PENDING of Time.time * Update.plan			(* Pending work on slave.  Ready time. *)
+      | WORKING of (Time.time * Time.time) * Update.plan	(* Slave working.  Ready time, working time. *)
+      | PROCEEDING of (Time.time * Time.time) * Update.plan	(* Slave working; interface up to date.  Ready time, working time. *)
+      | PENDING' of (Time.time * Time.time) * Update.plan	(* Pending work on master.  Ready time, slave time. *)
+      | WORKING' of (Time.time * Time.time * Time.time) * Update.plan	(* Master working.  Ready time, slave time, working' time. *)
+      | DONE of Time.time * Time.time * Time.time		(* Total time, slave time, master time. *)
 	
     local
 
@@ -339,7 +343,7 @@ struct
 	end
 
     local
-	val workingLocal = ref ([] : (string * Time.time * (unit -> bool)) list)
+	val workingLocal = ref ([] : (string * (unit -> bool)) list)
 	val readySlaves = ref ([] : Comm.channel list)
 	val knownSlaves = ref ([] : Comm.channel list)
 	val workingSlaves = ref ([] : Comm.channel list)
@@ -365,8 +369,8 @@ struct
 	fun pollForSlaves (do_ack_interface, do_ack_done, do_ack_local): int * int= 
 	    let
 		val maxWorkingLocal = 2
-		val newWorkingLocal = List.filter (fn (unit, startTime, done) =>
-						   if done() then (do_ack_local (unit, startTime); false)
+		val newWorkingLocal = List.filter (fn (unit, done) =>
+						   if done() then (do_ack_local unit; false)
 						   else true) (!workingLocal)
 		val _ = workingLocal := newWorkingLocal
 		val channels = Comm.findToMasterChannels()
@@ -408,7 +412,7 @@ struct
 	    end
 	(* Should only be used when we are below our limit on local processes. *)
 	fun useLocal (unit, f) =
-	    let val newLocal = (unit, Time.now(), Background.background f)
+	    let val newLocal = (unit, Background.background f)
 		val _ = workingLocal := (newLocal :: (!workingLocal))
 	    in  ()
 	    end
@@ -437,12 +441,37 @@ struct
 	(case get_status unit
 	   of READY t => t
 	    | PENDING (t, _) => t
-	    | WORKING (t, _) => t
-	    | PROCEEDING (t, _) => t
-	    | PENDING' (t, _) => t
-	    | WORKING' (t, _) => t
+	    | WORKING (t, _) => #1 t
+	    | PROCEEDING (t, _) => #1 t
+	    | PENDING' (t, _) => #1 t
+	    | WORKING' (t, _) => #1 t
 	    | status => badStatus (unit, status, "getting ready time"))
 
+    fun getWorkingTime unit =
+	(case get_status unit
+	   of WORKING (t, _) => #2 t
+	    | PROCEEDING (t, _) => #2 t
+	    | status => badStatus (unit, status, "getting working time"))
+
+    fun getWorking'Time unit =
+	(case get_status unit
+	   of WORKING' (t, _) => #3 t
+	    | status => badStatus (unit, status, "getting working' time"))
+
+    fun getTotalTimes unit =
+	(case get_status unit
+	   of DONE t => t
+	    | status => badStatus (unit, status, "getting total times"))
+
+    fun getSlaveTime unit =
+	(case get_status unit
+	   of PENDING' (t, _) => #2 t
+	    | WORKING' (t, _) => #2 t
+	    | DONE t => #2 t
+	    | status => badStatus (unit, status, "getting slave time"))
+
+    val getMasterTime = #3 o getTotalTimes
+	     
     fun getPlan unit =
 	(case get_status unit
 	   of PENDING (_, plan) => plan
@@ -456,7 +485,7 @@ struct
 	(case get_status unit
 	   of WAITING => set_status (unit, READY (Time.now()))
 	    | READY _ => ()
-	    | status => badStatus (unit, status, "maing ready"))
+	    | status => badStatus (unit, status, "making ready"))
 
     fun markPending (unit, plan) =
 	(case get_status unit
@@ -465,14 +494,14 @@ struct
 	
     fun markWorking unit =
 	(case get_status unit
-	   of PENDING arg => set_status (unit, WORKING arg)
+	   of PENDING (t, plan) => set_status (unit, WORKING ((t, Time.now()), plan))
 	    | status => badStatus (unit, status, "making working"))
 
     fun markWorking' unit =
 	(case get_status unit
-	   of PENDING' arg => set_status (unit, WORKING' arg)
+	   of PENDING' ((t, t'), plan) => set_status (unit, WORKING' ((t, t', Time.now()), plan))
 	    | status => badStatus (unit, status, "making working'"))
-	     
+    
     fun enableChildren parent = 
 	let 
 	    fun enableReady child =
@@ -501,10 +530,11 @@ struct
 	end
 
     fun markPending' (unit, plan) =
-	let val _ = case get_status unit
-		      of READY t => set_status (unit, PENDING' (t, plan))
-		       | WORKING (t, _) => set_status (unit, PENDING' (t, plan))
-		       | PROCEEDING (t, _) => set_status (unit, PENDING' (t, plan))
+	let fun newT (t,t') = (t, Time.-(Time.now(), t'))
+	    val _ = case get_status unit
+		      of READY t => set_status (unit, PENDING' ((t, Time.zeroTime), plan))
+		       | WORKING (t, _) => set_status (unit, PENDING' (newT t, plan))
+		       | PROCEEDING (t, _) => set_status (unit, PENDING' (newT t, plan))
 		       | status => badStatus (unit, status, "making pending'")
 	    val _ = enableChildren unit
 	in  ()
@@ -519,17 +549,20 @@ struct
 	end
 
     fun markDone unit =
-	let 
-	    val readyTime = case get_status unit
-			      of READY t => t
-			       | WORKING (t,_) => t
-			       | PROCEEDING (t,_) => t
-			       | WORKING' (t,_) => t
-			       | status => badStatus (unit, status, "making done")
-	    val elapsedTime = Time.-(Time.now(), readyTime)
-	    val _ = set_status (unit, DONE elapsedTime)
+	let
+	    val now = Time.now()
+	    fun since t = Time.- (now, t)
+	    val z = Time.zeroTime
+	    val (times as (totalTime, slaveTime, masterTime)) =
+		case get_status unit
+		  of READY t => (since t, z, z)
+		   | WORKING ((t,t'), _) => (since t, since t', z)
+		   | PROCEEDING ((t, t'), _) => (since t, since t', z)
+		   | WORKING' ((t, t', t''), _) => (since t, t', since t'')
+		   | status => badStatus (unit, status, "making done")
+	    val _ = set_status (unit, DONE times)
 	    val _ = enableChildren unit
-	in  elapsedTime
+	in  ()
 	end
 
     (* sendToSlave : plan -> bool *)
@@ -553,7 +586,7 @@ struct
 		    else ()
 	    val _ =
 		if null plan then
-		    ignore (markDone unit)
+		    markDone unit
 		else
 		    if sendToSlave plan then
 			markPending (unit, plan)
@@ -600,9 +633,9 @@ struct
 		    val pending = pending @ pending2
 		    val pending' = pending' @ pending'2
 		    val done = done @ done2
-		in  if (null done2)				(* no progress *)
-			then (waiting, pending, pending', done)	(* some more may have become ready now *)
-		    else loop (waiting, pending, pending', done)
+		in  if (null ready)				 (* no progress *)
+			then (waiting, pending, pending', done)
+		    else loop (waiting, pending, pending', done) (* some more may have become ready now *)
 		end
 	    val (waiting, pending, pending', done) = loop (waiting, [], [], [])
 	    val _ = if (null done) orelse (not (!chat_verbose))
@@ -629,27 +662,33 @@ struct
     fun waitForSlaves () = 
 	let
 	    fun ack_inter (name, unit) =
-		(markProceeding unit;
-		 chat ("  [" ^ name ^ " compiled interface of " ^ unit ^ "]\n"))
+		let val _ = markProceeding unit
+		    val diff = Time.toReal (Time.-(Time.now(), getWorkingTime unit))
+		    val diff = (Real.realFloor(diff * 100.0)) / 100.0
+		    val _ = chat ("  [" ^ name ^ " compiled interface of " ^ unit ^ " in " ^
+				  (Real.toString diff) ^ " seconds]\n")
+		in  ()
+		end
 	    fun ack_done (name, unit, plan) =
 		if null plan then
-		    let val diff = Time.toReal (markDone unit)
+		    let
+			val _ = markDone unit
+			val diff = Time.toReal (getSlaveTime unit)
 			val diff = (Real.realFloor(diff * 100.0)) / 100.0
 		    in  chat ("  [" ^ name ^ " compiled " ^ unit ^ " in " ^
 			      (Real.toString diff) ^ " seconds]\n")
 		    end
 		else
 		    let val _ = markPending' (unit, plan)
-			val readyTime = getReadyTime unit
-			val diff = Time.toReal(Time.-(Time.now(),readyTime))
+			val diff = Time.toReal(getSlaveTime unit)
 			val diff = (Real.realFloor(diff * 100.0)) / 100.0
-			val _ = chat ("  [" ^ name ^ " compiled to assembly of " ^ unit ^ " in " ^
+			val _ = chat ("  [" ^ name ^ " compiled " ^ unit  ^ " to assembly in " ^
 				      (Real.toString diff) ^ " seconds]\n")
 		    in  ()
 		    end
-	    fun ack_local (unit, startTime) =
-		let val _ = ignore (markDone unit)
-		    val diff = Time.toReal(Time.-(Time.now(),startTime))
+	    fun ack_local unit =
+		let val _ = markDone unit
+		    val diff = Time.toReal (getMasterTime unit)
 		    val diff = (Real.realFloor(diff * 100.0)) / 100.0
 		    val _ = Help.chat ("  [Master locally finished " ^ unit ^ " in " ^
 				       (Real.toString diff) ^ " seconds]\n")
@@ -659,40 +698,50 @@ struct
 	in  numSlaves 
 	end
     fun finalReport units =
-	if (!chat_verbose) then
-	    let fun mapper u = 
-		(case get_status u of
-		     DONE         t => let val t = Time.toReal t
-				       in if (t>=1.0) then SOME(u,t) else NONE
-				       end
-		   | WAITING => error ("Unit "  ^ u ^ " still waiting for compilation!")
-		   | status => error ("Unit " ^ u ^ " still has status " ^ statusName status))
-		val unsorted = List.mapPartial mapper units
-		fun greater ((_,x),(_,y)) = x > (y : real)
-		val sorted = ListMergeSort.sort greater unsorted
-		val _ = chat "------- Times to compile files in ascending order -------\n"
-		val (underOne,overOne) = List.partition (fn (_,t) => t < 1.0) sorted
-		val (underTen, overTen) = List.partition (fn (_,t) => t < 10.0) overOne
-		val (underThirty, overThirty) = List.partition (fn (_,t) => t < 30.0) overOne
-		val _ = (print (Int.toString (length underOne));
-			 print " files under 1.0 second.\n")
-		val _ = (print (Int.toString (length underTen));
-			 print " files from 1.0 to 10.0 seconds.\n")
-		val _ = (print (Int.toString (length overTen));
-			 print " files from 10.0 to 30.0 seconds:  ";
-			 chat_strings 40 (map #1 overThirty); print "\n")
-		val _ = (print (Int.toString (length overThirty));
-			 print " files over 30.0 seconds:\n")
-		val _ = app (fn (unit,t) => 
-			     let val t = (Real.realFloor(t * 100.0)) / 100.0
-			     in  chat ("  " ^ unit ^ 
-				       (Util.spaces (20 - (size unit))) ^
-				       " took " ^ 
-				       (Real.toString t) ^ " seconds.\n")
-			     end) overThirty
-	    in  ()
-	    end
-	else ()
+	let
+	    fun toString r = Real.toString (Real.realFloor (r * 100.0) / 100.0)
+	    val _ = chat "------- Times to compile files -------\n"
+	    fun stats nil = "unavailable"
+	      | stats (L : real list) =
+		let val v = Vector.fromList L
+		in  String.concat ["min ", toString (VectorStats.min v),
+				   " max ", toString (VectorStats.max v),
+				   " mean ", toString (VectorStats.mean v),
+				   " absdev ", toString (VectorStats.absdev v)]
+		end
+	    fun mapper unit =
+		let val (total, slave, master) = getTotalTimes unit
+		    val total' = Time.+ (slave, master)
+		    val idle = Time.- (total, total')
+		    val total' = Time.toReal total'
+		    val idle = Time.toReal idle
+		in  if total' > 0.0 then SOME (unit, idle, total') else NONE
+		end
+	    val unsorted = List.mapPartial mapper units
+	    val _ = chat (Int.toString (length unsorted) ^ " of  " ^ Int.toString (length units) ^ " units needed compilation.\n" ^
+			  "  Work time statistics (in seconds): " ^ stats (map #3 unsorted) ^ "\n" ^
+			  "  Idle time statistics (in seconds): " ^ stats (map #2 unsorted) ^ "\n")
+	    fun greater ((_,_,x),(_,_,y)) = x > (y : real)
+	    val sorted = ListMergeSort.sort greater unsorted
+	    val (underOne,overOne) = List.partition (fn (_,_,t) => t < 1.0) sorted
+	    val (oneToTen, overTen) = List.partition (fn (_,_,t) => t < 10.0) overOne
+	    val (tenToThirty, overThirty) = List.partition (fn (_,_,t) => t < 30.0) overTen
+	    val _ = (chat (Int.toString (length underOne));
+		     chat " files under 1.0 second.\n")
+	    val _ = (chat (Int.toString (length oneToTen));
+		     chat " files from 1.0 to 10.0 seconds.\n")
+	    val _ = (chat (Int.toString (length tenToThirty));
+		     chat " files from 10.0 to 30.0 seconds:  ";
+		     chat_strings 40 (map #1 tenToThirty); chat "\n")
+	    val _ = (chat (Int.toString (length overThirty));
+		     chat " files over 30.0 seconds:\n")
+	    val _ = app (fn (unit,idle,total) =>
+			 chat ("  " ^ unit ^ 
+			       (Util.spaces (20 - (size unit))) ^ " took " ^ 
+			       (toString total) ^ " seconds of work and idled for " ^
+			       (toString idle) ^ " seconds.\n")) overThirty
+	in  ()
+	end
     fun execute (target, imports, plan) = ignore (foldl Update.execute (Update.init (target, imports)) plan)
     (* Assumes that all units in state's pending' list are PENDING'. *)
     fun useLocals (localsLeft, state : state) : int =
@@ -836,7 +885,12 @@ struct
 	    val initialState : state = (units, [], [], [], [], [])
 	in  {setup = fn _ => initialState,
 	     step = step, 
-	     complete = fn _ => (finalReport units; app makeExe finalTargets)}
+	     complete = (fn _ =>
+			 let val _ = if !chat_verbose
+					 then finalReport units
+				     else ()
+			 in  app makeExe finalTargets
+			 end)}
 	end
     fun showCheckPoint state =
 	let val left = stateSize state
