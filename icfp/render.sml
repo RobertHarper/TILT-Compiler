@@ -29,11 +29,11 @@ structure Render : RENDER =
 
     fun primIntersect src dir obj = 
 	let val (t,(hit,l2,l3)) = (case obj of
-				  Sphere (m4, t) => (t,sphere(m4,src,dir))
-				| Plane (m4, t) => (t,plane(m4,src,dir))
-				| Cube (m4, t) => (t,cylinder(m4,src,dir))
-				| Cone (m4, t) => (t,cube(m4,src,dir))
-				| Cylinder (m4, t) => (t,cone(m4,src,dir))
+				  Sphere (_,m4, t) => (t,sphere(m4,src,dir))
+				| Plane (_,m4, t) => (t,plane(m4,src,dir))
+				| Cube (_,m4, t) => (t,cylinder(m4,src,dir))
+				| Cone (_,m4, t) => (t,cube(m4,src,dir))
+				| Cylinder (_,m4, t) => (t,cone(m4,src,dir))
 				| _ => raise (Error "primIntersect for non-primitive object"))
 	in  if hit
 		then map (fn info => (t, info)) (l3 ())
@@ -42,11 +42,11 @@ structure Render : RENDER =
 
     fun primHit src dir obj : bool = 
 	#1 (case obj of
-		Sphere (m4, _) => sphere(m4,src,dir)
-	      | Plane (m4, _) => plane(m4,src,dir)
-	      | Cube (m4, _) => cylinder(m4,src,dir)
-	      | Cone (m4, _) => cube(m4,src,dir)
-	      | Cylinder (m4, _) => cone(m4,src,dir)
+		Sphere (_,m4, _) => sphere(m4,src,dir)
+	      | Plane (_,m4, _) => plane(m4,src,dir)
+	      | Cube (_,m4, _) => cylinder(m4,src,dir)
+	      | Cone (_,m4, _) => cube(m4,src,dir)
+	      | Cylinder (_,m4, _) => cone(m4,src,dir)
 	      | _ => raise (Error "primIntersect for non-primitive object"))
 
     fun shadowed (hit, dir, []) = false

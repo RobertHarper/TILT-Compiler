@@ -37,96 +37,44 @@ struct
     structure M4 = Matrix
 
 
-fun translate ((Real rtz) :: (Real rty) :: (Real rtx) :: (Object obj) :: s) =
-    let
-	fun helper (Sphere(m,c)) = Sphere(M4.translateM(rtx, rty, rtz, m), c)
-	  | helper (Cube(m,c))  = Cube(M4.translateM(rtx, rty, rtz, m), c)
-	  | helper (Cone(m,c)) = Cone(M4.translateM(rtx, rty, rtz, m), c)
-	  | helper (Cylinder(m,c)) = Cylinder(M4.translateM(rtx, rty, rtz, m), c)
-	  | helper (Plane (m,c)) = Plane(M4.translateM(rtx, rty, rtz, m), c)
-	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
-	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
-	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    local 
+      fun app3 f ((Real rtz) :: (Real rty) :: (Real rtx) :: (Object obj) :: s) =
+	let
+	  fun helper (Sphere(name,m,c))   = Sphere(name,f(rtx, rty, rtz, m), c)
+	    | helper (Cube(name,m,c))     = Cube(name,f(rtx, rty, rtz, m), c)
+	    | helper (Cone(name,m,c))     = Cone(name,f(rtx, rty, rtz, m), c)
+	    | helper (Cylinder(name,m,c)) = Cylinder(name,f(rtx, rty, rtz, m), c)
+	    | helper (Plane (name,m,c))   = Plane(name,f(rtx, rty, rtz, m), c)
+	    | helper (Union(o1, o2))      = Union(helper(o1), helper(o2))
+	    | helper (Difference(o1,o2))  = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2))  = Intersection(helper(o1), helper(o2))
+	in
+	  Object (helper obj)::s
+	end
+
+      fun app1 f ((Real rs) :: (Object obj) :: s) =
+	let
+	  fun helper (Sphere(name,m,c)) = Sphere(name,f(rs, m), c)
+	    | helper (Cube(name,m,c))  = Cube(name,f(rs, m), c)
+	    | helper (Cone(name,m,c)) = Cone(name,f(rs, m), c)
+	    | helper (Cylinder(name,m,c)) = Cylinder(name,f(rs, m), c)
+	    | helper (Plane (name,m,c)) = Plane(name,f(rs, m), c)
+	    | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	    | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	    | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+	in
+	  Object (helper obj)::s
+	end
     in
-	Object (helper obj)::s
+      val translate = app3 M4.translateM
+      val scale     = app3 M4.scaleM
+
+      val uscale  = app1 M4.uScaleM
+      val rotatex = app1 M4.rotxM
+      val rotatey = app1 M4.rotyM
+      val rotatez = app1 M4.rotzM
     end
 
-fun scale ((Real rsz) :: (Real rsy) :: (Real rsx) :: (Object obj) :: s) =
-    let
-	fun helper (Sphere(m,c)) = Sphere(M4.scaleM(rsx, rsy, rsz, m), c)
-	  | helper (Cube(m,c))  = Cube(M4.scaleM(rsx, rsy, rsz, m), c)
-	  | helper (Cone(m,c)) = Cone(M4.scaleM(rsx, rsy, rsz, m), c)
-	  | helper (Cylinder(m,c)) = Cylinder(M4.scaleM(rsx, rsy, rsz, m), c)
-	  | helper (Plane (m,c)) = Plane(M4.scaleM(rsx, rsy, rsz, m), c)
-	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
-	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
-	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
-    in
-	Object (helper obj)::s
-    end
-
-fun uscale ((Real rs) :: (Object obj) :: s) =
-    let
-	fun helper (Sphere(m,c)) = Sphere(M4.uScaleM(rs, m), c)
-	  | helper (Cube(m,c))  = Cube(M4.uScaleM(rs, m), c)
-	  | helper (Cone(m,c)) = Cone(M4.uScaleM(rs, m), c)
-	  | helper (Cylinder(m,c)) = Cylinder(M4.uScaleM(rs, m), c)
-	  | helper (Plane (m,c)) = Plane(M4.uScaleM(rs, m), c)
-	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
-	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
-	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
-    in
-	Object (helper obj)::s
-    end
-
-fun rotatex ((Real t) :: (Object obj) :: s) =
-    let
-	fun helper (Sphere(m,c)) = Sphere(M4.rotxM(t, m), c)
-	  | helper (Cube(m,c))  = Cube(M4.rotxM(t, m), c)
-	  | helper (Cone(m,c)) = Cone(M4.rotxM(t, m), c)
-	  | helper (Cylinder(m,c)) = Cylinder(M4.rotxM(t, m), c)
-	  | helper (Plane (m,c)) = Plane(M4.rotxM(t, m), c)
-	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
-	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
-	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
-    in
-	Object (helper obj)::s
-    end
-
-fun rotatey ((Real t) :: (Object obj) :: s) =
-    let
-	fun helper (Sphere(m,c)) = Sphere(M4.rotyM(t, m), c)
-	  | helper (Cube(m,c))  = Cube(M4.rotyM(t, m), c)
-	  | helper (Cone(m,c)) = Cone(M4.rotyM(t, m), c)
-	  | helper (Cylinder(m,c)) = Cylinder(M4.rotyM(t, m), c)
-	  | helper (Plane (m,c)) = Plane(M4.rotyM(t, m), c)
-	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
-	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
-	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
-    in
-	Object (helper obj)::s
-    end
-
-fun rotatez ((Real t) :: (Object obj) :: s) =
-    let
-	fun helper (Sphere(m,c)) = Sphere(M4.rotzM(t, m), c)
-	  | helper (Cube(m,c))  = Cube(M4.rotzM(t, m), c)
-	  | helper (Cone(m,c)) = Cone(M4.rotzM(t, m), c)
-	  | helper (Cylinder(m,c)) = Cylinder(M4.rotzM(t, m), c)
-	  | helper (Plane (m,c)) = Plane(M4.rotzM(t, m), c)
-	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
-	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
-	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
-    in
-	Object (helper obj)::s
-    end
-
-fun union ((Object o2) :: (Object o1) :: s) = Object(Union(o1, o2))::s
-    
-fun intersect ((Object o2) :: (Object o1) :: s) = Object(Intersection(o1, o2))::s
-    
-fun difference ((Object o2) :: (Object o1) :: s) = Object (Difference(o1, o2))::s
-    
 (* Math functions [not addi/addf, since tom did those] in reverse alphabetic order *)
     
 fun subi((Int i2) :: (Int i1) :: s) = Int (i1-i2) :: s
@@ -177,12 +125,29 @@ fun asin((Real r1) :: s) = Real(r2d (Math.asin r1)) :: s
 fun acos((Real r1) :: s) = Real(r2d (Math.acos r1)) :: s
     
 (* Geom primitaves *)
-    
-fun sphere ((Closure c) :: s) = Object (Sphere(M4.ident, c)) :: s
-fun cube ((Closure c) :: s) = Object (Cube(M4.ident, c)) :: s
-fun cylinder ((Closure c) :: s) = Object (Cylinder(M4.ident, c)) :: s
-fun cone ((Closure c) :: s) = Object (Cone(M4.ident, c)) :: s
-fun plane ((Closure c) :: s) = Object (Plane(M4.ident, c)) :: s
+
+local 
+  val counter = ref 0
+  fun inc () = (!counter) before (counter := !counter +1)
+
+  fun newname s = s ^ (Int.toString (inc()))
+
+  fun make (maker,n) s = 
+    (case s
+       of ((String name) :: (Closure c) :: s) => Object (maker(name,M4.ident,c)) :: s
+	| ((Closure c) :: s) => Object (maker(newname n,M4.ident,c)) :: s)
+in    
+
+  val sphere   = make (Sphere,"sphere")
+  val cube     = make (Cube,"cube")
+  val cylinder = make (Cylinder,"cylinder")
+  val cone     = make (Cone,"cone")
+  val plane    = make (Plane,"plane")
+
+  fun union ((Object o2) :: (Object o1) :: s) = Object(Union(o1, o2))::s
+  fun intersect ((Object o2) :: (Object o1) :: s) = Object(Intersection(o1, o2))::s
+  fun difference ((Object o2) :: (Object o1) :: s) = Object (Difference(o1, o2))::s
+end
 
 fun render (s : stack) = !real_render s
 

@@ -33,12 +33,12 @@
 [ ]   % lights (none!)
 
 % wall facing us (z=0), push back
-red solid-color apply plane 
+red solid-color apply "red back wall" plane 
         90.0 rotatex
         0.0 0.0 3.0 translate 
 
 % wall to our left, (x=0), push left
-blue solid-color apply plane
+blue solid-color apply "blue left wall" plane
         90.0 rotatez
 	-3.0 0.0 0.0 translate
 

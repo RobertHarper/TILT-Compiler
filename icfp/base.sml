@@ -30,11 +30,11 @@ struct
       | Light of light
         
     and obj = 
-        Sphere of m4 * closure
-      | Cube of m4 * closure
-      | Cone of m4 * closure
-      | Cylinder of m4 * closure
-      | Plane of m4 * closure
+        Sphere   of string * m4 * closure
+      | Cube     of string * m4 * closure
+      | Cone     of string * m4 * closure
+      | Cylinder of string * m4 * closure
+      | Plane    of string * m4 * closure
       | Union of obj * obj
       | Difference of obj * obj
       | Intersection of obj * obj
