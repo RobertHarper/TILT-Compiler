@@ -145,7 +145,7 @@ val test6a =
 val test6b = tst0 "test6b" ((concat ("a", "/b") seq "WRONG")
 			    handle Path => "OK" | _ => "WRONG")
 
-val mkAbsolute = fn (p, r) => mkAbsolute {path = p, relativeTo = r}
+(* val mkAbsolute = fn (p, r) => mkAbsolute {path = p, relativeTo = r} *)
    
 val test7a = 
     tst' "test7a" (fn _ => 
@@ -157,7 +157,7 @@ val test7b = tst0 "test7b" ((mkAbsolute("a", "c/d") seq "WRONG")
 val test7c = tst0 "test7c" ((mkAbsolute("/a", "c/d") seq "WRONG")
 			    handle Path => "OK" | _ => "WRONG")
 
-val mkRelative = fn (p, r) => mkRelative {path = p, relativeTo = r}
+(* val mkRelative = fn (p, r) => mkRelative {path = p, relativeTo = r} *)
 
 val test8a = 
     tst' "test8a" (fn _ => 
