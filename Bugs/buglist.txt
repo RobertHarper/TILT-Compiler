@@ -157,3 +157,4 @@
 0161 [open]	should not allow whitespace in long.identifier
 0162 [open]	Queue.delete is broken.
 0163 [open]	Pattern compiler causing elaborator to bomb.
+0164 [closed]	Garbage collector skipping global roots.
