@@ -52,12 +52,16 @@ struct
    val strip_var = Nilutil.strip_var
    val strip_arrow = Nilutil.strip_arrow
    val strip_singleton = Nilutil.strip_singleton
+   val strip_record = Nilutil.strip_record
    val is_unit_c = Nilutil.is_unit_c
+   val curry2 = Util.curry2
+   val find2 = Listops.find2
 
    val perr_c = NilError.perr_c
    val perr_e = NilError.perr_e
    val perr_k = NilError.perr_k
    val perr_c_k = NilError.perr_c_k
+   val eq_label = Name.eq_label
 
    fun gt_label_pair ((l1,_),(l2,_)) = (case Name.compare_label (l1,l2) of
 							 GREATER => true
@@ -259,14 +263,26 @@ struct
    (* selectFromRec.  Given a record expression r and a list lbls 
          of labels, produce the term corresponding to r.lbls
     *)
-   fun selectFromRec (r, lbls) = 
-       let
-	   fun loop [] = r
-	     | loop (lbl::lbls) = 
-	       Prim_e(NilPrimOp(select lbl), [], [loop lbls])
-       in
-	   loop (rev lbls)
-       end
+   fun selectFromRec (r,t,lbls) = 
+     let
+       fun loop [] = (r,t)
+	 | loop (lbl::lbls) = 
+	 let
+	   val (r,t) = loop lbls
+	   val (labels,cons) = 
+	     case strip_record t
+	       of SOME (labels,cons) => (labels,cons)
+		| NONE => error "Expected record type in selectFromRec"
+	   val t = case find2 (fn (l,c) => eq_label (l,lbl)) (labels,cons)
+		     of SOME (label,con) => con
+		      | NONE => error "Label not found in record projection"
+	 in
+	   (Prim_e(NilPrimOp(select lbl), cons, [r]),t)
+	 end
+       val (r,t) = loop (rev lbls)
+     in
+       r
+     end
 
    fun chooseName (NONE, vmap) = splitFreshVar vmap
      | chooseName (SOME (var,var_c,var_r), vmap) = (var, var_c, var_r, vmap)
@@ -581,9 +597,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	   local
 	       val Var_c var_mod_c = name_mod_c
-	       val labels_r = (case type_mod_r of
-				   Prim_c(Record_c labels,_) => labels
-				 | _ => [])
+	       val labels_r = (case strip_record type_mod_r 
+				 of SOME (labels,cons) => labels
+				  | _ => [])
 	       fun mapper ((l,v),_) = if (Listops.member_eq(Name.eq_label,l,labels_r))
 					  then NONE else SOME(v,Proj_c(name_mod_c,l))
 	       val table = 
@@ -620,7 +636,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	   val ebnd_proj_cat = APP[ebnd_mod_cat,
 				   LIST [Exp_b(var_proj_r, type_proj_r,
-					       selectFromRec(name_mod_r,
+					       selectFromRec(name_mod_r,type_mod_r,
 							     lbls))]]
        in
 	   {cbnd_cat = cbnd_proj_cat,
@@ -1744,8 +1760,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val (exp_record, con_record, valuable) = xexp context il_exp
 
 	   val con = projectFromRecord con_record [label]
+	   val cons = case strip_record con_record 
+			of SOME (labels,cons) => cons
+			 | _ => error "Expected record type"
        in
-	   (Prim_e (NilPrimOp (select label), [], [exp_record]), con, valuable)
+	   (Prim_e (NilPrimOp (select label), cons, [exp_record]), con, valuable)
        end
 
      | xexp' context (Il.SUM_TAIL (_, il_exp)) =
@@ -1992,7 +2011,13 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	       if specialize then 
 		   name_r
 	       else
-		   Prim_e (NilPrimOp (select label), [], [name_r])
+		 let
+		   val cons = case strip_record type_r 
+				of SOME (labels,cons) => cons
+				 | NONE => error "Expected record type"
+		 in
+		   Prim_e (NilPrimOp (select label), cons, [name_r])
+		 end
 
        in
 	       (Let_e (Sequential, bnds, let_body), 

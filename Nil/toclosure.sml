@@ -890,6 +890,7 @@ struct
        let val _ = if (!debug)
 		       then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
+	   val k = k_rewrite k
 	   val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars,...} = get_frees v (* freeevars must be empty *)
 	   val vk_free = (VarMap.listItemsi freecvars)

@@ -234,8 +234,7 @@ functor Ppnil(structure ArgNil : NIL
 	       (pp_list pp_con clist ("",",","",false)),
 	       String "; ", String (TilWord32.toDecimalString numfloats),
 	       String "; ", Break0 0 5,
-	       pp_con con,
-	       String ")"]]
+	       pp_con con]]
 
     and pp_nilprimop (select label) = Hbox[String "select[", pp_label label, String "]"]
       | pp_nilprimop nilprimop = 

@@ -3,6 +3,8 @@ signature NILSUBST =
     type exp
     type con
     type kind
+    type bnd
+
     type var = Name.var
 
     type 'a subst
@@ -35,6 +37,7 @@ signature NILSUBST =
     val substConInCon : con subst -> con -> con
     val substConInKind : con subst -> kind -> kind
     val substConInExp : con subst -> exp -> exp
+    val substConInBnd : con subst -> bnd -> bnd * con subst
     val substExpInExp : exp subst -> exp -> exp
     val substExpConInExp : (exp subst * con subst) -> exp -> exp
 

@@ -13,7 +13,7 @@ struct
     val set2list = Util.set2list
     val list2sequence = Util.list2sequence
     val sequence2list = Util.sequence2list
-
+    val foldl_acc = Listops.foldl_acc
     val linearize = false
     val debug = ref false
 
@@ -165,19 +165,18 @@ struct
 	   val state = copy_state state
 	   val (cbnds_vk,vklist,state) = lvklist state vklist
 	   val (cbnds_vc,vclist,state) = lvclist state vclist
-	   fun vfolder(v,(acc,state)) = 
+	   fun vfolder(v,state) = 
 	       let val (state,v) = add_var(state,v)
 		   val state = pop_var state
-	       in (v::acc,state)
+	       in (v,state)
 	       end
-	   val (rev_vflist',state) = foldl vfolder ([],state) vflist
-	   val vflist = rev rev_vflist'
+	   val (vflist,state) = foldl_acc vfolder state vflist
 	   val (bnds_e,e) = lexp state e
 	   val (bnds_c,c) = lcon2 state c
 	   val bnds = (map NilUtil.cbnd2bnd cbnds_vk) @ (map NilUtil.cbnd2bnd cbnds_vc) @ bnds_e @ bnds_c
 	   val e = (case bnds of 
-			  [] => e
-			| bnds => lete(bnds,e))
+		      [] => e
+		    | bnds => lete(bnds,e))
        in  Function(effect,recur,vklist,vclist,vflist,e,c)
        end
 
@@ -425,8 +424,8 @@ struct
 	       val (cbnd,c) = lcon state c
 	   in  ((rev cbnd)@cbnds, (v,c)::acc, state)
 	   end
-	   val (rev_cbnds, vclist,state) = foldl vcfolder ([],[],state) vclist
-       in  (rev rev_cbnds, vclist, state)
+	   val (rev_cbnds, rev_vclist,state) = foldl vcfolder ([],[],state) vclist
+       in  (rev rev_cbnds, rev rev_vclist, state)
        end
 
    and lkind state arg_kind : conbnd list * kind = 

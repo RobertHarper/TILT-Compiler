@@ -43,7 +43,8 @@ struct
 				  structure ArgPrim = LinkIl.Prim
 				  structure PrimUtil = NilPrimUtil
 				  structure Alpha = Alpha
-				  structure Subst = NilSubst)
+				  structure Subst = NilSubst
+				  structure PpNil = PpNil)
 
     structure NilContext = NilContextFn(structure NilUtil = NilUtil
 					structure ArgNil = Nil
@@ -455,6 +456,20 @@ struct
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else print "Renaming complete\n"
+ 	    val nilmod = 
+	      if (!typecheck) then
+		(Stats.timer("Nil typechecking2",NilStatic.module_valid)) (D,nilmod)
+	      else
+		nilmod
+	    val _ = 
+	      if (!typecheck) then 
+		if debug 
+		  then (print "\n\n=======================================\n\n";
+			print "nil typechecking2 results:\n";
+			PpNil.pp_module nilmod;
+			print "\n")
+		else print "Nil typechecking2 complete\n"
+	      else ()
 	in  nilmod
 	end
 

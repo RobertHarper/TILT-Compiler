@@ -899,10 +899,12 @@ struct
 	   recur (con1,con2)
 	  | _ => false)
 	 orelse (if !debug then
-		   (lprintl "Constructor:";
+		   (lprintl "alpha_equiv_con failed!";
+		    printl "Constructor:";
 		    PpNil.pp_con con1;
 		    lprintl "Not equivalent to :";
-		    PpNil.pp_con con2)
+		    PpNil.pp_con con2;
+		    printl "")
 		 else ();
 		   false)
 		   

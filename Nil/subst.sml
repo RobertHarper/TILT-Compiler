@@ -1,12 +1,16 @@
 functor NilSubstFn(structure Nil : NIL
 		   structure PpNil : PPNIL
 		   sharing Nil = PpNil.Nil) :> 
-  NILSUBST where type exp = Nil.exp and type con = Nil.con and type kind = Nil.kind = 
+  NILSUBST where type exp = Nil.exp 
+	     and type con = Nil.con 
+	     and type kind = Nil.kind 
+	     and type bnd = Nil.bnd = 
   struct
 
     type exp = Nil.exp
     type con = Nil.con
     type kind = Nil.kind
+    type bnd = Nil.bnd
     type var = Name.var
     open Nil
 
@@ -127,15 +131,18 @@ functor NilSubstFn(structure Nil : NIL
 
 
     fun rebind Con (var,subst) = 
-      let
-	val var' = Name.derived_var var
-      in
-	(*It is sufficient here to add instead of compose
-	 * because we are guaranteed that nothing in the domain of
-	 * subst appears in the range of the things added
-	 *)
-	(var', add subst (var,Con var'))
-      end
+      if is_empty subst then
+	(var,subst)
+      else
+	let
+	  val var' = Name.derived_var var
+	in
+	  (*It is sufficient here to add instead of compose
+	   * because we are guaranteed that nothing in the domain of
+	   * subst appears in the range of the things added
+	   *)
+	  (var', add subst (var,Con var'))
+	end
 
     fun rebind_list rebind (vars,subst) = 
       Listops.foldl_acc rebind subst vars
@@ -569,6 +576,17 @@ functor NilSubstFn(structure Nil : NIL
 	id 
       else
 	substExpConInExp' (expmap,conmap)
+
+    fun substConInBnd conmap bnd = 
+      if is_empty conmap then 
+	(bnd,conmap)
+      else
+	let
+	  (*substExpConInBnd' cannot make an empty expmap non-empty*)
+	  val (bnd,(expmap,conmap)) = substExpConInBnd' (bnd,(empty(),conmap))
+	in
+	  (bnd,conmap)
+	end
 
     val con_subst_compose = compose substConInCon
 
