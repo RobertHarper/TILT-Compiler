@@ -11,7 +11,7 @@
 	.globl  global_exnrec
         .globl  GetRpcc
 	.globl	raise_exception_raw
-	.globl  ComapreAndSwap
+	.globl  CompareAndSwap
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
