@@ -16,17 +16,16 @@
 #define IS_SPECIAL_GLOBAL_REC(type) ((type & 3) == 3)
 #define IS_SPECIAL_UNSET(type)      (((signed int)type) == -1)
 
-#define SKIP 7
-#define MASK (1 << SKIP) - 1
-#define GET_SPECIAL_STACK_REC_POS(type) ((type >> 2) & MASK)
-#define GET_SPECIAL_STACK_REC_POS2(type) ((type >> (2 + SKIP)) & MASK)
-#define GET_SPECIAL_STACK_REC_POS3(type) ((type >> (2 + 2 * SKIP)) & MASK)
-#define GET_SPECIAL_STACK_REC_POS4(type) ((type >> (2 + 3 * SKIP)) * MASK)
+
+#define GET_SPECIAL_STACK_REC_POS(type) ((type >> 2) & 63)
+#define GET_SPECIAL_STACK_REC_POS2(type) ((type >> (2 + 6)) & 255)
+#define GET_SPECIAL_STACK_REC_POS3(type) ((type >> (2 + 6 + 8)) & 255)
+#define GET_SPECIAL_STACK_REC_POS4(type) ((type >> (2 + 6 + 8 + 8)) & 255)
 
 #define GET_SPECIAL_STACK_GLOBAL_POS(type)  GET_SPECIAL_STACK_REC_POS(type)
 #define GET_SPECIAL_STACK_GLOBAL_POS2(type) GET_SPECIAL_STACK_REC_POS2(type)
 #define GET_SPECIAL_STACK_GLOBAL_POS3(type) GET_SPECIAL_STACK_REC_POS3(type)
-#define GET_SPECIAL_STACK_GLOBAL_POS4(type) GET_SPECIAL_STACK_REC_POS4(type)
+#define GET_SPECIAL_STACK_GLOBAL_POS4(type) GET_SPECIAL_STACK_REC_POS4(type) 
 
 
 void show_stack(value_t sp, value_t cur_retadd, value_t top);
