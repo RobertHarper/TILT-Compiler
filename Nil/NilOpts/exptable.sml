@@ -1,7 +1,13 @@
 (*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil Int *)
 
 (* Basically revamped from old version of Til *)
+(* This sucks.  There's got to be better ways to do this.
+ * Some hashing should make this more efficient, if nothing else.
+ *)
 
+(* INVARIANTS:
+ *  - No two con variables bound twice.
+ *)
 
 structure ExpTable :> EXPTABLE = 
     
@@ -26,7 +32,7 @@ struct
 		GREATER
 	    else EQUAL
 		
-    val cmp_int:(int*int->order) = cmp_maker op< op>
+    val cmp_int:(int*int->order) = Int.compare (*cmp_maker op< op>*)
     val cmp_TilWord64 = cmp_maker TilWord64.slt TilWord64.sgt
     val cmp_uTilWord64 = cmp_maker TilWord64.ult TilWord64.ugt
 
@@ -220,8 +226,37 @@ struct
 	  | length_table t => 58*skip + hash_table t
 	  | equal_table t => 59 *skip + hash_table t
 
+    (* We rely on the unique variable name invariant to avoid having
+     * to care about scope.  You'll never bind the same variable twice,
+     * so you can't accidently capture an equation.
+     *)
 
-
+    local 
+      structure V = Name.VarMap
+      type eqns_map = (var V.map) ref
+      val cvar_eqns : eqns_map = ref V.empty
+    in
+      fun reset () = cvar_eqns := V.empty
+      fun cvar_equate (v1,v2) = 
+	if Name.eq_var(v1,v2) then ()
+	else cvar_eqns := V.insert(!cvar_eqns,v1,v2)
+      fun cvar_list_equate arg = 
+	let fun loop ([],[])           = EQUAL
+	      | loop (v1::vv1,v2::vv2) = (cvar_equate (v1,v2);loop (vv1,vv2))
+	      | loop ([],_)            = LESS
+	      | loop _                 = GREATER
+	in  loop arg
+	end 
+      fun cvar_equal (v1,v2) = 
+	(Name.eq_var (v1,v2)) orelse 
+	(case V.find (!cvar_eqns,v1)
+	   of SOME v2' => Name.eq_var (v2,v2')
+	    | NONE => false)
+      fun cvar_cmp (args) =
+	if cvar_equal args then EQUAL
+	else Name.compare_var args
+    end
+	
 
     fun cmp_primcon p = 
 	case p of 
@@ -330,12 +365,9 @@ struct
     and cmp_vklist (vklist1, vklist2) = cmp_list cmp_vk (vklist1, vklist2)
     and cmp_vclist (vclist1, vclist2) = cmp_list cmp_vc (vclist1, vclist2)
 
-    and cmp_vk ((v1,k1),(v2,k2)) = (case Name.compare_var(v1,v2) of
-					EQUAL => cmp_kind(k1,k2)
-				      | r => r)
-    and cmp_vc ((v1,c1),(v2,c2)) = (case Name.compare_var(v1,v2) of
-					EQUAL => cmp_con(c1,c2)
-				      | r => r)
+    and cmp_vk ((v1,k1),(v2,k2)) = (cmp_kind(k1,k2) before cvar_equate(v1,v2))
+	  
+    and cmp_vc ((v1,c1),(v2,c2)) = (cmp_con(c1,c2) before cvar_equate(v1,v2))
 
     and cmp_kind (k1, k2) = 
 	(case (k1,k2) of
@@ -352,10 +384,12 @@ struct
 	   | (_, Single_k _) => GREATER
 
 	   | (Record_k lvk1, Record_k lvk2) =>
-		 let fun cmp(((l1,v1),k1), ((l2,v2),k2)) = 
-		              cmp_orders[Name.compare_label (l1,l2),
-					 Name.compare_var (v1,v2),
-					 cmp_kind (k1,k2)]
+		 let 
+		   fun cmp(((l1,v1),k1), ((l2,v2),k2)) = 
+		     (cmp_orders[Name.compare_label (l1,l2),
+				 cmp_kind (k1,k2)]
+		      before cvar_equate (v1,v2)
+		      )
 		 in  cmp_list cmp (Sequence.toList lvk1, Sequence.toList lvk2)
 		 end
 
@@ -364,22 +398,20 @@ struct
 
 	   | (Arrow_k (op1, vklist1, k1), Arrow_k (op2, vklist2, k2)) => 
 		 cmp_orders[cmp_openness (op1, op2),
-			    cmp_vklist(vklist1, vklist2),
+			    cmp_vklist(vklist1, vklist2),   (*Has effects!! *)
 			    cmp_kind (k1,k2)])
 
 
     and cmp_conbnd (b1, b2) = 
 	case (b1,b2) of 
-	    ( Con_cb (v1,c1), Con_cb(v2,c2) ) => Name.compare_var (v1, v2) 
+	    ( Con_cb (v1,c1), Con_cb(v2,c2) ) => cmp_con(c1,c2) before cvar_equate(v1,v2)
 	  | (Con_cb _, _) => GREATER
 	  | (_, Con_cb _) => LESS
  
 	  | ( Open_cb (v1, vklist1, con1), Open_cb (v2, vklist2, con2) ) =>
-		(case Name.compare_var (v1, v2) of
-		     EQUAL => (case cmp_vklist (vklist1,vklist2) of
-				   EQUAL => cmp_con(con1,con2)
-				 | r => r)
-		   | r => r)
+	      (case cmp_vklist (vklist1,vklist2) of
+		 EQUAL => cmp_con(con1,con2) before cvar_equate(v1,v2)
+	       | r => r)
 
 	  | (Open_cb _, _) => GREATER
 	  | (_, Open_cb _ ) => LESS
@@ -392,7 +424,7 @@ struct
 	  | ( Prim_c _, _ ) => GREATER 
 	  | ( _ , Prim_c _ ) => LESS
 
-	  | (Var_c v1, Var_c v2) => Name.compare_var (v1, v2)
+	  | (Var_c v1, Var_c v2) => cvar_cmp (v1, v2)
 	  | (Var_c _, _) => GREATER
 	  | (_, Var_c _) => LESS
 
@@ -423,7 +455,7 @@ struct
 
 		
 	  | ( Let_c (sort1, conbnds1, con1) , Let_c (sort2, conbnds2, con2)) => 
-		cmp_orders [cmp_conbnd_list ( conbnds1, conbnds2), cmp_con (con1, con2)]
+		cmp_orders [cmp_conbnd_list ( conbnds1, conbnds2), cmp_con (con1, con2)]  (*Effects!  We rely on order of evaluation*)
 		
 	  | (Let_c _, _) =>  GREATER 
 	  | (_, Let_c _) =>  LESS
@@ -439,9 +471,13 @@ struct
 
 
 	  | (Mu_c (bool1, seq1) , Mu_c (bool2, seq2)) => 
-		(cmp_orders[cmp_bool(bool1,bool2),
-				  cmp_vclist (Sequence.toList seq1,
-					      Sequence.toList seq2)])
+		let
+		  val (vs1,l1) = Listops.unzip (Sequence.toList seq1)
+		  val (vs2,l2) = Listops.unzip (Sequence.toList seq2)
+		in
+		  cmp_orders[cvar_list_equate (vs1,vs2),cmp_bool(bool1,bool2),
+			     cmp_con_list (l1,l2)]
+		end
 	  | (Mu_c _ , _) =>  GREATER
 	  | (_ , Mu_c _) =>  LESS
 
@@ -455,8 +491,8 @@ struct
 				  cmp_openness(op1,op2),
 				  cmp_effect (eff1, eff2),
 				  cmp_int (Word32.toInt f1, Word32.toInt f2)]) of
-		    EQUAL => cmp_orders[cmp_vklist (vklist1,vklist2),
-					cmp_varcon_list (vclist1, vclist2),
+		    EQUAL => cmp_orders[cmp_vklist (vklist1,vklist2),             (*Effects!!!*)
+					cmp_varcon_list (vclist1, vclist2),      
 					cmp_con (con1,con2)]
 		 | r => r)
 	  | ( AllArrow_c _, _) => GREATER
@@ -471,7 +507,8 @@ struct
 
 	  | (Coercion_c {from=from1,to=to1,vars=vars1},
 	     Coercion_c {from=from2,to=to2,vars=vars2}) => 
-		    cmp_orders[cmp_con(from1,from2),cmp_con(to1,to2),cmp_list Name.compare_var (vars1,vars2)]
+	     cmp_orders[cvar_list_equate (vars1,vars2), cmp_con(from1,from2),cmp_con(to1,to2)]
+		    
 	  | (Coercion_c _, _) => GREATER
 	  | (_, Coercion_c _) => LESS
 
@@ -634,12 +671,14 @@ struct
        | (_, Raise_e _) => LESS
 	     
        | (Fold_e (vs1,from1,to1),Fold_e (vs2,from2,to2)) =>
-		cmp_orders[cmp_con(from1,from2),cmp_con(to1,to2),cmp_list Name.compare_var (vs1,vs2)]
+         cmp_orders[cvar_list_equate (vs1,vs2), cmp_con(from1,from2),cmp_con(to1,to2)]
+
        | (Fold_e _, _)  => GREATER
        | (_, Fold_e _)  => LESS
 
        | (Unfold_e (vs1,from1,to1),Unfold_e (vs2,from2,to2)) =>
-		cmp_orders[cmp_con(from1,from2),cmp_con(to1,to2),cmp_list Name.compare_var (vs1,vs2)]
+	 cmp_orders[cvar_list_equate (vs1,vs2), cmp_con(from1,from2),cmp_con(to1,to2)]
+
        | (Unfold_e _, _)  => GREATER
        | (_, Unfold_e _)  => LESS
 
@@ -662,12 +701,13 @@ struct
 			      | r => r)
 		| r => r)
 
-	     
+
+    fun wrap f = fn arg => (reset();f arg)
 
     structure ExpKey = 
 	struct 
 	    type ord_key = exp
-	    val compare = cmp_exp
+	    val compare = wrap cmp_exp
 	end
 
     structure Expmap = BinaryMapFn(ExpKey)
@@ -675,7 +715,7 @@ struct
     structure ConKey = 
 	struct
 	    type ord_key = con
-	    val compare = cmp_con
+	    val compare = wrap cmp_con
 	end
     structure Conmap = BinaryMapFn(ConKey)
 
