@@ -117,7 +117,7 @@ structure LinkIl (* : LINKIL *) =
 	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
 		  | help ce = ce
 		val entries' = map help entries
-	    in IlContext.add_context_entries(IlContext.empty_context,entries')
+	    in IlContext.add_context_entries(ctxt,entries')
 	    end
 	    
 	fun elaborate_diff'(context,s) = 
