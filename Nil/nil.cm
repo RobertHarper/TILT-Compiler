@@ -101,6 +101,8 @@ traceops.sml
 traceinfo.sig.sml
 traceinfo.sml
 
+reorder.sml
+
 (*
 cleanup.sig.sml
 cleanup.sml

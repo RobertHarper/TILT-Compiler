@@ -1,4 +1,4 @@
-(*$import TraceInfo Nil NilContext Util Normalize TRACEOPS *)
+(*$import TraceInfo Nil NilContext Util Normalize TRACEOPS Name *)
 
 structure TraceOps :> TRACEOPS = 
 struct
@@ -63,12 +63,12 @@ struct
             error "get_trace found Closure_c"
      end
 
-  fun get_free_vars' (TI.Compute (v,_)) = [v]
-    | get_free_vars' _ = []
+  fun get_free_vars' (TI.Compute (v,_)) = Name.VarSet.singleton v
+    | get_free_vars' _ = Name.VarSet.empty
 
   fun get_free_vars (TraceKnown tinfo) = get_free_vars' tinfo
-    | get_free_vars (TraceCompute v) = [v]
-    | get_free_vars _ = []
+    | get_free_vars (TraceCompute v) = Name.VarSet.singleton v
+    | get_free_vars _ = Name.VarSet.empty
 
   fun valid_trace (ctxt, TraceKnown (TI.Compute(v,ls))) = 
       (* XXX Unsound approximation ! *)

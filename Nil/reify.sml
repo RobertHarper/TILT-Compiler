@@ -59,12 +59,12 @@ struct
 
     fun do_reify (ctxt, con, nt, pset) =
 	if (TraceOps.valid_trace (ctxt,nt)) then
-	    (nt, [], pset_add_list (pset, TraceOps.get_free_vars nt))
+	    (nt, [], pset_add_pset (pset, TraceOps.get_free_vars nt))
 	else
 	    (case TraceOps.get_trace (ctxt, con) of
 		 SOME tinfo => 
 		     (TraceKnown tinfo, [], 
-		      pset_add_list (pset, TraceOps.get_free_vars' tinfo))
+		      pset_add_pset (pset, TraceOps.get_free_vars' tinfo))
 	       | NONE =>
 		     let 
 			 val v' = Name.fresh_named_var "reify"

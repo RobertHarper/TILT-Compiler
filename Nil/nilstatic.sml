@@ -1702,7 +1702,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    error  (locate "niltrace_valid") 
 	    ("variable "^(var2string v)^" not in context")))
     in
-      app checker free_vars
+      Name.VarSet.app checker free_vars
     end
 
   and bnds_valid (D,bnds) = let val (etypes,(D,cbnds)) = (foldl_acc bnd_valid' (D,[]) bnds) in (D,rev cbnds,List.concat etypes) end

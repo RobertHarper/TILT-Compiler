@@ -766,11 +766,14 @@ struct
     | rcon' (Typecase_c _,_, _) = 
       (error "rcon of Typecase_c unimplemented")
 
-    | rcon' (Annotate_c (annot,con), env, state) = 
+    | rcon' (Annotate_c (_,con), env, state) = 
       let
 	  val (con, state, level) = rcon (con, env, state)
       in
-	  (Annotate_c (annot,con), state, level)
+	  (* The free variable information in an annotation
+	   is no longer trustworthy, so we discard all
+	   annotations *)
+	  (con, state, level)
       end
 
   and rcons (cons, env, state) = 
