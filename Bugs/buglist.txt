@@ -124,3 +124,4 @@
 0124 [open]	flexible records
 0125 [open]	BUG in get_record
 0126 [open]	parsing identifiers incorrectly
+0127 [open]	integer overflow discrepancy
