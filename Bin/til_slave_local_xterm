@@ -15,7 +15,7 @@
 # trying to use it at your site.
 #
 
-PATH=/usr/local/bin:/usr/bin:/bin:/usr/X11/bin:$PATH
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/ccs/bin:/usr/X11/bin:$PATH
 export PATH
 
 case $# in
