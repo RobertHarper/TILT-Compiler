@@ -1,5 +1,14 @@
 (*$import Prelude TopLevel Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize *)
 
+(* A note about renaming: there is an optimizer invariant that all
+   bound variables must be unique.  Constructor level variables get
+   duplicated by reduction.  We could rename (in the sense of
+   NilRename) all values returned from the normalizer but this would
+   lead to some unnecessary work.  Instead, a constructor is renamed
+   only if it comes from the normalizer and its being returned as part
+   of the vararg translation (as opposed to merely guiding the
+   translation).  *)
+
 structure Vararg :> VARARG = 
 struct
     
@@ -282,7 +291,7 @@ struct
 	(case reduce state getrecord arg of
 	     Normalize.REDUCED rt => rt
 	   | Normalize.UNREDUCED c => (if (!debug) 
-					  then (print "is_record returning DYNAMIC with con = \n";
+					  then (print "is_record returning DYNAMIC with con = ";
 						Ppnil.pp_con c; print "\n")
 					else ();
 					DYNAMIC))
@@ -348,23 +357,24 @@ struct
 		   end)
 
      and do_arrow state (openness,effect,isDependent,argvopt,argc,resc) : con = 
-	 let val cr = do_con state
+	 let val cnr = do_con state
+	     val cr = NilRename.renameCon o cnr
 	     val flatcount = get_count state
 	     fun nochange() = AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
 					 tFormals=[],fFormals=0w0,
 					 eFormals=[(argvopt,cr argc)],
-					 body_type = cr resc}
+					 body_type = cnr resc}
 	     fun change(labels,cons) = 
 		 if ((length labels) <= flatcount)
 		     then AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
 				     tFormals=[],fFormals=0w0,
 				     eFormals = map (fn c => (NONE, cr c)) cons,
-				     body_type = cr resc}
+				     body_type = cnr resc}
 		 else nochange()
-	 in  (case is_record state argc of
+	 in  (case (is_record state argc) of
 		 NOT_RECORD => nochange()
 	       | RECORD(ls,cs) => change(ls,cs)
-	       | DYNAMIC => Prim_c(Vararg_c(openness,effect),[cr argc,cr resc]) 
+	       | DYNAMIC => Prim_c(Vararg_c(openness,effect),[cr argc,cnr resc])
 	       | NOT_TYPE => error "ill-formed arrow type")
 	 end
 
@@ -440,9 +450,9 @@ struct
 	     fun change(v,argc,labels,cons) = 
 		 let val body_type = do_con state body_type
 		     val innerState = add_con(state,v,argc)
-		     val argc = do_con state argc
+(*		     val argc = do_con state argc *)
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
-		     val vtrclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, do_con state c)) (vars,cons)
+		     val vtrclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, NilRename.renameCon (do_con state c))) (vars,cons)
 		     val recordBnd = Exp_b(v,TraceUnknown,Prim_e(NilPrimOp(record labels),[],map Var_e vars))
 		     val body = do_exp innerState body
 		     val body = NilSubst.substExpInExp subst body
@@ -477,7 +487,7 @@ struct
 	 
      and getExtra state (var,Function{tFormals=[],fFormals=[],eFormals=[(_,_,argc)],body_type,effect,...},
 			 pvar) =
-	 (case is_record state argc of
+	 (case (is_record state argc) of
 	      NOT_RECORD => NONE
 	    | RECORD _ => NONE
 	    | DYNAMIC => SOME(var, Prim_e(NilPrimOp(make_vararg(Open,effect)),
@@ -486,11 +496,12 @@ struct
        | getExtra _ _ = NONE
 
      and do_app state (f,arg) =
-	 let val f' = do_exp state f
+	 let val cr = NilRename.renameCon o (do_con state)
+	     val f' = do_exp state f
 	     val arg' = do_exp state arg
 	     val con = type_of(state,f)
 	     val nochange = App_e(Open,f',[],[arg'],[])
-	     fun change(labels,cons) = 
+	     fun change(labels) = 
 		 if ((length labels) <= flattenThreshold)
 		     then 
 			 let val v = fresh_named_var "funarg"
@@ -504,10 +515,9 @@ struct
 	     fun dynamic(openness,effect,argc,resc) =  
 		 let val v = fresh_named_var "oneargVersion"
 		     val result = App_e(openness,
-					Prim_e(NilPrimOp(make_onearg(openness,effect)),
-							[NilRename.renameCon(do_con state argc),
-							 NilRename.renameCon(do_con state resc)],
-							[f']),
+					Prim_e(NilPrimOp(make_onearg(openness,effect)), 
+					       [cr argc, cr resc],
+					       [f']),
 					[],[arg'],[])
 		 in  Linearize.linearize_exp result
 		 end
@@ -517,7 +527,7 @@ struct
 			 Transform(openness,effect,isDependent,argc,resc) =>
 			     (case (is_record state argc) of
 				  NOT_RECORD => nochange
-				| RECORD(ls,cs) => change(ls,cs)
+				| RECORD(ls,_) => change(ls)
 				| DYNAMIC => dynamic(openness,effect,argc,resc)
 				| NOT_TYPE => error "ill-formed application")
 	               | NoTransform _ => 
@@ -631,7 +641,15 @@ struct
 		val (imports,state) = foldl_acc do_import state imports
 		val (bnds,state) = do_bnds(bnds,state)
 		val (exports,state) = foldl_acc do_export state exports
-	    in  MODULE{imports=imports,exports=exports,bnds=bnds}
+		val result = MODULE{imports=imports,exports=exports,bnds=bnds}
+		val _ = if not (!debug) orelse NilRename.isRenamedMod result
+			    then ()
+			else (Ppnil.pp_module {module=result,
+					       name = "",
+					       pass = "Vararg",
+					       header = "bound variable reuse"};
+			      error "bound variable reuse")
+	    in  result
 	    end
 
 end
