@@ -772,7 +772,7 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 				    | SOME e => e_find_fv (state,frees) e)
 		 in  frees
 		 end
-	   | Sumsw_e{sumtype,arg,bound,arms,default,...} => 
+	   | Sumsw_e{sumtype,arg,bound,arms,default,result_type,...} => 
 		 let val frees = e_find_fv (state,frees) arg
 		     val frees = t_find_fv (state,frees) sumtype
 		     val frees = (case default of
@@ -1451,18 +1451,21 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	  | Switch_e switch => 
 		Switch_e(case switch of 
 		     Intsw_e{size,result_type,arg,arms,default} => 
-			 Intsw_e{size = size, result_type=result_type,
+			 Intsw_e{size = size, 
+				 result_type=c_rewrite result_type,
 				 arg = e_rewrite arg,
 				 arms = map_second e_rewrite arms,
 				 default = Util.mapopt e_rewrite default}
 		   | Sumsw_e{sumtype,result_type,arg,bound,arms,default} => 
 			 Sumsw_e{sumtype=c_rewrite sumtype, 
-				 result_type=result_type,arg=e_rewrite arg,
+				 result_type=c_rewrite result_type,
+				 arg=e_rewrite arg,
 				 bound = bound,
 				 arms = map_second  e_rewrite arms,
 				 default=Util.mapopt e_rewrite default}
 		   | Exncase_e{result_type,arg,arms,bound,default} => 
-			 Exncase_e{result_type=result_type, arg=e_rewrite arg,
+			 Exncase_e{result_type=c_rewrite result_type, 
+				   arg=e_rewrite arg,
 				   bound=bound,
 				 arms=map (fn (e,f) => (e_rewrite e,e_rewrite f)) arms,
 				 default=Util.mapopt e_rewrite default}
