@@ -118,7 +118,7 @@ sig
   datatype switch =                                 (* Switching on / Elim Form *)
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
     | Sumsw_e of (con list,exp,w32) sw                    (* sum types *)
-    | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
+    | Exncase_e of (unit,exp,var) sw                      (* exceptions *)
 
 
   and exp =                                          (* Term-level constructs *)
