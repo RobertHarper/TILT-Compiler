@@ -173,6 +173,8 @@ structure Linker :> LINKER =
 	    val _ = BinIO.closeIn is
 	in {imports=imports, exports=exports}
 	end
+        handle e => (print "exception while read_header of ";
+		     print uo_arg; print "\n"; raise e)
     end
 
     (* link: Link a sequence of uo-files into a new uo-file 
