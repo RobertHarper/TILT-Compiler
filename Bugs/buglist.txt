@@ -94,3 +94,4 @@
 0094 [open]	The Runtime uses too much virtual memory.
 0095 [open]	Errno is sometimes clobbered.
 0096 [open]	Does not parse type variables properly.
+0097 [open]	does not parse type variables properly
