@@ -645,9 +645,10 @@ interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
 
 (*
  * $Log$
-# Revision 1.1  97/03/21  15:24:23  pscheng
-# added our local version of the parser
-# asthelp.* and name* migrated from Util directory
+# Revision 1.2  97/03/21  16:34:34  pscheng
+# changed to work with new Parser directory
+# ml.grm.sig and ml.grm.sml cannot be created with 109.25 for some reason
+# So, these are the results of manually invoking the 109.22 lex and yacc.
 # 
  * Revision 1.2  1997/01/28  23:20:44  jhr
  * Integer and word literals are now represented by IntInf.int (instead of
