@@ -1,64 +1,72 @@
 include "../Util/mapfile-util"
 include "../Lil/mapfile"
 include "../Parser/mapfile-parse"
+include "../Backend/mapfile"
 
 unit TAL = "tal.sml" { Lil Util Name TilWord32 Int List } 
 
-unit PPTAL = "pptal.sig.sml" { TAL Formatter }	
-unit Pptal = "pptal.sml" { TAL Formatter }	
+unit PPTAL = "pp.sig.sml" { TAL Formatter }	
+unit Pptal = "pp.sml" { 
+	TAL PPTAL Name 
+	String Char Formatter List Vector
+	}	
 
 unit TALOUT = "talout.sig.sml" { TAL TextIO }
 unit TalOut = "talout.sml" { 
 	TALOUT TAL Pptal
 	Util Stats Formatter
-	OS TextIO 
+	OS IO TextIO 
 	}
 
 unit ABBREV = "abbrev.sig.sml" { }
-unit Abbrev = "abbrev.sml" { ABBREV Stats Util }
+unit Abbrev = "abbrev.sml" { ABBREV Stats Util ORD_SET ORD_MAP }
 
 unit TALABBREV = "tal_abbrev.sig.sml" { TAL Lil ABBREV }
 unit TalAbbrev = "tal_abbrev.sml" { 
 	TAL Lil TALABBREV Abbrev 
-	Name
+	Name 
 	}
 
 unit TALTRANSLATIONDEFS = "taltranslationdefs.sig.sml" { TAL Lil }
 unit TalTranslationDefs = "taltranslationdefs.sml" { 
-	TAL Lil LilUtil Deconstruct TalAbbrev
-	Util Stats
+	TAL TALTRANSLATIONDEFS Lil LilUtil Deconstruct TalAbbrev
+	Util Stats Name TilWord32 Core Symbol
 	}
 
 unit LILTOTALSTATE = "liltotalstate.sig.sml" { TAL Lil }
 unit LilToTalState = "liltotalstate.sml" { 
-	TAL Lil LilUtil
+	TAL LILTOTALSTATE Lil LilUtil
 	Util Error Name
-	Vector
+	Vector List Array
 	}
 
 unit LILTOTALENV = "liltotalenv.sig.sml" { TAL Lil LilContext }
 unit LilToTalEnv = "liltotalenv.sml" { 
-	TAL Lil LilContext LilSubst LilUtil Synthesis
+	TAL LILTOTALENV Lil LilContext LilSubst LilUtil Synthesis
 	Stats Util Name
 	}
 
 unit LILTOTALCON = "liltotalcon.sig.sml" { TAL Lil LilToTalEnv }
-unit LilToTalCon = "liltotalcon.sig.sml" { 
-	TAL Lil LilToTalEnv TalTranslationDefs TalAbbrev
-	Lil LilContext LilSubst LilDefs LilUtil Deconstruct 
-	Listops	Stats Util
+unit LilToTalCon = "liltotalcon.sml" { 
+	TAL LILTOTALCON Lil LilToTalEnv TalTranslationDefs TalAbbrev
+	Lil LilContext LilSubst LilDefs LilUtil Deconstruct PpLil
+	Listops	Stats Util Name
+	ListPair
 	}
 
 unit LILTOTALEXP = "liltotalexp.sig.sml" { TAL Lil }
 unit LilToTalExp = "liltotalexp.sml" {
-	TAL LILTOTALEXP LilToTalCon TalTranslationDefs LilToTalState TalAbbrev
+	TAL LILTOTALEXP LilToTalCon TalTranslationDefs LilToTalState LilToTalEnv TalAbbrev
 	Lil LilType_Equiv LilDefs LilUtil Deconstruct 
-	Stats Util
+	Stats Util Name TilWord64 Prim 
+	List Vector
 	}
 
 unit LILTOTAL = "liltotal.sig.sml" { Lil TextIO }
 unit LilToTal = "liltotal.sml" { 
 	LILTOTAL TAL TalOut LilToTalExp 
-	Util Stats Vector }
+	Util Stats Vector 
+	TextIO
+	}
 
-unit LinkTAL = "linktal.sml" { Stats Lil TextIO }
+unit LinkTAL = "linktal.sml" { Stats Lil LilToTal TextIO }

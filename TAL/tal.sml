@@ -77,7 +77,7 @@ struct
     (* ----- LX kinds ----- *)
     | Ksum of kind list
     | Kvar of identifier
-    | Kmu of kmu_schema * identifier 
+    | Kmu of (identifier * kind) list * identifier 
   (* ----- end LX ----- *)
     
   (* LX *)
@@ -87,7 +87,8 @@ struct
      freekindvars : VarSet.set option ref,         (* free kind vars *)
      kabbrev : identifier option ref               (* is this kind an abbreviation *)
      } 
-  and kmu_schema = (identifier * kind) list 
+
+  type kmu_schema = (identifier * kind) list 
 
 
     (* helper functions for creating kinds *)
@@ -168,6 +169,26 @@ struct
 
   datatype con_state = NotNorm | Normalized | WeakHead
 
+  (* free kind and con vars of rcon *)
+
+    
+  (* Get around withtype scoping by explicitly parameterizing *)
+  type ('con,'ccinfo) pre_machine_state = 
+    {
+     ms_eax : 'con option,
+     ms_ebx : 'con option,
+     ms_ecx : 'con option,
+     ms_edx : 'con option,
+     ms_esi : 'con option,
+     ms_edi : 'con option,
+     ms_ebp : 'con option,
+     ms_esp : 'con option,
+     ms_fpstack : fpstack,
+     ms_cc : 'ccinfo ref,
+     ms_save_cc : 'ccinfo,
+     ms_cap : 'con
+     }
+
   datatype rcon = 
     (* the language portion of con's *)
     Cvar of identifier
@@ -193,7 +214,8 @@ struct
     | Cforall of identifier * kind * con      (* forall-polymorphism *)
     | Cexist of identifier * kind * con * con (* E[i:k such that c1].c2 *)
     | Ccode of con                            (* Kms -> K4byte *)
-    | Cms of machine_state                  (* describes an entry point in 
+    | Cms of (con,ccinfo) pre_machine_state 
+                                            (* describes an entry point in 
 					     * a hunk of code.  The machine
 					     * state is described below and
 					     * is in essence a pre-condition
@@ -285,28 +307,17 @@ struct
 (*  and rep_item = RCon of con | RKind of kind | RLabel of identifier*)
     
   withtype con = 
-    { rcon     : rcon ref,   (* "raw" constructor *)
+    { 
+     rcon     : rcon ref,   (* "raw" constructor *)
      con_state : con_state ref,
      freevars : (VarSet.set * VarSet.set) option ref,
-(*     hash : int ref; *)
+     (*     hash : int ref; *)
      abbrev : identifier option ref  (* is this con an abbreviation *)
-  } 
-(* free kind and con vars of rcon *)
+     } 
 
-  and machine_state = {
-    ms_eax : con option,
-    ms_ebx : con option,
-    ms_ecx : con option,
-    ms_edx : con option,
-    ms_esi : con option,
-    ms_edi : con option,
-    ms_ebp : con option,
-    ms_esp : con option,
-    ms_fpstack : fpstack,
-    ms_cc : ccinfo ref,
-    ms_save_cc : ccinfo,
-    ms_cap : con
-  }
+  (* free kind and con vars of rcon *)
+
+  type machine_state = (con,ccinfo) pre_machine_state
 
   fun invalid_arg s = Util.error "tal.sml" ("Invalid arg: "^s)
   fun string_of_int i = Int.toString i
