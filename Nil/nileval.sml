@@ -263,7 +263,7 @@ functor NilEvaluate (structure Nil : NIL
 			 | _ => error "project_sum_record given bad arg")
 		| box_float fs => default
 		| unbox_float fs => (case elist of
-					 [Prim_e(NilPrimOp (unbox_float _),_,[v])] => v
+					 [Prim_e(NilPrimOp (box_float _),_,[v])] => v
 				       | _ => error "unbox_float given bad argument")
 		| roll => default
 		| unroll => (case elist of

@@ -162,6 +162,14 @@ structure Linknil (* : LINKNIL *) =
 				    structure PrimUtil = NilPrimUtil
 				    structure Subst = NilSubst)
 
+    structure NilOpts = NilOpts (structure Nil = Nil
+			       structure NilPrimUtil = NilPrimUtil 
+			       structure PpNil = PpNil
+			       structure NilContext = NilContext
+			       structure NilEval = NilEval
+			       structure NilStatic = NilStatic
+			       structure NilSubst = NilSubst
+			       structure NilUtil = NilUtil)
     fun phasesplit debug (ctxt,sbnds,sdecs) : Nil.module = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
@@ -438,6 +446,9 @@ structure Linknil (* : LINKNIL *) =
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else print "Renaming complete\n"
+
+ 	     val nilmod = NilOpts.do_opts debug nilmod  
+
 	    val D = NilContext.empty()
  	    val nilmod = 
 	      if (!typecheck) then

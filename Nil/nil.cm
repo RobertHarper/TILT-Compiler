@@ -53,3 +53,10 @@ nilerror.sig.sml
 nilerror.sml
 subst.sml
 subst.sig.sml
+(* ----- Optimizer Stuff ------- *)
+NilOpts/squish.sig.sml
+NilOpts/squish.sml
+NilOpts/anormalize.sml
+NilOpts/reduce.sml
+NilOpts/flattenargs.sml
+NilOpts/linkopt.sml
