@@ -5,13 +5,15 @@ struct
   fun make_source s = Source.newSource(s,0,TextIO.openIn s,true,
 				       ErrorMsg.defaultConsumer())
   local
-      fun parse s = FrontEnd.parse (make_source s)
+      fun parse s = let val src = make_source s
+		    in  (src,FrontEnd.parse src ())
+		    end
   in
       fun parse_one s =
-	  case parse s () of 
-	      FrontEnd.PARSE dec => dec
-	    | result => raise Parse result
-
+	  case parse s of 
+	      (src,FrontEnd.PARSE dec) => (src,dec)
+	    | (_,result) => raise Parse result
+		  
       fun tvscope_dec dec = (TVClose.closeDec dec; dec)
       fun named_form_dec dec = NamedForm.namedForm dec
   end
