@@ -3,11 +3,14 @@
  * AlphaMLRISCPseudo.sml
  * ========================================================================= *)
 
-functor AlphaMLRISCPseudo(
-	  structure IntSet: ORD_SET where type Key.ord_key = int
-	) :> MLRISC_PSEUDO
-	       where type idSet = IntSet.set
-	  = struct
+structure AlphaMLRISCPseudo
+	    :> MLRISC_PSEUDO
+		 where type idSet = DenseIntSet.set
+	    = struct
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure IntSet = DenseIntSet
 
   (* -- types -------------------------------------------------------------- *)
 

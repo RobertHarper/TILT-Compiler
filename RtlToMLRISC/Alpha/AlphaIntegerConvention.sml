@@ -3,14 +3,15 @@
  * AlphaIntegerConvention.sml
  * ========================================================================= *)
 
-functor AlphaIntegerConvention(
-	  structure MLTreeExtra: MLTREE_EXTRA
-	) :> INTEGER_CONVENTION
-	       where type id   = int
-		 and type rexp = MLTreeExtra.MLTree.rexp
-	  = struct
+structure AlphaIntegerConvention
+	    :> INTEGER_CONVENTION
+		 where type id	 = int
+		   and type rexp = AlphaMLTreeExtra.MLTree.rexp
+	    = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure MLTreeExtra = AlphaMLTreeExtra
 
   structure MLTree = MLTreeExtra.MLTree
 

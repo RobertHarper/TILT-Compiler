@@ -3,14 +3,15 @@
  * AlphaFloatConvention.sml
  * ========================================================================= *)
 
-functor AlphaFloatConvention(
-	  structure MLTreeExtra: MLTREE_EXTRA
-	) :> FLOAT_CONVENTION
-	       where type id   = int
-		 and type fexp = MLTreeExtra.MLTree.fexp
-	  = struct
+structure AlphaFloatConvention
+	    :> FLOAT_CONVENTION
+		 where type id	 = int
+		   and type fexp = AlphaMLTreeExtra.MLTree.fexp
+	    = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure MLTreeExtra = AlphaMLTreeExtra
 
   structure MLTree = MLTreeExtra.MLTree
 
