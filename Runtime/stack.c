@@ -686,8 +686,11 @@ value_t trace_stack_step(unsigned long *saveregs,
 		if (!(needspecial & (1U << mi)))
 		  continue;
 #ifdef DEBUG
-		printf("doing special for reg %d = %d -> %d -> %d\n",
+		printf("doing special for reg %d = %d -> %d\n",
+		       mi,data_add,*data_add);
+/*		printf("doing special for reg %d = %d -> %d -> %d\n",
 		       mi,data_add,*data_add,*((value_t *)*data_add));
+*/
 		if (should_trace_big(TRACE_SPECIAL,callinfo,cur_sp, regstate,
 				     &byte_offset, &word_offset,
 				    data_add,-1))
@@ -980,5 +983,10 @@ unsigned int trace_stack(unsigned long *saveregs,
     printf("\n\n\n");
   }
 #endif
+
+#ifdef STACK_DEBUG
+  printf("returning regstate = %x\n",regstate);
+#endif
+
   return regstate;
 }

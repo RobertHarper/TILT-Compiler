@@ -24,12 +24,14 @@ test:
 
 
 # ------------------------------ General macros --------------------------
-alpha_osf32_sys_name = alpha_osf
 alpha_osf20_sys_name = alpha_osf
+alpha_osf32_sys_name = alpha_osf
+alpha_dux40_sys_name = alpha_osf
 rs_aix32_sys_name = rs_aix
 
-alpha_osf32_chip_name = alpha
 alpha_osf20_chip_name = alpha
+alpha_osf32_chip_name = alpha
+alpha_dux40_chip_name = alpha
 rs_aix32_chip_name = ppc
 
 full_sys_name = $(shell sys)
