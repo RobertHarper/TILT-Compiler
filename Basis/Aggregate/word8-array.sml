@@ -227,7 +227,9 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 			then accum'
 		    else fold (uminus(i,0w1), accum')
 		end
-	in  fold (int32touint32(length arr - 1), init)
+	    val n = length arr
+	in  if n = 0 then init
+	    else fold (int32touint32(n - 1), init)
 	end
 
 
