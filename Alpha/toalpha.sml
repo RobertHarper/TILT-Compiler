@@ -762,11 +762,9 @@ struct
 	 (* Converts a double-precision floating-point value in Fsrc
 	    to a canonical integer bit-pattern in Rdest, rounding
 	    towards minus-infinity. *)
-	   print "FPTOFROMINT used\n";
 	   emit (SPECIFIC (FPCONV (CVTTQM, Fsrc, Fat)));
-	   emit (BASE(LADDR (Rat2, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
-	   emit (SPECIFIC(STOREF (STT, Fat, 0, Rat2)));
-	   emit (SPECIFIC(LOADI (LDQ, Rdest, 0, Rat2)))
+	   emit (SPECIFIC(STOREF (STT, Fat, threadScratch_disp, Rth)));
+	   emit (SPECIFIC(LOADI (LDQ, Rdest, threadScratch_disp, Rth)))
        end
 
      | translate (Rtl.CVT_INT2REAL (rtl_Rsrc, rtl_Fdest)) =
@@ -776,10 +774,8 @@ struct
        in
 	 (* Converts an integer in Rsrc to a double-precision 
 	    floating-point value in Fdest; this is always precise *)
-	   print "FPTOFROMINT used\n";
-	   emit (BASE(LADDR (Rat2, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
-	   emit (SPECIFIC(STOREI (STQ, Rsrc, 0, Rat2)));
-	   emit (SPECIFIC(LOADF  (LDT, Fdest, 0, Rat2)));
+	   emit (SPECIFIC(STOREI (STQ, Rsrc, threadScratch_disp, Rth)));
+	   emit (SPECIFIC(LOADF  (LDT, Fdest, threadScratch_disp, Rth)));
 	   emit (SPECIFIC (FPCONV (CVTQT, Fdest, Fdest)))
        end
 

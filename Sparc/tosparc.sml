@@ -665,11 +665,9 @@ struct
 	 val Fsrc  = translateFReg rtl_Fsrc
          val Rdest = translateIReg rtl_Rdest
        in
-	   print "FPTOFROMINT used\n";
 	   emit (SPECIFIC (FPMOVE(FDTOI, Fsrc, Fat)));
-	   emit (BASE (LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
-	   emit (SPECIFIC (STOREF (STF, Fat, 0, Rat)));
-	   emit (SPECIFIC (LOADI (LD, Rdest, 0, Rat)))
+	   emit (SPECIFIC (STOREF (STF, Fat, threadScratch_disp, Rth)));
+	   emit (SPECIFIC (LOADI (LD, Rdest, threadScratch_disp, Rth)))
        end
 
      | translate (Rtl.CVT_INT2REAL (rtl_Rsrc, rtl_Fdest)) =
@@ -677,10 +675,8 @@ struct
 	 val Rsrc  = translateIReg rtl_Rsrc
          val Fdest = translateFReg rtl_Fdest
        in
-	   print "FPTOFROMINT used\n";
-	   emit (BASE (LADDR (Rat, Rtl.ML_EXTERN_LABEL ("FPTOFROMINT"))));
-	   emit (SPECIFIC (STOREI (ST, Rsrc, 0, Rat)));
-	   emit (SPECIFIC (LOADF  (LDF, Fat, 0, Rat)));
+	   emit (SPECIFIC (STOREI (ST, Rsrc, threadScratch_disp, Rth)));
+	   emit (SPECIFIC (LOADF  (LDF, Fat, threadScratch_disp, Rth)));
 	   emit (SPECIFIC (FPMOVE (FITOD, Fat, Fdest)))
        end
 
