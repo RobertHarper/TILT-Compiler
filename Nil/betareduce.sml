@@ -1,12 +1,10 @@
 (* Remember the definitions of all encoutered functions.
    Perform the reduction in place whenever the function is used. *)
 functor BetaReduce(structure Nil : NIL
-		   structure Prim :PRIM
 		   structure Ppnil : PPNIL
 		   structure NilUtil : NILUTIL
 		   structure IlUtil : ILUTIL
-		   sharing NilUtil.Nil = Ppnil.Nil = Nil
-		   and NilUtil.Prim = Prim = Nil.Prim) 
+		   sharing NilUtil.Nil = Ppnil.Nil = Nil)
     : BETAREDUCE = 
 struct
 

@@ -22,7 +22,7 @@ struct
   (* In general, we want to distinguish between functions/arrow types that 
    * are open (possibly having free variables) or those that are closed.
    *)
-  datatype openness = Open | Closure | Code
+  datatype openness = Open | Closure | Code | ExternCode
 
   (* In addition, we would like to know if application of an arrow object
    * is total(i.e. effect-free) or partial (i.e. not necessarily effect-free)

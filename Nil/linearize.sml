@@ -210,13 +210,17 @@ struct
 			 let val res = case orig_bnd of
 			     Con_b(v,k,c) => if (is_used(state,v)) (* constructors never have an effect *)
 						 then bnds@acc
-					     else (print "discarding con variable ";
-						   Ppnil.pp_var v; print "\n";
+					     else (if (!debug)
+						       then (print "discarding con variable ";
+							     Ppnil.pp_var v; print "\n")
+						   else ();
 						   acc)
 			   | Exp_b(v,c,e) => if ((is_used(state,v)) orelse (NilUtil.effect e))
 						 then bnds@acc
-					     else (print "discarding exp variable ";
-						   Ppnil.pp_var v; print "\n";
+					     else (if (!debug)
+						       then (print "discarding exp variable ";
+							     Ppnil.pp_var v; print "\n")
+						   else ();
 						   acc)
 			   | _ => bnds @ acc
 			 in res

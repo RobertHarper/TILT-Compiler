@@ -1,5 +1,4 @@
 functor NilStaticFn(structure Annotation : ANNOTATION
-		    structure Prim : PRIM
 		    structure PrimUtil : PRIMUTIL
 		    structure ArgNil : NIL
 		    structure PpNil : PPNIL
@@ -10,7 +9,7 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		         sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil 
 			       = PpNil.Nil = NilError.Nil = ArgNil
 			 and Annotation = ArgNil.Annotation
-			 and Prim = ArgNil.Prim = PrimUtil.Prim = NilUtil.Prim
+			 and ArgNil.Prim = PrimUtil.Prim
 			 and type NilUtil.alpha_context = Alpha.alpha_context
 			 and type PrimUtil.con = ArgNil.con
 		         and type PrimUtil.exp = ArgNil.exp) :(*>*) NILSTATIC 
@@ -20,7 +19,8 @@ struct
   
   structure Annotation = Annotation
   structure Nil = ArgNil
-  open Nil Prim
+  open Nil 
+  open Prim
 
   val debug = ref false
   
@@ -606,6 +606,7 @@ struct
 	| (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
 	 let
+	   val origD = D
 	   val (D,formals) = foldKSR (D,formals)
 	   val _ = if (!debug)
 		     then (print "formals1 are ";
@@ -638,7 +639,7 @@ struct
 	     eq_opt (eq_var,SOME var,strip_var con) then
 	     (lambda,bndkind)
 	   else
-	     con_valid (D,varConConSubst var lambda (Let_c (sort,rest,con)))
+	     con_valid (origD,varConConSubst var lambda (Let_c (sort,rest,con)))
 	 end
         | (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
 	   let
@@ -661,7 +662,7 @@ struct
 	     val (env,env_kind) = con_valid (D,env)
 	     val (code,code_kind) =  con_valid (D,code)
 	   in
-	     case code_kind
+	     case (strip_singleton code_kind)
 	       of Arrow_k (Code,vklist,body_kind) => 
 		 let 
 		   val (first,(v,klast)) = split vklist

@@ -7,7 +7,6 @@ functor NilUtilFn(structure ArgNil : NIL
 		  sharing ArgNil = Alpha.Nil
 		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim) 
   :(*>*) NILUTIL where structure Nil = ArgNil 
-		   and structure Prim = ArgPrim
 		   and type alpha_context = Alpha.alpha_context =
 struct
 
@@ -702,6 +701,7 @@ struct
   fun same_openness (Open,Open) = true
     | same_openness (Closure,Closure) = true
     | same_openness (Code,Code) = true
+    | same_openness (ExternCode,ExternCode) = true
     | same_openness _ = false
 
   fun same_effect (Total,Total) = true

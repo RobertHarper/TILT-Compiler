@@ -46,6 +46,7 @@ functor Ppnil(structure ArgNil : NIL
     fun openness2s Open =  "Open"
       | openness2s Closure = "Closure"
       | openness2s Code = "Code"
+      | openness2s ExternCode = "ExternCode"
     fun pp_openness openness = String(openness2s openness)
     fun pp_effect Partial = String "->"
       | pp_effect Total = String "=>"
@@ -241,7 +242,8 @@ functor Ppnil(structure ArgNil : NIL
 	String (case nilprimop of
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
-		  | inject {field,...} => "inject_" ^ (TilWord32.toDecimalString field)
+		  | inject {field,tagcount} => ("inject" ^ (TilWord32.toDecimalString tagcount) ^ 
+						"_" ^ (TilWord32.toDecimalString field))
 		  | inject_record {field,...} => "inject_record_" ^ (TilWord32.toDecimalString field)
 		  | project_sum {sumtype,...} => "project_sum_" ^ (TilWord32.toDecimalString sumtype)
 		  | project_sum_record {sumtype,...} => "project_sum_rec__" ^ (TilWord32.toDecimalString sumtype)
@@ -252,7 +254,10 @@ functor Ppnil(structure ArgNil : NIL
 		  | peq => "peq"
 		  | make_vararg (openness,effect) => "make_vararg" 
 		  | make_onearg (openness,effect) => "make_onearg"
-		  | _ => "nilprim_notdone")
+		  | box_float Prim.F64 => "box_float_64"
+		  | box_float Prim.F32 => "box_float_32"
+		  | unbox_float Prim.F64 => "unbox_float_64"
+		  | unbox_float Prim.F32 => "unbox_float_32")
 
     and pp_exp exp = 
 	(case exp of
@@ -268,8 +273,8 @@ functor Ppnil(structure ArgNil : NIL
 		 end
 	   | App_e (openness,efun,cons,exps,fexps) => (pp_region ("App_" ^ (openness2s openness) ^ "(") ")" 
 						       [pp_exp efun, String "; ", Break, 
-							pp_list pp_con cons ("",",",";",false),
-							pp_list pp_exp exps ("",",",";",false),
+							pp_list pp_con cons ("",",","",false), String "; ",
+							pp_list pp_exp exps ("",",","",false), String "; ",
 							pp_list pp_exp fexps (" ",",","",false)])
 	   | Let_e (letsort,bnds,e) => Vbox0 0 1 [String (case letsort of
 							      Sequential => "LET  "

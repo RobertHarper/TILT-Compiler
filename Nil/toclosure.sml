@@ -520,7 +520,7 @@ struct
 		   | Exncase_e sw => do_sw sw nothing (e_find_fv state) (e_find_fv state)
 		   | Typecase_e sw => do_sw sw nothing (c_find_fv state) nothing
 		 end
-	   | App_e (Open, e, clist, elist, eflist) =>
+	   | App_e (_, e, clist, elist, eflist) =>
 		 let val free1 = (case e of
 				      Var_e v => if (is_fid v)
 						     then (
@@ -538,7 +538,6 @@ struct
 		     val joiner = foldl join_free
 		 in joiner (joiner (joiner free1 free2) free3) free4
 		 end
-	   | App_e ((Closure | Code), _,_,_,_) => error "no closure/code calls during closure conversion"
 	   | Raise_e (e,c) => join_free(e_find_fv state e, c_find_fv state c)
 	   | Handle_e (e,Function(_,_,[],[(v,c)],[],body,tipe)) =>
 		 let val f = e_find_fv state e
@@ -564,7 +563,7 @@ struct
 			 empty_frees (set2list vcset)
 		     end
 	       (* the types of some primitives like integer equality are Code arrow *)
-	       | AllArrow_c((Code | Open | Closure),_,vklist,clist,numfloats,c) =>
+	       | AllArrow_c((ExternCode | Code | Open | Closure),_,vklist,clist,numfloats,c) =>
 		     let fun vkfolder((v,k),(f,s)) = (join_free(f,k_find_fv s k),
 						      add_boundcvar(s,v,k))
 			 fun cfolder (c,(f,s)) = (join_free(f, (c_find_fv s c)),s)
@@ -831,7 +830,14 @@ struct
 	  | Prim_e(p,clist,elist) => NOCHANGE
 	  | Switch_e switch => NOCHANGE
 	  | Let_e(letsort,bnds,e) => NOCHANGE
-	  | App_e ((Code | Closure), _,_,_,_) => error "App_e(Code|Closure,...) during closure conversion"
+	  | App_e (Closure, _,_,_,_) => error "App_e(Code|Closure,...) during closure conversion"
+	  | App_e (ar as (ExternCode | Code), e, clist, elist, eflist) => 
+		let val clist' = map (c_rewrite lift) clist
+		    val elist' = map (e_rewrite lift) elist
+		    val eflist' = map (e_rewrite lift) eflist
+		    val e' = e_rewrite lift e
+		in  CHANGE_NORECURSE(App_e(ar, e', clist', elist', eflist'))
+		end
 	  | App_e (Open, e, clist, elist, eflist) => 
 		let val clist' = map (c_rewrite lift) clist
 		    val elist' = map (e_rewrite lift) elist
@@ -883,11 +889,12 @@ struct
 	    Prim_c (primcon,clist) => NOCHANGE
 	  | Mu_c (vc_set,v) =>  NOCHANGE
 	  | Var_c v => NOCHANGE
-	  | AllArrow_c (ar as (Open | Code),effect,vklist,clist,numfloats,c) => 
+	  | AllArrow_c (ar as (Open | ExternCode | Code),effect,vklist,clist,numfloats,c) => 
 		let val vklist' = map (fn(v,k) => (v,k_rewrite k)) vklist
 		    val ar' = (case ar of
 				   Open => Closure
 				 | Code => Code
+				 | ExternCode => ExternCode
 				 | Closure => error "control can't reach here")
 		in  CHANGE_NORECURSE(AllArrow_c(ar',effect,vklist',
 						map (c_rewrite lift) clist,

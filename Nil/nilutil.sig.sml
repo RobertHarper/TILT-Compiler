@@ -1,7 +1,6 @@
 signature NILUTIL =
   sig
     structure Nil : NIL
-    structure Prim : PRIM
     val substConInExp : (Nil.var -> Nil.con option) -> Nil.exp -> Nil.exp
     val substConInCon : (Nil.var -> Nil.con option) -> Nil.con -> Nil.con
     val substConInKind : (Nil.var -> Nil.con option) -> Nil.kind -> Nil.kind
@@ -83,9 +82,9 @@ signature NILUTIL =
     val strip_var : Nil.con -> Nil.var option
     val strip_exntag : Nil.con -> Nil.con option
     val strip_recursive : Nil.con -> ((Nil.var,Nil.con) Util.set * Nil.var) option
-    val strip_boxfloat : Nil.con -> Prim.floatsize option
-    val strip_float : Nil.con -> Prim.floatsize option
-    val strip_int : Nil.con -> Prim.intsize option
+    val strip_boxfloat : Nil.con -> Nil.Prim.floatsize option
+    val strip_float : Nil.con -> Nil.Prim.floatsize option
+    val strip_int : Nil.con -> Nil.Prim.intsize option
     val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 option * Nil.con list) option
     val strip_arrow : Nil.con -> 
       (Nil.openness*Nil.effect*(Nil.var*Nil.kind) list*Nil.con list*Nil.w32*Nil.con) option

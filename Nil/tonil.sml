@@ -296,7 +296,7 @@ struct
 	   loop lst
        end
 
-   val w0 = Word32.fromInt 0
+   val w0 = TilWord32.fromInt 0
 
    fun projectFromRecord con [] = con
      | projectFromRecord (Prim_c(Record_c (lbl::lbls), con::cons)) (l' as (lbl'::lbls')) =
@@ -1290,12 +1290,18 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   (con, Word_k Runtime)
        end
 
-     | xcon' context (Il.CON_ARROW (il_con1, il_con2, arr)) =
+     | xcon' context (Il.CON_ARROW (il_cons1, il_con2, closed, arr)) =
        let
-	   val (con1, _) = xcon context il_con1
-           val (con2, _) = xcon context il_con2
+	   fun folder (Il.CON_FLOAT Prim.F64, (cons,f)) = (cons, TilWord32.uplus(f,0w1))
+	     | folder (c,(cons,f)) = (c::cons,f)
+	   val (rev_il_cons1,floats) = foldl folder ([],w0) il_cons1
+	   val il_cons1 = rev rev_il_cons1
+	   val cons1 = map (#1 o (xcon context)) il_cons1
+           val con2 = (case (closed,il_con2) of
+			   (true,Il.CON_FLOAT Prim.F64) => Prim_c (Float_c Prim.F64, [])
+			 | _ => #1(xcon context il_con2))
 	   val eff = xeffect (derefOneshot arr)
-	   val con = AllArrow_c(Open, eff, [], [con1], w0, con2)
+	   val con = AllArrow_c(if closed then ExternCode else Open, eff, [], cons1, floats, con2)
        in
 	   (con, Word_k Runtime)
        end
@@ -1636,30 +1642,53 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   (Var_e var, con, true)
        end
 
-     | xexp' context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
-       (case (Ilutil.beta_reduce(il_exp1,il_exp2)) of
-	    NONE =>
-		let
-		    val (exp1, con1, valuable1) = xexp context il_exp1
-		    val (exp2, con2, valuable2) = xexp context il_exp2
-		    val (effect,con) = 
-			(case (Nilstatic.con_reduce(NILctx_of context, con1)) of
-			     AllArrow_c(_,effect,_,_,_,con) => (effect, con)
-			   | nonarrow => (print "Error: could not reduce function type to arrow!\n";
-					  print "Expression was :\n";
-					  Ppil.pp_exp il_exp;
-					  print "\nFunction type was :\n";
-					  Ppnil.pp_con con1;
-					  print "\nWhich reduces to :\n";
-					  Ppnil.pp_con nonarrow;
-					  print "\n";
-					  error "xexp:  could not reduce function type to arrow!\n"))
-			
-		    val valuable = (effect = Total) andalso valuable1 andalso valuable2
-		in
-		    (App_e (Open, exp1, [], [exp2], []), con, valuable)
-		end
-	  | SOME il_exp => xexp context il_exp)
+     | xexp' context (il_exp as (Il.APP (il_exp1, il_exps2))) = 
+       let fun default() = 
+	   let
+	       val (exp1, con1, valuable1) = xexp context il_exp1
+	       val exp_con_va = map (xexp context) il_exps2
+	       val exps2 = map #1 exp_con_va
+	       val cons2 = map #1 exp_con_va
+	       val valuable2 = Listops.andfold #3 exp_con_va
+		   
+	       val (openness,effect,con) = 
+		   (case (Nilstatic.con_reduce(NILctx_of context, con1)) of
+			AllArrow_c(openness,effect,_,_,_,con) => (openness, effect, con)
+		      | nonarrow => (print "Error: could not reduce function type to arrow!\n";
+				     print "Expression was :\n";
+				     Ppil.pp_exp il_exp;
+				     print "\nFunction type was :\n";
+				     Ppnil.pp_con con1;
+				     print "\nWhich reduces to :\n";
+				     Ppnil.pp_con nonarrow;
+				     print "\n";
+				     error "xexp:  could not reduce function type to arrow!\n"))
+	       val valuable = (effect = Total) andalso valuable1 andalso valuable2
+	   in  case openness of
+	       ExternCode => let 
+			   fun split((e,Prim_c(BoxFloat_c fs,[]),_),(nf,f)) = 
+			       (nf,f @ [(Prim_e (NilPrimOp (unbox_float fs),
+						 [], [e]))])
+			     | split((e,_,_),(nf,f)) = (nf @ [e], f)
+			   val (nonfloat,float) = foldl split ([],[]) exp_con_va
+			   val result = App_e (openness, exp1, [], nonfloat, float)
+			   val (result,con) = 
+			       (case con of
+				    Prim_c(Float_c fs, []) => (Prim_e (NilPrimOp (box_float fs),
+								       [], [result]),
+							       Prim_c(BoxFloat_c fs, []))
+				  | _ => (result,con))
+		       in  (result, con, valuable)
+		       end
+	     | _ => (App_e (openness, exp1, [], exps2, []), con, valuable)
+	   end	   
+       in (case il_exps2 of
+	       [il_exp2] => 
+		   (case (Ilutil.beta_reduce(il_exp1,il_exp2)) of
+			NONE => default()
+		      | SOME il_exp => xexp context il_exp)
+	     | _ => default())
+       end
 
      | xexp' context (Il.FIX (is_recur, il_arrow, fbnds)) = 
        let
@@ -2138,7 +2167,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		     Il.SDEC(_,Il.DEC_EXP(top_var,il_con))) :: rest) = 
 	        if (Util.substring("polyfun",Name.var2string top_var)) then
 		   let
-		       val _ = print "entered mono optimization case\n"
+(*		       val _ = print "entered mono optimization case\n" *)
 		       val clist = (case il_con of
 					Il.CON_RECORD lclist => map #2 lclist
 				      | Il.CON_ARROW _ => [il_con]
@@ -2171,7 +2200,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		   andalso (not (Name.eq_label (lbl, Ilutil.expose_lab)))
 		   andalso (not (Ilutil.is_eq_lab lbl))) then
 		   let
-		       val _ = print "entered poly optimization case\n"
+(*		       val _ = print "entered poly optimization case\n" *)
 		       val clist = (case il_con of
 					Il.CON_RECORD lclist => map #2 lclist
 				      | Il.CON_ARROW _ => [il_con]
