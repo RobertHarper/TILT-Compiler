@@ -18,3 +18,8 @@ stats.sig.sml
 stats.sml
 graph.sig.sml
 graph.sml
+crc.sig.sml
+crc.sml
+blast.sml
+bin_io_util.sig.sml
+bin_io_util.sml
