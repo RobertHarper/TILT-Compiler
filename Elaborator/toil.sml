@@ -531,6 +531,42 @@ functor Toil(structure Il : IL
 				 | _ => unbound())
 			| _ => unbound())
 	     end
+       | Ast.DelayExp expr =>
+	     (case (Context_Lookup(context,[symbol_label (Symbol.varSymbol "#Susp")]),
+		   Context_Lookup(context,[symbol_label (Symbol.tycSymbol "#susp")])) of
+		 (SOME (_,PHRASE_CLASS_MOD(sm,SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE(_,[sdec]),_,_))), 
+		  SOME(_,PHRASE_CLASS_CON(sc,sk))) =>  
+		 (let 
+		      val (e,c) = xexp(context,expr)
+		      local
+			  val (type_sbnds,_,new_cons) = poly_inst(context,[sdec])
+			  val _ = (case new_cons of
+				       [new_con] => if (eq_con(context,new_con,c))
+							then ()
+						    else elab_error "new_con mus be unset"
+				     | _ => elab_error "poly_inst returned diff length list")
+			  val type_mod = MOD_STRUCTURE type_sbnds
+		      in
+			  val wrapper_exp = MODULE_PROJECT(MOD_APP(sm,type_mod),it_lab)
+		      end
+		      fun make_thunk(c,e) = make_lambda(fresh_named_var "dummy_var",con_unit, c, e) 
+		      val ref_arg = fresh_named_var "delay_ref"
+		      val value_arg = fresh_named_var "delay_value"
+		      val thunk_c = CON_ARROW(con_unit,c,oneshot_init PARTIAL)
+		      val dummy_fun = #1(make_thunk(c, RAISE(c,bindexn_exp)))
+		      val bnd = BND_EXP(ref_arg,APP(PRIM(mk_ref,[thunk_c]), dummy_fun))
+		      val thunk_e = #1(make_thunk(c, APP(APP(PRIM(deref,[thunk_c]),VAR ref_arg),unit_exp)))
+		      val wrapped_exp = APP(wrapper_exp,thunk_e)
+		      val final_c = CON_APP(sc, c)
+		      val inner_body = #1(make_seq[(APP(PRIM(setref,[thunk_c]),
+						     #1(make_thunk(c, VAR value_arg))), con_unit),
+						   (VAR value_arg, c)])
+		      val assign_exp = APP(PRIM(setref,[thunk_c]),
+					   #1(make_thunk(c, LET([BND_EXP(value_arg,e)], inner_body))))
+		      val body = #1(make_seq[(assign_exp, con_unit),(wrapped_exp,final_c)])
+		  in  (LET([bnd],body), final_c)
+		  end)
+		| _ => elab_error "constructor #Susp or type #susp not defined in initial basis\n")
        | Ast.LetExp {dec,expr} => 
 	     let val boolsbnd_ctxt_list = xdec'(context, dec)
 		 val (sbnds,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
@@ -1197,17 +1233,28 @@ functor Toil(structure Il : IL
 
 	(* These cases are unhandled *)
 	| Ast.SigDec [] => []
-	| Ast.SigDec (sigb::rest) => let val ctxt : context_entry = xsigb(context,sigb)
-                                	(* already selfified *)
-					 val context' = add_context_entries(context,[ctxt])
-					 val sbnd_ctxt_rest = xdec(context',Ast.SigDec rest)
-				     in (NONE,ctxt)::sbnd_ctxt_rest
-				     end
-	| Ast.AbstypeDec {abstycs,withtycs,body} => error "abstype not handled"
-	| Ast.AbsDec strblist => error "abstract structure not handled"
-	| Ast.FsigDec fsiglist => error "funsig not handled"
-	| Ast.OvldDec fctblist => error "overloading declaration not handled"
-	| Ast.ImportDec strlist => error "ImportDec not handled"
+	| Ast.SigDec (sigb::rest) => 
+	      let val ctxt : context_entry = xsigb(context,sigb)
+		  (* CONTEXT_SIGNATs do not need to be selfified *)
+		  val context' = add_context_entries(context,[ctxt])
+		  val sbnd_ctxt_rest = xdec(context',Ast.SigDec rest)
+	      in (NONE,ctxt)::sbnd_ctxt_rest
+	      end
+	| Ast.AbstypeDec {abstycs,withtycs,body} => 
+	      let val ldec = Ast.DatatypeDec{datatycs = abstycs, withtycs = withtycs}
+		  fun get_dec(Ast.MarkDb(db,_)) = get_dec db
+		    | get_dec(Ast.Db{tyc,tyvars,...}) = 
+		      let val ty = Ast.ConTy([tyc],map Ast.VarTy tyvars)
+		      in Ast.TypeDec[Ast.Tb{tyc=tyc,tyvars=tyvars,def=ty}]
+		      end
+		  val bdec = Ast.SeqDec((map get_dec abstycs) @ [body])
+		  val desugared_dec = Ast.LocalDec(ldec,bdec)
+	      in xdec(context, desugared_dec)
+	      end
+	| Ast.FsigDec fsiglist => parse_error "functor signature declaration not handled"
+	| Ast.AbsDec strblist => parse_error "abstract structure not handled"
+	| Ast.OvldDec fctblist => parse_error "overloading declaration not handled"
+	| Ast.ImportDec strlist => parse_error "import declaration not handled"
 
         (* translate declaration by dropping region information *)
 	| Ast.MarkDec (dec,region) => let val _ = push_region region
@@ -1226,7 +1273,8 @@ functor Toil(structure Il : IL
 	     let val sym = AstHelp.tyvar_strip tyvar
 	     in (case (Context_Lookup(context,[symbol_label sym])) of
 		     SOME(_,PHRASE_CLASS_CON (c,_)) => c
-		   | _ => (error_region(); print "unbound type constructor: ???\n";
+		   | _ => (error_region(); print "unbound type constructor: ";
+			   AstHelp.pp_sym sym; print "\n";
 			   fresh_named_con(context,"unbound_type")))
 	     end
        | Ast.MarkTy (ty,r) => 
@@ -1268,7 +1316,8 @@ functor Toil(structure Il : IL
 			  (pp_kind k'; print "\nand c' = "; pp_con c';
 			   elab_error "external_label mapped to type with KIND_ARROW(_,!= 1)")
 		    | (_,_) => (error_region();
-				print "unbound type constructor: ???\n";
+				print "unbound type constructor: ";
+				pp_pathlist AstHelp.pp_sym' syms; print "\n";
 				fresh_named_con(context,"unbound_type")))
 	     end)
 
@@ -1457,7 +1506,7 @@ functor Toil(structure Il : IL
 		    fun doer (funid,fsig) = 
 		      let 
 			val var = fresh_var()
-			fun help (Ast.VarFsig _) = error "Ast.VarFsig encountered"
+			fun help (Ast.VarFsig _) = parse_error "Ast.VarFsig encountered"
 			  | help (Ast.MarkFsig (fs,r)) = let val _ = push_region r
 							     val res = help fs
 							     val _ = pop_region ()
@@ -1510,7 +1559,7 @@ functor Toil(structure Il : IL
 		end
 	   | (Ast.ShatycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
 	   | (Ast.ShareSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
-	   | (Ast.FixSpec _) => error "Ast.FixitySpec not implemented"
+	   | (Ast.FixSpec _) => parse_error "fixity specs not supported"
 	   | (Ast.MarkSpec (s,r)) => let val _ = push_region r
 					 val res = xspec1 context prev_sdecs s
 					 val _ = pop_region ()
@@ -1540,7 +1589,17 @@ functor Toil(structure Il : IL
 	 let 
 	     fun help (context,(name,def)) : ((bool * sbnd) option * context_entry) list = 
 		 (case def of
-		      (Ast.VarFct _) => error "No variables in functor bindings"
+		      (Ast.VarFct (path,Ast.NoSig)) => 
+			  (case (Context_Lookup(context,map symbol_label path)) of
+			       SOME(path,PHRASE_CLASS_MOD(m,s as (SIGNAT_FUNCTOR _))) => 
+				   let val l = symbol_label name
+				       val v = fresh_named_var "functor_var"
+				   in [(SOME(false,SBND(l,BND_MOD(v,m))),
+					CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))]
+				   end
+			     | _ => (error_region();
+				     print "unbound functor: ???\n"; []))
+		    | (Ast.VarFct (path,_)) => parse_error "functor signatures not handled"
 		    | (Ast.FctFct {params=[(argnameopt,sigexp)],body,constraint}) =>
 			  let 
 			      val arglabel = (case argnameopt of
@@ -1667,7 +1726,7 @@ functor Toil(structure Il : IL
 	(case strb of
 	     Ast.VarStr path => 
 			 (case Context_Lookup(context,map symbol_label path) of
-			      SOME (path,PHRASE_CLASS_MOD(m,s)) => ([],m,s)
+			      SOME (path,PHRASE_CLASS_MOD(m,s as (SIGNAT_STRUCTURE _))) => ([],m,s)
 			    | _ => (error_region();
 				    print "unbound structure: ???\n";
 				    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[]))))
@@ -1935,7 +1994,7 @@ functor Toil(structure Il : IL
 		  SOME c => SOME c
                 | NONE => 
 		  case curpath of
-		    [] => error "transparent got empty path"
+		    [] => elab_error "transparent got empty path"
 		  | (v,_)::vlrest => let val p = COMPOUND_PATH(v,map #2 vlrest)
 					 val c = path2con p
 					 val _ = firstcon := (SOME c)
@@ -2121,7 +2180,7 @@ functor Toil(structure Il : IL
 				    print "coercion of a non-type or non-existent component to a ";
 				    print "type specification failed\n";
 				    NONE))
-		   | _ => error "compiler impossibility: ill-formed specification")
+		   | _ => elab_error "ill-formed specification")
 	    end
 
 	fun sdecs_loop (ctxt : context) [] : (sbnds * sdecs) = ([],[])
@@ -2189,7 +2248,7 @@ functor Toil(structure Il : IL
 	  open Prim
       in (case con' of
 	    CON_TYVAR tyvar => (case (tyvar_deref tyvar) of
-				NONE => error "resolved type does not permit equailty"
+				NONE => elab_error "unresolved type does not permit equailty"
 			      | SOME c => self c)
 	  | CON_VAR v => (let val type_label = (case (Context_Lookup'(ctxt,v)) of
 						    SOME(l,_) => l
@@ -2261,8 +2320,8 @@ functor Toil(structure Il : IL
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
-	  | CON_ARRAY c => PRIM(array_eq,[c])
-	  | CON_VECTOR c => APP(PRIM(vector_eq,[c]),self c)
+	  | CON_ARRAY c => PRIM(array_eq true,[c])
+	  | CON_VECTOR c => APP(PRIM(array_eq false,[c]),self c)
 	  | CON_REF c => PRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
 		let val e = MODULE_PROJECT(m,to_eq_lab l)
@@ -2281,14 +2340,14 @@ functor Toil(structure Il : IL
 					     CON_TUPLE_INJECT cons => cons
 					   | c => [c])
 			    fun translucentfy [] [] = []
-			      | translucentfy [] _ = error "arity mismatch in eq compiler"
+			      | translucentfy [] _ = elab_error "arity mismatch in eq compiler"
 			      | translucentfy ((SDEC(l,DEC_CON(v,k,NONE)))::
 					       (sdec2 as (SDEC(_,DEC_EXP _))) :: rest) (c::crest) =
 				((SDEC(l,DEC_CON(v,k,SOME c)))::sdec2::
 				 (translucentfy rest crest))
 			      | translucentfy ((SDEC(l,DEC_CON(v,k,NONE)))::rest) (c::crest) = 
 				((SDEC(l,DEC_CON(v,k,SOME c)))::(translucentfy rest crest))
-			      | translucentfy _ _ = error "got strange sdec in eq compiler"
+			      | translucentfy _ _ = elab_error "got strange sdec in eq compiler"
 			    val sdecs = translucentfy sdecs types
 			    val (new_sbnds,new_sdecs,new_types) = poly_inst(ctxt,sdecs)
 			in MODULE_PROJECT(MOD_APP(meq,MOD_STRUCTURE new_sbnds),it_lab)
@@ -2297,7 +2356,7 @@ functor Toil(structure Il : IL
 		end
 	  | CON_MUPROJECT (j,con') => 
 		(case GetConKind(ctxt,con') of
-		     KIND_TUPLE _ => error "cannot perform equality on con tuples"
+		     KIND_TUPLE _ => elab_error "cannot perform equality on con tuples"
 		   | KIND_ARROW(n,m) => 
 			 let
 			     val _ = if (m=n) then () else elab_error "datatype constructor must have kind n=>n"

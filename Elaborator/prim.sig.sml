@@ -85,18 +85,20 @@ signature PRIM =
       | rshift_int of intsize       (* right shift arithmetic *)
       | rshift_uint of intsize      (* right shift logical *)
 
-      (* array ops *)
-      | sub1
-      | array1
-      | update1
-      | length1
-      | array_eq (* pointer equality *)
+      (* array and vector ops - bool = true indicates writeable *)
+      | sub1 of bool 
+      | array1 of bool
+      | update1 
+      | length1 of bool
+      | array_eq of bool (* pointer equality for true and element-wise equality for false *)
 
-      (* vector ops *)
-      | vector1
-      | vsub1
-      | vlength1
-      | vector_eq (* element-wise equality *)
+      (* array and vector ops - bool = true indicates writeable *)
+      | intsub1 of bool 
+      | intupdate1 
+      | floatsub1 of bool 
+      | floatupdate1 
+      | ptrsub1 of bool 
+      | ptrupdate1 
 
       (* IO operations - a hack so we can see our results for now - takes from stdin - puts to stdout *)
       | output
@@ -111,4 +113,6 @@ signature PRIM =
       | and_uint of intsize
       | or_uint of intsize
       | lshift_uint of intsize
+
+
   end

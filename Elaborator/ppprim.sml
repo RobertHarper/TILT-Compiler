@@ -80,7 +80,8 @@ functor Ppprim(structure Prim : PRIM)
 	   | CAR => String "car"
 	   | CDR  => String "cdr"
 *)
-	   | length1 => String "length1"
+	   | length1 true => String "length1"
+	   | length1 false => String "vlength1"
 (*	   | LENGTH2 => String "length2" *)
 
 
@@ -146,15 +147,23 @@ functor Ppprim(structure Prim : PRIM)
 
 	  | CONS => String "::"
 *)
-	  | array1  => String "array1"
-	  | sub1     => String "sub1"
-	  | update1  => String "update1"
-	  | array_eq => String "array_eq"
+	  | array1 true => String "array1"
+	  | sub1   true  => String "sub1"
+	  | update1 => String "update1"
+	  | array_eq true => String "array_eq"
+	  | array1 false => String "vector1"
+	  | sub1   false  => String "vsub1"
+	  | array_eq false => String "vector_eq"
 
-	  | vector1  => String "vector1"
-	  | vsub1     => String "vsub1"
-	  | vlength1  => String "vlength1"
-	  | vector_eq => String "vector_eq"
+	  | intsub1 true => String "intsub1"
+	  | floatsub1 true => String "floatsub1"
+	  | ptrsub1 true => String "ptrsub1"
+	  | intsub1 false => String "vintsub1"
+	  | floatsub1 false => String "vfloatsub1"
+	  | ptrsub1 false => String "vptrsub1"
+	  | intupdate1 => String "intudpate"
+	  | floatupdate1 => String "floatudpate"
+	  | ptrupdate1 => String "ptrudpate"
 
 (*	   | ARRAY2  {instance} => String "array2"
 	   | SUB2    {instance} => String "sub2" *)

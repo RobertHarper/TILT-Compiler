@@ -69,7 +69,8 @@ struct
 	      | CLOSE_OUT => raise UNIMP
 	      | USE => raise UNIMP
 	      | FLUSH_OUT => raise UNIMP *)
-	| (length1, [instance]) => thelp(con_array instance, con_int W32)
+
+
 (*	      | length2 {instance} => raise UNIMP *)
 
 (*	     and  => help'([con_bool,con_bool],con_bool) *)
@@ -101,20 +102,31 @@ struct
 	       lesseq_uint is | greatereq_uint is),[]) => help'([con_uint is, con_uint is], con_bool)
 (*	  | cons {instance} => help'([instance,con_list instance],con_list instance) *)
 
-	  | (array1, [instance]) => thelp'([con_int W32, instance], con_array instance)
-	  | (sub1, [instance]) => help'([con_array instance, con_int W32], instance)
-	  | (array_eq, [instance]) => help'([con_array instance, con_array instance],con_bool)
+	  | (array1 true, [instance]) => thelp'([con_int W32, instance], con_array instance)
+	  | (length1 true, [instance]) => thelp(con_array instance, con_int W32)
+	  | (sub1 true, [instance]) => help'([con_array instance, con_int W32], instance)
+	  | (array_eq true, [instance]) => help'([con_array instance, con_array instance],con_bool)
 
-	  | (vector1, [instance]) => thelp'([con_int W32, instance], con_vector instance)
-	  | (vlength1, [instance]) => help(con_vector instance, con_int W32)
-	  | (vsub1, [instance]) => help'([con_vector instance, con_int W32], instance)
-	  | (vector_eq, [instance]) => help(help'([instance, instance],con_bool),
+	  | (array1 false, [instance]) => thelp'([con_int W32, instance], con_vector instance)
+	  | (length1 false, [instance]) => help(con_vector instance, con_int W32)
+	  | (sub1 false, [instance]) => help'([con_vector instance, con_int W32], instance)
+	  | (array_eq false, [instance]) => help(help'([instance, instance],con_bool),
 					    help'([con_vector instance, 
 						   con_vector instance],con_bool))
 		
 (*	  | output => help'([con_int, con_string], con_unit) *)
 	      
 	  | (update1, [instance]) => help'([con_array instance, con_int W32, instance], con_unit)
+	  | (intsub1 true, []) => help'([con_array (con_int W32), con_int W32], con_int W32)
+	  | (floatsub1 true, []) => help'([con_array (con_float F64), con_int W32], con_float F64)
+	  | (ptrsub1 true, [instance]) => help'([con_array instance, con_int W32], instance)
+	  | (intsub1 false, []) => help'([con_vector (con_int W32), con_int W32], con_int W32)
+	  | (floatsub1 false, []) => help'([con_vector (con_float F64), con_int W32], con_float F64)
+	  | (ptrsub1 false, [instance]) => help'([con_vector instance, con_int W32], instance)
+	  | (intupdate1, []) => help'([con_array (con_int W32), con_int W32, con_int W32], con_unit)
+	  | (floatupdate1, []) => help'([con_array (con_float F64), con_int W32, con_float F64], con_unit)
+	  | (ptrupdate1, [instance]) => help'([con_array instance, con_int W32, instance], con_unit)
+
 	  | _ => error "can't get type"
 (*	   | array2  {instance} => raise UNIMP
 	   | SUB2    {instance} => raise UNIMP *) )
@@ -274,16 +286,11 @@ struct
 	  | (lesseq_uint is, [], _) => ipred is (TilWord64.ulte)
 	  | (greatereq_uint is, [], _) => ipred is (TilWord64.ugte)
 					
-	  | (length1, [instance], _) => raise UNIMP
-	  | (sub1,_,_)  => raise UNIMP
-	  | (array1,_,_)  => raise UNIMP
+	  | (length1 _, [instance], _) => raise UNIMP
+	  | (sub1 _,_,_)  => raise UNIMP
+	  | (array1 _,_,_)  => raise UNIMP
 	  | (update1, _, _) => raise UNIMP
-	  | (array_eq,_,_)  => raise UNIMP
-
-	  | (vlength1, [instance], _) => raise UNIMP
-	  | (vsub1,_,_)  => raise UNIMP
-	  | (vector1,_,_)  => raise UNIMP
-	  | (vector_eq,_,_)  => raise UNIMP
+	  | (array_eq _,_,_)  => raise UNIMP
 
 	  | _ => bad())
 	end
