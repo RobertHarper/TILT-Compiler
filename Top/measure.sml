@@ -1,6 +1,4 @@
-(*$Measure: Char Math Format Linkb Linkall Linkalpha MEASURE *)
-
-structure Measure (* : MEASURE *) =
+structure Measure =
 struct
    val system = OS.Process.system
 

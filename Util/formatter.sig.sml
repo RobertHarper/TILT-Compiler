@@ -32,7 +32,7 @@ These may may be changed by the user.
       val  Width: format -> (int * int)
 
       (* routines to create a format *)
-      (* Note: the xxxx0 functions take extra arguments *)
+      (* Note: the ?????0 functions take extra arguments *)
       val  Break: format
       val  Break0: int -> int -> format     (* blanks, indent *)
       val  String: string -> format
