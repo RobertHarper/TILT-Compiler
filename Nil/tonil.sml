@@ -2162,9 +2162,8 @@ end (* local defining splitting context *)
 
      | xsig' context (con0, Il.SIGNAT_STRUCTURE (NONE,sdecs)) = xsig_struct context (con0,sdecs)
      | xsig' context (con0, Il.SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-       let val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
-	   val sig' = IlStatic.UnselfifySig (IlContext.empty_context) (p,s)
-       in  xsig' context (con0, sig')
+       let val signat = Il.SIGNAT_STRUCTURE(NONE,sdecs)
+       in  xsig' context (con0, signat)
        end
 
    and xsig_struct context (con0,sdecs) = 
@@ -2391,6 +2390,7 @@ end (* local defining splitting context *)
 			let
 			    val (l_c,l_r) = make_cr_labels l
 			    val ((v_c, v_r),context) = splitVar (v, context)
+			    val il_sig = IlStatic.UnselfifySig IlContext.empty_context (PATH(v,[]), il_sig)
 			    val (knd, type_r) = xsig context (Var_c v_c, il_sig)
 				
 			    val context = update_NILctx_insert_kind(context, v_c, knd)

@@ -128,7 +128,9 @@ structure IlStatic
 				       val popt = if selfify then popt else NONE
 				   in  SIGNAT_STRUCTURE(popt,sdecs')
 				   end)
-	      | SIGNAT_VAR v => TransformSig state (popt, reduce_sigvar(ctxt, v))
+	      | SIGNAT_VAR v => if selfify
+				    then TransformSig state (popt, reduce_sigvar(ctxt, v))
+				else signat
 	      | SIGNAT_OF p => let val m = path2mod p
 				   val m = mod_subst(m, subst)
 			       in  (case mod2path m of

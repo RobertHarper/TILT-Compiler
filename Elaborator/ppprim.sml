@@ -1,4 +1,4 @@
-(*$import PPPRIM PRIM Util Formatter Prim Stats *)
+(*$import PPPRIM PRIM Util Formatter Prim Stats Listops *)
 (* Primitives pretty-printer. *)
 structure Ppprim :> PPPRIM =
   struct
