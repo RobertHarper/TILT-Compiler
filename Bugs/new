@@ -22,6 +22,7 @@ bugno=`{
 }
 description=$^*
 echo $bugno '[open]	' ^ $description >> buglist.txt
+run cvs commit -m 'bug number ' ^ $bugno buglist.txt	# Abort early if we lose race to commit
 mkdir $bugno
 {
 	echo Number: $bugno
@@ -40,7 +41,7 @@ mkdir $bugno
 	echo 'Owner:'
 	echo 'Status: open'
 } > $bugno/description
-cvs add $bugno
-cvs add $bugno/description
-cvs commit -m 'bug number ' ^ $bugno buglist.txt $bugno
+run cvs add $bugno
+run cvs add $bugno/description
+run cvs commit -m 'Initial report.' $bugno
 echo now edit $bugdir/$bugno/description
