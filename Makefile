@@ -16,10 +16,10 @@
 smlnj=SML_VERSION=110 /usr/local/bin/sml
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
-tiltnj=./Bin/tilt-nj
-master=$(tiltnj) -vv
+tiltnj=./Bin/tilt-nj -vv
+master=$(tiltnj)
 slave=:
-purge=$(tiltnj) -vpp
+purge=$(tiltnj) -pp
 
 all:\
 	tilt_heap\
