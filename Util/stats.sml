@@ -148,19 +148,27 @@ structure Stats :> STATS =
 	fun add {usr,sys,gc} = Time.toReal(Time.+(sys,usr))
 
 	val delta_t = ref NONE;
-
+	val delta_timeout = 10000  (* If the timer doesn't advance after 10000 uses, we give up *)
 	fun delta () = 
-	  (case delta_t
-	     of ref NONE =>
+	  (case (!delta_t) of
+	       NONE =>
 	       let 
 		 val cputimer = startCPUTimer ()
-		 fun loop () = let val d = add (checkCPUTimer cputimer)
-			       in if d <= 0.000001 then loop () else d
-			       end
-		 val d = loop()
-	       in (delta_t := SOME d;  d)
+		 fun loop cnt =
+		     if (cnt > delta_timeout)
+			 then (print "Warning: timer does not advance after ";
+			       print (Int.toString delta_timeout); print " uses; assuming 0 overhead\n";
+			       0.0)
+		     else let val d = add (checkCPUTimer cputimer)
+			  in  if (Real.==(d,0.0))
+				  then loop (cnt+1) 
+			      else d
+			  end
+		 val d = loop 0
+		 val _ = delta_t := SOME d
+	       in d
 	       end
-	      | ref (SOME r) => r)
+	     | (SOME r) => r)
 	     
 	(*This times small functions.  This is just to get a handle on how much
 	 * the timers slow things down. 

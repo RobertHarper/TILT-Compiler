@@ -466,6 +466,9 @@ NilError Nil/nilerror
 NILREWRITE Nil/rewrite.sig
 NilRewrite Nil/rewrite
 
+MEASURE Nil/measure.sig
+Measure Nil/measure
+
 NILRENAME 	Nil/nilrename.sig
 NilRename	Nil/nilrename
 
@@ -531,9 +534,6 @@ Hoist Nil/hoist
 
 INLINE Nil/inline.sig
 Inline Nil/inline
-
-MEASURE Nil/measure.sig
-Measure Nil/measure
 
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil

@@ -25,6 +25,29 @@ type int32 = int
 type word = word32
 
 
+(* Predefined external functions *)
+extern exnName : (exn, char vector) -->
+extern exnMessage : (exn, char vector) -->
+extern real_logb : (float, int) -->
+extern real_scalb : (float * int, float) -->
+extern sqrt : (float, float) -->
+extern exp : (float, float) -->
+extern log : (float, float) -->
+extern ln : (float, float) -->
+extern log10 : (float, float) -->
+extern sin : (float, float) -->
+extern cos : (float, float) -->
+extern tan : (float, float) -->
+extern atan : (float, float) -->
+extern asin : (float, float) -->
+extern acos : (float, float) -->
+extern tanh : (float, float) -->
+extern sinh : (float, float) -->
+extern cosh : (float, float) -->
+extern setRoundingMode : (int, int) -->
+extern getRoundingMode : (int, int) -->
+extern ml_timeofday : (unit, (int * int)) -->
+
 (* standard exceptions *)
 exception Match and Bind                   (* pattern related *)
 exception Overflow and Div and Mod and Quot (* arithmetic *)
@@ -63,6 +86,10 @@ structure List =
 	  | foldr f acc (first::rest) = f(first,foldr f acc rest)
 	fun map f [] = []
 	  | map f (a::b) = (f a)::(map f b)
+	fun filter pred [] = []
+	  | filter pred (a::b) = if (pred a)
+				     then a :: (filter pred b)
+				 else (filter pred b)
     end
 open List
 
@@ -145,6 +172,11 @@ structure Vector =
     end
 open Vector
 type string = char vector
+
+structure Math = 
+    struct
+	val sqrt = fn(x:real) => Ccall(sqrt,x)
+    end
 
 structure Misc = 
     struct
@@ -448,6 +480,8 @@ structure Real =
 	    end (* makestring_real *)
 	fun eq(x,y) = float_eq(x,y)
 	fun ==(x,y) = float_eq(x,y)
+	fun max(x:real,y) = if (x>=y) then x else y
+	fun min(x:real,y) = if (x<=y) then x else y
     end
 
 
@@ -506,29 +540,4 @@ open IO
 
 (* unimped parts of the standard basis *)
 exception LibFail of string
-
-(* we cannot use types defined in this module for the externs 
-   because of a deficiency in the phase-splitter *)
-(* Predefined external functions *)
-extern exnName : (exn, char vector) -->
-extern exnMessage : (exn, char vector) -->
-extern real_logb : (float, int) -->
-extern real_scalb : (float * int, float) -->
-extern sqrt : (float, float) -->
-extern exp : (float, float) -->
-extern log : (float, float) -->
-extern ln : (float, float) -->
-extern log10 : (float, float) -->
-extern sin : (float, float) -->
-extern cos : (float, float) -->
-extern tan : (float, float) -->
-extern atan : (float, float) -->
-extern asin : (float, float) -->
-extern acos : (float, float) -->
-extern tanh : (float, float) -->
-extern sinh : (float, float) -->
-extern cosh : (float, float) -->
-extern setRoundingMode : (int, int) -->
-extern getRoundingMode : (int, int) -->
-extern ml_timeofday : (unit, (int * int)) -->
 
