@@ -1151,7 +1151,14 @@ functor EmitRtlMLRISC(
     fun BR label =
 	  [MLTree.CODE[MLTree.JMP(labelExp label, [label])]]
 
-    fun JMP(src, labels) =
+    fun JMP(src, []) =
+	  (*
+	   * we assume that jumps to unknown locations will use the registers
+	   * that escape the procedure on a normal return
+	   *)
+	  [ExternalConvention.escape,
+	   MLTree.CODE[MLTree.JMP(src, [])]]
+      | JMP(src, labels) =
 	  [MLTree.CODE[MLTree.JMP(src, labels)]]
 
     local
