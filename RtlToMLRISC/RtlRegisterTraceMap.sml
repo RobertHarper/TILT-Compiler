@@ -4,22 +4,22 @@
  * ========================================================================= *)
 
 functor RtlRegisterTraceMap(
-	  structure Cells:	 CELLS
-	  structure IntSet:	 ORD_SET where type Key.ord_key = int
-	  structure RegisterMap: REGISTER_MAP where type id = int
-	  structure Rtl:	 RTL
-	  structure TraceTable:	 TRACETABLE
-
-	  sharing type Rtl.label = TraceTable.Machine.Rtl.label
-	      and type Rtl.rep	 = TraceTable.Machine.Rtl.rep
+	  structure Cells:	CELLS
+	  structure TraceTable: TRACETABLE
 	) :> REGISTER_TRACE_MAP
-	       where type var		= Rtl.var
-		 and type id		= RegisterMap.id
-		 and type rep		= Rtl.rep
+	       where type var		= TraceTable.Machine.Rtl.var
+		 and type id		= DenseRegisterMap.id
+		 and type rep		= TraceTable.Machine.Rtl.rep
 		 and type trace		= TraceTable.trace
 		 and type stacklocation = TraceTable.Machine.stacklocation
-		 and type idSet		= IntSet.set
+		 and type idSet		= DenseIntSet.set
 	  = struct
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure IntSet	= DenseIntSet
+  structure RegisterMap = DenseRegisterMap
+  structure Rtl		= TraceTable.Machine.Rtl
 
   (* -- types -------------------------------------------------------------- *)
 

@@ -14,18 +14,15 @@ functor EmitRtlMLRISC(
 	  structure IntegerConvention:	 INTEGER_CONVENTION
 					   where type id = int
 	  structure IntegerLiveness:	 REGISTER_LIVENESS
-	  structure IntSet:		 ORD_SET
-					   where type Key.ord_key = int
+					   where type idSet = DenseIntSet.set
 	  structure MLRISCConstant:	 MLRISC_CONSTANT
 	  structure MLRISCPseudo:	 MLRISC_PSEUDO
 	  structure MLRISCRegion:	 MLRISC_REGION
 	  structure MLTreeComp:		 MLTREECOMP
 	  structure MLTreeExtra:	 MLTREE_EXTRA
-	  structure RegisterMap:	 REGISTER_MAP
 	  structure RegisterSpillMap:	 REGISTER_SPILL_MAP
 	  structure RegisterTraceMap:	 REGISTER_TRACE_MAP
 					   where type var = Name.var
-	  structure Rtl:		 RTL
 	  structure SpillReload:	 SPILL_RELOAD
 	  structure StackFrame:		 STACK_FRAME
 	  structure TraceTable:		 TRACETABLE
@@ -38,12 +35,10 @@ functor EmitRtlMLRISC(
 		       FloatAllocation.id =
 		       FloatConvention.id =
 		       IntegerAllocation.id =
-		       RegisterMap.id =
 		       RegisterSpillMap.id =
 		       RegisterTraceMap.id =
 		       SpillReload.id
-	      and type IntSet.set =
-		       IntegerLiveness.idSet =
+	      and type IntegerLiveness.idSet =
 		       MLRISCPseudo.idSet =
 		       RegisterTraceMap.idSet
 	      and type MLRISCConstant.const =
@@ -72,14 +67,8 @@ functor EmitRtlMLRISC(
 		       SpillReload.fexp
 	      and type MLTreeExtra.MLTree.stm =
 		       CallConventionBasis.stm
-	      and type Rtl.data =
-		       TraceTable.Machine.Rtl.data
-	      and type Rtl.label =
-		       TraceTable.Machine.Rtl.label
-	      and type Rtl.local_label =
-		       TraceTable.Machine.Rtl.local_label
-	      and type Rtl.rep =
-		       RegisterTraceMap.rep
+	      and type RegisterTraceMap.rep =
+		       TraceTable.Machine.Rtl.rep
 	      and type StackFrame.frame =
 		       ExternalConvention.frame
 	      and type TraceTable.Machine.stacklocation =
@@ -87,11 +76,15 @@ functor EmitRtlMLRISC(
 	      and type TraceTable.trace =
 		       RegisterTraceMap.trace
 	) :> EMIT_RTL
-	       where type local_label = Rtl.local_label
-		 and type module      = Rtl.module
+	       where type local_label = TraceTable.Machine.Rtl.local_label
+		 and type module      = TraceTable.Machine.Rtl.module
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure IntSet	= DenseIntSet
+  structure RegisterMap = DenseRegisterMap
+  structure Rtl		= TraceTable.Machine.Rtl
 
   structure Machine = TraceTable.Machine
   structure MLTree  = MLTreeExtra.MLTree
