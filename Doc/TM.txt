@@ -1,129 +1,130 @@
-Received: from UX12.SP.CS.CMU.EDU by ux9.sp.cs.cmu.edu id aa08717;
-          19 Sep 2001 19:54 EDT
-Received: from ux12.sp.cs.cmu.edu by ux12.sp.cs.cmu.edu id aa05586;
-          19 Sep 2001 19:53 EDT
-Date: Wed, 19 Sep 2001 19:53:49 -0400 (EDT)
-From: Tom Murphy <tom7+@cs.cmu.edu>
-X-Sender: tom7+@ux12.sp.cs.cmu.edu
-To: swasey@cs.cmu.edu
-cc: tom7@cs.cmu.edu
-Subject: TILT: TM notes draft
-Message-ID: <Pine.LNX.3.95L.1010919195131.4070B-100000@ux12.sp.cs.cmu.edu>
-MIME-Version: 1.0
-Content-Type: TEXT/PLAIN; charset=US-ASCII
-
-
-
-Here's a draft, Dave.  I left out an example, which I hope you can fill in
-(along with alerting me to egregious errors or omissions). Then maybe we
-can run it by the til-list to make sure it's consistent with the group's
-view.
-
-Tom
-
-------------------------------------------------------------
-
-
 Here's a high-level description of the TILT project management system.
-We were actually just looking at reworking the surface syntax (and
-also at writing a CM import tool), so the prospect of standardizing on
-something is exciting to us.
+We were actually just looking at reworking the surface syntax (and also at
+writing a CM import tool), so the prospect of standardizing on something
+is exciting to us.
 
-Our system is similar to the "recursive list of files" method, with
-the addition of interfaces. Interfaces specify the exports of a module
-(and their types), allowing us to compile parts of our code even when
-a module hasn't been implemented yet.
+Our system is similar to the "recursive list of files" method {***Tom,
+I don't know what that means and there is nothing recursive in the types
+below.  Can you clarify?***}, with the addition of interfaces. Interfaces
+specify the exports of a module (and their types), allowing us to compile
+code which uses the module before it has been implemented. Interfaces
+play a role in cutoff recompilation and in our parallel make facility.
 
-An interface is a series of declarations as they might appear in a
-signature ('spec' in the Definition; p14), perhaps:
+An interface file contains a list of declarations as they might appear
+in a signature ('spec' in the Definition; p14).  An example:
 
-structure S : SIG
-val x : int
-type t
+	structure S : SIG
+	val x : int
+	type t
 
-
-The project description is as follows.
+A project description file is arranged as follows.
 
 datatype module_code =
-      Interface_File of file       (because no implementation is
-available)
-    | Implementation_File of file  (where an interface can be inferred)
-    | Both of file * file
+      Interface_File of file       (interface with no source)
+    | Implementation_File of file  (source with no interface)
+    | Both of file * file	   (source and matching interface)
 
 type module = name * module_code
 
-A module is not limited to being a structure/signature/functor; it can
-be several structures, or top-level value declarations, etc. It can be
-defined by an interface file, an implementation file, or both.
+A module is not limited to being a structure/signature/functor; it can be
+several structures, or top-level value declarations, etc. {***Is this a
+'program' in the Definition?***} It can be defined by an interface file,
+an implementation file, or both.
 
-type dependencies = {imports: name list,
-                     includes: name list}
+type dependencies = {imports: name set,
+                     includes: name set}
 
-A module's dependencies come in the form of imports and includes.
-Imports are the modules needed to compile the implementation; includes
-are the modules necessary to elaborate the interface. Only direct
-dependencies are listed.
+A module has two sets of dependencies called imports and includes.
+Imports are the modules needed to compile the implementation; includes are
+the modules necessary to elaborate the interface. Only direct dependencies
+are listed.
 
-type project_description = {deps    : (module_name * dependencies) list,
-                            targets : module_name list}
+type project_description = {deps    : (module * dependencies) list,
+                            targets : module_name set}
 
-Finally, the entire project description is a list of targets
-(executables are produced from these) and a list of dependencies. It
-is required that a module cannot be named as a dependency until its
-dependencies are given; thus the order in which modules are listed
-gives a "use-file" ordering. Specifying this ordering allows the user
-to decide on the order in which effects take place.
+Finally, a project description is a set of targets (executables are
+produced for each of these) and a list of dependencies.  A module cannot
+be named as a dependency before its dependencies have been given; thus the
+order in which modules are listed gives a "use-file" ordering. Specifying
+this ordering allows the user to decide on the order in which effects
+take place.
 
-By way of example (but not to suggest a concrete syntax), here's what
-a project might look like:
+By way of example (but not to suggest a concrete syntax), consider
+the problem of specifying how to compile the following code:
 
+	(* list.sig -- skeleton *)
+	signature LIST = sig type ... end
 
+	(* list.int *)
+	structure List : LIST
 
-*** Dave, maybe you could give a short example here? 
-    I'm not familiar with how interfaces and include are typically used.
-***
+	(* queue.sig -- skeleton *)
+	signature QUEUE = sig type 'a queue ... end
 
+	(* queue.int *)
+	structure Queue : QUEUE
 
+	(* queue.sml -- skeleton *)
+	structure Queue :> QUEUE =
+	struct
+	    type 'a queue = 'a List.list * 'a List.list
+	    ...
+	end
+
+a project description might look like:
+
+	Targets are [Queue]
+	Deps are
+	  LIST : source="list.sig"
+		 imports=[]
+		 includes=[]
+
+	  List : interface="list.int"
+		 imports=[LIST]
+		 includes=[LIST]
+
+	  QUEUE : source="queue.sig"
+		  imports=[]
+		  includes=[]
+
+	  Queue : source="queue.sml"
+		  interface="queue.int"
+		  imports=[QUEUE, List]
+		  includes=[QUEUE]
+
+Note that module QUEUE is needed to elaborate the source file queue.sml
+and the interfaec file queue.int so its listed as an import and an
+include.
 
 Steve Weeks asked that there be an easy way to go from a project
-description to an SML source file (without, for instance, doing
-dependency analysis). This is almost the case with our system:
+description to an SML source file (without, for instance, doing dependency
+analysis). This is almost the case with our system.
 
-If there are no interface files, concatenating the modules in the
-order in which they are listed gives such an SML source file. 
+If there are no interface files, concatenating the modules in the order
+in which they are listed gives such an SML source file.
 
-If both an implementation and interface file are supplied, it is
-necessary to check/seal the implementation with respect to the
-interface. I believe this can be handled with signature matching and
-'open':
+If both an implementation and interface file are supplied, it is necessary
+to check/seal the implementation with respect to the interface. I believe
+this can be handled with signature matching and 'open'.  Suppose we
+have a module with source M and interface I. We can translate this to
+the following (where N is a new structure name):
 
-Suppose we have a module M and an interface for it, I. We can
-translate this to the following (where N is a new structure name):
+	structure N :> sig <text of I> end =
+	struct
 
-structure N :> sig <text of I> end =
-struct
+	  <text of M>
 
-  <text of M>
+	end
 
-end
+	open N
 
-open N
+One important problem with this translation is that it limits what users
+can write in I and M.  For instance, functors and signatures can not
+appear in SML'97 signatures and structures.
 
-
-One important problem with this method is that it limits the set of
-things that users can specify in interfaces (because they cannot
-appear in SML '97 signatures or structures), most notably excluding
-functors.
-
-We gave some thought to how we might fit libraries into this
-framework, but don't have anything concrete to say since we haven't
-implemented it. One issue here is that our module names must be
-globally unique (they are used to generate symbols for the linker).
-We're especially interested in ideas on this subject, though we think
-interfaces are a good way to get started.
-
+We haven't got a concrete proposal for fitting libraries into this
+framework.  One issue here is that our module names must be globally
+unique (they are used to generate symbols for the linker).
 
 Tom Murphy
 Dave Swasey
-
-
