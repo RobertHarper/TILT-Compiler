@@ -2,7 +2,9 @@
 
 signature BACKGROUND =
 sig
-    
+
+    val noFork : bool ref		(* Processing is done in the foreground *)
+	
     (* (background f) launches a child process evaluating f(), returning a function isdone such that:
      * isdone() = false if child is still running.
      *          = true  if child finished successfully (because f termianted or called exit(0)).

@@ -910,7 +910,7 @@ struct
 	    if stateDone state then
 		COMPLETE (Time.now())
 	    else
-		if slavesLeft > 0 andalso not (null waiting) then
+		if slavesLeft > 0 then
 		    IDLE (Time.now(), state, slavesLeft)
 		else
 		    PROCESSING (Time.now(), state)
@@ -1078,11 +1078,6 @@ struct
 				    chat " waiting jobs.\n";
 				    chat "     Waiting for interfaces of ";
 				    chat_strings 20 (pending @ working); chat ".";
-				    if (null proceeding) andalso (null pending') andalso (null working')
-					then ()
-				    else (chat "\n     Waiting for objects of ";
-					  chat_strings 20 (List.concat [proceeding, pending', working']);
-					  chat ".");
 				    chat "]\n";
 				    if (diff > 15.0)
 					then (makeGraph'(mapfile,NONE);
@@ -1103,10 +1098,8 @@ struct
 	    val _ = (print "Purging "; print mapfile; print what; print "\n")
 	    val dirs = Dirs.getDirs()
 	    fun deletable file = not (Dirs.isSystemFile (dirs, file))
-	    fun kill file = if (deletable file andalso
-				OS.FileSys.access(file, []) andalso
-				OS.FileSys.access(file, [OS.FileSys.A_READ]))
-				then OS.FileSys.remove file
+	    fun kill file = if deletable file
+				then (OS.FileSys.remove file handle _ => ())
 			    else ()
 	    fun remove unit =
 		let val paths = get_paths unit
@@ -1119,6 +1112,7 @@ struct
 	    app kill files'
 	end
     val any = [Paths.infoFile,
+	       Paths.fileToBackup o Paths.infoFile,
 	       Paths.ilFile,
 	       Paths.ilToUnself o Paths.ilFile,
 	       Paths.fileToBackup o Paths.ilFile]

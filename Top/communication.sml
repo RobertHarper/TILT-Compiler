@@ -246,9 +246,10 @@ struct
 	    fun loop try =
 		if createLink() then ()
 		else
-		    let val _ = if try mod 10 = 0 then print ("Waiting for " ^ new ^ "\n")
+		    let val _ = if try = 1 then zeroFile old else () (* Avoid race where master deletes old. *)
+			val _ = if try mod 3 = 0 then print ("Waiting for " ^ new ^ "\n")
 				else ()
-			val _ = Platform.sleep 0.1
+			val _ = Platform.sleep 1.0
 		    in  loop (try + 1)
 		    end
 	    val _ = loop 1		(* acquire lock *)

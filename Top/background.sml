@@ -1,9 +1,11 @@
-(*$import BACKGROUND OS Util *)
+(*$import BACKGROUND OS Util Stats *)
 
 structure Background :> BACKGROUND =
 struct
 
     val error = fn s => Util.error "background.sml" s
+
+    val noFork = Stats.ff "NoFork"
 	
     open Posix.Process
 
@@ -73,4 +75,11 @@ struct
 		      isdone
 		  end
 	end
+    
+    (* Handle noFork *)
+    val background = (fn f =>
+		      if (!noFork) then
+			  (f(); fn () => true)
+		      else background f)
+	
 end
