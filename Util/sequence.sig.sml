@@ -3,7 +3,7 @@
 signature SEQUENCE =
   sig
 
-    type ('a,'b) sequence
+    type ('a,'b) sequence = ('a * 'b) list
 
     val length     : ('a,'b) sequence -> int
     val foldl      : (('a*'b) * 'c -> 'c) -> 'c -> ('a,'b) sequence -> 'c (* like foldl *)
