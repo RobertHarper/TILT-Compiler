@@ -1029,15 +1029,14 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				  | _ => con_tuple fbnd_cons)
 		 
 	     local 
+		 val (_,top_con) = top_exp_con
+		 val _ = debugdo (fn () => (print "about to call rebind_free_type_var:";
+					    print "var_poly = ";
+					    pp_var var_poly; print "\nand c = \n";
+					    pp_con top_con; print"\n\n"))
 		 val tyvar_lbls'_useeq = 
-		     ((fn (_,c) => 
-		       (debugdo (fn () => (print "about to call rebind_free_type_var:";
-					   print "var_poly = ";
-					   pp_var var_poly; print "\nand c = \n";
-					   pp_con c; print"\n\n"));
-			rebind_free_type_var(tyvar_stamp,c,
-					     context_fun_ids,var_poly)))
-		      top_exp_con)
+		     rebind_free_type_var(tyvar_stamp,top_con,
+					  context_fun_ids,var_poly)
 		 fun help(_,tlab,iseq) = (tlab,iseq)
 		 val temp = map help tyvar_lbls'_useeq
 	     in

@@ -510,9 +510,10 @@ structure IlUtil
 	end
 
 
-    fun canonical_tyvar_label n = 
+    fun canonical_tyvar_label is_equal n = 
 	if (n<0 orelse n>25) then error "canonical_tyvar_label given number out of range"
-	else symbol_label(Symbol.tyvSymbol ("'" ^ (String.str (chr (ord #"a" + n)))))
+	else symbol_label(Symbol.tyvSymbol ((if is_equal then "''" else "'")
+					    ^ (String.str (chr (ord #"a" + n)))))
 
       fun rebind_free_type_var(tv_stamp : stamp,
 			       argcon : con, context, targetv : var) 
@@ -546,15 +547,15 @@ structure IlUtil
 				mod_handler = default_mod_handler,
 				sig_handler = default_sig_handler})
 	  val _ = f_con handlers argcon
-	  val res = mapcount (fn (n,tv) => (tv, canonical_tyvar_label n,
-(*				   internal_label (tyvar2string tv), can't be generative *)
-					    tyvar_is_use_equal tv)) (!free_tyvar)
-	  val _ = (map (fn (tv,lbl,useeq) => 
-			 let val proj = CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
-			 in tyvar_set(tv,proj)
-			 end)
-		   res)
-	in res
+	  val free_tyvar = rev(!free_tyvar)
+	  fun mapper (n,tv) = 
+	      let val is_equal = tyvar_is_use_equal tv
+		  val lbl = canonical_tyvar_label is_equal n
+		  val proj = CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
+		  val _ = tyvar_set(tv,proj)
+	      in  (tv, lbl, is_equal)
+	      end
+	in mapcount mapper free_tyvar
 	end
 
       exception DEPENDENT
