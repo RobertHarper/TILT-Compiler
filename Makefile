@@ -102,7 +102,7 @@ install: FORCE
 	cp Doc/tilt.man $(PREFIX)/man/man1/tilt.1 && chmod 644 $(PREFIX)/man/man1/tilt.1
 	cp Doc/tilt-project.man $(PREFIX)/man/man4/tilt-project.4 && chmod 644 $(PREFIX)/man/man4/tilt-project.4
 	-mkdir $(PREFIX)/bin
-	for name in tilt tilt-nj tilt-slaves tilt-dump tilt-dump-nj; do \
+	for name in tilt tilt-nj tilt-slaves; do \
 		(echo '#!/bin/sh'; \
 		 echo 'exec $(RUNPREFIX)/lib/tilt/Bin/'$$name' $${1+"$$@"}'; \
 		)>$(PREFIX)/bin/$$name && chmod 755 $(PREFIX)/bin/$$name; \
