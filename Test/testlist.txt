@@ -22,6 +22,9 @@
 0004	pass	Hello world.
 0005	fail	Picky infix decl parsing bug.
 0006	fail	More infix decls that should be accepted.
+0007	pass	overload resolution order (top-level)
+0008	pass	overload resolution order (in structures)
+0009	pass	overload resolution order (in functors)
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
