@@ -134,3 +134,4 @@
 0138 [open]	date failure
 0139 [open]	filesys discrepancies
 0140 [open]	discrepancies on string tests
+0141 [open]	stringcvt discrepancies
