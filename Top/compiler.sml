@@ -107,19 +107,9 @@ struct
 	    fun updateTiltprim pctxt = saved := SOME pctxt
 	end
 
-    fun list_labels (ctxt : Il.context) : Il.label list =
-	let
-	    val labels = LinkIl.IlContext.list_labels ctxt
-	    val labels = foldl (fn (l,acc) =>
-				let val (c,r) = Name.make_cr_labels l
-				in  (l :: c :: r :: acc)
-				end) nil labels
-	in  labels
-	end
-	
     fun extend (map : unitmap, unitname : string, pctxt : Il.partial_context) : unitmap =
 	let fun extend' (l,map) = Linkrtl.extend(map,l,unitname)
-	    val labels = list_labels (#1 pctxt)
+	    val labels = LinkIl.IlContext.list_labels (#1 pctxt)
 	    val _ = if (!ShowUnitmap)
 			then (print "partial context: "; LinkIl.Ppil.pp_pcontext pctxt; print "\n";
 			      print "unitname: "; print unitname; print "\n";
@@ -227,7 +217,7 @@ struct
 		end
 	    val il_module = LinkIl.IlContext.unobscure_labels (il_module, label_info)
 	    (* Trim unitmap *)
-	    val unitmap = Linkrtl.restrict(unitmap, list_labels (#1 il_module))
+	    val unitmap = Linkrtl.restrict(unitmap, LinkIl.IlContext.list_labels (#1 il_module))
 	    (* Update il file *)
 	    val _ = IlCache.flushSome [targetIlFile]
 	    val (_, partial_ctxt, _) = il_module

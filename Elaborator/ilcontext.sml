@@ -650,7 +650,10 @@ struct
 	    fun addPath (l : label, (p,pc) : path * phrase_class, acc) =
 		if is_open_internal_path(pathMap,p)
 		    then acc
-		else l :: acc
+		else
+		    let val (c,r) = Name.make_cr_labels l
+		    in  l :: c :: r :: acc
+		    end
 	in  Name.LabelMap.foldli addPath nil labelMap
 	end
     
