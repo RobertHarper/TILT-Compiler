@@ -485,12 +485,11 @@ structure NilContextPre
 	    	      
 	     | (Closure_c (code,env)) => 
 	      let val (subst,code_kind) = kind_of' (D,code,name) 
-		  val (vklist,body_kind) = 
+		  val (TEv,vklist,body_kind) = 
 		    (case code_kind
-		       of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
-			| _ => (error  (locate "kind_of") "Invalid closure: code component does not have code kind" ))
-		  val (first,(v,klast)) = split vklist
-	      in (NilSubst.C.addl (v,env,subst),Arrow_k(Closure,first,body_kind))
+		       of Arrow_k (Code,(TEv,_)::vklist,body_kind) => (TEv,vklist,body_kind)
+			| _ => (error  (locate "kind_of") "Invalid closure: code component does not have correct kind" ))
+	      in (NilSubst.C.addl (TEv,env,subst),Arrow_k(Closure,vklist,body_kind))
 	      end
 	    
 	     | (Crecord_c entries) => 
@@ -625,17 +624,12 @@ structure NilContextPre
 	    | Single_k c => CON(App_c(substConInCon subst c,clist))
 	    | _ => error (locate "app_kind") "bad kind to app_kind")
 
-      fun closure_kind (Single_k c,env,subst) = CON(Closure_c(substConInCon subst c,env))
-	| closure_kind (k,env,subst) = 
-	(let 
-	   val (vklist,body_kind) = 
-	     (case k
-		of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
-		 | _ => (error  (locate "find_kind_equation") "Invalid closure: code component does not have code kind" ))
-	   val (first,(v,klast)) = split vklist
-	   val body_kind = varConKindSubst v env body_kind
-	 in  KIND (Arrow_k(Closure,first,body_kind),subst)
-	 end)
+      fun closure_kind (k,env,subst) = 
+	(case k
+	   of Single_k c => CON(Closure_c(substConInCon subst c,env))
+	    | Arrow_k (Code,(TEv,_)::vklist,body_kind) =>
+	     KIND (Arrow_k(Closure,vklist,body_kind),add subst (TEv,env))
+	    | _ => (error  (locate "find_kind_equation") "Invalid closure: code component does not have code kind" ))
 
       fun kind_eqn k = 
 	(case k 

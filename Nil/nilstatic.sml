@@ -1,4 +1,4 @@
-(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha *)
+(*$import TIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 
@@ -742,13 +742,12 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 let
 	   val code_kind =  con_valid (D,code)
 	   (*Or could synthesize on the environment*)
-	   val (vklist,body_kind) = 
+	   val ((v,klast),vklist,body_kind) = 
 	     case code_kind of
-	       Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
-	     | _ => (c_error(D,constructor,"Invalid closure: code component does not have code kind"))
+	       Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
+	     | _ => (c_error(D,constructor,"Invalid closure: code has wrong kind"))
 		 
-	   val (first,(v,klast)) = split vklist
-	   val kind2 = Arrow_k(Closure,first,body_kind)
+	   val kind2 = Arrow_k(Closure,vklist,body_kind)
 	   val _ = sub_kind(D,kind2,kind1)
 	   val _ = (con_analyze(D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure2?")
 	 in ()
@@ -947,14 +946,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 | (Closure_c (code,env)) => 
 	   let
 	     val code_kind =  con_valid (D,code)
-	     val (vklist,body_kind) = 
+	     val ((v,closure_k),vklist,body_kind) = 
 	       case code_kind of
-		 Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
-	       | _ => (c_error(D,constructor,"Invalid closure: code component does not have code kind"))
-	     val (first,(v,klast)) = split vklist
-	     val _ = (con_analyze (D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure?")
-	     val body_kind = varConKindSubst v env body_kind
-	   in Arrow_k(Closure,first,body_kind)
+		 Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
+	       | _ => (c_error(D,constructor,"Invalid closure: code component does not have correct kind"))
+	     val _ = (con_analyze (D,env,closure_k)) handle e => k_error(D,closure_k,"Illegal kind in Closure?")
+	     val kind = Arrow_k(Closure,vklist,body_kind)
+	   in varConKindSubst v env kind
 	   end
 	 | (Crecord_c entries) => 
 	   let
@@ -1072,20 +1070,30 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     let
       val _ = push_subkind(kind1,kind2,D)
 
-      fun sub_one ((var1,kind1),(var2,kind2),(D,subst1,subst2)) = 
+      fun sub_one ((var1,kind1),(var2,kind2),(D,rename1,rename2)) = 
 	let
-	  val var' = derived_var var1
-	  val kind1 = substConInKind subst1 kind1
-	  val kind2 = substConInKind subst2 kind2
-	  val D' = insert_kind (D,var',kind1)
-	  val subst1 = Subst.C.sim_add subst1 (var1,Var_c var')
-	  val subst2 = Subst.C.sim_add subst2 (var2,Var_c var')
+	  val kind1 = alphaCRenameKind rename1 kind1
+	  val kind2 = alphaCRenameKind rename2 kind2
+
+	  val (D',rename1,rename2) = 
+	    let
+	      val var' = 
+		if NilContext.bound_con(D,var1) then 
+		  if NilContext.bound_con(D,var2) then
+		    derived_var var1
+		  else var2
+		else var1
+	      val D = insert_kind (D,var',kind1)
+	      val rename1 = if eq_var (var1,var') then rename1 else Alpha.rename (rename1,var1,var')
+	      val rename2 = if eq_var (var2,var') then rename2 else Alpha.rename (rename2,var2,var')
+	    in (D,rename1,rename2)
+	    end
 	in
-	  (subeq_kind is_eq (D,kind1,kind2),(D',subst1,subst2))
+	  (subeq_kind is_eq (D,kind1,kind2),(D',rename1,rename2))
 	end
 
       fun sub_all D (vks1,vks2) = 
-	foldl_all2 sub_one (D,Subst.C.empty(),Subst.C.empty()) (vks1,vks2)
+	foldl_all2 sub_one (D,Alpha.empty_context(),Alpha.empty_context()) (vks1,vks2)
 
       val res = 
       (case (kind1,kind2) 
@@ -1111,10 +1119,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  | (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	   (if eq_len (formals1,formals2) then
 	      let
-		val (formals_ok,(D,subst2,subst1)) = sub_all D (formals2,formals1)
+		val (formals_ok,(D,rename2,rename1)) = sub_all D (formals2,formals1)
 		(* Notice reversal of order!!!*)
-		val return1 = Subst.substConInKind subst1 return1
-		val return2 = Subst.substConInKind subst2 return2
+		val return1 = alphaCRenameKind rename1 return1
+		val return2 = alphaCRenameKind rename2 return2
 	      in
 		formals_ok andalso 
 		same_openness (openness1,openness2) andalso 
@@ -1305,7 +1313,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      in
 			(case open_lambda constructor
 			   of SOME((formals,body),SOME env) =>
-			     con_reduce(instantiate_formals(state,formals,actuals@[env]),body)
+			     con_reduce(instantiate_formals(state,formals,env::actuals),body)
 			    | SOME((formals,body),NONE)     => 
 			     con_reduce(instantiate_formals(state,formals,actuals),body)
 			    | NONE => (perr_c constructor;
@@ -1737,7 +1745,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val _ = Sequence.app (function_valid openness D) defs
 	in (D,Sequence.toList bnd_types)
 	end
-
       (*tipe is already checked*)
       fun do_closure D ({code,cenv,venv,tipe}) = 
 	let
@@ -1751,7 +1758,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	  val (effect,isDependent,tFormals,eFormals,fFormals,body_type) =
 	    (case strip_arrow (con_head_normalize(D,code_type)) of
-	       SOME {openness = Code,effect,isDependent,tFormals,eFormals,fFormals,body_type} => 
+	       SOME {openness = Code,effect,isDependent,
+		     tFormals,eFormals, fFormals,body_type} => 
 		 (effect,isDependent,tFormals,eFormals,fFormals,body_type)
 	     | SOME _ => 		     
 		 (perr_e_c (Var_e code,code_type);
@@ -1759,39 +1767,37 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | NONE => (perr_e_c (Var_e code,code_type);
 			(error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e)))
 
-	  val (tformals,(last_tv,last_k)) = split tFormals
+	  (* Split out the closure variables and classifiers*)
+	  val ((clos_tv,clos_k),tFormals) =
+	    (case tFormals
+	       of c::ff => (c,ff)
+		| _ => error (locate "bnd_valid") "Code doesn't expect type closure")
 
-
-	  val _ = (con_analyze (D,cenv,kind_standardize(D,last_k))) handle e => k_error(D,last_k,"Illegal kind in Closure3?")
-
-	  val tformals = map (fn (tv,k) => (tv,varConKindSubst last_tv cenv k)) tformals
-	  val eformals = map (fn (vopt,c) => (vopt, varConConSubst last_tv cenv c)) eFormals
-
-	  val (eformals,last_vc) = split eformals
+	  val ((clos_v_opt,clos_c),eFormals) = 
+	    (case eFormals
+	       of v::ff => (v,ff)
+		| _ => error (locate "bnd_valid") "Code doesn't expect value closure")
 	    
-	  val D = foldl (fn ((v,k),D) => insert_stdkind(D,v,k)) D tformals
 
-	  fun folder ((vopt,c),D) =
-	    (case vopt of
-	       NONE => D
-	     | SOME v => insert_con(D,v,c))
+	  (*Check that the environments are appropriate*)
+	  val _ = (con_analyze (D,cenv,kind_standardize(D,clos_k))) handle e => k_error(D,clos_k,"Illegal kind in Closure?")
+	  val _ = exp_analyze  (D,venv,varConConSubst clos_tv cenv clos_c)
 
-	  val D' = foldl folder D eformals
-
-	  val body_type = varConConSubst last_tv cenv body_type
-
-	  val body_type = (case last_vc of
-			     (NONE,_) => body_type
-			   | (SOME v,_) => varExpConSubst v venv body_type)
-
-	  val _ = exp_analyze (D,venv,#2 last_vc)
+	  (* Create the closure type and substitute in the types of the
+	   * environments
+	   *)
+	  val esubst = (case clos_v_opt 
+			  of NONE   => Subst.E.empty()
+			   | SOME v => Subst.E.sim_add (Subst.E.empty()) (v,venv))
+	  val csubst = Subst.C.sim_add (Subst.C.empty()) (clos_tv,cenv)
 	    
 	  val closure_type = AllArrow_c {openness=Closure, effect=effect, 
-					 isDependent=isDependent,
-					 tFormals = tformals,
-					 eFormals = eformals,
-					 fFormals = fFormals,
-					 body_type=body_type}
+					   isDependent=isDependent,
+					   tFormals = tFormals,
+					   eFormals = eFormals,
+					   fFormals = fFormals,
+					   body_type=body_type}
+	  val closure = substExpConInCon (esubst,csubst) closure_type
 	    
 	  val _ = 
 	    (type_equiv (D,closure_type,tipe,false)) orelse
@@ -2089,7 +2095,27 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in
 		   result_type
 		 end
-		| Typecase_e {arg=argcon,arms,default,result_type} => e_error(D,Switch_e switch,"Typecase_e not done"))
+		| Typecase_e {arg,arms,default,result_type} =>
+		 let
+		   val _ = type_analyze(D,result_type)
+		   val origD = D
+		   fun doarm (pcon,args,body) = 
+		     let
+		       fun folder ((v,k),D) =
+			 let val k = kind_valid (origD,k)
+			 in
+			   (Var_c v,insert_kind(D,v,k))
+			 end
+		       val (argcons,D) = foldl_acc folder D args
+		       val _ = pcon_analyze (D,pcon,argcons)
+		       val _ = exp_analyze(D,body,result_type)
+		     in ()
+		     end
+		   val _ = (app doarm arms;
+			    type_analyze (D,arg);
+			    exp_analyze (D,default,result_type))
+		 in result_type
+		 end)
 	       
 	in res 
 	end

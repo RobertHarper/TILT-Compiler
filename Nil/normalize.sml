@@ -124,7 +124,7 @@ struct
 	      | Code => Let_c (Sequential,[Code_cb (var,formals,c)],Var_c var)
 	      | Closure => let val cenv = (fresh_named_var "pull_closure", 
 					   Record_k (Sequence.fromList []))
-			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c)],
+			   in  Let_c (Sequential,[Code_cb (var,cenv::formals ,c)],
 				      Closure_c(Var_c var, Crecord_c []))
 			   end
 	 end)
@@ -326,7 +326,7 @@ struct
     in
       (case open_lambda con
 	 of SOME(args,SOME env) =>
-	       reduce (actuals @ [env]) args
+	       reduce (env::actuals) args
 	  | SOME(args,NONE)     => 
 	       reduce actuals args
 	  | NONE => (false,app))
