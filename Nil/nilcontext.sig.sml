@@ -10,14 +10,16 @@ signature NILCONTEXT =
 
     val empty : unit -> context
 
-    val reset_counter : unit -> unit
-    val get_counter : unit -> int * int
+    val leave_top_level : context -> context
+    val code_context : context -> context
 
     val insert_con : context*var*con -> context
+    val insert_code_con : context*var*con -> context
     val find_con : context*var -> con option
     val remove_con : context*var -> context
 
     val insert_con_list : context * (var * con) list -> context
+    val insert_code_con_list : context * (var * con) list -> context
 
     (*Note that insertion of a kind automatically selfifies*)
     (* insert_kind (context,var,kind) => ()
@@ -40,10 +42,8 @@ signature NILCONTEXT =
     val bind_kind_list : context * (var * kind) list -> context * (var * kind) list * con subst
 
     val c_insert_con : context*var*con*(context->'a) -> 'a
-    val c_remove_con : context*var*(context -> 'a) -> 'a
 
     val c_insert_kind : context*var*kind*(context->'a) -> 'a
-    val c_remove_kind : context*var*(context -> 'a) -> 'a
 
     val c_insert_con_list : context * (var*con) list * (context -> 'a) -> 'a
     val c_insert_kind_list : context * (var*kind) list * (context -> 'a) -> 'a

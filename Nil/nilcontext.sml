@@ -23,37 +23,78 @@ struct
     
   fun error s = Util.error "nilcontext.sml" s
 
-
-  val bound = ref 0
-  val renamed = ref 0
-
-  fun reset_counter () = (bound := 0;renamed := 0)
-  fun get_counter () = (!bound,!renamed)
+  local fun id () = () 
+  in
+    val profile = Stats.bool "nil_profile"
+    val (nilcontext_kinds_bound,
+	 nilcontext_kinds_renamed) =
+      if !profile then
+	(Stats.counter "nilcontext_kinds_bound",
+	 Stats.counter "nilcontext_kinds_renamed")
+      else
+	(id,id)
+  end
 
   structure V = Name.VarMap
 
   type 'a map = 'a V.map
 
   type context = {kindmap : kind map,
-		  conmap : con map}
+		  conmap : con map,
+		  top_level : bool,
+		  c_binds_top : kind map,
+		  e_binds_top : con map}
 
   fun empty ():context = 
     {kindmap = V.empty,
-     conmap = V.empty}
+     conmap = V.empty,
+     top_level = true,
+     c_binds_top = V.empty,
+     e_binds_top = V.empty}
 
-  fun insert_con ({conmap,kindmap}:context,var,con) = 
-    {conmap = V.insert (conmap, var, con), kindmap = kindmap}
-(*    (case V.find (conmap, var)
-       of NONE => {conmap = V.insert (conmap, var, con), kindmap = kindmap}
-	| _ => error ("Expression variable "^(var2string var)^" already in context"))*)
+  fun leave_top_level ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context) : context = 
+    {conmap = conmap,kindmap = kindmap,
+     top_level = false,
+     c_binds_top = c_binds_top,e_binds_top = e_binds_top}
+
+  fun code_context ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context) : context = 
+    {conmap = e_binds_top,kindmap = c_binds_top,
+     top_level = false,
+     c_binds_top = c_binds_top,e_binds_top = e_binds_top}
+
+  fun insert_con ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,var,con) = 
+    {conmap = V.insert (conmap, var, con), 
+     kindmap = kindmap,
+     top_level = top_level,
+     c_binds_top = c_binds_top,
+     e_binds_top = if top_level then V.insert (e_binds_top, var, con) else e_binds_top}
+
+  fun insert_code_con ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,code_var,con) = 
+    {conmap = V.insert (conmap, code_var, con), 
+     kindmap = kindmap,
+     top_level = top_level,
+     c_binds_top = c_binds_top,
+     e_binds_top = V.insert (e_binds_top, code_var, con)}
 
   fun insert_con_list (C:context,defs : (var * con) list) =
     List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
 
+  fun insert_code_con_list (C:context,defs : (var * con) list) =
+    List.foldl (fn ((v,c),C) => insert_code_con (C,v,c)) C defs
+
   fun find_con ({conmap,...}:context,var) = V.find (conmap, var)
     
-  fun remove_con ({conmap,kindmap}:context,var) = 
-      {conmap = #1 (V.remove (conmap, var)), kindmap = kindmap}
+  fun remove_con ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,var) = 
+    let
+      val conmap = #1 (V.remove (conmap, var))
+      val e_binds_top = (#1 (V.remove (e_binds_top, var))
+			 handle LibBase.NotFound => e_binds_top)
+    in
+      {conmap = conmap, kindmap = kindmap,
+       top_level = top_level,
+       c_binds_top = c_binds_top,
+       e_binds_top = e_binds_top}
+    end
 
   fun foldli_kind f acc ({kindmap,...} : context) = V.foldli f acc kindmap
     
@@ -70,44 +111,72 @@ struct
 	   Singleton_k(get_phase kind,kind,con))
   end
 
-  fun inc int_ref = int_ref := !int_ref + 1
-
-  fun insert_kind ({kindmap,conmap}:context,var,kind) = 
-      (case V.find (kindmap, var)
-	 of NONE => {kindmap = V.insert (kindmap, var, selfify(Nil.Var_c var,kind)),
-		     conmap = conmap}
-	  | _ => error ("Constructor variable "^(var2string var)^" already in context"))
+  fun insert_kind ({kindmap,conmap,top_level,c_binds_top,e_binds_top}:context,var,kind) = 
+    (case V.find (kindmap, var)
+       of NONE => 
+	 let
+	   val kind = selfify(Nil.Var_c var,kind)
+	 in
+	   {kindmap = V.insert (kindmap, var, kind),
+	    conmap = conmap,
+	    top_level = top_level,
+	    c_binds_top = (if top_level then V.insert (c_binds_top, var, kind) else c_binds_top),
+	    e_binds_top = e_binds_top}
+	 end
+	| _ => error ("Constructor variable "^(var2string var)^" already in context"))
 
   fun insert_kind_list (C:context,defs : (var * kind) list) =
       List.foldl (fn ((v,k),C) => insert_kind (C,v,k)) C defs
 
   fun find_kind ({kindmap,...}:context,var) = V.find (kindmap, var)
     
-  fun remove_kind ({kindmap,conmap}:context,var) = 
-      {kindmap = #1 (V.remove (kindmap, var)), conmap = conmap}
+  fun remove_kind ({conmap,kindmap,top_level,c_binds_top,e_binds_top}:context,var) = 
+    let
+      val kindmap = #1 (V.remove (kindmap, var))
+      val c_binds_top = (#1 (V.remove (c_binds_top, var))
+			 handle LibBase.NotFound => c_binds_top)
+    in
+      {conmap = conmap, kindmap = kindmap,
+       top_level = top_level,
+       c_binds_top = c_binds_top,
+       e_binds_top = e_binds_top}
+    end
 
   val empty_subst = Subst.empty
   val subst_compose = Subst.con_subst_compose
   val subst_add = Subst.add
-  fun bind_kind ({kindmap,conmap}:context,var,kind) =
-    (case V.find (kindmap, var)
-       of NONE => 
-	 let
-	   val _ = inc bound 
-	   val kindmap = V.insert (kindmap, var, selfify(Nil.Var_c var,kind))
-	 in
-	   ({kindmap = kindmap, conmap = conmap},var,empty_subst())
-	 end
-	| SOME k => 
-	 let
-	   val var' = Name.derived_var var
-	   val _ = (inc bound;inc renamed)
-	   val kindmap = V.insert (kindmap, var', selfify(Nil.Var_c var',kind))
-	 in
-	   ({kindmap = kindmap, conmap = conmap},
-	    var',
-	    subst_add (empty_subst ()) (var,Nil.Var_c var'))
-	 end)
+
+  fun bind_kind ({kindmap,conmap,top_level,c_binds_top,e_binds_top}:context,var,kind) =
+(*    let
+      val kind = selfify(Nil.Var_c var,kind)
+      val _ = nilcontext_kinds_bound ()
+    in*)
+(* Unfortunately, the way I handle code means that must always rename to avoid 
+ * accidental capture.
+ *)
+  (*    case V.find (kindmap, var)
+	 of NONE => 
+	   ({kindmap = V.insert (kindmap, var, kind), 
+	     conmap = conmap,
+	     top_level = top_level,
+	     c_binds_top = if top_level then V.insert (c_binds_top, var, kind) else c_binds_top,
+	     e_binds_top = e_binds_top},
+	    var,empty_subst())
+	  | SOME k => *)
+	   let
+	     val var' = Name.derived_var var
+	     val _ = (nilcontext_kinds_renamed();
+		      nilcontext_kinds_bound ())
+	     val kind = selfify(Nil.Var_c var',kind)
+	     val kindmap = V.insert (kindmap, var', kind)
+	     val c_binds_top = if top_level then V.insert (c_binds_top, var', kind) else c_binds_top
+	   in
+	     ({kindmap = kindmap, conmap = conmap,
+	       top_level = top_level,
+	       c_binds_top = c_binds_top, e_binds_top = e_binds_top},
+	      var',
+	      subst_add (empty_subst ()) (var,Nil.Var_c var'))
+	   end
 
   fun bind_kind_list (C:context,defs : (var * kind) list) 
     : (context * ((var * kind) list) * con subst) =
@@ -117,7 +186,7 @@ struct
 	  val kind = Subst.substConInKind subst kind
 	  val (C,var,subst_one) = bind_kind (C,var,kind)
 	in
-	  (C,(var,kind)::rev_acc,subst_compose(subst,subst_one))
+	  (C,(var,kind)::rev_acc,subst_compose(subst_one,subst))
 	end
 
       val (C,rev_acc,subst) = 
@@ -129,14 +198,8 @@ struct
   fun c_insert_con (context,var,con,k) = 
       k (insert_con(context,var,con))
 
-  fun c_remove_con (context,var,k) = 
-      k (remove_con(context,var))
-
   fun c_insert_kind (context,var,kind,k) = 
       k (insert_kind(context,var,kind))
-
-  fun c_remove_kind (context,var,k) = 
-      k (remove_kind(context,var))
 
   fun c_insert_con_list (context,nil,k) = k context
     | c_insert_con_list (context,(v,c)::cs,k) = 
@@ -183,8 +246,9 @@ struct
      PpNil.pp_con con;
      print "\n")
 
-  fun print_context ({kindmap,conmap}:context) = 
-    (print "\n Constructor variables and kinds are :\n";
+  fun print_context ({kindmap,conmap,top_level,c_binds_top,e_binds_top}:context) = 
+    (print (if top_level then "\nTOPLEVEL CONTEXT\n" else "\nCONTEXT\n");
+     print "\n Constructor variables and kinds are :\n";
      V.appi print_kind kindmap;
      print "\n Expression variables and constructors are :\n";
      V.appi print_con conmap)

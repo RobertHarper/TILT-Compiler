@@ -17,25 +17,26 @@ end
 structure Linknil (* : LINKNIL *) =
   struct
     val typecheck = ref true
-    val typecheck2 = ref true
+    val typecheck_before_opt = ref true
+    val typecheck_after_cc = ref true
     val error = fn s => Util.error "linknil.sml" s
 
     structure Il = LinkIl.Il
 
-    local
-      val select_carries_types = Stats.bool "select_carries_types"
-      val profile = Stats.bool "nil_profile"
-      val short_circuit = Stats.bool "subst_short_circuit"
-      val hash = Stats.bool "subst_use_hash"
-    in
-      val _ = (select_carries_types:=false;
-	       profile := false;
-	       short_circuit := true;
-	       hash := false)
-    end
+    val select_carries_types = Stats.bool "select_carries_types"
+    val profile = Stats.bool "nil_profile"
+    val short_circuit = Stats.bool "subst_short_circuit"
+    val hash = Stats.bool "subst_use_hash"
+    val bnds_made_precise = Stats.bool "bnds_made_precise"
+    val _ = (select_carries_types:=false;
+	     profile := false;
+	     short_circuit := true;
+	     hash := false;
+	     bnds_made_precise := true)
 
+    structure Stats = Stats
     structure Name = Name
-
+    structure LinkIl = LinkIl
     structure Nil = Nil(structure ArgAnnotation = Annotation
 			structure ArgPrim = LinkIl.Prim)      
 
@@ -82,42 +83,8 @@ structure Linknil (* : LINKNIL *) =
 				      structure NilError = NilError
 				      structure Subst = NilSubst)
 
-    fun nilstatic_exp_valid (nilctxt : NilContext.context ,nilexp : Nil.exp) : Nil.exp * Nil.con = 
-	let val (e,c) = NilStatic.exp_valid(nilctxt,nilexp) in (e,c) end
-(*
-	let open Nil
-(*	    val _ = (print "nilstatic_exp_valid called on:\n"; PpNil.pp_exp nilexp; print "\n") *)
-	    val res = 
-		     (case nilexp of
-		 Var_e v => (case (NilContext.find_con(nilctxt,v)) of
-				 SOME c => (nilexp,c)
-			       | _ => (print "temp typechecker could not find var";
-				       PpNil.pp_var v; print "\n";
-				       error "temp typechecker could not find var"))
-	       | Prim_e(NilPrimOp(select l), _, [e]) => 
-		     let val (_,c) = nilstatic_exp_valid(nilctxt,e)
-			 fun lerror() = (print "temporary typechecker failed typechecking projection\n";
-					print "expected record type with field ";
-					PpNil.pp_label l; print "; instead found:";
-					PpNil.pp_con c; print "\n";
-					error "temporary typechecker failed typechecking projection")
-		     in  case c of
-			 Prim_c(Record_c labels,fields) => 
-			     (case (Listops.assoc_eq(Name.eq_label,l,Listops.zip labels fields)) of
-				   SOME fieldc => (nilexp,fieldc)
-				 | _ => lerror())
-		       | _ => lerror()
-		     end
-	       | _ => (print "sorry, this temporary typecheker does not handler this:\n";
-		       PpNil.pp_exp nilexp; print "\n";
-		       error "sorry, this temporary typecheker does not handler this"))
-(*
-	    val _ = (print "nilstatic_exp_valid called on:\n"; PpNil.pp_exp nilexp; print "\n";
-		     print "and returning type:\n"; PpNil.pp_con (#2 res); print "\n\n")
-*)
-	in res
-	end
-*)
+    val nilstatic_exp_valid = NilStatic.exp_valid
+
     structure Tonil = Tonil(structure ArgIl = LinkIl.Il
 			    structure Nilstatic = NilStatic
 			    structure NilError = NilError
@@ -431,6 +398,8 @@ structure Linknil (* : LINKNIL *) =
     fun compile' debug (ctxt,sbnds,sdecs) = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
+	    val D = NilContext.empty()
+
 	    val nilmod = phasesplit debug (ctxt,sbnds,sdecs)
 	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
 	    val _ = if debug 
@@ -446,10 +415,30 @@ structure Linknil (* : LINKNIL *) =
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else print "Renaming complete\n"
+ 	    val nilmod = 
+	      if (!typecheck_before_opt) then
+		(Stats.timer("Nil typechecking - pre opt",NilStatic.module_valid)) (D,nilmod)
+	      else
+		nilmod
+	    val _ = 
+	      if (!typecheck_before_opt) then 
+		if debug 
+		  then (print "\n\n=======================================\n\n";
+			print "nil typechecking results:\n";
+			PpNil.pp_module nilmod;
+			print "\n")
+		else print "Nil typechecking complete (pre-opt)\n"
+	      else ()
 
- 	     val nilmod = NilOpts.do_opts debug nilmod  
+	    val nilmod = (Stats.timer("Nil Optimization", NilOpts.do_opts debug)) nilmod  
 
-	    val D = NilContext.empty()
+	    val _ = if debug 
+			then (print "\n\n=======================================\n\n";
+			      print "nil optimization results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Nil Optimization complete\n"
+
  	    val nilmod = 
 	      if (!typecheck) then
 		(Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
@@ -486,26 +475,31 @@ structure Linknil (* : LINKNIL *) =
 			      print "\n")
 		    else print "Renaming complete\n"
  	    val nilmod = 
-	      if (!typecheck2) then
-		(Stats.timer("Nil typechecking2",NilStatic.module_valid)) (D,nilmod)
+	      if (!typecheck_after_cc) then
+		(Stats.timer("Nil typechecking (post cc)",NilStatic.module_valid)) (D,nilmod)
 	      else
 		nilmod
 	    val _ = 
-	      if (!typecheck2) then 
+	      if (!typecheck_after_cc) then 
 		if debug 
 		  then (print "\n\n=======================================\n\n";
-			print "nil typechecking2 results:\n";
+			print "nil typechecking results:\n";
 			PpNil.pp_module nilmod;
 			print "\n")
-		else print "Nil typechecking2 complete\n"
+		else print "Nil typechecking complete (post cc)\n"
 	      else ()
 	in  nilmod
 	end
 
+    fun linkil_tests [] = NONE
+      | linkil_tests [one] = SOME [valOf (LinkIl.test one)]
+      | linkil_tests _ = error "linkil_tests only defined for one file"
+
     fun meta_compiles debug filenames = 
-	let val mods = valOf (LinkIl.compiles filenames)
+	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
 	in  map (compile' debug) mods
 	end
+
 
     fun compiles filenames = meta_compiles false filenames
     fun compile filename = hd(meta_compiles false [filename])

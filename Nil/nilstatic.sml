@@ -28,6 +28,7 @@ struct
 
   val debug = ref false
   val select_carries_types = Stats.bool "select_carries_types"
+  val bnds_made_precise = Stats.bool "bnds_made_precise"
 
   local
       datatype entry = 
@@ -83,12 +84,14 @@ struct
   val empty = NilContext.empty
   val insert_con = NilContext.insert_con
   val insert_con_list = NilContext.insert_con_list
+  val insert_code_con = NilContext.insert_code_con
+  val insert_code_con_list = NilContext.insert_code_con_list
   val find_con = NilContext.find_con
-  val remove_con = NilContext.remove_con
   val bind_kind = NilContext.bind_kind
   val bind_kind_list = NilContext.bind_kind_list
   val find_kind = NilContext.find_kind
-  val remove_kind = NilContext.remove_kind
+  val leave_top_level = NilContext.leave_top_level
+  val code_context = NilContext.code_context
 
   (*From Alpha*)
   type alpha_context = Alpha.alpha_context
@@ -150,7 +153,6 @@ struct
   val var2string = Name.var2string
   val label2string = Name.label2string
   val fresh_var = Name.fresh_var
-  val labels_sorted_distinct = Name.labels_sorted_distinct
 
   (*From Listops*)
   val assoc_eq = Listops.assoc_eq
@@ -176,6 +178,7 @@ struct
   val split = Listops.split
   val opt_cons = Listops.opt_cons
   val find2 = Listops.find2
+  val labels_distinct = Listops.no_dups Name.compare_label
 
   (*From PrimUtil*)
   val same_intsize = PrimUtil.same_intsize
@@ -347,7 +350,7 @@ struct
 	    val kind = substConInKind subst kind
 	    val kind = kindSubstReduce (D,kmap,kind)
 	    val (D,var,subst_one) = bind_kind (D,var,kind)
-	    val subst = Subst.con_subst_compose(subst,subst_one)
+	    val subst = Subst.con_subst_compose(subst_one,subst)
 	    val kmap = (var,kind)::kmap
 	  in
 	    loop (D,rest,kmap,subst)
@@ -438,14 +441,16 @@ struct
 	| Word_k p => (Word_k p)
 	| Singleton_k (p,kind,con) => 
 	 let
-	   val (con,kind) = (con_valid (D,con))
-	   val kind = strip_singleton kind
+	   val kind = kind_valid (D,kind)
+	   val (con,kind') = (con_valid (D,con))
 	   val phase = get_phase kind
+	   val return_kind = if !bnds_made_precise then kind' else kind
 	 in
-	   if sub_phase (p,phase) then
-	     (Singleton_k (phase,kind,con))
+	   if sub_phase (p,phase) andalso alpha_sub_kind (kind',kind) then
+	     (singletonize (SOME phase,kind,con))
 	   else
-	     (error "Invalid singleton kind" handle e => raise e)
+	     (perr_c_k_k (con,kind,kind');
+	      error "Invalid singleton kind" handle e => raise e)
 	 end
 	| Record_k elts => 
 	 let
@@ -456,11 +461,11 @@ struct
 	   val entries = 
 	     map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
 	 in  
-	   if labels_sorted_distinct labels then
+	   if labels_distinct labels then
 	     (Record_k (list2sequence entries))
 	   else 
 	     (perr_k kind;
-	      error "Labels in record kind not sorted/distinct")
+	      error "Labels in record kind not distinct")
 	 end
 	| Arrow_k (openness, formals, return) => 
 	 let
@@ -499,13 +504,13 @@ struct
 	    (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
 	   => (pcon,Word_k Runtime,args,kinds)
 	 | (Record_c labels) => 
-	     (if labels_sorted_distinct labels then
-		  (if c_all is_word b_perr_k kinds 
-		       then (Record_c labels,Word_k Runtime,args,kinds)
-		   else
-		       (error "Record contains field of non-word kind" handle e => raise e))
+	     (if labels_distinct labels then
+		(if c_all is_word b_perr_k kinds 
+		   then (Record_c labels,Word_k Runtime,args,kinds)
+		 else
+		   (error "Record contains field of non-word kind" handle e => raise e))
 	      else
-		  (error "Record contains out-of-order field labels" handle e => raise e))
+		(error "Record contains duplicate field labels" handle e => raise e))
 	 | (Sum_c {known,tagcount}) => 
 	      (if c_all is_word b_perr_k kinds then
 		 let
@@ -567,6 +572,7 @@ struct
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
+	   val D = leave_top_level D
 	   val (D,tformals,subst1) = foldKSR (D,tformals)
 	   val (tformals,subst2) = foldSubstSingleton tformals
 	   val tformals = map_second (curry2 kind_reduce D) tformals
@@ -588,21 +594,26 @@ struct
 	     (error "Invalid arrow constructor" handle e => raise e)
 	 end
 	| (v as (Var_c var)) => 
-	     (case find_kind (D,var) 
-		of SOME (k as (Singleton_k (_,k',c as Var_c v'))) =>  
-		  if (eq_var(var,v'))  
-		    then (v,k)  
-		  else con_valid(D,c) 
-		 | SOME (Singleton_k (_,k,c)) => con_valid(D,c)  
-		 | SOME k => (v,Singleton_k(get_phase k,k,v))
-		 | NONE => 
-		    (error ("Encountered undefined variable " ^ (Name.var2string var) 
-			   ^" in con_valid") handle e => raise e))
-
+	 (case find_kind (D,var) 
+	    of SOME (k as (Singleton_k (_,k',c as Var_c v'))) =>  
+	      if (eq_var(var,v'))  
+		then (v,k)  
+	      else con_valid(D,c) 
+	     | SOME (Singleton_k (_,k,c)) => con_valid(D,c)  
+	     | SOME k => (v,Singleton_k(get_phase k,k,v))
+	     | NONE => 
+		(error ("Encountered undefined variable " ^ (Name.var2string var) 
+			^" in con_valid") handle e => raise e))
+	    
 	| (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
 			((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
 	 let
 	   val origD = D
+	   val is_code = 
+	     case cbnd 
+	       of Open_cb _ => false
+		| _ => true
+	   val D = if is_code then code_context D else leave_top_level D
 	   val (D,formals,subst1) = foldKSR (D,formals)
 	   val _ = if (!debug)
 		     then (print "formals1 are ";
@@ -623,16 +634,14 @@ struct
 	   val body_kind = substConInKind subst body_kind
 	   val body_kind = kind_valid(D,body_kind)
 	   val (body,body_kind') = con_valid (D,body)
+	   val return_kind = if !bnds_made_precise then body_kind' else body_kind
 	   val _ = if (alpha_sub_kind (body_kind',body_kind)) then ()
 		   else (perr_c_k_k (body,body_kind,body_kind');
 			 (error "invalid return kind for constructor function" handle e => raise e))
-	   val (Con,openness) = 
-	     case cbnd 
-	       of Open_cb _ => (Open_cb,Open)
-		| _ => (Code_cb,Code)
-	   val lambda = (Let_c (sort,[Con (var,formals,body,body_kind')],Var_c var))
+	   val (constructor,openness) = if is_code then (Code_cb,Code) else (Open_cb,Open)
+	   val lambda = (Let_c (sort,[constructor (var,formals,body,return_kind)],Var_c var))
 	   val lambda = eta_reduce_fun lambda
-	   val bndkind = Arrow_k(openness,formals,body_kind')
+	   val bndkind = Arrow_k(openness,formals,return_kind)
 	   val bndkind = singletonize(NONE,bndkind,lambda)
 	 in
 	   if (null rest) andalso (is_var_c con) andalso 
@@ -659,6 +668,7 @@ struct
 	| (Let_c (sort,[],body)) => con_valid (D,body)
 	| (Closure_c (code,env)) => 
 	   let
+	     val D = leave_top_level D
 	     val (env,env_kind) = con_valid (D,env)
 	     val (code,code_kind) =  con_valid (D,code)
 	   in
@@ -685,7 +695,7 @@ struct
 	| (Crecord_c entries) => 
 	   let
 	     val (labels,cons) = unzip entries
-	     val distinct = labels_sorted_distinct labels
+	     val distinct = labels_distinct labels
 	     val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	     val k_entries = map2 (fn (l,k) => ((l,fresh_var()),k)) (labels,kinds)
 	     val entries = zip labels cons
@@ -698,7 +708,7 @@ struct
 	     else
 	       (PpNil.pp_list PpNil.pp_label' labels 
 		("labels are: ",",",";",true);
-	       (error "Labels in record of constructors not sorted or not distinct" handle e => raise e))
+	       (error "Labels in record of constructors not distinct" handle e => raise e))
 	   end
 	| (Proj_c (rvals,label)) => 
 	 let
@@ -965,10 +975,10 @@ struct
 	   val con = Prim_c (Record_c labels,cons)
 	   val (con,kind) = con_valid (D,con)
 	 in
-	   if labels_sorted_distinct labels then
+	   if labels_distinct labels then
 	     (exp,con)
 	   else
-	     (error "Fields not distinct or not sorted" handle e => raise e)
+	     (error "Fields not distinct" handle e => raise e)
 	 end
 	| (select label,given_types,[exp]) =>
 	 let
@@ -986,7 +996,7 @@ struct
 	       in
 		 if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in record select") 
 		   (given_types,found_types) then
-		   found_types
+		   if !bnds_made_precise then found_types else given_types
 		 else
 		   (perr_e (Prim_e (NilPrimOp (select label),given_types,[exp]));
 		    print "Record has type: ";
@@ -1471,7 +1481,8 @@ struct
       val (body,body_c) = exp_valid (D,body)
       val return = substConInCon subst return
       val return = con_reduce (D,return)
-      val function = Function (effect,recursive,tformals,formals,fformals,body,return)
+      val return_con = if !bnds_made_precise then body_c else return
+      val function = Function (effect,recursive,tformals,formals,fformals,body,return_con)
     in
       if alpha_equiv_con (body_c,return) then
 	function
@@ -1491,9 +1502,10 @@ struct
 	   let
 	     val given_kind = kind_valid (D,given_kind)
 	     val (con,found_kind) = con_valid (D,con)
-	     val (D,var,subst_one) = bind_kind (D,var,found_kind)
-	     val subst = Subst.con_subst_compose (subst,subst_one)
-	     val bnd = Con_b (var,found_kind,con)
+	     val bnd_kind = if !bnds_made_precise then found_kind else given_kind
+	     val (D,var,subst_one) = bind_kind (D,var,bnd_kind)
+	     val subst = Subst.con_subst_compose (subst_one,subst)
+	     val bnd = Con_b (var,bnd_kind,con)
 	   in
 	     if alpha_sub_kind (found_kind,given_kind) then
 	       (bnd,(D,subst))
@@ -1505,8 +1517,9 @@ struct
 	   let
 	     val (given_con,kind) = con_valid (D,con)
 	     val (exp,found_con) = exp_valid (D,exp)
-	     val D = insert_con (D,var,found_con)
-	     val bnd = Exp_b (var,found_con,exp)
+	     val bnd_con = if !bnds_made_precise then found_con else given_con
+	     val D = insert_con (D,var,bnd_con)
+	     val bnd = Exp_b (var,bnd_con,exp)
 	   in
 	     if alpha_equiv_con (given_con,found_con) then
 	       (bnd,(D,subst))
@@ -1517,18 +1530,32 @@ struct
 	  | ((Fixopen_b defs) | (Fixcode_b defs)) =>
 	   let
 	     val origD = D
+	     val is_code = 
+	       (case bnd 
+		  of Fixopen_b _ => false
+		   | _ => true)
 	     val def_list = set2list defs
 	     val (vars,functions) = unzip def_list
 	     val (openness,constructor) = 
-	       (case bnd 
-		  of Fixopen_b _ => (Open,Fixopen_b)
-		   | _ => (Code,Fixcode_b))
+	       if is_code then 
+		 (Code,Fixcode_b) 
+	       else (Open,Fixopen_b)
+
 	     val (declared_c) = map (curry2 get_function_type openness) functions
 	     val (declared_c,_) = unzip (map (curry2 con_valid D) declared_c)  (*Must normalize!!*)
-	     val D = insert_con_list (D,zip vars declared_c)
+	     val bnd_types = zip vars declared_c
+
+	     val D = 
+	       if is_code then 
+		 insert_code_con_list (code_context D, bnd_types)
+	       else leave_top_level (insert_con_list (D,bnd_types))
+		       
 	     val functions = map (curry2 function_valid D) functions
-	     val found_c = map (curry2 get_function_type openness) functions
-	     val D = insert_con_list (origD,zip vars found_c)  (*May be more precise?*)
+	     val D = 
+	       if is_code then 
+		 insert_code_con_list (origD, bnd_types)
+	       else insert_con_list (origD,bnd_types)
+		       
 	     val defs = list2set (zip vars functions)
 	     val bnd = constructor defs
 	   in
@@ -1539,7 +1566,8 @@ struct
 	     val (vars,closures) = unzip (set2list defs)
 	     val tipes = map (fn cl => #tipe cl) closures
 	     val (tipes,_) = unzip (map (curry2 con_valid D) tipes)
-	     val D = insert_con_list (D,zip vars tipes)
+	     val returnD = insert_con_list (D,zip vars tipes)
+	     val D = leave_top_level returnD
 	     fun do_closure ({code,cenv,venv,tipe=_},tipe) = 
 	       let
 		 val (cenv,ckind) = con_valid (D,cenv)
@@ -1583,7 +1611,7 @@ struct
 		    print "con is "; PpNil.pp_con con; print "\n";
 		    (error "Type error in closure" handle e => raise e))
 	       end
-	     
+	     val D = returnD
 	     val closures = map2 do_closure (closures,tipes)
 	     val defs = list2set (zip vars closures)
 	     val bnd = Fixclosure_b defs
@@ -1683,7 +1711,7 @@ struct
 		  val actual_kind = substConInKind subst actual_kind
 		  val actual_kind = kind_reduce(D,actual_kind) (*Must renormalize*)
 		  val (D,var,subst_one) = bind_kind (D,var,actual_kind)
-		  val subst = Subst.con_subst_compose(subst,subst_one)
+		  val subst = Subst.con_subst_compose(subst_one,subst)
 		in
 		  if sub_kind (origD,actual_kind,formal_kind) then
 		    (D,subst_one)
@@ -1754,14 +1782,16 @@ struct
 	    end
 	| Handle_e (exp,function) =>
 	    (case function 
-	       of Function (effect,recursive,[],[(var,c as Prim_c (Exn_c,[]))],
+	       of Function (effect,recursive,[],[(var,c)],
 			    [],body,con) =>
 		 let
+		   val _ = if is_exn_con c then () else error "Variable has wrong type in handle"
 		   val (con',kind) = con_valid (D,con)
 		   val (exp',con'') = exp_valid (D,exp)
 		   val (body',con''') = exp_valid (insert_con (D,var,c),body)
+		   val return_con = if !bnds_made_precise then con''' else con'
 		   val function' = Function (effect,recursive,[],
-					     [(var,c)],[],body',con')
+					     [(var,c)],[],body',return_con)
 		 in
 		   if alpha_equiv_con (con',con'') andalso
 		     alpha_equiv_con (con'',con''') then
@@ -1817,7 +1847,7 @@ struct
 	  val kind = substConInKind subst kind
 	  val kind = kind_valid(D,kind)
 	  val (D,var,subst_one) = bind_kind(D,var,kind)
-	  val subst = Subst.con_subst_compose(subst,subst_one)
+	  val subst = Subst.con_subst_compose(subst_one,subst)
 	in
 	  (ImportType (label,var,kind),(D,subst))
 	end
@@ -1830,9 +1860,10 @@ struct
 	  val con = substConInCon subst con
 	  val (exp,found_con) = exp_valid(D,exp)
 	  val (con,kind) = con_valid(D,con)
+	  val bnd_con = if !bnds_made_precise then found_con else con
 	in
 	  if alpha_equiv_con (found_con,con) then
-	    ExportValue (label,exp,found_con)
+	    ExportValue (label,exp,bnd_con)
 	  else
 	    (perr_e_c_c (exp,con,found_con);
 	     (error "Type error in value exports of module" handle e => raise e))
@@ -1843,9 +1874,10 @@ struct
 	  val kind = substConInKind subst kind
 	  val (con,found_kind) = con_valid(D,con)
 	  val kind = kind_valid(D,kind)
+	  val bnd_kind = if !bnds_made_precise then found_kind else kind
 	in
 	  if alpha_sub_kind (found_kind,kind) then
-	    ExportType (label,con,found_kind)
+	    ExportType (label,con,bnd_kind)
 	  else
 	    (perr_c_k_k (con,kind,found_kind);
 	     (error "Type error in type exports of module" handle e => raise e))
