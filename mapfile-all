@@ -93,6 +93,8 @@ UPDATE Top/update.sig
 Update Top/update
 COMMUNICATION Top/communication.sig
 Communication Top/communication
+STATISTICS Top/statistics.sig
+Statistics Top/statistics
 MASTER Top/master.sig
 Master Top/master
 SLAVE Top/slave.sig
