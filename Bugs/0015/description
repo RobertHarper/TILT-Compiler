@@ -60,8 +60,7 @@ Comments:
 	directives taken from tilt/[ab]/Parser/ml.grm.alpha.s.gz.  A
 	is the version created by the SML/NJ hosted TILT and B is that
 	created by Top.  Re-compiling just the string, under either
-	compiler, creates .ascii directives identical to whats in A.s
-	(see test/[AB]/test.alpha.s).
+	compiler, creates .ascii directives identical to whats in A.s.
 
 	Plan
 	     . Verify that recompiling the unit with tiltb
