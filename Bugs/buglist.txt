@@ -160,3 +160,4 @@
 0164 [closed]	Garbage collector skipping global roots.
 0165 [closed]	Elaborator shadowing variables.
 0166 [closed]	Elaborator adding classifiers with unbound, free variables to context.
+0167 [open]	Elaborator bombs on toplevel raise/handle/raise
