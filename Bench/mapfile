@@ -2,8 +2,8 @@ Prelude		Preludes/Prelude
 #hello		Bench/hello
 
 # WORKS
-#life		Bench/life
-leroy		Bench/leroy
+life		Bench/life
+#leroy		Bench/leroy
 #frank		Bench/frank
 #matmult	Bench/matmult
 #quicksort	Bench/quicksort
