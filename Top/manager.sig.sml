@@ -82,7 +82,7 @@ sig
 	            | COMPLETE
     (* Takes the mapfile, a list of units that are desired,
        and a name of the executable.  Generates the executable
-       and compiles the necessart units. *)
+       and compiles the necessary units. *)
     val once : string * string list * string option -> 
 	{setup : unit -> state,
 	 step : state -> result,
