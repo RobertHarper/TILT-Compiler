@@ -174,7 +174,13 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
       break;
     }
   if (res == NULL) {
-    fprintf(stderr,"Proc %d: thread %d: out of stack space\n", proc->procid, th->tid);
+    Thread_t* thread = (Thread_t*)stackChain->thread;
+    volatile Proc_t* proc = (thread ? thread->proc : NULL);
+    if(thread && proc)
+      fprintf(stderr,"Proc %d: thread %d: out of stack space\n",
+	      proc->procid, thread->tid);
+    else
+      fprintf(stderr,"out of stack space\n");
     abort();
   }
 
