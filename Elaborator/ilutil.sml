@@ -762,6 +762,7 @@ functor IlUtil(structure Ppil : PPIL
 	  fun mod_subst_conmodvar(arg,ctable,mtable) = f_mod (cmhandlers ctable mtable) arg
 	  fun exp_subst_expconmodvar(arg,etable,ctable,mtable) = f_exp (ecmhandlers etable ctable mtable) arg
 	  fun con_subst_expconmodvar(arg,etable,ctable,mtable) = f_con (ecmhandlers etable ctable mtable) arg
+	  fun kind_subst_expconmodvar(arg,etable,ctable,mtable) = f_kind (ecmhandlers etable ctable mtable) arg
 	  fun sig_subst_expconmodvar(arg,etable,ctable,mtable) = f_signat (ecmhandlers etable ctable mtable) arg
       end
 
@@ -1126,6 +1127,7 @@ functor IlUtil(structure Ppil : PPIL
     val top_str = "*top_"
     fun is_eq_lab lab = is_label_internal lab andalso (substring (eq_str,label2string lab))
     fun is_datatype_lab lab = is_label_internal lab andalso (substring (dt_str,label2string lab))
+    fun is_top_lab lab = is_label_internal lab andalso (substring (top_str,label2string lab))
     local
 	fun to_meta_lab meta_str lab =
 	  let
@@ -1134,16 +1136,17 @@ functor IlUtil(structure Ppil : PPIL
 	  in  internal_label final_str
 	  end
     in  fun to_eq_lab lab = to_meta_lab eq_str lab
-(*	fun to_top_lab lab = to_meta_lab top_str lab *)
-	fun to_top_lab lab = lab
+	fun to_top_lab lab = to_meta_lab top_str lab 
+(*	fun to_top_lab lab = lab *)
 	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
     end
 
     fun is_exportable_lab l =
 	(not (is_label_internal l)) orelse
 	(is_eq_lab l) orelse
+	(is_top_lab l) orelse
 	let val str = label2string l
-	in (substring ("top",str)) orelse (substring ("open",str))
+	in (substring ("open",str))
 	end
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e

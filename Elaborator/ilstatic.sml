@@ -122,7 +122,7 @@ functor IlStatic(structure Il : IL
 		     in (state,SDEC(l,this_dec)::rev_sdecs)
 		     end
 		  | DEC_CON(v,k,copt) => 
-		     let val _ = print "got here 1\n"
+		     let 
 			 val this_dec = 
 			 (case copt of  (*  if we do this, Unselfify is hard to write. *)
 			      NONE => DEC_CON(v,k,(case popt of
@@ -130,10 +130,8 @@ functor IlStatic(structure Il : IL
 						     | SOME p => SOME(path2con p)))
 			    | SOME c => 
 				  let val c' = selfify_con(selfify,state,c)
-				      val _ = print "got here 2\n"
 				      val copt' = 
 					  (if (not selfify andalso 
-					       (print "got here 3\n"; true) andalso
 					       case (c',popt) of
 						   (CON_MODULE_PROJECT _, SOME p) => eq_conproj(c', path2con p)
 (*

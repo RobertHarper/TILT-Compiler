@@ -332,9 +332,11 @@ functor Basis(structure Il : IL
     (3) and to retain only low 11 bits
     (4) subtract 1023 from this quantity and return as an int *)
 
-	      val basevar_list = [("real_logb", CON_ARROW([CON_FLOAT F64], CON_INT W32, true, oneshot_init TOTAL)),
-(*  ("real_scalb", CON_ARROW([CON_FLOAT F64, CON_INT W32], 
+	      val basevar_list = [
+(*				  ("real_logb", CON_ARROW([CON_FLOAT F64], CON_INT W32, true, oneshot_init TOTAL)),
+  ("real_scalb", CON_ARROW([CON_FLOAT F64, CON_INT W32], 
  CON_FLOAT F64, true, oneshot_init TOTAL)), *)
+(*
 				  ("sqrt", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
 				  ("sin", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
 				  ("cos", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
@@ -350,8 +352,10 @@ functor Basis(structure Il : IL
 				  ("log10", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
 				  ("getRoundingMode", CON_ARROW([CON_INT W32], CON_INT W32, true, oneshot_init TOTAL)),
 				  ("setRoundingMode", CON_ARROW([CON_INT W32], CON_INT W32, true, oneshot_init TOTAL)),
+
 				  ("ml_timeofday", CON_ARROW([con_unit], con_tuple[CON_INT W32, CON_INT W32], 
-							     true, oneshot_init PARTIAL))]
+							     true, oneshot_init PARTIAL))
+*)]
 
 	  in  val _ = app exp_entry basevalue_list
 	      val _ = app mono_entry baseprimvalue_list

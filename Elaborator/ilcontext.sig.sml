@@ -69,6 +69,12 @@ signature ILCONTEXT =
 	val Sdecs_Lookup' : mod * sdecs * label list -> (label list * phrase_class) option
 	val Sbnds_Lookup  : Il.sbnds * label list -> (label list * phrase) option
 
+	val context_to_sdecs : Il.context -> Il.sdecs
+	val plus_context : ((con * (var * exp) list * (var * con) list * (var * mod) list) -> con) *
+	                   ((kind * (var * exp) list * (var * con) list * (var * mod) list) -> kind) * 
+			   ((signat * (var * exp) list * (var * con) list * (var * mod) list) -> signat) ->
+			   Il.context list -> Il.context
+
 	(* ---- none of these lookup functions perform normalization ---- *)		
 	val fixity : context -> fixity_table
 	val Context_Lookup     : context * label list -> (path * phrase_class) option
@@ -76,9 +82,6 @@ signature ILCONTEXT =
 	val Context_Exn_Lookup : context * tag        -> con option
 	val Context_Varlist    : context -> var list
 
-        (* -------- convert a context to sdecs -------- *)
-	val context_to_sdecs : context -> sdecs
-	val plus_context : context list -> context
 
         (* -------- if you get desperate enough to print the context, i feel sorry for you ----- *)
 	val print_context    : {pp_exp : exp -> Formatter.format,

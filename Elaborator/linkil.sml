@@ -448,9 +448,13 @@ structure LinkIl (* : LINKIL *) =
 	       | NONE => NONE       (* maybe we should selfify entries *)
 *)
 
-	val plus_context = IlContext.plus_context
+	val plus_context = IlContext.plus_context(IlUtil.con_subst_expconmodvar,
+						  IlUtil.kind_subst_expconmodvar,
+						  IlUtil.sig_subst_expconmodvar)
 
-	structure IlContextEq = IlContextEq(structure IlContext = IlContext)
+	structure IlContextEq = IlContextEq(structure IlContext = IlContext
+					    structure IlUtil = IlUtil
+					    structure Ppil = Ppil)
 	val eq_context = IlContextEq.eq_context
 	val init_context = empty_context
 	type spec = Ast.spec and dec = Ast.dec

@@ -2,26 +2,28 @@ functor IlContext(structure Il : ILLEAK)
     : ILCONTEXT = 
 struct
 
-	structure Il = Il
-	type context = Il.context
-	type exp = Il.exp
-	type con = Il.con
-	type kind = Il.kind
-	type mod = Il.mod
-	type signat = Il.signat
-	type label = Il.label
-	type var = Il.var
-	type tag = Il.tag
-	type sdec = Il.sdec
-	type sdecs = Il.sdecs
-	type fixity_table = Il.fixity_table
-	type path = Il.path
-	type inline = Il.inline
-	type context_entry = Il.context_entry
-
-	open Il Util Name Listops 
-
-	val error = fn s => error "ilcontext.sml" s
+    structure Il = Il
+    type context = Il.context
+    type exp = Il.exp
+    type con = Il.con
+    type kind = Il.kind
+    type mod = Il.mod
+    type signat = Il.signat
+    type label = Il.label
+    type var = Il.var
+    type tag = Il.tag
+    type sdec = Il.sdec
+    type sdecs = Il.sdecs
+    type fixity_table = Il.fixity_table
+    type path = Il.path
+    type inline = Il.inline
+    type context_entry = Il.context_entry
+	
+    open Il Util Name Listops 
+	
+    val error = fn s => error "ilcontext.sml" s
+	
+    val blast_debug = ref false
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun join_path_labels (SIMPLE_PATH v, l) = COMPOUND_PATH(v,l)
@@ -471,7 +473,8 @@ struct
       fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
       fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
-      fun context_to_sdecs (CONTEXT {var_list,...}) =
+
+     fun context_to_sdecs (CONTEXT {var_list,...}) =
 	  Name.VarMap.foldli (fn (v,(lab,phrase_class),sdecs) =>
 			      case phrase_class
 				of PHRASE_CLASS_EXP(exp,con) => SDEC(lab,DEC_EXP(v,con))::sdecs
@@ -480,21 +483,54 @@ struct
 				 | PHRASE_CLASS_SIG _ => sdecs
 				 | PHRASE_CLASS_OVEREXP _ => sdecs) [] (#1 var_list)
 
-      fun plus(ctxt, CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list}) =
-	  let val ctxt = add_context_fixity(ctxt,fixity_list)
-	      val ctxt = Name.VarMap.foldli (fn (v,(lab,phrase_class),ctxt) =>
-		 case phrase_class
-		   of PHRASE_CLASS_EXP(exp,con) => add_context_sdec(ctxt,SDEC(lab,DEC_EXP(v,con)))
-		    | PHRASE_CLASS_CON(con,kind) => add_context_sdec(ctxt,SDEC(lab,DEC_CON(v,kind,SOME con)))
-		    | PHRASE_CLASS_MOD(m,signat) => add_context_sdec(ctxt,SDEC(lab,DEC_MOD(v,signat)))
-		    | PHRASE_CLASS_SIG _ => error "Not implemented"
-		    | PHRASE_CLASS_OVEREXP _ => error "plus.PHRASE_CLASS_OVEREXP") ctxt (#1 var_list)
-	  in ctxt
+      (* faster when first context is larger than second *)
+      fun plus (csubster,ksubster,ssubster,orig_ctxt, 
+		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list}) =
+	  let val ctxt = add_context_fixity(orig_ctxt,fixity_list)
+	      fun varIn (v,ctxt) = (case (Context_Lookup'(ctxt,v)) of
+					NONE => false
+				      | SOME _ => true)
+	      fun folder(v,(ctxt,subst)) =
+		  let val in_orig = varIn(v,orig_ctxt)
+		      val in_current = varIn(v,ctxt)
+		      val SOME(lab,pc) = Name.VarMap.find(#1 var_list, v)
+		  in  if (not in_orig andalso in_current)
+			  then (ctxt,subst) (* inserted already due to open in next context *)
+		      else
+			  let val (v,subst as (esubst,csubst,msubst)) = 
+			      if not in_current
+				  then  (v,subst)
+			      else  let val v' = Name.derived_var v
+					val (esubst,csubst,msubst) = subst
+				    in  (v',((v,VAR v')::esubst,
+					     (v,CON_VAR v')::csubst,
+					     (v,MOD_VAR v')::msubst))
+				    end
+			      fun do_c c = csubster(c,esubst,csubst,msubst)
+			      fun do_s s = ssubster(s,esubst,csubst,msubst)
+			      fun do_k k = ksubster(k,esubst,csubst,msubst)
+			  in (case pc of
+				  PHRASE_CLASS_EXP(exp,con) => add_context_sdec(ctxt,SDEC(lab,DEC_EXP(v,do_c con)))
+				| PHRASE_CLASS_CON(con,kind) => add_context_sdec(ctxt,
+										 SDEC(lab,DEC_CON(v,do_k kind,
+												  SOME (do_c con))))
+				| PHRASE_CLASS_MOD(m,signat) => add_context_sdec(ctxt,SDEC(lab,DEC_MOD(v,do_s signat)))
+				| PHRASE_CLASS_SIG s => add_context_entry(ctxt,CONTEXT_SIGNAT(lab,v,do_s s))
+				| PHRASE_CLASS_OVEREXP celist => add_context_inline(ctxt,lab,v,INLINE_OVER celist),
+				      subst)
+			  end
+		  end
+              (* cannot fold over #1 var_list since that is unordered *)
+	      val (ctxt,_) = foldl folder (ctxt,([],[],[])) (Context_Varlist ctxt2)
+	  in  ctxt
 	  end  (* MEMO: What about the tag_list ?? - Martin *)
 	  
-      fun plus_context [] = empty_context
-	| plus_context [context] = context
-	| plus_context (context::contexts) = plus(context,plus_context(contexts))
+      fun plus_context (csubster,ksubster,ssubster) ctxts =
+	  (case ctxts of
+	       [] => empty_context
+	     | [ctxt] => ctxt
+	     | (ctxt::rest) => foldl (fn (c,acc) => plus(csubster,ksubster,ssubster,acc,c)) ctxt rest)
+
 
     fun pp_list doer objs (left,sep,right,break) = 
       let 
@@ -536,28 +572,31 @@ struct
 	val indent = ref 0 
 	fun push() = indent := (!indent) + 2
 	fun pop() = indent := (!indent) - 2
-	fun tab s = let fun loop 0 = print s
-			  | loop n = (print " "; loop (n-1))
-		    in  loop (!indent)
-		    end
+	fun tab s = if (!blast_debug)
+			then let fun loop 0 = print s
+				   | loop n = (print " "; loop (n-1))
+			     in  loop (!indent)
+			     end
+		    else ()
+	fun say s = if (!blast_debug) then print s else ()
     in
 
 	fun blastOutPath os (SIMPLE_PATH v) = (blastOutInt os 0; blastOutVar os v)
 	  | blastOutPath os (COMPOUND_PATH (v,ls)) = (blastOutInt os 1; blastOutVar os v; 
 						      blastOutList blastOutLabel os ls)
-	fun blastInPath is = let val _ = print "blastInPath:"
+	fun blastInPath is = let val _ = tab "blastInPath:" 
 				 val which = blastInInt is
 				 val v = blastInVar is
 				 val res = if (which = 0)
 					       then SIMPLE_PATH v
 					   else COMPOUND_PATH(v, blastInList blastInLabel is)
 				 val _ = (case res of
-					      SIMPLE_PATH v => (print (Name.var2string v))
-					    | COMPOUND_PATH (v,ls) => (print (Name.var2string v);
-								       app (fn l => (print ".";
-										     print (Name.label2string l)))
+					      SIMPLE_PATH v => (say (Name.var2string v))
+					    | COMPOUND_PATH (v,ls) => (say (Name.var2string v);
+								       app (fn l => (say ".";
+										     say (Name.label2string l)))
 								       ls))
-				 val _ = print "\n"
+				 val _ = say "\n"
 			     in res
 			     end
 
@@ -1046,7 +1085,7 @@ struct
 
         and blastInExp is = 
 	    let val _ = push()
-		val _ = tab "blastInExp\n"
+		val _ = tab "blastInExp\n" 
 		val res = blastInExp' is
 		val _ = pop()
 	    in  res
@@ -1054,9 +1093,9 @@ struct
 
 	and blastInExp' is =
 	     (case (blastInInt is) of
-	         0 => (tab "  SCON\n";
+	         0 => (tab "  SCON\n"; 
 		       SCON(blastInValue is))
-	       | 1 => (tab "  PRIM\n";
+	       | 1 => (tab "  PRIM\n"; 
 		       PRIM (blastInPrim is,
 			    blastInList blastInCon is,
 			    blastInList blastInExp is))
@@ -1069,7 +1108,7 @@ struct
 				 blastInList blastInCon is)
 	       | 5 => let val _ = tab "  VAR"
 			  val v = blastInVar is
-			  val _ = (print (Name.var2string v); print "\n")
+			  val _ = (say (Name.var2string v); say "\n")
 		      in  VAR v
 		      end
 	       | 6 => APP (blastInExp is, blastInList blastInExp is)
@@ -1121,7 +1160,7 @@ struct
 						     blastOutExp os e)
 	and blastInFbnd is = let val _ = tab "blastInFbnd"
 				 val v = blastInVar is
-				 val _ = (print (Name.var2string v); print "\n")    
+				 val _ = (say (Name.var2string v); say "\n")    
 				 val _ = push()
 				 val res = FBND(v, blastInVar is,
 						blastInCon is, blastInCon is, blastInExp is)
@@ -1161,7 +1200,7 @@ struct
 	       | _ => error "bad blastInMod")
 
 	and blastOutSig os s = 
-		 (print "    blastInSig\n";
+		 (tab "    blastInSig\n"; 
 		  case s of
 		 SIGNAT_STRUCTURE (NONE, sdecs) => (blastOutInt os 0; blastOutSdecs os sdecs)
 	       | SIGNAT_STRUCTURE (SOME p, sdecs) => (blastOutInt os 1; blastOutPath os p; blastOutSdecs os sdecs)
@@ -1194,7 +1233,7 @@ struct
 						blastOutList (blastOutPair blastOutCon blastOutExp) os celist)
 
 	fun blastInPC is = 
-	    (print "  blastInPC\n";
+	    (tab "  blastInPC\n"; 
 	    case (blastInInt is) of
 		0 => PHRASE_CLASS_EXP(blastInExp is, blastInCon is)
 	      | 1 => PHRASE_CLASS_CON(blastInCon is, blastInKind is)
@@ -1220,7 +1259,7 @@ struct
 	fun blastOutLabelList os label_list = 
 	    blastOutLabelmap os (blastOutPair blastOutPath blastOutPC) label_list
 	fun blastInLabelList is = 
-	    (print "blastLabelList\n";
+	    (tab "blastLabelList\n"; 
 	    blastInLabelmap is (blastInPair blastInPath blastInPC) )
 
 	fun blastOutVarList os (vmap,vlist) = 
@@ -1228,7 +1267,7 @@ struct
 	     blastOutList blastOutVar os vlist)
 
 	fun blastInVarList is = 
-	    let val _ = print "blastInVarList\n";
+	    let val _ = tab "blastInVarList\n";
 		val vmap = blastInVarmap is (blastInPair blastInLabel blastInPC) 
 		val vlist = blastInList blastInVar is
 	    in  (vmap, vlist)

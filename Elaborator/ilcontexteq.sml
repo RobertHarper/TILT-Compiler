@@ -1,8 +1,12 @@
 (* Equality of contexts *)
 
-functor IlContextEq (structure IlContext : ILCONTEXT) : ILCONTEXTEQ =
+functor IlContextEq (structure IlContext : ILCONTEXT
+		     structure IlUtil : ILUTIL
+		     structure Ppil : PPIL
+		     sharing Ppil.Il = IlUtil.Il = IlContext.Il) : ILCONTEXTEQ =
     struct
 
+	val debug = ref false
 	nonfix mod
 
 	open IlContext
@@ -13,6 +17,8 @@ functor IlContextEq (structure IlContext : ILCONTEXT) : ILCONTEXTEQ =
 	fun foldand f [] = true
 	  | foldand f (x::xs) = f x andalso foldand f xs
 
+ 
+
 	(* alpha-conversion is necessary when checking contexts for
 	 * equality.  This is done by explicitly maintaining a `var
 	 * map' mapping variables to variables.  *)
@@ -22,27 +28,42 @@ functor IlContextEq (structure IlContext : ILCONTEXT) : ILCONTEXTEQ =
 	    struct val empty : vm = Name.VarMap.empty
 		   val add : var * var * vm -> vm = fn (v,v',vm) => Name.VarMap.insert(vm,v,v')
 		   val lookup : vm -> var -> var = 
-		       fn vm => fn v => case Name.VarMap.find(vm,v)
-		                          of SOME v => v
-					   | NONE => error "VM.lookup"
-		   fun eq_var(vm,v,v') = Name.eq_var(lookup vm v, v')
+		       fn vm => fn v => case Name.VarMap.find(vm,v) of
+		                             SOME v => v
+					   | NONE => error ("VM.lookup failed on " ^ (Name.var2string v))
+		   fun eq_var(vm,v,v') = 
+		       case Name.VarMap.find(vm,v) of
+			   SOME v => Name.eq_var(v,v')
+			 | NONE => Name.eq_var(v,v')
 	    end
 
 	exception NOT_EQUAL    (* raised when contexts are not equal *)
 
-	fun extend_vm_context (c : context, c' : context, vm) : vm =
-	    let val label_var_pairs = 
-		map (fn v => case Context_Lookup'(c,v)
-		               of SOME (l,_) => (l, v)
-				| NONE => error "extend_vm_context") (Context_Varlist c)
-		val _ = if length label_var_pairs <> length (Context_Varlist c') then
-		          raise NOT_EQUAL
+	fun extend_vm_context (c : context, c' : context, vm) : vm * var list =
+	    let val vlist = Context_Varlist c
+		val vlist' = Context_Varlist c'
+		fun mapper ctxt v = (case Context_Lookup'(ctxt,v) of
+				    SOME (l,_) => (* is this too conservative? *)
+					if (IlUtil.is_exportable_lab l)
+					    then SOME(l, v)
+					else NONE
+				  | NONE => (print "extend_vm_context: could not find var = ";
+					     Ppil.pp_var v; print "\n";
+					     error "extend_vm_context"))
+		val lvlist = List.mapPartial (mapper c) vlist
+		val lvlist' = List.mapPartial (mapper c') vlist'
+
+		val _ = if length lvlist <> length lvlist' 
+			    then (print "extend_vm_contxt: lvlist length not equal\n";
+				  raise NOT_EQUAL)
 			else ()
-	    in foldr (fn ((l,v), vm) => 
-		      case Context_Lookup(c',[l])
-			of SOME(SIMPLE_PATH v',_) => VM.add(v,v',vm)
+		fun folder ((l,v), vm) =
+		      case Context_Lookup(c',[l]) of
+			   SOME(SIMPLE_PATH v',_) => VM.add(v,v',vm)
 		         | SOME(COMPOUND_PATH (v',_),_) => VM.add(v,v',vm)
-			 | NONE => raise NOT_EQUAL) vm label_var_pairs
+			 | NONE => (print "label not found in c'\n"; 
+				    raise NOT_EQUAL)
+	    in (foldr folder vm lvlist, map #2 lvlist)
 	    end
 
 	fun sdecs_lookup([],l) = NONE
@@ -67,9 +88,12 @@ functor IlContextEq (structure IlContext : ILCONTEXT) : ILCONTEXTEQ =
 	    Name.eq_label(lbl,lbl') andalso eq_labels(lbls,lbls')
 	  | eq_labels _ = false
 
-	fun eq_vars(vm,[],[]) = true
-	  | eq_vars(vm,v::vs,v'::vs') = VM.eq_var(vm,v,v') andalso eq_vars(vm,vs,vs')
-	  | eq_vars _ = false
+	fun eq_vars(vm,v1,v2) = 
+	    let fun loop([],[],vm) = SOME vm
+		  | loop(v::vs,v'::vs',vm) = loop(vs,vs',VM.add(v,v',vm))
+		  | loop _ = NONE
+	    in  loop(v1,v2,vm)
+	    end
 
 	fun eq_mod (vm,MOD_VAR v,MOD_VAR v') = VM.eq_var(vm,v,v')
 	  | eq_mod _ = false
@@ -97,7 +121,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT) : ILCONTEXTEQ =
 		     i=i' andalso eq_con(vm,con,con')    
 	       | (CON_RECORD labcons, CON_RECORD labcons') => eq_labcons(vm,labcons,labcons')        
 	       | (CON_FUN(vars,con), CON_FUN(vars',con')) => 
-		     eq_vars(vm,vars,vars') andalso eq_con(vm,con,con')
+		     (case eq_vars(vm,vars,vars') of
+			  NONE => false
+			| SOME vm => eq_con(vm,con,con'))
 	       | (CON_SUM{noncarriers,carriers,special}, 
 		  CON_SUM{noncarriers=noncarriers',carriers=carriers',special=special'}) =>
 		     noncarriers=noncarriers' andalso special=special' 
@@ -207,17 +233,49 @@ functor IlContextEq (structure IlContext : ILCONTEXT) : ILCONTEXTEQ =
 		  eq_signat(vm,signat,signat')
 	       | _ => false 
 
-	fun eq_cntxt(vm,c,c') =
-	    let val vars = Context_Varlist c
-	    in foldand (fn v =>
-			case (Context_Lookup'(c,v), Context_Lookup'(c',VM.lookup vm v)) 
-			  of (SOME (_, pc), SOME (_, pc')) => eq_pc(vm,pc,pc')
-			   | _ => false) vars
+	fun eq_cntxt(vm,c,c',vars) =
+	    let fun folder v =
+		    let fun diag() = 
+			if (!debug)
+			    then (print "eq_cntxt was processing v = ";
+				  Ppil.pp_var v; print "\n";
+				  print "context 1 = \n";
+				  Ppil.pp_context c;
+				  print "\n\ncontext 2 = \n";
+				  Ppil.pp_context c';
+				  print "\n\n")
+			else ()
+			val res = 
+			    (case (Context_Lookup'(c,v), Context_Lookup'(c',VM.lookup vm v)) of
+				 (SOME (_, pc), SOME (_, pc')) => eq_pc(vm,pc,pc')
+			       | _ => false)
+				handle e => (print "eq_cntxt caught exception\n";
+					     diag();
+					     raise e)
+		    in  if res then res else (print "eq_cntxt got false\n"; diag(); false)
+		    end
+		val res = foldand folder vars
+		val _ = (print "eq_cntxt returning "; 
+			 print (Bool.toString res);
+			 print "\n")
+	    in  res
 	    end	    
 
 	fun eq_context (c: context, c': context) : bool =
-	    let val vm = extend_vm_context(c,c',VM.empty)
-	    in eq_cntxt(vm,c,c')
+	    let 
+(*
+		val _ = (print "context c = \n";
+			 Ppil.pp_context c; 
+			 print "\n";
+			 print "context c' = \n";
+			 Ppil.pp_context c'; 
+			 print "\n")
+*)
+		val (vm,vlist) = extend_vm_context(c,c',VM.empty)
+(*
+		val _ = print "done extend_vm_context\n"
+*)
+	    in eq_cntxt(vm,c,c',vlist)
 	    end handle NOT_EQUAL => false
 
     end

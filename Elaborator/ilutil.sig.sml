@@ -143,6 +143,7 @@ signature ILUTIL =
     val mod_subst_conmodvar : (mod * (var * con) list * (var * mod) list) -> mod
     val exp_subst_expconmodvar : (exp * (var * exp) list * (var * con) list * (var * mod) list) -> exp
     val con_subst_expconmodvar : (con * (var * exp) list * (var * con) list * (var * mod) list) -> con
+    val kind_subst_expconmodvar : (kind * (var * exp) list * (var * con) list * (var * mod) list) -> kind
     val sig_subst_expconmodvar : (signat * (var * exp) list * (var * con) list * (var * mod) list) -> signat
 
 
