@@ -654,7 +654,7 @@ struct
     *)
     fun enable (b : var) : unit =
 	let
-	    fun hasInterface' (c : var) : bool =
+	    fun hasInterface (c : var) : bool =
 	        (case get_status c
 		   of PENDING (_, p) => Update.isReady p
 		    | WORKING (_, p) => Update.isReady p
@@ -663,11 +663,6 @@ struct
 		    | WORKING' _ => true
 		    | DONE _ => true
 		    | _ => false)
-	    fun interfaceVar (U : var) : var =
-		(case get_node U
-		   of SRCU (_,SOME I,_) => I
-		    | _ => U)
-	    val hasInterface : var -> bool = hasInterface' o interfaceVar
 	    fun isDone (c : var) : bool =
 		(case get_status c
 		   of DONE _ => true
@@ -757,22 +752,22 @@ struct
 	    assures us that if U in dom(unitmap), then unitmap(U) is
 	    the variable for node.
     *)
-    fun	unit_help (root	: var) : Update.unit_help =
-	let val	imports	= get_import_transitive	root
-	    fun	folder (v : var, map) :	var StringMap.map =
+    fun unit_help (root : var) : Update.unit_help =
+	let val imports = get_import_transitive root
+	    fun folder (v : var, map) : var StringMap.map =
 		(case get_unit_paths v
 		   of NONE => map
-		    | SOME p =>	StringMap.insert (map, Paths.unitName p, v))
-	    (* Right-to-left establishes the invariant.	*)
-	    val	unitmap	= foldr	folder StringMap.empty imports
-	    fun	lookup (U : E.id) : var	=
+		    | SOME p => StringMap.insert (map, Paths.unitName p, v))
+	    (* Right-to-left establishes the invariant. *)
+	    val unitmap = foldr folder StringMap.empty imports
+	    fun lookup (U : E.id) : var =
 		(case StringMap.find (unitmap, U)
-		   of SOME v =>	v
+		   of SOME v => v
 		    | NONE => error ("unit " ^ U ^ " not in unitmap"))
-	    fun	readparms (uefile : string) : var list =
-		let val	ue = FileCache.read_ue uefile
-		    val	ids = map #1 (Ue.listItemsi ue)
-		in  map	lookup ids
+	    fun readparms (uefile : string) : var list =
+		let val ue = FileCache.read_ue uefile
+		    val ids = map #1 (Ue.listItemsi ue)
+		in  map lookup ids
 		end
 	in  {parms=readparms, get_id=get_id, get_unit_paths=get_unit_paths}
 	end
