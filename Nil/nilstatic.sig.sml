@@ -5,6 +5,8 @@ signature NILSTATIC =
     type context 
     val debug : bool ref
 
+    val exp_valid : context * Nil.exp -> Nil.exp * Nil.con * Nil.kind 
+
     val con_valid : context * Nil.con -> Nil.con * Nil.kind
     (* con_valid (context,con) => (con',kind)
       * PRE: con is in alpha normal form

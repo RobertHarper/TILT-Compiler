@@ -3,14 +3,16 @@
 (* ------------ Context manipulation functions ------------ *)
 
 functor NilUtilFn(structure ArgNil : NIL
+		  structure PrimUtil : PRIM
+		  structure Prim : PRIM
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
-		  sharing ArgNil = Alpha.Nil ) :> 
-  sig include NILUTIL sharing ArgNil = Nil and type alpha_context = Alpha.alpha_context end =
+		  sharing ArgNil = Alpha.Nil
+		  and Prim = PrimUtil.Prim) (* :> 
+  sig include NILUTIL sharing ArgNil = Nil and type alpha_context = Alpha.alpha_context end *) =
 struct
 
   structure Nil = ArgNil
-
   open Nil Util
 
 
@@ -70,6 +72,8 @@ struct
     val foldl_acc = Listops.foldl_acc
     val eq_len = Listops.eq_len
     val member_eq = Listops.member_eq
+    val same_intsize = PrimUtil.same_intsize
+    val same_floatsize = PrimUtil.same_floatsize
   end
   (**)
     
@@ -606,25 +610,12 @@ struct
   (*Pre: Records are sorted by label *)
   fun primequiv (pcon1,pcon2) = 
     let
-      fun same_int_size (size1,size2) = 
-	(case (size1,size2)
-	   of (Prim.W8,Prim.W8) => true
-	    | (Prim.W16,Prim.W16) => true
-	    | (Prim.W32,Prim.W32) => true
-	    | (Prim.W64,Prim.W64) => true
-	    | _ => false)
-
-      fun same_float_size (size1,size2) =
-	(case (size1,size2)
-	   of (Prim.F32,Prim.F32) => true
-	    | (Prim.F64,Prim.F64) => true
-	    | _ => false)
     in
       case (pcon1,pcon2)
-	of (Int_c size1,Int_c size2) => same_int_size (size1,size2)
+	of (Int_c size1,Int_c size2) => same_intsize (size1,size2)
 	| ((Float_c size1,Float_c size2) |
 	   (BoxFloat_c size1,BoxFloat_c size2)) => 
-	  same_float_size (size1,size2)
+	  same_floatsize (size1,size2)
 	| ((Exn_c,Exn_c) |
 	   (Array_c,Array_c) |
 	   (Vector_c,Vector_c) |

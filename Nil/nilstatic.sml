@@ -1,5 +1,6 @@
 functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure Prim : PRIM
+		    structure PrimUtil : PRIMUTIL
 		    structure ArgNil : NIL
 		    structure PpNil : PPNIL
 		    structure Alpha : ALPHA
@@ -7,9 +8,9 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure NilContext : NILCONTEXT
 		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil = PpNil.Nil = ArgNil
 		    and Annotation = ArgNil.Annotation
-		    and Prim = ArgNil.Prim
-		    and type NilUtil.alpha_context = Alpha.alpha_context) :> 
-  sig include NILSTATIC sharing Nil = ArgNil and type context = NilContext.context end = 
+		    and Prim = ArgNil.Prim = PrimUtil.Prim
+		    and type NilUtil.alpha_context = Alpha.alpha_context) (*:> 
+  sig include NILSTATIC sharing Nil = ArgNil and type context = NilContext.context end *)= 
 struct	
   
   structure Annotation = Annotation
@@ -74,15 +75,26 @@ struct
     open C NU
     val eq_var = Name.eq_var
     val eq_label = Name.eq_label
+    val var2string = Name.var2string
+    val label2string = Name.label2string
     val fresh_var = Name.fresh_var
     val assoc_eq = Listops.assoc_eq
     val eq_len = Listops.eq_len
     val map_second = Listops.map_second
+    val zip3 = Listops.zip3
+    val unzip3 = Listops.unzip3
+    val same_intsize = PrimUtil.same_intsize
+    val same_floatsize = PrimUtil.same_floatsize
   end
 
 
   (* Local helpers *)
+
+
   fun error s = Util.error "nilstatic.sml" s
+
+  fun printl s = print (s^"\n")
+  fun lprintl s = print ("\n"^s^"\n")
   fun split ls = 
       let fun split' _ [] = error "split given empty list"
 	    | split' acc [x] = (rev acc,x)
@@ -92,14 +104,64 @@ struct
   fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
     | strip_singleton k = k
 
-  fun eq_var2 var1 var2 = eq_var (var1,var2)
-    
-  fun first (fst,_) = fst
-    
-  fun eq_var_pair var = (eq_var2 var) o first
-    
   fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
   fun is_word T = alpha_sub_kind (T,Word_k Runtime)
+
+  fun singletonize (phase,kind as Singleton_k _,con) = kind
+    | singletonize (phase,kind,con) = 
+    if type_or_word kind then
+      case phase
+	of SOME p => 
+	  Singleton_k (p,kind,con)
+	 | NONE => Singleton_k (get_phase kind,kind,con)
+    else
+      kind
+
+  fun is_exn_con (Prim_c (Exn_c,_)) = true
+    | is_exn_con (Annotate_c (_,con)) = is_exn_con con
+    | is_exn_con _ = false
+
+  fun strip_exntag (Prim_c (Exntag_c,[con])) = SOME con
+    | strip_exntag (Annotate_c (_,con)) = strip_exntag con
+    | strip_exntag _ = NONE
+
+  fun strip_recursive (Mu_c (set,var)) = SOME (set,var)
+    | strip_recursive (Annotate_c (_,con)) = strip_recursive con
+    | strip_recursive _ = NONE
+
+  fun strip_boxfloat (Prim_c (BoxFloat_c floatsize,[])) = SOME floatsize
+    | strip_boxfloat (Annotate_c (_,con)) = strip_boxfloat con
+    | strip_boxfloat _ = NONE
+
+  fun strip_float (Prim_c (Float_c floatsize,[])) = SOME floatsize
+    | strip_float (Annotate_c (_,con)) = strip_float con
+    | strip_float _ = NONE
+
+  fun strip_arrow (AllArrow_c body) = SOME body
+    | strip_arrow (Annotate_c (_,con)) = strip_arrow con
+    | strip_arrow _ = NONE
+
+  fun strip_record (Prim_c (Record_c labels,cons)) = SOME (labels,cons)
+    | strip_record (Annotate_c (_,con)) = strip_record con
+    | strip_record _ = NONE
+
+  fun curry2 f = fn a => fn b => f (a,b)
+
+  val eq_var2 = curry2 eq_var
+  val eq_label2 = curry2 eq_label
+
+  fun find2 p listpair = 
+    let
+      fun find_one (a,b,NONE) = if p(a,b) then SOME (a,b) else NONE
+	| find_one (_,_,state) = state
+    in
+      ListPair.foldl find_one NONE listpair
+    end
+
+  fun first (fst,_) = fst
+
+  fun eq_var_pair var = (eq_var2 var) o first
+    
   fun list2cmap list = 
     (fn var => 
      case List.find (eq_var_pair var) list
@@ -126,16 +188,10 @@ struct
     
   fun varConConSubst var con = substConInCon (subst_fn var con)
     
-    
   fun primKind ((Int_c W64) | 
 		(Float_c F32) |
 		(Float_c F64)) = Type_k Runtime
-    
-    | primKind ((Int_c W32) | (Int_c W16) | (Int_c W8) | 
-		(BoxFloat_c F64) | (BoxFloat_c F32) |
-		(Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c) | (Sum_c _) |
-		(Record_c _) | (Vararg_c _)) = Word_k Runtime
-    
+    | primKind _ = Word_k Runtime
 
   fun do_beta_fun (Let_c (sort,cbnds,Annotate_c (_,con)),actuals) = 
     do_beta_fun (Let_c (sort,cbnds,con),actuals) 
@@ -299,27 +355,48 @@ struct
      (case constructor 
        of (Prim_c (pcon,args)) =>
 	 let
-	   val kind = primKind pcon
 	   val (args',kinds) = 
 	     ListPair.unzip (List.map (fn x => (con_valid (D,x))) args)
-	   val pcon' = 
+	   val (pcon',kind) = 
 	     (case pcon
-		of (Record_c labels) => 
-		  Record_c (ListMergeSort.sort gt_label labels)
-		 | (Sum_c {known = SOME i,tagcount}) => 
-		  if (Word32.<=(Word32.fromInt 0,i) andalso Word32.<(i,tagcount)) then
-		    pcon
-		  else
-		    error "Illegal index to sum constructor"
-		 | _ => pcon)
+		of ((Int_c W64) | 
+		    (Float_c F32) |
+		    (Float_c F64)) => (pcon,Type_k Runtime)
+		| ((Int_c W32) | (Int_c W16) | (Int_c W8) | 
+		   (BoxFloat_c F64) | (BoxFloat_c F32) |
+		   (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
+		  => (pcon,Word_k Runtime)
+		| (Record_c labels) => 
+		  (if List.all is_word kinds then
+		     (Record_c (ListMergeSort.sort gt_label labels),Word_k Runtime)
+		   else
+		     error "Record contains field of non-word kind")
+		| (Sum_c {known,tagcount}) => 
+		  (if List.all is_word kinds then
+		     let
+		       val valid =  
+			 (case known 
+			    of SOME i => 
+			      (Word32.<=(Word32.fromInt 0,i) andalso 
+			       Word32.<(i,tagcount))
+			     | NONE => true) 
+		     in
+		       if valid then
+			 (pcon,Word_k Runtime)
+		       else
+			 error "Illegal index to sum constructor" 
+		     end
+		   else
+		     error "Sum contains non-word component")
+		| (Vararg_c _) => 
+		  (if List.all is_word kinds then
+		     (pcon,Word_k Runtime)
+		     else 
+		       error "Vararg has non-word component"))
 	   val con = (Prim_c (pcon',args'))
 
 	 in
-	   (*ASSERT*)
-	   if List.all type_or_word kinds then
-	     (con,Singleton_k (get_phase kind,kind,con))
-	   else
-	     error "Invalid argument to primcon"
+	     (con,singletonize (SOME Runtime,kind,con))
 	 end
 	| (Mu_c (defs,var)) =>
 	 let
@@ -338,13 +415,15 @@ struct
 
 	   fun cont D = (List.foldr (check_one D) ([],[]) def_list)
 	   val (cons,kinds) = c_insert_kind_list (D,var_kinds,cont)
+	   val con' = Mu_c (Util.list2sequence cons,var)
+	   val kind = singletonize (SOME Runtime,Word_k Runtime,con')
 	 in
 	   (*ASSERT*)
-	   if List.all is_word (map strip_singleton kinds) then
-	     (Mu_c (Util.list2sequence cons,var),Word_k Runtime)
+	   if List.all is_word kinds then
+	     (con',kind)
 	   else
-	       (app (fn k => (print "kind = "; PpNil.pp_kind k; print "\n\n")) (map strip_singleton kinds);
-		error "Invalid kind for recursive constructor")
+	     (app (fn k => (print "kind = "; PpNil.pp_kind k; print "\n\n")) (map strip_singleton kinds);
+	      error "Invalid kind for recursive constructor")
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
 	 let
@@ -392,8 +471,9 @@ struct
        
 	| (v as (Var_c var)) => 
 	     (case find_kind (D,var) of
-		  SOME (Singleton_k (_,k,c as Var_c v')) => if (eq_var(var,v')) 
-							   then (v,k) else con_valid(D,c)
+		  SOME (Singleton_k (_,k,c as Var_c v')) => 
+		    if (eq_var(var,v')) 
+		      then (v,k) else con_valid(D,c)
 	       | SOME (Singleton_k (_,k,c)) => con_valid(D,c)
 	       | SOME k => (v,k)
 	       | NONE => 
@@ -703,7 +783,8 @@ struct
     in
       kind_valid (D,k)
     end
-  
+
+
   fun kind_equiv (D,k1,k2) = 
     let
       val k1 = kind_valid (D,k1)
@@ -736,6 +817,427 @@ struct
     in
       alpha_sub_kind (k1,k2)
     end
+
+
+(* Term level type checking.  *)
+
+  fun value_valid (D,value) = 
+    (case value
+       of (int (intsize,word) |
+	   uint (intsize,word)) => 
+	 let
+	   val kind = case intsize 
+			of W64 => Type_k Runtime
+			 | _ => Word_k Runtime
+	 in
+	   (value,Prim_c (Int_c intsize,[]),kind)
+	 end
+	| float (floatsize,string) => 
+	 (value,Prim_c (Float_c floatsize,[]),Type_k Runtime)
+	| array (con,arr) => 
+	 let
+	   val (con',kind) = con_valid (D,con)
+	   fun check (i,exp) = 
+	     let
+	       val (exp',con',kind) = exp_valid (D,exp)
+	     in
+	       if alpha_equiv_con (con,con') then
+		 Array.update (arr,i,exp')
+	       else
+		 error "Array contains expression of incorrect type"
+	     end
+	 in
+	   Array.appi check (arr,0,NONE);
+	   (array (con',arr),Prim_c (Array_c,[con']),Word_k Runtime)
+	 end
+	| vector (con,vec) => 
+	 let
+	   val (con',kind) = con_valid (D,con)
+	   fun check i = 
+	     let
+	       val (exp',con',kind) = exp_valid (D,Array.sub (vec,i))
+	     in
+	       if alpha_equiv_con (con,con') then
+		 exp'
+	       else
+		 error "Vector contains expression of incorrect type"
+	     end
+	   val vec' = Array.tabulate (Array.length vec,check) 
+	 in
+	   (vector (con',vec'),Prim_c (Vector_c,[con']),Word_k Runtime)
+	 end
+	| refcell expref =>
+	 let
+	   val (exp',con,kind) = exp_valid (D,!expref)
+	 in
+	   expref := exp';
+	   (refcell expref,Prim_c (Ref_c,[con]),Word_k Runtime)
+	 end
+	| tag (atag,con) => 
+	 let
+	   val (con',kind) = con_valid (D,con)
+	 in
+	   (tag (atag,con'),
+	    Prim_c (Exntag_c,[con']),Word_k Runtime)
+	 end)
+  and prim_valid (D,prim,cons,exps) = 
+    (case (prim,cons,exps)
+       of (record labels,cons,exps) =>
+	 let
+	   val fields = zip3 labels exps cons
+	   fun field_gt ((l1,_,_),(l2,_,_)) = gt_label(l1,l2)
+	   val fields' = ListMergeSort.sort field_gt fields
+	   fun field_eq ((l1,_,_),(l2,_,_)) = eq_label(l1,l2)
+	   val distinct = sorted_unique field_eq fields'
+	   fun check_one (label,exp,con) = 
+	     let
+	       val (con',kind) = con_valid (D,con)
+	       val (exp',con'',kind') = exp_valid (D,exp)
+	     in
+	       if alpha_equiv_con (con',con'') then
+		 (label,exp',con')
+	       else
+		 (printl ("Record field "^(label2string label)^" declared as type ");
+		  PpNil.pp_con con';
+		  lprintl "found to have type ";
+		  PpNil.pp_con con'';
+		  error "Type mismatch in record")
+	     end
+	   val fields'' = List.map check_one fields'
+	   val (labels',exps',cons') = unzip3 fields'
+	   val exp' = (record labels',cons',exps')
+	   val con = Prim_c (Record_c labels',cons')
+	   val (con',kind) = con_valid (D,con)
+	 in
+	   (exp',con',kind)
+	 end
+	| (select label,[],[exp]) =>
+	 let
+	   val (exp',con,kind) = exp_valid (D,exp)
+	   val (labels,cons) = 
+	     (case strip_record con 
+		of SOME x => x
+		 | NONE => 
+		  (printl ("Label "^(label2string label)^" projected from expression");
+		   PpNil.pp_exp exp;
+		   lprintl " of type ";
+		   PpNil.pp_con con;
+		   error "Projection from value of non record type"))
+	 in
+	   case find2 (fn (l,c) => eq_label (l,label)) (labels,cons)
+	     of SOME (_,con) => 
+	       ((select label,[],[exp']),
+		con,singletonize (SOME Runtime,Word_k Runtime,con))
+	      | NONE => 
+	       (printl ("Label "^(label2string label)^" projected from expression");
+		PpNil.pp_exp exp;
+		lprintl " of type ";
+		PpNil.pp_con con;
+		error "No such label")
+	 end
+	| (inject {tagcount,field},cons,exps) =>  error "Unimplemented"  (* slow; sum intro *)
+	| (inject_record {tagcount,field},cons,exps) =>       error "Unimplemented"
+	(* fast; sum intro where argument is a record *)
+	(* whose components are individually passed in *)
+	| (project_sum {tagcount,sumtype},cons,exps) => error "Unimplemented"
+	      (* slow; given a special sum type, return carried value *)
+	| (project_sum_record {tagcount,sumtype,field},cons,exps) => error "Unimplemented"
+	(* fast; given a special sum type of record type, 
+	 return the specified field *)
+	| (box_float floatsize,[],[exp]) => 
+	 let
+	   val (exp',con,kind) = exp_valid (D,exp)
+	   val box_con = Prim_c (BoxFloat_c floatsize,[])
+	 in
+	   case strip_float con
+	     of SOME floatsize' => 
+	       if same_floatsize (floatsize,floatsize') then
+		 ((box_float floatsize,[],[exp']),
+		  box_con,
+		  singletonize (SOME Runtime,Word_k Runtime,box_con))
+	       else
+		 error "Mismatched float size in box float"
+	      | NONE => error "Box float called on non-float"
+	 end
+	| (unbox_float floatsize,[],[exp]) => 
+	 let
+	   val (exp',con,kind) = exp_valid (D,exp)
+	   val unbox_con = Prim_c (Float_c floatsize,[])
+	 in
+	   case strip_boxfloat con
+	     of SOME floatsize' => 
+	       if same_floatsize (floatsize,floatsize') then
+		 ((unbox_float floatsize,[],[exp']),
+		  unbox_con,
+		  singletonize (SOME Runtime,Type_k Runtime,unbox_con))
+	       else
+		 error "Mismatched float size in box float"
+	      | NONE => error "Unbox float called on non-boxfloat"
+	 end
+	| (roll,[argcon],[exp]) => 
+	 let
+	   val (argcon',argkind) = con_valid (D,argcon)
+	   val (exp',con,kind) = exp_valid (D,exp)
+	 in
+	   case strip_recursive argcon' 
+	     of SOME (set,var) =>
+	       let
+		 val def_list = Util.set2list set
+		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
+		 val cmap = list2cmap (List.map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		 val con'' = substConInCon cmap con'
+	       in
+		 if con_equiv (D,con,con'') then
+		   ((roll,[argcon'],[exp']),argcon',argkind)
+		 else
+		   (printl "Rolled expression ";
+		    PpNil.pp_exp exp';
+		    lprintl "expected as type ";
+		    PpNil.pp_con con'';
+		    lprintl "found to be type ";
+		    PpNil.pp_con con;
+		    error "Error in roll")
+	       end
+	      | NONE => 
+	       (printl "Roll primitive given argument of type";
+		PpNil.pp_con argcon';
+		lprintl " not a recursive type";
+		error "Illegal constructor argument in roll")
+	 end
+	| (unroll,[con],[exp]) =>
+	 let
+	   val (argcon',argkind) = con_valid (D,con)
+	   val (exp',con,kind) = exp_valid (D,exp)
+	 in
+	   (case strip_recursive argcon' 
+	      of SOME (set,var) =>
+		(if alpha_equiv_con (argcon',con) then
+		   let
+		     val def_list = Util.set2list set
+		     val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
+		     val cmap = list2cmap (List.map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		     val con'' = substConInCon cmap con'
+		   in
+		     ((roll,[argcon'],[exp']),con'',
+		      singletonize(SOME Runtime,Word_k Runtime,con''))
+		   end
+		 else
+		   (printl "Unolled expression ";
+		    PpNil.pp_exp exp';
+		    lprintl "expected as type ";
+		    PpNil.pp_con argcon';
+		    lprintl "found to be type ";
+		    PpNil.pp_con con;
+		    error "Error in unroll"))
+	       | NONE => 
+		   (printl "Unoll primitive given argument of type";
+		    PpNil.pp_con argcon';
+		    lprintl " not a recursive type";
+		    error "Illegal constructor argument in unroll"))
+	 end
+	| (make_exntag,[argcon],[]) => 
+	 let
+	   val (argcon',argkind) = con_valid (D,argcon)
+	   val exp' = (make_exntag,[argcon'],[])
+	   val con' = Prim_c (Exntag_c,[argcon'])
+	   val kind' = singletonize (SOME Runtime,Word_k Runtime,con')
+	 in
+	   (exp',con',kind')
+	 end
+	| (inj_exn,[],[exp1,exp2]) => 
+	 let
+	   val (exp1',con1,kind1) = exp_valid (D,exp1)
+	   val (exp2',con2,kind2) = exp_valid (D,exp2)
+	 in
+	   case strip_exntag con2
+	     of SOME con => 
+	       if alpha_equiv_con (con1,con) then
+		 let
+		   val exp' = (inj_exn,[],[exp1',exp2'])
+		   val con' = Prim_c (Exn_c,[])
+		   val kind'= singletonize (SOME Runtime,Word_k Runtime,con')
+		 in
+		   (exp',con',kind')
+		 end
+	       else
+		 error "Type mismatch in exception injection"
+	      | NONE =>  
+		 (printl "Expression ";
+		  PpNil.pp_exp exp2;
+		  lprintl "of type ";
+		  PpNil.pp_con con2;
+		  lprintl "not a tag";
+		  error "Illegal argument to exception injection")
+	 end
+	| (make_vararg (openness,effect),cons,exps) =>
+	 error "make_vararg unimplemented....punting"
+	| (make_onearg (openness,effect),cons,exps) =>  
+	 error "make_onearg unimplemented....punting"
+	| (peq,cons,exps) => error "Polymorphic equality should not appear at this level"
+	| (prim,cons,exps) => 
+	 (printl "Error in exp_valid - malformed expression";
+	  PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
+	  lprintl "No matching case in exp_valid";
+	  error "Illegal primitive application"))
+  and bnds_valid (D,bdns) = error "Unimplemented"
+
+  and exp_valid (D : context,exp : exp) : (exp * con * kind) = 
+    (case exp 
+       of Var_e var => 
+	 (case find_con (D,var)
+	    of SOME con => 
+	      let
+		val (con',kind) = con_valid (D,con)
+	      in
+		(exp,con,kind)
+	      end
+	     | NONE => 
+	      error ("Encountered undefined variable " ^ (Name.var2string var) 
+		     ^ "in exp_valid"))
+	| Const_e value => 
+	    let
+	      val (value',con,kind) = value_valid (D,value)
+	    in
+	      (Const_e value',con,singletonize (NONE,kind,con))
+	    end
+	| Let_e (letsort,bnds,exp) => 
+	    let
+	      val (D',bnds') = bnds_valid (D,bnds)
+	      val (exp',con,kind) = exp_valid (D',exp)
+	    in
+	      (Let_e (letsort,bnds',exp'),con,singletonize (NONE,kind,con))
+	    end
+	| Prim_e (NilPrimOp prim,cons,exps) =>   
+	    let
+	      val ((prim',cons',exps'),con,kind) = prim_valid (D,prim,cons,exps)
+	    in
+	      (Prim_e (NilPrimOp prim',cons',exps'),con,kind)
+	    end
+	| Prim_e (PrimOp prim,cons,exps) =>   error "Unimplemented"
+	(*	       let 
+	 *			 val 
+	 * val con = PrimUtil.get_type prim cons
+	 *		 val exp' = Prim_e (PrimOp prim,cons
+	 *	       in
+	 *	       end
+	 *)
+	| Switch_e switch => error "Unimplemented"  
+	| ((App_e (openness as Code,exp as (Var_e _),cons,texps,fexps)) |  
+	   (App_e (openness as (Closure | Open),exp,cons,texps,fexps))) =>
+	let
+	  val (cons',kinds) = ListPair.unzip (List.map (fn c => con_valid (D,c)) cons)
+	  val actuals_t = List.map (fn e => exp_valid (D,e)) texps
+	  val actuals_f = List.map (fn e => exp_valid (D,e)) fexps
+	  val (exp',con,kind) = exp_valid (D,exp)
+	  val (openness',_,tformals,formals,numfloats,body) = 
+	    (case strip_arrow con
+	       of SOME c => c
+		| NONE => (printl "Expression ";
+			   PpNil.pp_exp exp';
+			   lprintl "Of type ";
+			   PpNil.pp_con con;
+			   error "Application of non-arrow expression"))
+
+	      fun check_cons ([],[],[],D) = true
+		| check_cons ([],(exp,con,kind)::actuals_f,con'::formals,D) = 
+		if alpha_equiv_con (con,con') then
+		  check_cons ([],actuals_f,formals,D)
+		else
+		  (printl ("Formal expression parameter of type");
+		   PpNil.pp_con con';
+		   lprintl "passed actual parameter ";
+		   PpNil.pp_exp exp;
+		   lprintl "of type ";
+		   PpNil.pp_con con;
+		   error "Parameter type mismatch")
+		| check_cons ((exp,con,kind)::actuals_t,actuals_f,con'::formals,D) = 
+		  if alpha_equiv_con (con,con') then
+		    check_cons (actuals_t,actuals_f,formals,D)
+		  else
+		    (printl ("Formal expression parameter of type");
+		     PpNil.pp_con con';
+		     lprintl "passed actual parameter ";
+		     PpNil.pp_exp exp;
+		     lprintl "of type ";
+		     PpNil.pp_con con;
+		     error "Parameter type mismatch")
+
+	      fun check_kinds ([],[],D) = SOME D
+		| check_kinds ((var,kind)::tformals,kind'::actuals,D) = 
+		if alpha_sub_kind (kind',kind) then
+		  check_kinds (tformals,actuals,insert_kind (D,var,kind))
+		else
+		  (printl ("Formal constructor parameter "^(var2string var)^"of kind ");
+		   PpNil.pp_kind kind;
+		   lprintl "passed actual parameter of kind ";
+		   PpNil.pp_kind kind';
+		   error "Parameter kind mismatch")
+		| check_kinds (_,_,D) = NONE
+
+	      val params_match = 
+		case check_kinds (tformals,kinds,D)
+		  of SOME D' =>
+		    check_cons (actuals_t,actuals_f,formals,D')
+		   | NONE => 
+		    error "Mismatch between formal and actual constructor parameter lists"
+	      val texps' = #1 (unzip3 actuals_t)
+	      val fexps' = #1 (unzip3 actuals_f)
+	      val body_kind = 
+		case openness 
+		  of Open => singletonize (SOME Runtime,Type_k Runtime,body)
+		   | _ => singletonize (SOME Runtime,Word_k Runtime,body)
+	    in
+	      if same_openness (openness,openness') andalso
+		((Word32.toInt numfloats) = (List.length fexps)) andalso
+		eq_len (tformals,cons') andalso params_match 
+		then
+		  (App_e (openness,exp',cons',texps',fexps'),
+		   body,body_kind)
+	      else
+		error "Error in application - different openness"
+	    end
+	| Raise_e (exp,con) => 
+	    let
+	      val (con',kind) = con_valid (D,con)
+	      val (exp',con'',kind') = exp_valid (D,exp)
+	    in
+	      if is_exn_con (con'') then
+		(exp',con',singletonize (NONE,kind',con'))
+	      else
+		(printl "Raised expression ";
+		 PpNil.pp_exp exp';
+		 lprintl "Of type ";
+		 PpNil.pp_con con';
+		 error "Non exception raised - Ill formed expression")
+	    end
+	| Handle_e (exp,function) =>
+	    (case function 
+	       of Function (effect,recursive,[],[(var,c as Prim_c (Exn_c,[]))],
+			    [],body,con) =>
+		 let
+		   val (con',kind) = con_valid (D,con)
+		   val (exp',con'',kind') = exp_valid (D,exp)
+		   val (body',con''',kind'') = exp_valid (insert_con (D,var,c),body)
+		   val function' = Function (effect,recursive,[],
+					     [(var,c)],[],body',con')
+		 in
+		   if alpha_equiv_con (con',con'') andalso
+		     alpha_equiv_con (con'',con''') then
+		     (Handle_e (exp',function'),con'',singletonize (NONE,kind',con''))
+		   else
+		     (print "Declared as : \n";
+		      PpNil.pp_con con';
+		      print "\nExpected : \n";
+		      PpNil.pp_con con'';
+		      print "\nFound : \n";
+		      PpNil.pp_con con''';
+		      error "Handler body has incorrect type")
+		 end
+	       | _ => 
+		 (print "Body is :\n";
+		  PpNil.pp_exp (Handle_e (exp,function));
+		  error "Illegal body for handler"))
+	       )
 
 
 end
