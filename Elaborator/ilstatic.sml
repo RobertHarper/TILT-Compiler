@@ -732,8 +732,22 @@ end
 		end
 	  | (CON_SUM {noncarriers=n1,carrier=c1,special=i1},
 	     CON_SUM {noncarriers=n2,carrier=c2,special=i2}) =>
-		(i1=i2 orelse (i2=NONE andalso is_sub)) andalso (n1=n2) andalso
-		self(c1,c2,ctxt,is_sub)
+		let val res = (i1=i2 orelse (i2=NONE andalso is_sub)) andalso (n1=n2) andalso
+		               self(c1,c2,ctxt,is_sub)
+(*
+		    val _ = if res then print "SAME\n" else print "DIFFERENT\n"
+		    val _ = if res then () else
+			let val _ = if (i1=i2 orelse (i2=NONE andalso is_sub)) 
+					then print "SAME1\n" else print "DIFFERENT1\n"
+			    val _ = if (n1=n2) 
+					then print "SAME2\n" else print "DIFFERENT2\n"
+			    val _ = if self(c1,c2,ctxt,is_sub)
+					then print "SAME3\n" else print "DIFFERENT3\n"
+			in  ()
+			end
+*)
+		in  res
+		end
 	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
 		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), cs1, cs2)
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
@@ -993,7 +1007,7 @@ end
 						       Ppil.pp_con con2; print "\n";
 						      error "ROLL: expression type does not match decoration"))
 					 else 
-					     (if (eq_con_from_get_exp6(econ,cNorm,ctxt))
+					     (if (eq_con(econ,cNorm,ctxt))
 						  then Normalize' "ROLL/UNROLL 3" (con2,ctxt)
 					      else (print "UNROLL: expression type does not match decoration";
 						    print "\necon = "; pp_con econ;
@@ -1088,7 +1102,7 @@ end
 	   end
      | (SUM_TAIL (c,e)) => 
 	   let val (va,con) = GetExpCon(e,ctxt)
-	   in if (eq_con_from_get_exp2(c,con,ctxt)) 
+	   in if (eq_con(c,con,ctxt)) 
 		  then (case c of
 			    CON_SUM{noncarriers,carrier,special=SOME i} => 
 				if (i<noncarriers) 
@@ -1102,7 +1116,7 @@ end
 	       val (_,hcon) = GetExpCon(handler,ctxt)
 	       val res_con = fresh_con ctxt
 	       val hcon' = CON_ARROW ([CON_ANY],res_con,false,oneshot())
-	   in  if (eq_con_from_get_exp3(hcon,hcon',ctxt)) 
+	   in  if (eq_con(hcon,hcon',ctxt)) 
 		   then (false,bcon)
 	       else error "Type mismatch between handler and body of HANDLE"
 	   end
@@ -1129,7 +1143,7 @@ end
 	   let 
 	       val (va1,c1) = GetExpCon(e1,ctxt)
 	       val (va2,c2) = GetExpCon(e2,ctxt)
-	   in if (eq_con_from_get_exp4(c1,CON_TAG c2,ctxt))
+	   in if (eq_con(c1,CON_TAG c2,ctxt))
 		  then (va1 andalso va2, CON_ANY)
 	      else error "EXN_INJECT tag type and value: type mismatch"
 	   end
@@ -1168,7 +1182,7 @@ end
 			   Ppil.pp_exp exparg; print "\n";
 			   error "INJ: injection field out of range")
 		  else
-		      if (eq_con_from_get_exp7(econ, valOf fieldcon_opt, ctxt))
+		      if (eq_con(econ, valOf fieldcon_opt, ctxt))
 			   then (va,CON_SUM{noncarriers=noncarriers,carrier=carrier,special=NONE})
 		       else (print "INJ: injection does not type check eq_con failed on: ";
 			     Ppil.pp_exp exparg; print "\n";
@@ -1180,14 +1194,14 @@ end
      | (EXN_CASE {arg,arms,default,tipe}) =>
 	   let 
 	       val (_,argcon) = GetExpCon(arg,ctxt)
-	       val _ = if (eq_con_from_get_exp12(argcon,CON_ANY,ctxt))
+	       val _ = if (eq_con(argcon,CON_ANY,ctxt))
 			   then () 
 		       else error "arg not a CON_ANY in EXN_CASE"
 	       fun checkarm(e1,c,e2) = 
 		   let val (_,c1) = GetExpCon(e1,ctxt)
 		       val (_,c2) = GetExpCon(e2,ctxt)
-		   in if ((eq_con_from_get_exp9(c1,CON_TAG c, ctxt))
-			  andalso eq_con_from_get_exp10(c2,CON_ARROW([c],tipe,false,oneshot()),ctxt))
+		   in if ((eq_con(c1,CON_TAG c, ctxt))
+			  andalso eq_con(c2,CON_ARROW([c],tipe,false,oneshot()),ctxt))
 			  then ()
 		      else error "rescon does not match in EXN_CASE"
 		   end
@@ -1197,7 +1211,7 @@ end
 			NONE => ()
 		      | (SOME e) =>
 			    let val (_,optcon) = GetExpCon(e,ctxt)
-			    in if (eq_con_from_get_exp11(optcon,tipe,ctxt))
+			    in if (eq_con(optcon,tipe,ctxt))
 				   then ()
 			       else (print "EXN_CASE: default case mismatches";
 				     print "default con is:\n";
@@ -1251,10 +1265,14 @@ end
 				  print "tipe = \n"; pp_con tipe;
 				  error "case arm type mismatch")
 			end
-	   in if (eq_con_from_get_exp15(eargCon,sumcon,ctxt))
+	   in if (eq_con(eargCon,sumcon,ctxt))
 		  then (loop 0 va arms)
 	      else 
-		  error "CASE: expression type and decoration con mismatch"
+		  (Ppil.convar_display := Ppil.VAR_VALUE;
+		   print "CASE: expression type and decoration con mismatch";
+		   print "eargCon = "; pp_con eargCon; print "\n";
+		   print "sumcon = "; pp_con sumcon; print "\n";
+		   error "CASE: expression type and decoration con mismatch")
 	   end
      | (MODULE_PROJECT(m,l)) => 
 	   let val (va,signat) = GetModSig(m,ctxt)
@@ -1290,22 +1308,7 @@ end
 			  else error "SEAL: expression type does not match sealing type"
 		       end)
 
-   and eq_con_from_get_exp1(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp2(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp3(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp4(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp5(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp6(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp7(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp8(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp9(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp10(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp11(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp12(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp13(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp14(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp15(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
-   and eq_con_from_get_exp16(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+
 
    (* ----------- rules 22 - 25 ------------------------- *)
    and GetBndDec (ctxt,BND_EXP (v,e))  = let val (va,c) = GetExpCon (e,ctxt)
@@ -1345,36 +1348,33 @@ end
 		     app (fn (SBND(l,_)) => (print (Name.label2string l); print " ...")) sbnds;
 		     print "\n\n")
 *)
-	    fun loop lbl [] = NONE
-	      | loop lbl ((sbnd as SBND(l,b))::r) = 
-		let val self = loop lbl 
-		in
-		    (case b of
+	    fun loop (lbl,[]) = NONE
+	      | loop (lbl,(sbnd as SBND(l,b))::r) = 
+		 (case b of
 			 (BND_EXP (_,e)) => if (eq_label(l,lbl)) 
-						then SOME([l],PHRASE_EXP e) else self r
+						then SOME([l],PHRASE_EXP e) else loop(lbl,r)
 		       | (BND_CON (_,c)) => if (eq_label(l,lbl)) 
 						then let val c' = c (* XXX *)
 						     in SOME([l],PHRASE_CON c') 
 						     end
-					    else self r
+					    else loop(lbl,r)
 		       | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
 						 then SOME([l],PHRASE_MOD m) 
 					     else if (is_label_open l)
 						      then 
 							  (case m of 
 							       MOD_STRUCTURE sbnds =>
-								   (case (self (rev sbnds)) of
+								   (case (loop (lbl,rev sbnds)) of
 									SOME(lbls',phrase) => SOME(l::lbls',phrase)
-								      | NONE => self r)
-							     | _ => self r)
-						  else self r))
-		end
+								      | NONE => loop (lbl,r))
+							     | _ => loop(lbl,r))
+						  else loop(lbl,r)))
 	in
 	    (case labs of
 		 [] => error "Sbnds_Lookup got []"
-	       | [lbl] => loop lbl (rev sbnds)
+	       | [lbl] => loop (lbl,rev sbnds)
 	       | (lbl :: lbls) =>
-		     (case (loop lbl (rev sbnds)) of
+		     (case (loop (lbl,rev sbnds)) of
 			 SOME(labs,PHRASE_MOD (MOD_STRUCTURE sbnds)) => 
 			     (case (Sbnds_Lookup ctxt (sbnds,lbls)) of
 				  SOME(labs2,phrase2) => SOME(labs@labs2,phrase2)

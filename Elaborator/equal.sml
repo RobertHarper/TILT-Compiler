@@ -81,7 +81,7 @@ struct
 				    [] => true_exp
 				  | (fst::rest) => foldl folder (help fst) rest)
 		in #1(make_total_lambda(v,paircon,con_bool,
-					make_let([(v1,e1),(v2,e2)],body)))
+					make_let([BND_EXP(v1,e1),BND_EXP(v2,e2)],body)))
 		end
 	  | CON_SUM {carrier,noncarriers,special} =>
 		let 
@@ -137,7 +137,7 @@ struct
 				    tipe = con_bool}
 (*  val body = make_catch(inner_body,con_bool,match_exp,con_unit,false_exp) *)
 		in #1(make_total_lambda(v,paircon,con_bool,
-				  make_let([(v1,e1),(v2,e2)],body)))
+				  make_let([BND_EXP(v1,e1),BND_EXP(v2,e2)],body)))
 		end
 	  | CON_ARRAY c => ETAPRIM(equal_table WordArray,[c])
 (*	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c) *)

@@ -43,10 +43,25 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 			end
 			
     val error = fn s => error "pat.sml" s
-    val debug = ref false
+    val debug = Stats.bool("Pattern_debug")
+    val _ = debug := false
     fun printint i = print (Int.toString i)
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun nada() = ()
+
+    fun compress_expression (exp as (CASE{arms,default,...})) = 
+	let fun do_arms (no_arms,acc,[]) = (no_arms, rev acc)
+	      | do_arms (no_arms,acc,NONE::rest) = do_arms(no_arms,NONE::acc,rest)
+	      | do_arms (no_arms,acc,(SOME e)::rest) = (case compress_expression e of
+							    NONE => do_arms(no_arms,NONE::acc,rest)
+							  | se => do_arms(false,se::acc,rest))
+	    val (no_arms,arms) = do_arms (true,[],arms)
+	in  (case default of
+		 NONE => if no_arms then NONE else SOME exp
+	       | SOME def => if no_arms then compress_expression def else SOME exp)
+	end
+      | compress_expression exp = SOME exp
+
 
     fun supertype (arg_con : con) : con = 
 	let fun exp_handler (e : exp) : exp option = NONE
@@ -83,7 +98,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 
 
     type clause = Ast.pat list
-    type def =  (unit -> (Il.exp * Il.con)) option
+    type def =  (context -> (Il.exp * Il.con)) option
     type delay_exp = sdec list * Ast.exp
     type bound = (Symbol.symbol * var * con) list 
     type arm' = clause * bound * Ast.exp option
@@ -130,12 +145,12 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 	      | folder(BND_CON(v,c),subst) = (BND_CON(v,IlUtil.con_subst_expvar(c,subst)),subst)
 	      | folder(BND_MOD(v,m),subst) = (BND_MOD(v,IlUtil.mod_subst_expvar(m,subst)),subst)
 	    val (bnds,subst) = foldl_acc folder [] bnds
-	    val e = IlUtil.exp_subst_expvar(e,subst)
-	in  (LET (bnds, e),c)
+	    val e = exp_subst_expvar(e,subst)
+	in  (make_let (bnds, e),c)
 	end
 
     fun wrapbnds ([] : bnds, (e : exp, c : con)) = (e,c)
-      | wrapbnds (bnds, (e,c)) = (LET (bnds, e),c)
+      | wrapbnds (bnds, (e,c)) = (make_let (bnds, e),c)
     fun wrapbnd (b, ec) = wrapbnds([b],ec)
 
 
@@ -186,7 +201,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
      Also returned is a list, one for each match-rule supplied, 
      of the variables and their types bound in each pattern.
     -------------------------------------------------------------- *)
- fun compile ({context, typecompile = xty, polyinst, error_region, 
+ fun compile ({context=compile_context, typecompile = xty, polyinst, error_region, 
 		fresh_con, expcompile} : patarg,
 	       compile_args : case_exp list, 
 	       compile_arms : arm' list,
@@ -210,7 +225,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 					    NONE => (bound,expcompile(ctxt,e))
 				          | SOME t => t)
 			    val _ = r := ((one,bound)::(#1(!r)), SOME carried)
-			    val e = OVEREXP(c,va,one)
+			    val e = OVEREXP(c,va,one) 
 			in  (e,c)
 			end))::arms)
 	    	  end
@@ -293,7 +308,8 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
  (* ------------------------------------------------------------------------------
     various cases to handle certain collected pattern types 
     --------------------------------------------------------------------------- *)
-  fun ref_case(arg1,args,
+  fun ref_case(context,
+	       arg1,args,
 	       acc : (Ast.pat * arm) list,
 	       def : def) : (exp * con) = 
     let
@@ -306,12 +322,14 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 	val v = fresh_var()
 	val bnd' = BND_EXP(v,PRIM(deref,[elemcon],[VAR var]))
 	val newargs = (CASE_VAR(v,elemcon))::args
+	val context = add_context_dec(context,DEC_EXP(v,elemcon))
 	val newarms = map (fn (p,(c,b,eopt)) => (p::c,b,eopt)) acc
-	val ec = match(newargs,newarms,def)
+	val ec = match(context,newargs,newarms,def)
     in  wrapbnd(bnd', ec)
     end
 
-  and var_case(arg1,
+  and var_case(context,
+	       arg1,
 	       args,
 	       accs : (Ast.symbol * arm) list,
 	       def : def) : (exp * con) = 
@@ -319,11 +337,12 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 	   val CASE_VAR(var,con) = arg1
 	   fun extender (s, arm) = arm_addbind(s,var,con,arm)
 	   val newarms = map extender accs
-	 in match(args, newarms, def)
+	 in match(context,args, newarms, def)
 	 end
 
 
-  and tuprec_case (arg1,
+  and tuprec_case (context,
+		   arg1,
 		   args,
 		   accs : (((label * Ast.pat) list * bool) * arm) list,
 		   def : def) : (exp * con) = 
@@ -373,13 +392,14 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 		else (error_region();
 		      print "tuple/record pattern used on a non-record argument\n")
 	val newargs = map2 (fn (v,c) => CASE_VAR(v,c)) (rvars,rcons)
+	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c))) context newargs
 	fun extender (pats,(cl,bound,body)) = (pats @ cl, bound, body)
 	val newarms = map extender accs'
-	val ec = match(newargs @ args,newarms,def)
+	val ec = match(context,newargs @ args,newarms,def)
     in wrapbnds(rbnds,ec)
     end
 
-  and exn_case(arg1,args,
+  and exn_case(context,arg1,args,
 	       accs: ((Ast.symbol list * Il.exp * Il.con option * Ast.pat option) * arm) list,
 	       def : def) : (exp * con) = 
       let
@@ -395,11 +415,12 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 			       | _ => con_unit)
 		  val (e,c) =
 		      (case patopt of
-			   NONE => match(args,[arm],def)
+			   NONE => match(context,args,[arm],def)
 			 | SOME argpat =>
 			       let val (cl,bound,body) = arm
 				   val arm' = (argpat::cl,bound,body)
-			       in  match((CASE_VAR (v,con))::args,[arm'],def)
+				   val context = add_context_dec(context,DEC_EXP(v,con))
+			       in  match(context,(CASE_VAR (v,con))::args,[arm'],def)
 			       end)
 		  val _ =  if (check_rescon c)
 			       then ()
@@ -415,17 +436,18 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 	      (case def of
 		   NONE => NONE
 		 | SOME ec_thunk => 
-		       let val (e,c) = ec_thunk()
-		       in  ((if (check_rescon c)
-				 then ()
-			     else (error_region();
-				   print "exn: arm and default type mismatch\n")); SOME e)
+		       let val (e,c) = ec_thunk context
+			   val _ = if (check_rescon c)
+					then ()
+				   else (error_region();
+					 print "exn: arm and default type mismatch\n")
+		       in  compress_expression e 
 		       end)
       in (EXN_CASE{arg=exnarg, arms=arms', default = default', tipe = (!rescon)},!rescon)
       end
 
 
-  and constr_case (arg1,
+  and constr_case (context,arg1,
 		   args,
 		   accs : ((Ast.path * Ast.pat option) * arm) list,
 		   def : def) : (exp * con) = 
@@ -434,7 +456,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 				 mapcount (fn (i,(path_patopt,arm)) =>  
 					   (print "  clause #"; printint i;
 					    pp_path_patopt path_patopt;
-					    print "\nand arm is:"; pp_arm arm; print "\n")) accs))
+					    print "\nand arm is:"; pp_arm arm)) accs))
       val CASE_VAR(casevar, casecon) = arg1
       val casearg = VAR casevar
       val rescon_var = fresh_named_var "rescon_var"
@@ -444,6 +466,28 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 		(sub_con("11",context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
 		sub_con("12",context,c,!rescon))      
+
+      val {instantiated_type = datacon,
+	   instantiated_sumtype = sumtype,
+	   arms = constr_patconopt_list,
+	   expose_exp} = Datatype.instantiate_datatype_signature(context,#1(#1(hd accs)),polyinst)
+
+      val mk_ssumcon = 
+	  (case (IlStatic.con_head_normalize(context,sumtype)) of
+	       CON_SUM{noncarriers,carrier,special} => (fn i => CON_SUM{noncarriers=noncarriers,
+									carrier=carrier,
+									special=SOME i})
+	     | _ => error "sumcon not reducible to SUM_CON")
+      val jopt = 
+	  let val actualtype = 
+	      (case Context_Lookup'(context,casevar) of
+		   SOME(_,PHRASE_CLASS_EXP(_,c)) => c
+		 | _ => error ("casevar " ^ (Name.var2string casevar) ^ " not bound"))
+	  in  (case (IlStatic.con_head_normalize(context,actualtype)) of
+		   CON_SUM{noncarriers,carrier,special} => special
+		 | _ => NONE)
+	  end
+
       fun getarm (datacon,sumcon) (i,{name=cur_constr,arg_type}) : exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
@@ -452,23 +496,22 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 	     | (true,NONE) => SOME(clause,bound,body)
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
 	  val relevants : arm list = List.mapPartial armhelp accs
-(*	val _ = (print "====getarm enter====casecon is: "; Ppil.pp_con casecon; print "\n") *)
 	  val _ = if (sub_con("13",context,casecon,datacon))
 		      then ()
 		  else (error_region();
 			print "datacon is "; Ppil.pp_con datacon; print "\n";
 			print "casecon is "; Ppil.pp_con casecon; print "\n";
 			print "constructor pattern used on an argument of the wrong type\n")
-(*
-	val _ = (print "====getarm past sub_con====casecon is: "; 
-	         Ppil.pp_con casecon; print "\n\nand context = \n";
-		  Ppil.pp_context context; print "\n\n")
-*)
 
-	in (case (relevants : arm list, arg_type) of
+         val context = IlContext.add_context_dec(context,DEC_EXP(casevar,mk_ssumcon i))
+
+	in  if (case jopt of
+		    NONE => false
+		  | SOME j => i <> j) then NONE
+	    else (case (relevants : arm list, arg_type) of
 	      ([],_) => NONE
 	    | (_,NONE) => let 
-			    val (me,mc) = match(args, relevants, def)
+			    val (me,mc) = match(context,args, relevants, def)
 			    val _ = if (check_rescon mc)
 					 then ()
 				     else (error_region();
@@ -479,19 +522,17 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 			  end
 	    | (_,SOME rcon) => let 
 			   val var = fresh_var()
-			   val (me,mc) = match((CASE_VAR (var,rcon))::args, relevants, def)
+			   val context = add_context_dec(context,DEC_EXP(var,rcon))
+			   val (me,mc) = match(context,(CASE_VAR (var,rcon))::args, relevants, def)
 			    val _ = if (check_rescon mc)
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
-			       in SOME(LET([BND_EXP(var,SUM_TAIL(sumcon,VAR rsvar))],me))
+			       in SOME(make_let([BND_EXP(var,SUM_TAIL(sumcon,VAR rsvar))],me))
 		       end)
 	end
 
-      val {instantiated_type = datacon,
-	   instantiated_sumtype = sumtype,
-	   arms = constr_patconopt_list,
-	   expose_exp} = Datatype.instantiate_datatype_signature(context,#1(#1(hd accs)),polyinst)
+
 
       val expopt_list = mapcount (getarm (datacon,sumtype)) constr_patconopt_list
 
@@ -517,17 +558,17 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 		    (true,_) => NONE
 		  | (_,NONE) => NONE
 		  | (_,SOME ec_thunk) => 
-			let val (e,c) = ec_thunk()
-			in  (if (eq_con("2",context,c,(!rescon)))
-				 then ()
-			     else (error_region();
-				   print "result type of constructor patterns mismatch";
-				   print "result type is: ";
-				   pp_con (!rescon);
-				   print "\nfound type is: ";
-				   pp_con c;
-				   print "\n");
-				 SOME e)
+			let val (e,c) = ec_thunk context
+			    val _ = (if (eq_con("2",context,c,(!rescon)))
+					 then ()
+				     else (error_region();
+					   print "result type of constructor patterns mismatch";
+					   print "result type is: ";
+					   pp_con (!rescon);
+					   print "\nfound type is: ";
+					   pp_con c;
+					   print "\n"))
+			in  compress_expression e
 			end),
 		tipe =  (case result_type_var of
 			     NONE => con_deref (!rescon)
@@ -535,22 +576,32 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
     in   (case_exp, con_deref (!rescon))
     end
 
-  and match (args : case_exp list, 
+  and match (context,
+	     args : case_exp list, 
 	     arms : arm list,
 	     def : def) : (Il.exp * Il.con) = 
     (
 
 debugdo 
      (fn () => 
-      (print "match called with "; printint (length args); print " args:\n";
-       mapcount (fn(i,a) => (print "  #"; printint i; print ": "; pp_case_exp a; print "\n")) args;
-       print "\nand with "; printint (length arms); print " arms:\n";
+      (print "\nMATCH called with "; printint (length args); print " args:\n";
+       mapcount (fn(i,a as (CASE_VAR (casevar,_))) => (print "    #"; printint i; print ": "; 
+			     pp_case_exp a; 
+			     let val actualtype = 
+				     (case Context_Lookup'(context,casevar) of
+					  SOME(_,PHRASE_CLASS_EXP(_,c)) => c
+					| _ => error ("!!!casevar " ^ (Name.var2string casevar) 
+						      ^ " not bound"))
+			     in  pp_con  actualtype
+			     end;
+			     print "\n")) args;
+       print "and with "; printint (length arms); print " arms:\n";
        mapcount (fn(i,a) => (print "  #"; printint i; print ": "; pp_arm a; print "\n")) arms;
-       print "      and with def = "; pp_def def; print "\n\n"));
+       print "and with def = "; pp_def def; print "\n\n"));
 
      case (arms,args) of
        ([],_) => (case def of
-		    SOME ec_thunk => ec_thunk()
+		    SOME ec_thunk => ec_thunk context
 		  | NONE => let val c = fresh_con context
 	   val _ = (TextIO.output(TextIO.stdOut,"no ec_thunk and really first c = \n");
 			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
@@ -571,10 +622,6 @@ debugdo
 	   val sdecs = arm2sdecs arm
 	   val context' = add_context_sdecs(context,sdecs)
            val (e,c) = ec_maker(context',clause,bound)
-(*
-	   val _ = (TextIO.output(TextIO.stdOut,"called ec_maker and got c = \n");
-			pp_con c; TextIO.output(TextIO.stdOut,"\n"))
-*)
 	 in (e,c)
 	 end
      | (_,arg1::argrest) => 
@@ -614,12 +661,6 @@ debugdo
 		   | (Ast.ListPat pats) => ((listpat2pat pats)::tlpat, bound, b)
 		   | _ => (hdpat::tlpat,bound,b)
 	   in
-	     val _ = debugdo (fn () => (print "got "; printint (length args); 
-					print " args\n";
-					mapcount (fn (i,a) => (print "arm #"; printint i; 
-							       print " has ";
-							       printint (length(#1 a));
-							       print " pats in clause\n")) arms))
 	     val arms = map do_arm arms
 	     val (arm1,armrest) = (hd arms, tl arms)
 	     val (clauses, bound, bodies) = (map #1 arms, map #2 arms, map #3 arms)
@@ -654,7 +695,7 @@ debugdo
 		 val (accs,arms) = find_maxseq' patpred arms
 		 val def = (case arms of 
 				[] => def
-			      | _ => SOME(fn () => match(args,arms,def)))
+			      | _ => SOME(fn context => match(context,args,arms,def)))
 		   in (accs,def)
 		   end
 	       end
@@ -677,7 +718,7 @@ debugdo
 			 | exnpred (Ast.AppPat{constr=Ast.VarPat p,argument}) = general(p,SOME argument)
 			 | exnpred _ = NONE
 		       val (accs,def) = find_maxseq exnpred arms
-		   in  exn_case(arg1,argrest,accs,def)
+		   in  exn_case(context,arg1,argrest,accs,def)
 		   end
 	       fun var_dispatch() = 
 		 let 
@@ -686,7 +727,7 @@ debugdo
 		     | varpred (Ast.VarPat _) = NONE
 		     | varpred _ = NONE
 		   val (accs,def) = find_maxseq varpred arms
-		 in  var_case(arg1,argrest,accs,def)
+		 in  var_case(context,arg1,argrest,accs,def)
 		 end
 	       fun layer_dispatch() = 
 		 let 
@@ -696,7 +737,7 @@ debugdo
 		   val (accs,def) = find_maxseq layerpred arms
 		   fun layer2var ((s,expPat),(cl,bound,body)) = (s, (expPat :: cl,bound,body))
 		   val accs = map layer2var accs
-		 in  var_case(arg1,arg1 :: argrest,accs,def)
+		 in  var_case(context,arg1,arg1 :: argrest,accs,def)
 		 end
 
 	       fun ref_dispatch() = 
@@ -705,7 +746,7 @@ debugdo
 		     if (Symbol.eq(s,Symbol.varSymbol "ref")) then SOME argument else NONE
 		     | refpred _ = NONE
 		   val (accs,def) = find_maxseq refpred arms
-		 in  ref_case(arg1,argrest,accs,def)
+		 in  ref_case(context,arg1,argrest,accs,def)
 		 end
 
 
@@ -720,7 +761,7 @@ debugdo
 		   fun constr_dispatch() = 
 		     let
 		       val (accs,def) = find_maxseq constrpred arms
-		     in  constr_case(arg1,argrest,accs,def)
+		     in  constr_case(context,arg1,argrest,accs,def)
 		     end
 		 in (case (hd(#1 (hd arms))) of
 			   Ast.AppPat{constr=Ast.VarPat[s],...} => 
@@ -740,32 +781,33 @@ debugdo
 		     | tuprecpred (Ast.RecordPat {def,flexibility}) = SOME(map rec_case def, flexibility)
 		     | tuprecpred _ = NONE
 		   val (accs,def) = find_maxseq tuprecpred arms
-		 in tuprec_case(arg1,argrest,accs,def)
+		 in tuprec_case(context,arg1,argrest,accs,def)
 		 end
 
 
+	       datatype match = MATCH | FAIL | UNKNOWN
 
-	       fun constant_dispatch(eqcon,eq,eqpat) : (exp * con) = 
+	       fun constant_dispatch(eqcon,eq,matchpat) : (exp * con) = 
 		   let
-		     fun conszip a b = map (op ::) (zip a b)
+		     fun loop (yes,maybe,maybe_no) [] = (rev yes, rev maybe, rev maybe_no)
+		       | loop _ (([],bounds,body)::rest) = error "no pattern"
+		       | loop (yes,maybe,maybe_no) ((arm as (pat::patrest,bounds,body))::rest) = 
+			 loop (case (matchpat pat) of
+				   MATCH => ((patrest,bounds,body)::yes,maybe,maybe_no)
+				 | FAIL => (yes,maybe,arm::maybe_no)
+				 | UNKNOWN => (yes,arm::maybe,arm::maybe_no)) rest
+		     val (yes,maybe,maybe_no) = loop ([],[],[]) arms
+
 		     val CASE_VAR(var,con) = arg1
 		     val _ = if (eq_con("4",context,eqcon,con))
 				 then ()
 			     else (error_region();
 				   print "base type mismatches argument type\n")
-		     val (e2,c2) = match(args, zip3 (conszip headpat_rest tlpat_rest) 
-					 boundrest bodyrest, def)
-		     fun thunk() = 
-			 let val temp = zip3 (conszip headpat_rest tlpat_rest) boundrest bodyrest
-			     fun filter (p::_,_,_) = eqpat p
-			       | filter _ = true
-			 in  match(args, List.filter filter temp, def)
-			 end
-		     val (e1,c1) = match(argrest, [(tlpat1, bound1, body1)], SOME thunk)
-(*
-val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.stdOut,"\n");
-		print "\nand c2 = "; pp_con c2; TextIO.output(TextIO.stdOut,"\n"); print "\n")
-*)
+
+		     fun thunk context = match(context, args, maybe, def)
+		     val (e1,c1) = match(context, argrest, yes, SOME thunk)
+		     val (e2,c2) = match(context, args, maybe_no, def)
+			 
 		     val _ = if (eq_con("5",context,c1,c2))
 				 then ()
 			     else (error_region();
@@ -778,7 +820,7 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 		   end
 
 
-	       in
+	       val ec = 
 		 (case headpat1 of
 		    (Ast.FlatAppPat _)    => error "no FlatAppPat should be here"
 		  | (Ast.MarkPat (p,_))   => error "no MarkPat should be here"
@@ -787,21 +829,22 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 			let val const = uint (W32,lit)
 			    fun equaler v = ILPRIM (eq_uint W32,[],
 						    [VAR v,SCON const])
-			    fun eqpat (Ast.WordPat lit') = TilWord64.equal(lit, lit')
-			      | eqpat _ = true
+			    fun eqpat (Ast.WordPat lit') = if TilWord64.equal(lit, lit') then MATCH else FAIL
+			      | eqpat _ = UNKNOWN
 			in constant_dispatch(CON_UINT W32, equaler, eqpat)
 			end
 		  | (Ast.IntPat lit)  => 
 			let val const = int (W32,lit)
 			    fun equaler v = PRIM (eq_int W32,[],
 						  [VAR v, SCON const])
-			    fun eqpat (Ast.IntPat lit') = TilWord64.equal(lit, lit')
-			      | eqpat _ = true
+			    fun eqpat (Ast.IntPat lit') = if TilWord64.equal(lit, lit')
+							      then MATCH else FAIL
+			      | eqpat _ = UNKNOWN
 			in constant_dispatch(CON_INT W32, equaler, eqpat)
 			end
 		  | (Ast.StringPat ss) => 
-			let fun eqpat (Ast.StringPat ss') = ss = ss'
-			      | eqpat _ = true
+			let fun eqpat (Ast.StringPat ss') = if ss = ss' then MATCH else FAIL
+			      | eqpat _ = UNKNOWN
 			    fun equaler v = 
 			    let val len = size ss
 				val lenbool = ILPRIM(eq_uint W32,[],
@@ -831,7 +874,7 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 								  false_exp, con_bool))
 				    end
 				val content_bool = 
-				    LET([BND_EXP(v',PRIM(uintv2uintv (W8,W32),[],[VAR v]))],
+				    make_let([BND_EXP(v',PRIM(uintv2uintv (W8,W32),[],[VAR v]))],
 					loop 0 (explode ss))
 			    in  make_ifthenelse(lenbool,content_bool,false_exp,con_bool)
 			    end
@@ -841,8 +884,8 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 		      let fun equaler v = ILPRIM (eq_uint W8,[],
 						  [VAR v,SCON(uint(W8,TilWord64.fromInt
 								   (ord (CharStr2char cs))))])
-			  fun eqpat (Ast.CharPat cs') = cs = cs'
-			    | eqpat _ = true
+			  fun eqpat (Ast.CharPat cs') = if cs = cs' then MATCH else FAIL
+			    | eqpat _ = UNKNOWN
 		      in  constant_dispatch(CON_UINT W8,equaler,eqpat)
 		      end
 		  | Ast.RecordPat _ => tuple_record_dispatch()
@@ -869,11 +912,17 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 		  | (Ast.VectorPat _) => raise UNIMP
 		  | (Ast.OrPat _) => (Error.error_region();
 				      print "Or-patterns not implemented\n";
-				      error "Sorry, Or-patterns not implemented"))
+	       				      error "Sorry, Or-patterns not implemented"))
+
+	       val _ = debugdo 
+		   (fn () => 
+		    (print "\nMATCH returning "; pp_exp (#1 ec); print "\n"))
+  	     in ec
 	     end)
 
-	val final_ec = match(compile_args,compile_arms,compile_default)
+	val final_ec = match(compile_context,compile_args,compile_arms,compile_default)
 	val (final_e,final_c) = wrapper final_ec
+
     in (final_e,final_c)
     end
 
@@ -920,9 +969,13 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 	val boundsyms = get_bound context bindpat
 
 	val args = [CASE_VAR (argvar,argc)] 
+	val context = add_context_dec(context,DEC_EXP(argvar,argc))
+	val patarg = {context = context, typecompile = #typecompile patarg,
+		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
+		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
 	val arms = [([bindpat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
 	val res_con = fresh_con context
-	val def = SOME (fn () => (Il.RAISE(res_con, bindexn_exp),res_con))
+	val def = SOME (fn _ => (Il.RAISE(res_con, bindexn_exp),res_con))
 	val (binde,bindc) = compile(patarg,args,arms,def,NONE)
 (*
 	val _ = (print "bindcompile returned from compile.\nGot e = ";
@@ -988,6 +1041,10 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
       : Il.exp * Il.con = 
       let 
 	val args = [CASE_VAR (argvar,argc)]
+	val context = add_context_dec(context,DEC_EXP(argvar,argc))
+	val patarg = {context = context, typecompile = #typecompile patarg,
+		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
+		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
 	val arms : arm' list = map (fn (pat,body) => ([pat],[], SOME body)) cases
 	val res_con = fresh_con context
 (*	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con) *)
@@ -998,14 +1055,14 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 				 then SOME result_type_var
 			     else NONE)
 	val e = if (!do_result_type) 
-		    then LET([BND_CON(result_type_var,c)],e)
+		    then make_let([BND_CON(result_type_var,c)],e)
 		else e
       in (e,c)
       end
 
 
     (* ---- funCompile creates a curried function ----------------------- *)
-    fun funCompile {patarg = patarg as {context, error_region, ...},
+    fun funCompile {patarg = patarg as {context, error_region, ...} : patarg,
 		    rules = cases : (clause * Ast.exp) list,
 		    reraise}
       : {arglist : (Il.var * Il.con) list, body : Il.exp * Il.con} =
@@ -1035,6 +1092,10 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 	   ---- adding context entries to reflect these arguments ----- *)
 	val arms : arm' list = map (fn (cl,body) => (cl,bound, SOME body)) cases
 	val args = map2 (fn (v,c) => CASE_VAR(v,c)) (argvars,argcons)
+	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c))) context args
+	val patarg = {context = context, typecompile = #typecompile patarg,
+		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
+		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
 	val result_type_var  = fresh_named_var "result_type"
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)
@@ -1043,7 +1104,7 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 					  else (error_region();
 						print "default of pattern not an exn type\n")
 				 val res_con = fresh_con context
-			     in SOME(fn()=>(RAISE (if (!do_result_type)
+			     in SOME(fn _ =>(RAISE (if (!do_result_type)
 						       then CON_VAR result_type_var
 						   else res_con,
 						   VAR v),res_con))
@@ -1054,7 +1115,7 @@ val _ = (print "eq_con 5 calling with c1 = "; pp_con c1; TextIO.output(TextIO.st
 				 then SOME result_type_var
 			     else NONE)
 	val e = if (!do_result_type)
-		    then LET([BND_CON(result_type_var,c)],e)
+		    then make_let([BND_CON(result_type_var,c)],e)
 		else e
 		    
 	val _ = debugdo (fn () => (print "\n\n***************\n";

@@ -46,7 +46,7 @@ signature ILUTIL =
     (* derived forms *)
     val make_lambda : var * con * con * exp -> (exp * con)
     val make_total_lambda : var * con * con * exp -> (exp * con) (* no function calls in body *)
-    val make_let  : ((var * exp) list * exp) -> exp
+    val make_let  : (bnd list * exp) -> exp
     val make_catch : exp * con * exp * con * exp -> exp
     val make_ifthenelse : exp * exp * exp * con -> exp
     val make_seq : (exp * con) list -> exp * con
