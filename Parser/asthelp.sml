@@ -376,7 +376,15 @@ structure AstHelp : ASTHELP =
        | Ast.VectorPat pats => String "VectorPatUNIMPED"
        | Ast.MarkPat (p,r) => pp_pat p
        | Ast.OrPat _ => String "OrPatUNIMPED")
-	 
+
+    fun pp_strexp strexp = 
+      (case strexp of
+	 Ast.VarStr p => pp_path p
+       | Ast.StructStr dec => String "StructStr"
+       | Ast.AppStr dec => String "AppStr"
+       | Ast.LetStr dec => String "LetStr"
+       | Ast.MarkStr (se,r) => HOVbox[String "MarkStr ", pp_strexp se])
+
     fun pp_exp exp = 
       (case exp of
 	 Ast.VarExp p => pp_path p
@@ -409,6 +417,7 @@ structure AstHelp : ASTHELP =
     val pp_ty'     = help' pp_ty 
     val pp_pat'    = help' pp_pat
     val pp_exp'    = help' pp_exp
+    val pp_strexp'    = help' pp_strexp
 
     val pp_tyvar = help pp_tyvar
     val pp_sym   = help pp_sym
@@ -416,6 +425,7 @@ structure AstHelp : ASTHELP =
     val pp_ty    = help pp_ty 
     val pp_pat   = help pp_pat
     val pp_exp   = help pp_exp
+    val pp_strexp   = help pp_strexp
 
     fun eq_path([],[]) = true
       | eq_path(_,[]) = false

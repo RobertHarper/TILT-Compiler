@@ -9,6 +9,7 @@ signature ASTHELP =
     val pp_ty'    : Ast.ty -> Formatter.format
     val pp_pat'   : Ast.pat -> Formatter.format
     val pp_exp'   : Ast.exp -> Formatter.format
+    val pp_strexp'   : Ast.strexp -> Formatter.format
 
     (* These print to std_out *)
     val pp_tyvar : Ast.tyvar -> unit
@@ -17,6 +18,7 @@ signature ASTHELP =
     val pp_ty    : Ast.ty -> unit
     val pp_pat   : Ast.pat -> unit
     val pp_exp   : Ast.exp -> unit
+    val pp_strexp: Ast.strexp -> unit
 
 
     (* AST stripping routines to remove Mark information *)

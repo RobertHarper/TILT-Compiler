@@ -9,9 +9,10 @@ struct
   in
       fun parse_one s =
 	  case parse s () of 
-	      FrontEnd.PARSE dec => (TVClose.closeDec(dec);
-				     dec)
+	      FrontEnd.PARSE dec => dec
 	    | result => raise Parse result
+
+      fun close_dec dec = (TVClose.closeDec dec; dec)
   end
 end;
 (*

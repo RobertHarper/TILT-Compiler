@@ -8,8 +8,10 @@ signature NAME =
 
     (* predicates *)
     val is_label_open     : label -> bool
+(*
     val is_label_barred   : label -> bool
     val is_label_internal : label -> bool
+*)
     val eq_label : (label * label) -> bool
     val eq_var   : (var * var) -> bool
     val eq_tag   : (tag * tag) -> bool
