@@ -147,6 +147,8 @@ sig
 							  (* abstract type *)
 	  | ExceptionDec of eb list			(* exception *)
 	  | StrDec of strb list				(* structure *)
+          | StrRecDec of {name:symbol, def:strexp, constraint:sigexp} 
+                                                        (* structure rec *)
 	  | SigDec of sigb list				(* signature *)
 	  | LocalDec of dec * dec			(* local dec *)
 	  | SeqDec of dec list				(* sequence of dec *)

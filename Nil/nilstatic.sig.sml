@@ -34,7 +34,7 @@ signature NILSTATIC =
 
 
     val kind_valid : context * Nil.kind -> Nil.kind
-    (* con_valid (Gamma,kind) => ()
+    (* kind_valid (Gamma,kind) => ()
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of kind are disjoint.
       *      Every binding site in Gamma, and kind is unique,

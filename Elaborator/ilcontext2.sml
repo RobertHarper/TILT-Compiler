@@ -87,6 +87,10 @@ struct
 		       in  SIGNAT_FUNCTOR(v,s1,s2',APPLICATIVE)
 		       end
 		    | SIGNAT_FUNCTOR _ => s
+		    | SIGNAT_SWITCH {use_private,sig_private,sig_public} => 
+                       if !use_private 
+			   then selfify_sig m sig_private
+		       else selfify_sig m sig_public
               )
 
 	      and selfify_sdecs (m : mod) (sdecs : sdecs) : sdecs = 
@@ -119,6 +123,22 @@ struct
 
     fun transform (ctxt : context, m : mod, s : signat) : unit -> signat =
 	Util.memoize (fn () => selfify true (ctxt,m,s))
+
+    val sig_changed = ref false
+
+    fun update_context () = sig_changed := true
+
+    fun transform_switchable (ctxt : context, m : mod, s : signat) : unit -> signat =
+	let 
+	    val r = ref s
+	    val _ = sig_changed := true
+	    fun reselfify () = (r := selfify true (ctxt,m,s);
+				sig_changed := false;
+				!r)
+	in
+	    fn () => if !sig_changed then reselfify() else !r
+	end
+
 
     (* ----------- context extenders ----------------------------  *)
     val empty_context = CONTEXT{varMap = VarMap.empty,
@@ -300,14 +320,14 @@ struct
 		Extend context with l > v:pc.  Handles starred labels
 		and the memo table.
 	*)
-	fun add (ctxt : context, l : label, v : var,
-		 pc : phrase_class) : context =
+	fun add_transform (transformer) (ctxt : context, l : label, v : var,
+					 pc : phrase_class) : context =
 	    let val ctxt = add' (ctxt,l,v,pc)
 	    in  (case pc
 	    	   of PHRASE_CLASS_MOD (m,poly,s,_) =>
 			let val CONTEXT {varMap, ordering, labelMap,
 					 fixityMap, overloadMap} = ctxt
-			    val f = transform (ctxt,m,s)
+			    val f = transformer (ctxt,m,s)
 			    val pc = PHRASE_CLASS_MOD(m,poly,s,f)
 			    val varMap = VarMap.insert (varMap,v,(l,pc))
 			    val (varMap,labelMap,overloadMap) =
@@ -323,7 +343,10 @@ struct
 			end
 		   | _ => ctxt)
 	    end
+
     end
+
+    val add = add_transform transform
 
     (*
 	Add a top-level label that maps to the given bound variable.
@@ -387,6 +410,10 @@ struct
     fun add_context_mod' (ctxt,v,s) = add_context_mod (ctxt,anon_label(),v,s)
     fun add_context_dec (ctxt,dec) = add_context_sdec (ctxt,dec2sdec dec)
     fun add_context_decs (ctxt,decs) = add_context_sdecs (ctxt,map dec2sdec decs)
+
+    fun add_context_mod_switchable(ctxt,v,s) =
+	add_transform transform_switchable
+	  (ctxt,anon_label(),v,PHRASE_CLASS_MOD (MOD_VAR v, false, s, noTransform))
 
     fun add_context_sig (ctxt,l,v,s) = add (ctxt,l,v,PHRASE_CLASS_SIG (v,s))
     fun add_context_sig' (ctxt,v,s) = add_context_sig (ctxt,anon_label(),v,s)

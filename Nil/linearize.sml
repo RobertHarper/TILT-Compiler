@@ -687,12 +687,23 @@ struct
                 end
 	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here:
 				   not sequential bindings *)
-		let val state = Sequence.foldl (fn ((v,_),s) => #1(add_var(s,v))) state vc_seq
-		    val vc_seq' = Sequence.map (fn (v,c) => (derived_var v, c)) vc_seq
-		    val vc_seq' = Sequence.map (fn (v,c) => (v, lcon_lift' state c)) vc_seq'
-		    val vc_seq'' = Sequence.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c))
-			         (vc_seq,vc_seq')
-		in  (state,[],Mu_c(flag,vc_seq''))
+		let 
+		    (* First, bind the variables in the state, possibly changing them. *)
+		    val (vc_seq,inner_state) = 
+		       Sequence.foldl_acc 
+		             (fn ((v,c),s) => let val (s,v) = add_var(s,v) in ((v,c),s) end)
+			     state vc_seq
+	            (* Second, lcon the constructors in the new state, which contains all the variables. *)
+		    val vc_seq = Sequence.map (fn (v,c) => (v,lcon_lift' inner_state c)) vc_seq
+                    (* Return the old state, though. *)
+		in  (state,[],Mu_c(flag,vc_seq))
+		end
+	  | Nurec_c (v,k,c) => 
+		let
+		    val ((v,k),inner_state) = lvk state (v,k)
+		    val c = lcon_lift' inner_state c
+		in
+		    (state,[],Nurec_c(v,k,c))
 		end
 	  | ExternArrow_c (clist,c) =>
 		let

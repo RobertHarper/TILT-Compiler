@@ -997,13 +997,25 @@ struct
     and c_find_fv' (state : state, frees : frees) con : frees =
 	     (case con of
 		 Prim_c (pc,clist) => foldl (fn (c,f)=> (c_find_fv (state,f) c)) frees clist
-	       | Mu_c (_,vcset) =>
+               (* The body of a Mu need not be closure-converted in the Rtl backend because 
+                  ToRtl uses a shallow representation for Mu's and does not translate their bodies. *)
+	       | Mu_c (_,vcset) => frees
+(*
 		     let val vclist = Sequence.toList vcset
 			 (* we need to alpha-vary since reductions may lead to duplication
 			    of bound variables despite A-normal linearization *)
-			 val (vclist) = NilUtil.alpha_mu (fn v => is_boundcvar(state,v)) (vclist)
+                         (* Really?  I don't think this line is necessary, none of the other
+                            cases alpha-varies. -Derek *)
+(* 			 val vclist = NilUtil.alpha_mu (fn v => is_boundcvar(state,v)) (vclist) *)
 			 val state' = add_boundcvars(state,map #1 vclist)
-		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (Sequence.toList vcset)
+			 val frees' = foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees vclist
+		     in  frees'
+		     end
+*)
+	       | Nurec_c (v,k,c) => 
+		     let val (f,s) = vklist_find_fv ([(v,k)],(frees,state))
+			 val f = c_find_fv (s,f) c
+		     in  f
 		     end
 	       (* the types of some primitives like integer equality are Code arrow *)
                (*  (So?  -joev, 8/2002)  *)
@@ -1665,6 +1677,8 @@ struct
 		end
 	  | Mu_c (ir,vc_set) => Mu_c(ir,Sequence.fromList
 					(map (fn (v,c) => (v,c_rewrite c)) (Sequence.toList vc_set)))
+	  | Nurec_c (v,k,c) => 
+		Nurec_c(v, k_rewrite state k, c_rewrite c)
 	  | Var_c v =>
 	       let val fid = current_fid state
                    val {free_cvars,...} = get_frees fid

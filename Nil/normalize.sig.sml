@@ -38,7 +38,9 @@ signature NORMALIZE =
      * POST: result is the normal form version of the argumentwith
      * respect to the context
      *)
+(*
     datatype progress = PROGRESS | HNF | IRREDUCIBLE
+*)
     val kind_normalize' : (context * (con_subst)) -> kind -> kind
     val con_normalize' : (context * (con_subst)) -> con -> con
 
@@ -49,11 +51,14 @@ signature NORMALIZE =
 							 * in reverse order: last found to first.  If initial arg was
 							 * a path, then it will be the last element of the list
 							 *)
-    val reduce_hnf'     : context * con * NilSubst.con_subst -> NilSubst.con_subst * con
+(*
     val reduce_once     : context * con -> con
     val reduce          : context * con -> con
+    val reduce_hnf'     : context * con * NilSubst.con_subst -> NilSubst.con_subst * con
     val reduce_beta_hnf : con -> (bool * con)    (*Beta short form only *)
     val con_reduce      : context * con_subst -> con -> progress * con_subst * con
+*)
+
     datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
     val reduce_until : context * (con -> 'a option) * con -> 'a ReduceResult
     val expandMuType : context * con -> con

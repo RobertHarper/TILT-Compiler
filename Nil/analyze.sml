@@ -168,6 +168,7 @@ struct
     (case con of
        Prim_c(pc,cs) => doCons cs
      | Mu_c(b,vcs) => doCons (map #2 (Sequence.toList vcs))
+     | Nurec_c(v,k,c) => doCon c
      | AllArrow_c{tFormals,eFormals,body_type,...} =>
 	 (doVklist tFormals) + (doCons eFormals) + (doCon body_type)
      | ExternArrow_c(cs,c) => doCons (c::cs)

@@ -172,6 +172,7 @@ struct
 	 of Var_c _ => con
 	  | Prim_c (pc,cons) => Prim_c(pc,map rcon cons)
 	  | Mu_c (flag,vc_seq) => Mu_c(flag,Listops.map_second rcon vc_seq)
+	  | Nurec_c (v,k,c) => Nurec_c(v,k,rcon c)
 	  | ExternArrow_c (clist,c) => ExternArrow_c(map rcon clist,rcon c)
 	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
 	   AllArrow_c{openness=openness,effect=effect,tFormals=tFormals,eFormals=map rcon eFormals,fFormals=fFormals,body_type=rcon body_type}

@@ -48,12 +48,21 @@ sig
     val add_context_entry   : context * context_entry                   -> context
     val add_context_entries : context * entries                         -> context
 
+    val add_context_mod_switchable : context * var * signat             -> context
+
     (* ----------- context access; see also IlStatic ----------------------------  *)
 
     val list_entries : context -> entries
 
     val Context_Fixity : context -> Fixity.fixity Name.LabelMap.map
 
+    (* 
+       Context_Lookup_Var_Raw returns the "natural" unselfified signature of the variable.
+       Context_Lookup_Var returns the selfified, but unpeeled, signature of the variable.
+       These functions are used in IlStatic, but not so much in other places.
+       For functions that return results in peeled form, which is usually what you want,
+       see the Context_Lookup functions defined in IlStatic.
+     *)
     val Context_Lookup_Var_Raw  : context * var   -> (label * phrase_class) option
     val Context_Lookup_Var      : context * var   -> (label * phrase_class) option
     val Context_Lookup_Label    : context * label -> path option
@@ -70,5 +79,13 @@ sig
     (* The boolean parameter should be supplied as true iff we want the resulting
        signature to be non-dependent, which is usually the case. *)
     val selfify : bool -> context * mod * signat -> signat
+
+    (* Used only by recursive module elaboration algorithm.
+       update_context() ensures that the next time a variable with a
+       "switchable" signature is looked up in the context, we return the
+       (selfified form of the) latest version of the signature.
+          -Derek
+     *)
+    val update_context : unit -> unit
 
 end

@@ -563,6 +563,12 @@ struct
 	  | (Mu_c _ , _) =>  GREATER
 	  | (_ , Mu_c _) =>  LESS
 
+	  | (Nurec_c(v1,k1,c1), Nurec_c(v2,k2,c2)) => 
+            cmp_orders[cmp_vk((v1,k1),(v2,k2)),
+		       cmp_con(c1,c2)]
+	  | (Nurec_c _, _) => GREATER
+	  | (_, Nurec_c _) => LESS
+
           | ( AllArrow_c {openness = op1, effect = eff1,
 			  tFormals = vklist1, eFormals = clist1, fFormals = f1,
 			  body_type = con1},

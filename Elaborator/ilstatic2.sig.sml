@@ -78,6 +78,7 @@ signature ILSTATIC =
 
     (* ----- Useful structure-related helper functions ------- *)
     (* ----- These look inside starred structures --------- *)
+    (* ----- Their results are in peeled form ------------ *)
     val Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
     val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
 

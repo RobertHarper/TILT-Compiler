@@ -238,6 +238,8 @@ structure IlUtil :> ILUTIL =
 	val TiltPrelude = Name.unit_label "TiltPrelude"
 	val match = Name.symbol_label(Symbol.varSymbol "Match")
 	val bind = Name.symbol_label(Symbol.varSymbol "Bind")
+	val fail = Name.symbol_label(Symbol.varSymbol "Fail") 
+        val badrecursion = Name.symbol_label (Symbol.varSymbol "BadRecursion")
 	val mk = Name.internal_label "mk"
     in
 	val lab_bool = Name.symbol_label (Symbol.tycSymbol "bool")
@@ -256,6 +258,8 @@ structure IlUtil :> ILUTIL =
 	  lookup_expcon [TiltVectorEq,TiltVectorEq',word8vector_eq]
 	val bind_exn : context -> exp = lookup_exn [TiltPrelude,bind,mk]
 	val match_exn : context -> exp = lookup_exn [TiltPrelude,match,mk]
+        val fail_exn : context -> exp = lookup_exn [TiltPrelude,fail,mk]
+        val badrecursion_exn : context -> exp = lookup_exn [TiltPrelude,badrecursion,mk]
     end
 
 
@@ -401,13 +405,19 @@ structure IlUtil :> ILUTIL =
 
     local val visible_var = fresh_var() in
 
-      fun make_existential_mod (unseen_var,m1,m2) : mod =
-	MOD_STRUCTURE[SBND(unseen_lab,BND_MOD(unseen_var,false,m1)),
-		      SBND(visible_lab,BND_MOD(visible_var,false,m2))]
+      fun make_existential_sbnds (unseen_var,m1,m2) : sbnds =
+	  [SBND(unseen_lab,BND_MOD(unseen_var,false,m1)),
+	   SBND(visible_lab,BND_MOD(visible_var,false,m2))]
 
-      fun make_existential_sig (unseen_var,s1,s2) : signat =
-        SIGNAT_STRUCTURE[SDEC(unseen_lab,DEC_MOD(unseen_var,false,s1)),
-			 SDEC(visible_lab,DEC_MOD(visible_var,false,s2))]
+      fun make_existential_sdecs (unseen_var,s1,s2) : sdecs =
+	  [SDEC(unseen_lab,DEC_MOD(unseen_var,false,s1)),
+	   SDEC(visible_lab,DEC_MOD(visible_var,false,s2))]
+
+      fun make_existential_mod args : mod =
+	MOD_STRUCTURE (make_existential_sbnds args)
+
+      fun make_existential_sig args : signat =
+        SIGNAT_STRUCTURE (make_existential_sdecs args)
 
     end
 
@@ -614,7 +624,13 @@ structure IlUtil :> ILUTIL =
 	 | MOD_APP (m1,m2) => MOD_APP (f_mod state m1, f_mod state m2)
 	 | MOD_PROJECT (m,l) => MOD_PROJECT(f_mod state m,l)
 	 | MOD_LET (v,m1,m2) => MOD_LET (v, f_mod state m1, f_mod (add_modvar(state,v)) m2)
-	 | MOD_SEAL (m,s) => MOD_SEAL (f_mod state m, f_signat state s)))
+	 | MOD_SEAL (m,s) => MOD_SEAL (f_mod state m, f_signat state s)
+	 | MOD_CANONICAL s => MOD_CANONICAL (f_signat state s)
+         | MOD_REC (v,s,m) => let val state' = add_modvar(state,v)
+	                      in MOD_REC(v, f_signat state s, f_mod state' m)
+			      end
+        ))
+
 
       and f_signat (state as STATE({bound_sigvar,...},
 				   {sig_handler,...})) (s : signat) : signat =
@@ -626,7 +642,12 @@ structure IlUtil :> ILUTIL =
 	   | SIGNAT_RDS (v,sdecs) => SIGNAT_RDS(v, f_sdecs (add_modvar(state,v)) sdecs)
 	   | SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (f_sdecs state sdecs)
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1,
-							  f_signat (add_modvar(state,v)) s2, a)))
+							  f_signat (add_modvar(state,v)) s2, a)
+	   | SIGNAT_SWITCH {use_private, sig_private, sig_public} => 
+		 SIGNAT_SWITCH {use_private = use_private,
+				sig_private = f_signat state sig_private,
+				sig_public = f_signat state sig_public}
+        ))
 
       and f_rbnd state (l,e) = (l, f_exp state e)
       and f_fbnd state (FBND(vname,varg,carg,cres,e)) : fbnd =
@@ -783,6 +804,21 @@ structure IlUtil :> ILUTIL =
 	   fun decresult_handle handlers = f_decresult (all_handlers handlers)
 	   fun sdecs_handle handlers = f_sdecs (all_handlers handlers)
 	   fun entries_handle handlers = f_entries (all_handlers handlers)
+       end
+
+       local
+	   fun sig_handler b (SIGNAT_SWITCH{use_private,...}) =
+	       (use_private := b; NONE)
+	     | sig_handler b _ = NONE
+
+	   fun set_switches_handler b = (default_exp_handler,
+					 default_con_handler,
+					 default_mod_handler,
+					 default_sdec_handler,
+					 sig_handler b)
+       in
+	   fun sig_set_switches b = sig_handle (set_switches_handler b)
+	   fun sdecs_set_switches b = sdecs_handle (set_switches_handler b)
        end
 
 

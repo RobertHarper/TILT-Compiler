@@ -635,6 +635,10 @@ strdec	: STRUCTURE strb	(StrDec strb)
         | FUNCTOR fctb          (StrDec fctb)
         | FUNCTOR strb          (StrDec strb)
 	| ldec			(markdec(ldec,ldecleft,ldecright))
+        | STRUCTURE REC ident COLON sign EQUALOP str
+                                (markdec(StrRecDec{name=strSymbol ident, def=str,
+						   constraint=sign},
+					 STRUCTUREleft, strright))
 
 sdec	: STRUCTURE strb	(StrDec strb)
 	| SIGNATURE sigb	(SigDec sigb)
@@ -644,6 +648,10 @@ sdec	: STRUCTURE strb	(StrDec strb)
 						     sdecs1left,sdecs1right),
 				    markdec(sdecs2,sdecs2left,sdecs2right)))
 	| ldec			(markdec(ldec,ldecleft,ldecright))
+        | STRUCTURE REC ident COLON sign EQUALOP str
+                                (markdec(StrRecDec{name=strSymbol ident, def=str,
+						   constraint=sign},
+					 STRUCTUREleft, strright))
 
 strb	: ident sigconstraint_op EQUALOP str
 	   		([MarkStrb(Strb{name = strSymbol ident,def = str,

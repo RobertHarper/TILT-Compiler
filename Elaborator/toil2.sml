@@ -261,6 +261,9 @@ structure Toil :> TOIL =
 	 in (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
 	 end
 
+     fun sbnd_ctxt_list2sdecs (sbnd_ctxt_list : decresult) : sdecs =
+	 List.mapPartial (fn (_,CONTEXT_SDEC sdec) => SOME sdec | _ => NONE) sbnd_ctxt_list
+
      fun add_context_fixity_entries (context : context,
 				     sbnd_ctxt_list : decresult) : context =
          let val entries = List.mapPartial (fn (_, x as CONTEXT_FIXITY _) => SOME x | _ => NONE)
@@ -278,62 +281,6 @@ structure Toil :> TOIL =
 	 in  (sbnds,ctxt)
 	 end
 
-     (* -- translate and package a list of objects using an object translator
-           inputs  : a translator that takes objects to a list of
-	               (optional) bindings and context-entries
-		     the bool in the binding pair indicates whether
-		       it should be inlined
-                     a context
-                     a list of objects
-           outputs : a list of (optional) bindings and context-entries
-     *)
-     fun packagedecs (xobj : context * 'a -> decresult * bool)
-         (context, sequential) (objs : 'a list) : decresult * bool =
-         let
-             fun loop context [] = ([],true)
-               | loop context [obj] = xobj(context,obj)
-               | loop context (obj::rest) =
-                 let
-                     val (sbnd_ctxt_list,pure) = xobj(context,obj)
-                     val context' = if sequential
-					then #2(add_context_sbnd_ctxts(context,sbnd_ctxt_list))
-				    else context
-                     val (sbnd_ctxt_restlist,restpure) = loop context' rest
-                 in (sbnd_ctxt_list @ sbnd_ctxt_restlist, pure andalso restpure)
-                 end
-             val (sbnd_ctxt_list,pure) = loop context objs
-             fun maxmap_folder((NONE,_),map) = map
-               | maxmap_folder((SOME(SBND(l,_)),_),map) =
-                 (case Name.LabelMap.find(map,l) of
-                     SOME r => (r := 1 + (!r);
-                                map)
-                   | NONE => Name.LabelMap.insert(map,l,ref 1))
-             val maxmap = foldl maxmap_folder Name.LabelMap.empty sbnd_ctxt_list
-             fun uniquify [] = []
-               | uniquify (sbnd_ctxt::rest) =
-                 (case sbnd_ctxt of
-                      (NONE,ce) => (NONE,ce) :: (uniquify rest)
-                    | (SOME(sbnd as (SBND(l,bnd))),
-                       ce as (CONTEXT_SDEC(SDEC(_,dec)))) =>
-                          (case (Name.LabelMap.find(maxmap,l)) of
-                              NONE => elab_error "maxmap must have entry at this point"
-                            | SOME r =>
-                                  (r := (!r) - 1;
-                                   if (!r = 0)
-                                       then sbnd_ctxt :: (uniquify rest)
-                                   else if (!r < 0)
-                                            then elab_error "maxmap count inconsistency"
-                                        else (* rename case *)
-                                            let val s = Name.label2name l
-						val l' = Name.fresh_internal_label s
-                                            in (SOME (SBND(l',bnd)),
-                                                CONTEXT_SDEC(SDEC(l',dec)))
-                                                :: (uniquify rest)
-                                            end))
-                    | (SOME _, _) => elab_error "packagedec: got sbnd without CONTEXT_SDEC")
-         in (uniquify sbnd_ctxt_list,pure)
-         end
-
      fun contains_generative_signature (context, s : signat) : bool =
 	 let 
 	     exception GenerativeSignatureSeen
@@ -345,7 +292,6 @@ structure Toil :> TOIL =
 	     (sig_handle handler (deep_reduce_signat context s); false)
 	     handle GenerativeSignatureSeen => true
 	 end
-
 
 
     (* ---------------------------------------------------------
@@ -590,7 +536,11 @@ structure Toil :> TOIL =
 			     | NONE => con)
 		     end
 		 else con
-	 in  (case ovld_option of
+
+             val is_valuable = ref true
+
+	     val (e,c,va) = 
+	     (case ovld_option of
 		  SOME (OVLD (_, NONE)) => (error_region();
 					    print "no default type for overloaded identifier: ";
 					    AstHelp.pp_path path; print "\n";
@@ -598,10 +548,12 @@ structure Toil :> TOIL =
 		| SOME (OVLD (ce, SOME n)) => make_overload (context, ce, n)
 		| NONE => (* identifier is long or is not overloaded *)
 		      (case (Context_Lookup_Labels(context,labs)) of
-			   SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,coerce c,Exp_IsValuable(context,e))
-			 | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,coerce c,true)
-			 | SOME(_,PHRASE_CLASS_EXT (v,_,c)) => (VAR v,coerce c,true)
-			 | SOME(_,PHRASE_CLASS_MOD (m, _, s, _)) =>
+                           SOME(PATH(v,_),pc) => (is_valuable := not(is_nonvalue_var v);
+                              case pc of
+			          PHRASE_CLASS_EXP (_,c,SOME e,true) => (e,coerce c,Exp_IsValuable(context,e))
+				| PHRASE_CLASS_EXP (e,c,_,_) => (e,coerce c,true)
+				| PHRASE_CLASS_EXT (v,_,c) => (VAR v,coerce c,true)
+				| PHRASE_CLASS_MOD (m, _, s, _) =>
 			       (case s of
 				    SIGNAT_FUNCTOR _ =>
 					let val (e,c) = polyfun_inst (context,m,s)
@@ -627,14 +579,16 @@ structure Toil :> TOIL =
 					      | [_,sdec] => dosdec sdec
 					      | _ => unbound())
 					end)
-			 | SOME (_, PHRASE_CLASS_CON _) => unbound()
-			 | SOME (_, PHRASE_CLASS_SIG _) => unbound()
+				| PHRASE_CLASS_CON _ => unbound()
+				| PHRASE_CLASS_SIG _ => unbound())
 			 | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
 				       then eqcase true
 				   else if (length path = 1 andalso
 					    (Symbol.eq(hd path,Symbol.varSymbol "<>")))
 					    then eqcase false
 					else unbound()))
+	 in
+	     (e,c,va andalso !is_valuable)
 	 end
 
      and xexp (context : context, exp : Ast.exp) : (exp * con * bool) = (* returns valuablilty *)
@@ -1097,10 +1051,38 @@ structure Toil :> TOIL =
 	 in  sbnds_entries
 	 end
 
+     (* 
+        remap_hidden_labels: Takes a list of sdecs and fixes for the possibility of labels being
+        used for more than one sdec by relabeling all but the last instance of such a label.
+        Actually, the relabeling does not happen here--remap_hidden_labels returns a remapping
+        function that when applied in order to the sdecs will return the new labels for each
+        sdec.  See the use of this function in the SeqDec cases of the xdec functions. 
+      *)
+     and remap_hidden_labels (sdecs : sdecs) : label -> label =
+	 let
+	     fun maxmap_folder(SDEC(l,_),map) =
+		 (case Name.LabelMap.find(map,l) of
+		      SOME r => (r := 1 + (!r);
+				 map)
+		    | NONE => Name.LabelMap.insert(map,l,ref 1))
+	     val maxmap = foldl maxmap_folder Name.LabelMap.empty sdecs
+	     fun remapper lbl =
+		 (case Name.LabelMap.find(maxmap,lbl) of
+		      NONE => elab_error "hidden_label_remapper misused"
+		    | SOME r => 
+			  (r := !r - 1;
+			   if !r = 0 then lbl else
+			     if !r < 0 then elab_error "hidden_label_remapper misused" else
+			       Name.fresh_internal_label (Name.label2name lbl)))
+	 in
+	     remapper
+	 end
+
      and xdec (args : context * Ast.dec) : decresult =
          #1(xdec' args)
 
-     (* xdec' returns a bool as well, which is true iff the declaration is "pure" in the sense of "transparent" *)
+     (* xdec' returns a bool as well, which is true iff the declaration is phase-separable
+        (but not necessarily transparent). *)
      and xdec' (context : context, d : Ast.dec) : decresult * bool =
        (case d of
           (* --- The tricky thing about this value declarations is figuring
@@ -1385,9 +1367,31 @@ structure Toil :> TOIL =
 		val con = con_normalize(context,con)
 	    in  ([(NONE, CONTEXT_EXTERN(lab,var,lab,con))],true)
 	    end
-	| Ast.SeqDec decs => packagedecs xdec' (context, true) decs
+	| Ast.SeqDec decs => 
+	    let
+		fun loop context [] = ([],true)
+		  | loop context [dec] = xdec'(context,dec)
+		  | loop context (dec::rest) =
+		    let
+			val (sbnd_ctxt_list,pure) = xdec'(context,dec)
+			val context' = #2(add_context_sbnd_ctxts(context,sbnd_ctxt_list))
+			val (sbnd_ctxt_restlist,restpure) = loop context' rest
+		    in (sbnd_ctxt_list @ sbnd_ctxt_restlist, pure andalso restpure)
+		    end
+		val (sbnd_ctxt_list,pure) = loop context decs
+		val sdecs = sbnd_ctxt_list2sdecs sbnd_ctxt_list
+		val label_remapper = remap_hidden_labels sdecs
+		fun uniquify (NONE,ce) = (NONE,ce)
+		  | uniquify (SOME(SBND(lbl,bnd)),CONTEXT_SDEC(SDEC(_,dec))) =
+		    let val lbl' = label_remapper lbl
+		    in (SOME(SBND(lbl',bnd)),CONTEXT_SDEC(SDEC(lbl',dec)))
+		    end
+		  | uniquify _ = elab_error "SeqDec case: got sbnd without CONTEXT_SDEC"
+	    in 
+		(map uniquify sbnd_ctxt_list, pure)
+	    end
 	| Ast.OpenDec pathlist =>
-	      let fun help (i,path) =
+	      let fun help path =
 		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
 		       SOME(_,PHRASE_CLASS_MOD(m,b,s,_)) =>
 			   let
@@ -1402,7 +1406,7 @@ structure Toil :> TOIL =
 		     | _ => (error_region(); print "unbound structure: ";
 			     AstHelp.pp_path path; print "\n";
 			     NONE))
-	      in (List.mapPartial (fn x => x) (mapcount help pathlist), true)
+	      in (List.mapPartial help pathlist, true)
 	      end
 	| Ast.TypeDec tblist => (xtybind(context,tblist),true)
 	| Ast.DatatypeDec {datatycs,withtycs=[]} =>
@@ -1420,7 +1424,93 @@ structure Toil :> TOIL =
 	      in  (xdec (context,dec), true)
 	      end
 	| Ast.StrDec strblist => xstrbinds(context,strblist)
+	| Ast.StrRecDec {name,def,constraint} =>
+          (* structure rec <name> : <constraint> = <def> *)
+	      let
+                  (* Elaborate the static part of the recursive module body
+                     into an "abstraction" signature. *)
+		  val sig_public = xsigexp (context,constraint)
+		  val fst_sig_public = Fst_Sig (context,sig_public)
+		  val var_rec_static = fresh_named_var "var_rec_static"
+		  val context' = add_context_mod(context,open_unseen_lab,var_rec_static,fst_sig_public)
+		  val absig_actual = xstrexp_static (context',def,Ast.NoSig)
+		  val fst_absig_actual = Fst_Sig (context,absig_actual)
 
+                  (* Check that the abstraction signature does not refer to the recursive
+		     module variable except inside datatype declarations. *)
+		  val _ = if Name.VarSet.member(sig_free(fst_absig_actual),var_rec_static)
+			      then (error_region();
+				    reject "Ill-formed recursive module: contains static-on-static dependency")
+			  else ()
+
+                  (* Check that the abstraction signature actually matches the static part
+                     of the constraint signature and create a leaky form of sig_public. *)
+		  val var_actual_static = fresh_named_var "var_actual_static"
+		  val context' = add_context_mod'(context,var_actual_static,fst_absig_actual)
+		  val (path_actual_static,sig_actual_static) = 
+		      (case Context_Lookup_Path (context',PATH(var_actual_static,[])) of
+			   SOME (p,PHRASE_CLASS_MOD(_,_,s,_)) => (p,s)
+			 | _ => elab_error "StrRecDec case is broken!")
+		  val (_,fst_tsig_private) = 
+		      Signature.xcoerce_functor (context',path_actual_static,
+						 sig_actual_static,fst_sig_public)
+
+                  (* Make an rds version of the abstraction signature that closes up the
+                     references to the recursive module variable inside datatype declarations. *)
+		  val absig_actual = sig_subst(absig_actual,
+					subst_modvar(var_rec_static,
+						     MOD_PROJECT(MOD_VAR var_rec_static, visible_lab)))
+		  val absig_static = SIGNAT_RDS(var_rec_static,
+						make_existential_sdecs(var_actual_static,
+								       absig_actual,
+								       fst_tsig_private))
+                  (* Bind var_static with the closed-up abstraction signature.
+                     It is necessary to call add_context_mod_switchable in order to ensure that
+                     the SIGNAT_SWITCH's in the abstraction signature get re-selfified properly. *)
+		  val var_static = fresh_named_var "var_static"
+		  val context' = add_context_mod_switchable(context,var_static,absig_static)
+
+                  (* Bind var_rec with the leaky form of sig_public.
+		     var_rec will be the recursive module variable when we elaborate the whole module. *)
+		  val var_rec = fresh_named_nonvalue_var "var_rec"
+		  val tsig_rec = selfify false 
+		                      (context',MOD_PROJECT(MOD_VAR var_static,visible_lab),sig_public)
+		  val context' = add_context_mod(context',open_unseen_lab,var_rec,tsig_rec)
+
+                  (* Elaborate the whole body of the recursive module. *)
+		  val state = (MOD_PROJECT(MOD_VAR var_static,unseen_lab), absig_actual)
+		  val (mod_actual,tsig_actual) = xstrexp_recmod (context',state,def,Ast.NoSig)
+
+                  (* Match the result against tsig_rec, the leaky form of sig_public.
+		     We could just use sig_public here, it doesn't matter. *)
+		  val mod_coerced = Signature.xcoerce_seal(context',mod_actual,tsig_actual,tsig_rec)
+
+                  (* Form the private version of the abstraction signature. *)
+		  val absig_private = deep_reduce_signat context (sig_set_switches true absig_static)
+
+                  (* Form the result module.
+		     The first binding is a temporary hack to ensure that the BadRecursion exception
+                       is imported.  It might not be if the Prelude is not otherwise needed.
+		     The second binding defines var_static to be the canonical implementation of
+                       (the private version of) the abstraction signature.  The phase-splitter knows
+		       how to generate canonical implementations of abstraction signatures.
+		     Finally, we have the recursive module sealed with sig_public.
+                   *)
+		  val mod_result = MOD_LET (fresh_var(), MOD_STRUCTURE[SBND(fresh_internal_label "",
+									BND_EXP(fresh_var(), 
+										badrecursion_exn context))],
+		                   MOD_LET (var_static, MOD_CANONICAL absig_private,
+			             MOD_SEAL (MOD_REC (var_rec, tsig_rec, mod_coerced),
+					       sig_public)))
+
+		  val l = symbol_label name
+		  val v = fresh_named_var "strrecbindvar"
+		  val top_sbnd = SBND (l,BND_MOD(v,false,mod_result))
+		  val top_sdec = SDEC (l,DEC_MOD(v,false,sig_public))
+		  val res = [(SOME top_sbnd, CONTEXT_SDEC top_sdec)]
+	      in 
+		  (res,true)
+	      end
 	| Ast.ExceptionDec [] => parse_error "ExceptionDec []"
 	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] =>
 	      let val _ = push_region r
@@ -1489,52 +1579,16 @@ structure Toil :> TOIL =
 		 ([],true))
 	| Ast.ExceptionDec eblist => (xdec (context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist)), true)
 
-        (* Rule 244 *)
 	| Ast.LocalDec (dec1,dec2) =>
 	      let
 		  val (sbnd_ctxt_list1,pure1) = xdec' (context,dec1)
 		  val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list1)
 		  val (sbnd_ctxt_list2,pure2) = xdec' (context',dec2)
-		  val (_,context'') = add_context_sbnd_ctxts(context',sbnd_ctxt_list2)
-		  fun genSubstFromSbnd (subst, self, SBND(l,BND_MOD(v,_,m))) =
-		      let val self2 = join_path_labels(self, [l])
-			  val subst = (case (mod2path m) of
-					   SOME _ =>subst_add_modpath(subst, self2, m)
-					 | _ => subst)
-		      in  genSubstFromMod (subst, self2, m)
-		      end
-		    | genSubstFromSbnd (subst, _, _) = subst
-		  and genSubstFromMod (subst, self, MOD_STRUCTURE sbnds) =
-		      let fun folder (sbnd, subst) = genSubstFromSbnd(subst, self, sbnd)
-		      in  foldl folder subst sbnds
-		      end
-		    | genSubstFromMod (subst, _, _) = subst
-		  fun genSubstFromSbndTop (SBND(l,BND_MOD(v,_,m)),subst) = genSubstFromMod(subst, PATH(v, []), m)
-		    | genSubstFromSbndTop (_, subst) = subst
-		  val subst = foldl genSubstFromSbndTop empty_subst (List.mapPartial #1 sbnd_ctxt_list1)
-		  fun getVarFromDec (DEC_EXP(v,_,_,_)) = v
-		    | getVarFromDec (DEC_CON(v,_,_,_)) = v
-		    | getVarFromDec (DEC_MOD(v,_,_)) = v
-		  fun getDecFromSbndCtxt (_, CONTEXT_SDEC(SDEC(_,dec))) = SOME dec
-		    | getDecFromSbndCtxt _ = NONE
-		  val localVars = map getVarFromDec (List.mapPartial getDecFromSbndCtxt sbnd_ctxt_list1)
-		  val localVars = Name.VarSet.addList(Name.VarSet.empty,localVars)
-		  fun reduceSbndCtxt (sbndOpt, CONTEXT_SDEC(SDEC(l,dec))) =
-		      (sbndOpt,CONTEXT_SDEC(SDEC(l,
-		        (case dec of
-			     DEC_EXP(v,c,eOpt,b) => DEC_EXP(v, con_subst(c,subst), eOpt, b)
-			   | DEC_CON(_,_,NONE,_) => dec
-			   | DEC_CON(v,k,SOME c,b) => DEC_CON(v,k,SOME(con_subst(c,subst)), b)
-			   | DEC_MOD(v,b,s) => DEC_MOD(v,b,sig_subst(s,subst))))))
-		    | reduceSbndCtxt sbndCtxtEntry = sbndCtxtEntry
-
-		  val sbnd_ctxt_list1 = map reduceSbndCtxt sbnd_ctxt_list1
-		  val sbnd_ctxt_list2 = map reduceSbndCtxt sbnd_ctxt_list2
-
 		  fun renameSbndCtxt (SOME (SBND(l,bnd)),CONTEXT_SDEC(SDEC(_,dec))) =
-		      let val v = getVarFromDec dec
+		      let 
 			  val lbl = internal_label ("local_" ^ (Name.label2name' l))
-		      in  (SOME (SBND(lbl,bnd)), CONTEXT_SDEC(SDEC(lbl,dec)))
+		      in  
+			  (SOME (SBND(lbl,bnd)), CONTEXT_SDEC(SDEC(lbl,dec)))
 		      end
 		    | renameSbndCtxt arg = arg
 
@@ -1595,6 +1649,998 @@ structure Toil :> TOIL =
 
 
     (* ---------------------------------------------------------
+      ------------------ STRUCTURE EXPRESSION -----------------
+      --------------------------------------------------------- *)
+
+     and xstrexp_seal (context : context, strb : Ast.strexp, sigexp : Ast.sigexp) : mod * signat * bool =
+	 let val sig_target = xsigexp(context,sigexp)
+	     val (module,sig_actual,pure) = xstrexp(context,strb,Ast.NoSig)
+	 in  if (Sig_IsSub(context, sig_actual, sig_target))
+		 then (MOD_SEAL(module,sig_target), sig_target, pure)
+	     else let val mod_result = Signature.xcoerce_seal(context,module,sig_actual,sig_target)
+		  in  (mod_result, sig_target, pure)
+		  end
+	 end
+
+     and xstrexp (context : context, strb : Ast.strexp, Ast.StrongOpaque sigexp) : (mod * signat * bool) =
+	 let val (m,s,pure) = xstrexp_seal(context,strb,sigexp)
+	 in  (m,s,false)
+	 end
+
+       | xstrexp (context, strb, Ast.WeakOpaque sigexp) =
+	 xstrexp_seal(context,strb,sigexp)
+
+       | xstrexp (context, strb, Ast.Transparent sigexp) =
+	 let val (module,signat,pure) = xstrexp(context,strb,Ast.NoSig)
+	     val sig' = xsigexp(context,sigexp)
+	     val (mod_result,sig_result) =
+		 Signature.xcoerce_transparent (context,module,signat,sig')
+	 in  (mod_result, sig_result, pure)
+	 end
+
+       | xstrexp (context, strb, Ast.NoSig) =
+	(case strb of
+	     Ast.VarStr path =>
+		 (case Context_Lookup_Labels(context,map symbol_label path) of
+		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s,true)
+		    | _ => (error_region();
+			    print "unbound module: ";
+			    AstHelp.pp_path path;
+			    print "\n";
+			    dummy_strexp_result))
+	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
+	   | Ast.AppStr (funpath,strexpbools) =>
+             (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
+		  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR(var1,sig1,sig2,arrow),_)) =>
+		   let
+                     exception EscapeFromAppStr
+
+                     (* Elaborates a single functor application. *)
+		     fun dofunctorapp (context,f,var1,sig1,sig2,arrow,strexp) : mod * signat * bool =
+		       let
+			  val (argmod,argsig,argpure) = xstrexp(context,strexp,Ast.NoSig)
+			  val argpathOpt = mod2path argmod
+			  val pure = (arrow = APPLICATIVE) andalso argpure
+		       in
+			  if isSome(argpathOpt) andalso Sig_IsSub(context,argsig,sig1)
+			      then (MOD_APP(f,argmod),
+				    sig_subst(sig2,subst_modvar(var1,argmod)),
+				    pure)
+			  else
+			      let val var_coerced = fresh_named_var "functorArgCoerced"
+				  val (mod_coerced,sig_coerced) =
+				      (case argpathOpt of
+					   SOME argpath => 
+					       Signature.xcoerce_functor(context,argpath,argsig,sig1)
+					 | NONE => 
+					       Signature.xcoerce_transparent(context,argmod,argsig,sig1))
+				  val path_coerced = 
+				      case Context_Lookup_Path(add_context_mod'(context,var_coerced,sig_coerced),
+							       PATH(var_coerced,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
+					| _ => elab_error "AppStr case"
+				  val mod_result = MOD_APP(f,path_coerced)
+				  val sig_result = sig_subst(sig2,subst_modvar(var1,path_coerced))
+			      in
+				  (make_existential_mod(var_coerced,mod_coerced,mod_result),
+				   make_existential_sig(var_coerced,sig_coerced,sig_result),
+				   pure)
+			      end
+		       end
+
+                     (* Elaborates curried functor application F(arg1)...(argn) by first elaborating
+                        F(arg1)...(argn-1) to a module M, then returning
+                        [hidden = M, visible* = hidden(argn)], except that hidden must be peeled before applying to argn.
+                        The argument strexps is assumed to be in reverse order (i.e. [argn,...,arg1]).
+                      *)
+		     fun docurriedapps (strexps) : mod * signat * bool = (
+		       case strexps of
+                           [strexp] => dofunctorapp(context,f,var1,sig1,sig2,arrow,strexp)
+			 | (strexp::strexps) => 
+                           let val (mod_curried,sig_curried,pure) = docurriedapps strexps
+			       val var_curried = fresh_named_var("curriedFunctorApplication")
+			       val context' = add_context_mod'(context,var_curried,sig_curried)
+			       val (f,(var1,sig1,sig2,arrow)) = 
+				     (case Context_Lookup_Path(context',PATH(var_curried,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR fsig,_)) => (f,fsig)
+					| _ => (error_region();
+						print "cannot apply a non-functor\n";
+						raise EscapeFromAppStr))
+			       val (mod_result,sig_result,pure') = dofunctorapp(context',f,var1,sig1,sig2,arrow,strexp)
+			   in (make_existential_mod(var_curried,mod_curried,mod_result),
+			       make_existential_sig(var_curried,sig_curried,sig_result),
+			       pure andalso pure')
+			   end
+                     )
+
+		   in
+		       docurriedapps(rev(map #1 strexpbools))
+		       handle EscapeFromAppStr => dummy_strexp_result
+		   end
+
+		| SOME _ => (error_region();
+			     print "cannot apply a non-functor\n";
+			     dummy_strexp_result)
+		| NONE => (error_region();
+			   print "functor identifier not bound: ";
+			   AstHelp.pp_path funpath;
+			   print "\n";
+			   dummy_strexp_result))
+	   | Ast.LetStr (dec,strexp) => 
+		 let 
+		     val var1 = fresh_named_var "letbound"
+		     val (sbnd_ctxt_list,pure1) = xdec' (context,dec)
+		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_ctxt_list
+		     val context = add_context_mod(context,open_unseen_lab,var1,sig1)
+		     val context = add_context_fixity_entries(context,sbnd_ctxt_list)
+		     val (mod2,sig2,pure2) = xstrexp(context,strexp,Ast.NoSig)
+		     val final_mod = make_existential_mod(var1,mod1,mod2)
+		     val final_sig = make_existential_sig(var1,sig1,sig2)
+		     val pure = pure1 andalso pure2
+		 in 
+		     (final_mod, final_sig, pure)
+		 end
+	   | Ast.BaseStr dec =>
+		 let
+		     val (sbnd_ctxt_list,pure) = xdec' (context,dec)
+		     val sbnds = (List.mapPartial #1 sbnd_ctxt_list) @ [ident_sbnd]
+		     val sdecs = (sbnd_ctxt_list2sdecs sbnd_ctxt_list) @ [ident_sdec]
+		 in 
+		     (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs, pure)
+		 end
+	   | Ast.ConstrainedStr (strexp,constraint) => xstrexp(context,strexp,constraint)
+	   | Ast.MarkStr (strexp,r) => let val _ = push_region r
+					   val res = xstrexp(context,strexp,Ast.NoSig)
+					   val _ = pop_region()
+				       in res
+				       end
+	   | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor has no parameters"
+           | (Ast.BaseFct {params,body,constraint}) =>
+		let
+                    fun doit ((argnameopt,sigexp),context) =
+		        let val arglabel = (case argnameopt of
+						NONE => functor_arg_lab
+					      | SOME s => symbol_label s)
+			    val argvar = fresh_named_var "functor_arg"
+			    val signat = xsigexp(context,sigexp)
+			    val context' = add_context_mod(context,arglabel,argvar,signat)
+			in  ((argvar,signat),context')
+			end
+		    val (args,context') = foldl_acc doit context params
+		    val (m',s',pure) = xstrexp(context',body,constraint)
+		    fun tomodsig [(v,s)] = 
+			let val arrow = if not pure orelse contains_generative_signature(context',s)
+					    then GENERATIVE
+					else APPLICATIVE
+			in (MOD_FUNCTOR(arrow,v,s,m',s'),SIGNAT_FUNCTOR(v,s,s',arrow))
+			end
+		      | tomodsig ((v,s)::args) =
+			let val (fmod,fsig) = tomodsig args
+			    val arrow = if contains_generative_signature(context',s)
+					    then GENERATIVE
+					else APPLICATIVE
+			in  (MOD_FUNCTOR(arrow,v,s,fmod,fsig),
+			     SIGNAT_FUNCTOR(v,s,fsig,arrow))
+			end
+		    val (fmod,fsig) = tomodsig args
+		in
+                    (fmod,fsig,pure)
+		end
+      )
+
+
+    (* ---------------------------------------------------------
+      ------------------ STRUCTURE BINDINGS --------------------
+      --------------------------------------------------------- *)
+     and xstrbinds (context : context, strbs : Ast.strb list)
+	 : decresult * bool =
+       let val strbs = map strb_strip strbs
+	   val allpure = ref true
+	   fun help (n,(strexp,constraint)) =
+	       let val v = fresh_named_var "strbindvar"
+		   val l = symbol_label n
+		   val (m,s,pure) = resolve_overloads (fn () => xstrexp(context,strexp,constraint))
+		   val _ = allpure := (pure andalso !allpure)
+	       in (SOME(SBND(l,BND_MOD(v,false,m))),
+		   CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
+	       end
+       in (map help strbs, !allpure)
+       end
+
+     (* The "static" versions of xdec, xstrexp, etc. return an "abstraction" of
+        a module's static part (for use in the elaboration of recursive modules).
+        Essentially, the sigs/sdecs these functions return are intended to reflect
+        the abstraction structure of the module:
+          * For datatypes, we return the datatype's interface.
+          * For ordinary typedefs, we return transparent type specs.
+          * At uses of sealing, we return a SIGNAT_SWITCH which offers two views
+            into the inside of the module, a public opaque view and a private transparent view.
+            The recursive module elaboration uses these switching signatures
+            to allow the signature of the recursive module variable to change
+            when elaborating different parts of the recursive module body.
+      *)
+     and xdec_static (context : context, d : Ast.dec) : sdecs =
+       (case d of
+	  Ast.SeqDec decs =>
+	    let
+		fun folder (dec,context) =
+		    let
+			val sdecs = xdec_static(context,dec)
+			val context = add_context_sdecs(context,sdecs)
+		    in 
+			(sdecs,context)
+		    end
+		val sdecs = flatten(#1(foldl_acc folder context decs))
+		val label_remapper = remap_hidden_labels sdecs
+		fun uniquify (SDEC(lbl,dec)) = SDEC(label_remapper lbl, dec)
+	    in 
+		map uniquify sdecs
+	    end
+	| Ast.OpenDec pathlist =>
+	      let fun help path =
+		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
+		       SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) =>
+			   let
+			       val str = foldl (fn (sym,acc) => acc ^ (Symbol.name sym))
+				            "openlbl" path
+                               val l = to_open(internal_label str)
+			       val v = fresh_named_var "openvar"
+			   in  
+			       SOME(SDEC(l,DEC_MOD(v,false,Fst_Sig(context,s))))
+			   end
+		     | _ => (error_region(); print "unbound structure: ";
+			     AstHelp.pp_path path; print "\n";
+			     NONE))
+	      in List.mapPartial help pathlist
+	      end
+	| Ast.TypeDec tblist => 
+	      sbnd_ctxt_list2sdecs(xtybind(context,tblist))
+	| Ast.DatatypeDec {datatycs,withtycs=[]} => 
+	      (case datatycs of
+		   [db] =>
+		       let val (tyc,tyv,rhs) = AstHelp.db_strip db
+		       in  (case rhs of
+				Ast.Repl path => Datatype.compile_static(context,datatycs)
+			      | _ => map #2 (xdatatype(context,datatycs)))
+		       end
+		 | _ => map #2 (xdatatype(context,datatycs)))
+	| Ast.DatatypeDec {datatycs,withtycs} =>
+	      let val (dt,wt) = (case InfixParse.parse_datbind(datatycs,withtycs) of
+				     SOME result => result
+				   | NONE => (error_region();
+					      print "cannot parse datbind\n";
+					      error "cannot parse datbind"))
+		  val dec = Ast.SeqDec[Ast.DatatypeDec{datatycs=dt,withtycs=[]},
+				       Ast.TypeDec wt]
+	      in  xdec_static(context,dec)
+	      end
+	| Ast.StrDec strblist => xstrbinds_static(context,strblist)
+	| Ast.StrRecDec {name,def,constraint} =>
+	      let
+		  val fst_sig_public = xsigexp_static (context,constraint)
+		  val var_rec_static = fresh_named_var "var_rec_static"
+		  val context' = add_context_mod(context,open_unseen_lab,var_rec_static,fst_sig_public)
+		  val absig_actual = xstrexp_static (context',def,Ast.NoSig)
+
+		  val fst_absig_actual = Fst_Sig (context,absig_actual)
+		  val _ = if Name.VarSet.member(sig_free(fst_absig_actual),var_rec_static)
+			      then (error_region();
+				    reject "Ill-formed recursive module: contains static-on-static dependency")
+			  else ()
+		  val var_actual_static = fresh_named_var "var_actual_static"
+		  val context' = add_context_mod'(context,var_actual_static,fst_absig_actual)
+		  val (path_actual_static,sig_actual_static) = 
+		      (case Context_Lookup_Path (context',PATH(var_actual_static,[])) of
+			   SOME (p,PHRASE_CLASS_MOD(_,_,s,_)) => (p,s)
+			 | _ => elab_error "StrRecDec case is broken!")
+		  val (_,fst_tsig_private) = 
+		      Signature.xcoerce_functor (context',path_actual_static,
+						 sig_actual_static,fst_sig_public)
+		  val absig_actual = sig_subst(absig_actual,
+					subst_modvar(var_rec_static,
+						     MOD_PROJECT(MOD_VAR var_rec_static, visible_lab)))
+		  val absig_coerced = SIGNAT_SWITCH {use_private = ref false,
+						     sig_private = fst_tsig_private,
+						     sig_public = fst_sig_public}
+		  val absig_static = SIGNAT_RDS(var_rec_static,
+						make_existential_sdecs(var_actual_static,
+								       absig_actual,
+								       absig_coerced))
+		  val l = symbol_label name
+		  val v = fresh_named_var "strrecbindvar"
+		  val top_sdec = SDEC (l,DEC_MOD(v,false,absig_static))
+	      in 
+		  [top_sdec]
+	      end
+	| Ast.LocalDec (dec1,dec2) =>
+	      let
+		  val sdecs1 = xdec_static (context,dec1)
+		  val context = add_context_sdecs(context,sdecs1)
+		  val sdecs2 = xdec_static (context,dec2)
+		  fun renameSdec (SDEC(l,dec)) =
+		      SDEC(internal_label ("local_" ^ (Name.label2name' l)), dec)
+		  val sdecs1 = map renameSdec sdecs1
+	      in  
+		  sdecs1 @ sdecs2
+	      end
+	| Ast.MarkDec (dec,region) => 
+	      let 
+		  val _ = push_region region
+		  val res = xdec_static (context,dec)
+		  val _ = pop_region()
+	      in 
+		  res
+	      end
+        | _ => []
+     )
+
+     and xstrexp_seal_static (context : context, strb : Ast.strexp, sigexp : Ast.sigexp) : signat =
+	 let
+	     val sig_target = xsigexp_static (context,sigexp)
+	     val sig_actual = xstrexp_static (context,strb,Ast.NoSig)
+	 in
+	     if Sig_IsSub(context, sig_actual, sig_target)
+		 then SIGNAT_SWITCH{use_private = ref false,
+				    sig_private = sig_actual,
+				    sig_public = sig_target}
+	     else
+	      let
+		  val (_,sig_coerced) = Signature.xcoerce_transparent
+		                         (context, MOD_STRUCTURE [], sig_actual, sig_target)
+	      in
+		  case is_existential_sig sig_coerced of
+		      SOME (var_actual,_,sig_target_leaky) =>
+			  make_existential_sig(var_actual,sig_actual,
+			      SIGNAT_SWITCH{use_private = ref false,
+					    sig_private = sig_target_leaky,
+					    sig_public = sig_target})
+                    (* sig returned from xcoerce_transparent must be an existential
+		       if sig_actual is not a subsignature of sig_target *)
+		    | NONE => elab_error "error in xstrexp_seal_static"
+	      end
+	 end
+
+     and xstrexp_static (context : context, strb : Ast.strexp, Ast.StrongOpaque sigexp) : signat =
+	 (error_region();
+	  print "Strong sealing not allowed inside recursive module definition\n";
+	  xstrexp_seal_static(context,strb,sigexp))
+
+       | xstrexp_static (context, strb, Ast.WeakOpaque sigexp) =
+	 xstrexp_seal_static(context,strb,sigexp)
+
+       | xstrexp_static (context, strb, Ast.Transparent sigexp) =
+	 let 
+	     val sig_target = xsigexp_static (context,sigexp)
+	     val sig_actual = xstrexp_static (context,strb,Ast.NoSig)
+	     val sig_result =
+		 if Sig_IsSub(context, sig_actual, sig_target) then sig_actual
+		 else #2(Signature.xcoerce_transparent 
+		          (context,MOD_STRUCTURE[],sig_actual,sig_target))
+	 in
+	     sig_result
+	 end
+
+       | xstrexp_static (context, strb, Ast.NoSig) =
+	(case strb of
+	     Ast.VarStr path =>
+		 (case Context_Lookup_Labels(context,map symbol_label path) of
+		      SOME (_,PHRASE_CLASS_MOD(_,_,s,_)) => Fst_Sig(context,s)
+		    | _ => (error_region();
+			    print "unbound module: ";
+			    AstHelp.pp_path path;
+			    print "\n";
+			    SIGNAT_STRUCTURE[]))
+
+	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
+
+	   | Ast.AppStr (funpath,strexpbools) =>
+             (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
+		  SOME(_,PHRASE_CLASS_MOD(_,_,SIGNAT_FUNCTOR(var1,sig1,sig2,arrow),_)) =>
+		   let
+                     exception EscapeFromAppStr
+
+		     val sig1 = Fst_Sig(context,sig1)
+                     (* ok to do Fst_Sig in outer context, since Fst_Sig only uses context to
+                        lookup signature variables *)
+		     val sig2 = Fst_Sig(context,sig2)
+
+		     fun check_applicative arrow = 
+			 arrow = APPLICATIVE orelse
+                              (error_region();
+			       print "Cannot apply generative functor inside recursive module definition\n";
+			       raise EscapeFromAppStr)
+
+                     val _ = check_applicative arrow
+
+                     (* Elaborates a single functor application. *)
+		     fun dofunctorapp (context,var1,sig1,sig2,arrow,strexp) : signat =
+		       let
+			   val (argsig,argpathOpt) = 
+			       (case strexp of 
+				    Ast.VarStr _ =>
+				      let val (m,s,_) = xstrexp(context,strexp,Ast.NoSig)
+				      in (Fst_Sig(context,s), mod2path m)
+				      end
+				  | _ => (xstrexp_static(context,strexp,Ast.NoSig), NONE))
+
+			   val _ = check_applicative arrow
+			   val var_coerced = fresh_named_var "functorArgCoerced"
+			   val (_,sig_coerced) =
+			       case argpathOpt of
+				   SOME argpath => 
+				       Signature.xcoerce_functor(context,argpath,argsig,sig1)
+				 | NONE => 
+				       Signature.xcoerce_transparent(context,MOD_STRUCTURE[],argsig,sig1)
+			   val path_coerced = 
+			       case Context_Lookup_Path(add_context_mod'(context,var_coerced,sig_coerced),
+							PATH(var_coerced,[])) of
+				   SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
+				 | _ => elab_error "AppStr case of xstrexp_static"
+			   val sig_result = sig_subst(sig2,subst_modvar(var1,path_coerced))
+		       in
+			   make_existential_sig(var_coerced,sig_coerced,sig_result)
+		       end
+
+                     (* Elaborates curried functor application F(arg1)...(argn) by first elaborating
+                        F(arg1)...(argn-1) to a module M, then returning
+                        [hidden = M, visible* = hidden(argn)], except that hidden must be peeled before applying to argn.
+                        The argument strexps is assumed to be in reverse order (i.e. [argn,...,arg1]).
+                      *)
+		     fun docurriedapps (strexps) : signat = (
+		       case strexps of
+                           [strexp] => dofunctorapp(context,var1,sig1,sig2,arrow,strexp)
+			 | (strexp::strexps) => 
+                           let val sig_curried = docurriedapps strexps
+			       val var_curried = fresh_named_var("curriedFunctorApplication")
+			       val context' = add_context_mod'(context,var_curried,sig_curried)
+			       val (var1,sig1,sig2,arrow) = 
+				     (case Context_Lookup_Path(context',PATH(var_curried,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(_,_,SIGNAT_FUNCTOR fsig,_)) => fsig
+					| _ => (error_region();
+						print "cannot apply a non-functor\n";
+						raise EscapeFromAppStr))
+			       val sig_result = dofunctorapp(context',var1,sig1,sig2,arrow,strexp)
+			   in 
+			       make_existential_sig(var_curried,sig_curried,sig_result)
+			   end
+                     )
+
+		   in
+		       docurriedapps(rev(map #1 strexpbools))
+		       handle EscapeFromAppStr => SIGNAT_STRUCTURE[]
+		   end
+
+		| SOME _ => (error_region();
+			     print "cannot apply a non-functor\n";
+			     SIGNAT_STRUCTURE[])
+		| NONE => (error_region();
+			   print "functor identifier not bound: ";
+			   AstHelp.pp_path funpath;
+			   print "\n";
+			   SIGNAT_STRUCTURE[]))
+
+	   | Ast.LetStr (dec,strexp) => 
+		 let 
+		     val var1 = fresh_named_var "letbound"
+		     val sdecs1 = xdec_static (context,dec)
+		     val sig1 = SIGNAT_STRUCTURE sdecs1
+		     val context = add_context_mod(context,open_unseen_lab,var1,sig1)
+		     val sig2 = xstrexp_static (context,strexp,Ast.NoSig)
+		 in 
+		     make_existential_sig(var1,sig1,sig2)
+		 end
+
+	   | Ast.BaseStr dec =>
+		 let
+		     val sdecs = xdec_static (context,dec)
+		 in
+		     SIGNAT_STRUCTURE (sdecs @ [ident_sdec])
+		 end
+
+	   | Ast.ConstrainedStr (strexp,constraint) => 
+		 xstrexp_static (context,strexp,constraint)
+
+	   | Ast.MarkStr (strexp,r) => 
+		 let val _ = push_region r
+		     val res = xstrexp_static (context,strexp,Ast.NoSig)
+		     val _ = pop_region()
+		 in res
+		 end
+
+	   | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor has no parameters"
+
+           | (Ast.BaseFct {params,body,constraint}) =>
+		let
+                    fun do_arg ((argnameopt,sigexp),context) =
+		        let val arglabel = (case argnameopt of
+						NONE => functor_arg_lab
+					      | SOME s => symbol_label s)
+			    val argvar = fresh_named_var "functor_arg"
+			    val signat = xsigexp_static (context,sigexp)
+			    val context' = add_context_mod(context,arglabel,argvar,signat)
+			in  ((argvar,signat),context')
+			end
+		    val (args,context') = foldl_acc do_arg context params
+		    val s' = xstrexp_static (context',body,constraint)
+		    val fsig = foldr (fn ((v,s),s') => SIGNAT_FUNCTOR(v,s,s',APPLICATIVE)) s' args
+		in
+		    fsig
+		end
+
+      )
+
+
+     and xstrbinds_static (context : context, strbs : Ast.strb list) : sdecs =
+       let 
+	   val strbs = map strb_strip strbs
+	   fun help (n,(strexp,constraint)) =
+	       let val v = fresh_named_var "strbindvar"
+		   val l = symbol_label n
+		   val s = xstrexp_static(context,strexp,constraint)
+	       in SDEC(l,DEC_MOD(v,false,s))
+	       end
+       in 
+	   map help strbs
+       end
+
+
+     (* The "recmod" versions of xdec, xstrexp, etc. are what actually elaborate
+        the body of a recursive module.  What makes it interesting is that we
+        have to do the elaboration in lockstep with the "abstraction" signature
+        that was generated in the first "static" pass of recursive module elaboration,
+        so that at certain points we can tie abstract types defined in the body to
+        their images in the recursive module variable.
+
+        These functions take two extra arguments: a module path and an absig/absdecs
+        that tells us where we are in the "abstraction" signature.
+
+        For xdec_recmod, the input absdecs may correspond to a bunch of EL decs, not
+        just the one currently being elaborated.  So, xdec_recmod outputs the tail
+        of the input absdecs that is left after eating the absdecs that correspond to
+        the EL dec currently being elaborated.
+      *)
+     and xdec_recmod (args : context * (mod * sdecs) * Ast.dec) : decresult =
+         let 
+	     val (res,sdecs_left) = xdec_recmod' args
+	     val _ = (case sdecs_left of [] => () | _ => elab_error "error in xdec_recmod")
+	 in
+	     res
+	 end
+
+     and xdec_recmod' (context : context, state as (modpath,absdecs), d : Ast.dec) : decresult * sdecs =
+       (case d of
+	  Ast.SeqDec decs => 
+	    let
+		fun folder (dec,(context,absdecs)) =
+		    let
+			val (sbnd_ctxt_list,absdecs) = xdec_recmod' (context,(modpath,absdecs),dec)
+			val context = #2(add_context_sbnd_ctxts(context,sbnd_ctxt_list))
+		    in 
+			(sbnd_ctxt_list,(context,absdecs))
+		    end
+		val (sbnd_ctxt_lists,(context',absdecs')) =
+		       foldl_acc folder (context,absdecs) decs
+		val sbnd_ctxt_list = flatten sbnd_ctxt_lists
+		val sdecs = sbnd_ctxt_list2sdecs sbnd_ctxt_list
+		val label_remapper = remap_hidden_labels sdecs
+		fun uniquify (NONE,ce) = (NONE,ce)
+		  | uniquify (SOME(SBND(lbl,bnd)),CONTEXT_SDEC(SDEC(_,dec))) =
+		    let val lbl' = label_remapper lbl
+		    in (SOME(SBND(lbl',bnd)),CONTEXT_SDEC(SDEC(lbl',dec)))
+		    end
+		  | uniquify _ = elab_error "SeqDec case: got sbnd without CONTEXT_SDEC"
+	    in 
+		(map uniquify sbnd_ctxt_list, absdecs')
+	    end
+
+	| Ast.OpenDec _ =>
+	      let 
+		  val res = xdec (context,d)
+		  val absdecs = List.drop (absdecs, length res)
+	      in
+		  (res,absdecs)
+	      end
+
+	| Ast.TypeDec _ =>
+	      let 
+		  val res = xdec (context,d)
+		  val absdecs = List.drop (absdecs, length res)
+	      in
+		  (res,absdecs)
+	      end
+
+	| Ast.DatatypeDec {datatycs,withtycs=[]} =>
+	      let 
+		  fun new_datatype_case () : (sbnd * sdec) list * sdecs =
+		    let val sbnd_sdecs = xdatatype(context,datatycs)
+			val n = length sbnd_sdecs
+			val data_absdecs = List.take(absdecs,n)
+			val rest_absdecs = List.drop(absdecs,n)
+			fun mapper (SDEC(ablab,_),(_,SDEC(newlab,DEC_MOD(v,_,s)))) =
+			    let 
+				val m = MOD_PROJECT(modpath,ablab)
+				val s = selfify false (context,m,s)
+			    in
+				(SBND(newlab,BND_MOD(v,false,m)),
+				 SDEC(newlab,DEC_MOD(v,false,s)))
+			    end
+			val sbnd_sdecs = map2 mapper (data_absdecs,sbnd_sdecs)
+		    in
+			(sbnd_sdecs, rest_absdecs)
+		    end
+		  val (sbnd_sdecs, rest_absdecs) = 
+                    (case datatycs of
+			 [db] =>
+			     let val (tyc,tyv,rhs) = AstHelp.db_strip db
+			     in  (case rhs of
+				      Ast.Repl path => (xdatatype (context,datatycs), tl absdecs)
+				    | _ => new_datatype_case())
+			     end
+		       | _ => new_datatype_case())
+		  val res = map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs
+	      in
+		  (res, rest_absdecs)
+	      end
+
+	| Ast.DatatypeDec {datatycs,withtycs} =>
+	      let 
+		  val (dt,wt) = (case InfixParse.parse_datbind(datatycs,withtycs) of
+				     SOME result => result
+				   | NONE => (error_region();
+					      print "cannot parse datbind\n";
+					      error "cannot parse datbind"))
+		  val dec = Ast.SeqDec[Ast.DatatypeDec{datatycs=dt,withtycs=[]},
+				       Ast.TypeDec wt]
+	      in  
+		  xdec_recmod' (context,state,dec)
+	      end
+
+	| Ast.StrDec strblist => 
+	      let 
+		  val n = length strblist
+		  val res = xstrbinds_recmod (context,(modpath,List.take(absdecs,n)),strblist)
+		  val absdecs = List.drop(absdecs,n)
+	      in
+		  (res,absdecs)
+	      end
+
+	| Ast.StrRecDec {name,def,constraint} =>
+	      let
+		  val (modpath_private,modpath_public,absig_private,use_private,absdecs_rest) =
+		      (case absdecs of
+			   (SDEC(ablab,DEC_MOD(_,_,SIGNAT_RDS(_,absdecs_rds)))) :: absdecs_rest =>
+			       (case is_existential_sig (SIGNAT_STRUCTURE absdecs_rds) of
+				    SOME (_,absig_private,SIGNAT_SWITCH{use_private,...}) =>
+					(MOD_PROJECT (MOD_PROJECT (modpath,ablab), unseen_lab),
+					 MOD_PROJECT (MOD_PROJECT (modpath,ablab), visible_lab),
+					 absig_private,use_private,absdecs_rest)
+				  | _ => elab_error "Error in StrRecDec case of xstrexp_recmod")
+			 | _ => elab_error "Error in StrRecDec case of xstrexp_recmod")
+
+		  val _ = (use_private := true; update_context())
+		  val sig_public = xsigexp (context,constraint)
+		  val tsig_rec = selfify false (context,modpath_public,sig_public)
+		  val var_rec = fresh_named_nonvalue_var "var_rec"
+		  val context' = add_context_mod(context,open_unseen_lab,var_rec,tsig_rec)
+		  val state' = (modpath_private,absig_private)
+		  val (mod_actual,tsig_actual) = xstrexp_recmod (context',state',def,Ast.NoSig)
+		  val mod_coerced = if Sig_IsSub(context', tsig_actual, tsig_rec)
+					then MOD_SEAL(mod_actual,tsig_rec)
+				    else Signature.xcoerce_seal(context',mod_actual,tsig_actual,tsig_rec)
+		  val _ = (use_private := false; update_context())
+
+		  val l = symbol_label name
+		  val v = fresh_named_var "strrecbindvar"
+		  val top_sbnd = SBND (l,BND_MOD(v,false,MOD_REC(var_rec,tsig_rec,mod_coerced)))
+		  val top_sdec = SDEC (l,DEC_MOD(v,false,tsig_rec))
+		  val res = [(SOME top_sbnd, CONTEXT_SDEC top_sdec)]
+	      in
+		  (res,absdecs_rest)
+	      end
+
+	| Ast.LocalDec (dec1,dec2) =>
+	      let
+		  val (sbnd_ctxt_list1,absdecs') = xdec_recmod' (context,state,dec1)
+		  val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list1)
+		  val (sbnd_ctxt_list2,absdecs'') = xdec_recmod' (context',(modpath,absdecs'),dec2)
+		  fun renameSbndCtxt (SOME (SBND(l,bnd)),CONTEXT_SDEC(SDEC(_,dec))) =
+		      let 
+			  val lbl = internal_label ("local_" ^ (Name.label2name' l))
+		      in  
+			  (SOME (SBND(lbl,bnd)), CONTEXT_SDEC(SDEC(lbl,dec)))
+		      end
+		    | renameSbndCtxt arg = arg
+		  val sbnd_ctxt_list1 = map renameSbndCtxt sbnd_ctxt_list1
+		  val res = sbnd_ctxt_list1 @ sbnd_ctxt_list2
+	      in  
+		  (res,absdecs'')
+	      end
+
+	| Ast.MarkDec (dec,region) => let val _ = push_region region
+					  val res = xdec_recmod' (context,state,dec)
+					  val _ = pop_region()
+				      in res
+				      end
+        (* If dec only has dynamic components, just call regular xdec. *)
+        | _ => (xdec (context,d), absdecs)
+
+      )
+
+    (* ---------------------------------------------------------
+      ------------------ STRUCTURE EXPRESSION -----------------
+      --------------------------------------------------------- *)
+
+     and xstrexp_seal_recmod (context, state, strb : Ast.strexp, sigexp : Ast.sigexp) : mod * signat =
+	 let
+	     val (modpath,absig) = state
+	     val (modpath_private,modpath_public,absig_private,use_private) =
+               (case absig of
+		    SIGNAT_SWITCH {use_private,sig_private,...} =>
+			(modpath,modpath,sig_private,use_private)
+		  | _ => (case is_existential_sig absig of
+			SOME (var_actual,sig_actual,SIGNAT_SWITCH {use_private,...}) =>
+			    (MOD_PROJECT (modpath,unseen_lab), 
+			     MOD_PROJECT (modpath,visible_lab),
+			     sig_actual, use_private)
+		      | _ => elab_error "Inconsistency between first and second passes of recursive module elaboration"))
+
+             (* Update the signature of the recursive module variable so that, for the part corresponding to this module,
+                we can see the private signature. *)
+	     val _ = (use_private := true; update_context())
+	     val sig_public = xsigexp (context,sigexp)
+
+             (* sig_target is sig_public with its abstract type components linked up to the corresponding
+                components in the recursive module variable.  That way, the remainder of the recursive module body
+                will get to know that "A.t = X.A.t" (where X is the recursive module variable, and A is the name of
+                the module being sealed here), even if A.t is held abstract by sig_public. *)
+	     val sig_target = selfify false (context,modpath_public,sig_public)
+
+	     val (mod_actual,sig_actual) = 
+		 xstrexp_recmod (context,(modpath_private,absig_private),strb,Ast.NoSig)
+	     val mod_result = if Sig_IsSub(context, sig_actual, sig_target)
+				  then MOD_SEAL(mod_actual,sig_target)
+			      else Signature.xcoerce_seal(context,mod_actual,sig_actual,sig_target)
+
+             (* Put the signature of the recursive module variable back the way it was. *)
+	     val _ = (use_private := false; update_context())
+	 in
+	     (mod_result, sig_target)
+	 end
+
+     and xstrexp_recmod (context, state, strb : Ast.strexp, Ast.StrongOpaque sigexp) : mod * signat =
+	 (error_region();
+	  print "Strong sealing not allowed inside recursive module definition\n";
+	  xstrexp_seal_recmod (context, state, strb, sigexp))
+
+       | xstrexp_recmod (context, state, strb, Ast.WeakOpaque sigexp) =
+	 xstrexp_seal_recmod (context, state, strb, sigexp)
+
+       | xstrexp_recmod (context, state as (modpath,absig), strb, Ast.Transparent sigexp) =
+	 let
+	     val state' = 
+		 (case is_existential_sig absig of
+		      SOME (_,s,_) => (MOD_PROJECT (modpath,unseen_lab), s)
+		    | NONE => state)
+	     val sig_target = xsigexp (context,sigexp)
+	     val (mod_actual,sig_actual) = xstrexp_recmod (context,state',strb,Ast.NoSig)
+	 in
+	     Signature.xcoerce_transparent (context,mod_actual,sig_actual,sig_target)
+	 end
+
+       | xstrexp_recmod (context, state as (modpath,absig), strb, Ast.NoSig) =
+	(case strb of
+	     Ast.VarStr path =>
+		 (case Context_Lookup_Labels(context,map symbol_label path) of
+		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s)
+		    | _ => (error_region();
+			    print "unbound module: ";
+			    AstHelp.pp_path path;
+			    print "\n";
+			    (MOD_STRUCTURE[],SIGNAT_STRUCTURE[])))
+	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
+	   | Ast.AppStr (funpath,strexpbools) =>
+             (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
+		  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR(var1,sig1,sig2,arrow),_)) =>
+		   let
+                     exception EscapeFromAppStr
+		     type state = mod * signat
+
+                     (* Elaborates a single functor application. *)
+		     fun dofunctorapp (context,state,f,var1,sig1,sig2,arrow,strexp) : mod * signat =
+		       let
+			   val (modpath,absig) = state
+			   val argstate =
+			       (case is_existential_sig absig of
+				    SOME (_,argsig,_) =>
+					(case is_existential_sig argsig of
+					     SOME (_,argsig_actual,_) =>
+						 (MOD_PROJECT(MOD_PROJECT(modpath,unseen_lab),unseen_lab),
+						  argsig_actual)
+					   | NONE =>
+						 (MOD_PROJECT(modpath,unseen_lab), argsig))
+				  | NONE => elab_error ("Inconsistency between first and second passes of "^
+							"recursive module elaboration in AppStr case"))
+
+			   val (argmod,argsig) = xstrexp_recmod (context,argstate,strexp,Ast.NoSig)
+			   val argpathOpt = mod2path argmod
+		       in
+			  if isSome(argpathOpt) andalso Sig_IsSub(context,argsig,sig1)
+			      then (MOD_APP(f,argmod),
+				    sig_subst(sig2,subst_modvar(var1,argmod)))
+			  else
+			      let val var_coerced = fresh_named_var "functorArgCoerced"
+				  val (mod_coerced,sig_coerced) =
+				      (case argpathOpt of
+					   SOME argpath => 
+					       Signature.xcoerce_functor(context,argpath,argsig,sig1)
+					 | NONE => 
+					       Signature.xcoerce_transparent(context,argmod,argsig,sig1))
+				  val path_coerced = 
+				      case Context_Lookup_Path(add_context_mod'(context,var_coerced,sig_coerced),
+							       PATH(var_coerced,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
+					| _ => elab_error "AppStr case"
+				  val mod_result = MOD_APP(f,path_coerced)
+				  val sig_result = sig_subst(sig2,subst_modvar(var1,path_coerced))
+			      in
+				  (make_existential_mod(var_coerced,mod_coerced,mod_result),
+				   make_existential_sig(var_coerced,sig_coerced,sig_result))
+			      end
+		       end
+
+		     fun get_states (lastarg : bool, state as (modpath,absig)) : state * state =
+			 if lastarg then (state,state) else
+			     (case is_existential_sig absig of
+				 SOME (_,mysig1,mysig2) => 
+				     ((MOD_PROJECT(modpath,unseen_lab), mysig1),
+				      (MOD_PROJECT(modpath,visible_lab), mysig2))
+			       | NONE => elab_error "Error in docurriedapps")
+
+		     fun docurriedapps (lastarg : bool) (strexps) : mod * signat * state = (
+		       case strexps of
+                           [strexp] => 
+                           let 
+			       val (this_state,next_state) = get_states(lastarg,state)
+			       val (mod_result,sig_result) = 
+                                   dofunctorapp(context,this_state,f,var1,sig1,sig2,arrow,strexp)
+			   in
+                               (mod_result,sig_result,next_state)
+			   end
+			 | (strexp::strexps) => 
+                           let 
+			       val (mod_curried,sig_curried,state) = docurriedapps false strexps
+			       val var_curried = fresh_named_var("curriedFunctorApplication")
+			       val context' = add_context_mod'(context,var_curried,sig_curried)
+			       val (f,(var1,sig1,sig2,arrow)) = 
+				     (case Context_Lookup_Path(context',PATH(var_curried,[])) of
+					  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR fsig,_)) => (f,fsig)
+					| _ => (error_region();
+						print "cannot apply a non-functor\n";
+						raise EscapeFromAppStr))
+			       val (this_state,next_state) = get_states(lastarg,state)
+			       val (mod_result,sig_result) = 
+				   dofunctorapp(context',this_state,f,var1,sig1,sig2,arrow,strexp)
+			   in 
+			       (make_existential_mod(var_curried,mod_curried,mod_result),
+				make_existential_sig(var_curried,sig_curried,sig_result),
+				next_state)
+			   end
+                     )
+
+		     val (m,s,_) = (docurriedapps true (rev(map #1 strexpbools))
+				    handle EscapeFromAppStr => (MOD_STRUCTURE[],SIGNAT_STRUCTURE[],state))
+
+		   in
+		       (m,s)
+		   end
+
+		| SOME _ => (error_region();
+			     print "cannot apply a non-functor\n";
+			     (MOD_STRUCTURE[],SIGNAT_STRUCTURE[]))
+		| NONE => (error_region();
+			   print "functor identifier not bound: ";
+			   AstHelp.pp_path funpath;
+			   print "\n";
+			   (MOD_STRUCTURE[],SIGNAT_STRUCTURE[])))
+
+	   | Ast.LetStr (dec,strexp) => 
+		 let 
+		     val var1 = fresh_named_var "letbound"
+		     val (sdecs1,sig2) = (case is_existential_sig absig of
+					      SOME (_,SIGNAT_STRUCTURE sdecs1,sig2) => (sdecs1,sig2)
+					    | _ => elab_error "error in LetStr case of xstrexp_recmod")
+		     val state1 = (MOD_PROJECT(modpath,unseen_lab),sdecs1)
+		     val sbnd_ctxt_list = xdec_recmod (context,state1,dec)
+		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_ctxt_list
+		     val context = add_context_mod(context,open_unseen_lab,var1,sig1)
+		     val context = add_context_fixity_entries(context,sbnd_ctxt_list)
+		     val state2 = (MOD_PROJECT(modpath,visible_lab),sig2)
+		     val (mod2,sig2) = xstrexp_recmod (context,state2,strexp,Ast.NoSig)
+		     val final_mod = make_existential_mod(var1,mod1,mod2)
+		     val final_sig = make_existential_sig(var1,sig1,sig2)
+		 in 
+		     (final_mod, final_sig)
+		 end
+
+	   | Ast.BaseStr dec =>
+		 let
+		     val absdecs = case absig of SIGNAT_STRUCTURE sdecs => sdecs
+                                     | _ => elab_error "error in BaseStr case of xstrexp_recmod"
+		     val state = (modpath, butlast absdecs)
+		     val sbnd_ctxt_list = xdec_recmod (context,state,dec)
+		     val sbnds = (List.mapPartial #1 sbnd_ctxt_list) @ [ident_sbnd]
+		     val self_ident_sdec = 
+			 case ident_sdec of SDEC(l,DEC_CON(v,k,NONE,inline)) =>
+			     SDEC(l,DEC_CON(v,k,SOME(CON_MODULE_PROJECT(modpath,ident_lab)),inline))
+		     val sdecs = (sbnd_ctxt_list2sdecs sbnd_ctxt_list) @ [self_ident_sdec]
+		 in 
+		     (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
+		 end
+
+	   | Ast.ConstrainedStr (strexp,constraint) => xstrexp_recmod (context,state,strexp,constraint)
+
+	   | Ast.MarkStr (strexp,r) => let val _ = push_region r
+					   val res = xstrexp_recmod (context,state,strexp,Ast.NoSig)
+					   val _ = pop_region()
+				       in res
+				       end
+	   | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor has no parameters"
+
+           | (Ast.BaseFct {params,body,constraint}) =>
+		let
+                    fun do_arg ((argnameopt,sigexp),context) =
+		        let val arglabel = (case argnameopt of
+						NONE => functor_arg_lab
+					      | SOME s => symbol_label s)
+			    val argvar = fresh_named_var "functor_arg"
+			    val signat = xsigexp(context,sigexp)
+			    val context' = add_context_mod(context,arglabel,argvar,signat)
+			in  ((argvar,signat),context')
+			end
+		    val (args,context') = foldl_acc do_arg context params
+		    val _ = app (fn (_,s) => 
+				 if contains_generative_signature(context',s)
+				     then reject ("Functors in recursive module definition must be "^
+						  "applicative, and their argument signatures may not "^
+						  "contain generative functor signatures")
+				 else ()) args
+		    fun state_folder ((v,_),(modpath, SIGNAT_FUNCTOR(_,_,sig_body,_))) =
+			(MOD_APP(modpath,MOD_VAR v), sig_body)
+		      | state_folder _ = elab_error "error in BaseFct case of xstrexp_recmod"
+		    val state_body = foldl state_folder state args
+		    val res_body = xstrexp_recmod (context',state_body,body,constraint)
+		    val res = foldr (fn ((v,s),(m',s')) => 
+					       (MOD_FUNCTOR(APPLICATIVE,v,s,m',s'),
+						SIGNAT_FUNCTOR(v,s,s',APPLICATIVE))) 
+			                res_body args
+		in
+                    res
+		end
+
+      )
+
+    (* ---------------------------------------------------------
+      ------------------ STRUCTURE BINDINGS --------------------
+      --------------------------------------------------------- *)
+     and xstrbinds_recmod (context : context, state as (modpath,absdecs), strbs : Ast.strb list)
+	 : decresult =
+       let 
+	   val strbs = map strb_strip strbs
+	   fun help ((n,(strexp,constraint)),SDEC(ablab,DEC_MOD(_,_,s))) =
+	       let val v = fresh_named_var "strbindvar"
+		   val l = symbol_label n
+		   val state = (MOD_PROJECT(modpath,ablab), s)
+		   val (m,s) = resolve_overloads (fn () => xstrexp_recmod (context,state,strexp,constraint))
+	       in (SOME(SBND(l,BND_MOD(v,false,m))),
+		   CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
+	       end
+	     | help _ = elab_error "error in xstrbinds_recmod"
+       in 
+	   map2 help (strbs,absdecs)
+       end
+
+
+    (* ---------------------------------------------------------
       ------------------ TYPE EXPRESSIONS----------------------
       --------------------------------------------------------- *)
     and xty (context, ty) : con =
@@ -1650,8 +2696,10 @@ structure Toil :> TOIL =
 
                               (* These two checks ensure that Fst(argsig) is really a subkind of
 			         Fst(s1) after phase-splitting.  The first check is necessary because
-				 the Fst_Sig operation throws away generative functor components.
-				 By an invariant of the elaborator, it's already known that argsig is 
+				 the Fst_Sig operation throws away generative functor components,
+				 but the phase-splitter in Tonil doesn't, and we want Fst_Sig(argsig)
+				 to correspond to what the phase-splitter actually produces.
+				 By an invariant of the elaborator, it's already known that s1 is 
 				 free of generative signatures, so there is no need to check that. *)
 
 			      val _ = not(contains_generative_signature(context,argsig))
@@ -1823,7 +2871,8 @@ structure Toil :> TOIL =
       ------------ Signature bindings and expressions ----------
       --------------------------------------------------------- *)
 
-     and xsigexp (context,sigexp) : signat = xsigexp' false (context,sigexp)
+     and xsigexp args : signat = xsigexp' false args
+     and xsigexp_static args : signat = xsigexp' true args
 
      and xsigexp' (just_static : bool) (context,sigexp) : signat =
        let val xsigexp = xsigexp' just_static
@@ -1929,10 +2978,10 @@ structure Toil :> TOIL =
 	  let 
 	      val recvar = fresh_named_var "var_rds"
 	      val reclab = to_open(var2label recvar)
-	      val fstsdecs = xspec' true (context,speclist)
+	      val fstsdecs = xspec_static (context,speclist)
 	      val fstsig = SIGNAT_STRUCTURE fstsdecs
 	      val context' = add_context_mod(context,reclab,recvar,fstsig)
-	      val sdecs = xspec' false (context',speclist)
+	      val sdecs = xspec (context',speclist)
 
 	      val fstsdecs' = Fst_Sdecs(context',sdecs)
 
@@ -1946,7 +2995,8 @@ structure Toil :> TOIL =
 		 later on inside the rds. *)
 
 	      val _ = if Name.VarSet.member(sdecs_free(fstsdecs'),recvar)
-			  then reject "Ill-formed rds: contains static-on-static dependency"
+			  then (error_region();
+				reject "Ill-formed rds: contains static-on-static dependency")
 		      else ()
 
               (* sanity check, could be removed eventually, note that it
@@ -1981,7 +3031,8 @@ structure Toil :> TOIL =
       ------------------ SIGNATURE SPECIFICATIONS --------------
       --------------------------------------------------------- *)
 
-     and xspec (orig_ctxt, specs : Ast.spec list) : sdecs = xspec' false (orig_ctxt,specs)
+     and xspec args : sdecs = xspec' false args
+     and xspec_static args : sdecs = xspec' true args
 
      and xspec' (just_static : bool) (orig_ctxt, specs : Ast.spec list) : sdecs =
        let
@@ -2056,6 +3107,10 @@ structure Toil :> TOIL =
 	       in ADDITIONAL(List.mapPartial doer sym_sigexp_path_list)
 	       end
 	   | (Ast.IncludeSpec sigexp) =>
+               (* Maybe this case should be changed to handle allow inclusion of rds's
+                  by instead transforming "include sigexp" to "dummylab* : sigexp", since
+                  signature coercion now allows coercion into open-labeled signatures?  
+                        -Derek *)
 	       (case (reduce_signat context (xsigexp(context,sigexp))) of
 		  SIGNAT_STRUCTURE sdecs => ADDITIONAL (butlast sdecs)
 		| _ => (error_region();
@@ -2171,256 +3226,6 @@ structure Toil :> TOIL =
 	   else (error_region();
 		 print "Cannot specify two components with the same name in a signature\n";
 		 [])
-       end
-
-
-(*
-    (* ---------------------------------------------------------
-      ------------------ FUNCTOR BINDINDS ---------------------
-      --------------------------------------------------------- *)
-     and xfctbind (context : context, fctbs : Ast.strb list) : decresult =
-	 let
-	     fun help (context,(name,def)) : decresult =
-		 (case def of
-		      (Ast.VarFct (path,Ast.NoSig)) =>
-			  (case (Context_Lookup_Labels(context,map symbol_label path)) of
-			       SOME(path,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR _),_)) =>
-				   let val l = symbol_label name
-				       val v = fresh_named_var "functor_var"
-				   in [(SOME(SBND(l,BND_MOD(v,false,m))),
-					CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
-				   end
-			     | _ => (error_region();
-				    print "unbound functor: ";
-				    AstHelp.pp_path path;
-				    print "\n"; []))
-		    | (Ast.VarFct (path,_)) => parse_error "functor signatures not handled"
-		    | (Ast.BaseFct {params=[(argnameopt,sigexp)],body,constraint}) =>
-			  let
-			      val arglabel = (case argnameopt of
-						  NONE => to_open(internal_label "FunctorArg")
-						| SOME s => symbol_label s)
-			      val funid = symbol_label name
-			      val argvar = fresh_named_var "funct_arg"
-			      val signat = xsigexp(context,sigexp)
-			      val context' = add_context_mod(context,arglabel,argvar, signat)
-			      val (m',s',pure) = xstrexp(context',body,constraint)
-			      val v = fresh_named_var "functor_var"
-			      val arrow = if pure then APPLICATIVE else GENERATIVE
-			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(arrow, argvar,signat,m',s')))
-			      val sdec = SDEC(funid,DEC_MOD(v,false,SIGNAT_FUNCTOR(argvar,signat,s',arrow)))
-			  in [(SOME sbnd, CONTEXT_SDEC sdec)]
-			  end
-		    | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor of order 0"
-		    | (Ast.BaseFct _) => parse_error "No higher order functors"
-		    | (Ast.LetFct _) => parse_error "No lets in functor bindings"
-		    | (Ast.AppFct _) => parse_error "No higher order functors"
-		    | (Ast.MarkFct (f,r)) => let val _ = push_region r
-						 val res = help (context,(name,f))
-						 val _ = pop_region()
-					     in res
-					     end)
-	     val help = fn x => (resolve_overloads (fn () => help x), true)
-	 in  #1(packagedecs help (context,true) (map fctb_strip fctbs))
-	 end
-*)
-
-    (* ---------------------------------------------------------
-      ------------------ STRUCTURE EXPRESSION -----------------
-      --------------------------------------------------------- *)
-
-     and xstrexp_seal (context : context, strb : Ast.strexp, sigexp : Ast.sigexp) : mod * signat * bool =
-	 let val sig_target = xsigexp(context,sigexp)
-	     val (module,sig_actual,pure) = xstrexp(context,strb,Ast.NoSig)
-	 in  if (Sig_IsSub(context, sig_actual, sig_target))
-		 then (MOD_SEAL(module,sig_target), sig_target, pure)
-	     else let val mod_result = Signature.xcoerce_seal(context,module,sig_actual,sig_target)
-		  in  (mod_result, sig_target, pure)
-		  end
-	 end
-
-     and xstrexp (context : context, strb : Ast.strexp, Ast.StrongOpaque sigexp) : (mod * signat * bool) =
-	 let val (m,s,pure) = xstrexp_seal(context,strb,sigexp)
-	 in  (m,s,false)
-	 end
-
-       | xstrexp (context, strb, Ast.WeakOpaque sigexp) =
-	 xstrexp_seal(context,strb,sigexp)
-
-       | xstrexp (context, strb, Ast.Transparent sigexp) =
-	 let val (module,signat,pure) = xstrexp(context,strb,Ast.NoSig)
-	     val sig' = xsigexp(context,sigexp)
-	     val (mod_result,sig_result) =
-		 Signature.xcoerce_transparent (context,module,signat,sig')
-	 in  (mod_result, sig_result, pure)
-	 end
-
-       | xstrexp (context, strb, Ast.NoSig) =
-	(case strb of
-	     Ast.VarStr path =>
-		 (case Context_Lookup_Labels(context,map symbol_label path) of
-		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) => (m,s,true)
-		    | _ => (error_region();
-			    print "unbound module: ";
-			    AstHelp.pp_path path;
-			    print "\n";
-			    dummy_strexp_result))
-	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
-	   | Ast.AppStr (funpath,strexpbools) =>
-             (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
-		  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR(var1,sig1,sig2,arrow),_)) =>
-		   let
-                     exception EscapeFromAppStr
-
-                     (* Elaborates a single functor application. *)
-		     fun dofunctorapp (context,f,var1,sig1,sig2,arrow,strexp) : mod * signat * bool =
-		       let
-			  val (argmod,argsig,argpure) = xstrexp(context,strexp,Ast.NoSig)
-			  val argpathOpt = mod2path argmod
-			  val pure = (arrow = APPLICATIVE) andalso argpure
-		       in
-			  if isSome(argpathOpt) andalso Sig_IsSub(context,argsig,sig1)
-			      then (MOD_APP(f,argmod),
-				    sig_subst(sig2,subst_modvar(var1,argmod)),
-				    pure)
-			  else
-			      let val var_coerced = fresh_named_var "functorArgCoerced"
-				  val (mod_coerced,sig_coerced) =
-				      (case argpathOpt of
-					   SOME argpath => 
-					       Signature.xcoerce_functor(context,argpath,argsig,sig1)
-					 | NONE => 
-					       Signature.xcoerce_transparent(context,argmod,argsig,sig1))
-				  val path_coerced = 
-				      case Context_Lookup_Path(add_context_mod'(context,var_coerced,sig_coerced),
-							       PATH(var_coerced,[])) of
-					  SOME(_,PHRASE_CLASS_MOD(m,_,_,_)) => m
-					| _ => elab_error "AppStr case"
-				  val mod_result = MOD_APP(f,path_coerced)
-				  val sig_result = sig_subst(sig2,subst_modvar(var1,path_coerced))
-			      in
-				  (make_existential_mod(var_coerced,mod_coerced,mod_result),
-				   make_existential_sig(var_coerced,sig_coerced,sig_result),
-				   pure)
-			      end
-		       end
-
-                     (* Elaborates curried functor application F(arg1)...(argn) by first elaborating
-                        F(arg1)...(argn-1) to a module M, then returning
-                        [hidden = M, visible* = hidden(argn)], except that hidden must be peeled before applying to argn.
-                        The argument strexps is assumed to be in reverse order (i.e. [argn,...,arg1]).
-                      *)
-		     fun docurriedapps (strexps) : mod * signat * bool = (
-		       case strexps of
-                           [strexp] => dofunctorapp(context,f,var1,sig1,sig2,arrow,strexp)
-			 | (strexp::strexps) => 
-                           let val (mod_curried,sig_curried,pure) = docurriedapps strexps
-			       val var_curried = fresh_named_var("curriedFunctorApplication")
-			       val context' = add_context_mod'(context,var_curried,sig_curried)
-			       val (f,(var1,sig1,sig2,arrow)) = 
-				     (case Context_Lookup_Path(context',PATH(var_curried,[])) of
-					  SOME(_,PHRASE_CLASS_MOD(f,_,SIGNAT_FUNCTOR fsig,_)) => (f,fsig)
-					| _ => (error_region();
-						print "cannot apply a non-functor\n";
-						raise EscapeFromAppStr))
-			       val (mod_result,sig_result,pure') = dofunctorapp(context',f,var1,sig1,sig2,arrow,strexp)
-			   in (make_existential_mod(var_curried,mod_curried,mod_result),
-			       make_existential_sig(var_curried,sig_curried,sig_result),
-			       pure andalso pure')
-			   end
-                     )
-
-		   in
-		       docurriedapps(rev(map #1 strexpbools))
-		       handle EscapeFromAppStr => dummy_strexp_result
-		   end
-
-		| SOME _ => (error_region();
-			     print "cannot apply a non-functor\n";
-			     dummy_strexp_result)
-		| NONE => (error_region();
-			   print "functor identifier not bound: ";
-			   AstHelp.pp_path funpath;
-			   print "\n";
-			   dummy_strexp_result))
-	   | Ast.LetStr (dec,strexp) => 
-		 let val var1 = fresh_named_var "letbound"
-		     val (sbnd_ctxt_list,pure1) = xdec' (context,dec)
-		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_ctxt_list
-		     val context = add_context_mod(context,open_unseen_lab,var1,sig1)
-		     val context = add_context_fixity_entries(context,sbnd_ctxt_list)
-		     val (mod2,sig2,pure2) = xstrexp(context,strexp,Ast.NoSig)
-		     val final_mod = make_existential_mod(var1,mod1,mod2)
-		     val final_sig = make_existential_sig(var1,sig1,sig2)
-		     val pure = pure1 andalso pure2
-		 in (final_mod, final_sig, pure)
-		 end
-	   | Ast.BaseStr dec =>
-		 let
-		     val (sbnd_ctxt_list,pure) = xdec' (context,dec)
-		     val sbnds = (List.mapPartial #1 sbnd_ctxt_list) @ [ident_sbnd]
-		     val sdecs = (List.mapPartial (fn (_,CONTEXT_SDEC sdec) => SOME sdec
-		                                    | _ => NONE) sbnd_ctxt_list) @ [ident_sdec]
-		 in (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs, pure)
-		 end
-	   | Ast.ConstrainedStr (strexp,constraint) => xstrexp(context,strexp,constraint)
-	   | Ast.MarkStr (strexp,r) => let val _ = push_region r
-					   val res = xstrexp(context,strexp,Ast.NoSig)
-					   val _ = pop_region()
-				       in res
-				       end
-	   | (Ast.BaseFct {params=[],body,constraint}) => parse_error "Functor has no parameters"
-           | (Ast.BaseFct {params,body,constraint}) =>
-		let
-                    fun doit ((argnameopt,sigexp),context) =
-		        let val arglabel = (case argnameopt of
-						NONE => functor_arg_lab
-					      | SOME s => symbol_label s)
-			    val argvar = fresh_named_var "functor_arg"
-			    val signat = xsigexp(context,sigexp)
-			    val context' = add_context_mod(context,arglabel,argvar,signat)
-			in  ((argvar,signat),context')
-			end
-		    val (args,context') = foldl_acc doit context params
-		    val (m',s',pure) = xstrexp(context',body,constraint)
-		    fun tomodsig [(v,s)] = 
-			let val arrow = if not pure orelse contains_generative_signature(context',s)
-					    then GENERATIVE
-					else APPLICATIVE
-			in (MOD_FUNCTOR(arrow,v,s,m',s'),SIGNAT_FUNCTOR(v,s,s',arrow))
-			end
-		      | tomodsig ((v,s)::args) =
-			let val (fmod,fsig) = tomodsig args
-			    val arrow = if contains_generative_signature(context',s)
-					    then GENERATIVE
-					else APPLICATIVE
-			in  (MOD_FUNCTOR(arrow,v,s,fmod,fsig),
-			     SIGNAT_FUNCTOR(v,s,fsig,arrow))
-			end
-		    val (fmod,fsig) = tomodsig args
-		in
-                    (fmod,fsig,pure)
-		end
-      )
-
-
-
-    (* ---------------------------------------------------------
-      ------------------ STRUCTURE BINDINGS --------------------
-      --------------------------------------------------------- *)
-     and xstrbinds (context : context, strbs : Ast.strb list)
-	 : decresult * bool =
-       let val strbs = map strb_strip strbs
-	   val allpure = ref true
-	   fun help (n,(strexp,constraint)) =
-	       let val v = fresh_named_var "strbindvar"
-		   val l = symbol_label n
-		   val (m,s,pure) = resolve_overloads (fn () => xstrexp(context,strexp,constraint))
-		   val _ = allpure := (pure andalso !allpure)
-	       in (SOME(SBND(l,BND_MOD(v,false,m))),
-		   CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
-	       end
-       in (map help strbs, !allpure)
        end
 
 

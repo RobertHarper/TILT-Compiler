@@ -440,7 +440,16 @@ struct
 		   end
 	    end
 
+  (* This code does NOT appear to produce normal forms in general.
+     Specifically, it only looks up equations for variables in the Var_c case.
+     So for example, if v is bound with kind T * S(int), 
+     then v.2 will not get normalized to int, because v does not have an equation.
+     The reduce_hnf code gets it right, see below.
+     Since normalize is only used by specialize.sml for an optimization, this perhaps
+     doesn't matter, but eventually it should either be fixed or removed.
 
+       -Derek
+   *)
 
   and con_normalize state (constructor : con) : con  =
     ((*print "con_normalize ";
@@ -462,6 +471,13 @@ struct
 		      else map (con_normalize' state) cons
 	   val defs = Sequence.fromList (zip vars cons)
 	 in Mu_c (recur,defs)
+	 end
+	| (Nurec_c (v,k,c)) => 
+         let
+	     val ((v,k),state) = bind_at_kind((v,k),state)
+	     val c = con_normalize' state c
+	 in
+	     Nurec_c (v,k,c)
 	 end
 	| (AllArrow_c {openness,effect,
 		       tFormals,eFormals,fFormals,body_type}) =>
@@ -603,18 +619,23 @@ struct
   datatype progress = PROGRESS | HNF | IRREDUCIBLE
   datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
 
+    (* With the addition of Nurec_c, this should really be called "is_maybe_hnf",
+       because a path starting at a Nurec_c may be reducible if it has a "natural"
+       singleton kind.  However, given that is_hnf is only applied to the result of
+       a call to reduce_hnf, we can be sure that the input does not have a singleton
+       kind, or reduce_hnf would have reduced further.  -Derek *)
     fun is_hnf c : bool =
         (case c of
-             Prim_c(pc,clist) => true
+             Prim_c _ => true
            | AllArrow_c _ => true
            | ExternArrow_c _ => true
            | Var_c _ => false
            | Let_c _ => false
            | Mu_c _ => true
-           | Proj_c (Mu_c _,_) => true
-           | Proj_c _ => false
+	   | Nurec_c _ => true
+           | Proj_c (c,_) => is_hnf c
 	   (*| Typeof_c _ => false*)
-           | App_c _ => false
+           | App_c (c,_) => is_hnf c
            | Crecord_c _ => true
            | Closure_c _ => error' "Closure_c not a type"
 	   | Coercion_c _ => true
@@ -653,26 +674,78 @@ struct
     fun expandMuType(D:context, mu_con:con) =
 	let
 
-	  fun extract mu_tuple_con (defs,which) =
-	    let
-	      val var' = Name.fresh_named_var "mu_bnd"
-	      val defs = Sequence.toList defs
-	      fun mapper (n,(v,_)) =
-		  Con_cb (v,Proj_c(Var_c var',NilUtil.generate_tuple_label(n+1)))
-	      val bnds = Listops.mapcount mapper defs
-	      val bnds = (Con_cb (var',mu_tuple_con))::bnds
-	      val (_,c) = List.nth(defs,which-1)
-	      val con = makeLetC bnds c
-	    in  con
-	    end
+          (* 
+	     This function takes as input a constructor of the form
+                E[nurec v:k. c]
+             that is, a path starting at a non-uniform mu-constructor.
+             It returns the context extended with v':k (where v' is fresh)
+             the con-binding "v' = mu v:k. c", and the constructor E[c[v'/v]].  
+	     The body of expandMuType below will first call
+	     this function, then reduce E[c[v'/v]] to a type of the form
+             E[mu (x1,...,xn). (c1,...cn)], then expandMuType that type,
+             and finally wrap the resulting type with
+             "let v' = nurec v:k.c in ...".
+                                            -Derek
+           *)
+	  fun deconstructNurecPath (con : con) : ((context * conbnd) * con) =
+	      (case con of
+		   Proj_c (con,lbl) => 
+		       let val (res,c) = deconstructNurecPath con
+		       in  (res,Proj_c(c,lbl))
+		       end
+		 | App_c (confun,conarg) =>
+		       let val (res,c) = deconstructNurecPath confun
+		       in  (res,App_c(c,conarg))
+		       end
+		 | Nurec_c (v,k,c) => 
+		       let 
+			   val nurecvar = Name.fresh_named_var "nurec_bnd"
+			   val c' = substConInCon (add (empty()) (v,Var_c nurecvar)) c
+			   val D = insert_kind (D,nurecvar,k)
+			   val cbnd = Con_cb (nurecvar, (* NilRename.renameCon *) con)
+		       in
+			   ((D,cbnd),c')
+		       end
+		 | _ => (print "expandMuType given type not reducible to projection from mu:\n";
+			 Ppnil.pp_con con;
+			 error' "expandMuType given type not reducible to projection from mu"))
+
 
 	in
 	  case #2(reduce_hnf(D,mu_con)) of
-	   Proj_c (mu_tuple as Mu_c (_,defs), l)  =>
-	       extract mu_tuple (defs, lab2int l (Sequence.length defs))
-	  | c => (print "expandMuType given type not reducible to projection from mu:\n";
-		  Ppnil.pp_con c;
-		  error' "expandMuType does not reduce to projection from a mu type")
+	    Proj_c (mu_tuple as Mu_c (_,defs), l) =>
+	      let 
+		  val muvar = Name.fresh_named_var "mu_bnd"
+		  val cbnd_mu = Con_cb(muvar,mu_tuple)
+		  val defs = Sequence.toList defs
+		  val which = lab2int l (length defs)
+		  fun mapper (n,(v,_)) =
+		      Con_cb (v,Proj_c(Var_c muvar,NilUtil.generate_tuple_label(n+1)))
+		  val cbnds_projs = Listops.mapcount mapper defs
+		  val (_,c) = List.nth(defs,which-1)
+	      in  makeLetC (cbnd_mu::cbnds_projs) c
+	      end
+
+	  | c => 
+	      let
+		  val ((D,cbnd_nurec),c) = deconstructNurecPath c
+	      in
+		  case #2(reduce_hnf(D,c)) of
+		      Proj_c(Mu_c (_,defs),l) =>
+			let
+			    val defs = Sequence.toList defs
+			    val which = lab2int l (length defs)
+                            (* This works based on the invariant that Mu's appearing inside
+			       Nurec's do not actually bind any local variables, i.e. all recursion
+                               inside a Nurec goes through the Nurec-bound variable.
+			       So the Mu here behaves more like a boxing operator 
+			       than like a recursion operator. *)
+			    val (_,the_lth_projection) = List.nth(defs,which-1)
+			in
+			    makeLetC [cbnd_nurec] the_lth_projection
+			end
+		    | _ => error' "expandMuType given type not reducible to projection from mu"
+	      end
 	end
 
 
@@ -761,6 +834,7 @@ struct
 	 end
 	| (Prim_c _) => (HNF, #2 state, constructor)
 	| (Mu_c _) => (HNF, #2 state, constructor)
+	| (Nurec_c _) => (IRREDUCIBLE, #2 state, constructor)
 	| (AllArrow_c _) => (HNF, #2 state, constructor)
 	| (ExternArrow_c _) => (HNF, #2 state, constructor)
 	| (Var_c var) =>
@@ -813,7 +887,7 @@ struct
 	| (Annotate_c (annot,con)) => con_reduce state con)*)
 	 )
 
-
+(*
     and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,empty()) con
 			      in  (case progress
 				     of IRREDUCIBLE => (case find_kind_equation_subst (D,subst,c)
@@ -821,6 +895,8 @@ struct
 							   | (NONE,c) => c)
 				      | _ => substConInCon subst c)
 			      end
+*)
+
     and reduce_until (D,pred,con) =
         let
 	  fun loop n (subst,c : con) =
@@ -890,6 +966,8 @@ struct
         end
     and reduce_hnf_list arg = reduce_hnf_list' true arg
     and reduce_hnf (D,con) = let val (hnf,c,_) = reduce_hnf_list' false (D,con) in (hnf,c) end
+
+(*
     and reduce_hnf' (D,con,subst) =
       let
 	fun loop (subst,c) =
@@ -925,7 +1003,7 @@ struct
 	    end
         in  loop 0 (empty(),con)
         end
-
+*)
 
     and projectTuple(D:context, c:con, l:label) =
 	(case (reduce_hnf(D,Proj_c(c,l))) of
@@ -1350,6 +1428,7 @@ struct
 
 	 | (Prim_c _)            => (state,constructor,false)
 	 | (Mu_c _)              => (state,constructor,false)
+	 | (Nurec_c _)           => (state,constructor,true)
 	 | (AllArrow_c _)        => (state,constructor,false)
 	 | (Coercion_c _)        => (state,constructor,false)
 	 | (ExternArrow_c _)     => (state,constructor,false)
@@ -1471,8 +1550,10 @@ struct
   val con_normalize' = wrap2 "con_normalize'"  con_normalize'
 
   val reduce_hnf = wrap1 "reduce_hnf" reduce_hnf
-  val reduce_once = wrap1 "reduce_once" reduce_once
   val reduce_until = fn arg => wrap "reduce_until" (fn () => reduce_until arg)
+(*
+  val reduce_once = wrap1 "reduce_once" reduce_once
+*)
 
   val beta_conrecord = wrap1 "beta_conrecord" beta_conrecord
   val beta_confun = wrap2 "beta_confun" beta_confun

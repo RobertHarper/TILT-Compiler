@@ -439,9 +439,9 @@ structure Name :> NAME =
 	fun keep_unit (name : string, set : LabelSet.set) : LabelSet.set =
 	    let
 		val import = unit_label name
-		val (c,r) = make_cr_labels import
+		val (c,s,r) = make_csr_labels import
 	    in
-		LabelSet.addList (set, [import, c, r])
+		LabelSet.addList (set, [import, c, s, r])
 	    end
 
 	val keepers = LabelSet.empty

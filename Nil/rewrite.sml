@@ -248,6 +248,16 @@ structure NilRewrite :> NILREWRITE =
 		     in  if !changed then SOME (Mu_c (flag,Sequence.fromList defslist)) else NONE
 		     end
 
+		    | (Nurec_c (var,kind,con)) => 
+		     let
+			 val changed = ref false
+			 val kind = recur_k changed state kind
+			 val (var,state) = bind_c changed (var,state)
+			 val con = recur_c changed state con
+		     in
+			 if !changed then SOME (Nurec_c (var,kind,con)) else NONE
+		     end
+
 		    | (AllArrow_c {openness, effect, tFormals,
 				   eFormals, fFormals, body_type}) =>
 		     let

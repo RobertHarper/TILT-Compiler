@@ -779,7 +779,10 @@ struct
 	       | MOD_APP (m1,m2) => (blastOutInt 3; blastOutMod m1; blastOutMod m2)
 	       | MOD_PROJECT (m,l) => (blastOutInt 4; blastOutMod m; blastOutLabel l)
 	       | MOD_SEAL (m,s) => (blastOutInt 5; blastOutMod m; blastOutSig s)
-	       | MOD_LET (v,m1,m2) => (blastOutInt 6; blastOutVar v; blastOutMod m1; blastOutMod m2))
+	       | MOD_LET (v,m1,m2) => (blastOutInt 6; blastOutVar v; blastOutMod m1; blastOutMod m2)
+	       | MOD_CANONICAL s => (blastOutInt 7; blastOutSig s)
+               | MOD_REC (v,s,m) => (blastOutInt 8; blastOutVar v; blastOutSig s; blastOutMod m))
+
 
         and blastInMod () =
 	    let val _ = push()
@@ -800,6 +803,8 @@ struct
 	       | 4 => MOD_PROJECT (blastInMod (), blastInLabel ())
 	       | 5 => MOD_SEAL (blastInMod (), blastInSig ())
 	       | 6 => MOD_LET (blastInVar (), blastInMod (), blastInMod ())
+	       | 7 => MOD_CANONICAL (blastInSig ())
+	       | 8 => MOD_REC (blastInVar (), blastInSig (), blastInMod ())
 	       | _ => error "bad blastInMod")
 
 	and blastOutSig s =
@@ -810,6 +815,7 @@ struct
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutInt 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
 	       | SIGNAT_VAR v => (blastOutInt 5; blastOutVar v)
+               | _ => error "bad blastOutSig"
                  )
 	and blastInSig () =
 	    (case (blastInInt()) of

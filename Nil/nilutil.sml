@@ -444,6 +444,15 @@ struct
 		   in  Mu_c (flag,defs')
 		   end
 
+	     | (Nurec_c (var,kind,conbody)) => 
+		   let
+		       val kind' = f_kind state kind
+		       val state' = add_convar(state,var)
+		       val conbody' = f_con state' conbody
+		   in
+		       Nurec_c (var,kind',conbody')
+		   end
+
 	     | (AllArrow_c confun) => AllArrow_c (f_arrow state confun)
 	     | (ExternArrow_c (cons,c)) => ExternArrow_c(map self cons, self c)
 
@@ -1143,7 +1152,7 @@ struct
 		     andalso (known1 = known2)
 		     )
 		  | (Vararg_c(o1,eff1),Vararg_c(o2,eff2)) =>
-		    o1 = o1 andalso (sub_effect(st,eff1,eff2)) andalso
+		    o1 = o2 andalso (sub_effect(st,eff1,eff2)) andalso
 		    (case (args1,args2)
 		       of ([argc1,resc1],[argc2,resc2]) =>
 			 alpha_subequiv_con' st context (argc2,argc1) andalso
@@ -1162,6 +1171,13 @@ struct
 		  val (var_list2,con_list2) = unzip def_list2
 		  val context = if flag1 then alpha_equate_pairs (context,(var_list1,var_list2)) else context
 		in alpha_subequiv_con_list false context (con_list1,con_list2)
+		end
+	    | (Nurec_c (var1,kind1,con1), Nurec_c (var2,kind2,con2)) => 
+		alpha_equiv_kind' context (kind1,kind2) andalso
+		let
+		    val context = alpha_equate_pair(context,(var1,var2))
+		in
+		    alpha_subequiv_con' false context (con1,con2)
 		end
 	    | (AllArrow_c {openness = o1, effect = eff1,
 			   tFormals = t1, eFormals = e1, fFormals = f1, body_type = b1},

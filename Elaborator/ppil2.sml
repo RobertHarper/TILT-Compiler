@@ -260,6 +260,12 @@ struct
 			    String "END"]
 	   | MOD_SEAL(m,s) => 
 		 pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true)
+	   | MOD_CANONICAL s => 
+		 pp_region "MOD_CANONICAL(" ")" [pp_signat seen s]
+           | MOD_REC(v,s,m) =>
+		 Vbox0 1 1 
+		 [String "MOD_REC(", pp_var v, String ": ", pp_signat seen s,
+		  Break, pp_mod seen m, String ")"]
     )
 
     and pp_phrase_class full seen pc =
@@ -448,8 +454,18 @@ struct
       (case signat of
 	 SIGNAT_VAR v => pp_var v
        | SIGNAT_STRUCTURE sdecs => pp_sdecs seen sdecs
-       | SIGNAT_RDS (v,sdecs) => HOVbox[String "RDS_SIG(", pp_var v, String ", ", 
-					pp_sdecs seen sdecs, String ")"]
+       | SIGNAT_RDS (v,sdecs) => Vbox0 1 1 [String "RDS_SIG(", pp_var v, String ", ", Break, 
+					    pp_sdecs seen sdecs, String ")"]
+       | SIGNAT_SWITCH {use_private,sig_private,sig_public} =>
+	     Vbox0 1 1
+	     [String "SIG_SWITCH(",
+	      if !use_private then String "use_private," else String "use_public,",
+              Break,
+	      pp_signat seen sig_private,
+              String ",",
+              Break,
+              pp_signat seen sig_public,
+	      String ")"]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1
 	                                        [String "SIGF(",
 						 pp_var v,

@@ -92,6 +92,8 @@ struct
                                                        of primitive types *)
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						       a recursive type *)
+    | Nurec_c of var * kind * con                 (* Non-uniform recursive type constructor *)
+
     | AllArrow_c of {openness : openness, (* open functions, code functions, and closures *)
 		     effect : effect,
 		     tFormals : (var * kind) list,

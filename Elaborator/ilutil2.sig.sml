@@ -70,6 +70,8 @@ signature ILUTIL =
     val is_existential_sig : signat -> (var * signat * signat) option
     val make_existential_mod : var * mod * mod -> mod
     val make_existential_sig : var * signat * signat -> signat
+    val make_existential_sbnds : var * mod * mod -> Il.sbnds
+    val make_existential_sdecs : var * signat * signat -> Il.sdecs
 
     (* some simple local reductions *)
     val exp_reduce : context * exp -> exp option
@@ -134,6 +136,8 @@ signature ILUTIL =
     val unit_exp : exp
     val bind_exn : context -> exp
     val match_exn : context -> exp
+    val fail_exn : context -> exp
+    val badrecursion_exn : context -> exp
 
     val ident_sbnd : sbnd
     val ident_sdec : sdec
@@ -246,6 +250,9 @@ signature ILUTIL =
     val decresult_handle : handler -> Il.decresult -> Il.decresult
     val sdecs_handle : handler -> Il.sdecs -> Il.sdecs
     val entries_handle : handler -> Il.entries -> Il.entries
+
+    val sig_set_switches : bool -> Il.signat -> Il.signat
+    val sdecs_set_switches : bool -> Il.sdecs -> Il.sdecs
 
       (*
         con_subst_conapps : substitute each application

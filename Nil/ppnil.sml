@@ -184,6 +184,10 @@ structure Ppnil :> PPNIL =
 					   (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
 					    (Sequence.toList vcset)),
 					   String ")"]
+	 | Nurec_c (v,k,c) => HOVbox[String "NUREC(",
+				     pp_var v, String " : ", 
+				     pp_kind k, String " = ", 
+				     pp_con c]
 	 | AllArrow_c confun => pp_confun confun
 	 | ExternArrow_c(cons,c) => pp_region "EXTERNARROW(" ")"
 	                            [pp_list pp_con cons ("",",","",false),

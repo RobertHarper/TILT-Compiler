@@ -12,6 +12,8 @@ sig
     datatype path = PATH of var * labels
 
     (* XXX want to eliminate total/partial eventually *)
+    (* TOTAL and PARTIAL only classify functors representing polymorphic values.
+       APPLICATIVE and GENERATIVE classify (the translations of) source-level functors. *)
     datatype arrow = TOTAL | PARTIAL | APPLICATIVE | GENERATIVE
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
@@ -100,6 +102,11 @@ sig
                  | MOD_PROJECT of mod * label
                  | MOD_SEAL of mod * signat
                  | MOD_LET of var * mod * mod
+                 (* Instead of generating canonical implementations of signatures during elaboration,
+		    which would require us to add non-uniform recursive types to the HIL,
+		    we simply write MOD_CANONICAL(s) and let the phase-splitter do the work. *)
+                 | MOD_CANONICAL of signat
+                 | MOD_REC of var * signat * mod
 
     and     sbnd = SBND of label * bnd
     and      bnd = BND_EXP of var * exp
@@ -110,7 +117,12 @@ sig
     and   signat = SIGNAT_STRUCTURE of sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
-                 | SIGNAT_RDS of var * sdec list
+                 | SIGNAT_RDS of var * sdec list   (* Rho var. [sdecs] *)
+                 (* SIGNAT_SWITCH is only used internally by recursive module elaboration.
+		    It should *not* appear in the module/interface output of elaboration. *)
+                 | SIGNAT_SWITCH of {use_private : bool ref,
+				     sig_private : signat,
+				     sig_public : signat}
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)

@@ -103,6 +103,18 @@ sig
 						    a recursive type; bool indicates if it
 						    is really recursive *)
 
+    (* Nurec_c (v,k,c) is a type constructor c of kind k, which may refer to itself recursively
+     * via the variable v, i.e. a non-uniform recursive type constructor.  We maintain the
+     * invariant that the only references to v inside c occur within Mu_c's, and that these
+     * Mu_c's do not bind their recursive variables, i.e. they are of the form
+     * Mu_c (v1,...,vn). (c1,...,cn), where v1,...,vn are not free in c1,...,cn.
+     * The first part of the invariant ensures that it is easy to translate Nurec_c's to RTL,
+     * because, thanks to the shallow representation of Mu_c's, Nurec_c (v,k,c) has the same
+     * RTL translation as c.  The second part of the invariant makes the implementation of
+     * expandMuType a little simpler, and is ensured by the output of the phase-splitter.
+     *)
+    | Nurec_c of var * kind * con                 (* Non-uniform recursive type constructor *)
+
     (* The AllArrow constructor combines the universal and arrow type constructors into a
      * single type constructor.  This permits use to pass type and term constructors
      * together in a single function call, instead of a double function call for

@@ -290,7 +290,11 @@ struct
 	   | AllArrow_c _      => NOT_RECORD
 	   | ExternArrow_c _   => NOT_RECORD
 	   | Coercion_c _      => NOT_RECORD
-	   | Proj_c(Mu_c _, _) => NOT_RECORD
+           (* The Proj_c and App_c cases are needed for projections from Nurec_c's. *)
+	   | Proj_c _          => NOT_RECORD
+	   | App_c _           => NOT_RECORD
+	   | Mu_c _            => NOT_RECORD
+	   | Nurec_c _         => NOT_RECORD
 	   | _ => error "Function argument type is not a Type, or reduce_hnf lied about HNF")
 
     fun is_record state arg =
@@ -329,6 +333,11 @@ struct
 		                    (fn ((v,c),state) => add_kind(state,v,Type_k)) state vc_seq
 		   in  Mu_c(recur,Sequence.map
 			    (fn (v,c) => (v,do_con state' c)) vc_seq)
+		   end
+	     | Nurec_c (v,k,c) => 
+		   let val ([(v,k)],state) = do_vklist state [(v,k)]
+		       val c = do_con state c
+		   in  Nurec_c(v,k,c)
 		   end
 	     | AllArrow_c{openness,effect,
 			  tFormals=[],fFormals=0w0,eFormals=[argc],body_type=resc} =>

@@ -734,8 +734,9 @@ structure Signature :> SIGNATURE =
 								  con_actual_tyvar,
 								  eopt_tyvar,inline))]
 			       val inner_mod =
-				   (case (eopt_tyvar,inline) of
-					(SOME e,true) => MOD_STRUCTURE [SBND(it_lab,BND_EXP(dummy_var,e))]
+				   (case (eopt_tyvar,inline,sdecs_actual) of
+					(SOME e,true,_) => MOD_STRUCTURE [SBND(it_lab,BND_EXP(dummy_var,e))]
+				      | (_,_,[]) => MOD_STRUCTURE [SBND(it_lab,BND_EXP(dummy_var, path2exp path))]
 				      | _ => mtemp)
 			       val s2 = SIGNAT_FUNCTOR(var_actual,s1,inner_sig,TOTAL)
 			       (* only need to coerce if spec is less polymorphic,
@@ -757,7 +758,7 @@ structure Signature :> SIGNATURE =
 				  constructors will be to (components of) an inner module of a datatype
                                   and will thus be eliminated by the phase-splitter anyway.
 			       *)
-			       val m = if coerced orelse (is_datatype_constr path)
+			       val m = if coerced orelse (is_datatype_constr path) orelse null sdecs_actual
 					   then MOD_FUNCTOR(TOTAL,var_actual,s1,inner_mod,inner_sig)
 				       else pathmod
 			       val _ = coerce(coerced,"polyval")
@@ -1043,6 +1044,19 @@ structure Signature :> SIGNATURE =
 			| (SOME _, _) =>
 			 (error_region_with "polymorphic value specification but module component: ";
 			  pp_label lab; print "\n"; NONE))
+
+                (* ------- coercion of a monoval component to a polyval spec ------- *)
+		| (_, DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_EXP (_,con_actual,eopt,inline))) =>
+		    (case is_polyval_sig sig_spec of
+			 SOME (v1,s1,con_spec,_,_) =>
+			     polyval_case (ctxt,coerce)
+			         {name = v_spec, path = join_path_labels(path_actual,lbls),
+				  varsig_spec = SOME(v1,s1), con_spec = con_spec, eopt = eopt,
+				  inline = inline, var_actual = fresh_var(),
+				  sdecs_actual = [], con_actual = con_actual}
+		       | _ => (error_region_with "coercion of a non-module component to a module specification failed at ";
+			       pp_label lab; print "\n";
+			       NONE))
 
 		(* ------- coercion of a non-existent or non-module component to a module spec ---- *)
 		| (_, DEC_MOD _, _) =>

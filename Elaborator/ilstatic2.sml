@@ -32,6 +32,8 @@ structure IlStatic
 	   | NONE => error "reduce_sigvar given unbound SIGVAR")
 
    fun reduce_signat context (SIGNAT_VAR v) = reduce_signat context (reduce_sigvar(context,v))
+     | reduce_signat context (SIGNAT_SWITCH {use_private,sig_private,sig_public}) =
+         reduce_signat context (if !use_private then sig_private else sig_public)
      | reduce_signat context s = s
 
    fun deep_reduce_signat ctxt signat : signat =
@@ -1062,6 +1064,12 @@ structure IlStatic
 		  else
 		      let val (va,con) = GetExpCon(e,ctxt)
 		      in
+                          (* XXX
+			     I believe this is broken.  In the case that there is only one carrier,
+			     the return type should just be carrier, not a projection.  Since this
+			     has not yet caused a problem, I suspect this code is never being called.
+			        -Derek
+			   *)
 			  if (eq_con(ctxt,c,con)) then
 			      (va,CON_TUPLE_PROJECT((i-noncarriers),carrier))
 			  else (debugdo(fn () =>
@@ -1419,6 +1427,7 @@ structure IlStatic
 *)
 		in SOME (va,s,pure)
 		end
+     | MOD_CANONICAL s => SOME (true,s,true)
     )
 
 
@@ -1662,6 +1671,8 @@ structure IlStatic
 		  SIGNAT_STRUCTURE(Fst_Sdecs(ctxt,sdecs))
 	    | SIGNAT_FUNCTOR(v,s1,s2,APPLICATIVE) => 
 		  SIGNAT_FUNCTOR(v,Fst_Sig(ctxt,s1),Fst_Sig(ctxt,s2),APPLICATIVE)
+	    | SIGNAT_SWITCH{use_private,sig_private,sig_public} => 
+		  if !use_private then Fst_Sig(ctxt,sig_private) else Fst_Sig(ctxt,sig_public)
 	    | _ => SIGNAT_STRUCTURE []
          )
 

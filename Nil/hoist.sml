@@ -303,10 +303,14 @@ struct
     in
 	type hoistmap = (bnd list * levels * bool) IntMap.map
         type choistmap = ((phase * conbnd) list * levels) IntMap.map
+
+        (* The nurecvaropt field is used to store the name and level of the nearest-enclosing
+           non-uniform recursive variable, if there is one. *)
 	datatype env = ENV of {currentlevel : level,
 			       context : NilContext.context,
 			       econtext : econtext,
 			       levelmap : level VarMap.map,
+			       nurecvaropt : (var * level) option,
 			       lastfnlevel : level}
 	datatype state = STATE of {hoistmap : hoistmap,choistmap : choistmap}
 
@@ -314,6 +318,7 @@ struct
 			    context = NilContext.empty(),
 			    econtext = empty_econtext,
 			    levelmap = VarMap.empty,
+			    nurecvaropt = NONE,
 			    lastfnlevel = toplevel}  
 
 	val empty_state = STATE{hoistmap = IntMap.empty, choistmap = IntMap.empty}
@@ -420,7 +425,7 @@ struct
 	    Normalize.strip_arrow_norm context c
 
 	(* insertKind : env * var * con -> env *)
-	fun insertKind (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, v, k) =
+	fun insertKind (ENV{currentlevel,context,econtext,levelmap,nurecvaropt,lastfnlevel}, v, k) =
 	    let
 		val context' = NilContext.insert_kind (context, v, k)
 	    in
@@ -428,11 +433,12 @@ struct
 		    econtext = econtext,
 		    currentlevel = currentlevel,
 		    levelmap = levelmap,
+		    nurecvaropt = nurecvaropt,
 		    lastfnlevel = lastfnlevel}
 	    end
 
 	(* insertEquation : env * var * con -> env *)
-	fun insertEquation (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, v, c) =
+	fun insertEquation (ENV{currentlevel,context,econtext,levelmap,nurecvaropt,lastfnlevel}, v, c) =
 	    let
 		val context' = NilContext.insert_equation (context, v, c)
 	    in
@@ -440,11 +446,12 @@ struct
 		    econtext = econtext,
 		    currentlevel = currentlevel,
 		    levelmap = levelmap,
+ 		    nurecvaropt = nurecvaropt,
 		    lastfnlevel = lastfnlevel}
 	    end
 
 	(* insertCbnd : env * cbnd -> env *)
-	fun insertCbnd (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, cb) =
+	fun insertCbnd (ENV{currentlevel,context,econtext,levelmap,nurecvaropt,lastfnlevel}, cb) =
 	    let
 		val context' = NilContext.insert_cbnd (context, cb)
 	    in
@@ -452,6 +459,7 @@ struct
 		    econtext = econtext,
 		    currentlevel = currentlevel,
 		    levelmap = levelmap,
+		    nurecvaropt = nurecvaropt,
 		    lastfnlevel = lastfnlevel}
 	    end
 
@@ -462,7 +470,7 @@ struct
 			     raise e)
 
         (* bindEff : env * var * hoist_effs -> env *)
-	fun bindEff (ENV{context,econtext,currentlevel,levelmap,lastfnlevel},
+	fun bindEff (ENV{context,econtext,currentlevel,levelmap,nurecvaropt,lastfnlevel},
 		      v, effs) =
 	    let
 		val econtext' = VarMap.insert(econtext, v, effs)
@@ -471,6 +479,7 @@ struct
 		    econtext = econtext',
 		    currentlevel = currentlevel,
 		    levelmap = levelmap,
+ 		    nurecvaropt = nurecvaropt,
 		    lastfnlevel = lastfnlevel}
 	    end
 
@@ -496,7 +505,7 @@ struct
               in the state, returns updated env and state and returns
               the new current level
          *)
-	fun bumpCurrentlevel (ENV{currentlevel,context,econtext,levelmap,lastfnlevel},
+	fun bumpCurrentlevel (ENV{currentlevel,context,econtext,levelmap,nurecvaropt,lastfnlevel},
 			      state) =
 	    let
 		val newlevel = currentlevel + 1
@@ -504,19 +513,20 @@ struct
 			       context = context,
 			       econtext = econtext,
 			       levelmap = levelmap,
+			       nurecvaropt = nurecvaropt,
 			       lastfnlevel = lastfnlevel}
 		val state' = clearLevel (newlevel, state)
 	    in
 		(env', state', newlevel)
 	    end
 
-	fun enterFunction (ENV{currentlevel, context, econtext, levelmap, lastfnlevel})=
+	fun enterFunction (ENV{currentlevel, context, econtext, levelmap, nurecvaropt, lastfnlevel})=
 	    ENV{currentlevel = currentlevel,
 		context = context,
 		econtext = econtext,
 		levelmap = levelmap,
+		nurecvaropt = nurecvaropt,
 		lastfnlevel = currentlevel}
-
 
 	fun lastFnLevel (ENV{lastfnlevel,...}) = lastfnlevel
 
@@ -531,18 +541,35 @@ struct
               Record that the binding of the var will be at the
               given level (for now)
          *)
-	fun bindLevel(ENV{currentlevel, context, econtext, levelmap, lastfnlevel},
+	fun bindLevel(ENV{currentlevel, context, econtext, levelmap, nurecvaropt, lastfnlevel},
 		       v, level) =
 	    ENV{currentlevel = currentlevel,
 		context = context,
 		econtext = econtext,
 		levelmap = VarMap.insert(levelmap, v, level),
+		nurecvaropt = nurecvaropt,
 		lastfnlevel = lastfnlevel}
 
         (* Bind a series of variables at the same level *)
 	fun bindsLevel(env, [], level) = env
           | bindsLevel(env, v::vs, level) =
 	    bindsLevel(bindLevel(env, v, level), vs, level)
+
+        (* When we enter a (uniform) Mu, we "bind" the level of the nearest-enclosing NON-uniform
+           recursive variable at the level of the Mu so that no references to that nurecvar inside
+           the Mu will be hoisted outside.  See the Var_c case of rtc' for further explanation. *)
+	fun enterMu (env as ENV{currentlevel, context, econtext, levelmap, nurecvaropt, lastfnlevel}) =
+	  (case nurecvaropt of 
+	       NONE => env
+             | SOME (var,_) => bindLevel(env, var, currentlevel))
+
+	fun enterNurec (ENV{currentlevel, context, econtext, levelmap, nurecvaropt, lastfnlevel}, var) =
+	    ENV{currentlevel = currentlevel,
+		context = context,
+		econtext = econtext,
+		levelmap = levelmap,
+		nurecvaropt = SOME (var,currentlevel),
+		lastfnlevel = lastfnlevel}
 
         (* Add a cbnd to the lowest possible hoisting level *)
 	fun hoistCbnd phase (STATE{hoistmap, choistmap}, cbndlevels, cbnd) =
@@ -778,12 +805,25 @@ struct
 	  val (env, state, mulevel) = bumpCurrentlevel (env, state)
 	  val env = bindsLevel (env, vars, mulevel)
 	  val env = foldl (fn (v, env) => insertKind (env, v, Type_k)) env vars
+	  val env = enterMu env
 
 	  val (cons, state, levels) = rtcs_limited phase mulevel (cons, env, state)
 
 	  val vcseq = Sequence.fromList (Listops.zip vars cons)
       in
 	  (Mu_c (isRecursive, vcseq), state, levels)
+      end
+
+    | rtc' phase (Nurec_c (v,k,c), env, state) =
+      let
+	  val (env, state, nureclevel) = bumpCurrentlevel (env, state)
+	  val (k', state, levels1) = rkind_limited nureclevel (k, env, state)
+	  val env = insertKind(env, v, k)
+	  val env = enterNurec(env, v)
+	  val (c, state, levels2) = rtc_limited phase nureclevel (c, env, state)
+	  val levels = mergeLevels(levels1,levels2)
+      in
+	  (Nurec_c(v,k',c), state, levels)
       end
 
     | rtc' phase (con as AllArrow_c {openness, effect, tFormals,
@@ -821,11 +861,33 @@ struct
 	  (ExternArrow_c(cons, con), state, levels)
       end
 
-    | rtc' phase (c as Var_c v, env, state) =
+    | rtc' phase (c as Var_c v, env as ENV{nurecvaropt,...}, state) =
       let
+	(* This is a subtle case, due to non-uniform recursive types.
+  
+	   If we hit a nurecvar, then we want to ensure
+	   1) that the nurecvar will not be hoisted out of any mu's in which it appears, and
+	   2) that this is nonetheless considered to be a free occurrence of the nurecvar.
+
+           These goals are achieved by pretending that the nurecvar has *two* levels:
+	   1) the level of the nearest-enclosing mu, ensuring that it will not be lifted out
+              of this mu, and
+           2) the actual level at which the nurecvar is bound, ensuring that no type containing
+              this nurecvar will be hoisted beyond the point where the nurecvar was bound.
+
+           The first level will be the one you get from lookupLevel(env,v),
+           thanks to the implementation of the enterMu function.  
+	   The second level be the one you get from looking up the nurecvaropt in the env.
+
+		-Derek
+         *)
 	  val level = lookupLevel (env, v)
+	  val levels = (case nurecvaropt of 
+			    NONE => [level]
+			  | SOME (var,varlevel) => 
+				if eq_var(var,v) then [level,varlevel] else [level])
       in
-	  (c, state, [level])
+	  (c, state, levels)
       end
 
     | rtc' phase (Let_c(Sequential,cbnds,cbody), env, state) =

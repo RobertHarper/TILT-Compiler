@@ -1286,6 +1286,11 @@ struct
 		   in
 		       Mu_c(recur,vc_seq')
 		   end
+	    | Nurec_c (v,k,c) => 
+		   let val ([(v,k)],state) = do_vklist state [(v,k)]
+		       val c = do_con state c
+		   in  Nurec_c(v,k,c)
+		   end
 	    | ExternArrow_c(clist,c) =>
 		   ExternArrow_c(map (do_con state) clist, do_con state c)
 	    | AllArrow_c{openness,effect,tFormals,eFormals,fFormals,body_type} =>

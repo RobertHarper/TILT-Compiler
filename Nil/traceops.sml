@@ -33,7 +33,7 @@ struct
 
   fun get_trace' c =
     let
-      val res =
+      val res = 
        case c of
           Prim_c (p, cs) =>
             get_trace_primcon (p, cs)
@@ -44,6 +44,10 @@ struct
             SOME TI.Notrace_Code
         | Mu_c _ =>
             SOME TI.Trace
+        (* In general, an elimination of a Nurec_c may not be traceable.
+           We don't know until we put it in HNF, see below in the
+           get_trace function. -Derek *)
+	| Nurec_c _ => NONE
         | Var_c v =>
             SOME (TI.Compute (v, []))
         | Proj_c (Mu_c _, _) =>
@@ -56,7 +60,7 @@ struct
         | Annotate_c (_,c) =>
             get_trace' c
 *)
-        | Let_c (_,_,body) => get_trace' body
+        | Let_c (_,_,body) => NONE
 (*
         | Typeof_c _ => NONE
 *)
@@ -101,12 +105,25 @@ struct
     val bestTraceCompute = #1 o find
   end
 
+  fun is_rec_proj (Proj_c(c,_)) = is_rec_proj c
+    | is_rec_proj (App_c(c,_)) = is_rec_proj c
+    | is_rec_proj (Nurec_c _) = true
+    | is_rec_proj (Mu_c _) = true
+    | is_rec_proj _ = false
+
+  (* get_trace is the function called by the Reifier.  This must give the
+     right answer, and it is able to do so by first putting things in HNF.
+
+     get_trace' above only gives a correct answer when given input in 
+     HNF that is not a projection from a Nurec_c.
+   *)
   fun get_trace  (ctxt, c) =
     let
       (* If c is a path, then it will be the last element of paths
        *)
        val (_, c',paths) = Normalize.reduce_hnf_list (ctxt, c)
     in
+       if is_rec_proj c' then SOME TI.Trace else
        case c' of
 	 Proj_c _ =>
 	   if !minimize_computes then

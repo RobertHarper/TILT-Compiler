@@ -152,6 +152,8 @@ structure AstHelp : ASTHELP =
 								  body=f_dec state body}
 	| Ast.ExceptionDec eb_list => Ast.ExceptionDec (map (f_eb state) eb_list)
 	| Ast.StrDec strb_list => Ast.StrDec (map (f_strb state) strb_list)
+	| Ast.StrRecDec {name,def,constraint} =>
+	      Ast.StrRecDec{name=name,def=f_strexp state def,constraint=f_sigexp state constraint}
 	| Ast.SigDec sigb_list => Ast.SigDec (map (f_sigb state) sigb_list)
 	| Ast.LocalDec (d1,d2) => Ast.LocalDec(f_dec state d1, f_dec state d2)
 	| Ast.SeqDec dec_list => Ast.SeqDec(map (f_dec state) dec_list)
@@ -230,6 +232,7 @@ structure AstHelp : ASTHELP =
 				       | Ast.WeakOpaque se => Ast.WeakOpaque(f_sigexp state se))})
       and f_sigexp state (Ast.VarSig s) = Ast.VarSig s
 	| f_sigexp state (Ast.BaseSig speclist) = Ast.BaseSig(map (f_spec state) speclist)
+	| f_sigexp state (Ast.RdsSig speclist) = Ast.RdsSig(map (f_spec state) speclist)
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
 	| f_sigexp state (Ast.AugSig (se,_)) = error "f_sigexp AugSig unimplemented"
       and f_spec (state as (doconstr,constrbound,

@@ -11,6 +11,7 @@ structure Datatype
 
     val do_inline = Stats.tt("DatatypeInline")
     val debug = Stats.ff("DatatypeDebug")
+    val no_eq = Stats.ff("DatatypeNoEq")
 
     val error = fn s => error "datatype.sml" s
     val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s
@@ -392,7 +393,7 @@ structure Datatype
 			SOME (con_bool, true_exp, false_exp, con_eqfun)
 		    end
 		else NONE
-	    val eq_exp_con = eqcomp(ctxt, bool, eq_con)
+	    val eq_exp_con = if !no_eq then NONE else eqcomp(ctxt, bool, eq_con)
 	    val (sdecs_eq, sigpoly_eq) =
 		if is_monomorphic orelse not (isSome eq_exp_con)
 		    then (sdecs_eq, sigpoly_eq)
@@ -838,7 +839,16 @@ structure Datatype
 	     | SOME sym_tyvar_def_listlist => map doit sym_tyvar_def_listlist
       end
 
-
+    (* 
+       The reason that we copy each component of a datatype separately,
+       instead of just copying the whole module, is that the *name* of the datatype
+       may change (e.g. datatype t = datatype u), and so the label names may need
+       to change accordingly.  Perhaps a smarter thing to do would be to copy the
+       module whole (with an open label) and then introduce some rebindings of the
+       type components (e.g. [tmod* = umod, type t = tmod.u]).  It would be worth
+       thinking about, since this code seems unnecessarily complicated.
+           -Derek
+     *)
     fun copy_datatype(context,path,tyc) =
 	let val old_type_sym = List.last path
 	    val type_sym = tyc

@@ -1606,17 +1606,20 @@ struct
 	     | Prim_c(Vararg_c _,cons) => mk_sum(state,[mktag 6],cons)
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (is_recur,vcset) =>
-		   let val (const,lv,state) = mk_sum(state,[mktag 8],[])
+		   let val (lv,state) = TortlRecord.make_record_const(state, [mktag 8], NONE)
 		       val num_mu = Sequence.length vcset
-		   in  if (num_mu = 1) then (const,lv,state)
+		   in  if num_mu = 1 andalso !do_single_crecord 
+			   then (true,lv,state)
 		       else let val terms = Listops.map0count (fn _ => lv) num_mu
 				val (result,state) =
-				    if const (* all mus are base-case/degenerate now *)
-					then TortlRecord.make_record_const(state,terms,NONE)
-				    else TortlRecord.make_record_const(state,terms,NONE)
-			    in  (const,result,state)
+				      TortlRecord.make_record_const(state,terms,NONE)
+			    in  (true,result,state)
 			    end
 		   end
+             (* By invariant of the compiler, c will only contain free references to v
+	        underneath Mu's, and since the bodies of Mu's are ignored, there is no need
+		to worry about v. *)
+	     | Nurec_c (v,k,c) => xcon'(state,name,c)
 
      (* ----------------------------------------------------------------------------------
         This used to be the code that represented Mu types by creating circular structures.

@@ -152,6 +152,7 @@ struct
 		     pass1_dec body]
     | pass1_dec (ExceptionDec ebs) = TVSet.union (map pass1_eb ebs)
     | pass1_dec (StrDec strbs) = (app pass1_strb strbs; [])
+    | pass1_dec (StrRecDec {def,...}) = (pass1_strexp def; [])
     | pass1_dec (SigDec sigbs) = []
     | pass1_dec (LocalDec (dec0, dec1)) = (pass1_dec dec0; pass1_dec dec1)
     | pass1_dec (SeqDec decs) = TVSet.union (map pass1_dec decs)
@@ -281,6 +282,7 @@ struct
     | pass2_dec env (AbstypeDec {abstycs, withtycs, body}) = pass2_dec env body
     | pass2_dec env (ExceptionDec ebs) = ()
     | pass2_dec env (StrDec strbs) = app pass2_strb strbs
+    | pass2_dec env (StrRecDec {def,...}) = pass2_strexp def
     | pass2_dec env (SigDec sigbs) = ()
     | pass2_dec env (LocalDec (dec0, dec1)) =
 	(pass2_dec env dec0; pass2_dec env dec1)

@@ -138,6 +138,17 @@ structure SingletonElim :> SINGLETONELIM =
 		val vcs = R_vclist env vc_seq
 	      in Mu_c(flag,vcs)
 	      end
+	  | Nurec_c (v,k,c) => 
+	      let
+(*
+		  val ([(v,k)],vc,env) = R_vklist env [(v,k)]
+		  val c = mkLetC [Con_cb vc] (R_c env c)
+*)
+		  val env = insert_kind env (v,k)
+		  val c = R_c env c
+	      in
+		  Nurec_c(v,k,c)
+	      end
 	  | ExternArrow_c (clist,c) => ExternArrow_c (R_clist env clist,R_c env c)
 	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
 	      let

@@ -38,6 +38,7 @@ exception Option
 exception Size
 exception Span
 exception Subscript
+exception BadRecursion
 
 (* values *)
 (* o, before, ignore, not -- primitive *)

@@ -296,6 +296,10 @@ struct
           | (_, MOD_SEAL _) => LESS
           | (MOD_LET _, _) => GREATER
           | (_, MOD_LET _) => LESS
+	  | (MOD_CANONICAL _, _) => GREATER
+	  | (_, MOD_CANONICAL _) => LESS
+	  | (MOD_REC _, _) => GREATER
+          | (_, MOD_REC _) => LESS
 
           | (MOD_VAR v1, MOD_VAR v2) => Name.compare_var(v1,v2)
           | (MOD_VAR v1, _) => GREATER

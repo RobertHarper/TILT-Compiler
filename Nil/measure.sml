@@ -201,6 +201,7 @@ structure Measure :> MEASURE =
 	 | Var_c _               => "Var_c"
 	 | Let_c _               => "Let_c"
 	 | Mu_c _                => "Mu_c"
+         | Nurec_c _             => "Nurec_c"
 	 | Proj_c _              => "Proj_c"
 	 | App_c _               => "App_c"
 	 | Crecord_c _           => "Crecord_c"

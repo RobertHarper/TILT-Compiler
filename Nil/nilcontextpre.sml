@@ -303,11 +303,9 @@ structure NilContextPre
    (* If you have a name, carry out the selfification using
     * the name.
     *)
-   fun name_self(SOME name,kind,subst) =
-     (empty_subst(),
-      if NilSubst.C.is_empty subst then selfify (name,kind)
-      else selfify' (name,kind,subst))
-     | name_self (NONE,kind,subst)     = (subst,kind)
+   fun name_self (SOME name,kind,subst) =
+     (empty_subst(), selfify' (name,kind,subst))
+     | name_self (NONE,kind,subst) = (subst,kind)
 
    val name_self = subtimer("Ctx:name_self",name_self)
 
@@ -419,6 +417,14 @@ structure NilContextPre
 		      end
 	      in  (empty_subst(),kind)
 	      end
+
+             (* Like the principal kind of a variable, 
+	        the principal kind of a Nurec is precisely its singleton expansion.
+		This means that kind_of(Nurec) can blow up in size, which is concerning,
+		but I don't see a simple way around it.  -Derek *)
+	     | Nurec_c (_,kind,_) => 
+               (empty_subst(),
+		kind_standardize'(D, kind, if isSome name then name else SOME constructor))
 
 	     | (v as (Var_c var)) =>
 	      let
@@ -744,6 +750,8 @@ structure NilContextPre
 		 of CON c1 => CON(Closure_c(c1,c2))
 		  | KIND (k,subst) => closure_kind(k,c2,subst)
 		  | NON_PATH => NON_PATH)
+            (* The natural kind of Nurec (a:k.c) is k. *)
+	    | (Nurec_c(_,k,_)) => KIND (k, empty_subst())
 	    (*| (Annotate_c (_,c)) => traverse c*)
 	    | _ => NON_PATH)
 
@@ -756,9 +764,6 @@ structure NilContextPre
 
     val find_kind_equation = subtimer("Ctx:find_kind_equation",find_kind_equation)
 
-    (* is_well_formed (kind_valid,con_valid,subkind) D
-     * Check whether or not a given context is well-formed.
-     *)
     fun is_well_formed (kind_valid : context * kind -> kind,
 			con_valid : context * con -> kind,
 			subkind : context * kind * kind -> bool) ({kindmap,...}:context) : bool =

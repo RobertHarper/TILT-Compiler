@@ -87,7 +87,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val projectRecordType  = flagtimer (import_profile,"Tchk:projectRecordType",Normalize.projectRecordType)
   val projectSumType     = flagtimer (import_profile,"Tchk:projectSumType",Normalize.projectSumType)
 
+(*
   val reduce_hnf'        = flagtimer (import_profile,"Tchk:reduce_hnf'",Normalize.reduce_hnf')
+*)
   val is_hnf             = Normalize.is_hnf
 
   fun con_head_normalize args = #2( Normalize.reduce_hnf args)
@@ -599,8 +601,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       (case (kind1,kind2)
 	 of (Type_k, Type_k) => true
 	  | (Type_k,_) => false
-	  | (Single_k _,_) => subeq_kind is_eq ((D,T), kind_standardize(D,kind1), kind2)
-	  | (_,Single_k _) => subeq_kind is_eq ((D,T), kind1, kind_standardize(D,kind2))
+	  | (Single_k _,_) => subeq_kind is_eq ((D,T), kind_standardize(D,(* NilRename.renameKind *) kind1), kind2)
+	  | (_,Single_k _) => subeq_kind is_eq ((D,T), kind1, kind_standardize(D,(* NilRename.renameKind *) kind2))
 	  | (SingleType_k _ ,Type_k) => true
 	  | (SingleType_k (c1),SingleType_k (c2)) =>
 	     subtimer("SubKind:st",type_equiv')((D,T),c1,c2)
@@ -786,8 +788,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      val state = bind_kind_eqn'(state,v,Proj_c(c1,l),k)
 		    in  (state,equal)
 		    end
+		  fun simple_compare () = alpha_subequiv_con sk (c1,c2) orelse con_structural_equiv((D,T),c1,c2,sk)
 		in (case (c1,c2)
-		      of (Mu_c _,Mu_c _) => alpha_subequiv_con sk (c1,c2) orelse con_structural_equiv((D,T),c1,c2,sk)
+		      of (Mu_c _,Mu_c _) => simple_compare()
+		       | (Nurec_c _, Nurec_c _) => simple_compare()
 		       | _ => #2 (Sequence.foldl folder ((D,Alpha.empty_context()),true) lvk_seq))
 		end
 	    | Arrow_k (openness,vklist,k) =>
@@ -827,8 +831,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	let
 	  fun folder((v1,k1),(v2,k2),(D,rename,match)) =
 	    let
-	      val k1 = alphaCRenameKind rename k1
-	      val k2 = alphaCRenameKind rename k2
+	      val k1 = NilRename.renameKind(alphaCRenameKind rename k1)
+	      val k2 = NilRename.renameKind(alphaCRenameKind rename k2)
 
 	      val match = match andalso kind_equiv' ((D,T),k1,k2)
 	      val (D,rename) =
@@ -967,11 +971,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in
 		   (flagtimer (equiv_profile,"Tchk:Equiv:Mu",do_mu) ())
 		 end
+	     | (Nurec_c (v1,k1,c1), Nurec_c (v2,k2,c2)) => 
+		 let
+		     val (D,cRename,match) = vklist_equiv((D,T),[(v1,k1)],[(v2,k2)])
+		 in  match andalso
+		     let
+			 val c1 = alphaCRenameCon cRename c1
+			 val c2 = alphaCRenameCon cRename c2
+		     in
+			 con_equiv((D,T),c1,c2,k1,false)
+		     end
+		 end
 	     | (AllArrow_c {openness=o1,effect=eff1,
 			    tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},
 		 AllArrow_c {openness=o2,effect=eff2,
 			     tFormals=t2,eFormals=e2,fFormals=f2,body_type=b2}) =>
-		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso
+		 o1 = o2 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso
 		 let val (D,cRename,match) = vklist_equiv((D,T),t1,t2)
 		 in  match andalso
 		   let val (D,rename,match) =
@@ -1009,7 +1024,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	     | (App_c (f1,clist1), App_c (f2,clist2)) =>
 		 if con_structural_equiv((D,T),f1,f2,false) then
-		   (case kind_of (D,f1) of
+		   (case kind_of (D, f1) of
 		      Arrow_k(openness,vklist,k) =>
 			let
 			  fun folder ((v,k),c1,c2, (state as (D,alpha),equal)) =
@@ -1017,7 +1032,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 			      let
 				val k = alphaCRenameKind alpha k
 				val equal = con_equiv((D,T),c1,c2,k,false)
-				val D = bind_kind_eqn'(state,v,c1,k)
+				val state = bind_kind_eqn'(state,v,c1,k)
 			      in  (state,equal)
 			      end
 			    else (state,equal)
@@ -1178,6 +1193,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 Ppnil.pp_kind kind;
 		 print "\n")
 	    else ()
+	fun analyze_error () = error' "Error in con_analyze"
+	fun test f = if f() then () else analyze_error()
     in
       (case (constructor,kind) of
 	 (constructor,SingleType_k c) =>
@@ -1188,6 +1205,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 end
        | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
        | (Prim_c (pcon,args),  Type_k) =>  pcon_analyze(D,pcon,args)
+       (* XXX This case does not inspect lvk_seq.  In what sense is it analyzing anything? -Derek *)
        | (Mu_c (is_recur,defs),Record_k lvk_seq) =>
 	 let
 	   val D = if is_recur
@@ -1196,6 +1214,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   else D
 	 in Sequence.app ((type_analyze D) o #2) defs
 	 end
+       | (Nurec_c _, _) => 
+	 test(fn () => sub_kind(D,con_valid(D,constructor),kind))
        | (AllArrow_c {openness,effect,
 		      tFormals,eFormals,fFormals,body_type},Type_k) =>
 	 let
@@ -1215,14 +1235,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 end
        | (v as (Var_c var),kind) =>
 	 let
-	   val _ = sub_kind(D,find_max_kind (D,var),kind)
-	     handle NilContext.Unbound =>
-	       (printem ["UNBOUND VARIABLE = ",var2string var,
-			   " CONTEXT IS \n"];
-		NilContext.print_context D;
-		error  (locate "con_valid") ("variable "^(var2string var)^" not in context"))
-		  | e => (print "Var "; Ppnil.pp_var var; print " vs. "; Ppnil.pp_kind kind; print "\n";
-			  raise e)
+	     val k = find_max_kind (D,var)
+		 handle NilContext.Unbound =>
+		     (printem ["UNBOUND VARIABLE = ",var2string var,
+			       " CONTEXT IS \n"];
+		      NilContext.print_context D;
+		      error  (locate "con_valid") ("variable "^(var2string var)^" not in context"))
+		      | e => (print "Var "; Ppnil.pp_var var; print " vs. "; Ppnil.pp_kind kind; print "\n";
+			      raise e)
+	     val _ = test(fn () => sub_kind(D,k,kind))
 	 in ()
 	 end
        | (Let_c (Parallel,cbnds,con),_) => error' "Parallel bindings not supported yet"
@@ -1245,12 +1266,12 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       (case bnd
 		  of Open_cb (args as (var,formals,body)) =>
 		     if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-		      ignore(sub_kind(D,lambda_valid(D,Open,formals,body),kind))
+		      test(fn () => sub_kind(D,lambda_valid(D,Open,formals,body),kind))
 		    else loop(rest,check_bnd (D,Open_cb,Open) args)
 
 		   | Code_cb (args as (var,formals,body)) =>
 		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
-			ignore(sub_kind(D,lambda_valid(D,Code,formals,body),kind))
+			test(fn () => sub_kind(D,lambda_valid(D,Code,formals,body),kind))
 		      else loop(rest,check_bnd (D,Code_cb,Code) args)
 		   | Con_cb (var,con) => loop(rest,insert_stdkind_equation(D,var,con,con_valid(D,con))))
 
@@ -1267,7 +1288,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | _ => (c_error(D,constructor,"Invalid closure: code has wrong kind"))
 
 	   val kind2 = Arrow_k(Closure,vklist,body_kind)
-	   val _ = sub_kind(D,kind2,kind1)
+	   val _ = test(fn () => sub_kind(D,kind2,kind1))
 	   val _ = (con_analyze(D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure2?")
 	 in ()
 	 end
@@ -1286,8 +1307,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   val record_kind = con_valid (D,rvals)
 
 	   val kind2 = project_from_kind_nondep (record_kind,label)
-	 in if sub_kind(D,kind2,kind1) then ()
-	    else k_error(D,kind1, "Trying to analyze projection at wrong kind")
+	 in test(fn () => sub_kind(D,kind2,kind1))
 	 end
        | (App_c (cfun_orig,actuals),kind1) =>
 	 let
@@ -1304,8 +1324,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  )
 
 	   val D = con_analyze_vk_list(D,actuals,formals)
-	 in if sub_kind(D,body_kind,kind1) then ()
-	    else k_error(D,kind1, "Analyzed kind and return kind from app don't match")
+	 in test(fn () => sub_kind(D,body_kind,kind1))
 	 end
        | (Coercion_c {vars,from,to},Type_k) =>
 	  let
@@ -1459,6 +1478,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     val entries = Sequence.mapcount mapper defs
 
 	   in  Record_k(entries)
+	   end
+	 | Nurec_c (v,k,c) => 
+	   let
+	       val k = kind_valid(D,k)
+	       val D' = insert_stdkind(D,v,k)
+	       val _ = con_analyze(D',c,k)
+	   in
+	       NilRename.renameKind (kind_of (D,constructor))
 	   end
 	 | (v as (Var_c var)) =>
 	   let

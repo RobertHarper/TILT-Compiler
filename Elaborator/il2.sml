@@ -100,6 +100,8 @@ struct
                  | MOD_PROJECT of mod * label
                  | MOD_SEAL of mod * signat
                  | MOD_LET of var * mod * mod
+                 | MOD_CANONICAL of signat
+                 | MOD_REC of var * signat * mod
 
     and     sbnd = SBND of label * bnd
     and      bnd = BND_EXP of var * exp
@@ -111,6 +113,9 @@ struct
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
                  | SIGNAT_RDS of var * sdec list
+                 | SIGNAT_SWITCH of {use_private : bool ref,
+				     sig_private : signat,
+				     sig_public : signat}
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)

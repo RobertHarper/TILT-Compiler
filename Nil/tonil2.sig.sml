@@ -6,7 +6,6 @@ sig
     val chatlev : int ref
 
     val full_debug : bool ref
-    val do_memoize : bool ref
     val killDeadImport : bool ref
 
     val phasesplit : Il.module -> Nil.module
