@@ -1643,7 +1643,7 @@ struct
 
       fun function_valid openness D (var,Function {effect,recursive,isDependent,
 						   tFormals,eFormals,fFormals,
-						   body,body_type=(_,return)}) =
+						   body,body_type}) =
 	let
 	  val _ = if (!trace)
 			then (print "{Processing function_valid with var = ";
@@ -1658,14 +1658,14 @@ struct
 		    else ()
 	  val body_c = exp_valid (D,body)
 	  val D = if isDependent then D else D'
-	  val _ = con_valid (D,return)
+	  val _ = con_valid (D,body_type)
 	  val _ = if (!trace)
 			then (print "}{Processing body type against given type in function_valid with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val _ = 
-	    (type_equiv (D,body_c,return)) orelse
-	    (perr_e_c_c (body,return,body_c);
+	    (type_equiv (D,body_c,body_type)) orelse
+	    (perr_e_c_c (body,body_type,body_c);
 	     (error (locate "function_valid") "Return expression has wrong type" handle e => raise e))    
 
 	  val eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals
@@ -1674,7 +1674,7 @@ struct
 	  val con = AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
 			       tFormals=tFormals,
 			       eFormals=eFormals,
-			       fFormals=fFormals,body=return}
+			       fFormals=fFormals,body=body_type}
 	  val _ = if (!trace)
 			then (print "Done processing function_valid with var = ";
 			      pp_var var; print "}\n")

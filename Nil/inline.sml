@@ -228,7 +228,7 @@ SOME({num_nonrec_calls,num_rec_calls,definition,...}) =>
 	     in 
 		 case vf_list of
 		     [(v,f as (Function{tFormals=vks,eFormals=vcs,fFormals=vs,
-					body=e,body_type=(_,c),...}))] =>
+					body=e,body_type=c,...}))] =>
 			 let val info = insert_fun(v)
 			     val s = (avks vks) + (avcs vcs) + (List.length
 vs) + 
@@ -264,7 +264,7 @@ e))
 	     List.foldl (fn ((vks,e),s) => s + (aexp e) + (avks vks))
 	     ((acon arg) + (aexpopt default)) arms
        )
-      and afunction (Function {tFormals=vks,eFormals=vcs,fFormals=vs,body=e,body_type=(_,c),...}) = 
+      and afunction (Function {tFormals=vks,eFormals=vcs,fFormals=vs,body=e,body_type=c,...}) = 
 	  (avks vks) + (avcs vcs) + (List.length vs) + (aexp e) + (acon c)
       and aexport_entry (ExportValue (_,v)) = (aexp (Var_e v); ())
 	| aexport_entry (_) = ()

@@ -212,9 +212,7 @@ struct
 	       end
 	   val (fFormals,state) = foldl_acc vfolder state fFormals
 	   val body = lexp_lift' state body
-	   val (tr,c) = body_type
-	   val c = lcon_flat state c
-	   val body_type = (tr,c)
+	   val body_type = lcon_flat state body_type
        in  Function{effect=effect,recursive=recursive,isDependent=isDependent,
 		    tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 		    body=body,body_type=body_type}

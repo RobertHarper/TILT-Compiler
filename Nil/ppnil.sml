@@ -428,7 +428,7 @@ structure Ppnil	:> PPNIL =
 		    String (case effect of 
 				Total => " -> " 
 			      | Partial => " => "),
-		    pp_con (#2 body_type), String " =", Break,
+		    pp_con body_type, String " =", Break,
 		    pp_exp body])
 	end
 

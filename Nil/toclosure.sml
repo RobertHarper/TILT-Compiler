@@ -652,7 +652,7 @@ struct
 		       | Fixopen_b var_fun_set =>
 			     let val (outer_curfid,_) = get_curfid state
 				 fun do_arm fids_types (v,Function{tFormals,eFormals,fFormals,body,
-								   body_type=(tr,tipe),...}) =
+								   body_type,...}) =
 				 let val outer_state = add_boundfids false (state,fids_types) 
 				     val fids = map #1 fids_types
 				     val local_state = copy_state state (v,fids)
@@ -683,8 +683,7 @@ struct
 						       Ppnil.pp_var v; print "\n";
 						       show_free f; print "\n")
 					     else ()
-				     val f = trace_find_fv (s,f) tr
-				     val f = c_find_fv (s,f) tipe
+				     val f = c_find_fv (s,f) body_type
 				     val _ = if (!debug)
 						 then (print "adding the following frees to ";
 						       Ppnil.pp_var v; print "\n";
@@ -1217,7 +1216,7 @@ struct
          fun substConPathInKind (subst,k) = NilUtil.kind_rewrite (handlers subst) k
      end 
    fun fun_rewrite state vars (v,Function{effect,recursive,isDependent,
-					  tFormals,eFormals,fFormals,body,body_type=(tr,tipe)}) =
+					  tFormals,eFormals,fFormals,body,body_type}) =
        let 
 	   val _ = if (!debug)
 		       then (print "\n***fun_rewrite v = "; Ppnil.pp_var v; print "\n")
@@ -1301,8 +1300,7 @@ struct
 	   val vclist_unpack_almost = vclist @ [(venv_var,TraceUnknown,venv_type)]
 	   val vclist_unpack = map (fn (v,tr,c) => (v,tr,substConPathInCon (external_subst, c))) vclist_unpack_almost
 
-	   val codebody_tr = trace_rewrite state tr
-	   val codebody_tipe = c_rewrite state tipe
+	   val codebody_tipe = c_rewrite state body_type
 
 	   val closure_tipe = AllArrow_c{openness=Closure, effect=effect, isDependent=isDependent,
 					 tFormals=vklist_outer,	
@@ -1336,7 +1334,7 @@ struct
 				   eFormals=vclist_unpack,
 				   fFormals=fFormals,
 				   body=code_body, 
-				   body_type=(codebody_tr,codebody_tipe)}
+				   body_type=codebody_tipe}
 
 	   val closure = {code = code_var,
 			  cenv = cenv,

@@ -416,12 +416,7 @@ structure NilRewrite :> NILREWRITE =
 	    val ftype = Prim_c (Float_c Prim.F64,[])
 	    fun folder changed (v,s) = let val (s,v) = bind_e changed (s,v,ftype) in (v,s) end
 	    val (fFormals,state2) = foldl_acc_f folder changed state2 fFormals
-	    val (trace,con) = body_type
-	    val trace = recur_trace changed state trace
-	    val con = if isDependent 
-			then recur_c changed state2 con
-		      else recur_c changed state1 con
-	    val body_type = (trace,con)
+	    val body_type = recur_c changed (if isDependent then state2 else state1) body_type
 	    val body = recur_e changed state2 body
 	  in
 	    if !changed then

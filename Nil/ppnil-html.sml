@@ -429,7 +429,7 @@ structure PpnilHtml :> PPNIL =
 			      vcformats @ [String " ;; "] @ vfformats)],
 		  Break0 0 5,
 		  pp_effect effect,
-		  pp_con (#2 body_type), String " =", Break,
+		  pp_con body_type, String " =", Break,
 		  pp_exp body])
 	end
 

@@ -89,7 +89,7 @@ functor Flatten( structure PrimUtil : PRIMUTIL
     and flatten_func  ( fnVar, Function{effect, recursive, isDependent,
 					tFormals = vklist, eFormals = vclist,
 					fFormals = vlist, body = body, 
-					body_type = (tr,con) } ) =
+					body_type = con} ) =
       (case vclist of 
 	 (* Single record argument *)
 	 [ (recordArg, _, recordType as Prim_c( Record_c (labels, vopt), cons))] =>
@@ -126,7 +126,7 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 			      Function{effect=effect, recursive=recursive, isDependent = isDependent,
 				       tFormals = vklist, eFormals = newvclist, 
 				       fFormals = vlist, 
-				       body = newbody, body_type = (tr, con)})
+				       body = newbody, body_type = con})
 		   
 	       (* Now a new version of fnVar which calls NewFnVar *)
 	       (*	 val args = map (fn _ => (Name.fresh_var())) labels
@@ -160,12 +160,12 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 			      tFormals = vklist, eFormals = [ (recordArg, TraceKnown TraceInfo.Trace, 
 							       recordType) ],
 			      fFormals = vlist, 
-			      body = body, body_type = (tr, con)} )]
+			      body = body, body_type = con} )]
 	| _ =>  (* Argument isn't a single record *)
 	  [ ( fnVar, Function{effect=effect, recursive=recursive, isDependent = isDependent,
 			      tFormals = vklist, eFormals = vclist, 
 			      fFormals = vlist, 
-			      body = body, body_type = (tr, con)}) ])
+			      body = body, body_type = con}) ])
 	  
     (* step two: rewrite applications of the flattened functions *)	
     and doApp ( openness, Var_e f, tactuals, (actual:exp list), elist2) = 
@@ -241,11 +241,11 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 	  Handle_e (xexp  exp, v, xexp  exp2)
 	  
     and xfn  (Function{effect, recursive, isDependent,
-		       tFormals, eFormals, fFormals, body, body_type = (tr, con)}) =
+		       tFormals, eFormals, fFormals, body, body_type = con}) =
       Function {effect=effect, recursive=recursive, isDependent = isDependent,
 		tFormals = tFormals, eFormals = map (fn (v,tr,c) => (v, tr, xcon c)) eFormals,
 		fFormals = fFormals,
-		body = xexp body, body_type = (tr, xcon con)}
+		body = xexp body, body_type = xcon con}
 
     and xswitch s =
       case s of

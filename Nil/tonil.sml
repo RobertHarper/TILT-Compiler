@@ -855,7 +855,7 @@ end (* local defining splitting context *)
 					body = (NilUtil.makeLetE Sequential
 						((map makeConb cbnds_body) @ ebnds_body)
 						name_body_r),
-					body_type = (TraceUnknown, con_res')})])]
+					body_type = con_res'})])]
 
 	   val context = update_NILctx_insert_kind(context, var_fun_c, 
                            Arrow_k(Open, [(var_arg_c, knd_arg)], Single_k(con_body)))
@@ -1145,13 +1145,13 @@ end (* local defining splitting context *)
 					    eFormals = [(arg_var, arg_tr, arg_con)],
 					    fFormals = [],
 					    body,
-					    body_type = (_,body_con)}) =
+					    body_type}) =
 		   let val body' = wrap(internal_var, inner_var, body)
 		       val body_con = AllArrow_c{openness = Open, effect = effect, isDependent = false,
 						 tFormals = [], 
 						 eFormals = [(NONE,arg_con)], 
 						 fFormals = 0w0, 
-						 body = body_con}
+						 body = body_type}
 		   in  (external_var_r,
 		       Function{effect = effect, 
 				recursive = Leaf, 
@@ -1167,9 +1167,9 @@ end (* local defining splitting context *)
 							       eFormals = [(arg_var,arg_tr,arg_con)],
 							       fFormals = [],
 							       body = body',
-							       body_type = (TraceUnknown, body_con)})])],
+							       body_type = body_con})])],
 				       Var_e inner_var),
-				body_type = (TraceUnknown,body_con)})
+				body_type = body_con})
 		   end
 
                val ebnd_entries = (Listops.map4 reviseFunction 
@@ -1360,7 +1360,7 @@ end (* local defining splitting context *)
 				   eFormals = [(poly_var_r, TraceUnknown, arg_type)],
 				   fFormals = [],
 				   body = exp,
-				   body_type = (TraceUnknown, con)})])
+				   body_type = con})])
 	 end
      | xpolymod context (v_r, il_mod) =
 	 (case extractPathLabels il_mod of
@@ -2056,7 +2056,7 @@ end (* local defining splitting context *)
 		   val body' = xexp context body
 	       in  (var, Function{recursive = recursive, effect = totality, isDependent = false,
 				  tFormals = [], eFormals = [(var', TraceUnknown, con1)], fFormals=[], 
-				  body = body', body_type = (TraceUnknown, con2)})
+				  body = body', body_type = con2})
 	       end
        in  map mapper fbnds
        end

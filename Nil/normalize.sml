@@ -650,9 +650,7 @@ struct
       val (tFormals,state) = bind_at_kinds state tFormals
       val (eFormals,state) = bind_at_tracecons state eFormals
       val body = exp_normalize' state body
-      val (trace,con) = body_type
-      val con = con_normalize' state con
-      val body_type = (trace,con)
+      val body_type = con_normalize' state body_type
     in Function{effect = effect , recursive = recursive, isDependent = isDependent,
 		tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
 		body = body, body_type = body_type}

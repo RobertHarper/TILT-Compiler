@@ -190,7 +190,7 @@ struct
 			      eFormals    : (var * niltrace * con) list,
 			      fFormals    : (var list),
 			      body        : exp,
-			      body_type   : niltrace * con}
+			      body_type   : con}
 
   datatype import_entry = ImportValue of label * var * con
                         | ImportType of label * var * kind

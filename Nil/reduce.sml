@@ -561,7 +561,7 @@ structure Reduce
 		
 
 	and scan_function fset (Function{tFormals=cvarlist,eFormals=varlist,
-					 fFormals=fvarlist,body=exp,body_type=(_,con), ...}) = 
+					 fFormals=fvarlist,body=exp,body_type, ...}) = 
 		    let fun dec (v,k) = (declare false v; scan_kind fset k)
 		    in  ( 
 			 app dec cvarlist;
@@ -569,7 +569,7 @@ structure Reduce
 			      ignore (declare false v, scan_con fset con))  varlist;
 			 app (declare false) fvarlist; 
 			 scan_exp fset exp;
-			 scan_con fset con 
+			 scan_con fset body_type
 			 )
 		    end 
 
@@ -842,15 +842,15 @@ structure Reduce
 	    and xfunction fset 
 		(Function{effect, recursive, isDependent,
 			  tFormals, eFormals, fFormals, 
-			  body, body_type=(tr,con)}) =
+			  body, body_type}) =
 		let val tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals
 		    val eFormals = map (fn (v,tr,con) => (v, tr, xcon fset con)) eFormals
 		    val body = xexp fset body
-		    val con = xcon fset con
+		    val body_type = xcon fset body_type
 		in 
 		    Function{effect=effect,recursive=recursive,isDependent=isDependent,
 			     tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
-			     body=body, body_type=(tr,con)}
+			     body=body, body_type=body_type}
 		end
 	
 	    and xbnds fset 
@@ -1017,10 +1017,10 @@ structure Reduce
 		     go away, so we need to update the counts for them *)
 			
 		    fun remove_rest
-			( vc as (v, Function{tFormals=vklist, eFormals=vclist, body_type=(_, con),...})) =
+			( vc as (v, Function{tFormals=vklist, eFormals=vclist, body_type,...})) =
 			(app (fn (_, kind) => census_kind fset (~1, kind)) vklist; 
 			 app (fn (_, _, con) => census_con fset (~1, con)) vclist; 
-			 census_con fset (~1, con))
+			 census_con fset (~1, body_type))
 		    fun remove_func 
 			( vc as (v, Function{body, ...})) =
 			( census_exp fset ( ~1, body); 
@@ -1177,7 +1177,7 @@ structure Reduce
 					 SOME (F (Function{tFormals=vklist, 
 							   eFormals=vclist, 
 							   fFormals=vlist, 
-							   body=exp, body_type=(_,con), ...})) =>
+							   body=exp, body_type, ...})) =>
 					     let val _ = inc_click inline_click
 						 fun do_args (arg,  x ) =
 						     case arg of

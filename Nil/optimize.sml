@@ -50,7 +50,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 					   eFormals = [(agg,TraceUnknown,Prim_c(constr,[Var_c c]))],
 					   fFormals = [],
 					   body = body, 
-					   body_type = (TraceUnknown, Prim_c(Int_c Prim.W32, []))}
+					   body_type = Prim_c(Int_c Prim.W32, [])}
 		in  len_fun
 		end
 		val len_fun = make_length(Prim.OtherArray, Array_c)
@@ -69,7 +69,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 						       (index, TraceUnknown, Prim_c(Int_c Prim.W32 ,[]))], 
 					   fFormals = [],
 					   body = body, 
-					   body_type = (TraceUnknown, Var_c c)}
+					   body_type = Var_c c}
 		in  sub_fun
 		end
 		val sub_fun = make_sub(Prim.OtherArray, Array_c)
@@ -90,7 +90,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 							  (item,  TraceUnknown, Var_c c)],
 					      fFormals = [],
 					      body = body, 
-					      body_type = (TraceUnknown, unit_con)}
+					      body_type = unit_con}
 		end
 
 		fun make_aggregate (aggregate,constr) = 
@@ -106,7 +106,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 					     (item, TraceUnknown, Var_c c)], 
 				 fFormals = [],
 				 body = body, 
-				 body_type = (TraceUnknown, Prim_c(constr,[Var_c c]))}
+				 body_type = Prim_c(constr,[Var_c c])}
 		    end
 		val array_fun = make_aggregate(Prim.OtherArray, Array_c)
 		val vector_fun = make_aggregate(Prim.OtherVector, Vector_c)
@@ -395,7 +395,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	fun make_lambda (v,f) = Let_e(Sequential,[Fixopen_b(Sequence.fromList[(v,f)])],Var_e v)
 
 	type wrap = var * effect * recursive * (var * kind) list * bool *
-	            (var * niltrace * con) list * var list * niltrace * con
+	            (var * niltrace * con) list * var list * con
 	fun extract_lambdas vf = 
 	    let val e = make_lambda vf
 		fun loop acc e = 
@@ -403,19 +403,19 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 			 NONE => (rev acc, e)
 		       | SOME (v,Function{effect=eff,recursive=r,isDependent=dep,
 					  tFormals=vklist,eFormals=vclist,fFormals=vflist,
-					  body=body,body_type=(tr,con)}) =>
-			     loop ((v,eff,r,vklist,dep,vclist,vflist,tr,con)::acc) body)
+					  body=body,body_type=con}) =>
+			     loop ((v,eff,r,vklist,dep,vclist,vflist,con)::acc) body)
 	    in  loop [] e
 	    end
 
 	fun create_lambdas ([],_) = error "no wraps to create_lambdas"
 	  | create_lambdas (wraps,body) = 
 	    let fun loop [] body = body
-		  | loop ((v,eff,r,vklist,dep,vclist,vflist,tr,con)::rest) body = 
+		  | loop ((v,eff,r,vklist,dep,vclist,vflist,con)::rest) body = 
 		          make_lambda(v,Function{effect=eff,recursive=r,isDependent=dep,
 						 tFormals=vklist,eFormals=vclist,fFormals=vflist,
 						 body=loop rest body,
-						 body_type=(tr,con)})
+						 body_type=con})
 		val lambda = loop wraps body
 		val SOME vf = get_lambda lambda 
 	    in  vf
@@ -424,7 +424,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	fun wraps2args_bnds (wraps : wrap list) = 
 	    let fun loop acc ([] : wrap list) = error "no wraps to wraps2args_bnds"
 		  | loop acc [_] = rev acc
-		  | loop acc ((v,_,_,vklist,dep,vclist,vflist,_,_)::(rest as (next::_))) =
+		  | loop acc ((v,_,_,vklist,dep,vclist,vflist,_)::(rest as (next::_))) =
 		    let val vk = map #1 vklist
 			val vc = map #1 vclist
 			val info = Exp_b(#1 next,TraceKnown TraceInfo.Trace,
@@ -439,11 +439,11 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	fun create_flatlambda(_,[],_) = error "no wraps to create_flatlamba"
 	  | create_flatlambda(name,wraps,body) = 
-	    let val (_,eff,r,_,dep,_,_,tr,con) = List.last wraps
+	    let val (_,eff,r,_,dep,_,_,con) = List.last wraps
 		 val ((vklist,vclist,vflist),_) = wraps2args_bnds wraps
 	    in  (name,Function{effect=eff,recursive=r,isDependent=dep,
 			       tFormals=vklist,eFormals=vclist,fFormals=vflist,
-			       body=body,body_type=(tr,con)})
+			       body=body,body_type=con})
 	    end
 
 
@@ -709,7 +709,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		     val call = App_e(Open, Var_e uncurry_name, vkarg, vcarg, vfarg)
 
 		     val (_,temp_state) = do_vklist state vklist
-		     val return_con = #9(List.last wraps)
+		     val return_con = #8(List.last wraps)
 		     val (bnds,tinfo) = 
 			 (case get_trace (temp_state, return_con) of
 			      SOME tinfo => ([],TraceKnown tinfo)
@@ -1019,7 +1019,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	and do_function (state : state) (v,Function{effect,recursive,isDependent,
 						    tFormals, eFormals, fFormals,
-						    body, body_type = (tr,c)}) =
+						    body, body_type = c}) =
 		let val state = enter_var(state,v)
 		    val (tFormals,state) = do_vklist state tFormals
 		    val (eFormals,state) = do_eFormals state eFormals
@@ -1027,7 +1027,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		    val c = do_type state c
 		in  (v,Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
-				body=body, body_type = (tr,c)})
+				body=body, body_type = c})
 		end
 
 	and do_niltrace state niltrace = 

@@ -69,11 +69,11 @@ struct
   val exn_con = Prim_c(Exn_c, [])
 
   fun function_type openness (Function{effect,recursive,isDependent,
-				       tFormals,eFormals,fFormals, body=_, body_type=(_,con)}) =
+				       tFormals,eFormals,fFormals, body=_, body_type}) =
        AllArrow_c{openness=openness, effect = effect, isDependent = isDependent,
 		  tFormals = tFormals, 
 		  eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals,
-		  fFormals = TilWord32.fromInt(length fFormals), body = con}
+		  fFormals = TilWord32.fromInt(length fFormals), body = body_type}
 
   fun intsize_leq (Prim.W8, _) = true
     | intsize_leq (Prim.W16, Prim.W8) = false
@@ -605,12 +605,11 @@ end
       let 
 	  val (tFormals', state) = f_vklist state tFormals
 	  val (eFormals', state) = f_vtclist state eFormals
-	  val (trace,con) = body_type
-	  val con' = f_con state con
+	  val body_type' = f_con state body_type
       in
 	  Function{effect=effect, recursive=recursive, isDependent=isDependent,
 		   tFormals = tFormals', eFormals = eFormals', fFormals = fFormals,
-		   body = body, body_type = (trace,con')}
+		   body = body, body_type = body_type'}
       end
 
   and f_bnd (state : state) (bnd : bnd) : bnd list * state = 

@@ -311,7 +311,7 @@ struct
              fun loop ([], pset) = ([], [], pset)
                | loop ((f, Function{effect=eff,recursive=recur,isDependent=dep,
 				    tFormals=vks,eFormals=vtcs,
-				    fFormals=fs,body=e,body_type=(trace,c)})::fns, pset)=
+				    fFormals=fs,body=e,body_type})::fns, pset)=
                    let
                       val (fns', bnds, pset) = loop (fns, pset)
                       val ctxt = NilContext.insert_kind_list (ctxt,vks)
@@ -347,12 +347,10 @@ struct
                       val ctxt = NilContext.insert_con_list (ctxt,
 							     (map (fn (v,t,c) => (v,c)) vtcs))
                       val (e', pset) = reify_exp ctxt (e, pset)
-		      (* XXXX Chris I think trace' needs to be computed from e' *)
-		      val trace' = trace 
                    in
                       ((f, Function{effect=eff,recursive=recur,isDependent=dep,
 				    tFormals=vks,eFormals=vtcs',fFormals=fs,
-				    body=e',body_type=(trace',c)})::fns',
+				    body=e',body_type=body_type})::fns',
                        bnds', pset)
                    end
 
