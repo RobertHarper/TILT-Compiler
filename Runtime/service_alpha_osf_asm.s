@@ -1,5 +1,9 @@
+
  # start_client makes assumption about how to invoke closures and thread pointer structure
 	
+ # Code that transitions from ML to C must set the thread-specific value notInML (used by signal
+ # handlers).  Code that transitions from C to ML must clear notInML.
+
 #define _asm_
 #include "general.h"
 #include "thread.h"
@@ -7,7 +11,6 @@
 	.text	
 	.align	4
  	.globl	start_client
- 	.globl	start_client_retadd_val
 	.globl  global_exnrec
         .globl  GetRpcc
 	.globl	raise_exception_raw
@@ -59,7 +62,7 @@ TestAndSet:
 .set noat
 	ldl_l	$at, ($16)
 	bne	$at, AlreadySet	# test
-	lda	$0, 1($31)
+	mov	1, $0
 	stl_c	$0, ($16)	# try to set
         ret     $31, ($26), 1		
 AlreadySet:
@@ -130,33 +133,34 @@ start_client:
 	br	$gp, start_client_getgp1
 start_client_getgp1:	
 	ldgp	$gp, 0($gp)				# fix $gp
-	stq	$31, notinml_disp(THREADPTR_REG)
+	stq	$31, notinml_disp(THREADPTR_REG)	# entering ML
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$1, 8($at)				# fetch term env
 	lda	EXNPTR_REG, global_exnrec		# install global handler
 	stl	$sp, 4(EXNPTR_REG)			# initialize the stack pointer
 	jsr	$26,  ($27)				# jump to thunk
-start_client_retadd_val:				# used by stack.c
-	br	$gp, start_client_getgp2
+	br	$gp, start_client_getgp2		# returning from mutator
 start_client_getgp2:	
 	ldgp	$gp, 0($gp)				# fix gp
-	lda	$at, 1($31)
-	stq	$at, notinml_disp(THREADPTR_REG)
+	mov	1, $at
+	stq	$at, notinml_disp(THREADPTR_REG)	# returning from ML
 	addq	THREADPTR_REG, MLsaveregs_disp, $0
 	bsr	save_regs				# need to save register set to get 
 							#    alloction pointer into thread state
 	ldq	$at, proc_disp(THREADPTR_REG)	# get system thread pointer
 	ldq	$sp, ($at)				# run on system thread stack	
 	jsr	Finish
-	lda	$16, $$errormsg				# should not return from Finish
-	jsr	printf
+	br	$gp, start_client_getgp3
+start_client_getgp3:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self	
 	jsr	abort
 	.end	start_client
 .set at
 	
  # ------------------------------------------------------------------------------------
- # Yield is called by mutator like a C function so save_regs_MLtoC has just been called
+ # Yield is called by mutator like a C function so save_regs_MLtoC will take care of
+ # ML -> C transition work for us.
  # ------------------------------------------------------------------------------------
 	.ent	Yield
 	.frame $sp, 0, $26
@@ -177,6 +181,10 @@ Yield_getgp2:
 	.end	Yield
 
 
+ # ------------------------------------------------------------------------------------
+ # Spawn is called by mutator like a C function so save_regs_MLtoC will take care of
+ # ML -> C transition work for us.
+ # ------------------------------------------------------------------------------------
 	.ent	Spawn
 	.frame $sp, 0, $26
 	.prologue 0
@@ -196,6 +204,10 @@ Spawn_getgp:
 .set at			
 	.end	Spawn
 
+ # -------------------------------------------------------------------------------
+ # Scheduler is called by a C function with the Proc_t * pointer.
+ # We switch to processor's stack and then call schedulerRest.
+ # -------------------------------------------------------------------------------
 	.ent	scheduler
 	.frame $sp, 0, $26
 	.prologue 0
@@ -213,27 +225,27 @@ scheduler_getgp2:
 .set at			
 	.end	scheduler
 
-
-
-
-
-
  # ------------------------------------------------------------
  # global_exnhandler when all else fails
  # saves all registers and calls C function toplevel_exnhandler
  # ------------------------------------------------------------
 	.ent	global_exnhandler
 global_exnhandler:
-	br	$gp, global_exn_handler_dummy
-global_exn_handler_dummy:	
-	ldgp	$gp, 0($gp)
+	br	$gp, global_exn_handler_getgp1
+global_exn_handler_getgp1:	
+	ldgp	$gp, 0($gp)					# fix $gp
 	ldl	$sp, 4(EXNPTR_REG)
 	stq	EXNARG_REG, EXNARG_DISP(THREADPTR_REG)
+	mov	1, $0
+	stq	$0, notinml_disp(THREADPTR_REG)			# returning from ML
 	addq	THREADPTR_REG, MLsaveregs_disp, $0		# use ML save area of thread pointer
 	bsr	save_regs
 	mov	THREADPTR_REG, $16
 	lda	$27, toplevel_exnhandler
 	bsr	toplevel_exnhandler
+	br	$gp, global_exn_handler_getgp2
+global_exn_handler_getgp2:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self	
 	jsr	abort
 	.end	global_exnhandler
 
@@ -243,20 +255,21 @@ global_exn_handler_dummy:
  # ------------------------------------------------------------
 	.ent	raise_exception_raw
 raise_exception_raw:
-	mov	$16, THREADPTR_REG	# restore thread pointer
-	mov	$17, $1			# save the exn value;  load_regs does not change $1
-	addq    THREADPTR_REG, MLsaveregs_disp, $0 # use ML save area of thread pointer structure
+	mov	$16, THREADPTR_REG			# restore thread pointer
+	mov	$17, $1					# save the exn value;  load_regs does not change $1
+	addq    THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
 	br	$gp, restore_dummy
 restore_dummy:	
-	ldgp	$gp, 0($gp)		# get own gp
+	ldgp	$gp, 0($gp)				# get own gp
+	stq	$31, notinml_disp(THREADPTR_REG)	# entering ML
 .set noat
 	bsr	load_regs
-	mov	$1, EXNARG_REG		# restore exn arg from $1 temp (unmodified by load_regs)
-	ldq	$0, MLsaveregs_disp+0*8(THREADPTR_REG)		# restore $0 which was used as arg to load_regs
-	ldq	$1, MLsaveregs_disp+1*8(THREADPTR_REG)		# restore $1 which was used to save exn arg unmodified by load_regs
-								# don't need to restore r26 and r29 due to load_regs
-								# at this point, all registers restored
-	br	$gp, restore_dummy2	# Fix gp
+	mov	$1, EXNARG_REG				# restore exn arg from $1 temp (unmodified by load_regs)
+	ldq	$0, MLsaveregs_disp+0*8(THREADPTR_REG)	# restore $0 which was used as arg to load_regs
+	ldq	$1, MLsaveregs_disp+1*8(THREADPTR_REG)	# restore $1 which was used to save exn arg unmodified by load_regs
+							# don't need to restore r26 and r29 due to load_regs
+							# at this point, all registers restored
+	br	$gp, restore_dummy2			# Fix gp
 restore_dummy2:
 	ldgp	$gp, 0($gp)
 	lda	ASMTMP2_REG, primaryStackletOffset
@@ -281,11 +294,3 @@ global_exnrec:
 	.long	0
 
 	.align 4
-$$errormsg:
-	.ascii "Thread Finish returned!!!\n\000"
-
-	.align 4
-$$global_exnmsg:
-	.ascii "Runtime Error: Uncaught exception!!!\n\000"
-	
-
