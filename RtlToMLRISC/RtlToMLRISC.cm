@@ -36,6 +36,8 @@ STACK_FRAME.sig.sml
 
 BasicBlock.sml
 CallConventionBasis.sml
+DenseIntSet.sml
+DenseRegisterMap.sml
 EmitRtlMLRISC.sml
 IntegerDataFlow.sml
 IntegerLiveness.sml
