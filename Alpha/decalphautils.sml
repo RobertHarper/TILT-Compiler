@@ -136,7 +136,7 @@ struct
   fun procedureHeader label = [" \t.align 4\n", "\t.ent " ^ (msLabel (label)) ^ "\n"]
   fun procedureTrailer s = ["\t.end " ^ s ^ "\n"]
   val textStart = ["\t.text\n"]
-  val dataStart = ["\t.data\n"]
+  val dataStart = ["\t.sdata\n"]
   val GCdataStart = ["\t.rdata\n"]
 
 end
