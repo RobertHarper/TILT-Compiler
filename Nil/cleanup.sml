@@ -121,7 +121,7 @@ struct
 			   | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
 			   | bnd_check ((Fixopen_b vfset) | (Fixcode_b vfset)) =
 			       Listops.orfold vf_mem (set2list vfset)
-			   | bnd_check (Fixclosure_b vfset) = 
+			   | bnd_check (Fixclosure_b (_,vfset)) = 
 			       Listops.orfold vf_mem (set2list vfset)
 			 val intersect = Listops.orfold bnd_check bnds
 		     in  if (intersect)

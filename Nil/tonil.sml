@@ -372,6 +372,7 @@ struct
         (6) valuable <=> il_mod is valuable
     *)
 
+   val do_kill_cpart_of_functor = ref false
    val xmod_count = ref 0
    val xcon_count = ref 0
    val xexp_count = ref 0
@@ -460,6 +461,7 @@ struct
 
      | xmod' context (Il.MOD_APP(ilmod_fun, ilmod_arg), preferred_name) =
        let
+
 	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap_of context)
 
 	   val _ = 
@@ -476,7 +478,6 @@ struct
 		type_r = type_fun_r,
 		valuable = valuable_fun
 		} = xmod context (ilmod_fun, NONE)
-
 
 (*
 val _ = (print "\nMOD_APP: type_fun_r = \n";
@@ -528,9 +529,18 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 	       (NILctx_of context,
 		Subst.varConKindSubst v_c reduced_argument_c con_body_kind)
 
-	     val cbnd_cat = APP[cbnd_cat_fun, 
-				cbnd_cat_arg,
-				LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
+
+
+	     val cbnd_cat = 
+		 APP[cbnd_cat_fun, 
+		     cbnd_cat_arg,
+		     if (!do_kill_cpart_of_functor andalso
+			 case knd_c of
+			     (Record_k seq) => null (Util.sequence2list seq)
+			   | _ => false)
+			 then LIST[(var_c, knd_c, Crecord_c[])]
+		     else LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]
+		     ]
 		   
 (*
                val _ = (print "ZZZ\n";
@@ -548,14 +558,19 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			print "\n")
 *)
 
-	       val NILctx = NILctx_of context
-	       val NILctx' = (Nilcontext.insert_kind(NILctx, var_arg_c, knd_arg_c))
-                                handle _ => NILctx
-(*	       val NILctx'' = (Nilcontext.insert_kind(NILctx', var_arg_c, knd_arg_c))
-                                handle _ => NILctx' *)
-	       val NILctx'' = (Nilcontext.insert_con(NILctx', var_arg_r, type_arg_r))
-                                handle _ => NILctx'
-
+	     val NILctx = NILctx_of context
+	     val is_var = (case ilmod_arg of
+			       Il.MOD_VAR _ => true 
+			     | _ => false)
+	     val NILctx' = (case (is_var,Nilcontext.find_kind(NILctx, var_arg_c)) of
+				(_,NONE) => Nilcontext.insert_kind(NILctx, var_arg_c, knd_arg_c)
+			      | (true, SOME _) => NILctx
+			      | _ => error "variable already in context and not a MOD_VAR")
+	     val NILctx'' = (case (is_var,Nilcontext.find_con(NILctx', var_arg_r)) of
+				 (_,NONE) => Nilcontext.insert_con(NILctx', var_arg_r, type_arg_r)
+			       | (true, SOME _) => NILctx'
+			       | _ => error "variable already in context and not a MOD_VAR")
+		 
 (*
 val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	 Ppnil.pp_con exp_body_type;
@@ -1146,7 +1161,10 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		   Arrow_k(Open, [(poly_var_c, knd_arg)], Record_k (Util.list2sequence []))
 
                val cbnds = 
-		   map (fn n_c => ((n_c, nullfunction_k, nullfunction_c)))
+		   if !do_kill_cpart_of_functor
+		       then []
+		   else
+		       map (fn n_c => ((n_c, nullfunction_k, nullfunction_c)))
 		       external_vars_c
 
                val cbnd_knds = map (fn _ => nullfunction_k) external_vars_c
@@ -1403,7 +1421,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		       (context, NILctx')
 
 		   val cons'= map (#1 o (xcon context')) cons
-		   val con = Mu_c (Util.list2set (Listops.zip vars cons'), 
+		   val freevars = Listops.flatten (map Ilutil.con_free_convar cons)
+		   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var,v,freevars)) vars
+
+		   val con = Mu_c (is_recur,
+				   Util.list2set (Listops.zip vars cons'), 
 				   List.nth (vars, i-1))
 	       in
 		   (con, Word_k Runtime)
@@ -1426,7 +1448,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		       (context, NILctx')
 		       
 		   val (con',_) = xcon context' con
-		   val con = Mu_c (Util.list2set [(var, con')], var)
+		   val freevars = Ilutil.con_free_convar con
+		   val is_recur = Listops.member_eq(Name.eq_var,var,freevars)
+		   val con = Mu_c (is_recur,Util.list2set [(var, con')], var)
 	       in
 		   (con, Word_k Runtime)
 	       end
@@ -1636,7 +1660,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
      | xexp' context (Il.ETAILPRIM (ilprim, il_cons)) = 
        xexp context (Ilutil.ilprim_etaexpand(ilprim,il_cons))
 
-(* XXX need to handler floats *)
+(* XXX need to handle floats *)
      | xexp' context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
 	   open Prim
@@ -1890,7 +1914,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val (con, _) = xcon context il_con
 	   val (exp, _, valuable) = xexp context il_exp1
 	   val con' = (case con of
-			   Mu_c (vc_seq,v) => Nilutil.muExpand(vc_seq,v)
+			   Mu_c (flag,vc_seq,v) => Nilutil.muExpand(flag,vc_seq,v)
 			 | _ => error "type of unroll is not a mu type")
        in
 	   (Prim_e(NilPrimOp unroll, [con], [exp]), con', valuable)
@@ -2159,6 +2183,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
    and xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
        let
+
+	   val is_polyfun_sig = 
+	       (case sig_rng of
+		    Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,Il.DEC_EXP _)]) => Name.eq_label(it_lbl,Ilutil.it_lab)
+		  | _ => false)
+
 	   val (var_c, var_r, vmap') = splitVar (var, vmap_of context)
 	   val (knd, con) = xsig context (Var_c var_c, sig_dom)
            val d = Il.DEC_MOD(var, sig_dom)
@@ -2352,7 +2382,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		       xsdecs context' (elab_spec,false,con0, Subst.add subst (var_c, Proj_c(con0, lbl)),
 					rest)
 	       in
-		   {crdecs = ((lbl, var_c), knd) :: crdecs,
+		   {crdecs = if (!do_kill_cpart_of_functor andalso
+				 case knd of
+				     Arrow_k(_,_,Record_k seq) => null (Util.sequence2list seq)
+				   | _ => false)
+				 then crdecs
+			     else ((lbl, var_c), knd) :: crdecs,
 		    erlabs = lbl :: erlabs,
 		    ercons = (Subst.substConInCon subst con) :: ercons}
 	       end
@@ -2466,13 +2501,19 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			    let
 				val (v_c, v_r,_) = splitVar (v, vmap_of context)
 				val (knd_c, type_r) = xsig context (Var_c v_c, il_sig)
+				val inner_ctxt = 
+				    if (false andalso
+					!do_kill_cpart_of_functor andalso
+					case knd_c of
+					    Arrow_k(_,_,Record_k seq) => null (Util.sequence2list seq)
+					  | _ => false)
+					then NILctx_of context
+				    else Nilcontext.insert_kind(NILctx_of context, v_c, knd_c)
 			    in
 				update_NILctx
 				(context,
 				 Nilcontext.insert_con
-				 (Nilcontext.insert_kind
-				  (NILctx_of context, v_c, knd_c),
-				  v_r, type_r))
+				 (inner_ctxt, v_r, type_r))
 			    end
 		      | _ => context)
 	       end

@@ -73,7 +73,7 @@ struct
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of (var,con) sequence * var            (* Constructors that classify values of
+    | Mu_c of bool * (var,con) sequence * var            (* Constructors that classify values of
 						       a recursive type *)
     | AllArrow_c of openness * effect *           (* open functions, code functions, and closures *)
                     (var * kind) list * con list * w32 * con
@@ -161,7 +161,7 @@ struct
     | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures *)
-    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp, tipe:con}) set
+    | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) set
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.
    * It may or may not be effect-free and may or may not be recursive.

@@ -14,6 +14,7 @@ signature NILSUBST =
     val empty : unit -> 'a subst
 	
     val fromList : (var * 'a) list -> 'a subst 
+    val toList   : 'a subst -> (var * 'a) list 
 
     val add : 'a subst -> (var * 'a) -> 'a subst 
 

@@ -281,9 +281,9 @@ struct
       map_annotate eta_reduce_fun' lambda
     end
 
-(* XXX must sort here? *)
+(* XXX must sort here? - must make sure all elements are present!!! *)
      (*PRE: elements are in head normal form*)
-  fun eta_reduce_record record_c = 
+  fun eta_reduce_record record_c con_valider = 
     let
       fun eta_reduce_record' (Crecord_c []) = record_c
 	| eta_reduce_record' (Crecord_c ((label,con)::rest)) = 
@@ -297,10 +297,13 @@ struct
 	in
 	  case strip_proj con
 	    of SOME (c,l) => 
-	      if ((eq_label (l,label)) andalso (all (etable c) rest)) then
-		c
-	      else 
-		record_c
+		let val reducible = (eq_label (l,label)) andalso (all (etable c) rest)
+		    val kind_match = 
+			(case (con_valider c) of
+			     (_, Record_k seq) => (length (sequence2list seq)) = ((length rest) + 1)
+			   | _ => false)
+		in  if reducible andalso kind_match then c else record_c
+		end
 	     | NONE => record_c
 	end
 	| eta_reduce_record' _ = 
@@ -543,7 +546,7 @@ struct
 	 in
 	     (con,singletonize (SOME Runtime,kind,con))
 	 end
-	| (Mu_c (defs,var)) =>
+	| (Mu_c (is_recur,defs,var)) =>
 	 let
 	   val def_list = sequence2list defs
 	     
@@ -562,7 +565,7 @@ struct
 
 	   val (cons,kinds) = unzip (map (curry2 con_valid D) cons)
 	   val defs = list2sequence (zip vars cons)
-	   val con = Mu_c (defs,var)
+	   val con = Mu_c (is_recur,defs,var)
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con)
 	 in
 	   if c_all is_word b_perr_k kinds then
@@ -701,7 +704,7 @@ struct
 	     val k_entries = map2 (fn (l,k) => ((l,fresh_var()),k)) (labels,kinds)
 	     val entries = zip labels cons
 	     val con = Crecord_c entries
-	     val con = eta_reduce_record con
+	     val con = eta_reduce_record con (curry2 con_valid D)
 	     val kind = singletonize (NONE,Record_k (list2sequence k_entries),con)
 	   in 
 	     if distinct then
@@ -1172,11 +1175,11 @@ struct
 	   val (exp,con) = exp_valid (D,exp)
 	 in
 	   case strip_recursive argcon 
-	     of SOME (set,var) =>
+	     of SOME (is_recur,set,var) =>
 	       let
 		 val def_list = set2list set
 		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		 val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		 val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (is_recur,set,v))) def_list)
 		 val con' = substConInCon cmap con'
 		 val con' = con_reduce(D,con') (*Must renormalize*)
 	       in
@@ -1198,12 +1201,12 @@ struct
 	   val (exp,con) = exp_valid (D,exp)
 	 in
 	   (case strip_recursive argcon 
-	      of SOME (set,var) =>
+	      of SOME (is_recur,set,var) =>
 		(if alpha_equiv_con (argcon,con) then
 		   let
 		     val def_list = set2list set
 		     val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
-		     val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
+		     val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (is_recur,set,v))) def_list)
 		     val con' = substConInCon cmap con'
 		     val (con',_) = con_valid(D,con')
 		   in
@@ -1558,7 +1561,7 @@ struct
 	   in
 	     (bnd,(D,subst))
 	   end
-	  | Fixclosure_b defs => 
+	  | Fixclosure_b (is_recur,defs) => 
 	   let
 	     val (vars,closures) = unzip (set2list defs)
 	     val tipes = map (fn cl => #tipe cl) closures
@@ -1611,7 +1614,7 @@ struct
 	     val D = returnD
 	     val closures = map2 do_closure (closures,tipes)
 	     val defs = list2set (zip vars closures)
-	     val bnd = Fixclosure_b defs
+	     val bnd = Fixclosure_b (is_recur, defs)
 	   in
 	     (bnd,(D,subst))
 	   end)

@@ -80,6 +80,8 @@ functor NilSubstFn(structure Nil : NIL
 	{test = notb zero,
 	 subst = VarMap.empty}
 
+      fun toList ({test,subst} : 'a subst) = VarMap.listItemsi subst
+
       fun fromList (list : (var * 'a) list) : 'a subst = 
 	let
 	  fun fold1 ((var,value),(test,subst)) = 
@@ -246,7 +248,7 @@ functor NilSubstFn(structure Nil : NIL
       (case con 
 	 of (Prim_c (pcon,args)) => 
 	   (Prim_c (pcon,map (substConInCon' conmap) args))
-	  | (Mu_c (defs,var)) =>
+	  | (Mu_c (flag,defs,var)) =>
 	   let
 	     val (vars,cons) = unzip (set2list defs)
 	     val (vars,conmap) = con_rebind_list (vars,conmap)
@@ -254,7 +256,7 @@ functor NilSubstFn(structure Nil : NIL
 	     val var = con_var_replace (conmap,var)
 	     val defs = Util.list2set (zip vars cons)
 	   in
-	     (Mu_c (defs,var))
+	     (Mu_c (flag,defs,var))
 	   end
 	  | (AllArrow_c (openness,effect,tformals,formals,flength,return)) =>
 	   let
@@ -483,13 +485,13 @@ functor NilSubstFn(structure Nil : NIL
 	   in
 	     (bnd,(expmap,conmap))
 	   end
-	  | Fixclosure_b defs => 
+	  | Fixclosure_b (flag,defs) => 
 	   let
 	     val (vars,closures) = unzip (set2list defs)
 	     val (vars,expmap) = exp_rebind_list (vars,expmap)
 	     val closures = map (substExpConInClosure' (expmap,conmap)) closures
 	     val defs = list2set (zip vars closures)
-	     val bnd = Fixclosure_b defs
+	     val bnd = Fixclosure_b (flag,defs)
 	   in
 	     (bnd,(expmap,conmap))
 	   end)

@@ -5,7 +5,7 @@ signature NILUTIL =
     val freeExpConVarInExp : Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
     val freeConVarInCon    : Nil.con -> Nil.var list (* free type level vars *)
 
-    val muExpand : (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
+    val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
     val exp_tuple : (Nil.exp * Nil.con) list -> Nil.exp
     val con_tuple : Nil.con list -> Nil.con
@@ -47,6 +47,11 @@ signature NILUTIL =
     val kind_rewrite : handlers -> Nil.kind -> Nil.kind
     val con_rewrite : handlers -> Nil.con -> Nil.con
 
+    val exp_size : Nil.exp -> int
+    val con_size : Nil.con -> int
+    val kind_size : Nil.kind -> int
+    val module_size : Nil.module -> int
+
     val primequiv : Nil.primcon * Nil.primcon -> bool
     type alpha_context
 
@@ -77,7 +82,7 @@ signature NILUTIL =
 
     val strip_var : Nil.con -> Nil.var option
     val strip_exntag : Nil.con -> Nil.con option
-    val strip_recursive : Nil.con -> ((Nil.var,Nil.con) Util.set * Nil.var) option
+    val strip_recursive : Nil.con -> (bool * (Nil.var,Nil.con) Util.set * Nil.var) option
     val strip_boxfloat : Nil.con -> Nil.Prim.floatsize option
     val strip_float : Nil.con -> Nil.Prim.floatsize option
     val strip_int : Nil.con -> Nil.Prim.intsize option

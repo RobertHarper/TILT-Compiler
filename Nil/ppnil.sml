@@ -180,12 +180,12 @@ functor Ppnil(structure ArgNil : NIL
 					       String ";",
 					       pp_list' pp_con conlist,
 					       String ")"]
-	 | Mu_c (vcset,var) => HOVbox[String "MU_C(",
-				       (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
-					(sequence2list vcset)),
-				       String ",",
-				       pp_var var,
-				       String ")"]
+	 | Mu_c (flag,vcset,var) => HOVbox[if flag then String "MU_C(" else String "MU_C_NR(",
+					   (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
+					    (sequence2list vcset)),
+					   String ",",
+					   pp_var var,
+					   String ")"]
 (*	 | Listcase_c {arg,arms,default} =>HOVbox[String "LISTCASE_C ",
 						  pp_con arg,
 						  Break0 0 5,
@@ -360,7 +360,7 @@ functor Ppnil(structure ArgNil : NIL
 	      | Fixcode_b fixset => let val fixlist = set2list fixset
 				    in Vbox(separate (map (pp_fix true) fixlist) Break)
 				    end
-	      | Fixclosure_b vceset => 
+	      | Fixclosure_b (flag,vceset) => 
 		    let val vcelist = set2list vceset
 		    in pp_list (fn (v,{code,cenv,venv,tipe}) => 
 				HOVbox[pp_var v, 

@@ -4,13 +4,13 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure ArgPrim : PRIM
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
-	(*	  structure Subst : NILSUBST*)
+		  structure Subst : NILSUBST
 		  structure PpNil : PPNIL
 		  sharing ArgNil = Alpha.Nil = PpNil.Nil
 		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim
-		(*  and type ArgNil.exp = Subst.exp
+		  and type ArgNil.exp = Subst.exp
 		  and type ArgNil.con = Subst.con
-		  and type ArgNil.kind = Subst.kind*)) 
+		  and type ArgNil.kind = Subst.kind) 
   :(*>*) NILUTIL where Nil = ArgNil 
 		   and type alpha_context = Alpha.alpha_context =
 struct
@@ -98,7 +98,7 @@ struct
       | strip_var' _ = NONE
     fun strip_exntag' (Prim_c (Exntag_c,[con])) = SOME con
       | strip_exntag' _ = NONE
-    fun strip_recursive' (Mu_c (set,var)) = SOME (set,var)
+    fun strip_recursive' (Mu_c (flag,set,var)) = SOME (flag,set,var)
       | strip_recursive' _ = NONE
     fun strip_boxfloat' (Prim_c (BoxFloat_c floatsize,[])) = SOME floatsize
       | strip_boxfloat' _ = NONE
@@ -176,26 +176,14 @@ struct
 	   else
 	     Compiletime)
 
-  fun selfify (con,kind) =
-    (case kind 
-       of Type_k phase => Singleton_k(phase,Type_k phase,con)
-	| Word_k phase => Singleton_k(phase,Word_k phase,con)
-	| Singleton_k(_) => kind
-	| Record_k entries => 
-	 Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
-	| Arrow_k (openness,args,return) => 
-	 let
-	   val (formal_vars,_) = ListPair.unzip args
-	   val actuals = List.map Var_c formal_vars
-	 in
-	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
-	 end)
+  fun singletonize (phase,kind as Singleton_k _,con) = kind
+    | singletonize (phase,kind,con) = 
+      case phase
+	of SOME p => 
+	  Singleton_k (p,kind,con)
+	 | NONE => Singleton_k (get_phase kind,kind,con)
 
-  fun singletonize (kind as Singleton_k _,con) = kind
-    | singletonize (kind,con) = selfify(con,kind)
-(*
-  fun simplify_singleton (Singleton_k(phase,kind,con)) = selfify(con,kind)
-    | simplify_singleton kind = *)
+
   local
     structure A : 
       sig
@@ -318,14 +306,14 @@ struct
 	  (case con of
 	       (Prim_c (pcon,args)) => (Prim_c (pcon,map self args))
 	       
-	     | (Mu_c (defs,var)) =>
+	     | (Mu_c (flag,defs,var)) =>
 		   let
 		       val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
 		       val state' = add_convars (state,map (fn v => (v, Word_k Runtime)) con_vars)
 		       val cons' = List.map (f_con state') cons
 		       val defs' = Util.list2set (ListPair.zip (con_vars,cons'))
 		   in
-		       (Mu_c (defs',var))
+		       (Mu_c (flag,defs',var))
 		   end
 	       
 	     | (AllArrow_c confun) => AllArrow_c (f_arrow state confun)
@@ -523,7 +511,7 @@ struct
 			  fun doer(v,f) = (v,dofun s' f)
 		      in  (Fixcode_b(Util.mapset doer vfset), s')
 		      end
-		| Fixclosure_b vcset => 
+		| Fixclosure_b (is_recur,vcset) => 
 		      let val s' = foldset (fn ((v,{tipe,...}),s) => add_var(s,v,tipe)) s vcset 
 			  fun doer(v,{code,cenv,venv,tipe}) = 
 			  (v,{code = (case (exphandler (bound,Var_e code)) of
@@ -534,7 +522,7 @@ struct
 			  cenv = f_con s' cenv,
 			  venv = f_exp s' venv,
 			  tipe = f_con s' tipe})
-		      in  (Fixclosure_b(Util.mapset doer vcset), s')
+		      in  (Fixclosure_b(is_recur,Util.mapset doer vcset), s')
 		      end
       in  case (bndhandler (bound,bnd)) of
 	  CHANGE_NORECURSE bs => (bs, state)  (* is this right? *)
@@ -665,6 +653,44 @@ struct
       List.exists (fn v => eq_var (v,var)) free_vars
     end
 
+  local
+      fun count_handler() = 
+	  let val count = ref 0 
+	      fun con_handler _ = (count := (!count) + 1; NOCHANGE)
+	      fun exp_handler _ = (count := (!count) + 1; NOCHANGE)
+	      fun kind_handler _ = (count := (!count) + 1; NOCHANGE)
+	  in 
+	      (count,
+	       STATE{bound = default_bound,
+		     bndhandler = default_bnd_handler,
+		     cbndhandler = default_cbnd_handler,
+		     exphandler = exp_handler,
+		     conhandler = con_handler,
+		     kindhandler = kind_handler})
+	  end
+  in  fun bnd_size argbnd = let val (count,handlers) = count_handler()
+			    in  (f_bnd handlers argbnd; !count)
+			    end
+      fun exp_size argexp = let val (count,handlers) = count_handler()
+			    in  (f_exp handlers argexp; !count)
+			    end
+      fun con_size argcon = let val (count,handlers) = count_handler()
+			    in  (f_con handlers argcon; !count)
+			    end
+      fun kind_size argkind = let val (count,handlers) = count_handler()
+			     in  (f_kind handlers argkind; !count)
+			     end
+      fun import_size (ImportValue (_,_,c)) = 1 + con_size c
+	| import_size (ImportType (_,_,k)) = 1 + kind_size k
+      fun export_size (ExportValue (_,e,c)) = exp_size e + con_size c
+	| export_size (ExportType (_,c,k)) = con_size c + kind_size k
+      fun module_size (MODULE{bnds,imports,exports}) =
+	  let val count = foldl (fn (bnd,acc) => acc + (bnd_size bnd))    0 bnds
+	      val count = foldl (fn (imp,acc) => acc + (import_size imp)) count imports
+	      val count = foldl (fn (exp,acc) => acc + (export_size exp)) count exports
+	  in  count
+	  end
+  end
 
   local 
     fun con_handler conmap ({boundcvars,boundevars},Var_c var) = 
@@ -722,6 +748,15 @@ struct
 	    !cvars_ref
 	end
   end
+
+  fun muExpand (flag,vcseq,v) = 
+      let val vc_list = sequence2list vcseq
+	  val vc_list' = map (fn (v,_) => (v,Mu_c(flag,vcseq,v))) vc_list
+	  val conmap = Subst.fromList vc_list'
+	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
+		     SOME c => c | NONE => error "bad mu type")
+      in  Subst.substConInCon conmap c
+      end
 
   fun same_openness (Open,Open) = true
     | same_openness (Closure,Closure) = true
@@ -816,7 +851,7 @@ struct
 	   
 	  (*Assume - sets must maintain ordering!  We only judge*)
 	  (* mus with the same ordering to be equiv *) 
-	  | (Mu_c (defs1,var1),Mu_c (defs2,var2)) =>
+	  | (Mu_c (flag1,defs1,var1),Mu_c (flag2,defs2,var2)) =>
 	   let
 	     val def_list1 = Util.set2list defs1
 	     val def_list2 = Util.set2list defs2
@@ -824,6 +859,7 @@ struct
 	     val (var_list2,con_list2) = ListPair.unzip def_list2
 	     val context' = alpha_equate_pairs (context,(var_list1,var_list2))
 	   in
+	     flag1 = flag2 andalso
 	     alpha_pair_eq (context',(var1,var2)) andalso
 	     alpha_equiv_con_list context' (con_list1,con_list2)
 	   end
@@ -917,25 +953,62 @@ struct
     eq_len list_pair andalso
     ListPair.all (alpha_equiv_con' context) list_pair
 
+  fun alpha_sub_kind' context (k1,k2) = 
+    (case (k1,k2)
+       of (Word_k p1, Word_k p2) => sub_phase(p1,p2)
+	| (Type_k p1, Type_k p2) => sub_phase(p1,p2)
+	| (Word_k p1, Type_k p2) => sub_phase(p1,p2)
+(*	| (Singleton_k (p1,_,_) ,Type_k p2) => sub_phase(p1,p2)
+	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k*)
+	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
+	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
+	| (Singleton_k (p1,k1,c1),k2) => 
+	 sub_phase(p1,get_phase k2) andalso alpha_sub_kind' context (k1,k2)
+	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
+	 let
+	   val conref = ref context
+	   fun sub_one ((var1,kind1),(var2,kind2)) = 
+	     (alpha_sub_kind' (!conref) (kind1,kind2))
+	     before (conref := alpha_equate_pair (!conref,(var1,var2)))
+	 in
+	   (same_openness (openness1,openness2) andalso 
+	    eq_len (formals1,formals2) andalso 
+	    ListPair.all sub_one (formals1,formals2) andalso
+	    alpha_sub_kind' (!conref) (return1,return2))
+	 end
+       
+	| (Record_k elts1,Record_k elts2) => 
+	 let
+	   val conref = ref context
+	   fun sub_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
+	     (eq_label (lbl1,lbl2) andalso
+	      alpha_sub_kind' (!conref) (kind1,kind2))
+	     before (conref := (alpha_equate_pair (!conref,(var1,var2))))
+	 in
+	   eq_len (elts1,elts2) andalso 
+	   (ListPair.all sub_one (elts1,elts2))
+	 end
+	| (_,_) => false)
+       
   val alpha_equiv_con = alpha_equiv_con' (empty_context (),empty_context ())
 
   val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
 
-
+  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
 (* End exported functions *)
 
     fun alpha_normalize_con' (context:alpha_context) (con:con) = 
       (case con 
 	 of (Prim_c (pcon,args)) => 
 	   (Prim_c (pcon,map (alpha_normalize_con' context) args))
-	  | (Mu_c (defs,var)) =>
+	  | (Mu_c (flag, defs,var)) =>
 	   let
 	     val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
 	     val (context',con_vars') = alpha_bind_list (context,con_vars)
 	     val cons' = List.map (alpha_normalize_con' context') cons
 	     val defs' = Util.list2set (ListPair.zip (con_vars',cons'))
 	   in
-	     (Mu_c (defs',substitute (context',var)))
+	     (Mu_c (flag, defs',substitute (context',var)))
 	   end
 	 
 	  | (AllArrow_c (openness,effect,tformals,formals,flength,return)) =>
@@ -1204,13 +1277,13 @@ struct
 	     in
 	       (bnd',(e_context',c_context))
 	     end
-	 | Fixclosure_b defs => 
+	 | Fixclosure_b (is_recur,defs) => 
 	     let
 	       val (vars,closures) = unzip (set2list defs)
 	       val (e_context',vars') = alpha_bind_list (e_context,vars)
 	       val closures' = map (alpha_normalize_closure' (e_context',c_context)) closures
 	       val defs' = list2set (zip (vars',closures'))
-	       val bnd' = Fixclosure_b defs
+	       val bnd' = Fixclosure_b (is_recur, defs)
 	     in
 	       (bnd',(e_context',c_context))
 	     end)
@@ -1328,5 +1401,8 @@ struct
 	end
 
 *)
+
+  fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
+  fun is_word T = alpha_sub_kind (T,Word_k Runtime)
 
 end;

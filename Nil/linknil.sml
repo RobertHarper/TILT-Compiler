@@ -18,8 +18,8 @@ end
 
 structure Linknil (* : LINKNIL *) =
   struct
-    val typecheck = ref true
     val typecheck_before_opt = ref true
+    val typecheck_after_opt = ref true
     val typecheck_after_cc = ref true
 
     val do_opt = ref true
@@ -393,104 +393,76 @@ structure Linknil (* : LINKNIL *) =
 	in  nilmod
 	end
 
+    fun showmod debug str nilmod = 
+	if debug
+	    then (print "\n\n=======================================\n\n";
+		  print str;
+		  print " results:\nsize = ";
+		  print (Int.toString (NilUtil.module_size nilmod));
+		  PpNil.pp_module nilmod;
+		  print "\n")
+	else (print str; print " complete\n")
+	    
     fun compile' debug (ctxt,sbnds,sdecs) = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
 	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnds,sdecs)	    
-	    val _ = if debug
-		      then (print "\n\n=======================================\n\n";
-			    print "phase-split results:\n";
-			    PpNil.pp_module nilmod;
-			    print "\n")
-		    else print "Phase-splitting complete\n"
+	    val _ = showmod debug "Phase-split" nilmod
+
 	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
-	    val _ = if debug 
-			then (print "\n\n=======================================\n\n";
-			      print "cleanup results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "cleanup complete\n"
+	    val _ = showmod debug "Cleanup" nilmod
+
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
-	    val _ = if debug 
-			then (print "\n\n=======================================\n\n";
-			      print "renaming results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Renaming complete\n"
- 	    val nilmod = 
+	    val _ = showmod debug "Renaming" nilmod
+
+ 	    val nilmod' = 
 	      if (!typecheck_before_opt) then
 		(Stats.timer("Nil typechecking - pre opt",NilStatic.module_valid)) (D,nilmod)
 	      else
 		nilmod
 	    val _ = 
 	      if (!typecheck_before_opt) then 
-		if debug 
-		  then (print "\n\n=======================================\n\n";
-			print "nil typechecking results:\n";
-			PpNil.pp_module nilmod;
-			print "\n")
-		else print "Nil typechecking complete (pre-opt)\n"
+		  showmod debug "Pre-opt typecheck" nilmod'
 	      else ()
 
 
 	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
-	    val _ = if debug andalso (!do_opt)
-			then (print "\n\n=======================================\n\n";
-			      print "nil optimization results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Nil Optimization complete\n"
+	    val _ = if (!do_opt)
+			then showmod debug "Optimization" nilmod
+		    else ()
 
- 	    val nilmod = 
-	      if (!typecheck) then
+ 	    val nilmod' = 
+	      if (!typecheck_after_opt) then
 		(Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
 	      else
 		nilmod
 	    val _ = 
-	      if (!typecheck) then 
-		if debug 
-		  then (print "\n\n=======================================\n\n";
-			print "nil typechecking results:\n";
-			PpNil.pp_module nilmod;
-			print "\n")
-		else print "Nil typechecking complete\n"
+	      if (!typecheck_after_opt) then 
+		  showmod debug "Post-opt typecheck" nilmod'
 	      else ()
+	
+(*
+	    val _ = print "starting beta-reduction\n"	  
 	    val nilmod = (Stats.timer("Beta-reduction",BetaReduce.reduceModule)) nilmod
-	    val _ = if debug 
-			then (print "\n\n=======================================\n\n";
-			      print "beta-reduction results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Beta-reduction complete\n"
+	    val _ = showmod debug  "Beta-reduction" nilmod
+*)
+
 	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
-	    val _ = if debug
-			then (print "\n\n=======================================\n\n";
-			      print "closure-conversion results:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Closure-conversion complete\n"
+	    val _ = showmod debug "Closure-conversion" nilmod
+
 	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
-	    val _ = if debug 
-			then (print "\n\n=======================================\n\n";
-			      print "renaming results2:\n";
-			      PpNil.pp_module nilmod;
-			      print "\n")
-		    else print "Renaming complete\n"
- 	    val nilmod = 
+	    val _ = showmod debug "Renaming2" nilmod
+
+ 	    val nilmod' = 
 	      if (!typecheck_after_cc) then
 		(Stats.timer("Nil typechecking (post cc)",NilStatic.module_valid)) (D,nilmod)
 	      else
 		nilmod
 	    val _ = 
 	      if (!typecheck_after_cc) then 
-		if debug 
-		  then (print "\n\n=======================================\n\n";
-			print "nil typechecking results:\n";
-			PpNil.pp_module nilmod;
-			print "\n")
-		else print "Nil typechecking complete (post cc)\n"
+		  showmod debug "Post-cc Typecheck" nilmod'
 	      else ()
 	in  nilmod
 	end

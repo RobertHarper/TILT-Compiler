@@ -16,6 +16,7 @@ struct
     val foldl_acc = Listops.foldl_acc
     val linearize = false
     val debug = ref false
+    val killunused = ref false
 
     local
 	datatype cell = Use | Defer of cellref list
@@ -62,7 +63,8 @@ struct
 	    in ()
 	    end
 	fun is_used ((_,s) : state, v) =
-	    (case (VarMap.find(s,v)) of
+	    (not (!killunused) orelse
+	     case (VarMap.find(s,v)) of
 		 NONE => error ("is_used failed on " ^ (Name.var2string v))
 	       | SOME (_,cellref) => cellref2bool cellref)
 
@@ -165,14 +167,14 @@ struct
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
 (* RECURSIVE BINDING *)
-	      | Fixclosure_b vcl_set => let val state = add_vars state vcl_set
-					    val state = pop_vars state vcl_set
-					    val vcl_list = set2list vcl_set
-					    val bnd_vcl = map (vcl_help state) vcl_list
-					    val fixbnd = Fixclosure_b(list2set(map #2 bnd_vcl))
-					    val bnds = flatten (map #1 bnd_vcl)
-					in  (state,bnds @ [fixbnd])
-					end)
+	      | Fixclosure_b (flag,vcl_set) => let val state = add_vars state vcl_set
+						   val state = pop_vars state vcl_set
+						   val vcl_list = set2list vcl_set
+						   val bnd_vcl = map (vcl_help state) vcl_list
+						   val fixbnd = Fixclosure_b(flag,list2set(map #2 bnd_vcl))
+						   val bnds = flatten (map #1 bnd_vcl)
+					       in  (state,bnds @ [fixbnd])
+					       end)
        end
 
    and lfunction state (Function(effect,recur,vklist,vclist,vflist,e,c)) : function =
@@ -345,11 +347,11 @@ struct
 		    val cbnds = flatten (map #1 cbnd_cons)
 		in  (cbnds, Prim_c(pc,cons'))
 		end
-	  | Mu_c (vc_seq,v) => let val vclist = sequence2list vc_seq
-				   val (cbnds,vclist,state) = lvclist state vclist
-				   val v = find_var(state,v)
-			       in  (cbnds,Mu_c(list2sequence vclist, v))
-			       end
+	  | Mu_c (flag,vc_seq,v) => let val vclist = sequence2list vc_seq
+					val (cbnds,vclist,state) = lvclist state vclist
+					val v = find_var(state,v)
+				    in  (cbnds,Mu_c(flag,list2sequence vclist, v))
+				    end
 	  | AllArrow_c (openness,effect,vklist,clist,w32,c) =>
 		let 
 		    val (cbnds_vk, vklist,state) = lvklist state vklist

@@ -52,7 +52,7 @@ functor NilEvaluate (structure Nil : NIL
 	     | (Exp_b _) => false
 	     | (Fixopen_b vf_set) => (member_eq(eq_var,v,map #1(set2list vf_set)))
 	     | (Fixcode_b vf_set) => (member_eq(eq_var,v,map #1(set2list vf_set)))
-	     | (Fixclosure_b vc_set) => (member_eq(eq_var,v,map #1(set2list vc_set))))
+	     | (Fixclosure_b (_,vc_set)) => (member_eq(eq_var,v,map #1(set2list vc_set))))
 	| exp_isval (Let_e _) = false
 	| exp_isval (Prim_e (NilPrimOp np,clist,elist)) = nilprim_isval(np,clist,elist)
 	| exp_isval (Prim_e (PrimOp _,_,_)) = false
@@ -91,7 +91,7 @@ functor NilEvaluate (structure Nil : NIL
 	      andalso (vklist_isval vklist)
 	  in  case con of
 	      Prim_c (pc,clist) => (primcon_isval pc) andalso (Listops.andfold con_isval clist)
-	    | Mu_c (vc_seq,v) => vclist_isval (sequence2list vc_seq)
+	    | Mu_c (_,vc_seq,v) => vclist_isval (sequence2list vc_seq)
 	    | AllArrow_c confun => confun_isval confun
 	    | Var_c v => false
 	    | Let_c (_,[Open_cb(v,vklist,c,k)],Var_c v') => eq_var(v,v') 
@@ -157,9 +157,9 @@ functor NilEvaluate (structure Nil : NIL
 		  end
 	  in  case con of
 	      Prim_c (pc,clist) => primconEval(pc,map self clist)
-	    | Mu_c (vc_seq,v) => let fun doer(v,c) = (v,self c)
-				 in  Mu_c(mapsequence doer vc_seq, v)
-				 end
+	    | Mu_c (flag,vc_seq,v) => let fun doer(v,c) = (v,self c)
+				      in  Mu_c(flag,mapsequence doer vc_seq, v)
+				      end
 	    | AllArrow_c confun => AllArrow_c(confunEval confun)
 	    | Var_c v => find_convar env v
 	    | Let_c (letsort, cbnds, c) => 
@@ -399,7 +399,7 @@ functor NilEvaluate (structure Nil : NIL
 				      val _ = renv := env'
 				  in  env'
 				  end
-			    | Fixclosure_b vcset => 
+			    | Fixclosure_b (is_recur,vcset) => 
 				  let val vclist = set2list vcset
 				      val u = VALUE NilUtil.unit_exp
 				      val c = NilUtil.unit_con
