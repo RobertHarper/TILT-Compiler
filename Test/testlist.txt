@@ -185,3 +185,5 @@ n135    Denmark Core-SML accept test
 n136    Denmark Core-SML accept test
 n137    Denmark Core-SML accept test
 n138    Denmark Core-SML accept test
+withtype	 withtype
+m0047	withtype
