@@ -23,6 +23,7 @@ signature PPIL =
     val pp_kind'    : Il.kind -> Formatter.format
     val pp_value'   : Il.value -> Formatter.format
     val pp_prim'    : Il.prim -> Formatter.format
+    val pp_context_entry' : Il.context_entry -> Formatter.format
     val pp_context' : Il.context -> Formatter.format
     val pp_inline'  : Il.inline -> Formatter.format
     val pp_signat'  : Il.signat -> Formatter.format
@@ -51,6 +52,7 @@ signature PPIL =
     val pp_kind    : Il.kind -> unit
     val pp_value   : Il.value -> unit
     val pp_prim    : Il.prim -> unit
+    val pp_context_entry : Il.context_entry -> unit
     val pp_context : Il.context -> unit
     val pp_inline  : Il.inline -> unit
     val pp_signat  : Il.signat -> unit

@@ -26,16 +26,19 @@ structure LinkIl :> LINKIL  =
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
 	fun SelfifySdec ctxt (SDEC(l,dec)) = SDEC(l,SelfifyDec ctxt dec)
-	local
-	    fun help self_ctxt (ctxt,entries) = 
-		let fun folder (CONTEXT_SDEC sdec,ctxt) = 
-		    IlContext.add_context_sdec(ctxt,SelfifySdec self_ctxt sdec)
-		      | folder (ce,ctxt) = IlContext.add_context_entries(ctxt,[ce])
-		in  foldl folder ctxt entries
-		end
-	in  fun local_add_context_entries (ctxt,entries) = help ctxt (ctxt,entries)
-	    val local_add_context_entries' = help
-	end
+	fun local_add_context_entries self_ctxt (acc_ctxt,entries) = 
+	    let fun folder (CONTEXT_SDEC sdec,(self_ctxt,acc_ctxt)) = 
+		    let val sdec = SelfifySdec self_ctxt sdec
+		    in  (IlContext.add_context_sdec(self_ctxt,sdec),
+			 IlContext.add_context_sdec(acc_ctxt,sdec))
+		    end
+		  | folder (ce,(self_ctxt,acc_ctxt)) = 
+		    let val self_ctxt = IlContext.add_context_entries(self_ctxt,[ce])
+			val acc_ctxt = IlContext.add_context_entries(acc_ctxt,[ce])
+		    in  (self_ctxt,acc_ctxt)
+		    end
+	    in  #2(foldl folder (self_ctxt,acc_ctxt) entries)
+	    end
 
 	val empty_context = IlContext.empty_context
 
@@ -197,19 +200,19 @@ structure LinkIl :> LINKIL  =
 	    case xspec(base_ctxt, fp, specs) of
 		SOME sdecs => 
 		    let val ctxts = map CONTEXT_SDEC sdecs
-			val ctxt = local_add_context_entries' base_ctxt (empty_context,ctxts) 
+			val ctxt = local_add_context_entries base_ctxt (empty_context,ctxts) 
 		    in  SOME ctxt
 		    end
 	      | NONE => NONE
 
 	fun elab_dec (base_ctxt, fp, dec) = 
 	    case xdec(base_ctxt,fp,dec) 
-		of SOME sbnd_ctxt_list => 
-		    let val sbnds = List.mapPartial #1 sbnd_ctxt_list
-			val ctxts = map #2 sbnd_ctxt_list
-			val ctxt = local_add_context_entries' base_ctxt (empty_context,ctxts) 
+		of SOME sbnd_ctxtent_list => 
+		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
+			val ctxtents = map #2 sbnd_ctxtent_list
+			val ctxt = local_add_context_entries base_ctxt (empty_context,ctxtents) 
 		    in 
-			SOME(ctxt,sbnd_ctxt_list)
+			SOME(ctxt,sbnd_ctxtent_list)
 		    end
 	      | NONE => NONE
 

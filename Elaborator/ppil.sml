@@ -496,6 +496,14 @@ struct
     val pp_inline' = help (pp_inline [])
     val pp_phrase_class' = help (pp_phrase_class [])
 
+    fun pp_context_entry' (CONTEXT_INLINE _) = String "CONTEXT_INLINE ???"
+      | pp_context_entry' (CONTEXT_ALIAS _) = String "CONTEXT_ALIAS ???"
+      | pp_context_entry' (CONTEXT_SDEC sdec) = HOVbox[String "CONTEXT_SDEC: ", pp_sdec [] sdec]
+      | pp_context_entry' (CONTEXT_SIGNAT (l,v,s)) = HOVbox[String "CONTEXT_SIGNAT: ",
+							    pp_label l, String " > ", pp_var v,
+							    String " = ", pp_signat [] s]
+      | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
+
     fun pp_context' (CONTEXT{label_list,...}) = 
 	let val label_pathpc_list = Name.LabelMap.listItemsi label_list
 	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp [] e, String " : ", pp_con [] c]
@@ -521,6 +529,7 @@ struct
     val pp_prim = help' Ppprim.pp_prim'
     val pp_mod = help' (pp_mod [])
     val pp_exp = help' (pp_exp [])
+    val pp_context_entry = help' pp_context_entry'
     val pp_context = help' pp_context'
     val pp_signat = help' (pp_signat [])
     fun pp_list doer data = help' (pp_list' doer data)
