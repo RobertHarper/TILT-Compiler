@@ -91,3 +91,4 @@
 0091 [open]     Unresolved equality expressions breaking elaborator
 0092 [closed]	There are too many steps to reporting bugs.
 0093 [open]	TILT does not support separate compilation.
+0094 [open]	The Runtime uses too much virtual memory.
