@@ -246,11 +246,12 @@ struct
 
     fun read_group (groupfile : string) : Group.group =
 	let val _ = Update.flushAll()
-	    (* Eg: target=sparc-8, objtype=sparc, cputype=linux *)
+	    (* Eg: cputype=linux, objtype=sparc, target=sparc-8 *)
 	    val cputype = Platform.platformName (Platform.platform ())
 	    val objtype = Target.platformName (Target.getTargetPlatform ())
 	    val target = Target.platformString()
 	    val littleEndian = !Target.littleEndian
+	    val libdir = Dirs.libDir() ^ "/Lib"
 	    val g = Group.empty_group'
 	    val g = Group.add_string_value (g, "cputype", cputype)
 	    val g = Group.add_string_value (g, "objtype", objtype)
@@ -259,6 +260,7 @@ struct
 	    val g = Group.add_int_value (g, "majorVersion", Version.majorVersion)
 	    val g = Group.add_int_value (g, "minorVersion", Version.minorVersion)
 	    val g = Group.add_string_value (g, "version", Version.version)
+	    val g = Group.add_string_value (g, "libdir", libdir)
 	    val (g,fixup) =
 		(case basis
 		   of NONE => (g,nofixup)
