@@ -1094,16 +1094,10 @@ unit posix_filesys_symlink(string unused1, string unused)
 unit posix_filesys_mkdir(string mlDir, word mode)
 {
   char *cDir = mlstring2cstring_static(mlDir);
-  int status;
-    printf("mlDir = %d\n", mlDir);
-    printf("mlDir = *%20s*\n", mlDir);
-    printf("trying mkdir (\"%s\", %x) failed\n", cDir, mode);
 /*status = mkdirp(cDir,mode);  If you want mkdirp, implement it for
   alpha */
-    status = mkdir(cDir,mode);
-  if (status) {
-    printf("mkdir (\"%s\", %x) failed with errno = %d\n", cDir, mode, status);
-    UNIMP();
+  if (mkdir(cDir,mode) == -1) {
+    runtime_error(errno);
   }
   return empty_record;
 }
