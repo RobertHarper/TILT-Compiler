@@ -54,7 +54,7 @@ int IsGlobalData(value_t addr)
 
 int IsConstructorData(value_t addr)
 {
-  return (addr < 256);
+  return (addr <= 256);
 }
 
 #ifdef solaris

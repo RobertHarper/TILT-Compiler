@@ -263,12 +263,12 @@ static void stop_copy(SysThread_t *sysThread)
   /* Only the designated thread needs to perform the following */
   if (isFirst)
     {
-      /* Check the heap */
+      /* Check the tospace heap - zero out all of fromspace */
       if (paranoid) {
 	value_t *from_alloc = (value_t *)fromheap->bottom;
 	paranoid_check_heap(fromheap,toheap);
 	while (from_alloc < (value_t *)fromheap->top)
-	  *(from_alloc++) = 13;
+	  *(from_alloc++) = 0;
       }
 
       /* Resize the tospace by using the oldspace size and liveness ratio */

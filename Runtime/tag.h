@@ -10,7 +10,6 @@ typedef unsigned int value_t;
 #endif
 
 #define RECORD_TAG      0x0
-#define RECORD_SUB_TAG  0x1
 #define IARRAY_TAG      0x2
 #define PARRAY_TAG      0x3
 #define RARRAY_TAG      0x4
@@ -19,7 +18,6 @@ typedef unsigned int value_t;
 
 #define GET_TYPE(t)       (((value_t)t) & 0x7)
 #define IS_RECORD(t)      (GET_TYPE(t) == RECORD_TAG)
-#define IS_RECORD_SUB(t)  (GET_TYPE(t) == RECORD_SUB_TAG)
 #define IS_IARRAY(t)      (GET_TYPE(t) == IARRAY_TAG)
 #define IS_PARRAY(t)      (GET_TYPE(t) == PARRAY_TAG)
 #define IS_RARRAY(t)      (GET_TYPE(t) == RARRAY_TAG)
@@ -36,7 +34,7 @@ typedef unsigned int value_t;
 #define GET_RECLEN(t)    ((((value_t)t) >> RECLEN_OFFSET) & 31)    /* rec len in words */
 #define GET_RECMASK(t)   (((value_t)t) >> RECMASK_OFFSET)          /* get record mask */
 
-#define TAG_REC_EMPTY      (RECORD_TAG | (0 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))
+/* Records are not allowed to be empty */
 #define TAG_REC_INT        (RECORD_TAG | (1 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))
 #define TAG_REC_TRACE      (RECORD_TAG | (1 << RECLEN_OFFSET) | (1 << RECMASK_OFFSET))
 #define TAG_REC_INTINT     (RECORD_TAG | (2 << RECLEN_OFFSET) | (0 << RECMASK_OFFSET))

@@ -1897,7 +1897,7 @@ end (* local defining splitting context *)
        let
 	   val exp = xexp context il_exp
 	   val sumcon = xcon context il_con
-       in  Prim_e (NilPrimOp (project_sum (TilWord32.fromInt i)), [sumcon], [exp])
+       in  Prim_e (NilPrimOp (project (TilWord32.fromInt i)), [sumcon], [exp])
        end
 (*
 	       handle e => (print "SUM_TAIL error\n";

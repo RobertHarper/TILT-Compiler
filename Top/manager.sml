@@ -161,7 +161,7 @@ structure Manager :> MANAGER =
   type filebase = string
   fun base2sml (f : string) = f ^ ".sml"
   fun base2int (f : string) = f ^ ".int"
-  fun base2ui (f : string) = f ^ ".ui"
+  val base2ui = Compiler.base2ui
   val base2o = Compiler.base2o
   val base2uo = Compiler.base2uo
 
@@ -577,9 +577,9 @@ structure Manager :> MANAGER =
 	  val _ = if (lines > 1000) then flush_cache() else ()
 
 	  val import_bases = map get_base imports
-	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
-	  val uiFile = srcBase ^ ".ui"
-	  val intFile = srcBase ^ ".int"
+	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (base2ui x))) import_bases
+	  val uiFile = base2ui srcBase
+	  val intFile = base2int srcBase
 
 	  val (ctxt',sbnds) = 
 	      if exists intFile then 

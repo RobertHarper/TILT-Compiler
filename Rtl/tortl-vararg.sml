@@ -10,7 +10,7 @@ struct
 
 structure TortlBase = TortlBase
 open Nil
-open TortlBase
+open TortlBase TortlRecord
 
 val number_flatten = 6
 val diag = ref true
@@ -176,11 +176,11 @@ val debug_full = ref false
 	    val tagi = alloc_regi TRACE
 	    val numfieldi = alloc_regi NOTRACE_INT
 	    val _ = (add_instr(BCNDI(LE, argc, IMM 255, noflattenl, false)); (* check for small types *)
-		     add_instr(LOAD32I(EA(argc,0),tagi));                     (* load tag of the type *)
+		     record_project(argc,0,tagi);                            (* load tag of the type *)
 		     add_instr(BCNDI(NE, tagi, IMM 5, noflattenl, false)))   (* check for record *)
 
             (* dispatch to the right record case *)
-	    val _ = add_instr(LOAD32I(EA(argc,4),numfieldi))      (* load record field number *)
+	    val _ = record_project(argc,1,numfieldi)                     (* load record field number *)
 	    fun mapper (n,recordlab) = 
 		add_instr(BCNDI(EQ, numfieldi, IMM n, recordlab, false)) (* check for records *)
 	    val _ = mapcount mapper recordlabs
@@ -192,7 +192,7 @@ val debug_full = ref false
 		    val funvar = Name.fresh_named_var "vararg_funvar"
 		    fun folder(convar,(n,state)) = 
 			let val tempi = alloc_regi TRACE
-			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
+			    val _ = record_project(argc,2+n,tempi)
 			in  (n+1,
 			     add_conterm (state,convar,Type_k,
 					  SOME(LOCATION(REGISTER (false,I tempi)))))
@@ -234,11 +234,11 @@ val debug_full = ref false
 	    val tagi = alloc_regi TRACE
 	    val numfieldi = alloc_regi NOTRACE_INT
 	    val _ = (add_instr(BCNDI(LE, argc, IMM 255, noflattenl, false)); (* check for small types *)
-		     add_instr(LOAD32I(EA(argc,0),tagi));                    (* load tag of the type *)
+		     record_project(argc,0,tagi);                           (* load tag of the type *)
 		     add_instr(BCNDI(NE, tagi, IMM 5, noflattenl, false))) (* check for record *)
 
             (* dispatch to the right record case *)
-	    val _ = add_instr(LOAD32I(EA(argc,4),numfieldi))      (* load record field number *)
+	    val _ = record_project(argc,1,numfieldi)      (* load record field number *)
 	    fun mapper (n,recordlab) = 
 		add_instr(BCNDI(EQ, numfieldi, IMM n, recordlab, false)) (* check for record *)
 
@@ -251,7 +251,7 @@ val debug_full = ref false
 		    val funvar = Name.fresh_named_var "onearg_funvar"
 		    fun folder(convar,(n,state)) = 
 			let val tempi = alloc_regi TRACE
-			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
+			    val _ = record_project(argc,2+n,tempi)
 			in  (n+1,
 			     add_conterm (state,convar,Type_k,
 					  SOME(LOCATION(REGISTER (false,I tempi)))))

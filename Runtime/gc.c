@@ -260,9 +260,11 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
 	else if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
 	    static int newval = 62000;
-	    printf("TRACE WARNING: register %d has from space value %d",
-		   count,data);
-	    printf("      changing to %d\n", newval);
+	    if (verbose) {
+	      printf("TRACE WARNING: register %d has from space value %d",
+		     count,data);
+	      printf("      changing to %d\n", newval);
+	    }
 	    saveregs[count] = newval; 
 	    newval++;
 	  }
@@ -277,13 +279,12 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
 	if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
 	    static int newval = 42000;
-	    if (1 || (NumGC == 14  && count >= 268942980 && count <= 268943000))
-	      {
-	    printf("TRACE WARNING: stack loc %d has from space value %d",
-		   data_add,data);
-	    printf("      changing to %d\n", newval);
-	     *data_add = newval; 
+	    if (verbose) {
+	      printf("TRACE WARNING: stack loc %d has from space value %d",
+		     data_add,data);
+	      printf("      changing to %d\n", newval);
 	    }
+	    *data_add = newval; 
 	    newval++;
 	  }
       }
@@ -302,9 +303,8 @@ void paranoid_check_heap(Heap_t *fromspace, Heap_t *tospace)
 	static int newval = 52000;
 	if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
-	    printf("TRACE ERROR*: to-space has a from-space value after collection");
-	    printf("   data_add = %d   data = %d",data_add,data);
-	    printf("      changing to %d\n", newval);
+	    printf("TRACE ERROR*(%d): to-space loc %d has from-space value %d changing to %d\n", 
+		   NumGC, data_add, data, newval);
 	    *data_add = newval;
 	    newval++;
 	  }
@@ -440,8 +440,11 @@ void gc(Thread_t *curThread)
     SysThread_t *sth = curThread->sysThread;
     assert(self == sth);
     assert(sth->userThread == curThread);
-    assert(curThread->request >= 0);    /* Check that request consistent with call from gc_raw */
-    assert(curThread->request < 8192);  /* Large objects shouldn't get here */
+    if (curThread->request < 0 ||
+	curThread->request >= 8192) {
+      fprintf(stderr,"GC request too big or negative: %d\n", curThread->request);
+      assert(0);
+    }
     ReleaseJob(sth);
   }
 

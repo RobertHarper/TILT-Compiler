@@ -9,6 +9,7 @@ structure AlphaLink :> LINKASM
 
   (* -- translation functions (adapted from linkalpha.sml) ----------------- *)
 
+  fun base2ui base = base ^ ".alpha.ui"
   fun base2s base = base ^ ".alpha.s"
   fun base2o base = base ^ ".alpha.o"
   fun base2uo base = base ^ ".alpha.uo"

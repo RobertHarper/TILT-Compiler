@@ -9,6 +9,7 @@ structure SparcLink :> LINKASM
 
   (* -- translation functions (adapted from linksparc.sml) ----------------- *)
 
+  fun base2ui base = base ^ ".sparc.ui"
   fun base2s base = base ^ ".sparc.s"
   fun base2o base = base ^ ".sparc.o"
   fun base2uo base = base ^ ".sparc.uo"

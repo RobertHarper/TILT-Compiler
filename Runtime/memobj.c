@@ -234,8 +234,9 @@ void GetHeapArea(Heap_t *heap, int size, value_t **bottom, value_t **top)
     start = 0;
     end = 0;
   }
-  else
+  else {
     heap->alloc_start = end;
+  }
   *bottom = (value_t *)start;
   *top = (value_t *)end;
   flushStore();

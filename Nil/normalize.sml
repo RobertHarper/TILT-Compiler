@@ -1218,11 +1218,11 @@ struct
 	    record labs => Prim_c(Record_c (labs,NONE), map (fn e => type_of(D,e)) exps)
 	  | select lab => projectRecordType(D,type_of(D,hd exps),lab)
 	  | inject s => specialize_sumtype(s,hd cons)
-	  | inject_record s => specialize_sumtype(s,hd cons)
-	  | inject_nonrecord s => specialize_sumtype(s,hd cons)
-	  | project_sum s => projectSumType(D,hd cons, s)
-	  | project_sum_nonrecord s => projectSumType(D,hd cons, s)
-	  | project_sum_record (s,lab) => let val summandType = projectSumType(D,hd cons, s)
+	  | inject_known s => specialize_sumtype(s,hd cons)
+	  | inject_known_record s => specialize_sumtype(s,hd cons)
+	  | project s => projectSumType(D,hd cons, s)
+	  | project_known s => projectSumType(D,hd cons, s)
+	  | project_known_record (s,lab) => let val summandType = projectSumType(D,hd cons, s)
 					  in  projectRecordType(D,summandType,lab)
 					  end
 	  | box_float fs => Prim_c(BoxFloat_c fs,[])
@@ -1348,11 +1348,11 @@ struct
 	   | select _ => false
 	   | roll => false
 	   | unroll => false
-	   | project_sum_record _ => false
-	   | project_sum_nonrecord _ => false
-	   | project_sum _ => true
-	   | inject_record _ => false
-	   | inject_nonrecord _ => false
+	   | project_known_record _ => false
+	   | project_known _ => false
+	   | project _ => true
+	   | inject_known_record _ => false
+	   | inject_known _ => false
 	   | inject _ => true
            | box_float _ => false
            | unbox_float _ => false

@@ -51,6 +51,7 @@ sig
    val set_args : reg list * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 
+   val add_mutable : label -> unit
    val get_mutable : unit -> label list
    val pl : Rtl.proc list ref
    val dl : Rtl.data list ref
@@ -101,14 +102,14 @@ sig
    val load_reg_val : value * reg option -> reg
    val load_reg_term : term * reg option -> reg
 
+   val repPathIsPointer : Rtl.rep_path -> regi
+   val storeWithBarrier : regi * regi * rep -> bool  (* true if there MIGHT be a barrier *)
+
    (* Routines for allocating registers and labels *)
    val alloc_regi : rep -> regi
    val alloc_named_regi : var -> rep -> regi
    val alloc_regf : unit -> regf
    val alloc_named_regf : var -> regf
-(* XXXX   val alloc_reg : state -> con -> reg 
-   val alloc_named_reg : state -> con * var -> reg
-*)
    val alloc_reg_trace : state -> Nil.niltrace -> rep * reg
 
    (* Routines for adding code and data *)
@@ -126,11 +127,11 @@ sig
    val stackptr : regi
    val exnptr : regi
    val exnarg : regi
-   val unit_term : term
 
    (* Helper routines *)
    val in_ea_range : int -> term -> int option
    val in_imm_range_vl : term -> int option
+   val add : regi * int * regi -> unit  (* source, int not necessarily in immediate range, dest *)
    val shuffle_iregs : regi list * regi list -> unit
    val shuffle_fregs : regf list * regf list -> unit
    val shuffle_regs  : reg  list * reg  list -> unit
@@ -139,13 +140,6 @@ sig
    val boxFloat_vl : state * term -> term * state
    val unboxFloat : regi -> regf
    val fparray : state * term list -> regi * state
-
-   (* make_record statically allocates if all the arguments are values or we are at top-level
-     make_record_const will always statically allocate
-     make_record_mutable will never statically allocate *)
-   val make_record         : state * rep list * term list -> term * state
-   val make_record_const   : state * rep list * term list * label option -> term * state
-   val make_record_mutable : state * rep list * term list -> term * state
 
 
    (* Tag-related Operations *)

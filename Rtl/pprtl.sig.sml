@@ -18,14 +18,14 @@ sig
    val pp_Data' : Rtl.data -> Formatter.format
    val pp_Proc' : Rtl.proc -> Formatter.format
    val pp_Module' : Rtl.module -> Formatter.format
-   val pp_tags': Rtltags.tags -> Formatter.format
+   val pp_tag': Rtltags.tag -> Formatter.format
 
    val pp_var : Rtl.var -> unit
    val pp_Instr : Rtl.instr -> unit
    val pp_Data : Rtl.data -> unit
    val pp_Proc : Rtl.proc -> unit
    val pp_Module : Rtl.module -> unit
-   val pp_tags: Rtltags.tags -> unit
+   val pp_tag: Rtltags.tag -> unit
 
    val elideSave : bool ref
 end

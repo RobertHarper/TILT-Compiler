@@ -64,6 +64,7 @@ struct
   val prelude_modules : ((Rtl.label list * string list) option) ref = ref NONE
   val prelude_modules_hprof : ((Rtl.label list * string list) option) ref = ref NONE
 
+  fun base2ui base = base ^ ".sparc.ui"
   fun base2s base = base ^ ".sparc.s"
   fun base2o base = base ^ ".sparc.o"
   fun base2uo base = base ^ ".sparc.uo"

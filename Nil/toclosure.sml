@@ -1423,7 +1423,7 @@ struct
 	       let val bnds = bnd_rewrite initial_state bnd
 	       in  acc @ bnds
 	       end
-	   val bnds' = (Stats.subtimer("toclosure_rewrite_bnds",foldl folder [])) bnds
+	   val bnds' = foldl folder [] bnds
 
 	   fun export_rewrite (ExportValue(l,v)) = ExportValue(l,v)
 	     | export_rewrite (ExportType(l,v)) = ExportType(l,v)

@@ -1,4 +1,4 @@
-(*$import TortlVararg Rtl Pprtl TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL *)
+(*$import TortlVararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL *)
 
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
@@ -39,7 +39,7 @@ struct
   (* Module-level declarations *)
   open Util Listops Name
   open Nil NilUtil
-  open Rtl Rtltags Pprtl TortlBase
+  open Rtl Rtltags Pprtl TortlBase TortlRecord
 
 
     val show_cbnd = Stats.ff("show_cbnd")
@@ -150,6 +150,9 @@ struct
 		      fun dowrite (clregi, (_,{code,cenv,venv,tipe}),s) = 
 			  let val (I ir,s) = xexp'(s,fresh_named_var "venv", venv, 
 						     Nil.TraceUnknown, NOTID)
+			      val _ = if (maxRecordLength < 4)
+					  then error "the INIT in dowrite of making a closure is wrong\n"
+				      else ()
 			  in  (add_instr(INIT(EA(clregi,8), ir, NONE)); s)
 			  end
 		      val _ = if is_recur 
@@ -456,9 +459,9 @@ struct
 					   NOTRACE_CODE
 				       val cregi =  alloc_named_regi (fresh_named_var "creg") TRACE
 				       val eregi =  alloc_named_regi (fresh_named_var "ereg") TRACE
-				       val _ = (add_instr(LOAD32I(EA(clregi,0),funregi));
-						add_instr(LOAD32I(EA(clregi,4),cregi));
-						add_instr(LOAD32I(EA(clregi,8),eregi)))
+				       val _ = record_project(clregi, 0, funregi)
+				       val _ = record_project(clregi, 1, cregi)
+				       val _ = record_project(clregi, 2, eregi)
 				   in  (false, REG' funregi, [cregi], [I eregi],state)
 				   end)
 			       
@@ -500,7 +503,7 @@ struct
 		  let val (I ir,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
 		      val newpc = alloc_regi NOTRACE_CODE
 		      val rep = niltrace2rep state trace
-		  in  add_instr(LOAD32I(EA(exnptr,0),newpc));
+		  in  record_project(exnptr,0,newpc);
 		      add_instr(MV (ir,exnarg));
 		      add_instr (JMP(newpc,nil));
 		      (VALUE(VOID rep), state)
@@ -566,8 +569,8 @@ struct
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      (* NOTID and not context because we have to remove the exnrecord *)
 		      val (reg,bstate) = xexp'(bstate,name,exp,trace,NOTID)
-		      val _ = (add_instr(LOAD32I(EA(exnptr,8),exnptr));
-			       add_instr(BR body_after));
+		      val _ = record_project(exnptr,2,exnptr)
+		      val _ = add_instr(BR body_after)
 
 
 		      (* --- now the code for handler --- *)
@@ -580,11 +583,13 @@ struct
 					   SOME r => [stackptr, exnptr, r] 
 					 | NONE => [stackptr, exnptr]) @ local_iregs
 				  fun f (h :: t,offset) =
-				      (if eqregi(h,exnptr) then ()
-				       else add_instr(LOAD32I(EA(exnptr,offset),h));
-					   f (t,offset+4))
+				      let val _ = if eqregi(h,exnptr) 
+						      then ()
+						  else record_project(exnptr,offset,h)
+				      in  f (t,offset+1)
+				      end
 				    | f (nil,offset) = ()
-			      in f (int_regs,4)
+			      in f (int_regs,1)
 			      end
 
 
@@ -612,7 +617,7 @@ struct
 
                       (* --- restore exnptr; compute the handler; move result into same register
                              as result reg of expression; add after label; and fall-through *)
-		      val _ = add_instr(LOAD32I(EA(exnptr,8),exnptr))
+		      val _ = record_project(exnptr,2,exnptr)
 		      val (hreg,hstate) = xexp'(hstate,name,handler_body,trace,context)
 		      val _ = (case (hreg,reg) of
 				   (I hreg,I reg) => add_instr(MV(hreg,reg))
@@ -734,7 +739,7 @@ struct
 						     Nil.TraceUnknown,NOTID)
 
 		      val exntag = alloc_regi(NOTRACE_INT)
-		      val _ = add_instr(LOAD32I(EA(exnarg,0),exntag))
+		      val _ = record_project(exnarg,0,exntag)
 		      val afterl = fresh_code_label "after+exncase"
 		      fun scan(states,lab,[]) =
 			  (add_instr(ILABEL lab);
@@ -765,7 +770,7 @@ struct
 						| _ => error "carried value is an unboxed float")
 			      val state = add_reg (state,bound,c,carried)
 			  in  add_instr(BCNDI(NE,exntag,REG armtagi,next,true));
-			      add_instr(LOAD32I(EA(exnarg,4),carriedi));
+			      record_project(exnarg,1,carriedi);
 			      let val (r,state) = xexp'(state,fresh_var(),body,
 							  trace,context)
 			      in  move r;
@@ -850,7 +855,7 @@ struct
 			      fun load_tag() = 
 				  (if (!load_tag_done) 
 				       then () 
-				   else add_instr(LOAD32I(EA(r,0),tag));
+				   else record_project(r,0,tag);
 				      load_tag_done := true)
 			  in  add_instr(ICOMMENT ("switch # : " ^ (Int.toString switchcount) ^ "case " 
 						  ^ (TW32.toDecimalString i)));
@@ -912,15 +917,11 @@ struct
 							else loop lrest crest (n+1)
 		   val which = loop labels fieldcons 0
 		   val I desti = #2(alloc_reg_trace state trace)
-		   val _ = add_instr(LOAD32I(EA(addr,which * 4), desti))
+		   val _ = record_project(addr, which, desti)
 	       in  (LOCATION(REGISTER(false, I desti)), state)
 	       end
-	 | inject_record known => 
-		let val (lvs,state) = xexp_list (state,elist)
-		in  TortlSum.xsum_record ((state,known,hd clist),lvs)
-		end
-
-	 | inject_nonrecord known => 
+	 | inject_known_record known => error "should not see inject_known_record"
+	 | inject_known known => 
 		let val (lvopt,state) = 
 		    (case elist of
 			 [] => (NONE,state)
@@ -928,36 +929,29 @@ struct
 							    Nil.TraceUnknown,NOTID)
 				in  (SOME lv,state)
 				end)
-		in  TortlSum.xsum_nonrecord ((state,known,hd clist),lvopt,trace)
+		in  TortlSum.xinject_sum_static ((state,known,hd clist),lvopt,trace)
 		end
 	 | inject known => 
 		(case elist of
 		    [] => (print "Warning: tortl encountered inject with no argument\n";
-			   print "         COnverting to inject_nonrecord\n";
-			   TortlSum.xsum_nonrecord ((state,known,hd clist),NONE,trace))
+			   print "         Converting to inject_known\n";
+			   TortlSum.xinject_sum_static ((state,known,hd clist),NONE,trace))
 		  | [e] =>
 			let val (e_lv,state) = xexp(state,fresh_var(),e,
 						      Nil.TraceUnknown,NOTID)
 			    val (_,c_lv,state) = xcon'(state,fresh_var(),hd clist)
-			in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv,trace)
+			in  TortlSum.xinject_sum_dynamic ((state,known,hd clist),c_lv,e_lv,trace)
 			end
 		| _ => error "inject_dynamic with more than one argument")
-	 | project_sum_record (k,field) => 
-	       let val [e] = elist
-		   val (I base,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-		   val ssumcon = type_of state e
-	       in  TortlSum.xproject_sum_record ((state,k,ssumcon),field,clist,base,trace)
-	       end
-
-	 | project_sum_nonrecord k =>
+	 | project_known_record (k,field) => error "should not see project_known_record" 
+	 | project_known k =>
 	       let val [sumcon] = clist
 		   val [e] = elist
 		   val (I base,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-		   val ssumcon = type_of state e
-	       in  TortlSum.xproject_sum_nonrecord ((state,k,sumcon),base,ssumcon,trace)
+	       in  TortlSum.xproject_sum_static ((state,k,sumcon),base,trace)
 	       end
 
-	 | project_sum k =>
+	 | project k =>
 	       let val [sumcon] = clist
 		   val [e] = elist
 		   val (I base,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
@@ -1159,7 +1153,7 @@ struct
 		     | (OtherVector false, [c]) => dynamic c
 		     | _ => error' "table primitive did not have right type args")
 	      end
-	  val unit_result = (unit_term, state)
+	  val unit_result = (empty_record, state)
       in (case prim of
 	      soft_vtrap tt => (add_instr(SOFT_VBARRIER(xtt tt)); unit_result)
 	    | soft_ztrap tt => (add_instr(SOFT_ZBARRIER(xtt tt)); unit_result)
@@ -1485,6 +1479,7 @@ struct
 				       val recstate = foldl folder state (zip vclist clregs)
 				       fun do_write ((clreg,(v,c)),s) = 
 					   let val (r,s) = xcon(s,v,c)
+					       use record_project abstractrion
 					   in  add_instr(MUTATE(EA(clreg,4),r,NONE)); s
 					   end
 				   in  foldl do_write recstate (zip clregs vclist)
@@ -1559,7 +1554,7 @@ struct
 			       val ir = load_ireg_term(lv,NONE)
 			       val _ = add_instr(ICOMMENT ("Proj_c at label " ^ 
 							   (Name.label2string l)))
-			       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
+			       val _ = record_project(ir,which,dest)
 			   in (const,LOCATION(REGISTER (const,I dest)), state)
 			   end
 		   in  (case (!do_single_crecord,Sequence.toList lvk_seq) of
@@ -1588,8 +1583,8 @@ struct
 		       val const = const_fun andalso const_arg
 		       val coderegi = alloc_regi NOTRACE_CODE
 		       val envregi = alloc_regi TRACE
-		       val _ = (add_instr(LOAD32I(EA(clregi,0),coderegi));
-				add_instr(LOAD32I(EA(clregi,4),envregi)))
+		       val _ = record_project(clregi,0,coderegi)
+		       val _ = record_project(clregi,1,envregi)
 		       val desti = alloc_regi TRACE
 		       val _ = add_instr(CALL{call_type = ML_NORMAL,
 					      func = REG' coderegi,

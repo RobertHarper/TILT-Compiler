@@ -26,8 +26,9 @@ signature COMPILER =
     * label for `initialization' with name `unitName_doit'. 
     *)
 
-   val base2s : string -> string  (* Given a base, create name of .o file for current platform *)
-   val base2o : string -> string  (* Given a base, create name of .o file for current platform *)
-   val base2uo : string -> string  (* Given a base, create name of .o file for current platform *)
+   val base2ui : string -> string  (* Given a base, create name of .ui file for current platform *)
+   val base2s  : string -> string  (* Given a base, create name of .s file for current platform *)
+   val base2o  : string -> string  (* Given a base, create name of .o file for current platform *)
+   val base2uo : string -> string  (* Given a base, create name of .uo file for current platform *)
 
  end

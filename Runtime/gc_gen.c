@@ -5,7 +5,6 @@
 
 #include "tag.h"
 #include "queue.h"
-#include "show.h"
 #include "forward.h"
 #include "gc.h"
 #include "thread.h"
@@ -16,6 +15,7 @@
 #include "gcstat.h"
 #include "platform.h"
 #include "client.h"
+#include "show.h"
 
 
 extern Queue_t *ScanQueue;
@@ -563,7 +563,8 @@ void gc_gen(Thread_t *curThread, int isMajor)
   measure_semantic_garbage_after();    
   if (paranoid) {
     paranoid_check_stack(curThread,nursery);
-    paranoid_check_heap(nursery,old_fromheap); 
+    check_heap("Paranoid check heap",old_fromheap->bottom, old_fromheap->alloc_start, old_fromheap->top, old_fromheap);
+    /*    paranoid_check_heap(nursery,old_fromheap);  */
   }
   /* stop timer */
   stop_timer(&sysThread->gctime); 

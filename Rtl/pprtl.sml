@@ -347,20 +347,18 @@ struct
 
   fun pp_rep_path _ = String "rep_path_not_done"
 
-  fun pp_tags' (tags : Rtltags.tags) = 
+  fun pp_tag' ({static,dynamic} : Rtltags.tag) = 
       let 
 	  fun pp_dyn{bitpos,path} = 
 	      Hbox[String (Int.toString bitpos), String " = ",
 		   pp_rep_path path]
-	  fun pp_tag {static,dynamic} = 
-	      let val x = String ("0x" ^ (TilWord32.toHexString static))
-		  val y = map pp_dyn dynamic
-	      in  (case y of 
-		       [] => x
-		     | _ => HOVbox(x :: y))
-	      end
-      in  pp_list pp_tag tags ("(",",",")",false)
+	  val x = String ("0x" ^ (TilWord32.toHexString static))
+	  val y = map pp_dyn dynamic
+      in  (case y of 
+	       [] => x
+	     | _ => HOVbox(x :: y))
       end
+
 
     fun wrapper pp out obj = 
       let 
@@ -378,7 +376,7 @@ struct
     val pp_Data = help pp_Data'
     val pp_Proc = help pp_Proc'
     val pp_Module = help pp_Module'
-    val pp_tags = help pp_tags'
+    val pp_tag = help pp_tag'
 
 
 

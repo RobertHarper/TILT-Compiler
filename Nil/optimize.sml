@@ -797,29 +797,16 @@ fun pp_alias UNKNOWN = print "unknown"
 		       | _ => elist)
 	    in  
 	     (case elist of
-		 [] => do_prim state (NilPrimOp(inject_nonrecord k),clist,[])
-	       | [Prim_e(NilPrimOp(record _),_,elist)] =>
-		     do_prim state (NilPrimOp(inject_record k),clist,elist)
-	       | [Var_e rec_var] => 
-		     (case (Normalize_reduce_hnf(get_env state, find_con(state,rec_var))) of
-			  (_, Prim_c(Record_c (labs,vlist),cons)) => 
-			      let val vars = map (fn l => Name.fresh_named_var (Name.label2name l)) labs
-				  fun mapper (v,l,c) =
-					let val e = Prim_e(NilPrimOp(select l),[], [Var_e rec_var])
-					in  case get_trace(state,c) of
-						SOME tinfo => [Exp_b(v,TraceKnown tinfo,e)]
-					      | NONE => let val rv = Name.fresh_named_var "opt_reify"
-							in  [Con_b(Runtime,Con_cb(rv,c)),
-							     Exp_b(v,TraceKnown (TraceInfo.Compute(rv,[])),e)]
-							end
-					end
-				  val bnds = Listops.flatten(map3 mapper (vars,labs,cons))
-				  val e = do_prim state (NilPrimOp(inject_record k),clist,map Var_e vars)
-			      in  do_exp state (Let_e (Sequential,bnds,e))
-			      end
-			| (true, _) => do_prim state (NilPrimOp (inject_nonrecord k),clist,elist)
+		 [] => do_prim state (NilPrimOp(inject_known k),clist,[])
+	       | [injectee] =>
+		     let val injectee_type = type_of(state,injectee)
+		     in  (case (Normalize_reduce_hnf(get_env state, injectee_type)) of
+			  (true, _) => let val e = Prim_e(NilPrimOp(inject_known k), clist, elist)
+				       in  do_exp state e
+				       end
 			| _ => default())
-	       | _ => default())
+		     end
+	       | _ => error "Inject got more than one argument")
 	    end
 
 
@@ -970,10 +957,13 @@ fun pp_alias UNKNOWN = print "unknown"
 		    val known_tag =
 			(case arg of 
 			     Prim_e(NilPrimOp (inject w), _, _) => SOME w
+			   | Prim_e(NilPrimOp (inject_known w), _, _) => SOME w
+			   | Prim_e(NilPrimOp (inject_known_record w), _, _) => SOME w
 			   | Var_e v => 
 				 (case (lookup_alias(state,v)) of
-				      OPTIONALe(Prim_e(NilPrimOp (inject w), _, _)) =>
-					  SOME w
+				      OPTIONALe(Prim_e(NilPrimOp (inject w), _, _)) => SOME w
+				    | OPTIONALe(Prim_e(NilPrimOp (inject_known w), _, _)) => SOME w
+				    | OPTIONALe(Prim_e(NilPrimOp (inject_known_record w), _, _)) => SOME w
 				    | _ => NONE)
 			   | _ => NONE)
 		in
@@ -1082,7 +1072,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	      (* Rewrite a binding to do the following:
 	         (a) check record arguments are variables
 		 (b) check inject argument are variables 
-		 (c) rewrite project_sum to project_sum_record or project_sum_nonrecord
+		 (c) rewrite project to project_known
 		 If NONE is returned, the binding does not need to be rewrritten.
 		 Otherwise, SOME bindings are returned.  The original bindings
 		   is guaranteed not to occur in this list.  This prevents looping. *)
@@ -1107,9 +1097,9 @@ fun pp_alias UNKNOWN = print "unknown"
 
 		     | Prim_e(NilPrimOp (inject _), _, [Var_e _]) => NONE
 		     | Prim_e(NilPrimOp (inject _), _, [Const_e _]) => NONE
-		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) =>
-			 error "inject argument is not a value"
-		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
+		     | Prim_e(NilPrimOp (inject k), clist,[injectee]) => error "inject argument is not a value"
+
+		     | Prim_e(NilPrimOp (project k),[sumcon],[Var_e sv]) =>
 			 let val sv_con = find_con(state,sv)
 			     val (tagcount,k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
 			     val known = (case k of
@@ -1122,31 +1112,15 @@ fun pp_alias UNKNOWN = print "unknown"
 			     val fieldcon = List.nth(clist, TilWord32.toInt
 						            (TilWord32.uminus(known,tagcount)))
 			 in  case Normalize_reduce_hnf(get_env state, fieldcon) of
-			       (_,Prim_c (Record_c (labs,_), rcons)) => 
-				 let val vars = map (fn l => Name.fresh_named_var
-						     (Name.label2string l)) labs
-				     fun mapper(v,l,t) =
-					 let val (bnds,tinfo) = 
-						 (case get_trace (state, t) of
-						      SOME tinfo => ([],TraceKnown tinfo)
-						    | NONE =>
-							  let val v' = Name.fresh_named_var "reify"
-							  in  ([Con_b(Runtime,Con_cb (v', t))], TraceCompute v')
-							  end)
-					     val np = project_sum_record(known, l)
-					 in  bnds @ [Exp_b(v,tinfo,Prim_e(NilPrimOp np,[sumcon],[Var_e sv]))]
-					 end
-				     val bnds = Listops.map3 mapper (vars, labs, rcons)
-				     val bnd = Exp_b(v,TraceKnown TraceInfo.Trace,
-						     Prim_e(NilPrimOp(record labs), [], map Var_e vars))
-				 in  SOME((Listops.flatten bnds) @ [bnd])
+			     (true, _) => 
+				 let val bnd = Exp_b(v,TraceKnown TraceInfo.Trace,
+						     Prim_e(NilPrimOp(project_known known),[sumcon],[Var_e sv]))
+				 in  SOME [bnd]
 				 end
-			     (* not a record for sure *)
-			     | (true, _) => SOME[Exp_b(v,niltrace,
-						       Prim_e(NilPrimOp (project_sum_nonrecord known),
-							      [sumcon],[Var_e sv]))]
 			     | _ => NONE
 			 end
+		     | Prim_e(NilPrimOp (project k), _, _) => error "project argument is not a value"
+
 		     | _ => NONE)
 	  in	(case bnd of
 		     Exp_b(v,niltrace,e) =>

@@ -213,7 +213,7 @@ value_t setRoundingMode(int ml_mode)
     case 3: ml_mode = FP_RM; break;
     default : printf("setrounding given unknown mML rounding mode %d\n", mode); assert(0);
     }
-  fp_setround(mode);
+  fpsetround(mode);
 #endif  
   return 256; /* ML rep of unit */
 }
@@ -1072,11 +1072,10 @@ statrep posix_filesys_fstat(int filedesc)
 {
   struct stat buffer;
   int error = fstat(filedesc,&buffer);
-printf("fstat called with %d\n",filedesc);
   if (error)
     {
-      printf("POSIX function fstat returned error: errno = %d should raise exn\n",
-	     errno);
+      printf("POSIX function fstat called with %d returned error: errno = %d should raise exn\n",
+	     filedesc, errno);
       assert(0);
     } 
   return cstat2mlstat(&buffer);

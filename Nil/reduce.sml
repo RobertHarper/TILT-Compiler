@@ -961,7 +961,7 @@ structure Reduce
 			 | _ => error "compiler error 2" )
 		end
 	  (* ------------- Sum projection ... perhaps it was from a record ------------ *)
-	  | Exp_b ( x, nt, Prim_e (NilPrimOp (project_sum sum), sum_cons, [ Var_e a ] )) =>
+	  | Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), sum_cons, [ Var_e a ] )) =>
 		let fun cleanup unit = 
 		    ( update_count ESC (s(a)) ~1 fset; 
 		     app (fn (con) => (census_con fset (~1, con))) sum_cons )
@@ -979,7 +979,7 @@ structure Reduce
 				then (cleanup();
 				      (rest,body) )
 			    else
-				( Exp_b ( x, nt, Prim_e (NilPrimOp (project_sum sum), 
+				( Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), 
 								    map (xcon fset) sum_cons, [(s a)]))::rest, body)
 			end 
 		end

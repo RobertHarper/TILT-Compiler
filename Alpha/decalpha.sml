@@ -316,9 +316,18 @@ structure Machine =
                                 (tab ^ (cbrf_to_ascii instr) ^ tab ^
 				 (msReg Rtest) ^ comma ^ (msLabel label))
     | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
-                                (tab ^ (int_to_ascii instr) ^ tab ^
-				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
-				 comma ^ (msReg Rdest))
+				(* XXX MULLV $at, 10, $at gets generated *)
+				let val forbidAt = (false andalso case (instr,Rsrc1) of 
+							(MULLV, R 28) => true
+						      | (MULL, R 28) => true
+						      | _ => false)
+				    val instr = (tab ^ (int_to_ascii instr) ^ tab ^
+						 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
+						 comma ^ (msReg Rdest))
+				in  if forbidAt
+					then (tab ^ ".set noat\n" ^ instr ^ "\n" ^ tab ^ ".set at")
+				    else instr
+				end
     | msInstr' (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =
 (* this is terrible to have traps everywhere... *)
                                 ((tab ^ (fp_to_ascii instr)^ tab ^

@@ -468,41 +468,40 @@ struct
 	  | (Annotate_c _, Annotate_c _) => EQUAL
 
     and cmp_allprim ((NilPrimOp p1), (NilPrimOp p2))= 
-	( case (p1, p2) of 
-	    (record labels1, record labels2) => cmp_label_list (labels1, labels2)
-	  | (record l, _) => GREATER
-	  | ( _, record l) => LESS
-
-	  | (select l1, select l2) => Name.compare_label (l1, l2)
-	  | (select l, _ ) => GREATER
-	  | (_, select l) => LESS
-
-	  | (inject s1, inject s2) => Word32.compare(s1,s2)
-	  | (inject _, _) => GREATER
-	  | ( _, inject _) => LESS
-
-	  | (inject_nonrecord s1, inject_nonrecord s2) => Word32.compare(s1,s2)
-	  | (inject_nonrecord _, _) => GREATER
-	  | ( _, inject_nonrecord _) => LESS
-
-	  | (inject_record s1, inject_record s2) => Word32.compare(s1,s2)
-	  | (inject_record _, _) => GREATER
-	  | (_, inject_record _) => LESS
-	   
-	  | (project_sum s1 , project_sum s2) => Word32.compare(s1, s2)
-	  | (project_sum _, _) => GREATER
-	  | (_, project_sum _) => LESS
-
-	  | (project_sum_nonrecord s1 , project_sum_nonrecord s2) => Word32.compare(s1, s2)
-	  | (project_sum_nonrecord _, _) => GREATER
-	  | (_, project_sum_nonrecord _) => LESS
-
-      | (project_sum_record (s1, f1),
-	 project_sum_record (s2, f2)) => 
-		 cmp_orders [Word32.compare(s1,s2), 
-			     Name.compare_label (f1, f2)]
-       | (project_sum_record _ , _) => GREATER
-       | (_ , project_sum_record _) => LESS
+     (case (p1, p2) of 
+	 (record labels1, record labels2) => cmp_label_list (labels1, labels2)
+       | (record l, _) => GREATER
+       | (_, record l) => LESS
+	     
+       | (select l1, select l2) => Name.compare_label (l1, l2)
+       | (select l, _ ) => GREATER
+       | (_, select l) => LESS
+	     
+       | (inject s1, inject s2) => Word32.compare(s1,s2)
+       | (inject _, _) => GREATER
+       | ( _, inject _) => LESS
+	     
+       | (inject_known s1, inject_known s2) => Word32.compare(s1,s2)
+       | (inject_known _, _) => GREATER
+       | ( _, inject_known _) => LESS
+	     
+       | (inject_known_record s1, inject_known_record s2) => Word32.compare(s1,s2)
+       | (inject_known_record _, _) => GREATER
+       | (_, inject_known_record _) => LESS
+	     
+       | (project s1 , project s2) => Word32.compare(s1, s2)
+       | (project _, _) => GREATER
+       | (_, project _) => LESS
+	     
+       | (project_known s1 , project_known s2) => Word32.compare(s1, s2)
+       | (project_known _, _) => GREATER
+       | (_, project_known _) => LESS
+	     
+       | (project_known_record (s1, f1), project_known_record (s2, f2)) => 
+	     cmp_orders [Word32.compare(s1,s2), 
+			 Name.compare_label (f1, f2)]
+       | (project_known_record _ , _) => GREATER
+       | (_ , project_known_record _) => LESS
 
        | (box_float sz1, box_float sz2) => cmp_int (hash_floatsize sz1, hash_floatsize sz2)
        | (box_float _ , _ ) => GREATER

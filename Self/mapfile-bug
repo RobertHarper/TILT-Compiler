@@ -61,8 +61,6 @@ ListPair    Basis/Aggregate/list-pair
 TIME        Basis/OS/time-sig
 PreTime     Basis/OS/pre-time
 Time        Basis/OS/time
-DATE	    Basis/date-sig
-Date	    Basis/date
 OS_FILE_SYS Basis/OS/os-filesys-sig
 OS_IO_SIG   Basis/OS/os-io-sig
 OS_PATH     Basis/OS/os-path-sig
@@ -91,18 +89,24 @@ TextPrimIO     Basis/IO/text-prim-io
 CLEAN_UP       Basis/NJ/cleanup-sig
 CleanUp        Basis/NJ/cleanup
 CleanIO        Basis/IO/clean-io
+BinPrimIO         Basis/IO/bin-prim-io
 BinIOFn        Basis/IO/bin-io-fn
-# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn"
+# "CLEAN_UP", "CleanUp", "CleanIO", "BinIOFn", "BinPrimIO"
+
 
 TIMER	       Basis/timer-sig
 Timer	       Basis/useless-timer
 
 POSIX_extern   Basis/extern
+DATE	    Basis/date-sig
+Date	    Basis/date
 POSIX_ERROR    Basis/Posix/posix-error.sig
 POSIX_Error    Basis/Posix/posix-error
 POSIX_FLAGS    Basis/Posix/posix-flags-sig
 POSIX_IO_SIG     Basis/Posix/posix-io-sig
 # "POSIX_extern", "POSIX_ERROR", "POSIX_Error", "POSIX_FLAGS", "POSIX_IO_SIG"
+
+
 
 POSIX_FILE_SYS Basis/Posix/posix-filesys-sig
 POSIX_FileSys Basis/Posix/posix-filesys
@@ -134,24 +138,14 @@ OS_IO          Basis/Unix/os-io
 OS             Basis/Unix/os
 # "OS_FileSys", "OS_Path", "OS_Process", "OS_IO", "OS"
 
-BinPrimIO         Basis/IO/bin-prim-io
-# "BinPrimIO"
 
 TextIOFn       Basis/IO/text-io-fn
 PosixPrimIOFn  Basis/Unix/posix-prim-io-fn
 PosixBinPrimIO Basis/Unix/posix-bin-prim-io
 PosixTextPrimIO Basis/Unix/posix-text-prim-io
-TextIO         Basis/Unix/posix-text-io
-BinIO     Basis/Unix/posix-bin-io
-UNIX           Basis/Unix/unix-sig
-Unix           Basis/Unix/unix
-# "TextIOFn", 
-# "PosixBinPrimIO"
-# "PosixTextPrimIO" 
-# "TextIO"
-# "UNIX", "Unix"
 
-TopLevelHelp    Basis/toplevel-help
-TopLevel    Basis/toplevel
+bug Test/bug2
 
-bug Test/bug
+#TextIO         Basis/Unix/posix-text-io
+#BinIO     Basis/Unix/posix-bin-io
+

@@ -23,6 +23,12 @@ structure Til : COMPILER =
 	   | TIL_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus"
 	   | MLRISC_ALPHA => if (!debug_asm) then " -g " else ""
 	   | MLRISC_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus")
+    fun base2ui base = 
+	(case !platform of
+	     TIL_ALPHA => Linkalpha.base2ui
+	   | TIL_SPARC => Linksparc.base2ui
+(*	   | MLRISC_ALPHA => AlphaLink.base2ui
+	   | MLRISC_SPARC => SparcLink.base2ui *) ) base
     fun base2s base = 
 	(case !platform of
 	     TIL_ALPHA => Linkalpha.base2s

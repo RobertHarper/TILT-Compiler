@@ -1330,7 +1330,7 @@ struct
 	 in
 	   inj_type
 	 end
-	| (inject_nonrecord sumtype,[sumcon],argexps) =>
+	| (inject_known sumtype,[sumcon],argexps) =>
 	 let
 
 	   val _ = con_valid(D,sumcon)
@@ -1339,8 +1339,8 @@ struct
 	   val (tagcount,totalcount,carrier) = 
 	     (case strip_sum sumcon_hnf of
 		SOME (tc,total,NONE,c) => (tc,total,c)
-	      | SOME _ => (e_error (D,orig_exp,"inject_nonrecord type argument has special sum type"))
-	      | NONE => (e_error(D,orig_exp, "inject_nonrecord given invalid type argument")))
+	      | SOME _ => (e_error (D,orig_exp,"inject_known type argument has special sum type"))
+	      | NONE => (e_error(D,orig_exp, "inject_known given invalid type argument")))
 
 	   val inj_type = NilUtil.convert_sum_to_special(sumcon_hnf, sumtype)
 	   val _ = 
@@ -1362,19 +1362,14 @@ struct
 			carrier
 		      else 
 			Proj_c(carrier,NilUtil.generate_tuple_label (which + 1))
-		  in (
-		      (case strip_record (con_head_normalize(D,con_k))
-			 of SOME _ => (e_error(D,orig_exp,"inject_nonrecord injects into record field"))
-			  | NONE => ());
-		      exp_analyze (D,argexp,con_k)
-		      )
+		  in  exp_analyze (D,argexp,con_k)
 		  end
 	      | _ => (e_error(D,orig_exp,"Illegal injection - too many args")))
 	 in
 	   inj_type
 	 end
 
-	| (inject_record sumtype, [sumcon], exps) => 
+	| (inject_known_record sumtype, [sumcon], exps) => 
 	 let
 
 	   val _ = con_valid(D,sumcon)
@@ -1424,7 +1419,7 @@ struct
 	 in
 	     inj_type
 	 end
-	| (project_sum k,[argcon],[argexp]) => 
+	| (project k,[argcon],[argexp]) => 
 	 let
 	   val argkind = con_valid(D,argcon)
 	   val argcon = con_head_normalize(D,argcon)
@@ -1432,12 +1427,12 @@ struct
 	   val argcon'' = exp_valid (D,argexp)
 	   val _ = 
 	     (type_equiv(D,argcon'',argcon',true)) orelse
-	     (e_error(D,orig_exp,"Type mismatch in project_sum"))
+	     (e_error(D,orig_exp,"Type mismatch in project"))
 	   val con_k = projectSumType(D,argcon,k)
 	 in
 	   con_k
 	 end
-	| (project_sum_nonrecord k,[argcon],[argexp]) => 
+	| (project_known k,[argcon],[argexp]) => 
 	 let
 	   val argkind = con_valid(D,argcon)
 	   val argcon = con_head_normalize(D,argcon)
@@ -1445,17 +1440,13 @@ struct
 	   val argcon'' = exp_valid (D,argexp)
 	   val _ = 
 	     (type_equiv(D,argcon'',argcon',true)) orelse
-	     (e_error(D,orig_exp,"Type mismatch in project_sum_nonrecord"))
+	     (e_error(D,orig_exp,"Type mismatch in project_known"))
 
 	   val con_k = projectSumType(D,argcon,k)
-	   val _ = 
-	     (case strip_record (con_head_normalize(D,con_k))
-		of SOME _ => (e_error(D,orig_exp,"inject_nonrecord injects into record field"))
-		 | NONE => ())
 	 in
 	   con_k
 	 end
-	| (project_sum_record (k,l),[argcon],[argexp]) => 
+	| (project_known_record (k,l),[argcon],[argexp]) => 
 	 let
 	   val argkind = con_valid(D,argcon)
 	   val argcon = con_head_normalize(D,argcon)

@@ -9,7 +9,7 @@ struct
     open Name
     open Rtl
     open Nil
-    open TortlBase
+    open TortlBase TortlRecord
     open Rtltags
     
     val w2i = TilWord32.toInt
@@ -117,7 +117,7 @@ struct
 		      in  add_instr(S8ADD(b',REG a',addr));
 			  add_instr(STOREQF(EA(addr,0),argf))
 		      end);
-	  (unit_term, state)
+	  (empty_record, state)
       end
 
   fun xupdate_int(state : state, is) (vl1 : term, vl2 : term, vl3 : term) : term * state =
@@ -140,7 +140,7 @@ struct
 			      add_instr(ICOMMENT "character update end")
 			  end
 	     | _ => error "xintupdate not implemented on this size");
-	  (unit_term, state)
+	  (empty_record, state)
       end
 
   fun xptrupdate(state, c) (vl1 : term, vl2 : term, vl3 : term) : term * state =
@@ -154,7 +154,7 @@ struct
 		       in  add_instr(SLL(offset,IMM 2, word_offset));
 			   add_instr(MUTATE(base, REG word_offset,newval,NONE))
 		       end);
-	  (unit_term, state)
+	  (empty_record, state)
       end
 
   fun xupdate_known(state, c) vlist : term * state =
@@ -193,7 +193,7 @@ struct
 	   val fr = unboxFloat(load_ireg_term(vl3,NONE))
 	   val _ = xupdate_float(state,Prim.F64) (vl1,vl2,LOCATION(REGISTER (false,F fr)))
 	   val _ = add_instr(ILABEL afterl)
-      in  (unit_term, state)
+      in  (empty_record, state)
       end
 
 
@@ -319,7 +319,7 @@ struct
 		
 	    (* now use a loop to initialize the data portion *)
 	    add_instr(S8ADD(len,REG dest,heapptr));
-	    add_instr(LI(Rtltags.skiptag, skiptag));
+	    add_instr(LI(Rtltags.skip, skiptag));
 	    add_instr(STORE32I(EA(heapptr,0),skiptag));
 	    add_instr(ADD(heapptr,IMM 4,heapptr));
 	    add_instr(SUB(len,IMM 1,i));      (* init val *)
@@ -368,7 +368,7 @@ struct
 			 in  add_instr(S4ADD(gctemp,REG heapptr,heapptr))
 			 end);
 
-	    add_instr(LI(Rtltags.skiptag, skiptag));
+	    add_instr(LI(Rtltags.skip, skiptag));
 	    add_instr(STORE32I(EA(heapptr,0),skiptag));
 	    add_instr(SUB(len,IMM 1,i));  (* init val and enter loop from bot *)
 	    add_instr(BR gbottom);

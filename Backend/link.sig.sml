@@ -12,9 +12,10 @@ sig
     (* create an asm file given extension-less filename of table info using given labels *)
     val link : string * (Rtl.label list) -> string
 
-   val base2s : string -> string  (* Given a base, create name of .o file for current platform *)
-   val base2o : string -> string  (* Given a base, create name of .o file for current platform *)
-   val base2uo : string -> string  (* Given a base, create name of .o file for current platform *)
+   val base2ui : string -> string  (* Given a base, create name of .ui file for current platform *)
+   val base2s  : string -> string  (* Given a base, create name of .s file for current platform *)
+   val base2o  : string -> string  (* Given a base, create name of .o file for current platform *)
+   val base2uo : string -> string  (* Given a base, create name of .uo file for current platform *)
 
 end
 

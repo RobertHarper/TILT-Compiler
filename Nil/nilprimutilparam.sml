@@ -48,8 +48,8 @@ structure NilPrimUtilParam
 	val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[Crecord_c[]])
 	val false_con' = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
 	val true_con' = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
-	val false_exp = Prim_e(NilPrimOp (inject_nonrecord 0w0),[false_con'],[])
-	val true_exp = Prim_e(NilPrimOp (inject_nonrecord 0w1),[true_con'],[])
+	val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[false_con'],[])
+	val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[true_con'],[])
 	fun bool2exp false = false_exp
 	  | bool2exp true = true_exp
 

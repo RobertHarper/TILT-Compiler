@@ -1,18 +1,17 @@
 (*$import Rtl RTLTAGS Util *)
 
 (* It is crucial that the layout of tags here matches that of the runtime.
-   Compare with files interface_*.h. 
+   Compare with file Runtime/tag.h
 *)
 structure Rtltags :> RTLTAGS =
 struct
   
     (* The low 3 bits of the 32-bit word describe the object type *)
     val record    = 0w0 : TilWord32.word
-    val subrecord = 0w1 : TilWord32.word
     val intarray  = 0w2 : TilWord32.word
     val ptrarray  = 0w3 : TilWord32.word
     val realarray = 0w4 : TilWord32.word
-    val skiptag   = 0w5 : TilWord32.word
+    val skip      = 0w5 : TilWord32.word
     
     (* For raw(bytes), pointer(words), and real(double) arrays, 
        the upper 29 bits measure the length of the array in bytes.
@@ -27,7 +26,8 @@ struct
        the record is a pointer or not.  If bit 8 of the header is set,
        then the first field of the record is a pointer and so on.... *)
     val rec_len_offset = 3
-    val rec_len_max = 24	
+    val rec_len_mask = 31
+    val maxRecordLength = 24
     val rec_mask_offset = 8
 
     open Rtl
@@ -41,9 +41,6 @@ struct
 			   else W.rshiftl(v,~disp)
     val bitor = W.orb
 
-    type tags = {static : Word32.word,
-		 dynamic : {bitpos : int,
-			    path : Rtl.rep_path} list} list
 
     fun realarraytag len =
 	bitor(bitshift(len,real_len_offset),realarray)
@@ -64,17 +61,14 @@ struct
       | pp_flag LOCATIVE = print "LOCATIVE, "
       | pp_flag (COMPUTE _) = print "COMPUTE, "
 
-    fun recordtag [] = error "recordtag given empty list"
-      | recordtag flaglist = 
+    type tag = {static : Word32.word,
+		dynamic : {bitpos : int,
+			   path : Rtl.rep_path} list}
+
+    fun recordtag flags : tag =
       let 
-	fun split _ [] = (nil,nil)
-	  | split 0 r  = (nil,r)
-	  | split n (a::b) = (case (split (n-1) b) of (x,y) => (a::x,y))
-	fun part first arg = 
-	  case (split rec_len_max arg) of
-	      (a,[]) => [(first,true,a)]
-	    | (a,b) => (first,false,a)::(part false b)
-	fun tagger (first,last,flags) = 
+	val len = length flags
+	fun make_tag() =
 	  let 
 	    fun stat_loop []          = 0
 	      | stat_loop (NOTRACE_INT :: rest) = 0 + 2 * (stat_loop rest)
@@ -96,19 +90,18 @@ struct
 
 	    val static_mask = stat_loop flags
 	    val dynamic_mask = dyn_loop (flags,rec_mask_offset)
-	    val lenflags = length flags
-	    val lenval = 
-		if (lenflags = rec_len_max andalso not last)
-		    then 31
-		else lenflags
-	    val rec_type = if first then record else subrecord
-	    val rec_len = bitshift(i2w lenval,rec_len_offset)
+	    val rec_aspect = record
+	    val rec_len = bitshift(i2w len,rec_len_offset)
 	    val rec_mask = bitshift(i2w static_mask,rec_mask_offset)
 	  in
-	      {static = bitor(bitor(rec_type,rec_len),rec_mask),
+	      {static = bitor(bitor(rec_aspect,rec_len),rec_mask),
 	       dynamic = dynamic_mask}
 	  end
-      in  map tagger (part true flaglist) 
+      in  if (len = 0)
+	      then error "Empty record"
+	  else if (len > maxRecordLength)
+	      then error "Record too long"
+	  else make_tag()
       end
 end
 

@@ -104,11 +104,11 @@ struct
     | partialRecord of label list * int (* record with a missing zero-indexed field *)
     | select of label            (* record field selection *)
     | inject of TilWord32.word
-    | inject_nonrecord of TilWord32.word
-    | inject_record of TilWord32.word
-    | project_sum of TilWord32.word
-    | project_sum_record of TilWord32.word * label
-    | project_sum_nonrecord of TilWord32.word
+    | inject_known of TilWord32.word
+    | inject_known_record of TilWord32.word
+    | project of TilWord32.word
+    | project_known of TilWord32.word
+    | project_known_record of TilWord32.word * label
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 

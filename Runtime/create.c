@@ -119,53 +119,32 @@ value_t alloc_rarray(int count, double val)
 
 value_t get_record(value_t rec, int which)
 {
-  value_t *tagstart = ((value_t *) rec) - 1;
   value_t *objstart = (value_t *) rec;
-  int fieldlen = 0;
+  value_t tag = objstart[-1];
+  int len = GET_RECLEN(tag);
 
-  while (1)
-    {
-      int tag = tagstart[0];
-      int olen = GET_RECLEN(tag);
-      int len = (olen > RECLEN_MAX) ? RECLEN_MAX : olen;
-      if (IS_RECORD(tag))
-	{
-	  fieldlen += len;
-	  break;
-	}
-      else if (IS_RECORD_SUB(tag))
-	{
-	  fieldlen += len;
-	}
-      else 
-	{
-	  printf("BUG: calling get_field on non-record\n");
-	  exit(-1);
-	}
-      tagstart--;
-    }
+  if (!(IS_RECORD(tag))) {
+    printf("BUG: calling get_field on non-record. tag = %d\n",tag);
+    exit(-1);
+  }
 
-
-  if (which < fieldlen)
+  if (which < len)
     return objstart[which];
   else
     {
       printf("BUG: calling get_field with"
 	     " non-existent field %d on rec of len %d at addr %d\n",
-	     which,fieldlen,objstart);
+	     which,len,objstart);
       exit(-1);
     }
 }
 
-value_t alloc_record(value_t *fields, int *masks, int orig_count)
+value_t alloc_record(value_t *fields, int *masks, int count)
 {
-  int count = (orig_count < 1) ? 1 : orig_count;
-  int temp = (count + RECLEN_MAX - 1) / RECLEN_MAX;
-  int numtag = (temp < 1) ? 1 : temp;
-  value_t *tagstart, *objstart;
-  int subpart = 0;
-
+  int i;
+  value_t *objstart;
   value_t *alloc, *limit;
+  assert(count <= RECLEN_MAX);
   get_alloc_limit(&alloc,&limit);
 
 #ifdef HEAPPROFILE
@@ -173,42 +152,32 @@ value_t alloc_record(value_t *fields, int *masks, int orig_count)
   alloc++;
 #endif
 
-  tagstart = alloc;
-  objstart = alloc + numtag;
-
-  alloc += numtag + count;
+  objstart = alloc + 1;
+  alloc += 1 + count;
   if (alloc > limit)
     { assert(0); }  /* OUT OF SPACE */
 
   set_alloc(alloc);
-  
-  while (count > 0)
-    {
-      int i,j;
-      int temp = (count<=RECLEN_MAX) ? count : RECLEN_MAX;
-      int len = (temp < 1) ? 1 : temp;
-      int masklen = (count<=RECLEN_MAX) ? count : (RECLEN_MAX+1);
-      int mask = 0;
-      int tag = (subpart==0) ? RECORD_TAG : RECORD_SUB_TAG;
-      for (i=0; i<len; i++)
-	{
-	  int logbit = subpart*RECLEN_MAX + i;
-	  int whichbyte = logbit >> 5;
-	  int whichbit = logbit & 31;
-	  int ison = masks[whichbyte] & (1 << whichbit);
-	  if (ison)
-	    mask |= 1 << i;
-	}
-      tag = tag | (masklen << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
-      tagstart[subpart] = tag;
-      
-      for (i=0; i<len; i++)
-	objstart[i+subpart*RECLEN_MAX] = fields[subpart*RECLEN_MAX+i];
-      
-      count -= len;
-      subpart++;
-    }
 
+  /* Initialize record tag */
+  {
+    int tag, mask = 0;
+    for (i=0; i<count; i++)
+      {
+	int whichbyte = count >> 5;
+	int whichbit = count & 31;
+	int ison = masks[whichbyte] & (1 << whichbit);
+	if (ison)
+	  mask |= 1 << i;
+      }
+    tag = RECORD_TAG | (count << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
+    objstart[-1] = tag;
+  }
+
+  /* Initialize record fields */
+  for (i=0; i<count; i++)
+    objstart[i] = fields[i];
+      
   return (value_t)objstart;
 }
 
