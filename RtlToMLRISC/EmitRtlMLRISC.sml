@@ -189,7 +189,8 @@ functor EmitRtlMLRISC(
    * Emit a list of mltree values.
    * mltrees -> the mltree values to emit
    *)
-  val emitMLTree = Stats.timer("MLRISC", app MLTreeComp.mltreeComp)
+  val emitMLTree = app MLTreeComp.mltreeComp
+  val emitMLTree = Stats.timer("MLRISC", emitMLTree)
 
   (* -- global state structures -------------------------------------------- *)
 
@@ -1880,6 +1881,14 @@ functor EmitRtlMLRISC(
       | hasHandler(_::instructions)   = hasHandler instructions
 
     (*
+     * Translate a given Rtl procedure body.
+     * body -> the procedure body to translate
+     * <- body translated to MLRISC
+     *)
+    val translateBody = foldr (splice translateInstruction) []
+    val translateBody = Stats.timer("RtlToMLRISC.translateBody", translateBody)
+
+    (*
      * Refine the liveness information in the call site pseudo-operations of
      * a given procedure.
      * procedure <-> the procedure to refine the call site liveness
@@ -1932,6 +1941,7 @@ functor EmitRtlMLRISC(
 	    set
     in
       val callSitePoly = foldr callSitePolyTree IntSet.empty
+      val callSitePoly = Stats.timer("RtlToMLRISC.callSitePoly", callSitePoly)
     end
 
     (*
@@ -2023,7 +2033,7 @@ functor EmitRtlMLRISC(
 	    (*
 	     * translate the body of the procedure
 	     *)
-	    val body = foldr (splice translateInstruction) [] instructions''
+	    val body = translateBody instructions''
 
 	    (*
 	     * generate code to enter and exit the procedure
@@ -2087,6 +2097,7 @@ functor EmitRtlMLRISC(
   (* -- emitter functions -------------------------------------------------- *)
 
   val emitData = app (emitMLTree o translateData)
+  val emitData = Stats.timer("RtlToMLRISC.emitData", emitData)
 
   local
     fun emitCluster translateProcedure procedures =
@@ -2168,7 +2179,7 @@ functor EmitRtlMLRISC(
 	    emitMLTree [MLTree.BEGINCLUSTER];
 	    emitMLTree textTrailer;
 	    emitMLTree dataHeader;
-	    app (emitMLTree o translateData) data;
+	    emitData data;
 	    emitMLTree dataTrailer;
 	    emitMLTree trailer
 	  end
