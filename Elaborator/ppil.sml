@@ -265,6 +265,14 @@ functor Ppil(structure Il : IL
 	 OVEREXP (c,_,exp) => (case oneshot_deref exp of
 				 NONE => String "OVEREXP_NONE"
 			       | (SOME e) => pp_exp seen e)
+       | SCON (scon as Prim.vector(_,a)) => 
+	     (case (Array.sub(a,0)) of
+		SCON(Prim.uint(W8,_)) => 
+		    let fun folder(SCON(Prim.uint(W8,c)),acc) = (chr(TilWord64.toInt c))::acc
+			  | folder _ = error "bad vector value: corrupt string"
+		    in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
+		    end
+              | _ => pp_value' (pp_exp seen) (pp_con seen) scon)
        | SCON scon => pp_value' (pp_exp seen) (pp_con seen) scon
        | PRIM (prim,[]) => pp_prim' prim
        | PRIM (prim,cons) => HOVbox[pp_prim' prim,
