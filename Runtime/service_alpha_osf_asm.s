@@ -226,7 +226,7 @@ restore_dummy:
 	ldq	$1, MLsaveregs_disp+1*4(THREADPTR_REG)		# restore $1 due to load_regs
 								# don't need to restore r26 and r29 due to load_regs
 	lda	ASMTMP2_REG, primaryStackletOffset
-	ldl	ASMTMP2_REG, ASMTMP2_REG
+	ldl	ASMTMP2_REG, (ASMTMP2_REG)
 	ldq	ASMTMP_REG, 4(EXNPTR_REG)	# fetch sp in handler
 	addq	ASMTMP_REG, ASMTMP2_REG, $sp	# restore sp		
 	ldq	$27, 0(EXNPTR_REG)	# fetch pc of handler

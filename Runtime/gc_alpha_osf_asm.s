@@ -268,11 +268,11 @@ returnFromGCFromML:
 .set at
 	.end	returnFromGCFromML
 
- ! -------------------------------------------------------------------------------
- ! returnToML is called from the runtime with
- ! thread pointer as 1st argument
- ! link value/return address as 2nd argument - this may or may not be the same saveregs[LINK]
- ! -------------------------------------------------------------------------------
+ # -------------------------------------------------------------------------------
+ # returnToML is called from the runtime with
+ # thread pointer as 1st argument
+ # link value/return address as 2nd argument - this may or may not be the same saveregs[LINK]
+ # -------------------------------------------------------------------------------
 	.ent	returnToML
 .set noat
 returnToML:
