@@ -50,6 +50,9 @@ Comments:
 	I can not conclude that this bug does not exist.  I can
 	conclude that it is not the sole cause of the compiler's
 	memory hunger.
+
+	Check out the May 11, 2003 version of this directory if you
+	want to see compiler output.
 Fix:
 Test:
 Owner: swasey

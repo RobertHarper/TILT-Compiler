@@ -53,6 +53,9 @@ Fix:
 	      parser	0.38	      1.0	0.48
 	      TILT	0.53	      1.0	0.76
 	]
+
+	Check out the May 11, 2003 version of this directory if you
+	want to see compiler output.
 Test: 
 Owner: swasey
 Status: closed

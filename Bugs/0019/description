@@ -13,6 +13,10 @@ Problem:
 	Nil/TM/any/nil.sml.il).
 
 	The same thing happens with test/mapfile.
+
+	Check out the May 11, 2003 version of this directory if you
+	want to see compiler output.
+
 Code:
 Transcript:
 	CRC's don't match up at end of compile, probably an elaborator bug.
