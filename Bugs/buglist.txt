@@ -142,3 +142,4 @@
 0146 [open]	integer constant too large
 0147 [open]	discrepancies with time tests
 0148 [open]	type specification error
+0149 [open]	type checking error
