@@ -29,7 +29,7 @@ esac
 rm -f ./Heaps/tilt.$platform
 
 # build NJ tilt.  
-gmake heap
+gmake tilt_heap
 
 # Did gmake heap succeed?
 if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
@@ -38,13 +38,13 @@ if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TIL
 if ./Bin/tilt-nj -b mapfile-basis; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
 
 # build SML/NJ lib
-if ./Bin/tilt-nj -m Basis/Library/group ; then echo "Compiled sml/nj-lib" ; else echo "sml/nj-lib didn't compile" ; exit 1 ; fi
+if ./Bin/tilt-nj Basis/Library/group ; then echo "Compiled sml/nj-lib" ; else echo "sml/nj-lib didn't compile" ; exit 1 ; fi
 
 # build SML/NJ lib
-if ./Bin/tilt-nj -m Parser/Library/group ; then echo "Compiled ml-yacc-lib" ; else echo "ml-yacc-lib didn't compile" ; exit 1 ; fi
+if ./Bin/tilt-nj Parser/Library/group ; then echo "Compiled ml-yacc-lib" ; else echo "ml-yacc-lib didn't compile" ; exit 1 ; fi
 
 # build the test harness
-if (cd Test ; ../Bin/tilt-nj -m mapfile) ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
+if ./Bin/tilt-nj ../Test/mapfile ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
 
 if test -f ./Bin/til_slave; then :; else ln -s ./Bin/til_slave_local_xterm ./Bin/til_slave; fi
 
@@ -72,7 +72,7 @@ fi
 if [ $arg = all -o $arg = tilt ] ; then  
 
    # build TILT
-    if ./Bin/tilt-nj -m mapfile-all ; then echo "TILT compiled TILT" ; else echo "TILT failed to compile TILT" ; exit 1; fi ;
+    if ./Bin/tilt-nj mapfile-all ; then echo "TILT compiled TILT" ; else echo "TILT failed to compile TILT" ; exit 1; fi ;
 
     # Run the native regression tests
     echo "Running tilt tests....." ;
