@@ -94,6 +94,7 @@ struct
     structure C = IlContext
     structure N = Name
 
+    (* XXX tom ? *)
     val do_result_type = Stats.tt("PatResultType")
     val debug = Stats.ff("Pattern_debug")
 
@@ -102,22 +103,39 @@ struct
     fun debugdo t = if (!debug) then (t(); ()) else ()
     val wildSymbol = (Symbol.varSymbol "_")
 
-    (* ------ Reduces eta-expanded records ------ *)
-    fun derefOverexp (e as (OVEREXP (_,_,eOneshot))) = 
+    (* If an overloaded expression is known, use it. *)
+    fun derefOverexp (exp as (OVEREXP (_,_,eOneshot))) = 
 	(case Util.oneshot_deref eOneshot of
-	     NONE => e
+	     NONE => exp
 	   | SOME e => e)
       | derefOverexp e = e
 
+    (* reduces eta-expanded records 
+
+       (1)
+       let ... no variable bindings ...
+       in { l1 = v }
+       end
+
+       ==>
+
+       { l1 = v }
+
+       (2)
+       
+       
+       *)
     fun reduce_expression e = 
       (case e of
 	 LET(bnds, letBody) =>
 	   (case derefOverexp letBody of
+		(* 1 *)
 	      body as (RECORD [(_,VAR v)]) => if (List.all (fn BND_EXP _ => false
 	                                                     | _ => true)) bnds
 						  then body
 					      else e
-            | RECORD le_exp =>
+	        (* 2 *)
+	    | RECORD le_exp =>
 		 let val vars = map (fn (_,VAR v) => v
 	                              | _ => N.fresh_named_var "dummy") le_exp
 		     fun search [] (n,v) = NONE
@@ -1151,7 +1169,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	val baseRules = map (fn r => reduceRule context (r, compile_args)) rules
 	fun default _ = RAISE(!shortCon, default_exn)
 	val almost_e = match(context,compile_args,baseRules,default,resCon)
-	val very_nearly_e = wrapper very_nearly_e
+	val very_nearly_e = wrapper almost_e
 	val final_e = (case (!do_result_type, !shortCon) of
 			   (true, CON_VAR v) => U.make_let([BND_CON(v,!fullCon)], very_nearly_e)
 			 | _ => very_nearly_e)
