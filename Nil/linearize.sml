@@ -137,7 +137,8 @@ struct
 	       in  (newstate, [wrapper (list2set vf_list)])
 	       end
 	   fun vcl_help state (v,{code,cenv,venv,tipe}) = 
-	       let val (bnd_cenv,cenv') = lcon2 state cenv
+	       let val v = find_var(state,v)
+		   val (bnd_cenv,cenv') = lcon2 state cenv
 		   val (bnd_tipe,tipe') = lcon2 state tipe
 		   val (bnd_venv,venv') = lexp state venv
 		   val code' = find_var(state,code)
@@ -163,6 +164,7 @@ struct
 				 end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
+(* RECURSIVE BINDING *)
 	      | Fixclosure_b vcl_set => let val state = add_vars state vcl_set
 					    val state = pop_vars state vcl_set
 					    val vcl_list = set2list vcl_set
@@ -195,7 +197,14 @@ struct
 
 
    and lexp state arg_exp : bnd list * exp = 
-       let val _ = state_stat "lexp" state
+       let 
+(*
+	   val _ = 
+	       (print "\nlinearizing exp:\n";
+		Ppnil.pp_exp arg_exp;
+		state_stat "lexp" state;
+		print "\n")
+*)
 	   val (bnds,e) = lexp' state arg_exp
        in  (case e of
 		Var_e _ => (bnds,e) 

@@ -425,7 +425,8 @@ struct
 		       | Fixopen_b var_fun_set =>
 			     let val outer_curfid = get_curfid state
 				 fun do_arm fids_types (v,Function(_,_,vklist,vclist,vflist,body,tipe)) =
-				 let val local_state = copy_state state v
+				 let val outer_state = add_boundfids false (state,fids_types) 
+				     val local_state = copy_state state v
 				     val local_state = add_boundfids true (local_state,fids_types) 
 				     val fs = (empty_frees, local_state)
 				     val _ = if (!debug)
@@ -459,7 +460,7 @@ struct
 						       show_free f; print "\n")
 					     else ()
 				     val _ = add_frees(v,f)
-				     val _ = add_callee(outer_curfid,v,state)
+				     val _ = add_callee(outer_curfid,v,outer_state)
 				 in  f
 				 end
 				 val (s,f) = do_fix var_fun_set do_arm add_fun fun_type
@@ -731,10 +732,13 @@ struct
 			then (print "before close_funs\n";
 			      VarSet.app (fn fid => (print ("fid = ");
 						     Ppnil.pp_var fid; print " --   callees are "; 
-						     app (fn (fid,s) => (Ppnil.pp_var fid; print " ")) 
+						     app (fn (fid,s) => (print "  ";
+									 Ppnil.pp_var fid; print " -> ";
+									 show_state s;
+									 print "\n"))
 						     (get_callee fid);
 						     print "\n";
-						     show_free(get_frees fid); print "\n")) (get_fids());
+						     show_free(get_frees fid); print "\n\n")) (get_fids());
 			      print "\n\n")
 		    else ()
 	    fun loop() = 
@@ -744,14 +748,15 @@ struct
 			then ()
 		    else loop()  (* note that we must start with the whole set again *)
 		end
-	   val _ = if (!debug)
-		       then (print "after all close_funs\n";
-			     VarSet.app (fn fid => (print ("fid = ");
-						    Ppnil.pp_var fid; print "\n"; 
-						    show_free(get_frees fid))) (get_fids());
-			     print "\n\n")
-		   else ()
-       in  loop()
+	    val _ = loop()
+	    val _ = if (!debug)
+			then (print "after all close_funs\n";
+			      VarSet.app (fn fid => (print ("fid = ");
+						     Ppnil.pp_var fid; print "\n"; 
+						     show_free(get_frees fid))) (get_fids());
+			      print "\n\n")
+		    else ()
+       in  ()
        end
    
    end
@@ -796,7 +801,7 @@ struct
    fun fun_rewrite lift (v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
        let 
 	   val _ = if (!debug)
-		       then (print "fun_rewrite v = "; Ppnil.pp_var v; print "\n")
+		       then (print "\nfun_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
 	   val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars,...} = get_frees v

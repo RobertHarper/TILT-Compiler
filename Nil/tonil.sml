@@ -327,12 +327,19 @@ struct
 
    val w0 = TilWord32.fromInt 0
 
+   fun Record_cc str labels = if (Name.labels_sorted_distinct labels)
+				  then Record_c labels
+			      else 
+				  (print ("Record_cc failed from " ^ str ^ "\n");
+				   app (fn l => (Ppnil.pp_label l; print "\n")) labels;
+				   error ("Record_cc failed from " ^ str))
+
    fun projectFromRecord con [] = con
      | projectFromRecord (Prim_c(Record_c (lbl::lbls), con::cons)) (l' as (lbl'::lbls')) =
        if (Name.eq_label (lbl, lbl')) then 
 	   projectFromRecord con lbls'
        else
-	   projectFromRecord (Prim_c(Record_c lbls, cons)) l'
+	   projectFromRecord (Prim_c(Record_cc "1" lbls, cons)) l'
      | projectFromRecord c labels =
        (print "Error: bad projection from constructor ";
 	Ppnil.pp_con c;
@@ -388,7 +395,7 @@ struct
 	       if (!debug) then
 		   (xmod_count := this_call + 1;
 		    
-		    print ("Call " ^ (Int.toString this_call) ^ " to xmod\n");
+		    print ("\nCall " ^ (Int.toString this_call) ^ " to xmod\n");
 		    Ppil.pp_mod il_mod;
 		    (* print"\n";
 		     Nilcontext.print_context (NILctx_of context); *)
@@ -469,6 +476,7 @@ struct
 		valuable = valuable_fun
 		} = xmod context (ilmod_fun, NONE)
 
+
 (*
 val _ = (print "\nMOD_APP: type_fun_r = \n";
 	 Ppnil.pp_con type_fun_r; print "\n\n\n")
@@ -536,10 +544,9 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			print "\n";
 			print "exp_body_type = ";
 			Ppnil.pp_con exp_body_type;
-			print "\n";
-			Ppnil.pp_con (Nilutil.substConInCon subst2 exp_body_type);
-			Nilcontext.print_context (NILctx_of context))
+			print "\n")
 *)
+
 	       val NILctx = NILctx_of context
 	       val NILctx' = (Nilcontext.insert_kind(NILctx, var_arg_c, knd_arg_c))
                                 handle _ => NILctx
@@ -547,13 +554,12 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
                                 handle _ => NILctx' *)
 	       val NILctx'' = (Nilcontext.insert_con(NILctx', var_arg_r, type_arg_r))
                                 handle _ => NILctx'
+
 (*
 val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	 Ppnil.pp_con exp_body_type;
 	 print "\n-----about to compute type_r = con_reduce of\n";
-	 Ppnil.pp_con (Nilutil.substConInCon subst2 exp_body_type);
-	 print "\nand context is";
-	 Nilcontext.print_context NILctx'';
+	 Ppnil.pp_con (Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type);
 	 print "\n\n")
 *)
 	       val type_r = Nilstatic.con_reduce 
@@ -792,7 +798,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	       if specialize then
 		   hd record_r_field_types
 	       else
-		   Prim_c(Record_c record_r_labels, record_r_field_types)
+		   Prim_c(Record_cc "2" record_r_labels, record_r_field_types)
 
 	   val ebnd_str_cat = 
 	       if specialize then
@@ -1224,7 +1230,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
      | xflexinfo context (ref (Il.FLEXINFO(_,true, recs))) = 
        let
 	   val (lbls, cons) = xrdecs context recs
-	   val con = Prim_c(Record_c lbls, cons) (* already sorted *)
+	   val con = Prim_c(Record_cc "3" lbls, cons) (* already sorted *)
        in
 	   (con, Singleton_k (Runtime, Word_k Runtime, con))
        end
@@ -1337,10 +1343,22 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xcon' context (Il.CON_ARROW (il_cons1, il_con2, closed, arr)) =
        let
+	   val (floats,il_cons1) = 
+	       if closed
+		   then 
+		       let fun folder (Il.CON_FLOAT Prim.F64, (cons,f)) = (cons, TilWord32.uplus(f,0w1))
+			     | folder (c,(cons,f)) = (c::cons,f)
+			   val (rev_il_cons1,floats) = foldl folder ([],w0) il_cons1
+		       in  (floats, rev rev_il_cons1)
+		       end
+	       else (w0, il_cons1)
 	   val cons1 = map (#1 o (xcon context)) il_cons1
            val con2 = #1(xcon context il_con2)
+           val con2 = (case (closed,il_con2) of
+			   (true,Il.CON_FLOAT Prim.F64) => Prim_c (Float_c Prim.F64, [])
+			 | _ => #1(xcon context il_con2))
 	   val eff = xeffect (derefOneshot arr)
-	   val con = AllArrow_c(if closed then ExternCode else Open, eff, [], cons1, w0, con2)
+	   val con = AllArrow_c(if closed then ExternCode else Open, eff, [], cons1, floats, con2)
        in
 	   (con, Word_k Runtime)
        end
@@ -1418,7 +1436,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
      | xcon' context (Il.CON_RECORD rdecs) = 
        let
 	   val (lbls, cons) = xrdecs context rdecs
-	   val con = Prim_c (Record_c lbls, cons) (* already sorted *)
+	   val con = Prim_c (Record_cc "4"  lbls, cons) (* already sorted *)
        in
 	   (con, Word_k Runtime)
        end
@@ -1762,7 +1780,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
            else
 	       (Let_e (Sequential, [Fixopen_b set], 
 		       Prim_e(NilPrimOp (record labels), types, names)),
-		Prim_c (Record_c labels, types), true)
+		Prim_c (Record_cc "5" labels, types), true)
        end
 
      | xexp' context (Il.RECORD rbnds) = 
@@ -1770,7 +1788,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val (labels, exps, cons, valuable) = xrbnds context rbnds
        in  (* labels already sorted *)
 	   (Prim_e (NilPrimOp (record labels), cons, exps),
-	    Prim_c (Record_c labels, cons), valuable) 
+	    Prim_c (Record_cc "6"  labels, cons), valuable) 
        end
 
      | xexp' context (il_exp0 as (Il.RECORD_PROJECT (il_exp, label, il_record_con))) =
@@ -2181,7 +2199,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 					 (Listops.zip erlabs ercons)
 	       in  (map #1 temp, map #2 temp)
 	       end
-	   val default = (kind,Prim_c(Record_c erlabs, ercons))
+	   val default = (kind,Prim_c(Record_cc "7" erlabs, ercons))
        in  (case (!elaborator_specific_optimizations,sdecs,erlabs,ercons) of
 		(true,[Il.SDEC(it_lbl,_)],[erlab],[ercon]) =>
 		    (if (Name.eq_label(it_lbl,Ilutil.it_lab))
@@ -2428,7 +2446,13 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		      | Ilcontext.PHRASE_CLASS_CON (il_con, il_kind) => 
 			    let
 				val nil_kind = xkind context il_kind
-				val nil_con = ((SOME (#1 (xcon context il_con))) handle _ => NONE)
+				val nil_con = 
+				    (case il_con of
+					 Il.CON_VAR v' => 
+					     if (Name.eq_var(v,v'))
+						 then NONE
+					     else ((SOME (#1 (xcon context il_con))) handle _ => NONE)
+				       | _ => ((SOME (#1 (xcon context il_con))) handle _ => NONE))
 				val nil_kind' = 
 				    (case nil_con of 
 					 NONE => nil_kind
@@ -2465,7 +2489,10 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	   val _ = 
 	       if (!debug) then
-		   (print "\nInitial HIL context:\n";
+		   (print "\nInitial HIL context varlist:\n";
+		    app (fn v => (print "  "; Ppnil.pp_var v; print "\n")) (Ilcontext.Context_Varlist HILctx);
+		    print "\n";
+		    print "\nInitial HIL context:\n";
 		    Ppil.pp_context HILctx;
 		    print "\nInitial NIL context:\n";
 		    Nilcontext.print_context (NILctx_of initial_splitting_context);

@@ -499,10 +499,13 @@ struct
 	    (Exn_c) | (Array_c) | (Vector_c) | (Ref_c) | (Exntag_c)) 
 	   => (pcon,Word_k Runtime,args,kinds)
 	 | (Record_c labels) => 
-	   (if c_all is_word b_perr_k kinds andalso labels_sorted_distinct labels then
-	      (Record_c labels,Word_k Runtime,args,kinds)
-	    else
-	      (error "Record contains field of non-word kind" handle e => raise e))
+	     (if labels_sorted_distinct labels then
+		  (if c_all is_word b_perr_k kinds 
+		       then (Record_c labels,Word_k Runtime,args,kinds)
+		   else
+		       (error "Record contains field of non-word kind" handle e => raise e))
+	      else
+		  (error "Record contains out-of-order field labels" handle e => raise e))
 	 | (Sum_c {known,tagcount}) => 
 	      (if c_all is_word b_perr_k kinds then
 		 let
