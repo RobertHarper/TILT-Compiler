@@ -13,6 +13,13 @@ Problem:
 Code:	This gets used by patterns like "val a as b = 3".
 Transcript:  
 Comments:    
+
+	Bob wrote:
+	> [A] layered pattern introduces two
+	> variables, one of which is bound to the value of the other.  It is a
+	> mistake, I would think, to regard the example [above] as generating a
+	> single variable with two labels.
+
 Fix:         
 Test: 
 Owner: swasey
