@@ -1,0 +1,102 @@
+Number: 0178
+Title:	Word8Array and Array each use a single empty array.
+Keywords:	arrays, equality
+Submitter:	swasey@cs.cmu.edu
+Date:	2/24/04
+Version:	CVS
+System:	any
+Severity:	library
+Problem:
+
+	Test m0029 fails because our Basis Library implementation always
+	returns a single empty array from fromList, etc rather than
+	constructing a new empty array each time.  For example, the
+	expression
+
+		let	val a = Word8Array.fromList []
+			val b = Word8Array.fromList []
+		in	a = b
+		end
+
+	evaluates to true.
+
+	The basis library manual page for Array says
+
+		``Arrays have a special equality property: two arrays are
+		equal if they are the same array, i.e., created by the same
+		call to a primitive array constructor such as array, fromList,
+		etc.; otherwise they are not equal.  This holds for arrays of
+		zero length.''
+
+	The definition is silent on arrays.
+
+	The following code should print a lot of OK messages rather than a
+	lot of WRONG messages.
+
+Code:
+
+	fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+	fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
+	fun tst' s f = tst0 s (chck' f);
+
+	local
+	    open Word8Array
+	    val array0 = fromList [];
+	in
+
+	val w127 = Word8.fromInt 127;
+
+	val test2:unit = tst' "test2a"
+	  (fn () => array(0, w127) <> array0)
+
+	val test2:unit = tst' "test2b"
+	  (fn () => array(0, w127) <> tabulate(0, fn _ => w127))
+
+	val test2:unit = tst' "test2c"
+	  (fn () => tabulate(0, fn _ => w127) <> fromList [])
+
+	val test2:unit = tst' "test2d"
+	  (fn () => array(0, w127) <> array(0, w127))
+
+	val test2:unit = tst' "test2e"
+	  (fn () => tabulate(0, fn _ => w127) <> tabulate(0, fn _ => w127))
+
+	val test2:unit = tst' "test2f"
+	  (fn () => fromList [] <> fromList [])
+
+	val test10h:unit = tst' "test10h" (fn () =>
+				      (copy{src=array0, si=0, dst=array0, di=0, len=NONE};
+				       array0 <> array(0, w127)));
+
+	val test10i:unit = tst' "test10i" (fn () =>
+				       (copy{src=array0, si=0, dst=array0, di=0, len=SOME 0};
+					array0 <> array(0, w127)));
+	end;
+
+Transcript:
+Comments:
+
+	The equality compiler considers two empty arrays inequal; that is,
+	the expression
+
+		let	val a = TiltPrim.unsafe_array8(0w0, 0w0)
+			val b = TiltPrim.unsafe_array8(0w0, 0w0)
+		in	a = b
+		end
+
+	evaluates to false.  No compiler changes are needed to fix this
+	bug but a cosmetic change to TiltPrim is appropriate.
+
+	This is a library error.  Word8Array returns TiltPrim.empty_array8
+	whenever an empty array is constructed.
+
+Fix:
+
+	Need to remove TiltPrim.empty_array8 and TiltPrim.empty_array.
+
+	Need to update Word8Array and Array to construct new empty arrays
+	rather than reuse a single value.
+
+Test: m0029
+Owner: swasey
+Status: open

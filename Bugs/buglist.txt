@@ -156,3 +156,4 @@
 0175 [open]	TILT does not include the latest SML/NJ library.
 0176 [open]	TILT can not compile with -fnil_debug.
 0177 [open]	nonexhaustive match warning is overly pessimistic
+0178 [open]	Word8Array and Array each use a single empty array.
