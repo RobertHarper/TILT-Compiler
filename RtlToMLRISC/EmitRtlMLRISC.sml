@@ -93,6 +93,7 @@ functor EmitRtlMLRISC(
 
   structure Machine = TraceTable.Machine
   structure MLTree  = MLTreeExtra.MLTree
+  structure VarSet  = Name.VarSet
 
   (* -- types -------------------------------------------------------------- *)
 
@@ -1078,12 +1079,12 @@ functor EmitRtlMLRISC(
      *)
     local
       fun code procedure (left, right, dest) =
-            let
-	      val left'  = Cells.newReg()
+	    let
+	      val left'	 = Cells.newReg()
 	      val right' = Cells.newReg()
 	    in
 	      [MLTree.CODE[
-	         mv(left', left),
+		 mv(left', left),
 		 mv(right', right)
 	       ]]@
 	      callC(externalExp procedure,
@@ -1313,7 +1314,9 @@ functor EmitRtlMLRISC(
 	      (* alpha-specific sizes? ??? *)
 	  end
 
-    fun NEEDGC src =
+    fun NEEDGC (MLTree.LI 0) =
+	  []
+      | NEEDGC src =
 	  let
 	    val skipLabel =
 		  newLabel()
@@ -1670,6 +1673,197 @@ functor EmitRtlMLRISC(
 	  end
 
     (*
+     * Transform a list of Rtl instructions into a list of instructions where
+     * one-argument branches have been replaced by two-argument branches,
+     * where possible.
+     * instructions -> the instructions to transform
+     * <- the transformed instructions
+     *)
+    local
+      fun transform
+	    ((instruction0 as
+		Rtl.CMPSI(compare, left, right, Rtl.REGI(dest, _)))::
+	     (instruction1 as
+		Rtl.BCNDI(Rtl.NE, Rtl.REGI(test, _), label, predict))::
+	     instructions) =
+	    let
+	      val (instructions', tests) = transform instructions
+	    in
+	      if Name.eq_var(dest, test) then
+		(Rtl.BCNDI2(compare, left, right, label, predict)::
+		 instructions',
+		 VarSet.add(tests, test))
+	      else
+		(instruction0::instruction1::instructions', tests)
+	    end
+	| transform
+	    ((instruction0 as
+		Rtl.CMPUI(compare, left, right, Rtl.REGI(dest, _)))::
+	     (instruction1 as
+		Rtl.BCNDI(Rtl.NE, Rtl.REGI(test, _), label, predict))::
+	     instructions) =
+	    let
+	      val (instructions', tests) = transform instructions
+	    in
+	      if (compare=Rtl.EQ orelse compare=Rtl.NE) andalso
+		 Name.eq_var(dest, test) then
+		(Rtl.BCNDI2(compare, left, right, label, predict)::
+		 instructions',
+		 VarSet.add(tests, test))
+	      else
+		(instruction0::instruction1::instructions', tests)
+	    end
+	| transform
+	    ((instruction0 as
+		Rtl.CMPF(compare, left, right, Rtl.REGI(dest, _)))::
+	     (instruction1 as
+		Rtl.BCNDI(Rtl.NE, Rtl.REGI(test, _), label, predict))::
+	     instructions) =
+	    let
+	      val (instructions', tests) = transform instructions
+	    in
+	      if Name.eq_var(dest, test) then
+		(Rtl.BCNDF2(compare, left, right, label, predict)::
+		 instructions',
+		 VarSet.add(tests, test))
+	      else
+		(instruction0::instruction1::instructions', tests)
+	    end
+	| transform
+	    (instruction0::
+	     instructions) =
+	    let
+	      val (instructions', tests) = transform instructions
+	    in
+	      (instruction0::instructions', tests)
+	    end
+	| transform
+	    nil =
+	    (nil, VarSet.empty)
+
+      fun uses set =
+	    let
+	      fun reg(Rtl.REGI(var, _)) = VarSet.member(set, var)
+		| reg _			= false
+
+	      fun value(Rtl.REG src) = reg src
+		| value _	     = false
+
+	      fun ea(Rtl.EA(src, _)) = reg src
+
+	      fun regOrLabel(Rtl.REG' src) = reg src
+		| regOrLabel _		   = false
+
+	      fun regOption(SOME src) = reg src
+		| regOption NONE      = false
+
+	      fun uses'(instruction::instructions) =
+		    (case instruction of
+		       Rtl.LEA(address, _) =>
+			 ea address
+		     | Rtl.MV(src, _) =>
+			 reg src
+		     | Rtl.CMV(_, test, src, _) =>
+			 reg test orelse value src
+		     | Rtl.ADD(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.SUB(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.MUL(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.DIV(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.MOD(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.S4ADD(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.S8ADD(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.S4SUB(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.S8SUB(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.ADDT(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.SUBT(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.MULT(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.DIVT(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.MODT(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.CMPSI(_, left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.CMPUI(_, left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.NOTB(src, _) =>
+			 reg src
+		     | Rtl.ANDB(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.ORB(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.XORB(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.SRA(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.SRL(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.SLL(left, right, _) =>
+			 reg left orelse value right
+		     | Rtl.CVT_INT2REAL(src, dest) =>
+			 reg src
+		     | Rtl.BCNDI(_, test, _, _) =>
+			 reg test
+		     | Rtl.BCNDI2(_, left, right, _, _) =>
+			 reg left orelse value right
+		     | Rtl.JMP(src, _) =>
+			 reg src
+		     | Rtl.LOAD32I(address, _) =>
+			 ea address
+		     | Rtl.STORE32I(address, src) =>
+			 ea address orelse reg src
+		     | Rtl.LOADQF(address, _) =>
+			 ea address
+		     | Rtl.STOREQF(address, _) =>
+			 ea address
+		     | Rtl.CALL{func   = procedure,
+				return = return,
+				args   = (args, _),
+				...} =>
+			 regOrLabel procedure orelse
+			 regOption return orelse
+			 List.exists reg args
+		     | Rtl.RETURN src =>
+			 reg src
+		     | Rtl.NEEDGC src =>
+			 value src
+		     | Rtl.FLOAT_ALLOC(length, _, _, _) =>
+			 reg length
+		     | Rtl.INT_ALLOC(length, initial, _, _) =>
+			 reg length orelse reg initial
+		     | Rtl.PTR_ALLOC(length, initial, _, _) =>
+			 reg length orelse reg initial
+		     | _ =>
+			 false) orelse uses' instructions
+		| uses' nil =
+		    false
+	    in
+	      uses'
+	    end
+    in
+      fun transformBranch instructions =
+	    let
+	      val (instructions', tests) = transform instructions
+	    in
+	      if uses tests instructions' then
+		instructions
+	      else
+		instructions'
+	    end
+    end
+
+    (*
      * Determine whether or not a given list of Rtl instructions contains an
      * exception handler.
      * instructions -> the instructions to check
@@ -1798,8 +1992,9 @@ functor EmitRtlMLRISC(
 	    (*
 	     * replace return instructions with branches to return code.
 	     *)
-	    val return	      = Rtl.fresh_code_label()
-	    val instructions' = transformReturn return instructions
+	    val return	       = Rtl.fresh_code_label()
+	    val instructions'  = transformReturn return instructions
+	    val instructions'' = transformBranch instructions'
 
 	    (*
 	     * translate labels and registers
@@ -1822,7 +2017,7 @@ functor EmitRtlMLRISC(
 	    (*
 	     * translate the body of the procedure
 	     *)
-	    val body = foldr (splice translateInstruction) [] instructions'
+	    val body = foldr (splice translateInstruction) [] instructions''
 
 	    (*
 	     * generate code to enter and exit the procedure
@@ -1864,7 +2059,7 @@ functor EmitRtlMLRISC(
 	     * an exception handler
 	     *)
 	    val spills =
-		  if hasHandler instructions' then
+		  if hasHandler instructions'' then
 		    let
 		      val integerSpills = memberInt(map #1 integerSave)
 		      val floatSpills	= memberInt(map #1 floatSave)
