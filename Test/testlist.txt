@@ -234,7 +234,7 @@ m0070	pass	fft
 m0071	fail	[Bug #0124] flexible records
 m0072	pass	functional unparsing
 m0073	pass	functors
-m0074	fail	[Bug #0125] general basis items
+m0074	fail	general basis items
 m0075	pass	deep raise
 m0075	pass	deep raise
 m0076	pass	[Bug #0126(closed)] identifier syntax

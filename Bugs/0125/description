@@ -1,6 +1,6 @@
 Number: 0125
-Title:       BUG in get_record
-Keywords:    get_record
+Title:       bug in runtime exception handling
+Keywords:    exceptions, runtime, exnName
 Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
@@ -8,9 +8,48 @@ System:      any
 Severity:    critical
 Problem:       BUG in get_record: record 1696530540 has 2 fields.  No field 2.
 Code:        Assertion failed: 0, file create.c, line 112
+
+	(*$import *)
+	exception NoExceptionRaised
+	val exn_bad = (1 div 0; NoExceptionRaised) handle e => e
+	val _ = print (exnName exn_bad)
+
 Transcript:  
-Comments:    
-Fix:         
+Comments:
+
+	Runtime/exn.c was not doing the right thing to find a
+	canonical exception packet for non-value carrying exceptions.
+	A non-value carrying exception declaration compiles to a HIL
+	module with signature [stamp : NAME(UNIT), mk : ANY].  To
+	project out the canonical exception packet for a top-level
+	declaration of this form we must:
+
+	1. Use GetGlobal to map the global address to the exn module
+	record (remember globals can be mirrored).
+
+	2. Project out the second (mk : ANY) component.
+
+	For Div and Overflow, the runtime was doing (1) but not (2).
+	Thus, exn_bad was not an exception packet (a three-element
+	record) at all but the two-element record implementing the
+	exception module.  Now, it just so happens that the exception
+	name is the third value in an exception packet and that
+	General.exnName is implemented as a call to the runtime rather
+	than an inline projection.  So the call to exnName ultimately
+	causes the runtime to attempt to project the third element out
+	of a two-element record.  This explains the message and
+	assertion above.
+
+	Why did it take so long to notice this error?  My guess is
+	that the most common use for an exception packet is projecting
+	out the exception stamp which happens to be the first element
+	of both an exception packet and an exception module.
+
+Fix:
+
+	Changed getOverflowExn and getDivExn in Runtime/exn.c.  Fixed
+	a similar bug in getTiltExnStamp.
+
 Test: m0074
 Owner: swasey
-Status: open
+Status: closed
