@@ -1168,10 +1168,12 @@ void thread_go(ptr_t thunk)
     if (status == 0 && infop.pi_state == P_ONLINE)
       activeProcs[active++] = curproc;
   }
-  printf("Found %d active processors:", active);
-  for (i=0; i<active; i++) 
-    printf(" %d ", activeProcs[i]);
-  printf("\n");
+  if (threadDiag) {
+    printf("Found %d active processors:", active);
+    for (i=0; i<active; i++) 
+      printf(" %d ", activeProcs[i]);
+    printf("\n");
+  }
   if (active < NumProc) {
     printf("Needed %d processors.\n", NumProc);
     assert(0);
@@ -1217,10 +1219,12 @@ void thread_go(ptr_t thunk)
   }
 
 #ifdef solaris
-  printf("Using processors ");
-  for (i=0; i<NumProc; i++) 
-    printf(" %d", Procs[i].processor);
-  printf(".\n");
+  if (threadDiag) {
+    printf("Using processors ");
+    for (i=0; i<NumProc; i++) 
+      printf(" %d", Procs[i].processor);
+    printf(".\n");
+  }
 #endif
 
   install_signal_handlers(1);

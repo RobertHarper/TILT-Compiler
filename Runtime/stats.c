@@ -556,34 +556,34 @@ const char *orderString(void)
 
 void stats_finish(void)
 { 
-  int i;
-  double elapsed;
-  double AvgStackDepth = TotalStackDepth/((double)NumGC+eps);
-  double AvgNewStackDepth = TotalNewStackDepth/((double)NumGC+eps);
-  double AvgStackFrameSize = TotalStackSize /(double)(TotalStackDepth+eps);
-  double bytesAllocated = 0.0, bytesCopied = 0.0, bytesReplicated = 0.0;
-  long NumCopied = 0, NumShared = 0, NumContention = 0, NumRoots = 0, NumLocatives = 0, NumWrites = 0;
-
-  getrusage(RUSAGE_SELF,&stop_rusage);
-  clock_gettime(CLOCK_REALTIME, &stop_tp);
-  elapsed = tp_diff(&stop_tp, &start_tp);
-
-  for (i=0; i<NumProc; i++) {
-    Proc_t *proc = getNthProc(i);
-    bytesReplicated += proc->bytesReplicatedStatistic.sum;
-    bytesAllocated += proc->bytesAllocatedStatistic.sum;
-    bytesCopied += proc->bytesCopiedStatistic.sum;
-    NumCopied += proc->numCopied;
-    NumShared += proc->numShared;
-    NumContention += proc->numContention;
-    NumRoots += proc->numRoot;
-    NumLocatives += proc->numLocative;
-    NumWrites += proc->numWritesStatistic.sum;
-  }
-
-  printf("\n\n");
-
   if (information >= 1) {
+    int i;
+    double elapsed;
+    double AvgStackDepth = TotalStackDepth/((double)NumGC+eps);
+    double AvgNewStackDepth = TotalNewStackDepth/((double)NumGC+eps);
+    double AvgStackFrameSize = TotalStackSize /(double)(TotalStackDepth+eps);
+    double bytesAllocated = 0.0, bytesCopied = 0.0, bytesReplicated = 0.0;
+    long NumCopied = 0, NumShared = 0, NumContention = 0, NumRoots = 0, NumLocatives = 0, NumWrites = 0;
+
+    getrusage(RUSAGE_SELF,&stop_rusage);
+    clock_gettime(CLOCK_REALTIME, &stop_tp);
+    elapsed = tp_diff(&stop_tp, &start_tp);
+
+    for (i=0; i<NumProc; i++) {
+      Proc_t *proc = getNthProc(i);
+      bytesReplicated += proc->bytesReplicatedStatistic.sum;
+      bytesAllocated += proc->bytesAllocatedStatistic.sum;
+      bytesCopied += proc->bytesCopiedStatistic.sum;
+      NumCopied += proc->numCopied;
+      NumShared += proc->numShared;
+      NumContention += proc->numContention;
+      NumRoots += proc->numRoot;
+      NumLocatives += proc->numLocative;
+      NumWrites += proc->numWritesStatistic.sum;
+    }
+    
+    printf("\n\n");
+    
     for (i=0; i<NumProc; i++) {
       Proc_t *proc = getNthProc(i);
       printf("\n");
@@ -658,63 +658,60 @@ void stats_finish(void)
       if (historyFile != NULL)
 	showHistory(proc, 0, historyFile);
     }
-  }
-
-  printf("\n");
-  printf("GC:    GCMethod      = %12s      StackMethod = %s\n",
-	 collectorTypeString(), useGenStack?"Gener":"Normal");
-  printf("       Ordering   = %8s        ForceSpaceCheck = %s   CopyCopy = %8s     WorkSharing = %s     WorkTrack = %s   Relaxed = %s\n",
-	 orderString(),  forceSpaceCheck ? "Yes" : "No",
-	 copyCopyString(), noSharing ? "No" : "Yes", noWorkTrack ? "No" : "Yes", relaxed ? "Yes" : "No");
-  printf("       CollectionRate = %.2f\n",
-	 CollectionRate);
-  printf("       Allocated     = %9.0f kb      Copied     = %9.0f kb    Replicated  = %9.0f kb\n",
-	 bytesAllocated / 1024.0, bytesCopied / 1024.0,  bytesReplicated/1024.0 + 0.001);
-  printf("       NumGC         = %6d            NumMajorGC = %3d\n"
-	 "       AvgFramsSize  = %4.0f         AvgStkDepth  = %4.0f           MaxStkDepth  = %4d    newStkDepth = %4.0f\n",
-	 NumGC, NumMajorGC, 
-	 AvgStackFrameSize, AvgStackDepth, MaxStackDepth, AvgNewStackDepth);
-  if (information >= 1)
+    
+    printf("\n");
+    printf("GC:    GCMethod      = %12s      StackMethod = %s\n",
+	   collectorTypeString(), useGenStack?"Gener":"Normal");
+    printf("       Ordering   = %8s        ForceSpaceCheck = %s   CopyCopy = %8s     WorkSharing = %s     WorkTrack = %s   Relaxed = %s\n",
+	   orderString(),  forceSpaceCheck ? "Yes" : "No",
+	   copyCopyString(), noSharing ? "No" : "Yes", noWorkTrack ? "No" : "Yes", relaxed ? "Yes" : "No");
+    printf("       CollectionRate = %.2f\n",
+	   CollectionRate);
+    printf("       Allocated     = %9.0f kb      Copied     = %9.0f kb    Replicated  = %9.0f kb\n",
+	   bytesAllocated / 1024.0, bytesCopied / 1024.0,  bytesReplicated/1024.0 + 0.001);
+    printf("       NumGC         = %6d            NumMajorGC = %3d\n"
+	   "       AvgFramsSize  = %4.0f         AvgStkDepth  = %4.0f           MaxStkDepth  = %4d    newStkDepth = %4.0f\n",
+	   NumGC, NumMajorGC, 
+	   AvgStackFrameSize, AvgStackDepth, MaxStackDepth, AvgNewStackDepth);
     printf("       NumCopied     = %8d     NumRoot      = %9d      NumConflict  = %8d\n"
 	   "       NumShared     = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
 	   NumCopied,                     NumRoots,                NumContention,   
 	   NumShared,                     NumWrites,               NumLocatives);
-  show_statistic("       MinSurvRate   ", &minorSurvivalStatistic);
-  printf("\n");
-  show_statistic("       MajSurvRate   ", &majorSurvivalStatistic);
-  printf("\n");
-  show_statistic("       HeapSize(kb)  ", &heapSizeStatistic);
-  printf("\n");
+    show_statistic("       MinSurvRate   ", &minorSurvivalStatistic);
+    printf("\n");
+    show_statistic("       MajSurvRate   ", &majorSurvivalStatistic);
+    printf("\n");
+    show_statistic("       HeapSize(kb)  ", &heapSizeStatistic);
+    printf("\n");
 
-  printf("\n");
-  printf("MISC:  Total time    = %8.2f s   maxPhysMem   = %9d      minPageFault = %8d    invCtxtSwap  = %5d\n"
-         "       Total Threads = %8d     sharedMem    = %9d      majPageFault = %8d    volCtxtSwap  = %5d\n"
-	 "       Processors    = %8d\n"
-	 "       Max Threads   = %8d     unsharedData = %9d                                 swapping     = %5d\n"
-	 "                                    unsharedStk  = %9d\n",
-	 elapsed, 	 stop_rusage.ru_maxrss,	 stop_rusage.ru_minflt,	stop_rusage.ru_nvcsw,  
-	 thread_total(), stop_rusage.ru_ixrss,   stop_rusage.ru_majflt, stop_rusage.ru_nivcsw,
-	 NumProc,
-	 thread_max(),	 stop_rusage.ru_idrss,                          stop_rusage.ru_nswap,
-	                 stop_rusage.ru_isrss);
-
-  if (workStack != NULL)
-    printf("       Shared Stack Push = %6d    Shared Stack Pops = %6d\n",
-	   workStack->numPush, 	 workStack->numPop);
-  /*
+    printf("\n");
+    printf("MISC:  Total time    = %8.2f s   maxPhysMem   = %9d      minPageFault = %8d    invCtxtSwap  = %5d\n"
+	   "       Total Threads = %8d     sharedMem    = %9d      majPageFault = %8d    volCtxtSwap  = %5d\n"
+	   "       Processors    = %8d\n"
+	   "       Max Threads   = %8d     unsharedData = %9d                                 swapping     = %5d\n"
+	   "                                    unsharedStk  = %9d\n",
+	   elapsed, 	 stop_rusage.ru_maxrss,	 stop_rusage.ru_minflt,	stop_rusage.ru_nvcsw,  
+	   thread_total(), stop_rusage.ru_ixrss,   stop_rusage.ru_majflt, stop_rusage.ru_nivcsw,
+	   NumProc,
+	   thread_max(),	 stop_rusage.ru_idrss,                          stop_rusage.ru_nswap,
+	   stop_rusage.ru_isrss);
+    
+    if (workStack != NULL)
+      printf("       Shared Stack Push = %6d    Shared Stack Pops = %6d\n",
+	     workStack->numPush, 	 workStack->numPop);
+    /*
     printf("MISC:    GCTable       = %9d b  \n"
-	 "         SMLGlobal     = %9d b  \n"
-	 "         GlobalTable   = %9d b        MutableTable = %9d b\n",
-	 GCTableSize,                    
-	 SMLGlobalSize,                   
-	 GlobalTableSize,    MutableTableSize);
-  */
-
+	   "         SMLGlobal     = %9d b  \n"
+	   "         GlobalTable   = %9d b        MutableTable = %9d b\n",
+	   GCTableSize,                    
+	   SMLGlobalSize,                   
+	   GlobalTableSize,    MutableTableSize);
+    */
+  }
   if (statStringCursor > 0) {
     FILE* fd = fopen("runStats", "w");
-    i = fwrite(statString,1,statStringCursor,fd);
-    assert(statStringCursor == i);
+    int n = fwrite(statString,1,statStringCursor,fd);
+    assert(statStringCursor == n);
     fclose(fd);
   }
 }
-
