@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 Rtl Core TRACETABLE Int Util List Pprtl *)
+(*$import Prelude TopLevel TilWord32 Rtl Core TRACETABLE Int Util List Pprtl Stats *)
 
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
@@ -75,9 +75,9 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
        }
 
     val call_entrysize = 16;
-    val ShowDebug      = ref false;
-    val ShowDiag       = ref false;
-    val TagEntry = ref false;
+    val ShowDebug      = Stats.ff "TraceDebug"
+    val ShowDiag       = Stats.ff "TraceDiag"
+    val TagEntry       = Stats.ff "TraceTagEntry"
 
 
 (* ---------------------------------------------------------------------- *)
@@ -183,34 +183,44 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     (* these number must match up with the macros in stack.h *)
     (* the lower 2 bits are used for other things so we only have 30 bits *)
     local
+(*
 	val bits = [6,8,8,8] (* must sum to <= 30 *)
 	val pows = [1,64,64*256,64*256*256]
-	val maxes  = [31,63,63,63]
-	val maxindices = length bits
+	val maxes  = [63,255,255,255]
+*)
+	val bits = [14,8,8] (* must sum to <= 30 *)
+	val pows = [1,16384,16384*256]
+	val maxes  = [16383,255,255]
 	fun local_error indices = 
 	     (print ("indices2int: ");
 	      app (fn m => (print (Int.toString m);
 			    print "  ")) indices;
 	      print "\n")
-	fun loop [] _ _ = 0
-	  | loop (index::indexRest) (pow::powRest) (max::maxRest) = 
-	      let val restsum = loop indexRest powRest maxRest
-		  val _ = if (index + 1 > max)
-			      then error "index too large"
-			  else ()
-	      in  (index + 1) * pow + restsum
-	      end
+	fun loop [] _ _ _ = 0
+	  | loop (index::indexRest) (pow::powRest) (max::maxRest) error = 
+	    if (index + 1 > max)
+		then error "index too large"
+	    else (index + 1) * pow + (loop indexRest powRest maxRest error)
+	  | loop _ _ _ error = error "too many indices"
+
+	(* indices2int : int list -> int.  Uses low 30 bits. *)
+	fun indices2int indices =
+	    (loop indices pows maxes
+	     (fn s => (local_error indices; error s)))
     in
-	fun indices2int indices = 
-	    let val len = length indices
-	        val res = if (len > maxindices)
-			      then (local_error indices;
-				    error "too many indices")
-			  else (loop indices pows maxes)
-	    in res
+	datatype special_type = STACK | LABEL | GLOBAL | UNSET
+
+	(* indices2word : int list -> W.word.  Uses 32 bits.  *)
+	fun indices2word (ty,indices) =
+	    let val tbits = i2w (case ty of
+				     STACK => 0
+				   | LABEL => 1
+				   | GLOBAL => 2
+				   | UNSET => 3)
+		val ibits = i2w (indices2int indices)
+	    in  W.orb (W.lshift (ibits, 2), tbits)
 	    end
     end
-
 
     fun tr2bot TRACE_NO                  = (inc Count_no; 0)
       | tr2bot TRACE_YES                 = (inc Count_yes; 1)
@@ -224,17 +234,17 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | tr2bot (TRACE_GLOBAL lab) = tr2bot (TRACE_GLOBAL_REC (lab, []))
       | tr2bot (TRACE_STACK_REC (sloc,indices)) =
 	(inc Count_stack_rec; 
-	 addword_int (i2w (0 + 4 * (indices2int indices)));
+	 addword_int (indices2word (STACK, indices));
 	 addword_int (i2w (Core.sloc2int sloc));
 	 3)
       | tr2bot (TRACE_LABEL_REC (lab,indices)) =
 	(inc Count_label_rec; 
-	 addword_int (i2w (1 + 4 * (indices2int indices)));
+	 addword_int (indices2word (LABEL, indices));
 	 addword_label lab;
 	 3)
       | tr2bot (TRACE_GLOBAL_REC (lab,indices)) =
 	(inc Count_label_rec; 
-	 addword_int (i2w (2 + 4 * (indices2int indices)));
+	 addword_int (indices2word (GLOBAL, indices));
 	 addword_label lab;
 	 3)
       | tr2bot TRACE_IMPOSSIBLE          = 
@@ -260,21 +270,43 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | regtr2bits _ TRACE_IMPOSSIBLE          = 
 	error "cannot get a trace impossible while making table"
 
-    fun msTrace TRACE_NO                  = "no"
-      | msTrace TRACE_YES                 = "yes"
-      | msTrace TRACE_UNSET               = "unset"
-      | msTrace (TRACE_CALLEE  r)         = "callee"
-      | msTrace (TRACE_STACK sloc)        = "stack"
-      | msTrace (TRACE_STACK_REC (sloc,i)) = "stack_rec"
-      | msTrace (TRACE_LABEL sloc)        = "label"
-      | msTrace (TRACE_LABEL_REC (sloc,i)) = "label_rec"
-      | msTrace (TRACE_GLOBAL sloc)        = "global"
-      | msTrace (TRACE_GLOBAL_REC (sloc,i)) = "global_rec"
-      | msTrace _          = 	"<ignoring trace>"
+
+    val msReg = Core.msReg
+    val msSloc = Core.msStackLocation
+    val msLabel = Pprtl.label2s
+    fun msIndices i = (foldr (fn (i,s) => "." ^ Int.toString i ^ s) "" i)
+
+    fun msTrace TRACE_NO                   = "no"
+      | msTrace TRACE_YES                  = "yes"
+      | msTrace TRACE_UNSET                = "unset"
+      | msTrace (TRACE_CALLEE  r)          = ("callee " ^ msReg r)
+      | msTrace (TRACE_STACK sloc)         = ("stack " ^ msSloc sloc)
+      | msTrace (TRACE_STACK_REC (sloc,i)) = ("stack_rec " ^ msSloc sloc ^ msIndices i)
+      | msTrace (TRACE_LABEL lab)          = ("label " ^ msLabel lab)
+      | msTrace (TRACE_LABEL_REC (lab,i))  = ("label_rec " ^ msLabel lab ^ msIndices i)
+      | msTrace (TRACE_GLOBAL lab)         = ("global " ^ msLabel lab)
+      | msTrace (TRACE_GLOBAL_REC (lab,i)) = ("global_rec " ^ msLabel lab ^ msIndices i)
+      | msTrace _                          = "<ignoring trace>"
 
     fun do_callinfo (CALLINFO {calllabel=CALLLABEL lab,framesize,retaddpos,
 			       regtrace,stacktrace}) =
 	let
+	    fun printPair f (x, t) = (print "\t";
+				      print (f x);
+				      print ":";
+				      print (msTrace t);
+				      print "\n")
+	    fun printPairs f L = app (printPair f) L
+	    val _ = (if !ShowDiag then
+			 (print "\n------------------------\n";
+			  print (Pprtl.label2s lab); print ":\n";
+			  print "framesize:"; print (Int.toString framesize); print "\n";
+			  print "retaddpos:"; print (Int.toString retaddpos); print "\n";
+			  print "regtrace:\n"; printPairs Core.msReg regtrace;
+			  print "stacktrace:\n"; printPairs Int.toString stacktrace;
+			  print "------------------------\n")
+		     else ())
+
 	    val _ = if (framesize mod 4 = 0) then ()
 		    else error "framesize not a multiple of 4"
 
@@ -304,15 +336,22 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		fun stackloop n = 
 		    if (n >= framesize) then nil
 		    else
-		      (if (!ShowDiag) then
-			 print ("Stack  " ^ (Int.toString n) ^ ":" ^
-				(msTrace (stacklookup n)) ^ "\n")
-		       else ();
-			 (tr2bot (stacklookup n)) :: (stackloop (n+4)))
+			let val tr = stacklookup n
+			    val _ = (if (!ShowDiag) then
+					 print ("Stack  " ^ (Int.toString n) ^ ":" ^
+						(msTrace tr) ^ "\n")
+				     else ())
+			in  tr2bot tr :: (stackloop (n+4))
+			end
 		fun regloop n = 
 		    if (n = 32) then (nil,nil)
 		    else 
-			let val (a,b) = regtr2bits n (reglookup n)
+			let val tr = reglookup n
+			    val _ = (if (!ShowDiag) then
+					 print ("Reg  " ^ (Int.toString n) ^ ":" ^
+						(msTrace tr) ^ "\n")
+				     else ())
+			    val (a,b) = regtr2bits n tr
 			    val (ar,br) = regloop (n+1)
 			in (a::ar,b::br)
 			end
@@ -338,14 +377,6 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		val _ = if (sum = (framesize div 4)) then ()
 			else (print "OOPS: framesize =  "; print (Int.toString framesize); 
 			print "  and  sum count = "; print (Int.toString sum); print "\n")
-		val _ = if (!ShowDiag) then
-		    (print "\n------------------------\n"; 
-		     print (Pprtl.label2s lab); print ":\n";
-		     app (fn (v,t) => (print (Int.toString v);
-				       print (msTrace t); 
-				       print "\n")) stacktrace;
-		     print "------------------------\n")
-		    else ()
 		val _ = if (!ShowDiag) then
 		    (print ("no,yes,callee,spec: " ^
 			    (Int.toString (n_no - no)) ^ ", " ^
@@ -397,13 +428,16 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 				else (i2w (2 + (datalength calldata)))
 	    val bytestuffsizeword = (i2w (datalength bytedata))
 	    val sizedata = 
-		let 
+		let
+		    fun local_error (what, v) =
+			(print what; print " = "; print (W.toDecimalString v); print "\n";
+			 error ("giant frame: " ^ what ^ " too big"))
 		    val _ = if (W.ugte(entrysizeword,i2w 5124))
-				then error "giant frame: entrysizeword too big" else ()
+				then local_error ("entrysizeword", entrysizeword) else ()
 		    val _ = if (W.ugte(framesizeword,i2w 512))
-				then error "giant frame: framesizeword too big" else ()
+				then local_error ("framesizeword", framesizeword) else ()
 		    val _ = if (W.ugte(bytestuffsizeword,i2w 512))
-				then error "giant frame: bytestuffsizeword too big" else ()
+				then local_error ("bytestuffsizeword", bytestuffsizeword) else ()
 		    val t1 = bitshift(entrysizeword,0)
 		    val t2 = bitshift(framesizeword,9)
 		    val t3 = bitshift(bytestuffsizeword,18)
@@ -424,7 +458,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     
     fun MakeTableHeader name = 
 	[COMMENT "gcinfo",DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_BEGIN_VAL"))]
-    fun MakeTable (calllist) = foldr (op @) nil (map do_callinfo calllist) 
+    fun MakeTable (calllist) = List.concat (map do_callinfo calllist)
     fun MakeTableTrailer name = 
 	(if !ShowDebug
 	     then (print ("\nTraceability Table Summary: \n");
@@ -465,7 +499,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	      end
       in
 	[DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
-	@ (foldr (op @) nil (map do_lab_trace arg))
+	@ (List.concat (map do_lab_trace arg))
 	@ [COMMENT "filler for alignment of global_table",
 	   DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_END_VAL")),
 	   INT32 wzero]
