@@ -81,6 +81,7 @@ structure IlUtil :> ILUTIL =
 
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
+
     fun fresh_named_con (ctxt,s) = CON_TYVAR (fresh_named_tyvar (ctxt,s))
     fun fresh_con ctxt = fresh_named_con (ctxt,"metavar")
     local
@@ -271,11 +272,13 @@ structure IlUtil :> ILUTIL =
     val ilprim_etaexpand = etaexpand_help (ILPRIM,IlPrimUtil.get_iltype')
 
 
-    fun con_deref (CON_TYVAR tyvar) = (case (tyvar_deref tyvar) of
-					   NONE => CON_TYVAR tyvar
-					 | SOME con => con)
-      | con_deref c = c
-
+    fun con_deref (c : con) : con =
+	(case c
+	   of CON_TYVAR tv =>
+	       (case tyvar_deref tv
+		  of NONE => c
+		   | SOME c' => c')
+	    | _ => c)
 
       fun find_sdec ([],_) = NONE
 	| find_sdec((sdec as SDEC(l,_))::rest,l') = if (eq_label(l,l')) 
