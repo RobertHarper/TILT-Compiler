@@ -102,6 +102,7 @@ static void stop_copy(Proc_t *proc)
   procChangeState(proc, GCWork, 403);                                    /* Entering main GC work */
   proc->numRoot += SetLength(&proc->work.roots);
   proc->numRoot += SetLength(&proc->work.globals);
+  addMaxWork(proc,MAXINT);
   if (!noSharing)
     pushSharedStack(0,workStack,&proc->work);                 /* this is necessary even if local stack is empty;
 								 this call is placed after the root/global to ensure 
@@ -124,7 +125,7 @@ static void stop_copy(Proc_t *proc)
 	    scanObj_locCopy1_copyCopySync_replicaSet(proc,gray,fromSpace);   
 	}
 	else {
-	  while (!recentWorkDone(proc) &&          /* Work on gray object unless time to re-distribute work */  
+	  while (!reachCheckWork(proc) &&          /* Work on gray object unless time to re-distribute work */  
 		 (gray = SetPop(&proc->work.objs)) != NULL)      /*      or there are no more local gray objects */
 	    scanObj_locCopy1_copyCopySync_replicaSet(proc,gray,fromSpace);   
 	}
@@ -140,8 +141,7 @@ static void stop_copy(Proc_t *proc)
 	    scanRegion_locCopy1_copyCopySync(proc,start,stop,fromSpace);
 	  AddGrayCopyRange(&proc->copyRange);
 	  if (!noWorkTrack) {
-	    updateWorkDone(proc);   /* recentWorkDone only counts down once */
-	    if (recentWorkDone(proc))
+	    if (updateReachCheckWork(proc))
 	      break;
 	  }
 	  if (SetIsEmpty(&proc->work.grayRegion))
@@ -166,10 +166,9 @@ static void stop_copy(Proc_t *proc)
     double liveRatio;
     assert(isEmptySharedStack(workStack));
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);  /* Paranoid check must precede heap adjustment */
-    liveRatio = HeapAdjust1(totalRequest, totalUnused,
-			    0, CollectionRate, 0,
-			    fromSpace, toSpace);
-    add_statistic(&majorSurvivalStatistic, liveRatio);
+    HeapAdjust1(totalRequest, totalUnused,
+		0, CollectionRate, 0,
+		fromSpace, toSpace);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;

@@ -32,14 +32,15 @@ int process_bool(int *var, char *item, char *option)
   return match;
 }
 
-int process_string(char *var, char *item, char *option)
+int process_string(char **var, char *item, char *option)
 {
   int len = strlen(item);
   int prefix_match = !strncmp(item,option,len);
   int optlen = strlen(option); 
   if (!prefix_match || (optlen<=len) || (option[len] != '='))
     return 0;
-  strcpy(var,option+len+1);
+  *var = malloc(strlen(option)-len);
+  strcpy(*var,option+len+1);
   return 1;
 }
 
@@ -101,7 +102,7 @@ int process_double(double *var, char *item, char *option)
 }
 
 struct option_entry {
-  int type; /* 0 for bool, 1 for int, 2 for long, 3 for double, 4 for byte measreuements */
+  int type; /* 0 for bool, 1 for int, 2 for long, 3 for double, 4 for byte measreuements, 5 for strings */
   char *name; 
   void *item;
   char *description;
@@ -165,7 +166,8 @@ struct option_entry table[] =
    1, "noWorkTrack", &noWorkTrack, "Do not update or test for work done.  Should be used only in addition to noSharing",
    1, "doAgressive", &doAgressive, "Use 2 phase concurrent collection",
    1, "doMinorAgressive", &doMinorAgressive, "Use 2 phase concurrent collection for minor collections",
-   1, "doStableEfficiency", &doStableEfficiency, "Do more/less work when efficiency is higher/lower",
+   1, "accounting", &accountingLevel, "Amount of accounting to perform",
+   3, "targetUtil", &targetUtil, "Do work to maintain target utilization",
    3, "collectionRate", &CollectionRate, "Rate of concurrent collector",
    3, "objCopyWeight", &objCopyWeight, "Weight given to cost of copying an object",
    3, "objScanWeight", &objScanWeight, "Weight given to cost of scanning an object",
@@ -185,7 +187,7 @@ struct option_entry table[] =
    1, "cacheSize", &cacheSize, "",
    1, "cacheSize2", &cacheSize2, "",
 
-   1, "doShowHistory", &doShowHistory, "Show history of states for each processor",
+   5, "historyFile", &historyFile, "Write state history into given file",
    1, "info", &information, "Level of information to print"};
 
 void process_option(int argc, char **argv)
@@ -220,6 +222,10 @@ void process_option(int argc, char **argv)
 	  }
 	  case 4 : {
 	    matched = process_byte(table[i].item, table[i].name, option);
+	    break;
+	  }
+	  case 5 : {
+	    matched = process_string(table[i].item, table[i].name, option);
 	    break;
 	  }
 	  default: {

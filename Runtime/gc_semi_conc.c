@@ -229,7 +229,7 @@ mem_t AllocBigArray_SemiConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 static long totalRequest = 0;     /* Total number of bytes requested by all threads */
 static long totalReplicated = 0;  /* Total number of bytes replicated by all processors */
 static long totalUnused = 0;
-static long workAhead = 0;        /* Total amount of work that is ahead of that required by amount allocated */
+long workAhead = 0;        /* Total amount of work that is ahead of that required by amount allocated */
 
 static int expandedSize = 0, reducedSize = 0;
 
@@ -265,8 +265,8 @@ static void CollectorOn(Proc_t *proc)
 
     /*    workAhead = 0; XXX */
     workAhead = (expandedSize - reducedSize) / 10; 
-    Heap_Resize(fromSpace,expandedSize,0);
-    Heap_Resize(toSpace,expandedSize,1);
+    Heap_Resize(fromSpace, relaxed ? Heap_GetMaximumSize(fromSpace) : expandedSize, 0);
+    Heap_Resize(toSpace, relaxed ? Heap_GetMaximumSize(toSpace) : expandedSize, 1);
     paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
     totalRequest = totalReplicated = totalUnused = 0;
     ResetJob();
@@ -279,8 +279,7 @@ static void CollectorOn(Proc_t *proc)
 
   FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   while ((curThread = NextJob()) != NULL) {
-    if (initial_root_scan(proc,curThread)) 
-      SetPush(&proc->work.stacklets, (ptr_t) curThread);
+    initial_root_scan(proc,curThread);
     if (curThread->requestInfo >= 0) /* Allocation request */
       FetchAndAdd(&totalRequest, curThread->requestInfo);
   }
@@ -319,7 +318,6 @@ static void CollectorTransition(Proc_t *proc)
   isFirst = (weakBarrier(barriers, proc) == 0);
   if (isFirst) {
     ResetJob();
-    workAhead = 0;
   }
   resetSharedStack(workStack,&proc->work, 0);
   strongBarrier(barriers, proc);
@@ -333,8 +331,7 @@ static void CollectorTransition(Proc_t *proc)
     discard_root_scan(proc,curThread);
     if (curThread->used == 0)
       continue;
-    if (initial_root_scan(proc,curThread)) 
-      SetPush(&proc->work.stacklets, (ptr_t) curThread);
+    initial_root_scan(proc,curThread);
     if (curThread->requestInfo >= 0) /* Allocation request */
       FetchAndAdd(&totalRequest, curThread->requestInfo);
   }
@@ -357,8 +354,6 @@ static void CollectorOff(Proc_t *proc)
   int rootCount = 0;
   ploc_t rootLoc, globalLoc;
 
-  proc->segmentType |= MajorWork | FlipOff;
-
   if (collectDiag >= 2)
     printf("Proc %d: entered CollectorOff\n", proc->procid);
   assert(SetIsEmpty(&proc->work.objs));
@@ -380,7 +375,7 @@ static void CollectorOff(Proc_t *proc)
     ResetJob();
   strongBarrier(barriers, proc);
 
-  /* Replace all roots (global, local registers, local stack) with replica */
+  /* Replace all roots (global, local registers) with replica */
   assert(isEmptySharedStack(workStack));
   assert(isLocalWorkEmpty(&proc->work));
   if (isFirst) 
@@ -393,6 +388,7 @@ static void CollectorOff(Proc_t *proc)
   while ((curThread = NextJob()) != NULL) 
     complete_root_scan(proc, curThread);
   procChangeState(proc, GCWork, 112);
+  proc->segmentType |= MajorWork | FlipOff;
 
   proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
   /* Flip stack slots */
@@ -408,10 +404,9 @@ static void CollectorOff(Proc_t *proc)
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
     
     /* Resize heaps and do stats */
-    liveRatio = HeapAdjust1(totalRequest,totalUnused,totalReplicated, 
-			    CollectionRate, doAgressive ? 2 : 1,
-			    fromSpace,toSpace);
-    add_statistic(&majorSurvivalStatistic, liveRatio);
+    HeapAdjust1(totalRequest,totalUnused,totalReplicated, 
+		CollectionRate, doAgressive ? 2 : 1,
+		fromSpace,toSpace);
     reducedSize = Heap_GetSize(toSpace);
     expandedSize = reducedToExpanded(reducedSize, CollectionRate, doAgressive ? 2 : 1);
     Heap_Resize(fromSpace, 0, 1);
@@ -450,7 +445,6 @@ void GCRelease_SemiConc(Proc_t *proc)
 
   proc->allocStart = proc->allocCursor;  /* allocation area is NOT reused */  
   numWrites = (proc->writelistCursor - proc->writelistStart) / 3;
-  proc->numWrite += numWrites;
   proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
 
   if (shouldDoubleAllocate()) {
@@ -593,28 +587,28 @@ void GCRelease_SemiConc(Proc_t *proc)
 /* GCStatus is either GCOn or GCPendingOff.
    Upon entry and exit, the local work stack is empty.
    The routine will work up until either
-     (1) updateWorkDone() > workToDo is reached.  The excess should be slight.
+     (1) workDone > maxWork_cur + additionalWork.  The excess should be slight.
      (2) Status is PendingOn or PendingOff and no local work is available after a fetch from the shared stack
    If the local flag is set, then the shared stack is not accessed.
 */
-static void do_work(Proc_t *proc, int workToDo)
+static void do_work(Proc_t *proc, int additionalWork)
 {
-
-  if (workToDo <= 0)
+  if (additionalWork <= 0)
     return;
+  addMaxWork(proc, additionalWork);
   procChangeState(proc, GCWork, 116);
   proc->segmentType |= MajorWork; 
 
   assert(isLocalWorkEmpty(&proc->work));
 
   if (collectDiag >= 2)
-    printf("GC %d Seg %d:  do_work(%d)  updateWorkDone = %5d\n",
-	   NumGC, proc->segmentNumber, workToDo, updateWorkDone(proc));
+    printf("GC %d Seg %d:  do_work(%d)  updatedWorkDone = %5d\n",
+	   NumGC, proc->segmentNumber, additionalWork, updateGetWorkDone(proc));
 
-  while (updateWorkDone(proc) < workToDo) {
+  while (!reachMaxWork(proc)) {
     int start, end;
     int i, globalEmpty;
-    Thread_t *thread;
+    Stacklet_t *stacklet;
     ploc_t rootLoc, globalLoc;
     ptr_t gray;
     
@@ -624,72 +618,77 @@ static void do_work(Proc_t *proc, int workToDo)
 	isLocalWorkEmpty(&proc->work))
       break;
 
-    while (updateWorkDone(proc) < workToDo &&
-	   ((thread = (Thread_t *) SetPop(&proc->work.stacklets)) != NULL)) {
-      if (!work_root_scan(proc, thread, workToDo)) 
-	SetPush(&proc->work.stacklets, (ptr_t) thread);
-    }
-
     if (ordering == StackOrder) {
       if (grayAsReplica) {
-	while (!recentWorkDone(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+	while (!reachCheckWork(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) {
 	  locAlloc1_copyCopySync_replicaSet(proc,rootLoc,fromSpace);
-	while (!recentWorkDone(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
+	  proc->segUsage.rootsProcessed++;
+	}
+	while (!reachCheckWork(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
 	  ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	  locAlloc1_copyCopySync_replicaSet(proc,replicaLoc,fromSpace);  
 	  proc->segUsage.globalsProcessed++;
 	}
 	/* segments are stored with primary gray even when grayAsReplica is true */
-	while ((updateWorkDone(proc) < workToDo) &&
+	while ((!updateReachCheckWork(proc)) &&
 	       (gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end)) != NULL) 
 	  transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_replicaSet(proc,gray,start,end,fromSpace); 
-	while (!recentWorkDone(proc) && 
+	while (!reachCheckWork(proc) && 
 	       ((gray = SetPop(&proc->work.objs)) != NULL)) 
 	  backTransferScanObj_copyWriteSync_locAlloc1_copyCopySync_replicaSet(proc,gray,fromSpace); 
       }
       else {
-	while (!recentWorkDone(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+	while (!reachCheckWork(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) {
 	  locAlloc1_copyCopySync_primarySet(proc,rootLoc,fromSpace);
-	while (!recentWorkDone(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
+	  proc->segUsage.rootsProcessed++;
+	}
+	while (!reachCheckWork(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
 	  ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	  locAlloc1_copyCopySync_primarySet(proc,replicaLoc,fromSpace);  
 	  proc->segUsage.globalsProcessed++;
 	}
-	while ((updateWorkDone(proc) < workToDo) &&
+	while (!updateReachCheckWork(proc) &&
 	       (gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end)) != NULL) 
 	  transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,start,end,fromSpace); 
-	while (!recentWorkDone(proc) && 
+	while (!reachCheckWork(proc) && 
 	       ((gray = SetPop(&proc->work.objs)) != NULL)) 
 	  transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,fromSpace); 
       }
     }
     else if (ordering == HybridOrder) {
       assert(grayAsReplica);
-      while (!recentWorkDone(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+      while (!reachCheckWork(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) {
 	  locAlloc1_copyCopySync(proc,rootLoc,fromSpace);
-      while (!recentWorkDone(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
+	  proc->segUsage.rootsProcessed++;
+      }
+      while (!reachCheckWork(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
 	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	locAlloc1_copyCopySync(proc,replicaLoc,fromSpace);  
 	proc->segUsage.globalsProcessed++;
       }
       /* segments are stored with primary gray even when grayAsReplica is true */
-      while ((updateWorkDone(proc) < workToDo) &&
+      while (!updateReachCheckWork(proc) &&
 	     (gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end)) != NULL) 
 	transferScanSegment_copyWriteSync_locAlloc1_copyCopySync(proc,gray,start,end,fromSpace); 
       assert(SetIsEmpty(&proc->work.objs));
-      while (!recentWorkDone(proc)) {
+      while (!updateReachCheckWork(proc)) {
 	mem_t start, stop;
 	if (start = (mem_t) SetPop2(&proc->work.grayRegion, &stop)) {
 	  backTransferScanRegion_copyWriteSync_locAlloc1_copyCopySync(proc,start,stop,fromSpace);
 	}
 	AddGrayCopyRange(&proc->copyRange);
-	updateWorkDone(proc);   /* recentWorkDone only counts down once */
 	if (SetIsEmpty(&proc->work.grayRegion))
 	  break;
       }
     }
     else
       assert(0);
+
+    while (!updateReachCheckWork(proc) &&
+	   ((stacklet = (Stacklet_t *) SetPop(&proc->work.stacklets)) != NULL)) {
+      if (!work_root_scan(proc, stacklet))
+	SetPush(&proc->work.stacklets, (ptr_t) stacklet);
+    }
 
     if (pushSharedStack(0,workStack,&proc->work)) {
       if (GCStatus == GCAgressive) {
@@ -786,67 +785,92 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
       goto fail;
     case GCAgressive:
     case GCOn: {
-      /* Target efficiency is 14.0.  
-	 (1) Perform half the target work to estimate the efficiency.
-	 (2) If efficiency is below 10.0 and workAhead is at least half the target work, 
-	     deduct this amount from workAhead end the cycle.
-	 (3) If efficiency is above 18.0, do extra work and add to workAhead.
-	     The amount of extra work done should be enough to take so that total time
-	     is what would be consumed had the efficiency been 14.0.  However, be conservative
-	     and limit the efficiency to 25.0 and the extra work to the original targetWork.
-	 (4) Otherwise, do the other half of the target work.
+      /* The default behavior is to do targetWork.  
+	 Under certain conditions, we desire to do less work.
+	   (1) utilization is too low
+	   (2) the collection is particularly inefficient and would take too much time
+	 To do less work though, we must borrow from the bank by decreementing from workAhead.
+	 The inefficiency of the collection is detected by doing only a third of the collection
+	 work and computing the efficiency at that point.
       */
-	do_work(proc, targetWork);
+      if (targetUtil < 1.0) {
+	double lastUtil = proc->utilizationQuotient1.stat[0].last;
+	/*
+	double lastMutatorTime = Min(proc->mutatorTime, 0.5);
+	double targetTime = Min(1.5, lastMutatorTime / targetUtil * (1.0 - targetUtil));
+	*/
+	double excessOnTime = 5.0 * (lastUtil - targetUtil);
+	double targetTime = Min(1.5, get_prewindow(&proc->utilizationQuotient1, 0, excessOnTime));
+	double typicalEfficiency = 15.0;
+	int estimatedWork = targetTime * typicalEfficiency * 1000.0;
+	int remainWork = estimatedWork / 3;
+	int curWork = 0;
+	double curTime, curEff;
+	double lastTime = 0.0, lastEff = 0.0;
+	int lastRemainWork = 0;
+
+	FetchAndAdd(&workAhead, -targetWork);
+	while (remainWork > 2048) {
+	  do_work(proc, remainWork);
+	  FetchAndAdd(&workAhead, remainWork);
+	  curWork += remainWork;
+	  curTime = nonMutatorTime(proc);
+	  curEff = Min(18.0, (curWork / 1000.0) / curTime);
+	  remainWork =  (int) (0.7 * (targetTime * curEff * 1000.0) - curWork);
+
+	  if (curTime > 1.2 * targetTime)
+	    sprintf(proc->delayMsg, 
+		    "seg %d:  curT = %.2f    tarT = %.2f   lastT = %.2f    lastRemW = %d   actualW = %d      curEff = %.2f  lastEff = %.2f\n", 
+		    proc->segmentNumber, curTime, targetTime, lastTime, lastRemainWork, updateGetWorkDone(proc), curEff, lastEff);
+
+	  lastTime = curTime;
+	  lastEff = curEff;
+	  lastRemainWork = remainWork;
+	}
+      }
 #ifdef SKIP
-      int estimatedWork, needBail;
-      double time, efficiency;
-      int lowMutatorTime = proc->mutatorTime < 0.10;
-      int lowUtil = proc->utilizationQuotient1.stat[0].last < 0.15;
-      int highUtil = proc->utilizationQuotient1.stat[0].last > 0.25;
-      do_work(proc, targetWork / 2);
-      time = nonMutatorTime(proc);
-      efficiency = ((targetWork / 2) / 1000.0) / time;
-      estimatedWork = (int) (1000.0 * 1.0 * efficiency);
-      if ((doStableEfficiency && efficiency < 9.0) || lowUtil) {
-	if (workAhead > targetWork / 2) {
-	  FetchAndAdd(&workAhead, -targetWork / 2);
-	  if (0)
-	    printf("GC %d/%5d:  %s:  time = %.2f    efficiency = %.1f   Bailing...   targetWork/2 = %d   workAhead = %d\n", 
-		   NumGC, proc->segmentNumber, 
-		   lowMutatorTime ? "Low mutator time" : "Low efficiency",
-		   time, efficiency, targetWork/2, workAhead);
+      else if (useLastUtil < 1.0) {
+	double curUtil = proc->utilizationQuotient1.stat[0].last;
+	if (curUtil < 0.05 + useLastUtil && 
+	    (1 || workAhead > targetWork)) {
+	  FetchAndAdd(&workAhead, -targetWork);
 	}
 	else {
-	  do_work(proc, targetWork / 2);
+	  double time, efficiency, finalEfficiency;
+	  int prelimWork = targetWork / 4;
+	  int remainWork = targetWork - prelimWork;
+	  do_work(proc, prelimWork);
 	  time = nonMutatorTime(proc);
-	  efficiency = (targetWork / 1000.0) / time;
-	  needBail = (doStableEfficiency && efficiency < 9.0) || lowMutatorTime;
-	  if (1)
-	    printf("GC %d/%5d: %s:  time = %.2f    efficiency = %.1f   %s  targetWork/2 = %d   workAhead = %d\n", 
-		   NumGC, proc->segmentNumber, 
-		   lowMutatorTime ? "Low mutator time" : "Low efficiency",
-		   time, efficiency, 
-		   needBail ? "Could not bail" : "Bailing not needed",
-		   targetWork/2, workAhead);
+	  efficiency = (prelimWork / 1000.0) / time;
+	  
+	  if ((curUtil < 0.10 + useLastUtil  && efficiency < 20.0) ||
+	      (curUtil < 0.15 + useLastUtil  && efficiency < 15.0) ||
+	      (curUtil < 0.20 + useLastUtil  && efficiency < 10.0)) {
+	    if (1 || workAhead > remainWork) {
+	      FetchAndAdd(&workAhead, -remainWork);
+	      finalEfficiency = efficiency;
+	    }
+	    else {
+	      do_work(proc, remainWork);
+	      time = nonMutatorTime(proc);
+	      finalEfficiency = ((prelimWork + remainWork) / 1000.0) / time;
+	    }
+	  }
+	  else {
+	    do_work(proc, remainWork);
+	    time = nonMutatorTime(proc);
+	    finalEfficiency = ((prelimWork + remainWork) / 1000.0) / time;
+	  }
+	  if (efficienct != finalEfficiency && finalEfficiency < 6.0) 
+	    printf("***** efficiency = %.1f   finalEfficiency = %.1f *******\n",
+		   efficiency, finalEfficiency);
 	}
       }
-      else if ((doStableEfficiency && efficiency > 18.0) || highUtil) {
-	double newEfficiency;
-	double targetTime = (targetWork / 1000.0) / 14.0;
-	double extraTime = targetTime - time;
-	int extraWork = (int) (1000.0 * (Min(efficiency,25.0)) * extraTime);
-	extraWork = Min(targetWork, extraWork);
-	extraWork = targetWork;
-	do_work(proc, extraWork);
-	FetchAndAdd(&workAhead, extraWork);
-	newEfficiency = ((targetWork / 2 + extraWork) / 1000.0) / nonMutatorTime(proc);
-	if (0)
-	  printf("GC %d: High efficiency: time = %.2f    efficiency = %.1f   new efficiency = %.1f   workAhead = %d\n", 
-		 NumGC, time, efficiency, newEfficiency, workAhead);
-      }
-      else
-	do_work(proc, targetWork / 2);
 #endif
+      else {  /* Default scheduling */
+	do_work(proc, targetWork); 
+      }
+  
        if (GC_SemiConcHelp(th,proc,roundOnSize))
 	 goto satisfied;
        goto fail;	 
@@ -905,14 +929,21 @@ void GCInit_SemiConc(void)
   if (ordering == HybridOrder)
     grayAsReplica = 1;
   GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);   
-  expandedSize = Heap_GetSize(fromSpace);
-  reducedSize = expandedToReduced(expandedSize, CollectionRate, doAgressive ? 2 : 1);
-  Heap_Resize(fromSpace, reducedSize, 1);
-  Heap_Resize(toSpace, reducedSize, 1);
-  workStack = SharedStack_Alloc(0, 100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024, 0, 0);
+  if (relaxed) {
+    reducedSize = Heap_GetSize(fromSpace);
+    expandedSize = reducedToExpanded(reducedSize, CollectionRate, doAgressive ? 2 : 1);
+  }
+  else {
+    expandedSize = Heap_GetSize(fromSpace);
+    reducedSize = expandedToReduced(expandedSize, CollectionRate, doAgressive ? 2 : 1);
+    Heap_Resize(fromSpace, reducedSize, 1);
+    Heap_Resize(toSpace, reducedSize, 1);
+  }
+  workStack = SharedStack_Alloc(0, 100, 16 * 1024, 12 * 1024, 128 * 1024, 16 * 1024, 0, 0);
   barriers = createBarriers(NumProc, 10);
   arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
   pauseWarningThreshold = 10.0;
+  addOldStackletOnUnderflow = 1;
 }
 

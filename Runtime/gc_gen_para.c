@@ -170,6 +170,7 @@ static void GCCollect_GenPara(Proc_t *proc)
 
   if (!noSharing)
     pushSharedStack(0,workStack, &proc->work);
+  addMaxWork(proc, MAXINT);
 
   /* Get work from global stack; operate on local stack; put work back on global stack */
   while (1) {
@@ -184,12 +185,12 @@ static void GCCollect_GenPara(Proc_t *proc)
       procChangeState(proc, GCWork, 406);
     
     if (GCType == Minor) {
-      while (!recentWorkDone(proc) &&
+      while (!reachCheckWork(proc) &&
 	     ((gray = SetPop(&proc->work.objs)) != NULL)) 
 	scanObj_locCopy1_copyCopySync_replicaSet(proc,gray,nursery);
     }
     else {
-      while (!recentWorkDone(proc) &&
+      while (!reachCheckWork(proc) &&
 	     ((gray = SetPop(&proc->work.objs)) != NULL)) 
 	scanObj_locCopy2L_copyCopySync_replicaSet(proc,gray,nursery,fromSpace,largeSpace);
     }
@@ -211,7 +212,6 @@ static void GCCollect_GenPara(Proc_t *proc)
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    double liveRatio = 0.0;
     if (GCType == Minor) 
       paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
     else
@@ -219,6 +219,7 @@ static void GCCollect_GenPara(Proc_t *proc)
 
     /* Globals, statistics, resize/reset/flip */
     if (GCType == Minor) {
+      double liveRatio = 0.0;
       int i, copied = 0;
       minor_global_promote(proc);
       for (i=0; i<NumProc; i++) {
@@ -230,8 +231,7 @@ static void GCCollect_GenPara(Proc_t *proc)
     }
     else {
       gc_large_endCollect();
-      liveRatio = HeapAdjust2(totalRequest,totalUnused,0,CollectionRate,0,nursery,fromSpace,toSpace);
-      add_statistic(&majorSurvivalStatistic, liveRatio);
+      HeapAdjust2(totalRequest,totalUnused,0,CollectionRate,0,nursery,fromSpace,toSpace);
       Heap_Resize(fromSpace, 0, 1);
       typed_swap(Heap_t *, fromSpace, toSpace);
       NumMajorGC++;

@@ -9,7 +9,8 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-extern int information, doShowHistory;
+extern int information;
+extern char *historyFile;
 
 /* Note that timer_t is a type already defined by the C library */
 typedef struct Timer__t
@@ -81,7 +82,7 @@ typedef struct WindowQuotient__t   /* quotient = on / off */
   int    first;                   /* first occupied slot */
   int    last;                    /* first unused slot */
   int    numWindows;
-  int    windowSize[20];          /* in tens of microseconds */
+  int    windowSize[20];          /* in units of granularity * ms */
   int    onSum[20];               /* sum of active data values that are on */
   int    offSum[20];              /* sum of active data values that are off */
   int    start[20];               /* first slot for this window size */
@@ -90,6 +91,7 @@ typedef struct WindowQuotient__t   /* quotient = on / off */
 
 void reset_windowQuotient(WindowQuotient_t *, int fineness);
 void add_windowQuotient(WindowQuotient_t *, double, int on);
+double get_prewindow(WindowQuotient_t *wq, int which, double neededOnTime);
 
 /* Initializing timers; show statistics */
 void add_statString(char *);

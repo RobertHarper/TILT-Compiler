@@ -25,7 +25,7 @@ static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
 
 int information = 1;
-int doShowHistory = 0;
+char *historyFile = NULL;
 int	prof_fd = 1;
 static double time_diff(void),time2double(void);
 static double eps=1e-7;
@@ -399,6 +399,30 @@ void check(WindowQuotient_t *wq, int i)
     assert(0);
 }
 
+/* Find how much time at the beginning of which^th window so that x ON time are included in them - 
+   returns 0.0 if cannot determine that much on time*/
+double get_prewindow(WindowQuotient_t *wq, int which, double neededOnTime)
+{
+  int neededOnTicks = (int) (neededOnTime * wq->granularity);
+  int index, count = 0, onCount = 0;
+  
+  assert(neededOnTicks <= wq->windowSize[which]);
+  index = wq->start[which];
+  while (1) {
+    count++;
+    if (wq->data[index]) {
+      onCount++;
+      if (onCount >= neededOnTicks)
+	return ((double)count) / wq->granularity;
+    }
+    if (count >= wq->windowSize[which])
+      return 0.0;
+    index++;
+    if (index == wq->size)
+      index = 0;
+  }
+}
+
 /* Time in ms */
 void add_windowQuotient(WindowQuotient_t *wq, double time, int on)
 {
@@ -555,7 +579,7 @@ void stats_finish(void)
     NumContention += proc->numContention;
     NumRoots += proc->numRoot;
     NumLocatives += proc->numLocative;
-    NumWrites += proc->numWrite;
+    NumWrites += proc->numWritesStatistic.sum;
   }
 
   printf("\n\n");
@@ -632,8 +656,8 @@ void stats_finish(void)
 	show_histogram(" GCFlipOn     Hist (ms)", &proc->gcFlipOnHistogram);
 	show_histogram("Mutator Histogram", &proc->mutatorHistogram); 
       }
-      if (doShowHistory)
-	showHistory(proc, 0);
+      if (historyFile != NULL)
+	showHistory(proc, 0, historyFile);
     }
   }
 

@@ -39,8 +39,8 @@ void NullGlobals(int globalOffset);           /* For debugging - pass in primary
 
 void thread_root_scan(Proc_t *, Thread_t *);  /* Scan all root locations in primaryStack */
 
-int initial_root_scan(Proc_t *, Thread_t *); /* Initialize snaphosts - returns 1 if thread as started */
-int work_root_scan(Proc_t *, Thread_t *, int workToDo); /* Obtain roots from startStack; returns one when stack complete */
+void initial_root_scan(Proc_t *, Thread_t *); /* Initialize snaphosts - returns 1 if thread as started */
+int work_root_scan(Proc_t *, Stacklet_t *); /* Obtain roots from startStack; returns one when stacklet complete */
 void discard_root_scan(Proc_t *, Thread_t *);  /* Clean up thread but don't do flip - for CollectorTransition */
 void complete_root_scan(Proc_t *, Thread_t *); /* Perform flip */
 

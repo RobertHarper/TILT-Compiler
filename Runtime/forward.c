@@ -454,7 +454,6 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
   ploc_t end = proc->writelistCursor;
 
   procChangeState(proc, GCWrite, 800);
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   proc->writelistCursor = proc->writelistStart;
   if (curLoc < end) 
     proc->segmentType |= MinorWork;

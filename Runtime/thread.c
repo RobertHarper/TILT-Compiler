@@ -3,6 +3,7 @@
 #elif (defined solaris)
 #include <ieeefp.h>
 #endif
+#include "errno.h"
 #include "general.h"
 #include "tag.h"
 #include "thread.h"
@@ -29,6 +30,7 @@ int NumThread     = 150;
 int NumProc       = 1;
 int RotateProc = 0;
 int threadDiag = 0;
+int accountingLevel = 1;
 extern int usageCount;
 
 Thread_t    *Threads;                         /* array of NumUserThread user threads */
@@ -151,8 +153,6 @@ void UpdateJob(Proc_t *proc)
   mem_t proc_allocLimit = proc->allocLimit;
   mem_t proc_writelistCursor = (mem_t) proc->writelistCursor;
 
-  procChangeState(proc, Scheduler, 1);
-
   /* Check that thread's allocation pointers are consistent and update processor's version */
   if (((mem_t) th->saveregs[ALLOCLIMIT] != proc_allocLimit &&
        (mem_t) th->saveregs[ALLOCLIMIT] != StopHeapLimit) ||
@@ -164,16 +164,20 @@ void UpdateJob(Proc_t *proc)
     assert(0);
   }
 
-  if (threadDiag)
-    printf("Proc %d: Releasing thread %d.   Request = %d.\n"
-	   "         Allocated %d to %d.    Writlist %d to %d.\n",
-	   proc->procid,th->tid,th->requestInfo, 
-	   proc_allocCursor, th->saveregs[ALLOCPTR],
-	   proc_writelistCursor, th->writelistAlloc);
-  
-  /* Update processor's version of allocation range and write list and process */
+  /* Update processor's version of allocation range and write list.  Update stats */
   proc->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
   proc->writelistCursor = th->writelistAlloc;
+  PadHeapArea(proc->allocCursor, proc->allocLimit);
+  proc->segUsage.numWrites += (proc->writelistCursor - proc->writelistStart) / 3;
+  proc->segUsage.bytesAllocated += (sizeof(val_t) * (proc->allocCursor - proc->allocStart));
+
+  if (threadDiag)
+    printf("Proc %d: Releasing thread %d.   Request = %d (%d).\n"
+	   "         %d bytes allocated.    Writes %d.\n",
+	   proc->procid,th->tid,th->requestInfo, 
+	   (sizeof(val_t) * (proc->allocCursor - proc->allocStart)),
+	   (proc->writelistCursor - proc->writelistStart) / 3);
+
   procChangeState(proc, Scheduler, 5);
   GCReleaseThread(proc);
   procChangeState(proc, Scheduler, 6);
@@ -232,7 +236,6 @@ void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
   th->thunk = thunk;
   if (th->stack == NULL)
     th->stack = StackChain_Alloc(th); 
-  th->snapshot = NULL;
 }
 
 void Thread_Pin(Thread_t *th)
@@ -254,9 +257,6 @@ void Thread_Free(Thread_t *th)
 	activeThread--;
 	StackChain_Dealloc(th->stack);
 	th->stack = NULL;
-	if (th->snapshot != NULL)
-	  StackChain_Dealloc(th->snapshot);
-	th->snapshot = NULL;
 	th->used = 0;
       }
       break;
@@ -363,6 +363,7 @@ Proc_t *getProc(void)
 
 void resetUsage(Usage_t *u)
 {
+  u->numWrites = 0;
   u->bytesAllocated = 0;
   u->bytesReplicated = 0;
   u->fieldsCopied = 0;
@@ -371,10 +372,12 @@ void resetUsage(Usage_t *u)
   u->objsCopied = 0;
   u->objsScanned = 0;
   u->pagesTouched = 0 ;
+  u->rootsProcessed = 0;
   u->globalsProcessed = 0;
   u->stackSlotsProcessed = 0;
   u->workDone = 0;
-  u->limitWorkDone = 0;
+  u->checkWork = 0;
+  u->maxWork = 0;
   u->counter = usageCount;
 }
 
@@ -386,14 +389,15 @@ long updateUsage(Usage_t *u)
 			u->objsCopied * objCopyWeight + 
 			u->objsScanned * objScanWeight +
 			u->pagesTouched * pageWeight +
+			u->rootsProcessed * rootWeight +
 			u->globalsProcessed * globalWeight +
 			u->stackSlotsProcessed * stackSlotWeight);
   return u->workDone;
 }
 
-long updateWorkDone(Proc_t *proc)
+void updateWorkDone(Proc_t *proc)
 {
-  return updateUsage(&proc->segUsage);
+  updateUsage(&proc->segUsage);
 }
 
 long bytesCopied(Usage_t *u)
@@ -403,6 +407,7 @@ long bytesCopied(Usage_t *u)
 
 static void attributeUsage(Usage_t *from, Usage_t *to)
 {
+  to->numWrites += from->numWrites;
   to->bytesAllocated += from->bytesAllocated;
   to->bytesReplicated += from->bytesReplicated;
   to->fieldsCopied += from->fieldsCopied;
@@ -411,6 +416,7 @@ static void attributeUsage(Usage_t *from, Usage_t *to)
   to->objsCopied += from->objsCopied;
   to->objsScanned += from->objsScanned;
   to->pagesTouched += from->pagesTouched;
+  to->rootsProcessed += from->rootsProcessed;
   to->globalsProcessed += from->globalsProcessed;
   to->stackSlotsProcessed += from->stackSlotsProcessed;
   resetUsage(from);
@@ -434,7 +440,6 @@ void fillThread(Thread_t *th, int id)
   th->saveregs[THREADPTR] = (long) th;
   th->saveregs[ALLOCLIMIT] = 0;
   th->stack = NULL;
-  th->snapshot = NULL;
   th->thunk = NULL;
 }
 
@@ -527,6 +532,7 @@ void thread_init(void)
     proc->firstHistory = proc->lastHistory = 0;
     resetUsage(&proc->segUsage);
     resetUsage(&proc->cycleUsage);
+    reset_statistic(&proc->numWritesStatistic);
     reset_statistic(&proc->bytesAllocatedStatistic);
     reset_statistic(&proc->bytesReplicatedStatistic);
     reset_statistic(&proc->bytesCopiedStatistic);
@@ -555,7 +561,6 @@ void thread_init(void)
     proc->numCopied = proc->numShared = proc->numContention = 0;
     proc->segmentNumber = 0;
     proc->segmentType = 0;
-    proc->numWrite = 0;
     proc->numRoot = 0;
     proc->numLocative = 0;
     proc->lastHashKey = 0;
@@ -564,6 +569,7 @@ void thread_init(void)
     proc->tab = (char *) malloc(i * tabSize + 1);
     memset(proc->tab, ' ', i * tabSize);
     proc->tab[i * tabSize] = (char) 0;
+    proc->delayMsg[0] = 0;
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -588,6 +594,7 @@ static char* state2string(ProcessorState_t procState)
   }
 }
 
+extern int workAhead;
 
 void captureSummary(Proc_t *proc, double diff, Summary_t *s) 
 {
@@ -595,14 +602,18 @@ void captureSummary(Proc_t *proc, double diff, Summary_t *s)
   s->segment = proc->segmentNumber;
   s->state = proc->state;
   s->type = proc->segmentType;
-  s->util = proc->utilizationQuotient1.stat[0].last;
+  s->util1 = proc->utilizationQuotient1.stat[0].count ? proc->utilizationQuotient1.stat[0].last : 1.0;
+  s->util2 = proc->utilizationQuotient1.stat[2].count ? proc->utilizationQuotient1.stat[2].last : 1.0;
+  s->util3 = proc->utilizationQuotient2.stat[5].count ? proc->utilizationQuotient2.stat[5].last : 1.0;
   switch (proc->state) {
   case Scheduler:
   case Idle: 
-    s->data = 0;
+    s->data1 = 0;
+    s->data2 = 0;
     break;
   case Mutator:
-    s->data = proc->segUsage.bytesAllocated;
+    s->data1 = proc->segUsage.bytesAllocated;
+    s->data2 = proc->segUsage.numWrites;
     break;
   case GC:
   case GCStack:
@@ -614,8 +625,10 @@ void captureSummary(Proc_t *proc, double diff, Summary_t *s)
       int work = proc->segUsage.workDone;
       if (proc->segUsage.workDone >= proc->lastSegWorkDone)
 	work = proc->segUsage.workDone - proc->lastSegWorkDone;
-      proc->lastSegWorkDone = proc->segUsage.workDone;
-      s->data = work;
+      proc->lastSegWorkDone = 
+      s->data1 = proc->segUsage.workDone;
+      s->data2 = workAhead;
+      s->data3 = proc->segUsage.stackSlotsProcessed;
       break;
     }
   }
@@ -623,44 +636,99 @@ void captureSummary(Proc_t *proc, double diff, Summary_t *s)
 
 
 /* If howMany is zero, then show all history */
-void showHistory(Proc_t *proc, int howMany)
+void showHistory(Proc_t *proc, int howMany, char *file)
 {
+  double mutTime = 0.0, gcTime = 0.0, skipTime = 0.0, minUtil = 1.0;
+  int on = 0, skip = 0;
+  int gc = 0;
   int cur = howMany ? proc->lastHistory - howMany : proc->firstHistory;
+  int maxCount = (sizeof(proc->history) / sizeof(Summary_t));
+  FILE *f = stdout;
+
+  if (file != NULL) {
+    f = fopen(file,"w");
+    if (f == NULL) {
+      printf("Could not open history file %s.  errno = %d\n", file, errno);
+      return;
+    }
+  }
+
   if (cur < 0)
     cur += arraysize(proc->history);
+
   while (cur != proc->lastHistory) {
     Summary_t *s = &proc->history[cur];
-    printf("%6d: %5.2f ms  %12s       util = %.3f",
-	   s->segment, s->time,  state2string(s->state), s->util);
-    switch (s->state) {
-      case Scheduler:
-      case Idle: 
-        break;
-      case Mutator:
-        printf("  alloc = %d   allrate = %.1f", s->data, (s->data / 1000.0) / s->time); break;
-      case GC:
-      case GCStack:
-      case GCGlobal:
-      case GCWrite: 
-      case GCReplicate:
-      case GCWork:
-      case GCIdle: 
-	printf("  work = %5d   eff = %.1f", s->data, (s->data / 1000.0) / s->time); break;
+    Summary_t *s2 = &proc->history[((cur+1) == maxCount) ? 0 : cur+1];
+    int suppress;
+    double utilCutoff = 0.8;
+
+    if (s->type & FlipOn) {
+      on = 1;
+      mutTime = gcTime = 0.0;
     }
-    if (s->type & FlipOn)
-      printf("  FlipOn");
-    if (s->type & FlipTransition)
-      printf("  FlipTransition");
-    if (s->type & FlipOff)
-      printf("  FlipOff");
-    printf("\n");
-    
+    suppress = (on == 0) && (s->util1 >= utilCutoff) && (s2->util1 >= utilCutoff);
+    if (suppress) {
+      skip++;
+      skipTime += s->time;
+    }
+    else {
+      if (skip > 0) {
+	fprintf(f,"%3d %6d: %5.2f ms  %12s       utils >= %.3f       Merged\n",
+		gc, s->segment, skipTime,  "Composite", utilCutoff);
+      }
+      skip = 0;
+      skipTime = 0.0;
+      fprintf(f,"%3d %6d: %5.2f ms  %12s       utils = %.3f  %.3f  %.3f",
+	     gc, s->segment, s->time,  state2string(s->state), s->util1, s->util2, s->util3);
+    }
+    minUtil = Min(minUtil, s->util1);
+    switch (s->state) {
+    case Mutator:
+      mutTime += s->time;
+      if (!suppress)
+	fprintf(f,"  alloc = %5d   writes = %4d rate = %4.1f", s->data1, s->data2, (s->data1 / 1000.0) / s->time); break;
+    case Scheduler:
+    case Idle: 
+      gcTime += s->time;
+      break;
+    case GC:
+    case GCStack:
+    case GCGlobal:
+    case GCWrite: 
+    case GCReplicate:
+    case GCWork:
+    case GCIdle: 
+      gcTime += s->time;
+      if (!suppress) 
+	fprintf(f,"  work  = %5d   eff  = %4.1f    slots = %4d   workAhead = %d", 
+		s->data1, (s->data1 / 1000.0) / s->time, s->data3, s->data2); break;
+    }
+    if (!suppress) {
+      if (s->type & FlipOn) 
+	fprintf(f,"  FlipOn");
+      if (s->type & FlipTransition)
+	fprintf(f,"  FlipTransition");
+      if (s->type & FlipOff) 
+	fprintf(f,"  FlipOff");
+      fprintf(f,"\n");
+    }
+    if (s->type & FlipOff) {
+      if (howMany == 0)
+	fprintf(f,"********** GC cycle:  mut = %5.1f   gc = %5.1f       avg util = %.3f     min util = %.3f\n",
+	       mutTime, gcTime, mutTime / (mutTime + gcTime), minUtil);
+      on = 0;
+      mutTime = gcTime = 0.0;
+      minUtil = 1.0;
+      gc++;
+    }
     cur++;
     if (cur >= arraysize(proc->history))
       cur = 0;
   }
-}
 
+  if (f != stdout)
+    fclose(f);
+}
 
 void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubstate)
 {
@@ -682,7 +750,11 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
   else
     start_timer(&proc->currentTimer);
 
-  segWork = updateWorkDone(proc);  /* Grab this before attributeUsage */
+  if (proc->delayMsg[0] != 0)
+    printf("%s\n", proc->delayMsg);
+  proc->delayMsg[0] = 0;
+
+  segWork = updateGetWorkDone(proc);  /* Grab this before attributeUsage */
 
   /* Accumulate info across segments since mutator segment */
   if (proc->state != Mutator && proc->nonMutatorCount >= 0) {
@@ -746,13 +818,15 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
   }
 
   /* A mutator is considered to have access unless a GC is active not triggered by an Idle state */
-  hasAccess = (proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle ||
-	       proc->nonMutatorCount == -1);
-  add_windowQuotient(&proc->utilizationQuotient1, diff, hasAccess);
-  add_windowQuotient(&proc->utilizationQuotient2, diff, hasAccess);
+  if (accountingLevel >= 1) {
+    hasAccess = (proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle ||
+		 proc->nonMutatorCount == -1);
+    add_windowQuotient(&proc->utilizationQuotient1, diff, hasAccess);
+    add_windowQuotient(&proc->utilizationQuotient2, diff, hasAccess);
+  }
 
   /* ---------------- Record History (skip short non-mutator segments) --------------- */
-  if (diff >= 0.01 || proc->state == Mutator) {
+  if (accountingLevel >= 1 && diff >= 0.01 || proc->state == Mutator) {
     captureSummary(proc, diff, &proc->history[proc->lastHistory]);
     proc->lastHistory++;
     if (proc->lastHistory >= arraysize(proc->history))
@@ -765,14 +839,15 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
   }
 
   /* -------------- Report History -------------------- */
-  if (((warnThreshold && pauseWarningThreshold > 0.0) ||   
+  if (accountingLevel >= 1 &&
+      ((warnThreshold && pauseWarningThreshold > 0.0) ||   
        (warnUtil > 0.0 && proc->utilizationQuotient1.stat[0].count && proc->utilizationQuotient1.stat[0].last < warnUtil))) {  
       int exceedThreshold = proc->nonMutatorTime > pauseWarningThreshold;
       int lowUtil = proc->utilizationQuotient1.stat[0].count && proc->utilizationQuotient1.stat[0].last < warnUtil;
       int diag = timeDiag && proc->nonMutatorTime > 0.2;
       if (exceedThreshold || lowUtil) 
 	printf("Proc %d: Total time = %.2f ms.  Work = %d    Util = %.3f    %s %s\n",
-	       proc->procid, proc->nonMutatorTime, updateWorkDone(proc),
+	       proc->procid, proc->nonMutatorTime, updateGetWorkDone(proc),
 	       proc->utilizationQuotient1.stat[0].last, 
 	       exceedThreshold ? "  --> Exceeded Threshold <--  " : "",
 	       lowUtil ? "  --> Low Utilization <--  " : "");
@@ -783,10 +858,10 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
 	       proc->segUsage.fieldsCopied, proc->segUsage.fieldsScanned, proc->segUsage.ptrFieldsScanned, 
 	       proc->segUsage.globalsProcessed, proc->segUsage.stackSlotsProcessed, 
 	       proc->segUsage.pagesTouched, proc->segUsage.bytesReplicated,
-	       proc->nonMutatorTime, updateWorkDone(proc));
+	       proc->nonMutatorTime, updateGetWorkDone(proc));
       }
       if (exceedThreshold || lowUtil) 
-	showHistory(proc, 40);
+	showHistory(proc, 40, NULL);
   }
 
 
@@ -799,6 +874,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
     /* First do statistics dependent on whether GC is major or minor */
     attributeUsage(&proc->segUsage, &proc->cycleUsage);
     if (flipOff || newState == Done) {
+      add_statistic(&proc->numWritesStatistic, proc->cycleUsage.numWrites);
       add_statistic(&proc->bytesAllocatedStatistic, proc->cycleUsage.bytesAllocated);
       add_statistic(&proc->bytesReplicatedStatistic, proc->cycleUsage.bytesReplicated);
       add_statistic(&proc->bytesCopiedStatistic, bytesCopied(&proc->cycleUsage));
@@ -807,8 +883,6 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
     }
 
     /* Attribute time since mutator last run and reset */
-    if (flipOff) 
-      add_statistic(&heapSizeStatistic, Heap_GetSize(fromSpace) / 1024);
     if (flipOn && flipOff)
       add_histogram(&proc->gcFlipBothHistogram, proc->nonMutatorTime);
     else if (flipOff) 
@@ -1141,7 +1215,7 @@ void thread_go(ptr_t thunk)
 #ifdef solaris
   printf("Using processors ");
   for (i=0; i<NumProc; i++) 
-    printf(" %d ", Procs[i].processor);
+    printf(" %d", Procs[i].processor);
   printf(".\n");
 #endif
 
@@ -1253,6 +1327,11 @@ void schedulerRest(Proc_t *proc)
 double nonMutatorTime(Proc_t *proc)
 {
   return proc->nonMutatorTime + lap_timer(&proc->currentTimer);
+}
+
+double segmentTime(Proc_t *proc)
+{
+  return lap_timer(&proc->currentTimer);
 }
 
 ptr_t registerThunk(ptr_t mlString)

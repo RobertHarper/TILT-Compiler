@@ -39,6 +39,7 @@ int warnThreshold = 0;
 int doCopyCopySync = 1;
 int noSharing = 0, noWorkTrack = 0;
 int relaxed = 0;
+int addOldStackletOnUnderflow = 0;
 
 int cacheSize = 4, fetchSize = 4, cacheSize2 = 0; /* in pages */
 
@@ -92,8 +93,9 @@ int backLocFetchSize = 100;
 double objCopyWeight = 2.5;      /* Corresponds to tag */
 double objScanWeight = 1.5;
 double fieldCopyWeight = 1.0;    /* Corresponds to fields - Each field is copied or scanend but not both. */
-double fieldScanWeight = 2.0;
-double ptrFieldScanWeight = 4.0;
+double fieldScanWeight = 3.0;
+double ptrFieldScanWeight = 3.0;
+double rootWeight = 6.0;
 double globalWeight = 6.0;
 double stackSlotWeight = 10.0;
 double pageWeight = 100.0;
@@ -109,7 +111,7 @@ int grayAsReplica = 0;
    Conservative: Use Off -> Commit protocol. */
 int doAgressive = 1; 
 int doMinorAgressive = 0; 
-int doStableEfficiency = 0;
+double targetUtil = 1.0;
 
 double CollectionRate = 2.0;   /* Ratio of coll rate to alloc rate */
 
@@ -131,6 +133,8 @@ double computeReserve(double rate, int phases)
 
 int expandedToReduced(int size, double rate, int phases)
 {
+  if (phases == 0) 
+    return size;
   size = RoundUp(size, minOnRequest);
   size = (int) size * (1.0 - computeReserve(rate, phases));
   size = size - (2 * NumProc) * minOnRequest;
@@ -140,6 +144,8 @@ int expandedToReduced(int size, double rate, int phases)
 
 int reducedToExpanded(int size, double rate, int phases)
 {
+  if (phases == 0) 
+    return size;
   size = RoundUp(size, minOnRequest);
   size = size + (2 * NumProc) * minOnRequest;
   size = (int) size / (1.0 - computeReserve(rate, phases));
@@ -153,16 +159,17 @@ long ComputeHeapSize(long live, double curRatio, double rate, int phases)
   double rawWhere = (live - (1024 * MinRatioSize)) / (1024.0 * (MaxRatioSize - MinRatioSize));
   double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
   double newratio = MinRatio + where * (MaxRatio - MinRatio);
-  long maxReducedSize = expandedToReduced(MaxHeapByte, rate, phases);
-  long minReducedSize = expandedToReduced(MinHeapByte, rate, phases);
-  long newExpandedSize = RoundUp(live / newratio, 1024);
-  long newReducedSize = expandedToReduced(newExpandedSize, rate, phases);
+  long newReducedSize = RoundUp(live / newratio, 1024);
+  long newExpandedSize = reducedToExpanded(newExpandedSize, rate, phases);
+  /* maxReducedSize and minReducedSize are not reduced if relaxed is true or if phases is already zero */
+  long maxReducedSize = expandedToReduced(MaxHeapByte, rate, relaxed ? 0 : phases);
+  long minReducedSize = expandedToReduced(MinHeapByte, rate, relaxed ? 0 : phases);
 
-  if (live > MaxHeapByte) {
-    fprintf(stderr,"GC error: Amount of live data (%d) exceeds maxiumum heap size (%d)\n", live, MaxHeapByte);
+  if (live > maxReducedSize) {
+    fprintf(stderr,"GC error: Amount of live data (%d) exceeds maxiumum heap size (%d)\n", live, maxReducedSize);
     assert(0);
   }
-  if (newReducedSize > maxReducedSize) {
+  if (newExpandedSize > MaxHeapByte) {
     double constrainedRatio = ((double)live) / maxReducedSize;
     if (collectDiag >= 1 || constrainedRatio > 0.95)
       printf("GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is downwardly constrained to %d kb.\n",
@@ -172,29 +179,27 @@ long ComputeHeapSize(long live, double curRatio, double rate, int phases)
     else if (constrainedRatio > 0.90)
       printf("GC warning: New liveness ratio is dangerously high %lf.\n", constrainedRatio);
     newReducedSize = maxReducedSize;
-    newExpandedSize = reducedToExpanded(newReducedSize, rate, phases);
-    if (newExpandedSize > MaxHeapByte) {
-      printf("ERROR: live/1024 = %d    maxReducedSize = %d    newReducedSize = %d    newExpandedSize = %d\n",
-	     live / 1024, maxReducedSize, newReducedSize, newExpandedSize);
-      assert(0);
-    }
+    newExpandedSize = MaxHeapByte;
   }
-  if (newReducedSize < minReducedSize) {
+  if (newExpandedSize < MinHeapByte) {
     if (collectDiag >= 1)
       printf("GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is upwardly constrained to %d kb.\n",
-	     live / 1024, newReducedSize / 1024, maxReducedSize / 1024);
+	     live / 1024, newReducedSize / 1024, minReducedSize / 1024);
     newReducedSize = minReducedSize;
-    newExpandedSize = reducedToExpanded(newReducedSize, rate, phases);
+    newExpandedSize = MinHeapByte;
   }
+  assert(newExpandedSize >= MinHeapByte);
   assert(newExpandedSize <= MaxHeapByte);
   assert(newReducedSize >= live);
   return newReducedSize;
 }
 
-double HeapAdjust(int request, int unused, int withhold, double rate, int phases, Heap_t **froms, Heap_t *to)
+void HeapAdjust(int request, int unused, int withhold, double rate, int phases, Heap_t **froms, Heap_t *to)
 {
   long copied = 0, occupied = -unused, live = 0, newSize = 0;
   double liveRatio = 0.0;
+
+  add_statistic(&heapSizeStatistic, Heap_GetUsed(fromSpace) / 1024);
 
   assert(request >= 0);
   while (*froms != NULL) {
@@ -208,6 +213,7 @@ double HeapAdjust(int request, int unused, int withhold, double rate, int phases
   live = copied + request;
   assert(live >= withhold);
   liveRatio = (double) (live - withhold) / (double) (occupied - withhold);
+  add_statistic(&majorSurvivalStatistic, liveRatio);
   newSize = ComputeHeapSize(live, liveRatio, rate, phases);
   Heap_Resize(to, newSize, 0);
   if (newSize - copied < request) {
@@ -221,24 +227,23 @@ double HeapAdjust(int request, int unused, int withhold, double rate, int phases
     printf("req = %3d    live = %7d    withhold = %7d    oldHeap = %8d(%.3lf)   ->   newHeap = %8d(%.3lf)\n", 
 	   request, live, withhold, occupied, liveRatio, newSize, ((double)live)/newSize);
   }
-  return liveRatio;
 }
 
-double HeapAdjust1(int request, int unused, int withhold, double rate, int phases, Heap_t *from1, Heap_t *to)
+void HeapAdjust1(int request, int unused, int withhold, double rate, int phases, Heap_t *from1, Heap_t *to)
 {
   Heap_t *froms[2];
   froms[0] = from1;
   froms[1] = NULL;
-  return HeapAdjust(request, unused, withhold, rate, phases, froms, to);
+  HeapAdjust(request, unused, withhold, rate, phases, froms, to);
 }
 
-double HeapAdjust2(int request, int unused, int withhold,  double reserve, int phases, Heap_t *from1, Heap_t *from2, Heap_t *to)
+void HeapAdjust2(int request, int unused, int withhold,  double reserve, int phases, Heap_t *from1, Heap_t *from2, Heap_t *to)
 {
   Heap_t *froms[3];
   froms[0] = from1;
   froms[1] = from2;
   froms[2] = NULL;
-  return HeapAdjust(request, unused, withhold, reserve, phases, froms, to);
+  HeapAdjust(request, unused, withhold, reserve, phases, froms, to);
 }
 
 void GCInit_Help(int defaultMinHeap, int defaultMaxHeap, 
@@ -252,8 +257,14 @@ void GCInit_Help(int defaultMinHeap, int defaultMaxHeap,
   init_double(&MaxRatio, defaultMaxRatio);
   init_int(&MinRatioSize, defaultMinRatioSize);
   init_int(&MaxRatioSize, defaultMaxRatioSize);
+  /*
   fromSpace = Heap_Alloc(MinHeapByte, MaxHeapByte);
   toSpace = Heap_Alloc(MinHeapByte, MaxHeapByte);  
+  */
+  fromSpace = Heap_Alloc(MinHeapByte, 1024 * defaultMaxHeap);
+  toSpace = Heap_Alloc(MinHeapByte, 1024 * defaultMaxHeap);
+  Heap_Resize(fromSpace, (MinHeapByte + MaxHeapByte) / 2, 1);
+  Heap_Resize(toSpace, (MinHeapByte + MaxHeapByte) / 2, 1);
 }
 
 void GCInit(void)
@@ -266,11 +277,6 @@ void GCInit(void)
   init_int(&copyChunkSize, 256);
   minOffRequest = RoundUp(minOffRequest, pagesize);
   minOnRequest = RoundUp(minOnRequest, pagesize);
-  /* After minOnRequest is initialized, we can use the function reducedToExpanded */
-  if (relaxed) {
-    MinHeapByte = reducedToExpanded(MinHeapByte, CollectionRate, doAgressive ? 2 : 1);
-    MaxHeapByte = reducedToExpanded(MaxHeapByte, CollectionRate, doAgressive ? 2 : 1);
-  }
 
   reset_statistic(&minorSurvivalStatistic);
   reset_statistic(&heapSizeStatistic);
@@ -672,6 +678,13 @@ void GCFromMutator(Thread_t *curThread)
   mem_t sysAllocStart = proc->allocStart;
   mem_t sysAllocLimit = proc->allocLimit;
 
+  /* Put registers in stacklet */
+  int i;
+  Stacklet_t *stacklet = CurrentStacklet(curThread->stack);
+  mem_t primaryRegs = (mem_t) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+  for (i=0; i<32; i++) 
+    primaryRegs[i] = curThread->saveregs[i];
+
   /* Check that we are running on own stack and allocation pointers consistent */
   if (paranoid)
     assert(proc == (getProc())); /* getProc is slow */
@@ -680,10 +693,6 @@ void GCFromMutator(Thread_t *curThread)
   assert((limit == sysAllocLimit) || (limit == StopHeapLimit));
   assert(alloc <= sysAllocLimit);
 
-  /* Write skip tag to indicate the end of region and then release job */
-  PadHeapArea(alloc, sysAllocLimit);
-  proc->segUsage.bytesAllocated += (sizeof(val_t) * (alloc - sysAllocStart));
-
   /* ReleaseJob(proc) */
   UpdateJob(proc); /* Update processor's info, GCRelease thread, but don't unmap */
   procChangeState(proc, Scheduler, 1003);
@@ -691,11 +700,19 @@ void GCFromMutator(Thread_t *curThread)
   assert(0);
 }
 
+#if defined(solaris)
+int calleeSaveMask = 0;
+#elif defined(solaris)
+int calleeSaveMask = 0;
+#endif
+
 /* maxOffset is non-zero if the caller passed arguments on the stack */
 void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 {
+  int i;
   mem_t sp = (mem_t) curThread->saveregs[SP];
   mem_t returnToCaller = (mem_t) curThread->saveregs[ASMTMP2];
+  mem_t primaryRegs;
 #ifdef solaris
   mem_t returnToCallee = (mem_t) curThread->saveregs[LINK];
 #else
@@ -706,7 +723,18 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 
   oldStacklet = EstablishStacklet(stackChain, sp); /* saves sp already */
   oldStacklet->retadd = returnToCaller;
-
+  primaryRegs = (mem_t) &oldStacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+  for (i=0; i<32; i++) {
+    primaryRegs[i] = curThread->saveregs[i];
+    if ((1<<i) & calleeSaveMask)
+      curThread->saveregs[i] = NULL;
+  }
+  if (addOldStackletOnUnderflow && GCStatus != GCOff && oldStacklet->state == Inconsistent) {
+    extern Stacklet_t *Stacklets;
+    /*    printf("GC %d: Adding stacklet %d\n", NumGC, oldStacklet - Stacklets); */
+    oldStacklet->state = Pending;
+    SetPush(&curThread->proc->work.stacklets, (ptr_t) oldStacklet);
+  }
   assert(maxOffset == 0);  /* Not handling overflow arguments yet */
   newStacklet = NewStacklet(stackChain);
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
@@ -723,12 +751,20 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 
 void PopStackletFromMutator(Thread_t *curThread)
 {
+  int i;
   mem_t sp = (mem_t) curThread->saveregs[SP];
   Stacklet_t *newStacklet = NULL;
+  mem_t primaryRegs;
 
   EstablishStacklet(curThread->stack, sp);
   PopStacklet(curThread->stack);
   newStacklet = CurrentStacklet(curThread->stack);
+  /* Even though we saved all registers, we only restore the callee-save ones */
+  primaryRegs = (mem_t) &newStacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+  for (i=0; i<32; i++)
+    if ((1<<i) & calleeSaveMask)
+      curThread->saveregs[i] = primaryRegs[i];
+
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
 #ifdef solaris
   curThread->saveregs[LINK] = (val_t) newStacklet->retadd; /* Not really necessary */

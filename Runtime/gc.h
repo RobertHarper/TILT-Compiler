@@ -19,6 +19,8 @@ extern int primaryArrayOffset, replicaArrayOffset;       /* Used by generational
 extern double pauseWarningThreshold;
 extern int warnThreshold;
 extern double warnUtil;
+extern int addOldStackletOnUnderflow;
+extern int accountingLevel;
 
 /* States of the collector */
 typedef enum GCStatus__t { GCOff, GCPendingAgressive, GCAgressive, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
@@ -155,7 +157,7 @@ extern int backObjFetchSize;             /* Number of back objects to fetch from
 extern int backLocFetchSize;             /* Number of back locations to fetch from global pool */
 extern int doCopyCopySync;               
 extern int doAgressive, doMinorAgressive;
-extern int doStableEfficiency;
+extern double useLastUtil, targetUtil;
 extern int localWorkSize;
 extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    An array of more than arraySegmentSize bytes is considered large and
@@ -172,6 +174,7 @@ extern double fieldCopyWeight;
 extern double fieldScanWeight;
 extern double ptrFieldScanWeight;
 extern double pageWeight;
+extern double rootWeight;
 extern double globalWeight;
 extern double stackSlotWeight;
 
@@ -179,8 +182,8 @@ extern double stackSlotWeight;
    The amount "withhold" is subtracted from both spaces for computation of liveness ratio.
    The fraction "reserve" is reserved for concurrent collector.
 */
-double HeapAdjust1(int request, int unused, int withhold,  double rate, int phases, Heap_t *from1, Heap_t *to);
-double HeapAdjust2(int request, int unused, int withhold,  double rate, int phases,  Heap_t *from1, Heap_t *from2, Heap_t *to);
+void HeapAdjust1(int request, int unused, int withhold,  double rate, int phases, Heap_t *from1, Heap_t *to);
+void HeapAdjust2(int request, int unused, int withhold,  double rate, int phases,  Heap_t *from1, Heap_t *from2, Heap_t *to);
 int expandedToReduced(int size, double rate, int phases);
 int reducedToExpanded(int size, double rate, int phases);
 

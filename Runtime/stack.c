@@ -344,13 +344,14 @@ bot_sp points to the top of this frame.  Thus, when we are
 done, bot_sp will point to the bottom of the last processed frame.  
 
 */
+
 static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 				       int stackletOffset,
 				       volatile unsigned long *saveregs)
 {
   int i, j, k;
   mem_t cur_sp = stacklet->baseTop + stackletOffset / sizeof(val_t);
-  unsigned int regstate = stacklet->topRegstate;
+  unsigned int regstate = 0;  /* Initial regstate is empty since callee-save registers are empty */
   Set_t *callinfoStack = stacklet->callinfoStack;
 
   while (!SetIsEmpty(callinfoStack)) {
@@ -417,7 +418,7 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
     {
       unsigned int tempRegstate = cursor->yesBits | (cursor->calleeMask & regstate);
       unsigned int specialBits = cursor->specialBits;
-      if (specialBits != 0)
+      if (specialBits != 0) {
 	for (i=0; i<8; i++) {
 	  if (((specialBits >> (4*i)) & 0xf) == 0)
 	    continue;
@@ -429,10 +430,10 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 	      tempRegstate |= 1 << pos;
 	  }
 	}
+      }
       regstate = tempRegstate;
     }
   }
-  stacklet->bottomRegstate = regstate;
   return regstate;
 }
 
@@ -486,6 +487,8 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack = th->stack;
   ptr_t thunk = th->thunk;
 
+  assert(primaryStackletOffset == 0);
+
   procChangeState(proc, GCStack, 500);
   if (collectDiag >= 2)
     printf("Proc %d: GC %d: thread_root_scan on thread %d with thunk %d\n", proc->procid, NumGC, th->tid, thunk);
@@ -517,18 +520,16 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames;
   TotalStackSize += numWords * sizeof(val_t);
 
-  assert(stack->stacklets[0]->topRegstate == 0);
   for (i=0; i<stack->cursor; i++) {
     Stacklet_t *stacklet = stack->stacklets[i];
-    unsigned int nextRegstate = downtrace_stacklet(proc, stacklet, primaryStackletOffset, saveregs);
-    if (i+1 < stack->cursor)
-      stack->stacklets[i+1]->topRegstate = nextRegstate;
+    unsigned int bottomRegstate = downtrace_stacklet(proc, stacklet, primaryStackletOffset, saveregs);
+    addRegRoots(proc, (unsigned long *) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32], bottomRegstate | (1 << EXNPTR));  
+    if (i + 1 == stack->cursor)
+      addRegRoots(proc, (unsigned long *)(th->saveregs), bottomRegstate | (1 << EXNPTR));
   }
-  regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
-  addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
 }
 
-int initial_root_scan(Proc_t *proc, Thread_t *th)
+void initial_root_scan(Proc_t *proc, Thread_t *th)
 {
   int i, numFrames = 0, numWords = 0;
   StackChain_t *stack = th->stack;
@@ -547,94 +548,52 @@ int initial_root_scan(Proc_t *proc, Thread_t *th)
   }
 
   if (thunk != NULL) 
-    return 0;   /* Thunk not yet started and so no more roots */
+    return;   /* Thunk not yet started and so no more roots */
 
   assert(stack->cursor > 0);
-  assert(th->snapshot == NULL);
-  th->snapshot = StackChain_Copy(th,stack);          /* New stack chain */
-  for (i=0; i<stack->cursor; i++) 
-    th->snapshot->stacklets[i]->state = Pending;  /* Snapshot copying delayed */
-  for (i=0; i<32; i++)
-    th->snapshotRegs[i] = th->saveregs[i];  
-
-  if (th->snapshot->cursor <= 0) {
-    extern StackChain_t *StackChains;
-    extern Thread_t *Threads;
-    int i;
-      printf("BAD Thread %d %d   stack %d   snapshot %d   stack->cursor = %d   snapshot->cursor = %d   snapshot->thread = %d\n\n",
-	     th->tid, th->id, 
-	     th->stack - &(StackChains[0]), th->snapshot - &(StackChains[0]),
-	     th->stack->cursor, th->snapshot->cursor, 
-	     ((Thread_t *)th->snapshot->thread)->id);
-    for (i=0; i<NumThread; i++) {
-      Thread_t *th = &Threads[i];
-      printf("Thread %4d %4d   ", th->tid, th->id);
-      if (th->stack == NULL)
-	printf("stack = NULL                                   ");
-      else
-	printf("stack %4d   cursor %d  thread %d           ", th->stack - &(StackChains[0]), th->stack->cursor, 
-	       ((Thread_t *)th->stack->thread)->id);
-      if (th->snapshot == NULL)
-	printf("snapshot = NULL                \n");
-      else
-	printf("snapshot %4d cursor %d  thread %d\n", th->snapshot - &(StackChains[0]), th->snapshot->cursor, 
-	       ((Thread_t *)th->snapshot->thread)->id);
-    }
+  for (i=0; i<stack->cursor; i++) {
+    Stacklet_t *stacklet = th->stack->stacklets[i];
+    stacklet->state = Pending;  /* stacklets must be copied before resumption */
+    SetPush(&proc->work.stacklets, (ptr_t) stacklet);
   }
-  assert(th->snapshot->cursor > 0);
-
-  return 1;
 }
 
 /* This will fill up rootLocs */
-int work_root_scan(Proc_t *proc, Thread_t *th, int workToDo)
+int work_root_scan(Proc_t *proc, Stacklet_t *stacklet)
 {
   int i, done, uptraceDone = 1;
-  StackChain_t *snapshot = th->snapshot;
+  mem_t replicaRegs = (mem_t) &stacklet->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
+
+  int numWords, numFrames;
+  unsigned int bottomRegstate;
 
   procChangeState(proc, GCStack, 520);
   assert(!useGenStack);
-  assert(snapshot->cursor>0);
 
-  while (snapshot->cursor>0) {
-    Stacklet_t *stacklet = snapshot->stacklets[0];  /* Get the oldest stacklet */
-    int numWords, numFrames;
-    unsigned int nextRegstate;
-    /* Copy stacklet first */
-    if (updateWorkDone(proc) >= workToDo) 
-      break;
-    if (stacklet->state != ActiveCopied && stacklet->state != ActiveCopied) {
-      int copied = Stacklet_Copy(stacklet);  /* copy stacklet from primary to replica area */
-      if (copied)
-	proc->segUsage.stackSlotsProcessed += (stacklet->baseTop - stacklet->baseCursor) / 40;
-    }
-    /* Scan from bottom to get frame sizes and descriptors */
-    if (updateWorkDone(proc) >= workToDo) 
-      break;
-    if (SetIsEmpty(stacklet->callinfoStack)) {
-      uptrace_stacklet(proc, stacklet, replicaStackletOffset);
-      numFrames += SetLength(stacklet->callinfoStack);
-      numWords += stacklet->baseTop - stacklet->baseCursor;
-      TotalStackDepth += numFrames;
-      TotalStackSize += numWords * sizeof(val_t);
-      /*  MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames; */
-    }
-    /* Trace from top to bottom for roots */
-    if (updateWorkDone(proc) >= workToDo) 
-      break;
-    nextRegstate = downtrace_stacklet(proc, stacklet, replicaStackletOffset, th->snapshotRegs);
-    /* Propagate regstate to next stacklet if it exists */
-    if (snapshot->cursor > 1)
-      snapshot->stacklets[1]->topRegstate = nextRegstate;
-    /* Otherwise, bottom stacklet includes registers */
-    else {
-      int regMask = nextRegstate | (1 << EXNPTR);
-      assert(snapshot->cursor == 1);
-      addRegRoots(proc, (unsigned long *)(th->snapshotRegs), regMask);
-    }
-    DequeueStacklet(snapshot);   /* Remove oldest stacklet */
+  if (stacklet->state != ActiveCopied && stacklet->state != ActiveCopied) {
+    int copied = Stacklet_Copy(stacklet);  /* copy stacklet from primary to replica area */
+    if (copied)
+      proc->segUsage.stackSlotsProcessed += (stacklet->baseTop - stacklet->baseCursor) / 40;
   }
-  return (snapshot->cursor == 0);
+  if (updateReachCheckWork(proc))
+    return 0;
+
+  /* Scan from bottom to get frame sizes and descriptors */
+  if (SetIsEmpty(stacklet->callinfoStack)) {
+    uptrace_stacklet(proc, stacklet, replicaStackletOffset);
+    numFrames += SetLength(stacklet->callinfoStack);
+    numWords += stacklet->baseTop - stacklet->baseCursor;
+    TotalStackDepth += numFrames;
+    TotalStackSize += numWords * sizeof(val_t);
+    /*  MaxStackDepth = (numFrames < MaxStackDepth) ? MaxStackDepth : numFrames; */
+  }
+  if (updateReachCheckWork(proc))
+    return 0;
+
+  /* Trace from top to bottom for roots */
+  bottomRegstate = downtrace_stacklet(proc, stacklet, replicaStackletOffset, replicaRegs);
+  addRegRoots(proc, (unsigned long *) replicaRegs, bottomRegstate | (1 << EXNPTR));
+  return 1;
 }
 
 int stkSize = 0;
@@ -645,6 +604,8 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   int i, regMask;
   StackChain_t *stack= th->stack;
   int firstActive = stack->cursor;
+  /* double t1, t2; */
+  /*  int upcount = 0, downcount = 0; */
 
   procChangeState(proc, GCStack, 530);
 
@@ -653,11 +614,6 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
   if (th->used == 0)  /* Thread is actually dead now.  Was live only due to pinning */
     return;
-
-  if (th->snapshot != NULL) {
-    StackChain_Dealloc(th->snapshot);
-    th->snapshot = NULL;
-  }
 
   installThreadRoot(th, (ploc_t) &th->thunk);   /* Thread may not have existed at the beginning of the GC and
 						   so initial_root_scan was not called on it */
@@ -673,6 +629,7 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   if (th->thunk != NULL) 
     return;   /* Thunk not yet started and so no more roots */
 
+  /*  resetPerfMon(proc); */
   for (i=0; i<stack->cursor; i++) {
     Stacklet_t *stacklet = stack->stacklets[i];
     if (stacklet->state != InactiveCopied) { /* Replica is not up-to-date if stacklet active */
@@ -680,16 +637,32 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
 	firstActive = i;
       stacklet->state = Pending;
       Stacklet_Copy(stacklet);
+      /* upcount++;
+	 lapPerfMon(proc, 0); */
       uptrace_stacklet(proc, stacklet, replicaStackletOffset);
     }
   }
   assert(firstActive <= stack->cursor);  /* Could equal if collection finished in first segment */
-
+  /*  t1 = segmentTime(proc); 
+  lapPerfMon(proc,0);
+  */
   for (i=firstActive; i<stack->cursor; i++) {
-    downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
+    volatile mem_t replicaRegs = (mem_t) &stack->stacklets[i]->bottomBaseRegs[replicaStackletOffset == 0 ? 0 : 32];
+    int bottomRegstate = downtrace_stacklet(proc, stack->stacklets[i], replicaStackletOffset, th->saveregs);
+    addRegRoots(proc, (unsigned long *) replicaRegs, bottomRegstate | (1 << EXNPTR));
+    if (i + 1 == stack->cursor)
+      addRegRoots(proc, (unsigned long *)(th->saveregs),  bottomRegstate | (1 << EXNPTR));
+    /* downcount++;*/
   }
-  regMask = (CurrentStacklet(stack)->bottomRegstate) | (1 << EXNPTR);
-  addRegRoots(proc, (unsigned long *)(th->saveregs), regMask);
+  /*
+    lapPerfMon(proc,0);
+    t2 = segmentTime(proc) - t1;
+  if (t1 + t2 > 1.0) {
+    printf("complete_root_scan: %.2f ms    up = %d (%.2f)   down = %d (%.2f)   hit/miss = %d %d   try = %d  %d %d  spec = %d  work = %d\n",
+	   t1 + t2, upcount, t1, downcount, t2, hit,miss, try1, try2, try3, special, updateWorkDone(proc));
+    showPerfMon(proc, 0);
+  }
+  */
 
 }
 
@@ -709,10 +682,6 @@ void discard_root_scan(Proc_t *proc, Thread_t *th)
     return;
 
   uninstallThreadRoot(th, (ploc_t) &th->thunk);
-  if (th->snapshot != NULL) {
-    StackChain_Dealloc(th->snapshot);
-    th->snapshot = NULL;
-  }
 }
 
 /* ----------------------------------------------------- 

@@ -196,8 +196,8 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
     res->mapped = 1;
   }
   res->baseCursor = res->baseTop;
-  res->topRegstate = 0;
-  res->bottomRegstate = 0;
+  for (i=0; i<32; i++)
+    res->bottomBaseRegs[i] = 0;
   SetReset(res->callinfoStack);
   return res;
 }
@@ -257,11 +257,14 @@ int Stacklet_Copy(Stacklet_t *stacklet)
 
   state = CompareAndSwap((int*) &stacklet->state, Pending, Copying);
   if (state == Pending) {
+    int i;
     int activeSize = (stacklet->baseTop - stacklet->baseCursor) * sizeof(val_t);
     mem_t primaryBottom = stacklet->baseBottom + (primaryStackletOffset / sizeof(val_t));
     mem_t replicaBottom = stacklet->baseBottom + (replicaStackletOffset / sizeof(val_t));
     mem_t primaryCursor = stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
     mem_t replicaCursor = stacklet->baseCursor + (replicaStackletOffset / sizeof(val_t));
+    mem_t primaryRegs = (mem_t) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 0 : 32];
+    mem_t replicaRegs = (mem_t) &stacklet->bottomBaseRegs[primaryStackletOffset == 0 ? 32 : 0];
     assert(stacklet->count > 0);
     assert(stacklet->baseExtendedBottom <= stacklet->baseCursor);
     assert(stacklet->baseCursor <= stacklet->baseTop);
@@ -269,13 +272,15 @@ int Stacklet_Copy(Stacklet_t *stacklet)
     stacklet->replicaCursor = stacklet->baseCursor;
     stacklet->replicaRetadd = stacklet->retadd;
     memcpy(replicaCursor, primaryCursor, activeSize);
+    for (i=0; i<32; i++) 
+      replicaRegs[i] = primaryRegs[i];
     stacklet->state = InactiveCopied;
     return 1;
   }
   while (stacklet->state == Copying)
     ;
-  assert(stacklet->state != Inconsistent &&
-	 stacklet->state != Pending);
+  assert(stacklet->state != Inconsistent);
+  assert(stacklet->state != Pending);
   return 0;
 }
 
@@ -319,7 +324,7 @@ void PopStacklet(StackChain_t *stackChain)
   Stacklet_Dealloc(stackChain->stacklets[active]);
   stackChain->stacklets[active] = NULL;
   stackChain->cursor--;
-  assert(stackChain->cursor > 0);
+  assert(stackChain->cursor >= 0);
 }
 
 /* Remove oldest stacklet from stack chain */
@@ -342,11 +347,9 @@ void showAllThreads(void)
   for (i=0; i<NumThread; i++) {
     Thread_t *th = &Threads[i];
     StackChain_t *stack = th->stack;
-    StackChain_t *snap = th->snapshot;
     int stackNum = (stack == NULL) ? -1 : (stack - &StackChains[0]);
-    int snapNum = (snap == NULL) ? -1 : (snap - &StackChains[0]);
-    printf("%3d: stat = %d    tid = %4d  stack = %3d   snap = %3d\n", 
-	   i, th->status, th->tid, stackNum, snapNum);
+    printf("%3d: stat = %d    tid = %4d  stack = %3d\n", 
+	   i, th->status, th->tid, stackNum);
   }
   printf("\n\nStackChains:\n");
   for (i=0; i<NumStackChain; i++) {

@@ -65,7 +65,6 @@ void GCCollect_Gen(Proc_t *proc)
 {
   int totalRequest = 0, totalUnused = 0;
   Thread_t *curThread = NULL;
-  double liveRatio = 0.0;
   ploc_t rootLoc, globalLoc;
   ptr_t PRObj;
 
@@ -97,7 +96,6 @@ void GCCollect_Gen(Proc_t *proc)
 
   proc->segmentType |= (FlipOn | FlipOff | ((GCType == Minor) ? MinorWork : MajorWork));
 
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   if (GCType == Minor) {            
     minor_global_scan(proc);
     process_writelist(proc, nursery, fromSpace); /* Get globals and backpointers */
@@ -111,6 +109,7 @@ void GCCollect_Gen(Proc_t *proc)
 
   /* Perform just a minor GC */
   if (GCType == Minor) {
+    double liveRatio = 0.0;
     /* --- forward the roots and the writelist; then Cheney-scan until no gray objects */
     mem_t scanStart = fromSpace->cursor;   /* Record before it gets changed */
     SetCopyRange(&proc->copyRange, proc, fromSpace, NULL);
@@ -167,8 +166,7 @@ void GCCollect_Gen(Proc_t *proc)
     paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
 
     /* Resize the tenured toSpace. Discard fromSpace. Flip Spaces. */
-    liveRatio = HeapAdjust2(totalRequest, totalUnused, 0, CollectionRate, 0, nursery, fromSpace, toSpace);
-    add_statistic(&majorSurvivalStatistic, liveRatio);
+    HeapAdjust2(totalRequest, totalUnused, 0, CollectionRate, 0, nursery, fromSpace, toSpace);
     Heap_Resize(fromSpace,0,1);
     typed_swap(Heap_t *, fromSpace, toSpace);
   }

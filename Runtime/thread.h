@@ -39,6 +39,8 @@
 #define _thread_h
 #ifndef _asm_
 
+#include <values.h>
+#include "general.h"
 #include "memobj.h"
 #include "stats.h"
 #include "queue.h"
@@ -113,6 +115,7 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
 /* Not volatile - not concurrently accessed */
 typedef struct Usage__t
 {
+  long numWrites;
   long bytesAllocated;
   long bytesReplicated;
   long fieldsCopied;
@@ -121,10 +124,12 @@ typedef struct Usage__t
   long objsCopied;
   long objsScanned;
   long pagesTouched;
+  long rootsProcessed;
   long globalsProcessed;
   long stackSlotsProcessed;
   long workDone;         /* Weighted average of bytesCopied, bytesScanned, and rootProcessed - not always up-to-date */
-  long limitWorkDone;    /* used by recentWorkDone; workDone (in the past) + localWorkSize */
+  long checkWork;        /* used by recentWorkDone; workDone (in the past) + localWorkSize */
+  long maxWork;          /* maximum work to do in this segment */
   long counter;          /* Cycles down from localWorksize to zero repeatedly.  When zero, workDone is updated. */
 } Usage_t;
 
@@ -167,8 +172,6 @@ typedef struct Thread__t
   volatile ploc_t             rootLocs[10];     /* Contains root locations (when non-NULL) from which the 
 						   corresponding rootVals obtained their values */
   StackChain_t                *stack;           /* Stack chain used by mutator */
-  StackChain_t                *snapshot;        /* Stack chain copied for concurrent collector */
-  volatile unsigned long      snapshotRegs[32]; /* Register set copied for concurrent collector */
   long                        tid;              /* Thread ID */
   long                        id;               /* Structure ID */
   volatile int                used;
@@ -223,8 +226,12 @@ typedef struct Summary__t {
   int    segment;  /* segment number */
   int    state;    /* primary state type */
   int    type;     /* additional segment type info */
-  int    data;     /* value of segUsage.workdone for GC and bytes allocaetd for Mutator */
-  double util;
+  int    data1;    /* value of segUsage.workdone for GC and bytes allocaetd for Mutator */
+  int    data2;    /* numWrites for Mutator */
+  int    data3;
+  double util1;
+  double util2;
+  double util3;
 } Summary_t;
 
 typedef struct Proc__t
@@ -270,7 +277,7 @@ typedef struct Proc__t
   int                lastSegWorkDone;
   int                firstHistory, lastHistory;   /* Index of first slot and first unused slot */
 
-
+  Statistic_t        numWritesStatistic;
   Statistic_t        bytesAllocatedStatistic;  /* just minor - won't this exclude large objects? XXXX */
   Statistic_t        bytesReplicatedStatistic;  /* only for concurrent collectors */
   Statistic_t        bytesCopiedStatistic;     /* both minor and major */
@@ -300,12 +307,12 @@ typedef struct Proc__t
   long               numCopied;        /* Number of objects copied */
   long               numShared;        /* Number of times an object is reached after it's already been forwarded */
   long               numContention;    /* Number of failed (simultaneous) attempts to copy an object */
-  long               numWrite;
   long               numRoot;
   long               numLocative;
 
   char               buffer[1024];    /* For use in posix.c */
   char               *tab;
+  char               delayMsg[1024];
 
   /* For Perf mon */
 #ifdef sparc
@@ -317,25 +324,53 @@ typedef struct Proc__t
 
 void procChangeState(Proc_t *, ProcessorState_t, int which);
 
-long updateWorkDone(Proc_t *proc);
 long bytesCopied(Usage_t *u);
 
 extern int usageCount;
+extern int localWorkSize;
 
-INLINE(getWorkDone)
-long getWorkDone(Proc_t *proc)
+void updateWorkDone(Proc_t *proc);     /* Updates workDone as a weighted average of other fields */
+
+INLINE(updateGetWorkDone)
+int updateGetWorkDone(Proc_t *proc)     /* Updates workDone as a weighted average of other fields */
 {
-  if (--proc->segUsage.counter == 0) {
-    proc->segUsage.counter = usageCount;
-    updateWorkDone(proc);
-  }
+  updateWorkDone(proc);
   return proc->segUsage.workDone;
 }
 
-extern int localWorkSize;
+INLINE(addMaxWork)
+void addMaxWork(Proc_t *proc, int additionalWork)
+{
+  if (additionalWork <= 0)
+    return;
+  proc->segUsage.maxWork += additionalWork;
+  if (proc->segUsage.maxWork < 0)    /* in case additionalWork is MAXINT */
+    proc->segUsage.maxWork = MAXINT;
+}
 
-INLINE(recentWorkDone)
-long recentWorkDone(Proc_t *proc)
+INLINE(reachMaxWork)                   /* Calls update and then check against maxWork */
+int  reachMaxWork(Proc_t *proc)
+{
+  updateWorkDone(proc);
+  proc->segUsage.checkWork = Min(proc->segUsage.maxWork, proc->segUsage.workDone + localWorkSize);
+  return proc->segUsage.workDone >= proc->segUsage.maxWork;
+}    
+
+INLINE(updateReachCheckWork)                 /* Calls update and check against check */
+int updateReachCheckWork(Proc_t *proc)
+{
+  int workDone;
+  updateWorkDone(proc);
+  workDone = proc->segUsage.workDone;
+  if (workDone > proc->segUsage.checkWork) {
+    proc->segUsage.checkWork = Min(proc->segUsage.maxWork, workDone + localWorkSize);
+    return 1;
+  }
+  return 0;
+}
+
+INLINE(reachCheckWork)                 /* Periodically calls update and check against check */
+int reachCheckWork(Proc_t *proc)
 {
   int workDone;
   if (--proc->segUsage.counter == 0) {
@@ -343,8 +378,8 @@ long recentWorkDone(Proc_t *proc)
     updateWorkDone(proc);
   }
   workDone = proc->segUsage.workDone;
-  if (workDone > proc->segUsage.limitWorkDone) {
-    proc->segUsage.limitWorkDone = workDone + localWorkSize;
+  if (workDone > proc->segUsage.checkWork) {
+    proc->segUsage.checkWork = Min(proc->segUsage.maxWork, workDone + localWorkSize);
     return 1;
   }
   return 0;
@@ -354,13 +389,14 @@ long recentWorkDone(Proc_t *proc)
 Thread_t *getThread(void);
 Proc_t *getProc(void);
 Proc_t *getNthProc(int);
-void showHistory(Proc_t *proc, int howMany);
+void showHistory(Proc_t *proc, int howMany, char *);  /* filename; NULL for stdout */
 
 extern pthread_mutex_t ScheduleLock;       /* locks (de)scheduling of sys threads */
 void ResetJob(void);                       /* For iterating over all jobs in work list */
 Thread_t *NextJob(void);
 void StopAllThreads(void);                 /* Change all user thread's limit to StopHeapLimit */
 double nonMutatorTime(Proc_t *);           /* Time of current GC segment */
+double segmentTime(Proc_t *);           /* Time of current GC segment */
 
 void thread_init(void);
 void thread_go(ptr_t thunk);

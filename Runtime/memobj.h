@@ -42,8 +42,9 @@ typedef volatile struct Stacklet__t
   /* These fields are for scanning the stack */
   mem_t replicaCursor;                 /* These 2 fields are recorded when the replica is copied from the primary */
   mem_t replicaRetadd;                 /*   so that the replica stacklet can be later scanned */
-  unsigned int topRegstate;            /* Register state (mask) at top frame */
-  unsigned int bottomRegstate;         /* Register state (mask) at bottom frame */
+  val_t  bottomBaseRegs[64];           /* Registers at the bottom frame;  the callee save ones are restored upon return
+					  There are 2 sets of 32 GP registers accesesed depending on if StackletPrimaryOffset is 0
+					*/
   Set_t  *callinfoStack;             /* Corresponds to stack frames of this stacklet */
   struct StackChain__t *parent;        /* Stack chain this stacklet belongs to */
 } Stacklet_t;

@@ -297,9 +297,7 @@ static void CollectorOn(Proc_t *proc)
   FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   assert(SetIsEmpty(&proc->work.roots));
   while ((threadIterator = NextJob()) != NULL) {
-    int started = initial_root_scan(proc,threadIterator);
-    if (started)
-      SetPush(&proc->work.stacklets, (ptr_t) threadIterator);
+    initial_root_scan(proc,threadIterator);
     if (threadIterator->requestInfo >= 0)  /* Allocation request */
       FetchAndAdd(&totalRequest, threadIterator->requestInfo);
   }
@@ -385,8 +383,7 @@ static void CollectorTransition(Proc_t *proc)
     discard_root_scan(proc,threadIterator);
     if (threadIterator->used == 0)
       continue; 
-    if (initial_root_scan(proc,threadIterator))
-      SetPush(&proc->work.stacklets, (ptr_t) threadIterator);
+    initial_root_scan(proc,threadIterator);
     if (threadIterator->requestInfo >= 0)  /* Allocation request */
       FetchAndAdd(&totalRequest, threadIterator->requestInfo);
   }
@@ -466,8 +463,8 @@ static void CollectorOff(Proc_t *proc)
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
-    double liveRatio = 0.0;
     if (GCType == Minor) {
+      double liveRatio = 0.0;
       int i, copied = 0;
       paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
       minor_global_promote(proc);
@@ -482,10 +479,9 @@ static void CollectorOff(Proc_t *proc)
       discardNextSharedStack(workStack); /* Discard nextBackObj/nextBackLocs on major GC */
       paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
       gc_large_endCollect();
-      liveRatio = HeapAdjust2(totalRequest, totalUnused, totalReplicated,  
-			      CollectionRate, doAgressive ? 2 : 1,
-			      nursery, fromSpace, toSpace);
-      add_statistic(&majorSurvivalStatistic, liveRatio);
+      HeapAdjust2(totalRequest, totalUnused, totalReplicated,  
+		  CollectionRate, doAgressive ? 2 : 1,
+		  nursery, fromSpace, toSpace);
       reducedTenuredSize = Heap_GetSize(toSpace);
       expandedTenuredSize = reducedToExpanded(reducedTenuredSize, CollectionRate, doAgressive ? 2 : 1);
       Heap_Resize(fromSpace, 0, 1);
@@ -521,22 +517,26 @@ static void CollectorOff(Proc_t *proc)
     printf("Proc %d: leaving CollectorOff\n", proc->procid);
 }
 
-static void do_work(Proc_t *proc, int workToDo)
+static void do_work(Proc_t *proc, int additionalWork)
 {
   int done = 0;
   Heap_t *srcRange = (GCType == Minor) ? nursery : fromSpace;
   
+  if (additionalWork <= 0)
+    return;
+  addMaxWork(proc, additionalWork);
   procChangeState(proc, GCWork, 612);
   proc->segmentType |= (GCType == Major) ? MajorWork : MinorWork;
 
   if (collectDiag >= 2)
     printf("GC %4d/%6d:  Entered do_work(%d)  updateWorkDone = %5d\n",
-	   NumGC, proc->segmentNumber, workToDo, updateWorkDone(proc));
+	   NumGC, proc->segmentNumber, additionalWork, updateGetWorkDone(proc));
 
-  while (updateWorkDone(proc) < workToDo) {
+  while (!reachMaxWork(proc)) {
     ploc_t rootLoc, globalLoc, backLoc;
     ptr_t backObj, largeObj, gray;
     int largeStart, largeEnd;
+    Stacklet_t *stacklet;
 
     /* Get shared work */
     popSharedStack(workStack, &proc->work);
@@ -546,24 +546,22 @@ static void do_work(Proc_t *proc, int workToDo)
       break;
 
     /* Do the thread stacklets - we can afford to call updateWorkDone often */
-    while (updateWorkDone(proc) < workToDo && 
-	   !SetIsEmpty(&proc->work.stacklets)) {
-      Thread_t *thread = (Thread_t *) SetPop(&proc->work.stacklets);
-      int complete = work_root_scan(proc, thread, workToDo);
-      if (!complete)
-	SetPush(&proc->work.stacklets, (ptr_t) thread);
+    while (!reachCheckWork(proc) &&
+	   ((stacklet = (Stacklet_t *) SetPop(&proc->work.stacklets)) != NULL)) {
+      if (!work_root_scan(proc, stacklet))
+	SetPush(&proc->work.stacklets, (ptr_t) stacklet);
     }
 
     /* Do the rootLocs */
     if (GCType == Minor) {
-      while (!recentWorkDone(proc) && 
+      while (!reachCheckWork(proc) &&
 	     ((rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL)) {
 	locAlloc1_copyCopySync_primarySet(proc,rootLoc,srcRange);
 	proc->segUsage.fieldsScanned++;
       }
     }
     else {
-      while (!recentWorkDone(proc) && 
+      while (!reachCheckWork(proc) && 
 	     ((rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL)) {
 	locAlloc1L_copyCopySync_primarySet(proc,rootLoc,srcRange,largeSpace);
 	proc->segUsage.fieldsScanned++;
@@ -573,11 +571,11 @@ static void do_work(Proc_t *proc, int workToDo)
     /* Do the backObjs and backLocs */
     if (GCType == Minor) {
       int occur;
-      while (updateWorkDone(proc) < workToDo && 
+      while (!updateReachCheckWork(proc) &&
 	     ((backObj = (ptr_t) SetPop(&proc->work.backObjs)) != NULL)) {
 	selfTransferScanObj_locAlloc1_copyCopySync_primarySet(proc,backObj,srcRange);
       }
-      while (!recentWorkDone(proc) && 
+      while (!reachCheckWork(proc) &&
 	     ((backLoc = (ploc_t) SetPop(&proc->work.backLocs)) != NULL)) {
 	ploc_t mirrorBackLoc = backLoc + ((primaryArrayOffset == 0) ? 1 : -1);
 	*mirrorBackLoc = *backLoc;
@@ -592,14 +590,14 @@ static void do_work(Proc_t *proc, int workToDo)
 
     /* Do the globalLocs */
     if (GCType == Minor) 
-      while (!recentWorkDone(proc) && 
+      while (!reachCheckWork(proc) && 
 	     ((globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL)) {
 	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	locAlloc1_copyCopySync_primarySet(proc,replicaLoc,srcRange);
 	proc->segUsage.globalsProcessed++;
       }
     else       
-      while (!recentWorkDone(proc) && 
+      while (!reachCheckWork(proc) &&
 	     ((globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL)) {
 	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
 	locAlloc1L_copyCopySync_primarySet(proc,replicaLoc,srcRange,largeSpace);
@@ -607,7 +605,7 @@ static void do_work(Proc_t *proc, int workToDo)
       }
 
     /* Do the large objects - don't need to optimize loop */
-    while (updateWorkDone(proc) < workToDo && 
+    while (!updateReachCheckWork(proc) &&
 	   (gray = SetPop3(&proc->work.segments,(ptr_t *)&largeStart,(ptr_t *)&largeEnd))) {
       if (GCType == Minor) {
 	int isMirrorPtrArray = (GET_TYPE(gray[-1]) == MIRROR_PTR_ARRAY_TYPE);
@@ -624,11 +622,11 @@ static void do_work(Proc_t *proc, int workToDo)
 
     /* Work on the gray objects */
     if (GCType == Minor)
-      while (!recentWorkDone(proc) &&
+      while (!reachCheckWork(proc) &&
 	     ((gray = SetPop(&proc->work.objs)) != NULL)) 
 	transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,srcRange);
     else
-      while (!recentWorkDone(proc) &&
+      while (!reachCheckWork(proc) &&
 	     ((gray = SetPop(&proc->work.objs)) != NULL))
 	transferScanObj_copyWriteSync_locAlloc1L_copyCopySync_primarySet(proc,gray,srcRange,largeSpace);
     /* Put work back on shared stack */
@@ -643,7 +641,7 @@ static void do_work(Proc_t *proc, int workToDo)
   assert(isLocalWorkEmpty(&proc->work));
   if (collectDiag >= 2)
     printf("GC %d Seg %d:  Completed do_work(%d)  segWork = %5d    sharedStack(%4d items %2d segs)     %d alloc  %d copied\n",
-	   NumGC, proc->segmentNumber, workToDo, getWorkDone(proc), 
+	   NumGC, proc->segmentNumber, additionalWork, updateGetWorkDone(proc), 
 	   SetLength(&workStack->work.objs), SetLength(&workStack->work.segments),
 	   proc->cycleUsage.bytesAllocated + proc->segUsage.bytesAllocated,
 	   bytesCopied(&proc->cycleUsage) + bytesCopied(&proc->segUsage));
@@ -663,10 +661,9 @@ void GCRelease_GenConc(Proc_t *proc)
                       (GCStatus == GCAgressive) || (GCStatus == GCPendingOn) : 0;
   int isGCOn = isGCAgressive || (GCStatus == GCOn) || (GCStatus == GCPendingOff);
   Heap_t *srcRange = (GCType == Minor) ? nursery : fromSpace;
-
-  /* Update statistics, reset cursors */
   int numWrites = (proc->writelistCursor - proc->writelistStart) / 3;
-  proc->numWrite += numWrites;
+
+  /* Reset cursors */
   proc->allocStart = proc->allocCursor;          
   proc->writelistCursor = proc->writelistStart;  
 
@@ -752,8 +749,6 @@ void GCRelease_GenConc(Proc_t *proc)
 	switch (GET_TYPE(tag)) {
           case PTR_ARRAY_TYPE:
           case MIRROR_PTR_ARRAY_TYPE:
-	    if (NumGC > 1155) 
-	      printf("Write:   graying  possPrevPtrVal = %d\n",possPrevPtrVal);
 	    alloc1_copyCopySync_primarySet(proc,possPrevPtrVal, srcRange);
 	    continue;
           case WORD_ARRAY_TYPE: 
@@ -955,7 +950,7 @@ void GC_GenConc(Proc_t *proc, Thread_t *th)
     case GCOn:
       do_work(proc, GCType == Minor ? minorWorkToDo : majorWorkToDo);
       if (multiPhase &&
-	  (updateWorkDone(proc) < (GCType == Minor ? minorWorkToDo : majorWorkToDo)) &&
+	  reachMaxWork(proc) &&
 	  GCStatus == GCPendingOff)
 	goto retry;
       if (GC_GenConcHelp(th,proc,roundOnSize)) 
@@ -994,11 +989,16 @@ void GCInit_GenConc(void)
     grayAsReplica = 1;
 
   GCInit_Help(2048, 128 * 1024, 0.2, 0.8, 512, 50 * 1024);   
-  expandedTenuredSize = Heap_GetSize(fromSpace);
-  reducedTenuredSize = expandedToReduced(expandedTenuredSize, CollectionRate, doAgressive ? 2 : 1);
-  Heap_Resize(fromSpace, reducedTenuredSize, 0);
-  Heap_Resize(toSpace, reducedTenuredSize, 0);
-
+  if (relaxed) {
+    reducedTenuredSize = Heap_GetSize(fromSpace);
+    expandedTenuredSize = reducedToExpanded(reducedTenuredSize, CollectionRate, doAgressive ? 2 : 1);
+  }
+  else {
+    expandedTenuredSize = Heap_GetSize(fromSpace);
+    reducedTenuredSize = expandedToReduced(expandedTenuredSize, CollectionRate, doAgressive ? 2 : 1);
+    Heap_Resize(fromSpace, reducedTenuredSize, 0);
+    Heap_Resize(toSpace, reducedTenuredSize, 0);
+  }
   init_int(&NurseryByte, (int)(nurseryFraction * cache_size));
   assert(MinHeapByte >= 1.2*NurseryByte);
   reducedNurserySize = NurseryByte;
@@ -1008,11 +1008,12 @@ void GCInit_GenConc(void)
   Heap_Resize(nursery, reducedNurserySize, 0);
 
   gc_large_init();
-  workStack = SharedStack_Alloc(1, 100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024, 2048, 256 * 1024);
+  workStack = SharedStack_Alloc(1, 100, 16 * 1024, 12 * 1024, 96 * 1024, 16 * 1024, 2048, 256 * 1024);
   barriers = createBarriers(NumProc, 14);
   arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
   mirrorArray = 1;
   pauseWarningThreshold = 10.0;
+  addOldStackletOnUnderflow = 1;
 }
 

@@ -147,10 +147,9 @@ static void GCCollect_Semi(Proc_t *proc)
   assert(SetIsEmpty(&proc->work.roots));
 
   paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
-  liveRatio = HeapAdjust1(totalRequested, totalUnused, 
-			  0, CollectionRate, 0,
-			  fromSpace, toSpace);
-  add_statistic(&majorSurvivalStatistic, liveRatio);
+  HeapAdjust1(totalRequested, totalUnused, 
+	      0, CollectionRate, 0,
+	      fromSpace, toSpace);
   Heap_Resize(fromSpace,0,1);
   typed_swap(Heap_t *, fromSpace, toSpace);
   NumGC++;
