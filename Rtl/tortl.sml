@@ -18,6 +18,7 @@ struct
 
 val do_constant_records = ref true
 val debug = ref false
+val debug_simp = ref false
 
    (* Module-level declarations *)
 
@@ -297,7 +298,7 @@ val debug = ref false
 		 in  (true,Prim_c(pc,map #2 clist'))
 		 end
 	   | Mu_c _ => (true,c)
-	   | _ => let val _ = if (!debug)
+	   | _ => let val _ = if (!debug_simp)
 				  then (print "simplify type calling the type reducer on type:\n";
 					Ppnil.pp_con c;
 					print "\nwith env = \n";
@@ -306,7 +307,7 @@ val debug = ref false
 			      else ()
 (*		      val c' = NilStatic.con_reduce(env,c) *)
 		      val (c',_) = NilStatic.con_valid(env,c) 
-		      val _ = if (!debug)
+		      val _ = if (!debug_simp)
 				  then (print "simplify type: reducer on type returned:\n";
 					Ppnil.pp_con c';
 					print "\n")
@@ -342,8 +343,7 @@ val debug = ref false
 		   (Sum_c _) | (Record_c _) | (Vararg_c _)),_) => TRACE
        in case con of
 	   Prim_c(pcon,clist) => SOME(primcon2rep(pcon,clist))
-	 (* since roll/unroll are no-ops *)
-	 | Mu_c (is_recur,vc_seq,v) => con2rep_raw state (NilUtil.muExpand(is_recur,vc_seq,v))
+	 | Mu_c (is_recur,vc_seq,v) => NONE
 	 | AllArrow_c (Open,_,_,_,_,_) => error "no open lambdas allowed by this stage"
 	 | AllArrow_c(Closure,_,_,_,_,_) => SOME TRACE
 	 | AllArrow_c(Code,_,_,_,_,_) => SOME NOTRACE_CODE
@@ -396,26 +396,32 @@ val debug = ref false
 		     | (NONE,NONE) => error "no info on this convar"
 	       end
 	 | (Let_c _) => NONE
+	 | (App_c _) => NONE
 	 | (Crecord_c _) => error "Crecord_c not a type"
 	 | (Closure_c _) => error "Closure_c not a type"
-	 | (App_c _) => NONE
 	 | (Annotate_c (_,c)) => con2rep_raw state c
        end
 
-   fun con2rep state con : rep = 
-       let fun dynamic() = 
-	   let val (_,c) = (simplify_type state con)
-	   in  (case con2rep_raw state c of
-		    SOME rep => rep
-		  | NONE => (print "con2rep failed on ";
-			     Ppnil.pp_con c; print "\n";
-			     error "con2rep failed"))
-	   end
-       in (case (con2rep_raw state con) of
-	       SOME (COMPUTE _) => dynamic()
-	     | SOME rep => rep
-	     | NONE => dynamic())
+   fun con2rep state con : rep =
+       let fun simp c = (case c of
+	             (* since roll/unroll are no-ops *)
+                      	   Mu_c (is_recur,vc_seq,v) => 
+			     reduce(NilUtil.muExpand(is_recur,vc_seq,v))
+			 | _ => c)
+	   and reduce c = (case c of
+			     (Proj_c _) => simp(#2(simplify_type state c))
+			   | (Let_c _) => simp(#2(simplify_type state c))
+			   | (App_c _) => simp(#2(simplify_type state c))
+			   | _ => simp c)
+	   val c = reduce con
+       in case con2rep_raw state c of
+	   SOME rep => rep
+	 | NONE => (print "con2rep failed\n";
+		    Ppnil.pp_con con; print "\n";
+		    Ppnil.pp_con c; print "\n";
+		    error "con2rep failed")
        end
+
 
    fun varloc2rep varloc =
        (case varloc of
@@ -509,13 +515,15 @@ val debug = ref false
        fun promote_maps is_top ({local_state} : state) : state = 
 	   let (* we filter out top-level variable that are in registers;
 		these should not be needed by any functions *)
-val _ = if !debug then print "*** start promote map ***\n" else ()
+val _ = if !debug then print ("*** start promote map : " ^ 
+			      (Bool.toString is_top) ^ "***\n") else ()
 
 	       fun vfolder(v,rep,m) = 
-		   let val should_promote = (case rep of
-						 (SOME(VGLOBAL _),_,_) => true
-					       | (_, SOME(VCODE _), _) => true
-					       | _ => false)
+		   let val should_promote = 
+		       (case rep of
+			    (SOME(VGLOBAL _),_,_) => true
+			  | (_, SOME(VCODE _), _) => true
+			  | _ => (VarSet.member(!nonglobals,v)))
 		   in  if should_promote 
 			   then VarMap.insert(m,v,rep)
 		       else m
@@ -539,9 +547,9 @@ val _ = if !debug then print "*** start promote map ***\n" else ()
 					NilContext.print_context env;
 					print "\n\n")
 *)
-val _ = if !debug then print "*** before context add kind map ***\n" else ()
+(* val _ = if !debug then print "*** before context add kind map ***\n" else () *)
 			       val ge = NilContext.context_addkindmap(ge,env)
-val _ = if !debug then print "*** after context add kind map ***\n" else ()
+(* val _ = if !debug then print "*** after context add kind map ***\n" else () *)
 			   in {env=ge,varmap=gv,convarmap=gc}
 			   end
 		   else !global_state
@@ -2041,7 +2049,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 
 
   and xnilprim(state : state, nilprim,clist,elist,context) : loc_or_val * con = 
-      let fun error' s = (print "nilprimexpression was:\n";
+      let fun error' s = (print "NIL primexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
 			  print "\n";
 			  error s)
@@ -2099,32 +2107,42 @@ val _ = if !debug then print "*** end promote map ***\n"
 						 in  (coercei "" r, c)
 						 end
 					| _ => error' "bad project_sum_record: base")
-		   val field' = 
+		   val summands = 
 		       (case econ of
-			    Prim_c(Sum_c _, summands) =>
-				(case (List.nth (summands, index)) of
-				     c as (Prim_c(Record_c labels, _)) =>
-					 let fun loop n [] = 
-					         (print "bad project_sum_record: missing field ";
-						  Ppnil.pp_label field; print "\n in type = \n";
-						  Ppnil.pp_con c; print "\n";
-						  error "bad project_sum_record: bad econ field not found")
-					       | loop n (a::rest) = if (Name.eq_label(a,field))
-									then n else loop (n+1) rest
-					 in  loop 0 labels
-					 end
-				   | _ => (print  "bad project_sum_record: bad econ not a record:\n";
-					   Ppnil.pp_con econ;
-					   error' "bad project_sum_record: bad econ not a record"))
-			  | _ => (print  "bad project_sum_record: bad econ not a record:\n";
-				     Ppnil.pp_con econ;
-				     error' "bad project_sum_record: bad econ not a record"))
+			    Prim_c(Sum_c _, summands) => summands
+			  | _ => (case #2(simplify_type state econ) of
+				      Prim_c(Sum_c _, summands) => summands
+				    | c => (print  "bad project_sum_record: bad econ not a record:\n";
+					    Ppnil.pp_con c;
+					    error' "bad project_sum_record: bad econ not a record")))
+		   val fieldcon = List.nth(summands,index)
+		   val field' = 
+		        let fun loop n [] = 
+				     (print "bad project_sum_record: missing field ";
+				      Ppnil.pp_label field; print "\n in type = \n";
+				      Ppnil.pp_con fieldcon; print "\n";
+				      error "bad project_sum_record: bad econ field not found")
+			      | loop n (a::rest) = if (Name.eq_label(a,field))
+						       then n else loop (n+1) rest
+			in  (case fieldcon of
+				 (Prim_c(Record_c labels, _)) => loop 0 labels
+			       | _ => (case #2(simplify_type state fieldcon) of
+					   (Prim_c(Record_c labels, _)) => loop 0 labels
+					 | c => (error "bad project_sum_record: not record\n";
+						 Ppnil.pp_con c;
+						 error "bad project_sum_record: not record\n")))
+			end
 		   val single_carrier = (length clist) = 1
 		   val record_con = (List.nth(clist,index)
 				     handle _ => error' "bad project_sum_record: record_con")
-		   val field_con = (case record_con of
-					Prim_c(Record_c _,cons) => List.nth(cons,field')
-				      | _ => error' "bad project_sum_record: field_con")
+		   val field_con = 
+		       (case record_con of
+			    Prim_c(Record_c _,cons) => List.nth(cons,field')
+			  | _ => (case #2(simplify_type state record_con) of
+				      Prim_c(Record_c _,cons) => List.nth(cons,field')
+				    | c => (print "bad project_sum_record: field_con";
+					    Ppnil.pp_con c;
+					    error' "bad project_sum_record: field_con")))
 		   val desti = alloc_regi (con2rep state field_con)
 		   val subscript = if single_carrier then field' else field' + 1
 		   val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
