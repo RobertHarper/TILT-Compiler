@@ -1,4 +1,4 @@
-(*$import Int List Word8 Word8Vector BinIO *)
+(*$import Int List Word8 Word8Vector BinIO OS *)
 
 val file = "testBinIO.txt"
 
