@@ -41,8 +41,9 @@ struct
 		    end
   fun plain [] = Hbox[]
     | plain (c::rest) = Hbox((String (extend c))::(map String rest))
-  fun plainlist children = Hbox children
-
+  fun separate _ [] = []
+    | separate _ [a] = [a]
+    | separate sep (a::b) = a :: sep :: (separate sep b)
 
 
   (* ------------ various to-string functions --------------------------- *)
@@ -125,7 +126,7 @@ struct
       HOVbox [String (label2s l),String (traceflag t)]
 
   fun pp_List' pr l = 
-     let fun f (h::t) = String "," :: pr h :: f t
+     let fun f (h::t) = String "," :: Break :: pr h :: f t
            | f nil = [String "]"]
      in case l
         of nil => String "[]"
@@ -145,7 +146,7 @@ struct
 
   fun pp_RegPair' (intregs,fregs) =
       HOVbox [String "(",pp_RegiList' intregs,
-	      String ",",pp_RegfList' fregs,String ")"]
+	      String "; ",pp_RegfList' fregs,String ")"]
 
   fun pp_Save'(SAVE p) = pp_RegPair' p
 
@@ -247,8 +248,8 @@ struct
 			  local_label2s dest ::
 			  (if !predicted then [pred2s pred]
 			  else nil))
-              | JMP (r,labels) => plainlist [String ("jmp "^regi2s r),
-					     pp_List' (String o local_label2s) labels]
+              | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
+					pp_List' (String o local_label2s) labels]
               | CALL {func,return : regi option,args=(ia,fa),
 			results=(ir,fr),tailcall,save} =>
 		   HOVbox0 1 15 1
@@ -349,34 +350,42 @@ struct
 	     print (label2s (LOCAL_LABEL name)); print "\n")
       else ();
 	   Vbox0 0 1 [String(label2s (LOCAL_LABEL name)),
-		      String "(",pp_RegPair' args,String ")",
 		      Break,
-		      Hbox[String "     ",
-			   HOVbox[String "{ret = ",String (regi2s return),String " , known = ",
-				  String (bool2s known),
-				  if !elideSave then String ""
-			     else (HOVbox [String " save = ",
-					   pp_Save' save]),
-				  HOVbox [String ", results = ",pp_RegPair' results],
-				  String "}"]], 
+		      Hbox[String "     ", HOVbox[String "args = ",pp_RegPair' args]],
+		      Break,
+		      Hbox[String "     ret = ",String (regi2s return)],
+		      Break,
+		      Hbox[String "     known = ",String (bool2s known)],
+		      Break,
+		      Hbox[String "     ", HOVbox[String "results = ",pp_RegPair' results]],
+		      Break,
+		      if !elideSave 
+			  then String ""
+		      else (HOVbox [String " save = ",
+				    pp_Save' save,
+				    String ","]),
 		      Break,
 		      String "{", Break,
 		      pp_code' code,
 		      String "}", Break])
 	   
   fun pp_Module' (MODULE{procs,data,main,mutable_objects,mutable_variables}) =
-      Vbox0 0 1 [Break,
+      Vbox0 0 1 ([Break,
 		 String ("main = "^label2s (LOCAL_LABEL main)),
-		 Break, Break,
-		 plainlist (map pp_Proc' procs),
-		 pp_DataArray'  data,
-		 Break,
-		 String "mutable objects = ",
-		 pp_List' (String o label2s) mutable_objects,
-		 Break,
-		 String "mutable vars = ",
-		 pp_List' pp_LabelPair' mutable_variables,
-		 Break]
+		 Break, Break]
+		 @ 
+		 (separate Break (map pp_Proc' procs))
+		 @
+		 [String "data objects = ",
+		  Break,
+		  pp_DataArray'  data,
+		  Break,
+		  HOVbox[String "mutable objects = ",
+			 pp_List' (String o label2s) mutable_objects],
+		  Break,
+		  HOVbox[String "mutable vars = ",
+			 pp_List' pp_LabelPair' mutable_variables],
+		  Break])
 
   fun pp_rep_path _ = String "rep_path_not_done"
 

@@ -594,30 +594,26 @@ fun trap() =
 			      REG' r => getlowival(r)
 			    | LABEL' l => i2w(label_to_address (!label_table) (l)))
 	  fun regular_call () =
-	      let val _ = print "----------trying regular_call\n"
+	      let 
 		  val call_label = 
 		  case func of
 		      REG' r => address_to_label (!label_table) (w2i call_add)
 		    | LABEL' l => l
-		  val _ = print "----------trying regular_call 0\n"
 		  val callee as PROC{args=formal,return,save=SAVE save_callee,...} = 
 		      find_proc(call_label)
-		  val _ = print "----------trying regular_call 1\n"
 		  val save_caller = save_caller_without
 		  val newblob = blob
 
-		  val _ = print "----------trying regular_call 2\n"
 		  val save_caller' = R.register_save(save_caller)
 		  val save_callee' = R.register_save save_callee
-		  val _ = print "----------trying regular_call 3\n"
+
 		  val _ = R.register_parmove args formal
 		  val ret_add = lpack(wzero,i2w(!pc + 4))
 		  val _ = setireg(return, ret_add)
-		  val _ = print "----------trying regular_call 4\n"
+
 		  val _ = push_stack(newblob,callee,save_caller',save_callee')
-		  val _ = print "----------trying regular_call 5\n"
 		  val _ = pc_abs_change call_add
-		  val _ = print "------done regular_call\n"
+
 	      in ()
 	      end
 	in if (W.ugte(call_add,0w1000000))
