@@ -151,3 +151,4 @@
 0155 [open]	Type sharing fails on corner case.
 0156 [closed]	datatypes and scope
 0157 [open]	Memory leak: continuous slow heap growth
+0158 [open]	pattern compiler rejecting valid code
