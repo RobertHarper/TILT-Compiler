@@ -933,6 +933,14 @@ functor EmitRtlMLRISC(
 	  ExternalConvention.call (mlWrapper live) (Procedure.frame()) operands
     fun callC operands =
 	  ExternalConvention.call noWrapper (Procedure.frame()) operands
+    fun callRaw live procedure =
+	  let
+	    val (before_, after) = mlWrapper live procedure
+	  in
+	    before_@
+	    [MLTree.CODE[MLTree.CALL(procedure, [], [])]]@
+	    after
+	  end
   end
 
   (* -- translation functions ---------------------------------------------- *)
@@ -1311,14 +1319,12 @@ functor EmitRtlMLRISC(
 		    MLTree.ADD(MLTree.REG IntegerConvention.heapPointer, size),
 		    MLTree.REG IntegerConvention.heapLimit,
 		    MLTree.LR)
-	    val gc_raw =
-		  externalExp "gc_raw"
 	  in
 	    [MLTree.CODE[
 	       MLTree.BCC(MLTree.LEU, compare, skipLabel),
 	       MLTree.MV(IntegerConvention.heapLimit, size)
 	     ]]@
-	    call [] (gc_raw, [], [])@
+	    callRaw [] (externalExp "gc_raw")@ (* need liveness ??? *)
 	    [MLTree.DEFINELABEL skipLabel]
 	  end
 
@@ -1328,7 +1334,7 @@ functor EmitRtlMLRISC(
 	       MLTree.MV(IntegerConvention.temporary1, size),
 	       moveValue
 	     ]]@
-	    call [] (externalExp alloc_raw, [], [])@
+	    callRaw [] (externalExp alloc_raw)@ (* need liveness ??? *)
 	    [MLTree.CODE[
 	       MLTree.MV(dest, MLTree.REG IntegerConvention.temporary1)
 	     ]]
