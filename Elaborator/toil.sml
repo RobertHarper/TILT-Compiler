@@ -45,6 +45,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     val fresh_con = fn ctxt => ((!tyvar_counter)(); fresh_con ctxt)
     val fresh_tyvar = fn ctxt => ((!tyvar_counter)(); fresh_tyvar ctxt)
     val fresh_named_tyvar = fn arg => ((!tyvar_counter)(); fresh_named_tyvar arg)
+    fun mk_eq_con c = CON_ARROW([con_tuple[c,c]],
+				con_bool,false, oneshot_init PARTIAL)
 
     type tyvar = (context,con) Tyvar.tyvar
     type ocon = (context,con) Tyvar.ocon
@@ -61,14 +63,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	source position stack, error state
         -------------------------------------------------------------- *)
     datatype ErrorLevel = NoError | Warn | Error
+    type region = Ast.srcpos * Ast.srcpos
     local 
       val tyvar_table = ref([] : tyvar list)
-      val overload_table = ref ([] : ocon list)
-      val eq_table = ref ([] : (context * tyvar * exp Util.oneshot) list)
-      val eq_stack = ref ([] : (dec list * context * tyvar * exp Util.oneshot) list list)
+      val overload_table = ref ([] : (region * ocon) list)
+      val eq_table = ref ([] : (region * context * tyvar * exp Util.oneshot) list)
+      val eq_stack = ref ([] : (region * dec list * context * tyvar * exp Util.oneshot) list list)
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
       val error_level = ref NoError
-      val src_region = ref ([] : (Ast.srcpos * Ast.srcpos) list)
+      val src_region = ref ([] : region list)
       fun nofilepos (_ : SourceMap.charpos) = ("nofilepos",0,0)
       val filepos = ref nofilepos
       fun error_max (Error,_) = Error
@@ -91,7 +94,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 	fun push_region p = src_region := (p :: (!src_region))
 	fun pop_region () = src_region := (tl(!src_region))
-	fun peek_region () : string = let val (p1,p2) = (hd(!src_region))
+	fun peek_region () = (hd(!src_region))
+
+	fun peek_region_str () : string = let val (p1,p2) = (hd(!src_region))
 					  val fp = !filepos
 					  val (f1,r1,c1) = fp p1
 					  val (f2,r2,c2) = fp p2
@@ -99,18 +104,25 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^ 
 					  ((Int.toString r2) ^ "." ^ (Int.toString c2))
 				      end handle _ => "unknown"
+	fun error_region_string() = ("Error at " ^ (peek_region_str()) ^ ", ")
+	fun warn_region_string() = ("Warning at " ^ (peek_region_str()) ^ ", ")
 	fun error_region() = (error_level := error_max(!error_level,Error);
-			      print "Error at "; print (peek_region()); print ", ")
+			      print (error_region_string()))
 	fun warn_region() = (error_level := error_max(!error_level,Warn);
-			     print "Warning at "; print (peek_region()); print ", ")
-
-	    
+			      print (warn_region_string()))
+	fun spaces n = 
+	    let fun loop 0 = []
+		  | loop n = #" "::(loop (n-1))
+	    in String.implode(loop n)
+	    end
+	val tab = spaces 10
+	fun tab_region() = print tab
 
 	fun get_tyvar_table () = !tyvar_table
 	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
 
 	fun get_overload_table () = !overload_table
-	fun add_overload_entry ocon = (overload_table := ocon::(!overload_table))
+	fun add_overload_entry ocon = (overload_table := (peek_region(),ocon)::(!overload_table))
 
 	fun get_flex_table () = !flex_table
 	fun add_flex_entry (l,rc,fc,e) = flex_table := (l,rc,fc,e)::(!flex_table)
@@ -124,12 +136,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	       | (first::rest) => let val ctxt = (case (tyvar_getctxts tyvar) of
 						      [] => elab_error "tyvar must have some context"
 						    | a::_ => a)
-				      val first' = ([],ctxt,tyvar,expos)::first
-(*
-				      val _ = (print "add_eq_entry called with length first = ";
-					       print (Int.toString (length first));
-					       print "\n")
-*)
+				      val first' = (peek_region(),[],ctxt,tyvar,expos)::first
+				      val _ = debugdo (fn () => 
+						       (print "add_eq_entry called with length first = ";
+							print (Int.toString (length first));
+							print "\n"))
 				  in (eq_stack := first'::rest)
 				  end)
 	fun eq_table_push() = (debugdo (fn () => (print "EQ_PUSHING depth = "; 
@@ -142,11 +153,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					    print " with dec = ";
 					    pp_dec dec; print "\n"))
 		val stack = !eq_stack
-		fun help dec (extra_decs,context,tyvar,expos) = 
-		    (dec :: extra_decs, context, tyvar,expos)
+		fun help dec (reg, extra_decs,context,tyvar,expos) = 
+		    (reg, dec :: extra_decs, context, tyvar,expos)
 		val stack' = mapmap (help dec) stack
-		fun help2 (extra_decs,context,tyvar,expos) = 
-		    (foldr (fn (dec,ctxt) => add_context_dec(ctxt,SelfifyDec dec)) context extra_decs,
+		fun help2 (reg,extra_decs,context,tyvar,expos) = 
+		    (reg,foldr (fn (dec,ctxt) => add_context_dec(ctxt,SelfifyDec dec)) context extra_decs,
 		     tyvar,expos)
 	    in case stack' of
 		[] => elab_error "cannot pop: empty eq_stack"
@@ -173,10 +184,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 
      (* ----------------- overload_resolver ----------------------- *)
-    fun overload_help warn ocon =
+    fun overload_help warn (region,ocon) =
 	let val helpers = {hard = fn (c1,c2) => eq_con(empty_context,c1,c2),
 			   soft = fn (c1,c2) => soft_eq_con(empty_context,c1,c2)}
-	in (
+	    val _ = push_region region
+	val res =  (
 (*
 	    print "overload_help: internal type is: ";
 	    Ppil.pp_con (CON_TYVAR (ocon_deref ocon));
@@ -193,6 +205,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				    print "Warning: more than one constraint satisfied by overloaded type")
 			   else ();
 			       false))
+	    val _ = pop_region()
+	in res
 	end
 
      (* ----------------- Helper Functions ----------------------- *)
@@ -204,13 +218,18 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			| SOME {stamp,carried_type=NONE} => false
 			| SOME {stamp,carried_type=SOME _} => true)
 	   | (SOME {name,datatype_path,is_const,datatype_sig}) => not is_const)
-    fun parse_pats context pats = InfixParse.parse_pat(fixity context,is_non_const context, pats)
+    fun parse_pats context pats = 
+	(case InfixParse.parse_pat(fixity context,is_non_const context, pats) of
+	     SOME result => result
+	   | NONE => (error_region();
+		      print "cannot parse pattern\n";
+		      error "cannot parse pattern\n"))
     fun parse_pat context pat = (case parse_pats context [pat] of
 				     [pat] => pat
 				   | _ => error "parse_pat getting back more than 1 pat")
 
 
-
+    fun dummy_type(context,str) = fresh_named_con(context,str)
     fun dummy_exp (context,str) =
 	let val c = fresh_named_con(context,str)
 	    val e = RAISE(c,EXN_INJECT("elab_fail",NEW_STAMP con_unit,RECORD[]))
@@ -250,6 +269,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	 : (mod * signat) = sbnd_ctxt_list2modsig(map (fn (SOME(_,sbnd),ctxt) => (SOME sbnd,ctxt)
                                                         | (NONE,ctxt) => (NONE,ctxt)) boolsbnd_ctxt_list)
 
+     and add_context_sbnd_ctxts(context,sbnd_ce_list) : sbnd list * context = 
+	 add_context_boolsbnd_ctxts(context,map 
+				    (fn (NONE,ce) => (NONE,ce)
+				  | (SOME sbnd,ce) => (SOME(false,sbnd),ce)) sbnd_ce_list)
+
      and add_context_boolsbnd_ctxts 
 	 (context : context,
 	  boolsbnd_ctxt : ((bool * sbnd) option * context_entry) list) : sbnd list * context = 
@@ -259,8 +283,10 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		     [] => (rev sbnds,ctxt)
 		   | ((NONE,CONTEXT_SIGNAT(l,v,s))::rest) => 
 			 loop (sbnds,add_context_sig(ctxt,l,v,s)) rest
-		   | ((NONE,CONTEXT_SDEC _)::_) => elab_error "cannot have context_sdec without sbnd"
-		   | ((NONE,CONTEXT_INLINE _)::rest) => elab_error "cannot have context_inline without sbnd"
+		   | ((NONE,CONTEXT_SDEC (SDEC(l,dec)))::rest) => 
+			 loop (sbnds,add_context_sdec(ctxt,SDEC(l,SelfifyDec dec))) rest
+		   | ((NONE,ce as CONTEXT_INLINE _)::rest) => 
+			 loop (sbnds, add_context_entries(context, [ce])) rest
 		   | ((NONE,cf as (CONTEXT_FIXITY _))::rest) => 
 			 loop (sbnds,add_context_entries(ctxt,[cf])) rest
 		   | ((SOME (flag,sbnd as SBND(l,bnd)), CONTEXT_SDEC (sdec as SDEC(l',dec)))::rest) => 
@@ -291,48 +317,50 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
            outputs : a list of (optional) bindings and context-entries
      *)
      and packagedecs (xobj : context * 'a -> ((bool * sbnd) option * context_entry) list)
-	 context (objs : 'a list) : (sbnd option * context_entry) list = 
-	 let 
-	     fun loop context [] = []
-	       | loop context [obj] = xobj(context,obj)
-	       | loop context (obj::rest) =
-		 let 
-		     val boolsbnd_ctxt_list = xobj(context,obj)
-		     val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
-		     val boolsbnd_ctxt_restlist = loop context' rest
-		 in boolsbnd_ctxt_list @ boolsbnd_ctxt_restlist
-		 end
-	     val boolsbnd_ctxt_list = loop context objs
-	     fun maxmap_folder((NONE,_),map) = map
-	       | maxmap_folder((SOME(_,SBND(l,_)),_),map) = 
-		 (case Name.LabelMap.find(map,l) of
-		     SOME r => (r := 1 + (!r);
-				map)
-		   | NONE => Name.LabelMap.insert(map,l,ref 1))
-	     val maxmap = foldl maxmap_folder Name.LabelMap.empty boolsbnd_ctxt_list 
-	     fun uniquify [] = []
-	       | uniquify (boolsbnd_ctxt::rest) = 
-		 (case boolsbnd_ctxt of
-		      (NONE,ce) => (NONE,ce) :: (uniquify rest)
-		    | (SOME(_,sbnd as (SBND(l,bnd))),
-		       ce as (CONTEXT_SDEC(SDEC(_,dec)))) => 
-		          (case (Name.LabelMap.find(maxmap,l)) of
-			      NONE => elab_error "maxmap must have entry at this point"
-			    | SOME r =>
-				  (r := (!r) - 1;
-				   if (!r = 0)
-				       then (SOME sbnd, ce) :: (uniquify rest)
-				   else if (!r < 0)
-					    then elab_error "maxmap count inconsistency"
-					else (* rename case *)
-					    let val l' = fresh_internal_label "hidden"
-					    in (SOME (SBND(l',bnd)), 
-						CONTEXT_SDEC(SDEC(l',dec)))
-						:: (uniquify rest)
-					    end))
-		    | (SOME(_,sbnd), _) => elab_error "packagedec: got sbnd without CONTEXT_SDEC")
-	 in uniquify boolsbnd_ctxt_list 
-	 end
+         context (objs : 'a list) : (sbnd option * context_entry) list = 
+         let 
+             fun loop context [] = []
+               | loop context [obj] = xobj(context,obj)
+               | loop context (obj::rest) =
+                 let 
+                     val boolsbnd_ctxt_list = xobj(context,obj)
+                     val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
+                     val boolsbnd_ctxt_restlist = loop context' rest
+                 in boolsbnd_ctxt_list @ boolsbnd_ctxt_restlist
+                 end
+             val boolsbnd_ctxt_list = loop context objs
+             fun maxmap_folder((NONE,_),map) = map
+               | maxmap_folder((SOME(_,SBND(l,_)),_),map) = 
+                 (case Name.LabelMap.find(map,l) of
+                     SOME r => (r := 1 + (!r);
+                                map)
+                   | NONE => Name.LabelMap.insert(map,l,ref 1))
+             val maxmap = foldl maxmap_folder Name.LabelMap.empty boolsbnd_ctxt_list 
+             fun uniquify [] = []
+               | uniquify (boolsbnd_ctxt::rest) = 
+                 (case boolsbnd_ctxt of
+                      (NONE,ce) => (NONE,ce) :: (uniquify rest)
+                    | (SOME(_,sbnd as (SBND(l,bnd))),
+                       ce as (CONTEXT_SDEC(SDEC(_,dec)))) => 
+                          (case (Name.LabelMap.find(maxmap,l)) of
+                              NONE => elab_error "maxmap must have entry at this point"
+                            | SOME r =>
+                                  (r := (!r) - 1;
+                                   if (!r = 0)
+                                       then (SOME sbnd, ce) :: (uniquify rest)
+                                   else if (!r < 0)
+                                            then elab_error "maxmap count inconsistency"
+                                        else (* rename case *)
+                                            let val l' = fresh_internal_label "hidden"
+                                            in (SOME (SBND(l',bnd)), 
+                                                CONTEXT_SDEC(SDEC(l',dec)))
+                                                :: (uniquify rest)
+                                            end))
+                    | (SOME(_,sbnd), _) => elab_error "packagedec: got sbnd without CONTEXT_SDEC")
+         in uniquify boolsbnd_ctxt_list 
+         end
+
+
 
     (* --------------------------------------------------------- 
       ------------------ EXPRESSIONS --------------------------
@@ -579,73 +607,70 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      print "\n")
 		 in dummy_exp(context,"unbound_var")
 		 end
-		 val iseq = path = [Symbol.varSymbol "="]
-		 val isneq = path = [Symbol.varSymbol "<>"]
+		 fun eqcase iseq = 
+		     let val exp_os = oneshot()
+			 val tyvar = fresh_named_tyvar (context,"teq")
+			 val _ = tyvar_use_equal tyvar
+			 val con = CON_TYVAR tyvar
+			 val arg_con = con_tuple[con,con]
+			 val eq_con = CON_ARROW([arg_con],con_bool,
+						false,oneshot_init PARTIAL)
+			 val _ = add_eq_entry(tyvar,exp_os)
+			 val eqexp = OVEREXP(eq_con,true,exp_os)
+			 val res = if iseq
+				       then eqexp
+				   else let val v = fresh_named_var "neq_arg"
+					in  #1(make_lambda(v,arg_con, con_bool,
+							   make_ifthenelse(APP(eqexp,[VAR v]),
+									   false_exp,true_exp,con_bool)))
+					end
+		     in (res,eq_con,true)
+		     end
 	     in
-		 if (iseq orelse isneq)
-		     then let val exp_os = oneshot()
-			      val tyvar = fresh_named_tyvar (context,"teq")
-			      val _ = tyvar_use_equal tyvar
-			      val con = CON_TYVAR tyvar
-			      val arg_con = con_tuple[con,con]
-			      val eq_con = CON_ARROW([arg_con],con_bool,
-						     false,oneshot_init PARTIAL)
-			      val _ = add_eq_entry(tyvar,exp_os)
-			      val eqexp = OVEREXP(eq_con,true,exp_os)
-			      val res = if iseq
-					    then eqexp
-					else let val v = fresh_named_var "neq_arg"
-					     in  #1(make_lambda(v,arg_con, con_bool,
-								make_ifthenelse(APP(eqexp,[VAR v]),
-										false_exp,true_exp,con_bool)))
-					     end
-			  in (res,eq_con,true)
+		 (case (Context_Lookup(context,map symbol_label path)) of
+		      SOME(_,PHRASE_CLASS_EXP (e,c)) => (e,c,Exp_IsValuable(context,e))
+		    | SOME (_, PHRASE_CLASS_OVEREXP constraint_result) =>
+			  let 
+			      fun mk_constraint (c,res) (tyvar, is_hard) = 
+				  let val c' = CON_TYVAR tyvar
+				      val match = if is_hard 
+						      then eq_con(context,c,CON_TYVAR tyvar)
+						  else soft_eq_con(context,c,CON_TYVAR tyvar)
+				      val res = if match
+						    then Tyvar.MATCH res
+						else Tyvar.FAIL
+				  in res
+				  end
+			      val constraints = Listops.mapcount (fn (n,(con,_)) => mk_constraint (con,n)) constraint_result
+			      val results = map #2 constraint_result
+			      fun con_thunk exp_oneshot results (index : int) = 
+				  let val result : exp = List.nth(results,index)
+				  in  (case (oneshot_deref exp_oneshot) of
+					   (SOME _) => ()
+					 | NONE => oneshot_set(exp_oneshot,result))
+				  end
+			      val eshot = oneshot()
+			      val ocon = Tyvar.uocon_inst (empty_context,
+							   Tyvar.fresh_uocon constraints, 
+							   con_thunk eshot results)
+			      val con = CON_OVAR ocon
+			      val exp = OVEREXP(con,true,eshot)
+			      val _ = add_overload_entry ocon
+			  in (exp,CON_OVAR ocon,Exp_IsValuable(context,exp))
 			  end
-		 else 
-		     (case (Context_Lookup(context,map symbol_label path)) of
-			  SOME(_,PHRASE_CLASS_EXP (e,c)) => (e,c,Exp_IsValuable(context,e))
-			| SOME (_, PHRASE_CLASS_OVEREXP constraint_result) =>
-			      let 
-				  fun mk_constraint (c,res) (tyvar, is_hard) = 
-				      let val c' = CON_TYVAR tyvar
-					  val match = if is_hard 
-							then eq_con(context,c,CON_TYVAR tyvar)
-						    else soft_eq_con(context,c,CON_TYVAR tyvar)
-					  val res = if match
-							then Tyvar.MATCH res
-						    else Tyvar.FAIL
-				      in res
-				      end
-				  val constraints = Listops.mapcount (fn (n,(con,_)) => mk_constraint (con,n)) constraint_result
-				  val results = map #2 constraint_result
-				  fun con_thunk exp_oneshot results (index : int) = 
-				      let val result : exp = List.nth(results,index)
-				      in  (case (oneshot_deref exp_oneshot) of
-					       (SOME _) => ()
-					     | NONE => oneshot_set(exp_oneshot,result))
-				      end
-				  val eshot = oneshot()
-				  val ocon = Tyvar.uocon_inst (empty_context,
-							       Tyvar.fresh_uocon constraints, 
-							       con_thunk eshot results)
-				  val con = CON_OVAR ocon
-				  val exp = OVEREXP(con,true,eshot)
-				  val _ = add_overload_entry ocon
-			      in (exp,CON_OVAR ocon,Exp_IsValuable(context,exp))
-			      end
-
-  
-			| SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => 
-			      let val (e,c) = polyfun_inst (context,m,s)
-			      in  (e,c,true)
-			      end
-			| SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec]))))) =>
-			      (case sdec of
-				   SDEC(l,DEC_EXP(_,c)) =>
-				       if (eq_label (l,mk_lab))
-					   then (MODULE_PROJECT(m,mk_lab),c,true)
-				       else unbound()
-				 | SDEC(l,DEC_MOD(_,s)) =>
+		      
+		      
+		    | SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => 
+			  let val (e,c) = polyfun_inst (context,m,s)
+			  in  (e,c,true)
+			  end
+		    | SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec]))))) =>
+			  (case sdec of
+			       SDEC(l,DEC_EXP(_,c)) =>
+				   if (eq_label (l,mk_lab))
+				       then (MODULE_PROJECT(m,mk_lab),c,true)
+				   else unbound()
+			     | SDEC(l,DEC_MOD(_,s)) =>
 				       if (eq_label(l,mk_lab))
 					   then 
 					       let val mk_mod = MOD_PROJECT(m,mk_lab)
@@ -653,8 +678,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					       in  (e,c,true)
 					       end
 				       else unbound()
-				 | _ => unbound())
-			| _ => unbound())
+			     | _ => unbound())
+		    | NONE => if (path = [Symbol.varSymbol "="])
+				  then eqcase true
+			      else if (path = [Symbol.varSymbol "<>"])
+				       then eqcase false
+				   else unbound())
 	     end
        | Ast.DelayExp expr =>
 	     (case (Context_Lookup(context,[symbol_label (Symbol.varSymbol "Susp")]),
@@ -702,9 +731,54 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
 	     in  (LET(bnds,e),c,false) 
 	     end
-       | Ast.FlatAppExp _ => let val exp' = InfixParse.parse_exp(fixity context, exp)
-			     in xexp(context,exp')
-			     end 
+       | Ast.FlatAppExp _ => (case InfixParse.parse_exp(fixity context, exp) of
+				  SOME exp' => xexp(context,exp')
+				| NONE => (error_region();
+					   print "cannot parse FlatAppExp\n";
+					   dummy_exp(context,"bad_application")))
+
+       | Ast.CcallExp (function,arguments) => 
+	     let val (e,con,va) = xexp(context,function)
+		 val e_con_va_args = map (fn e => xexp(context,e)) arguments
+		 val arrow_oe =
+		     (case con of
+			  CON_ARROW(_,_,true,arrow) => arrow
+			| _ => (case (con_normalize(context,con)) of
+				    CON_ARROW(_,_,true,arrow) => arrow
+				  | _ => oneshot()))
+		 val spec_rescon = fresh_con context
+		 val exp_args = map #1 e_con_va_args
+		 val con_args = map #2 e_con_va_args
+		 val va_args = map #3 e_con_va_args
+		 val spec_funcon = CON_ARROW(con_args,spec_rescon,
+					     true,arrow_oe)
+	     in
+		 if (sub_con(context,spec_funcon,con))
+		     then (let val va3 = 
+			       (case oneshot_deref arrow_oe of
+				      NONE => (oneshot_set(arrow_oe,PARTIAL); false)
+				    | SOME PARTIAL => false
+				    | SOME TOTAL => true)
+			   in  (APP(e,exp_args),
+				con_deref spec_rescon,
+				va andalso (List.all (fn x => x) va_args) andalso va3)
+			   end)
+		 else
+		     (case (con_normalize(context,con)) of
+			 CON_ARROW(argcons,rescon,_,_) => 
+			     (error_region(); print " application is ill-typed.\n";
+			      print "  Function domain: "; 
+			      app (fn c => (pp_con c; print "; ")) argcons;
+			      print "\n  Argument type: "; 
+			      app (fn c => (pp_con c; print "; ")) con_args;
+			      print "\n";
+			      dummy_exp(context,"bad_application"))
+		       | nonarrow => (error_region(); 
+				      print " operator is not a function. Has type:\n";
+				      pp_con nonarrow;
+				      print "\n";
+				      dummy_exp(context,"bad_application")))
+	     end
 
        | Ast.AppExp {argument,function} => 
 	     let val (e1',con1,va1) = xexp(context,function)
@@ -723,7 +797,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		       | SOME e => e)
 		 fun red (exp as (OVEREXP (c,_,oe))) = 
 		     ((case c of 
-			   CON_OVAR ocon => overload_help false ocon
+			   CON_OVAR ocon => overload_help false (peek_region(),ocon)
 			 | _ => false);
 		      (case (oneshot_deref oe) of
 			   SOME exp => exp
@@ -739,14 +813,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				va1 andalso va2 andalso va3)
 			   end)
 		 else
-		     (case con1 of
+		     (case (con_deref con1) of
 			 CON_ARROW([argcon],rescon,_,_) => 
 			     (error_region(); print " application is ill-typed.\n";
 			      print "  Function domain: "; pp_con argcon;
 			      print "\n  Argument type: "; pp_con con2;
 			      print "\n";
 			      dummy_exp(context,"bad_application"))
-		       | nonarrow => (error_region(); print " operator is not a function. Has type:";
+		       | nonarrow => (error_region(); 
+				      print " operator is not a function. Has type:\n";
 				      pp_con nonarrow;
 				      print "\n";
 				      dummy_exp(context,"bad_application")))
@@ -768,7 +843,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		    then (SEAL(exp,con'),con',va)
 		else let val (e,c,_) = dummy_exp(context,"badseal")
 		     in  error_region();
-			 print " constraint does not match expression type\n";
+			 print "constraint does not match expression type\n";
+			 tab_region();
+			 print "Expression type:\n"; pp_con con;
+			 tab_region();
+			 print "\nConstraint type:\n"; pp_con con';
+			 print "\n";
 			 (SEAL(e,con'),con',va)
 		     end
 	     end		    
@@ -989,6 +1069,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				    | _ => (Ast.TuplePat(map #1 pe_list),
 					    Ast.TupleExp(map #2 pe_list)))
 		end
+
 		val tyvars = map tyvar_strip tyvars
 		val tyvar_stamp = get_stamp()
 		val lbl = fresh_open_internal_label "varpoly"
@@ -1017,8 +1098,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      polyinst = poly_inst,
 			      error_region = error_region,
 			      fresh_con = fresh_con}
+                val parsed_pat = parse_pat context pat
 		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
-						  bindpat = parse_pat context pat,
+						  bindpat = parsed_pat,
 						  arg = (v,con)})
 		val sbnd_sdec_list = sbnd_sdec::bind_sbnd_sdec
 		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
@@ -1325,6 +1407,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    in	top_sbnd_entry :: sbnds_entries
 	    end
 
+	| Ast.ExternDec (sym,ty) =>
+	    let val var = gen_var_from_symbol sym
+		val lab = symbol_label sym
+		val con = xty(context,ty)
+	    in  [(NONE, CONTEXT_SDEC(SDEC(lab,DEC_EXP(var,con))))]
+	    end
 	| Ast.SeqDec decs => packagedecs xdec' context decs
 	| Ast.OpenDec pathlist => 
 	      let fun help (i,path) = 
@@ -1338,13 +1426,81 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			     NONE))
 	      in List.mapPartial (fn x => x) (mapcount help pathlist)
 	      end
-	| Ast.TypeDec tblist => xtybind(context,tblist) 
+	| Ast.TypeDec tblist => 
+	      let val typeresult = xtybind(context,tblist) 
+		  fun make_eq_bnddec(l,c,k) = 
+		      let val is_poly = (case k of
+					     KIND_TUPLE _ => NONE
+					   | KIND_ARROW(m,_) => SOME m)
+			  val vp = fresh_named_var "varpoly"
+			  val (ctxt',c',sigpoly) = 
+			      case is_poly of 
+				  NONE => (context,c,SIGNAT_STRUCTURE(NONE,[]))
+				| SOME m => 
+				      let
+					  fun mapper n = internal_label ("tv" ^ (Int.toString n)) 
+					  val lbls = Listops.map0count mapper m
+					  fun mapper l = 
+					      let val eql = to_eq_lab l
+						  val v = fresh_var()
+						  val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE))
+						  val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
+									       mk_eq_con(CON_VAR v)))
+					      in  [sdec1,sdec2]
+					      end
+					  val sdecs = List.concat (map mapper lbls)
+					  val sp = SIGNAT_STRUCTURE(NONE,sdecs)
+					  val ctxt' = add_context_dec(context,SelfifyDec(DEC_MOD(vp,sp)))
+					  val arg_cons = map (fn l => CON_MODULE_PROJECT(MOD_VAR vp,l)) lbls
+					  val arg_con = con_tuple_inject arg_cons
+					  val c' = CON_APP(c,arg_con)
+				      in  (ctxt',c',sp)
+				      end
+			  val eqlab = to_eq_lab l
+			  val eq_con = mk_eq_con c'
+		    in case (xeqopt(ctxt',c')) of
+			SOME eq_exp =>
+			    let
+			  val v1 = fresh_var()
+			  val (bnd,dec) = 
+			      case is_poly of
+				  NONE => (BND_EXP(v1, eq_exp), 
+					   DEC_EXP(v1, eq_con))
+				| SOME _ => 
+				      let val v2 = fresh_var()
+					  val innermod = 
+					      MOD_FUNCTOR(vp,sigpoly,
+							  MOD_STRUCTURE[SBND(it_lab,BND_EXP(v2,eq_exp))])
+					  val innersig = 
+					      SIGNAT_FUNCTOR(vp,sigpoly,
+							     SIGNAT_STRUCTURE(NONE,
+									      [SDEC(it_lab,
+									       DEC_EXP(v2,eq_con))]),
+							      TOTAL)
+					      
+				      in  (BND_MOD(v1,innermod), DEC_MOD(v1, innersig))
+				      end
+			    in  [(SOME(SBND(eqlab,bnd)),CONTEXT_SDEC(SDEC(eqlab,dec)))]
+			    end
+			    | NONE => []
+			end
+		  val eqresult = 
+		      case typeresult of
+			  [(SOME(SBND(l,BND_CON(_,c))), CONTEXT_SDEC(SDEC(_,DEC_CON(_,k,_))))] =>
+			      make_eq_bnddec(l,c,k)
+			| _ => []
+	      in  typeresult @ eqresult
+	      end
 	| Ast.DatatypeDec {datatycs,withtycs=[]} => 
 	      let val sbnd_sdecs = xdatatype(context,datatycs)
 	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs 
 	      end
 	| Ast.DatatypeDec {datatycs,withtycs} => 
-	      let val (dt,wt) = InfixParse.parse_datbind(datatycs,withtycs)
+	      let val (dt,wt) = (case InfixParse.parse_datbind(datatycs,withtycs) of
+				     SOME result => result
+				   | NONE => (error_region();
+					      print "cannot parse datbind\n";
+					      error "cannot parse datbind"))
 		  val dec = Ast.SeqDec[Ast.DatatypeDec{datatycs=dt,withtycs=[]},
 				       Ast.TypeDec wt]
 	      in  xdec(context,dec)
@@ -1460,7 +1616,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	      end
 	| Ast.FsigDec fsiglist => parse_error "functor signature declaration not handled"
 	| Ast.AbsDec strblist => parse_error "abstract structure not handled"
-	| Ast.OvldDec fctblist => parse_error "overloading declaration not handled"
+	| Ast.OvldDec (sym,ignored_type,exp_list) =>
+	      let val con_exp_list = map (fn e => let val (e,c,_) = xexp(context,e)
+						  in (c,e)
+						  end) exp_list
+		  val l = symbol_label sym
+		  val v = gen_var_from_symbol sym
+		  val inline = INLINE_OVER con_exp_list
+		  val ce = CONTEXT_INLINE(l,v,inline)
+	      in  [(NONE,ce)]
+	      end
 	| Ast.ImportDec strlist => parse_error "import declaration not handled"
 
         (* translate declaration by dropping region information *)
@@ -1506,26 +1671,40 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					    pp_list AstHelp.pp_sym' syms ("","",".",false); print "])"))
 		 val con_list = map (fn t => xty(context,t)) ty_list
 	     in
-		 (case (con_list,Context_Lookup(context, map symbol_label syms)) of
-		      ([],SOME(_,PHRASE_CLASS_CON(con,KIND_TUPLE 1))) => con
-		    | (_,SOME(_,PHRASE_CLASS_CON(con,KIND_ARROW(n,1)))) => 
-			  if (n = length con_list) 
-			      then CON_APP(con,(case con_list of
-						    [c] => c
-						  | _ => CON_TUPLE_INJECT(con_list)))
-			  else (error_region();
-				print "type constructor wants ";
-				print (Int.toString n);
-				print "arguments, given ";
-				print (Int.toString (length con_list));
-				fresh_named_con(context,"badarity_type"))
-		    | (_,SOME(_,PHRASE_CLASS_CON (c',k'))) => 
-			  (pp_kind k'; print "\nand c' = "; pp_con c';
-			   elab_error "external_label mapped to type with KIND_ARROW(_,!= 1)")
-		    | (_,_) => (error_region();
-				print "unbound type constructor: ";
-				pp_pathlist AstHelp.pp_sym' syms; print "\n";
-				fresh_named_con(context,"unbound_type")))
+		 (case (Context_Lookup(context, map symbol_label syms)) of
+		      SOME(_,PHRASE_CLASS_CON(con,k)) =>
+			  (case (con_list,(case k of 
+					      KIND_INLINE(k,_) => k
+					    | _ => k)) of
+			      ([],KIND_TUPLE 1) => con
+			    | (_,KIND_ARROW(n,1)) => 
+				  if (n = length con_list) 
+				      then CON_APP(con,con_tuple_inject con_list)
+				  else (error_region();
+					tab_region();
+					print "type constructor wants ";
+					print (Int.toString n);
+					print "arguments, given ";
+					print (Int.toString (length con_list));
+					fresh_named_con(context,"badarity_type"))
+			     | _ => (pp_kind k; print "\nand c = "; 
+				      pp_con con;
+				      elab_error "external_label mapped to type with KIND_ARROW(_,!= 1)"))
+		    | _ => 
+		      if (length syms = 1 andalso
+			     hd syms = Symbol.tycSymbol "-->")
+		      then let fun split acc [] = error "need at least result type"
+				 | split acc [c] = (rev acc,c)
+			         | split acc (c::d) = split (c::acc) d
+			       val (arg_cons,res_con) = split [] con_list
+			   in  CON_ARROW(arg_cons,res_con,true,
+					 oneshot_init PARTIAL)
+			   end
+		      else
+			       (error_region();
+			       print "unbound type constructor: ";
+			       pp_pathlist AstHelp.pp_sym' syms; print "\n";
+			       fresh_named_con(context,"unbound_type")))
 	     end)
 
 				  
@@ -1585,10 +1764,34 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				  | _ => (CON_FUN(vars,con')))
 			   end
 		       val conopt = mapopt doty tyopt
-		       val eq_con = CON_ARROW([con_tuple[CON_VAR type_var, CON_VAR type_var]],
-					      con_bool,false, oneshot_init PARTIAL)
 		       val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt))
-		       val eq_sdec = SDEC(eq_label, DEC_EXP(eq_var,eq_con))
+		       val eq_dec = 
+			   (case tyvars of
+				[] => DEC_EXP(eq_var,mk_eq_con(CON_VAR type_var))
+			      | _ => 
+				let val vpoly = fresh_named_var "vpoly"
+				    fun mapper (n,_) = internal_label ("tv" ^ (Int.toString n)) 
+				    val lbls = Listops.mapcount mapper tyvars
+				    fun mapper l = 
+					let val eql = to_eq_lab l
+					    val v = fresh_var()
+					    val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE))
+					    val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
+									 mk_eq_con(CON_VAR v)))
+					in  [sdec1,sdec2]
+					end
+				    val sdecs = List.concat (map mapper lbls)
+				    val sigpoly = SIGNAT_STRUCTURE(NONE,sdecs)
+				    val args = map (fn l => CON_MODULE_PROJECT(MOD_VAR vpoly,l)) lbls
+				    val eq_con = mk_eq_con(CON_APP(CON_VAR type_var, 
+								   con_tuple_inject args))
+				    val innersig = SIGNAT_STRUCTURE(NONE,
+								    [SDEC(it_lab,
+									  DEC_EXP(fresh_var(),eq_con))])
+				in  DEC_MOD(eq_var,SIGNAT_FUNCTOR(vpoly,sigpoly,innersig,PARTIAL))
+				end)
+					    
+		       val eq_sdec = SDEC(eq_label, eq_dec)
 		   in if (is_eq) then type_sdec :: eq_sdec:: (loop rest)
 		      else type_sdec :: (loop rest)
 		   end
@@ -1603,7 +1806,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	  Ast.VarSig s => (case (Context_Lookup(context,[symbol_label s])) of
 			       SOME(_,PHRASE_CLASS_SIG s) => s
 			     | _ => (error_region();
-				     print "unbound signature: ???\n";
+				     print "unbound signature: "; 
+				     AstHelp.pp_sym s;
+				     print "\n";
 				     SIGNAT_STRUCTURE(NONE,[])))
 	| Ast.SigSig speclist => SIGNAT_STRUCTURE(NONE,xspec(context,speclist))
 	| Ast.MarkSig (s,r) => let val _ = push_region r
@@ -1611,9 +1816,44 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				   val _ = pop_region()
 			       in res 
 			       end
-	| Ast.AugSig (s, [], tyvars, ty) => parse_error "ill-formed where type"
-	| Ast.AugSig (s, syms, tyvars, ty) =>
-	      (case xsigexp(context,s) of
+	| Ast.AugSig (s, []) => xsigexp(context,s)
+	| Ast.AugSig (s, ((Ast.WhStruct (syms1,syms2))::rest)) => 
+	      let val mjunk = MOD_VAR(fresh_named_var "mjunk")
+	      in  (case xsigexp(context,Ast.AugSig(s,rest)) of
+		   s as SIGNAT_STRUCTURE (popt,sdecs) => 
+		       (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label syms1),
+			      xstrexp(context,Ast.VarStr syms2, Ast.NoSig)) of
+			    (SOME(labels1,PHRASE_CLASS_MOD(_,s1)),
+			     (_,_,SIGNAT_STRUCTURE(_,sdecs2))) =>
+				let fun find_labels' path (SDEC(l,DEC_CON (_,k,_)),acc) = (k,l::path)::acc
+				      | find_labels' path (SDEC(l,DEC_MOD (_,s)),acc) = 
+				                       (find_labels (l::path) s)@acc
+				      | find_labels' path (_,acc) = acc
+				    and find_labels path (SIGNAT_STRUCTURE (_,sdecs)) = 
+					foldl (find_labels' path) [] sdecs
+				      | find_labels _ _ = []
+				    val kind_rlabels = find_labels [] s1
+				    fun constrain((k,rlbls),sdecs) = 
+					let val lbls = rev rlbls
+					    val lbls_all = labels1 @ lbls
+					    val c = case (Sdecs_Lookup'(mjunk,sdecs2,lbls)) of
+						SOME(_,PHRASE_CLASS_CON(c,_)) => c
+					      | _ => (error_region();
+						      print "where's rhs structure missing components\n";
+						      dummy_type(context,"badwhere"))
+					in  xsig_wheretype(context,sdecs,lbls_all,c,k)
+					end
+				in  SIGNAT_STRUCTURE(popt,foldl constrain sdecs kind_rlabels)
+				end
+			   | _ => (error_region();
+				   print "can't where non-existent or non-structure component\n";
+				   s))
+		 | s => (error_region();
+			 print "can't where a non-structure signature\n";
+			 s))
+	      end
+	| Ast.AugSig (s, ((Ast.WhType(syms, tyvars, ty))::rest)) =>
+	      (case xsigexp(context,Ast.AugSig(s,rest)) of
 		   s as SIGNAT_STRUCTURE (popt,sdecs) => 
 		       let val mjunk = MOD_VAR(fresh_named_var "mjunk")
 		       in (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label syms)) of
@@ -1626,7 +1866,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				       end
 				       val context = foldl folder context tyvars
 				       val c = xty(context,ty)
-				   in SIGNAT_STRUCTURE(popt,xsig_wheretype(sdecs,labels,c,k))
+				   in SIGNAT_STRUCTURE(popt,xsig_wheretype(context,sdecs,labels,c,k))
 				   end
 			     | _ => (error_region();
 				     print "can't where type a non-type component";
@@ -1698,11 +1938,14 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			end)
 	       in ADDITIONAL(map doer vtlist )
 	       end
-	   | (Ast.StrSpec (symsigexp_list)) =>
-	       let fun doer(sym,sigexp) = let val s = xsigexp(context,sigexp)
-					  in SDEC(symbol_label sym,DEC_MOD(fresh_var(),s))
-					  end
-	       in ADDITIONAL(map doer symsigexp_list)
+	   | (Ast.StrSpec (sym_sigexp_path_list)) =>
+	       let 
+		   fun doer(sym,SOME sigexp, _) = 
+		       let val s = xsigexp(context,sigexp)
+		       in SDEC(symbol_label sym,DEC_MOD(fresh_var(),s))
+		       end
+		     | doer(sym,_,_) = error "structure path spec not imped"
+	       in ADDITIONAL(map doer sym_sigexp_path_list)
 	       end
 	   | (Ast.IncludeSpec sym) =>
 	       (case (xsigexp(context,Ast.VarSig sym)) of
@@ -1723,10 +1966,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			  | help (Ast.FsigFsig {param,def=sigexp'}) = 
 			     let (* this is a derived form *)
 			       val strid = functor_arg_lab
-			       val sym_sigexp_list = (map (fn (SOME s,se) => (s,se)
-			                                    | (NONE, _) => elab_error "functor arg unnamed")
-						      param)
-			       val sigexp = Ast.SigSig[Ast.StrSpec sym_sigexp_list]
+			       val sym_sigexp_path_list = 
+				   (map (fn (SOME s,se) => (s,SOME se,NONE)
+				          | (NONE, _) => elab_error "functor arg unnamed")
+				    param)
+			       val sigexp = Ast.SigSig[Ast.StrSpec sym_sigexp_path_list]
 			       val signat = xsigexp(context,sigexp)
 			       val context' = add_context_mod(context,strid,var,
 								 SelfifySig(SIMPLE_PATH var,signat))
@@ -1762,8 +2006,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		    val sdecs = map #2 sbnd_sdecs
 		in  ADDITIONAL sdecs
 		end
-	   | (Ast.ShatycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
-	   | (Ast.ShareSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
+	   | (Ast.ShareTycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
+	   | (Ast.ShareStrSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
 	   | (Ast.FixSpec _) => parse_error "fixity specs not supported"
 	   | (Ast.MarkSpec (s,r)) => let val _ = push_region r
 					 val res = xspec1 context prev_sdecs s
@@ -1772,7 +2016,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				     end
          fun loop ctxt prev_sdecs [] = prev_sdecs
            | loop ctxt prev_sdecs ((Ast.DataSpec{datatycs,withtycs=wt as (_::_)})::specrest) =
-		let val (dt,wt) = InfixParse.parse_datbind(datatycs,wt)
+		let val (dt,wt) = (case InfixParse.parse_datbind(datatycs,wt) of
+				       SOME result => result
+				     | NONE => (error_region();
+						print "cannot parse datspec\n";
+						error "cannot parse datspec"))
 		    val dspec = Ast.DataSpec{datatycs=dt,withtycs=[]}
 		    fun strip tb = let val (s,tvs,ty) = AstHelp.tb_strip tb
 				   in  (s,tvs,SOME ty) 
@@ -1812,13 +2060,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))]
 				   end
 			     | _ => (error_region();
-				     print "unbound functor: ???\n"; []))
+				    print "unbound functor: ";
+				    AstHelp.pp_path path;
+				    print "\n"; []))
 		    | (Ast.VarFct (path,_)) => parse_error "functor signatures not handled"
 		    | (Ast.FctFct {params=[(argnameopt,sigexp)],body,constraint}) =>
 			  let 
 			      val arglabel = (case argnameopt of
 						  NONE => fresh_open_internal_label "FunctorArg"
-						| SOME s => openlabel(symbol_label s))
+						| SOME s => symbol_label s)
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "functor_arg_var"
 			      val signat = xsigexp(context,sigexp)
@@ -1920,9 +2170,10 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	 : (decresult * mod * signat) = 
 	 let 
 	     val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
+	     val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	     val sig' = xsigexp(context,sigexp)
 	     val mod'_var = fresh_named_var "v0_xcoerce"
-	     val (mod'_body,sig_ret') = xcoerce(context,mod'_var,signat,sig')
+	     val (mod'_body,sig_ret') = xcoerce(context',mod'_var,signat,sig')
 	     val v = fresh_named_var "opaque_mod"
 	     val resmod =  MOD_LET(v,module,
 				   MOD_SEAL(mod_subst_modvar(mod'_body,[(mod'_var,MOD_VAR v)]),
@@ -1932,9 +2183,13 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
       | xstrexp (context, strb, Ast.Transparent sigexp) = 
 	let 
 	    val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
+	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	    val sig' = xsigexp(context,sigexp) 
 	    val orig_var = fresh_named_var "orig_var"
-	    val (coerced_mod,sig_ret') = xcoerce(context,orig_var,signat,sig')
+	    val (coerced_mod,sig_ret') = 
+				  (if (Util.substring("xxxposix-bin-io",peek_region_str()))
+				       then xcoerce_show else xcoerce)
+				       (context',orig_var,signat,sig')
 	    (* --- we would like to use sig_ret' but it contains references to mod'_var --- *)
 	    val let_var = fresh_named_var "let_var"
 	    val coerced_var = fresh_named_var "coerced_var"
@@ -1958,8 +2213,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      SOME (path,PHRASE_CLASS_MOD(m,s as (SIGNAT_STRUCTURE _))) => ([],m,s)
 			    | _ => (error_region();
 				    print "unbound structure: ";
-(*				    AstUtil.pp_exp
-				    print "\n"; *)
+				    AstHelp.pp_path path;
+				    print "\n";
 				    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[]))))
 	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
 	   | Ast.AppStr (f,[(Ast.MarkStr (se,r),flag)]) =>
@@ -1984,9 +2239,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					  then ()
 				      else (error_region();  
 					    print "functor application failed\n";
+					    tab_region();
 					    print "Expected signature";
 					    pp_signat fsig';
-					    print "\nActual signature";
+					    print "\n";
+					    tab_region();
+					    print "Actual signature";
 					    pp_signat fsig;
 					    print "\n")
 
@@ -2019,8 +2277,13 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		   print "\n";
 *)
 
-	            | _ => (error_region();
+	            | SOME _ => (error_region();
 			    print "cannot apply a non-functor\n";
+			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[])))
+	            | NONE => (error_region();
+			    print "identifier not bound";
+			       AstHelp.pp_path funpath;
+			       print "\n";
 			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[]))))
 	   | Ast.AppStr (_,[(strexp,_)]) => parse_error "AppStr applied to a non-path: we should be in named form"
 	   | Ast.AppStr (_,_) => (error_region();
@@ -2086,7 +2349,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     (* --------------------------------------------------------- 
       ------------------ SIGNATURE PATCHING -------------------
       --------------------------------------------------------- *)
-    and xsig_wheretype(orig_sdecs,lbls, con, kind) : sdecs =
+    and xsig_wheretype(ctxt,orig_sdecs,lbls, con, kind) : sdecs =
       let 
 	  local val fv = con_free_convar con
 	  in    fun bound v = if (member_eq(eq_var,v,fv)) 
@@ -2098,6 +2361,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	      (case sdecs of
 		   [] => (error_region();
 			  print "signature wheretype could not find specificed component\n";
+			  tab_region();
+			  pp_pathlist pp_label' lbls;
+			  print "\n";
 			  [])
 		 | ((sdec as SDEC(l,dec))::rest) => 
 		       (case dec of
@@ -2133,7 +2399,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			 | SDEC(l,DEC_EXCEPTION _) => sdec::(loop rest))
 	      in loop sdecs
 	      end		
-      in dosig lbls orig_sdecs
+      in case (follow_labels (orig_sdecs,ctxt) lbls) of 
+	  SOME lbls => dosig lbls orig_sdecs
+	| NONE => (error_region();
+		   print "cannot where type bad sig\n";
+		   orig_sdecs)
       end
 
 
@@ -2197,7 +2467,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	      in  case (type_is_abstract(v,c')) of
 		  SOME lbls => SOME lbls
 		| NONE => (error_region();
-			   print "can't share non-type components";
+			   print "can't share non-abstact type component";
+			   pp_con c'; print "\n";
 			   NONE)
 	      end
       in result
@@ -2277,15 +2548,28 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
       ------------------ COERCION COMPILATION-------------------
       --------------------------------------------------------- *)
 
+    and xcoerce_show (context : context,
+		 v0 : var,
+		 sig_actual : signat,
+		 signat : signat) : Il.mod * Il.signat =
+	         (print "trying to xcoerce with signatactual = \n";
+		  pp_signat sig_actual; print "\nand signat = \n";
+		  pp_signat signat; print "\nand ctxt = \n";
+		  pp_context context; print "\n";
+		  xcoerce(context,v0,sig_actual,signat))
+
+
+
     and xcoerce (context : context,
 		 v0 : var,
 		 sig_actual : signat,
 		 signat : signat) : Il.mod * Il.signat =
       let 
+(*
 	  val _ =  debugdo (fn () => (print "trying to xcoerce with signatactual = \n";
 				      pp_signat sig_actual; print "\nand signat = \n";
 				      pp_signat signat; print "\nand ctxt = \n";
-				      pp_context context; print "\n"))
+				      pp_context context; print "\n")) *)
 	  val sig_actual_self = SelfifySig (SIMPLE_PATH v0, sig_actual)
 	  val context = add_context_mod'(context,v0,sig_actual_self)
 	  fun sig_actual_lookup lbl : (label list * phrase_class) option = 
@@ -2350,10 +2634,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			    then SOME(bnd,dec,dec)
 			else (print "s is "; pp_signat s;
 			      print "\ns'' is "; pp_signat s'';
+			      print "\n";
 			      bad(4)))
 			handle e => (print "s is "; pp_signat s;
 			      print "\ns'' is "; pp_signat s'';
 			      print "\nctxt' is "; pp_context ctxt';
+			      print "\n";
 			      bad(5))
 		    end
 		| _ => bad(6))
@@ -2364,7 +2650,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		(case (sig_actual_lookup lbl) of
 		     SOME(lbls,PHRASE_CLASS_MOD (_,s1)) => 
 			 let val mvar = fresh_named_var "v0_xcoerce"
-			     val (mbody,sig_ret) = xcoerce(ctxt,mvar,s1,s)
+ 			     val (mbody,sig_ret) = xcoerce(ctxt,mvar,s1,s)
 			     val v1 = fresh_var()
 			     val m' = path2mod(COMPOUND_PATH(v0,lbls))
 			     val bnd = BND_MOD(v,mod_subst_modvar(mbody,[(mvar,m')]))
@@ -2402,6 +2688,10 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					pp_con c;
 					print "\nFound type:\n";
 					pp_con con;
+					print "\nExpected expanded type:\n";
+					pp_con (con_normalize(ctxt,c));
+					print "\nFound expanded type:\n";
+					pp_con (con_normalize(ctxt,con));
 					print "\n";
 					NONE))
 			    | SOME(lbls,PHRASE_CLASS_MOD (_,s)) => 
@@ -2420,7 +2710,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				    NONE)
 			    | NONE => (error_region();
 				       print ((label2string lbl) ^ 
-					      "component in signature not in structure\n");
+					      " component in signature not in structure\n");
 				       NONE))
 
 	           (* ----- check for polymorphic specification case first ---- *)
@@ -2443,14 +2733,18 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 							   then ()
 						       else (error_region();
 							     print "coercion of a type component to a ";
-							     print "type specification failed\n"))
+							     print "type specification failed at";
+							     pp_label lbl;
+							     print "\n"))
 				      val bnd = BND_CON(v,con')
 				      val dec = DEC_CON(v,k,SOME con')
 				  in SOME(bnd,dec,dec)
 				  end
 			    | _ => (error_region();
 				    print "coercion of a non-type or non-existent component to a ";
-				    print "type specification failed\n";
+				    print "type specification failed at";
+				    pp_label lbl;
+				    print "\n";
 				    NONE))
 		   | _ => elab_error "ill-formed specification")
 	    end
@@ -2505,6 +2799,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]))))
       in (m,s)
       end
+
 
     and xeqopt (ctxt : context, argcon : con) : exp option = 
 	SOME(xeq_hidden(ctxt,argcon)) handle _ => NONE
@@ -2704,10 +2999,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			     val ctxt = foldl efolder ctxt (zip3 evars cvars eq_lbls)
 
 			     local
-				 val temp = map CON_VAR cvars
-				 val applied = ConApply(con',(case temp of
-								  [c] => c
-								| _ => CON_TUPLE_INJECT temp))
+				 val applied = ConApply(con',con_tuple_inject (map CON_VAR cvars))
 			     in
 				 val reduced_cons = (case applied of
 							 CON_TUPLE_INJECT conlist => conlist
@@ -2762,13 +3054,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    in oneshot_set(eshot,e)
 	    end
 	  | flex_help (l,ref(INDIRECT_FLEXINFO fr),fieldc,eshot) = flex_help (l,fr,fieldc,eshot)
-	fun eq_help (decs,tyvar,exp_oneshot) = 
-	  let val con = CON_TYVAR tyvar
-	  in  (case xeqopt(decs,con) of
-		   SOME e => oneshot_set(exp_oneshot,e)
-		 | NONE => (error_region();
-			    print "no equality at type: ";
-			    pp_con con; print "\n"))
+	fun eq_help (reg,decs,tyvar,exp_oneshot) = 
+	  let val _ = push_region reg
+	      val con = CON_TYVAR tyvar
+	      val res = (case xeqopt(decs,con) of
+			     SOME e => oneshot_set(exp_oneshot,e)
+			   | NONE => (error_region();
+				      print "no equality at type: ";
+				      pp_con con; print "\n"))
+	      val _ = pop_region()
+	  in res
 	  end
 
 	fun tyvar_help tv = 

@@ -509,7 +509,12 @@ functor Pat(structure Il : IL
 		     val _ = if (eq_con(context,c,con))
 				 then ()
 			     else (error_region();
-				   print "constraint pattern mismatches pattern type\n")
+				   print "constraint pattern mismatches pattern type\n";
+				   print "actual type:\n";
+				   pp_con con;
+				   print "\nconstraint type:\n";
+				   pp_con c;
+				   print "\n")
 		 in dopat pattern
 		 end
 	       | dopat (Ast.ListPat []) = Ast.VarPat [Symbol.varSymbol "nil"]

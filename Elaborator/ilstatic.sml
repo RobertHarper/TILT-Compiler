@@ -65,13 +65,31 @@ functor IlStatic(structure Il : IL
 
        fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
 	 | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	 | eq_modproj _ = false
        fun eq_expproj (VAR v, VAR v') = eq_var (v,v')
 	 | eq_expproj (MODULE_PROJECT (m,l), MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	 | eq_expproj _ = false
+
        fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
 	 | eq_conproj (CON_MODULE_PROJECT (m,l), 
 		       CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	 | eq_conproj _ = false
+
        fun ehandler ({expunself,...} : state) (m,l) = assoc_eq(eq_expproj, MODULE_PROJECT(m,l), expunself)
-       fun chandler ({conunself,...} : state) (m,l) = assoc_eq(eq_conproj, CON_MODULE_PROJECT(m,l), conunself)
+       fun chandler ({conunself,...} : state) (m,l) = 
+	   let val res = assoc_eq(eq_conproj, CON_MODULE_PROJECT(m,l), conunself)
+(*
+	       val _ = (print "(un)-selfify chandler called with\n";
+			pp_con (CON_MODULE_PROJECT(m,l));
+			print "\nand conunself = ";
+			app (fn (c,c') => (pp_con c; print "   -->  "; pp_con c'; print "\n")) conunself;
+			print "\nand returning res = ";
+			case res of 
+			    NONE => print "NONE\n"
+			  | SOME c => (print "SOME "; pp_con c; print "\n"))
+*)
+	   in  res
+	   end
        fun mhandler ({modunself,...} : state) (m,l) = assoc_eq(eq_modproj,MOD_PROJECT(m,l), modunself)
 
 
@@ -176,12 +194,20 @@ functor IlStatic(structure Il : IL
 		       in  SIGNAT_INLINE_STRUCTURE{self=popt,
 						   code=code, abs_sig=abs_sig, imp_sig=imp_sig}
 		       end
-		 | ((true,SIGNAT_STRUCTURE (NONE,sdecs)) |
+		 | ((_,SIGNAT_STRUCTURE (NONE,sdecs)) |
 		       (false,SIGNAT_STRUCTURE (SOME _,sdecs))) =>
 		       let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
 			   val popt = if selfify then popt else NONE
 		       in  SIGNAT_STRUCTURE(popt,sdecs')
 		       end
+(* re-selfifying old paths; but what about other components *)
+		 | (true,s as SIGNAT_STRUCTURE (SOME p,sdecs)) =>
+		       (case popt of
+			   SOME p' => if (eq_path(p,p'))
+					  then s
+				      else SelfifySig (state,selfify) 
+					  (popt, SIGNAT_STRUCTURE(NONE,sdecs))
+			 | _ => s)
 		 | _ => signat)
 	   end
    in
@@ -822,6 +848,11 @@ end
 	  handle e => (if !trace then msg() else (); raise e)
      end
 
+  and etaize c = (case c of
+		      CON_ARROW([c],rescon,b,a) => CON_ARROW([c],rescon,b,a)
+		    | CON_ARROW(cons,rescon,b,a) => CON_ARROW([con_tuple cons],rescon,b,a)
+		    | _ => c)
+
    and GetExpCon' (exparg,ctxt) : bool * con = 
      (case exparg of
        SCON scon => (true,GetSconCon(ctxt,scon))
@@ -829,20 +860,19 @@ end
 				     SOME e => if va then (va,con)
 					       else GetExpCon(e,ctxt)
 				   | NONE => (va,con))
-     | ETAPRIM (p,cs) => (true, PrimUtil.get_type' p cs)
-     | ETAILPRIM (ip,cs) => (true, PrimUtil.get_iltype' ip cs)
-     | PRIM(p,cs,[e]) => GetExpCon(APP(ETAPRIM(p,cs),[e]),ctxt)
-     | ILPRIM(ip,cs,[e]) => GetExpCon(APP(ETAILPRIM(ip,cs),[e]),ctxt)
-     | PRIM(p,cs,es) => GetExpCon(APP(ETAPRIM(p,cs),[exp_tuple es]),ctxt)
-     | ILPRIM(ip,cs,es) => GetExpCon(APP(ETAILPRIM(ip,cs),[exp_tuple es]),ctxt)
+     | ETAPRIM (p,cs) => (true, etaize (PrimUtil.get_type' p cs))
+     | ETAILPRIM (ip,cs) => (true, etaize(PrimUtil.get_iltype' ip cs))
      | (VAR v) => (case Context_Lookup'(ctxt,v) of
 		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
 		     | SOME _ => error "VAR looked up to a non-value"
 		     | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
-     | (APP (e1,es2)) => 
-	   let val (va1,con1) = GetExpCon(e1,ctxt)
+     | ((PRIM _) | (ILPRIM _) | (APP _)) =>
+	   let val ((va1,con1),es2) = 
+	       (case exparg of
+		    APP(e1,es2) => (GetExpCon(e1,ctxt),es2)
+		  | PRIM(p,cs,es) => ((true, PrimUtil.get_type' p cs), es)
+		  | ILPRIM(ip,cs,es) => ((true, PrimUtil.get_iltype' ip cs),es))
 	       val con1 = Normalize(con1,ctxt)
-  (*	       val (va2,con2) = GetExpCon(e2,ctxt) *)
 	       val vacon2 = map (fn e => GetExpCon(e,ctxt)) es2
 	       val va2 = Listops.andfold #1 vacon2
 	       val cons2 = map #2 vacon2
@@ -1341,10 +1371,9 @@ end
 	    | (CON_VAR v) => (case (Context_Lookup'(ctxt,v)) of
 				  SOME(_,PHRASE_CLASS_CON (CON_VAR v',k)) => 
 				      if (eq_var(v,v'))
-					  then (case k of (* we do not break abstraction of KIND_INLINE *)
-						    KIND_INLINE _ => (* (k,c) => HeadNormalize(c,ctxt) *)
-								(false, CON_VAR v)
-						  | _ => (false, CON_VAR v))
+					  then (case k of (* we consider KIND_INLINE abstrct *)
+(*						    KIND_INLINE (k,c) => HeadNormalize(c,ctxt) 
+						  | *) _ => (false, CON_VAR v))
 				      else HeadNormalize(CON_VAR v',ctxt)
 				| SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)
 				| SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")

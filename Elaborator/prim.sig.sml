@@ -42,6 +42,8 @@ signature PRIM =
       | int2float (* real  *) 
       | int2uint of intsize * intsize
       | uint2int of intsize * intsize
+      | int2int of intsize * intsize
+      | uint2uint of intsize * intsize
       | uinta2uinta of intsize * intsize
       | uintv2uintv of intsize * intsize
 
@@ -93,13 +95,16 @@ signature PRIM =
       | not_int of intsize
       | and_int of intsize
       | or_int of intsize
+      | xor_int of intsize
       | lshift_int of intsize
       | rshift_int of intsize       (* right shift arithmetic *)
       | rshift_uint of intsize      (* right shift logical *)
 
       (* array and vectors *)
       | array2vector of table
+      | vector2array of table
       | create_table of table
+      | create_empty_table of table
       | sub of table
       | update of table
       | length_table of table
@@ -125,6 +130,7 @@ signature PRIM =
       | not_uint of intsize
       | and_uint of intsize
       | or_uint of intsize
+      | xor_uint of intsize
       | lshift_uint of intsize
 
 

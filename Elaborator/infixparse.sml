@@ -34,7 +34,11 @@ functor InfixParse(structure Il : IL
     fun fixity_to_level (Fixity.NONfix) = error "no level for NONfix"
       | fixity_to_level (Fixity.INfix (a,b)) = a div 2
     fun path_fixity_lookup path [] = NONE
-      | path_fixity_lookup [s] ((l,f)::rest) = if (eq_label(l,symbol_label s)) then SOME f 
+      | path_fixity_lookup [s] ((l,f)::rest) = if (eq_label(l,symbol_label s)) 
+						   then 
+						       (case f of
+							    (Fixity.INfix _) => SOME f 
+							  | _ => NONE)
 					       else path_fixity_lookup [s] rest
       | path_fixity_lookup _ _ = NONE
     fun exp_fixity_lookup table (Ast.VarExp p) = path_fixity_lookup p table
@@ -292,9 +296,17 @@ functor InfixParse(structure Il : IL
 	      | conty_handler _ = NONE
 	    fun subst_def (s,NONE) = (s,NONE)
 	      | subst_def (s,SOME ty) = (s, SOME (subst_ty conty_handler ty))
-	    fun subst (Db {tyc, tyvars, def}) = Db{tyc = tyc, tyvars = tyvars, def = map subst_def def}
+	    fun subst_rhs (rhs as (Repl _)) = rhs
+	      | subst_rhs (Constrs defs) = Constrs(map subst_def defs)
+	    fun subst (Db {tyc, tyvars, rhs}) = Db{tyc = tyc, tyvars = tyvars, 
+						   rhs = subst_rhs rhs}
 	      | subst (MarkDb(db,r)) = MarkDb(subst db, r)
 	    val datatycs' = map subst datatycs
 	in  (datatycs', withtycs)
 	end
+
+    val parse_pat = fn arg => SOME(parse_pat arg) handle e => NONE
+    val parse_exp = fn arg => SOME(parse_exp arg) handle e => NONE
+    val parse_datbind = fn arg => SOME(parse_datbind arg) handle e => NONE
+
   end;

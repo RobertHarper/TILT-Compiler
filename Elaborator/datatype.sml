@@ -19,6 +19,7 @@ functor Datatype(structure Il : IL
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
+
     (* ------------------------------------------------------------------
       The datatype compiler for compiling a single strong-connected type.
       ------------------------------------------------------------------ *)
@@ -41,9 +42,10 @@ functor Datatype(structure Il : IL
 	val is_eq = ref true  (* speculate it is an eq-permitting datatype *)
 	val p = length std_list
 	val type_symbols = map #1 std_list
-	val top_type_label = map (fn s => internal_label ("top_" ^ Symbol.name s)) type_symbols
-	val top_type_var = map (fn s => fresh_named_var ("top_" ^ Symbol.name s)) type_symbols
+
 	val type_label = map (fn s => symbol_label s) type_symbols
+	val top_type_label = map to_top_lab type_label
+	val top_type_var = map (fn s => fresh_named_var ("top_" ^ Symbol.name s)) type_symbols
 	val type_var = map (fn s => fresh_named_var ("unused_" ^ (Symbol.name s))) type_symbols
 	val tyvar_label = flatten (map (fn (_,tyvars,_) => map (symbol_label o tyvar_strip) tyvars) std_list)
 	val k = length tyvar_label
@@ -279,12 +281,13 @@ functor Datatype(structure Il : IL
 
 
 	local
-	    fun help (type_label,exp_con_eq_i_opt) = 
+	    fun help (top_type_label,type_label,exp_con_eq_i_opt) = 
 		(case exp_con_eq_i_opt of
 		     NONE => NONE
 		   | SOME (exp_eq_i,con_eq_i) =>
 			 let 
-			     val eq_lab = to_eq_lab type_label
+(*			     val eq_lab = to_eq_lab type_label *)
+			     val eq_lab = to_eq_lab top_type_label 
 			     val equal_var = fresh_named_var (label2string eq_lab)
 			     val bnd_var = fresh_named_var ("poly" ^ (label2string eq_lab))
 			     val eq_expbnd = BND_EXP(equal_var,exp_eq_i)
@@ -307,7 +310,7 @@ functor Datatype(structure Il : IL
 							    TOTAL)))
 			 in SOME(eq_sbnd, eq_sdec)
 			 end)
-	in val eq_sbnd_sdec_opts = map2 help (top_type_label,exp_con_eq_opt)
+	in val eq_sbnd_sdec_opts = map3 help (top_type_label,type_label,exp_con_eq_opt)
 	end
 	val type_sbnd_sdecs = (map4 (fn (l,v,c,k) => (SBND(l,BND_CON(v,c)),
 						      (SDEC(l,DEC_CON(v,k,NONE)))))
@@ -325,13 +328,12 @@ functor Datatype(structure Il : IL
     (* ------------------------------------------------------------------
       The datatype compiler for compiling a single datatype statement.
       ------------------------------------------------------------------ *)
-    fun compile {context, typecompile,
-		 datatycs : Ast.db list, eq_compile} : (sbnd * sdec) list =
+    type node = int * (Symbol.symbol * Ast.tyvar list * (Ast.symbol * Ast.ty option) list)
+    fun compile' (context, typecompile,
+		nodes : node list, eq_compile) : (sbnd * sdec) list =
       let 
 	(* ---- Find the strongly-connected components of datatypes. *)
 	local
-	  type node = int * (Symbol.symbol * Ast.tyvar list * (Ast.symbol * Ast.ty option) list)
-	  val nodes = mapcount (fn (i,arg) => (i,db_strip arg)) datatycs
 	  val syms = map (fn (_,(s,_,_)) => s) nodes
 	  fun help (_,NONE) = []
 	    | help (_,SOME ty) = let val s = free_tyc_ty(ty,fn _ => false)
@@ -372,6 +374,81 @@ functor Datatype(structure Il : IL
 	val res = loop context [] sym_tyvar_def_listlist
       in res
       end
+
+    fun compile {context, typecompile,
+		 datatycs : Ast.db list, eq_compile} : (sbnd * sdec) list =
+	let
+	    fun calldriver() = 
+		let fun mapper (i,arg) = 
+		    let val (tyc,tyv,rhs) = db_strip arg
+			val def = (case rhs of
+				       Ast.Constrs def => def
+				     | _ => error "bad datbind")
+		    in (i,(tyc,tyv,def))
+		    end
+		    val nodes = mapcount mapper datatycs
+		in  compile'(context,typecompile,nodes,eq_compile)
+		end
+	in 
+	    case datatycs of
+		[db] => 
+		    let val (tyc,tyv,rhs) = db_strip db
+		    in  (case rhs of
+			     Ast.Repl path => 
+				 let val type_lab = symbol_label tyc
+				     val type_var = gen_var_from_symbol tyc
+				     val top_lab = to_top_lab type_lab
+				     val top_var = fresh_named_var "top_dt"
+(*				     val eq_lab = to_eq_lab type_lab *)
+				     val eq_lab = to_eq_lab top_lab 
+				     val eq_var = fresh_named_var "eqfun"
+				     val dt_lab = to_datatype_lab type_lab
+				     val dt_var = fresh_named_var "dt"
+				     val type_labs = map symbol_label path
+				     val (eq_labs,dt_labs) = 
+					 let fun loop base [] = error "empty path"
+					       | loop base [l] = [base l]
+					       | loop base (a::b) = a :: loop base b
+					 in  (loop (to_eq_lab o to_top_lab) type_labs,
+					      loop to_datatype_lab type_labs)
+					      
+					 end
+				     val type_sbndsdec = 
+					 (case (Context_Lookup(context,type_labs)) of
+					      SOME(_,PHRASE_CLASS_CON (c,k)) => 
+						  let 
+						      val bnd = BND_CON(top_var,c)
+						      val dec = DEC_CON(top_var,k,SOME c)
+						  in  [(SBND(top_lab,bnd),SDEC(top_lab,dec))]
+						  end
+					    | _ => (error "unbound datatype"))
+				     val eq_sbndsdec = 
+					 (case (Context_Lookup(context,eq_labs)) of
+					      SOME(_,PHRASE_CLASS_EXP (e,c)) => 
+						  let val bnd = BND_EXP(eq_var,e)
+						      val dec = DEC_EXP(eq_var,c)
+						  in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
+						  end
+					    | SOME(_,PHRASE_CLASS_MOD (m,s)) => 
+						  let val bnd = BND_MOD(eq_var,m)
+						      val dec = DEC_MOD(eq_var,s)
+						  in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
+						  end
+					    | _ => [])
+				     val constr_sbndsdec = 
+					 (case (Context_Lookup(context,dt_labs)) of
+					      SOME(_,PHRASE_CLASS_MOD (m,s)) => 
+						  let val bnd = BND_MOD(dt_var,m)
+						      val dec = DEC_MOD(dt_var,s)
+						  in  [(SBND(dt_lab,bnd),SDEC(dt_lab,dec))]
+						  end
+					    | _ => error "unbound datatype")
+				 in type_sbndsdec @ eq_sbndsdec @ constr_sbndsdec
+				 end
+			   | _ => calldriver())
+		    end
+	      | _ => calldriver()
+	end
 
     (* ---------------- constructor LOOKUP RULES --------------------------- 
      --------------------------------------------------------- *)

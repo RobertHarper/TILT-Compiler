@@ -50,6 +50,8 @@ struct
        | ((not_int is | neg_int is | abs_int is),[]) => help(con_int is, con_int is)
        | (float2int,[]) => help(con_float F64, con_int W32)
        | (int2float,[]) => help(con_int W32, con_float F64)
+       | (int2int(is1,is2),[]) => help(con_int is1, con_int is2)
+       | (uint2uint(is1,is2),[]) => help(con_uint is1, con_uint is2)
        | (int2uint(is1,is2),[]) => help(con_int is1, con_uint is2)
        | (uint2int(is1,is2),[]) => help(con_uint is1, con_int is2)
        | (uinta2uinta(is1,is2),[]) => help(con_array(con_uint is1), con_array(con_uint is2))
@@ -100,21 +102,24 @@ struct
 	       div_int  is | mod_int is | 
 	       quot_int is | rem_int is),[]) => help'([con_int is, con_int is], con_int is)
 	 | ((plus_uint is | minus_uint is | mul_uint is | 
-	       div_uint is),[]) => help'([con_uint is, con_uint is], con_uint is)
+	       div_uint is | mod_uint is),[]) => help'([con_uint is, con_uint is], con_uint is)
    	  | ((less_int is | greater_int is |
 	       lesseq_int is | greatereq_int is | 
 	       eq_int is | neq_int is),[])  => help'([con_int is, con_int is], con_bool)
 	  | ((lshift_int is | rshift_int is),[]) => help'([con_int is, con_int W32], con_int is)
 	  | (rshift_uint is,[]) => help'([con_uint is, con_int W32], con_uint is)
-	  | ((and_int is | or_int is),[]) => help'([con_uint is, con_uint is], con_uint is)
+	  | ((and_int is | or_int is | xor_int is),[]) => help'([con_int is, con_int is], con_int is)
 	   | ((less_uint is | greater_uint is |
 	       lesseq_uint is | greatereq_uint is),[]) => help'([con_uint is, con_uint is], con_bool)
 (*	  | cons {instance} => help'([instance,con_list instance],con_list instance) *)
 
-	     | (((array2vector aggregate) | (create_table aggregate) | 
+	     | (((array2vector aggregate) | (vector2array aggregate) |
+		 (create_table aggregate) | (create_empty_table aggregate) |
 		 (length_table aggregate) | (sub aggregate) | (update aggregate) | 
 		 (equal_table aggregate)), cons) =>
-	     let fun create_array instance = thelp'([con_uint W32, instance], con_array instance)
+	     let fun create_empty_array instance = thelp'([], con_array instance)
+		 fun create_empty_vector instance = thelp'([], con_vector instance)
+		 fun create_array instance = thelp'([con_uint W32, instance], con_array instance)
 		 fun create_vector instance = thelp'([con_uint W32, instance], con_vector instance)
 		 fun len_array instance = thelp(con_array instance, con_uint W32)
 		 fun len_vector instance = thelp(con_vector instance, con_uint W32)
@@ -123,27 +128,32 @@ struct
 		 fun update_array instance =  thelp'([con_array instance, con_uint W32, instance], con_unit)
 		 fun update_vector instance =  thelp'([con_vector instance, con_uint W32, instance], con_unit)
 		 fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
-		 fun eq_vector instance = help(partial_arrow(con_tuple [instance, instance],con_bool),
-					       partial_arrow(con_tuple [con_vector instance, 
-									con_vector instance],con_bool))
+		 fun eq_vector instance = help(partial_arrow([instance, instance],con_bool),
+					       partial_arrow([con_vector instance, 
+							      con_vector instance],con_bool))
 		 fun array2vector_array instance = thelp(con_array instance, con_vector instance)
+		 fun vector2array_vector instance = thelp(con_vector instance, con_array instance)
 		 fun do_array instance = 
 		     (case prim of
 			  create_table _ => create_array instance
+			| create_empty_table _ => create_empty_array instance
 			| length_table _ => len_array instance
 			| sub _ => sub_array instance
 			| update _ => update_array instance
 			| equal_table _ => eq_array instance
 			| array2vector _ => array2vector_array instance
+			| vector2array _ => error "use array2vector"
 			| _ => error "pattern impossibility")
 		 fun do_vector instance = 
 		     (case prim of
 			  create_table _ => create_vector instance
+			| create_empty_table _ => create_empty_vector instance
 			| length_table _ => len_vector instance
 			| sub _ => sub_vector instance
 			| update _ => update_vector instance
 			| equal_table _ => eq_vector instance
-			| array2vector _ => error "no you're not turning a vector back to an array"
+			| array2vector _ => error "use vector2array"
+			| vector2array _ => vector2array_vector instance
 			| _ => error "pattern impossibility")
 
 	     in  (case (aggregate,cons) of
@@ -173,7 +183,8 @@ struct
   fun get_iltype ilprim _ =
       (case ilprim of
 	   (not_uint is) => (false,[con_uint is], con_uint is)
-	 | (and_uint is | or_uint is) => (false,[con_uint is, con_uint is], con_uint is)
+	 | ((and_uint is) | (or_uint is) | (xor_uint is))=> 
+	       (false,[con_uint is, con_uint is], con_uint is)
 	 | (lshift_uint is) => (false,[con_uint is, con_int W32], con_uint is)
 	 | (eq_uint is | neq_uint is) => (false, [con_uint is, con_uint is], con_bool))
 
@@ -181,17 +192,13 @@ struct
   fun get_type' prim args = 
       let val (total,incons,outcon) = get_type prim args
 	  val arrow = if total then total_arrow else partial_arrow
-      in  (case incons of
-	       [incon] => arrow(incon,outcon)
-	     | _ => arrow(con_tuple incons, outcon))
+      in  arrow(incons,outcon)
       end
 
   fun get_iltype' ilprim arg = 
       let val (total,incons,outcon) = get_iltype ilprim arg
 	  val arrow = if total then total_arrow else partial_arrow
-      in  (case incons of
-	       [incon] => arrow(incon,outcon)
-	     | _ => arrow(con_tuple incons, outcon))
+      in  arrow(incons,outcon)
       end
 
     fun apply prim cons vals = (* instance arg *)
@@ -320,6 +327,7 @@ struct
 	  | (not_int is, [], _) => iunary is TilWord64.notb
 	  | (and_int is, [], _) => ibinary is TilWord64.andb
 	  | (or_int is, [], _) => ibinary is TilWord64.orb
+	  | (xor_int is, [], _) => ibinary is TilWord64.xorb
 					
 	  | (less_int is, [], _) => ipred is TilWord64.slt
 	  | (greater_int is, [], _) => ipred is TilWord64.sgt
@@ -336,6 +344,7 @@ struct
 	  | (length_table _, [instance], _) => raise UNIMP
 	  | (sub _,_,_)  => raise UNIMP
 	  | (create_table _,_,_)  => raise UNIMP
+	  | (create_empty_table _,_,_)  => raise UNIMP
 	  | (update _, _, _) => raise UNIMP
 	  | (equal_table _, _,_)  => raise UNIMP
 

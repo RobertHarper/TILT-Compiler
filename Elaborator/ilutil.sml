@@ -123,9 +123,11 @@ functor IlUtil(structure Ppil : PPIL
 	let val prim_tipe = typer prim cargs
 	    val (res_tipe,args_tipes) = 
 		(case prim_tipe of
-		     CON_ARROW([CON_RECORD lclist],res_tipe,false,_) => (res_tipe,map #2 lclist)
-		   | CON_ARROW([c],res_tipe,false,_) => (res_tipe,[c])
-		   | _ => error "cannot expand unexpected non-arrow primitive")
+		     CON_ARROW([c],res_tipe,false,_) => (res_tipe,[c])
+		   | CON_ARROW(clist,res_tipe,false,_) => (res_tipe,clist)
+		   | _ => (print "cannot expand unexpected non-arrow primitive\n";
+			   pp_con prim_tipe; print "\n";
+			   error "cannot expand unexpected non-arrow primitive"))
 	    val vars = map (fn _ => fresh_var()) args_tipes
 	    val arg_var = fresh_var()
 	    val (eargs,arg_tipe) = (case args_tipes of 
@@ -1121,6 +1123,7 @@ functor IlUtil(structure Ppil : PPIL
 
     val eq_str = "*eq_"
     val dt_str = "*dt_"
+    val top_str = "*top_"
     fun is_eq_lab lab = is_label_internal lab andalso (substring (eq_str,label2string lab))
     fun is_datatype_lab lab = is_label_internal lab andalso (substring (dt_str,label2string lab))
     local
@@ -1131,6 +1134,8 @@ functor IlUtil(structure Ppil : PPIL
 	  in  internal_label final_str
 	  end
     in  fun to_eq_lab lab = to_meta_lab eq_str lab
+(*	fun to_top_lab lab = to_meta_lab top_str lab *)
+	fun to_top_lab lab = lab
 	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
     end
 

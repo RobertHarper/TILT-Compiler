@@ -9,7 +9,8 @@ signature LINKIL =
       structure IlContext : ILCONTEXT
       structure IlStatic : ILSTATIC 
 
-      type module = (Il.context * Il.sbnd list * Il.sdec list) 
+(*      type module = (Il.context * Il.sbnd list * Il.sdec list)  *)
+      type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
       val compile_prelude : bool * string -> module
       val compile : string -> module option
       val compiles : string -> (module list) option
@@ -89,7 +90,7 @@ structure LinkIl (* : LINKIL *) =
 	open Il IlUtil Ppil IlStatic Formatter
 	    
 	structure Il = Il
-        type module = (Il.context * Il.sbnd list * Il.sdec list) 
+        type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
 
 	val _ = Compiler.Control.Print.printDepth := 15;
 	val _ = Pagewidth := 80;
@@ -171,20 +172,20 @@ structure LinkIl (* : LINKIL *) =
 	    else SOME pair
 	  | kill_datatype pair = SOME pair
 
-	fun elaborate (context,filename) : (sbnds * context_entry list) option = 
+	fun elaborate (context,filename) : ((sbnd option * context_entry) list) option = 
 	    let val (filepos,imports,astdec) = LinkParse.parse_impl filename
-		val _ = print "Parsing complete\n"
+		val _ = print ("Parsing complete: " ^ filename ^ "\n")
 		val res = 
 		    (case (Toil.xdec(context,filepos,astdec)) of
 		     SOME sbnd_ctxt_list =>
 			 let 
 (*			     val sbnd_ctxt_list = List.mapPartial kill_datatype sbnd_ctxt_list *)
-			     val sbnds = List.mapPartial #1 sbnd_ctxt_list
-			     val entries = map #2 sbnd_ctxt_list
-			 in  SOME(sbnds,entries)
+(*			     val sbnds = List.mapPartial #1 sbnd_ctxt_list *)
+(*			     val entries = map #2 sbnd_ctxt_list *)
+			 in  SOME(sbnd_ctxt_list)
 			 end
 		   | _ => NONE)
-		val _ = print "Elaboration complete\n"
+		val _ = print ("Elaboration complete: " ^ filename ^ "\n")
 	    in  res
 	    end
 	val elaborate = Stats.timer("Elaboration",elaborate)
@@ -193,19 +194,24 @@ structure LinkIl (* : LINKIL *) =
 
         (* elaborate *)
 	val prelude_module = ref (NONE : module option)
-	val inlineprelude_quad = ref (NONE : (context * sbnds * sdecs * context) option)
+	val inlineprelude_quad = ref (NONE : (context * (sbnd option * context_entry) list * context) option)
 	val inline_size = 0
 	local
-	    (* elaborate_prepend takes a context BEFORE, sbnds, sdecs, 
-          and a context AFTER where AFTER = BEFORE + sdecs.
-	     It returns a triple in which the sbnds:sdecs typecheck in the context. *)
-	    fun elaborate_prepend (context_inline,sb_init,sd_init,context_noninline) filename = 
+	    (* elaborate_prepend takes a context with the inlined entries, 
+	         the entries to be inlined, and a context without the inlined entries
+	       It returns the entry without the inlined entries,
+	         the new entries that typecheck in the context without the inlined entry,
+	         the new entries that typecheck in the context with the inlined entry *)
+	    fun elaborate_prepend' (context_inline,sb_entries_init,context_noninline) filename = 
 		(case elaborate(context_inline,filename) of
 		     NONE => NONE
-		   | SOME (sb,entries) => 
-			 let val sd = entries2sdecs entries
-			 in  SOME(context_noninline,sb_init @ sb, sd_init @ sd)
-			 end)
+		   | SOME sb_entries => 
+			 SOME(context_noninline,sb_entries_init @ sb_entries, sb_entries))
+	    fun elaborate_prepend arg filename = 
+		(case elaborate_prepend' arg filename of
+		     NONE => NONE
+		   | SOME (ctxt,sb_entries,_) => SOME (ctxt,sb_entries))
+
 	    fun hide_sbnd_sdec (sbnd,sdec) = 
 		let 
 		    fun loop acc_b acc_d [] [] = (rev acc_b,rev acc_d)
@@ -221,17 +227,15 @@ structure LinkIl (* : LINKIL *) =
 		in  (sbnd,sdec)
 		end
 	    (* we want to keep the sbnds that are reasonably small *)
-	    fun filter (sbnds,sdecs) = 
-		let fun loop acc_b acc_d [] [] = (rev acc_b, rev acc_d)
-		      | loop _ _ [] _ = error "number of sbnds and sdecs not equal"
-		      | loop _ _ _ [] = error "number of sbnds and sdecs not equal"
-		      | loop acc_b acc_d ((sb as (Il.SBND(l,b)))::rest_b) 
-			                      ((sd as (Il.SDEC(l',d)))::rest_d) = 
-			    if ((IlUtil.bnd_size b < inline_size) andalso 
-				 (IlUtil.is_inline_bnd b))
-				then loop (sb::acc_b) (sd::acc_d) rest_b rest_d
-			    else (loop acc_b acc_d  rest_b rest_d)
-		in  loop [] [] sbnds sdecs
+	    fun filter sbnd_entries =
+		let fun loop acc [] = rev acc
+		      | loop acc ((sb as SOME(Il.SBND(l,b)),ce)::rest) =
+		            if ((IlUtil.bnd_size b < inline_size) andalso 
+				(IlUtil.is_inline_bnd b))
+				then loop ((sb,ce)::acc) rest
+			    else loop acc rest
+		      | loop acc (_::rest) = loop acc rest
+		in  loop [] sbnd_entries
 		end
  	    val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()  
 
@@ -250,24 +254,26 @@ structure LinkIl (* : LINKIL *) =
        	    fun reparse filename : module = 
 		(case elaborate(ctxt_inline,filename) of 
 		       NONE => error "prelude failed to elaborate"
-		     | SOME (sbnds,entries) =>
-		     let val sdecs = entries2sdecs entries
+		     | SOME (sbnds_entries : (sbnd option * context_entry) list) =>
+		     let 
+(*                       val sdecs = entries2sdecs entries *)
 
 			 (* compute prelude_module *)
-			 val m = (ctxt_noninline,sbnds,sdecs)
+			 val m = (ctxt_noninline,sbnds_entries)
 			 val _ = prelude_module := SOME m
 
 
 			 (* compute inlineprelude_quad *)
+			 val entries = map #2 sbnds_entries
 			 val ctxt_inline = local_add_context_entries(ctxt_inline,entries)
 			 val ctxt_noninline = local_add_context_entries(ctxt_noninline,entries)
 (*
 			 val _ = (print "sdecs are:\n"; Ppil.pp_sdecs sdecs; print "\n\n";
 				  print "ctxt_noninline is:\n"; Ppil.pp_context ctxt_noninline; print "\n\n")
 *)
-			 val (sb_filt,sd_filt) = filter(sbnds,sdecs)
+			 val sbnd_entry_filt =  filter(sbnds_entries)
 (*			 val (sb_filt,sd_filt) = hide_sbnd_sdec(sb_filt,sd_filt) *)
-			 val _ = inlineprelude_quad := SOME (ctxt_inline,sb_filt,sd_filt,ctxt_noninline)
+			 val _ = inlineprelude_quad := SOME (ctxt_inline,sbnd_entry_filt,ctxt_noninline)
 		     in  m
 		     end)
 	in  
@@ -282,13 +288,15 @@ structure LinkIl (* : LINKIL *) =
 	    fun compiles filenames = 
 		let fun loop q [] = SOME []
 		      | loop q (filename::rest) = 
-			(case (elaborate_prepend q filename) of
+			(case (elaborate_prepend' q filename) of
 			     NONE => NONE
-			   | SOME (m as (_,_,sdecs)) => 
-				 (let val (ct1,sb,sd,ct2) = q
-				      val ct1' = local_add_context_sdecs(ct1,sdecs)
-				      val ct2' = local_add_context_sdecs(ct2,sdecs)
-				      val q' = (ct1',sb,sd,ct2')
+			   | SOME (ctxt,sb_ent_inline,sb_ent_noinline) =>
+				 (let val m = (ctxt,sb_ent_inline)
+				      val (ct1,sb_ent,ct2) = q
+				      val entries = map #2 sb_ent_inline
+				      val ct1' = local_add_context_entries(ct1,entries)
+				      val ct2' = local_add_context_entries(ct2,entries)
+				      val q' = (ct1',sb_ent,ct2')
 				  in  (case (loop q' rest) of
 					   NONE => NONE
 					 | SOME ms => SOME(m :: ms))
@@ -329,16 +337,20 @@ structure LinkIl (* : LINKIL *) =
 	    in  !unset
 	    end
 
+
 	fun check' filename {doprint,docheck} =
 	    let
-		val (context,sbnds,sdecs) = 
+		val (context,sbnd_entries) =
 			(case compile filename of
 			       SOME res => res
 			     | NONE => error "Elaboration failed")
+		val _ = print "XXXXXXXXXXXXXXXXX linkil.sml:check not done\n"
+
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
-				  Ppil.pp_sbnds sbnds)
+				  Ppil.pp_sbnds (List.mapPartial #1 sbnd_entries))
 			else ()
+(*
 		val m = MOD_STRUCTURE sbnds
 		val given_s = SIGNAT_STRUCTURE (NONE,sdecs)
 		val _ =  if doprint
@@ -397,7 +409,8 @@ structure LinkIl (* : LINKIL *) =
 				  Ppil.pp_context context;
 				  print "\n")
 			else ()
-	    in  (context,sbnds,sdecs)
+*)
+	    in  (context,sbnd_entries)
 	    end
 
 
@@ -423,11 +436,13 @@ structure LinkIl (* : LINKIL *) =
 
 	val test = (fn filename => SOME(ptest_res' filename) handle _ => NONE)
 
+(*
 	val elaborate = fn (ctxt,s) =>
 	    case elaborate (ctxt,s)
-	      of SOME (sbnds,entries) => 
+	      of SOME (sbnd_entries) => 
 		  SOME(sbnds, IlContext.add_context_entries(IlContext.empty_context,entries))
 	       | NONE => NONE       (* maybe we should selfify entries *)
+*)
 
 	val plus_context = IlContext.plus_context
 
@@ -449,7 +464,7 @@ structure LinkIl (* : LINKIL *) =
 			val ctxts = map #2 sbnd_ctxt_list
 			val ctxt = local_add_context_entries(empty_context,ctxts) 
 		    in 
-			SOME(sbnds,ctxt)
+			SOME(sbnd_ctxt_list,ctxt)
 		    end
 	      | NONE => NONE
 

@@ -22,6 +22,6 @@ signature TOIL =
     (* ---------------------- Signature Patching --------------------- *)
     val xsig_sharing_type      : Il.context * Il.sdecs * Ast.path list -> Il.sdecs option
     val xsig_sharing_structure : Il.context * Il.sdecs * Ast.path list -> Il.sdecs option
-    val xsig_wheretype         : Il.sdecs * Il.label list * Il.con * Il.kind -> Il.sdecs option
+    val xsig_wheretype         : Il.context * Il.sdecs * Il.label list * Il.con * Il.kind -> Il.sdecs option
 
   end;

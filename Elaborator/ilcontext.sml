@@ -299,9 +299,9 @@ struct
 		     app (fn (SBND(l,_)) => (print (Name.label2string l); print " ...")) sbnds;
 		     print "\n\n")
 *)
-	    fun loop lbl _ [] = NONE
-	      | loop lbl prev ((sbnd as SBND(l,b))::r) = 
-		let val self = loop lbl (b::prev) 
+	    fun loop lbl [] = NONE
+	      | loop lbl ((sbnd as SBND(l,b))::r) = 
+		let val self = loop lbl 
 		in
 		    (case b of
 			 (BND_EXP (_,e)) => if (eq_label(l,lbl)) 
@@ -317,7 +317,7 @@ struct
 						      then 
 							  (case m of 
 							       MOD_STRUCTURE sbnds =>
-								   (case (self sbnds) of
+								   (case (self (rev sbnds)) of
 									SOME(lbls',phrase) => SOME(l::lbls',phrase)
 								      | NONE => self r)
 							     | _ => self r)
@@ -326,9 +326,9 @@ struct
 	in
 	    (case labs of
 		 [] => error "Sbnds_Lookup got []"
-	       | [lbl] => loop lbl [] sbnds
+	       | [lbl] => loop lbl (rev sbnds)
 	       | (lbl :: lbls) =>
-		     (case (loop lbl [] sbnds) of
+		     (case (loop lbl (rev sbnds)) of
 			 SOME(labs,PHRASE_MOD (MOD_STRUCTURE sbnds)) => 
 			     (case (Sbnds_Lookup(sbnds,lbls)) of
 				  SOME(labs2,phrase2) => SOME(labs@labs2,phrase2)
@@ -355,11 +355,11 @@ struct
 		else if (is_label_open l)
 		    then (case d of
 			      (DEC_MOD(_,SIGNAT_STRUCTURE (_,sdecs))) =>
-				  (case (loop lbl sdecs) of
+				  (case (loop lbl (rev sdecs)) of
 				       SOME (flag,(class,lbls')) => SOME(flag,(class,l::lbls'))
 				     | NONE => loop lbl rest)
 			    | (DEC_MOD(_,((SIGNAT_INLINE_STRUCTURE{code,abs_sig=sdecs,...})))) =>
-				  (case (Sbnds_Lookup(code,[lbl]),loop lbl sdecs) of
+				  (case (Sbnds_Lookup(code,[lbl]),loop lbl (rev sdecs)) of
 				       (SOME (lbl,p), SOME(_,(pc,lbls'))) => 
 						SOME(true,(combine_pc(p,pc2class pc),l::lbls'))
 				     | (SOME _, NONE) => error "sdecs_Lookup: open case:  SOME/NONE"
@@ -371,9 +371,9 @@ struct
 	in
 	    (case labs of
 		 [] => error "Sdecs_Lookup_help got []"
-	       | [lbl] => loop lbl sdecs
+	       | [lbl] => loop lbl (rev sdecs)
 	       | (lbl :: lbls) =>
-		     case (loop lbl sdecs) of
+		     case (loop lbl (rev sdecs)) of
 			 SOME(_,(phrase_class,labs)) =>
 			     (case phrase_class of
 				  PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs')))) =>
@@ -415,9 +415,9 @@ struct
 	in
 	    (case labs of
 		 [] => error "Sdecs_Lookup got []"
-	       | [lbl] => loop lbl sdecs
+	       | [lbl] => loop lbl (rev sdecs)
 	       | (lbl :: lbls) =>
-		     case (loop lbl sdecs) of
+		     case (loop lbl (rev sdecs)) of
 			 SOME(labs,PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs'))))) =>
 			     (case (Sdecs_Lookup(m',sdecs',lbls)) of
 				  SOME(labs2, pc2) => SOME(labs @ labs2, pc2)

@@ -195,13 +195,15 @@ functor Ppil(structure Il : IL
 	  | pp_def (sym, SOME ty) = HOVbox[pp_sym' sym, 
 					   String " of ",
 					   pp_ty' ty]
-	val (name,tparams,defs) = db_strip db
+	fun pp_rhs (Ast.Repl path) = pp_list pp_sym' path ("",".","",true)
+	  | pp_rhs (Ast.Constrs sym_tys) = pp_list pp_def sym_tys (""," | ","",true)
+	val (name,tparams,rhs) = db_strip db
       in HOVbox((case tparams of
 		  [] => []
 		| _ => [pp_list pp_tyvar' tparams ("(",", ",")",false)]) @
 		[pp_sym' name,
 		 String " = ",
-		 pp_list pp_def defs (""," | ","",true)])
+		 pp_rhs rhs])
       end
 
     and pp_tb (tb : Ast.tb) = 

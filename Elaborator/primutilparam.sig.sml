@@ -6,8 +6,8 @@ signature PRIMUTILPARAM =
 	type intsize
 	type floatsize
 
-	val partial_arrow : con * con -> con
-	val total_arrow : con * con -> con
+	val partial_arrow : con list * con -> con
+	val total_arrow : con list * con -> con
 	val con_tuple : con list -> con
 	val con_bool : con
 	val con_unit : con

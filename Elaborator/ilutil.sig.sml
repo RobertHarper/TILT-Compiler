@@ -71,6 +71,7 @@ signature ILUTIL =
     val stamp_lab   : label
     val case_lab : label
     val expose_lab : label
+    val to_top_lab : label -> label
     val to_eq_lab : label -> label       (* takes any internal label and 
 				           generate the unique eq internal label *)
     val is_eq_lab : label -> bool

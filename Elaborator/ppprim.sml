@@ -32,6 +32,7 @@ functor Ppprim(structure ArgPrim : PRIM)
 	  | not_uint is => Hbox[String "NOT_UINT", pp_is is]
 	  | and_uint is => Hbox[String "AND_UINT", pp_is is]
 	  | or_uint is => Hbox[String "OR_UINT", pp_is is]
+	  | xor_uint is => Hbox[String "XOR_UINT", pp_is is]
 	  | lshift_uint is => Hbox[String "LSHIFT_UINT", pp_is is])
 
     fun pp_prim prim = 
@@ -67,6 +68,8 @@ functor Ppprim(structure ArgPrim : PRIM)
 	   | abs_int is => Hbox[String "ABS_INT", pp_is is]
 	   | float2int => String "FLOAT2INT"
 	   | int2float => String "INT2FLOAT"
+	   | int2int(is1,is2) => Hbox[String "INT2INT(", pp_is is1, String "->", pp_is is2, String ")"]
+	   | uint2uint(is1,is2) => Hbox[String "UINT2UINT(", pp_is is1, String "->", pp_is is2, String ")"]
 	   | int2uint(is1,is2) => Hbox[String "INT2UINT(", pp_is is1, String "->", pp_is is2, String ")"]
 	   | uint2int(is1,is2) => Hbox[String "UINT2INT(", pp_is is1, String "->", pp_is is2, String ")"]
 	   | uinta2uinta(is1,is2) => Hbox[String "UINTA2UINTA(", pp_is is1, String "->", pp_is is2, String ")"]
@@ -140,6 +143,7 @@ functor Ppprim(structure ArgPrim : PRIM)
 	  | rshift_int is => Hbox[String "rshiftI", pp_is is]
 	  | and_int is => Hbox[String "andI", pp_is is]
 	  | or_int is => Hbox[String "orI", pp_is is]
+	  | xor_int is => Hbox[String "xorI", pp_is is]
 	  | less_uint is => Hbox[String "lessUI", pp_is is]
 	  | greater_uint is => Hbox[String "greaterUI", pp_is is]
 	  | lesseq_uint is => Hbox[String "lesseqUI", pp_is is]
@@ -169,6 +173,16 @@ functor Ppprim(structure ArgPrim : PRIM)
 	  | array2vector (FloatVector _) => error "can't have array2vector *vector"
 	  | array2vector PtrVector => error "can't have array2vector *vector"
 
+	  | vector2array WordArray => error "can't have vector2array *array"
+	  | vector2array (IntArray _) => error "can't have vector2array *array"
+	  | vector2array (FloatArray _) => error "can't have vector2array *array"
+	  | vector2array PtrArray => error "can't have vector2array *array"
+
+	  | vector2array WordVector => String "wordvector2array"
+	  | vector2array (IntVector _) => String "intvector2array"
+	  | vector2array (FloatVector _) => String "(FloatArray _)2vector"
+	  | vector2array PtrVector => String "ptrvector2array"
+
 	  | create_table WordArray => String "array1"
 	  | create_table WordVector => String "vector1"
 	  | create_table (IntArray _) => String "intarray_create"
@@ -177,6 +191,15 @@ functor Ppprim(structure ArgPrim : PRIM)
 	  | create_table (FloatVector _) => String "(FloatVector _)1"
 	  | create_table PtrArray => String "ptrarray1"
 	  | create_table PtrVector => String "ptrvector1"
+
+	  | create_empty_table WordArray => String "empty_array1"
+	  | create_empty_table WordVector => String "empty_vector1"
+	  | create_empty_table (IntArray _) => String "empty_intarray_create"
+	  | create_empty_table (IntVector _) => String "(empty_IntVector _)1"
+	  | create_empty_table (FloatArray _) => String "empty_floatarray_create"
+	  | create_empty_table (FloatVector _) => String "(empty_FloatVector _)1"
+	  | create_empty_table PtrArray => String "empty_ptrarray1"
+	  | create_empty_table PtrVector => String "empty_ptrvector1"
 
 	  | sub WordArray => String "sub1"
 	  | sub WordVector => String "vsub1"
