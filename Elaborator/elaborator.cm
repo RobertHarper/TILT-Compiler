@@ -1,0 +1,39 @@
+Group is
+
+smlnj-lib.cm            (* ------ SML/NJ library ------ *)
+Util/util.cm            (* ------ Our own utilities --- *)
+
+(* ------ Elaborator Stuff ----- *)
+prim.sig.sml
+prim.sml
+ppprim.sig.sml
+ppprim.sml
+primutil.sig.sml
+primutil.sml
+primutilparam.sig.sml
+ilprimutilparam.sml
+tyvar.sig.sml
+tyvar.sml
+il.sig.sml
+il.sml
+ppil.sig.sml
+ppil.sml
+ilutil.sig.sml
+ilutil.sml 
+ilstatic.sig.sml
+ilstatic.sml
+infixparse.sig.sml
+infixparse.sml
+basis.sig.sml
+basis.sml
+illookup.sig.sml
+illookup.sml
+datatype.sig.sml
+datatype.sml
+pat.sig.sml
+pat.sml
+toil.sig.sml
+toil.sml
+ileval.sig.sml
+ileval.sml
+linkil.sml

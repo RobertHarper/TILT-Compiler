@@ -588,6 +588,8 @@ else ();
 				    | _ => (Ast.TuplePat(map #1 pe_list),
 					    Ast.TupleExp(map #2 pe_list)))
 		end
+	        (* it would be more efficient to figure this out ahead of time,
+		   instead of recomputing this over and over again .... *)
 		val tyvars = free_tyvar_exp(expr, Context_Get_ScopedConvars context)
 	    in
 	      case tyvars of
@@ -604,7 +606,8 @@ else ();
 		    in map (fn (sbnd,sdec) => (SOME sbnd, CONTEXT_SDEC sdec)) sbnd_sdec_list
 		    end
 	      | _ => (* Rules 237 *)
-		let val context' = add_context_scoped_tyvars(context,tyvars)
+		let 
+		  val context' = add_context_scoped_tyvars(context,tyvars)
 		  val lbl = fresh_open_label()
 		  val lbl' = fresh_int_label()
 		  val var = fresh_var()
