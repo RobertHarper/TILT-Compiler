@@ -5,6 +5,6 @@ signature RENDER =
 		  scene  : Eval.obj,
 		  depth  : int,
 		  hfov   : real,
-		  width  : int,
-		  height : int} -> Ppm.ppm
+		  hres   : int,
+		  vres   : int} -> Ppm.ppm
   end
