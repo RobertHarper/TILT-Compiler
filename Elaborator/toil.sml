@@ -77,24 +77,35 @@ structure Toil
 	fun get_eq_table() = !eq_table
     end
 
-    val fresh_tyvar' = fresh_tyvar
-    fun fresh_tyvar ctxt = let val tv = fresh_tyvar' ctxt
-				val _ = add_tyvar_table tv
-			    in  tv
-			    end
-    fun fresh_con ctxt = CON_TYVAR(fresh_tyvar ctxt)
-
+    local
+	fun tvwrap (f : 'a -> 'b) (proj : 'b -> tyvar) (a : 'a) : 'b =
+	    let val b = f a
+		val tv = proj b
+		val _ =  add_tyvar_table tv
+	    in  b
+	    end
+	fun conproj (what : string) (c : con) : tyvar =
+	    (case c
+	       of CON_TYVAR tv => tv
+		| _ => error (what ^ " not CON_TYVAR"))
+    in
+	val fresh_tyvar     = tvwrap fresh_tyvar     (fn tv => tv)
+	val fresh_con       = tvwrap fresh_con       (conproj "fresh_con")
+	val fresh_named_con = tvwrap fresh_named_con (conproj "fresh_named_con")
+	val dummy_type      = tvwrap dummy_type      (conproj "dummy_type")
+    end
 
     fun make_overload (context, cons_exps : (con * exp) list, default : int) : exp * con * bool =
 	let
 	    val eshot = oneshot()
 	    fun mk_constraint (con,exp) =
-		let fun check(tyvar,is_hard) = 
-		    let val c' = CON_TYVAR tyvar
-			val match = (if is_hard then eq_con else soft_eq_con)
-			    (context,con,c')
-		    in  match
-		    end
+		let
+		    fun check(tyvar,is_hard) = 
+			let val c' = CON_TYVAR tyvar
+			    val match = (if is_hard then eq_con else soft_eq_con)
+				(context,con,c')
+			in  match
+			end
 		    fun thunk() = 
 			(case (oneshot_deref eshot) of
 			     SOME _ => ()
@@ -1761,7 +1772,7 @@ structure Toil
 		   | SOME(p,PHRASE_CLASS_CON (_,_,_,_)) => path2con p
 		   | _ => (error_region(); print "unbound type constructor: ";
 			   AstHelp.pp_sym sym; print "\n";
-			   fresh_named_con(context,"unbound_type")))
+			   Error.dummy_type(context,"unbound_varty")))
 	     end
        | Ast.MarkTy (ty,r) => 
 	     let val _ = push_region r
@@ -1802,7 +1813,7 @@ structure Toil
 					print " arguments, given ";
 					print (Int.toString (length con_list));
 					print "\n";
-					fresh_named_con(context,"badarity_type"))
+					Error.dummy_type(context,"badarity_type"))
 			     | _ => (pp_kind k; print "\nand c = "; 
 				     pp_con con;
 				     elab_error "external_label mapped to type with unexpected kind"))
@@ -1821,8 +1832,7 @@ structure Toil
 			       (error_region();
 				print "unbound type constructor: ";
 				pp_pathlist AstHelp.pp_sym' syms; print "\n";
-				debugdo (fn () => pp_context context);
-				fresh_named_con(context,"unbound_type")))
+				Error.dummy_type(context,"unbound_conty")))
 	     end)
 
 				  
@@ -2529,8 +2539,4 @@ structure Toil
     val xty = fn (ctxt,fp,ty) => overload_wrap ctxt  NONE fp xty (ctxt,ty)
     val xtybind = fn (ctxt,fp,tyb) => overload_wrap ctxt  NONE fp xtybind (ctxt,tyb)
 
-
-  end;
-
-
-
+  end
