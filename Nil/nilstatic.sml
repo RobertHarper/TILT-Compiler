@@ -30,6 +30,7 @@ struct
 	type context = NilContext.context
 	val empty : unit -> context
 	val insert_con : context*var*con -> context
+	val insert_con_list : context * (var * con) list -> context
 	val find_con : context*var -> con option
 	val remove_con : context*var -> context
 	val insert_kind : context*var*kind -> context
@@ -97,6 +98,11 @@ struct
     val map = List.map
     val same_intsize = PrimUtil.same_intsize
     val same_floatsize = PrimUtil.same_floatsize
+    val set2list = Util.set2list
+    val list2set = Util.list2set
+    val mapsequence = Util.mapsequence
+    val sequence2list = Util.sequence2list
+    val list2sequence = Util.list2sequence
   end
 
 
@@ -163,27 +169,9 @@ struct
     (printl "Expression is";
      PpNil.pp_exp exp)
 
-  fun o_perr_e s opt = 
-    let
-      val _ = case opt 
-		of (SOME exp) => perr_e exp
-		 | NONE => printl s
-    in
-      false
-    end
-
   fun perr_c con =
     (printl "Constructor is";
      PpNil.pp_con con)
-
-  fun o_perr_c s opt = 
-    let
-      val _ = case opt 
-		of (SOME con) => perr_c con
-		 | (NONE) => printl s
-    in
-      false
-    end
 
   fun perr_k kind = 
     (printl "Kind is";
@@ -191,30 +179,11 @@ struct
 
   fun b_perr_k kind = (perr_k kind;false)
 
-  fun o_perr_k s opt = 
-    let
-      val _ = case opt 
-		of (SOME kind) => perr_k kind
-		 | (NONE) => printl s
-    in
-      false
-    end
-
   fun perr_e_c (exp,con) = 
     (printl "Expression is";
      PpNil.pp_exp exp;
      lprintl "of type";
      PpNil.pp_con con)
-
-  fun o_perr_e_c s opt = 
-    let
-      val _ = 
-	case opt
-	  of (SOME (exp,con)) => perr_e_c (exp,con)
-	   | (NONE) =>  printl s
-    in
-      false
-    end
 
   fun perr_c_c (con1,con2) = 
     (printl "Expected constructor";
@@ -222,31 +191,19 @@ struct
      printl "Found constructor";
      PpNil.pp_con con2)
 
-  fun o_perr_c_c s opt = 
-    let
-      val _ = 
-	case opt 
-	  of SOME cons => perr_c_c cons
-	   | NONE => printl s
-    in
-      false
-    end
-
   fun perr_k_k (kind1,kind2) = 
     (printl "Expected kind";
      PpNil.pp_kind kind1;
      printl "Found kind";
      PpNil.pp_kind kind2)
 
-  fun o_perr_k_k s opt = 
-    let
-      val _ = 
-	case opt 
-	  of SOME kinds => perr_k_k kinds
-	   | NONE => printl s
-    in
-      false
-    end
+  fun perr_c_k_k (con,kind1,kind2) = 
+    (printl "Constructor is";
+     PpNil.pp_con con;
+     lprintl "Expected kind";
+     PpNil.pp_kind kind1;
+     lprintl "Found kind";
+     PpNil.pp_kind kind2)
 
   fun perr_e_c_c (exp,con1,con2) = 
     (printl "Expression is";
@@ -256,15 +213,23 @@ struct
      lprintl "Found type";
      PpNil.pp_con con2)
 
-  fun o_perr_e_c_c s opt = 
+  fun o_perr pr s opt =  
     let
-      val _ = 
-	case opt
-	  of (SOME args) => perr_e_c_c args
-	   | NONE => printl s
+      val _ = case opt 
+		of (SOME arg) => pr arg
+		 | NONE => printl s
     in
       false
     end
+
+  val o_perr_e = o_perr perr_e
+  val o_perr_c = o_perr perr_c
+  val o_perr_k = o_perr perr_k
+  val o_perr_e_c = o_perr perr_e_c
+  val o_perr_c_c = o_perr perr_c_c
+  val o_perr_k_k = o_perr perr_k_k
+  val o_perr_c_k_k = o_perr perr_c_k_k
+  val o_perr_e_c_c = o_perr perr_e_c_c
 
   fun split ls = 
       let fun split' _ [] = error "split given empty list"
@@ -334,6 +299,7 @@ struct
     | strip_record _ = NONE
 
   fun curry2 f = fn a => fn b => f (a,b)
+  fun curry3 f = fn a => fn b => fn c => f (a,b,c)
 
   val eq_var2 = curry2 eq_var
   val eq_label2 = curry2 eq_label
@@ -487,7 +453,7 @@ struct
 	 end
 	| Record_k elts => 
 	 let
-	   val elt_list = Util.sequence2list elts
+	   val elt_list = sequence2list elts
 	   val vars_and_kinds = map (fn ((l,v),k) => (v,k)) elt_list
 
 	   fun base (D,kmap) = 
@@ -496,7 +462,7 @@ struct
 		 ListPair.map (fn (((l,_),_),(v,k)) => ((l,v),k)) 
 		 (elt_list,kmap)
 	     in
-	       (Record_k (Util.list2sequence entries))
+	       (Record_k (list2sequence entries))
 	     end
 	 in
 	   fold_kinds (D,vars_and_kinds,base)
@@ -592,7 +558,7 @@ struct
 	   (* Assumes that set implementation guarantees entries are 
 	    * all distinct - i.e., no duplicates
 	    *)
-	   val def_list = Util.sequence2list defs
+	   val def_list = sequence2list defs
 	   val var_kinds = map (fn (var,con) => (var,Word_k Runtime)) def_list
 	     
 	   fun check_one D ((var,con),(cons,kinds)) =
@@ -604,7 +570,7 @@ struct
 
 	   fun cont D = (List.foldr (check_one D) ([],[]) def_list)
 	   val (cons,kinds) = c_insert_kind_list (D,var_kinds,cont)
-	   val con' = Mu_c (Util.list2sequence cons,var)
+	   val con' = Mu_c (list2sequence cons,var)
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con')
 	 in
 	   if c_all is_word b_perr_k kinds then
@@ -785,7 +751,7 @@ struct
 	   fun base (D,entry_info) =
 	     let
 	       val (entries,entry_kinds) = unzip entry_info
-	       val kind = Record_k (Util.list2sequence entry_kinds)
+	       val kind = Record_k (list2sequence entry_kinds)
 	     in
 	       case (do_eta_record entries)
 		 of SOME c => (c,kind)
@@ -815,7 +781,7 @@ struct
 
 	   val entry_kinds = 
 	     (case (strip_singleton record_kind) of
-		 Record_k kinds => Util.sequence2list kinds
+		 Record_k kinds => sequence2list kinds
 	       | _ => (print"While con_valid-ing\n";
 		       PpNil.pp_con constructor;
 		       print"\nUnexpected kind returned from con_valid\n";
@@ -940,7 +906,7 @@ struct
 	    | Record_k elts => 
 	     let
 	       val entries = 
-		 Util.mapsequence 
+		 mapsequence 
 		 (fn ((label,var),kind) => 
 		  (label,pull (Proj_c (c,label),kind))) elts
 	     in
@@ -1006,6 +972,16 @@ struct
 
 
 (* Term level type checking.  *)
+
+  fun get_function_type (D,openness,Function (effect,recursive,tformals,
+					      formals,fformals,body,return)) = 
+    let
+      val num_floats = Word32.fromInt (List.length fformals)
+      val con = AllArrow_c (openness,effect,tformals,#2 (unzip formals),num_floats,return)
+      val (con',kind) = con_valid (D,con)
+    in
+      (con',kind)
+    end
 
   fun value_valid (D,value) = 
     (case value
@@ -1278,7 +1254,7 @@ struct
 	   case strip_recursive argcon' 
 	     of SOME (set,var) =>
 	       let
-		 val def_list = Util.set2list set
+		 val def_list = set2list set
 		 val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
 		 val cmap = list2cmap (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		 val con'' = substConInCon cmap con'
@@ -1304,7 +1280,7 @@ struct
 	      of SOME (set,var) =>
 		(if alpha_equiv_con (argcon',con) then
 		   let
-		     val def_list = Util.set2list set
+		     val def_list = set2list set
 		     val (_,con') = valOf (List.find (fn (v,c) => eq_var (v,var)) def_list)
 		     val cmap = list2cmap (map (fn (v,c) => (v,Mu_c (set,v))) def_list)
 		     val con'' = substConInCon cmap con'
@@ -1568,10 +1544,8 @@ struct
 	       insert_con (D,v,Prim_c (Float_c F64,[]))) D'' fformals
       val (body',body_c,body_kind) = exp_valid (D''',body)
       val (return',return_kind) = con_valid (D''',return)
-      val num_floats = Word32.fromInt (List.length fformals)
-      val con = AllArrow_c (Open,effect,tformals',#2 (unzip formals'),num_floats,return')
-      val (con',kind) = con_valid (D,con)  (*Some extra stuff needs to be done *)
       val function' = Function (effect,recursive,tformals',formals',fformals,body',return')
+      val (con',kind) = get_function_type (D,Open,function')
     in
       if alpha_equiv_con (body_c,return') then
 	(function',con',kind)
@@ -1579,7 +1553,58 @@ struct
 	(perr_e_c_c (body',return',body_c);
 	 error "Return expression has wrong type")
     end
-  and bnds_valid (D,bdns) = error "Unimplemented"
+  and bnds_valid (D,bnds) = bnds_valid' (D,bnds,[])
+  and bnds_valid' (D,[],rev_bnds) = (D,rev rev_bnds)
+    | bnds_valid' (D,bnd::rest,rev_bnds) = 
+    let
+      val (D',bnd') = 
+	(case bnd 
+	   of Con_b (var, kind, con) =>
+	     let
+	       val kind' = kind_valid (D,kind)
+	       val (con',kind'') = con_valid (D,con)
+	     in
+	       if alpha_equiv_kind (kind',kind'') then
+		 (insert_kind (D,var,kind''),Con_b (var,kind'',con'))
+	       else
+		 (perr_c_k_k (con',kind',kind'');
+		  error ("kind mismatch in constructor binding of "^(var2string var)))
+	     end
+	    | Exp_b (var, con, exp) =>
+	     let
+	       val (con',kind) = con_valid (D,con)
+	       val (exp',con'',kind'') = exp_valid (D,exp)
+	     in
+	       if alpha_equiv_con (con',con'') then
+		 (insert_con (D,var,con''),Exp_b (var,con'',exp'))
+	       else
+		 (perr_e_c_c (exp',con',con'');
+		  error ("type mismatch in expression binding of "^(var2string var)))
+	     end
+	    | ((Fixopen_b defs) | (Fixcode_b defs)) =>
+	     let
+	       val def_list = set2list defs
+	       val (vars,functions) = unzip def_list
+	       val openness = 
+		 (case bnd 
+		    of Fixopen_b _ => Open
+		     | _ => Code)
+	       val (declared_c,declared_k) = 
+		 (unzip (map (curry3 get_function_type D openness) functions))
+	       val D' = insert_con_list (D,zip (vars,declared_c))
+	       val (functions',found_c,found_k) = 
+		 unzip3 (map (curry2 function_valid D') functions)
+	       val defs' = list2set (zip (vars,functions'))
+	     in
+	       if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (declared_c,found_c) then
+		 (D',Fixopen_b defs')
+	       else
+		 error "Declared type for function binding doesn't match found type"
+	     end
+	 | Fixclosure_b defs => error "Unimplemented")
+    in
+      bnds_valid' (D,rest,bnd'::rev_bnds)
+    end
 
   and exp_valid (D : context,exp : exp) : (exp * con * kind) = 
     (case exp 

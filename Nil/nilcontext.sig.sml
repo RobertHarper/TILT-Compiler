@@ -16,6 +16,7 @@ signature NILCONTEXT =
     val find_con : context*var -> con option
     val remove_con : context*var -> context
 
+    val insert_con_list : context * (var * con) list -> context
 
     (*Note that insertion of a kind automatically selfifies*)
     (* insert_kind (context,var,kind) => ()

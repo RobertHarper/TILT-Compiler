@@ -32,6 +32,9 @@ struct
        of NONE => {conmap = V.insert (conmap, var, con), kindmap = kindmap}
 	| _ => error ("Expression variable "^(var2string var)^" already in context"))
 
+  fun insert_con_list (C:context,defs : (var * con) list) =
+    List.foldl (fn ((v,c),C) => insert_con (C,v,c)) C defs
+
   fun find_con ({conmap,...}:context,var) = V.find (conmap, var)
     
   fun remove_con ({conmap,kindmap}:context,var) = 
