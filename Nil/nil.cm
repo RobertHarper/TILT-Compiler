@@ -11,6 +11,10 @@ nil.sig.sml
 nil.sml
 ppnil.sig.sml
 ppnil.sml
+tonil.sml
+nilutil.sig.sml
+nilutil.sml
+linknil.sml
 (*
 typecheck.sig.sml
 typecheck.sml

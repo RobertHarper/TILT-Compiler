@@ -196,7 +196,8 @@ struct
 	   val (knd, con) = xsig decs (Var_c var'_c, il_signat')
      
            (* Split the functor body *)
-	   val decs' = Ilcontext.add_context_mod' (decs, var', il_signat')
+           val d = Il.DEC_MOD(var', il_signat')
+	   val decs' = Ilcontext.add_context_dec (decs, Ilstatic.SelfifyDec d)
 	   val {rev_cbnds, 
 		rev_ebnds, 
 		name_c = name''_c,
@@ -216,8 +217,7 @@ struct
            val ebnds = rev rev_ebnds
        in
 	   {rev_cbnds = [(var_c, Fun_c(Open, [(var'_c, knd)], 
-					     Let_c (Sequential, cbnds, 
-						    Var_c name''_c)))],
+					     makeLetC cbnds (Var_c name''_c)))],
             rev_ebnds = [Fixfun_b [(var_not_in_defn,
 				   Function(Open, effect, Leaf,
 					    [(var'_c, knd)],
@@ -294,7 +294,7 @@ struct
       let
 	  val {rev_cbnds, rev_ebnds, name_c, name_r, il_signat} = xmod decs il_mod
 	  val il_dec = Il.DEC_MOD(var', il_signat)
-	  val decs' = Ilcontext.add_context_mod'(decs, var', il_signat)
+	  val decs' = Ilcontext.add_context_dec(decs, Ilstatic.SelfifyDec il_dec)
 	  val {cbnds, crbnds, ebnds, erlabels, erfields, ercons, il_sdecs} =
 	      xsbnds decs' rest
 	  
@@ -510,7 +510,7 @@ struct
        let
 	   val il_knd = Ilstatic.GetConKind (decs, il_con)
 	   val {rev_cbnds,name_c,...} = xmod decs modv
-	   val con = Let_c (Sequential, rev rev_cbnds, Proj_c (Var_c name_c, lab))
+	   val con = makeLetC (rev rev_cbnds) (Proj_c (Var_c name_c, lab))
 	   val knd = xkind il_knd
        in
 	   (con, Singleton_k(knd, con))
@@ -565,9 +565,16 @@ struct
        let
 	   val (exp, con) = xexp decs il_exp
        in
-	   (* XXX *)
+	   (* BUG *)
 	   (* SHOULD PRESERVE EQUIVALENCE OF REF VALUES BUT DOESN'T !!! *)
 	   (Const_e (Prim.refcell (ref exp)), Prim_c(Ref_c, [con]))
+       end
+
+     | xvalue decs (Prim.tag(tag, il_con))  =
+       let
+	   val (con, _) = xcon decs il_con
+       in
+	   (Const_e (Prim.tag (tag, con)), Prim_c(Exntag_c, [con]))
        end
 
    and xexp decs (Il.OVEREXP(_, true, exp)) = xexp decs (xoneshot exp)
@@ -631,7 +638,9 @@ struct
 	   val set = xfbnds decs fbnds
 	   val (SOME (Function (_,_,_,vklist,vclist,_,result_con))) = 
 	       Util.set_lookup Name.eq_var set var
-	   val effect = (case il_arrow of PARTIAL => Partial | TOTAL => Total)
+	   val effect = (case il_arrow of 
+			     Il.PARTIAL => Partial 
+			   | Il.TOTAL => Total)
        in
 	   (Let_e (Sequential, [Fixfun_b set], Var_e var), 
 	    Arrow_c (Open, (effect, vklist, #2 (myunzip vclist), result_con)))
@@ -645,9 +654,27 @@ struct
 	    Prim_c (Record_c labels, cons))
        end
 
-     | xexp decs (Il.RECORD_PROJECT (il_exp, label, il_con)) =
+     | xexp decs (il_exp0 as (Il.RECORD_PROJECT (il_exp, label, il_record_con))) =
        let
 	   val (exp, _) = xexp decs il_exp
+           val fields = (case (Ilstatic.con_head_normalize' (decs, il_record_con)) of
+                           Il.CON_RECORD fields => fields
+                         | hnf => (print "Oops\n";
+				   Ppil.pp_exp il_exp0;
+				   print "\n";
+				   Ppil.pp_con il_record_con;
+				   print "\n";
+				   Ppil.pp_con hnf;
+				   error "xexp: RECORD_PROJECT 1"))
+           val il_con = (case (Listops.assoc_eq(Name.eq_label, label, fields)) of
+			     SOME il_con => il_con
+			   | NONE => (print "Oops\n";
+				      Ppil.pp_exp il_exp0;
+				      print "\n";
+				      Ppil.pp_con il_record_con;
+				      print "\n";
+				      Ppil.pp_label label;
+				      error "xexp: RECORD_PROJECT 2"))
 	   val (con, _) = xcon decs il_con
        in
 	   (Prim_e (NilPrimOp (select label), [], SOME [exp]), con)
@@ -788,8 +815,6 @@ struct
 
      | xexp decs (Il.SEAL (exp,_)) = xexp decs exp
 
-     | xexp decs (Il.TAG _) = error "(xexp): TAG untranslatable"
-
      | xexp decs _ = error "(xexp) unrecognized expression"
 
    and xfbnds decs fbnds = 
@@ -861,7 +886,7 @@ struct
 			    ((Exp_b (var_r, Var_e name_r)) :: 
 			     (rev_ebnds @ 
 			      (map Con_b ((var_c, Var_c name_c) :: rev_cbnds))),
-			     Il.DEC_MOD(var, il_signat))
+			     Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat)))
 			end
 
 		  | (Il.BND_CON(var,il_con)) =>
@@ -883,8 +908,9 @@ struct
        let
 	   val (var_c, var_r) = splitVar var
 	   val (knd, con) = xsig decs (Var_c var, sig_dom)
+           val d = Il.DEC_MOD(var, sig_dom)
            val (knd', con') = 
-	       xsig (Ilcontext.add_context_mod' (decs, var, sig_dom))
+	       xsig (Ilcontext.add_context_dec (decs, Ilstatic.SelfifyDec d))
 	            (App_c(con0, [Var_c var]), sig_rng)
        in
 	   (Arrow_k (Open, [(var_c, knd)], knd'),
@@ -906,7 +932,7 @@ struct
        let
 	   val (var_c, var_r) = splitVar var
 	   val (knd, con) = xsig decs (Proj_c(con0, lbl), signat)
-           val decs' = Ilcontext.add_context_dec(decs, d)
+           val decs' = Ilcontext.add_context_dec(decs, Ilstatic.SelfifyDec d)
 	   val {crdecs, erlabs, ercons} =
 	       xsdecs decs' (con0, extendmap (subst, var_c, Proj_c(con0, lbl)),
 			    rest)

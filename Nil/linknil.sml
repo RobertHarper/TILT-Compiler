@@ -29,11 +29,11 @@ struct
 	    val bnds = (List.rev (map Nil.Con_b rev_cbnds)) @ 
 		       (List.rev rev_ebnds)
 	in
-	    print "ELABORATION SUCESSFULLY COMPLETED\n";
+	    print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n";
 	    Ppnil.pp_bnds bnds;
 	    print "\n"
 	end
-(*            handle (LinkIl.IlUtil.NOTFOUND s) => print ("NOTFOUND: " ^ s)*)
+           handle (LinkIl.IlContext.NOTFOUND s) => print ("NOTFOUND: " ^ s)
 
 end
 
