@@ -1,0 +1,16 @@
+Number: 0105
+Title:       overloading with words
+Keywords:    overloading, words
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     unresolved overloading in test case, may be a discrepancy with mlton, but i'm not sure what is right
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0030
+Owner: rwh
+Status: open

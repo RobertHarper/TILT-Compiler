@@ -1,0 +1,16 @@
+Number: 0107
+Title:       tilt option failure
+Keywords:    option, equality
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     tilt falls over with Option failure
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0032
+Owner: rwh
+Status: open

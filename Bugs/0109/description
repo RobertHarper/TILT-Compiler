@@ -1,0 +1,16 @@
+Number: 0109
+Title:       listpair discrepancies
+Keywords:    list, listpair
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     test case reports "wrong" results
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0032
+Owner: rwh
+Status: open

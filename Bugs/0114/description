@@ -1,0 +1,16 @@
+Number: 0114
+Title:       overloading constants
+Keywords:    overload
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     fails to type check, perhaps because of word overloading problem
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0046
+Owner: rwh
+Status: open

@@ -1,0 +1,16 @@
+Number: 0112
+Title:       option exception
+Keywords:    equality
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     tilt: Option
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0038
+Owner: rwh
+Status: open

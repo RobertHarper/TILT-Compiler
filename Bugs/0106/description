@@ -1,0 +1,16 @@
+Number: 0106
+Title:       internal Option failure
+Keywords:    equality, option
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     tilt fails with exception Option
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0031
+Owner: rwh
+Status: open

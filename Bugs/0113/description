@@ -1,0 +1,16 @@
+Number: 0113
+Title:       parsing problem
+Keywords:    parser
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     disagreement over parsing
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0045
+Owner: rwh
+Status: open

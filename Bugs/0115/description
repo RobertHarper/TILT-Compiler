@@ -1,0 +1,16 @@
+Number: 0115
+Title:       withtype scoping wrong
+Keywords:    withtype
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     scoping of rhs's of withtype's is wrong
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0047
+Owner: rwh
+Status: open
