@@ -1,0 +1,45 @@
+Group 
+	structure Curtain
+	structure WNilStatic
+	structure WNilContext
+	structure WTraceInfo
+is
+
+../../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
+../../Util/util.cm             	(* ------ Our own utilities --- *)
+../../Parser/parser.cm   		(* ------ Parsing, name utils 	*)
+../../Elaborator/elaborator.cm	(* ------ Elaborator Stuff ---- *)
+
+(* ------ Wizard Stuff --------- *)
+nil.sig.sml
+nil.sml
+curtain.sig.sml
+curtain.sml
+(*curtain-impl.sml*)
+ppnil.sig.sml
+ppnil.sml
+nilerror.sig.sml
+nilerror.sml
+rewrite.sig.sml
+rewrite.sml
+subst.sig.sml
+subst.sml
+nilrename.sig.sml
+nilrename.sml
+nilprimutilparam.sml
+nilutil.sig.sml
+nilutil.sml
+nilcontextpre.sig.sml
+nilcontextpre.sml
+nilcontext.sig.sml
+nilcontext.sml
+normalize.sig.sml
+normalize.sml
+traceops.sig.sml
+traceops.sml
+nilstatic.sig.sml
+nilstatic.sml
+traceinfo.sig.sml
+traceinfo.sml
+alpha_context.sig.sml
+alpha_context.sml
