@@ -176,22 +176,20 @@ global_exn_handler_dummy:
  # ------------------------------------------------------------
  # first C arg = thread structure
  # second C arg = exn argument	;  will eventually pass in return address
- # third C arg = exn code handler address
  # ------------------------------------------------------------
 	.ent	raise_exception_raw
 raise_exception_raw:
-	lda	$sp, -64($sp)	# allocate frame
-	mov	$16, THREADPTR_SYMREG	# save where regs are
-	stq	$17, 16($sp)	# save the exn value
-	stq	$18, 24($sp)	# save handler address
+	mov	$16, THREADPTR_SYMREG	# restore thread point
+	mov	$17, $16	# save the exn value;  load_regs_forC does not change $16
 	br	$gp, restore_dummy
 restore_dummy:	
 	ldgp	$gp, 0($gp)	# get own gp
 .set noat
 				# restore address from argument
-	bsr	load_regs
-	ldq	$26, 16($sp)	# pass exn arg
-	ldq	$27, 24($sp)	# restore where to go
+	bsr	load_regs_forC
+	stq	$18, 24($sp)	# save handler address
+	mov	$16, EXNARG_SYMREG	# restore exn arg - which is same as $26 
+	ldq	$27, 0(EXNPTR_SYMREG)	# fetch exn handler code
 				# no need to pop frame as handler will change sp
 	jmp	$31, ($27), 1
 .set at

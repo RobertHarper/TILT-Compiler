@@ -56,14 +56,17 @@ long GetIReg(struct ucontext *uctxt, int i)
     return uctxt->uc_mcontext.gregs[REG_G1 + (i - 1)];
   if (i < 32) {
     gwindows_t *gwins = uctxt->uc_mcontext.gwins;
-    if (gwins != NULL)
+    if (gwins != NULL) {
+      /* window saved here */
       if (i < 24)
 	return (gwins->wbuf[gwins->wbcnt].rw_local[i-16]);
       else 
 	return (gwins->wbuf[gwins->wbcnt].rw_in[i-24]);
-    else {
-      printf ("GetIReg i = %d  gwins = %d\n",i,gwins);
-      assert(0);
+    }
+    else { 
+      /* window saved on stack */
+      int *sp = uctxt->uc_mcontext.gregs[REG_SP];
+      return sp[i - 16];
     }
   }
   assert(0);

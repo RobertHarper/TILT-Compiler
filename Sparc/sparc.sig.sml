@@ -44,6 +44,8 @@ sig
     IALIGN of align
   | NOP  (* stylized for easier reading *)
   | SETHI  of int * register
+  | WRY    of register  (* the Y register is for 64-bit integer mult/div *)
+  | RDY    of register
   | CMP    of register * operand
   | FCMPD  of register * register
   | STOREI of storei_instruction * register * int * register

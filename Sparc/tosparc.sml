@@ -380,6 +380,8 @@ struct
 	 val src2 = translateOp op2
 	 val Rdest = translateIReg rtl_Rdest
        in
+	 emit (SPECIFIC(INTOP (SRA, Rsrc1, IMMop 31, Rat)));
+	 emit (SPECIFIC(WRY   Rat));
 	 emit (SPECIFIC(INTOP (SDIV, Rsrc1, src2, Rdest)))
        end
 

@@ -88,8 +88,7 @@ structure Util = struct
     fun stripSort compare = fn a => let
 	  infix sub
 
-
-	  val op sub = sub and update = update
+(*	  val op sub = sub and update = update *)
 	  fun swap (i,j) = let val ai = a sub i
 			   in update(a,i,a sub j); update(a,j,ai) end
 	  (* sort all a[k], 0<=i<=k<j<=length a *)

@@ -21,7 +21,7 @@ exn divide_exn;
 exn overflow_exn;
 extern int Divide_exncon;
 extern int Overflow_exncon;
-extern void raise_exception_raw(Thread_t *th, value_t exn_arg, value_t code);
+extern void raise_exception_raw(Thread_t *th, value_t exn_arg);
 
 
 void exn_init()
@@ -43,13 +43,15 @@ void raise_exception(struct ucontext *uctxt, exn exn_arg)
   value_t exn_ptr;
   value_t code;
 
+  /* Move saved register from uctxt to thread area so it can be restored by raise_exception_raw */
   GetIRegs(uctxt, th->saveregs);
-  exn_ptr = th->saveregs[EXNPTR_REG];
-  code = get_record(exn_ptr,0);
 
 #ifdef DEBUG
   {
     int i;
+    exn_ptr = th->saveregs[EXNPTR_REG];
+    code = get_record(exn_ptr,0);
+
     fprintf(stderr,"\n\n--------exn_raise entered---------\n");
     fprintf(stderr,"raise: exn_ptr is %d\n",exn_ptr);
     fprintf(stderr,"raise: rec[-1] is %d\n",((int *)exn_ptr)[-1]);
@@ -60,7 +62,7 @@ void raise_exception(struct ucontext *uctxt, exn exn_arg)
   }
 #endif
   
-  raise_exception_raw(th,exn_arg,code);
+  raise_exception_raw(th,exn_arg);
 }
 
 void toplevel_exnhandler(Thread_t *curThread)

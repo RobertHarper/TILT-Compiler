@@ -19,6 +19,7 @@ structure Machine =
 
     val Rpv     = NONE
     val Rcc     = R (~1) (* useful for defining interferences WRT status register *)
+    val RY      = R (~2) (* useful for defining interferences WRT Y register *)
     val Rzero   = R 0   (* Standard Sparc convention *)
     val Rsp     = R 14  (* Standard Sparc convention *)
     val Rat     = R 16  (* Standard Sparc convention *)
@@ -66,6 +67,8 @@ structure Machine =
     IALIGN of align
   | NOP  (* stylized for easier reading *)
   | SETHI  of int * register
+  | WRY    of register
+  | RDY    of register
   | CMP    of register * operand
   | FCMPD  of register * register
   | STOREI of storei_instruction * register * int * register
@@ -246,6 +249,8 @@ structure Machine =
     | msInstr' (SETHI (value, Rdest)) =
                                 (tab ^ "sethi" ^ tab ^
 				 (ms value) ^ comma ^ (msReg Rdest))
+    | msInstr' (WRY Rsrc) = (tab ^ "mov " ^  (msReg Rsrc) ^ ", %y")
+    | msInstr' (RDY Rdest) = (tab ^ "mov %y, " ^  (msReg Rdest))
     | msInstr' (CMP (Rsrc1, op2)) =
                                 (tab ^ "cmp" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2))
@@ -474,6 +479,8 @@ structure Machine =
       | defUse (SPECIFIC (IALIGN _))               = ([], [])
       | defUse (SPECIFIC NOP)                      = ([], [])
       | defUse (SPECIFIC (SETHI (_,Rdest)))        = ([Rdest], [])
+      | defUse (SPECIFIC (WRY Rsrc))               = ([RY], [Rsrc])
+      | defUse (SPECIFIC (RDY Rdest))              = ([Rdest], [RY])
       | defUse (SPECIFIC (CMP (Rsrc1, REGop Rsrc2)))     = ([],[Rsrc1, Rsrc2])
       | defUse (SPECIFIC (CMP (Rsrc1, IMMop _)))     = ([],[Rsrc1])
       | defUse (SPECIFIC (FCMPD (Rsrc1, Rsrc2)))   = ([],[Rsrc1, Rsrc2])
@@ -518,6 +525,8 @@ structure Machine =
 	 | xspec (IALIGN ia) = IALIGN ia
 	 | xspec NOP = NOP
 	 | xspec (SETHI (value, Rdest)) = SETHI(value, fd Rdest)
+	 | xspec (RDY Rdest) = RDY(fd Rdest)
+	 | xspec (WRY Rsrc) = WRY(fs Rsrc)
 	 | xspec (CMP (Rsrc1, op2 as (IMMop _))) = CMP(fs Rsrc1, op2)
 	 | xspec (CMP (Rsrc1, REGop Rsrc2)) = CMP(fs Rsrc1, REGop(fs Rsrc2))
 	 | xspec (FCMPD (Rsrc1, Rsrc2)) = FCMPD(fs Rsrc1, fs Rsrc2)
