@@ -19,6 +19,8 @@ is
 ../RtlToMLRISC.cm
 ../MLRISC.cm
 
+AlphaCallConventionBasis.sml
+AlphaEmitRtlMLRISC.sml
 AlphaFloatAllocation.sml
 AlphaFloatConvention.sml
 AlphaIntegerAllocation.sml
@@ -27,7 +29,10 @@ AlphaLink.sml
 AlphaMLRISCConstant.sml
 AlphaMLRISCPseudo.sml
 AlphaMLRISCRegion.sml
+AlphaMLTree.sml
+AlphaMLTreeComp.sml
 AlphaPseudoInstr.sml
-AlphaStackFrame.sml
+AlphaRegisterSpillMap.sml
+AlphaStandardFrame.sml
 AlphaStandardConvention.sml
 
