@@ -731,7 +731,7 @@ struct
 	in  if assemble'' (desc,asm,asmz,obj) then
 		let val objs = map (I.P.U.obj o lookup) units
 		    val includes = tal_includes desc
-		in  Tools.link (objs, objs @ [obj], exe)
+		in  Tools.link (includes, objs @ [obj], exe)
 		end
 	    else ()
 	end
