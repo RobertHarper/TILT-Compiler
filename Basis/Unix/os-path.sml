@@ -27,8 +27,8 @@ structure OS_Path : OS_PATH = OS_PathFn (
 
     val volSS = Substring.all ""
 
-    fun splitVolPath "" = (false, volSS, volSS)
-      | splitVolPath s = if (unsafe_vsub(s, 0w0) = #"/")
+    (* Note: we are guaranteed that this is never called with "" *)
+    fun splitVolPath s = if (unsafe_vsub(s, 0w0) = #"/")
 	  then (true, volSS, Substring.triml 1 (Substring.all s))
 	  else (false, volSS, Substring.all s)
 
@@ -43,6 +43,9 @@ structure OS_Path : OS_PATH = OS_PathFn (
 
 (*
  * $Log$
+# Revision 1.2  2000/08/22  18:28:24  swasey
+# Brought up to date
+# 
 # Revision 1.1  98/03/09  19:54:19  pscheng
 # added basis
 # 
