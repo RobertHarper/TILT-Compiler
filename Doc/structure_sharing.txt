@@ -18,7 +18,7 @@ addition, it seems strange that one cannot replace an occurrence of a
 signature variable with the signature it is supposed to abbreviate.
 
 In this note, we will present our proposal for sensible structure
-sharing.  It is a conservative extension of both the Definition and
+sharing.  It is strictly more permissive than both the Definition and
 SML/NJ.  First, we will go into some detail on the Definition of type
 and structure sharing, for those not intimately familiar with the
 details.  Some terminology given here (some from the Definition, some
@@ -31,7 +31,7 @@ The Details of the Problem
 
 1) How is structure sharing Defined?
 
-The Definition says that the structure sharing specification
+The Definition says that the (n-ary) structure sharing specification
 
 > spec sharing A1 = ... = An
 
@@ -42,7 +42,10 @@ type sharing constraints, each of the form
 
 for every pair of longtycons Ai.longtycon and Aj.longtycon specified
 by the spec such that 1 <= i < j <= n.  Below, we will refer to any
-such pair as "type components of the same name".  This leads us to:
+such pair as "type components of the same name".  Note that sharing
+occurs here between pairs of type components, so there is no
+requirement that the type components being shared need to exist in all
+the structures.  This leads us to:
 
 2) How is type sharing Defined?
 
@@ -96,7 +99,7 @@ constraints between all pairs of flexible type components of the same
 name and arity (and only those components).  In other words, it will
 only expand into the type sharing constraints that are guaranteed to
 be legal.  This completely defines what spec is generated from the
-structure sharing constraint.
+(n-ary) structure sharing constraint.
 
 The remainder of the proposal involves what extra "sanity" checks are
 performed after the sharing between the flexible components has been
@@ -155,14 +158,12 @@ always legal; the compiler may just whine a lot if you use it weirdly.
 
 3) Why bother with the two variations?  At the time we studied this
 issue, we couldn't agree on which was better and it seemed easy to
-implement them both.  [Derek: If I recall correctly, I may have been
-the only one who really supported variation 1 and I've now changed my
-mind.]  The distinction comes up in the case that you're sharing one
-type component that's flexible and one that's not.  The Definition of
-course says to reject this.  One could consider implementing real
-sharing here, using a "where type" or something to realize the
-flexible component in terms of the non-flexible one, but it is unclear
-how to do this in general.  Consider for example,
+implement them both.  The distinction comes up in the case that you're
+sharing one type component that's flexible and one that's not.  The
+Definition of course says to reject this.  One could consider
+implementing real sharing here, using a "where type" or something to
+realize the flexible component in terms of the non-flexible one, but
+it is unclear how to do this in general.  Consider for example,
 
 > structure A : sig type a  type t        type s = a*a end
 > structure B : sig type b  type t = b*b  type s end
@@ -185,6 +186,27 @@ made equal, and hence should be allowed to do so.  However, at the
 least a warning is desired to indicate that not all type components
 of the same name can be made equal.
 
+4) Another alternative idea we discussed was to give a stronger
+meaning to multiple structure sharing specs, namely to only add type
+sharing constraints between type components existing in all the
+structures (as opposed to any two).  This seems like a reasonable
+approach, but we opted against it because it causes some valid SML
+programs to be rejected (i.e. it is not strictly more permissive than
+the Definition).  For example,
+
+> structure A : sig type t end
+> structure B : sig type s end
+> structure C : sig type t end
+> sharing A = B = C
+
+induces the sharing of A.t and C.t according to the Definition (and
+thus our proposal), but no sharing according to the stronger idea
+outlined above (since t is not present in the signature of B).
+Admittedly, this is a stupid example.  We would be interested to know
+if there are any examples of real SML programs that would not
+typecheck under a stronger interpretation of multiple structure
+sharing that induces less type sharing in this fashion.
+
 
 Credits
 -------
@@ -199,9 +221,12 @@ developers:
   Tom Murphy
   Leaf Petersen
   Chris Stone
+  David Swasey
   Joe Vanderwaart
 
-Comments and suggestions are appreciated as always.
+Comments and suggestions are appreciated as always, especially
+regarding the question of whether the first or second variation is
+preferable.
 
 Derek Dreyer & Leaf Petersen
 
