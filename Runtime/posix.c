@@ -1,6 +1,7 @@
 #include "tag.h"
 #include "posix.h"
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <math.h>
 #include <sys/wait.h>
 #include <stdio.h>
@@ -86,7 +87,7 @@ struct flock_rep_struct
 typedef struct flock_rep_struct *flock_rep;
 
 /* type tm = (int * int * int * int * int * int * int * int * int) */
-struct tm_struct
+struct mltm_struct
 {
   int a;
   int b;
@@ -98,14 +99,14 @@ struct tm_struct
   int h;
   int i;
 };
-typedef struct tm_struct *tm;
+typedef struct mltm_struct *mltm;
 
-struct string_tm_struct
+struct string_mltm_struct
 {
   char *a;
-  tm b;
+  mltm b;
 };
-typedef struct string_tm_struct *string_tm;
+typedef struct string_mltm_struct *string_mltm;
 
 /* type termio_rep = (word *       	(* iflags *)
 		   word *       	(* oflags *)
@@ -200,37 +201,67 @@ int real_logb(double arg)
 }
 
 
-void ml_timeofday()
+intpair ml_timeofday()
+{
+  value_t result;
+  struct timeval tp;
+  struct timezone tzp;
+  int fail = gettimeofday (&tp, &tzp);
+  if (fail)
+    {
+      printf("POSIX function gettimeofday failed with errno = %d\n", errno);
+      assert(0);
+    }
+  result = alloc_manyint(2,0,&cur_alloc_pointer,cur_alloc_limit);
+  ((value_t *) result)[0] = tp.tv_sec;
+  ((value_t *) result)[1] = tp.tv_usec;
+  return (intpair) result;
+}
+
+mltm ctm2mltm(struct tm *tm)
+{
+  value_t result = alloc_manyint(9,0,&cur_alloc_pointer,cur_alloc_limit);
+  ((value_t *) result)[0] = tm->tm_sec;
+  ((value_t *) result)[1] = tm->tm_min;
+  ((value_t *) result)[2] = tm->tm_hour;
+  ((value_t *) result)[3] = tm->tm_mday;
+  ((value_t *) result)[4] = tm->tm_mon;
+  ((value_t *) result)[5] = tm->tm_year;
+  ((value_t *) result)[6] = tm->tm_wday;
+  ((value_t *) result)[7] = tm->tm_yday;
+  ((value_t *) result)[8] = tm->tm_isdst;
+  return ((mltm) result);
+}
+
+string posix_ascTime (mltm unused)
 {
   printf("POSIX function not defined at line %d\n", __LINE__);
   assert(0);
 }
 
-string posix_ascTime (tm unused)
+mltm posix_localTime (intpair sec_musec)
+{
+  time_t t = *((int *)sec_musec);
+  struct tm *tm;
+  tm = localtime (&t);
+  return ctm2mltm(tm);
+}
+
+mltm posix_gmTime (intpair sec_musec)
+{
+  time_t t = *((int *)sec_musec);
+  struct tm *tm;
+  tm = gmtime (&t);
+  return ctm2mltm(tm);
+}
+
+intpair posix_mkTime(mltm unused)
 {
   printf("POSIX function not defined at line %d\n", __LINE__);
   assert(0);
 }
 
-tm posix_localTime (intpair unused)
-{
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-}
-
-tm posix_gmTime (intpair unused)
-{
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-}
-
-intpair posix_mkTime(tm unused)
-{
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
-}
-
-string posix_strfTime(string_tm unused)
+string posix_strfTime(string_mltm unused)
 {
   printf("POSIX function not defined at line %d\n", __LINE__);
   assert(0);
