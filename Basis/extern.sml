@@ -105,7 +105,7 @@ extern posix_filesys_closedir : (int, unit) -->
 extern posix_filesys_chdir : (string, unit) -->
 extern posix_filesys_getcwd : (unit, string) -->
 extern posix_filesys_openf : (string, word, word, int) -->
-extern posix_filesys_umask : (word, int) -->
+extern posix_filesys_umask : (word, word) -->
 extern posix_filesys_link : (string, string, unit) -->
 extern posix_filesys_rename : (string, string, unit) -->
 extern posix_filesys_symlink : (string, string, unit) -->
@@ -127,15 +127,5 @@ extern posix_filesys_fchmod : (int, word, unit) -->
 extern posix_filesys_chown : (string, word, word, unit) -->
 extern posix_filesys_fchown : (int, word, word, unit) -->
 extern posix_filesys_utime : (string, int, int, unit) -->
-extern posix_filesys_umask : (word, word) -->
-extern posix_filesys_link : (string, string, unit) -->
-extern posix_filesys_rename : (string, string, unit) -->
-extern posix_filesys_symlink : (string, string, unit) -->
-extern posix_filesys_mkdir : (string, word, unit) -->
-extern posix_filesys_mkfifo : (string, word, unit) -->
-extern posix_filesys_unlink : (string, unit) -->
-extern posix_filesys_rmdir : (string, unit) -->
-extern posix_filesys_readlink : (string, string) -->
-extern posix_filesys_ftruncate : (int, int, unit) -->
 extern posix_filesys_pathconf : (string, string, (int * int)) -->
 extern posix_filesys_fpathconf :  (int, string, (int * int)) -->
