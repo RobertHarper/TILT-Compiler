@@ -139,7 +139,7 @@
 0143 [open]	parsing problem with test file
 0144 [closed]	redefinition problem in as
 0145 [open]	discrepancies with time results
-0146 [open]	integer constant too large
+0146 [closed]	integer constant too large
 0147 [open]	discrepancies with time tests
 0148 [closed]	type specification error
 0149 [open]	type checking error

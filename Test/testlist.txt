@@ -176,7 +176,8 @@ m0117	pass	matrices
 m0118	fail	basic dynamic tests of primitives
 m0119	fail	text io
 m0120	fail	time
-m0121	fail	time
+m0121	skip	time [requires LargeInt to be bigger than 32 bits]
+m0121b	pass	time [works in 32 bits]
 m0122	fail	time
 m0123	pass	string comparison
 m0124	fail	type specs

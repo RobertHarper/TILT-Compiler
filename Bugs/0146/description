@@ -11,6 +11,11 @@ Code:
 Transcript:  
 Comments:    
 Fix:         
+
+	We support 32 bit ints.  The test required more.  TILT was
+	(appropriately) rejecting the test code.  We are now skipping this
+	test and I checked in a 32-bit version (m0121b).
+
 Test: m0121
-Owner: 
-Status: open
+Owner: swasey
+Status: closed
