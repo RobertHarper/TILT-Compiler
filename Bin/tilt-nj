@@ -1,0 +1,6 @@
+#!/usr/local/bin/rc
+bindir=`{dirname $0}
+top=`{cd $bindir/..; pwd}
+TILT_LIBDIR=$top
+SML_VERSION=110b
+exec /usr/local/bin/sml @SMLload'='$top/Heaps/tilt @SMLname'='tilt $*

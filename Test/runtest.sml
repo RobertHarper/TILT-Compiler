@@ -10,8 +10,8 @@ SYNOPSIS
 
 	./Runtest.$objtype.exe [-fncFS] testdir ...
 
-	./tilt [tilt-options]
-	./tilt-nj [tilt-options]
+	../Bin/tilt [tilt-options]
+	../Bin/tilt-nj [tilt-options]
 
 DESCRIPTION
 	Runtest performs the tests in testdirs, stopping when a test
@@ -69,10 +69,10 @@ EXAMPLES
 	1. Check out the sources.
 	2. Compile the runtime with gmake runtime inside ml96/Runtime.
 	3. Compile TILT under SML/NJ with gmake heap inside ml96.
-	4. Compile the Basis with ./Test/tilt-nj -b mapfile-basis inside ml96.
-	5. Compile native TILT with ./Test/tilt-nj -m mapfile-all
+	4. Compile the Basis with ./Bin/tilt-nj -b mapfile-basis inside ml96.
+	5. Compile native TILT with ./Bin/tilt-nj -m mapfile-all
 	   inside ml96.
-	6. Compile runtest with ./tilt-nj -m mapfile inside ml96/Test.
+	6. Compile runtest with ../Bin/tilt-nj -m mapfile inside ml96/Test.
 	7. Choose a til_slave script.  For a reasonable default, do
 	   ln -s til_slave_local_xterm til_slave inside ml96/Bin.
 
@@ -361,9 +361,12 @@ struct
 		    fail()))
 	end
 
-    fun harness (name : string) : string =
-	P.joinDirFile {dir = P.dir (CommandLine.name()),
-		       file = name}
+    local
+	val op/ = P.joinDirFile
+    in
+	fun bindir (name : string) : string =
+	    P.dir (CommandLine.name())/".."/"Bin"/name
+    end
 
     fun pblock b = 
       let fun pline s = eprint ("\t"^s^"\n")
@@ -400,9 +403,9 @@ struct
 			let
 			    fun has (flag : char) : bool =
 				List.exists (fn c => c=flag) flags
-			    val tilt = harness (if has #"n"
-						    then "tilt-nj"
-						else "tilt")
+			    val tilt = bindir (if has #"n"
+						   then "tilt-nj"
+					       else "tilt")
 
 			    val onfail = if has #"f" then fn () => ()
 					 else fn () => fail "test failed"

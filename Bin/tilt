@@ -1,34 +1,6 @@
-#!/bin/sh
-
-# driver for TILT for the CMU misc collection
-
-: ${TILT_LIBDIR:=/usr/local/lib/tilt} ${TILT_VERSION:=NJ}
-export TILT_LIBDIR TILT_VERSION
-
-case "$TILT_VERSION" in
-NJ)
-	SML_VERSION=110b
-	export SML_VERSION
-	exec /usr/local/bin/sml "@SMLload=$TILT_LIBDIR/Heaps/tilt" ${1+"$@"}
-	;;
-TILT)
-	case `/usr/local/bin/sys` in
-	sun*)	tilt_binary="$TILT_LIBDIR/Top.sparc.exe"  ;;
-	alpha*) tilt_binary="$TILT_LIBDIR/Top.alpha.exe"  ;;
-	*)	tilt_binary=NONE ;;
-	esac
-
-	if test "$tilt_binary" != NONE -a -x "$tilt_binary"
-	then
-		exec "$tilt_binary" ${1+"$@"}
-	else
-		echo >&2 '[Warning: native version of TILT not compiled for this platform]'
-		TILT_VERSION=NJ
-		exec "$0" ${1+"$@"}
-	fi
-	;;
-*)
-	echo >&2 "tilt: TILT_VERSION unrecognized -- $TILT_VERSION"
-	exit 1
-	;;
-esac
+#!/usr/local/bin/rc
+bindir=`{dirname $0}
+top=`{cd $bindir/..; pwd}
+TILT_LIBDIR=$top
+. $top/Test/platform
+exec $top/Bin/$objtype/tilt $*
