@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String Stats ORD_KEY HashTable *)
+(*$import NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String Stats ORD_KEY HashTable *)
 
 structure Name :> NAME =
   struct
@@ -165,7 +165,7 @@ structure Name :> NAME =
 	(* Internal labels follow special conventions *)
 	(* Some internal labels are opened for lookup *)
 	(* Some internal labels are non-exported *)
-	(* Eq and coerction labels are identifiable as such *)
+	(* Eq and coercion labels are identifiable as such *)
 	 
 	val open_str      = "+O"
 	val dt_str        = "+O+D"
