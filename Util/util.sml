@@ -55,6 +55,7 @@ structure Util : UTIL =
     val mapset = map
     val appsequence = app
     val appset = app
+    val allsequence = List.all
 
     fun set_lookup pred set key = 
 	let fun loop [] = NONE

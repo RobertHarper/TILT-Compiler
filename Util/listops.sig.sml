@@ -52,4 +52,17 @@ signature LISTOPS =
 
     val flatten : 'a list list -> 'a list
     val transpose : 'a list list -> 'a list list
+
+    val map_first : ('a -> 'b) -> ('a * 'c) list -> ('b * 'c) list
+    val map_second : ('a -> 'b) -> ('c * 'a) list -> ('c * 'b) list
+
+    (* foldl_acc f s l => (s',l') where s' is equivalent to the result of
+      * List.foldl (fn x => #2(f x)) s l
+      * and l' is the accumulated list of the second result of f.
+      * So foldl_acc (fn (x,y) => (x*x,y+x*x)) 0 [2,0,3,1] => ([4,0,9,1],14)
+      *  that is, the squares of each element, and the sum of the squares
+      *)
+    val foldl_acc : ('a * 'b -> 'c * 'b) -> 'b -> 'a list -> 'c list * 'b
+
+    val eq_len : 'a list * 'b list -> bool
   end

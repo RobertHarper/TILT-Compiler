@@ -43,4 +43,7 @@ signature UTIL =
     val appset : (('a*'b) -> unit) -> ('a,'b) sequence -> unit
     val set_lookup : ('a * 'a -> bool) -> ('a,'b) set -> 'a -> 'b option
     val sequence_lookup : ('a * 'a -> bool) -> ('a,'b) sequence -> 'a -> 'b option
+    val allsequence : (('a *'b) -> bool) -> ('a,'b) sequence -> bool
   end
+
+

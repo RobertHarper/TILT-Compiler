@@ -75,5 +75,24 @@ structure Listops : LISTOPS =
 				     in b orelse (orfold' pred acc' rest)
 				     end
 
+    fun map_second f = List.map (fn (x,v) => (x,f v)) 
+    fun map_first f = List.map (fn (x,v) => (f x,v)) 
+
+    fun foldl_acc ffun init list = 
+      let 
+	fun loop (state,[]) = ([],state)
+	  | loop (state,fst::rest) =
+	  let
+	    val (fst',state') = ffun (fst,state)
+	    val (rest',state'') = loop (state',rest)
+	  in
+	    (fst'::rest',state'')
+	  end
+      in
+	loop (init,list)
+      end
+    
+    fun eq_len (l1,l2) = ((List.length l1) = (List.length l2))
+
 
   end
