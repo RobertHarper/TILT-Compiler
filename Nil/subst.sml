@@ -7,6 +7,7 @@ structure NilSubst :> NILSUBST =
     val isSome = Option.isSome
     val debug = Stats.ff "nil_debug"
     val profile = Stats.ff "nil_profile"
+    val rename = Stats.ff "subst_rename"
       
     val (subst_counter,
 	 subst_total_size) = 
@@ -29,13 +30,31 @@ structure NilSubst :> NILSUBST =
 
     fun error' s = error "" s
 
-    val timer = Stats.timer
+    val timer = Stats.subtimer
     val subtimer = Stats.subtimer
 
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
 
     type 'a map = 'a VarMap.map
+
+    local
+      (*Possibly uncomputed data.*)
+      datatype 'a thunk = FROZEN of (unit -> 'a) | THAWED of 'a
+      type 'a delay = 'a thunk ref
+    in
+      type 'a delay = 'a delay
+      fun delay thunk = ref(FROZEN thunk)
+      fun immediate value = ref (THAWED value)
+      fun thaw (ref (THAWED v)) = v
+	| thaw (r as ref(FROZEN t)) = let val v = t()
+					  val _ = r := (THAWED v)
+				      in  v
+				      end
+      fun delayed (ref (FROZEN _)) = true
+	| delayed (ref (THAWED _)) = false
+    end
+
     (* Substitutions *)
     local
       open NilRewrite
@@ -44,8 +63,8 @@ structure NilSubst :> NILSUBST =
 
       type varset = VarSet.set
 
-      type state = {esubst : exp map,
-		    csubst : con map}
+      type state = {esubst : exp delay map,
+		    csubst : con delay map}
 
       val substitute = fn args => subtimer ("Subst:substitute",VarMap.find) args
 
@@ -55,27 +74,31 @@ structure NilSubst :> NILSUBST =
       fun empty () = VarMap.empty
 
       fun exp_var_xxx (state : state as {esubst,csubst},var,any) = 
-	let val var' = Name.derived_var var
-	in ({csubst = csubst,
-	     esubst = add (esubst,var, Var_e var')},
-	    SOME var')
-	end
+	if !rename  then
+	  let val var' = Name.derived_var var
+	  in ({csubst = csubst,
+	       esubst = add (esubst,var, immediate (Var_e var'))},
+	      SOME var')
+	  end
+	else (state,NONE)
 
 
       fun con_var_xxx (state : state as {esubst,csubst},var,any) = 
-	let val var' = Name.derived_var var
-	in ({esubst = esubst,
-	     csubst = add (csubst,var, Var_c var')},
-	    SOME var')
-	end
+	if !rename  then
+	  let val var' = Name.derived_var var
+	  in ({esubst = esubst,
+	       csubst = add (csubst,var, immediate (Var_c var'))},
+	      SOME var')
+	  end
+	else (state,NONE)
 
       fun conhandler (state : state as {csubst,...},con : con) =
 	(case con
 	   of Var_c var => 
 	     (case substitute (csubst,var)
-		of SOME con => 
+		of SOME con_delay => 
 		  (subst_counter(); 
-		   CHANGE_NORECURSE (state,con))
+		   CHANGE_NORECURSE (state,thaw con_delay))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
 	   
@@ -83,9 +106,9 @@ structure NilSubst :> NILSUBST =
 	(case exp
 	   of Var_e var => 
 	     (case substitute (esubst,var)
-		of SOME exp => 
+		of SOME exp_delay => 
 		  (subst_counter(); 
-		   CHANGE_NORECURSE (state,exp))
+		   CHANGE_NORECURSE (state,thaw exp_delay))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
 
@@ -106,7 +129,7 @@ structure NilSubst :> NILSUBST =
            rewrite_cbnd = substExpConInCBnd',
            rewrite_bnd = substExpConInBnd',...} = rewriters exp_con_handler
  
-      fun empty_state (esubst : exp map,csubst : con map) : state = 
+      fun empty_state (esubst : exp delay map,csubst : con delay map) : state = 
 	{esubst = esubst, csubst = csubst}
 
       fun substExpConInXXX substituter (esubst,csubst) item = 
@@ -270,23 +293,27 @@ structure NilSubst :> NILSUBST =
     end
 *)
 
-    fun varConExpSubst var con exp = substConInExp (VarMap.insert (VarMap.empty,var,con)) exp
-    fun varConConSubst var con con2 = substConInCon (VarMap.insert (VarMap.empty,var,con)) con2
-    fun varConKindSubst var con kind = substConInKind (VarMap.insert (VarMap.empty,var,con)) kind
+    local 
+      fun renameCon (con :con) : con delay = delay (fn () => if !rename then NilRename.renameCon con else con)
+      fun renameExp (exp :exp) : exp delay = delay (fn () => if !rename then NilRename.renameExp exp else exp)
+    in
+      fun varConExpSubst var con exp = substConInExp (VarMap.insert (VarMap.empty,var,renameCon con)) exp
+      fun varConConSubst var con con2 = substConInCon (VarMap.insert (VarMap.empty,var,renameCon con)) con2
+      fun varConKindSubst var con kind = substConInKind (VarMap.insert (VarMap.empty,var,renameCon con)) kind
 
-    fun varExpExpSubst var exp1 exp2 = substExpInExp (VarMap.insert (VarMap.empty,var,exp1)) exp2
-    fun varExpConSubst var exp con = substExpInCon (VarMap.insert (VarMap.empty,var,exp)) con
-    fun varExpKindSubst var exp kind = substExpInKind (VarMap.insert (VarMap.empty,var,exp)) kind
+      fun varExpExpSubst var exp1 exp2 = substExpInExp (VarMap.insert (VarMap.empty,var,renameExp exp1)) exp2
+      fun varExpConSubst var exp con = substExpInCon (VarMap.insert (VarMap.empty,var,renameExp exp)) con
+      fun varExpKindSubst var exp kind = substExpInKind (VarMap.insert (VarMap.empty,var,renameExp exp)) kind
+    end
 
-
-    type con_subst = con VarMap.map
-    type exp_subst = exp VarMap.map
+    type con_subst = con delay VarMap.map
+    type exp_subst = exp delay VarMap.map
 
 
     functor SubstFn(type item
-		    type item_subst = item VarMap.map
-		    val varItemItemSubst : var -> item -> item -> item
+		    type item_subst = item delay VarMap.map
 		    val substItemInItem : item_subst -> item -> item 
+		    val renameItem : item -> item
 		    val printer : item -> unit) 
       :> SUBST where type item = item
 		 and type item_subst = item_subst =
@@ -296,26 +323,35 @@ structure NilSubst :> NILSUBST =
       type item = item
       type item_subst = item_subst
 
+      val renameItem = fn item => if !rename then renameItem item else item
+      fun rename (item :item) : item delay = delay (fn () => renameItem item)
+
       fun empty () : item_subst = VarMap.empty
 	
-      fun substitute subst var = VarMap.find (subst,var)
+      fun substitute subst var = mapopt thaw (VarMap.find (subst,var))
 	
-      fun toList (subst : item_subst) = VarMap.listItemsi subst
+      fun toList (subst : item_subst) = map_second thaw (VarMap.listItemsi subst)
 	
-      fun sim_add subst (var,value) : item_subst = VarMap.insert (subst,var,value)
+      fun sim_add subst (var,value) : item_subst = VarMap.insert (subst,var,rename value)
       
       fun addl (var,item,subst) = 
-	VarMap.insert (VarMap.map (varItemItemSubst var item) subst,
-		       var,item)
-
+	let
+	  val item_delay = rename item
+	  val map_subst = VarMap.insert (empty(),var,item_delay)
+	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
+	in
+	  VarMap.insert (VarMap.map domap subst,var,item_delay)
+	end
+      
       fun addr  (subst,var,item) = 
-	VarMap.insert (subst,var,substItemInItem subst item)
+	VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem item)))
 
       fun is_empty subst = (VarMap.numItems subst) = 0
 	
       fun compose (subst1,subst2) = 
 	let
-	  val subst2 = VarMap.map (substItemInItem subst1) subst2
+	  fun domap item_delay = delay (fn () => substItemInItem subst1 (thaw item_delay))
+	  val subst2 = VarMap.map domap subst2
 	  val subst = VarMap.unionWith #2 (subst1,subst2)
 	in
 	  subst
@@ -326,7 +362,7 @@ structure NilSubst :> NILSUBST =
       fun simFromList (list : (var * item) list) : item_subst = 
 	let
 	  fun fold ((var,value),subst) = 
-	    VarMap.insert(subst,var,value)
+	    VarMap.insert(subst,var,rename value)
 	    
 	  val subst =  List.foldl fold VarMap.empty list
 	in
@@ -336,8 +372,7 @@ structure NilSubst :> NILSUBST =
       fun seqFromList (list : (var * item) list) : item_subst = 
 	let
 	  fun fold ((var,value),subst) = 
-	    VarMap.insert(subst,var,substItemInItem subst value)
-	    
+	    VarMap.insert (subst,var,delay (fn () => substItemInItem subst (renameItem value)))
 	  val subst =  List.foldl fold VarMap.empty list
 	in
 	  subst
@@ -348,7 +383,7 @@ structure NilSubst :> NILSUBST =
 	  fun print1 (v,a) = 
 	    (TextIO.print (Name.var2string v);
 	     TextIO.print "->";
-	     printer a;
+	     printer (thaw a);
 	     TextIO.print "\n")
 	in
 	  (Util.lprintl "Substitution is";
@@ -361,15 +396,15 @@ structure NilSubst :> NILSUBST =
 
     structure C = SubstFn(type item = con
 			  type item_subst = con_subst
-			  val varItemItemSubst = varConConSubst
 			  val substItemInItem = substConInCon
+			  val renameItem = NilRename.renameCon
 			  val printer = Ppnil.pp_con)
       
       
     structure E = SubstFn(type item = exp
 			  type item_subst = exp_subst
-			  val varItemItemSubst = varExpExpSubst
 			  val substItemInItem = substExpInExp
+			  val renameItem = NilRename.renameExp
 			  val printer = Ppnil.pp_exp)
       
   end

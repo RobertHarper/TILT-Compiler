@@ -129,7 +129,7 @@ struct
 
   (* Local rebindings from imported structures *)
 
-  val timer = Stats.timer
+  val timer = Stats.subtimer
   val subtimer = Stats.subtimer
   (*From Normalize*)
 
@@ -348,7 +348,7 @@ struct
 
   val con_head_normalize = NilHNF.reduce_hnf
 
-  val time_con_head_normalize = fn s => Stats.subtimer("Tchk:CHNF:"^s,con_head_normalize)
+  val time_con_head_normalize = fn s => subtimer("Tchk:CHNF:"^s,con_head_normalize)
   val con_head_normalize = time_con_head_normalize "Rest"
 
   (*PRE: kind is standard

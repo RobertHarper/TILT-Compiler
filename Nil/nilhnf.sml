@@ -11,7 +11,7 @@ structure NilHNF :> NILHNF =
     type con_subst = NilSubst.con_subst
 
 
-    val timer = Stats.timer
+    val timer = Stats.subtimer
     val subtimer = Stats.subtimer
 
     val find_kind_equation = (*subtimer ("HNF:find_kind_equation",*)NilContext.find_kind_equation(*)*)
@@ -82,9 +82,9 @@ structure NilHNF :> NILHNF =
     end
 	
     fun con_reduce (state : context * con_subst) (constructor : con) : con * bool  = 
-      (push_con "con_reduce" (constructor,state);
+(*      (push_con "con_reduce" (constructor,state);
        (con_reduce' state constructor) before pop())
-    and con_reduce' (state : context * con_subst) (constructor : con) : con * bool  = 
+    and con_reduce' (state : context * con_subst) (constructor : con) : con * bool  = *)
       let
 	val (D,subst) = state 
 	val res = 
@@ -233,9 +233,9 @@ structure NilHNF :> NILHNF =
 
 
     fun reduce_hnf (D,con) = 
-      (push_con "reduce_hnf" (con,(D,empty()));
+(*      (push_con "reduce_hnf" (con,(D,empty()));
        (reduce_hnf' (D,con)) before pop())
-    and reduce_hnf' (D,con) = 
+    and reduce_hnf' (D,con) = *)
       let
 	val (con,path) = con_reduce (D,empty()) con
       in
@@ -247,10 +247,10 @@ structure NilHNF :> NILHNF =
 	  con
       end
 
-    val con_reduce = wrap2 "con_reduce" con_reduce
+(*    val con_reduce = wrap2 "con_reduce" con_reduce*)
     val con_reduce = fn (D,con) => timer ("HNF:con_reduce",#1 o (con_reduce (D,empty()))) con
 
-    val reduce_hnf = wrap1 "reduce_hnf" reduce_hnf
+(*    val reduce_hnf = wrap1 "reduce_hnf" reduce_hnf*)
     val reduce_hnf = fn args => (depth := 0;timer ("HNF:reduce_hnf",reduce_hnf) args)
 
 

@@ -171,15 +171,16 @@ structure Linknil (* :> LINKNIL  *) =
 			       "Phase-split", Tonil.phasesplit,
 			       filename, (ctxt,sbnd_entries))
 
-
 	    val nilmod = transform(ref true, show_renamed,
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)
+
 
  	    val nilmod = check (typecheck_before_opt,show_typecheck,
 				    "Nil_typecheck_pre-opt",
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
+
 
 	    val nilmod = transform(do_reduce, show_reduce,
 				   "Reduce", Reduce.doModule, 

@@ -1,10 +1,10 @@
 functor Vararg(val number_flatten : int
-	       structure NilContext : NILCONTEXT
 	       structure Normalize : NORMALIZE
+	       structure NilContext : NILCONTEXT
 	       structure NilUtil : NILUTIL
 	       structure Subst : NILSUBST
 	       structure Ppnil : PPNIL
-	       sharing type NilContext.context = Normalize.context)
+	       sharing type Normalize.context = NilContext.context)
     :> VARARG
     =
 
