@@ -31,10 +31,10 @@
 0014	skip	Comparing functor signatures.
 0015	skip	Comparing functor signatures.
 0016	pass	Comparing functor signatures.
-0017	pass	Bug in coercion compiler's handling of equality functions.
-0018	pass	Bug in coercion of poly to mono value in precense of unmatched specs.
+0017	pass	Coercion compiler's handling of equality functions.
+0018	pass	Coercion of poly to mono value in precense of unmatched specs.
 0019	pass	Variation on 0018.
-0020	pass	Bug in coercion of poly to mono type (bomb rather than reject).
+0020	pass	Coercion of poly to mono type.
 0021	pass	Phase splitter bombing on SIGNAT_OF.
 0022	pass	Elaborator error: SIGNAT_OF and functors.
 0023	pass	Elaborator error: Bombing with unbound variable during coercion.
@@ -91,7 +91,7 @@ m0025	fail	[Bug# 0169] Word value ranges.
 m0026	pass	Word32 checks.
 m0027	pass	Word sub checks.
 m0028	fail	[Bug #0103] Word stuff.
-m0029	fail	[Bug #?] Word8 array
+m0029	fail	Word8 array
 m0030	pass	Word8 vector
 m0031	pass	List
 m0032	pass	List pair
@@ -99,7 +99,7 @@ m0033	pass	Math
 m0034	pass	Local ref's.
 m0035	pass	Lists and ref's
 m0037	pass	abstype
-m0038	fail	[Bug #?] arrays
+m0038	fail	arrays
 m0039	skip	two-dimensional arrays [TILT does not provide 2d arrays]
 m0040	pass	arrays
 m0041	pass	arrays
@@ -173,7 +173,7 @@ m0107	pass	binary io
 m0108	fail	[Bug #0138] date and time
 m0109	pass	file system
 m0111	pass	signatures
-m0112	fail	strings
+m0112	fail	[Bug #0140] strings
 m0113	pass	strings
 m0114	pass	string conversion
 m0115	pass	substring overflow
@@ -181,7 +181,7 @@ m0116	pass	take
 m0117	pass	matrices
 m0118	pass	basic dynamic tests of primitives
 m0119	fail	text io
-m0120	fail	time
+m0120	fail	[Bug #0145] time
 m0121	skip	time [requires LargeInt to be bigger than 32 bits]
 m0121b	pass	time [works in 32 bits]
 m0122	fail	time
@@ -191,7 +191,7 @@ m0125	pass	unary constructors
 m0126	pass	unary arithmetic
 m0127	pass	non-generalized type variables
 m0128	pass	unix paths
-m0129	fail	where-and
+m0129	fail	[Bug #0150] where-and
 m0130	pass	where
 m0131	pass	list checks
 m0132	pass	fib 35
@@ -259,9 +259,9 @@ n53	pass	type inference with type constructors
 n54	pass	type inference
 n55	fail	value restriction
 n56	fail	duplicate id pattern
-n57	fail	duplicate label in record
+n57	fail	[bug #0054] duplicate label in record
 n58	pass	duplicate label in record pattern
-n59	fail	duplicate label in record type
+n59	fail	[bug #0054] duplicate label in record type
 n60	fail	duplicate id in "and" binding
 n61	fail	duplicate id in "and" type binding
 n62	fail	duplicate id in "and" type binding
