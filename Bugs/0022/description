@@ -19,6 +19,9 @@ Code:
 Transcript:
 Comments:
 Fix:
+	Util.reject and Util.error are for, respectively, user code errors
+	and internal errors.  Slaves continue to operate after reporting
+	errors to the master.
 Test:
 Owner: swasey
-Status: open
+Status: closed

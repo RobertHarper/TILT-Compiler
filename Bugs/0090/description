@@ -44,6 +44,10 @@ Comments:
 
 Fix: Need a "blessed" context that the compiler uses to look up
      special types and values.
-Test: *
-Owner: *
-Status: open
+
+	The equality compiler looks up bool from context by unit name
+	(eg, TiltPrim.bool).
+
+Test:
+Owner: swasey
+Status: closed

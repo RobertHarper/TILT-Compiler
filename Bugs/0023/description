@@ -24,7 +24,11 @@ Code:
 		        | bug (C) = ()
 Transcript:
 Comments:
+
+	The elaborator is now using Util.reject rather than Util.error
+	for user code errors.
+
 Fix:
 Test:
 Owner: swasey
-Status: open
+Status: closed

@@ -38,7 +38,9 @@ where _r_47437 is an import:
 Match_r > _r_47437 : Unknown : DEP_RECORD[ stamp > _47438, mk > _47439](EXNTAG(UNIT), EXN)
 
 Fix:	     
-Test: 
-Owner: 
-Status: open
 
+	The elaborator now looks up Bind and Match from context.
+
+Test: 
+Owner: swasey
+Status: closed

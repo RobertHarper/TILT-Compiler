@@ -4,20 +4,20 @@
 0007 [closed]	Runtime looping on alpha.
 0008 [closed]	Bus error on alpha.
 0009 [closed]	Stack overflow segv on alpha.
-0010 [open]	Want a separate stack for signal handlers on alpha.
+0010 [closed]	Want a separate stack for signal handlers on alpha.
 0011 [closed]	Segv on alpha.
 0013 [closed]	Prolog-based stacklet allocation not working properly on alpha.
 0014 [closed]	Stack overflow in C code on alpha.
 0015 [closed]	Large string constant compiles incorrectly on alpha.
-0016 [open]	Want raised exceptions to carry debugging information.
+0016 [closed]	Want raised exceptions to carry debugging information.
 0017 [closed]	Incorrect L2 cache size on some alphas.
 0018 [closed]	Parser doesn't allow signature constraints on a structure expression which is a functor application.
 0019 [closed]	Manager is overwriting up-to-date il files.
 0020 [closed]	Runtime reading extra characters at end of some files.
 0021 [closed]	Regenerated partial contexts are not considered equal.
-0022 [open]	TILT doesn't distinguish between errors in source programs and compiler errors.
-0023 [open]	Elaborator raising exceptions.
-0024 [open]	Manager linking when unnecessary.
+0022 [closed]	TILT doesn't distinguish between errors in source programs and compiler errors.
+0023 [closed]	Elaborator raising exceptions.
+0024 [closed]	Manager linking when unnecessary.
 0025 [closed]	Elaborator fails to terminate.
 0026 [closed]	Local definitions don't work in overload declaration.
 0027 [closed]	Compile fails on trivial source.
@@ -66,7 +66,7 @@
 0071 [closed]	Spurious illegal instruction trap on sparc.
 0072 [open]	Minor bug in register allocator.
 0073 [open]	ref does not have constructor status.
-0074 [open]	Manager not parallelizing enough.
+0074 [closed]	Manager not parallelizing enough.
 0075 [closed]	Pattern compiler generating incorrect code for exceptions.
 0076 [closed]	Dead data possibly being retained by GC.
 0077 [closed]	Memory corruption error.
@@ -77,11 +77,11 @@
 0082 [open]	Type of thunk prematurely made a rigid record.
 0083 [open]	Backend liveness analysis is too conservative.
 0084 [open]	Shadowing :: or nil makes list patterns fail to compile.
-0085 [open]	Elaborator/Pattern compiler not using correct exceptions.
+0085 [closed]	Elaborator/Pattern compiler not using correct exceptions.
 0086 [closed]	Matching against an external interface file is broken.
 0087 [closed]	Possible "conservative" bug in Analyze avoiding desired optimizations
-0089 [open]	Printing from runtime.
-0090 [open]	Shadowing type "bool" causes equality compiler to fail.
+0089 [closed]	Printing from runtime.
+0090 [closed]	Shadowing type "bool" causes equality compiler to fail.
 0091 [closed]	Unresolved equality expressions breaking elaborator
 0092 [closed]	There are too many steps to reporting bugs.
 0093 [closed]	TILT does not support separate compilation.

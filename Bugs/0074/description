@@ -26,7 +26,12 @@ Problem:
 Code:
 Transcript:
 Comments:
+
+	The new manager gets this right.  Dependents of a unit with an
+	ascribed interface can be compiled before the unit; that is, they
+	only wait for the interface to be compiled.
+
 Fix:
 Test:
 Owner: swasey
-Status: open
+Status: closed

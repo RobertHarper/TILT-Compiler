@@ -7,6 +7,10 @@ Version:     CVS
 System:      solaris
 Severity:    minor
 Problem:
+
+	This is going to be hard to reproduce.  I spotted it again in
+	January, 2004.
+
 	You will be able to reproduce this bug on cuff if bug number
 	94 has not been fixed.  If bug 94 has been fixed, you will
 	need to arrange for fork to fail somehow.  For example, you

@@ -16,7 +16,10 @@ Problem:
 Code:
 Transcript:
 Comments:
+
+	This is silly.  If you tell TILT to link, then it should.
+
 Fix:
 Test:
 Owner: swasey
-Status: open
+Status: closed
