@@ -1,0 +1,176 @@
+Preparing TILT for release to CMU campus
+----------------------------------------
+
+You should work in your copy of the ml96 tree.  The misc collection's
+source tree is on display so people can study the code and should not
+be used for building the compiler.
+
+* Tweak Main.version:string in Top/main.sml.  The version should
+  differ from the current version.  To check the current version:
+
+	gmake version
+
+* Build SML/NJ heaps for the new version of TILT.  On alpha, linux,
+  and solaris:
+
+	gmake heap
+  
+* Purge old runtime and basis library binaries:
+
+	gmake purge
+
+* Build the runtime, basis library, and tilt binaries.
+
+  . Start slaves with:
+
+	gmake slave
+
+  . On an alpha then a solaris box:
+  
+	gmake tilt
+
+  . Kill any slaves
+
+At this point you've compiled everything the misc collection needs.
+You've built the runtime, basis library, and up to two versions of the
+compiler for each platform.  Here is a summary of the various compiler
+versions.  NJ indicates an SML/NJ heap and TILT indicates a
+TILT-compiled binary:
+
+			   Platform
+		i386_linux3	alpha_dux40	sun4_55
+	NJ	     *		     *		    *
+	TILT			     *		    *
+
+You should test these compilers.  Set TILT_LIBDIR to your ml96 tree
+and set TILT_VERSION to either NJ or TILT.  Then use the driver script
+./Bin/tilt to invoke the compiler.  For example
+
+	csh% setenv TILT_LIBDIR /afs/cs/project/fox/member/swasey/ml96
+	csh% setenv TILT_VERSION TILT
+	csh% ./Bin/tilt -v
+
+Once you've tested the compilers you can follow the instructions below
+to copy things out of your ml96 tree into the misc collection and
+/usr/contributed release area.
+
+Creating a misc collection release
+----------------------------------
+
+* Make sure you are a member of the misc collection pts groups
+
+	sys:admin.tilt
+	sys:write.src.tilt
+	sys:write.rel.tilt
+	
+  To check if you are a member:
+  
+        pts membership GROUP
+	
+  Any member (or help@cs) can add new members with:
+  
+        pts adduser USERID GROUP
+
+  For example to add Perry to all the groups:
+
+        pts adduser pscheng sys:admin.tilt 
+	pts adduser pscheng sys:write.src.tilt
+	pts adduser pscheng sys:write.rel.tilt
+
+* Increase the quota on the misc collection volumes.  They are all
+  mounted under /afs/.cs.cmu.edu/local/tilt.  Make sure there is at
+  least 30MB free space in each of i386_linux3, alpha_dux40, sun4_55,
+  and common.  Make sure there is enough space for a "cvs update" in
+  src.
+
+  . To check quota
+
+	fs lq VOLUME
+	
+	[eg: fs lq /afs/.cs.cmu.edu/local/tilt/common]
+
+  . To change quota, telnet to jeeves and issue
+
+	afs misc change VOLUME NEW_QUOTA_IN_KILOBYTES
+	
+	[eg: afs misc change /afs/.cs.cmu.edu/local/tilt/common 60000]
+
+* Commit your changes to CVS (including Top/main.sml) then update the
+  misc collection's source tree:
+
+	gmake misc_src
+
+* On a linux machine, issue the command:
+
+	./Bin/makeRelease VERSION
+
+  The VERSION string is used as a directory name to separate this
+  version of TILT from others in the misc collection.  List the
+  directory
+
+	/afs/.cs.cmu.edu/local/tilt/common
+
+  for the version strings currently in use.
+
+  If something goes wrong, you can remove
+
+	/afs/.cs.cmu.edu/local/tilt/*/VERSION
+
+  and do makeRelease again.
+
+* Update
+
+	/afs/.cs.cmu.edu/local/tilt/common/conf/coll.conf
+
+  This file is under RCS version control.  It tells depot which
+  directories to copy to /usr/local for every machine type and release
+  level.
+
+  You should probably release the compiler as alpha first.  This lets
+  you test it from /usr/local on certain machines without affecting
+  the main release.  To do this, put something like
+
+	contents alpha common/VERSION @sys/VERSION
+
+  into the coll.conf file and make sure your test machines include a
+  line like
+
+	collection.release alpha tilt
+
+  in their /usr/local/depot/depot.pref.local files.
+
+  To make your new release the standard put something like
+
+	contents all common/VERSION @sys/VERSION
+
+  into coll.conf.
+
+* Release the updated misc collection volumes.  Telnet to jeeves and
+  issue the commands:
+
+	afs misc release /afs/.cs.cmu.edu/local/tilt/common
+	afs misc release /afs/.cs.cmu.edu/local/tilt/i386_linux3
+	afs misc release /afs/.cs.cmu.edu/local/tilt/alpha_dux40
+	afs misc release /afs/.cs.cmu.edu/local/tilt/sun4_55
+
+* Optionally, have depot install the collection on your test machines
+  immediately (as opposed to overnight) by running
+
+	/usr/local/bin/dosupdepot
+
+  as root on each machine.
+
+* Announce the new release to the newsgroup cmu.cs.unix.forum.
+  Announcing alpha releases isn't so important since most machines
+  ignore them.
+
+* To test TILT out of /usr/local you need to clear TILT_LIBDIR and use
+  the /usr/local/bin/tilt driver.  Eg:
+
+	% unset TILT_LIBDIR
+	% /usr/local/bin/tilt -v
+
+Creating a /usr/contributed release
+-----------------------------------
+
+[to be written]
