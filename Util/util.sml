@@ -70,7 +70,16 @@ structure Util :> UTIL =
 	      | SOME res => res)
        end
 
-   val has_sys = OS.Process.system "sys" = OS.Process.success
+   val has_sys = 
+       let val command = "sys > sysname"
+       in  (OS.Process.system command = OS.Process.success
+	    andalso 
+	    let val is = TextIO.openIn "sysname"
+		val str = TextIO.input is
+		val _ = TextIO.closeIn is
+	    in  substring("alpha",str)
+	    end)
+       end
    fun system command = 
        if (not has_sys)
 	        then 
