@@ -142,7 +142,7 @@
 0146 [closed]	integer constant too large
 0147 [open]	discrepancies with time tests
 0148 [closed]	type specification error
-0149 [open]	type checking error
+0149 [closed]	type checking error
 0150 [open]	parsing problem on non-corner case
 0151 [closed]	name clash problem in ld
 0152 [open]	Incorrect matching of eqtype specs.

@@ -11,6 +11,8 @@ Code:
 Transcript:  
 Comments:    
 Fix:         
+	This was fixed at some point.  I do not remember
+	what the problem was.  The test passes.
 Test: m0128
-Owner: 
-Status: open
+Owner: swasey
+Status: closed
