@@ -27,8 +27,10 @@ extern int SML_GLOBALS_BEGIN_VAL;
 extern int SML_GLOBALS_END_VAL;
 extern int MUTABLE_TABLE_BEGIN_VAL;
 extern int MUTABLE_TABLE_END_VAL;
+/*
 extern int GLOBAL_TABLE_BEGIN_VAL;
 extern int GLOBAL_TABLE_END_VAL;
+*/
 
 static int *GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
 static int *GCTABLE_END_ADDR = &GCTABLE_END_VAL;
@@ -39,8 +41,10 @@ static int *SML_GLOBALS_END_ADDR = &SML_GLOBALS_END_VAL;
 
 static int *MUTABLE_TABLE_BEGIN_ADDR = &MUTABLE_TABLE_BEGIN_VAL;
 static int *MUTABLE_TABLE_END_ADDR = &MUTABLE_TABLE_END_VAL;
+/*
 static int *GLOBAL_TABLE_BEGIN_ADDR = &GLOBAL_TABLE_BEGIN_VAL;
 static int *GLOBAL_TABLE_END_ADDR = &GLOBAL_TABLE_END_VAL;
+*/
 unsigned long MaxStackDepth = 0;
 unsigned long TotalStackDepth = 0;
 unsigned long TotalNewStackDepth = 0;
@@ -301,9 +305,11 @@ void stack_init()
 	           (long)(SML_GLOBALS_BEGIN_ADDR[mi]);
        MutableTableSize += (long)(MUTABLE_TABLE_END_ADDR[mi]) - 
 	           (long)(MUTABLE_TABLE_BEGIN_ADDR[mi]);
+/*
        GlobalTableSize += (long)(GLOBAL_TABLE_END_ADDR[mi]) - 
 	           (long)(GLOBAL_TABLE_BEGIN_ADDR[mi]);
                    
+*/
     }
   CallinfoHashTable = CreateHashTable(2*count);
   for (mi=0; mi<module_count; mi++)
@@ -365,7 +371,7 @@ Callinfo_t *LookupCallinfo(value_t ret_add)
 {
   unsigned int i;
   struct HashEntry *e;
-  e = HashTableLookup(CallinfoHashTable,(unsigned long)ret_add);
+  e = HashTableLookup(CallinfoHashTable,(unsigned long)ret_add,0);
 #ifdef DEBUG
   if (ret_add == (value_t) ml_input_gcentry)
     printf("input_dogc lookup in stack trace\n");

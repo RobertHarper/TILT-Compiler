@@ -358,8 +358,16 @@ unit posix_io_close(int fd)
 word8vector posix_io_read(int fd, int size)
 {
   char *buf = NULL;
-  value_t res = alloc_uninit_string(size,&buf,&cur_alloc_pointer,cur_alloc_limit);
-  int bytes_read = read(fd,buf,size);
+  int permitted = cur_alloc_limit - cur_alloc_pointer - 24;
+  int bytes_read;
+  value_t res;
+
+  if (size > permitted)
+    size = permitted;
+  if (size < 0)
+    size = 0;
+  res = alloc_uninit_string(size,&buf,&cur_alloc_pointer,cur_alloc_limit);
+  bytes_read = read(fd,buf,size);
   if (bytes_read == -1)
     { 
       printf("POSIX function read failed with errno = %d\n", errno);

@@ -19,7 +19,7 @@ value_t alloc_iarray(int count, int n,
   obj = (*alloc_ptr) + 4;
   if (len == 0) len++;
   if (*alloc_ptr + 4*(len+1) > limit)
-    BUG("OUT OF SPACE");
+    { assert(0); }  /* OUT OF SPACE */
   (*alloc_ptr) += 4*(len+1);
 
   {
@@ -69,7 +69,7 @@ value_t alloc_rarray(int count, double val,
   obj = (*alloc_ptr) + 4;
   if (len == 0) len++;
   if (*alloc_ptr + 4*(len+1) > limit)
-    BUG("OUT OF SPACE");
+    { assert(0); }  /* OUT OF SPACE */
   (*alloc_ptr) += 4*(len+1);
 
   {
@@ -143,7 +143,7 @@ value_t alloc_record(value_t *alloc_ptr, value_t limit,
 
 
   if (*alloc_ptr + 4*(numtag+count) > limit)
-    BUG("OUT OF SPACE");
+    { assert(0); }  /* OUT OF SPACE */
   (*alloc_ptr) += 4*(numtag+count);
 
   while (count > 0)
@@ -195,7 +195,7 @@ value_t alloc_string(int strlen, char *str,
 #endif
   res = (*alloc_ptr) + 4;
   if (*alloc_ptr + 4*(wordlen+1) > limit)
-    BUG("OUT OF SPACE");
+    { assert(0); }  /* OUT OF SPACE */
   (*alloc_ptr) += 4*((wordlen?wordlen:1)+1);
 
   ((int *)res)[-1] = tag;
@@ -218,7 +218,7 @@ value_t alloc_uninit_string(int strlen, char **raw,
 #endif
   res = (*alloc_ptr) + 4;
   if (*alloc_ptr + 4*(wordlen+1) > limit)
-    BUG("OUT OF SPACE");
+    { assert(0); }  /* OUT OF SPACE */
   (*alloc_ptr) += 4*(wordlen+1);
 
   ((int *)res)[-1] = tag;

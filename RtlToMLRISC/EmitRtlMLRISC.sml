@@ -2166,7 +2166,7 @@ functor EmitRtlMLRISC(
 
     fun resetBody() = ()
 
-    fun emitTables(prefix, infos, variables, objects) =
+    fun emitTables(prefix, infos, mutable) =  (* variables, objects *)
 	  let
 	    val header = [
 		  MLTree.BEGINCLUSTER,
@@ -2181,22 +2181,30 @@ functor EmitRtlMLRISC(
 	    fun translateVariable(label, represent) =
 		  (label, RegisterTraceMap.traceGlobalRepresent represent)
 
+	    val mutable' = map translateVariable mutable
+
+(*
 	    val variables' = map translateVariable variables
 
 	    val objects' = objects
-
+*)
 	    val calls = TraceTable.MakeTableHeader prefix@
 			TraceTable.MakeTable infos@
 			TraceTable.MakeTableTrailer prefix
 
+	    val mutable = TraceTable.MakeMutableTable(prefix, mutable')
+(*
 	    val globals = TraceTable.MakeGlobalTable(prefix, variables')
 
 	    val mutables = TraceTable.MakeMutableTable(prefix, objects')
+*)
 	  in
 	    emitMLTree header;
 	    emitData calls;
-	    emitData globals;
+(*	    emitData globals; 
 	    emitData mutables;
+*)
+	    emitData mutable;
 	    emitMLTree trailer
 	  end
 
@@ -2206,8 +2214,10 @@ functor EmitRtlMLRISC(
     fun emit(Rtl.MODULE{main		  = main,
 			procs		  = procedures,
 			data		  = data,
-			mutable_variables = variables,
-			mutable_objects	  = objects}) =
+			mutable}) =
+(*			mutable_variables = variables,
+			mutable_objects	  = objects
+*)
 	  let
 	    val name = Label'.string main
 
@@ -2216,7 +2226,7 @@ functor EmitRtlMLRISC(
 	    val infos =
 		  (emitBody' protect resetBody)(name, main, procedures, data)
 	  in
-	    (emitTables protect resetTables)(name, infos, variables, objects)
+	    (emitTables protect resetTables)(name, infos, mutable) (* variables, objects *)
 	  end
   in
     fun emitModule operand = (Module.open_();

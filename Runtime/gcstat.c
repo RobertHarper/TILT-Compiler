@@ -221,7 +221,7 @@ ProfileTagEntry_t *GetProfileTagEntry(unsigned int proftag)
 	tagentry->copied_size = 0;
 	tagentry->total_age = 0;
 	tagentry->total_oldcount = 0;
-        HashTableInsert(table,&entry);
+        HashTableInsert(table,&entry,0);
 	return (ProfileTagEntry_t *)(entry.data);
   }
 }

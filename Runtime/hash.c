@@ -30,7 +30,7 @@ void DestroyHashTable(HashTable_t *h)
   free(h);
 }
 
-int HashTableLookupRaw(HashTable_t *h, unsigned long key, HashEntry_t **res)
+HashEntry_t * HashTableLookup(HashTable_t *h, unsigned long key, int insert)
 {
   /* delta and h->size must be rel prime; assuming h->size if a power of 2
      it is sufficient to make delta odd */
@@ -42,15 +42,16 @@ int HashTableLookupRaw(HashTable_t *h, unsigned long key, HashEntry_t **res)
   while (1)
     {
       count++;
-      if (h->table[cur].key == key)
+      if (h->table[cur].key == key) /* found it */
 	{
-	  *res = &(h->table[cur]);
-	  return 1;
+	  return &(h->table[cur]);
 	}
-      if (h->table[cur].key == 0xffffffff)
+      if (h->table[cur].key == 0xffffffff) /* uninitialized */
 	{
-	  *res = &(h->table[cur]);
-	  return 0;
+	  if (insert) 
+	    { return &(h->table[cur]); }
+	  else 
+            return NULL;
 	}
       cur = (cur + delta) & h->logmask;
       if (cur == start)
@@ -61,23 +62,14 @@ int HashTableLookupRaw(HashTable_t *h, unsigned long key, HashEntry_t **res)
 	  exit(-1);
 	}
     }
-  return 0;
-}
-
-HashEntry_t *HashTableLookup(HashTable_t *h, unsigned long key)
-{
-  HashEntry_t *dummy;
-  if (HashTableLookupRaw(h,key,&dummy))
-    return dummy;
   return NULL;
 }
 
-
 void HashTableInsert(HashTable_t *h, HashEntry_t *e)
 {
-  HashEntry_t *slot = NULL;
+  HashEntry_t *slot = HashTableLookup(h,e->key,&slot);
 
-  if (HashTableLookupRaw(h,e->key,&slot))
+  if (slot->key != 0xffffffff)
     {
       printf("Slot already used\n");
       exit(-1);

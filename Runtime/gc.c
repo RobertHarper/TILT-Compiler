@@ -44,6 +44,7 @@ value_t old_alloc_limit = 0;
 
 extern Queue_t *ScanQueue;
 
+
 /* use generational by default */
 long generational_flag = 1;
 
@@ -94,6 +95,7 @@ extern long TotalBytesAllocated;
 int NumGC = 0;
 int NumMajorGC = 0;
 long NumLocatives = 0;
+long NumRoots = 0;
 
 #ifdef HEAPPROFILE
 Object_Profile_t allocated_object_profile;
@@ -111,8 +113,10 @@ HeapObj_t *toheap = NULL;
 extern int InScheduler;
 extern int module_count;
 long CurHeapLimit = 0;
+/*
 extern int GLOBAL_TABLE_BEGIN_VAL;
 extern int GLOBAL_TABLE_END_VAL;
+*/
 extern int MUTABLE_TABLE_BEGIN_VAL;
 extern int MUTABLE_TABLE_END_VAL;
 extern int SML_GLOBALS_BEGIN_VAL;
@@ -167,7 +171,7 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask, Queue_t *root_li
   int allocptr = saveregs[ALLOCPTR_REG];
     if (SHOW_GCDEBUG && NumGC > LEAST_GC_TO_CHECK)
       {
-	int i,j;
+	long i,j;
 	printf("\n--------------- ROOT INFORMATION ---------------\n");
 	for (i=0; i<32; i++)
 	  if (regmask & (1 << i))
@@ -235,6 +239,7 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
       Enqueue(reg_roots,(int *)(&(saveregs[i])));
   Enqueue(root_lists,reg_roots);
 
+/*
   if (first_time)
   {
     for (mi=0; mi<module_count; mi++)
@@ -242,6 +247,17 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 	   i<(value_t)*((&GLOBAL_TABLE_END_VAL)+mi); i+=16)
 	{ Enqueue(uninit_global_roots,(value_t *)i); }
   }
+*/
+
+
+  if (first_time)
+  {
+    for (mi=0; mi<module_count; mi++)
+      for (i=(value_t)*((&MUTABLE_TABLE_BEGIN_VAL)+mi);
+	   i<(value_t)*((&MUTABLE_TABLE_END_VAL)+mi); i+=16)
+	{ Enqueue2(uninit_global_roots,(value_t *)i); }
+  }
+
 
   QueueClear(promoted_global_roots);
   QueueClear(temp);
@@ -253,10 +269,10 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
       int     trace       = ((value_t *)e)[1];
       value_t data = *((value_t *)table_entry);
       int should_trace = 0;
-      int resolved = data >= 256;
+      int resolved = (data != 258);
 
       if (!resolved)
-	{ Enqueue(temp,e); }
+	{ Enqueue2(temp,e); }
       else if (IS_TRACE_YES(trace))
 	should_trace = 1;
       else if (IS_TRACE_NO(trace))
@@ -299,8 +315,8 @@ int root_scan(unsigned long *saveregs, long sp, long ret_add, Queue_t *root_list
 	  should_trace = (res >= 3);
 	} /* TRACE_SPECIAL */ 
 
-      Enqueue(global_roots,table_entry); /* this is accumulated */
-      Enqueue(promoted_global_roots,table_entry); /* this is reset each time */
+      Enqueue2(global_roots,table_entry); /* this is accumulated */
+      Enqueue2(promoted_global_roots,table_entry); /* this is reset each time */
     }
 
 
@@ -771,7 +787,7 @@ void SetBirth(value_t *proftag_addr)
 value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr, 
 				 range_t *from_range, range_t *to_range)
 {
-  int i, j, rlen = QueueLength(root_lists);
+  long i, j, rlen = QueueLength(root_lists);
   for (i=0; i<rlen; i++)
     {
       Queue_t *roots = QueueAccess(root_lists,i);
@@ -780,6 +796,7 @@ value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr,
 	{
 	  value_t *temp = (value_t *)QueueAccess(roots,j);
 	  forward_mac_minor(temp,to_ptr,from_range);
+	  NumRoots++;
 	}
     }
   return to_ptr;
@@ -789,7 +806,7 @@ value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr,
 value_t *forward_root_lists_major(Queue_t *root_lists, value_t *to_ptr, 
 				  range_t *from_range, range_t *from2_range, range_t *to_range)
 {
-  int i, j, rlen = QueueLength(root_lists);
+  long i, j, rlen = QueueLength(root_lists);
   for (i=0; i<rlen; i++)
     {
       Queue_t *roots = QueueAccess(root_lists,i);
@@ -871,7 +888,7 @@ value_t *forward_writelist_minor(value_t *more_roots, value_t *to_ptr,
 value_t *forward_gen_locatives(value_t *to_ptr, 
 			       range_t *from_range, range_t *from2_range, range_t *to_range)
 {
-  int i;
+  long i;
     static Queue_t *LastScanQueue = 0;
     if (LastScanQueue == 0)
       LastScanQueue = QueueCreate(100);
@@ -1154,7 +1171,8 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 {
   double *rawstart = NULL;
   value_t *res = NULL;
-  int pos, i, tag = RARRAY_TAG + (2 * log_len) << (2 + POSSLEN_SHIFT);
+  long i;
+  int pos, tag = RARRAY_TAG + (2 * log_len) << (2 + POSSLEN_SHIFT);
 
 #ifdef DEBUG
   printf("(log_len,init_val)  is  (%d, %lf)\n",log_len,init_val);
@@ -1388,7 +1406,8 @@ void debug_after_collect()
 
 void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_size)
 {
-  int i, mi;  
+  long i;
+  int mi;  
   int regmask = 0;
   int stack_top;
   int allocsize, allocptr;
@@ -1490,7 +1509,7 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
 
 
   /* ---------------- forward mutables  --------------------- */
-  to_ptr = forward_mutables_semi(to_ptr, &from_range,&to_range);
+/*  to_ptr = forward_mutables_semi(to_ptr, &from_range,&to_range); */
   to_ptr = scan_nostop_minor(to_range.low,to_ptr,&from_range,&to_range);
 
 #ifdef HEAPPROFILE
@@ -1692,7 +1711,7 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
 					   &from_range, &to_range);
 	  
 	  to_ptr = forward_gen_locatives(to_ptr,&from_range,&from2_range,&to_range); 
-	  to_ptr = forward_mutables_semi(to_ptr,&from_range,&to_range); 
+/* 	  to_ptr = forward_mutables_semi(to_ptr,&from_range,&to_range);  */
 	  to_ptr = scan_stop_minor(old_fromheap->alloc_start,to_ptr,old_alloc_ptr,
 				   &from_range,&to_range);
 	  to_ptr = scan_nostop_minor(old_alloc_ptr,to_ptr,&from_range,&to_range);
@@ -1787,7 +1806,7 @@ void gc_handler_gen(unsigned long *saveregs, long sp,
 					   &from_range, &from2_range, &to_range);
 	  
 	  to_ptr = forward_gen_locatives(to_ptr,&from_range,&from2_range,&to_range); 
-	  to_ptr = forward_mutables_gen(to_ptr,&from_range,&from2_range,&to_range); 
+/*	  to_ptr = forward_mutables_gen(to_ptr,&from_range,&from2_range,&to_range);  */
 	  to_ptr = scan_major(old_toheap->bottom,to_ptr,to_range.high,&from_range,&from2_range,&to_range);
 
 

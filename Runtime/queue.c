@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <assert.h>
 
-Queue_t *QueueCreate(int size)
+Queue_t *QueueCreate(long size)
 {
   Queue_t *res = (Queue_t *)malloc(sizeof(Queue_t));
-  int i;
+  long i;
 
   if (size < 10)
     size = 10;
@@ -99,33 +99,43 @@ void Enqueue(Queue_t *q, void *data)
   q->len = qlen + 1;
 }
 
+void Enqueue2(Queue_t *q, void *data)
+{ Enqueue(q,data); }
 
-int QueueLength(Queue_t *q)
+void Enqueue3(Queue_t *q, void *data)
+{ Enqueue(q,data); }
+
+
+long QueueLength(Queue_t *q)
 {
   return q->len;
 }
 
-void *QueueAccess(Queue_t *q, int _pos)
+void *QueueAccess(Queue_t *q, long _pos)
 {
-  int pos = _pos + q->start;
+  long pos = _pos + q->start;
+#ifdef DEBUG
   if (_pos >= q->len)
     {
       printf("QueueAccess bad\n");
       exit(-1);
     }
+#endif
   if (pos >= q->size)
     pos -= q->size;
   return q->table[pos];
 }
 
-void QueueSet(Queue_t *q, int _pos, void *data)
+void QueueSet(Queue_t *q, long _pos, void *data)
 {
-  int pos = _pos + q->start;
+  long pos = _pos + q->start;
+#ifdef DEBUG
   if (_pos >= q->len)
     {
       printf("QueueSet bad\n");
       exit(-1);
     }
+#endif
   if (pos >= q->size)
     pos -= q->size;
   q->table[pos] = data;

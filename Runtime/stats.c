@@ -30,6 +30,7 @@ extern long GlobalTableSize;
 extern long MutableTableSize;
 extern int write_count;
 extern long NumLocatives;
+extern long NumRoots;
 
 extern long SemanticGarbageSize;
 
@@ -121,6 +122,7 @@ void stats_finish()
 	 use_stack_gen?"Gener":"Normal",
 	 TotalBytesAllocated,             TotalBytesCollected,
 	 NumGC,                           NumMajorGC);
+    printf("         Num_of_roots = %9d\n", NumRoots);
   if (generational_flag)
     printf("         Num_of_writes = %9d    Num_of_Locs = %d\n",
 	   write_count, NumLocatives);
