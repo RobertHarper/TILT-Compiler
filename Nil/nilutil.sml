@@ -5,7 +5,8 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
 		  structure Subst : NILSUBST
-		  sharing ArgNil = Alpha.Nil
+		  structure PpNil : PPNIL
+		  sharing ArgNil = Alpha.Nil = PpNil.Nil
 		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim
 		  and type ArgNil.exp = Subst.exp
 		  and type ArgNil.con = Subst.con
@@ -17,6 +18,8 @@ struct
   structure Nil = ArgNil
   structure Prim = ArgPrim
   open Nil Util 
+
+  val debug = ref true
 
   val unzip = ListPair.unzip
   val zip = ListPair.zip
@@ -812,7 +815,7 @@ struct
 	  (* mus with the same ordering to be equiv *) 
 	  | (Mu_c (defs1,var1),Mu_c (defs2,var2)) =>
 	   let
-		     val def_list1 = Util.set2list defs1
+	     val def_list1 = Util.set2list defs1
 	     val def_list2 = Util.set2list defs2
 	     val (var_list1,con_list1) = ListPair.unzip def_list1
 	     val (var_list2,con_list2) = ListPair.unzip def_list2
@@ -860,7 +863,7 @@ struct
 	       in
 		 ((ListPair.all equiv_one (formals1,formals2))
 		  andalso alpha_equiv_con' (!conref') (con1,con2))
-		 before (alpha_equate_pair(!conref,(var1,var2)))
+		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
 	       end
 	       | equiv_one _ = false
 	   in
@@ -895,6 +898,14 @@ struct
 	  | (con1,Annotate_c (annot1,con2)) => 
 	   recur (con1,con2)
 	  | _ => false)
+	 orelse (if !debug then
+		   (lprintl "Constructor:";
+		    PpNil.pp_con con1;
+		    lprintl "Not equivalent to :";
+		    PpNil.pp_con con2)
+		 else ();
+		   false)
+		   
     end
   
   and alpha_equiv_con_list context list_pair = 
