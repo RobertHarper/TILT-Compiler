@@ -364,7 +364,8 @@ struct
 			  end)
 	    val labelMap = LabelMap.unionWithi 
 		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
-			     if (is_open_internal_path(pm1,p1) handle e => (print "first\n"; false) orelse 
+			     if (is_open_internal_path(pm1,p1) handle e => (print "first\n"; pp_context ctxt; 
+									    print "\n\n\n"; false) orelse 
 				 is_open_internal_path(pm2,p2) handle e => (print "second\n"; false))
 				 then second
 			     else (print "p1 = "; pp_path p1; print " :\n";
@@ -390,7 +391,6 @@ struct
 					     labelMap = labelMap,
 					     pathMap = pathMap,
 					     ordering = ordering}
-(*	    val _ = print "!!ABOUT to make overloadmap!!\n"*)
 	    val overloadMap = LabelMap.unionWithi
                      	      (fn (l, ce1, ce2) => 
 			       (
