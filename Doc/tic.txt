@@ -86,3 +86,53 @@ to expand their scope, allowing functor results to refer to the
 functor arguments.
 
 -----------------------------------------------------------------------------------------
+
+When a signature is added to the translation context, the signature is
+"selfifed" with respect to the path that the signature describes.
+This permits the classifier of the translations of paths to be
+determined quickly since there will be no dependencies in the
+selfified signature.  Transparent type components are selfified to
+replace occurrences of previous components with self paths while
+opaque type components are made transparent with a self path.
+
+During type inference, types are normalized before being unified.
+Normalization involves beta reduction and looking up type definitions
+in the context.  Since it is apparent which projections are true 
+type definitions and which arose from selfified opaque components,
+normalization will not enter a loop.
+
+When a structure path is locally bound (just inside a let or local),
+the bound variable becomes an alias.  Occurrences of that variable will
+be replaced by the path.  This may be irrelevant given the pre-projection
+performed in phase-splitting.
+
+Given a label, the context normally returns a path and a classifier.
+Sometimes, an expression rather than a path is returned.  This permits
+primitives and datatype constructors to be inlined.  This may be extended
+to inline expressions, types, and modules.
+
+Whenever there is an application in the ML code, the translation is
+reduced if the function is a lambda.  If the argument is a variable,
+the varible is substituted into body; otherwise, the argument is
+let-bound around the body.  In conjunction with the inlining, this
+will get rid of many small functions and their calls.
+
+The HIL datatype also contains eta-expanded primitives (primitives
+that are applied only to their type arguments) in addition to
+fully-applied primitives.  This theoretically permits only one copy of
+each primitive at each type for the whole program.  In contrast,
+eta-expanding the primitives with a lambda can cause many small functions
+to be generated if the primitives are not applied and thus reducible.
+ML primitives are translated to eta-expanded HIL primitives.
+Since most primitives in ML are imediately applied,
+their translation becomes applications of eta-expanded primitives 
+which are immediately reduced by beta-reduction.
+
+There are other minor differences from the "Tech Report."  For
+efficiency reasons, "let" is not a derived form.  Cases analysis on
+exception tags are n-ary.  Pattern compilation is different.  (No
+exceptions are used and decision tree generated is not ridiculous.)
+Datatype definitions are compiled to reduce structure nesting.
+Polymorphic arguments are compiled to be a flat structure taking types
+and equality functions rather than a list of strucutres each
+containing one type and possibly one equality function.
