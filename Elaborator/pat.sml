@@ -524,9 +524,13 @@ struct
 
 	(* adds variables in 'bound' to context *)
 	fun extendContext(ctxt, bound : bound) : context = 
-	    let fun folder((s,v,c), ctxt) = C.add_context_sdec(ctxt, 
-							       SDEC(N.symbol_label s,
-								    DEC_EXP(v, c, NONE, false)))
+	    let
+		fun folder((s,v,c), ctxt) =
+		    let val l = N.symbol_label s
+		    in  (case C.Context_Lookup_Var_Raw(ctxt,v)
+			   of NONE => C.add_context_exp (ctxt, l, v, c)
+			    | SOME _ => C.add_context_label (ctxt, l, v))
+		    end
 	    in  foldl folder ctxt bound
 	    end
 
@@ -629,7 +633,7 @@ struct
 		     fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
 		     val str = SCON(vector (CON_UINT W8, Array.fromList(map mapper (explode str))))
 		     val string_eq_label = N.to_eq(N.symbol_label (Symbol.tycSymbol "string"))
-		     val string_eq = (case (C.Context_Lookup_Label(context,string_eq_label)) of
+		     val string_eq = (case (IlStatic.Context_Lookup_Labels(context,[string_eq_label])) of
 					  SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => e
 					| _ => error "string-equality undefined")
 		 in  APP(string_eq, U.exp_tuple[VAR v, str])
@@ -707,8 +711,6 @@ struct
 	    val bnd = BND_EXP(v,ILPRIM(deref,[elemcon],[VAR var]))
 	    val newarg = (v,elemcon)
 	    val newargs = newarg::restArgs
-	    val context = C.add_context_dec(context,DEC_EXP(v,elemcon,NONE, false))
-
 	    val newarms = map (fn (p,rule) => extendBaseRule context (rule, p, newarg)) info_arms
 	(* emit this binding and recurse *)
 	in  wrapbnds([bnd], match(context,newargs,newarms,def,resCon))
@@ -792,7 +794,6 @@ struct
 		      print "Actual type: "; Ppil.pp_con con1; print "\n";
 		      print "Pattern type: "; Ppil.pp_con argcon; print "\n")
 	val newargs = Listops.zip rvars rcons
-	val context = foldl (fn ((v,c),ctxt) => C.add_context_dec(ctxt,DEC_EXP(v,c,NONE, false))) context newargs
 	(* foldr because we concatenate new args to front of list *)
 	fun extender (pats,rule) = foldr (fn ((p,arg),rule) => extendBaseRule context (rule, p, arg))
 	                             rule (Listops.zip pats newargs)
@@ -847,7 +848,6 @@ struct
 			 | SOME (_, argpat) =>
 			       let val arg = (v,con)
 				   val arm' = extendBaseRule context (arm, argpat, arg)
-				   val context = C.add_context_dec(context,DEC_EXP(v,con,NONE, false))
 			       in  match(context, arg::restArgs, [arm'], def, resCon)
 			       end)
 		  val body = #1(U.make_lambda(v,con,!(#shortCon resCon),e))
@@ -897,25 +897,9 @@ struct
 	   instantiated_sumtype = sumtype,
 	   arms = constr_patconopt_list,
 	   expose_exp} = Datatype.instantiate_datatype_signature(context, ast_path, polyinst)
-
-      local
-	  val (names, noncarriers, carrier) = 
-	      (case IlStatic.con_head_normalize (context, sumtype) of
-		   CON_SUM{names,noncarriers,carrier,special} => (names, noncarriers, carrier)
-		 | c => (Error.error_region ();
-			 print "sumcon not reducible to SUM_CON: ";
-			 Ppil.pp_con c; print "\n";
-			 abort()))
-      in  
-	  fun mk_ssumcon i = CON_SUM{names=names,
-				     noncarriers=noncarriers,
-				     carrier=carrier,
-				     special=SOME i}
-      end
-
-      val jopt = case C.Context_Lookup_Var(context, casevar) of
-	            SOME(_,PHRASE_CLASS_EXP(_,CON_SUM{special,...},_,_)) => special
-		  | _ => NONE
+      val jopt = (case C.Context_Lookup_Var(context, casevar)
+		    of SOME(_,PHRASE_CLASS_EXP(_,CON_SUM{special,...},_,_)) => special
+		     | _ => NONE)
 
       val _ = if IlStatic.sub_con(context,casecon,datacon)
 		  then ()
@@ -936,9 +920,6 @@ struct
 		   | (true,SOME argpat, SOME arg) => SOME(extendBaseRule context (baseRule, argpat, arg))
 		   | (true, _, _) => abort' "value-carrying vs non-value-carrying mismatch")
 	    val relevants : baseRule list = List.mapPartial armhelp info_arms
-
-	    val context = C.add_context_dec(context,DEC_EXP(casevar,mk_ssumcon i,NONE, false))
-
 	in  if (case jopt of
 		    NONE => false
 		  | SOME j => i <> j) then NONE
@@ -948,12 +929,10 @@ struct
 			  in  compress_case me 
 			  end
 	    | (_,SOME (newArg as (var,rcon))) => 
-			  let val context = C.add_context_dec(context,DEC_EXP(var,rcon,NONE,false))
-			      val me = match(context,newArg::restArgs, relevants, def, resCon)
+			  let val me = match(context,newArg::restArgs, relevants, def, resCon)
 			  in SOME(U.make_let([BND_EXP(var,SUM_TAIL(i,sumtype,VAR rsvar))],me))
 			  end)
 	end
-
 
       val expopt_list = Listops.mapcount getarm constr_patconopt_list
 
@@ -1060,7 +1039,7 @@ struct
       let 
 
 	  val _ = debugdo (fn () =>
-			   if length arms > 0 andalso length args > 0 then
+			   if length arms > 0 orelse length args > 0 then
 			   let in
 			       print "\nMATCH called with "; 
 			       printint (length args); print " args:\n";
@@ -1142,11 +1121,9 @@ struct
 	    (* no arguments, but many rules: redundant *)
 	    | (_, []) => (Error.error_region();
 			  print "Redundant matches.\n";
-			  debugdo (fn () => Ppil.pp_context context);
 			  #1(Error.dummy_exp (context,"RedundantMatch")))
 	    | _ =>
 		  let
-
 		      val matrix = map #1 arms
 
 		      (* compute the columntypes of columns *)
@@ -1302,7 +1279,7 @@ struct
 	   bind it above the match as a function, and make calls to it
 	   at each location where it was used. *)
 	fun wrapper (ec : exp) : exp =
-	    let fun folder(ref(one_bounds,SOME(bound,(e,c,va))),bnds) = 
+	    let fun folder(ref(one_bounds : (exp Util.oneshot * bound) list,SOME(bound,(e,c,va))),bnds) = 
 		if (length one_bounds<2) 
 		    then (Util.oneshot_set(#1(hd one_bounds),e); bnds)
 		else 
@@ -1359,7 +1336,9 @@ struct
 	val baseRules = map (fn r => reduceRule context (r, compile_args)) rules
 
 	(* finally call match *)
-	val almost_e = match(context,compile_args,baseRules,(default (!shortCon)),{fullCon = fullCon, shortCon = shortCon})
+	val almost_e = match(context,compile_args,baseRules,
+			     (default (!shortCon)),
+			     {fullCon = fullCon, shortCon = shortCon})
 	val very_nearly_e = wrapper almost_e
 	(* bind "short" result type if flag set *)
 	val final_e = (case (!do_result_type, !shortCon) of
@@ -1381,7 +1360,6 @@ struct
 	   it binds. *)
 	val boundsyms = get_bound context bindpat
 
-	val context = C.add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
 	val args = [(argvar,argc)] 
 	val astTuple = Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)
 	val arms = [([bindpat],astTuple)]
@@ -1457,7 +1435,6 @@ struct
       : Il.exp * Il.con = 
       let 
 	val args = [(argv, argc)]
-	val context = C.add_context_dec(context, DEC_EXP(argv,argc,NONE,false))
 	val arms = map (fn (pat,body) => ([pat], body)) cases
 
 	val _ = if reraise andalso not (IlStatic.eq_con(context,argc,CON_ANY))
@@ -1494,9 +1471,7 @@ struct
 	  val args = map (fn s => (N.fresh_named_var s,
 				   U.fresh_named_con (context,s))) names
 
-	  (* ---- call main routine to get compiled body; creating arms by
-	     ---- adding context entries to reflect these arguments ----- *)
-	  val context = foldl (fn ((v,c),ctxt) => C.add_context_dec(ctxt,DEC_EXP(v,c,NONE,false))) context args
+	  (* ---- call main routine to get compiled body ----- *)
 
 	  fun default returntype () = 
 	      let in
@@ -1506,9 +1481,9 @@ struct
 
 	  val (e,c) = compile (context,args,rules,default)
 
-      in {arglist = args, body = (e,c) }
+      in {arglist = args,
+	  body = (e,c) }
       end handle Abort => {arglist = nil,
 			   body = Error.dummy_exp (context, "fun_pat")}
 
   end
-
