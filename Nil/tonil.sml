@@ -1132,7 +1132,7 @@ end (* local defining splitting context *)
 			   else Exp_b(internal_var, TraceUnknown, NilUtil.makeAppE 
 				      (Var_e external_var_r)
 				      [Var_c poly_var_c]
-				      []
+				      [Var_e poly_var_r]
 				      [])
 		       val bnds = Listops.map2 mapper (internal_vars, external_var_rs)
 		   in  NilUtil.makeLetE Sequential bnds e
