@@ -232,14 +232,23 @@ structure Toil
 	    val boundConVars = (List.mapPartial 
 				(fn (SBND(_,BND_CON(v,_))) => SOME v
 			          | _ => NONE) sbnds)
-
-	    fun loop con = 
-		let val occurVars = Name.VarSet.listItems(con_free con)
-		in  if (null (Listops.list_inter_eq(eq_var,boundModVars,
-						    occurVars)))
+	    fun loop con =
+		let 
+		    val occurVars = Name.VarSet.listItems(con_free con)
+		    val escVars = Listops.list_inter_eq(eq_var,boundModVars,occurVars)
+		in
+		    if (null escVars)
 			then con
 		    else (case (con_reduce_once(context,con)) of
-			      NONE => error "reduce_to_remove failed to remove"
+			      NONE =>
+				  (error_region();
+				   print "abstract type escaping scope\n";
+				   print "let body type "; pp_con c; print "\n";
+				   print "   reduces to "; pp_con con; print "\n";
+				   print "escaping module variables are: ";
+				   app (fn v => (pp_var v; print " ")) escVars;
+				   print "\n";
+				   Error.dummy_type (context, "escaped_type"))
 			    | SOME con => loop con)
 		end
 	in if (null boundModVars andalso null boundConVars)
