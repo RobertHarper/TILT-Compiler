@@ -8,7 +8,7 @@ include group "../Backend/mapfile"
 include group "../Alpha/mapfile"
 include group "../Sparc/mapfile"
 
-source unit Version = "version.sml" {}
+source unit Version = "version.sml" {Int}
 
 source unit ExtSyn = "extsyn.sml" {}
 source unit Group_TOKENS = "group.grm.sig" {YaccBase}
