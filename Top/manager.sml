@@ -123,7 +123,7 @@ local
     fun fixup (groupfile : E.groupfile) : E.groupfile =
 	let
 	    fun fix (imports : E.imports) : E.imports =
-		("Firstlude"::"TiltPrim"::"Prelude"::"TopLevel"::imports)
+		("Firstlude"::"TiltPrim"::"VectorEq"::"Prelude"::"TopLevel"::imports)
 	    fun fix' (units : E.id list) : E.id list =
 		("TiltExn"::units)
 	    fun fixEntry (ent : E.entry) : E.entry =
