@@ -11,6 +11,7 @@
 #include "exn.h"
 #include "general.h"
 #include "gc.h"
+#include "gc_large.h"
 #include "thread.h" 
 #include "platform.h"
 #include "til-signal.h"
@@ -68,6 +69,20 @@ int process_int(int *var, char *item, char *option)
   return status;
 }
 
+int process_byte(int *var, char *item, char *option)
+{
+  char optionByte[100];
+  long temp = *var;
+  int status = process_long(&temp,item,option);
+  *var = (int) (1024 * temp);
+  if (status)
+    return status;
+  sprintf(optionByte,"%sbyte",option);
+  status = process_long(&temp,item,optionByte);
+  *var = (int) temp;
+  return status;
+}
+
 int process_double(double *var, char *item, char *option)
 {
   int len = strlen(item);
@@ -86,7 +101,7 @@ int process_double(double *var, char *item, char *option)
 }
 
 struct option_entry {
-  int type; /* 0 for bool, 1 for int, 2 for long, 3 for double */
+  int type; /* 0 for bool, 1 for int, 2 for long, 3 for double, 4 for byte measreuements */
   char *name; 
   void *item;
   char *description;
@@ -98,7 +113,7 @@ extern int cacheSize, cacheSize2, fetchSize; /* XXXXXX debugging */
 
 static int stackOrder = 0, queueOrder = 0, hybridOrder = 0, doSpaceCheck = 0;
 static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0;
-static int fixheap=0, youngheap=0, relaxFixheap=0;
+static int FixheapByte = 0, RelaxFixheapByte = 0;
 struct option_entry table[] = 
   {0, "help", &help, "Print help info but do not execute program",
    0, "semi", &semi, "Use the semispace garbage collector",
@@ -116,6 +131,7 @@ struct option_entry table[] =
    0, "timeDiag", &timeDiag, "Run in time-diagnostic mode",
    0, "threadDiag", &threadDiag, "Show thread-related diagnostic messages",
    0, "warnThreshold", &warnThreshold, "Show information if pause exceeds threshold",
+   3, "warnUtil", &warnUtil, "Show information if utilization falls below given fraction at 10 ms level",
    0, "debugStack", &debugStack, "Show scanning of stack frames",
    0, "gcstats", &SHOW_GCSTATS, "Show GC statistics during execution",
    0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
@@ -127,14 +143,14 @@ struct option_entry table[] =
    1, "checkatgc", &checkAtGC, "Check heaps starting at this GC",
    1, "stackletSize", &MLStackletSize, "Stack size of thread stacklets measured in Kbytes",
    1, "proc", &NumProc, "Use this many processors",
+   1, "rotateProc", &RotateProc, "Skip this many processors before beginning assignment",
    1, "usageCount", &usageCount, "Update usage whenever this many gray objects processed",
-   1, "largeheap", &largeheapsize, "Set large object heap size in Kbytes",
-   1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
-   1, "maxheap", &MaxHeap, "Set maximum size of heap in Kbytes",
-   1, "fixheap", &fixheap, "Set the size of heap in Kbytes",
-   1, "relaxFixheap", &relaxFixheap, "Set the size of heap in Kbytes when concurrent collector off",
-   1, "nursery", &youngheap, "Set size of nursery in Kbytes",
-   1, "nurserybyte", &YoungHeapByte, "Set size of nursery in bytes",
+   4, "largeheap", &LargeHeapByte, "Set large object heap size in bytes",
+   4, "minheap", &MinHeapByte, "Set minimum size of heap in bytes",
+   4, "maxheap", &MaxHeapByte, "Set maximum size of heap in bytes",
+   4, "nursery", &NurseryByte, "Set size of nursery in bytes",
+   4, "fixheap", &FixheapByte, "Set the size of heap in kbytes",
+   4, "relaxFixheap", &RelaxFixheapByte, "Set the size of heap in Kbytes when concurrent collector off",
    1, "minratio", &MinRatio, "Set the minimum ratio of of live objects to all objects",
    1, "maxratio", &MaxRatio, "Set the maximum ratio of of live objects to all objects",
    1, "minOffRequest", &minOffRequest, "Minimum size of mutator request when collector is off",
@@ -149,8 +165,8 @@ struct option_entry table[] =
    1, "noWorkTrack", &noWorkTrack, "Do not update or test for work done.  Should be used only in addition to noSharing",
    1, "doAgressive", &doAgressive, "Use 2 phase concurrent collection",
    1, "doMinorAgressive", &doMinorAgressive, "Use 2 phase concurrent collection for minor collections",
-   3, "majorCollectionRate", &majorCollectionRate, "Rate of concurrent collector",
-   3, "minorCollectionRate", &minorCollectionRate, "Rate of minor GC of concurrent collector",
+   1, "doStableEfficiency", &doStableEfficiency, "Do more/less work when efficiency is higher/lower",
+   3, "collectionRate", &CollectionRate, "Rate of concurrent collector",
    3, "objCopyWeight", &objCopyWeight, "Weight given to cost of copying an object",
    3, "objScanWeight", &objScanWeight, "Weight given to cost of scanning an object",
    3, "fieldCopyWeight", &fieldCopyWeight, "Weight given to cost of copying a field",
@@ -169,6 +185,7 @@ struct option_entry table[] =
    1, "cacheSize", &cacheSize, "",
    1, "cacheSize2", &cacheSize2, "",
 
+   1, "doShowHistory", &doShowHistory, "Show history of states for each processor",
    1, "info", &information, "Level of information to print"};
 
 void process_option(int argc, char **argv)
@@ -201,6 +218,10 @@ void process_option(int argc, char **argv)
 	    matched = process_double(table[i].item, table[i].name, option);
 	    break;
 	  }
+	  case 4 : {
+	    matched = process_byte(table[i].item, table[i].name, option);
+	    break;
+	  }
 	  default: {
 	    printf("Unknown type for option entry %d", table[i].name);
 	    assert(0);
@@ -224,15 +245,13 @@ void process_option(int argc, char **argv)
   if (queueOrder) ordering = QueueOrder;
   if (hybridOrder) ordering = HybridOrder;
   if (doSpaceCheck) forceSpaceCheck = 1;
-  if (fixheap) MinHeap = MaxHeap = fixheap;
-  if (relaxFixheap) {
-    int fixheap = (int) (relaxFixheap * (majorCollectionRate + 1.0) / majorCollectionRate);
-    relaxed = 1;
+  if (RelaxFixheapByte) {
     assert(collector_type == SemispaceConcurrent ||
 	   collector_type == GenerationalConcurrent);
-    MinHeap = MaxHeap = fixheap;
+    relaxed = 1;
+    MinHeapByte = MaxHeapByte = RelaxFixheapByte;
   }
-  if (youngheap) YoungHeapByte = 1024 * youngheap;
+  if (FixheapByte) MinHeapByte = MaxHeapByte = FixheapByte;
   if (help) {
     printf("Boolean options are activated like this: @diag\n");
     printf("Int, long, and double options are activated like this: @nursery=512\n");

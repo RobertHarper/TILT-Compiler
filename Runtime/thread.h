@@ -216,6 +216,17 @@ int isLocalWorkEmpty(LocalWork_t *lw);
    Fields that are frequently and directly accessed should be placed first so their displacement is small.
    Statistics, histories, histograms, or indirectly accessed fields come last.
 */
+
+/* Summarizes information of a state */
+typedef struct Summary__t { 
+  double time;     /* Time in ms */
+  int    segment;  /* segment number */
+  int    state;    /* primary state type */
+  int    type;     /* additional segment type info */
+  int    data;     /* value of segUsage.workdone for GC and bytes allocaetd for Mutator */
+  double util;
+} Summary_t;
+
 typedef struct Proc__t
 {
   int                stack;          /* address of system thread stack that can be used to enter scheduler */
@@ -239,8 +250,9 @@ typedef struct Proc__t
   int                segmentType;    /* Was there minor work, major work, flip off, or flip on? */
   double             mutatorTime;    /* Time last spent in mutator - used for computing utilization level */
   double             nonMutatorTime; /* Total time since mutator suspended */
+  int                nonMutatorCount;
+  int                nonMutatorSegmentType;
   ProcessorState_t   state;          /* What the processor is working on */
-  int                substate;
   int                bytesCopied;    /* Number of bytes just copied (0 if not copied).  Modified by call to alloc/copy */
   int                needScan;       /* Non-zero if object just copied (check bytesCopied) might have pointer field. */
   CopyRange_t        copyRange;        /* Only one active per processor */
@@ -253,12 +265,11 @@ typedef struct Proc__t
   pthread_t          pthread;        /* pthread that this system thread is implemented as */
   ptr_t              writelist[3 * 4096];
 
-  int                nonMutatorSegmentType; /* Union of all segment types since mutator suspended */
-  double             nonMutatorTimes[60];   /* For debugging */
-  int                nonMutatorStates[60];
-  int                nonMutatorSubstates[60];
-  int                nonMutatorSegmentStart; /* Segment number of first segment comprising pause */
-  int                nonMutatorCount;
+  /* Rotating history of last $n$ segments */
+  Summary_t          history[1000000];
+  int                lastSegWorkDone;
+  int                firstHistory, lastHistory;   /* Index of first slot and first unused slot */
+
 
   Statistic_t        bytesAllocatedStatistic;  /* just minor - won't this exclude large objects? XXXX */
   Statistic_t        bytesReplicatedStatistic;  /* only for concurrent collectors */
@@ -343,6 +354,7 @@ long recentWorkDone(Proc_t *proc)
 Thread_t *getThread(void);
 Proc_t *getProc(void);
 Proc_t *getNthProc(int);
+void showHistory(Proc_t *proc, int howMany);
 
 extern pthread_mutex_t ScheduleLock;       /* locks (de)scheduling of sys threads */
 void ResetJob(void);                       /* For iterating over all jobs in work list */

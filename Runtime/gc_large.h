@@ -5,6 +5,7 @@
 #include "queue.h"
 #include "gc.h"
 
+extern int LargeHeapByte;
 Heap_t *largeSpace;
 
 void gc_large_init(void);

@@ -57,9 +57,7 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 /* --------------------- Generational collector --------------------- */
 void GCRelease_Gen(Proc_t *proc)
 {
-  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
   proc->allocStart = proc->allocCursor;
-  proc->segUsage.bytesAllocated += alloc;
 }
 
 
@@ -169,7 +167,7 @@ void GCCollect_Gen(Proc_t *proc)
     paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
 
     /* Resize the tenured toSpace. Discard fromSpace. Flip Spaces. */
-    liveRatio = HeapAdjust2(totalRequest, totalUnused, 0, 0.0, nursery, fromSpace, toSpace);
+    liveRatio = HeapAdjust2(totalRequest, totalUnused, 0, CollectionRate, 0, nursery, fromSpace, toSpace);
     add_statistic(&majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace,0,1);
     typed_swap(Heap_t *, fromSpace, toSpace);
@@ -209,9 +207,9 @@ void GCInit_Gen(void)
   int cache_size = GetBcacheSize();
 
   GCInit_Help(1024, 128 * 1024, 0.2, 0.8, 512, 50 * 1024);   
-  init_int(&YoungHeapByte, (int)(0.85 * cache_size));
-  assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
-  nursery = Heap_Alloc(YoungHeapByte, YoungHeapByte);
+  init_int(&NurseryByte, (int)(0.85 * cache_size));
+  assert(MinHeapByte >= 1.2*NurseryByte);
+  nursery = Heap_Alloc(NurseryByte, NurseryByte);
   gc_large_init();
 }
 

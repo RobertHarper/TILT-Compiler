@@ -27,7 +27,6 @@ Barriers_t *createBarriers(int numProc, int maxBarrier)
 int strongBarrier(Barriers_t *b, Proc_t *proc)
 {
   ProcessorState_t prevState = proc->state;
-  int prevSubstate = proc->substate;
   int i, stalled = 0;
   int which = proc->barrierPhase;
   int index = FetchAndAdd(&b->barriers[which], 1);
@@ -44,7 +43,7 @@ int strongBarrier(Barriers_t *b, Proc_t *proc)
     memBarrier();
   }
   if (stalled)
-    procChangeState(proc, prevState, prevSubstate);
+    procChangeState(proc, prevState, 0);
   if (collectDiag >= 2)
     printf("Proc %d: Passing strong barrier %d\n", 
 	   proc->procid, which, b->numProcessor - b->barriers[which]);

@@ -46,9 +46,7 @@ ptr_t AllocBigArray_Semi(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 
 void GCRelease_Semi(Proc_t *proc)
 {
-  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
   proc->allocStart = proc->allocCursor;
-  proc->segUsage.bytesAllocated += alloc;
 }
 
 
@@ -150,7 +148,8 @@ static void GCCollect_Semi(Proc_t *proc)
 
   paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
   liveRatio = HeapAdjust1(totalRequested, totalUnused, 
-			  0, 0.0, fromSpace, toSpace);
+			  0, CollectionRate, 0,
+			  fromSpace, toSpace);
   add_statistic(&majorSurvivalStatistic, liveRatio);
   Heap_Resize(fromSpace,0,1);
   typed_swap(Heap_t *, fromSpace, toSpace);

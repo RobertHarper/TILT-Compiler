@@ -53,9 +53,7 @@ mem_t AllocBigArray_SemiPara(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 /* --------------------- Parallel collector --------------------- */
 void GCRelease_SemiPara(Proc_t *proc)
 {
-  int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
   proc->allocStart = proc->allocCursor;
-  proc->segUsage.bytesAllocated += alloc;
 }
 
 static long totalRequest = 0;   /* Total space requested by all threads */
@@ -169,7 +167,8 @@ static void stop_copy(Proc_t *proc)
     assert(isEmptySharedStack(workStack));
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);  /* Paranoid check must precede heap adjustment */
     liveRatio = HeapAdjust1(totalRequest, totalUnused,
-			    0, 0.0, fromSpace, toSpace);
+			    0, CollectionRate, 0,
+			    fromSpace, toSpace);
     add_statistic(&majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);

@@ -25,6 +25,7 @@ static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
 
 int information = 1;
+int doShowHistory = 0;
 int	prof_fd = 1;
 static double time_diff(void),time2double(void);
 static double eps=1e-7;
@@ -78,12 +79,13 @@ void restart_timer(Timer_t *t)
 
 void reset_statistic(Statistic_t *s)
 {
-  s->min = s->max = s->sum = 0;
+  s->last = s->min = s->max = s->sum = 0.0;
   s->count = 0;
 }
 
 void add_statistic(Statistic_t *s, double data)
 {
+  s->last = data;
   s->count++;
   if (s->count == 1)
     s->min = data;
@@ -92,33 +94,7 @@ void add_statistic(Statistic_t *s, double data)
   s->sum += data;
 }
 
-void reset_history(History_t *h)
-{
-  reset_statistic(&h->stat);
-  h->historyCursor = 0;
-  h->logFrequency = 0;
-}
 
-void add_history_brief(History_t *h, double data)
-{
-  add_statistic(&h->stat, data);
-}
-
-void add_history(History_t *h, double data)
-{
-  int i;
-  int historySize = sizeof(h->history) / sizeof(double);
-  if (((h->stat.count >> h->logFrequency) << h->logFrequency) == h->stat.count) {
-    h->history[h->historyCursor++] = data;
-  }
-  if (h->historyCursor >= historySize) {
-    h->logFrequency++;
-    h->historyCursor = historySize / 2;
-    for (i=0; i<historySize / 2; i++)
-      h->history[i] = h->history[2*i];
-  }
-  add_statistic(&h->stat, data);
-}
 
 void reset_histogram(Histogram_t *h)
 {
@@ -273,24 +249,7 @@ static void show_statistic(char *str, Statistic_t *s)
   }
 }
 
-static void show_history(char *name, History_t *h)
-{
-  int historySize = sizeof(h->history) / sizeof(double);
-  int dataSize = h->logFrequency ? historySize : h->historyCursor;
-  int numToShow = 5;
-  int i;
-  qsort(h->history, dataSize, sizeof(double), doubleCompare);
-  printf("         %s (ms) : ", name);
-  for (i=0; i<dataSize; i++) {
-    if (i < numToShow)
-      printf("%4.2lf < ", h->history[i]);
-    if (i == numToShow)
-      printf(" skip %d ", dataSize - 2 * numToShow);
-    if (i > dataSize - numToShow - 1)
-      printf(" < %4.2lf", h->history[i]);
-  }
-  printf("\n");
-}
+
 
 static void show_bucket_end(double v)
 {
@@ -671,8 +630,10 @@ void stats_finish(void)
 	show_histogram(" GCFlipBoth   Hist (ms)", &proc->gcFlipOffHistogram);
 	show_histogram(" GCFlipOff    Hist (ms)", &proc->gcFlipOffHistogram);
 	show_histogram(" GCFlipOn     Hist (ms)", &proc->gcFlipOnHistogram);
-	/*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
+	show_histogram("Mutator Histogram", &proc->mutatorHistogram); 
       }
+      if (doShowHistory)
+	showHistory(proc, 0);
     }
   }
 
@@ -682,8 +643,8 @@ void stats_finish(void)
   printf("       Ordering   = %8s        ForceSpaceCheck = %s   CopyCopy = %8s     WorkSharing = %s     WorkTrack = %s   Relaxed = %s\n",
 	 orderString(),  forceSpaceCheck ? "Yes" : "No",
 	 copyCopyString(), noSharing ? "No" : "Yes", noWorkTrack ? "No" : "Yes", relaxed ? "Yes" : "No");
-  printf("       MajorCollectionRate = %.2f  MinorCollectionRate = %.2f\n",
-       majorCollectionRate, minorCollectionRate);
+  printf("       CollectionRate = %.2f\n",
+	 CollectionRate);
   printf("       Allocated     = %9.0f kb      Copied     = %9.0f kb    Replicated  = %9.0f kb\n",
 	 bytesAllocated / 1024.0, bytesCopied / 1024.0,  bytesReplicated/1024.0 + 0.001);
   printf("       NumGC         = %6d            NumMajorGC = %3d\n"

@@ -27,8 +27,8 @@
 
 int NumThread     = 150;
 int NumProc       = 1;
+int RotateProc = 0;
 int threadDiag = 0;
-int allowSubstates = 0;                       /* Record substate changes in procChangeState */
 extern int usageCount;
 
 Thread_t    *Threads;                         /* array of NumUserThread user threads */
@@ -515,12 +515,12 @@ void thread_init(void)
     reset_timer(&(proc->totalTimer));
     reset_timer(&(proc->currentTimer));
     proc->state = Scheduler;
-    proc->substate = -1;
     proc->segmentNumber = 0;
     proc->segmentType = 0;
     proc->mutatorTime = 0.0;
     proc->nonMutatorTime = 0.0;
     proc->nonMutatorCount = -1;
+    proc->firstHistory = proc->lastHistory = 0;
     resetUsage(&proc->segUsage);
     resetUsage(&proc->cycleUsage);
     reset_statistic(&proc->bytesAllocatedStatistic);
@@ -584,17 +584,92 @@ static char* state2string(ProcessorState_t procState)
   }
 }
 
-void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
+
+void captureSummary(Proc_t *proc, double diff, Summary_t *s) 
+{
+  s->time = diff;
+  s->segment = proc->segmentNumber;
+  s->state = proc->state;
+  s->type = proc->segmentType;
+  s->util = proc->utilizationQuotient1.stat[0].last;
+  switch (proc->state) {
+  case Scheduler:
+  case Idle: 
+    s->data = 0;
+    break;
+  case Mutator:
+    s->data = proc->segUsage.bytesAllocated;
+    break;
+  case GC:
+  case GCStack:
+  case GCGlobal:
+  case GCWrite: 
+  case GCReplicate:
+  case GCWork:
+  case GCIdle: {
+      int work = proc->segUsage.workDone;
+      if (proc->segUsage.workDone >= proc->lastSegWorkDone)
+	work = proc->segUsage.workDone - proc->lastSegWorkDone;
+      proc->lastSegWorkDone = proc->segUsage.workDone;
+      s->data = work;
+      break;
+    }
+  }
+}
+
+
+/* If howMany is zero, then show all history */
+void showHistory(Proc_t *proc, int howMany)
+{
+  int cur = howMany ? proc->lastHistory - howMany : proc->firstHistory;
+  if (cur < 0)
+    cur += (sizeof(proc->history) / sizeof(Summary_t));
+  while (cur != proc->lastHistory) {
+    Summary_t *s = &proc->history[cur];
+    printf("%6d: %5.2f ms  %12s       util = %.3f",
+	   s->segment, s->time,  state2string(s->state), s->util);
+    switch (s->state) {
+      case Scheduler:
+      case Idle: 
+        break;
+      case Mutator:
+        printf("  alloc = %d   allrate = %.1f", s->data, (s->data / 1000.0) / s->time); break;
+      case GC:
+      case GCStack:
+      case GCGlobal:
+      case GCWrite: 
+      case GCReplicate:
+      case GCWork:
+      case GCIdle: 
+	printf("  work = %5d   eff = %.1f", s->data, (s->data / 1000.0) / s->time); break;
+    }
+    if (s->type & FlipOn)
+      printf("  FlipOn");
+    if (s->type & FlipTransition)
+      printf("  FlipTransition");
+    if (s->type & FlipOff)
+      printf("  FlipOff");
+    printf("\n");
+    
+    cur++;
+    if (cur >= (sizeof(proc->history) / sizeof(Summary_t)))
+      cur = 0;
+  }
+}
+
+
+void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubstate)
 {
   int i, segWork;
   double diff = 0.0;             /* Time just spent in current segment in ms */
   int switchToMutator = (newState == Mutator || 
 			 newState == Done ||
 			 newState == Idle); /* Switching to mutator or effectievly so? */
+  int hasAccess = 0;
 
   if (proc->segmentNumber < 0)
     return;
-  if (!allowSubstates && proc->state == newState)  /* No state change */
+  if (proc->state == newState)  /* No state change */
     return;
   if (proc->currentTimer.on) {
     restart_timer(&proc->currentTimer);
@@ -609,42 +684,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   if (proc->state != Mutator && proc->nonMutatorCount >= 0) {
     proc->nonMutatorTime += diff;
     proc->nonMutatorSegmentType |= proc->segmentType;
-  }
-
-
-  if (warnThreshold &&
-      pauseWarningThreshold > 0.0  &&   /* Are we in a mutator-started pause? */
-      proc->nonMutatorCount >= 0) {     /* Are we doing threshold check? */ 
-    if (switchToMutator) {
-      int exceed = proc->nonMutatorTime > pauseWarningThreshold;
-      int diag = timeDiag && proc->nonMutatorTime > 0.2;
-      if (exceed) 
-	printf("Proc %d: Total time = %.2f ms.  Start segment = %d.  Work = %d    <---- Exceeded Threshold\n", 
-	       proc->procid, proc->nonMutatorTime, proc->nonMutatorSegmentStart, updateWorkDone(proc));
-      if (exceed || diag) {
-	printf("   objCopy    objScan  fieldsCopy  fieldsScan   ptrFieldScan   globals  stack   pages  rep  Time  Work\n");
-	printf("   %5d        %5d       %5d       %5d          %5d        %3d      %3d     %2d    %5d   %.2f  %5d ;\n",
-	       proc->segUsage.objsCopied, proc->segUsage.objsScanned, 
-	       proc->segUsage.fieldsCopied, proc->segUsage.fieldsScanned, proc->segUsage.ptrFieldsScanned, 
-	       proc->segUsage.globalsProcessed, proc->segUsage.stackSlotsProcessed, 
-	       proc->segUsage.pagesTouched, proc->segUsage.bytesReplicated,
-	       proc->nonMutatorTime, updateWorkDone(proc));
-      }
-      if (exceed)
-	for (i=0; i<proc->nonMutatorCount; i++)
-	  printf("   %i: State %10s   Time = %.2f ms    which = %d\n", 
-		 i, state2string(proc->nonMutatorStates[i]), 
-		 proc->nonMutatorTimes[i], 
-		 proc->nonMutatorSubstates[i]);
-      
-    }
-    else {
-      proc->nonMutatorTimes[proc->nonMutatorCount] = diff;
-      proc->nonMutatorStates[proc->nonMutatorCount] = proc->state;
-      proc->nonMutatorSubstates[proc->nonMutatorCount] = proc->substate;
-      proc->nonMutatorCount++;
-      assert(proc->nonMutatorCount < sizeof(proc->nonMutatorTimes) / sizeof(double));
-    }
+    proc->nonMutatorCount++;
   }
 
   /* Add times to the segment that just ended */
@@ -653,7 +693,6 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
     add_histogram(&proc->mutatorHistogram, diff);
     proc->mutatorTime = diff;
     proc->nonMutatorCount = 0;
-    proc->nonMutatorSegmentStart = proc->segmentNumber;
     proc->nonMutatorSegmentType = 0;
     proc->nonMutatorTime = 0.0;
     break;
@@ -701,11 +740,51 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   default:
     assert(0);
   }
-  
-  add_windowQuotient(&proc->utilizationQuotient1, diff, 
-		     proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle);
-  add_windowQuotient(&proc->utilizationQuotient2, diff, 
-		     proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle);
+
+  /* A mutator is considered to have access unless a GC is active not triggered by an Idle state */
+  hasAccess = (proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle ||
+	       proc->nonMutatorCount == -1);
+  add_windowQuotient(&proc->utilizationQuotient1, diff, hasAccess);
+  add_windowQuotient(&proc->utilizationQuotient2, diff, hasAccess);
+
+  /* ---------------- Record History (skip short non-mutator segments) --------------- */
+  if (diff >= 0.01 || proc->state == Mutator) {
+    captureSummary(proc, diff, &proc->history[proc->lastHistory]);
+    proc->lastHistory++;
+    if (proc->lastHistory >= (sizeof(proc->history) / sizeof(Summary_t)))
+      proc->lastHistory = 0;
+    if (proc->lastHistory == proc->firstHistory) {
+      proc->firstHistory++;
+      if (proc->firstHistory >= (sizeof(proc->history) / sizeof(Summary_t)))
+	proc->firstHistory = 0;
+    }
+  }
+
+  /* -------------- Report History -------------------- */
+  if (((warnThreshold && pauseWarningThreshold > 0.0) ||   
+       (warnUtil > 0.0 && proc->utilizationQuotient1.stat[0].count && proc->utilizationQuotient1.stat[0].last < warnUtil))) {  
+      int exceedThreshold = proc->nonMutatorTime > pauseWarningThreshold;
+      int lowUtil = proc->utilizationQuotient1.stat[0].count && proc->utilizationQuotient1.stat[0].last < warnUtil;
+      int diag = timeDiag && proc->nonMutatorTime > 0.2;
+      if (exceedThreshold || lowUtil) 
+	printf("Proc %d: Total time = %.2f ms.  Work = %d    Util = %.3f    %s %s\n",
+	       proc->procid, proc->nonMutatorTime, updateWorkDone(proc),
+	       proc->utilizationQuotient1.stat[0].last, 
+	       exceedThreshold ? "  --> Exceeded Threshold <--  " : "",
+	       lowUtil ? "  --> Low Utilization <--  " : "");
+      if (exceedThreshold || lowUtil || diag) {
+	printf("   objCopy    objScan  fieldsCopy  fieldsScan   ptrFieldScan   globals  stack   pages  rep  Time  Work\n");
+	printf("   %5d        %5d       %5d       %5d          %5d        %3d      %3d     %2d    %5d   %.2f  %5d ;\n",
+	       proc->segUsage.objsCopied, proc->segUsage.objsScanned, 
+	       proc->segUsage.fieldsCopied, proc->segUsage.fieldsScanned, proc->segUsage.ptrFieldsScanned, 
+	       proc->segUsage.globalsProcessed, proc->segUsage.stackSlotsProcessed, 
+	       proc->segUsage.pagesTouched, proc->segUsage.bytesReplicated,
+	       proc->nonMutatorTime, updateWorkDone(proc));
+      }
+      if (exceedThreshold || lowUtil) 
+	showHistory(proc, 40);
+  }
+
 
   if (proc->segmentNumber > 0 && switchToMutator) {
 
@@ -751,9 +830,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   proc->segmentNumber++;
   proc->segmentType = 0;
   proc->state = newState;
-  proc->substate = newSubstate;
 
-  assert(proc->substate != 0);
   restart_timer(&proc->currentTimer);
   add_statistic(&proc->accountingStatistic, proc->currentTimer.last);
 }
@@ -996,30 +1073,42 @@ static void* proc_go(void* untypedProc)
 
 void thread_go(ptr_t thunk)
 {
-  int curproc = -1;
+  int curActive = RotateProc;
   int i, status;
   pthread_t discard;
+
+#ifdef solaris
+  int curproc = -1, active = 0;
+  int activeProcs[64];
+  processor_info_t infop;
+  while (++curproc < 64) {
+    int status = processor_info(curproc,&infop);
+    if (status == 0 && infop.pi_state == P_ONLINE)
+      activeProcs[active++] = curproc;
+  }
+  printf("Found %d active processors:", active);
+  for (i=0; i<active; i++) 
+    printf(" %d ", activeProcs[i]);
+  printf("\n");
+  if (active < NumProc) {
+    printf("Needed %d processors.\n", NumProc);
+    assert(0);
+  }
+#endif
 
   mainThread = thread_create(NULL,thunk);
   AddJob(mainThread);
 
   /* Create system threads that run off the user thread queue */
+  if (curActive >= active)
+    curActive = 0;
   for (i=0; i<NumProc; i++) {
     pthread_attr_t attr;
     struct sched_param schedParam;
 #ifdef solaris
-    processor_info_t infop;
-    while (1) {
-      int status = processor_info(++curproc,&infop);
-      if (status == 0 && infop.pi_state == P_ONLINE) {
-	Procs[i].processor = curproc;
-	break;
-      }
-      if (curproc > 1024) {
-	printf("Only found %d processors, needed %d.\n",i,NumProc);
-	assert(0);
-      }
-    }
+    Procs[i].processor = activeProcs[curActive++];
+    if (curActive >= active)
+      curActive = 0;
 #else
     if (threadDiag)
       printf("Cannot find processors on non-sparc: assuming uniprocessor\n");
@@ -1039,10 +1128,12 @@ void thread_go(ptr_t thunk)
 	     Procs[i].procid, Procs[i].processor, Procs[i].pthread);
   }
 
-  printf("Found %d processors:  ", NumProc);
+#ifdef solaris
+  printf("Using processors ");
   for (i=0; i<NumProc; i++) 
-    printf("%d  ", Procs[i].processor);
-  printf("\n");
+    printf(" %d ", Procs[i].processor);
+  printf(".\n");
+#endif
 
   install_signal_handlers(1);
   /* Wait until the work stack is empty;  work stack contains running jobs too */

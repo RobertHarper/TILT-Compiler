@@ -231,6 +231,8 @@ static long totalReplicated = 0;  /* Total number of bytes replicated by all pro
 static long totalUnused = 0;
 static long workAhead = 0;        /* Total amount of work that is ahead of that required by amount allocated */
 
+static int expandedSize = 0, reducedSize = 0;
+
 static void CollectorOn(Proc_t *proc)
 {
   Thread_t *curThread = NULL;
@@ -259,13 +261,12 @@ static void CollectorOn(Proc_t *proc)
 
   isFirst = (weakBarrier(barriers, proc) == 0);
   if (isFirst) {
-    int neededSize = Heap_GetSize(fromSpace);
     int pages = Heap_ResetFreshPages(proc,fromSpace);
 
-    workAhead = 0;
-    neededSize += neededSize / majorCollectionRate;
-    Heap_Resize(fromSpace,neededSize,0);
-    Heap_Resize(toSpace,neededSize,1);
+    /*    workAhead = 0; XXX */
+    workAhead = (expandedSize - reducedSize) / 10; 
+    Heap_Resize(fromSpace,expandedSize,0);
+    Heap_Resize(toSpace,expandedSize,1);
     paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
     totalRequest = totalReplicated = totalUnused = 0;
     ResetJob();
@@ -407,9 +408,12 @@ static void CollectorOff(Proc_t *proc)
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
     
     /* Resize heaps and do stats */
-    liveRatio = HeapAdjust1(totalRequest,totalUnused,totalReplicated, 1.0/ (1.0 + majorCollectionRate),
+    liveRatio = HeapAdjust1(totalRequest,totalUnused,totalReplicated, 
+			    CollectionRate, doAgressive ? 2 : 1,
 			    fromSpace,toSpace);
     add_statistic(&majorSurvivalStatistic, liveRatio);
+    reducedSize = Heap_GetSize(toSpace);
+    expandedSize = reducedToExpanded(reducedSize, CollectionRate, doAgressive ? 2 : 1);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(int, primaryGlobalOffset, replicaGlobalOffset);
     typed_swap(int, primaryStackletOffset, replicaStackletOffset);
@@ -432,28 +436,26 @@ void GCRelease_SemiConc(Proc_t *proc)
   mem_t allocStop;
   ploc_t writelistCurrent;
   ploc_t writelistStop;
-  int alloc;
   int gcAgressive;
   int gcOn;
-
+  int numWrites;
   assert(proc->work.hasShared == 0);
 
   allocCurrent = proc->allocStart;
   allocStop = proc->allocCursor;
   writelistCurrent = proc->writelistStart;
   writelistStop = proc->writelistCursor;
-  alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
   gcAgressive = doAgressive ? (GCStatus == GCAgressive) || (GCStatus == GCPendingOn) : 0;
   gcOn = gcAgressive || (GCStatus == GCOn) || (GCStatus == GCPendingOff);
 
   proc->allocStart = proc->allocCursor;  /* allocation area is NOT reused */  
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
+  numWrites = (proc->writelistCursor - proc->writelistStart) / 3;
+  proc->numWrite += numWrites;
   proc->writelistCursor = proc->writelistStart;  /* write list reused once processed */
-  proc->segUsage.bytesAllocated += alloc;
 
   if (shouldDoubleAllocate()) {
     if (collectDiag >= 3)
-      printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
+      printf("Proc %d:   Double-allocating %d to %d\n",proc->procid,allocCurrent,allocStop);
 
     procChangeState(proc, GCReplicate, 114);
     proc->segUsage.bytesReplicated += sizeof(val_t) * (allocStop - allocCurrent);
@@ -489,8 +491,9 @@ void GCRelease_SemiConc(Proc_t *proc)
   }
 
   if (collectDiag >= 3)
-    printf("Proc %d: Processing writes from %d to %d\n",proc->procid,writelistCurrent,writelistStop);
-  procChangeState(proc, GCWrite, 115);
+    printf("Proc %d:   Processing %d writes from %d to %d\n",proc->procid,numWrites,writelistCurrent,writelistStop);
+  if (writelistCurrent < writelistStop) 
+    procChangeState(proc, GCWrite, 115);
   assert(primaryArrayOffset == 0);
   while (writelistCurrent < writelistStop) {
     vptr_t primary = *writelistCurrent++, replica;
@@ -535,7 +538,7 @@ void GCRelease_SemiConc(Proc_t *proc)
     while ((replica = (ptr_t) primary[-1]) == (ptr_t)STALL_TAG)  
       ;
     tag = replica[-1];
-    /* Backpointer present indicates object not yet scanned - can skip replica update */
+    /* Backpointer present indicates object not yet scanned - can/must skip replica update */
     if (replica[0] == (val_t) primary) 
       continue;
 
@@ -602,10 +605,11 @@ static void do_work(Proc_t *proc, int workToDo)
   procChangeState(proc, GCWork, 116);
   proc->segmentType |= MajorWork; 
 
-  if (collectDiag >= 2)
-    printf("Proc %d: do_work\n", proc->procid); 
-
   assert(isLocalWorkEmpty(&proc->work));
+
+  if (collectDiag >= 2)
+    printf("GC %d Seg %d:  do_work(%d)  updateWorkDone = %5d\n",
+	   NumGC, proc->segmentNumber, workToDo, updateWorkDone(proc));
 
   while (updateWorkDone(proc) < workToDo) {
     int start, end;
@@ -688,19 +692,26 @@ static void do_work(Proc_t *proc, int workToDo)
       assert(0);
 
     if (pushSharedStack(0,workStack,&proc->work)) {
-      if (collectDiag >= 2)
-	printf("Proc %d: Turning Collector Off\n", proc->procid); 
-      if (GCStatus == GCAgressive)
+      if (GCStatus == GCAgressive) {
 	GCStatus = GCPendingOn;
-      else if (GCStatus == GCOn)
+	if (collectDiag >= 2)
+	  printf("Proc %d: GC %d: Transitioning collector to GCPendingOn\n", proc->procid, NumGC); 
+      }
+      else if (GCStatus == GCOn) {
 	GCStatus = GCPendingOff;
+	if (collectDiag >= 2)
+	  printf("Proc %d: GC %d: Turning collector to off - GCPendingOff\n", proc->procid, NumGC); 
+      }
     }
 
   }
   assert(SetIsEmpty(&proc->work.objs));
   assert(proc->work.hasShared == 0);
   if (collectDiag >= 2)
-    printf("Proc %d: leaving do_work\n", proc->procid); 
+    printf("Proc %d: Completed do_work.  %d bytes allocated and %d bytes copied on current GC cycle.\n", 
+	   proc->procid, 
+	   proc->cycleUsage.bytesAllocated + proc->segUsage.bytesAllocated,
+	   bytesCopied(&proc->cycleUsage) + bytesCopied(&proc->segUsage));
 }
 
 /* Satisfy space requirements by allocating space.  
@@ -716,15 +727,16 @@ static int GC_SemiConcHelp(Thread_t *th, Proc_t *proc, int roundSize)
     return 1;
   GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
   if (collectDiag >= 3)
-    printf("Proc %d: GCSemiConcHelp %s in getting %d bytes\n",
-	   proc->procid, (proc->allocStart != NULL) ? "succeeded" : "failed", roundSize);
+    printf("Proc %d: GCSemiConcHelp %s in allocating %d bytes. %d bytes allocated this GC cycle\n",
+	   proc->procid, (proc->allocStart != NULL) ? "succeeded" : "failed", roundSize,
+	   proc->cycleUsage.bytesAllocated + proc->segUsage.bytesAllocated);
   return GCSatisfiable(proc,th);
 }
 
 void GC_SemiConc(Proc_t *proc, Thread_t *th)
 {
   int requestInfo = th->requestInfo;
-  int roundOffSize, roundOnSize, workToDo;
+  int roundOffSize, roundOnSize, targetWork;
   assert(proc->writelistCursor + 3 <= proc->writelistEnd);
   memBarrier();
 
@@ -738,20 +750,10 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
     roundOffSize = RoundUp(requestInfo, minOffRequest);
     roundOnSize = RoundUp(requestInfo, minOnRequest);
   }
-  workToDo = (int) (1.0 + majorCollectionRate) * roundOnSize;  /* + 1 for the work in replicating primary */
-  /* XXXXXXXXXXXXXX might fall behind XXXXXXXXX */
-  if (roundOnSize > 2 * minOnRequest)
-    workToDo = (int) (1.0 + majorCollectionRate) * (2 * minOnRequest);
-  if (workAhead > workToDo) {
-    int amountToTake = Min(workToDo, workAhead / 4);
-    int oldWorkAhead = FetchAndAdd(&workAhead, -amountToTake);
-    if (oldWorkAhead - amountToTake >= 0) {
-      workToDo -= amountToTake;
-    }
-    else {  /* Overreach */
-      FetchAndAdd(&workAhead, amountToTake);
-    }
-  }
+  /* include 1.0 for work already done in replicating primary */
+  targetWork = (int) (((GCStatus == GCAgressive ? 0.0 : 1.0) + CollectionRate) * roundOnSize);    
+  if (roundOnSize > minOnRequest) /* XXXXXXXXXXXXXX might fall behind XXXXXXXXX */
+    targetWork = (int) (((GCStatus == GCAgressive ? 0.0 : 1.0) + CollectionRate) * (3 * minOnRequest));   
 
 
   retry:
@@ -783,11 +785,72 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
 	goto retry;
       goto fail;
     case GCAgressive:
-    case GCOn:       
-       do_work(proc, workToDo);
+    case GCOn: {
+      /* Target efficiency is 14.0.  
+	 (1) Perform half the target work to estimate the efficiency.
+	 (2) If efficiency is below 10.0 and workAhead is at least half the target work, 
+	     deduct this amount from workAhead end the cycle.
+	 (3) If efficiency is above 18.0, do extra work and add to workAhead.
+	     The amount of extra work done should be enough to take so that total time
+	     is what would be consumed had the efficiency been 14.0.  However, be conservative
+	     and limit the efficiency to 25.0 and the extra work to the original targetWork.
+	 (4) Otherwise, do the other half of the target work.
+      */
+	do_work(proc, targetWork);
+#ifdef SKIP
+      int estimatedWork, needBail;
+      double time, efficiency;
+      int lowMutatorTime = proc->mutatorTime < 0.10;
+      int lowUtil = proc->utilizationQuotient1.stat[0].last < 0.15;
+      int highUtil = proc->utilizationQuotient1.stat[0].last > 0.25;
+      do_work(proc, targetWork / 2);
+      time = nonMutatorTime(proc);
+      efficiency = ((targetWork / 2) / 1000.0) / time;
+      estimatedWork = (int) (1000.0 * 1.0 * efficiency);
+      if ((doStableEfficiency && efficiency < 9.0) || lowUtil) {
+	if (workAhead > targetWork / 2) {
+	  FetchAndAdd(&workAhead, -targetWork / 2);
+	  if (0)
+	    printf("GC %d/%5d:  %s:  time = %.2f    efficiency = %.1f   Bailing...   targetWork/2 = %d   workAhead = %d\n", 
+		   NumGC, proc->segmentNumber, 
+		   lowMutatorTime ? "Low mutator time" : "Low efficiency",
+		   time, efficiency, targetWork/2, workAhead);
+	}
+	else {
+	  do_work(proc, targetWork / 2);
+	  time = nonMutatorTime(proc);
+	  efficiency = (targetWork / 1000.0) / time;
+	  needBail = (doStableEfficiency && efficiency < 9.0) || lowMutatorTime;
+	  if (1)
+	    printf("GC %d/%5d: %s:  time = %.2f    efficiency = %.1f   %s  targetWork/2 = %d   workAhead = %d\n", 
+		   NumGC, proc->segmentNumber, 
+		   lowMutatorTime ? "Low mutator time" : "Low efficiency",
+		   time, efficiency, 
+		   needBail ? "Could not bail" : "Bailing not needed",
+		   targetWork/2, workAhead);
+	}
+      }
+      else if ((doStableEfficiency && efficiency > 18.0) || highUtil) {
+	double newEfficiency;
+	double targetTime = (targetWork / 1000.0) / 14.0;
+	double extraTime = targetTime - time;
+	int extraWork = (int) (1000.0 * (Min(efficiency,25.0)) * extraTime);
+	extraWork = Min(targetWork, extraWork);
+	extraWork = targetWork;
+	do_work(proc, extraWork);
+	FetchAndAdd(&workAhead, extraWork);
+	newEfficiency = ((targetWork / 2 + extraWork) / 1000.0) / nonMutatorTime(proc);
+	if (0)
+	  printf("GC %d: High efficiency: time = %.2f    efficiency = %.1f   new efficiency = %.1f   workAhead = %d\n", 
+		 NumGC, time, efficiency, newEfficiency, workAhead);
+      }
+      else
+	do_work(proc, targetWork / 2);
+#endif
        if (GC_SemiConcHelp(th,proc,roundOnSize))
 	 goto satisfied;
        goto fail;	 
+     }
      case GCPendingOff:
        do_work(proc, MAXINT);
        CollectorOff(proc);
@@ -813,7 +876,7 @@ void GCPoll_SemiConc(Proc_t *proc)
     return;
   case GCOn:
   case GCAgressive: {
-    int workToDo =  (int) majorCollectionRate * minOnRequest;
+    int workToDo =  (int) (CollectionRate * minOnRequest);
     do_work(proc, workToDo);
     FetchAndAdd(&workAhead, workToDo);
     return;
@@ -837,15 +900,13 @@ void GCPoll_SemiConc(Proc_t *proc)
 
 void GCInit_SemiConc(void)
 {
-  int expandedSize, reducedSize;
-
   if (ordering == DefaultOrder)
     ordering = StackOrder;
   if (ordering == HybridOrder)
     grayAsReplica = 1;
   GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);   
   expandedSize = Heap_GetSize(fromSpace);
-  reducedSize = expandedToReduced(expandedSize, majorCollectionRate);
+  reducedSize = expandedToReduced(expandedSize, CollectionRate, doAgressive ? 2 : 1);
   Heap_Resize(fromSpace, reducedSize, 1);
   Heap_Resize(toSpace, reducedSize, 1);
   workStack = SharedStack_Alloc(0, 100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024, 0, 0);

@@ -172,7 +172,8 @@ ptr_t genericScan(Proc_t *proc,
 
      For small objects, fields are scanned in order starting with the first field so no special action needs
      to be taken as the backpointer is deleted before the fields are processed.  However, for large objects
-     the fields are scanned in parallel so the backpointer must be explicitly deleted.
+     the fields are scanned in parallel so the backpointer must be explicitly deleted.  Care should be taken
+     for the SelfTransfer case which should not be cleared (since no backpointer is present for mirrored arrays.
   */
   switch (transfer) {
     case NoTransfer:
@@ -344,6 +345,7 @@ ptr_t genericScan(Proc_t *proc,
       return primaryOrReplicaGray + fieldLen;
     }
     else if (TYPE_IS_FORWARD(type)) {
+      assert(0);
       tag = ((ptr_t)tag)[-1];
       continue;
     }
@@ -364,7 +366,8 @@ ptr_t genericScan(Proc_t *proc,
   {
     int segments = DivideUp(largeArrayByteLen, arraySegmentSize);
     assert(primaryGray != NULL);
-    replicaGray[0] = NULL;    /* Clear out backpointer */
+    if (transfer != SelfTransfer)
+      replicaGray[0] = 555;    /* Clear out backpointer */
     for (i=0; i<segments; i++) {
       int start = i * arraySegmentSize;
       int end = start + arraySegmentSize;

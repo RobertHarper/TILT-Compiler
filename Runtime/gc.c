@@ -34,6 +34,7 @@ int SHOW_HEAPS     = 0;
 int SHOW_GLOBALS   = 0;
 int SHOW_GCFORWARD = 0;
 double pauseWarningThreshold = -1.0;
+double warnUtil = 0.0;
 int warnThreshold = 0;
 int doCopyCopySync = 1;
 int noSharing = 0, noWorkTrack = 0;
@@ -66,7 +67,7 @@ extern void PopStackletFromML(void);
 
 int minAllocRegion = 256;         /* Minimum allocation region size in bytes.  Mutator will be resumed with at least this 
 				     many bytes even if allocation request is less. */
-int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
+int NurseryByte = 0, MaxHeapByte = 0, MinHeapByte = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
 int minOffRequest, maxOffRequest, minOnRequest;
@@ -108,45 +109,89 @@ int grayAsReplica = 0;
    Conservative: Use Off -> Commit protocol. */
 int doAgressive = 1; 
 int doMinorAgressive = 0; 
+int doStableEfficiency = 0;
 
-double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
-double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */
+double CollectionRate = 2.0;   /* Ratio of coll rate to alloc rate */
 
 static void (*GCFun)(Proc_t *, Thread_t *) = NULL;
 static void (*GCReleaseFun)(Proc_t *) = NULL;
 static void (*GCPollFun)(Proc_t *) = NULL;
 
-/* 0.0 <= reserve < 1.0 is not mapped in */
-long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve)
+/* Compute reduced heap size by reserving area and rounding down to nearest page */
+double computeReserve(double rate, int phases)
 {
-  long oldlive = oldsize * oldratio;
-  double rawWhere = (oldlive - (1024 * MinRatioSize)) / (1024.0 * (MaxRatioSize - MinRatioSize));
-  double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
-  double newratio = MinRatio + where * (MaxRatio - MinRatio);
-  long newSize = RoundUp(oldlive / newratio + withhold, 1024);
-  long unreservedSize = RoundUp(newSize / (1.0 - reserve), 1024);
-  if (oldlive > 1024 * MaxHeap) {
-    fprintf(stderr,"GC error: livedata = %d but maxheap constrained to %d\n", oldlive, MaxHeap);
-    assert(0);
-  }
-  if (unreservedSize > 1024 * MaxHeap) {
-    double constrainedRatio = ((double)oldlive) / (1024 * MaxHeap);
-    if (collectDiag >= 1 || constrainedRatio > 0.95)
-      printf("GC warning: Would like to make newheap %d kb but constrained to <= %d kb\n",unreservedSize / 1024, MaxHeap);
-    if (constrainedRatio > 0.90)
-      printf("GC warning: Liveness ratio is dangerously high %lf.\n", constrainedRatio);
-    newSize = RoundDown(1024 * MaxHeap * (1.0 - reserve), pagesize);
-  }
-  if (unreservedSize < 1024 * MinHeap) {
-    if (collectDiag >= 1)
-      printf("GC warning: Would like to make newheap %d kb but constrained to >= %d kb\n",unreservedSize / 1024, MinHeap);
-    newSize = RoundDown(1024 * MinHeap * (1.0 - reserve), pagesize);
-  }
-  assert(newSize >= oldlive + withhold);
-  return newSize;
+  assert(rate > 1.0);
+  if (phases == 0)  /* not concurrent */
+    return 0.0;
+  else if (phases == 1) /* concurrent */
+    return rate / (rate + 1.0);
+  else if (phases == 2) /* concurrent - non-committing, committing */
+    return (rate + 1.0) / (rate * rate + rate + 1.0);
 }
 
-double HeapAdjust(int request, int unused, int withhold, double reserve, Heap_t **froms, Heap_t *to)
+int expandedToReduced(int size, double rate, int phases)
+{
+  size = RoundUp(size, minOnRequest);
+  size = (int) size * (1.0 - computeReserve(rate, phases));
+  size = size - (2 * NumProc) * minOnRequest;
+  size = RoundDown(size, minOnRequest);
+  return size;
+}
+
+int reducedToExpanded(int size, double rate, int phases)
+{
+  size = RoundUp(size, minOnRequest);
+  size = size + (2 * NumProc) * minOnRequest;
+  size = (int) size / (1.0 - computeReserve(rate, phases));
+  size = RoundDown(size, minOnRequest);
+  return size;
+}
+
+/* Compute the new (reduced) heap size given the liveness ratio and amount of live data */
+long ComputeHeapSize(long live, double curRatio, double rate, int phases)
+{
+  double rawWhere = (live - (1024 * MinRatioSize)) / (1024.0 * (MaxRatioSize - MinRatioSize));
+  double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
+  double newratio = MinRatio + where * (MaxRatio - MinRatio);
+  long maxReducedSize = expandedToReduced(MaxHeapByte, rate, phases);
+  long minReducedSize = expandedToReduced(MinHeapByte, rate, phases);
+  long newExpandedSize = RoundUp(live / newratio, 1024);
+  long newReducedSize = expandedToReduced(newExpandedSize, rate, phases);
+
+  if (live > MaxHeapByte) {
+    fprintf(stderr,"GC error: Amount of live data (%d) exceeds maxiumum heap size (%d)\n", live, MaxHeapByte);
+    assert(0);
+  }
+  if (newReducedSize > maxReducedSize) {
+    double constrainedRatio = ((double)live) / maxReducedSize;
+    if (collectDiag >= 1 || constrainedRatio > 0.95)
+      printf("GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is downwardly constrained to %d kb.\n",
+	     live / 1024, newReducedSize / 1024, maxReducedSize / 1024);
+    if (constrainedRatio >= 1.00)
+      printf("GC warning: New liveness ratio is too high %lf.\n", constrainedRatio);
+    else if (constrainedRatio > 0.90)
+      printf("GC warning: New liveness ratio is dangerously high %lf.\n", constrainedRatio);
+    newReducedSize = maxReducedSize;
+    newExpandedSize = reducedToExpanded(newReducedSize, rate, phases);
+    if (newExpandedSize > MaxHeapByte) {
+      printf("ERROR: live/1024 = %d    maxReducedSize = %d    newReducedSize = %d    newExpandedSize = %d\n",
+	     live / 1024, maxReducedSize, newReducedSize, newExpandedSize);
+      assert(0);
+    }
+  }
+  if (newReducedSize < minReducedSize) {
+    if (collectDiag >= 1)
+      printf("GC warning: There is %d kb of live data.  The desired new heap size is %d kb but is upwardly constrained to %d kb.\n",
+	     live / 1024, newReducedSize / 1024, maxReducedSize / 1024);
+    newReducedSize = minReducedSize;
+    newExpandedSize = reducedToExpanded(newReducedSize, rate, phases);
+  }
+  assert(newExpandedSize <= MaxHeapByte);
+  assert(newReducedSize >= live);
+  return newReducedSize;
+}
+
+double HeapAdjust(int request, int unused, int withhold, double rate, int phases, Heap_t **froms, Heap_t *to)
 {
   long copied = 0, occupied = -unused, live = 0, newSize = 0;
   double liveRatio = 0.0;
@@ -161,8 +206,9 @@ double HeapAdjust(int request, int unused, int withhold, double reserve, Heap_t 
   assert(occupied >= copied);
   assert(copied >= withhold);
   live = copied + request;
+  assert(live >= withhold);
   liveRatio = (double) (live - withhold) / (double) (occupied - withhold);
-  newSize = ComputeHeapSize(occupied - withhold, liveRatio, withhold, reserve);
+  newSize = ComputeHeapSize(live, liveRatio, rate, phases);
   Heap_Resize(to, newSize, 0);
   if (newSize - copied < request) {
     printf("Error: newSize - copied < request\n");
@@ -178,36 +224,36 @@ double HeapAdjust(int request, int unused, int withhold, double reserve, Heap_t 
   return liveRatio;
 }
 
-double HeapAdjust1(int request, int unused, int withhold, double reserve, Heap_t *from1, Heap_t *to)
+double HeapAdjust1(int request, int unused, int withhold, double rate, int phases, Heap_t *from1, Heap_t *to)
 {
   Heap_t *froms[2];
   froms[0] = from1;
   froms[1] = NULL;
-  return HeapAdjust(request, unused, withhold, reserve, froms, to);
+  return HeapAdjust(request, unused, withhold, rate, phases, froms, to);
 }
 
-double HeapAdjust2(int request, int unused, int withhold,  double reserve, Heap_t *from1, Heap_t *from2, Heap_t *to)
+double HeapAdjust2(int request, int unused, int withhold,  double reserve, int phases, Heap_t *from1, Heap_t *from2, Heap_t *to)
 {
   Heap_t *froms[3];
   froms[0] = from1;
   froms[1] = from2;
   froms[2] = NULL;
-  return HeapAdjust(request, unused, withhold, reserve, froms, to);
+  return HeapAdjust(request, unused, withhold, reserve, phases, froms, to);
 }
 
 void GCInit_Help(int defaultMinHeap, int defaultMaxHeap, 
 		 double defaultMinRatio, double defaultMaxRatio, 
 		 int defaultMinRatioSize, int defaultMaxRatioSize)
 {
-  init_int(&MinHeap, defaultMinHeap);
-  init_int(&MaxHeap, defaultMaxHeap);
-  MinHeap = Min(MinHeap,MaxHeap);
+  init_int(&MinHeapByte, 1024 * defaultMinHeap);
+  init_int(&MaxHeapByte, 1024 * defaultMaxHeap);
+  MinHeapByte = Min(MinHeapByte, MaxHeapByte);
   init_double(&MinRatio, defaultMinRatio);
   init_double(&MaxRatio, defaultMaxRatio);
   init_int(&MinRatioSize, defaultMinRatioSize);
   init_int(&MaxRatioSize, defaultMaxRatioSize);
-  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  fromSpace = Heap_Alloc(MinHeapByte, MaxHeapByte);
+  toSpace = Heap_Alloc(MinHeapByte, MaxHeapByte);  
 }
 
 void GCInit(void)
@@ -220,6 +266,11 @@ void GCInit(void)
   init_int(&copyChunkSize, 256);
   minOffRequest = RoundUp(minOffRequest, pagesize);
   minOnRequest = RoundUp(minOnRequest, pagesize);
+  /* After minOnRequest is initialized, we can use the function reducedToExpanded */
+  if (relaxed) {
+    MinHeapByte = reducedToExpanded(MinHeapByte, CollectionRate, doAgressive ? 2 : 1);
+    MaxHeapByte = reducedToExpanded(MaxHeapByte, CollectionRate, doAgressive ? 2 : 1);
+  }
 
   reset_statistic(&minorSurvivalStatistic);
   reset_statistic(&heapSizeStatistic);
@@ -517,18 +568,6 @@ static ptr_t alloc_bigdispatcharray(ArraySpec_t *spec)
   return result;
 }
 
-/* Compute reduced heap size by reserving area and rounding down to nearest page */
-int expandedToReduced(int size, double rate)
-{
-  int newSize = (int) size * rate / (1.0 + rate);
-  return RoundDown(newSize, pagesize);
-}
-
-int reducedToExpanded(int size, double rate)
-{
-  int newSize = (int) size * (1.0 + rate)  / rate;
-  return RoundUp(newSize, pagesize);
-}
 
 /* ------------------------------ Interface Routines -------------------- */
 ptr_t alloc_bigintarray(int elemLen, int initVal, int ptag)
@@ -630,7 +669,7 @@ void GCFromMutator(Thread_t *curThread)
   Proc_t *proc = (Proc_t *) curThread->proc;
   mem_t alloc = (mem_t) curThread->saveregs[ALLOCPTR];
   mem_t limit = (mem_t) curThread->saveregs[ALLOCLIMIT];
-  mem_t sysAllocCursor = proc->allocCursor;
+  mem_t sysAllocStart = proc->allocStart;
   mem_t sysAllocLimit = proc->allocLimit;
 
   /* Check that we are running on own stack and allocation pointers consistent */
@@ -643,6 +682,7 @@ void GCFromMutator(Thread_t *curThread)
 
   /* Write skip tag to indicate the end of region and then release job */
   PadHeapArea(alloc, sysAllocLimit);
+  proc->segUsage.bytesAllocated += (sizeof(val_t) * (alloc - sysAllocStart));
 
   /* ReleaseJob(proc) */
   UpdateJob(proc); /* Update processor's info, GCRelease thread, but don't unmap */

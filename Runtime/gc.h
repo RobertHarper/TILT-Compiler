@@ -18,6 +18,7 @@ extern int primaryGlobalOffset, replicaGlobalOffset;     /* Used by concurrent c
 extern int primaryArrayOffset, replicaArrayOffset;       /* Used by generational, concurrent collector to support atomic redirection */
 extern double pauseWarningThreshold;
 extern int warnThreshold;
+extern double warnUtil;
 
 /* States of the collector */
 typedef enum GCStatus__t { GCOff, GCPendingAgressive, GCAgressive, GCPendingOn, GCOn, GCPendingOff } GCStatus_t;
@@ -154,6 +155,7 @@ extern int backObjFetchSize;             /* Number of back objects to fetch from
 extern int backLocFetchSize;             /* Number of back locations to fetch from global pool */
 extern int doCopyCopySync;               
 extern int doAgressive, doMinorAgressive;
+extern int doStableEfficiency;
 extern int localWorkSize;
 extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    An array of more than arraySegmentSize bytes is considered large and
@@ -161,8 +163,7 @@ extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    Each segment (except possibly the last) is of size arraySegmentSize. */
 extern int ordering;                 /* Implicit queue, explicit stack, explicit queue */
 extern int forceSpaceCheck;          /* Do space check even when not necessary */
-extern double minorCollectionRate;   /* Ratio of minor coll rate to alloc rate */
-extern double majorCollectionRate;   /* Ratio of major coll rate to alloc rate */
+extern double CollectionRate;   /* Ratio of coll rate to alloc rate */
 extern int grayAsReplica;            /* In concurrent collector, store gray set as replicas (with backpointers) */
 
 extern double objCopyWeight;  
@@ -178,11 +179,10 @@ extern double stackSlotWeight;
    The amount "withhold" is subtracted from both spaces for computation of liveness ratio.
    The fraction "reserve" is reserved for concurrent collector.
 */
-long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve);
-double HeapAdjust1(int request, int unused, int withhold,  double reserve, Heap_t *from1, Heap_t *to);
-double HeapAdjust2(int request, int unused, int withhold,  double reserve,  Heap_t *from1, Heap_t *from2, Heap_t *to);
-int expandedToReduced(int size, double rate);
-int reducedToExpanded(int size, double rate);
+double HeapAdjust1(int request, int unused, int withhold,  double rate, int phases, Heap_t *from1, Heap_t *to);
+double HeapAdjust2(int request, int unused, int withhold,  double rate, int phases,  Heap_t *from1, Heap_t *from2, Heap_t *to);
+int expandedToReduced(int size, double rate, int phases);
+int reducedToExpanded(int size, double rate, int phases);
 
 /* Make sure all the pointer values in the stack/globals are in the legal heaps */
 void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
