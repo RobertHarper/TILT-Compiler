@@ -81,6 +81,10 @@ struct
        (if (!debug) then (print "about to open_out "; print outfilename; print "\n") else ();
 	output_stream := SOME (TextIO.openOut outfilename))
 
+   fun openAppend outfilename =
+       (if (!debug) then (print "about to open_append"; print outfilename; print "\n") else ();
+	output_stream := SOME (TextIO.openAppend outfilename))
+
    fun closeOutput () = 
      (case (! output_stream) of
 	NONE => error "Can't close output stream; it's not open."

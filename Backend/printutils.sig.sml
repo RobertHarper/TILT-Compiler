@@ -12,6 +12,7 @@ sig
 
 
    val openOutput  : string -> unit
+   val openAppend  : string -> unit
    val closeOutput : unit -> unit
 
    val emitString : string -> unit

@@ -405,7 +405,8 @@ struct
              val entrytable =        mktable("client_entry","")
 	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
 			  INT32 (TilWord32.fromInt count)]
-         in dumpDatalist count;
+         in  
+	    dumpDatalist count;
 	    dumpDatalist gc_table_begin;
 	    dumpDatalist gc_table_end;
 	    dumpDatalist sml_globals;
