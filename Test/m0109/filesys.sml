@@ -222,3 +222,5 @@ val test15g =
 val _ = rmDir "testdir2";
 in
 end
+
+val _ = app OS.FileSys.remove ["hardlinkA","hardlinkB","testbadl","testcycl","testlink"]
