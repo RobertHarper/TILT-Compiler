@@ -1,0 +1,14 @@
+Number: 0087
+Title:       Analyze missing optimizations
+Keywords:    analyze
+Submitter:   Adam Chlipala <adamc@andrew>
+Date:        8/14/2002
+Version:     CVS
+System:	     all
+Severity:    minor
+Description: In findApp in analyze.sml, an eq_var comparison seems to use the wrong variable (v instead of f) to detect
+	     an opportunity for optimization. Similarly, a recursive parameter looks like it should be v instead of cur.
+Fix:         Made the changes mentioned above, and everything seems to work fine
+Owner: adamc
+Status: closed
+
