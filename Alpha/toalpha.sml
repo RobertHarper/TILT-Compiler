@@ -756,9 +756,10 @@ struct
 	 (* Need to sign-extend shifted result to regain
             canonical 32-bit form in register (See Assembly
             manual, page B-3 *)
-	 emit (SPECIFIC (INTOP (ZAP, Rsrc1, IMMop 0xF0, Rdest)));
-	 emit (SPECIFIC (INTOP (SRL, Rdest, src2, Rdest)));
-	 emit (SPECIFIC (INTOP (ADDL, Rdest, REGop Rzero, Rdest)))
+	 (* Rdest can't be used in this calculation since it can be spilled. *)
+	 emit (SPECIFIC (INTOP (ZAP, Rsrc1, IMMop 0xF0, Rat)));
+	 emit (SPECIFIC (INTOP (SRL, Rat, src2, Rat)));
+	 emit (SPECIFIC (INTOP (ADDL, Rat, REGop Rzero, Rdest)))
        end
 
      | translate (Rtl.SRA (rtl_Rsrc1, op2, rtl_Rdest)) =
