@@ -48,6 +48,7 @@
            - Requires typecase/Typecase (not typerec)
            - separate sub and floatsub primitives
            - vararg/Vararg.  definable via typecase?
+           - how many uses of run-time type information are there?
         - Typing issues
            - Algorithm status
            - Implementation experience
