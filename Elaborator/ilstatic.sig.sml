@@ -12,16 +12,20 @@ signature ILSTATIC =
        eq_con: returns true if the types are equal: will set tyvars to ensure equality
        soft_eq_con: a version of eq_con that will not set any tyvars
        sub_con: tests whether the first constructor is a subtype of the second 
+       semi_sub_con: a version of sub_con that will not set any tyvars if not true
        con_head_normalize: returns an equivalent constructor in head-normal form 
-       con_normalize: returns an equivalent constructor in normal form *)
+       con_normalize: returns an equivalent constructor in normal form 
+       eq_exp: alpha equivalence of expressions
+    *)
     val eq_onearrow        : Il.arrow Util.oneshot * Il.arrow Util.oneshot -> bool
     val eq_con             : Il.context * Il.con * Il.con -> bool
     val soft_eq_con        : Il.context * Il.con * Il.con -> bool
     val sub_con            : Il.context * Il.con * Il.con -> bool
+    val semi_sub_con       : Il.context * Il.con * Il.con -> bool
     val con_head_normalize : Il.context * Il.con -> Il.con
     val con_normalize      : Il.context * Il.con -> Il.con
-
-
+    val eq_exp             : Il.context * Il.exp * Il.exp -> bool
+    val eq_kind            : Il.kind * Il.kind -> bool
 
     (* ---------- Tests for well-formedness ---------------------- *)
     val Decs_Valid  : Il.context * Il.decs -> bool
@@ -38,6 +42,7 @@ signature ILSTATIC =
     (* ---------- Obtain types and kinds and signatures ---------- *)
     val GetExpCon     : Il.context * Il.exp  -> Il.con
     val GetConKind    : Il.context * Il.con  -> Il.kind
+    val GetConKindFast : Il.context * Il.con  -> Il.kind
     val GetModSig     : Il.context * Il.mod  -> Il.signat
     val GetBndDec     : Il.context * Il.bnd  -> Il.dec
     val GetBndsDecs   : Il.context * Il.bnds -> Il.decs 
@@ -71,6 +76,8 @@ signature ILSTATIC =
     val SelfifySig : Il.context -> Il.path * Il.signat -> Il.signat
     val UnselfifySig : Il.context ->  Il.path * Il.signat -> Il.signat
     val SelfifyDec : Il.context -> Il.dec -> Il.dec
+    val SelfifySdec : Il.context -> Il.sdec -> Il.sdec
+    val SelfifyEntry : Il.context -> Il.context_entry -> Il.context_entry
     val reduce_signat : Il.context -> Il.signat -> Il.signat
 
   end

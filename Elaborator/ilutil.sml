@@ -96,17 +96,17 @@ structure IlUtil
 			    in  RECORD(mapcount help explist)
 			    end
     val con_string = CON_VECTOR (CON_UINT W8)
-    val con_bool =  CON_SUM{noncarriers = 2,
-			    carrier = CON_TUPLE_INJECT[],
-			    special = NONE}
+	fun bool_help special = CON_SUM{names = [Name.symbol_label(Symbol.varSymbol "false"), 
+						 Name.symbol_label(Symbol.varSymbol "true")],
+					noncarriers = 2,
+					carrier = CON_TUPLE_INJECT[],
+					special = special}
+	val con_bool = bool_help NONE
+	val con_false = bool_help (SOME 0)
+	val con_true = bool_help (SOME 1)
     fun con_eqfun c = CON_ARROW([con_tuple[c,c]],
 				con_bool,false, oneshot_init PARTIAL)
-    val con_false =  CON_SUM{noncarriers = 2,
-			    carrier = CON_TUPLE_INJECT[],
-			    special = SOME 0}
-    val con_true =  CON_SUM{noncarriers = 2,
-			    carrier = CON_TUPLE_INJECT[],
-			    special = SOME 1}
+
     val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
     val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
     fun make_lambda_help (funvar_opt,a,var,con,rescon,e) 
@@ -351,8 +351,8 @@ structure IlUtil
 		     | CON_FUN (vars,c) => let val state' = add_convars(state,vars)
 					   in CON_FUN(vars,f_con state' c)
 					   end
-		     | CON_SUM {noncarriers,special,carrier} =>
-			   CON_SUM{special=special,noncarriers=noncarriers,
+		     | CON_SUM {names,noncarriers,special,carrier} =>
+			   CON_SUM{names=names,special=special,noncarriers=noncarriers,
 				   carrier = self carrier}
 		     | CON_TUPLE_INJECT clist => CON_TUPLE_INJECT (map self clist)
 		     | CON_TUPLE_PROJECT (i,c) =>  CON_TUPLE_PROJECT (i, self c)
@@ -382,11 +382,6 @@ structure IlUtil
 	     SIGNAT_VAR v => s
 	   | SIGNAT_OF m => SIGNAT_OF(f_mod state m)
 	   | SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
-	   | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig} =>
-		 let val abs_sig = map (f_sdec state) abs_sig
-		     val code = map (f_sbnd state) code
-		 in  SIGNAT_INLINE_STRUCTURE {self=self,code=code,abs_sig=abs_sig}
-		 end
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))
 
@@ -408,19 +403,16 @@ structure IlUtil
 	 | BND_MOD(v,b,m) => BND_MOD(v, b,f_mod state m)
 	 | BND_CON(v,c) => BND_CON(v, f_con state c))
 
-      and f_kind (state : state) (kind : kind) : kind = 
-	  (case kind of
-	       KIND_ARROW _ => kind
-	     | KIND_TUPLE _ => kind
-	     | KIND_INLINE (k,c) => KIND_INLINE(f_kind state k, f_con state c))
+      and f_kind (state : state) (kind : kind) : kind = kind
 
       and f_dec (state : state) (dec : dec) : dec =
 	(case dec of
-	   DEC_EXP(v,c) => DEC_EXP(v, f_con state c)
-	 | DEC_MOD(v,b,s) => DEC_MOD(v, b, f_signat state s)
-	 | DEC_CON(v,k,NONE) => DEC_CON(v, f_kind state k, NONE)
-	 | DEC_CON(v,k,SOME c) => DEC_CON(v, f_kind state k, SOME (f_con state c))
-	 | DEC_EXCEPTION(n,c) => DEC_EXCEPTION(n, f_con state c))
+	   DEC_EXP(v,c,NONE, inline)   => DEC_EXP(v, f_con state c, NONE, inline)
+	 | DEC_EXP(v,c,SOME e, inline) => DEC_EXP(v, f_con state c, SOME (f_exp state e), inline)
+	 | DEC_CON(v,k,NONE, inline)   => DEC_CON(v, f_kind state k, NONE, inline)
+	 | DEC_CON(v,k,SOME c, inline) => DEC_CON(v, f_kind state k, SOME (f_con state c), inline)
+	 | DEC_MOD(v,b,s)      => DEC_MOD(v, b, f_signat state s)
+	 | DEC_EXCEPTION(n,c)  => DEC_EXCEPTION(n, f_con state c))
 
 
       val default_bound_convar = []
@@ -430,13 +422,14 @@ structure IlUtil
 			   bound_var = default_bound_var,
 			   bound_modvar = default_bound_modvar}
       fun default_flex_handler _ = false
+      fun default_sig_handler _ = NONE
+
+    in
+
       fun default_sdec_handler _ = NONE
       fun default_exp_handler _ = NONE
       fun default_con_handler _ = NONE
       fun default_mod_handler _ = NONE
-      fun default_sig_handler _ = NONE
-
-    in
 
       fun con_occurs(argcon : con, origtv : tyvar) : bool =
 	let 
@@ -577,7 +570,7 @@ structure IlUtil
 		  (case (labs,sdecs) of
 		       ([],_) => error "search in remove_modvar_* got no labels"
 		     | ([l],[]) => raise DEPENDENT
-		     | ([l],(SDEC(curl,DEC_CON(v,k,SOME c)))::rest) =>
+		     | ([l],(SDEC(curl,DEC_CON(v,k,SOME c,_)))::rest) =>
 			   if (eq_label(l,curl))
 			       then c
 			   else search [l] rest
@@ -595,10 +588,10 @@ structure IlUtil
 			   then SOME(search lbls arg_sdecs)
 		       else NONE)
 	    end
-	  fun sdec_handler (state,SDEC(l,DEC_CON(v,k,SOME c))) =
+	  fun sdec_handler (state,SDEC(l,DEC_CON(v,k,SOME c,inline))) =
 	      let val copt = (SOME(f_con state c)
 			      handle DEPENDENT => NONE)
-	      in SOME(SDEC(l,DEC_CON(v,k,copt)))
+	      in SOME(SDEC(l,DEC_CON(v,k,copt,inline)))
 	      end
 	    | sdec_handler (state,sdec) = NONE
 	  val handlers = STATE(default_bound,
@@ -631,8 +624,8 @@ structure IlUtil
 	    fun loop (ea,ca,ma) [] = (ea,ca,ma)
 	      | loop (ea,ca,ma) ((cur as (SDEC(l,dec)))::rest) =
 		(case dec of
-		     DEC_EXP (v,c) => loop ((v,MODULE_PROJECT(m,l))::ea,ca,ma) rest
-		   | DEC_CON(v,k,copt) => loop (ea,(v,CON_MODULE_PROJECT(m,l))::ca,ma) rest
+		     DEC_EXP (v,c,eopt,_) => loop ((v,MODULE_PROJECT(m,l))::ea,ca,ma) rest
+		   | DEC_CON(v,k,copt,_) => loop (ea,(v,CON_MODULE_PROJECT(m,l))::ca,ma) rest
 		   | DEC_MOD(v,_,s) => loop (ea,ca,(v,MOD_PROJECT(m,l))::ma) rest
 		   | _ => loop (ea,ca,ma) rest)
 	    val (exptable,contable,modtable) = loop ([],[],[]) sdecs
@@ -671,7 +664,7 @@ structure IlUtil
 
       fun con_subst_var_withproj(c : con, prev_sdecs : sdec list, m : mod) : con = 
 	let fun strip [] = []
-	      | strip ((SDEC (l, DEC_CON(v,_,_)))::rest) = (v,l) :: (strip rest)
+	      | strip ((SDEC (l, DEC_CON(v,_,_,_)))::rest) = (v,l) :: (strip rest)
 	      | strip (_::rest) = strip rest
 	    val table : (var * label) list= strip prev_sdecs
 	    fun con_handler (CON_VAR var,bound) = 
@@ -838,6 +831,13 @@ structure IlUtil
 	in f_con handlers argcon
 	end
 
+      type proj_handler = (mod * label -> exp option) * (mod * label -> con option) * 
+	   (mod * label -> mod option) * (sdec -> sdec option) 
+      fun default_sdec_proj_handler _ = NONE
+      fun default_exp_proj_handler _ = NONE
+      fun default_con_proj_handler _ = NONE
+      fun default_mod_proj_handler _ = NONE
+
       local
 	  fun allproj_handlers(eproj, cproj, mproj, sdecer) : state =
 	      let 
@@ -857,88 +857,46 @@ structure IlUtil
 	      in handlers
 	      end
       in
-	  fun sig_subst_allproj(argsig : signat, eproj, cproj, mproj, sdecer) : signat = 
-	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
-	      in  f_signat handlers argsig
-	      end
-	  fun exp_subst_allproj(arg, eproj, cproj, mproj, sdecer) =
-	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
-	      in  f_exp handlers arg
-	      end
-	  fun con_subst_allproj(arg, eproj, cproj, mproj, sdecer) =
-	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
-	      in  f_con handlers arg
-	      end
-	  fun mod_subst_allproj(arg, eproj, cproj, mproj, sdecer) =
-	      let val handlers = allproj_handlers(eproj,cproj,mproj,sdecer)
-	      in  f_mod handlers arg
-	      end
+	  fun exp_subst_allproj handlers = f_exp (allproj_handlers handlers)
+	  fun con_subst_allproj handlers = f_con (allproj_handlers handlers)
+	  fun mod_subst_allproj handlers = f_mod (allproj_handlers handlers)
+	  fun sig_subst_allproj handlers = f_signat (allproj_handlers handlers)
+	  fun bnd_subst_allproj handlers = f_bnd (allproj_handlers handlers)
+	  fun dec_subst_allproj handlers = f_dec (allproj_handlers handlers)
       end
 
-     fun subst_proj_handlers(eproj, cproj) =
-	let 
-	  fun exp_handler (MODULE_PROJECT(m,l),_) = eproj(m,l)
-	    | exp_handler _ = NONE
-	  fun con_handler (CON_MODULE_PROJECT(m,l),_) = cproj(m,l)
-	    | con_handler _ = NONE
-	  val handlers = STATE(default_bound,
-			       {sdec_handler = default_sdec_handler,
-				exp_handler = exp_handler,
-				con_handler = con_handler,
-				mod_handler = default_mod_handler,
-				sig_handler = default_sig_handler})
-	in handlers
-	end
-
-      fun exp_subst_proj(argexp : exp, eproj, cproj) : exp =
-	  f_exp (subst_proj_handlers(eproj,cproj)) argexp
-
-      fun con_constrain  (argcon, 
-			  orig_con_handler,
-			  param as {constrain : bool, 
-				    stamp = stampopt : Tyvar.stamp option,
-				    eq_constrain : bool},
-			  constrain_ctxts : context list) = 
-	  let 
-	      val tyvars = ref []
-	      fun con_handler (c : con,bound : var list) = 
-		  (case orig_con_handler c of
-		      NONE => 
+      fun find_tyvars_flexes con = 
+	  let val tyvars = ref []
+	      val flexes = ref []
+	      fun help in_array_ref argcon = 
+		  let
+		      fun con_handler (c : con,bound : var list) = 
 			  (case c of
-			      CON_TYVAR tyvar =>
-				  if (member_eq(eq_tyvar,tyvar,!tyvars))
-				      then NONE
-				  else (tyvars := tyvar :: (!tyvars);
-					if constrain then tyvar_constrain tyvar else (); 
-					debugdo (fn () => 
-						 if (eq_constrain) 
-						     then
-							 (print "!!!eq_constraining tyvar ";
-							  print (tyvar2string tyvar); print "\n")
-						 else ());
-					if eq_constrain then tyvar_use_equal tyvar else (); 
-					    tyvar_addctxts(tyvar,constrain_ctxts);
-					    (case stampopt of
-						 SOME stamp => update_stamp(tyvar,stamp)
-					       | NONE => ());
-						 NONE)
-			    | CON_FLEXRECORD r => (flex_handler r; SOME c)
-			    | _ => NONE)
-		    | someopt => someopt)
-	      and flex_handler (r as (ref (FLEXINFO (stamp,resolved,rdecs)))) =
-		  (app (fn (_,c) => con_constrain(c,orig_con_handler,param,constrain_ctxts)) rdecs;
-		   (case stampopt of
-			SOME s => r := FLEXINFO(stamp_join(s,stamp),resolved,rdecs)
-		      | NONE => ()))
-		| flex_handler (ref (INDIRECT_FLEXINFO rf)) = flex_handler rf
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				      exp_handler = default_exp_handler,
-				      con_handler = con_handler,
-				      mod_handler = default_mod_handler,
-				      sig_handler = default_sig_handler})
-	  in (f_con handlers argcon; ())
+			       CON_TYVAR tyvar =>
+				   if (member_eq(eq_tyvar,tyvar,map #2 (!tyvars))
+				       orelse (case tyvar_deref tyvar of
+						   NONE => false
+						 | SOME _ => true))
+					then NONE
+				      else 
+					  (tyvars := (in_array_ref,tyvar) :: (!tyvars);
+					  NONE)
+			      | CON_FLEXRECORD r => (flexes := r :: (!flexes); NONE)
+			      | CON_ARRAY c => (help true c; SOME c)
+			      | CON_REF c => (help true c; SOME c)
+			      | _ => NONE)
+		      val handlers = STATE(default_bound,
+					   {sdec_handler = default_sdec_handler,
+					    exp_handler = default_exp_handler,
+					    con_handler = con_handler,
+					    mod_handler = default_mod_handler,
+					    sig_handler = default_sig_handler})
+		      val _ = f_con handlers argcon
+		  in  (!tyvars, !flexes)
+		  end
+	  in  help false con
 	  end
+      
 
 
       fun ConApply (reduce_small,c1,c2) = 
@@ -964,6 +922,12 @@ structure IlUtil
 	  end
 
 
+      fun find_sdec ([],_) = NONE
+	| find_sdec((sdec as SDEC(l,_))::rest,l') = if (eq_label(l,l')) 
+						      then SOME sdec else find_sdec(rest,l')
+      fun find_sbnd ([],_) = NONE
+	| find_sbnd((sbnd as SBND(l,_))::rest,l') = if (eq_label(l,l')) 
+						      then SOME sbnd else find_sbnd(rest,l')
 
       fun mod_free_expvar module : var list = 
 	  let
@@ -994,7 +958,11 @@ structure IlUtil
 	  in f_signat handlers argsig
 	  end
 
-      fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) =
+       type handler = (exp -> exp option) * (con -> con option) * 
+	   (mod -> mod option) * (sdec -> sdec option) 
+       fun empty_handler (_ : 'a) : 'a option = NONE
+
+       fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) =
 	  STATE(default_bound,
 		{sdec_handler = fn (_,sd) => sdec_handler sd,
 		 exp_handler = fn (e,_) => exp_handler e,
@@ -1002,30 +970,12 @@ structure IlUtil
 		 mod_handler = fn (m,_) => mod_handler m,
 		 sig_handler = default_sig_handler})
 
-       fun sig_all_handle (argsig : signat, exp_handler, con_handler, mod_handler, sdec_handler) : signat =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
-	  in f_signat handlers argsig
-	  end
-
-       fun con_all_handle (argcon : con, exp_handler, con_handler, mod_handler, sdec_handler) : con =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
-	  in f_con handlers argcon
-	  end
-
-       fun bnd_all_handle (argbnd : bnd, exp_handler, con_handler, mod_handler, sdec_handler) : bnd =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
-	  in f_bnd handlers argbnd
-	  end
-
-       fun dec_all_handle (argdec : dec, exp_handler, con_handler, mod_handler, sdec_handler) : dec =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
-	  in f_dec handlers argdec
-	  end
-
-       fun mod_all_handle (argmod : mod, exp_handler, con_handler, mod_handler, sdec_handler) : mod =
-	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) 
-	  in f_mod handlers argmod
-	  end
+       fun exp_all_handle handlers = f_exp (all_handlers handlers)
+       fun con_all_handle handlers = f_con (all_handlers handlers)
+       fun mod_all_handle handlers = f_mod (all_handlers handlers)
+       fun sig_all_handle handlers = f_signat (all_handlers handlers)
+       fun bnd_all_handle handlers = f_bnd (all_handlers handlers)
+       fun dec_all_handle handlers = f_dec (all_handlers handlers)
 
 
     fun con_free_modvar con : var list = 
@@ -1170,13 +1120,12 @@ structure IlUtil
     (* Internal labels follow special conventions *)
     (* Some internal labels are opened for lookup *)
     (* Some internal labels are non-exported *)
-    (* Datatype labels are internal, non-exported, opened, and identifiable as dt labels *)
     (* Eq labels are identifiable as eq labels *)
 	 
     val open_str = "+O"
     val nonexport_str = "-X"
-    val dt_str = "+D"
     val eq_str = "+E"
+    val dt_str = "+O-X+D"
 
     fun is_open lab = 
 	let val str = label2name lab
@@ -1184,9 +1133,8 @@ structure IlUtil
 	in  (c = #"+" orelse c = #"-") andalso substring (open_str,str)
 	end
     fun is_nonexport lab =  substring (nonexport_str,label2name lab)
-    fun is_dt lab =  substring (dt_str,label2name lab)
     fun is_eq lab = substring (eq_str,label2name lab)
-    fun is_dt_var v = Util.substring("*inline_",Name.var2name v)
+    fun is_dt lab = substring (dt_str,label2name lab)
 
     local
 	fun to_meta_lab meta_str lab =
@@ -1197,10 +1145,9 @@ structure IlUtil
 	  end
     in  fun to_open lab = to_meta_lab open_str lab
 	fun to_nonexport lab = to_meta_lab nonexport_str lab 
-	fun to_dt lab = to_meta_lab (open_str ^ nonexport_str ^ dt_str) lab
 	fun to_eq lab = to_meta_lab eq_str lab
+	fun to_dt lab = to_meta_lab dt_str lab
     end
-    fun to_dt_var v = fresh_named_var("*inline_ " ^ (Name.var2name v))
 
     fun label2name lab = 
       let
@@ -1214,102 +1161,6 @@ structure IlUtil
       in String.substring(str,start,len - start)
       end
 
-    fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e
-      | is_inline_bnd (BND_CON _) = true
-      | is_inline_bnd (BND_MOD(v,_,m)) = is_inline_mod m
-
-    and is_inline_exp arg_exp = 
-	(case arg_exp of
-	     OVEREXP (_,_,oe) => (case oneshot_deref oe of
-				      NONE => false
-				    | SOME e => is_inline_exp e)
-	   | SCON _ => true
-	   | VAR _ => true 
-	   | ETAPRIM _ => true
-	   | ETAILPRIM _ => true
-	   | (FIX _) => true
-	   | PRIM _ => false
-	   | ILPRIM _ => false
-	   | (RECORD le_list) => List.all (fn (_,e) => is_inline_exp e) le_list
-	   | SUM_TAIL (_,_,e)  => is_inline_exp e
-	   | ROLL(_,e) => is_inline_exp e
-	   | UNROLL(_,_,e) => is_inline_exp e
-	   | HANDLE (e1,e2) => (is_inline_exp e1) andalso (is_inline_exp e2)
-	   | EXN_INJECT(_,e1,e2) => (is_inline_exp e1) andalso (is_inline_exp e2)
-	   | (RAISE (_,e)) => is_inline_exp e
-	   | (LET (bnds,e)) => (List.all is_inline_bnd bnds) andalso (is_inline_exp e)
-	   | (NEW_STAMP _) => false
-	   | (INJ _) => true
-	   | (RECORD_PROJECT _) => false (* could be sometimes true *)
-	   | (APP _) => false (* could be sometimes true *)
-	   | (EXTERN_APP _) => false (* could be sometimes true *)
-	   | (CASE _) => false (* could be sometimes true *)
-	   | (EXN_CASE _) =>  false (* could be sometimes true *)
-	   | (MODULE_PROJECT _) => false (* could be sometimes true *)
-	   | (SEAL (e,_)) => is_inline_exp e)
-		 
-    and is_inline_mod arg_mod = 
-	(case arg_mod of
-	     MOD_VAR _ => true
-	   | MOD_STRUCTURE sbnds => List.all (fn SBND(_,bnd) => is_inline_bnd bnd) sbnds
-	   | MOD_APP _ =>  false (* could be sometimes true *)
-	   | MOD_PROJECT _ => false (* could be sometimes true *)
-	   | MOD_SEAL (m,_) => is_inline_mod m
-	   | MOD_LET (v,m1,m2) => (is_inline_mod m1) andalso (is_inline_mod m2))
-
-     fun make_inline_module (context,m,pathopt,inline_type) : mod option = 
-	 (case m of
-	     MOD_STRUCTURE sbnds => 
-		 let 
-		     exception FAIL
-		     val freevars = mod_free_expvar m
-		     fun doit (ee,cc,mm) (SBND(l,bnd)) = 
-			 SBND(l,case bnd of
-			      BND_EXP(v,e) => BND_EXP(v, ee e)
-			    | BND_CON(v,c) => BND_CON(v, cc c)
-			    | BND_MOD(v,b,m) => BND_MOD(v, b, mm m))
-		     fun loop [] : sbnd list = []
-		       | loop ((sbnd as SBND(l,bnd))::rest) =
-			 case bnd of
-			     BND_EXP(v,e) => 
-				 if member_eq(eq_var,v,freevars)
-				     then (print "cannot inline module due to v = ";
-					   pp_var v; print "\n";
-					   raise FAIL)
-				 else sbnd::(loop rest)
-			   | BND_CON (v,c) => 
-				 let 
-				     val c = (case (inline_type,pathopt) of
-					(true,_) => c
-				       |(_,SOME p) => 
-					path2con(join_path_labels(p,[l]))
-					| _ => error "cannot inline")
-				     fun ee earg = exp_subst_convar(earg, [(v,c)])
-				     fun cc carg = con_subst_convar(carg, [(v,c)])
-				     fun mm marg = mod_subst_convar(marg, [(v,c)])
-				     val rest' = map (doit (ee,cc,mm)) rest
-				 in sbnd::(loop rest')
-				 end
-			   | BND_MOD (v,b,m) =>
-				 let 
-				     fun ee earg = exp_subst_modvar(earg, [(v,m)])
-				     fun cc carg = con_subst_modvar(carg, [(v,m)])
-				     fun mm marg = mod_subst_modvar(marg, [(v,m)])
-				     val rest' = map (doit (ee,cc,mm)) rest
-				     val pathopt = (case pathopt of
-					NONE => NONE
-				      | SOME p => SOME(join_path_labels(p,[l])))
-				     val sbnd = SBND(l,BND_MOD(v,b,case make_inline_module (context,m,pathopt,inline_type) of
-							       SOME m => m
-							     | NONE => raise FAIL))
-				 in sbnd::(loop rest')
-				 end
-		 in
-		     SOME (MOD_STRUCTURE(loop sbnds))
-		     handle FAIL => NONE
-		 end
-	   | MOD_FUNCTOR _ => SOME m
-	   | _ => NONE)
 
 
    fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)

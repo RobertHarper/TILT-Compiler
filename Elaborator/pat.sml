@@ -48,12 +48,13 @@ structure Pat
 	    fun mod_handler (m : mod) : mod option = NONE
 	    fun con_handler (c : con) : con option = 
 		(case c of
-		   CON_SUM {noncarriers,carrier,special} =>
-			SOME(CON_SUM{noncarriers = noncarriers,
-					special = NONE,
-					carrier = supertype carrier})
+		   CON_SUM {names,noncarriers,carrier,special} =>
+		       SOME(CON_SUM{names = names,
+				    noncarriers = noncarriers,
+				    special = NONE,
+				    carrier = supertype carrier})
 		| _ => NONE)
-	in  con_all_handle(arg_con,exp_handler,con_handler,mod_handler, fn _ => NONE)
+	in  con_all_handle(exp_handler,con_handler,mod_handler, fn _ => NONE) arg_con
 	end
 
     (* ---------- auxilliary types, datatypes, and functions -------------- 
@@ -92,7 +93,7 @@ structure Pat
 	end
 
     fun arm2sdecs(_,svc_list,_) = map (fn (s,v,c) => (SDEC(symbol_label s,
-							   DEC_EXP(v,c)))) svc_list
+							   DEC_EXP(v,c,NONE, false)))) svc_list
     fun arm_addbind(s,v,c,(cl,svc_list,expopt) : arm) = 
 	let fun notshadow (s2,_,_) = not(Symbol.eq(s,s2))
 	    val svc_list' = List.filter notshadow svc_list
@@ -191,6 +192,7 @@ structure Pat
     let
 
 	val wildSymbol = (Symbol.varSymbol "_")
+
 
       local 
 	    fun folder((clause,bound,NONE),(ls,arms)) = (ls, (clause,bound,NONE)::arms)
@@ -302,7 +304,7 @@ structure Pat
 	val v = fresh_var()
 	val bnd' = BND_EXP(v,ILPRIM(deref,[elemcon],[VAR var]))
 	val newargs = (CASE_VAR(v,elemcon))::args
-	val context = add_context_dec(context,DEC_EXP(v,elemcon))
+	val context = add_context_dec(context,DEC_EXP(v,elemcon,NONE, false))
 	val newarms = map (fn (p,(c,b,eopt)) => (p::c,b,eopt)) acc
 	val ec = match(context,newargs,newarms,def)
     in  wrapbnd(bnd', ec)
@@ -374,7 +376,7 @@ structure Pat
 		      print "Actual type: "; pp_con con1; print "\n";
 		      print "Pattern type: "; pp_con argcon; print "\n")
 	val newargs = map2 (fn (v,c) => CASE_VAR(v,c)) (rvars,rcons)
-	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c))) context newargs
+	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c,NONE, false))) context newargs
 	fun extender (pats,(cl,bound,body)) = (pats @ cl, bound, body)
 	val newarms = map extender accs'
 	val ec = match(context,newargs @ args,newarms,def)
@@ -401,7 +403,7 @@ structure Pat
 			 | SOME argpat =>
 			       let val (cl,bound,body) = arm
 				   val arm' = (argpat::cl,bound,body)
-				   val context = add_context_dec(context,DEC_EXP(v,con))
+				   val context = add_context_dec(context,DEC_EXP(v,con,NONE, false))
 			       in  match(context,(CASE_VAR (v,con))::args,[arm'],def)
 			       end)
 		  val _ =  if (check_rescon c)
@@ -434,43 +436,64 @@ structure Pat
 		   accs : ((Ast.path * Ast.pat option) * arm) list,
 		   def : def) : (exp * con) = 
     let 
-      val _ = debugdo (fn () => (print "\n\nCONSTRUCTOR_CASE CALLED with clauses:\n";
-				 mapcount (fn (i,(path_patopt,arm)) =>  
-					   (print "  clause #"; printint i;
-					    pp_path_patopt path_patopt;
-					    print "\nand arm is:"; pp_arm arm)) accs))
+(*
+      val _ = (print "\n\nCONSTRUCTOR_CASE CALLED with clauses:\n";
+	       mapcount (fn (i,(path_patopt,arm)) =>  
+			 (print "  clause #"; printint i;
+			  pp_path_patopt path_patopt;
+			  print "\nand arm is:"; pp_arm arm)) accs)
+*)
       val CASE_VAR(casevar, casecon) = arg1
       val casearg = VAR casevar
       val rescon_var = fresh_named_var "rescon_var"
       val rescon = ref(fresh_con context)
       val rsvar = fresh_named_var "sumswitch_arg"
       fun check_rescon c = 
+(*	  print "check_rescon = "; pp_con c; print "\n"; *)
 		(sub_con(context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
-		sub_con(context,c,!rescon))      
+		 sub_con(context,c,!rescon))
 
+      val ast_path = #1(#1(hd accs))
       val {instantiated_type = datacon,
 	   instantiated_sumtype = sumtype,
 	   arms = constr_patconopt_list,
 	   expose_exp} = Datatype.instantiate_datatype_signature(context,#1(#1(hd accs)),polyinst)
 
-      val mk_ssumcon = 
-	  (case (IlStatic.con_head_normalize(context,sumtype)) of
-	       CON_SUM{noncarriers,carrier,special} => (fn i => CON_SUM{noncarriers=noncarriers,
-									carrier=carrier,
-									special=SOME i})
-	     | _ => error "sumcon not reducible to SUM_CON")
-      val jopt = 
-	  let val actualtype = 
-	      (case Context_Lookup'(context,casevar) of
-		   SOME(_,PHRASE_CLASS_EXP(_,c)) => c
-		 | _ => error ("casevar " ^ (Name.var2string casevar) ^ " not bound"))
-	  in  (case (IlStatic.con_head_normalize(context,actualtype)) of
-		   CON_SUM{noncarriers,carrier,special} => special
-		 | _ => NONE)
-	  end
+      local
+	  val (names,noncarriers,carrier) = 
+	      (case (IlStatic.con_head_normalize(context,sumtype)) of
+		   CON_SUM{names,noncarriers,carrier,special} => (names,noncarriers,carrier)
+		 | _ => error "sumcon not reducible to SUM_CON")
+      in  fun mk_ssumcon i = CON_SUM{names=names,
+				     noncarriers=noncarriers,
+				     carrier=carrier,
+				     special=SOME i}
+      end
 
-      fun getarm (datacon,sumcon) (i,{name=cur_constr,arg_type}) : exp option = 
+
+      local
+	  val SOME(_,PHRASE_CLASS_EXP(_,actualtype,_,_)) = Context_Lookup'(context,casevar)
+      in  val jopt = (case actualtype of
+			  CON_SUM{names,noncarriers,carrier,special} => special
+			| _ => NONE)
+      end
+
+(*
+      val _ = (print "datacon is "; Ppil.pp_con datacon; print "\n";
+	       print "casecon before is "; Ppil.pp_con casecon; print "\n")
+*)
+      val _ = if (sub_con(context,casecon,datacon))
+		  then ()
+	      else (error_region();
+		    print "datacon is "; Ppil.pp_con datacon; print "\n";
+		    print "casecon is "; Ppil.pp_con casecon; print "\n";
+		    print "constructor pattern used on an argument of the wrong type\n")
+(*
+      val _ = (print "casecon after is "; Ppil.pp_con casecon; print "\n")
+*)
+
+      fun getarm (i,{name=cur_constr,arg_type}) : exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
 	      (case (eq_label(cur_constr, symbol_label (List.last path)), patopt) of
@@ -478,14 +501,8 @@ structure Pat
 	     | (true,NONE) => SOME(clause,bound,body)
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
 	  val relevants : arm list = List.mapPartial armhelp accs
-	  val _ = if (sub_con(context,casecon,datacon))
-		      then ()
-		  else (error_region();
-			print "datacon is "; Ppil.pp_con datacon; print "\n";
-			print "casecon is "; Ppil.pp_con casecon; print "\n";
-			print "constructor pattern used on an argument of the wrong type\n")
 
-         val context = IlContext.add_context_dec(context,DEC_EXP(casevar,mk_ssumcon i))
+         val context = IlContext.add_context_dec(context,DEC_EXP(casevar,mk_ssumcon i,NONE, false))
 
 	in  if (case jopt of
 		    NONE => false
@@ -504,19 +521,18 @@ structure Pat
 			  end
 	    | (_,SOME rcon) => let 
 			   val var = fresh_var()
-			   val context = add_context_dec(context,DEC_EXP(var,rcon))
+			   val context = add_context_dec(context,DEC_EXP(var,rcon,NONE,false))
 			   val (me,mc) = match(context,(CASE_VAR (var,rcon))::args, relevants, def)
 			    val _ = if (check_rescon mc)
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
-			       in SOME(make_let([BND_EXP(var,SUM_TAIL(i,sumcon,VAR rsvar))],me))
+			       in SOME(make_let([BND_EXP(var,SUM_TAIL(i,sumtype,VAR rsvar))],me))
 		       end)
 	end
 
 
-
-      val expopt_list = mapcount (getarm (datacon,sumtype)) constr_patconopt_list
+      val expopt_list = mapcount getarm constr_patconopt_list
 
       val _ = debugdo (fn () => (print "Got these arms:";
 				 mapcount (fn (i,eopt) => (print "Arm #"; printint i; print ": ";
@@ -526,7 +542,7 @@ structure Pat
 								  print "\n")) expopt_list))
 
       val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
-(*	val _ = (print "========casecon is: "; Ppil.pp_con casecon; print "\n") *)
+
       val arg = IlUtil.beta_reduce(expose_exp,casearg)
 
       val case_exp = 
@@ -540,7 +556,7 @@ structure Pat
 		  | (_,NONE) => NONE
 		  | (_,SOME ec_thunk) => 
 			let val (e,c) = ec_thunk context
-			    val _ = (if (eq_con(context,c,(!rescon)))
+			    val _ = (if (check_rescon c)
 					 then ()
 				     else (error_region();
 					   print "result type of constructor patterns mismatch";
@@ -554,6 +570,7 @@ structure Pat
 		tipe =  (case result_type_var of
 			     NONE => con_deref (!rescon)
 			   | SOME v => CON_VAR v)})
+
     in   (case_exp, con_deref (!rescon))
     end
 
@@ -562,15 +579,13 @@ structure Pat
 	     arms : arm list,
 	     def : def) : (Il.exp * Il.con) = 
     (
-
-debugdo 
-     (fn () => 
-      (print "\nMATCH called with "; printint (length args); print " args:\n";
+(*
+      print "\nMATCH called with "; printint (length args); print " args:\n";
        mapcount (fn(i,a as (CASE_VAR (casevar,_))) => (print "    #"; printint i; print ": "; 
 			     pp_case_exp a; 
 			     let val actualtype = 
 				     (case Context_Lookup'(context,casevar) of
-					  SOME(_,PHRASE_CLASS_EXP(_,c)) => c
+					  SOME(_,PHRASE_CLASS_EXP(_,c,_)) => c
 					| _ => error ("!!!casevar " ^ (Name.var2string casevar) 
 						      ^ " not bound"))
 			     in  pp_con  actualtype
@@ -578,8 +593,8 @@ debugdo
 			     print "\n")) args;
        print "and with "; printint (length arms); print " arms:\n";
        mapcount (fn(i,a) => (print "  #"; printint i; print ": "; pp_arm a; print "\n")) arms;
-       print "and with def = "; pp_def def; print "\n\n"));
-
+       print "and with def = "; pp_def def; print "\n\n";
+*)
      case (arms,args) of
        ([],_) => (case def of
 		    SOME ec_thunk => ec_thunk context
@@ -950,7 +965,7 @@ debugdo
 	val boundsyms = get_bound context bindpat
 
 	val args = [CASE_VAR (argvar,argc)] 
-	val context = add_context_dec(context,DEC_EXP(argvar,argc))
+	val context = add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
 	val patarg = {context = context, typecompile = #typecompile patarg,
 		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
 		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
@@ -967,7 +982,7 @@ debugdo
 	    let val l = fresh_internal_label "bind"
 		val bv = fresh_named_var "bind"
 		val sbnd_sdec = (SBND(l,(BND_EXP(bv,binde))),
-				 SDEC(l,(DEC_EXP(bv,bindc))))
+				 SDEC(l,(DEC_EXP(bv,bindc,NONE,false))))
 		fun mapper(n,s) = 
 		    let val l = symbol_label s
 			val v = gen_var_from_symbol s
@@ -976,7 +991,7 @@ debugdo
 				   | _ => error "bindc not a tuple")
 			val e = RECORD_PROJECT(VAR bv,generate_tuple_label (n+1) ,bindc)
 		    in   (SBND(l,(BND_EXP(v,e))),
-			  SDEC(l,(DEC_EXP(v,c))))
+			  SDEC(l,(DEC_EXP(v,c,NONE,false))))
 		    end
 		val sbnd_sdec_proj = Listops.mapcount mapper boundsyms
 	    in  sbnd_sdec :: sbnd_sdec_proj
@@ -1022,7 +1037,7 @@ debugdo
       : Il.exp * Il.con = 
       let 
 	val args = [CASE_VAR (argvar,argc)]
-	val context = add_context_dec(context,DEC_EXP(argvar,argc))
+	val context = add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
 	val patarg = {context = context, typecompile = #typecompile patarg,
 		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
 		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
@@ -1073,7 +1088,7 @@ debugdo
 	   ---- adding context entries to reflect these arguments ----- *)
 	val arms : arm' list = map (fn (cl,body) => (cl,bound, SOME body)) cases
 	val args = map2 (fn (v,c) => CASE_VAR(v,c)) (argvars,argcons)
-	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c))) context args
+	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c,NONE,false))) context args
 	val patarg = {context = context, typecompile = #typecompile patarg,
 		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
 		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}

@@ -16,7 +16,6 @@ struct
     type sdecs = Il.sdecs
     type fixity_table = Il.fixity_table
     type path = Il.path
-    type inline = Il.inline
     type context_entry = Il.context_entry
 	
     open Il Util Name Listops Ppil IlUtil
@@ -57,66 +56,6 @@ struct
 			tag_list = tag_list})
 	end
 
-    (*  path is the path to the inline object; 
-       lbl is the local name given to the object *)
-    local
-	fun help (CONTEXT {alias_list, flatlist,fixity_list,
-			   label_list,var_list,tag_list},path,lbl,pc) = 
-	    let 
-	        val label_list = Name.LabelMap.insert(label_list,lbl,(path,pc))
-	        val var_list = (case path of
-				    PATH(v,[]) => var_seq_insert(var_list,v,(lbl,pc))
-				  | _ => var_list)
-            in CONTEXT({alias_list = alias_list,
-			flatlist = flatlist,
-			fixity_list = fixity_list,
-			label_list = label_list,
-			var_list = var_list,
-			tag_list = tag_list})
-	    end
-	    fun sbnd_sdec_help path ((SBND(l,bnd), SDEC(_,dec)),ctxt as (CONTEXT{label_list,...})) = 
-		let val path = join_path_labels(path,[l])
-		    val inline = case (bnd,dec) of
-			(BND_EXP (_,e), DEC_EXP(_,c)) => INLINE_EXPCON (e,c)
-		      | (BND_CON (_,c), DEC_CON(_,k,_)) => INLINE_CONKIND (c,k)
-		      | (BND_MOD(_,true,m), DEC_MOD(_,true,s)) => INLINE_MODSIG(true,m,s)
-		      | (BND_MOD(_,false,m), DEC_MOD(_,false,s)) => INLINE_MODSIG(true,m,s)
-		      | (_, _) => error "bad argument to add_context_inline'"
-		    val ctxt' as (CONTEXT{label_list=label_list',...}) = 
-			do_inline(ctxt,path,l,inline)
-(*
-		    val _ =  (print "sbnd_sdec_help called with label_list length = ";
-			      print (Int.toString (Name.LabelMap.numItems label_list)); print "\n";
-			      print "and returning with label_list length = ";
-			      print (Int.toString (Name.LabelMap.numItems label_list')); print "\n\n")
-*)
-		in  ctxt'
-		end
-	    
-	    and do_inline (ctxt,path, lbl, inline) = 
-		(case inline of
-		     INLINE_EXPCON ec => help (ctxt,path,lbl,PHRASE_CLASS_EXP ec)
-		   | INLINE_CONKIND ck => help (ctxt,path,lbl,PHRASE_CLASS_CON ck)
-		   | INLINE_OVER arg => help (ctxt,path,lbl,PHRASE_CLASS_OVEREXP arg)
-		   | INLINE_MODSIG (b,m,s) => 
-			 let val ctxt = help (ctxt,path,lbl,PHRASE_CLASS_MOD (m,b,s))
-			 in  (case (is_open lbl,m,s) of
-				  (true,MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE(_,sdecs)) =>
-				      foldl (sbnd_sdec_help path) ctxt (zip sbnds sdecs)
-				| _ => ctxt)
-			 end)
-    in
-	fun add_context_inline (ctxt, l, v, inline) = 
-	    do_inline (add_context_flat(ctxt, CONTEXT_INLINE(l,v,inline)), PATH(v,[]), l, inline)
-	fun add_context_inline_signature (ctxt, l, v, quad as {self, code, abs_sig}) = 
-	    let val s = SIGNAT_INLINE_STRUCTURE quad
-		val ctxt = add_context_flat(ctxt, CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
-		val ctxt = help (ctxt,PATH(v,[]),l,PHRASE_CLASS_MOD (MOD_STRUCTURE code,false,s))
-	    in  if (is_open l) 
-		    then foldl (sbnd_sdec_help (PATH(v,[]))) ctxt (zip code abs_sig)
-		else ctxt
-	    end
-    end
 
     fun stat_context(CONTEXT {flatlist,fixity_list,
 			      label_list,var_list,tag_list, alias_list}) = 
@@ -153,18 +92,12 @@ struct
 		end
 	    fun sdec_help (v,l) (sdec,ctxt) = add_context_sdec'(ctxt,SOME(mk_path v),sdec)
 	in case dec of
-	    (DEC_EXP(v,c)) => help(ctxt, v, path2exp, fn obj => (PHRASE_CLASS_EXP (obj, c)))
-	  | DEC_CON(v,k,NONE) => help(ctxt,v, path2con, fn obj => (PHRASE_CLASS_CON(obj, k)))
-	  | DEC_CON(v,k,SOME c) => help(ctxt,v, path2con, fn _ => (PHRASE_CLASS_CON(c, k)))
+	    DEC_EXP(v,c,eopt,inline) => help(ctxt, v, path2exp, fn obj => PHRASE_CLASS_EXP(obj, c, eopt, inline))
+	  | DEC_CON(v,k,copt,inline) => help(ctxt, v, path2con, fn obj => PHRASE_CLASS_CON(obj, k, copt, inline))
 	  | DEC_MOD (v,b,s as SIGNAT_FUNCTOR _) => help(ctxt,v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj,b,s)))
 	  | DEC_MOD (v,_,(SIGNAT_STRUCTURE(NONE,_))) => 
 	    (print "adding non-selfified signature to context: "; pp_sdec sdec; print "\n";
 	     error "adding non-selfified signature to context")
-	  | DEC_MOD(_,_,(SIGNAT_INLINE_STRUCTURE {self=NONE,...})) => 
-	    (print "adding non-selfified inline signature to context: "; pp_sdec sdec; print "\n";
-	     error "adding non-selfified inline signature to context")
-	  | DEC_MOD(v,_,SIGNAT_INLINE_STRUCTURE (quad as {self=SOME _,...})) =>
-	          add_context_inline_signature (ctxt,l,v,quad)
 	  | DEC_MOD(v,_,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
 		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, false,s)))
 		  in  if (is_open l)
@@ -203,6 +136,18 @@ struct
 		 var_list = var_seq_insert(var_list,v,(l, PHRASE_CLASS_SIG (v,signat))),
 		 tag_list = tag_list})
 
+    fun add_context_overexp(CONTEXT {alias_list, flatlist,fixity_list,
+				     label_list,var_list,tag_list}, 
+			    l, v, celist) = 
+	let val pc = PHRASE_CLASS_OVEREXP celist
+	in  CONTEXT({alias_list = alias_list,
+		     flatlist = (CONTEXT_OVEREXP(l,v,celist))::flatlist,
+		     fixity_list = fixity_list,
+		     label_list = Name.LabelMap.insert(label_list,l, (PATH(v,[]), pc)),
+		     var_list = var_seq_insert(var_list,v,(l, pc)),
+		     tag_list = tag_list})
+	end
+
     fun add_context_alias(CONTEXT {alias_list, flatlist,fixity_list,
 				   label_list,var_list,tag_list}, 
 			  l, labs) = 
@@ -222,7 +167,8 @@ struct
 	   | CONTEXT_ALIAS (l,labs) => add_context_alias(ctxt,l,labs)
 	   | CONTEXT_SDEC sdec => add_context_sdec(ctxt,sdec)
 	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
-	   | CONTEXT_INLINE (l,v,i) => add_context_inline(ctxt,l,v,i))
+	   | CONTEXT_OVEREXP(l,v,celist) => add_context_overexp(ctxt,l,v,celist))
+
 
     fun add_context_entry'(entry,ctxt) = add_context_entry(ctxt,entry)
     fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
@@ -235,9 +181,10 @@ struct
     fun add_context_decs(ctxt, decs) = add_context_sdecs(ctxt, decs2sdecs decs)
     fun add_context_dec(ctxt, dec) = add_context_decs(ctxt,[dec])
 
-    fun add_context_exp(c, l, v, con) = add_context_sdec(c,SDEC(l,DEC_EXP(v,con)))
+    fun add_context_exp(c, l, v, con) = add_context_sdec(c,SDEC(l,DEC_EXP(v,con,NONE,false)))
     fun add_context_mod(c, l, v, signat) = add_context_sdec(c,SDEC(l,DEC_MOD(v,false,signat)))
-    fun add_context_con(c, l, v, kind, conopt) = add_context_sdec(c,SDEC(l,DEC_CON(v,kind,conopt)))
+    fun add_context_con(c, l, v, kind, conopt) = 
+	add_context_sdec(c,SDEC(l,DEC_CON(v,kind,conopt,false)))
 
     fun add_context_exp'(c, v, con) = add_context_exp(c,anon_label(), v, con)
     fun add_context_mod'(c, v, signat) = add_context_mod(c,anon_label(), v, signat)
@@ -275,16 +222,17 @@ struct
 
 
      fun context_to_sdecs (CONTEXT {var_list,...}) =
-	  Name.VarMap.foldli (fn (v,(lab,phrase_class),sdecs) =>
-			      case phrase_class
-				of PHRASE_CLASS_EXP(exp,con) => SDEC(lab,DEC_EXP(v,con))::sdecs
-			         | PHRASE_CLASS_CON(con,kind) => SDEC(lab,DEC_CON(v,kind,SOME con))::sdecs
-				 | PHRASE_CLASS_MOD(m,b,signat) => SDEC(lab,DEC_MOD(v,b,signat))::sdecs
-				 | PHRASE_CLASS_SIG _ => sdecs
-				 | PHRASE_CLASS_OVEREXP _ => sdecs) [] (#1 var_list)
+	  Name.VarMap.foldli 
+	  (fn (v,(lab,phrase_class),sdecs) =>
+	   case phrase_class of
+	       PHRASE_CLASS_EXP(_,con,eopt,inline) => SDEC(lab,DEC_EXP(v,con,eopt,inline))::sdecs
+	     | PHRASE_CLASS_CON(_,kind,copt,inline) => SDEC(lab,DEC_CON(v,kind,copt,inline))::sdecs
+	     | PHRASE_CLASS_MOD(m,b,signat) => SDEC(lab,DEC_MOD(v,b,signat))::sdecs
+	     | PHRASE_CLASS_SIG _ => sdecs
+	     | PHRASE_CLASS_OVEREXP _ => sdecs) [] (#1 var_list)
 
       (* faster when first context is larger than second *)
-      fun plus (csubster,ksubster,ssubster,orig_ctxt, 
+      fun plus (esubster,csubster,ksubster,ssubster,orig_ctxt, 
 		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list, tag_list,alias_list=_}) =
 	  let val ctxt = add_context_fixity(orig_ctxt,fixity_list)
 	      fun varIn (v,ctxt) = (case (Context_Lookup'(ctxt,v)) of
@@ -306,17 +254,23 @@ struct
 					     (v,CON_VAR v')::csubst,
 					     (v,MOD_VAR v')::msubst))
 				    end
+			      fun do_e e = esubster(e,esubst,csubst,msubst)
 			      fun do_c c = csubster(c,esubst,csubst,msubst)
 			      fun do_s s = ssubster(s,esubst,csubst,msubst)
 			      fun do_k k = ksubster(k,esubst,csubst,msubst)
 			  in (case pc of
-				  PHRASE_CLASS_EXP(exp,con) => add_context_sdec(ctxt,SDEC(lab,DEC_EXP(v,do_c con)))
-				| PHRASE_CLASS_CON(con,kind) => add_context_sdec(ctxt,
-										 SDEC(lab,DEC_CON(v,do_k kind,
-												  SOME (do_c con))))
+				  PHRASE_CLASS_EXP(_,con,eopt,inline) => 
+				      add_context_sdec(ctxt,SDEC(lab,DEC_EXP(v,do_c con, 
+									     Util.mapopt do_e eopt,
+									     inline)))
+				| PHRASE_CLASS_CON(_,kind,copt,inline) => 
+				      add_context_sdec(ctxt,
+						       SDEC(lab,DEC_CON(v,do_k kind,
+									Util.mapopt do_c copt,
+									inline)))
 				| PHRASE_CLASS_MOD(m,b,signat) => add_context_sdec(ctxt,SDEC(lab,DEC_MOD(v,b,do_s signat)))
 				| PHRASE_CLASS_SIG (v,s) => add_context_entry(ctxt,CONTEXT_SIGNAT(lab,v,do_s s))
-				| PHRASE_CLASS_OVEREXP celist => add_context_inline(ctxt,lab,v,INLINE_OVER celist),
+				| PHRASE_CLASS_OVEREXP celist => add_context_entry(ctxt,CONTEXT_OVEREXP(lab,v,celist)),
 				      subst)
 			  end
 		  end
@@ -325,11 +279,11 @@ struct
 	  in  ctxt
 	  end  (* MEMO: What about the tag_list ?? - Martin *)
 	  
-      fun plus_context (csubster,ksubster,ssubster) ctxts =
+      fun plus_context (esubster,csubster,ksubster,ssubster) ctxts =
 	  (case ctxts of
 	       [] => empty_context
 	     | [ctxt] => ctxt
-	     | (ctxt::rest) => foldl (fn (c,acc) => plus(csubster,ksubster,ssubster,acc,c)) ctxt rest)
+	     | (ctxt::rest) => foldl (fn (c,acc) => plus(esubster,csubster,ksubster,ssubster,acc,c)) ctxt rest)
 
 
 

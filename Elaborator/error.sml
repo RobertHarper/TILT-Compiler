@@ -10,6 +10,16 @@ struct
     structure Il = Il
     open Il IlUtil
 
+    val track = Stats.ff("ElaboratorTrack")
+
+    fun spaces n = 
+	let fun loop 0 = []
+	      | loop n = #" "::(loop (n-1))
+	in String.implode(loop n)
+	end
+    fun tab n = print(spaces n)
+    fun tab_region() = tab 10
+
     val error_level = ref NoError
     val src_region = ref ([] : region list)
 
@@ -28,10 +38,7 @@ struct
 	    
     fun get_error() = !error_level
 
-    fun push_region p = src_region := (p :: (!src_region))
-    fun pop_region () = src_region := (tl(!src_region))
     fun peek_region () = (hd(!src_region))
-
     fun peek_region_str () : string = let val (p1,p2) = (hd(!src_region))
 					  val fp = !filepos
 					  val (f1,r1,c1) = fp p1
@@ -40,19 +47,26 @@ struct
 					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^ 
 					  ((Int.toString r2) ^ "." ^ (Int.toString c2))
 				      end handle _ => "unknown"
+    fun push_region p = (src_region := (p :: (!src_region));
+			 if (!track)
+			     then (tab ((length (!src_region)) - 1);
+				   print "PUSH_REGION: "; 
+				   print (peek_region_str()); print "\n")
+			 else ())
+    fun pop_region () = let val _ = if (!track)
+					then (tab ((length (!src_region)) - 1);
+					      print "POP_REGION: "; 
+					      print (peek_region_str()); print "\n")
+				    else ()
+			in src_region := (tl(!src_region))
+			end
+
     fun error_region_string() = ("Error at " ^ (peek_region_str()) ^ ", ")
     fun warn_region_string() = ("Warning at " ^ (peek_region_str()) ^ ", ")
     fun error_region() = (error_level := error_max(!error_level,Error);
 			  print (error_region_string()))
     fun warn_region() = (error_level := error_max(!error_level,Warn);
 			 print (warn_region_string()))
-    fun spaces n = 
-	let fun loop 0 = []
-	      | loop n = #" "::(loop (n-1))
-	in String.implode(loop n)
-	end
-    val tab = spaces 10
-    fun tab_region() = print tab
 
 
     fun dummy_type(context,str) = fresh_named_con(context,str)

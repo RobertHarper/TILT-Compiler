@@ -18,8 +18,7 @@ signature TOIL =
     val xsigexp : Il.context * filepos * Ast.sigexp -> Il.signat option
     val xty     : Il.context * filepos * Ast.ty -> Il.con option
     val xtybind : Il.context * filepos * Ast.tb list -> decresult option
-    val xeq     : Il.context * Il.con -> Il.exp option
-    val xeq_mu  : Il.context * Il.con -> Il.exp option
+    val xeq     : Il.context * Il.con -> (Il.exp * Il.con) option
 
 
   end;

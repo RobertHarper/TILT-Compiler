@@ -16,14 +16,13 @@ structure Il :> IL =
     type prim = Prim.prim
     type ilprim = Prim.ilprim
 
+
     datatype path = PATH of var * labels
     datatype arrow = TOTAL | PARTIAL
 
     type fixity_table = (label * Fixity.fixity) list 
-    type prim = Prim.prim
-    type ilprim = Prim.ilprim
 
-    datatype exp = OVEREXP of con * bool * exp Util.oneshot
+    datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
                  | PRIM    of prim * con list * exp list   (* fully applied primitivies only *)
                  | ILPRIM  of ilprim * con list * exp list (* for type-checking reasons *)
@@ -36,14 +35,14 @@ structure Il :> IL =
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of int * con * exp
-                 | HANDLE  of exp * exp      (* body and handler: type ANY  *)
-                 | RAISE   of con * exp
+                 | HANDLE  of exp * exp      
+                 | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
                  | EXN_INJECT of string * exp * exp (* tag and value *)
                  | ROLL    of con * exp
-                 | UNROLL  of con * con * exp
-                 | INJ     of {sumtype : con,
+                 | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
+                 | INJ     of {sumtype : con,    (* non-special sum tyoe *)
 			       field : int,
 			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
@@ -53,6 +52,7 @@ structure Il :> IL =
 			       arms : (exp option) list,
 			       tipe : con,
 			       default : exp option}
+                 (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *) 
                  | EXN_CASE of {arg : exp,
 				arms : (exp * con * exp) list,
 				default : exp option,
@@ -60,9 +60,12 @@ structure Il :> IL =
                  | MODULE_PROJECT of mod * label
                  | SEAL    of exp * con
 
-    and     fbnd = FBND    of var * var * con * con * exp  (* var = (var : con) : con |-> exp *)
-    and flexinfo = FLEXINFO of (Tyvar.stamp * bool * (label * con) list) 
+                              (* var = (var : con) : con |-> exp *)
+    and  fbnd = FBND    of var * var * con * con * exp  
+
+    and flexinfo = FLEXINFO of (Tyvar.stamp * bool * (label * con) list)
 	         | INDIRECT_FLEXINFO of flexinfo ref (* <--- this ref is necessary for unification *)
+
     and      con = CON_VAR           of var
                  | CON_TYVAR         of (context,con) Tyvar.tyvar  (* supports type inference *)
                  | CON_OVAR          of (context,con) Tyvar.ocon   (* supports "overloaded" types *)
@@ -80,7 +83,8 @@ structure Il :> IL =
                  | CON_MU            of con
                  | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
-                 | CON_SUM           of {noncarriers : int,
+                 | CON_SUM           of {names : label list,
+					 noncarriers : int,
 					 carrier : con,
 					 special : int option}
                  | CON_TUPLE_INJECT  of con list
@@ -88,7 +92,6 @@ structure Il :> IL =
                  | CON_MODULE_PROJECT of mod * label
     and     kind = KIND_TUPLE of int
                  | KIND_ARROW of int * int
-                 | KIND_INLINE of kind * con
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
                  | MOD_FUNCTOR of arrow * var * signat * mod * signat
@@ -98,49 +101,41 @@ structure Il :> IL =
                  | MOD_LET of var * mod * mod
     and     sbnd = SBND of label * bnd
     and      bnd = BND_EXP of var * exp
-                 | BND_MOD of var * bool * mod
                  | BND_CON of var * con
+                 | BND_MOD of var * bool * mod
 
-    and   signat = SIGNAT_STRUCTURE       of path option * sdec list
+    and   signat = SIGNAT_STRUCTURE of path option * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
-                 | SIGNAT_INLINE_STRUCTURE  of {self : path option,
-						code : sbnd list, (* may be selfified *)
-						abs_sig : sdec list}
 		 | SIGNAT_VAR of var
 	         | SIGNAT_OF of mod
 
     and     sdec = SDEC of label * dec
-    and      dec = DEC_EXP       of var * con
+    and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)
+                 | DEC_CON       of var * kind * con option * bool (* true indicates should inline *)
                  | DEC_MOD       of var * bool * signat
-                 | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
 
 
-    and inline = INLINE_MODSIG of bool * mod * signat
-               | INLINE_EXPCON of exp * con
-	       | INLINE_CONKIND of con * kind
-	       | INLINE_OVER   of (con * exp) list
-
     and context_entry = 
-		CONTEXT_INLINE of label * var * inline
-              | CONTEXT_ALIAS of label * label list
-	      | CONTEXT_SDEC   of sdec
-	      | CONTEXT_SIGNAT of label * var * signat
-              | CONTEXT_FIXITY of fixity_table
+	CONTEXT_ALIAS of label * label list
+      | CONTEXT_SDEC   of sdec
+      | CONTEXT_SIGNAT of label * var * signat
+      | CONTEXT_FIXITY of fixity_table
+      | CONTEXT_OVEREXP of label * var * (con * exp) list
 
-    and context = CONTEXT of  {alias_list : label list Name.LabelMap.map,
-			       flatlist : context_entry list,
+    and context = CONTEXT of  {flatlist : context_entry list,
 			       fixity_list : fixity_table,
 			       label_list : (path * phrase_class) Name.LabelMap.map,
 			       var_list : (label * phrase_class) Name.VarMap.map * var list,
-			       tag_list : con Name.TagMap.map}
+			       tag_list : con Name.TagMap.map,
+			       alias_list : label list Name.LabelMap.map}
 
-      and phrase_class = PHRASE_CLASS_EXP  of exp * con
-	  | PHRASE_CLASS_CON  of con * kind
-	  | PHRASE_CLASS_MOD  of mod * bool * signat
-	  | PHRASE_CLASS_SIG  of var * signat
-	  | PHRASE_CLASS_OVEREXP of (con * exp) list
-	
+    and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
+                     | PHRASE_CLASS_CON     of con * kind * con option * bool
+                     | PHRASE_CLASS_MOD     of mod * bool * signat
+                     | PHRASE_CLASS_SIG     of var * signat
+                     | PHRASE_CLASS_OVEREXP of (con * exp) list
+
     withtype value = (con,exp) Prim.value
     and decs = dec list
 
@@ -150,4 +145,4 @@ structure Il :> IL =
 
     type module = context * (sbnd option * context_entry) list
 
-  end
+end

@@ -8,13 +8,17 @@ signature LINKIL =
       structure IlContext : ILCONTEXT
       structure IlContextEq : ILCONTEXTEQ
       structure IlStatic : ILSTATIC
-      structure Basis : BASIS
+
 
       type sbnd = Il.sbnd
       type context_entry = Il.context_entry
       type context = Il.context
       type filepos = SourceMap.charpos -> string * int * int
       type module = Il.module
+
+      val show_hil : bool ref
+
+      val initial_context : unit -> context
 
       (* Adding contexts is useful for compilation management *)
       val plus_context : context list -> context

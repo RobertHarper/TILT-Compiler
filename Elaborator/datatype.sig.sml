@@ -12,12 +12,10 @@ signature DATATYPE =
     (* Takes a context, a procedure for type expression compilation, and
        datatype and withtype specifications, and returns a module and 
        signature for the datatype declaration. *)
-    val compile : {transparent : bool,
-		   context : Il.context,
+    val compile : {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   datatycs : Ast.db list,
-		   eq_compile : Il.context * Il.con -> Il.exp option,
-		   eq_compile_mu : Il.context * Il.con -> Il.exp option} -> 
+		   eq_compile : Il.context * Il.con -> (Il.exp * Il.con) option} ->
 	                        (Il.sbnd * Il.sdec) list
 
 

@@ -17,6 +17,8 @@ structure Basis
     val uint32 = CON_UINT W32
     val float64 = CON_FLOAT F64
 
+    val small_context = Stats.ff("SmallContext")
+
     local
       open Ast
       open Symbol
@@ -42,67 +44,92 @@ structure Basis
       val default_fixity_table = map (fn (str,f) => (symbol_label(varSymbol(str)), f)) table
     end
 
-    fun initial_context () : context * sbnd list * sdec list * context =
+    fun initial_context () : Il.module = 
       let
-	  val result = ref (add_context_fixity(empty_context,default_fixity_table))
-	  val noninline_result = ref empty_context
-	  val sbnds_result = ref ([] : sbnd list)
+	  val context = ref empty_context
+	  val entries = ref []
+	  fun add_ce ce = (entries := ((NONE,ce)::(!entries)); 
+			   context := (add_context_entries(!context,[ce])))
+	  fun add_sbnd(sbnd,sdec) = (entries := ((SOME sbnd, CONTEXT_SDEC sdec) :: (!entries));
+				     context := add_context_sdec(!context, IlStatic.SelfifySdec (!context) sdec))
 
 	  fun mk_var_lab str = symbol_label(Symbol.varSymbol str)
 	  fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
 	  fun mk_var str = fresh_named_var str
-	  fun var_entry (s,c) = 
-	      let val v = mk_var s
-	      in  (result := add_context_sdec(!result,SDEC(mk_var_lab s, DEC_EXP(v,c)));
-		   noninline_result := add_context_sdec(!noninline_result,SDEC(mk_var_lab s, DEC_EXP(v, c))))
-	      end
-	  fun type_entry ctxt s k c = add_context_sdec(ctxt,SDEC(mk_tyc_lab s, DEC_CON(mk_var s, k, SOME c)))
+
+	  (* ------------ Do the fixity ---------------- *)
+	  val _ = add_ce(CONTEXT_FIXITY default_fixity_table)
+
 	  fun exp_entry (str,e) = 
-	      let val inline = INLINE_EXPCON(e,IlStatic.GetExpCon(!result,e))
-	      in  result := add_context_inline(!result, mk_var_lab str, fresh_named_var str, inline)
+	      let val var = fresh_named_var str
+		  val lab = mk_var_lab str
+		  val c = IlStatic.GetExpCon(!context,e)
+		  val bnd = BND_EXP(var, e)
+		  val dec = DEC_EXP(var, c, SOME e, true)
+		  val sbnd = SBND(lab, bnd)
+		  val sdec = SDEC(lab, dec)
+	      in  add_sbnd(sbnd,sdec)
 	      end
+
 	  fun mono_entry (str,prim) = exp_entry(str, ETAPRIM (prim,[]))
 	  fun ilmono_entry (str,prim) = exp_entry(str, ETAILPRIM (prim,[]))
 	  fun scon_entry (str,scon) = exp_entry(str, SCON scon)
+
 	  fun poly_entry (str,c2exp) = 
 	      let val argvar = fresh_var()
 		  val l = internal_label str
 		  val argsig = SIGNAT_STRUCTURE(NONE,
 						[SDEC(l,DEC_CON(fresh_var(),
 								KIND_TUPLE 1, 
-								NONE))])
+								NONE, false))])
+		  val inner_ctxt = add_context_dec(empty_context,
+						   IlStatic.SelfifyDec empty_context
+						   (DEC_MOD(argvar,false,argsig)))
 		  val instcon = CON_MODULE_PROJECT(MOD_VAR argvar,l)
-		  val resmod = MOD_STRUCTURE[SBND(it_lab,
-						  BND_EXP(fresh_var(),
-							  (c2exp instcon)))]
-		  val ctxt = add_context_dec(empty_context,
-					     IlStatic.SelfifyDec empty_context
-					       (DEC_MOD(argvar,false,argsig)))
-		  val inner_sig = IlStatic.GetModSig(ctxt,resmod)
-		  val m = MOD_FUNCTOR(TOTAL,argvar,argsig,resmod,inner_sig)
-		  val s = SIGNAT_FUNCTOR(argvar,argsig,inner_sig,TOTAL)
-	      in result := add_context_inline(!result,mk_var_lab str, 
-					      fresh_named_var str, INLINE_MODSIG(true,m,s))
+		  val exp = c2exp instcon
+		  val con = IlStatic.GetExpCon(inner_ctxt,exp)
+		  val inner_var = fresh_named_var str
+		  val body = MOD_STRUCTURE([SBND(it_lab,BND_EXP(inner_var, exp))])
+		  val ressig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,DEC_EXP(inner_var,con, SOME exp, true))])
+		  val module = MOD_FUNCTOR(TOTAL,argvar,argsig,body,ressig)
+		  val signat = SIGNAT_FUNCTOR(argvar,argsig,ressig,TOTAL)
+		  val lab = mk_var_lab str
+		  val var = fresh_named_var (str ^ "_mod")
+		  val sbnd = SBND(lab, BND_MOD(var, true, module))
+		  val sdec = SDEC(lab, DEC_MOD(var, true, signat))
+	      in  add_sbnd(sbnd,sdec)
 	      end
-	  fun over_entry str con_exp =
-	      result := add_context_inline(!result,
-					   mk_var_lab str, 
-					   fresh_named_var str,
-					   INLINE_OVER con_exp)
 
+	  fun over_entry str con_exp =
+	      let val entry = CONTEXT_OVEREXP(mk_var_lab str, 
+					      fresh_named_var str,
+					      con_exp)
+	      in   add_ce entry
+	      end
+	      
+	  fun tag_entry (str,t) = 
+		  let val sdec = SDEC(fresh_internal_label str,
+				      DEC_EXCEPTION(t,con_unit))
+		  in  add_ce(CONTEXT_SDEC sdec)
+		  end
+
+
+	  fun type_entry (s,c) =
+	      let val lab = symbol_label (Symbol.tycSymbol s)
+		  val var = fresh_named_var s
+		  val k = IlStatic.GetConKind(!context,c)
+		  val sdec = SDEC(lab, DEC_CON(var,k, SOME c, true))
+		  val sbnd = SBND(lab, BND_CON(var, c))
+	      in  add_sbnd(sbnd,sdec)
+	      end
 
 	 (* -------------- add the base tags ------------------------- *)
-	  local 
-	      fun tag_help (str,t) = result := add_context_sdec(!result,
-							      SDEC(fresh_internal_label str,
-								   DEC_EXCEPTION(t,con_unit)))
-		  
-	      val basetag_list = [("fail", fail_tag),
-				  ("bind", bind_tag),
-				  ("match", match_tag)]
-	  in  val _ = app tag_help basetag_list
-	  end
-
+	  val basetag_list = [("fail", fail_tag),
+			      ("bind", bind_tag),
+			      ("match", match_tag)]
+	  val _ = if (not (!small_context))
+		      then app tag_entry basetag_list
+		  else ()
 
 	 (* -------------- add the base types ------------------------- *)
 	  local
@@ -129,39 +156,13 @@ structure Basis
 					 in CON_FUN([v1,v2],CON_ARROW ([CON_VAR v1], CON_VAR v2, 
 								       false, oneshot_init PARTIAL))
 					 end)]
-	      fun add_basetype (s,c) =
-		  result := add_context_inline(!result,
-					       symbol_label (Symbol.tycSymbol s),
-					       IlUtil.to_dt_var(fresh_named_var s),
-					       INLINE_CONKIND(c,IlStatic.GetConKind(empty_context,c)))
 	  in
-	      val _ = app add_basetype basetype_list
+	      val _ = app type_entry basetype_list
 	  end
       
         (* -------------- add the overloaded base values ---------------- *)	    
-	val context = 
+	val _ = 
 	   let
-	       fun constraints (c,res) (tyvar, 
-					helpers as  {hard : con * con -> bool,
-						     soft : con * con -> bool},
-					is_hard) = 
-		   let val c' = CON_TYVAR tyvar
-(*
-		       val _ = (print "basis: constraints before...\n";
-				print "   c is "; Ppil.pp_con c; print "\n";
-				print "   c' is "; Ppil.pp_con c'; print "\n")
-*)
-		       val res = 
-			   if ((if is_hard then hard else soft)(c,CON_TYVAR tyvar))
-			       then MATCH res
-			   else FAIL
-(*
-		       val _ = (print "basis: constraints after...\n";
-				print "   c is "; Ppil.pp_con c; print "\n";
-				print "   c' is "; Ppil.pp_con c'; print "\n\n\n")
-*)
-		   in res
-		   end
 	       val intbin = CON_ARROW([con_tuple[int32, int32]], 
 				      int32, false, oneshot_init PARTIAL)
 	       val wordbin = CON_ARROW([con_tuple[uint32, uint32]], 
@@ -219,8 +220,10 @@ structure Basis
 	      val basevalue_list = 
 		  [("littleEndian", if (!(Stats.bool "littleEndian"))
 					then true_exp else false_exp),
+(*
 	           ("true", true_exp),
 		   ("false", false_exp),
+*)
 		   ("not", let
 			       val arg_var = fresh_named_var "not_arg"
 			       val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
@@ -314,83 +317,15 @@ structure Basis
     (3) and to retain only low 11 bits
     (4) subtract 1023 from this quantity and return as an int *)
 
-	      val basevar_list = [
-(*				  ("real_logb", CON_ARROW([CON_FLOAT F64], CON_INT W32, true, oneshot_init TOTAL)),
-  ("real_scalb", CON_ARROW([CON_FLOAT F64, CON_INT W32], 
- CON_FLOAT F64, true, oneshot_init TOTAL)), *)
-(*
-				  ("sqrt", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("sin", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("cos", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("tan", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("atan", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("asin", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("acos", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("sinh", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("cosh", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("tanh", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("exp", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("ln", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("log10", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
-				  ("getRoundingMode", CON_ARROW([CON_INT W32], CON_INT W32, true, oneshot_init TOTAL)),
-				  ("setRoundingMode", CON_ARROW([CON_INT W32], CON_INT W32, true, oneshot_init TOTAL)),
 
-				  ("ml_timeofday", CON_ARROW([con_unit], con_tuple[CON_INT W32, CON_INT W32], 
-							     true, oneshot_init PARTIAL))
-*)]
 
-	  in  val _ = app exp_entry basevalue_list
-	      val _ = app mono_entry baseprimvalue_list
-	      val _ = app ilmono_entry baseilprimvalue_list
-	      val _ = app var_entry basevar_list
+	  in  val _ = if (not (!small_context))
+			  then (app exp_entry basevalue_list;
+				app mono_entry baseprimvalue_list;
+				app ilmono_entry baseilprimvalue_list)
+		      else ()
 	  end
 
-(*
-	  (* ----------------- add functions for standard basis ------------ *)
-	  local
-	      fun arrow arg result = CON_ARROW([arg], result, true, oneshot_init PARTIAL)
-	      val posix = [("exnName", arrow CON_ANY con_string),
-			   ("exnMessage", arrow CON_ANY con_string),
-			   ("posix_error_msg", arrow (CON_INT W32) con_string),
-			   ("posix_error_name", arrow (CON_INT W32) con_string),
-			   ("posix_error_num", arrow con_string (CON_INT W32)),
-			   ("posix_filesys_num", arrow con_string (CON_UINT W32)),
-			   ("posix_filesys_opendir", arrow con_string (CON_INT W32)),
-			   ("posix_filesys_readdir", arrow (CON_INT W32) con_string),
-			   ("posix_filesys_rewinddir", arrow (CON_INT W32) con_unit),
-			   ("posix_filesys_closedir", arrow (CON_INT W32) con_unit),
-			   ("posix_filesys_chdir", arrow con_string con_unit),
-			   ("posix_filesys_getcwd", arrow con_unit con_string),
-			   ("posix_filesys_openf", arrow (con_tuple[con_string,CON_UINT W32, CON_UINT W32]) (CON_INT W32)),
-			   ("posix_filesys_umask", arrow (CON_UINT W32) (CON_INT W32)),
-			   ("posix_filesys_link", arrow (con_tuple[con_string, con_string]) con_unit),
-			   ("posix_filesys_rename", arrow (con_tuple[con_string, con_string]) con_unit),
-			   ("posix_filesys_symlink", arrow (con_tuple[con_string, con_string]) con_unit),
-			   ("posix_filesys_mkdir", arrow (con_tuple[con_string, CON_UINT W32]) con_unit),
-			   ("posix_filesys_mkfifo", arrow (con_tuple[con_string, CON_UINT W32]) con_unit),
-			   ("posix_filesys_unlink", arrow con_string con_unit),
-			   ("posix_filesys_rmdir", arrow con_string con_unit),
-			   ("posix_filesys_readlink", arrow con_string con_string),
-			   ("posix_filesys_ftruncate", arrow (con_tuple[CON_INT W32, CON_INT W32]) con_unit)
-(* xxxxxxx
-			   ("posix_filesys_stat", arrow con_string con_stat),
-			   ("posix_filesys_lstat", arrow con_string con_stat),
-			   ("posix_filesys_fstat", arrow (CON_INT W32) con_stat),
-			   ("posix_filesys_access", arrow (con_tuple[con_string, CON_UINT W32]) con_bool),
-			   ("posix_filesys_chmod", arrow (con_tuple[con_string, CON_UINT W32]) con_unit),
-			   ("posix_filesys_fchmod", arrow (con_tuple[CON_INT W32, CON_UINT W32]) con_unit),
-			   ("posix_filesys_chown", arrow (con_tuple[con_string, CON_UINT W32, CON_UINT W32]) con_unit),
-			   ("posix_filesys_fchown", arrow (con_tuple[CON_INT W32, CON_UINT W32, CON_UINT W32]) con_unit),
-			   ("posix_filesys_utime", arrow (con_tuple[con_string, CON_INT W32, CON_INT W32]) con_unit),
-			   ("posix_filesys_pathconf", arrow (con_tuple[con_string, con_string])
-			    (con_tuple[CON_UINT W32, CON_INT W32]) con_unit),
-			   ("posix_filesys_fpathconf", arrow (con_tuple[CON_INT W32, con_string]),
-			    (con_tuple[CON_UINT W32, CON_INT W32]) con_unit)
-xxxxx *)
-			   ]
-	  in    val _ = app var_entry posix
-	  end
-*)
 
 	  (* ----------------- add base polymorphic variables -------------- *)
 	  local 
@@ -465,120 +400,13 @@ xxxxx *)
 						     con_unit,ILPRIM(setref,[c],
 								     [proj 1, proj 2])))
 				   end))]
-	  in val _ = app poly_entry basepolyvalue_list
+	  in val _ = if (not (!small_context))
+			 then app poly_entry basepolyvalue_list
+		     else ()
 	  end
 
-
-	   
-       (* ----------------- add base datatypes ----------------- *)
-	  local
-	      open Ast 
-	      open Symbol
-	      (* we want false to be 0 and true to be 1 *)
-	      val booldb = [Db{rhs=Constrs[(varSymbol "false",NONE),
-					   (varSymbol "true",NONE)],
-			       tyc=tycSymbol "bool",tyvars=[]}]
-	      val listdb = [Db{rhs=Constrs[(varSymbol "nil",NONE),
-					    (varSymbol "::",
-					     SOME (TupleTy
-						   [VarTy (Tyv (tyvSymbol "'a")),
-						    ConTy ([tycSymbol "list"],
-							   [VarTy (Tyv (tyvSymbol "'a"))])]))],
-		  
-		  tyc=tycSymbol "list",
-		  tyvars=[Tyv (tyvSymbol "'a")]}]
-
-	      val suspdb = 
-		  [Db{rhs=Constrs[(varSymbol "#Susp",
-				   SOME
-				   (ConTy
-				    ([tycSymbol "->"],
-				     [ConTy ([tycSymbol "unit"],[]),
-				      VarTy (Tyv (tyvSymbol "'a"))])))],
-		      tyc=tycSymbol "#susp",
-		      tyvars=[Tyv (tyvSymbol "'a")]}]
-
-		    
-		fun typecompile(ctxt,ty) = 
-		    let fun zfp(_:Ast.srcpos) = ("zfp",0,0)
-		    in (case Toil.xty(ctxt,zfp,ty) of
-			    SOME c => c
-			  | NONE => (print "context in typecompile was:";
-				     pp_context ctxt;
-				     error "Compilation error in initial basis"))
-		    end
-
-
-(*
-		val list_sbnd_sdecs = Datatype.compile {context = !result,
-							typecompile = typecompile,
-							datatycs = listdb : Ast.db list,
-							eq_compile = Toil.xeq,
-							eq_compile_mu = Toil.xeq_mu}
-		    
-		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
-					       map #2 list_sbnd_sdecs)
-
-*)
-(*
-		val _ = (print "=========================================\n";
-			 print "list_sbnds are: ";
-			 Ppil.pp_sbnds list_sbnds;
-			 print "\n\n";
-			 print "list_sdecss are: ";
-			 Ppil.pp_sdecs list_sdecs;
-			 print "\n\n\n")
-*)
-
-		val bool_sbnd_sdecs = Datatype.compile {transparent = true,
-							context = !result,
-							typecompile = typecompile,
-							datatycs = booldb : Ast.db list,
-							eq_compile = Toil.xeq,
-							eq_compile_mu = Toil.xeq_mu}
-		val (bool_sbnds,bool_sdecs) = (map #1 bool_sbnd_sdecs,
-					       map #2 bool_sbnd_sdecs)
-
-
-		val bool_self_sdecs = map (fn (SDEC(l,dec)) => 
-					   SDEC(l,IlStatic.SelfifyDec (!result) dec)) bool_sdecs
-(*
-	      fun self_sdec (SDEC(l,dec)) = SDEC(l,IlStatic.SelfifyDec dec)
-
-	      val lbl = to_open(fresh_internal_label "basis_dt_inline")
-	      val v = fresh_named_var "basis_dt_inline"
-	      val bool_sbnds_inline = 
-		  let val temp = MOD_STRUCTURE(bool_sbnds)
-		  in  (case IlUtil.make_inline_module(!result,temp,SOME(SIMPLE_PATH v), true) of
-			   SOME (MOD_STRUCTURE sbnds) => sbnds
-			 | _ => (print "cannot inline datatype module!";
-				 Ppil.pp_mod temp; print "\n";
-				 error "cannot inline datatype module!"))
-		  end
-	      val final_sdec = self_sdec final_sdec
-*)
-
-	      val _ = result := add_context_sdecs(!result, bool_self_sdecs)
-
-(*
-	      val _ = (print "!result is: "; Ppil.pp_context (!result); print "\n";
-		       print "final_sdec is: "; Ppil.pp_sdec final_sdec;
-		       print "\nnew_context is: "; Ppil.pp_context new_context; print "\n\n")
-*)
-		      
-	  in
-(*	      val datatype_self_sdecs = datatype_self_sdecs *)
-(*	      val _ = sbnds_result := datatype_sbnds *)
-(*	      val datatype_sdecs = datatype_sdecs *)
-	  end
-      in  (!result, [], [], !noninline_result)
-        (* (!result, !sbnds_result, datatype_sdecs, 
-	    add_context_sdecs(!result,datatype_self_sdecs)) *)
+      in  (!context, !entries)
       end
 
-(*    val initial_context = Util.memoize initial_context *)
-  
+
   end
-
-
-

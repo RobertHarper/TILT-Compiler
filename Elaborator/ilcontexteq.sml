@@ -101,18 +101,25 @@ struct
 
 	fun blastOutDec dec = 
 	    (case dec of
-		 DEC_EXP (v,c) => (blastOutChoice 0; blastOutVar v; blastOutCon c)
-	       | DEC_CON (v,k,NONE) => (blastOutChoice 1; blastOutVar v; blastOutKind k)
-	       | DEC_CON (v,k,SOME c) => (blastOutChoice 2; blastOutVar v; blastOutKind k; blastOutCon c)
-	       | DEC_MOD (v,b,s) => (blastOutChoice 3; blastOutVar v; blastOutBool b; blastOutSig s)
-	       | DEC_EXCEPTION (t,c) =>  (blastOutChoice 4; blastOutTag t; blastOutCon c))
+		 DEC_EXP (v,c,NONE, inline)   => (blastOutChoice 0; blastOutVar v; blastOutCon c;
+						  blastOutBool inline)
+	       | DEC_EXP (v,c,SOME e, inline) => (blastOutChoice 1; blastOutVar v; blastOutCon c;
+						  blastOutExp e; blastOutBool inline)
+	       | DEC_CON (v,k,NONE, inline)   => (blastOutChoice 2; blastOutVar v; blastOutKind k;
+						  blastOutBool inline)
+	       | DEC_CON (v,k,SOME c, inline) => (blastOutChoice 3; blastOutVar v; blastOutKind k; 
+						 blastOutCon c; blastOutBool inline)
+	       | DEC_MOD (v,b,s)      => (blastOutChoice 4; blastOutVar v; blastOutBool b; 
+					  blastOutSig s)
+	       | DEC_EXCEPTION (t,c)  => (blastOutChoice 5; blastOutTag t; blastOutCon c))
 	and blastInDec () =
 	    (case (blastInChoice()) of
-		 0 => DEC_EXP (blastInVar (), blastInCon ())
-	       | 1 => DEC_CON (blastInVar (), blastInKind (), NONE)
-	       | 2 => DEC_CON (blastInVar (), blastInKind (), SOME (blastInCon ()))
-	       | 3 => DEC_MOD (blastInVar (), blastInBool (), blastInSig ())
-	       | 4 => DEC_EXCEPTION (blastInTag (), blastInCon ())
+		 0 => DEC_EXP (blastInVar (), blastInCon (), NONE, blastInBool())
+	       | 1 => DEC_EXP (blastInVar (), blastInCon (), SOME (blastInExp()), blastInBool())
+	       | 2 => DEC_CON (blastInVar (), blastInKind (), NONE, blastInBool())
+	       | 3 => DEC_CON (blastInVar (), blastInKind (), SOME (blastInCon ()), blastInBool())
+	       | 4 => DEC_MOD (blastInVar (), blastInBool (), blastInSig ())
+	       | 5 => DEC_EXCEPTION (blastInTag (), blastInCon ())
 	       | _ => error "bad blastInDec")
 	and blastOutBnd bnd = 
 	    (case bnd of
@@ -138,14 +145,13 @@ struct
 	and blastOutKind k = 
 	    (case k of
 		KIND_TUPLE n => (blastOutChoice 0; blastOutChoice n)
-	      | KIND_ARROW (m,n) => (blastOutChoice 1; blastOutChoice m;  blastOutChoice n)
-	      | KIND_INLINE (k,c) => (blastOutChoice 2; blastOutKind k; blastOutCon c))
+	      | KIND_ARROW (m,n) => (blastOutChoice 1; blastOutChoice m;  blastOutChoice n))
+
 		    
 	and blastInKind () = 
 	    (case blastInChoice() of
 		0 => KIND_TUPLE(blastInChoice())
 	      | 1 => KIND_ARROW(blastInChoice(), blastInChoice())
-	      | 2 => KIND_INLINE(blastInKind (), blastInCon ())
 	      | _ => error "bad blastInKind")
 
 	and blastOutCon c = 
@@ -176,12 +182,17 @@ struct
 	       | CON_MU c => (blastOutChoice 11; blastOutCon c)
 	       | CON_RECORD lclist => (blastOutChoice 12; blastOutList (blastOutPair blastOutLabel blastOutCon) lclist)
 	       | CON_FUN (vlist, c) => (blastOutChoice 13; blastOutList blastOutVar vlist; blastOutCon c)
-	       | CON_SUM {noncarriers, carrier, special = NONE} => 
-		     (blastOutChoice 14; blastOutChoice noncarriers; 
+	       | CON_SUM {names, noncarriers, carrier, special = NONE} => 
+		     (blastOutChoice 14; 
+		      blastOutList blastOutLabel names;
+		      blastOutChoice noncarriers; 
 		      blastOutCon carrier)
-	       | CON_SUM {noncarriers, carrier, special = SOME i} => 
-		     (blastOutChoice 15; blastOutChoice noncarriers; 
-		      blastOutCon carrier; blastOutChoice i)
+	       | CON_SUM {names, noncarriers, carrier, special = SOME i} => 
+		     (blastOutChoice 15; 
+		      blastOutList blastOutLabel names;
+		      blastOutChoice noncarriers; 
+		      blastOutCon carrier; 
+		      blastOutChoice i)
 	       | CON_TUPLE_INJECT clist => (blastOutChoice 16; blastOutList blastOutCon clist)
 	       | CON_TUPLE_PROJECT (i,c) => (blastOutChoice 17; blastOutChoice i; blastOutCon c)
 	       | CON_MODULE_PROJECT (m,l) => (blastOutChoice 18; blastOutMod m; blastOutLabel l))
@@ -216,10 +227,12 @@ struct
 	       | 11 => CON_MU (blastInCon ())
 	       | 12 => CON_RECORD(blastInList (fn () => blastInPair blastInLabel blastInCon))
 	       | 13 => CON_FUN (blastInList blastInVar, blastInCon ())
-	       | 14 => CON_SUM {noncarriers = blastInChoice(),
+	       | 14 => CON_SUM {names = blastInList blastInLabel,
+				noncarriers = blastInChoice(),
 				carrier = blastInCon (),
 				special = NONE} 
-	       | 15 => CON_SUM {noncarriers = blastInChoice(),
+	       | 15 => CON_SUM {names = blastInList blastInLabel,
+				noncarriers = blastInChoice(),
 				carrier = blastInCon (),
 				special = SOME (blastInChoice())}
 	       | 16 => CON_TUPLE_INJECT (blastInList blastInCon)
@@ -653,11 +666,6 @@ struct
 	       | SIGNAT_STRUCTURE (SOME p, sdecs) => (blastOutChoice 1; blastOutPath p; blastOutSdecs sdecs)
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutChoice 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
-	       | SIGNAT_INLINE_STRUCTURE {self=NONE,code,abs_sig} => 
-		     (blastOutChoice 3; blastOutSbnds code; blastOutSdecs abs_sig)
-	       | SIGNAT_INLINE_STRUCTURE {self=SOME p,code,abs_sig} => 
-		     (blastOutChoice 4; blastOutPath p;
-		      blastOutSbnds code; blastOutSdecs abs_sig)
 	       | SIGNAT_VAR v => (blastOutChoice 5; blastOutVar v)
 	       | SIGNAT_OF m => (blastOutChoice 6; blastOutMod m))
 
@@ -666,19 +674,20 @@ struct
 		 0 => SIGNAT_STRUCTURE (NONE, blastInSdecs ())
 	       | 1 => SIGNAT_STRUCTURE (SOME (blastInPath ()), blastInSdecs ())
 	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
-	       | 3 => SIGNAT_INLINE_STRUCTURE {self=NONE, code = blastInSbnds (), 
-					       abs_sig = blastInSdecs ()}
-	       | 4 => SIGNAT_INLINE_STRUCTURE {self=SOME(blastInPath ()), code = blastInSbnds (), 
-					       abs_sig = blastInSdecs ()}
 	       | 5 => SIGNAT_VAR(blastInVar ())
 	       | 6 => SIGNAT_OF(blastInMod ())
 	       | _ => error "bad blastInSig")
 				     
 	fun blastOutPC pc = 
 	    case pc of
-		PHRASE_CLASS_EXP (e,c) => (blastOutChoice 0; blastOutExp e; blastOutCon c)
-	      | PHRASE_CLASS_CON (c,k) => (blastOutChoice 1; blastOutCon c; blastOutKind k)
-	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutChoice 2; blastOutMod m; blastOutBool b; blastOutSig s)
+		PHRASE_CLASS_EXP (e,c,eopt,inline) => (blastOutChoice 0; blastOutExp e; 
+						       blastOutCon c; blastOutOption blastOutExp eopt;
+						       blastOutBool inline)
+	      | PHRASE_CLASS_CON (c,k,copt,inline) => (blastOutChoice 1; blastOutCon c; blastOutKind k; 
+						       blastOutOption blastOutCon copt; 
+						       blastOutBool inline)
+	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutChoice 2; blastOutMod m; blastOutBool b; 
+					     blastOutSig s)
 	      | PHRASE_CLASS_SIG (v,s) => (blastOutChoice 3; blastOutVar v; blastOutSig s)
 	      | PHRASE_CLASS_OVEREXP celist => (blastOutChoice 4; 
 						blastOutList (blastOutPair blastOutCon blastOutExp) celist)
@@ -686,8 +695,8 @@ struct
 	fun blastInPC () = 
 	    (tab "  blastInPC\n"; 
 	    case (blastInChoice()) of
-		0 => PHRASE_CLASS_EXP(blastInExp (), blastInCon ())
-	      | 1 => PHRASE_CLASS_CON(blastInCon (), blastInKind ())
+		0 => PHRASE_CLASS_EXP(blastInExp (), blastInCon (), blastInOption blastInExp, blastInBool())
+	      | 1 => PHRASE_CLASS_CON(blastInCon (), blastInKind (), blastInOption blastInCon, blastInBool())
 	      | 2 => PHRASE_CLASS_MOD(blastInMod (), blastInBool (), blastInSig ())
 	      | 3 => PHRASE_CLASS_SIG(blastInVar (), blastInSig ())
 	      | 4 => PHRASE_CLASS_OVEREXP(blastInList (fn() => blastInPair blastInCon blastInExp))
@@ -824,9 +833,9 @@ struct
 	  | sbnds_lookup(SBND(l',bnd)::sbnds,l) =
 	    if Name.eq_label(l,l') then SOME bnd else sbnds_lookup(sbnds,l)
 
-	fun add_dec(DEC_EXP(v,_), DEC_EXP(v',_), vm) = VM.add(v,v',vm)
+	fun add_dec(DEC_EXP(v,_,_,_), DEC_EXP(v',_,_,_), vm) = VM.add(v,v',vm)
+	  | add_dec(DEC_CON(v,_,_,_), DEC_CON(v',_,_,_), vm) = VM.add(v,v',vm)
 	  | add_dec(DEC_MOD(v,_,_), DEC_MOD(v',_,_), vm) = VM.add(v,v',vm)
-	  | add_dec(DEC_CON(v,_,_), DEC_CON(v',_,_), vm) = VM.add(v,v',vm)
 	  | add_dec(DEC_EXCEPTION(t,_), DEC_EXCEPTION(t',_), vm) = vm
 	  | add_dec _ = raise NOT_EQUAL
 
@@ -916,8 +925,9 @@ struct
 		     (case eq_vars(vm,vars,vars') of
 			  NONE => false
 			| SOME vm => eq_con(vm,con,con'))
-	       | (CON_SUM{noncarriers,carrier,special}, 
-		  CON_SUM{noncarriers=noncarriers',carrier=carrier',special=special'}) =>
+	       | (CON_SUM{names,noncarriers,carrier,special}, 
+		  CON_SUM{names=names',noncarriers=noncarriers',carrier=carrier',special=special'}) =>
+		     Listops.eq_list(Name.eq_label,names,names') andalso
 		     noncarriers=noncarriers' andalso special=special' 
 		     andalso eq_con(vm,carrier,carrier')
 	       | (CON_TUPLE_INJECT cons, CON_TUPLE_INJECT cons') => 
@@ -937,12 +947,14 @@ struct
 	  | eq_conopt(vm,NONE,NONE) = true
 	  | eq_conopt _ = false
 
+	and eq_expopt(vm,SOME exp,SOME exp') = eq_exp(vm,exp,exp')
+	  | eq_expopt(vm,NONE,NONE) = true
+	  | eq_expopt _ = false
+
 	and eq_kind(vm,kind,kind') = 
-	    case (kind,kind')
-	      of (KIND_TUPLE i, KIND_TUPLE i') => i=i'
+	    case (kind,kind') of
+		 (KIND_TUPLE i, KIND_TUPLE i') => i=i'
 	       | (KIND_ARROW p, KIND_ARROW p') => p=p'
-	       | (KIND_INLINE(kind,con), KIND_INLINE(kind',con')) => 
-		     eq_kind(vm,kind,kind') andalso eq_con(vm,con,con')
 	       | _ => false
  
 	and eq_tyvar(vm,tv,tv') =
@@ -977,11 +989,6 @@ struct
 	       | (SIGNAT_FUNCTOR(v,signat1,signat2,a), SIGNAT_FUNCTOR(v',signat1',signat2',a')) =>
 		  eq_signat(vm,signat1,signat1') andalso a=a' andalso
 		  eq_signat(VM.add(v,v',vm),signat2,signat2')
-	       | (SIGNAT_INLINE_STRUCTURE{self=s1,code=c1,abs_sig=a1},
-		  SIGNAT_INLINE_STRUCTURE{self=s2,code=c2,abs_sig=a2}) =>
-		  eq_pathopt(vm,s1,s2) andalso
-		  eq_sbnds(vm,c1,c2) andalso
-		  eq_sdecs(vm,a1,a2)
                | (SIGNAT_VAR v1, SIGNAT_VAR v2) => VM.eq_var(vm,v1,v2)
                | _ => false
 
@@ -1011,13 +1018,14 @@ struct
 
 	and eq_dec(vm,dec,dec') =
 	    case (dec, dec')
-	      of (DEC_EXP(v,con),DEC_EXP(v',con')) => 
-		  VM.eq_var(vm,v,v') andalso eq_con(vm,con,con') 
+	      of (DEC_EXP(v,con,exp,inline),DEC_EXP(v',con',exp',inline')) => 
+		  VM.eq_var(vm,v,v') andalso eq_con(vm,con,con')  andalso 
+		  eq_expopt(vm,exp,exp') andalso inline=inline'
 	       | (DEC_MOD(v,b,signat), DEC_MOD(v',b',signat')) => 
 	          VM.eq_var(vm,v,v') andalso (b = b') andalso eq_signat(vm,signat,signat')
-               | (DEC_CON(v,kind,conopt), DEC_CON(v',kind',conopt')) =>
+               | (DEC_CON(v,kind,conopt,inline), DEC_CON(v',kind',conopt',inline')) =>
 		  VM.eq_var(vm,v,v') andalso eq_kind(vm,kind,kind') andalso
-		  eq_conopt(vm,conopt,conopt')
+		  eq_conopt(vm,conopt,conopt') andalso inline=inline'
 	       | (DEC_EXCEPTION(t,con), DEC_EXCEPTION(t',con')) => eq_con(vm,con,con') 
 	       | _ => false                        (* MEMO: () this right?? *)
  
@@ -1061,10 +1069,12 @@ struct
 
 	fun eq_pc(vm, pc, pc') =
 	    case (pc, pc')
-	      of (PHRASE_CLASS_EXP(exp,con), PHRASE_CLASS_EXP(exp',con')) =>
-		  eq_exp(vm,exp,exp') andalso eq_con(vm,con,con')
-	       | (PHRASE_CLASS_CON(con,kind), PHRASE_CLASS_CON(con',kind')) =>
-		  eq_con(vm,con,con') andalso eq_kind(vm,kind,kind')		  
+	      of (PHRASE_CLASS_EXP(exp,con,eopt,inline), PHRASE_CLASS_EXP(exp',con',eopt',inline')) =>
+		  eq_exp(vm,exp,exp') andalso eq_con(vm,con,con') andalso eq_expopt(vm,eopt,eopt')
+		  andalso inline=inline'
+	       | (PHRASE_CLASS_CON(con,kind,copt,inline), PHRASE_CLASS_CON(con',kind',copt',inline')) =>
+		  eq_con(vm,con,con') andalso eq_kind(vm,kind,kind') andalso eq_conopt(vm,copt,copt')
+		  andalso inline=inline'
 	       | (PHRASE_CLASS_MOD(mod,b,signat), PHRASE_CLASS_MOD(mod',b',signat')) =>
 		  eq_mod(vm,mod,mod') andalso (b = b') andalso eq_signat(vm,signat,signat')
 	       | (PHRASE_CLASS_SIG (v,signat), PHRASE_CLASS_SIG (v',signat')) =>

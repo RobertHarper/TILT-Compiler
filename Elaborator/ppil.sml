@@ -32,6 +32,9 @@ struct
     fun pp_var v = String(var2string v)
     fun pp_label l = String(label2string l)
     fun pp_tag (t : tag) = String(tag2string t)
+    fun pp_commalist pobj objlist = pp_list pobj objlist ("(",",",")",false)
+    fun pp_semicolonlist pobj objlist = pp_list pobj objlist ("(",";",")",true)
+    fun pp_pathlist pobj objlist = pp_list pobj objlist ("",".","",false)
 
 
     fun pp_fixity fixity = 
@@ -92,10 +95,10 @@ struct
     fun pp_recordcon (seen : (context,con) tyvar list) (isflex,rdecs) : format = 
 	let val is_tuple = rdecs_is_tuple rdecs
 	    val format = (case (is_tuple,isflex) of
-			      (true,false) => ("{", " *","}", false)
-			    | (true,true) => ("{?", " *","?}", false)
-			    | (false,false) => ("{", ",","}", false)
-			    | (false,true) => ("{?", ",","?}", false))
+			      (true,false) => ("{", " *","}", true)
+			    | (true,true) => ("{?", " *","?}", true)
+			    | (false,false) => ("{", ",","}", true)
+			    | (false,true) => ("{?", ",","?}", true))
 	    val doer = if is_tuple
 			   then (fn (l,c) => pp_con seen c)
 		       else
@@ -168,12 +171,17 @@ struct
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
 				       pp_con seen con]
-       | CON_SUM {noncarriers,carrier,special} => 
-	     pp_list (pp_con seen) [carrier] ("SUM"^ (case special of 
-							NONE => ""
-						      | SOME x => (Int.toString x))
-					    ^"(" ^ (Int.toString noncarriers) ^ "; ",
-					    ",",")", false)
+       | CON_SUM {names,noncarriers,carrier,special} => 
+	      HOVbox[String (case special of 
+				 NONE => "SUM"
+			       | SOME x => "SUM_" ^ (Int.toString x)),
+		     String "[", Break,
+		     pp_commalist pp_label names,
+		     String ";", Break,
+		     String (Int.toString noncarriers),
+		     String ";", Break,
+		     pp_con seen carrier,
+		     String "]"]
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
        | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
        | CON_MODULE_PROJECT (module,label) => pp_region "CON_MPROJ(" ")"
@@ -216,44 +224,46 @@ struct
 			    String "END"]
 	   | MOD_SEAL(m,s) => pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true))
 	
-    and pp_phrase_class seen pc = 
+    and pp_phrase_class full seen pc = 
 	let val pp_con = pp_con seen
 	    val pp_exp = pp_exp seen
 	    val pp_kind = pp_kind seen
 	    val pp_mod = pp_mod seen
 	    val pp_signat = pp_signat seen
+	    fun help leftstr rightstr items = 
+		HOVbox(if full
+			   then (String leftstr) :: (items @ [String rightstr])
+		       else items)
+		    
 	in  
 	    (case pc of
-		 PHRASE_CLASS_EXP  (e,c) => HOVbox[String "PC_EXP(", pp_exp e,
-						   String ", ", pp_con c, String ")"]
-	       | PHRASE_CLASS_CON  (c,k) => HOVbox[String "PC_CON(", pp_con c,
-						   String ", ", pp_kind k, String ")"]
-	       | PHRASE_CLASS_MOD  (m,false,s)  => HOVbox[String "PC_MOD(", pp_mod m,
-						    String ", ", pp_signat s, String ")"]
-	       | PHRASE_CLASS_MOD  (m,true,s)  => HOVbox[String "PC_$POLY$MOD(", pp_mod m,
-						    String ", ", pp_signat s, String ")"]
-	       | PHRASE_CLASS_SIG  (v,s)  => HOVbox[String "PC_SIG(", pp_var v, String " = ",
-						    pp_signat s, String ")"]
+		 PHRASE_CLASS_EXP  (e,c,eopt,inline) => 
+		     help (if inline then "PC_EXP_INLINE" else "PC_EXP(") ")"
+		     ([pp_exp e, String ": ", pp_con c] @
+		      (case eopt of
+			   NONE => []
+			 | SOME e => [String "= ", pp_exp e]))
+	       | PHRASE_CLASS_CON  (c,k,copt,inline) =>
+		     help (if inline then "PC_EXP_INLINE" else "PC_CON(") ")"
+		     ([pp_con c, String ": ", pp_kind k] @
+		      (case copt of
+			   NONE => []
+			 | SOME c => [String "= ", pp_con c]))
+	       | PHRASE_CLASS_MOD  (m,false,s)  => 
+		     help "PC_MOD(" ")" [pp_mod m, String ": ", pp_signat s]
+	       | PHRASE_CLASS_MOD  (m,true,s)  => 
+		     help "PC_$POLY$MOD(" ")" [pp_mod m, String ": ", pp_signat s]
+	       | PHRASE_CLASS_SIG  (v,s)  => 
+		     help "PC_SIG(" ")" [pp_var v, String " = ", pp_signat s]
 	       | PHRASE_CLASS_OVEREXP _ => String "PC_OVEREXP")
 	end
 
-    and pp_inline seen inline = 
-	    (case inline of
-		(INLINE_MODSIG (b,m,s)) => HOVbox[pp_mod seen m, 
-                                                  if b then String ": $POLY$ " else String ":", 
-                                                  Break, pp_signat seen s]
-	      | (INLINE_EXPCON (e,c)) => HOVbox[pp_exp seen e, String ":", pp_con seen c]
-	      | (INLINE_CONKIND (c,k)) => HOVbox[pp_con seen c, String ":", pp_kind seen k]
-	      | (INLINE_OVER _) => String "INLINE_OVER")
 
     and pp_kind seen kind = (case kind of
 			    KIND_TUPLE 1 => String "TYPE"
 			  | KIND_TUPLE i => String ("KIND(" ^ (Int.toString i) ^ ")")
 			  | KIND_ARROW (i,j) => String ("KIND(" ^ (Int.toString i) ^
-							" -> " ^ (Int.toString j) ^ ")")
-			  | KIND_INLINE (k,c) => HOVbox[String "KIND_INLINE(",
-							pp_kind seen k, String ", ", pp_con seen c,
-							String ")"])
+							" -> " ^ (Int.toString j) ^ ")"))
 
     and pp_elist seen exps = pp_list (pp_exp seen) exps ("[",",","]",false)
     and pp_clist seen cons = pp_list (pp_con seen) cons ("[",",","]",false)
@@ -328,23 +338,22 @@ struct
        | EXN_INJECT (s,e1,e2) => pp_region "EXN_INJECT(" ")" [String s, String ",",
 							      pp_exp e1, String ",", pp_exp e2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
-			  [pp_con con, pp_exp e]
+			  [pp_con con, String ",", pp_exp e]
        | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"
 			  [pp_con con1, String ",", 
 			   pp_con con2, String ",", pp_exp e]
        | INJ {sumtype,field,inject} => 
 	     pp_region "INJ(" ")"
 	     [String (Int.toString field), String ", ",
-	      pp_con sumtype,
+	      pp_con sumtype, 
 	      case inject of
-		  NONE => String "NONE"
-		| SOME e => pp_exp e]
+		  NONE => String ""
+		| SOME e => HOVbox[String ",", pp_exp e]]
        | CASE {sumtype,bound,arg,arms,tipe,default} =>
 	     pp_region "CASE(" ")"
-	     ((pp_con sumtype) :: (String ",") :: Break ::
-	      (pp_exp arg) :: (String ",") :: Break ::
-	      (pp_con tipe) :: (String ",") :: Break ::
-	      (pp_var bound) :: (String ",") :: Break ::
+	     ((pp_exp arg) :: (String ":") :: (pp_con sumtype) :: (String ",") :: Break ::
+	      (String "result_type = ") :: (pp_con tipe) :: (String ",") :: Break ::
+	      (String "bound = ") :: (pp_var bound) :: (String ",") :: Break ::
 	      (pp_list (fn NONE => String "NONE" 
 	                | SOME e => pp_exp e) arms ("[",", ","]",true)) ::
 	      (String ", ") :: Break ::
@@ -390,16 +399,9 @@ struct
 				String ")"]
        | SIGNAT_STRUCTURE (NONE,sdecs) => pp_sdecs seen sdecs
        | SIGNAT_STRUCTURE (SOME p,sdecs) => HOVbox[String "SIGS_NORM(",
-						   pp_path p, String ", ",
+						   pp_path p, String ", ", Break,
 						   pp_sdecs seen sdecs,
 						   String ")"]
-       | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig} =>
-	     HOVbox[(case self of
-			 SOME p => Hbox[String "SIGS_INLINE_NORM(",
-					pp_path p, String ")"]
-		       | NONE => String "SIGS_INLINE"),
-		    String "abs_sig = ", pp_sdecs seen abs_sig, Break,
-		    String "code = ", pp_sbnds seen code]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,
@@ -432,12 +434,17 @@ struct
     and pp_dec' seen dec = 
       let fun help x y = (x,y)
       in (case dec of
-	    DEC_EXP (v,c) => help (pp_var v) [pp_con seen c]
+	    DEC_EXP (v,c,NONE, _) => help (pp_var v) [pp_con seen c]
+	  | DEC_EXP (v,c,SOME e, inline) => 
+		help (pp_var v) [pp_con seen c, String (if inline then " == " else " = "), 
+				 pp_exp seen e]
+	  | DEC_CON (v,k,NONE, _) => help (pp_var v) [pp_kind seen k]
+	  | DEC_CON (v,k,SOME c, inline) => 
+		help (pp_var v) [pp_kind seen k, String (if inline then " == " else " = "), 
+				 pp_con seen c]
 	  | DEC_MOD (v,false,s) => help (pp_var v) [pp_signat seen s]
 	  | DEC_MOD (v,true,s) => help (pp_var v) [String " $POLY$ ", 
 						   pp_signat seen s]
-	  | DEC_CON (v,k,NONE) => help (pp_var v) [pp_kind seen k]
-	  | DEC_CON (v,k,SOME c) => help (pp_var v) [pp_con seen c, String " = ", pp_kind seen k]
 	  | DEC_EXCEPTION (n,c) =>  help (pp_tag n) [pp_con seen c])
       end
 
@@ -481,9 +488,9 @@ struct
     val pp_exp' = help (pp_exp [])
     val pp_signat' = help (pp_signat [])
     val pp_list' = pp_list
-    fun pp_commalist' pobj objlist = pp_list' pobj objlist ("(",", ",")",false)
-    fun pp_semicolonlist' pobj objlist = pp_list' pobj objlist ("(","; ",")",true)
-    fun pp_pathlist' pobj objlist = pp_list' pobj objlist ("",".","",false)
+    val pp_commalist' = pp_commalist
+    val pp_semicolonlist' = pp_semicolonlist
+    val pp_pathlist' = pp_pathlist
     val pp_path' = help pp_path
     val pp_bnd' = help (pp_bnd [])
     val pp_bnds' = help pp_bnds
@@ -493,30 +500,23 @@ struct
     val pp_sdec' = help (pp_sdec [])
     val pp_decs' = help pp_decs
     val pp_sdecs' = help (pp_sdecs [])
-    val pp_inline' = help (pp_inline [])
-    val pp_phrase_class' = help (pp_phrase_class [])
+    val pp_phrase_class' = help (pp_phrase_class true [])
 
-    fun pp_context_entry' (CONTEXT_INLINE _) = String "CONTEXT_INLINE ???"
-      | pp_context_entry' (CONTEXT_ALIAS _) = String "CONTEXT_ALIAS ???"
+    fun pp_context_entry' (CONTEXT_ALIAS _) = String "CONTEXT_ALIAS ???"
       | pp_context_entry' (CONTEXT_SDEC sdec) = HOVbox[String "CONTEXT_SDEC: ", pp_sdec [] sdec]
       | pp_context_entry' (CONTEXT_SIGNAT (l,v,s)) = HOVbox[String "CONTEXT_SIGNAT: ",
 							    pp_label l, String " > ", pp_var v,
 							    String " = ", pp_signat [] s]
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
+      | pp_context_entry' (CONTEXT_OVEREXP _) = String "CONTEXT_OVEREXP ???"
 
     fun pp_context' (CONTEXT{label_list,...}) = 
 	let val label_pathpc_list = Name.LabelMap.listItemsi label_list
-	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp [] e, String " : ", pp_con [] c]
-	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con [] c, String " : ", pp_kind [] k]
-	      | pp_xpc (PHRASE_CLASS_MOD (m,false,s)) = HOVbox[pp_mod [] m, String " : ", pp_signat [] s]
-	      | pp_xpc (PHRASE_CLASS_MOD (m,true,s)) = HOVbox[pp_mod [] m, String " : $POLY$ ", pp_signat [] s]
-	      | pp_xpc (PHRASE_CLASS_SIG (v,s)) = HOVbox[pp_var v, String " = ", pp_signat [] s]
-	      | pp_xpc (PHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
-	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,
+	    fun doer(lbl,(path,pc)) = HOVbox[pp_label lbl,
 					   String " --> ",
 					   pp_path path,
 					   String " = ",
-					   pp_xpc xpc]
+					   pp_phrase_class true [] pc]
 	in  pp_list doer label_pathpc_list ("[",", ", "]", true)
 	end
 
@@ -545,7 +545,6 @@ struct
     val pp_sdec = help' (pp_sdec [])
     val pp_decs = help' pp_decs
     val pp_sdecs = help' (pp_sdecs [])
-    val pp_inline = help' (pp_inline [])
-    val pp_phrase_class = help' (pp_phrase_class [])
+    val pp_phrase_class = help' (pp_phrase_class true [])
 
   end

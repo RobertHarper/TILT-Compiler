@@ -14,6 +14,8 @@ signature ILUTIL =
     type mod = Il.mod
     type bnd = Il.bnd
     type dec = Il.dec
+    type sdec = Il.sdec
+    type sbnd = Il.sbnd
     type signat = Il.signat
     type context = Il.context
     type tag = Il.tag
@@ -81,19 +83,16 @@ signature ILUTIL =
 
     (* Some internal labels are opened for lookup *)
     (* Some internal labels are non-exported *)
-    (* Datatype labels are internal, non-exported, opened, and identifiable as dt labels *)
     (* Eq labels are internal, non-exported, and identifiable as eq labels *)
     val to_open : label -> label
     val to_nonexport : label -> label
-    val to_dt : label -> label 
     val to_eq: label -> label       
-    val to_dt_var : var -> var
+    val to_dt: label -> label       
 
     val is_open : label -> bool
     val is_nonexport : label -> bool
-    val is_dt : label -> bool 
     val is_eq : label -> bool
-    val is_dt_var : var -> bool	
+    val is_dt : label -> bool
 
     (* Lose all characteristics *)
     val label2name : label -> string
@@ -125,10 +124,10 @@ signature ILUTIL =
 		  If the flag is true, then the reduction occurs if each argument variable
 		  is used at most once in the function body.  This prevents code explosion. *)
     val ConApply       : bool * con * con -> con
-    val make_inline_module : Il.context * Il.mod * Il.path option * bool -> Il.mod option 
-    val is_inline_bnd  : bnd -> bool
 
 
+    val find_sdec : sdec list * label -> sdec option
+    val find_sbnd : sbnd list * label -> sbnd option
 
     (* ------------ Functions that perform variable substiutions --------- *)
     (* exp_subst_expvar : takes an expression and substitutes 
@@ -187,48 +186,43 @@ signature ILUTIL =
     val sig_size : signat -> int
 
 
-    (* ----------- Functions related to type inference ----------- *)
-    (* con_constrain: given a con, constrain, update stamp, 
-                      eq_constrain, update decs of all unset tyvars 
-       con_occurs: given a con and a tyvar, returns whether tyvar occurs in con *)
-    val con_constrain  : con * (con -> con option) *
-	                    {constrain : bool, 
-			     stamp : Tyvar.stamp option,
-			     eq_constrain : bool} * context list -> unit
-    val con_occurs      : con * tyvar -> bool
-
+    (* ----------- Functions related to type inference ----------- 
+       find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag
+                            indicating whether it occurred inside a CON_REF or CON_ARRAY
+                            and a list of flexinfo refs
+    *)
+    val find_tyvars_flexes : con -> (bool * tyvar) list * Il.flexinfo ref list
 
 
     (* ------------ More Miscellaneous/General Substituter ------- *)
-    val exp_subst_proj    : (exp * (mod * label -> exp option) * 
-			           (mod * label -> con option)) -> exp
+    type handler = (exp -> exp option) * (con -> con option) * 
+	           (mod -> mod option) * (sdec -> sdec option) 
+    type proj_handler = (mod * label -> exp option) * (mod * label -> con option) * 
+	                (mod * label -> mod option) * (sdec -> sdec option) 
+
+    val default_exp_handler  : exp -> exp option
+    val default_con_handler  : con -> con option
+    val default_mod_handler  : mod -> mod option
+    val default_sdec_handler : sdec -> sdec option
+
+    val default_exp_proj_handler  : mod * label -> exp option
+    val default_con_proj_handler  : mod * label -> con option
+    val default_mod_proj_handler  : mod * label -> mod option
+    val default_sdec_proj_handler : sdec -> sdec option
+
+    val sig_all_handle : handler -> signat -> signat
+    val exp_all_handle : handler -> exp -> exp
+    val con_all_handle : handler -> con -> con
+    val mod_all_handle : handler -> mod -> mod
+    val bnd_all_handle : handler -> bnd -> bnd
+    val dec_all_handle : handler -> dec -> dec
+
+    val exp_subst_allproj : proj_handler -> exp -> exp
+    val con_subst_allproj : proj_handler -> con -> con
+    val mod_subst_allproj : proj_handler -> mod -> mod
+    val sig_subst_allproj : proj_handler -> signat -> signat
+
     val con_subst_conapps : (con * (con * con -> con option)) -> con
-    val sig_all_handle : signat * (exp -> exp option) * (con -> con option) * 
-	                          (mod -> mod option) * (Il.sdec -> Il.sdec option) -> signat
-    val con_all_handle : con * (exp -> exp option) * (con -> con option) * 
-	                       (mod -> mod option) * (Il.sdec -> Il.sdec option) -> con
-    val mod_all_handle : mod * (exp -> exp option) * (con -> con option) * 
-	                       (mod -> mod option) * (Il.sdec -> Il.sdec option) -> mod
-    val bnd_all_handle : bnd * (exp -> exp option) * (con -> con option) * 
-	                       (mod -> mod option) * (Il.sdec -> Il.sdec option) -> bnd
-    val dec_all_handle : dec * (exp -> exp option) * (con -> con option) * 
-	                       (mod -> mod option) * (Il.sdec -> Il.sdec option) -> dec
-    val sig_subst_allproj : (signat * (mod * label -> exp option) * 
-			     (mod * label -> con option) * 
-			     (mod * label -> mod option) * 
-			     (Il.sdec -> Il.sdec option)) -> signat
-    val exp_subst_allproj : (exp * (mod * label -> exp option) * 
-			     (mod * label -> con option) * 
-			     (mod * label -> mod option) * 
-			     (Il.sdec -> Il.sdec option)) -> exp
-    val con_subst_allproj : (con * (mod * label -> exp option) * 
-			     (mod * label -> con option) * 
-			     (mod * label -> mod option) * 
-			     (Il.sdec -> Il.sdec option)) -> con
-    val mod_subst_allproj : (mod * (mod * label -> exp option) * 
-			     (mod * label -> con option) * 
-			     (mod * label -> mod option) * 
-			     (Il.sdec -> Il.sdec option)) -> mod
 
       (*
 	con_subst_var_withproj : given a con c and a list of sdecs and a module m,

@@ -18,6 +18,7 @@ structure LinkIl :> LINKIL  =
 	structure Toil = Toil
 	structure Basis = Basis
 
+	val show_hil = Stats.ff("showHIL")
 
 	open Il IlUtil Ppil IlStatic Formatter
 	val error = fn s => Util.error "linkil.sml" s
@@ -58,19 +59,23 @@ structure LinkIl :> LINKIL  =
 		    fun do_sdec (SDEC(l,dec),(acc,(etab,ctab,mtab))) = 
 			let val fv = Name.fresh_var()
 			in  (case dec of
-				 DEC_EXP(v,c) => 
+				 DEC_EXP(v,c,eopt,i) => 
 				     let val c = con_subst_expconmodvar(c,etab,ctab,mtab)
 					 val subst = ((v,VAR fv)::etab,ctab,mtab)
+					 val eopt = 
+					     (case eopt of
+						  NONE => NONE
+						| SOME e => SOME(exp_subst_expconmodvar(e,etab,ctab,mtab)))
 				     in  ((SBND(l,BND_EXP(fv,label2obj path2exp l)),
-					   SDEC(l,DEC_EXP(fv,c)))::acc, subst)
+					   SDEC(l,DEC_EXP(fv,c,eopt,i)))::acc, subst)
 				     end
-			       | DEC_CON(v,k,copt) => 
+			       | DEC_CON(v,k,copt,i) => 
 				     let val subst = (etab,(v,CON_VAR fv)::ctab,mtab)
 					 val copt = (case copt of
 							 NONE => NONE
 						       | SOME c => SOME(con_subst_expconmodvar(c,etab,ctab,mtab)))
 				     in  ((SBND(l,BND_CON(fv,label2obj path2con l)),
-					   SDEC(l,DEC_CON(fv,k,copt)))::acc, subst)
+					   SDEC(l,DEC_CON(fv,k,copt,i)))::acc, subst)
 				     end
 			       | DEC_MOD(v,b,s) => 
 				     let val subst = (etab,ctab,(v,MOD_VAR fv)::mtab)
@@ -106,7 +111,8 @@ structure LinkIl :> LINKIL  =
 						   NONE => unset := true
 						 | _ => ()); NONE)
 		  | chandle _ = NONE
-		val _ = mod_all_handle(m,ehandle,chandle,fn _ => NONE, fn _ => NONE)
+		val _ = mod_all_handle(ehandle,chandle,
+				       default_mod_handler,default_sdec_handler)
 	    in  !unset
 	    end
 
@@ -186,14 +192,25 @@ structure LinkIl :> LINKIL  =
 	    end
 
 
-	val plus_context = IlContext.plus_context(IlUtil.con_subst_expconmodvar,
+	val plus_context = IlContext.plus_context(IlUtil.exp_subst_expconmodvar,
+						  IlUtil.con_subst_expconmodvar,
 						  IlUtil.kind_subst_expconmodvar,
 						  IlUtil.sig_subst_expconmodvar)
 
 	structure IlContextEq = IlContextEq
 
 	val eq_context = IlContextEq.eq_context
-	val init_context = empty_context
+	val cached_initial_context = ref (NONE : context option)
+	fun initial_context() = 
+	  (case (!cached_initial_context) of
+	       SOME ctxt => ctxt
+	     | _ => let val (empty, sbnd_entries) = Basis.initial_context()
+			val entries = map #2 sbnd_entries
+			fun folder (entry,ctxt) = IlContext.add_context_entries(ctxt,[IlStatic.SelfifyEntry ctxt entry])
+			val initial_context = foldl folder empty entries
+			val _ = cached_initial_context := (SOME initial_context)
+		    in  initial_context
+		    end)
 
 	type filepos = SourceMap.charpos -> string * int * int
 	fun elab_specs (base_ctxt, fp, specs) = 
@@ -211,8 +228,16 @@ structure LinkIl :> LINKIL  =
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list
 			val ctxt = local_add_context_entries base_ctxt (empty_context,ctxtents) 
-		    in 
-			SOME(ctxt,sbnd_ctxtent_list)
+			val _ = if (!show_hil)
+				    then  (print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
+					   print "\nENTRIES:\n"; 
+					   (app (fn e => (Ppil.pp_context_entry e; 
+							  print "\n")) ctxtents);
+					   print "\nCONTEXT:\n";
+					   Ppil.pp_context base_ctxt;
+					   print "\n")
+				else ()
+		    in  SOME(ctxt,sbnd_ctxtent_list)
 		    end
 	      | NONE => NONE
 

@@ -17,22 +17,20 @@ structure Tyvar :> TYVAR =
 		end
     type stamp = int
 
-    type ('ctxt,'1con) tyvar_info = {stampref : int,
+    type ('ctxt,'con) tyvar_info = {stampref : int,
 				     name : var,
 				     constrained : bool,
 				     use_equal : bool,
-				     body : '1con Util.oneshot,
+				     body : 'con Util.oneshot,
 				     ctxts : 'ctxt list} ref
-    datatype ('ctxt,'1con) tyvar = TYVAR of ('ctxt,'1con) tyvar_info
+    datatype ('ctxt,'con) tyvar = TYVAR of ('ctxt,'con) tyvar_info
 
-    datatype 'a status = FAIL | MAYBE | MATCH of 'a
-    type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * bool -> 'a status (* bool represents hardness *)
+    (* input bool represents hardness *)
+    type ('ctxt,'con) constraint = (unit -> unit) * (('ctxt,'con) tyvar * bool -> bool) 
 	
-    datatype ('ctxt,'1con,'a) uocon  = UOCON of {constraints : ('ctxt,'1con,'a) constraint list}
-    type ('ctxt,'1con) ocon_info = {constrainer : unit -> (int * bool) list,
-				    name : var,
-				    body : ('ctxt,'1con) tyvar}
-    datatype ('ctxt,'1con) ocon = OCON of ('ctxt,'1con) ocon_info
+    datatype ('ctxt,'con) ocon = OCON of {constraints : ('ctxt,'con) constraint list ref,
+					  name : var,
+					  body : ('ctxt,'con) tyvar}
 
     fun get_stamp() = inc()
     fun stamp2int stamp = (stamp : int)
@@ -100,40 +98,29 @@ structure Tyvar :> TYVAR =
 		ctxts=(ctxts' @ ctxts)}
 
 
-    fun fresh_uocon c = UOCON{constraints = c}
     fun ocon2string (OCON{name,...}) = var2string name
     fun ocon_deref (OCON{body,...}) = body
 
-    fun uocon_inst (ctxts : 'ctxt,
-		    UOCON{constraints} : ('ctxt,'1con,'a) uocon, thunk : 'a -> unit) : ('ctxt,'1con) ocon = 
-	let
-	    val body = fresh_named_tyvar (ctxts,"ocon")
-	    val name = fresh_named_var "ocon"
-	    val constraints = ref(mapcount (fn (i,c) => (i,c)) constraints)
-	    fun constrainer () : (int * bool) list =
-		let
-		    fun filter(i,c) = (case (c(body,false)) of
-					   MAYBE => SOME(i,c)
-					 | MATCH _ => SOME(i,c)
-					 | FAIL => NONE)
-		    val constraints' = List.mapPartial filter (!constraints)
-		    val _ = (constraints := constraints')
-		    val result =
-			(case constraints' of
-			     [(i,c)] => (case (c(body,true)) of
-					      FAIL => error "softeq succeeded but hardeq failed!!!"
-					    | MAYBE => [(i,false)]
-					    | MATCH thunk_arg => (thunk thunk_arg;
-								  [(i,true)]))
-			   | _ => map (fn (i,c) => (i,false)) constraints')
-		in result
-		end
-	in
-	    OCON{constrainer = constrainer,
+    fun fresh_ocon (ctxt,constraints) =
+	let val name = fresh_named_var "ocon"
+	    val body = fresh_named_tyvar (ctxt,"ocon")
+	    val _ = tyvar_constrain body
+	in  OCON{constraints = ref constraints,
 		 name = name,
 		 body = body}
 	end
 
-    fun ocon_constrain(OCON{constrainer,...}) = constrainer() 
+    fun ocon_constrain (OCON{constraints, name, body}) =
+	let
+	    fun filter(thunk,unify) = if (unify(body,false))
+					  then SOME(thunk,unify)
+				      else NONE
+	    val constraints' = List.mapPartial filter (!constraints)
+	    val _ = constraints := constraints'
+	    val _ = (case constraints' of
+			 [(thunk,unify)] => (unify(body,true); thunk())
+		       | _ => ())
+	in  length constraints'
+	end
 
   end

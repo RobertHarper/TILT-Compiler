@@ -17,19 +17,18 @@ signature ILCONTEXT =
 	type tag = Il.tag
 	type fixity_table = Il.fixity_table
 	type path = Il.path
-	type inline = Il.inline
 	type context_entry = Il.context_entry
 	    
 	(* ----------- context extenders ----------------------------  *)
 	val empty_context : context
 
-	val add_context_fixity : context * fixity_table -> context
 	val add_context_dec   : context * dec -> context
 	val add_context_decs  : context * decs -> context
 	val add_context_sdec  : context * sdec -> context
 	val add_context_sdecs : context * sdecs -> context
-	val add_context_inline : context * label * var * inline -> context
+	val add_context_fixity : context * fixity_table -> context
 	val add_context_alias : context * label * label list -> context
+	val add_context_overexp : context * label * var * (con * exp) list -> context
 	val add_context_entries : context * context_entry list -> context
 
 	val add_context_mod  : context * label * var * signat            -> context
@@ -47,7 +46,8 @@ signature ILCONTEXT =
 
 
 	val context_to_sdecs : Il.context -> Il.sdecs
-	val plus_context : ((con * (var * exp) list * (var * con) list * (var * mod) list) -> con) *
+	val plus_context : ((exp * (var * exp) list * (var * con) list * (var * mod) list) -> exp) *
+	                   ((con * (var * exp) list * (var * con) list * (var * mod) list) -> con) *
 	                   ((kind * (var * exp) list * (var * con) list * (var * mod) list) -> kind) * 
 			   ((signat * (var * exp) list * (var * con) list * (var * mod) list) -> signat) ->
 			   Il.context list -> Il.context

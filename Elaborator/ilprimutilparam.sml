@@ -1,4 +1,4 @@
-(*$import IL PRIMUTILPARAM Il *)
+(*$import IL PRIMUTILPARAM Il Name *)
 structure IlPrimUtilParam
     :> PRIMUTILPARAM where type con = Il.con 
                      where type exp = Il.exp
@@ -20,15 +20,14 @@ structure IlPrimUtilParam
 	fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
 	val unit_exp : exp = RECORD[]
 	val con_unit = CON_RECORD[]
-	val con_bool = CON_SUM{noncarriers = 2,
-			       carrier = CON_TUPLE_INJECT[],
-			       special = NONE}
-	val con_true = CON_SUM{noncarriers = 2,
-			       carrier = CON_TUPLE_INJECT[],
-			       special = SOME 0}
-	val con_false = CON_SUM{noncarriers = 2,
-			       carrier = CON_TUPLE_INJECT[],
-			       special = SOME 1}
+	fun bool_help special = CON_SUM{names = [Name.symbol_label(Symbol.varSymbol "false"), 
+						 Name.symbol_label(Symbol.varSymbol "true")],
+					noncarriers = 2,
+					carrier = CON_TUPLE_INJECT[],
+					special = special}
+	val con_bool = bool_help NONE
+	val con_false = bool_help (SOME 0)
+	val con_true = bool_help (SOME 1)
 	val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
 	val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
 	    
