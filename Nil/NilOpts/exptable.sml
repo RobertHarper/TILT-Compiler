@@ -196,17 +196,7 @@ struct
 	  | length_table t => 58*skip + hash_table t
 	  | equal_table t => 59 *skip + hash_table t
 
-	  (* IO operations *)
-	  | open_in => 66 *skip
-	  | input => 67 *skip
-	  | input1 => 68 *skip
-	  | lookahead => 69 *skip
-	  | open_out => 70 *skip
-	  | close_in => 71 *skip
-	  | output => 72 *skip
-	  | flush_out => 73 *skip
-	  | close_out => 74 *skip
-	  | end_of_stream => 75 *skip
+
 
 
     fun cmp_primcon p = 
