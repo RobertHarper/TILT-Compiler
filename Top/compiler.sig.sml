@@ -6,7 +6,6 @@ sig
     exception Reject of string		(* User code is bad. *)
     
     val showWrittenContext : bool ref	(* Print contexts as they are written to disk. *)
-    val writeUnselfContext : bool ref	(* Write out unselfified context too. *)
     val showImports : bool ref		(* Print imports when building contexts. *)
 
     (* Contains only ilFiles *)

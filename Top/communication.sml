@@ -223,7 +223,6 @@ struct
 	 ("TimeEachFile", Help.statEachFile),
 	 ("makeBackups", Help.makeBackups),
 	 ("ShowWrittenContext", Compiler.showWrittenContext),
-	 ("WriteUnselfContext", Compiler.writeUnselfContext),
 	 ("ShowTools", Tools.showTools),
 	 ("Typecheck", Linknil.typecheck)]
 
