@@ -2167,6 +2167,26 @@ val _ = print "plet0\n"
 		 (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
 		      SOME(_,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
 			  let 
+			      (* Compiling an ML path should lead to a HIL path with no bindings *)
+			      val ([],argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
+			      val argpath = 
+				  (case (mod2path argmod) of
+				       SOME p => p
+				     | _ => elab_error "xstrexp: functor argument became non-variable")
+			      val varName = Symbol.name var
+			      val coerced_lbl = internal_label ("!coerced_" ^ varName)
+			      val coerced_var = fresh_named_var ("coerced_" ^ varName)
+				  
+			      val (mod_coerced,sig_coerced) = Signature.xcoerce_functor(context,argpath,signat,sig1)
+			      val mod_sealed = MOD_SEAL(mod_coerced,sig_coerced)
+			      val mod_result = MOD_LET(coerced_var,mod_coerced, MOD_APP(m, MOD_VAR coerced_var))
+			      val sig_result = sig_subst(sig2,subst_add_modvar(empty_subst,var1,argmod))
+			  in ([], mod_result, sig_result)
+			  end
+(*
+		 (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
+		      SOME(_,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
+			  let 
 			      val (sbnd_ce_list,argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argpath = 
 				  (case (mod2path argmod) of
@@ -2188,6 +2208,7 @@ val _ = print "plet0\n"
 			      MOD_APP(m,MOD_VAR coerced_var),
 			      sig2')
 			  end
+*)
 	            | SOME _ => (error_region();
 			    print "cannot apply a non-functor\n";
 			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[])))

@@ -229,8 +229,14 @@ struct
 		| Exncase_e {arg,arms,default,bound,result_type} =>
 		      let val _ = scan_exp ctxt arg
 			  val _ = scan_default default
-			  val ctxt = NilContext.insert_con(ctxt,bound,Prim_c(Exn_c, []))
-		      in  app (fn (e1,_,e2) => (scan_exp ctxt e1; scan_exp ctxt e2)) arms
+		      in  app (fn (e1,_,e2) => 
+			       let val _ = scan_exp ctxt e1
+				   val c1 = Normalize.type_of(ctxt,e1)
+				   val (_,c1) = Normalize.reduce_hnf(ctxt,c1)
+				   val SOME carriedCon = NilUtil.strip_exntag c1
+				   val ctxt = NilContext.insert_con(ctxt,bound,carriedCon)
+			       in  scan_exp ctxt e2
+			       end) arms
 		      end
 		| Typecase_e _ => error "typecase_e not done")
 	  end

@@ -418,6 +418,7 @@ struct
     open Help
     val error = fn s => Util.error "manager.sml" s
     val stat_each_file = Stats.tt("TimeEachFile")
+    val showWrittenContext = Stats.ff("ShowWrittenContext")
 
     datatype result = WORK of string | WAIT | READY
     fun readPartialContextRaw file = 
@@ -440,10 +441,12 @@ struct
 	    val os = BinIO.openOut shortfile
 	    val _ = LinkIl.IlContextEq.blastOutPartialContext os shortpctxt
 	    val _ = BinIO.closeOut os
-	    val _ = (print "Selfified context:\n"; 
-		     Ppil.pp_pcontext pctxt;
-		     print "\n\n\nUnselfified context:\n"; 
-		     Ppil.pp_pcontext shortpctxt)
+	    val _ = if (!showWrittenContext)
+			then (print "Selfified context:\n"; 
+			      Ppil.pp_pcontext pctxt;
+			      print "\n\n\nUnselfified context:\n"; 
+			      Ppil.pp_pcontext shortpctxt)
+		    else ()
 	in  () 
 	end
     val writePartialContextRaw = Stats.timer("WritingContext",writePartialContextRaw)

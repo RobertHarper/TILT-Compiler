@@ -37,7 +37,7 @@ sig
 	  Mod_result contains mod_actual.
 	  Sig_result is the signature of mod_result.
 
-        xcoerce_funtor : ... * context * path_actual * sig_actual * sig_target -> mod_result * sig_result
+       xcoerce_functor : ... * context * path_actual * sig_actual * sig_target -> mod_result * sig_result
 	  Context contains path_actual already.
           Sig_actual is the signature of module path_actual and contains path_actual.
   	  Sig_target does not contain path_actual.
