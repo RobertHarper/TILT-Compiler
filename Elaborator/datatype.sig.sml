@@ -9,9 +9,9 @@ signature DATATYPE =
 	 carried_type : Il.con option} option
 
 
-    (* Takes a context, a procedure for type expression compilation, and
-       datatype and withtype specifications, and returns a module and 
-       signature for the datatype declaration. *)
+    (* Takes a context, procedures for type and equality compilation, and
+       a datatype declaration, and returns a module and signature for
+       the datatype declaration.  *)
     val compile : {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   datatycs : Ast.db list,
