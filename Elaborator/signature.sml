@@ -63,6 +63,10 @@ structure Signature :> SIGNATURE =
 	else NONE
       | is_polyval_sig _ = NONE
 
+    fun is_exception_sig (SIGNAT_STRUCTURE[_,SDEC(maybe_mk,DEC_EXP(_,c,_,_))]) = 
+        if eq_label (maybe_mk, mk_lab) then SOME c else NONE
+      | is_exception_sig _ = NONE
+
     fun make_polyval_sig (var_poly,sig_poly,v,c,eopt,i) = 
 	SIGNAT_FUNCTOR(var_poly,sig_poly,SIGNAT_STRUCTURE 
 		       [SDEC(it_lab,DEC_EXP(v,c,eopt,i))],PARTIAL)
@@ -595,6 +599,7 @@ structure Signature :> SIGNATURE =
 	sdecsAbstractEqual
       end
 
+  (* Derek: Why is this so much faster? *)
   and xsig_sharing_structure_fast(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
@@ -931,10 +936,12 @@ structure Signature :> SIGNATURE =
 			     let val exp = (case (inline,eopt') of
 						(true, SOME e) => e
 					      | _ => path2exp(join_path_labels(path_actual,lbls)))
+				 (* Derek: Why all this normalization? *)
 				 val con_actual_reduced = con_normalize(ctxt, con_actual)
 				 val con_actual_smaller = if (con_size con_actual) < (con_size con_actual_reduced)
 							      then con_actual else con_actual_reduced
 				 val bnd = BND_EXP(v_spec,exp)
+				 (* Derek: Why do we put in the inlining info of the "from" component? *)
 				 val dec = DEC_EXP(v_spec,con_actual_smaller,eopt',inline)
 			     in  SOME(bnd,dec)
 			     end 
@@ -956,9 +963,33 @@ structure Signature :> SIGNATURE =
 	           (* XXX not checking eopt XXX *)
 	          | (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,SIGNAT_SELF(_,_,signat)))) =>
 		      (case (is_polyval_sig signat) of
-			   NONE => (error_region_with "polymorphic value specification but module component";
-				    pp_signat signat;
-				    NONE)
+			   NONE =>
+			       (case (is_exception_sig signat) of
+				   NONE => 
+				       (error_region_with "polymorphic value specification but module component";
+					pp_signat signat;
+					NONE)
+				 | SOME con_actual => 
+				       if (sub_con(ctxt,con_actual,con_spec)) then
+					   let val exp = path2exp(join_path_labels(path_actual, lbls @ [mk_lab]))
+					       val bnd = BND_EXP(v_spec,exp)
+					       val dec = DEC_EXP(v_spec,con_spec,NONE,false)
+					   in SOME(bnd,dec)
+					   end
+				       else
+					   let val con_spec_norm = con_normalize(ctxt,con_spec)
+					       val con_actual_norm = con_normalize(ctxt,con_actual)
+					   in  error_region_with "coercion of an exception constructor\n";
+					       tab_region_with "to a monomorphic value specification failed\n";
+					       print "Component name: ";   pp_label lab;
+					       print "\nExpected type:\n"; pp_con con_spec;
+					       print "\nFound type:\n";    pp_con con_actual;
+					       print "\nExpanded expected type:\n"; pp_con con_spec_norm;
+					       print "\nExpanded found type:\n"; pp_con con_actual_norm;
+					       print "\n";
+					       NONE
+					   end
+				       )
 			 | SOME (var_actual, 
 				 SIGNAT_STRUCTURE sdecs_actual,
 				 con_actual,_,inline) =>
