@@ -69,7 +69,7 @@ sig
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of (var,con) set * var                 (* Constructors that classify values of
+    | Mu_c of (var,con) sequence * var            (* Constructors that classify values of
 						       a recursive type *)
     | Arrow_c of openness * confun                (* open functions and closures *)
     | Code_c of confun                            (* for describing code at the term level: 
@@ -123,7 +123,7 @@ sig
    *)
   datatype switch =                                 (* Switching on / Elim Form *)
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
-    | Sumsw_e of (int * con list,exp,w32) sw             (* sum types *)
+    | Sumsw_e of (w32 * con list,exp,w32) sw              (* sum types *)
     | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
 
 
@@ -131,7 +131,7 @@ sig
       Var_e of var                                        (* Term-level variables *)
     | Const_e of (con,exp) Prim.value                           (* Term-level constants *)
     | Let_e of letsort * bnd list * exp                   (* Binding construct *)
-    | Prim_e of allprim * (con list) * (exp list) option  (* allow primops to be partially applied *)
+    | Prim_e of allprim * (con list) * (exp list)         (* primops must be fully applied *)
     | Switch_e of switch                                  (* Switch statements *)
     | App_e of exp * (con list) * (exp list)              (* Application of open functions and closures *)
     | Call_e of var * (con list) * (exp list)             (* Application of code pointers *)

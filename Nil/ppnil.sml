@@ -79,8 +79,10 @@ functor Ppnil(structure Nil : NIL
 					 pp_kind k]
 	in
 	    (case kind of
-		 Type_k => String "TYPE"
-	       | Word_k => String "WORD"
+		 Type_k Compiletime => String "TYPE_C"
+	       | Type_k Runtime => String "TYPE_R"
+	       | Word_k Compiletime => String "WORD_C"
+	       | Word_k Runtime => String "WORD_R"
 	       | Record_k lvk_seq => (pp_list (fn ((l,v),k) => HOVbox[pp_label l, String " = ",
 								      pp_var v, String " : ",
 								  pp_kind k])
@@ -89,7 +91,11 @@ functor Ppnil(structure Nil : NIL
 	       | Arrow_k (Open,ks,k) => help "Open" ks k
 	       | Arrow_k (Closed,ks,k) => help "Closed" ks k
 	       | Code_k (ks,k) => help "Code" ks k
-	       | Singleton_k (k,c) => pp_region "SINGLE_K(" ")" [pp_kind k, String ",", pp_con c])
+	       | Singleton_k (p,k,c) => (pp_region 
+					 (case p of 
+					      Compiletime => "SINGLE_KC(" 
+					    | Runtime => "SINGLE_KR(")
+					 ")" [pp_kind k, String ",", pp_con c]))
 	end
 (*
     and pp_primcon (Mono_c monocon) = pp_monocon monocon
@@ -106,23 +112,30 @@ functor Ppnil(structure Nil : NIL
 	 | Crecord_c lc_list => (pp_list (fn (l,c) => HOVbox[pp_label l, String " = ", pp_con c])
 				  lc_list ("CREC_C{", ",","}", false))
 	 | Proj_c (c,l) => HOVbox[String "PROJ_C(", pp_con c, String ",", pp_label l, String ")"]
-	 | Let_c (letsort,vclist,cbody) => Vbox0 0 1 [String (case letsort of
-								  Sequential => "LET  "
-								| Parallel => "LETP "),
-						      Vbox(separate (map (fn (v,c) =>
-									  Hbox[pp_var v, String " = ", 
-									       pp_con c]) vclist)
-							   (Break0 0 0)),
-						      Break,
-						      String "IN  ",
-						      pp_con cbody,
-						      Break,
-						      String "END"]
-	 | Fun_c (openness,vklist,c) => HOVbox[String "FUN_C",
-					       (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
-						vklist),
-					       Break0 0 5,
-					       pp_con c]
+	 | Let_c (letsort,cbnds,cbody) =>
+	       let fun do_cbnd (Con_cb(v,k,c)) = Hbox[pp_var v, String " : ",
+							   pp_kind k, String " = ", 
+							   pp_con c]
+		     | do_cbnd (Fun_cb(v,openness,vklist,c,k)) = 
+		       HOVbox[pp_var v, String " = ",
+			      String "FUN_C",
+			      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
+			       vklist),
+			      Break0 0 5,
+			      pp_con c,
+			      Break0 0 5,
+			      pp_kind k]
+	       in
+		   Vbox0 0 1 [String (case letsort of
+					  Sequential => "LET  "
+					| Parallel => "LETP "),
+			      Vbox(separate (map do_cbnd cbnds) (Break0 0 0)),
+			      Break,
+			      String "IN  ",
+			      pp_con cbody,
+			      Break,
+			      String "END"]
+	       end
 	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
 				       pp_con c2, String ")"]
 	 | App_c (con,conlist) => HOVbox[String "APP_C(",
@@ -136,7 +149,7 @@ functor Ppnil(structure Nil : NIL
 					       String ")"]
 	 | Mu_c (vcset,var) => HOVbox[String "MU_C(",
 				       (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
-					(set2list vcset)),
+					(sequence2list vcset)),
 				       String ",",
 				       pp_var var,
 				       String ")"]
@@ -172,8 +185,8 @@ functor Ppnil(structure Nil : NIL
       | pp_primcon Ref_c = String "REF"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
-      | pp_primcon (Sum_c NONE) = String "SUM"
-      | pp_primcon (Sum_c (SOME i)) = String ("SUM_" ^ (Int.toString i))
+      | pp_primcon (Sum_c {known = NONE,...}) = String "SUM"
+      | pp_primcon (Sum_c {known = SOME i,...}) = String ("SUM_" ^ (TilWord32.toDecimalString i))
       | pp_primcon (Record_c labels) = String "RECORD"
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
 
@@ -193,7 +206,7 @@ functor Ppnil(structure Nil : NIL
 	String (case nilprimop of
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
-		  | inject w32 => "inject_" ^ (Word32.toString w32)
+		  | inject {field,...} => "inject_" ^ (TilWord32.toDecimalString field)
 		  | roll => "roll"
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"
@@ -207,14 +220,12 @@ functor Ppnil(structure Nil : NIL
 	(case exp of
 	     Var_e var => pp_var var
 	   | Const_e v => Ppprim.pp_value' pp_exp pp_con v
-	   | Prim_e (prim,cons,expsopt) => HOVbox([(case prim of
+	   | Prim_e (prim,cons,exps) => HOVbox([(case prim of
 							PrimOp p => pp_prim' p
 						      | NilPrimOp p => pp_nilprimop p),
 						   pp_list pp_con cons ("[",",","]",false)] @
-						  (case expsopt of
-						       NONE => []
-						     | SOME exps => [pp_list pp_exp exps
-							   ("[",",","]",false)]))
+						   [pp_list pp_exp exps
+						    ("[",",","]",false)])
 	   | App_e (efun,cons,exps) => (pp_region "APP(" ")" 
 					[pp_exp efun, String ",", Break, 
 					 pp_list pp_con cons ("[",",","]",false),
@@ -270,8 +281,9 @@ functor Ppnil(structure Nil : NIL
 	in
 	    case sw of
 		Intsw_e sw => help sw "INT" pp_exp pp_is' (String o Word32.toString)
-	      | Sumsw_e sw => help sw "SUM" pp_exp (fn clist => pp_con(Prim_c(Sum_c NONE,clist)))
-		                                          (String o Word32.toString)
+	      | Sumsw_e sw => help sw "SUM" pp_exp 
+		    (fn (tagcount,clist) => pp_con(Prim_c(Sum_c {tagcount=tagcount,known=NONE},clist)))
+								 (String o Word32.toString)
 (*
 	      | Typecase_e sw => help sw "TCASE" pp_con 
 		                   (fn (v,c) => Hbox[pp_var v, String "=", pp_con c]) pp_primcon
@@ -285,8 +297,8 @@ functor Ppnil(structure Nil : NIL
     and pp_bnd bnd =
 	let fun help x y = (x,y)
 	  in (case bnd of
-		Exp_b (v,e) => Hbox[pp_var v, String "=", pp_exp e]
-	      | Con_b (v,c) => Hbox[pp_var v, String "=", pp_con c]
+	        Exp_b (v,c,e) => Hbox[pp_var v, String ":", pp_con c, String "=", pp_exp e]
+	      | Con_b (v,k,c) => Hbox[pp_var v, String ":", pp_kind k, String "=", pp_con c]
 	      | Fixfun_b fixset => let val fixlist = set2list fixset
 				   in Vbox(map pp_fix fixlist)
 				   end
