@@ -10,8 +10,6 @@ struct
     
   open Nil Util
 
-  fun muExpand _ = raise Util.UNIMP
-
 
   fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
   fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
@@ -558,6 +556,15 @@ struct
 	     !evars_ref)
 	end
   end
+
+  fun muExpand (vcseq,v) = 
+      let val vc_list = sequence2list vcseq
+	  fun lookup v = Listops.assoc_eq(eq_var,v,vc_list)
+	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
+		       SOME c => c | NONE => error "bad mu type")
+      in  substConInCon lookup c
+      end
+
 
   fun same_openness (Open,Open) = true
     | same_openness (Closure,Closure) = true

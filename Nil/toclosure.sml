@@ -16,6 +16,7 @@ struct
     structure Nil = Nil
 
     val error = fn s => error "toclosure.sml" s
+    val debug = ref false
     val float64 = Prim_c(Float_c Prim.F64,[])
     structure FidSet = VarSet
     type fid = var
@@ -580,13 +581,17 @@ struct
 	   val top_fid = fresh_named_var "top_fid"
 	   val state = initial_state top_fid
 	   val {freeevars,freecvars} = e_find_fv state arg_exp
-	   val _ = print "Done with e_find_fv\n"
-	   val _ = (print "free is empty: ";
-		    print (Bool.toString (VarMap.numItems freeevars = 0
-					  andalso VarMap.numItems freecvars = 0));
-		    print "\n")
+	   val _ = if (!debug)
+		       then (print "Done with e_find_fv\n";
+			     print "free is empty: ";
+			     print (Bool.toString (VarMap.numItems freeevars = 0
+						   andalso VarMap.numItems freecvars = 0));
+			     print "\n")
+		   else ()
 	   val _ = close_funs(get_fids())
-	   val _ = print "Done with close_funs\n"
+	   val _ = if (!debug)
+		       then print "Done with close_funs\n"
+		   else ()
 	   val result = e_rewrite arg_exp
        in  result
        end	   
@@ -596,13 +601,17 @@ struct
 	   val top_fid = fresh_named_var "top_fid"
 	   val state = initial_state top_fid
 	   val {freeevars,freecvars} = c_find_fv state arg_con
-	   val _ = print "Done with c_find_fv\n"
-	   val _ = (print "free is empty: ";
-		    print (Bool.toString (VarMap.numItems freeevars = 0
-					  andalso VarMap.numItems freecvars = 0));
-		    print "\n")
+	   val _ = if (!debug)
+		       then (print "Done with c_find_fv\n";
+			     print "free is empty: ";
+			     print (Bool.toString (VarMap.numItems freeevars = 0
+						   andalso VarMap.numItems freecvars = 0));
+			     print "\n")
+		   else ()
 	   val _ = close_funs(get_fids())
-	   val _ = print "Done with close_funs\n"
+	   val _ = if (!debug)
+		       then print "Done with close_funs\n"
+		   else ()
 	   val result = c_rewrite arg_con
        in  result
        end	   
@@ -612,13 +621,18 @@ struct
 	   val top_fid = fresh_named_var "top_fid"
 	   val state = initial_state top_fid
 	   val {freeevars,freecvars} = k_find_fv state arg_kind
-	   val _ = print "Done with k_find_fv\n"
-	   val _ = (print "free is empty: ";
-		    print (Bool.toString (VarMap.numItems freeevars = 0
-					  andalso VarMap.numItems freecvars = 0));
-		    print "\n")
+	   val _ = if (!debug)
+		       then 
+			   (print "Done with k_find_fv\n";
+			   print "free is empty: ";
+			   print (Bool.toString (VarMap.numItems freeevars = 0
+						 andalso VarMap.numItems freecvars = 0));
+			   print "\n")
+		   else ()
 	   val _ = close_funs(get_fids())
-	   val _ = print "Done with close_funs\n"
+	   val _ = if (!debug)
+		       then print "Done with close_funs\n"
+		   else ()
 	   val result = k_rewrite arg_kind
        in  result
        end	   

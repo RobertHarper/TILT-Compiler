@@ -41,52 +41,56 @@ struct
 				    structure NilUtil = NilUtil
 				    structure Ppnil = Ppnil
 				    structure PrimUtil = NilPrimUtil)
+    type nilmodule = {bnds : Nil.bnd list,
+		      name_c : Nil.var, knd_c : Nil.kind,
+		      name_r : Nil.var, type_r : Nil.con}
+
     fun test s = 
 	let
+	    open Nil
 	    val SOME(sbnds, decs) = LinkIl.elaborate s
 	    val _ = print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
 	    val _ = LinkIl.Ppil.pp_sbnds sbnds
             val _ = print "\nSize of IL = ";
 	    val _ = print (Int.toString (LinkIl.IlUtil.mod_size 
 					 (LinkIl.MOD_STRUCTURE sbnds)));
-            val _ = print "\n\n"
+            val _ = print "\n\n========================================\n"
 	    val _ = Compiler.Profile.reset () 
 	    val {cu_bnds, cu_c_var, cu_c_kind, cu_r_var, cu_r_type} =
 		Tonil.xcompunit decs sbnds
 	    val _ = print "\nPhase-splitting done.\n";
-(*	    val cu_c_closed = ToClosure.close_con cu_c
-	    val cu_c_kind_closed = ToClosure.close_kind cu_c_kind
-	    val cu_r_closed = ToClosure.close_exp cu_r
-	    val cu_r_type_closed = ToClosure.close_con cu_r_type
-*)
+	    val nilmod : nilmodule = {bnds = cu_bnds, 
+				      name_c = cu_c_var, name_r = cu_r_var,
+				      knd_c = cu_c_kind, type_r = cu_r_type}
+	    val {bnds,name_c,name_r,knd_c,type_r} = nilmod
+	    val _ = (print "\n\n=======================================\n\n";
+		     print "phase-split results:\n";
+		     Ppnil.pp_var name_c; print "\n";
+		     Ppnil.pp_var name_r; print "\n";
+		     Ppnil.pp_bnds bnds)
+	    val temp_var = Name.fresh_var()
+	    val temp_exp = Let_e(Sequential,bnds,
+				 Let_e(Sequential,[Con_b(temp_var,knd_c,Var_c name_c)],
+							 Var_e name_r))
+	    val temp_exp_closed = ToClosure.close_exp temp_exp
+	    val Let_e(_,bnds',_) = temp_exp_closed
+	    val knd_c' = ToClosure.close_kind knd_c
+	    val type_r' = ToClosure.close_con type_r
+
+	    val nilmod' : nilmodule = {bnds = bnds', name_c = name_c, name_r = name_r,
+				      knd_c = knd_c', type_r = type_r'}
+
 (*	    val _ = Compiler.Profile.report TextIO.stdOut  *)
+
 	in
-	    print "phase-split results:\n";
-	    Ppnil.pp_bnds cu_bnds;
-	    print "\n";
-	    Ppnil.pp_var cu_c_var;
-	    print " :: ";
-	    Ppnil.pp_kind cu_c_kind;
+
+	    print "closure-conversion results:\n";
+	    Ppnil.pp_var name_c; print "\n";
+	    Ppnil.pp_var name_r; print "\n";
+	    Ppnil.pp_bnds bnds';
 	    print "\n\n";
-	    Ppnil.pp_var cu_r_var;
-	    print " : ";
-	    Ppnil.pp_con cu_r_type;
-	    print "\n";
-(*	    
-	    print "\n\nclosure-conversion results:\n";
-	    Ppnil.pp_con cu_c_closed;
-	    print "\n";
-	    Ppnil.pp_kind cu_c_kind_closed;
-	    print "\n\n";
-	    Ppnil.pp_exp cu_r_closed;
-	    print "\n";
-	    Ppnil.pp_con cu_r_type_closed;
-	    print "\n";
-       
-            (cu_c_closed,cu_c_kind_closed,
-	     cu_r_closed,cu_r_type_closed)
-*)
-	    ()
+
+	    nilmod'
 
 	end
 end

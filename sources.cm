@@ -7,6 +7,9 @@ Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
 Nil/nil.cm               (* ------ Nil stuff ------ *)
 
 Rtl/rtl.cm
+Backend/backend.cm
+Alpha/alpha.cm
+Top/top.cm
 (*
 link.sml 
 *)
