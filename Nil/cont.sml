@@ -2,7 +2,9 @@
 
 structure Cont :> CONT =
   struct
-    
+
+    type ('key,'val) table = ('key,'val) HashTable.hash_table
+
     val find = HashTable.find
     val remove = HashTable.remove
     val insert = HashTable.insert
@@ -11,7 +13,7 @@ structure Cont :> CONT =
     (*Applies cont to the hash table with (k,v) inserted.  When cont *)
     (* returns, restores the original state of the tbl, and returns*)
     (* the value returned by cont *)
-    fun c_insert (tbl,(k,v),cont) = 
+    fun c_insert (tbl,k,v,cont) = 
       let 
 	val old = find tbl k
 	fun undo (SOME old_v) = insert tbl (k,old_v)
@@ -54,16 +56,16 @@ structure Cont :> CONT =
 	fun base (tbl,elts) = fbase (tbl,rev elts) 
 	fun step (cur,(tbl,elts),k) = 
 	  let
-	    val (acc_elt,ins_elt) = fsplit (tbl,cur)
+	    val (acc_elt,(key,value)) = fsplit (tbl,cur)
 	  in
-	    c_insert (tbl,ins_elt,fn tbl => k (tbl,acc_elt::elts))
+	    c_insert (tbl,key,value,fn tbl => k (tbl,acc_elt::elts))
 	  end
       in
 	c_foldl base step (tbl,[]) 
       end
 
     fun c_insert_list (tbl,[],cont) = cont tbl
-      | c_insert_list (tbl,fst::rest,cont) = 
-      c_insert (tbl,fst,fn nu_tbl => c_insert_list (nu_tbl,rest,cont))
+      | c_insert_list (tbl,(key,value)::rest,cont) = 
+      c_insert (tbl,key,value,fn nu_tbl => c_insert_list (nu_tbl,rest,cont))
 
   end (* Cont *)

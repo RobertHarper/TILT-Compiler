@@ -25,9 +25,6 @@ signature NILUTIL =
 
     val con_free_convar : Nil.con -> Name.var list
     val convar_occurs_free : Name.var * Nil.con -> bool
-    val alpha_equiv_con : Nil.con * Nil.con -> bool
-    val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
-    val alpha_sub_kind : Nil.kind * Nil.kind -> bool
 
     val same_openness : Nil.openness * Nil.openness -> bool
     val same_effect : Nil.effect * Nil.effect -> bool
@@ -45,4 +42,24 @@ signature NILUTIL =
     val kind_rewrite : handlers -> Nil.kind -> Nil.kind
     val con_rewrite : handlers -> Nil.con -> Nil.con
 
+    val primequiv : Nil.primcon * Nil.primcon -> bool
+    type alpha_context
+
+    val alpha_equiv_con' : (alpha_context*alpha_context) -> Nil.con * Nil.con -> bool
+    val alpha_equiv_con : Nil.con * Nil.con -> bool
+
+    val alpha_equiv_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
+    val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
+
+    val alpha_sub_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
+    val alpha_sub_kind : Nil.kind * Nil.kind -> bool
+
+    val alpha_normalize_con : Nil.con -> Nil.con
+    val alpha_normalize_con' : alpha_context -> Nil.con -> Nil.con
+
+    val alpha_normalize_kind : Nil.kind -> Nil.kind
+    val alpha_normalize_kind' : alpha_context -> Nil.kind -> Nil.kind
+
+    val sub_phase : Nil.phase * Nil.phase -> bool
+    val get_phase : Nil.kind -> Nil.phase
   end

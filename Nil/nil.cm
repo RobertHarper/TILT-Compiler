@@ -27,6 +27,10 @@ ppnil.sig.sml
 ppnil.sml
 tonil.sig.sml
 tonil.sml
+nilcontext.sml
+nilcontext.sig.sml
+alpha_context.sig.sml
+alpha_context.sml
 nilutil.sig.sml
 nilutil.sml
 nilstatic.sig.sml
@@ -37,7 +41,7 @@ typecheck.sig.sml
 (*typecheck.sml*)
 vararg.sig.sml
 vararg.sml
-nilprimutilparam.sml
+(*nilprimutilparam.sml*)
 nileval.sig.sml
 nileval.sml 
 toclosure.sig.sml
