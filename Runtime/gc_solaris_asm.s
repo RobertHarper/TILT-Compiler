@@ -410,15 +410,16 @@ returnFromYield:
 	.proc	07
 	.align  4
 save_regs_MLtoC:
+	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]	! save_regs does not save r1 (used for arg)
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure	
-	stw	%r4 , [%r1+16]				! save_regs does not save r4
+	stw	%r4, [%r1+16]				! save_regs does not save r4
 							!    so we can use this as temp if we save it
 	mov	%o7, %r4				! use r4 to hold return address
 	add	%o7, 8, %o7				! we want C to return to load_regs_MLtoC
 							! and NOT to the C call again so we skip
 							! 2 instructions (call and nop)
-	stw	%o7 , [THREADPTR_REG+MLsaveregs_disp+60] ! save_regs does not save o7
+	stw	%o7, [%r1+60]                           ! save_regs does not save o7
 	call	save_regs
 	nop
 	mov	%r4, %o7				! restore return address
@@ -440,6 +441,7 @@ save_regs_MLtoC:
 	.proc	07
 	.align  4
 load_regs_MLtoC:
+	flushw
 	mov	%l0, THREADPTR_REG			! restore THREADPTR_REG
 	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
