@@ -22,7 +22,7 @@ functor NilPrimUtilParam(structure Nil : NIL)
 	fun con_ref c = Prim_c(Ref_c,[c])
 	fun con_vector c = Prim_c(Vector_c,[c])
 	fun con_tag c = Prim_c(Exntag_c,[c])
-	val con_bool = Prim_c(Sum_c{tagcount=0w2,known=NONE},[])
+	val con_bool = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
 	val con_unit = Prim_c(Record_c [], [])
 	val unit_value = Prim_e(NilPrimOp(record []),[],[])
 
@@ -37,8 +37,10 @@ functor NilPrimUtilParam(structure Nil : NIL)
 	    let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) clist
 	    in Prim_c(Record_c labels,clist)
 	    end
-	val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w0}),[],[])
-	val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])
+	val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[Crecord_c[]])
+	val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[Crecord_c[]])
+	val false_exp = Prim_e(NilPrimOp inject,[false_con],[])
+	val true_exp = Prim_e(NilPrimOp inject,[true_con],[])
 	fun bool2exp false = false_exp
 	  | bool2exp true = true_exp
 

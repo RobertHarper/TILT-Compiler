@@ -29,9 +29,13 @@ struct
 	val num_lcon_sum = ref 0
 	val num_lcon_inj = ref 0
 	val num_lcon_case = ref 0
+	val num_lcon_expb = ref 0
+	val num_lcon_conb = ref 0
 	val sum_depth_case = ref 0
 	val sum_depth_inj = ref 0
 	val sum_depth_sum = ref 0
+	val sum_depth_expb = ref 0
+	val sum_depth_conb = ref 0
 	fun reset_state() : state = (seen := VarSet.empty; 
 				     num_renamed := 0;
 				     num_var := 0;
@@ -41,9 +45,13 @@ struct
 				     num_lcon_sum := 0;
 				     num_lcon_inj := 0;
 				     num_lcon_case := 0;
+				     num_lcon_expb := 0;
+				     num_lcon_conb := 0;
 				     sum_depth_inj := 0;
 				     sum_depth_case := 0;
 				     sum_depth_sum := 0;
+				     sum_depth_expb := 0;
+				     sum_depth_conb := 0;
 				     VarMap.empty)
 
 	fun state_stat str (m : state) : unit = 
@@ -128,13 +136,17 @@ struct
 	   fun mapset f s = list2set(map f (set2list s))
 
        in  (case arg_bnd of
-		Con_b (v,k,c) => let val c = lcon state c
+		Con_b (v,k,c) => let val _ = sum_depth_conb := !sum_depth_conb + 1
+				     val c = lcon state c
 				     val k = lkind state k
+				     val _ = sum_depth_conb := !sum_depth_conb + 1
 				     val (state,v) = add_var(state,v)
 				 in  (Con_b(v,k,c), state)
 				 end
 	      | Exp_b (v,c,e) => let val e = lexp state e
+				     val _ = sum_depth_expb := !sum_depth_expb + 1
 				     val c = lcon state c
+				     val _ = sum_depth_expb := !sum_depth_expb - 1
 				     val (state,v) = add_var(state,v)
 				 in  (Exp_b(v,c,e), state)
 				 end
@@ -180,13 +192,13 @@ struct
 		end
 	  | Prim_e (ap,clist,elist) =>
 		let val _ = (case ap of
-				 NilPrimOp (inject _) => sum_depth_inj := !sum_depth_inj + 1
-			       | NilPrimOp (inject_record _) => sum_depth_inj := !sum_depth_inj + 1
+				 NilPrimOp inject  => sum_depth_inj := !sum_depth_inj + 1
+			       | NilPrimOp inject_record  => sum_depth_inj := !sum_depth_inj + 1
 			       | _ => ())
 		    val clist' = map (lcon state) clist
 		    val _ = (case ap of
-				 NilPrimOp (inject _) => sum_depth_inj := !sum_depth_inj - 1
-			       | NilPrimOp (inject_record _) => sum_depth_inj := !sum_depth_inj - 1
+				 NilPrimOp inject => sum_depth_inj := !sum_depth_inj - 1
+			       | NilPrimOp inject_record => sum_depth_inj := !sum_depth_inj - 1
 			       | _ => ())
 		    val elist' = map (lexp state) elist
 		in  Prim_e(ap,clist',elist')
@@ -210,10 +222,10 @@ struct
 			in  Switch_e(pack sw')
 			end
 		    fun nada arg = arg
-		    fun sumhelp (w,cons) = let val _ = sum_depth_case := !sum_depth_case + 1
-					       val cons = map (lcon state) cons
+		    fun sumhelp c = let val _ = sum_depth_case := !sum_depth_case + 1
+					       val result = lcon state c
 					       val _ = sum_depth_case := !sum_depth_case - 1
-					   in  (w,cons)
+					   in  result
 					   end
 		in  (case switch of
 			 (Intsw_e sw) => help Intsw_e nada (lexp state) nada sw
@@ -256,6 +268,12 @@ struct
        (num_lcon := !num_lcon + 1;
 	if (!sum_depth_inj > 0)
 	    then num_lcon_inj := !num_lcon_inj + 1
+	else ();
+	if (!sum_depth_expb > 0)
+	    then num_lcon_expb := !num_lcon_expb + 1
+	else ();
+	if (!sum_depth_conb > 0)
+	    then num_lcon_conb := !num_lcon_conb + 1
 	else ();
 	if (!sum_depth_sum > 0)
 	    then num_lcon_sum := !num_lcon_sum + 1
@@ -416,6 +434,12 @@ struct
 		    print (Int.toString (!num_lexp)); print "\n";
 		    print "Number of lcon calls: ";
 		    print (Int.toString (!num_lcon)); print "\n";
+
+		    print "Number of lcon calls with Exp_b: ";
+		    print (Int.toString (!num_lcon_expb)); print "\n";
+		    print "Number of lcon calls with Con_b: ";
+		    print (Int.toString (!num_lcon_conb)); print "\n";
+
 		    print "Number of lcon calls with sums: ";
 		    print (Int.toString (!num_lcon_sum)); print "\n";
 		    print "Number of lcon calls with case: ";

@@ -540,14 +540,14 @@ functor NilSubstFn(structure Nil : NIL
 	     Intsw_e {info=intsize,arg=arg,
 		      arms=arms,default=default}
 	   end
-	  | Sumsw_e {info=(tagcount,decl_cons),arg,arms,default} => 
+	  | Sumsw_e {info,arg,arms,default} => 
 	   let
 	     val arg = substExpConInExp' maps arg
 	     val arms = map_second (substExpConInFunction' maps) arms
-	     val decl_cons = map (substConInCon conmap) decl_cons
+	     val info = substConInCon conmap info
 	     val default = mapopt (substExpConInExp' maps) default
 	   in
-	     Sumsw_e {info=(tagcount,decl_cons),arg=arg,
+	     Sumsw_e {info=info,arg=arg,
 		      arms=arms,default=default}
 	   end
 	  | Exncase_e {info,arg,arms,default} =>

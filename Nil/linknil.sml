@@ -133,8 +133,11 @@ structure Linknil (* : LINKNIL *) =
 			    structure Subst = NilSubst)
 
     structure Optimize = Optimize(structure Nil = Nil
-				    structure NilUtil = NilUtil
-				    structure Ppnil = PpNil)
+				  structure Subst = NilSubst			
+				  structure NilUtil = NilUtil
+				  structure NilContext = NilContext
+				  structure NilStatic = NilStatic
+				  structure Ppnil = PpNil)
 
     structure Specialize = Specialize(structure Nil = Nil
 				    structure NilUtil = NilUtil
@@ -446,6 +449,9 @@ val _ = (print "Nil final context is:\n";
 			then showmod (!show_one_optimize orelse debug,!show_size) 
 			        "OneOptimize" (filename, nilmod)
 		    else ()
+
+	    val nilmod = (Stats.timer("Linearization__temp",Linearize.linearize_mod)) nilmod
+
 
 	    val nilmod = if (!do_specialize)
 			     then (Stats.timer("Specialize",Specialize.optimize)) nilmod

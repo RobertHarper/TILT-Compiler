@@ -62,6 +62,7 @@ sig
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
     | Sum_c of {tagcount : w32,
+		totalcount : w32,
                 known : w32 option}           (* sum types *)
     | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
@@ -97,16 +98,17 @@ sig
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection; takes the record type *)
-    | inject of {tagcount : w32,
-                 sumtype : w32}    (* slow; sum intro *)
-    | inject_record of {tagcount : w32,       (* fast; sum intro where argument is a record *)
-			sumtype : w32}	      (* whose components are individually passed in *)
-    | project_sum of {tagcount : w32,
-                      sumtype  : w32}         (* slow; given a special sum type, return carried value *)
-    | project_sum_record of {tagcount : w32,
-			     sumtype  : w32,
-                             field : label}     (* fast; given a special sum type of record type, 
-				                 return the specified field *)
+    | inject                     (* slow; must be given one type that is
+				    reducible to a known sum type *)
+    | inject_record              (* fast; must be given one type that is reducible
+				    to a known sum type; the known component must 
+				    be reducible to a record; the term components
+				    consituting the record are passed separately 
+				    to this primitive *)
+    | project_sum                (* slow; same requirement as inject *)
+    | project_sum_record of label (* fast; same requirement as inject_record;
+				     the record type must contain the label given here *)
+
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 
@@ -128,7 +130,7 @@ sig
    *)
   datatype switch =                                 (* Switching on / Elim Form *)
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
-    | Sumsw_e of (w32 * con list,exp,w32) sw              (* sum types *)
+    | Sumsw_e of (con,exp,w32) sw                         (* sum types *)
     | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
     | Typecase_e of (unit,con,primcon) sw                 (* typecase *)
 

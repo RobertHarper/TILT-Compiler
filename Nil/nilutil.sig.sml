@@ -87,7 +87,7 @@ signature NILUTIL =
     val strip_boxfloat : Nil.con -> Nil.Prim.floatsize option
     val strip_float : Nil.con -> Nil.Prim.floatsize option
     val strip_int : Nil.con -> Nil.Prim.intsize option
-    val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 option * Nil.con list) option
+    val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 * Nil.w32 option * Nil.con) option
     val strip_arrow : Nil.con -> 
       (Nil.openness*Nil.effect*(Nil.var*Nil.kind) list*Nil.con list*Nil.w32*Nil.con) option
     val strip_record : Nil.con -> (Nil.label list * Nil.con list) option

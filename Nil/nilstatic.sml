@@ -423,7 +423,7 @@ struct
 		   (error "Record contains field of non-word kind" handle e => raise e))
 	      else
 		(error "Record contains duplicate field labels" handle e => raise e))
-	 | (Sum_c {known,tagcount}) => 
+	 | (Sum_c {known,totalcount,tagcount}) => 
 	      (if c_all (is_word_kind D) b_perr_k kinds then
 		 let
 		   val valid =  
@@ -827,7 +827,7 @@ struct
 	 | AllArrow_c _ => con
 	 | Var_c v => (case NilContext.find_kind_equation(D,con) of
 			 NONE => con
-		       | SOME c => c)
+		       | SOME c => con_reduce (D,c))
 	 | Crecord_c lclist => con
 	 | Closure_c _ => con
 	 | Typecase_c _ => error "typecase_c not handled yet"
@@ -1138,20 +1138,29 @@ struct
 		printl ("Label "^(label2string label)^" projected from expression");
 		(error "No such label" handle e => raise e))
 	 end
-	| (inject {tagcount,sumtype},cons,exps as ([] | [_])) =>  
+	| (inject,[sumcon],exps as ([] | [_])) =>  
 	 let
-	   val (cons,kinds) = 
-	     unzip (map (curry2 con_valid D) cons)
-	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},cons) (*Can't propogate sumtype*)
+	   val (sumcon,_) = con_valid(D,sumcon)
+	   val (tagcount,totalcount,sumtype,carrier) = 
+		 (case strip_sum sumcon of
+	           SOME (tc,total,SOME st,c) => (tc,total,st,c)
+	         | _ => (error "inject type argument does not have special sum type"))
+	   val con = Prim_c (Sum_c {tagcount=tagcount,
+				    totalcount=totalcount,known=NONE},[carrier]) (*Can't propogate sumtype*)
 	 in
 	   case exps 
 	     of [] => 
 	       if (sumtype < tagcount) then
-		 ((prim,cons,[]),con)
+		 ((prim,[carrier],[]),con)
 	       else
-		 (perr_e (Prim_e (NilPrimOp prim,cons,[]));
+		 (perr_e (Prim_e (NilPrimOp prim,[carrier],[]));
 		  (error "Illegal injection - sumtype out of range" handle e => raise e))
 	      | argexp::_ =>    
+		 let val cons = (* carrier should be normalized already *) 
+		     (case carrier of
+			  Crecord_c lcons => map #2 lcons
+			| c => [c])
+		 in
 		 if (tagcount <= sumtype) andalso 
 		   ((Word32.toInt sumtype) < ((Word32.toInt tagcount) + (List.length cons))) then
 		   let
@@ -1167,19 +1176,27 @@ struct
 		 else
 		   (perr_e (Prim_e (NilPrimOp prim,cons,[argexp]));
 		    (error "Illegal injection - field out of range" handle e => raise e))
+		end
 	 end
-	| (inject_record {tagcount,sumtype},argcons,argexps) => 
+	| (inject_record, [sumcon], argexps) => 
 	 let
-	   val (argcons,argkinds) = 
-	     unzip (map (curry2 con_valid D) argcons)
 	   val (argexps,expcons) = 
 	     unzip (map (curry2 exp_valid D) exps)
-	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},argcons) (*can't propogate field*)
+	   val (sumcon,_) = con_valid(D,sumcon)
+	   val (tagcount,totalcount,sumtype,carrier) = 
+		 (case strip_sum sumcon of
+	           SOME (tc,total,SOME st,c) => (tc,total,st,c)
+	  	 | _ => error "inject_record not decorated with special sum type")
+	   val con = Prim_c (Sum_c {tagcount=tagcount,totalcount=totalcount,known=NONE},[carrier]) (*can't propogate field*)
+	   val cons = (* carrier should be normalized already *) 
+	       (case carrier of
+		    Crecord_c lcons => map #2 lcons
+		  | c => [c])
 	 in
 	   if (tagcount <= sumtype) andalso 
-	     ((Word32.toInt sumtype) < ((Word32.toInt tagcount) + (List.length argcons))) then
+	     ((Word32.toInt sumtype) < ((Word32.toInt tagcount) + (List.length cons))) then
 	     let
-	       val con_k = List.nth (argcons,Word32.toInt (sumtype-tagcount))
+	       val con_k = List.nth (cons,Word32.toInt (sumtype-tagcount))
 	       val (labels,cons) = 
 		 case strip_record con_k
 		   of SOME (ls,cs) => (ls,cs)
@@ -1189,7 +1206,7 @@ struct
 	     in
 	       if c_all2 (fn (c1,c2) => type_equiv(D,c1,c2))
 		 (o_perr_c_c "Length mismatch in record") (expcons,cons) then 
-		 ((prim,argcons,argexps),con)
+		 ((prim,cons,argexps),con)
 	       else
 		  (error "Illegal record injection - type mismatch in args" handle e => raise e)
 	     end
@@ -1198,70 +1215,55 @@ struct
 	      PpNil.pp_exp (Prim_e (NilPrimOp prim,cons,exps));
 	      (error "Illegal injection - field out of range" handle e => raise e))
 	 end
-	| (project_sum {tagcount,sumtype},argcons,[argexp]) => 
+	| (project_sum,[argcon],[argexp]) => 
 	 let
-	   val (argexp,argcon) = exp_valid (D,argexp)
-	   val (argcons,argkinds) = unzip (map (curry2 con_valid D) argcons)
+	   val (argexp,argcon') = exp_valid (D,argexp)
+	   val (argcon'',argkind) = con_valid(D,argcon)
+	   val (tagcount,totalcount,field,carrier) = 
+		 (case strip_sum argcon' of
+	           SOME (tc,total,SOME f, c) => (tc,total,f,c)
+	         | _ => (error "project_sum's term argument does not have special sum type"))
+	 val cons = (* carrier should be normalized already *) 
+		     (case carrier of
+			  Crecord_c lcons => map #2 lcons
+			| c => [c])
+	   val which = if (field >= tagcount) then Word32.toInt (field - tagcount)
+				else error "field < tagcount for project_sum"
+           val con_i = List.nth (cons,which)
 	 in
-	   case strip_sum argcon
-	     of SOME (tagcount',SOME field,cons) =>
-	       if tagcount' = tagcount andalso
-		 field = sumtype andalso
-		 (field >= tagcount) andalso
-		 (Word32.toInt field) < ((Word32.toInt tagcount) + List.length argcons) then
-		 let
-		   val con_i = List.nth (argcons,Word32.toInt (field - tagcount))
-		 in
-		   if c_all2 (fn (c1,c2) => type_equiv(D,c1,c2))
-			 (o_perr_c_c "Length mismatch in project") (cons,argcons) then
-		     ((prim,argcons,[argexp]),con_i)
-		   else
-		      (error "Arguments to project_sum don't match" handle e => raise e)
-		 end
-	       else 
-		 (perr_e_c ((Prim_e (NilPrimOp prim,cons,exps)),
-			    argcon);
-		  (error "Illegal projection - numbers don't match" handle e => raise e))
-	      | _ => 
-		 (perr_e_c ((Prim_e (NilPrimOp prim,cons,exps)),
-			    argcon);
-		  (error "Illegal projection - expression not of sum type" handle e => raise e))
+           if type_equiv(D,argcon',argcon'')
+		then ((prim,[argcon],[argexp]),con_i)
+	   else	
+		(error "project_sum's decoration type and term argument type mismatch")
 	 end
-	| (project_sum_record {tagcount,sumtype,field},argcons,[argexp]) => 
+	| (project_sum_record l,[argcon],[argexp]) => 
 	 let
-	   val (argexp,argcon) = exp_valid (D,argexp)
-	   val (argcons,argkinds) = unzip (map (curry2 con_valid D) argcons)
+	   val (argexp,argcon') = exp_valid (D,argexp)
+	   val (argcon'',argkind) = con_valid(D,argcon)
+	   val (tagcount,totalcount,field,carrier) = 
+		 (case strip_sum argcon' of
+	           SOME (tc,total,SOME f, c) => (tc,total,f,c)
+	         | _ => (error "project_sum's term argument does not have special sum type"))
+	   val cons = (* carrier should be normalized already *) 
+	       (case carrier of
+		    Crecord_c lcons => map #2 lcons
+		  | c => [c])
+	   val which = if (field >= tagcount) then Word32.toInt (field - tagcount)
+				else error "field < tagcount for project_sum"
+           val con_i = List.nth (cons,which)
+	   val _ = (case con_i of
+		     Prim_c(Record_c labs, _) => 
+			(if (Listops.member_eq(Name.eq_label,l,labs))
+			  then ()
+		        else error "project_sum_record summand type reduce to a record type without named label")
+		   | _ => error "project_sum_record has summand type not equal to a record type")
 	 in
-	   case strip_sum argcon
-	     of SOME (tagcount',SOME sumtype',cons) =>
-	       (if tagcount' = tagcount andalso
-		  sumtype = sumtype' andalso
-		  tagcount <= sumtype andalso
-		  (Word32.toInt sumtype) < ((Word32.toInt tagcount) + List.length argcons) then
-		  if c_all2 (fn (c1,c2) => type_equiv(D,c1,c2))
-		 (o_perr_c_c "Length mismatch in project sum") (cons,argcons) 
-		    then
-		      let
-			val con_i = List.nth (argcons,Word32.toInt (sumtype - tagcount))
-		      in
-			case strip_record con_i
-			  of SOME (labels,cons) =>
-			      (case Listops.assoc_eq(Name.eq_label,field,Listops.zip labels cons) of
-				   SOME field_con => ((prim,argcons,[argexp]),field_con)
-				 | NONE => (error "Project_sum_record field out of range" handle e => raise e))
-			   | NONE => 
-			      (perr_c con_i;
-			       (error "Non recrod type in sum record projection" handle e => raise e))
-		      end
-		  else
-		    (error "Arguments to project_sum don't match" handle e => raise e)
-		else 
-		  (perr_e (Prim_e (NilPrimOp prim,cons,exps));
-		   (error "Illegal projection - numbers don't match" handle e => raise e)))
-	      | _ => 
-		  (perr_e (Prim_e (NilPrimOp prim,cons,exps));
-		   (error "Illegal projection - expression not of sum type" handle e => raise e))
+           if type_equiv(D,argcon',argcon'')
+		then ((prim,[argcon],[argexp]),con_i)
+	   else	
+		(error "project_sum's decoration type and term argument type mismatch")
 	 end
+
 	| (box_float floatsize,[],[exp]) => 
 	 let
 	   val (exp,con) = exp_valid (D,exp)
@@ -1408,21 +1410,21 @@ struct
 		     arms=arms,default=default},
 	    rep_con)
 	 end
-	| Sumsw_e {info=(non_val,val_cons),arg,arms,default} => 
+	| Sumsw_e {info,arg,arms,default} => 
 	 let
 	   val (arg,argcon) = exp_valid (D,arg)
 	   val (ns,arm_fns) = unzip arms
 	   val arm_fns = map (curry2 function_valid  D) arm_fns
-	   val (val_cons,_) = unzip (map (curry2 con_valid D) val_cons)
+	   val (sum_decl,_) = con_valid(D,info)
 
 	   val arms = zip ns arm_fns
 
 	   local
-	     val (sum_decl,_) = con_valid(D,Prim_c (Sum_c {tagcount=non_val,known=NONE},val_cons))
-	     val cons = 
+
+	     val (non_val,totalcount,_,carrier) = 
 	       if type_equiv(D,sum_decl,argcon) then
-		 case strip_sum argcon
-		   of SOME (_,_,cons) => cons
+		 case strip_sum argcon of
+		      SOME quad => quad
 		    | _ => 
 		     (perr_e_c (arg,argcon);
 		      (error "Branch argument not of sum type" handle e => raise e))
@@ -1432,8 +1434,14 @@ struct
 	  	  PpNil.pp_con sum_decl; print "\n";
 		  error "Type given for sum switch argument does not match found type")
 
+	     val cons = (* carrier should be normalized already *) 
+		 (case carrier of
+		      Crecord_c lcons => map #2 lcons
+		    | c => [c])
+
 	     fun mk_sum field = 
 	       Prim_c (Sum_c {tagcount=non_val,
+			      totalcount=totalcount,
 			      known=SOME ((Word32.fromInt field)+non_val)},cons)
 
 	     val known_sums = map0count mk_sum (List.length cons)
@@ -1482,7 +1490,7 @@ struct
 	   end
 
 	 in
-	   (Sumsw_e {info=(non_val,val_cons),arg=arg,
+	   (Sumsw_e {info=sum_decl,arg=arg,
 		     arms=arms,default=default},
 	    rep_con)
 	 end

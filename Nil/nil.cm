@@ -63,7 +63,9 @@ subst.sml
 subst.sig.sml
 normalize.sml
 normalize.sig.sml
+optimize.sig.sml  
 optimize.sml  
+specialize.sig.sml
 specialize.sml
 
 (* ----- Optimizer Stuff ------- *)

@@ -67,6 +67,7 @@ struct
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
     | Sum_c of {tagcount : w32,
+		totalcount : w32,
                 known : w32 option}           (* sum types *)
     | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
@@ -102,16 +103,10 @@ struct
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection *)
-    | inject of {tagcount : w32,
-                 sumtype : w32}    (* slow; sum intro *)
-    | inject_record of {tagcount : w32,       (* fast; sum intro where argument is a record *)
-			sumtype : w32}	      (* whose components are individually passed in *)
-    | project_sum of {tagcount : w32,
-                      sumtype  : w32}         (* slow; given a special sum type, return carried value *)
-    | project_sum_record of {tagcount : w32,
-			     sumtype  : w32,
-                             field : label}     (* fast; given a special sum type of record type, 
-				                 return the specified field *)
+    | inject
+    | inject_record
+    | project_sum
+    | project_sum_record of label
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 
@@ -133,7 +128,7 @@ struct
    *)
   datatype switch =                                 (* Switching on / Elim Form *)
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
-    | Sumsw_e of (w32 * con list,exp,w32) sw              (* sum types *)
+    | Sumsw_e of (con,exp,w32) sw                         (* sum types *)
     | Exncase_e of (unit,exp,exp) sw                      (* exceptions *)
     | Typecase_e of (unit,con,primcon) sw                 (* typecase *)
 

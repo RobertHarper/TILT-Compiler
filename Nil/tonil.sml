@@ -52,6 +52,8 @@ struct
    val select_carries_types = Stats.bool "select_carries_types"
    fun error msg = Util.error "tonil.sml" msg
 
+   fun msg str = if (!diag) then print str else ()
+
    val printl = Util.printl
    val lprintl = Util.lprintl
    val strip_var = Nilutil.strip_var
@@ -214,6 +216,7 @@ struct
          LET_E bnds, fixopen-LEAF foo formal = fnbody IN foo arg ==>
                  makeLetE (bnds, formal = arg) IN fnbody
     *)
+
    fun makeLetE nil body = body
      | makeLetE ebnds (Let_e(Sequential, ebnds', body)) =
           makeLetE (ebnds @ ebnds') body
@@ -252,6 +255,47 @@ struct
        in
            con_bnds @ exp_bnds @ fp_bnds
        end
+
+   fun compressLetE (original as Let_e(sort,bnds,body)) = 
+	let datatype exp_usage = PROJECT of var * exp | USE | CLOSED
+	    fun check newvar ve_opt 
+		(e as Prim_e(np as (NilPrimOp (select l)),clist,[Var_e v])) = 
+		(case ve_opt of
+			NONE => PROJECT(newvar,e)
+		      | SOME (v',e') => 
+				if (Name.eq_var(v,v'))
+				  then PROJECT(newvar,Prim_e(np,clist,[e']))
+				else USE)
+	      | check newvar ve_opt
+		(e as App_e(c,Var_e v,clist,[],[])) = 
+		(case ve_opt of
+			NONE => PROJECT(newvar,e)
+		      | SOME(v',e') =>
+				if (Name.eq_var(v,v'))
+				  then PROJECT(newvar,App_e(c,e',clist,[],[]))
+				else USE)
+	      | check _ _ (Prim_e(NilPrimOp (record _), _, [])) = CLOSED
+	      | check _ _ _ = USE
+	    fun loop acc [] NONE = original
+	      | loop acc [] (SOME ve) =
+		(case (check (Name.fresh_named_var "junk") (SOME ve) body) of 
+			USE => original
+		      | CLOSED => original
+		      | PROJECT (_,e) => Let_e(sort,rev acc,e))
+	      | loop acc (bnd::rest) ve_opt = 
+		(case bnd of
+		   Con_b _ => loop (bnd::acc) rest ve_opt
+		 | Exp_b (v,_,e) => 
+			(case check v ve_opt e of
+			  USE => original
+			| CLOSED => loop (bnd::acc) rest ve_opt
+			| PROJECT ve => loop acc rest (SOME ve))
+		| _ => original)
+	in  loop [] bnds NONE
+	end
+     | compressLetE e = e
+
+    val makeLetE = fn bnds => fn e => compressLetE(makeLetE bnds e)
 
    (* makeApply
          Creates an application.  Optimizes (beta-reduces) 
@@ -559,6 +603,7 @@ in
 
    fun update_NILctx_insert_con_list(CONTEXT{NILctx,used,vmap,
 					     memoized_mpath, alias,convarmap},vclist) = 
+
        let val NILctx' = foldl (fn ((v,c),ctxt) => Nilcontext.insert_con(ctxt, v, c)) NILctx vclist
 	   val used' = foldl (fn ((v,_),used) => Name.VarMap.insert(used,v,ref false)) used vclist
        in  CONTEXT{NILctx=NILctx', vmap=vmap, 
@@ -886,17 +931,18 @@ end (* local defining splitting context *)
 		else NONE
 	  | _ => NONE)
 
-   fun strip_kind (k : kind) : kind = 
+   fun strip_kind kill_single (k : kind) : kind = 
        let open Nilutil
 	   fun khandle(_,Record_k seq) = 
 	       let val ls = Util.sequence2list seq
 		   fun not_dead_arrow(v,k as Arrow_k(_,_,Record_k seq)) = if (null (Util.sequence2list seq))
 									      then NONE
-									  else SOME(v,strip_kind k)
-		     | not_dead_arrow (v,k) = SOME(v,strip_kind k)
+									  else SOME(v,strip_kind kill_single k)
+		     | not_dead_arrow (v,k) = SOME(v,strip_kind kill_single k)
 		   val ls = List.mapPartial not_dead_arrow ls
 	       in  CHANGE_NORECURSE(Record_k(Util.list2sequence ls))
 	       end 
+	     | khandle (_,Singleton_k(_,k,_)) = if kill_single then CHANGE_RECURSE k else NOCHANGE
 	     | khandle _ = NOCHANGE
 	   val handlers = (fn _ => NOCHANGE,
 			   fn _ => NOCHANGE,
@@ -904,6 +950,35 @@ end (* local defining splitting context *)
 			   fn _ => NOCHANGE,
 			   khandle)
        in kind_rewrite handlers k
+       end
+
+
+   fun reduce_to_sum str context con = 
+       let fun local_error ()= 
+	   (print str; print " has sumtype = \n";
+	    Ppnil.pp_con con; 
+	    print "\n reducing to non sum type = \n";
+	    Ppnil.pp_con (nilcontext_con_reduce(context,con));
+	    print "\n in context = \n";
+	    nilcontext_print context; print "\n";
+	    error (str ^ " has sumtype whose translate is irreducible to a sum type"))
+	   fun help (tagcount,totalcount,known,carrier) = 
+	   if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1)))
+	       then (tagcount,totalcount,known,[carrier])
+	   else (case carrier of
+		     Crecord_c lcons => (tagcount,totalcount,known,map #2 lcons)
+		   | _ => (case nilcontext_con_reduce(context,carrier) of
+			       Crecord_c lcons => (tagcount,totalcount,known,map #2 lcons)
+			     | _ => local_error()))
+       in
+       (case con of
+	   Prim_c(Sum_c {tagcount,totalcount,known},[carrier]) => 
+	       help(tagcount,totalcount,known,carrier)
+	 | _ => 
+	       (case nilcontext_con_reduce(context,con) of
+		    Prim_c(Sum_c {tagcount,totalcount,known},[carrier]) => 
+			help(tagcount,totalcount,known,carrier)
+		  | c => local_error()))
        end
 
    fun xmod context (args as (il_mod, preferred_name)) =
@@ -936,7 +1011,8 @@ end (* local defining splitting context *)
 				(case preferred_name of 
 				  NONE => (name_c,name_r,LIST[],LIST[],context)
 				| SOME(_,pc,pr) => 
-					let val context = update_NILctx_insert_kind(context,pc,knd_c_context)
+					let val context = update_NILctx_insert_kind_equation(context,pc,
+										    name_c, knd_c_context)
 					    val context = update_NILctx_insert_con(context,pr,type_r)
 					in  (Var_c pc, Var_e pr, 
 						LIST[(pc,knd_c,name_c)], LIST[Exp_b(pr,type_r,name_r)],
@@ -995,8 +1071,14 @@ end (* local defining splitting context *)
 		 else ()
 	    fun folder (mpath,(cbnds,ebnds,context)) = 
 		let val _ = (print "Working on "; Ppil.pp_mod mpath; print "\n")
+		    fun loop (Il.MOD_VAR v) acc = (Name.var2name v) ^ acc
+		      | loop (Il.MOD_PROJECT (m,l)) acc = loop m ("_" ^ (Name.label2name l) ^ acc)
+		    val var = Name.fresh_named_var(loop mpath "")
+		    val (var_c, var_r, vmap) = splitVar (var, vmap_of context)
+		    val context = update_vmap(context,vmap)
 		    val {cbnd_cat,ebnd_cat,name_c,name_r,knd_c,
-			 knd_c_context,context,type_r,valuable,vmap} = xmod context (mpath,NONE)
+			 knd_c_context,context,type_r,valuable,vmap} =
+			  xmod context (mpath,SOME(var,var_c,var_r))
 		    val cbnds = cbnd_cat::cbnds
 		    val ebnds = ebnd_cat::ebnds
 		    val context = add_module_alias(context,mpath,name_c,name_r,knd_c,knd_c_context,type_r)
@@ -1024,8 +1106,9 @@ end (* local defining splitting context *)
 		| _ => (print "Variable: "; Ppnil.pp_var var_mod_c;
 			error "Constructor variable not found in context")
 
+
 	   val generated_mod_c = generate_con_from_kind knd_c
-	   val knd_c_real = strip_kind knd_c
+	   val knd_c_real = strip_kind true knd_c
 
            val type_r = 
 	     case nilcontext_find_con (context, var_mod_r) of
@@ -1053,8 +1136,9 @@ end (* local defining splitting context *)
 		  | SOME (_, name_c, name_r) => 
 			(LIST (cbnds@[(name_c, knd_c_real, Var_c var_mod_c)]),
 			 LIST [Exp_b (name_r, type_r, Var_e var_mod_r)],
-			 update_NILctx_insert_kind
-			  (update_NILctx_insert_con(context,name_r, type_r), name_c, knd_c)))
+			 update_NILctx_insert_kind_equation
+			  (update_NILctx_insert_con(context,name_r, type_r), 
+			   name_c, Var_c var_mod_c, knd_c)))
 
        in
 	   {cbnd_cat = cbnd_cat,
@@ -1274,7 +1358,7 @@ end (* local defining splitting context *)
 		       then ((case (generate_con_from_kind knd_proj_c) of
 				  NONE => con_proj_c
 				| SOME c => c),
-			     strip_kind knd_proj_c)
+			     strip_kind true knd_proj_c)
 		   else (con_proj_c, knd_proj_c)
 
 
@@ -2054,6 +2138,9 @@ end (* local defining splitting context *)
 	   val context = (case (extractPathLabels il_module) of
 			      (Il.MOD_VAR tovar,labs) => add_modvar_alias(context,var,(tovar,labs))
 			    | _ => context)
+
+
+	       
 	   val {final_context, cbnd_cat, ebnd_cat, valuable, record_c_con_items,
 		record_c_knd_items, record_c_knd_items_context, 
 		record_r_labels, record_r_field_types,
@@ -2143,7 +2230,7 @@ end (* local defining splitting context *)
 	   val con = (case generate_con_from_kind kind of
 			  NONE => con
 			| SOME c => c)
-	   val kind_real = strip_kind kind
+	   val kind_real = strip_kind true kind
        in
 	   (con, kind_real, kind)
        end
@@ -2347,14 +2434,18 @@ end (* local defining splitting context *)
        end
 
 
-     | xcon' context (Il.CON_SUM {carriers, noncarriers, special}) =
+     | xcon' context (Il.CON_SUM {carrier, noncarriers, special}) =
        let
 	   val known = (case special of
 			       NONE => NONE
 			     | SOME i => SOME (Word32.fromInt i))
-	   val cons = map (#1 o (xcon context)) carriers
+	   val (carrier_con,k,_) = xcon' context carrier
+	   val num_carriers = (case k of
+				   (Record_k seq) => length(Util.sequence2list seq)
+				 | _ => 1)
 	   val con = Prim_c (Sum_c {tagcount = Word32.fromInt noncarriers,
-				    known = known}, cons)
+				    totalcount = Word32.fromInt(noncarriers + num_carriers),
+				    known = known}, [carrier_con])
 	   val knd = Word_k Runtime
        in
 	   (con, knd, knd)
@@ -2433,7 +2524,7 @@ end (* local defining splitting context *)
 		     else #2(nilcontext_con_valid (context, proj_con))
 
 	   (* this gets rid of Arrow_k(...,Record_k[]) *)
-	   val knd_stripped = strip_kind knd
+	   val knd_stripped = strip_kind true knd
        in
 	   (con, knd_stripped, knd)
        end
@@ -2708,11 +2799,12 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.SUM_TAIL (_, il_exp)) =
        let
-	   val (exp, con as (Prim_c(Sum_c {known = SOME i, tagcount}, cons)), valuable) = xexp context il_exp
-	   val which_con = TilWord32.toInt (TilWord32.uminus(i,tagcount))
-	   val field_con = List.nth(cons, which_con)
-       in  (Prim_e (NilPrimOp (project_sum {sumtype = i, tagcount = tagcount}), 
-		    cons, [exp]), field_con, valuable)
+	   val (exp, con, valuable) = xexp context il_exp
+	   val (tagcount,totalcount,SOME i, cons) = reduce_to_sum "SUM_TAIL" context con
+	   val which = TilWord32.toInt(TilWord32.uminus(i,tagcount))
+	   val field_con = List.nth(cons,which)
+       in  (Prim_e (NilPrimOp project_sum, [con],
+		    [exp]), field_con, valuable)
        end
 
      | xexp' context (Il.HANDLE (il_exp1, il_exp2)) = 
@@ -2794,43 +2886,28 @@ end (* local defining splitting context *)
        in  (Prim_e(NilPrimOp unroll, [mu_con], [exp]), expanded_con, valuable)
        end
 
-     | xexp' context (Il.INJ {carriers, noncarriers, special, inject=NONE}) =
+     | xexp' context (Il.INJ {sumtype, inject = eopt}) =
        let
-	   val sumtype = Word32.fromInt special
-	   val tagcount = Word32.fromInt noncarriers
-	   val cons = map (#1 o (xcon context)) carriers
-	   val con = Prim_c(Sum_c{tagcount = tagcount,
-				  known = NONE},
-			    cons)
+	   val (con,_,_) = xcon context sumtype
+	   val (valuable,elist) = (case eopt of
+			  	     NONE => (true,[])
+				   | SOME il_exp =>
+					let val (exp,_,valuable) = xexp context il_exp
+					in  (valuable,[exp])
+					end)
        in
-	   (Prim_e(NilPrimOp (inject {tagcount = tagcount,
-				      sumtype = sumtype}),
-		   cons, []),
-	    con, true)
+	   (Prim_e(NilPrimOp inject,[con],elist), con, valuable)
        end
 
 
-     | xexp' context (Il.INJ {carriers, noncarriers, special, inject=SOME il_exp}) =
+     | xexp' context (Il.CASE {sumtype, arg=il_arg, arms=il_arms,
+			       tipe,default=il_default}) =
        let
-	   val sumtype = Word32.fromInt special
-	   val tagcount = Word32.fromInt noncarriers
-	   val cons = map (#1 o (xcon context)) carriers
-	   val con = Prim_c(Sum_c{tagcount = tagcount,
-				  known = NONE},
-			    cons)
-	   val (exp, _, valuable) = xexp context il_exp
-       in
-	   (Prim_e(NilPrimOp (inject {tagcount = tagcount,
-				      sumtype = sumtype}),
-		   cons, [exp]),
-	    con, 
-	    valuable)
-       end
-
-     | xexp' context (Il.CASE {noncarriers, carriers=il_cons, arg=il_arg, arms=il_arms,
-			      tipe,default=il_default}) =
-       let
-	   val cons = map (#1 o (xcon context)) il_cons
+	   (* We want to use the result type given to avoid type blowup *)
+	   val (rescon,_,_) = xcon context tipe
+	   val (con,_,_) = xcon context sumtype
+	   val (tagcount,totalcount,_,cons) = reduce_to_sum "CASE" context con
+	   val noncarriers = TilWord32.toInt tagcount
 	   val (exp, _, valuable) = xexp context il_arg
 	       
 	   fun xarms (n, []) = []
@@ -2838,24 +2915,24 @@ end (* local defining splitting context *)
 	     | xarms (n, SOME ilexp :: rest) = 
 	       (if (n < noncarriers) then
 		    let
-			val (exp, con, valuable) = xexp context ilexp
+			val (exp, _, valuable) = xexp context ilexp
 			val effect = if valuable then Total else Partial
 		    in
-			(Word32.fromInt n, Function(effect, Leaf, [], [], [], exp, con))
+			(Word32.fromInt n, Function(effect, Leaf, [], [], [], exp, rescon))
 		    end
 		else
 		    (Word32.fromInt n, toFunction context ilexp)) 
 		:: (xarms (n+1, rest))
 
-	   val (arms as ((_,Function(_,_,_,_,_,_,con))::_)) = xarms (0, il_arms)
+	   val arms = xarms (0, il_arms)
 
 	   val default = (case il_default of 
 			      NONE => NONE
 			    | SOME e => SOME (#1 (xexp context e)))
        in
-	   (Switch_e(Sumsw_e {info = (Word32.fromInt noncarriers, cons), 
+	   (Switch_e(Sumsw_e {info = con,
 			      arg  = exp, arms = arms, default = default}),
-	    con, 
+	    rescon, 
 	    (* OVERLY CONSERVATIVE!! *)
 	    false)
        end
@@ -2893,39 +2970,31 @@ end (* local defining splitting context *)
                             ! elaborator_specific_optimizations
 
 	   val cbnds = flattenCatlist cbnd_cat
-
-
 	   val bnds = (map Con_b cbnds) @ 
 	              (flattenCatlist ebnd_cat)
 
            val unnormalized_con = 
 	       makeLetC (map Con_cb cbnds) 
-	                (if specialize then 
-			     type_r 
-			 else
-			     projectFromRecord context type_r [label])
+	                (if specialize then type_r 
+			 else projectFromRecord context type_r [label])
 
            val con = nilcontext_con_reduce(context, unnormalized_con)
 
 
 	   val let_body = 
-	       if specialize then 
-		   name_r
+	       if specialize then name_r
 	       else
-		 let
-		   val cons = 
+		 let val cons = 
 		     if !select_carries_types then
 		       case strip_record type_r 
 			 of SOME (labels,cons) => cons
 			  | NONE => error "Expected record type"
-		     else
-		       []
-		 in
-		   Prim_e (NilPrimOp (select label), cons, [name_r])
+		     else []
+		 in  Prim_e (NilPrimOp (select label), cons, [name_r])
 		 end
 
        in
-	       (makeLetE bnds let_body, 
+	       (compressLetE(makeLetE bnds let_body),
 		con,
 		valuable)
        end
@@ -3290,12 +3359,12 @@ print (Int.toString (length sdecs')); print "\n") *)
 		       then context
 		   else 
 		   (case pc of
-			Ilcontext.PHRASE_CLASS_EXP (_,il_type) => 
+			Il.PHRASE_CLASS_EXP (_,il_type) => 
 			    let
 				val (nil_type,_,_) = xcon context il_type
 			    in  update_NILctx_insert_con(context,v, nil_type)
 			    end
-		      | Ilcontext.PHRASE_CLASS_CON (il_con, il_kind) => 
+		      | Il.PHRASE_CLASS_CON (il_con, il_kind) => 
 			    let
 				val nil_kind = xkind context il_kind
 				val nil_con = 
@@ -3311,7 +3380,7 @@ print (Int.toString (length sdecs')); print "\n") *)
 					     update_NILctx_insert_kind_equation(context, v, c,
 						       Singleton_k(Runtime, nil_kind, c)))
 			    end
-		      | Ilcontext.PHRASE_CLASS_MOD (_,il_sig) => 
+		      | Il.PHRASE_CLASS_MOD (_,il_sig) => 
 			    let
 				val (v_c, v_r,_) = splitVar (v, vmap_of context)
 				val (knd_c_context, knd_c, type_r) = xsig context (Var_c v_c, il_sig)
@@ -3472,22 +3541,23 @@ val _ = (print "Nil final context is:\n";
 		    val (c,k) = Nilstatic.con_valid(nil_initial_context,Var_c v) 
 		    val k = strip_var_from_singleton(v,k) (* Singleton_k(Runtime,k,c)) *)
                     val k = if (!do_kill_cpart_of_functor)
-				then strip_kind k
+				then strip_kind false k
 			    else k
 		  in  (ImportType(l,v,k))::imps
 		  end
 	        else (Stats.counter("import_dead")(); imps )
 	      | folder ((ImpMod,v,l),imps) = 
-		if (Ilutil.is_exportable_lab l) (* a label is exportable iff it is importable *)
-		    then
+               (* a label is exportable iff it is importable *)
+		if (Ilutil.is_nonexport_lab l)
+		    then imps
+		    else
 			let val (cvar,rvar) = valOf (VarMap.find(import_varmap,v))
 			    val (cl,rl) = make_cr_labels l
 			in  folder((ImpExp,rvar,rl),folder((ImpType,cvar,cl),imps))
 			end
-		else imps
-(*	    val _ = print "---about to compute imports\n" *)
+	    val _ = msg "---about to compute imports\n" 
 	    val imports : import_entry list = rev (foldl folder [] import_temp)
-(*	    val _ = print "---adone with compute imports\n" *)
+	    val _ = msg "---done with compute imports\n" 
 
 	    (* create the export map by looking at the original sbnds;
 	      labels that are "exportable" must be exported
@@ -3516,31 +3586,28 @@ val _ = (print "Nil final context is:\n";
 			in loop (Var_c v) lbls
 			end
 		in
-		    (case (is_exportable_lab l andalso (not (!omit_datatype_bindings) orelse 
-							not (Ilutil.is_datatype_lab l)), 
-			   false andalso Name.is_label_open l, dec) of
-			 (false,false,_) => exports
-		       | (true,_,DEC_EXP (v,_)) => 
+		    (case (not (is_nonexport_lab l), dec) of
+			 (false,_) => exports
+		       | (true,DEC_EXP (v,_)) => 
 			     let val e = path2exp (make_rpath v)
 				 val (_,c) = Nilstatic.exp_valid(nil_final_context,e)
 			     in  (ExportValue(l,e,c)::exports)
 			     end
-		       | (true,_,DEC_CON (v,_,_)) =>
+		       | (true,DEC_CON (v,_,_)) =>
 			     let val c = path2con (make_cpath v)
 				 val (_,k) = Nilstatic.con_valid(nil_final_context,c)
 				 val k = if (!do_kill_cpart_of_functor)
-					     then strip_kind k
+					     then strip_kind false k
 					 else k
 			     in  if (!do_kill_cpart_of_functor andalso
 				     (case k of 
-					  (Arrow_k(_,_,Record_k seq)) => null (Util.sequence2list seq)
+					  (Arrow_k(_,_,Record_k seq)) => 
+					      null (Util.sequence2list seq)
 					| _ => false))
 				     then exports
 				 else (ExportType(l,c,k)::exports)
 			     end
-		       | (false,true,DEC_EXP _) => error "DEC_EXP with open label"
-		       | (false,true,DEC_CON _) => error "DEC_CON with open label"
-		       | (is_export,is_open,DEC_MOD (v,s)) => 
+		       | (true,DEC_MOD (v,s)) => 
 			     let val (lc,lr) = make_cr_labels l
 				 val (vc,vr) = (case VarMap.find(total_varmap,v) of
 						    SOME vrc => vrc
@@ -3548,60 +3615,37 @@ val _ = (print "Nil final context is:\n";
 							Ppnil.pp_var v;
 							print "\n";
 							error "total_varmap missing bindings"))
-(*
-				 val _ = (print "v = "; PpNil.pp_var v; print "\n";
-					  print "vc = "; PpNil.pp_var vc; print "\n";
-					  print "vr = "; PpNil.pp_var vr; print "\n")
-*)
+
 				 val rpath = make_rpath vr
 				 val cpath = make_cpath vc
 				 val exports = 
-				     if is_export
-					 then
-					     let 
-(*						 val _ = print "exporting module\n"  *)
-						 val er = path2exp rpath
-(*						 val _ = (print "er = "; PpNil.pp_exp er; print "\n") *)
-						 val (_,cr) = Nilstatic.exp_valid(nil_final_context,er)
-(*						 val _ = print "exporting module: type-checked exp\n"  *)
-						 val cc = path2con cpath
-						 val (_,kc) = Nilstatic.con_valid(nil_final_context,cc)
-						 val kc = if (!do_kill_cpart_of_functor)
-							     then strip_kind kc
-							 else kc
-(*						 val _ = print "done exporting module\n"  *)
-					     in if (!do_kill_cpart_of_functor andalso
-						    (case kc of 
-							 (Arrow_k(_,_,Record_k seq)) => 
-							     null (Util.sequence2list seq)
-						       | _ => false))
-						    then 
-							(ExportValue(lr,er,cr)::exports)
-						else 
-						 (ExportValue(lr,er,cr)::
-						 ExportType(lc,cc,kc)::
-						 exports)
-					     end
-				     else exports
-				 val exports = 
-				     (case (is_open,s) of
-					  (true,SIGNAT_STRUCTURE (_,sdecs)) =>
-					      let val _ = print "exporting open module\n"
-						  val res = foldl (folder (SOME (cpath,rpath))) exports sdecs
-						  val _ = print "done exporting open module\n"
-					      in res
-					      end
-					| (true, _) => 
-					      (print "DEC_MOD (non-structure) with open label:\n";
-					       Ppil.pp_signat s; print "\n";
-					       error "DEC_MOD (non-structure) with open label")
-					| _ => exports)
+				     let 
+
+					 val er = path2exp rpath
+					 val (_,cr) = Nilstatic.exp_valid(nil_final_context,er)
+					 val cc = path2con cpath
+					 val (_,kc) = Nilstatic.con_valid(nil_final_context,cc)
+					 val kc = if (!do_kill_cpart_of_functor)
+						      then strip_kind false kc
+						  else kc
+				     in if (!do_kill_cpart_of_functor andalso
+					    (case kc of 
+						 (Arrow_k(_,_,Record_k seq)) => 
+						     null (Util.sequence2list seq)
+					       | _ => false))
+					    then 
+						(ExportValue(lr,er,cr)::exports)
+					else 
+					    (ExportValue(lr,er,cr)::
+					     ExportType(lc,cc,kc)::
+					     exports)
+				     end
 			     in  exports
 			     end)
 		end
-(*	    val _ = print "---about to compute exports\n" *)
+	    val _ = msg "---about to compute exports\n" 
 	   val exports : export_entry list = rev(foldl (folder NONE) [] sdecs)
-(*	   val _ = print "---done with compute exports\n" *)
+	   val _ = msg "---done with compute exports\n" 
 
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,

@@ -219,9 +219,10 @@ functor Ppnil(structure ArgNil : NIL
       | pp_primcon Ref_c = String "REF"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
-      | pp_primcon (Sum_c {known = opt,tagcount,...}) = 
+      | pp_primcon (Sum_c {known = opt,tagcount,totalcount}) = 
 	String ("SUM" ^ (case opt of NONE => "" | SOME i => "_" ^ (TilWord32.toDecimalString i)) ^
-		"(" ^ (TilWord32.toDecimalString tagcount) ^ ")")
+		"(" ^ (TilWord32.toDecimalString tagcount) ^ ","
+		^ (TilWord32.toDecimalString totalcount) ^ ")")
       | pp_primcon (Record_c labels) = pp_list pp_label labels ("RECORD[", ",", "]", false)
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
 
@@ -244,15 +245,11 @@ functor Ppnil(structure ArgNil : NIL
 	String (case nilprimop of
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
-		  | inject {tagcount,sumtype} => ("inject" ^ (TilWord32.toDecimalString tagcount) ^ 
-						  "_" ^ (TilWord32.toDecimalString sumtype))
-		  | inject_record {tagcount,sumtype} => ("inject_rec" ^ (TilWord32.toDecimalString tagcount) ^ 
-							 "_" ^ (TilWord32.toDecimalString sumtype))
-		  | project_sum {tagcount,sumtype} => ("project_sum" ^ (TilWord32.toDecimalString tagcount) ^ 
-						       "_" ^ (TilWord32.toDecimalString sumtype))
-		  | project_sum_record {tagcount,sumtype,field} => ("project_sum" ^ (TilWord32.toDecimalString tagcount) ^
-								     "_" ^ (TilWord32.toDecimalString sumtype) ^
-								     "_rec[" ^ (Name.label2string field) ^ "]")
+		  | inject => "inject"
+		  | inject_record => "inject_rec"
+		  | project_sum => "project_sum"
+		  | project_sum_record field => ("project_sum[" ^ 
+						 "_rec[" ^ (Name.label2string field) ^ "]")
 		  | roll => "roll"
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"
@@ -343,9 +340,7 @@ functor Ppnil(structure ArgNil : NIL
 	in
 	    case sw of
 		Intsw_e sw => help sw "INT" pp_exp pp_is' (String o Word32.toString)
-	      | Sumsw_e sw => help sw "SUM" pp_exp 
-		    (fn (tagcount,clist) => pp_con(Prim_c(Sum_c {tagcount=tagcount,known=NONE},clist)))
-								 (String o Word32.toString)
+	      | Sumsw_e sw => help sw "SUM" pp_exp pp_con (String o Word32.toString)
 	      | Typecase_e sw => help sw "TCASE" pp_con 
 		                   (fn _ => String "") pp_primcon
 (*

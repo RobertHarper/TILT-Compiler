@@ -20,6 +20,7 @@ struct
   open Nil Util 
 
   val debug = ref false
+  fun error s = Util.error "nilutil.sml" s
 
   val unzip = ListPair.unzip
   val zip = ListPair.zip
@@ -47,12 +48,14 @@ struct
 			 end
   val unit_con = con_tuple []
   val unit_exp = exp_tuple []
-  val bool_con = Prim_c(Sum_c{tagcount=0w2,known=NONE},[])
+  val bool_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[con_tuple_inject[]])
+  val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[con_tuple_inject[]])
+  val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[con_tuple_inject[]])
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[unit_con],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w0}),[],[])
-  val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])
+  val false_exp = Prim_e(NilPrimOp inject,[false_con],[])
+  val true_exp = Prim_e(NilPrimOp inject,[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
 
@@ -107,7 +110,9 @@ struct
       | strip_float' _ = NONE
     fun strip_int' (Prim_c (Int_c intsize,[])) = SOME intsize
       | strip_int' _ = NONE
-    fun strip_sum' (Prim_c (Sum_c {tagcount,known},cons)) = SOME (tagcount,known,cons)
+    fun strip_sum' (Prim_c (Sum_c {tagcount,totalcount,known},cons)) = 
+	if (length cons = 1) then SOME (tagcount,totalcount,known,hd cons)
+	    else error "strip_sum given sum not carrying exactly one type argument"
       | strip_sum' _ = NONE
     fun strip_arrow' (AllArrow_c body) = SOME body
       | strip_arrow' _ = NONE
@@ -227,7 +232,6 @@ struct
   end
   (**)
     
-  fun error s = Util.error "nilutil.sml" s
 
     (* collections *)
  
@@ -590,8 +594,7 @@ struct
 		| (Switch_e switch) => 
 		      Switch_e(case switch of
 				   Intsw_e sw => Intsw_e(dosw sw identity self identity)
-				 | Sumsw_e sw => Sumsw_e(dosw sw (fn (w,clist) => (w,map (f_con state) clist)) 
-							 self identity)
+				 | Sumsw_e sw => Sumsw_e(dosw sw (f_con state) self identity)
 				 | Exncase_e sw => Exncase_e(dosw sw identity self self)
 				 | Typecase_e sw => Typecase_e(dosw sw identity (f_con state) identity))
 		| (App_e (openness,func,clist,elist,eflist)) => 
@@ -826,8 +829,10 @@ struct
 	   (Vector_c,Vector_c) |
 	   (Ref_c,Ref_c) |
 	   (Exntag_c,Exntag_c)) => true
-	 | (Sum_c {known=k1,tagcount=t1},Sum_c {known=k2,tagcount=t2}) => (Util.eq_opt (op =,k1,k2)
-									   andalso (t1 = t2))
+	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},
+	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => (Util.eq_opt (op =,k1,k2)
+							     andalso (to1 = to2)
+							     andalso (t1 = t2))
 	 | (Record_c fields1,Record_c fields2) => 
 	  (List.length fields1 = List.length fields2) andalso
 	  ListPair.all eq_label (fields1,fields2)
@@ -1342,14 +1347,14 @@ struct
 	     Intsw_e {info=intsize,arg=arg',
 		      arms=arms',default=default'}
 	   end
-	  | Sumsw_e {info=(tagcount,decl_cons),arg,arms,default} => 
+	  | Sumsw_e {info,arg,arms,default} => 
 	   let
 	     val arg' = alpha_normalize_exp' contexts arg
 	     val arms' = map_second (alpha_normalize_function' contexts) arms
-	     val decl_cons' = map (alpha_normalize_con' c_context) decl_cons
+	     val info' = alpha_normalize_con' c_context info
 	     val default' = alpha_normalize_exp_opt' contexts default
 	   in
-	     Sumsw_e {info=(tagcount,decl_cons'),arg=arg',
+	     Sumsw_e {info=info',arg=arg',
 		      arms=arms',default=default'}
 	   end
 	  | Exncase_e {info,arg,arms,default} =>

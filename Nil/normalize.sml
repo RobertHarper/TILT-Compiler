@@ -786,14 +786,14 @@ val show_context = ref false
 	   Intsw_e {info=info,arg=arg,
 		    arms=arms,default=default}
 	 end
-	| Sumsw_e {info=(non_val,val_cons),arg,arms,default} => 
+	| Sumsw_e {info,arg,arms,default} => 
 	 let
 	   val arg = exp_normalize' state arg
 	   val arms = map_second (function_normalize' state) arms
-	   val val_cons = map (con_normalize' state) val_cons
+	   val info = con_normalize' state info
 	   val default = map_opt (exp_normalize' state) default
 	 in
-	   Sumsw_e {info=(non_val,val_cons),arg=arg,
+	   Sumsw_e {info=info,arg=arg,
 		    arms=arms,default=default}
 	 end
 	| Exncase_e {info=_,arg,arms,default} =>
