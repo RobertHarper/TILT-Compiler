@@ -1,4 +1,4 @@
-(*$import Time *)
+(*$import Time TopLevel List *)
 
 signature TRACE = sig
   type trace
@@ -36,7 +36,7 @@ structure Trace :> TRACE = struct
 
   fun enter {name, calls as ref call_number, callstack} =
      let
-	 val _ = app print (spaces (!tracecount))
+	 val _ = List.app print (spaces (!tracecount))
 	 val _ = print name
 	 val _ = print (Int.toString call_number)
          val _ = print "\n"
@@ -53,7 +53,7 @@ structure Trace :> TRACE = struct
      let
          val elapsed = Time.- (Time.now(), t1)
 	 val _ = (tracecount := (!tracecount) - 1)
-	 val _ = app print (spaces (!tracecount))
+	 val _ = List.app print (spaces (!tracecount))
 	 val _ = print name
 	 val _ = print (Int.toString call_number)
 	 val _ = if (Time.>(elapsed, !mintime)) then 

@@ -11,6 +11,17 @@ signature STATS =
 
      val timer : string * ('a -> 'b) -> ('a -> 'b)
      val subtimer : string * ('a -> 'b) -> ('a -> 'b)
+
+     (*You probably want these ones!
+      * These have the property that they don't double count
+      * on recursive calls: that is, if the timered function gets called
+      * while the timer is still active, it will only count the time once
+      * Note that this does not protect you from nested timers, just from
+      * nested calls to the same timer
+      *)
+     val timer'    : string * ('a -> 'b) -> ('a -> 'b)
+     val subtimer' : string * ('a -> 'b) -> ('a -> 'b)
+
      val counter : string -> (unit -> int)
      val int     : string -> int ref
      val bool    : string -> bool ref

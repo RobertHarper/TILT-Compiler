@@ -5,11 +5,11 @@ structure Stats :> STATS =
 
        val error = fn s => Util.error "stats.sml" s
        type time = Time.time
-       type time_entry = {count : int,
-			  max : real,
-			  last : real,
-			  top_timer : bool,
-			  sum : {gc : time, sys: time, usr: time, real : time}}  ref
+
+       type time_entry = {count: int, max : real,last : real,
+			  top_timer : bool, active : bool ref,
+			  sum : {gc : time, sys: time, usr: time, real : time}} ref
+
        type counter_entry = int ref
        type int_entry = int ref
        type bool_entry = bool ref
@@ -34,6 +34,7 @@ structure Stats :> STATS =
 	       in  entry := {count = 0,
 			     max = 0.0,
 			     last = 0.0, 
+			     active = ref false,
 			     top_timer = #top_timer (!entry),
 			     sum = {gc=z,sys=z,usr=z,real=z}}
 	       end
@@ -59,7 +60,7 @@ structure Stats :> STATS =
 	let val z = Time.zeroTime
 	    fun maker () = TIME_ENTRY(ref{count = 0,
 					  max = 0.0,
-					  last = 0.0,
+					  last = 0.0,active = ref false,
 					  top_timer = disjoint,
 					  sum = {gc=z,sys=z,usr=z,real=z}})
         in  case (find_entry maker s) of
@@ -98,32 +99,109 @@ structure Stats :> STATS =
 				   in intref := v + 1; v
 				   end
 			end
+      fun update_entry {count,max,top_timer,last,active,sum as {gc=gc',sys=sys',usr=usr',real=real'}} {usr,sys,gc} real =      
+	let
+	  val new_sum = {gc = Time.+(gc,gc'),
+			 sys = Time.+(sys,sys'),
+			 usr = Time.+(usr,usr'),
+			 real = Time.+(real,real')}
+	  val cur = Time.toReal(Time.+(gc,Time.+(sys,usr)))
+	in {count = count+1, 
+	    last = cur,
+	    active = active,
+	    max = Real.max(cur,max),
+	    top_timer = top_timer,
+	    sum = new_sum}
+	end
+		      
+      fun timer_help (avoid_overlap,disjoint) (str,f) arg =
+	let 
+	  val entry_ref = find_time_entry str disjoint
+	  val (entry as {active,...}) = !entry_ref
+	in 
+	  if avoid_overlap andalso !active then
+	    f arg
+	  else
+	    let
+	      val _ = active := true
+	      val cpu_timer = Timer.startCPUTimer()
+	      val real_timer = Timer.startRealTimer()
+	      val r = f arg
+	      val cpu =  Timer.checkCPUTimer cpu_timer
+	      val real =  Timer.checkRealTimer real_timer
+	      val _ = active := false
+	      val new_entry = update_entry entry cpu real
+	      val _ = entry_ref := new_entry
+	    in r
+	    end
+	end
 
-      fun timer_help disjoint (str,f) arg =
-	   let val cpu_timer = Timer.startCPUTimer()
-	       val real_timer = Timer.startRealTimer()
-	       val r = f arg
-	       val {gc,sys,usr} =  Timer.checkCPUTimer cpu_timer
-	       val real =  Timer.checkRealTimer real_timer
-	       val entry_ref = find_time_entry str disjoint
-	       val {count,max,last=_,top_timer,
-		    sum = {gc=gc',sys=sys',usr=usr', real=real'}} = !entry_ref
-	       val new_sum = {gc = Time.+(gc,gc'),
-			      sys = Time.+(sys,sys'),
-			      usr = Time.+(usr,usr'),
-			      real = Time.+(real,real')}
-	       val cur = Time.toReal(Time.+(gc,Time.+(sys,usr)))
-	       val new_entry = {count = count+1, 
-				last = cur,
-				max = Real.max(cur,max),
-				top_timer = top_timer,
-				sum = new_sum}
-	       val _ = entry_ref := new_entry
-	   in r
-	   end
+      val timer     = fn arg => timer_help (false,true) arg
+      val subtimer  = fn arg => timer_help (false,false) arg
+      val timer'    = fn arg => timer_help (true,true) arg
+      val subtimer' = fn arg => timer_help (true,false) arg
 
-      val timer = fn arg => timer_help true arg
-      val subtimer = fn arg => timer_help false arg
+      local 
+	val startCPUTimer = Timer.startCPUTimer
+	val checkCPUTimer = Timer.checkCPUTimer
+
+	fun add {usr,sys,gc} = Time.toReal(Time.+(sys,usr))
+
+	val delta_t = ref NONE;
+
+	fun delta () = 
+	  (case delta_t
+	     of ref NONE =>
+	       let 
+		 val cputimer = startCPUTimer ()
+		 fun loop () = let val d = add (checkCPUTimer cputimer)
+			       in if d <= 0.000001 then loop () else d
+			       end
+		 val d = loop()
+	       in (delta_t := SOME d;  d)
+	       end
+	      | ref (SOME r) => r)
+	     
+	(*This times small functions.  This is just to get a handle on how much
+	 * the timers slow things down. 
+	 *)
+	fun ftime(f,epsilon) =
+	  let
+	    val d = delta()
+	    val tmin = (d / epsilon) + d;
+
+	    fun f_for c =
+	      if c > 0 then
+		(f();f_for(c-1))
+	      else () 
+		
+	    fun loop cnt = 
+	      let
+		val cputimer = startCPUTimer ()
+		val _ = f_for cnt
+		val tmeas = add (checkCPUTimer cputimer)
+	      in
+		if tmeas < tmin then
+		  loop (cnt + cnt)
+		else tmeas / (Real.fromInt cnt)
+	      end
+	  in
+	    loop 1
+	  end
+
+	val timer_overhead = ref NONE
+
+	fun test() = subtimer("TimerTimingCall",fn x=>x) 3
+
+	fun get_overhead () = 
+	  (case timer_overhead
+	     of ref (SOME r) => r 
+	      | ref NONE => (timer_overhead := SOME (ftime(test,0.01));get_overhead()))
+
+      in
+	fun timer_time n = (Real.fromInt n) * (get_overhead())
+      end
+  
 
        fun fprint max_size str =
 	   let fun loop i = if i < 0 then () else (print " "; loop (i-1))
@@ -133,15 +211,20 @@ structure Stats :> STATS =
        fun print_timers() =
 	 let 
 	   
-	   fun triple2cpu  ({gc:time,sys:time,usr:time,real:time}) = Time.toReal(Time.+(gc,Time.+(sys,usr)))
-	   fun triple2real ({gc:time,sys:time,usr:time,real:time}) = Time.toReal real
+	   (*gc time is included in the user time - don't overcount*)
+	   fun triple2cpu  ({sys,usr,gc,real}) = Time.toReal(Time.+(sys,usr))
+	   fun triple2real ({sys,usr,gc,real})    = Time.toReal real
 	     
 	   val entries = rev(!entries)
+
 	   fun folder ((_,TIME_ENTRY (ref{top_timer=true,sum,...})),(acc_cpu,acc_real)) = 
 	     (acc_cpu+(triple2cpu sum), acc_real+(triple2real sum))
 	     | folder (_,acc) = acc
+
 	   val (total_cpu, total_real) = foldr folder (0.0,0.0) entries
+
 	   fun real2string r = Real.fmt (StringCvt.FIX (SOME 3)) r
+
 	   fun real2stringWith prec r = Real.fmt (StringCvt.FIX (SOME prec)) r
 
 	   val max_name_size = foldl (fn ((n,TIME_ENTRY _),m) => Int.max(m,size n)
@@ -165,12 +248,13 @@ structure Stats :> STATS =
 	      fprint 6 warning_flag;
 	      print "\n")
 
-	   fun pritem (name,TIME_ENTRY(ref {count,max,top_timer,sum,...})) = 
+	   fun pritem (name,TIME_ENTRY(ref {count,max,top_timer,sum,active,...})) = 
 	     let 
 	       val time_cpu = triple2cpu sum
 	       val time_real = triple2real sum
 	       val per_call = (time_cpu * 1000.0)/(Real.fromInt count) (*In milliseconds!*)
 	       val per_call = (Real.realFloor(per_call * 10.0)) / 10.0
+	       val timer_overhead = timer_time count
 	       val time_cpu_string = real2string time_cpu
 	       val time_real_string = real2string time_real
 	       val count_string = Int.toString count
@@ -184,8 +268,15 @@ structure Stats :> STATS =
 		 if top_timer then 
 		   ("(" ^ (real2stringWith 1 (time_real/total_real * 100.0)) ^ "%)") 
 		 else ""
-	       val warning_flag = (if (time_real > time_cpu * 2.0)
-				     then "****" else "")
+
+	       (* If timer is active, print a warning flag.
+		* If the timer overhead is greater than 1 second, print it.
+		* Otherwise, if realtime is more than twice cpu time, print
+		* a warning flag *)
+	       val warning_flag = (if !active then "Active!"
+	                           else if timer_overhead > 1.0 then real2string timer_overhead
+				   else if (time_real > time_cpu * 2.0) then "*****" 
+				   else "")
 	     in
 	       print_strings(name,count_string,per_call_string,max_string,
 			     time_cpu_string,percent_cpu_string,
@@ -195,10 +286,10 @@ structure Stats :> STATS =
 	 in
 	   print "\nGlobal timings\n";
 	   print_strings("Timer Name","Calls","avg(ms)",
-			 "max(ms)","cpu (s)","% cpu","real (s)","% real","flag");
-	   print "-----------------------------------------------------------------------------------------\n";
+			 "max(ms)","cpu (s)","% cpu","real (s)","% real","flag/timer overhead");
+	   print "--------------------------------------------------------------------------------------------------\n";
 	   app pritem entries;
-	   print "-----------------------------------------------------------------------------------------\n";
+	   print "--------------------------------------------------------------------------------------------------\n";
 	   fprint max_name_size "TOTAL TIME";
 	   print " : ";
 	   fprint 8 (real2string total_cpu);
@@ -265,11 +356,11 @@ structure Stats :> STATS =
 
       fun print_stats() = (entries := ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) (!entries);
 			   print "\n\n";
+			   print_bools(); 	
+			   print "\n\n";
 			   print_counters(); 	
 			   print "\n\n";
 			   print_ints(); 	
-			   print "\n\n";
-			   print_bools(); 	
 			   print "\n\n";
 			   print_timers(); 
 			   print "\n\n")

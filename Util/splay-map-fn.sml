@@ -21,32 +21,31 @@ functor LocalSplayMapFn (K : ORD_KEY) : ORD_MAP =
     fun cmpf k (k', _) = K.compare(k',k)
 
     val empty = EMPTY
-    
-	(* Insert an item.  
-	 *)
-    fun insert (EMPTY,key,v) =
-          MAP{nobj=1,root=ref(SplayObj{value=(key,v),left=SplayNil,right=SplayNil})}
-      | insert (MAP{root,nobj},key,v) =
-          case splay (cmpf key, !root) of
-            (EQUAL,SplayObj{value,left,right}) => 
-              MAP{nobj=nobj,root=ref(SplayObj{value=(key,v),left=left,right=right})}
-          | (LESS,SplayObj{value,left,right}) => 
-              MAP{
-                nobj=nobj+1,
-                root=ref(SplayObj{value=(key,v),left=SplayObj{value=value,left=left,right=SplayNil},right=right})
-              }
-          | (GREATER,SplayObj{value,left,right}) => 
-              MAP{
-                nobj=nobj+1,
-                root=ref(SplayObj{
-                  value=(key,v),
-                  left=left,
-                  right=SplayObj{value=value,left=SplayNil,right=right}
-                })
-              }
-          | (_,SplayNil) => raise LibBase.Impossible "SplayMapFn.insert SplayNil"
 
-  fun insert'((key, value), map) = insert(map, key, value)
+    fun insert (EMPTY,key,v) =
+      MAP{nobj=1,root=ref(SplayObj{value=(key,v),left=SplayNil,right=SplayNil})}
+      | insert (MAP{root,nobj},key,v) =
+      (case splay (cmpf key, !root) of
+	 (EQUAL,SplayObj{value,left,right}) => 
+	   MAP{nobj=nobj,root=ref(SplayObj{value=(key,v),left=left,right=right})}
+       | (LESS,SplayObj{value,left,right}) => 
+	     MAP{
+		 nobj=nobj+1,
+		 root=ref(SplayObj{value=(key,v),left=SplayObj{value=value,left=left,right=SplayNil},right=right})
+		 }
+       | (GREATER,SplayObj{value,left,right}) => 
+	     MAP{
+		 nobj=nobj+1,
+		 root=ref(SplayObj{
+				   value=(key,v),
+				   left=left,
+				   right=SplayObj{value=value,left=SplayNil,right=right}
+				   })
+		 }
+       | (_,SplayNil) => raise LibBase.Impossible "SplayMapFn.insert SplayNil")
+
+    fun insert'((key, value), map) = insert(map, key, value)
+	
 
   (* Look for an item, return NONE if the item doesn't exist *)
     fun find (EMPTY,_) = NONE

@@ -14,7 +14,6 @@ structure Name :> NAME =
     type loc  = int
     type tag  = int * string
 
-
     (* equality and generation functions on Nameitive types *)
     fun eq_var   (v1 : var, v2)     = v1 = v2
     val eq_var2 = curry2 eq_var
@@ -25,7 +24,9 @@ structure Name :> NAME =
 				 end
     structure VarSet = SplaySetFn(VarKey) 
     structure VarMap = SplayMapFn(VarKey) 
-    val varmap = ref (VarMap.empty : (string*bool) VarMap.map)
+
+    val varmap : string VarMap.map ref = ref VarMap.empty
+
     fun reset_varmap() = varmap := VarMap.empty
 
     fun eq_label (l1 as (h1,_) : label, l2 as (h2,_)) = 
@@ -75,29 +76,28 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
-    fun construct_var (i : int, s : string, f : bool) : var = 
-	let val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
-			then "v" ^ s else s
-	    val _ = varmap := (VarMap.insert(!varmap,i,(s,f)))
-	in  i
+    fun construct_var (i : int, s : string) : var = 
+      let val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
+		    then "v" ^ s else s
+	  val _ = varmap := (VarMap.insert(!varmap,i,s))
+      in  i
 	end
 
-    fun fresh_named_var str = construct_var(inc_counter var_counter, str, true)
+    fun fresh_named_var str = construct_var(inc_counter var_counter, str)
     fun fresh_var() = inc_counter var_counter
     fun gen_var_from_symbol v : var = fresh_named_var(Symbol.name v)
 
     fun var2int    (v : var) = v
     fun var2name   (v : var) = (case VarMap.find(!varmap,v) of
-				    NONE => ""
-				  | SOME (str,_) => str)
+				  NONE => ""
+				| SOME str => str)
     fun var2string (v : var) = (var2name v) ^ "_" ^ (Int.toString v)
 
     fun derived_var v = fresh_named_var(var2name v)
 
     fun deconstruct_var v = (v, var2name v)
 
-    fun rename_var (v : var, s : string) : unit =
-         (varmap := (VarMap.insert(!varmap,v,(s,true))))
+    fun rename_var (v : var, s : string) : unit = varmap := (VarMap.insert(!varmap,v,s))
 
     fun fresh_named_tag s = (inc_counter tag_counter,s)
     fun fresh_tag  () = fresh_named_tag "t"
@@ -105,20 +105,7 @@ structure Name :> NAME =
     fun internal_label s : label = (internal_hash s,s)
     fun is_label_internal ((num,str) : label) = internal_hash str = num
 
-    fun fresh_named_var' str = construct_var(inc_counter var_counter, str, false)
-    fun derived_var' v = fresh_named_var'(var2name v)
-    local
-      val trim = Stats.tt "trim_unused_vars"
-    in
-      fun used_var v = 
-	if !trim then
-	  (case VarMap.find(!varmap,v) of
-	     NONE => true
-	   | SOME (_,f) => f)
-	else true
-    end
-
-    val construct_var = fn (c,s) => construct_var (c,s,true)
+    val construct_var = fn (c,s) => construct_var (c,s)
 
     fun symbol_label sym : label = 
 	let val str = Symbol.name sym
@@ -167,6 +154,8 @@ structure Name :> NAME =
 	in HashTable.mkTable (hash,eqKey) (size,notfound_exn)
 	end
 
+
+
       type vpath = var * label list
       structure PathKey : ORD_KEY = 
 	  struct
@@ -194,9 +183,9 @@ structure Name :> NAME =
 					 val compare = compare_tag
 				     end
       structure LabelMap = SplayMapFn(LabelKey) 
-      structure TagMap = SplayMapFn(TagKey) 
-      structure PathMap = SplayMapFn(PathKey) 
-      structure PathSet = SplaySetFn(PathKey) 
+      structure TagMap   = SplayMapFn(TagKey) 
+      structure PathMap  = SplayMapFn(PathKey) 
+      structure PathSet  = SplaySetFn(PathKey) 
 
 
     fun construct_label x = x
@@ -206,4 +195,7 @@ structure Name :> NAME =
     fun construct_loc x = x
     fun deconstruct_loc x = x
 
+    val derived_var      = (*Stats.subtimer("Name:derived_var",*)(derived_var)
+    val fresh_named_var  = (*Stats.subtimer("Name:fresh_named_var",*)(fresh_named_var)
+    val fresh_var        = (*Stats.subtimer("Name:fresh_var",*)(fresh_var)
 end
