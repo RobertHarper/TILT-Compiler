@@ -1,0 +1,77 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{nil}
+
+\newcommand{\Sing}[1]{S_T(#1)}
+\newcommand{\DRecord}[1]{\Sigma(#1)}
+\newcommand{\DArrow}[2]{\Pi(#1).#2}
+
+\newcommand{\CFn}[2]{\lambda(#1).#2}
+\newcommand{\CApp}[2]{#1(#2)}
+\newcommand{\CRecord}[1]{\{#1\}}
+\newcommand{\CSelect}[2]{#1.#2}
+
+\newcommand{\TInt}[0]{Int}
+\newcommand{\Float}[0]{Float}
+\newcommand{\BoxedFloat}[0]{BoxFloat}
+\newcommand{\BoxFloat}[0]{BoxFloat}
+\newcommand{\Sum}[2]{Sum_{#1}(#2)}
+\newcommand{\KSum}[3]{Sum_{#1}^{#3}(#2)}
+\newcommand{\Prod}[2]{#1 \times #2}
+\newcommand{\Rec}[2]{\mu (#1) . (#2)}
+\newcommand{\Arrow}[4]{(#1;#2;#3) \rightarrow #4}
+\newcommand{\PArrow}[2]{#1 \rightarrow #2}
+\newcommand{\Exn}[0]{Exn}
+\newcommand{\Exntag}[1]{Exntag(#1)}
+\newcommand{\Array}[1]{Array(#1)}
+\newcommand{\Vector}[1]{Vector(#1)}
+\newcommand{\Loc}[0]{Loc}
+\newcommand{\Record}[1]{\{#1\}}
+\newcommand{\Vararg}[2]{Vararg_{#1 \rightarrow #2}}
+\newcommand{\GCTag}[1]{GCTag(#1)}
+\newcommand{\ExternArrow}[2]{(#1) \rightarrow^{ext} #2}
+\newcommand{\Coercion}[3]{\forall (#1) (#2 \Rightarrow #3)}
+
+\newcommand{\Pair}[2]{\angl{#1, #2}}
+\newcommand{\RecordIntro}[1]{\{#1\}}
+\newcommand{\Proj}[3]{proj_{#1}[#2]#3}
+\newcommand{\Inj}[3]{inj_{#1}[#2]#3}
+\newcommand{\KProj}[2]{projk_{#1}#2}
+\newcommand{\KInj}[2]{injk_{#1}#2}
+\newcommand{\Boxf}[1]{box\ #1}
+\newcommand{\Unboxf}[1]{unbox\ #1}
+\newcommand{\Injexn}[2]{inj\_exn (#1, #2)}
+%\newcommand{\Roll}[0]{roll}
+%\newcommand{\Unroll}[0]{unroll}
+\renewcommand{\App}[4]{#1\ (#2;#3;#4)}
+\newcommand{\Mkexntag}[0]{mk\_exntag}
+\newcommand{\Raise}[1]{raise\ #1}
+\newcommand{\Typed}[2]{[#1]_{#2}}
+\newcommand{\Mkrecordgctag}[0]{mk\_record\_gctag}
+\newcommand{\Mksumknowngctag}[0]{mk\_sum\_known\_gctag}
+\newcommand{\ExternApp}[2]{#1^{ext}(#2)}
+\newcommand{\Handle}[3]{(#1)\ handle\ with\ #2\ in\ #3}
+\newcommand{\Mkvararg}[2]{make\_vararg_{#1}(#2)}
+\newcommand{\Mkonearg}[2]{make\_onearg_{#1}(#2)}
+\newcommand{\Roll}[3]{roll(#1; #2; #3)}
+\newcommand{\Unroll}[3]{unroll(#1; #2; #3)}
+\newcommand{\Coerce}[3]{coerce[#1](#2)(#3)}
+
+\newcommand{\Val}[2]{val\ #1 = #2}
+\newcommand{\ValT}[3]{val\ #1:#2 = #3}
+\newcommand{\ValRec}[1]{val\ rec\ #1}
+\newcommand{\ValOpen}[1]{val\ open\ #1}
+\newcommand{\And}[0]{\ and\ }
+
+\newcommand{\Intsw}[2]{Intsw\ #1\ of\ #2}
+\newcommand{\Sumsw}[3]{Sumsw\ #1\ with\ #2\ in\ #3}
+\newcommand{\Exncase}[3]{Exncase\ #1\ with\ #2\ in\ #3}
+\newcommand{\Ifthenelse}[3]{If\ #1\ then\ #2\ else\ #3}
+
+\newcommand{\Let}[3]{let\ #1 = #2\ in\ #3}
+\newcommand{\LetT}[4]{let\ #1:#2 = #3\ in\ #4}
+\newcommand{\LetRec}[2]{letrec\ #1\ in\ #2}
+\newcommand{\Case}[5]{case\ #1\ of\ (#2 . #3, #4 . #5)}
+
+
+
+

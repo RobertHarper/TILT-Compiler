@@ -1,0 +1,486 @@
+\documentclass{article}
+\usepackage{fullpage}
+\usepackage{latexsym}
+\usepackage{verbatim}
+\usepackage{code,proof,amsthm,amssymb}
+\usepackage{lib}
+\usepackage{nil}
+
+\title{Nil Type Synthesis and Analysis}
+\author{Adam Chlipala}
+
+\begin{document}
+\maketitle
+
+\section{Language}
+
+\begin{eqnarray*}
+	\kappa &::=& T \mid S_T(c) \mid \DRecord{l_1:\alpha_1::\kappa_1, \cdots, l_n:\alpha_n::\kappa_n} \mid \DArrow{\alpha_1::\kappa_1, \cdots, \alpha_n::\kappa_n}{\kappa} \\
+	\\
+	\tau, c &::=& \CFn{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{c} \mid \CApp{c}{c_1,\cdots,c_n} \mid \CRecord{l_1: \alpha_1 = c_1, \cdots, l_n: \alpha_n = c_n} \mid \CSelect{c}{l} \\
+	&& \mid \TInt \mid \BoxFloat \mid \Record{l_1: \tau_1,\cdots,l_n: \tau_n} \mid \Arrow{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{\tau_1,\cdots,\tau_m}{k}{\tau} \\
+	&& \mid \Rec{\alpha_1,\cdots,\alpha_n}{\tau_1,\cdots,\tau_n} \mid \Exn \mid \Exntag{\tau} \mid \ExternArrow{\tau_1,\cdots,\tau_n}{\tau} \mid \GCTag{\tau} \mid \Coercion{\alpha_1,\cdots,\alpha_n}{c_1}{c_2} \\
+	&& \mid \Vararg{c_1}{c_2} \mid \Sum{i}{\vec c} \mid \KSum{i}{\vec c}{k}
+	\\
+	p &::=& (\kappa_1,\cdots,\kappa_n; \tau_1,\cdots,\tau_m; k) \\
+	\\
+	p_f &::=& (\alpha_1: \kappa_1,\cdots,\alpha_n: \kappa_n; x_1: \tau_1,\cdots,x_m: \tau_m; y_1, \cdots, y_k) \\
+	\\
+	p_a &::=& (c_1, \cdots, c_n; e_1, \cdots, e_m; e'_1, \cdots, e'_k) \\
+	\\
+	q &::=& (\alpha_1, \cdots, \alpha_n; x_1, \cdots, x_m; y_1, \cdots, y_k) \\
+	\\
+	x &::=& <\textrm{term variables}> \\
+	\\
+	y &::=& <\textrm{float variables}> \\
+	\\
+	\alpha &::=& <\textrm{constructor variables}> \\
+	\\
+	e &::=& \overline n \mid \overline f \mid x \mid y \mid \RecordIntro{l_1 = e_1,\cdots,l_n = e_n} \mid \Proj{l}{e} \mid \App{e}{c_1,\cdots,c_n}{e_1,\cdots,e_m}{e'_1,\cdots,e'_k} \mid \Boxf{e} \mid \Unboxf{e} \mid \Injexn{e_1}{e_2} \\
+	&& \mid \Intsw{e}{\overline{n_1} \Rightarrow e_1 \mid \cdots \mid \overline{n_m} \Rightarrow e_m [\mid default \Rightarrow e_d]} \\
+	&& \mid \Sumsw{e}{x}{\overline{n_1} \Rightarrow e_1 \mid \cdots \mid \overline{n_m} \Rightarrow e_m [\mid default \Rightarrow e_d]} \\
+	&& \mid \Exncase{e}{x}{e'_1 \Rightarrow e_1 \mid \cdots \mid e'_m \Rightarrow e_m [\mid default \Rightarrow e_d]} \\
+	&& \mid \Handle{e_1}{x}{e_2} \mid \Mkexntag \mid \Mkrecordgctag \mid \Mksumknowngctag \mid \Raise{e} \\
+	&& \mid \Roll{\alpha_1,\cdots,\alpha_n}{c_1}{c_2} \mid \Unroll{\alpha_1,\cdots,\alpha_n}{c_1}{c_2} \mid \Coerce{e_1}{c_1,\cdots,c_n}{e_2} \\
+	&& \mid \Let{x}{e_1}{e_2} \mid \LetT{x}{\tau}{e_1}{e_2} \mid \LetRec{f_1: \tau_1 (q_1) = e_1 \And \cdots \And f_n: \tau_n (q_n) = e_n}{e} \mid \Typed{e}{\tau} \\
+	&& \mid \Let{\alpha}{c}{e} \mid \Let{y}{e_1}{e_2} \mid \Mkvararg{\PArrow{\tau_1}{\tau_2}}{e} \mid \Mkonearg{\PArrow{\tau_1}{\tau_2}}{e} \\
+	\\
+	\Gamma &::=& \cdot \mid \Gamma, x: \tau \mid \Gamma, y \textrm{ (all variables in a context are assumed to be unique)} \\
+	\\
+	\Delta &::=& \cdot \mid \Delta, \alpha:: \kappa \textrm{ (all variables in a context are assumed to be unique)}
+\end{eqnarray*}
+
+\section{Additional Notation}
+
+\begin{eqnarray*}
+Branch(\Delta, \Sum{i}{c_1,\cdots,c_n}, j) &=& \Record{}, 0 \leq j < i\ \&\ \forall k \leq n . \Delta \vdash c_k \\
+	&& c_{j-i}, i \leq j < i+n 0 \leq j < i\ \&\ \forall k \leq n . \Delta \vdash c_k \\
+Branch(\Delta, \KSum{i}{\vec c}{k}, j) &=& Branch(\Delta, \Sum{i}{\vec c}, j)
+\end{eqnarray*}
+
+\section{Kind Well-Formedness Judgment}
+
+$$
+\infer[T]{\Delta \vdash T}{}
+\quad
+\infer[S]{\Delta \vdash \Sing{c}}
+{
+	\Delta \vdash c :: T
+}
+\quad
+\infer[CRecord]{\Delta \vdash \DRecord{l_1: \alpha_1:: \kappa_1, \cdots, l_n: \alpha_n:: \kappa_n}}
+{
+	\forall i \leq n . \Delta, \alpha_1:: \kappa_1, \cdots, \alpha_{i-1}:: \kappa_{i-1} \vdash \kappa_i
+}
+$$
+
+$$
+\infer[CArrow]{\Delta \vdash \DArrow{\alpha_1:: \kappa_1, \cdots, \alpha_n:: \kappa_n}{\kappa}}
+{
+	\forall i \leq n . \Delta, \alpha_1:: \kappa_1, \cdots, \alpha_{i-1}:: \kappa_{i-1} \vdash \kappa'_i
+	\quad \forall i \leq n . \kappa_i < \kappa'_i
+	\quad \Delta, \alpha_1:: \kappa_1, \cdots, \alpha_n:: \kappa_n \vdash \kappa'
+	\quad \kappa' < \kappa
+}
+$$
+
+\section{Kinding Judgment}
+
+$$
+\infer[CFn]{\Delta \vdash \CFn{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{c} :: \kappa}
+{
+	\Delta, \alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n \vdash c :: \kappa
+}
+$$
+
+$$
+\infer[CApp]{\Delta \vdash \CApp{c}{c_1,\cdots,c_n} :: [c_1,\cdots,c_n/\alpha_1,\cdots,\alpha_n]\kappa}
+{
+	\Delta \vdash c :: \DArrow{\alpha_1:: \kappa_1, \cdots, \alpha_n:: \kappa_n}{\kappa}
+	\quad \forall i \leq n . \Delta \vdash c_i:: \kappa_i[c_1,\cdots,c_{i-1}/\alpha_1,\cdots,\alpha_{i-1}]
+}
+$$
+
+$$
+\infer[CRecord]{\Delta \vdash \CRecord{l_1: \alpha_1 = c_1, \cdots, l_n: \alpha_n = c_n} :: \DRecord{l_1: \alpha_1:: \kappa_1, \cdots, l_n: \alpha_n:: \kappa_n}}
+{
+	\forall i \leq n . \Delta, \alpha_1:: \kappa_1, \cdots, \alpha_{i-1}:: \kappa_{i-1} \vdash c_i:: \kappa_i
+}
+$$
+
+$$
+\infer[CSelect]{\Delta \vdash \CSelect{c}{l_i} :: \kappa_i[c.l_1,\cdots,\c.l_{i-1}/\alpha_1,\cdots,\alpha_{i-1}}
+{
+	\Delta \vdash c :: \DRecord{l_1: \alpha_1:: \kappa_1, \cdots, l_n: \alpha_n:: \kappa_n}
+}
+$$
+
+$$
+\infer[CRec]{\Delta \vdash \Rec{\alpha_1,\cdots,\alpha_n}{\tau_1,\cdots,\tau_n} :: \DRecord{1: \alpha_1:: T, \cdots, n: \alpha_n:: T}}
+{
+	\forall i \leq n . \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_i :: T
+}
+$$
+
+
+
+$$
+\infer[CType]{\Delta \vdash \tau :: T}
+{
+	\Delta \vdash \tau
+	\quad \tau \neq \Rec{\alpha_1,\cdots,\alpha_n}{\tau_1,\cdots,\tau_n}
+}
+$$
+
+\section{Type Well-Formedness Judgment}
+
+$$
+\infer[TInt]{\Delta \vdash \TInt}{}
+\quad
+\infer[TBoxFloat]{\Delta \vdash \BoxFloat}{}
+$$
+
+$$
+\infer[TSum]{\Delta \vdash \tau_1 + \cdots + \tau_n}
+{
+	\forall i \leq n . \Delta \vdash \tau_i
+}
+\quad
+\infer[TRecord]{\Delta \vdash \Record{l_1: \tau_1, \cdots, l_n: \tau_n}}
+{
+	\forall i \leq n . \Delta \vdash \tau_i
+}
+$$
+
+$$
+\infer[TArrow]{\Delta \vdash \Arrow{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{\tau_1,\cdots,\tau_m}{k}{\tau}}
+{
+	\forall i \leq n . \Delta \vdash \kappa_i
+	\quad \forall i \leq m . \Delta, \alpha_1::\kappa_1, \cdots, \alpha_{i-1}::\kappa_{i-1} \vdash \tau_i
+	\quad \Delta, \alpha_1::\kappa_1, \cdots, \alpha_n::\kappa_n \vdash \tau
+}
+$$
+
+$$
+\infer[TExternArrow]{\Delta \vdash \ExternArrow{\tau_1,\cdots,\tau_n}{\tau}}
+{
+	\forall i \leq n . \Delta \vdash \tau_i
+	\quad \Delta \vdash \tau
+}
+\quad
+\infer[TRec]{\Delta \vdash \Rec{\alpha_1,\cdots,\alpha_n}{\tau_1,\cdots,\tau_n}}
+{
+	\forall i \leq n . \Delta; \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_i
+}
+$$
+
+$$
+\infer[TExn]{\Delta \vdash \Exn}{}
+\quad
+\infer[TExntag]{\Delta \vdash \Exntag{\tau}}
+{
+	\Delta \vdash \tau
+}
+$$
+
+$$
+\infer[TGCTag]{\Delta \vdash \GCTag{\tau}}
+{
+	\Delta \vdash \tau
+}
+\quad
+\infer[TCoercion]{\Delta \vdash \Coercion{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2}}
+{
+	\Delta, \alpha_1, \cdots, \alpha_n \vdash \tau_1
+	\quad \Delta, \alpha_1, \cdots, \alpha_n \vdash \tau_2
+}
+$$
+
+\section{Float Typing Judgment}
+
+$$
+\infer[Float]{\Delta; \Gamma \vdash \overline f\ \Float}
+{
+}
+\quad
+\infer[Unbox]{\Delta; \Gamma \vdash \Unboxf{e}\ \Float}
+{
+	\Delta; \Gamma \vdash e \Uparrow \BoxedFloat
+}
+\quad
+\infer[FVar]{\Delta; \Gamma \vdash y \Float}
+{
+	y \in \Gamma
+}
+$$
+
+\section{Synthesis Typing Judgment}
+
+$$
+\infer[Annotate]{\Delta; \Gamma \vdash \Typed{e}{\tau} \Uparrow \tau}
+{
+	\Delta; \Gamma \vdash e \Downarrow \tau
+}
+$$
+
+$$
+\infer[Int]{\Delta; \Gamma \vdash \overline n \Uparrow \TInt}
+{
+}
+\quad
+\infer[Var]{\Delta; \Gamma \vdash x \Uparrow \tau}
+{
+	\Gamma(x) = \tau
+}
+$$
+
+$$
+\infer[RecordInj]{\Delta; \Gamma \vdash \RecordIntro{l_1 = e_1,\cdots,l_n = e_n} \Uparrow \Record{l_1: \tau_1,\cdots,l_n: \tau_n}}
+{
+	\forall i \leq n . \Delta; \Gamma \vdash e_i \Uparrow \tau_i
+}
+\quad
+\infer[RecordProj]{\Delta; \Gamma \vdash \Proj{l_i}{e} \Uparrow \tau_i}
+{
+	\Delta; \Gamma \vdash e \Uparrow \Record{l_1: \tau_1,\cdots,l_n: \tau_n}
+}
+$$
+
+$$
+\infer[Box]{\Delta; \Gamma \vdash \Boxf{e} \Uparrow \BoxedFloat}
+{
+	\Delta; \Gamma \vdash e\ \Float
+}
+$$
+
+$$
+\infer[Inj\_exn]{\Delta; \Gamma \vdash \Injexn{e_1}{e_2} \Uparrow \Exn}
+{
+	\Delta; \Gamma \vdash e_1 \Uparrow \Exntag{\tau}
+	\quad \Delta; \Gamma \vdash e_2 \Downarrow \tau
+}
+$$
+
+$$
+\infer[Handle]{\Delta; \Gamma \vdash \Handle{e_1}{x}{e_2} \Uparrow \tau}
+{
+	\Delta; \Gamma \vdash e_1 \Uparrow \tau
+	\quad \Delta; \Gamma; x: \Exn \vdash e_2 \Downarrow \tau
+}
+$$
+
+$$
+\infer[AppUp]{\Delta; \Gamma \vdash \App{e}{c_1,\cdots,c_n}{e_1,\cdots,e_m}{e'_1,\cdots,e'_k} \Uparrow [c_1,\cdots,c_n/\alpha_1,\cdots,\alpha_n]\tau}
+{
+	\begin{array}{l}
+		\Delta; \Gamma \vdash e \Uparrow \Arrow{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{\tau_1,\cdots,\tau_m}{k}{\tau} \\
+		\forall i \leq n . \Delta; \Gamma \vdash c_i :: \kappa_i[c_1,\cdots,c_{i-1}/\alpha_1,\cdots,\alpha_{i-1}] \\
+		\forall i \leq m . \Delta; \Gamma \vdash e_i \Downarrow \tau_i[c_1,\cdots,c_{i-1}/\alpha_1,\cdots,\alpha_{i-1}] \\
+		\forall i \leq k . \Delta; \Gamma \vdash e'_i \Downarrow \Float
+	\end{array}
+}
+$$
+
+$$
+\infer[Make\_vararg]{\Delta; \Gamma \vdash \Mkvararg{\PArrow{p}{\tau}}{e} \Uparrow \Vararg{p}{\tau}}
+{
+	\Delta; \Gamma \vdash e \Downarrow \PArrow{p}{\tau}
+}
+\quad
+\infer[Make\_onearg]{\Delta; \Gamma \vdash \Mkonearg{\PArrow{p}{\tau}}{e} \Uparrow \PArrow{p}{\tau}}
+{
+	\Delta; \Gamma \vdash e \Downarrow \Vararg{p}{\tau}
+}
+$$
+
+$$
+\infer[ExternCall]{\Delta; \Gamma \vdash \ExternApp{e}{e_1,\cdots,e_n} \Uparrow \tau}
+{
+	\Delta; \Gamma \vdash e \Uparrow \ExternArrow{\tau_1,\cdots,\tau_n}{\tau}
+	\quad \forall i \leq n . \Delta; \Gamma \vdash e_i \Downarrow \tau_i
+}
+$$
+
+$$
+\infer[Proj]{\Delta; \Gamma \vdash \Proj{j}{\KSum{i}{\vec c}{j}}{e} \Uparrow Branch(\Delta, \KSum{i}{\vec c}{j}, j)}
+{
+	\Delta; \Gamma \vdash e \Uparrow \KSum{i}{\vec c}{j}
+}
+\quad
+\infer[ProjKnown]{\Delta; \Gamma \vdash \KProj{j}{e} \Uparrow Branch(\Delta, \KSum{i}{\vec c}{j}, j)}
+{
+	\Delta; \Gamma \vdash e \Uparrow \KSum{i}{\vec c}{j}
+}
+$$
+
+$$
+\infer[Roll]{\Delta; \Gamma \vdash \Roll{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2} \Uparrow \Coercion{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2}}
+{
+	\begin{array}{l}
+		\tau_2 = \Rec{\alpha_1,\cdots,\alpha_n}{\sigma_1,\cdots,\sigma_n}.i
+		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1
+		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 \\
+		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1 = \sigma_i[\sigma_1,\cdots,\sigma_n/\alpha_1,\cdots,\alpha_n]
+	\end{array}
+}
+$$
+
+$$
+\infer[Unroll]{\Delta; \Gamma \vdash \Unroll{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2} \Uparrow \Coercion{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2}}
+{
+	\begin{array}{l}
+		\tau_1 = \Rec{\alpha_1,\cdots,\alpha_n}{\sigma_1,\cdots,\sigma_n}.i
+		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_1
+		\quad \Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 \\
+		\Delta, \alpha_1::T, \cdots, \alpha_n::T \vdash \tau_2 = \sigma_i[\sigma_1,\cdots,\sigma_n/\alpha_1,\cdots,\alpha_n]
+	\end{array}
+}
+$$
+
+$$
+\infer[Coerce]{\Delta; \Gamma \vdash \Coerce{e_1}{c_1,\cdots,c_n}{e_2} \Uparrow [c_1,\cdots,c_n/\alpha_1,\cdots,\alpha_n]\tau_2}
+{
+	\Delta; \Gamma \vdash e_1 \Uparrow \Coercion{\alpha_1,\cdots,\alpha_n}{\tau_1}{\tau_2}
+	\quad \Delta; \Gamma \vdash e_2 \Downarrow [c_1,\cdots,c_n/\alpha_1,\cdots,\alpha_n]\tau_1
+}
+$$
+
+\section{Analysis Typing Judgment}
+
+$$
+\infer[Lift]{\Delta; \Gamma \vdash e \Downarrow \tau}
+{
+	\Delta; \Gamma \vdash e \Uparrow \tau'
+	\quad \tau' < \tau
+}
+$$
+
+$$
+\infer[Inj]{\Delta; \Gamma \vdash \Inj{j}{\Sum{i}{\vec c}}{e} \Downarrow \Sum{i}{\vec c}}
+{
+	\Delta; \Gamma \vdash e \Downarrow Branch(\Delta, \Sum{i}{\vec c}, j)
+}
+\quad
+\infer[InjKnown]{\Delta; \Gamma \vdash \KInj{j}{e} \Downarrow \Sum{i}{\vec c}}
+{
+	\Delta; \Gamma \vdash e \Downarrow Branch(\Delta, \Sum{i}{\vec c}, j)
+}
+$$
+
+$$
+\infer[Mk\_exntag]{\Delta; \Gamma \vdash \Mkexntag \Downarrow \Exntag{\tau}}
+{
+}
+\quad
+\infer[Raise]{\Delta; \Gamma \vdash \Raise{e} \Downarrow \tau}
+{
+	\Delta; \Gamma \vdash e \Downarrow \Exn
+}
+$$
+
+%$$
+%\infer[AppDown???]{\Delta; \Gamma \vdash \App{e}{c_1,\cdots,c_n}{e_1,\cdots,e_m}{e'_1,\cdots,e'_k} \Downarrow \tau}
+%{
+%	\forall i \leq n . \Delta; \Gamma \vdash c_i :: \kappa_i
+%	\quad \forall i \leq m . \Delta; \Gamma \vdash e_i \Uparrow \tau_i
+%	\quad \forall i \leq k . \Delta; \Gamma \vdash e'_i \Downarrow \Float
+%	\quad \Delta; \Gamma \vdash e \Downarrow \Arrow{\alpha_1::\kappa_1,\cdots,\alpha_n::\kappa_n}{\tau_1,\cdots,\tau_m}{k}{\tau}
+%}
+%$$
+
+$$
+\infer[LetRec]{\Gamma \vdash \LetRec{f_1: \PArrow{p_1}{\tau_1} (q_1) = e_1 \And \cdots \And f_n: \PArrow{p_n}{\tau_n} (q_n) = e_n}{e} \Downarrow \tau}
+{
+	\forall i \leq n . \Delta; \Gamma, f_1: \PArrow{p_1}{\tau_1}, \cdots, f_n: \PArrow{p_n}{\tau_n}, p_{fi} \vdash e_i \Downarrow \tau_i
+	\quad \Delta; \Gamma, f_1: \PArrow{p_1}{\tau_1}, \cdots, f_n: \PArrow{p_n}{\tau_n} \vdash e \Downarrow \tau
+}
+$$
+
+$$
+\infer[Let]{\Delta; \Gamma \vdash \Let{x}{e_1}{e_2} \Downarrow \tau}
+{
+	\Delta; \Gamma \vdash e_1 \Uparrow \tau'
+	\quad \Delta; \Gamma, x: \tau' \vdash e_2 \Downarrow \tau
+}
+\quad
+\infer[LetT]{\Delta; \Gamma \vdash \LetT{x}{\tau'}{e_1}{e_2} \Downarrow \tau}
+{
+	\Delta; \Gamma \vdash e_1 \Downarrow \tau'
+	\quad \Delta; \Gamma, x: \tau' \vdash e_2 \Downarrow \tau
+}
+$$
+
+$$
+\infer[LetFloat]{\Delta; \Gamma \vdash \Let{y}{e_1}{e_2} \Downarrow \tau}
+{
+	\Delta; \Gamma \vdash e_1\ \Float
+	\quad \Delta; \Gamma, y \vdash e_2 \Downarrow \tau
+}
+\quad
+\infer[LetCon]{\Delta; \Gamma \vdash \Let{\alpha}{c}{e} \Downarrow \tau}
+{
+	\Delta \vdash c :: \kappa
+	\quad \Delta, \alpha:: \kappa; \Gamma\vdash e \Downarrow \tau
+}
+$$
+
+
+$$
+\infer[Mk\_record\_gctag]{\Delta; \Gamma \vdash \Mkrecordgctag \Downarrow \GCTag{\tau}}{}
+$$
+
+$$
+\infer[Mk\_sum\_known\_gctag]{\Delta; \Gamma \vdash \Mksumknowngctag \Downarrow \GCTag{\tau}}{}
+$$
+
+$$
+\infer[Intsw]{\Delta; \Gamma \vdash \Intsw{e}{\overline{n_1} \Rightarrow e_1 \mid \cdots \mid \overline{n_m} \Rightarrow e_m [\mid default \Rightarrow e_d] \Downarrow \tau}}
+{
+	\Delta; \Gamma \vdash e \Downarrow \TInt
+	\quad \forall i \leq m . \Delta; \Gamma \vdash e_i \Downarrow \tau
+	\quad [\Delta; \Gamma \vdash e_d \Downarrow \tau]
+}
+$$
+
+$$
+\infer[Sumsw]{\Delta; \Gamma \vdash \Sumsw{e}{x}{\overline{n_1} \Rightarrow e_1 \mid \cdots \mid \overline{n_m} \Rightarrow e_m [\mid default \Rightarrow e_d] \Downarrow \tau}}
+{
+	\Delta; \Gamma \vdash e \Uparrow \Sum{i}{c_1,\cdots,c_n}
+	\quad \forall i \leq m . n_i < i+n
+	\quad \forall i \leq m . \Delta; \Gamma, x: \KSum{i}{c_1,\cdots,c_n}{n_i} \vdash e_i \Downarrow \tau
+	\quad [\Delta; \Gamma \vdash e_d \Downarrow \tau]
+}
+$$
+
+$$
+\infer[Exncase]{\Delta; \Gamma \vdash \Exncase{e}{x}{ex_1 \Rightarrow e_1 \mid \cdots \mid ex_m \Rightarrow e_m [\mid default \Rightarrow e_d] \Downarrow \tau}}
+{
+	\Delta; \Gamma \vdash e \Downarrow \Exn
+	\quad \forall i \leq m . \Delta; \Gamma \vdash ex_i \Uparrow \Exntag{\tau_i}
+	\quad \forall i \leq m . \Delta; \Gamma, x: \tau_i \vdash e_i \Downarrow \tau
+	\quad [\Delta; \Gamma \vdash e_d \Downarrow \tau]
+}
+$$
+
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
