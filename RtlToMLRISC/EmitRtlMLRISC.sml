@@ -1025,9 +1025,9 @@ functor EmitRtlMLRISC(
        * of Rtl doesn't cause any traps
        *)
       val SUB  = code MLTree.SUB
-      val DIV  = code MLTree.DIVT
+      (* val DIV  = code MLTree.DIVT  use library call ??? *)
       val SUBT = code MLTree.SUBT
-      val DIVT = code MLTree.DIVT
+      (* val DIVT = code MLTree.DIVT  use library call ??? *)
     end
 
     local
@@ -1054,6 +1054,7 @@ functor EmitRtlMLRISC(
       val S8SUB = code 3
     end
 
+    (*
     fun MODT(left, right, dest) =
 	  let
 	    val quotient  = MLTree.DIVT(left, right, MLTree.LR)
@@ -1068,6 +1069,34 @@ functor EmitRtlMLRISC(
      * of Rtl doesn't cause any traps
      *)
     val MOD = MODT
+     * use library call ???
+     *)
+
+    (*
+     * replace MLRISC emulated instructions with library calls ???
+     * these just get turned into library calls on the Alpha anyway
+     *)
+    local
+      fun code procedure (left, right, dest) =
+            let
+	      val left'  = Cells.newReg()
+	      val right' = Cells.newReg()
+	    in
+	      [MLTree.CODE[
+	         mv(left', left),
+		 mv(right', right)
+	       ]]@
+	      callC(externalExp procedure,
+		    [ExternalConvention.integer left',
+		     ExternalConvention.integer right'],
+		    [ExternalConvention.integer dest])
+	    end
+    in
+      val DIV  = code "til_div"
+      val DIVT = code "til_divt"
+      val MOD  = code "til_mod"
+      val MODT = code "til_modt"
+    end
 
     local
       fun code((testCondition, testExp), dest) =
