@@ -425,6 +425,13 @@ structure IlUtil
 	 | DEC_CON(v,k,SOME c, inline) => DEC_CON(v, f_kind state k, SOME (f_con state c), inline)
 	 | DEC_MOD(v,b,s)      => DEC_MOD(v, b, f_signat state s))
 
+      fun f_entry(state : state) (entry : context_entry) : context_entry = 
+	  (case entry of
+	       CONTEXT_SDEC sdec => CONTEXT_SDEC (f_sdec state sdec)
+	     | CONTEXT_SIGNAT (l, v, s) => CONTEXT_SIGNAT (l, v, f_signat state s)
+	     | CONTEXT_FIXITY _ => entry
+	     | CONTEXT_OVEREXP (l, v, celist) => CONTEXT_OVEREXP (l, v, map (fn (c,e) => (f_con state c,
+											  f_exp state e)) celist))
 
       val default_bound_convar = []
       val default_bound_var = []
@@ -565,6 +572,13 @@ structure IlUtil
 	                            (Name.PathMap.numItems c = 0) andalso
 				    (Name.PathMap.numItems m = 0) andalso
 				    (Name.VarMap.numItems s = 0)
+      fun subst_add((e1,c1,m1,s1),(e2,c2,m2,s2)) = 
+	  let fun joiner _ = error "subst_add: subst not disjoint"
+	  in  (Name.PathMap.unionWith joiner (e1,e2),
+	       Name.PathMap.unionWith joiner (c1,c2),
+	       Name.PathMap.unionWith joiner (m1,m2),
+	       Name.VarMap.unionWith joiner (s1,s2))
+	  end
 
       fun subst_add_exp((e,c,m,s), p, exp) = (Name.PathMap.insert(e, p, exp), c, m,s)
       fun subst_add_con((e,c,m,s), p, con) = (e, Name.PathMap.insert(c, p, con), m,s)
@@ -654,21 +668,24 @@ structure IlUtil
 
 
       local
-	  fun exp_handler (e,_,_) (VAR v,bound) = 
+	  fun exp_handler s (VAR v,bound) = 
 	                 if (member_eq(eq_var,v,bound)) 
 			     then NONE
-			 else ((e := v :: (!e)); NONE)
+			 else ((s := Name.VarSet.add(!s, v)); NONE)
 	    | exp_handler _ _ = NONE
-	  fun con_handler (_,c,_) (CON_VAR v,bound) = 
+	  fun con_handler s (CON_VAR v,bound) = 
 	                 if (member_eq(eq_var,v,bound)) 
 			     then NONE
-			 else ((c := v :: (!c)); NONE)
+			 else ((s := Name.VarSet.add(!s, v)); NONE)
 	    | con_handler _ _ = NONE
-	  fun mod_handler (_,_,m) (MOD_VAR v,bound) = 
+	  fun mod_handler s (MOD_VAR v,bound) = 
 	                 if (member_eq(eq_var,v,bound)) 
 			     then NONE
-			 else ((m := v :: (!m)); NONE)
+			 else ((s := Name.VarSet.add(!s, v)); NONE)
 	    | mod_handler _ _ = NONE
+	  fun sig_handler s (SIGNAT_VAR v) =
+	               ((s := Name.VarSet.add(!s, v)); NONE)
+	    | sig_handler _ _ = NONE
 
 	  fun handlers free =
 	       STATE(default_bound,
@@ -676,19 +693,18 @@ structure IlUtil
 			exp_handler = exp_handler free,
 			con_handler = con_handler free,
 			mod_handler = mod_handler free,
-			sig_handler = default_sig_handler})
-	  fun wrap f_obj obj = let val free = (ref ([] : var list), 
-					       ref ([] : var list), 
-					       ref ([] : var list))
+			sig_handler = sig_handler free})
+	  fun wrap f_obj obj = let val free = ref Name.VarSet.empty
 				      val _ = f_obj (handlers free) obj
-				      val (e,c,m) = free
-				  in  (!e, !c, !m)
+				  in  !free
 				  end
       in 
-	  type free = var list * var list * var list
+	  val exp_free = wrap f_exp
 	  val con_free = wrap f_con
 	  val mod_free = wrap f_mod
 	  val sig_free = wrap f_signat
+	  val sbnd_free = wrap f_sbnd
+	  val entry_free = wrap f_entry
       end
 
 

@@ -41,6 +41,7 @@ signature HELP =
 	val chat_ref : bool ref
 	val chat_strings : int -> string list -> int
 	    
+	val startTime : string -> unit
 	val showTime : string -> unit
 	val reshowTimes : unit -> unit
     end
@@ -54,8 +55,9 @@ signature FILECACHE =
 	val modTime : string -> Time.time
 	val lastModTime : string list -> string option * Time.time
 	val size : string -> int
-	val read : string -> bool * internal    (* Was it cached? *) 
-	val write : string * internal -> bool   (* Did we write?  *)
+	val read : string -> bool * internal         (* Was it cached? *) 
+	val write : string * internal -> bool        (* Did we write?  *)
+	val updateCache : string * internal -> bool  (* Update the cache if object cached; succeed? *)
 	val crc : string -> Crc.crc
 	val tick : unit -> unit
     end 

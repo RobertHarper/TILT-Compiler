@@ -276,7 +276,10 @@ struct
 		     help "PC_$POLY$MOD(" ")" [pp_mod m, String ": ", pp_signat s]
 	       | PHRASE_CLASS_SIG  (v,s)  => 
 		     help "PC_SIG(" ")" [pp_var v, String " = ", pp_signat s]
-	       | PHRASE_CLASS_OVEREXP _ => String "PC_OVEREXP")
+	       | PHRASE_CLASS_OVEREXP celist => 
+		     Vbox[String "PC_OVEREXP: ", Break,
+			  pp_list (fn (c,e) => Hbox[pp_exp e, String " : ", pp_con c])
+			          celist ("[",",","]",false)])
 	end
 
 
@@ -524,7 +527,11 @@ struct
 							    pp_label l, String " > ", pp_var v,
 							    String " = ", pp_signat [] s]
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
-      | pp_context_entry' (CONTEXT_OVEREXP _) = String "CONTEXT_OVEREXP ???"
+      | pp_context_entry' (CONTEXT_OVEREXP (l,v,celist)) = 
+			   HOVbox[String "CONTEXT_OVEREXP: ", 
+				  pp_label l, String " > ", pp_var v,
+				  pp_list (fn (c,e) => Hbox[pp_exp [] e, String " : ", pp_con [] c])
+			          celist ("[",",","]",false)]
 
     fun pp_context' (CONTEXT{fixityMap, pathMap, ordering, ...}) = 
 	let fun fixity_doer (l, f) = Hbox[pp_label l, String " : ", pp_fixity f]
@@ -536,9 +543,12 @@ struct
 			   String " : ",
 			   pp_phrase_class true [] pc]
 		end
-	in  Vbox[String "Fixity: ",
+	in  Vbox[String "---- Fixity ----",
+		 Break,
 		 pp_list fixity_doer (Name.LabelMap.listItemsi fixityMap) ("","", "", true),
-		 String "Pathmap: ",
+		 Break,
+		 String "---- Pathmap ----",
+		 Break,
 		 pp_list path_doer (rev ordering) ("","","", true)]
 	end
 

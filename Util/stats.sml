@@ -212,12 +212,15 @@ structure Stats :> STATS =
 	fun timer_time n = (Real.fromInt n) * (get_overhead())
       end
   
+      local
+	  fun loop i = if i < 0 then () else (print " "; loop (i-1))
+      in
+	  fun lprint max_size str =
+	      (print str; loop (max_size - (size str)))
+	  fun rprint max_size str =
+	      (loop (max_size - (size str)); print str)
+      end
 
-       fun fprint max_size str =
-	   let fun loop i = if i < 0 then () else (print " "; loop (i-1))
-	   in  print str;
-	       loop (max_size - (size str))
-	   end
        fun print_timers() =
 	 let 
 	   
@@ -233,7 +236,6 @@ structure Stats :> STATS =
 
 	   val (total_cpu, total_real) = foldr folder (0.0,0.0) entries
 
-	   fun real2string r = Real.fmt (StringCvt.FIX (SOME 3)) r
 
 	   fun real2stringWith prec r = Real.fmt (StringCvt.FIX (SOME prec)) r
 
@@ -244,20 +246,21 @@ structure Stats :> STATS =
 	   fun print_strings(name,count_string,per_call_string,max_string,
 			     time_cpu_string,percent_cpu_string,time_gc_string,
 			     time_real_string,percent_real_string, warning_flag) =
-	     (fprint max_name_size name;
-	      print " : ";
-	      fprint 8 count_string;
-	      fprint 8 per_call_string;
-	      fprint 6 max_string;
-	      print " : ";
-	      fprint 8 time_cpu_string;
-	      fprint 6 percent_cpu_string;
-	      print " : ";
-	      fprint 8 time_gc_string;
-	      print " : ";
-	      fprint 8 time_real_string;
-	      fprint 6 percent_real_string;
-	      fprint 6 warning_flag;
+	     (lprint max_name_size name;
+	      print " | ";
+	      rprint 6 count_string;
+	      rprint 7 per_call_string;
+	      rprint 7 max_string;
+	      print " | ";
+	      rprint 7 time_cpu_string;
+	      rprint 7 percent_cpu_string;
+	      print " | ";
+	      rprint 6 time_gc_string;
+	      print " | ";
+	      rprint 7 time_real_string;
+	      rprint 7 percent_real_string;
+	      print " | ";
+	      lprint 4 warning_flag;
 	      print "\n")
 
 	   fun pritem (name,TIME_ENTRY(ref {count,max,top_timer,sum,active,...})) = 
@@ -267,28 +270,29 @@ structure Stats :> STATS =
 	       val per_call = (time_cpu * 1000.0)/(Real.fromInt count) (*In milliseconds!*)
 	       val per_call = (Real.realFloor(per_call * 10.0)) / 10.0
 	       val timer_overhead = timer_time count
-	       val time_cpu_string = real2string time_cpu
-	       val time_real_string = real2string time_real
-	       val time_gc_string   = real2string (Time.toReal (#gc sum))
+	       val time_cpu_string = real2stringWith 2 time_cpu
+	       val time_real_string = real2stringWith 2 time_real
+	       val time_gc_string   = real2stringWith 2 (Time.toReal (#gc sum))
 	       val count_string = Int.toString count
 	       val per_call_string = real2stringWith 1 per_call
 	       val max_string = Int.toString (Real.trunc (max*1000.0)) (*In milliseconds (truncate, since beyond resolution)*)
+	       fun percent frac = 
+		   let val per = frac * 100.0
+		       val str = "(" ^ (real2stringWith 1 per) ^ ")"
+		   in  if (size str <= 5) then " " ^ str else str
+		   end
 	       val percent_cpu_string = 
-		 if top_timer then 
-		   ("(" ^ (real2stringWith 1 (time_cpu/total_cpu * 100.0)) ^ "%)") 
-		 else ""
+		   if top_timer then (percent (time_cpu/total_cpu)) else ""
 	       val percent_real_string = 
-		 if top_timer then 
-		   ("(" ^ (real2stringWith 1 (time_real/total_real * 100.0)) ^ "%)") 
-		 else ""
+		 if top_timer then (percent (time_real/total_real)) else ""
 
 	       (* If timer is active, print a warning flag.
 		* If the timer overhead is greater than 1 second, print it.
 		* Otherwise, if realtime is more than twice cpu time, print
 		* a warning flag *)
-	       val warning_flag = (if !active then "Active!"
-	                           else if timer_overhead > 1.0 then real2string timer_overhead
-				   else if (time_real > time_cpu * 2.0) then "*****" 
+	       val warning_flag = (if !active then "ON!"
+	                           else if timer_overhead > 1.0 then real2stringWith 2 timer_overhead
+				   else if (time_real > time_cpu * 2.0) then "***" 
 				   else "")
 	     in
 	       print_strings(name,count_string,per_call_string,max_string,
@@ -298,23 +302,27 @@ structure Stats :> STATS =
 	     | pritem _ = ()
 	 in
 	   print "\nGlobal timings\n";
-	   print_strings("Timer Name","Calls","avg(ms)",
-			 "max(ms)","cpu (s)","% cpu","gc (s)","real (s)","% real","flag/timer overhead");
-	   print "--------------------------------------------------------------------------------------------------\n";
+	   print_strings("Timer Name","Calls","Avg","Max",
+			 "cpu","cpu","gc","real"," real","flags");
+	   print_strings("","","(ms)","(ms)",
+			 "(s)","(%)","(s)","(s)"," (%)","");
+	   print "----------------------------------------------------------------------------------------------------\n";
 	   app pritem entries;
-	   print "--------------------------------------------------------------------------------------------------\n";
-	   fprint max_name_size "TOTAL TIME";
+	   print "----------------------------------------------------------------------------------------------------\n";
+	   lprint max_name_size "TOTAL CPU TIME";
 	   print " : ";
-	   fprint 8 (real2string total_cpu);
-	   fprint 8;
-	   fprint 8 (real2string total_real);
-	   print "\n";
+	   print (real2stringWith 2 total_cpu);
+	   print " seconds\n";
+	   lprint max_name_size "TOTAL REAL TIME";
+	   print " : ";
+	   print (real2stringWith 2 total_real);
+	   print " seconds\n";
 	   let val lines = !(int "SourceLines") 
 	   in  if lines > 0
-		 then (fprint max_name_size "LINES/SEC";
+		 then (lprint max_name_size "OVERALL RATE";
 		       print " : ";
-		       fprint 8 (real2string ((Real.fromInt lines) / total_real));
-		       print "\n")
+		       print (real2stringWith 2 ((Real.fromInt lines) / total_real));
+		       print " lines/second\n")
 	       else ()
 	   end;
 	   print (Date.toString(Date.fromTimeLocal(Time.now())));
@@ -324,9 +332,9 @@ structure Stats :> STATS =
       fun print_counters() = 
         let
 	       fun pritem (name,COUNTER_ENTRY(ref count)) =
-		       (fprint 30 name;
+		       (lprint 30 name;
 		        print " : ";
-		        fprint 8 (Int.toString count);
+		        rprint 8 (Int.toString count);
 			print "\n")
 	         | pritem _ = ()
 	in
@@ -340,9 +348,9 @@ structure Stats :> STATS =
       fun print_ints() =
         let
 	       fun pritem (name,INT_ENTRY(ref count)) =
-		       (fprint 30 name;
+		       (lprint 30 name;
 		        print " : ";
-		        fprint 8 (Int.toString count);
+		        rprint 8 (Int.toString count);
 			print "\n")
 	         | pritem _ = ()
 	in
@@ -355,7 +363,7 @@ structure Stats :> STATS =
       fun print_bools() =
         let
 	       fun pritem (name,BOOL_ENTRY(ref flag)) =
-		       (fprint 30 name;
+		       (lprint 30 name;
 		        print " : ";
 		        print (Bool.toString flag);
 			print "\n")
@@ -367,16 +375,21 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n"
 	 end
 
-      fun print_stats() = (entries := ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) (!entries);
-			   print "\n\n";
-			   print_bools(); 	
-			   print "\n\n";
-			   print_counters(); 	
-			   print "\n\n";
-			   print_ints(); 	
-			   print "\n\n";
-			   print_timers(); 
-			   print "\n\n")
+      fun print_stats() = 
+	  let val orig_entries = !entries
+	      val sort_entries = ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) orig_entries
+	  in  entries := sort_entries;
+	      print "\n\n";
+	      print_bools(); 	
+	      print "\n\n";
+	      print_counters(); 	
+	      print "\n\n";
+	      print_ints(); 	
+	      print "\n\n";
+	      entries := orig_entries;
+	      print_timers(); 
+	      print "\n\n"
+	  end
 
 
 

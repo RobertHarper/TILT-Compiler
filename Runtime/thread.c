@@ -312,7 +312,7 @@ int thread_max()
   return maxThread;
 }
 
-/* If num_add is zero, then start_adds is a thunk */
+/* If numThunk is zero, then thunks IS the thunk rather than an array of thunks */
 Thread_t *thread_create(Thread_t *parent, value_t *thunks, int numThunk)
 {
   int i;

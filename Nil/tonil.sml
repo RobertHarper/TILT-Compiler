@@ -1580,9 +1580,9 @@ end (* local defining splitting context *)
 	   val context'' = update_NILctx_insert_kind_list(context',map (fn v => (v,Type_k)) vars')
 	       
 	   val cons'= map (xcon context'') cons
-	   val freevars = Listops.flatten (map (fn c => #2(IlUtil.con_free c)) cons)
-	   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var,v,freevars)) vars
-
+	   val freevars = foldl Name.VarSet.union Name.VarSet.empty
+	                  (map IlUtil.con_free cons)
+	   val is_recur = Listops.orfold (fn v => Name.VarSet.member(freevars,v)) vars
 	   val con = Mu_c (is_recur,
 			   Sequence.fromList (Listops.zip vars' cons'))
 
@@ -1596,8 +1596,8 @@ end (* local defining splitting context *)
 	   val context''= update_NILctx_insert_kind(context', var', Type_k)
 	       
 	   val con' = xcon context'' con
-	   val (_,freevars,_) = IlUtil.con_free con
-	   val is_recur = Listops.member_eq(Name.eq_var,var,freevars)
+	   val freevars = IlUtil.con_free con
+	   val is_recur = Name.VarSet.member(freevars,var)
 	   val con = Mu_c (is_recur,Sequence.fromList [(var', con')])
        in
 	   con
@@ -2464,7 +2464,7 @@ end (* local defining splitting context *)
 		    ()
 		    
 	    val (imports,initial_splitting_context) = 
-		Stats.subtimer("Phase-spltting-context",xHILctx)
+		Stats.subtimer("Phase-split-ctxt",xHILctx)
 		HILctx
 		
             val _ = NilContext_reset_used (initial_splitting_context)

@@ -180,9 +180,9 @@ structure Toil
 			          | _ => NONE) sbnds)
 
 	    fun loop con = 
-		let val (_,occurConVars,occurModVars) = con_free con
-		in  if (null (Listops.list_inter_eq(eq_var,boundModVars,occurModVars)) andalso
-			null (Listops.list_inter_eq(eq_var,boundConVars,occurConVars)))
+		let val occurVars = Name.VarSet.listItems(con_free con)
+		in  if (null (Listops.list_inter_eq(eq_var,boundModVars,
+						    occurVars)))
 			then con
 		    else (case (con_reduce_once(context,con)) of
 			      NONE => error "reduce_to_remove failed to remove"

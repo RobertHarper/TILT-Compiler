@@ -12,6 +12,7 @@ structure Reduce
     val do_inline = Stats.tt("reduce_do_inline")
     val do_project_known = Stats.tt("reduce_do_project_known")
     val do_dead = Stats.tt("reduce_do_dead")
+    val show_stats = Stats.ff("ShowReduceStats")
 
     open Nil Name Util Prim Listops
     val error = fn s => Util.error "reduce.sml" s
@@ -1308,22 +1309,19 @@ fun doModule (module as MODULE{bnds=bnds, imports=imports, exports=exports}) =
 	    let val _ = clearTable drop_table
 	      val _ = clearTable bind 
 	      val (m as (bnds, EXPORTS entrys)) = xbnds VarSet.empty bnds (EXPORTS entrys)
-	    in (
-		if !debug then 
-		  (  
-		   print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
-		   print "ITERATION\n";
-			 print_round_clicks clicks;
-			 app Ppnil.pp_bnd bnds; print "\n";
-			 print_stats() 
-			 )
-		    else 
-			( 
-			 print_round_clicks clicks
-			 ) ;  
-			loop (round_clicks clicks, m )
-			)
-		end 
+	    in 
+		if !debug
+		    then (print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
+			  print "ITERATION\n";
+			  print_round_clicks clicks;
+			  app Ppnil.pp_bnd bnds; print "\n";
+			  print_stats())
+		else 
+		    if !show_stats
+			then print_round_clicks clicks
+		    else ();
+		loop (round_clicks clicks, m)
+	    end 
 	val (newbnds,( EXPORTS newexports)) = 
 	  (init 0 ; (loop (1, (bnds, EXPORTS exports))))
     in 

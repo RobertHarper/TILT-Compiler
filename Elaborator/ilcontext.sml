@@ -190,162 +190,296 @@ struct
 	
 
 
+    fun pcSubst(pc,subst) = 
+	(case pc of
+	     PHRASE_CLASS_EXP(e,con,eopt,inline) => 
+		 let val e = exp_subst(e,subst)
+		     val con = con_subst(con,subst)
+		     val eopt = (case eopt of
+				     NONE => NONE
+				   | SOME e => SOME(exp_subst(e,subst)))
+		 in  PHRASE_CLASS_EXP(e,con,eopt,inline)
+		 end
+	   | PHRASE_CLASS_CON(con,kind,copt,inline) => 
+		 let val con = con_subst(con,subst)
+		     val copt = (case copt of
+				     NONE => NONE
+				   | SOME c => SOME(con_subst(c,subst)))
+		 in  PHRASE_CLASS_CON(con,kind,copt,inline)
+		 end
+	   | PHRASE_CLASS_MOD(m,b,signat) => 
+		 let val m = mod_subst(m,subst)
+		     val signat = sig_subst(signat,subst)
+		 in  PHRASE_CLASS_MOD(m,b,signat)
+		 end
+	   | PHRASE_CLASS_SIG (v,s) => 
+		 let val s = sig_subst(s,subst)
+		 in  PHRASE_CLASS_SIG(v,s)
+		 end
+	   | PHRASE_CLASS_OVEREXP celist => 
+		 let val celist = map (fn (c,e) => (con_subst(c,subst),
+						    exp_subst(e,subst))) celist
+		 in  PHRASE_CLASS_OVEREXP celist
+		 end)
 
-    (* adding the partial context to the context *)
-    fun plus (ctxt as CONTEXT{fixityMap = fl1, labelMap = lm1, pathMap = pm1, ordering = ord1},
-	      (CONTEXT{fixityMap = fl2, labelMap = lm2, pathMap = pm2, ordering = ord2}, unresolved),
-	      used) =
+    (* alphaVarying a partial context WRT a context so that
+       (1) the partial context's unresolved list maps to variables as bound by the full context
+       (2) the partial context does not bind variables (at top-level) 
+           that are bound (at top-level) of the full context
+       If either condition is not already true, a substitution is produced and
+          the substitution is applied to partial context.
+    *)
+    fun alphaVaryPartialContext 
+	(CONTEXT{labelMap = lm1, pathMap = pm1, ...},
+	 (CONTEXT{fixityMap = fm2, labelMap = lm2, pathMap = pm2, ordering = ord2}, unresolved)) 
+	: partial_context option = 
 	let 
-	    fun folder(PATH p,(lm,pm,ord,subst)) =
+	    fun folder subst (PATH p,(lm,pm,ord)) =
 		let val (lab,pc) = (case Name.PathMap.find(pm2, p) of
 					   SOME lab_pc => lab_pc
 					 | NONE => (print "missing path ";
 						    pp_path (PATH p); print "\n";
 						    error "missing path"))
-		    val in_current = (case (Name.PathMap.find(pm, p)) of
-					  NONE => false
-					| SOME _ => true)
-		    val (p,subst) = 
-			if in_current 
-			    then let val (v,labs) = p
-				     val v' = Name.derived_var v
-				     val p' = (v',labs)
-				     val subst = subst_add_expvar(subst,v,VAR v')
-				     val subst = subst_add_convar(subst,v,CON_VAR v')
-				     val subst = subst_add_modvar(subst,v,MOD_VAR v')
-				     val subst = subst_add_sigvar(subst,v,v')
-				 in  (p',subst)
-				 end
-			else (p, subst)
-		    val pc = 
+		    val (v,labs) = p
+		    val v = 
 			(case pc of
-			     PHRASE_CLASS_EXP(e,con,eopt,inline) => 
-				 let val e = exp_subst(e,subst)
-				     val con = con_subst(con,subst)
-				     val eopt = (case eopt of
-						     NONE => NONE
-						   | SOME e => SOME(exp_subst(e,subst)))
-				 in  PHRASE_CLASS_EXP(e,con,eopt,inline)
-				 end
-			   | PHRASE_CLASS_CON(con,kind,copt,inline) => 
-				 let val con = con_subst(con,subst)
-				     val copt = (case copt of
-						     NONE => NONE
-						   | SOME c => SOME(con_subst(c,subst)))
-				 in  PHRASE_CLASS_CON(con,kind,copt,inline)
-				 end
-			   | PHRASE_CLASS_MOD(m,b,signat) => 
-				 let val m = mod_subst(m,subst)
-				     val signat = sig_subst(signat,subst)
-				 in  PHRASE_CLASS_MOD(m,b,signat)
-				 end
-			   | PHRASE_CLASS_SIG (v,s) => 
-				 let val s = sig_subst(s,subst)
-				 in  PHRASE_CLASS_SIG(v,s)
-				 end
-			   | PHRASE_CLASS_OVEREXP celist => 
-				 let val celist = map (fn (c,e) => (con_subst(c,subst),
-								    exp_subst(e,subst))) celist
-				 in  PHRASE_CLASS_OVEREXP celist
-				 end)
+			     PHRASE_CLASS_EXP _ => let val VAR v' = exp_subst(VAR v, subst)
+						   in  v'
+						   end
+			   | PHRASE_CLASS_CON _ => let val CON_VAR v' = con_subst(CON_VAR v, subst)
+						   in  v'
+						   end
+			   | PHRASE_CLASS_MOD _ => let val MOD_VAR v' = mod_subst(MOD_VAR v, subst)
+						   in  v'
+						   end
+			   | PHRASE_CLASS_SIG _ => let val SIGNAT_VAR v' = sig_subst(SIGNAT_VAR v, subst)
+						   in  v'
+						   end
+			   | PHRASE_CLASS_OVEREXP _ => let val VAR v' = exp_subst(VAR v, subst)
+						       in  v'
+						       end)
+		    val p = (v,labs)
+		    val pc = pcSubst(pc,subst)
 		    val lm = LabelMap.insert(lm,lab,(PATH p,pc))
 		    val pm = Name.PathMap.insert(pm,p,(lab,pc))
-		    val ord = (PATH p) :: ord
-		in (lm, pm, ord, subst)
+		in (lm, pm, (PATH p)::ord)
 		end
-	    val fixityMap = LabelMap.unionWith (fn (first,second) => second) (fl1,fl2)
-            (* The initial substitution comes from unresolved *)
-	    val subst = Name.VarMap.foldli 
-		(fn (v,l,subst) => 
-		 (case Name.LabelMap.find(lm1,l) of
-		      SOME (PATH(v',[]), pc) =>
-			  if (eq_var (v,v'))
-			      then subst
-			  else (case pc of
-				    PHRASE_CLASS_EXP _ => subst_add_expvar(subst,v,VAR v')
-				  | PHRASE_CLASS_CON _ => subst_add_convar(subst,v,CON_VAR v')
-				  | PHRASE_CLASS_MOD _ => subst_add_modvar(subst,v,MOD_VAR v')
-				  | PHRASE_CLASS_SIG _ => subst_add_sigvar(subst,v,v')
-				  | PHRASE_CLASS_OVEREXP _ => subst_add_expvar(subst,v,VAR v'))
-		    | _ => error ("add_context could not resolve " ^ (Name.label2name l))))
-		 empty_subst unresolved
-	    (* use foldr since ord's are backwards *)
-	    val (labelMap,pathMap,ordering,_) = foldr folder (lm1,pm1,ord1,subst) ord2
-	in  (used,
+            (* ---- We compute the new unresolved and the substitution that arises ----- *)
+	    fun unresolvedFolder (v,l,(unresolved,subst)) =
+		(case Name.LabelMap.find(lm1,l) of
+		     SOME (PATH(v',[]), pc) =>
+			 let val unresolved = VarMap.insert(unresolved, v', l)
+			     val subst = 
+				 if (eq_var (v,v'))
+				     then subst
+				 else (case pc of
+					   PHRASE_CLASS_EXP _ => subst_add_expvar(subst,v,VAR v')
+					 | PHRASE_CLASS_CON _ => subst_add_convar(subst,v,CON_VAR v')
+					 | PHRASE_CLASS_MOD _ => subst_add_modvar(subst,v,MOD_VAR v')
+					 | PHRASE_CLASS_SIG _ => subst_add_sigvar(subst,v,v')
+					 | PHRASE_CLASS_OVEREXP _ => subst_add_expvar(subst,v,VAR v'))
+			 in  (unresolved, subst)
+			 end
+		    | _ => error ("add_context could not resolve " ^ (Name.label2name l)))
+	    val (unresolved,unresolvedSubst) = Name.VarMap.foldli unresolvedFolder
+		                               (VarMap.empty, empty_subst) unresolved
+            (* ---- Compute the substitution to avoid clashes of bound variables ------- *)
+	    fun clashFolder ((v,[]), (l, pc), subst) = 
+		(case PathMap.find(pm1, (v, [])) of
+		     NONE => subst
+		   | SOME _ => 
+			 let val v' = derived_var v
+			 in  (case pc of
+				  PHRASE_CLASS_EXP _ => subst_add_expvar(subst,v,VAR v')
+				| PHRASE_CLASS_CON _ => subst_add_convar(subst,v,CON_VAR v')
+				| PHRASE_CLASS_MOD _ => subst_add_modvar(subst,v,MOD_VAR v')
+				| PHRASE_CLASS_SIG _ => subst_add_sigvar(subst,v,v')
+				| PHRASE_CLASS_OVEREXP _ => subst_add_expvar(subst,v,VAR v'))
+			 end)
+	      | clashFolder (_, _, subst) = subst
+	    val clashSubst = Name.PathMap.foldli clashFolder empty_subst pm2
+	    val subst = subst_add(clashSubst, unresolvedSubst)
+	in  if ((print "XXXXXXX alphaVary NOT short-circuiting!!!!\n"; false)
+		andalso subst_is_empty subst)
+		then NONE
+	    else 
+		let val (labelMap,pathMap,ordering) = 
+		    foldr (folder subst) (LabelMap.empty,PathMap.empty,[]) ord2
+		in  SOME (CONTEXT{fixityMap = fm2,
+				  labelMap = labelMap,
+				  pathMap = pathMap,
+				  ordering = ordering}, 
+			  unresolved)
+		end 
+	end
+
+    fun pcAddFree(pc,set) = 
+	(case pc of
+	     PHRASE_CLASS_EXP (e,c,eopt,_) => 
+		 let val set = VarSet.union(set, exp_free e)
+		     val set = VarSet.union(set ,con_free c) 
+		 in  (case eopt of
+			  NONE => set
+			| SOME e => VarSet.union(set, exp_free e))
+		 end
+	   | PHRASE_CLASS_CON (c,_,copt,_) => 
+		let val set = VarSet.union(set, con_free c) 
+		in (case copt of
+			NONE => set
+		      | SOME c => VarSet.union(set, con_free c))
+		end
+	   | PHRASE_CLASS_MOD (m,_,s) => 
+		let val set = VarSet.union(set, mod_free m) 
+		in  VarSet.union(set, sig_free s)
+		end
+	   | PHRASE_CLASS_SIG (_, s) => VarSet.union(set, sig_free s)
+	   | PHRASE_CLASS_OVEREXP celist =>
+		let fun folder((c,e),acc) = 
+		        VarSet.union(acc, VarSet.union(con_free c, exp_free e))
+		in  foldl folder set celist
+		end)
+
+    (* adding the partial context to the context *)
+    fun plus (orig_pctxt : partial_context,
+	      ctxt as CONTEXT{fixityMap = fm1, labelMap = lm1, 
+			      pathMap = pm1, ordering = ord1})
+	: partial_context option * context = 
+	let
+	    val pctxt_option = alphaVaryPartialContext(ctxt, orig_pctxt)
+	    val (CONTEXT{fixityMap = fm2, labelMap = lm2, 
+			 pathMap = pm2, ordering = ord2}, 
+		 unresolved) = (case pctxt_option of
+				    NONE => orig_pctxt (* alpha-varying not needed *)
+				  | SOME pctxt => pctxt)
+	    val fixityMap = LabelMap.unionWithi
+		            (fn (l,_,_) => error ("fixityMap not disjoint at " ^ (label2name l)))
+			     (fm1,fm2)
+	    val labelMap = LabelMap.unionWithi 
+		            (fn (l,_,second) => second) (* take the second to shadow the first *)
+			     (lm1,lm2)
+	    val pathMap = PathMap.unionWithi 
+			    (fn (p,(l,_),(l',_)) => (print "pathMap not disjoint at label ";
+						     Ppil.pp_label l;
+						     print " and label' ";
+						     Ppil.pp_label l';
+						     print " and path ";
+						     Ppil.pp_path (PATH p);
+						     print "\n";
+						     error "pathMap not disjoint"))
+			     (pm1,pm2)
+	    (* orderings are backwards *)
+	    val ordering = ord2 @ ord1
+	in  (pctxt_option,
 	     CONTEXT{fixityMap = fixityMap,
-		    labelMap = labelMap,
-		    pathMap = pathMap,
-		    ordering = ordering})
+		     labelMap = labelMap,
+		     pathMap = pathMap,
+		     ordering = ordering})
 	end 
 
-      fun plus_context (ctxt, partial_ctxts) = 
-	  let fun loop (ctxt,[],used) = ctxt
-		| loop (ctxt,pctxt::rest,used) = 
-	            let val (used,ctxt) = plus(ctxt,pctxt,used)
-		    in  loop (ctxt, rest, used)
-		    end
-	  in  loop (ctxt,partial_ctxts,Name.VarSet.empty)
-	  end
+    fun plus_context (ctxt, partial_ctxts) 
+	: partial_context option list * context = 
+	foldl_list plus ctxt partial_ctxts
+    
+    fun show_varset str set = 
+	(print str; print ": ";
+	 VarSet.app (fn v => (Ppil.pp_var v; print "  ")) set;
+	 print "\n")
 
-(*
-      fun check_context (CONTEXT{fixityMap, labelMap, pathMap, ordering}) = 
-	  let val _ = (Name.PathMap.appi 
-		       (fn (p,(l,_)) => 
-			    (case Name.LabelMap.find(labelMap,l) of
-				 NONE => error "check_context: missing label in pathmap"
-			       | SOME (p',_) => if (eq_path(PATH p,p'))
-						    then ()
-						else (print "check_context: mismatch path: ";
-						      pp_path (PATH p); print " != ";
-						      pp_path p'; print "\n";
-						      error "check_context: mismatch path")))
-		       pathMap)
-	      val _ = (Name.LabelMap.appi 
-		       (fn (l,(PATH p,_)) => 
-			    (case Name.PathMap.find(pathMap,p) of
-				 NONE => error "check_context: missing path in labelmap"
-			       | SOME (l',_) => if (eq_label(l,l'))
-						    then ()
-						else error "check_context: mismatch label"))
-		       labelMap)
-	  in  ()
-	  end
-*)
+    (* The context has cycles because of selfification *)
+    fun reachableVars(pathMap, black, gray) = 
+	if (VarSet.isEmpty gray)
+	    then black
+	else 
+	    let 
+(*		val _ = show_varset "Gray" gray *)
+		val black = VarSet.union(black, gray)
+		fun folder (v,s) = 
+		    (case PathMap.find(pathMap,(v,[])) of
+			 SOME (_, pc) => pcAddFree(pc,s)
+		       | _ => s)
+(* error ("reachableVars could not find free variable " ^ (Name.var2string v)) *)
+		val freeVars = VarSet.foldl folder VarSet.empty gray  
+		fun pred v = (case PathMap.find(pathMap,(v,[])) of
+				  SOME _ => true
+				| _ => false)
+		val temp = VarSet.filter pred freeVars         (* one step from old gray *)
+(*		val _ = show_varset "temp" temp *)
+		val gray = VarSet.difference(temp, black)      (* there might be loops *)
+	    in  reachableVars(pathMap,black,gray)
+	    end
 
-      fun sub_context (bigger : Il.context, smaller : Il.context) : Il.partial_context = 
-	  let 
-(*	      val _ = check_context bigger 
-	      handle e => (print "bigger context failed consistency: ";
-			   Ppil.pp_context bigger;
-			   raise e)
-	      val _ = check_context smaller
-	      handle e => (print "smaller context failed consistency: ";
-			   Ppil.pp_context smaller;
-			   raise e)
-*)
-	      val CONTEXT{fixityMap=f1, labelMap=l1, pathMap=p1, ordering=o1} = bigger
-	      val CONTEXT{fixityMap=f2, labelMap=l2, pathMap=p2, ordering=o2} = smaller
-	      val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1) of
-							   NONE => true
-							 | SOME _ => false)) f1
-	      val o3 = List.filter (fn PATH vpath => (case Name.PathMap.find(p2,vpath) of
-							  NONE => true
-							| SOME _ => false)) o1
-	      val l3 = Name.LabelMap.filteri (fn (l,_) => 
-					      (case Name.LabelMap.find(l2,l) of
-						   NONE => true
-						 | SOME _ => false)) l1
-	      val p3 = Name.PathMap.filteri (fn (p,_) => 
-					     (case Name.PathMap.find(p2,p) of
-						  NONE => true
-						| SOME _ => false)) p1
-	      val diff = CONTEXT{fixityMap = f3, labelMap = l3, pathMap = p3, ordering = o3} 
-	      (* Could be more clever and figure out only what is needed *)
-	      val unresolved = Name.PathMap.foldli 
-		                  (fn ((v,[]),(l,_),vm) => Name.VarMap.insert(vm,v,l)
-				    | (_,_,vm) => vm) Name.VarMap.empty p2
-	  in  (diff, unresolved)
-	  end
+    fun sub_context (bigger : Il.context, smaller : Il.context) : Il.partial_context = 
+	let 
+	    val CONTEXT{fixityMap=f1, labelMap=l1, pathMap=p1, ordering=o1} = bigger
+	    val CONTEXT{fixityMap=f2, labelMap=l2, pathMap=p2, ordering=o2} = smaller
+	    val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1) of
+							 NONE => true
+						       | SOME _ => false)) f1
+	    val o3 = List.filter (fn PATH vpath => (case PathMap.find(p2,vpath) of
+							NONE => true
+						      | SOME _ => false)) o1
+	    val l3 = LabelMap.filteri (fn (l,_) => 
+					    (case LabelMap.find(l2,l) of
+						 NONE => true
+					       | SOME _ => false)) l1
+	    val p3 = PathMap.filteri (fn (p,_) => 
+					   (case PathMap.find(p2,p) of
+						NONE => true
+					      | SOME _ => false)) p1
+	    val diff = CONTEXT{fixityMap = f3, labelMap = l3, pathMap = p3, ordering = o3} 
+	    val roots = PathMap.foldli 
+		          (fn ((v,[]),_,s) => VarSet.add(s,v)
+			    | (_,_,s) => s)
+		          VarSet.empty p3
+	    val reachable = reachableVars(p1, VarSet.empty, roots)
+	    val keepVars = VarSet.difference(reachable, roots)
+	    val unresolved = VarSet.foldl
+		                  (fn (v,vm) => 
+				   (case PathMap.find(p1, (v,[])) of
+					SOME (l, _) => VarMap.insert(vm,v,l)
+				      | NONE => error "Missing variable in sub_context"))
+				  Name.VarMap.empty keepVars
+	    val _ = print ("sub_context: " ^
+			   Int.toString(PathMap.numItems p2) ^
+			   " items in smaller context. " ^ 
+			   (Int.toString (VarMap.numItems unresolved))
+			   ^ " items in unresolved of smaller context.\n")
+	in  (diff, unresolved)
+	end
 
+    fun gc_context ((context, (CONTEXT{pathMap,...}, _), sbndopt_entry) : Il.module) : Il.context = 
+	let val exclude = PathMap.foldli
+		          (fn ((v,[]),_,s) => VarSet.add(s,v)
+			    | (_,_,s) => s)
+		          VarSet.empty pathMap
+	    val roots = PathMap.foldli
+		          (fn ((v,[]),(_,pc),s) => pcAddFree(pc,s)
+			    | (_,_,s) => s)
+		          VarSet.empty pathMap
+	    fun folder ((sbndopt,entry),roots) = 
+		let val roots = (case sbndopt of
+				     NONE => roots
+				   | SOME sbnd => VarSet.union(roots, sbnd_free sbnd))
+		in  VarSet.union(roots, entry_free entry)
+		end
+	    val roots = foldl folder roots sbndopt_entry
+	    val roots = VarSet.difference(roots, exclude)
+	    val CONTEXT{pathMap, labelMap, ordering, fixityMap} = context
+	    val reachable = reachableVars(pathMap, VarSet.empty, roots)
+	    fun isReachable (v,_) = Name.VarSet.member(reachable,v)
+	    val pathMap_orig = pathMap (* used for the print statements below *)
+	    val pathMap = PathMap.filteri (fn (p,_) => isReachable p) pathMap_orig
+	    val labelMap = LabelMap.filteri (fn (_, (PATH p, _)) => isReachable p) labelMap
+	    val ordering = List.filter (fn PATH p => isReachable p) ordering
+	    val _ = print ("gc_context: " ^
+			   Int.toString(PathMap.numItems pathMap_orig) ^
+			   " items in original context.  " ^ 
+			   (Int.toString (PathMap.numItems pathMap))
+			   ^ " items in reduced context.\n")
+	in  CONTEXT{pathMap = pathMap,
+		    labelMap = labelMap,
+		    ordering = ordering,
+		    fixityMap = fixityMap}
+	end
 end
 

@@ -118,13 +118,14 @@ struct
        fun reset_mutable() = mutable := nil
    end
    fun add_proc p = pl := p :: !pl
-
-
+       
+  (* Stats.subtimer(str,f) for real timing *)
+  fun subtimer(str,f) = f
   fun type_of ({env,...}:state) e = 
-      Stats.subtimer("RTL_typeof",Normalize.type_of)(#1 env,e)
+      subtimer("RTL_typeof",Normalize.type_of)(#1 env,e)
 
   fun std_kind_of ({env,...}:state) c =
-      Stats.subtimer("RTL_kind_of",NilContext.kind_of) (#1 env,c)
+      subtimer("RTL_kind_of",NilContext.kind_of) (#1 env,c)
 
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
@@ -251,8 +252,7 @@ struct
        in either case, the returned type is possibly simpler than the argument type *)
 
     fun simplify_type ({env,...} : state) con : bool * con = 
-	let val result = Stats.subtimer("RTL_reduce_hnf",
-					Normalize.reduce_hnf)(#1 env,con)
+	let val result = subtimer("RTL_reduce_hnf",Normalize.reduce_hnf)(#1 env,con) 
 	    val _ = if (!debug_simp)
 		    then (print (Real.toString (Stats.fetch_timer_last "RTL_reduce_hnf"));
 			  print "s  simplify on\n";  Ppnil.pp_con con;
@@ -264,7 +264,7 @@ struct
 
 
   fun reduce_to_sum str ({env,...}:state) c = 
-      let fun slow() = Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype) (#1 env,c)
+      let fun slow() = subtimer("RTL_reduceToSum",Normalize.reduceToSumtype) (#1 env,c) 
       in  (case c of
 	       Var_c v => 
 		   let val SOME cache = VarMap.find(#2 env,v)
@@ -297,7 +297,7 @@ struct
 	  in  loop acc con rest
 	  end
 	    | loop acc (Single_k c) labs = 
-	  let val k = Stats.subtimer("RTLkind_of0", NilContext.kind_of) (#1 (#env state),c)
+	  let val k = subtimer("RTLkind_of0", NilContext.kind_of) (#1 (#env state),c)
 	  in  loop acc k labs
 	  end
 	    | loop acc (SingleType_k c) labs = 

@@ -1,4 +1,4 @@
-(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int32 Util Listops *)
+(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int32 Util Listops List *)
 functor Rtltoasm (val commentHeader : string
 		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV
@@ -38,9 +38,8 @@ struct
    val error = fn s => Util.error "rtltoasm.sml" s
 
 
-   fun filter p [] = []
-     | filter p (x::xs) = if (p x) then x :: (filter p xs) else filter p xs
-
+   (* Use Stats.subtimer(str,f) for real timing *)
+   fun subtimer (str,f) = f
 
 
 (* ----------------------------------------------------------------- *)
@@ -166,10 +165,10 @@ struct
 	       let
 		 val callees = callee_map name
 		 val recursive_callees = 
-		   filter (is_mutual_recursive name) callees
+		     List.filter (is_mutual_recursive name) callees
 
 		 val nonrecursive_callees =
-		   filter (not o (is_mutual_recursive name)) callees
+		     List.filter (not o (is_mutual_recursive name)) callees
 
 		 val _ = 
 		   if (! debug) then
@@ -208,7 +207,7 @@ struct
 		     val (rtlproc as Rtl.PROC{known,...})= findRtlProc name procs
 		   in
 		     (known andalso (! knowns), 
-		       Stats.subtimer("toasm_translateproc", 
+		       subtimer("toasm_translateproc", 
 			Toasm.translateProc) rtlproc)
 		   end
 
@@ -274,7 +273,7 @@ struct
 			     then (print "allocateProc 2 entered\n")
 		       else ()
 	       val (new_sig, new_block_map, new_block_labels, gc_data) =
-		    Stats.subtimer("chaitin_allocproc2", 
+		    subtimer("chaitin_allocproc2", 
 				  Procalloc.allocateProc2) res_of_allocateproc1
 	       fun doer (l,acc) = 
 		 let
@@ -336,7 +335,7 @@ struct
 	     fun final_alloc arg = 
 		 case arg of
 		   (SOME psig, NONE, cls) => ((psig,[]),cls)
-		 | (NONE, SOME x, cls) => (Stats.subtimer("toasm_allocProc2", 
+		 | (NONE, SOME x, cls) => (subtimer("toasm_allocProc2", 
 					  allocateProc2) x,cls)
 		 | _ => error "allocateproc in allocatecomponent"
 	     val code_labels_listlist = map (fn ((_,a),b) => (a @ b)) (map final_alloc temps)

@@ -18,6 +18,8 @@ struct
 	val debug = Stats.ff("Optimize_debug")
 	val do_diag = ref false
 	fun diag s = if !do_diag then print s else()
+	(* Use Stats.subtimer(str,f) for real timing *)
+	fun subtimer(str,f) = f
 
 fun path2con (v,labs) = 
   let fun loop c [] = c
@@ -383,9 +385,9 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun find_curry_pair(STATE{curry_processed,...},v) = Name.VarMap.find(#2 curry_processed,v)
 	  fun is_curry_processed(STATE{curry_processed,...},v) = Name.VarSet.member(#1 curry_processed,v)
 
-	  val Normalize_reduce_hnf = Stats.timer("optimize_reduce_hnf", Normalize.reduce_hnf);
-	  val Normalize_reduceToSumtype = Stats.timer("optimize_reduce_tosumtype", Normalize.reduceToSumtype);
-	  val Normalize_type_of = Stats.timer("optimize_typeof", Normalize.type_of);
+	  val Normalize_reduce_hnf = subtimer("optimize_reduce_hnf", Normalize.reduce_hnf)
+	  val Normalize_reduceToSumtype = subtimer("optimize_reduce_tosumtype", Normalize.reduceToSumtype)
+	  val Normalize_type_of = subtimer("optimize_typeof", Normalize.type_of)
 	  fun type_of(STATE{equation,...},e) = Normalize_type_of(equation,e)
 	  fun get_trace(STATE{equation,...},t) = TraceOps.get_trace (equation,t)
 	end

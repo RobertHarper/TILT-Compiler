@@ -150,9 +150,9 @@ structure Signature :> SIGNATURE =
 
     fun rewrite_type_component (ctxt,orig_sdecs,labs,con) = 
 	let
-	    local val (_,fv,_) = con_free con
+	    local val fv = con_free con
 	    in    fun bound v = 
-	            if (member_eq(eq_var,v,fv)) 
+	            if (Name.VarSet.member(fv,v))
 			then (error_region();
 			      print "signature wheretype leads to variable capture\n")
 		    else ()
@@ -1113,14 +1113,15 @@ structure Signature :> SIGNATURE =
 	    else  (mod_actual, sig_actual)
 	end
 
-    val xsig_where_type = Stats.subtimer("Elab-Signature",xsig_where_type)
-    val xsig_where_structure = Stats.subtimer("Elab-Signature",xsig_where_structure)
-    val xsig_sharing_types = Stats.subtimer("Elab-Signature",xsig_sharing_types)
-    val xsig_sharing_structures = Stats.subtimer("Elab-Signature",xsig_sharing_structures)
+    fun subtimer(str,f) = f  (* use Stats.subtimer for real timing *)
+    val xsig_where_type = subtimer("Elab-Signature",xsig_where_type)
+    val xsig_where_structure = subtimer("Elab-Signature",xsig_where_structure)
+    val xsig_sharing_types = subtimer("Elab-Signature",xsig_sharing_types)
+    val xsig_sharing_structures = subtimer("Elab-Signature",xsig_sharing_structures)
 
-    val xcoerce_seal = Stats.subtimer("Elab-Signature",xcoerce_seal)
-    val xcoerce_transparent = Stats.subtimer("Elab-Signature",xcoerce_transparent)
-    val xcoerce_functor = Stats.subtimer("Elab-Signature",xcoerce_functor)
+    val xcoerce_seal = subtimer("Elab-Signature",xcoerce_seal)
+    val xcoerce_transparent = subtimer("Elab-Signature",xcoerce_transparent)
+    val xcoerce_functor = subtimer("Elab-Signature",xcoerce_functor)
 
 end
 

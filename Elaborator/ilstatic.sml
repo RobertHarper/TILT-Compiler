@@ -284,14 +284,11 @@ structure IlStatic
 			else ()
 
 	       val tyvar_ctxts = tyvar_getctxts tyvar
-	       val (ev,cv,mv) = con_free c
+	       val fv = Name.VarSet.listItems(con_free c)
 	       fun var_bound ctxt v = (case Context_Lookup_Var(ctxt,v) of
 					   SOME _ => true
 					 | _ => false)
-	       fun bounded ctxt = 
-		   (Listops.andfold (var_bound ctxt) ev) andalso
-		   (Listops.andfold (var_bound ctxt) cv) andalso
-		   (Listops.andfold (var_bound ctxt) mv)
+	       fun bounded ctxt = Listops.andfold (var_bound ctxt) fv
 
 	       val occurs = Listops.member_eq(eq_tyvar,tyvar,map #2 tyvars) (* occurs check *)
 	       val well_formed = Listops.andfold bounded tyvar_ctxts
@@ -322,16 +319,19 @@ structure IlStatic
 			  false)
 	   end
 
+(*
        val set = fn (arg as (_,c)) => 
-	   let val islong_before = (Stats.fetch_timer_max "Elab-set") > 0.5
+	   let 
+	       val islong_before = (Stats.fetch_timer_max "Elab-set") > 0.5 
 	       val res = Stats.subtimer("Elab-set",set) arg
-	       val islong_after = (Stats.fetch_timer_max "Elab-set") > 0.5
+               val islong_after = (Stats.fetch_timer_max "Elab-set") > 0.5
 	       val _ = if (not islong_before andalso islong_after)
 			   then (print "set took more than 0.5s with c = ";
 				 pp_con c; print "\n\n")
 		       else ()
 	   in  res
 	   end
+*)
 
        (* Undo is not undoing effects of constrain operations *)
        fun undo() = app (fn {saved,active} => tyvar_update(active,saved)) (!table)
@@ -340,7 +340,7 @@ structure IlStatic
 
    and eq_con (ctxt, con1, con2) = 
        let val (setter,undo) = unify_maker()
-       in  Stats.subtimer("Elab-subeq_con",meta_eq_con (setter,false))
+       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,false)
 	   (con1, con2, ctxt)
        end
 
@@ -349,7 +349,7 @@ structure IlStatic
 			pp_con con1; print "\nand con2 = \n";
 			pp_con con2; print "\n")
 	   val (setter,undo) = unify_maker()
-       in  Stats.subtimer("Elab-subeq_con",meta_eq_con (setter,true))
+       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,true)
 	   (con1, con2, ctxt)
        end
 

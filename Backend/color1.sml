@@ -22,6 +22,8 @@ struct
 
    (* Color the interference graph *)
 
+   (* Use Stats.subtimer(str,f) for real timing *)
+   fun subtimer (str,f) = f  
    fun simplify_graph_time f = f (* Stats.subtimer("simplify graph",f) *)
    fun select_colors_time f =  f (* Stats.subtimer("select colors",f) *)
 
@@ -101,7 +103,7 @@ struct
 			print (Int.toString (length random_nodes)); print "\n")
 *)
 
-	   in Stats.subtimer("color: delete_nodes",fn()=>
+	   in subtimer("color: delete_nodes",fn()=>
 			     (app delete_node good_nodes;
 			      app delete_node bad_nodes;
 			      app delete_node random_nodes)) ();

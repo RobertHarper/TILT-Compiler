@@ -38,8 +38,12 @@ signature ILCONTEXT =
 	val add_context_con  : context * label * var * kind * con option -> context
 	val add_context_con' : context *         var * kind * con option -> context
 
-	val sub_context  : Il.context * Il.context -> Il.partial_context  (* a - b *)
-	val plus_context : Il.context * Il.partial_context list -> Il.context
+	(* Subtract the second context from the first one.  *)
+	val sub_context  : Il.context * Il.context -> Il.partial_context  
+	(* Returns alpha-varied partial contexts if alpha-varying was needed. *)
+	val plus_context : Il.context * Il.partial_context list -> Il.partial_context option list * Il.context
+	(* GC the given context by using the partial context and bindings as roots *)
+	val gc_context : Il.module -> Il.context
 
 	(* ---- These lookup functions don't perform selfification ---- *)		
 	val Context_Fixity       : context -> Fixity.fixity Name.LabelMap.map

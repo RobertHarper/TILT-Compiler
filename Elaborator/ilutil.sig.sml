@@ -135,6 +135,7 @@ signature ILUTIL =
 
     val empty_subst : subst
     val subst_is_empty : subst -> bool
+    val subst_add : subst * subst -> subst  (* Must be disjoint *)
     val list2subst : (var * exp) list * (var * con) list * (var * mod) list -> subst
 
     val subst_add_expvar : subst * var * exp -> subst
@@ -154,10 +155,12 @@ signature ILUTIL =
     val sig_subst' : signat * subst -> int * signat
 
     (* ------------ Functions that compute FV --------- *)
-    type free = var list * var list * var list
-    val mod_free : mod -> free
-    val con_free : con -> free
-    val sig_free : signat -> free
+    val exp_free : exp -> Name.VarSet.set
+    val mod_free : mod -> Name.VarSet.set
+    val con_free : con -> Name.VarSet.set
+    val sig_free : signat -> Name.VarSet.set
+    val sbnd_free : sbnd -> Name.VarSet.set
+    val entry_free : Il.context_entry -> Name.VarSet.set
 
     (* ----------- Functions that compute object sizes ----------- *)
     val mod_size : mod -> int

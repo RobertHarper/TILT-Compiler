@@ -84,7 +84,7 @@ struct
     end
 
   fun wrapper string command = Stats.timer(string,command)
-  val comp = wrapper "toasm" comp
+  val comp = wrapper "To Alpha ASM" comp
 
   fun rtl_to_asm (base_file, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod

@@ -87,6 +87,8 @@ struct
    fun summarize_time f =     f (* Stats.subtimer("summarize info",f) *)
    fun rewrite_time f =      f (* Stats.subtimer("rewrite prog",f) *)
 
+   (* Use Stats.subtimer(str,f) for real timing *)
+   fun subtimer (str,f) = f
 
 
    val Rdiscard = Rat
@@ -1220,7 +1222,7 @@ struct
 
        (* initialize information on storage *)
        val storage_info = 
-	  Stats.subtimer("chaitin_newinfo", 
+	   subtimer("chaitin_newinfo", 
 	 Trackstorage.newInfo)
 	                      {callee_saves = callee_saved,
 			       stack_resident = stack_resident,
@@ -1228,16 +1230,16 @@ struct
 			       max_C_args = max_C_args,
 			       regs_destroyed = (!regs_destroyed)}
        val stackOffset = Trackstorage.stackOffset storage_info
-       val _ =  Stats.subtimer("chaitin_initbias",  initBias)  block_map
+       val _ =  subtimer("chaitin_initbias",  initBias)  block_map
        val _ = msg "\tbuilding interference graph\n"
 
-       val igraph = Stats.subtimer("chaitin_buildgraph",buildGraph)
+       val igraph = subtimer("chaitin_buildgraph",buildGraph)
 	                 (getSignature,name,block_map,
 			       args,res,callee_saved)
        val _ = if (!msgs) then Ifgraph.print_stats igraph else ()
 
        val _ = msg "\tcoloring interference graph\n"
-       val mapping = Stats.subtimer("chaitin_color",color)(igraph,storage_info, stack_resident, getBias)
+       val mapping = subtimer("chaitin_color",color)(igraph,storage_info, stack_resident, getBias)
 
 
        val _ = msg "\tsummarizing storage information\n"
@@ -1247,7 +1249,7 @@ struct
 					    stackframe_size,
 					    registers_used,
 					    callee_save_slots,...}) = 
-	                Stats.subtimer("chaitin_summarize", summarize )  storage_info
+	   subtimer("chaitin_summarize", summarize )  storage_info
 
         val new_procsig =
 	       let 
@@ -1278,7 +1280,7 @@ struct
 	    at every call site. *)
 
 	 val callsite_info = 
-		 Stats.subtimer("chaitin_rewrite", 
+		 subtimer("chaitin_rewrite", 
 			       map (fn bblock => 
 		        allocateBlock (mapping,
 				       stackframe_size,
@@ -1292,12 +1294,12 @@ struct
 	 val _ = createPostamble(block_map,hd(rev block_labels),arg_ra_pos,summary)
          val _ = createPreamble (block_map,name,arg_ra_pos,summary)
 
-	 val callinfo = Stats.subtimer("chaitin_getcallinfo",
+	 val callinfo = subtimer("chaitin_getcallinfo",
 				       getCallInfo name summary mapping tracemap)  callsite_info
 
 
 	 val _ = msg "\tleaving allocateproc2\n"
-	 val tables = Stats.subtimer("chaitin_maketable", Tracetable.MakeTable) callinfo
+	 val tables = subtimer("chaitin_maketable", Tracetable.MakeTable) callinfo
      in	(new_procsig, 
 	 block_map, 
 	 block_labels,

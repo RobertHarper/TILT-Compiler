@@ -48,13 +48,25 @@ struct
     val base2o = Til.base2o
     val base2uo = Til.base2uo
 
+    val start = ref (NONE : Time.time option)
     val msgs = ref ([] : string list)
     fun showTime str = 
-	let val msg = (str ^ ": " ^ 
-		       (Date.toString(Date.fromTimeLocal(Time.now()))) ^ ".\n")
+	let val cur = Time.now()
+	    val curString = Date.toString(Date.fromTimeLocal cur)
+	    val diff = Time.-(cur, (case !start of
+					NONE => error "no start time"
+				      | SOME t => t))
+	    val diff = Time.toReal diff
+	    val diff = (Real.realFloor(diff * 100.0)) / 100.0
+	    (* XXX should move this and the space-making function into util *)
+	    fun loop i = if (i<0) then "" else " " ^ (loop (i-1))
+	    val padding = loop (30 - size str)
+	    val msg = (str ^ padding ^ ": " ^ curString ^ "   " ^ 
+		       (Real.toString diff) ^ " seconds since start.\n")
 	in  msgs := msg :: (!msgs); chat msg
 	end
-    fun reshowTimes() = (chat "\n\n"; app chat (rev (!msgs)); msgs := [])
+    fun startTime str = (msgs := []; start := SOME(Time.now()); showTime str)
+    fun reshowTimes() = (chat "\n\n"; app chat (rev (!msgs)); msgs := []; start := NONE)
 end
 
 
@@ -326,6 +338,15 @@ struct
       in  stats := (StringMap.map mapper (!stats))
       end
 
+  fun updateCache (file, newValue) : bool = 
+      (case (get file) of
+	   CACHED (s, t, crc, tick, result) => 
+	       let val stat = CACHED(s, t, crc, tick, newValue)
+		   val _ = set(file, stat)
+	       in  true
+	       end
+	 | _ => false)
+
   fun read file = 
       (case (get file) of
 	   CACHED (s, t, crc, tick, result) => 
@@ -431,27 +452,36 @@ struct
 		     chat "]\n")
 	    val initial_ctxt = LinkIl.initial_context()
 	    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
-	    val context = addContext (initial_ctxt, partial_ctxts)
+	    val (partial_context_opts, context) = addContext (initial_ctxt, partial_ctxts)
+	    val _ = Listops.map2 (fn (NONE,_) => false
+	                           | (SOME new, file) => Cache.updateCache(file,new))
+		        (partial_context_opts, uifiles)
 	    val _ = chat ("  [Added contexts.]\n")
 	in  context
 	end
 
     fun elab_constrained(unit,ctxt,sourcefile,fp,dec,fp2,specs,uiFile,least_new_time) =
 	(case LinkIl.elab_dec_constrained(ctxt, fp, dec, fp2,specs) of
-	     SOME (il_module as (_, partial_ctxt, _)) =>
+	     SOME (il_module as (ctxt, partial_ctxt, binds)) =>
 		 let val _ = (Help.chat ("  [writing " ^ uiFile);
 			      Cache.write (uiFile, partial_ctxt);
 			      Help.chat "]\n")
+(*		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module *)
+		    val reduced_ctxt = (print "XXXX NOT REDUCING CONTEXT"; ctxt)
+		     val il_module = (reduced_ctxt, partial_ctxt, binds)
 		 in il_module
 		 end
 	   | NONE => error("File " ^ sourcefile ^ " failed to elaborate."))
     
     fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
 	case LinkIl.elab_dec(pre_ctxt, fp, dec) of
-	    SOME (il_module as (_, partial_ctxt, _)) => 
+	    SOME (il_module as (ctxt, partial_ctxt, binds)) =>
 		let val _ = (Help.chat ("  [writing " ^ uiFile);
 			     Cache.write (uiFile, partial_ctxt);
 			     Help.chat "]\n")
+(*		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module *)
+		    val reduced_ctxt = (print "XXXX NOT REDUCING CONTEXT"; ctxt)
+		     val il_module = (reduced_ctxt, partial_ctxt, binds)
 		in il_module
 		end
 	  | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
@@ -911,6 +941,7 @@ struct
 		val _ = TextIO.closeOut out
 		val diff = Time.toReal(Time.-(Time.now(), start))
 		val diff = (Real.realFloor(diff * 100.0)) / 100.0
+		val _ = showTime "CheckPoint"
 		val _ = chat ("Generated " ^ dot ^ " in " ^ (Real.toString diff) ^ " seconds.\n")
 	    in  dot
 	    end
@@ -1354,7 +1385,7 @@ struct
 	end
 
   fun master mapfile = 
-      let val _ = showTime "Starting compilation"
+      let val _ = startTime "Starting compilation"
 	  val _ = helper Master.run (mapfile, false, NONE, [])
 	  val _ = showTime "Finished compilation" 
       in  reshowTimes()
@@ -1363,7 +1394,7 @@ struct
       let fun startSlave (num,machine) = 
 	  let val row = num mod 5
 	      val col = num div 5
-	      val geometry = "80x12+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 160))
+	      val geometry = "120x12+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 160))
 	      val dir = OS.FileSys.getDir()
 	      val SOME display = OS.Process.getEnv "DISPLAY"
 	      val SOME user = OS.Process.getEnv "USER"
@@ -1405,7 +1436,7 @@ struct
 		     | Master.IDLE (t,state, _) => (Slave.step(); loop state))
 	  in  loop (setup())
 	  end
-	  val _ = showTime "Starting compilation"
+	  val _ = startTime "Starting compilation"
 	  val _ = helper runner arg
 	  val _ = showTime "Finished compilation"
       in  reshowTimes()
