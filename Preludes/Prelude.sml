@@ -32,6 +32,8 @@ exception Io of string
 
 structure List = 
     struct
+	fun [] @ y = y
+	  |  (x::xs) @ y = x :: (xs @ y)
 	fun rev l = 
 	    let fun revappend([],x) = x
 		  | revappend(hd::tl,x) = revappend(tl,hd::x)
@@ -42,6 +44,8 @@ structure List =
 		  | length' (n,_::rest) = length' (n+1,rest)
 	    in  length' (0,l)
 	    end
+	fun foldl f acc [] = acc
+	  | foldl f acc (first::rest) = foldl f (f(first,acc)) rest
     end
 open List
 
