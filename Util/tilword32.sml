@@ -148,7 +148,7 @@ struct
   fun toUnsignedHalf _ = ()
   val fromInt = Word32.fromInt
   fun toInt i =
-      let val i' = Word32.toInt i
+      let val i' = Word32.toIntX i
 	  val j = Word32.fromInt i'
       in if equal(i,j) then i' else raise Overflow
       end

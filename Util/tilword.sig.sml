@@ -57,9 +57,9 @@ signature TILWORD =
   
 	(* ----- conversion operations *)
 	val fromSignedHalf : halfword -> word
-	val fromUnsignedHalf : halfword -> word
+	val fromUnsignedHalf : halfword -> word (* never fails *)
 	val toSignedHalf : word -> halfword
-	val toUnsignedHalf : word -> halfword
+	val toUnsignedHalf : word -> halfword (* never fails *)
 	val fromInt : int -> word       (* converts from int to word with sign extension *)
 	val toInt : word -> int       (* converts to int treating word as signed *)
 	val fromHexString : string -> word         (* for exmaple, "ff0a435" *)

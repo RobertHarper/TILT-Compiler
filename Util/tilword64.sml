@@ -195,7 +195,7 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
   fun fromSignedHalf w32 = let val high = if ((W.sign w32) < 0) then W.neg_one else W.zero
 			   in (high,w32)
 			   end
-  fun toUnsignedHalf (high,low) = if (W.equal(W.zero,high)) then low else error "toUnsignedHalf failed"
+  fun toUnsignedHalf (high,low) = low
   fun toSignedHalf (high,low) = let val high' = if ((W.sign low) < 0) then W.neg_one else W.zero
 				in if (W.equal(high,high'))
 				       then low
