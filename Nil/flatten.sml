@@ -86,11 +86,13 @@ functor Flatten( structure PrimUtil : PRIMUTIL
        fn (b, k) => NilUtil.NOCHANGE)
       
     (* Step one: rewrite non-escaping functions *)
-    and flatten_func  ( fnVar, Function(eff, a, vklist, bl, vclist,
-					   vlist, body, con )) =
+    and flatten_func  ( fnVar, Function{effect, recursive, isDependent,
+					tFormals = vklist, eFormals = vclist,
+					fFormals = vlist, body = body, 
+					body_type = (tr,con) } ) =
       (case vclist of 
 	 (* Single record argument *)
-	 [ (recordArg, recordType as Prim_c( Record_c (labels, vopt), cons))] =>
+	 [ (recordArg, _, recordType as Prim_c( Record_c (labels, vopt), cons))] =>
 	   if (non_esc_var fnVar) 
 	     andalso 
 	     ((length vlist) + (length labels)  <= maxFnArgs ) 
@@ -107,7 +109,7 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 			 else ()
 		 val args = map (fn _ => (Name.fresh_var())) labels
 		 val newcons = map xcon cons
-		 val newvclist = Listops.zip args newcons
+		 val newvclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, c)) (args, newcons)
 		 val exps = map Var_e args 
 		 val _ = HashTable.insert flattened 
 		   (fnVar,(newFnVar, labels, (map #1 vklist), newcons))
@@ -121,8 +123,10 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 		   
 		 (* We'll on the body later *)
 		 val newFn = (newFnVar,
-			      Function( eff, a, vklist, bl, 
-				       newvclist, vlist, newbody, con))
+			      Function{effect=effect, recursive=recursive, isDependent = isDependent,
+				       tFormals = vklist, eFormals = newvclist, 
+				       fFormals = vlist, 
+				       body = newbody, body_type = (tr, con)})
 		   
 	       (* Now a new version of fnVar which calls NewFnVar *)
 	       (*	 val args = map (fn _ => (Name.fresh_var())) labels
@@ -152,12 +156,16 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 	       end 
 	   else 
 	     (* Takes a record argument, but we can't flatten it *)
-	     [ ( fnVar, Function(eff, a, vklist,bl,
-				 [ (recordArg, recordType) ],
-				 vlist,  body, con)) ] 
+	     [ ( fnVar, Function{effect=effect, recursive=recursive, isDependent = isDependent,
+			      tFormals = vklist, eFormals = [ (recordArg, TraceKnown TraceInfo.Trace, 
+							       recordType) ],
+			      fFormals = vlist, 
+			      body = body, body_type = (tr, con)} )]
 	| _ =>  (* Argument isn't a single record *)
-	  [ ( fnVar, Function(eff, a, vklist,bl, vclist, vlist,
-			      body, con)) ])
+	  [ ( fnVar, Function{effect=effect, recursive=recursive, isDependent = isDependent,
+			      tFormals = vklist, eFormals = vclist, 
+			      fFormals = vlist, 
+			      body = body, body_type = (tr, con)}) ])
 	  
     (* step two: rewrite applications of the flattened functions *)	
     and doApp ( openness, Var_e f, tactuals, (actual:exp list), elist2) = 
@@ -232,9 +240,12 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
       | Handle_e (exp, v, exp2) =>
 	  Handle_e (xexp  exp, v, xexp  exp2)
 	  
-    and xfn  (Function(eff, r, vks,bl, vcs, vs, exp, con)) =
-      Function (eff, r, vks, bl, (map (fn (v,c) => (v, xcon c)) vcs), 
-		vs, xexp exp, xcon con)
+    and xfn  (Function{effect, recursive, isDependent,
+		       tFormals, eFormals, fFormals, body, body_type = (tr, con)}) =
+      Function {effect=effect, recursive=recursive, isDependent = isDependent,
+		tFormals = tFormals, eFormals = map (fn (v,tr,c) => (v, tr, xcon c)) eFormals,
+		fFormals = fFormals,
+		body = xexp body, body_type = (tr, xcon con)}
 
     and xswitch s =
       case s of

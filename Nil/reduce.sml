@@ -448,10 +448,10 @@ structure Reduce
 		in 
 		  Sequence.app (fn (var, con) => scan_con fset con) vcset
 		end 
-	    | AllArrow_c (openness, effect, vklist, vlistopt, clist, w32, con) => 
-		(app ((scan_kind fset) o #2) vklist;
-		 app (scan_con fset) clist; 
-		 (scan_con fset) con )
+	    | AllArrow_c {tFormals, eFormals, body, ...} => 
+		(app ((scan_kind fset) o #2) tFormals;
+		 app ((scan_con fset) o #2) eFormals;
+		 (scan_con fset) body)
 	    | ExternArrow_c (cons, con) =>
 		(app (scan_con fset) cons ; scan_con fset con)
 	    | Var_c v => ()
@@ -560,11 +560,12 @@ structure Reduce
 	    end
 		
 
-	and scan_function fset (Function(_,_,cvarlist,bl,varlist,fvarlist,exp,con)) = 
+	and scan_function fset (Function{tFormals=cvarlist,eFormals=varlist,
+					 fFormals=fvarlist,body=exp,body_type=(_,con), ...}) = 
 		    let fun dec (v,k) = (declare false v; scan_kind fset k)
 		    in  ( 
 			 app dec cvarlist;
-			 app (fn (v, con) =>
+			 app (fn (v, tr, con) =>
 			      ignore (declare false v, scan_con fset con))  varlist;
 			 app (declare false) fvarlist; 
 			 scan_exp fset exp;
@@ -583,7 +584,8 @@ structure Reduce
 		    in
 			Sequence.app 
 			(fn (v,function as 
-			     Function(effect,_,cvarlist,_,varlist,fvarlist,exp,_)) => 
+			     Function{effect,tFormals=cvarlist,eFormals=varlist,
+				      fFormals=fvarlist,body=exp,...}) =>
 			     (if effect = Total 
 				  then total_set := VarSet.add (!total_set, v)
 			      else () ;
@@ -781,11 +783,12 @@ structure Reduce
 		in 
 		  Mu_c (bool, Sequence.map (fn (v, c) => (v, xcon fset c)) vcseq)
 		end 
-	    | AllArrow_c ( openness, effect, vklist, vlistopt,  cons, w32, con) => 
-		AllArrow_c ( openness, effect,
-			    (map (fn (v,k) => (v, xkind fset k)) vklist),
-			    vlistopt,
-			    map (xcon fset) cons, w32, xcon fset con)
+	    | AllArrow_c {openness, effect, isDependent, tFormals, eFormals, fFormals, body} =>
+		AllArrow_c {openness = openness, effect = effect, isDependent=isDependent,
+			    tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals,
+			    eFormals = map (fn (vopt,c) => (vopt, xcon fset c)) eFormals,
+			    fFormals = fFormals,
+			    body = xcon fset body}
 	    | ExternArrow_c (cons, con) => 
 		ExternArrow_c (map (xcon fset) cons, xcon fset con)
 	    | Crecord_c (lclist) =>
@@ -837,13 +840,17 @@ structure Reduce
 			  }
 			 
 	    and xfunction fset 
-		(Function( eff, recu, vklist, b, vclist, vlist, exp, con)) =
-		let val vklist = map (fn (v,k) => (v, xkind fset k)) vklist
-		    val vclist = map (fn (v,con) => (v, xcon fset con)) vclist
-		    val exp = xexp fset exp
+		(Function{effect, recursive, isDependent,
+			  tFormals, eFormals, fFormals, 
+			  body, body_type=(tr,con)}) =
+		let val tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals
+		    val eFormals = map (fn (v,tr,con) => (v, tr, xcon fset con)) eFormals
+		    val body = xexp fset body
 		    val con = xcon fset con
 		in 
-		    Function( eff, recu, vklist, b, vclist, vlist, exp, con)
+		    Function{effect=effect,recursive=recursive,isDependent=isDependent,
+			     tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
+			     body=body, body_type=(tr,con)}
 		end
 	
 	    and xbnds fset 
@@ -1010,13 +1017,13 @@ structure Reduce
 		     go away, so we need to update the counts for them *)
 			
 		    fun remove_rest
-			( vc as ( v, Function(eff, _, vklist, _, vclist, vlist, exp, con))) =  
-			(app (fn (var, kind) => census_kind fset (~1, kind)) vklist; 
-			 app (fn (var,con) => census_con fset (~1, con)) vclist; 
+			( vc as (v, Function{tFormals=vklist, eFormals=vclist, body_type=(_, con),...})) =
+			(app (fn (_, kind) => census_kind fset (~1, kind)) vklist; 
+			 app (fn (_, _, con) => census_con fset (~1, con)) vclist; 
 			 census_con fset (~1, con))
 		    fun remove_func 
-			( vc as ( v, Function(eff, _, vklist, _,  vclist, vlist, exp, con))) =  
-			( census_exp fset ( ~1, exp); 
+			( vc as (v, Function{body, ...})) =
+			( census_exp fset ( ~1, body); 
 			 remove_rest vc
 			 )
 		    fun recur_func ( v, function) = 
@@ -1167,7 +1174,10 @@ structure Reduce
 				  look count_esc sf = 0 
 			       then 
 				   ( case (HashTable.find bind sf) of
-					 SOME (F (Function( effect, recur, vklist, _,vclist, vlist, exp, con))) =>
+					 SOME (F (Function{tFormals=vklist, 
+							   eFormals=vclist, 
+							   fFormals=vlist, 
+							   body=exp, body_type=(_,con), ...})) =>
 					     let val _ = inc_click inline_click
 						 fun do_args (arg,  x ) =
 						     case arg of

@@ -199,20 +199,25 @@ struct
 				 end)
        end
 
-   and lfunction state (Function(effect,recur,vklist,dep,vclist,vflist,e,c)) : function =
+   and lfunction state (Function{effect,recursive,isDependent,
+				 tFormals,eFormals,fFormals,body,body_type}) : function =
        let 
-	   val (vklist,state) = lvklist state vklist
+	   val (tFormals,state) = lvklist state tFormals
 	   val _ = inc depth_lcon_function
-	   val (vclist,state) = lvclist_flat state vclist
+	   val (eFormals,state) = lvtrclist_flat state eFormals
 	   val _ = dec depth_lcon_function
 	   fun vfolder(v,state) = 
 	       let val (state,v) = add_var(state,v)
 	       in (v,state)
 	       end
-	   val (vflist,state) = foldl_acc vfolder state vflist
-	   val e = lexp_lift' state e
+	   val (fFormals,state) = foldl_acc vfolder state fFormals
+	   val body = lexp_lift' state body
+	   val (tr,c) = body_type
 	   val c = lcon_flat state c
-       in  Function(effect,recur,vklist,dep,vclist,vflist,e,c)
+	   val body_type = (tr,c)
+       in  Function{effect=effect,recursive=recursive,isDependent=isDependent,
+		    tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
+		    body=body,body_type=body_type}
        end
 
 
@@ -428,20 +433,15 @@ struct
 		    val (cbnds',c) = lcon state c
 		in  (flatten cbnds@cbnds',ExternArrow_c (clist,c))
 		end
-	  | AllArrow_c (openness,effect,vklist,vlist,clist,w32,c) =>
+	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body} =>
 	      let 
-		  val (vklist,state) = lvklist state vklist
-		  val vars = (case vlist of
-				   NONE => map (fn _ => Name.fresh_var()) clist
-				 | SOME vars => vars)
-		  val (vclist,state) = lvclist_flat state (Listops.zip vars clist)
-		  val clist = map #2 vclist
-		  val vlist = (case vlist of
-				   NONE => NONE
-				 | SOME _ => SOME(map #1 vclist))
-		  val c = lcon_flat state c
+		  val (tFormals,state) = lvklist state tFormals
+		  val (eFormals,state) = lvoptclist_flat state eFormals
+		  val body = lcon_flat state body
 	      in  ([],
-		   AllArrow_c (openness,effect,vklist,vlist,clist,w32,c))
+		   AllArrow_c {openness=openness,effect=effect,isDependent=isDependent,
+			       tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
+			       body=body})
 	      end
 	  | Let_c (letsort,cbnds,c) =>
 		let 
@@ -510,13 +510,28 @@ struct
        in  (flatten(map #1 temp), map #2 temp, state)
        end
 
-   and lvclist_flat state vclist = 
-       let fun vcfolder((v,c),state) =
+   and lvtrclist_flat state vtrclist = 
+       let fun vtrcfolder((v,tr,c),state) =
 	   let val _ = inc depth_lcon_function
 	       val c = lcon_flat state c
                val _ = dec depth_lcon_function
 	       val (state,v) = add_var(state,v)
-	   in  ((v,c), state)
+	   in  ((v,tr,c), state)
+	   end
+       in  foldl_acc vtrcfolder state vtrclist
+       end
+
+   and lvoptclist_flat state vclist = 
+       let fun vcfolder((vopt,c),state) =
+	   let val _ = inc depth_lcon_function
+	       val c = lcon_flat state c
+               val _ = dec depth_lcon_function
+	       val (state,vopt) = (case vopt of
+				       SOME v => let val (s,v) = add_var(state,v)
+						 in  (s, SOME v)
+						 end
+				     | NONE => (state, vopt))
+	   in  ((vopt,c), state)
 	   end
        in  foldl_acc vcfolder state vclist
        end

@@ -257,6 +257,7 @@ struct
 
     fun cmp_exp_list e = cmp_list cmp_exp e
     and cmp_con_list e = cmp_list cmp_con e
+    and cmp_varcon_list e = cmp_list cmp_varcon e
     and cmp_bnd_list e = cmp_list cmp_bnd e
     and cmp_label_list e = cmp_list Name.compare_label e
     and cmp_conbnd_list e = cmp_list cmp_conbnd e
@@ -296,6 +297,8 @@ struct
 	  | (tag (t1, con1), (tag (t2, con2))) => 
 		cmp_orders[ Name.compare_tag(t1,t2),
 			    cmp_con (con1, con2)]
+
+    and cmp_varcon ((v1,c1),(v2,c2)) = cmp_orders[cmp_con(c1,c2), cmp_option Name.compare_var (v1,v2)]
 
     and cmp_vklist (vklist1, vklist2) = cmp_list cmp_vk (vklist1, vklist2)
     and cmp_vclist (vclist1, vclist2) = cmp_list cmp_vc (vclist1, vclist2)
@@ -416,14 +419,16 @@ struct
 	  | (Mu_c _ , _) =>  GREATER
 	  | (_ , Mu_c _) =>  LESS
 
-          | ( AllArrow_c (op1, eff1, vklist1, vlist1, clist1, w321, con1),
-	      AllArrow_c (op2, eff2, vklist2, vlist2, clist2, w322, con2) ) => 
-	       (case (cmp_orders [cmp_openness(op1,op2),
+          | ( AllArrow_c {openness = op1, effect = eff1, isDependent = i1,
+			  tFormals = vklist1, eFormals = vclist1, fFormals = f1, body = con1},
+	      AllArrow_c {openness = op2, effect = eff2, isDependent = i2,
+			  tFormals = vklist2, eFormals = vclist2, fFormals = f2, body = con2}) =>
+	       (case (cmp_orders [cmp_bool (i1,i2),
+				  cmp_openness(op1,op2),
 				  cmp_effect (eff1, eff2),
-				  cmp_int (Word32.toInt w321, Word32.toInt w322)]) of
+				  cmp_int (Word32.toInt f1, Word32.toInt f2)]) of
 		    EQUAL => cmp_orders[cmp_vklist (vklist1,vklist2),
-					cmp_option (cmp_list Name.compare_var) (vlist1,vlist2),
-					cmp_con_list (clist1, clist2),
+					cmp_varcon_list (vclist1, vclist2),
 					cmp_con (con1,con2)]
 		 | r => r)
 	  | ( AllArrow_c _, _) => GREATER

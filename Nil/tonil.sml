@@ -846,15 +846,16 @@ end (* local defining splitting context *)
 	   val ebnd_fun_cat =  
 	       LIST[Fixopen_b (Sequence.fromList
 			      [(var_fun_r,
-			       Function(effect, Leaf,
-					 [(var_arg_c, knd_arg)],
-					 true,
-					 [(var_arg_r, con_arg)],
-					 [],
-					 NilUtil.makeLetE Sequential
-					  ((map makeConb cbnds_body) @ ebnds_body)
-					  name_body_r,
-					 con_res'))])]
+			       Function{recursive = Leaf,
+					effect = effect,
+					isDependent =  true,
+					tFormals = [(var_arg_c, knd_arg)],
+					eFormals = [(var_arg_r, TraceUnknown, con_arg)],
+					fFormals = [],
+					body = (NilUtil.makeLetE Sequential
+						((map makeConb cbnds_body) @ ebnds_body)
+						name_body_r),
+					body_type = (TraceUnknown, con_res')})])]
 
 	   val context = update_NILctx_insert_kind(context, var_fun_c, 
                            Arrow_k(Open, [(var_arg_c, knd_arg)], Single_k(con_body)))
@@ -1139,23 +1140,36 @@ end (* local defining splitting context *)
 
                fun reviseFunction (internal_var,
 				   external_var_r, inner_var,
-				   Function(effect,recursive,[],
-					   _,[(arg_var,arg_con)],[],body,body_con)) =
+				   Function{effect,recursive,isDependent,
+					    tFormals = [],
+					    eFormals = [(arg_var, arg_tr, arg_con)],
+					    fFormals = [],
+					    body,
+					    body_type = (_,body_con)}) =
 		   let val body' = wrap(internal_var, inner_var, body)
+		       val body_con = AllArrow_c{openness = Open, effect = effect, isDependent = false,
+						 tFormals = [], 
+						 eFormals = [(NONE,arg_con)], 
+						 fFormals = 0w0, 
+						 body = body_con}
 		   in  (external_var_r,
-		       Function(effect, Leaf, 
-				[(poly_var_c, knd_arg)],
-				false,
-				[(poly_var_r, con_arg)],
-				[],
-				Let_e (Sequential,
+		       Function{effect = effect, 
+				recursive = Leaf, 
+				isDependent = false,
+				tFormals = [(poly_var_c, knd_arg)],
+				eFormals = [(poly_var_r, TraceUnknown, con_arg)],
+				fFormals = [],
+				body = Let_e (Sequential,
 				       [Fixopen_b
 					(Sequence.fromList 
-					 [(inner_var, Function(effect,recursive,[],
-							  false,[(arg_var,arg_con)],[],
-							  body',body_con))])],
+					 [(inner_var, Function{effect=effect,recursive=recursive,isDependent=false,
+							       tFormals = [],
+							       eFormals = [(arg_var,arg_tr,arg_con)],
+							       fFormals = [],
+							       body = body',
+							       body_type = (TraceUnknown, body_con)})])],
 				       Var_e inner_var),
-				AllArrow_c(Open, effect, [], NONE, [arg_con], 0w0, body_con)))
+				body_type = (TraceUnknown,body_con)})
 		   end
 
                val ebnd_entries = (Listops.map4 reviseFunction 
@@ -1341,13 +1355,12 @@ end (* local defining splitting context *)
 	 in
 	     Fixopen_b (Sequence.fromList
 			[(v_r,
-			  Function(effect, Leaf,
-				   [(poly_var_c, knd_arg)],
-				   false,
-				   [(poly_var_r, arg_type)],
-				   [],
-				   exp,
-				   con))])
+			  Function{effect=effect, recursive=Leaf, isDependent = false,
+				   tFormals = [(poly_var_c, knd_arg)],
+				   eFormals = [(poly_var_r, TraceUnknown, arg_type)],
+				   fFormals = [],
+				   body = exp,
+				   body_type = (TraceUnknown, con)})])
 	 end
      | xpolymod context (v_r, il_mod) =
 	 (case extractPathLabels il_mod of
@@ -1507,7 +1520,10 @@ end (* local defining splitting context *)
 	   val eff = xeffect (derefOneshot arr)
 	   val con = if closed
 			 then ExternArrow_c(cons1, con2)
-		     else AllArrow_c(Open, eff, [], NONE, cons1,0w0,con2)
+		     else AllArrow_c{openness = Open, effect = eff, isDependent = false,
+				     tFormals = [], 
+				     eFormals = map (fn c => (NONE,c)) cons1,
+				     fFormals = 0w0, body = con2}
        in  con
        end
 
@@ -1652,7 +1668,8 @@ end (* local defining splitting context *)
 	   val Let_e (_, [Fixopen_b fns], Var_e var) = xexp context exp
        in
 	   case	(Sequence.lookup (Name.eq_var) fns var) of
-	       SOME (Function(_,_,[],false,[(v,c)],[],body,_)) => (v,c,body)
+	       SOME (Function{tFormals=[],isDependent=false,
+			      eFormals=[(v,_,c)],fFormals=[],body,...}) => (v,c,body)
 	     | NONE => error "(toFunction): impossible"
        end
      | toFunction _ e = 
@@ -1746,8 +1763,8 @@ end (* local defining splitting context *)
 	   val cons = map (xcon context) il_cons
 	   val args = map (xexp context) il_args
            val (effect,con) = 
-	     case strip_arrow (NilPrimUtil.get_type' prim cons)
-	       of SOME (_,effect,_,_,_,_,con) => (effect,con)
+	     case strip_arrow (NilPrimUtil.get_type' prim cons) of
+		 SOME {effect,body,...} => (effect,body)
 		| _ => (perr_c (NilPrimUtil.get_type' prim cons);
 			error "Expected arrow constructor")
 
@@ -2037,8 +2054,9 @@ end (* local defining splitting context *)
 		   val con1 = xcon context il_con1
 		   val con2 = xcon context il_con2
 		   val body' = xexp context body
-	       in  (var, Function(totality, recursive, [],
-				  false, [(var', con1)], [], body', con2))
+	       in  (var, Function{recursive = recursive, effect = totality, isDependent = false,
+				  tFormals = [], eFormals = [(var', TraceUnknown, con1)], fFormals=[], 
+				  body = body', body_type = (TraceUnknown, con2)})
 	       end
        in  map mapper fbnds
        end
@@ -2107,10 +2125,12 @@ end (* local defining splitting context *)
            val effect = xeffect arrow
 	       
        in
-		 (Arrow_k (Open, [(var_c, knd)], knd'),
-		  AllArrow_c (Open, effect, [(var_c, knd)],
-			      SOME[var_r],[con], 0w0, con'))
-
+	   (Arrow_k (Open, [(var_c, knd)], knd'),
+	    AllArrow_c {openness = Open, effect = effect, isDependent = true,
+			tFormals = [(var_c, knd)],
+			eFormals = [(SOME var_r, con)], 
+			fFormals = 0w0, 
+			body = con'})
        end
 
      | xsig' context (con0, Il.SIGNAT_STRUCTURE (NONE,sdecs)) = xsig_struct context (con0,sdecs)

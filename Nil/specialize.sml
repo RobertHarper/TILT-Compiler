@@ -242,9 +242,9 @@ struct
 		| Typecase_e _ => error "typecase_e not done")
 	  end
 
-	and scan_function (state : state) (Function(effect,recur,vklist,_,vclist,vlist,e,c)) : unit =
-		let val state = add_vars(state,map (fn (v,_) => (v,NONE)) vklist) 
-		in scan_exp state e
+	and scan_function state (Function{tFormals,body,...}) =
+		let val state = add_vars(state,map (fn (v,_) => (v,NONE)) tFormals)
+		in scan_exp state body
 		end
 
 	and scan_bnds(bnds : bnd list, state : state) : state = foldl scan_bnd state bnds
@@ -263,8 +263,10 @@ struct
 		      let val vflist = (Sequence.toList vfset)
 			  val _ = 
 			      (case vflist of
-				   [(v,Function(_,Leaf,vklist,_,[],[],e,_))] => 
-				       (case e of
+				   [(v,Function{recursive=Leaf,
+						tFormals,eFormals=[],fFormals=[],
+						body, ...})] =>
+				       (case body of
 					   Let_e(_,[Fixopen_b vfset], Var_e inner) =>
 					       (case (Sequence.toList vfset) of
 						   [(v',_)] => if (Name.eq_var(v',inner))
@@ -341,9 +343,12 @@ struct
 	      | Typecase_e _ => error "typecase not handled")
 
 
-	and do_function (Function(effect,recur,vklist,dep,vclist,vlist,e,c)) : function =
-	    let val e = do_exp e
-	    in  Function(effect,recur,vklist,dep,vclist,vlist,e,c)
+	and do_function (Function{effect,recursive,isDependent,
+				  tFormals, eFormals, fFormals, body, body_type}) =
+	    let val body = do_exp body
+	    in  Function{effect=effect,recursive=recursive,isDependent=isDependent,
+			 tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
+			 body = body, body_type = body_type}
 	    end
 
 	and do_bnds(bnds : bnd list) : bnd list = 
@@ -360,12 +365,14 @@ struct
 			  fun do_vflist vflist = 
 			      [Fixopen_b(Sequence.fromList(map (fn (v,f) => (v,do_function f)) vflist))]
 		      in  (case vflist of
-			       [(v,Function(_,Leaf,vklist,_,[],[],Let_e(_,[Fixopen_b vflist'],_),_))] =>
+			       [(v,Function{recursive=Leaf,
+					    tFormals, eFormals=[], fFormals=[],
+					    body=Let_e(_,[Fixopen_b vflist'],_),...})] =>
 				   (case (is_candidate v) of
 					NONE => do_vflist vflist
 				      | SOME (v,clist) => 
 					    let fun mapper ((v,k),c) = Con_b(Runtime,Con_cb(v,c))
-						val cbnds = Listops.map2 mapper (vklist,clist)
+						val cbnds = Listops.map2 mapper (tFormals,clist)
 					    in  cbnds @ do_vflist (Sequence.toList vflist')
 					    end)
 			     | _ => do_vflist vflist)

@@ -575,24 +575,21 @@ struct
 		 in  Record_k(entries)
 		 end
 	     end
-	    | (AllArrow_c (openness,effect,tformals,vars_opt,formals,numfloats,body)) =>
+	    | (AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body}) =>
 	     let
 	       fun folder ((v,k),D) = 
 		 (kind_valid (D,k);
 		  insert_kind (D,v,k))
-	       val D = foldl folder D tformals
-	       val (formal_kinds,D) = 
-		 (case vars_opt
-		    of SOME vars => 
-		      let 
-			fun folder (v,c,(kinds,D)) = ((con_valid (D,c))::kinds,insert_con (D,v,c))
-		      in
-			foldl2 folder ([],D) (vars,formals)
-		      end
-		     | NONE => (map (curry2 con_valid D) formals,D))
+	       val D = foldl folder D tFormals
+	       fun folder ((vopt,c),D) = 
+		   (con_valid (D,c),
+		    case vopt of 
+			NONE => D
+		      | SOME v => insert_con (D,v,c))
+	       val (eFormal_kinds,D) = foldl_acc folder D eFormals
 	       val body_kind = con_valid (D,body)
 	       val _ = 
-		 ((c_all is_type b_perr_k formal_kinds) andalso (is_type body_kind)) orelse
+		 ((c_all is_type b_perr_k eFormal_kinds) andalso (is_type body_kind)) orelse
 		 (error (locate "con_valid'") "Invalid arrow constructor")
 	     in
 	       SingleType_k(constructor)
@@ -1031,36 +1028,26 @@ struct
 	else (D, empty_subst(), false)
       end
     
-  and vlistopt_clist_equiv (D, cRename, NONE, clist1, NONE, clist2) : context * (exp_subst * con_subst) * bool =
-    (D, (Subst.E.empty(),cRename),
-     Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon cRename) c2,
-					     Type_k), clist1, clist2))
-    | vlistopt_clist_equiv (D, rename, NONE, clist1, vlistopt2, clist2) =
-    vlistopt_clist_equiv (D, rename, vlistopt2, clist2, NONE, clist1)
-    | vlistopt_clist_equiv (D, cRename, SOME vlist1, clist1, vlistopt2, clist2) =
-    let 
-      fun folder(v1,c1,vopt2,c2,(D,rename as (eRename,cRename),match)) = 
-	let 
-	  val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) c2
-	  val match = match andalso con_equiv(D,c1,c2,Type_k)
-	  val rename = (case vopt2 of
-			  NONE => rename
-			| SOME v2 => if (eq_var(v1,v2)) then rename
-				     else (Subst.E.sim_add eRename (v2,Var_e v1),cRename))
-	  val D = NilContext.insert_con(D,v1,c1)
-	in  (D,rename,match)
-	end
-      val vlist2 = (case vlistopt2 of
-		      NONE => map (fn _ => NONE) clist2
-		    | SOME vars => map (fn v => SOME v) vars)
-      val vl1 = length vlist1
-      val vl2 = length vlist2
-    in  if (vl1 = vl2 andalso vl1 = length clist1 andalso vl2 = length clist2)
-	  then Listops.foldl4 folder (D,(Subst.E.empty(),cRename),true)
-	    (vlist1,clist1,vlist2,clist2)
-	else (D, (Subst.E.empty(),cRename), false)
-    end
-
+  and vlistopt_clist_equiv (D, cRename, vclist1, vclist2) : context * (exp_subst * con_subst) * bool =
+      let fun folder((vopt1, c1), (vopt2, c2), (D, eRename, match)) = 
+	      let val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon (eRename,cRename)) c2
+		  val match = match andalso con_equiv(D,c1,c2,Type_k)
+		  val D = (case vopt1 of
+			       NONE => D
+			     | SOME v1 => NilContext.insert_con(D,v1,c1))
+		  val eRename = (case (vopt1,vopt2) of
+				     (SOME v1, SOME v2) =>  if (eq_var(v1,v2)) then eRename
+							    else Subst.E.sim_add eRename (v2,Var_e v1)
+				   | _ => eRename)
+	      in  (D,eRename,match)
+	      end
+      in  if (length vclist1 = length vclist2)
+	      then 
+		  let val (D, eRename, match) = foldl2 folder (D,Subst.E.empty(),true) (vclist1,vclist2)
+		  in  (D, (eRename, cRename), match)
+		  end
+	  else (D, (Subst.E.empty(), cRename), false)
+      end
 
   and con_structural_equiv (D,c1,c2) : kind option =
    let fun base true = SOME Type_k
@@ -1072,8 +1059,14 @@ struct
 	     (Prim_c(Record_c (labs1,vlistopt1),clist1), 
 	      (Prim_c(Record_c (labs2,vlistopt2),clist2))) =>
 	     base (Listops.eq_list(eq_label,labs1,labs2) andalso
-		   #3(vlistopt_clist_equiv(D,empty_subst(),
-					 vlistopt1,clist1,vlistopt2,clist2)))
+		   let fun combine(vlistopt,clist) =
+		           (case vlistopt of
+				NONE => map (fn c => (NONE, c)) clist1
+			      | SOME vars => map2 (fn (v,c) => (SOME v, c)) (vars,clist))
+		       val vclist1 = combine(vlistopt1, clist1)
+		       val vclist2 = combine(vlistopt2, clist2)
+		   in  #3(vlistopt_clist_equiv(D,empty_subst(),vclist2,vclist2))
+		   end)
 	    | (Prim_c(pcon1 as Sum_c{tagcount,totalcount,known},clist1), 
 	       Prim_c(pcon2,clist2)) =>
 	     let val carriers = TilWord32.uminus(totalcount,tagcount)
@@ -1104,25 +1097,25 @@ struct
 			then SOME(kind_type_tuple (length vc1))
 		    else NONE
 		end
-	  | (AllArrow_c (openness1,effect1,vklist1,vlistopt1,clist1,nf1,c1),
-		AllArrow_c (openness2,effect2,vklist2,vlistopt2,clist2,nf2,c2)) =>
-		base(openness1 = openness1 andalso effect1 = effect2 
-		     andalso nf1 = nf2 
-		     andalso 
-		     let val (D,cRename,match) = vklist_equiv(D,vklist1,vklist2)
+	  | (AllArrow_c {openness=o1,effect=eff1,isDependent=i1,
+			 tFormals=t1,eFormals=e1,fFormals=f1,body=b1},
+	     AllArrow_c {openness=o2,effect=eff2,isDependent=i2,
+			 tFormals=t2,eFormals=e2,fFormals=f2,body=b2}) =>
+		base(o1 = o1 andalso eff1 = eff2 andalso f1 = f2 andalso 
+		     let val (D,cRename,match) = vklist_equiv(D,t1,t2)
 		     in  match andalso
 			 let val (D,rename,match) = 
-			   vlistopt_clist_equiv(D,cRename,vlistopt1,clist1,
-						vlistopt2,clist2)
+			   vlistopt_clist_equiv(D,cRename,e1,e2)
 			 in  match andalso
 			   type_equiv(D,c1,subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) c2)
 			 end
 		     end)
 
 	      | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
-		let val (D,_,match) = 
-		    vlistopt_clist_equiv(D,Subst.C.empty(),NONE,clist1,
-					 NONE,clist2)
+		let fun mapper c = (NONE, c)
+		    val (D,_,match) = vlistopt_clist_equiv(D,Subst.C.empty(),
+							   map mapper clist1,
+							   map mapper clist2)
 		in  base(type_equiv(D,c1,c2))
 		end
 
@@ -1648,24 +1641,23 @@ struct
 
 (*      val bnd = substConInBnd subst bnd *)
 
-      fun function_valid openness D (var,Function (effect,recursive,tformals,dependent,
-						   formals,fformals,body,return)) = 
+      fun function_valid openness D (var,Function {effect,recursive,isDependent,
+						   tFormals,eFormals,fFormals,
+						   body,body_type=(_,return)}) =
 	let
 	  val _ = if (!trace)
 			then (print "{Processing function_valid with var = ";
 			      pp_var var; print "\n")
 		    else ()
-	  val D' = foldl (fn ((v,k),D) => (kind_valid(D,k);insert_kind(D,v,k))) D tformals
-	  val D = foldl (fn ((v,c),D) => (con_valid(D,c);insert_con(D,v,c))) D' formals
-	  val D = 
-	    (foldl (fn (v,D) => 
-		    insert_con (D,v,Prim_c (Float_c F64,[]))) D fformals)
+	  val D' = foldl (fn ((v,k),D) => (kind_valid(D,k);insert_kind(D,v,k))) D tFormals
+	  val D = foldl (fn ((v,_,c),D) => (con_valid(D,c);insert_con(D,v,c))) D' eFormals
+	  val D = foldl (fn (v,D) => insert_con (D,v,Prim_c (Float_c F64,[]))) D fFormals
 	  val _ = if (!trace)
 			then (print "}{Processing body in function_valid with var = ";
 			      pp_var var; print "\n")
 		    else ()
 	  val body_c = exp_valid (D,body)
-	  val D = if dependent then D else D'
+	  val D = if isDependent then D else D'
 	  val _ = con_valid (D,return)
 	  val _ = if (!trace)
 			then (print "}{Processing body type against given type in function_valid with var = ";
@@ -1676,11 +1668,13 @@ struct
 	    (perr_e_c_c (body,return,body_c);
 	     (error (locate "function_valid") "Return expression has wrong type" handle e => raise e))    
 
-	  val (vars_opt,cons) = let val (vars,cons) = unzip formals
-				in if dependent then (SOME vars,cons) else (NONE,cons) 
-				end
-	  val numfloats = Word32.fromInt (List.length fformals) 
-	  val con = AllArrow_c(openness,effect,tformals,vars_opt,cons,numfloats,body_c)
+	  val eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals
+	  val fFormals = Word32.fromInt (List.length fFormals) 
+
+	  val con = AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
+			       tFormals=tFormals,
+			       eFormals=eFormals,
+			       fFormals=fFormals,body=return}
 	  val _ = if (!trace)
 			then (print "Done processing function_valid with var = ";
 			      pp_var var; print "}\n")
@@ -1763,44 +1757,44 @@ struct
 		      (printl ("Code pointer "^(var2string code));
 		       print " not defined in context";
 		       (error (locate "bnd_valid") "Invalid closure" handle e => raise e)))
-		 val (effect,tformals,vars_opt,formals,numfloats,body_c) = 
+		 val {openness,effect,isDependent,tFormals,eFormals,fFormals,body} =
 		   (case strip_arrow code_type of
-		       SOME (Code,effect,tformals,vars_opt,formals,numfloats,body_c) => 
-			   (effect,tformals,vars_opt,formals,numfloats,body_c) 
-		     | SOME (ExternCode,effect,tformals,vars_opt,formals,numfloats,body_c) => 
-			   (effect,tformals,vars_opt,formals,numfloats,body_c) 
-		     | _ => (perr_e_c (Var_e code,code_type);
-			     (error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e)))
-		 val (tformals,(v,last_k)) = split tformals
-		 val tformals = map (fn (tv,k) => (tv,varConKindSubst v cenv k)) tformals
-		 val formals = map (varConConSubst v cenv) formals
-		 val (formals,last_c) = split formals
+		       SOME blob => blob
+		     | NONE => (perr_e_c (Var_e code,code_type);
+				(error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e)))
+		 val _ = (case openness of
+			      Code => ()
+			    | _ => (perr_e_c (Var_e code,code_type);
+				    (error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e)))
+
+		 val (tformals,(last_tv,last_k)) = split tFormals
+		 val tformals = map (fn (tv,k) => (tv,varConKindSubst last_tv cenv k)) tformals
+		 val eformals = map (fn (vopt,c) => (vopt, varConConSubst last_tv cenv c)) eFormals
+		 val (eformals,last_vc) = split eformals
 
 		 val D = foldl (fn ((v,k),D) => insert_kind(D,v,k)) D tformals
-		 val (D',body_c) = 
-		   (case vars_opt
-		      of SOME vars =>
-			let
-			  val (vars,last) = split vars
-			in (foldl2 (fn (v,c,D) => insert_con (D,v,c)) D (vars,formals),varExpConSubst last venv body_c)
-			end
-		       | NONE => (D,body_c))
-
-		 val body_c = varConConSubst v cenv body_c
+		 fun folder ((vopt,c),D) =
+		     (case vopt of
+			  NONE => D
+			| SOME v => insert_con(D,v,c))
+		 val D' = foldl folder D eformals
+		 val body = varConConSubst last_tv cenv body
+		 val body = (case last_vc of
+				   (NONE,_) => body
+				 | (SOME v,_) => varExpConSubst v venv body)
 
 		 val _ = 
-		   (sub_kind (D,Single_k(cenv),last_k) andalso type_equiv (D',vcon,last_c)) orelse
+		   (sub_kind (D,Single_k(cenv),last_k) andalso type_equiv (D',vcon, #2 last_vc)) orelse
 		   (perr_k_k (last_k,ckind);
-		    perr_c_c (last_c,vcon);
+		    perr_c_c (#2 last_vc,vcon);
 		    (error (locate "bnd_valid") "Mismatch in closure" handle e => raise e))
 
-		 val closure_vars_opt = 
-		     (case vars_opt of
-			  NONE => NONE
-			| SOME vars => SOME (Listops.butlast vars))
-		 val closure_type = AllArrow_c (Closure,effect,tformals,
-						closure_vars_opt,
-						formals,numfloats,body_c)
+		 val closure_type = AllArrow_c {openness=Closure, effect=effect, 
+						isDependent=isDependent,
+						tFormals = tformals,
+						eFormals = eformals,
+						fFormals = fFormals,
+						body=body}
 
 		 val _ = con_valid(D,tipe)
 		 val _ = 
@@ -1896,7 +1890,7 @@ struct
 	   
 	   val con = exp_valid (D,app)
 
-	   val (openness',_,tformals,vars_opt,formals,numfloats,body) = 
+	   val {openness=openness', tFormals, eFormals, fFormals, body, ...} = 
 	       let
 		   val con' = con_head_normalize(D,con)
 
@@ -1928,8 +1922,8 @@ struct
 	   val kinds = map (curry2 con_valid D) cons
 
 	   val _ = 
-	     (eq_len (tformals,kinds)) orelse
-	     (Ppnil.pp_list (fn (v,k) => pp_kind' k) tformals ("\nFormal param kinds are: ",",","\n",false);
+	     (eq_len (tFormals,kinds)) orelse
+	     (Ppnil.pp_list (fn (v,k) => pp_kind' k) tFormals ("\nFormal param kinds are: ",",","\n",false);
 	      Ppnil.pp_list pp_con' cons ("\nActuals are: ",",","\n",false);
 	      error (locate "exp_valid") "Length mismatch between formal and actual constructor parameter lists")
 
@@ -1943,44 +1937,30 @@ struct
 	       insert_kind(D,var,actual_kind)
 	     end
 
-	   val D = foldl2 check_one_kind D (tformals,kinds)
+	   val D = foldl2 check_one_kind D (tFormals,kinds)
 
 	   val t_cons = map (curry2 exp_valid D) texps
 
 	   fun print_error () =
-	     (Ppnil.pp_list pp_con' formals ("\nFormal Types: (",", ",")",false);
+	     (Ppnil.pp_list pp_con' (map #2 eFormals )("\nFormal Types: (",", ",")",false);
 	      Ppnil.pp_list pp_con' t_cons ("\nActual Types: (",", ",")",false);
 	      Ppnil.pp_list pp_exp' texps ("\nActuals: (",", ",")\n",false);
 	      perr_e exp;
 	      error (locate "exp_valid") "Formal/actual parameter mismatch")
 
-	   val subst = Subst.C.simFromList (zip (#1 (unzip tformals)) cons)
-	   val formals = map (Subst.substConInCon subst) formals
+	   val subst = Subst.C.simFromList (zip (#1 (unzip tFormals)) cons)
+	   val eFormals = map (fn (v,c) => (v,Subst.substConInCon subst c)) eFormals
 	     
+	   fun folder ((vopt, formal_con), actual_con, D) = 
+	       if (type_equiv (D,actual_con,formal_con)) 
+		   then (case vopt of
+			     NONE => D
+			   | SOME var => insert_con (D,var,actual_con) )
+	       else (print_error ())
 
-	   val D = 
-	     (case vars_opt
-		of SOME vars => 
-		  let
-		    fun check_one_dep (var,actual_con,formal_con,D) = 
-		      if (type_equiv (D,actual_con,formal_con)) then insert_con (D,var,actual_con) 
-		      else (print_error ())
-		  in
-		    (foldl3 check_one_dep D (vars,t_cons,formals))
-		    handle e => (Ppnil.pp_list (pp_exp' o Var_e) vars ("\nVars: (",", ",")\n", false);
-				 print_error())
-		  end
-		 | NONE => 
-		  let
-		    fun check_one_con (actual_con,formal_con) = 
-		      (type_equiv (D,actual_con,formal_con)) orelse (print_error ())
-		    val _ = if (all2 check_one_con (t_cons,formals)) then ()
-			    else print_error()
-			    
-		  in
-		    D
-		  end)
-		
+	   val D = ((foldl2 folder D (eFormals,t_cons))
+		    handle e => print_error())
+				 
 	   val f_cons = map (curry2 exp_valid D) fexps
 	   val f_cons = map (curry2 con_head_normalize D) f_cons
 
@@ -1989,7 +1969,7 @@ struct
 	     (error (locate "exp_valid") "Expected float for float parameter" handle e => raise e)
 
 	   val _ = 
-	     ((Word32.toInt numfloats) = (List.length fexps)) orelse 
+	     ((Word32.toInt fFormals) = (List.length fexps)) orelse 
 	     (error (locate "exp_valid") "Wrong number of float parameters")
 
 (*	   val _ = (lprintl "STARTED WITH TYPE";
@@ -2001,11 +1981,12 @@ struct
 		    lprintl "IN APP_E")*)
 	   val body = 
 	     let
-	       val body = Subst.substConInCon subst body
-	     in
-	       case vars_opt
-		 of SOME vars => substExpInCon (Subst.E.simFromList (zip vars texps)) body
-		  | NONE => body
+		 fun folder ((SOME v, _), c, eSubst) = Subst.E.sim_add eSubst (v,c)
+		   | folder (_, _, eSubst) = eSubst
+		 val eSubst = foldl2 folder (Subst.E.empty()) (eFormals, texps)
+		 val body = Subst.substConInCon subst body
+		 val body = Subst.substExpInCon eSubst body
+	     in  body
 	     end
 
 (*	   val _ = (lprintl "GENERATING TYPE";

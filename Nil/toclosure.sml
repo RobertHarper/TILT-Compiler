@@ -1,5 +1,7 @@
 (*$import NilContext NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool *)
 
+(* Are argument traces being properly closure converted *)
+
 (* Closure conversion is accomplished in two phases.  
    The first phase scans the program for free type and term variables of 
    all type and term functions and also notes whether a function escapes or not.  
@@ -354,7 +356,11 @@ struct
 		  | bubble (first::rest) = 
 		    let val v = Name.fresh_named_var "dummy"
 			val SOME (_,_,k') = PathMap.find(freecpaths_map,first)
-			val c = AllArrow_c(Open,Total,[(v,k')],NONE,[],0w0,Var_c v)
+			val c = AllArrow_c{openness=Open,effect=Total,isDependent=false,
+					   tFormals=[(v,k')],
+					   eFormals=[],
+					   fFormals=0w0,
+					   body=Var_c v}
 		    in  if (NilUtil.convar_occurs_free(cvar,c))
 			    then (cvar,labs)::first::rest
 			else first::(bubble rest)
@@ -645,7 +651,8 @@ struct
 			     end
 		       | Fixopen_b var_fun_set =>
 			     let val (outer_curfid,_) = get_curfid state
-				 fun do_arm fids_types (v,Function(_,_,vklist,_,vclist,vflist,body,tipe)) =
+				 fun do_arm fids_types (v,Function{tFormals,eFormals,fFormals,body,
+								   body_type=(tr,tipe),...}) =
 				 let val outer_state = add_boundfids false (state,fids_types) 
 				     val fids = map #1 fids_types
 				     val local_state = copy_state state (v,fids)
@@ -656,19 +663,19 @@ struct
 						       Ppnil.pp_var v; print "\n";
 						       show_state (#2 fs); print "\n")
 					     else ()
-				     val fs = vklist_find_fv (vklist,fs)
+				     val fs = vklist_find_fv (tFormals,fs)
 				     val _ = if (!debug)
 						 then (print "the following (after vkfolder) frees to ";
 						       Ppnil.pp_var v; print "\n";
 						       show_free (#1 fs); print "\n")
 					     else ()
-				     val (f,s) = vtlist_find_fv
-						  (vclist @ (map (fn v => (v,float64)) vflist),
-						   fs)
+				     val fs = vtrtlist_find_fv (eFormals, fs)
+				     val (f,s) = vtlist_find_fv (map (fn v => (v,float64)) fFormals, fs)
+
 				     val _ = if (!debug)
 						 then (print "the following (after vcfolder) frees to ";
 						       Ppnil.pp_var v; print "\n";
-						       show_free f; print "\n")
+						       show_free (#1 fs); print "\n")
 					     else ()
 				     val f = e_find_fv (s,f) body
 				     val _ = if (!debug)
@@ -676,6 +683,7 @@ struct
 						       Ppnil.pp_var v; print "\n";
 						       show_free f; print "\n")
 					     else ()
+				     val f = trace_find_fv (s,f) tr
 				     val f = c_find_fv (s,f) tipe
 				     val _ = if (!debug)
 						 then (print "adding the following frees to ";
@@ -953,6 +961,22 @@ struct
 	in  foldl folder fs vclist
 	end
 
+    and vtrtlist_find_fv (vtrclist,fs) =
+	let fun folder((v,tr,c),(f,s)) = 
+	    (trace_find_fv (s, t_find_fv (s,f) c) tr,
+	     add_boundevar(s,v,c))
+	in  foldl folder fs vtrclist
+	end
+
+    and vopttlist_find_fv (vclist,fs) =
+	let fun folder((vopt,c),(f,s)) = 
+	    (t_find_fv (s,f) c, 
+	     (case vopt of 
+		  NONE => s
+		| SOME v => add_boundevar(s,v,c)))
+	in  foldl folder fs vclist
+	end
+
     and cbnd_find_fv (cbnd,(f,s)) = 
 	(case cbnd of
 	     Con_cb(v,c) => let val f' = c_find_fv (s,f) c
@@ -989,12 +1013,10 @@ struct
 		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (Sequence.toList vcset)
 		     end
 	       (* the types of some primitives like integer equality are Code arrow *)
-	       | AllArrow_c(_,_,vklist,vlist,clist,numfloats,c) =>
-		     let val fs = vklist_find_fv (vklist,(frees,state))
-			 val vlist = case vlist of SOME vars => vars 
-		                                 | NONE => map (fn _ => Name.fresh_var()) clist
-			 val (f,s) = vtlist_find_fv (Listops.zip vlist clist,fs)
-		     in  c_find_fv (s,f) c
+	       | AllArrow_c{tFormals,eFormals,fFormals,body,...} =>
+		     let val fs = vklist_find_fv (tFormals,(frees,state))
+			 val (f,s) = vopttlist_find_fv (eFormals,fs)
+		     in  c_find_fv (s,f) body
 		     end
 	       | ExternArrow_c(clist,c) =>
 		     let fun cfolder (c,(f,s)) = (c_find_fv (s,f) c,s)
@@ -1194,7 +1216,8 @@ struct
      in  fun substConPathInCon (subst,c) = NilUtil.con_rewrite (handlers subst) c
          fun substConPathInKind (subst,k) = NilUtil.kind_rewrite (handlers subst) k
      end 
-   fun fun_rewrite state vars (v,Function(effect,recur,vklist,dep,vclist,vflist,body,tipe)) = 
+   fun fun_rewrite state vars (v,Function{effect,recursive,isDependent,
+					  tFormals,eFormals,fFormals,body,body_type=(tr,tipe)}) =
        let 
 	   val _ = if (!debug)
 		       then (print "\n***fun_rewrite v = "; Ppnil.pp_var v; print "\n")
@@ -1211,10 +1234,11 @@ struct
 	                     (rev freecpaths)
 
 	   val inner_state = copy_state(state,v)
-	   val vklist_outer = map (fn (v,k) => (v,k_rewrite state k)) vklist
-	   val vclist_outer = map (fn (v,c) => (v,c_rewrite state c)) vclist
-	   val vklist = map (fn (v,k) => (v,k_rewrite inner_state k)) vklist
-	   val vclist = map (fn (v,c) => (v,c_rewrite inner_state c)) vclist
+	   val vklist_outer = map (fn (v,k) => (v,k_rewrite state k)) tFormals
+	   val vclist_outer = map (fn (v,tr,c) => (v,tr,c_rewrite state c)) eFormals
+	   val vklist = map (fn (v,k) => (v,k_rewrite inner_state k)) tFormals
+	   val vclist = map (fn (v,tr,c) => (v,trace_rewrite inner_state tr,
+					     c_rewrite inner_state c)) eFormals
 	   val escape = get_escape v
 	   val vkl_free = map (fn (p,v,k,l) => (p,v,k_rewrite state k,l)) vkl_free
 	   val pc_free = let val temp = PathMap.listItemsi pc_free
@@ -1256,7 +1280,7 @@ struct
 			   end
 
 	   val vklist_code = vklist @ (map (fn (p,v,k,l) => (v,k)) vkl_free)
-	   val vclist_code = vclist @ (map (fn (path,v',_,c) => (v',c)) pc_free)
+	   val vclist_code = vclist @ (map (fn (path,v',_,c) => (v',TraceUnknown,c)) pc_free)
 	   val (internal_subst,external_subst,cenv_kind) = 
 	       let 
 		   fun loop is es acc [] = (is,es,Record_k (Sequence.fromList (rev acc)))
@@ -1274,17 +1298,18 @@ struct
 
 	   val vklist_unpack_almost = map (fn (v,k) => (v,substConPathInKind(external_subst, k))) vklist
 	   val vklist_unpack = vklist_unpack_almost @ [(cenv_var,cenv_kind)]
-	   val vclist_unpack_almost = vclist @ [(venv_var,venv_type)]
-	   val vclist_unpack = map (fn (v,c) => (v,substConPathInCon (external_subst, c))) vclist_unpack_almost
+	   val vclist_unpack_almost = vclist @ [(venv_var,TraceUnknown,venv_type)]
+	   val vclist_unpack = map (fn (v,tr,c) => (v,tr,substConPathInCon (external_subst, c))) vclist_unpack_almost
 
-
+	   val codebody_tr = trace_rewrite state tr
 	   val codebody_tipe = c_rewrite state tipe
 
-	   val closure_tipe = AllArrow_c(Closure,effect,
-					 vklist_outer,
-					 if dep then SOME(map #1 vclist) else NONE,
-					 map #2 vclist_outer,
-					 TilWord32.fromInt(length vflist),codebody_tipe)
+	   val closure_tipe = AllArrow_c{openness=Closure, effect=effect, isDependent=isDependent,
+					 tFormals=vklist_outer,	
+					 eFormals=map (fn (v,_,c) => 
+						       (if isDependent then SOME v else NONE, c)) vclist,
+					 fFormals=TilWord32.fromInt(length fFormals),
+					 body=codebody_tipe}
 	   val codebody_tipe = substConPathInCon(external_subst,codebody_tipe)
 
 
@@ -1306,9 +1331,12 @@ struct
 			  else Prim_e(NilPrimOp(record labels),[],elist)
 		      end
 
-	   val code_fun = Function(effect,recur,
-				   vklist_unpack,dep,vclist_unpack,vflist,
-				   code_body, codebody_tipe)
+	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
+				   tFormals=vklist_unpack,
+				   eFormals=vclist_unpack,
+				   fFormals=fFormals,
+				   body=code_body, 
+				   body_type=(codebody_tr,codebody_tipe)}
 
 	   val closure = {code = code_var,
 			  cenv = cenv,
@@ -1379,11 +1407,7 @@ struct
 	   val _ = (print "  e_rewrite called on = \n";
 		    pp_exp arg_exp; print "\n")
 *)
-	   (* we do not copy_state for arms since they are not first-class *)
-	   fun armfun_rewrite (Function(ef,re,vklist,dep,vclist,vflist,e,c)) =
-	   Function(ef,re,map (fn (v,k) => (v, k_rewrite state k)) vklist,
-		    dep,map (fn (v,c) => (v, c_rewrite state c)) vclist,
-		    vflist, e_rewrite state e, c_rewrite state c)
+
 	   (* there are no function definitions within e_rewrite so we use same state *)
 	   val e_rewrite = e_rewrite state
 	   val c_rewrite = c_rewrite state
@@ -1552,17 +1576,17 @@ struct
 	  | Mu_c (ir,vc_set) => Mu_c(ir,Sequence.fromList 
 					(map (fn (v,c) => (v,c_rewrite c)) (Sequence.toList vc_set)))
 	  | Var_c v => path_case(v,[])
-	  | AllArrow_c (ar,effect,vklist,vlist,clist,numfloats,c) => 
-		let val vklist' = map (fn(v,k) => (v,k_rewrite state k)) vklist
-		    val clist' = map c_rewrite clist
-		    val ar' = (case ar of
+	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body} =>
+		let val tFormals' = map (fn(v,k) => (v,k_rewrite state k)) tFormals
+		    val eFormals' = map (fn(v,c) => (v,c_rewrite c)) eFormals
+		    val openness' = (case openness of
 				   Open => Closure
 				 | Code => Code
 				 | Closure => error ("AllArrow_c(Closure,...) " ^ 
 						     "during closure-conversion"))
-		in  AllArrow_c(ar',effect,vklist',
-			       vlist,clist',
-			       numfloats,c_rewrite c)
+		in  AllArrow_c{openness=openness',effect=effect,isDependent=isDependent,
+			       tFormals=tFormals',eFormals=eFormals',
+			       fFormals=fFormals,body=body}
 		end
 	  | ExternArrow_c (clist,c) => 
 		ExternArrow_c(map c_rewrite clist,
