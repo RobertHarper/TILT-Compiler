@@ -35,7 +35,7 @@ gmake heap
 if [ -f ./Heaps/tilt.$platform ] ; then echo "Compiled tilt-nj" ; else echo "TILT didn't compile" ; exit 1 ; fi
 
 # build the basis
-if ./Test/tilt-nj -b ; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
+if ./Test/tilt-nj -b mapfile-basis; then echo "Compiled basis" ; else echo "Basis didn't compile" ; exit 1 ; fi
 
 # build the test harness
 if (cd Test ; ./tilt-nj -m mapfile) ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
