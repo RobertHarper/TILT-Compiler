@@ -146,23 +146,26 @@ struct
    * Trying to normalize and pull on demand in this will cause a loop.
   *)
 
-  val empty_subst = Subst.empty
-  val subst_compose = Subst.con_subst_compose
-  val subst_add = Subst.add
 
   fun bind_kind normalizer (D:context,var,kind) =
     let
       val _ = if !profile then (nilcontext_kinds_renamed();
 				nilcontext_kinds_bound ()) else ()
-      val var' = Name.derived_var var
+      val (var',subst) = (case V.find(D,var) 
+			    of NONE => (var,Subst.empty())
+			     | SOME _ => 
+			      let
+				val var' = Name.derived_var var
+			      in
+				(var',Subst.add (Subst.empty ()) (var,Var_c var'))
+			      end)
       val var_con = Var_c var'
       val kind = selfify(var_con,kind)
       val D' = inject_kind (D,var',var_con,kind)
       val con = normalizer D' (pull(var_con,kind))
     in
       (inject_kind(D,var',con,kind),
-       var',
-       subst_add (empty_subst ()) (var,Var_c var'))
+       var', subst)
     end
 
   fun insert_kind normalizer (D as {kindmap,...}:context,var,kind) = 
@@ -218,11 +221,11 @@ struct
 	      val kind = Subst.substConInKind subst kind
 	      val (C,var,subst_one) = bind_kind (C,var,kind)
 	    in
-	      (C,(var,kind)::rev_acc,subst_compose(subst_one,subst))
+	      (C,(var,kind)::rev_acc,con_subst_compose(subst_one,subst))
 	    end
 	  
 	  val (C,rev_acc,subst) = 
-	    List.foldl folder (C,[],empty_subst()) defs
+	    List.foldl folder (C,[],Subst.empty()) defs
 	in
 	  (C,rev rev_acc,subst)
 	end

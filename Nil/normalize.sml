@@ -293,29 +293,27 @@ struct
     let
       fun eta_conrecord' (Crecord_c []) = record_c
 	| eta_conrecord' (Crecord_c (fields as (label,con)::rest)) = 
-	let
-	  fun etable repcon (label,con) = 
-	    (case strip_proj con
-	       of SOME (con2,label2) => 
-		 (eq_label (label,label2)) andalso 
-		 (alpha_equiv_con (repcon,con2))
-		| NONE => false)
-	  val kind = get_shape' D record_c
-	in
-	  if (length fields) = (count_fields kind) then
-	    (case strip_proj con
-	       of SOME (c,l) => 
-		 if (all (etable c) fields) then
-		   c
-		 else 
-		   record_c
-		| NONE => record_c)
-	  else
-	    record_c
-	end
+	(case strip_proj con
+	   of SOME (c,l) => 
+	     let
+	       fun etable repcon (label,con) = 
+		 (case strip_proj con
+		    of SOME (con2,label2) => 
+		      (eq_label (label,label2)) andalso 
+		      (alpha_equiv_con (repcon,con2))
+		     | NONE => false)
+	       val kind = get_shape' D c
+	       val kind' = get_shape' D record_c
+	     in
+	       if alpha_equiv_kind (kind,kind') andalso (all (etable c) fields) then
+		 c
+	       else 
+		 record_c
+	     end
+	    | NONE => record_c)
 	| eta_conrecord' _ = 
-	(PpNil.pp_con record_c;
-	 (error "eta_conrecord passed non record" handle e => raise e))
+	   (PpNil.pp_con record_c;
+	    (error "eta_conrecord passed non record" handle e => raise e))
     in
       map_annotate eta_conrecord' record_c
     end

@@ -436,6 +436,7 @@ struct
 
 	   val var_kinds = map (fn var => (var,Word_k Runtime)) vars
 
+	   (* leave top level? *)
 	   val origD = D
 	   val (D,var_kinds,subst) = bind_kind_list (D,var_kinds)
 
@@ -1485,6 +1486,8 @@ struct
 		 (Code,Fixcode_b) 
 	       else (Open,Fixopen_b)
 
+	     val D = leave_top_level D
+
 	     val (declared_c) = map (curry2 get_function_type openness) functions
 	     val (declared_c,_) = unzip (map (curry2 con_valid D) declared_c)  (*Must normalize!!*)
 	     val bnd_types = zip vars declared_c
@@ -1492,9 +1495,10 @@ struct
 	     val D = 
 	       if is_code then 
 		 insert_code_con_list (code_context D, bnd_types)
-	       else leave_top_level (insert_con_list (D,bnd_types))
+	       else insert_con_list (D,bnd_types)
 		       
 	     val functions = map (curry2 function_valid D) functions
+
 	     val D = 
 	       if is_code then 
 		 insert_code_con_list (origD, bnd_types)
@@ -1507,11 +1511,15 @@ struct
 	   end
 	  | Fixclosure_b (is_recur,defs) => 
 	   let
+	     val origD = D
+	     val D = leave_top_level D
 	     val (vars,closures) = unzip (set2list defs)
 	     val tipes = map (fn cl => #tipe cl) closures
 	     val (tipes,_) = unzip (map (curry2 con_valid D) tipes)
-	     val returnD = insert_con_list (D,zip vars tipes)
-	     val D = if is_recur then leave_top_level returnD else leave_top_level D
+
+	     val D = if is_recur 
+		       then insert_con_list (D,zip vars tipes)
+		     else D
 	     fun do_closure ({code,cenv,venv,tipe=_},tipe) = 
 	       let
 		 val (cenv,ckind) = con_valid (D,cenv)
@@ -1555,7 +1563,7 @@ struct
 		    print "con is "; PpNil.pp_con con; print "\n";
 		    (error "Type error in closure" handle e => raise e))
 	       end
-	     val D = returnD
+	     val D = insert_con_list (origD,zip vars tipes)
 	     val closures = map2 do_closure (closures,tipes)
 	     val defs = list2set (zip vars closures)
 	     val bnd = Fixclosure_b (is_recur, defs)
