@@ -105,7 +105,7 @@ structure DenseIntSet
    *)
   local
     fun countInt 0 = 0
-      | countInt n = (n mod 1)+countInt(n div 2)
+      | countInt n = (n mod 2)+countInt(n div 2)
 
     val countInt8 = Array.tabulate(256, countInt)
 
