@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilSubst INLINE Analyze *)
+(*$import List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilSubst INLINE Analyze *)
 
 (* Inline functions that are non-recursive and either are called once
    or else are sufficiently small and called a sufficiently small number
@@ -22,6 +22,8 @@
    Also, when inlining a function more than one time, we need to rename
    its bound term variables to maintain the invariant that term variables
    are unique.
+
+   This pass depends on applications to be inlined being in A-normal form.
 *)
 structure Inline :> INLINE =
 struct
@@ -50,7 +52,7 @@ struct
 	occurs} : Analyze.funinfo) : inlineStatus =
       let val calledOnce = (case occurs of
 				[] => true  (* or dead *)
-			      | [(false, n)] => n >= 1
+			      | [(false, n)] => n >= 1 (* Match a single non-recursive call to the function w/ no escaping *)
 			      | _ => false)
 	  val recursive = Listops.orfold #1 occurs
 	  val escaping = Listops.orfold (fn (_, level) => level = 0) occurs
@@ -69,7 +71,9 @@ struct
 
   fun rbnds bnds = List.concat(map rbnd bnds)
 
-  and make_handlers unit =
+  (* Is this code only necessary if Typeof is used? *)
+
+  and make_handlers () =
       {exphandler = fn (b,e) =>
                     let val newexp = rexp e
 		    in NilUtil.CHANGE_NORECURSE newexp
