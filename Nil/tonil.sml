@@ -1107,7 +1107,7 @@ end (* local defining splitting context *)
 				Il.BND_MOD
 				(top_var, true, m as 
 				 Il.MOD_FUNCTOR
-				 (arrow,poly_var, il_arg_signat, 
+				 (Il.TOTAL,poly_var, il_arg_signat, 
 				  Il.MOD_STRUCTURE
 				  [Il.SBND(them_lbl,
 					   Il.BND_EXP
@@ -1125,8 +1125,6 @@ end (* local defining splitting context *)
 	   let
 	       val _ = clear_memo top_var
 	       val _ = clear_memo poly_var
-
-               val effect = xeffect arrow
 
 	       (* external_labels = Exported labels for these functions.
                   external_vars = Variables to which the functions should be bound
@@ -1198,7 +1196,7 @@ end (* local defining splitting context *)
 							fFormals = 0w0, 
 							body_type = inner_body_type}
 		   in  (external_var_r,
-		       Function{effect = effect, 
+		       Function{effect = Total,
 				recursive = Leaf, 
 				isDependent = false,
 				tFormals = [(poly_var_c, knd_arg)],
