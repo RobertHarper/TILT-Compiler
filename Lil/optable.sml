@@ -184,7 +184,35 @@ struct
       | update t => 57*skip + hash_table t
       | length_table t => 58*skip + hash_table t
       | equal_table t => 59 *skip + hash_table t
+      | mk_ref => 60 * skip 
+      | deref => 61 * skip 
+      | eq_ref => 62 * skip 
+      | setref => 63 * skip 
 	  
+	  
+    fun cmp_intvectors ((sz1, arr1), (sz2, arr2)) =
+	let
+	    val length1 = Array.length arr1
+	    val length2 = Array.length arr2
+	    fun e2n (slice(B1,Lil.Const_32(Prim.uint(Prim.W8,n)))) = n
+              | e2n _ = error "cmp_vectors: e2n: ill-formed string"
+	    fun loop i =
+		if (i >= length1) then
+		    EQUAL
+		else
+		    (case cmp_uTilWord64 (e2n (Array.sub(arr1,i)),
+					  e2n (Array.sub(arr2,i))) of
+			 EQUAL => loop (i+1)
+		       | ord => ord)
+	in
+	    (case (sz1,sz2) of
+	       (Prim.W8,Prim.W8) =>
+		 (* Comparison of strings *)
+		 (case cmp_int(length1, length2) of
+		    EQUAL => loop 0
+		  | ord => ord)
+	     | _ => LESS)
+	end
 
 
     fun cmp_vk ((v1,k1),(v2,k2)) = cmp_orders[Name.compare_var(v1,v2),cmp_kind(k1,k2)]
@@ -215,12 +243,30 @@ struct
 	  | (float f, _ )  => GREATER
 	  | (_, float f) => LESS
 
+
 	  (* | (array a, array b) => LESS   These shouldn't ever be equal *)
 	  | (array a, _ ) => GREATER
 	  | (_, array a) => LESS
 
+	  (* | (array a, array b) => LESS   These shouldn't ever be equal *)
+	  | (intarray a, _ ) => GREATER
+	  | (_, intarray a) => LESS
+
+	  (* | (array a, array b) => LESS   These shouldn't ever be equal *)
+	  | (floatarray a, _ ) => GREATER
+	  | (_, floatarray a) => LESS
+
+(*	  | (vector v1, (vector v2)) => cmp_vectors (v1, v2)*)
 	  | (vector v, _ ) => GREATER
 	  | (_, vector v) => LESS
+
+(*	  | (vector v1, (vector v2)) => cmp_vectors (v1, v2)*)
+	  | (floatvector v, _ ) => GREATER
+	  | (_, floatvector v) => LESS
+
+	  | (intvector v1, (intvector v2)) => cmp_intvectors (v1, v2)
+	  | (intvector v, _ ) => GREATER
+	  | (_, intvector v) => LESS
 
 	  | (refcell r, _ ) => GREATER (* And these *)
 	  | (_, refcell r) => LESS
@@ -291,6 +337,19 @@ struct
 	  | (_ , Tag _) => LESS
 	  | (Unit,Unit) => EQUAL)
 
+    fun cmp_size (a,b) =
+      (case (a,b)
+	 of (B8, B8) => EQUAL
+	  | (B8,_) => GREATER
+	  | (_,B8) => LESS
+	  | (B4,B4) => EQUAL
+	  | (B4,_) => GREATER
+	  | (_,B4) => LESS
+	  | (B2,B2) => EQUAL
+	  | (B2,_) => GREATER
+	  | (_,B2) => LESS
+	  | (B1,B1) => EQUAL)
+
     val cmp_sv32_list = cmp_list cmp_sv32
     val cmp_sv64_list = cmp_list cmp_sv64
     fun cmp_primarg (arg1,arg2) =
@@ -298,7 +357,10 @@ struct
 	 of (arg32 a,arg32 b) => cmp_sv32 (a,b)
 	  | (arg32 _, _) => GREATER
 	  | (_, arg32 _) => LESS
-	  | (arg64 a,arg64 b) => cmp_sv64 (a,b))
+	  | (arg64 a,arg64 b) => cmp_sv64 (a,b)
+	  | (arg64 _, _) => GREATER
+	  | (_,arg64 _) => LESS
+	  | (slice (sz1,sv1),slice (sz2,sv2)) => cmp_orders [cmp_size (sz1,sz2),cmp_sv32 (sv1,sv2)])
 
     val cmp_primarg_list = cmp_list cmp_primarg
 
@@ -308,6 +370,8 @@ struct
 	  | other => other)
     val cmp_prim32 = cmp_prim
     fun cmp_prim64 ((p1,args1),(p2,args2)) = cmp_prim((p1,[],args1),(p2,[],args2))
+    fun cmp_primembed ((sz1,p1,args1),(sz2,p2,args2)) = 
+      cmp_orders[cmp_size (sz1,sz2),cmp_prim((p1,[],args1),(p2,[],args2))]
 
     fun cmp_op64 (a,b) = 
       (case (a,b)
@@ -338,9 +402,10 @@ struct
 	  | (Select w1,Select w2) => cmp_word (w1,w2)
 	  | (Select _, _) => GREATER
 	  | (_, Select _) => LESS
-	  | (Dyntag,Dyntag) => EQUAL)
-(*	  | (Dyntag, _) => GREATER
-	  | (_, Dyntag) => LESS*)
+	  | (Dyntag,Dyntag) => EQUAL
+	  | (Dyntag, _) => GREATER
+	  | (_, Dyntag) => LESS
+	  | (Ptreq,Ptreq) => EQUAL)
 
 
     fun cmp_lilprimop(a,b) = 
@@ -354,6 +419,9 @@ struct
 	  | (Prim32 a,Prim32 b) => cmp_prim32 (a,b)
 	  | (Prim32 _, _) => GREATER
 	  | (_, Prim32 _) => LESS
+	  | (PrimEmbed a,PrimEmbed b) => cmp_primembed (a,b)
+	  | (PrimEmbed _, _) => GREATER
+	  | (_, PrimEmbed _) => LESS
 	  | (LilPrimOp32 a,LilPrimOp32 b) => cmp4 (cmp_lilprim,cmp_con_list,cmp_sv32_list,cmp_sv64_list) (a,b)
 	  | (LilPrimOp32 _, _) => GREATER
 	  | (_, LilPrimOp32 _) => LESS

@@ -47,6 +47,15 @@ structure Listops :> LISTOPS =
 
     fun map_unzip f ls = unzip(map f ls)
 
+    fun map_concat (f : 'a -> 'b list) (l : 'a list) : 'b list = 
+      let
+	fun loop (l,acc) = 
+	  (case l 
+	     of [] => rev acc
+	      | a::aa => loop(aa,List.revAppend (f a,acc)))
+      in loop(l,[])
+      end
+
     val all = List.all
 
     (* nb. NOT the same as ListPair.all, because

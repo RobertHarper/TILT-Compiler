@@ -1432,13 +1432,14 @@ struct
           val state = mergeStates(state, arms_leftover_state)
 
 	  val (default, default_leftover_state, levels3, _, _) =
-		  rexpopt_limited limitlevel (default, env, empty_state)
+		  rexpopt_limited limitlevel (default, inner_env, empty_state)
 
           val state = mergeStates(state, default_leftover_state)
 
 	  val (result_type, state, levels4) = rtype(result_type, env, state)
+	  val (sumtype, state, levels5) = rtype(sumtype, env, state)
 
-	  val levels = mergeMultiLevels[levels1, levels2,levels3, levels4]
+	  val levels = mergeMultiLevels[levels1, levels2,levels3, levels4, levels5]
 
 	  val effs = con2eff result_type
 	  val valuable = false

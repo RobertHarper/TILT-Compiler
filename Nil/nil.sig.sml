@@ -71,6 +71,16 @@ sig
       (* Params: Element con *)
     | Vector_c                                (* vectors *)
       (* Params: Element con *)
+    | IntArray_c of Prim.intsize
+      (* Params: None *)
+    | IntVector_c of Prim.intsize
+      (* Params: None *)
+    | FloatArray_c of Prim.floatsize
+      (* Params: None *)
+    | FloatVector_c of Prim.floatsize
+      (* Params: None *)
+    | Ref_c 
+      (* Params: Element con *)
     | Loc_c                                   (* locatives *)
       (* Params: None *)
     | Exntag_c                                (* exception tags *)

@@ -76,10 +76,11 @@ signature TRANSLATIONDEFS =
 	val length_float   : Lil.sv32 -> Lil.op32 P.pexp 
 	val length_other   : Lil.con -> Lil.sv32 -> Lil.op32 P.pexp 
 
-	val equal_dynamic : Lil.con -> Lil.sv32 -> (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp 
+(*	Superceded by Ptreq 
+val equal_dynamic : Lil.con -> Lil.sv32 -> (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp 
 	val equal_int     : Prim.intsize -> (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp 
 	val equal_float   : (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp 
-	val equal_other   : Lil.con -> (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp 
+	val equal_other   : Lil.con -> (Lil.sv32 * Lil.sv32) -> Lil.op32 P.pexp *)
       end
 
     (* Ready? *)

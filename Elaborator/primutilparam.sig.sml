@@ -14,8 +14,12 @@ signature PRIMUTILPARAM =
 	val con_uint : Prim.intsize -> con
 	val con_float : Prim.floatsize -> con
 	val con_array : con -> con
-	val con_ref : con -> con
 	val con_vector : con -> con
+	val con_intarray : Prim.intsize -> con
+	val con_intvector : Prim.intsize -> con
+	val con_floatarray : Prim.floatsize -> con
+	val con_floatvector : Prim.floatsize -> con
+	val con_ref : con -> con
 	val con_tag : con -> con
 	val unit_value : exp
 	val exp2value : exp -> (con,exp) Prim.value option

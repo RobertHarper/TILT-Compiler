@@ -70,8 +70,7 @@ struct
       | cmp_orders (EQUAL::rest) = cmp_orders rest
       | cmp_orders (first::rest) = first
 
-
-    fun cmp_vectors ((c1, arr1), (c2, arr2)) =
+    fun cmp_intvectors ((sz1, arr1), (sz2, arr2)) =
 	let
 	    val length1 = Array.length arr1
 	    val length2 = Array.length arr2
@@ -86,14 +85,13 @@ struct
 			 EQUAL => loop (i+1)
 		       | ord => ord)
 	in
-	    (case (c1,c2) of
-		 (Prim_c(Int_c Prim.W8,[]),
-		  Prim_c(Int_c Prim.W8,[])) =>
-		     (* Comparison of strings *)
-		     (case cmp_int(length1, length2) of
-			  EQUAL => loop 0
-			| ord => ord)
-	       | _ => LESS)
+	    (case (sz1,sz2) of
+	       (Prim.W8,Prim.W8) =>
+		 (* Comparison of strings *)
+		 (case cmp_int(length1, length2) of
+		    EQUAL => loop 0
+		  | ord => ord)
+	     | _ => LESS)
 	end
 
     fun cmp_list cmp (a,b) =
@@ -225,6 +223,10 @@ struct
 	  | update t => 57*skip + hash_table t
 	  | length_table t => 58*skip + hash_table t
 	  | equal_table t => 59 *skip + hash_table t
+	  | mk_ref => 60 * skip 
+	  | deref => 61 * skip 
+	  | eq_ref => 62 * skip 
+	  | setref => 63 * skip 
 
     (* We rely on the unique variable name invariant to avoid having
      * to care about scope.  You'll never bind the same variable twice,
@@ -239,7 +241,7 @@ struct
       fun reset () = cvar_eqns := V.empty
       fun cvar_equate (v1,v2) =
 	if Name.eq_var(v1,v2) then ()
-	else cvar_eqns := V.insert(!cvar_eqns,v1,v2)
+	else cvar_eqns := (V.insert(V.insert(!cvar_eqns,v1,v2),v2,v1))
       fun cvar_list_equate arg =
 	let fun loop ([],[])           = EQUAL
 	      | loop (v1::vv1,v2::vv2) = (cvar_equate (v1,v2);loop (vv1,vv2))
@@ -300,18 +302,20 @@ struct
 	  | (_, TraceCompute _) => LESS
 	  | (TraceKnown ti1,TraceKnown ti2) => cmp_ti (ti1,ti2))
 
+    fun cmp_intsize (sz1,sz2) = cmp_int (hash_intsize(sz1), hash_intsize(sz2))
+    fun cmp_floatsize (sz1,sz2) = cmp_int (hash_floatsize(sz1), hash_floatsize(sz2))
 
     fun cmp_primcon p =
 	case p of
-	    ( Int_c sz1, Int_c sz2) =>  cmp_int (hash_intsize(sz1), hash_intsize(sz2))
+	    ( Int_c sz1, Int_c sz2) =>  cmp_intsize (sz1,sz2)
 	  | (Int_c _, _) => GREATER
 	  | (_, Int_c _ ) => LESS
 
-	  | (Float_c sz1, Float_c sz2) =>cmp_int (hash_floatsize(sz1), hash_floatsize(sz2))
+	  | (Float_c sz1, Float_c sz2) => cmp_floatsize(sz1,sz2)
 	 | (Float_c _, _) => GREATER
 	 | (_, Float_c _) => LESS
 
-	 | (BoxFloat_c sz1, BoxFloat_c sz2) =>cmp_int (hash_floatsize(sz1), hash_floatsize(sz2))
+	 | (BoxFloat_c sz1, BoxFloat_c sz2) => cmp_floatsize(sz1,sz2)
 	 | (BoxFloat_c _, _) => GREATER
 	 | ( _, BoxFloat_c _) => LESS
 
@@ -323,9 +327,29 @@ struct
 	 | (Array_c, _) => GREATER
 	 | (_, Array_c) => LESS
 
+	 | (IntArray_c sz1, IntArray_c sz2) => cmp_intsize (sz1,sz2)
+	 | (IntArray_c _, _) => GREATER
+	 | (_, IntArray_c _) => LESS
+
+	 | (FloatArray_c sz1, FloatArray_c sz2) => cmp_floatsize (sz1,sz2)
+	 | (FloatArray_c _, _) => GREATER
+	 | (_, FloatArray_c _) => LESS
+
 	 | ( Vector_c, Vector_c) => EQUAL
 	 | (Vector_c, _) => GREATER
 	 | ( _, Vector_c) => LESS
+
+	 | (IntVector_c sz1, IntVector_c sz2) => cmp_intsize (sz1,sz2)
+	 | (IntVector_c _, _) => GREATER
+	 | (_, IntVector_c _) => LESS
+
+	 | (FloatVector_c sz1, FloatVector_c sz2) => cmp_floatsize (sz1,sz2)
+	 | (FloatVector_c _, _) => GREATER
+	 | (_, FloatVector_c _) => LESS
+
+	 | (Ref_c, Ref_c) => EQUAL
+	 | (Ref_c, _) => GREATER
+	 | (_, Ref_c) => LESS
 
 	 | (Loc_c, Loc_c) => EQUAL
 	 | (Loc_c, _) => GREATER
@@ -391,9 +415,25 @@ struct
 	  | (array a, _ ) => GREATER
 	  | (_, array a) => LESS
 
-	  | (vector v1, (vector v2)) => cmp_vectors (v1, v2)
+	  (* | (array a, array b) => LESS   These shouldn't ever be equal *)
+	  | (intarray a, _ ) => GREATER
+	  | (_, intarray a) => LESS
+
+	  (* | (array a, array b) => LESS   These shouldn't ever be equal *)
+	  | (floatarray a, _ ) => GREATER
+	  | (_, floatarray a) => LESS
+
+(*	  | (vector v1, (vector v2)) => cmp_vectors (v1, v2)*)
 	  | (vector v, _ ) => GREATER
 	  | (_, vector v) => LESS
+
+(*	  | (vector v1, (vector v2)) => cmp_vectors (v1, v2)*)
+	  | (floatvector v, _ ) => GREATER
+	  | (_, floatvector v) => LESS
+
+	  | (intvector v1, (intvector v2)) => cmp_intvectors (v1, v2)
+	  | (intvector v, _ ) => GREATER
+	  | (_, intvector v) => LESS
 
 	  | (refcell r, _ ) => GREATER (* And these *)
 	  | (_, refcell r) => LESS

@@ -331,7 +331,8 @@ structure LilTypecheck :> LILTYPECHECK =
 				   val () = ASSERT (w = iw) "Case_c: duplicate arm"
 				   val () = check (bind_cvar(env,(a,ki))) c k "Case_c has bad arm"
 				 in checkarms(restarms,ks,iw+0w1,complete)
-				 end)
+				 end
+			   | _ => FAIL "too many arms!")
 		     val () = checkarms (arms,ks,0w0,true)
 		   in ()
 		   end
@@ -448,7 +449,8 @@ structure LilTypecheck :> LILTYPECHECK =
 				 let
 				   val k = optcheck (bind_cvar(env,(a,ki))) c kopt "Case_c has bad arm"
 				 in doarms(restarms,ks,SOME k,iw + 0w1,complete)
-				 end)
+				 end
+			   | _ => FAIL "too many arms!")
 		     val k = doarms (arms,ks,NONE,0w0,true)
 		   in k
 		   end
@@ -541,12 +543,15 @@ structure LilTypecheck :> LILTYPECHECK =
 	    val t = ((primarg' env arg) handle IllTyped => FAIL s)
 	    val () = if !paranoid then 
 	      (case arg 
-		 of arg32 _ => T.check32 env (LR.renameCon t) "primarg' returned bad type" 
+		 of slice (sz,_) => T.check32 env (LR.renameCon (LD.T.embed sz t)) "primarg' returned bad type"
+		  | arg32 _ => T.check32 env (LR.renameCon t) "primarg' returned bad type" 
 		  | arg64 _ => T.check64 env (LR.renameCon t) "primarg' returned bad type")
 		     else ()
 	  in t 
 	  end
 	and primargcheck env arg t s = check primarg "primarg" env arg t s
+	and value size env v s = ((value' size env v) handle IllTyped => FAIL s)
+	and valuecheck size env v t s = check (value size) "value" env v t s
 	and sv64 env sv s = 
 	  let 
 	    val t = ((sv64' env sv) handle IllTyped => FAIL s)
@@ -646,15 +651,44 @@ structure LilTypecheck :> LILTYPECHECK =
 	  end
 	and primarg' env arg = 
 	  (case arg
-	     of arg32 sv => sv32 env sv "primarg32: bad sv"
+	     of slice (sz,sv) => 
+	       let
+		 val t = sv32 env sv "slice: bad sv"
+		 val (sz',c) = VALOF (Dec.C.embed' t) "slice: not an embedded type"
+		 val _ = ASSERT (sz = sz') "slice: bad sizes"
+	       in c
+	       end
+	      | arg32 sv => sv32 env sv "primarg32: bad sv"
 	      | arg64 sv => sv64 env sv "primarg64: bad sv")
+	and value' size env arg  =
+	  (case size
+	     of B1 => 
+	       (case arg
+		  of (Prim.int (Prim.W8, w))  => LD.T.intt B1
+		   | (Prim.uint (Prim.W8, w)) => LD.T.intt B1
+		   | _ => FAIL "value got bad prim value")
+	      | B2 => FAIL "no supported 2 byte values"
+	      | B4 => 
+		  (case arg
+		     of (Prim.int (Prim.W8, w))  => LD.T.embed B1 (LD.T.intt B1)
+		      | (Prim.int (Prim.W32, w)) => LD.T.intt B4
+		      | (Prim.uint (Prim.W8, w)) => LD.T.embed B1 (LD.T.intt B1)
+		      | (Prim.uint (Prim.W32, w)) => LD.T.intt B4
+		      | (Prim.intvector (Prim.W8,arr))    => 
+		       let
+			 val _ = Array.app (fn arg => primargcheck (LC.empty()) arg (LD.T.intt B1) "vector has bad elt") arr
+		       in LD.T.ptr (LD.T.array B4 (LD.T.intt B1))
+		       end
+		      | _ => FAIL "bad 4 byte prim value")
+	      | B8 => 
+		   (case arg
+		      of Prim.float (floatsize, f) => LD.T.float ()
+		       | _ => FAIL "bad 8 byte prim value"))
+
 	and sv64' env sv = 
 	  (case sv
 	     of Var_64 xf => find_var64 (env,xf)
-	      | Const_64 v => 
-	       (case v 
-		  of Prim.float (floatsize, f) => LD.T.float ()
-		   | _ => FAIL "Const_64 got bad prim value"))
+	      | Const_64 v => value B8 env v "Const_64: bad constant")
 	and sv32' env sv =
 	  (case sv
 	     of Var_32 x => find_var32(env,x)
@@ -710,17 +744,7 @@ structure LilTypecheck :> LILTYPECHECK =
 	       in LD.T.tag w32 
 	       end
 	      | Unit => LD.T.unit()
-	      | Const_32 v => 
-	       (case v 
-		  of (Prim.int (intsize, w))  => LD.T.intt (LU.i2size intsize)
-		   | (Prim.uint (intsize, w)) => LD.T.intt (LU.i2size intsize)
-		   | (Prim.vector (t,arr))    => 
-		    let
-		      val _ = T.check32 env t "Vector value has bad type"
-		      val _ = Array.app (fn arg => primargcheck (LC.empty()) arg t "vector has bad elt") arr
-		    in LD.T.ptr (LD.T.array B4 t)
-		    end
-		   | _ => FAILv32 "Const_32 got bad prim value" sv))
+	      | Const_32 v => value B4 env v "Const_32: bad constant")
 	and op64' env fop = 
 	  (case fop
 	     of Val_64 sv => sv64 env sv "Val_64: bad sv"
@@ -777,6 +801,16 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val () = T.check32 env c "Dyntag: bad type"
 	       in LD.T.dyntag c
 	       end
+	      | (Ptreq,[],[sv1,sv2],[])      => 
+	       let
+		 val t1 = sv32 env sv1 "Ptreq: bad arg 1"
+		 val t2 = sv32 env sv2 "Ptreq: bad arg 2"
+		 val t1 = DECT Dec.C.ptr' t1 "Ptreq: arg 1 not of ptr type"
+		 val t2 = DECT Dec.C.ptr' t2 "Ptreq: arg 2 not of ptr type"
+		 val () = EQUALTYPES t1 t2 "Ptreq: args have different type"
+	       in LD.T.bool()
+	       end
+
 	      | _ => FAIL "Wrong number of args to lilprim")
 	and op32' env eop = 
 	  (case eop
@@ -787,6 +821,14 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val (total,arg_types,rtype) = PU.get_type () p cs
 		 val () = checklist primargcheck env primargs arg_types "Prim32 got bad argument"
 		 val () = T.check32 env rtype "Prim32 has bad return type"
+	       in rtype
+	       end
+	      | PrimEmbed (sz,p,primargs) => 
+	       let 
+		 val (total,arg_types,rtype) = PU.get_type () p []
+		 val () = checklist primargcheck env primargs arg_types "PrimEmbed got bad argument"
+		 val rtype = LD.T.embed sz rtype
+		 val () = T.check32 env rtype "PrimEmbed has bad return type"
 	       in rtype
 	       end
 	      | LilPrimOp32 args => lilprimop32 env args "LilPrimOp32: bad prim"
@@ -972,10 +1014,10 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val () = expcheck env default rtype "Dyncase: bad default"
 	       in rtype
 	       end
-	      | Intcase {arg : sv32,arms :(w32 * exp) list,        default: exp,        rtype : con} => 
+	      | Intcase {arg : sv32,arms :(w32 * exp) list,size : size,   default: exp,        rtype : con} => 
 	       let
 		 val () = T.check32 env rtype "Intcase: bad return type"
-		 val () = sv32check env arg (LD.T.intt B4) "Intcase: bad arg"
+		 val () = sv32check env arg (LD.COps.mkT32 size (LD.T.intt size)) "Intcase: bad arg"
 		 fun armcheck (w,exp) = 
 		   let
 		     val () = expcheck env exp rtype "Intcase: bad arm body"
@@ -996,10 +1038,10 @@ structure LilTypecheck :> LILTYPECHECK =
         and cccheck' env cc = 
 	  (case cc
 	     of Exp_cc e => expcheck env e (LD.T.bool()) "Exp_cc: bad exp"
-	      | And_cc (cc1,cc2) => (cccheck env cc "And_cc: bad left cc";
-				     cccheck env cc "And_cc: bad right cc")
-	      | Or_cc (cc1,cc2) => (cccheck env cc "And_cc: bad left cc";
-				    cccheck env cc "And_cc: bad right cc")
+	      | And_cc (cc1,cc2) => (cccheck env cc1 "And_cc: bad left cc";
+				     cccheck env cc2 "And_cc: bad right cc")
+	      | Or_cc (cc1,cc2) => (cccheck env cc1 "And_cc: bad left cc";
+				    cccheck env cc2 "And_cc: bad right cc")
 	      | Not_cc cc => cccheck env cc "NOT_cc: bad cc")
 	and bind_functions (env,vfs) = 
 	  let
@@ -1133,8 +1175,8 @@ structure LilTypecheck :> LILTYPECHECK =
 	       end
 	      | Darray (l,sz,t,svs) => 
 	       let
-		 val () = T.check32 env t "Darray: bad type"
-		 val () = app (fn sv => E.sv32check env sv t "Darray: bad elt") svs
+		 val () = C.check env t (LD.K.Type sz) "Darray: bad type"
+		 val () = app (fn v => E.valuecheck sz env v t "Darray: bad elt") svs
 	       in ()
 	       end
 	

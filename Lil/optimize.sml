@@ -36,11 +36,7 @@ struct
   fun cout (c : Lil.con) : Lil.con_ = #c c
   fun kout (k : Lil.kind) : Lil.kind_ = #k k
 
-
-  fun get_exp_val (e : exp) =
-    (case #e e
-       of Val32_e sv => SOME sv
-	| _ => NONE)
+  exception None
 
   fun obind opt f = 
     (case opt 
@@ -52,6 +48,8 @@ struct
   val warn = fn s => print ("WARNING: "^s^"\n")
 
   val debug = Stats.ff("LilOptimizeDebug")
+  val debuglev = ref 0
+  fun debugdo (i,t) = if (!debug) andalso (i <= !debuglev) then (t(); ()) else ()
 
   fun inc r = r := !r + 1
   fun dec r = r := !r - 1
@@ -151,7 +149,8 @@ struct
 			       params : params}
 
     fun isused r =
-      let fun loop count current [] = current
+      let 
+	fun loop count current [] = current
 	    | loop count current (l::rest) =
 	(case (isused l) of
 	   USED _ => loop (count+1) (USED(count+1)) rest
@@ -200,10 +199,12 @@ struct
 	    cglobals = cglobals,
 	    mapping = mapping,
 	    avail = avail,
-	    current=case (Name.VarMap.find(mapping,v)) of
-	    NONE => error "enter_var given var not in used map"
-	  | SOME (us,_) => us,
-	      params = params}
+	    params = params,
+	    current=
+	    (case (Name.VarMap.find(mapping,v)) 
+	       of
+		 NONE => error "enter_var given var not in used map"
+	       | SOME (us,_) => us)}
 
     fun add_vars(state as STATE{mapping,...},vars) =
       let val r = ref UNUSED
@@ -226,7 +227,7 @@ struct
     fun get_varuse(STATE{mapping,params,...},v) =
       case Name.VarMap.find(mapping,v) of
 	NONE => (print "is_used_var given var not in state: ";
-		 Ppnil.pp_var v; print "\n";
+		 PpLil.pp_var v; print "\n";
 		 error "is_used_var given var not in state")
       | SOME (r,_) => isused r
 
@@ -255,7 +256,8 @@ struct
 	fun loop (Var_32 v) =
 	  (case lookup_alias(state,v) 
 	     of MUST32 sv => loop sv
-	      | _ => e)
+	     | OPTIONAL32(Val sv) => loop sv
+	     | _ => e)
 	  | loop e = e
       in loop e
       end
@@ -264,6 +266,7 @@ struct
 	fun loop (Var_64 v) =
 	  (case lookup_alias(state,v) 
 	     of MUST64 sv => loop sv
+	      | OPTIONAL64(Val_64 sv) => loop sv
 	      | _ => e)
 	  | loop e = e
       in loop e
@@ -384,8 +387,8 @@ struct
      * any kind.  These may be eliminated as dead code, or replicated, or
      * coalesced at will
      *)
-    fun notvaluable32 (state, e) = LU.anyEffect32 e
-    fun notvaluable64 (state, e) = LU.anyEffect64 e
+    fun notvaluable32 e = LU.anyEffect32 e
+    fun notvaluable64 e = LU.anyEffect64 e
 
     (* Pure expressions are expressions which do not have
      * any store effects (that is, they neither depend on nor modify
@@ -440,75 +443,18 @@ struct
       (case sv
 	 of Var_64 _ => false
 	  | Const_64 _ => true)
-      
-    fun bnd_used state bnd =
-      (case bnd 
-	 of (Exp32_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
-	  | (Exp64_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
-	  | (Unpack_b (a,x,sv)) => if is_used_var(state,x) orelse is_used_var(state,a) then SOME bnd else NONE
-	  | (Fixcode_b vflist) => 
-	   let
-	     val vflist = List.filter (fn (v,f) => is_used_var (state,v)) vflist
-	   in case vflist 
-		of [] => NONE
-		 | _ => SOME (Fixcode_b vflist)
-	   end
-	  | _ => SOME bnd  (* We could eliminate these, but it's a but more subtle than
-			    * I want to do right now.  Note that redundant refinements
-			    * get eliminated anyway.
-			    *)
-	   )
 
 
-
-    fun getVals state l = 
-      let
-	exception None
-	fun loop [] = []
-	  | loop ((arg32 sv) ::rest) =
-	  let
-	    val sv = unaliassv32 (state,sv)
-	  in
-	    if (closed_sv32 state sv) then (arg32 sv) :: (loop rest) 
-	    else raise None
-	  end
-	  | loop ((arg64 sv) ::rest) =
-	  let
-	    val sv = unaliassv64 (state,sv)
-	  in
-	    if (closed_sv64 sv) then (arg64 sv) :: (loop rest) 
-	    else raise None
-	  end
-      in ((SOME (loop l)) handle None => NONE)
-      end
-
-
-    fun do_con (state : state) (con : con) : con = 
-      let
-	val con = do_csubst (state,con)
-	val () = VarSet.app (fn v => use_var(state,v)) (free_cvars_con con)
-      in con
-      end
-
-    fun do_vc ((v,c),state) = 
-      let
-	val c = do_con state c
-	val state = add_var(state,v)
-      in ((v,c),bind_var32(state,(v,c)))
-      end
-
-    fun do_vclist state vcs = LO.foldl_acc do_vc state vcs
-
-    fun do_vc64 ((v,c),state) = 
-      let
-	val c = do_con state c
-	val state = add_var(state,v)
-      in ((v,c),bind_var64(state,(v,c)))
-      end
-
-    fun do_vc64list state vcs = LO.foldl_acc do_vc64 state vcs
-    fun do_vklist state vks = (vks,bind_cvars(state,vks))
-
+    fun get_exp_val (e : exp) =
+      (case #e e
+	 of Val32_e sv => SOME sv
+	  | _ => NONE)
+	 
+    fun get_exp_cc_val cc =
+      (case cc 
+	 of Exp_cc e => get_exp_val e
+	  | _ => NONE)
+	 
     (* Does not rewrite subterms. Only use as a sub-routine.*)
     fun reduce_coercion (state : state) (coercion1,arg1) = 
       let
@@ -582,6 +528,293 @@ struct
       obind (get_exp_val e)
       (fn sv => lilbool2bool state sv)
 
+
+    fun get_coercedbool state (qs,exp) = 
+      let
+	fun reduce_loop (qs,sv) = 
+	  (case qs
+	     of [] => SOME sv
+	      | q::qs => 
+	       (case reduce_coercion state (q,sv)
+		  of SOME sv => reduce_loop(qs,sv)
+		   | NONE => NONE))
+      in 
+	obind (get_exp_val exp)
+	(fn sv => obind (reduce_loop (qs,sv))
+	 (fn sv => lilbool2bool state sv))
+      end
+
+    fun coerce_exp qs e = 
+      let
+	val e = P.Lili.from_exp e
+	val e = P.bind e (fn sv => P.ret (LD.Q.coerce_many qs sv))
+      in P.Lili.to_exp e
+      end
+    
+    (* inline indicates whether or not it is safe to 
+     * inline the contents of the operator (safe when the switch 
+     * was either local or known to be used linearly here)
+     *)
+    fun reduce_nested_if (inline,state,qs,oper) = 
+      (case oper
+	 of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
+	   (case (inline,get_coercedbool state (qs,thenArm),get_coercedbool state (qs, elseArm))
+	      of (_,SOME true,SOME false) => SOME arg
+	       | (_,SOME false,SOME true) => SOME (Not_cc arg)
+	       | (_,SOME a,SOME a')  => SOME (Exp_cc (mk_exp(Val32_e(LD.E.bool' a))))  (* a == a'*)
+	       | (true,SOME true,_)  => SOME (Or_cc(arg,Exp_cc(coerce_exp qs elseArm)))
+	       | (true,SOME false,_) => SOME (And_cc(Not_cc arg,Exp_cc(coerce_exp qs elseArm)))
+	       | (true,_,SOME true)  => SOME (Or_cc(Not_cc arg,Exp_cc(coerce_exp qs thenArm)))
+	       | (true,_,SOME false) => SOME (And_cc(arg,Exp_cc(coerce_exp qs thenArm)))
+	       | _ => NONE)
+	  | _ => NONE)
+	 
+    fun reduce_exp_cc state e = 
+      (case get_exp_val e
+	 of SOME sv => 
+	   let
+	     val (qs,sv) = Dec.E.coercen sv
+	   in reduce_nested_if(false,state,qs,unaliasop32 (state,sv))
+	   end
+	  | NONE => 
+	   (case #e e
+	      of Let_e([Exp32_b(x,oper)],body) => 
+		(case #e body
+		   of Val32_e sv => 
+		     let
+		       val (qs,sv) = Dec.E.coercen sv
+		     in case sv
+			  of Var_32 x' => 
+			    (if Name.eq_var (x,x') then 
+			       reduce_nested_if(true,state,qs,oper)
+			     else NONE)
+			   | _ => NONE
+		     end
+		    | _ => NONE)
+	       | _ => NONE))
+
+    (* Work way the fuck too hard to reduce switches to a form
+     * from which we can generate good code.  What *freak* made bool
+     * an abstract datatype anyway?  You realize that we pay
+     * a function call (vararg-ed no less) for negating a condition?
+     *
+     * The thing that makes this all a pain in the butt is that we can't 
+     * just look for true and false.  We have to look for 
+     * "bool_in@true" and "bool_in@false".  Yeesh.
+     *)
+    fun reduce_cc state cc = 
+      let
+	
+	fun valuable cc = 
+	  (case cc
+	     of Exp_cc e => isSome (get_exp_val e)
+	      | Not_cc cc => valuable cc
+	      | And_cc (cc1,cc2) => (valuable cc1) andalso (valuable cc2)
+	      | Or_cc (cc1,cc2) =>  (valuable cc1) andalso (valuable cc2))
+	     
+	fun static_cc b = Exp_cc (mk_exp (Val32_e (LD.E.bool' b)))
+	  
+	  
+	fun static cc = 
+	  obind (get_exp_cc_val cc)
+	  (fn sv => lilbool2bool state sv)
+
+      in
+	case cc
+	  of Exp_cc e => 
+	    (case reduce_exp_cc state e
+	       of SOME cc => reduce_cc state cc
+		| NONE => Exp_cc e)
+	   | Not_cc cc => 
+	       let
+		 val cc = reduce_cc state cc
+	       in case static cc
+		    of SOME true => static_cc false
+		     | SOME false => static_cc true
+		     | NONE => Not_cc (reduce_cc state cc)
+	       end
+	    | And_cc(cc1,cc2) => 
+	       let
+		 val cc1 = reduce_cc state cc1
+		 val cc2 = reduce_cc state cc2
+	       in case (static cc1,static cc2)
+		    of (SOME tag1,SOME tag2) => static_cc (tag1 andalso tag2)
+		     | (SOME true,NONE) => cc2
+		     | (SOME false,NONE) => static_cc false
+		     | (NONE,SOME tag) => 
+		      if valuable cc1 then
+			if tag then cc1
+			else static_cc false
+		      else And_cc (cc1,cc2)
+		     | (NONE, NONE) => And_cc (cc1,cc2)
+	     end
+	    | Or_cc (cc1,cc2) => 
+	     let
+	       val cc1 = reduce_cc state cc1
+	       val cc2 = reduce_cc state cc2
+	     in case (static cc1,static cc2)
+		  of (SOME tag1,SOME tag2) => static_cc (tag1 orelse tag2)
+		   | (SOME true,NONE) => static_cc true
+		   | (SOME false,NONE) => cc2
+		   | (NONE,SOME tag) => 
+		    if valuable cc1 then
+		      if tag then static_cc true
+		      else cc1
+		    else Or_cc (cc1,cc2)
+		   | (NONE, NONE) => Or_cc (cc1,cc2)
+	     end
+      end
+
+
+    (* Without knowing more about the valuability of oper, 
+     * we may only sink into the leftmost cc, which is guaranteed to 
+     * be evaluated.
+     *)
+    fun sink state (x,oper,cc) = 
+      let 
+	fun build_exp sv = mk_exp(Let_e([Exp32_b(x,oper)],mk_exp (Val32_e sv)))
+	  
+	fun replace_exp (qs,sv) =
+	  (case sv
+	     of Var_32 x' => 
+	       if Name.eq_var (x,x') then  
+		 (case reduce_nested_if (true,state,qs,oper)
+		    of SOME cc => cc
+		     | NONE => Exp_cc (build_exp (LD.Q.coerce_many qs sv)))
+	       else raise None
+            | _ => raise None)
+
+	fun sink_exp e =
+	  (case get_exp_val e
+	     of NONE => raise None
+	      | SOME sv => replace_exp(Dec.E.coercen sv))
+
+	fun sink' cc = 
+	  (case cc
+	     of Not_cc cc => Not_cc(sink' cc)
+	      | And_cc(cc1,cc2) => And_cc(sink' cc1,cc2)
+	      | Or_cc(cc1,cc2)  => Or_cc(sink' cc1,cc2)
+	      | Exp_cc e => sink_exp e)
+      in (SOME(sink' cc)) handle None => NONE
+      end
+
+
+    fun bnd_used state bnd =
+      (case bnd 
+	 of (Exp32_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
+	  | (Exp64_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
+	  | (Unpack_b (a,x,sv)) => if is_used_var(state,x) orelse is_used_var(state,a) then SOME bnd else NONE
+	  | (Fixcode_b vflist) => 
+	   let
+	     val vflist = List.filter (fn (v,f) => is_used_var (state,v)) vflist
+	   in case vflist 
+		of [] => NONE
+		 | _ => SOME (Fixcode_b vflist)
+	   end
+	  | _ => SOME bnd  (* We could eliminate these, but it's a but more subtle than
+			    * I want to do right now.  Note that redundant refinements
+			    * get eliminated anyway.
+			    *)
+	   )
+
+    (* Try to fold bnds into the argument of the Ifthenelse construct.
+     * In principle, we can generate better code by knowing that these 
+     * are only used to decide a continuation *)
+    fun switch_opts (state,bnds,acc) =
+      (case bnds 
+	 of ((bnd1 as Exp32_b(x1,oper))::
+	     (bnd2 as Exp32_b(x2,Switch (Ifthenelse{arg,thenArm,elseArm,rtype})))::rest) =>
+	   let
+	     fun default() = switch_opts2(state,bnds,acc)
+	   in
+	     (case get_varuse(state,x1)
+	       of USED n => 
+		 (if (n = 1) orelse ((n = 2) andalso (notvaluable32 oper)) then
+		    (case sink state (x1,oper,arg)
+		       of SOME arg => 
+			 let
+			   val bnd = Exp32_b(x2,Switch (Ifthenelse{arg=arg,thenArm = thenArm, elseArm = elseArm,rtype=rtype}))
+			 in switch_opts_backtrack(state,bnd::rest,acc)
+			 end
+			| _ => default())
+		  else default())
+		| _ => default())
+	   end
+	   | _ => switch_opts2(state,bnds,acc))
+    (* Continue with other opts    *)
+    and switch_opts2(state,bnds,acc) = bnd_opts (state,tl bnds,(hd bnds)::acc)
+    (* Progress was made and a bnd eliminated.  Backtrack to try
+     * with the next pair of adjacent bnds.
+     *)
+    and switch_opts_backtrack(state,bnds,acc) =
+      (case acc
+	 of (bnd::acc) => switch_opts (state,bnd::bnds,acc)
+	  | _ => switch_opts2(state,bnds,acc))
+
+    and bnd_opts (state,bnds,acc) = 
+      (case bnds
+	 of [] => rev acc
+	  | bnd::bnds => 
+	   (case bnd_used state bnd
+	      of SOME bnd => switch_opts(state,bnd::bnds,acc)
+	       | NONE => bnd_opts(state,bnds,acc)))
+
+    fun killbnds state bnds = bnd_opts(state,bnds,[])
+
+    fun getVals state l = 
+      let
+	fun loop [] = []
+	  | loop ((arg32 sv) ::rest) =
+	  let
+	    val sv = unaliassv32 (state,sv)
+	  in
+	    if (closed_sv32 state sv) then (arg32 sv) :: (loop rest) 
+	    else raise None
+	  end
+	  | loop ((slice(sz, sv)) ::rest) =
+	  let
+	    val sv = unaliassv32 (state,sv)
+	  in
+	    if (closed_sv32 state sv) then (slice(sz, sv)) :: (loop rest) 
+	    else raise None
+	  end
+	  | loop ((arg64 sv) ::rest) =
+	  let
+	    val sv = unaliassv64 (state,sv)
+	  in
+	    if (closed_sv64 sv) then (arg64 sv) :: (loop rest) 
+	    else raise None
+	  end
+      in ((SOME (loop l)) handle None => NONE)
+      end
+
+
+    fun do_con (state : state) (con : con) : con = 
+      let
+	val con = do_csubst (state,con)
+	val () = VarSet.app (fn v => use_var(state,v)) (free_cvars_con con)
+      in con
+      end
+
+    fun do_vc ((v,c),state) = 
+      let
+	val c = do_con state c
+	val state = add_var(state,v)
+      in ((v,c),bind_var32(state,(v,c)))
+      end
+
+    fun do_vclist state vcs = LO.foldl_acc do_vc state vcs
+
+    fun do_vc64 ((v,c),state) = 
+      let
+	val c = do_con state c
+	val state = add_var(state,v)
+      in ((v,c),bind_var64(state,(v,c)))
+      end
+
+    fun do_vc64list state vcs = LO.foldl_acc do_vc64 state vcs
+    fun do_vklist state vks = (vks,bind_cvars(state,vks))
+
     fun do_lilprim32 (state : state) (prim, clist, sv32s, sv64s) =
       let 
 	open Prim
@@ -631,6 +864,21 @@ struct
 		 handle _ => default()))
       end
 
+    and do_prim_embed (state : state) (sz,prim, primargs) =
+      let 
+	fun default() = PrimEmbed(sz,prim,
+			       map (do_primarg state) primargs)
+	  
+      in  
+	(case getVals state primargs
+	   of NONE => default ()
+	    | SOME elist =>
+	     ((case LilPrimUtil.apply () prim [] elist
+		 of slice (sz,sv) => Val (do_sv32 state sv)
+		  | _ => error "bad prim result")
+		 handle _ => default()))
+      end
+
     and do_prim64 (state : state) (prim, primargs) =
       let 
 	fun default() = Prim64(prim, map (do_primarg state) primargs)
@@ -661,7 +909,29 @@ struct
     and do_primarg state parg = 
       (case parg
 	 of arg32 sv => arg32 (do_sv32 state sv)
-	  | arg64 sv => arg64 (do_sv64 state sv))
+	  | arg64 sv => arg64 (do_sv64 state sv)
+	  | slice(sz,sv) => slice (sz,do_sv32 state sv))
+
+    and do_value state v = 
+      (case v of
+	 Prim.int _ => v
+       | Prim.uint _ => v
+       | Prim.float _ => v
+       | Prim.vector (c,a) =>
+	   let val _ = Array.modify (do_primarg state) a
+	   in  Prim.vector(do_con state c, a)
+	   end
+       | Prim.intvector (sz,a) =>
+	   let val _ = Array.modify (do_primarg state) a
+	   in  Prim.intvector(sz, a)
+	   end
+       | Prim.floatvector (sz,a) =>
+	   let val _ = Array.modify (do_primarg state) a
+	   in  Prim.floatvector(sz, a)
+	   end
+       | Prim.tag (t,c) => Prim.tag(t,do_con state c)
+       | _ => error "ref and array constants not supported"
+	   )
 
     and do_sv32 (state : state) (sv : sv32) : sv32 =
       (case sv
@@ -669,22 +939,7 @@ struct
 	   (case lookup_alias(state,v) of
 	      MUST32 sv => do_sv32 state sv
 	    | _ => (use_var(state,v); sv))
-	  | Const_32 v =>
-	   (case v of
-	      Prim.int _ => sv
-	    | Prim.uint _ => sv
-	    | Prim.float _ => sv
-	    | Prim.array (c,a) =>
-		let 
-		  val _ = Array.modify (do_primarg state) a
-		in  Const_32(Prim.array(do_con state c, a))
-		end
-	    | Prim.vector (c,a) =>
-		let val _ = Array.modify (do_primarg state) a
-		in  Const_32(Prim.vector(do_con state c, a))
-		end
-	    | Prim.refcell _ => sv
-	    | Prim.tag (t,c) => Const_32(Prim.tag(t,do_con state c)))
+	  | Const_32 v => Const_32 (do_value state v)
 	  | Label l => sv  (* Could do dead code elimination with labels too *)
 	  | Coercion (ctag,cons) => Coercion(ctag,map (do_con state) cons)
 	  | Coerce args => do_coercion state args
@@ -704,14 +959,15 @@ struct
 	    | Const_64 v => sv)
 
     (* Some operations may result in new bindings in the context *)
-    and do_op32 (state : state) (oper : op32) : (op32 P.pexp * state) = 
+    and do_op32 (state : state) (oper : op32) : (bnd list * op32) = 
       (case oper
 	 of Switch sw => do_switch state sw
-	  | _ => (P.ret (do_op32_small state oper),state))
+	  | _ => ([],do_op32_small state oper))
     and do_op32_small (state : state) (oper : op32) : op32 = 
       (case oper
 	 of Val sv => Val (do_sv32 state sv)
 	  | Prim32 args => do_prim32 state args
+	  | PrimEmbed args => do_prim_embed state args
 	  | LilPrimOp32 args => do_lilprim32 state args
 	  | Switch sw => error "Impossible"
 	  | ExternApp(f,sv32s,sv64s) =>
@@ -783,10 +1039,10 @@ struct
 		val state = bind_var32 (state,(x,ksum))
 		val state = 
 		  (case arg
-		     of Var_32 x => 
+		     of Var_32 y => 
 		       let
-			 val argeta = LD.E.forget' ksum arg
-			 val state = add_avail32(state,Val(argeta) ,x)
+			 val argeta = LD.E.forget' ksum (Var_32 x)
+			 val state = add_avail32(state,Val(argeta) ,y)
 		       in state
 		       end
 		      | _ => state)
@@ -796,43 +1052,50 @@ struct
 	    val arms = map do_arm arms
 	    val default = Util.mapopt (do_exp' state) default
 	  in  
-	    (P.ret(Switch(Sumcase {arg=arg,
-				   arms=arms,
-				   default=default,
-				   rtype = rtype})),state)
+	    ([],Switch(Sumcase {arg=arg,
+				arms=arms,
+				default=default,
+				rtype = rtype}))
 	  end
 
       in
 	case (reduce_known_switch sw)
-	  of SOME exp => do_exp_state state exp
+	  of SOME exp => do_exp_op state exp
 	   | NONE => sum_switch sw
       end
-    and do_ifthenelse state {arg,thenArm,elseArm,rtype} =
+    and do_ifthenelse (state : state) {arg,thenArm,elseArm,rtype} =
       let
+	val () = debugdo (5, fn () => print "Working on ifthenelse\n")
+
 	val arg = do_cc state arg
+
+	val mkstate = 
+	  (case get_exp_cc_val arg
+	     of SOME (Var_32 x) => (fn b => add_alias(state,x,MUST32 (LD.E.bool' b)))
+	      | _ => fn b => state)
 
 	fun default () = 
 	  let
-	    val thenArm = do_exp' state thenArm
-	    val elseArm = do_exp' state elseArm
+	    val thenArm = do_exp' (mkstate true) thenArm
+	    val elseArm = do_exp' (mkstate false) elseArm
 	    val rtype = do_con state rtype
-	  in (P.ret (Switch(Ifthenelse{arg=arg,thenArm=thenArm,elseArm=elseArm,rtype=rtype})),state)
+	  in ([],Switch(Ifthenelse {arg = arg,thenArm = thenArm,elseArm = elseArm, rtype = rtype}))
 	  end
 
       in 
 	case arg
 	  of Exp_cc e => 
 	    (case lilboolexp2bool state e
-	       of SOME true => do_exp_state state thenArm
-		| SOME false => do_exp_state state elseArm
+	       of SOME true => do_exp_op state thenArm
+		| SOME false => do_exp_op state elseArm
 		| NONE => default())
 	   | _ => default()
       end
 	    
-    and do_switch (state : state) (switch : switch) : (op32 P.pexp * state)= 
+    and do_switch (state : state) (switch : switch) : (bnd list * op32) = 
       let 
 	
-	fun int_switch {arg,arms,default,rtype} =
+	fun int_switch {arg,arms,size,default,rtype} =
 	  let
 	  in 
 	    case (do_sv32 state arg) 
@@ -845,17 +1108,18 @@ struct
 		      SOME arm => arm
 		    | NONE => default
 		in
-		  do_exp_state state arm
+		  do_exp_op state arm
 		end
 	       | arg =>
 		let
 		  val rtype = do_con state rtype
 		  val arms = LO.map_second (do_exp' state) arms
 		  val default = do_exp' state default
-		in  (P.ret(Switch(Intcase {arg=arg, 
-					   arms=arms,
-					   default=default,
-					   rtype=rtype})),state)
+		in  ([],Switch(Intcase {arg=arg, 
+					arms=arms,
+					size = size,
+					default=default,
+					rtype=rtype}))
 		end
 	  end
 	fun sumsw_to_if {arg,arms,default,rtype} =
@@ -905,114 +1169,27 @@ struct
 		end
 	      val arms = map do_arm arms
 	      val default = do_exp' state default
-	    in  (P.ret(Switch(Dyncase {arg=arg,
-				       arms=arms,
-				       default=default,
-				       rtype = rtype})),state)
+	    in  ([],Switch(Dyncase {arg=arg,
+				    arms=arms,
+				    default=default,
+				    rtype = rtype}))
 	    end
 	   | Ifthenelse ifte => do_ifthenelse state ifte
       end
     and do_cc (state : state) (cc : conditionCode) = 
       let
-
-
-	fun get_exp_cc_val cc =
-	  (case cc 
-	     of Exp_cc e => get_exp_val e
-	      | _ => NONE)
-
-	fun valuable cc = 
-	  (case cc
-	     of Exp_cc e => isSome (get_exp_val e)
-	      | Not_cc cc => valuable cc
-	      | And_cc (cc1,cc2) => (valuable cc1) andalso (valuable cc2)
-	      | Or_cc (cc1,cc2) =>  (valuable cc1) andalso (valuable cc2))
-
-	fun static_cc b = Exp_cc (mk_exp (Val32_e (LD.E.bool' b)))
-
-
-	fun static cc = 
-	  obind (get_exp_cc_val cc)
-	  (fn sv => lilbool2bool state sv)
-
-	fun try_reduce_cc state sv = 
-	  (case unaliasop32 (state,sv)
-	     of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
-	       (case (lilboolexp2bool state thenArm,lilboolexp2bool state elseArm) 
-		  of (SOME true,SOME false) => SOME arg
-		   | (SOME false,SOME true) => SOME (Not_cc arg)
-		   | (SOME true,SOME true) => SOME (static_cc true)
-		   | (SOME false,SOME false) => SOME (static_cc false)
-		   | _ => NONE)
-	      | _ => NONE)
-
-	fun try_convert_cc state sv =
-	  obind (Dec.E.coerce' (unaliassv32 (state,sv)))
-	  (fn (q,potentialbool) =>
-	   (case unaliasop32 (state,potentialbool)
-	      of Switch (Ifthenelse {arg,thenArm,elseArm,rtype}) =>
-		obind (get_exp_val thenArm)
-		(fn thensv => obind (get_exp_val elseArm)
-		 (fn elsesv => 
-		  (case (reduce_coercion state (q,thensv),reduce_coercion state (q,elsesv))
-		     of (SOME thensv,SOME elsesv) => 
-		       (case (lilbool2bool state thensv,lilbool2bool state elsesv)
-			  of (SOME true,SOME false) => SOME arg
-			   | (SOME false,SOME true) => SOME (Not_cc arg)
-			   | _ => NONE)
-		      | _ => NONE)))
-	       | _ => NONE))
-
-      in
-	case cc
-	  of Exp_cc e => 
-	    (case get_exp_val e
-	       of SOME sv => 
-		 (case try_reduce_cc state sv
-		    of SOME cc => do_cc state cc
-		     | NONE => 
-                 (case try_convert_cc state sv
-		    of SOME cc => do_cc state cc
-		     | NONE => Exp_cc (do_exp' state e)))
-		| NONE => Exp_cc (do_exp' state e))
-	   | Not_cc cc => 
-	       let
-		 val cc = do_cc state cc
-	       in case static cc
-		    of SOME true => static_cc false
-		     | SOME false => static_cc true
-		     | NONE => Not_cc (do_cc state cc)
-	       end
-	    | And_cc(cc1,cc2) => 
-	     let
-	       val cc1 = do_cc state cc1
-	       val cc2 = do_cc state cc2
-	     in case (static cc1,static cc2)
-		  of (SOME tag1,SOME tag2) => static_cc (tag1 andalso tag2)
-		   | (SOME true,NONE) => cc2
-		   | (SOME false,NONE) => static_cc false
-		   | (NONE,SOME tag) => 
-		    if valuable cc1 then
-		      if tag then cc1
-		      else static_cc false
-		    else And_cc (cc1,cc2)
-		   | (NONE, NONE) => And_cc (cc1,cc2)
-	     end
-	    | Or_cc (cc1,cc2) => 
-	     let
-	       val cc1 = do_cc state cc1
-	       val cc2 = do_cc state cc2
-	     in case (static cc1,static cc2)
-		  of (SOME tag1,SOME tag2) => static_cc (tag1 orelse tag2)
-		   | (SOME true,NONE) => static_cc true
-		   | (SOME false,NONE) => cc2
-		   | (NONE,SOME tag) => 
-		    if valuable cc1 then
-		      if tag then static_cc true
-		      else cc1
-		    else Or_cc (cc1,cc2)
-		   | (NONE, NONE) => Or_cc (cc1,cc2)
-	     end
+	(* Two passes. First we rewrite it (expanding out aliases, etc).
+	 * Then we try to reduce it.  Reduction can use the context 
+	 * to try to reduce coercions, but shouldn't do any further
+	 * rewriting of expressions.
+	 *)
+	val cc = 
+	  case cc
+	    of Exp_cc e => Exp_cc (do_exp' state e)
+	     | Not_cc cc => Not_cc (do_cc state cc)
+	     | And_cc(cc1,cc2) => And_cc (do_cc state cc1,do_cc state cc2)
+	     | Or_cc(cc1,cc2) => Or_cc (do_cc state cc1,do_cc state cc2)
+      in reduce_cc state cc
       end
 
     and do_function (state : state) (v,Function{tFormals, 
@@ -1031,198 +1208,238 @@ struct
 		    body=body,rtype=rtype})
       end
 
-    and do_bnds(bnds : bnd list, state : state) : state P.pexp = P.List.foldl_from_list do_bnd state bnds
-    and do_bnd (bnd : bnd, state : state) : state P.pexp =
+    and do_bnds(bnds : bnd list, state : state) : (bnd list * state) = 
       let
-      in	
-	case bnd 
-	  of Exp32_b(v,oper) =>
-	    let
-	      val state = add_var(state,v)
-	      val state' = enter_var(state,v)
-	      val (oper,state) = do_op32 state' oper
-	    in P.bind oper
-	      (fn oper =>
+	fun loop(bnds,state,racc) = 
+	  (case bnds
+	     of [] => (rev racc,state)
+	      | (bnd::bnds) => 
 	       let
-		 val oper =
-		   (case find_avail32(state,oper) of
-		      NONE => oper
-		    | SOME v' => 
-			let 
-			  val () = use_var(state',v')
-			in  Val (Var_32 v')
-			end)
-		 val eff = notvaluable32(state,oper)
-		 val _ = if eff then use_var(state,v) else ()
-		 val state=
-		   (case oper
-		      of Val sv => 
-			(case sv
-			   of Var_32 v' => 
-			     let
-			       val n = Name.var2name v
-			       val n' = Name.var2name v'
-			       val _ = if (String.size(n') = 0) then
-				 Name.rename_var (v', n)
-				       else ()
-			       val state = add_alias(state,v,MUST32 sv)
-			     in
-			       state
-			     end
-			    | _ => add_alias(state,v,MUST32 sv))
-		       | _ => 
-			   let
-			     val state = add_avail32(state,oper,v)
-			     val state = add_alias(state,v,OPTIONAL32 oper)
-			   in state
-			   end)
-		 val state = op32_define (state,(v,oper))
-	       in  P.Bind.op32' v (P.ret oper) (P.ret state)
+		 val (bnds',state) = do_bnd (bnd,state)
+	       in loop (bnds,state,List.revAppend(bnds',racc))
 	       end)
-	    end
-	   | Exp64_b(v,oper) =>
-	    let
-	      val state = add_var(state,v)
-	      val state' = enter_var(state,v)
-	      val oper = do_op64 state' oper
-	      val oper =
-		(case find_avail64(state,oper) of
-		   NONE => oper
-		 | SOME v' => 
-		     let 
-		       val () = use_var(state',v')
-		     in  Val_64 (Var_64 v')
-		     end)
-	      val eff = notvaluable64(state,oper)
-	      val _ = if eff then use_var(state,v) else ()
-	      val state=
-		(case oper
-		   of Val_64 sv => 
-		     (case sv
-			of Var_64 v' => 
+      in loop(bnds,state,[])
+      end
+
+    and do_bnd (bnd : bnd, state : state) : (bnd list * state) =
+      let
+
+	val () = debugdo (6, fn () => (print "Working on bnd:\n";
+				       PpLil.pp_bnd bnd;
+				       print "\n"))
+	val res = 
+	  case bnd 
+	    of Exp32_b(v,oper) =>
+	      let
+		val orig_state = state
+		val state = add_var(state,v)
+		val state' = enter_var(state,v)
+		val (bnds,oper) = do_op32 state' oper
+
+	      (* We may get more bnds out from switch reduction.  If so,
+	       * start over so that the flattened bindings are available
+	       * in the current environment.
+	       *)
+	      in 
+		if not (null bnds) then do_bnds (bnds @ [Exp32_b (v,oper)],orig_state)
+		else
+		  let
+		    val oper =
+		      (case find_avail32(state,oper) of
+			 NONE => oper
+		       | SOME v' => 
+			   let 
+			     val () = use_var(state',v')
+			   in  Val (Var_32 v')
+			   end)
+		    val eff = notvaluable32 oper
+		    val _ = if eff then use_var(state,v) else ()
+		    val state=
+		      (case oper
+			 of Val sv => 
+			   (case sv
+			      of Var_32 v' => 
+				let
+				  val n = Name.var2name v
+				  val n' = Name.var2name v'
+				  val _ = if (String.size(n') = 0) then
+				    Name.rename_var (v', n)
+					 else ()
+				  val state = add_alias(state,v,MUST32 sv)
+				in
+				  state
+				end
+			       | _ => add_alias(state,v,MUST32 sv))
+			  | _ => 
+			      let
+				val state = add_avail32(state,oper,v)
+				val state = add_alias(state,v,OPTIONAL32 oper)
+			      in state
+			      end)
+		    val state = op32_define (state,(v,oper))
+		  in  ([Exp32_b(v,oper)],state)
+		  end
+	      end
+	     | Exp64_b(v,oper) =>
+	      let
+		val state = add_var(state,v)
+		val state' = enter_var(state,v)
+		val oper = do_op64 state' oper
+		val oper =
+		  (case find_avail64(state,oper) of
+		     NONE => oper
+		   | SOME v' => 
+		       let 
+			 val () = use_var(state',v')
+		       in  Val_64 (Var_64 v')
+		       end)
+		val eff = notvaluable64 oper
+		val _ = if eff then use_var(state,v) else ()
+		val state=
+		  (case oper
+		     of Val_64 sv => 
+		       (case sv
+			  of Var_64 v' => 
+			    let
+			      val n = Name.var2name v
+			      val n' = Name.var2name v'
+			      val _ = if (String.size(n') = 0) then
+				Name.rename_var (v', n)
+				      else ()
+			      val state = add_alias(state,v,MUST64 sv)
+			    in
+			      state
+			    end
+			   | _ => 
+			    let
+			      val state = add_alias(state,v,MUST64 sv)
+			    in state
+			    end)
+		      | _ => 
 			  let
-			    val n = Name.var2name v
-			    val n' = Name.var2name v'
-			    val _ = if (String.size(n') = 0) then
-			      Name.rename_var (v', n)
-				    else ()
-			    val state = add_alias(state,v,MUST64 sv)
-			  in
-			    state
-			  end
-			 | _ => 
-			  let
-			    val state = add_alias(state,v,MUST64 sv)
+			    val state = add_avail64(state,oper,v)
+			    val state = add_alias(state,v,OPTIONAL64 oper)
 			  in state
 			  end)
-		    | _ => 
-			let
-			  val state = add_avail64(state,oper,v)
-			  val state = add_alias(state,v,OPTIONAL64 oper)
-			in state
-			end)
-	      val state = op64_define (state,(v,oper))
-	    in  P.Bind.op64' v (P.ret oper) (P.ret state)
-	    end
-	   | Fixcode_b vfset => 
-	    let 
-	      val vflist = Sequence.toList vfset
-	      fun folder ((v,f),state) = add_var(bind_var32(state,(v,Typeof.function f)),v)
-	      val state = foldl folder state vflist
-	      val vflist = map (do_function state) vflist
-	    in
-	      (case vflist
-		 of ([(v,Function{tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
-				  body,
-				  rtype})]) =>
-		   (case #e body
-		      of Let_e([Exp32_b(x,App(sv,elist,eflist))],ret) => 
-			(case (Dec.E.nary_tapp sv,#e ret)
-			   of ((Var_32 v',clist),Val32_e(Var_32 x')) =>
-			     let
-			       fun ccheck((a,_),c) = EQ.C.equal (mk_con(Var_c a)) c
-			       fun echeck((x,_),Var_32 x') = Name.eq_var(x,x') 
-				 | echeck _ = false
-			       fun efcheck((x,_),Var_64 x') = Name.eq_var(x,x')
-				 | efcheck _ = false
-			     in
-			       if not (Name.eq_var(v,v')) andalso (Name.eq_var(x,x')) andalso
-				 (Listops.all2 ccheck (tFormals,clist)) andalso
-				 (Listops.all2 echeck (eFormals,elist)) andalso
-				 (Listops.all2 efcheck (fFormals,eflist)) 
-				 then (inc fun_eta;
-				       (P.ret (add_alias(state,v,MUST32(Var_32 v')))))
-			       else P.Bind.fixcode' (P.ret vflist) (P.ret state)
-			     end
-			    | _ => P.Bind.fixcode' (P.ret vflist) (P.ret state))
-		       | _ => P.Bind.fixcode' (P.ret vflist) (P.ret state))
- 		| _ => P.Bind.fixcode' (P.ret vflist) (P.ret state))
-	    end
-	| Unpack_b (a,x,sv) =>
-	    let
-	      val state = add_vars(state,[a,x])
+		val state = op64_define (state,(v,oper))
+	      in  ([Exp64_b(v,oper)],state)
+	      end
+	     | Fixcode_b vflist => 
+	      let 
+		fun folder ((v,f),state) = add_var(bind_var32(state,(v,Typeof.function f)),v)
+		val state = foldl folder state vflist
+		val vflist = map (do_function state) vflist
+	      in
+		(case vflist
+		   of ([(v,Function{tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
+				    body,
+				    rtype})]) =>
+		     (case #e body
+			of Let_e([Exp32_b(x,App(sv,elist,eflist))],ret) => 
+			  (case (Dec.E.nary_tapp sv,#e ret)
+			     of ((Var_32 v',clist),Val32_e(Var_32 x')) =>
+			       let
+				 fun ccheck((a,_),c) = EQ.C.equal (mk_con(Var_c a)) c
+				 fun echeck((x,_),Var_32 x') = Name.eq_var(x,x') 
+				   | echeck _ = false
+				 fun efcheck((x,_),Var_64 x') = Name.eq_var(x,x')
+				   | efcheck _ = false
+			       in
+				 if not (Name.eq_var(v,v')) andalso (Name.eq_var(x,x')) andalso
+				   (Listops.all2 ccheck (tFormals,clist)) andalso
+				   (Listops.all2 echeck (eFormals,elist)) andalso
+				   (Listops.all2 efcheck (fFormals,eflist)) 
+				   then (inc fun_eta;
+					 (([],add_alias(state,v,MUST32(Var_32 v')))))
+				 else ([Fixcode_b vflist],state)
+			       end
+			      | _ => ([Fixcode_b vflist],state))
+			 | _ => ([Fixcode_b vflist],state))
+		  | _ => ([Fixcode_b vflist],state))
+	      end
+	     | Unpack_b (a,x,sv) =>
+	      let
+		val state = add_vars(state,[a,x])
 
-	      (* doesn't matter which variable we give to enter. -leaf *)
-	      val state' = enter_var(state,x)
-	      val sv = do_sv32 state' sv
-	    in 
-	      case Dec.E.pack'(unaliassv32 (state,sv))
-		of SOME (tas,thiding,sv) => 
-		  let
-		    val state = add_alias(state,x,MUST32 sv)
-		    val state = replace_con state (a,thiding)
-		  in P.ret state
-		  end
-		 | NONE => 
-		  let
-		    val state = unpack_define (state,(a,x,sv)) 
-		    val state = 
-		      (case sv
-			 of Var_32 v => 
-			   let
-			     val tas = typeof_sv32 (state,sv)
-			     val thiding  = mk_con (Var_c a)
-			   in
-			     add_alias(state,v,MUST32(LD.E.pack' tas thiding (Var_32 x)))
-			   end
-			  | _ => state)
-		  in P.Bind.unpack' (a,x) (P.ret sv) (P.ret state)
-		  end
-	    end
-	| Split_b (a1,a2,c) =>
-	    let
-	      val c = do_con state c 
-	      val state = split_define (state,(a1,a2,c))
-	    in case cout (R.whnf c)
-		 of Pair_c _ => P.ret state  
-		  | _ => P.Bind.split' (a1,a2) (P.ret c) (P.ret state)
-	    end
-	| Unfold_b (a,c) => 
-	    let
-	      val c = do_con state c 
-	      val state = unfold_define (state,(a,c))
-	    in case cout (R.whnf c)
-		 of Fold_c _ => P.ret state  
-		  | _ => P.Bind.unfold' a (P.ret c) (P.ret state)
-	    end
-	| Inj_b (w,a,c,sv) =>
-	    let
-	      val c = do_con state c 
-	      val sv = do_sv32 state sv 
-	      val state = inj_define (state,(w,a,c,sv))
-	    in case cout (R.whnf c)
-		 of Inj_c (w',_,_) => 
-		   if w = w' then P.ret state
-		   else P.Bind.inj' a (P.ret (w,c,sv)) (P.ret state)
-		  | _ => P.Bind.inj' a (P.ret (w,c,sv)) (P.ret state)
-	    end
+		(* doesn't matter which variable we give to enter. -leaf *)
+		val state' = enter_var(state,x)
+		val sv = do_sv32 state' sv
+	      in 
+		case Dec.E.pack'(unaliassv32 (state,sv))
+		  of SOME (tas,thiding,sv) => 
+		    let
+		      val state = add_alias(state,x,MUST32 sv)
+		      val state = replace_con state (a,thiding)
+		    in ([],state)
+		    end
+		   | NONE => 
+		    let
+		      val state = unpack_define (state,(a,x,sv)) 
+		      val state = 
+			(case sv
+			   of Var_32 v => 
+			     let
+			       val tas = typeof_sv32 (state,sv)
+			       val thiding  = mk_con (Var_c a)
+			     in
+			       add_alias(state,v,OPTIONAL32(Val(LD.E.pack' tas thiding (Var_32 x))))
+			     end
+			    | _ => state)
+		    in ([Unpack_b (a,x,sv)],state)
+		    end
+	      end
+	     | Split_b (a1,a2,c) =>
+	      let
+		val c = do_con state c 
+		val state = split_define (state,(a1,a2,c))
+	      in case cout (R.whnf c)
+		   of Pair_c _ => ([],state )
+		    | _ => ([Split_b (a1,a2,c)],state)
+	      end
+	     | Unfold_b (a,c) => 
+	      let
+		val c = do_con state c 
+		val state = unfold_define (state,(a,c))
+	      in case cout (R.whnf c)
+		   of Fold_c _ => ([],state)
+		    | _ => ([Unfold_b(a,c)], state)
+	      end
+	     | Inj_b (w,a,c,sv) =>
+	      let
+		val c = do_con state c 
+		val sv = do_sv32 state sv 
+		val state = inj_define (state,(w,a,c,sv))
+	      in case cout (R.whnf c)
+		   of Inj_c (w',_,_) => 
+		     if w = w' then ([],state)
+		     else ([Inj_b(w,a,c,sv)],state)
+		    | _ =>  ([Inj_b(w,a,c,sv)],state)
+	      end
+
+	val () = debugdo (6, fn () => (print "Finished bnd:\n"))
+
+      in res
       end
-    and do_exp' state exp = P.Lili.op_to_exp (do_exp state exp)
-    and do_exp (state : state) (exp : exp) : Lil.op32 P.pexp = 
+    and do_exp' state exp = 
+      let
+	val (bnds,sv) = do_exp state exp
+	val body = mk_exp (Val32_e sv)
+      in 
+	case bnds 
+	  of [] => body
+	   | _ => mk_exp(Let_e (bnds,body))
+      end
+    and do_exp_op (state : state) (exp : exp) : (bnd list * Lil.op32)  = 
+      let
+	val (bnds,sv) = do_exp state exp
+      in (bnds, Val sv)
+      end
+    and do_exp (state : state) (exp : exp) : (bnd list * Lil.sv32)  = 
       let
 	(* we must put a wrapper in order to perform the filter *)
 	val state = retain_state state
-	val (exp,state) = do_exp_state state exp
+
+	val ((bnds,sv),state) = do_exp_flatten state exp
 
 	(* bnd_used will discard any bounds that were definitively unused.
 	 * Variables that appear free in any of the bounds will be deferred
@@ -1233,24 +1450,36 @@ struct
 	 * we don't yet know the status if the binding that we are in.
 	 *)
 
-	val exp = P.Lili.revMapPartial (bnd_used state) exp
-      in exp
+	val bnds = killbnds state bnds
+      in (bnds,sv)
       end
     (* Return a rewritten exp with the innermost state to use in the 
      * filter above.
      *)
-    and do_exp_state state exp = 
-      (case #e exp
-	 of Let_e (bnds,e) => P.bind_first (do_bnds(bnds,state))
-	   (fn state => do_exp_state state e)
-	  | Val32_e sv => (P.ret (Val (do_sv32 state sv)),state))
+    and do_exp_flatten state exp = 
+      let
+	fun flatten_loop (state,e,acc) = 
+	  (case #e e
+	     of Let_e (bnds,e) => 
+	       let
+		 val (bnds,state) = do_bnds(bnds,state)
+	       in flatten_loop (state,e,List.revAppend(bnds,acc))
+	       end
+	      | Val32_e sv => 
+	       let
+		 val sv = do_sv32 state sv
+		 val bnds = rev acc
+	       in ((bnds,sv),state)
+	       end)
+      in flatten_loop(state,exp,[])
+      end
 
 
     fun do_datum state d = 
       (case d
 	 of Dboxed (l,sv64) => Dboxed (l,do_sv64 state sv64)
 	  | Dtuple (l,t,q,svs) => Dtuple (l,do_con state t,Util.mapopt (do_sv32 state) q,map (do_sv32 state) svs)
-	  | Darray (l,sz,t,svs) => Darray (l,sz,do_con state t,map (do_sv32 state) svs)
+	  | Darray (l,sz,t,vs) => Darray (l,sz,do_con state t,map (do_value state) vs)
 	  | Dcode (l,f) => 
 	   let
 	     val fvar = Name.fresh_named_var (Name.label2name l)

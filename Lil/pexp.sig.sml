@@ -177,6 +177,7 @@ signature  PEXP =
 	val to_bnds : 'a pexp -> Lil.bnd list * 'a 
 
 	val fold : (Lil.bnd * 'state -> 'state) -> ('a * 'state -> 'result) -> 'state -> 'a pexp -> 'result 
+	val fold_acc : (Lil.bnd * 'state -> 'state pexp) -> ('a * 'state -> 'result pexp) -> 'state -> 'a pexp -> 'result pexp * 'state
 
 	val mapPartial : (Lil.bnd -> Lil.bnd option) -> 'a pexp -> 'a pexp
 	(* map in reverse order.  more efficient - use if no effects in f *)

@@ -63,8 +63,12 @@ structure IlPrimUtilParam :> ILPRIMUTILPARAM =
 	val con_uint = CON_UINT
 	val con_float = CON_FLOAT
 	val con_array = CON_ARRAY
-	val con_ref = CON_REF
 	val con_vector = CON_VECTOR
+	val con_intarray  = CON_INTARRAY
+	val con_intvector = CON_INTVECTOR
+	val con_floatarray  = CON_FLOATARRAY
+	val con_floatvector = CON_FLOATVECTOR
+	val con_ref = CON_REF
 	val unit_value = unit_exp
 	val con_tag = CON_TAG
 

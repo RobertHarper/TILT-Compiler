@@ -392,6 +392,8 @@ structure TranslationDefs :> TRANSLATIONDEFS =
     val otherwise' = fn a => P.SV32.to_op (otherwise a)
     local
 
+
+
       fun if_xxx which (mkrtype : Lil.con -> Lil.con) (srep : Lil.con) (drep : Lil.sv32 ) (yes : Lil.con -> Lil.sv32 P.pexp) (no: Lil.con -> Lil.sv32 P.pexp) = 
 	let
 	  fun mkswitch srep drep = 
@@ -444,7 +446,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 			 P.bind (mkfn ()) (fn f => LD.E.allapp' f [srep] [drep] [])))
 	end
     in
-      val ifboxfloat = fn x => (debugdo(fn() => print "Calling ifboxflat\n");if_xxx BFloatidx x)
+(*      val ifboxfloat = fn x => (debugdo(fn() => print "Calling ifboxflat\n");if_xxx BFloatidx x)*)
       val iftaglike  = fn x => (debugdo(fn() => print "Calling iftaglike\n");if_xxx Otheridx x)
 
       fun mk_project_dynamic_fn () = 
@@ -729,7 +731,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  in  op32
 	  end
 
-	fun create_int is (len,init) = LD.E.create_array32' (LD.T.intt (LU.i2size is)) len init
+	fun create_int is (len,init) = LD.E.create_intarray' (LU.i2size is) len init
 	fun create_float (len,init)  = LD.E.create_array64' len init
 	fun create_other t (len,init) = LD.E.create_array32' t len init
 
@@ -740,7 +742,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	    val op32 = ifboxfloat Arrayptr staticrep crep [] [] ifbfloat notbfloat
 	  in  op32
 	  end
-	fun create_empty_int is () = LD.E.create_empty_array32' (LD.T.intt (LU.i2size is)) 
+	fun create_empty_int is () = LD.E.create_empty_intarray' (LU.i2size is)
 	fun create_empty_float () = LD.E.create_empty_array64' ()
 	fun create_empty_other t () = LD.E.create_empty_array32' t 
 
@@ -762,7 +764,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  in op32
 	  end
 	
-	fun sub_int is  (arr,i) = LD.E.sub_array32' (LD.T.intt (LU.i2size is)) arr i
+	fun sub_int is  (arr,i) = LD.E.sub_intarray' (LU.i2size is) arr i
 	fun sub_float   (arr,i) = LD.E.sub_array64' arr i
 	fun sub_other t (arr,i) = LD.E.sub_array32' t arr i
 
@@ -782,7 +784,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	    val op32 = ifboxfloat (fn _ => LD.T.unit()) staticrep crep args argtypes ifbfloat notbfloat
 	  in op32
 	  end
-	fun update_int is  (arr,i,v) = LD.E.update_array32' (LD.T.intt (LU.i2size is)) arr i v
+	fun update_int is  (arr,i,v) = LD.E.update_intarray' (LU.i2size is) arr i v
 	fun update_float   (arr,i,v) = LD.E.update_array64' arr i v
 	fun update_other t (arr,i,v) = LD.E.update_array32' t arr i v
 
@@ -796,10 +798,11 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	    val op32 = ifboxfloat (fn _ => LD.T.intt B4) staticrep crep args argtypes ifbfloat notbfloat
 	  in op32
 	  end
-	fun length_int is  arr = LD.E.length_array32' (LD.T.intt (LU.i2size is)) arr 
+	fun length_int is  arr = LD.E.length_intarray' (LU.i2size is) arr 
 	fun length_float   arr = LD.E.length_array64' arr 
 	fun length_other t arr = LD.E.length_array32' t arr 
 
+      (* Superceded by Ptreq
 	fun equal_dynamic staticrep crep (arr1,arr2) = 
 	  let
 	    val _ = debugdo (fn () => print "Entering equality \n")
@@ -813,7 +816,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	fun equal_int is  (arr1,arr2) = LD.E.equal_array32' (LD.T.intt (LU.i2size is)) arr1 arr2 
 	fun equal_float   (arr1,arr2) = LD.E.equal_array64' arr1 arr2 
 	fun equal_other t (arr1,arr2) = LD.E.equal_array32' t arr1 arr2 
-
+	  *)
       end
 
   end

@@ -34,6 +34,11 @@ source unit Stats : Stats = "stats.sml" {
 	Date ListMergeSort
 }
 
+source unit COMPILERCONTROL = "compiler_control.sig.sml" {}
+source unit CompilerControl = "compiler_control.sml" {
+	Stats COMPILERCONTROL
+}
+
 source unit Timestamp = "timestamp.sml" {
 	Stats Time Timer Real Int
 }

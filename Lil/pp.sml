@@ -39,8 +39,6 @@ structure PpLil :> PPLIL =
       (case cout c
 	 of Var_c _ => true
 	  | Nat_c _ => true
-	  | Pi1_c c => smallcon c
-	  | Pi2_c c => smallcon c
 	  | Prim_c _ => true
 	  | Star_c => true
 	  | Inj_c (w,k,c) => smallcon c
@@ -79,6 +77,7 @@ structure PpLil :> PPLIL =
       
     fun primarg2value (arg32(Const_32 v)) = SOME v
       | primarg2value (arg64(Const_64 v)) = SOME v
+      | primarg2value (slice(_,Const_32 v)) = SOME v
       | primarg2value _ = NONE
 
     fun wrapper pp out obj = 
@@ -179,10 +178,12 @@ structure PpLil :> PPLIL =
 	 of Int_c size => Hbox[String "Int", pp_size size]
 	  | Float_c => String "Float"
 	  | Boxed_c size => Hbox[String "Boxed", pp_size size]
+	  | Embed_c size => Hbox[String "Embed", pp_size size]
 	  | Void_c  => String "Void"
 	  | Tuple_c => String "Tuple"
 	  | Dyntag_c => String "Dyntag"	 
 	  | Array_c size => Hbox[String "Array", pp_size size]
+	  | Ref_c => String "Ref"
 	  | Tag_c => String "Tag"
 	  | Sum_c => String "Sum"
 	  | KSum_c => String "KSum"
@@ -351,7 +352,8 @@ structure PpLil :> PPLIL =
     and pp_primarg arg = 
       (case arg
 	 of arg32 sv32 => Hbox[String "32(",pp_sv32 sv32,String ")"]
-	  | arg64 sv64 => Hbox[String "64(",pp_sv64 sv64,String ")"])
+	  | arg64 sv64 => Hbox[String "64(",pp_sv64 sv64,String ")"]
+	  | slice(sz,sv) =>Hbox[pp_size sz,String "(",pp_sv32 sv,String ")"])
     and pp_sv64 sv = 
       (case sv 
 	 of Var_64 v => pp_var v
@@ -388,7 +390,8 @@ structure PpLil :> PPLIL =
 	 of Box => String "box"
 	  | Tuple => String "tuple"
 	  | Select w => Hbox[String "select_",pp_word w]
-	  | Dyntag => String "dyntag")
+	  | Dyntag => String "dyntag"
+	  | Ptreq => String "ptreq")
     and pp_op32 oper = 
       (case oper
 	 of Val sv32 => pp_sv32 sv32
@@ -399,12 +402,19 @@ structure PpLil :> PPLIL =
 	     val args = pp_list pp_primarg args ("(",",",")",false)
 	   in HOVbox[p,cons,args]
 	   end
+	  | PrimEmbed (sz,p,args) =>
+	   let
+	     val p = pp_prim' p
+	     val args = pp_list pp_primarg args ("(",",",")",false)
+	   in HOVbox[String "Embed",pp_size sz,Break,p,args]
+	   end
 	  | LilPrimOp32 (lp,cons,sv32s,sv64s) =>
 	   (case (lp,cons,sv32s,sv64s)
 	      of (Box,[],[],[sv64]) => Hbox[String "box(",pp_sv64 sv64,String ")"]
 	       | (Tuple,[],sv32s,[]) => pp_list pp_sv32 sv32s ("<",",",">",false)
 	       | (Select w,[],[sv32],[]) => Hbox[String "select_",pp_word w,Break,pp_sv32 sv32]
 	       | (Dyntag,[c],[],[]) => HOVbox[String "dyntag_",pp_con c]
+	       | (Ptreq,[],[sv1,sv2],[]) => HOVbox[String "ptreq_(",pp_sv32 sv1,String ",",pp_sv32 sv2,String ")"]
 	       | _ => 
 		let
 		  val _ = warn "lilprim got unexpected args"
@@ -420,13 +430,13 @@ structure PpLil :> PPLIL =
 		pp_list pp_sv32 args ("",",","",false), Break,
 		pp_list pp_sv64 fargs ("",",","",false)])
 	  | App (f,sv32s,sv64s) =>
-	      HOVbox[String "App(",pp_sv32 f, String ";", Break,
+	      HOVbox[String "App(",pp_sv32 f, String ";", Break0 0 2,
 		     pp_list pp_sv32 sv32s ("",",","",false), 
 		     String "; ",
 		     pp_list pp_sv64 sv64s (" ",",","",false), 
 		     String ")"]
 	  | Call (f,sv32s,sv64s) =>
-	      HOVbox[String "Call(",pp_sv32 f, String ";", Break,
+	      HOVbox[String "Call(",pp_sv32 f, String ";", Break0 0 2,
 		     pp_list pp_sv32 sv32s ("",",","",false), 
 		     String "; ",
 		     pp_list pp_sv64 sv64s (" ",",","",false), 
@@ -506,8 +516,8 @@ structure PpLil :> PPLIL =
 	    | pp_default (SOME e) = Hbox[String "DEFAULT = ", Break0 0 2, pp_exp e]
       in
 	case sw of
-	  Intcase {arg,arms,default,rtype} => 
-	    HOVbox[String "INT_SWITCH(", 
+	  Intcase {arg,arms,size,default,rtype} => 
+	    HOVbox[String "INT_SWITCH", pp_size size,String "(",
 		   pp_sv32 arg, String ", ",
 		   Break0 0 3,
 		   (pp_list (fn (w,e) => HOVbox[pp_word w, String "=> ", Break0 0 2, pp_exp e])
@@ -554,9 +564,9 @@ structure PpLil :> PPLIL =
 
     and pp_conditionCode cc = 
       (case cc of
-	 Exp_cc exp => pp_exp exp
-       | And_cc (cc1,cc2) => HOVbox[String "AND(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
-       | Or_cc  (cc1,cc2) => HOVbox[String "OR(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
+	 Exp_cc exp => HOVbox[pp_exp exp]
+       | And_cc (cc1,cc2) => HOVbox[String "AND(", Break0 0 1 , pp_conditionCode cc1, String ", ",  Break0 0 0, pp_conditionCode cc2, String ")"]
+       | Or_cc  (cc1,cc2) => HOVbox[String "OR(", Break0 0 1 , pp_conditionCode cc1, String ", ", Break0 0 0, pp_conditionCode cc2, String ")"]
        | Not_cc  cc => HOVbox[String "NOT(", pp_conditionCode cc, String ")"])
 	 
 
@@ -565,7 +575,7 @@ structure PpLil :> PPLIL =
       let
 	fun pp_char sv = 
 	  (case sv
-	     of Const_32 (Prim.uint(W8,c)) => 
+	     of Prim.uint(W8,c) => 
 	       let val c = chr(TilWord64.toInt c)
 	       in  if (c = #"\n") then String ("\\n") else String (Char.toString c)
 	       end

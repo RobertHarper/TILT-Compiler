@@ -37,11 +37,13 @@ structure Synthesis :> SYNTHESIS =
       struct
 	type env = LC.context
 	val T32 = LD.K.T32()
+	val T8 = LD.K.Type B1
 	val T64 = LD.K.T64()
 	val TM = LD.K.TM()
 	val T32_to_TM = LD.K.arrow T32 TM
 	val T64_to_TM = LD.K.arrow T64 TM
 	val T32_to_T32 = LD.K.arrow T32 T32
+	val T8_to_T32 = LD.K.arrow T8 T32
 	val Nat = LD.K.nat()
 	val Nat_to_T32 = LD.K.arrow Nat T32
 	val T32list = LD.K.tlist()
@@ -58,14 +60,15 @@ structure Synthesis :> SYNTHESIS =
 				    end)
 	fun primcon p = 
 	  (case p
-	     of Int_c s => T32
+	     of Int_c s => LD.K.Type s
 	      | Float_c => T64
 	      | Void_c  => T32
 	      | Tag_c      => Nat_to_T32
 	      | Sum_c      => Nat_to_T32list_to_T32
 	      | KSum_c     => Nat_to_Nat_to_T32list_to_T32
+	      | Tuple_c    => T32list_to_TM
 	      | Boxed_c B8 => T64_to_TM
-	      | Tuple_c     => T32list_to_TM
+	      | Embed_c B1 => T8_to_T32
 	      | Array_c B4  => T32_to_TM
 	      | Array_c B8  => T64_to_TM
 	      | Arrow_c    => T32list_to_T64list_t_T32_to_T32
@@ -79,7 +82,9 @@ structure Synthesis :> SYNTHESIS =
 						LD.K.list T64,
 						LD.K.Type s] T32
 	      | Boxed_c size => LD.K.arrow (LD.K.Type size) TM
-	      | Array_c size  => LD.K.arrow (LD.K.Type size) TM)
+	      | Embed_c size => LD.K.arrow (LD.K.Type size) T32
+	      | Array_c size  => LD.K.arrow (LD.K.Type size) TM
+	      | Ref_c  => T32_to_TM)
 	     
 	fun con env c = 
 	  (case cout c
@@ -130,7 +135,8 @@ structure Synthesis :> SYNTHESIS =
 	      | _ => error "Wrong args")
 	and primarg env arg = 
 	  (case arg
-	     of arg32 sv => sv32 env sv
+	     of slice (sz,sv) => Elim.C.doslice (sv32 env sv)
+	      | arg32 sv => sv32 env sv
 	      | arg64 sv => sv64 env sv)
 	and sv64 env sv = 
 	  (case sv
@@ -169,9 +175,10 @@ structure Synthesis :> SYNTHESIS =
 	      | Unit => LD.T.unit()
 	      | Const_32 v => 
 	       (case v 
-		  of (Prim.int (intsize, w))  => LD.T.intt (LU.i2size intsize)
-		   | (Prim.uint (intsize, w)) => LD.T.intt (LU.i2size intsize)
-		   | (Prim.vector (t,arr))    => LD.T.ptr (LD.T.array B4 t)
+		  of (Prim.int (Prim.W8, w))  => LD.T.embed B1 (LD.T.intt B1)
+		   | (Prim.int (Prim.W32, w)) => LD.T.intt B4
+		   | (Prim.uint (Prim.W8, w)) => LD.T.embed B1 (LD.T.intt B1)
+		   | (Prim.uint (Prim.W32, w)) => LD.T.intt B4
 		   | _ => error "Const_32 got bad prim value"))
 	and op64 env fop = 
 	  (case fop
@@ -185,11 +192,13 @@ structure Synthesis :> SYNTHESIS =
 	      | (Tuple, [], svs,[]) => LD.T.ptr (LD.T.tuple' (map (sv32 env) svs))
 	      | (Select w32,[],[sv],[]) => Elim.C.select w32 (sv32 env sv)
 	      | (Dyntag,[c],[],[])      => LD.T.dyntag c
+	      | (Ptreq,[],[sv1,sv2],[]) => LD.T.bool()
 	      | _ => error "Wrong number of arms to lilprim")
 	and op32 env eop = 
 	  (case eop
 	     of Val sv => sv32 env sv
 	      | Prim32 (p,cs,primargs) => #3 (PU.get_type () p cs)
+	      | PrimEmbed (sz,p,primargs) => LD.T.embed sz (#3 (PU.get_type () p []))
 	      | LilPrimOp32 args => lilprimop32 env args
 	      | ExternApp (f,args,fargs) => Elim.C.externapp (sv32 env f)
 	      | App (f,vs,fvs) => Elim.C.app (sv32 env f)
@@ -231,7 +240,7 @@ structure Synthesis :> SYNTHESIS =
 	  (case sw 
 	     of Sumcase {arg : sv32,arms :(w32  * var * exp) list, default: exp option, rtype : con} => rtype
 	      | Dyncase {arg : sv32,arms :(sv32 * (var * con) * exp) list, default: exp,        rtype : con} => rtype
-	      | Intcase {arg : sv32,arms :(w32 * exp) list,        default: exp,                rtype : con} => rtype
+	      | Intcase {arg : sv32,arms :(w32 * exp) list,size:size,      default: exp,        rtype : con} => rtype
 	      | Ifthenelse {rtype,...} => rtype)
       
 	and bind_functions (env,vfs) = LC.bind_var32s (env,LO.map_second function vfs)

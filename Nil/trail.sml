@@ -121,9 +121,29 @@ structure Trail :> TRAIL =
 	 | (Array_c, _) => GREATER
 	 | (_, Array_c) => LESS
 
+	 | (IntArray_c sz1, IntArray_c sz2) => cmp_intsize (sz1,sz2)
+	 | (IntArray_c _, _) => GREATER
+	 | (_, IntArray_c _) => LESS
+
+	 | (FloatArray_c sz1, FloatArray_c sz2) => cmp_floatsize (sz1,sz2)
+	 | (FloatArray_c _, _) => GREATER
+	 | (_, FloatArray_c _) => LESS
+
 	 | ( Vector_c, Vector_c) => EQUAL
 	 | (Vector_c, _) => GREATER
 	 | ( _, Vector_c) => LESS
+
+	 | (IntVector_c sz1, IntVector_c sz2) => cmp_intsize (sz1,sz2)
+	 | (IntVector_c _, _) => GREATER
+	 | (_, IntVector_c _) => LESS
+
+	 | (FloatVector_c sz1, FloatVector_c sz2) => cmp_floatsize (sz1,sz2)
+	 | (FloatVector_c _, _) => GREATER
+	 | (_, FloatVector_c _) => LESS
+
+	 | (Ref_c, Ref_c) => EQUAL
+	 | (Ref_c, _) => GREATER
+	 | (_, Ref_c) => LESS
 
 	 | (Loc_c, Loc_c) => EQUAL
 	 | (Loc_c, _) => GREATER

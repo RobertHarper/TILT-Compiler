@@ -136,7 +136,7 @@ structure IlUtil :> ILUTIL =
 					    ^ (String.str (chr (ord #"a" + n)))))
 
     val con_unit = CON_RECORD[]
-    val con_string = CON_VECTOR (CON_UINT W8)
+    val con_string = CON_INTVECTOR W8
     val unit_exp : exp = RECORD[]
     val internal_match_tag = fresh_named_tag "match"
 
@@ -175,6 +175,12 @@ structure IlUtil :> ILUTIL =
 		| SOME (p, PHRASE_CLASS_EXP _) => path2exp p
 		| _ => errorMsg (ctxt,"unbound value",labs))
 
+	fun lookup_expcon (labs : labels) (ctxt : context) : exp * con =
+	    (case Context_Lookup_Labels (ctxt, labs)
+	       of SOME (_, PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,c)
+		| SOME (p, PHRASE_CLASS_EXP (_,c,_,_)) => (path2exp p,c)
+		| _ => errorMsg (ctxt,"unbound value",labs))
+
 	fun lookup_poly (labs : labels) (ctxt : context) : mod * signat =
 	    (case Context_Lookup_Labels (ctxt, labs)
 	       of SOME (_, PHRASE_CLASS_MOD (m,_,s as SIGNAT_FUNCTOR _,_)) => (m,s)
@@ -192,6 +198,7 @@ structure IlUtil :> ILUTIL =
 	val VectorEq = Name.to_unit(Name.internal_label "VectorEq")
 	val TiltVectorEq = Name.symbol_label(Symbol.strSymbol "TiltVectorEq")
 	val vector_eq = Name.symbol_label(Symbol.varSymbol "vector_eq")
+	val word8vector_eq = Name.symbol_label(Symbol.varSymbol "word8vector_eq")
 
 	val Prelude = Name.to_unit(Name.internal_label "Prelude")
 	val string_eq = Name.to_eq(Name.symbol_label(Symbol.tycSymbol "string"))
@@ -209,7 +216,9 @@ structure IlUtil :> ILUTIL =
 	val false_exp : context -> exp = lookup_exp [Firstlude,lab_false]
 	val bool_out : context -> exp = lookup_exp [Firstlude,bool_out]
 	val vector_eq : context -> mod * signat =
-	    lookup_poly [VectorEq,TiltVectorEq,vector_eq]
+	  lookup_poly [VectorEq,TiltVectorEq,vector_eq]
+	val word8vector_eq : context -> exp * con =
+	  lookup_expcon [VectorEq,TiltVectorEq,word8vector_eq]
 	val string_eq : context -> exp = lookup_exp [Prelude,string_eq]
 	val bind_exn : context -> exp = lookup_exn [Prelude,bind,mk]
 	val match_exn : context -> exp = lookup_exn [Prelude,match,mk]
@@ -439,6 +448,10 @@ structure IlUtil :> ILUTIL =
 		     | CON_ANY => con
 		     | CON_ARRAY c => CON_ARRAY (self c)
 		     | CON_VECTOR c => CON_VECTOR (self c)
+		     | CON_INTARRAY _ => con
+		     | CON_INTVECTOR _ => con
+		     | CON_FLOATARRAY _ => con
+		     | CON_FLOATVECTOR _ => con
 		     | CON_REF c => CON_REF (self c)
 		     | CON_TAG c => CON_TAG (self c)
 		     | CON_ARROW (cons,c2,closed,complete) => CON_ARROW (map self cons, self c2, closed, complete)

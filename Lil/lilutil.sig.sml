@@ -14,6 +14,9 @@ signature LILUTIL =
     val i2size : Prim.intsize -> Lil.size
     val f2size : Prim.floatsize -> Lil.size
 
+    val size2i : Lil.size -> Prim.intsize 
+    val size2f : Lil.size -> Prim.floatsize 
+
     (* Find the strongly connected components of a graph. 
      * Result is a list of list of vars and their info.
      * Each list is a scc.  The sccs are ordered such

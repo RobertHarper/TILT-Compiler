@@ -9,6 +9,8 @@ struct
   val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "normalize_profile"
 
+  val SpecializeArrayofChar = CompilerControl.SpecializeArrayofChar
+
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
 
   open Nil
@@ -635,7 +637,7 @@ struct
     fun find_kind_equation_subst (D,subst,c) =
       let
 	(*Since we are under a subst here, we may have an unbound variable in the path*)
-	val eqnopt = find_kind_equation(D,c) handle Unbound => NONE
+	val eqnopt = (find_kind_equation(D,c)) handle Unbound => NONE
       in
 	case eqnopt
 	  of SOME c => (SOME subst,c)                     (*We found an equation *)
@@ -716,9 +718,51 @@ struct
 				 fFormals=0w0, body_type=resc})
 	    | (HNF,_,c)         => (HNF,#2 state,no_flatten)
 	    | (IRREDUCIBLE,_,c) =>
-		(case find_kind_equation(#1 state,argc)
-		   of SOME argc => (PROGRESS,#2 state,Prim_c (Vararg_c (openness,effect),[argc,resc]))
-		    | NONE      => (HNF,#2 state,irreducible)))
+		(case find_kind_equation_subst(#1 state,#2state,argc)
+		   of (SOME subst,argc) => (PROGRESS,subst,Prim_c (Vararg_c (openness,effect),[argc,resc]))
+		    | (NONE,_)      => (HNF,#2 state,irreducible)))
+	 end
+       | (Prim_c (Array_c,[c])) =>
+	 let
+	   val irreducible = Prim_c(Array_c,[c])
+	 in
+	   (case con_reduce state c of
+	      (PROGRESS,subst,c) => (PROGRESS,subst,Prim_c (Array_c,[c]))
+	    | (HNF,_,Prim_c(BoxFloat_c Prim.F64,[])) =>
+		(HNF,#2 state,Prim_c(FloatArray_c Prim.F64,[]))
+	    | (HNF,_,Prim_c(Int_c Prim.W32,[])) =>
+		(HNF,#2 state,Prim_c(IntArray_c Prim.W32,[]))
+	    | (HNF,_,Prim_c(Int_c Prim.W8,[])) =>
+		if !SpecializeArrayofChar then
+		  (HNF,#2 state,Prim_c(IntArray_c Prim.W8,[]))
+		else
+		  (HNF,#2 state,irreducible)
+	    | (HNF,_,c)         => (HNF,#2 state,irreducible)
+	    | (IRREDUCIBLE,_,_) =>
+	       (case find_kind_equation_subst(#1 state,#2 state,c)
+		  of (SOME subst,c) => (PROGRESS,subst,Prim_c (Array_c,[c]))
+		   | (NONE,_)      => (HNF,#2 state,irreducible)))
+	 end
+       | (Prim_c (Vector_c,[c])) =>
+	 let
+	   val irreducible = Prim_c(Vector_c,[c])
+	 in
+	   (case con_reduce state c of
+	      (PROGRESS,subst,c) => (PROGRESS,subst,Prim_c (Vector_c,[c]))
+	    | (HNF,_,Prim_c(BoxFloat_c Prim.F64,[])) =>
+		(HNF,#2 state,Prim_c(FloatVector_c Prim.F64,[]))
+	    | (HNF,_,Prim_c(Int_c Prim.W32,[])) =>
+		(HNF,#2 state,Prim_c(IntVector_c Prim.W32,[]))
+	    | (HNF,_,Prim_c(Int_c Prim.W8,[])) =>
+		if !SpecializeArrayofChar then
+		  (HNF,#2 state,Prim_c(IntVector_c Prim.W8,[]))
+		else
+		  (HNF,#2 state,irreducible)
+	    | (HNF,_,c)         => (HNF,#2 state,irreducible)
+	    | (IRREDUCIBLE,_,_) =>
+	       (case find_kind_equation_subst(#1 state,#2state,c)
+		  of (SOME subst,c) => (PROGRESS,subst,Prim_c (Vector_c,[c]))
+		   | (NONE,_)      => (HNF,#2 state,irreducible)))
 	 end
 	| (Prim_c _) => (HNF, #2 state, constructor)
 	| (Mu_c _) => (HNF, #2 state, constructor)
@@ -860,9 +904,9 @@ struct
 	    PROGRESS => loop (subst,c)
 	  | HNF => (subst,c)
 	  | IRREDUCIBLE =>
-	      (case find_kind_equation(D,c) of
-		 SOME c => loop (subst,c)
-	       | NONE => (subst,c))
+	      (case find_kind_equation_subst(D,subst,c) of
+		 (SOME subst,c) => loop (subst,c)
+	       | (NONE,c) => (subst,c))
 	  end
       in  loop (subst,con)
       end
@@ -1014,6 +1058,10 @@ struct
 	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
 	 | array (con,arr) => Prim_c (Array_c,[con])
 	 | vector (con,vec) => Prim_c (Vector_c,[con])
+	 | intarray (sz,arr) => Prim_c (IntArray_c sz,[])
+	 | intvector (sz,vec) => Prim_c (IntVector_c sz,[])
+	 | floatarray (sz,arr) => Prim_c (FloatArray_c sz,[])
+	 | floatvector (sz,vec) => Prim_c (FloatVector_c sz,[])
 	 | refcell expref => Prim_c (Array_c,[type_of(D,!expref)])
 	 | tag (atag,con) => Prim_c (Exntag_c,[con]))
 
@@ -1095,6 +1143,7 @@ struct
 	       end
 	  | mk_record_gctag => Prim_c(GCTag_c,[hd cons])
 	  | mk_sum_known_gctag => Prim_c(GCTag_c,[hd cons])
+	  | partialRecord _ => error' "No clue."
 )
 	end
 
@@ -1267,6 +1316,37 @@ struct
 			     else no_flatten)
 	     in (state,res,false)
 	     end
+	 | (Prim_c (Array_c,[c])) =>
+	     let
+	       val (state,c,path) = context_reduce_hnf'' (state,c)
+	       val irreducible = Prim_c(Array_c,[c])
+	       val res = 
+		 (case c 
+		    of Prim_c(BoxFloat_c Prim.F64,[]) => Prim_c(FloatArray_c Prim.F64,[])
+		     | Prim_c(Int_c Prim.W32,[]) => Prim_c(IntArray_c Prim.W32,[])
+		     | Prim_c(Int_c Prim.W8,[]) =>
+		      if !SpecializeArrayofChar then
+			(Prim_c(IntArray_c Prim.W8,[]))
+		      else irreducible
+		     | _ => irreducible)
+	     in (state,res,false)
+	     end
+	 | (Prim_c (Vector_c,[c])) =>
+	     let
+	       val (state,c,path) = context_reduce_hnf'' (state,c)
+	       val irreducible = Prim_c(Vector_c,[c])
+	       val res = 
+		 (case c 
+		    of Prim_c(BoxFloat_c Prim.F64,[]) => Prim_c(FloatVector_c Prim.F64,[])
+		     | Prim_c(Int_c Prim.W32,[]) => Prim_c(IntVector_c Prim.W32,[])
+		     | Prim_c(Int_c Prim.W8,[]) =>
+		      if !SpecializeArrayofChar then
+			(Prim_c(IntVector_c Prim.W8,[]))
+		      else irreducible
+		     | _ => irreducible)
+	     in (state,res,false)
+	     end
+
 	 | (Prim_c _)            => (state,constructor,false)
 	 | (Mu_c _)              => (state,constructor,false)
 	 | (AllArrow_c _)        => (state,constructor,false)

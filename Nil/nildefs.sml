@@ -67,7 +67,8 @@ structure NilDefs :> NILDEFS =
 	  (case (store,control)
 	     of (true,true)  => Prim.has_effect
 	      | (true,false) => Prim.store_effect
-	      | (false,true) => Prim.control_effect)
+	      | (false,true) => Prim.control_effect
+	      | _ => fn _ => false)
 	fun check e =
 	  case e
 	    of (Var_e _)     => false
@@ -146,6 +147,8 @@ structure NilDefs :> NILDEFS =
        | Record_c _ => true
        | GCTag_c    => true
        | Vector_c   => true
+       | IntVector_c _ => true
+       | FloatVector_c _ => true
        | Vararg_c _ => false  (* Actually, this is covariant in the result type.*)
        | _          => false)
 
@@ -164,7 +167,8 @@ structure NilDefs :> NILDEFS =
        | make_vararg _ => true
        | make_onearg _ => true
        | mk_record_gctag  => false
-       | mk_sum_known_gctag  => false)
+       | mk_sum_known_gctag  => false
+       | partialRecord _ => false)
 
   fun aggregate_uses_carg (Prim.OtherArray false) = true
     | aggregate_uses_carg (Prim.OtherVector false) = true
@@ -181,12 +185,12 @@ structure NilDefs :> NILDEFS =
 	   | update t => aggregate_uses_carg t
 	   | length_table t => aggregate_uses_carg t
 	   | equal_table t => aggregate_uses_carg t
-	   | _ => true)
+	   | _ => false)
       end
 
   fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
     | allprim_uses_carg (PrimOp p) = prim_uses_carg p
-
+    
     fun path2exp (v,labs) =
 	let fun loop e [] = e
 	      | loop e (l::rest) = loop (Prim_e(NilPrimOp(select l), [], [], [e])) rest

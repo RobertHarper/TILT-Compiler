@@ -8,7 +8,7 @@ struct
     val rdebug = Stats.ff("ReifyMinDebug")
 
     (* Lil code does not use traces (much) *)
-    val doTrace = Stats.tt("ReifyTraces")
+    val doTrace = CompilerControl.ReifyTraces
 
     fun error s = Util.error "reify.sml" s
 

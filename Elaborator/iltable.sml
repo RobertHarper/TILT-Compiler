@@ -189,6 +189,22 @@ struct
           | (CON_VECTOR _, _) => GREATER
           | (_, CON_VECTOR _) => LESS
 
+          | (CON_INTARRAY sz1, CON_INTARRAY sz2) => cmp_int(hash_intsize sz1,hash_intsize sz2)
+          | (CON_INTARRAY _, _) => GREATER
+          | (_, CON_INTARRAY _) => LESS
+
+          | (CON_INTVECTOR sz1, CON_INTVECTOR sz2) => cmp_int(hash_intsize sz1,hash_intsize sz2)
+          | (CON_INTVECTOR _, _) => GREATER
+          | (_, CON_INTVECTOR _) => LESS
+
+          | (CON_FLOATARRAY sz1, CON_FLOATARRAY sz2) => cmp_int(hash_floatsize sz1,hash_floatsize sz2)
+          | (CON_FLOATARRAY _, _) => GREATER
+          | (_, CON_FLOATARRAY _) => LESS
+
+          | (CON_FLOATVECTOR sz1, CON_FLOATVECTOR sz2) => cmp_int(hash_floatsize sz1,hash_floatsize sz2)
+          | (CON_FLOATVECTOR _, _) => GREATER
+          | (_, CON_FLOATVECTOR _) => LESS
+
           | (CON_ANY, CON_ANY) => EQUAL
           | (CON_ANY, _) => GREATER
           | (_, CON_ANY) => LESS

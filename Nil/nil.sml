@@ -5,7 +5,7 @@ struct
 
   val error = fn s => error "nil.sml" s
 
-  val flattenThreshold = ref 2
+  val flattenThreshold = ref 6
 
   type var = Name.var
   type label = Name.label
@@ -61,6 +61,16 @@ struct
     | Array_c                                 (* arrays *)
       (* Params: Element con *)
     | Vector_c                                (* vectors *)
+      (* Params: Element con *)
+    | IntArray_c of Prim.intsize
+      (* Params: None *)
+    | IntVector_c of Prim.intsize
+      (* Params: None *)
+    | FloatArray_c of Prim.floatsize
+      (* Params: None *)
+    | FloatVector_c of Prim.floatsize
+      (* Params: None *)
+    | Ref_c 
       (* Params: Element con *)
     | Loc_c                                   (* locatives *)
       (* Params: None *)

@@ -30,6 +30,8 @@ graphutil.sml
 splay-map-fn.sml
 stats.sig.sml
 stats.sml
+compiler_control.sig.sml
+compiler_control.sml
 timestamp.sml
 graph.sig.sml
 graph.sml

@@ -45,16 +45,30 @@ structure LilUtil :> LILUTIL =
 	  GREATER
 	else EQUAL
 
+
     fun i2size pis = 
       (case pis 
-	 of W8 => B4
+	 of W8 => B1
 	  | W16 => error "unsupported int size"
 	  | W32 => B4
 	  | W64 => error "unsupported int size")
     fun f2size pfs = 
       (case pfs 
-	 of F32 => B4
-	  | F64 => error "unsupported float size")
+	 of F32 => error "unsupported float size"
+	  | F64 => B8)
+
+    fun size2i is = 
+      (case is 
+	 of B1 => W8
+	  | B2 => W16
+	  | B4 => W32
+	  | B8 => W64)
+    fun size2f fs = 
+      (case fs 
+	 of B1 => error "size has no corresponding floatsize"
+	  | B2 => error "size has no corresponding floatsize"
+	  | B4 => F32
+	  | B8 => F64)
 
     (* Find the strongly connected components of the graph.
      * Result is a list of list of vars and their info.

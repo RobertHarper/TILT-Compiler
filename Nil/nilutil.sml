@@ -25,7 +25,7 @@ struct
 
   fun error s = Util.error "nilutil.sml" s
 
-  val arrow_is_taglike = Stats.ff "ArrowIsTaglike"
+  val arrow_is_taglike = CompilerControl.ArrowIsTaglike
 
   val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "nilutil_profile"
@@ -724,6 +724,18 @@ struct
 		       | (Prim.vector (c,array)) =>
 			     (Array.modify self array;
 			      Prim.vector(f_con state c,array))
+		       | (Prim.intarray (sz,array)) =>
+			     (Array.modify self array;
+			      Prim.intarray(sz,array))
+		       | (Prim.intvector (sz,array)) =>
+			     (Array.modify self array;
+			      Prim.intvector(sz,array))
+		       | (Prim.floatarray (sz,array)) =>
+			     (Array.modify self array;
+			      Prim.floatarray(sz,array))
+		       | (Prim.floatvector (sz,array)) =>
+			     (Array.modify self array;
+			      Prim.floatvector(sz,array))
 		       | Prim.refcell (r as (ref e)) => (r := self e; v)
 		       | Prim.tag (t,c) => Prim.tag(t,f_con state c))
 		| (Let_e (sort,bnds,body)) =>
@@ -1006,6 +1018,11 @@ struct
 	| (Exn_c,Exn_c) => true
 	| (Array_c,Array_c) => true
 	| (Vector_c,Vector_c) => true
+	| (IntArray_c sz1,IntArray_c sz2) => same_intsize (sz1,sz2)
+	| (IntVector_c sz1,IntVector_c sz2) => same_intsize (sz1,sz2)
+	| (FloatArray_c sz1,FloatArray_c sz2) => same_floatsize (sz1,sz2)
+	| (FloatVector_c sz1,FloatVector_c sz2) => same_floatsize (sz1,sz2)
+	| (Ref_c,Ref_c) => true
 	| (Loc_c,Loc_c) => true
 	| (Exntag_c,Exntag_c) => true
 	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},

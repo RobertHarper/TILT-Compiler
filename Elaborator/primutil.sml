@@ -18,6 +18,11 @@ struct
     val error = fn s => error "primutil.sml" s
     structure Float = Real
 
+    fun fs2is fs = 
+      (case fs
+	 of F32 => W32
+	  | F64 => W64)
+
     val con_string = con_vector(con_uint W8)
     fun value_type exp_typer scon : con =
 	(case scon of
@@ -26,6 +31,10 @@ struct
 	   | (float (fs,_)) => con_float fs
 	   | (array (c,_)) => con_array c
 	   | (vector (c,_)) => con_vector c
+	   | (intarray (sz,_))  => con_intarray sz
+	   | (intvector (sz,_)) => con_intvector sz 
+	   | (floatarray (sz,_))  => con_floatarray sz
+	   | (floatvector (sz,_)) => con_floatvector sz 
 	   | (refcell (ref e)) => con_ref (exp_typer e)
 	   | (tag (_,c)) => con_tag c)
 
@@ -36,51 +45,51 @@ struct
 	    fun thelp (arg,res) = (true,[arg],res)
 	    fun thelp' (args,res) = (true,args,res)
 
-	    fun create_empty_array instance = thelp'([], con_array instance)
-	    fun create_empty_vector instance = thelp'([], con_vector instance)
-	    fun create_array instance = thelp'([con_uint W32, instance], con_array instance)
-	    fun create_vector instance = thelp'([con_uint W32, instance], con_vector instance)
-	    fun len_array instance = thelp(con_array instance, con_uint W32)
-	    fun len_vector instance = thelp(con_vector instance, con_uint W32)
-	    fun sub_array instance = help'([con_array instance, con_uint W32], instance)
-	    fun sub_vector instance = thelp'([con_vector instance, con_uint W32], instance)
-	    fun update_array instance =  help'([con_array instance, con_uint W32, instance], con_unit)
-	    fun eq_array instance = help'([con_array instance, con_array instance],con_bool context)
-	    fun eq_vector instance = help(partial_arrow([instance, instance],con_bool context),
-					  partial_arrow([con_vector instance,
-							 con_vector instance],con_bool context))
-	    fun array2vector_array instance = thelp(con_array instance, con_vector instance)
-	    fun vector2array_vector instance = thelp(con_vector instance, con_array instance)
-	    fun do_array instance =
+	    fun create_empty_array con_array instance = thelp'([], con_array)
+	    fun create_empty_vector con_vector instance = thelp'([], con_vector)
+	    fun create_array con_array instance = thelp'([con_uint W32, instance], con_array)
+	    fun create_vector con_vector instance = thelp'([con_uint W32, instance], con_vector)
+	    fun len_array con_array instance = thelp(con_array, con_uint W32)
+	    fun len_vector con_vector instance = thelp(con_vector, con_uint W32)
+	    fun sub_array con_array instance = help'([con_array, con_uint W32], instance)
+	    fun sub_vector con_vector instance = thelp'([con_vector, con_uint W32], instance)
+	    fun update_array con_array instance =  help'([con_array, con_uint W32, instance], con_unit)
+	    fun eq_array con_array instance = help'([con_array, con_array],con_bool context)
+	    fun eq_vector con_vector instance = help(partial_arrow([instance, instance],con_bool context),
+					  partial_arrow([con_vector,
+							 con_vector],con_bool context))
+	    fun array2vector_array con_array con_vector instance = thelp(con_array, con_vector)
+	    fun vector2array_vector con_array con_vector instance = thelp(con_vector, con_array)
+	    fun do_array con_array con_vector instance =
 		(case prim of
-		     create_table _ => create_array instance
-		   | create_empty_table _ => create_empty_array instance
-		   | length_table _ => len_array instance
-		   | sub _ => sub_array instance
-		   | update _ => update_array instance
-		   | equal_table _ => eq_array instance
-		   | array2vector _ => array2vector_array instance
+		     create_table _ => create_array con_array instance
+		   | create_empty_table _ => create_empty_array con_array instance
+		   | length_table _ => len_array con_array instance
+		   | sub _ => sub_array con_array instance
+		   | update _ => update_array con_array instance
+		   | equal_table _ => eq_array con_array instance
+		   | array2vector _ => array2vector_array con_array con_vector instance
 		   | vector2array _ => error "use array2vector"
 		   | _ => error "pattern impossibility")
-	    fun do_vector instance =
+	    fun do_vector con_array con_vector instance =
 		(case prim of
-		     create_table _ => create_vector instance
-		   | create_empty_table _ => create_empty_vector instance
-		   | length_table _ => len_vector instance
-		   | sub _ => sub_vector instance
+		     create_table _ => create_vector con_vector instance
+		   | create_empty_table _ => create_empty_vector con_vector instance
+		   | length_table _ => len_vector con_vector instance
+		   | sub _ => sub_vector con_vector instance
 		   | update _ => error "no vector update"
-		   | equal_table _ => eq_vector instance
+		   | equal_table _ => eq_vector con_vector instance
 		   | array2vector _ => error "use vector2array"
-		   | vector2array _ => vector2array_vector instance
+		   | vector2array _ => vector2array_vector con_array con_vector instance
 		   | _ => error "pattern impossibility")
 
 	in  (case (aggregate,cons) of
-		 (OtherArray  _, [instance]) => do_array instance
-	       | (OtherVector _, [instance]) => do_vector instance
-	       | (IntArray is, []) => do_array (con_uint is)
-	       | (IntVector is, []) => do_vector (con_uint is)
-	       | (FloatArray fs, []) => do_array (con_float fs)
-	       | (FloatVector fs, []) => do_vector (con_float fs)
+		 (OtherArray  _, [instance]) => do_array (con_array instance) (con_vector instance) instance
+	       | (OtherVector _, [instance]) => do_vector (con_array instance) (con_vector instance) instance
+	       | (IntArray is, []) => do_array (con_intarray is) (con_intvector is) (con_uint is)
+	       | (IntVector is, []) => do_vector (con_intarray is) (con_intvector is) (con_uint is)
+	       | (FloatArray fs, []) => do_array (con_floatarray fs) (con_floatvector fs) (con_float fs)
+	       | (FloatVector fs, []) => do_vector (con_floatarray fs) (con_floatvector fs) (con_float fs)
 	       | _ => error "ill-formed table primitive")
 	end
 
@@ -109,8 +118,8 @@ struct
        | (uint2uint(is1,is2),[]) => help(con_uint is1, con_uint is2)
        | (int2uint(is1,is2),[]) => help(con_int is1, con_uint is2)
        | (uint2int(is1,is2),[]) => help(con_uint is1, con_int is2)
-       | (uinta2uinta(is1,is2),[]) => help(con_array(con_uint is1), con_array(con_uint is2))
-       | (uintv2uintv(is1,is2),[]) => help(con_vector(con_uint is1), con_vector(con_uint is2))
+       | (uinta2uinta(is1,is2),[]) => help(con_intarray is1, con_intarray is2)
+       | (uintv2uintv(is1,is2),[]) => help(con_intvector is1, con_intvector is2)
 
 
        | (plus_float fs,[]) => help'([con_float fs, con_float fs], con_float fs)
@@ -168,6 +177,10 @@ struct
        | (update aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
        | (equal_table aggregate,cons) => get_aggregate_type(context,prim,aggregate,cons)
 
+       | (mk_ref, [instance]) => (false,[instance],con_ref instance)
+       | (deref, [instance]) => (false,[con_ref instance], instance)
+       | (setref, [instance]) => (false,[con_ref instance,instance],con_unit)
+       | (eq_ref, [instance]) => (true, [con_ref instance, con_ref instance],con_bool context)
 
        | _ => (Ppprim.pp_prim prim;
 	       error "can't get type"))
@@ -184,10 +197,6 @@ struct
 	 | (eq_uint is, []) => (true, [con_uint is, con_uint is], con_bool context)
 	 | (neq_uint is, []) => (true, [con_uint is, con_uint is], con_bool context)
 
-	 | (mk_ref, [instance]) => (false,[instance],con_ref instance)
-	 | (deref, [instance]) => (false,[con_ref instance], instance)
-	 | (setref, [instance]) => (false,[con_ref instance,instance],con_unit)
-	 | (eq_ref, [instance]) => (true, [con_ref instance, con_ref instance],con_bool context)
 	 | _ => error "get_iltype is ill-formed")
 
 
@@ -396,6 +405,12 @@ struct
 	  | (create_empty_table _,_,_)  => raise UNIMP
 	  | (update _, _, _) => raise UNIMP
 	  | (equal_table _, _,_)  => raise UNIMP
+					
+	  | (mk_ref, _,_) => raise UNIMP
+	  | (deref, _,_ ) => raise UNIMP
+	  | (eq_ref, _,_) => raise UNIMP
+	  | (setref, _,_) => raise UNIMP
+
 
 	  | _ => bad "general"())
 	end

@@ -533,28 +533,7 @@ structure LilClosure :> LILCLOSURE =
 		end
 	       | Tag w => Tag w
 	       | Unit => Unit
-	       | Const_32 v => 
-		Const_32
-		(case v of
-		   (Prim.int _) => v
-		 | (Prim.uint _) => v
-		 | (Prim.float _) => v
-		 | (Prim.array (c,array)) =>
-		     let
-		       val _ = Array.modify recur_primarg array
-		       val c = recur_c c
-		     in Prim.array(c,array)
-		     end
-		 | (Prim.vector (c,array)) =>
-		     let
-		       val _ = Array.modify recur_primarg array
-		       val c = recur_c c
-		     in Prim.vector(c,array)
-		     end
-		 | Prim.refcell (r as (ref e)) => 
-		     (r := recur_primarg e; v)
-		 | Prim.tag (t,c) => 
-		     Prim.tag(t,recur_c c))
+	       | Const_32 v => Const_32 (rewrite_value env v)
 	  end
 	
       in (dosv32 (env,sv32))
@@ -562,6 +541,35 @@ structure LilClosure :> LILCLOSURE =
 			 PpLil.pp_sv32 sv32;print "\n";
 			 raise any)
       end
+    and rewrite_value (env : env) (v : value) : value = 
+      let
+	val recur_primarg = rewrite_primarg env
+	val recur_c = rewrite_con env
+      in
+	case v of
+	  (Prim.int _) => v
+	| (Prim.uint _) => v
+	| (Prim.float _) => v
+	| (Prim.vector (c,array)) =>
+	    let
+	      val _ = Array.modify recur_primarg array
+	      val c = recur_c c
+	    in Prim.vector(c,array)
+	    end
+	| (Prim.intvector (sz,array)) =>
+	    let
+	      val _ = Array.modify recur_primarg array
+	    in Prim.intvector(sz,array)
+	    end
+	| (Prim.floatvector (sz,array)) =>
+	    let
+	      val _ = Array.modify recur_primarg array
+	    in Prim.floatvector(sz,array)
+	    end
+	| Prim.tag (t,c) =>  Prim.tag(t,recur_c c)
+	| _ => error "array and ref constants not supported"
+      end
+	 
     and rewrite_bnds (env : env) (bnds : bnd list) : env P.pexp = 
       let
 	fun do_bnd (bnd,env) = (rewrite_bnd env bnd)
@@ -647,22 +655,24 @@ structure LilClosure :> LILCLOSURE =
 						  rtype       : con,
 						  body        : exp}) = 
 	  let
+	    val _ = chat 4 ("Building code type for: "^(Name.var2string fname)^"\n")
 	    val {cvars,vars32,vars64} = get_frees env fname
 	    val cvars  = VarSet.listItems cvars
 	    val vars32 = VarSet.listItems vars32
 	    val vars64 = VarSet.listItems vars64
 	    val cenks = build_cenv_kinds env cvars
 	    val (cvars,env) = cvarsrename env cvars 
-  
-	    val tFormals = (LO.zip cvars cenks)@tFormals
+  	    val tFormals = (LO.zip cvars cenks)@tFormals
 	    val env = con_vars_bind (env,tFormals)
-	      
 	    val venv_type = build_venv_type env (vars32,vars64)
+
+	    val _ = chat 4 ("Built cenv_kind and type, working on arg types\n")	      
 	    val args = LO.seconds eFormals
 	    val fargs = LO.seconds fFormals
 	    val args = map (rewrite_con env) args
 	    val args = venv_type::args
 	    val fargs = map (rewrite_con env) fargs
+	    val _ = chat 4 ("Working on return type\n")
 	    val rtype = rewrite_con env rtype
 	    val code_type = LD.T.allcode' tFormals args fargs rtype
 	  in (get_code_lbl env fname,code_type)
@@ -1064,6 +1074,8 @@ structure LilClosure :> LILCLOSURE =
 	     of Val sv32 => P.ret (Val (recur_sv32 sv32))
 	      | Prim32 (p,cs,primargs) => 
 	       P.ret (Prim32 (p,map recur_c cs, map recur_primarg primargs))
+	      | PrimEmbed (sz,p,primargs) => 
+	       P.ret (PrimEmbed (sz,p, map recur_primarg primargs))
 	      | LilPrimOp32 (lp,cs,sv32s,sv64s) => 
 	       P.ret (LilPrimOp32 (lp,
 				   map recur_c cs, 
@@ -1170,7 +1182,8 @@ structure LilClosure :> LILCLOSURE =
     and rewrite_primarg (env : env) (primarg : primarg) : primarg = 
       (case primarg 
 	 of arg32 sv32 => arg32 (rewrite_sv32 env sv32)
-	  | arg64 sv64 => arg64 (rewrite_sv64 env sv64))
+	  | arg64 sv64 => arg64 (rewrite_sv64 env sv64)
+	  | slice (sz,sv32) => slice (sz,rewrite_sv32 env sv32))
 	 
     and rewrite_switch (env : env) (sw : switch) : switch = 
       let
@@ -1210,13 +1223,13 @@ structure LilClosure :> LILCLOSURE =
 	       in Dyncase {arg = arg,arms = arms,default = default, rtype = rtype}
 	       end
 	     
-	      | Intcase {arg : sv32,arms :(w32 * exp) list, default: exp,rtype : con} =>
+	      | Intcase {arg : sv32,arms :(w32 * exp) list, size : size, default: exp,rtype : con} =>
 	       let
 		 val arg = recur_sv32 arg
 		 val default = recur_exp default
 		 val rtype = recur_con rtype
 		 val arms = map_second recur_exp arms
-	       in Intcase {arg = arg,arms = arms,default = default, rtype = rtype}
+	       in Intcase {arg = arg,arms = arms, size = size, default = default, rtype = rtype}
 	       end
 	      | Ifthenelse {arg : conditionCode,thenArm : exp, elseArm : exp, rtype : con} =>
 	       let
@@ -1269,7 +1282,7 @@ structure LilClosure :> LILCLOSURE =
       (case d
 	 of Dboxed (l,sv64) => Dboxed (l,rewrite_sv64 env sv64)
 	  | Dtuple (l,t,q,svs) => Dtuple (l,rewrite_con env t,Util.mapopt (rewrite_sv32 env) q,map (rewrite_sv32 env) svs)
-	  | Darray (l,sz,t,svs) => Darray (l,sz,rewrite_con env t,map (rewrite_sv32 env) svs)
+	  | Darray (l,sz,t,svs) => Darray (l,sz,rewrite_con env t,map (rewrite_value env) svs)
 	  | Dcode (l,f) => 
 	   let
 	     val f = rewrite_code env f

@@ -68,6 +68,10 @@ struct
                  | CON_FLOAT         of Prim.floatsize
                  | CON_ARRAY         of con
                  | CON_VECTOR        of con
+                 | CON_INTARRAY      of Prim.intsize     (* Array_sz  (uniform rep at size)*)
+                 | CON_INTVECTOR     of Prim.intsize 
+                 | CON_FLOATARRAY    of Prim.floatsize   (* Array_sz  (uniform rep at size)*)
+                 | CON_FLOATVECTOR   of Prim.floatsize 
                  | CON_ANY
                  | CON_REF           of con
                  | CON_TAG           of con

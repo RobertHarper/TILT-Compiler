@@ -24,7 +24,7 @@ structure Reduce :> REDUCE =
 
 	     val res = 
 	       (case cout c
-(*		  of App_c _ => 
+		  of App_c _ => 
 		    let
 		      (* This is a little ugly, but it turns out that
 		       * nary applications can be a real bottleneck. 
@@ -38,7 +38,7 @@ structure Reduce :> REDUCE =
 				  let
 				    val ksubst = LS.K.sim_add ksubst (j,mk_kind(Mu_k (j,k)))
 				    val csubst = LS.C.sim_add csubst (a,c)
-				    val csubst = LS.C.sim_add csubst (b,f)
+				    val csubst = LS.C.sim_add csubst (b,LS.substConKindInCon (csubst,ksubst) f)
 				  in SOME (ksubst,csubst,body)
 				  end
 				 | _ => NONE)
@@ -62,13 +62,18 @@ structure Reduce :> REDUCE =
 				of SOME (ksubst,csubst,body) => applyn (body,args,ksubst,csubst)
 				 | NONE => 
 				  if LS.C.is_empty csubst then
-				    appn (LS.substKindInCon ksubst f,args)
+				    appn (LS.substKindInCon ksubst f,arg::args)
 				  else 
+				    let
+				      val f = LS.substConKindInCon (csubst,ksubst) f
+				      val (f,args) = unapp (f,arg::args)
+				    in applyn(f,args,LS.K.empty(),LS.C.empty())
+				    end))
 
-				    
+				  
 		    in applyn (f,args,LS.K.empty(),LS.C.empty())
-		    end*)
-		  of App_c (c1,c2) => 
+		    end
+(*		  of App_c (c1,c2) => 
 		    (case cout (whnf c1)
 		       of Lam_c ((a,_),body) => 
 			 whnf (LS.varConConSubst a c2 body)
@@ -82,7 +87,7 @@ structure Reduce :> REDUCE =
 			      in whnf (LS.substConKindInCon (csubst,ksubst) body)
 			      end
 			     | _ => c)
-			| _ => c)
+			| _ => c)*)
 		   | APP_c (c1,k) => 
 	            (case cout (whnf c1)
 		       of LAM_c (j,body) => whnf (LS.varKindConSubst j k body)

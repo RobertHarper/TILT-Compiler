@@ -21,13 +21,18 @@ structure PreString =
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
 
-    val unsafe_vsub = TiltPrim.unsafe_vsub
-    val vector_length = TiltPrim.vector_length
-    val unsafe_sub = TiltPrim.unsafe_sub
-    val unsafe_update = TiltPrim.unsafe_update
-    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_vsub = TiltPrim.unsafe_vsub8
+    val vector_length = TiltPrim.vector_length8
+    val unsafe_sub = TiltPrim.unsafe_sub8
+    val unsafe_update = TiltPrim.unsafe_update8
+    val unsafe_array = TiltPrim.unsafe_array8
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector8
 
-    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+    val unsafe_vsub32 = TiltPrim.unsafe_vsub
+    val unsafe_update32 = TiltPrim.unsafe_update
+    val unsafe_array32 = TiltPrim.unsafe_array
+    val unsafe_array2vector32 = TiltPrim.unsafe_array2vector
+
 
     local
 (*
@@ -50,7 +55,8 @@ structure PreString =
 *)
 	val unsafeSub = unsafe_sub
 	val unsafeUpdate = unsafe_update
-	fun unsafeCreate (sz : int) : char array = unsafe_array(int32touint32 sz,#"\000")
+	val unsafeUpdate32 = unsafe_update32
+	fun unsafeCreate (sz : int) : word8array = unsafe_array(int32touint32 sz,#"\000")
 	val maxOrd = 255
     in
 
@@ -67,19 +73,19 @@ structure PreString =
   (* a vector of single character strings *)
     val chars : string vector =
 	let
-	    val a = unsafe_array (int32touint32 (maxOrd+1),"")
+	    val a = unsafe_array32 (int32touint32 (maxOrd+1),"")
 	    fun next i = if (i <= maxOrd)
 			     then let val s = unsafeCreate 1
 				      val _ = unsafeUpdate(s, 0w0, int32touint8 i)
-				      val _ = unsafeUpdate(a, int32touint32 i, unsafe_array2vector s)
+				      val _ = unsafeUpdate32(a, int32touint32 i, unsafe_array2vector s)
 				  in  next(i+1)
 				  end
-			 else unsafe_array2vector a
+			 else unsafe_array2vector32 a
 	in  next 0
 	end
 
     fun unsafeSubstring (_, _, 0w0) = ""
-      | unsafeSubstring (s : string, i, 0w1) = unsafe_vsub (chars, uint8touint32 (unsafe_vsub (s, i)))
+      | unsafeSubstring (s : string, i, 0w1) = unsafe_vsub32 (chars, uint8touint32 (unsafe_vsub (s, i)))
       | unsafeSubstring (s, i, n) =
 	let
 	    val ss = unsafeCreate (uint32toint32 n)
@@ -89,7 +95,7 @@ structure PreString =
 	in  copy 0w0
 	end
 
-    fun size (x : string) : int = TiltPrim.uint32toint32(TiltPrim.vector_length x)
+    fun size (x : string) : int = TiltPrim.uint32toint32(TiltPrim.vector_length8 x)
 
   (* concatenate a pair of non-empty strings *)
     fun concat2 (x, y) =

@@ -12,10 +12,11 @@ structure Char :> CHAR where type char = char
     val && = TiltPrim.&&
     val uplus = TiltPrim.uplus
     val ult = TiltPrim.ult
-    val unsafe_sub = TiltPrim.unsafe_sub
-    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_sub8 = TiltPrim.unsafe_sub8
+    val unsafe_update8 = TiltPrim.unsafe_update8
     val unsafe_vsub = TiltPrim.unsafe_vsub
-    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_vsub8 = TiltPrim.unsafe_vsub8
+    val unsafe_array8 = TiltPrim.unsafe_array8
 ;(*
     structure C = InlineT.Char
 
@@ -69,9 +70,9 @@ structure Char :> CHAR where type char = char
       fun mkArray (s, sLen) =
 	  let
 	      val sLen = int32touint32 sLen
-	      val ca = unsafe_array (int32touint32 (maxOrd+1),#"\000")
+	      val ca = unsafe_array8 (int32touint32 (maxOrd+1),#"\000")
 	      fun ins i = if ult(i,sLen)
-			      then (unsafe_update (ca, ord'(unsafe_vsub(s, i)), #"\001");
+			      then (unsafe_update8 (ca, ord'(unsafe_vsub8(s, i)), #"\001");
 				    ins(uplus(i,0w1)))
 			  else ()
 	      val _ = ins 0w0
@@ -83,10 +84,10 @@ structure Char :> CHAR where type char = char
 	    let val sLen = PreString.size s
 	    in
 		if (sLen = 1)
-		    then let val c' = unsafe_vsub(s, 0w0)
+		    then let val c' = unsafe_vsub8(s, 0w0)
 			 in fn c => (c = c') end
 		else let val cv = mkArray (s, sLen)
-		     in fn c => (unsafe_sub(cv, ord' c) <> #"\000")
+		     in fn c => (unsafe_sub8(cv, ord' c) <> #"\000")
 		     end
 	    end
 	fun notContains "" = (fn c => true)
@@ -94,10 +95,10 @@ structure Char :> CHAR where type char = char
 	    let val sLen = PreString.size s
 	    in
 		if (sLen = 1)
-		    then let val c' = unsafe_vsub(s,0w0)
+		    then let val c' = unsafe_vsub8(s,0w0)
 			 in fn c => (c <> c') end
 		else let val cv = mkArray (s, sLen)
-		     in fn c => (unsafe_sub(cv, ord' c) = #"\000")
+		     in fn c => (unsafe_sub8(cv, ord' c) = #"\000")
 		     end
 	    end
     end (* local *)
@@ -132,7 +133,7 @@ structure Char :> CHAR where type char = char
 	    \\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
 	  \"
     fun inSet (c : char, s : word) = let
-	  val m = int32touint32(ord(unsafe_vsub(ctypeTbl, int32touint32 (ord c))))
+	  val m = int32touint32(ord(unsafe_vsub8(ctypeTbl, int32touint32 (ord c))))
 	  in  &&(m, s) <> 0w0
 	  end
 

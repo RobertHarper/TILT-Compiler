@@ -38,11 +38,13 @@ structure Lil :> LIL =
       Int_c of size                           (* register integers *)
     | Float_c                          (* register floating-points *)
     | Boxed_c of size                         (* boxed values *)
+    | Embed_c of size
     | Void_c
     | Tuple_c
     | Dyntag_c
     | Array_c of size                         (* arrays *)
     | Tag_c
+    | Ref_c 
     | Sum_c                                   (* tagcount, carriers *)
     | KSum_c                                  (* which, tagcount, carriers *)
     | Exists_c
@@ -83,10 +85,10 @@ structure Lil :> LIL =
     | InjForget   (*Composite inject and forget *)
     withtype coercion = ctag * con list (* Coercion and decorations*)
 
-    datatype primarg = arg32 of sv32 | arg64 of sv64
+    datatype primarg = slice of size * sv32 | arg32 of sv32 | arg64 of sv64
     and sv64 = 
       Var_64 of var 
-      | Const_64 of (con,primarg) Prim.value
+      | Const_64 of value
     and sv32 = 
       Var_32 of var 
       | Label of label
@@ -94,9 +96,10 @@ structure Lil :> LIL =
       | Coerce of sv32 * sv32 
       | Tabs of (var * kind) * sv32
       | TApp of sv32 * con
-      | Const_32 of (con,primarg) Prim.value
+      | Const_32 of value
       | Tag of w32		(*  w32 *)
       | Unit
+    withtype value = (con,primarg) Prim.value
 
 
     datatype op64 = 
@@ -110,10 +113,12 @@ structure Lil :> LIL =
       | Tuple 			(*  sv32 list *)
       | Select of w32		(*  w32 * sv32 *)
       | Dyntag 			(*  con *)
+      | Ptreq                   (* sv32 * sv32 *)
 
     datatype op32 = 
       Val of sv32 
       | Prim32 of Prim.prim * con list * primarg list
+      | PrimEmbed of size * Prim.prim * primarg list
       | LilPrimOp32 of lilprimop32 * con list * sv32 list * sv64 list
       | ExternApp of sv32 * sv32 list * sv64 list
       | App of sv32 * sv32 list * sv64 list
@@ -148,7 +153,7 @@ structure Lil :> LIL =
     and switch = 
       Sumcase of   {arg : sv32,arms :(w32  * var * exp) list,         default: exp option, rtype : con}
       | Dyncase of {arg : sv32,arms :(sv32 * (var * con) * exp) list, default: exp,        rtype : con}
-      | Intcase of {arg : sv32,arms :(w32 * exp) list,                default: exp,        rtype : con}
+      | Intcase of {arg : sv32,arms :(w32 * exp) list,size : size,    default: exp,        rtype : con}
       | Ifthenelse of {arg : conditionCode,  (* Ifnonzero arg.  If arg <> Tag 0 then thenArm else elseArm *)
 		       thenArm : exp,
 		       elseArm : exp,
@@ -164,7 +169,7 @@ structure Lil :> LIL =
     (* Invariant: data is closed *)
     datatype data = 
       Dboxed of label * sv64 
-      | Darray of label * size * con * sv32 list
+      | Darray of label * size * con * value list
       | Dtuple of label * con * sv32 option * sv32 list  (* l : c = sv @ <svs> *)
       | Dcode of label * function
       
@@ -386,7 +391,9 @@ structure Lil :> LIL =
 	      | Forall_c   => hash[h,0w2013]
 	      | Rec_c      => hash[h,0w2014]
 	      | ExternArrow_c s => hash[h,0w2015,size2word s]
-	      | Coercion_c => hash[h,0w2016])
+	      | Coercion_c => hash[h,0w2016]
+	      | Embed_c s  => hash[h,0w2017,size2word s]
+	      | Ref_c      => hash[h,0w2018])
 
 	fun hashVal c_ =
 	  (case c_
@@ -507,7 +514,11 @@ structure Lil :> LIL =
       val externarrow8 = {c=Prim_c(ExternArrow_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(ExternArrow_c B8))), cvars = VarSet.empty}
       val coercion = {c=Prim_c(Coercion_c), id=new_stamp(), whnf=ref (SOME(Prim_c(Coercion_c))), cvars = VarSet.empty}
       val star = {c=Star_c, id=new_stamp(), whnf=ref (SOME Star_c), cvars = VarSet.empty}
-
+      val refc = {c=Prim_c Ref_c, id=new_stamp(), whnf=ref (SOME (Prim_c Ref_c)), cvars = VarSet.empty}
+      val embed1 = {c=Prim_c(Embed_c B1), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B1))), cvars = VarSet.empty}
+      val embed2 = {c=Prim_c(Embed_c B2), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B2))), cvars = VarSet.empty}
+      val embed4 = {c=Prim_c(Embed_c B4), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B4))), cvars = VarSet.empty}
+      val embed8 = {c=Prim_c(Embed_c B8), id=new_stamp(), whnf=ref (SOME(Prim_c(Embed_c B8))), cvars = VarSet.empty}
       val nat_cached = 32
       fun mknat i = 
 	let
@@ -519,6 +530,7 @@ structure Lil :> LIL =
 
       fun hash_con (c_ : con_,whnf,frees) = 
 	let
+
 (*	  val () = 
 	    (case ColMap.find (!collisions,ConKey.hashVal c_)
 	       of SOME cs => if List.exists (fn c_' => ConKey.sameKey (c_,c_')) cs 
@@ -583,7 +595,14 @@ structure Lil :> LIL =
 		  | B1 => externarrow1
 		  | B2 => externarrow2
 		  | B8 => externarrow8)
-	    | Coercion_c => coercion)
+	    | Coercion_c => coercion
+	    | Ref_c => refc
+	    | Embed_c s => 
+		 (case s 
+		    of B1 => embed1
+		     | B2 => embed2
+		     | B4 => embed4
+		     | B8 => embed8))
 	         
       fun mk_con (con : con_) : con = 
 	let 
@@ -648,6 +667,7 @@ structure Lil :> LIL =
     structure KindSet   = SplaySetFn(KindKey)
 
     fun reset_tables () = (reset_kind_table();reset_con_table())
+
     fun report () = {csize = CT.numItems (!con_table),
 		     ksize = KT.numItems (!kind_table),
 		     cbuckets = CT.bucketSizes (!con_table),

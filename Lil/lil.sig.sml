@@ -36,10 +36,12 @@ signature LIL =
       Int_c of size                           (* register integers *)
     | Float_c                          (* register floating-points *)
     | Boxed_c of size                         (* boxed values *)
+    | Embed_c of size
     | Void_c
     | Tuple_c
     | Dyntag_c
     | Array_c of size                         (* arrays *)
+    | Ref_c
     | Tag_c
     | Sum_c                                   (* tagcount, carriers *)
     | KSum_c                                  (* which, tagcount, carriers *)
@@ -81,10 +83,10 @@ signature LIL =
     | InjForget   (*Composite inject and forget *)
     withtype coercion = ctag * con list (* Coercion and decorations*)
 
-    datatype primarg = arg32 of sv32 | arg64 of sv64
+    datatype primarg = slice of size * sv32 | arg32 of sv32 | arg64 of sv64
     and sv64 = 
       Var_64 of var 
-      | Const_64 of (con,primarg) Prim.value
+      | Const_64 of value
     and sv32 = 
       Var_32 of var 
       | Label of label
@@ -92,9 +94,10 @@ signature LIL =
       | Coerce of sv32 * sv32 
       | Tabs of (var * kind) * sv32
       | TApp of sv32 * con
-      | Const_32 of (con,primarg) Prim.value
+      | Const_32 of value
       | Tag of w32		(*  w32 *)
       | Unit
+    withtype value = (con,primarg) Prim.value
 
 
     datatype op64 = 
@@ -108,10 +111,12 @@ signature LIL =
       | Tuple 			(*  sv32 list *)
       | Select of w32		(*  w32 * sv32 *)
       | Dyntag 			(*  con *)
+      | Ptreq                   (* sv32 * sv32 *)
 
     datatype op32 = 
       Val of sv32 
       | Prim32 of Prim.prim * con list * primarg list
+      | PrimEmbed of size * Prim.prim * primarg list
       | LilPrimOp32 of lilprimop32 * con list * sv32 list * sv64 list
       | ExternApp of sv32 * sv32 list * sv64 list
       | App of sv32 * sv32 list * sv64 list
@@ -146,7 +151,7 @@ signature LIL =
     and switch = 
       Sumcase of   {arg : sv32,arms :(w32  * var * exp) list,         default: exp option, rtype : con}
       | Dyncase of {arg : sv32,arms :(sv32 * (var * con) * exp) list, default: exp,        rtype : con}
-      | Intcase of {arg : sv32,arms :(w32 * exp) list,                default: exp,        rtype : con}
+      | Intcase of {arg : sv32,arms :(w32 * exp) list, size : size,   default: exp,        rtype : con}
       | Ifthenelse of {arg : conditionCode,  (* Ifnonzero arg.  If arg <> Tag 0 then thenArm else elseArm *)
 		       thenArm : exp,
 		       elseArm : exp,
@@ -162,7 +167,7 @@ signature LIL =
     (* Invariant: data is closed *)
     datatype data = 
       Dboxed of label * sv64 
-      | Darray of label * size * con * sv32 list
+      | Darray of label * size * con * value list
       | Dtuple of label * con * sv32 option * sv32 list  (* l : c = sv @ <svs> *)
       | Dcode of label * function
       

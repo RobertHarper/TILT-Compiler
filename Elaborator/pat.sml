@@ -624,7 +624,7 @@ struct
 	   of Int lit => [(IntLit (lit, W32), CON_INT W32)]
 	    | Word lit => [(IntLit (lit, W32), CON_UINT W32),
 			   (IntLit (lit, W8), CON_UINT W8)]
-	    | String str => [(StringLit str, CON_VECTOR(CON_UINT W8))]
+	    | String str => [(StringLit str, CON_INTVECTOR W8)]
 	    | Char str => [(CharLit str, CON_UINT W8)]
 	    | _ => abort' "conLiteral: pattern is not literal")
 
@@ -642,7 +642,7 @@ struct
 		 end
 	   | StringLit str =>
 		 let fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
-		     val str = SCON(vector (CON_UINT W8, Array.fromList(map mapper (explode str))))
+		     val str = SCON(intvector (W8, Array.fromList(map mapper (explode str))))
 		 in  APP(U.string_eq context, U.exp_tuple[VAR v, str])
 		 end
 	   | CharLit cstr =>
@@ -712,7 +712,7 @@ struct
 
 	    (* bind a new variable for the contents of the ref *)
 	    val v = N.fresh_var()
-	    val bnd = BND_EXP(v,ILPRIM(deref,[elemcon],[VAR var]))
+	    val bnd = BND_EXP(v,PRIM(deref,[elemcon],[VAR var]))
 	    val newarg = (v,elemcon)
 	    val newargs = newarg::restArgs
 	    val newarms = map (fn (p,rule) => extendBaseRule context (rule, p, newarg)) info_arms

@@ -85,6 +85,7 @@ structure Linklil :> LINKLIL  =
     val lilclose       = makeEntry (true, "LilClose")
     val optimize1      = makeEntry (true, "LilOptimize1")
     val optimize2      = makeEntry (true, "LilOptimize2")
+    val optimize3      = makeEntry (true, "LilOptimize3")
       
     val error = fn s => Util.error "linklil.sml" s
 
@@ -153,6 +154,8 @@ structure Linklil :> LINKLIL  =
 	val lilmod = transform lilclose (LilClosure.close_mod, lilmod)
 	 
 	val lilmod = transform optimize2 (LilOptimize.optimize {doCse = true},lilmod) 
+
+	val lilmod = transform optimize3 (LilOptimize.optimize {doCse = true},lilmod) 
 
 	val () = gc()
 

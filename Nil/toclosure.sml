@@ -87,8 +87,6 @@ Some Factoids:
   - The closure converter DOES seem to support Typecase_c and Typecase_e; I do not
   know whether this support is correct or not.
 
-  - At the moment, closure conversion introduces Typeof's.  Look in fun_rewrite.
-
   - Closure conversion DOES require correct trace annotations and constructor
   phase annotations.  Trace annotations are used to identify wide (i.e., float)
   values that must be boxed when building environments; constructor phase matters as
@@ -794,18 +792,27 @@ struct
 		      (Prim.int _)  => frees
 		    | (Prim.uint _) => frees
 		    | (Prim.float _) => frees
-		    | Prim.array (c,array) =>
-			  let fun folder(e,f) = e_find_fv (state,f) e
-			      val f = Array.foldl folder frees array
-			  in  t_find_fv (state,f) c
-			  end
 		    | Prim.vector (c,array) =>
 			  let fun folder(e,f) = e_find_fv (state,f) e
 			      val f = Array.foldl folder frees array
 			  in  t_find_fv (state,f) c
 			  end
+		    | Prim.intvector (sz,array) =>
+			  let fun folder(e,f) = e_find_fv (state,f) e
+			      val f = Array.foldl folder frees array
+			  in  f
+			  end
+		    | Prim.floatvector (sz,array) =>
+			  let fun folder(e,f) = e_find_fv (state,f) e
+			      val f = Array.foldl folder frees array
+			  in  f
+			  end
 		    | Prim.refcell (ref e) => e_find_fv(state,frees) e
-		    | Prim.tag (_,c) => t_find_fv (state,frees) c)
+		    | Prim.tag (_,c) => t_find_fv (state,frees) c
+		    | Prim.array (c,array) => error "Array constants not supported"
+		    | Prim.intarray (c,array) => error "Array constants not supported"
+		    | Prim.floatarray (c,array) => error "Array constants not supported"
+			  )
 	   | Let_e (_,bnds,e) => (* treat as though a sequential let *)
 		      let val (bndfree,state') = foldl bnd_find_fv (frees,state) bnds
 		      in  e_find_fv (state',bndfree) e
@@ -953,9 +960,17 @@ struct
 			    let val _ = add_fun v
 				val ls = copy_state s (v,[v])
 				val (f,ls) = vklist_find_fv (vklist,(f,ls))
-				val f' = c_find_fv (ls,f) c
-				val _ = add_frees(v,f')
-			    in  (remove_free(s,f'), add_boundcvar(s,v))
+				val f = c_find_fv (ls,f) c
+
+				(* Generate a new copy of our free variables, with fresh derived names, *)
+				(* to store as the free vars of this function.  The f we just computed will *)
+				(* be returned, and counted among the free vars of the next level out. joev *)
+				fun cfolder(v,_,f) = free_cvar_add(f,v)
+				val {free_evars,free_cvars} = f
+				val lf = VarMap.foldli cfolder empty_frees free_cvars
+
+				val _ = add_frees(v,lf)
+			    in  (remove_free(s,f), add_boundcvar(s,v))
 			    end)
 
     and c_find_fv' (state : state, frees : frees) con : frees =
@@ -1566,28 +1581,32 @@ struct
 			 then (print "  cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		     else ()
 	     val (code_var, cenv_var, vkl_free, cbnds, subst) =
-		 if (is_fid v)
-		     then let val {code_var, cenv_var, ...} = get_static v
-			      val {free_cvars,...} = get_frees v    (* free_evars must be empty *)
-			      fun folder ((v,v'),subst) =
-				let val k = Single_k(Var_c v)
-				    val l = Name.internal_label(Name.var2string v)
-				    val c = Proj_c(Var_c cenv_var, l)
-				in  (((v,k,l), Con_cb(v',c)), NilSubst.C.sim_add subst (v,c))
-				end
-			      val (temp, subst) = Listops.foldl_acc folder (NilSubst.C.empty())
-							(VarMap.listItemsi free_cvars)
-			      val (vkl_free, cbnds) = Listops.unzip temp
-			  in  (code_var, cenv_var, vkl_free, cbnds, subst)
-			  end
-		 else  (if !debug then
-				(print "UNCLOSED: ";
-				Ppnil.pp_var v;
-				print "\n")
-			else ();
+	       if (is_fid v)
+		 then 
+		   let 
+		     val {code_var, cenv_var, ...} = get_static v
+		     val {free_cvars,...} = get_frees v    (* free_evars must be empty *)
+		     fun folder ((v,v'),subst) =
+		       let 
+			 val k = Single_k(Var_c v)
+			 val l = Name.internal_label(Name.var2string v)
+			 val c = Proj_c(Var_c cenv_var, l)
+		       in  
+			 (((v,k,l), Con_cb(v',c)), NilSubst.C.sim_add subst (v,c))
+		       end
+		     val (temp, subst) = Listops.foldl_acc folder (NilSubst.C.empty())
+		       (VarMap.listItemsi free_cvars)
+		     val (vkl_free, cbnds) = Listops.unzip temp
+		   in  (code_var, cenv_var, vkl_free, cbnds, subst)
+		   end
+	       else  (if !debug then
+			(print "UNCLOSED: ";
+			 Ppnil.pp_var v;
+			 print "\n")
+		      else ();
 			(Name.fresh_named_var "unclosed_open_cb",
-			Name.fresh_named_var "unclosed_open_cb_cenv",
-			[], [], NilSubst.C.empty()))
+			 Name.fresh_named_var "unclosed_open_cb_cenv",
+			 [], [], NilSubst.C.empty()))
 
 
 	     val vklist = vklist_rewrite state vklist

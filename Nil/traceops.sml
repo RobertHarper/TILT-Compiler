@@ -18,7 +18,12 @@ struct
      | BoxFloat_c _ => SOME TI.Trace
      | Exn_c => SOME TI.Trace
      | Array_c => SOME TI.Trace
+     | IntArray_c _ => SOME TI.Trace
+     | FloatArray_c _ => SOME TI.Trace
      | Vector_c => SOME TI.Trace
+     | IntVector_c _ => SOME TI.Trace
+     | FloatVector_c _ => SOME TI.Trace
+     | Ref_c => SOME TI.Trace
      | Loc_c => error "what do I do with a locative?"
      | Exntag_c => SOME TI.Notrace_Int
      | Record_c _ => SOME TI.Trace

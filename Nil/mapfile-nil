@@ -90,6 +90,7 @@ source unit NilUtil : NilUtil = "nilutil.sml" {
 	Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops
 	Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option
 	ListPair List TraceInfo Stats Int NilDefs NilRename GraphUtil Frees
+	CompilerControl
 }
 
 source unit TRAIL = "trail.sig.sml" {Nil}
@@ -107,7 +108,7 @@ source unit NilContextPre : NilContextPre = "nilcontextpre.sml" {
 
 source unit NilPrimUtilParam = "nilprimutilparam.sml" {
 	Sequence Name Symbol Listops NIL PRIMUTILPARAM Prim Int Nil
-	IlUtil NilContextPre TilWord32 TraceInfo Stats
+	IlUtil NilContextPre TilWord32 TraceInfo Stats CompilerControl
 }
 source unit NilPrimUtil = "nilprimutil.sml" {
 	PrimUtil NilPrimUtilParam
@@ -120,7 +121,7 @@ source interface Normalize = "normalize.int" {NORMALIZE}
 source unit Normalize : Normalize = "normalize.sml" {
 	Name List Sequence Listops Int Util NilError NilRename Stats Prim
 	Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst
-	NORMALIZE NilPrimUtil NilDefs
+	NORMALIZE NilPrimUtil NilDefs CompilerControl
 }
 
 source unit NILCONTEXT = "nilcontext.sig.sml" {Nil NILCONTEXTPRE}
@@ -168,7 +169,7 @@ source unit REIFY = "reify.sig.sml" {Nil}
 source unit Reify = "reify.sml" {
 	Stats NilRename Normalize List Nil NilContext NilUtil Util
 	Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs
-	ListPair NilSubst Prim NilStatic
+	ListPair NilSubst Prim NilStatic CompilerControl
 }
 
 source unit TOCLOSURE = "toclosure.sig.sml" {Nil}
@@ -193,7 +194,7 @@ source unit Optimize : Optimize = "optimize.sml" {
 	Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64
 	TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize
 	OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs
-	ListPair NilStatic Vararg
+	ListPair NilStatic Vararg NilSubst CompilerControl
 }
 
 source unit SPECIALIZE = "specialize.sig.sml" {Nil}
@@ -209,7 +210,7 @@ source unit ToNil : ToNil = "tonil.sml" {
 	Name Listops Util Sequence List Prim Tyvar Int Word32 Array
 	TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil
 	NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL
-	Option NilPrimUtil NilDefs ListPair NilRename
+	Option NilPrimUtil NilDefs ListPair NilRename CompilerControl
 }
 
 source unit PASS = "pass.sig.sml" {Nil}
@@ -268,5 +269,6 @@ source unit Linknil : Linknil = "linknil.sml" {
 	ToNil Optimize Specialize Normalize Linearize ToClosure LINKNIL
 	Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic
 	Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim SingletonElim
+	CompilerControl
 }
 

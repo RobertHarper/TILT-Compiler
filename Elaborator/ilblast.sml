@@ -40,8 +40,8 @@ struct
 
         structure CTab = IlTable.Conmap
         val ctab : int CTab.map ref = ref CTab.empty
-        val initial_tab_count = 25  (* must be > any encoding
-                                        tag for a constructor! *)
+        val initial_tab_count = 30  (* must be > any encoding
+				     tag for a constructor! *)
         val ctab_count = ref initial_tab_count
         val itab : con IntListMap.map ref = ref IntListMap.empty
         val itab_count = ref initial_tab_count
@@ -274,7 +274,12 @@ struct
 	       | CON_TUPLE_PROJECT (i,c) => (blastOutInt 17; blastOutInt i; blastOutCon c)
 	       | CON_MODULE_PROJECT (m,l) => (blastOutInt 18; blastOutMod m; blastOutLabel l)
 	       | CON_COERCION (vs,c1,c2) =>
-		     (blastOutInt 19; blastOutList blastOutVar vs; blastOutCon c1; blastOutCon c2))
+		     (blastOutInt 19; blastOutList blastOutVar vs; blastOutCon c1; blastOutCon c2)
+	       | CON_INTARRAY is => (blastOutInt 20; blastOutIS is)
+	       | CON_INTVECTOR is => (blastOutInt 21; blastOutIS is)
+	       | CON_FLOATARRAY fs => (blastOutInt 22; blastOutFS fs)
+	       | CON_FLOATVECTOR fs => (blastOutInt 23; blastOutFS fs)
+		     )
 
 
         and blastInCon () =
@@ -346,6 +351,10 @@ struct
 	       | 17 => CON_TUPLE_PROJECT (blastInInt(), blastInCon ())
 	       | 18 => CON_MODULE_PROJECT (blastInMod (), blastInLabel ())
 	       | 19 => CON_COERCION (blastInList blastInVar, blastInCon (), blastInCon ())
+	       | 20 => CON_INTARRAY (blastInIS ())
+	       | 21 => CON_INTVECTOR(blastInIS ())
+	       | 22 => CON_FLOATARRAY (blastInFS ())
+	       | 23 => CON_FLOATVECTOR (blastInFS ())
 	       | _ => error "bad blastInCon")
 
 	and blastOutValue v =
@@ -374,11 +383,7 @@ struct
 		   | or_uint is => (blastOutInt 4; blastOutIS is)
 		   | xor_uint is => (blastOutInt 5; blastOutIS is)
 		   | lshift_uint is => (blastOutInt 6; blastOutIS is)
-
-		   | mk_ref => (blastOutInt 7)
-		   | deref => (blastOutInt 8)
-		   | eq_ref => (blastOutInt 9)
-		   | setref => (blastOutInt 10))
+		       )
 	    end
 
 	and blastInIlPrim () =
@@ -391,11 +396,6 @@ struct
 		   | 4 => or_uint(blastInIS ())
 		   | 5 => xor_uint(blastInIS ())
 		   | 6 => lshift_uint(blastInIS ())
-
-		   | 7 => mk_ref
-		   | 8 => deref
-		   | 9 => eq_ref
-		   | 10 => setref
 		   | _ => error "bad blastInIlPrim")
 	    end
 
@@ -517,7 +517,11 @@ struct
 		   | sub t => (blastOutInt 61; blastOutTable t)
 		   | update t => (blastOutInt 62; blastOutTable t)
 		   | length_table t => (blastOutInt 63; blastOutTable t)
-		   | equal_table t => (blastOutInt 64; blastOutTable t))
+		   | equal_table t => (blastOutInt 64; blastOutTable t)		   
+		   | mk_ref => (blastOutInt 65)
+		   | deref => (blastOutInt 66)
+		   | eq_ref => (blastOutInt 67)
+		   | setref => (blastOutInt 68))
 
 
 
@@ -600,6 +604,11 @@ struct
 		   | 62 => update (blastInTable ())
 		   | 63 => length_table (blastInTable ())
 		   | 64 => equal_table (blastInTable ())
+
+		   | 65 => mk_ref
+		   | 66 => deref
+		   | 67 => eq_ref
+		   | 68 => setref
 
 		   | _ => error "bad blastInPrim")
 

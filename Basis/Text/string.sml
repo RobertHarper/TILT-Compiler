@@ -13,12 +13,13 @@ structure String :> STRING where type string = string
     val uint32toint32 = TiltPrim.uint32toint32
     val uint8touint32 = TiltPrim.uint8touint32
 
-    val unsafe_array = TiltPrim.unsafe_array
-    val unsafe_update = TiltPrim.unsafe_update
-    val unsafe_vsub = TiltPrim.unsafe_vsub
-    val vector_length = TiltPrim.vector_length
+    val unsafe_array8 = TiltPrim.unsafe_array8
+    val unsafe_update8 = TiltPrim.unsafe_update8
+    val unsafe_vsub8 = TiltPrim.unsafe_vsub8
+    val vector_length8 = TiltPrim.vector_length8
+    val unsafe_array2vector8 = TiltPrim.unsafe_array2vector8
 
-    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+    val unsafe_vsub32 = TiltPrim.unsafe_vsub
 
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
@@ -45,25 +46,25 @@ structure String :> STRING where type string = string
   (* the length of a string *)
     val i2w = int32touint32
     val w2i = uint32toint32
-    fun size(x : string) : int = uint32toint32(vector_length x)
+    fun size(x : string) : int = uint32toint32(vector_length8 x)
 
 
   (* allocate an uninitialized string of given length *)
-	fun create sz : char array = if (sz>0)
-					 then unsafe_array(i2w sz,#"\000")
-				     else raise Size
+    fun create sz : word8array = if (sz>0)
+				   then unsafe_array8(i2w sz,#"\000")
+				 else raise Size
 
 
   (* convert a character into a single character string *)
     fun str (c : Char.char) : string =
-	  unsafe_vsub(PreString.chars, uint8touint32 c)
+	  unsafe_vsub32(PreString.chars, uint8touint32 c)
 
   (* get a character from a string *)
     fun sub(x : string, i : int) =
 	let val index = int32touint32 i
-	in  if (ugte(index, vector_length x))
+	in  if (ugte(index, vector_length8 x))
 		then raise Subscript
-	    else unsafe_vsub(x,index)
+	    else unsafe_vsub8(x,index)
 	end
 
     fun substring (s, i, n) =
@@ -75,17 +76,17 @@ structure String :> STRING where type string = string
 	  val len = size v
 	  val base' = i2w base
 	  fun newVec n = let
-		val newV : char array = create n
+		val newV : word8array = create n
 		val n = i2w n
 		fun fill (i : word) = if ult(i,n)
 		      then let val temp : word = uplus(base',i)
-			       val c : char = unsafe_vsub(v,temp)
+			       val c : char = unsafe_vsub8(v,temp)
 			       val i' : word = uplus(i,0w1)
-			  in  (unsafe_update(newV, i, c);
+			  in  (unsafe_update8(newV, i, c);
 			       fill i')
 			   end
 		      else ()
-		in  fill 0w0; unsafe_array2vector newV
+		in  fill 0w0; unsafe_array2vector8 newV
 		end
 	  in
 	    case (base, optLen)
@@ -101,7 +102,7 @@ structure String :> STRING where type string = string
 	      | (_, SOME 1) =>
 		  if ((base < 0) orelse (len < base+1))
 		    then raise General.Subscript
-		    else str(unsafe_vsub(v, i2w base))
+		    else str(unsafe_vsub8(v, i2w base))
 	      | (_, SOME n) =>
 		  if ((base < 0) orelse (n < 0) orelse (len < (base+n)))
 		    then raise General.Subscript
@@ -136,15 +137,15 @@ structure String :> STRING where type string = string
 		      fun copy' j = if (j = len)
 			    then ()
 			    else (
-			      unsafe_update(ss, uplus(i,j),
-					    unsafe_vsub(s, j));
+			      unsafe_update8(ss, uplus(i,j),
+					    unsafe_vsub8(s, j));
 			      copy'(uplus(j,0w1)))
 		      in
 			copy' 0w0;
 			copy (r, uplus(i,len))
 		      end
 		in
-		  copy (sl, 0w0);  unsafe_array2vector ss
+		  copy (sl, 0w0);  unsafe_array2vector8 ss
 		end
 	  (* end case *)
 	end (* concat *)
@@ -161,7 +162,7 @@ structure String :> STRING where type string = string
   (* explode a string into a list of characters *)
     fun explode s = let
 	  fun f(l, ~1) = l
-	    | f(l,  i) = f(unsafe_vsub(s, i2w i) :: l, i-1)
+	    | f(l,  i) = f(unsafe_vsub8(s, i2w i) :: l, i-1)
 	  in
 	    f(nil, size s - 1)
 	  end
@@ -172,11 +173,11 @@ structure String :> STRING where type string = string
 		val newVec = create len
 		val len = i2w len
 		fun mapf i = if ult(i,len)
-		      then (unsafe_update(newVec, i,
-					 f(unsafe_vsub(vec, i)));
+		      then (unsafe_update8(newVec, i,
+					 f(unsafe_vsub8(vec, i)));
 			    mapf(uplus(i,0w1)))
 		      else ()
-		in  mapf 0w0; unsafe_array2vector newVec
+		in  mapf 0w0; unsafe_array2vector8 newVec
 		end
 	  (* end case *))
 
@@ -192,12 +193,12 @@ structure String :> STRING where type string = string
 		then l
 		else PreString.unsafeSubstring(s, i2w i, i2w(j-i))::l
 	  fun scanTok (i, j, toks) = if (j < n)
-		  then if (isDelim (unsafe_vsub (s, i2w j)))
+		  then if (isDelim (unsafe_vsub8 (s, i2w j)))
 		    then skipSep(j+1, substr(i, j, toks))
 		    else scanTok (i, j+1, toks)
 		  else substr(i, j, toks)
 	  and skipSep (j, toks) = if (j < n)
-		  then if (isDelim (unsafe_vsub (s, i2w j)))
+		  then if (isDelim (unsafe_vsub8 (s, i2w j)))
 		    then skipSep(j+1, toks)
 		    else scanTok(j, j+1, toks)
 		  else toks
@@ -208,7 +209,7 @@ structure String :> STRING where type string = string
 	  val n = size s
 	  fun substr (i, j, l) = PreString.unsafeSubstring(s, i2w i, i2w(j-i))::l
 	  fun scanTok (i, j, toks) = if (j < n)
-		  then if (isDelim (unsafe_vsub (s, i2w j)))
+		  then if (isDelim (unsafe_vsub8 (s, i2w j)))
 		    then scanTok (j+1, j+1, substr(i, j, toks))
 		    else scanTok (i, j+1, toks)
 		  else substr(i, j, toks)
@@ -228,8 +229,8 @@ structure String :> STRING where type string = string
 	  fun cmp i = if (i = n)
 		then (al > bl)
 		else let
-		  val ai = unsafe_vsub(a,i2w i)
-		  val bi = unsafe_vsub(b,i2w i)
+		  val ai = unsafe_vsub8(a,i2w i)
+		  val bi = unsafe_vsub8(b,i2w i)
 		  in
 		    Char.>(ai, bi) orelse ((ai = bi) andalso cmp(i+1))
 		  end
@@ -245,7 +246,7 @@ structure String :> STRING where type string = string
     fun fromString s = let
 	  val len = i2w(size s)
 	  fun getc i = if ult(i,len)
-		then SOME(unsafe_vsub(s, i), uplus(i,0w1))
+		then SOME(unsafe_vsub8(s, i), uplus(i,0w1))
 		else NONE
 	  val scanChar = Char.scan getc
 	  fun accum (i, chars) = (case (scanChar i)

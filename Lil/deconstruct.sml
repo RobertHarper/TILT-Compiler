@@ -1,4 +1,8 @@
-
+(* Deconstructor functions for the LIL.
+ * 
+ * Leaf Petersen (2003)
+ *
+ *)
 
 signature STRIP =
   sig
@@ -382,6 +386,11 @@ local
 	      (fn (Boxed_c s, c) => SOME (s,c) | _ => NONE)
 	    val boxed = opt_out "Not a boxed type" boxed'
 
+	    fun embed' c = 
+	      obind (prim1' c)
+	      (fn (Embed_c s, c) => SOME (s,c) | _ => NONE)
+	    val embed = opt_out "Not an embedded type" embed'
+
 	    fun externarrow' c = 
 	      obind (prim3' c)
 	      (fn (ExternArrow_c s, args,fargs,res) => SOME (s,args,fargs,res) | _ => NONE)
@@ -706,6 +715,15 @@ structure Deconstruct :> DECONSTRUCT =
 
 	    val coerce = opt_out "Not a coerce" coerce'
 
+	    fun coercen sv =
+	      let
+		fun loop (qs,sv) = 
+		  (case coerce' sv
+		     of SOME (q,sv) => loop (q::qs,sv)
+		      | NONE => (rev qs,sv))
+	      in loop ([],sv)
+	      end
+
 	    fun pack' sv = 
 	      obind (coerce' sv)
 	      (fn (q,sv) => obind (Q.pack' q)
@@ -735,7 +753,16 @@ structure Deconstruct :> DECONSTRUCT =
 	      (fn (q,sv) => obind (Q.injforget' q)
 	       (fn ksum => SOME (ksum,sv)))
 	    val injforget = opt_out "Not a injforget" injforget'
-	      	    
+	      	   
+	    fun delet e = 
+	      let
+		fun loop (e,acc) = 
+		  (case #e e
+		     of Let_e(bnds,e) => loop(e,List.revAppend (bnds,acc))
+		      | Val32_e sv => (rev acc,sv))
+	      in loop (e,[])
+	      end
+	      
 	  end
 	
 
@@ -1002,7 +1029,7 @@ structure Deconstruct :> DECONSTRUCT =
 	structure K = 
 	  struct
 	    (***************** Kind destructors *****************)
-
+	      
 	    fun app' k = obind (Dec.K.arrow' k) (fn (_,rk) => SOME rk)
 	    val app = opt_out "App of non-arrow kind" app'
 	    fun APP' k1 k = 
@@ -1091,6 +1118,10 @@ structure Deconstruct :> DECONSTRUCT =
 	    fun call c = 
 	      errbind "Not a code arrow" (Dec.C.code' c)
 	      (fn (args,fargs,rtype) => rtype)
+
+	    fun doslice c = 
+	      errbind "Not an embedded type" (Dec.C.embed' c)
+	      (fn (size,t) => t)
 
 	  end (* C *)
       end (* Elim *)

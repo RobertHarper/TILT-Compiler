@@ -37,6 +37,7 @@ signature CLOSURESTATE =
 	val add_boundcvar   : state * Lil.var -> state
 	val add_globalvar32 : state * Lil.var -> state
 	val add_globalcvar  : state * Lil.var -> state
+	val hide_globalcvar : state * Lil.var -> state
 
         (* A variable is local if it is bound locally or is a global *)
         val var32_islocal : state * Lil.var -> bool

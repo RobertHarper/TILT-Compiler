@@ -27,7 +27,7 @@ datatype 'a option = NONE | SOME of 'a
 datatype order = LESS | EQUAL | GREATER
 datatype 'a list = nil | :: of 'a * 'a list
 
-type string = char vector
+type string = word8vector
 
 (* exceptions *)
 exception Bind
@@ -42,10 +42,12 @@ exception Span
 exception Subscript
 
 (* values *)
+(* In TILTPRIM
 fun f o g = fn x => f(g x)
 fun a before b = a
 fun ignore _ = ()
-
+*)
+(* Should be in TILTprim *)
 fun not true = false
   | not false = true
 

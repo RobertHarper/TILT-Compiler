@@ -321,6 +321,18 @@ structure P :> PEXP =
 	  in result
 	  end
 
+	fun fold_acc (bndsfn : Lil.bnd * 'state -> 'state pexp)  (afn : 'a * 'state -> 'result pexp)  (state : 'state) ((rbnds,a) : 'a pexp) : 'result pexp * 'state = 
+	  let
+	    fun folder (bnd,(state,racc)) = 
+	      let
+		val (rbnds,state) = bndsfn (bnd,state)
+	      in (state,rbnds@racc)
+	      end
+	    val (state,rbnds) = foldr folder (state,[]) rbnds
+	    val (resbnds,res) = afn (a,state)
+	  in ((resbnds@rbnds,res),state)
+	  end
+
 	fun mapPartial mapper (bnds,sv) = 
 	  let
 	    fun loop [] = []

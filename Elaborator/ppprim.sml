@@ -31,11 +31,7 @@ structure Ppprim :> PPPRIM =
 	  | and_uint is => Hbox[String "AND_UINT", pp_is is]
 	  | or_uint is => Hbox[String "OR_UINT", pp_is is]
 	  | xor_uint is => Hbox[String "XOR_UINT", pp_is is]
-	  | lshift_uint is => Hbox[String "LSHIFT_UINT", pp_is is]
-          | mk_ref  => String "MK_REF"
-          | deref  => String "DEREF"
-	  | eq_ref => String "EQ_REF"
-	  | setref => String "SETREF")
+	  | lshift_uint is => Hbox[String "LSHIFT_UINT", pp_is is])
 
     fun pp_aggregate str t =
 	let val str2 = (case t of
@@ -171,7 +167,10 @@ structure Ppprim :> PPPRIM =
 	  | update t => pp_aggregate "update" t
 	  | length_table t => pp_aggregate "length" t
 	  | equal_table t => pp_aggregate "equal" t
-
+          | mk_ref  => String "MK_REF"
+          | deref  => String "DEREF"
+	  | eq_ref => String "EQ_REF"
+	  | setref => String "SETREF"
 (*	   | ARRAY2  {instance} => String "array2"
 	   | SUB2    {instance} => String "sub2" *)
 		 )
@@ -191,7 +190,11 @@ structure Ppprim :> PPPRIM =
 	  | uint (is,i) => String (doint (is,i))
 	  | float (_,s) => String s
 	  | array (c,a) => String "ArrayValue"
-	  | vector (_,a) =>
+	  | vector (c,a) => String "VectorValue"
+	  | floatarray (c,a) => String "FloatArrayValue"
+	  | floatvector (c,a) => String "FloatVectorValue"
+	  | intarray (c,a) => String "IntArrayValue"
+	  | intvector (_,a) =>
 		if ((Array.length a) > 0)
 		    then (case (exp2value(Array.sub(a,0))) of
 			      SOME(uint(W8,_)) =>

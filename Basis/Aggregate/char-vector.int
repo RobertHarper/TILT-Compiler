@@ -1,2 +1,2 @@
 structure CharVector : MONO_VECTOR where type elem = char
-				     and type vector = char vector 
+				     and type vector = word8vector 

@@ -148,7 +148,7 @@ structure Toil
 	    end
 
 	fun make_string_overload (context, s : string) : exp * con * bool =
-	    (SCON(vector (CON_UINT W8,
+	    (SCON(intvector (Prim.W8,
 			  Array.fromList
 			  (map (fn c => SCON(uint(W8,W.fromInt (ord c))))
 			   (explode s)))), con_string, true)
@@ -2206,6 +2206,7 @@ structure Toil
 		end
 	in  Equal.compile{polyinst_opt = polyinst_opt,
 			  vector_eq = vector_eq,
+			  word8vector_eq = IlUtil.word8vector_eq,
 			  bool = bool,
 			  context = ctxt,
 			  con = argcon}

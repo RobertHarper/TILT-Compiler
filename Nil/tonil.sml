@@ -108,6 +108,8 @@ struct
     *)
    val flatten_modules          = Stats.ff("flatten_modules")
 
+   val ref_is_array             = CompilerControl.RefIsArray
+
    (* The elaborator_specific_optimizations ref controls whether
       the phase-splitter should do some simple optimizations
       that rely upon knowing exactly how the elaborator
@@ -933,7 +935,6 @@ end (* local defining splitting context *)
      | xilprim (Prim.or_uint intsize)     = Prim.or_int intsize
      | xilprim (Prim.xor_uint intsize)     = Prim.xor_int intsize
      | xilprim (Prim.lshift_uint intsize) = Prim.lshift_int intsize
-     | xilprim _ = error "other ilprims should not get here"
 
 
    (* xmod.  Translation of an IL module.
@@ -2476,7 +2477,10 @@ end (* local defining splitting context *)
 	   val con = Prim_c (Vector_c, [con'])
        in  con
        end
-
+     | xcon' context (Il.CON_INTARRAY sz) = Prim_c (IntArray_c sz, [])
+     | xcon' context (Il.CON_INTVECTOR sz) = Prim_c (IntVector_c sz, [])
+     | xcon' context (Il.CON_FLOATARRAY sz) = Prim_c (FloatArray_c sz, [])
+     | xcon' context (Il.CON_FLOATVECTOR sz) = Prim_c (FloatVector_c sz, [])
      | xcon' context (Il.CON_ANY) =
        let
 	   val con = Prim_c(Exn_c, [])
@@ -2486,10 +2490,12 @@ end (* local defining splitting context *)
 
      | xcon' context (Il.CON_REF il_con) =
        let
-	   val con' = xcon context il_con
-	   val con = Prim_c (Array_c, [con'])
-       in
-	   con
+	 val con' = xcon context il_con
+       in 
+	 if !ref_is_array then
+	   Prim_c (Array_c, [con'])
+	 else
+	   Prim_c (Ref_c, [con'])
        end
 
      | xcon' context (Il.CON_TAG il_con) =
@@ -2752,6 +2758,21 @@ end (* local defining splitting context *)
 	   Const_e (Prim.vector (con, Array.fromList exps))
        end
 
+     | xvalue context (Prim.intvector (sz, v)) =
+       let
+	   val il_exps = Array.foldr (op ::) nil v
+	   val exps = map (xexp context) il_exps
+       in
+	   Const_e (Prim.intvector (sz, Array.fromList exps))
+       end
+     | xvalue context (Prim.floatvector (sz, v)) =
+       let
+	   val il_exps = Array.foldr (op ::) nil v
+	   val exps = map (xexp context) il_exps
+       in
+	   Const_e (Prim.floatvector (sz, Array.fromList exps))
+       end
+
      | xvalue context (Prim.refcell (ref il_exp)) =
          error "xvalue:  Can't translate ref cell constants \
                 \because sharing is lost"
@@ -2907,36 +2928,35 @@ end (* local defining splitting context *)
 		   | float2int => float_int F64
 		   | int2float => int_float F64
 		   | _ => (args,id))
+	   val (prim,args) = 
+	     if !ref_is_array then
+	       let
+		 (* Refs are represented as arrays in the rest of the compiler when 
+		  * compiling to alpha or sparc.  *)
+		 val zero = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 0))
+		 val one = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 1))
+		 val t = (Prim.OtherArray false)
+	       in
+		 case prim 
+		   of mk_ref => (create_table t,one::args)
+		    | deref => (sub t, args @[zero])
+		    | setref => (update t,(case args 
+					     of [a,b] => [a,zero,b]
+					      | _ => error "bad set_ref"))
+		    | eq_ref => (equal_table t,args)
+		    | _ => (prim,args)
+	       end
+	     else (prim,args)
        in
 	 wrap(Prim_e (PrimOp prim, [], cons, args))
        end
-
+     
      | xexp' context (il_exp as (Il.ILPRIM (ilprim, il_cons, il_args))) =
        let
 	   val cons = map (xcon context) il_cons
 	   val args = map (xexp context) il_args
-	   val zero = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 0))
-	   val one = Const_e (Prim.int (Prim.W32, TilWord64.fromInt 1))
-	   val t = (Prim.OtherArray false)
        in
-	 (* Translate away IL-only primitives. *)
-	 case ilprim of
-	     (* Refs are represented as arrays in the rest of the compiler *)
-	     Prim.mk_ref => Prim_e(PrimOp(Prim.create_table t),[],
-				   cons, one::args)
-	   | Prim.deref => Prim_e(PrimOp(Prim.sub t),[],
-				  cons, args @ [zero])
-	   | Prim.setref => Prim_e(PrimOp(Prim.update t),[],
-				  cons, case args of
-				          [a,b] => [a,zero,b]
-					| _ => error "bad set_ref")
-	   | Prim.eq_ref => Prim_e(PrimOp(Prim.equal_table t),[],
-				   cons, args)
-             (* The translation of the other IL-only primitives
-                is independent of the arguments, and so is moved
-                to a helper function
-              *)
-	   | _ => Prim_e (PrimOp (xilprim ilprim), [], cons, args)
+	 Prim_e (PrimOp (xilprim ilprim), [], cons, args)
        end
 
      | xexp' context (Il.VAR var) =

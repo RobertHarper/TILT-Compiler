@@ -19,7 +19,7 @@ structure RealFormat : sig
     val float_neq = TiltPrim.float_neq
     val floor = TiltPrim.float2int
     val int32touint32 = TiltPrim.int32touint32
-    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val unsafe_vsub = TiltPrim.unsafe_vsub8
 
     infix 4 == !=
 (*

@@ -262,22 +262,25 @@ structure LilRewrite :> LILREWRITE =
 		       (Prim.int _) => v
 		     | (Prim.uint _) => v
 		     | (Prim.float _) => v
-		     | (Prim.array (c,array)) =>
-			 let
-			   val _ = Array.modify (rewrite_primarg state) array
-			   val c = rewrite_con state c
-			 in Prim.array(c,array)
-			 end
-		      | (Prim.vector (c,array)) =>
+		     | (Prim.vector (c,array)) =>
 			 let
 			   val _ = Array.modify (rewrite_primarg state) array
 			   val c = rewrite_con state c
 			 in Prim.vector(c,array)
 			 end
-		      | Prim.refcell (r as (ref e)) => 
-			 (r := (rewrite_primarg state e); v)
-		      | Prim.tag (t,c) => 
-			 Prim.tag(t,rewrite_con state c))
+		     | (Prim.intvector (sz,array)) =>
+			 let
+			   val _ = Array.modify (rewrite_primarg state) array
+			 in Prim.intvector(sz,array)
+			 end
+		     | (Prim.floatvector (sz,array)) =>
+			 let
+			   val _ = Array.modify (rewrite_primarg state) array
+			 in Prim.floatvector(sz,array)
+			 end
+		     | Prim.tag (t,c) => 
+			 Prim.tag(t,rewrite_con state c)
+		     | _ => error "Array and ref constants not supported")
 	      end
 	    
 	  in call_client_code sv32handler dosv32 state sv32
@@ -409,6 +412,8 @@ structure LilRewrite :> LILREWRITE =
 		 of Val sv32 => Val (recur_sv32 sv32)
 		  | Prim32 (p,cs,primargs) => 
 		   Prim32 (p,map recur_c cs, map recur_primarg primargs)
+		  | PrimEmbed (sz,p,primargs) => 
+		   PrimEmbed (sz,p,map recur_primarg primargs)
 		  | LilPrimOp32 (lp,cs,sv32s,sv64s) => 
 		   LilPrimOp32 (lp,
 				map recur_c cs, 
@@ -451,7 +456,8 @@ structure LilRewrite :> LILREWRITE =
 	and rewrite_primarg (state : 'state) (primarg : primarg) : primarg = 
 	  (case primarg 
 	     of arg32 sv32 => arg32 (rewrite_sv32 state sv32)
-	      | arg64 sv64 => arg64 (rewrite_sv64 state sv64))
+	      | arg64 sv64 => arg64 (rewrite_sv64 state sv64)
+	      | slice (sz,sv) => slice (sz,rewrite_sv32 state sv))
 
 	and rewrite_cc (state : 'state) (cc : conditionCode) : conditionCode = 
 	  let
@@ -501,13 +507,13 @@ structure LilRewrite :> LILREWRITE =
 		   in Dyncase {arg = arg,arms = arms,default = default, rtype = rtype}
 		   end
 
-	      | Intcase {arg : sv32,arms :(w32 * exp) list, default: exp,rtype : con} =>
+	      | Intcase {arg : sv32,arms :(w32 * exp) list, size : size, default: exp,rtype : con} =>
 		   let
 		     val arg = recur_sv32 arg
 		     val default = recur_exp default
 		     val rtype = recur_con rtype
 		     val arms = map_second recur_exp arms
-		   in Intcase {arg = arg,arms = arms,default = default, rtype = rtype}
+		   in Intcase {arg = arg,arms = arms,size = size,default = default, rtype = rtype}
 		   end
 	      | Ifthenelse {arg,thenArm : exp, elseArm : exp, rtype : con} =>
 		   let

@@ -30,7 +30,7 @@ signature GENERAL =
     val := : 'a ref * 'a -> unit
     val o  : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
 
-    val before : 'a * 'b -> 'a
+    val before : 'a * unit -> 'a
     val ignore : 'a -> unit
 
   end

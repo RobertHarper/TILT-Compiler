@@ -13,13 +13,14 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
     structure Typeof = Synthesis.Typeof
     structure Kindof = Synthesis.Kindof
     structure Dec = Deconstruct.Dec
+    structure R = Reduce
 
     type fid = ClosureState.fid
 
     val error = fn s => Util.error "lilclosure_analyze.sml" s
     val staticalloc = Stats.tt "LilClosureStaticAlloc"
     val debug = Stats.ff "LilClosureAnalyzeDebug"
-    val do_con_globals = Stats.ff "LilClosureDoConGlobals"
+    val do_con_globals = Stats.tt "LilClosureDoConGlobals"
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
@@ -72,8 +73,10 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	val empty_table = VarMap.empty : (funentry ref) VarMap.map
 	val fids = ref empty_table
 	val globals : label VarMap.map ref = ref VarMap.empty
+	val conglobals : VarSet.set ref = ref VarSet.empty
 	fun reset () = (fids := empty_table;
-			globals := VarMap.empty)
+			globals := VarMap.empty;
+			conglobals := VarSet.empty)
 	  
 	fun is_fid f = (case (VarMap.find(!fids,f)) of NONE => false | _ => true)
 	fun get_fids() = VarMap.foldli (fn (fid,_,acc) => VarSet.add(acc,fid)) VarSet.empty (!fids)
@@ -152,6 +155,29 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	
 	fun add_global (v,l) = globals := VarMap.insert(!globals,v,l)
 	fun add_globals vls = app add_global vls
+
+	fun add_conglobal v = conglobals := VarSet.add(!conglobals,v)
+	fun get_conglobals () = !conglobals
+	fun hide_conglobal v = 
+	  if VarSet.member(!conglobals,v) then 
+	    conglobals := VarSet.delete(!conglobals,v)
+	  else ()
+
+	fun remove_conglobals () = 
+	  let
+	    val cglobs = !conglobals
+	    val () = chat 3 ("True globals: "^Int.toString(VarSet.numItems cglobs)^"\n")
+	    val () = 
+	      if chatp 3 then
+		(print "True con globals:\n";
+		 VarSet.app (fn a => (PpLil.pp_var a;print "\t")) cglobs;
+		 print "\n")
+	      else ()
+	    fun remove (r as ref {static,escape,callee,escapee,frees = {cvars,vars32,vars64}}) = 
+	      r := {static = static,escape = escape,callee = callee,escapee = escapee,
+		    frees = {cvars = VarSet.difference (cvars,cglobs),vars32 = vars32,vars64 = vars64}}
+	  in VarMap.app remove (!fids)
+	  end
 
 	fun result () = (VarMap.map (fn e => !e) (!fids),!globals)
       end
@@ -250,6 +276,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 
 	fun kindof      (ENV{ctxt,csubst,...},c)    = (Kindof.con  ctxt (LS.substConInCon csubst c))
 	  handle any => (print "ERROR in kindof\n";raise any)
+
 	fun bind_unpack (ENV{state,ctxt,csubst},(a,x,sv)) = 
 	  let
 	    val state = State.add_boundcvar (state,a)
@@ -265,7 +292,8 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	  let
 	    val state = State.add_boundcvar (state,a1)
 	    val state = State.add_boundcvar (state,a2)
-	    val (ctxt,new_csubst) = Typeof.bind_split (ctxt, (a1,a2,LS.substConInCon csubst c))
+	    val c = LS.substConInCon csubst c
+	    val (ctxt,new_csubst) = Typeof.bind_split (ctxt, (a1,a2,c))
 	    val csubst = LS.C.compose (new_csubst,csubst)
 	  in
 	    ENV{state = state,
@@ -276,7 +304,8 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	fun bind_unfold (ENV{state,ctxt,csubst},(a,c)) = 
 	  let
 	    val state = State.add_boundcvar (state,a)
-	    val (ctxt,new_csubst) = Typeof.bind_unfold (ctxt,(a,LS.substConInCon csubst c))
+	    val c = LS.substConInCon csubst c
+	    val (ctxt,new_csubst) = Typeof.bind_unfold (ctxt,(a,c))
 	    val csubst = LS.C.compose (new_csubst,csubst)
 	  in
 	    ENV{state = state,
@@ -287,7 +316,9 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	fun bind_inj (ENV{state,ctxt,csubst},arg as (w,a,c,sv)) = 
 	  let
 	    val state = State.add_boundcvar (state,a)
-	    val (ctxt,new_csubst) = Typeof.bind_inj (ctxt,(w,a,LS.substConInCon csubst c,LS.substConInSv32 csubst sv))
+	    val c = LS.substConInCon csubst c
+	    val sv = LS.substConInSv32 csubst sv
+	    val (ctxt,new_csubst) = Typeof.bind_inj (ctxt,(w,a,c,sv))
 	    val csubst = LS.C.compose (new_csubst,csubst)
 	  in
 	    ENV{state = state,
@@ -300,6 +331,15 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 
 	fun do_csubst_var (ENV{csubst,...},a) = LS.C.substitute csubst a
 	fun do_csubst (ENV{csubst,...}) c = LS.substConInCon csubst c
+
+
+	fun hide_potential_cvar (env as ENV{ctxt,csubst,state},c) = 
+	  let
+	    val () = (case cout (R.whnf (LS.substConInCon csubst c))
+			of Var_c a => Global.hide_conglobal a
+			 | _ => ())
+	  in env
+	  end
 
 	fun cvar_isavailable (ENV{state,...},frees,v) = State.cvar_isavailable(state,frees,v)
         fun var32_isavailable (ENV{state,...},frees,v) = State.var32_isavailable(state,frees,v)
@@ -474,26 +514,39 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		    end
 		   | Tag w => frees
 		   | Unit => frees
-		   | Const_32 v => 
-		    (case v of
-		       (Prim.int _) => frees
-		     | (Prim.uint _) => frees
-		     | (Prim.float _) => frees
-
-		     | (Prim.vector (c,array)) =>
-			 let
-			   fun folder(sv,f) = findfv_primarg env f sv
-			   val frees = Array.foldl folder frees array
-			   val frees = recur_c frees c
-			 in frees
-			 end
-		     | Prim.tag (t,c) => recur_c frees c
-		     | _ => error "array constants shouldn't happen")
-
+		   | Const_32 v => findfv_value env frees v
 	      end
 	    
 	  in dosv32 (env,frees,sv32)
 	  end
+	and findfv_value env frees v = 
+	  (case v of
+	     (Prim.int _) => frees
+	   | (Prim.uint _) => frees
+	   | (Prim.float _) => frees
+	       
+	   | (Prim.vector (c,array)) =>
+	       let
+		 fun folder(sv,f) = findfv_primarg env f sv
+		 val frees = Array.foldl folder frees array
+		 val frees = findfv_con env frees c
+	       in frees
+	       end
+	   | (Prim.intvector (sz,array)) =>
+	       let
+		 fun folder(sv,f) = findfv_primarg env f sv
+		 val frees = Array.foldl folder frees array
+	       in frees
+	       end
+	   | (Prim.floatvector (sz,array)) =>
+	       let
+		 fun folder(sv,f) = findfv_primarg env f sv
+		 val frees = Array.foldl folder frees array
+	       in frees
+	       end
+	   | Prim.tag (t,c) => findfv_con env frees c
+	   | _ => error "array constants shouldn't happen")
+	     
 	and findfv_vcxxlist (binder : env * (var * con) -> env) (env : env) (frees : frees) (vcs : (var * con) list) : (env * frees) = 
 	  let
 	    fun folder ((v,c),(env,frees)) = 
@@ -594,18 +647,21 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		   end
 		  | Split_b (a1,a2,c) => 
 		   let
+		     val env = hide_potential_cvar (env,c)
 		     val frees = findfv_con env frees c 
 		     val env = bind_split (env,(a1,a2,c))
 		   in (env,frees)
 		   end
 		  | Unfold_b (a,c) => 
 		   let
+		     val env = hide_potential_cvar (env,c)
 		     val frees = findfv_con env frees c 
 		     val env = bind_unfold (env,(a,c))
 		   in (env,frees)
 		   end
 		  | Inj_b (w,b,c,sv) => 
 		   let
+		     val env = hide_potential_cvar (env,c)
 		     val frees = findfv_con env frees c 
 		     val frees = findfv_sv32 env frees sv
 		     val env = bind_inj (env,(w,b,c,sv))
@@ -631,6 +687,11 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		  | Prim32 (p,cs,primargs) => 
 		   let
 		     val frees = findfv_list findfv_con env frees cs
+		     val frees = findfv_list findfv_primarg env frees primargs
+		   in frees
+		   end
+		  | PrimEmbed (sz,p,primargs) => 
+		   let
 		     val frees = findfv_list findfv_primarg env frees primargs
 		   in frees
 		   end
@@ -750,7 +811,8 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	and findfv_primarg (env : env) (frees : frees) (primarg : primarg) : Frees.frees = 
 	  (case primarg 
 	     of arg32 sv32 => findfv_sv32 env frees sv32
-	      | arg64 sv64 => findfv_sv64 env frees sv64)
+	      | arg64 sv64 => findfv_sv64 env frees sv64
+	     | slice (_,sv32) => findfv_sv32 env frees sv32)
 	     
 	and findfv_switch (env : env) (frees : frees) (sw : switch) : Frees.frees = 
 	  let
@@ -791,7 +853,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		     val frees = findfv_list findfv_arm env frees arms
 		   in frees
 		   end
-		  | Intcase {arg : sv32,arms :(w32 * exp) list, default: exp,rtype : con} =>
+		  | Intcase {arg : sv32,arms :(w32 * exp) list, size : size, default: exp,rtype : con} =>
 		   let
 		     val frees = findfv_sv32 env frees arg
 		     val frees = findfv_exp env frees default
@@ -853,7 +915,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	      | Darray (l,sz,t,svs) => 
 	       let 
 		 val _ = findfv_con env Frees.empty_frees t
-		 val () = app (fn sv => ignore(findfv_sv32 env Frees.empty_frees sv)) svs
+		 val () = app (fn sv => ignore(findfv_value env Frees.empty_frees sv)) svs
 	       in ()
 	       end    
 	      | Dcode (l,f) => 
@@ -922,7 +984,6 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	  
 	end
 	
-
 	(* Scan module for free variables *)
 	(* Shouldn't be any code in the data segment yet.
 	 *)
@@ -934,12 +995,17 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 
 	    val env = initial_env top_fid
 
-	    val env = 
-	      if !do_con_globals then 
+	    val env = con_var_list_bind(env,timports)
+(*	      if !do_con_globals then 
 		foldl (fn (vk,env) => con_gvar_bind(env,vk)) env timports
 	      else
 		con_var_list_bind(env,timports)
-
+*)
+	    val () = 
+	      if !do_con_globals then 
+		app (fn (v,k) => Global.add_conglobal v) timports
+	      else
+		()
 	    val env = findfv_data env data
 
 	    val _ = findfv_exp env Frees.empty_frees expfun
@@ -947,6 +1013,11 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	    val _ = chat 1 "  Computing transitive closure of close funs\n"
 	    val _ = close_funs(Global.get_fids())
 	    val _ = chat 1 "  Finished closure analysis\n"
+
+	    val _ = 
+	      if !do_con_globals then 
+		Global.remove_conglobals()
+	      else ()
 	      
 	    val res = Global.result()
 	    val _ = Global.reset ()

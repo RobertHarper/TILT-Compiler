@@ -15,7 +15,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
 
-    val unsafe_vector2array = TiltPrim.unsafe_vector2array
+    val unsafe_vector2array = TiltPrim.unsafe_vector2array8
     val op^ = String.^
 
     structure FS = POSIX_FileSys

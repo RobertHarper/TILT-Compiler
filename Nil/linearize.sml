@@ -322,10 +322,18 @@ struct
 				    val _ = dec depth_lcon_conb
 				in  (map (fn cb => Con_b(p,cb)) cbnds,state)
 				end
-	      | Exp_b (v,niltrace,e) => let val (bnds,e) = lexp true state e
-					    val (state,v) = add_var(state,v)
-					in  (bnds @ [Exp_b(v,niltrace,e)], state)
-					end
+	      | Exp_b (v,niltrace,e) => 
+				let 
+				  val (bnds,e) = lexp true state e
+				in 
+				  case e
+				    of Var_e newv => (bnds,replace_var (state,v,newv))
+				     | _ => 
+				      let
+					val (state,v) = add_var(state,v)
+				      in  (bnds @ [Exp_b(v,niltrace,e)], state)
+				      end
+				end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
 (* RECURSIVE BINDING *)

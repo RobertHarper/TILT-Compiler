@@ -8,8 +8,8 @@ structure Byte :> BYTE =
   struct
     val int32touint32 = TiltPrim.int32touint32
 
-    val unsafe_update = TiltPrim.unsafe_update
-    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val unsafe_update = TiltPrim.unsafe_update8
+    val unsafe_vsub = TiltPrim.unsafe_vsub8
 
     val uplus = TiltPrim.uplus
     val uminus = TiltPrim.uminus
@@ -31,10 +31,10 @@ structure Byte :> BYTE =
 	 = Word8Array.extract
 
 
-    fun packString (arr : char array, i : int, ss : Substring.substring) : unit =
+    fun packString (arr : Word8Array.array, i : int, ss : Substring.substring) : unit =
 	let
 	    val PreString.SS(src, srcStart, srcLen) = ss
-	    val dstLen = Array.length arr
+	    val dstLen = Word8Array.length arr
 	    fun cpy (_, _, 0w0) = ()
 	      | cpy (srcIndx, dstIndx, n) =
 		(unsafe_update (arr, dstIndx, unsafe_vsub(src, srcIndx));

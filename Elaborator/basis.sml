@@ -3,6 +3,14 @@
    types which either can't be expressed in Basis/Prelude.sml or are
    included here for efficiency.  *)
 
+(* Warning: We currently check expression equality of inlined expressions during 
+ * interface equality.  Expression alpha-equality is only partially implemented in
+ * ilstatic.  So if you add new constructs here, you may need to update eq_exp
+ * in ilstatic.  The symptom of failure will be that all the TiltPrim interface
+ * will always be judged stale, requiring recompilation of everything every time.
+ * -leaf
+ *)
+
 signature BIND =
 sig
     type t
@@ -17,6 +25,8 @@ end
 (* bindings go to a top-level structure *)
 structure Bind :> BIND =
 struct
+  (* sbnds and sdecs go inside of TiltPrim.  Others bound at toplevel.
+   *)
     datatype t = B of {sbnds : Il.sbnds,
 		       sdecs : Il.sdecs,
 		       topsbnds : Il.sbnds,
@@ -79,9 +89,12 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
+    (* Eta expanded monomorphic prim*)
     fun mono_entry context (str,prim) = exp_entry context (str, ETAPRIM (prim,[]))
+    (* Eta expanded monomorphic il prim*)
     fun ilmono_entry context (str,prim) = exp_entry context (str, ETAILPRIM (prim,[]))
 
+    (* Make a polymorphic entry. (1 type arg) *)
     fun poly_entry context (str,c2exp) =
 	let val argvar = fresh_var()
 	    val l = internal_label str
@@ -104,6 +117,30 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
+    (* Make a polymorphic entry. (n type args) *)
+    fun npoly_entry context (str,n,c2exp) =
+	let 
+	  val argvar = fresh_var()
+	  val lbls = Listops.map0count (fn i => internal_label (str^(Int.toString i))) n
+	  val sdecs = map (fn l => SDEC(l,DEC_CON(fresh_var(),KIND,NONE, false))) lbls
+	  val argsig = SIGNAT_STRUCTURE(sdecs)
+	  val inner_ctxt = add_context_dec(context,DEC_MOD(argvar,false,argsig))
+	  val instcons = map (fn l => CON_MODULE_PROJECT(MOD_VAR argvar,l)) lbls
+	  val exp = c2exp instcons
+	  val con = IlStatic.GetExpCon(inner_ctxt,exp)
+	  val inner_var = fresh_named_var str
+	  val body = MOD_STRUCTURE([SBND(it_lab,BND_EXP(inner_var, exp))])
+	  val ressig = SIGNAT_STRUCTURE [SDEC(it_lab,DEC_EXP(inner_var,con, SOME exp, true))]
+	  val module = MOD_FUNCTOR(TOTAL,argvar,argsig,body,ressig)
+	  val signat = SIGNAT_FUNCTOR(argvar,argsig,ressig,TOTAL)
+	  val lab = mk_var_lab str
+	  val var = fresh_named_var (str ^ "_mod")
+	  val sbnd = SBND(lab, BND_MOD(var, true, module))
+	  val sdec = SDEC(lab, DEC_MOD(var, true, signat))
+	in  (sbnd,sdec)
+	end
+
+    (* Add a type entry *)
     fun type_entry context (s,c) =
 	let val lab = symbol_label (Symbol.tycSymbol s)
 	    val var = fresh_named_var s
@@ -118,6 +155,7 @@ structure Basis :> BASIS =
 	  val exp_entry = exp_entry context
 	  val mono_entry = mono_entry context
 	  val poly_entry = poly_entry context
+	  val npoly_entry = npoly_entry context
 	  val ilmono_entry = ilmono_entry context
 	  val type_entry = type_entry context
 
@@ -147,7 +185,9 @@ structure Basis :> BASIS =
 					   end),
 				  ("vector",let val v = fresh_var()
 					    in CON_FUN([v],CON_VECTOR (CON_VAR v))
-					    end)
+					    end),
+				  ("word8array",CON_INTARRAY Prim.W8),
+				  ("word8vector",CON_INTVECTOR Prim.W8)
 				  ]
 	      val basetype_list = [("float64", float64),
 				   ("int32", int32),
@@ -163,7 +203,9 @@ structure Basis :> BASIS =
 					    end),
 				   ("vector",let val v = fresh_var()
 					     in CON_FUN([v],CON_VECTOR (CON_VAR v))
-					     end)
+					     end),
+				   ("word8array",CON_INTARRAY Prim.W8),
+				   ("word8vector",CON_INTVECTOR Prim.W8)
 				   ]
 	  in
 	      val _ = (app (add_top o type_entry) toptype_list;
@@ -172,8 +214,15 @@ structure Basis :> BASIS =
 
 	  (* ----------------- add base monomorphic values -------------- *)
 	  local
-	      val topvalue_list =
-		  []
+	    val topvalue_list =  [
+				  ("empty_array8",PRIM(create_empty_table (IntArray Prim.W8),[],[])),
+				  ("empty_vector8",PRIM(create_empty_table (IntVector Prim.W8),[],[]))
+				  ]
+
+	    val basevalue_list =  [
+				   ("empty_array8",PRIM(create_empty_table (IntArray Prim.W8),[],[])),
+				   ("empty_vector8",PRIM(create_empty_table (IntVector Prim.W8),[],[]))
+				   ]
 
 	      val baseilprimvalue_list =
 		  [("<<", (lshift_uint W32)),
@@ -278,8 +327,17 @@ structure Basis :> BASIS =
 		   ("int32touint8", (int2uint (W32,W8))),
 
 		   ("int2float", (int2float)),
-		   ("float2int", (float2int))
-
+		   ("float2int", (float2int)),
+		   
+		   ("unsafe_array8",create_table (IntArray Prim.W8)),
+		   ("unsafe_array2vector8",array2vector (IntArray Prim.W8)),
+		   ("unsafe_vector2array8",vector2array (IntVector Prim.W8)),
+		   ("unsafe_sub8",sub (IntArray Prim.W8)),
+		   ("unsafe_vector8",create_table (IntVector Prim.W8)),
+		   ("unsafe_vsub8",sub (IntVector Prim.W8)),
+		   ("unsafe_update8",update (IntArray Prim.W8)),
+		   ("array_length8",length_table (IntArray Prim.W8)),
+		   ("vector_length8",length_table (IntVector Prim.W8))
 		   (* XXX need to do unsigned and real stuff *)]
 
 (* real_getexp should take a 64-bit IEEE float:
@@ -288,9 +346,10 @@ structure Basis :> BASIS =
     (3) and to retain only low 11 bits
     (4) subtract 1023 from this quantity and return as an int *)
 
-	  in  val _ = (app (add_top o exp_entry) topvalue_list;
-		       app (add_top o mono_entry) topprimvalue_list;
-		       app (add     o mono_entry) baseprimvalue_list;
+	  in  val _ = (app (add_top o exp_entry)    topvalue_list;
+		       app (add_top o mono_entry)   topprimvalue_list;
+		       app (add     o exp_entry)    basevalue_list;
+		       app (add     o mono_entry)   baseprimvalue_list;
 		       app (add     o ilmono_entry) baseilprimvalue_list)
 	  end
 
@@ -301,19 +360,49 @@ structure Basis :> BASIS =
 		  [(* NOT TOTAL! has a store effect - otherwise we would generalize *)
 		   ("ref", (fn c => let val v = fresh_var()
 				    in #1(make_lambda(v,c,CON_REF c,
-						      ILPRIM(mk_ref,[c],[VAR v])))
+						      PRIM(mk_ref,[c],[VAR v])))
 				    end)),
 		   ("!", (fn c => let val v = fresh_var()
 				  in #1(make_lambda(v,CON_REF c,c,
-						    ILPRIM(deref,[c],[VAR v])))
+						    PRIM(deref,[c],[VAR v])))
 				  end)),
 		   (":=", (fn c => let val v = fresh_var()
 				       val pc = con_tuple[CON_REF c, c]
 				       fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
 				   in #1(make_lambda(v,pc,
-						     con_unit,ILPRIM(setref,[c],
-								     [proj 1, proj 2])))
-				   end))]
+						     con_unit,PRIM(setref,[c],
+								   [proj 1, proj 2])))
+				   end)),
+		   ("before", (fn c => let val v = fresh_var()
+					   val pc = con_tuple[c, con_unit]
+					   fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
+				       in #1(make_lambda(v,pc,
+							 c,proj 1))
+				       end)),
+		   ("ignore", (fn c => let val v = fresh_var()
+				       in #1(make_lambda(v,c,con_unit,unit_exp))
+				       end))
+		   ]
+	      val topnpolyvalue_list =
+		[
+		 ("o", 3, (fn cs => 
+			   let 
+			     val a = hd cs
+			     val b = hd (tl cs)
+			     val c = hd (tl (tl cs))
+			     val fg = fresh_var()
+			     val x = fresh_var()
+			     val a2b = CON_ARROW([a],b,false,oneshot_init PARTIAL)
+			     val c2a = CON_ARROW([c],a,false,oneshot_init PARTIAL)
+			     val t1 = con_tuple[a2b, c2a]
+			     fun proj n = RECORD_PROJECT(VAR fg,generate_tuple_label n,t1)
+			     val (inner,c2b) = 
+			       make_lambda(x,c,b, APP(proj 1,APP(proj 2,VAR x)))
+			     val (outer,_) = 
+			       make_lambda(fg,t1,c2b,inner)
+			   in outer
+			   end))
+		 ]
 
 	      val basepolyvalue_list =
 		  [("unsafe_array",(fn c => let val v = fresh_var()
@@ -372,6 +461,7 @@ structure Basis :> BASIS =
 					     end))]
 
 	  in  val _ = (app (add_top o poly_entry) toppolyvalue_list;
+		       app (add_top o npoly_entry) topnpolyvalue_list;
 		       app (add     o poly_entry) basepolyvalue_list)
 	  end
 

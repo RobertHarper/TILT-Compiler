@@ -32,6 +32,15 @@ structure SingletonElim :> SINGLETONELIM =
     fun strip_arrow (Env {ctxt}) c         = Normalize.strip_arrow_norm ctxt c
     fun new_env()                          = Env {ctxt=NilContext.empty()}
 
+    fun mkLetC cbnds c = 
+      (case c
+	 of Var_c a => NU.makeLetC cbnds c
+	  | Let_c (_,cbnds2,c) => mkLetC (cbnds@cbnds2) c
+	  | _ => 
+	   let
+	     val a = Name.fresh_named_var "LetCbody"
+	   in NU.makeLetC (cbnds@[Con_cb(a,c)]) (Var_c a)
+	   end)
 
     fun erasek env k =
       case k
@@ -79,7 +88,7 @@ structure SingletonElim :> SINGLETONELIM =
 		   end
 		 val (cbsfields,_) = foldl_acc folder env lvks
 		 val (cbs,fields) = unzip cbsfields
-	       in NU.makeLetC cbs (Crecord_c fields)
+	       in mkLetC cbs (Crecord_c fields)
 	       end
 	      | Arrow_k (os,vks,k) =>
 	       let
@@ -100,7 +109,7 @@ structure SingletonElim :> SINGLETONELIM =
 		 val k = erasek env k
 
 		 val name = path2var c
-		 val newbody = NU.makeLetC bnds body
+		 val newbody = mkLetC bnds body
 		 val lam = Open_cb (name,vks,newbody)
 
 	       in Let_c (Sequential,[lam],Var_c name)
@@ -136,15 +145,17 @@ structure SingletonElim :> SINGLETONELIM =
 		 *)
 		val eFormals = map (fn c => NilRename.renameCon(NilSubst.substConInCon subst c)) eFormals
 		val body_type = R_c env body_type
-		val body_type = NU.makeLetC (map Con_cb vcs) body_type
+		val body_type = mkLetC (map Con_cb vcs) body_type
 	      in
 		AllArrow_c {openness=openness,effect=effect,
 			    tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			    body_type=body_type}
 	      end
 	  | Let_c (letsort,cbnds,c) =>
-	      let val (cbnds,env) = R_cbnds env cbnds
-	      in Let_c(letsort,cbnds,R_c env c)
+	      let 
+		val (cbnds,env) = R_cbnds env cbnds
+		val c = R_c env c 
+	      in mkLetC cbnds c
 	      end
 	  | Crecord_c lc_list => Crecord_c (map_second (R_c env) lc_list)
 	  | Proj_c (c,l) => Proj_c (R_c env c,l)
@@ -180,7 +191,7 @@ structure SingletonElim :> SINGLETONELIM =
 	  let
 	    val (vks,vcs,env') = R_vklist env vklist
 	    val c = R_c env' c
-	    val c = NU.makeLetC (map Con_cb vcs) c
+	    val c = mkLetC (map Con_cb vcs) c
 	    val cb = wrapper(v,vks,c)
 	    val env = insert_cbnd env cbnd
 	  in (cb,env)

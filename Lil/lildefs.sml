@@ -343,6 +343,11 @@ structure LilDefs :> LILDEFS  =
 
 	fun project_i_fields i c = LO.map0count (fn i => C.nproj c i) i
 	fun ntuple2tlist i c = C.tlist (project_i_fields i c)
+
+	fun mkT32 sz c = 
+	  (case sz
+	     of B4 => c
+	      | _ => C.pcon_app (Embed_c sz) [c])
       end
 
 
@@ -353,6 +358,8 @@ structure LilDefs :> LILDEFS  =
 	fun tuple' ts = tuple (C.tlist ts)
 
 	fun ptr t = mk_con (Ptr_c t)
+
+	fun refc t = C.pcon_app Ref_c [t]
 
 	fun tupleptr ts = ptr (tuple ts)
 	fun tupleptr' ts = ptr (tuple' ts)
@@ -391,6 +398,8 @@ structure LilDefs :> LILDEFS  =
 	fun boxed_float () = boxed B8 (mk_pcon Float_c)
 
 	fun float64 ()     = mk_pcon Float_c
+
+	fun embed sz c = C.pcon_app (Embed_c sz) [c]
 
 	fun dyntag c = C.pcon_app Dyntag_c [c]
 	fun tag iw = C.pcon_app Tag_c [C.nat iw]
@@ -647,6 +656,9 @@ structure LilDefs :> LILDEFS  =
 	val box' = ret box''
 	val box = op2sv box''
 
+	fun ptreq'' sv1 sv2 = mk_lilprim Ptreq [] [sv1,sv2] []
+	val ptreq' = ret2 ptreq''
+	val ptreq  = op2sv2 ptreq''
 
 	fun update_array64'' arr i sv64 = Prim32 (Prim.update (Prim.FloatArray Prim.F64),[],[arg32 arr,arg32 i,arg64 sv64])
 	val update_array64' = ret3 update_array64''
@@ -656,6 +668,17 @@ structure LilDefs :> LILDEFS  =
 	val update_array32' = ret4 update_array32''
 	val update_array32 = op2sv4 update_array32''
 
+	fun update_intarray'' sz arr i sv32 = 
+	  let
+	    val arg = 
+	      (case sz 
+		 of B4 => arg32 sv32
+		  | _ => slice(sz,sv32))
+	  in Prim32 (Prim.update (Prim.IntArray (LU.size2i sz)),[],[arg32 arr,arg32 i,arg])
+	  end
+	val update_intarray' = ret4 update_intarray''
+	val update_intarray = op2sv4 update_intarray''
+
 	fun sub_array64'' arr i = Prim64 (Prim.sub (Prim.FloatArray Prim.F64),[arg32 arr,arg32 i])
 	val sub_array64' = ret2 sub_array64''
 	val sub_array64 = fop2sv2 sub_array64''
@@ -663,6 +686,13 @@ structure LilDefs :> LILDEFS  =
 	fun sub_array32'' t arr i = Prim32 (Prim.sub (Prim.OtherArray true),[t],[arg32 arr,arg32 i])
 	val sub_array32'  = ret3 sub_array32''
 	val sub_array32  = op2sv3 sub_array32''
+
+	fun sub_intarray'' sz arr i = 
+	  (case sz 
+	     of B4 => Prim32 (Prim.sub (Prim.IntArray (LU.size2i sz)),[],[arg32 arr,arg32 i])
+	      |_ => PrimEmbed (sz,Prim.sub (Prim.IntArray (LU.size2i sz)),[arg32 arr,arg32 i]))
+	val sub_intarray'  = ret3 sub_intarray''
+	val sub_intarray  = op2sv3 sub_intarray''
 
 	fun create_array64'' len sv64 = Prim32 (Prim.create_table (Prim.FloatArray Prim.F64),[],[arg32 len,arg64 sv64])
 	val create_array64' = ret2 create_array64''
@@ -672,6 +702,14 @@ structure LilDefs :> LILDEFS  =
 	val create_array32'  = ret3 create_array32''
 	val create_array32   = op2sv3 create_array32''
 	  
+	fun create_intarray'' sz len sv32 = 
+	  let
+	    val init = case sz of B4 => arg32 sv32 | _ => slice (sz,sv32)
+	  in Prim32 (Prim.create_table (Prim.IntArray (LU.size2i sz)),[],[arg32 len,init])
+	  end
+	val create_intarray'  = ret3 create_intarray''
+	val create_intarray   = op2sv3 create_intarray''
+	  
 	fun create_empty_array64'' () = Prim32 (Prim.create_empty_table (Prim.FloatArray Prim.F64),[],[])
 	val create_empty_array64'  = ret create_empty_array64''
 	val create_empty_array64   = op2sv create_empty_array64''
@@ -679,6 +717,10 @@ structure LilDefs :> LILDEFS  =
 	fun create_empty_array32'' t = Prim32 (Prim.create_empty_table (Prim.OtherArray true),[t],[])
 	val create_empty_array32'  = ret create_empty_array32''
 	val create_empty_array32   = op2sv create_empty_array32''
+
+	fun create_empty_intarray'' sz = Prim32 (Prim.create_empty_table (Prim.IntArray (LU.size2i sz)),[],[])
+	val create_empty_intarray'  = ret create_empty_intarray''
+	val create_empty_intarray   = op2sv create_empty_intarray''
 
 	fun length_array64'' arr = Prim32 (Prim.length_table (Prim.FloatArray Prim.F64),[],[arg32 arr])
 	val length_array64' = ret length_array64''
@@ -688,6 +730,12 @@ structure LilDefs :> LILDEFS  =
 	val length_array32'  = ret2 length_array32''
 	val length_array32   = op2sv2 length_array32''
 
+	fun length_intarray'' sz arr = Prim32 (Prim.length_table (Prim.IntArray (LU.size2i sz)),[],[arg32 arr])
+	val length_intarray'  = ret2 length_intarray''
+	val length_intarray   = op2sv2 length_intarray''
+
+	(*
+	 Superceded by Ptreq
 	fun equal_array64'' arr1 arr2 = Prim32 (Prim.equal_table (Prim.FloatArray Prim.F64),[],[arg32 arr1,arg32 arr2])
 	val equal_array64' = ret2 equal_array64''
 	val equal_array64  = op2sv2 equal_array64''
@@ -695,7 +743,7 @@ structure LilDefs :> LILDEFS  =
 	fun equal_array32'' t arr1 arr2 = Prim32 (Prim.equal_table (Prim.OtherArray true),[t],[arg32 arr1,arg32 arr2])
 	val equal_array32'  = ret3 equal_array32''
 	val equal_array32   = op2sv3 equal_array32''
-
+	  *)
 	fun lambda formals rtype body = 
 	  let
 	    val f = Name.fresh_named_var "anon_lambda"

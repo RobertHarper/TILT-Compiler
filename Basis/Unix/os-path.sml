@@ -8,7 +8,7 @@
 
 structure OS_Path = OS_PathFn (
   struct
-    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val unsafe_vsub = TiltPrim.unsafe_vsub8
     val op ^ = String.^
 
     exception Path

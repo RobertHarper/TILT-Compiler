@@ -421,7 +421,6 @@ structure NilContextPre
 	     | (AllArrow_c _)  => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
 	     | ExternArrow_c _ => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
 	     | (Coercion_c _)  => (empty_subst(),name_eqn(name,SingleType_k(constructor)))
-	     (*| Typeof_c _      => (empty_subst(),name_eqn(name,SingleType_k(constructor)))*)
 
 	     | (Mu_c (recur,defs)) =>
 	      let val len = Sequence.length defs

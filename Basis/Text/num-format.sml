@@ -26,7 +26,7 @@ structure NumFormat : sig
 
     val ult = TiltPrim.ult
 
-    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val unsafe_vsub8 = TiltPrim.unsafe_vsub8
 (*
     structure W = InlineT.Word32
     structure I = InlineT.Int31
@@ -50,7 +50,7 @@ structure NumFormat : sig
     val i2w = int32touint32
 
 
-    fun mkDigit (w : word) = unsafe_vsub("0123456789abcdef", w)
+    fun mkDigit (w : word) = unsafe_vsub8("0123456789abcdef", w)
 
     fun wordToBin w = let
 	  fun mkBit w = if (&&(w, 0w1) = 0w0) then #"0" else #"1"

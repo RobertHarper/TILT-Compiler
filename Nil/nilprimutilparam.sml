@@ -6,7 +6,9 @@ structure NilPrimUtilParam
 
     open Nil
     open Prim
-      
+
+    val RefIsArray = CompilerControl.RefIsArray
+
     type context = NilContextPre.context
     type con = con
     type exp = exp
@@ -25,8 +27,13 @@ structure NilPrimUtilParam
     fun con_uint is = Prim_c(Int_c is,[])
     fun con_float fs = Prim_c(Float_c fs,[])
     fun con_array c = Prim_c(Array_c,[c])
-    fun con_ref c = Prim_c(Array_c,[c])
     fun con_vector c = Prim_c(Vector_c,[c])
+    fun con_intarray sz = Prim_c(IntArray_c sz,[])
+    fun con_intvector sz = Prim_c(IntVector_c sz,[])
+    fun con_floatarray sz = Prim_c(FloatArray_c sz,[])
+    fun con_floatvector sz = Prim_c(FloatVector_c sz,[])
+
+    fun con_ref c = if !RefIsArray then Prim_c(Array_c,[c]) else Prim_c(Ref_c,[c])
     fun con_tag c = Prim_c(Exntag_c,[c])
     local
       val unitlab = Name.to_unit(Name.internal_label "Firstlude")

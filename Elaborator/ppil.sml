@@ -165,6 +165,10 @@ struct
        | CON_FLOAT fs  => Hbox[String "FLOAT", pp_fs' fs]
        | CON_VECTOR c => Hbox[pp_con seen c, Break, String "VECTOR"]
        | CON_ARRAY c => Hbox[pp_con seen c, Break, String "ARRAY"]
+       | CON_INTVECTOR sz => Hbox[String "WORDVECTOR_",pp_is' sz]
+       | CON_INTARRAY sz => Hbox[String "WORDARRAY_",pp_is' sz]
+       | CON_FLOATVECTOR sz => Hbox[String "FLOATVECTOR_",pp_fs' sz]
+       | CON_FLOATARRAY sz => Hbox[String "FLOATARRAY_",pp_fs' sz]
        | CON_ANY     => String "ANY"
        | CON_REF c   => pp_region "REF("  ")" [pp_con seen c]
        | CON_TAG c  => pp_region "NAME(" ")" [pp_con seen c]

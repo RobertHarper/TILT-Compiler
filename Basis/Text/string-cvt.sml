@@ -10,12 +10,12 @@ structure StringCvt :> STRING_CVT =
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
 
-    val unsafe_array = TiltPrim.unsafe_array
-    val unsafe_update = TiltPrim.unsafe_update
-    val unsafe_vsub = TiltPrim.unsafe_vsub
-    val vector_length = TiltPrim.vector_length
+    val unsafe_array8 = TiltPrim.unsafe_array8
+    val unsafe_update8 = TiltPrim.unsafe_update8
+    val unsafe_vsub8 = TiltPrim.unsafe_vsub8
+    val vector_length8 = TiltPrim.vector_length8
 
-    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+    val unsafe_array2vector8 = TiltPrim.unsafe_array2vector8
 
   (* get radix and realfmt types from type-only structure *)
 
@@ -31,15 +31,15 @@ structure StringCvt :> STRING_CVT =
       fun fillStr (c, s, i, n) = let
 	    val stop = i+n
 	    fun fill j = if (j < stop)
-		  then (unsafe_update(s, int32touint32 j, c);
+		  then (unsafe_update8(s, int32touint32 j, c);
 			fill(j+1))
 		  else ()
 	    in
 	      fill i
 	    end
-      fun cpyStr (src : string, srcLen, dst : char array, start) = let
+      fun cpyStr (src : string, srcLen, dst : word8array, start) = let
 	    fun cpy (i, j) = if (i < srcLen)
-		  then (unsafe_update(dst, int32touint32 j, unsafe_vsub(src, int32touint32 i));
+		  then (unsafe_update8(dst, int32touint32 j, unsafe_vsub8(src, int32touint32 i));
 			cpy (i+1, j+1))
 		  else ()
 	    in
@@ -53,11 +53,11 @@ structure StringCvt :> STRING_CVT =
 	    in
 		if (pad > 0)
 		    then let
-			     val s' = unsafe_array(int32touint32 wid,#"\000")
+			     val s' = unsafe_array8(int32touint32 wid,#"\000")
 			 in
 			     fillStr (padChr, s', 0, pad);
 			     cpyStr (s, len, s', pad);
-			     unsafe_array2vector s'
+			     unsafe_array2vector8 s'
 			 end
 		else s
 	    end
@@ -68,11 +68,11 @@ structure StringCvt :> STRING_CVT =
 	    in
 		if (pad > 0)
 		    then let
-			     val s' = unsafe_array(int32touint32 wid,#"\000")
+			     val s' = unsafe_array8(int32touint32 wid,#"\000")
 			 in
 			     fillStr (padChr, s', len, pad);
 			     cpyStr (s, len, s', 0);
-			     unsafe_array2vector s'
+			     unsafe_array2vector8 s'
 			 end
 		else s
 	    end
@@ -127,9 +127,9 @@ structure StringCvt :> STRING_CVT =
     type cs = int
      fun scanString (scanFn : (char, cs) reader -> ('a, cs) reader) s =
 	 let
-	     val n = uint32toint32(vector_length s)
+	     val n = uint32toint32(vector_length8 s)
 	     fun getc i =
-		 if (i < n) then SOME(unsafe_vsub(s, int32touint32 i), i+1) else NONE
+		 if (i < n) then SOME(unsafe_vsub8(s, int32touint32 i), i+1) else NONE
 	 in
 	     case (scanFn getc 0) of
 		 NONE => NONE

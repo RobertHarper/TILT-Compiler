@@ -150,11 +150,16 @@ signature CDEC =
 
     val boxed : Lil.con -> (Lil.size * Lil.con)
     val boxed' : Lil.con -> (Lil.size * Lil.con) option
+
+    val embed  : Lil.con -> (Lil.size * Lil.con)
+    val embed' : Lil.con -> (Lil.size * Lil.con) option
       
-    val externarrow  : Lil.con -> (Lil.size * Lil.con * Lil.con * Lil.con)
-    val externarrow' : Lil.con -> (Lil.size * Lil.con * Lil.con * Lil.con) option
-    val externarrow_ml  : Lil.con -> (Lil.size * Lil.con list * Lil.con list * Lil.con)
-    val externarrow_ml' : Lil.con -> (Lil.size * Lil.con list * Lil.con list * Lil.con) option
+    val externarrow : Lil.con -> (Lil.size * Lil.con * Lil.con *
+    Lil.con) val externarrow' : Lil.con -> (Lil.size * Lil.con *
+    Lil.con * Lil.con) option val externarrow_ml : Lil.con ->
+    (Lil.size * Lil.con list * Lil.con list * Lil.con) val
+    externarrow_ml' : Lil.con -> (Lil.size * Lil.con list * Lil.con
+    list * Lil.con) option
 
     val coercion  : Lil.con -> (Lil.con * Lil.con)
     val coercion' : Lil.con -> (Lil.con * Lil.con) option
@@ -225,8 +230,9 @@ signature DECONSTRUCT =
 	    (* Every small value is trivially an nary-tapp
 	     *)
 	    val nary_tapp : Lil.sv32 -> Lil.sv32 * Lil.con list 
-	    val coerce : Lil.sv32 -> (Lil.sv32 * Lil.sv32)
+	    val coerce  : Lil.sv32 -> (Lil.sv32 * Lil.sv32)
 	    val coerce' : Lil.sv32 -> (Lil.sv32 * Lil.sv32) option
+	    val coercen : Lil.sv32 -> (Lil.sv32 list * Lil.sv32)
 	    val pack : Lil.sv32 -> (Lil.con * Lil.con * Lil.sv32) 
 	    val pack' : Lil.sv32 -> (Lil.con * Lil.con * Lil.sv32) option
 	    val forgetknown : Lil.sv32 -> (Lil.con * Lil.sv32)
@@ -237,7 +243,7 @@ signature DECONSTRUCT =
 	    val injunion' : Lil.sv32 -> (Lil.con * Lil.sv32) option
 	    val injforget : Lil.sv32 -> (Lil.con * Lil.sv32)
 	    val injforget' : Lil.sv32 -> (Lil.con * Lil.sv32) option
-
+	    val delet : Lil.exp -> Lil.bnd list * Lil.sv32
 	  end
 
 	structure TD :
@@ -278,6 +284,7 @@ signature DECONSTRUCT =
 	    (* These functions are type deconstructors for computing the types
 	     * of the term level constructs.
 	     *)
+	    val doslice     : Lil.con -> Lil.con
 	    val instantiate : Lil.con -> Lil.con -> Lil.con
 	    val unpack      : Lil.var * Lil.con -> Lil.kind * Lil.con
 	    val unbox       : Lil.con -> Lil.con

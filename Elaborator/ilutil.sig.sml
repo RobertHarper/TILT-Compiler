@@ -73,6 +73,7 @@ signature ILUTIL =
     val false_exp : context -> exp
     val string_eq : context -> exp
     val vector_eq : context -> mod * signat
+    val word8vector_eq : context -> exp * con
 
     val con_eqfun : context -> con -> con
     val con_tuple : con list -> con                 (* the type of tuple values *)

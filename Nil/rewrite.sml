@@ -467,6 +467,26 @@ structure NilRewrite :> NILREWRITE =
 	      let
 		val map_e = map_f recur_e
 		val map_c = map_f recur_c
+
+		fun do_polyarray (constr,(c,array)) = 
+		  let
+		    val changed = ref false
+		    val _ = Array.modify (recur_e changed state) array
+		    val c = recur_c changed state c
+		  in
+		    if !changed then
+		      SOME (Const_e (constr(c,array)))
+		    else NONE
+		  end
+		fun do_monoarray (constr,(sz,array)) = 
+		  let
+		    val changed = ref false
+		    val _ = Array.modify (recur_e changed state) array
+		  in
+		    if !changed then
+		      SOME (Const_e (constr(sz,array)))
+		    else NONE
+		  end
 	      in
 		(case e of
 		   (Var_e _) => NONE
@@ -475,26 +495,12 @@ structure NilRewrite :> NILREWRITE =
 			(Prim.int _) => NONE
 		      | (Prim.uint _) => NONE
 		      | (Prim.float _) => NONE
-		      | (Prim.array (c,array)) =>
-			  let
-			    val changed = ref false
-			    val _ = Array.modify (recur_e changed state) array
-			    val c = recur_c changed state c
-			  in
-			    if !changed then
-			      SOME (Const_e (Prim.array(c,array)))
-			    else NONE
-			  end
-		      | (Prim.vector (c,array)) =>
-			  let
-			    val changed = ref false
-			    val _ = Array.modify (recur_e changed state) array
-			    val c = recur_c changed state c
-			  in
-			    if !changed then
-			      SOME (Const_e (Prim.vector(c,array)))
-			    else NONE
-			  end
+		      | (Prim.array arg) => do_polyarray (Prim.array, arg)
+		      | (Prim.vector arg) => do_polyarray (Prim.vector, arg)
+		      | (Prim.intarray arg) => do_monoarray (Prim.intarray, arg)
+		      | (Prim.intvector arg) => do_monoarray (Prim.intvector, arg)
+		      | (Prim.floatarray arg) => do_monoarray (Prim.floatarray, arg)
+		      | (Prim.floatvector arg) => do_monoarray (Prim.floatvector, arg)
 		      | Prim.refcell (r as (ref e)) =>
 			  (case rewrite_exp state e
 			     of SOME e => (r := e; SOME (Const_e v))
@@ -621,7 +627,7 @@ structure NilRewrite :> NILREWRITE =
 
 	    fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
 	      | loop (Proj_c (c,l)) labs = loop c (l::labs)
-	      | loop _ _ = error "Non path returned from rewriting trace info"
+	      | loop _ _ = TraceUnknown
 
 	    fun do_trace (state,trace) =
 	      (case trace of
@@ -910,7 +916,8 @@ structure NilRewrite :> NILREWRITE =
 		     val oldstate = state
 		     val (wrap,(var,vklist,c)) = (case cbnd
 						    of Open_cb args => (Open_cb, args)
-						     | Code_cb args => (Code_cb, args))
+						     | Code_cb args => (Code_cb, args)
+						     | _ => error "Impossible")
 
                      fun folder changed ((v,k),state) =
 		       let

@@ -218,9 +218,23 @@ struct
 			   val bnds1 =
 			     Listops.map2 (fn ((v,_),c) => Con_cb(v,c)) (vks,cons)
 			   val (bnds2,bnds3) =
-			     (case body of
-				Let_c(_,cbnds,c) => (cbnds,[Con_cb(a,c)])
-			      | _ => ([],[Con_cb(a,body)]))
+			     (case body 
+				of Let_c(_,cbnds,c) => 
+				  (case c
+				     of Var_c a' =>
+				       let
+					 val (cbnds,last) = Listops.split cbnds
+				       in case last
+					    of Con_cb(a'',c) =>
+					      if Name.eq_var (a',a'') then
+						(cbnds,[Con_cb(a,c)])
+					      else
+						(cbnds,[last,Con_cb(a,Var_c a')])
+					     | _ => 
+						(cbnds,[last,Con_cb(a,Var_c a')])
+				       end
+				      | _ => (cbnds,[Con_cb(a,c)]))
+				 | _ => ([],[Con_cb(a,body)]))
 				
 			   val bnds = List.concat [bnds1,bnds2,bnds3]
 			     
@@ -326,10 +340,22 @@ struct
 						       Exp_b(v,TraceKnown TraceInfo.Notrace_Real, e))
 					 (fFormals,es2)
 				     val (bnd4,bnd5) =
-					 (case body of
-					      Let_e(ls,bnds,e) => (bnds,[Exp_b(v,nt,e)])
-					    | _ => ([],[Exp_b(v,nt,body)]))
-
+					 (case body 
+					    of Let_e (ls,bnds,e) =>
+					      (case e
+						 of Var_e v' =>
+						   let
+						     val (bnds,last) = Listops.split bnds
+						   in case last
+							of Exp_b(v'',tr,e) => 
+							  if Name.eq_var (v',v'') then
+							    (bnds,[Exp_b(v,tr,e)])
+							  else 
+							    (bnds,[last,Exp_b(v,nt,Var_e v')])
+							 | _ =>	(bnds,[last,Exp_b(v,nt,Var_e v')])
+						   end
+						  | _ => (bnds,[Exp_b(v,nt,e)]))
+					     | _ => ([],[Exp_b(v,nt,body)]))
 
 				     val bnds = List.concat [bnd1,bnd2,bnd3,bnd4,bnd5]
 

@@ -45,6 +45,7 @@ source unit Deconstruct : Deconstruct = "deconstruct.sml" { DECONSTRUCT
 source unit PPLIL = "pp.sig.sml" { Lil Formatter Name }
 source unit PpLil = "pp.sml" { PPLIL
 	Lil Util Deconstruct Formatter Name Prim Ppprim Stats TilWord32 TextIO
+	Char TilWord64
 }
 
 source unit PEXP = "pexp.sig.sml" { Lil }
@@ -107,8 +108,8 @@ source unit Closure_State = "closure_state.sml" { CLOSURE_STATE
 }
 source unit CLOSURE_ANALYZE = "closure_analyze.sig.sml" { Lil Closure_State Name }
 source unit Closure_Analyze = "closure_analyze.sml" { CLOSURE_ANALYZE 
-	Lil Frees Closure_State Name Listops LilDefs LilContext LilSubst Synthesis 
-	Deconstruct Util Stats Option Prim List PpLil Array
+	Lil Frees Closure_State Name Listops LilDefs LilContext LilSubst Synthesis Reduce
+	Deconstruct Util Stats Option Prim List PpLil Array Int
 }
 
 source unit LILCLOSE = "toclosure.sig.sml" { Lil }
@@ -124,21 +125,22 @@ source unit SelfCheck = "selfcheck.sml" { SELFCHECK
 	Listops Util Name LilRename List UtilError
 }
 
-source unit OPTABLE = "optable.sig.sml" { Lil ORD_KEY }
+source unit OPTABLE = "optable.sig.sml" { Lil ORD_KEY ORD_MAP }
 source unit OpTable = "optable.sml" { OPTABLE
 	Lil Prim TilWord64 Name
-	Util
+	Util Int Word32 String BinaryMapFn Array
 }
 
 source unit LILOPTIMIZE = "optimize.sig.sml" { Lil }
 source unit LilOptimize = "optimize.sml" { LILOPTIMIZE
-	Lil Prim Name Optable
-	Util
+	Lil Prim Name OpTable LilUtil LilDefs LilContext LilType_Equiv 
+	Reduce Synthesis Deconstruct PpLil LilSubst LilPrimUtil Pexp
+	Util Listops Stats Int List Array Option TilWord64 String
 }
 
 source unit LINKLIL = "linklil.sig.sml" { Nil Lil PPLIL }
 source unit Linklil = "linklil.sml" { LINKLIL
 	Nil Lil PpLil Stats SelfCheck LilSubst List Int Word 
-	NilToLil LilClose Array Util Timestamp LilTypecheck
+	NilToLil LilClose Array Util Timestamp LilTypecheck LilOptimize
 }
 

@@ -131,7 +131,7 @@ struct
 	  | eq_mod' (vm,MOD_FUNCTOR(a1,v1,s1,m1,s1'),MOD_FUNCTOR(a2,v2,s2,m2,s2')) =
 	    a1 = a2 andalso
 	    eq_signat (vm,s1,s2) andalso eq_mod(VM.add(v1,v2,vm),m1,m2) andalso
-	    eq_signat (vm,s1',s2')
+	    eq_signat (VM.add(v1,v2,vm),s1',s2')
 	  | eq_mod' (vm,MOD_STRUCTURE sbnds1,MOD_STRUCTURE sbnds2) = eq_sbnds(vm,sbnds1,sbnds2)
 	  | eq_mod' _ = false
 
@@ -154,6 +154,10 @@ struct
 	       | (CON_FLOAT floatsize, CON_FLOAT floatsize') => floatsize=floatsize'
 	       | (CON_ARRAY con, CON_ARRAY con') => eq_con(vm,con,con')
 	       | (CON_VECTOR con, CON_VECTOR con') => eq_con(vm,con,con')
+	       | (CON_INTARRAY is, CON_INTARRAY is') => is = is'
+	       | (CON_INTVECTOR is, CON_INTVECTOR is') => is = is'
+	       | (CON_FLOATARRAY fs, CON_FLOATARRAY fs') => fs = fs'
+	       | (CON_FLOATVECTOR fs, CON_FLOATVECTOR fs') => fs = fs'
 	       | (CON_ANY, CON_ANY) => true
 	       | (CON_REF con, CON_REF con') => eq_con(vm,con,con')
 	       | (CON_TAG con, CON_TAG con') => eq_con(vm,con,con')

@@ -130,7 +130,7 @@ source unit BASIS = "basis.sig.sml" {Il}
 source interface Basis = "basis.int" {BASIS}
 source unit Basis : Basis = "basis.sml" {
 	Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic
-	Ppil IlUtil Toil BASIS Stats TilWord64
+	Ppil IlUtil Toil BASIS Stats TilWord64 Listops Int
 }
 
 source unit LINKIL = "linkil.sig.sml" {LinkParse Il Blaster Name Ast}

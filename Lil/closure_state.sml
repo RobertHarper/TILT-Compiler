@@ -82,7 +82,7 @@ structure ClosureState :> CLOSURESTATE =
     structure State = 
       struct
 	  
-	(*Tags to indicate variable status.  Currently no globals
+	(*Tags to indicate variable status.  
 	 * A variable marked GLOBAL is scheduled to be placed in the data
 	 * segment and hence does not need to be included in the environment.
 	 * A variable marked LOCAL is bound in the current function and so does not
@@ -156,6 +156,20 @@ structure ClosureState :> CLOSURESTATE =
 	  fun add_globalcvar (STATE{curfid,boundvars32,boundvars64,boundcvars,boundfids},v) = 
 	    let 
 	      val boundcvars = VarMap.insert(boundcvars,v,GLOBAL)
+	    in  
+	      STATE{curfid = curfid,
+		    boundvars32 = boundvars32,
+		    boundvars64 = boundvars64,
+		    boundcvars = boundcvars,
+		    boundfids = boundfids}
+	    end
+
+	  fun hide_globalcvar (STATE{curfid,boundvars32,boundvars64,boundcvars,boundfids},v) = 
+	    let 
+	      val boundcvars = 
+		(case VarMap.remove(boundcvars,v)
+		   of (boundcvars,GLOBAL) => VarMap.insert(boundcvars,v,SHADOW)
+		    | (boundcvars,other) => VarMap.insert(boundcvars,v,other))
 	    in  
 	      STATE{curfid = curfid,
 		    boundvars32 = boundvars32,

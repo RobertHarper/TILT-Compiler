@@ -128,6 +128,8 @@ signature LILDEFS =
 	val project_i_fields : int -> Lil.con -> Lil.con list
 
 	val ntuple2tlist : int -> Lil.con -> Lil.con
+
+	val mkT32 : Lil.size -> Lil.con -> Lil.con
       end
 
     structure T :
@@ -163,6 +165,7 @@ signature LILDEFS =
 	val boxed : Lil.size -> Lil.con -> Lil.con
 	val boxed_float : unit -> Lil.con
 
+	val embed : Lil.size -> Lil.con -> Lil.con
 	val closure : (Lil.var * Lil.kind) list -> Lil.con -> Lil.con -> Lil.con -> Lil.con
 
 	val coercion : Lil.con -> Lil.con -> Lil.con
@@ -196,6 +199,7 @@ signature LILDEFS =
 	val unit : unit -> Lil.con
 
 	val array : Lil.size -> Lil.con -> Lil.con
+	val refc : Lil.con -> Lil.con
 
 	val tag : Lil.w32 -> Lil.con
 	val dyntag : Lil.con -> Lil.con
@@ -264,14 +268,21 @@ signature LILDEFS =
 	val box'  : Lil.sv64 -> Lil.op32 P.pexp
 	val box   : Lil.sv64 -> Lil.sv32 P.pexp
 
+	val ptreq'' : Lil.sv32 -> Lil.sv32 -> Lil.op32
+	val ptreq'  : Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
+	val ptreq   : Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
+
 	val update_array64'' : Lil.sv32 -> Lil.sv32 -> Lil.sv64 -> Lil.op32
 	val update_array64'  : Lil.sv32 -> Lil.sv32 -> Lil.sv64 -> Lil.op32 P.pexp
 	val update_array64   : Lil.sv32 -> Lil.sv32 -> Lil.sv64 -> Lil.sv32 P.pexp
 
 	val update_array32'' : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.op32
-	val update_array32' : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
-	val update_array32 : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
+	val update_array32'  : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
+	val update_array32   : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
+	val update_intarray'' : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.op32
+	val update_intarray'  : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
+	val update_intarray   : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
 	val sub_array64'' : Lil.sv32 -> Lil.sv32 -> Lil.op64
 	val sub_array64'  : Lil.sv32 -> Lil.sv32 -> Lil.op64 P.pexp
@@ -281,6 +292,10 @@ signature LILDEFS =
 	val sub_array32'  : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
 	val sub_array32   : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
+	val sub_intarray'' : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.op32
+	val sub_intarray'  : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
+	val sub_intarray   : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
+
 	val create_array64'' : Lil.sv32 -> Lil.sv64 -> Lil.op32
 	val create_array64'  : Lil.sv32 -> Lil.sv64 -> Lil.op32 P.pexp
 	val create_array64   : Lil.sv32 -> Lil.sv64 -> Lil.sv32 P.pexp
@@ -289,6 +304,9 @@ signature LILDEFS =
 	val create_array32'  : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp 
 	val create_array32   : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
+	val create_intarray'' : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.op32
+	val create_intarray'  : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp 
+	val create_intarray   : Lil.size -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
 
 	val create_empty_array64'' : unit -> Lil.op32
 	val create_empty_array64'  : unit -> Lil.op32 P.pexp
@@ -298,6 +316,9 @@ signature LILDEFS =
 	val create_empty_array32'  : Lil.con ->  Lil.op32 P.pexp 
 	val create_empty_array32   : Lil.con ->  Lil.sv32 P.pexp
 
+	val create_empty_intarray'' : Lil.size ->  Lil.op32
+	val create_empty_intarray'  : Lil.size ->  Lil.op32 P.pexp 
+	val create_empty_intarray   : Lil.size ->  Lil.sv32 P.pexp
 
 	val length_array64'' : Lil.sv32 -> Lil.op32
 	val length_array64'  : Lil.sv32 -> Lil.op32 P.pexp
@@ -307,6 +328,11 @@ signature LILDEFS =
 	val length_array32'  : Lil.con -> Lil.sv32 -> Lil.op32 P.pexp 
 	val length_array32   : Lil.con -> Lil.sv32 -> Lil.sv32 P.pexp
 
+	val length_intarray'' : Lil.size -> Lil.sv32 -> Lil.op32
+	val length_intarray'  : Lil.size -> Lil.sv32 -> Lil.op32 P.pexp 
+	val length_intarray   : Lil.size -> Lil.sv32 -> Lil.sv32 P.pexp
+
+	(* Superceded by Ptreq
 	val equal_array64'' : Lil.sv32 -> Lil.sv32 -> Lil.op32
 	val equal_array64'  : Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp
 	val equal_array64   : Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
@@ -314,7 +340,7 @@ signature LILDEFS =
 	val equal_array32'' : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.op32
 	val equal_array32'  : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.op32 P.pexp 
 	val equal_array32   : Lil.con -> Lil.sv32 -> Lil.sv32 -> Lil.sv32 P.pexp
-
+	  *)
 
 	(*inject into sum and forget *)
 	val inj_nontag_from_sumtype' : Lil.w32 -> Lil.con -> Lil.sv32 -> Lil.sv32

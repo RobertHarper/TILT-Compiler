@@ -185,6 +185,8 @@ structure IlStatic
 				 end
 			   | CON_FLEXRECORD r => (flexes := r :: (!flexes); NONE)
 			   | CON_ARRAY elemc => (if in_array_ref then NONE else (help true elemc; SOME c))
+			   | CON_INTARRAY is => (if in_array_ref then NONE else (help true (CON_UINT is); SOME c))
+			   | CON_FLOATARRAY fs => (if in_array_ref then NONE else (help true (CON_FLOAT fs); SOME c))
 			   | CON_REF elemc => (if in_array_ref then NONE else (help true elemc; SOME c))
 			   | CON_APP (c',types) =>
 				 (* For each a in types we recurse with in_ref true if the equality
@@ -532,6 +534,10 @@ structure IlStatic
 	  | (CON_ANY, CON_ANY) => true
 	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,ctxt)
 	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,ctxt)
+	  | (CON_INTARRAY is1, CON_INTARRAY is2) => is1 = is2
+	  | (CON_INTVECTOR is1, CON_INTVECTOR is2) => is1 = is2
+	  | (CON_FLOATARRAY fs1, CON_FLOATARRAY fs2) => fs1 = fs2
+	  | (CON_FLOATVECTOR fs1, CON_FLOATVECTOR fs2) => fs1 = fs2
 	  | (CON_REF c1, CON_REF c2) => self(c1,c2,ctxt)
 	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,ctxt)
 	  | (CON_ARROW (c1_a,c1_r,flag1,comp1), CON_ARROW(c2_a,c2_r,flag2,comp2)) =>
@@ -740,6 +746,10 @@ structure IlStatic
      | (CON_REF _) => KIND
      | (CON_ARRAY _) => KIND
      | (CON_VECTOR _) => KIND
+     | (CON_INTARRAY _) => KIND
+     | (CON_INTVECTOR _) => KIND
+     | (CON_FLOATARRAY _) => KIND
+     | (CON_FLOATVECTOR _) => KIND
      | (CON_TAG _) => KIND
      | (CON_ARROW _) => KIND
      | (CON_COERCION _) => KIND             (* XXX Is this correct? XXX *)
@@ -1434,6 +1444,10 @@ structure IlStatic
 	    | CON_REF c => help CON_REF c
 	    | CON_ARRAY c => help CON_ARRAY c
 	    | CON_VECTOR c => help CON_VECTOR c
+	    | CON_INTARRAY _ => NONE
+	    | CON_INTVECTOR _ => NONE
+	    | CON_FLOATARRAY _ => NONE
+	    | CON_FLOATVECTOR _ => NONE
 	    | CON_TAG c => help CON_TAG c
 	    | CON_MU c => help CON_MU c
 	    | CON_SUM{names,carrier,noncarriers,special} =>
@@ -1641,6 +1655,10 @@ structure IlStatic
 	TiltPrim unit inlines all primitives.
     *)
 
+    (* Warning: expression equality seems to only cover enough cases
+     * to cover TiltPrim.  -leaf
+     *)
+
      and eq_exp(ctxt,exp1,exp2) =
 	 let fun find subst v = (case Listops.assoc_eq(eq_var,v,subst) of
 				     NONE => v
@@ -1682,6 +1700,9 @@ structure IlStatic
 	       | (RECORD_PROJECT (e1,l1,c1), RECORD_PROJECT (e2,l2,c2)) =>
 		     eq(e1,e2,subst) andalso eq_label(l1,l2) andalso
 		     eq_con(ctxt,c1,c2)
+	       | (RECORD  le1,RECORD le2) => 
+		     eq_list (fn ((l1,e1),(l2,e2)) => (eq_label (l1,l2) andalso eq(e1,e2,subst)),le1,le2)
+	       | (APP (e11,e12),APP (e21,e22)) => eq(e11,e21,subst) andalso eq(e12,e22,subst)
 	       | (COERCE (coercion,cs,e), COERCE (coercion',cs',e')) =>
 		     eq(coercion,coercion',subst) andalso eq(e,e',subst) andalso
 		     eq_cons(cs,cs')

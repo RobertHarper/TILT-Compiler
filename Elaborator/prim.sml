@@ -5,11 +5,17 @@ structure Prim :> PRIM =
     datatype floatsize = F32 | F64
 
     (* zero-length arrays and vectors need type *)
+    (* Most of these existed only so that we could write an interpreter,
+     * which we never bothered to do. *)
     datatype ('con,'sv) value = int     of intsize * TilWord64.word
                                | uint    of intsize * TilWord64.word
 			       | float   of floatsize * string
 			       | array   of 'con * 'sv Array.array
 			       | vector  of 'con * 'sv Array.array
+			       | intarray  of intsize * 'sv Array.array
+			       | intvector of intsize * 'sv Array.array
+			       | floatarray  of floatsize * 'sv Array.array
+			       | floatvector of floatsize * 'sv Array.array
 			       | refcell of 'sv ref
 			       | tag     of Name.tag * 'con
 
@@ -102,6 +108,11 @@ structure Prim :> PRIM =
       | length_table of table
       | equal_table of table (* pointer equality for array and element-wise equality for vector *)
 
+      | mk_ref
+      | deref
+      | eq_ref
+      | setref
+
     datatype ilprim =
       (* unsigned int operations: separated for type reasons; they are identical to
          the signed version when viewed at the bit-pattern level *)
@@ -113,10 +124,6 @@ structure Prim :> PRIM =
       | xor_uint of intsize
       | lshift_uint of intsize
 
-      | mk_ref
-      | deref
-      | eq_ref
-      | setref
 
     fun same_intsize (size1,size2) =
 	(case (size1,size2)
@@ -220,6 +227,10 @@ structure Prim :> PRIM =
 	    | (update t1, update t2) => same_table (t1,t2)
 	    | (length_table t1, length_table t2) => same_table (t1,t2)
 	    | (equal_table t1, equal_table t2) => same_table (t1,t2)
+	    | (mk_ref, mk_ref) => true
+	    | (deref, deref) => true
+	    | (eq_ref, eq_ref) => true
+	    | (setref, setref) => true
 	    | _ => false)
 
     fun same_ilprim (p1 : ilprim, p2 : ilprim) : bool =
@@ -231,10 +242,6 @@ structure Prim :> PRIM =
 	    | (or_uint s1, or_uint s2) => same_intsize (s1,s2)
 	    | (xor_uint s1, xor_uint s2) => same_intsize (s1,s2)
 	    | (lshift_uint s1, lshift_uint s2) => same_intsize (s1,s2)
-	    | (mk_ref, mk_ref) => true
-	    | (deref, deref) => true
-	    | (eq_ref, eq_ref) => true
-	    | (setref, setref) => true
 	    | _ => false)
 
 	(* control_effect p
@@ -400,6 +407,11 @@ structure Prim :> PRIM =
 				  * are compared structurally *)		 
 	  | sub t    => true
 	  | update t => true
+
+	  | mk_ref => true
+	  | deref => true
+(*	  | eq_ref => false *)
+	  | setref => true
 
 	  (* Some or all of these depend on the rounding mode,
 	   * which is a kind of store effect.  

@@ -326,22 +326,44 @@ structure NiltoLil :> NILTOLIL =
 	case args
 	  of [] =>
 	    (case p
-	       of Nil.Int_c sz       => Other0 (Lil.Int_c (i_sizetrans sz))
+	       of Nil.Int_c sz       => 
+		 let
+		   val sz = i_sizetrans sz
+		   val t = (case sz
+			      of Lil.B4 => LD.T.intt Lil.B4
+			       | _ => LD.T.embed sz (LD.T.intt sz))
+		 in TD.OtherRep t
+		 end
 		| Nil.BoxFloat_c fsz => TD.BFloatRep ()
 		| Nil.Exn_c          => TD.OtherRep (LD.T.exn())
+		| Nil.IntArray_c sz  => 
+		 let
+		   val sz = i_sizetrans sz
+		 in TD.PtrRep (LD.T.array sz (LD.T.intt sz))
+		 end
+		| Nil.IntVector_c sz  => 
+		 let
+		   val sz = i_sizetrans sz
+		 in TD.PtrRep (LD.T.array sz (LD.T.intt sz))
+		 end
+		| Nil.FloatArray_c sz  => 
+		 let
+		   val sz = f_sizetrans sz
+		 in TD.PtrRep (LD.T.array sz (LD.T.float()))
+		 end
+		| Nil.FloatVector_c sz  => 
+		 let
+		   val sz = f_sizetrans sz
+		 in TD.PtrRep (LD.T.array sz (LD.T.float()))
+		 end
 		| Nil.Loc_c          => error "Locatives not supported"
 		| Nil.Float_c fsz    => error "Float is not a constructor"
 		| _                  => error "Bad primcon: not enough args")
 	   | [c] =>
 	    (case p 
-	       of Nil.Array_c        => 
-		 (case NilWHNF env c
-		    of Nil.Prim_c(Nil.Float_c _,_) => TD.PtrRep (LD.T.array Lil.B8 (LD.T.float()))
-		     | _ => TD.PtrRep (TD.Array (ctrans c)))
-		| Nil.Vector_c       => 
-		  (case NilWHNF env c
-		     of Nil.Prim_c(Nil.Float_c _,_) => TD.PtrRep (LD.T.array Lil.B8 (LD.T.float()))
-		      | _ => TD.PtrRep (TD.Array (ctrans c)))
+	       of Nil.Array_c        => TD.PtrRep (TD.Array (ctrans c))
+		| Nil.Vector_c       => TD.PtrRep (TD.Array (ctrans c))
+		| Nil.Ref_c          => TD.PtrRep (LD.T.refc (TD.interp (ctrans c)))
 		| Nil.Exntag_c       => Other1 Lil.Dyntag_c (TD.interp (ctrans c))
 		| Nil.GCTag_c        => TD.PtrRep (LD.T.tuple'[])  (*We don't use GCtags right now*)
 
@@ -688,8 +710,13 @@ structure NiltoLil :> NILTOLIL =
 		| Nil.Float_c sz => error "Float is not a constructor"
 		| Nil.Exn_c => dyn_rep_other env c
 		| Nil.Array_c => dyn_rep_ptr env c
-		| Nil.Vector_c => dyn_rep_ptr env c                              (* vectors *)
-		| Nil.Loc_c => error "Locatives not supported"                              (* locatives *)
+		| Nil.Vector_c => dyn_rep_ptr env c                              
+		| Nil.IntArray_c _ => dyn_rep_ptr env c
+		| Nil.IntVector_c _ => dyn_rep_ptr env c                         
+		| Nil.FloatArray_c _ => dyn_rep_ptr env c
+		| Nil.FloatVector_c _ => dyn_rep_ptr env c 
+		| Nil.Ref_c => dyn_rep_ptr env c
+		| Nil.Loc_c => error "Locatives not supported"         
 		| Nil.Vararg_c _ => dyn_rep_other env c
 		| Nil.GCTag_c  => dyn_rep_ptr env c)
 	    
@@ -886,19 +913,24 @@ structure NiltoLil :> NILTOLIL =
 		(Lil.Const_32 (Prim.int (intsize, w)),Nil.Prim_c (Nil.Int_c intsize,[]))
 	       | (Prim.uint (intsize, w)) =>
 		(Lil.Const_32 (Prim.uint (intsize, w)),	Nil.Prim_c (Nil.Int_c intsize,[]))
-	       | (Prim.vector (con, v)) =>
+	       | (Prim.intvector (Prim.W8, v)) =>
 		let
 		  val svs = Array.foldr (op ::) nil v
 		  val svs = map (sv32_trans' env) svs
-		  val c = ttrans env con
+		  val lsz = i_sizetrans (Prim.W8)
 		  val l = Name.fresh_internal_label "vec_const"
-		  val () = add_darray (l,Lil.B4,c,svs)
-		in (Lil.Label l,Nil.Prim_c (Nil.Vector_c ,[con]))
+		  fun getval sv = 
+		    (case sv of Lil.Const_32 v => v | _ => error "Vector constant element not a const!")
+		  val vs = map getval svs
+		  val () = add_darray (l,lsz,LD.T.intt lsz,vs)
+		in (Lil.Label l,Nil.Prim_c (Nil.IntVector_c (Prim.W8),[]))
 		end
 	       | _ => (print "ERROR: ";
 		       Ppnil.pp_exp e;
 		       error "sv32_trans got a large constant"))
-	  | _ => error "sv32_trans got a large value")
+	  | _ => (print "ERROR: ";
+		  Ppnil.pp_exp e;
+		  error "sv32_trans got a large value"))
 
     and sv32_trans' (env : env) (e : Nil.exp) : Lil.sv32 = #1 (sv32_trans env e)
 
@@ -915,9 +947,10 @@ structure NiltoLil :> NILTOLIL =
        else A (sv32_trans' env e))
 
     fun primarg_trans (env : env) (e : Nil.exp,t : Nil.con) : Lil.primarg = 
-      (case svxx_trans env (e,t) 
-	 of A sv32 => Lil.arg32 sv32
-	  | B sv64 => Lil.arg64 sv64)
+      (case (NilWHNF env t)
+	 of Nil.Prim_c(Nil.Float_c Prim.F64,[]) => Lil.arg64 (sv64_trans' env e)
+	  | Nil.Prim_c(Nil.Int_c Prim.W8,[])    => Lil.slice (Lil.B1,sv32_trans' env e)
+	  | _    => Lil.arg32 (sv32_trans' env e))
 
     fun exp2exp32_trans (env : env) (e : Nil.exp) : (Lil.exp * Nil.con) = 
       let 
@@ -1247,6 +1280,8 @@ structure NiltoLil :> NILTOLIL =
 		| _ => error "table primitive did not have right type args"
 	  end
 
+	val (argtypes,rtype) = prim_get_type env prim cons
+
 	val (op32,rtype) = 
 	  (case (prim,cons,exps) 
 	     (* Typecasing array primitives *)
@@ -1275,8 +1310,6 @@ structure NiltoLil :> NILTOLIL =
 						    TD.Array.create_other,
 						    TD.Array.create_dynamic,(len,init))
 
-		 val rtype = Nil.Prim_c(Nil.Array_c,[eltt])
-		   
 	       in (op32,rtype)
 	       end
 	      | (Prim.create_empty_table t,cs,[]) =>
@@ -1289,8 +1322,6 @@ structure NiltoLil :> NILTOLIL =
 						    TD.Array.create_empty_other,
 						    TD.Array.create_empty_dynamic,())
 
-		 val rtype = Nil.Prim_c(Nil.Array_c,[eltt])
-		   
 	       in (op32,rtype)
 	       end
 	      | (Prim.length_table t,cs,[arr]) =>
@@ -1347,22 +1378,15 @@ structure NiltoLil :> NILTOLIL =
 		   
 	       in (op32,ND.unit_con)
 	       end
-	      | (Prim.array2vector aggregate,cons,[arr]) => (P.ret (Lil.Val (sv32_trans' env arr)),
-							     #2 (prim_get_type env prim cons))
-	      | (Prim.vector2array aggregate,cons,[arr]) => (P.ret (Lil.Val (sv32_trans' env arr)),	
-						     #2 (prim_get_type env prim cons))
+	      | (Prim.array2vector aggregate,cons,[arr]) => (P.ret (Lil.Val (sv32_trans' env arr)),rtype)
+	      | (Prim.vector2array aggregate,cons,[arr]) => (P.ret (Lil.Val (sv32_trans' env arr)),rtype)
 	      | (Prim.equal_table t,cs,[arr1,arr2]) => 
 	       let
-		 fun trans env (arr1,arr2) = (sv32_trans' env arr1,sv32_trans' env arr2)
-
-		 val (op32,eltt) = do_dispatch env (t,cs,trans,trans,
-						    TD.Array.equal_int,
-						    TD.Array.equal_float,
-						    TD.Array.equal_other,
-						    TD.Array.equal_dynamic,(arr1,arr2))
-	       in
-		 tonilbool(op32,nil_bool_con env)
+		 val arr1 = sv32_trans' env arr1
+		 val arr2 = sv32_trans' env arr2
+	       in tonilbool(LD.E.ptreq' arr1 arr2,nil_bool_con env)
 	       end
+
               (* Floating point arguments *)
   
 	      | (Prim.float2int, _,[fl]) => 
@@ -1377,29 +1401,73 @@ structure NiltoLil :> NILTOLIL =
 	      | (Prim.greatereq_float _,[],[f1,f2])=> float_float2bool prim f1 f2
 	      | (Prim.eq_float _,[],[f1,f2])       => float_float2bool prim f1 f2
 	      | (Prim.neq_float _,[],[f1,f2])      => float_float2bool prim f1 f2
+
+	      | (Prim.eq_ref,[t],[sv1,sv2]) => 
+	       let
+		 val sv1 = sv32_trans' env sv1
+		 val sv2 = sv32_trans' env sv2
+	       in tonilbool(LD.E.ptreq' sv1 sv2,nil_bool_con env)
+	       end
+	      (* Other ref prims *)
+	      | (prim,[t],args) => 
+	       let
+		 val t = ttrans env t
+		 val args = LO.map2 (primarg_trans env) (exps,argtypes)
+	       in
+		  (P.ret (Lil.Prim32 (prim,[t],args)),rtype)
+	       end
+
 	      (* All other 32 bit prims take only 32 bit args,
 	       * but may still need to be wrapped up into the external bool
-	       * type
+	       * type and/or embedded into the 32 bit type
 	       *)
 	      | (_,[],exps) => 
 	       let
-		 val sv32s = map (sv32_trans' env) exps
-		 val args = map Lil.arg32 sv32s
-		 val op32 = Lil.Prim32 (prim,[],args)
-		 val (_,return_type) = prim_get_type env prim []
-		 val res = (P.ret op32,return_type)
-	       in case prim
-		    of Prim.less_int _   => tonilbool res
-		     | Prim.greater_int _ => tonilbool res
-		     | Prim.lesseq_int _ => tonilbool res
-		     | Prim.greatereq_int _ => tonilbool res
-		     | Prim.less_uint _ => tonilbool res
-		     | Prim.greater_uint _ => tonilbool res
-		     | Prim.lesseq_uint _ => tonilbool res
-		     | Prim.greatereq_uint _ => tonilbool res
-		     | Prim.eq_int _ => tonilbool res
-		     | Prim.neq_int _ => tonilbool res
-		     | _ => res
+		 val cons = map (ttrans env) cons
+		 val args = LO.map2 (primarg_trans env) (exps,argtypes)
+		 val res32 = (P.ret (Lil.Prim32 (prim,cons,args)),rtype)
+		 fun doint sz = 
+		   (case sz
+		      of Prim.W32 => res32
+		       | _ => (P.ret (Lil.PrimEmbed (i_sizetrans sz,prim,args)),rtype))
+	       in
+		 case prim
+		    of Prim.less_int _   => tonilbool res32
+		     | Prim.greater_int _ => tonilbool res32
+		     | Prim.lesseq_int _ => tonilbool res32
+		     | Prim.greatereq_int _ => tonilbool res32
+		     | Prim.less_uint _ => tonilbool res32
+		     | Prim.greater_uint _ => tonilbool res32
+		     | Prim.lesseq_uint _ => tonilbool res32
+		     | Prim.greatereq_uint _ => tonilbool res32
+		     | Prim.eq_int _ => tonilbool res32
+		     | Prim.neq_int _ => tonilbool res32
+		     | Prim.int2int (_,sz) => doint sz
+		     | Prim.uint2uint (_,sz) => doint sz
+		     | Prim.int2uint (_,sz) => doint sz
+		     | Prim.uint2int (_,sz) => doint sz
+		     | Prim.plus_int sz => doint sz
+		     | Prim.minus_int sz => doint sz
+		     | Prim.mul_int sz => doint sz
+		     | Prim.div_int sz => doint sz
+		     | Prim.mod_int sz => doint sz
+		     | Prim.quot_int sz => doint sz
+		     | Prim.rem_int sz => doint sz
+		     | Prim.plus_uint sz => doint sz
+		     | Prim.minus_uint sz => doint sz
+		     | Prim.mul_uint sz => doint sz
+		     | Prim.div_uint sz => doint sz
+		     | Prim.mod_uint sz => doint sz
+		     | Prim.neg_int sz => doint sz
+		     | Prim.abs_int sz => doint sz
+		     | Prim.not_int sz => doint sz
+		     | Prim.and_int sz => doint sz
+		     | Prim.or_int sz => doint sz
+		     | Prim.xor_int sz => doint sz
+		     | Prim.lshift_int sz => doint sz
+		     | Prim.rshift_int sz => doint sz
+		     | Prim.rshift_uint sz => doint sz
+		     | _ => res32
 	       end
 	      | _ => (print "Bad prim:\n";
 		      Ppnil.pp_exp (Nil.Prim_e (Nil.PrimOp prim,[],cons,exps));
@@ -1618,15 +1686,14 @@ structure NiltoLil :> NILTOLIL =
 	case switch
 	  of Nil.Intsw_e {arg,size,result_type,arms,default} =>
 	    let
-(*	      val _ = if size = Prim.W32 then ()
-		      else error "I thought we only supported switches on 32bit ints!"*)
+	      val size = i_sizetrans size
 	      val arg = sv32_trans' env arg
 	      val rtype = ttrans env result_type
 	      val default = case default of SOME def => def | NONE => error "No default for int switch"
 	      val default = #1 (exp2exp32_trans env default)
 	      val arms = map (fn (w,e) => (w, #1(exp2exp32_trans env e))) arms
 	    in
-	      (P.ret (Lil.Switch (Lil.Intcase {arg = arg,arms = arms, default = default,rtype = rtype})),result_type)
+	      (P.ret (Lil.Switch (Lil.Intcase {arg = arg,arms = arms, size = size, default = default,rtype = rtype})),result_type)
 	    end
 	| Nil.Sumsw_e {arg, sumtype, result_type,  bound, arms, default} =>
 	    let

@@ -355,7 +355,27 @@ struct
 					   ([],state) a)
 				  in   TortlArray.xvector(state,c,vals)
 				  end
+	      | (intvector (sz,a)) => let val (vals,state) =
+		                          (Array.foldr (fn (e,(vls,state)) =>
+							let val (VALUE v,state) = xexp (state,Name.fresh_var(),e,
+										 Nil.TraceUnknown,NOTID)
+							in  (v::vls,state)
+							end)
+					   ([],state) a)
+				  in   TortlArray.xvector(state,Prim_c(Int_c sz,[]),vals)
+				  end
+	      | (floatvector (sz,a)) => let val (vals,state) =
+		                          (Array.foldr (fn (e,(vls,state)) =>
+							let val (VALUE v,state) = xexp (state,Name.fresh_var(),e,
+										 Nil.TraceUnknown,NOTID)
+							in  (v::vls,state)
+							end)
+					   ([],state) a)
+				  in   TortlArray.xvector(state,Prim_c(Float_c sz,[]),vals)
+				  end
 	      | (array _)  => error "array/vector/refcell constants not implemented"
+	      | (intarray _)  => error "array/vector/refcell constants not implemented"
+	      | (floatarray _)  => error "array/vector/refcell constants not implemented"
 	      | refcell _ => error "array/vector/refcell constants not implemented"
 	      | (tag(t,c)) => let val i = TW32.fromInt (Name.tag2int t)
 			      in  (VALUE(INT i), state)
@@ -1565,6 +1585,15 @@ struct
 	     | Prim_c(Exntag_c,[c]) => mk_sum(state,[mktag 12],[c])
 	     | Prim_c(Array_c,[c]) => mk_sum(state,[mktag 0],[c])
 	     | Prim_c(Vector_c,[c]) => mk_sum(state,[mktag 1],[c])
+
+	     (* Special arrays and vectors represented the same *)
+	     | Prim_c(IntArray_c sz,[]) => mk_sum (state,[mktag 0],[Prim_c(Int_c sz,[])])
+	     | Prim_c(IntVector_c sz,[]) => mk_sum (state,[mktag 1],[Prim_c(Int_c sz,[])])
+	     | Prim_c(FloatArray_c sz,[]) => mk_sum (state,[mktag 0],[Prim_c(BoxFloat_c sz,[])])
+	     | Prim_c(FloatVector_c sz,[]) => mk_sum (state,[mktag 1],[Prim_c(BoxFloat_c sz,[])])
+
+	     | Prim_c (Ref_c,_) => error "Ref is not supported by toRtl.  Forgot to set NilDefaults?"
+
 	     | Prim_c(Loc_c,_) => error "LOC cannot be a constructor"
 	     | Prim_c(Sum_c {known,totalcount,tagcount},[c]) =>
 		   mk_sum(state,

@@ -4,12 +4,18 @@ signature PRIM =
     datatype intsize = W8 | W16 | W32 | W64
     datatype floatsize = F32 | F64
 
-    (* zero-length arrays and vectors need type *)
+    (* zero-length arrays and vectors need type    *)
+    (* Most of these existed only so that we could write an interpreter,
+     * which we never bothered to do. *)
     datatype ('con,'exp) value = int     of intsize * TilWord64.word
                                | uint    of intsize * TilWord64.word
 			       | float   of floatsize * string
 			       | array   of 'con * 'exp Array.array
 			       | vector  of 'con * 'exp Array.array
+			       | intarray  of intsize * 'exp Array.array
+			       | intvector of intsize * 'exp Array.array
+			       | floatarray  of floatsize * 'exp Array.array
+			       | floatvector of floatsize * 'exp Array.array
 			       | refcell of 'exp ref
 			       | tag     of Name.tag * 'con
 
@@ -100,6 +106,11 @@ signature PRIM =
       | length_table of table
       | equal_table of table (* pointer equality for array and element-wise equality for vector *)
 
+      | mk_ref
+      | deref
+      | eq_ref
+      | setref
+
 
     datatype ilprim =
       (* unsigned int operations: separated for type reasons; they are identical to
@@ -112,11 +123,6 @@ signature PRIM =
       | xor_uint of intsize
       | lshift_uint of intsize
 
-      (* translated to arrays *)
-      | mk_ref
-      | deref
-      | eq_ref
-      | setref
 
     val same_intsize : intsize * intsize -> bool
     val same_floatsize : floatsize * floatsize -> bool

@@ -18,6 +18,8 @@ signature LISTOPS =
 
     val map_unzip : ('a -> 'b * 'c) -> 'a list -> 'b list * 'c list
 
+    val map_concat : ('a -> 'b list) -> 'a list -> 'b list
+
     (* checks that the lists are the same length, when applicable *)
     val all : ('a -> bool) -> 'a list -> bool
     val all2 : (('a * 'b) -> bool) -> ('a list * 'b list) -> bool

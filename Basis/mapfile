@@ -203,19 +203,22 @@ source unit MONO_VECTOR = "Aggregate/mono-vector-sig.sml" {
 source unit MONO_ARRAY = "Aggregate/mono-array-sig.sml" {
 	Firstlude TiltPrim Prelude MONO_VECTOR
 }
+source unit PreVector8 = "Aggregate/pre-vector8.sml" {
+	Firstlude TiltPrim Prelude
+}
 source interface Word8Vector = "Aggregate/word8-vector.int" {
 	TiltPrim Prelude MONO_VECTOR
 }
 source unit Word8Vector : Word8Vector = "Aggregate/word8-vector.sml" {
-	Firstlude TiltPrim Prelude VectorEq General Array MONO_VECTOR
-	Vector List
+	Firstlude TiltPrim Prelude VectorEq General MONO_VECTOR
+	List PreVector8
 }
 source interface Word8Array = "Aggregate/word8-array.int" {
 	TiltPrim Prelude MONO_ARRAY
 }
 source unit Word8Array : Word8Array = "Aggregate/word8-array.sml" {
-	Firstlude TiltPrim Prelude VectorEq General MONO_ARRAY Array
-	List Word8Vector
+	Firstlude TiltPrim Prelude VectorEq General MONO_ARRAY 
+	List Word8Vector PreVector8
 }
 source unit PACK_WORD = "Aggregate/pack-word-sig.sml" {
 	Firstlude TiltPrim Prelude Word8Vector Word8Array LargeWord

@@ -34,7 +34,7 @@ structure SelfCheck :> SELFCHECK =
       in LO.foldl_acc newc env ks
       end
 
-    val report = ref true
+    val report = ref false
     fun msg s = if !report then print ("\t"^s^"\n") else ()
 
     

@@ -898,27 +898,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso
 		 con_equiv((D,T),argc2,argc1,Type_k,sk) andalso
 		 con_equiv((D,T),resc1,resc2,Type_k,sk)
-	       | (Prim_c(Array_c,[c1]), Prim_c(Array_c,[c2])) =>
-		 let
-		   val (D,c1) = context_reduce_hnf(D,c1)
-		   val (D,c2) = context_reduce_hnf(D,c2)
-		 in
-		   (case (c1,c2)
-		      of (Prim_c(BoxFloat_c is,[]),Prim_c(Float_c is',[])) => is = is'
-		       | (Prim_c(Float_c is,[]),Prim_c(BoxFloat_c is',[])) => is = is'
-		       | _ => con_equiv((D,T),c1,c2,Type_k,false))
-		 end
-	       | (Prim_c(Vector_c,[c1]), Prim_c(Vector_c,[c2])) =>
-		 let
-		   val (D,c1) = context_reduce_hnf(D,c1)
-		   val (D,c2) = context_reduce_hnf(D,c2)
-		 in
-		   (case (c1,c2)
-		      of (Prim_c(BoxFloat_c is,[]),Prim_c(Float_c is',[])) => is = is'
-		       | (Prim_c(Float_c is,[]),Prim_c(BoxFloat_c is',[])) => is = is'
-		       | _ => con_equiv((D,T),c1,c2,Type_k,false))
-		 end
-
 	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) =>
 		 let
 		   val sk' = sk andalso (NilDefs.covariant_prim pcon1)
@@ -1962,22 +1941,21 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
 	 | vector (con,vec) =>
 	     let
-	       val sub_type    = subtimer("Tchk:Exp:Val:st",sub_type)
 	       val _ = type_analyze (D,con)
-	       fun check exp =
-		 let
-		   val con' = exp_valid (D,exp)
-		   val _ =
-		     (sub_type (D,con',con)) orelse
-		     (e_error(D,Const_e value,"Vector contains expression of incorrect type" handle e => raise e))
-		 in()
-		 end
 	     in
 	       (Array.app (fn e => exp_analyze(D,e,con)) vec;
 		Prim_c (Vector_c,[con]))
 	     end
+	 | intvector (sz,vec) =>
+	     (Array.app (fn e => exp_analyze(D,e,Prim_c(Int_c sz,[]))) vec;
+	      Prim_c (IntVector_c sz,[]))
+	 | floatvector (sz,vec) =>
+	     (Array.app (fn e => exp_analyze(D,e,Prim_c(Float_c sz,[]))) vec;
+	      Prim_c (FloatVector_c sz,[]))
 	 | tag (atag,con) => (type_analyze (D,con);Prim_c (Exntag_c,[con]))
 	 | array (con,arr) => e_error(D,Const_e value,"Array's shouldn't happen")
+	 | intarray (con,arr) => e_error(D,Const_e value,"Array's shouldn't happen")
+	 | floatarray (con,arr) => e_error(D,Const_e value,"Array's shouldn't happen")
 	 | refcell expref => e_error(D,Const_e value,"Ref's shouldn't happen"))
 
       (*Check a switch

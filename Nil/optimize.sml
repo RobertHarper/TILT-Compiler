@@ -34,6 +34,9 @@ struct
 	fun inc r = r := !r + 1
 	fun dec r = r := !r - 1
 
+	val uncurry_pushes_cbnds = CompilerControl.UncurryPushCbnds
+	val SpecializeArrayofChar = CompilerControl.SpecializeArrayofChar
+
 	val coercion_cancel = Stats.tt "CancelCoercions"
 	val reduce_varargs = Stats.tt "ReduceVarargs"
 	val reduce_oneargs = Stats.tt "ReduceOneargs"
@@ -289,6 +292,7 @@ struct
         type params = {doDead : bool,
 		       doProjection : int option,
 		       doUncurry : bool,
+		       doPolyUncurry : bool,
 		       doCse : bool}
 	local
 	  type entry = used_state ref * equivalent
@@ -441,6 +445,19 @@ struct
 		 | _ => c)
 		| loop c = c
 	    in loop c
+	    end
+
+	  fun getVals state [] = SOME []
+	    | getVals state (e::rest) =
+	    let
+	      val e = unalias (state,e)
+	    in
+	      if (NilDefs.is_closed_value e) then
+		(case (getVals state rest) of
+		   NONE => NONE
+		 | SOME es => SOME (e :: es))
+	      else
+		NONE
 	    end
 
 (*	  val lookup_alias = fn (s,v) =>
@@ -665,13 +682,39 @@ struct
 	end
 
         (* Helper functions for uncurry optimizations *)
-	fun get_lambda (Let_e(_,[Fixopen_b vfset],Var_e v)) =
-	    (case (vfset) of
-		 [((v',c),f)] => if (Name.eq_var(v,v'))
-				then SOME ((v,c),f)
-			    else NONE
-	       | _ => NONE)
-	  | get_lambda _ = NONE
+	fun get_lambda e = 
+	  let
+	    fun lambda (subst,cbs,((v,c),
+				   Function{effect,recursive,
+					    tFormals,eFormals,fFormals,
+					    body=body})) = 
+	      let
+		val c = NilSubst.substConInCon subst c
+		val eFormals = Listops.map_second (NilSubst.substConInTrace subst) eFormals
+		val body = NilUtil.makeLetE Sequential cbs body
+		val f = 
+		  Function{effect=effect,recursive=recursive,
+			   tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
+			   body=body}
+	      in SOME ((v,c),f)
+	      end
+	    
+	    fun loop (e,subst,cbs) = 
+	      (case e
+		 of Let_e(t,((cb as Con_b(_,Con_cb(a,c)))::bnds),e) => 
+		   if !uncurry_pushes_cbnds then
+		     loop (Let_e(t,bnds,e),NilSubst.C.addr(subst,a,c),cb::cbs)
+		   else NONE
+		  | Let_e(_,[Fixopen_b vfset],Var_e v) =>
+		   (case vfset 
+		      of [arg as ((v',c),f)] => 
+			if (Name.eq_var(v,v'))
+			  then lambda (subst,rev cbs,arg)
+			else NONE
+		       | _ => NONE)
+		  | _ => NONE)
+	  in loop (e,NilSubst.C.empty(),[])
+	  end
 
 	fun make_lambda ((v,c),f) = Let_e(Sequential,[Fixopen_b([((v,c),f)])],Var_e v)
 
@@ -715,8 +758,10 @@ struct
 		     let
 		       val {openness, tFormals = vklist, eFormals = clist,body_type,...} = rename_arrow(strip_arrow (state, c),tFormals)
 		     in
-		       loop (WRAP {v = v, c = c, openness = openness, eff = eff, r = r, vklist = vklist, vtlist = vtlist,
-				   clist = clist, vflist = vflist, body_type = body_type}::acc) body
+		       if (#doPolyUncurry (getParams state)) orelse (null vklist) then
+			 loop (WRAP {v = v, c = c, openness = openness, eff = eff, r = r, vklist = vklist, vtlist = vtlist,
+				     clist = clist, vflist = vflist, body_type = body_type}::acc) body
+		       else (rev acc, e)
 		     end)
 	    in  loop [] e
 	    end
@@ -760,18 +805,38 @@ struct
 	    in  ((vklist,clist,vtlist,vflist), loop [] wraps)
 	    end
 
+	fun wraps2properties wraps = 
+	  let
+	    fun promote_effect(cureff,neweff) = 
+	      (case cureff
+		 of Total => neweff
+		  | _ => cureff)
+	    fun promote_recursive(currec,newrec) =
+	      (case (currec,newrec)
+		 of (Leaf,_) => newrec
+		  | (_,Leaf) => currec
+		  | (Arbitrary,_) => currec
+		  | _ => newrec)
+	    fun loop (wraps,cureff,currec) = 
+	      (case wraps
+		 of [] => (cureff,currec)
+		  | (WRAP{eff,r,...}::rest) => loop (rest,promote_effect(cureff,eff),promote_recursive(currec,r)))
+	  in loop (wraps,Total,Leaf)
+	  end
 	fun create_flatlambda(_,[],_) = error "no wraps to create_flatlamba"
 	  | create_flatlambda(name,wraps,body) =
 	    let 
-	      val WRAP {eff,r,body_type,openness,...} = List.last wraps
+	      val WRAP {body_type,openness,...} = List.last wraps
 	      val ((vklist,clist,vtlist,vflist),_) = wraps2args_bnds wraps
+	      val (eff,r) = wraps2properties wraps
 	      val c = AllArrow_c {openness = openness, 
 				  effect = eff, 
 				  tFormals = vklist, 
 				  eFormals = clist, 
 				  fFormals =  TilWord32.fromInt(length vflist), 
 				  body_type = body_type}
-	      val (bnds,c) = NilUtil.nameType ((Name.var2name name )^"_type") c
+	      val (bnds,c) = NilUtil.nameType ((Name.var2name name )^"_type") (NilRename.renameCon c)
+
 	    in  (bnds,
 		 ((name, c),
 		  Function{effect=eff,recursive=r,
@@ -991,9 +1056,9 @@ struct
 	fun bnd_used state bnd =
 	    (case bnd of
 		 (Con_b(p,cb)) => (case (cbnd_used' state cb) of
-				       UNUSED => NONE
-				     | USED _ => SOME(Con_b(p,cb)))
-	       | (Exp_b(v,_,e)) => if is_used_var(state,v) then SOME bnd else NONE
+				       UNUSED => []
+				     | USED _ => [Con_b(p,cb)])
+	       | (Exp_b(v,_,e)) => if is_used_var(state,v) then [bnd] else []
 	       | (Fixopen_b vfset) =>
 		     let val vflist = Sequence.toList vfset
 			 val vflist = List.filter (fn ((v,_),_) => is_used_var(state,v)) vflist
@@ -1044,24 +1109,29 @@ struct
 				     else  (* Not a pair, keep going with rest *) 
 				       (A::loop(B::rest))))
 
-			 val vflist = loop vflist
-		     in  case vflist 
-			   of [] => NONE
-			    | _ => SOME(Fixopen_b (Sequence.fromList vflist))
+			 val vflists = 
+			   if #doUncurry (getParams state) then
+			     let
+			       val vflist = loop vflist
+			       val vflists = NilUtil.break_fix vflist
+			     in vflists
+			     end
+			   else [vflist]
+		     in  map Fixopen_b vflists
 		     end
 	       | (Fixcode_b vfset) =>
 		     let val vflist = Sequence.toList vfset
 			 val vflist = List.filter (fn ((v,_),_) => is_used_var(state,v)) vflist
 		     in  (case vflist of
-			      [] => NONE
-			    | _ => SOME(Fixcode_b (Sequence.fromList vflist)))
+			      [] => []
+			    | _ => [Fixcode_b (Sequence.fromList vflist)])
 		     end
 	       | (Fixclosure_b(recur,vclset)) =>
 		     let val vcllist = Sequence.toList vclset
 			 val vcllist = List.filter (fn ((v,_),_) => is_used_var(state,v)) vcllist
 		     in  (case vcllist of
-			      [] => NONE
-			    | _ => SOME(Fixclosure_b (recur,Sequence.fromList vcllist)))
+			      [] => []
+			    | _ => [Fixclosure_b (recur,Sequence.fromList vcllist)])
 		     end)
 
 	fun do_vklist state vklist =
@@ -1155,18 +1225,20 @@ struct
 
 	and do_con' (state : state) (con : con) : con =
 	  let
-	    fun do_aggregate_con state (constr,eltt) = 
-	      (case reduce_hnf (state,eltt)
-		 of (_,Prim_c(BoxFloat_c is,_)) => Prim_c(constr,[Prim_c(Float_c is,[])])
-		  | _ => Prim_c (constr,[do_con state eltt]))
 	  in
 	    case con of
 	      Prim_c(Vararg_c _,clist) =>
 		(case reduce_hnf(state,con)  (* Try to reduce Varargs if possible *)
 		   of (_,Prim_c (pc,_)) => Prim_c(pc, map (do_con state) clist)
 		    | (_,con) => do_con state con)
-	    | Prim_c(Array_c,[eltt])  => do_aggregate_con state (Array_c,eltt)
-	    | Prim_c(Vector_c,[eltt]) => do_aggregate_con state (Vector_c,eltt)
+	    | Prim_c(Array_c,clist)  => 
+		(case reduce_hnf(state,con)  (* Try to reduce Array if possible *)
+		   of (_,Prim_c (Array_c,_)) => Prim_c(Array_c, map (do_con state) clist)
+		    | (_,con) => do_con state con)
+	    | Prim_c(Vector_c,clist)  => 
+		(case reduce_hnf(state,con)  (* Try to reduce Vector if possible *)
+		   of (_,Prim_c (Vector_c,_)) => Prim_c(Vector_c, map (do_con state) clist)
+		    | (_,con) => do_con state con)
 	    | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
 	    | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					 (fn (v,c) => (v,do_con state c)) vc_seq)
@@ -1276,12 +1348,17 @@ struct
 					   val c = do_con state' c
 					   fun check_eta_args (vklist,args) =
 					     (Listops.all2 (fn ((v,k),(Var_c v')) => Name.eq_var (v,v') | _ => false) (vklist,args))
-				       in  case c
-					     of Let_c (_,[Con_cb(a,App_c(Var_c v',args))],Var_c a') => 
-					       if Name.eq_var (a,a') andalso check_eta_args(vklist,args)
+				       in  
+					 case c
+					   of Let_c (_,[Con_cb(a,App_c(Var_c v',args))],Var_c a') => 
+					     if Name.eq_var (a,a') andalso check_eta_args(vklist,args)
+					       then (Con_cb(v,Var_c v'),state)
+					     else(Open_cb(v,vklist, c), state)
+					    | App_c(Var_c v',args) => 
+					       if check_eta_args(vklist,args) 
 						 then (Con_cb(v,Var_c v'),state)
 					       else(Open_cb(v,vklist, c), state)
-					      | _ => (Open_cb(v,vklist, c), state)
+					    | _ => (Open_cb(v,vklist, c), state)
 				       end
 	      | Code_cb(v,vklist,c) => let val state = add_var(state,v)
 					   val state' = enter_var(state,v)
@@ -1362,18 +1439,26 @@ struct
 		    | (create_empty_table _,_)    => (false,p,[],elist)
 		    | (sub _,[arr,i])             => (true,p,[],elist)
 		    | (update _,[arr,i,v])        => (false,p,[],[arr,i,unbox v])
-		    | (length_table _,_)          => (false,p,[],elist))
+		    | (length_table _,_)          => (false,p,[],elist)
+		    | _ => error "Impossible")
 		   
 
 	      fun helper is_array c elist =
-		(case (is_array,reduce_hnf(state, c)) of
-		   (true,(_, Prim_c(Int_c is, _))) => (false,constr(IntArray is),[],elist)
-		 | (false,(_, Prim_c(Int_c is, _))) => (false,constr(IntVector is),[],elist)
-		 | (true,(_, Prim_c(BoxFloat_c is, _))) => do_boxfloat(constr(FloatArray is),elist)
-		 | (false,(_, Prim_c(BoxFloat_c is, _))) => do_boxfloat(constr(FloatVector is),elist)
-		 | (_,(_, Prim_c(Float_c is, _))) => error "This shouldn't happen?"
-		 | (true, (hnf, _)) => (false,constr(OtherArray hnf),[c],elist)
-		 | (false, (hnf, _)) => (false,constr (OtherVector hnf),[c],elist))
+		let
+		  val intconstr = if is_array then IntArray else IntVector
+		  val floatconstr = if is_array then FloatArray else FloatVector
+		  val otherconstr = if is_array then OtherArray else OtherVector
+		in
+		  (case reduce_hnf(state, c)
+		   of (_, Prim_c(Int_c is, _)) => 
+		     (case (!SpecializeArrayofChar,is)
+			of (true,_) => (false,constr(intconstr is),[],elist)
+			 | (_,Prim.W32) => (false,constr(intconstr is),[],elist)
+			 | _ => (false,constr(otherconstr true),[],elist))
+		    | (_, Prim_c(BoxFloat_c Prim.F64, _)) => do_boxfloat(constr(floatconstr Prim.F64),elist)
+		    | (_, Prim_c(Float_c is, _)) => error "This shouldn't happen?"
+		    | (hnf, _) => (false,constr(otherconstr hnf),[c],elist))
+		end
 		   
 	      val (boxit,p,clist,elist) =
 		(case t of
@@ -1391,14 +1476,6 @@ struct
 	    let fun default() = Prim_e(NilPrimOp (inject k),[],
 				       map (do_con state) clist,
 				       map (do_exp state) elist)
-		val elist =
-		    (case elist of
-			 [Var_e v] =>
-			     (case lookup_alias(state,v) of
-				  OPTIONALe (e as (Prim_e(NilPrimOp(record _),_,_,_))) => [e]
-				| MUSTe e => [e]
-				| _ => elist)
-		       | _ => elist)
 	    in
 	     (case elist of
 		 [] => do_prim state (NilPrimOp(inject_known k),[],clist,[])
@@ -1447,19 +1524,6 @@ struct
 
 	and do_prim (state : state) (prim, trlist,clist, elist) =
 	 let open Prim
-
-	     fun getVals [] = SOME []
-	       | getVals (e::rest) =
-	       let
-		 val e = unalias (state,e)
-	       in
-		 if (NilDefs.is_closed_value e) then
-		   (case (getVals rest) of
-		      NONE => NONE
-		    | SOME es => SOME (e :: es))
-		 else
-		   NONE
-	       end
 	     
 	     fun help e = unalias (state,e)
 
@@ -1536,7 +1600,7 @@ struct
 			 | NONE => default()
 		   end
                | (PrimOp p, _) =>
-		      (case (getVals elist) of
+		      (case (getVals state elist) of
 			   NONE => default ()
 			 | SOME elist =>
 			       (do_exp state (NilPrimUtil.apply (get_env state) p clist elist))
@@ -1565,6 +1629,22 @@ struct
 				  let val _ = Array.modify (do_exp state) a
 				  in  Const_e(Prim.vector(do_con state c, a))
 				  end
+			    | Prim.intarray (sz,a) =>
+				  let val _ = Array.modify (do_exp state) a
+				  in  Const_e(Prim.intarray(sz, a))
+				  end
+			    | Prim.intvector (sz,a) =>
+				  let val _ = Array.modify (do_exp state) a
+				  in  Const_e(Prim.intvector(sz, a))
+				  end
+			    | Prim.floatarray (sz,a) =>
+				  let val _ = Array.modify (do_exp state) a
+				  in  Const_e(Prim.floatarray(sz, a))
+				  end
+			    | Prim.floatvector (sz,a) =>
+				  let val _ = Array.modify (do_exp state) a
+				  in  Const_e(Prim.floatvector(sz, a))
+				  end
 			    | Prim.refcell _ => exp
 			    | Prim.tag (t,c) => Const_e(Prim.tag(t,do_con state c)))
 		| Prim_e(p,trlist,clist,elist) => do_prim state (p,trlist,clist,elist)
@@ -1583,7 +1663,7 @@ struct
 			     * all of the bnds will be marked as unused and discarded, since
 			     * we don't yet know the status if the binding that we are in.
 			     *)
-			    val bnds = List.mapPartial (bnd_used state) bnds
+			    val bnds = Listops.map_concat (bnd_used state) bnds
 			    (* We cannot flatten bnds inside do_bnds because bnd_used would access undefined vars *)
 			    val bnds = flattenBnds bnds
 		        in  NilUtil.makeLetE letsort bnds e
@@ -1955,7 +2035,18 @@ struct
 			     | _ => NONE
 			 end
 		     | Prim_e(NilPrimOp (project k), _, _, _) => error "project argument is not a value"
-
+		     | Prim_e(PrimOp p, _,clist,elist) =>
+			 (* apply may return a let (not a-normal form).  catching this here 
+			  * instead of waiting for do_prim makes us "more idempotent"
+			  *)
+			 (case (getVals state elist) 
+			    of NONE => NONE
+			     | SOME elist =>
+			      ((case (NilPrimUtil.apply (get_env state) p clist elist)
+				  of Let_e (_,bnds,body) => SOME (bnds @ [Exp_b(v,niltrace,body)])
+				   | e => SOME [Exp_b(v,niltrace,e)])
+				  handle _ => NONE))
+				 
 		     | _ => NONE)
 	  in	(case bnd of
 		     Exp_b(v,niltrace,e) =>
@@ -2015,10 +2106,9 @@ struct
 					     | _ => (eff,OPTIONALe e))
 
 				      val _ = if effect then use_var(state,v) else ()
-				      val state = (case e 
-						     of Var_e _ => state
-						      | Const_e _ => state
-						     | _ => add_availE(state, e, v))
+				      val state = (case alias 
+						     of MUSTe _ => state
+						      | _ => add_availE(state, e, v))
 
 				      val state = add_alias(state,v,alias)
 				      val state = add_exp(state,v,e)
@@ -2147,7 +2237,7 @@ struct
 	      val export_bnds = List.mapPartial #1 temp
 	      val exports = map #2 temp
 	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
-              val bnds = List.mapPartial (bnd_used state) bnds
+              val bnds = Listops.map_concat (bnd_used state) bnds
 	      val bnds = flattenBnds bnds
 
 	      fun import_used imp = 

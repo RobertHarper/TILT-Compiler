@@ -92,6 +92,7 @@ struct
        equality function and polymorphic instantiation function. *)
     type state = {polyinst_opt : context * sdecs -> (sbnd list * sdecs * con list) option,
 		  vector_eq : context -> exp * con,
+		  word8vector_eq : context -> exp * con,
 		  con_bool : con, true_exp : exp, false_exp : exp,
 		  con_eqfun : con -> con}
 
@@ -315,7 +316,13 @@ struct
 	       (* pointer equality *)
 	       | CON_ARRAY c => (ETAPRIM(equal_table (OtherArray false),[c]),
 				 #con_eqfun state con)
-	       | CON_REF c => (ETAILPRIM(eq_ref,[c]), #con_eqfun state con)
+	       | CON_INTARRAY sz => 
+		  (ETAPRIM(equal_table (IntArray sz),[]),
+		   #con_eqfun state con)
+	       | CON_FLOATARRAY sz => 
+		  (ETAPRIM(equal_table (FloatArray sz),[]),
+		   #con_eqfun state con)
+	       | CON_REF c => (ETAPRIM(eq_ref,[c]), #con_eqfun state con)
 	       (* 'state' has our higher-order vector_eq function.
 		  Just generate the equality function for the contents of
 		  the vector and pass it along. *)
@@ -335,6 +342,22 @@ struct
 		  in  (U.exp_try_reduce (ctxt,exp),
 		       #con_eqfun state con)
 		  end
+	       | CON_INTVECTOR sz =>
+		  (case sz of
+		     Prim.W8 =>
+		       let 
+			 val (e,vc) = #word8vector_eq state ctxt
+			 val ac = #con_eqfun state (CON_INTVECTOR sz)
+			   
+			 val _ = if (IlStatic.eq_con(ctxt,vc,ac)) then ()
+				 else (print "vc = "; Ppil.pp_con vc; print "\n";
+				       print "ac = "; Ppil.pp_con ac; print "\n";
+				       elab_error "Prelude vector_eq is bad")
+			   
+		       in  (e,#con_eqfun state con)
+		       end
+		   | _ => elab_error "No vector eq for int vectors other than W8.")
+	       | CON_FLOATVECTOR sz => elab_error "No vector_eq for float vectors"
 	       (* if it's from a module, look for the equality function in that module *)
 	       | CON_MODULE_PROJECT(m,l) =>
 		  let val e = MODULE_PROJECT(m,N.to_eq l)
@@ -491,6 +514,7 @@ struct
        when no equality function generation is possible. *)
     fun compile ({polyinst_opt : context * sdecs -> (sbnd list * sdecs * con list) option,
 		  vector_eq : context -> exp * con,
+		  word8vector_eq : context -> exp * con,
 		  bool : (Il.con * Il.exp * Il.exp * (Il.con -> Il.con)) option,
 		  context : C.context,
 		  con : con}) : (exp * con) option =
@@ -513,6 +537,7 @@ struct
 			      (fn f => let
 					   val state : state = {polyinst_opt = polyinst_opt,
 								vector_eq = vector_eq,
+								word8vector_eq = word8vector_eq,
 								con_bool = b,
 								true_exp = t,
 								false_exp = f,

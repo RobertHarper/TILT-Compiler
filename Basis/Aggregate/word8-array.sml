@@ -5,7 +5,7 @@
  *)
 
 structure Word8Array :> MONO_ARRAY where type elem = char
-				     and type array = char array
+				     and type array = word8array
 				     and type Vector.vector = string
 				     and type Vector.elem = char =
   struct
@@ -13,16 +13,16 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
 
-    val array_length = TiltPrim.array_length
-    val empty_array = TiltPrim.empty_array
-    val empty_vector = TiltPrim.empty_vector
-    val unsafe_array = TiltPrim.unsafe_array
-    val unsafe_sub = TiltPrim.unsafe_sub
-    val unsafe_update = TiltPrim.unsafe_update
-    val unsafe_vsub = TiltPrim.unsafe_vsub
-    val vector_length = TiltPrim.vector_length
+    val array_length = TiltPrim.array_length8
+    val empty_array = TiltPrim.empty_array8
+    val empty_vector = TiltPrim.empty_vector8
+    val unsafe_array = TiltPrim.unsafe_array8
+    val unsafe_sub = TiltPrim.unsafe_sub8
+    val unsafe_update = TiltPrim.unsafe_update8
+    val unsafe_vsub = TiltPrim.unsafe_vsub8
+    val vector_length = TiltPrim.vector_length8
 
-    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector8
 
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
@@ -33,10 +33,10 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     val ulte = TiltPrim.ulte
 
     type elem = char
-    type array = char array
+    type array = word8array
     structure Vector = Word8Vector
 
-    val maxLen = Array.maxLen
+    val maxLen = PreVector8.maxLen
 
     val array0 : array = empty_array
     val vector0 : Vector.vector = empty_vector
@@ -91,7 +91,7 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 		then raise Subscript
 	    else unsafe_sub(a,index)
 	end
-    fun update (a, index :int, e : 'a) : unit =
+    fun update (a, index :int, e : char) : unit =
 	let val index = int32touint32 index
 	in  if (ugte(index, array_length a))
 		then raise Subscript

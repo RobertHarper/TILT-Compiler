@@ -10,6 +10,7 @@ signature OPTIMIZE =
       val optimize :  {doDead : bool,
 		       doProjection : int option,
 		       doUncurry : bool,
+		       doPolyUncurry : bool,
 		       doCse : bool} -> Nil.module -> Nil.module
       (* Perform optimizations listed in the comment at the top of optimize.sml as always being performed, as well
        * as performing dead code elimination (doDead), replacement of known projections for small values (doProjection),
