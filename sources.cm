@@ -1,0 +1,48 @@
+Group is
+(* ------ SML/NJ library ------ *)
+smlnj-lib.cm
+(* ------ Our own utilities --- *)
+Util/formatter.sig.sml
+Util/formatter.sml
+Util/util.sig.sml
+Util/util.sml
+Util/graphutil.sig.sml
+Util/graphutil.sml
+Util/name.sig.sml
+Util/name.sml
+Util/asthelp.sig.sml
+Util/asthelp.sml
+(* ------ Elaborator Stuff ----- *)
+Elaborator/prim.sig.sml
+Elaborator/prim.sml
+Elaborator/tyvar.sig.sml
+Elaborator/tyvar.sml
+Elaborator/il.sig.sml
+Elaborator/il.sml
+Elaborator/ppil.sig.sml
+Elaborator/ppil.sml
+Elaborator/ilutil.sig.sml
+Elaborator/ilutil.sml
+Elaborator/ilstatic.sig.sml
+Elaborator/ilstatic.sml
+Elaborator/infixparse.sig.sml
+Elaborator/infixparse.sml
+Elaborator/basis.sig.sml
+Elaborator/basis.sml
+Elaborator/illookup.sig.sml
+Elaborator/illookup.sml
+Elaborator/datatype.sig.sml
+Elaborator/datatype.sml
+Elaborator/pat.sig.sml
+Elaborator/pat.sml
+Elaborator/toil.sig.sml
+Elaborator/toil.sml
+Elaborator/ileval.sig.sml
+Elaborator/ileval.sml
+
+(* ------ Nil stuff ------ *)
+Nil/annote.sig.sml
+Nil/nil.sig.sml
+
+link.sml
+
