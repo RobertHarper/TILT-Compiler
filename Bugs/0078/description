@@ -159,8 +159,8 @@ Comments:
 
             out of the definition of putV.  I don't know why the same
             thing doesn't happen in posix-prim-io-fn.sml, since the
-            announce code is still marking the function total.  This
-            might be a bug (suboptimality) in the hoister.
+            announce code is still marked as total in those arguments.
+            This might be a bug (suboptimality) in the hoister.
 
 Fix:
 Test: 
