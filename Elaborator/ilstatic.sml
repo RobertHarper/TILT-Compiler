@@ -218,7 +218,8 @@ structure IlStatic
 		    val handlers = (default_exp_handler,
 				    con_handler,
 				    default_mod_handler,
-				    default_sdec_handler)
+				    default_sdec_handler,
+				    default_sig_handler)
 
 		    val _ = con_handle handlers argcon
 		in  ()
@@ -1296,7 +1297,7 @@ structure IlStatic
 	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
-	      | NONE => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound"))
+	      | NONE => NONE)
      | MOD_STRUCTURE (sbnds) =>
 	   let fun loop va [] acc ctxt = (va,rev acc)
 		 | loop va (sb::sbs) acc ctxt =
@@ -1485,7 +1486,7 @@ structure IlStatic
 			    ReduceAgainWith(c,PATH(v,[]))
 		      | SOME(_,PHRASE_CLASS_CON (_,_,NONE,_)) => NONE
 		      | SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
-		      | NONE => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound"))
+		      | NONE => NONE)
 	    | CON_TUPLE_PROJECT (i,c) =>
 		  let fun reducible cons =
 		      let val len = length cons
@@ -1816,7 +1817,7 @@ structure IlStatic
     and Sdecs_Lookup_Help (doOpen : bool) (ctxt : context) (m : mod, sdecs, labs : labels)
 	: (labels * phrase_class) option =
 	(case labs
-	   of [] => error "Sdecs_Lookup_Help got []"
+	   of [] => NONE
 	    | [lbl] => Sdecs_Lookup_Label (doOpen,ctxt,lbl) (m,sdecs)
 	    | (lbl :: lbls) =>
 	       (case Sdecs_Lookup_Label (doOpen,ctxt,lbl) (m,sdecs)
