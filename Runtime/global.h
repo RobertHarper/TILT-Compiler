@@ -27,7 +27,8 @@ int IsGlobalData(vptr_t addr)
 INLINE(IsTagData)
 int IsTagData(ptr_t addr)
 {
-  return (addr <= (ptr_t) 256);
+  unsigned long a = (unsigned long)addr;
+  return a <= 256;
 }
 
 

@@ -104,12 +104,12 @@ struct
 	  val boxl = fresh_code_label "dynamic_box"
 	  val noboxl = fresh_code_label "dynamic_nobox"
 	  val _ = 
-	      (add_instr(BCNDI(LE, carriedType, IMM 4, boxl, false));     (* check for int types *)
-	       add_instr(BCNDI(LE, carriedType, IMM 255, noboxl, false)); (* check for other small types *)
+	      (add_instr(BCNDUI(LE, carriedType, IMM 4, boxl, false));     (* check for int types *)
+	       add_instr(BCNDUI(LE, carriedType, IMM 255, noboxl, false)); (* check for other small types *)
 	       record_project(carriedType, 0, tag);
-	       add_instr(BCNDI(EQ, tag, IMM 12, boxl, false));               (* check for exntags *)
-	       add_instr(BCNDI(EQ, tag, IMM 4, boxl, false));                (* check for sums *)
-	       add_instr(BCNDI(EQ, tag, IMM 8, boxl, false)))                (* check mus *)
+	       add_instr(BCNDSI(EQ, tag, IMM 12, boxl, false));               (* check for exntags *)
+	       add_instr(BCNDSI(EQ, tag, IMM 4, boxl, false));                (* check for sums *)
+	       add_instr(BCNDSI(EQ, tag, IMM 8, boxl, false)))                (* check mus *)
 	in  (boxl, noboxl)
 	end
 

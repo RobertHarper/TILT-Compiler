@@ -175,14 +175,14 @@ val debug_full = ref false
 	    val desti = alloc_regi TRACE
 	    val tagi = alloc_regi TRACE
 	    val numfieldi = alloc_regi NOTRACE_INT
-	    val _ = (add_instr(BCNDI(LE, argc, IMM 255, noflattenl, false)); (* check for small types *)
-		     record_project(argc,0,tagi);                            (* load tag of the type *)
-		     add_instr(BCNDI(NE, tagi, IMM 5, noflattenl, false)))   (* check for record *)
+	    val _ = (add_instr(BCNDUI(LE, argc, IMM 255, noflattenl, false)); (* check for small types *)
+		     record_project(argc,0,tagi);                             (* load tag of the type *)
+		     add_instr(BCNDSI(NE, tagi, IMM 5, noflattenl, false)))   (* check for record *)
 
             (* dispatch to the right record case *)
 	    val _ = record_project(argc,1,numfieldi)                     (* load record field number *)
 	    fun mapper (n,recordlab) = 
-		add_instr(BCNDI(EQ, numfieldi, IMM n, recordlab, false)) (* check for records *)
+		add_instr(BCNDSI(EQ, numfieldi, IMM n, recordlab, false)) (* check for records *)
 	    val _ = mapcount mapper recordlabs
 	    val _ = add_instr(BR noflattenl)
 	    fun mapper (n,recordlab,supportvar) = 
@@ -233,14 +233,14 @@ val debug_full = ref false
 	    val desti = alloc_regi TRACE
 	    val tagi = alloc_regi TRACE
 	    val numfieldi = alloc_regi NOTRACE_INT
-	    val _ = (add_instr(BCNDI(LE, argc, IMM 255, noflattenl, false)); (* check for small types *)
-		     record_project(argc,0,tagi);                           (* load tag of the type *)
-		     add_instr(BCNDI(NE, tagi, IMM 5, noflattenl, false))) (* check for record *)
+	    val _ = (add_instr(BCNDUI(LE, argc, IMM 255, noflattenl, false)); (* check for small types *)
+		     record_project(argc,0,tagi);                             (* load tag of the type *)
+		     add_instr(BCNDSI(NE, tagi, IMM 5, noflattenl, false)))   (* check for record *)
 
             (* dispatch to the right record case *)
 	    val _ = record_project(argc,1,numfieldi)      (* load record field number *)
 	    fun mapper (n,recordlab) = 
-		add_instr(BCNDI(EQ, numfieldi, IMM n, recordlab, false)) (* check for record *)
+		add_instr(BCNDSI(EQ, numfieldi, IMM n, recordlab, false)) (* check for record *)
 
 	    val _ = mapcount mapper recordlabs
 	    val _ = add_instr(BR noflattenl)
