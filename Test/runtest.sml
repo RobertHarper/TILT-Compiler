@@ -8,7 +8,7 @@ NAME
 SYNOPSIS
 	./runall [-fnc]
 
-	./Runtest.$platform.exe [-fnc] testdir ...
+	./Runtest.$platform.exe [-fncFS] testdir ...
 
 	./tilt [tilt-options]
 	./tilt-nj [tilt-options]
@@ -20,7 +20,14 @@ DESCRIPTION
 	after failure.  The -n option causes runtest to use a version
 	of TILT compiled by SML/NJ.  Runtest purges compiler-generated
 	files before each test and after each successful test.  The -c
-	option prevents this cleanup.
+	option prevents this cleanup.  The (mutually exclusive) -F and 
+	-S flags tells runtest the expected outcome of the tests, so 
+	that it can generate an appropriate warning if a test unexepectedly 
+	fails or succeeds.  If the -F flag is specified, then any 
+	test that succeeds will generate a message indicating that the 
+        status of the test has changed.  Similary, the -S flag will cause
+	runtest to generate warnings on any failures.  These flags
+	are mostly useful for the runall script.
 
 	A test comprises some SML code and an expected result.
 	Runtest uses TILT to compile the test code then runs the
