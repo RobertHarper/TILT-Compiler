@@ -7,10 +7,17 @@ Version:     CVS
 System:      any
 Severity:    critical
 Problem:     The compiler bombs with tilt: internal error: tonil.sml: Use of datatype label detected.
-Code:        See bug.sml.
+Code:
+	(*$import *)
+	datatype t = A
+	val () =
+	    let
+		datatype t = datatype t
+	    in  ()
+	    end
 Transcript:  
 Comments:    
 Fix:         
-Test: 
+Test: 0013
 Owner: swasey
 Status: open
