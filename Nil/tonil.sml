@@ -95,7 +95,7 @@ struct
 	   fun loop 0 (rest, labs, vars) = (rest, rev labs, rev vars)
 	     | loop n (Il.SBND(lab,bnd)::rest, labs, vars) = 
 	       let val var = (case bnd of
-				  Il.BND_MOD (v,_) => v
+				  Il.BND_MOD (v,_,_) => v
 				| Il.BND_EXP (v,_) => v
 				| Il.BND_CON (v,_) => v)
 	       in  loop (n-1) (rest, lab::labs, var::vars)
@@ -109,7 +109,7 @@ struct
 	   fun loop 0 (rest, labs, vars) = (rest, rev labs, rev vars)
 	     | loop n (Il.SDEC(lab,bnd)::rest, labs, vars) = 
 	       let val var = (case bnd of
-				  Il.DEC_MOD (v,_) => v
+				  Il.DEC_MOD (v,_,_) => v
 				| Il.DEC_EXP (v,_) => v
 				| Il.DEC_CON (v,_,_) => v)
 	       in  loop (n-1) (rest, lab::labs, var::vars)
@@ -178,10 +178,10 @@ struct
 				     in  (SDEC(l,DEC_CON(v',k,c)),
 					  (#1 s, (v,CON_VAR v'):: (#2 s), #3 s))
 				     end
-		 | DEC_MOD(v,signat) => let val v' = Name.derived_var v
+		 | DEC_MOD(v,b,signat) => let val v' = Name.derived_var v
 					    val signat = sig_subst_expconmodvar(signat,
 										#1 s, #2 s, #3 s)
-					in  (SDEC(l,DEC_MOD(v,signat)),s)
+					in  (SDEC(l,DEC_MOD(v,b,signat)),s)
 					end
        in  #1(foldl_acc folder ([],[],[]) sdecs)
        end
@@ -673,7 +673,7 @@ end (* local defining splitting context *)
    and preproject (var_arg, il_signat, context) = 
 	let 
 	    fun find_structure_paths m acc 
-		(Il.SIGNAT_STRUCTURE(popt,(Il.SDEC(l,Il.DEC_MOD (_,s)))::rest)) = 
+		(Il.SIGNAT_STRUCTURE(popt,(Il.SDEC(l,Il.DEC_MOD (_,_,s)))::rest)) = 
 		let val skip_project = 
 		    ((IlUtil.is_datatype_lab l) orelse 
 		     (case s of 
@@ -1174,7 +1174,7 @@ end (* local defining splitting context *)
                         (il_sbnds as
 			 Il.SBND(lbl, 
 				Il.BND_MOD
-				(top_var, m as 
+				(top_var, is_poly, m as 
 				 Il.MOD_FUNCTOR
 				 (poly_var, il_arg_signat, 
 				  Il.MOD_STRUCTURE
@@ -1194,6 +1194,9 @@ end (* local defining splitting context *)
 	   let
 	       val _ = clear_memo top_var
 	       val _ = clear_memo poly_var
+
+               val _ = if is_poly then () else (print "warning: function ";
+                                                Ppnil.pp_label lbl; print " not poly-bound\n")
 
 	       (* external_labels = Exported labels for these functions.
                   external_vars = Variables to which the functions should be bound
@@ -1378,7 +1381,7 @@ end (* local defining splitting context *)
 	    record_r_exp_items = record_r_exp_items}
        end
 
-     | xsbnds_rewrite_3 context (Il.SBND(lbl, Il.BND_MOD(var, il_module))::rest_il_sbnds) =
+     | xsbnds_rewrite_3 context (Il.SBND(lbl, Il.BND_MOD(var, _, il_module))::rest_il_sbnds) =
        let
 
 	   val _ = clear_memo var
@@ -2305,7 +2308,7 @@ end (* local defining splitting context *)
 	     | loop ((sdec as 
 		     Il.SDEC(lbl,
 			     Il.DEC_MOD
-			     (top_var, s as
+			     (top_var, is_polyfun, s as
 			      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat,
 						Il.SIGNAT_STRUCTURE(_,[Il.SDEC(it_lbl,
 									    Il.DEC_EXP(_,il_con))]),
@@ -2318,6 +2321,9 @@ end (* local defining splitting context *)
 		   andalso (not (IlUtil.is_eq_lab lbl))) then
 		   let
 (*		       val _ = print "entered poly optimization case\n" *)
+                       val _ = if is_polyfun then () else (print "warning: function ";
+                                                Ppnil.pp_label lbl; print " not poly-bound\n")
+
 		       val clist = (case il_con of
 					Il.CON_RECORD lclist => map #2 lclist
 				      | Il.CON_ARROW _ => [il_con]
@@ -2330,7 +2336,7 @@ end (* local defining splitting context *)
 		       fun make_sdec (l,c) =
 			   let val inner_sig =
 			       Il.SIGNAT_STRUCTURE(NONE,[Il.SDEC(it_lbl,Il.DEC_EXP(Name.fresh_var(),c))])
-			   in  Il.SDEC(l,Il.DEC_MOD(top_var,
+			   in  Il.SDEC(l,Il.DEC_MOD(top_var, true,
 						      Il.SIGNAT_FUNCTOR(poly_var, il_arg_signat, inner_sig, arrow)))
 			   end
 		   val sdecs' = Listops.map2 make_sdec (external_labels,clist)
@@ -2351,7 +2357,7 @@ end (* local defining splitting context *)
 					crdecs_use = nil, erdecs = nil}
 
      | xsdecs' context (con0, subst,  
-		    Il.SDEC(lbl, d as Il.DEC_MOD(var,signat)) :: rest) =
+		    Il.SDEC(lbl, d as Il.DEC_MOD(var,_,signat)) :: rest) =
        let
 	   val _ = clear_memo var
 	   val ((var_c, var_r), context') = splitVar (var, context)
@@ -2465,17 +2471,17 @@ end (* local defining splitting context *)
 			       | SOME c => 
 				     update_NILctx_insert_kind_equation(context, v, c, NONE))
 			end
-		  | Il.PHRASE_CLASS_MOD (_,il_sig) => 
+		  | Il.PHRASE_CLASS_MOD (_,is_polyfun,il_sig) => 
 			let
 			    val (l_c,l_r) = make_cr_labels l
 			    val ((v_c, v_r),context) = splitVar (v, context)
 			    val (knd_context, knd_shape, knd_use, type_r) = xsig context (Var_c v_c, il_sig)
 				
 			    val context = update_NILctx_insert_kind(context, v_c, knd_context, NONE)
-			    val kill_con = killArrowKind "6" context knd_shape
 			    val iv = ImportValue(l_r,v_r,type_r)
 			    val it = ImportType(l_c,v_c,knd_use)
-			in  (if kill_con
+			in  (if (* is_polyfun *)
+                                 (killArrowKind "6" context knd_shape)
 				 then iv::imports
 			     else iv::it::imports,
 			     context)
@@ -2576,22 +2582,31 @@ end (* local defining splitting context *)
 				     then exports
 				 else (ExportType(l,v)::exports)
 			     end
-		       | (true,Il.DEC_MOD (v,s)) => 
+		       | (true,Il.DEC_MOD (v,is_polyfun,s)) => 
 			     let val (lc,lr) = make_cr_labels l
 				 val ((vc,vr),_) = splitVar (v,final_context)
 				 val exports = 
-				     let 
-					 val kc = NilContext.find_shape(nil_final_context, vc)
-					  handle e => (print "exception while doing DEC_MOD\n";
-						       raise e)
-				     in if killArrowKind "8" final_context kc
-					    then 
-						(ExportValue(lr,vr)::exports)
-					else (ExportValue(lr,vr)::
-					      ExportType(lc,vc)::
-					      exports)
-				     end
+                                    let
+                                        val kc = NilContext.find_shape(nil_final_context, vc)
+                                         handle e => (print "exception while doing DEC_MOD\n";
+                                                      raise e)
+                                    in if killArrowKind "8" final_context kc
+                                           then
+                                               (ExportValue(lr,vr)::exports)
+                                       else (ExportValue(lr,vr)::
+                                             ExportType(lc,vc)::
+                                             exports)
+                                    end
+(*
+				     if is_polyfun then 
+				 ExportValue(lr,vr) :: exports 
+				     else 
+					 ExportValue(lr,vr) ::
+					  ExportType(lc,vc) ::
+					  exports
+*)
 			     in  exports
+
 			     end)
 	    val exports : export_entry list = rev(foldl folder [] sdecs)
 	    val _ = msg "---done phase-splitting\n" 

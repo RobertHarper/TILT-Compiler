@@ -249,6 +249,7 @@ struct
   val split = Listops.split
   val opt_cons = Listops.opt_cons
   val find2 = Listops.find2
+  (* XXX CS: detects conflicts between namespaces  that ought not occur! *)
   val labels_distinct = Listops.no_dups Name.compare_label_name
 
   (*From PrimUtil*)
@@ -629,6 +630,10 @@ struct
 		 (labels_distinct labels) orelse
 		 (Ppnil.pp_list Ppnil.pp_label' labels 
 		  ("labels are: ",",",";",true);
+                  Listops.no_dups (fn (x,y) => let val _ = (print "comparing: "; pp_label x; print " and "; pp_label y; print " : ")
+                                                   val result = Name.compare_label_name (x,y)
+                                                   val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
+                                               in result end) labels;
 		  (error (locate "con_valid") "Labels in record of constructors not distinct" ))
 	       val _ = if (!trace)
 			   then print "con_valid done processing Crecord_c\n}"

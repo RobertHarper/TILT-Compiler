@@ -241,6 +241,9 @@ structure NilContext
 				  end
 	    val (formals,D) = Listops.foldl_acc folder D formals
 *)
+ 	    fun folder((v,k),D) = insert_kind(D,v,k)
+	    val D = List.foldl folder D formals
+
 	    val return = make_shape (D,return)
 	  in  (Arrow_k (openness, formals,return))
 	  end)
@@ -355,7 +358,7 @@ structure NilContext
       | NONE => raise Unbound)
 
 
-   fun insert_kind (context as {conmap,kindmap,counter}:context,var,kind) = 
+   and insert_kind (context as {conmap,kindmap,counter}:context,var,kind) = 
      let
        val _ =  
 	 if !debug then
