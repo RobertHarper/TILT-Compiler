@@ -1,7 +1,11 @@
-#This file was created by <leaf> Tue Oct  6 10:27:32 1998
+#This file was created by <leaf> Mon Oct 12 19:41:55 1998
 #LyX 0.12 (C) 1995-1998 Matthias Ettrich and the LyX Team
 \lyxformat 2.15
-\textclass article
+\textclass amsart-seq
+\begin_preamble
+\usepackage{latexsym}
+\newcommand{\comment}[1]{}
+\end_preamble
 \language default
 \inputencoding default
 \fontscheme default
@@ -11,7 +15,7 @@
 \papersize Default
 \paperpackage a4
 \use_geometry 0
-\use_amsmath 0
+\use_amsmath 1
 \paperorientation portrait
 \secnumdepth 3
 \tocdepth 3
@@ -20,7 +24,7 @@
 \quotes_language english
 \quotes_times 2
 \papercolumns 1
-\papersides 1
+\papersides 2
 \paperpagestyle default
 
 \layout Standard
@@ -116,6 +120,48 @@
 \end_inset 
 
  
+\begin_inset FormulaMacro 
+\newcommand{\carray}[1]{#1 \: array}
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\inl}[2]{inl_{#1 }#2 }
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\inr}[2]{inr_{#1 }#2 }
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\sumsw}[7]{case\, #1 \, of\, \{inl(#2 :#3 )\Rightarrow #4 ,inr(#5 :#6 )\Rightarrow #7 \}}
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\arr}[3]{array_{#1 }(#2 ,#3 )}
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\sub}[2]{sub(#1 ,#2 )}
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\fsub}[2]{\mathit{fsub}(#1 ,#2 )}
+
+\end_inset 
+
+
 \layout Title
 
 Core Nil
@@ -132,20 +178,36 @@ Syntax
 \begin{eqnarray*}
 \kappa  & ::= & T\: |\: \st{c}\: |\: \Sigma (\alpha ::\kappa ).\kappa \: |\: \Pi (\alpha ::\kappa ).\kappa \\
  &  & \\
-c & ::= & \alpha \mid Int\mid BoxFloat\mid \mu (a=c,b=c)\mid c\times c\mid c\rightarrow c\mid \Lam{\alpha }{\kappa }{c}\\
- &  & \mid c\, c\mid <c,c>\mid c.1\mid c.2\mid \Let{\alpha }{c}{c}\\
+c & ::= & \alpha \mid Int\mid BoxFloat\mid \mu (a=c,b=c)\mid c\times c\mid c\rightarrow c\mid c+c\mid \carray{c}\\
+ &  & \mid \Lam{\alpha }{\kappa }{c}\mid c\, c\mid <c,c>\mid c.1\mid c.2\mid \Let{\alpha }{c}{c}\\
  &  & \\
 \tau  & ::= & c\mid (\alpha ::\kappa ,\tau )\rightarrow \tau \mid Float\mid \tau \times \tau \\
  &  & \\
 p & ::= & \alpha \mid p.1\mid p.2\mid p\, c\\
  &  & \\
 e & ::= & x\mid \lete{x}{e}{e}\mid \lete{\alpha }{c}{e}\mid \rec{f}{\alpha }{\kappa }{x}{\tau }{\tau }{e}\\
- &  & \mid e[c]e\mid <e,e>\mid e.1\mid e.2\mid n\mid r\mid box(e)\mid unbox(e)\\
- &  & \mid \ifz{e}{e}{e}\mid \iffloat{\tau }{e}{e}\\
+ &  & \mid e[c]e\mid <e,e>\mid e.1\mid e.2\mid n\mid r\mid box(e)\mid unbox(e)\mid \inl{c}{e}\mid \inr{c}{e}\\
+ &  & \mid \sumsw{e}{x}{c}{e}{x}{c}{e}\mid \iffloat{c}{e}{e}\\
+ &  & \mid \arr{c}{e}{e}\mid \sub{e}{e}\mid \fsub{e}{e}\\
  &  & \\
 \Delta  & ::= & \bullet \mid \caddt{x}{\tau }\mid \caddk{\alpha }{\kappa }
 \end{eqnarray*}
 
+\end_inset 
+
+
+\layout Standard
+
+I occasionally use 
+\begin_inset Formula \( \kappa _{1}\times \kappa _{2} \)
+\end_inset 
+
+ for 
+\begin_inset Formula \( \Sigma (\alpha ::\kappa _{1}).\kappa _{2} \)
+\end_inset 
+
+where 
+\begin_inset Formula \( \alpha \notin fv(\kappa _{2}) \)
 \end_inset 
 
 
@@ -252,7 +314,7 @@ Judgements for the algorithmic core nil
 
 
 \begin_inset FormulaMacro 
-\newcommand{\pathextract}[3]{#1 \vdash #2 \sim #3 }
+\newcommand{\pathextract}[3]{#1 \vdash #2 \leadsto #3 }
 
 \end_inset 
 
@@ -270,7 +332,7 @@ Judgements for the algorithmic core nil
 
 
 \begin_inset FormulaMacro 
-\newcommand{\selfify}[3]{#1 ::#2 =#3 }
+\newcommand{\selfify}[3]{#1 ::#2 \doteq #3 }
 
 \end_inset 
 
@@ -287,6 +349,15 @@ Judgements for the algorithmic core nil
 \end_inset 
 
 
+\layout Standard
+
+
+\begin_inset FormulaMacro 
+\newcommand{\tcheck}[3]{#1 \vdash #2 \Downarrow #3 }
+
+\end_inset 
+
+ 
 \layout Subsection
 
 Well Formed Context 
@@ -309,7 +380,7 @@ Kind
 \[
 \infrule{\begin{array}{ll}
 \cok{\context } & \kindvalid{\context }{\kappa }
-\end{array}}{\cok{\caddk{\alpha }{\kappa }}}\alpha \notin dom(\context )\]
+\end{array}}{\cok{\caddk{\alpha }{\kappa }}}\quad \alpha \notin dom(\context )\]
 
 \end_inset 
 
@@ -322,7 +393,7 @@ Type
 \[
 \infrule{\begin{array}{ll}
 \cok{\context } & \typevalid{\context }{\tau }
-\end{array}}{\cok{\caddt{x}{\tau }}}x\notin dom(\context )\]
+\end{array}}{\cok{\caddt{x}{\tau }}}\quad x\notin dom(\context )\]
 
 \end_inset 
 
@@ -497,14 +568,57 @@ Selfification
 \end_inset 
 
 
+\layout Standard
+
+This is the definition of selfification.
+ Assume 
+\begin_inset Formula \( c \)
+\end_inset 
+
+ and 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ are well-formed with respect to some context.
+ Return the most precise kind of 
+\begin_inset Formula \( c \)
+\end_inset 
+
+.
+ Intuitively, this is the definition of a singleton at the higher kind.
+ So assume that there exists 
+\begin_inset Formula \( \context  \)
+\end_inset 
+
+ s.t.
+ 
+\begin_inset Formula \( \kcheck{\context }{c}{\kappa } \)
+\end_inset 
+
+, and 
+\begin_inset Formula \( \selfify{c}{\kappa }{\kappa '} \)
+\end_inset 
+
+.
+ Then for all 
+\begin_inset Formula \( \kappa '' \)
+\end_inset 
+
+ s.t.
+ 
+\begin_inset Formula \( \kcheck{\context }{c}{\kappa ''} \)
+\end_inset 
+
+, 
+\begin_inset Formula \( \subkind{\context }{\kappa '}{\kappa ''} \)
+\end_inset 
+
+.
 \layout List
 \labelwidthstring 00.00.0000
 
 Type 
-\begin_inset Formula 
-\[
-\axiom{\selfify{c}{T}{\st{c}}}\]
-
+\begin_inset Formula \( \selfify{c}{T}{\st{c}} \)
 \end_inset 
 
 
@@ -512,10 +626,7 @@ Type
 \labelwidthstring 00.00.0000
 
 Singleton 
-\begin_inset Formula 
-\[
-\axiom{c::\st{d}=\st{d}}\]
-
+\begin_inset Formula \( \selfify{c}{\st{d}}{d} \)
 \end_inset 
 
 
@@ -527,10 +638,13 @@ Singleton
 \end_inset 
 
  
-\begin_inset Formula 
-\[
-\infrule{\selfify{c\, \alpha }{\kappa _{2}}{\kappa _{2}'}}{\selfify{c}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}'}}\]
+\begin_inset Formula \( \selfify{c}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}'} \)
+\end_inset 
 
+ 
+\newline 
+where 
+\begin_inset Formula \( \selfify{c\, \alpha }{\kappa _{2}}{\kappa _{2}'} \)
 \end_inset 
 
 
@@ -542,12 +656,17 @@ Singleton
 \end_inset 
 
  
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\selfify{c.1}{\kappa _{1}}{\kappa _{1}'} & \selfify{c.2}{\subst{c.1}{\alpha }{\kappa _{2}}}{\kappa _{2}'}
-\end{array}}{\selfify{c}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'}}\]
+\begin_inset Formula \( \selfify{c}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'} \)
+\end_inset 
 
+ 
+\newline 
+where 
+\begin_inset Formula \( \selfify{c.1}{\kappa _{1}}{\kappa _{1}'} \)
+\end_inset 
+
+ and 
+\begin_inset Formula \( \selfify{c.2}{\subst{c.1}{\alpha }{\kappa _{2}}}{\kappa _{2}'} \)
 \end_inset 
 
 
@@ -617,7 +736,24 @@ Assumes that
 \begin_inset Formula \( \kappa  \)
 \end_inset 
 
+.
+ We say that a constructor 
+\begin_inset Formula \( c \)
+\end_inset 
 
+ is well-formed with respect to a well-formed context 
+\begin_inset Formula \( \context  \)
+\end_inset 
+
+ iff 
+\begin_inset Formula \( \kindsynth{\context }{c}{\kappa } \)
+\end_inset 
+
+ for some 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+.
 \layout List
 \labelwidthstring 00.00.0000
 
@@ -625,39 +761,6 @@ Variable
 \begin_inset Formula 
 \[
 \infrule{\selfify{\alpha }{\kappa }{\kappa '}}{\kindsynth{\Delta [\alpha ::\kappa ]}{\alpha }{\kappa }'}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Weakening1 
-\begin_inset Formula 
-\[
-\infrule{\kindsynth{\context }{\alpha }{\kappa }}{\kindsynth{\caddk{\alpha '}{\kappa '}}{\alpha }{\kappa }}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Weakening2 
-\begin_inset Formula 
-\[
-\infrule{\kindsynth{\context }{\alpha }{\kappa }}{\kindsynth{\caddt{x}{\tau }}{\alpha }{\kappa }}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Int 
-\begin_inset Formula 
-\[
-\axiom{\kindsynth{\Delta }{Int}{\st{Int}}}\]
 
 \end_inset 
 
@@ -676,6 +779,17 @@ BoxFloat
 \layout List
 \labelwidthstring 00.00.0000
 
+Int 
+\begin_inset Formula 
+\[
+\axiom{\kindsynth{\context }{Int}{\st{Int}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
 
 \begin_inset Formula \( \mu  \)
 \end_inset 
@@ -685,7 +799,7 @@ BoxFloat
 \[
 \infrule{\begin{array}{ll}
 \kcheck{\Delta [a::T,b::T]}{c_{1}}{T} & \kcheck{\Delta [a::T,b::T]}{c_{2}}{T}
-\end{array}}{\kindsynth{\Delta }{\mu (a=c_{1},b=c_{2})}{\st{\mu (a=c_{1},b=c_{2}).1}\times \st{\mu (a=c_{1},b=c_{2}).2}}}a,b\notin dom(\Delta )\]
+\end{array}}{\kindsynth{\Delta }{\mu (a=c_{1},b=c_{2})}{\st{\mu (a=c_{1},b=c_{2}).1}\times \st{\mu (a=c_{1},b=c_{2}).2}}}\quad a,b\notin dom(\Delta )\]
 
 \end_inset 
 
@@ -719,12 +833,36 @@ Arrow
 \layout List
 \labelwidthstring 00.00.0000
 
+Sum 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\kcheck{\context }{c_{1}}{T} & \kcheck{\context }{c_{2}}{T}
+\end{array}}{\kindsynth{\Delta }{c_{1}+c_{2}}{\st{c_{1}+c_{2}}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+Array 
+\begin_inset Formula 
+\[
+\infrule{\kcheck{\context }{c}{T}}{\kindsynth{\context }{\carray{c}}{\st{\carray{c}}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
 Lambda 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
 \kindvalid{\Delta }{\kappa } & \kindsynth{\Delta [\alpha ::\kappa ]}{c}{\kappa '}
-\end{array}}{\kindsynth{\Delta }{\Lam{\alpha }{\kappa }{c}}{\Pi (\alpha ::\kappa ).\kappa '}}\alpha \notin dom(\Delta )\]
+\end{array}}{\kindsynth{\Delta }{\Lam{\alpha }{\kappa }{c}}{\Pi (\alpha ::\kappa ).\kappa '}}\quad \alpha \notin dom(\Delta )\]
 
 \end_inset 
 
@@ -787,7 +925,7 @@ Let
 \[
 \infrule{\begin{array}{ll}
 \kindsynth{\Delta }{c_{1}}{\kappa _{1}} & \kindsynth{\Delta [\alpha ::\kappa _{1}]}{c_{2}}{\kappa _{2}}
-\end{array}}{\kindsynth{\Delta }{\Let{\alpha }{c_{1}}{c_{2}}}{\subst{c_{1}}{\alpha }{\kappa _{2}}}}\alpha \notin dom(\Delta )\]
+\end{array}}{\kindsynth{\Delta }{\Let{\alpha }{c_{1}}{c_{2}}}{\subst{c_{1}}{\alpha }{\kappa _{2}}}}\quad \alpha \notin dom(\Delta )\]
 
 \end_inset 
 
@@ -831,7 +969,7 @@ ArrowType
 \frac{\begin{array}{ll}
 \kindvalid{\context }{\kappa } & \\
 \typevalid{\caddk{\alpha }{\kappa }}{\tau _{1}} & \typevalid{\caddk{\alpha }{\kappa }}{\tau _{2}}
-\end{array}}{\typev{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}}}\alpha \notin dom(\context )\]
+\end{array}}{\typev{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}}}\quad \alpha \notin dom(\context )\]
 
 \end_inset 
 
@@ -856,6 +994,45 @@ PairType
 \frac{\begin{array}{ll}
 \typev{\tau _{1}} & \typev{\tau _{2}}
 \end{array}}{\typev{\tau _{1}\times \tau _{2}}}\]
+
+\end_inset 
+
+
+\layout Subsection
+
+Type Analysis 
+\begin_inset Formula \( \tcheck{\context }{e}{\tau } \)
+\end_inset 
+
+
+\layout Standard
+
+Assume 
+\begin_inset Formula \( \context  \)
+\end_inset 
+
+ and 
+\begin_inset Formula \( \tau  \)
+\end_inset 
+
+ are well-formed.
+ Check that 
+\begin_inset Formula \( e \)
+\end_inset 
+
+ is well-typed, and has type 
+\begin_inset Formula \( \tau  \)
+\end_inset 
+
+.
+\layout Standard
+
+
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\types{e}{\tau '} & \typeeq{\tau '}{\tau }
+\end{array}}{\tcheck{\context }{e}{\tau }}\]
 
 \end_inset 
 
@@ -901,34 +1078,12 @@ variable
 \layout List
 \labelwidthstring 00.00.0000
 
-weakening1 
-\begin_inset Formula 
-\[
-\infrule{\types{x}{\tau }}{\typesynth{\caddt{x'}{\tau '}}{x}{\tau }}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-weakening2 
-\begin_inset Formula 
-\[
-\infrule{\types{x}{\tau }}{\typesynth{\caddk{\alpha }{\kappa }}{x}{\tau }}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
 lete 
 \begin_inset Formula 
 \[
 \frac{\begin{array}{ll}
 \types{e_{1}}{\tau _{1}} & \typesynth{\caddt{x}{\tau _{1}}}{e_{2}}{\tau _{2}}
-\end{array}}{\types{\lete{x}{e_{1}}{e_{2}}}{\tau _{2}}}x\notin dom(\context )\]
+\end{array}}{\types{\lete{x}{e_{1}}{e_{2}}}{\tau _{2}}}\quad x\notin dom(\context )\]
 
 \end_inset 
 
@@ -941,7 +1096,7 @@ letc
 \[
 \frac{\begin{array}{ll}
 \kindsynth{\context }{c}{\kappa } & \typesynth{\caddk{\alpha }{\kappa }}{e}{\tau }
-\end{array}}{\types{\lete{\alpha }{c}{e}}{\subst{c}{\alpha }{\tau }}}\alpha \notin dom(\context )\]
+\end{array}}{\types{\lete{\alpha }{c}{e}}{\subst{c}{\alpha }{\tau }}}\quad \alpha \notin dom(\context )\]
 
 \end_inset 
 
@@ -954,12 +1109,18 @@ rec
 \[
 \infrule{\begin{array}{lll}
 \kindvalid{\context }{\kappa } & \typevalid{\caddk{\alpha }{\kappa }}{\tau _{1}} & \typevalid{\caddk{\alpha }{\kappa }}{\tau _{2}}\\
-\typesynth{\context \extt{f}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}}\extk{\alpha }{\kappa }\extt{x}{\tau _{1}}}{e}{\tau _{2}'} & \typeequiv{\caddk{\alpha }{\kappa }}{\tau _{2}}{\tau _{2}'} & f,\alpha ,x\notin dom(\context )
+\typesynth{\context \extt{f}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}}\extk{\alpha }{\kappa }\extt{x}{\tau _{1}}}{e}{\tau _{2}'} & \typeequiv{\caddk{\alpha }{\kappa }}{\tau _{2}}{\tau _{2}'} & 
 \end{array}}{\types{\rec{f}{\alpha }{\kappa }{x}{\tau _{1}}{\tau _{2}}{e}}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}}}\]
 
 \end_inset 
 
 
+\newline 
+where 
+\begin_inset Formula \( f,\alpha ,x\notin dom(\context ) \)
+\end_inset 
+
+.
 \layout List
 \labelwidthstring 00.00.0000
 
@@ -967,8 +1128,7 @@ app
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{lll}
-\types{e_{1}}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}} &  & \kcheck{\context }{c}{\kappa }\\
-\types{e_{2}}{\tau _{1}'} &  & \typeeq{\tau _{1}'}{\subst{c}{\alpha }{\tau _{1}}}
+\types{e_{1}}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}} & \kcheck{\context }{c}{\kappa } & \kcheck{\context }{e_{2}}{\subst{c}{\alpha }{\tau _{1}}}
 \end{array}}{\types{e_{1}[c]e_{2}}{\subst{c}{\alpha }{\tau _{2}}}}\]
 
 \end_inset 
@@ -981,8 +1141,7 @@ app2
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{lll}
-\types{e_{1}}{c_{e}} & \hnf{\context }{c_{e}}{c_{1}\rightarrow c_{2}} & \\
-\types{e_{2}}{c_{1}'} & \coneq{c_{1}}{c_{1}'}{T} & 
+\types{e_{1}}{c_{e}} & \hnf{\context }{c_{e}}{c_{1}\rightarrow c_{2}} & \tcheck{\context }{e_{2}}{c_{1}}
 \end{array}}{\types{e_{1}\, e_{2}}{c_{2}}}\]
 
 \end_inset 
@@ -1008,7 +1167,7 @@ type_proj1
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\types{e}{\tau _{1}\times \tau _{2}} & 
+\types{e}{\tau _{1}\times \tau _{2}}
 \end{array}}{\types{e.1}{\tau _{1}}}\]
 
 \end_inset 
@@ -1034,7 +1193,7 @@ type_proj2
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\types{e}{\tau _{1}\times \tau _{2}} & 
+\types{e}{\tau _{1}\times \tau _{2}}
 \end{array}}{\types{e.2}{\tau _{2}}}\]
 
 \end_inset 
@@ -1056,10 +1215,10 @@ con_proj2
 \layout List
 \labelwidthstring 00.00.0000
 
-integer 
+float 
 \begin_inset Formula 
 \[
-\axiom{\types{n}{Int}}\]
+\axiom{\types{r}{Float}}\]
 
 \end_inset 
 
@@ -1067,10 +1226,10 @@ integer
 \layout List
 \labelwidthstring 00.00.0000
 
-float 
+int 
 \begin_inset Formula 
 \[
-\axiom{\types{r}{Float}}\]
+\axiom{\types{n}{Int}}\]
 
 \end_inset 
 
@@ -1100,14 +1259,14 @@ unbox
 \layout List
 \labelwidthstring 00.00.0000
 
-ifzero 
+sumswitch 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\types{e}{c} & \hnf{\context }{c}{Int}\\
-\types{e_{1}}{\tau _{1}} & \types{e_{2}}{\tau _{2}}\\
-\typeeq{\tau _{1}}{\tau _{2}} & 
-\end{array}}{\types{\ifz{e}{e_{1}}{e_{2}}}{\tau _{1}}}\]
+\kcheck{\context }{c_{1}}{T} & \typesynth{\caddt{x_{1}}{c_{1}}}{e_{1}}{\tau _{1}}\\
+\kcheck{\context }{c_{2}}{T} & \typesynth{\caddt{x_{2}}{c_{2}}}{e_{2}}{\tau _{2}}\\
+\tcheck{\context }{e}{c_{1}+c_{2}} & \typeeq{\tau _{1}}{\tau _{2}}
+\end{array}}{\sumsw{e}{x_{1}}{c_{1}}{e_{1}}{x_{2}}{c_{2}}{e_{2}}}\]
 
 \end_inset 
 
@@ -1115,20 +1274,88 @@ ifzero
 \layout List
 \labelwidthstring 00.00.0000
 
-ifFloat 
+inl 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\typev{\tau } & \types{e_{1}}{\tau _{1}}\\
+\kcheck{\context }{c}{T} & \hnf{\context }{c}{c_{1}+c_{2}}\\
+\tcheck{\context }{e}{c_{1}} & 
+\end{array}}{\types{\inl{c}{e}}{c_{1}+c_{2}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+inr 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\kcheck{\context }{c}{T} & \hnf{\context }{c}{c_{1}+c_{2}}\\
+\tcheck{\context }{e}{c_{2}} & 
+\end{array}}{\types{\inr{c}{e}}{c_{1}+c_{2}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+ifBoxFloat 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\kcheck{\context }{c}{T} & \types{e_{1}}{\tau _{1}}\\
 \types{e_{2}}{\tau _{2}} & \typeeq{\tau _{1}}{\tau _{2}}
-\end{array}}{\types{\iffloat{\tau }{e_{1}}{e_{2}}}{\tau _{1}}}\]
+\end{array}}{\types{\iffloat{c}{e_{1}}{e_{2}}}{\tau _{1}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+array 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\tcheck{\context }{e_{1}}{Int} & \kcheck{\context }{c}{T}\\
+\tcheck{\context }{e_{2}}{c} & 
+\end{array}}{\types{\arr{c}{e_{1}}{e_{2}}}{\carray{c}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+sub 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{lll}
+\types{e_{1}}{\carray{c}} & \tcheck{\context }{e_{2}}{Int}
+\end{array}}{\types{\sub{e_{1}}{e_{2}}}{c}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+fsub 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\tcheck{\context }{e_{1}}{\carray{BoxFloat}} & \tcheck{\context }{e_{2}}{Int}
+\end{array}}{\types{\fsub{e_{1}}{e_{2}}}{Float}}\]
 
 \end_inset 
 
 
 \layout Subsection
 
-Natural Kind Inference 
+Natural Kind Extraction 
 \begin_inset Formula \( \pext{p}{\kappa } \)
 \end_inset 
 
@@ -1157,28 +1384,6 @@ Variable
 \begin_inset Formula 
 \[
 \axiom{\pathextract{\caddk{\alpha }{\kappa }}{\alpha }{\kappa }}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Weakening1 
-\begin_inset Formula 
-\[
-\infrule{\pext{\alpha }{\kappa }}{\pathextract{\caddk{\alpha '}{\kappa '}}{\alpha }{\kappa }}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Weakening2 
-\begin_inset Formula 
-\[
-\infrule{\pext{\alpha }{\kappa }}{\pathextract{\caddt{x}{\tau }}{\alpha }{\kappa }}\]
 
 \end_inset 
 
@@ -1224,141 +1429,7 @@ App
 
 \layout Subsection
 
-Beta Reduction
-\layout List
-\labelwidthstring 00.00.0000
-
-Lambda 
-\begin_inset Formula 
-\[
-\infrule{\hnf{\context }{\subst{c_{2}}{\alpha }{c_{1}}}{c}}{\betared{\context }{(\lambda \alpha ::\kappa .c_{1})\, c_{2}}{c}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-PathApp 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\pext{p\, c}{\st{c'}} & \hnf{\context }{c'}{c''}
-\end{array}}{\betared{\context }{p\, c}{c''}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-OpaquePathApp 
-\begin_inset Formula 
-\[
-\infrule{\pext{p\, c}{\kappa }}{\betared{\context }{p\, c}{p\, c}}\]
-
-\end_inset 
-
-
-\newline 
-where 
-\begin_inset Formula \( \kappa  \)
-\end_inset 
-
- is not a singleton
-\layout List
-\labelwidthstring 00.00.0000
-
-Proj1 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\Hnf{c_{1}}{c_{1}'}
-\end{array}}{\betared{\context }{<c_{1},c_{2}>.1}{c_{1}'}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-PathProj1 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\pext{p.1}{\st{c'}} & \hnf{\context }{c'}{c''}
-\end{array}}{\betared{\context }{p.1}{c''}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-OpaquePathProj1 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\pext{p.1}{\kappa }
-\end{array}}{\betared{\context }{p.1}{p.1}}\]
-
-\end_inset 
-
-
-\newline 
-where 
-\begin_inset Formula \( \kappa  \)
-\end_inset 
-
- is not a singleton
-\layout List
-\labelwidthstring 00.00.0000
-
-Proj2 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\Hnf{c_{2}}{c_{2}'}
-\end{array}}{\betared{\context }{<c_{1},c_{2}>.2}{c_{2}'}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-PathProj2 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\pext{p.2}{\st{c'}} & \hnf{\context }{c'}{c''}
-\end{array}}{\betared{\context }{p.2}{c''}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-OpaquePathProj2 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\pext{p.2}{\kappa }
-\end{array}}{\betared{\context }{p.2}{p.2}}\]
-
-\end_inset 
-
-
-\newline 
-where 
-\begin_inset Formula \( \kappa  \)
-\end_inset 
-
- is not a singleton
-\layout Subsection
-
-Constructor Head Normal Form 
+Constructor Weak Head Normal Form 
 \begin_inset Formula \( \hnf{\context }{c}{c'} \)
 \end_inset 
 
@@ -1386,7 +1457,39 @@ Assumes that
 Variable 
 \begin_inset Formula 
 \[
-\infrule{\pext{x}{c}}{\hnf{\context }{x}{c}}\]
+\infrule{\begin{array}{ll}
+\pext{\alpha }{\st{c}} & \hnf{\context }{c}{c'}
+\end{array}}{\hnf{\context }{\alpha }{c'}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+OpaqueVariable 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\pext{\alpha }{\kappa } & 
+\end{array}}{\hnf{\context }{\alpha }{\alpha }}\]
+
+\end_inset 
+
+
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
+\layout List
+\labelwidthstring 00.00.0000
+
+BoxFloat 
+\begin_inset Formula 
+\[
+\axiom{\hnf{\context }{BoxFloat}{BoxFloat}}\]
 
 \end_inset 
 
@@ -1398,17 +1501,6 @@ Int
 \begin_inset Formula 
 \[
 \axiom{\hnf{\context }{Int}{Int}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-BoxFloat 
-\begin_inset Formula 
-\[
-\axiom{\hnf{\context }{BoxFloat}{BoxFloat}}\]
 
 \end_inset 
 
@@ -1453,6 +1545,28 @@ Arrow
 \layout List
 \labelwidthstring 00.00.0000
 
+Sum 
+\begin_inset Formula 
+\[
+\axiom{\Hnf{c_{1}+c_{2}}{c_{1}+c_{2}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+Array 
+\begin_inset Formula 
+\[
+\axiom{\hnf{\context }{\carray{c}}{\carray{c}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
 Lambda 
 \begin_inset Formula 
 \[
@@ -1468,12 +1582,45 @@ App
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\Hnf{c_{1}}{c_{1}'} & \betared{\context }{c_{1}'\, c_{2}}{c'}
-\end{array}}{\Hnf{c_{1}\, c_{2}}{c'}}\]
+\Hnf{c_{1}}{\lambda \alpha ::\kappa .c_{1}} & \hnf{\context }{\subst{c_{2}}{\alpha }{c_{1}}}{c}
+\end{array}}{\Hnf{c_{1}\, c_{2}}{c}}\]
+
+\end_inset 
+
+ 
+\layout List
+\labelwidthstring 00.00.0000
+
+PathApp 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c_{1}}{p} & \pext{p\, c}{\st{c'}}\\
+\hnf{\context }{c'}{c''} & 
+\end{array}}{\Hnf{c_{1}\, c_{2}}{c''}}\]
 
 \end_inset 
 
 
+\layout List
+\labelwidthstring 00.00.0000
+
+OpaquePathApp 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c_{1}}{p} & \pext{p\, c}{\kappa }
+\end{array}}{\Hnf{c_{1}\, c_{2}}{p\, c}}\]
+
+\end_inset 
+
+
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
 \layout List
 \labelwidthstring 00.00.0000
 
@@ -1492,7 +1639,21 @@ Proj1
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\Hnf{c}{c'} & \betared{\context }{c'.1}{c''}
+\Hnf{c}{<c_{1},c_{2}>} & \Hnf{c_{1}}{c_{1}'}
+\end{array}}{\Hnf{c.1}{c_{1}'}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+PathProj1 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c}{p} & \pext{p.1}{\st{c'}}\\
+\hnf{\context }{c'}{c''} & 
 \end{array}}{\Hnf{c.1}{c''}}\]
 
 \end_inset 
@@ -1501,16 +1662,68 @@ Proj1
 \layout List
 \labelwidthstring 00.00.0000
 
-Proj2 
+OpaquePathProj1 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\Hnf{c}{c'} & \betared{\context }{c'.2}{c''}
-\end{array}}{\Hnf{c.1}{c''}}\]
+\Hnf{c}{p} & \pext{p.1}{\kappa }
+\end{array}}{\Hnf{c.1}{p.1}}\]
 
 \end_inset 
 
 
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
+\layout List
+\labelwidthstring 00.00.0000
+
+Proj2 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c}{<c_{1},c_{2}>} & \Hnf{c_{2}}{c_{2}'}
+\end{array}}{\Hnf{c.2}{c_{2}'}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+PathProj2 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c}{p} & \pext{p.2}{\st{c'}}\\
+\hnf{\context }{c'}{c''} & 
+\end{array}}{\Hnf{c.2}{c''}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+OpaquePathProj2 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c}{p} & \pext{p.2}{\kappa }
+\end{array}}{\Hnf{c.2}{p.2}}\]
+
+\end_inset 
+
+
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
 \layout List
 \labelwidthstring 00.00.0000
 
@@ -1522,4 +1735,420 @@ Let
 \end_inset 
 
 
+\layout Section
+
+Proofs
+\layout Subsection
+
+Termination of sub-kinding, well-formed kind, and kind synthesis algorithms.
+\layout Standard
+
+For the time being, we assume that constructor equivalence at kind type
+ is decidable.
+ For this section, I view the judgments given above as algorithms, as they
+ were intended to be.
+ All of the judgments presented above are algorithmic in the sense that
+ either they are entirely syntax directed, or else at worse, require the
+ 
+\begin_inset Quotes eld
+\end_inset 
+
+results
+\begin_inset Quotes erd
+\end_inset 
+
+ of one of their hypotheses to determine a rule which uniquely applies.
+\layout Theorem
+
+The algorithm for checking subkinding always terminates.
+ That is, the algorithmic rules for subkinding do not permit any infinite
+ sequences of rule applications.
+ 
+\layout Standard
+
+Consider the relation 
+\begin_inset Formula \( \prec  \)
+\end_inset 
+
+ on sub-kinding judgments defined as follows: 
+\begin_inset Formula \( (\subkind{\context '}{\kappa _{1}'}{\kappa _{2}'})\prec (\subkind{\context }{\kappa _{1}}{\kappa _{2}}) \)
+\end_inset 
+
+ iff showing 
+\begin_inset Formula \( \subkind{\context '}{\kappa _{1}'}{\kappa _{2}'} \)
+\end_inset 
+
+ is an immediate sub-goal of showing 
+\begin_inset Formula \( \subkind{\context }{\kappa _{1}}{\kappa _{2}} \)
+\end_inset 
+
+.
+ It suffices to show that the 
+\begin_inset Formula \( \prec  \)
+\end_inset 
+
+ relation is well-founded, since if there are no infinite descending chains
+ in the relation, then clearly there are no infinite sequences of rule applicati
+ons.
+ To show that this is the case, we exhibit a mapping 
+\begin_inset Formula \( SZ \)
+\end_inset 
+
+ which maps judgments to natural numbers, and show that this map is order
+ preserving.
+ 
+\layout Standard
+
+Define the function 
+\begin_inset Formula \( SZ \)
+\end_inset 
+
+ as follows : 
+\begin_inset Formula \( SZ(\subkind{\context }{\kappa _{1}}{\kappa _{2}})=sz(\kappa _{1})+sz(\kappa _{2}) \)
+\end_inset 
+
+, where 
+\layout Standard
+
+
+\begin_inset Formula 
+\[
+sz(\kappa )=\left\{ \begin{array}{ll}
+1 & \mathrm{if}\, \kappa =T\\
+1 & \mathrm{if}\, \kappa =\st{c}\\
+sz(\kappa _{1})+sz(\kappa _{2}) & \mathrm{if}\, \kappa =\Sigma (\alpha ::\kappa _{1}).\kappa _{2}\\
+sz(\kappa _{1})+sz(\kappa _{2}) & \mathrm{if}\, \kappa =\Pi (\alpha ::\kappa _{1}).\kappa _{2}
+\end{array}\right. \]
+
+\end_inset 
+
+
+\layout Lemma
+
+
+\begin_inset Formula \( SZ \)
+\end_inset 
+
+ is a function.
+\layout Proof
+
+Clearly it suffices to show that 
+\begin_inset Formula \( sz \)
+\end_inset 
+
+ is a function - that is, 
+\begin_inset Formula \( \forall \kappa ,\exists !n\, s.t.\, sz(\kappa )=n \)
+\end_inset 
+
+.
+ This follows by induction over the structure of 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+.
+\layout Lemma
+
+
+\begin_inset Formula \( SZ \)
+\end_inset 
+
+ is order preserving.
+ That is, 
+\begin_inset Formula 
+\[
+(\subkind{\context '}{\kappa _{1}'}{\kappa _{2}'})\prec (\subkind{\context }{\kappa _{1}}{\kappa _{2})}\Rightarrow SZ(\subkind{\context '}{\kappa _{1}'}{\kappa _{2}'})<SZ(\subkind{\context }{\kappa _{1}}{\kappa _{2}})\]
+
+\end_inset 
+
+
+\layout Standard
+
+
+\latex latex 
+
+\backslash 
+begin{proof}
+\layout Standard
+
+We proceed by cases on the subkinding judgements that define
+\begin_inset Formula \( \prec  \)
+\end_inset 
+
+.
+\layout Enumerate
+
+
+\begin_inset Formula \( \subkind{\context }{T}{T} \)
+\end_inset 
+
+.
+ Vacuously true - the rule has no premises, and hence has nothing smaller
+ than it.
+ 
+\layout Enumerate
+
+
+\begin_inset Formula \( \subkind{\context }{\st{c}}{T} \)
+\end_inset 
+
+.
+ Vacuously true - the rule has no premises, and hence has nothing smaller
+ than it.
+ 
+\layout Enumerate
+
+
+\begin_inset Formula \( \subkind{\context }{\st{c}}{\st{d}} \)
+\end_inset 
+
+.
+ This rule has no sub-kinding premises, and hence has nothing smaller than
+ it.
+ The only subgoal is an equivalence judgment, which we assume terminates.
+ 
+\layout Enumerate
+
+
+\begin_inset Formula \( \subkind{\Delta }{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}').\kappa _{2}'} \)
+\end_inset 
+
+.
+ The subkinding rule for the 
+\begin_inset Formula \( \Pi  \)
+\end_inset 
+
+ judgment defines two judgments as smaller:
+\begin_deeper 
+\layout Enumerate
+
+By definition, 
+\begin_inset Formula \( (\subkind{\context }{\kappa _{1}'}{\kappa _{1}})\prec (\subkind{\context }{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}').\kappa _{2}'}) \)
+\end_inset 
+
+.
+ But note that 
+\begin_inset Formula 
+\begin{eqnarray*}
+SZ(\subkind{\context }{\kappa _{1}'}{\kappa _{1}}) & = & sz(\kappa _{1}')+sz(\kappa _{1})\\
+ & < & sz(\kappa _{1}')+sz(\kappa _{1})+sz(\kappa _{2}')+sz(\kappa _{2})\\
+ & = & SZ(\subkind{\context }{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}').\kappa _{2}'})
+\end{eqnarray*}
+
+\end_inset 
+
+
+\layout Enumerate
+
+By definition, 
+\begin_inset Formula \( (\subkind{\caddk{\alpha }{\kappa _{1}'}}{\kappa _{2}}{\kappa _{2}'})\prec (\subkind{\context }{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}').\kappa _{2}'}) \)
+\end_inset 
+
+.
+ But note that 
+\begin_inset Formula 
+\begin{eqnarray*}
+SZ(\subkind{\caddk{\alpha }{\kappa _{1}'}}{\kappa _{2}}{\kappa _{2}}') & = & sz(\kappa _{2}')+sz(\kappa _{2})\\
+ & < & sz(\kappa _{1}')+sz(\kappa _{1})+sz(\kappa _{2}')+sz(\kappa _{2})\\
+ & = & SZ(\subkind{\context }{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}').\kappa _{2}'})
+\end{eqnarray*}
+
+\end_inset 
+
+
+\end_deeper 
+\layout Enumerate
+
+
+\begin_inset Formula \( \subkind{\Delta }{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'} \)
+\end_inset 
+
+.
+ The subkinding rule for the 
+\begin_inset Formula \( \Sigma  \)
+\end_inset 
+
+ judgment defines two judgements as smaller:
+\begin_deeper 
+\layout Enumerate
+
+By definition, 
+\begin_inset Formula \( \subkind{\context }{\kappa _{1}}{\kappa _{1}'}\prec \subkind{\context }{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'} \)
+\end_inset 
+
+.
+ But note that 
+\begin_inset Formula 
+\begin{eqnarray*}
+SZ(\subkind{\context }{\kappa _{1}}{\kappa _{1}'}) & = & sz(\kappa _{1}')+sz(\kappa _{1})\\
+ & < & sz(\kappa _{1}')+sz(\kappa _{1})+sz(\kappa _{2}')+sz(\kappa _{2})\\
+ & = & SZ(\subkind{\context }{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'})
+\end{eqnarray*}
+
+\end_inset 
+
+
+\layout Enumerate
+
+By definition, 
+\begin_inset Formula \( \subkind{\caddk{\alpha }{\kappa _{1}}}{\kappa _{2}}{\kappa _{2}'}\prec \subkind{\context }{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'} \)
+\end_inset 
+
+.
+ But note that 
+\begin_inset Formula 
+\begin{eqnarray*}
+SZ(\subkind{\caddk{\alpha }{\kappa _{1}}}{\kappa _{2}}{\kappa _{2}}') & = & sz(\kappa _{2}')+sz(\kappa _{2})\\
+ & < & sz(\kappa _{1}')+sz(\kappa _{1})+sz(\kappa _{2}')+sz(\kappa _{2})\\
+ & = & SZ(\subkind{\context }{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'})
+\end{eqnarray*}
+
+\end_inset 
+
+
+\end_deeper 
+\layout Standard
+
+Clearly then, for all 
+\begin_inset Formula \( \context ,\context ',\kappa _{1},\kappa _{2},\kappa _{1}' \)
+\end_inset 
+
+ and 
+\begin_inset Formula \( \kappa _{2}' \)
+\end_inset 
+
+ such that 
+\begin_inset Formula \( (\subkind{\context '}{\kappa _{1}'}{\kappa _{2}'})\prec (\subkind{\context }{\kappa _{1}}{\kappa _{2})} \)
+\end_inset 
+
+, it is the case that 
+\begin_inset Formula \( SZ(\subkind{\context '}{\kappa _{1}'}{\kappa _{2}'})<SZ(\subkind{\context }{\kappa _{1}}{\kappa _{2}}) \)
+\end_inset 
+
+.
+ Therefore 
+\begin_inset Formula \( SZ \)
+\end_inset 
+
+ is order preserving.
+\layout LaTeX
+
+
+\backslash 
+end{proof}
+\layout LaTeX
+
+
+\backslash 
+comment{
+\layout LaTeX
+
+Weakening1 
+\begin_inset Formula 
+\[
+\infrule{\kindsynth{\context }{\alpha }{\kappa }}{\kindsynth{\caddk{\alpha '}{\kappa '}}{\alpha }{\kappa }}\]
+
+\end_inset 
+
+
+\layout LaTeX
+
+Weakening2 
+\begin_inset Formula 
+\[
+\infrule{\kindsynth{\context }{\alpha }{\kappa }}{\kindsynth{\caddt{x}{\tau }}{\alpha }{\kappa }}\]
+
+\end_inset 
+
+
+\layout LaTeX
+
+weakening1 
+\begin_inset Formula 
+\[
+\infrule{\types{x}{\tau }}{\typesynth{\caddt{x'}{\tau '}}{x}{\tau }}\]
+
+\end_inset 
+
+
+\layout LaTeX
+
+weakening2 
+\begin_inset Formula 
+\[
+\infrule{\types{x}{\tau }}{\typesynth{\caddk{\alpha }{\kappa }}{x}{\tau }}\]
+
+\end_inset 
+
+
+\layout LaTeX
+
+Weakening1 
+\begin_inset Formula 
+\[
+\infrule{\pext{\alpha }{\kappa }}{\pathextract{\caddk{\alpha '}{\kappa '}}{\alpha }{\kappa }}\]
+
+\end_inset 
+
+
+\layout LaTeX
+
+Weakening2 
+\begin_inset Formula 
+\[
+\infrule{\pext{\alpha }{\kappa }}{\pathextract{\caddt{x}{\tau }}{\alpha }{\kappa }}\]
+
+\end_inset 
+
+
+\layout LaTeX
+
+Now we note that the We say that 
+\begin_inset Formula \( \kappa _{1}<\kappa _{2} \)
+\end_inset 
+
+ iff 
+\begin_inset Formula \( \kappa _{1} \)
+\end_inset 
+
+ is a sub-expression of 
+\begin_inset Formula \( \kappa _{2} \)
+\end_inset 
+
+.
+ This is a well-founded ordering.
+ We order triples 
+\begin_inset Formula \( (\context ,\kappa _{1},\kappa _{2}) \)
+\end_inset 
+
+ by the product ordering of 
+\begin_inset Formula \( < \)
+\end_inset 
+
+.
+ That is, 
+\begin_inset Formula \( (\context ',\kappa _{1}',\kappa _{2}')<(\context ,\kappa _{1},\kappa _{2}) \)
+\end_inset 
+
+ iff 
+\begin_inset Formula \( \kappa _{1}'<\kappa _{1} \)
+\end_inset 
+
+ and 
+\begin_inset Formula \( \kappa _{2}'<\kappa _{2} \)
+\end_inset 
+
+.
+ Finally, we show by cases on the subkinding judgment that 
+\begin_inset Formula \( (\context ',\kappa _{1}',\kappa _{2}')\prec (\context ,\kappa _{1},\kappa _{2})\Rightarrow (\context ',\kappa _{1}',\kappa _{2}')<(\context ,\kappa _{1},\kappa _{2}) \)
+\end_inset 
+
+, and hence 
+\begin_inset Formula \( \prec  \)
+\end_inset 
+
+ is well-founded.
+ 
+\layout LaTeX
+
+}
 \the_end
