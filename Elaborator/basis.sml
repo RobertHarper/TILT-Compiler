@@ -1,71 +1,53 @@
-(*$import Util Name Prim Tyvar Symbol Fixity Ast Il IlContext IlStatic Ppil IlUtil Toil BASIS Stats TilWord64 *)
+(* Everything provided here is inlined.  Most primitives are in
+   structure TiltPrim.  We provide some top-level inlined values and
+   types which either can't be expressed in Basis/Prelude.sml or are
+   included here for efficiency.  *)
 
-(* Everything provided here is inlined.  There is no corresponding
-   object code.  Most primitives are in structure TiltPrim.  We
-   provide some top-level inlined values and types which either can't
-   be expressed in Basis/Firstlude.sml or are included here for
-   efficiency.
-*)
-   
 signature BIND =
 sig
     type t
-    val start : Il.context -> t
+    val empty : t
 
     val add_sbnd_top : (Il.sbnd * Il.sdec) * t -> t
-    val add_sbnd : (Il.sbnd * Il.sdec) * t -> t
-	
-    val finish : t -> Il.context
-end
+    val add_sbnd     : (Il.sbnd * Il.sdec) * t -> t
 
-(*
-(* bindings go to top-level *)
-structure BindTop :> BIND =
-struct
-    type t = Il.context
-    fun start context = context 
-    fun add_sbnd_top ((_, sdec), context) = IlContext.add_context_sdec (context, IlContext.SelfifySdec context sdec)
-    val add_sbnd = add_sbnd_top
-    fun finish context = context
+    val bindings : t -> Il.sbnds * Il.sdecs
 end
-*)
 
 (* bindings go to a top-level structure *)
 structure Bind :> BIND =
 struct
     datatype t = B of {sbnds : Il.sbnds,
 		       sdecs : Il.sdecs,
-		       context : Il.context}
+		       topsbnds : Il.sbnds,
+		       topsdecs : Il.sdecs}
 
-    fun start context = B {sbnds=nil, sdecs=nil, context=context}
+    val empty = B {sbnds=nil, sdecs=nil, topsbnds=nil, topsdecs=nil}
 
-    fun add_sdec_ctxt (sdec, context) =
-	IlContext.add_context_sdec (context, sdec)
-	
-    fun add_sbnd_top ((_, sdec), B {sbnds, sdecs, context}) =
+    fun add_sbnd_top ((sbnd, sdec), B {sbnds, sdecs, topsbnds, topsdecs}) =
 	B {sbnds=sbnds,
 	   sdecs=sdecs,
-	   context=add_sdec_ctxt (sdec, context)}
+	   topsbnds=sbnd :: topsbnds,
+	   topsdecs=sdec :: topsdecs}
 
-    fun add_sbnd ((sbnd,sdec), B {sbnds, sdecs, context}) =
+    fun add_sbnd ((sbnd,sdec), B {sbnds, sdecs, topsbnds, topsdecs}) =
 	B {sbnds=sbnd :: sbnds,
 	   sdecs=sdec :: sdecs,
-	   context=context}
-		
-    fun finish (B {sbnds, sdecs, context}) =
-	let val str = "TiltPrim"
-	    val lab = Name.symbol_label (Symbol.strSymbol str)
-	    val var = Name.fresh_named_var str
+	   topsbnds=topsbnds,
+	   topsdecs=topsdecs}
+
+    fun bindings (B {sbnds, sdecs, topsbnds, topsdecs}) : Il.sbnds * Il.sdecs =
+	let val lab = Name.symbol_label (Symbol.strSymbol "TiltPrim")
+	    val var = Name.fresh_var()
 	    open Il
-	    val body = MOD_STRUCTURE sbnds
-	    val signat = SIGNAT_STRUCTURE sdecs
+	    val body = MOD_STRUCTURE (rev sbnds)
+	    val signat = SIGNAT_STRUCTURE (rev sdecs)
 	    val sbnd = SBND(lab, BND_MOD(var,false,body))
 	    val sdec = SDEC(lab, DEC_MOD(var,false,signat))
-	in  add_sdec_ctxt (sdec,context)
+	in  (rev (sbnd :: topsbnds), rev (sdec :: topsdecs))
 	end
 end
 
-(* Forms the initial basis for elaboration *)
 structure Basis :> BASIS =
   struct
 
@@ -74,7 +56,6 @@ structure Basis :> BASIS =
     open Util Name Prim Tyvar
     open IlContext
 
-    val empty_context : context = empty_context
     val error = fn s => error "basis.sml" s
 
     val uint8 = CON_UINT W8
@@ -86,8 +67,8 @@ structure Basis :> BASIS =
 (*  fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
     fun mk_var str = fresh_named_var str
 *)
-	
-    fun exp_entry context (str,e) = 
+
+    fun exp_entry context (str,e) =
 	let val var = fresh_named_var str
 	    val lab = mk_var_lab str
 	    val c = IlStatic.GetExpCon(context,e)
@@ -100,9 +81,8 @@ structure Basis :> BASIS =
 
     fun mono_entry context (str,prim) = exp_entry context (str, ETAPRIM (prim,[]))
     fun ilmono_entry context (str,prim) = exp_entry context (str, ETAILPRIM (prim,[]))
-    fun scon_entry context (str,scon) = exp_entry context (str, SCON scon)
 
-    fun poly_entry context (str,c2exp) = 
+    fun poly_entry context (str,c2exp) =
 	let val argvar = fresh_var()
 	    val l = internal_label str
 	    val argsig = SIGNAT_STRUCTURE([SDEC(l,DEC_CON(fresh_var(),
@@ -133,16 +113,15 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
-    fun tiltprim context : Il.partial_context =
+    fun tiltprim context : Il.sbnds * Il.sdecs =
       let
 	  val exp_entry = exp_entry context
 	  val mono_entry = mono_entry context
 	  val poly_entry = poly_entry context
 	  val ilmono_entry = ilmono_entry context
-	  val scon_entry = scon_entry context
 	  val type_entry = type_entry context
-	      
-	  val bindings = ref (Bind.start context)
+
+	  val bindings = ref Bind.empty
 	  fun wrap binder x = bindings := binder (x, !bindings)
 	  val add_top = wrap Bind.add_sbnd_top
 	  val add     = wrap Bind.add_sbnd
@@ -151,7 +130,7 @@ structure Basis :> BASIS =
 	  local
 	      val toptype_list = [("->",let val v1 = fresh_var()
 					    val v2 = fresh_var()
-					in CON_FUN([v1,v2],CON_ARROW ([CON_VAR v1], CON_VAR v2, 
+					in CON_FUN([v1,v2],CON_ARROW ([CON_VAR v1], CON_VAR v2,
 								      false, oneshot_init PARTIAL))
 					end),
 				  ("real", float64),
@@ -190,26 +169,22 @@ structure Basis :> BASIS =
 	      val _ = (app (add_top o type_entry) toptype_list;
 		       app (add     o type_entry) basetype_list)
 	  end
-      
+
 	  (* ----------------- add base monomorphic values -------------- *)
 	  local
 	      val topvalue_list =
 		  []
-	      val basevalue_list = 
-		  [("littleEndian",	(* has type int; bool defined in prelude *)
-		    let val v = (if (!(Stats.bool "littleEndian"))
-				     then 1
-				 else 0)
-		    in  SCON (int (W32, TilWord64.fromInt v))
-		    end)]
-		  
-	      val baseilprimvalue_list = 
+
+	      val baseilprimvalue_list =
 		  [("<<", (lshift_uint W32)),
 		   ("&&", (and_uint W32)),
 		   ("^^", (xor_uint W32)),
 		   ("||", (or_uint W32)),
 		   ("!!", (not_uint W32)),
-		   
+		   ("ueq", (eq_uint W32)),
+		   ("uneq", (neq_uint W32)),
+		   ("beq", (eq_uint W8)),
+		   ("bneq", (neq_uint W8)),
 		   ("andbyte", (and_uint W8)),
 		   ("orbyte", (or_uint W8))]
 
@@ -223,7 +198,7 @@ structure Basis :> BASIS =
 	      val baseprimvalue_list =
 		  [("float_eq", (eq_float F64)),
 		   ("float_neq", (neq_float F64)),
-		   
+
 (* these are non-trivial, see Basis/Numeric/pre-int.sml
                    ("div", (div_int W32)),
 		   ("mod", (mod_int W32)),
@@ -235,22 +210,24 @@ structure Basis :> BASIS =
 		   ("iquot", (quot_int W32)),
 		   ("irem", (rem_int W32)),
 		   ("fdiv", (div_float F64)),
-		   
+
+		   ("ieq", (eq_int W32)),
+		   ("ineq", (neq_int W32)),
 		   ("ilt", (less_int W32)),
 		   ("igt", (greater_int W32)),
 		   ("ilte", (lesseq_int W32)),
 		   ("igte", (greatereq_int W32)),
-		   
+
 		   ("blt", (less_uint W8)),
 		   ("bgt", (greater_uint W8)),
 		   ("blte", (lesseq_uint W8)),
 		   ("bgte", (greatereq_uint W8)),
-		   
+
 		   ("flt", (less_float F64)),
 		   ("fgt", (greater_float F64)),
 		   ("flte", (lesseq_float F64)),
 		   ("fgte", (greatereq_float F64)),
-		   
+
 		   ("ult", (less_uint W32)),
 		   ("ugt", (greater_uint W32)),
 		   ("ulte", (lesseq_uint W32)),
@@ -263,19 +240,19 @@ structure Basis :> BASIS =
 		   ("iabs", (abs_int W32)),
 *)
 		   ("fabs", (abs_float F64)),
-		   
+
 		   ("iplus", (plus_int W32)),
 		   ("imult", (mul_int W32)),
 		   ("iminus", (minus_int W32)),
-		   
+
 		   ("uplus", (plus_uint W32)),
 		   ("umult", (mul_uint W32)),
 		   ("uminus", (minus_uint W32)),
-		   
+
 		   ("bplus", (plus_uint W8)),
 		   ("bmult", (mul_uint W8)),
 		   ("bminus", (minus_uint W8)),
-		   
+
 		   ("fplus", (plus_float F64)),
 		   ("fmult", (mul_float F64)),
 		   ("fminus", (minus_float F64)),
@@ -290,19 +267,19 @@ structure Basis :> BASIS =
 
 		   ("uinta8touinta32", (uinta2uinta (W8,W32))),
 		   ("uintv8touintv32", (uintv2uintv (W8,W32))),
-		   
+
 		   ("uint8toint32", (uint2int (W8,W32))),
 		   ("uint8touint32", (uint2uint (W8,W32))),
-		   
+
 		   ("uint32toint32", (uint2int (W32,W32))),
 		   ("uint32touint8", (uint2uint (W32,W8))),
-		   
+
 		   ("int32touint32", (int2uint (W32,W32))),
 		   ("int32touint8", (int2uint (W32,W8))),
-		   
+
 		   ("int2float", (int2float)),
 		   ("float2int", (float2int))
-		   
+
 		   (* XXX need to do unsigned and real stuff *)]
 
 (* real_getexp should take a 64-bit IEEE float:
@@ -312,7 +289,6 @@ structure Basis :> BASIS =
     (4) subtract 1023 from this quantity and return as an int *)
 
 	  in  val _ = (app (add_top o exp_entry) topvalue_list;
-		       app (add     o exp_entry) basevalue_list;
 		       app (add_top o mono_entry) topprimvalue_list;
 		       app (add     o mono_entry) baseprimvalue_list;
 		       app (add     o ilmono_entry) baseilprimvalue_list)
@@ -339,7 +315,7 @@ structure Basis :> BASIS =
 								     [proj 1, proj 2])))
 				   end))]
 
-	      val basepolyvalue_list = 
+	      val basepolyvalue_list =
 		  [("unsafe_array",(fn c => let val v = fresh_var()
 						 val argc = con_tuple[uint32, c]
 						 val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
@@ -394,11 +370,12 @@ structure Basis :> BASIS =
 					     in #1(make_total_lambda(v,CON_VECTOR c,uint32,
 								     PRIM(length_table (OtherVector false),[c],[VAR v])))
 					     end))]
-		   
+
 	  in  val _ = (app (add_top o poly_entry) toppolyvalue_list;
 		       app (add     o poly_entry) basepolyvalue_list)
 	  end
-      in  IlContext.sub_context (Bind.finish (!bindings), context)
+
+      in  Bind.bindings (!bindings)
       end
 
   end
