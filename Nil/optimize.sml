@@ -492,8 +492,6 @@ struct
 	  fun add_label(state as STATE{equation,...},l,v) =
 	      updateContext(state,NilContext.insert_label(equation,l,v))
 
-	  fun find_labelled_var(state as STATE{equation,...},l) =
-	    NilContext.find_labelled_var(equation,l)
 
 	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,params},v) =
 	       STATE{equation=equation,

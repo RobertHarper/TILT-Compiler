@@ -100,7 +100,7 @@ struct
    val killDeadImport           = Stats.tt("killDeadImport")
    val do_preproject            = Stats.tt("do_preproject")
    val do_memoize               = Stats.tt("do_memoize")
-   val do_polyrec               = Stats.tt("do_polyrec")
+   val do_polyrec               = Stats.ff("do_polyrec")
    val keep_hil_numbers         = Stats.ff("keep_hil_numbers")
 
    (* Don't change this without setting/unsetting FLATTEN_MODULES in

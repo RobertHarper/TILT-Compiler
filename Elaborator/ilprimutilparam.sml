@@ -41,9 +41,31 @@ structure IlPrimUtilParam :> ILPRIMUTILPARAM =
 		(Cbool := con_bool;
 		 Ctrue := true_exp;
 		 Cfalse := false_exp)
-	    fun con_bool arg = !Cbool arg
-	    fun true_exp arg = !Ctrue arg
-	    fun false_exp arg = !Ctrue arg
+
+	    (* This must agree exactly with the sum type generated for
+	     * bool in Firstlude.sml
+	     *)
+	    fun con_bool arg = 
+	      let
+		val t = Name.symbol_label (Symbol.varSymbol "true")
+		val f = Name.symbol_label (Symbol.varSymbol "false")
+	      in
+		CON_SUM {names = [f,t],
+			 noncarriers = 2,
+			 carrier = CON_TUPLE_INJECT [],
+			 special = NONE}
+	      end
+
+	    fun true_exp arg = 
+	      INJ {sumtype =con_bool arg,
+		   field = 1,
+		   inject = NONE}
+
+	    fun false_exp arg = 
+	      INJ {sumtype =con_bool arg,
+		   field = 0,
+		   inject = NONE}
+				
 	end
 
 	fun partial_arrow (cons,c2) = CON_ARROW(cons,c2,false,oneshot_init PARTIAL)

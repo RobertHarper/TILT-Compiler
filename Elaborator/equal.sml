@@ -27,6 +27,8 @@ struct
     exception NoEqExp
     and ReallyNoEqExp
 
+
+
     local
 	val cadd_eq_entry : ((context,con,exp) Tyvar.tyvar -> unit) ref =
 	    ref(fn _ => error "add_eq_entry not installed")
@@ -174,8 +176,8 @@ struct
 	       | CON_OVAR ocon => self (SOME name,CON_TYVAR (Tyvar.ocon_deref ocon))
 
 	       (* for base types, emit the appropriate primitive *)
-	       | CON_INT is => (ETAPRIM(eq_int is,[]), #con_eqfun state con)
-	       | CON_UINT is => (ETAILPRIM(eq_uint is,[]), #con_eqfun state con)
+	       | CON_INT is => (IlUtil.to_external_bool_eta ctxt (eq_int is,[]), #con_eqfun state con)
+	       | CON_UINT is => (IlUtil.ilto_external_bool_eta ctxt (eq_uint is,[]), #con_eqfun state con)
 	       (* no equality on floats *)
 	       | CON_FLOAT fs => raise NoEqExp
 
@@ -314,15 +316,15 @@ struct
 					  U.make_let([BND_EXP(v1,e1),BND_EXP(v2,e2)],body)))
 		  end
 	       (* pointer equality *)
-	       | CON_ARRAY c => (ETAPRIM(equal_table (OtherArray false),[c]),
+	       | CON_ARRAY c => (IlUtil.to_external_bool_eta ctxt (equal_table (OtherArray false),[c]),
 				 #con_eqfun state con)
 	       | CON_INTARRAY sz => 
-		  (ETAPRIM(equal_table (IntArray sz),[]),
+		  (IlUtil.to_external_bool_eta ctxt (equal_table (IntArray sz),[]),
 		   #con_eqfun state con)
 	       | CON_FLOATARRAY sz => 
-		  (ETAPRIM(equal_table (FloatArray sz),[]),
+		  (IlUtil.to_external_bool_eta ctxt (equal_table (FloatArray sz),[]),
 		   #con_eqfun state con)
-	       | CON_REF c => (ETAPRIM(eq_ref,[c]), #con_eqfun state con)
+	       | CON_REF c => (IlUtil.to_external_bool_eta ctxt (eq_ref,[c]), #con_eqfun state con)
 	       (* 'state' has our higher-order vector_eq function.
 		  Just generate the equality function for the contents of
 		  the vector and pass it along. *)

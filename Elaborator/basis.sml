@@ -89,10 +89,15 @@ structure Basis :> BASIS =
 	in  (sbnd,sdec)
 	end
 
+
     (* Eta expanded monomorphic prim*)
     fun mono_entry context (str,prim) = exp_entry context (str, ETAPRIM (prim,[]))
     (* Eta expanded monomorphic il prim*)
     fun ilmono_entry context (str,prim) = exp_entry context (str, ETAILPRIM (prim,[]))
+
+    fun bool_entry context (str,p) = exp_entry context (str,IlUtil.to_external_bool_eta context (p,[]))
+
+    fun ilbool_entry context (str,p) = exp_entry context (str,IlUtil.ilto_external_bool_eta context (p,[]))
 
     (* Make a polymorphic entry. (1 type arg) *)
     fun poly_entry context (str,c2exp) =
@@ -158,7 +163,8 @@ structure Basis :> BASIS =
 	  val npoly_entry = npoly_entry context
 	  val ilmono_entry = ilmono_entry context
 	  val type_entry = type_entry context
-
+	  val bool_entry = bool_entry context
+	  val ilbool_entry = ilbool_entry context
 	  val bindings = ref Bind.empty
 	  fun wrap binder x = bindings := binder (x, !bindings)
 	  val add_top = wrap Bind.add_sbnd_top
@@ -224,121 +230,128 @@ structure Basis :> BASIS =
 				   ("empty_vector8",PRIM(create_empty_table (IntVector Prim.W8),[],[]))
 				   ]
 
-	      val baseilprimvalue_list =
-		  [("<<", (lshift_uint W32)),
-		   ("&&", (and_uint W32)),
-		   ("^^", (xor_uint W32)),
-		   ("||", (or_uint W32)),
-		   ("!!", (not_uint W32)),
-		   ("ueq", (eq_uint W32)),
-		   ("uneq", (neq_uint W32)),
-		   ("beq", (eq_uint W8)),
-		   ("bneq", (neq_uint W8)),
-		   ("andbyte", (and_uint W8)),
-		   ("orbyte", (or_uint W8))]
+	    val baseilprimvalue_list =
+	      [("<<", (lshift_uint W32)),
+	       ("&&", (and_uint W32)),
+	       ("^^", (xor_uint W32)),
+	       ("||", (or_uint W32)),
+	       ("!!", (not_uint W32)),
+	       ("andbyte", (and_uint W8)),
+	       ("orbyte", (or_uint W8))]
 
-	      val topprimvalue_list =
-		  [("ord", (uint2int (W8,W32))),
-(* Primitive doesn't raise exn.
-		   ("chr", (int2uint (W32,W8))),
+	    val baseilprimeqvalue_list = 
+	      [
+	       ("ueq", (eq_uint W32)),
+	       ("uneq", (neq_uint W32)),
+	       ("beq", (eq_uint W8)),
+	       ("bneq", (neq_uint W8))
+	       ]
+
+	    val topprimvalue_list =
+	      [("ord", (uint2int (W8,W32))),
+	       (* Primitive doesn't raise exn.
+		("chr", (int2uint (W32,W8))),
+		*)
+	       ("real", (int2float))]
+	      
+	    val baseprimeqvalue_list =
+	      [("float_eq", (eq_float F64)),
+	       ("float_neq", (neq_float F64)),
+	       ("ieq", (eq_int W32)),
+	       ("ineq", (neq_int W32)),
+	       ("ilt", (less_int W32)),
+	       ("igt", (greater_int W32)),
+	       ("ilte", (lesseq_int W32)),
+	       ("igte", (greatereq_int W32)),
+	       
+	       ("blt", (less_uint W8)),
+	       ("bgt", (greater_uint W8)),
+	       ("blte", (lesseq_uint W8)),
+	       ("bgte", (greatereq_uint W8)),
+	       
+	       ("flt", (less_float F64)),
+	       ("fgt", (greater_float F64)),
+	       ("flte", (lesseq_float F64)),
+	       ("fgte", (greatereq_float F64)),
+	       
+	       ("ult", (less_uint W32)),
+	       ("ugt", (greater_uint W32)),
+	       ("ulte", (lesseq_uint W32)),
+	       ("ugte", (greatereq_uint W32))
+	       ]
+	       
+	    val baseprimvalue_list =
+	      [
+	       (* these are non-trivial, see Basis/Numeric/pre-int.sml
+		("div", (div_int W32)),
+		("mod", (mod_int W32)),
 *)
-		   ("real", (int2float))]
-
-	      val baseprimvalue_list =
-		  [("float_eq", (eq_float F64)),
-		   ("float_neq", (neq_float F64)),
-
-(* these are non-trivial, see Basis/Numeric/pre-int.sml
-                   ("div", (div_int W32)),
-		   ("mod", (mod_int W32)),
-*)
-		   ("bdiv", (div_uint W8)),
-		   ("bmod", (mod_uint W8)),
-		   ("udiv", (div_uint W32)),
-		   ("umod", (mod_uint W32)),
-		   ("iquot", (quot_int W32)),
-		   ("irem", (rem_int W32)),
-		   ("fdiv", (div_float F64)),
-
-		   ("ieq", (eq_int W32)),
-		   ("ineq", (neq_int W32)),
-		   ("ilt", (less_int W32)),
-		   ("igt", (greater_int W32)),
-		   ("ilte", (lesseq_int W32)),
-		   ("igte", (greatereq_int W32)),
-
-		   ("blt", (less_uint W8)),
-		   ("bgt", (greater_uint W8)),
-		   ("blte", (lesseq_uint W8)),
-		   ("bgte", (greatereq_uint W8)),
-
-		   ("flt", (less_float F64)),
-		   ("fgt", (greater_float F64)),
-		   ("flte", (lesseq_float F64)),
-		   ("fgte", (greatereq_float F64)),
-
-		   ("ult", (less_uint W32)),
-		   ("ugt", (greater_uint W32)),
-		   ("ulte", (lesseq_uint W32)),
-		   ("ugte", (greatereq_uint W32)),
-
-		   ("ineg", (neg_int W32)),
-		   ("fneg", (neg_float F64)),
-
-(* This does not pass RTL
-		   ("iabs", (abs_int W32)),
-*)
-		   ("fabs", (abs_float F64)),
-
-		   ("iplus", (plus_int W32)),
-		   ("imult", (mul_int W32)),
-		   ("iminus", (minus_int W32)),
-
-		   ("uplus", (plus_uint W32)),
-		   ("umult", (mul_uint W32)),
-		   ("uminus", (minus_uint W32)),
-
-		   ("bplus", (plus_uint W8)),
-		   ("bmult", (mul_uint W8)),
-		   ("bminus", (minus_uint W8)),
-
-		   ("fplus", (plus_float F64)),
-		   ("fmult", (mul_float F64)),
-		   ("fminus", (minus_float F64)),
-
-		   ("notb", (not_int W32)),
-		   (">>", (rshift_uint W32)),
-		   ("~>>", (rshift_int W32)),
-
-		   ("andb", (and_int W32)),
-		   ("xorb", (xor_int W32)),
-		   ("orb", (or_int W32)),
-
-		   ("uinta8touinta32", (uinta2uinta (W8,W32))),
-		   ("uintv8touintv32", (uintv2uintv (W8,W32))),
-
-		   ("uint8toint32", (uint2int (W8,W32))),
-		   ("uint8touint32", (uint2uint (W8,W32))),
-
-		   ("uint32toint32", (uint2int (W32,W32))),
-		   ("uint32touint8", (uint2uint (W32,W8))),
-
-		   ("int32touint32", (int2uint (W32,W32))),
-		   ("int32touint8", (int2uint (W32,W8))),
-
-		   ("int2float", (int2float)),
-		   ("float2int", (float2int)),
-		   
-		   ("unsafe_array8",create_table (IntArray Prim.W8)),
-		   ("unsafe_array2vector8",array2vector (IntArray Prim.W8)),
-		   ("unsafe_vector2array8",vector2array (IntVector Prim.W8)),
-		   ("unsafe_sub8",sub (IntArray Prim.W8)),
-		   ("unsafe_vector8",create_table (IntVector Prim.W8)),
-		   ("unsafe_vsub8",sub (IntVector Prim.W8)),
-		   ("unsafe_update8",update (IntArray Prim.W8)),
-		   ("array_length8",length_table (IntArray Prim.W8)),
-		   ("vector_length8",length_table (IntVector Prim.W8))
-		   (* XXX need to do unsigned and real stuff *)]
+	       ("bdiv", (div_uint W8)),
+	       ("bmod", (mod_uint W8)),
+	       ("udiv", (div_uint W32)),
+	       ("umod", (mod_uint W32)),
+	       ("iquot", (quot_int W32)),
+	       ("irem", (rem_int W32)),
+	       ("fdiv", (div_float F64)),
+	       
+	       
+	       ("ineg", (neg_int W32)),
+	       ("fneg", (neg_float F64)),
+	       
+	       (* This does not pass RTL
+		("iabs", (abs_int W32)),
+		*)
+	       ("fabs", (abs_float F64)),
+	       
+	       ("iplus", (plus_int W32)),
+	       ("imult", (mul_int W32)),
+	       ("iminus", (minus_int W32)),
+	       
+	       ("uplus", (plus_uint W32)),
+	       ("umult", (mul_uint W32)),
+	       ("uminus", (minus_uint W32)),
+	       
+	       ("bplus", (plus_uint W8)),
+	       ("bmult", (mul_uint W8)),
+	       ("bminus", (minus_uint W8)),
+	       
+	       ("fplus", (plus_float F64)),
+	       ("fmult", (mul_float F64)),
+	       ("fminus", (minus_float F64)),
+	       
+	       ("notb", (not_int W32)),
+	       (">>", (rshift_uint W32)),
+	       ("~>>", (rshift_int W32)),
+	       
+	       ("andb", (and_int W32)),
+	       ("xorb", (xor_int W32)),
+	       ("orb", (or_int W32)),
+	       
+	       ("uinta8touinta32", (uinta2uinta (W8,W32))),
+	       ("uintv8touintv32", (uintv2uintv (W8,W32))),
+	       
+	       ("uint8toint32", (uint2int (W8,W32))),
+	       ("uint8touint32", (uint2uint (W8,W32))),
+	       
+	       ("uint32toint32", (uint2int (W32,W32))),
+	       ("uint32touint8", (uint2uint (W32,W8))),
+	       
+	       ("int32touint32", (int2uint (W32,W32))),
+	       ("int32touint8", (int2uint (W32,W8))),
+	       
+	       ("int2float", (int2float)),
+	       ("float2int", (float2int)),
+	       
+	       ("unsafe_array8",create_table (IntArray Prim.W8)),
+	       ("unsafe_array2vector8",array2vector (IntArray Prim.W8)),
+	       ("unsafe_vector2array8",vector2array (IntVector Prim.W8)),
+	       ("unsafe_sub8",sub (IntArray Prim.W8)),
+	       ("unsafe_vector8",create_table (IntVector Prim.W8)),
+	       ("unsafe_vsub8",sub (IntVector Prim.W8)),
+	       ("unsafe_update8",update (IntArray Prim.W8)),
+	       ("array_length8",length_table (IntArray Prim.W8)),
+	       ("vector_length8",length_table (IntVector Prim.W8))
+	  (* XXX need to do unsigned and real stuff *)]
 
 (* real_getexp should take a 64-bit IEEE float:
     (1) it the loads the 64-bit pattern as a long
@@ -349,7 +362,9 @@ structure Basis :> BASIS =
 	  in  val _ = (app (add_top o exp_entry)    topvalue_list;
 		       app (add_top o mono_entry)   topprimvalue_list;
 		       app (add     o exp_entry)    basevalue_list;
+		       app (add     o bool_entry)   baseprimeqvalue_list;
 		       app (add     o mono_entry)   baseprimvalue_list;
+		       app (add     o ilbool_entry)   baseilprimeqvalue_list;
 		       app (add     o ilmono_entry) baseilprimvalue_list)
 	  end
 

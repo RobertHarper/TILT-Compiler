@@ -86,6 +86,9 @@ signature NILCONTEXTPRE =
     (* Insert a label into a context.  If the label is already bound,
      * raises an exception.
      *)
+    (* As of now, these are cruft, since I changed the elaborator
+     * to resolve all uses of user level bool in terms of
+     * an internal bool. -leaf*)
     val insert_label : context * label * var -> context
 
     val find_labelled_var : context * label -> var

@@ -98,8 +98,8 @@ fun qsort2 lo hi (a : int array) =
   in
       update(a,i,sub(a,hi));
       update(a,hi,temp);
-      qsort lo (i-1) a;
-      qsort (i+1) hi a
+      qsort2 lo (i-1) a;
+      qsort2 (i+1) hi a
   end
   else ()
 

@@ -69,11 +69,25 @@ signature ILUTIL =
     val lab_false : label
 
     val con_bool : context -> con
+    val bool_out : context -> exp
+    val bool_in : context -> exp
+
     val true_exp : context -> exp
     val false_exp : context -> exp
     val string_eq : context -> exp
     val vector_eq : context -> mod * signat
     val word8vector_eq : context -> exp * con
+
+    (* Wrap the internal bool type in a coercion to turn it into 
+     * the external bool type.  Would probably be better to have eq functions
+     * actually return internal bool and wrap the result, but who cares about 
+     * generated equality functions anyway.
+     * -leaf
+     *)
+    val to_external_bool       : context -> Prim.prim * con list * exp list -> exp
+    val ilto_external_bool     : context -> Prim.ilprim * con list * exp list -> exp
+    val to_external_bool_eta   : context -> Prim.prim * con list -> exp
+    val ilto_external_bool_eta : context -> Prim.ilprim * con list -> exp
 
     val con_eqfun : context -> con -> con
     val con_tuple : con list -> con                 (* the type of tuple values *)

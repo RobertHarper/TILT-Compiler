@@ -201,11 +201,6 @@ structure NiltoLil :> NILTOLIL =
     fun nil_strip_arrow (Env {D,...}) con = 
       NN.strip_arrow_norm D con
 
-    fun add_labelled_var (env,l,v) = set_ctx env (NC.insert_label (get_ctx env,l,v))
-
-    fun nil_bool_con (Env {D,...}) = NilPrimUtilParam.con_bool D
-    fun mk_nil_bool (Env {D,...}) b = NilPrimUtilParam.bool2exp D b
-
     fun type_of (Env {D,...}) e = 
       let
 	val _ = debugdo (5,fn () => (print "calling type_of with exp:\n\t";
@@ -229,9 +224,10 @@ structure NiltoLil :> NILTOLIL =
 				     print "\n"))
       in k
       end
-    
+
+    fun nil_bool_con () = NilPrimUtilParam.con_bool (NC.empty())    
+
     fun find_type (Env {D,...}) a = ((NC.find_con (D,a)) handle NC.Unbound => error ("Unbound NIL con variable: "^(Name.var2string a)))
-    fun find_labelled_var (Env {D,...}) a = NC.find_labelled_var (D,a)
     fun add_type env (x,t) = set_ctx env (NC.insert_con (get_ctx env,x,t))
     fun add_type_list env xts = set_ctx env (NC.insert_con_list (get_ctx env,xts))
 
@@ -1229,20 +1225,6 @@ structure NiltoLil :> NILTOLIL =
     and allprim32_trans (env : env) (prim,cons,exps) : (Lil.op32 P.pexp * Nil.con) = 
       let
 
-	fun tag2nilbool rtype (sv : Lil.sv32) : Lil.op32 = 
-	  let
-	    val bool_in = get_global env "bool_in"
-	    val sv = LD.Q.coerce bool_in sv
-	  in Lil.Val sv
-	  end
-
-	fun tonilbool (op32,rtype) = 
-	  let
-	    val sv = P.SV32.from_op op32
-	    val op32 = P.map (tag2nilbool (ttrans env rtype)) sv
-	  in
-	    (op32 ,rtype)
-	  end
 
 	fun float_float2bool prim f1 f2 =
 	  let
@@ -1250,7 +1232,7 @@ structure NiltoLil :> NILTOLIL =
 	    val sv64_2 = sv64_trans' env f2
 	    val op32 = Lil.Prim32 (prim,[],[Lil.arg64 sv64_1,Lil.arg64 sv64_2])
 	    val op32 = P.ret op32
-	  in tonilbool(op32,nil_bool_con env)
+	  in (op32,nil_bool_con ())
 	  end
 
 	fun do_dispatch env (t,cs,trans,ftrans,xint,xfloat,xother,xdynamic,args) = 
@@ -1384,7 +1366,7 @@ structure NiltoLil :> NILTOLIL =
 	       let
 		 val arr1 = sv32_trans' env arr1
 		 val arr2 = sv32_trans' env arr2
-	       in tonilbool(LD.E.ptreq' arr1 arr2,nil_bool_con env)
+	       in (LD.E.ptreq' arr1 arr2,nil_bool_con ())
 	       end
 
               (* Floating point arguments *)
@@ -1406,7 +1388,7 @@ structure NiltoLil :> NILTOLIL =
 	       let
 		 val sv1 = sv32_trans' env sv1
 		 val sv2 = sv32_trans' env sv2
-	       in tonilbool(LD.E.ptreq' sv1 sv2,nil_bool_con env)
+	       in (LD.E.ptreq' sv1 sv2,nil_bool_con ())
 	       end
 	      (* Other ref prims *)
 	      | (prim,[t],args) => 
@@ -1432,17 +1414,7 @@ structure NiltoLil :> NILTOLIL =
 		       | _ => (P.ret (Lil.PrimEmbed (i_sizetrans sz,prim,args)),rtype))
 	       in
 		 case prim
-		    of Prim.less_int _   => tonilbool res32
-		     | Prim.greater_int _ => tonilbool res32
-		     | Prim.lesseq_int _ => tonilbool res32
-		     | Prim.greatereq_int _ => tonilbool res32
-		     | Prim.less_uint _ => tonilbool res32
-		     | Prim.greater_uint _ => tonilbool res32
-		     | Prim.lesseq_uint _ => tonilbool res32
-		     | Prim.greatereq_uint _ => tonilbool res32
-		     | Prim.eq_int _ => tonilbool res32
-		     | Prim.neq_int _ => tonilbool res32
-		     | Prim.int2int (_,sz) => doint sz
+		    of Prim.int2int (_,sz) => doint sz
 		     | Prim.uint2uint (_,sz) => doint sz
 		     | Prim.int2uint (_,sz) => doint sz
 		     | Prim.uint2int (_,sz) => doint sz
@@ -1809,66 +1781,22 @@ structure NiltoLil :> NILTOLIL =
       end
 
 
-    fun trans_nil_bool env b = fn () =>
-      let
-	val (e,_) = exp32_trans env (mk_nil_bool env b)
-	val e = P.SV32.from_op e
-      in e
-      end
-    fun trans_nil_bool_in env = fn () =>
-      let
-
-	val unitlab = Name.to_unit(Name.internal_label "Firstlude")
-	val (unit_c, unit_r) = Name.make_cr_labels unitlab
-	val bool_in_lab = Name.to_coercion (Name.internal_label ("bool_in"))
-	val bool_mod = Name.to_open (Name.internal_label "_bool")
-
-	val rv = find_labelled_var env unit_r
-	val cv = find_labelled_var env unit_c
-		  
-	val mod_var = Name.fresh_named_var "bool_mod"
-	val coercion_var = Name.fresh_named_var "bool_in"
-		  
-	val mod_exp = Nil.Prim_e (Nil.NilPrimOp (Nil.select bool_mod),[],[],[Nil.Var_e rv])
-	val coercion_exp = Nil.Prim_e (Nil.NilPrimOp (Nil.select bool_in_lab),[],[],[Nil.Var_e mod_var])
-	val bnds = [Nil.Exp_b(mod_var,Nil.TraceKnown TraceInfo.Trace,mod_exp),
-		    Nil.Exp_b(coercion_var,Nil.TraceKnown TraceInfo.Notrace_Int,coercion_exp)
-		    ]
-	val e = Nil.Let_e (Nil.Sequential,bnds,Nil.Var_e coercion_var)
-	val (e,_) = exp32_trans env e
-      in P.SV32.from_op e
-      end
-
     fun add_globals env = 
       let
 	val env = add_global env ("vararg",TD.mk_vararg_fn)
 	val env = add_global env ("onearg", TD.mk_onearg_fn)
 	val env = add_global env ("project_dyn",TD.mk_project_dynamic_fn)
 	val env = add_global env ("inject_dyn",TD.mk_inject_dynamic_fn)
-	val env = add_global env ("true",  trans_nil_bool env true)
-	val env = add_global env ("false", trans_nil_bool env false)
-	val env = add_global env ("bool_in", trans_nil_bool_in env)
       in env
       end
 
-    val new_env = fn Nil.MODULE{imports,...} =>
-      let
-	val env = new_env()
-	fun folder (imp,env) = 
-	  case imp of 
-	    Nil.ImportType (l,v,k)    => add_labelled_var (env,l,v) 
-	  | Nil.ImportValue (l,v,_,_) => add_labelled_var (env,l,v)
-	  | _ => env
-	val env = foldl folder env imports
-      in env
-      end
 
     fun niltolil module =  
       let
 
 	val () = reset_globals ()
 	val () = reset_data()
-	val env = new_env module
+	val env = new_env ()
 	val (timports,tlam,vlam) = modfuns module
 
 	val _ = chat 2 "  Translating type imports\n"

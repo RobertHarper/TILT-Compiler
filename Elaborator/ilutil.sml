@@ -194,6 +194,7 @@ structure IlUtil :> ILUTIL =
 	val Firstlude = Name.to_unit(Name.internal_label "Firstlude")
 	val bool_sum = Name.internal_label "bool_sum"
 	val bool_out = Name.to_coercion (Name.internal_label "bool_out")
+	val bool_in  = Name.to_coercion (Name.internal_label "bool_in")
 
 	val VectorEq = Name.to_unit(Name.internal_label "VectorEq")
 	val TiltVectorEq = Name.symbol_label(Symbol.strSymbol "TiltVectorEq")
@@ -215,6 +216,7 @@ structure IlUtil :> ILUTIL =
 	val true_exp : context -> exp = lookup_exp [Firstlude,lab_true]
 	val false_exp : context -> exp = lookup_exp [Firstlude,lab_false]
 	val bool_out : context -> exp = lookup_exp [Firstlude,bool_out]
+	val bool_in  : context -> exp = lookup_exp [Firstlude,bool_in]
 	val vector_eq : context -> mod * signat =
 	  lookup_poly [VectorEq,TiltVectorEq,vector_eq]
 	val word8vector_eq : context -> exp * con =
@@ -223,6 +225,7 @@ structure IlUtil :> ILUTIL =
 	val bind_exn : context -> exp = lookup_exn [Prelude,bind,mk]
 	val match_exn : context -> exp = lookup_exn [Prelude,match,mk]
     end
+
 
     fun con_eqfun context c = CON_ARROW([con_tuple[c,c]],
 					con_bool context,
@@ -242,6 +245,47 @@ structure IlUtil :> ILUTIL =
 		    end
     val make_total_lambda = make_lambda_help TOTAL
     val make_lambda  = make_lambda_help PARTIAL
+
+
+    (* Wrap the internal bool type in a coercion to turn it into 
+     * the external bool type.  Would probably be better to have eq functions
+     * actually return internal bool and wrap the result, but who cares about 
+     * generated equality functions anyway.
+     * -leaf
+     *)
+
+    fun to_external_bool ctxt (p,cargs,eargs) = 
+      let
+	val bool_in = bool_in ctxt
+      in COERCE(bool_in,[],PRIM(p,cargs,eargs))
+      end
+
+    fun to_external_bool_eta ctxt (p,cargs) = 
+      let
+	val v = Name.fresh_var()
+	val pc = con_tuple (#2(IlPrimUtil.get_type ctxt p cargs))
+	fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
+	val body = to_external_bool ctxt (p,cargs,[proj 1, proj 2])
+	val f =  #1(make_lambda(v,pc,con_bool ctxt,body))
+      in f
+      end
+
+    fun ilto_external_bool ctxt (p,cargs,eargs) = 
+      let
+	val bool_in = bool_in ctxt
+      in COERCE(bool_in,[],ILPRIM(p,cargs,eargs))
+      end
+
+    fun ilto_external_bool_eta ctxt (p,cargs) = 
+      let
+	val v = Name.fresh_var()
+	val pc = con_tuple (#2(IlPrimUtil.get_iltype ctxt p cargs))
+	fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
+	val body = ilto_external_bool ctxt (p,cargs,[proj 1, proj 2])
+	val f =  #1(make_lambda(v,pc,con_bool ctxt,body))
+      in f
+      end
+
 
     fun make_fold_coercion (vars,unrolltype,rolltype) : exp * con =
 	(FOLD(vars,unrolltype,rolltype),CON_COERCION(vars,unrolltype,rolltype))

@@ -634,11 +634,11 @@ struct
 	(case lit of
 	     IntLit (lit,sz) =>
 		 let val const = int(sz, lit)
-		 in  PRIM (eq_int sz,[],[VAR v,SCON const])
+		 in  IlUtil.to_external_bool context (eq_int sz,[],[VAR v,SCON const])
 		 end
 	   | WordLit (lit,sz) =>
 		 let val const = uint(sz, lit)
-		 in  ILPRIM (eq_uint sz,[],[VAR v,SCON const])
+		 in  IlUtil.ilto_external_bool context (eq_uint sz,[],[VAR v,SCON const])
 		 end
 	   | StringLit str =>
 		 let fun mapper c = SCON(uint(W8,TilWord64.fromInt (ord c)))
@@ -647,7 +647,7 @@ struct
 		 end
 	   | CharLit cstr =>
 		 let val char = Util.CharStr2char cstr
-		 in  ILPRIM (eq_uint W8, [], [VAR v, SCON(uint(W8, TilWord64.fromInt (ord char)))])
+		 in  IlUtil.ilto_external_bool context (eq_uint W8, [], [VAR v, SCON(uint(W8, TilWord64.fromInt (ord char)))])
 		 end)
 
     (* For "code snippet that inlines string equality", see CVS before 13 Aug 02 *)
