@@ -2119,7 +2119,7 @@ struct
       val bnds_valid = subtimer ("Tchk:bnds_valid",bnds_valid)
 
 
-      fun import_valid' (ImportValue (label,var,con),D) =
+      fun import_valid' (ImportValue (label,var,tr,con),D) =
 	let
 	    val _ = if (!trace)
 			then (print "{Processing ImportValue with var = ";

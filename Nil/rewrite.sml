@@ -733,13 +733,14 @@ structure NilRewrite :> NILREWRITE =
 	  end
 
 
-	fun import_helper flag (import as (ImportValue (label,var,con)),state) =
+	fun import_helper flag (import as (ImportValue (label,var,trace,con)),state) =
 	  let
 	    val changed = ref false
+	    val trace = recur_trace changed state trace 
 	    val con = recur_c changed state con
 	    val (state,var) = bind_e changed (state,var,con)
 	    val _ = flag := (!changed orelse !flag)
-	  in (if !changed then ImportValue (label,var,con) else import,state)
+	  in (if !changed then ImportValue (label,var,trace,con) else import,state)
 	  end
 	  | import_helper flag (import as (ImportType (label,var,kind)),state) = 
 	  let

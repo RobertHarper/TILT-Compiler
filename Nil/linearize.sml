@@ -385,7 +385,7 @@ struct
        let val (cbnds,c) = lcon' lift state arg_con
        in  if (small_con c orelse not (!linearize) orelse not lift)
 	       then (cbnds, c)
-	   else let val v = Name.fresh_named_var "tmptype"
+	   else let val v = Name.fresh_named_var "type"
 		in  (cbnds @ [Con_cb(v,c)], Var_c v)
 		end
        end
@@ -578,12 +578,12 @@ struct
      | lexport state (ExportType(l,v)) = ExportType(l,find_var(state,v))
 
 
-   fun limport (ImportValue(l,v,c),s) =
+   fun limport (ImportValue(l,v,tr,c),s) =
        let val (s,v) = add_var(s,v)
 	   val _ = inc depth_lcon_import
 	   val c = lcon_flat s c
 	   val _ = dec depth_lcon_import
-       in  (ImportValue(l,v,c),s)
+       in  (ImportValue(l,v,tr,c),s)
 	   handle e => (print "exception in limport call\n";
 			raise e)
        end

@@ -398,7 +398,8 @@ struct
         let fun create_ctxt ([], ctxt) = ctxt
               | create_ctxt (ImportType (_, v, k) :: is, ctxt) = 
                    create_ctxt (is, NilContext.insert_kind(ctxt, v, k))
-              | create_ctxt (ImportValue (_, v, c) :: is, ctxt) = 
+		   (* XXX Chris look at the trace on ImportValue *)
+              | create_ctxt (ImportValue (_, v, tr, c) :: is, ctxt) = 
                    create_ctxt (is, NilContext.insert_con(ctxt, v, c))
 	    val ctxt = create_ctxt (imports, NilContext.empty ())
 	    val (bnds', BODY_EXPORTS exports', pset) = 

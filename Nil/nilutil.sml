@@ -848,7 +848,7 @@ end
       fun kind_size argkind = let val (count,handlers) = count_handler()
 			     in  (f_kind handlers argkind; !count)
 			     end
-      fun import_size (ImportValue (_,_,c)) = 1 + con_size c
+      fun import_size (ImportValue (_,_,_,c)) = 1 + con_size c
 	| import_size (ImportType (_,_,k)) = 1 + kind_size k
       fun export_size (ExportValue (_,v)) = 2
 	| export_size (ExportType (_,v)) = 2

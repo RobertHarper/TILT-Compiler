@@ -785,11 +785,11 @@ struct
 	   val handler = exp_normalize' state handler
 	 in Handle_e (exp,v,handler)
 	 end)
-  fun import_normalize' state (ImportValue (label,var,con)) =
+  fun import_normalize' state (ImportValue (label,var,tr,con)) =
     let
       val con = con_normalize' state con
     in
-      (ImportValue (label,var,con),state)
+      (ImportValue (label,var,tr,con),state)
     end
     | import_normalize' state (ImportType (label,var,kind)) = 
     let
