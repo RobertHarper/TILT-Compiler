@@ -1239,7 +1239,6 @@ struct
 
            fun is_float (TraceKnown TraceInfo.Notrace_Real) = true
 	     | is_float _ = false
-	   val boxfloat_type = Prim_c(BoxFloat_c Prim.F64, [])
 	   fun box e = Prim_e(NilPrimOp(box_float Prim.F64), [],[], [e])
 	   fun unbox e = Prim_e(NilPrimOp(unbox_float Prim.F64), [],[], [e])
 	   val trace_pointer = TraceKnown TraceInfo.Trace
@@ -1261,7 +1260,7 @@ struct
 						 if is_float tr then
 						   (box venv,
 						    Exp_b(v', tr, unbox(Var_e venv_var)),
-						    trace_pointer,boxfloat_type)
+						    trace_pointer,NilDefs.boxfloat_con)
 						 else
 						   (venv,
 						    Exp_b(v',tr,Var_e venv_var),
@@ -1283,7 +1282,7 @@ struct
 				  val code_tr = trace_rewrite inner_state tr
 				  val (env_e,env_tr,env_t) =
 				      if (is_float tr) 
-					  then (box env_e, trace_pointer, boxfloat_type)
+					  then (box env_e, trace_pointer, NilDefs.boxfloat_con)
 				      else (env_e, trace_rewrite state tr, t)
 				  val code_bnds = if (is_float tr)
 						      then let val v'' = Name.derived_var v'
