@@ -7,13 +7,10 @@ signature NORMALIZE =
     type context 
     type 'a subst
 
-    val partial_get_kind : context -> con -> kind option
-    val get_kind : context -> con -> kind
+    val debug : bool ref
+    val show_calls : bool ref
 
-    val partial_kind_normalize : context -> kind -> kind
-    val partial_con_normalize : context -> con -> con
-    val partial_exp_normalize : context -> exp -> exp
-    val partial_module_normalize : context -> module -> module
+    val get_shape : context -> con -> kind
 
     val kind_normalize : context -> kind -> kind
     val con_normalize : context -> con -> con

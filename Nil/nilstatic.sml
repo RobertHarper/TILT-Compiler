@@ -108,7 +108,7 @@ struct
   val bind_kind = NilContext.bind_kind
   val bind_kind_list = NilContext.bind_kind_list
   val insert_kind = NilContext.insert_kind
-  val find_kind = NilContext.find_kind
+  val find_kind' = NilContext.find_kind'
   val leave_top_level = NilContext.leave_top_level
   val code_context = NilContext.code_context
 
@@ -285,19 +285,18 @@ struct
     
   fun bind_at_kind' ((D,subst),(var,kind)) = 
     let
-      val kind = kind_normalize' (D,subst) kind
+      val kind = substConInKind subst kind
+      val kind = kind_valid (D,kind)
       val var' = derived_var var 
-      val con = pull (Var_c var',kind)
       val D = insert_kind (D,var',kind)
-      val con = con_normalize D con  (*Don't re-substitute*)
-      val subst = Subst.add subst (var,con)
+      val subst = Subst.add subst (var,Var_c var')
     in
       ((D,subst),var',kind)
     end
  
-  fun bind_at_kind (D,var,kind) = bind_at_kind' ((D,Subst.empty()),(var,kind))
+  and bind_at_kind (D,var,kind) = bind_at_kind' ((D,Subst.empty()),(var,kind))
 
-  fun bind_at_kinds D kinds = 
+  and bind_at_kinds D kinds = 
     let
       fun folder ((v,k),state) = 
 	let
@@ -311,7 +310,7 @@ struct
     end
  
  
-  fun kind_valid (D,kind) = 
+  and kind_valid (D,kind) = 
       let val _ = push_kind(kind,D)
 	  val _ = if (!show_calls)
 		      then (print "kind_valid called with kind =\n";
@@ -480,8 +479,8 @@ struct
 	     (error "Invalid arrow constructor" handle e => raise e)
 	 end
 	| (v as (Var_c var)) => 
-	 (case find_kind (D,var) 
-	    of SOME k => (v,k)  (*already singeltonized*)
+	 (case find_kind' (D,var) 
+	    of SOME (c,k) => (c,k)  (*already singeltonized*)
 	     | NONE => 
 	      (error ("Encountered undefined variable " ^ (Name.var2string var) 
 		      ^" in con_valid") handle e => raise e))
@@ -650,7 +649,6 @@ struct
 	   fun doarm (pcon,args,body) = 
 	     let
 	       val (vars,kinds) = unzip args
-	       val kinds = map (curry2 kind_valid D) kinds
 	       val argcons = map Var_c vars
 	       val args = zip vars kinds
 	       val ((D,subst),args) = bind_at_kinds D args
@@ -697,13 +695,9 @@ struct
 	  val kind1 = kind_normalize' (D,subst1) kind1
 	  val kind2 = kind_normalize' (D,subst2) kind2
 	  val var' = derived_var var1
-	  val con1 = pull (Var_c var',kind1)
-(*	  val con2 = pull (Var_c var',kind2)*)
 	  val D' = insert_kind (D,var',kind1)
-	  val con1 = con_normalize D' con1  (*Don't re-substitute*)
-(*	  val con2 = con_normalize D' con2  (*Don't re-substitute*)*)
-	  val subst1 = Subst.add subst1 (var1,con1)
-	  val subst2 = Subst.add subst1(*2*) (var2,con1)(*2)*)
+	  val subst1 = Subst.add subst1 (var1,Var_c var')
+	  val subst2 = Subst.add subst2 (var2,Var_c var')
 	in
 	  (sub_kind' (D,kind1,kind2),(D',subst1,subst2))
 	end
@@ -1756,10 +1750,11 @@ struct
 
       and bnd_valid' (bnd,(D,subst)) = 
 	let 
-	  val _ = push_bnd(bnd,D)
+	  val (bnd',_) = substConInBnd subst bnd
+	  val _ = push_bnd(bnd',D)
 	  val _ = if (!show_calls)
 		    then (print "bnd_valid called with bnd =\n";
-			  PpNil.pp_bnd bnd;
+			  PpNil.pp_bnd bnd';
 			  print "\nand context"; NilContext.print_context D;
 			  print "\n\n")
 		  else ()
@@ -1785,7 +1780,6 @@ struct
 	end
 	| import_valid' (ImportType (label,var,kind),(D,subst)) = 
 	let
-	  val kind = kind_valid(D,kind)
 	  val ((D,subst),var,kind) = bind_at_kind' ((D,subst),(var,kind))
 	in
 	  (ImportType (label,var,kind),(D,subst))

@@ -31,11 +31,13 @@ structure Linknil (* : LINKNIL *) =
     val short_circuit = Stats.bool "subst_short_circuit"
     val hash = Stats.bool "subst_use_hash"
     val bnds_made_precise = Stats.bool "bnds_made_precise"
+    val closure_print_free = Stats.bool "closure_print_free"
     val _ = (select_carries_types:=false;
 	     profile := false;
 	     short_circuit := true;
 	     hash := false;
-	     bnds_made_precise := true)
+	     bnds_made_precise := true;
+	     closure_print_free := false)
 
     structure Il = LinkIl.Il
     structure Stats = Stats
@@ -67,20 +69,23 @@ structure Linknil (* : LINKNIL *) =
 				  structure Subst = NilSubst
 				  structure PpNil = PpNil)
 
-    structure NilContext = NilContextFn(structure NilUtil = NilUtil
+    structure NilContext' = NilContextFn'(structure NilUtil = NilUtil
 					structure ArgNil = Nil
 					structure PpNil = PpNil
 					structure Cont = Cont
 					structure Subst = NilSubst)
 
-    structure NilError = NilErrorFn(structure ArgNil = Nil
-				    structure PpNil = PpNil)
-
     structure Normalize = NormalizeFn(structure Nil = Nil
 				      structure NilUtil = NilUtil
-				      structure NilContext = NilContext
+				      structure NilContext = NilContext'
 				      structure PpNil = PpNil
 				      structure Subst = NilSubst)
+
+    structure NilContext = NilContextFn(structure NilContext' = NilContext'
+					structure Normalize = Normalize)
+
+    structure NilError = NilErrorFn(structure ArgNil = Nil
+				    structure PpNil = PpNil)
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim

@@ -17,7 +17,10 @@ functor ToClosure(structure Nil : NIL
 struct
 
 
-    val select_has_con = ref false
+
+    val select_carries_types = Stats.bool "select_carries_types"
+    val select_has_con = select_carries_types
+    val closure_print_free = Stats.bool "closure_print_free"
 
     open Util NilUtil Name Nil
     structure Nil = Nil
@@ -762,12 +765,15 @@ struct
 			      print "\n\n")
 		    else ()
 	    val _ = VarSet.app (fn fid => let val {freeevars,freecvars} = get_frees fid
-					  in  (print ("fid = ");
+					  in  
+					    if !closure_print_free then
+					      (print ("fid = ");
 					       Ppnil.pp_var fid; print "  (#free-cvars , #free-evars) =   ";
 					       print (Int.toString (length freecvars));
 					       print ", ";
 					       print (Int.toString (length freeevars));
 					       print "\n")
+					    else ()
 					  end) (get_fids())
        in  ()
        end

@@ -33,6 +33,9 @@ signature NILSUBST =
      * new map is that of the second map
      *)
     val merge : ('a subst * 'a subst) -> 'a subst 
+
+    val print : ('a -> unit) -> 'a subst -> unit
+
     val substConInCon : con subst -> con -> con
     val substConInKind : con subst -> kind -> kind
     val substConInExp : con subst -> exp -> exp
@@ -44,4 +47,5 @@ signature NILSUBST =
     val varConKindSubst : var -> con -> kind -> kind
     val varConConSubst : var -> con -> con -> con
 
+    val printConSubst : con subst -> unit
   end

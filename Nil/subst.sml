@@ -163,6 +163,20 @@ functor NilSubstFn(structure Nil : NIL
 	in
 	  {test = test, subst = subst}
 	end
+
+      fun print printer ({test,subst}: 'a subst) = 
+	let
+	  fun print1 (v,a) = 
+	    (TextIO.print (Name.var2string v);
+	     TextIO.print "->";
+	     printer a;
+	     TextIO.print "\n")
+	in
+	  (Util.lprintl "Substitution is";
+	   VarMap.appi print1 subst;
+	   Util.printl "")
+	end
+
     end
 
     fun rebind Con (var,subst) = 
@@ -244,7 +258,7 @@ functor NilSubstFn(structure Nil : NIL
     and substConInCon' (conmap : con subst) (con : con) = 
       let
 	fun print_one (v,c) =
-	  (print ((Name.var2string v)^"->");
+	  (TextIO.print ((Name.var2string v)^"->");
 	   PpNil.pp_con c)
 	val _ = 
 	  if !debug then
@@ -673,4 +687,7 @@ functor NilSubstFn(structure Nil : NIL
 	wrap2 varConKindSubst "varConSubst"
       else 
 	varConKindSubst
+
+    val printConSubst = print PpNil.pp_con
+
   end
