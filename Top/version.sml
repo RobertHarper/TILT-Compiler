@@ -6,6 +6,6 @@ sig
 end =
 struct
     val majorVersion = 1
-    val minorVersion = 0
+    val minorVersion = 1
     val version = (Int.toString majorVersion ^ "." ^ Int.toString minorVersion)
 end

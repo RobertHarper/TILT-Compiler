@@ -216,7 +216,8 @@ struct
     in
 	fun set_desc (descfiles:string list, targets:targets,
 		      linking:bool, files:string list) : unit =
-	    let val d = Project.empty {linking=linking}
+	    let val _ = Fs.flush()
+		val d = Project.empty {linking=linking}
 		val d = foldl (fn (descfile,d) => Project.add_include (d, descfile)) d descfiles
 		val d = Project.finish d
 		val _ = app (check_file(descfiles,d)) files
