@@ -225,3 +225,6 @@ m0080	known case
 m0081	known case
 m0082	llv?
 m0083	nested loops
+m0084	non-exhaustive match
+m0085	generativity
+m0086	opaque types
