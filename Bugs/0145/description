@@ -1,0 +1,16 @@
+Number: 0145
+Title:       discrepancies with time results
+Keywords:    time
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     run test
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0120
+Owner: 
+Status: open

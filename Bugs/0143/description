@@ -1,0 +1,16 @@
+Number: 0143
+Title:       parsing problem with test file
+Keywords:    parser
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     test file does not parse, but should.  this is not a corner case.
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0118
+Owner: 
+Status: open

@@ -1,0 +1,16 @@
+Number: 0140
+Title:       discrepancies on string tests
+Keywords:    string, char
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     discrepancies with test
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0112
+Owner: 
+Status: open

@@ -1,0 +1,16 @@
+Number: 0144
+Title:       redefinition problem in as
+Keywords:    redefinition
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     fails to assemble because of re-definition of "hidden" identifiers
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0119
+Owner: 
+Status: open

@@ -1,0 +1,16 @@
+Number: 0142
+Title:       uncaught exception leads to assertion failure in runtime
+Keywords:    uncaught exceptions
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     title says it all
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0115
+Owner: 
+Status: open

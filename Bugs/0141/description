@@ -1,0 +1,16 @@
+Number: 0141
+Title:       stringcvt discrepancies
+Keywords:    stringcvt, textio
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     discrepancies with test results
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0114
+Owner: 
+Status: open

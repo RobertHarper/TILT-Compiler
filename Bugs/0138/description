@@ -1,0 +1,16 @@
+Number: 0138
+Title:       date failure
+Keywords:    date
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     fails date tests
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: 
+Owner: rwh
+Status: open

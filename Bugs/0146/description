@@ -1,0 +1,16 @@
+Number: 0146
+Title:       integer constant too large
+Keywords:    elaborator
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     fails to elaborate test file because of constants
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0121
+Owner: 
+Status: open

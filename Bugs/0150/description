@@ -1,0 +1,16 @@
+Number: 0150
+Title:       parsing problem on non-corner case
+Keywords:    parser
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     doesn't parse properly
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: 
+Owner: 
+Status: open

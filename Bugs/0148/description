@@ -1,0 +1,16 @@
+Number: 0148
+Title:       type specification error
+Keywords:    modules, elaborator
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    critical
+Problem:     semantics of type specifications is wrong
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0124
+Owner: 
+Status: open

@@ -1,0 +1,16 @@
+Number: 0139
+Title:       filesys discrepancies
+Keywords:    filesys
+Submitter:   rwh
+Date:        08/18/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     discrepancies on FileSys tests
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0109
+Owner: 
+Status: open
