@@ -70,56 +70,216 @@ struct
     fun aget ((Int i) :: (Array v) :: s) =
 	(Vector.sub (v, i)) :: s
 
+(* transformations *)
+
+    structure M4 = Matrix
+
+
+fun translate ((Real rtz) :: (Real rty) :: (Real rtx) :: (Object obj) :: s) =
+    let
+	fun helper (Sphere(m,c)) = Sphere(M4.translateM(rtx, rty, rtz, m), c)
+	  | helper (Cube(m,c))  = Cube(M4.translateM(rtx, rty, rtz, m), c)
+	  | helper (Cone(m,c)) = Cone(M4.translateM(rtx, rty, rtz, m), c)
+	  | helper (Cylinder(m,c)) = Cylinder(M4.translateM(rtx, rty, rtz, m), c)
+	  | helper (Plane (m,c)) = Plane(M4.translateM(rtx, rty, rtz, m), c)
+	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    in
+	Object (helper obj)::s
+    end
+
+fun scale ((Real rsz) :: (Real rsy) :: (Real rsx) :: (Object obj) :: s) =
+    let
+	fun helper (Sphere(m,c)) = Sphere(M4.scaleM(rsx, rsy, rsz, m), c)
+	  | helper (Cube(m,c))  = Cube(M4.scaleM(rsx, rsy, rsz, m), c)
+	  | helper (Cone(m,c)) = Cone(M4.scaleM(rsx, rsy, rsz, m), c)
+	  | helper (Cylinder(m,c)) = Cylinder(M4.scaleM(rsx, rsy, rsz, m), c)
+	  | helper (Plane (m,c)) = Plane(M4.scaleM(rsx, rsy, rsz, m), c)
+	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    in
+	Object (helper obj)::s
+    end
+
+fun uscale ((Real rs) :: (Object obj) :: s) =
+    let
+	fun helper (Sphere(m,c)) = Sphere(M4.uScaleM(rs, m), c)
+	  | helper (Cube(m,c))  = Cube(M4.uScaleM(rs, m), c)
+	  | helper (Cone(m,c)) = Cone(M4.uScaleM(rs, m), c)
+	  | helper (Cylinder(m,c)) = Cylinder(M4.uScaleM(rs, m), c)
+	  | helper (Plane (m,c)) = Plane(M4.uScaleM(rs, m), c)
+	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    in
+	Object (helper obj)::s
+    end
+
+fun rotatex ((Real t) :: (Object obj) :: s) =
+    let
+	fun helper (Sphere(m,c)) = Sphere(M4.rotxM(t, m), c)
+	  | helper (Cube(m,c))  = Cube(M4.rotxM(t, m), c)
+	  | helper (Cone(m,c)) = Cone(M4.rotxM(t, m), c)
+	  | helper (Cylinder(m,c)) = Cylinder(M4.rotxM(t, m), c)
+	  | helper (Plane (m,c)) = Plane(M4.rotxM(t, m), c)
+	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    in
+	Object (helper obj)::s
+    end
+
+fun rotatey ((Real t) :: (Object obj) :: s) =
+    let
+	fun helper (Sphere(m,c)) = Sphere(M4.rotyM(t, m), c)
+	  | helper (Cube(m,c))  = Cube(M4.rotyM(t, m), c)
+	  | helper (Cone(m,c)) = Cone(M4.rotyM(t, m), c)
+	  | helper (Cylinder(m,c)) = Cylinder(M4.rotyM(t, m), c)
+	  | helper (Plane (m,c)) = Plane(M4.rotyM(t, m), c)
+	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    in
+	Object (helper obj)::s
+    end
+
+fun rotatez ((Real t) :: (Object obj) :: s) =
+    let
+	fun helper (Sphere(m,c)) = Sphere(M4.rotzM(t, m), c)
+	  | helper (Cube(m,c))  = Cube(M4.rotzM(t, m), c)
+	  | helper (Cone(m,c)) = Cone(M4.rotzM(t, m), c)
+	  | helper (Cylinder(m,c)) = Cylinder(M4.rotzM(t, m), c)
+	  | helper (Plane (m,c)) = Plane(M4.rotzM(t, m), c)
+	  | helper (Union(o1, o2)) = Union(helper(o1), helper(o2))
+	  | helper (Difference(o1,o2)) = Difference(helper(o1), helper(o2))
+	  | helper (Intersection(o1,o2)) = Intersection(helper(o1), helper(o2))
+    in
+	Object (helper obj)::s
+    end
+
+fun union ((Object o2) :: (Object o1) :: s) = Object(Union(o1, o2))::s
+    
+fun intersect ((Object o2) :: (Object o1) :: s) = Object(Intersection(o1, o2))::s
+    
+fun difference ((Object o2) :: (Object o1) :: s) = Object (Difference(o1, o2))::s
+    
+(* Math functions [not addi/addf, since tom did those] in reverse alphabetic order *)
+    
+fun subi((Int i2) :: (Int i1) :: s) = Int (i1-i2) :: s
+    
+fun subf((Real r2) :: (Real r1) :: s) = Real (r1-r2) :: s
+    
+fun sqrt ((Real r1) :: s) = Real (Math.sqrt r1) :: s
+    
+(* d2r converts degrees to radians *)
+fun d2r (angle) = angle * (Math.pi / 180.0)
+(* r2d converts radians to degrees *)
+fun r2d (rad) = rad * (180.0 / Math.pi)
+    
+fun sin ((Real r1) :: s) = Real (Math.sin (d2r (r1))) :: s
+    
+fun real ((Int i1) :: s) = Real (Real.fromInt(i1)) :: s
+    
+fun negi ((Int i1) :: s) = Int (~ i1) :: s
+    
+fun negf ((Real r1) :: s) = Real (~ r1) :: s
+    
+fun muli ((Int i2) :: (Int i1) :: s) = Int(i1 * i2) :: s
+    
+fun mulf ((Real r2) :: (Real r1) :: s) = Real (r1 * r2) :: s
+    
+fun modi ((Int i2) :: (Int i1) :: s) = Int (i1 mod i2) :: s
+    
+fun lessi ((Int i2) :: (Int i1) :: s) = Bool(i1 < i2) :: s
+fun lessf ((Real r2) :: (Real r1) :: s) = Bool (Real.< (r1, r2)) :: s
+    
+fun frac ((Real r1) :: s) = Real (Real.realMod r1) :: s
+    
+fun floor ((Real r1) :: s) = Int (Real.trunc r1) :: s
+    
+fun eqi ((Int i2) :: (Int i1) :: s) = Bool (i1 = i2) :: s
+fun eqf ((Real i2) :: (Real i1) :: s) = Bool (Real.== (i1,i2)) :: s
+    
+fun divi ((Int i2) :: (Int i1) :: s) = Int (i1 div i2) :: s
+fun divf ((Real r2) :: (Real r1) :: s) = Real (r1 / r2) :: s
+    
+fun cos ((Real r1) :: s) = Real (Math.cos (d2r r1)) :: s
+    
+fun clampf ((Real r1) :: s) = 
+    Real(if (r1 < 0.0) then 0.0 else if (r1 > 1.0) then 1.0 else r1) :: s
+	 
+fun asin((Real r1) :: s) = Real(r2d (Math.asin r1)) :: s
+    
+fun acos((Real r1) :: s) = Real(r2d (Math.acos r1)) :: s
+    
+(* Geom primitaves *)
+    
+fun sphere ((Closure c) :: s) = Object (Sphere(M4.ident, c)) :: s
+fun cube ((Closure c) :: s) = Object (Cube(M4.ident, c)) :: s
+fun cylinder ((Closure c) :: s) = Object (Cylinder(M4.ident, c)) :: s
+fun cone ((Closure c) :: s) = Object (Cone(M4.ident, c)) :: s
+fun plane ((Closure c) :: s) = Object (Plane(M4.ident, c)) :: s
+
+
+
+(* FIXME *)
+
+val pointlight = u
+val spotlight = u
+val light = u
+    
     val opers = 
 	foldl (fn ((oo,dd), m) => Envmap.insert (m, oo, dd)) Envmap.empty
 
 [ ("addi", addi),
   ("addf", addf),
-  ("acos", u),
-  ("asin", u),
-  ("clampf", u),
-  ("cos", u),
-  ("divi", u),
-  ("divf", u),
-  ("eqi", u),
-  ("equif", u),
-  ("floor", u),
-  ("frac", u),
-  ("lessi", u),
-  ("lessf", u),
-  ("modi", u),
-  ("muli", u),
-  ("mulf", u),
-  ("negi", u),
-  ("negf", u),
-  ("real", u),
-  ("sin", u),
-  ("sqrt", u),
-  ("subi", u),
-  ("subf", u),
+  ("acos", acos),
+  ("asin", asin),
+  ("clampf", clampf),
+  ("cos", cos),
+  ("divi", divi),
+  ("divf", divf),
+  ("eqi", eqi),
+  ("eqf", eqf),
+  ("floor", floor),
+  ("frac", frac),
+  ("lessi", lessi),
+  ("lessf", lessf),
+  ("modi", modi),
+  ("muli", muli),
+  ("mulf", mulf),
+  ("negi", negi),
+  ("negf", negf),
+  ("real", real),
+  ("sin", sin),
+  ("sqrt", sqrt),
+  ("subi", subi),
+  ("subf", subf),
   ("getx", getx),
   ("gety", gety),
   ("getz", getz),
   ("point", point),
   ("get", aget),
   ("length", alength),
-  ("sphere", u),
-  ("cube", u),
-  ("cylinder", u),
-  ("cone", u),
-  ("plane", u),
-  ("translate", u),
-  ("scale", u),
-  ("uscale", u),
-  ("rotatex", u),
-  ("rotatey", u),
-  ("rotatez", u),
-  ("light", u),
-  ("pointlight", u),
-  ("spotlight", u),
-  ("union", u),
-  ("intersect", u),
-  ("difference", u),
+  ("sphere", sphere),
+  ("cube", cube),
+  ("cylinder", cylinder),
+  ("cone", cone),
+  ("plane", plane),
+  ("translate", translate),
+  ("scale", scale),
+  ("uscale", uscale),
+  ("rotatex", rotatex),
+  ("rotatey", rotatey),
+  ("rotatez", rotatez),
+  ("light", light),
+  ("pointlight", pointlight),
+  ("spotlight", spotlight),
+  ("union", union),
+  ("intersect", intersect),
+  ("difference", difference),
   ("render", u)
   ]
 
