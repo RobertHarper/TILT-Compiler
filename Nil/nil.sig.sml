@@ -8,6 +8,10 @@ sig
   type annot = Annotation.annotation
   type w32 = Word32.word
   type prim = Prim.prim
+  type ('a,'b) sequence   (* conceptually this is a ('a*'b) list that allows
+			     fast access using 'a as a key *)
+  type ('a,'b) set        (* sets are used instead of lists in places 
+			   where a natural ordering does not exist *)
 
   (* In general, we want to distinguish between functions/arrow types that 
    * are open (possibly having free variables) or those that are closed.
@@ -21,18 +25,15 @@ sig
    *)
   datatype effect = Total | Partial
 
-  (* A leaf procedure makes no function calls.  A self-recursive procedure may 
-   * only call itself.  A non-leaf procedure may call any functions.
+  (* A leaf procedure makes no function calls.
+   *  A non-leaf procedure may call any functions.
    *)
-  datatype recursive = Leaf | Self | Nonleaf
+  datatype recursive = Leaf | Nonleaf
 
   (* A sequential let only permits the bindings to be evaluated sequentially. 
    * A parallel let permits the bindings to be concurrently executed.
    *)
   datatype letsort = Sequential | Parallel
-
-
-
 
   datatype kind = 
       Type_k                        (* classifies constructors that are types *)
@@ -41,7 +42,7 @@ sig
 				           through the constructor *)
                                     (* dependent record kind classify records of 
 				           constructors *)
-    | Record_k of (label * var * kind) list
+    | Record_k of ((label*var),kind) sequence
                                     (* dependent arrow kinds classify open 
 				       constructor funs or closures *)
     | Arrow_k of openness * (var * kind) list * kind 
@@ -50,7 +51,7 @@ sig
 
 
   and primcon =                          (* classifies term-level ... *)
-      Int_c of Prim.intsize                   (* integers *)
+      Int_c of Prim.intsize                   (* register integers *)
     | Float_c of Prim.floatsize               (* register floating-points *)
     | BoxFloat_c of Prim.floatsize            (* boxed floating-points *)
     | Exn_c                                   (* exceptions *)
@@ -60,26 +61,26 @@ sig
     | Exntag_c                                (* exception tags *)
     | Sum_c                                   (* sum types *)
     | Record_c                                (* records *)
-    | Vararg_c | Onearg_c                     (* make_vararg and make_onearg *)
+    | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 
   and con = 
-      Var_c of var
-    | Let_c of letsort * (var * con) list * con   (* Constructor-level bindings *)
-    | Fun_c of openness * (var * kind) list * con (* Constructor-level lambdas *)
-    | Crecord_c of (label * var * con) list       (* Constructor-level records *)
-    | Proj_c of con * label                       (* Constructor-level record projection *)
-    | Closure_c of con * con                      (* Constructor-level closure: 
-					               code and environment *)
-    | App_c of openness * con * (con list)        (* Constructor-level application 
-						       of open or closed constructor function *)
-    | Prim_c of primcon * (con list)              (* Classify term-level values 
+      Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of (var * con) list * con              (* Fix-point of constructors classify 
-						       recursive datatypes *)
+    | Mu_c of var * (var,con) set                 (* Constructors that classify values of
+						       a recursive type *)
     | Arrow_c of openness * confun                (* open functions and closures *)
     | Code_c of confun                            (* for describing code at the term level: 
 					               note that the classifiers of open functions 
                                                        and closures are given by Arrow_c *)
+    | Var_c of var
+    | Let_c of letsort * (var * con) list * con   (* Constructor-level bindings *)
+    | Fun_c of openness * (var * kind) list * con (* Constructor-level lambdas *)
+    | Crecord_c of (label * con) list             (* Constructor-level records *)
+    | Proj_c of con * label                       (* Constructor-level record projection *)
+    | Closure_c of con * con                      (* Constructor-level closure: 
+					               code and environment *)
+    | App_c of con * con list                     (* Constructor-level application 
+						       of open or closed constructor function *)
     | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
   withtype confun = effect * (var * kind) list * con list * con
@@ -90,32 +91,31 @@ sig
     | inject of w32              (* slow; sum intro *)
     | inject_record of w32       (* fast; sum intro where argument is a record
 					  whose components are individually passed in *)
-    | project_sum                (* slow; given a special sum type, return carried value *)
-    | project_sum_record of w32  (* fast; given a special sum type of record type, 
-				          return the specified field *)
+    | project_sum of w32         (* slow; given a special sum type, return carried value *)
+    | project_sum_record of w32 * w32 (* fast; given a special sum type of record type, 
+				               return the specified field *)
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
     | roll | unroll              (* coerce to/from recursive type *) 
     | make_exntag                (* generate new exn tag *)
     | inj_exn                    (* takes tag + value and give exn *)
-    | make_vararg                (* given a function in onearg calling convention, convert to vararg *)
-    | make_onearg                (* given a function in vararg calling convention, convert to onearg *)
+    | make_vararg of openness * effect  (* given a function in onearg calling conv, convert to vararg *)
+    | make_onearg of openness * effect  (* given a function in vararg calling conv, convert to onearg *)
     | peq                        (* polymorphic equality: unused since HIL compiles away equality *)
 
 
   datatype allprim = NilPrimOp of nilprim
                    | PrimOp of prim
 
-
   (* Intswitch should be apparent.
-   * The con in the Sumswitch tells us the sum type and the w32
+   * The con list in the Sumswitch tells us the sum type and the w32
    *    is used to index the different cases for the sum type.
    * Exncase's arms are indexed by variables that must have type Exntag_c(c) and
    *    the arms must be functions from [c]->tau for some fixed result type tau.  
    *)
   datatype switch =                                 (* Switching on / Elim Form *)
       Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
-    | Sumsw_e of (con,exp,w32) sw                         (* sum types *)
+    | Sumsw_e of (con list,exp,w32) sw                    (* sum types *)
     | Exncase_e of (unit,exp,var) sw                      (* exceptions *)
 
 
@@ -125,8 +125,8 @@ sig
     | Let_e of letsort * bnd list * exp                   (* Binding construct *)
     | Prim_e of allprim * (con list) * (exp list) option  (* allow primops to be partially applied *)
     | Switch_e of switch                                  (* Switch statements *)
-    | App_e of openness * exp * (con list) * (exp list)   (* Application of open functions and closures *)
-    | Call_e of openness * var * (con list) * (exp list)  (* Application of code pointers *)
+    | App_e of exp * (con list) * (exp list)              (* Application of open functions and closures *)
+    | Call_e of var * (con list) * (exp list)             (* Application of code pointers *)
     | Raise_e of exp * con                                
     | Handle_e of exp * function
 
@@ -141,9 +141,9 @@ sig
   and bnd =                                (* Term-level Bindings *)
       Con_b of var * con                            (* Binds constructors *)
     | Exp_b of var * exp                            (* Binds expressions *)
-    | Fixfun_b of (var * function) list             (* Binds mutually recursive functions *)
+    | Fixfun_b of (var,function) set                (* Binds mutually recursive functions *)
                                                     (* Allows the creation of closures *)
-    | Fixclosure_b of (var * con * {code:var, cenv:con, venv:exp}) list 
+    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp}) set
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.
    * It may or may not be effect-free and may or may not be recursive.
