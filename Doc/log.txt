@@ -47,4 +47,30 @@ conclusions:
      passes.  In particular, I'll write the reifier to assume the
      input has been normalized.
 
+
 ------------------------------------------------------------------------    
+April 21-22 Perry
+
+	
+	I incorporated Morgan's hoister and Stephanie's ExpTable
+into TILT.  Also, the linearizer now actually linearizes as well
+as renames.  The optimizer has been enahnced to perform CSE.
+Preliminary results indicates that linearization, hosisting, and CSE
+decrease code size by 10-20%.
+
+	Using A-normal form on constructors and terms help
+hoisting and CSE but a-normalizing types can have a deleterious 
+effect on compilation time.  By just anormalizing types,
+we can end up with many occurrences of Let_c types which require
+a lot of work to reduce back to head-normal form.  This may not be 
+so bad if the bindings are lifted followed by un-a-normalizing the types.
+For some test files, naively anormalizing types causes the optimizer
+to take twice as long and tortl to take four times as long.
+
+	In experimenting with the optimizations, I discovered two
+bugs.  First, the closure converter does not handle free variables
+of type floating-point.  Second, tortl does not handle top-level
+variables of type floating-point.  As a workaround, I have disabled the
+hoister and CSE for unboxed floating-point terms.
+
+------------------------------------------------------------------------
