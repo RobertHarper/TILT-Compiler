@@ -2,7 +2,7 @@
 
 signature PLATFORM = 
 sig
-    datatype platform = NT | DUNIX | SOLARIS
+    datatype platform = NT | DUNIX | SOLARIS | LINUX
 	
     val platform : platform
     val sleep : real -> unit

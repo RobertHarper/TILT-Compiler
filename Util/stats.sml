@@ -242,7 +242,7 @@ structure Stats :> STATS =
 	                           10 entries
 
 	   fun print_strings(name,count_string,per_call_string,max_string,
-			     time_cpu_string,percent_cpu_string,
+			     time_cpu_string,percent_cpu_string,time_gc_string,
 			     time_real_string,percent_real_string, warning_flag) =
 	     (fprint max_name_size name;
 	      print " : ";
@@ -252,6 +252,8 @@ structure Stats :> STATS =
 	      print " : ";
 	      fprint 8 time_cpu_string;
 	      fprint 6 percent_cpu_string;
+	      print " : ";
+	      fprint 8 time_gc_string;
 	      print " : ";
 	      fprint 8 time_real_string;
 	      fprint 6 percent_real_string;
@@ -267,6 +269,7 @@ structure Stats :> STATS =
 	       val timer_overhead = timer_time count
 	       val time_cpu_string = real2string time_cpu
 	       val time_real_string = real2string time_real
+	       val time_gc_string   = real2string (Time.toReal (#gc sum))
 	       val count_string = Int.toString count
 	       val per_call_string = real2stringWith 1 per_call
 	       val max_string = Int.toString (Real.trunc (max*1000.0)) (*In milliseconds (truncate, since beyond resolution)*)
@@ -289,14 +292,14 @@ structure Stats :> STATS =
 				   else "")
 	     in
 	       print_strings(name,count_string,per_call_string,max_string,
-			     time_cpu_string,percent_cpu_string,
+			     time_cpu_string,percent_cpu_string,time_gc_string,
 			     time_real_string,percent_real_string, warning_flag)
 	     end
 	     | pritem _ = ()
 	 in
 	   print "\nGlobal timings\n";
 	   print_strings("Timer Name","Calls","avg(ms)",
-			 "max(ms)","cpu (s)","% cpu","real (s)","% real","flag/timer overhead");
+			 "max(ms)","cpu (s)","% cpu","gc (s)","real (s)","% real","flag/timer overhead");
 	   print "--------------------------------------------------------------------------------------------------\n";
 	   app pritem entries;
 	   print "--------------------------------------------------------------------------------------------------\n";
