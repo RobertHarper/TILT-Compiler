@@ -1,7 +1,6 @@
-(*$import TilWord32 Alpha Nil NilContextPre NilSubst *)
-
-signature NORMALIZE = 
+signature NORMALIZE =
   sig
+    val NormalizeDiag : bool ref
 
     type kind = Nil.kind
     type con = Nil.con
@@ -49,11 +48,11 @@ signature NORMALIZE =
     val is_hnf          : con -> bool
     val reduce_hnf      : context * con -> bool * con   (* bool indicates whether HNF was reached *)
     val reduce_hnf_list : context * con -> bool * con * con list
-                                                        (* same as reduce_hnf, but returns list of intermediate paths 
+                                                        (* same as reduce_hnf, but returns list of intermediate paths
 							 * in reverse order: last found to first.  If initial arg was
 							 * a path, then it will be the last element of the list
 							 *)
-    val reduce_hnf'     : context * con * NilSubst.con_subst -> NilSubst.con_subst * con   
+    val reduce_hnf'     : context * con * NilSubst.con_subst -> NilSubst.con_subst * con
     val reduce_once     : context * con -> con
     val reduce          : context * con -> con
     val con_reduce      : context * con_subst -> con -> progress * con_subst * con
@@ -73,7 +72,7 @@ signature NORMALIZE =
     val beta_conrecord : con -> con
 
     (*PRE: argument is a well kinded, normalized function application,
-     * c (c1...cn) 
+     * c (c1...cn)
      *POST: If c is syntactically a function lambda(a1...an).c', then
      *   beta_confun D (c (c1...cn)) => con_normalize D ({ci/ai} c')
      *)
@@ -87,7 +86,7 @@ signature NORMALIZE =
      *)
     val eta_confun : con -> con
 
-      
+
     (*PRE: argument is a well kinded, normalized type switch,
      * case c {ci(v1,...vn) => ci'}
      *POST: If c is syntactically a primitive constructor prim(p,c1'...cn'), then
@@ -100,13 +99,13 @@ signature NORMALIZE =
     val reduceToSumtype : context * Nil.con -> TilWord32.word * TilWord32.word option * Nil.con list
     val type_of : context * Nil.exp -> Nil.con
 
-    val context_beta_reduce : (context * Alpha.alpha_context) * con 
-      -> (context * Alpha.alpha_context) * con * bool 
+    val context_beta_reduce : (context * Alpha.alpha_context) * con
+      -> (context * Alpha.alpha_context) * con * bool
 
-    val context_reduce_hnf'' : (context * Alpha.alpha_context) * con 
-      -> (context * Alpha.alpha_context) * con * bool 
+    val context_reduce_hnf'' : (context * Alpha.alpha_context) * con
+      -> (context * Alpha.alpha_context) * con * bool
 
-    val context_reduce_hnf' : (context * Alpha.alpha_context) * con 
+    val context_reduce_hnf' : (context * Alpha.alpha_context) * con
       -> (context * Alpha.alpha_context) * con
 
     val context_reduce_hnf : context * con -> context * con

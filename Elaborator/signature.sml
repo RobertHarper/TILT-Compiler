@@ -1,13 +1,11 @@
-(*$import Formatter List Int Listops Util Name Tyvar Il IlStatic IlUtil Ppil IlContext Error SIGNATURE Bool Stats Option *)
-
 (* Need to improve where_structure to use SIGNAT_OF *)
 
 structure Signature :> SIGNATURE =
   struct
 
 
-    open Il IlUtil Ppil 
-    open IlStatic 
+    open Il IlUtil Ppil
+    open IlStatic
     open Util Listops Name Tyvar
     open IlContext Error
 
@@ -30,8 +28,8 @@ structure Signature :> SIGNATURE =
  local
      val Cpolyinst = ref (NONE : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) option)
  in
-     fun installHelpers{polyinst} = 
-	 ((case !Cpolyinst of 
+     fun installHelpers{polyinst} =
+	 ((case !Cpolyinst of
 	      NONE => ()
 	    | SOME _ => (print "WARNING: installHelpers called more than once.\n";
 			 print "         Possibly because CM.make does not have the semantics of a fresh make\n"));
@@ -43,13 +41,13 @@ structure Signature :> SIGNATURE =
 
     (* ----------------- Misc Helper Functions ----------------------- *)
     fun is_eta_expand vsig ([],[]) = true
-      | is_eta_expand vsig ((SBND(l1,bnd))::sbnds, (SDEC(l2,dec))::sdecs) = 
+      | is_eta_expand vsig ((SBND(l1,bnd))::sbnds, (SDEC(l2,dec))::sdecs) =
 	(is_eta_expand vsig (sbnds,sdecs) andalso
 	 (case (bnd,dec) of
 	      (BND_CON(_,c), DEC_CON _) =>
 		  (case con_deref c of
 		       CON_MODULE_PROJECT(MOD_VAR v,l3) =>
-			   (eq_label(l1,l2) andalso eq_label(l2,l3) andalso 
+			   (eq_label(l1,l2) andalso eq_label(l2,l3) andalso
 			    eq_var(vsig,v))
 		     | _ => false)
 	    | (BND_EXP(_,_), DEC_EXP _) => eq_label(l1,l2)
@@ -57,13 +55,13 @@ structure Signature :> SIGNATURE =
       | is_eta_expand _ _ = false
 
     fun is_polyval_sig (SIGNAT_FUNCTOR(var_poly,sig_poly,
-				       SIGNAT_STRUCTURE [SDEC(maybe_it,DEC_EXP(_,c,eopt,i))], _)) = 
+				       SIGNAT_STRUCTURE [SDEC(maybe_it,DEC_EXP(_,c,eopt,i))], _)) =
 	if (eq_label (maybe_it, it_lab))
 	    then SOME(var_poly,sig_poly,c,eopt,i)
 	else NONE
       | is_polyval_sig _ = NONE
 
-    fun is_exception_sig (SIGNAT_STRUCTURE[_,SDEC(maybe_mk,DEC_EXP(_,c,_,_))]) = 
+    fun is_exception_sig (SIGNAT_STRUCTURE[_,SDEC(maybe_mk,DEC_EXP(_,c,_,_))]) =
         if eq_label (maybe_mk, mk_lab) then SOME c else NONE
       | is_exception_sig _ = NONE
 
@@ -72,12 +70,12 @@ structure Signature :> SIGNATURE =
       in (not (len < 2)) andalso is_dt(List.nth(labs,len-2))
       end
 
-    fun make_polyval_sig (var_poly,sig_poly,v,c,eopt,i) = 
-	SIGNAT_FUNCTOR(var_poly,sig_poly,SIGNAT_STRUCTURE 
+    fun make_polyval_sig (var_poly,sig_poly,v,c,eopt,i) =
+	SIGNAT_FUNCTOR(var_poly,sig_poly,SIGNAT_STRUCTURE
 		       [SDEC(it_lab,DEC_EXP(v,c,eopt,i))],PARTIAL)
 
     fun deep_reduce_signat path ctxt signat =
-	let val signat' = reduce_signat ctxt signat 
+	let val signat' = reduce_signat ctxt signat
 	in  (case signat' of
 	     SIGNAT_STRUCTURE sdecs =>
 		 let val (sdecs',_) = foldl_acc (deep_reduce_sdec path) ctxt sdecs
@@ -108,7 +106,7 @@ structure Signature :> SIGNATURE =
     type cluster = path option ref * lpath list
     fun eq_lpath'(lpath1,lpath2) = Listops.eq_list(eq_label,lpath1,lpath2)
     fun eq_lpath lpath1 lpath2 = Listops.eq_list(eq_label,lpath1,lpath2)
-    fun vlpath_eq_lpath(vlpath1,vlpath2) = 
+    fun vlpath_eq_lpath(vlpath1,vlpath2) =
 	let fun eq_vl((_,l1),l2) = eq_label(l1,l2)
 	in  Listops.eq_list(eq_vl, vlpath1, vlpath2)
 	end
@@ -128,13 +126,13 @@ structure Signature :> SIGNATURE =
   datatype typeslot = ABSTRACT of label list * kind
 		    | CONCRETE of label list * kind * con
 
-  fun splitAbstractConcrete slots = 
+  fun splitAbstractConcrete slots =
       let fun folder (ABSTRACT(labs,_),(abs,conc)) = (labs::abs, conc)
 	    | folder (CONCRETE(labs,_,_),(abs,conc)) = (abs, labs::conc)
       in  foldl folder ([],[]) slots
       end
 
-  fun splitAbstract slot_pairs = 
+  fun splitAbstract slot_pairs =
       let fun mapper (ABSTRACT(labs1,k1),ABSTRACT (labs2,k2)) = if eq_kind(k1,k2) then SOME [labs1,labs2] else NONE
 	    | mapper _ = NONE
       in  List.mapPartial mapper slot_pairs
@@ -152,7 +150,7 @@ structure Signature :> SIGNATURE =
 					      pp_con c)
 
   (* follow_labels looks up the "labels" type component of
-     sdecs and follows type definitions to determine whether it is 
+     sdecs and follows type definitions to determine whether it is
      flexible or rigid (ABSTRACT or CONCRETE).  In order to do so,
      a variable is put into the context (unless pathopt is supplied)
      with the sdecs signature.  If the normalized form of the "labels"
@@ -162,7 +160,7 @@ structure Signature :> SIGNATURE =
 
   fun follow_labels (pathopt : path option,sdecs,ctxt) : labels -> typeslot =
       let
-	  val (v,path,ctxt) = 
+	  val (v,path,ctxt) =
 	      (case pathopt of
 		   NONE => let val v = fresh_named_var "modtemp"
 			       val path = PATH (v,[])
@@ -177,7 +175,7 @@ structure Signature :> SIGNATURE =
 	      val c' = con_normalize(ctxt,c)
 	  in  case (con2path c') of
 	      SOME p => let val PATH(v',lbls) = p
-			in  if (eq_var(v,v')) 
+			in  if (eq_var(v,v'))
 				then ABSTRACT (lbls,k)
 			    else CONCRETE (labels,k,c')
 			end
@@ -185,12 +183,12 @@ structure Signature :> SIGNATURE =
 	  end
       end
 
-     fun signat2sdecs ctxt s = 
+     fun signat2sdecs ctxt s =
 	 (case reduce_signat ctxt s of
 	      SIGNAT_STRUCTURE sdecs => SOME sdecs
 	    | s => NONE)
 
-     fun find_labels_sdecs context sdecs = 
+     fun find_labels_sdecs context sdecs =
 	 let fun driver path sdecs = rev(foldl (find_labels path) [] sdecs)
 	     (* the path being carried is backwards so we must reverse when we add to accumulator *)
 	     and find_labels path (SDEC(l,DEC_CON (_,k,NONE,_)),_) =
@@ -201,7 +199,7 @@ structure Signature :> SIGNATURE =
 			   print "\n"));
 		  error "find_labels should not encounter any abstract types")
 	       | find_labels path (SDEC(l,DEC_CON (_,k,SOME _,_)),kpaths) =  (k,rev(l::path))::kpaths
-	       | find_labels path (SDEC(l,DEC_MOD (v,_,s)),kpaths) = 
+	       | find_labels path (SDEC(l,DEC_MOD (v,_,s)),kpaths) =
 		 (case signat2sdecs context s of
 		      SOME sdecs => (driver (l::path) sdecs) @ kpaths
 		    | NONE => kpaths)
@@ -211,15 +209,15 @@ structure Signature :> SIGNATURE =
 	 end
 
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ SIGNATURE PATCHING -------------------
       --------------------------------------------------------- *)
 
 
-    fun rewrite_type_component (ctxt,orig_sdecs,labs,con) = 
+    fun rewrite_type_component (ctxt,orig_sdecs,labs,con) =
 	let
 	    local val fv = con_free con
-	    in    fun bound v = 
+	    in    fun bound v =
 	            if (Name.VarSet.member(fv,v))
 			then (error_region();
 			      print "signature wheretype leads to variable capture\n")
@@ -235,10 +233,10 @@ structure Signature :> SIGNATURE =
 			    print "\n";
 			  print "orig_sdecs = "; pp_sdecs orig_sdecs; print "\n";
 			  [])
-		 | ((sdec as SDEC(l,dec))::rest) => 
+		 | ((sdec as SDEC(l,dec))::rest) =>
 		       (case dec of
-			    DEC_CON(v,k,NONE,i) => 
-				(bound v; 
+			    DEC_CON(v,k,NONE,i) =>
+				(bound v;
 				 if eq_label(l,curl)
 				     then (SDEC(l,DEC_CON(v,k,SOME con,i)))::rest
 				 else sdec::(docon curl rest))
@@ -247,9 +245,9 @@ structure Signature :> SIGNATURE =
 			  | DEC_MOD(v,_,_)  => (bound v; sdec::(docon curl rest))))
 	  fun domod [] sdecs = elab_error "rewrite_type_component got empty lbls"
 	    | domod [l] sdecs = docon l sdecs
-	    | domod (curl::restl) sdecs = 
-	      let 
-		  fun loop [] : sdecs = 
+	    | domod (curl::restl) sdecs =
+	      let
+		  fun loop [] : sdecs =
 		      (error_region();
 		       print "signature wheretype could not find component ";
 		       pp_label curl; print " in sdecs:\n";
@@ -257,11 +255,11 @@ structure Signature :> SIGNATURE =
 		       [])
 		    | loop ((sdec as SDEC(l,DEC_EXP(v,_,_,_)))::rest) = (bound v; sdec::(loop rest))
 		    | loop ((sdec as SDEC(l,DEC_CON(v,_,_,_)))::rest) = (bound v; sdec::(loop rest))
-		    | loop ((sdec as SDEC(l,DEC_MOD(v,b,s)))::rest) = 
-		      (bound v; 
-		       if eq_label(l, curl) 
+		    | loop ((sdec as SDEC(l,DEC_MOD(v,b,s)))::rest) =
+		      (bound v;
+		       if eq_label(l, curl)
 			   then (case (reduce_signat ctxt s) of
-				     SIGNAT_STRUCTURE sdecs => 
+				     SIGNAT_STRUCTURE sdecs =>
 					 (SDEC(l,DEC_MOD(v,b,SIGNAT_STRUCTURE
 							 (domod restl sdecs))))::rest
 				   | s => (error_region();
@@ -270,7 +268,7 @@ structure Signature :> SIGNATURE =
 					   sdec::(loop rest)))
 		       else sdec::(loop rest))
 	      in loop sdecs
-	      end		
+	      end
 	in  domod labs orig_sdecs
 	end
 
@@ -284,15 +282,15 @@ structure Signature :> SIGNATURE =
          This function is called by xsig_sharing_structure_fast when the structures being
          shared basically all have equivalent signatures, so SIGNAT_OF is safe.
        *)
-      fun xsig_sharing_rewrite_structure (context,sdecs,lpath_list,sigopt) = 
+      fun xsig_sharing_rewrite_structure (context,sdecs,lpath_list,sigopt) =
 	  (* using a ref like this is error-prone; should change this *)
 	  let val target = ref(sigopt, NONE)
-	      fun getsig(cur_path,orig_sig) = 
+	      fun getsig(cur_path,orig_sig) =
 		  (case !target of
 		       (SOME s,_) => s
-		     | (NONE, SOME vlpath) => 
+		     | (NONE, SOME vlpath) =>
 			   let fun loop [] current = SIGNAT_OF(vlpath2path current)
-				 | loop ((v1,l1)::rest1) (all2 as ((v2,l2)::rest2)) = 
+				 | loop ((v1,l1)::rest1) (all2 as ((v2,l2)::rest2)) =
 			            if (eq_var(v1,v2))
 					then loop rest1 rest2
 				    else SIGNAT_OF(vlpath2path all2)
@@ -300,7 +298,7 @@ structure Signature :> SIGNATURE =
 			   in  loop cur_path vlpath
 			   end
 		     | (NONE, NONE) => (target := (NONE, SOME cur_path); orig_sig))
-	      fun traverse ctxt _ [] = [] 
+	      fun traverse ctxt _ [] = []
                 | traverse ctxt cur_path ((SDEC(l,DEC_MOD(v,b,s)))::rest) =
 		  let val cur_path' = cur_path @ [(v,l)]
 		      val cur_lpath' = vlpath2lpath cur_path'
@@ -308,7 +306,7 @@ structure Signature :> SIGNATURE =
 		      val prematches = List.filter (sub_lpath cur_lpath') lpath_list
 		      val match_count = length matches
 		      val prematch_count = length prematches
-		      val s = 
+		      val s =
 			  if (match_count > 0)
 			      then ((* print "match called getsig with\n";
 				    pp_signat s;
@@ -335,19 +333,19 @@ structure Signature :> SIGNATURE =
 	  end
 
 
-      fun xsig_sharing_rewrite (ctxt,sdecs) = 
+      fun xsig_sharing_rewrite (ctxt,sdecs) =
         let val v = fresh_named_var "mod_sharing_temp"
 	    val s = SIGNAT_STRUCTURE sdecs
 	    val ctxt = add_context_mod'(ctxt,v,s)
 	    fun combine_path first [] = path2con(vlpath2path first)
 	      | combine_path [] _ = error "bad paths"
 	      | combine_path (first as ((v,_)::firstrest))
-			      ((v',_)::secondrest) = 
-			      if (eq_var(v,v')) 
+			      ((v',_)::secondrest) =
+			      if (eq_var(v,v'))
 				  then combine_path firstrest secondrest
 			      else path2con(vlpath2path first)
 	in  fn (typeslots : lpath list list, sdecs) =>
-            let 
+            let
 (*	      val _ = (print "\nrewrite called with:\n\t";
 		       app (fn l => (app (fn p => (pp_lpath p;print "   ")) l;print "\n\t")) typeslots;
 		       print "\n")*)
@@ -356,21 +354,21 @@ structure Signature :> SIGNATURE =
 	      fun find_representative (curpath : lpath) : vlpath option ref list =
 		  let fun loop ([],[]) = error "find_representative failed"
 			| loop ([],acc) = acc
-			| loop ((rep,tslots : lpath list)::rest,acc) = 
+			| loop ((rep,tslots : lpath list)::rest,acc) =
 		      if (Listops.member_eq(eq_lpath',curpath,tslots))
 			  then loop(rest,rep::acc)  else loop (rest,acc)
 		  in  loop (table,[])
 		  end
               fun transparent (curpath : (var * label) list, copt) =
-		  let 
+		  let
 		    val reps = (find_representative (map #2 curpath))
 		    fun loop [rep as ref NONE] = NONE
 		      | loop ((rep as ref NONE)::rest) = loop rest
 		      | loop (rep::rest) = !rep
 		    val repopt = loop reps
-		    val (rep,res) = 
-		      case repopt 
-			of NONE => (curpath,copt) 
+		    val (rep,res) =
+		      case repopt
+			of NONE => (curpath,copt)
 			 | SOME path => (path,SOME (combine_path path curpath))
 		    val _ = app (fn (r as ref NONE) => r := SOME rep | _ => ()) reps
 		  in res
@@ -386,8 +384,8 @@ structure Signature :> SIGNATURE =
 		in  foldl folder ([],[]) candidates
 		end
 
-		
-	      fun traverse (_,[]) [] = [] 
+
+	      fun traverse (_,[]) [] = []
 		| traverse (_,typeslots) [] = (print "traverse finished but there are leftover typeslots\n";
 					       app (fn lp => (pp_lpath lp; print "\n")) typeslots;
 					       error "traverse finished but there are leftover typeslots")
@@ -399,17 +397,17 @@ structure Signature :> SIGNATURE =
 				      | DEC_EXP(v,_,_,_) => v)
 		      val cur_path' = cur_path @ [(this_v,l)]
 		      val (this_typeslots, typeslots) = separate cur_path' typeslots
-		      val dec' = 
+		      val dec' =
 			  (case (this_typeslots,dec) of
 			       ([], _) => dec
-			     | (_, DEC_CON(v,k,copt,i)) => 
+			     | (_, DEC_CON(v,k,copt,i)) =>
 				   let val copt = transparent(cur_path',copt)
 				   in  DEC_CON(v,k,copt,i)
 				   end
 			     | (_, DEC_MOD(v,b,s)) =>
 				  (case (reduce_signat ctxt s) of
 				       SIGNAT_STRUCTURE sdecs =>
-					   let val is_first = 
+					   let val is_first =
 					       (case this_typeslots of
 						    [this] => andfold (fn x => not (isSome (!x))) (find_representative this)
 						  | _ => false)
@@ -436,7 +434,7 @@ structure Signature :> SIGNATURE =
 	    val msig = SIGNAT_STRUCTURE orig_sdecs
 	    val ctxt = add_context_mod'(ctxt,mjunk,msig)
 	in
-	    (case (follow_labels (SOME mpath,orig_sdecs,ctxt) lpath) of 
+	    (case (follow_labels (SOME mpath,orig_sdecs,ctxt) lpath) of
 		 ABSTRACT (lbls,k) => if (eq_kind(k,kind))
 					  then rewrite_type_component (ctxt, orig_sdecs, lbls, con)
 				      else
@@ -462,7 +460,7 @@ structure Signature :> SIGNATURE =
     (* We have to selfify the sdecs so lookup works correctly,
          but then we must recognize that some transparent type
 	   slots are actually opaque *)
-    and xsig_where_structure_slow(context,sdecs,labs1,m2,sig2) = 
+    and xsig_where_structure_slow(context,sdecs,labs1,m2,sig2) =
 	let val _ = debugdo (fn () =>
 			     (print "-------xsig_where_structure_slow-------\n";
 			      print "sdesc = "; pp_sdecs sdecs; print "\n";
@@ -473,9 +471,9 @@ structure Signature :> SIGNATURE =
 	    val mjunk_var = fresh_named_var "mjunk_where_structure_slow"
 	    val mjunk = MOD_VAR mjunk_var
 	    val context = add_context_mod'(context,mjunk_var,SIGNAT_STRUCTURE sdecs)
-	    val (labels1,s1) = 
+	    val (labels1,s1) =
 		(case Context_Lookup_Path(context,PATH(mjunk_var,labs1)) of
-		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,_,s1)) => (labels1,s1)
+		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,_,s1,_)) => (labels1,s1)
 		   | _ => (error_region();
 			   print "can't where non-existent or non-structure component\n";
 			   raise WhereError))
@@ -487,14 +485,14 @@ structure Signature :> SIGNATURE =
 
             (* as we constrain, some ABSTRACT paths become CONCRETE so
 	      we cannot follow_labels all at once at the beginning *)
-	    fun constrain((k,plabs),sdecs) = 
+	    fun constrain((k,plabs),sdecs) =
 		let val labs = labels1 @ plabs
 		in  (case follow_labels (NONE,sdecs,context) labs of
 		       ABSTRACT (labs',_) =>
 			   let val plabs' = List.drop(labs',nlabels1)
 			   in
 			       (case (Sdecs_Lookup context (m2,sdecs2,plabs')) of
-				    SOME(_,PHRASE_CLASS_CON(c,_,_,_)) => 
+				    SOME(_,PHRASE_CLASS_CON(c,_,_,_)) =>
 					xsig_where_type(context,sdecs,labs',c,k)
 				  | _ => (error_region();
 					  print "where's rhs structure missing components\n";
@@ -512,7 +510,7 @@ structure Signature :> SIGNATURE =
 		 raise e)
 
      (* it is difficult to correctly optimize this case: we try to catch only some cases *)
-    and xsig_where_structure(context,sdecs,labs1,m2,sig2) = 
+    and xsig_where_structure(context,sdecs,labs1,m2,sig2) =
 	let val _ = debugdo (fn () =>
 			     (print "-------xsig_where_structure-------\n";
 			      print "sdesc = "; pp_sdecs sdecs; print "\n";
@@ -545,28 +543,28 @@ structure Signature :> SIGNATURE =
      return its actual path and its sdecs. *)
   fun path2triple (ctxt : context, v : var, lpath : labels) : path * labels * sdecs =
       (case Context_Lookup_Path (ctxt,PATH(v,lpath))
-	 of SOME (path as PATH (_,labs), PHRASE_CLASS_MOD (_,_,SIGNAT_STRUCTURE sdecs)) =>
+	 of SOME (path as PATH (_,labs), PHRASE_CLASS_MOD (_,_,SIGNAT_STRUCTURE sdecs,_)) =>
 	     (path,labs,sdecs)
 	  | _ => (error_region();
 		  print "structure sharing given a non-structure component: ";
 		  pp_lpath lpath; print "\n";
 		  raise SharingError))
-		
+
   and xsig_sharing_structure_slow2(ctxt,sdecs,lpathlist) : sdecs =
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
 	  val s = SIGNAT_STRUCTURE sdecs
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
 
-	  (* 
+	  (*
 	     The i-th path is the path (starting with mjunk) to the i-th structure.
 	     The i-th lpath is the i-th path with the head (mjunk) cut off.
              The i-th sdecs is the spec of the i-th structure.
           *)
-	  val (pathlist,lpathlist,sdecslist) = 
+	  val (pathlist,lpathlist,sdecslist) =
 	      Listops.unzip3(map (fn lpath => path2triple(ctxt',mjunk,lpath)) lpathlist)
 
-          (* 
+          (*
 	     The i-th slabs is the list of lpaths to type components in the i-th structure.
 	  *)
 	  val slabslist : lpath list list = map (fn sdecs => map #2 (find_labels_sdecs ctxt' sdecs)) sdecslist
@@ -575,7 +573,7 @@ structure Signature :> SIGNATURE =
       in raise SharingError end
 
 
-  and xsig_sharing_structure_slow(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
+  and xsig_sharing_structure_slow(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs =
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
 	  val s = SIGNAT_STRUCTURE sdecs
@@ -587,7 +585,7 @@ structure Signature :> SIGNATURE =
 	  val slabs1 = map #2 (find_labels_sdecs ctxt' sdecs1)
 	  val slabs2 = map #2 (find_labels_sdecs ctxt' sdecs2)
 	  val slabs = inter_lpaths slabs1 slabs2
-	  val slabs_abs = 
+	  val slabs_abs =
 	    let
 	      val f1 = (follow_labels(SOME path1, sdecs1, ctxt'))
 	      val f2 = (follow_labels(SOME path2, sdecs2, ctxt'))
@@ -599,16 +597,16 @@ structure Signature :> SIGNATURE =
 	  val sigAbstractEqual= SIGNAT_STRUCTURE(sdecsAbstractEqual)
 	  val ctxt'' = add_context_mod'(ctxt,mjunk,sigAbstractEqual)
 
-	  fun check labs = 
-	    let 
+	  fun check labs =
+	    let
 	      val c  = path2con(join_path_labels(path1,labs))
 	      val c' = path2con(join_path_labels(path2,labs))
 	      val res = (Name.is_label_internal(List.last labs))
 		orelse eq_con(ctxt'',c,c')
 	      in
-		if res then () 
-		else 
-		  let 
+		if res then ()
+		else
+		  let
 		    val A = lpath1
 		    val B = lpath2
 		    val At = lpath1 @ labs
@@ -616,7 +614,7 @@ structure Signature :> SIGNATURE =
 		    val reduced_c = con_normalize(ctxt'',c)
 		    val reduced_c' = con_normalize(ctxt'',c')
 		    val yell = if !PermissiveSharing then warn_region_with else error_region_with
-		  in  
+		  in
 		    yell "Incompatible types encountered while expanding sharing spec:\n";
 		    print "\t\t"; print "sharing "; pp_lpath A; print " = "; pp_lpath B; print "\n";
 		    print "\t\t"; pp_lpath At; print " = "; pp_con reduced_c; print "\n";
@@ -625,7 +623,7 @@ structure Signature :> SIGNATURE =
 		    print "\n\n"
 		  end
 	      end
-      in  
+      in
 	app check slabs;
 	sdecsAbstractEqual
       end
@@ -637,7 +635,7 @@ structure Signature :> SIGNATURE =
      xsig_sharing_rewrite_structure is called to put in the appropriate SIGNAT_OF's.
      Otherwise, each type component is just shared individually the old-fashioned way.
    *)
-  and xsig_sharing_structure_fast(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
+  and xsig_sharing_structure_fast(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs =
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
 	  val s = SIGNAT_STRUCTURE sdecs
@@ -662,24 +660,24 @@ structure Signature :> SIGNATURE =
 		  val s2 = GetModSig(ctxt'',path2mod path2)
 	      in  Sig_IsEqual(ctxt'',s1,s2)
 	      end)
-	      then (print "xsig_sharing_structure_fast succeeded\n";
+	      then (msg "xsig_sharing_structure_fast succeeded\n";
 		    xsig_sharing_rewrite_structure(ctxt,sdecs,[lpath1,lpath2], NONE))
-	  else 
-	      (print "xsig_sharing_structure_fast calling slow version\n";
+	  else
+	      (msg "xsig_sharing_structure_fast calling slow version\n";
 	       xsig_sharing_structure_slow(ctxt, sdecs, lpath1, lpath2))
 
       end
 
   and xsig_sharing_structures(ctxt,sdecs,[])  = sdecs
     | xsig_sharing_structures(ctxt,sdecs,[_]) = sdecs
-    | xsig_sharing_structures(ctxt,sdecs,p1::p2::rest) : sdecs = 
+    | xsig_sharing_structures(ctxt,sdecs,p1::p2::rest) : sdecs =
       let  val _ = if (!debug)
 		       then print "xsig_sharing_structures started\n"
 		   else ()
 	   val sdecs = xsig_sharing_structure_fast(ctxt,sdecs,p1,p2)
 	   val _ = if (!debug)
 		       then (print "xsig_sharing_structures half-done\n") else ()
-	   val sdecs = xsig_sharing_structures(ctxt,sdecs,p2::rest) 
+	   val sdecs = xsig_sharing_structures(ctxt,sdecs,p2::rest)
 	   val _ = if (!debug)
 		       then (print "xsig_sharing_structures finished with\n";
 			     pp_signat (SIGNAT_STRUCTURE sdecs); print "\n\n")
@@ -688,13 +686,13 @@ structure Signature :> SIGNATURE =
       end
 
   (* ------ These type components are being shared ----------------- *)
-  fun xsig_sharing_type(ctxt,sdecs,path1,path2) : sdecs = 
+  fun xsig_sharing_type(ctxt,sdecs,path1,path2) : sdecs =
       let val _ = if (!debug)
 		      then print "xsig_sharing_type started\n"
 		  else ()
 	  val mjunk = fresh_named_var "mjunk_sharing_type"
 	  val ctxt = add_context_mod'(ctxt,mjunk,SIGNAT_STRUCTURE sdecs)
-	  fun path2label (lpath : labels) : typeslot = 
+	  fun path2label (lpath : labels) : typeslot =
 	      (case (Sdecs_Lookup ctxt (MOD_VAR mjunk,sdecs,lpath)) of
 		   SOME(labs,_) => follow_labels (NONE,sdecs,ctxt) labs
 		 | NONE => (error_region();
@@ -705,7 +703,7 @@ structure Signature :> SIGNATURE =
 	  val typeslot1 = path2label path1
 	  val typeslot2 = path2label path2
 	  val res = (case (typeslot1,typeslot2) of
-			 (ABSTRACT(lbls1,k1), ABSTRACT(lbls2,k2)) => 
+			 (ABSTRACT(lbls1,k1), ABSTRACT(lbls2,k2)) =>
 			     if (eq_kind(k1,k2))
 				 then xsig_sharing_rewrite(ctxt,sdecs)([[lbls1,lbls2]],sdecs)
 			     else (error_region_with "cannot share abstract types with unequal kinds\n";
@@ -728,30 +726,30 @@ structure Signature :> SIGNATURE =
 
   and xsig_sharing_types(ctxt,sdecs,[])  = sdecs
     | xsig_sharing_types(ctxt,sdecs,[_]) = sdecs
-    | xsig_sharing_types(ctxt,sdecs,p1::p2::rest) : sdecs = 
+    | xsig_sharing_types(ctxt,sdecs,p1::p2::rest) : sdecs =
       let val sdecs = xsig_sharing_type(ctxt,sdecs,p1,p2)
-      in  xsig_sharing_types(ctxt,sdecs,p2::rest) 
+      in  xsig_sharing_types(ctxt,sdecs,p2::rest)
       end
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ COERCION COMPILATION-------------------
       --------------------------------------------------------- *)
 
     (* the variables of sdecs_change is alpha-varied to match variables of
        corresponding components of sdecs_name *)
-    fun sdecs_rename(sdecs_change, sdecs_name) = 
-	let 
-	    fun folder (sdec_change as (SDEC(l,dec_change)),subst) = 
+    fun sdecs_rename(sdecs_change, sdecs_name) =
+	let
+	    fun folder (sdec_change as (SDEC(l,dec_change)),subst) =
 		(case find_sdec (sdecs_name,l) of
 		     SOME(SDEC(_,dec_name)) =>
 			 (case (dec_change, dec_name) of
-			      (DEC_EXP(v,c,e,i), DEC_EXP(v',_,_,_)) => 
+			      (DEC_EXP(v,c,e,i), DEC_EXP(v',_,_,_)) =>
 				  (SDEC(l,DEC_EXP(v',c,e,i)),
 				   subst_add_expvar(subst,v,VAR v'))
-	                     | (DEC_CON(v,k,c,i), DEC_CON(v',_,_,_)) => 
+	                     | (DEC_CON(v,k,c,i), DEC_CON(v',_,_,_)) =>
 				  (SDEC(l,DEC_CON(v',k,c,i)),
 				   subst_add_convar(subst,v,CON_VAR v'))
-	                     | (DEC_MOD(v,s,p), DEC_MOD(v',_,_)) => 
+	                     | (DEC_MOD(v,s,p), DEC_MOD(v',_,_)) =>
 				  (SDEC(l,DEC_MOD(v',s,p)),
 				   subst_add_modvar(subst,v,MOD_VAR v'))
 			     | _ => (sdec_change,subst))
@@ -766,7 +764,7 @@ structure Signature :> SIGNATURE =
        fun polyval_case (ctxt : context)
 	   {name : var, (* use this name for the final binding *)
 	    path : path, (* this path is to the actual polymorphic component *)
-	    varsig_spec : (var * signat) option, (* argument & argument signature of the spec, 
+	    varsig_spec : (var * signat) option, (* argument & argument signature of the spec,
 						    unless it's monomorphic *)
 	    con_spec : con, (* the type of the specification *)
 	    var_actual : var, (* argument of functor signature of actual component *)
@@ -774,10 +772,10 @@ structure Signature :> SIGNATURE =
 	    inline : bool, (* whether to inline it *)
 	    sdecs_actual : sdec list, (* argument signature of functor signature of actual component *)
 	    con_actual : con} (* the type of the actual component *)
-		  : bool * (bnd * dec) option = 
-	   let 
+		  : bool * (bnd * dec) option =
+	   let
 	       (* make con_spec refer to var_actual instead of var_spec *)
-	       val con_spec = 
+	       val con_spec =
 		   (case varsig_spec of
 			NONE => con_spec
 		      | SOME(v,_) => con_subst(con_spec,subst_add_modvar(empty_subst, v, MOD_VAR var_actual)))
@@ -785,7 +783,7 @@ structure Signature :> SIGNATURE =
 	       fun local_error () =
 		   (error_region_with "Coercion of a polymorphic value component to a\n";
 		    error_region_with "  monomorphic/polymorphic specification failed at ";
-		    pp_path path; print "\n"; 
+		    pp_path path; print "\n";
 		    error_region_with "Expected type: ";
 		    (case varsig_spec of
 			 NONE => pp_con con_spec
@@ -799,10 +797,10 @@ structure Signature :> SIGNATURE =
 		    (true,NONE))
 
 
-	       val ctxt' = 
+	       val ctxt' =
 		   (case varsig_spec of
 			NONE => ctxt
-		      | SOME(_,sig_spec) => 
+		      | SOME(_,sig_spec) =>
 			    add_context_mod'(ctxt,var_actual,sig_spec))
 
 	       val (sbnds_poly,sdecs_poly,_) = polyinst(ctxt',sdecs_actual)
@@ -818,12 +816,12 @@ structure Signature :> SIGNATURE =
 		      inlined body of the actual component.
                     *)
 		   val con_actual_tyvar = con_subst(con_actual,subst)
-		   val eopt_tyvar = (case eopt of 
-		                       NONE => NONE 
+		   val eopt_tyvar = (case eopt of
+		                       NONE => NONE
 				     | SOME e => SOME(exp_subst(e,subst)))
 	       end
 	       (* val _ = if (!debug)
-			   then (print "con_actual_tyvar = "; 
+			   then (print "con_actual_tyvar = ";
 				 pp_con con_actual_tyvar; print "\n";
 				 print "spec_con = "; pp_con con_spec; print "\n";
 				 (case varsig_spec of
@@ -832,15 +830,15 @@ structure Signature :> SIGNATURE =
 						    print "\n"; pp_signat s; print "\n")))
 		       else () *)
 
-	   val res = 
+	   val res =
 	       (* First unify and solve for the tyvars. *)
 	       if sub_con(ctxt',con_actual_tyvar,con_spec)
-		 then 
+		 then
 		   ((case varsig_spec of
 			 (* when the spec is monomorphic *)
-			 NONE => 
+			 NONE =>
 			     let val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
-				 
+
 				 val exp_actual_tyvar =
 				     (case (eopt_tyvar,inline) of
 					  (SOME e,true) => e
@@ -850,12 +848,12 @@ structure Signature :> SIGNATURE =
 				       DEC_EXP(name,con_actual_tyvar,eopt_tyvar,inline)))
 			     end
 			 (* when the spec is polymorphic *)
-		       | SOME (_,s1) => 
-			   let 
+		       | SOME (_,s1) =>
+			   let
 			       val pathmod = path2mod path
 			       val mtemp = MOD_APP(pathmod, MOD_STRUCTURE sbnds_poly)
 			       val dummy_var = fresh_var()
-			       val inner_sig = 
+			       val inner_sig =
 				   SIGNAT_STRUCTURE [SDEC(it_lab,
 							  DEC_EXP(dummy_var,
 								  con_actual_tyvar,
@@ -868,19 +866,19 @@ structure Signature :> SIGNATURE =
 			       (* only need to coerce if spec is less polymorphic,
 				  i.e. if unification did nothing *)
 			       val coerced = not (is_eta_expand var_actual (sbnds_poly,sdecs_poly))
-			       (* 
+			       (*
 				  Even if coercion was unnecessary, we must inline if the actual
 				  component was a datatype constructor.  This has the effect of
 				  eliminating references to the inner module of a datatype, which
 				  is necessary in order for the phase-splitter to discard those inner
-				  modules.  
+				  modules.
 
 				  Note, however, that this condition does not affect the
 				  coerced flag.  Thus, most of the time, e.g. when a datatype is matching
-				  a datatype signature and a coercion is really unnecessary, the inner 
+				  a datatype signature and a coercion is really unnecessary, the inner
 				  module will not be inlined, merely path-copied.  This optimization is OK,
-				  because inlining is only really necessary when coercing a datatype 
-				  constructor to a value spec.  All other coercions of datatype 
+				  because inlining is only really necessary when coercing a datatype
+				  constructor to a value spec.  All other coercions of datatype
 				  constructors will be to (components of) an inner module of a datatype
                                   and will thus be eliminated by the phase-splitter anyway.
 			       *)
@@ -888,7 +886,7 @@ structure Signature :> SIGNATURE =
 					   then MOD_FUNCTOR(TOTAL,var_actual,s1,inner_mod,inner_sig)
 				       else pathmod
 			   in  (coerced,
-				SOME(BND_MOD(name, true, m), 
+				SOME(BND_MOD(name, true, m),
 				     DEC_MOD(name, true, s2)))
 			   end))
 	       else local_error()
@@ -901,8 +899,8 @@ structure Signature :> SIGNATURE =
 			    end
 		   else ()
 	   in  res
-	   end 
-       
+	   end
+
 
 
     (* The resulting module and signature will involve var_actual.
@@ -913,21 +911,21 @@ structure Signature :> SIGNATURE =
 	       The signature whose order we are using to traverse and create
 	         the final module and signature.
               The current list of labels indicating our current position.
-	          This list allows us to look up components in the 
-		    sig_actual and sig_target to type-check. 
+	          This list allows us to look up components in the
+		    sig_actual and sig_target to type-check.
     *)
 
     and xcoerce (context : context,
 		 path_actual : path,
 		 sig_actual : signat,
-		 sig_target : signat) : (bool * Il.mod * Il.signat) = 
+		 sig_target : signat) : (bool * Il.mod * Il.signat) =
 	let val sig_actual = reduce_signat context sig_actual
 	    val sig_target = deep_reduce_signat path_actual context sig_target
 	in  (case (sig_actual,sig_target) of
-		 (SIGNAT_FUNCTOR(v1,s1,s1',a1), 
+		 (SIGNAT_FUNCTOR(v1,s1,s1',a1),
 		  SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
-		 let 
-		     val _ = if (a1 = a2) then () 
+		 let
+		     val _ = if (a1 = a2) then ()
 			     else raise (FAILURE "arrow mismatch in xcoerce")
 		     val p2 = PATH(v2,[])
 		     val (_,m3body,_) = xcoerce(add_context_mod'(context,v2,s2),
@@ -961,8 +959,8 @@ structure Signature :> SIGNATURE =
    and xcoerce_structure (ctxt : context,
 			  path_actual : path,
 			  sdecs_actual : sdec list,
-			  sdecs_target : sdec list) : (bool * Il.mod * Il.signat) = 
-      let 
+			  sdecs_target : sdec list) : (bool * Il.mod * Il.signat) =
+      let
 
 	  val coerced = ref false
 	  fun coerce (false,_) = ()
@@ -983,7 +981,7 @@ structure Signature :> SIGNATURE =
 				print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n"))
 	      val _ = if (Listops.eq_list (fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2),
 					   sdecs_actual, sdecs_target))
-			  then () 
+			  then ()
 		      else coerce (true,"length/order mismatch")
 	      val self = path2mod path_actual
 	  in  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
@@ -994,7 +992,7 @@ structure Signature :> SIGNATURE =
 	    (case (spec_dec, actual_self_lookup lab) of
 
 		 (* --------------- Coercion from monoval to monoval ----------------------- *)
-		 (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_EXP (_,con_actual,eopt',inline))) => 
+		 (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_EXP (_,con_actual,eopt',inline))) =>
 		     if (sub_con(ctxt,con_actual,con_spec) andalso
 			 (case (eopt,eopt') of
 			      (SOME _, NONE) => false
@@ -1011,8 +1009,8 @@ structure Signature :> SIGNATURE =
 				 (* Derek: Why do we put in the inlining info of the "from" component? *)
 				 val dec = DEC_EXP(v_spec,con_actual_smaller,eopt',inline)
 			     in  SOME(bnd,dec)
-			     end 
-		     else 
+			     end
+		     else
 			 let val con_spec_norm = con_normalize(ctxt,con_spec)
 			     val con_actual_norm = con_normalize(ctxt,con_actual)
 			 in  error_region_with "coercion of a monomorphic value component\n";
@@ -1025,19 +1023,19 @@ structure Signature :> SIGNATURE =
 			     print "\n";
 			     NONE
 			 end
-		    
+
 	           (* --------------- Coercion from module/polyval to monoval ----------------------- *)
 	           (* XXX not checking eopt XXX *)
-	          | (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,signat))) =>
+	          | (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,signat,_))) =>
 		      (case (is_polyval_sig signat) of
 			   NONE =>
 			       (case (is_exception_sig signat) of
-				   NONE => 
+				   NONE =>
 				       (error_region_with "polymorphic value specification but module component";
 					pp_signat signat;
 					NONE)
 			         (* --- Coercion from exception constructor to value spec --- *)
-				 | SOME con_actual => 
+				 | SOME con_actual =>
 				       (coerce(true,"exception constructor to value spec");
 				       if (sub_con(ctxt,con_actual,con_spec)) then
 					   let val exp = path2exp(join_path_labels(path_actual, lbls @ [mk_lab]))
@@ -1059,11 +1057,11 @@ structure Signature :> SIGNATURE =
 					       NONE
 					   end
 				       ))
-			 | SOME (var_actual, 
+			 | SOME (var_actual,
 				 SIGNAT_STRUCTURE sdecs_actual,
 				 con_actual,eopt,inline) =>
 			       let val path = join_path_labels(path_actual,lbls)
-				   val (coerced,SOME(resbnd,resdec)) = 
+				   val (coerced,SOME(resbnd,resdec)) =
 				       polyval_case ctxt
 				         {name = v_spec, path = path,
 					  varsig_spec = NONE, con_spec = con_spec, eopt = eopt,
@@ -1072,20 +1070,23 @@ structure Signature :> SIGNATURE =
 				   val _ = coerce(coerced,"polyval")
 			       in  SOME (resbnd,resdec)
 			       end)
-				
+
                 (* --------- Coercion from con, overexp, or none to monoval --------------- *)
-	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_CON _)) => 
+	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_CON _)) =>
 			     (error_region_with "value specification but type component: ";
 			      pp_label lab; print "\n"; NONE)
-	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_SIG _)) => 
+	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_SIG _)) =>
 			     (error_region_with "value specification but signature component: ";
 			      pp_label lab; print "\n"; NONE)
-                | (DEC_EXP _, NONE) => 
+		| (DEC_EXP _, SOME(_,PHRASE_CLASS_EXT _)) =>
+			     error "Sdecs_Lookup returned extern"
+
+                | (DEC_EXP _, NONE) =>
 			     (error_region_with "value specification but missing component: ";
 			      pp_label lab; print "\n"; NONE)
 
 	        (* ----- Coercion from module/polyval to module/polyval -------------------------- *)
-	        | (DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual))) => 
+	        | (DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual,_))) =>
 	            (case (is_polyval_sig sig_spec, is_polyval_sig sig_actual) of
 			 (* ----------- Coercion from polyval to polyval ------------------ *)
 			 (SOME (v1,s1,con_spec,_,_),
@@ -1100,9 +1101,9 @@ structure Signature :> SIGNATURE =
 			 in  SOME(resbnd,resdec)
 			 end
 			(* ----------- Coercion from module to module ------------------ *)
-			| (NONE, NONE) => 
+			| (NONE, NONE) =>
 			 let val mod_path = join_path_labels(path_actual,lbls)
-			     val (coerced,mbody,sig_ret) = 
+			     val (coerced,mbody,sig_ret) =
 				 xcoerce(ctxt,mod_path,sig_actual,sig_spec)
 			     val _ = coerce(coerced,"inner module")
 			     val bnd = BND_MOD(v_spec,b,mbody)
@@ -1110,15 +1111,15 @@ structure Signature :> SIGNATURE =
 			 in SOME(bnd,dec)
 			 end
 			(* ----------- Coercion from module to polyval or polyval to module --------- *)
-			| (NONE, SOME _) => 
+			| (NONE, SOME _) =>
 			 (error_region_with "module specification but polymorphic value component: ";
 			  pp_label lab; print "\n"; NONE)
 			| (SOME _, _) =>
 			 (error_region_with "polymorphic value specification but module component: ";
 			  pp_label lab; print "\n"; NONE))
-		   
+
 	       (* ------- coercion of a non-module component to a module spec ---- *)
-	       | (DEC_MOD _, _) => 
+	       | (DEC_MOD _, _) =>
 			(error_region_with "coercion of a non-module or non-existent component\n";
 			 tab_region_with   "  to a module specification failed at ";
 			 pp_label lab; print "\n";
@@ -1126,18 +1127,18 @@ structure Signature :> SIGNATURE =
 
 	       (* ------- coercion of a type component to a type spec ---- *)
 	       | (DEC_CON (v_spec, k_spec, copt_spec, _),
-	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,con_opt,inline))) => 
+	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,con_opt,inline))) =>
 			let val bnd = BND_CON(v_spec,con_actual)
 			    val dec = DEC_CON(v_spec,k_actual,SOME con_actual,inline)
 			    val res = SOME(bnd,dec)
 			in  if eq_kind(k_spec,k_actual)
-			      then 
+			      then
 			        (case copt_spec of
 			       	   NONE => res
 				 | SOME con_spec =>
 				     if sub_con(ctxt,con_actual,con_spec)
 					 then res
-				     else 
+				     else
 					 let val con_actual' = con_normalize(ctxt,con_actual)
 					     val con_spec' = con_normalize(ctxt,con_spec)
 					 in  error_region_with "coercion of a type component to a\n";
@@ -1161,7 +1162,7 @@ structure Signature :> SIGNATURE =
 
 		   (* ------- coercion of a non-type component to a type spec ---- *)
 		   | (DEC_CON (v_spec, k_spec, SOME c_spec, inline_spec), NONE) =>
-			(* Used to check is_questionable for transparent datatypes. *) 
+			(* Used to check is_questionable for transparent datatypes. *)
 			(error_region_with "coercion of a non-existent component\n";
 			 tab_region_with   "  to a type specification failed at ";
 			 pp_label lab; print "\n";
@@ -1175,7 +1176,7 @@ structure Signature :> SIGNATURE =
 	fun loop _ [] = ([],[])
 	  | loop ctxt ((SDEC(l,dec))::rest) =
 	    (if (!debug)
-		 then (print "xcoerce_help' working on SDEC with label = "; 
+		 then (print "xcoerce_help' working on SDEC with label = ";
 		       pp_label l; print "\n")
 	     else ();
 	     case (doit ctxt (l,dec)) of
@@ -1192,7 +1193,7 @@ structure Signature :> SIGNATURE =
 	val res = if !coerced
 		      then (true, MOD_STRUCTURE sbnds_coerced,
 			    SIGNAT_STRUCTURE sdecs_coerced)
-		  else (false, path2mod path_actual, 
+		  else (false, path2mod path_actual,
 			SIGNAT_STRUCTURE sdecs_actual)
 	val _ = if (!debug)
 		    then let val (_,m,s) = res
@@ -1213,7 +1214,7 @@ structure Signature :> SIGNATURE =
        pds: There is another reason.  Module_IsValuable is buggy for
        modules that are not syntactic values.  I could not compile the
        basis after replacing xcoerce_seal with #1 o xcoerce_seal'.  *)
-   
+
     fun xcoerce_seal (context : context,
 		      mod_actual : mod,
 		      sig_actual : signat,
@@ -1248,7 +1249,7 @@ structure Signature :> SIGNATURE =
 		       in  (mod_result, sigopt_unsealed)
 		       end)
 	    end
-	
+
     fun xcoerce_functor (context : context,
 			 path_actual : path,
 			 sig_actual : signat,
@@ -1258,18 +1259,18 @@ structure Signature :> SIGNATURE =
 	    in  (mod_coerced, sig_coerced)
 	    end
 
-    fun sig_describe_size s = 
+    fun sig_describe_size s =
 	let fun describe d m s = let val sz = sig_size s
 				 in  if (sz > 2)
-				     then (print (Int.toString d); print ": "; 
+				     then (print (Int.toString d); print ": ";
 					   pp_mod m; print " has size "; print (Int.toString sz);
 					   print "\n")
 				     else ()
 				 end
 	    fun help d m (SDEC(l,DEC_MOD(_,_,s))) = loop d (MOD_PROJECT (m,l)) s
 	      | help d _ _ = ()
-	    and loop d m (s as (SIGNAT_STRUCTURE sdecs)) = 
-		(describe d m s; 
+	    and loop d m (s as (SIGNAT_STRUCTURE sdecs)) =
+		(describe d m s;
 		 if (d<4) then app (help (d+1) m) sdecs else ())
 	      | loop d m s = describe d m s
 	in  loop 0 (MOD_VAR (fresh_var())) s
@@ -1279,20 +1280,20 @@ structure Signature :> SIGNATURE =
 
     fun generateModFromSig (ctxt, path : path, signat : signat, typeOnly : bool) =
 	let val signat = deep_reduce_signat path ctxt signat
-	    fun generateSdec m (sdec as (SDEC(l,dec))) = 
+	    fun generateSdec m (sdec as (SDEC(l,dec))) =
 		(case dec of
 		     DEC_MOD(v,b,s) =>
 			 (case generateSig (MOD_PROJECT(m, l)) s of
 			      NONE => NONE
 			    | SOME (m,s) => SOME(SBND(l,BND_MOD(v,b,m)),
 						 SDEC(l,DEC_MOD(v,b,s))))
-		   | DEC_EXP (v,c,eopt,b) => 
+		   | DEC_EXP (v,c,eopt,b) =>
 			      if not typeOnly orelse is_coercion l orelse is_eq l then
 				  SOME(SBND(l, BND_EXP(v,MODULE_PROJECT(m,l))),
 				       SDEC(l, DEC_EXP(v,c,eopt,b)))
 			      else NONE
 		   | DEC_CON (v,_,_,_) => SOME (SBND(l, BND_CON(v,CON_MODULE_PROJECT(m,l))), sdec))
-	    and generateSig m s = 
+	    and generateSig m s =
 		(case s of
 		     SIGNAT_STRUCTURE sdecs =>
 			 let val (sbnds,sdecs) = Listops.unzip(List.mapPartial (generateSdec m) sdecs)
@@ -1308,7 +1309,7 @@ structure Signature :> SIGNATURE =
 		    var_actual : var,
  		    mod_client : mod,
  		    sig_client : signat,
-		    used) = 
+		    used) =
 	let
 (*
 	    val _ = (print "XXXstructureGCXXX\n";
@@ -1319,24 +1320,25 @@ structure Signature :> SIGNATURE =
 		     print "\n")
 *)
 	    val ctxt = add_context_mod'(ctxt, var_actual, sig_client)
-	    fun getChildren path = 
+	    fun getChildren path =
 		Name.PathSet.filter (fn (v,_) => eq_var(v,var_actual))
 		(case Context_Lookup_Path(ctxt, PATH path) of
-		     SOME (_,PHRASE_CLASS_MOD(_,_,s)) => findPathsInSig s
+		     SOME (_,PHRASE_CLASS_MOD(_,_,s,_)) => findPathsInSig s
 		   | SOME (_,PHRASE_CLASS_EXP(_,c,_,_)) => findPathsInCon c
 		   | SOME (_,PHRASE_CLASS_CON(_,k,SOME c,_)) => findPathsInCon c
 		   | SOME (_,PHRASE_CLASS_CON(_,k,NONE,_)) => Name.PathSet.empty
+		   | SOME (_,PHRASE_CLASS_EXT (_,_,c)) => findPathsInCon c
 		   | SOME _ => (print "unexpected result from  path "; pp_path (PATH path); print "\n";
 			   error "no such path")
 		   | _ => (print "no such path "; pp_path (PATH path); print "\n";
 			   error "no such path"))
-		     
-	    fun reachable black gray = 
+
+	    fun reachable black gray =
 		(case Name.PathSet.find (fn _ => true) gray of
 		     NONE => black
 		   | SOME first =>
 			 let fun folder (p, gray) =
-				 if (Name.PathSet.member(gray,p) orelse 
+				 if (Name.PathSet.member(gray,p) orelse
 				     Name.PathSet.member(black,p))
 				     then gray
 				 else Name.PathSet.add(gray, p)
@@ -1348,15 +1350,15 @@ structure Signature :> SIGNATURE =
 			 end)
 	    val used = reachable Name.PathSet.empty used
 	    (* Verify all paths start with var_actual and maintain necessary structures by adding all prefixes *)
-	    fun folder ((v,labs),set) = 
+	    fun folder ((v,labs),set) =
 		let fun loop ([],set) = set
-		      | loop (revLabs,set) = 
+		      | loop (revLabs,set) =
 		        let val labs = rev revLabs
 			in  if (Name.PathSet.member(set,(var_actual,labs)))
 				then set
 			    else loop(tl revLabs, Name.PathSet.add(set,(var_actual,labs)))
 			end
-		in  if eq_var(v,var_actual) 
+		in  if eq_var(v,var_actual)
 			then () else error "bad path found";
 		    loop (rev labs, set)
 		end
@@ -1367,14 +1369,14 @@ structure Signature :> SIGNATURE =
 		     print "\n")
 *)
 
-	    fun filterModSig currentPrefix (m,s) = 
+	    fun filterModSig currentPrefix (m,s) =
 		let val MOD_STRUCTURE sbnds = m
 		    val SIGNAT_STRUCTURE sdecs = s
-		    val (sbnds,sdecs) = Listops.unzip(List.mapPartial (filterSbndSdec currentPrefix) 
+		    val (sbnds,sdecs) = Listops.unzip(List.mapPartial (filterSbndSdec currentPrefix)
 						   (Listops.zip sbnds sdecs))
 		in  (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
 		end
-	    and filterSbndSdec currentPrefix (sbnd as SBND(lb,bnd),sdec as SDEC(ld,dec)) = 
+	    and filterSbndSdec currentPrefix (sbnd as SBND(lb,bnd),sdec as SDEC(ld,dec)) =
 		let val _ = if (eq_label(lb,ld)) then () else error "filterSbndSdec: labels not the same"
 		    val currentPrefix = currentPrefix @ [lb]
 		in  if Name.PathSet.member(used,(var_actual,currentPrefix))
@@ -1386,7 +1388,7 @@ structure Signature :> SIGNATURE =
 				| _ => SOME(sbnd,sdec))
 		    else NONE
 		end
-	    
+
 	    val (module, signat) = filterModSig [] (mod_client, sig_client)
 (*
 	    val _ = (print "XXXXstructureGCXXXX\n";
@@ -1396,7 +1398,7 @@ structure Signature :> SIGNATURE =
 	in  (module, signat)
 	end
 
-    (* We are given a module modActual (not a module variable), its signature sigActual, and a desired signature sigTarget 
+    (* We are given a module modActual (not a module variable), its signature sigActual, and a desired signature sigTarget
        against which we wish to coerce transparently.  That is, we must add/drop components and change polymorphism
        as necessary so that exactly the right number and shape of terms, type and structures are visible.
        However, we are/must leak type information through even if the ascribing signature does not give it.
@@ -1405,7 +1407,7 @@ structure Signature :> SIGNATURE =
        (1) Compute modCoerced and sigCoerced which has the components of sigTarget
            (with type information exposed) in terms of varActual.  Return modActual and sigActual
 	   if no coercion was actually necessary.
-       (2) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return 
+       (2) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return
 
            {labelHidden :> varCoerced =
 	       MOD_LET varActual = modActual
@@ -1415,16 +1417,16 @@ structure Signature :> SIGNATURE =
 	    exp1 = varCoerced.exp1
 	    ...
            }
-	       
+
 	   {labelHidden :> varCoerced : sigCoerced,
 	    tau1 = varCoerced.tau1
 	    exp1 : varCoerced.tau1
 	    ...
 	   }
-	   
+
        (3) Unfortunately, the resulting signatures now has two copies of all necessary type
            AND term components.  Some duplication of type components is necessary due to
-	   the transparency semantics but redundant term components are not and can well 
+	   the transparency semantics but redundant term components are not and can well
 	   almost double the size of the signature.
 
        Here is an alternative solution.
@@ -1434,7 +1436,7 @@ structure Signature :> SIGNATURE =
        (2) Compute modThin and sigThin which contains all the types, datatype
            coercions, and equality functions of modActual and sigActual.
 	   Note that creating these from modCoerced and sigCoerced fails to capture all necessary type components.
-       (3) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return 
+       (3) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return
 
 	   MOD_LET varActual = modActual
                    varCoerced = coercedMod
@@ -1443,7 +1445,7 @@ structure Signature :> SIGNATURE =
 		    exp1 = varCoerced.exp2,
 		    ...
 		    }
-	       
+
 	   {labelHidden :> varThin : sigThin,
 	    tau1 = varThin.tau1,
 	    exp1 : varThin.tau1,
@@ -1459,7 +1461,7 @@ structure Signature :> SIGNATURE =
 			     mod_actual : mod,
 			     sig_actual : signat,
 			     sig_target : signat) : Il.mod * Il.signat =
-	let 
+	let
 	    (* Compute modCoerced and sigCoerced *)
 	    val _ = if (!track_coerce)
 			then Stats.bool("IlstaticShowing") := true
@@ -1488,10 +1490,10 @@ structure Signature :> SIGNATURE =
 		       val MOD_STRUCTURE copy_sbnds = mod_subst(mod_thick, substActualToCoerced)
 		       val sig_copy = sig_subst(sig_thick, substActualToThin)
 		       val SIGNAT_STRUCTURE copy_sdecs = sig_copy
-		       val (hidden_sbnd, hidden_sdec) = 
+		       val (hidden_sbnd, hidden_sdec) =
 			   (case mod_sig_thin_option of
 				NONE => ([],[])
-			      | SOME (mod_thin, sig_thin) => 
+			      | SOME (mod_thin, sig_thin) =>
 				    let
 					val sig_thin = sig_subst(sig_thin, substActualToThin)
 					val paths = findPathsInSig sig_copy
@@ -1514,7 +1516,7 @@ structure Signature :> SIGNATURE =
 				    in  ([SBND(hidden_lbl, BND_MOD(var_thin, false, mod_thin))],
 					 [SDEC(hidden_lbl, DEC_MOD(var_thin, false, sig_thin))])
 				    end)
-		       val mod_result = MOD_LET(var_actual,mod_actual, 
+		       val mod_result = MOD_LET(var_actual,mod_actual,
 						MOD_LET(var_coerced, mod_coerced,
 							MOD_STRUCTURE(hidden_sbnd @ copy_sbnds)))
 		       val sig_result = SIGNAT_STRUCTURE(hidden_sdec @ copy_sdecs)
@@ -1523,10 +1525,10 @@ structure Signature :> SIGNATURE =
 					 print "sig_result = \n"; pp_signat sig_result; print "\n")
 			       else ()
 		       val _ = case (!diag, hidden_sdec) of
-			   (true, [SDEC(_,DEC_MOD(_, _, sig_thin))]) => 
-			       (print "XXX hidden component\n"; 
+			   (true, [SDEC(_,DEC_MOD(_, _, sig_thin))]) =>
+			       (print "XXX hidden component\n";
 				sig_describe_size sig_thin; print "\n";
-				print "XXX remaining component\n"; 
+				print "XXX remaining component\n";
 				sig_describe_size (SIGNAT_STRUCTURE copy_sdecs); print "\n")
 			 | _ => ()
 		   in  (mod_result, sig_result)

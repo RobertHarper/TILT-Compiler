@@ -1,5 +1,3 @@
-(*$import Nil *)
-
 (* Inline functions that are non-recursive and either are called once
    or else are sufficiently small and called a sufficiently small number
    of times.
@@ -7,6 +5,7 @@
 
 signature INLINE =
  sig
+     val InlineDiag : bool ref
      val debug : bool ref
      (* Print debug information *)
 
@@ -24,8 +23,8 @@ signature INLINE =
       * or 2) Have body size no more than sizeThreshold and no more than occurThreshold calls
       *
       * In addition, inline any applications of tiny functions (functions whose body is
-      * smaller than tinyThreshold), whether they escape or not. At some point, the size 
-      * of the application is comparable to the size of the function body, in which 
+      * smaller than tinyThreshold), whether they escape or not. At some point, the size
+      * of the application is comparable to the size of the function body, in which
       * case inlining is pretty much always a win.   This should not be iterated
       * however, since this can cause exponential blowup.
       *

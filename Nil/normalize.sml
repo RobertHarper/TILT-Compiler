@@ -1,7 +1,5 @@
-(*$import Name List Sequence Listops Int Util NilError NilRename Stats Prim Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst NORMALIZE NilPrimUtil NilDefs *)
-
 structure Normalize :> NORMALIZE =
-struct	
+struct
 
   structure NilContext = NilContextPre
 
@@ -12,8 +10,8 @@ struct
   val local_profile = Stats.ff "normalize_profile"
 
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
-    
-  open Nil 
+
+  open Nil
   open Prim
 
   type con_subst = NilSubst.con_subst
@@ -56,7 +54,7 @@ struct
   fun fresh_var ()    = fresh_named_var "normalize"
   val derived_var     = Name.derived_var
   val label2string    = Name.label2string
-  val var2string      = Name.var2string 
+  val var2string      = Name.var2string
 
   (*From Listops*)
   val map_second = Listops.map_second
@@ -77,7 +75,7 @@ struct
 
   (* NilContext *)
   type context   = NilContext.context
-  val find_kind  = NilContext.find_kind   
+  val find_kind  = NilContext.find_kind
   val kind_of    = NilContext.kind_of
   val find_con   = NilContext.find_con
   val insert_con = NilContext.insert_con
@@ -88,7 +86,7 @@ struct
   val insert_kind          = NilContext.insert_kind
   val insert_kind_equation = NilContext.insert_kind_equation
   val insert_equation      = NilContext.insert_equation
-      
+
   fun error' s = Util.error "normalize.sml" s
   fun error s s' = Util.error s s'
 
@@ -97,6 +95,8 @@ struct
   val perr_k_k = NilError.perr_k_k
 
 
+  val NormalizeDiag = Stats.ff "NormalizeDiag"
+  fun msg str = if (!NormalizeDiag) then print str else ()
 
   val debug = Stats.ff "normalize_debug"
   val show_calls = Stats.ff "normalize_show_calls"
@@ -107,7 +107,7 @@ struct
 
 
   local
-      datatype entry = 
+      datatype entry =
 	EXP of exp * (NilContext.context * (con_subst))
       | CON of con * (NilContext.context  * (con_subst))
       | KIND of kind * (NilContext.context * (con_subst))
@@ -119,8 +119,8 @@ struct
       fun push e = (depth := !depth + 1;
 		    stack := (e :: (!stack));
 		    if (!depth mod 20 = 0)
-			then (print "****normalize.sml: stack depth = ";
-			      print (Int.toString (!depth)))
+			then msg ("  *** stack depth = " ^
+				  Int.toString (!depth) ^ "\n")
 		    else ();
 		    if (!depth) > maxDepth
 			then error' "stack depth exceeded"
@@ -136,10 +136,10 @@ struct
 		 stack := (tl (!stack)))
     fun show_stack() = let val st = !stack
 			   val _ = clear_stack()
-			   fun show (EXP(e,(context,s))) = 
+			   fun show (EXP(e,(context,s))) =
 			     (print "exp_normalize called with expression =\n";
 			      Ppnil.pp_exp e;
-			      print "\nand context"; 
+			      print "\nand context";
 			      NilContext.print_context context;
 			      print "\n and subst";
 			      printConSubst s;
@@ -164,7 +164,7 @@ struct
 				      print "\n\n")
 			     | show (MODULE(m,(context,s))) =
 				     (print "module_normalize called with module =\n";
-				      Ppnil.pp_module 
+				      Ppnil.pp_module
                                         {module = m,
                                          header = "",
                                          name = "",
@@ -174,16 +174,16 @@ struct
 				      print "\n\n")
 		       in  app show (rev st)
 		       end
-    fun wrap str f = 
+    fun wrap str f =
 	(clear_stack(); f())
 	handle e => (print "\n ------ ERROR in "; print str; print " ---------\n";
 		     show_stack(); raise e)
     fun wrap1 str f arg1 = wrap str (fn () => f arg1)
     fun wrap2 str f arg1 arg2 = wrap str (fn () => f arg1 arg2)
   end
-	 
 
-  fun beta_conrecord' (proj as Proj_c (con,label)) = 
+
+  fun beta_conrecord' (proj as Proj_c (con,label)) =
 	(case strip_crecord con
 	   of SOME entries =>
 	     (case (List.find (fn ((l,_)) => eq_label (l,label))
@@ -191,7 +191,7 @@ struct
 		of SOME (l,c) => (true,c)
 		 | NONE => (error' "Field not in record" handle e => raise e))
 	    | NONE => (false,proj))
-    | beta_conrecord' proj = 
+    | beta_conrecord' proj =
 	   (Ppnil.pp_con proj;
 	    (error' "beta_conrecord called on non-projection" handle e => raise e))
 
@@ -199,7 +199,7 @@ struct
 
   val beta_conrecord = subtimer("Norm:beta_conrecord",beta_conrecord)
 
-  fun eta_confun lambda = 
+  fun eta_confun lambda =
     let
 	fun help(var, formals,body) =
 	    (case strip_app body of
@@ -219,23 +219,23 @@ struct
 			     lambda
 		     end
 	       | NONE => lambda)
-      fun eta_confun' (Let_c (sort,[Open_cb (var,formals,body)],Var_c var')) = 
+      fun eta_confun' (Let_c (sort,[Open_cb (var,formals,body)],Var_c var')) =
 	  if (eq_var(var,var')) then help(var,formals,body) else lambda
-        | eta_confun' (Let_c (sort,[Code_cb (var,formals,body)],Var_c var')) = 
+        | eta_confun' (Let_c (sort,[Code_cb (var,formals,body)],Var_c var')) =
 	  if (eq_var(var,var')) then help(var,formals,body) else lambda
 	| eta_confun' _ = lambda
     in
       eta_confun' lambda
     end
 
-  (*and beta_typecase D typecase = 
-    let 
-      fun beta_typecase' 
-	(Typecase_c {arg,arms,default,kind}) = 
+  (*and beta_typecase D typecase =
+    let
+      fun beta_typecase'
+	(Typecase_c {arg,arms,default,kind}) =
 	(case strip_prim arg
 	   of SOME (pcon,args) =>
 	     (case List.find (fn (pcon',formals,body) => primequiv (pcon,pcon')) arms
-		of SOME (_,formals,body) => 
+		of SOME (_,formals,body) =>
 		  let
 		    val (vars,_) = unzip formals
 		    val subst = fromList (zip vars args)
@@ -243,7 +243,7 @@ struct
 		  end
 		 | NONE => default)
 	    | _ => typecase)
-	| beta_typecase' _ = 
+	| beta_typecase' _ =
 	   (Ppnil.pp_con typecase;
 	    (error' "beta_typecase called on non type case" handle e => raise e))
     in
@@ -254,7 +254,7 @@ struct
   and beta_confun once D app = #2(beta_confun' once D app)
 
   and beta_confun' once D (app as (App_c (con,actuals))) =
-    let  
+    let
 
       exception NOT_A_LAMBDA
 
@@ -262,20 +262,20 @@ struct
 	| strip (Code_cb (var,formals,body)) = (var,formals,body)
 	| strip _ = raise NOT_A_LAMBDA
 
-      fun get_lambda (lambda,name) = 
+      fun get_lambda (lambda,name) =
 	let
 	  val (var,formals,body) = strip lambda
 	in
 	  (case name
-	     of Var_c var' => 	  
+	     of Var_c var' =>
 	       if eq_var (var,var') then
 		 (formals,body)
 	       else raise NOT_A_LAMBDA
 	      | _ => raise NOT_A_LAMBDA)
 	end
-      
+
       fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
-	| lambda_or_closure (Closure_c(code,env)) = 
+	| lambda_or_closure (Closure_c(code,env)) =
 	let val (args,_) = lambda_or_closure code
 	in  (args,SOME env) end
 	(*| lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)*)
@@ -283,8 +283,8 @@ struct
 
 
       fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
-	
-      fun reduce actuals (formals,body) = 
+
+      fun reduce actuals (formals,body) =
 	(true,
 	 let
 	   val (vars,_) = unzip formals
@@ -292,14 +292,14 @@ struct
 	 in if once
 	      then substConInCon subst body
 	    else (con_normalize' (D,subst) body)
-	 end) 
-	
-	
+	 end)
+
+
     in
       (case open_lambda con
 	 of SOME(args,SOME env) =>
 	       reduce (env::actuals) args
-	  | SOME(args,NONE)     => 
+	  | SOME(args,NONE)     =>
 	       reduce actuals args
 	  | NONE => (false,app))
     end
@@ -314,13 +314,13 @@ struct
       val kind = kind_normalize' (D,subst) kind
       val var' = if ((find_kind(D,var); true)
 			handle NilContext.Unbound => false)
-		     then derived_var var 
+		     then derived_var var
 		 else var
       val D = insert_kind (D,var',kind)
       val subst = add subst (var,Var_c var')
     in ((var',kind),(D,subst))
     end
-  
+
   and bind_at_kinds state vklist = foldl_acc bind_at_kind state vklist
 
   and bind_at_con ((var,con),(D,subst)) =
@@ -328,28 +328,28 @@ struct
       val con = con_normalize' (D,subst) con
       val var' = if ((find_con(D,var); true)
 			handle NilContext.Unbound => false)
-		     then derived_var var 
+		     then derived_var var
 		 else var
       val D = insert_con (D,var',con)
       val subst = add subst (var,Var_c var')
     in ((var',con),(D,subst))
     end
 
-  and bind_at_tracecon ((var,trace,con),state) = 
+  and bind_at_tracecon ((var,trace,con),state) =
       let val ((v,c),state) = bind_at_con ((var,con),state)
       in ((v,trace,c),state)
       end
-  
+
   and bind_at_cons state vclist = foldl_acc bind_at_con state vclist
   and bind_at_tracecons state vtclist = foldl_acc bind_at_tracecon state vtclist
- 
-  and kind_normalize' (state as (D,subst)) (kind : kind) : kind = 
+
+  and kind_normalize' (state as (D,subst)) (kind : kind) : kind =
     if !debug then
-      let 
+      let
 	val _ = push_kind(kind,state)
 	val _ = if (!show_calls)
 		  then (print "kind_normalize called with kind =\n";
-			Ppnil.pp_kind kind; 
+			Ppnil.pp_kind kind;
 			(if (!show_context)
 			   then (print "\nand context"; NilContext.print_context D;
 				 print "\n and subst";  printConSubst subst)
@@ -362,21 +362,21 @@ struct
       end
     else
       kind_normalize state kind
-  and kind_normalize state (kind : kind) : kind = 
+  and kind_normalize state (kind : kind) : kind =
     (case kind of
           Type_k => kind
 	| SingleType_k con => SingleType_k(con_normalize' state con)
 	| Single_k con => Single_k(con_normalize' state con)
-	| Record_k elts => 
+	| Record_k elts =>
 	 let
 	   val elt_list = Sequence.toList elts
 	   val (labels,vars_and_kinds) = unzip (map (fn ((l,v),k) => (l,(v,k))) elt_list)
 	   val (vars_and_kinds,state) =  bind_at_kinds state vars_and_kinds
 	   val elts = map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
-	 in  
+	 in
 	   Record_k (Sequence.fromList elts)
 	 end
-	| Arrow_k (openness, formals, return) => 
+	| Arrow_k (openness, formals, return) =>
 	 let
 	   val (formals,state) = bind_at_kinds state formals
 	   val return = kind_normalize' state return
@@ -384,13 +384,13 @@ struct
 	   (Arrow_k (openness, formals,return))
 	 end)
 
-  and con_normalize' (state as (D,subst)) (con : con) : con = 
+  and con_normalize' (state as (D,subst)) (con : con) : con =
     if !debug then
-      let 
+      let
 	val _ = push_con(con,state)
 	val _ = if (!show_calls)
 		  then (print "con_normalize called with con =\n";
-			Ppnil.pp_con con; 
+			Ppnil.pp_con con;
 			if (!show_context)
 			    then (print "\nand context"; NilContext.print_context D)
 			else ();
@@ -404,12 +404,12 @@ struct
     else
       con_normalize state con
 
-  and con_normalize_letfun state (sort,constructor,var,formals,body,rest,letbody) = 
+  and con_normalize_letfun state (sort,constructor,var,formals,body,rest,letbody) =
 	    let
 	      val old_state = state
 
 
-	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var letbody) 
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var letbody)
 		   then
 		       let val (formals,state) = bind_at_kinds state formals
 			   val body = con_normalize' state body
@@ -419,16 +419,16 @@ struct
 		       in  lambda
 		       end
 	       else
-		   let 
+		   let
 
 		       val lambda = (Let_c (sort,[constructor (var,formals,body)],
 					    Var_c var))
-		       val _ = 
+		       val _ =
 			   (case (substitute (#2 old_state) var)  of
 				SOME c => error' "XXX var already in subst"
 			      | _ => ())
-		       val lambda = substConInCon (#2 old_state) lambda 
-		       val state = 
+		       val lambda = substConInCon (#2 old_state) lambda
+		       val state =
 			   let val (D,subst) = old_state
 			   in (D,add subst (var,lambda))
 			   end
@@ -440,7 +440,7 @@ struct
 
 
 
-  and con_normalize state (constructor : con) : con  = 
+  and con_normalize state (constructor : con) : con  =
     ((*print "con_normalize ";
      Ppnil.pp_con constructor;
      print "\n";*)
@@ -453,7 +453,7 @@ struct
 	 let
 	   val def_list = Sequence.toList defs
 	   val (vars,cons) = unzip def_list
-	   val (vars_kinds,state') = 
+	   val (vars_kinds,state') =
 	     bind_at_kinds state (map (fn v => (v,Type_k)) vars)
 	   val (vars,_) = unzip vars_kinds
 	   val cons = if recur then map (con_normalize' state') cons
@@ -465,10 +465,10 @@ struct
 		       tFormals,eFormals,fFormals,body_type}) =>
 	 let
 	   val (tFormals,state) = bind_at_kinds state tFormals
-	   (*fun folder ((vopt,c),state) = 
+	   (*fun folder ((vopt,c),state) =
 	       (case vopt of
 		    NONE => ((vopt, con_normalize' state c), state)
-		  | SOME v => 
+		  | SOME v =>
 			let val ((v,c),state) = bind_at_con ((v,c),state)
 			in  ((SOME v, c), state)
 			end)
@@ -476,20 +476,20 @@ struct
 	   val eFormals = map (con_normalize' state) eFormals
 	   val body_type = con_normalize' state body_type
 	 in AllArrow_c{openness = openness, effect = effect,
-		       tFormals = tFormals, eFormals = eFormals, 
+		       tFormals = tFormals, eFormals = eFormals,
 		       fFormals = fFormals, body_type = body_type}
 	 end
-	| ExternArrow_c (args,body) => 
-	 let 
+	| ExternArrow_c (args,body) =>
+	 let
 	   val args = map (con_normalize' state) args
 	   val body = con_normalize' state body
 	 in
 	   ExternArrow_c (args,body)
 	 end
-	| (Var_c var) => 
+	| (Var_c var) =>
 	 let
 	   val (D,subst) = state
-	   val con = 
+	   val con =
 	     (case (substitute subst var) of
 		   SOME c => c
 		 | NONE =>
@@ -506,20 +506,20 @@ struct
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let
 	      val con = con_normalize' state con
-	      val state = 
+	      val state =
 		let val (D,subst) = state
 		in (D,add subst (var,con))
 		end
 	    in con_normalize' state (Let_c (sort,rest,body))
 	    end
 	| (Let_c (sort,[],body)) => con_normalize' state body
-	| (Closure_c (code,env)) => 
+	| (Closure_c (code,env)) =>
 	    let
-	      val env = con_normalize' state env 
+	      val env = con_normalize' state env
 	      val code =  con_normalize' state code
 	    in Closure_c (code,env)
 	    end
-	| (Crecord_c (entries as orig_entries)) => 
+	| (Crecord_c (entries as orig_entries)) =>
 	    let
 	      val (labels,cons) = unzip entries
 	      val cons = map (con_normalize' state) cons
@@ -528,14 +528,14 @@ struct
 	    in con
 	    end
         (*| Typeof_c e => error' "typeof encountered in con_normalize"*)
-	| (Proj_c (rvals,label)) => 
+	| (Proj_c (rvals,label)) =>
 	    let
 	      val rvals = con_normalize' state rvals
 	      val con = Proj_c (rvals,label)
 	      val con = beta_conrecord con
 	    in con
 	    end
-	| (App_c (cfun,actuals)) => 
+	| (App_c (cfun,actuals)) =>
 	    let
 		val (D,subst) = state
 	      val cfun = con_normalize' state cfun
@@ -555,10 +555,10 @@ struct
 		Coercion_c {vars = vars, from = from, to = to}
 	    end
 (*
-	| (Typecase_c {arg,arms,default,kind}) => 
+	| (Typecase_c {arg,arms,default,kind}) =>
 	    let
 	      val kind = kind_normalize' state kind
-	      fun doarm (pcon,args,body) = 
+	      fun doarm (pcon,args,body) =
 		let
 		  val (args,state) = bind_at_kinds state args
 		  val body = con_normalize' state body
@@ -576,31 +576,31 @@ struct
 *)
 	    ) (*before print "/con_normalize\n"*))
 
-  
 
 
 
-  fun value_normalize' state value = 
+
+  fun value_normalize' state value =
     (case value of
           (int _) => value
 	| (uint _) => value
 	| (float _) => value
-	| array (con,arr) => 
+	| array (con,arr) =>
 	 let
 	   val con = con_normalize' state con
 	   val _ = Array.modify (exp_normalize' state) arr
 	 in array (con,arr)
 	 end
-	| vector (con,vec) => 
+	| vector (con,vec) =>
 	 let
 	   val con = con_normalize' state con
 	   val _ = Array.modify (exp_normalize' state) vec
 	 in vector (con,vec)
 	 end
-	| refcell expref => 
+	| refcell expref =>
 	 (expref := exp_normalize' state (!expref);
 	  refcell expref)
-	| tag (atag,con) => 
+	| tag (atag,con) =>
 	 let
 	   val con = con_normalize' state con
 	 in tag (atag,con)
@@ -617,7 +617,7 @@ struct
 	   Intsw_e {size=size,
 		    arg=arg,arms=arms,default=default}
 	 end
-	| Sumsw_e {info,arg,arms,default} => 
+	| Sumsw_e {info,arg,arms,default} =>
 	 let
 	   val arg = exp_normalize' state arg
 	   val arms = map_second (function_normalize' state) arms
@@ -662,14 +662,14 @@ struct
 		body = body}
     end
 
-  and cfunction_normalize' state (tformals,body) = 
+  and cfunction_normalize' state (tformals,body) =
     let
       val (tformals,state) = bind_at_kinds state tformals
       val body = con_normalize' state body
     in (tformals,body)
     end
 
-  and bnds_normalize' state bnds = 
+  and bnds_normalize' state bnds =
     let
       fun norm_bnd (bnd,state) = bnd_normalize' state bnd
     in
@@ -679,14 +679,14 @@ struct
   and bnd_normalize' state (bnd : bnd) =
     (case bnd of
           Con_b (p, cbnd) =>
-	 let	
+	 let
 	   val (cbnd,var,kind) =
 	   (case cbnd of
-		Con_cb (v,c) => 
+		Con_cb (v,c) =>
 		let val con = con_normalize' state c
 		in  (Con_cb(v,con), v, Single_k con)
 		end
-	      | Open_cb(v,vklist,c) => 
+	      | Open_cb(v,vklist,c) =>
 		let val (vklist,c) = cfunction_normalize' state (vklist,c)
 		    val cbnd = Open_cb(v,vklist,c)
 		in  (cbnd, v, Single_k(Let_c(Sequential,[cbnd],Var_c v)))
@@ -714,9 +714,9 @@ struct
 	 let val defs = Sequence.map (fn (x,f) => (x,function_normalize' state f)) defs
 	 in  (Fixcode_b defs,state)
 	 end
-	| Fixclosure_b (is_recur,defs) => 
+	| Fixclosure_b (is_recur,defs) =>
 	 let
-	   fun do_closure {code,cenv,venv} = 
+	   fun do_closure {code,cenv,venv} =
 	     let
 	       val cenv = con_normalize' state cenv
 	       val venv = exp_normalize' state venv
@@ -726,13 +726,13 @@ struct
 	   val bnd = Fixclosure_b (is_recur,defs)
 	 in (bnd,state)
 	 end)
-  and exp_normalize' (state as (D,subst)) (exp : exp) : exp = 
+  and exp_normalize' (state as (D,subst)) (exp : exp) : exp =
     if !debug then
-      let 
+      let
 	val _ = push_exp(exp,state)
 	val _ = if (!show_calls)
 		  then (print "exp_normalize called with expression =\n";
-			Ppnil.pp_exp exp; 
+			Ppnil.pp_exp exp;
 			print "\nand context"; NilContext.print_context D;
 			print "\n and subst";  printConSubst subst;
 			print "\n\n")
@@ -743,18 +743,18 @@ struct
       end
     else
       exp_normalize state exp
-  and exp_normalize state (exp : exp) : exp = 
-    (case exp 
+  and exp_normalize state (exp : exp) : exp =
+    (case exp
        of Var_e var => exp
 	| Const_e value => Const_e (value_normalize' state value)
-	| Let_e (letsort,bnds,exp) => 
+	| Let_e (letsort,bnds,exp) =>
 	 let
 	   val (bnds,state) = bnds_normalize' state bnds
 	   val exp = exp_normalize' state exp
 	 in
 	   Let_e (letsort,bnds,exp)
 	 end
-	| Prim_e (prim,trs,cons,exps) =>   
+	| Prim_e (prim,trs,cons,exps) =>
 	 let
 	   val cons = map (con_normalize' state) cons
 	   val exps = map (exp_normalize' state) exps
@@ -769,14 +769,14 @@ struct
 	   val fexps = map (exp_normalize' state) fexps
 	 in App_e (openness,app,cons,texps,fexps)
 	 end
-	| ExternApp_e (app,args) => 
+	| ExternApp_e (app,args) =>
 	 let
 	   val app = exp_normalize' state app
 	   val args = map (exp_normalize' state) args
 	 in ExternApp_e (app,args)
 	 end
 
-	| Raise_e (exp, con) => 
+	| Raise_e (exp, con) =>
 	 let
 	   val exp = exp_normalize' state exp
 	   val con = con_normalize' state con
@@ -824,7 +824,7 @@ struct
     in
       (ImportValue (label,var,tr,con),state)
     end
-    | import_normalize' state (ImportType (label,var,kind)) = 
+    | import_normalize' state (ImportType (label,var,kind)) =
     let
       val ((var,kind),state) = bind_at_kind ((var,kind),state)
       val state = insert_label (state,label,var)
@@ -832,12 +832,12 @@ struct
       (ImportType (label,var,kind),state)
     end
     | import_normalize' _ _ = raise Fail "Don't think this will be reached...."
-  
+
   fun export_normalize' state (ExportValue (label,v)) = ExportValue (label,v)
     | export_normalize' state (ExportType (label,v)) = ExportType (label,v)
 
-  
-  fun module_normalize' state (MODULE {bnds,imports,exports}) = 
+
+  fun module_normalize' state (MODULE {bnds,imports,exports}) =
     let
       fun folder (import,state) = import_normalize' state import
       val (imports,state) = foldl_acc folder state imports
@@ -846,8 +846,8 @@ struct
     in
       MODULE {bnds=bnds,imports=imports,exports=exports}
     end
-  
-  
+
+
   fun kind_normalize D = kind_normalize' (D,empty())
   fun con_normalize D = con_normalize' (D,empty())
   fun exp_normalize D = exp_normalize' (D,empty())
@@ -876,7 +876,7 @@ struct
   datatype progress = PROGRESS | HNF | IRREDUCIBLE
   datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
 
-    fun is_hnf c : bool = 
+    fun is_hnf c : bool =
         (case c of
              Prim_c(pc,clist) => true
            | AllArrow_c _ => true
@@ -895,17 +895,17 @@ struct
            | Annotate_c (_,c) => false)*))
 
 
-    (* Paths are not stable under substitution. 
+    (* Paths are not stable under substitution.
      * A return of (SOME subst,c) indicates that continuing may be fruitful
      * A return of (NONE,c) indicates that c is as far as it can be reduced
      * This process terminates because either this function tells you to stop,
-     * or it empties the subst.  So if no further progress can be made, 
+     * or it empties the subst.  So if no further progress can be made,
      * the subst will be empty next time around and we will return NONE
      *)
     fun find_kind_equation_subst (D,subst,c) =
-      let 
+      let
 	(*Since we are under a subst here, we may have an unbound variable in the path*)
-	val eqnopt = find_kind_equation(D,c) handle Unbound => NONE  
+	val eqnopt = find_kind_equation(D,c) handle Unbound => NONE
       in
 	case eqnopt
 	  of SOME c => (SOME subst,c)                     (*We found an equation *)
@@ -914,23 +914,23 @@ struct
 	      (NONE,c)
 	    else                                          (*No equation, but carrying out subst may enable reductions *)
 	      let val c = substConInCon subst c
-	      in 
+	      in
 		case find_kind_equation(D,c)
 		  of SOME c => (SOME (empty()),c)         (*Result of substitution had an equation, continue with empty subst*)
-		   | NONE => (SOME (empty()), c)          (*Result of substitution did not have an equation, but try to 
+		   | NONE => (SOME (empty()), c)          (*Result of substitution did not have an equation, but try to
 							   * beta reduce further before giving up*)
 	      end
       end
 
 
     fun expandMuType(D:context, mu_con:con) =
-	let 
-	       
+	let
+
 	  fun extract mu_tuple_con (defs,which) =
-	    let 
+	    let
 	      val var' = Name.fresh_named_var "mu_bnd"
 	      val defs = Sequence.toList defs
-	      fun mapper (n,(v,_)) = 
+	      fun mapper (n,(v,_)) =
 		  Con_cb (v,Proj_c(Var_c var',NilUtil.generate_tuple_label(n+1)))
 	      val bnds = Listops.mapcount mapper defs
 	      val bnds = (Con_cb (var',mu_tuple_con))::bnds
@@ -939,9 +939,9 @@ struct
 	    in  con
 	    end
 
-	in 
-	  case #2(reduce_hnf(D,mu_con)) of  
-	   Proj_c (mu_tuple as Mu_c (_,defs), l)  => 
+	in
+	  case #2(reduce_hnf(D,mu_con)) of
+	   Proj_c (mu_tuple as Mu_c (_,defs), l)  =>
 	       extract mu_tuple (defs, lab2int l (Sequence.length defs))
 	  | c => (print "expandMuType given type not reducible to projection from mu:\n";
 		  Ppnil.pp_con c;
@@ -949,15 +949,15 @@ struct
 	end
 
 
-  and con_reduce_letfun state (sort,coder,var,formals,body,rest,con) = 
+  and con_reduce_letfun state (sort,coder,var,formals,body,rest,con) =
 	    let
 	      val (D,subst) = state
 	      val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
-	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con)
 		   then (HNF, subst, lambda)
 	       else
-		   let 
-		       val _ = if (!debug) 
+		   let
+		       val _ = if (!debug)
 				   then (case (substitute subst var)  of
 					SOME c => error' "XXX var already in subst"
 				      | _ => ())
@@ -967,10 +967,10 @@ struct
 		   end
 	    end
 
-  and con_reduce state (constructor : con) : progress * con_subst * con  = 
+  and con_reduce state (constructor : con) : progress * con_subst * con  =
     (case constructor of
-	 (Prim_c (Vararg_c (openness,effect),[argc,resc])) => 
-	 let 
+	 (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>
+	 let
 	   val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
 	   val no_flatten = AllArrow_c{openness=openness,effect=effect,
 				       tFormals=[],eFormals=[argc],fFormals=0w0,
@@ -980,12 +980,12 @@ struct
 	      (PROGRESS,subst,argc) => (PROGRESS,subst,Prim_c (Vararg_c (openness,effect),[argc,resc]))
 	    | (HNF,_,Prim_c(Record_c labs, cons)) =>
 		(HNF,#2 state,
-		 if (length labs > !number_flatten) then no_flatten 
+		 if (length labs > !number_flatten) then no_flatten
 		 else AllArrow_c{openness=openness,effect=effect,
 				 tFormals=[], eFormals=cons,
 				 fFormals=0w0, body_type=resc})
 	    | (HNF,_,c)         => (HNF,#2 state,no_flatten)
-	    | (IRREDUCIBLE,_,c) => 
+	    | (IRREDUCIBLE,_,c) =>
 		(case find_kind_equation(#1 state,argc)
 		   of SOME argc => (PROGRESS,#2 state,Prim_c (Vararg_c (openness,effect),[argc,resc]))
 		    | NONE      => (HNF,#2 state,irreducible)))
@@ -994,7 +994,7 @@ struct
 	| (Mu_c _) => (HNF, #2 state, constructor)
 	| (AllArrow_c _) => (HNF, #2 state, constructor)
 	| (ExternArrow_c _) => (HNF, #2 state, constructor)
-	| (Var_c var) => 
+	| (Var_c var) =>
 	 let val (D,subst) = state
 	 in  (case (substitute subst var) of
 		   SOME c => (PROGRESS, subst, c)
@@ -1012,27 +1012,27 @@ struct
 				     in  (PROGRESS,subst,Let_c(sort,rest,letbody))
 				     end)
 	 end
-	| (Closure_c (c1,c2)) => 
-	    let val (progress,subst,c1) = con_reduce state c1 
+	| (Closure_c (c1,c2)) =>
+	    let val (progress,subst,c1) = con_reduce state c1
 	    in  (progress,subst,Closure_c(c1,c2))
 	    end
 	| (Crecord_c _) => (HNF,#2 state,constructor)
 	(*| Typeof_c e => (PROGRESS, #2 state, type_of(#1 state,e))*)
 	| (Proj_c (Mu_c _,lab)) => (HNF,#2 state,constructor)
-	| (Proj_c (c,lab)) => 
+	| (Proj_c (c,lab)) =>
 	      (case con_reduce state c of
 		   (PROGRESS,subst,c) => (PROGRESS,subst,Proj_c(c,lab))
-		 | (_,_,c) => 
+		 | (_,_,c) =>
 		       let val (D,subst) = state
 			   val (progress,con) = beta_conrecord' (Proj_c (c,lab))
 		       in  if progress
 			       then (PROGRESS,subst,con)
 			   else (IRREDUCIBLE,subst,con)
 		       end)
-	| (App_c (cfun,actuals)) => 
+	| (App_c (cfun,actuals)) =>
 	       (case con_reduce state cfun of
 		    (PROGRESS,subst,c) => (PROGRESS,subst,App_c(c,actuals))
-		  | (_,_,c) => 
+		  | (_,_,c) =>
 			let val (D,subst) = state
 			    val (progress,con) = beta_confun' true D (App_c(c,actuals))
 			in  if progress
@@ -1046,41 +1046,43 @@ struct
 
 
     and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,empty()) con
-			      in  (case progress 
-				     of IRREDUCIBLE => (case find_kind_equation_subst (D,subst,c) 
+			      in  (case progress
+				     of IRREDUCIBLE => (case find_kind_equation_subst (D,subst,c)
 							  of (SOME subst,c) => substConInCon subst c
 							   | (NONE,c) => c)
 				      | _ => substConInCon subst c)
 			      end
-    and reduce_until (D,pred,con) = 
-        let 
-	  fun loop n (subst,c : con) = 
-            let val _ = if (n=warnDepth) 
-			    then (print "Warning: reduce_until exceeded "; 
-				  print (Int.toString warnDepth); print "iterations\n")
+    and reduce_until (D,pred,con) =
+        let
+	  fun loop n (subst,c : con) =
+            let val _ = if (n=warnDepth)
+			    then (print "Warning: reduce_until exceeded ";
+				  print (Int.toString warnDepth);
+				  print " iterations\n")
 			else ()
 		val _ = if (n = maxDepth)
-			    then (print "Warning: reduce_until exceeded "; 
-				  print (Int.toString maxDepth); print "iterations.  Showing 10 iterations.\n")
+			    then (print "Warning: reduce_until exceeded ";
+				  print (Int.toString maxDepth);
+				  print " iterations.  Showing 10 iterations.\n")
 			else ()
 		val _ = if (n >= maxDepth)
 			    then (print "Error: reduce_until iteration #";
-				  print "#"; print (Int.toString n); print ": "; Ppnil.pp_con c; print "\n")
+				   print (Int.toString n); print ": "; Ppnil.pp_con c; print "\n")
 			else ()
 		val _ = if (n >= maxDepth + 10) then error' "reduce_until too many iterations" else ()
 
-		fun step (subst,c) = 
+		fun step (subst,c) =
 		  let val (progress,subst,c) = con_reduce(D,subst) c
 		  in  case progress of
-		    PROGRESS => loop (n+1) (subst,c) 
-		  | HNF => 
+		    PROGRESS => loop (n+1) (subst,c)
+		  | HNF =>
 		      let val c = substConInCon subst c
 		      in (case pred c of
 			    SOME info => REDUCED info
 			  | NONE => UNREDUCED c)
 		      end
-		  | IRREDUCIBLE => 
-		      (case find_kind_equation_subst(D,subst,c) 
+		  | IRREDUCIBLE =>
+		      (case find_kind_equation_subst(D,subst,c)
 			 of (SOME subst,c) => loop (n+1) (subst,c)
 			  | (NONE,c) => UNREDUCED c)
 		  end
@@ -1095,23 +1097,22 @@ struct
 	    end
         in  loop 0 (empty(),con)
         end
-    and reduce_hnf_list' keep_paths (D,con) = 
-        let fun loop n (subst,c,acc) = 
-            let val _ = if (n>maxDepth) 
+    and reduce_hnf_list' keep_paths (D,con) =
+        let fun loop n (subst,c,acc) =
+            let val _ = if (n>maxDepth)
 			    then (print "reduce_hnf exceeded max reductions\n";
 				  Ppnil.pp_con (substConInCon subst c); print "\n\n";
 				  error' "reduce_hnf exceeded max reductions")
 			 else ()
-		val _ = if (n > 0 andalso n mod warnDepth = 0) 
-			    then (print "reduce_hnf at iteration #";
-				  print (Int.toString n);
-				  print "\n")
+		val _ = if (n > 0 andalso n mod warnDepth = 0)
+			    then msg ("  reduce_hnf at iteration #" ^
+				      Int.toString n ^ "\n")
 			else ()
-	        val (progress,subst,c) = con_reduce(D,subst) c  
+	        val (progress,subst,c) = con_reduce(D,subst) c
 	    in  case progress of
-			 PROGRESS => loop (n+1) (subst,c,acc) 
+			 PROGRESS => loop (n+1) (subst,c,acc)
 		       | HNF => (true, substConInCon subst c,acc)  (*HNF is invariant under substitution*)
-		       | IRREDUCIBLE => 
+		       | IRREDUCIBLE =>
 			   (case find_kind_equation_subst(D,subst,c)
 			      of (SOME subst',c') => loop (n+1) (subst',c',if keep_paths then (substConInCon subst c)::acc else acc)
 			       | (NONE,c) => (false,c,acc))
@@ -1120,43 +1121,43 @@ struct
         end
     and reduce_hnf_list arg = reduce_hnf_list' true arg
     and reduce_hnf (D,con) = let val (hnf,c,_) = reduce_hnf_list' false (D,con) in (hnf,c) end
-    and reduce_hnf' (D,con,subst) = 
-      let 
-	fun loop (subst,c) = 
-	  let 
-	    val (progress,subst,c) = con_reduce(D,subst) c  
+    and reduce_hnf' (D,con,subst) =
+      let
+	fun loop (subst,c) =
+	  let
+	    val (progress,subst,c) = con_reduce(D,subst) c
 	  in  case progress of
-	    PROGRESS => loop (subst,c) 
+	    PROGRESS => loop (subst,c)
 	  | HNF => (subst,c)
-	  | IRREDUCIBLE => 
+	  | IRREDUCIBLE =>
 	      (case find_kind_equation(D,c) of
 		 SOME c => loop (subst,c)
 	       | NONE => (subst,c))
 	  end
       in  loop (subst,con)
       end
-      
+
 
     and reduce(D,con) = con_normalize D con
 
 
-    and projectTuple(D:context, c:con, l:label) = 
+    and projectTuple(D:context, c:con, l:label) =
 	(case (reduce_hnf(D,Proj_c(c,l))) of
 	   (true,c)  => c
 	 | (false,c) => c)
 
-    (*and removeDependence vclist c = 
+    (*and removeDependence vclist c =
 	let fun loop subst [] = substExpInCon subst c
-	      | loop subst ((v,c)::rest) = 
+	      | loop subst ((v,c)::rest) =
 	           let val e = Raise_e(NilDefs.internal_match_exn,c)
 		   in  loop (NilSubst.E.addr (subst,v,e)) rest
 		   end
 	in  loop (NilSubst.E.empty()) vclist
 	end*)
 
-    and projectRecordType(D:context, c:con, l:label) = 
+    and projectRecordType(D:context, c:con, l:label) =
       let
-	fun err () = 
+	fun err () =
 	  (
 	   print "projectRecordType could not find field ";Ppnil.pp_label l;print " in constructor: \n";
 	   Ppnil.pp_con c;print "\n";
@@ -1173,10 +1174,10 @@ struct
 		   error' "projectRecordType reduced to non-record type")
       end
 
-    and reduceToSumtype(D: context, c:con) = 
+    and reduceToSumtype(D: context, c:con) =
 	(case #2(reduce_hnf(D,c)) of
-	     Prim_c(Sum_c {tagcount,totalcount,known}, [carrier]) => 
-	       if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1))) 
+	     Prim_c(Sum_c {tagcount,totalcount,known}, [carrier]) =>
+	       if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1)))
 		  then (tagcount,known,[carrier])
 	       else (case #2(reduce_hnf(D,carrier)) of
 		      Crecord_c lcons => (tagcount,known,map #2 lcons)
@@ -1185,12 +1186,12 @@ struct
 		   Ppnil.pp_con c; print "\n";
 		   error' "reduceToSumtype failed to reduced argument to sumtype"))
 
-    and projectSumType(D:context, c:con, s:TilWord32.word) = 
+    and projectSumType(D:context, c:con, s:TilWord32.word) =
 	(case #2(reduce_hnf(D,c)) of
 	     Prim_c(Sum_c {tagcount,totalcount,known}, cons) =>
 		 if (TilWord32.ult(s,tagcount))
 		     then error' "projectSumType: asking for tag fields"
-		 else 
+		 else
 		     let val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
 			 val which = TilWord32.toInt(TilWord32.uminus(s,tagcount))
 		     in  case (nontagcount,which) of
@@ -1205,14 +1206,14 @@ struct
 		   Ppnil.pp_con c; print "\n";
 		   error' "projectSumType reduced to non-sum type"))
 
-   and reduce_vararg(D:context,openness,effect,argc,resc) = 
+   and reduce_vararg(D:context,openness,effect,argc,resc) =
        let val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
 	   val no_flatten = AllArrow_c{openness=openness,effect=effect,
 				       tFormals=[],eFormals=[argc],fFormals=0w0,
 				       body_type=resc}
        in  case (reduce_hnf(D,argc)) of
-	   (_,Prim_c(Record_c labs, cons)) => 
-	       if (length labs > !number_flatten) then no_flatten 
+	   (_,Prim_c(Record_c labs, cons)) =>
+	       if (length labs > !number_flatten) then no_flatten
 	       else AllArrow_c{openness=openness,effect=effect,
 			       tFormals=[], eFormals=cons,
 			       fFormals=0w0, body_type=resc}
@@ -1221,7 +1222,7 @@ struct
        end
 
 
-   and type_of_switch (D:context,switch:switch):con  = 
+   and type_of_switch (D:context,switch:switch):con  =
      (case switch of
 	   Intsw_e {result_type,...} => result_type
 	 | Sumsw_e {result_type,...} => result_type
@@ -1233,13 +1234,13 @@ struct
            Intsw_e {default=SOME def,...} => type_of(D,def)
 	 | Intsw_e {arms,...} => type_of(D,#2(hd arms))
 	 | Sumsw_e {default=SOME def,...} => type_of(D,def)
-	 | Sumsw_e {arms,bound,sumtype,...} => 
+	 | Sumsw_e {arms,bound,sumtype,...} =>
 	       let val (tagcount,_,carriers) = reduceToSumtype(D,sumtype)
 		   val ssumcon = Prim_c(Sum_c {tagcount=tagcount,
 					       totalcount=TilWord32.uplus(tagcount,
 									  TilWord32.fromInt
 									  (length carriers)),
-					       known=SOME 0w0}, 
+					       known=SOME 0w0},
 					case carriers of
 					    [_] => carriers
 					  | _ => [NilUtil.con_tuple carriers])
@@ -1247,7 +1248,7 @@ struct
 	       in  type_of(D,#2(hd arms))
 	       end
 	 | Exncase_e {default=SOME def,...} => type_of(D,def)
-	 | Exncase_e {arms,bound,...} => 
+	 | Exncase_e {arms,bound,...} =>
 	       let val (tage,body) = hd arms
 		   val tagcon = type_of(D,tage)
 		   val Prim_c(Exntag_c, [con]) = #2(reduce_hnf(D,tagcon))
@@ -1257,8 +1258,8 @@ struct
 	 | Typecase_e _ => error' "typecase_e not done")
 **)
 
-   and type_of_value (D,value) = 
-     (case value 
+   and type_of_value (D,value) =
+     (case value
 	of int (intsize,_) => Prim_c (Int_c intsize,[])
 	 | uint (intsize,_) => Prim_c (Int_c intsize,[])
 	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
@@ -1267,7 +1268,7 @@ struct
 	 | refcell expref => Prim_c (Array_c,[type_of(D,!expref)])
 	 | tag (atag,con) => Prim_c (Exntag_c,[con]))
 
-   and type_of_fbnd (D,openness,constructor,defs) = 
+   and type_of_fbnd (D,openness,constructor,defs) =
      let
        val def_list = Sequence.toList defs
        val (bnd_types,functions) = unzip def_list
@@ -1277,12 +1278,12 @@ struct
      in
        ((map (fn (x, y) => (x, SOME y)) bnd_types,[]),D)
      end
-   and type_of_bnds (D,bnds) = 
+   and type_of_bnds (D,bnds) =
      let
-       fun folder (bnd,D) = 
+       fun folder (bnd,D) =
 	 (case bnd of
-	    Con_b (phase, cbnd) => 
-	      let val (v,c) = 
+	    Con_b (phase, cbnd) =>
+	      let val (v,c) =
 		(case cbnd of
 		   Con_cb (v,c) => (v,c)
 		 | Open_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v))
@@ -1299,13 +1300,13 @@ struct
 	      end
 	  | (Fixopen_b defs) => (type_of_fbnd(D,Open,Fixopen_b,defs))
 	  | (Fixcode_b defs) => (type_of_fbnd(D,Code,Fixcode_b,defs))
-	  | Fixclosure_b (is_recur,defs_l) => 
+	  | Fixclosure_b (is_recur,defs_l) =>
 	      let
 		(*val defs_l = Sequence.toList defs
 		val defs_l = Listops.map_second (fn cl => #tipe cl) defs_l*)
 		val defs_l = map #1 defs_l
 		val D = NilContext.insert_con_list (D,defs_l)
-	      in 
+	      in
 		((map (fn (x, y) => (x, SOME y)) defs_l,[]),D)
 	      end)
        val (bnds,D) = foldl_acc folder D bnds
@@ -1315,9 +1316,9 @@ struct
      in
        (D,etypes,cbnds)
      end
-   and type_of_prim (D,prim,cons,exps) = 
+   and type_of_prim (D,prim,cons,exps) =
         let
-	   fun specialize_sumtype (known,sumcon) = 
+	   fun specialize_sumtype (known,sumcon) =
 	       let val (_,sumcon_hnf) = reduce_hnf(D,sumcon)
 	       in  NilUtil.convert_sum_to_special(sumcon_hnf,known)
 	       end
@@ -1334,11 +1335,11 @@ struct
 	  | unbox_float fs => Prim_c(Float_c fs,[])
 	  | make_exntag => Prim_c(Exntag_c, cons)
 	  | inj_exn _ => Prim_c(Exn_c, [])
-	  | make_vararg (openness,effect) => 
+	  | make_vararg (openness,effect) =>
 	       let val [argc,resc] = cons
 	       in  reduce_vararg(D,openness,effect,argc,resc)
 	       end
-	  | make_onearg (openness,effect) => 
+	  | make_onearg (openness,effect) =>
 	       let val [argc,resc] = cons
 	       in  AllArrow_c{openness=openness,effect=effect,
 			      tFormals=[],eFormals=[argc],fFormals=0w0,body_type=resc}
@@ -1348,15 +1349,15 @@ struct
 )
 	end
 
-   and type_of (D : context,exp : exp) : con = 
+   and type_of (D : context,exp : exp) : con =
      let val _ = if (!debug)
 		     then (print "XXX type_of on ";
 			   Ppnil.pp_exp exp;
 			   print "\n")
 		 else ()
      in
-       (case exp 
-	  of Var_e var => 
+       (case exp
+	  of Var_e var =>
 	    (NilContext.find_con (D,var)
 	     handle NilContext.Unbound =>
 		 let val _ = if (!debug)
@@ -1369,7 +1370,7 @@ struct
 			     (Name.var2string var) ^ " in type_of")
 		 end)
 	   | Const_e value => type_of_value (D,value)
-	   | Let_e (letsort,bnds,exp) => 
+	   | Let_e (letsort,bnds,exp) =>
 	    let
 	      val (D,etypes,cbnds) = type_of_bnds (D,bnds)
 	      val c = type_of (D,exp)
@@ -1377,8 +1378,8 @@ struct
 	      NilUtil.makeLetC cbnds c
 	    end
 	   | Prim_e (NilPrimOp prim,_,cons,exps) => type_of_prim (D,prim,cons,exps)
-	   | Prim_e (PrimOp prim,_,cons,exps) =>   
-	    let 
+	   | Prim_e (PrimOp prim,_,cons,exps) =>
+	    let
 	      val (total,arg_types,return_type) = NilPrimUtil.get_type D prim cons
 	    in
 	      return_type
@@ -1397,11 +1398,11 @@ struct
 			      Ppnil.pp_exp app;
 			      print "\n";
 			      error' "Ill Typed expression - not an arrow"))
-	    end	   
+	    end
 	   | (App_e (openness,app,cons,texps,fexps)) =>
 	    let
 	      val app_con : con = type_of (D,app)
-	      val  (tformals,eformals,body) = 
+	      val  (tformals,eformals,body) =
 		(case #2(reduce_hnf(D,app_con)) of
 		     AllArrow_c{tFormals,eFormals,body_type,...} => (tFormals,eFormals,body_type)
 		   | Prim_c(Vararg_c _, [_,c]) => ([],[],c)
@@ -1416,8 +1417,8 @@ struct
 
 	      val subst = fromList (zip (#1 (unzip tformals)) cons)
 	      val con = substConInCon subst body
-		  
-	    in  (*removeDependence 
+
+	    in  (*removeDependence
 		  (map (fn (SOME v,c) => (v,substConInCon subst c)
 		         | (NONE, c) => (fresh_var(), c)) eformals)*)
 		  con
@@ -1430,7 +1431,7 @@ struct
 	   | (exp as (Coerce_e (coercion,cargs,_))) =>
 	     let
 		 val coerce_con = type_of (D,coercion)
-		 val (vars,to) = case #2 (reduce_hnf(D,coerce_con)) of 
+		 val (vars,to) = case #2 (reduce_hnf(D,coerce_con)) of
 				     Coercion_c {vars,to,...} => (vars,to)
 				   | c => (print "Ill Typed expression - coercion has type: \n";
 					   Ppnil.pp_con coerce_con;
@@ -1457,10 +1458,10 @@ struct
 	  end
 	else (insert_kind_equation(D,var,con,kind),alpha)
 
-      fun bind_kind_eqn(state as (D,alpha),var,con,kind) = 
+      fun bind_kind_eqn(state as (D,alpha),var,con,kind) =
 	bind_kind_eqn'(state,var,alphaCRenameCon alpha con,alphaCRenameKind alpha kind)
-	
-      fun bind_eqn(state as (D,alpha),var,con) = 
+
+      fun bind_eqn(state as (D,alpha),var,con) =
 	let val con = alphaCRenameCon alpha con
 	in
 	  if NilContext.bound_con (D,var) then
@@ -1473,36 +1474,36 @@ struct
 	  else (insert_equation(D,var,con),alpha)
 	end
 
-      fun instantiate_formals(state,vklist,actuals) = 
+      fun instantiate_formals(state,vklist,actuals) =
 	let
 	  fun folder ((var,k),actual,state) = bind_kind_eqn(state,var,actual,k)
 	in foldl2 folder state (vklist,actuals)
 	end
     in
-      fun context_beta_reduce_letfun (state,sort,coder,var,formals,body,rest,con) = 
+      fun context_beta_reduce_letfun (state,sort,coder,var,formals,body,rest,con) =
 	let
 	  val lambda = (Let_c (sort,[coder (var,formals,body)],Var_c var))
-	in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+	in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con)
 	     then (state,lambda,false)
 	   else
 	     context_beta_reduce(bind_eqn(state,var,lambda),Let_c(sort,rest,con))
 	end
-      
-      and context_beta_reduce (state : (context * Alpha.alpha_context),constructor : con) 
-	: ((context * Alpha.alpha_context) * con * bool)  = 
-	(case constructor of 
-	   (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>       
-	     let 
+
+      and context_beta_reduce (state : (context * Alpha.alpha_context),constructor : con)
+	: ((context * Alpha.alpha_context) * con * bool)  =
+	(case constructor of
+	   (Prim_c (Vararg_c (openness,effect),[argc,resc])) =>
+	     let
 	       val (state,argc,path) = context_reduce_hnf''(state,argc)
-		 
+
 	       val irreducible = Prim_c(Vararg_c(openness,effect),[argc,resc])
 	       val no_flatten  = AllArrow_c{openness=openness,effect=effect,
 					    tFormals=[],eFormals=[argc],fFormals=0w0,
 					    body_type=resc}
-	       val res = 
+	       val res =
 		 (case argc of
-			Prim_c(Record_c labs, cons) => 
-			  if (length labs > !number_flatten) then no_flatten 
+			Prim_c(Record_c labs, cons) =>
+			  if (length labs > !number_flatten) then no_flatten
 			  else AllArrow_c{openness=openness,effect=effect,
 					  tFormals=[], eFormals=cons,
 					  fFormals=0w0, body_type=resc}
@@ -1517,36 +1518,36 @@ struct
 	 | (ExternArrow_c _)     => (state,constructor,false)
 	 | (Crecord_c _)         => (state,constructor,false)
 	 | (Var_c var)           => (state,constructor,true)
-	     
+
 	 | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
 	     context_beta_reduce_letfun (state,sort,Open_cb,var,formals,body,rest,con)
-	     
+
 	 | (Let_c (sort,((cbnd as Code_cb (var,formals,body))::rest),con)) =>
 	     context_beta_reduce_letfun (state,sort,Code_cb,var,formals,body,rest,con)
-	     
+
 	 | (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body))             =>
 	     context_beta_reduce(bind_eqn(state,var,con),Let_c(sort,rest,body))
-	     
+
 	 | (Let_c (sort,[],body)) => context_beta_reduce(state,body)
-	     
-	 | (Closure_c (c1,c2)) => 
+
+	 | (Closure_c (c1,c2)) =>
 	     let val (state,c1,path) = context_beta_reduce (state,c1)
 	     in  (state,Closure_c(c1,c2),path)
 	     end
 
-	 (*Typeof may insert con bindings into the context which 
+	 (*Typeof may insert con bindings into the context which
 	  * are already in the context.  Therefore, we must rename it first.
 	  *)
 (*
-	 | Typeof_c e => 
+	 | Typeof_c e =>
 	     let val (D,alpha) = state
 	     in context_beta_reduce((D,Alpha.empty_context()),type_of(D,renameExp(alphaCRenameExp alpha e)))
 	     end
 *)
-	 | (Proj_c (c,lab)) => 
+	 | (Proj_c (c,lab)) =>
 	     (case context_beta_reduce (state,c) of
 		(state,constructor,true)  => (state,Proj_c(constructor,lab),true)
-	      | (state,constructor,false) => 
+	      | (state,constructor,false) =>
 		  (case strip_crecord constructor
 		     of SOME entries =>
 		       (case (List.find (fn ((l,_)) => eq_label (l,lab))
@@ -1554,51 +1555,51 @@ struct
 			  of SOME (l,c) => context_beta_reduce(state,c)
 			   | NONE => error (locate "context_beta_reduce") "Field not in record")
 		      | NONE => (state,Proj_c(constructor,lab),false))) (* constructor is a mu *)
-	 | (App_c (cfun,actuals)) => 
+	 | (App_c (cfun,actuals)) =>
 	      (case context_beta_reduce (state,cfun) of
 		 (state,constructor,true)  => (state,App_c(constructor,actuals),true)
-	       | (state,constructor,false) => 
+	       | (state,constructor,false) =>
 		   let
 		     exception NOT_A_LAMBDA
-		     
+
 		     fun strip (Open_cb (var,formals,body)) = (var,formals,body)
 		       | strip (Code_cb (var,formals,body)) = (var,formals,body)
 		       | strip _ = raise NOT_A_LAMBDA
-		       
-		     fun get_lambda (lambda,name) = 
+
+		     fun get_lambda (lambda,name) =
 		       let
 			 val (var,formals,body) = strip lambda
 		       in
 			 (case name
-			    of Var_c var' => 	  
+			    of Var_c var' =>
 			      if eq_var (var,var') then
 				(formals,body)
 			      else raise NOT_A_LAMBDA
 			     | _ => raise NOT_A_LAMBDA)
 		       end
-		     
+
 		     fun lambda_or_closure (Let_c (_,[lambda],name)) = (get_lambda (lambda,name),NONE)
-		       | lambda_or_closure (Closure_c(code,env)) = 
+		       | lambda_or_closure (Closure_c(code,env)) =
 		       let val (args,_) = lambda_or_closure code
 		       in  (args,SOME env) end
 		       (*| lambda_or_closure (Annotate_c(_,con)) = lambda_or_closure (con)*)
 		       | lambda_or_closure _ = raise NOT_A_LAMBDA
-			 
-			 
+
+
 		     fun open_lambda cfun = (SOME (lambda_or_closure cfun)) handle NOT_A_LAMBDA => NONE
-		       
+
 		   in
 		     (case open_lambda constructor
 			of SOME((formals,body),SOME env) =>
 			  context_beta_reduce(instantiate_formals(state,formals,env::actuals),body)
-			 | SOME((formals,body),NONE)     => 
+			 | SOME((formals,body),NONE)     =>
 			  context_beta_reduce(instantiate_formals(state,formals,actuals),body)
 			 | NONE => (Ppnil.pp_con constructor;
 				    error (locate "context_beta_reduce") "redex not in HNF"))
 		   end)
-	
-(*	    
-	     | (Typecase_c {arg,arms,default,kind}) => 
+
+(*
+	     | (Typecase_c {arg,arms,default,kind}) =>
 		 let
 		   val (state,arg)   = context_reduce_hnf'(state,arg)
 		 in
@@ -1624,16 +1625,16 @@ struct
 	  else
 	    ((D,alpha),con,false)
 	end
-      
-      and context_reduce_hnf' args = 
+
+      and context_reduce_hnf' args =
 	let val (state,con,path) = context_reduce_hnf'' args
 	in (state,con)
 	end
-      fun context_reduce_hnf(D,constructor) = 
+      fun context_reduce_hnf(D,constructor) =
 	let val ((D,alpha),con) = context_reduce_hnf'((D,Alpha.empty_context()),constructor)
 	in (D,alphaCRenameCon alpha con)
 	end
-    end      
+    end
 
   val kind_normalize = wrap2 "kind_normalize" kind_normalize
   val con_normalize = wrap2 "con_normalize"  con_normalize

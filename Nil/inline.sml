@@ -1,15 +1,13 @@
-(*$import List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilSubst INLINE Analyze Bool Ppnil Stats *)
-
 (* Inline functions that are non-recursive and either are called once
    or else are sufficiently small and called a sufficiently small number
    of times.
 
-   First, we call the Analyze.analyze function to gather function usage 
+   First, we call the Analyze.analyze function to gather function usage
    information.  Then we select candidates for inlining.
 
    A function should be inlined if the following are true
         (1) Called once non-recursively and does not escape.
-	(2) Called multiply, is non-recursive, 
+	(2) Called multiply, is non-recursive,
 	    and we remain within the size threshold.
 
    The transformation pass inlines and removes definitions according to the
@@ -33,13 +31,15 @@ struct
   val error = fn s => Util.error "inline.sml" s
 
   val chat = Stats.ff "InlineChat"
+  val InlineDiag = Stats.ff "InlineDiag"
+  fun msg str = if (!InlineDiag) then print str else ()
 
   val debug = ref false
   fun debugpr s = if (!debug) then print s else ()
   fun inc(r:int ref) = r := (!r) + 1
 
-  datatype inlineStatus = 
-    NoInline | InlineOnce 
+  datatype inlineStatus =
+    NoInline | InlineOnce
     | InlineMany of int (* Inline if inlined version is below threshold *)
 
   (*Keep list of the functions we are currently in, so that we can update
@@ -53,18 +53,18 @@ struct
   val inlineManyCall = ref 0
   val hasCandidates  = ref false
 
-  fun updateDefinition(v,f) = 
-      let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v) 
+  fun updateDefinition(v,f) =
+      let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v)
       in  analyzeTable := (Name.VarMap.insert(table,v,{definition=f,size=size,occurs=occurs}))
       end
 
-  fun size v = 
+  fun size v =
     (case Name.VarMap.find(!analyzeTable,v)
        of SOME {size,...} => size
 	| NONE => error "Must have definition to get size")
 
-  fun updateSize(v,s) = 
-      let val (table, {definition, size, occurs}) = Name.VarMap.remove(!analyzeTable, v) 
+  fun updateSize(v,s) =
+      let val (table, {definition, size, occurs}) = Name.VarMap.remove(!analyzeTable, v)
       in  analyzeTable := (Name.VarMap.insert(table,v,{definition=definition,size=size+s,occurs=occurs}))
       end
 
@@ -73,15 +73,15 @@ struct
   fun enterFunction f  = functionList := f :: (!functionList)
   fun leaveFunction () = functionList := tl (!functionList)
 
-  fun makeNoInline v = 
-    let 
+  fun makeNoInline v =
+    let
       val _ = if !chat then (print "\tMarking function ";Ppnil.pp_var v;print " NoInline\n") else ()
-      val (table,_) = Name.VarMap.remove(!optimizeTable, v) 
+      val (table,_) = Name.VarMap.remove(!optimizeTable, v)
     in optimizeTable := Name.VarMap.insert(table,v,NoInline)
     end
 
-  fun showFunInfo(v,size,occurs,status) = 
-    let 
+  fun showFunInfo(v,size,occurs,status) =
+    let
       fun showOccur(isRecur, level) = (print "("; print (Bool.toString isRecur);
 				       print ", "; print (Int.toString level);
 				       print ") ")
@@ -91,14 +91,14 @@ struct
       app showOccur occurs;
       print "\n";
       print "\tInline status is ";
-      print (case status 
+      print (case status
 	       of NoInline => "NoInline"
 		| InlineOnce => "InlineOnce"
 		| InlineMany n => "InlineMany "^(Int.toString n));
       print "\n"
     end
 
-  val inline_tiny = Stats.tt "inline_tiny" 
+  val inline_tiny = Stats.tt "inline_tiny"
 
   fun analyzeInfo {iterate,tinyThreshold, sizeThreshold, occurThreshold}
       (v,{size : int,
@@ -115,11 +115,11 @@ struct
 	  val numapps = length occurs
 
 	  val small = numapps * size < occurThreshold * sizeThreshold
-	  (*(size <= sizeThreshold) andalso 
+	  (*(size <= sizeThreshold) andalso
 	   numapps <= (occurThreshold)*)
 
-	  val status =  
-	    (* We don't inline any recursive functions.  
+	  val status =
+	    (* We don't inline any recursive functions.
 	     * We may want to consider inlining functions
 	     * that are not self-recursive and do not escape.
 	     * this is a common idiom.
@@ -145,50 +145,50 @@ struct
 
   and rcon con = con
   and rcbnd conbnd = conbnd
-      
-  and rexp e = 
+
+  and rexp e =
       (case e of
 	   Var_e _ => e
 	 | Const_e _ => e
 	 | Let_e(ls,bnds,e) => Let_e(ls,rbnds bnds,rexp e)
-	 | Prim_e (p, trs,cons, exps) => 
+	 | Prim_e (p, trs,cons, exps) =>
 	       Prim_e (p, trs,map rcon cons, map rexp exps)
 	 | Switch_e sw => Switch_e(rswitch sw)
 	 | App_e (openness,f,cs,es1,es2) =>
-	       App_e (openness, rexp f, map rcon cs, 
+	       App_e (openness, rexp f, map rcon cs,
 		      map rexp es1, map rexp es2)
 	 | ExternApp_e (f,es) => ExternApp_e (rexp f, map rexp es)
-	 | Handle_e {body,bound,handler,result_type} => 
-	       Handle_e{body = rexp body, bound = bound, 
+	 | Handle_e {body,bound,handler,result_type} =>
+	       Handle_e{body = rexp body, bound = bound,
 			handler = rexp handler, result_type = rcon result_type}
-	 | Raise_e (exp, con) => 
+	 | Raise_e (exp, con) =>
 		    Raise_e (rexp exp, rcon con)
 	 | Fold_e (vars,from,to) => Fold_e (vars,rcon from,rcon to)
 	 | Unfold_e (vars,from,to) => Unfold_e (vars,rcon from, rcon to)
-	 | Coerce_e (coercion,cargs,exp) => 
+	 | Coerce_e (coercion,cargs,exp) =>
 	   Coerce_e (rexp coercion,map rcon cargs,rexp exp))
 
 
-  and rbnd b = 
+  and rbnd b =
       (case b of
 	   Con_b (p, cbnd) => [(Con_b (p, rcbnd cbnd))]
-	 | Exp_b(v,nt,e) => 
+	 | Exp_b(v,nt,e) =>
 	       (case e of
 		    App_e(Open,Var_e f,cs,es1,es2) =>
-			let val funinfoOpt = Name.VarMap.find(!analyzeTable, f) 
+			let val funinfoOpt = Name.VarMap.find(!analyzeTable, f)
 			    val defOpt =
 			        (case Name.VarMap.find(!optimizeTable, f) of
 				     SOME NoInline => NONE
-				   | SOME InlineOnce => 
+				   | SOME InlineOnce =>
 					 (case funinfoOpt of
-					      SOME {definition,size, ...} => 
+					      SOME {definition,size, ...} =>
 						(inlineOnce := 1 + (!inlineOnce);
 						 updateSizes size;
 						 SOME definition)
 					    | _ => error "must have definition here")
-				   | SOME (InlineMany _) => 
+				   | SOME (InlineMany _) =>
 					 (case funinfoOpt of
-					      SOME {definition,size, ...} => 
+					      SOME {definition,size, ...} =>
 						  (inlineManyCall := 1 + (!inlineManyCall);
 						   updateSizes size;
 						   SOME (NilRename.renameFunction definition))
@@ -199,19 +199,19 @@ struct
 			    val es2 = map rexp es2
 			in  (case defOpt of
 				 NONE => [Exp_b(v,nt,App_e(Open,Var_e f,cs,es1,es2))]
-			       | SOME (Function{tFormals,eFormals,fFormals,body,...}) => 
-				 let  val bnd1 = 
+			       | SOME (Function{tFormals,eFormals,fFormals,body,...}) =>
+				 let  val bnd1 =
 					 Listops.map2 (fn (v,c) =>
 						       Con_b(Runtime,Con_cb(v,c)))(tFormals,cs)
-				     val bnd2 = 
+				     val bnd2 =
 					 Listops.map2 (fn ((v,tr),e) =>
 						       Exp_b(v,tr,e))
 					 (eFormals,es1)
-				     val bnd3 = 
-					 Listops.map2 (fn (v,e) => 
+				     val bnd3 =
+					 Listops.map2 (fn (v,e) =>
 						       Exp_b(v,TraceKnown TraceInfo.Notrace_Real, e))
 					 (fFormals,es2)
-				     val (bnd4,bnd5) = 
+				     val (bnd4,bnd5) =
 					 (case body of
 					      Let_e(ls,bnds,e) => (bnds,[Exp_b(v,nt,e)])
 					    | _ => ([],[Exp_b(v,nt,body)]))
@@ -224,11 +224,11 @@ struct
 				 end)
 			end
 		  | _ =>  [Exp_b(v,nt, rexp e)])
-	| Fixopen_b vfSeq => 
+	| Fixopen_b vfSeq =>
 	    let val vf = Sequence.toList vfSeq
 		val vf = List.mapPartial
 		    (fn ((v,c),f) => (case Name.VarMap.find(!optimizeTable,v) of
-				      SOME InlineOnce => 
+				      SOME InlineOnce =>
 					(* Tarditi's thesis suggests rewriting the definition
 					 * here before inlining, and I can't see any reason
 					 * not to.  In particular, rewriting it first may
@@ -240,7 +240,7 @@ struct
 					  val _ = updateDefinition(v,f)
 					in NONE
 					end
-				    | SOME (InlineMany n) => 
+				    | SOME (InlineMany n) =>
 					  let val _ = inlineManyFun := 1 + (!inlineManyFun)
 					      val c = rcon c
 					      val _ = enterFunction v
@@ -254,40 +254,40 @@ struct
 		     [] => []
 		   | _ => [Fixopen_b vf])
 	    end
-	| Fixcode_b vfs => 
+	| Fixcode_b vfs =>
 	      [Fixcode_b(Sequence.fromList
 			 (List.map(fn ((v,c),f) => ((v,rcon c),rfunction f))
 			  (Sequence.toList vfs)))]
 	| Fixclosure_b _ => [b])
       and rfunction(Function{effect,recursive,
 			     tFormals,eFormals,fFormals,
-			     body}) = 
+			     body}) =
 	  Function{effect=effect,recursive=recursive,
 		   tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 		   body=rexp body}
 
-      and rswitch sw = 
+      and rswitch sw =
 	(case sw of
 	   Intsw_e{arg,size,arms,default,result_type} =>
 	       Intsw_e{arg=rexp arg,size=size,
 		       arms=List.map(fn(w,e) => (w,rexp e)) arms,
 		       default=ropt rexp default, result_type = rcon result_type}
-	 | Sumsw_e{arg,sumtype,bound,arms,default,result_type} => 
+	 | Sumsw_e{arg,sumtype,bound,arms,default,result_type} =>
 	       Sumsw_e{arg=rexp arg,sumtype=rcon sumtype,bound=bound,
 		       arms=List.map(fn(w,tr,e) => (w,tr,rexp e)) arms,
 		       default=ropt rexp default, result_type = rcon result_type}
-	 | Exncase_e {arg,bound,arms,default,result_type} => 
+	 | Exncase_e {arg,bound,arms,default,result_type} =>
 	       Exncase_e{arg=rexp arg,bound=bound,
 			 arms=List.map(fn(e1,tr,e2) => (e1,tr,rexp e2)) arms,
 			 default=ropt rexp default, result_type = rcon result_type}
 	 | Ifthenelse_e _ => error "Ifthenelse not implemented"
-	 | Typecase_e {arg,arms,default,result_type} => 
+	 | Typecase_e {arg,arms,default,result_type} =>
 	       Typecase_e{arg=rcon arg,
 			  arms=List.map(fn (pc,vks,e) => (pc,vks,rexp e)) arms,
 			  default= rexp default,
 			  result_type = rcon result_type})
 
-  fun reset () = 
+  fun reset () =
     let in
       hasCandidates := false;
       inlineOnce := 0;
@@ -296,14 +296,12 @@ struct
     end
 
   fun inline_once iterate nilmod =
-    let 
+    let
       val _ = reset();
       val threshold = {iterate=iterate,tinyThreshold=0,sizeThreshold=0,occurThreshold=0}
 
-      fun loop (nilmod,n) = 
+      fun loop (nilmod,n) =
 	let
-	  val _ = print ("  "^(Int.toString n))
-
 	  val _ = hasCandidates := false
 	  val _ = functionList := []
 	  val _ = analyzeTable := Analyze.analyze nilmod
@@ -322,17 +320,15 @@ struct
 	end
 
       val nilmod = loop (nilmod,1)
-	
-      val _ = 
-	(print "\n  "; 
-	 print (Int.toString (!inlineOnce));
-	 print " functions inlined once.\n")
-	
+
+      val _ = msg ("  " ^ Int.toString (!inlineOnce) ^
+		   " functions inlined once.\n")
+
     in  nilmod
     end
 
-  fun inline threshold nilmod = 
-      let 
+  fun inline threshold nilmod =
+      let
 	val _ = reset()
 	val _ = functionList := []
 	val _ = analyzeTable := Analyze.analyze nilmod
@@ -344,21 +340,17 @@ struct
 	val _ = analyzeTable := Name.VarMap.empty
 	val _ = optimizeTable := Name.VarMap.empty
 
-	val _ = 
-	  if !hasCandidates then 
-	    (print "  "; 
-	     print (Int.toString (!inlineOnce));
-	     print " functions inlined once.\n  ";
-	     print (Int.toString (!inlineManyCall));
-	     print " copies of ";
-	     print (Int.toString (!inlineManyFun));
-	     print " other functions inlined.\n")
+	val _ =
+	  if !hasCandidates then
+	    msg ("  " ^ Int.toString (!inlineOnce) ^ 
+		 " functions inlined once.\n  " ^
+		 Int.toString (!inlineManyCall) ^ " copies of " ^
+		 Int.toString (!inlineManyFun) ^ " other functions inlined.\n")
 	  else
-	    (print "  No candidate functions for inlining\n"
-	     )
+	    msg "  No candidate functions for inlining\n"
 
-	val nilmod = if !hasCandidates andalso #iterate threshold 
-		       then (print "  Iterating.....";
+	val nilmod = if !hasCandidates andalso #iterate threshold
+		       then (msg "  Iterating\n";
 			     inline_once (#iterate threshold) nilmod)
 		     else nilmod
       in  nilmod

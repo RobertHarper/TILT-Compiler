@@ -1,20 +1,21 @@
-(*$import Nil *)
-signature NILSTATIC = 
+signature NILSTATIC =
   sig
 
-    type context 
+    val NilStaticDiag : bool ref
+
+    type context
 
     val exp_valid : context * Nil.exp -> Nil.con
     (* exp_valid (Gamma,exp) => con
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of exp are disjoint.
-      *      Every binding site in Gamma and exp is unique, 
+      *      Every binding site in Gamma and exp is unique,
       *  with respect to Gamma, and exp.
-      *    
-      * POST: Gamma |- exp : con, i.e. exp is well-formed with 
+      *
+      * POST: Gamma |- exp : con, i.e. exp is well-formed with
       *  respect to the given context and has type con.
       *       All binding sites in con are unique with respect to Gamma.
-      * 
+      *
       *)
 
 
@@ -22,13 +23,13 @@ signature NILSTATIC =
     (* con_valid (Gamma,con) => kind
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of con are disjoint.
-      *      Every binding site in Gamma, and con is unique, 
+      *      Every binding site in Gamma, and con is unique,
       *  with respect to Gamma, and con.
-      *    
-      * POST: Gamma |- con : kind, i.e. con is well-formed with 
+      *
+      * POST: Gamma |- con : kind, i.e. con is well-formed with
       *  respect to the given context and has kind kind.
       *       All binding sites in kind are unique with respect to Gamma.
-      * 
+      *
       *)
 
 
@@ -36,10 +37,10 @@ signature NILSTATIC =
     (* con_valid (Gamma,kind) => ()
       * PRE: The context is well formed.
       *      The domain of Gamma and the bound variables of kind are disjoint.
-      *      Every binding site in Gamma, and kind is unique, 
+      *      Every binding site in Gamma, and kind is unique,
       *  with respect to Gamma, and kind.
-      *    
-      * POST: Gamma |- kind, i.e. kind is well-formed with 
+      *
+      * POST: Gamma |- kind, i.e. kind is well-formed with
       *  respect to the given context
       *)
 
@@ -67,7 +68,7 @@ signature NILSTATIC =
     val con_reduce : context * Nil.con -> Nil.con
     (* con_reduce (context,con) => con'
       * PRE: context is well formed
-      * POST: con is fully normalized.  Note that this does 
+      * POST: con is fully normalized.  Note that this does
       * not check for well-kindedness.  This is currently just an
       * alias to Normalize.con_normalize
       *)
@@ -77,7 +78,7 @@ signature NILSTATIC =
     val kind_reduce : context * Nil.kind -> Nil.kind
     (* kind_reduce (context,kind) => kind'
       * PRE: context is well formed
-      * POST: kind is fully normalized. Note that this does 
+      * POST: kind is fully normalized. Note that this does
       * not check for well-kindedness.  This is currently just an
       * alias to Normalize.kind_normalize
       *)

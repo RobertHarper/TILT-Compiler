@@ -1,16 +1,15 @@
-(*$import Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Real Timestamp CoerceElim *)
-
 (* Reorder *)
 
 structure Linknil :> LINKNIL  =
   struct
 
+    val LinkNilDiag = Stats.ff("LinkNilDiag")
     val do_cse = Stats.tt("doCSE")         (* do CSE during optimzie2 *)
     val do_uncurry = Stats.ff("doUncurry") (* do uncurry during optimize2 *)
-	
+    val UptoPhasesplit = Stats.ff("UptoPhasesplit")
     val show_size = Stats.ff("showSize")   (* show size after each pass *)
     val show_html = Stats.ff("showHTML")   (* when showing pass results, generate HTML *)
-    val typecheck = Stats.ff "Typecheck"   (* typecheck after each pass *)
+    val typecheck = Stats.tt "Typecheck"   (* typecheck after each pass *)
     val measure   = Stats.ff "Measure"     (* measure after each pass *)
     val show      = Stats.ff "ShowNil"     (* show after each pass *)
 
@@ -83,9 +82,10 @@ structure Linknil :> LINKNIL  =
 
 
 
-    fun printBold str = (print "===== "; print str;
-			 print (Util.spaces (50 - (size str)));
-			 print " =====\n")
+    fun printBold str =
+	if (!LinkNilDiag) then
+	    (print "===== "; print str; print " =====\n")
+	else ()
 
     fun pass filename (ref false, _, _, _, _, _) (transformer,obj) =
 	error "pass called with a false flag"
@@ -102,9 +102,9 @@ structure Linknil :> LINKNIL  =
 		    else ()
 	    val _ = if !showphase orelse !show then
 		      ((if !show_html then
-			   PpnilHtml.pp_module 
+			   PpnilHtml.pp_module
 		       else
-			   Ppnil.pp_module)   
+			   Ppnil.pp_module)
 			   {module = nilmod,
 			    header = phasename,
 			    name = filename,
@@ -114,14 +114,14 @@ structure Linknil :> LINKNIL  =
 	    val _ = if !checkphase orelse !typecheck then
 		      NilStatic.module_valid (NilContext.empty (), nilmod)
 		    else ()
-	    (* Note that these get redirected in the self-compile, 
+	    (* Note that these get redirected in the self-compile,
 	     * since TIL can't handle the Wizard.  (Datatype bug)
 	     *)
 	    (*val _ = if !wcheckphase orelse !wtypecheck then
 		      WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod)
 		    else ()*)
-	val _ = 
-	  if !measurephase orelse !measure then 
+	val _ =
+	  if !measurephase orelse !measure then
 	    let
 	      val (imps,bnds,exps) = Measure.mod_size' {cstring=Measure.cstring,count=[],count_in=[]} nilmod
 	      val impsr = Stats.int (phasename^"::importsize")
@@ -136,7 +136,7 @@ structure Linknil :> LINKNIL  =
 	in  nilmod
 	end
 
-    fun transform filename (ref false,_,_,_,_,phasename) (_,nilmod) = 
+    fun transform filename (ref false,_,_,_,_,phasename) (_,nilmod) =
 	let val str = "Skipping " ^ phasename ^ " : " ^ filename
 	in  (* printBold str;  *)
 	    nilmod
@@ -144,30 +144,30 @@ structure Linknil :> LINKNIL  =
       | transform filename (tr as (ref true,_,_,_,_,_)) arg =
 	pass filename tr arg
 
-					    
+
     exception Stop of Nil.module
 
     (* (1) Rename must precede everything.
        (2) Vararg must precede Reify because vararg changes traceability
-       (3) Reify must occur before uncurrying.  This is 
+       (3) Reify must occur before uncurrying.  This is
            because we do not allow type applications in traceability annotations.
-	   Therefore, we allow reify to insert any needed type applications 
+	   Therefore, we allow reify to insert any needed type applications
 	   between the type lambda and the term lambda before we try to uncurry,
 	   so that we block uncurrying when it would force us to place applications
 	   in the trace annotations.
        (4) Reify2 is needed because some optimizations create TraceUnknowns.
     *)
-    fun compile' (filename,(ctxt,_,sbnd_entries) : Il.module) =
+    fun compile' (filename,ilmodule : Il.module) =
 	let
 	    val pass = pass filename
 	    val transform = transform filename
 
-	    open Nil LinkIl.IlContext Name
+	    open Nil Name
 	    val D = NilContext.empty()
 
-	    val nilmod = pass phasesplit (Tonil.phasesplit, (ctxt,sbnd_entries))
+	    val nilmod = pass phasesplit (Tonil.phasesplit, ilmodule)
 
-	    val _ = if !(Stats.bool("UptoPhasesplit"))
+	    val _ = if !UptoPhasesplit
 			then raise (Stop nilmod)
 		    else ()
 
@@ -184,18 +184,18 @@ structure Linknil :> LINKNIL  =
 *)
 	    val nilmod = transform hoist1 (Hoist.optimize, nilmod)
 
-	    val nilmod = transform optimize1 
-				   (Optimize.optimize {doDead = true, 
+	    val nilmod = transform optimize1
+				   (Optimize.optimize {doDead = true,
 						       doProjection = SOME 50,
-						       doCse = true, 
+						       doCse = true,
 						       doUncurry = false},
 				    nilmod)
 
 	    val nilmod = transform inlineOnce1 (Inline.inline_once  true, nilmod)
 
-	    (* It is very important that specialize be run before any speculative 
+	    (* It is very important that specialize be run before any speculative
 	     * inlining (that is, before inlining anything except functions called
-	     * only once).  Otherwise, the inliner may generate lots of copies of 
+	     * only once).  Otherwise, the inliner may generate lots of copies of
 	     * the same function applied at the same type, which is a complete loss.
 	     * We would much rather specialize them to get a single monomorphic copy,
 	     * and then inline that single copy as necessary.
@@ -203,9 +203,9 @@ structure Linknil :> LINKNIL  =
 	    val nilmod = transform specialize1 (Specialize.optimize, nilmod)
 
 	    val nilmod = transform optimize2
-				   (Optimize.optimize {doDead = true, 
+				   (Optimize.optimize {doDead = true,
 						       doProjection = SOME 50,
-						       doCse = true, 
+						       doCse = true,
 						       doUncurry = false},
 				    nilmod)
 
@@ -214,9 +214,9 @@ structure Linknil :> LINKNIL  =
 	    val nilmod = transform vararg (Vararg.optimize, nilmod)
 
 
-	    (* It might be a good idea to iterate inline (and possibly optimize) 
+	    (* It might be a good idea to iterate inline (and possibly optimize)
 	     * with the thresholds set to zero until the code reaches a fixpoint.
-	     * The idea would be to inline all functions called only once right 
+	     * The idea would be to inline all functions called only once right
 	     * off the bat.  This is more inline with Tarditi's thesis.  As it stands,
 	     * some functions only called once will not get inlined, or will not get
 	     * inlined until the last inline stage, because they are deeply curried.
@@ -227,7 +227,7 @@ structure Linknil :> LINKNIL  =
 	    val nilmod = transform inline1
 		                   (Inline.inline {iterate = false,
 						   tinyThreshold = 10,
-						   sizeThreshold = 50, 
+						   sizeThreshold = 50,
 						   occurThreshold = 5},
 				    nilmod)
 
@@ -236,35 +236,35 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform hoist2 (Hoist.optimize, nilmod)
 
-	    val nilmod = transform optimize3 (Optimize.optimize {doDead = true, 
+	    val nilmod = transform optimize3 (Optimize.optimize {doDead = true,
 								 doProjection = SOME 50,
-								 doCse = !do_cse, 
+								 doCse = !do_cse,
 								 doUncurry = !do_uncurry},
-					      nilmod) 
-	    val nilmod = transform inline2 
+					      nilmod)
+	    val nilmod = transform inline2
 		                   (Inline.inline {iterate = false,
 						   tinyThreshold = 10,
-						   sizeThreshold = 50, 
+						   sizeThreshold = 50,
 						   occurThreshold = 5},
 				    nilmod)
 
 	    val nilmod = transform optimize4
-				   (Optimize.optimize {doDead = true, 
+				   (Optimize.optimize {doDead = true,
 						       doProjection = SOME 50,
-						       doCse = !do_cse, 
+						       doCse = !do_cse,
 						       doUncurry = !do_uncurry},
-				   nilmod) 
+				   nilmod)
 
 	    val nilmod = transform specialize2 (Specialize.optimize, nilmod)
 
 	    val nilmod = transform inline3
 		                   (Inline.inline {iterate = true,
 						   tinyThreshold = 10,
-						   sizeThreshold = 50, 
+						   sizeThreshold = 50,
 						   occurThreshold = 5},
 				    nilmod)
 
-	    (* Optimizing after every inlining is a good thing.  
+	    (* Optimizing after every inlining is a good thing.
 	     * We could notice when the inliner failed to do anything
 	     * and not do this pass in that case.  This would be
 	     * especially true if the optimizer were actually idempotent
@@ -272,11 +272,11 @@ structure Linknil :> LINKNIL  =
 	     * -leaf
 	     *)
 	    val nilmod = transform optimize5
-				   (Optimize.optimize {doDead = true, 
+				   (Optimize.optimize {doDead = true,
 						       doProjection = SOME 50,
-						       doCse = !do_cse, 
+						       doCse = !do_cse,
 						       doUncurry = !do_uncurry},
-				   nilmod) 
+				   nilmod)
 
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 

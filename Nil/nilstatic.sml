@@ -1,10 +1,9 @@
-(*$import Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck NilPrimUtil NilPrimUtilParam NilDefs ListPair *)
-structure NilStatic :> NILSTATIC where type context = NilContext.context = 
-struct	
+structure NilStatic :> NILSTATIC where type context = NilContext.context =
+struct
 
   (* IMPORTS *)
 
-  open Nil 
+  open Nil
   open Prim
 
   val number_flatten = Nil.flattenThreshold
@@ -28,6 +27,7 @@ struct
   val con_valid_top       = Stats.ff "nilstatic_con_valid_top_profile"
 
   val debug               = Stats.ff "nil_debug"
+  val NilStaticDiag	  = Stats.ff "NilStaticDiag"
 
   val show_calls          = Stats.ff "nil_show_calls"
   val show_context        = Stats.ff "nil_show_context"
@@ -51,11 +51,11 @@ struct
    the code that it enables.            -- Joe *)
   val equiv_shao_recursion   = Stats.ff "nilstatic_shao_recursion"
 
-(*  
+(*
 
 val timer = Stats.subtimer'
 val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer' args args2 else #2 args args2
-val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profile orelse !flag 
+val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profile orelse !flag
 						    then Stats.subtimer' (name,f) args  else f args)
 						  handle e => (print "Error in ";print name;print "\n";raise e))
 *)
@@ -119,7 +119,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val insert_label            = flagtimer (import_profile,"Tchk:insert_label",NilContext.insert_label)
 
   val find_con      = flagtimer (import_profile,"Tchk:find_con",NilContext.find_con)
-  val find_max_kind = flagtimer (import_profile,"Tchk:find_max_kind",NilContext.find_max_kind)           
+  val find_max_kind = flagtimer (import_profile,"Tchk:find_max_kind",NilContext.find_max_kind)
 
   val kind_standardize    = flagtimer (import_profile,"Tchk:kind_standardize",NilContext.kind_standardize)
   val kind_of             = flagtimer (import_profile,"Tchk:kind_of",NilContext.kind_of)
@@ -157,7 +157,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 
   val kind_type_tuple        = NilDefs.kind_type_tuple
-  val bool_con               = NilPrimUtilParam.con_bool 
+  val bool_con               = NilPrimUtilParam.con_bool
 
   (*From NilUtil*)
   val makeLetC               = NilUtil.makeLetC
@@ -193,7 +193,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val strip_app         = NilUtil.strip_app
   val strip_coercion    = NilUtil.strip_coercion
   val is_exn_con        = NilUtil.is_exn_con
-  val is_float_c        = NilUtil.is_float_c 
+  val is_float_c        = NilUtil.is_float_c
   val is_var_e          = NilUtil.is_var_e
 
   val sub_effect        = NilUtil.sub_effect
@@ -278,7 +278,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val b_perr_k = NilError.b_perr_k
 
   val o_perr = NilError.o_perr
-    
+
   val o_perr_e  = NilError.o_perr_e
   val o_perr_c  = NilError.o_perr_c
   val o_perr_k  = NilError.o_perr_k
@@ -295,9 +295,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
   (* Local helpers *)
 
+  fun msg str = if (!NilStaticDiag) then print str else ()
 
-  fun foldl_all2 ffun init (l1,l2) = 
-    let 
+  fun foldl_all2 ffun init (l1,l2) =
+    let
       fun loop ([],[],state) = (true,state)
 	| loop (a::arest,b::brest,state) =
 	let
@@ -312,8 +313,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in
       loop (l1,l2,init)
     end
-    
-  fun e_error (D,exp,explanation) = 
+
+  fun e_error (D,exp,explanation) =
     (
      printem ["\n","TYPE ERROR: Problem with expression\n",
 		explanation,"\n"];
@@ -323,7 +324,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Util.raise_error explanation
        )
 
-  fun c_error (D,con,explanation) = 
+  fun c_error (D,con,explanation) =
       (
        printem ["\n","TYPE ERROR: Problem with constructor\n",
 		 explanation,"\n"];
@@ -333,7 +334,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        Util.raise_error explanation
        )
 
-  fun k_error (D,kind,explanation) = 
+  fun k_error (D,kind,explanation) =
     (
      printem ["\n","TYPE ERROR: Problem with kind\n",
 		explanation,"\n"];
@@ -343,7 +344,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Util.raise_error explanation
        )
 
-  fun ck_error (D,con,kind,explanation) = 
+  fun ck_error (D,con,kind,explanation) =
     (
      printem ["\n","TYPE ERROR: Problem with constructor and kind:\n\t",
 		explanation,"\n","Con is:\n"];
@@ -355,7 +356,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Util.raise_error explanation
     )
 
-  fun cc_error (D,con1,con2,explanation) = 
+  fun cc_error (D,con1,con2,explanation) =
     (
      printem ["\n","TYPE ERROR: Problem with constructors:\n\t",
 		explanation,"\n",
@@ -369,32 +370,32 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     )
 
 
-  fun strip_sum (D,con) = 
+  fun strip_sum (D,con) =
     (case NilUtil.strip_sum (con_head_normalize(D,con)) of
        SOME quad => quad
      | _ => c_error(D,con,"Expected a sum type"))
-       
-  fun strip_int (D,con) = 
+
+  fun strip_int (D,con) =
     (case NilUtil.strip_int (con_head_normalize(D,con))
        of SOME intsize => intsize
 	| NONE => c_error(D,con,"Expected the integer type"))
-       
-  fun strip_exntag (D,con) = 
+
+  fun strip_exntag (D,con) =
     (case NilUtil.strip_exntag (con_head_normalize(D,con))
        of SOME arg => arg
 	| NONE => c_error(D,con,"Expected the exn type"))
 
-  fun strip_record (D,con) = 
+  fun strip_record (D,con) =
     (case NilUtil.strip_record (con_head_normalize(D,con))
        of SOME arg => arg
 	| NONE => c_error(D,con,"Expected the record type"))
 
-  fun strip_float (D,con) = 
+  fun strip_float (D,con) =
     (case NilUtil.strip_float (con_head_normalize(D,con))
        of SOME arg => arg
 	| NONE => c_error(D,con,"Expected the float type"))
 
-  fun strip_boxfloat (D,con) = 
+  fun strip_boxfloat (D,con) =
     (case NilUtil.strip_boxfloat (con_head_normalize(D,con))
        of SOME arg => arg
 	| NONE => c_error(D,con,"Expected the boxfloat type"))
@@ -403,24 +404,24 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
   (*PRE: kind is standard
    *)
-  fun is_type kind = 
+  fun is_type kind =
     (case kind
        of Type_k => true
         | SingleType_k _ => true
 	| _ => false)
 
-  fun is_type' D kind = 
-    (case kind_standardize(D,kind) 
+  fun is_type' D kind =
+    (case kind_standardize(D,kind)
        of Type_k => true
 	| SingleType_k _ => true
 	| _ => false)
 
 
   local
-      datatype entry = 
-	EXP of exp * NilContext.context 
-      | CON of con * NilContext.context 
-      | EQCON of con * con * NilContext.context 
+      datatype entry =
+	EXP of exp * NilContext.context
+      | CON of con * NilContext.context
+      | EQCON of con * con * NilContext.context
       | KIND of kind * NilContext.context
       | SUBKIND of kind * kind * NilContext.context
       | BND of bnd * NilContext.context
@@ -452,29 +453,29 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  stack := (tl (!stack))) handle Empty => error (locate "pop") "Pop from empty stack")
     fun show_stack() = let val st = !stack
 			   val _ = clear_stack()
-			   fun show (EXP(e,context)) = 
+			   fun show (EXP(e,context)) =
 				     (print "exp_valid called with expression =\n";
 				      pp_exp e;
-				      print "\nand minimal context"; 
+				      print "\nand minimal context";
 				      NilContext.print_context (NilContext.exp_error_context (context,e));
 				      print "\n\n")
 			     | show (CON(c,context)) =
 				     (print "con_valid called with constructor =\n";
 				      pp_con c;
-				      print "\nand minimal context"; 
+				      print "\nand minimal context";
 				      NilContext.print_context (NilContext.con_error_context (context,c));
 				      print "\n\n")
 			     | show (EQCON(c1,c2,context)) =
 				     (print "con_equiv called with constructor =\n";
 				      pp_con c1; print "\nand\n";
 				      pp_con c2;
-				      print "\nand minimal context"; 
+				      print "\nand minimal context";
 				      NilContext.print_context (NilContext.cons_error_context (context,[c1,c2]));
 				      print "\n\n")
 			     | show (KIND(k,context)) =
 				     (print "kind_valid called with kind =\n";
 				      pp_kind k;
-				      print "\nand context"; 
+				      print "\nand context";
 				      NilContext.print_context (NilContext.kind_error_context (context,k));
 				      print "\n\n")
 			     | show (SUBKIND(k1,k2,context)) =
@@ -482,7 +483,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 				      pp_kind k1;
 				      print "\n                 and kind2 =\n";
 				      pp_kind k2;
-				      print "\nand context"; 
+				      print "\nand context";
 				      NilContext.print_context (NilContext.kinds_error_context (context,[k1,k2]));
 				      print "\n\n")
 			     | show (BND(b,context)) =
@@ -492,7 +493,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 				      print "\n\n")
 			     | show (MODULE(m,context)) =
 				     (print "module_valid called with module =\n";
-				      Ppnil.pp_module 
+				      Ppnil.pp_module
                                         {module = m,
                                          header = "",
                                          name = "",
@@ -513,19 +514,19 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   and subeq_phase true (p1,p2) = p1 = p2
     | subeq_phase false (p1,p2) = sub_phase(p1,p2)
 
-  and subeq_kind is_eq ((D,T),kind1,kind2) = 
+  and subeq_kind is_eq ((D,T),kind1,kind2) =
     let
       val _ = push_subkind(kind1,kind2,D)
 
-      fun sub_one ((var1,kind1),(var2,kind2),(D,rename1,rename2)) = 
+      fun sub_one ((var1,kind1),(var2,kind2),(D,rename1,rename2)) =
 	let
 	  val kind1 = alphaCRenameKind rename1 kind1
 	  val kind2 = alphaCRenameKind rename2 kind2
 
-	  val (D',rename1,rename2) = 
+	  val (D',rename1,rename2) =
 	    let
-	      val var' = 
-		if NilContext.bound_con(D,var1) then 
+	      val var' =
+		if NilContext.bound_con(D,var1) then
 		  if NilContext.bound_con(D,var2) then
 		    derived_var var1
 		  else var2
@@ -539,21 +540,21 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  (subeq_kind is_eq ((D,T),kind1,kind2),(D',rename1,rename2))
 	end
 
-      fun sub_all D (vks1,vks2) = 
+      fun sub_all D (vks1,vks2) =
 	 foldl_all2 sub_one (D,Alpha.empty_context(),Alpha.empty_context()) (vks1,vks2)
 
-      val res = 
-      (case (kind1,kind2) 
+      val res =
+      (case (kind1,kind2)
 	 of (Type_k, Type_k) => true
 	  | (Type_k,_) => false
 	  | (Single_k _,_) => subeq_kind is_eq ((D,T), kind_standardize(D,kind1), kind2)
 	  | (_,Single_k _) => subeq_kind is_eq ((D,T), kind1, kind_standardize(D,kind2))
 	  | (SingleType_k _ ,Type_k) => true
-	  | (SingleType_k (c1),SingleType_k (c2)) => 
+	  | (SingleType_k (c1),SingleType_k (c2)) =>
 	     subtimer("SubKind:st",type_equiv')((D,T),c1,c2)
 	  | (SingleType_k (c1), _) => false
 
-	  | (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
+	  | (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) =>
 	   (if eq_len (formals1,formals2) then
 	      let
 		val (formals_ok,(D,rename2,rename1)) = sub_all D (formals2,formals1)
@@ -561,14 +562,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		val return1 = alphaCRenameKind rename1 return1
 		val return2 = alphaCRenameKind rename2 return2
 	      in
-		formals_ok andalso 
-		same_openness (openness1,openness2) andalso 
+		formals_ok andalso
+		same_openness (openness1,openness2) andalso
 		  subeq_kind is_eq ((D,T),return1,return2)
 	      end
 	    else
 	      (lprintl "formals of different lengths!!";
 	       false))
-	  | (Record_k elts1,Record_k elts2) => 
+	  | (Record_k elts1,Record_k elts2) =>
 	   let
 	     val elts1 = Sequence.toList elts1
 	     val elts2 = Sequence.toList elts2
@@ -576,7 +577,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     val (labels1,vks1) = split_lbls elts1
 	     val (labels2,vks2) = split_lbls elts2
 	   in
-	     eq_len (elts1,elts2) andalso 
+	     eq_len (elts1,elts2) andalso
 	     (#1 (sub_all D (vks1,vks2))) andalso
 	     all2 eq_label (labels1,labels2)
 	   end
@@ -601,9 +602,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   (* Given a well-formed context D and well-formed constructors c1 and c2 of kind k,
    return whether they are equivalent at well-formed kind k. *)
   (* note: wrapper function at end of file redefines con_equiv! *)
-  and con_equiv (D,c1,c2,k,sk) : bool = 
+  and con_equiv (D,c1,c2,k,sk) : bool =
     flagtimer (equiv_total_profile,"Tchk:equiv_total", con_equiv_wrapper) ((D,Trail.empty),c1,c2,k,sk)
-  and con_equiv_wrapper args = 
+  and con_equiv_wrapper args =
     let
 
       val alpha_subequiv_con  = fn st => flagtimer(equiv_profile,"Tchk:Equiv:alpha_subequiv",alpha_subequiv_con st)
@@ -627,10 +628,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  end
 	else (insert_kind_equation(D,var,con,kind),alpha)
 
-      fun bind_kind_eqn(state as (D,alpha),var,con,kind) = 
+      fun bind_kind_eqn(state as (D,alpha),var,con,kind) =
 	bind_kind_eqn'(state,var,alphaCRenameCon alpha con,alphaCRenameKind alpha kind)
 
-      fun bind_eqn(state as (D,alpha),var,con) = 
+      fun bind_eqn(state as (D,alpha),var,con) =
 	let val con = alphaCRenameCon alpha con
 	in
 	  if NilContext.bound_con (D,var) then
@@ -647,18 +648,18 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val bind_kind_eqn' = flagtimer(equiv_profile,"Tchk:Equiv:bind_kind_eqn'",bind_kind_eqn')
       val bind_eqn      = flagtimer(equiv_profile,"Tchk:Equiv:bind_eqn",bind_eqn)
 
-      fun instantiate_formals(state,vklist,actuals) = 
+      fun instantiate_formals(state,vklist,actuals) =
 	let
 	  fun folder ((var,k),actual,state) = bind_kind_eqn(state,var,actual,k)
 	in foldl2 folder state (vklist,actuals)
 	end
 
-      fun con_equiv (args as (state,c1,c2,k,sk)) : bool = 
+      fun con_equiv (args as (state,c1,c2,k,sk)) : bool =
 	let val res = (alpha_subequiv_con sk (c1,c2)) orelse (con_equiv' args)
 	in res
 	end
 
-      and con_equiv' ((D,T),c1,c2,k,sk) = 
+      and con_equiv' ((D,T),c1,c2,k,sk) =
 	let
 
 	  fun compare_list2 ([],c) = false
@@ -671,20 +672,20 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   * PRE:  not (done1 and done2)
 	   *    :  Forall ci in c1s and cj in c2s, not (alpha_sub_equiv_con sk (ci,cj))
 	   *)
-	  fun compare (D,cc1 as c1::_,done1,cc2 as c2::_,done2) = 
+	  fun compare (D,cc1 as c1::_,done1,cc2 as c2::_,done2) =
 	    let
-	      val (D,c1,path1) = 
+	      val (D,c1,path1) =
 		if done1 then (D,c1,false)
-		else 
+		else
 		  let
 		    val ((D,alpha),c1,path) = context_beta_reduce ((D,Alpha.empty_context()),c1)
 		    val c1 = alphaCRenameCon alpha c1
 		  in (D,c1,path)
 		  end
 
-	      val (D,c2,path2) = 
+	      val (D,c2,path2) =
 		if done2 then (D,c2,false)
-		else 
+		else
 		  let
 		    val ((D,alpha),c2,path) = context_beta_reduce ((D,Alpha.empty_context()),c2)
 		    val c2 = alphaCRenameCon alpha c2
@@ -693,17 +694,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	      val eq = (((not done1) andalso compare_list1(c1,c2::cc2)) orelse
 			((not done2) andalso compare_list2(c1::cc1,c2)))
-	    in 
+	    in
 	      if eq then (D,c1,c2,true)
 	      else
 		let
-		  val (c1,done1) = 
+		  val (c1,done1) =
 		    if path1 then
 		      (case find_kind_equation (D,c1)
 			 of SOME con => (con,false)
 			  | NONE => (c1,true))
 		    else (c1,true)
-		  val (c2,done2) = 
+		  val (c2,done2) =
 		    if path2 then
 		      (case find_kind_equation (D,c2)
 			 of SOME con => (con,false)
@@ -714,9 +715,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		end
 	    end
 	  val _ = push_eqcon(c1,c2,D)
-	  val res = 
+	  val res =
 	    case k of
-	      Type_k => 
+	      Type_k =>
 		if !compare_paths then
 		  (let
 
@@ -734,29 +735,29 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		    val (D,c2) = context_reduce_hnf(D,c2)
 		  in con_structural_equiv((D,T),c1,c2,sk)
 		  end
-	      
+
 	    | SingleType_k c => true
 	    | Single_k c => true
-	    | Record_k lvk_seq => 
-		let 
+	    | Record_k lvk_seq =>
+		let
 		  val (D,c1) = context_reduce_hnf(D,c1)
 		  val (D,c2) = context_reduce_hnf(D,c2)
 		  fun folder (((l,v),k),(state as (D,alpha),equal)) =
-		    let 
+		    let
 		      val k = alphaCRenameKind alpha k
 		      val equal = equal andalso con_equiv'((D,T),Proj_c(c1,l),Proj_c(c2,l),k,sk)
-		      val state = bind_kind_eqn'(state,v,Proj_c(c1,l),k)  
+		      val state = bind_kind_eqn'(state,v,Proj_c(c1,l),k)
 		    in  (state,equal)
 		    end
-		in (case (c1,c2) 
+		in (case (c1,c2)
 		      of (Mu_c _,Mu_c _) => alpha_subequiv_con sk (c1,c2) orelse con_structural_equiv((D,T),c1,c2,sk)
 		       | _ => #2 (Sequence.foldl folder ((D,Alpha.empty_context()),true) lvk_seq))
 		end
-	    | Arrow_k (openness,vklist,k) => 
-		let 
-		  fun folder ((v,k),(D,alpha)) = 
+	    | Arrow_k (openness,vklist,k) =>
+		let
+		  fun folder ((v,k),(D,alpha)) =
 		    let val k = alphaCRenameKind alpha k
-		    in 
+		    in
 		      if NilContext.bound_con(D,v) then
 			let val vnew = fresh_var()
 			    val D = insert_kind(D,vnew,k)
@@ -769,31 +770,31 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		  val k = alphaCRenameKind rename k
 		  val c1 = App_c(c1,args)
 		  val c2 = App_c(c2,args)
-		in  con_equiv'((D,T),c1,c2,k,sk) 
+		in  con_equiv'((D,T),c1,c2,k,sk)
 		end
 	  val _ = pop()
 	  val _ = if res then ()
-		  else if !debug then 
+		  else if !debug then
 		    (print "con_equiv' returning false\n";
 		     print "subkinding = "; print (Bool.toString sk); print "\n";
 		     print "c1 = "; Ppnil.pp_con c1; print "\n";
 		     print "c2 = "; Ppnil.pp_con c2; print "\n";
 		     print "k = "; Ppnil.pp_kind k; print "\n";
-		     (*		  print "min context for c1,c2 = "; 
+		     (*		  print "min context for c1,c2 = ";
 		      NilContext.print_context (Nilcontext.cons_error_context (D,[c1,c2])); print "\n";*)
 		     print "\n") else ()
 	in  res
 	end
       (* The substitution returned maps variables in the second list to the first. *)
       and vklist_equiv ((D,T), vklist1, vklist2) : context * Alpha.alpha_context * bool =
-	let 
-	  fun folder((v1,k1),(v2,k2),(D,rename,match)) = 
-	    let 
+	let
+	  fun folder((v1,k1),(v2,k2),(D,rename,match)) =
+	    let
 	      val k1 = alphaCRenameKind rename k1
 	      val k2 = alphaCRenameKind rename k2
 
 	      val match = match andalso kind_equiv' ((D,T),k1,k2)
-	      val (D,rename) = 
+	      val (D,rename) =
 		if NilContext.bound_con (D,v1) then
 		  let
 		    val vnew = Name.derived_var v1
@@ -805,22 +806,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		else (insert_kind(D,v1,k1),Alpha.rename(rename,v2,v1))
 	    in  (D,rename,match)
 	    end
-	in  
+	in
 	  if (length vklist1 = length vklist2)
 	    then Listops.foldl2 folder (D,Alpha.empty_context(),true) (vklist1, vklist2)
 	  else (D, Alpha.empty_context(), false)
 	end
-      
+
       and clist_equiv ((D,T), cRename, clist1, clist2,sk) : context * (Alpha.alpha_context * Alpha.alpha_context) * bool =
-	let 
-	  fun folder(c1, c2, (D, eRename, cRename, match)) = 
-	    let 
+	let
+	  fun folder(c1, c2, (D, eRename, cRename, match)) =
+	    let
 	      val c1 = alphaECRenameCon (eRename,cRename) c1
 	      val c2 = alphaECRenameCon (eRename,cRename) c2
 	      val match = match andalso con_equiv((D,T),c1,c2,Type_k,sk)
-		
-	      fun bind(D,eRename,v,c) = 
-		if NilContext.bound_exp (D,v) then 
+
+	      fun bind(D,eRename,v,c) =
+		if NilContext.bound_exp (D,v) then
 		  let val vnew = Name.derived_var v
 		  in (Alpha.rename (eRename,v,vnew),insert_con(D,vnew,c)) end
 		else (eRename,insert_con(D,v,c))
@@ -828,7 +829,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    in  (D,eRename,cRename,match)
 	    end
 	in  if (length clist1 = length clist2)
-	      then 
+	      then
 		let val (D, eRename, cRename, match) = foldl2 folder (D,Alpha.empty_context(),cRename,true) (clist1,clist2)
 		in  (D, (eRename, cRename), match)
 		end
@@ -852,14 +853,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     end
 	     )
 
-	  val res =   
+	  val res =
 	      (case (c1,c2) of
-		 (Prim_c(Record_c labs1,clist1), 
+		 (Prim_c(Record_c labs1,clist1),
 		  (Prim_c(Record_c labs2,clist2))) =>
 		 (eq_list(eq_label,labs1,labs2) andalso
 		  #3(clist_equiv((D,T),Alpha.empty_context(),clist1,clist2,sk)))
 	       | (Prim_c(pcon1 as Sum_c{tagcount=tagcount1,totalcount=totalcount1,
-					known=known1}, clist1), 
+					known=known1}, clist1),
 		  Prim_c(pcon2 as Sum_c{tagcount=tagcount2,totalcount=totalcount2,
 					known=known2}, clist2)) =>
 		 let val carriers = TilWord32.uminus(totalcount1,tagcount1)
@@ -872,21 +873,21 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      | (SOME w1, NONE, true) => true
 		      | _ => false)
 		   val _ = sum_equiv_count()
-		 in  
-		   res1 andalso 
+		 in
+		   res1 andalso
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,k,sk),
 					  clist1,clist2)
 		 end
 	       | (Prim_c(Vararg_c(o1,eff1),[argc1,resc1]),
-		  Prim_c(Vararg_c(o2,eff2),[argc2,resc2])) => 
+		  Prim_c(Vararg_c(o2,eff2),[argc2,resc2])) =>
 		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso
 		 con_equiv((D,T),argc2,argc1,Type_k,sk) andalso
 		 con_equiv((D,T),resc1,resc2,Type_k,sk)
-	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
+	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) =>
 		 let
 		   val sk' = sk andalso (NilDefs.covariant_prim pcon1)
 		 in
-		   NilUtil.primequiv(pcon1,pcon2) andalso 
+		   NilUtil.primequiv(pcon1,pcon2) andalso
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,Type_k,sk'),
 				   clist1,clist2)
 		 end
@@ -894,17 +895,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       (* This case is purely structural comparison; when
 		!equiv_shao_recursion is false all mu's will be
 		compared this way and no other way. *)
-	       | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
-		 let 
-		   fun do_mu () = 
-		     let 
-		       
+	       | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) =>
+		 let
+		   fun do_mu () =
+		     let
+
 		       val vc1 = Sequence.toList defs1
 		       val vc2 = Sequence.toList defs2
-			 
-		       fun build (D,rename) ((v1,_)::rest1,(v2,_)::rest2) = 
+
+		       fun build (D,rename) ((v1,_)::rest1,(v2,_)::rest2) =
 			 let
-			   val (D,rename) = 
+			   val (D,rename) =
 			     if NilContext.bound_con (D,v1) then
 			       if NilContext.bound_con (D,v2) then
 				 let val vnew = Name.derived_var v1
@@ -913,20 +914,20 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 				 in (insert_kind(D,vnew,Type_k),rename) end
 			       else (insert_kind(D,v2,Type_k),Alpha.rename(rename,v1,v2))
 			     else (insert_kind(D,v1,Type_k),
-				   if eq_var(v1,v2) then rename 
+				   if eq_var(v1,v2) then rename
 				   else Alpha.rename (rename,v2,v1))
 			 in  build (D,rename) (rest1,rest2)
 			 end
 			 | build acc _ = acc
 
-		       val (D,rename) = if (ir1 andalso ir2) then build (D,Alpha.empty_context()) (vc1,vc2) 
+		       val (D,rename) = if (ir1 andalso ir2) then build (D,Alpha.empty_context()) (vc1,vc2)
 					else (D,Alpha.empty_context())
 
-		       fun pred ((_,c1),(_,c2)) = 
+		       fun pred ((_,c1),(_,c2)) =
 			 let val c1 = alphaCRenameCon rename c1
 			     val c2 = alphaCRenameCon rename c2
 			 in con_equiv((D,T),c1,c2, Type_k, false) (* no subtyping *) end
-		     in  
+		     in
 		       (ir1 = ir2) andalso eq_list(pred,vc1,vc2)
 		     end
 
@@ -937,10 +938,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 			    tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},
 		 AllArrow_c {openness=o2,effect=eff2,
 			     tFormals=t2,eFormals=e2,fFormals=f2,body_type=b2}) =>
-		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso 
+		 o1 = o1 andalso (sub_effect(sk,eff1,eff2)) andalso f1 = f2 andalso
 		 let val (D,cRename,match) = vklist_equiv((D,T),t1,t2)
 		 in  match andalso
-		   let val (D,rename,match) = 
+		   let val (D,rename,match) =
 		     clist_equiv((D,T),cRename,e2,e1,sk)
 		       val b1 = alphaECRenameCon rename b1
 		       val b2 = alphaECRenameCon rename b2
@@ -949,7 +950,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   end
 		 end
 
-	     | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
+	     | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) =>
 		 let
 		   val (D,_,match) = clist_equiv((D,T),Alpha.empty_context(),
 							  clist1,
@@ -958,12 +959,12 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in  type_equiv(D,c1,c2)
 		 end
 
-	     | (Crecord_c lclist, _) => 
+	     | (Crecord_c lclist, _) =>
 		 error' "Crecord given to con_structural_equiv: not WHNF"
-		 
+
 	     | (Let_c _, _) => error' "Let_c given to con_structural_equiv: not WHNF"
-		 
-	     | (Proj_c (con1,l1), Proj_c(con2,l2)) => 
+
+	     | (Proj_c (con1,l1), Proj_c(con2,l2)) =>
 		 ((eq_label(l1,l2)) andalso (con_structural_equiv((D,T),con1,con2,false))) orelse
 		 (!equiv_shao_recursion andalso   (* Possibly "rescue" the equivalence with Shao's eqn. *)
 		  (case (con1,con2)
@@ -977,10 +978,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 if con_structural_equiv((D,T),f1,f2,false) then
 		   (case kind_of (D,f1) of
 		      Arrow_k(openness,vklist,k) =>
-			let     
+			let
 			  fun folder ((v,k),c1,c2, (state as (D,alpha),equal)) =
-			    if equal then 
-			      let 
+			    if equal then
+			      let
 				val k = alphaCRenameKind alpha k
 				val equal = con_equiv((D,T),c1,c2,k,false)
 				val D = bind_kind_eqn'(state,v,c1,k)
@@ -996,7 +997,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		    Coercion_c {vars=vars2,from=from2,to=to2}) =>
 		   length vars1 = length vars2 andalso
 		   let
-		     fun folder(v1,v2,(D,rename)) = 
+		     fun folder(v1,v2,(D,rename)) =
 		       if NilContext.bound_con (D,v1) then
 			 let
 			   val vnew = Name.derived_var v1
@@ -1017,8 +1018,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   end
 	     | (Var_c v, Var_c v') => eq_var(v,v')
 	     | _ => false)
-		 
-	    val _ = if res then () 
+
+	    val _ = if res then ()
 		    else if !debug then
 		      (print "con_structural_equiv returning false\n";
 		       print "c1 = "; Ppnil.pp_con c1; print "\n";
@@ -1027,25 +1028,25 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		       print_context (cons_error_context (D,[c1,c2]));
 		       print "\n") else ()
 	in res
-	end 
+	end
       val res = con_equiv args
     in res
     end
 
 
-  fun assertWellFormed context = 
+  fun assertWellFormed context =
     let
       val debug' = !debug
       val _ = debug := false
-      val res = 
+      val res =
 	((NilContext.is_well_formed (kind_valid,con_valid,sub_kind) context, fn () => ())
 	 handle any => (debug := debug';raise any))
       val _ = debug := debug'
     in
       res
     end
-  and kind_valid (D,kind) = 
-    let 
+  and kind_valid (D,kind) =
+    let
       val _ = push_kind(kind,D)
       val _ = if (!show_calls)
 		then (print "kind_valid called with kind =\n";
@@ -1054,7 +1055,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      print "\n\n")
 	      else ()
 
-      val _ = 
+      val _ =
 	if !debug then
 	  assert (locate "kind_valid - PRE")
 	  [
@@ -1072,59 +1073,59 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in  kind
     end
 
-  and kind_valid' (D : context, kind : kind) : kind = 
+  and kind_valid' (D : context, kind : kind) : kind =
     (case kind of
        Type_k => kind
      | SingleType_k con => (con_analyze(D,con,Type_k);kind)
      | Single_k con => con_valid(D,con)
-     | Record_k elts => 
+     | Record_k elts =>
 	 let
-	   fun folder (((l,v),k),D) = 
+	   fun folder (((l,v),k),D) =
 	     let val kstd = kind_valid (D,k)
 	     in (((l,v),kstd),insert_stdkind (D,v,kstd))
 	     end
 	   val (elts,_) = Sequence.foldl_acc folder D elts
 	   fun compare (((l1,_),_),((l2,_),_)) = Name.compare_label (l1,l2)
-	   val _ = 
+	   val _ =
 	     (no_dups compare elts) orelse
 	     (k_error (D,kind,"Labels in record kind not distinct"))
 	 in Record_k elts
 	 end
-     | Arrow_k (openness, formals, return) => 
+     | Arrow_k (openness, formals, return) =>
 	 let val (formals,D) = vklist_valid (D,formals)
 	 in  Arrow_k(openness,formals,kind_valid (D,return))
 	 end)
-  and vklist_valid (D,vklist) = 
-    let 
-      fun folder ((v,k),D) = 
+  and vklist_valid (D,vklist) =
+    let
+      fun folder ((v,k),D) =
 	let val kstd = kind_valid (D,k)
 	in ((v,kstd),insert_stdkind (D,v,kstd))
 	end
     in foldl_acc folder D vklist
     end
 
-  and pcon_analyze (D,pcon,args) = 
+  and pcon_analyze (D,pcon,args) =
     let
       val type_analyze = curry2 type_analyze
     in
      (case pcon of
-	 (Record_c labels) => 
+	 (Record_c labels) =>
 	   let val _ = app (type_analyze D) args
 	   in if labels_distinct labels then ()
 	      else (error (locate "pcon_valid") "Record contains duplicate field labels")
 	   end
-       | (Sum_c {known,totalcount,tagcount}) => 
+       | (Sum_c {known,totalcount,tagcount}) =>
 	   let
 	     val carriers = TilWord32.uminus(totalcount,tagcount)
 	     val k = kind_type_tuple (TilWord32.toInt carriers)
-	     val _ = 
+	     val _ =
 	       (case args
 		  of [con] => con_analyze(D,con,k)
 		   | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
-	     val _ = 
-	       (case known 
-		  of SOME i => 
-		    (Word32.<=(Word32.fromInt 0,i) andalso 
+	     val _ =
+	       (case known
+		  of SOME i =>
+		    (Word32.<=(Word32.fromInt 0,i) andalso
 		     Word32.<(i,totalcount)) orelse
 		    (perr_c (Prim_c (pcon,args));
 		     error (locate "pcon_valid") "Illegal index to sum constructor")
@@ -1134,7 +1135,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        | (Vararg_c _) =>  app (type_analyze D) args
        | _ => ())
     end
-  and con_analyze (D : context, constructor : con,kind : kind) : unit = 
+  and con_analyze (D : context, constructor : con,kind : kind) : unit =
     let val type_analyze = curry2 type_analyze
 	val _ =
 	    if !show_calls then
@@ -1146,7 +1147,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    else ()
     in
       (case (constructor,kind) of
-	 (constructor,SingleType_k c) => 
+	 (constructor,SingleType_k c) =>
 	 let val _ = type_analyze D constructor
 	     val _ = if type_equiv(D,constructor,c) then ()
 		     else cc_error (D,constructor,c,"c=/=c' in c::S(c')")
@@ -1155,8 +1156,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
        | (Prim_c (pcon,args),  Type_k) =>  pcon_analyze(D,pcon,args)
        | (Mu_c (is_recur,defs),Record_k lvk_seq) =>
-	 let 
-	   val D = if is_recur 
+	 let
+	   val D = if is_recur
 		     then let fun folder((v,_),D) = insert_stdkind (D,v,Type_k)
 			  in  Sequence.foldl folder D defs end
 		   else D
@@ -1168,18 +1169,18 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   val (tFormals,D) = vklist_valid (D,tFormals)
 
 	   fun apper c = type_analyze D c
-	   
+
 	   val _ = app apper eFormals
 	   val _ = type_analyze D body_type
 	 in ()
 	 end
-       | (ExternArrow_c (args,body),Type_k) => 
+       | (ExternArrow_c (args,body),Type_k) =>
 	 let
 	   val _ = map (type_analyze D) args
 	   val _ = type_analyze D body
 	 in ()
 	 end
-       | (v as (Var_c var),kind) => 
+       | (v as (Var_c var),kind) =>
 	 let
 	   val _ = sub_kind(D,find_max_kind (D,var),kind)
 	     handle NilContext.Unbound =>
@@ -1194,7 +1195,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        | (Let_c (Parallel,cbnds,con),_) => error' "Parallel bindings not supported yet"
        | (Let_c (Sequential,cbnds,con),kind) =>
 	   let
-	     fun check_bnd (D,maker,Tag) (var,formals,body) = 
+	     fun check_bnd (D,maker,Tag) (var,formals,body) =
 	       let
 		 val kind = lambda_valid(D,Tag,formals,body)
 		 val var' = derived_var var
@@ -1203,9 +1204,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 val D = insert_stdkind_equation(D,var,con,kind)
 	       in D
 	       end
-	     
+
 	     val body_var_opt = strip_var con
-	       
+
 	     fun loop ([],D) = con_analyze(D,con,kind)
 	       | loop (bnd::rest,D) =
 	       (case bnd
@@ -1214,7 +1215,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      ignore(sub_kind(D,lambda_valid(D,Open,formals,body),kind))
 		    else loop(rest,check_bnd (D,Open_cb,Open) args)
 
-		   | Code_cb (args as (var,formals,body)) => 
+		   | Code_cb (args as (var,formals,body)) =>
 		      if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
 			ignore(sub_kind(D,lambda_valid(D,Code,formals,body),kind))
 		      else loop(rest,check_bnd (D,Code_cb,Code) args)
@@ -1223,52 +1224,52 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   in loop (cbnds,D)
 	   end
 
-       | (Closure_c (code,env),kind1 as Arrow_k(Closure,_,_)) => 
+       | (Closure_c (code,env),kind1 as Arrow_k(Closure,_,_)) =>
 	 let
 	   val code_kind =  con_valid (D,code)
 	   (*Or could synthesize on the environment*)
-	   val ((v,klast),vklist,body_kind) = 
+	   val ((v,klast),vklist,body_kind) =
 	      case code_kind of
 	       Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
 	     | _ => (c_error(D,constructor,"Invalid closure: code has wrong kind"))
-		 
+
 	   val kind2 = Arrow_k(Closure,vklist,body_kind)
 	   val _ = sub_kind(D,kind2,kind1)
 	   val _ = (con_analyze(D,env,klast)) handle e => k_error(D,klast,"Illegal kind in Closure2?")
 	 in ()
 	 end
-       | (Crecord_c entries,Record_k lvkseq) => 
+       | (Crecord_c entries,Record_k lvkseq) =>
 	 let
 	   val (labels,cons) = unzip entries
 	   val (labels',vks) = unzip ((Sequence.maptolist (fn ((l,v),k) => (l,(v,k)))) lvkseq)
 	   val _ = con_analyze_vk_list (D,cons,vks)
 	 in
-	   if eq_list (eq_label,labels,labels') then () 
+	   if eq_list (eq_label,labels,labels') then ()
 	   else c_error(D,constructor,"Illegal labels")
 	 end
-       | (Proj_c (rvals,label),kind1) => 
+       | (Proj_c (rvals,label),kind1) =>
 	 let
 	   (*This will never be dependent*)
 	   val record_kind = con_valid (D,rvals)
-	     
+
 	   val kind2 = project_from_kind_nondep (record_kind,label)
 	 in if sub_kind(D,kind2,kind1) then ()
 	    else k_error(D,kind1, "Trying to analyze projection at wrong kind")
 	 end
-       | (App_c (cfun_orig,actuals),kind1) => 
+       | (App_c (cfun_orig,actuals),kind1) =>
 	 let
 	   val cfun_kind = con_valid (D,cfun_orig)
-	     
-	   val (formals,body_kind) = 
+
+	   val (formals,body_kind) =
 	     case cfun_kind of
 	       (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-	     | _ => 
+	     | _ =>
 		 (
 		  print "Invalid kind for constructor application\n";
 		  pp_kind cfun_kind; print "\n";
 		  (c_error(D,constructor,"Invalid kind for constructor application" ))
 		  )
-		 
+
 	   val D = con_analyze_vk_list(D,actuals,formals)
 	 in if sub_kind(D,body_kind,kind1) then ()
 	    else k_error(D,kind1, "Analyzed kind and return kind from app don't match")
@@ -1285,14 +1286,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 ) before (if !show_calls then print "con_analyze returned\n" else ())
     end
   and con_analyze_vk_list (D,cons : con list,
-			   vks : (var * kind) list) = 
+			   vks : (var * kind) list) =
     let
       val origD = D
-      (*Since we do not know if the cons are well-formed, 
-       * we must substitute instead of just using the context.  
+      (*Since we do not know if the cons are well-formed,
+       * we must substitute instead of just using the context.
        * Otherwise, we might accidentally capture an unbound
        * variable in one of the cons. -leaf *)
-      fun folder (c,(v,k),(D,subst)) = 
+      fun folder (c,(v,k),(D,subst)) =
 	let val k = substConInKind subst k
 	    val _ = con_analyze(origD,c,k)
 	    val subst = Subst.C.sim_add subst (v,c)
@@ -1305,14 +1306,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     end
   (* This version renames the parameter variables to avoid shadowing *)
   and con_analyze_vk_list' (D,cons : con list,
-			   vks : (var * kind) list) = 
+			   vks : (var * kind) list) =
     let
       val origD = D
-      (*Since we do not know if the cons are well-formed, 
-       * we must substitute instead of just using the context.  
+      (*Since we do not know if the cons are well-formed,
+       * we must substitute instead of just using the context.
        * Otherwise, we might accidentally capture an unbound
        * variable in one of the cons. -leaf *)
-      fun folder (c,(v,k),(D,subst,alpha)) = 
+      fun folder (c,(v,k),(D,subst,alpha)) =
 	let val k = substConInKind subst k
 	    val _ = con_analyze(origD,c,k)
 	    val subst = Subst.C.sim_add subst (v,c)
@@ -1325,18 +1326,18 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in (D,alpha)
     end
   and type_analyze(D,c) = con_analyze(D,c,Type_k)
-  and con_valid (D : context, constructor : con) : kind = 
-    let 
+  and con_valid (D : context, constructor : con) : kind =
+    let
       val _ = push_con(constructor,D)
 
       val _ = if (!show_calls)
 		then (print "con_valid called with constructor =\n";
-		      pp_con constructor; 
+		      pp_con constructor;
 		      if !show_context then (print "\nand context"; NilContext.print_context D) else ();
 		      print "\n\n")
 	      else ()
 
-      val _ = 
+      val _ =
 	if !debug then
 	  assert (locate "con_valid PRE")
 	  [
@@ -1348,7 +1349,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val _ = if (!show_calls)
 		then (printl "con_valid returned")
 	      else ()
-      val _ = 
+      val _ =
 	if !debug then
 	  assert (locate "con_valid POST")
 	  [
@@ -1371,10 +1372,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       in
 	  (v, NilRename.renameKind (con_valid (D, con)))
       end
-  
-  and con_valid' (D : context, constructor : con) : kind = 
+
+  and con_valid' (D : context, constructor : con) : kind =
     let
-      val kind = 
+      val kind =
 	(case constructor of
 	   (Prim_c (pcon,args)) => ((flagtimer (con_valid_prof,"Tchk:pcon_valid",pcon_analyze) (D,pcon,args);
 				     SingleType_k(constructor))
@@ -1385,7 +1386,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      type_analyze (D,constructor);
 	      SingleType_k(constructor)
 	      )
-	 | (ExternArrow_c (args,body)) => 
+	 | (ExternArrow_c (args,body)) =>
 	   (
 	    type_analyze (D,constructor);
 	    SingleType_k(constructor)
@@ -1398,18 +1399,18 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in  Sequence.foldl folder D defs
 		 end
 	       else D
-		 
+
 	     val _ = app (fn (_,c) => type_analyze (D,c)) (Sequence.toList defs)
 
-	     fun mapper (i,(v,c)) = 
+	     fun mapper (i,(v,c)) =
 		 let val label = generate_tuple_label(i+1)
 		 in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
 		 end
 	     val entries = Sequence.mapcount mapper defs
-		 
+
 	   in  Record_k(entries)
 	   end
-	 | (v as (Var_c var)) => 
+	 | (v as (Var_c var)) =>
 	   let
 	     val kind = (find_max_kind (D,var)
 			 handle NilContext.Unbound =>
@@ -1424,14 +1425,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 | (c as (Let_c (Sequential,cbnds,con))) =>
 	   let
 
-	     val _ = 
+	     val _ =
 	       if !print_lets then
 		 (printl "let is:";
 		  pp_con c;
 		  printl "")
 	       else ()
 
-	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) = 
+	     fun check_bnd ((D,subst),maker,Tag) (var,formals,body) =
 					 let
 							 val kind = lambda_valid(D,Tag,formals,body)
 							 val var' = derived_var var
@@ -1442,9 +1443,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 							 val subst = Subst.C.addr(subst,var,con)
 					 in (D,subst)
 					 end
-	     
+
 	     val body_var_opt = strip_var con
-	       
+
 	     fun loop ([],(D,subst)) = substConInKind subst (con_valid(D,con))
 	       | loop (bnd::rest,state as (D,subst)) =
 	       (case bnd
@@ -1456,27 +1457,27 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		    if (null rest) andalso eq_opt(eq_var,SOME var,body_var_opt) then
 		      substConInKind subst (lambda_valid(D,Code,formals,body))
 		    else loop(rest,check_bnd (state,Code_cb,Code) args)
-		   | Con_cb (var,con) => 
+		   | Con_cb (var,con) =>
 		      let val D = insert_stdkind_equation(D,var,con,con_valid(D,con))
 			  val subst = Subst.C.addr (subst,var,con)
 		      in loop(rest,(D,subst))
 		      end)
 
 	     val res = loop (cbnds,(D,Subst.C.empty()))
-	     val _ = 
+	     val _ =
 					 if !print_lets then
 							 (printl "Kind is:";
 								pp_kind res;
 								printl "")
 					 else ()
 	   in res
-				 
+
 	   end
 
-	 | (Closure_c (code,env)) => 
+	 | (Closure_c (code,env)) =>
 	   let
 	     val code_kind =  con_valid (D,code)
-	     val ((v,closure_k),vklist,body_kind) = 
+	     val ((v,closure_k),vklist,body_kind) =
 	       case code_kind of
 		 Arrow_k (Code ,c_parm::vklist,body_kind) => (c_parm,vklist,body_kind)
 	       | _ => (c_error(D,constructor,"Invalid closure: code component does not have correct kind"))
@@ -1484,16 +1485,16 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     val kind = Arrow_k(Closure,vklist,body_kind)
 	   in varConKindSubst v env kind
 	   end
-	 | (Crecord_c entries) => 
+	 | (Crecord_c entries) =>
 	   let
 	     val _ = if (!trace)
 		       then print "{con_valid processing Crecord_c\n"
 		     else ()
 	     val (labels,cons) = unzip entries
 	     val kinds = map (curry2 con_valid D) cons
-	     val _ =  
+	     val _ =
 	       (labels_distinct labels) orelse
-	       (Ppnil.pp_list Ppnil.pp_label' labels 
+	       (Ppnil.pp_list Ppnil.pp_label' labels
 		("labels are: ",",",";",true);
 		Listops.no_dups (fn (x,y) => let val _ = (printem ["comparing: ",label2string x, " and ",
 								   label2string y," : "])
@@ -1503,25 +1504,25 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		(c_error(D,constructor,"Labels in record of constructors not distinct" )))
 	     val _ = if (!trace)
 		       then print "con_valid done processing Crecord_c\n}"
-		     else () 
-	     val k_entries = 
+		     else ()
+	     val k_entries =
 	       map2 (fn (l,k) => ((l,fresh_named_var "con_valid_record"),k)) (labels,kinds)
 	   in Record_k (Sequence.fromList k_entries)
 	   end
-	 | (Proj_c (rvals,label)) => 
+	 | (Proj_c (rvals,label)) =>
 	   let
 	     (*This will never be dependent*)
 	     val record_kind = con_valid (D,rvals)
-	       
-	     val entry_kinds = 
+
+	     val entry_kinds =
 	       (case record_kind of
 		  Record_k kinds => kinds
-		| other => 
+		| other =>
 		    (c_error(D,constructor,"Projection from constructor of non-record kind")))
 	     val labs = map (#1 o #1) (Sequence.toList entry_kinds)
-	       
+
 	     val _ = if (member_eq(eq_label,label,labs))
-		       then () 
+		       then ()
 		     else (print "attempted to project label ";
 			   pp_label label;
 			   print " from \n";
@@ -1532,27 +1533,27 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   in
 	     project_from_kind_nondep (record_kind,label)
 	   end
-	 | (App_c (cfun_orig,actuals)) => 
+	 | (App_c (cfun_orig,actuals)) =>
 	   let
-	     
+
 	     val cfun_kind = con_valid (D,cfun_orig)
 
-	     val (formals,body_kind) = 
+	     val (formals,body_kind) =
 	       case cfun_kind of
 		 (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-	       | _ => 
+	       | _ =>
 		   (
 		    print "Invalid kind for constructor application\n";
 		      pp_kind cfun_kind; print "\n";
 		      (c_error(D,constructor,"Invalid kind for constructor application" ))
 		      )
 
-	     val (formal_vars,formal_kinds) = unzip formals		   
+	     val (formal_vars,formal_kinds) = unzip formals
 	     val _ = app2 (fn (c,k) => con_analyze(D,c,k)) (actuals,formal_kinds)
 
 	     fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
 	     val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
-	   in  
+	   in
 	     substConInKind subst body_kind
 	   end
 	 | (Coercion_c {vars,from,to}) =>
@@ -1561,8 +1562,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in
       kind
     end
-  and lambda_valid (D,Tag,formals,body) = 
-    let 
+  and lambda_valid (D,Tag,formals,body) =
+    let
       val (formals,D) = vklist_valid (D,formals)
       val body_kind = con_valid(D,body)
     in Arrow_k(Tag,formals,body_kind)
@@ -1574,11 +1575,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   and niltrace_valid (D,nt) =
     let
       val free_vars = TraceOps.get_free_vars nt
-      fun checker v = 
+      fun checker v =
 	(ignore (NilContext.find_kind (D,v)) (*Don't bother with standard kind if ignoring*)
 	 handle NilContext.Unbound =>
 	   (NilContext.print_context D;
-	    error  (locate "niltrace_valid") 
+	    error  (locate "niltrace_valid")
 	    ("variable "^(var2string v)^" not in context")))
     in
       Name.VarSet.app checker free_vars
@@ -1586,7 +1587,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
   and bnds_valid (D,bnds) = let val (etypes,(D,cbnds)) = (foldl_acc bnd_valid' (D,[]) bnds) in (D,rev cbnds,List.concat etypes) end
   and bnd_valid (state,bnd) = bnd_valid' (bnd,state)
-  and bnd_valid'' (bnd : bnd, state : context * conbnd list) = 
+  and bnd_valid'' (bnd : bnd, state : context * conbnd list) =
     let
       val (D,cbnds) = state
 
@@ -1603,7 +1604,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 eFormals = ceFormals,
 		 fFormals = cfFormals,
 		 body_type, ...} = NilUtil.rename_arrow (arr, tFormals)
-		
+
 	  val _ = TilWord32.toInt cfFormals = length fFormals
 	      orelse error (locate "function_valid") "Numbers of float parameters do not match"
 
@@ -1619,11 +1620,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  exp_analyze(D,body,body_type)
 	end
 
-      fun fbnd_valid (openness,defs) = 
+      fun fbnd_valid (openness,defs) =
 	let
 	  val origD = D
 	  val bnd_types = map #1 defs
-	    
+
 	  (*Checks that the decorations are well-formed*)
 	  val _ = Sequence.app_second (curry2 type_analyze D) bnd_types
 	  val D = Sequence.foldl (fn ((v,c),D) => insert_con(D,v,c)) D bnd_types
@@ -1631,10 +1632,10 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in (D,Sequence.toList bnd_types)
 	end
       (*tipe is already checked*)
-      fun do_closure D (tipe,{code,cenv,venv}) = 
+      fun do_closure D (tipe,{code,cenv,venv}) =
 	let
 
-	  val (code_type) = 
+	  val (code_type) =
 	    (find_con (D,code)
 	     handle NilContext.Unbound =>
 	       (printl ("Code pointer "^(var2string code));
@@ -1644,9 +1645,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val (effect,tFormals,eFormals,fFormals,body_type) =
 	    (case strip_arrow (con_head_normalize(D,code_type)) of
 	       SOME {openness = Code,effect,
-		     tFormals,eFormals, fFormals,body_type} => 
+		     tFormals,eFormals, fFormals,body_type} =>
 		 (effect,tFormals,eFormals,fFormals,body_type)
-	     | SOME _ => 		     
+	     | SOME _ =>
 		 (perr_e_c (Var_e code,code_type);
 		  (error (locate "bnd_valid") "Code pointer in closure of illegal type" handle e => raise e))
 	     | NONE => (perr_e_c (Var_e code,code_type);
@@ -1658,11 +1659,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       of c::ff => (c,ff)
 		| _ => error (locate "bnd_valid") "Code doesn't expect type closure")
 
-	  val (clos_c,eFormals) = 
+	  val (clos_c,eFormals) =
 	    (case eFormals
 	       of v::ff => (v,ff)
 		| _ => error (locate "bnd_valid") "Code doesn't expect value closure")
-	    
+
 
 	  (*Check that the environments are appropriate*)
 	  val _ = (con_analyze (D,cenv,kind_standardize(D,clos_k))) handle e => k_error(D,clos_k,"Illegal kind in Closure?")
@@ -1670,29 +1671,29 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	  (* Create the closure type and substitute in the types of the
 	   * environments
-	   *)	    
-	  val closure_type = AllArrow_c {openness=Closure, effect=effect, 
+	   *)
+	  val closure_type = AllArrow_c {openness=Closure, effect=effect,
 					   tFormals = tFormals,
 					   eFormals = eFormals,
 					   fFormals = fFormals,
 					   body_type=body_type}
 	  val closure_type = varConConSubst clos_tv cenv closure_type
-	    
-	  val _ = 
+
+	  val _ =
 	    (sub_type (D,closure_type,tipe)) orelse
 	    (cc_error (D,closure_type,tipe,"Type error in closure"))
 	in ()
 	end
 
-      val res = 
-	(case bnd 
-	   of Con_b (phase, cbnd) => 
+      val res =
+	(case bnd
+	   of Con_b (phase, cbnd) =>
 	     let
 	       val con = fn var => Let_c(Sequential,[cbnd],Var_c var)
-	       val D = (case cbnd of 
-			  Open_cb (args as (var,formals,body)) => 
+	       val D = (case cbnd of
+			  Open_cb (args as (var,formals,body)) =>
 			    insert_stdkind_equation(D,var,con var,lambda_valid(D,Open,formals,body))
-			| Code_cb (args as (var,formals,body)) => 
+			| Code_cb (args as (var,formals,body)) =>
 			    insert_stdkind_equation(D,var,con var,lambda_valid(D,Code,formals,body))
 			| Con_cb  (var,con) => insert_stdkind_equation(D,var,con,con_valid(D,con)))
 
@@ -1709,7 +1710,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     end
 	    | (Fixopen_b defs) => let val (D,etypes) = fbnd_valid(Open,defs) in (etypes,(D,cbnds)) end
 	    | (Fixcode_b defs) => let val (D,etypes) = fbnd_valid(Code,defs) in (etypes,(D,cbnds)) end
-	    | Fixclosure_b (is_recur,defs) => 
+	    | Fixclosure_b (is_recur,defs) =>
 	     let
 	       val origD = D
 	       val (vars_tipes,closures) = unzip (Sequence.toList defs)
@@ -1718,7 +1719,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       val bnd_types = zip vars tipes
 	       val D = insert_con_list (D,bnd_types)
 
-	       val _ = if is_recur 
+	       val _ = if is_recur
 			 then ListPair.app (do_closure D) (tipes,closures)
 		       else ListPair.app (do_closure origD) (tipes,closures)
 	     in
@@ -1726,26 +1727,26 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     end)
     in res
     end
-  and exp_analyze(D : context, exp : exp, con : con) : unit = 
+  and exp_analyze(D : context, exp : exp, con : con) : unit =
     let
       val con' = exp_valid(D,exp)
     in
-      ignore (subtimer("exp_analyze:st",sub_type)(D,con',con) orelse 
+      ignore (subtimer("exp_analyze:st",sub_type)(D,con',con) orelse
 	      (print "Analyzing an expression\n";Ppnil.pp_exp exp;
 	       print "\nof type\n";Ppnil.pp_con con';
 	       print "\nAt type \n";Ppnil.pp_con con;
 	       e_error(D,exp,"Expression cannot be given required type")))
     end
-  and exp_valid (D : context, exp : exp) : con = 
-      let 
+  and exp_valid (D : context, exp : exp) : con =
+      let
 	val _ = push_exp(exp,D)
 	  val _ = if (!show_calls)
 		      then (print "exp_valid called with expression =\n";
-			    pp_exp exp; 
+			    pp_exp exp;
 			    if !show_context then (print "\nand context"; NilContext.print_context D) else ();
 			    print "\n\n")
 		  else ()
-	val _ = 
+	val _ =
 	  if !debug then
 	    assert (locate "exp_valid PRE")
 	    [
@@ -1756,7 +1757,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	val _ = if (!show_calls)
 		  then (printl "exp_valid returned")
 		else ()
-	val _ = 
+	val _ =
 	  if !debug then
 	    assert (locate "exp_valid POST")
 	    [
@@ -1766,52 +1767,52 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val _ = pop()
       in  res
       end
-  and exp_valid' (D : context,exp : exp) : con = 
+  and exp_valid' (D : context,exp : exp) : con =
     let
       val subtimer = fn args => if !profile orelse !exp_profile then Stats.subtimer' args else #2 args
 
-      fun conditionCode_valid (D,arg) = 
-	(case arg 
+      fun conditionCode_valid (D,arg) =
+	(case arg
 	   of Exp_cc exp       => exp_analyze(D,exp,bool_con D)
 	    | And_cc (cc1,cc2) => (conditionCode_valid(D,cc1);
 				   conditionCode_valid(D,cc2))
 	    | Or_cc (cc1,cc2)  => (conditionCode_valid(D,cc1);
 				   conditionCode_valid(D,cc2))
 	    | Not_cc cc        => conditionCode_valid(D,cc))
-	   
+
       (*Do an application node. *)
       fun do_app (openness,app,cons,texps,fexps) =
-	let           
+	let
 	  val sub_type    = subtimer("Tchk:Exp:App:st",sub_type)
 	  val con = exp_valid (D,app)
 
-	  val {openness = openness', tFormals, eFormals, fFormals, body_type,...} = 
+	  val {openness = openness', tFormals, eFormals, fFormals, body_type,...} =
 	    (case strip_arrow (con_head_normalize(D,con)) of
 	       SOME c => c
 	     | NONE => (perr_c (con_head_normalize(D,con));
 			e_error(D,exp,"Application of non-arrow expression" )))
 
-	  val _ = 
+	  val _ =
 	    if same_openness (openness,openness') then
 	      (case (openness,app) of
 		 (Code,Var_e _) => ()
 	       | (Code,_) => e_error(D,exp,"code applied to non-variable")
 	       | _ => ())
 	    else e_error(D,exp,"Error in application - different openness")
-	      
-	  val _ = 
+
+	  val _ =
 	    let
 	      fun do_float (i,[]) = if i <> 0 then e_error(D,exp,"Wrong number of float parameters") else ()
-		| do_float (i,actual::rest) = 
+		| do_float (i,actual::rest) =
 		if is_float_c(con_head_normalize(D,exp_valid(D,actual))) then
 		  do_float(i-1,rest)
 		else
 		  e_error(D,exp,"Expected float for float parameter")
 	    in do_float (Word32.toInt fFormals,fexps)
 	    end
-	      
+
 	  local
-	    fun bind_kind(D,cRename,rev_bnds,var,actual,kind) = 
+	    fun bind_kind(D,cRename,rev_bnds,var,actual,kind) =
 	      if NilContext.bound_con (D,var) then
 		let
 		  val vnew = Name.derived_var var
@@ -1820,16 +1821,16 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		in (D,cRename,(Con_cb(vnew,actual))::rev_bnds)
 		end
 	      else (insert_kind_equation(D,var,actual,kind),cRename,(Con_cb(var,actual))::rev_bnds)
-	      
-	    fun do_one ((var,kind),actual,(D,rename,cbnds)) = 
+
+	    fun do_one ((var,kind),actual,(D,rename,cbnds)) =
 	      let
 		val kind = alphaCRenameKind rename kind
 		val kind = kind_standardize(D,kind)
 		val _ = con_analyze(D,actual,kind)
 	      in bind_kind (D,rename,cbnds,var,actual,kind)
 	      end
-	  in	      
-	    val (D,rename,rev_bnds) = 
+	  in
+	    val (D,rename,rev_bnds) =
 	      (foldl2 do_one (D,Alpha.empty_context(),[]) (tFormals,cons))
 	      handle e => (print "Possible Formal/Actual length mismatch?\n";
 			   print "Applying "; Ppnil.pp_exp app; print "\n";
@@ -1843,9 +1844,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  local
 	    (*Expression variables aren't inter-dependent?*)
 
-	    fun do_one (con,exp) = 
+	    fun do_one (con,exp) =
 		let
-		  val con = alphaCRenameCon rename con 
+		  val con = alphaCRenameCon rename con
 		  val _ = exp_analyze(D,exp,con)
 		in ()
 		end
@@ -1859,13 +1860,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val body_type = alphaCRenameCon rename body_type
 	in makeLetC cbnds body_type
 	end
-      
+
       (*Type check and subtype a list of expressions against a list of types
        *)
       fun do_args (D,formals,actuals) =
 	let
 	  val sub_type    = subtimer("Tchk:Exp:Arg:st",sub_type)
-	  fun do_one (formal,actual) = 
+	  fun do_one (formal,actual) =
 	    let val found = exp_valid(D,actual)
 	    in
 	      if sub_type(D,found,formal) then ()
@@ -1878,13 +1879,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       fun do_coerce (ccn,cons,arg) =
 	let
 	  val ccon = exp_valid(D,ccn)
-	  val {vars,from,to} = 
+	  val {vars,from,to} =
 	    (case strip_coercion (con_head_normalize(D,ccon))
 	       of SOME x => x
 	     | NONE => e_error(D,exp,"Coercing with a non-coercion value"))
-	       
+
 	  local
-	    fun bind_kind(D,cRename,rev_bnds,var,actual) = 
+	    fun bind_kind(D,cRename,rev_bnds,var,actual) =
 	      if NilContext.bound_con (D,var) then
 		let
 		  val vnew = Name.derived_var var
@@ -1893,14 +1894,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		in (D,cRename,(Con_cb(vnew,actual))::rev_bnds)
 		end
 	      else (insert_kind_equation(D,var,actual,Type_k),cRename,(Con_cb(var,actual))::rev_bnds)
-	      
-	    fun do_one (var,actual,(D,rename,cbnds)) = 
+
+	    fun do_one (var,actual,(D,rename,cbnds)) =
 	      let
 		val _ = type_analyze(D,actual)
 	      in bind_kind (D,rename,cbnds,var,actual)
 	      end
-	  in	      
-	    val (D,rename,rev_bnds) = 
+	  in
+	    val (D,rename,rev_bnds) =
 	      (foldl2 do_one (D,Alpha.empty_context(),[]) (vars,cons))
 	      handle e => (print "Possible Formal/Actual length mismatch?\n";raise e)
 	    val cbnds = rev rev_bnds
@@ -1908,27 +1909,27 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	  val from = alphaCRenameCon rename from
 	  val _ = exp_analyze (D,arg,from)
-	    
+
 	  val return_type = alphaCRenameCon rename to
-	  
-	in 
+
+	in
 	  makeLetC cbnds return_type
 	end
 
       (* Check a value*)
-      fun value_valid (D,value) = 
+      fun value_valid (D,value) =
 	(case value of
 	   int (intsize,_) => Prim_c (Int_c intsize,[])
 	 | uint (intsize,_) => Prim_c (Int_c intsize,[])
 	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
-	 | vector (con,vec) =>  
+	 | vector (con,vec) =>
 	     let
 	       val sub_type    = subtimer("Tchk:Exp:Val:st",sub_type)
 	       val _ = type_analyze (D,con)
-	       fun check exp = 
+	       fun check exp =
 		 let
 		   val con' = exp_valid (D,exp)
-		   val _ = 
+		   val _ =
 		     (sub_type (D,con',con)) orelse
 		     (e_error(D,Const_e value,"Vector contains expression of incorrect type" handle e => raise e))
 		 in()
@@ -1958,11 +1959,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val con_head_normalize = subtimer("Tchk:Switch:HNF",con_head_normalize)
 	  val exp_valid   = subtimer("Tchk:Switch:exp_valid",exp_valid)
 *)
-	  fun sum_exn (mk_itype,check_arg) (D,arg,bound,arms,default,result_type) = 
+	  fun sum_exn (mk_itype,check_arg) (D,arg,bound,arms,default,result_type) =
 	    let
 	      val result_type' = con_head_normalize(D,result_type)
 	      val sub_type    = subtimer("Tchk:Exp:Swt:Arm:st",sub_type)
-	      fun do_arm (index,tr,exp) = 
+	      fun do_arm (index,tr,exp) =
 		let
 		  val D = insert_con(D,bound,mk_itype (D,index))
 		  val con = exp_valid(D,exp)
@@ -1970,26 +1971,26 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		in
 		  sub_type(D,con,result_type')
 		end
-	      
+
 	      val argcon = exp_valid(D,arg)
-		
-	      val _ = 
+
+	      val _ =
 		(type_analyze(D,result_type);
-		 
+
 		 (check_arg(D,argcon)) orelse
 		 (e_error(D,Switch_e switch,"Switch argument does not match found type"));
-		 
+
 		 if all do_arm arms then ()
 		 else e_error(D,Switch_e switch,"Arms to switch are invalid");
-		   
+
 		 do_default (D,default,arms,result_type')
 		 )
 	    in result_type
 	    end
 	  val sum_exn = fn fargs => subtimer ("Tchk:Exp:sum_exn",sum_exn fargs)
-	  val res = 
+	  val res =
 	    (case switch
-	       of Sumsw_e {arg,sumtype,bound,arms,default,result_type} => 
+	       of Sumsw_e {arg,sumtype,bound,arms,default,result_type} =>
 		 let
 		   val _ = type_analyze(D,sumtype)
 		   val sumtype = con_head_normalize(D,sumtype)
@@ -1999,7 +2000,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   sum_exn (mk_sum,check_arg) (D,arg,bound,arms,default,result_type)
 		 end
 
-		| Ifthenelse_e {arg,thenArm,elseArm,result_type} => 
+		| Ifthenelse_e {arg,thenArm,elseArm,result_type} =>
 		 let
 		   val _ = conditionCode_valid (D,arg)
 		   val _ = type_analyze(D,result_type)
@@ -2007,7 +2008,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   val _ = exp_analyze(D,elseArm,result_type)
 		 in result_type
 		 end
-	       
+
 		| Exncase_e {arg,bound,arms,default,result_type} =>
 		 let
 		   fun mk_itype (D,index) = strip_exntag(D,exp_valid(D,index))
@@ -2015,22 +2016,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in
 		   sum_exn (mk_itype,is_exn) (D,arg,bound,arms,default,result_type)
 		 end
-	       
+
 		| Intsw_e {size,arg,arms,default,result_type} =>
-		 let 
+		 let
 		   val argcon = exp_valid (D,arg)
 		   val (_,armexps) = unzip arms
-		     
+
 		   val result_type' = con_head_normalize(D,result_type)
-		   val _ = 
+		   val _ =
 		     (
 		      type_analyze (D,result_type);
-		      
+
 		      if same_intsize (size,strip_int(D,argcon)) then ()
 		      else e_error(D,Switch_e switch, "Integer size mismatch in int switch");
-			
+
 		      app (fn exp => subtimer("Tchk:Exp:Intsw:ea",exp_analyze) (D,exp,result_type')) armexps;
-			  
+
 		      do_default (D,default,arms,result_type')
 		      )
 		 in
@@ -2040,7 +2041,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 let
 		   val _ = type_analyze(D,result_type)
 		   val origD = D
-		   fun doarm (pcon,args,body) = 
+		   fun doarm (pcon,args,body) =
 		     let
 		       fun folder ((v,k),D) =
 			 let val k = kind_valid (origD,k)
@@ -2057,21 +2058,21 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 			    exp_analyze (D,default,result_type))
 		 in result_type
 		 end)
-	       
-	in res 
+
+	in res
 	end
 
       (* Check a primitive node
        *)
-      fun prim_valid (D,prim : nilprim,trs : niltrace list, cons : con list,exps : exp list) : con = 
-	let 
-	  
+      fun prim_valid (D,prim : nilprim,trs : niltrace list, cons : con list,exps : exp list) : con =
+	let
+
 	  val orig_exp = Prim_e(NilPrimOp prim,trs,cons,exps)
 
-	  val _ = (app (curry2 niltrace_valid D) trs 
+	  val _ = (app (curry2 niltrace_valid D) trs
 		   handle _ => e_error (D,orig_exp,"Invalid trace args to prim_valid"))
-  
-	  fun project_sum_xxx (D,argcon : con, argexp : exp, k : w32) : con = 
+
+	  fun project_sum_xxx (D,argcon : con, argexp : exp, k : w32) : con =
 	    let
 	      val _ = type_analyze(D,argcon)
 	      val argcon = con_head_normalize(D,argcon)
@@ -2082,7 +2083,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	  fun mkGCTagType special = Prim_c(GCTag_c,[special])
 
-	  fun assert_taglike c = 
+	  fun assert_taglike c =
 	    is_taglike c orelse
 	    c_error(D,c,"type is not taglike")
 
@@ -2092,13 +2093,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	  val is_known = is_hnf o con_head_normalize
 
-	  fun sum_helper(D,sumcon : con, sumtype : w32) : con * int * int * con =  
+	  fun sum_helper(D,sumcon : con, sumtype : w32) : con * int * int * con =
 	    let
 	      val _ = type_analyze(D,sumcon)
 
 	      val sumcon_hnf = con_head_normalize(D,sumcon)
 
-	      val (tagcount,totalcount,carrier) = 
+	      val (tagcount,totalcount,carrier) =
 		(case NilUtil.strip_sum sumcon_hnf of
 		   SOME (tc,total,NONE,c) => (tc,total,c)
 		 | SOME _ => (pp_con sumcon;
@@ -2111,9 +2112,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	    in (inj_type,nontagcount,which,carrier)
 	    end
-	  
 
-	  fun sum_project_carrier_type (which : int, nontagcount : int, carrier) = 
+
+	  fun sum_project_carrier_type (which : int, nontagcount : int, carrier) =
 	    (case (Int.compare (which,0),Int.compare (nontagcount,1)) of
 	       (LESS,_) => e_error (D,orig_exp, "Injecting value into non tag field")
 	     | (_,LESS) => e_error(D,orig_exp,"Illegal injection - no non value fields!")
@@ -2121,7 +2122,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	     | _ => Proj_c(carrier,NilUtil.generate_tuple_label (which + 1)))
 
 
-	  fun inject_sum_tag (D,sumtype : w32, sumcon : con) : con = 
+	  fun inject_sum_tag (D,sumtype : w32, sumcon : con) : con =
 	    let
 	      val (inj_type,_,which,_) = sum_helper(D,sumcon,sumtype)
 	    in
@@ -2130,17 +2131,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	    end
 
 
-	  val res = 
+	  val res =
 	    (case (prim,cons,exps) of
 	       (project k,[argcon],[argexp]) => project_sum_xxx(D,argcon,argexp,k)
-	     | (project_known k,[argcon],[argexp]) => 
+	     | (project_known k,[argcon],[argexp]) =>
 		 let val con_k = project_sum_xxx(D,argcon,argexp,k)
 		 in if is_known(D,con_k) then con_k
 		    else e_error(D,orig_exp,"project_known projects into unkown type")
 		 end
 	     | (record [],[],[]) => NilDefs.unit_con
 	     | (record labels,[],t::exps) =>
-		 let 
+		 let
 		   val gctag_type = exp_valid (D,t)
 		   val cons  = map (curry2 exp_valid D) exps
 
@@ -2156,13 +2157,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 		   val _ = ((List.length labels) = (List.length exps)) orelse e_error(D,orig_exp, "Wrong number of fields")
 		 in atype
-		 end	
+		 end
 	     | (select label,[],[exp]) => projectRecordType (D,exp_valid (D,exp),label)
 
 	     | (inject sumtype,[sumcon],[]) => inject_sum_tag(D,sumtype,sumcon)
 	     | (inject_known sumtype,[sumcon],[]) => inject_sum_tag (D,sumtype,sumcon)
 
-	     | (inject sumtype,[sumcon],exps as [v])  => 
+	     | (inject sumtype,[sumcon],exps as [v])  =>
 		 let
 		   val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
 		   val con_k = sum_project_carrier_type (which,nontagcount,carrier)
@@ -2172,8 +2173,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   else e_error(D,orig_exp,"Injected argument doesn't have expected type")
 		 end
 
-	     | (inject_known sumtype,[sumcon],exps) => 
-		 let 				       
+	     | (inject_known sumtype,[sumcon],exps) =>
+		 let
 		     val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
 		     val con_k = sum_project_carrier_type (which,nontagcount,carrier)
 		     val con_k = con_head_normalize (D,con_k)
@@ -2195,22 +2196,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 in inj_type
 		 end
 
-	     | (box_float floatsize,[],[exp]) => 
-		 if same_floatsize(strip_float(D,exp_valid (D,exp)),floatsize) then 
+	     | (box_float floatsize,[],[exp]) =>
+		 if same_floatsize(strip_float(D,exp_valid (D,exp)),floatsize) then
 		   Prim_c (BoxFloat_c floatsize,[])
 		 else e_error(D,orig_exp,"Mismatched float size in box float")
 
-	    | (unbox_float floatsize,[],[exp]) => 
-	       if same_floatsize(strip_boxfloat(D,exp_valid (D,exp)),floatsize) then 
+	    | (unbox_float floatsize,[],[exp]) =>
+	       if same_floatsize(strip_boxfloat(D,exp_valid (D,exp)),floatsize) then
 		 Prim_c (Float_c floatsize,[])
 	       else e_error(D,orig_exp,"Mismatched float size in unbox float")
 
-	    | (make_exntag,[argcon],[]) => 
+	    | (make_exntag,[argcon],[]) =>
 		let val _ = type_analyze(D,argcon)
 		in Prim_c (Exntag_c,[argcon])
 		end
 
-	    | (inj_exn name,[],[exp1,exp2]) => 
+	    | (inj_exn name,[],[exp1,exp2]) =>
 		if subtimer("Tchk:Exp:Prim:IExn:st",sub_type)(D,exp_valid (D,exp2),strip_exntag(D,exp_valid (D,exp1))) then
 		  Prim_c (Exn_c,[])
 		else e_error(D,orig_exp,"Type mismatch in exception injection")
@@ -2222,7 +2223,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 val _ = exp_analyze (D,e,etype)
 	       in  Prim_c(Vararg_c(openness,effect),[argc,resc])
 	       end
-	    | (make_onearg (openness,effect),[argc,resc],[e]) =>  
+	    | (make_onearg (openness,effect),[argc,resc],[e]) =>
 	       let
 		 val etype = Prim_c(Vararg_c(openness,effect),[argc,resc])
 		 val _ = type_analyze(D,etype)
@@ -2247,22 +2248,22 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val con_head_normalize = subtimer("Tchk:Exp:HNF",con_head_normalize)
       val substConInCon      = fn s => subtimer("Tchk:Exp:substConInCon",substConInCon s)
 
-      val res = 
+      val res =
 	(case exp of
-	   Var_e var => 
+	   Var_e var =>
 	     (find_con (D,var)
 	      handle NilContext.Unbound =>
 		(error (locate "exp_valid") ("Encountered undefined variable " ^ (Name.var2string var))))
 	 | Const_e value => value_valid (D,value)
-	 | Let_e (letsort,bnds,exp) => 
+	 | Let_e (letsort,bnds,exp) =>
 	     let
 	       val (D,cbnds,etypes) = bnds_valid (D,bnds)
 	       val con = exp_valid (D,exp)
 	     in makeLetC cbnds con
 	     end
 	 | Prim_e (NilPrimOp prim,trs,cons,exps) => prim_valid (D,prim,trs,cons,exps)
-	 | Prim_e (PrimOp prim,trs,cons,exps) =>   
-	     let 
+	 | Prim_e (PrimOp prim,trs,cons,exps) =>
+	     let
 	       val _ = app (curry2 niltrace_valid D) trs
 	       val _ = app (curry2 type_analyze D) cons
 	       val (total,arg_types,return_type) = NilPrimUtil.get_type D prim cons
@@ -2283,17 +2284,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       val _ = do_args (D,formals,args)
 	     in return
 	     end
-	   
-	 | Raise_e (exp,con) => 
+
+	 | Raise_e (exp,con) =>
 	     let
 	       val _ = type_analyze (D,con)
 	       val exn_con = exp_valid (D,exp)
-	       val _ = 
+	       val _ =
 		 (is_exn_con (con_head_normalize (D,exn_con))) orelse
 		 (e_error(D,exp,"Non exception raised - Ill formed expression") handle e => raise e)
 	     in con
 	     end
-	 | Handle_e {body,bound,handler,result_type} => 
+	 | Handle_e {body,bound,handler,result_type} =>
 	     let
 	       val _ = exp_analyze(D,body,result_type)
 	       val D = insert_con(D,bound,Prim_c(Exn_c,[]))
@@ -2314,7 +2315,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       if con_equiv (D,from,expanded,Type_k,false) then
 		 Coercion_c {vars=vars, from=from, to=to}
 	       else
-		 e_error (D,Fold_e(vars,from,to),"Fold coercion has bad argument type") 
+		 e_error (D,Fold_e(vars,from,to),"Fold coercion has bad argument type")
 	     end
 	 | Unfold_e (vars,from,to) =>
 	     let
@@ -2322,21 +2323,21 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       (* renaming? *)
 	       fun folder (v,D) = insert_stdkind (D,v,Type_k)
 	       val D = foldl folder D vars
-		 
+
 	       val expanded = expandMuType (D,from)
 	     in
 	       if con_equiv (D,to,expanded,Type_k,false) then
 		 Coercion_c {vars=vars, from=from, to=to}
 	       else
 		 e_error (D,Unfold_e(vars,from,to),
-			  "Unfold coercion has bad result type") 
+			  "Unfold coercion has bad result type")
 	     end
 	   )
     in
       res
     end
-    and bnd_valid' (bnd : bnd, state : context * conbnd list) = 
-	let 
+    and bnd_valid' (bnd : bnd, state : context * conbnd list) =
+	let
 	  val (D,subst) = state
 	  val _ = push_bnd(bnd,D)
 	  val _ = if (!show_calls)
@@ -2379,7 +2380,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in
 	  D
 	end
-	| import_valid' (ImportType (label,var,kind),D) = 
+	| import_valid' (ImportType (label,var,kind),D) =
 	let
 	    val _ = if (!trace)
 			then (print "{Processing ImportType with var = ";
@@ -2395,7 +2396,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	in
 	  D
 	end
-	| import_valid' (ImportBnd (_, cb),D) = 
+	| import_valid' (ImportBnd (_, cb),D) =
 	let
 	    val (var,kind) = kind_of_cbnd (D, cb)
 	    val D = insert_stdkind(D,var,kind)
@@ -2405,39 +2406,39 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
       fun import_valid (D,import) = import_valid' (import,D)
 
-      fun export_valid D (ExportValue (label,var)) = 
+      fun export_valid D (ExportValue (label,var)) =
 	let
 	  val con = exp_valid(D,Var_e var)
 	in  ()
 	end
-	| export_valid D (ExportType (label,var)) = 
+	| export_valid D (ExportType (label,var)) =
 	let
 	  val kind = con_valid(D,Var_c var)
 	in ()
 	end
 
-      fun module_valid' (D,MODULE {bnds,imports,exports}) = 
+      fun module_valid' (D,MODULE {bnds,imports,exports}) =
 	let
 	  val _ = NilContext.is_well_formed (kind_valid,con_valid,sub_kind) D
-	  val _ = print "  Done checking context\n"
+	  val _ = msg "  Done checking context\n"
 	  val D = foldl import_valid' D imports
-          val _ = print "  Done validating imports\n"
+          val _ = msg "  Done validating imports\n"
 
 	  val (D,_,_) = bnds_valid(D,bnds)
 
-          val _ = print "  Done validating module\n"
+          val _ = msg "  Done validating module\n"
 	  val _ = app (export_valid D) exports
-          val _ = print "  Done validating exports\n"
+          val _ = msg "  Done validating exports\n"
 	in
 	  ()
 	end
 
-      fun module_valid (D,module) = 
-	let 
+      fun module_valid (D,module) =
+	let
 	  val _ = clear_stack ()
 	  val _ = push_mod(module,D)
 
-	  val _ = 
+	  val _ =
 	    if (!assertions) then
 	      assert (locate "module_valid")
 	      [
@@ -2447,7 +2448,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	  val _ = if (!show_calls)
 		    then (print "module_valid called with module =\n";
-                          Ppnil.pp_module 
+                          Ppnil.pp_module
                                         {module = module,
                                          header = "",
                                          name = "",
@@ -2464,7 +2465,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  val _ = pop()
 	in  res
 	end
-    
+
       val module_valid = wrap "module_valid" module_valid
       val module_valid = subtimer ("Module_valid", module_valid)
 

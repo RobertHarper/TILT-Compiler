@@ -1,7 +1,6 @@
-(*$import Il Nil NILUTIL NILCONTEXT PPNIL NORMALIZE TONIL VARARG *)
-
-signature LINKNIL = 
+signature LINKNIL =
 sig
+    val LinkNilDiag : bool ref
     structure Tonil : TONIL
     structure NilUtil : NILUTIL
     structure Normalize : NORMALIZE
@@ -16,6 +15,6 @@ sig
     val typecheck : bool ref
 
     val il_to_nil  : string * Il.module -> Nil.module
-    val show_html : bool ref    
-    
+    val show_html : bool ref
+
 end

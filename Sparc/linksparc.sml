@@ -1,8 +1,9 @@
-(*$import Util Rtl Stats LINKASM Linkrtl Sparc Labelgraph SparcUtils IfGraph SparcCallConv Bblock Tracetable DivMult ToSparc PrintUtils VarGraph SparcTrackStorage Color Chaitin RtlToAsm Recursion Tortl *)
-
-
 structure Linksparc :> LINKASM =
 struct
+  val diag = Stats.ff("LinkSparcDiag")
+
+  fun msg str = if (!diag) then print str else ()
+
   val error = fn s => Util.error "linksparc.sml" s
   open Linkrtl
 
@@ -22,7 +23,7 @@ struct
   structure Tosparc = Tosparc(structure Machineutils = Sparcutils
 			      structure ArgTracetable = Tracetable
 			      structure Bblock = Bblock)
-			      
+
 
   structure Printutils = Printutils(val commentHeader = " !"
 				    structure Bblock = Bblock
@@ -31,7 +32,7 @@ struct
 
   structure Recursion = Recursion(structure Printutils = Printutils)
 
-  structure Trackstorage = SparcTrackstorage(structure Printutils = Printutils	
+  structure Trackstorage = SparcTrackstorage(structure Printutils = Printutils
 					     structure Machineutils = Sparcutils)
 
 
@@ -45,7 +46,7 @@ struct
 			      structure Machineutils = Sparcutils
 			      structure Callconv = Callconv
 			      structure Bblock = Bblock
-			      structure Trackstorage = Trackstorage			      
+			      structure Trackstorage = Trackstorage
 			      structure Printutils = Printutils
 			      structure Ifgraph = Ifgraph
 			      structure Color = Color1
@@ -63,8 +64,8 @@ struct
   val prelude_modules : ((Rtl.label list * string list) option) ref = ref NONE
   val prelude_modules_hprof : ((Rtl.label list * string list) option) ref = ref NONE
 
-  fun comp (asm_file,rtlmod) = 
-    let val _ = print "===== Translating to TIL-Sparc assembly      =====\n"
+  fun comp (asm_file,rtlmod) =
+    let val _ = msg "===== Translating to Sparc assembly =====\n"
 	val _ = Printutils.openOutput asm_file
 	val _ = Rtltosparc.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
@@ -73,8 +74,9 @@ struct
 
   val rtl_to_asm = Stats.timer("To Sparc ASM",comp)
 
-  fun link {asmFile, units} = 
-    let val rtlmod = Tortl.entryTables units
+  fun link {asmFile, units} =
+    let val _ = msg "  Generating link unit\n"
+	val rtlmod = Tortl.entryTables units
     in  rtl_to_asm(asmFile,rtlmod)
     end
 
