@@ -138,14 +138,13 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
   replica = obj;                       /* replica ultimately is 0 if equal to obj */
 
   if (show && (GET_TYPE(tag) != SKIP_TYPE)) {
-    printf("%ld:  ");
+    printf("%ld:  ", start);
     if (start < obj - 1) {
       printf("[");
       for (temp = start; temp < start - 1; temp++)
 	printf("%d%s", *temp, (temp < start - 2) ? ", " : "");
       printf("]");
     }
-    printf("%ld", start, obj);
   }
   while (TAG_IS_FORWARD(tag)) {
     assert(replica != (ptr_t) tag);

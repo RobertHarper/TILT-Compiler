@@ -304,8 +304,7 @@ returnFromGCFromC:
 	ld	[%r1+16], %r4				! restore r4 which we use as temp
 	ld	[%r1+LINK_DISP], LINK_REG		! restore return address back to C code
 	ld	[THREADPTR_REG+Csaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
-	mov	THREADPTR_REG, %l0			! C functions keep thread pointer in %l0
-	ld	[%l0+Csaveregs_disp+8], THREADPTR_REG	! restore C's $r2 which does not hold threadptr
+	ld	[THREADPTR_REG+Csaveregs_disp+8], THREADPTR_REG	! restore C's $r2 which does not hold threadptr
 	retl
 	nop
 	call	abort

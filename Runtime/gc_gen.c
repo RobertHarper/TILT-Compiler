@@ -49,9 +49,10 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
-    case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                        pushStack(proc->primaryReplicaObjRoots, obj);        /* Object is one word past tag */
-			break;
+  case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
+                      pushStack(proc->rootVals, spec->pointerVal);
+                      pushStack(proc->primaryReplicaObjFlips, obj);
+		      break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
   return obj;
@@ -150,10 +151,12 @@ void GCStop_Gen(Proc_t *proc)
     proc->minorRange.stop = fromSpace->top;
     while (!isEmptyStack(proc->roots)) 
       locCopy1_noSpaceCheck(proc, (ploc_t) popStack(proc->roots), &proc->minorRange, &nursery->range);
-    while (!isEmptyStack(proc->primaryReplicaObjRoots)) {
+    while (!isEmptyStack(proc->rootVals)) 
+      copy1_noSpaceCheck(proc, (ptr_t) popStack(proc->rootVals), &proc->minorRange, &nursery->range);
+    while (!isEmptyStack(proc->primaryReplicaObjFlips)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
-	 Since this is a stop-copy collector, we can use _locCopy_ and not worry about Flips */
-      ptr_t obj = popStack(proc->primaryReplicaObjRoots);
+	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
+      ptr_t obj = popStack(proc->primaryReplicaObjFlips);
       scanObj_locCopy1_noSpaceCheck(proc, obj, &proc->minorRange, &nursery->range);
     }
     scanUntil_locCopy1_noSpaceCheck(proc, scanStart, &proc->minorRange, &nursery->range);
@@ -191,7 +194,7 @@ void GCStop_Gen(Proc_t *proc)
     while (!isEmptyStack(proc->roots)) 
       locCopy2_noSpaceCheck(proc,(ploc_t) popStack(proc->roots), &proc->majorRange,
 			    &nursery->range, &fromSpace->range, &largeSpace->range);
-    resetStack(proc->primaryReplicaObjRoots);
+    resetStack(proc->primaryReplicaObjFlips);
     scanUntil_locCopy2_noSpaceCheck(proc,scanStart, &proc->majorRange,
 				    &nursery->range, &fromSpace->range, &largeSpace->range);
     assert(proc->majorRange.cursor < toSpace->top);

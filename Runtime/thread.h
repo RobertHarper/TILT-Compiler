@@ -181,6 +181,20 @@ void pushStack2(Stack_t *oStack, ptr_t item1, ptr_t item2)
     resizeStack(oStack, 2 * oStack->size);
 }
 
+INLINE1(pushStack3)
+INLINE2(pushStack3)
+void pushStack3(Stack_t *oStack, ptr_t item1, ptr_t item2, ptr_t item3)
+{
+  /* assert(item != NULL); */
+  if (oStack->cursor == oStack->size)
+    resizeStack(oStack, 2 * oStack->size);
+  oStack->data[oStack->cursor++] = item1;
+  oStack->data[oStack->cursor++] = item2;
+  oStack->data[oStack->cursor++] = item3;
+  if (oStack->cursor == oStack->size)
+    resizeStack(oStack, 2 * oStack->size);
+}
+
 /* Returns NULL if stack is empty */
 INLINE1(popStack)
 INLINE2(popStack)
@@ -206,9 +220,22 @@ ptr_t peekStack(Stack_t *oStack)
 /* Returns NULL if stack is empty */
 INLINE1(popStack2)
 INLINE2(popStack2)
-ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref)
+ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
 {
   if (oStack->cursor > 1) {
+    *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
+    return oStack->data[--oStack->cursor];
+  }
+  return NULL;
+}
+
+/* Returns NULL if stack is empty */
+INLINE1(popStack3)
+INLINE2(popStack3)
+ptr_t popStack3(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
+{
+  if (oStack->cursor > 2) {
+    *item3Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
     *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
     return oStack->data[--oStack->cursor];
   }
@@ -247,7 +274,9 @@ typedef struct Proc__t
   pthread_t          pthread;        /* pthread that this system thread is implemented as */
   Thread_t           *userThread;    /* current user thread mapped to this system thread */
   Stack_t            minorStack;     /* Used by parallel/concurrent generational collector */
+  Stack_t            minorSegmentStack; 
   Stack_t            majorStack;     /* Used by parallel/concurrent collector */
+  Stack_t            majorSegmentStack;  
   Stack_t            majorRegionStack; /* Used by generational concurrent collector */
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
@@ -277,11 +306,12 @@ typedef struct Proc__t
   Histogram_t        gcFlipOffHistogram;
   Histogram_t        gcFlipOnHistogram;
 
-  Stack_t            *roots;                  /* Stack, global roots */
-  Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - allocated pointer arrays */
-  Stack_t            *primaryReplicaLocFlips; /* Locations of PRs which need to be flipped when collectors goes off */
-  Stack_t            *primaryReplicaObjRoots; /* PR objects whose contents serve as roots - modified pointer array locations */
-  Stack_t            *primaryReplicaObjFlips; /* PR objects whose locations need to be flipped when collectors goes off */
+  Stack_t            *roots;                  /* Stack, global root locations containing root values */
+  Stack_t            *rootVals;               /* Used by incremental collector for breaking up initial root processing 
+						      and by generational for ptr array allocation */
+  Stack_t            *primaryReplicaObjFlips; /* PR objects whose locs must be flipped when minor collector goes off - allocated ptr array */
+  Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - modified ptr array loc */
+  Stack_t            *primaryReplicaLocFlips; /* Locations of PRs which need to be flipped when collectors goes off - modified ptr array loc */
 
   CopyRange_t        minorRange;   /* Used only by generational collector */
   CopyRange_t        majorRange;

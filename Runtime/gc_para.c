@@ -55,225 +55,128 @@ static void *SynchEnd(TwoRoom_t *tr, Thunk_t *thunk, void *thunkData)
   return result;
 }
 
-/* ------------ SharedObjStack  Functions ------------ */
-static void resetAllocSharedObjStack(SharedObjStack_t *sos, int objStackSize)
+/* ------------ SharedStack  Functions ------------ */
+static void resetAllocSharedStack(SharedStack_t *ss, int objStackSize)
 {
-  sos->size = objStackSize;
-  sos->data = (ptr_t *) malloc(sizeof(ptr_t) * objStackSize);
-  sos->cursor = 0;
-  sos->numStack = 0;
-  resetTwoRoom(&sos->twoRoom);
 }
 
-SharedObjStack_t *SharedObjStack_Alloc(int size)
+SharedStack_t *SharedStack_Alloc(int objSize, int segmentSize)
 {
-  SharedObjStack_t *sos = (SharedObjStack_t *) malloc(sizeof(SharedObjStack_t));
-  resetAllocSharedObjStack(sos, size);
-  return sos;
+  SharedStack_t *ss = (SharedStack_t *) malloc(sizeof(SharedStack_t));
+  ss->objSize = objSize;
+  ss->segmentSize = segmentSize;
+  ss->objData = (ptr_t *) malloc(sizeof(ptr_t) * objSize);
+  ss->segmentData = (ptr_t *) malloc(sizeof(ptr_t) * segmentSize);
+  ss->objCursor = 0;
+  ss->segmentCursor = 0;
+  ss->numLocalStack = 0;
+  resetTwoRoom(&ss->twoRoom);
+  return ss;
 }
 
-static int internalIsEmptySharedObjStack(SharedObjStack_t *ss)
+static int internalIsEmptySharedStack(SharedStack_t *ss)
 {
-  return (ss->cursor == 0 && ss->numStack == 0);
+  return (ss->objCursor == 0 && ss->segmentCursor == 0 && ss->numLocalStack == 0);
 }
 
-static void moveToSharedObjStack(SharedObjStack_t *ss, Stack_t *oStack)
+/* Transfer all items from 'from' to 'to' */
+static void moveToSharedStack(ptr_t *to, long *toCursor, long toSize, ptr_t *from, long *fromCursor)
 {
-  int i, numToTransfer = oStack->cursor;
-  int oldCursor = FetchAndAdd(&ss->cursor,numToTransfer);
+  int i, numToTransfer = *fromCursor;
+  int oldToCursor = FetchAndAdd(toCursor,numToTransfer);
   for (i=0; i<numToTransfer; i++) 
-    ss->data[oldCursor+i] = oStack->data[i];
-  oStack->cursor = 0;
-  if (ss->cursor >= ss->size) {
-    printf("Shared stack overflowed with %d items\n", ss->cursor);
+    to[oldToCursor+i] = from[i];
+  *fromCursor = 0;
+  if (*toCursor >= toSize) {
+    printf("Shared stack overflowed with %d items\n", *toCursor);
     assert(0);
   }
 }
 
-static int getFromSharedObjStack(SharedObjStack_t *ss, Stack_t *oStack, int numToFetch)
+/* Transfer up to numToFetch items from 'from' to 'to', handling overreach */
+static int getFromSharedStack(ptr_t *to, long *toCursor, long toSize, ptr_t *from, long *fromCursor, long numToFetch)
 {
-  int i, oldCursor, newCursor;
-  assert(oStack->cursor == 0);
-  oldCursor = FetchAndAdd(&ss->cursor,-numToFetch);  /* FetchAndAdd returns the pre-added value */
-  newCursor = oldCursor - numToFetch;  
-  if (oldCursor < 0) {            /* Handle complete overreach */
+  int i, oldFromCursor, newFromCursor;
+  oldFromCursor = FetchAndAdd(fromCursor,-numToFetch);  /* FetchAndAdd returns the pre-added value */
+  newFromCursor = oldFromCursor - numToFetch;  
+  if (oldFromCursor < 0) {        /* Handle complete overreach */
     numToFetch = 0;
-    ss->cursor = 0;               /* Multiple processors might execute this; this is fine since there are no increments */
+    *fromCursor = 0;              /* Multiple processors might execute this; this is fine since there are no increments */
   }
-  else if (newCursor < 0) {       /* Handle partial overreach */
-    numToFetch += newCursor;
-    newCursor = oldCursor - numToFetch;
-    ss->cursor = 0;               /* Multiple processors might execute this; this is fine since there are no increments */
+  else if (newFromCursor < 0) {   /* Handle partial overreach */
+    numToFetch += newFromCursor;  /* Fetching fewer items than requested */
+    newFromCursor = oldFromCursor - numToFetch; /* Recompute newFromCursor */
+    *fromCursor = 0;              /* Multiple processors might execute this; this is fine since there are no increments */
   }
+  assert(*toCursor == 0);
   for (i=0; i<numToFetch; i++)
-    oStack->data[i] = ss->data[newCursor+i];
-  oStack->cursor = numToFetch;
+    to[i] = from[newFromCursor+i];
+  *toCursor = numToFetch;
   return numToFetch;
 }
 
 
-void popSharedObjStack(SharedObjStack_t *sos, Stack_t *oStack, int numToFetch)
-{
-  int numFetched;
-  SynchStart(&sos->twoRoom);
-  numFetched = getFromSharedObjStack(sos, oStack, numToFetch);
-  assert(sos->numStack >= 0);
-  FetchAndAdd(&sos->numStack,1);  /* Local stack is possibly non-empty now; note that we must increment even when empty since 
-				         we don't know how to conditionally decrement later */
-  SynchMid(&sos->twoRoom);
-  SynchEnd(&sos->twoRoom, NULL, NULL);
-}
-
-int isEmptySharedObjStack(SharedObjStack_t *sos)
+int isEmptySharedStack(SharedStack_t *ss)
 {
   int empty;
-  SynchStart(&sos->twoRoom);
-  empty = internalIsEmptySharedObjStack(sos);
-  SynchMid(&sos->twoRoom);
-  SynchEnd(&sos->twoRoom, NULL, NULL);
+  SynchStart(&ss->twoRoom);
+  empty = internalIsEmptySharedStack(ss);
+  SynchMid(&ss->twoRoom);
+  SynchEnd(&ss->twoRoom, NULL, NULL);
   return empty;
 }
 
-void resetSharedObjStack(SharedObjStack_t *sos, int n)
+void resetSharedStack(SharedStack_t *ss, int n)
 {
-  assert(isEmptySharedObjStack(sos));
-  sos->numStack = n;
+  assert(isEmptySharedStack(ss));
+  ss->numLocalStack = n;
 }
 
-int pushSharedObjStack(SharedObjStack_t *sos, Stack_t *oStack)
+static int segSize = 3; /* Number of items that constitute a segment */
+
+void popSharedStack(SharedStack_t *ss, Stack_t *obj, int objRequest, Stack_t *segment, int segRequest)
+{
+  int numObjFetched, segRequestRemain;
+  SynchStart(&ss->twoRoom);
+  numObjFetched = getFromSharedStack(obj->data, &obj->cursor, obj->size, ss->objData, &ss->objCursor, objRequest);
+  segRequestRemain = (int) (segRequest * ((double)(objRequest - numObjFetched) / objRequest));
+  if (segRequestRemain > 0)
+    getFromSharedStack(segment->data, &segment->cursor, segment->size, ss->segmentData, &ss->segmentCursor, segSize * segRequestRemain);
+  assert(ss->numLocalStack >= 0);
+  FetchAndAdd(&ss->numLocalStack,1);  /* Local stack is possibly non-empty now; note that we must increment even when empty since 
+				     we don't know how to conditionally decrement later */
+  SynchMid(&ss->twoRoom);
+  SynchEnd(&ss->twoRoom, NULL, NULL);
+}
+
+int pushSharedStack(SharedStack_t *ss, Stack_t *obj, Stack_t *segment)
 {
   int empty;
-  SynchStart(&sos->twoRoom);
-  SynchMid(&sos->twoRoom);
-  moveToSharedObjStack(sos, oStack);
-  FetchAndAdd(&sos->numStack,-1);  /* Local stack is non-empty now */
-  assert(sos->numStack >= 0);
-  empty = (int) SynchEnd(&sos->twoRoom, (Thunk_t *) (&internalIsEmptySharedObjStack), sos);
+  SynchStart(&ss->twoRoom);
+  SynchMid(&ss->twoRoom);
+  moveToSharedStack(ss->objData, &ss->objCursor, ss->objSize, obj->data, &obj->cursor);
+  moveToSharedStack(ss->segmentData, &ss->segmentCursor, ss->segmentSize, segment->data, &segment->cursor);
+  FetchAndAdd(&ss->numLocalStack,-1);  /* Local stack is non-empty now */
+  assert(ss->numLocalStack >= 0);
+  empty = (int) SynchEnd(&ss->twoRoom, (Thunk_t *) (&internalIsEmptySharedStack), ss);
   return empty;
 }
 
-int condPushSharedObjStack(SharedObjStack_t *sos, Stack_t *oStack)
+int condPushSharedStack(SharedStack_t *ss, Stack_t *obj, Stack_t *segment)
 {
   int isNonEmpty;
-  SynchStart(&sos->twoRoom);
-  SynchMid(&sos->twoRoom);
-  isNonEmpty = !internalIsEmptySharedObjStack(sos);
-  if (isNonEmpty)
-    moveToSharedObjStack(sos, oStack);
-  SynchEnd(&sos->twoRoom, NULL, NULL);
+  SynchStart(&ss->twoRoom);
+  SynchMid(&ss->twoRoom);
+  isNonEmpty = !internalIsEmptySharedStack(ss);
+  if (isNonEmpty) {
+    moveToSharedStack(ss->objData, &ss->objCursor, ss->objSize, obj->data, &obj->cursor);
+    moveToSharedStack(ss->segmentData, &ss->segmentCursor, ss->segmentSize, segment->data, &segment->cursor);
+  }
+  SynchEnd(&ss->twoRoom, NULL, NULL);
   return isNonEmpty;   /* we pushed only if it was not empty */
 }
 
-/* ------------ SharedObjRegionStack  Functions ------------ */
-SharedObjRegionStack_t *SharedObjRegionStack_Alloc(int objStackSize)
-{
-  SharedObjRegionStack_t *sors = (SharedObjRegionStack_t *) malloc(sizeof(SharedObjRegionStack_t));
-  resetAllocSharedObjStack(&sors->objStack, objStackSize);
-  sors->regionCursor = 0;
-  return sors;
-}
 
-static int internalIsEmptySharedObjRegionStack(SharedObjRegionStack_t *sors)
-{
-  return (sors->objStack.cursor == 0 && sors->objStack.numStack == 0 && sors->regionCursor == 0);
-}
-
-void popObjSharedObjRegionStack(SharedObjRegionStack_t *sors, Stack_t *oStack, int numToFetch)
-{
-  SynchStart(&sors->objStack.twoRoom);
-  getFromSharedObjStack(&sors->objStack, oStack, numToFetch);
-  assert(sors->objStack.numStack >= 0);
-  FetchAndAdd(&sors->objStack.numStack,1);  /* Local stack is possibly non-empty now; note that we must increment even when empty since 
-						    we don't know how to conditionally decrement later */
-  SynchMid(&sors->objStack.twoRoom);
-  SynchEnd(&sors->objStack.twoRoom, NULL, NULL);
-}
-
-int pushObjSharedObjRegionStack(SharedObjRegionStack_t *sors, Stack_t *oStack)
-{
-  int empty;
-  SynchStart(&sors->objStack.twoRoom);
-  SynchMid(&sors->objStack.twoRoom);
-  moveToSharedObjStack(&sors->objStack, oStack);
-  FetchAndAdd(&sors->objStack.numStack,-1);  /* Local stack is non-empty now */
-  assert(sors->objStack.numStack >= 0);
-  empty = (int) SynchEnd(&sors->objStack.twoRoom, (Thunk_t *) (&internalIsEmptySharedObjRegionStack), sors);
-  return empty;
-}
-
-int condPushObjSharedObjRegionStack(SharedObjRegionStack_t *sors, Stack_t *oStack)
-{
-  int isNonEmpty;
-  SynchStart(&sors->objStack.twoRoom);
-  SynchMid(&sors->objStack.twoRoom);
-  isNonEmpty = !internalIsEmptySharedObjRegionStack(sors);
-  if (isNonEmpty)
-    moveToSharedObjStack(&sors->objStack, oStack);
-  SynchEnd(&sors->objStack.twoRoom, NULL, NULL);
-  return isNonEmpty;
-}
-
-int isEmptySharedObjRegionStack(SharedObjRegionStack_t *sors)
-{
-  int empty;
-  SynchStart(&sors->objStack.twoRoom);
-  empty = internalIsEmptySharedObjRegionStack(sors);
-  SynchMid(&sors->objStack.twoRoom);
-  SynchEnd(&sors->objStack.twoRoom, NULL, NULL);
-  return empty;
-}
-
-void resetSharedObjRegionStack(SharedObjRegionStack_t *sors, int n)
-{
-  assert(isEmptySharedObjRegionStack(sors));
-  sors->objStack.numStack = n;
-}
-
-int condPushToSharedObjRegionStack(SharedObjRegionStack_t *sors, Stack_t *oStack)
-{
-  int isNonEmpty;
-  SynchStart(&sors->objStack.twoRoom);
-  SynchMid(&sors->objStack.twoRoom);
-  isNonEmpty = !internalIsEmptySharedObjRegionStack(sors);
-  if (isNonEmpty)
-    moveToSharedObjStack(&sors->objStack, oStack);
-  SynchEnd(&sors->objStack.twoRoom, NULL, NULL);
-  return isNonEmpty; /* we pushed only if it was not empty */
-}
-
-int popRegionSharedObjRegionStack(SharedObjRegionStack_t *sors, Stack_t *rStack)
-{
-  int newCursor, success = 1;
-  SynchStart(&sors->objStack.twoRoom);
-  newCursor = FetchAndAdd(&sors->regionCursor,-2) - 2;
-  if (newCursor < 0) {  /* overreach */
-    success = 0;
-    FetchAndAdd(&sors->regionCursor,2);
-  }
-  else 
-    pushStack2(rStack, sors->regionStack[newCursor], sors->regionStack[newCursor+1]);
-  SynchMid(&sors->objStack.twoRoom);
-  SynchEnd(&sors->objStack.twoRoom, NULL, NULL);
-  return success;  /* Returns 1 if region actually popped */
-}
-
-int condPushRegionSharedObjRegionStack(SharedObjRegionStack_t *sors, Stack_t *rStack)
-{
-  int isNonEmpty;
-  SynchStart(&sors->objStack.twoRoom);
-  SynchMid(&sors->objStack.twoRoom);
-  isNonEmpty = !internalIsEmptySharedObjRegionStack(sors);
-  if (isNonEmpty) {
-    int i, numToTransfer = rStack->cursor;
-    int oldCursor = FetchAndAdd(&sors->regionCursor,numToTransfer);
-    assert(oldCursor + numToTransfer <= (sizeof(sors->regionStack) / sizeof(mem_t)));
-    for (i=0; i<numToTransfer; i++)
-      sors->regionStack[oldCursor+i] = rStack->data[i];
-    rStack->cursor = 0;
-  }
-  SynchEnd(&sors->objStack.twoRoom, NULL, NULL);
-  return isNonEmpty; /* we pushed only if a stack was non-empty or numStack is not zero */
-}
 
 /* ---------- Other Helper Functions ------------------- */
 

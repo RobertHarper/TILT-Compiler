@@ -36,9 +36,7 @@ mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t al
 /* Heaps and work stacks used by various collectors.  */
 extern Heap_t *fromSpace, *toSpace;                   /* The 2 semispaces or the tenured area of a generational collector */
 extern Heap_t *nursery;                               /* Used by the generational collector */
-extern SharedObjStack_t *workStack;                   /* Used by all parallel/concurrent collectors */
-extern SharedObjStack_t *largeArrayStack;             /* Used by concurrent collectors for incrementally copying large arrays */
-extern SharedObjRegionStack_t *majorWorkStack;        /* Used by the generational-concurrent collector */
+extern SharedStack_t *workStack;                      /* Used by all parallel/concurrent collectors */
 
 /* GCFromML has a non-standard calling convention */
 void GCFromC(Thread_t *, int RequestSizeBytes, int isMajor);
@@ -107,6 +105,7 @@ extern long NumRoots, NumContentions, NumWrites, NumLocatives;
 extern int GenKBytesCollected;
 extern int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
 extern int fetchSize;                    /* Number of objects to fetch from global pool */
+extern int segFetchSize;                 /* Number of (large object) segments to fetch from global pool */
 extern int localWorkSize;                /* Number of objects to work on from local pool */
 extern int doCopyCopySync;               
 extern int arraySegmentSize;             /* Large arrays are broken into segments to allow incremental copying */

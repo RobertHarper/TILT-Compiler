@@ -425,7 +425,9 @@ void thread_init()
     Proc_t *proc = &(Procs[i]); /* Structures are by-value in C */
     proc->procid = i;
     allocStack(&proc->minorStack, 16384);
-    allocStack(&proc->majorStack, 16384);
+    allocStack(&proc->majorStack, 1024);
+    allocStack(&proc->minorSegmentStack, 16384);
+    allocStack(&proc->majorSegmentStack, 1024);
     allocStack(&proc->majorRegionStack, 1024);
     proc->allocStart = (mem_t) StartHeapLimit;
     proc->allocCursor = (mem_t) StartHeapLimit;
@@ -436,10 +438,10 @@ void thread_init()
     for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
       proc->writelist[j] = 0;
     proc->roots = createStack(10000);
+    proc->rootVals = createStack(10000);
+    proc->primaryReplicaObjFlips = createStack(200);
     proc->primaryReplicaLocRoots = createStack(500);
     proc->primaryReplicaLocFlips = createStack(1000);
-    proc->primaryReplicaObjRoots = createStack(100);
-    proc->primaryReplicaObjFlips = createStack(200);
     reset_timer(&(proc->totalTimer));
     reset_timer(&(proc->currentTimer));
     proc->state = Scheduler;

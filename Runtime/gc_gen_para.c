@@ -50,7 +50,8 @@ mem_t AllocBigArray_GenPara(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                        pushStack(proc->primaryReplicaObjRoots, obj);        /* Object is one word past tag */
+                        pushStack(proc->rootVals, spec->pointerVal);        
+                        pushStack(proc->primaryReplicaObjFlips, obj);        
                         break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
@@ -114,7 +115,7 @@ void GCStop_GenPara(Proc_t *proc)
     else 
       GCType = Minor;
     req_size = 0;
-    resetSharedObjStack(workStack, NumProc);
+    resetSharedStack(workStack, NumProc);
     ResetJob();                        /* Reset counter so all user threads are scanned */
     asynchReachBarrier(&numWaitProc);  /* First processor is counted twice. */
   }
@@ -201,23 +202,33 @@ void GCStop_GenPara(Proc_t *proc)
       else
 	locCopy2_copyCopySync_primaryStack(proc,root,&proc->majorStack,&proc->majorRange,&nursery->range,&fromSpace->range,&largeSpace->range);
   }
+  while (!isEmptyStack(proc->rootVals)) {
+      ptr_t rootVal = (ptr_t) popStack(proc->rootVals);
+      if (GCType == Minor) 
+	copy1_copyCopySync_primaryStack(proc,rootVal,&proc->minorStack,&proc->minorRange,&nursery->range);
+      else
+	copy2_copyCopySync_primaryStack(proc,rootVal,&proc->majorStack,&proc->majorRange,&nursery->range,&fromSpace->range,&largeSpace->range);
+  }
   if (GCType == Minor)
-    while (!isEmptyStack(proc->primaryReplicaObjRoots)) {
+    while (!isEmptyStack(proc->primaryReplicaObjFlips)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
-	 Since this is a stop-copy collector, we can use _locCopy_ and not worry about Flips */
-      ptr_t obj = popStack(proc->primaryReplicaObjRoots);
+	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
+      ptr_t obj = popStack(proc->primaryReplicaObjFlips);
       scanObj_locCopy1_copyCopySync_primaryStack(proc, obj, &proc->minorStack,&proc->minorRange,&nursery->range);
     }
   else
-    resetStack(proc->primaryReplicaObjRoots);
+    resetStack(proc->primaryReplicaObjFlips);
 
-  /* Move everything from local stack to global stack to balance work; note the omitted popSharedObjStack */
-  pushSharedObjStack(workStack, (GCType == Minor) ? &proc->minorStack : &proc->majorStack);
+  /* Move everything from local stack to global stack to balance work; note the omitted popSharedStack */
+  pushSharedStack(workStack, (GCType == Minor) ? &proc->minorStack : &proc->majorStack,
+		  (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack);
 
   /* Get work from global stack; operate on local stack; put work back on global stack */
   while (1) {
     int i, globalEmpty;
-    popSharedObjStack(workStack, (GCType == Minor) ? &proc->minorStack : &proc->majorStack, fetchSize);
+    popSharedStack(workStack, 
+		   (GCType == Minor) ? &proc->minorStack : &proc->majorStack, fetchSize,
+		   (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack, 0);
     if (GCType == Minor) {
       for (i=0; i < localWorkSize; i++) {
 	ptr_t gray = popStack(&proc->minorStack);
@@ -235,7 +246,8 @@ void GCStop_GenPara(Proc_t *proc)
 								  &nursery->range,&fromSpace->range,&largeSpace->range);
       }
     }
-    globalEmpty = pushSharedObjStack(workStack, (GCType == Minor) ? &proc->minorStack : &proc->majorStack);
+    globalEmpty = pushSharedStack(workStack, (GCType == Minor) ? &proc->minorStack : &proc->majorStack,
+				  (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack);
     if (globalEmpty)
       break;
   }
@@ -320,6 +332,6 @@ void GCInit_GenPara()
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   gc_large_init();
-  workStack = SharedObjStack_Alloc(16384);
+  workStack = SharedStack_Alloc(16384, 1024);
 }
 

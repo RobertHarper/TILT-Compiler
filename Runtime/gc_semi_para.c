@@ -69,7 +69,7 @@ static void stop_copy(Proc_t *proc)
   static long req_size;            /* These are shared across processors. */
   
   assert(isEmptyStack(&proc->majorStack));
-  assert(isEmptySharedObjStack(workStack));
+  assert(isEmptySharedStack(workStack));
 
   /* Using asynchronous version, we detect the first thread and permit
      it to do some preliminary work while other processors have not reached the barrier.
@@ -78,7 +78,7 @@ static void stop_copy(Proc_t *proc)
   isFirst = (asynchReachBarrier(&numWaitProc)) == 0;
   if (isFirst) {
     Heap_Resize(toSpace, Heap_GetSize(fromSpace) + NumProc * minOffRequest, 1);
-    resetSharedObjStack(workStack,NumProc);
+    resetSharedStack(workStack,NumProc);
     ResetJob();                        /* Reset counter so all user threads are scanned */
     req_size = 0;
     asynchReachBarrier(&numWaitProc);
@@ -124,22 +124,22 @@ static void stop_copy(Proc_t *proc)
     ploc_t root = (ploc_t) popStack(proc->roots);
     (void) locCopy1_copyCopySync_primaryStack(proc,root,&proc->majorStack,&proc->majorRange,&fromSpace->range); 
   }
-  pushSharedObjStack(workStack,&proc->majorStack);  /* We must call this even if local stack is empty */
+  pushSharedStack(workStack,&proc->majorStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
 
   while (1) {
     int i, globalEmpty;
-    popSharedObjStack(workStack,&proc->majorStack, fetchSize);
+    popSharedStack(workStack,&proc->majorStack, fetchSize, &proc->majorSegmentStack, 0);
     for (i=0; i < localWorkSize; i++) {
       ptr_t gray = popStack(&proc->majorStack);
       if (gray != NULL)
 	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorRange,&fromSpace->range);
     }
-    globalEmpty = pushSharedObjStack(workStack,&proc->majorStack);  /* We must call this even if local stack is empty */
+    globalEmpty = pushSharedStack(workStack,&proc->majorStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
     if (globalEmpty)
       break;
   }
   assert(isEmptyStack(&proc->majorStack));
-  assert(isEmptySharedObjStack(workStack));
+  assert(isEmptySharedStack(workStack));
   ClearCopyRange(&proc->majorRange);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
@@ -231,5 +231,5 @@ void GCInit_SemiPara()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedObjStack_Alloc(16384);
+  workStack = SharedStack_Alloc(16384, 1024);
 }

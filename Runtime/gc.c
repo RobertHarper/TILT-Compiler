@@ -38,9 +38,7 @@ GCStatus_t GCStatus = GCOff;
 
 Heap_t *fromSpace = NULL, *toSpace = NULL;
 Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
-SharedObjStack_t *workStack = NULL;
-SharedObjStack_t *largeArrayStack = NULL;
-SharedObjRegionStack_t *majorWorkStack = NULL;
+SharedStack_t *workStack = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
@@ -54,11 +52,13 @@ double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
 int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
 int fetchSize = 25;               /* Number of objects to fetch from global pool */
+int segFetchSize = 2;             /* Number of objects to fetch from global pool */
 int localWorkSize = 50;           /* Number of objects to work on from local pool */
 double copyWeight = 1.0 / 4.0;    /* Does not actually copy fields */
 double scanWeight = 3.0 / 4.0;
 double rootWeight = 10.0;
-int arraySegmentSize = 32 * 1024;
+int arraySegmentSize = 4 * 1024;  /* Must be greater than the compiler's maxByteRequest - notion of large array */
+
 
 static int (*GCTryFun)(Proc_t *, Thread_t *) = NULL;
 static void (*GCStopFun)(Proc_t *) = NULL;

@@ -140,6 +140,7 @@
 
 */
 
+
 /* weights can be reset in init routine */
 static int reducedNurserySize = 0, expandedNurserySize = 0;
 static int reducedTenuredSize = 0, expandedTenuredSize = 0;
@@ -166,8 +167,11 @@ mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
   mem_t region;
   ptr_t obj = NULL;
-  int tagByteLen = spec->byteLen + 4;
-  Align_t align = (spec->type == DoubleField) ? OddWordAlign : NoWordAlign; /* Since there is one tag word */
+  int i, segments = (spec->byteLen < arraySegmentSize) ? 0 : DivideUp(spec->byteLen, arraySegmentSize);
+  int tagByteLen = spec->byteLen + 4 + 4 * segments;
+  Align_t align = (spec->type == DoubleField) ? 
+                        ((segments & 1) ? EvenWordAlign : OddWordAlign) : 
+                        NoWordAlign; 
 
   /* Allocate the space */
   if (spec->type == PointerField) {
@@ -187,13 +191,18 @@ mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   assert(region != NULL);
 
   /* Allocate object; update stats; initialize */
-  obj = region + 1;
+  obj = region + 1 + segments;
+  for (i=0; i<segments; i++)
+    obj[-(2+i)] = PROCEED_TAG;
   proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : 
       init_parray(obj, spec->elemLen, spec->pointerVal); 
-      pushStack(proc->primaryReplicaObjRoots, obj);        /* Object is one word past tag */
+      if (GCType != Major) {
+	pushStack(proc->rootVals, spec->pointerVal);
+	pushStack(proc->primaryReplicaObjFlips, obj);
+      }
       break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
@@ -221,6 +230,7 @@ static void CollectorOn(Proc_t *proc)
   int i, len, isFirst = 0;
   Thread_t *threadIterator = NULL;
   Stack_t *objStack = (GCType == Minor) ? &proc->minorStack : &proc->majorStack;
+  Stack_t *segmentStack = (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack;
   CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
   range_t *srcRange = (GCType == Minor) ? &nursery->range : &fromSpace->range;
 
@@ -278,7 +288,7 @@ static void CollectorOn(Proc_t *proc)
       paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
     while (!(asynchCheckBarrier(&numStackOnProc, NumProc, &numWaitOnProc)))
       ;
-    resetSharedObjStack(workStack,NumProc);
+    resetSharedStack(workStack,NumProc);
     if (GCType == Major) {
       major_global_scan(proc);
       Heap_Resize(fromSpace,expandedTenuredSize,0);
@@ -319,7 +329,7 @@ static void CollectorOn(Proc_t *proc)
       ploc_t primaryReplicaLoc = (ploc_t) popStack(proc->primaryReplicaLocRoots);
       ptr_t root = *primaryReplicaLoc;
       pushStack(proc->primaryReplicaLocFlips, (void *) primaryReplicaLoc);
-      alloc1_copyCopySync_primaryStack(proc,root,objStack,copyRange,srcRange);
+      splitAlloc1_copyCopySync_primaryStack(proc,root,objStack,copyRange,srcRange);
     }
   }
   else
@@ -330,23 +340,16 @@ static void CollectorOn(Proc_t *proc)
   while (!isEmptyStack(proc->roots)) {
     ploc_t root = (ploc_t) popStack(proc->roots);
     ptr_t obj = *root;
-    alloc1_copyCopySync_primaryStack(proc,obj,objStack,copyRange,srcRange);
+    splitAlloc1_copyCopySync_primaryStack(proc,obj,objStack,copyRange,srcRange);
+  }
+  /* Should move roots to rootVals and delay rootVals */
+  while (!isEmptyStack(proc->rootVals)) {
+    ptr_t rootVal = (ptr_t) popStack(proc->rootVals);
+    splitAlloc1_copyCopySync_primaryStack(proc,rootVal,objStack,copyRange,srcRange);
   }
 
-  if (GCType == Minor)
-    while (!isEmptyStack(proc->primaryReplicaObjRoots)) {
-      /* Not transferScanObj_* since this object is a primaryReplica.
-	 Not scanObj_locCopy1_* since this object is a primary-replica and we cannot modify it until we Flip. */
-      ptr_t obj = popStack(proc->primaryReplicaObjRoots);
-      scanObj_copy1_copyCopySync_primaryStack(proc, obj, objStack, copyRange, srcRange);
-      pushStack(proc->primaryReplicaObjFlips, obj);
-    }
-  else
-    resetStack(proc->primaryReplicaObjRoots);
-
   /* Omit popSharedObjStack */
-  pushSharedObjStack(workStack, objStack);
-  assert(isEmptyStack(objStack));
+  pushSharedStack(workStack, objStack, segmentStack);
   GCStatus = GCOn;
   synchBarrier(&numDoneOnProc, NumProc, &numStackOnProc);
   flushStore();
@@ -492,34 +495,44 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 {
   int counter, done = 0;
   Stack_t *objStack = (GCType == Minor) ? &proc->minorStack : &proc->majorStack;
+  Stack_t *segmentStack = (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack;
   CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
   range_t *srcRange = (GCType == Minor) ? &nursery->range : &fromSpace->range;
   while (!done) {
     if (!local)
-      popSharedObjStack(workStack, objStack, fetchSize);
+      popSharedStack(workStack, objStack, fetchSize, segmentStack, segFetchSize);
+    while (!isEmptyStack(segmentStack)) {
+      int start, end;
+      ptr_t gray;
+      gray = popStack3(segmentStack,(ptr_t *)&start,(ptr_t *)&end);
+      (void) transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,start,end,
+											&proc->majorStack,&proc->majorSegmentStack,
+											&proc->majorRange, &fromSpace->range);
+    }
     for (counter = localWorkSize; counter > 0; counter--) {
       ptr_t gray = popStack(objStack);
       if (gray == NULL) 
 	break;
-      transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,objStack,copyRange,srcRange);
+      transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,objStack,segmentStack,copyRange,srcRange);
     }
     if (!local) {
-      int sharedWorkDone = pushSharedObjStack(workStack, objStack);
+      int sharedWorkDone = pushSharedStack(workStack, objStack, segmentStack);
       if (sharedWorkDone) {
 	GCStatus = GCPendingOff;
 	done = 1;
       }
     }
     else {
-      if (isEmptyStack(objStack))
+      if (isEmptyStack(objStack) && isEmptyStack(segmentStack))
 	done = 1;
     }
     done |= (updateWorkDone(proc) >= workToDo);
   }
   assert(isEmptyStack(objStack));
+  assert(isEmptyStack(segmentStack));
   if (diag)
-    printf("Proc %d: GC %d Segment %d:  do_minor_work:  workToDo = %d segWork = %d   shared workStack has %d items\n",
-	   proc->procid, NumGC, proc->numSegment, workToDo, getWorkDone(proc), workStack->cursor);
+    printf("Proc %d: GC %d Segment %d:  do_minor_work:  workToDo = %d segWork = %d   shared workStack has %d items %d segments\n",
+	   proc->procid, NumGC, proc->numSegment, workToDo, getWorkDone(proc), workStack->objCursor, workStack->segmentCursor);
 }
 
  
@@ -531,6 +544,7 @@ void GCRelease_GenConc(Proc_t *proc)
   ploc_t writelistStop = proc->writelistCursor;
   int isGCOn = (GCStatus == GCOn) || (GCStatus == GCPendingOff);
   Stack_t *objStack = (GCType == Minor) ? &proc->minorStack : &proc->majorStack;
+  Stack_t *segmentStack = (GCType == Minor) ? &proc->minorSegmentStack : &proc->majorSegmentStack;
   CopyRange_t *copyRange = (GCType == Minor) ? &proc->minorRange : &proc->majorRange;
   range_t *srcRange = (GCType == Minor) ? &nursery->range : &fromSpace->range;
 
@@ -550,7 +564,7 @@ void GCRelease_GenConc(Proc_t *proc)
     while (allocCurrent + 1 < allocStop) {
       tag_t tag = *allocCurrent;
       ptr_t obj = allocCurrent + 1;
-      int objSize = alloc_unique_primaryStack(proc,obj,objStack,copyRange,srcRange);
+      int objSize = splitAlloc_unique_primaryStack(proc,obj,objStack,copyRange,srcRange);
       allocCurrent += objSize / sizeof(val_t);
     }
   }
@@ -588,14 +602,14 @@ void GCRelease_GenConc(Proc_t *proc)
       if (inHeap(mutatorPrimary, nursery)) {
 	assert(GCType == Minor);
 	nurseryPrimary = mutatorPrimary;
-	alloc1_copyCopySync_primaryStack(proc,nurseryPrimary,objStack,copyRange,srcRange);
+	splitAlloc1_copyCopySync_primaryStack(proc,nurseryPrimary,objStack,copyRange,srcRange);
 	  fromSpaceEither = (ptr_t) nurseryPrimary[-1];
 	  tag = fromSpaceEither[-1];
       }
       else if (inHeap(mutatorPrimary,fromSpace)) {
 	fromSpaceEither = mutatorPrimary;
 	if (GCType == Major) {
-	  alloc1_copyCopySync_primaryStack(proc,fromSpaceEither,objStack,copyRange,srcRange);
+	  splitAlloc1_copyCopySync_primaryStack(proc,fromSpaceEither,objStack,copyRange,srcRange);
 	  toSpaceReplica = (ptr_t) fromSpaceEither[-1];
 	  tag = toSpaceReplica[-1];
 	}
@@ -636,17 +650,17 @@ void GCRelease_GenConc(Proc_t *proc)
 
 	/* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
 	   even if it might die to prevent the mutator from hiding live data */
-	alloc1_copyCopySync_primaryStack(proc,possPrevPtrVal,objStack,copyRange,srcRange);
+	splitAlloc1_copyCopySync_primaryStack(proc,possPrevPtrVal,objStack,copyRange,srcRange);
 
 	if (inHeap(mutatorField,nursery)) {
 	  assert(GCType == Minor);
-	  alloc1_copyCopySync_primaryStack(proc,mutatorField,objStack,copyRange,srcRange);
+	  splitAlloc1_copyCopySync_primaryStack(proc,mutatorField,objStack,copyRange,srcRange);
 	  fromSpaceField = (ptr_t) mutatorField[-1];
 	}
 	else if (inHeap(mutatorField,fromSpace)) {
 	  fromSpaceField = mutatorField;
 	  if (GCType == Major)
-	    alloc1_copyCopySync_primaryStack(proc,fromSpaceField,objStack,copyRange,srcRange);
+	    splitAlloc1_copyCopySync_primaryStack(proc,fromSpaceField,objStack,copyRange,srcRange);
 	  toSpaceField = (ptr_t) fromSpaceField[-1];
 	}
 	if (GCType == Minor) {
@@ -677,7 +691,7 @@ void GCRelease_GenConc(Proc_t *proc)
   } /* while */
   
   if (isGCOn) {
-    condPushSharedObjStack(workStack, objStack);
+    condPushSharedStack(workStack, objStack, segmentStack);
   }
   flushStore();
 }
@@ -827,6 +841,6 @@ void GCInit_GenConc()
   Heap_Resize(toSpace, reducedTenuredSize, 0);
 
   gc_large_init();
-  workStack = SharedObjStack_Alloc(32 * 1024);
+  workStack = SharedStack_Alloc(32 * 1024, 4 * 1024);
 }
 

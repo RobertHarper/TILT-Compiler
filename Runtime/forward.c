@@ -24,7 +24,6 @@
 #include "general.h"
 #include "forward.h"
 
-
 int doCopyCopySync = 1;
 
 /* Using switch statements to dispatch on the "type" of objects causes gcc to "optimize"
@@ -64,13 +63,13 @@ void ClearCopyRange(CopyRange_t *copyRange)
   copyRange->regionStack = NULL;
 }
 
-/* Since doubleOddAlign and noCheck are staically known, the compiler can greatly simplify the function body */
+/* Since doubleOddAlign and noCheck are statically known, the compiler can greatly simplify the function body */
 INLINE1(allocFromCopyRange)
 INLINE2(allocFromCopyRange)
-mem_t allocFromCopyRange(CopyRange_t *copyRange, int byteLen, int doubleOddAlign, int noCheck)
+mem_t allocFromCopyRange(CopyRange_t *copyRange, int byteLen, Align_t align, int noCheck)
 {
   mem_t oldCursor = copyRange->cursor;
-  int paddedByteLen = doubleOddAlign ? byteLen + 4 : byteLen;
+  int paddedByteLen = (align == NoWordAlign) ? byteLen : 4 + byteLen;
   mem_t newCursor = oldCursor + (paddedByteLen / sizeof(val_t));
   if (!noCheck && newCursor >= copyRange->stop) {
     assert(*copyRange->expand != NULL);
@@ -83,12 +82,8 @@ mem_t allocFromCopyRange(CopyRange_t *copyRange, int byteLen, int doubleOddAlign
     }
     assert(newCursor < copyRange->stop);
   }
-  if (doubleOddAlign) {
-    if ((((int) oldCursor) & 7) == 0) 
-      *(oldCursor++) = SKIP_TYPE | (1 << SKIPLEN_OFFSET);
-    else 
-      newCursor--;
-  }
+  AlignMemoryPointer(&oldCursor, align);
+  newCursor = oldCursor + (byteLen / sizeof(val_t));
   copyRange->cursor = newCursor;
   return oldCursor;
 }
@@ -210,68 +205,6 @@ unsigned long objectLength(ptr_t obj)
 
 
 /* -------------------------------------------------------------------------- */
-INLINE1(copyOrAllocAndSpaceCheck)
-INLINE2(copyOrAllocAndSpaceCheck)
-int copyOrAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, int noSpaceCheck)
-{
-  ptr_t obj;
-  int tag = white[-1];
-  int type = GET_TYPE(tag);
-
-  if (type == RECORD_TYPE) {               /* Record tag is the most common case */
-    int i, numFields = GET_RECLEN(tag);
-    int objByteLen = 4 * (1 + numFields);
-    mem_t region = allocFromCopyRange(copyRange, objByteLen, 0, noSpaceCheck);
-    obj = region + 1;
-    if (doCopy)
-      for (i=0; i<numFields; i++)         /* Copy tag and record fields */
-	obj[i] = white[i];
-    obj[-1] = tag;                       /* Write tag last */
-    white[-1] = (val_t) obj;             /* Store forwarding pointer in old object */
-    proc->numCopied++;
-    proc->segUsage.bytesCopied += objByteLen;
-    return objByteLen;
-  }
-  else if (TYPE_IS_FORWARD(type)) {
-    proc->numShared++;
-    return 0;
-  }
-  else if (TYPE_IS_ARRAY(type)) {
-    int i, arrayByteLen = GET_ARRLEN(tag);
-    int objByteLen = 4 + ((arrayByteLen + 3) >> 2 << 2);
-    mem_t region = allocFromCopyRange(copyRange, objByteLen, type == RARRAY_TYPE, noSpaceCheck);
-    obj = region + 1;
-    if (doCopy)
-      memcpy((char *) obj, (const char *)white, objByteLen - 4);
-    obj[-1] = tag;                       /* Write tag last */
-    white[-1] = (val_t) obj;             /* Store forwarding pointer in old object */
-    proc->numCopied++;
-    proc->segUsage.bytesCopied += objByteLen;
-    return objByteLen;
-  }
-  else if (type == SKIP_TYPE)
-    return 0;
-  else 
-    printf("\n\ncopyOrAlloc: Bad tag %d for object %d \n", tag, white);
-  assert(0);
-}
-
-int copy(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
-{
-  return copyOrAlloc(proc, white, copyRange, 1, 0);
-}
-
-int alloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
-{
-  return copyOrAlloc(proc, white, copyRange, 0, 0);
-}
-
-void copy_noSpaceCheck(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
-{
-  (void) copyOrAlloc(proc, white, copyRange, 1, 1);
-}
-
-
 /* Tag is the the tag value when the caller checked.  It may have changed */
 INLINE1(acquireOwnership)
 INLINE2(acquireOwnership)
@@ -339,9 +272,9 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRa
 #endif
 }
 
-INLINE1(copyOrAlloc_copyCopySync)
-INLINE2(copyOrAlloc_copyCopySync)
-int copyOrAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy)
+INLINE1(genericAlloc)
+INLINE2(genericAlloc)
+int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, int doCopyCopy, int skipSpaceCheck, int splitLarge)
 {
   ptr_t obj;                       /* forwarded object */
   tag_t tag = white[-1];           /* original tag */
@@ -358,7 +291,7 @@ int copyOrAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, 
     return 0;
   }
   else {
-    if (doCopyCopySync)  /* For measuring the costs of the copy-copy sync */
+    if (doCopyCopy && doCopyCopySync)  /* We omit copy-copy sync for measuring the costs of the copy-copy sync */
       tag = acquireOwnership(proc, white, tag, copyRange);
   }
 
@@ -367,12 +300,12 @@ int copyOrAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, 
   if (type == RECORD_TYPE) {           /* As usual, the record case is the most common */
     int i, numFields = GET_RECLEN(tag);
     int objByteLen = 4 * (1 + numFields);
-    mem_t region = allocFromCopyRange(copyRange, objByteLen, 0, 0);
+    mem_t region = allocFromCopyRange(copyRange, objByteLen, NoWordAlign, skipSpaceCheck);
     obj = region + 1;
     if (doCopy)
       for (i=0; i<numFields; i++)     /* Copy fields */
 	obj[i] = white[i];
-    obj[-1] = tag;                  /* Write tag last */
+    obj[-1] = tag;                    /* Write tag last */
     white[-1] = (val_t) obj;        /* Store forwarding pointer last */
     /* Sparc TSO order guarantees forwarding pointer will be visible only after fields are visible */
     proc->numCopied++;
@@ -387,11 +320,16 @@ int copyOrAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, 
   }
   else if (TYPE_IS_ARRAY(type)) {
     int i, arrayByteLen = GET_ARRLEN(tag);
-    int objByteLen = 4 + ((arrayByteLen + 3) >> 2 << 2);
-    mem_t region = allocFromCopyRange(copyRange, objByteLen, type == RARRAY_TYPE, 0);
-    obj = region + 1;
+    int dataByteLen = RoundUp(arrayByteLen, 4);
+    int numTags = 1 + (splitLarge ? (arrayByteLen > arraySegmentSize ? DivideUp(arrayByteLen,arraySegmentSize) : 0) : 0);
+    int objByteLen = dataByteLen + 4 * numTags;
+    Align_t align = (type == RARRAY_TYPE) ? ((numTags & 1) ? OddWordAlign : EvenWordAlign) : NoWordAlign;
+    mem_t region = allocFromCopyRange(copyRange, objByteLen, align, skipSpaceCheck);
+    obj = region + numTags;
     if (doCopy)
       memcpy((char *) obj, (const char *)white, objByteLen - 4);
+    for (i=0; i<numTags-1; i++)
+      obj[-2-i] = PROCEED_TAG;
     obj[-1] = tag;	
     white[-1] = (val_t) obj;
     proc->numCopied++;
@@ -405,14 +343,40 @@ int copyOrAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, 
   assert(0);
 }
 
+int copy(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+{
+  return genericAlloc(proc, white, copyRange, 1, 0, 0, 0);
+}
+
+int alloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+{
+  return genericAlloc(proc, white, copyRange, 0, 0, 0, 0);
+}
+
+int splitAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+{
+  return genericAlloc(proc, white, copyRange, 0, 0, 0, 1);
+}
+
+void copy_noSpaceCheck(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+{
+  (void) genericAlloc(proc, white, copyRange, 1, 0, 1, 0);
+}
+
+
 int copy_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return copyOrAlloc_copyCopySync(proc, white, copyRange, 1);
+  return genericAlloc(proc, white, copyRange, 1, 1, 0, 0);
 }
 
 int alloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return copyOrAlloc_copyCopySync(proc, white, copyRange, 0);
+  return genericAlloc(proc, white, copyRange, 0, 1, 0, 0);
+}
+
+int splitAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+{
+  return genericAlloc(proc, white, copyRange, 0, 1, 0, 1);
 }
 
 /* ------------------------------------------------------- */
@@ -644,15 +608,26 @@ void scanObj_locCopy2_copyCopySync_replicaStack(Proc_t *proc, ptr_t gray, Stack_
 
 
 typedef enum LocAllocCopy__t {Copy, LocCopy, LocAlloc} LocAllocCopy_t;
+/* The generic scanning function with compile-time parameters.
+   primaryOrReplicaGray - The primary or replica gray object is passed in
+   start, end - if start <> end, large object is indicated; in bytes
+   splitLarge - if true, then large arrays are split
+   mayTransfer - if true, object was primary and the replica is uninitialized
+   localStack - stack for holding primary or replica gray objects
+   localSegmentStack - stack for holding primary large object segments
+   copyRange - where new objects are allocated rfom
+   from_range, from2_range, large_range - determines if an object is primary
+   howMany - one or two generations
+   doCopyWrite - copy-write synchronization; if true, must also have mayTransfer
+*/
 
-INLINE1(mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack)
-INLINE2(mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack)
-void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack
-           (Proc_t *proc, 
-	    ptr_t primaryOrReplicaGray, 
-	    Stack_t *localStack, CopyRange_t *copyRange,
-	    range_t *from_range, range_t *from2_range, range_t *large_range,
-	    int doCopyWrite, LocAllocCopy_t locAllocCopy, int howMany, int mayTransfer)
+INLINE1(genericScan)
+INLINE2(genericScan)
+void genericScan(Proc_t *proc, 
+		 ptr_t primaryOrReplicaGray, int start, int end,
+		 Stack_t *localStack, Stack_t *localSegmentStack, CopyRange_t *copyRange,
+		 range_t *from_range, range_t *from2_range, range_t *large_range,
+		 int doCopyWrite, LocAllocCopy_t locAllocCopy, int howMany, int mayTransfer, int splitLarge)
 {
   /* If performing transfer, we are given primaryGray and must copy fields into replicaGray */
   ptr_t primaryGray = mayTransfer ? primaryOrReplicaGray : NULL;
@@ -672,14 +647,21 @@ void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primary
 	  /* Since no copy-write sync is required, objects that point to themselves won't cause looping */
 	  switch (locAllocCopy) {
 	  case LocAlloc:
-	    if (howMany == 1)
-	      locAlloc1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
-	    else if (howMany == 2)
+	    if (howMany == 1) {
+	      if (splitLarge)
+		locSplitAlloc1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
+	      else
+		locAlloc1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
+	    }
+	    else if (howMany == 2) {
+	      assert(splitLarge == 0);
 	      locAlloc2_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range,from2_range,large_range);
+	    }
 	    else 
 	      assert(0);
 	    break;
 	  case LocCopy:
+	    assert(splitLarge == 0);
 	    if (howMany == 1)
 	      locCopy1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
 	    else if (howMany == 2)
@@ -688,6 +670,7 @@ void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primary
 	      assert(0);
 	    break;
 	  case Copy:
+	    assert(splitLarge == 0);
 	    if (howMany == 1)
 	      copy1_copyCopySync_primaryStack(proc,(ptr_t) replicaGray[i],localStack,copyRange,from_range);
 	    else
@@ -699,28 +682,36 @@ void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primary
       return;
     } 
     else if (TYPE_IS_ARRAY(type)) {
-      int i, arrayByteLen = GET_ARRLEN(tag);      /* Int array length might not be multiple of 4 */
-      int fieldLen = (arrayByteLen + 3) >> 2;     
-      if (doCopyWrite)
-	primaryGray[-1] = STALL_TAG;
-      if (fieldLen > arraySegmentSize && largeArrayStack != NULL) {
-	int i, segments = DivideUp(fieldLen, arraySegmentSize);
-	static Stack_t stack;
-	static int first = 1;
-	if (first) {
-	  first = 0;
-	  allocStack(&stack, 1024);
-	}
+      int i, byteLen = RoundUp(GET_ARRLEN(tag), 4);      /* Int array length might not be multiple of 4 */
+      int fieldLen = DivideUp(byteLen, 4);               /* In words for all array types */
+      int large =  splitLarge && (byteLen > arraySegmentSize);
+      int syncIndex = large ? -(2+DivideUp(start,arraySegmentSize)) : -1; /* Use normal tag or segment tag */
+      int firstField = 0, lastField = fieldLen;
+
+      /* If a large array object, convert into segments */
+      if (large && start == end) {
+	int i, segments = DivideUp(byteLen, arraySegmentSize);
 	assert(primaryGray != NULL);
-	resetSharedObjStack(largeArrayStack, 1);
-	for (i=0; i<segments; i++) 
-	  pushStack2(&stack, (ptr_t) primaryGray, (ptr_t) i);
-	pushSharedObjStack(largeArrayStack, &stack);
+	for (i=0; i<segments; i++) {
+	  int start = i * arraySegmentSize;
+	  int end = start + arraySegmentSize;
+	  if (end > byteLen)
+	    end = byteLen;
+	  pushStack3(localSegmentStack, (ptr_t) primaryGray, (ptr_t) start, (ptr_t) end);
+	}
+	return;
       }
-      if (mayTransfer)
-	memcpy((char *) replicaGray, (const char *)primaryGray, 4 * fieldLen);
+      /* If segmented, fields we work on is derived from start and end */
+      if (start != end) {
+	firstField = start / sizeof(val_t);
+	lastField =  end / sizeof(val_t);
+      }
+      if (doCopyWrite) 
+	primaryGray[syncIndex] = STALL_TAG;
+      if (mayTransfer) 
+	memcpy((char *) &(replicaGray[firstField]), (const char *) &(primaryGray[firstField]), 4 * (lastField - firstField));
       if (type == PARRAY_TYPE) 
-	for (i=0; i<fieldLen; i++) {
+	for (i=firstField; i<lastField; i++) {
 	  if (doCopyWrite && 
 	      (ptr_t) primaryGray[i] == primaryGray) { /* Check is needed for objects that point to themselves - otherwise, loop */
 	    replicaGray[i] = (val_t) replicaGray;
@@ -728,14 +719,21 @@ void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primary
 	  }
 	  switch (locAllocCopy) {
 	    case LocAlloc:
-	      if (howMany == 1)
-		locAlloc1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
-	      else if (howMany == 2)
+	      if (howMany == 1) {
+		if (splitLarge)
+		  locSplitAlloc1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
+		else 
+		  locAlloc1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
+	      }
+	      else if (howMany == 2) {
+		assert(splitLarge == 0);
 		locAlloc2_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range,from2_range,large_range);
+	      }
 	      else
 		assert(0);
 	      break;
 	    case LocCopy:
+	      assert(splitLarge == 0);
 	      if (howMany == 1) 
 		locCopy1_copyCopySync_primaryStack(proc,(ploc_t)replicaGray+i,localStack,copyRange,from_range);
 	      else if (howMany == 2)
@@ -744,16 +742,17 @@ void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primary
 		assert(0);
 	      break;
 	    case Copy:
+	      assert(splitLarge == 0);
 	      if (howMany == 1)
 		copy1_copyCopySync_primaryStack(proc,(ptr_t) replicaGray[i],localStack,copyRange,from_range);
 	      else
 		assert(0);
 	  }
 	}
-      if (doCopyWrite)
-	primaryGray[-1] = (val_t) replicaGray;
-      proc->segUsage.bytesScanned += 4 * (1 + fieldLen);
-      if (fieldLen > 32) 
+      if (doCopyWrite) 
+	primaryGray[syncIndex] = large ? PROCEED_TAG : (val_t) replicaGray;
+      proc->segUsage.bytesScanned += 4 * (1 + lastField - firstField);
+      if (lastField - firstField > 32) 
 	updateWorkDone(proc);
       return;
     }
@@ -779,50 +778,61 @@ void mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primary
 void scanObj_copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray, Stack_t *localStack, CopyRange_t *copyRange,
 					     range_t *from_range)
 {
-  mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack(proc, replicaGray, localStack, copyRange,
-										   from_range, NULL, NULL,
-										   0, Copy, 1, 0);
+  genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
+	      from_range, NULL, NULL,
+	      0, Copy, 1, 0, 0);
 }
 
 void scanObj_locCopy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray, Stack_t *localStack, CopyRange_t *copyRange,
 					     range_t *from_range)
 {
-  mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack(proc, replicaGray, localStack, copyRange,
-										   from_range, NULL, NULL,
-										   0, LocCopy, 1, 0);
+  genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
+	      from_range, NULL, NULL,
+	      0, LocCopy, 1, 0, 0);
 }
 
 void transferScanObj_locCopy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, Stack_t *localStack, CopyRange_t *copyRange,
 							range_t *from_range)
 {
-  mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack(proc, primaryGray, localStack, copyRange,
-										from_range, NULL, NULL,
-										0, LocCopy, 1, 1);
+  genericScan(proc, primaryGray, 0, 0, localStack, NULL,  copyRange,
+	      from_range, NULL, NULL,
+	      0, LocCopy, 1, 1, 0);
 }
 
 void transferScanObj_locCopy2_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, Stack_t *localStack, CopyRange_t *copyRange,
 							range_t *from_range, range_t *from2_range, range_t *large_range)
 {
-  mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack(proc, primaryGray, localStack, copyRange,
-										from_range, from2_range, large_range,
-										0, LocCopy, 2, 1);
+  genericScan(proc, primaryGray, 0, 0, localStack, NULL,  copyRange,
+	      from_range, from2_range, large_range,
+	      0, LocCopy, 2, 1, 0);
 }
 
 
-void transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, Stack_t *localStack, CopyRange_t *copyRange,
+void transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
+								       Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
 								       range_t *from_range)
 {
-  mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack(proc, primaryGray, localStack, copyRange,
-										from_range, NULL, NULL,
-										1, LocAlloc, 1, 1);
+  genericScan(proc, primaryGray, 0, 0, objStack, segmentStack,  copyRange,
+	      from_range, NULL, NULL,
+	      1, LocAlloc, 1, 1, 1);
 }
 
-void transferScanObj_copyWriteSync_locAlloc2_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, Stack_t *localStack, CopyRange_t *copyRange,
-							range_t *from_range, range_t *from2_range, range_t *large_range)
+void transferScanObj_copyWriteSync_locSplitAlloc2_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
+								       Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
+								       range_t *from_range, range_t *from2_range, range_t *large_range)
 {
-  mayTransferScanObj_mayCopyWriteSync_mayLocAllocCopyNum_copyCopySync_primaryStack(proc, primaryGray, localStack, copyRange,
-										from_range, from2_range, large_range,
-										1, LocAlloc, 2, 1);
+  genericScan(proc, primaryGray, 0, 0, objStack, segmentStack, copyRange,
+	      from_range, from2_range, large_range,
+	      1, LocAlloc, 2, 1, 1);
+}
+
+void transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
+									   Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
+									   range_t *from_range)
+{
+  genericScan(proc, primaryGray, start, end, objStack, segmentStack,  copyRange,
+	      from_range, NULL, NULL,
+	      1, LocAlloc, 1, 1, 1);
 }
 
 
