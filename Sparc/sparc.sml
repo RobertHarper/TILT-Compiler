@@ -739,15 +739,20 @@ structure Machine =
    fun std_return_code(NONE) = []
      | std_return_code(SOME sra) = []
 
+   (* Largest immediate value that is divisble by four.  We perform
+      loads and stores after advance_base_register so we need to worry
+      about alignment.  *)
+   val maxOffset = maxImm - (maxImm mod 4)
+
    (* advance_base_register : register * int -> int * instruction list * instruction list *)
    fun advance_base_register (Rbase, sz) =
        let
-	   val max = IMMop (INT maxImm)
+	   val max = IMMop (INT maxOffset)
 	   val add = SPECIFIC (INTOP (ADD, Rbase, max, Rbase))
 	   val sub = SPECIFIC (INTOP (SUB, Rbase, max, Rbase))
 	   fun loop (x as (sz, adds, subs)) =
 	       if in_ea_disp_range sz then x
-	       else loop (sz - maxImm, add :: adds, sub :: subs)
+	       else loop (sz - maxOffset, add :: adds, sub :: subs)
        in  loop (sz, nil, nil)
        end
 
@@ -811,14 +816,14 @@ structure Machine =
 				[SPECIFIC (LOADI (instr, Rdest, INT remainder, Rbase))] @
 				decline)
 		   
-	       val sequence1 = (load_imm' (i2w (offset - maxImm), Rdest) @
-				[SPECIFIC (INTOP (ADD,   Rbase, REGop Rdest, Rdest)),
-				 SPECIFIC (LOADI (instr, Rdest, INT maxImm,  Rdest))])
+	       val sequence1 = (load_imm' (i2w (offset - maxOffset), Rdest) @
+				[SPECIFIC (INTOP (ADD,   Rbase, REGop Rdest,    Rdest)),
+				 SPECIFIC (LOADI (instr, Rdest, INT maxOffset,  Rdest))])
 
-	       val (remainder, advance, _) = advance_base_register (Rdest, offset - maxImm)
-	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase, IMMop (INT maxImm), Rdest))] @
+	       val (remainder, advance, _) = advance_base_register (Rdest, offset - maxOffset)
+	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase, IMMop (INT maxOffset), Rdest))] @
 				advance @
-				[SPECIFIC (LOADI (instr, Rdest, INT remainder,      Rdest))])
+				[SPECIFIC (LOADI (instr, Rdest, INT remainder,         Rdest))])
 	   in
 	       select [sequence0, sequence1, sequence2]
 	   end
@@ -839,16 +844,16 @@ structure Machine =
 				 SPECIFIC (LOADI (instr, Rdest', INT remainder,       Rbase))] @
 				decline)
 
-	       val sequence1 = (load_imm' (i2w (offset' - maxImm), Rdest') @
-				[SPECIFIC (INTOP (ADD,   Rbase,  REGop Rdest',     Rdest')),
-				 SPECIFIC (LOADI (instr, Rdest,  INT (maxImm - 4), Rdest')),
-				 SPECIFIC (LOADI (instr, Rdest', INT maxImm,       Rdest'))])
+	       val sequence1 = (load_imm' (i2w (offset' - maxOffset), Rdest') @
+				[SPECIFIC (INTOP (ADD,   Rbase,  REGop Rdest',        Rdest')),
+				 SPECIFIC (LOADI (instr, Rdest,  INT (maxOffset - 4), Rdest')),
+				 SPECIFIC (LOADI (instr, Rdest', INT maxOffset,       Rdest'))])
 
-	       val (remainder, advance, _) = advance_base_register (Rdest', offset' - maxImm)
-	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase,  IMMop (INT maxImm),  Rdest'))] @
+	       val (remainder, advance, _) = advance_base_register (Rdest', offset' - maxOffset)
+	       val sequence2 = ([SPECIFIC (INTOP (ADD,   Rbase,  IMMop (INT maxOffset),  Rdest'))] @
 				advance @
-				[SPECIFIC (LOADI (instr, Rdest,  INT (remainder - 4), Rdest')),
-				 SPECIFIC (LOADI (instr, Rdest', INT remainder,       Rdest'))])
+				[SPECIFIC (LOADI (instr, Rdest,  INT (remainder - 4),    Rdest')),
+				 SPECIFIC (LOADI (instr, Rdest', INT remainder,          Rdest'))])
 	   in
 	       select [sequence0, sequence1, sequence2]
 	   end
