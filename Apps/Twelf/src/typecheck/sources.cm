@@ -2,8 +2,8 @@ Group is
   ../lambda/sources.cm
   ../print/sources.cm
   ../paths/sources.cm
-  typecheck.sig
-  typecheck.fun 
+  typecheck.sig.sml
+  typecheck.fun.sml 
   typecheck.sml
-  strict.sig
-  strict.fun
+  strict.sig.sml
+  strict.fun.sml

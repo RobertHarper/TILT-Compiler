@@ -1,8 +1,8 @@
 Group is
-  paths.sig
-  paths.fun
+  paths.sig.sml
+  paths.fun.sml
   ../lambda/sources.cm
   ../global/sources.cm
-  origins.sig
-  origins.fun
+  origins.sig.sml
+  origins.fun.sml
   paths.sml

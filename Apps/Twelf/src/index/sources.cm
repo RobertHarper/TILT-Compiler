@@ -2,7 +2,7 @@ Group is
   ../lambda/sources.cm
   ../table/sources.cm
   ../global/sources.cm
-  index.sig	
-  index.fun
-  index-skolem.fun
+  index.sig.sml
+  index.fun.sml
+  index-skolem.fun.sml
   index.sml

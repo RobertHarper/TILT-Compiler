@@ -1,4 +1,4 @@
 Group is
-  formatter.sig
-  formatter.fun
+  formatter.sig.sml
+  formatter.fun.sml
   formatter.sml

@@ -1,5 +1,5 @@
 Group is
   timing.sml
-  timers.sig
-  timers.fun
+  timers.sig.sml
+  timers.fun.sml
   timers.sml
