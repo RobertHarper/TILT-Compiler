@@ -242,15 +242,11 @@ struct
 	end
 
     (*
-	When we are not waiting, we use fork' instead of fork because
-	waiting for the exception message pipe to close is tantamount
-	to waiting for the child to exit.  Also, we fork twice so that
-	the OS reaps the child process exit status rather than
-	leaveing a zombie for the parent to reap (there does not
-	appear to be a Basis interface to sigaction).
+	See CVS revision 1.38 for a version of run that can run command in
+	the background.
     *)
-    fun run {command:string list, stdin:string option, stdout:string option, wait:bool} : unit =
-	let fun wait_child () : unit =
+    fun run {command:string list, stdin:string option, stdout:string option} : unit =
+	let fun child () : unit =
 		let val infile =
 			(case stdin of
 			    NONE => "/dev/null"
@@ -262,26 +258,11 @@ struct
 			|   SOME file => connect(FS.stdout, writetrunc file))
 		in  exec command
 		end
-	    fun nowait_child () : unit =
-		let (* Let command run after TILT is interrupted. *)
-		    val _ = PE.setpgid {pid=NONE, pgid=NONE}
-		    val pid = fork' wait_child
-		in  ()
-		end
-	in
-	    if wait then
-		let val (pid,waitexn) = fork wait_child
-		    val status = waitpid pid
-		    val _ = waitexn ()
-		    val _ = check_status (pid,status)
-		in  ()
-		end
-	    else
-		let val pid = fork' nowait_child
-		    val status= waitpid pid (* terminates immediately *)
-		    val _ = check_status (pid,status)
-		in  ()
-		end
+	    val (pid,waitexn) = fork child
+	    val status = waitpid pid
+	    val _ = waitexn ()
+	    val _ = check_status (pid,status)
+	in  ()
 	end
 
     fun outputOf (program : string list) : string =

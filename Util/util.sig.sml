@@ -44,16 +44,14 @@ sig
 	Run command.  If stdin is SOME file, then command's standard input
 	is connected to file; otherwise, it is connected to /dev/null.  If
 	stdout is SOME file, then command's standard output is connected
-	to file; otherwise, it is intermixed with the parent's output.  If
-	wait is true, then run will wait for the command to terminate and
-	raise an exception if command terminates abnormally (no such exn
-	is raised when wait is false).
+	to file; otherwise, it is intermixed with the parent's output.
+	Run will wait for the command to terminate and raise an exception
+	if command terminates abnormally.
     *)
     val run :
 	{command:string list,
 	 stdin:string option,
-	 stdout:string option,
-	 wait:bool} -> unit
+	 stdout:string option} -> unit
 
     (*
 	Run command and return its output as a string.  Raises an

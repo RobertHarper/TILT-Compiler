@@ -79,23 +79,4 @@ struct
 
     val slave = fn x => Diag Slave.slave x
 
-    fun slaves (slaveList : (int * string) list) : unit =
-	let val til_slave = IntSyn.F.til_slave()
-	    val commdir = IntSyn.F.commdir()
-	    fun cmdline (num:int, count:int, machine:string) : string list =
-		[til_slave,Int.toString num,
-		 Int.toString count,machine,commdir]
-	    fun startSlave (arg:int * int * string) : unit =
-		Util.run {command=cmdline arg, stdin=NONE, stdout=NONE, wait=false}
-	    fun loop (cur : int, slaveList : (int * string) list) : unit =
-		(case slaveList
-		   of nil => ()
-		    | (count,machine) :: rest =>
-			(startSlave (cur,count,machine);
-			 loop (cur+count, rest)))
-	in  loop (0,slaveList)
-	end
-
-    val slaves = (Exn o Diag) slaves
-
 end

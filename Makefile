@@ -10,15 +10,14 @@
 # Runtime/Makefile too.
 #
 # To compile TILT, use "make" or "make with-slaves".  The latter assumes
-# that ./Bin/til_slave works; you can copy (and update for your systems)
-# ./Bin/til_slave_local_xterm or ./Bin/til_slave_remote_emacs.
+# that the script ./Bin/tilt-slave works on your system.
 
 smlnj=SML_VERSION=110 /usr/local/bin/sml
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
 tiltnj=./Bin/tilt-nj -vv
 master=$(tiltnj)
-slave=:
+slaves=:
 purge=$(tiltnj) -pp
 
 all:\
@@ -35,7 +34,7 @@ all:\
 	runtest
 
 with-slaves: FORCE
-	$(MAKE) 'master=$(tiltnj) -m' 'slave=$(tiltnj) -s' all
+	$(MAKE) 'master=$(tiltnj) -m' 'slaves=./Bin/tilt-slaves' all
 
 FORCE:
 
@@ -82,4 +81,4 @@ clean: FORCE
 	-$(purge) -fBootstrap Basis/mapfile
 
 slaves: FORCE
-	$(slave) 4/localhost
+	$(slaves) -n 4/localhost

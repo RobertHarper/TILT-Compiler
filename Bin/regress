@@ -43,8 +43,6 @@ if make smlnj-lib ml-yacc-lib arg ; then echo "Compiled libraries" ; else echo "
 # build the test harness
 if make runtest ; then echo "Compiled test harness" ; else echo "Harness didn't compile" ; exit 1; fi
 
-if test -f ./Bin/til_slave; then :; else ln -s ./Bin/til_slave_local_xterm ./Bin/til_slave; fi
-
 if [ $# -lt 1 ] ; then arg=nj ; else arg=$1 ; fi
 
 if [ $# -eq 2 ] ; then outfile=$2 ; else outfile=`pwd`/RegressionResults.`date +%m.%d.%y.%T`.txt ; fi

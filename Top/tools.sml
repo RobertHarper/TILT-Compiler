@@ -101,7 +101,7 @@ struct
 	    | Platform.SPARC => sparcConfig()
 	    | Platform.TALx86 => talx86Config())
 
-    fun run' (arg as {command:string list, stdin:string option, stdout:string option, wait:bool}) : unit =
+    fun run' (arg as {command:string list, stdin:string option, stdout:string option}) : unit =
 	let val _ =
 		if !ShowTools then
 		    let val stdin =
@@ -112,8 +112,7 @@ struct
 			    (case stdout of
 				NONE => nil
 			    |	SOME file => [">",file])
-			val bg = if wait then nil else ["&"]
-			val msg = List.concat[command,stdin,stdout,bg]
+			val msg = List.concat[command,stdin,stdout]
 			val msg = Listops.concatWith " " msg
 		    in  print "running: "; print msg; print "\n"
 		    end
@@ -123,7 +122,7 @@ struct
 
     fun run (command:string list list) : unit =
 	let val command = List.concat command
-	in  run'{command=command, stdin=NONE, stdout=NONE, wait=true}
+	in  run'{command=command, stdin=NONE, stdout=NONE}
 	end
 
     fun assemble (tal_includes : string list, asmFile : string, objFile : string) : unit =
@@ -151,8 +150,7 @@ struct
 		run'
 		    {command = ["gzip","-cq9"],
 		     stdin = SOME src,
-		     stdout = SOME tmp,
-		     wait = true}
+		     stdout = SOME tmp}
 	in  Fs.write' writer dest
 	end
 
@@ -162,8 +160,7 @@ struct
 		run'
 		    {command = ["gunzip", "-cq"],
 		     stdin = SOME src,
-		     stdout = SOME tmp,
-		     wait = true}
+		     stdout = SOME tmp}
 	in  Fs.write' writer dest
 	end
 

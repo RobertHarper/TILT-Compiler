@@ -46,7 +46,6 @@ struct
 	val Lib = "Lib"
 	val Bin = "Bin"
 	val Runtime = "Runtime"
-	val Tilslave = "til_slave"
 	val Basis = "basis"
 	val Impl = "impl"
 	val Inter = "inter"
@@ -157,7 +156,6 @@ struct
 	    in	dir = basisdir()
 	    end
 	val runtimedir = (fn () => tiltroot()/Runtime)
-	val til_slave = (fn () => tiltroot()/Bin/Tilslave)
 
 	fun tal_include (pos:pos) : file =
 	    pdir pos/U

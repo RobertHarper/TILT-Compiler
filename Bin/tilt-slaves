@@ -1,0 +1,50 @@
+#!/bin/sh
+# usage: tilt-slaves [-n] num/host ...
+#
+# Launch num slaves on host using tilt
+# (or tilt-nj if the -n option is present).
+# This is just a driver for tilt-slave.
+
+bindir=`dirname "$0"`
+usage='tilt-slaves [-n] num/host ...'
+name=tilt
+while :
+do
+	case "$1" in
+	-n)
+		shift
+		name=tilt-nj
+		;;
+	-*)
+		echo "$usage" 1>&2
+		exit 1
+		;;
+	*)
+		break
+		;;
+	esac
+done
+case $# in
+0)
+	echo "$usage" 1>&2
+	exit 1
+	;;
+*)
+	;;
+esac
+n=0
+for arg
+do
+	case "$arg" in
+	*/*)
+		num=`echo "$arg"|sed 's,/.*,,'`
+		host=`echo "$arg"|sed 's,.*/,,'`
+		;;
+	*)
+		num=1
+		host="$arg"
+		;;
+	esac
+	"$bindir"/tilt-slave $name $n "$num" "$host"&
+	n=`echo "$n + $num"|bc`
+done

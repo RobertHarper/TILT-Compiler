@@ -1,19 +1,17 @@
 #!/bin/sh
 
-# usage: til_slave n count host commdir
+# usage: tilt_slave name n count host
 #
-# Create count slaves on host.  n is used to set window geometry.  We
-# create the slaves in a remote emacs displaying on a local xterm.
-# Advantage: less communication overhead.
+# Create count slaves on host by running "bindir/name -s" in the current
+# directory where bindir is the directory containing this script.  n is
+# used to set window geometry.  The slaves are run in a remote emacs
+# displaying on a local xterm.
 #
 # As a hack, the host "localhost" is treated specially.
 #
-# commdir is a directory, visible to both master and slave, used for
-# communication during the parallel make.
-#
-# This version works at CMU.  You should check it over before
-# trying to use it at your site.
-#
+# This version works at CMU where it is necessary to authenticate to
+# (but not mount) our shared file system on the remote host.  You
+# probably have to make changes for use at your site.
 
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/ccs/bin:/usr/X11/bin:$PATH
 export PATH
@@ -21,39 +19,27 @@ export PATH
 case $# in
 4)	;;
 *)
-	echo 1>&2 usage: $0 n count host commdir
+	echo 1>&2 usage: $0 name n count host
 	exit 1
 	;;
 esac
 
-argn="$1"
-argcount="$2"
-arghost="$3"
-argdir="$4"
+bindir=`dirname "$0"`
+bindir=`cd "$bindir"; pwd`
+argname="$1"
+argn="$2"
+argcount="$3"
+arghost="$4"
 
-# At CMU, scp will print diagnostics on some systems unless -q is
-# specified.  On other systems, scp -q causes a usage error.
-
-case `sys 2>/dev/null` in
-i386_linux3|i386_rh60)
-	scp="scp -q"
-	;;
-*)
-	scp="scp"
-	;;
-esac
+# If you see scp diagnostics, try "scp -q".
+scp="scp"
 
 # Where to run tilt.
 
-tiltdir=`cd "$argdir/../.."; pwd`
-
-# Provide a reasonable default for TILTROOT.
-
-: ${TILTROOT:="$tiltdir"}
-export TILTROOT
+tiltdir=`pwd`
 
 # The userid for kinit.  At CMU, this will already be set, so we don't
-# care that `whoami` isn't the right thing for all systypes.
+# care that `whoami` isn't the right thing for all systems.
 
 : ${USER:=`whoami`}
 
@@ -68,9 +54,9 @@ xoffset=`echo "$argn / 5 * 300" | bc`
 nrows=`echo "11 * $argcount" | bc`
 geometry="120x$nrows+$xoffset+$yoffset"
 
-# The bourne shell script to run remotely.
+# The bourne shell script and emacs lisp code to run remotely.
 
-cmdfile=/tmp/til_slave.$$
+cmdfile=/tmp/tilt_slave.$$
 elisp=/tmp/elisp.$$
 
 cmd='	PATH="'"$PATH"'"
@@ -94,44 +80,36 @@ cmd='	PATH="'"$PATH"'"
 		fi
 	fi
 
-	# Required if user has modified
-
-	TILTROOT="'"$TILTROOT"'"
-	export TILTROOT
-
 	# Required at CMU, harmless elsewhere.
 	
 	SML_VERSION="'"$SML_VERSION"'"
 	export SML_VERSION
 
 	cat << "END_EMACS" > '$elisp'
-(defvar tilt-executable (concat (getenv "TILTROOT") "/Bin/tilt-nj"))
-(defvar tilt-slave-args "-vs")
-
 (require '\''comint)
 
-(defun tilt-nth-slave (n)
+(defun nth-tilt-slave (n)
   (let* ((bufname (concat "tilt slave " (int-to-string n)))
-	 (buffer (make-comint bufname tilt-executable nil tilt-slave-args)))
+	 (buffer (make-comint bufname "'"$bindir/$argname"'" nil "-vs")))
     (switch-to-buffer buffer)
     buffer))
 
-(defun tilt-make-slaves (n split)
+(defun make-tilt-slaves (n split)
   (if (= n 0)
       (balance-windows)
     (progn
       (balance-windows)
       (if split (split-window-vertically))
       (balance-windows)
-      (tilt-nth-slave n)
-      (tilt-make-slaves (- n 1) t))))
+      (nth-tilt-slave n)
+      (make-tilt-slaves (- n 1) t))))
   
 (defun tilt-slaves (n)
   (interactive "p")
   (delete-other-windows)
-  (tilt-make-slaves n nil))
+  (make-tilt-slaves n nil))
   
-(defun tilt-slave-startup ()
+(defun initial-tilt-slaves ()
   (interactive)
 ; (set-default-font "6x10")  Window resize due to font change here does not work with Exceed for wide (>100) windows
   (menu-bar-mode -1)
@@ -139,11 +117,11 @@ cmd='	PATH="'"$PATH"'"
   (tilt-slaves '$argcount'))
 END_EMACS
 	cd "'"$tiltdir"'"
-	exec emacs -nw --no-init-file -l '$elisp' -f tilt-slave-startup
+	exec emacs -nw --no-init-file -l '$elisp' -f initial-tilt-slaves
 '
 
 # We put the command into a file because ssh doesn't send the
-# command exactly to the remote sh.  Rather than using $argdir
+# command exactly to the remote sh.  Rather than using $tiltdir
 # to hold the file (which may be on AFS -- causing
 # synchronization problems we don't want to deal with), we
 # send it to /tmp on the remote machine.  Ug.

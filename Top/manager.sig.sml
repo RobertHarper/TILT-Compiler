@@ -26,10 +26,8 @@ sig
     val purgeAll : string list * targets -> unit
 
     (*
-	Slave makes the current process act as a slave.  Slaves
-	launches slaves and immediately terminates.
+	This makes the current process act as a slave.
     *)
     val slave : unit -> 'a
-    val slaves : (int * string) list -> unit
 
 end

@@ -69,8 +69,6 @@ EXAMPLES
 	4. Compile the Basis with make basis inside ml96.
 	5. Compile native TILT with make all inside ml96 (optional).
 	6. Compile runtest with make runtest inside ml96.
-	7. Choose a til_slave script.  For a reasonable default, do
-	   ln -s til_slave_local_xterm til_slave inside ml96/Bin.
 
 	If you use -n, you can skip step (5).
 

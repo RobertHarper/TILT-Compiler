@@ -11,16 +11,15 @@ struct
 		\       tilt -o exe project ...\n\
 		\       tilt -l lib project ...\n\
 		\       tilt -p project ...\n\
-		\       tilt -s [[num/]host ...]\n\
-		\general options:\n\
+		\       tilt -s\n\
+		\options:\n\
 		\       -v       increase diagnostics level\n\
-		\       -f F     set flag F to true\n\
+		\       -f F     set compiler flag F to true\n\
 		\       -r F     set F to false\n\
-		\compiler options:\n\
 		\       -m       master only\n\
 		\       -c U     operate on unit U\n\
 		\       -C I     operate on interface I\n\
-		\       -t T     compile for target T (sparc or alpha)\n"
+		\       -t T     set target architecture to T (sparc or alpha)\n"
 	in  TextIO.output (TextIO.stdErr, msg);
 	    OS.Process.exit (OS.Process.failure)
 	end
@@ -31,7 +30,7 @@ struct
       | MAKE_LIB of string
       | PURGE
       | PURGE_ALL
-      | RUN_SLAVES
+      | RUN_SLAVE
 
     type options =
 	{action : action,
@@ -53,7 +52,7 @@ struct
 		| MAKE_LIB _ => ()
 		| PURGE => check_purge()
 		| PURGE_ALL => check_purge()
-		| RUN_SLAVES => check_slave())
+		| RUN_SLAVE => check_slave())
 	end
 
     fun set_action (options : options, newaction : action) : options =
@@ -82,7 +81,7 @@ struct
 	       of #"o" => set_action (options, MAKE_EXE (eargf usage))
 		| #"l" => set_action (options, MAKE_LIB (eargf usage))
 		| #"p" => set_purge_action options
-		| #"s" => set_action (options, RUN_SLAVES)
+		| #"s" => set_action (options, RUN_SLAVE)
 		| #"v" =>
 		    (M.DiagLevel := !M.DiagLevel + 1;
 		     options)
@@ -107,21 +106,6 @@ struct
 		| _ => usage())
 	end
 
-    fun slaveSpec (arg : string) : int * string =
-	let fun isslash c = c = #"/"
-	    fun error() = reject ("argument must have form [num/]host -- " ^ arg)
-	    fun nonempty "" = error()
-	      | nonempty s = s
-	    fun nat num = (case Int.fromString num
-			     of NONE => error()
-			      | SOME n => if n > 0 then n
-					  else error())
-	in  (case String.fields isslash arg
-	       of [host] => (1, nonempty host)
-		| [num, host] => (nat num, nonempty host)
-		| _ => error())
-	end
-
     fun run (args : string list, options : options) : unit =
 	let val _ = check options
 	    val {action,master,targets} = options
@@ -139,10 +123,10 @@ struct
 		    M.make_lib with_slave (projects(), lib, targets)
 		| PURGE => M.purge (projects(), targets)
 		| PURGE_ALL => M.purgeAll (projects(), targets)
-		| RUN_SLAVES =>
+		| RUN_SLAVE =>
 		    (case args
 		       of [] => M.slave()
-			| slaves => M.slaves (map slaveSpec slaves)))
+			| _ => usage()))
 	end
 
     fun main (_ : string, args : string list) : OS.Process.status =

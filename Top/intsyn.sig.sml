@@ -96,7 +96,6 @@ sig
 	val basisdesc : unit -> file
 	val is_basisdesc : file -> bool
 	val runtimedir : unit -> file
-	val til_slave : unit -> file
 
 	val tal_include : pos -> file
     end
