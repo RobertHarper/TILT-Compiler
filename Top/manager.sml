@@ -4,11 +4,11 @@
 functor Manager (structure Parser: LINK_PARSE
 		 structure Elaborator: LINKIL
 		 structure Compiler: COMPILER
+		     where type sbnd = Il.sbnd
+		     and type context_entry = Il.context_entry
+		     and type context = Il.context
 		 structure Linker: LINKER
-		 structure Makedep: MAKEDEP
-		 sharing type Elaborator.sbnd = Compiler.sbnd
-		 sharing type Elaborator.context_entry = Compiler.context_entry
-		 sharing type Elaborator.context = Compiler.context)
+		 structure Makedep: MAKEDEP)
 		:> MANAGER = 
 struct
 
@@ -16,7 +16,7 @@ struct
   val up_to_phasesplit = ref false
   val up_to_elaborate = ref false
   val stat_each_file = ref false
-  val cache_context = ref false
+  val cache_context = ref 5
   val stop_early_compiling_sml_to_ui = ref false
   val eager = ref true
 
@@ -184,7 +184,7 @@ struct
 		  imports_link  : unitname list option ref,
 		  includes : unitname list option ref,
 		  fresh : fresh ref,
-		  context : Elaborator.context option ref}
+		  context : (int * Elaborator.context) option ref}
 
       val mapping = ref (StringMap.empty : unitinfo StringMap.map)
 
@@ -193,7 +193,13 @@ struct
 	  (case (find_unit unitname) of
 	       NONE => error ("unit " ^ unitname ^ " missing")
 	     | SOME entry => entry)
+
   in  
+      fun tick_cache() = let fun apper (UNIT{context=r as (ref(SOME(i,ctxt))),...}) = 
+	                         if (i<=1) then r := NONE else r := SOME(i-1,ctxt)
+			       | apper _ = ()
+  	                 in  StringMap.app apper (!mapping)
+                         end
       fun reset_mapping() = (unitlist := [];
 			     mapping := StringMap.empty)
 
@@ -262,24 +268,27 @@ struct
   fun readContext unit = 
       let val r = get_context unit
       in  (case !r of
-	       SOME ctxt => ctxt
+	       SOME (i,ctxt) => (print "readContext: incache = "; print unit; print "\n";
+		                 r := SOME(!cache_context,ctxt); ctxt)
 	     | NONE => let val uifile = base2ui (get_base unit)
 			   val ctxt = readContextRaw uifile
-			   val _ = if(!cache_context) then r:=SOME ctxt else ()
+			   val _ = if (!cache_context>0) 
+                                   then r:=SOME(!cache_context,ctxt) else ()
 		       in  ctxt
 		       end)
       end
 
   fun writeContext (unit,ctxt) = 
        let val r = get_context unit
-	   val _ = if (!cache_context) then r := SOME ctxt else ()
+(*	   val _ = if (!cache_context>0) then r := SOME(2,ctxt) else () *)
 	   val uifile = base2ui (get_base unit)
        in  forget_stat uifile;
            writeContextRaw(uifile,ctxt)
        end
 
   fun getContext imports = 
-      let val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
+      let val _ = tick_cache()
+	  val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
 	  val _ = (chat "  [Creating context from imports: ";
 	           chat_imports 4 imports;
 	           chat "]\n")
@@ -769,18 +778,22 @@ struct
                List.foldl 
                  (fn (next, set) => 
                      let val import_tr = getImportTr_link next
-                     in
-                       print "Imports for ";
-                       print next;
-                       print " are:\n   ";
-                       app (fn s => (print s; print " ")) import_tr;
-                       print "\n";
-                       StringSet.add(StringSet.addList (set, import_tr), next)
+			 val _ = if (!diag_ref)
+				     then (print "Imports for ";
+					   print next;
+					   print " are:\n   ";
+					   app (fn s => (print s; print " ")) import_tr;
+					   print "\n")
+				 else ()
+		     in StringSet.add(StringSet.addList (set, import_tr), next)
                      end)
                  (StringSet.empty)
                  units
 
-          val base_args = map get_base (StringSet.listItems unit_set)
+	  fun mapper unit = if (StringSet.member(unit_set,unit))
+				then SOME(get_base unit)
+			    else NONE
+          val base_args = List.mapPartial mapper units
 
       in
 	  (case (linkopt,exeopt) of
