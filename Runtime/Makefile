@@ -193,16 +193,16 @@ ${objdir}/%.hprof.o: %.s
 # command adds dependency information for two additional targets: the
 # generated makefile and the heap profiling object file.
 
-ADD_MAKEFILE_DEP=sed 's,\($*\)\.o[ :]*,\1.o \1.hprof.o $@ : ,g'
-ADD_MAKEFILE_DEP_ASM=sed 's,\($*${ASM}\)\.o[ :]*,\1.o \1.hprof.o $@ : ,g'
+FIX_DEP=sed 's,\($*\)\.o[ :]*,${objdir}/\1.o ${objdir}/\1.hprof.o $@ : ,g'
+FIX_DEP_ASM=sed 's,\($*${ASM}\)\.o[ :]*,${objdir}/\1.o ${objdir}/\1.hprof.o $@ : ,g'
 
 # Dependencies for C source.
 ${objdir}/%.d: %.c
-	$(CPP) $(CPPFLAGS) -M $< | $(ADD_MAKEFILE_DEP) > $@
+	$(CPP) $(CPPFLAGS) -M $< | $(FIX_DEP) > $@
 
 # Dependencies for assembler source.  ("as -M" doesn't work on solaris.)
 ${objdir}/%${ASM}.d: %${ASM}.s
-	makedepend -f- -- $(ASFLAGS) -- $< | $(ADD_MAKEFILE_DEP_ASM) > $@
+	makedepend -f- -- $(ASFLAGS) -- $< | $(FIX_DEP_ASM) > $@
 
 # Snarf up the dependency information.
 include $(patsubst %,${objdir}/%.d,${ROOT_OBJ})
