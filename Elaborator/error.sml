@@ -57,8 +57,9 @@ struct
 			in src_region := (tl(!src_region))
 			end
 
-    fun error_region_string() = ("Error at " ^ (peek_region_string()) ^ ", ")
-    fun warn_region_string() = ("Warning at " ^ (peek_region_string()) ^ ", ")
+    (* message format is compatible with Parser/errormsg.sml *)
+    fun error_region_string() = ((peek_region_string()) ^ " Error: ")
+    fun warn_region_string() = ((peek_region_string()) ^ " Warning: ")
     fun error_region() = (error_level := error_max(!error_level,Error);
 			  print (error_region_string()))
     fun warn_region() = (error_level := error_max(!error_level,Warn);
