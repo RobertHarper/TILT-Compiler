@@ -28,11 +28,8 @@ struct
     val profile = Stats.bool "nil_profile"
     val (nilcontext_kinds_bound,
 	 nilcontext_kinds_renamed) =
-      if !profile then
-	(Stats.counter "nilcontext_kinds_bound",
-	 Stats.counter "nilcontext_kinds_renamed")
-      else
-	(id,id)
+      (Stats.counter "nilcontext_kinds_bound",
+       Stats.counter "nilcontext_kinds_renamed")
   end
 
   structure V = Name.VarMap
@@ -165,8 +162,8 @@ struct
 	  | SOME k => *)
 	   let
 	     val var' = Name.derived_var var
-	     val _ = (nilcontext_kinds_renamed();
-		      nilcontext_kinds_bound ())
+	     val _ = if !profile then (nilcontext_kinds_renamed();
+				       nilcontext_kinds_bound ()) else ()
 	     val kind = selfify(Nil.Var_c var',kind)
 	     val kindmap = V.insert (kindmap, var', kind)
 	     val c_binds_top = if top_level then V.insert (c_binds_top, var', kind) else c_binds_top
