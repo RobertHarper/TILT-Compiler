@@ -2,25 +2,25 @@
 
 (*
 NAME
-	runtest, runall, tilt, tilt-nj, platform
+	runall, runtest, tilt, tilt-nj, platform
 		- regression test harness for the TILT compiler
 
 SYNOPSIS
-	runtest [-fnc] testdir ...
+	./runall [-fnc]
 
-	runall [-fnc]
+	./Runtest.$platform.exe [-fnc] testdir ...
 
-	tilt [tilt-options]
-	tilt-nj [tilt-options]
+	./tilt [tilt-options]
+	./tilt-nj [tilt-options]
 
 DESCRIPTION
 	Runtest performs the tests in testdirs, stopping when a test
 	fails.  Each testdir defines a single test, as described in
 	the file README.  With the -f option, runtest will keep going
 	after failure.  The -n option causes runtest to use a version
-	of TILT hosted under the SML/NJ runtime.  Runtest purges
-	compiler-generated files before each test and after each
-	successful test.  The -c option prevents this cleanup.
+	of TILT compiled by SML/NJ.  Runtest purges compiler-generated
+	files before each test and after each successful test.  The -c
+	option prevents this cleanup.
 
         A test comprises some SML code and an expected result.
 	Runtest uses TILT to compile the test code then runs the
@@ -59,11 +59,12 @@ BUGS
 	versions of TILT.  The glorious details are:
 
 	1. Check out the sources.
-	2. Compile the runtime with gmake runtime inside Runtime.
-	3. Compile TILT under SML/NJ with gmake heap at the top-level.
-	4. Compile the Basis with ./Test/tilt-nj -b at the top-level.
+	2. Compile the runtime with gmake runtime inside ml96/Runtime.
+	3. Compile TILT under SML/NJ with gmake heap inside ml96.
+	4. Compile the Basis with ./Test/tilt-nj -b inside ml96.
 	5. Compile native TILT with ./Test/tilt-nj -m mapfile-all
-	   at the top-level.
+	   inside ml96.
+	6. Compile runtest with ./tilt-nj -m mapfile inside ml96/Test.
 
 	If you use -n, you can skip step (5).
 *)
