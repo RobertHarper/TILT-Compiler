@@ -1,4 +1,4 @@
-(*$import Rtl Nil *)
+(*$import Rtl Nil TortlBase *)
 
 signature TORTL_RECORD = 
 sig

@@ -1,4 +1,4 @@
-(*$import TORTLARRAY Rtl Pprtl TortlBase Rtltags Nil NilUtil Ppnil Stats *)
+(*$import TORTLARRAY Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
 
 
 structure TortlArray :> TORTL_ARRAY =

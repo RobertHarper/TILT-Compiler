@@ -1,4 +1,4 @@
-(*$import TORTLVARARG Rtl Pprtl TortlBase Rtltags Nil NilUtil Ppnil Stats *)
+(*$import TORTLVARARG Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
 
 (* ASSUMPTIONS and GUARANTEES:
 *)
