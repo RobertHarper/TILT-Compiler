@@ -1,2 +1,7 @@
-TOP top.sig
-Test top
+TOP		top.sig
+Top		top		TARGET
+
+REQUIRED	required.sig
+Required	required	TARGET
+
+Test		test		TARGET

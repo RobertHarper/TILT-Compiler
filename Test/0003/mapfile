@@ -1,3 +1,4 @@
 OVERLOAD	overload.sig
 OvldDefaults	overload-defaults
-Test		overload
+Overload	overload		TARGET
+Test		test			TARGET

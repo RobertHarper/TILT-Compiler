@@ -1,4 +1,3 @@
 0001	Arithmetic exceptions.
-0002	Top-level types and values.
+0002	Top-level types and values, basis structures and sharing.
 0003	Overloading.
-0004	Required Basis structures and sharing.
