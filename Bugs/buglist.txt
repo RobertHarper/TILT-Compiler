@@ -126,3 +126,4 @@
 0126 [open]	parsing identifiers incorrectly
 0127 [open]	integer overflow discrepancy
 0128 [open]	discrepancy on arguments to datatypes
+0129 [open]	os exit status and textio
