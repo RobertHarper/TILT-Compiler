@@ -846,7 +846,7 @@ struct
 				    Rtl.BCNDI(Rtl.LT, cursor_val, Rtl.REG end_val, afterLabel, true)];
 		     emit (BASE (MOVE (Rheap, Rat)));
 		     emit (BASE (GC_CALLSITE afterLabel));
-		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
+		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 				      {regs_modified=[Rat], regs_destroyed=[Rat],
 				       args=[Rat]})));
 		     app translate [Rtl.ILABEL afterLabel,
@@ -904,7 +904,7 @@ struct
 	  emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
 	  emit (SPECIFIC (CBRANCHI(BL, rtl_loclabel)));
 	  emit (BASE (GC_CALLSITE rtl_loclabel));
-	  emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("gc_raw"), NONE,
+	  emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 			   {regs_modified=[Rat], regs_destroyed=[Rat],
 			    args=[Rat]})));
 	  translate (Rtl.ILABEL rtl_loclabel)

@@ -753,11 +753,11 @@ struct
 			case (calltype, func) of
 
 			  (C_NORMAL, DIRECT (label as (ML_EXTERN_LABEL _), sraOpt)) => 
-			      [BASE(BSR (ML_EXTERN_LABEL "save_regs_forC", NONE, no_moddef_info)),
+			      [BASE(BSR (ML_EXTERN_LABEL "save_regs_MLtoC", NONE, no_moddef_info)),
 			       BASE(BSR (label, sraOpt, no_moddef_info)),
 			       BASE(ILABEL return_label)] @
 			      (std_return_code sraOpt) @
-			      [BASE(BSR (ML_EXTERN_LABEL "load_regs_forC", NONE, no_moddef_info))] @
+			      [BASE(BSR (ML_EXTERN_LABEL "load_regs_MLtoC", NONE, no_moddef_info))] @
 			      (std_return_code NONE)
 
 			| (C_NORMAL, DIRECT (l, _)) => 

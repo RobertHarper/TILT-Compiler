@@ -21,9 +21,7 @@ void show_gcstats(Object_Profile_t *alloc, Object_Profile_t *collect);
 void gc_heapstat(value_t *bottom, value_t *alloc_ptr);
 void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *from,
 			      int *stackbot, int *stacktop);
-void gcstat_normal(unsigned allocsize,
-	 	   unsigned oldsize, double oldratio, 
-		   unsigned newsize, unsigned copied);
+void gcstat_normal(unsigned allocsize, unsigned copied);
 void gcstat_finish(unsigned long allocptr);
 
 void gcstat_heapprofile_beforecollect(value_t *bot, value_t *top);

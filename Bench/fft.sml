@@ -243,5 +243,5 @@ fun doit() =
   end
 
 in
-val _ = doit()
+    val fftResult = doit()
 end

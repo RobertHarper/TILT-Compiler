@@ -44,84 +44,64 @@ value_t old_alloc_limit = 0;
 
 /* ------------------  Generational array allocation routines ------------------- */
 
-value_t alloc_bigintarray_gen(int word_len, value_t init_val, int ptag)
+value_t alloc_bigintarray_gen(int byte_len, value_t init_val, int ptag)
 {
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
   value_t *res = 0;
-  int i, tag = IARRAY_TAG | word_len << (2 + ARRLEN_OFFSET);
-  int real_byte_len = 4 * (word_len + 1);
+  int word_len = (byte_len + 3) / 4;
+  int i, tag = IARRAY_TAG | (byte_len << ARRLEN_OFFSET);
+  int real_byte_len = word_len * 4 + 4;  /* tag takes one word and we must add padding */
 
-#ifdef DEBUG
-  printf("\nint_alloc called with word_len = %d   init_val = %d\n",
-	 word_len, init_val);
-#endif
+  /* If there is not enough heap space in older space, we must do a major GC */
+  if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) 
+    GCFromC(curThread, 4, 1);
 
+  assert (old_fromheap->alloc_start + real_byte_len < old_fromheap->top);
+  res = (value_t *)(old_fromheap->alloc_start + 4);
+  old_fromheap->alloc_start += real_byte_len;
+  old_alloc_ptr = old_fromheap->alloc_start;
+  assert(old_fromheap->alloc_start < old_fromheap->top);
 
-    {
-      if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) {
-	curThread->request = 4;
-	gc_gen(curThread,0);
-      }
-     if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top)
-       {
-	 printf("old_fromheap->alloc_start + 4*(word_len + 1) < old_fromheap->top\n%d + %d < %d\n",
-		old_fromheap->alloc_start, real_byte_len, old_fromheap->top);
-	 assert(0);
-       }
-#ifdef HEAPPROFILE
-      real_byte_len needs to be 4 bigger if we profile objects
-      *(value_t *)(old_fromheap->alloc_start) = 30007;
-      old_fromheap->alloc_start += 4;
-#endif
-      res = (value_t *)(old_fromheap->alloc_start + 4);
-      old_fromheap->alloc_start += real_byte_len;
-      old_alloc_ptr = old_fromheap->alloc_start;
-      assert(old_fromheap->alloc_start < old_fromheap->top);
-    }
   res[-1] = tag;
   for (i=0; i<word_len; i++)
     res[i] = init_val;
-printf("TotalBytesAllocated 1: %ld\n",TotalBytesAllocated);
-  TotalBytesAllocated += 4*(word_len+1);
-printf("TotalBytesAllocated 1: %ld\n",TotalBytesAllocated);
+  gcstat_normal(4*(word_len+1), 0);
   return (value_t) res;
 }
 
-
-
-value_t alloc_bigptrarray_gen(int log_len, value_t init_val, int ptag)
+value_t alloc_bigptrarray_gen(int word_len, value_t init_val, int ptag)
 {
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
   value_t *res = 0;
-  int i, tag = PARRAY_TAG | log_len << (2 + ARRLEN_OFFSET);
-  int real_byte_len = 4 * (log_len + 1);
+  int byte_len = word_len << 2;
+  int i, tag = PARRAY_TAG | (byte_len << ARRLEN_OFFSET);
+  int real_byte_len = byte_len + 4;  /* tag takes one word */
 
-    {
-      /* we collect if init_val is from young area */
-      if ((old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) ||
-	  (init_val >= nursery->bottom && init_val < nursery->top)) {
-	curThread->request = 4;
-	gc_gen(curThread,0);
-      }
-      assert(old_fromheap->alloc_start + real_byte_len < old_fromheap->top);
-#ifdef HEAPPROFILE
-      real_byte_len needs to be 4 bigger if we profile objects
-      *(value_t *)(old_fromheap->alloc_start) = 30009;
-      old_fromheap->alloc_start += 4;
-#endif
-      res = (value_t *)(old_fromheap->alloc_start + 4);
-      old_fromheap->alloc_start += real_byte_len;
-      assert(old_fromheap->alloc_start < old_fromheap->top);
-      old_alloc_ptr = old_fromheap->alloc_start;
-    }
+  /* If the older generation does not have enough space, we for a major GC */
+  if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top)
+      GCFromC(curThread,4,1);
+  /* If init_val is in the young area, we need a minor GC. */
+  else if (init_val >= nursery->bottom && init_val < nursery->top) {
+      GCFromC(curThread,4,0);
+      /* minor GC may have taken too much space */
+      if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) 
+	GCFromC(curThread,4,1);
+  }
+
+  /* We must have enough space to allocate to older generation now. */
+  assert(old_fromheap->alloc_start + real_byte_len < old_fromheap->top);
+  res = (value_t *)(old_fromheap->alloc_start + 4);
+  old_fromheap->alloc_start += real_byte_len;
+  assert(old_fromheap->alloc_start < old_fromheap->top);
+  old_alloc_ptr = old_fromheap->alloc_start;
+
   res[-1] = tag;
-  for (i=0; i<log_len; i++)
+  for (i=0; i<word_len; i++)
     res[i] = init_val;
   return (value_t) res;
 }
-
 
 
 value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
@@ -131,85 +111,51 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
   long i;
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
-  int pos, tag = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
-  int real_byte_len = 8 * (log_len + 1);
+  int byte_len = log_len << 3;
+  int pos, tag = RARRAY_TAG | (byte_len << ARRLEN_OFFSET);
+  int real_byte_len = byte_len + 8;  /* one word for tag, possibly another for alignment */
 
-#ifdef DEBUG
-  printf("(log_len,init_val)  is  (%d, %lf)\n",log_len,init_val);
-#endif
+  assert(byte_len >= 8192);
+  assert(real_byte_len < floatheapsize);
+  pos = AllocBitmapRange(floatbitmap,DivideUp(real_byte_len,floatbitmapsize));
 
-
+  if (pos < 0)
     {
-      assert(log_len >= 4096);
-      assert(real_byte_len < floatheapsize);
-      pos = AllocBitmapRange(floatbitmap,DivideUp(real_byte_len,floatbitmapsize));
-
-      if (pos < 0)
+      int qlen;
+      QueueClear(float_roots);    
+      curThread->request = 4;
+      gc_gen(curThread,1);
+      /* --- stuff already marked; sweep the bitmap, then mark the live stuff --- */
+      ClearBitmap(floatbitmap);
+      qlen = QueueLength(float_roots);
+      for (i=0; i<qlen; i++)
 	{
-	  int qlen;
-#ifdef DEBUG
-	  printf("Have to do a GC while doing a float_alloc.  Hope this works.\n");
-#endif
-	  QueueClear(float_roots);    
-	  curThread->request = 4;
-	  gc_gen(curThread,1);
-#ifdef DEBUG
-	  printf("float_roots has %d items\n",QueueLength(float_roots));
-#endif
-	  /* --- stuff already marked; sweep the bitmap, then mark the live stuff --- */
-	  ClearBitmap(floatbitmap);
-	  qlen = QueueLength(float_roots);
-	  for (i=0; i<qlen; i++)
-	    {
-	      value_t far_val = (value_t) QueueAccess(float_roots,i);
-	      value_t tag = ((int *)far_val)[-1];
-	      int word_len = GET_ARRLEN(tag)/4;
-	      value_t start = RoundDown(far_val, floatbitmapsize);
-	      value_t end   = RoundUp(far_val+4*word_len, floatbitmapsize);
-	      int bitmap_start = (start - floatheap->bottom) / floatbitmapsize;
-	      int bitmap_end   = (end - floatheap->bottom) / floatbitmapsize;
-	      int bitmap_size = bitmap_end - bitmap_start;
-#ifdef DEBUG
-	      printf("float root #%d; *%d = %d\n",i,far_val,tag);
-#endif
-	      if (!(IS_RARRAY(tag)))
-		{
-		  printf("expected array tag at %d: got %d\n",far_val,tag);
-		  assert(0);
-		}
-	      SetBitmapRange(floatbitmap,bitmap_start,bitmap_size);
-#ifdef DEBUG
-	      printf("Restoring array with (start,end,size) word_len = (%d, %d, %d) %d\n",
-		     bitmap_start,bitmap_end,bitmap_size,word_len);
-#endif
-	    }
-	  pos = AllocBitmapRange(floatbitmap,DivideUp(real_byte_len,floatbitmapsize));
-#ifdef DEBUG
-	  printf("pos = %d, size = %d start = %d, safeend = %d\n",
-		 pos,DivideUp(real_byte_len,floatbitmapsize),
-		 (double *)(floatheap->bottom + floatbitmapsize * pos),
-		 (double *)(floatheap->bottom + floatbitmapsize * pos) + (log_len + 1));
-#endif
+	  value_t far_val = (value_t) QueueAccess(float_roots,i);
+	  value_t tag = ((int *)far_val)[-1];
+	  int word_len = GET_ARRLEN(tag)/4;
+	  value_t start = RoundDown(far_val, floatbitmapsize);
+	  value_t end   = RoundUp(far_val+4*word_len, floatbitmapsize);
+	  int bitmap_start = (start - floatheap->bottom) / floatbitmapsize;
+	  int bitmap_end   = (end - floatheap->bottom) / floatbitmapsize;
+	  int bitmap_size = bitmap_end - bitmap_start;
+	  if (!(IS_RARRAY(tag))) {
+	    fprintf(stderr,"expected array tag at %d: got %d\n",far_val,tag);
+	    assert(0);
+	  }
+	  SetBitmapRange(floatbitmap,bitmap_start,bitmap_size);
 	}
+      pos = AllocBitmapRange(floatbitmap,
+			     DivideUp(real_byte_len,floatbitmapsize));
       assert(pos >= 0);
-      
-      rawstart = (double *)(floatheap->bottom + floatbitmapsize * pos);
-      res = (value_t *)(rawstart + 1);
-      TotalBytesAllocated += RoundUp(real_byte_len,floatbitmapsize);
     }
-#ifdef HEAPPROFILE
-  ((int *)res)[-2] = 30011;
-#endif
+
+  rawstart = (double *)(floatheap->bottom + floatbitmapsize * pos);
+  res = (value_t *)(rawstart + 1);
+  gcstat_normal(RoundUp(real_byte_len,floatbitmapsize), 0);
   ((int *)res)[-1] = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
   for (i=0; i<log_len; i++)
     ((double *)res)[i] = init_val;
 
-#ifdef DEBUG
-{
-  static int count = 0;
-  printf("\n--- float_alloc %d returning [%d(-8) to %d)\n",++count,res,res+2*log_len);
-}
-#endif
   return (value_t) res;
 }
 
@@ -419,7 +365,6 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  old_fromheap->alloc_start = old_alloc_ptr;
 	  assert(old_fromheap->alloc_start < old_fromheap->top);
 	  gcstat_normal(allocptr - nursery->alloc_start,
-			0, 0.0, 0,
 			to_allocptr - old_alloc_ptr);
 
 	  old_alloc_ptr = to_allocptr;
@@ -457,16 +402,12 @@ void gc_gen(Thread_t *curThread, int isMajor)
 		     old_fromheap->top, old_fromheap->bottom);
 	      printf("nursery->top = %d, nursery->bottom = %d\n",
 		     nursery->top, nursery->bottom);
-	      printf("old_toheap->rawtop = %d, old_toheap->top = %d, old_toheap->bottom = %d\n",
-		     old_toheap->rawtop, old_toheap->top, old_toheap->bottom);
+	      printf("old_toheap->top = %d, old_toheap->bottom = %d\n",
+		     old_toheap->top, old_toheap->bottom);
 	    }    
 	  newsize = Heap_Getsize(old_toheap);
 	  Heap_Resize(old_toheap,newsize);
 	  Heap_Unprotect(old_toheap); 	  
-	  if (GCtype == ForcedMajor)
-	      fprintf(stderr,"--------MAJOR GC %d at GC %d---------\n",NumMajorGC, NumGC);
-	  else 
-	      fprintf(stderr,"--------FORCED MAJOR GC %d at GC %d---------\n",NumMajorGC, NumGC);
 #ifdef DEBUG
 	  printf("nursery->bottom, nursery->top: %d %d\n",
 		 nursery->bottom, nursery->top);
@@ -517,7 +458,6 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  old_alloc_ptr = to_allocptr;
 	  old_alloc_limit = old_toheap->top;
 	  gcstat_normal(allocptr - nursery->alloc_start,
-			0, 0.0, 0,
 			to_allocptr - old_toheap->bottom);
 
 
@@ -541,9 +481,10 @@ void gc_gen(Thread_t *curThread, int isMajor)
       long oldsize = (GCtype != Minor)?(old_toheap->top - old_toheap->bottom):
 	(old_fromheap->top - old_fromheap->bottom);
       long copied = old_fromheap->alloc_start - old_fromheap->bottom;
+      long live = copied + req_size;
       long eff_oldsize = (copied + req_size > oldsize) ? 
 	(copied + req_size) : oldsize;
-      double oldratio = oldsize ? (double)(copied + req_size)/ oldsize : 1.0;
+      double oldratio = oldsize ? (double)(live)/ oldsize : 1.0;
       long newsize = ComputeHeapSize(eff_oldsize, oldratio);
       if ((newsize < copied + req_size) || 
 	  req_size > (nursery->top - nursery->bottom))
@@ -553,6 +494,10 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  fprintf(stderr,"FATAL ERROR: gen failure reqesting %d bytes\n",req_size);
 	  exit(-1);
 	}
+      fprintf(stderr,"---- %sMAJOR GC %d (%d): ",
+	      GCtype == ForcedMajor ? "*" : " ", NumMajorGC, NumGC);
+      fprintf(stderr,"live = %d     oldHeap = %d(%.3lf)  -> newHeap = %d(%.3lf)\n", 
+	      live, oldsize, oldratio, newsize, ((double)live)/newsize);
       Heap_Resize(old_fromheap,newsize);
     }
 
@@ -592,24 +537,14 @@ void gc_init_gen()
   int cache_size = GetBcacheSize();
   INT_INIT(YoungHeapByte, (int)(0.85 * cache_size));
   
-#ifdef SEMANTIC_GARBAGE
-  INT_INIT(MaxHeap, 12 * 1024);
-#else
-  INT_INIT(MaxHeap, 32 * 1024);
-#endif
+  INT_INIT(MaxHeap, 80 * 1024);
   INT_INIT(MinHeap, 1024);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
-#ifdef OLD_ALLOC
-  DOUBLE_INIT(TargetRatio, 0.3);
-#else
-  DOUBLE_INIT(TargetRatio, 0.4);
-#endif
-  DOUBLE_INIT(MaxRatio, 0.85);
-  DOUBLE_INIT(UpperRatioReward, 1.5);
-  DOUBLE_INIT(LowerRatioReward, 0.75);
-  DOUBLE_INIT(TargetSize, 4096.0);
-  DOUBLE_INIT(SizePenalty, 0.2);
+  DOUBLE_INIT(MinRatio, 0.2);
+  DOUBLE_INIT(MaxRatio, 0.8);
+  DOUBLE_INIT(MinRatioSize, 512);
+  DOUBLE_INIT(MaxRatioSize, 50 * 1024);
   assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
   nursery = Heap_Alloc(YoungHeapByte, YoungHeapByte);
   old_fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);

@@ -881,5 +881,5 @@ local
 
 in
 (*  val _ = print_state(runit(4,false))  *)
-    val res = runit(4,false) 
+    val simpleResult = runit(4,false) 
 end

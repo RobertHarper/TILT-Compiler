@@ -1,6 +1,7 @@
 (*$import Prelude *)
 
 (* Merge sort *)
+local
 fun revappend([],l2) = l2
   | revappend(hd::tl,l2) = revappend(tl,hd::l2)
 
@@ -35,7 +36,8 @@ fun for(start,stop,f) =
 (* fun doit() = (for(1,40,fn _ => sort (op >) (square(gen([],10),9)))) *)
 fun doit() = for(1,2,fn _ => sort (op >) (square(gen([],10),9)))
 
-    val _ = print "Started\n"    
-    val _ = doit()
-    val _ = print "Done\n"    
-
+in
+    val msortResult = (print "Started\n";
+		       doit();
+		       print "Done\n")
+end

@@ -44,7 +44,7 @@ val dim = 100
       end
 
 
-in
+
   fun mult (A : int array2, B : int array2) =
       let val (ar,ac) = length2 A
           val (br,bc) = length2 B
@@ -67,9 +67,10 @@ in
   val v = 1
   val a = array2(dim,dim,v)
   val b = mult(a,a)
-  val _ = if (check b (dim * v))
-	      then print "matrix product correct\n"
-	  else print "matrix product incorrect\n"
+in
+  val matmultResult = if (check b (dim * v))
+			  then print "matrix product correct\n"
+		      else print "matrix product incorrect\n"
 
 end
 

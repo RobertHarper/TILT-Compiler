@@ -11,10 +11,10 @@
 (*                                                                     *)
 (***********************************************************************)
 
-fun myprint s = () (* print s *)
 
 (* $Id$ *)
 local
+fun myprint s = () (* print s *)
 (* compatability *)
 val print_string : string -> unit = print
 val print_int : int -> unit = print_string o Int.toString
@@ -932,7 +932,7 @@ fun doit () =
 	    (print_string "Cannot prove!\n")
     end
 in
-  val _ = doit()
+  val boyerResult = doit()
       handle Match => print "match exception\n"
 
 end

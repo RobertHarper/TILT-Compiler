@@ -16,9 +16,9 @@
 (* Good test for loops. Best compiled with unsafe libraries. *)
 
 
+local
 val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
 val (op &&) = andb
-local
 
 fun qsort lo hi (a : int array) =
   if lo < hi then 
@@ -133,5 +133,5 @@ fun main () =
   (test_sort qsort 50000;
    test_sort qsort2 50000)
 in
-  val _ = main()
+  val quicksort2Result = main()
 end

@@ -16,9 +16,6 @@
 #include "show.h"
 
 
-
-extern int TotalGenBytesCollected;
-extern int TotalBytesAllocated;
 extern int NumGC;
 extern Queue_t *ScanQueue;
 extern value_t MUTABLE_TABLE_BEGIN_VAL;
@@ -33,7 +30,7 @@ static Queue_t *global_roots = 0;
 /* ------------------  Parallel array allocation routines ------------------- */
 
 
-value_t alloc_bigintarray_para(int log_len, value_t init_val, int ptag)
+value_t alloc_bigintarray_para(int byte_len, value_t init_val, int ptag)
 {
   assert(0);
   return 0;
@@ -55,13 +52,13 @@ value_t alloc_bigfloatarray_para(int log_len, double init_val, int ptag)
 
 
 /* --------------------- Parallel collector --------------------- */
-static int numWaitThread = 0;      /* threads waiting for mutators to stop */
-static int numGlobalThread = 0;    /* threads completed local work; all work in shared area */
-static int numReadyThread = 0;     /* threads waiting for collection to complete */
-static int numDoneThread = 0;      /* threads waiting for heap resize/space flip to complete */
+static long numWaitThread = 0;      /* threads waiting for mutators to stop */
+static long numGlobalThread = 0;    /* threads completed local work; all work in shared area */
+static long numReadyThread = 0;     /* threads waiting for collection to complete */
+static long numDoneThread = 0;      /* threads waiting for heap resize/space flip to complete */
 static value_t SharedStack[4096];
-static int SharedCursor;
-static int Gate = 0, Turn1 = 0, Turn2 = 0;
+static long SharedCursor;
+static long Gate = 0, Turn1 = 0, Turn2 = 0;
 
 static void SynchStart(SysThread_t *sth)
 {
@@ -285,7 +282,7 @@ static void stop_copy(SysThread_t *sysThread)
 	    fprintf(stderr,"FATAL ERROR: failure new = %d < copied = %d\n",new,copied);
 	    exit(-1);
 	  }
-	gcstat_normal(alloc,old,oldratio,new,copied);
+	gcstat_normal(alloc,copied);
 	Heap_Resize(toheap,new);
 	Heap_Unprotect(toheap); 
       }
@@ -314,7 +311,7 @@ static void stop_copy(SysThread_t *sysThread)
   assert(0);
 }
 
-void poll_para()
+void gc_poll_para()
 {
   if (numWaitThread)
     stop_copy(getSysThread());
@@ -355,16 +352,14 @@ void gc_para(SysThread_t *sysThread)
 
 void gc_init_para()
 {
-  INT_INIT(MaxHeap, 32 * 1024);
+  INT_INIT(MaxHeap, 80 * 1024);
   INT_INIT(MinHeap, 256);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
-  DOUBLE_INIT(TargetRatio, 0.08);
-  DOUBLE_INIT(MaxRatio, 0.8);
-  DOUBLE_INIT(UpperRatioReward, 1.5);
-  DOUBLE_INIT(LowerRatioReward, 0.75);
-  DOUBLE_INIT(TargetSize, 8192.0);
-  DOUBLE_INIT(SizePenalty, 0.1);
+  DOUBLE_INIT(MinRatio, 0.1);
+  DOUBLE_INIT(MaxRatio, 0.7);
+  DOUBLE_INIT(MinRatioSize, 512);         
+  DOUBLE_INIT(MaxRatioSize, 50 * 1024);
   fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   global_roots = QueueCreate(0,100);

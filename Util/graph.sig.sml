@@ -56,13 +56,19 @@ sig
     val numEdges : 'a graph -> int
     val nodeAttribute : 'a graph * node -> 'a
     val nodeWeight : 'a graph * node -> int
-    val pathWeight : 'a graph * node -> int
+    val ancestorWeight : 'a graph * node -> int
+    val descendentWeight : 'a graph * node -> int
     val nodes : 'a graph -> node list
     val children : 'a graph * node -> node list
     val parents : 'a graph * node -> node list
     val ancestors : 'a graph * node -> node list    (* topologically sorted with descendants first *)
 
-    val makeDot : TextIO.outstream * 'a graph -> unit  
+    datatype nodeStatus = Black  (* Completed nodes whose outgoing edges will not be shown *)
+	                | Gray   (* Working nodes which will be shown in boxes *)
+	                | White  (* Nodes that can be worked on if there are no incoming edges *)
+    val makeDot : {graph : 'a graph,
+		   out : TextIO.outstream,
+		   status : node -> nodeStatus}-> unit  
     val removeTransitive : 'a graph -> 'a graph
     val collapse : 'a graph * 
 	                {maxWeight : int,

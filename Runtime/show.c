@@ -4,7 +4,7 @@
 #include "tag.h"
 #include "memobj.h"
 #include "show.h"
-
+#include "global.h"
 
 
 /* Check that pointer is either a tag, a global, or a current heap value */

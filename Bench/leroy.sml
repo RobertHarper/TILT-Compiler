@@ -612,8 +612,8 @@ val Group_order = rpo Group_precedence lex_ext
 fun greater pair =
   case Group_order pair of Greater => true | _ => false
 
-in
     fun doit() = kb_complete greater [] Geom_rules 
 	handle e => (print "top-level exception caught and re-raised"; raise e)
-    val _ = doit()
+in
+    val leroyResult = doit()
 end

@@ -87,14 +87,20 @@ GetRpcc:
  # ----------------------------------------------------------------------------
 	.ent	start_client 
 start_client:
- 	ldgp	$gp, 0($27)	# get self gp
-	mov	$16,THREADPTR_REG				# initialize thread ptr outside loop
-	ldq	ALLOCPTR_REG, ALLOCPTR_DISP(THREADPTR_REG)	# initialize heap ptr outside loop
-	ldq	ALLOCLIMIT_REG, ALLOCLIMIT_DISP(THREADPTR_REG)	# initizlize heap limit outside loop
-	ldq	$sp, SP_DISP(THREADPTR_REG)			# initialize stack outside loop
+ 	ldgp	$gp, 0($27)				# get self gp
+	mov	$16,THREADPTR_REG			# initialize thread ptr outside loop
+	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
+	bsr	load_regs				# restore dedicated pointers like
+							# heap pointer, heap limit, and stack pointer
+							# don't need to restore return address
+	ldq	$1, MLsaveregs_disp+8($0)		# restore $1 which is not restored by load_regs
+	ldq	$0, MLsaveregs_disp($0)			# restore $0 which was used as arg to load_regs
+	br	$gp, start_client_getgp1
+start_client_getgp1:	
+	ldgp	$gp, 0($gp)				# fix $gp
 	br	$31, after_loop
 thunk_loop:
-	stl	$31, notinml_disp(THREADPTR_REG)
+	stq	$31, notinml_disp(THREADPTR_REG)
 .set noat
  	ldl	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
 	addl	$16, 1, $17				# increment and
@@ -109,8 +115,9 @@ thunk_loop:
 	stl	$sp, 4(EXNPTR_REG)			# initialize the stack pointer
 	jsr	$26,  ($27)				# jump to thunk
 start_client_retadd_val:	
-	br	$gp, dummy
-dummy:	ldgp	$gp, 0($gp)
+	br	$gp, start_client_getgp2
+start_client_getgp2:	
+	ldgp	$gp, 0($gp)
 after_loop:	
 	ldl	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
 	ldl	$17, numThunk_disp(THREADPTR_REG)	# fetch numThunk
@@ -118,6 +125,7 @@ after_loop:
 	bne	$at, thunk_loop				# execute if nextThunk < numThunk
 	lda	$at, 1($31)
 	stl	$at, notinml_disp(THREADPTR_REG)
+	addq	THREADPTR_REG, MLsaveregs_disp, $0
 	bsr	save_regs				# need to save register set to get 
 							#    alloction pointer into thread state
 	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
@@ -129,16 +137,14 @@ after_loop:
 	.end	start_client
 .set at
 	
- # ---------------------------
- # Yield
- # ---------------------------	
+ # ------------------------------------------------------------------------------------
+ # Yield is called by mutator like a C function so save_regs_MLtoC has just been called
+ # ------------------------------------------------------------------------------------
 	.ent	Yield
 	.frame $sp, 0, $26
 	.prologue 0
 Yield:
 .set noat
-	stq	$26, 208(THREADPTR_REG)	# note that this is return address of Yield
-	bsr	save_regs
 	br	$gp, Yield_getgp
 Yield_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self	
@@ -219,13 +225,13 @@ global_exn_handler_dummy:
 	.ent	raise_exception_raw
 raise_exception_raw:
 	mov	$16, THREADPTR_REG	# restore thread point
-	mov	$17, $16		# save the exn value;  load_regs_forC does not change $16
+	mov	$17, $16		# save the exn value;  load_regs_MLtoC does not change $16
 	br	$gp, restore_dummy
 restore_dummy:	
 	ldgp	$gp, 0($gp)		# get own gp
 .set noat
 					# restore address from argument
-	bsr	load_regs_forC
+	bsr	load_regs_MLtoC
 	stq	$18, 24($sp)		# save handler address
 	mov	$16, EXNARG_REG		# restore exn arg - which is same as $26 
 	ldq	$27, 0(EXNPTR_REG)	# fetch exn handler code

@@ -1,12 +1,12 @@
 (*$import Prelude *)
 
+
+local
 val makestring_int = Int.toString
 fun fold f l a = foldr f a l
 fun ordof(s : string, i : int) = ord(String.sub(s,i))
 fun char2string c = implode[c]
 
-
-local
     fun char_leq(a : char, b : char) = (ord a) <= (ord b)
     fun char_geq(a : char, b : char) = (ord a) >= (ord b)
     fun char_gt(a : char, b : char) = (ord a) > (ord b)
@@ -1160,8 +1160,8 @@ fun lexGen(xinfile) =
 	   close_out(!LexOut)
 	 end)
     end
-fun doit() = (lexGen "../Bench/ml.lex")
+fun doit() = (lexGen "Bench/ml.lex")
 in
- val _ = doit() 
+ val lexgenResult = doit() 
 end
  

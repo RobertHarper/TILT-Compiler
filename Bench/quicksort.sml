@@ -14,9 +14,9 @@
 (* $Id$ *)
 
 
+local
 val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
 val (op &&) = andb
-local
 fun inc x = x := (!x) + 1
 fun dec x = x := (!x) - 1
 
@@ -117,5 +117,5 @@ fun main () =
    test_sort qsort2 50000;
    test_sort qsort2 50000)
 in
-  val _ = main()
+  val quicksortResult = main()
 end

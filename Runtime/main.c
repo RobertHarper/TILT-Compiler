@@ -2,6 +2,8 @@
 #include <sys/resource.h>
 #include <sys/user.h>
 #include <string.h>
+#include <errno.h>
+#include <sys/mman.h>
 
 #include "queue.h"
 #include "tag.h"
@@ -118,7 +120,8 @@ struct option_entry table[] =
    1, "fixheap", &fixheap, "Set the size of heap in Kbytes",
    1, "nursery", &youngheap, "Set size of nursery in Kbytes",
    1, "nurserybyte", &YoungHeapByte, "Set size of nursery in bytes",
-   2, "targetratio", &TargetRatio, "Set the target ratio of live objects",
+   1, "minratio", &MinRatio, "Set the minimum ratio of of live objects to all objects",
+   1, "maxratio", &MaxRatio, "Set the maximum ratio of of live objects to all objects",
    0, "short", &shortSummary, "Print short summary of execution"};
 
 void process_option(int argc, char **argv)
@@ -174,14 +177,15 @@ void process_option(int argc, char **argv)
     printf("The following options are available.\n");
     for (i=0; i<sizeof(table) / sizeof(struct option_entry); i++) {
       char *type;
+      printf("%12s : ", table[i].name);
       switch (table[i].type) {
-	case 0 : type = "bool"; break;
-	case 1 : type = "int"; break;
-	case 2 : type = "long"; break;
-	case 3 : type = "double"; break;
-	default : printf("Unknown type for option entry %d", table[i].name); assert(0);
+	case 0 : printf("bool = %s", *(int *)table[i].item ? "true" : "false"); break;
+	case 1 : printf("int = %d", *(int *)(table[i].item)); break;
+	case 2 : printf("long = %d", *(long *)(table[i].item)); break;
+	case 3 : printf("double = %lf", *(double *)(table[i].item)); break;
+	default : printf("Unknown type!!!", table[i].name); assert(0);
       }
-      printf("%12s : %6s -- %s\n", table[i].name, type, table[i].description);
+      printf(" -- %s\n", table[i].description);
     }
     exit(-1);
   }

@@ -21,5 +21,5 @@ fun tak (x, y, z) =
 fun repeat n =
   if n <= 0 then 0 else tak(18,12,6) + repeat(n-1)
 in
-    val _ = (print (Int.toString (repeat 500)); print "\n")
+    val takuResult = (print (Int.toString (repeat 500)); print "\n")
 end

@@ -268,15 +268,12 @@ Callinfo_t *LookupCallinfo(value_t ret_add)
   unsigned int i;
   struct HashEntry *e;
   e = HashTableLookup(CallinfoHashTable,(unsigned long)ret_add,0);
-#ifdef STACKDEBUG
   if (e && ((value_t)(e->data) < NUM_STACK_STUB))
     { printf("stack_stub_%d lookup in stack trace\n",e->data); return NULL; }
   if (e)
     return (Callinfo_t *)(e->data);
-  printf("FATAL ERROR: ret_add = %d not found in table during stack trace\n",ret_add);
+  fprintf(stderr,"FATAL ERROR: ret_add = %d not found in table during stack trace\n",ret_add);
   assert(0);
-#endif
-  return (Callinfo_t *)(e->data);
 }
 
 
@@ -336,8 +333,12 @@ int findretadd(value_t *sp_ptr, value_t *cur_retadd_ptr, value_t top,
       error platform not defined
 #endif
 #endif
-
-      sp += GET_FRAMESIZE(callinfo->sizes)<<2;
+      { 
+	int framesize = GET_FRAMESIZE(callinfo->sizes)<<2;
+	if (framesize >= 8192)
+	  printf("framesize = %d too big\n", framesize);
+	sp += framesize;
+      }
       if (cur_retadd == (value_t)(&start_client_retadd_val) || (sp == top))
 	{
 	  done = 1;

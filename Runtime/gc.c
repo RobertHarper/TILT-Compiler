@@ -16,8 +16,6 @@
 #include "gcstat.h"
 #include "show.h"
 
-/* XXX for temp debugging */
-extern int NumThread;
 
 
 /* use generational by default */
@@ -64,36 +62,34 @@ static range_t null_range;
 
 
 int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
-double TargetRatio = 0.0, MaxRatio = 0.0;
-double UpperRatioReward = 0.0, LowerRatioReward = 0.0;
-double TargetSize = 0.0, SizePenalty = 0.0;
+double MinRatio = 0.0, MaxRatio = 0.0;
+int MinRatioSize = 0,  MaxRatioSize = 0;
 
 long ComputeHeapSize(long oldsize, double oldratio)
 {
-  double res = 0.0;
-  double diff_ratio = (oldratio - TargetRatio) / TargetRatio;
-  double diff_size  = (oldsize - 1024 * TargetSize) / (double) (1024 * TargetSize);
-  double where = oldsize / (1024.0 * MaxHeap);
-  double RatioReward = UpperRatioReward * (1 - where) + LowerRatioReward * where;
-  double k_ratio = (diff_ratio < 0.0) ? 1.0 : (1.0 + diff_ratio * RatioReward);
-  double k_size  = (diff_size < 0.0) ? 1.0 : (1.0 + diff_size * SizePenalty);
-  if (k_size > 2.0)
-    k_size = 2.0;
-  res = oldsize * k_ratio / k_size;
-  if (res < ((oldratio / MaxRatio) * oldsize))
-      res = ((oldratio / MaxRatio) * oldsize);
-  if (res >= 2.5 * oldsize)
-    res = 2.5 * oldsize;
-  if (res < 1024 * MinHeap)
-    res = 1024 * MinHeap;
-  if (res > (1024 * MaxHeap))
-    res = 1024 * MaxHeap;
-  
-  if (!(res >= (long)(oldsize * oldratio)))
-    {
-      assert(0);
-    }
-  return ((long)res) / 4 * 4;
+  /* Internally, we will round to the nearest K */
+  long oldlive = ((long)(oldsize * oldratio) + 1023) / 1024;  /* must round up here */
+  double rawWhere = (oldlive - MinRatioSize) / (double)(MaxRatioSize - MinRatioSize);
+  double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
+  double newratio = MinRatio + where * (MaxRatio - MinRatio);
+  long newsize = (oldlive / newratio) / 32 * 32 + 32;
+  if (oldlive > MaxHeap) {
+    fprintf(stderr,"GC error: livedata = %d but maxheap constrained to %d\n", oldlive, MaxHeap);
+    assert(0);
+  }
+  if (newsize > MaxHeap) {
+    double constrainedRatio = ((double)oldlive) / MaxHeap;
+    fprintf(stderr,"GC warning: Would like to make newheap %d but constrained to <= %d\n",newsize, MaxHeap);
+    if (constrainedRatio > 0.95)
+      fprintf(stderr,"GC warning: Ratio is dangerously high %lf.\n", constrainedRatio);
+    newsize = MaxHeap;
+  }
+  if (newsize < MinHeap) {
+    fprintf(stderr,"GC warning: Would like to make newheap %d but constrained to >= %d\n",newsize, MinHeap);
+    newsize = MinHeap;
+  }
+  assert(newsize > oldlive);
+  return 1024 * newsize;
 }
 
 
@@ -369,13 +365,13 @@ void debug_after_collect(Heap_t *fromheap, Heap_t* old_fromheap)
 
 
 /* ------------------------------ Interface Routines -------------------- */
-value_t alloc_bigintarray(int wordlen, value_t value, int ptag)
+value_t alloc_bigintarray(int byteLen, value_t value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace :    { return alloc_bigintarray_semi(wordlen,value,ptag); }
-    case Generational : { return alloc_bigintarray_gen (wordlen,value,ptag); }
-    case Parallel :     { return alloc_bigintarray_para(wordlen,value,ptag); }
+    case Semispace :    { return alloc_bigintarray_semi(byteLen,value,ptag); }
+    case Generational : { return alloc_bigintarray_gen (byteLen,value,ptag); }
+    case Parallel :     { return alloc_bigintarray_para(byteLen,value,ptag); }
     }
 }
 
@@ -399,10 +395,10 @@ value_t alloc_bigfloatarray(int loglen, double value, int ptag)
     }
 }
 
-void poll()
+void gc_poll()
 {
   if (collector_type == Parallel)
-    poll_para();
+    gc_poll_para();
   return;
 }
 

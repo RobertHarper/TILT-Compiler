@@ -86,9 +86,12 @@ GetTick:
 start_client:
 	flushw
 	mov	%o0, THREADPTR_REG		! initialize thread ptr outside loop
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs			! restore dedicated pointers like
-						! heap pointer, heap limit, and stack pointer
-	nop
+	nop					! heap pointer, heap limit, and stack pointer
+							! don't need to restore return address
+	ld	[%r1+16], %r4				! restore r4 which is not restored by load_regs
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
 	ba	start_client_retadd_val
 	nop
 thunk_loop:
@@ -119,6 +122,7 @@ start_client_retadd_val:					! used by stack.c
 	nop
 	mov	1, ASMTMP_REG
 	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]
+	add	THREADPTR_REG, MLsaveregs_disp, %r1
 	call	save_regs					! need to save register set to get 
 								!   alloction pointer into thread state
 	nop
@@ -137,13 +141,12 @@ start_client_retadd_val:					! used by stack.c
 
 	
  ! -------------------------------------------------------------------------------
- ! Yield is called by mutator like a C function so save_regs_forC has been called
+ ! Yield is called by mutator like a C function so save_regs_MLtoC has just been called
  ! -------------------------------------------------------------------------------
 	.proc	07
 	.align	4
 Yield:
 	flushw
-	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Yield
 	ld	[THREADPTR_REG + sysThread_disp],ASMTMP_REG ! get system thread pointer into temp
 	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
 	call	YieldRest				
@@ -153,7 +156,7 @@ Yield:
 	.size	Yield,(.-Yield)
 
  ! -------------------------------------------------------------------------------
- ! Spawn is called by mutator like a C function so save_regs_forC has been called
+ ! Spawn is called by mutator like a C function so save_regs_MLtoC has been called
  ! Switch to system stack here
  ! -------------------------------------------------------------------------------
 	.globl  Spawn
@@ -169,7 +172,7 @@ Spawn:
 	mov	RESULT_REG, THREADPTR_REG
 	ld	[THREADPTR_REG + SP_DISP], SP_REG	! back to user thread stack
 	ld	[THREADPTR_REG + LINK_DISP], LINK_REG	
-	mov	THREADPTR_REG, %l0			! load_regs_forC expects thread pointer in l0
+	mov	THREADPTR_REG, %l0			! load_regs_MLtoC expects thread pointer in l0
 	retl
 	nop
 	.size	Yield,(.-Yield)
@@ -210,18 +213,19 @@ global_exnhandler:
  ! ------------------------------------------------------------
  ! first C arg = thread structure
  ! second C arg = exn argument	;  will eventually pass in return address
- ! third C arg = exn code handler address
  ! Don't use register window
  ! ------------------------------------------------------------
 	.proc	07
 	.align	4
 raise_exception_raw:
-	mov	%o0, THREADPTR_REG		! save where regs are
-	mov	%o1, RESULT_REG			! load_Iregs_forC does not change this reg
-	st	%o2, [SP_REG + 24]		! save handler address
-	call	load_regs_forC
+	mov	%o0, THREADPTR_REG		
+	mov	%o1, %r4			! save exn arg since load_regs leaves r4 alone
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
+	call	load_regs
 	nop
-	mov	RESULT_REG, EXNARG_REG		! restore exn arg
+	mov	%r4, EXNARG_REG			! restore exn arg from r4 temp (unmodified by load_regs)
+	ld	[%r1+16], %r4			! restore real r4 
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
 	ld	[EXNPTR_REG], ASMTMP_REG	! fetch exn handler code
 	jmpl	ASMTMP_REG, %g0			! jump not return and do not link
 	nop

@@ -17,7 +17,6 @@
 #include "show.h"
 
 
-extern int TotalBytesAllocated;
 extern int NumGC;
 extern Queue_t *ScanQueue;
 extern value_t MUTABLE_TABLE_BEGIN_VAL;
@@ -30,13 +29,14 @@ static Queue_t *global_roots = 0;
 
 /* ------------------  Semispace array allocation routines ------------------- */
 
-value_t alloc_bigwordarray_semi(int tagType, int word_len, value_t init_val, int ptag)
+value_t alloc_bigwordarray_semi(int tagType, int byte_len, value_t init_val, int ptag)
 {
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
   value_t alloc_ptr = saveregs[ALLOCPTR];
   value_t alloc_limit = saveregs[ALLOCLIMIT];
-  int tag = tagType | word_len << (2 + ARRLEN_OFFSET);
+  int word_len = (byte_len + 3) / 4;
+  int tag = tagType | (byte_len << ARRLEN_OFFSET);
 
   int i;
   value_t *res = 0;
@@ -67,20 +67,20 @@ value_t alloc_bigwordarray_semi(int tagType, int word_len, value_t init_val, int
     res[i] = init_val;
 
   /* Update statistics */
-  TotalBytesAllocated += 4*(word_len+1);
+  gcstat_normal(4*(word_len+1), 0);
 
   return (value_t) res;
 }
 
 
-value_t alloc_bigintarray_semi(int wordlen, value_t value, int ptag)
+value_t alloc_bigintarray_semi(int bytelen, value_t value, int ptag)
 {
-  return alloc_bigwordarray_semi(IARRAY_TAG, wordlen, value, ptag);
+  return alloc_bigwordarray_semi(IARRAY_TAG, bytelen, value, ptag);
 }
 
 value_t alloc_bigptrarray_semi(int wordlen, value_t value, int ptag)
 {
-  return alloc_bigwordarray_semi(PARRAY_TAG, wordlen, value, ptag);
+  return alloc_bigwordarray_semi(PARRAY_TAG, wordlen * 4, value, ptag);
 }
 
 value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
@@ -90,7 +90,8 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
   long i;
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
-  int pos, tag = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
+  int byte_len = log_len << 3;
+  int pos, tag = RARRAY_TAG | (byte_len << ARRLEN_OFFSET);
   value_t alloc_ptr = saveregs[ALLOCPTR];
   value_t alloc_limit = saveregs[ALLOCLIMIT];
 
@@ -130,7 +131,7 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
   assert ((value_t)res % 8 == 0);
   alloc_ptr = (((value_t) res) + (8 * log_len));
   saveregs[ALLOCPTR] = alloc_ptr;
-  res[-1] = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
+  res[-1] = tag;
   for (i=0; i<log_len; i++)
     ((double *)res)[i] = init_val;
 
@@ -279,7 +280,7 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 	  exit(-1);
 	}
 
-      gcstat_normal(alloc,old,oldratio,new,copied);
+      gcstat_normal(alloc,copied);
 
       Heap_Resize(toheap,new);
       Heap_Unprotect(toheap); 
@@ -316,16 +317,14 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 
 void gc_init_semi()
 {
-  INT_INIT(MaxHeap, 32 * 1024);
+  INT_INIT(MaxHeap, 80 * 1024);
   INT_INIT(MinHeap, 256);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
-  DOUBLE_INIT(TargetRatio, 0.08);
-  DOUBLE_INIT(MaxRatio, 0.8);
-  DOUBLE_INIT(UpperRatioReward, 1.5);
-  DOUBLE_INIT(LowerRatioReward, 0.75);
-  DOUBLE_INIT(TargetSize, 8192.0);
-  DOUBLE_INIT(SizePenalty, 0.1);
+  DOUBLE_INIT(MinRatio, 0.1);
+  DOUBLE_INIT(MaxRatio, 0.7);
+  DOUBLE_INIT(MinRatioSize, 512);         
+  DOUBLE_INIT(MaxRatioSize, 50 * 1024);
   fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   global_roots = QueueCreate(0,100);

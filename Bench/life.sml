@@ -154,15 +154,14 @@ val gun = mkgen
   (9,29),(9,30),(9,31),(9,32)
 ]
 
-in
-
   fun doit start step thing = 
       let fun loop 0 thing = ()
 	    | loop count thing = (show thing; loop (count-1) (nthgen thing step))
       in  loop start thing
       end
-  fun test() = doit 10 10 gun
-  val result = test()
+in
+
+    val lifeResult = doit 10 10 gun
 
 end
 

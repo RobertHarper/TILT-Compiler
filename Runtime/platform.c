@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "platform.h"
-
+#include <strings.h>
 
 #define WB_MAX            5
 #define TB_MAX           32

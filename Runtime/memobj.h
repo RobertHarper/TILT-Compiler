@@ -44,15 +44,14 @@ int InStackChain(StackChain_t*, value_t);
 
 struct Heap__t
 {
-  int id;
-  int valid;
-  value_t top;
-  value_t bottom;
-  value_t rawtop;
-  value_t rawbottom;
-  value_t alloc_start;
-  long safety;
-  pthread_mutex_t *lock;
+  int id;                    /* The ID for the heap object. */
+  int valid;                 /* Indicates whether this heap is in current use. */
+  value_t bottom;            /* The physical and logical bottom of the memory region and heap. */
+  value_t top;               /* The logical top of the heap. */
+  value_t actualTop;         /* The physical top of the memory region. */
+  value_t alloc_start;       /* The next allocation point in the logical heap. 
+				This must lie between bottom and top.  */
+  pthread_mutex_t *lock;     /* Used to synchronize multiple access to heap object. */
 };
 
 typedef struct Heap__t Heap_t;

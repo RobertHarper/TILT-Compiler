@@ -1,312 +1,390 @@
  ! (1) Assumes that the thread pointer points to a structure containing
  ! 32 longs constituting the integer register set followed by 16 doubles
  ! constituting the floating-point register set
- ! (2) Assumes that the thread pointer is unmodified by call to gc_raw	 
-		
+ ! (2) Assumes that the thread pointer is unmodified by call to gcFromML
+
+#include <sys/trap.h>
 #define _asm_
 #include "general.h"
 #include "thread.h"
-			
 		
 	.section ".text"
-	.globl	gc_raw
-	.globl	returnFromGC
+ ! helper functions used locally and in service_solaris_asm.s
+	.globl	load_regs
+	.globl	save_regs
+	.globl	GCFromML
+	.globl	returnFromGCFromML
+	.globl	GCFromC
+	.globl	returnFromGCFromC
 	.globl	returnFromYield
+	.globl	save_regs_MLtoC
+	.globl	load_regs_MLtoC
 	.globl	old_alloc
 	.globl	cur_alloc_ptr
-	.globl	save_regs
-	.globl	load_regs
-	.globl	save_regs_forC
-	.globl	load_regs_forC
-	
-save_fregs:	
-	std	%f0 , [THREADPTR_REG + 128]
-save_most_fregs:	
-	std	%f2 , [THREADPTR_REG + 136]
-	std	%f4 , [THREADPTR_REG + 144]
-	std	%f6 , [THREADPTR_REG + 152]
-	std	%f8 , [THREADPTR_REG + 160]
-	std	%f10, [THREADPTR_REG + 168]
-	std	%f12, [THREADPTR_REG + 176]
-	std	%f14, [THREADPTR_REG + 184]
-	std	%f16, [THREADPTR_REG + 192]
-	std	%f18, [THREADPTR_REG + 200]
-	std	%f20, [THREADPTR_REG + 208]
-	std	%f22, [THREADPTR_REG + 216]
-	std	%f24, [THREADPTR_REG + 224]
-	std	%f26, [THREADPTR_REG + 232]
-	std	%f28, [THREADPTR_REG + 240]
-	std	%f30, [THREADPTR_REG + 248]
-	std	%f32, [THREADPTR_REG + 256]
-	std	%f34, [THREADPTR_REG + 264]
-	std	%f36, [THREADPTR_REG + 272]
-	std	%f38, [THREADPTR_REG + 280]
-	std	%f40, [THREADPTR_REG + 288]
-	std	%f42, [THREADPTR_REG + 296]
-	std	%f44, [THREADPTR_REG + 304]
-	std	%f46, [THREADPTR_REG + 312]
-	std	%f48, [THREADPTR_REG + 320]
-	std	%f50, [THREADPTR_REG + 328]
-	std	%f52, [THREADPTR_REG + 336]
-	std	%f54, [THREADPTR_REG + 344]
-	std	%f56, [THREADPTR_REG + 352]
-	std	%f58, [THREADPTR_REG + 360]
-	std	%f60, [THREADPTR_REG + 368]
-	std	%f62, [THREADPTR_REG + 376]	
-	retl
+
+ ! ---------------------------------------------------------------------------------------------
+ ! save_regs stores the integer register (exceptions noted) into the save area pointed to by r1.
+ ! It will then return to the caller by using r15.	
+ ! The save area begins with the GP area and then the FP area.   
+ !
+ ! r0 is skipped because it is the zero register
+ ! r1 is skipped because it is used as the argument register to the save area
+ ! r2 is skipped because it is the THREADPTR_REG
+ ! r3, r6, r7 are skipped because they are reserved for library or app software (C compiler)
+ ! r4 is skipped because so the caller can use it as a temp register
+ ! r15 is skipped because it is our return address
+ ! The called must take care to save r1, r4, and r15 manually
+ ! ---------------------------------------------------------------------------------------------
+save_regs:	
+ !	stw	%r0, [%r1+0]	     g0 - no std role                           
+ !	stw	%r1 , [%r1+4]	   ! g1 - no std role(volatile);     EXNPTR
+ !	stw	%r2 , [%r1+8]	   ! g2 - reserved for app software; THREADPTR
+ ! 	stw	%r3 , [%r1+12]       g3 - reserved for app software
+ !	stw	%r4 , [%r1+16]     ! g4 - no std role (volatile);    ALLOCPTR   
+ 	stw	%r5 , [%r1+20]	   ! g5 - no std role (volatile);    ALLOCLIMIT           
+ !	stw	%r6 , [%r1+24]       g6 - reserved for system software          
+ !	stw	%r7 , [%r1+28]       g7 - reserved for system software          
+ 	stw	%r8 , [%r1+32]
+	stw	%r9 , [%r1+36]
+	stw	%r10, [%r1+ 40]
+	stw	%r11, [%r1+ 44]
+	stw	%r12, [%r1+ 48]
+	stw	%r13, [%r1+ 52]
+	stw	%r14, [%r1+ 56]	    ! o6 - stack pointer is saved
+ !	stw	%r15, [%r1+ 60]     ! o7 - return address/link register
+	stw	%r16, [%r1+ 64]
+	stw	%r17, [%r1+ 68]
+	stw	%r18, [%r1+ 72]
+	stw	%r19, [%r1+ 76]
+	stw	%r20, [%r1+ 80]
+	stw	%r21, [%r1+ 84]
+	stw	%r22, [%r1+ 88]
+	stw	%r23, [%r1+ 92]
+ 	stw	%r24, [%r1+ 96] 
+ 	stw	%r25, [%r1+ 100]
+ 	stw	%r26, [%r1+ 104]
+ 	stw	%r27, [%r1+ 108]
+ 	stw	%r28, [%r1+ 112]
+ 	stw	%r29, [%r1+ 116]
+ 	stw	%r30, [%r1+ 120]	! i6 - frame pointer is saved
+ 	stw	%r31, [%r1+ 124]
+	std	%f0 , [%r1 + 128]
+	std	%f2 , [%r1 + 136]
+	std	%f4 , [%r1 + 144]
+	std	%f6 , [%r1 + 152]
+	std	%f8 , [%r1 + 160]
+	std	%f10, [%r1 + 168]
+	std	%f12, [%r1 + 176]
+	std	%f14, [%r1 + 184]
+	std	%f16, [%r1 + 192]
+	std	%f18, [%r1 + 200]
+	std	%f20, [%r1 + 208]
+	std	%f22, [%r1 + 216]
+	std	%f24, [%r1 + 224]
+	std	%f26, [%r1 + 232]
+	std	%f28, [%r1 + 240]
+	std	%f30, [%r1 + 248]
+	std	%f32, [%r1 + 256]
+	std	%f34, [%r1 + 264]
+	std	%f36, [%r1 + 272]
+	std	%f38, [%r1 + 280]
+	std	%f40, [%r1 + 288]
+	std	%f42, [%r1 + 296]
+	std	%f44, [%r1 + 304]
+	std	%f46, [%r1 + 312]
+	std	%f48, [%r1 + 320]
+	std	%f50, [%r1 + 328]
+	std	%f52, [%r1 + 336]
+	std	%f54, [%r1 + 344]
+	std	%f56, [%r1 + 352]
+	std	%f58, [%r1 + 360]
+	std	%f60, [%r1 + 368]
+	std	%f62, [%r1 + 376]	
+	ld	[%r2+MLsaveregs_disp+8], %o0	! use g8/o0 as temp to perform consistency check
+	cmp	%r2, %o0			! check that g2 consistent with saved version
+	be	save_regs_ok
 	nop
-	.size	save_fregs,(.-save_fregs)
-	.size	save_most_fregs,(.-save_most_fregs)
-	
- !	save iregs all iregs skipping r1 and r2	
-save_most_iregs:	
- !	stw	%r0, [THREADPTR_REG+0]         g0 - no std role                           
- ! 	stw	%r3 , [THREADPTR_REG+12]       g3 - reserved for app software
- 	stw	%r4 , [THREADPTR_REG+16]     ! g4 - no std role (volatile);    ALLOCPTR   
- 	stw	%r5 , [THREADPTR_REG+20]     ! g5 - no std role (volatile);    ALLOCLIMIT           
- !	stw	%r6 , [THREADPTR_REG+24]       g6 - reserved for system software          
- !	stw	%r7 , [THREADPTR_REG+28]       g7 - reserved for system software          
- 	stw	%r8 , [THREADPTR_REG+32]
-	stw	%r9 , [THREADPTR_REG+36]
-	stw	%r10, [THREADPTR_REG+ 40]
-	stw	%r11, [THREADPTR_REG+ 44]
-	stw	%r12, [THREADPTR_REG+ 48]
-	stw	%r13, [THREADPTR_REG+ 52]
-	stw	%r14, [THREADPTR_REG+ 56]
-	! skip return address/link register
-	stw	%r16, [THREADPTR_REG+ 64]
-	stw	%r17, [THREADPTR_REG+ 68]
-	stw	%r18, [THREADPTR_REG+ 72]
-	stw	%r19, [THREADPTR_REG+ 76]
-	stw	%r20, [THREADPTR_REG+ 80]
-	stw	%r21, [THREADPTR_REG+ 84]
-	stw	%r22, [THREADPTR_REG+ 88]
-	stw	%r23, [THREADPTR_REG+ 92]
- 	stw	%r24, [THREADPTR_REG+ 96] 
- 	stw	%r25, [THREADPTR_REG+ 100]
- 	stw	%r26, [THREADPTR_REG+ 104]
- 	stw	%r27, [THREADPTR_REG+ 108]
- 	stw	%r28, [THREADPTR_REG+ 112]
- 	stw	%r29, [THREADPTR_REG+ 116]
-						! skip frame pointer so it remains valid for OS
- 	stw	%r31, [THREADPTR_REG+ 124]
+	mov	%r2, %o1			! pass the inconsistent versions to save_regs_fail
+	call	save_regs_fail
+	nop
+save_regs_ok:	
+	ld	[%r1+32], %o0			! restore g8/o0
 	stbar
 	retl
 	nop
-	.size	save_most_iregs,(.-save_most_iregs)
-					
- ! ----------------- save_regs---------------------------------
- ! saves entire register set except for the return address register
- ! does not use a stack frame or change any registers
- ! ----------------------------------------------------------
+	.size	save_regs,(.-save_regs)
+
+
+ ! ---------------------------------------------------------------------------------------------
+ ! load_regs restores the integer register (exceptions noted) from the save area pointed to by r1.
+ ! It will then return to the caller by using r15.	
+ ! The save area begins with the GP area and then the FP area.   
+ !	
+ ! See the comment for save_regs for why these register are skipped:	
+ ! r0, r1, r2, r3, r6, r7, r15 are skipped
+ ! The caller must take care to restore r1, r4, and r15 manually
+ ! ---------------------------------------------------------------------------------------------
 	.proc	07
 	.align  4
-save_regs:
- 	stw	%r1 , [THREADPTR_REG+4]		! g1 - no std role(volatile);     EXNPTR
-						! g2 - reserved for app software; THREADPTR
-	ld	[THREADPTR_REG+8], %r1		! use g1 as temp
-	cmp	%r1, %r2			! check that g2 consistent with pointed to struct
-	be	save_regs_ok
-	nop
-	mov	%r1, %o0
-	mov	%r2, %o1
-	call	save_regs_fail
-	nop
-save_regs_ok:
-	mov	%o7, %r1			! use g1 to hold return address
-	call	save_most_iregs
-	nop
-	call	save_fregs
-	nop
-	mov	%r1, %o7			! restore return address
-	ld	[THREADPTR_REG+4], %r1		! restore g1 which we use as temp
-	retl
-	nop
-        .size save_regs,(.-save_regs)
-
-
-save_regs_forC:		
-	stw	%r1 , [THREADPTR_REG+4]		! g1 - no std role(volatile);     EXNPTR
-						! g2 - reserved for app software; THREADPTR
-	ld	[THREADPTR_REG+8], %r1		! use g1 as temp
-	cmp	%r1, %r2			! check that g2 consistent with pointed to struct
-	be	save_regs_forC_ok
-	nop
-	mov	%r1, %o0
-	mov	%r2, %o1
-	call	save_regs_fail
-	nop
-save_regs_forC_ok:
-	mov	%o7, %r1			! use g1 to hold return address
-	call	save_most_iregs
-	nop
-	call	save_most_fregs
-	nop
-	mov	%r1, %o7			! restore return address
-	ld	[THREADPTR_REG+4], %r1		! restore g1 which we use as temp
-	mov	1, %l0
-	st	%l0, [THREADPTR_REG + notinml_disp]	! set notInML to one
-	mov	THREADPTR_REG, %l0		! when calling C code, %l0 (but not %g2) is unmodified
-	retl
-	nop	
-        .size save_regs_forC,(.-save_regs_forC)
-
-	.proc	07
-	.align  4
-load_fregs:	
-	ldd	[THREADPTR_REG + 128], %f0 
-load_most_fregs:	
-	ldd	[THREADPTR_REG + 136], %f2 
-	ldd	[THREADPTR_REG + 144], %f4 
-	ldd	[THREADPTR_REG + 152], %f6 
-	ldd	[THREADPTR_REG + 160], %f8 
-	ldd	[THREADPTR_REG + 168], %f10
-	ldd	[THREADPTR_REG + 176], %f12
-	ldd	[THREADPTR_REG + 184], %f14
-	ldd	[THREADPTR_REG + 192], %f16
-	ldd	[THREADPTR_REG + 200], %f18
-	ldd	[THREADPTR_REG + 208], %f20
-	ldd	[THREADPTR_REG + 216], %f22
-	ldd	[THREADPTR_REG + 224], %f24
-	ldd	[THREADPTR_REG + 232], %f26
-	ldd	[THREADPTR_REG + 240], %f28
-	ldd	[THREADPTR_REG + 248], %f30
-	ldd	[THREADPTR_REG + 256], %f32
-	ldd	[THREADPTR_REG + 264], %f34
-	ldd	[THREADPTR_REG + 272], %f36
-	ldd	[THREADPTR_REG + 280], %f38
-	ldd	[THREADPTR_REG + 288], %f40
-	ldd	[THREADPTR_REG + 296], %f42
-	ldd	[THREADPTR_REG + 304], %f44
-	ldd	[THREADPTR_REG + 312], %f46
-	ldd	[THREADPTR_REG + 320], %f48
-	ldd	[THREADPTR_REG + 328], %f50
-	ldd	[THREADPTR_REG + 336], %f52
-	ldd	[THREADPTR_REG + 344], %f54
-	ldd	[THREADPTR_REG + 352], %f56
-	ldd	[THREADPTR_REG + 360], %f58
-	ldd	[THREADPTR_REG + 368], %f60
-	ldd	[THREADPTR_REG + 376], %f62
-	retl
-	nop
-	.size	load_fregs,(.-load_fregs)
-	.size	load_most_fregs,(.-load_most_fregs)	
-
- !	load all regs but r1, r2, r8
-load_most_iregs:	
- !	ld	[THREADPTR_REG+0], %r0         g0 - no std role              
- !	ld	[THREADPTR_REG+12], %r3        g3 - reserved for app software
- 	ld	[THREADPTR_REG+16], %r4      ! g4 - no std role (volatile);    ALLOCPTR
- 	ld	[THREADPTR_REG+20], %r5      ! g5 - no std role (volatile);    ALLOCLIMIT
- !	ld	[THREADPTR_REG+24], %r6        g6 - reserved for system software      
- !	ld	[THREADPTR_REG+28], %r7        g7 - reserved for system software          
-	ld	[THREADPTR_REG+36], %r9 
-	ld	[THREADPTR_REG+ 40], %r10
-	ld	[THREADPTR_REG+ 44], %r11
-	ld	[THREADPTR_REG+ 48], %r12
-	ld	[THREADPTR_REG+ 52], %r13
-	ld	[THREADPTR_REG+ 56], %r14
-						! skip return address/link register
-	ld	[THREADPTR_REG+ 64], %r16
-	ld	[THREADPTR_REG+ 68], %r17
-	ld	[THREADPTR_REG+ 72], %r18
-	ld	[THREADPTR_REG+ 76], %r19
-	ld	[THREADPTR_REG+ 80], %r20
-	ld	[THREADPTR_REG+ 84], %r21
-	ld	[THREADPTR_REG+ 88], %r22
-	ld	[THREADPTR_REG+ 92], %r23
- 	ld	[THREADPTR_REG+ 96], %r24 
- 	ld	[THREADPTR_REG+ 100], %r25
- 	ld	[THREADPTR_REG+ 104], %r26
- 	ld	[THREADPTR_REG+ 108], %r27
- 	ld	[THREADPTR_REG+ 112], %r28
- 	ld	[THREADPTR_REG+ 116], %r29
-						! skip frame pointer so it remains valid for OS
- 	ld	[THREADPTR_REG+ 124], %r31
-	retl
-	nop
-        .size load_most_iregs,(.-load_most_iregs)
-
-			
- ! ----------------- load_regs---------------------------------
- ! loads entire register set except for the return address register
- ! does not use a stack frame or change any registers
- ! ----------------------------------------------------------
 load_regs:	
-						! g2 - reserved for app software; THREADPTR
-	ld	[THREADPTR_REG+8], %r1       ! use g1 as temp for thread-structure's copy of g2
-	cmp	%r1, %r2			! check that g2 consistent with temp
+ !	ld	[%r1+0], %r0       ! g0 - no std role
+ !	ld	[%r1+0], %r1       ! g1 - no std role(volatile);     EXNPTR
+ !	ld	[%r1+0], %r2       ! g2 - reserved for app software; THREADPTR
+ !	ld	[%r1+12], %r3      ! g3 - reserved for app software
+ !	ld	[%r1+16], %r4      ! g4 - no std role (volatile);    ALLOCPTR
+ 	ld	[%r1+20], %r5      ! g5 - no std role (volatile);    ALLOCLIMIT
+ !	ld	[%r1+24], %r6      ! g6 - reserved for system software      
+ !	ld	[%r1+28], %r7      ! g7 - reserved for system software          
+	ld	[%r1+32], %r8
+	ld	[%r1+36], %r9 
+	ld	[%r1+ 40], %r10
+	ld	[%r1+ 44], %r11
+	ld	[%r1+ 48], %r12
+	ld	[%r1+ 52], %r13
+	ld	[%r1+ 56], %r14    ! o6 - stack pointer
+ !	ld	[%r1+ 60], %r15    ! o7 - return address/link register
+	ld	[%r1+ 64], %r16
+	ld	[%r1+ 68], %r17
+	ld	[%r1+ 72], %r18
+	ld	[%r1+ 76], %r19
+	ld	[%r1+ 80], %r20
+	ld	[%r1+ 84], %r21
+	ld	[%r1+ 88], %r22
+	ld	[%r1+ 92], %r23
+ 	ld	[%r1+ 96], %r24 
+ 	ld	[%r1+ 100], %r25
+ 	ld	[%r1+ 104], %r26
+ 	ld	[%r1+ 108], %r27
+ 	ld	[%r1+ 112], %r28
+ 	ld	[%r1+ 116], %r29
+  	ld	[%r1+ 120], %r30   !  i6 - frame pointer
+ 	ld	[%r1+ 124], %r31
+	ldd	[%r1 + 128], %f0 
+	ldd	[%r1 + 136], %f2 
+	ldd	[%r1 + 144], %f4 
+	ldd	[%r1 + 152], %f6 
+	ldd	[%r1 + 160], %f8 
+	ldd	[%r1 + 168], %f10
+	ldd	[%r1 + 176], %f12
+	ldd	[%r1 + 184], %f14
+	ldd	[%r1 + 192], %f16
+	ldd	[%r1 + 200], %f18
+	ldd	[%r1 + 208], %f20
+	ldd	[%r1 + 216], %f22
+	ldd	[%r1 + 224], %f24
+	ldd	[%r1 + 232], %f26
+	ldd	[%r1 + 240], %f28
+	ldd	[%r1 + 248], %f30
+	ldd	[%r1 + 256], %f32
+	ldd	[%r1 + 264], %f34
+	ldd	[%r1 + 272], %f36
+	ldd	[%r1 + 280], %f38
+	ldd	[%r1 + 288], %f40
+	ldd	[%r1 + 296], %f42
+	ldd	[%r1 + 304], %f44
+	ldd	[%r1 + 312], %f46
+	ldd	[%r1 + 320], %f48
+	ldd	[%r1 + 328], %f50
+	ldd	[%r1 + 336], %f52
+	ldd	[%r1 + 344], %f54
+	ldd	[%r1 + 352], %f56
+	ldd	[%r1 + 360], %f58
+	ldd	[%r1 + 368], %f60
+	ldd	[%r1 + 376], %f62
+	ld	[%r2+MLsaveregs_disp+8], %o0	! use g8/o0 as temp to perform consistency check
+	cmp	%r2, %o0			! check that g2 consistent with saved version
 	be	load_regs_ok
 	nop
-	mov	%r1, %o0
-	mov	%r2, %o1
+	mov	%r2, %o1			! pass the inconsistent versions to save_regs_fail
 	call	load_regs_fail
 	nop
-load_regs_ok:
-	mov	%o7, %r1			! save return address in g1 temp
-	call	load_fregs
-	nop
-	call	load_most_iregs
-	nop	
-	ld	[THREADPTR_REG+32], %r8	! load_most_iregs skips r8 so load_regs_forC can use it
-	mov	%r1, %o7			! restore return address
-						! g1 - no std role(volatile);     EXNPTR
-	ld	[THREADPTR_REG+4], %r1       ! used g1 as temp;  restore now
+load_regs_ok:	
+	ld	[%r1+32], %o0			! restore g8/o0
+	stbar
 	retl
 	nop
-        .size load_regs,(.-load_regs)
+	.size	load_regs,(.-load_regs)
 
 
-load_regs_forC:
-	mov	%l0, THREADPTR_REG
-	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
-						! g2 - reserved for app software; THREADPTR
-	ld	[THREADPTR_REG+8], %r1       ! use g1 as temp for thread-structure's copy of g2
-	cmp	%r1, %r2			! check that g2 consistent with temp
-	be	load_regs_forC_ok
-	nop
-	mov	%r1, %o0
-	mov	%r2, %o1
-	call	load_regs_fail
-	nop
-load_regs_forC_ok:
-	mov	%o7, %r1			! save return address in g1 temp
-	call	load_most_fregs
-	nop
-	call	load_most_iregs
-	nop	
-	mov	%r1, %o7			! restore return address
-						! g1 - no std role(volatile);     EXNPTR
-	ld	[THREADPTR_REG+4], %r1       ! used g1 as temp;  restore now
-	retl
-	nop
-        .size load_regs_forC,(.-load_regs_forC)
-		
-		
- ! ----------------- gc_raw ---------------------------------
+ ! ----------------- gcFromML ---------------------------------
  ! return address comes in normal return address register
  ! temp register contains request size + heap pointer
  ! does not use a stack frame 
  ! ----------------------------------------------------------
 	.proc	07
 	.align  4
-gc_raw:
+GCFromML:	
 	flushw
-	stw	LINK_REG, [THREADPTR_REG + LINK_DISP] ! save link value
-	call	save_regs
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
+	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
+	call	save_regs					
 	nop
-	ld	[THREADPTR_REG + ASMTMP_DISP], ASMTMP_REG
-	ld	[THREADPTR_REG + ALLOCPTR_DISP], ALLOCPTR_REG
-	sub	ASMTMP_REG, ALLOCPTR_REG, ASMTMP_REG
-	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]
-	ld	[THREADPTR_REG + sysThread_disp], CFIRSTARG_REG ! use CFIRSTARG as temp
-	ld	[CFIRSTARG_REG], SP_REG 	        ! run on system thread stack
-	mov	THREADPTR_REG, CFIRSTARG_REG		! pass user thread pointer as arg
-	call	gc					! call runtime GC
+	sub	ASMTMP_REG, ALLOCPTR_REG, ASMTMP_REG		! compute how many bytes requested
+	stw	ASMTMP_REG, [THREADPTR_REG + requestInfo_disp]	! record bytes needed
+	mov	GCRequestFromML, ASMTMP_REG
+	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]	! record that this is an MLtoGC request
+	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! must use temp so SP always correct
+	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
+	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
+	call	gc						! call runtime GC
 	nop
 	call	abort
 	nop
-	.size gc_raw,(.-gc_raw)
+	.size GCFromML,(.-GCFromML)
+	
+ ! -------------------------------------------------------------------------------
+ ! returnFromGCFromML is called from the runtime with the thread pointer argument
+ ! -------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+returnFromGCFromML:
+	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
+	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
+	call	load_regs				! don't need to save return address
+	nop						
+	ld	[%r1+16], %r4				! restore r4 which we use as temp
+	ld	[%r1+LINK_DISP], LINK_REG		! restore return address back to ML code
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
+	retl
+	nop
+	call	abort
+	nop	
+	.size returnFromGCFromML,(.-returnFromGCFromML)
+
+ ! ----------------- gcFromC ---------------------------------
+ ! gcFromC is called from the runtime system with 3 arguments:	
+ !	thread pointer, request size, a bool for majorGC
+ ! gcFromC does not use a stack frame 
+ ! ----------------------------------------------------------
+	.proc	07
+	.align  4
+GCFromC:
+	ta	ST_FLUSH_WINDOWS	
+	flushw
+	mov	CFIRSTARG_REG, THREADPTR_REG
+	stw	%r1 , [THREADPTR_REG+Csaveregs_disp+4]		! we save r1, r4, r15 manually 
+	stw	%r4 , [THREADPTR_REG+Csaveregs_disp+16]	
+	stw	LINK_REG, [THREADPTR_REG + Csaveregs_disp + LINK_DISP]	
+	add	THREADPTR_REG, Csaveregs_disp, %r1		! use C save area of thread pointer
+	call	save_regs					
+	nop
+	stw	CSECONDARG_REG, [THREADPTR_REG + requestInfo_disp] ! record bytes needed
+	mov	GCRequestFromC, ASMTMP_REG
+	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]	! record that this is an CtoGC request
+	cmp	%g0, CTHIRDARG_REG
+	beq	MinorGCFromC
+	nop
+	mov	MajorGCRequestFromC, ASMTMP_REG
+	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]	! record that this is an CtoGC request	
+MinorGCFromC:	
+	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! must use temp so SP always correct
+	ld	[ASMTMP_REG], SP_REG				! run on system thread stack
+	mov	THREADPTR_REG, CFIRSTARG_REG			! pass user thread pointer as arg
+	call	gc						! call runtime GC
+	nop
+	call	abort
+	nop
+	.size GCFromC,(.-GCFromC)
+
+ ! -------------------------------------------------------------------------------
+ ! returnFromGCFromC is called from the runtime with the thread pointer argument
+ ! -------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+returnFromGCFromC:
+	flushw
+	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
+							! don't change notInML
+	add	THREADPTR_REG, Csaveregs_disp, %r1	! use C save area of thread pointer structure
+	call	load_regs				! don't need to save return address
+	nop						
+	ld	[%r1+16], %r4				! restore r4 which we use as temp
+	ld	[%r1+LINK_DISP], LINK_REG		! restore return address back to C code
+	ld	[THREADPTR_REG+Csaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
+	mov	THREADPTR_REG, %l0			! C functions keep thread pointer in %l0
+	ld	[%l0+Csaveregs_disp+8], THREADPTR_REG	! restore C's $r2 which does not hold threadptr
+	retl
+	nop
+	call	abort
+	nop	
+	.size returnFromGCFromC,(.-returnFromGCFromC)
+
+ ! ------------------------------------------------------------------------------------
+ ! returnFromYield is called from the runtime with the thread pointer argument
+ ! Yield was called from ML code as a C function so we don't need to call load_regs here
+ ! -------------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+returnFromYield:
+	flushw	
+	mov	CFIRSTARG_REG, THREADPTR_REG
+	mov	THREADPTR_REG, %l0			! Calls from C expect thread reg in %l0
+	ld	[THREADPTR_REG + MLsaveregs_disp + SP_DISP], SP_REG	
+	ld	[THREADPTR_REG + MLsaveregs_disp + LINK_DISP], LINK_REG
+	retl
+	nop
+	call	abort
+	nop
+	.size returnFromYield,(.-returnFromYield)
+	
+	
+ ! ----------------- save_regs_MLtoC -------------------------
+ ! This is called using the C calling convention.
+ ! This routine does not use a stack frame.
+ ! The THREADPTR_REG will be moved to %l0 so that C will not modify it.
+ ! ----------------------------------------------------------		
+	.proc	07
+	.align  4
+save_regs_MLtoC:
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]	! save_regs does not save r1 (used for arg)
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure	
+	stw	%r4 , [%r1+16]				! save_regs does not save r4
+							!    so we can use this as temp if we save it
+	mov	%o7, %r4				! use r4 to hold return address
+	add	%o7, 8, %o7				! we want C to return to load_regs_MLtoC
+							! and NOT to the C call again so we skip
+							! 2 instructions (call and nop)
+	stw	%o7 , [THREADPTR_REG+MLsaveregs_disp+60] ! save_regs does not save o7
+	call	save_regs
+	nop
+	mov	%r4, %o7				! restore return address
+	mov	1, %r4
+	st	%r4, [THREADPTR_REG + notinml_disp]	! set notInML to one
+	ld	[%r1+16], %r4				! restore r4 which we use as temp
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg
+	mov	THREADPTR_REG, %l0			! when calling C code, %l0 (but not %g2) is unmodified
+	retl
+	nop
+        .size save_regs_MLtoC,(.-save_regs_MLtoC)
+
+ ! ----------------- load_regs_MLtoC -------------------------
+ ! This is called using the C calling convention.
+ ! This routine does not use a stack frame.
+ ! The THREADPTR_REG is actually in %l0 when this function is called.
+ ! It will restore all registers EXCEPT the result registers.
+ ! ----------------------------------------------------------		
+	.proc	07
+	.align  4
+load_regs_MLtoC:
+	mov	%l0, THREADPTR_REG			! restore THREADPTR_REG
+	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
+	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
+	stw	%o0, [%r1 + 32]				! overwrite GP result register
+	std	%f0, [%r1 + 128]			! overwrite FP result register	
+	mov	%o7, %r4				! save our return address
+	call	load_regs
+	nop
+	mov	%r4, %o7				! restore return address used for call to load_regs
+	ld	[%r1+16], %r4				! restore r4 which we use as temp
+	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
+	retl
+	nop
+        .size load_regs_MLtoC,(.-load_regs_MLtoC)	
+
+
 
 
  ! ----------------- old_alloc --------------------------
@@ -361,39 +439,7 @@ load_regs2:
 	
         .size load_regs2,(.-load_regs2)
 		
- ! --------------------------------------------------------
- ! Called from the runtime with the thread pointer argument
- ! --------------------------------------------------------
-	.proc	07
-	.align  4
-returnFromGC:
-	flushw
-	mov	CFIRSTARG_REG, THREADPTR_REG
- 	call 	load_regs
- 	nop
-	ld	[THREADPTR_REG + LINK_DISP], LINK_REG
-	retl
-	nop
-	call	abort
-	nop	
-	.size returnFromGC,(.-returnFromGC)
 
- ! --------------------------------------------------------
- ! Called from the runtime with the thread pointer argument
- ! --------------------------------------------------------
-	.proc	07
-	.align  4
-returnFromYield:
-	flushw	
-	mov	CFIRSTARG_REG, THREADPTR_REG
-	mov	THREADPTR_REG, %l0			! Calls from C expect thread reg in %l0
-	ld	[THREADPTR_REG + SP_DISP], SP_REG	
-	ld	[THREADPTR_REG + LINK_DISP], LINK_REG
-	retl
-	nop
-	call	abort
-	nop
-	.size returnFromYield,(.-returnFromYield)
 		
 .data
 .align 4

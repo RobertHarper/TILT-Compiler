@@ -24,19 +24,25 @@ struct
 		   else error ("Unrecognized system/OS type: " ^ sys))
 	end
 
-    fun spinMilli 0 = ()
-      | spinMilli n = 
+    fun spinMilli start 0 = ()
+      | spinMilli start n = 
 	let fun spin 0 = ()
 	      | spin n = spin (n-1)
-	in spin 50000; spinMilli (n-1)
+	in spin start; spinMilli start (n-1)
 	end
+    val spinMilliNT = spinMilli 50000      (* timed for baked *)
+    val spinMilliDUNIX = spinMilli 35000   (* timed for tcl *)
 
+    (*  Posix.Process.sleep does not work for times under 1.0 seconds
+          since it seems to round down to the nearest second.
+	OS.IO.poll (as a way to sleep) works on the Sun but not the Alpha.
+    *)
     fun sleep duration = 
 	(case platform of
-	     DUNIX   => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
+	     DUNIX   => spinMilliDUNIX (1 + Real.floor(duration * 1000.0))
 	   | SOLARIS => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
 	   | LINUX   => (OS.IO.poll([], SOME (Time.fromReal duration)); ())
-	   | NT      => spinMilli (1 + Real.floor(duration * 1000.0)))
+	   | NT      => spinMilliNT (1 + Real.floor(duration * 1000.0)))
 
     fun pid() = 
 	(case platform of
@@ -45,8 +51,8 @@ struct
 	   | LINUX   => Posix.Process.pidToWord(Posix.ProcEnv.getpid())
 	   | NT      => let val time = Time.toReal(Time.now())
 			    val floor = Real.realFloor time
-			    val pid = Word32.fromInt(Real.floor((time - floor) * 1000.0))
-			in  (print "Cannot obtain pid on NT so we use first 3 decimal digits of time.";
+			    val pid = Word32.fromInt(Real.floor((time - floor) * 10000.0))
+			in  (print "Cannot obtain pid on NT so we use first 4 decimal digits of time.";
 			     print "Chose "; print (Int.toString (Word32.toInt pid)); print ".\n";
 			     pid)
 			end)

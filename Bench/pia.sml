@@ -1147,10 +1147,10 @@ fun get_file_scene  ()=                    (* get scene name *)
    end(*;*)
 *)
 
-fun get_file_model  ()  = "../Bench/bsim"
+fun get_file_model  ()  = "Bench/bsim"
 
 fun get_file_scene  ()=                    (* get scene name *)
-   let val fname =  "../Bench/bsim"
+   let val fname =  "Bench/bsim"
        val YN =     "y"
    in 
      (fname,YN)
@@ -2067,9 +2067,8 @@ val _ = output(std_out, "appended to it.\n")(*;*)
 
 in
 
-    val _ = print "About to start...\n";
-    val doit = go;
-    val _ = doit()
+    val piaResult = (print "About to start...\n";
+		     go())
 
 end
 

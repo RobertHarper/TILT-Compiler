@@ -12,64 +12,6 @@
 #include <fcntl.h>
 
 
-
-void my_mprotect(int which, caddr_t bottom, int size, int perm)
-{
-  int v = mprotect(bottom, size, perm);
-  if (v)
-    {
-      printf ("mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
-      exit(-1);
-    }
-}
-
-int my_mmap(caddr_t start, int size, int prot)
-{
-  static int fd = -1;
-  value_t v;
-#ifdef solaris
-  {
-    if (fd == -1)
-      if ((fd = open("/dev/zero", O_RDWR)) == -1) {
-	printf ("unable to open /dev/zero, errno = %d\n", errno);
-	exit(-1);
-      }
-    v = (value_t) mmap((caddr_t) start,size, prot,
-		       MAP_FIXED | MAP_PRIVATE, fd, 0);
-  }
-#else
-  v = mmap((caddr_t) start, size, prot,
-	      MAP_ANONYMOUS | MAP_FIXED, fd, 0);
-#endif
-  if (paranoid) {
-    if (prot == (PROT_READ | PROT_WRITE)) {
-      int a,b;
-      caddr_t end = start + size - 4;
-      *((int *)(start)) = 666;
-      *((int *)(end)) = 666;
-      a = *((int *)(start));
-      b = *((int *)(end));
-      if (a != 666 || b != 666) {
-	printf ("mmap (%d,%d,%d)\n",start,size,prot);
-	printf("written 666 to %u: read back %d\n",start,*((int *)(start)));
-	printf("written 666 to %u: read back %d\n",end,*((int *)(end)));
-      }
-    }
-  }
-  return v;
-}
-
-#ifdef SEMANTIC_GARBAGE   
-value_t semantic_garbage_offset = 64 * 1024 * 1024;
-#endif
-
-void wordset(void *start, unsigned long v, size_t sz)
-{
-  unsigned long *end = (void *)(((value_t)start) + sz), *cur;
-  for (cur=(unsigned long *)start; cur<end; cur++)
-    *cur = v;
-}
-
 static Stack_t *Stacks;
 static StackChain_t *StackChains;
 static Heap_t  *Heaps;
@@ -77,7 +19,7 @@ static Heap_t  *Heaps;
 value_t StopHeapLimit = 1;  /* A user thread heap limit used to indicates that it has been interrupted */
 value_t StartHeapLimit = 2; /* A user thread heap limit used to indicates that it has not been given space */
 
-int StackSize = 512; /* mesaure in Kb */
+int StackSize = 2048; /* mesaure in Kb */
 static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
 #ifdef alpha_osf
@@ -93,14 +35,88 @@ const int stackstart = 768 * 1024 * 1024;
 const int heapstart  = 780 * 1024 * 1024;
 #endif
 
+/* The heaps are managed by a bitmap where each bit corresponds to a 32K chunk of the heap.
+   8192 bits gives us 256 megs of heap space. 
+*/
 int pagesize = 0;
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
-#ifdef SEMANTIC_GARBAGE
-static const int Heapbitmap_bits = 1536;
+static const int Heapbitmap_bits = 8192;
+
+
+
+void my_mprotect(int which, caddr_t bottom, int size, int perm)
+{
+  int status = mprotect(bottom, size, perm);
+  if (status)
+    {
+      fprintf (stderr, "mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
+      assert(0);
+    }
+  if (paranoid)
+    fprintf (stderr, "mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
+}
+
+value_t my_mmap(caddr_t start, int size, int prot)
+{
+  static int fd = -1;
+  value_t mapped;
+#ifdef solaris
+  {
+    if (fd == -1)
+      if ((fd = open("/dev/zero", O_RDWR)) == -1) {
+	fprintf (stderr, "unable to open /dev/zero, errno = %d\n", errno);
+	exit(-1);
+      }
+    mapped = (value_t) mmap((caddr_t) start, size, prot,
+			    MAP_FIXED | MAP_PRIVATE, fd, 0);
+  }
 #else
-static const int Heapbitmap_bits = 3072;
+  mapped = (value_t) (mmap((caddr_t) start, size, prot,
+			   MAP_ANONYMOUS | MAP_FIXED, fd, 0));
 #endif
+  if (mapped == -1) {
+    fprintf(stderr,"mmap failed with start = %d, size = %d  -->  errno = %d\n",
+	    start, size, errno);
+    assert(0);
+  }
+  if (mapped != (value_t) start) {
+      fprintf(stderr,"mmap failed with start = %d, size = %d  -->  mapped = %d\n",
+	      start, size, mapped);
+      assert(0);
+  }
+  if (paranoid)
+    fprintf(stderr,"mmap succeeded with start = %d, size = %d, prot = %d\n",
+	    start, size, prot);
+  if (paranoid) {
+    if (prot == (PROT_READ | PROT_WRITE)) {
+      int a,b;
+      caddr_t end = start + size - 4;
+      *((int *)(start)) = 666;
+      *((int *)(end)) = 666;
+      a = *((int *)(start));
+      b = *((int *)(end));
+      if (a != 666 || b != 666) {
+	fprintf(stderr,"mmap (%d,%d,%d)\n",start,size,prot);
+	fprintf(stderr,"written 666 to %u: read back %d\n",start,*((int *)(start)));
+	fprintf(stderr,"written 666 to %u: read back %d\n",end,*((int *)(end)));
+      }
+    }
+  }
+  return mapped;
+}
+
+#ifdef SEMANTIC_GARBAGE   
+value_t semantic_garbage_offset = 64 * 1024 * 1024;
+#endif
+
+void wordset(void *start, unsigned long v, size_t sz)
+{
+  unsigned long *end = (void *)(((value_t)start) + sz), *cur;
+  for (cur=(unsigned long *)start; cur<end; cur++)
+    *cur = v;
+}
+
 
 void StackInitialize(void)
 {
@@ -140,7 +156,7 @@ int InStackChain(StackChain_t *sc, value_t addr)
 {
   int i;
   for (i=0; i<sc->count; i++) {
-    printf("instackchain bottom = %d, addr = %d, top = %d\n",
+    fprintf(stderr,"instackchain bottom = %d, addr = %d, top = %d\n",
 	  sc->stacks[i]->bottom, addr ,
 	   sc->stacks[i]->top);
     if (sc->stacks[i]->bottom <= addr &&
@@ -184,7 +200,7 @@ Stack_t* Stack_Alloc(StackChain_t *parent)
   res->valid  = 1;
 
   if (!(res->rawtop < heapstart))
-    printf("count = %d, res->rawtop , heapstart = %d  %d\n", count,res->rawtop, heapstart);
+    fprintf(stderr,"count = %d, res->rawtop , heapstart = %d  %d\n", count,res->rawtop, heapstart);
   assert(res->rawtop < heapstart);
 #ifdef SEMANTIC_GARBAGE
   wordset((void *)(res->bottom+semantic_garbage_offset),1,
@@ -195,8 +211,8 @@ Stack_t* Stack_Alloc(StackChain_t *parent)
   my_mprotect(2,(caddr_t) res->rawtop-res->safety,res->safety,PROT_NONE);
 
 #ifdef DEBUG
-  printf("Stack Object: bottom = %d,    top = %d\n",res->bottom,res->top);
-  printf("           rawbottom = %d, rawtop = %d\n\n",res->rawbottom,res->rawtop);
+  fprintf(stderr,"Stack Object: bottom = %d,    top = %d\n",res->bottom,res->top);
+  fprintf(stderr,"           rawbottom = %d, rawtop = %d\n\n",res->rawbottom,res->rawtop);
 #endif
   return res;
 }
@@ -215,8 +231,7 @@ void HeapInitialize(void)
       heap->top = 0;
       heap->bottom = 0;
       heap->alloc_start = 0;
-      heap->rawtop = 0;
-      heap->rawbottom = 0;
+      heap->actualTop = 0;
       heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
       pthread_mutex_init(heap->lock,NULL);
     }
@@ -254,59 +269,29 @@ Heap_t* GetHeap(value_t add)
   return NULL;
 }
 
-/* we will manage heaps by a bitmap starting from 32meg up to 128M
-   which gives us 96M to play with; the bitmap will measure in 32k chunks
-   so there will be 3072 bits in the bitmap */
 Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 {
   static int heap_count = 0;
 
-  Heap_t *res = &(Heaps[heap_count]);
+  Heap_t *res = &(Heaps[heap_count++]);
+  int maxsize_pageround = RoundUp(MaxSize,pagesize);
+  int maxsize_chunkround = RoundUp(MaxSize,chunksize);
 
-  int safety   = 2 * pagesize;
-  int fullsize = MaxSize + 2 * safety + pagesize;
-  int fullsize_pageround = RoundUp(fullsize,pagesize);
-  int fullsize_chunkround = RoundUp(fullsize,chunksize);
-
-  int chunkstart = AllocBitmapRange(bmp,fullsize_chunkround / chunksize);
+  int chunkstart = AllocBitmapRange(bmp,maxsize_chunkround / chunksize);
   int start = (chunkstart * chunksize) + heapstart;
-  assert(chunkstart >= 0);
-  assert (heap_count < NumHeap);
-  assert(MaxSize >= MinSize);
-
-  res->safety = safety;
-  res->rawbottom = (value_t) my_mmap((caddr_t) start,fullsize_pageround, PROT_NONE);
-  assert(res->rawbottom != -1);
-
-  res->rawtop = res->rawbottom + fullsize_pageround;
-  res->bottom = res->rawbottom + res->safety;
+  res->bottom = (value_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
   res->alloc_start = res->bottom;
   res->top    = res->bottom + MinSize;
-#ifdef SEMANTIC_GARBAGE
-  printf("chunkstart = %d   start=%d res->rawbottom=%d\n",chunkstart,start,res->rawbottom);
-  printf("SEMANTIC GARBAGE: memsetting at %d for %d\n",
-	 (res->rawbottom+semantic_garbage_offset),fullsize_pageround);
-  wordset((void *)(res->bottom+semantic_garbage_offset),1,
-	 res->top-res->bottom);
-#endif
-  my_mprotect(3,(caddr_t) res->bottom, res->top - res->bottom, PROT_READ | PROT_WRITE);
-  my_mprotect(4,(caddr_t) res->rawbottom, res->safety,PROT_NONE);
-  my_mprotect(5,(caddr_t) (res->rawtop-safety),res->safety,PROT_NONE);
-
-#ifdef DEBUG
-    {
-      printf("-------HEAP Object allocation----\n");
-      printf("unPROTECTing %d %d\n",res->bottom,res->top - res->bottom);
-      printf("  PROTECTing %d %d\n",res->rawbottom,safety);
-      printf("  PROTECTing %d %d\n",res->rawtop-safety,safety);
-      printf("rawtop,rawbot %d %d \n",res->rawtop,res->rawbottom);
-      printf("top,bot       %d %d \n",res->top,res->bottom);
-    }
-#endif
-  assert(res->bottom > res->rawbottom);
-  assert(res->top    < res->rawtop);
+  res->actualTop = res->bottom + maxsize_pageround;
   res->valid  = 1;
-  heap_count++;
+
+  assert(res->bottom != -1);
+  assert(chunkstart >= 0);
+  assert(heap_count < NumHeap);
+  assert(MaxSize >= MinSize);
+  assert(res->bottom <= res->alloc_start);
+  assert(res->alloc_start <= res->top);
+  assert(res->top <= res->actualTop);
 
   return res;
 }
@@ -314,42 +299,34 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 
 void Heap_Protect(Heap_t* res)
 {
-  long size = res->rawtop - res->rawbottom;
-  long roundsize = (size + pagesize - 1) / pagesize * pagesize;
-#ifdef DEBUG
-  printf("PROTECT: rawbottom, roundsize, rawtop %d %d %d\n",
-	 res->rawbottom,roundsize,res->rawtop);
-#endif
-  my_mprotect(6,(caddr_t) res->rawbottom, roundsize,PROT_NONE);
+  long size = res->actualTop - res->bottom;
+  assert((size / pagesize * pagesize) == size);
+  my_mprotect(6,(caddr_t) res->bottom, size, PROT_NONE);
 
 }
 
 void Heap_Unprotect(Heap_t *res)
 {
-  long size = res->top - res->bottom;
-  long roundsize = (size + pagesize - 1) / pagesize * pagesize;
-  if (res-> top >= res->rawtop)
-    printf("Error: res->top = %d  res->rawtop = %d\n",res->top,res->rawtop);
-  my_mprotect(7,(caddr_t) res->bottom, roundsize, PROT_READ | PROT_WRITE);
-
+  long size = res->actualTop - res->bottom;
+  assert((size / pagesize * pagesize) == size);
+  my_mprotect(7,(caddr_t) res->bottom, size, PROT_READ | PROT_WRITE);
 }
 
-int Heap_Getsize(Heap_t *res)
+int Heap_Getsize(Heap_t *h)
 {
-  int top = res->rawtop - res->safety;
-  return top - res->bottom;
+  return h->actualTop - h->bottom;
 }
 
-void Heap_Resize(Heap_t *res, long newsize)
+void Heap_Resize(Heap_t *h, long newsize)
 {
-  res->top = res->bottom + newsize;
-  if (res->top > res->rawtop - res->safety)
-    {
-      printf("res->bottom, res->rawtop, res->top, newsize  %d %d %d %d\n",
-	     res->bottom, res->rawtop, res->top, newsize);
-      fprintf(stderr,"FATAL ERROR in Heap_resize\n");
+  int actualSize = Heap_Getsize(h);
+  if (newsize > actualSize) {
+      fprintf(stderr,"FATAL ERROR in Heap_Resize.  Heap size = %d.  Trying to resize to %d\n",
+	      actualSize, newsize);
       exit(-1);
     }
+  h->top = h->bottom + newsize;
+  assert(h->top <= h->actualTop);
 }
 
 int StackError(struct ucontext *ucontext, long badadd)

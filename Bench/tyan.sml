@@ -1,5 +1,6 @@
 (*$import Prelude *)
 
+local
 fun fold f l acc = foldr f acc l
 fun revfold f l acc = foldl f acc l
 
@@ -864,6 +865,7 @@ fun runit () =
 	gb data handle e => report e
     end
 
-val _ = runit();
-
+in
+    val tyanResult = runit()
+end
 

@@ -4,12 +4,13 @@
 void get_alloc_limit(value_t **alloc, value_t **limit);
 value_t get_record(value_t rec, int which);
 
-value_t alloc_intrec(int k, value_t rec);
+const value_t empty_record;
 value_t alloc_intint(int m, int n);
+value_t alloc_intrec(int k, value_t rec);
+value_t alloc_recrec(value_t rec1, value_t rec2);
 value_t alloc_manyint(int count, int n);
 value_t alloc_manyintrec(int count, int n, value_t rec);
 value_t alloc_iarray(int count, int n);
-value_t alloc_recrec(value_t rec1, value_t rec2);
 value_t alloc_rarray(int count, double v);
 value_t alloc_string(int strlen, char *str);
 value_t alloc_record(value_t *fields, int *masks, int orig_count);

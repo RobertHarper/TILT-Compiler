@@ -1,4 +1,4 @@
-(*$import LinkIl Crc *)
+(*$import Time Crc *)
 
 
 (* ---- Provides an abstraction for communication between master and slave processes ---- *)
@@ -14,6 +14,7 @@ sig
     type job = string list
     datatype message = READY                 (* Slave signals readiness *)
 		     | ACK_INTERFACE of job  (* Slave signals that interface has compiled *)
+		     | ACK_ASSEMBLY of job   (* Slave signals that asm file has compiled but cannot assemble *)
 		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
 		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
                      | FLUSH                 (* Master signals that slaves should flush file cache *)
@@ -25,7 +26,7 @@ sig
     val send : channel * message -> unit    (* Write a message on given channel, even if channel exists. *)
     val receive : channel -> message option (* Get a message from a given channel, if it exists. *)
     val findToMasterChannels : unit -> channel list  (* Find all ready channels to master. *)
-
+    val findFromMasterChannels : unit -> channel list  (* Find all ready channels from master. *)
 end
 
 signature HELP = 
@@ -65,6 +66,7 @@ sig
     val setup : unit -> unit
     val step : unit -> result
     val run : unit -> unit       (* run slave repeatedly and restart on termination *)
+    val assemble : string * string * string list -> unit  (* (unit,base,importBases) *)
 end
 
 signature MASTER = 

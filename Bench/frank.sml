@@ -446,7 +446,7 @@ unify (T_1, X) (fn () =>
 solitaire (STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, CON_nil_s])])])])]), STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, CON_nil_s])])])]), STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_o_s, STR(cons_s, [CON_x_s, CON_nil_s])])]), STR(cons_s, [STR(cons_s, [CON_x_s, STR(cons_s, [CON_x_s, CON_nil_s])]), STR(cons_s, [STR(cons_s, [CON_x_s, CON_nil_s]), CON_nil_s])])])])]), X, STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [STR(s_s, [INT(0)])])])])])])])])])])])])])) sc))
   | solution2 _ _ = ()
 
-in
+
 
 exception Done
 fun sol1 _ = exists(fn Z =>
@@ -454,7 +454,7 @@ fun sol1 _ = exists(fn Z =>
 
 fun sol2 _ = exists(fn Z =>
 	       solution2 (Z) (fn () => (print "yes\n"; raise Done)))
-
-val _ = (sol2 ()) handle Done => ()
+in
+val frankResult = (sol2 ()) handle Done => ()
 
 end

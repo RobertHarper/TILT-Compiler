@@ -30,12 +30,14 @@ local
       | checkit (a::b::rest) = (a<=b) andalso (checkit (b::rest))
 
 in 
-    val _ = print "Started\n"
-    val data = generator 1 5000 [] 
-    val sorted = sort data
-    val _ = if (checkit(sorted)) 
-		then print "\nSorted correctly\n\n" 
-	    else print "\nSorted incorrectly\n\n"
+    val sortResult = let val _ = print "Started\n"
+			 val data = generator 1 5000 [] 
+			 val sorted = sort data
+			 val _ = if (checkit(sorted)) 
+				     then print "\nSorted correctly\n\n" 
+				 else print "\nSorted incorrectly\n\n"
+		     in  ()
+		     end
 
 end 
 

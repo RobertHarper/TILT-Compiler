@@ -8,7 +8,7 @@ structure Linker :> LINKER =
     fun preld() = 
 	let val alpha = "ld -r " 
 	    val solaris = "ld -r "
-	in   case !Til.platform of
+	in   case (Til.getTargetPlatform()) of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
 	     | Til.TIL_SPARC => solaris
@@ -21,7 +21,7 @@ structure Linker :> LINKER =
 	    else
 		"ld -D a000000 -T 8000000"
 	    val solaris = "ld"
-	in   case !Til.platform of
+	in   case (Til.getTargetPlatform()) of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
 	     | Til.TIL_SPARC => solaris
@@ -30,7 +30,7 @@ structure Linker :> LINKER =
     fun crt() = 
 	let val alpha = "/usr/lib/cmplrs/cc/crt0.o "
 	    val solaris = "Runtime/obj_solaris/firstdata.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crt1.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crti.o /usr/ccs/lib/values-Xa.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtbegin.o  -L/usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2 -L/usr/ccs/bin -L/usr/ccs/lib -L/usr/local/lib"
-	in   case !Til.platform of
+	in   case (Til.getTargetPlatform()) of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
 	     | Til.TIL_SPARC => solaris
@@ -39,7 +39,7 @@ structure Linker :> LINKER =
     fun ld_libs() = 
 	let val alpha = "Runtime/runtime.alpha_osf.a -call_shared -lpthread -lmach -lexc -lm -lc"
 	    val solaris = "Runtime/runtime.solaris.a -lpthread -lposix4 -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
-	in  case !Til.platform of
+	in  case (Til.getTargetPlatform()) of
 	       Til.MLRISC_ALPHA => alpha
 	     | Til.TIL_ALPHA => alpha
 	     | Til.TIL_SPARC => solaris
@@ -249,7 +249,7 @@ structure Linker :> LINKER =
 		  val unitnames = map #unit units
 		  val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
 					  ("main_" ^ un ^ "_doit")) unitnames
-		  val link_s = (case !Til.platform of
+		  val link_s = (case (Til.getTargetPlatform()) of
 				Til.TIL_ALPHA => Linkalpha.link
 			      |	Til.TIL_SPARC => Linksparc.link
     (*			      | Til.MLRISC_ALPHA => AlphaLink.link 

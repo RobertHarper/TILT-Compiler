@@ -98,7 +98,7 @@ structure Util :> UTIL =
 					then (sleep 10; loop()) else ()
                   in  loop(); true
                   end
-       else (OS.Process.system command = OS.Process.success)
+       else (OS.Process.system command <> OS.Process.failure)
 
     val error = real_error
   end

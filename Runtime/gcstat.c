@@ -34,9 +34,9 @@ extern int NumGC;
 
 
 
-int TotalBytesAllocated = 0;
-int TotalBytesCollected = 0;
-int TotalGenBytesCollected = 0;
+int KBytesAllocated = 0;
+int KBytesCollected = 0;
+int GenKBytesCollected = 0;
 
 void object_profile_init(Object_Profile_t *p)
 {
@@ -145,26 +145,24 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *fromspace,
 
 
 
-void gcstat_normal(unsigned allocsize,
-		   unsigned oldsize, double oldratio, 
-		   unsigned newsize, unsigned copied)
+void gcstat_normal(unsigned allocsize, unsigned copied)
 {
-  /*
-    printf("Cheap diag: size %d, ratio=%.2f  --->  newsize=%d   copied=%d\n",
-	   oldsize,oldratio,newsize,copied);
-	   */
-  TotalBytesAllocated += allocsize;
-  TotalBytesCollected += copied;
+  static int bytesAllocated = 0;
+  static int bytesCollected = 0;
+  bytesAllocated += allocsize;
+  bytesCollected += copied;
+  KBytesAllocated += (bytesAllocated / 1024);
+  KBytesCollected += (bytesCollected / 1024);
+  bytesAllocated %= 1024;
+  bytesCollected %= 1024;
 }
 
 
 
 void gcstat_finish(unsigned long allocsize)
 {
-/*  printf("TotalBytesAllocated 4: %ld\n",TotalBytesAllocated); */
-  TotalBytesAllocated += allocsize;
-/*  printf("TotalBytesAllocated 4: %ld\n",TotalBytesAllocated); */
-  TotalBytesCollected += TotalGenBytesCollected;
+  gcstat_normal(allocsize, 0);
+  KBytesCollected += GenKBytesCollected;
 }
 
 #ifdef HEAPPROFILE
@@ -377,8 +375,8 @@ void gcstat_show_heapprofile(char *label, double alloc_tol, double copy_tol)
 {
   int i;
   double eps = 1e-5;
-  long total_allocated_size = TotalBytesAllocated / 4;
-  long total_copied_size    = TotalBytesCollected / 4;
+  long total_allocated_size = KBytesAllocated * 256;  /* in words */
+  long total_copied_size    = KBytesCollected * 256;
   long printed_entry = 0;
   double old_cutoff = 0.8;
   double cutoff_copy = 0.0;

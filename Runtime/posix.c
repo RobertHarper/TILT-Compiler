@@ -11,6 +11,8 @@
 #include <ieeefp.h>
 #endif
 #include <dirent.h>
+#include <stropts.h>
+#include <poll.h>
 
 #include "tag.h"
 #include "thread.h"
@@ -138,7 +140,7 @@ typedef struct termio_rep_struct *termio_rep;
 
 
 
-string cstring2mlstring(char *str)
+string cstring2mlstring_alloc(char *str)
 {
   return alloc_string(strlen(str),str);
 }
@@ -224,7 +226,7 @@ value_t setRoundingMode(int ml_mode)
     }
   fpsetround(mode);
 #endif  
-  return 256; /* ML rep of unit */
+  return empty_record;
 }
 
 char* exnNameRuntime(void *unused)
@@ -272,13 +274,10 @@ intpair ml_timeofday()
       printf("POSIX function gettimeofday failed with errno = %d\n", errno);
       assert(0);
     }
-  result = alloc_manyint(2,0);
-  ((value_t *) result)[0] = tp.tv_sec;
-  ((value_t *) result)[1] = tp.tv_usec;
-  return (intpair) result;
+  return alloc_intint(tp.tv_sec,tp.tv_usec);
 }
 
-mltm ctm2mltm(struct tm *tm)
+mltm ctm2mltm_alloc(struct tm *tm)
 {
   value_t result = alloc_manyint(9,0);
   ((value_t *) result)[0] = tm->tm_sec;
@@ -305,7 +304,7 @@ mltm posix_localTime (intpair sec_musec)
   time_t t = *((int *)sec_musec);
   struct tm *tm;
   tm = localtime (&t);
-  return ctm2mltm(tm);
+  return ctm2mltm_alloc(tm);
 }
 
 mltm posix_gmTime (intpair sec_musec)
@@ -313,7 +312,7 @@ mltm posix_gmTime (intpair sec_musec)
   time_t t = *((int *)sec_musec);
   struct tm *tm;
   tm = gmtime (&t);
-  return ctm2mltm(tm);
+  return ctm2mltm_alloc(tm);
 }
 
 intpair posix_mkTime(mltm unused)
@@ -364,10 +363,38 @@ string posix_os_tmpname(unit unused)
   return (word8vector) res;
 }
 
-intword_list posix_os_poll(intword_list unused1, intpair_option unused2)
+intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_option)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  struct pollfd fds[10];
+  unsigned long count = 0;
+  int i, timeout = INFTIM;
+  value_t result = 0;        /* nil */
+
+  if (sec_usec_option != 0)  /* is it NONE? */
+    {
+      int *sec_usec = (int *)sec_usec_option;
+      int sec = sec_usec[0];
+      int usec = sec_usec[1];
+      timeout = 1000 * sec + usec / 1000;
+    }
+  while (fd_event_list != 0) /* is it nil? */
+    {
+      int *fd_event = (int *)(((value_t *)fd_event_list)[0]);
+      int fd = fd_event[0];
+      int event = fd_event[1];
+      fd_event_list = ((value_t *)fd_event_list)[0];
+      fds[count].fd = fd;
+      fds[count].events = event;
+      count++;
+      assert(count < (sizeof(fds))/(sizeof (struct pollfd)));
+    }
+  printf("count = %d, timeout = %d \n",count, timeout);
+  poll(fds,count,timeout);
+  for (i=count-1; i>=0; i--) {
+    int car = alloc_intint(fds[i].fd, fds[i].revents);
+    result = alloc_recrec(car,result);
+  }
+  return result;
 }
 
 int posix_io_num(string arg)
@@ -410,7 +437,7 @@ unit posix_io_close(int fd)
       printf("POSIX function close returned with errno = %d\n", errno);
       assert(0);
     }
-  return 256; /* unit is 256 */
+  return empty_record;
 }
 
 
@@ -419,16 +446,10 @@ word8vector posix_io_read(int fd, int size)
 {
   value_t *alloc, *limit;
   char *buf = NULL;
-  int permitted;
   int bytes_read;
   value_t res;
 
-  get_alloc_limit(&alloc,&limit);
-  permitted = (value_t)limit - (value_t)alloc - 24;
-  if (size > permitted)
-    size = permitted;
-  if (size < 0)
-    size = 0;
+  assert(size >= 0);
   res = alloc_uninit_string(size,&buf);
   bytes_read = read(fd,buf,size);
   if (bytes_read == -1)
@@ -520,7 +541,7 @@ unit posix_io_fsync(int fd)
       printf("POSIX function fsync returned with errno = %d\n", errno);
       assert(0);
     }
-  return 256; /* unit */
+  return empty_record;
 }
 
 int posix_procenv_getpid(unit unused)
@@ -768,11 +789,10 @@ word posix_process_sysconf(string arg)
 
 int posix_process_fork(unit unused)
 {
-  int junk = printf("calling fork now\n");
   int code = fork();
   if (code != -1)
     {
-      printf("return from fork with %d\n",code);
+      printf("Call to fork returned with %d.\n",code);
       return code; 
     }
   else
@@ -787,29 +807,23 @@ unit posix_process_exec(string path, string_list args)
   int code, i, length = 0;
   string_list cur = args;
   char **argv;
-  printf("exec called\n");
   while (cur)
     {
       length++;
       cur = ((string_list_long) cur)->cdr;
     }
-  printf("exec 1\n");
   argv = malloc((length + 1) * sizeof(char *));
-  printf("exec 2\n");
   if (argv == NULL)
     {
       printf("malloc in posix_process_exec failed with length = %d\n", length);
       assert(0);
     }
-  printf("exec 3\n");
   for (cur=args, i=0; i<length; i++)
     {
       argv[i] = mlstring2cstring_malloc(((string_list_long) cur)->car);
       cur = ((string_list_long) cur)->cdr;
     }
-  printf("exec 4\n");
   argv[length] = NULL;
-  printf("exec 5\n");
   code = execv(mlstring2cstring_malloc(path),argv);
   printf("POSIX function exec returned with errno = %d\n", errno);
   assert(0);
@@ -934,23 +948,23 @@ string posix_filesys_readdir(int arg)
   DIR *dir = (DIR *)arg;
   struct dirent *entry = readdir(dir);
   if (entry == NULL)
-    return cstring2mlstring("");
+    return cstring2mlstring_alloc("");
   else 
-    return cstring2mlstring(entry->d_name);
+    return cstring2mlstring_alloc(entry->d_name);
 }
 
 unit posix_filesys_rewinddir(int arg)
 {
   DIR *dir = (DIR *)arg;
   rewinddir(dir);
-  return 256; /* unit */
+  return empty_record;
 }
 
 unit posix_filesys_closedir(int arg)
 {
   DIR *dir = (DIR *)arg;
   closedir(dir);
-  return 256; /* unit */
+  return empty_record;
 }
 
 unit posix_filesys_chdir(string unused)
@@ -994,7 +1008,7 @@ unit posix_filesys_rename(string from, string to)
   char *cfrom = mlstring2cstring_static(from);
   char *cto = mlstring2cstring_buffer(to, sizeof(buf), buf);  /* can't use ..._static twice */
   rename(cfrom,cto);
-  return 256; /* unit */
+  return empty_record;
 }
 
 unit posix_filesys_symlink(string unused1, string unused)
@@ -1023,7 +1037,7 @@ unit posix_filesys_unlink(string arg)
     printf("posix_filesys_unlink failed with errno = %d\n", errno);
     assert(0);
   }
-  return 256; /* unit */
+  return empty_record;
 }
 
 unit posix_filesys_rmdir(string unused)
@@ -1046,7 +1060,7 @@ unit posix_filesys_ftruncate(int unused1, int unused)
 
 #define MODE_BITS (S_IRWXU | S_IRWXG | S_IRWXO | S_ISUID | S_ISGID)
 
-statrep cstat2mlstat(struct stat *buffer)
+statrep cstat2mlstat_alloc(struct stat *buffer)
 {
   value_t record = alloc_manyint(11,0);
   statrep s = (statrep)record;
@@ -1076,7 +1090,7 @@ statrep posix_filesys_stat(string name)
 	     errno);
       assert(0);
     } 
-  return cstat2mlstat(&buffer);
+  return cstat2mlstat_alloc(&buffer);
 }
 
 statrep posix_filesys_lstat(string name)
@@ -1089,7 +1103,7 @@ statrep posix_filesys_lstat(string name)
 	     errno);
       assert(0);
     } 
-  return cstat2mlstat(&buffer);
+  return cstat2mlstat_alloc(&buffer);
 }
 
 statrep posix_filesys_fstat(int filedesc)
@@ -1102,7 +1116,7 @@ statrep posix_filesys_fstat(int filedesc)
 	     filedesc, errno);
       assert(0);
     } 
-  return cstat2mlstat(&buffer);
+  return cstat2mlstat_alloc(&buffer);
 }
 
 /* XXX what about errno's other than NOENT - shouldn't an exception be raised by posix-filesys.sml? */

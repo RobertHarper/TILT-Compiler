@@ -33,8 +33,8 @@
 #define RoundDown(x,mult) ((x) / (mult) * (mult))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 
-int FetchAndAdd(int *, int);
-int TestAndSet(int *);
+long FetchAndAdd(long *, int);
+long TestAndSet(long *);
 
 extern int LEAST_GC_TO_CHECK;
 extern int SHOW_GCSTATS;

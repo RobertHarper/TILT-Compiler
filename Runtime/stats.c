@@ -1,13 +1,13 @@
 #include "general.h"
-#include <sys/time.h>
-#include <sys/timeb.h>
-#include <sys/resource.h>
 #include "tag.h"
 #include "memobj.h"
 #include "stats.h"
 #include "gcstat.h"
 #include "gc.h"
 #include "thread.h"
+#include <sys/time.h>
+#include <sys/timeb.h>
+#include <sys/resource.h>
 
 extern int use_stack_gen;
 
@@ -199,13 +199,13 @@ void stats_finish()
 	   "         Total Threads  = %d       Max Threads = %d\n",
 	   NumSysThread,thread_total(),thread_max());
     printf("GC(K):   heap_method   = %9s    stack_method  = %s\n"
-	   "         bytes_alloced = %9ld    bytes_copied  = %d\n"
+	   "         kbytesAlloced = %9ld    kbytesCopied  = %d\n"
 	   "         NumGC         = %9d    NumMajorGC    = %d\n",
 	   (collector_type == Semispace) ? "Semi" : 
 	   ((collector_type == Generational) ? "Gen " : 
 	    ((collector_type == Parallel) ? "Para" : "????")),
 	   use_stack_gen?"Gener":"Normal",
-	   TotalBytesAllocated,             TotalBytesCollected,
+	   KBytesAllocated,             KBytesCollected,
 	   NumGC,                           NumMajorGC);
     printf("         Num_of_roots  = %9d\n", NumRoots);
     if (collector_type == Generational)

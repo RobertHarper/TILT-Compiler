@@ -9,6 +9,7 @@
 #define longsize       4
 #define ptrsize        4
 #endif
+#define MLsaveregs_disp 0
 #define maxsp_disp     longsize*32+8*32
 #define snapshot_disp  longsize*32+8*32+longsize
 #define sysThread_disp longsize*32+8*32+longsize+ptrsize
@@ -17,7 +18,16 @@
 #define thunk_disp     longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize
 #define nextThunk_disp longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize
 #define numThunk_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize
-#define request_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize+longsize
+#define request_disp   longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize+longsize
+#define requestInfo_disp longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize+longsize+longsize
+#define Csaveregs_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize+longsize+longsize+longsize+longsize
+
+#define NoRequest 0
+#define YieldRequest 1
+#define StartRequest 2
+#define GCRequestFromML 3
+#define GCRequestFromC 4
+#define MajorGCRequestFromC 5
 
 #ifndef _inside_stack_h
 #ifndef _asm_
@@ -38,31 +48,31 @@
      -1 : Thread is done
      0 : Thread is ready to be scheduled
      1 or more : Thread is running already or is blocked; not eligible to be run
-   Request:
-     0 or more: allocating specified number of bytes;l; 
-                must check that this is satisfied before resumption
-     -1 : Yield was called		
 */
-
+     
 /* decalpha.sml, sparc.sml, and the ***_disp above have to be changed if the fields are modified 
    Note that long is used to avoid padding problems.
 */
 struct Thread__t
 {
+  /* ---- These fields are accessed by assembly code ---- */
   long               saveregs[32];     /* Register set; compiler relied on this being first */
   double             fregs[32];        /* Register set; compiler relied on this being second */
   long               maxSP;            /* Used by mutator exn handler; compiler relies on this third */
   StackSnapshot_t    *snapshots;       /* Used by stack.c and stack_asm.s */
   struct SysThread__t *sysThread;      /* of type SysThread_t * - relied on by service_alpha_osf.s  */
-  long                notInML;          /* set to true whenever mutator calls a normal external function */
+  long               notInML;          /* set to true whenever mutator calls a normal external function */
   double             scratch;
   value_t            *thunks;          /* Array of num_add unit -> unit */
   long               nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
   long               numThunk;         /* Number of thunks.  At least one. */
-  long               request;          /* Why pre-empted? */
+  long               request;          /* Why were we stoppped and how do we resume? */
+  long               requestInfo;      /* If GC, how many bytes do we want? */
+  long               filler;           /* must double align here */
+  long               Csaveregs[32];    /* C register saved when we need to de-schedule while in a C function */
+  double             Cfregs[32];        
 
   /* ---- The remaining fields not accessed by assembly code ---- */
-
   long               last_snapshot;    /* Index of last used snapshot */
   StackChain_t       *stackchain;      /* Stack */
   Queue_t            *retadd_queue;
@@ -110,6 +120,7 @@ void Interrupt(struct ucontext *);
 void scheduler(SysThread_t *); /* Unmap systhread if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);
+void ReleaseJob(SysThread_t *sth);
 
 int thread_total(void);
 int thread_max(void);

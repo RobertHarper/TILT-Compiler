@@ -1,70 +1,92 @@
-(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc OS Stats *)
-structure Til : COMPILER =
+(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha Linksparc OS Stats Platform *)
+structure Til :> COMPILER =
   struct
 
+    val error = fn x => Util.error "compiler.sml" x
     val littleEndian = Stats.tt("littleEndian")
 
     datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
-    val platform = 
-	let val envType = (case OS.Process.getEnv "SYS_TYPE" of
-			       NONE => OS.Process.getEnv "SYS"
-			     | some => some)
-	in
-	    ref (case envType of
-		     NONE => (print "Environment variable SYS_TYPE unset. Defaulting to Alpha.\n";  
-			      littleEndian := true; TIL_ALPHA)
-		   | SOME sysType => 
-			 if (String.substring(sysType,0,3)) = "sun"
-			     then (print "Sun detected. Using Til-Sparc\n"; 
-				   littleEndian := false; TIL_SPARC)
-			 else if (String.substring(sysType,0,5)) = "alpha"
-				  then (print "Alpha detected. Using Til-Alpha\n"; 
-					littleEndian := true; TIL_ALPHA)
-			      else (print "Environment variable SYS_TYPE's value ";
-				    print sysType; 
-				    print " is unrecognized. Defaulting to Alpha.\n";  
-				    littleEndian := true; TIL_ALPHA))
+    val targetPlatform = ref TIL_ALPHA
+    fun getTargetPlatform() = !targetPlatform
+    fun setTargetPlatform p = 
+	let val little = (case p of
+			      TIL_ALPHA => true
+			    | TIL_SPARC => false
+			    | MLRISC_ALPHA => true
+			    | MLRISC_SPARC => false)
+	in  targetPlatform := p;
+	    littleEndian := little
 	end
+    fun native() = 
+	(case (getTargetPlatform(), Platform.platform) of
+	     (TIL_ALPHA, Platform.DUNIX) => true
+	   | (TIL_ALPHA, _) => false
+	   | (TIL_SPARC, Platform.SOLARIS) => true
+	   | (TIL_SPARC, _) => false
+	   | _ => error "MLRISC not supported")
+
+    local 
+	val envType = (case OS.Process.getEnv "SYS_TYPE" of
+			   NONE => OS.Process.getEnv "SYS"
+			 | some => some)
+    in
+	val _ =
+	    (case envType of
+		 NONE => (print "Environment variable SYS unset. Defaulting to Alpha.\n";  
+			  setTargetPlatform TIL_ALPHA)
+	       | SOME sysType => 
+		     if (String.substring(sysType,0,3)) = "sun"
+			 then (print "Sun detected. Using Til-Sparc\n"; 
+			       setTargetPlatform TIL_SPARC)
+		     else if (String.substring(sysType,0,5)) = "alpha"
+			      then (print "Alpha detected. Using Til-Alpha\n"; 
+				    setTargetPlatform TIL_ALPHA)
+			  else (print "Environment variable SYS_TYPE's value ";
+				print sysType; 
+				print " is unrecognized. Defaulting to Alpha.\n";  
+				setTargetPlatform TIL_ALPHA))
+    end
 
     type sbnd = Il.sbnd
     type context_entry = Il.context_entry
     type context = Il.context
 	
-    val error = fn x => Util.error "Compiler" x
     val as_path = "as"
 	
     val debug_asm = Stats.ff("debug_asm")
     val keep_asm = Stats.tt("keep_asm")
     val compress_asm = Stats.tt("compress_asm")
     fun as_flag() = 
-	(case !platform of
+	(case (getTargetPlatform()) of
 	     TIL_ALPHA => if (!debug_asm) then " -g " else ""
 	   | TIL_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus"
 	   | MLRISC_ALPHA => if (!debug_asm) then " -g " else ""
 	   | MLRISC_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus")
-    fun base2ui base = 
-	(case !platform of
+    fun base2ui base = base ^ ".ui"
+(*
+	(case (getTargetPlatform()) of
 	     TIL_ALPHA => Linkalpha.base2ui
 	   | TIL_SPARC => Linksparc.base2ui
 	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2ui
 	   | MLRISC_SPARC => SparcLink.base2ui *) ) base
+*)
     fun base2s base = 
-	(case !platform of
+	(case (getTargetPlatform()) of
 	     TIL_ALPHA => Linkalpha.base2s
 	   | TIL_SPARC => Linksparc.base2s
 	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2s
 	   | MLRISC_SPARC => SparcLink.base2s *) ) base
     fun base2o base = 
-	(case !platform of
+	(case (getTargetPlatform()) of
 	     TIL_ALPHA => Linkalpha.base2o
 	   | TIL_SPARC => Linksparc.base2o
 	   | _ => error "No MLRISC"
 (*	   | MLRISC_ALPHA => AlphaLink.base2o
 	   | MLRISC_SPARC => SparcLink.base2o *) ) base
     fun base2uo base = 
-	(case !platform of
+	(case (getTargetPlatform()) of
 	     TIL_ALPHA => Linkalpha.base2uo
 	   | TIL_SPARC => Linksparc.base2uo
 	   | _ => error "No MLRISC"
@@ -72,22 +94,41 @@ structure Til : COMPILER =
 	   | MLRISC_SPARC => SparcLink.base2uo *) ) base
 
 
-    fun assemble(s_file,o_file) =
-	let val as_command = as_path ^ " " ^ (as_flag()) ^ " -o " ^ o_file ^ " " ^ s_file
-	    val rm_command = "rm " ^ s_file
-	    val compress_command = "gzip -f " ^ s_file ^ " &"
-	    val success = (Stats.timer("Assemble",Util.system) as_command)
-	    val success = success andalso
-		((OS.FileSys.fileSize o_file > 0) handle _ => false)
-	in if success
-	       then (if (!keep_asm)
-			 then (if (!compress_asm)
-				   then (Util.system compress_command; ())
-			       else ())
-		     else (Util.system rm_command; ()))
-	   else error "assemble. System command as failed"
+    val uptoAsm = Stats.ff("UptoAsm")
+    fun assemble_help background base =
+	let val s_file = base2s base
+	    val o_file = base2o base
+	in  if (!uptoAsm) 
+		then let val os = TextIO.openOut o_file
+			 val _ = TextIO.output(os,"Dummy .o file\n")
+		     in  TextIO.closeOut os; o_file
+		     end
+	    else
+		let val as_command = as_path ^ " " ^ (as_flag()) ^ " -o " ^ o_file 
+		                       ^ " " ^ s_file
+		    val rm_command = "rm " ^ s_file
+		    val compress_command = "gzip -f " ^ s_file
+		    val command = 
+			(case (!keep_asm, !compress_asm) of
+			     (false, _) => as_command ^ "; " ^ rm_command
+			   | (true, false) => as_command
+			   | (true, true) => as_command ^ "; " ^ compress_command)
+		    val command = if background
+				      then "(" ^ command ^ ") &"
+				  else command
+		    val success = (Stats.timer("Assemble",Util.system) command)
+		    val success = success andalso
+			(background orelse
+			 ((OS.FileSys.fileSize o_file > 0) handle _ => false))
+		in if success
+		       then o_file
+		   else error ("System command as failed:\n" ^ command ^ "\n")
+		end
 	end
-    
+    val assemble = assemble_help false
+    val assemble_start = assemble_help true
+    fun assemble_done base = OS.FileSys.access(base2o base, [OS.FileSys.A_READ])
+
     (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
      * object file `unitName.o'. ctxt is the context in which the sbnds
      * were produced, and ctxt' contains the new bindings. unitName is
@@ -95,44 +136,37 @@ structure Til : COMPILER =
      * generating unique identifiers. Also, `unitName.o' must contain a
      * label for `initialization' with name `unitName_doit'. 
      *)
-	exception Stop
-	val uptoElaborate = Stats.ff("UptoElaborate")
-	val uptoPhasesplit = Stats.ff("UptoPhasesplit")
-	val uptoClosureConvert = Stats.ff("UptoClosureConvert")
-	val uptoRtl = Stats.ff("UptoRtl")
-	val uptoAsm = Stats.ff("UptoAsm")
-	fun compile (unitName : string,
-		     fileBase: string, 
-		     il_module) : string = 
-	    let val _ = if (!uptoElaborate) then raise Stop else ()
-		val nilmod = Linknil.il_to_nil(unitName, il_module)
-		val _ = if (!uptoPhasesplit orelse !uptoClosureConvert)
-			    then raise Stop else ()
-		val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
-		val _ = if (!uptoRtl) then raise Stop else ()
-
-
-		(* rtl_to_asm creates fileBase.s file with main label * `fileName_doit' *)
-		val rtl_to_asm = 
-		    case !platform of
-			 TIL_ALPHA => Linkalpha.rtl_to_asm
-		       | TIL_SPARC => Linksparc.rtl_to_asm
-		       | _ => error "No MLRISC"
-(*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm *)
-(*		       | MLRISC_SPARC => SparcLink.rtl_to_asm*)
-		val (sFile,_) = rtl_to_asm(fileBase, rtlmod)    
-		val _ = if (!uptoAsm) then raise Stop else ()
-
-		val oFile = base2o fileBase
-		val _ = assemble(sFile, oFile)
-	    in  oFile
-	    end
-	handle Stop => (let val oFile = base2o fileBase
-			    val os = TextIO.openOut oFile
-			    val _ = TextIO.output(os,"Dummy .o file\n")
-			in  TextIO.closeOut os; oFile
-			end)
-
-
- 
+    exception Stop
+    val uptoElaborate = Stats.ff("UptoElaborate")
+    val uptoPhasesplit = Stats.ff("UptoPhasesplit")
+    val uptoClosureConvert = Stats.ff("UptoClosureConvert")
+    val uptoRtl = Stats.ff("UptoRtl")
+    fun il_to_asm (unitName : string,
+		   fileBase: string, 
+		   il_module) : string = 
+	let val _ = if (!uptoElaborate) then raise Stop else ()
+	    val nilmod = Linknil.il_to_nil(unitName, il_module)
+	    val _ = if (!uptoPhasesplit orelse !uptoClosureConvert)
+			then raise Stop else ()
+	    val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
+	    val _ = if (!uptoRtl) then raise Stop else ()
+		
+		
+	    (* rtl_to_asm creates fileBase.s file with main label * `fileName_doit' *)
+	    val rtl_to_asm = 
+		case (getTargetPlatform()) of
+		    TIL_ALPHA => Linkalpha.rtl_to_asm
+		  | TIL_SPARC => Linksparc.rtl_to_asm
+		  | _ => error "No MLRISC"
+	    (*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm *)
+	    (*		       | MLRISC_SPARC => SparcLink.rtl_to_asm*)
+	    val (sFile,_) = rtl_to_asm(fileBase, rtlmod)    
+	in  sFile
+	end
+    handle Stop => (let val sFile = base2s fileBase
+			val os = TextIO.openOut sFile
+			val _ = TextIO.output(os,"Dummy .s file\n")
+		    in  TextIO.closeOut os; sFile
+		    end)
+	
     end

@@ -18,8 +18,8 @@
 Thread_t    *Threads;                         /* array of NumUserThread user threads */
 static SysThread_t *SysThreads;               /* array of NumSystemThread system threads */
 
-static int totalThread = 0;                   /* Number of create user threads */
-static int maxThread = 0;                     /* Maximum number of threads in work queue */
+static long totalThread = 0;                  /* Number of create user threads */
+static long maxThread = 0;                    /* Maximum number of threads in work queue */
 
 static Thread_t **JobQueue;                   /* Work list for user threads: array of pointers to user threads */
 static pthread_cond_t EmptyCond;              /* Signals no more jobs */
@@ -33,7 +33,7 @@ extern void start_client(Thread_t *, value_t *, int);
 extern void context_restore(Thread_t *);
 
 /* ------------------ Manipulating the job queue ----------------- */
-static int local_lock = 0;
+static long local_lock = 0;
 
 void LocalLock(void)
 {
@@ -156,7 +156,7 @@ void DeleteJob(SysThread_t *sth)
     if (JobQueue[i] == th) {
       if (th->parent) {
 	FetchAndAdd(&(th->parent->status),-1);
-	assert(th->parent >= 0); /* Parent must not have already finished */
+	assert(th->parent->status >= 0); /* Parent must not have already finished */
       }
       for (j=i; j<NumThread-1; j++)
 	JobQueue[j] = JobQueue[j+1];
@@ -218,7 +218,7 @@ void fillThread(Thread_t *th, int i)
   th->status = ThreadNew;
   th->tid = -1;
   th->parent = NULL;
-  th->request = 0;
+  th->request = StartRequest;
   th->maxSP = 0;
   th->last_snapshot = -1;
   th->snapshots = (StackSnapshot_t *)malloc(NUM_STACK_STUB * sizeof(StackSnapshot_t));
@@ -244,7 +244,7 @@ void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
   assert(&(Threads[th->id]) == th);
   th->tid = FetchAndAdd(&totalThread,1);
   th->parent = parent;
-  th->request = 0;
+  th->request = StartRequest;
   th->last_snapshot = -1;
   th->saveregs[THREADPTR] = (long) th;
   th->saveregs[ALLOCLIMIT] = 0;
@@ -261,8 +261,6 @@ void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
       th->nextThunk = 0;
       th->numThunk = numThunk;
     }
-  if (numThunk == 0)
-    assert(thunks >= 1000000);
   check("threadcreate_mid",getSysThread());
   if (th->stackchain == NULL)
     th->stackchain = StackChain_Alloc(); 
@@ -342,8 +340,6 @@ Thread_t *thread_create(Thread_t *parent, value_t *thunks, int numThunk)
     assert(0);
   }
   assert(th->status == 0);
-  if (numThunk == 0)
-    assert(thunks >= 1000000);
   resetThread(th, parent, thunks, numThunk);
   return th;
 }
@@ -402,67 +398,96 @@ static void work(SysThread_t *sth)
       th->sysThread = sth;
     }
     else
-      poll();
+      gc_poll();
   }
 
   if (th->status != 1)
     printf("Proc %d: thread %d  has status = %d\n", sth->stid,th->tid,th->status);
   assert(th->status == 1); /* FetchJob increments status from 0 to 1 */
-  if (th->nextThunk == 0)  /* Starting thread for the first time */
-    {
+  switch (th->request) {
+  
+    case NoRequest : assert(0);
+
+    case StartRequest : {              /* Starting thread for the first time */
       value_t stack_top = th->stackchain->stacks[0]->top;
+      assert(th->nextThunk == 0);
       th->saveregs[THREADPTR] = (long)th;
-      th->saveregs[SP] = (long)stack_top - 128; /* Get some initial room; Sparc requires at least 68 byte for the save area */
+      /* Get some initial room; Sparc requires at least 68 byte for the save area */
+      th->saveregs[SP] = (long)stack_top - 128; 
       th->saveregs[ALLOCPTR] = sth->alloc;
       th->saveregs[ALLOCLIMIT] = sth->limit;
-
       if (diag) {
 	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
 	       sth->stid, th->tid, th->id, 
 	       th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
-
       check("workstart",sth);
       start_client(th,(value_t *)th->thunks, th->numThunk);
+      assert(0);
+    }
 
-      assert(0);
-    }
-  else  /* Thread not starting for first time */
-    {
-      int request = th->request;
-      value_t stack_top = th->stackchain->stacks[0]->top;
-      if (request == -1) {      /* Yield put us here; return as though from C */
+    case YieldRequest : {
 #ifdef solaris
-	th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
+      th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
-	th->saveregs[ALLOCPTR] = sth->alloc;
-	th->saveregs[ALLOCLIMIT] = sth->limit;
-	returnFromYield(th);
+      th->saveregs[ALLOCPTR] = sth->alloc;
+      th->saveregs[ALLOCLIMIT] = sth->limit;
+      returnFromYield(th);
+    }
+
+    case GCRequestFromML : {
+      if (th->requestInfo >= pagesize) {
+	fprintf(stderr,"th->requestInfo = %d  > pagesize = %d\n",
+		th->requestInfo, pagesize);
+	assert(0);
       }
-      else if (request >= 0) { /* GC request */
-	if (request + sth->alloc >= sth->limit) {
-	  if (diag)
-	    printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
-		 sth->stid, th->tid, request, sth->limit - sth->alloc);
-	  assert(request < pagesize);
-	  th->saveregs[ALLOCPTR] = sth->alloc;
-	  th->saveregs[ALLOCLIMIT] = sth->limit;
-	  gc(th); /* map the thread as though calling from gc_raw */
-	  assert(0);
-	}
-	th->saveregs[ALLOCPTR] = sth->alloc;
-	th->saveregs[ALLOCLIMIT] = sth->limit;
+      if (th->requestInfo + sth->alloc >= sth->limit) {
 	if (diag)
-	  printf("Proc %d: resuming user thread %d (%d) with request = %d  and %d < %d\n",
-		 sth->stid, th->tid,th->id,
-		 request, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
-	check("workresume",sth);
-	returnFromGC(th);
+	  printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
+		 sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
+	th->saveregs[ALLOCPTR] = sth->alloc;
+	th->saveregs[ALLOCLIMIT] = sth->limit;
+	gc(th); /* map the thread as though calling from gc_raw */
+	assert(0);
       }
-      printf("Odd request %d\n",request);
+      th->saveregs[ALLOCPTR] = sth->alloc;
+      th->saveregs[ALLOCLIMIT] = sth->limit;
+      if (diag)
+	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
+	       sth->stid, th->tid,th->id,
+	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
+      check("workresume",sth);
+      returnFromGCFromML(th);
+    }
+
+     case GCRequestFromC : 
+     case MajorGCRequestFromC : {
+      assert(th->requestInfo < pagesize);
+      if (th->requestInfo + sth->alloc >= sth->limit) {
+	if (diag)
+	  printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
+		 sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
+	th->saveregs[ALLOCPTR] = sth->alloc;
+	th->saveregs[ALLOCLIMIT] = sth->limit;
+	gc(th); /* map the thread as though calling from gc_raw */
+	assert(0);
+      }
+      th->saveregs[ALLOCPTR] = sth->alloc;
+      th->saveregs[ALLOCLIMIT] = sth->limit;
+      if (diag)
+	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
+	       sth->stid, th->tid,th->id,
+	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
+      check("workresume",sth);
+      returnFromGCFromC(th);
+    }
+
+   default : {
+      printf("Odd request %d\n",th->request);
       assert(0);
     }
+  } /* end of switch */
   assert(0);
 }
 
@@ -606,8 +631,8 @@ Thread_t *YieldRest()
 {
   SysThread_t *sth = getSysThread();
   check("YieldReststart",sth);
-  sth->userThread->request = -1;               /* Record why this thread pre-empted */
-  sth->userThread->saveregs[RESULT] = 256; /* ML representation of unit */
+  sth->userThread->request = YieldRequest;  /* Record why this thread pre-empted */
+  sth->userThread->saveregs[RESULT] = 256;  /* ML representation of unit */
   ReleaseJob(sth);
   check("YieldRestend",sth);
   work(sth);
@@ -639,5 +664,6 @@ void schedulerRest(SysThread_t *sth)
   work(sth);
   assert(0);
 }
+
 
 

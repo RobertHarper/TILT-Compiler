@@ -237,22 +237,26 @@ struct
 		     attributes : (int * 'a) StringMap.map ref,  
 		     cached      : bool ref,                         (* Cache up-to-date? *)
 		     reverse     : Graph.graph ref,                  (* Cached info *)
-		     info        : {pathWeight : int,
+		     upInfo      : {ancestorWeight : int,
 				    ancestors : StringOrderedSet.set}
-		                      StringMap.map ref}   
+		                      StringMap.map ref,
+		     downInfo    : {descendentWeight : int}
+		                      StringMap.map ref}
 
     fun empty () = {main = Graph.empty "", 
 		    attributes = ref StringMap.empty,
 		    cached = ref false,
 		    reverse = ref (Graph.empty ""),
-		    info = ref StringMap.empty}
+		    upInfo = ref StringMap.empty,
+		    downInfo = ref StringMap.empty}
 
     fun copy ({main,attributes,...} : 'a graph) : 'a graph = 
 	{main = Graph.copy main,
 	 attributes = ref (!attributes),
 	 cached = ref false,
 	 reverse = ref (Graph.empty ""),
-	 info = ref StringMap.empty}
+	 upInfo = ref StringMap.empty,
+	 downInfo = ref StringMap.empty}
 
     fun flush ({cached, ...} : 'a graph) = cached := false
 
@@ -300,19 +304,20 @@ struct
 	foldl (fn (n,acc) => acc + (numChildren(g,n))) 0 (nodes g)
 
     fun refresh({cached = ref true, ...} : 'a graph) = ()
-      | refresh(g as {main, cached, reverse, info, ...} : 'a graph) = 
+      | refresh(g as {main, cached, reverse, upInfo, downInfo, ...} : 'a graph) = 
 	let val _ = reverse := Graph.rev main
-	    val _ = info := StringMap.empty
-	    fun get_info node = 
-		(case (StringMap.find(!info, node)) of
+	    val _ = upInfo := StringMap.empty
+	    val _ = downInfo := StringMap.empty
+	    fun get_upInfo node = 
+		(case (StringMap.find(!upInfo, node)) of
 		     SOME pw_a => pw_a
 		   | NONE => 
 			 let 	
 			     val this_size = nodeWeight(g,node)
 			     fun mapper hashedNode = 
 				 let val node = Graph.unhash main hashedNode
-				     val {ancestors,pathWeight} = get_info node
-				 in  (node, ancestors, pathWeight)
+				     val {ancestors,ancestorWeight} = get_upInfo node
+				 in  (node, ancestors, ancestorWeight)
 				 end
 			     val parents_info = (map mapper 
 						 (Graph.edges (!reverse) (Graph.hash main node)))
@@ -323,57 +328,105 @@ struct
 				 in  (acc_anc,size)
 				 end
 			     val i = foldl folder (StringOrderedSet.empty, 0) parents_info
-			     val i = {ancestors = #1 i, pathWeight = #2 i}
-			     val _ = info := (StringMap.insert(!info,node,i))
+			     val i = {ancestors = #1 i, ancestorWeight = #2 i}
+			     val _ = upInfo := (StringMap.insert(!upInfo,node,i))
 			 in  i
 			 end)
-	in  map get_info (Graph.nodes main); 
+	    fun get_downInfo node = 
+		(case (StringMap.find(!downInfo, node)) of
+		     SOME di => di
+		   | NONE => 
+			 let 	
+			     val this_size = nodeWeight(g,node)
+			     fun mapper hashedNode = 
+				 let val node = Graph.unhash main hashedNode
+				     val {descendentWeight} = get_downInfo node
+				 in  (node, descendentWeight)
+				 end
+			     val children_info = (map mapper 
+						  (Graph.edges main (Graph.hash main node)))
+			     fun folder ((node,size),acc_size) = 
+				 Int.max(size + this_size, acc_size)
+			     val i = foldl folder 0 children_info
+			     val i = {descendentWeight = i}
+			     val _ = downInfo := (StringMap.insert(!downInfo,node,i))
+			 in  i
+			 end)
+	in  map get_upInfo (Graph.nodes main); 
+	    map get_downInfo (Graph.nodes main); 
 	    cached := true
 	end
 
     (* Queries requiring the cached parts of the graph *)
-    fun pathWeight (g as {info, ...} : 'a graph, node) = 
+    fun ancestorWeight (g as {upInfo, ...} : 'a graph, node) = 
 	(refresh g;
-	 case StringMap.find(!info, node) of
+	 case StringMap.find(!upInfo, node) of
 	     NONE => raise UnknownNode
-	   | SOME {pathWeight,...} => pathWeight)
+	   | SOME {ancestorWeight,...} => ancestorWeight)
+    fun descendentWeight (g as {downInfo, ...} : 'a graph, node) : int = 
+	(refresh g;
+	 case StringMap.find(!downInfo, node) of
+	     NONE => raise UnknownNode
+	   | SOME {descendentWeight,...} => descendentWeight)
     fun parents (g as {main, reverse,...} : 'a graph, node) = 
 	let val _ = refresh g
 	    val edges = Graph.edges (!reverse) (Graph.hash main node)
 	in  map (Graph.unhash main) edges
 	end
-    fun ancestors (g as {info,...} : 'a graph, node) = 
+    fun ancestors (g as {upInfo,...} : 'a graph, node) = 
 	(refresh g; 
-	 (case (StringMap.find(!info, node)) of
+	 (case (StringMap.find(!upInfo, node)) of
 	      NONE => raise UnknownNode
 	    | SOME {ancestors = a,... } => StringOrderedSet.toList a))
 
-    fun makeDot (out, g) = 
+    datatype nodeStatus = Black  (* Completed nodes whose outgoing edges will not be shown *)
+	                | Gray   (* Working nodes which will be shown in boxes *)
+	                | White  (* Nodes that can be worked on if there are no incoming edges *)
+
+    fun makeDot {graph = g, out, status} =
 	let val _ = TextIO.output (out, "digraph G {\n")
 	    val _ = TextIO.output (out, "  size = \"8,8\"\n")
 	    val _ = TextIO.output (out, "  rankdir = LR\n") 
-	    val _ = TextIO.output (out, "  concentrate = true\n") 
+	    val _ = TextIO.output (out, "  concentrate = true\n")  
 	    fun escape "Graph" = "_Graph"
 	      | escape "GRAPH" = "_GRAPH"
 	      | escape str = implode (map (fn #"-" => #"_"
 	                                    | c => c) (explode str))
+	    val maxDescendentWeight = foldl Int.max 0 (map (fn n => descendentWeight(g,n)) (nodes g))
 	    fun doNode parent =
 		let val children = children(g,parent)
 		    val parentName = escape parent
 		    val _ = TextIO.output (out, "  " ^ parentName ^ 
 					   " [label=\"" ^ parent ^"\"");
 		    val weight = nodeWeight(g,parent) 
-		    val _ = if (weight > 200000)
-				then TextIO.output (out, ", color=crimson, peripheries=4")
+		    val _ = if (weight > 100000)
+				then TextIO.output (out, ", color=red")
 			    else if (weight > 50000)
-				then TextIO.output (out, ", color=red, peripheries=2")
+				then TextIO.output (out, ", color=purple")
 			    else if (weight > 10000)
-				then TextIO.output (out, ", color=green, peripheries=1")
-			    else ()
+				then TextIO.output (out, ", color=blue")
+			    else TextIO.output (out, ", color=black")
+		    val status = status parent
+		    val _ = (case status of
+				 White => ()
+			       | Gray => TextIO.output (out, ", shape=box, peripheries=4")
+			       | Black => ())
 		    val _ = TextIO.output (out, "];\n")
 		    fun apper child = 
 			let val childName = escape child
-			in  TextIO.output (out, "  " ^ parentName ^ " -> " ^ childName ^";\n") 
+			    val childNodeWeight = nodeWeight(g, child)
+			    val childAncestorWeight = ancestorWeight(g, child)
+			    val parentAncestorWeight = ancestorWeight(g, parent)
+			    val percentUpMax = (real parentAncestorWeight) / 
+				               (real (childAncestorWeight - childNodeWeight))
+			    val percentDownMax = (real (descendentWeight(g,parent))) /
+						 (real maxDescendentWeight)
+			in  TextIO.output (out, "  " ^ parentName ^ " -> " ^ childName);
+			    (case status of
+				 White => ()
+			       | Gray => ()
+			       | Black => TextIO.output (out, " [color=gray]"));
+			    TextIO.output (out, ";\n") 
 			end
 		in  app apper children
 		end
