@@ -1,0 +1,4 @@
+source unit Value = "value.sml" {Int}
+source unit Fixity = "fixity.sml" {}
+source unit Test = "test.sml" {Value Fixity}
+make executable "Test." ^ $target ^ ".exe" {Test}

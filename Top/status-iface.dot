@@ -1,0 +1,11 @@
+digraph InterfaceStatus {
+	// ellipse: interface is waiting around
+	// box: interface is being worked on
+	READY [shape=box]		// master making plan
+	WORKING [shape=box]	// slave compiling
+	WAITING -> READY
+	READY -> PENDING
+	PENDING -> WORKING
+	READY -> DONE
+	WORKING -> DONE
+}

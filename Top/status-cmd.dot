@@ -1,0 +1,10 @@
+digraph CmdStatus {
+	// ellipse: interface is waiting around
+	// box: interface is being worked on
+	READY [shape=box]		// master making plan
+	WORKING [shape=box]	// slave running command
+	WAITING -> READY
+	READY -> PENDING
+	PENDING -> WORKING
+	WORKING -> DONE
+}
