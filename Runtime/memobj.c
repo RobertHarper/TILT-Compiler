@@ -35,27 +35,7 @@ int CStackletSize = 32;          /* Extra area made available when calling C */
 int GuardStackletSize;           /* Guard page at bottom */
 int primaryStackletOffset, replicaStackletOffset, stackletOffset;
 
-static const int megabyte  = 1024 * 1024;
 static const int kilobyte  = 1024;
-#ifdef alpha_osf
-const mem_t stackstart = (mem_t) (256 * 1024 * 1024);
-const mem_t heapstart  = (mem_t) (512 * 1024 * 1024);
-#endif
-#ifdef solaris 
-const mem_t stackstart = (mem_t) (256 * 1024 * 1024);
-const mem_t heapstart  = (mem_t) (512 * 1024 * 1024);
-#endif
-#ifdef rs_aix
-const mem_t stackstart = (mem_t) (768 * 1024 * 1024);
-const mem_t heapstart  = (mem_t) (780 * 1024 * 1024);
-#endif
-
-/* The heaps are managed by a bitmap where each bit corresponds to a 32K chunk of the heap.
-*/
-static int heapspace;
-static int chunksize = 32768;
-static Bitmap_t *bmp = NULL;
-static int Heapbitmap_bits;
 
 void* my_malloc(size_t size)
 {
@@ -88,9 +68,11 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
 }
 
 
-mem_t my_mmap(caddr_t start, int size, int prot)
+mem_t my_mmap(int size, int prot)
 {
+  caddr_t start = NULL;
   static int fd = -1;
+  int flags;
   mem_t mapped;
 #ifdef solaris
   {
@@ -99,26 +81,19 @@ mem_t my_mmap(caddr_t start, int size, int prot)
 	fprintf (stderr, "unable to open /dev/zero, errno = %d\n", errno);
 	exit(-1);
       }
-    mapped = (mem_t) mmap((caddr_t) start, size, prot,
-			    MAP_FIXED | MAP_PRIVATE, fd, 0);
+    flags = MAP_PRIVATE;
   }
 #else
-  mapped = (mem_t) (mmap((caddr_t) start, size, prot,
-			   MAP_ANONYMOUS | MAP_FIXED, fd, 0));
+  flags = MAP_ANONYMOUS;
 #endif
+  mapped = (mem_t) mmap(start, size, prot, flags, fd, 0);
   if (mapped == (mem_t) -1) {
-    fprintf(stderr,"mmap failed with start = %d, size = %d  -->  errno = %d\n",
-	    start, size, errno);
+    fprintf(stderr,"mmap failed with size = %d: %s\n", size, strerror(errno));
     assert(0);
   }
-  if (mapped != (mem_t) start) {
-      fprintf(stderr,"mmap failed with start = %d, size = %d  -->  mapped = %d\n",
-	      start, size, mapped);
-      assert(0);
-  }
   if (diag)
-    fprintf(stderr,"mmap succeeded with start = %d, size = %d, prot = %d\n",
-	    start, size, prot);
+    fprintf(stderr,"mmap succeeded with mapped = %x, size = %d, prot = %d\n",
+	    mapped, size, prot);
   return mapped;
 }
 
@@ -178,9 +153,7 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
   res->parent = stackChain;
   res->state = Inconsistent;
   if (!res->mapped) {
-    mem_t start = my_mmap((caddr_t) (stackstart + (2 * i * size) / (sizeof (val_t))), 
-			  2 * size, 
-			  PROT_READ | PROT_WRITE);
+    mem_t start = my_mmap(2 * size, PROT_READ | PROT_WRITE);
     mem_t middle = start + size / (sizeof (val_t));
     mem_t end = start + 2 * size / (sizeof (val_t));
 
@@ -496,8 +469,12 @@ Heap_t* GetHeap(mem_t add)
 
 int inSomeHeap(ptr_t v)
 {
-  int totalHeapSize = chunksize * Heapbitmap_bits; /* in bytes */
-  return (v >= heapstart && v < heapstart + (totalHeapSize / sizeof (val_t)));
+  int i;
+  for (i=0; i < NumHeap; i++) {
+    if (Heaps[i].valid && Heaps[i].id==i && inHeap(v, &Heaps[i]))
+      return 1;
+  }
+  return 0;
 }
 
 void SetRange(range_t *range, mem_t low, mem_t high)
@@ -513,13 +490,9 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   int stat;
   mem_t cursor;
   Heap_t *res = &(Heaps[heap_count++]);
-  int maxsize_pageround = RoundUp(MaxSize,pagesize);
-  int maxsize_chunkround = RoundUp(MaxSize,chunksize);
-
-  int chunkstart = AllocBitmapRange(bmp,maxsize_chunkround / chunksize);
-  mem_t start = heapstart + (chunkstart * chunksize) / (sizeof (val_t));
+  int maxsize_pageround = RoundUp(MaxSize,TILT_PAGESIZE);
   res->size = maxsize_pageround;
-  res->bottom = (mem_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
+  res->bottom = (mem_t) my_mmap(maxsize_pageround, PROT_READ | PROT_WRITE);
   res->cursor = res->bottom;
   res->top    = res->bottom + MinSize / (sizeof (val_t));
   res->writeableTop = res->bottom + maxsize_pageround / (sizeof (val_t));
@@ -527,10 +500,9 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   SetRange(&(res->range), res->bottom, res->mappedTop);
   res->valid  = 1;
   res->bitmap = paranoid ? CreateBitmap(maxsize_pageround / 4) : NULL;
-  res->freshPages = (int *) my_malloc(DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
-  memset((int *)res->freshPages, 0, DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
+  res->freshPages = (int *) my_malloc(DivideUp(maxsize_pageround / TILT_PAGESIZE, 32) * sizeof(int));
+  memset((int *)res->freshPages, 0, DivideUp(maxsize_pageround / TILT_PAGESIZE, 32) * sizeof(int));
   assert(res->bottom != (mem_t) -1);
-  assert(chunkstart >= 0);
   assert(heap_count < NumHeap);
   assert(MaxSize >= MinSize);
   /* Lock down pages and force page-table to be initialized; otherwise, PadHeapArea can often take 0.1 - 0.2 ms. 
@@ -549,7 +521,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
 int Heap_ResetFreshPages(Proc_t *proc, Heap_t *h)
 {
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
-  int i, pages = DivideUp(MaxSize,pagesize);
+  int i, pages = DivideUp(MaxSize,TILT_PAGESIZE);
   memset((int *)h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
   /*  proc->segUsage.pagesTouched += pages / 100;   XXX These refer to pages of the pageMap itself */
   return pages;
@@ -586,8 +558,8 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
   long maxSize = (h->mappedTop - h->bottom) * sizeof(val_t);
   long oldSize = (h->top - h->bottom) * sizeof(val_t);
   long oldWriteableSize = (h->writeableTop - h->bottom) * sizeof(val_t);
-  long oldSizeRound = RoundUp(oldSize, pagesize);
-  long newSizeRound = RoundUp(newSize, pagesize);
+  long oldSizeRound = RoundUp(oldSize, TILT_PAGESIZE);
+  long newSizeRound = RoundUp(newSize, TILT_PAGESIZE);
 
   if (newSize > maxSize) {
     printf("FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n", NumGC, maxSize, newSize);
@@ -633,26 +605,21 @@ extern mem_t datastart;
 void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
-  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * pagesize;
-  unsigned long address_bytes = RoundDown(ULONG_MAX - (unsigned long)heapstart, pagesize);
+  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * TILT_PAGESIZE;
   unsigned long heap_bytes;
   int max_heap_byte;
   heap_bytes = (unsigned long)INT_MAX;
   heap_bytes = Min(heap_bytes, mem_bytes);
-  heap_bytes = Min(heap_bytes, address_bytes);
-  heapspace = (int)heap_bytes;
   init_int(&MinHeapByte, 2048 * 1024);
-  init_int(&MaxHeapByte, 0.40 * heapspace);
-  Heapbitmap_bits = heapspace / chunksize;
-  bmp = CreateBitmap(Heapbitmap_bits);
+  init_int(&MaxHeapByte, 0.40 * heap_bytes);
 #ifdef solaris
-  assert(pagesize == sysconf(_SC_PAGESIZE));
+  assert(TILT_PAGESIZE == sysconf(_SC_PAGESIZE));
 #else
-  assert(pagesize == sysconf(_SC_PAGE_SIZE));
+  assert(TILT_PAGESIZE == sysconf(_SC_PAGE_SIZE));
 #endif
   StackInitialize();
   HeapInitialize();
-  GuardStackletSize = pagesize / kilobyte;
+  GuardStackletSize = TILT_PAGESIZE / kilobyte;
   stackletOffset = (GuardStackletSize + MLStackletSize + CStackletSize) * kilobyte;
   primaryStackletOffset = 0;
   replicaStackletOffset = stackletOffset;
