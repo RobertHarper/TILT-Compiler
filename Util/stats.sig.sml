@@ -7,11 +7,14 @@ signature STATS =
      (*Just zero out all numerical data - don't remove entries*)
      val clear_stats : unit -> unit
      val print_stats : unit -> unit
+     val print_timers : unit -> unit
 
      val timer : string * ('a -> 'b) -> ('a -> 'b)
      val subtimer : string * ('a -> 'b) -> ('a -> 'b)
      val counter : string -> (unit -> int)
      val int     : string -> int ref
      val bool    : string -> bool ref
+     val true    : string -> bool ref (* initialized to true *)
+     val false   : string -> bool ref (* initialized to false *)
    end
 
