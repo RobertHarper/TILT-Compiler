@@ -1,3 +1,4 @@
+(*$import Name *)
 signature ANNOTATION = 
     sig
       datatype 'a annotation = 

@@ -26,32 +26,42 @@ struct
 	val num_lexp = ref 0
 	val num_lcon = ref 0
 	val num_lkind = ref 0
-	val num_lcon_sum = ref 0
-	val num_lcon_inj = ref 0
-	val num_lcon_case = ref 0
+
 	val num_lcon_expb = ref 0
 	val num_lcon_conb = ref 0
-	val sum_depth_case = ref 0
-	val sum_depth_inj = ref 0
-	val sum_depth_sum = ref 0
-	val sum_depth_expb = ref 0
-	val sum_depth_conb = ref 0
+	val num_lcon_concb = ref 0
+	val num_lkind_conb = ref 0
+	val num_lkind_concb = ref 0
+	val num_lkind_single = ref 0
+
+	val depth_lcon_expb = ref 0
+	val depth_lcon_conb = ref 0
+	val depth_lcon_concb = ref 0
+	val depth_lkind_conb = ref 0
+	val depth_lkind_concb = ref 0
+	val depth_lkind_single = ref 0
+
+	fun bumper(num,depth) = if (!depth > 0) then num := !num + 1 else ()
+	fun inc n = n := !n + 1
+	fun dec n = n := !n - 1
+	    
 	fun reset_state() : state = (seen := VarSet.empty; 
 				     num_renamed := 0;
 				     num_var := 0;
 				     num_lexp := 0;
 				     num_lcon := 0;
 				     num_lkind := 0;
-				     num_lcon_sum := 0;
-				     num_lcon_inj := 0;
-				     num_lcon_case := 0;
-				     num_lcon_expb := 0;
 				     num_lcon_conb := 0;
-				     sum_depth_inj := 0;
-				     sum_depth_case := 0;
-				     sum_depth_sum := 0;
-				     sum_depth_expb := 0;
-				     sum_depth_conb := 0;
+				     num_lcon_concb := 0;
+				     num_lkind_conb := 0;
+				     num_lkind_concb := 0;
+				     num_lkind_single := 0;
+				     depth_lcon_expb := 0;
+				     depth_lcon_conb := 0;
+				     depth_lcon_concb := 0;
+				     depth_lkind_conb := 0;
+				     depth_lkind_concb := 0;
+				     depth_lkind_single := 0;
 				     VarMap.empty)
 
 	fun state_stat str (m : state) : unit = 
@@ -136,17 +146,19 @@ struct
 	   fun mapset f s = list2set(map f (set2list s))
 
        in  (case arg_bnd of
-		Con_b (v,k,c) => let val _ = sum_depth_conb := !sum_depth_conb + 1
+		Con_b (v,k,c) => let val _ = inc depth_lcon_conb
 				     val c = lcon state c
+				     val _ = dec depth_lcon_conb
+				     val _ = inc depth_lkind_conb
 				     val k = lkind state k
-				     val _ = sum_depth_conb := !sum_depth_conb + 1
+				     val _ = dec depth_lkind_conb
 				     val (state,v) = add_var(state,v)
 				 in  (Con_b(v,k,c), state)
 				 end
 	      | Exp_b (v,c,e) => let val e = lexp state e
-				     val _ = sum_depth_expb := !sum_depth_expb + 1
+				     val _ = inc num_lcon_expb
 				     val c = lcon state c
-				     val _ = sum_depth_expb := !sum_depth_expb - 1
+				     val _ = dec num_lcon_expb
 				     val (state,v) = add_var(state,v)
 				 in  (Exp_b(v,c,e), state)
 				 end
@@ -191,15 +203,7 @@ struct
 		in  (lete(bnds, e))
 		end
 	  | Prim_e (ap,clist,elist) =>
-		let val _ = (case ap of
-				 NilPrimOp inject  => sum_depth_inj := !sum_depth_inj + 1
-			       | NilPrimOp inject_record  => sum_depth_inj := !sum_depth_inj + 1
-			       | _ => ())
-		    val clist' = map (lcon state) clist
-		    val _ = (case ap of
-				 NilPrimOp inject => sum_depth_inj := !sum_depth_inj - 1
-			       | NilPrimOp inject_record => sum_depth_inj := !sum_depth_inj - 1
-			       | _ => ())
+		let val clist' = map (lcon state) clist
 		    val elist' = map (lexp state) elist
 		in  Prim_e(ap,clist',elist')
 		end
@@ -222,9 +226,9 @@ struct
 			in  Switch_e(pack sw')
 			end
 		    fun nada arg = arg
-		    fun sumhelp c = let val _ = sum_depth_case := !sum_depth_case + 1
+		    fun sumhelp c = let 
 					       val result = lcon state c
-					       val _ = sum_depth_case := !sum_depth_case - 1
+					
 					   in  result
 					   end
 		in  (case switch of
@@ -253,8 +257,12 @@ struct
 	   in  (cbnd, state)
 	   end
        in (case arg_cbnd of
-	       Con_cb (v,k,c) => let val k = lkind state k
+	       Con_cb (v,k,c) => let val _ = inc depth_lkind_concb
+				     val k = lkind state k
+				     val _ = dec depth_lkind_concb
+				     val _ = inc depth_lcon_concb
 				     val c = lcon state c
+				     val _ = dec depth_lcon_concb
 				     val (state,v) = add_var(state,v)
 				 in  (Con_cb(v,k,c), state)
 				 end
@@ -265,28 +273,18 @@ struct
 
 
    and lcon state arg_con : con = 
-       (num_lcon := !num_lcon + 1;
-	if (!sum_depth_inj > 0)
-	    then num_lcon_inj := !num_lcon_inj + 1
-	else ();
-	if (!sum_depth_expb > 0)
-	    then num_lcon_expb := !num_lcon_expb + 1
-	else ();
-	if (!sum_depth_conb > 0)
-	    then num_lcon_conb := !num_lcon_conb + 1
-	else ();
-	if (!sum_depth_sum > 0)
-	    then num_lcon_sum := !num_lcon_sum + 1
-	else ();
-	if (!sum_depth_case > 0)
-	    then num_lcon_case := !num_lcon_case + 1
-	else ();
+       (inc num_lcon;
+	bumper(num_lcon_expb, depth_lcon_expb);
+	bumper(num_lcon_conb, depth_lcon_conb);
+	bumper(num_lcon_concb, depth_lcon_concb);
+
+
 	case arg_con of
 	    Var_c v => (num_var := !num_var + 1; Var_c(find_var(state,v)))
 	  | Prim_c (pc,cons) => 
-		let val _ = case pc of Sum_c _ => sum_depth_sum := !sum_depth_sum + 1 | _ => ()
+		let 
 		    val cons = map (lcon state) cons
-		    val _ = case pc of Sum_c _ => sum_depth_sum := !sum_depth_sum - 1 | _ => ()
+		    
 		in  Prim_c(pc,cons)
 		end
 	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here: 
@@ -371,11 +369,17 @@ struct
 
 
    and lkind state arg_kind : kind = 
-       (num_lkind := !num_lkind + 1;
+       (inc num_lkind;
+	bumper(num_lkind_conb, depth_lkind_conb);
+	bumper(num_lkind_concb, depth_lkind_concb);
+	bumper(num_lkind_single, depth_lkind_single);
+
 	case arg_kind of
 	    Type_k _ => arg_kind
 	  | Word_k _ => arg_kind
-	  | Singleton_k (p,k,c) => let val k = lkind state k
+	  | Singleton_k (p,k,c) => let val _ = inc depth_lkind_single
+				       val k = lkind state k
+				       val _ = dec depth_lkind_single
 				       val c = lcon state c
 				   in  Singleton_k(p,k,c)
 				   end
@@ -439,15 +443,17 @@ struct
 		    print (Int.toString (!num_lcon_expb)); print "\n";
 		    print "Number of lcon calls with Con_b: ";
 		    print (Int.toString (!num_lcon_conb)); print "\n";
+		    print "Number of lcon calls with Con_cb: ";
+		    print (Int.toString (!num_lcon_concb)); print "\n";
 
-		    print "Number of lcon calls with sums: ";
-		    print (Int.toString (!num_lcon_sum)); print "\n";
-		    print "Number of lcon calls with case: ";
-		    print (Int.toString (!num_lcon_case)); print "\n";
-		    print "Number of lcon calls with inj: ";
-		    print (Int.toString (!num_lcon_inj)); print "\n";
 		    print "Number of lkind calls: ";
-		    print (Int.toString (!num_lkind)); print "\n")
+		    print (Int.toString (!num_lkind)); print "\n";
+		    print "Number of lkind calls for Con_b kinds: ";
+		    print (Int.toString (!num_lkind_conb)); print "\n";
+		    print "Number of lkind calls for Con_cb kinds: ";
+		    print (Int.toString (!num_lkind_concb)); print "\n";
+		    print "Number of lkind calls inside singleton kinds: ";
+		    print (Int.toString (!num_lkind_single)); print "\n")
 
        in  MODULE{bnds = bnds,
 		  imports = imports,

@@ -1,11 +1,14 @@
+(*$import NIL PPNIL NILSUBST Stats *)
 functor NilSubstFn(structure Nil : NIL
 		   structure PpNil : PPNIL
-		   sharing Nil = PpNil.Nil) :> 
-  NILSUBST where type exp = Nil.exp 
-	     and type con = Nil.con 
-	     and type kind = Nil.kind 
-	     and type bnd = Nil.bnd = 
+		   sharing PpNil.Nil = Nil) 
+  :> NILSUBST where type exp = Nil.exp 
+	      where type con = Nil.con 
+	      where type kind = Nil.kind 
+	      where type bnd = Nil.bnd
+  = 
   struct
+
 
     type exp = Nil.exp
     type con = Nil.con
@@ -168,7 +171,7 @@ functor NilSubstFn(structure Nil : NIL
 	  {test = test, subst = subst}
 	end
 
-      fun print printer ({test,subst}: 'a subst) = 
+      fun print (printer : 'a -> unit) ({test,subst}: 'a subst) = 
 	let
 	  fun print1 (v,a) = 
 	    (TextIO.print (Name.var2string v);
@@ -181,7 +184,7 @@ functor NilSubstFn(structure Nil : NIL
 	   Util.printl "")
 	end
 
-    end
+    end (* local *)
 
     fun rebind Con (var,subst) = 
       if is_empty subst then
@@ -209,6 +212,8 @@ functor NilSubstFn(structure Nil : NIL
       (case substitute subst var
 	 of SOME (Nil.Var_c var) => (local_subst_count := !local_subst_count + 1; var)
 	  | _ => var)
+
+
 
     fun substConInTFormals (conmap : con subst) (formals : (var * kind) list) = 
       let
@@ -453,8 +458,10 @@ functor NilSubstFn(structure Nil : NIL
 	   end)
     and substExpConInValue' 
       (maps as (expmap : exp subst,conmap : con subst)) value = 
-      (case value
-	 of ((Prim.int _) | (Prim.uint _) |(Prim.float _)) => value
+      (case value of
+	    Prim.int _ => value
+	  | (Prim.uint _)  => value
+	  | (Prim.float _) => value
 	  | Prim.array (con,arr) => 
 	   let
 	     val con = substConInCon conmap con
@@ -482,52 +489,57 @@ functor NilSubstFn(structure Nil : NIL
 	 in
 	   Prim.tag (atag,con)
 	 end)
+
     and substExpConInBnds' maps bnds =
       foldl_acc substExpConInBnd' maps bnds
+
+
     and substExpConInBnd' (bnd,maps as (expmap,conmap)) = 
-      (case bnd 
-	 of Con_b (var, kind, con) =>
-	   let
-	     val kind = substConInKind conmap kind
-	     val con = substConInCon conmap con
-	     val (var,conmap) = con_rebind (var,conmap)
-	     val bnd = (Con_b (var,kind,con))
-	   in
-	     (bnd,(expmap,conmap))
-	   end
-	  | Exp_b (var, con, exp) =>
-	   let
-	     val con = substConInCon conmap con
-	     val exp = substExpConInExp' maps exp
-	     val (var,expmap) = exp_rebind (var,expmap)
-	     val bnd = (Exp_b (var,con,exp))
-	   in
-	     (bnd,(expmap,conmap))
-	   end
-	  | ((Fixopen_b defs) | (Fixcode_b defs)) =>
-	   let
-	     val (vars,functions) = unzip (set2list defs)
-	     val (vars,expmap) = exp_rebind_list (vars,expmap)
-	     val functions = 
-	       map (substExpConInFunction' (expmap,conmap)) functions
-	     val defs = list2set (zip vars functions)
-	     val bnd = 
-	       (case bnd 
-		  of Fixopen_b _ => (Fixopen_b defs)
-		   | _ => (Fixcode_b defs))
-	   in
-	     (bnd,(expmap,conmap))
-	   end
-	  | Fixclosure_b (flag,defs) => 
-	   let
-	     val (vars,closures) = unzip (set2list defs)
-	     val (vars,expmap) = exp_rebind_list (vars,expmap)
-	     val closures = map (substExpConInClosure' (expmap,conmap)) closures
-	     val defs = list2set (zip vars closures)
-	     val bnd = Fixclosure_b (flag,defs)
-	   in
-	     (bnd,(expmap,conmap))
-	   end)
+	let fun do_funs defs =  
+	    let
+		val (vars,functions) = unzip (set2list defs)
+		val (vars,expmap) = exp_rebind_list (vars,expmap)
+		val functions = 
+		    map (substExpConInFunction' (expmap,conmap)) functions
+		val defs = list2set (zip vars functions)
+	    in	(defs,(expmap,conmap))
+	    end
+        in  (case bnd of
+		 Con_b (var, kind, con) =>
+		     let
+			 val kind = substConInKind conmap kind
+			 val con = substConInCon conmap con
+			 val (var,conmap) = con_rebind (var,conmap)
+			 val bnd = (Con_b (var,kind,con))
+		     in
+			 (bnd,(expmap,conmap))
+		     end
+	       | Exp_b (var, con, exp) =>
+		     let
+			 val con = substConInCon conmap con
+			 val exp = substExpConInExp' maps exp
+			 val (var,expmap) = exp_rebind (var,expmap)
+			 val bnd = (Exp_b (var,con,exp))
+		     in
+			 (bnd,(expmap,conmap))
+		     end
+	       | (Fixopen_b defs) => let val (defs,ecmap) = do_funs defs
+				     in  (Fixopen_b defs, ecmap)
+				     end
+	       | (Fixcode_b defs) => let val (defs,ecmap) = do_funs defs
+				     in  (Fixcode_b defs, ecmap)
+				     end
+	       | Fixclosure_b (flag,defs) => 
+		      let
+			  val (vars,closures) = unzip (set2list defs)
+			  val (vars,expmap) = exp_rebind_list (vars,expmap)
+			  val closures = map (substExpConInClosure' (expmap,conmap)) closures
+			  val defs = list2set (zip vars closures)
+			  val bnd = Fixclosure_b (flag,defs)
+		      in  (bnd,(expmap,conmap))
+		      end)
+	end
+
     and substExpConInSwitch'
       (maps as (expmap : exp subst, conmap : con subst)) switch = 
       (case switch
@@ -692,5 +704,7 @@ functor NilSubstFn(structure Nil : NIL
 	varConKindSubst
 
     val printConSubst = print PpNil.pp_con
+
+
 
   end

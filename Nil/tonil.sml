@@ -1,39 +1,40 @@
+(*$import IL PPIL ILUTIL ILCONTEXT ILSTATIC NIL NILUTIL NILERROR NILCONTEXT NILSTATIC PPNIL NILSUBST PRIMUTIL Stats LibBase ListMergeSort TONIL *)
+
 (* We box all floats and translate floating point operations accordingly.
    Thus, kind type is replaced by work types.
    Also note that all term-level (but not type-level) 
         record fields must be sorted by their labels. *)
 
-functor Tonil(structure ArgIl : IL
-	      structure ArgNil : NIL
+functor Tonil(structure Il : IL
+	      structure Nil : NIL
               structure Ilutil : ILUTIL
               structure Nilutil : NILUTIL
 	      structure NilError : NILERROR
               structure Ilcontext : ILCONTEXT
               structure IlStatic : ILSTATIC
-              structure ArgNilcontext : NILCONTEXT
+              structure Nilcontext : NILCONTEXT
               structure Nilstatic : NILSTATIC
               structure Nilprimutil : PRIMUTIL
               structure Ppnil : PPNIL
               structure Ppil : PPIL
 	      structure Subst : NILSUBST
-               sharing ArgIl = Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il
-               sharing Nilutil.Nil.Prim = Nilprimutil.Prim = ArgIl.Prim
-	       sharing ArgNil = Nilutil.Nil = ArgNilcontext.Nil = Ppnil.Nil = 
-		   Nilstatic.Nil = NilError.Nil
-	       sharing type Nilstatic.context = ArgNilcontext.context
+               sharing Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il = Il
+	       sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil = 
+		   Nilstatic.Nil = NilError.Nil = Nil
+               sharing Nil.Prim = Nilprimutil.Prim = Il.Prim
+	       sharing type Nilstatic.context = Nilcontext.context
 	       sharing type Nilprimutil.exp = Nilutil.Nil.exp
                    and type Nilprimutil.con = Nilutil.Nil.con
-	       sharing type Subst.con = ArgNil.con
-		   and type Subst.exp = ArgNil.exp
-		   and type Subst.kind = ArgNil.kind
-		   and type Subst.subst = ArgNilcontext.subst
-             ) :(*>*) TONIL where Il = ArgIl 
-                            and NilContext = ArgNilcontext =
+	       sharing type Subst.con = Nil.con
+		   and type Subst.exp = Nil.exp
+		   and type Subst.kind = Nil.kind
+		   and type Subst.subst = Nilcontext.subst)
+              :> TONIL where Il = Il 
+                        and Nil = Nil =
 struct
-   structure Il = ArgIl
-   structure NilContext = ArgNilcontext
-   structure Nilcontext = ArgNilcontext
-   structure Nil = ArgNil
+
+   structure Il = Il
+   structure Nil = Nil
    structure VarSet = Name.VarSet
 
    open Nil Listops
@@ -318,8 +319,8 @@ struct
 
 	    fun bnd_check (Con_b(v,_,_)) = VarSet.member(fv,v)
 	      | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
-	      | bnd_check ((Fixopen_b vfset) | (Fixcode_b vfset)) =
-		Listops.orfold vf_mem (Util.set2list vfset)
+	      | bnd_check (Fixopen_b vfset) = Listops.orfold vf_mem (Util.set2list vfset)
+	      | bnd_check (Fixcode_b vfset) = Listops.orfold vf_mem (Util.set2list vfset)
 	      | bnd_check (Fixclosure_b (_,vfset)) = 
 		Listops.orfold vf_mem (Util.set2list vfset)
 
@@ -387,6 +388,7 @@ struct
     *)
    fun selectFromKindStrip (k, lbls) = 
        let fun decompose (Record_k lvk_seq) = Util.sequence2list lvk_seq
+	     | decompose (Singleton_k(_,k,_)) = decompose k
 	     | decompose _ = error "selectFromKind failed to get record kind"
 	   fun loop k [] = Nilutil.kill_singleton k
 	     | loop k (lbl::lbls) = 
@@ -501,6 +503,7 @@ struct
 local
    datatype splitting_context = 
        CONTEXT of {NILctx : Nilcontext.context,
+		   sigmap : Il.signat Name.VarMap.map,
 		   used   : (bool ref) Name.VarMap.map,
 		   vmap   : (var * var) Name.VarMap.map,
 		   convarmap : kind Name.VarMap.map,
@@ -511,13 +514,15 @@ local
 in
     type splitting_context = splitting_context
     fun make_splitting_context vmap = CONTEXT{NILctx = Nilcontext.empty,
+					      sigmap = Name.VarMap.empty,
 					      used = Name.VarMap.empty,
 					      vmap = vmap,
 					      convarmap = Name.VarMap.empty,
 					      alias = Name.VarMap.empty,
 					      memoized_mpath = Name.PathMap.empty}
 
-   fun print_splitting_context (CONTEXT{NILctx,used,vmap,alias,memoized_mpath,convarmap}) = 
+   fun print_splitting_context (CONTEXT{NILctx,sigmap,used,vmap,
+					alias,memoized_mpath,convarmap}) = 
        (Name.VarMap.appi (fn (v,(vc,vr)) => (Ppnil.pp_var v; print "  -->  "; 
 					     Ppnil.pp_var vc; print ", ";
 					     Ppnil.pp_var vr; print "\n")) vmap;
@@ -527,6 +532,8 @@ in
 
    fun filter_NILctx (CONTEXT{NILctx,used,...}) = (NILctx, used)
    fun vmap_of (CONTEXT{vmap,...}) = vmap
+
+   fun find_sig(CONTEXT{sigmap,...},v) = Name.VarMap.find(sigmap,v)
 
    fun nilcontext_find_con(CONTEXT{NILctx,used,...},v) = 
        let val res = (SOME (Nilcontext.find_con(NILctx,v))
@@ -573,50 +580,58 @@ in
    fun nilcontext_con_valid(CONTEXT{NILctx,...},c) = Nilstatic.con_valid(NILctx,c)
    fun nilcontext_print(CONTEXT{NILctx,...}) = Nilcontext.print_context NILctx
 
-   fun update_vmap  (CONTEXT{NILctx,used,vmap,alias,memoized_mpath,convarmap}, vmap') = 
-       CONTEXT{NILctx=NILctx, used=used, vmap=vmap',
+   fun update_vmap  (CONTEXT{NILctx,sigmap,
+			     used,vmap,alias,memoized_mpath,convarmap}, vmap') = 
+       CONTEXT{NILctx=NILctx, sigmap=sigmap,
+	       used=used, vmap=vmap',
 	       memoized_mpath=memoized_mpath,alias=alias,convarmap=convarmap}
 
-   fun update_NILctx_insert_con(CONTEXT{NILctx,vmap,used,
+   fun update_insert_sig  (CONTEXT{NILctx,sigmap,
+			     used,vmap,alias,memoized_mpath,convarmap}, v, hilsig) = 
+       CONTEXT{NILctx=NILctx, sigmap=Name.VarMap.insert(sigmap,v,hilsig),
+	       used=used, vmap=vmap,
+	       memoized_mpath=memoized_mpath,alias=alias,convarmap=convarmap}
+
+   fun update_NILctx_insert_con(CONTEXT{NILctx,sigmap,vmap,used,
 					memoized_mpath,alias,convarmap},v,c) = 
        let val NILctx' = Nilcontext.insert_con(NILctx, v, c)
 	   val used' = Name.VarMap.insert(used,v,ref false)
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used',
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, used = used',
 		   memoized_mpath=memoized_mpath, alias=alias,convarmap=convarmap}
        end
-   fun update_NILctx_insert_kind(CONTEXT{NILctx,vmap,used,
+   fun update_NILctx_insert_kind(CONTEXT{NILctx,sigmap,vmap,used,
 					 memoized_mpath,alias,convarmap},v,k) = 
        let val NILctx' = Nilcontext.insert_kind(NILctx,v,k)
 	   val used' = Name.VarMap.insert(used,v,ref false)
 	   val convarmap' = Name.VarMap.insert(convarmap,v,k)
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used', 
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, used = used', 
 		   memoized_mpath=memoized_mpath, alias = alias,convarmap=convarmap'}
        end
-   fun update_NILctx_insert_kind_equation(CONTEXT{NILctx,vmap,used,
+   fun update_NILctx_insert_kind_equation(CONTEXT{NILctx,sigmap,vmap,used,
 						  memoized_mpath,alias,convarmap},v,c,k) = 
        let val NILctx' = Nilcontext.insert_kind_equation(NILctx,v,c,k)
 	   val used' = Name.VarMap.insert(used,v,ref false)
 	   val convarmap' = Name.VarMap.insert(convarmap,v,k)
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used', 
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, used = used', 
 		   memoized_mpath=memoized_mpath, alias = alias,convarmap=convarmap'}
        end
 
-   fun update_NILctx_insert_con_list(CONTEXT{NILctx,used,vmap,
+   fun update_NILctx_insert_con_list(CONTEXT{NILctx,used,vmap,sigmap,
 					     memoized_mpath, alias,convarmap},vclist) = 
 
        let val NILctx' = foldl (fn ((v,c),ctxt) => Nilcontext.insert_con(ctxt, v, c)) NILctx vclist
 	   val used' = foldl (fn ((v,_),used) => Name.VarMap.insert(used,v,ref false)) used vclist
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, 
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, 
 		   memoized_mpath=memoized_mpath, used=used',alias=alias,convarmap=convarmap}
        end
 
 
-   fun update_NILctx_insert_kind_list(CONTEXT{NILctx,used,vmap,
+   fun update_NILctx_insert_kind_list(CONTEXT{NILctx,sigmap,used,vmap,
 					      memoized_mpath, alias,convarmap},vklist) =
        let val NILctx' = foldl (fn ((v,k),ctxt) => Nilcontext.insert_kind(ctxt, v, k)) NILctx vklist
 	   val used' = foldl (fn ((v,_),used) => Name.VarMap.insert(used,v,ref false)) used vklist
 	   val convarmap' = foldl (fn ((v,k),m) => Name.VarMap.insert(m,v,k)) convarmap vklist
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, 
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, 
 		   memoized_mpath=memoized_mpath, used=used',alias=alias,convarmap=convarmap'}
        end
 
@@ -624,8 +639,8 @@ in
 	  let val cbnds = flattenCatlist cbnd_cat
 	      fun loop [] = true
                 | loop ((v,_,_)::rest) = 
-		((NilContext.find_kind(NILctx,v); loop rest)
-			handle NilContext.Unbound
+		((Nilcontext.find_kind(NILctx,v); loop rest)
+			handle Nilcontext.Unbound
 			 => (print "cbndpresent false because of ";
 				Ppnil.pp_var v; print "\n"; false))
 	  in  loop cbnds
@@ -635,12 +650,12 @@ in
 	  let val ebnds = flattenCatlist ebnd_cat
 	      fun loop [] = true
                 | loop ((Exp_b(v,_,_))::rest) = 
-		((NilContext.find_con(NILctx,v); loop rest)
-			handle NilContext.Unbound => false)
+		((Nilcontext.find_con(NILctx,v); loop rest)
+			handle Nilcontext.Unbound => false)
 	  in  loop ebnds
 	  end
 
-   fun update_NILctx_cbndcat_help strict (CONTEXT{NILctx,used,vmap,
+   fun update_NILctx_cbndcat_help strict (CONTEXT{NILctx,sigmap,used,vmap,
 						  memoized_mpath,alias,convarmap},cbnd_cat) = 
        let fun folder((v,k,c:con),(ctxt,used,cm)) = 
            let val insert = 
@@ -663,11 +678,11 @@ in
            end
            val cbnd_flat = flattenCatlist cbnd_cat
            val (NILctx',used',convarmap') =  foldl folder (NILctx,used,convarmap) cbnd_flat
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used', 
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, used=used', 
 		   memoized_mpath=memoized_mpath, alias=alias, convarmap=convarmap'}
        end
 
-    fun update_NILctx_ebndcat_help strict (CONTEXT{NILctx,vmap,used,
+    fun update_NILctx_ebndcat_help strict (CONTEXT{NILctx,sigmap,vmap,used,
 						   memoized_mpath,alias,convarmap},ebnd_cat) = 
        let fun folder' openness ((v,f), (ctxt, used,cm)) = 
              let val insert = 
@@ -700,7 +715,7 @@ in
 		     print "update_NILctx_ebndcat found var already present\n";
 		     false) handle Nilcontext.Unbound => true))
 	       in  if insert 
-                       then (NilContext.insert_kind(ctxt,v,#2 (Nilstatic.con_valid (ctxt, c))),
+                       then (Nilcontext.insert_kind(ctxt,v,#2 (Nilstatic.con_valid (ctxt, c))),
 			     Name.VarMap.insert(used, v, ref false),
 			     Name.VarMap.insert(cm,v,k))
                    else (ctxt,used,cm)
@@ -711,7 +726,7 @@ in
                
            val ebnd_flat = flattenCatlist ebnd_cat
            val (NILctx',used',convarmap') = foldl folder (NILctx,used, convarmap) ebnd_flat
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used',
+       in  CONTEXT{NILctx=NILctx', sigmap=sigmap, vmap=vmap, used=used',
 		   memoized_mpath=memoized_mpath, alias=alias, convarmap=convarmap'}
        end
 
@@ -721,19 +736,19 @@ in
    val update_NILctx_ebndcat = update_NILctx_ebndcat_help true
    val update_NILctx_ebndcat' = update_NILctx_ebndcat_help false
 
-    fun add_modvar_alias(CONTEXT{NILctx,vmap,used,
+    fun add_modvar_alias(CONTEXT{NILctx,sigmap,vmap,used,
 				 memoized_mpath,alias,convarmap},var,path) =
 	let val alias' = Name.VarMap.insert(alias,var,path)
-	in  CONTEXT{NILctx=NILctx, vmap=vmap, 
+	in  CONTEXT{NILctx=NILctx, sigmap=sigmap, vmap=vmap, 
 		    used=used,alias=alias',  memoized_mpath=memoized_mpath, convarmap=convarmap}
 	end
-    fun add_module_alias(CONTEXT{NILctx,vmap,used,alias,
+    fun add_module_alias(CONTEXT{NILctx,sigmap,vmap,used,alias,
 				 memoized_mpath,convarmap},m,name_c,name_r,k1,k2,c) = 
 	case (extractPathLabels m) of
 		  (Il.MOD_VAR v, labs) => 
 		      let val p = (v,labs)
 			  val memoized_mpath' = Name.PathMap.insert(memoized_mpath,p,(name_c,name_r,k1,k2,c))
-		      in  CONTEXT{NILctx=NILctx, vmap=vmap, 
+		      in  CONTEXT{NILctx=NILctx, sigmap=sigmap, vmap=vmap, 
 				  used=used,alias=alias,  memoized_mpath=memoized_mpath',
 				  convarmap=convarmap}
 		      end
@@ -2241,16 +2256,22 @@ end (* local defining splitting context *)
 
      | xcon' context (Il.CON_FLEXRECORD fr) = xflexinfo context fr
 
-     | xcon' context ((Il.CON_INT Prim.W64) | (Il.CON_UINT Prim.W64)) =
+     | xcon' context (Il.CON_INT Prim.W64) =
        raise Util.BUG "64-bit integers not handled during/after phase-split"
 
-     | xcon' context ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
+     | xcon' context (Il.CON_UINT Prim.W64) =
+       raise Util.BUG "64-bit integers not handled during/after phase-split"
+
+     | xcon' context (Il.CON_INT intsize) =
        let
            val con = Prim_c (Int_c intsize, [])
            val knd = Word_k Runtime
        in
 	   (con, knd, knd)
        end
+
+    (* there is no type distinction between signed/unsigned ints from NIL onwards *)
+     | xcon' context (Il.CON_UINT intsize) = xcon' context (Il.CON_INT intsize)
 
      | xcon' context (Il.CON_FLOAT floatsize) = 
        let
@@ -2656,12 +2677,18 @@ end (* local defining splitting context *)
 	   fun int_float fs = (args, box fs)
 	   val (args,wrap) = 
 	       (case prim of
-		    ((neg_float fs) | (abs_float fs) |
-		     (plus_float fs) | (minus_float fs) |
-		     (mul_float fs) | (div_float fs)) => float_float fs
-		  | ((less_float fs) | (greater_float fs) |
-		     (lesseq_float fs) | (greatereq_float fs) |
-		     (eq_float fs) | (neq_float fs)) => float_int fs
+		     neg_float fs  => float_float fs
+		   | (abs_float fs)  => float_float fs
+		   | (plus_float fs)  => float_float fs
+		   | (minus_float fs)  => float_float fs
+		   | (mul_float fs)  => float_float fs
+		   | (div_float fs) => float_float fs
+		   | (less_float fs)   => float_int fs
+		   | (greater_float fs)  => float_int fs
+		   | (lesseq_float fs) => float_int fs
+		   | (greatereq_float fs)  => float_int fs
+		   | (eq_float fs)  => float_int fs
+		   | (neq_float fs) => float_int fs
 		   | float2int => float_int F64
 		   | int2float => int_float F64
 		   | _ => (args,id))
@@ -3071,7 +3098,35 @@ end (* local defining splitting context *)
 	    valuable = valuable}
        end
 
-   and xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
+   and xsig' context (con0,Il.SIGNAT_VAR v) = 
+          xsig' context (con0,case find_sig(context,v) of
+			        NONE => error "unbound signature variable"
+			      | SOME s => s)
+
+     |  xsig' context (con0,Il.SIGNAT_OF il_module) = 
+          let val {cbnd_cat = cbnd_mod_cat, 
+		   ebnd_cat = ebnd_mod_cat,
+		   name_c   = name_mod_c, 
+		   name_r   = name_mod_r,
+		   knd_c    = knd_mod_c,
+		   knd_c_context = knd_mod_c_context,
+		   type_r   = type_mod_r,
+		   valuable = mod_valuable, 
+		   vmap     = vmap,
+		   context  = context,
+		   ...} = xmod context (il_module, NONE)
+
+	      val cbnds = map Con_cb (flattenCatlist cbnd_mod_cat)
+	      val con_mod = makeLetC cbnds name_mod_c
+	      val knd_c = Singleton_k(Runtime, Nilutil.kill_singleton knd_mod_c, con_mod)
+	      val knd_c_context = Singleton_k(Runtime, Nilutil.kill_singleton knd_mod_c_context, 
+					      con_mod)
+	      val type_r = makeLetC cbnds type_mod_r
+
+	  in  (knd_c, knd_c_context, type_r)
+	  end
+
+     | xsig' context (con0,Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
        let
 
 	   val _ = clear_memo var
@@ -3101,8 +3156,23 @@ end (* local defining splitting context *)
 
        end
 
-     | xsig' context (con0, ((Il.SIGNAT_STRUCTURE (NONE,sdecs)) |
-			     (Il.SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...}))) =
+     | xsig' context (con0, Il.SIGNAT_STRUCTURE (NONE,sdecs)) = xsig_struct context (con0,sdecs)
+     | xsig' context (con0, Il.SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...}) =
+                        xsig_struct context (con0,sdecs)
+
+     | xsig' context (con0, Il.SIGNAT_STRUCTURE (SOME p,sdecs)) = 
+       let val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
+	   val sig' = IlStatic.UnselfifySig (Ilcontext.empty_context) (p,s)
+       in  xsig' context (con0, sig')
+       end
+
+     | xsig' context (con0, Il.SIGNAT_INLINE_STRUCTURE {self=SOME p,imp_sig=sdecs,...}) =
+       let val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
+	   val sig' = IlStatic.UnselfifySig (Ilcontext.empty_context) (p,s)
+       in  xsig' context (con0, sig')
+       end
+
+   and xsig_struct context (con0,sdecs) = 
        let
 	   val {crdecs_context, crdecs, erlabs, ercons} = 
 	       xsdecs context (!elaborator_specific_optimizations,true,con0, Subst.empty(), sdecs)
@@ -3123,12 +3193,6 @@ end (* local defining splitting context *)
 	      | _ => default)
        end
 
-     | xsig' context (con0, ((Il.SIGNAT_STRUCTURE (SOME p,sdecs)) |
-			     (Il.SIGNAT_INLINE_STRUCTURE {self=SOME p,imp_sig=sdecs,...}))) =
-       let val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
-	   val sig' = IlStatic.UnselfifySig(p,s)
-       in  xsig' context (con0, sig')
-       end
 
    and xsig context (con, il_sig) =
        let
@@ -3389,6 +3453,8 @@ print (Int.toString (length sdecs')); print "\n") *)
 				    
 			    in	update_NILctx_insert_con(context, v_r, type_r)
 			    end
+		      | Il.PHRASE_CLASS_SIG(v,il_sig) => 
+			    update_insert_sig(context,v,il_sig)
 		      | _ => context)
 	       end
        in
@@ -3446,13 +3512,13 @@ print (Int.toString (length sdecs')); print "\n") *)
 
             (* we move all the externs into the context first:
 	       this does not always work if the externs depend on
-	       things inthe sbnd_entries list *)
+	       things in the sbnd_entries list *)
 
 	    fun folder((SOME sbnd,CONTEXT_SDEC sdec),(ctxt,sbnds)) = (ctxt, (sbnd,sdec)::sbnds)
 	      | folder((NONE, ce),(ctxt,sbnds)) = 
 		(add_context_entries(ctxt,
 			      [case ce of
-				   CONTEXT_SDEC(SDEC(l,dec)) => CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
+				   CONTEXT_SDEC(SDEC(l,dec)) => CONTEXT_SDEC(SDEC(l,SelfifyDec ctxt dec))
 				 | _ => ce]),
 		 sbnds)
 	    val (ctxt,rev_sbnd_sdecs) = foldl folder (ctxt,[]) sbnd_entries
@@ -3491,13 +3557,13 @@ print (Int.toString (length sdecs')); print "\n") *)
 
             (* call the phase splitter *)
 	    val {initial_used : (bool ref) Name.VarMap.map,
-		 nil_initial_context : NilContext.context , nil_final_context : NilContext.context, 
+		 nil_initial_context : Nilcontext.context , nil_final_context : Nilcontext.context, 
 		 cu_bnds = bnds, vmap = total_varmap} = 
 		xcompunit ctxt import_varmap sbnds
 
 (*
 val _ = (print "Nil final context is:\n";
-	 NilContext.print_context nil_final_context;
+	 Nilcontext.print_context nil_final_context;
 	 print "\n\n")
 *)
 
@@ -3507,8 +3573,8 @@ val _ = (print "Nil final context is:\n";
 		if (!do_kill_dead_import andalso case VarMap.find(initial_used,v) of
 			 NONE => error "missing import expvar"
 		       | SOME r => !r)
-		    then let val c' = (NilContext.find_con(nil_initial_context,v) 
-				handle NilContext.Unbound =>
+		    then let val c' = (Nilcontext.find_con(nil_initial_context,v) 
+				handle Nilcontext.Unbound =>
 					error "exp var not in NIL context")
 			     val _ = Stats.counter("import_live")()
 			 in  (ImportValue(l,v,c'))::imps

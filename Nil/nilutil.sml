@@ -1,3 +1,4 @@
+(*$import NIL PRIMUTIL PRIM ILUTIL ALPHA NILSUBST PPNIL NILUTIL *)
 (* -------------------------------------------------------- *)
 functor NilUtilFn(structure ArgNil : NIL
 		  structure PrimUtil : PRIMUTIL
@@ -11,8 +12,8 @@ functor NilUtilFn(structure ArgNil : NIL
 		  and type ArgNil.exp = Subst.exp
 		  and type ArgNil.con = Subst.con
 		  and type ArgNil.kind = Subst.kind) 
-  :(*>*) NILUTIL where Nil = ArgNil 
-		   and type alpha_context = Alpha.alpha_context =
+  :> NILUTIL where Nil = ArgNil 
+	     and type alpha_context = Alpha.alpha_context =
 struct
 
   structure Nil = ArgNil
@@ -149,8 +150,8 @@ struct
 
     val is_exn_con = strip_annotate is_exn_con'
     val is_unit_c = strip_annotate is_unit_c'
-    val is_var_c = isSome o strip_var
-    val is_float_c = isSome o strip_float
+    val is_var_c = Option.isSome o strip_var
+    val is_float_c = Option.isSome o strip_float
   end
 
   fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
@@ -168,8 +169,10 @@ struct
     | sub_phase _ = true
 
   fun get_phase kind = 
-    (case kind 
-       of (Type_k p | Word_k p | Singleton_k (p,_,_)) => p
+    (case kind of
+          Type_k p => p
+        | Word_k p => p
+        | Singleton_k (p,_,_) => p
 	| Record_k entries => 
 	 if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
 	   Runtime
@@ -186,8 +189,8 @@ struct
 
 
   fun selfify (con,kind) =
-    (case kind 
-       of Type_k phase => Singleton_k(phase,Type_k phase,con)
+    (case kind of
+          Type_k phase => Singleton_k(phase,Type_k phase,con)
 	| Word_k phase => Singleton_k(phase,Word_k phase,con)
 	| Singleton_k(_) => kind
 	| Record_k entries => 
@@ -571,7 +574,9 @@ struct
 		| (Const_e v) => 	
 		    Const_e 
 		    (case v of
-			 ((Prim.int _) | (Prim.uint _) | (Prim.float _)) => v
+			 (Prim.int _) => v
+                       | (Prim.uint _) => v
+                       | (Prim.float _) => v
 		       | (Prim.array (c,array)) =>
 			     (Array.modify self array;
 			      Prim.array(f_con state c,array))
@@ -819,16 +824,15 @@ struct
   fun primequiv (pcon1,pcon2) = 
     let
     in
-      case (pcon1,pcon2)
-	of (Int_c size1,Int_c size2) => same_intsize (size1,size2)
-	| ((Float_c size1,Float_c size2) |
-	   (BoxFloat_c size1,BoxFloat_c size2)) => 
-	  same_floatsize (size1,size2)
-	| ((Exn_c,Exn_c) |
-	   (Array_c,Array_c) |
-	   (Vector_c,Vector_c) |
-	   (Ref_c,Ref_c) |
-	   (Exntag_c,Exntag_c)) => true
+      case (pcon1,pcon2) of
+	  (Int_c size1,Int_c size2) => same_intsize (size1,size2)
+	| (Float_c size1,Float_c size2) => same_floatsize (size1,size2)
+	| (BoxFloat_c size1,BoxFloat_c size2) => same_floatsize (size1,size2)
+	| (Exn_c,Exn_c) => true
+	| (Array_c,Array_c) => true
+	| (Vector_c,Vector_c) => true
+	| (Ref_c,Ref_c) => true
+	| (Exntag_c,Exntag_c) => true
 	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},
 	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => (Util.eq_opt (op =,k1,k2)
 							     andalso (to1 = to2)
@@ -937,10 +941,20 @@ struct
 	       (alpha_equiv_con' (!conref) (con1,con2))
 	       before (conref := alpha_equate_pair(!conref,(var1,var2)))
 	       
-	       | equiv_one ((Open_cb(var1,formals1,con1,k1),
-			     Open_cb(var2,formals2,con2,k2)) |
-			    (Code_cb(var1,formals1,con1,k1),
-			     Code_cb(var2,formals2,con2,k2))) =
+	       | equiv_one (Open_cb(var1,formals1,con1,k1),
+			     Open_cb(var2,formals2,con2,k2)) =
+	       let
+		 val conref' = ref (!conref)
+		 fun equiv_one ((var1,kind1),(var2,kind2))= 
+		   (alpha_equiv_kind' (!conref') (kind1,kind2))
+		   before (conref' := alpha_equate_pair(!conref',(var1,var2)))
+	       in
+		 ((ListPair.all equiv_one (formals1,formals2))
+		  andalso alpha_equiv_con' (!conref') (con1,con2))
+		 before (conref := alpha_equate_pair(!conref,(var1,var2)))
+	       end
+	       | equiv_one (Code_cb(var1,formals1,con1,k1),
+			    Code_cb(var2,formals2,con2,k2)) =
 	       let
 		 val conref' = ref (!conref)
 		 fun equiv_one ((var1,kind1),(var2,kind2))= 
@@ -1260,8 +1274,10 @@ struct
 	   end)
     and alpha_normalize_value' 
       (contexts as (e_context : alpha_context, c_context : alpha_context)) value = 
-      (case value
-	 of ((Prim.int _) | (Prim.uint _) |(Prim.float _)) => value
+      (case value of
+	    (Prim.int _) => value
+          | (Prim.uint _) => value
+          | (Prim.float _) => value
 	  | Prim.array (con,arr) => 
 	   let
 	     val con' = alpha_normalize_con' c_context con
@@ -1292,39 +1308,38 @@ struct
     and alpha_normalize_bnds' contexts bnds =
       foldl_acc alpha_normalize_bnd' contexts bnds
     and alpha_normalize_bnd' (bnd,(e_context,c_context)) = 
-      (case bnd 
-	 of Con_b (var, kind, con) =>
-	   let
-	     val kind' = alpha_normalize_kind' c_context kind
-	     val con' = alpha_normalize_con' c_context con
-	     val (c_context',var') = alpha_bind (c_context,var)
-	     val bnd' = (Con_b (var',kind',con'))
-	   in
-	     (bnd',(e_context,c_context'))
-	   end
-	  | Exp_b (var, con, exp) =>
-	   let
-	     val con' = alpha_normalize_con' c_context con
-	     val exp' = alpha_normalize_exp' (e_context,c_context) exp
-	     val (e_context',var') = alpha_bind (e_context,var)
-	     val bnd' = (Exp_b (var',con',exp'))
-	   in
-	     (bnd',(e_context',c_context))
-	   end
-	  | ((Fixopen_b defs) | (Fixcode_b defs)) =>
-	     let
-	       val (vars,functions) = unzip (set2list defs)
-	       val (e_context',vars') = alpha_bind_list (e_context,vars)
-	       val functions' = 
-		 map (alpha_normalize_function' (e_context',c_context)) functions
-	       val defs' = list2set (zip (vars',functions'))
-	       val bnd' = 
-		 (case bnd 
-		    of Fixopen_b _ => (Fixopen_b defs')
-		     | _ => (Fixcode_b defs'))
-	     in
-	       (bnd',(e_context',c_context))
+	let fun do_funs (wrapper,defs) = 
+	    let
+		val (vars,functions) = unzip (set2list defs)
+		val (e_context',vars') = alpha_bind_list (e_context,vars)
+		val functions' = 
+		    map (alpha_normalize_function' (e_context',c_context)) functions
+		val defs' = list2set (zip (vars',functions'))
+	     in (wrapper defs',(e_context',c_context))
 	     end
+	in
+	    (case bnd of
+		 Con_b (var, kind, con) =>
+		     let
+			 val kind' = alpha_normalize_kind' c_context kind
+			 val con' = alpha_normalize_con' c_context con
+			 val (c_context',var') = alpha_bind (c_context,var)
+			 val bnd' = (Con_b (var',kind',con'))
+		     in
+			 (bnd',(e_context,c_context'))
+		     end
+	       | Exp_b (var, con, exp) =>
+		     let
+			 val con' = alpha_normalize_con' c_context con
+			 val exp' = alpha_normalize_exp' (e_context,c_context) exp
+			 val (e_context',var') = alpha_bind (e_context,var)
+			 val bnd' = (Exp_b (var',con',exp'))
+		     in
+			 (bnd',(e_context',c_context))
+		     end
+	  | (Fixopen_b defs) => do_funs(Fixopen_b,defs)
+	  | (Fixcode_b defs) => do_funs(Fixcode_b,defs)
+
 	 | Fixclosure_b (is_recur,defs) => 
 	     let
 	       val (vars,closures) = unzip (set2list defs)
@@ -1335,6 +1350,8 @@ struct
 	     in
 	       (bnd',(e_context',c_context))
 	     end)
+	end
+
     and alpha_normalize_switch'
       (contexts as (e_context : alpha_context, c_context : alpha_context)) switch = 
       (case switch

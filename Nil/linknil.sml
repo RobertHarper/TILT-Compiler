@@ -118,18 +118,18 @@ structure Linknil (* : LINKNIL *) =
 
     val nilstatic_exp_valid = NilStatic.exp_valid
 
-    structure Tonil = Tonil(structure ArgIl = LinkIl.Il
+    structure Tonil = Tonil(structure Il = LinkIl.Il
 			    structure Nilstatic = NilStatic
 			    structure NilError = NilError
 			    structure Nilprimutil = NilPrimUtil
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
                             structure IlStatic = LinkIl.IlStatic
-			    structure ArgNilcontext = NilContext
+			    structure Nilcontext = NilContext
 			    structure Nilutil = NilUtil
 			    structure Ppnil = PpNil
 			    structure Ppil = LinkIl.Ppil
-			    structure ArgNil = Nil
+			    structure Nil = Nil
 			    structure Subst = NilSubst)
 
     structure Optimize = Optimize(structure Nil = Nil

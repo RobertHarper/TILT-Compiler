@@ -1,7 +1,8 @@
+(*$import ANNOTATION PRIM NIL *)
 functor Nil(structure ArgAnnotation : ANNOTATION
 	    structure ArgPrim : PRIM)
-	   :(*>*) NIL where Prim = ArgPrim 
-		      and  Annotation = ArgAnnotation =
+	   :> NIL where Prim = ArgPrim 
+	          where Annotation = ArgAnnotation =
 struct	
 
   open Util Name Listops

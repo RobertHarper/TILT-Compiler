@@ -1,3 +1,4 @@
+(*$import Name *)
 signature NILSUBST = 
   sig
     type exp

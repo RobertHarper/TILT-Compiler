@@ -1,3 +1,4 @@
+(*$import NIL *)
 signature NILUTIL =
   sig
     structure Nil : NIL

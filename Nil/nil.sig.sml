@@ -1,3 +1,5 @@
+(*$import PRIM ANNOTATION *)
+
 signature NIL =
 sig
   structure Prim : PRIM

@@ -1,5 +1,7 @@
-functor Alpha(structure ArgNil : NIL) :(*>*)
-   ALPHA where Nil = ArgNil =
+(*$import NIL Listops ALPHA TopLevel Option *)
+
+functor Alpha(structure ArgNil : NIL) 
+    :> ALPHA where Nil = ArgNil =
   struct
 
     structure Nil = ArgNil
@@ -21,9 +23,9 @@ functor Alpha(structure ArgNil : NIL) :(*>*)
 	 of NONE => false
 	  | SOME var' => not (eq_var (var,var')))
 
-    val bound : alpha_context * var -> bool = isSome o VarMap.find
+    val bound : alpha_context * var -> bool = Option.isSome o VarMap.find
 
-    fun substitute (bindings,var) = (getOpt (VarMap.find (bindings,var),var))
+    fun substitute (bindings,var) = (Option.getOpt (VarMap.find (bindings,var),var))
 
     val rename : alpha_context * var * var -> alpha_context = VarMap.insert 
 

@@ -1,3 +1,5 @@
+(*$import ANNOTATION NAME *)
+
 structure Annotation : ANNOTATION = 
     struct
       structure VarSet = Name.VarSet

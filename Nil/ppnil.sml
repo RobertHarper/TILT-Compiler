@@ -1,13 +1,13 @@
+(*$import NIL PPPRIM PRIM Formatter PPNIL *)
 (* Nil pretty-printer. *)
 functor Ppnil(structure ArgNil : NIL
 	      structure Ppprim : PPPRIM
 	      structure Prim : PRIM
 	      sharing Prim = ArgNil.Prim = Ppprim.Prim)
-	: PPNIL where Nil = ArgNil = 
+	:> PPNIL where Nil = ArgNil = 
   struct
 
     structure Nil = ArgNil
-    structure Formatter = Formatter
 
     open Nil Formatter
     open Util Name Prim Ppprim

@@ -1,3 +1,4 @@
+(*$import NIL *)
 signature NILERROR = 
   sig
     structure Nil : NIL
