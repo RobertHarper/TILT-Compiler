@@ -434,9 +434,7 @@ structure Ppnil	:> PPNIL =
 				then [String " ;; "] 
 			    else [String " ;; ", Break0 0 0] @ vfformats))],
 		    Break0 0 0,
-		    String (case effect of 
-				Total => " -> " 
-			      | Partial => " => "),
+		    pp_effect effect,
 		    pp_con body_type, String " =", Break,
 		    pp_exp body])
 	end
