@@ -40,34 +40,20 @@ struct
 	fun add_eq_entry arg = !cadd_eq_entry arg
     end
 
-    (* used to create the "bind" function below for constructors and expressions.
-       dontBind: predicate on objects; if true, then just pass the object directly.
-       fromVar: how to get an object from a variable bound to it (will be VAR or CON_VAR)
-       toBnd: how to make a binding of a variable to an object
-       *)
-    type 'a bindparm = {dontBind : 'a -> bool,
-			fromVar  : var -> 'a,
-			toBnd    : var * 'a -> bnd}
-
-    (* bind {dontBind, fromVar, toBnd} name obj f
-
-       Invokes f with a small version (maybe a bound variable, maybe the
-       object itself if it is small) of the object passed in. The result
-       of f is wrapped with any bindings needed to make that
+    (* bind_exp/bind_con name obj f
 
        Invokes the function with a short version of the given object
        and rewrites the result to include any necessary bindings. *)
-    fun bind (parm : 'a bindparm) (name : string) (obj : 'a) (f : 'a -> exp * con) : exp * con =
-	if #dontBind parm obj then f obj
-	else
-	    let
-		val v = N.fresh_named_var name
-		val (e, c) = f (#fromVar parm v)
-		val e' = if N.VarSet.member (U.exp_free e, v)
-			     then U.make_let ([#toBnd parm (v, obj)], e)
-			 else e
-	    in  (e', c)
-	    end
+
+    fun bind_exp (name : string) (exp : exp) (f : exp -> exp * con) : exp * con =
+	let
+	    val v = N.fresh_named_var name
+	    val (e, c) = f (VAR v)
+	    val e' = if N.VarSet.member (U.exp_free e, v)
+			 then U.make_let ([BND_EXP(v,exp)], e)
+		     else e
+	in  (e',c)
+	end
 
     (* test if a constructor is "small" *)
     fun simple_con (CON_VAR _) = true
@@ -77,18 +63,27 @@ struct
       | simple_con (CON_ANY) = true
       | simple_con _ = false
 
-    fun bind_con x = bind {dontBind = simple_con,
-			   fromVar = CON_VAR,
-			   toBnd = BND_CON} x
-
-    fun bind_exp x = bind {dontBind = fn _ => false,
-			   fromVar = VAR,
-			   toBnd = BND_EXP} x
+    fun bind_con (name : string) (context : context) (con : con) (f : context -> con -> exp * con) : exp * con =
+	if simple_con con then f context con
+	else
+	    let
+		val v = N.fresh_named_var name
+		val k = IlStatic.GetConKind (context,con)
+		val context' = C.add_context_con'(context,v,k,NONE)
+		val (e, c) = f context' (CON_VAR v)
+		val e' = if N.VarSet.member (U.exp_free e, v)
+			     then U.make_let ([BND_CON (v, con)], e)
+			 else e
+		val c' = if N.VarSet.member (U.con_free c, v) then
+			     U.con_subst(c, U.subst_add_convar(U.empty_subst, v, con))
+			 else c
+	    in  (e',c')
+	    end
 
     (* Invoke function with supplied or created short form of
        constructor, rewriting the result. *)
-    fun maybe_bind_con (SOME con', _, f) = f con'
-      | maybe_bind_con (NONE, con, f) = bind_con "name" con f
+    fun maybe_bind_con (SOME con', context, _, f) = f context con'
+      | maybe_bind_con (NONE, context, con, f) = bind_con "name" context con f
 
     (* Not really "state". Just carry around the local bindings for
        "true" "false" and "bool", as well as the supplied vector
@@ -120,7 +115,7 @@ struct
        (xeq_step); if not, reduce one step and try again. *)
 
     fun xeq (state : state) ctxt (nameopt, con) =
-	(maybe_bind_con (nameopt, con, fn con' => xeq_step state ctxt (con', con))
+	(maybe_bind_con (nameopt, ctxt, con, fn ctxt' => fn con' => xeq_step state ctxt' (con', con))
 	 handle NoEqExp =>
 	     let in
 		 debugdo(fn() => print "NoEqExp: xeq_step failed, try reduce\n");
@@ -429,8 +424,8 @@ struct
 	end
 
     and xeq_mu (state : state) ctxt (munameopt, confun) =
-	maybe_bind_con (munameopt, CON_MU confun,
-			fn muname => xeq_mu_step state ctxt (muname, confun))
+	maybe_bind_con (munameopt, ctxt, CON_MU confun,
+			fn ctxt' => fn muname => xeq_mu_step state ctxt' (muname, confun))
 
     (* All this, just to make a mutually-recursive tuple of functions that unfold the
        recursive type and call the appropriate equality function on it. *)
@@ -534,8 +529,8 @@ struct
 			       U.false_exp context, U.con_eqfun context)
 		    | SOME x => x)
 
-	    val res = SOME (bind_con "bool" cbool
-			    (fn b => bind_exp "true" truee
+	    val res = SOME (bind_con "bool" context cbool
+			    (fn context' => fn b => bind_exp "true" truee
 			     (fn t => bind_exp "false" falsee
 			      (fn f => let
 					   val state : state = {polyinst_opt = polyinst_opt,
@@ -545,7 +540,7 @@ struct
 								true_exp = t,
 								false_exp = f,
 								con_eqfun = ceqfun}
-				       in  xeq state context (NONE, con)
+				       in  xeq state context' (NONE, con)
 				       end))))
 		handle ReallyNoEqExp => NONE
 	    val _ = Stats.counter_max(MaxNum,!num)
