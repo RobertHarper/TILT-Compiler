@@ -33,6 +33,7 @@ bug151a	pass	name-mangling test [x] <- [x]
 bug151b	fail	name-mangling test [x] <- * -> [x]
 bug151c	fail	name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
 bug151d	fail	name-mangling test [x] <- * <- * -> [x]
+bug154	pass	Equality allowed on non-eqtypes by elaborator.
 bug159	fail	Datatype replication.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
