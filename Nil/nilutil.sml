@@ -3,12 +3,12 @@
 (* ------------ Context manipulation functions ------------ *)
 
 functor NilUtilFn(structure ArgNil : NIL
-		  structure PrimUtil : PRIM
+		  structure PrimUtil : PRIMUTIL
 		  structure Prim : PRIM
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
 		  sharing ArgNil = Alpha.Nil
-		  and Prim = PrimUtil.Prim) (* :> 
+		  and Prim = PrimUtil.Prim = ArgNil.Prim) (* :> 
   sig include NILUTIL sharing ArgNil = Nil and type alpha_context = Alpha.alpha_context end *) =
 struct
 
