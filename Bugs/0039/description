@@ -95,6 +95,22 @@ Problem:
 Code:
 Transcript:
 Comments:
+
+	We do not have a clear idea what all the problems with our real
+	number support are.  We could develop a few regression tests that
+	check specific properties of each structure Math and structure
+	Real value and then use test failures as a guide for implementing
+	fixes. [dave]
+
+	The mlton folks have an 800 line regression test for reals, which looks
+	pretty substantial. It might be a good starting point. [tom]
+
+	Aside: Our real number support is implemented partly with
+	primitives and ML code and mostly through calls to a C library.
+	Given that the x86 provides some instructions for transcendental
+	functions, we might want to treat more floating point operations
+	as primitive and let the backends decide how to implement things. [dave]
+
 Fix:
 
 	* Updated ../../Basis/Numeric/real-format.sml to match the
