@@ -6,7 +6,7 @@ structure LilToTal :> LILTOTAL =
     val error = fn s => Util.error "liltotal.sml" s
     val debug = Stats.ff "LilToTalDebug"
 
-    val std_libs = ["stdlib.tali","support.talx86_e.tali"]
+    val std_libs = ["stdlib.tali","support_e.tali"]
 
     fun files2intrefs files = Vector.fromList (map Tal.Int_filename files)
 
