@@ -33,12 +33,12 @@ DESCRIPTION
 	Exit s	compiled code exitted with output s
 	Suicide	compiled code died because of an uncaught signal
 
-	Runtest executes programs with stdin connected to /dev/null and
-	stdout and stderr connected to one end of a pipe.  TILT must
-	exit with status 0 when it accepts a program and with status 10
-	when it rejects a program.  Any other behavior is considered a
-	Bomb.  TILT's output and the exit status of a test's executable
-	are ignored.
+	Runtest executes programs with stdin and stderr connected to
+	/dev/null and stdout connected to one end of a pipe.  TILT
+	must exit with status 0 when it accepts a program and with
+	status 10 when it rejects a program.  Any other behavior is
+	considered a Bomb.  TILT's output and the exit status of a
+	test's executable are ignored.
 
 	Runall runs the tests listed in testlist.txt.
 
@@ -152,6 +152,16 @@ struct
 	in  loop ()
 	end
 
+    fun output (fd : IO.file_desc, s : string) : unit =
+	let
+	    fun loop (_,0) = ()
+	      | loop (offset,remain) =
+		let val n = IO.writeVec (fd, {buf=s,i=offset,sz=SOME remain})
+		in  loop(offset+n,remain-n)
+		end
+	in  loop(0,size s)
+	end
+	
     (* Make fd like tmpfd and close tmpfd. *)
     fun redirect (fd : IO.file_desc, tmpfd : IO.file_desc) : unit =
 	(IO.dup2 {old=tmpfd, new=fd};
@@ -173,10 +183,15 @@ struct
 		   (case P.fork()
 		      of NONE => (* we are the child *)
 			  (IO.close infd;
-			   IO.dup2 {old=outfd, new=FS.stdout};
-			   redirect (FS.stderr, outfd);
+			   redirect (FS.stdout, outfd);
+			   supress (FS.stderr, FS.O_WRONLY);
 			   supress (FS.stdin, FS.O_RDONLY);
-			   P.execp (path, program))
+			   P.execp (path, program)
+			   handle e =>
+			       (output(outfd,"exec of "^path^" failed: "^
+				       exnMessage e);
+				IO.close outfd;
+				P.exit 0w1))
 			| SOME pid =>	(* we are the parent *)
 			  let
 			      val _ = IO.close outfd
