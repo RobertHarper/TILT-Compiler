@@ -1,0 +1,44 @@
+Number: 0085
+Title:       Elaborator/pattern compiler generate wrong expcetions
+Keywords:    Elaborator, pattern compiler, exceptions
+Submitter:   Leaf Petersen <leaf@cs.cmu.edu>
+Date:        10/13/02
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:     
+	Either the pattern compiler or the elaborator is using the
+wrong (or inconsistent) exceptions.  The match exception raised by an
+incomplete pattern is not the same one tested against by a "handle
+Match" pattern.
+
+Code:	     
+
+(*This should evaluate to false
+ *)
+val y = (case 3 of 0 => true) handle Match => false
+
+Transcript:  
+
+cuff ml96/testing >./Test.sparc.exe 
+Proc 0: Thread 0 (0): Uncaught exception match
+
+Comments:    
+
+The exception that is raised (above) is the following:
+
+inj_exn[match]{}[](tag(NAME_match_258, UNIT), record())
+
+The exception that is tested against is the following:
+
+select[stamp]{}[](_r_47437)
+
+where _r_47437 is an import:
+
+Match_r > _r_47437 : Unknown : DEP_RECORD[ stamp > _47438, mk > _47439](EXNTAG(UNIT), EXN)
+
+Fix:	     
+Test: 
+Owner: 
+Status: open
+
