@@ -15,11 +15,11 @@ struct
                 | CRC     of int * Time.time * Crc.crc                  (* + CRC *)
                 | CACHED  of int * Time.time * Crc.crc * int * internal (* + ticks + cached result *)
 
-  val stats = ref (Help.StringMap.empty : stat Help.StringMap.map)
+  val stats = ref (Util.StringMap.empty : stat Util.StringMap.map)
 	    
-  fun set (file,stat) = stats := (Help.StringMap.insert(!stats,file,stat))
+  fun set (file,stat) = stats := (Util.StringMap.insert(!stats,file,stat))
   fun get file = 
-      (case Help.StringMap.find(!stats,file) of
+      (case Util.StringMap.find(!stats,file) of
 	   NONE => let val stat = ABSENT
 		       val _ = set (file, stat)
 		   in  stat
@@ -41,9 +41,9 @@ struct
       end
 	
   (* This two functions totally or partially flushes the cache *)
-  fun flushAll() = (stats := Help.StringMap.empty)
+  fun flushAll() = (stats := Util.StringMap.empty)
   fun flushSome files = 
-      let fun remove file = (stats := #1 (Help.StringMap.remove(!stats, file))
+      let fun remove file = (stats := #1 (Util.StringMap.remove(!stats, file))
 			     handle _ => ())
       in  app remove files
       end
@@ -80,7 +80,7 @@ struct
       let fun mapper (CACHED (s, t, crc, tick, r)) = if (tick <= 1) then PRESENT (s,t)
 						     else CACHED(s, t, crc, tick-1, r)
 	    | mapper entry = entry
-      in  stats := (Help.StringMap.map mapper (!stats))
+      in  stats := (Util.StringMap.map mapper (!stats))
       end
 
   fun updateCache (file, newValue) : bool = 
