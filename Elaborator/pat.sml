@@ -753,6 +753,11 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	      in (stamp,con,body)
 	      end
 	  val (exnvar,exncon) = targetArg
+	  val _ = if (eq_con(context,exncon,CON_ANY))
+		      then ()
+		  else (error_region();
+			print "exception pattern used on a non-exception argument\n";
+			print "Argument type: "; pp_con exncon; print "\n")
 	  val exnarg = VAR exnvar
 	  val arms' : (exp * con * exp) list = map helper info_arms
 	  val default' = 
