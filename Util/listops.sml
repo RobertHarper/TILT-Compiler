@@ -271,14 +271,6 @@ structure Listops :> LISTOPS =
 	not (exist_pair eq list)
       end
 
-  fun foldl_list (folder : 'a * 'b -> 'c * 'b) (base : 'b) (data : 'a list) : 'c list * 'b = 
-	let fun loop [] (ls,acc) = (rev ls, acc)
-	      | loop (x::y) (ls,acc) = let val (item,acc) = folder(x,acc)
-                                       in  loop y (item::ls,acc)
-				       end
-        in  loop data ([],base)
-        end
-
    datatype 'a catlist =
        LIST of 'a list
      | CONS of 'a * 'a catlist

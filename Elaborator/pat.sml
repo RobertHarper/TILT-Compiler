@@ -533,7 +533,7 @@ struct
 			val bound = foldl (fn (s,bound) => extendBound((s, arg), bound)) bound syms
 		    in  (bp, bound)
 		    end
-	    val (basePats,bound) = Listops.foldl_list folder bound (Listops.zip pats args)
+	    val (basePats,bound) = Listops.foldl_acc folder bound (Listops.zip pats args)
 	in  (basePats, bound, body)
 	end
 

@@ -176,7 +176,7 @@ struct
 			      val s' = if toplevel then state else add_reg (state,v,tipe,I ir)
 			  in  (ir,s')
 			  end
-		      val (clregsi,rec_state) = foldl_list loadcl state var_vcelist
+		      val (clregsi,rec_state) = foldl_acc loadcl state var_vcelist
 		      fun dowrite (clregi, (_,{code,cenv,venv,tipe}),s) = 
 			  let val (I ir,s) = xexp'(s,fresh_named_var "venv", venv, 
 						     Nil.TraceUnknown, NOTID)
@@ -405,9 +405,9 @@ struct
 			  fun efolder(e,state) = xexp'(state,fresh_named_var "call_e", 
 						       e, Nil.TraceUnknown, NOTID)
 		      in
-			  val (cregsi,state) = foldl_list cfolder state clist
-			  val (eregs, state) = foldl_list efolder state elist
-			  val (efregs, state) = foldl_list efolder state eflist
+			  val (cregsi,state) = foldl_acc cfolder state clist
+			  val (eregs, state) = foldl_acc efolder state elist
+			  val (efregs, state) = foldl_acc efolder state eflist
 		      end
 
 		      val _ = add_instr (ICOMMENT ("making " ^ call_type))
@@ -956,7 +956,7 @@ struct
 	 | Nil.record labels => 
 	       let val _ = incRecord()
 		   fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
-		   val (terms,state) = foldl_list folder state elist
+		   val (terms,state) = foldl_acc folder state elist
 		   val tagword::terms = terms
 	       in  make_record_with_tag(state,tagword,terms)
 	       end
@@ -986,7 +986,7 @@ struct
 	 | inject_known known => 
 		let val _ = incSumInject()
 		  fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
-		  val (terms,state) = foldl_list folder state elist
+		  val (terms,state) = foldl_acc folder state elist
 		in  TortlSum.xinject_sum_static ((state,known,hd clist),terms,trace)
 		end
 	 | inject known => 
@@ -1455,7 +1455,7 @@ struct
 		       let val (const',t,s) = xcon'(s,fresh_named_var "xcon_sum",c)
 		       in (t,(const andalso const', s))
 		       end
-		  val (postTerms,(const,state)) = foldl_list folder (true,state) cons
+		  val (postTerms,(const,state)) = foldl_acc folder (true,state) cons
 		  val terms = preTerms @ postTerms
 		  val (res,state) = if const 
 				       then make_record_const(state, terms, NONE)
@@ -1576,7 +1576,7 @@ struct
 			       val (const',term,state) = xcon'(state,v,c)
 			   in (term, (const andalso const', state))
 			   end
-		       val (terms,(const,state)) = foldl_list folder (true,state) lclist
+		       val (terms,(const,state)) = foldl_acc folder (true,state) lclist
 		       val (result,state) = 
 			   (case (!do_single_crecord,terms) of
 				(true,[term]) => (term, state)
@@ -1623,7 +1623,7 @@ struct
 		       val (const_fun,lv,state) = xcon'(state,fresh_named_var "closure",c)
 		       val clregi = load_ireg_term(lv,NONE)
 		       val (cregsi,(const_arg,state)) = 
-			   foldl_list  (fn (c,(const,state)) => 
+			   foldl_acc  (fn (c,(const,state)) => 
 				   let val (const',vl,state) = xcon'(state,fresh_named_var "clos_arg",c)
 				   in  (load_ireg_term(vl,NONE),(const andalso const', state))
 				   end) (true,state) clist
@@ -1674,7 +1674,7 @@ struct
 			    val s' = add_conterm (s,v,k,SOME(LOCATION(REGISTER (false,I r))))
 			in  (r,s')
                         end
-	      val (cargs,state) = foldl_list folder state vklist
+	      val (cargs,state) = foldl_acc folder state vklist
 	      val args = map I cargs
 	      val return = alloc_regi NOTRACE_CODE
 	      val _ = set_args(args, return)
@@ -1700,17 +1700,17 @@ struct
 		      val s' = add_conterm (s,v,k,SOME(LOCATION(REGISTER (false,I r))))
 		  in  (r,s')
 		  end
-	      val (cargs,state) = foldl_list folder state vklist
+	      val (cargs,state) = foldl_acc folder state vklist
               fun folder ((v,tr,c),s) = let val ir = alloc_named_regi v (niltrace2rep s tr)
 					 val s' = add_reg (s,v,c,I ir)
 			             in  (ir, s')
                                      end
-	      val (eiargs,state) = foldl_list folder state vclist
+	      val (eiargs,state) = foldl_acc folder state vclist
               fun folder (v,s) = let val fr = alloc_named_regf v
 					       val s' = add_reg (s,v,Prim_c(Float_c Prim.F64,[]), F fr)
 					   in  (fr,s')
                                            end
-              val (efargs,state) = foldl_list folder state vflist
+              val (efargs,state) = foldl_acc folder state vflist
 
 	      val args = (map I cargs) @ (map I eiargs) @ (map F efargs)
 	      val return = alloc_regi NOTRACE_CODE
