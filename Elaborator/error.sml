@@ -1,4 +1,4 @@
-(*$import ERROR IlUtil Il *)
+(*$import ERROR IlUtil Il Util *)
 (* Stateful module holding the error state of the elaboration process *)
 
 structure Error
@@ -8,15 +8,10 @@ struct
     datatype ErrorLevel = NoError | Warn | Error
     type region = Ast.srcpos * Ast.srcpos
     structure Il = Il
-    open Il IlUtil
+    open Il IlUtil Util
 
     val track = Stats.ff("ElaboratorTrack")
 
-    fun spaces n = 
-	let fun loop 0 = []
-	      | loop n = #" "::(loop (n-1))
-	in String.implode(loop n)
-	end
     fun tab n = print(spaces n)
     fun tab_region() = tab 10
     fun tab_region_with str = (tab 10; print str)

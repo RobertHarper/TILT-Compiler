@@ -1065,7 +1065,7 @@ struct
 
 
    (* Translates an entire Rtl procedure *)
-   fun translateProc (Rtl.PROC {name, args, code, known, results, return, 
+   fun translateProc (Rtl.PROC {name, args, code, results, return, 
 				save = _, vars = _}) =
      let
        val args   = map translateReg args

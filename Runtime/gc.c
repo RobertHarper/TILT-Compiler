@@ -22,6 +22,7 @@
 int paranoid = 0;
 int verbose = 0;
 int diag = 0;
+int debug = 0;
 int collector_type = Generational;
 int SHOW_GCDEBUG_FORWARD = 0;
 int SHOW_GCERROR   = 1;
@@ -85,7 +86,8 @@ long ComputeHeapSize(long oldsize, double oldratio)
     newsize = MaxHeap;
   }
   if (newsize < MinHeap) {
-    fprintf(stderr,"GC warning: Would like to make newheap %d but constrained to >= %d\n",newsize, MinHeap);
+    if (diag)
+      fprintf(stderr,"GC warning: Would like to make newheap %d but constrained to >= %d\n",newsize, MinHeap);
     newsize = MinHeap;
   }
   assert(newsize > oldlive);
@@ -141,43 +143,9 @@ void debug_and_stat_before(unsigned long *saveregs, long req_size)
 
 
 
-#ifdef SEMANTIC_GARBAGE
-void update_lifetime(value_t *from, value_t *to, value_t sz)
-{
-  extern value_t semantic_garbage_offset;
-  int curstamp = *((value_t *)(((value_t)from) + semantic_garbage_offset));
-  int used = 0, i;
-  assert((*from) == FORWARD_TAG);
-  for (i=1; i<=sz; i++)
-    {
-      int temp = *(int *)(((value_t)(from + i)) + semantic_garbage_offset);
-      if (temp == 0)
-	{ 
-	  used = 1; 
-	  break; 
-	}
-    }
-
-  for (i=1; i<=sz; i++)
-     *(int *)(((value_t)(to + i)) + semantic_garbage_offset) = 98765;
-  if ((value_t)from >= fromheap->bottom && (value_t)from < fromheap->top)
-    if ((value_t)to >= old_toheap->bottom && (value_t)to < old_toheap->top)
-      curstamp = NumMajorGC;
-    else
-      curstamp = NumMajorGC-1;
-  else if (used)
-    curstamp = NumMajorGC;
-  *((value_t *)(((value_t)to) + semantic_garbage_offset)) = curstamp;
-}
-#endif
-
-
-
-
 
 void gc_init(void)
 {
-  /* ??? 64 does not work for MaxHeap for some reason */
   int writelist_size = 0;
 #ifdef HEAPPROFILE
   object_profile_init(&allocated_object_profile);
@@ -188,19 +156,19 @@ void gc_init(void)
     {
       case Semispace :
 	{
-	  gc_init_semi();
+	  gc_init_Semi();
 	  writelist_size = (MinHeap*1024/2);
 	  break;
 	}
       case Generational :
 	{ 
-	  gc_init_gen();
+	  gc_init_Gen();
 	  writelist_size = (YoungHeapByte/2);
 	  break;
 	}
       case Parallel:
 	{
-	  gc_init_para();
+	  gc_init_SemiPara();
 	  writelist_size = (MinHeap*1024/2);
 	  break;
 	}
@@ -232,10 +200,10 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
     /* should check start_addr */
     if (saveregs[ALLOCLIMIT] == StopHeapLimit)
       return;
-    for (i=0; i<thread->numThunk; i++) { /* check thunks */
+    for (i=thread->nextThunk; i<thread->numThunk; i++) { /* check thunks */
       value_t thunk = thread->thunks[i];
       if (thunk >= fromspace->bottom && thunk < fromspace->top) {
-	printf("TRACE ERROR*: thunk has from-space value after collection: %d", thunk);
+	printf("TRACE ERROR*: thunk %d has from-space value after collection: %d", i, thunk);
 	assert(0);
       }
     }
@@ -369,9 +337,9 @@ value_t alloc_bigintarray(int byteLen, value_t value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace :    { return alloc_bigintarray_semi(byteLen,value,ptag); }
-    case Generational : { return alloc_bigintarray_gen (byteLen,value,ptag); }
-    case Parallel :     { return alloc_bigintarray_para(byteLen,value,ptag); }
+    case Semispace :    { return alloc_bigintarray_Semi(byteLen,value,ptag); }
+    case Generational : { return alloc_bigintarray_Gen (byteLen,value,ptag); }
+    case Parallel :     { return alloc_bigintarray_SemiPara(byteLen,value,ptag); }
     }
 }
 
@@ -379,9 +347,9 @@ value_t alloc_bigptrarray(int wordlen, value_t value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace :    { return alloc_bigptrarray_semi(wordlen,value,ptag); }
-    case Generational : { return alloc_bigptrarray_gen (wordlen,value,ptag); }
-    case Parallel :     { return alloc_bigptrarray_para(wordlen,value,ptag); }
+    case Semispace :    { return alloc_bigptrarray_Semi(wordlen,value,ptag); }
+    case Generational : { return alloc_bigptrarray_Gen (wordlen,value,ptag); }
+    case Parallel :     { return alloc_bigptrarray_SemiPara(wordlen,value,ptag); }
     }
 }
 
@@ -389,62 +357,83 @@ value_t alloc_bigfloatarray(int loglen, double value, int ptag)
 {  
   switch (collector_type) 
     {
-    case Semispace :    { return alloc_bigfloatarray_semi(loglen,value,ptag); }
-    case Generational : { return alloc_bigfloatarray_gen (loglen,value,ptag); }
-    case Parallel :     { return alloc_bigfloatarray_para(loglen,value,ptag); }
+    case Semispace :    { return alloc_bigfloatarray_Semi(loglen,value,ptag); }
+    case Generational : { return alloc_bigfloatarray_Gen (loglen,value,ptag); }
+    case Parallel :     { return alloc_bigfloatarray_SemiPara(loglen,value,ptag); }
     }
 }
 
-void gc_poll()
+void gc_poll(SysThread_t *sth)
 {
   if (collector_type == Parallel)
-    gc_poll_para();
+    gc_poll_SemiPara(sth);
   return;
 }
 
 
-void gc(Thread_t *curThread)
+int GCAllocate(SysThread_t *sth, int req)
+{  
+  /* req = 0 means write buffer was full */
+  if (req == 0) {
+    if (writelist_cursor < writelist_end)
+      return 1;
+  } 
+  else if (req + sth->alloc <= sth->limit) 
+    return 1; 
+  switch (collector_type) {
+    case Semispace :    { return GCAllocate_Semi(sth,req); }
+    case Generational : { return GCAllocate_Gen(sth,req); }
+    case Parallel :     { return GCAllocate_SemiPara(sth,req); }
+  }
+}
+
+void GC(Thread_t *curThread)
 {
   SysThread_t *self = getSysThread();
 
-  if (curThread != NULL) {
-    /* Called from gc_raw; need to unmap first */ 
-    SysThread_t *sth = curThread->sysThread;
-    assert(self == sth);
-    assert(sth->userThread == curThread);
-    if (curThread->request < 0 ||
-	curThread->request >= 8192) {
-      fprintf(stderr,"GC request too big or negative: %d\n", curThread->request);
-      assert(0);
-    }
-    ReleaseJob(sth);
+  /* Check that we are running on own stack */
+  assert((self->stack - (int) (&self)) < 1024); 
+
+  /* Called from GCFromML - need to unmap first */ 
+  assert(self == curThread->sysThread);
+  assert(self->userThread == curThread);
+  ReleaseJob(self);
+
+  /* If limit pointer set to StopHeapLimit, then not a real GC */
+  if (curThread->saveregs[ALLOCLIMIT] == StopHeapLimit) {
+    scheduler(self);
+    assert(0);
   }
 
-  assert((self->stack - (int) (&self)) < 1024); /* Check that we are running on own stack */
-
-  /* If thread preempted, not a real GC */
-  if ((curThread != NULL) && 
-      (curThread->saveregs[ALLOCLIMIT] == StopHeapLimit)) {
+  /* If requestInfo is zero, then the write buffer is full and we must GC.
+     Otherwise, see if the request is already satisfied or can be satisfied
+     by allocating from the current heap */
+  if (curThread->requestInfo != 0) {
+    if (curThread->requestInfo + self->alloc <= self->limit) {
+      printf("Warning: GC request already satisfied by current region.\n");
+      printf("         %d + %d <= %d\n",  curThread->requestInfo,
+	     self->alloc, self->limit);
       scheduler(self);
-      assert(0);
     }
+    if (GCAllocate(self, curThread->requestInfo))
+      scheduler(self);
+  }
 
+
+  /* Dispatch to the underlying collector */
   switch (collector_type) 
     {
     case Semispace : 
-      assert(curThread != NULL);
-      gc_semi(curThread); 
+      GC_Semi(self,curThread->requestInfo);
       scheduler(self);
-      assert(0);
       break; 
     case Generational : 
-      assert(curThread != NULL);
-      gc_gen(curThread,0);
+      GC_Gen(self,curThread->requestInfo,curThread->request == MajorGCRequestFromC);
       scheduler(self); 
-      assert(0);
       break; 
     case Parallel :     
-      gc_para(self); /* Does not return */
+      GC_SemiPara(self,curThread->requestInfo);
+      scheduler(self); 
       break; 
     }
   assert(0);
@@ -455,8 +444,11 @@ void gc_finish()
 {
   switch (collector_type) 
     {
-    case Semispace : { gc_finish_semi(); break; }
-    case Generational : { gc_finish_gen(); break; }
-    case Parallel : { gc_finish_para(); break; }
+    case Semispace : { gc_finish_Semi(); break; }
+    case Generational : { gc_finish_Gen(); break; }
+    case Parallel : { gc_finish_SemiPara(); break; }
     }
 }
+
+
+  

@@ -98,9 +98,11 @@ struct
    (* OUTPUT PROGRAM *)
 
    fun dumpBlocks debug proc_name 
-                  (psig as (PROCSIG{framesize, arg_ra_pos, 
-				    ra_offset,
-				    ...}))
+                  (psig as (KNOWN_PROCSIG{framesize, 
+					  linkage = LINKAGE{argCallee = arg_ra_pos, 
+							    resCallee = ra_offset,
+							    ...},
+					  ...}))
                   block_map blocklabels  =
      let 
        fun myEmitInstr i = emitInstr (msAnnotation i) 
@@ -156,27 +158,16 @@ struct
 	res
      end
 
-   exception Zip
-       fun zip [] [] = []
-         | zip (x::xs) (y::ys) = (x,y) :: (zip xs ys)
-	 | zip _ [] = raise Zip
-	 | zip [] _ = raise Zip
 
-
-   fun dumpCodeLabel cls = 
-       let open Machine
-	   fun member (elem,list) = Listops.member_eq(Rtl.eq_label,elem,list)
-	   fun unique [] = []
-	     | unique (a::rest) = if (member(a,rest)) then unique rest else a::(unique rest)
-	   val ucls = unique cls
-     in
-       app (emitString o CodeLabelDecl) ucls
-     end
 
    fun dumpProc (name, 
-		 psig as PROCSIG{args, res, regs_destroyed, regs_modified,
-				 arg_ra_pos, res_ra_pos, ...}, 
-		 
+		 psig as KNOWN_PROCSIG{argFormal = args, 
+				       resFormal = res, 
+				       regs_destroyed, 
+				       regs_modified,
+				       linkage = LINKAGE{argCallee = arg_ra_pos, 
+							 resCallee = res_ra_pos, ...},
+				       ...},
 		 block_map,
 		 block_labels,
 		 debug) =
@@ -185,23 +176,18 @@ struct
       emitString commentHeader;
 
       emitString " arguments : ";
-      (case arg_ra_pos of
-	 SOME (arg_pos) => print_list print_asn (zip args arg_pos)
-       | NONE => print_list print_reg args);
+      print_list print_asn (Listops.zip args arg_ra_pos);
       emitString commentHeader;
       emitString (" results    : ");
-
-      (case res_ra_pos of 
-	 SOME res_pos => print_list print_asn (zip res res_pos)
-       | NONE => print_list print_reg res);
+      print_list print_asn (Listops.zip res res_ra_pos);
 
       emitString commentHeader;
       emitString (" destroys   : ");
-      emitString (msRegList (! regs_destroyed));
+      emitString (msRegList (Regset.listItems regs_destroyed));
       emitString "\n";
       emitString commentHeader;
       emitString (" modifies   : ");
-      emitString (msRegList (! regs_modified));
+      emitString (msRegList (Regset.listItems regs_modified));
       emitString "\n";
 
       (case block_labels of

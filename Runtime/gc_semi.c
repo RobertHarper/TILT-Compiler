@@ -29,166 +29,113 @@ static Queue_t *global_roots = 0;
 
 /* ------------------  Semispace array allocation routines ------------------- */
 
-value_t alloc_bigwordarray_semi(int tagType, int byte_len, value_t init_val, int ptag)
+static value_t* alloc_big(int wordLen, int oddAlign) 
 {
+  value_t *res = 0;
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
   value_t alloc_ptr = saveregs[ALLOCPTR];
   value_t alloc_limit = saveregs[ALLOCLIMIT];
-  int word_len = (byte_len + 3) / 4;
-  int tag = tagType | (byte_len << ARRLEN_OFFSET);
-
-  int i;
-  value_t *res = 0;
+  int byteLen = 4 * wordLen;
+  int byteLenPad = byteLen + (oddAlign ? 4 : 0);
 
   /* Make sure there is enough space */
-  if (alloc_ptr + (word_len + 1) >= alloc_limit)
+  if (alloc_ptr + byteLenPad >= alloc_limit)
     {
-#ifdef DEBUG
-      printf("DOING GC inside int_alloc with a semispace collector\n");
-#endif
-      curThread->request = 4 * (word_len + 1);
-      gc_semi(curThread);
+      GCFromC(curThread, byteLenPad, 0);
       alloc_ptr = saveregs[ALLOCPTR];
       alloc_limit = saveregs[ALLOCLIMIT];
     }
-  assert(alloc_ptr + (word_len + 1) < alloc_limit);
+  assert(alloc_ptr + byteLenPad < alloc_limit);
 
-  /* Perform actual allocation and initialization */
-#ifdef HEAPPROFILE
-  *(value_t *)alloc_ptr = 30006;
-  alloc_ptr += 4;
-#endif
-  res = (value_t *)(alloc_ptr + 4);
-  alloc_ptr += 4 * (word_len + 1);
+  /* Perform alignment and actual allocation */
+  if ((alloc_ptr & 7) == 0) {
+    *((value_t *)alloc_ptr) = SKIP_TAG;
+    alloc_ptr += 4;
+  }
+  res = (value_t *)(alloc_ptr);
+  alloc_ptr += byteLen;
   saveregs[ALLOCPTR] = alloc_ptr;
-  res[-1] = tag;
-  for (i=0; i<word_len; i++)
-    res[i] = init_val;
 
   /* Update statistics */
-  gcstat_normal(4*(word_len+1), 0);
+  gcstat_normal(byteLen, 0);
 
+  return res;
+}
+
+value_t alloc_bigintarray_Semi(int byteLen, value_t initVal, int ptag)
+{
+  int wordLen = 4 + (byteLen + 3) / 4;
+  value_t *space = alloc_big(wordLen,0);
+  value_t * res = space + 1;
+  init_iarray(res, byteLen, initVal);
   return (value_t) res;
 }
 
-
-value_t alloc_bigintarray_semi(int bytelen, value_t value, int ptag)
+value_t alloc_bigptrarray_Semi(int wordLen, value_t initVal, int ptag)
 {
-  return alloc_bigwordarray_semi(IARRAY_TAG, bytelen, value, ptag);
-}
-
-value_t alloc_bigptrarray_semi(int wordlen, value_t value, int ptag)
-{
-  return alloc_bigwordarray_semi(PARRAY_TAG, wordlen * 4, value, ptag);
-}
-
-value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
-{
-  double *rawstart = NULL;
-  value_t *res = NULL;
-  long i;
-  Thread_t *curThread = getThread();
-  long *saveregs = curThread->saveregs;
-  int byte_len = log_len << 3;
-  int pos, tag = RARRAY_TAG | (byte_len << ARRLEN_OFFSET);
-  value_t alloc_ptr = saveregs[ALLOCPTR];
-  value_t alloc_limit = saveregs[ALLOCLIMIT];
-
-  /* Make sure there is enough space */
-  if (alloc_ptr + 8 * (log_len + 3) >= alloc_limit)
-    {
-      long req_size = 8 * (log_len + 3);
-#ifdef DEBUG
-      printf("DOING GC inside float_alloc with a semispace collector\n");
-#endif
-      saveregs[ALLOCLIMIT] = req_size;
-      gc_semi(curThread);
-      alloc_ptr = saveregs[ALLOCPTR];
-      alloc_limit = saveregs[ALLOCLIMIT];
-    }
-  assert(alloc_ptr + 8 * (log_len + 3) <= alloc_limit);
-
-  /* Perform alignment and write heap profile tag */
-#ifdef HEAPPROFILE
-  if (alloc_ptr % 8 != 0)
-    { 
-      *(value_t *)alloc_ptr = SKIP_TAG;
-      alloc_ptr += 4;       
-    }
-  *(value_t *)alloc_ptr = 30010;
-  alloc_ptr += 4;
-#else
-  if (alloc_ptr % 8 == 0)
-    { 
-      *(value_t *)alloc_ptr = SKIP_TAG;
-      alloc_ptr += 4;
-    }
-#endif
-
-  /* Allocate and initialize */
-  res = (value_t *)(alloc_ptr + 4);
-  assert ((value_t)res % 8 == 0);
-  alloc_ptr = (((value_t) res) + (8 * log_len));
-  saveregs[ALLOCPTR] = alloc_ptr;
-  res[-1] = tag;
-  for (i=0; i<log_len; i++)
-    ((double *)res)[i] = init_val;
-
+  value_t *space = alloc_big(4 + wordLen,0);
+  value_t *res = space + 1;
+  init_parray(res, wordLen, initVal);
   return (value_t) res;
 }
 
-
+value_t alloc_bigfloatarray_Semi(int doubleLen, double initVal, int ptag)
+{
+  int wordLen = 2 * doubleLen;
+  value_t *space = alloc_big(4 + wordLen,1);
+  value_t *res = space + 1;
+  init_farray(res, doubleLen, initVal);
+  return (value_t) res;
+}
 
 
 /* --------------------- Semispace collector --------------------- */
+int GCAllocate_Semi(SysThread_t *sysThread, int req_size)
+{
+  /* Check for first time heap value needs to be initialized */
+  assert(sysThread->userThread == NULL);
+  if (sysThread->limit == StartHeapLimit)
+    {
+      sysThread->alloc = fromheap->bottom;
+      sysThread->limit = fromheap->top;
+      return (req_size < (sysThread->alloc  - sysThread->limit));
+    }
+  return 0;
+}
 
-
-void gc_semi(Thread_t *curThread) /* Not mapped */
+void GC_Semi(SysThread_t *sysThread, int req_size)
 {
   int i;  
-  SysThread_t *sysThread = getSysThread();
-  long *saveregs = curThread->saveregs;
+  Thread_t *curThread;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
-  int req_size = curThread->request;
   value_t *to_ptr = (value_t *)toheap->bottom;
   range_t from_range, to_range;
   Queue_t *root_lists, *loc_roots;
   long alloc = 0;
 
-#ifdef SEMANTIC_GARBAGE
-  assert(0); /* unimplemented */
-#endif
-
-  assert(sysThread->userThread == NULL);
-  assert(curThread->sysThread == NULL);
-  assert(writelist_cursor >= writelist_start);
-  assert(writelist_cursor <= writelist_end);
-  writelist_cursor = writelist_start;          /* Write list irrelevnat in a semispace collector */
-
-  /* Check for first time heap value needs to be initialized */
-  if (sysThread->limit == StartHeapLimit)
-    {
-      sysThread->alloc = fromheap->bottom;
-      sysThread->limit = fromheap->top;
-      return;
-    }
-
-  assert(allocptr <= alloclimit);
-  assert(req_size >= 0);
-  alloc = allocptr - fromheap->alloc_start;
-  fromheap->alloc_start = allocptr;
-
   /* Start timing this collection */
-  root_lists = curThread->root_lists;
-  loc_roots = curThread->loc_roots;
   start_timer(&sysThread->gctime);
 
-#ifdef DEBUG
-  debug_and_stat_before(saveregs, req_size);
-#endif
+  /* Check that processor is unmapped, write list is not overflowed, allocation region intact */
+  assert(sysThread->userThread == NULL);
+  assert(writelist_cursor >= writelist_start);
+  assert(writelist_cursor <= writelist_end);
+  writelist_cursor = writelist_start;          /* Write list irrelevant in a semispace collector */
+  assert(allocptr <= alloclimit);
+  assert(req_size >= 0);
 
+  alloc = allocptr - fromheap->alloc_start;
+  fromheap->alloc_start = allocptr;
+  curThread = &(Threads[0]);             /* In a sequential collector, 
+					    there is only one user thread */
+  root_lists = curThread->root_lists;
+  loc_roots = curThread->loc_roots;
+
+
+  if (debug)
+    debug_and_stat_before(curThread->saveregs, req_size);
   if (paranoid) {
     Heap_t *legalHeaps[2];
     legalHeaps[0] = fromheap;
@@ -248,15 +195,14 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 
 #endif
 
-#ifdef DEBUG
-    if (SHOW_HEAPS)
+    if (debug && SHOW_HEAPS)
       {
 	memdump("From Heap After collection:", (int *)fromheap->bottom,40,0);
         memdump("To Heap After collection:", (int *)toheap->bottom,40,0);
-	show_heap("FINAL FROM",fromheap->bottom,allocptr,fromheap->top);
-	show_heap("FINAL TO",toheap->bottom,to_ptr,toheap->top);
+	show_heap_raw("FINAL FROM",(allocptr - fromheap->bottom) / 4,
+		      fromheap->bottom,fromheap->top,
+		      toheap->bottom,toheap->top);
       }
-#endif
 
     if (paranoid) {
       Heap_t *legalHeaps[2];
@@ -268,16 +214,15 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 
   /* Resize the tospace by using the oldspace size and liveness ratio */
     {
-      long old = fromheap->top - fromheap->bottom;
+      long alloc = fromheap->top - fromheap->bottom;
       long copied = ((value_t)to_ptr) - toheap->bottom;
-      double oldratio = (double)(copied) / old;
-      long cur = copied + req_size;
-      long live = (cur > old) ? cur : old;
-      long new = ComputeHeapSize(live, oldratio);
-      if (new < cur)
-	{
+      long used = fromheap->top - fromheap->bottom + req_size;
+      long live = copied + req_size;
+      double ratio = (double)(live) / used;
+      long new = ComputeHeapSize(live, ratio);
+      if (new < live) {
 	  fprintf(stderr,"FATAL ERROR: failure reqesting %d bytes\n",req_size);
-	  exit(-1);
+	  assert(0);
 	}
 
       gcstat_normal(alloc,copied);
@@ -315,7 +260,7 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 #define INT_INIT(x,y) { if (x == 0) x = y; }
 #define DOUBLE_INIT(x,y) { if (x == 0.0) x = y; }
 
-void gc_init_semi()
+void gc_init_Semi()
 {
   INT_INIT(MaxHeap, 80 * 1024);
   INT_INIT(MinHeap, 256);
@@ -331,7 +276,7 @@ void gc_init_semi()
 }
 
 
-void gc_finish_semi()
+void gc_finish_Semi()
 {
   Thread_t *th = getThread();
   int allocsize = th->saveregs[ALLOCPTR] - fromheap->alloc_start;

@@ -238,7 +238,7 @@ GCFromMLgetgp1:
 	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
 	ldl	$sp, ($at)				# run on system thread stack
 	mov	THREADPTR_REG, $16			# pass user thread pointer as arg
-	jsr	$26, gc					
+	jsr	$26, GC					
 	br	$gp, GCFromMLgetgp2
 GCFromMLgetgp2:	
 	ldgp	$gp, 0($gp)				# compute self-gp for abort
@@ -269,7 +269,7 @@ returnFromGCFromML:
 .set at
 	.end	returnFromGCFromML
 
- # ----------------- gcFromC ---------------------------------
+ # ----------------- GCFromC ---------------------------------
  # gcFromC is called from the runtime system with 3 arguments:	
  #	thread pointer, request size, a bool for majorGC
  # gcFromC does not use a stack frame 
@@ -301,7 +301,7 @@ MinorGCFromC:
 	ldq	ASMTMP_REG, sysThread_disp(THREADPTR_REG)	# must use temp so SP always correct
 	ldq	$sp, (ASMTMP_REG)				# run on system thread stack
 	mov	THREADPTR_REG, CFIRSTARG_REG			# pass user thread pointer as arg
-	jsr	gc						# call runtime GC
+	jsr	GC						# call runtime GC
 	jsr	abort
 	nop
 .set at

@@ -503,7 +503,7 @@ struct
 		    val _ = if (lines > 3000) 
 				then (chat "  [Large file: ";
 				      chat (Int.toString lines);
-				      chat " lines .  Flushing file cache.]\n";
+				      chat " lines.  Flushing file cache.]\n";
 				      Cache.flushAll())
 			    else ()
 		    (* Elaborate the source file, generating a .ui file *)
@@ -704,7 +704,7 @@ struct
       | ASSEMBLING of Time.time (* Compiled interface and assembly.  
 				   Locally compiling object file. Pending Time. *)
       | PROCEEDING of Time.time (* Compiled interface.  Compiling object file. Pending Time. *)
-      | DONE                    (* Interface and object are both generated. *)
+      | DONE of Time.time       (* Interface and object are both generated. *)
     local
 
 	val graph = ref (Dag.empty() : {position : int,
@@ -766,7 +766,7 @@ struct
 	       | PENDING _ => error "unit was pending; making ready\n"
 	       | ASSEMBLING _ => error "unit was assembling; making ready\n"
 	       | PROCEEDING _ => error "unit was proceeding; making ready\n"
-	       | DONE => error "unit was done; making ready\n")
+	       | DONE _ => error "unit was done; making ready\n")
 
 	fun markPending unit = 
 	    (case (get_status unit) of
@@ -775,7 +775,7 @@ struct
 	       | PENDING _ => ()
 	       | ASSEMBLING _ => error "markPending: unit was assembling\n"
 	       | PROCEEDING _ => error "markPending: unit was proceeding\n"
-	       | DONE => error "markPending: unit was done\n")
+	       | DONE _ => error "markPending: unit was done\n")
 
 	fun enableChildren parent = 
 	    let 
@@ -783,7 +783,7 @@ struct
 		    let val imports = get_import_direct child (* no need to check transitively *)
 			fun atLeastProceeding unit = (case (get_status unit) of
 							  PROCEEDING _ => true
-							| DONE => true
+							| DONE _ => true
 							| _ => false)
 			val ready = Listops.andfold atLeastProceeding imports
 		    in  ready andalso 
@@ -808,7 +808,7 @@ struct
 	       | PENDING t => set_status(unit,PROCEEDING t)
 	       | PROCEEDING _ => ()
 	       | ASSEMBLING t => error "markProceeding: unit was assembling\n"
-	       | DONE => error "markProceeding: unit was done\n");
+	       | DONE _ => error "markProceeding: unit was done\n");
 	      enableChildren unit)
 
 	fun markAssembling unit = 
@@ -819,21 +819,25 @@ struct
 		   | PENDING t => (set_status(unit, ASSEMBLING t); t)
 		   | PROCEEDING t => (set_status(unit, ASSEMBLING t); t)
 		   | ASSEMBLING t => t
-		   | DONE => error "markAssembling: unit was done\n")
+		   | DONE _ => error "markAssembling: unit was done\n")
 		val _ = enableChildren unit
 	    in  startTime
 	    end
 
 	(* We must call enableChildren here because units may skip through the Proceeding stage. *)
 	fun markDone unit : Time.time = 
-	    let val startTime = 
-		(case (get_status unit) of
-		     WAITING => error "markDone: unit was waiting\n"
-		   | READY t =>   (set_status(unit,DONE); t) (* May not need compile this unit. *)
-		   | PENDING t => (set_status(unit,DONE); t) (* Might have missed the proceding step. *)
-		   | PROCEEDING t => (set_status(unit,DONE); t)
-		   | ASSEMBLING t => (set_status(unit,DONE); t)
-		   | DONE => (Time.now()))
+	    let val now = Time.now()
+		val startTime = 
+		    (case (get_status unit) of
+			 WAITING => error "markDone: unit was waiting\n"
+		       (* May not need compile this unit. *)
+		       | READY t => t
+		       (* Might have missed the proceding step. *)
+		       | PENDING t => t
+		       | PROCEEDING t => t
+		       | ASSEMBLING t => t
+		       | DONE _ => error "markDone: unit was already done\n")
+		val _ = set_status(unit,DONE(Time.-(now,startTime)))
 		val _ = enableChildren unit
 	    in  startTime
 	    end
@@ -847,7 +851,7 @@ struct
 		   | PENDING _ => (w, r, unit::pe, pr, a, d)
 		   | PROCEEDING _ => (w, r, pe, unit::pr, a, d)
 		   | ASSEMBLING _ => (w, r, pe, pr, unit::a, d)
-		   | DONE => (w, r, pe, pr, a, unit::d))
+		   | DONE _ => (w, r, pe, pr, a, unit::d))
 	    in  foldl folder ([],[],[],[],[],[]) units
 	    end
 
@@ -936,7 +940,7 @@ struct
 		val _ = Dag.makeDot{out = out, 
 				    graph = g,
 				    status = (fn n => (case (get_status n) of
-							     DONE => Dag.Black
+							     DONE _ => Dag.Black
 							   | ASSEMBLING _ => Dag.Gray
 							   | PROCEEDING _ => Dag.Gray
 							   | PENDING _ => Dag.Gray
@@ -1036,82 +1040,82 @@ struct
     (* Compiles the unit either by determining that compilation is not necessary or by calling a slave. 
        This call does not block. *)
     fun needsCompile unitname = (* This unit is in at least a ready state so its imports exist *)
-        if (get_status unitname = DONE)
-	    then false
-	else 
-	let val sourcebase = get_base unitname
-	    val intfile = base2int sourcebase
-	    val smlfile = base2sml sourcebase
-	    val uofile = base2uo sourcebase
-	    val ofile = base2o sourcebase
-	    val uifile = base2ui sourcebase
-
-	    val smldate = Cache.modTime smlfile
-	    val dest_ui_exists = Cache.exists uifile
-	    val dest_uo_exists = Cache.exists uofile
-	    val dest_o_exists = Cache.exists ofile
-
-	    val direct_imports = get_import_direct unitname
-	    val direct_imports_base = map get_base direct_imports
-	    val direct_imports_ui = map Help.base2ui direct_imports_base
-	    val (latest_import_file, latest_import_time) = Cache.lastModTime direct_imports_ui
- 
-	    val sml_changed = 
-                (dest_ui_exists andalso
-                 dest_uo_exists andalso 
-                 dest_o_exists andalso
-                 (Time.<(Cache.modTime uofile, smldate) orelse
-                  Time.<(Cache.modTime ofile, smldate)))
-
-	    val import_changed = 
-                (dest_uo_exists andalso
-                 dest_o_exists andalso
-                 (Time.<(Cache.modTime ofile, latest_import_time) orelse
-                  Time.<(Cache.modTime uofile, latest_import_time)))
-
-	    val fresh =           
-		 if (not dest_ui_exists) then
-		     (if (!show_stale)
-			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
-				     uifile ^ " is missing.]\n")
-		      else ();
+        (case (get_status unitname) of
+	      DONE _ => false
+	    | _ => 
+		  let val sourcebase = get_base unitname
+		      val intfile = base2int sourcebase
+		      val smlfile = base2sml sourcebase
+		      val uofile = base2uo sourcebase
+		      val ofile = base2o sourcebase
+		      val uifile = base2ui sourcebase
+			  
+		      val smldate = Cache.modTime smlfile
+		      val dest_ui_exists = Cache.exists uifile
+		      val dest_uo_exists = Cache.exists uofile
+		      val dest_o_exists = Cache.exists ofile
+			  
+		      val direct_imports = get_import_direct unitname
+		      val direct_imports_base = map get_base direct_imports
+		      val direct_imports_ui = map Help.base2ui direct_imports_base
+		      val (latest_import_file, latest_import_time) = Cache.lastModTime direct_imports_ui
+			  
+		      val sml_changed = 
+			  (dest_ui_exists andalso
+			   dest_uo_exists andalso 
+			   dest_o_exists andalso
+			   (Time.<(Cache.modTime uofile, smldate) orelse
+			    Time.<(Cache.modTime ofile, smldate)))
+			  
+		      val import_changed = 
+			  (dest_uo_exists andalso
+			   dest_o_exists andalso
+			   (Time.<(Cache.modTime ofile, latest_import_time) orelse
+			    Time.<(Cache.modTime uofile, latest_import_time)))
+			  
+		      val fresh =           
+			  if (not dest_ui_exists) then
+			      (if (!show_stale)
+				   then chat ("      [" ^ sourcebase ^ " is stale: " ^
+					      uifile ^ " is missing.]\n")
+			       else ();
+				   false)
+			  else if (not dest_uo_exists) then
+			      (if (!show_stale)
+				   then chat ("      [" ^ sourcebase ^ " is stale: " ^
+					      uofile ^ " is missing.]\n")
+			       else ();
+				   false)
+			       else if (not dest_o_exists) then
+				   (if (!show_stale)
+					then chat ("      [" ^ sourcebase ^ " is stale: " ^
+						   ofile ^ " is missing.]\n")
+				    else ();
+					false)
+				    else if sml_changed then
+					(if (!show_stale)
+					     then chat ("      [" ^ sourcebase ^ " is stale: " ^
+							smlfile ^ " newer than objects or interface.]\n")
+					 else ();
 		      false)
-		 else if (not dest_uo_exists) then
-		     (if (!show_stale)
-			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
-				     uofile ^ " is missing.]\n")
-		      else ();
-		      false)
-		 else if (not dest_o_exists) then
-		     (if (!show_stale)
-			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
-				     ofile ^ " is missing.]\n")
-		      else ();
-		      false)
-		 else if sml_changed then
-		     (if (!show_stale)
-			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
-				     smlfile ^ " newer than objects or interface.]\n")
-		      else ();
-		      false)
-                 else if import_changed then
-		     (if (!show_stale)
-			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
-				     (valOf latest_import_file) ^ " changed.]\n")
-		      else ();
-		      false)
-		 else 
-		     true
-
-
-	    val _ = if fresh
-			then (chat ("  [" ^ sourcebase ^ " is up-to-date.]\n");
-			      markDone unitname; ())
-		    else ()
-
-	in  not fresh
-	end
-
+					 else if import_changed then
+					     (if (!show_stale)
+						  then chat ("      [" ^ sourcebase ^ " is stale: " ^
+							     (valOf latest_import_file) ^ " changed.]\n")
+					      else ();
+						  false)
+					      else 
+						  true
+						  
+						  
+		      val _ = if fresh
+				  then (chat ("  [" ^ sourcebase ^ " is up-to-date.]\n");
+					markDone unitname; ())
+			      else ()
+				  
+		  in  not fresh
+		  end)
+	      
     (* waiting, ready, pending, assembling, proceeding - done not included *)
     type state = string list * string list * string list * string list * string list
     datatype result = PROCESSING of Time.time * state  (* All slaves utilized *)
@@ -1198,7 +1202,21 @@ struct
 	    fun useSlaves slavesLeft state = 
 		let val (state as (_, ready, _, _, _)) = newState state
 		in  if (stateDone state)
-			then COMPLETE (Time.now())
+			then 	
+			    let fun mapper u = (case get_status u of
+						    DONE t => (u, Time.toReal t)
+						  | _ => error "unit still not DONE here")
+				val unsorted = map mapper units
+				fun greater ((_,x),(_,y)) = x > (y : real)
+				val sorted = ListMergeSort.sort greater unsorted
+				val _ = chat "------- Time to compile files in ascending order -------\n"
+				val _ = app (fn (unit,t) => 
+					     let val t = (Real.realFloor(t * 100.0)) / 100.0
+					     in  chat (unit ^ " took " ^ 
+						       (Real.toString t) ^ "seconds.\n")
+					     end) sorted
+			    in  COMPLETE (Time.now())
+			    end
 		    else
 			(case (slavesLeft, ready) of
 			     (0, _) => PROCESSING (Time.now(),state)

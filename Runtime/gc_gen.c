@@ -44,67 +44,55 @@ value_t old_alloc_limit = 0;
 
 /* ------------------  Generational array allocation routines ------------------- */
 
-value_t alloc_bigintarray_gen(int byte_len, value_t init_val, int ptag)
+static value_t* alloc_big(int wordLen, int oddAlign)
 {
+  value_t *res = 0;
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
-  value_t *res = 0;
-  int word_len = (byte_len + 3) / 4;
-  int i, tag = IARRAY_TAG | (byte_len << ARRLEN_OFFSET);
-  int real_byte_len = word_len * 4 + 4;  /* tag takes one word and we must add padding */
+  int byteLen = 4 * wordLen;
+  int byteLenPad = byteLen + (oddAlign ? 4 : 0);
+  assert(byteLen >= 512);                /* Should be at least 0.5K to be considered big */
 
-  /* If there is not enough heap space in older space, we must do a major GC */
-  if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) 
+  /* Make sure there is enough room in the older generation */
+  if (old_fromheap->alloc_start + byteLenPad >= old_fromheap->top) 
     GCFromC(curThread, 4, 1);
+  assert (old_fromheap->alloc_start + byteLenPad < old_fromheap->top);
 
-  assert (old_fromheap->alloc_start + real_byte_len < old_fromheap->top);
-  res = (value_t *)(old_fromheap->alloc_start + 4);
-  old_fromheap->alloc_start += real_byte_len;
-  old_alloc_ptr = old_fromheap->alloc_start;
-  assert(old_fromheap->alloc_start < old_fromheap->top);
-
-  res[-1] = tag;
-  for (i=0; i<word_len; i++)
-    res[i] = init_val;
-  gcstat_normal(4*(word_len+1), 0);
-  return (value_t) res;
-}
-
-value_t alloc_bigptrarray_gen(int word_len, value_t init_val, int ptag)
-{
-  Thread_t *curThread = getThread();
-  long *saveregs = curThread->saveregs;
-  value_t *res = 0;
-  int byte_len = word_len << 2;
-  int i, tag = PARRAY_TAG | (byte_len << ARRLEN_OFFSET);
-  int real_byte_len = byte_len + 4;  /* tag takes one word */
-
-  /* If the older generation does not have enough space, we for a major GC */
-  if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top)
-      GCFromC(curThread,4,1);
-  /* If init_val is in the young area, we need a minor GC. */
-  else if (init_val >= nursery->bottom && init_val < nursery->top) {
-      GCFromC(curThread,4,0);
-      /* minor GC may have taken too much space */
-      if (old_fromheap->alloc_start + real_byte_len >= old_fromheap->top) 
-	GCFromC(curThread,4,1);
+  /* Perform odd alignment and actual allocation */
+  if (oddAlign && (old_fromheap->alloc_start & 7) == 0) {
+    *((value_t *)old_fromheap->alloc_start) = SKIP_TAG;
+    old_fromheap->alloc_start += 4;
   }
-
-  /* We must have enough space to allocate to older generation now. */
-  assert(old_fromheap->alloc_start + real_byte_len < old_fromheap->top);
-  res = (value_t *)(old_fromheap->alloc_start + 4);
-  old_fromheap->alloc_start += real_byte_len;
-  assert(old_fromheap->alloc_start < old_fromheap->top);
+  res = (value_t *)(old_fromheap->alloc_start);
+  old_fromheap->alloc_start += byteLen;
   old_alloc_ptr = old_fromheap->alloc_start;
+  assert(old_fromheap->alloc_start < old_fromheap->top);
 
-  res[-1] = tag;
-  for (i=0; i<word_len; i++)
-    res[i] = init_val;
-  return (value_t) res;
+  /* Update Statistics */
+  gcstat_normal(byteLen, 0);
+
+  return res;
 }
 
 
-value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
+value_t alloc_bigintarray_Gen(int byteLen, value_t initVal, int ptag)
+{
+  int wordLen = 4 + (byteLen + 3) / 4;
+  value_t *space = alloc_big(4 * wordLen,0);
+  value_t *res = space + 1;
+  init_iarray(res, byteLen, initVal);
+  return (value_t) res;
+}
+
+value_t alloc_bigptrarray_Gen(int wordLen, value_t initVal, int ptag)
+{
+  value_t *space = alloc_big(1 + wordLen,0);
+  value_t *res = space + 1;
+  init_parray(res, wordLen, initVal);
+  return (value_t) res;
+}
+
+value_t alloc_bigfloatarray_Gen(int log_len, double init_val, int ptag)
 {
   double *rawstart = NULL;
   value_t *res = NULL;
@@ -123,8 +111,7 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
     {
       int qlen;
       QueueClear(float_roots);    
-      curThread->request = 4;
-      gc_gen(curThread,1);
+      GCFromC(curThread, 4, 1); /* Perform a major GC */
       /* --- stuff already marked; sweep the bitmap, then mark the live stuff --- */
       ClearBitmap(floatbitmap);
       qlen = QueueLength(float_roots);
@@ -152,9 +139,8 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
   rawstart = (double *)(floatheap->bottom + floatbitmapsize * pos);
   res = (value_t *)(rawstart + 1);
   gcstat_normal(RoundUp(real_byte_len,floatbitmapsize), 0);
-  ((int *)res)[-1] = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
-  for (i=0; i<log_len; i++)
-    ((double *)res)[i] = init_val;
+
+  init_farray(res, log_len, init_val);
 
   return (value_t) res;
 }
@@ -242,39 +228,43 @@ value_t *forward_gen_locatives(value_t *to_ptr,
     return to_ptr;
 }
 
+int GCAllocate_Gen(SysThread_t *sysThread, int req_size)
+{
+  /* Check for first time heap value needs to be initialized */
+  assert(sysThread->userThread == NULL);
+  if (sysThread->limit == StartHeapLimit) 
+    {
+      sysThread->alloc = nursery->bottom;
+      sysThread->limit = nursery->top;
+      return (req_size < (sysThread->alloc  - sysThread->limit));
+    }
+  return 0;
+}
 
-void gc_gen(Thread_t *curThread, int isMajor)
+void GC_Gen(SysThread_t *sysThread, int req_size, int isMajor)
 {
   int regmask = 0;
-  SysThread_t *sysThread = getSysThread();
-  long *saveregs = curThread->saveregs;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
-  int req_size = curThread->request;
+  Thread_t *curThread;
 
   struct rusage start,finish;
   Queue_t *root_lists, *loc_roots;
   enum GCType GCtype = isMajor ? Major : Minor;
   value_t to_allocptr;
 
-  /* Check for first time heap value needs to be initialized */
-  assert(sysThread->userThread == NULL);
-  if (alloclimit == StartHeapLimit)
-    {
-      sysThread->alloc = nursery->bottom;
-      sysThread->limit = nursery->top;
-      return;
-    }
+  /* start timer */
+  start_timer(&sysThread->gctime);
 
-  assert(saveregs[ALLOCPTR] <= saveregs[ALLOCLIMIT]);
   assert(allocptr <= alloclimit);
   assert(req_size >= 0);
+  assert(req_size < pagesize);
   assert(writelist_cursor <= writelist_end);
 
-  /* start timer */
+  curThread = &(Threads[0]);             /* In a sequential collector, 
+					    there is only one user thread */
   root_lists = curThread->root_lists;
   loc_roots = curThread->loc_roots;
-  start_timer(&sysThread->gctime);
 
   if (paranoid) {
     Heap_t *legalHeaps[3];
@@ -531,7 +521,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 #define INT_INIT(x,y) { if (x == 0) x = y; }
 #define DOUBLE_INIT(x,y) { if (x == 0.0) x = y; }
 
-void gc_init_gen() 
+void gc_init_Gen() 
 {
   /* secondary cache size */
   int cache_size = GetBcacheSize();
@@ -560,7 +550,7 @@ void gc_init_gen()
 }
 
 
-void gc_finish_gen()
+void gc_finish_Gen()
 {
   Thread_t *th = getThread();
   int allocsize = th->saveregs[ALLOCPTR] - nursery->alloc_start;

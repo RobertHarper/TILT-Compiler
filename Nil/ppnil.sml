@@ -320,7 +320,7 @@ structure Ppnil	:> PPNIL =
 	 
     and pp_switch sw =
 	let fun pp_default NONE = String "NODEFAULT"
-	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", pp_exp e]
+	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", Break0 0 2, pp_exp e]
 	in
 	    case sw of
 		Intsw_e {arg,size,arms,default,result_type} => 
@@ -365,13 +365,13 @@ structure Ppnil	:> PPNIL =
       | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]
       | pp_trace (TraceKnown (TraceInfo.Compute path)) =
 		Hbox[String "Compute(", pp_path path, String ")"]
-      | pp_trace (TraceKnown (TraceInfo.Trace)) = String "Known_Trace"
-      | pp_trace (TraceKnown (TraceInfo.Unset)) = String "Known_Unset"
-      | pp_trace (TraceKnown (TraceInfo.Notrace_Int)) = String "Known_Int"
-      | pp_trace (TraceKnown (TraceInfo.Notrace_Code)) = String "Known_Code"
-      | pp_trace (TraceKnown (TraceInfo.Notrace_Real)) = String "Known_Real"
-      | pp_trace (TraceKnown (TraceInfo.Label)) = String "Known_Label"
-      | pp_trace (TraceKnown (TraceInfo.Locative)) = String "Known_Locative"
+      | pp_trace (TraceKnown (TraceInfo.Trace)) = String "Trace"
+      | pp_trace (TraceKnown (TraceInfo.Unset)) = String "Unset"
+      | pp_trace (TraceKnown (TraceInfo.Notrace_Int)) = String "Int"
+      | pp_trace (TraceKnown (TraceInfo.Notrace_Code)) = String "Code"
+      | pp_trace (TraceKnown (TraceInfo.Notrace_Real)) = String "Real"
+      | pp_trace (TraceKnown (TraceInfo.Label)) = String "Label"
+      | pp_trace (TraceKnown (TraceInfo.Locative)) = String "Locative"
 
 
     and pp_bnd bnd =

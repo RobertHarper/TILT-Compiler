@@ -8,6 +8,7 @@ signature MACHINE =
     type label = Core.label
     type data = Core.data
     type assign = Core.assign
+    type linkage = Core.linkage
 
     type specific_instruction
     datatype instruction = 

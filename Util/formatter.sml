@@ -50,7 +50,7 @@ The {\tt Spmod} function is used when {\tt Bailout} is active.
          fun Spaces' n acc = Repeat " " acc n
          fun Newlines' n acc = Repeat "\n" acc n
          fun Newlines n = if n>0 then Newlines' n "" else ""
-         fun Spaces n = if n>0 then Spaces' n "" else ""
+         val Spaces = Util.spaces
       in
         val Sp = Spaces (* return a number of spaces *) 
 (*        fun Spmod n = Spaces (n mod (!Pagewidth)) *)

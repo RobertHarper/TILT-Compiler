@@ -902,7 +902,7 @@ struct
 			     emit (SPECIFIC (INTOP (ADD, Rheap, REGop Rat, Rat))))
 		    end);
 	  emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
-	  emit (SPECIFIC (CBRANCHI(BL, rtl_loclabel)));
+	  emit (SPECIFIC (CBRANCHI(BLE, rtl_loclabel)));
 	  emit (BASE (GC_CALLSITE rtl_loclabel));
 	  emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 			   {regs_modified=[Rat], regs_destroyed=[Rat],
@@ -936,7 +936,7 @@ struct
 
 
    (* Translates an entire Rtl procedure *)
-   fun translateProc (Rtl.PROC {name, args, code, known, results, return, 
+   fun translateProc (Rtl.PROC {name, args, code, results, return, 
 				save = _, vars = _}) =
      let
        val args   = map translateReg args

@@ -7,41 +7,37 @@
    We perform the translation in two passes -- an analysis pass and a 
    transformation pass.
 
-   The analysis pass performs the following steps:
-    calculates and enters into a hash-table mapping function variables to
-the
-    following information:
-        (1) the size of the function
-        (2) the number of calls to the function outside the function's
-definition
-              but in the scope of the definition (num_nonrec_calls)
-	(3) the number of calls to the function within the function's
-definition
-	      (num_rec_calls)
-        (4) the number of times the function escapes (i.e., is mentioned but
-	      not called) outside the function's definition but in the scope
+   The analysis pass calculates and enters into a hash-table a mapping from 
+     function variables to the following information:
+        (1) size - the size of the function
+	(2) num_rec_call - the number of applications
+	      of the function variable inside the function's
+	      definition (or those recursively defined)
+	(2) num_rec_occur - the number of occurrences (in any position)
+	      of the function variable inside the function's
+	      definition (or those mutually defined)
+        (3) num_nonrec_call - the number of calls to the function 
+	      from outside the function's definition
+	      (or those mutually defined)
+        (4) num_nonrec_occur - the number of times the function 
+	      occurs (in any position) from outside the function's
+	      definition (or those mutually defined)
 
-              of the definition.
-	      (num_occurs)
+   Note that num_rec_call <= num_rec_occur and num_nonrec_call <= num_nonrec_occur.
 
-   A function should be inlined (and the definition removed) if:
-        * (3) = 0 (the function is non-recursive)
-        * (2) = 1 or else
-        * (1)*(2) <= threshold
-
-   [CS: We now inline at applications of escaping functions
-        (i.e., even when (4) > (3)).  If the function does escape,
-        we don't remove the original definition, of course.]
-
+   A function should be inlined if the following are true
+        (1) num_nonrec_occur = num_nonrec_call = 1  (* Used once *)
+	    AND num_rec_occur = 0                   (* Not at all recursive *)
+	    (definition should be removed)
+	(2) num_rec_call = 0 AND                    (* Not call-recursive *)
+	    num_nonrec_call * size <= threshold     (* Inlining won't cause excessive blowup *)
+	    (definition should be retained)
 
    The transformation pass inlines and removes definitions according to the
    rules above.  Care must be taken when substituting the definition of the
-   function in order to avoid variable capture.  Hence, if we are
-substituting
-   {e1/x1,...,en/xn} and hit a binding-occurrence of a variable, then we
-must
-   alpha-convert the variable if it occurs within the free variables of
-e1,...,en.
+   function in order to avoid variable capture.  Hence, if we are substituting
+   {e1/x1,...,en/xn} and hit a binding-occurrence of a variable, then we must
+   alpha-convert the variable if it occurs within the free variables of e1,...,en.
    We just alpha-convert everything to be on the safe side.
 
    Also, when inlining a function more than one time, we need to rename
@@ -52,43 +48,53 @@ structure Inline :> INLINE =
 struct
   open Nil Name NilUtil
 
-  val threshold = ref 150
+  val size_threshold = ref 150
   val occur_threshold = ref 20
   val error = fn s => Util.error "inline.sml" s
   val debug = ref false
   fun debugpr s = if (!debug) then print s else ()
   fun inc(r:int ref) = r := (!r) + 1
 
+  datatype inlineStatus = NoInline | InlineOnce | InlineMany
   type fun_info = 
-    { size: int ref,  num_nonrec_calls: int ref, num_rec_calls: int ref, 
-     num_occurs: int ref, definition: function option ref,
-     already_inlined:bool ref }
+    {size: int ref,  
+     num_rec_calls : int ref, num_rec_occurs : int ref,
+     num_nonrec_calls: int ref, num_nonrec_occurs : int ref, 
+     definition: function option ref,
+     status : inlineStatus ref }
+
   fun new_info() = 
-	 { size = ref 0, num_nonrec_calls = ref 0, num_rec_calls = ref 0,
-	  num_occurs = ref 0, definition = ref NONE, already_inlined = ref false
+	 {size = ref 0, 
+	  num_rec_calls = ref 0, num_rec_occurs = ref 0,
+	  num_nonrec_calls = ref 0, num_nonrec_occurs = ref 0,
+	  definition = ref NONE, status = ref NoInline
 	  }
 
-  fun should_inline
-({size,num_nonrec_calls,num_rec_calls,num_occurs,...}:fun_info) =
-      ((!num_rec_calls) = 0) andalso   (* no recursive functions *)
-      (((!num_nonrec_calls) <= 1) orelse
-       ((!size) <= (!threshold) andalso (!num_nonrec_calls) <=
-(!occur_threshold)))
+  fun analyze_info inline_count ({size,num_nonrec_calls,num_nonrec_occurs,
+				  num_rec_calls,num_rec_occurs,
+				  definition,status,...} : fun_info) =
+      let val usedOnce = (!num_nonrec_calls = 1) andalso (!num_nonrec_occurs = 1)
+	  val recursive = !num_rec_occurs > 0
+	  val callRecursive = !num_rec_calls > 0
+	  val small = (!size) <= (!size_threshold) andalso (!num_nonrec_calls) <= (!occur_threshold)
+      in  if (usedOnce andalso not recursive) 
+	      then (status := InlineOnce; inc inline_count)
+	  else if (not callRecursive andalso small)
+		   then (status := InlineMany; inc inline_count)
+	       else (status := NoInline; definition := NONE)
+      end
 
-  fun analyze_info inline_count (info:fun_info) = 
-      if not(should_inline info) then (#definition info) := NONE else 
-	  inc inline_count
 
-  fun print_info
-(v,{size,num_nonrec_calls,num_rec_calls,num_occurs,definition,
-		     already_inlined}:fun_info) = 
+  fun print_info(v,{size,num_nonrec_calls,num_rec_calls,num_rec_occurs,num_nonrec_occurs,definition,
+		    status}:fun_info) = 
       let val vs = Name.var2string v
       in
 	  print vs; print ": size="; print(Int.toString (!size));
 	  print ", num_nonrec_calls=";
 	  print(Int.toString(!num_nonrec_calls));
 	  print ", num_rec_calls="; print(Int.toString(!num_rec_calls));
-	  print ", num_occurs="; print(Int.toString(!num_occurs));
+	  print ", num_rec_occurs="; print(Int.toString(!num_rec_occurs));
+	  print ", num_nonrec_occurs="; print(Int.toString(!num_nonrec_occurs));
 	  print (case (!definition) of NONE => " not " | _ => " ");
 	  print "inlining function\n"
       end
@@ -99,7 +105,7 @@ struct
   fun rename_func (f:function) = 
       let val (b,_) = 
 	  NilRename.renameBnd (Fixopen_b (Sequence.fromList
-[(Name.fresh_var(),f)]))
+					  [(Name.fresh_var(),f)]))
       in
 	  case b of
 	    Fixopen_b s =>
@@ -182,7 +188,10 @@ arms)
            Var_e v =>
 	       ((case find_fun v of
 		     NONE => ()
-		   | SOME ({num_occurs,...}) => inc num_occurs); 0)
+		   | SOME ({num_rec_occurs,num_nonrec_occurs,definition,...}) => 
+			 (case !definition of
+			      NONE => inc num_nonrec_occurs
+			    | SOME _ => inc num_rec_occurs)); 0)
 	 | Const_e pv =>
 	   let fun aarray(c,ea) = Array.foldr (fn (e,s) => (s + (aexp e)))
 (acon c) ea
@@ -204,8 +213,7 @@ arms)
 			(Open,Var_e v) =>
 			    (case find_fun v of
 				 NONE => ()
-			       |
-SOME({num_nonrec_calls,num_rec_calls,definition,...}) => 
+			       | SOME({num_nonrec_calls,num_rec_calls,definition,...}) => 
 				     (case !definition of
 					  NONE => inc num_rec_calls
 					| SOME _ => inc num_nonrec_calls))
@@ -321,10 +329,13 @@ e))
 	       Prim_e (p, map rcon cons, map rexp exps)
 	   | App_e (Open,Var_e f,cs,es1,es2) =>
 	       		 (case find_fun f of
-		    SOME{definition=ref(SOME(func)),already_inlined,...} =>
-		      let val Function{tFormals=vks,eFormals=vcs,fFormals=vs,body=e,...} = 
-			if !already_inlined then rename_func func else 
-			      (already_inlined := true; func)
+		    SOME{definition=ref(SOME(func)),status,...} =>
+		      let val shouldRename = (case !status of
+						  InlineOnce => false
+						| InlineMany => true
+						| _ => error "cannot have NoInline here")
+			  val Function{tFormals=vks,eFormals=vcs,fFormals=vs,body=e,...} = 
+			      if shouldRename then rename_func func else func
 			  val bnd1 = 
 			      Listops.map2 (fn ((v,k),c) =>
 					    Con_b(Runtime,Con_cb(v,c)))(vks,cs)
@@ -356,10 +367,13 @@ e))
              | Handle_e _ => [Exp_b(v,nt,rexp e)]
 	     | App_e(Open,Var_e f,cs,es1,es2) =>
 		 (case find_fun f of
-		    SOME{definition=ref(SOME(func)),already_inlined,...} =>
-		      let val Function{tFormals=vks,eFormals=vcs,fFormals=vs,body=e,...} = 
-			if !already_inlined then rename_func func else 
-			      (already_inlined := true; func)
+		    SOME{definition=ref(SOME(func)),status,...} =>
+		      let val shouldRename = (case !status of
+						  InlineOnce => false
+						| InlineMany => true
+						| _ => error "cannot have NoInline here")
+			  val Function{tFormals=vks,eFormals=vcs,fFormals=vs,body=e,...} = 
+			  if shouldRename then rename_func func else func
 			  val bnd1 = 
 			      Listops.map2 (fn ((v,k),c) =>
 					    Con_b(Runtime,Con_cb(v,c)))(vks,cs)
@@ -387,14 +401,11 @@ e))
 	       [(v,f)] =>
 
 		 (case find_fun v of
-		    SOME {definition=ref(SOME _),num_occurs,
-			  num_nonrec_calls, already_inlined, ...} => 
-		         if (!num_occurs) = (!num_nonrec_calls)	then
-                            []  (* delete definition when fn does not escape 
-                                   and will be inlined everywhere *)
+		    SOME {definition=ref(SOME _),status,...} =>
+		         if (!status = InlineOnce) then
+                            []  (* delete definition when fn inlined once *)
                          else
-                            (already_inlined := true;
-                             [Fixopen_b(Sequence.fromList[(v,rfunction f)])])
+                            ([Fixopen_b(Sequence.fromList[(v,rfunction f)])])
 		  | _ => [Fixopen_b(Sequence.fromList[(v,rfunction f)])])
 
 	     | vfl => 

@@ -11,7 +11,29 @@ structure Util :> UTIL =
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
     fun count n = loop 0 (n-1)
     val error = fn s => real_error "util.sml" s
-	
+
+    local 
+	val precomputeMax = 10
+	fun rawSpaces 0 = ""
+	  | rawSpaces 1 = " "
+	  | rawSpaces n = 
+	    let val _ = if (n < 2) then error "rawSpaces given negative number" else ()
+		val a = n div 2
+		val b = n - a
+		val aSpace = rawSpaces a
+		val bSpace = if (a = b) then aSpace 
+			     else (aSpace ^ " ")
+	    in  aSpace ^ bSpace
+	    end
+	val precompute = Array.tabulate(precomputeMax, rawSpaces)
+    in  fun spaces n = 
+	if (n < 0)
+	    then ""
+	else if (n < precomputeMax)
+		 then Array.sub(precompute,n)
+	     else rawSpaces n
+    end
+
     fun printl s = print (s^"\n")
     fun lprint s = print ("\n"^s)
     fun lprintl s = print ("\n"^s^"\n")

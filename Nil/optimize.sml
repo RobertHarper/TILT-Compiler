@@ -841,8 +841,10 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	 in  case (prim,map help elist) of
 		 (NilPrimOp(select l),[Prim_e(NilPrimOp(record labs),_,elist)]) => 
-		     let val SOME e = assoc_eq(Name.eq_label,l,zip labs elist)
-                     in do_exp state e
+		     let val SOME new_exp = assoc_eq(Name.eq_label,l,zip labs elist)
+                     in  if (NilUtil.exp_size new_exp > 150)
+			     then default()
+			 else do_exp state new_exp
 		     end
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
 	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) 

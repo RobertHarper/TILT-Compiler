@@ -41,7 +41,6 @@ struct
         (* total number of words needed *)
 	val words_alloced = length terms+length tagwords
 
-
 	(* shadow heapptr with thunk to prevent accidental use *)
 	val (heapptr,state) = 
 	    if const

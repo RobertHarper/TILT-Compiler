@@ -45,7 +45,8 @@ sig
    val uninit_val : TilWord32.word
 
    (* (global) RTL translation state *)
-   val reset_global_state : string * (var * label) list * Name.VarSet.set -> unit
+   val set_global_state : string * (var * label) list * Name.VarSet.set -> unit
+   val unset_global_state : unit -> unit
    val reset_state : bool * (var * label) -> unit
    val get_unitname : unit -> string
    val get_proc : unit -> Rtl.proc
@@ -142,7 +143,6 @@ sig
    val unboxFloat : regi -> regf
    val fparray : state * term list -> regi * state
 
-
    (* Tag-related Operations *)
    val mk_realarraytag : regi * regi -> unit
    val mk_intarraytag : regi * regi -> unit
@@ -153,5 +153,17 @@ sig
    val SetHeapProfileCounter : int -> unit
    val MakeProfileTag : unit -> TilWord32.word
 
+   (* Recording stats *)
+   val incSelect : unit -> unit
+   val incRecord : unit -> unit
+   val incApp : unit -> unit
+   val incFun : unit -> unit
+   val incClosure : unit -> unit
+   val incCase : unit -> unit
+   val incSumInject : unit -> unit
+   val incSumProject : unit -> unit
+   val incSumDynInject : unit -> unit
+   val incSumDynProject : unit -> unit
+   val incPrim : unit -> unit
 
 end

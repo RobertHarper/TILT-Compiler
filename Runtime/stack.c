@@ -494,10 +494,8 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
 {
   value_t res = 0;
   unsigned int mi;
-  value_t cur_sp;
+  value_t cur_sp = *bot_sp;
   unsigned int regstate = *regstate_ptr;
-
-  cur_sp = *bot_sp;
 
   while (!QueueIsEmpty(retadd_queue) && ((frame_to_trace--)>0))
     {
@@ -512,6 +510,7 @@ value_t trace_stack_step(Thread_t *th, unsigned long *saveregs,
       char *special_byte = callinfo->__rawdata + stacktrace_bytesize;
 
       unsigned int quad_offset = GET_QUAD_RA_OFFSET((value_t) callinfo->sizes);
+      assert(((int)cur_sp) & 15 == 0);  /* frames are multiples of 16 bytes */
       cur_sp -= framesize_word << 2;
       if (quad_offset == 31)
 	{

@@ -9,12 +9,10 @@ signature UTIL =
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 
-    (* printl s => print (s^"\n") *)
-    val printl : string -> unit
-    (* lprint s => print ("\n"^s) *)
-    val lprint : string -> unit
-    (* lprintl s => print ("\n"^s^"\n") *)
-    val lprintl : string -> unit
+    val spaces : int -> string     (* return a string of given length of spaces *)
+    val printl : string -> unit    (* print newline after string *)
+    val lprint : string -> unit    (* print newline before string *)
+    val lprintl : string -> unit   (* print newline before and after string *)
 
     (* Misc helpers *)
     val eq_opt : (('a * 'a -> bool) * 'a option * 'a option) -> bool

@@ -31,8 +31,13 @@ void SetRange(range_t *range, value_t low, value_t high);
 
 
 /* --------------- Forwarding Routines ---------------------------- */
-value_t *forward(value_t *vpp, value_t *alloc);  /* Don't call directly */
-void forward_stack(value_t *vpp, value_t **alloc, value_t **limit, Heap_t *toheap);  /* Don't call directly */
+/* Don't call directly */
+value_t *forward(value_t *vpp, value_t *alloc);  
+
+/* Do not call directly.
+   forward_stack returns a bool indicating if the object needs to be put in the stack.
+   This happens if this thread became the copier and hte object was not large or already forwarded. */
+int forward_stack(value_t *vpp, value_t **alloc, value_t **limit, Heap_t *toheap);  
 
 #define forward_minor(vpp,alloc,from)  \
     { if (((*(vpp)) - (from)->low) < (from)->diff) alloc = forward(vpp,alloc); }
@@ -43,8 +48,8 @@ void forward_stack(value_t *vpp, value_t **alloc, value_t **limit, Heap_t *tohea
     { if (((*(vpp)) - local_from_low) < local_from_diff) alloc = forward(vpp,alloc); }
 
 #define forward_stack_help(vpp,alloc,limit,toheap,from,sysThread)  \
-    { forward_stack(vpp,&alloc,&limit,toheap); \
-	sysThread->LocalStack[sysThread->LocalCursor++] = (*(vpp)); \
+    { if (forward_stack(vpp,&alloc,&limit,toheap)) \
+         sysThread->LocalStack[sysThread->LocalCursor++] = (*(vpp)); \
     } 
 
 #define forward_minor_stack(vpp,alloc,limit,toheap,from,sysThread)  \

@@ -1,6 +1,7 @@
 (*$import Prelude *)
 
 local
+
 fun fold f l acc = foldr f acc l
 fun revfold f l acc = foldl f acc l
 
@@ -61,7 +62,7 @@ structure Util = struct
 
     (* arr[i] := obj :: arr[i]; extend non-empty arr if necessary *)
     fun insert (obj,i,arr) = let
-	  val len = length1 arr
+	  val len = Array.length arr
           val res =  if i<len then (update(arr,i,obj::sub(arr,i)); arr)
 	     else let val arr' = array(max(i+1,len+len),[])
 		      fun copy ~1 = (update(arr',i,[obj]); arr')
@@ -102,7 +103,7 @@ structure Util = struct
 			| Greater => (swap (k,hi-1); partition (lo,k,hi-1))
 		val (lo,hi) = partition (i,i,j)
 	        in s(i,lo,pivot::s(hi,j,acc)) end
-	   val res = s(0,length1 a,[]) 
+	   val res = s(0,Array.length a,[]) 
 
           in 
 	   res
@@ -335,7 +336,7 @@ structure MI = struct (* MONO_IDEAL *)
 	  val ms : (M.mono * '_a) list = 
 	      Util.stripSort (fn ((m,_),(m',_)) => M.compare (m,m')) msa
 	  val buckets = revfold ins ms (array(0,[]))
-	  val n = length1 buckets
+	  val n = Array.length buckets
 	  val mi = mkEmpty()
           fun sort i = if i>=n then mi else let
 	        fun redundant (m,_) = case search(mi,m) of NONE => false
@@ -498,8 +499,8 @@ structure HP = struct
 	      in HP(tabulate(l+1,fn i => if i=l then p else P.zero)) end
 	fun add(p,HP ps) = let
 	      val l = log(P.numTerms p)
-	      in if l>=length1 ps then let
-		   val n = length1 ps
+	      in if l>=Array.length ps then let
+		   val n = Array.length ps
 		   in HP(tabulate(n+n,
 			 fn i => if i<n then sub(ps,i)
 			         else if i=l then p else P.zero))
@@ -511,7 +512,7 @@ structure HP = struct
 		   end
 	      end
 	fun leadAndRest (HP ps) = let
-	      val n = length1 ps
+	      val n = Array.length ps
 	      fun lar (m,indices,i) = if i>=n then lar'(m,indices) else let
 		    val p = sub(ps,i)
 		    in if P.isZero p then lar(m,indices,i+1)
@@ -567,30 +568,32 @@ structure G = struct
      *    deg(h,gij) = deg lcm(m,m') = deg (lcm/m) + deg m = deg (m':m) + deg m
      * 4) store list of pairs (h,g1),...,(h,gn) as vector (h,g1,...,gn)
      *)
-    fun addPairs (h,mi,pairs) = let
-	  val m = P.leadMono h
-	  val d = M.deg m
-	  fun tag ((m' : M.mono,g' : P.poly ref),quots) = (inc maybePairs;
-				     (M.divide(M.lcm(m,m'),m),(m',!g'))::quots)
-	  fun insert ((mm,(m',g')),arr) = (* recall mm = m':m *)
+    fun addPairs (h,mi,pairs) = 
+	let
+	    val m = P.leadMono h
+	    val d = M.deg m
+	    fun tag ((m' : M.mono,g' : P.poly ref),quots) = (inc maybePairs;
+							     (M.divide(M.lcm(m,m'),m),(m',!g'))::quots)
+	    fun insert ((mm,(m',g')),arr) = (* recall mm = m':m *)
 	        if M.compare(m',mm)=Util.Equal then (* rel. prime *)
 		    (inc primePairs; arr)
 		else (inc usedPairs;
 		      Util.insert(P.cons((F.one,m'),g'),M.deg mm+d,arr))
-	  val buckets = MI.fold insert (MI.mkIdeal (MI.fold tag mi []))
-	      			       (array(0,[]))
-	  fun ins (~1,pairs) = pairs
-	    | ins (i,pairs) = case sub(buckets,i) of
-	            [] => ins(i-1,pairs)
-		  | gs => ins(i-1,Util.insert(arrayoflist(h::gs),i,pairs))
-	  in ins(length1 buckets - 1,pairs) end
+	    val buckets = MI.fold insert (MI.mkIdeal (MI.fold tag mi []))
+		(array(0,[]))
+	    fun ins (~1,pairs) = pairs
+	      | ins (i,pairs) = case sub(buckets,i) of
+		[] => ins(i-1,pairs)
+	      | gs => ins(i-1,Util.insert(arrayoflist(h::gs),i,pairs))
+	in ins(Array.length buckets - 1,pairs) 
+	end
 
     fun grobner fs = let
 	 fun pr l = print (string_implode (l@["\n"]))
 	  val fs = revfold (fn (f,fs) => Util.insert(f,P.deg f,fs))
 	      		   fs (array(0,[]))
 	  (* pairs at least as long as fs, so done when done w/ all pairs *)
-	  val pairs = ref(array(length1 fs,[]))
+	  val pairs = ref(array(Array.length fs,[]))
 	  val mi = MI.mkEmpty()
 	  val newDegGens = ref []
           val addGen = (* add and maybe auto-reduce new monic generator h *)
@@ -634,41 +637,45 @@ structure G = struct
 			  inc newGens
 		      end
 	      end
-	  fun tryPairs fgs = let
-		val ((a,m),f) = P.leadAndRest (sub(fgs,0))
-		fun tryPair i = if i=0 then () else let
-		      val ((b,n),g) = P.leadAndRest (sub(fgs,i))
-		      val k = M.lcm(m,n)
-		      in 
-			 try (P.spair(b,M.divide(k,m),f,a,M.divide(k,n),g));
-			 tryPair (i-1)
+	  fun tryPairs fgs = 
+	      let
+		  val ((a,m),f) = P.leadAndRest (sub(fgs,0))
+		  fun tryPair 0 = ()
+		    | tryPair i =
+		      let val ((b,n),g) = P.leadAndRest (sub(fgs,i))
+			  val k = M.lcm(m,n)
+		      in  try (P.spair(b,M.divide(k,m),f,a,M.divide(k,n),g));
+			  tryPair (i-1)
 		      end
-		in tryPair (length1 fgs -1) end
+	      in tryPair (Array.length fgs -1) 
+	      end
 	  fun numPairs ([],n) = n
-	    | numPairs (p::ps,n) = numPairs(ps,n-1+length1 p)
-	  fun gb d = if d>=length1(!pairs) then mi else
-	        (* note: i nullify entries to reclaim space *)
-	        (
-pr ["DEGREE ",makestring_int d," with ",
-    makestring_int(numPairs(sub(!pairs,d),0))," pairs ",
-    if d>=length1 fs then "0" else makestring_int(length(sub(fs,d))),
-    " generators to do"];
-tasksleft := numPairs(sub(!pairs,d),0);
-if d>=length1 fs then () 
-else tasksleft := !tasksleft + length (sub(fs,d));
-if d>(!maxDeg) then ()
-else (             reset();
-      		   newDegGens := [];
-		   app tryPairs (sub(!pairs,d));
-		   update(!pairs,d,[]);
-		   if d>=length1 fs then ()
-		   else (app try (sub(fs,d)); update(fs,d,[]));
-pr ["maybe ",makestring_int(!maybePairs)," prime ",makestring_int (!primePairs),
-    " using ",makestring_int (!usedPairs),"; found ",makestring_int (!newGens)]
-);
-		   gb(d+1)
-		)
-	  in gb 0 end
+	    | numPairs (p::ps,n) = numPairs(ps,n-1+Array.length p)
+	  fun gb d = 
+	      if d>=Array.length(!pairs) 
+		  then mi 
+	      else (* note: i nullify entries to reclaim space *)
+	        (pr ["DEGREE ",makestring_int d," with ",
+		     makestring_int(numPairs(sub(!pairs,d),0))," pairs ",
+		     if d>=Array.length fs then "0" else makestring_int(length(sub(fs,d))),
+			 " generators to do"];
+		 tasksleft := numPairs(sub(!pairs,d),0);
+		 if d>=Array.length fs 
+		     then () 
+		 else tasksleft := !tasksleft + length (sub(fs,d));
+		 if d>(!maxDeg) 
+		     then ()
+		 else (reset();
+		       newDegGens := [];
+		       app tryPairs (sub(!pairs,d));
+		       update(!pairs,d,[]);
+		       if d>=Array.length fs then ()
+		       else (app try (sub(fs,d)); update(fs,d,[]));
+		       pr ["maybe ",makestring_int(!maybePairs)," prime ",makestring_int (!primePairs),
+			   " using ",makestring_int (!usedPairs),"; found ",makestring_int (!newGens)]);
+		 gb(d+1))
+	in gb 0 
+        end
 
 
 local
@@ -783,7 +790,7 @@ fun sort [] = []
   | sort a = 
 let
     val a = arrayoflist a
-    val b = tabulate(length1 a,fn i => i)
+    val b = tabulate(Array.length a,fn i => i)
     val sub = sub and update = update
     infix sub
     fun swap (i,j) = let val ai = a sub i in update(a,i,a sub j); update(a,j,ai) end
@@ -797,7 +804,7 @@ let
 	       | Util.Greater => (swap (k,hi-1); partition (dup,lo,k,hi-1)))
 	val (dup,lo,hi) = partition (0,i,i,j)
 	in s(i,lo,(dup,pivot)::s(hi,j,acc)) end
-    in s(0,length1 a,[]) end
+    in s(0,Array.length a,[]) end
 ;
 
 fun sum f l = revfold op + (map f l) 0

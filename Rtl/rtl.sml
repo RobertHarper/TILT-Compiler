@@ -214,7 +214,6 @@ struct
 			   args : reg list,
 			   results : reg list,
 			   code : instr array,
-			   known: bool,
 			   save : reg list,
                            vars : (int * int) option}
 

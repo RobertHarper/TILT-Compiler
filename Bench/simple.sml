@@ -2,6 +2,8 @@
 
 local
 
+    open Array
+    open Array2
   val makestring_real = Real.toString
   val makestring_int = Int.toString
 

@@ -480,6 +480,36 @@ fun createTree (_ : box, [] : particle list) : tree = Empty
 	Node (b, p, (t1, t2, t3, t4))
     end
 
+(* ------- Parallel version of createTree --------- *)
+fun createTreeP (_ : box, [] : particle list) : tree = Empty
+  | createTreeP (_, [i]) = Leaf i
+  | createTreeP (b as ((x, y), (dx, dy)), ss) =
+    let
+	val d as (dx', dy') = (dx/2.0, dy/2.0)
+	val x' = x + dx'
+	val y' = y + dy'
+	val b1 = ((x', y'), d)
+	val b2 = ((x, y'), d)
+	val b3 = ((x', y), d)
+	val b4 = ((x, y), d)
+
+	pval t1 = createTree(b1, List.filter (fn ((x'', y''), _, _) =>
+					      x'' >= x' andalso y'' >= y') ss)
+	and  t2 = createTree(b2, List.filter (fn ((x'', y''), _, _) =>
+					      x'' < x' andalso y'' >= y') ss)
+	and  t3 = createTree(b3, List.filter (fn ((x'', y''), _, _) =>
+					      x'' >= x' andalso y'' < y') ss)
+	and  t4 = createTree(b4, List.filter (fn ((x'', y''), _, _) =>
+					      x'' < x' andalso y'' < y') ss)
+
+	val p = cm (cm (cm (treeMass t1,
+                            treeMass t2),
+                        treeMass t3),
+                    treeMass t4)
+    in
+	Node (b, p, (t1, t2, t3, t4))
+    end
+
 
 (*
  * The force of a collection of particles (represented by a tree)
@@ -537,6 +567,16 @@ fun bhForces ([] : particle list) : force list = []
 	val tree = createTree (box, ss)
     in
 	map (fn s => treeForce (tree, s)) ss
+    end
+
+fun bhForcesP ([] : particle list) : force list = []
+  | bhForcesP [_] = [vecZero]
+  | bhForcesP ss =
+    let
+	val box = boundingBox ss
+	val tree = createTreeP (box, ss)
+    in
+	pmap (fn s => treeForce (tree, s)) ss
     end
 
 (*
@@ -603,6 +643,20 @@ let
 in  ()
 end;
 
+fun bhP numParticles numIterations numCheckpoint = 
+let 
+    val particles = randomParticles numParticles
+    val _ = print "\n\n--------- Parallel Barnes-Hutt Simulation -------------\n"
+    val _ = simulate bhForcesP particles 0.00001 0 numIterations (fn n => n mod numCheckpoint = 0)
+in  ()
+end;
+
+(* There are 3 version:
+   (1) standard - Standard nbody simulation
+   (2) bh - Sequential Barnes-Hutt
+   (3) bhP - Parallel Barnes-Hutt
+*)
 
 (* val _ = standard 1000 2 1000 *)
-val _ = bh 1000 10 1000  
+(* val _ = bh 1000 10 1000  *)
+ val _ = bhP 1000 10 1000  

@@ -260,22 +260,23 @@ value_t *forward(value_t *vpp, value_t *alloc_ptr)
 
 
 /* This should not be called directly. */
-void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap)
+int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap)
 {
-  value_t *white = (value_t *)(*vpp); /* old object */
+  value_t *white = (value_t *)(*vpp); /* old object must be in from space */
   value_t *obj;                       /* forwarded object */
   value_t tag;                        /* original tag */
   value_t *alloc = *alloc_ptr;
   value_t *limit = *limit_ptr;
 
+  assert(white < toheap->bottom ||
+	 white >= toheap->top);     /* white object cannot be in to space */
+
   /* Check for forward tag first since ldl_l/stl_c is expensive */
   if (white[-1] == FORWARD_TAG)
    {
      *vpp = white[0];
-     return;
+     return 0;
    }
-
-
 
  /* Atomically try commiting to be the copier; 
     we exit this when there is some copier */
@@ -341,22 +342,14 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
     case TAG_REC_TRACE:
       {
 	if (alloc+2 >= limit) {
-	  GetHeapArea(toheap,pagesize,&alloc,limit_ptr);
-	  assert(alloc);
-	  if (paranoid) { /* really paranoid XXX */
-	    int i;
-	    for (i=0; i<16; i++)
-	      ((value_t *)alloc)[i] = ((int)alloc_ptr >> 2) & 15;
-	  }
+	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
+	  alloc = *alloc_ptr;
+	  limit = *limit_ptr;
+	  assert(alloc + 2 < limit);
 	}
 	obj = alloc + 1;
 	alloc += 2;
 	*alloc_ptr = alloc;
-	/* XXXX This is Slow */
-	if (paranoid) {
-	  assert(obj[-1] < 16);
-	  assert(obj[0] < 16);
-	}
 	obj[-1] = tag;
 	obj[0] = white[0];
 	*vpp = (value_t)obj;
@@ -364,7 +357,7 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	flushStore();
 	white[-1] = FORWARD_TAG; /* Write tag last */
 	assert(obj[-1] != FORWARD_TAG);
-	return;
+	return 1;
       }
     case TAG_REC_INTINT:
     case TAG_REC_TRACEINT:
@@ -372,30 +365,14 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
     case TAG_REC_TRACETRACE:
       {
 	if (alloc+3 >= limit) {
-	  GetHeapArea(toheap,pagesize,&alloc,limit_ptr);
-	  assert(alloc);
-	  if (paranoid) { /* really paranoid XXX */
-	    int i;
-	    for (i=0; i<16; i++)
-	      ((value_t *)alloc)[i] = ((int)alloc_ptr >> 2) & 15;
-	  }
-	}
-	if (tag == TAG_REC_INTINT) {
-	  if (((int)white[0]) > 10000) {
-	    fprintf(stderr,"white[-1] = %d\n",white[-1]);
-	    fprintf(stderr,"white[0] = %d\n",white[0]);
-	    fprintf(stderr,"white[1] = %d\n",white[1]);
-	    assert(0);
-	  }
+	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
+	  alloc = *alloc_ptr;
+	  limit = *limit_ptr;
+	  assert(alloc + 3 < limit);
 	}
 	obj = alloc + 1;
 	alloc += 3;
 	*alloc_ptr = alloc;
-	if (paranoid) {
-	  assert(obj[-1] < 16);
-	  assert(obj[0] < 16);
-	  assert(obj[1] < 16);
-	}
 	obj[-1] = tag;
 	obj[0] = white[0];
 	obj[1] = white[1];
@@ -404,7 +381,7 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	flushStore();
 	white[-1] = FORWARD_TAG; /* Write tag last */
 	assert(obj[-1] != FORWARD_TAG);
-	return;
+	return 1;
       }
     default:
       break;
@@ -417,62 +394,50 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
     case RARRAY_TAG:
       {
 	value_t *rawstart = white-1;
-	int i,upper = GET_ARRLEN(tag), newadd = 0;
-	upper = (upper + 3) / 4;
-	/* empty arrays have 1 word of storage */
-	if (upper == 0)
-	  upper = 1;
+	int bytelen = GET_ARRLEN(tag);
+	int wordlen = (bytelen + 3) / 4;
+	int i;
 
-	if (alloc + (1+upper) >= limit) {
-	  GetHeapArea(toheap,pagesize,&alloc,limit_ptr);
-	  assert(alloc);
-	  if (paranoid) { /* really paranoid XXX */
-	    int i;
-	    for (i=0; i<16; i++)
-	      ((value_t *)alloc)[i] = ((int)alloc_ptr >> 2) & 15;
-	  }
+	/* empty arrays still have 1 word of storage for the forwarding pointer */
+	if (wordlen == 0)
+	  wordlen = 1;
+
+	/* one for the tag and one for alignment */
+	if (alloc + (2+wordlen) >= limit) {
+	  int requestBytes = 4 * (2 + wordlen);
+	  int request = (requestBytes + pagesize - 1) / pagesize * pagesize;
+	  GetHeapArea(toheap,request,alloc_ptr,limit_ptr);
+	  alloc = *alloc_ptr;
+	  limit = *limit_ptr;
+	  assert (alloc + (2+wordlen) < limit);
 	}
 
 	if (floatheap &&
 	    ((value_t) white) >= floatheap->bottom &&
-	    ((value_t) white) < floatheap->top)
-	  {
-	    Enqueue(float_roots,(void *)white);
-	    return;
-	  }
-	
-	if (GET_TYPE(tag) == RARRAY_TAG)
-	  {
-	    int temp = (int) (alloc);
-	    /* odd-word align the pointer so data is even-aligned */
-	    if ((temp & 7) == 0)
-	      {
-		*((int *)temp) = SKIP_TAG;
-		alloc = (value_t *)(temp+4);
-	      }
-	  }
-	obj = alloc + 1;
-	alloc += (1 + upper);
-	*alloc_ptr = alloc;
-        if (paranoid) { 
-          int i;
-          for (i=-1; i<upper; i++)
-            if (obj[i] > 15) {
-	      int j;
-	      for (j=i-2; j<=i+2; j++)
-		fprintf(stderr,"%d[%d] = %d != 0%s\n",
-			obj,j,obj[j],(i==j)?" *** ":"");
-	      assert(0);
-	    }
+	    ((value_t) white) < floatheap->top) {
+	  Enqueue(float_roots,(void *)white);
+	  return 0; /* does not need to go into shared stack */
 	}
+	
+	if (GET_TYPE(tag) == RARRAY_TAG) {
+	  int alloc_int = (int) (alloc);
+	  /* odd-word align the pointer so data is even-aligned */
+	  if ((alloc_int & 7) == 0) {
+	    *alloc = SKIP_TAG;
+	    alloc++;
+	  }
+	}
+	obj = alloc + 1;
+	alloc += (1 + wordlen);
+	*alloc_ptr = alloc;
 	obj[-1] = tag;	
-	bcopy((const char *)white,(char *)obj,4*upper);
+	bcopy((const char *)white, (char *)obj, 4*wordlen);
 	*vpp = (value_t)obj;
 	white[0] = (value_t)obj;
 	flushStore();
 	white[-1] = FORWARD_TAG;
 	assert(obj[-1] != FORWARD_TAG);
-	return;
+	return 1;
       }
     case RECORD_TAG:
       {
@@ -487,22 +452,14 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	}
 
 	if (alloc+1+numfields >= limit) {
-	  GetHeapArea(toheap,pagesize,&alloc,limit_ptr);
-	  assert(alloc);
-	  if (paranoid) { /* really paranoid XXX */
-	    int i;
-	    for (i=0; i<16; i++)
-	      ((value_t *)alloc)[i] = ((int)alloc_ptr >> 2) & 15;
-	  }
+	  GetHeapArea(toheap,pagesize,alloc_ptr,limit_ptr);
+	  alloc = *alloc_ptr;
+	  limit = *limit_ptr;
+	  assert (alloc+1+numfields < limit);
 	}
 	obj = alloc + 1;
 	alloc += 1+numfields;
 	*alloc_ptr = alloc;
-	if (paranoid) {
-	  int i;
-          for (i=-1; i<numfields; i++)
-            assert(obj[i] < 16);
-	}
 	bcopy((char *)(white),(char *)(obj),4*(numfields));
 	obj[-1] = tag;
 	*vpp = (value_t)obj;
@@ -510,13 +467,15 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	flushStore();
 	white[-1] = FORWARD_TAG;
 	assert(obj[-1] != FORWARD_TAG);
-	return;
+	return 1;
       }
     case FORWARD_TAG:
-      *vpp = white[0];
-      assert(((value_t *)white[0])[-1] != FORWARD_TAG);
-      /*      white[-1] = FORWARD_TAG; */
-      return;
+      {
+	value_t gray = white[0];
+	*vpp = gray;
+	assert(((value_t *)gray)[-1] != FORWARD_TAG);
+	return 0;
+      }
     case SKIP_TAG:
     default:
       printf("\n\nforward_stack: BAD TAG: white = %d, tag = %d\n",white,tag);

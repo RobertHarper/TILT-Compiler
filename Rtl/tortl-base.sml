@@ -31,6 +31,49 @@ struct
     val debug_bound = ref false
     val maxGCRequest = 2048  (* Measured in words *)
 
+   (* ------------------ RTL statistics ------------------------------ *)
+       fun makeStat() = let val r = ref 0
+			in  (r, fn() => r := (!r) + 1)
+			end
+       val (numSelect, incSelect) = makeStat()
+       val (numRecord, incRecord) = makeStat()
+       val (numApp, incApp) = makeStat()
+       val (numFun, incFun) = makeStat()
+       val (numClosure, incClosure) = makeStat()
+       val (numCase, incCase) = makeStat()
+       val (numSumInject, incSumInject) = makeStat()
+       val (numSumProject, incSumProject) = makeStat()
+       val (numSumDynInject, incSumDynInject) = makeStat()
+       val (numSumDynProject, incSumDynProject) = makeStat()
+       val (numPrim, incPrim) = makeStat()
+       val (numGC, incGC) = makeStat()
+
+       val stats = [("Record projections", numSelect),
+		    ("Record creations", numRecord),
+		    ("Applications", numApp),
+		    ("Functions", numFun),
+		    ("Closures", numClosure),
+		    ("Case statements", numCase),
+		    ("Static sum injections", numSumInject),
+		    ("Static sum projections", numSumProject),
+		    ("Dynamic sum injections", numSumDynInject),
+		    ("Dynamic sum projections", numSumDynProject),
+		    ("Primitives", numPrim),
+		    ("GC checks", numGC)]
+
+       fun clear_stats() = app (fn (_,r) => r := 0) stats
+       fun show_stats() = (print "\nRTL statistics:\n";
+			   app (fn (str,r) => 
+				let val tab = spaces (30 - size str)
+				in  print "  "; 
+				    print str; 
+				    print ": ";
+				    print tab;
+				    print (Int.toString (!r));
+				    print "\n"
+				end) stats;
+			   print "\n\n")
+
    (* ------------------ Overall Data Structures ------------------------------ *)
     
    (* A NIL variable is represented at the RTL level as one of:
@@ -435,7 +478,7 @@ struct
 
        fun needgc(state as {is_top,gcstate,env,convarmap,varmap}:state,operand) : state = 
 	 if (not (!do_gcmerge))
-	     then (add_instr'(NEEDGC operand); state)
+	     then (incGC(); add_instr'(NEEDGC operand); state)
 	 else
 	     let val mergeImm =
 		 (case operand of 
@@ -450,7 +493,8 @@ struct
 			  end
 		    | _ => NONE)
 	     in  (case mergeImm of
-		      NONE => let val r = ref(NEEDGC operand)
+		      NONE => let val _ = incGC()
+				  val r = ref(NEEDGC operand)
 				  val _ = il := (r :: (!il))
 				  val gcinfo = (case operand of
 						    IMM _ => GC_IMM r 
@@ -516,8 +560,8 @@ struct
 	    add_instr(ILABEL (!top)))
 
 
-
-       fun reset_global_state (un,exportlist,ngset) = 
+	   
+       fun set_global_state (un,exportlist,ngset) = 
 	   let fun exp_adder((v,l),m) = (case VarMap.find(m,v) of
 					     NONE => VarMap.insert(m,v,[l])
 					   | SOME ls => VarMap.insert(m,v,l::ls))
@@ -529,8 +573,12 @@ struct
 		dl := nil;
 		pl := nil;
 		reset_mutable();
-		reset_state(false,(fresh_named_var "code", fresh_code_label "code")))
+		reset_state(false,(fresh_named_var "code", fresh_code_label "code"));
+		clear_stats())
 	   end
+       fun unset_global_state() = (show_stats(); set_global_state("",[],VarSet.empty));
+
+				   
        fun get_unitname() = !unitname
        fun get_code() = map ! (rev (!il))
        fun get_proc() = 
@@ -545,7 +593,6 @@ struct
 		 args    = !argregs,
 		 results = results,
 		 code    = Array.fromList code,
-		 known   = false,
 		 save    = nil,
 		 vars    = NONE}
 	end

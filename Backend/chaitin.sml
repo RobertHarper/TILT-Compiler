@@ -2,15 +2,8 @@
 (* Graph-coloring register allocator.
        Notes on constructing the interference graph for procedures.
        
-       A procedure comes to us in two states:
-             (1) either arguments, return, and result registers are pre-colored,
-	         and assigned to specific physical registers.
-	     (2) or they are unconstrained.
-
-       We assume that register allocation has already been done on all procedures
-       called in the body of this procedure.
-
-       If the procedure is pre-colored, then 
+       Since we use a standard calling convention, we must associate
+       the formals of the procedure and actuals dictated by the calling convention
              (1) insert moves at the beginning of the procedure from the physical
 	         registers holding the arguments and return address to the
 		 pseudo-registers (formals)
@@ -78,17 +71,10 @@ struct
    fun msg (x : string) = if !msgs then print x else ()
    fun print_reglist regs = app (fn r => (print(msReg r); print "  ")) regs
 
-   (* time various phases *)
-
-   fun precolor_time f =      f (* Stats.subtimer("precolor",f) *)
-   fun replace_calls_time f = f (* Stats.subtimer("replace calls",f) *)
-   fun annotate_time f =      f (* Stats.subtimer("annotate",f) *)
-   fun build_graph_time f =  f (*  Stats.subtimer("build graph",f) *)
-   fun summarize_time f =     f (* Stats.subtimer("summarize info",f) *)
-   fun rewrite_time f =      f (* Stats.subtimer("rewrite prog",f) *)
-
-   (* Use Stats.subtimer(str,f) for real timing *)
-   fun subtimer (str,f) = f
+   val doTimer = Stats.ff("DoChaitinTimer")
+   fun subtimer (str,f) = if !doTimer
+			      then Stats.subtimer(str,f)
+			  else f
 
 
    val Rdiscard = Rat
@@ -168,67 +154,67 @@ struct
 
   (* getCallInstrRegs: calculate the physical registers used by a call *)
      
+       fun getLinkageDestroyedModified (UNKNOWN_PROCSIG{linkage,regs_destroyed,regs_modified,...}) = 
+	   (linkage, regs_destroyed, regs_modified)
+	 | getLinkageDestroyedModified (KNOWN_PROCSIG{linkage,regs_destroyed,regs_modified,...}) = 
+	   (linkage, regs_destroyed, regs_modified)
        fun getCallInstrRegs (getSignature : label -> procsig) call =
-	(case call
-	 of (CALL{func = DIRECT (label as (LOCAL_CODE _),_), ...}) =>
-	   (case getSignature label of
-	      PROCSIG{regs_destroyed = regs_destroyed, 
-		      regs_modified = regs_modified,
-		      arg_ra_pos = SOME (arg_pos),
-		      res_ra_pos = SOME res_pos,
-		      ...} => 
-	                {regs_destroyed = ! regs_destroyed, 
-			 regs_modified = ! regs_modified, 
-			 arg_pos = arg_pos, 
-			 res_pos = res_pos, 
-			 C_call = false}
-		    | _ => error "call to nonallocated function!")
-           | (CALL{func = INDIRECT _, args : register list, results, ...})=>
-		 let 
-		   val ACTUALS{args=arg_pos, results=res_pos} =
-		     unknown_ml false (FORMALS{args=args,results=results})
-                 in {regs_destroyed = indirect_caller_saved_regs,
-		     regs_modified = (indirect_callee_saved_regs @
-				      indirect_caller_saved_regs),
-	             arg_pos = arg_pos,
-		     res_pos = res_pos,
-		     C_call = false}
-		 end
+	(case call of
+	  (CALL{func = DIRECT (label as (LOCAL_CODE _),_), ...}) =>
+	    let val (LINKAGE{argCaller = arg_pos,
+			     resCaller = res_pos,
+			     ...},
+		     regs_destroyed,
+		     regs_modified) = getLinkageDestroyedModified (getSignature label)
+	    in  {regs_destroyed = regs_destroyed, 
+		 regs_modified = regs_modified, 
+		 arg_pos = arg_pos, 
+		 res_pos = res_pos, 
+		 C_call = false}
+	    end
+	| (CALL{func = INDIRECT _, args : register list, results, ...})=>
+	     let 
+		 val LINKAGE{argCaller=arg_pos, resCaller=res_pos,...} =
+		     unknown_ml (FORMALS{args=args,results=results})
+	     in {regs_destroyed = indirect_caller_saved_regs,
+		 regs_modified = Regset.union(indirect_callee_saved_regs,
+					      indirect_caller_saved_regs),
+		 arg_pos = arg_pos,
+		 res_pos = res_pos,
+		 C_call = false}
+	     end
 
-	   | (CALL{calltype = ML_NORMAL,
-		   func = DIRECT (_, _), args, results,  
-				 argregs, resregs, destroys, ...}) =>
-		  let 
-		    val ACTUALS{args=arg_pos_default, results=res_pos_default} = 
-			unknown_ml false (FORMALS{args=args,results=results})
-		  in {regs_destroyed = (case destroys of
-					  NONE => indirect_caller_saved_regs
-					| SOME regs => regs),
-		      regs_modified = (case destroys of
-					   NONE => indirect_caller_saved_regs
-					 | SOME regs => regs),
-		      arg_pos = (case argregs of
-				     NONE => arg_pos_default
-				   | SOME regs => map IN_REG regs),
-		      res_pos = (case resregs of
-				     NONE => res_pos_default
-				   | SOME regs => map IN_REG regs),
-		      C_call = false}
-              end
+       | (CALL{calltype = ML_NORMAL,
+	       func = DIRECT (_, _), args, results,  
+	       argregs, resregs, destroys, ...}) =>
+	     let val LINKAGE{argCaller=arg_pos_default, resCaller=res_pos_default,...} = 
+		     unknown_ml (FORMALS{args=args,results=results})
+	     in {regs_destroyed = (case destroys of
+				       NONE => indirect_caller_saved_regs
+				     | SOME regs => listToSet regs),
+		 regs_modified = (case destroys of
+				      NONE => indirect_caller_saved_regs
+				    | SOME regs => listToSet regs),
+		 arg_pos = (case argregs of
+				NONE => arg_pos_default
+			      | SOME regs => map IN_REG regs),
+		 res_pos = (case resregs of
+				NONE => res_pos_default
+			      | SOME regs => map IN_REG regs),
+		 C_call = false}
+	     end
 
 	   | (CALL{calltype = C_NORMAL,
 		   func = DIRECT (_, _), args, results,  
 				 argregs, resregs, destroys, ...}) =>
-		  let 
-		    val ACTUALS{args=arg_pos_default,
-				results=res_pos_default} = std_c false 
-		      (FORMALS{args=args,results=results})
-		  in {regs_destroyed = (case destroys of
+	       let val LINKAGE{argCaller=arg_pos_default, resCaller=res_pos_default, ...} = 
+			std_c (FORMALS{args=args,results=results})
+	       in {regs_destroyed = (case destroys of
 					  NONE => C_caller_saved_regs
-					| SOME regs => regs),
+					| SOME regs => listToSet regs),
 		  regs_modified = (case destroys of
 				     NONE => C_caller_saved_regs
-				   | SOME regs => regs),
+				   | SOME regs => listToSet regs),
 		  arg_pos = (case argregs of
 			       NONE => arg_pos_default
 			     | SOME regs => map IN_REG regs),
@@ -240,22 +226,21 @@ struct
 
 	  | _ => error "getCallInstRegs: not a call")
 
+
     
    (* if a function's arguments, results, and return address register are
       already assigned, then rewrite procedure as described in comments at
       the top of the file.*)
 
-   fun pre_color (name : label, arg_ra_pos,res_ra_pos,blocklabels,args,res, block_map) = 
-      case (arg_ra_pos,res_ra_pos)
-      of (SOME(actual_args), SOME actual_results) =>
-	  let val postlude_label = freshCodeLabel()
-	    val block_labels = blocklabels
+   fun pre_color (name : label, actual_args, actual_results, blocklabels, args, res, block_map) = 
+       let val postlude_label = freshCodeLabel()
+	   val block_labels = blocklabels
 	    
-	      (* An empty prelude block has been created for us already *)
-	      local
-		(* extract current name of first block *)
-		val prelude_label = (case blocklabels of
-				       (a::_) => a
+	   (* An empty prelude block has been created for us already *)
+	   local
+	       (* extract current name of first block *)
+	       val prelude_label = (case blocklabels of
+					(a::_) => a
 				     | nil => error "empty procedure!")
 		(* - Move actual parameters into pseudo-registers.*)
 		val prelude_instr = map mv2reg (zip actual_args args)
@@ -347,15 +332,10 @@ struct
 *)
 
 
-
-
          in (block_labels,block_map)
 	end
-	| _  => (blocklabels,block_map)
 
-    (* time pre-coloring phase *)
-
-     val pre_color = precolor_time pre_color
+     val pre_color = subtimer("chaitin_preColor", pre_color)
 
      val (hasRpv,Rpv_virt) = (case Rpv of 
 				NONE  => (false, Rat)
@@ -368,10 +348,7 @@ struct
       calls.   These need to be marked as used, so that the correct
       code for callee-save may be generated.*)
 
-   local
-       val _ = ()
-   in
-     fun replace_calls (getSignature : label -> procsig) (blockmap,tracemap) =
+     fun replace_calls (getSignature : label -> procsig, blockmap, tracemap) =
        let val max_on_stack = ref 0
 	   val max_C_args = ref 0
 	   val regs_destroyed = ref Regset.empty
@@ -407,9 +384,7 @@ struct
 (* new code *)              | DIRECT (ML_EXTERN_LABEL label, _) => 
 				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
 				  else []
-			    | INDIRECT reg => [BASE(MOVE(reg,Rpv_virt))]
-(*			    | _ => error "replace_calls: pv move") *)
-				)
+			    | INDIRECT reg => [BASE(MOVE(reg,Rpv_virt))])
 			      @ (BASE(RTL(CALL{calltype=calltype,
 					       func=func,
 					       args=arg_regs,
@@ -420,43 +395,6 @@ struct
 				 mvlist(res_pos,map IN_REG results))
 				 
 
-		       (* if it is a C call, save/restore dedicated registers
-			  that fall into the C caller save set.*)
-
-		       val code' = 
-			if C_call then
-			    let 
-				val save_across_C_reglist = save_across_C
-				val save_across_C_assignlist = 
-				    map IN_REG save_across_C_reglist
-				val tmps = 
-				let exception SpecialRegNoTrace
-				    val table = 
-					[(Rheap, TRACE_NO),
-					 (Rhlimit, TRACE_NO),
-					 (Rexnptr, TRACE_YES)]
-				    fun lookup (R v) [] = 
-					(print "R"; print (Int.toString v);
-					 print "\n";
-					 raise SpecialRegNoTrace)
-				      | lookup r ((a,b)::c) =
-					if (eqRegs a r) then b else (lookup r c)
-				      | lookup _ _ = error "no match in lookup"
-				    fun doit r = 
-					let val newreg = freshIreg()
-					    val _ = tracemap := 
-						Regmap.insert(!tracemap,newreg, 
-							      (NONE, lookup r table))
-					in IN_REG newreg
-					end
-				in map doit save_across_C_reglist
-				end
-			   in mvlist (save_across_C_assignlist,tmps) @
-			      code @
-			      mvlist (tmps,save_across_C_assignlist)
-			   end
-                        else code
-
 		        (* update the set of registers destroyed by calls.
 			   This includes (1) actual argument, result, return
 			   registers and (2) registers in the destroy set.*)
@@ -464,13 +402,14 @@ struct
 		       val _ =
 			   let 
 			       val actuals = (arg_regs @ result_regs)
+			       val actuals_set = listToSet actuals
 			   in 
-			       regs_destroyed := Regset.union(!regs_destroyed,listToSet actuals);
-			       regs_destroyed := Regset.union(!regs_destroyed,listToSet destroyed_by_call);
-			       regs_modified  := Regset.union(!regs_modified ,listToSet actuals);
-			       regs_modified  := Regset.union(!regs_modified ,listToSet modified_by_call)
+			       regs_destroyed := Regset.union(!regs_destroyed, actuals_set);
+			       regs_destroyed := Regset.union(!regs_destroyed, destroyed_by_call);
+			       regs_modified  := Regset.union(!regs_modified , actuals_set);
+			       regs_modified  := Regset.union(!regs_modified , modified_by_call)
 			   end
-		   in code'	                  
+		   in code	                  
 		   end
 	     | expand_call _ = error "expand_call: unhandled cases"
 		   
@@ -498,8 +437,7 @@ struct
 	    Regset.listItems (Regset.intersection(listToSet general_regs,!regs_modified)))
        end (* replace_calls *)
 
-       val replace_calls = (fn arg1 => replace_calls_time (replace_calls arg1))
-   end (* local *)
+     val replace_calls = fn arg => subtimer("chaitin_replaceCalls", replace_calls) arg
 
    (* print an interference graph *)
 
@@ -546,7 +484,7 @@ struct
 		 (BASE(RTL(call as (CALL{func, args, results, ...})))) =>
 		     let
 			 val {regs_destroyed, ...} =  getCallInstrRegs getSignature call
-			 val regs_destroyed' = List.filter isPhysical regs_destroyed
+			 val regs_destroyed' = Regset.filter isPhysical regs_destroyed
 (*
 			 val _ = (print "regs_destroyed = "; print (Int.toString (length regs_destroyed));
 				  print "regs_destroyed' = "; print (Int.toString (length regs_destroyed'));
@@ -555,7 +493,7 @@ struct
 *)
 		         (* add conflicts between registers destroyed
 			  by call and variables live after call.*)
-		     in   Ifgraph.insert_edges igraph (regs_destroyed,live_regs)
+		     in   Ifgraph.insert_edges igraph (Regset.listItems regs_destroyed,live_regs)
 		     end
                 | _ => ()
 	     end
@@ -588,7 +526,7 @@ struct
 	   igraph
 	 end
 
-         val buildGraph = fn arg => build_graph_time buildGraph arg
+       val buildGraph = fn arg => subtimer("chaitin_buildGraph", buildGraph) arg
 
    (* generate tables of information for the garbage collector *)
 
@@ -885,7 +823,7 @@ struct
 	     !callsite_info
 	   end (* allocateBlock *)
 
-           val allocateBlock = fn arg1 => rewrite_time (allocateBlock arg1)
+   val allocateBlock = subtimer("chaitin_rewrite", allocateBlock)
 
        (* arguments: 
 	       . name of site
@@ -1039,13 +977,10 @@ struct
 	 end
 
 
-       fun createPostamble (block_map,name,arg_ra_pos,
+       fun createPostamble (block_map,name,arg_pos,
 			     Trackstorage.SUMMARY{callee_save_slots, fixStackOffset,
 						  stackframe_size,...}) =
-	   (case arg_ra_pos of
-	      NONE => error "createPostamble"
-	    | SOME (arg_pos) => 
-		let val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
+	   let val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
 						  SOME bl => bl
 						| _ => error "missing block")
 		  val i_in = !instrs
@@ -1065,60 +1000,48 @@ struct
 			| NONE => a::(loop b))
 		    end
 		  val i_out = loop i_in 
-		in instrs := i_out
-		end)
+	   in instrs := i_out
+	   end
 		
 
-   fun createPreamble (block_map,name,arg_ra_pos,
+   fun createPreamble (block_map,name,arg_pos,
 			     Trackstorage.SUMMARY{callee_save_slots,
 						  stackframe_size,fixStackOffset,...}) =
-	   (case arg_ra_pos of
-	      NONE => error "createPreamble"
-	    | SOME (arg_pos) => 
-		let 
-		  val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
-						SOME bl => bl | NONE => error "missing block")
-		  val reversed_i = ((std_entry_code()) @
-				    (decrease_stackptr stackframe_size) @
-				     [BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
-				    (map (fn (r, i) => push(r, i)) callee_save_slots))
-		  val ordered_i = rev (map NO_ANN reversed_i)
-		in instrs := !instrs @ ordered_i
-		end)
+       let 
+	   val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
+					 SOME bl => bl | NONE => error "missing block")
+	   val reversed_i = ((std_entry_code()) @
+			     (decrease_stackptr stackframe_size) @
+			     [BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
+			     (map (fn (r, i) => push(r, i)) callee_save_slots))
+	   val ordered_i = rev (map NO_ANN reversed_i)
+       in instrs := !instrs @ ordered_i
+       end
 		
-   fun allocateProc1 (blah as
-		      {getSignature : label -> procsig,
+   fun allocateProc ({getSignature : label -> procsig,
 		       name         : label,
-		      block_map    : bblock Labelmap.map,
-		      procsig = procsig as PROCSIG{arg_ra_pos=orig_args,
-						   res_ra_pos,
-						   allocated,
-						   regs_destroyed,
-						   regs_modified,
-						   framesize,
-						   ra_offset,
-						   callee_saved,
-						   blocklabels,
-						   args, res} : procsig,
+		       block_map    : bblock Labelmap.map,
+		       procsig = 
+		         procsig as 
+			   KNOWN_PROCSIG{linkage = linkage as LINKAGE{argCallee=arg_ra_pos,
+								      resCallee=res_ra_pos,
+								      ...},
+					 regs_destroyed,
+					 regs_modified,
+					 framesize,
+					 ra_offset,
+					 callee_saved,
+					 blocklabels,
+					 argFormal = args, 
+					 resFormal = res},
 		       stack_resident : stacklocation Regmap.map,
 		       tracemap     : (register option * Tracetable.trace) Regmap.map}) = 
 
      let
        val _ = msg "\tentered allocateproc1\n"
        val local_tracemap = ref tracemap
-       (* map arguments on stack to proper location *)
 
-       val arg_ra_pos = 
-	   case orig_args of
-	       NONE => NONE
-	     | SOME l => 
-		   let fun mapper (ON_STACK (THIS_FRAME_ARG4 i)) = ON_STACK(CALLER_FRAME_ARG4 i)
-			 | mapper (ON_STACK (THIS_FRAME_ARG8 i)) = ON_STACK(CALLER_FRAME_ARG8 i)
-			 | mapper otherLoc = otherLoc
-		   in  SOME(map mapper l)
-		   end
-
-      val _ = if !debug then
+       val _ = if !debug then
 	           (emitString commentHeader;
 		    emitString " before precoloring procedure\n";
 	            dumpProc(name,procsig,
@@ -1138,7 +1061,7 @@ struct
 
       val (max_passed_args, max_C_args, regs_destroyed, regs_modified) =
 	       (msg "\treplacing calls\n";
-		replace_calls getSignature (block_map, local_tracemap))
+		replace_calls (getSignature, block_map, local_tracemap))
 
        val _ = if !debug then
 	           (emitString commentHeader;
@@ -1149,7 +1072,7 @@ struct
 	       else ()
        val _ = msg  "\tannotating\n"
 	   
-       val block_map = (annotate_time (Bblock.liveVars (!local_tracemap) block_map)) name
+       val block_map = subtimer("chaitin_annotate", Bblock.liveVars (!local_tracemap) block_map) name
 	   
        val _ = 
 	   if (! debug) then 
@@ -1159,81 +1082,42 @@ struct
 		emitString commentHeader;
 		emitString " done annotation\n")
 	   else ()
-       val _ = msg "\tleaving allocateproc1\n"
-     in
-	 ({getSignature = getSignature,
-	   name = name,
-	   block_map = block_map,
-	   procsig = PROCSIG{arg_ra_pos=orig_args,
-			     res_ra_pos = res_ra_pos,
-			     allocated = allocated,
-			     regs_destroyed = ref regs_destroyed,
-			     regs_modified = ref regs_modified,
-			     framesize = framesize,
-			     ra_offset = ra_offset,
-			     callee_saved = callee_saved,
-			     blocklabels = blocklabels,
-			     args = args, res = res},
-	   stack_resident = stack_resident,
-	   tracemap = !local_tracemap},
-	  arg_ra_pos, max_passed_args, max_C_args, block_labels)
-     end (* allocateProc1 *)
 
+       val tracemap = !local_tracemap
 
+       val _ = msg("processing procedure "^msLabel name^"\n")
 
-   fun allocateProc2 ({getSignature : label -> procsig,
-		       name         : label,
-		       block_map    : bblock Labelmap.map,
-		       procsig as PROCSIG{arg_ra_pos=orig_args,
-						    res_ra_pos,
-						    allocated,
-						    regs_destroyed,
-						    regs_modified,
-						    framesize,
-						    ra_offset,
-						    callee_saved,
-						    blocklabels,
-						    args, res} : procsig,
-		       stack_resident : Machine.stacklocation
-		                        Regmap.map,
-		       tracemap     : (Machine.register option * Tracetable.trace) Regmap.map},
-		      arg_ra_pos : assign list option, 
-		      max_passed_args, max_C_args, block_labels) = 
-
-       let
-
-	   val _ = msg("processing procedure "^msLabel name^"\n")
-
-	   (* if there is a HANDLER_ENTRY in here, add modified to destroyed for saving purposes *)
-	   local
-	       val has_exn_flag = ref false
-	       fun has_exn [] = false
-		 | has_exn ((BASE(RTL HANDLER_ENTRY))::_) = true
-		 | has_exn (_::rest) = has_exn rest
-	       val instr_blocks = Labelmap.app (fn (BLOCK{instrs,...}) => 
-						if (has_exn (map stripAnnot (!instrs)) )
-						    then (has_exn_flag := true) else ())
-		   block_map
-	   in
-	       val _ = if (!has_exn_flag)
-			   then regs_destroyed := (!regs_destroyed) @ (!regs_modified)
-		       else ()
-	   end
+       (* if there is a HANDLER_ENTRY in here, add modified to destroyed for saving purposes *)
+       local
+	   val has_exn_flag = ref false
+	   fun has_exn [] = false
+	     | has_exn ((BASE(RTL HANDLER_ENTRY))::_) = true
+	     | has_exn (_::rest) = has_exn rest
+	   val instr_blocks = Labelmap.app (fn (BLOCK{instrs,...}) => 
+					    if (has_exn (map stripAnnot (!instrs)) )
+						then (has_exn_flag := true) else ())
+	       block_map
+       in  val regs_modified = listToSet regs_modified
+	   val regs_destroyed = listToSet regs_destroyed
+	   val regs_destroyed = if (!has_exn_flag)
+				    then Regset.union(regs_destroyed, regs_modified)
+				else regs_destroyed
+       end
 
        (* initialize information on storage *)
        val storage_info = 
 	   subtimer("chaitin_newinfo", 
 	 Trackstorage.newInfo)
-	                      {callee_saves = callee_saved,
+	                      {callee_saves = Regset.listItems callee_saved,
 			       stack_resident = stack_resident,
 			       max_on_stack = max_passed_args,
 			       max_C_args = max_C_args,
-			       regs_destroyed = (!regs_destroyed)}
+			       regs_destroyed = Regset.listItems regs_destroyed}
        val stackOffset = Trackstorage.stackOffset storage_info
        val _ =  subtimer("chaitin_initbias",  initBias)  block_map
        val _ = msg "\tbuilding interference graph\n"
 
-       val igraph = subtimer("chaitin_buildgraph",buildGraph)
+       val igraph = subtimer("chaitin_buildGraph",buildGraph)
 	                 (getSignature,name,block_map,
 			       args,res,callee_saved)
        val _ = if (!msgs) then Ifgraph.print_stats igraph else ()
@@ -1244,7 +1128,7 @@ struct
 
        val _ = msg "\tsummarizing storage information\n"
 
-       val summarize = summarize_time Trackstorage.summarize 
+       val summarize = subtimer("chaitin_summarize", Trackstorage.summarize)
        val summary as (Trackstorage.SUMMARY{fixStackOffset,
 					    stackframe_size,
 					    registers_used,
@@ -1253,25 +1137,22 @@ struct
 
         val new_procsig =
 	       let 
-		 val framesize  = SOME stackframe_size
-		 val ra_offset = SOME(sloc2int (fixStackOffset RETADD_POS))
-		 val callee_save_regs = (map #1 callee_save_slots)
-	         val regs_destroyed  = ref (Regset.listItems (Regset.difference(listToSet registers_used,
-										listToSet callee_save_regs)))
-	         val regs_modified  = ref (Regset.listItems (Regset.union(listToSet registers_used,
-									 listToSet (!regs_modified))))
+		 val framesize  = stackframe_size
+		 val ra_offset = sloc2int (fixStackOffset RETADD_POS)
+		 val callee_save_regs = listToSet (map #1 callee_save_slots)
+		 val registers_used_set = listToSet registers_used
+	         val regs_destroyed  = Regset.difference(registers_used_set, callee_save_regs)
+	         val regs_modified  = Regset.union(regs_modified, registers_used_set)
 	       in
-		  PROCSIG {arg_ra_pos   = orig_args,
-			   res_ra_pos   = res_ra_pos,
-			   allocated    = true,
-			   regs_destroyed = regs_destroyed,
-			   regs_modified = regs_modified,
-			   blocklabels  = block_labels,
-			   framesize    = framesize,
-			   ra_offset = ra_offset,
-			   callee_saved = callee_save_regs,
-			   args         = args,
-			   res          = res}
+		   KNOWN_PROCSIG {linkage = linkage,
+				  regs_destroyed = regs_destroyed,
+				  regs_modified = regs_modified,
+				  blocklabels  = block_labels,
+				  framesize    = framesize,
+				  ra_offset = ra_offset,
+				  callee_saved = callee_save_regs,
+				  argFormal    = args,
+				  resFormal    = res}
 	       end
 
         val _ = msg "\trewriting module\n"
@@ -1298,16 +1179,12 @@ struct
 				       getCallInfo name summary mapping tracemap)  callsite_info
 
 
-	 val _ = msg "\tleaving allocateproc2\n"
 	 val tables = subtimer("chaitin_maketable", Tracetable.MakeTable) callinfo
      in	(new_procsig, 
 	 block_map, 
 	 block_labels,
 	 tables)
-     end (* allocateProc2 *)
+     end (* allocateProc *)
 
-(*   val allocateProc = allocateProcOrig  *)
-
-  fun allocateProc arg = allocateProc2 (allocateProc1 arg) 
 
 end; (* Chaitin *)

@@ -125,7 +125,8 @@ struct
 			  add_global(state,v,tipe,VALUE(LABEL(LOCAL_DATA(Name.var2string v))))
 		      val state = if toplevel then foldl folder state var_vcelist else state
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
-			  let val (code_lv,state) = xexp(state,fresh_named_var "codereg",
+			  let val _ = incClosure()
+			      val (code_lv,state) = xexp(state,fresh_named_var "codereg",
 							   Var_e code, Nil.TraceUnknown, NOTID)
 			      val (_,con_lv,state) = xcon'(state,fresh_named_var "cenv", cenv)
 			      val (exp_lv,state) = 
@@ -367,6 +368,7 @@ struct
 	    | Switch_e sw => xswitch(state,name,sw,trace,context)
 	    | ExternApp_e (f, elist) => (* assume the environment is passed in first *)
 		  let 
+		      val _ = incApp()
 		      val _ = add_instr (ICOMMENT ("making external call"))
 		      fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
 		      fun efolder(e,(eregs,fregs,state)) = 
@@ -413,7 +415,7 @@ struct
 
 	    | App_e (openness, f, clist, elist, eflist) => (* assume the environment is passed in first *)
 		  let 
-		      val callcount = Stats.counter("RTLcall")()
+		      val _ = incApp()
 		      val call_type = 
 			      (case openness of
 				    Open => error "no open calls permitted here"
@@ -687,6 +689,7 @@ struct
 	       context             (* The evaluation context this expression is in *)
 	       ) : term * state =
       let
+	  val _ = incCase()
 	  val dest = ref NONE
 	  fun move r = let val _ = (case (!dest) of
 					  NONE => dest := (SOME (#2(alloc_reg_trace state trace)))
@@ -703,7 +706,6 @@ struct
 			     in  move r; newstate
 			     end
 		 | NONE => error "empty switch statement")
-	  val switchcount = Stats.counter("RTLswitch")()
       in
 	  case sw of
 	      Intsw_e {size, arg, arms, default, result_type} => 
@@ -903,9 +905,6 @@ struct
       end
 
 
-
-
-
   and xnilprim(state : state, nilprim,clist,elist,context,trace) : term * state = 
       let fun error' s = (print "NIL primexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.NilPrimOp nilprim, clist,elist));
@@ -914,13 +913,14 @@ struct
       in
       (case nilprim of 
 	   Nil.record labels => 
-	       let fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
+	       let val _ = incRecord()
+		   fun folder(e,state) = xexp(state,fresh_var(), e, Nil.TraceUnknown, NOTID)
 		   val (terms,state) = foldl_list folder state elist
 	       in  make_record(state,terms)
 	       end
          | partialRecord _ => error "partialRecord not implemented"
 	 | select label => 
-	       let 
+	       let val _ = incSelect()
 		   val [e] = elist 
 		   val (I addr, state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 		   val reccon = type_of state e
@@ -937,7 +937,8 @@ struct
 	       end
 	 | inject_known_record known => error "should not see inject_known_record"
 	 | inject_known known => 
-		let val (lvopt,state) = 
+		let val _ = incSumInject()
+		    val (lvopt,state) = 
 		    (case elist of
 			 [] => (NONE,state)
 		       | [e] => let val (lv,state) = xexp(state,fresh_var(),hd elist,
@@ -947,7 +948,8 @@ struct
 		in  TortlSum.xinject_sum_static ((state,known,hd clist),lvopt,trace)
 		end
 	 | inject known => 
-		(case elist of
+		(incSumDynInject();
+		 case elist of
 		    [] => (print "Warning: tortl encountered inject with no argument\n";
 			   print "         Converting to inject_known\n";
 			   TortlSum.xinject_sum_static ((state,known,hd clist),NONE,trace))
@@ -960,14 +962,16 @@ struct
 		| _ => error "inject_dynamic with more than one argument")
 	 | project_known_record (k,field) => error "should not see project_known_record" 
 	 | project_known k =>
-	       let val [sumcon] = clist
+	       let val _ = incSumProject()
+		   val [sumcon] = clist
 		   val [e] = elist
 		   val (I base,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 	       in  TortlSum.xproject_sum_static ((state,k,sumcon),base,trace)
 	       end
 
 	 | project k =>
-	       let val [sumcon] = clist
+	       let val _ = incSumDynProject()
+		   val [sumcon] = clist
 		   val [e] = elist
 		   val (I base,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 		   val (cr,state) = xcon(state,fresh_var(),sumcon)
@@ -975,13 +979,15 @@ struct
 	       end
 
 	 | box_float Prim.F64 => 
-	       let val [e] = elist
+	       let val _ = incPrim()
+		   val [e] = elist
 		   val (lv,state) = xexp(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 		   val (vl,state) = boxFloat_vl(state,lv)
 	       in (vl, state)
 	       end
 	 | unbox_float Prim.F64 => 
-	       let val [e] = elist
+	       let val _ = incPrim()
+		   val [e] = elist
 		   val (I ir,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
 		   val fr = alloc_regf()
 		   val _ = add_instr(LOADQF(EA(ir,0),fr))
@@ -997,7 +1003,8 @@ struct
 		   in  xexp(state,fresh_var(),e,Nil.TraceUnknown,context)
 		   end
 	 | make_exntag => 
-		   let val _ = (case trace of
+		   let val _ = incPrim()
+		       val _ = (case trace of
 				    Nil.TraceKnown TraceInfo.Notrace_Int => ()
 				  | _ => error "make_exntag result has funny trace")
 		       val desti = alloc_regi NOTRACE_INT
@@ -1010,7 +1017,8 @@ struct
 		   in  (LOCATION(REGISTER (false, I desti)), state)
 		   end
 	 | inj_exn name => 
-		   let val [e1,e2] = elist
+		   let val _ = incPrim()
+		       val [e1,e2] = elist
 		       val desti = alloc_regi NOTRACE_INT
 		       val (vl1,state) = xexp(state,fresh_var(),e1,Nil.TraceUnknown,NOTID)
 		       val (vl2,state) = xexp(state,fresh_var(),e2,Nil.TraceUnknown,NOTID)
@@ -1021,7 +1029,8 @@ struct
 		   in  make_record(state,terms)
 		   end
 	 | make_vararg oe => 
-		   let fun local_xexp (s,e) = 
+		   let val _ = incPrim()
+		       fun local_xexp (s,e) = 
 		          let val (I ir, _) = xexp'(s,fresh_var(),e, Nil.TraceUnknown,NOTID)
 			  in  ir
 			  end
@@ -1034,7 +1043,8 @@ struct
 		   in  (LOCATION(REGISTER(false, I resulti)), state)
 		   end
 	 | make_onearg (openness,eff) => 
-		   let  fun local_xexp (s,e) = 
+		   let  val _ = incPrim()
+		       fun local_xexp (s,e) = 
 		          let val (I ir, _) = xexp'(s,fresh_var(),e, Nil.TraceUnknown,NOTID)
 			  in  ir
 			  end
@@ -1060,6 +1070,7 @@ struct
 			  print "\n";
 			  error s)
 	  open Prim
+	  val _ = incPrim()
 	  val (vl_list,state) = xexp_list(state,elist)
 	  val int32 = Prim_c(Int_c W32, []) 
 	  val float64 = Prim_c(Float_c F64, []) 
@@ -1587,7 +1598,8 @@ struct
 		   end
 	     | Typecase_c _ => error "typecase_c not implemented"
 	     | App_c (c,clist) => (* pass in env argument first *)
-		   let val _ = add_instr(ICOMMENT "start making constructor call")
+		   let val _ = incApp()
+		       val _ = add_instr(ICOMMENT "start making constructor call")
 		       val (const_fun,lv,state) = xcon'(state,fresh_named_var "closure",c)
 		       val clregi = load_ireg_term(lv,NONE)
 		       val (cregsi,(const_arg,state)) = 
@@ -1622,6 +1634,7 @@ struct
 			      NONE => LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
+	      val _ = incFun()
 	      val _ = reset_state(is_top, (vname, name))
 	      val _ = if (!debug)
 			  then (print "-----doconfun on "; print (Pprtl.label2s name); 
@@ -1657,6 +1670,7 @@ struct
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
 	      val _ = reset_state(is_top, (vname, name))
+	      val _ = incFun()
 	      val _ = msg ("-----dofun_help : " ^ (Pprtl.label2s name) ^ "\n")
               fun folder ((v,k),s) = 
 		  let val r = alloc_named_regi v TRACE
@@ -1742,7 +1756,7 @@ struct
 	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = reset_global_state (unitname,
+	     val _ = set_global_state (unitname,
 					 (mainCodeVar,mainCodeName)::named_exports,
 					 toplevel_locals)
 		 
@@ -1811,7 +1825,7 @@ struct
 
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = reset_global_state ("", [], Name.VarSet.empty)
+	     val _ = unset_global_state ()
 
 	 in module
 	 end

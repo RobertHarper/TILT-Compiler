@@ -65,21 +65,21 @@ struct
    val regsAbove = listToSet o regsAbove'
 
 
-   val unsaved_regs  = [Rat, Rzero, Fat, Fzero, Rsp, Rat2, Fat2]
+   val unsaved_regs  = listToSet [Rat, Rzero, Fat, Fzero, Rsp, Rat2, Fat2]
 
    val C_caller_saved_regs = 
-     [ireg 0,  ireg 1,  ireg 2,  ireg 3,  ireg 4,  ireg 5, ireg 6, 
-      ireg 7,  ireg 8,  ireg 16, ireg 17, ireg 18, ireg 19,
-      ireg 20, ireg 21, ireg 22, ireg 23, ireg 24, ireg 25,
-      ireg 26, ireg 27, ireg 29, 
-      freg 0,  freg 1,  freg 2, 
-      freg 10, freg 11, freg 12, freg 13, freg 14, freg 15,
-      freg 16, freg 17, freg 18, freg 19, freg 20, freg 21,
-      freg 22, freg 23, freg 24, freg 25, freg 26, freg 27,
-      freg 28, freg 29, freg 30]
+       listToSet [ireg 0,  ireg 1,  ireg 2,  ireg 3,  ireg 4,  ireg 5, ireg 6, 
+		  ireg 7,  ireg 8,  ireg 16, ireg 17, ireg 18, ireg 19,
+		  ireg 20, ireg 21, ireg 22, ireg 23, ireg 24, ireg 25,
+		  ireg 26, ireg 27, ireg 29, 
+		  freg 0,  freg 1,  freg 2, 
+		  freg 10, freg 11, freg 12, freg 13, freg 14, freg 15,
+		  freg 16, freg 17, freg 18, freg 19, freg 20, freg 21,
+		  freg 22, freg 23, freg 24, freg 25, freg 26, freg 27,
+		  freg 28, freg 29, freg 30]
 
-   val save_across_C = listintersect([Rheap,Rhlimit,Rexnptr],
-				     C_caller_saved_regs)
+   val save_across_C = Regset.intersection(listToSet [Rheap,Rhlimit,Rexnptr],
+					   C_caller_saved_regs)
 
    val C_int_args = map ireg [16, 17, 18, 19, 20, 21]
    val C_fp_args  = map freg [16, 17, 18, 19, 20, 21]
@@ -94,9 +94,9 @@ struct
        val num_indirect_fp_args = 32
    in
        val indirect_int_args = 
-	   listdiff(Regset.listItems (regsBelow (ireg (num_indirect_int_args - 1))), special_iregs)
+	   Regset.listItems(Regset.difference(regsBelow (ireg (num_indirect_int_args - 1)), listToSet special_iregs))
        val indirect_fp_args  = 
-	   Regset.listItems (regsBelow (freg (num_indirect_fp_args - 1)))
+	   Regset.listItems(regsBelow (freg (num_indirect_fp_args - 1)))
    end
 
    val Rpv = (case Rpv of
@@ -105,26 +105,18 @@ struct
    val indirect_ra_reg   = Rra
    val indirect_int_res  = indirect_int_args
    val indirect_fp_res   = indirect_fp_args
-   val indirect_caller_saved_regs = 
-     listunion ([indirect_ra_reg,Rpv],
-		listunion(indirect_int_args, indirect_fp_args))
-   val indirect_callee_saved_regs = 
-     listdiff(general_regs, indirect_caller_saved_regs)
+   val indirect_caller_saved_regs = listToSet ([indirect_ra_reg,Rpv] @ indirect_int_args @ indirect_fp_args)
+   val indirect_callee_saved_regs = Regset.difference(listToSet general_regs, indirect_caller_saved_regs)
 
-  fun makeAsmHeader(PROCSIG{framesize,ra_offset,...}) = 
-      let val (realized,framesize, ra_offset) = (case (framesize, ra_offset) of
-						     (SOME f, SOME r) => (true,f,r)
-						   | _ => (false,0,0))
-	  val result =  ("\t.mask (1 << 26), -" ^ 
+  fun makeAsmHeader(KNOWN_PROCSIG{framesize,ra_offset,...}) = 
+      let val result =  ("\t.mask (1 << 26), -" ^ 
 					       (Int.toString (framesize - ra_offset)) ^
 					       "\n\t.frame $sp, " ^ 
 					       (Int.toString framesize) ^ "\n" ^
 					       "\t.prologue 1\n")
-      in  if realized 
-	      then result 
-	  else ("error: framesize/ra_offset unrealized\n" ^ result)
+      in  result
       end
-
+    | makeAsmHeader _ = ("error: framesize/ra_offset unrealized in UNKNOWN_PROCSIG\n")
 
   fun msRegList l = 
     let fun doer(r,acc) = acc ^ " " ^ (msReg r)
@@ -145,7 +137,7 @@ struct
   fun procedureTrailer s = ["\t.end " ^ s ^ "\n"]
   val textStart = ["\t.text\n"]
   val dataStart = ["\t.data\n"]
-  fun CodeLabelDecl _ = "" (* no need to do this with the OSF as *)
+
 
 end
 

@@ -266,3 +266,34 @@ value_t alloc_intint(int a, int b)
   ((int *)result)[1] = b;
   return result;
 }
+
+void init_iarray(value_t *obj, int byteLen, int v)
+{
+  int i;
+  int tag = IARRAY_TAG | (byteLen << ARRLEN_OFFSET);
+  obj[-1] = tag;
+  for (i=0; i<(byteLen + 3) / 4; i++)
+    obj[i] = v;
+}
+
+void init_parray(value_t *obj, int len, value_t v)
+{
+  int i;
+  int byteLen = 4 * len;
+  int tag = PARRAY_TAG | (byteLen << ARRLEN_OFFSET);
+  obj[-1] = tag;
+  for (i=0; i<len; i++)
+    obj[i] = v;
+}
+
+void init_farray(value_t *obj, int len, double v)
+{
+  int i;
+  int byteLen = 8 * len;
+  int tag = RARRAY_TAG | (byteLen << ARRLEN_OFFSET);
+  assert((((value_t)obj) & 7) == 0);
+  obj[-1] = tag;
+  for (i=0; i<len; i++)
+    ((double *)obj)[i] = v;
+}
+

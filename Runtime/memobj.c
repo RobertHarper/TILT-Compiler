@@ -53,8 +53,10 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
       fprintf (stderr, "mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
       assert(0);
     }
+  /*
   if (paranoid)
     fprintf (stderr, "mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
+    */
 }
 
 value_t my_mmap(caddr_t start, int size, int prot)
@@ -248,6 +250,10 @@ void GetHeapArea(Heap_t *heap, int size, value_t **bottom, value_t **top)
   if (end > heap->top) {
     start = 0;
     end = 0;
+    /*
+    printf("GetHeapArea from %d failed.  Available = %d    Request = %d\n",
+	   heap, heap->top - heap->alloc_start, size);
+*/
   }
   else {
     heap->alloc_start = end;

@@ -404,7 +404,7 @@ static void work(SysThread_t *sth)
       th->sysThread = sth;
     }
     else
-      gc_poll();
+      gc_poll(sth);
   }
 
   if (th->status != 1)
@@ -443,18 +443,20 @@ static void work(SysThread_t *sth)
     }
 
     case GCRequestFromML : {
-      if (th->requestInfo >= pagesize) {
-	fprintf(stderr,"th->requestInfo = %d  > pagesize = %d\n",
-		th->requestInfo, pagesize);
-	assert(0);
-      }
-      if (th->requestInfo + sth->alloc >= sth->limit) {
-	if (diag)
-	  printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
-		 sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
+      /* Allocate space or check write buffer to see if we have enough space */
+      int satisfied = GCAllocate(sth, th->requestInfo); 
+      if (!satisfied) {
+	if (diag) {
+	  if (th->requestInfo)
+	    printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
+		   sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
+	  else 
+	    printf("Proc %d: cannot resume user thread %d; write list full\n",
+		   sth->stid, th->tid);
+	}
 	th->saveregs[ALLOCPTR] = sth->alloc;
 	th->saveregs[ALLOCLIMIT] = sth->limit;
-	gc(th); /* map the thread as though calling from gc_raw */
+	GC(th); /* map the thread as though calling from gc_raw */
 	assert(0);
       }
       th->saveregs[ALLOCPTR] = sth->alloc;
@@ -469,14 +471,16 @@ static void work(SysThread_t *sth)
 
      case GCRequestFromC : 
      case MajorGCRequestFromC : {
-      assert(th->requestInfo < pagesize);
-      if (th->requestInfo + sth->alloc >= sth->limit) {
+       /* Requests from C may exceed a page - like large array */
+       if (th->requestInfo + sth->alloc >= sth->limit) 
+	 GCAllocate(sth, th->requestInfo);
+       if (th->requestInfo + sth->alloc > sth->limit) {
 	if (diag)
 	  printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
 		 sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
 	th->saveregs[ALLOCPTR] = sth->alloc;
 	th->saveregs[ALLOCLIMIT] = sth->limit;
-	gc(th); /* map the thread as though calling from gc_raw */
+	GC(th); /* map the thread as though calling from GCFromML */
 	assert(0);
       }
       th->saveregs[ALLOCPTR] = sth->alloc;
@@ -559,6 +563,11 @@ void thread_go(value_t *thunks, int numThunk)
       printf("Main thread found %d jobs.\n", i);
     pthread_cond_wait(&EmptyCond,&EmptyLock);
   }
+  /* Now collect the GC times of the system threads */
+  for (i=0; i<NumSysThread; i++) {
+    SysThread_t sth = SysThreads[i];
+    stats_finish_thread(&sth.stacktime,&sth.gctime,&sth.majorgctime);
+  }
 }
 
 
@@ -630,7 +639,6 @@ void Finish()
   if (diag) printf("Proc %d: finished user thread %d\n",sth->stid,th->tid);
   /*
   gc_finish();
-  stats_finish_thread(&sth->stacktime,&sth->gctime,&sth->majorgctime);
   */
   DeleteJob(sth);
   check("Finishend",sth);

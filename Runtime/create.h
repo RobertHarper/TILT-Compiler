@@ -15,6 +15,10 @@ value_t alloc_rarray(int count, double v);
 value_t alloc_string(int strlen, char *str);
 value_t alloc_record(value_t *fields, int *masks, int orig_count);
 
+void init_iarray(value_t *obj, int byteLen, int v);
+void init_parray(value_t *obj, int wordLen, value_t v);
+void init_farray(value_t *obj, int doubleLen, double v);
+
 /* these two functions should be used with care */
 value_t alloc_uninit_string(int strlen, char **raw);
 void adjust_stringlen(value_t str, int newlen);

@@ -155,7 +155,7 @@ structure Machine =
 
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
-    | msLabel (ML_EXTERN_LABEL label)     = (makeAsmLabel label)
+    | msLabel (ML_EXTERN_LABEL label) = (makeAsmLabel label)
 
 
   fun loadi_to_ascii LD  = "ld"

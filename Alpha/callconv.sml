@@ -10,9 +10,6 @@ struct
   open Machine
   open Core
 
-  datatype actuals = 
-	ACTUALS of {args : assign list,
-	            results : assign list}
 
   datatype formals = 
 	FORMALS of {args : register list,
@@ -75,7 +72,7 @@ struct
     | assignRegsAmongC ((F _) :: _) _ _ = 
        error "assignRegsAmongC:  Could not allocate floating-point"
 
-  fun std_c def (FORMALS {args,results}) =
+  fun std_c (FORMALS {args,results}) =
      let val actual_args =
 	   if (length args <= 6) then
 	      map IN_REG (assignRegsAmongC args C_int_args C_fp_args)
@@ -83,18 +80,21 @@ struct
 	      error ("allocateCall: More than 6 args" ^ "passed to C")
          val actual_results = 
 	     map IN_REG (assignRegsAmongC results C_int_res C_fp_res)
-     in ACTUALS{args=actual_args,
-		results=actual_results}
+     in LINKAGE{argCaller=actual_args,
+		resCaller=actual_results,
+		argCallee=actual_args,
+		resCallee=actual_results}
      end
 
-  fun unknown_ml def (FORMALS {args,results}) =
-     let val stackloc = if def then CALLER_FRAME_ARG8
-	                else THIS_FRAME_ARG8
-	 val actual_args = unknownArgPositions stackloc args 
-	 val actual_results = 	map IN_REG (assignRegsAmong results 
+  fun unknown_ml (FORMALS {args,results}) =
+     let val actual_Caller_args = unknownArgPositions THIS_FRAME_ARG8 args 
+	 val actual_Callee_args = unknownArgPositions CALLER_FRAME_ARG8 args 
+	 val actual_results = map IN_REG (assignRegsAmong results 
 					    indirect_int_res indirect_fp_res)
-      in ACTUALS{args=actual_args,
-		 results=actual_results}
+      in LINKAGE{argCaller=actual_Caller_args,
+		 resCaller=actual_results,
+		 argCallee=actual_Callee_args,
+		 resCallee=actual_results}
       end
 
 

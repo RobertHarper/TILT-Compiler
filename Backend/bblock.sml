@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS BBLOCK Int32 Util Listops TRACETABLE List *)
+(*$import MACHINEUTILS BBLOCK Int32 Util Listops TRACETABLE List Stats *)
 functor Bblock(structure Machine : MACHINE
 	       structure Machineutils : MACHINEUTILS
 	       structure Tracetable : TRACETABLE)
@@ -8,8 +8,13 @@ struct
    structure Machine = Machine
    structure Machineutils = Machineutils
    structure Tracetable = Tracetable
-
    open Machineutils Machine Core
+
+   val doTimer = Stats.ff("DoBblockTimer")
+   fun subtimer(str,f) = if (!doTimer)
+			     then Stats.subtimer(str,f)
+			 else f
+
    (* Annotations on an instruction *)
    datatype 'a annotated = NO_ANN of 'a
                          | LIVE of Regset.set * 'a
@@ -116,26 +121,22 @@ struct
        fun getBlock blk =
 	   case Labelmap.find(block_map, blk) of
 	       SOME value => value
-	     | NONE => error ("findLiveTemps: getblock" ^
-			      (msLabel blk))
-
-       fun memberLabel labs l = Listops.member_eq(fn (l1,l2) => eqLabs l1 l2, l,labs)
+	     | NONE => error ("findLiveTemps: getblock" ^ (msLabel blk))
 
        (* Aho/Sethi/Ullman suggests traversing the blocks in the
           OPPOSITE order from a depth-first-search through the
 	  control-flow graph. *)
        local
-	   fun revDFS [] block_names = block_names
-	     | revDFS (blk :: rest) block_names =
-	       if (memberLabel block_names blk) then
-		   revDFS rest block_names
+	   fun revDFS [] (seenList, seenSet) = seenList
+	     | revDFS (blk :: rest) (seenList, seenSet) = 
+	       if (Labelset.member(seenSet, blk)) then
+		   revDFS rest (seenList, seenSet)
 	       else
 		   let val (BLOCK{succs,...}) = getBlock blk
-		   in
-		       revDFS (!succs @ rest) (blk :: block_names)
+		   in  revDFS (!succs @ rest) (blk :: seenList, Labelset.add(seenSet, blk))
 		   end
        in  (* some blocks are reachable via jsr's so we must include all labels *)
-	   val rev_blocklabel_list = revDFS (first_label :: all_labels) []
+	   val rev_blocklabel_list = revDFS (first_label :: all_labels) ([], Labelset.empty)
 (*	   val blocklabel_list = rev rev_blocklabel_list *)
        end
 
@@ -170,18 +171,26 @@ struct
 	       out_live := out_live';
 	       in_live  := in_live'
 	   end
-(*
-       fun forward_step blk = 
-*)
+
 
        (* Repeat loop() until a fixpoint is reached *)
-       fun outerLoop () =      
+       fun outerLoop n =      
 	 (unchanged := true;
 	  app reverse_step rev_blocklabel_list; 
-(*	  app forward_step blocklabel_list; *)
-	  if (not (! unchanged)) then outerLoop () else ())
-     in
-       outerLoop ()
+	  if (not (! unchanged)) then outerLoop (n+1) else n)
+
+       val stepsNeeded = outerLoop 1
+       val size = length all_labels
+
+       val _ = if (stepsNeeded > 1 andalso size > 50)
+		   then (print "function ";
+			 print (msLabel first_label);
+			 print " with "; 
+			 print (Int.toString size);
+			 print " labels. liveness analysis took "; 
+			 print (Int.toString stepsNeeded); print " steps\n")
+	       else ()
+     in ()
      end
 
    (* This function ignores special regs, which are *always* live *)
@@ -203,17 +212,17 @@ struct
 	      let val instr = stripAnnot instr
                   val (def_list, use_list) = defUse instr
 		  val instr_def = listToSet def_list
-		  val use_list_compute = 
-		      List.mapPartial (fn f => (case (Regmap.find(compute_map,f)) of
-						    NONE => NONE
-						  | SOME (copt,_) => copt)) use_list
+		  (* We must augment the used variables with their runtime types, if present *)
+		  val use_list = 
+		      foldl (fn (f,acc) => (case (Regmap.find(compute_map,f)) of
+						SOME (SOME c,_) => f::c::acc
+					      | _ => f::acc)) [] use_list
                   (* we don't want special regs in in' so we subtract 
                      them out as we add use_list;  note that we don't
                      need to remove special regs from instr_def since 
                      instr_def is used to subtract away from out which
                      already doesn't have any special regs *)
 		  val in' = setPlusListMinusSet(out - instr_def, use_list, special_regs_set)
-		  val in' = setPlusListMinusSet(in', use_list_compute, Regset.empty)
               in LIVE(out,instr) :: loop(in',instrs)
 	      end
 
@@ -221,14 +230,13 @@ struct
 	    instrs := loop (! out_live, !instrs)
 
       (* compute def/use and zap bblock in_live/out_line information *)
-
-       val block_map' = Labelmap.map blockDefUse block_map
+       val block_map' = subtimer("bblock_defuse", Labelmap.map blockDefUse) block_map
      in
        (* find live vars at block boundaries *)
-       findLiveTemps block_map' first_label;
-
+       subtimer("bblock_findLiveTemp", findLiveTemps block_map') first_label;
+       
        (* use this to annotate individual instructions *)            
-       Labelmap.appi annotateBlock block_map' ;
+       subtimer("bblock_annotateBlock", Labelmap.appi annotateBlock) block_map' ;
 
        block_map'
      end

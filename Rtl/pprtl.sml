@@ -308,7 +308,7 @@ struct
       in  pp_Array' pp_Instr'' code
       end
 
-  fun pp_Proc' (PROC{name,return,args,results,code,known,save,vars}) =
+  fun pp_Proc' (PROC{name,return,args,results,code,save,vars}) =
       (if !DEBUG then
 	    (print "laying out procedure "; 
 	     print (label2s name); print "\n")
@@ -318,8 +318,6 @@ struct
 		      Hbox[String "     ", HOVbox[String "args = ",pp_RegList' args]],
 		      Break,
 		      Hbox[String "     ret = ",String (regi2s return)],
-		      Break,
-		      Hbox[String "     known = ",String (bool2s known)],
 		      Break,
 		      Hbox[String "     ", HOVbox[String "results = ",pp_RegList' results]],
 		      Break,

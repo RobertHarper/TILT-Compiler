@@ -10,10 +10,6 @@ struct
   open Machine
   open Core
 
-  datatype actuals = 
-	ACTUALS of {args : assign list,
-	            results : assign list}
-
   datatype formals = 
 	FORMALS of {args : register list,
 		    results : register list}
@@ -87,21 +83,24 @@ struct
     in  #1(Listops.foldl_acc folder (iFormals,fFormals,0) actuals)
     end
 
-  fun std_c def (FORMALS {args,results}) =
+  fun std_c (FORMALS {args,results}) =
      let
 	 val actual_args    = assignRegsAmong (true,true) args (C_int_args, [])
          val actual_results = assignRegsAmong (true,false) results (C_int_res, C_fp_res)
-     in ACTUALS{args=actual_args,
-		results=actual_results}
+     in  LINKAGE{argCaller=actual_args,
+		 resCaller=actual_results,
+		 argCallee=actual_args,
+		 resCallee=actual_results}
      end
 
-  fun unknown_ml def (FORMALS {args,results}) =
-     let val stackloc = if def then CALLER_FRAME_ARG4
-	                else THIS_FRAME_ARG4
-	 val actual_args = unknownArgPositions stackloc args 
+  fun unknown_ml (FORMALS {args,results}) =
+     let val actual_Caller_args = unknownArgPositions THIS_FRAME_ARG4 args 
+	 val actual_Callee_args = unknownArgPositions CALLER_FRAME_ARG4 args 
 	 val actual_results = assignRegsAmong (false,false) results (indirect_int_res, indirect_fp_res)
-      in ACTUALS{args=actual_args,
-		 results=actual_results}
+      in LINKAGE{argCaller=actual_Caller_args,
+		 resCaller=actual_results,
+		 argCallee=actual_Callee_args,
+		 resCallee=actual_results}
       end
 
 

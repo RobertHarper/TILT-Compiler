@@ -50,6 +50,12 @@ local
 	      | accumf sofar (a::x) = accumf (revonto sofar (f a)) x
 	in accumf [] list
 	end
+    fun flatten [] = []
+      | flatten (first::rest) = 
+	let fun loop [] = flatten rest
+	      | loop (a::rest) = a::(loop rest)
+	in  loop first
+	end
 
     fun occurs3 x = 
     (* finds coords which occur exactly 3 times in coordlist x *)
@@ -74,9 +80,11 @@ local
 	let val living = alive gen
 	    val isalive = member living
 	    val liveneighbours = length o filter isalive o neighbours
-	    fun twoorthree n = n=2 orelse n=3
-	    val survivors = filter (twoorthree o liveneighbours) living
-	    val newnbrlist = collect (filter (not o isalive) o neighbours) living
+	    fun twoorthree 2 = true
+	      | twoorthree 3 = true
+	      | twoorthree _ = false
+	    val survivors = filterP (twoorthree o liveneighbours) living
+	    val newnbrlist = flatten(mapP (filter (not o isalive) o neighbours) living)
 	    val newborn = occurs3 newnbrlist
 	in mkgen (survivors @ newborn) 
 	end

@@ -39,10 +39,8 @@ sig
                  Bblock.bblock Core.Labelmap.map * 
 	         Machine.label list *
 		 bool -> unit
-   val dumpCodeLabel : Machine.label list -> unit
+
    val dumpData : Machine.data Array.array -> unit
-
    val dumpDatalist : Machine.data list -> unit
-
 
 end

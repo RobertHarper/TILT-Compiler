@@ -27,7 +27,7 @@ struct
    datatype assign = IN_REG of register
                    | ON_STACK of stacklocation
                    | HINT of register
-		   | UNKNOWN
+		   | UNKNOWN_ASSIGN
 
     type label = Rtl.label
     type data = Rtl.data
@@ -90,7 +90,7 @@ struct
   fun msAssign (IN_REG r) = msReg r
     | msAssign (ON_STACK sl) = msStackLocation sl
     | msAssign (HINT r) = "HINT(" ^ (msReg r) ^ ")"
-    | msAssign UNKNOWN = "UNKNOWN"
+    | msAssign UNKNOWN_ASSIGN = "UNKNOWN"
 
   fun sloc2int (ACTUAL4 x) = x
     | sloc2int (ACTUAL8 x) = x
@@ -126,6 +126,7 @@ struct
 		| compare (_, LOCAL_DATA _) = GREATER
 	  end
   in  structure Labelmap = BinaryMapFn(Labelkey)
+      structure Labelset = BinarySetFn(Labelkey)
   end
 
 
@@ -247,18 +248,28 @@ struct
     | ICOMMENT of string
     | LADDR of register * label         (* dest, offset, label *)
 
-   datatype procsig = 
-     PROCSIG of {arg_ra_pos : (assign list) option,
-		 res_ra_pos : assign list option,
-		 allocated  : bool,
-		 regs_destroyed  : register list ref,
-		 regs_modified  : register list ref,
-		 blocklabels: label list,
-                 framesize  : int option,
-		 ra_offset : int option,
-		 callee_saved: register list,
-		 args   : register list,  (* formals *)
-		 res    : register list}  (* formals *)
+    datatype linkage = 
+	LINKAGE of {argCaller : assign list,    (* Where are the arguments from the caller's view? *)
+		    resCaller : assign list,    (* Where are the results from the caller's view? *)
+		    argCallee : assign list,    (* Where are the arguments from the callee's view? *)
+		    resCallee : assign list     (* Where are the results from the callee's view? *)
+		    }
 
+   datatype procsig = 
+       UNKNOWN_PROCSIG of 
+           {linkage : linkage,
+	    regs_destroyed  : Regset.set,     (* Physical registers modified by procedure *)
+	    regs_modified  : Regset.set,      (* Physical registers modified (but restored) by procedure *)
+	    callee_saved: Regset.set}         (* Physical registers saved by procedure *)
+     | KNOWN_PROCSIG of 
+           {linkage : linkage,                (* Physical locations of arguments and registers *)
+	    argFormal : register list,        (* What are the formal (the pseudo-registers) for args and res *)
+	    resFormal : register list,  
+	    framesize : int,                  (* How big is the stack frame for the procedure? *)
+	    ra_offset : int,                  (* Where in the stack is the return addr stored? *)
+	    blocklabels: label list,          (* A list of basic block labels of the proc *)
+	    regs_destroyed  : Regset.set,     (* Physical registers modified by procedure *)
+	    regs_modified  : Regset.set,      (* Physical registers modified (but restored) by procedure *)
+	    callee_saved: Regset.set}         (* Physical registers saved by procedure *)
 
 end

@@ -305,8 +305,6 @@ struct
       in  (FIX(true,TOTAL,fbnds), con_tuple cons)
       end
 
-    fun fbnd2type (FBND(_,_,con,rescon,_)) = CON_ARROW([con],rescon,false,oneshot_init PARTIAL)
-
     fun compile ({polyinst_opt : context * sdecs -> 
 			     (sbnd list * sdecs * con list) option,
 		  vector_eq : context -> exp * con,

@@ -1,4 +1,4 @@
-/* Not thread-safe */
+
 #include "general.h"
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -29,26 +29,60 @@ static Queue_t *global_roots = 0;
 
 /* ------------------  Parallel array allocation routines ------------------- */
 
-
-value_t alloc_bigintarray_para(int byte_len, value_t init_val, int ptag)
+static value_t* alloc_big(int wordLen, int oddAlign) 
 {
-  assert(0);
-  return 0;
+  Thread_t *curThread = getThread();
+  long *saveregs = curThread->saveregs;
+  value_t *bottom = NULL, *top;
+  int byteLen = 4 * wordLen;
+  int byteLenPad = byteLen + (oddAlign ? 4 : 0);
+  int request = RoundUp(byteLenPad, pagesize);
+
+  /* Get the large region */
+  GetHeapArea(fromheap, request, &bottom, &top);
+  if (bottom == 0) {
+    long bytesNeeded = 0;
+    GCFromC(curThread,request,0);
+    GetHeapArea(fromheap, request, &bottom, &top);
+    assert(bottom != 0);
+  }
+  
+  /* Align by inserting Skip Tag */
+  if ((((value_t)bottom) & 7) == 0) {
+      *bottom = SKIP_TAG;
+      bottom++;
+    }
+  
+  /* Discard the rest of the allocated region */
+
+  return bottom;
 }
 
-value_t alloc_bigptrarray_para(int log_len, value_t init_val, int ptag)
+value_t alloc_bigintarray_SemiPara(int byteLen, value_t initVal, int ptag)
 {
-  assert(0);
-  return 0;
+  int wordLen = 4 + (byteLen + 3) / 4;
+  value_t *space = alloc_big(wordLen,0);
+  value_t *res = space + 1;
+  init_iarray(res, byteLen, initVal);
+  return (value_t) res;
 }
 
-value_t alloc_bigfloatarray_para(int log_len, double init_val, int ptag)
+value_t alloc_bigptrarray_SemiPara(int wordLen, value_t initVal, int ptag)
 {
-  assert(0);
-  return 0;
+  value_t *space = alloc_big(4 + wordLen,0);
+  value_t *res = space + 1;
+  init_parray(res, wordLen, initVal);
+  return (value_t) res;
 }
 
-
+value_t alloc_bigfloatarray_SemiPara(int doubleLen, double initVal, int ptag)
+{
+  int wordLen = 2 * doubleLen;
+  value_t *space = alloc_big(4 + wordLen,1);
+  value_t *res = space + 1;
+  init_farray(res, doubleLen, initVal);
+  return (value_t) res;
+}
 
 
 /* --------------------- Parallel collector --------------------- */
@@ -95,9 +129,11 @@ static void stop_copy(SysThread_t *sysThread)
   int i;
   int isFirst = 0;
   value_t  *tmp1,*tmp2;
+  value_t to_alloc_start;         /* Designated thread records this initially */
   value_t *to_alloc = 0;
   value_t *to_limit = 0;
   range_t from_range, to_range;
+  static long req_size;           /* This is shared across processors. */
 
   /* Indicate we have reached this point;
      if we are the first thread to reach this point, we do some preliminary work */
@@ -108,6 +144,7 @@ static void stop_copy(SysThread_t *sysThread)
     ResetJob();                        /* Reset counter so all user threads are scanned */
     FetchAndAdd(&numWaitThread,1);
     numGlobalThread = 0;
+    req_size = 0;
   }
 
   /* Wait for all threads to reach this point; note that the first thread is counted twice */
@@ -117,9 +154,8 @@ static void stop_copy(SysThread_t *sysThread)
   while (numWaitThread < (NumSysThread + 1)) 
     ;
   if (diag)
-    printf("Proc %d: proceeding to colection\n", sysThread->stid);
+    printf("Proc %d: proceeding to collection\n", sysThread->stid);
   numDoneThread = 0;
-
 
 
   /* Get local ranges ready for use */
@@ -127,9 +163,10 @@ static void stop_copy(SysThread_t *sysThread)
   SetRange(&to_range, toheap->bottom, toheap->top);
   sysThread->LocalCursor = 0;
 
-  /* The "first" GC thread is in charge of the globals */
+  /* The "first" GC processor is in charge of the globals */
   if (isFirst)
     {
+      to_alloc_start = toheap->alloc_start;
       /* Since it's semispace, we must consider the global_roots each time */
       global_root_scan(sysThread,global_roots,fromheap);
       while (!(QueueIsEmpty(global_roots))) {
@@ -139,11 +176,12 @@ static void stop_copy(SysThread_t *sysThread)
       }
     }
 
-  /* For each remaining user thread, forward its stack and registers */
+  /* For each user thread, forward its stack and registers */
   {
     Thread_t *curThread = NULL;
     while ((curThread = NextJob()) != NULL) {
-
+      assert(curThread->requestInfo >= 0);
+      FetchAndAdd(&req_size, curThread->requestInfo);
 
       /* Compute the roots from the stack and register set */
       local_root_scan(sysThread,curThread,fromheap);
@@ -183,11 +221,11 @@ static void stop_copy(SysThread_t *sysThread)
       if (diag)
 	printf("Proc %d:    forwarded local roots of userThread %d\n",
 	       sysThread->stid,curThread->tid);      
-
-
     }
   }
-  
+
+  start_timer(&(sysThread->gctime));
+
   /* Move everything from local stack to global stack to balance work */
   {
     int i,cursor;
@@ -273,14 +311,14 @@ static void stop_copy(SysThread_t *sysThread)
       /* Resize the tospace by using the oldspace size and liveness ratio */
       {
 	long alloc = fromheap->top - fromheap->alloc_start;
-	long old = fromheap->top - fromheap->bottom;
-	long copied = ((value_t) toheap->alloc_start) - toheap->bottom;
-	double oldratio = (double)(copied) / old;
-	long new = ComputeHeapSize(copied, oldratio);
-	if (new < copied)
-	  {
+	long copied = toheap->alloc_start - to_alloc_start;
+	long used = fromheap->top - fromheap->bottom + req_size;
+	long live = copied + req_size;
+	double ratio = (double)(live) / used;
+	long new = ComputeHeapSize(live, ratio);
+	if (new < live) {
 	    fprintf(stderr,"FATAL ERROR: failure new = %d < copied = %d\n",new,copied);
-	    exit(-1);
+	    assert(0);
 	  }
 	gcstat_normal(alloc,copied);
 	Heap_Resize(toheap,new);
@@ -307,42 +345,49 @@ static void stop_copy(SysThread_t *sysThread)
     ;
   numReadyThread = 0;
 
-  scheduler(sysThread);
-  assert(0);
+  stop_timer(&(sysThread->gctime));
+
 }
 
-void gc_poll_para()
+void gc_poll_SemiPara(SysThread_t *sth)
 {
-  if (numWaitThread)
-    stop_copy(getSysThread());
+  if (numWaitThread) 
+    stop_copy(sth);
 }
 
-void gc_para(SysThread_t *sysThread)
+
+int GCAllocate_SemiPara(SysThread_t *sysThread, int req_size)
 {
+  int roundSize = RoundUp(req_size,pagesize);
+  value_t *tmp1, *tmp2;
+
+  /* Check for first time heap value needs to be initialized */
+  GetHeapArea(fromheap,roundSize,&tmp1,&tmp2);
+  if (tmp1) {
+    if (diag) 
+      printf("Proc %d: Grabbed %d page at %d\n",sysThread->stid,roundSize/pagesize,tmp1);
+    sysThread->alloc = (int)tmp1;
+    sysThread->limit = (int)tmp2;
+    return 1;
+  }
+  return 0;
+}
+
+void GC_SemiPara(SysThread_t *sysThread, int req_size)
+{
+  int pageAllocated = 0;
   int stid = sysThread->stid;
   value_t *tmp1, *tmp2;
 
   assert(sysThread->userThread == NULL);
   assert(writelist_cursor >= writelist_start);
   assert(writelist_cursor <= writelist_end);   /* It's okay not to synchornize since */
-  writelist_cursor = writelist_start;          /* Write list is irrelevnat in a semispace collector */
-
-  /* See if we can grab another page from the fromspace; if not, then it's time to stop and copy */
-  GetHeapArea(fromheap,pagesize,&tmp1,&tmp2);
-  if (tmp1) {
-    sysThread->alloc = (int)tmp1;
-    sysThread->limit = (int)tmp2;
-    if (diag) {
-      printf("Proc %d: Grabbed a page at %d\n",stid,tmp1);
-    }
-    scheduler(sysThread);
-    assert(0);
-  }
+  writelist_cursor = writelist_start;          /* Write list irrelevant in a semispace collector */
 
   if (diag)
     printf("Proc %d: Invoking stop-and-copy\n",stid);
   stop_copy(sysThread);
-  assert(0);
+
 }
 
 
@@ -350,7 +395,7 @@ void gc_para(SysThread_t *sysThread)
 #define INT_INIT(x,y) { if (x == 0) x = y; }
 #define DOUBLE_INIT(x,y) { if (x == 0.0) x = y; }
 
-void gc_init_para()
+void gc_init_SemiPara()
 {
   INT_INIT(MaxHeap, 80 * 1024);
   INT_INIT(MinHeap, 256);
@@ -367,7 +412,7 @@ void gc_init_para()
 }
 
 
-void gc_finish_para()
+void gc_finish_SemiPara()
 {
   Thread_t *th = getThread();
   int allocsize = th->saveregs[ALLOCPTR] - fromheap->alloc_start;

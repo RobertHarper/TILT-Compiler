@@ -21,38 +21,6 @@ sig
 			  Core.data list)
 
 
-   val allocateProc1 : {getSignature  : Core.label -> Core.procsig,
-		       name          : Core.label,
-		       block_map     : Bblock.bblock Core.Labelmap.map,
-		       tracemap      : (Core.register option * Tracetable.trace) Core.Regmap.map,
-		       stack_resident : Core.stacklocation 
-		                                 Core.Regmap.map,
-		       procsig       : Core.procsig} 
-                      -> 
-                       ({getSignature  : Core.label -> Core.procsig,
-		       name          : Core.label,
-		       block_map     : Bblock.bblock Core.Labelmap.map,
-		       tracemap      : (Core.register option * Tracetable.trace) Core.Regmap.map,
-		       stack_resident : Core.stacklocation 
-		                                 Core.Regmap.map,
-		       procsig       : Core.procsig} 
-			* (Core.assign list) option   
-			* int * int * Core.label list)
-
-   val allocateProc2 : 
-                     ({getSignature  : Core.label -> Core.procsig,
-		       name          : Core.label,
-		       block_map     : Bblock.bblock Core.Labelmap.map,
-		       tracemap      : (Core.register option * Tracetable.trace) Core.Regmap.map,
-		       stack_resident : Core.stacklocation 
-		                                 Core.Regmap.map,
-		       procsig       : Core.procsig} 
-			* (Core.assign list) option 		
-			* int * int * Core.label list)
-                      -> (Core.procsig * 
-			  Bblock.bblock Core.Labelmap.map *
-			  Core.label list *
-			  Core.data list)
 end
 
 

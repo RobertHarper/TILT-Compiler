@@ -25,7 +25,6 @@ static double time_diff(),time2double();
 static struct rusage start,finish;
 
 
-
 static timer_mt stacktime;
 static timer_mt gctime;
 static timer_mt majorgctime;

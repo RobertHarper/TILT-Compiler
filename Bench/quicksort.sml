@@ -105,7 +105,7 @@ fun test_sort sort_fun size =
          (if sub(a,i-1) > sub(a,i) then raise Failed else ();
           update(check,sub(a,i),sub(check,sub(a,i)) - 1)));
        for(0,4095,fn i => if sub(check,i) <> 0 then raise Failed else ());
-       print "OK"; print "\n") handle Failed =>
+       print "sort OK"; print "\n") handle Failed =>
       (print "failed"; print "\n")
   end
 
