@@ -15,7 +15,7 @@ struct
     fun specific_link_file arg = 
 	(case (!cur_platform) of
 	     ALPHA => Linkalpha.link arg
-	   | ALPHA_MLRISC => AlphaLink.link arg
+(*	   | ALPHA_MLRISC => AlphaLink.link arg*)
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
     fun specific_comp_file file =
 	let 
@@ -28,7 +28,7 @@ struct
 	in
 	    (case (!cur_platform) of
 		 ALPHA => Linkalpha.rtl_to_asm (file, rtl_mod)
-	       | ALPHA_MLRISC => AlphaLink.rtl_to_asm (file, rtl_mod)
+(*	       | ALPHA_MLRISC => AlphaLink.rtl_to_asm (file, rtl_mod)*)
 	       | PPC => error "no PPC")
 	end
     val specific_comp_files = map specific_comp_file 	  

@@ -63,9 +63,9 @@ structure Til : COMPILER =
 		val _ = if (!uptoRtl) then raise Stop else ()
 		val rtl_to_asm = 
 		    (case !platform of
-			 TIL_ALPHA => Linkalpha.rtl_to_asm
-		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm
-		       | MLRISC_SPARC => SparcLink.rtl_to_asm)
+			 TIL_ALPHA => Linkalpha.rtl_to_asm)
+(*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm
+		       | MLRISC_SPARC => SparcLink.rtl_to_asm)*)
 		val _ = rtl_to_asm(unitName ^ ".s", rtlmod)    (* creates unitName.s file with main label
 								     * `unitName_doit' *)
 

@@ -843,7 +843,7 @@ struct
 
   fun tilc(mapfile : string, cs : bool, rs : string option, 
 	   os : string option, srcs : string list) =
-	let val _ = Stats.clear_stats()
+	let val _ = if !(Stats.tt "Reset stats between calls") then Stats.clear_stats() else ()
 	    val _ = reset_stats()
 	    val _ = (depth := 0)
 	    val _ = setMapping mapfile

@@ -160,7 +160,10 @@ structure Linknil (* :> LINKNIL  *) =
 	    val _ = if (!show_hil)
 			then 
 			    let val sbnds = List.mapPartial #1 sbnd_entries
-			    in  LinkIl.Ppil.pp_sbnds sbnds
+			    in  (print "HIL context is\n";
+				 LinkIl.Ppil.pp_context ctxt;
+				 print "\nHIL bounds are\n";
+				 LinkIl.Ppil.pp_sbnds sbnds)
 			    end
 		    else ()
 	    val nilmod = pass(show_phasesplit,

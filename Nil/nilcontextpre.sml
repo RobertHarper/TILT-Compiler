@@ -8,9 +8,12 @@ structure NilContextPre
    open Nil 
    open Prim
 
+
    (* IMPORTS *)
-   val substConInKind = NilSubst.substConInKind
-   val substConInCon = NilSubst.substConInCon
+   val subtimer = Stats.subtimer
+
+   val substConInKind = fn s => subtimer("Ctx:substConInKind",NilSubst.substConInKind s)
+   val substConInCon = fn s => subtimer("Ctx:substConInCon",NilSubst.substConInCon s)
    val add = NilSubst.C.sim_add
    val addr = NilSubst.C.addr
    val varConKindSubst = NilSubst.varConKindSubst
@@ -49,7 +52,7 @@ structure NilContextPre
    val strip_arrow = NilUtil.strip_arrow
    val strip_var = NilUtil.strip_var
    val generate_tuple_label = NilUtil.generate_tuple_label
-   val selfify = NilUtil.selfify
+   val selfify = subtimer("Ctx:selfify",NilUtil.selfify)
 
 
 
@@ -440,7 +443,7 @@ structure NilContextPre
 			   lprintl "Kind contains variables not found in context"))
 	    ]
 	 else (); 
-       fun thunk() = selfify(Var_c var,kind_standardize (context,kind))
+       fun thunk() = selfify(Var_c var,subtimer ("Ctx:kind_standardize",kind_standardize) (context,kind))
        val entry = {eqn = NONE,
 		    kind = kind,
 		    std_kind = delay thunk,
@@ -467,7 +470,7 @@ structure NilContextPre
 			   print "Kind contains variables not found in context"))
 	    ]
 	 else ();
-       fun thunk() = kind_standardize(context,Single_k(con))
+       fun thunk() = subtimer("Ctx:kind_standardize",kind_standardize)(context,Single_k(con))
        val entry = {eqn = SOME con,
 		    kind = kind,
 		    std_kind = delay thunk,
@@ -492,7 +495,7 @@ structure NilContextPre
 		   ]
 	 else ();
        val kind = Single_k (con)
-       fun sthunk() = kind_standardize (context,kind)
+       fun sthunk() = subtimer("Ctx:kind_standardize",kind_standardize) (context,kind)
        val entry = {eqn = SOME con,
 		    kind = kind,
 		    std_kind = delay sthunk,
@@ -513,6 +516,7 @@ structure NilContextPre
       datatype result = CON of con | KIND of (kind * NilSubst.con_subst)
       exception Opaque
       
+      val substConInCon = fn s => subtimer ("Ctx:FKEQ:substConInCon",substConInCon s)
 
       fun project_kind(k,c,l,subst) = 
 	(case k of
@@ -534,6 +538,8 @@ structure NilContextPre
 	      error (locate "find_kind_equation.project_kind") 
 	      "bad kind to project_kind"))
 
+      val project_kind = subtimer("Ctx:project_kind",project_kind)
+
       fun app_kind(k,c1,clist,subst) = 
 	(case k 
 	   of Arrow_k (openness,vklist, k) => 
@@ -544,6 +550,8 @@ structure NilContextPre
 	     end
 	    | Single_k c => CON(substConInCon subst (App_c(c,clist)))
 	    | _ => error (locate "app_kind") "bad kind to app_kind")
+
+      val app_kind = subtimer("Ctx:app_kind",app_kind)
 
       fun closure_kind (Single_k c,env,subst) = CON(substConInCon subst (Closure_c(c,env)))
 	| closure_kind (k,env,subst) = 

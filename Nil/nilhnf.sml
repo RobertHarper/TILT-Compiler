@@ -14,20 +14,20 @@ structure NilHNF :> NILHNF =
     val timer = Stats.subtimer
     val subtimer = Stats.subtimer
 
-    val find_kind_equation = (*subtimer ("HNF:find_kind_equation",*)NilContext.find_kind_equation(*)*)
+    val find_kind_equation = subtimer ("HNF:find_kind_equation",NilContext.find_kind_equation)
 
     val type_of = subtimer ("HNF:typeof",Normalize.type_of)
 
     val substConInCon = fn subst => subtimer ("HNF:substConInCon",NilSubst.substConInCon subst)
     val addr = subtimer ("HNF:addr",NilSubst.C.addr)
-    val sim_add = NilSubst.C.sim_add
+    val sim_add = fn subst => subtimer ("HNF:sim_add",NilSubst.C.sim_add subst)
     val substitute = fn subst => subtimer ("HNF:substitute",NilSubst.C.substitute subst)
     val empty = NilSubst.C.empty
-    val fromList = NilSubst.C.simFromList
-    val merge = NilSubst.C.merge
+    val fromList = subtimer ("HNF:fromList",NilSubst.C.simFromList)
+    val merge = subtimer ("HNF:merge",NilSubst.C.merge)
 
-    val zip = Listops.zip
-    val unzip = Listops.unzip
+    val zip = fn l1 => subtimer ("HNF:zip",Listops.zip l1)
+    val unzip = fn l => subtimer ("HNF:unzip",Listops.unzip) l
 
     val strip_var = NilUtil.strip_var
     val strip_crecord = NilUtil.strip_crecord
@@ -51,6 +51,8 @@ structure NilHNF :> NILHNF =
       | is_path (Var_c v) = true
       | is_path (Annotate_c (_,c)) = is_path c
       | is_path _ = false
+
+    val is_path = subtimer ("HNF:is_path",is_path)
 
     local
       datatype entry =  CON of string * con * NilContext.context * con_subst

@@ -252,9 +252,9 @@ structure Linker :> LINKER =
 		   val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
 					   ("main_" ^ un ^ "_doit")) unitnames
 		   val _ = (case !Til.platform of
-				Til.MLRISC_ALPHA => AlphaLink.link
-			      | Til.TIL_ALPHA => Linkalpha.link
-			      | Til.MLRISC_SPARC => SparcLink.link)
+			      Til.TIL_ALPHA => Linkalpha.link
+(*			      | Til.MLRISC_ALPHA => AlphaLink.link
+			      | Til.MLRISC_SPARC => SparcLink.link*))
 		       (link_s, local_labels)
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
 		   val _ = if success then ()

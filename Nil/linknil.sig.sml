@@ -4,12 +4,13 @@ signature LINKNIL =
 sig
     structure Tonil : TONIL
     structure NilUtil : NILUTIL
-    structure NilContext : NILCONTEXT
+
 (*    structure NilStatic : NILSTATIC *)
     structure Normalize : NORMALIZE
+    structure NilContext : NILCONTEXT where type context = Normalize.context
+
     structure Ppnil : PPNIL
     structure ToClosure : TOCLOSURE
-    sharing type NilContext.context = Normalize.context (* = NilStatic.context  *)
 
     (* --- The compilation is split apart for testing just the phase-splitter --- *)
     val phasesplit : string * Il.module -> Nil.module

@@ -1233,7 +1233,7 @@ end
     fun project_from_kind(lvk_seq,con,label) = 	     
       let
 	val lvk_list = Sequence.toList lvk_seq
-	fun loop (subst,[]) = error "project_kind: Missing label in record, kind.  "
+	fun loop (subst,[]) = error ("project_kind: Missing label in record kind:  "^(Name.label2string label))
 	  | loop (subst,((l,v),k)::rest) = 
 	  if (Name.eq_label(label,l))
 	    then NilSubst.substConInKind subst k
