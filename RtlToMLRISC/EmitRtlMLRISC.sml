@@ -1188,19 +1188,19 @@ functor EmitRtlMLRISC(
 
     fun externalCALL operand =
 	  let
-	    val alloc_pointer = externalExp "cur_alloc_pointer"
-	    val alloc_limit   = externalExp "cur_alloc_limit"
-	    val heapPointer   = IntegerConvention.heapPointer
-	    val heapLimit     = IntegerConvention.heapLimit
+	    val cur_alloc_pointer = externalExp "cur_alloc_pointer"
+	    val cur_alloc_limit	  = externalExp "cur_alloc_limit"
+	    val heapPointer	  = IntegerConvention.heapPointer
+	    val heapLimit	  = IntegerConvention.heapLimit
 	  in
 	    [MLTree.CODE[
-	       MLTree.STORE32(alloc_pointer, MLTree.REG heapPointer),
-	       MLTree.STORE32(alloc_limit, MLTree.REG heapLimit)
+	       MLTree.STORE32(cur_alloc_pointer, MLTree.REG heapPointer),
+	       MLTree.STORE32(cur_alloc_limit, MLTree.REG heapLimit)
 	     ]]@
 	    CALL operand@
 	    [MLTree.CODE[
-	       MLTree.MV(heapPointer, MLTree.LOAD32 alloc_pointer),
-	       MLTree.MV(heapLimit, MLTree.LOAD32 alloc_limit)
+	       MLTree.MV(heapPointer, MLTree.LOAD32 cur_alloc_pointer),
+	       MLTree.MV(heapLimit, MLTree.LOAD32 cur_alloc_limit)
 	     ]]
 	  end
 
@@ -1229,14 +1229,15 @@ functor EmitRtlMLRISC(
 
     fun NEEDMUTATE dest =
 	  let
-	    val cursor = externalExp "writelist_cursor"
+	    val writelist_cursor = externalExp "writelist_cursor"
+	    val heapLimit	 = IntegerConvention.heapLimit
 	  in
 	    [MLTree.CODE[
-	       MLTree.MV(IntegerConvention.heapLimit,
-			 MLTree.SUB(MLTree.REG IntegerConvention.heapLimit,
-				    MLTree.LI 8, MLTree.LR)),
-	       MLTree.MV(dest, MLTree.LOAD32 cursor),
-	       MLTree.STORE32(cursor, MLTree.ADD(MLTree.REG dest, MLTree.LI 4))
+	       MLTree.MV(heapLimit, MLTree.SUB(MLTree.REG heapLimit,
+					       MLTree.LI 8, MLTree.LR)),
+	       MLTree.MV(dest, MLTree.LOAD32 writelist_cursor),
+	       MLTree.STORE32(writelist_cursor,
+			      MLTree.ADD(MLTree.REG dest, MLTree.LI 4))
 	     ]]
 	      (* alpha-specific sizes? ??? *)
 	  end
@@ -1270,19 +1271,15 @@ functor EmitRtlMLRISC(
 	  end
 
     local
-      fun code(size, moveValue, dest, raw) =
-	    let
-	      val alloc_raw = externalExp raw
-	    in
-	      [MLTree.CODE[
-		 MLTree.MV(IntegerConvention.temporary1, size),
-		 moveValue
-	       ]]@
-	      call [] (alloc_raw, [], [])@
-	      [MLTree.CODE[
-		 MLTree.MV(dest, MLTree.REG IntegerConvention.temporary1)
-	       ]]
-	    end
+      fun code(size, moveValue, dest, alloc_raw) =
+	    [MLTree.CODE[
+	       MLTree.MV(IntegerConvention.temporary1, size),
+	       moveValue
+	     ]]@
+	    call [] (externalExp alloc_raw, [], [])@
+	    [MLTree.CODE[
+	       MLTree.MV(dest, MLTree.REG IntegerConvention.temporary1)
+	     ]]
     in
       fun INT_ALLOC(size, value, dest) =
 	    code(size, mv(IntegerConvention.temporary2, value),
