@@ -633,7 +633,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 
 
     fun wild_case (col, context, args, arms, def, resCon) : exp = 
-	let fun wildpred Wild = SOME ()
+	let val _ = debugdo (fn () => print "wild_case\n")
+	    fun wildpred Wild = SOME ()
 	      | wildpred _ = error "must have Wild here"
 	    val (targetArg,argRest,info_arms,unmatchedArms) = getPrefix(col,wildpred,args,arms)
 	    val _ = if (null unmatchedArms)
@@ -644,7 +645,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	end
 
     and ref_case (col, context, args, arms, def, resCon) : exp = 
-	let
+	let val _ = debugdo (fn () => print "ref_case\n")
 	    fun extractRefInfo (Ref pattern) = pattern
 	      | extractRefInfo Wild = ([], [], Wild)
 	      | extractRefInfo _ = error "must have ref or wild here"
@@ -666,7 +667,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	end
 
   and record_case (col, context, args, arms, def, resCon) : exp = 
-    let
+    let val _ = debugdo (fn () => print "record_case\n")
 	fun extractRecordInfo(Record {fields,flexibility}) = (fields, flexibility)
 	  | extractRecordInfo Wild = ([], true)
 	  | extractRecordInfo _ = error "must have record or wild here"
@@ -726,11 +727,12 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
     in  wrapbnds(rbnds,e)
     end
 
-  and exn_case(col, context, args, arms, def, resCon) : exp = 
-      let
-	  fun exnpred (Exception info) = SOME info
-	    | exnpred _ = NONE
-	  val (targetArg, restArgs, info_arms, unmatchedArms) = getPrefix(col,exnpred,args,arms)
+  and exn_case(col, context, args, arms, def, resCon, selector) : exp = 
+      let val _ = debugdo (fn () => print "exn_case\n")
+	  val (pat_arms, unmatchedArms) = selector(col, arms)
+	  val info_arms = map (fn (Exception info, arm) => (info, arm)
+			        | _ => error "must have exception here") pat_arms
+	  val (targetArg, restArgs) = listExtract col args
 	  val def = (case unmatchedArms of
 			 [] => def
 		       | _ => fn () => match(context,args,unmatchedArms,def,resCon))
@@ -764,7 +766,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 
 
   and constructor_case (col, context, args, arms, def, resCon, selector) : exp = 
-    let 
+    let val _ = debugdo (fn () => print "constructor_case\n")
       val (pat_arms, unmatchedArms) =  selector(col, arms)
       val info_arms = map (fn (Constructor info, arm) => (info, arm)
 			    | _ => error "must have constructor here") pat_arms
@@ -873,7 +875,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 
 
     and constant_case(col, context, args, arms, def, resCon, selector) : exp = 
-	let
+	let val _ = debugdo (fn () => print "constant_case\n")
 	    val (info_arms, unmatchedArms) =  selector(col, arms)
 	    val def = (case unmatchedArms of
 			   [] => def
@@ -1002,16 +1004,17 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 				  end
 			      val firstCol :: restCol = colTypes
 			      val (maxCol, maxColType) = loop 1 (0, firstCol) restCol
+			      fun handleSum f =
+				  let val rule::_ = arms
+				      val (_, (otherPats, _, _)) = ruleExtract maxCol rule
+				      val selector = if (anyNonwild otherPats orelse ((length args) = 1))
+							 then untilSelfWild
+						     else untilOtherNonwild
+				  in  f(maxCol, context, args, arms, def, resCon, selector)
+				  end
 			  in  (case maxColType of
-				   SUMWILD (_,Constructor _) => 
-				       let val rule::_ = arms
-					   val (_, (otherPats, _, _)) = ruleExtract maxCol rule
-					   val selector = if (anyNonwild otherPats orelse ((length args) = 1))
-							      then untilSelfWild
-							  else untilOtherNonwild
-				       in  constructor_case(maxCol, context, args, arms, def, resCon, selector)
-				       end
-				 | SUMWILD (_,Exception _) => exn_case(maxCol, context, args, arms, def, resCon)
+				   SUMWILD (_,Constructor _) => handleSum constructor_case
+				 | SUMWILD (_,Exception _) => handleSum exn_case
 				 | INTWILD _ => constant_case(maxCol, context, args, arms, 
 							      def, resCon, untilSelfWild)
 				 | _ => error "must have SUMWILD or INTWILD here")
@@ -1036,7 +1039,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 				| loop n ((SUM bp)::rest) = 
 			           (case bp of
 					Constructor _ => constructor_case(n, context, args, arms, def, resCon, untilSelfWild)
-				      | Exception _ => exn_case(n, context, args, arms, def, resCon)
+				      | Exception _ => exn_case(n, context, args, arms, def, resCon, untilSelfWild)
 				      | _ => error "must have Constructor or Exception here")
 				| loop n (_::rest) = loop (n+1) rest
 			  in  loop 0 colTypes
