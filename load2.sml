@@ -77,11 +77,11 @@ val _ =
      LoadVars.first := false
    )
   else if !LoadVars.sticky then
-    (typecheck (!LoadVars.typecheck);
-     typecheck_some (!LoadVars.typecheck_some);
-     show_hil (!LoadVars.show_hil);
-     show (!LoadVars.show);
-     show_some (!LoadVars.show_some);
+    (if !LoadVars.typecheck then typecheck true else ();
+     if !LoadVars.typecheck_some then typecheck_some true else ();
+     if !LoadVars.show_hil then show_hil true else ();
+     if !LoadVars.show then show true else ();
+     if !LoadVars.show_some then show_some true else ();
      if !LoadVars.toRtl then toRtl()
      else if !LoadVars.toAsm then toAsm()
      else if !LoadVars.toExe then toExe() else ()
