@@ -9,19 +9,49 @@ functor Tonil(structure Ilstatic : ILSTATIC
 struct
    structure Il = Ilstatic.Il
    structure Nil = Nilutil.Nil
+   structure H = HashTable
 
    open Nil
-
+(*
+   val debug = ref (Prim_c (Record_c nil, nil))
+   val il_debug = ref (Il.CON_ANY)
+*)
    fun error msg = Util.error "tonil.sml" msg
 
+   (* THIS HASH TABLE LEAKS MEMORY !!! *)
+
    exception Tonil_HashExn
-   val vmap = Name.mk_var_hash_table (100, Tonil_HashExn) : (var, var*var) HashTable.hash_table
+   val vmap = Name.mk_var_hash_table (10000, Tonil_HashExn) : (var, var*var) HashTable.hash_table
 
    fun add_to_vmap (v, v_c, v_r) = HashTable.insert vmap (v, (v_c, v_r))
 
    val lookupVmap = HashTable.find vmap
 
    fun idmap _ = NONE
+
+   val xcon_count = ref 0
+
+   datatype 'a pseudoseq =
+       LIST of 'a list
+     | CONS of 'a * 'a pseudoseq
+     | APP of 'a pseudoseq list
+
+   fun flatten' (ps as LIST lst, accum) = lst :: accum
+     | flatten' (CONS (x, ps), accum) = 
+       let
+	   val accum' = flatten' (ps, accum)
+       in
+	   [x] :: accum'
+       end
+     | flatten' (APP nil, accum) = accum
+     | flatten' (APP (ps::pss), accum) = 
+       let
+	   val accum' = flatten' (APP pss, accum)
+       in
+	   flatten' (ps,accum')
+       end
+
+   fun flattenPseudoseq ps = List.concat (flatten' ps)
        
    fun extendmap (map, key, value) key' =
        if (Name.eq_var (key, key')) then SOME value else map key'
@@ -85,8 +115,8 @@ struct
 
    val count = ref 0
    fun gms (args as (_, module)) = 
-       (count := !count + 1;
-	Ilstatic.GetModSig args)
+       (Ilstatic.GetModSig args)
+
 
    fun myzip (nil, nil) = nil
      | myzip (x::xs, y::ys) = (x,y) :: myzip (xs, ys)
@@ -98,6 +128,16 @@ struct
 	     | loop ((x,y)::rest) xaccum yaccum = loop rest (x::xaccum) (y::yaccum)
        in
 	   loop lst nil nil
+       end
+
+   fun myunzip3 lst = 
+       let
+	   fun loop nil xaccum yaccum zaccum = 
+	       (List.rev xaccum, List.rev yaccum, List.rev zaccum)
+	     | loop ((x,y,z)::rest) xaccum yaccum zaccum = 
+	       loop rest (x::xaccum) (y::yaccum) (z::zaccum)
+       in
+	   loop lst nil nil nil
        end
 
    fun lookupList eq lst k' =
@@ -130,66 +170,145 @@ struct
 
    fun xovar ovar = xtyvar (Il.Tyvar.ocon_deref ovar)
 
-   fun xmod decs (il_mod as (Il.MOD_VAR var')) = 
+   fun chooseName NONE = splitFreshVar ()
+     | chooseName (SOME names) = names
+
+   fun xmod decs (il_mod as (Il.MOD_VAR var'), preferred_name) = 
        let
 	   val (var'_c, var'_r) = splitVar var'
+	   val (cbnd_ps, ebnd_ps, name_c, name_r) =
+	       (case preferred_name of
+		    NONE => (LIST nil, LIST nil, Var_c var'_c, Var_e var'_r)
+		  | SOME (_, name_c, name_r) => 
+			(LIST [(name_c, Var_c var'_c)], 
+			 LIST [Exp_b (name_r, Var_e var'_r)],
+			 Var_c name_c, Var_e name_r))
        in
-	   {rev_cbnds = [],
-	    rev_ebnds = [],
-            name_c = var'_c,
-            name_r = var'_r,
-	    il_signat = gms (decs, il_mod)}
+	   {cbnd_ps = cbnd_ps,
+	    ebnd_ps = ebnd_ps,
+            name_c = name_c,
+            name_r = name_r,
+	    il_signat = gms (decs, il_mod),
+	    valuable = true}
        end
 
-     | xmod decs (Il.MOD_APP(mod1, mod2)) =
+     | xmod decs (Il.MOD_APP(mod1, mod2), preferred_name) =
        let
-	   val (var, var_c, var_r) = splitFreshVar ()
+	   val (var, var_c, var_r) = chooseName preferred_name
 
-	   val {rev_cbnds = rev_cbnds', 
-		rev_ebnds = rev_ebnds', 
+	   val {cbnd_ps = cbnd_ps',
+		ebnd_ps = ebnd_ps',
 		name_c = name'_c,
                 name_r = name'_r,
-		il_signat = Il.SIGNAT_FUNCTOR(var',il_sig1',il_sig2',_)} = 
-	       xmod decs mod1
+		il_signat = Il.SIGNAT_FUNCTOR(var',il_sig1',il_sig2',_),
+		valuable} = 
+	       xmod decs (mod1, NONE)
 
-	   val {rev_cbnds = rev_cbnds'', 
-		rev_ebnds = rev_ebnds'', 
+	   val {cbnd_ps = cbnd_ps'',
+		ebnd_ps = ebnd_ps'',
                 name_c = name''_c,
                 name_r = name''_r,
-		il_signat = Il.SIGNAT_STRUCTURE(_,il_sdecs'')} = xmod decs mod2
+		il_signat = Il.SIGNAT_STRUCTURE(_,il_sdecs''),
+		valuable = valuable'} = xmod decs (mod2, NONE)
        in
-	   {rev_cbnds = (var_c, App_c(Var_c name'_c, [Var_c name''_c]))
-	                 :: rev_cbnds' @ rev_cbnds'',
-	    rev_ebnds = Exp_b(var_r, App_e(Var_e name'_r, 
-					   [Var_c name''_c],
-					   [Var_e name''_r]))
-                         :: rev_ebnds' @ rev_ebnds'',
-            name_c = var_c,
-	    name_r = var_r,
-	    il_signat = Ilutil.remove_modvar_signat(il_sig2', var', il_sdecs'')}
+	   {cbnd_ps = APP[cbnd_ps', cbnd_ps'',
+			  LIST[(var_c,App_c(name'_c,[name''_c]))]],
+	    ebnd_ps = APP[ebnd_ps', ebnd_ps'',
+			  LIST[Exp_b(var_r, App_e(name'_r, 
+					   [name''_c],
+					   [name''_r]))]],
+            name_c = Var_c var_c,
+	    name_r = Var_e var_r,
+	    il_signat = Ilutil.remove_modvar_signat(il_sig2',var',il_sdecs''),
+	    valuable = valuable' andalso valuable}
        end
    
-     | xmod decs (Il.MOD_SEAL(module,_)) = xmod decs module
-     
-     | xmod decs (il_mod as (Il.MOD_PROJECT (module, lbl))) =
+     | xmod decs (Il.MOD_SEAL(module,_), preferred_name) = 
+       xmod decs (module, preferred_name)
+
+     | xmod decs (il_mod as (Il.MOD_PROJECT (Il.MOD_VAR mvar, lbl)),
+		  preferred_name) =
        let
-	   val (var, var_c, var_r) = splitFreshVar ()
-	   val {rev_cbnds, rev_ebnds, name_c, name_r, ...} = 
-	       xmod decs module
 	   val il_signat = gms (decs, il_mod)
+	   val (mvar_c, mvar_r) = splitVar mvar
+	   val (cbnd_ps, ebnd_ps, name_c, name_r) = 
+	       (case preferred_name of 
+		    NONE => (LIST [], LIST[], 
+			     Proj_c(Var_c mvar_c, lbl),
+			     Prim_e(NilPrimOp(select lbl), [], 
+				    SOME [Var_e mvar_r]))
+                  | SOME (_, var_c, var_r) =>
+			(LIST [(var_c, Proj_c(Var_c mvar_c, lbl))],
+			 LIST [Exp_b(var_r, 
+				     Prim_e(NilPrimOp(select lbl), [], 
+					    SOME [Var_e mvar_r]))],
+			 Var_c var_c,
+			 Var_e var_r))
        in
-	   {rev_cbnds = (var_c, Proj_c(Var_c name_c, lbl)) :: rev_cbnds,
-	    rev_ebnds = (Exp_b (var_r, Prim_e(NilPrimOp(select lbl), 
-					      [], SOME [Var_e name_r])))
-                          :: rev_ebnds,
-            name_c = var_c,
-	    name_r = var_r,
-	    il_signat = il_signat}
+           {cbnd_ps = cbnd_ps,
+	    ebnd_ps = ebnd_ps,
+	    name_c = name_c,
+	    name_r = name_r,
+	    il_signat = il_signat,
+	    valuable = true}
        end
 
-     | xmod decs (Il.MOD_FUNCTOR(var', il_signat', body)) =
+
+     | xmod decs (il_mod as (Il.MOD_PROJECT 
+			     (Il.MOD_PROJECT(Il.MOD_VAR mvar, lbl), lbl')),
+		  preferred_name) =
        let
-	   val (var, var_c, var_r) = splitFreshVar ()
+	   val il_signat = gms (decs, il_mod)
+	   val (mvar_c, mvar_r) = splitVar mvar
+           val code_c = Proj_c(Proj_c(Var_c mvar_c, lbl), lbl')
+	   val code_e = Prim_e(NilPrimOp(select lbl), 
+			       [], 
+			       SOME [Prim_e(NilPrimOp(select lbl'),
+					    [],
+					    SOME [(Var_e mvar_r)])])
+
+	   val (cbnd_ps, ebnd_ps, name_c, name_r) = 
+	       (case preferred_name of 
+		    NONE => (LIST [], LIST[], code_c, code_e)
+                  | SOME (_, var_c, var_r) =>
+			(LIST [(var_c, code_c)],
+			 LIST [Exp_b(var_r, code_e)],
+			 Var_c var_c,
+			 Var_e var_r))
+       in
+           {cbnd_ps = cbnd_ps,
+	    ebnd_ps = ebnd_ps,
+	    name_c = name_c,
+	    name_r = name_r,
+	    il_signat = il_signat,
+	    valuable = true}
+       end
+     
+     | xmod decs (il_mod as (Il.MOD_PROJECT (module, lbl)), preferred_name) =
+       let
+	   val (var, var_c, var_r) = chooseName preferred_name
+	   val {cbnd_ps, ebnd_ps, name_c, name_r, il_signat,
+		valuable} = xmod decs (module, NONE)
+           val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
+	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
+	   val (_, Ilcontext.PHRASE_CLASS_MOD(_,il_signat')) = 
+	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])
+						   
+       in
+	   {cbnd_ps = APP[cbnd_ps,
+			  LIST [(var_c, Proj_c(name_c, lbl))]],
+	    ebnd_ps = APP[ebnd_ps,
+			  LIST [Exp_b(var_r,Prim_e(NilPrimOp(select lbl), 
+						   [], SOME [name_r]))]],
+            name_c = Var_c var_c,
+	    name_r = Var_e var_r,
+	    il_signat = il_signat',
+	    valuable = valuable}
+       end
+
+     | xmod decs (Il.MOD_FUNCTOR(var', il_signat', body), preferred_name) =
+       let
+	   val (var, var_c, var_r) = chooseName preferred_name
 
 	   (* Split the argument parameter *)
 	   val (var'_c, var'_r) = splitVar var'
@@ -198,11 +317,12 @@ struct
            (* Split the functor body *)
            val d = Il.DEC_MOD(var', il_signat')
 	   val decs' = Ilcontext.add_context_dec (decs, Ilstatic.SelfifyDec d)
-	   val {rev_cbnds, 
-		rev_ebnds, 
+	   val {cbnd_ps = cbnd_ps'', 
+		ebnd_ps = ebnd_ps'', 
 		name_c = name''_c,
 		name_r = name''_r,
-		il_signat = il_signat''} = xmod decs' body
+		il_signat = il_signat'',
+		valuable} = xmod decs' (body, NONE)
 
 	   val var_not_in_defn = Name.fresh_var ()
 	   val (arrow, effect) = 
@@ -211,64 +331,105 @@ struct
 	       else 
 		   (Il.PARTIAL, Partial)
 
-	   val (knd'', con'') = xsig decs' (Var_c name''_c, il_signat'') 
+	   val (knd'', con'') = xsig decs' (name''_c, il_signat'') 
 
-           val cbnds = rev rev_cbnds
-           val ebnds = rev rev_ebnds
+           val cbnds = flattenPseudoseq cbnd_ps''
+           val ebnds = flattenPseudoseq ebnd_ps''
        in
-	   {rev_cbnds = [(var_c, Fun_c(Open, [(var'_c, knd)], 
-					     makeLetC cbnds (Var_c name''_c)))],
-            rev_ebnds = [Fixfun_b [(var_not_in_defn,
+	   {cbnd_ps = LIST[(var_c, Fun_c(Open, [(var'_c, knd)], 
+					 makeLetC cbnds (name''_c)))],
+            ebnd_ps = LIST[Fixfun_b [(var_not_in_defn,
 				   Function(Open, effect, Leaf,
 					    [(var'_c, knd)],
 					    [(var'_r, con)],
 					    Let_e(Sequential,
 						  (map Con_b cbnds) @ ebnds,
-						  Var_e name''_r),
+						  name''_r),
 					    con''))]],
-	    name_c = var_c,
-	    name_r = var_r,
+	    name_c = Var_c var_c,
+	    name_r = Var_e var_r,
 	    il_signat = Il.SIGNAT_FUNCTOR(var', il_signat', il_signat'',
-					  Util.oneshot_init arrow)}
+					  arrow),
+	    valuable = true}
        end
    
-     | xmod decs (Il.MOD_STRUCTURE sbnds) =
+     | xmod decs (Il.MOD_STRUCTURE sbnds, preferred_name) =
        let
-	   val (var, var_c, var_r) = splitFreshVar ()
+	   val (var, var_c, var_r) = chooseName preferred_name
+
 	   val {cbnds, crbnds, ebnds, erlabels, erfields, ercons,
-		il_sdecs} = xsbnds decs sbnds
+		il_sdecs, valuable} = xsbnds decs sbnds
        in
-	   {rev_cbnds = [(var_c, Crecord_c crbnds)] @ (rev cbnds),
-	    rev_ebnds = [Exp_b (var_r, Prim_e (NilPrimOp (record erlabels),
-					       ercons, SOME erfields))] @ 
-	                (rev ebnds),
-            name_c = var_c,
-	    name_r = var_r,
-	    il_signat = Il.SIGNAT_STRUCTURE (NONE, il_sdecs)} 
+	   {cbnd_ps = APP[cbnds,
+			  LIST [(var_c, Crecord_c crbnds)]],
+	    ebnd_ps = APP[ebnds,
+			  LIST[Exp_b (var_r, 
+				      Prim_e (NilPrimOp (record erlabels),
+					      ercons, SOME erfields))]],
+            name_c = Var_c var_c,
+	    name_r = Var_e var_r,
+	    il_signat = Il.SIGNAT_STRUCTURE (NONE, il_sdecs),
+	    valuable = valuable} 
+       end
+
+    | xmod decs (il_mod as (Il.MOD_LET (var1, il_mod1, il_mod2)),
+		 preferred_name) =
+       let
+	   val (var1_c, var1_r) = splitVar var1
+	   val (var', var'_c, var'_r) = chooseName preferred_name
+
+	   val {cbnd_ps = cbnd_ps',
+		ebnd_ps = ebnd_ps',
+		name_c = _,
+                name_r = _,
+		il_signat = il_signat',
+		valuable} = xmod decs (il_mod1, SOME (var1, var1_c, var1_r))
+
+           val d = Il.DEC_MOD(var1, il_signat')
+	   val decs' = Ilcontext.add_context_dec (decs, Ilstatic.SelfifyDec d)
+
+	   val {cbnd_ps = cbnd_ps'',
+		ebnd_ps = ebnd_ps'',
+                name_c = _, 
+                name_r = _,
+		il_signat = il_signat'',
+		valuable = valuable'} = 
+	       xmod decs' (il_mod2, SOME (var', var'_c, var'_r))
+
+       in
+	   {cbnd_ps = APP[cbnd_ps', cbnd_ps''],
+	    ebnd_ps = APP[ebnd_ps', ebnd_ps''],
+            name_c = Var_c var'_c,
+	    name_r = Var_e var'_r,
+            (* SLOW!!! *)
+	    il_signat = gms (decs, il_mod),
+	    valuable = valuable' andalso valuable}
        end
 
    and xsbnds decs [] =  
-       {cbnds = nil, crbnds = nil, 
-	ebnds = nil, erlabels = nil, 
+       {cbnds = LIST nil, crbnds = nil, 
+	ebnds = LIST nil, erlabels = nil, 
 	erfields = nil, ercons = nil,
-	il_sdecs = nil}
+	il_sdecs = nil,
+	valuable = true}
 
      | xsbnds decs (Il.SBND(lab, Il.BND_EXP(var, il_exp)) :: rest) = 
        let
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
 	   val il_dec = Il.DEC_EXP(var, il_con)
 	   val decs' = Ilcontext.add_context_exp'(decs, var, il_con)
-	   val {cbnds, crbnds, ebnds, erlabels, erfields, ercons, il_sdecs} =
-	       xsbnds decs' rest
-	   val (exp, tipe) = xexp decs il_exp
+	   val {cbnds, crbnds, ebnds, erlabels, 
+		erfields, ercons, il_sdecs, valuable} = xsbnds decs' rest
+	   val (exp, tipe, valuable') = xexp decs il_exp
        in
 	   {cbnds = cbnds,
 	    crbnds = crbnds,
-	    ebnds = (Exp_b (var, exp)) :: ebnds,
+	    ebnds = CONS (Exp_b (var, exp), ebnds),
 	    erlabels = lab :: erlabels,
 	    erfields = (Var_e var) :: erfields,
 	    ercons = tipe :: ercons,
-	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs}
+	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
+	    valuable = valuable andalso valuable'}
        end
 
      | xsbnds decs (Il.SBND(lab, Il.BND_CON(var, il_con)) :: rest) = 
@@ -277,37 +438,40 @@ struct
 	   val il_dec = Il.DEC_CON(var, il_knd, SOME il_con)
 	   val decs' = 
 	       Ilcontext.add_context_con'(decs, var, il_knd, SOME il_con)
-	   val {cbnds, crbnds, ebnds, erlabels, erfields, ercons, il_sdecs} =
-	       xsbnds decs' rest
+	   val {cbnds, crbnds, ebnds, erlabels, 
+		erfields, ercons, il_sdecs, valuable} = xsbnds decs' rest
            val (con,_) = xcon decs il_con
        in
-	   {cbnds = (var, con) :: cbnds,
+	   {cbnds = CONS((var, con), cbnds),
 	    crbnds = (lab, Var_c var) :: crbnds,
 	    ebnds = ebnds,
 	    erlabels = erlabels, 
 	    erfields = erfields,
 	    ercons = ercons,
-	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs}
+	    il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
+	    valuable = valuable}
        end
 
     | xsbnds decs (Il.SBND(lab, Il.BND_MOD(var', il_mod)) :: rest) =
       let
-	  val {rev_cbnds, rev_ebnds, name_c, name_r, il_signat} = xmod decs il_mod
+	  val (var'_c, var'_r) = splitVar var'
+	  val {cbnd_ps, ebnd_ps, il_signat, valuable = valuable', ...} = 
+	      xmod decs (il_mod, SOME (var', var'_c, var'_r))
 	  val il_dec = Il.DEC_MOD(var', il_signat)
 	  val decs' = Ilcontext.add_context_dec(decs, Ilstatic.SelfifyDec il_dec)
-	  val {cbnds, crbnds, ebnds, erlabels, erfields, ercons, il_sdecs} =
-	      xsbnds decs' rest
+	  val {cbnds, crbnds, ebnds, erlabels, 
+	       erfields, ercons, il_sdecs, valuable} = xsbnds decs' rest
 	  
-	  val (var'_c, var'_r) = splitVar var'
 	  val (knd, con) = xsig decs (Var_c var'_c, il_signat)
       in
-	  {cbnds = (rev rev_cbnds) @ ((var'_c, Var_c name_c) :: cbnds),
+	  {cbnds = APP[cbnds, cbnd_ps],
 	   crbnds = (lab, Var_c var'_c) :: crbnds,
-	   ebnds = (rev rev_ebnds) @ ((Exp_b (var'_r, Var_e name_r)) :: ebnds),
+	   ebnds = APP[ebnds, ebnd_ps],
 	   erlabels = lab :: erlabels,
 	   erfields = (Var_e var'_r) :: erfields,
 	   ercons = con :: ercons,
-	   il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs}
+	   il_sdecs = Il.SDEC(lab, il_dec) :: il_sdecs,
+	   valuable = valuable andalso valuable'}
       end
 
    and xflexinfo decs (ref (Il.INDIRECT_FLEXINFO f)) = xflexinfo decs f
@@ -328,7 +492,7 @@ struct
 	   (lab :: labs, con :: cons)
        end
 
-   and xcon decs (il_con as (Il.CON_VAR var)) = 
+   and xcon' decs (il_con as (Il.CON_VAR var)) = 
        let
 	   val con = Var_c var
 	   val il_kind = Ilstatic.GetConKind(decs, il_con)
@@ -337,13 +501,13 @@ struct
 	   (con, Singleton_k (kind, con))
        end
 
-     | xcon decs (Il.CON_TYVAR tv) = xcon decs (xtyvar tv)
+     | xcon' decs (Il.CON_TYVAR tv) = xcon decs (xtyvar tv)
 
-     | xcon decs (Il.CON_OVAR ov) = xcon decs (xovar ov)
+     | xcon' decs (Il.CON_OVAR ov) = xcon decs (xovar ov)
 
-     | xcon decs (Il.CON_FLEXRECORD fr) = xflexinfo decs fr
+     | xcon' decs (Il.CON_FLEXRECORD fr) = xflexinfo decs fr
 
-     | xcon decs ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
+     | xcon' decs ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
        let
 	   val con = Prim_c (Int_c intsize, [])
        in
@@ -352,14 +516,14 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_FLOAT floatsize) = 
+     | xcon' decs (Il.CON_FLOAT floatsize) = 
        let
 	   val con = Prim_c (BoxFloat_c floatsize, [])
        in
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_ARRAY il_con) = 
+     | xcon' decs (Il.CON_ARRAY il_con) = 
        let
 	   val (con', knd') = xcon decs il_con 
 	   val con = Prim_c (Array_c, [con'])
@@ -367,7 +531,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_VECTOR il_con) = 
+     | xcon' decs (Il.CON_VECTOR il_con) = 
        let
 	   val (con', knd') = xcon decs il_con 
 	   val con = Prim_c (Vector_c, [con'])
@@ -375,14 +539,14 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_ANY) = 
+     | xcon' decs (Il.CON_ANY) = 
        let
 	   val con = Prim_c(Exn_c, [])
        in
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_REF il_con) = 
+     | xcon' decs (Il.CON_REF il_con) = 
        let
 	   val (con', knd') = xcon decs il_con
 	   val con = Prim_c (Ref_c, [con'])
@@ -390,7 +554,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_TAG il_con) = 
+     | xcon' decs (Il.CON_TAG il_con) = 
        let
 	   val (con', knd') = xcon decs il_con
 	   val con = Prim_c (Exntag_c, [con'])
@@ -398,7 +562,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_ARROW (il_con1, il_con2, arr)) =
+     | xcon' decs (Il.CON_ARROW (il_con1, il_con2, arr)) =
        let
 	   val (con1, _) = xcon decs il_con1
            val (con2, _) = xcon decs il_con2
@@ -410,7 +574,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (il_con as Il.CON_APP (il_con1, il_con2)) = 
+     | xcon' decs (il_con as Il.CON_APP (il_con1, il_con2)) = 
        let
 	   val (con1, _) = xcon decs il_con1
            val (con2, _) = xcon decs il_con2
@@ -421,7 +585,7 @@ struct
 	   (con, Singleton_k(knd, con))
        end
 
-     | xcon decs (Il.CON_MUPROJECT(i, Il.CON_FUN(vars, 
+     | xcon' decs (Il.CON_MUPROJECT(i, Il.CON_FUN(vars, 
 						 Il.CON_TUPLE_INJECT cons))) =
        let
 	   val decs' =
@@ -429,14 +593,14 @@ struct
 	       (decs,(map (fn v => 
 			   Il.DEC_CON(v, Il.KIND_TUPLE 1, NONE))
 		      vars))
-	   val (cons', _) = myunzip (map (xcon decs') cons)
+	   val cons'= map (#1 o (xcon decs')) cons
 	   val con = Mu_c (Util.list2set (Listops.zip vars cons'), 
 			   List.nth (vars, i-1))
        in
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_MUPROJECT(i, Il.CON_FUN([var], con))) =
+     | xcon' decs (Il.CON_MUPROJECT(i, Il.CON_FUN([var], con))) =
        let
 	   val decs' = 
 	       Ilcontext.add_context_con'(decs, var, Il.KIND_TUPLE 1, NONE)
@@ -446,7 +610,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_RECORD rdecs) = 
+     | xcon' decs (Il.CON_RECORD rdecs) = 
        let
 	   val (lbls, cons) = xrdecs decs rdecs
 	   val con = Prim_c (Record_c lbls, cons)
@@ -454,7 +618,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_FUN (vars, il_con1)) = 
+     | xcon' decs (Il.CON_FUN (vars, il_con1)) = 
        let
 	   val decs' = 
 	       Ilcontext.add_context_decs 
@@ -467,15 +631,15 @@ struct
 	   (con, Singleton_k(Arrow_k(Open, args, knd1), con))
        end
 
-     | xcon decs (Il.CON_SUM (units, il_cons)) = 
+     | xcon' decs (Il.CON_SUM (units, il_cons)) = 
        let
-	   val (cons, _) = myunzip (map (xcon decs) il_cons)
+	   val cons = map (#1 o (xcon decs)) il_cons
 	   val con = Prim_c (Sum_c units, cons)
        in
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
+     | xcon' decs (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
        let
 	   val (cons, knds) = myunzip (map (xcon decs) il_cons)
 	   val tuple_length = List.length cons
@@ -488,7 +652,7 @@ struct
 	   (con, Singleton_k(knd, con))
        end
 
-     | xcon decs (il_con as (Il.CON_TUPLE_PROJECT (i, il_con1))) = 
+     | xcon' decs (il_con as (Il.CON_TUPLE_PROJECT (i, il_con1))) = 
        let
 	   val (con1, Singleton_k(Record_k seq,_)) = xcon decs il_con1
 	   val lbl = Ilutil.generate_tuple_label i
@@ -506,23 +670,38 @@ struct
 	   (con, Singleton_k(knd, con))
        end
 
-     | xcon decs (il_con as (Il.CON_MODULE_PROJECT (modv, lab))) = 
+     | xcon' decs (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
        let
-	   val il_knd = Ilstatic.GetConKind (decs, il_con)
-	   val {rev_cbnds,name_c,...} = xmod decs modv
-	   val con = makeLetC (rev rev_cbnds) (Proj_c (Var_c name_c, lab))
+	   val {cbnd_ps,name_c,il_signat,...} = xmod decs (modv, NONE)
+
+	   val var = Name.fresh_var ()
+           val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
+	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
+	   val (_, Ilcontext.PHRASE_CLASS_CON(_,il_knd)) = 
+	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [lbl])
+
+	   val con = makeLetC (flattenPseudoseq cbnd_ps) 
+	                      (Proj_c (name_c, lbl))
 	   val knd = xkind il_knd
        in
 	   (con, Singleton_k(knd, con))
        end
     
-     | xcon decs c = (print "Error:  Unrecognized constructor:\n";
+     | xcon' decs c = (print "Error:  Unrecognized constructor:\n";
 		      Ppil.pp_con c;
 		      error "(xcon):  Unrecognized constructor")
    
+   and xcon decs c =
+       (xcon_count := (!xcon_count) + 1;
+(*        print (Int.toString (!xcon_count));
+	print " : ";
+	Ppil.pp_con c;
+	print "\n"; *)
+	xcon' decs c)
+
    and toFunction decs (exp as Il.FIX _) =
        let
-	   val (Let_e (_, [Fixfun_b fns], Var_e var), _) = xexp decs exp
+	   val (Let_e (_, [Fixfun_b fns], Var_e var), _, _) = xexp decs exp
        in
 	   case	(Util.sequence_lookup (Name.eq_var) fns var) of
 	       SOME f => f
@@ -531,50 +710,50 @@ struct
      | toFunction _ _ = error "(toFunction): not a FIX expression"
 
    and xvalue decs (Prim.int (intsize, w)) = 
-       (Const_e (Prim.int (intsize, w)), Prim_c(Int_c intsize, nil))
+       (Const_e (Prim.int (intsize, w)), Prim_c(Int_c intsize, nil), true)
 
      | xvalue decs (Prim.uint (intsize, w)) = 
-       (Const_e (Prim.uint (intsize, w)), Prim_c(Int_c intsize, nil))
+       (Const_e (Prim.uint (intsize, w)), Prim_c(Int_c intsize, nil), true)
 
      | xvalue decs (Prim.float (floatsize, f)) = 
        (Prim_e (NilPrimOp (box_float floatsize),
 		[], SOME [Const_e (Prim.float (floatsize, f))]),
-	Prim_c(BoxFloat_c floatsize,nil))
+	Prim_c(BoxFloat_c floatsize,nil), true)
 
      | xvalue decs (Prim.array (il_con, a)) = 
        let
 	   val il_exps = Array.foldr (op ::) nil a
-           val (con,_) = xcon decs il_con 
-	   val (exps, _) = myunzip (map (xexp decs) il_exps)
+           val (con,_) = xcon decs il_con
+           val exps = map (#1 o (xexp decs)) il_exps
        in
 	   (Const_e (Prim.array (con, Array.fromList exps)), 
-	    Prim_c(Array_c, [con]))
+	    Prim_c(Array_c, [con]), true)
        end
 
      | xvalue decs (Prim.vector (il_con, v)) = 
        let
 	   val il_exps = Array.foldr (op ::) nil v
            val (con, _) = xcon decs il_con
-	   val (exps, _) = myunzip (map (xexp decs) il_exps)
+	   val exps = map (#1 o (xexp decs)) il_exps
        in
 	   (Const_e (Prim.vector (con, Array.fromList exps)), 
-	    Prim_c(Array_c, [con]))
+	    Prim_c(Array_c, [con]), true)
        end
 
      | xvalue decs (Prim.refcell (ref il_exp)) = 
        let
-	   val (exp, con) = xexp decs il_exp
+	   val (exp, con, _) = xexp decs il_exp
        in
 	   (* BUG *)
 	   (* SHOULD PRESERVE EQUIVALENCE OF REF VALUES BUT DOESN'T !!! *)
-	   (Const_e (Prim.refcell (ref exp)), Prim_c(Ref_c, [con]))
+	   (Const_e (Prim.refcell (ref exp)), Prim_c(Ref_c, [con]), true)
        end
 
      | xvalue decs (Prim.tag(tag, il_con))  =
        let
 	   val (con, _) = xcon decs il_con
        in
-	   (Const_e (Prim.tag (tag, con)), Prim_c(Exntag_c, [con]))
+	   (Const_e (Prim.tag (tag, con)), Prim_c(Exntag_c, [con]), true)
        end
 
    and xexp decs (Il.OVEREXP(_, true, exp)) = xexp decs (xoneshot exp)
@@ -583,30 +762,36 @@ struct
 
      | xexp decs (il_exp as (Il.APP (Il.PRIM (prim, il_cons), il_arg))) = 
        let
-	   val (cons, _) = myunzip (map (xcon decs) il_cons)
-	   val (arg, _) = xexp decs il_arg
+	   val cons = map (#1 o (xcon decs)) il_cons
+	   val (arg, _, valuable) = xexp decs il_arg
+           (* slow *)
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
+           val valuable = Ilstatic.Exp_IsValuable (decs, il_exp)
+
 	   val (con, _) = xcon decs il_con
        in
-	   (Prim_e (PrimOp prim, cons, SOME [arg]), con)
+	   (Prim_e (PrimOp prim, cons, SOME [arg]), con, valuable)
        end
 
      | xexp decs (il_exp as Il.PRIM (prim, il_cons)) = 
        let
-	   val (cons, _) = myunzip (map (xcon decs) il_cons)
+	   val cons = map (#1 o (xcon decs)) il_cons
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
 	   val (con, _) = xcon decs il_con
        in
-	   (Prim_e (PrimOp prim, cons, NONE), con)
+	   (Prim_e (PrimOp prim, cons, NONE), con, true)
        end
 
      | xexp decs (il_exp as (Il.APP (Il.ILPRIM ilprim, il_arg))) = 
        let
-	   val (arg, _) = xexp decs il_arg
+	   val (arg, _, _) = xexp decs il_arg
+	   (* SLOW *)
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
+           val valuable = Ilstatic.Exp_IsValuable (decs, il_exp)
+
 	   val (con, _) = xcon decs il_con
        in
-	   (Prim_e (PrimOp (xilprim ilprim), [], SOME [arg]), con)
+	   (Prim_e (PrimOp (xilprim ilprim), [], SOME [arg]), con, valuable)
        end
 
      | xexp decs (il_exp as (Il.ILPRIM ilprim)) = 
@@ -614,7 +799,7 @@ struct
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
 	   val (con, _) = xcon decs il_con
        in
-	   (Prim_e (PrimOp (xilprim ilprim), [], NONE), con)
+	   (Prim_e (PrimOp (xilprim ilprim), [], NONE), con, true)
        end
 
      | xexp decs (il_exp as (Il.VAR var)) = 
@@ -622,41 +807,60 @@ struct
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
 	   val (con, _) = xcon decs il_con
        in
-	   (Var_e var, con)
+	   (Var_e var, con, true)
        end
 
-     | xexp decs (Il.APP (il_exp1, il_exp2)) = 
+     | xexp decs (il_exp as (Il.APP (il_exp1, il_exp2))) = 
        let
-	   val (exp1, Arrow_c(_,(_,_,_,con))) = xexp decs il_exp1
-	   val (exp2, _) = xexp decs il_exp2
+           (* SLOW *)
+(*           val il_fun_con = Ilstatic.GetExpCon (decs, il_exp1)
+           val (il_arrow, il_fun_result) = 
+	       (case (Ilstatic.con_head_normalize' (decs, il_fun_con)) of
+                   Il.CON_ARROW(il_arrow,il_con,_) => (il_arrow, il_con)
+                | _ => error "xexp: APP of non-arrow-type function")
+           val (con, _) = xcon decs il_fun_result
+*)
+	   val (exp1, Arrow_c(_,(effect,[],_,con)), valuable) = xexp decs il_exp1
+	   val (exp2, _, valuable') = xexp decs il_exp2
+	   val valuable'' = (case effect of
+			       Total => valuable' andalso valuable
+			     | Partial => false)
        in
-	   (App_e (exp1, [], [exp2]), con)
+	   (App_e (exp1, [], [exp2]), con, valuable'')
        end
 
-     | xexp decs (Il.FIX (il_arrow, fbnds, var)) = 
+     | xexp decs (Il.FIX (il_arrow, fbnds)) = 
        let
-	   val set = xfbnds decs fbnds
-	   val (SOME (Function (_,_,_,vklist,vclist,_,result_con))) = 
-	       Util.set_lookup Name.eq_var set var
-	   val effect = (case il_arrow of 
-			     Il.PARTIAL => Partial 
-			   | Il.TOTAL => Total)
+	   val fbnds'= xfbnds decs fbnds
+           val set = Util.list2set fbnds'
+           val names = map (fn (var,_) => Var_e var) fbnds'
+           val types = map 
+                (fn (_,Function(openness,effect,_,_,[(_,con1)],_,con2)) =>  
+                        Arrow_c(openness,(effect, [], [con1], con2)))
+                fbnds'
+           val num_names = List.length types
+           val labels = makeLabels num_names
        in
-	   (Let_e (Sequential, [Fixfun_b set], Var_e var), 
-	    Arrow_c (Open, (effect, vklist, #2 (myunzip vclist), result_con)))
+	   if (List.length names = 1) then
+               (Let_e (Sequential, [Fixfun_b set], hd names),
+		hd types, true)
+           else
+	       (Let_e (Sequential, [Fixfun_b set], 
+		       Prim_e(NilPrimOp (record labels), types, SOME names)),
+		Prim_c (Record_c labels, types), true)
        end
 
      | xexp decs (Il.RECORD rbnds) = 
        let
-	   val (labels, exps, cons) = xrbnds decs rbnds
+	   val (labels, exps, cons, valuable) = xrbnds decs rbnds
        in
-	   (Prim_e (NilPrimOp (record labels), [], SOME exps),
-	    Prim_c (Record_c labels, cons))
+	   (Prim_e (NilPrimOp (record labels), cons, SOME exps),
+	    Prim_c (Record_c labels, cons), valuable)
        end
 
      | xexp decs (il_exp0 as (Il.RECORD_PROJECT (il_exp, label, il_record_con))) =
        let
-	   val (exp, _) = xexp decs il_exp
+	   val (exp, _, valuable) = xexp decs il_exp
            val fields = (case (Ilstatic.con_head_normalize' (decs, il_record_con)) of
                            Il.CON_RECORD fields => fields
                          | hnf => (print "Oops\n";
@@ -677,40 +881,41 @@ struct
 				      error "xexp: RECORD_PROJECT 2"))
 	   val (con, _) = xcon decs il_con
        in
-	   (Prim_e (NilPrimOp (select label), [], SOME [exp]), con)
+	   (Prim_e (NilPrimOp (select label), [], SOME [exp]), con, valuable)
        end
 
      | xexp decs (Il.SUM_TAIL (_, il_exp)) =
        let
-	   val (exp, Prim_c(Sum_c (SOME i), cons)) = xexp decs il_exp
+	   val (exp, Prim_c(Sum_c (SOME i), cons), valuable) = xexp decs il_exp
        in
 	   (Prim_e (NilPrimOp (project_sum (Word32.fromInt i)), 
 		    cons, SOME [exp]),
-	    List.nth (cons, i))
+	    List.nth (cons, i), valuable)
        end
 
-     | xexp decs (Il.HANDLE (il_exp1, il_exp2 as (Il.FIX (_,fbnds, var)))) = 
+     | xexp decs (Il.HANDLE (il_exp1, il_exp2)) = 
        let
-	   val (exp1, con) = xexp decs il_exp1
+	   val (exp1, con, _) = xexp decs il_exp1
 	   val exp2 = toFunction decs il_exp2
        in
-	   (Handle_e (exp1, exp2), con)
+	   (Handle_e (exp1, exp2), con, false)
        end
 
      | xexp decs (Il.RAISE (il_con, il_exp)) = 
        let
-	   val (exp, _) = xexp decs il_exp
+	   val (exp, _, _) = xexp decs il_exp
 	   val (con, _) = xcon decs il_con
        in
-	   (Raise_e (exp, con), con)
+	   (Raise_e (exp, con), con, false)
        end
 
      | xexp decs (Il.LET (bnds, il_exp)) = 
        let
-	   val (extended_decs, bnds') = xbnds decs bnds
-	   val (exp, con) = xexp extended_decs il_exp
+	   val (extended_decs, bnds', valuable) = xbnds decs bnds
+	   val (exp, con, valuable') = xexp extended_decs il_exp
        in
-	   (Let_e (Sequential, bnds', exp), con)
+	   (Let_e (Sequential, flattenPseudoseq bnds', exp), 
+	    con, valuable andalso valuable)
        end
 
      | xexp decs (Il.NEW_STAMP il_con) = 
@@ -718,48 +923,50 @@ struct
 	   val (con, _) = xcon decs il_con
        in 
 	   (Prim_e(NilPrimOp make_exntag, [con], SOME []),
-	    Prim_c (Exntag_c, []))
+	    Prim_c (Exntag_c, []),
+	    false)
        end
 
      | xexp decs (Il.EXN_INJECT (il_tag, il_exp)) =
        let
-	   val (tag, _) = xexp decs il_tag
-	   val (exp, _) = xexp decs il_exp
+	   val (tag, _, valuable) = xexp decs il_tag
+	   val (exp, _, valuable') = xexp decs il_exp
        in
            (Prim_e (NilPrimOp inj_exn, [], SOME [tag, exp]),
-	    Prim_c (Exn_c, []))
+	    Prim_c (Exn_c, []),
+	    valuable andalso valuable')
        end
 
      | xexp decs (Il.ROLL (il_con, il_exp)) = 
        let
 	   val (con, _) = xcon decs il_con
-	   val (exp, _) = xexp decs il_exp
+	   val (exp, _, valuable) = xexp decs il_exp
        in
-	   (Prim_e(NilPrimOp roll, [con], SOME [exp]), con)
+	   (Prim_e(NilPrimOp roll, [con], SOME [exp]), con, valuable)
        end
 
      | xexp decs (il_exp as (Il.UNROLL (_, il_exp1))) = 
        let
 	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
 	   val (con, _) = xcon decs il_con
-	   val (exp1, con1) = xexp decs il_exp1
+	   val (exp1, con1, valuable) = xexp decs il_exp1
        in
-	   (Prim_e(NilPrimOp unroll, [con1], SOME [exp1]), con)
+	   (Prim_e(NilPrimOp unroll, [con1], SOME [exp1]), con, valuable)
        end
 
      | xexp decs (Il.INJ (il_cons, n, il_exp)) =
        let
-	   val (exp, _) = xexp decs il_exp
-	   val (cons, _) = myunzip (map (xcon decs) il_cons)
+	   val (exp, _, valuable) = xexp decs il_exp
+	   val cons = map (#1 o (xcon decs)) il_cons
        in
 	   (Prim_e(NilPrimOp (inject (Word32.fromInt n)), cons, SOME [exp]),
-	    Prim_c(Sum_c (SOME n), cons))
+	    Prim_c(Sum_c (SOME n), cons), valuable)
        end
 
      | xexp decs (Il.CASE (il_cons, il_exp, il_arms, il_default)) =
        let
-	   val (cons, _) = myunzip (map (xcon decs) il_cons)
-	   val (exp, _) = xexp decs il_exp
+	   val cons = map (#1 o (xcon decs)) il_cons
+	   val (exp, _, valuable) = xexp decs il_exp
 	       
 	   fun xarms (n, []) = []
              | xarms (n, NONE :: rest) = xarms (n+1, rest)
@@ -774,14 +981,14 @@ struct
        in
 	   (Switch_e(Sumsw_e {info = cons, arg  = exp, arms = arms, 
 			      default = default}),
-	    con)
+	    con, 
+	    (* OVERLY CONSERVATIVE? *)
+	    false)
        end
 
      | xexp decs (e as Il.EXN_CASE (il_exp, il_arms, il_default)) =
        let
-           val _ = Ppil.pp_exp e
-
-	   val (exp, _) = xexp decs il_exp
+	   val (exp, _, _) = xexp decs il_exp
 
 	   fun xarms [] = []
              | xarms ((il_tag_exp, _, exp) :: rest) = 
@@ -795,22 +1002,29 @@ struct
        in
 	   (Switch_e(Exncase_e {info = (), arg = exp, arms = arms,
 				default = default}),
-	    con)
+	    con, false)
        end
 
      | xexp decs (il_exp as (Il.MODULE_PROJECT (module, label))) =
        let
-	   val {rev_cbnds, rev_ebnds, 
-		name_c, name_r, il_signat} = xmod decs module
-	   val (_, Prim_c(Record_c lbls, cons)) = 
-	       xsig decs (Var_c name_c, il_signat)
-	   val cbnds = rev rev_cbnds
-	   val (SOME con') = lookupList Name.eq_label (myzip (lbls,cons)) label
+	   val {cbnd_ps, ebnd_ps, 
+		name_c, name_r, il_signat, valuable} = xmod decs (module, NONE)
+
+	   val var = Name.fresh_var ()
+           val (Il.SIGNAT_STRUCTURE(_,sdecs)) = 
+	       Ilstatic.SelfifySig(Il.SIMPLE_PATH var, il_signat)
+	   val (_, Ilcontext.PHRASE_CLASS_EXP(_,il_con)) = 
+	       Ilcontext.Sdecs_Lookup(Il.MOD_VAR var, sdecs, [label])
+	   val (con,_) = xcon decs il_con
+	     
+	   val cbnds = flattenPseudoseq cbnd_ps
+	   val bnds = (map Con_b cbnds) @ 
+	              (flattenPseudoseq ebnd_ps)
        in
-	   (Let_e (Sequential, 
-		   (map Con_b cbnds) @ (rev rev_ebnds), 
-		   Prim_e (NilPrimOp (select label), cons, SOME [Var_e name_r])),
-	    makeLetC cbnds con')
+	   (Let_e (Sequential, bnds, Prim_e (NilPrimOp (select label), 
+					     [], SOME [name_r])),
+	    makeLetC cbnds con,
+	    valuable)
        end
 
      | xexp decs (Il.SEAL (exp,_)) = xexp decs exp
@@ -833,10 +1047,10 @@ struct
 		   val rest' = loop rest
 		   val decs'' = 
 		       Ilcontext.add_context_exp'(decs', var', il_con1)
-		   val (body', _) = xexp decs'' body
-                   (* overly conservative ! *)
+		   val (body', _, valuable) = xexp decs'' body
+                   (* OVERLY CONSERVATIVE ! *)
 		   val (effect, recursive) = 
-		       if (Ilstatic.Exp_IsValuable(decs'', body)) then
+		       if valuable then
 			   (Total, Leaf)
 		       else
 			   (Partial, Nonleaf)
@@ -848,63 +1062,65 @@ struct
 		   :: rest'
 	       end
        in
-	   Util.list2set (loop fbnds)
+	   loop fbnds
        end
    handle e => (print "uncaught exception in xfbnds\n";
 		raise e)
 
-   and xrbnds decs [] = ([], [], [])
+   and xrbnds decs [] = ([], [], [], true)
      | xrbnds decs ((label, il_exp) :: rest) = 
        let
-	   val (exp, con) = xexp decs il_exp
-	   val (labels, exps, cons) = xrbnds decs rest
+	   val (exp, con, valuable) = xexp decs il_exp
+	   val (labels, exps, cons, valuable') = xrbnds decs rest
        in
-	   (label :: labels, exp :: exps, con :: cons)
+	   (label :: labels, exp :: exps, con :: cons,
+	    valuable andalso valuable')
        end
 
-   and xbnds decs [] = (decs, nil)
+   and xbnds decs [] = (decs, LIST nil, true)
      | xbnds decs (il_bnd :: rest) = 
        let
-	   val (bnds, il_dec) = 
+	   val (bnds, il_dec, valuable) = 
 	       (case il_bnd of
 		    (Il.BND_EXP(var, il_exp)) => 
 			let 
 			    val il_con = Ilstatic.GetExpCon (decs, il_exp)
-			    val (exp, con) = xexp decs il_exp
+			    val (exp, con, valuable) = xexp decs il_exp
 			in
-			    ([Exp_b(var, exp)], 
-			     Il.DEC_EXP(var, il_con))
+			    (LIST [Exp_b(var, exp)], 
+			     Il.DEC_EXP(var, il_con),
+			     valuable)
 			end
 
 		  | (Il.BND_MOD(var, il_module)) => 
 			let
 			    val (var_c, var_r) = splitVar var
-			    val {rev_ebnds, rev_cbnds,
-				 name_c, name_r, il_signat} = 
-				xmod decs il_module
+			    val {ebnd_ps, cbnd_ps, il_signat, valuable,...} = 
+				xmod decs (il_module, SOME (var, var_c, var_r))
  			in
-			    ((Exp_b (var_r, Var_e name_r)) :: 
-			     (rev_ebnds @ 
-			      (map Con_b ((var_c, Var_c name_c) :: rev_cbnds))),
-			     Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat)))
+			   (APP [LIST (map Con_b (flattenPseudoseq cbnd_ps)),
+				 ebnd_ps],
+			    Ilstatic.SelfifyDec (Il.DEC_MOD(var, il_signat)),
+			    valuable)
 			end
 
 		  | (Il.BND_CON(var,il_con)) =>
 			let
-			    val il_knd = Ilstatic.GetConKind (decs, il_con)
+			    val il_knd = Ilstatic.GetConKind (decs, il_con) 
 			    val (con, _) = xcon decs il_con
 			in
-			    ([Con_b(var, con)],
-			     Il.DEC_CON(var, il_knd, SOME il_con))
+			    (LIST [Con_b(var, con)],
+			     Il.DEC_CON(var, il_knd, SOME il_con),
+			     true)
 			end)
 
-	   val (decs', bnds'') = 
+	   val (decs', bnds'', valuable') = 
 	       xbnds (Ilcontext.add_context_dec (decs, il_dec)) rest
        in
-	   (decs', bnds @ bnds'')
+	   (decs', APP[bnds, bnds''], valuable' andalso valuable)
        end
 
-   and xsig decs (con0, Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow_shot))=
+   and xsig decs (con0, Il.SIGNAT_FUNCTOR (var, sig_dom, sig_rng, arrow))=
        let
 	   val (var_c, var_r) = splitVar var
 	   val (knd, con) = xsig decs (Var_c var, sig_dom)
@@ -914,7 +1130,7 @@ struct
 	            (App_c(con0, [Var_c var]), sig_rng)
        in
 	   (Arrow_k (Open, [(var_c, knd)], knd'),
-	    Arrow_c (Open, (xeffect (xoneshot arrow_shot), 
+	    Arrow_c (Open, (xeffect arrow, 
 			    [(var_c, knd)], [con], con')))
        end
 
