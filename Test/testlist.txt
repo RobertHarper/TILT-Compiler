@@ -46,40 +46,40 @@ m0042	two-dimensional arrays
 m0043	arrays
 m0044	arrays
 m0045	asterisk parsing
-n0      Denmark Core-SML failure test
-n1      Denmark Core-SML failure test
-n2      Denmark Core-SML failure test
-n3      Denmark Core-SML failure test
-n4      Denmark Core-SML failure test
-n5      Denmark Core-SML failure test
-n6      Denmark Core-SML failure test
-n7      Denmark Core-SML failure test
-n8      Denmark Core-SML failure test
-n9      Denmark Core-SML failure test
-n10     Denmark Core-SML failure test
-n11     Denmark Core-SML accept test
-n12     Denmark Core-SML accept test
-n13     Denmark Core-SML failure test
-n14     Denmark Core-SML failure test
-n15     Denmark Core-SML failure test
-n16     Denmark Core-SML failure test
-n17     Denmark Core-SML failure test
-n18     Denmark Core-SML failure test
-n19     Denmark Core-SML failure test
-n20     Denmark Core-SML failure test
-n21     Denmark Core-SML failure test
-n22     Denmark Core-SML failure test
-n23     Denmark Core-SML failure test
-n24     Denmark Core-SML failure test
-n25     Denmark Core-SML failure test
-n26     Denmark Core-SML failure test
-n27     Denmark Core-SML failure test
-n28     Denmark Core-SML failure test
-n29     Denmark Core-SML failure test
-n30     Denmark Core-SML failure test
-n31     Denmark Core-SML failure test
-n32     Denmark Core-SML failure test
-n33     Denmark Core-SML failure test
+n0      abstype not equality type
+n1      scoping of abstype
+n2      syntax error (exp in local top)
+n3      syntax error (exp in local bottom)
+n4      syntax error (exp in local bottom)
+n5      syntax error (exp in let top)
+n6      unresolved flex pattern
+n7      arrow not an equality type
+n8      exn not an equality type
+n9      arrow not an equality type
+n10     distinct namespaces of types and values
+n11     ref constraint (obsolete imperative tyvar test)
+n12     ref constraint (obsolete imperative tyvar test)
+n13     record type mismatch
+n14     records aren't ints
+n15     scoping
+n16     type shadowing
+n17     records aren't lists
+n18     nested pairs aren't triples
+n19     distinct type variables don't unify
+n20     polymorphic constraint
+n21     polymorphic constraint
+n22     exception handler typing
+n23     exception handler typing
+n24     exception raise typing
+n25     multi-arm fn typing
+n26     multi-arm fn typing
+n27     equality typing
+n28     type inference with refs
+n29     type inference with refs
+n30     type inference with refs
+n31     type inference with refs
+n32     distinct type variables don't unify
+n33     scope of explicit type variables
 n34     Denmark Core-SML failure test
 n35     Denmark Core-SML failure test
 n36     Denmark Core-SML failure test
