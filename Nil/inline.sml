@@ -141,13 +141,11 @@ function *)
 	(case con of
 	   Prim_c(pc,cs) => acons cs
          | Mu_c(b,vcs) => asequence acon vcs
-         | AllArrow_c(_,_,vks,vlo,cs,_,c) =>
+         | AllArrow_c{tFormals=vks,eFormals=cs,body=c,...} =>
 	   let val s1 = avks vks
-	       val s2 = (case vlo of NONE => 1 | SOME(vs) => 1+List.length
-vs)
-	       val s3 = acons cs
-	       val s4 = acon c
-	   in s1 + s2 + s3 + s4
+	       val s2 = acons (map #2 cs)
+	       val s3 = acon c
+	   in s1 + s2 + s3
 	   end
          | ExternArrow_c(cs,c) => acons (c::cs)
          | Var_c v => 0
@@ -219,7 +217,7 @@ SOME({num_nonrec_calls,num_rec_calls,definition,...}) =>
        )
       (* analyze a list of expressions *)
       and aexps (es:exp list) : int = alist aexp es
-      and avcs vcs = alist2 acon vcs
+      and avcs vcs = acons (map #3 vcs)
       and abnd (bnd: bnd) : int = 
         1 + 
 	(case bnd of
@@ -229,7 +227,8 @@ SOME({num_nonrec_calls,num_rec_calls,definition,...}) =>
 	     let val vf_list = Sequence.toList vfs
 	     in 
 		 case vf_list of
-		     [(v,f as (Function(_,r,vks,_,vcs,vs,e,c)))] => 
+		     [(v,f as (Function{tFormals=vks,eFormals=vcs,fFormals=vs,
+					body=e,body_type=(_,c),...}))] =>
 			 let val info = insert_fun(v)
 			     val s = (avks vks) + (avcs vcs) + (List.length
 vs) + 
@@ -265,7 +264,7 @@ e))
 	     List.foldl (fn ((vks,e),s) => s + (aexp e) + (avks vks))
 	     ((acon arg) + (aexpopt default)) arms
        )
-      and afunction (Function (_,_,vks,_,vcs,vs,e,c)) = 
+      and afunction (Function {tFormals=vks,eFormals=vcs,fFormals=vs,body=e,body_type=(_,c),...}) = 
 	  (avks vks) + (avcs vcs) + (List.length vs) + (aexp e) + (acon c)
       and aexport_entry (ExportValue (_,v)) = (aexp (Var_e v); ())
 	| aexport_entry (_) = ()
@@ -320,19 +319,19 @@ e))
 	   | App_e (Open,Var_e f,cs,es1,es2) =>
 	       		 (case find_fun f of
 		    SOME{definition=ref(SOME(func)),already_inlined,...} =>
-		      let val Function(_,_,vks,_,vcs,vs,e,_) = 
+		      let val Function{tFormals=vks,eFormals=vcs,fFormals=vs,body=e,...} = 
 			if !already_inlined then rename_func func else 
 			      (already_inlined := true; func)
 			  val bnd1 = 
 			      Listops.map2 (fn ((v,k),c) =>
 					    Con_b(Runtime,Con_cb(v,c)))(vks,cs)
 			  val bnd2 = 
-			      Listops.map2 (fn ((v,c),e) =>
-					    Exp_b(v,TraceUnknown,e))
+			      Listops.map2 (fn ((v,tr,c),e) =>
+					    Exp_b(v,tr,e))
 			      (vcs,es1)
 			  val bnd3 = 
 			      Listops.map2 (fn (v,e) => 
-					    Exp_b(v,TraceUnknown,e))
+					    Exp_b(v,TraceKnown TraceInfo.Notrace_Real, e))
 			      (vs,es2)
 
 			  val bnds = List.concat [bnd1,bnd2,bnd3]
@@ -355,19 +354,19 @@ e))
 	     | App_e(Open,Var_e f,cs,es1,es2) =>
 		 (case find_fun f of
 		    SOME{definition=ref(SOME(func)),already_inlined,...} =>
-		      let val Function(_,_,vks,_,vcs,vs,e,_) = 
+		      let val Function{tFormals=vks,eFormals=vcs,fFormals=vs,body=e,...} = 
 			if !already_inlined then rename_func func else 
 			      (already_inlined := true; func)
 			  val bnd1 = 
 			      Listops.map2 (fn ((v,k),c) =>
 					    Con_b(Runtime,Con_cb(v,c)))(vks,cs)
 			  val bnd2 = 
-			      Listops.map2 (fn ((v,c),e) =>
-					    Exp_b(v,TraceUnknown,e))
+			      Listops.map2 (fn ((v,tr,c),e) =>
+					    Exp_b(v,tr,e))
 			      (vcs,es1)
 			  val bnd3 = 
 			      Listops.map2 (fn (v,e) => 
-					    Exp_b(v,TraceUnknown,e))
+					    Exp_b(v,TraceKnown TraceInfo.Notrace_Real, e))
 			      (vs,es2)
 			  val (bnd4,bnd5) = 
 			    (case e of
@@ -403,8 +402,13 @@ e))
 			 (List.map(fn (v,f) => (v,rfunction f))
 			  (Sequence.toList vfs)))]
 	| Fixclosure_b _ => [b])
-      and rfunction(Function(ef,r,vks,b,vcs,vs,e,c)) = 
-	  Function(ef,r,vks,b,vcs,vs,rexp e,c)
+      and rfunction(Function{effect,recursive,isDependent,
+			     tFormals,eFormals,fFormals,
+			     body,body_type}) = 
+	  Function{effect=effect,recursive=recursive,isDependent=isDependent,
+		   tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
+		   body=rexp body, body_type=body_type}
+
       and rswitch sw = 
 	(case sw of
 	   Intsw_e{arg,size,arms,default} =>
