@@ -21,6 +21,7 @@ struct
    val do_preproject = Stats.tt("do_preproject")
    val do_memoize = Stats.tt("do_memoize")
    val keep_hil_numbers = Stats.ff("keep_hil_numbers")
+   val do_polyrec = Stats.tt("do_polyrec")
 
    val elaborator_specific_optimizations = ref true
    fun error msg = Util.error "tonil.sml" msg
@@ -1102,7 +1103,7 @@ end (* local defining splitting context *)
 				  il_body_signat)))
 			 :: rest_il_sbnds) =
 
-       if ((!elaborator_specific_optimizations)
+       if ((!do_polyrec)
 	   andalso (Name.is_label_internal lbl) 
            andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
 	   andalso (Name.eq_label (them_lbl, IlUtil.them_lab))
@@ -2249,8 +2250,7 @@ end (* local defining splitting context *)
 									    Il.DEC_EXP(_,il_con,_,_))]),
 						arrow))))
 		     :: rest) = 
-	       if ( (! elaborator_specific_optimizations)
-                   andalso (Name.eq_label (them_lbl, IlUtil.them_lab))) then
+	       if ((Name.eq_label (them_lbl, IlUtil.them_lab))) then
                    (* if a polymorphic function has a "them" label rather than 
                       an "it" label, then it is a polymorphic function nest whose
                       code (i.e., this entire component) will be eliminated by the
@@ -2270,7 +2270,7 @@ end (* local defining splitting context *)
 	   val sdecs = if !elaborator_specific_optimizations
 			   then List.filter filter sdecs
 		       else sdecs
-       in  if !elaborator_specific_optimizations
+       in  if !do_polyrec
 	       then loop sdecs
 	   else sdecs
        end
