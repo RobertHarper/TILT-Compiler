@@ -9,12 +9,8 @@ structure AlphaLink
 
 is
 
-(*
 ../../Alpha/alpha.cm
-*)
 ../../smlnj-lib.cm
-
-../Backend/backend.cm
 
 ../RtlToMLRISC.cm
 ../MLRISC.cm

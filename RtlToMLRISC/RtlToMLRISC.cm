@@ -7,11 +7,10 @@ group
 
 is
 
+../Backend/backend.cm
 ../Parser/parser.cm
 ../Rtl/rtl.cm
 ../smlnj-lib.cm
-
-Backend/backend.cm
 
 MLRISC.cm
 
@@ -47,4 +46,5 @@ RegisterMap.sml
 RegisterSpillMap.sml
 RtlRegisterTraceMap.sml
 SpillReload.sml
+StringHashTable.sml
 

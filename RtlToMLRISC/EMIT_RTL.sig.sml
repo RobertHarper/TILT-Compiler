@@ -12,7 +12,7 @@ signature EMIT_RTL = sig
   (*
    * A label within a given module.
    *)
-  type local_label
+  type label
 
   (*
    * A module of code and data.
@@ -38,7 +38,7 @@ signature EMIT_RTL = sig
    * Emit a native entry table for a given list of module labels.
    * labels -> the module labels to construct the entry table from
    *)
-  val emitEntryTable: local_label list -> unit
+  val emitEntryTable: label list -> unit
 
 end
 

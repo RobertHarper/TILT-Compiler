@@ -7,9 +7,6 @@
 structure AlphaLink
 	    = struct
 
-  (* -- structures --------------------------------------------------------- *)
-
-
   (* -- translation functions (adapted from linkalpha.sml) ----------------- *)
 
   val asm_suffix = ".alpha.s"
@@ -58,7 +55,7 @@ structure AlphaLink
       end
   fun compile filename = hd(compiles [filename])
 
-  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.local_label =
+  fun rtl_to_alpha (filename, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
       in (comp(filename ^ ".s",rtlmod), main)
       end
@@ -69,7 +66,7 @@ structure AlphaLink
       in  (comp(filename ^ asm_suffix,rtlmod),main)
       end
 
-  val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
+  val cached_prelude = ref (NONE : (string * Rtl.label) option)
   fun compile_prelude (use_cache,filename) = 
       case (use_cache, !cached_prelude) of
 	  (true, SOME mlabel) => mlabel

@@ -1,6 +1,5 @@
 (*$import TopLevel *)
 
-
 (* =========================================================================
  * MLRISC_PSEUDO.sig.sml
  * ========================================================================= *)
@@ -29,7 +28,8 @@ signature MLRISC_PSEUDO = sig
   | ProcedureTrailer of Label.label
   | Export of Label.label
   | CallSite of idSet ref * (idSet -> unit)
-  | Align of int * int
+  | Align of int
+  | AlignOdd of int
   | Comment of string
   | Integer of Word32.word
   | IntegerFloatSize of Word32.word

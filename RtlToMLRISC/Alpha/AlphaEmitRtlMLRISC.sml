@@ -8,6 +8,29 @@ local
 
   (* -- structures --------------------------------------------------------- *)
 
+  structure Decalpha =
+    Decalpha(
+      val exclude_intregs = []: int list
+      structure Rtl = Rtl
+    )
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure Decalphautils =
+    Decalphautils(
+      structure Decalpha = Decalpha
+    )
+
+  (* -- structures --------------------------------------------------------- *)
+
+  structure AlphaTraceTable =
+    Tracetable(
+      val little_endian = true
+      structure MU = Decalphautils
+    )
+
+  (* -- structures --------------------------------------------------------- *)
+
   structure AlphaBasicBlock =
     BasicBlock(
       structure MLRISCPseudo = AlphaMLRISCPseudo
@@ -22,7 +45,7 @@ local
   structure AlphaRtlRegisterTraceMap =
     RtlRegisterTraceMap(
       structure Cells	   = Alpha32Cells
-      structure TraceTable = LittleEndianTraceTable
+      structure TraceTable = AlphaTraceTable
     )
 
   structure AlphaSpillReload =
@@ -69,7 +92,7 @@ in
       structure RegisterTraceMap    = AlphaRtlRegisterTraceMap
       structure SpillReload	    = AlphaSpillReload
       structure StackFrame	    = AlphaStandardFrame
-      structure TraceTable	    = LittleEndianTraceTable
+      structure TraceTable	    = AlphaTraceTable
     )
 
 end

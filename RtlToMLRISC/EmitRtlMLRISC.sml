@@ -1,6 +1,5 @@
 (*$import TopLevel BASIC_BLOCK CALL_CONVENTION_BASIS CELLS CALL_CONVENTION REGISTER_ALLOCATION FLOAT_CONVENTION INTEGER_CONVENTION REGISTER_LIVENESS DenseIntSet MLRISC_CONSTANT MLRISC_PSEUDO MLRISC_REGION MLTREECOMP MLTREE_EXTRA REGISTER_SPILL_MAP REGISTER_TRACE_MAP Name SPILL_RELOAD SPILL_FRAME TRACETABLE EMIT_RTL DenseRegisterMap Rtl Label *)
 
-
 (* =========================================================================
  * EmitRtlMLRISC.sml
  * ========================================================================= *)
@@ -78,14 +77,15 @@ functor EmitRtlMLRISC(
 	      and type TraceTable.trace =
 		       RegisterTraceMap.trace
 	) :> EMIT_RTL
-	       where type local_label = Rtl.local_label
-		 and type module      = Rtl.module
+	       where type label  = Rtl.label
+		 and type module = Rtl.module
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
 
   structure IntSet	= DenseIntSet
   structure RegisterMap = DenseRegisterMap
+  structure LabelMap    = RegisterMap(structure HashTable = StringHashTable)
 
   structure Machine = TraceTable.Machine
   structure MLTree  = MLTreeExtra.MLTree
@@ -93,7 +93,7 @@ functor EmitRtlMLRISC(
 
   (* -- types -------------------------------------------------------------- *)
 
-  type local_label = Rtl.local_label
+  type label = Rtl.label
 
   type module = Rtl.module
 
@@ -218,7 +218,7 @@ functor EmitRtlMLRISC(
 		   regtrace,
 		   stacktrace} = info
 
-	      val label' = LocalLabel.translate label
+	      val label' = Label'.translate label
 	    in
 	      print(Label.nameOf label'^"("^Int.toString framesize^"): ");
 	      app (fn(Machine.R reg, trace) =>
@@ -529,7 +529,7 @@ functor EmitRtlMLRISC(
 	      val returnOffset = StackFrame.allocateReturn frame
 	    in
 	      fn live =>
-		(* ??? print(Label.nameOf(LocalLabel.translate label)^": ");
+		(* ??? print(Label.nameOf(Label'.translate label)^": ");
 		 app (fn id => print(Int.toString id^" ")) live;
 		 print "\n"; *)
 		Module.addCallInfo{
@@ -716,59 +716,47 @@ functor EmitRtlMLRISC(
 
   end
 
-  structure LocalLabel = struct
+  structure Label' = struct
 
     local
       (*
-       * The register map from Rtl local label numbers to MLRISC labels.
+       * The register map from Rtl local label strings to MLRISC labels.
        *)
-      val map	 = RegisterMap.map(fn _ => newLabel())
-      val lookup = RegisterMap.lookup map
+      val mapCode    = LabelMap.map(fn _ => newLabel())
+      val mapData    = LabelMap.map(fn _ => newLabel())
+      val lookupCode = LabelMap.lookup mapCode
+      val lookupData = LabelMap.lookup mapData
     in
       (*
-       * Return an MLRISC label for a given Rtl local label.
-       * -> the Rtl local label
+       * Return an MLRISC label for a given Rtl label.
+       * -> the Rtl label
        * <- the label
        *)
-      fun translate(Rtl.LOCAL_DATA label) = lookup(Name.var2int label)
-	| translate(Rtl.LOCAL_CODE label) = lookup(Name.var2int label)
-	    (* ??? let
-	      val label' = lookup(Name.var2int label)
-	    in
-	      print(Name.var2string label^" -> "^Label.nameOf label'^"\n");
-	      label'
-	    end *)
+      fun translate(Rtl.ML_EXTERN_LABEL name) = externalLabel name
+	| translate(Rtl.C_EXTERN_LABEL name)  = externalLabel name
+	| translate(Rtl.LOCAL_DATA name)      = lookupData name
+	| translate(Rtl.LOCAL_CODE name)      = lookupCode name
 
       (*
-       * Return the string of a given Rtl local label.
-       * -> the Rtl local label
+       * Return the string of a given Rtl label.
+       * -> the Rtl label
        * <- the string of the label
        *)
       local
-	val toString = MLRISCPseudo.fixLabel o Name.var2string
+	val fixLabel = MLRISCPseudo.fixLabel
       in
-	fun string(Rtl.LOCAL_DATA label) = "LD"^toString label
-	  | string(Rtl.LOCAL_CODE label) = "LC"^toString label
+	fun string(Rtl.ML_EXTERN_LABEL name) = fixLabel name
+	  | string(Rtl.C_EXTERN_LABEL name)  = fixLabel name
+	  | string(Rtl.LOCAL_DATA name)      = "LD"^fixLabel name
+	  | string(Rtl.LOCAL_CODE name)      = "LC"^fixLabel name
       end
 
       (*
        * Reset the internal state of the local label translation.
        *)
-      fun reset() = RegisterMap.reset map
+      fun reset() = (LabelMap.reset mapCode;
+		     LabelMap.reset mapData)
     end
-
-  end
-
-  structure Label' = struct
-
-    (*
-     * Return an MLRISC label for a given Rtl label.
-     * -> the Rtl label
-     * <- the label
-     *)
-    fun translate(Rtl.ML_EXTERN_LABEL name) = externalLabel name
-      | translate(Rtl.C_EXTERN_LABEL name)  = externalLabel name
-      | translate(Rtl.LOCAL_LABEL label)    = LocalLabel.translate label
 
   end
 
@@ -896,16 +884,15 @@ functor EmitRtlMLRISC(
   structure Alignment = struct
 
     (*
-     * Return an alignment size and offset for a given alignment operand.
+     * Return an alignment directive for a given alignment operand.
      * -> the alignment operand
-     * <- the alignment size
-     * <- the alignment offset
+     * <- the alignment directive
      *)
-    fun translate Rtl.LONG    = (4, 0)
-      | translate Rtl.QUAD    = (8, 0)
-      | translate Rtl.ODDLONG = (8, 4)
-      | translate Rtl.OCTA    = (16, 0)
-      | translate Rtl.ODDOCTA = (16, 12)
+    fun translate Rtl.LONG    = MLRISCPseudo.Align 2
+      | translate Rtl.QUAD    = MLRISCPseudo.Align 3
+      | translate Rtl.ODDLONG = MLRISCPseudo.AlignOdd 3
+      | translate Rtl.OCTA    = MLRISCPseudo.Align 4
+      | translate Rtl.ODDOCTA = MLRISCPseudo.AlignOdd 4
 
   end
 
@@ -920,11 +907,11 @@ functor EmitRtlMLRISC(
      *)
     fun mlWrapper live _ =
 	  let
-	    val label = Rtl.fresh_code_label()
+	    val label = Rtl.fresh_code_label "call_site"
 	    val site  = (ref live, Register.callSite label)
 	  in
 	    ([MLTree.PSEUDO_OP(MLRISCPseudo.CallSite site)],
-	     [MLTree.DEFINELABEL(LocalLabel.translate label)])
+	     [MLTree.DEFINELABEL(Label'.translate label)])
 	  end
 
     fun noWrapper _ =
@@ -962,7 +949,7 @@ functor EmitRtlMLRISC(
     val destFloatReg = FloatRegister.translate
     val value	     = SmallValue.translate
     val ea	     = EffectiveAddress.translate
-    val localLabel   = LocalLabel.translate
+    val label        = Label'.translate
 
     (*
      * Return a list of mltree values for a specific Rtl instruction whose
@@ -1374,7 +1361,7 @@ functor EmitRtlMLRISC(
 	  [MLTree.DEFINELABEL label]
 
     fun IALIGN alignment =
-	  [MLTree.PSEUDO_OP(MLRISCPseudo.Align alignment)]
+	  [MLTree.PSEUDO_OP alignment]
 
     fun ICOMMENT message =
 	  [MLTree.PSEUDO_OP(MLRISCPseudo.Comment message)]
@@ -1386,8 +1373,8 @@ functor EmitRtlMLRISC(
      *)
     fun translateInstruction(Rtl.LI(immediate, dest)) =
 	  LI(Immediate.translate32 immediate, destReg dest)
-      | translateInstruction(Rtl.LADDR(label, offset, dest)) =
-	  LADDR(Label'.translate label, Offset.translate offset, destReg dest)
+      | translateInstruction(Rtl.LADDR(base, offset, dest)) =
+	  LADDR(label base, Offset.translate offset, destReg dest)
       | translateInstruction(Rtl.LEA(address, dest)) =
 	  LEA(ea address, destReg dest)
       | translateInstruction(Rtl.MV(src, dest)) =
@@ -1478,24 +1465,24 @@ functor EmitRtlMLRISC(
       | translateInstruction(Rtl.LN(src, dest)) =
 	  LN(destFloatReg src, destFloatReg dest)
 
-      | translateInstruction(Rtl.BR label) =
-	  BR(localLabel label)
-      | translateInstruction(Rtl.BCNDI(compare, test, label, predict)) =
-	  BCNDI(compare, srcReg test, localLabel label, predict)
-      | translateInstruction(Rtl.BCNDF(compare, test, label, predict)) =
-	  BCNDF(compare, srcFloatReg test, localLabel label, predict)
+      | translateInstruction(Rtl.BR target) =
+	  BR(label target)
+      | translateInstruction(Rtl.BCNDI(compare, test, target, predict)) =
+	  BCNDI(compare, srcReg test, label target, predict)
+      | translateInstruction(Rtl.BCNDF(compare, test, target, predict)) =
+	  BCNDF(compare, srcFloatReg test, label target, predict)
       | translateInstruction(
-	  Rtl.BCNDI2(compare, left, right, label, predict)) =
-	  BCNDI2(compare, srcReg left, value right, localLabel label, predict)
+	  Rtl.BCNDI2(compare, left, right, target, predict)) =
+	  BCNDI2(compare, srcReg left, value right, label target, predict)
       | translateInstruction(
-	  Rtl.BCNDF2(compare, left, right, label, predict)) =
+	  Rtl.BCNDF2(compare, left, right, target, predict)) =
 	  BCNDF2(compare, srcFloatReg left, srcFloatReg right,
-		 localLabel label, predict)
-      | translateInstruction(Rtl.JMP(src, labels)) =
-	  JMP(srcReg src, map LocalLabel.translate labels)
+		 label target, predict)
+      | translateInstruction(Rtl.JMP(src, targets)) =
+	  JMP(srcReg src, map label targets)
 
-      | translateInstruction(Rtl.SAVE_CS label) =
-	  SAVE_CS(localLabel label)
+      | translateInstruction(Rtl.SAVE_CS target) =
+	  SAVE_CS(label target)
       | translateInstruction(Rtl.END_SAVE) =
 	  END_SAVE
       | translateInstruction(Rtl.RESTORE_CS) =
@@ -1546,8 +1533,8 @@ functor EmitRtlMLRISC(
 	  HARD_ZBARRIER
       | translateInstruction(Rtl.HANDLER_ENTRY) =
 	  HANDLER_ENTRY
-      | translateInstruction(Rtl.ILABEL label) =
-	  ILABEL(localLabel label)
+      | translateInstruction(Rtl.ILABEL target) =
+	  ILABEL(label target)
       | translateInstruction(Rtl.IALIGN align) =
 	  IALIGN(Alignment.translate align)
       | translateInstruction(Rtl.HALT) =
@@ -1595,7 +1582,7 @@ functor EmitRtlMLRISC(
 	     MLRISCPseudo.IntegerArray(size, immediate))]
 
     fun ALIGN alignment =
-	  [MLTree.PSEUDO_OP(MLRISCPseudo.Align alignment)]
+	  [MLTree.PSEUDO_OP alignment]
 
     fun DLABEL label =
 	  [MLTree.DEFINELABEL label]
@@ -1637,7 +1624,7 @@ functor EmitRtlMLRISC(
 	    case label of
 	      Rtl.ML_EXTERN_LABEL _ => externalDLABEL label'
 	    | Rtl.C_EXTERN_LABEL _  => externalDLABEL label'
-	    | Rtl.LOCAL_LABEL _	    => DLABEL label'
+	    | _	                    => DLABEL label'
 	  end
   end
 
@@ -2002,14 +1989,14 @@ functor EmitRtlMLRISC(
 	     * replace return instructions with branches to return code and
 	     * replace compare/branch sequences with branches
 	     *)
-	    val return	       = Rtl.fresh_code_label()
+	    val return	       = Rtl.fresh_code_label "return"
 	    val instructions'  = transformReturn return instructions
 	    val instructions'' = transformBranch instructions'
 
 	    (*
 	     * translate labels and registers
 	     *)
-	    val label'	   = LocalLabel.translate label
+	    val label'	   = Label'.translate label
 	    val arguments' = RegisterSet.translateCall arguments
 	    val results'   = RegisterSet.translateCall results
 	    val saves'	   = RegisterSet.translateCall saves
@@ -2039,7 +2026,7 @@ functor EmitRtlMLRISC(
 		  ExternalConvention.enter frame (arguments', saves'', body)
 
 	    val exit =
-		  [MLTree.DEFINELABEL(LocalLabel.translate return)]@
+		  [MLTree.DEFINELABEL(Label'.translate return)]@
 		  ExternalConvention.exit frame (results', saves'', body)@
 		  [MLTree.PSEUDO_OP(MLRISCPseudo.ProcedureTrailer label')]
 
@@ -2130,7 +2117,7 @@ functor EmitRtlMLRISC(
 		  end
 
 	    fun translateProcedure'(procedure as Rtl.PROC{name = label, ...}) =
-		  (if Rtl.eq_locallabel(label, main) then
+		  (if Rtl.eq_label(label, main) then
 		     define "" (* "_client_entry" *)
 		   else
 		     [])@
@@ -2214,8 +2201,7 @@ functor EmitRtlMLRISC(
 	    emitMLTree trailer
 	  end
 
-    fun resetTables() = (LocalLabel.reset();
-			 Label.reset())
+    fun resetTables() = Label'.reset()
 
     fun emit(Rtl.MODULE{main		  = main,
 			procs		  = procedures,
@@ -2223,7 +2209,7 @@ functor EmitRtlMLRISC(
 			mutable_variables = variables,
 			mutable_objects	  = objects}) =
 	  let
-	    val name = LocalLabel.string main
+	    val name = Label'.string main
 
 	    fun emitBody' operand = (emitBody operand; Module.infos())
 
@@ -2239,7 +2225,7 @@ functor EmitRtlMLRISC(
 
   fun emitEntryTable labels =
 	let
-	  val names = map LocalLabel.string labels
+	  val names = map Label'.string labels
 
 	  fun table name =
 		let

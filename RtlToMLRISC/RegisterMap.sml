@@ -1,18 +1,18 @@
-(*$import TopLevel REGISTER_MAP IntHashTable *)
-
+(*$import TopLevel MONO_HASH_TABLE REGISTER_MAP *)
 
 (* =========================================================================
  * RegisterMap.sml
  * ========================================================================= *)
 
-structure RegisterMap
-	    :> REGISTER_MAP
-		 where type id = int
-	    = struct
+functor RegisterMap(
+          structure HashTable: MONO_HASH_TABLE
+        ) :> REGISTER_MAP
+	       where type id = HashTable.Key.hash_key
+	  = struct
 
   (* -- types -------------------------------------------------------------- *)
 
-  type id = int
+  type id = HashTable.Key.hash_key
 
   (*
    * A register map is represented as a reference to a hash table, along with
@@ -20,7 +20,7 @@ structure RegisterMap
    * The tables might also be represented as arrays if we know that the range
    * of register ids is contiguous and we can guess the base id.
    *)
-  type 'a map = 'a IntHashTable.hash_table ref * (id -> 'a)
+  type 'a map = 'a HashTable.hash_table ref * (id -> 'a)
 
   (* -- exceptions --------------------------------------------------------- *)
 
@@ -28,24 +28,24 @@ structure RegisterMap
 
   (* -- functions ---------------------------------------------------------- *)
 
-  fun table() = IntHashTable.mkTable(31, Impossible)
+  fun table() = HashTable.mkTable(31, Impossible)
 
   fun map default = (ref(table()), default)
 
   fun lookup (ref table, default) id =
-	case IntHashTable.find table id of
+	case HashTable.find table id of
 	  NONE =>
 	    let
 	      val value = default id
 	    in
-	      IntHashTable.insert table (id, value); value
+	      HashTable.insert table (id, value); value
 	    end
 	| SOME value =>
 	    value
 
-  fun test (ref table, _) id = IntHashTable.find table id
+  fun test (ref table, _) id = HashTable.find table id
 
-  fun insert (ref table, _) mapping = IntHashTable.insert table mapping
+  fun insert (ref table, _) mapping = HashTable.insert table mapping
 
   fun reset(tableRef, _) = tableRef := table()
 

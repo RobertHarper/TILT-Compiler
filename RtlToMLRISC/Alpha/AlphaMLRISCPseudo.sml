@@ -33,7 +33,8 @@ structure AlphaMLRISCPseudo
   | ProcedureTrailer of Label.label
   | Export of Label.label
   | CallSite of idSet ref * (idSet -> unit)
-  | Align of int * int
+  | Align of int
+  | AlignOdd of int
   | Comment of string
   | Integer of Word32.word
   | IntegerFloatSize of Word32.word
@@ -137,8 +138,14 @@ structure AlphaMLRISCPseudo
 	  end
       | toString(CallSite(ref live, emit)) =
 	  (emit live; "")
-      | toString(Align (size, offset)) =
-	  "\t.align "^Int.toString size^", "^Int.toString offset^"\n"
+      | toString(Align size) =
+	  "\t.align "^Int.toString size^"\n"
+      | toString(AlignOdd 3) =
+	  "\t.align 3\n\t.long 0x0\n"
+      | toString(AlignOdd 4) =
+	  "\t.align 4\n\t.quad 0x0\n\t.long 0x0\n"
+      | toString(AlignOdd _) =
+	  raise Unimplemented (* ??? *)
       | toString(Comment message) =
 	  "\t# "^message^"\n"
       | toString(Integer value) =
