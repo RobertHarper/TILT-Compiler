@@ -127,3 +127,4 @@
 0131 [open]	scalb and real_scalb unimplemented
 0132 [open]	scalb, real_scalb unimplemented
 0133 [open]	~inf vs nan
+0134 [open]	discrepancies for real number operations
