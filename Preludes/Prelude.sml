@@ -5,7 +5,7 @@
     
 
 (* standard fixity *)
-infix  3 := o
+infix  3 := o before
 infix  4 = <> < > <= >= 
 infix  5 @
 infixr 5 ::
@@ -17,6 +17,7 @@ infix  9 << >> && ||
 type string = char vector
 datatype 'a list = nil | :: of 'a * 'a list
 datatype 'a susp = Susp of unit -> 'a 
+datatype order = GREATER | LESS | EQUAL
 
 
 (* standard exceptions *)
@@ -63,19 +64,18 @@ open List
 
 structure Array = 
     struct
-	type 'a array1 = 'a array
-	fun array1 (s:int, e : 'a) : 'a array =
+	fun array (s:int, e : 'a) : 'a array =
 	    if s<0 then raise Size
 	    else unsafe_array(int32touint32 s,e) 
 		
-	fun sub1 (a : 'a array, index :int) : 'a =
+	fun sub (a : 'a array, index :int) : 'a =
 	    let val index = int32touint32 index
 	    in  if (ugte(index, array_length a))
 		    then raise Subscript
 		else unsafe_sub(a,index)
 	    end
 	
-	fun update1 (a : 'a array, index :int, e : 'a) : unit =
+	fun update (a : 'a array, index :int, e : 'a) : unit =
 	    let val index = int32touint32 index
 	    in  if (ugte(index, array_length a))
 		    then raise Subscript
@@ -142,6 +142,7 @@ open Vector
 structure Misc = 
     struct
 	fun (f o g) x = f(g x)
+	fun a before b = a
 	fun app f =
 	    let fun app_loop [] = ()
 		  | app_loop (hd::tl) = (f hd; app_loop tl)
@@ -254,8 +255,40 @@ structure String =
     
 	fun char_eq (cx:char,cy:char) = cx = cy
 	val string_eq = vector_eq char_eq
+	    
+	fun compare(x : string, y : string) : order = 
+	    let val sx = vector_length x
+		val sy = vector_length y
+		val s = if (ult(sx,sy)) then sx else sy
+		fun loop n = 
+		    if (ult(n,s))
+			then let val cx = unsafe_vsub(x,n)
+				 val cy = unsafe_vsub(x,n)
+			     in  if ult(int32touint32(uint8toint32 cx),
+					int32touint32(uint8toint32 cy))
+				     then LESS
+				 else if (cx = cy)
+					  then EQUAL
+				      else GREATER
+			     end
+		    else EQUAL
+	    in  (case loop 0w0 of
+		     EQUAL => if (sx = sy)
+				  then EQUAL
+			      else if ugt(sx,sy)
+				       then GREATER
+				   else LESS
+		   | different => different)
+	    end
+	fun leq(x,y) = (case compare(x,y) of
+			    GREATER => false
+			  | _ => true)
     end
-open String
+
+val size = String.size
+val implode = String.implode
+val explode = String.explode
+val (op ^) = String.^
 
 	fun (a : int) mod (b : int) =
 	    let val temp = a rem b
@@ -367,7 +400,7 @@ structure Real =
 				  else scistr(digits,e)
 			      end
 	    in  if r < zero 
-		    then concat("~",mkstr(~r,0))
+		    then String.concat("~",mkstr(~r,0))
 		else if r > zero 
 			 then mkstr(r,0)
 		     else "0.0"
