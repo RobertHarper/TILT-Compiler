@@ -1,4 +1,5 @@
 import group $libdir ^ "/smlnj-lib/group"
+import group $libdir ^ "/ml-yacc-lib/group"
 include group "../Util/mapfile-util"
 
 source unit CONTROL = "control.sig.sml" {}
@@ -95,9 +96,8 @@ source unit IntStrMap = "intstrmap.sml" {
 	INTSTRMAP Array List Word Int Control
 }
 
-source unit YaccBase = "base.sig.sml" {}
 source unit ML_TOKENS = "ml.grm.sig" {
-	TilWord64 Symbol YaccBase
+	TilWord64 Symbol PARSER_DATA
 }
 
 source unit TokenTable = "tokentable.sml" {
@@ -109,24 +109,16 @@ source unit MLLexFun = "ml.lex.sml" {
 }
 
 
-source unit Stream = "stream.sml" {YaccBase}
-source unit LrTable = "lrtable.sml" {
-	Array List YaccBase
-}
-source unit LrParser = "parser2.sml" {
-	List YaccBase Stream LrTable TextIO Int
-}
-
 source unit MLLrValsFun = "ml.grm.sml" {
-	Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast
-	ErrorMsg AstUtil StrgHash Array
+	Fixity Char String TilWord64 TOKEN PARSER_DATA ML_TOKENS
+	Symbol Ast ErrorMsg AstUtil StrgHash Array
 }
 
-source unit Join = "join.sml" {YaccBase}
+
 source unit FRONTEND = "frontend.sig.sml" {Ast Source}
 source unit FrontEnd = "frontend.sml" {
-	ErrorMsg TextIO SourceMap FRONTEND Join MLLrValsFun MLLexFun
-	Ast Source Control LrParser Stats
+	ErrorMsg TextIO SourceMap FRONTEND JoinWithArg MLLrValsFun
+	MLLexFun Ast Source Control LrParser Stats
 }
 (*
 	unused --- FreeTypeVars freetyvars

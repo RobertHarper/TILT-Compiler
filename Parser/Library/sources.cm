@@ -1,0 +1,35 @@
+(* sources file for ML-Yacc library *)
+
+Library
+
+signature STREAM
+signature LR_TABLE
+signature TOKEN
+signature LR_PARSER
+signature LEXER
+signature ARG_LEXER
+signature PARSER_DATA
+signature PARSER
+signature ARG_PARSER
+functor Join
+functor JoinWithArg
+structure LrTable
+structure Stream
+structure LrParser
+
+is
+
+(*base.sig*)	stream.sig.sml
+(*base.sig*)	lr-table.sig.sml
+(*base.sig*)	token.sig.sml
+(*base.sig*)	lr-parser.sig.sml
+(*base.sig*)	lexer.sig.sml
+(*base.sig*)	arg-lexer.sig.sml
+(*base.sig*)	parser-data.sig.sml
+(*base.sig*)	parser.sig.sml
+(*base.sig*)	arg-parser.sig.sml
+(*join.sml*)	join.sml
+(*join.sml*)	joinwitharg.sml
+lrtable.sml
+stream.sml
+parser2.sml	(* error correcting version *)

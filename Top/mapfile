@@ -1,4 +1,5 @@
 import group $libdir ^ "/smlnj-lib/group"
+import group $libdir ^ "/ml-yacc-lib/group"
 include group "../Util/mapfile-util"
 include group "../Parser/mapfile-parse"
 include group "../Elaborator/mapfile-elaborate"
@@ -11,9 +12,9 @@ include group "../Sparc/mapfile"
 source unit Version = "version.sml" {Int}
 
 source unit ExtSyn = "extsyn.sml" {}
-source unit Group_TOKENS = "group.grm.sig" {YaccBase}
+source unit Group_TOKENS = "group.grm.sig" {PARSER_DATA}
 source unit GroupLrValsFun = "group.grm.sml" {
-	YaccBase Group_TOKENS ExtSyn Char String Array
+	TOKEN PARSER_DATA Group_TOKENS ExtSyn Char String Array
 }
 source unit GroupLexFun = "group.lex.sml" {
 	Group_TOKENS ExtSyn List Char Vector String
@@ -54,8 +55,8 @@ source unit GROUP = "group.sig.sml" {ExtSyn Name}
 source interface GROUP = "group.int" {GROUP}
 source unit Group : GROUP = "group.sml" {
 	GROUP ExtSyn Name Util Int String Bool Word TextIO Listops
-	Option OS Join LrParser GroupLrValsFun GroupLexFun Stats
-	File SplayMapFn Compiler UnitEnvironment IO
+	Option OS JoinWithArg LrParser GroupLrValsFun GroupLexFun
+	Stats File SplayMapFn Compiler UnitEnvironment IO
 }
 source unit PRELINK = "prelink.sig.sml" {Crc UnitEnvironment}
 source unit Prelink = "prelink.sml" {

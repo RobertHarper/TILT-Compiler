@@ -1,0 +1,32 @@
+(*
+	XXX: Provide interfaces for Join and JoinWithArg.
+*)
+
+source unit STREAM = "stream.sig.sml" {}
+source unit LR_TABLE = "lr-table.sig.sml" {}
+source unit TOKEN = "token.sig.sml" {LR_TABLE}
+source unit LR_PARSER = "lr-parser.sig.sml" {STREAM LR_TABLE TOKEN}
+source unit LEXER = "lexer.sig.sml" {}
+source unit ARG_LEXER = "arg-lexer.sig.sml" {}
+source unit PARSER_DATA = "parser-data.sig.sml" {LR_TABLE TOKEN}
+source unit PARSER = "parser.sig.sml" {STREAM TOKEN}
+source unit ARG_PARSER = "arg-parser.sig.sml" {STREAM TOKEN}
+
+source unit Join = "join.sml" {LR_PARSER LEXER PARSER_DATA PARSER}
+
+source unit JoinWithArg = "joinwitharg.sml" {
+	LR_PARSER ARG_LEXER PARSER_DATA ARG_PARSER
+}
+
+source interface LR_TABLE = "lrtable.int" {LR_TABLE}
+source unit LrTable : LR_TABLE = "lrtable.sml" {LR_TABLE Array List}
+
+source interface STREAM = "stream.int" {STREAM}
+source unit Stream : STREAM = "stream.sml" {STREAM}
+
+source interface LR_PARSER = "parser.int" {LR_PARSER}
+source unit LrParser = "parser2.sml" {
+	STREAM LR_TABLE TOKEN LR_PARSER List Stream LrTable TextIO Int
+}
+
+make library $libdir ^ "/ml-yacc-lib"

@@ -1,0 +1,1 @@
+structure LrParser : LR_PARSER

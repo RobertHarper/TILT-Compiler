@@ -3,6 +3,7 @@ Group is
 ../Elaborator/elaborator.cm
 ../Util/util.cm
 ../smlnj-lib.cm
+../ml-yacc-lib.cm
 ../Nil/nil.cm
 ../Rtl/rtl.cm
 ../Backend/backend.cm
