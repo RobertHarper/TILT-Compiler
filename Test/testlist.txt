@@ -72,6 +72,91 @@ m0049	pass	vectors
 m0050	pass	vectors
 m0051	pass	vectors
 m0052	pass	vector looping
+m0053	fail	[Bug #0118] val rec declarations
+m0054	fail	[Bug #0119] bytes and characters
+m0055	pass	character patterns
+m0056	pass	word8, char, and general arrays
+m0057	pass	tabulation of vectors
+m0058	pass	command line
+m0059	pass	signature constraints
+m0060	fail	infinite integer conversion tests
+m0061	fail	infinite integers
+m0062	pass	mutual recursion
+m0063	pass	exhaustiveness
+m0064	pass	exceptions
+m0065	pass	exceptions
+m0066	skip	[Bug #0123] exponential polymorphic instantiation 
+m0067	pass	factorial
+m0068	pass	loop with comparison
+m0069	pass	looping
+m0070	pass	fft
+m0071	fail	[Bug #0124] flexible records
+m0072	pass	functional unparsing
+m0073	pass	functors
+m0074	fail	general basis items
+m0075	pass	deep raise
+m0075	pass	deep raise
+m0076	pass	[Bug #0126(closed)] identifier syntax
+m0077	pass	integer overflow
+m0078	pass	integers
+m0079	pass	list tabulation
+m0080	pass	known case
+m0081	pass	known case
+m0082	fail	[Bug #0128] llv?
+m0083	pass	nested loops
+m0084	pass	non-exhaustive match
+m0085	pass	generativity
+m0086	pass	opaque types
+m0087	pass	open scoping
+m0088	fail	[Bug #0129] exit status
+m0089	pass	overloading
+m0090	pass	patterns
+m0091	pass	polymorphic equality
+m0092	pass	polymorphic equality
+m0093	pass	posix exit
+m0094	pass	self-printer
+m0095	pass	maximum real
+m0096	fail	[Bug #0131] reals
+m0097	fail	[Bug #0132] reals
+m0098	fail	[Bug #0133] reals
+m0099	fail	[Bug #0134] reals
+m0100	fail	[Bug #0135] reals
+m0101	fail	[Bug #0136] reals
+m0102	fail	reals
+m0103	pass	modules
+m0104	fail	special constants
+m0105	pass	semicolon parsing
+m0106	pass	sharing
+m0107	pass	binary io
+m0108	fail	[Bug #0138] date and time
+m0109	pass	file system
+m0111	pass	signatures
+m0112	fail	strings
+m0113	pass	strings
+m0114	fail	string conversion
+m0115	fail	substring overflow
+m0116	pass	take
+m0117	pass	matrices
+m0118	fail	basic dynamic tests of primitives
+m0119	fail	text io
+m0120	fail	time
+m0121	fail	time
+m0122	fail	time
+m0123	pass	string comparison
+m0124	fail	type specs
+m0125	pass	unary constructors
+m0126	pass	unary arithmetic
+m0127	pass	non-generalized type variables
+m0128	pass	unix paths
+m0129	fail	where-and
+m0130	pass	where
+m0131	fail	list checks
+m0132	pass	fib 35
+m0133	pass	deep recursion
+m0134	pass	quicksort
+m0135	pass	reynolds 2
+m0136	pass	reynolds 3
+m0137	pass	merge sort
 n0	fail	abstype not equality type
 n1	pass	scoping of abstype
 n2	pass	syntax error (exp in local top)
@@ -213,88 +298,3 @@ n135	pass	Denmark Core-SML accept test
 n136	pass	Denmark Core-SML accept test
 n137	pass	Denmark Core-SML accept test
 n138	fail	Denmark Core-SML accept test
-m0053	fail	[Bug #0118] val rec declarations
-m0054	fail	[Bug #0119] bytes and characters
-m0055	pass	character patterns
-m0056	pass	word8, char, and general arrays
-m0057	pass	tabulation of vectors
-m0058	pass	command line
-m0059	pass	signature constraints
-m0060	fail	infinite integer conversion tests
-m0061	fail	infinite integers
-m0062	pass	mutual recursion
-m0063	pass	exhaustiveness
-m0064	pass	exceptions
-m0065	pass	exceptions
-m0066	skip	[Bug #0123] exponential polymorphic instantiation 
-m0067	pass	factorial
-m0068	pass	loop with comparison
-m0069	pass	looping
-m0070	pass	fft
-m0071	fail	[Bug #0124] flexible records
-m0072	pass	functional unparsing
-m0073	pass	functors
-m0074	fail	general basis items
-m0075	pass	deep raise
-m0075	pass	deep raise
-m0076	pass	[Bug #0126(closed)] identifier syntax
-m0077	pass	integer overflow
-m0078	pass	integers
-m0079	pass	list tabulation
-m0080	pass	known case
-m0081	pass	known case
-m0082	fail	[Bug #0128] llv?
-m0083	pass	nested loops
-m0084	pass	non-exhaustive match
-m0085	pass	generativity
-m0086	pass	opaque types
-m0087	pass	open scoping
-m0088	fail	[Bug #0129] exit status
-m0089	pass	overloading
-m0090	pass	patterns
-m0091	pass	polymorphic equality
-m0092	pass	polymorphic equality
-m0093	pass	posix exit
-m0094	pass	self-printer
-m0095	pass	maximum real
-m0096	fail	[Bug #0131] reals
-m0097	fail	[Bug #0132] reals
-m0098	fail	[Bug #0133] reals
-m0099	fail	[Bug #0134] reals
-m0100	fail	[Bug #0135] reals
-m0101	fail	[Bug #0136] reals
-m0102	fail	reals
-m0103	pass	modules
-m0104	fail	special constants
-m0105	pass	semicolon parsing
-m0106	pass	sharing
-m0107	pass	binary io
-m0108	fail	[Bug #0138] date and time
-m0109	pass	file system
-m0111	pass	signatures
-m0112	fail	strings
-m0113	pass	strings
-m0114	fail	string conversion
-m0115	fail	substring overflow
-m0116	pass	take
-m0117	pass	matrices
-m0118	fail	basic dynamic tests of primitives
-m0119	fail	text io
-m0120	fail	time
-m0121	fail	time
-m0122	fail	time
-m0123	pass	string comparison
-m0124	fail	type specs
-m0125	pass	unary constructors
-m0126	pass	unary arithmetic
-m0127	pass	non-generalized type variables
-m0128	pass	unix paths
-m0129	fail	where-and
-m0130	pass	where
-m0131	fail	list checks
-m0132	pass	fib 35
-m0133	pass	deep recursion
-m0134	pass	quicksort
-m0135	pass	reynolds 2
-m0136	pass	reynolds 3
-m0137	pass	merge sort

@@ -14,9 +14,7 @@ Problem:     unresolved overloading
 	was printing the first then bombing.  The compiler should
 	print all the errors then reject the user program.
 
-	Second, the code below should elaborate; that is, the
-	overloaded special constant appears in a context that
-	constrains its type to Word8.word.
+	Second, the code should elaborate.
 
 Code:
 
@@ -27,15 +25,17 @@ Code:
 Transcript:  
 Comments:
 
-	Resolve_all_overloads was resolving top-level overloads in
-	LIFO order.  Using FIFO order fixed the bug.
-
-	Resolve_overloads was resolving functor- and structure-level
-	overloads in LIFO order.  Thus, the compiler failed on the
-	code in bugs.sml and bugf.sml.  Using FIFO order fixed the
-	bug.
+	Resolve_all_overloads was resolving top-level overloads
+	bottom-up.  In this case, the compiler was trying to resolve
+	the overloading for 0w2 before first resolving the overloading
+	for op*.  Functor- and structure-level overload resolution
+	(handled by resolve_overload) was similarly broken.
 
 Fix:
+
+	Overload information is now pulled out of the overload table
+	in FIFO order rather than LIFO order.
+
 Test: m0030
 Owner: swasey
 Status: open
