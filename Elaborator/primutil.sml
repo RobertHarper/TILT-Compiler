@@ -343,7 +343,7 @@ struct
 	  | (lesseq_uint is, [], _) => ipred is (TilWord64.ulte)
 	  | (greatereq_uint is, [], _) => ipred is (TilWord64.ugte)
 					
-	  | (length_table _, [instance], _) => raise UNIMP
+	  | (length_table _, _, _) => raise UNIMP
 	  | (sub _,_,_)  => raise UNIMP
 	  | (create_table _,_,_)  => raise UNIMP
 	  | (create_empty_table _,_,_)  => raise UNIMP
