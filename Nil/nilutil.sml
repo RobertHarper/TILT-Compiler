@@ -3,14 +3,11 @@
 (* ------------ Context manipulation functions ------------ *)
 
 functor NilUtilFn(structure ArgNil : NIL
-		  structure IlUtil : ILUTIL
-		  structure Alpha : ALPHA
-		  sharing ArgNil = Alpha.Nil ) :> 
-  sig include NILUTIL sharing ArgNil = Nil and type alpha_context = Alpha.alpha_context end =
+		  structure IlUtil : ILUTIL) :> 
+  sig include NILUTIL sharing ArgNil = Nil end =
 struct
-
   structure Nil = ArgNil
-
+    
   open Nil Util
 
 
@@ -40,35 +37,17 @@ struct
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp inj_exn,[unit_con],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])])
-  val true_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])])
+  val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])
+  val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])
 
   (* Local rebindings from imported structures *)
 
-  local
-    structure A : 
-      sig
-	type alpha_context
-	val substitute : alpha_context * var -> var
-	val empty_context : unit -> alpha_context
-	val alpha_bind : (alpha_context * var) -> (alpha_context * var)
-	val alpha_bind_list : (alpha_context * (var list)) -> (alpha_context * (var list))
-	val alpha_equate_pair : (alpha_context * alpha_context) * (var * var)
-	  -> alpha_context * alpha_context
-	val alpha_equate_pairs :
-	  (alpha_context * alpha_context) * (var list * var list)
-	  -> alpha_context * alpha_context
-	val alpha_pair_eq : (alpha_context * alpha_context) * (var * var) -> bool
-      end = Alpha
-  in
-    open A
-    val eq_var = Name.eq_var
-    val eq_label = Name.eq_label
-    val map_second = Listops.map_second
-    val foldl_acc = Listops.foldl_acc
-    val eq_len = Listops.eq_len
-    val member_eq = Listops.member_eq
-  end
+  val member_eq = Listops.member_eq
+  val eq_var = Name.eq_var
+  val eq_label = Name.eq_label
+  val map_second = Listops.map_second
+  val foldl_acc = Listops.foldl_acc
+  val eq_len = Listops.eq_len
   (**)
     
   fun error s = Util.error "nilutil.sml" s
@@ -224,38 +203,22 @@ struct
 		       App_c (cfun', actuals')
 		   end
 	       
-<<<<<<< nilutil.sml
-	     | Typecase_c {arg, arms, default, kind} => 
-		   let fun doarm(pc,vklist,c) =   
-		       let fun folder((v,k),s) = 
-=======
 	     | Typecase_c {arg, arms, default, kind} => 
 		   let fun doarm(pc,vklist,c) =   
 		       let fun folder((v,k),(vklist,s)) = 
->>>>>>> 1.11
 			   let val k' = f_kind state k
 			       val s' = add_convar (s,v,k')
-			   in  ((v,k'),s')
+			   in  ((v,k')::vklist,s')
 			   end
-<<<<<<< nilutil.sml
-			   val (vklist',state') = foldl_acc folder state vklist
-		       in  (pc, vklist', f_con state' c)
-=======
 			   val (rev_vklist',state') = foldl folder ([],state) vklist
 		       in  (pc, rev rev_vklist', f_con state' c)
->>>>>>> 1.11
 		       end
 		       val arms' = map doarm arms
 		       val kind' = f_kind state kind
 		   in  Typecase_c{arg = self arg,
 				  arms = arms',
-<<<<<<< nilutil.sml
-				  default = self default,
-				  kind = f_kind state kind}
-=======
 				  default = self default,
 				  kind = kind'}
->>>>>>> 1.11
 		   end
 
 	     | (Annotate_c (annot,con)) => 
@@ -586,7 +549,6 @@ struct
 		    kindhandler = default_kind_handler}))
 	end
   in	  
-    (*PRE:  alpha normalization has taken place *)
     fun substConInCon conmap = f_con (cstate conmap) 
     fun substConInKind conmap = f_kind (cstate conmap)
     fun substConInExp conmap = f_exp (cstate conmap)
@@ -654,12 +616,51 @@ struct
 	   same_effect (effect1,effect2))
 	 | _  => false
     end
+  structure VarMap = Name.VarMap
+
+  type varmap = var VarMap.map
+
+  type alpha_context = (var VarMap.map * var VarMap.map)
+
+  val bound : varmap * var -> bool = isSome o VarMap.find
+
+  fun subst (bindings,var) = (getOpt (VarMap.find (bindings,var),var))
+
+  val bind : varmap * var * var -> varmap = VarMap.insert 
+
+  val empty_context : alpha_context = (VarMap.empty,VarMap.empty)
+
+  fun alpha_vary_var ((subst1,subst2) : alpha_context, var1, var2) = 
+    let
+      val equal = eq_var (var1,var2)
+      val var = if equal then var1
+		else Name.fresh_var()
+      val context' = 
+	if not equal then 
+	  (bind(subst1,var1,var),bind(subst2,var2,var))
+	else 
+	  (if bound(subst1,var1) then bind(subst1,var1,var) else subst1,
+	     if bound(subst2,var2) then bind(subst2,var2,var) else subst2)
+    in
+      (context')
+    end
+
+  fun alpha_vary_var_list (context : alpha_context, var_list1,var_list2) =
+    let
+      fun vary_one  (var1,var2,context) = 
+	alpha_vary_var (context,var1,var2)
+    in
+      ListPair.foldl vary_one context (var_list1,var_list2) 
+    end
   
+  fun subst_eq ((subst1,subst2),var1,var2) = 
+    eq_var (subst (subst1,var1),subst (subst2,var2))
+
   fun same_phase (Compiletime, Compiletime) = true
     | same_phase (Runtime, Runtime) = true
     | same_phase _ = false
 
-  fun alpha_equiv_kind' (context) (kind1,kind2) = 
+  fun alpha_equiv_kind' context (kind1,kind2) = 
     let
       val recur = alpha_equiv_kind' context
     in
@@ -667,40 +668,57 @@ struct
 	 of (Type_k p1, Type_k p2) => same_phase(p1,p2)
 	  | (Word_k p1, Word_k p2) => same_phase(p1,p2)
 	  | (Singleton_k (p1,kind1,con1),Singleton_k (p2,kind2,con2)) => 
-	   same_phase(p1,p2) andalso
-	   recur (kind1,kind2) andalso
-	   alpha_equiv_con' context (con1,con2)
-	   
+		same_phase(p1,p2) andalso
+		recur (kind1,kind2) andalso
+		alpha_equiv_con' context (con1,con2)
+
+	  (* Need to check all orderings? *)
 	  | (Record_k elts1,Record_k elts2) => 
 	   let
-	     val conref = ref context
-	     fun equiv_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
+	     fun equiv_one (((lbl1,var1),kind1),((lbl2,var2),kind2),
+			    (context,so_far)) = 
 	       let
-		 val kind_equiv = alpha_equiv_kind' (!conref) (kind1,kind2)
-		 val _ = conref := alpha_equate_pair (!conref,(var1,var2))
+		 val context' = alpha_vary_var (context,var1,var2)
+		 val still = 
+		   so_far andalso 
+		   eq_label (lbl1,lbl2) andalso
+		   alpha_equiv_kind' context (kind1,kind2)
 	       in
-		 eq_label (lbl1,lbl2) andalso kind_equiv
+		 (context',still)
 	       end
 	   in
 	     eq_len (elts1,elts2) andalso 
-	     (ListPair.all equiv_one (elts1,elts2))
+	     (#2(ListPair.foldl equiv_one (context,true) (elts1,elts2)))
 	   end
 
-	  | (Arrow_k (openness1, formals1, return1),
-	     (Arrow_k (openness2, formals2, return2))) =>
-	   let
-	     val conref = ref context
-	     fun equiv_one ((var1,kind1),(var2,kind2)) = 
-	       (alpha_equiv_kind' (!conref) (kind1,kind2))
-	       before (conref := alpha_equate_pair (!conref,(var1,var2)))
-	   in
-	     same_openness (openness1,openness2) andalso 
-	     eq_len (formals1,formals2) andalso 
-	     (ListPair.all equiv_one (formals1,formals2)) andalso 
-	     alpha_equiv_kind' (!conref) (return1,return2)
-	   end
-	  | _ => false)
+       | (Arrow_k (openness1, formals1, return1),
+	   Arrow_k (openness2, formals2, return2)) =>
+	   same_openness (openness1,openness2) andalso 
+	   alpha_equiv_arrow_kind context ((formals1,return1),
+					   (formals1,return2))
+	 | _ => false)
     end
+  and alpha_equiv_arrow_kind context ((formals1, return1),
+				      (formals2, return2)) = 
+    let
+      fun equiv_one ((var1,kind1),(var2,kind2),
+		     (context,so_far)) = 
+	let
+	  val context' = alpha_vary_var (context,var1,var2)
+	  val still = 
+	    so_far andalso 
+	    alpha_equiv_kind' context (kind1,kind2)
+	in
+	  (context',still)
+	end
+      val (context',all_equiv) = 
+	(ListPair.foldl equiv_one (context,true) (formals1,formals2))
+    in
+      all_equiv andalso 
+      eq_len (formals1,formals2) andalso 
+      alpha_equiv_kind' context' (return1,return2)
+    end
+
   and alpha_equiv_con' context (con1,con2) = 
     let
       val recur = alpha_equiv_con' context
@@ -714,89 +732,132 @@ struct
 	  (* mus with the same ordering to be equiv *) 
 	  | (Mu_c (defs1,var1),Mu_c (defs2,var2)) =>
 	   let
-		     val def_list1 = Util.set2list defs1
+	     val def_list1 = Util.set2list defs1
 	     val def_list2 = Util.set2list defs2
 	     val (var_list1,con_list1) = ListPair.unzip def_list1
 	     val (var_list2,con_list2) = ListPair.unzip def_list2
-	     val context' = alpha_equate_pairs (context,(var_list1,var_list2))
+	     val context' = 
+	       (alpha_vary_var_list (context,var_list1,var_list2))
 	   in
-	     alpha_pair_eq (context',(var1,var2)) andalso
+	     subst_eq (context',var1,var2) andalso
 	     alpha_equiv_con_list context' (con_list1,con_list2)
 	   end
 
-	  | (AllArrow_c (openness1,effect1,tformals1,formals1,flength1,return1),
-	     AllArrow_c (openness2,effect2,tformals2,formals2,flength2,return2)) =>
-	   let
-	     val conref = ref context
-	     fun tformal_equiv ((var1,kind1),(var2,kind2)) = 
-	       (alpha_equiv_kind' (!conref) (kind1,kind2))
-	       before (conref :=  alpha_equate_pair (!conref,(var1,var2)))
-	   in
-	     same_openness(openness1,openness2) andalso
-	     (flength1 = flength2) andalso
-	     eq_len (tformals1,tformals2) andalso 
-	     ListPair.all tformal_equiv (tformals1,tformals2) andalso 
-	     alpha_equiv_con_list (!conref) (formals1,formals2) andalso
-	     alpha_equiv_con' (!conref) (return1,return2)
-	   end 
+	  | (AllArrow_c confun1, AllArrow_c confun2) => 
+	   alpha_equiv_confun context (confun1,confun2)
+
 
 	  | (Var_c var1,Var_c var2) => 
-	   alpha_pair_eq(context,(var1,var2))
+	   subst_eq(context,var1,var2)
 
+	  (* Ignore sort or not??? *)
 	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) => 
 	   let 
-	     val conref = ref context
-	     fun equiv_one (Con_cb(var1,k1,con1),Con_cb(var2,k2,con2)) = 
-	       (alpha_equiv_con' (!conref) (con1,con2))
-	       before (conref := alpha_equate_pair(!conref,(var1,var2)))
-	       
-	       | equiv_one ((Open_cb(var1,formals1,con1,k1),
-			     Open_cb(var2,formals2,con2,k2)) |
-			    (Code_cb(var1,formals1,con1,k1),
-			     Code_cb(var2,formals2,con2,k2))) =
-	       let
-		 val conref' = ref (!conref)
-		 fun equiv_one ((var1,kind1),(var2,kind2))= 
-		   (alpha_equiv_kind' (!conref') (kind1,kind2))
-		   before (conref' := alpha_equate_pair(!conref',(var1,var2)))
-	       in
-		 ((ListPair.all equiv_one (formals1,formals2))
-		  andalso alpha_equiv_con' (!conref') (con1,con2))
-		 before (alpha_equate_pair(!conref,(var1,var2)))
-	       end
-	       | equiv_one _ = false
+	       fun equiv_one (Con_cb(var1,k1,con1),Con_cb(var2,k2,con2),(context,so_far)) = 
+		   let
+		       val context' =  alpha_vary_var(context,var1,var2)
+		   in
+		       (context', 
+			so_far andalso alpha_equiv_con' context' (con1,con2))
+		   end
+		 | equiv_one ((Open_cb(var1,formals1,con1,k1),
+			      Open_cb(var2,formals2,con2,k2),
+			      (context,so_far)) |
+			      (Code_cb(var1,formals1,con1,k1),
+			       Code_cb(var2,formals2,con2,k2),
+			       (context,so_far))) =
+		   let
+		       fun equiv_one ((var1,kind1),(var2,kind2),(context,so_far)) = 
+			   let
+			       val context' = alpha_vary_var(context,var1,var2)
+			       val still =  
+				   so_far andalso 
+				   alpha_equiv_kind' context' (kind1,kind2)
+			   in
+			       (context',still)
+			   end
+		       val (context',formals_equiv) = 
+			   (ListPair.foldl equiv_one (context,true) (formals1,formals2))
+		       val context'' =  alpha_vary_var(context',var1,var2)
+		   in
+		       (context', 
+			so_far andalso 
+			alpha_equiv_con' context' (con1,con2))
+		   end
+		 | equiv_one(_,_,(context,_)) = (context,false)
+	       val (context',defs_equiv) = 
+		   (ListPair.foldl equiv_one (context,true) (binds1,binds2))
 	   in
-	     (ListPair.all equiv_one (binds1,binds2))
-	     andalso alpha_equiv_con' (!conref) (con1,con2)
+	       (defs_equiv andalso  alpha_equiv_con' context' (con1,con2))
 	   end
-	 
-	  | (Closure_c (code1,env1),Closure_c (code2,env2)) => 
+(*	 
+       | (Fun_c (openness1,formals1,body1),
+	   Fun_c (openness2,formals2,body2)) => 
+	   let 
+	     fun equiv_one ((var1,kind1),(var2,kind2),(context,so_far)) = 
+	       let
+		 val context' = alpha_vary_var(context,var1,var2)
+		 val still =  
+		   so_far andalso 
+		   alpha_equiv_kind' context' (kind1,kind2)
+	       in
+		 (context',still)
+	       end
+	     val (context',formals_equiv) = 
+	       (ListPair.foldl equiv_one (context,true) (formals1,formals2))
+	   in
+	     same_openness (openness1,openness2) andalso
+	     formals_equiv andalso 
+	     (alpha_equiv_con' context' (body1,body2))
+	   end
+*)
+	 | (Closure_c (code1,env1),Closure_c (code2,env2)) => 
 	   recur (code1,code2) andalso recur (env1,env2)
-	  
-	  (* Cannot be dependent.  Note Precondition is sorted labels*)
-	  | (Crecord_c entries1,Crecord_c entries2) => 
+
+	 (* Cannot be dependent.  Note Precondition is sorted labels*)
+	 | (Crecord_c entries1,Crecord_c entries2) => 
 	   let
 	     fun equiv_each ((lbl1,con1),(lbl2,con2)) = 
-	       (eq_label (lbl1,lbl2) andalso
-		recur (con1,con2))
+	       recur (con1,con2)
 	   in
 	     eq_len (entries1,entries2) andalso 
 	     (ListPair.all equiv_each (entries1,entries2))
 	   end
-	 
-	  | (Proj_c (crec1,label1),Proj_c (crec2,label2)) => 
+
+	 | (Proj_c (crec1,label1),Proj_c (crec2,label2)) => 
 	   eq_label (label1,label2) andalso
 	   recur (crec1,crec2)
-	   
-	  | (App_c (cfun1,actuals1),App_c (cfun2,actuals2)) => 
+
+	 | (App_c (cfun1,actuals1),App_c (cfun2,actuals2)) => 
 	   recur (cfun1,cfun2) andalso
 	   (ListPair.all recur (actuals1,actuals2))
-	   
-	  | (Annotate_c (annot1,con1),Annotate_c (annot2,con2)) => 
+
+	 | (Annotate_c (annot1,con1),Annotate_c (annot2,con2)) => 
 	   recur (con1,con2)
-	  | _ => false)
+	 | _ => false)
     end
   
+  and alpha_equiv_confun context ((openness1,effect1,tformals1,formals1,flength1,return1),
+				  (openness2,effect2,tformals2,formals2,flength2,return2)) =
+    let
+      fun tformal_equiv ((var1,kind1),(var2,kind2),(context,so_far)) = 
+	let
+	  val context' = alpha_vary_var (context,var1,var2)
+	in
+	  (context',(so_far andalso 
+		     alpha_equiv_kind' context (kind1,kind2)))
+	end
+      val same_len = eq_len (tformals1,tformals2)
+      val (context',t_equiv) = 
+	ListPair.foldl tformal_equiv (context,same_len) (tformals1,tformals2)
+    in
+      same_openness(openness1,openness2) andalso
+      t_equiv andalso 
+      alpha_equiv_con_list context' (formals1,formals2) andalso
+      (flength1 = flength2) andalso
+      alpha_equiv_con' context' (return1,return2)
+    end
+
   and alpha_equiv_con_list context list_pair = 
     eq_len list_pair andalso
     ListPair.all (alpha_equiv_con' context) list_pair
@@ -805,8 +866,10 @@ struct
     | is_word (Type_k _) = false
     | is_word _ = error "Invalid kind for constructor in Singleton kind"
 
-  fun sub_phase (Compiletime, Runtime) = false
-    | sub_phase _ = true
+  fun sub_phase(Runtime, Compiletime) = true
+    | sub_phase(Runtime, Runtime) = true
+    | sub_phase(Compiletime, Compiletime) = true
+    | sub_phase(Compiletime, Runtime) = false
 
   fun alpha_sub_kind' context (k1,k2) = 
     (case (k1,k2)
@@ -816,224 +879,58 @@ struct
 	| (Singleton_k (p1,_,_) ,Type_k p2) => sub_phase(p1,p2)
 	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k
 	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
-	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
-	      
-	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
-	 let
-	   val conref = ref context
-	   fun sub_one ((var1,kind1),(var2,kind2)) = 
-	     (alpha_sub_kind' (!conref) (kind1,kind2))
-	     before (conref := alpha_equate_pair (!conref,(var1,var2)))
-	 in
-	   (same_openness (openness1,openness2) andalso 
-	    eq_len (formals1,formals2) andalso 
-	    ListPair.all sub_one (formals1,formals2) andalso
-	    alpha_sub_kind' (!conref) (return1,return2))
-	 end
-       
+	      sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
+
+       | (Arrow_k (openness1, formals1, return1),   
+	  Arrow_k (openness2, formals2, return2)) => 
+	 (same_openness (openness1,openness2) andalso 
+	  alpha_sub_arrow_kind context ((formals1,return1),
+					(formals1,return2)))
+
 	| (Record_k elts1,Record_k elts2) => 
 	 let
-	   val conref = ref context
-	   fun sub_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
-	     (eq_label (lbl1,lbl2) andalso
-	      alpha_sub_kind' (!conref) (kind1,kind2))
-	     before (conref := (alpha_equate_pair (!conref,(var1,var2))))
+	   fun sub_one (((lbl1,var1),kind1),((lbl2,var2),kind2),
+			(context,so_far)) = 
+	     let
+	       val context' = alpha_vary_var (context,var1,var2)
+	       val still = 
+		 so_far andalso 
+		 eq_label (lbl1,lbl2) andalso
+		 alpha_sub_kind' context (kind1,kind2)
+	     in
+	       (context',still)
+	     end
 	 in
 	   eq_len (elts1,elts2) andalso 
-	   (ListPair.all sub_one (elts1,elts2))
+	   (#2(ListPair.foldl sub_one (context,true) (elts1,elts2)))
 	 end
 	| (_,_) => false)
-       
-  val alpha_equiv_con = alpha_equiv_con' (empty_context (),empty_context ())
 
-  val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
+  and alpha_sub_arrow_kind context ((formals1, return1),
+				    (formals2, return2)) = 
+    let
+      fun sub_one ((var1,kind1),(var2,kind2),
+		   (context,so_far)) = 
+	let
+	  val context' = alpha_vary_var (context,var1,var2)
+	  val still = 
+	    so_far andalso alpha_sub_kind' context (kind1,kind2)
+	in
+	  (context',still)
+	end
+      val (context',all_equiv) = 
+	(ListPair.foldl sub_one (context,true) (formals1,formals2))
+    in
+      all_equiv andalso 
+      eq_len (formals1,formals2) andalso 
+      alpha_sub_kind' context' (return1,return2)
+    end
 
-  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
+
+  val alpha_equiv_con = alpha_equiv_con' empty_context
+
+  val alpha_equiv_kind = alpha_equiv_kind' empty_context
+
+  val alpha_sub_kind = alpha_sub_kind' empty_context
 (* End exported functions *)
-
-    fun alpha_normalize_con' (context:alpha_context) (con:con) = 
-      (case con 
-	 of (Prim_c (pcon,args)) => 
-	   (Prim_c (pcon,map (alpha_normalize_con' context) args))
-	  | (Mu_c (defs,var)) =>
-	   let
-	     val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
-	     val (context',con_vars') = alpha_bind_list (context,con_vars)
-	     val cons' = List.map (alpha_normalize_con' context') cons
-	     val defs' = Util.list2set (ListPair.zip (con_vars',cons'))
-	   in
-	     (Mu_c (defs',substitute (context',var)))
-	   end
-	 
-	  | (AllArrow_c (openness,effect,tformals,formals,flength,return)) =>
-	   let
-	     fun fold_one ((var,kind),context) =
-	       let
-		 val (context',var') = alpha_bind (context,var)
-		 val kind' = alpha_normalize_kind' context' kind
-	       in
-		 ((var',kind'),context')
-	       end
-	     
-	     val (tformals',context') = foldl_acc fold_one context tformals
-	     val formals' = map (alpha_normalize_con' context') formals
-	     val return' = alpha_normalize_con' context' return
-	   in
-	     AllArrow_c (openness,effect,tformals',formals',flength,return')
-	   end
-
-	  | (Var_c var) => Var_c (substitute (context,var))
-
-	  | (Let_c (letsort, cbnds, body)) => 
-	   let
-	     
-	     fun do_confun Con (var,formals,body,kind) = 
-	       let
-		 fun fold_one ((var,kind),context) =
-		   let
-		     val (context',var') = alpha_bind (context,var)
-		     val kind' = alpha_normalize_kind' context' kind
-		   in
-		     ((var',kind'),context')
-		   end
-		 val (formals',context') = foldl_acc fold_one context formals
-		 val body' = alpha_normalize_con' context' body
-		 val kind' = alpha_normalize_kind' context' kind
-		 val (context'',var') = alpha_bind (context,var) (*Not context'!!*)
-	       in
-		 (Con (var',formals',body',kind'),context'')
-	       end
-	     fun folder (cbnd,context) = 
-	       case cbnd 
-		 of Con_cb (var,kind,con) =>
-		   let 
-		     val kind' = alpha_normalize_kind' context kind
-		     val (context',var') = alpha_bind (context,var)
-		     val con' = alpha_normalize_con' context' con
-		     val cbnd' = Con_cb (var',kind',con')
-		   in  
-		     (cbnd',context')
-		   end
-		  | Open_cb body => do_confun Open_cb body
-		  | Code_cb body => do_confun Code_cb body
-
-	     val (cbnds',context') = foldl_acc folder context cbnds
-	     val body' = alpha_normalize_con' context' body
-	   in
-	     Let_c (letsort, cbnds', body')
-	   end
-	 
-	  | (Closure_c (code,env)) =>
-	   let
-	     val code' = alpha_normalize_con' context code
-	     val env' = alpha_normalize_con' context env
-	   in
-	     Closure_c(code', env')
-	   end
-	 
-	  | (Crecord_c entries) =>
-	   Crecord_c (map (fn (l,c) => (l,alpha_normalize_con' context c)) entries)
-	   
-	  | (Proj_c (con,lbl)) =>
-	   let
-	     val con' = alpha_normalize_con' context con
-	   in
-	     Proj_c (con', lbl)
-	   end
-	 
-	  | (App_c (cfun,actuals)) =>
-	   let
-	     val cfun' = alpha_normalize_con' context cfun
-	     val actuals' = map (alpha_normalize_con' context) actuals
-	   in
-	     App_c (cfun', actuals')
-	   end
-	 
-	  | Typecase_c {arg, arms, default, kind} => 
-	   let 
-	     val arg' = alpha_normalize_con' context arg
-	     fun doarm ((pcon,args,body),arms) = 
-	       let
-		 val (vars,kinds) = ListPair.unzip args
-		 val kinds' = map (alpha_normalize_kind' context) kinds
-		 val (context',vars') = alpha_bind_list (context,vars)
-		 val body' = alpha_normalize_con' context' body
-		 val args' = ListPair.zip (vars',kinds')
-	       in
-		 (pcon,args',body')::arms
-	       end
-	     val arms' =  List.foldr doarm [] arms
-	   in  Typecase_c{arg = arg',
-			  arms = arms',
-			  default = alpha_normalize_con' context default,
-			  kind = alpha_normalize_kind' context kind}
-	   end
-
-	  | (Annotate_c (annot,con)) => 
-	   let
-	     val con' = alpha_normalize_con' context con
-	   in
-	     Annotate_c (annot, con')
-	   end)
-    and alpha_normalize_kind' (context:alpha_context) (kind:kind) =
-      (case kind of
-	 Type_k _ => kind
-       | Word_k _ => kind
-       | (Singleton_k(p,kind, con)) =>
-	   let
-	     val kind' = alpha_normalize_kind' context kind
-	     val con' = alpha_normalize_con' context con
-	   in
-	     Singleton_k(p,kind', con')
-	   end
-	 
-       | (Record_k fieldseq) =>
-	   let
-	     fun fold_one (((lbl,var),knd),context) = 
-	       let
-		 val kind'  = alpha_normalize_kind' context kind
-		 val (context',var') = alpha_bind (context,var)
-	       in
-		 (((lbl, var'), kind'),context')
-	       end
-	     val field_list = Util.sequence2list fieldseq
-	     val (field_list',context') = 
-	       foldl_acc fold_one context field_list
-	   in
-	     Record_k (Util.list2sequence field_list')
-	   end
-
-       | (Arrow_k (openness, args, result)) =>
-	   let
-	     fun fold_one ((var,kind),context) = 
-	       let
-		 val kind' = alpha_normalize_kind' context kind
-		 val (context',var') = alpha_bind(context, var)
-	       in
-		 ((var',kind'),context')
-	       end
-	     val (args',context') = foldl_acc fold_one context args
-	     val result' = alpha_normalize_kind' context' result
-	   in
-	     Arrow_k (openness,args', result')
-	   end)
-
-    fun alpha_normalize_con con = alpha_normalize_con' (empty_context()) con
-
-    fun alpha_normalize_kind kind = alpha_normalize_kind' (empty_context()) kind
-
-    fun get_phase kind = 
-      (case kind 
-	 of (Type_k p | Word_k p | Singleton_k (p,_,_)) => p
-	  | Record_k entries => 
-	   if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
-	     Runtime
-	   else
-	     Compiletime
-	 | Arrow_k (openness,args,result) => 
-	     if List.all (fn (v,k) => sub_phase (get_phase k,Runtime)) args 
-	       andalso sub_phase(get_phase result,Runtime) then
-	       Runtime
-	     else
-	       Compiletime)
 end;
