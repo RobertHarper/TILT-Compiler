@@ -3216,9 +3216,11 @@ val _ = if !debug then print "*** end promote map ***\n"
 		   end
 	     | AllArrow_c (Open,_,_,_,_,_) => error "open Arrow_c"
 	     | AllArrow_c (Closure,_,_,clist,numfloat,c) => 
-		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist)
+		   mk_sum_help(NONE,[9],[])
+(*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
 	     | AllArrow_c (Code,_,_,clist,numfloat,c) => 
-		   mk_sum_help(NONE,[10,TW32.toInt numfloat],c::clist)
+(*		   mk_sum_help(NONE,[10,TW32.toInt numfloat],c::clist) *)
+		   mk_sum_help(NONE,[10],[])
 	     | Var_c v => (case (getconvarrep state v) of
 			       (_,SOME vv, k) => (VAR_VAL vv,k)
 			     | (SOME vl,_, k) => (VAR_LOC vl,k)
