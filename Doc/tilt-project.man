@@ -11,9 +11,9 @@
 .ft R
 .fi
 ..
-.TH PROJECT 4
+.TH TILT-PROJECT 4
 .SH NAME
-project \- TILT project descriptions
+tilt-project \- TILT project descriptions
 .SH DESCRIPTION
 .PP
 The project description language has value, interface, and unit
