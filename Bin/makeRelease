@@ -1,18 +1,100 @@
-#!/usr/local/bin/rc -p
+#!/usr/local/bin/rc -pe
 
-# Copies stuff from the current directory into the misc collection
-# area, resulting in a new misc collection release.  Assumes you've
-# built heaps (Heaps/tilt*), binaries (Top*), and the basis for all
-# platforms.  You need to modify the collection's coll.conf by hand.
-
+# usage: makeRelease VERSION
+#    or: makeAndrewRelease VERSION
+#
 # Should probably only be run on linux because of the strange chmod
 # and mkdir usage.
+#
+# makeRelease VERSION
+# Copies stuff from the current directory into the CS misc collection
+# area, resulting in a new misc collection release.  Assumes:
+# * The current directory contains heaps (Heaps/tilt*),
+#   binaries (Top*), and the basis for all platforms.
+# * VERSION is a new string.  See TILT/common for the VERSIONs
+#   currently in use, where TILT is /afs/.cs.cmu.edu/misc/tilt.
+# * There is enough free space in the release volumes.  Requirements
+#   are per release are approximately 15MB for TILT/common and TILT/
+#   i386_linux3 and 20MB for TILT/sun4_55 and TILT/alpha_dux40.
+#   Use jeeves to grow volumes if necessary.
+# * You will edit TILT/common/conf/coll.conf by hand and "release" the
+#   volumes using Jeeves.
+#
+# makeAndrewRelease VERSION
+# Copies stuff from the current directory into the Andrew /usr/contributed
+# dest and common areas.  This just prepares the release.  You have to run
+# carpe to get the release out there.  Differences from makeRelease:
+# * Each VERSION has its own set of volumes.  You have to
+#   create these ahead of time with the Andrew carpe program.
+# * We use the CS-side SML/NJ runtime.
+# * We tweak the man page.
+# * We generate coll.conf files.
 
-if (! ~ `{/usr/local/bin/sys} i386_linux*) { echo run me on linux; exit 1 } 
+error_cmd = $0
+fn error { echo >[1=2] $error_cmd ^ :  $*; exit 1 }
 
+# Since we're run with -e, commands that exit abnormally usually
+# cause this script to terminate.  `ignore cmd' avoids this.
+fn ignore { cmd=$* {
+	if (! $cmd) {
+		echo >[1=2] $error_cmd ^ ': ignoring abnormal exit,' \
+			'error code:'  $status
+	}
+	return 0
+}}
+
+if (!~ `{/usr/local/bin/sys} i386_linux*) error 'run me on linux'
+if (!~ $#* 1) error 'read me for usage'
+
+VERSION=$1
 path=(/usr/local/bin /usr/bin /bin)
-
 umask 022
+
+# Establish COMMON, SPARC, ALPHA, and LINUX which are each
+# lists of directories in which to toss platform specific stuff.
+# (Typically each list is either empty or a singleton.)
+#
+# Establish ENABLE_COMMON which is lists of directories in which to
+# stick depot.conf directives.
+#
+# Also establish
+#	MAN_PAGE_FILTER		name of a filter command
+#	SMLNJ			full path to SML/NJ driver
+
+switch ($0) {
+case *makeRelease
+	
+	#tilt=/usr/tmp/tilt	Debugging
+	tilt = /afs/.cs.cmu.edu/misc/tilt {
+		COMMON = $tilt/common/$VERSION
+		SPARC = $tilt/sun4_55/$VERSION
+		ALPHA = $tilt/alpha_dux40/$VERSION
+		LINUX = $tilt/i386_linux3/$VERSION
+	}
+	MAN_PAGE_FILTER = cat
+	SMLNJ = /usr/local/bin/sml
+
+	# No depot.conf tweaks necessary with the misc collection.
+	ENABLE_COMMON=()
+
+case *makeAndrewRelease
+
+	dest = /afs/andrew.cmu.edu/system/dest \
+	tilt = contributed/tilt/$VERSION {
+		SPARC = $dest/sun4x_56/$tilt
+		ALPHA = ()		# there are no andrew alphas
+		LINUX = $dest/i386_linux2/$tilt
+		COMMON = $LINUX/common	# volume is shared
+	}
+	MAN_PAGE_FILTER = andrewFilter
+	SMLNJ = /afs/cs.cmu.edu/local/sml/common/andrew/bin/sml
+
+	# Enable common directory for every target platform.
+	ENABLE_COMMON = ($SPARC $ALPHA $LINUX)
+	
+case *
+	error 'call me either makeRelase or makeAndrewRelease'
+}
 
 # Tracing
 fn indent { n=$1 {
@@ -52,7 +134,7 @@ fn fixPerms { dir=$1 {
 # Copy a directory, preserving timestamps and copying symlinks as symlinks
 fn copyDir { dir=$1 dest=$2 {
 	traceBegin copying $dest
-	rm -rf $dest >[2]/dev/null
+	ignore rm -rf $dest
 	createDir $dest
 	@{cd $dir; tar cf - .} | @{cd $dest; tar xf -}
 	cleanupDir $dest
@@ -63,13 +145,15 @@ fn copyDir { dir=$1 dest=$2 {
 # Copy a file
 fn copyFile { file=$1 dest=$2 {
 	traceBegin copying $dest
-	rm -f $dest >[2]/dev/null
+	ignore rm -f $dest
 	createDir `{ dirname $dest }
 	cp -p $file $dest
 	fixPerms $dest
 	traceEnd
 }}
 
+# Copies files and directories.  Unlike the copyDir and copyFile,
+# the destination comes FIRST. 
 fn copyStuff { dest=$1 i=() {
 	shift
 	for (i in $*) {
@@ -81,45 +165,114 @@ fn copyStuff { dest=$1 i=() {
 	}
 }}
 
-# OK, here we go
-
-if (!~ $#* 1) {
-	echo >[1=2] usage: $0 version
-	exit 1
+# Filter to fix manual page for Andrew
+fn andrewFilter {
+	# 1. Replace references to /usr/local/lib/tilt with
+	#    /usr/contributed/lib/tilt.
+	# 2. Replace sml-site.el reference with /afs version.
+	# 3. Add caveat and support sections (required)
+	sed '
+		s,/usr/local/lib/tilt,/usr/contributed/lib/tilt,g
+		s,/usr/local/lib/sml/sml-mode/sml-site.el,/afs/cs/local/sml/common/andrew/sml-site.el,g
+		/^\.TH/a\
+.SH "/USR/CONTRIBUTED CAVEAT"\
+The software and documentation in /usr/contributed are supported by\
+users on campus rather than by the central support organizations.\
+Questions or comments about the contents of /usr/contributed should be\
+sent to the support person for the particular application, library, or\
+information file.  The support person is cited in the Support Person\
+field at the end of the documentation for the particular topic.
+		$a\
+.SH "SUPPORT PERSONS"\
+TILT is being maintained by David Swasey\
+.RB < swasey@cs.cmu.edu >.\
+.SH "/USR/CONTRIBUTED CAVEAT"\
+The software and documentation in /usr/contributed are supported by\
+users on campus rather than by the central support organizations.\
+Questions or comments about the contents of /usr/contributed should be\
+sent to the support person for the particular application, library, or\
+information file.  The support person is cited in the Support Person\
+field at the end of the documentation for the particular topic.
+	'
 }
 
-ver=$1
-#dest=/usr/tmp/tilt	Debugging
-dest=/afs/.cs.cmu.edu/misc/tilt
-
-fn archPath { arch=$1 i=$2 { echo $dest/$arch/$ver/$i }}
-fn commonPath { i=$1 { archPath common $i }}
-
-# Choose a version of til_slave
-fn setSlaveScript { script=$1 {
-	trace setting til_slave to $script
-	@{
-		cd `{commonPath lib/tilt/Bin}
-		ln -s $script til_slave
-        }
+# makeCommon ROOT
+fn makeCommon { common=$1 {
+	traceBegin makeCommon $common
+	copyStuff $common/lib/tilt \
+		Bin/ ^ (til_slave_local_xterm til_slave_remote_emacs run) \
+		Basis mapfile-lib mapfile-basis
+	# Special treatment for til_slave
+	script = til_slave_local_xterm {
+		trace setting til_slave to $script
+		@{
+			cd $common/lib/tilt/Bin
+			ln -s $script til_slave
+		}
+	}
+	# Special treatment for driver script
+	tmp=/tmp/tilt$pid {
+		trace creating driver script
+		sed s,/usr/local/bin/sml,$SMLNJ,g <Bin/tilt >$tmp
+		copyFile $tmp $common/bin/tilt
+		copyFile $tmp $common/lib/tilt/Bin/tilt
+		rm -f $tmp
+	}
+	# Special treatment for man page
+	tmp=/tmp/man$pid {
+		trace creating manual page
+		$MAN_PAGE_FILTER <Doc/tilt.1 >$tmp
+		copyFile $tmp $common/man/man1/tilt.1
+		rm -f $tmp
+	}
+	traceEnd
 }}
 
-copyStuff `{commonPath lib/tilt} \
-		Bin/ ^ (til_slave_local_xterm til_slave_remote_emacs tilt run) \
-		Basis mapfile-lib mapfile-basis
-copyFile Bin/tilt `{commonPath bin/tilt}
-copyFile Doc/tilt.1 `{commonPath man/man1/tilt.1}
-copyStuff `{archPath sun4_55 lib/tilt} \
+# makeSparc ROOT
+fn makeSparc { sparc=$1 {
+	traceBegin makeSparc $sparc
+	copyStuff $sparc/lib/tilt \
 		Runtime/obj_solaris/firstdata.o \
 		Runtime/runtime.solaris.a \
 		Heaps/tilt.sparc-solaris
 		#Top.sparc.exe
-copyStuff `{archPath alpha_dux40 lib/tilt} \
+	traceEnd
+}}
+
+# makeLinux ROOT
+fn makeLinux { linux=$1 {
+	traceBegin makeLinux $linux
+	copyStuff $linux/lib/tilt \
+		Heaps/tilt.x86-linux
+	traceEnd
+}}
+
+# makeAlpha ROOT
+fn makeAlpha { alpha=$1 {
+	traceBegin makeAlpha $alpha
+	copyStuff $alpha/lib/tilt \
 		Runtime/runtime.alpha_osf.a \
 		Heaps/tilt.alpha32-dunix
 		#Top.alpha.exe
-copyStuff `{archPath i386_linux3 lib/tilt} \
-		Heaps/tilt.x86-linux
-setSlaveScript til_slave_local_xterm
+	traceEnd
+}}
+
+# enableCommon ROOT
+fn enableCommon { conf=$1/depot.conf {
+	trace generating $conf
+	{
+		echo '/ /'
+		echo '~delete common'
+		echo 'common /'
+	} > $conf
+}}
+
+root=() {
+	for(root in $COMMON) makeCommon $root
+	for(root in $SPARC) makeSparc $root
+	for(root in $ALPHA) makeAlpha $root
+	for(root in $LINUX) makeLinux $root
+	for(root in $ENABLE_COMMON) enableCommon $root
+}
 
 exit 0
