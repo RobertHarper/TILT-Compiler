@@ -5,6 +5,12 @@
 # ------------------------------ Top Targets ---------------------------
 SHELL=/bin/sh
 
+OPT=1
+hprof=0
+oldalloc=0
+DEBUG=0
+ATOM=0
+
 all:
 	echo "Try gmake runtime"
 
@@ -88,15 +94,30 @@ solaris_cc=gcc
 # This allows the runtime to use pointer type that are 32-bit when interacting with ML.
 # The -fprm d flag instructs the Alpha compiler to respect dynamic IEEE rounding mode
 # changes.
-alpha_osf_cflags=-warnprotos -xtaso -inline size -w0 -c -g3 -fprm d
-solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g 
+
+alpha_osf_cflags=-warnprotos -xtaso -w0 -c -fprm d
+solaris_cflags=-Winline -Wimplicit -Wa,-xarch=v8plus -c -g
+
+ifeq ($(OPT),1)
+	alpha_osf_cflags:=$(alpha_osf_cflags) -g3 -inline size
+	solaris_cflags:=$(solaris_cflags) -O2 -finline-functions
+else
+	alpha_osf_cflags:=$(alpha_osf_cflags) -g
+endif
+
 CC=${${sys_name}_cc}
 CFLAGS=${CPPFLAGS} ${${sys_name}_cflags}
 
 # --------------------------- assembler flag ---------------------------
-alpha_osf_asflags=-O1 -g
-rs_aix_asflags=-mppc -Drs_aix
+alpha_osf_asflags=-g
 solaris_asflags=-xarch=v8plus -P
+
+ifeq ($(OPT),1)
+	alpha_osf_asflags:=$(alpha_osf_asflags) -O1
+else
+	alpha_osf_asflags:=$(alpha_osf_asflags) -O0
+endif
+rs_aix_asflags=-mppc -Drs_aix
 AS=as
 ASFLAGS=${CPPFLAGS} ${${sys_name}_asflags}
 
@@ -104,11 +125,9 @@ ASFLAGS=${CPPFLAGS} ${${sys_name}_asflags}
 alpha_osf_ldflags=-D 40000000 -T 20000000 -non_shared
 rs_aix_ldflags=-H512 -T512
 sparc_solaris_ldflags=
-META_LDFLAGS=${sys_name}_ldflags
+LDFLAGS=${${sys_name}_ldflags}
 ifeq ($(ATOM),1)
-	LDFLAGS=-r -N ${${META_LDFLAGS}}
-else
-	LDFLAGS=${${META_LDFLAGS}}
+	LDFLAGS:=-r -N ${LDFLAGS}
 endif
 
 alpha_osf_crt=/usr/lib/cmplrs/cc/crt0.o 
@@ -147,7 +166,6 @@ ifeq ($(ATOM),1)
 	atom ${out} -32addr -tool pipe -o ${out}.pipe.exe
 	atom ${out} -32addr -tool lpipe -o ${out}.lpipe.exe
 	atom ${out} -32addr -tool memsys -o ${out}.memsys.exe
-else
 endif
 
 # ------------------------------ Compiling -----------------------------
