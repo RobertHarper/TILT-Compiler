@@ -127,7 +127,8 @@ structure NilSubst :> NILSUBST =
 	   rewrite_exp = substExpConInExp',
 	   rewrite_kind = substExpConInKind',
            rewrite_cbnd = substExpConInCBnd',
-           rewrite_bnd = substExpConInBnd',...} = rewriters exp_con_handler
+           rewrite_bnd = substExpConInBnd',
+	   rewrite_trace = substExpConInTrace',...} = rewriters exp_con_handler
  
       fun empty_state (esubst : exp delay map,csubst : con delay map) : state = 
 	{esubst = esubst, csubst = csubst}
@@ -157,19 +158,13 @@ structure NilSubst :> NILSUBST =
 
     in
 
-      val substConInCon = substConInXXX substExpConInCon'
-      val substExpInExp = substExpInXXX substExpConInExp'
-      val substExpInCon = substExpInXXX substExpConInCon'
-      val substConInExp = substConInXXX substExpConInExp'
-      val substConInKind = substConInXXX substExpConInKind'
-      val substExpInKind = substExpInXXX substExpConInKind'
-      fun substConInTrace subst (TraceKnown (TraceInfo.Compute (v,labs))) = 
-		let fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
-		      | loop (Proj_c (c,l)) labs = loop c (l::labs)
-		      | loop _ _ = error "substConInTrace" "got non-path"
-		in  loop (substConInCon subst (Var_c v)) labs
-		end
-	| substConInTrace _ tr = tr
+      val substConInCon   = substConInXXX substExpConInCon'
+      val substExpInExp   = substExpInXXX substExpConInExp'
+      val substExpInCon   = substExpInXXX substExpConInCon'
+      val substConInExp   = substConInXXX substExpConInExp'
+      val substConInKind  = substConInXXX substExpConInKind'
+      val substExpInKind  = substExpInXXX substExpConInKind'
+      val substConInTrace = substConInXXX substExpConInTrace'
 
       fun substConInCBnd csubst bnd = 
 	let

@@ -23,6 +23,7 @@ structure NilRewrite :> NILREWRITE =
 		  conhandler : 'state * con -> ('state * con) changeopt,
 		  exphandler : 'state * exp -> ('state * exp) changeopt,
 		  kindhandler : 'state * kind -> ('state * kind) changeopt,
+		  tracehandler : 'state * niltrace -> ('state * niltrace) changeopt,
 		  con_var_bind : 'state * var * kind -> ('state * var option),
 		  con_var_define : 'state * var * con -> ('state * var option),
 		  exp_var_bind : 'state * var * con -> ('state * var option),
@@ -31,12 +32,13 @@ structure NilRewrite :> NILREWRITE =
 
     fun rewriters (handler : 'state handler) 
       : {
-	 rewrite_kind :'state -> Nil.kind -> Nil.kind,
-	 rewrite_con : 'state -> Nil.con -> Nil.con,
-	 rewrite_exp : 'state -> Nil.exp -> Nil.exp,
-	 rewrite_bnd : 'state -> Nil.bnd -> (Nil.bnd list * 'state),
-	 rewrite_cbnd : 'state -> Nil.conbnd -> (Nil.conbnd list * 'state),
-	 rewrite_mod : 'state -> Nil.module -> Nil.module
+	 rewrite_kind  : 'state -> Nil.kind -> Nil.kind,
+	 rewrite_con   : 'state -> Nil.con -> Nil.con,
+	 rewrite_exp   : 'state -> Nil.exp -> Nil.exp,
+	 rewrite_bnd   : 'state -> Nil.bnd -> (Nil.bnd list * 'state),
+	 rewrite_cbnd  : 'state -> Nil.conbnd -> (Nil.conbnd list * 'state),
+	 rewrite_trace : 'state -> Nil.niltrace -> Nil.niltrace,
+	 rewrite_mod   : 'state -> Nil.module -> Nil.module
 	 }
       =
       let
@@ -46,6 +48,7 @@ structure NilRewrite :> NILREWRITE =
 		     cbndhandler,
 		     conhandler,
 		     kindhandler,
+		     tracehandler,
 		     con_var_bind,
 		     con_var_define,
 		     exp_var_bind,
@@ -103,7 +106,11 @@ structure NilRewrite :> NILREWRITE =
 	  (case rewrite_kind state kind
 	     of SOME kind => (flag := true;kind)
 	      | NONE => kind)
-	    
+	and recur_trace flag state trace = 
+	  (case rewrite_trace state trace
+	     of SOME trace => (flag := true;trace)
+	      | NONE => trace)
+
 	and rewrite_cbnd (state : 'state) (cbnd : conbnd) : (conbnd list option * 'state) =
 	  let
 
@@ -426,20 +433,6 @@ structure NilRewrite :> NILREWRITE =
 	    else NONE
 	  end
 
-	and recur_trace changed state trace = 
-	    (case trace of
-		     TraceCompute var => 
-			 (case recur_c changed state (Var_c var)
-			      of Var_c var => TraceCompute var
-			    | _ => (lprintl "Warning - rewrite forgetting trace info";
-				    TraceUnknown))
-		   | TraceKnown (TraceInfo.Compute (var,labels)) => 
-			      (case recur_c changed state (Var_c var)
-				   of Var_c var => TraceKnown (TraceInfo.Compute (var,labels))
-				 | _ => (lprintl "Warning - rewrite forgetting trace info";
-					 TraceUnknown))
-		   | _ => trace)
-
 	and rewrite_bnd (state : 'state) (bnd : bnd) : (bnd list option * 'state) = 
 	  let 
 	    fun do_fix (recur,maker,vfset) = 
@@ -731,7 +724,35 @@ structure NilRewrite :> NILREWRITE =
 		| NOCHANGE => doexp (state,exp)
 		| NORECURSE => NONE)
 	  end
+	and rewrite_trace (state : 'state) (trace : niltrace) : niltrace option = 
+	  let
 
+	    fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
+	      | loop (Proj_c (c,l)) labs = loop c (l::labs)
+	      | loop _ _ = error "Non path returned from rewriting trace info"
+
+	    fun do_trace (state,trace) =
+	      (case trace of
+		 TraceCompute var => 
+		   let val changed = ref false
+		       val trace = loop (recur_c changed state (Var_c var)) []
+		   in
+		     if !changed then SOME trace else NONE
+		   end
+	       | TraceKnown (TraceInfo.Compute (var,labels)) => 
+		   let val changed = ref false
+		       val trace = loop (recur_c changed state (Var_c var)) labels
+		   in
+		     if !changed then SOME trace else NONE
+		   end
+	       | _ => NONE)
+	  in
+      	    (case (tracehandler (state,trace))
+	       of CHANGE_NORECURSE (state,t) => SOME t
+		| CHANGE_RECURSE value => do_trace value
+		| NOCHANGE => do_trace (state,trace)
+		| NORECURSE => NONE)
+	  end
 
 	fun import_helper flag (import as (ImportValue (label,var,trace,con)),state) =
 	  let
@@ -791,6 +812,7 @@ structure NilRewrite :> NILREWRITE =
       val rewrite_exp = rewrite_item rewrite_exp
       val rewrite_con = rewrite_item rewrite_con
       val rewrite_kind = rewrite_item rewrite_kind
+      val rewrite_trace = rewrite_item rewrite_trace
 
       val rewrite_bnd = 
 	(fn state => fn bnd => 
@@ -806,12 +828,13 @@ structure NilRewrite :> NILREWRITE =
 
       in
 	{
-	 rewrite_kind = rewrite_kind,
-	 rewrite_con = rewrite_con,
-	 rewrite_exp = rewrite_exp,
-	 rewrite_bnd = rewrite_bnd,
-	 rewrite_cbnd = rewrite_cbnd,
-	 rewrite_mod = rewrite_mod
+	 rewrite_kind  = rewrite_kind,
+	 rewrite_con   = rewrite_con,
+	 rewrite_exp   = rewrite_exp,
+	 rewrite_bnd   = rewrite_bnd,
+	 rewrite_cbnd  = rewrite_cbnd,
+	 rewrite_trace = rewrite_trace,
+	 rewrite_mod   = rewrite_mod
 	 }
       end
 
@@ -822,109 +845,116 @@ structure NilRewrite :> NILREWRITE =
 
       val default_handler =  
 	HANDLER {
-		 bndhandler = default_handler,
-		 cbndhandler = default_handler,
-		 conhandler = default_handler,
-		 exphandler = default_handler,
-		 kindhandler = default_handler,
-		 con_var_bind = null_binder,
-		 exp_var_bind = null_binder,
+		 bndhandler     = default_handler,
+		 cbndhandler    = default_handler,
+		 conhandler     = default_handler,
+		 exphandler     = default_handler,
+		 kindhandler    = default_handler,
+		 tracehandler   = default_handler,
+		 con_var_bind   = null_binder,
+		 exp_var_bind   = null_binder,
 		 con_var_define = null_binder,
 		 exp_var_define = null_binder
 		 }
 
       fun set_conhandler (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define }) new_conhandler = 
 	HANDLER {
-		 bndhandler = bndhandler,
-		 cbndhandler = cbndhandler,
-		 conhandler = new_conhandler,
-		 exphandler = exphandler,
-		 kindhandler = kindhandler,
-		 con_var_bind = con_var_bind,
-		 exp_var_bind = exp_var_bind,
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = new_conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define
 		 }
 
       fun set_exphandler (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define }) new_exphandler = 
 	HANDLER {
-		 bndhandler = bndhandler,
-		 cbndhandler = cbndhandler,
-		 conhandler = conhandler,
-		 exphandler = new_exphandler,
-		 kindhandler = kindhandler,
-		 con_var_bind = con_var_bind,
-		 exp_var_bind = exp_var_bind,
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = new_exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define
 		 }
 
       fun set_exp_binder (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define }) new_exp_var_bind = 
 	HANDLER {
-		 bndhandler = bndhandler,
-		 cbndhandler = cbndhandler,
-		 conhandler = conhandler,
-		 exphandler = exphandler,
-		 kindhandler = kindhandler,
-		 con_var_bind = con_var_bind,
-		 exp_var_bind = new_exp_var_bind,
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = new_exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define
 		 }
 
       fun set_exp_definer (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define }) new_exp_var_define = 
 	HANDLER {
-		 bndhandler = bndhandler,
-		 cbndhandler = cbndhandler,
-		 conhandler = conhandler,
-		 exphandler = exphandler,
-		 kindhandler = kindhandler,
-		 con_var_bind = con_var_bind,
-		 exp_var_bind = exp_var_bind,
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = new_exp_var_define
 		 }
 
       fun set_con_binder (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define }) new_con_var_bind = 
 	HANDLER {
-		 bndhandler = bndhandler,
-		 cbndhandler = cbndhandler,
-		 conhandler = conhandler,
-		 exphandler = exphandler,
-		 kindhandler = kindhandler,
-		 con_var_bind = new_con_var_bind,
-		 exp_var_bind = exp_var_bind,
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = new_con_var_bind,
+		 exp_var_bind   = exp_var_bind,
 		 con_var_define = con_var_define,
 		 exp_var_define = exp_var_define
 		 }
 
       fun set_con_definer (HANDLER {bndhandler,cbndhandler,
-				   conhandler,exphandler,kindhandler,
+				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define }) new_con_var_define = 
 	HANDLER {
-		 bndhandler = bndhandler,
-		 cbndhandler = cbndhandler,
-		 conhandler = conhandler,
-		 exphandler = exphandler,
-		 kindhandler = kindhandler,
-		 con_var_bind = con_var_bind,
-		 exp_var_bind = exp_var_bind,
+		 bndhandler     = bndhandler,
+		 cbndhandler    = cbndhandler,
+		 conhandler     = conhandler,
+		 exphandler     = exphandler,
+		 kindhandler    = kindhandler,
+		 tracehandler   = tracehandler,
+		 con_var_bind   = con_var_bind,
+		 exp_var_bind   = exp_var_bind,
 		 con_var_define = new_con_var_define,
 		 exp_var_define = exp_var_define
 		 }

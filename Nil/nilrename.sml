@@ -55,9 +55,10 @@ structure NilRename :> NILRENAME =
 		of SOME var => (CHANGE_NORECURSE (subst,Var_e var))
 		 | _ => NORECURSE)
 	    | _ => NOCHANGE)
-
+      (*Default trace handler should suffice
+       *)
       val exp_handlers = 
-	let
+	let   
 	  val h = set_exphandler default_handler exphandler
 	  val h = set_exp_binder h exp_var_xxx
 	  val h = set_exp_definer h exp_var_xxx
@@ -96,7 +97,7 @@ structure NilRename :> NILRENAME =
 	   rewrite_kind = renameKind',
 	   rewrite_bnd = renameBnd',
 	   rewrite_cbnd = renameCBnd',
-	   rewrite_mod = renameMod'} = rewriters all_handlers
+	   rewrite_mod = renameMod',...} = rewriters all_handlers
 
       val empty = (VarMap.empty,VarMap.empty)
 
@@ -193,7 +194,7 @@ structure NilRename :> NILRENAME =
 	   rewrite_kind = renameKindWRT',
 	   rewrite_bnd = renameBndWRT',
 	   rewrite_cbnd = renameCBndWRT',
-	   rewrite_mod = renameModWRT'} = rewriters all_handlers
+	   rewrite_mod = renameModWRT',...} = rewriters all_handlers
 
       fun empty (epred,cpred) = {esubst = VarMap.empty,csubst = VarMap.empty,epred = epred,cpred = cpred}
 
