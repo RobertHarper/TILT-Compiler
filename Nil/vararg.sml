@@ -1,4 +1,4 @@
-(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs ListPair Prim Alpha *)
+(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs ListPair Prim Alpha NilStatic *)
 
 (* Converting functions with either statically and dynamically known parameter types such that they take a single record
  * argument to use multiple arguments, as well as generating code to apply vararg/onearg at runtime

@@ -1,4 +1,4 @@
-(*$import Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs ListPair NilSubst Prim *)
+(*$import Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs ListPair NilSubst Prim NilStatic *)
 
 (* Determines which constructors are used as data, creates proper traces, and possibly adds extra bindings for reified types *)
 
