@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
+(*$import Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
 
 functor MLLrValsFun(structure Token : TOKEN)
  : sig structure ParserData : PARSER_DATA
@@ -17,9 +17,9 @@ struct
 
 (* Based on grammar in SML/NJ 110.0.7 *)
 
-(* ml.grm.sml imports Prelude TopLevel Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
+(* ml.grm.sml imports Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast ErrorMsg AstUtil StrgHash Array *)
 
-(* ml.grm.sig.sml imports Prelude TilWord64 Symbol YaccBase *)
+(* ml.grm.sig.sml imports TilWord64 Symbol YaccBase *)
 
 open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
 

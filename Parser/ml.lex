@@ -3,7 +3,7 @@
  * Copyright 1989 by AT&T Bell Laboratories
  *)
 
-(* ml.lex.sml imports Prelude TopLevel StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
+(* ml.lex.sml imports StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
 
 open ErrorMsg;
 
@@ -108,7 +108,7 @@ hexnum=[0-9a-fA-F]+;
                     Tokens.RPAREN(yypos,yypos+1));
 <INITIAL>"."		=> (Tokens.DOT(yypos,yypos+1));
 <INITIAL>"..."		=> (Tokens.DOTDOTDOT(yypos,yypos+3));
-<INITIAL>"'"("'"?)("_"|{num})?{id}
+<INITIAL>"'"("'"?)("_"|{num}|"'")?{id}?
 			=> (TokTable.checkTyvar(yytext,yypos));
 <INITIAL>{id}	        => (TokTable.checkToken(yytext,yypos));
 <INITIAL>{full_sym}+    => (if (!Control.quotation)

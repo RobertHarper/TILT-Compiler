@@ -1,4 +1,5 @@
-(*$import Prelude TopLevel StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
+(*$import StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
+
 functor MLLexFun(structure Tokens : ML_TOKENS)=
    struct
     structure UserDeclarations =
@@ -8,7 +9,7 @@ functor MLLexFun(structure Tokens : ML_TOKENS)=
  * Copyright 1989 by AT&T Bell Laboratories
  *)
 
-(* ml.lex.sml imports Prelude TopLevel StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
+(* ml.lex.sml imports StrgHash Control SourceMap Int String Char ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
 
 open ErrorMsg;
 
@@ -665,7 +666,7 @@ val s = [
  (87, 
 "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
 \\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
-\\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
+\\000\000\000\000\000\000\000\085\000\000\000\000\000\000\000\000\
 \\086\086\086\086\086\086\086\086\086\086\000\000\000\000\000\000\
 \\000\084\084\084\084\084\084\084\084\084\084\084\084\084\084\084\
 \\084\084\084\084\084\084\084\084\084\084\084\000\000\000\000\085\
@@ -1084,68 +1085,68 @@ in Vector.fromList(map g
 {fin = [], trans = 3},
 {fin = [], trans = 5},
 {fin = [], trans = 5},
-{fin = [(N 308)], trans = 7},
-{fin = [(N 308)], trans = 7},
+{fin = [(N 309)], trans = 7},
+{fin = [(N 309)], trans = 7},
 {fin = [], trans = 9},
 {fin = [], trans = 9},
-{fin = [(N 337)], trans = 11},
-{fin = [(N 337)], trans = 11},
+{fin = [(N 338)], trans = 11},
+{fin = [(N 338)], trans = 11},
 {fin = [], trans = 13},
 {fin = [], trans = 13},
-{fin = [(N 186)], trans = 15},
-{fin = [(N 186)], trans = 15},
+{fin = [(N 187)], trans = 15},
+{fin = [(N 187)], trans = 15},
 {fin = [], trans = 17},
 {fin = [], trans = 17},
-{fin = [(N 195)], trans = 19},
-{fin = [(N 195)], trans = 19},
-{fin = [(N 166)], trans = 21},
-{fin = [(N 166)], trans = 21},
-{fin = [(N 158),(N 160)], trans = 0},
-{fin = [(N 160)], trans = 0},
-{fin = [(N 56),(N 65),(N 160)], trans = 25},
-{fin = [(N 56),(N 65)], trans = 26},
-{fin = [(N 56)], trans = 27},
-{fin = [(N 97)], trans = 28},
+{fin = [(N 196)], trans = 19},
+{fin = [(N 196)], trans = 19},
+{fin = [(N 167)], trans = 21},
+{fin = [(N 167)], trans = 21},
+{fin = [(N 159),(N 161)], trans = 0},
+{fin = [(N 161)], trans = 0},
+{fin = [(N 57),(N 66),(N 161)], trans = 25},
+{fin = [(N 57),(N 66)], trans = 26},
+{fin = [(N 57)], trans = 27},
+{fin = [(N 98)], trans = 28},
 {fin = [], trans = 29},
 {fin = [], trans = 30},
-{fin = [(N 87)], trans = 30},
+{fin = [(N 88)], trans = 30},
 {fin = [], trans = 32},
-{fin = [(N 87)], trans = 33},
+{fin = [(N 88)], trans = 33},
 {fin = [], trans = 34},
 {fin = [], trans = 35},
-{fin = [(N 87)], trans = 35},
-{fin = [(N 97)], trans = 37},
+{fin = [(N 88)], trans = 35},
+{fin = [(N 98)], trans = 37},
 {fin = [], trans = 38},
-{fin = [(N 108)], trans = 38},
-{fin = [(N 15),(N 160)], trans = 0},
-{fin = [(N 56),(N 65),(N 160)], trans = 26},
-{fin = [(N 13),(N 160)], trans = 0},
-{fin = [(N 45),(N 160)], trans = 43},
-{fin = [(N 45)], trans = 43},
-{fin = [(N 56),(N 67),(N 160)], trans = 27},
-{fin = [(N 9),(N 160)], trans = 0},
-{fin = [(N 22),(N 160)], trans = 0},
-{fin = [(N 17),(N 160)], trans = 0},
-{fin = [(N 24),(N 160)], trans = 0},
-{fin = [(N 90),(N 93),(N 160)], trans = 50},
-{fin = [(N 90),(N 93)], trans = 50},
-{fin = [(N 93),(N 160)], trans = 52},
+{fin = [(N 109)], trans = 38},
+{fin = [(N 15),(N 161)], trans = 0},
+{fin = [(N 57),(N 66),(N 161)], trans = 26},
+{fin = [(N 13),(N 161)], trans = 0},
+{fin = [(N 46),(N 161)], trans = 43},
+{fin = [(N 46)], trans = 43},
+{fin = [(N 57),(N 68),(N 161)], trans = 27},
+{fin = [(N 9),(N 161)], trans = 0},
+{fin = [(N 22),(N 161)], trans = 0},
+{fin = [(N 17),(N 161)], trans = 0},
+{fin = [(N 24),(N 161)], trans = 0},
+{fin = [(N 91),(N 94),(N 161)], trans = 50},
+{fin = [(N 91),(N 94)], trans = 50},
+{fin = [(N 94),(N 161)], trans = 52},
 {fin = [], trans = 53},
-{fin = [(N 102)], trans = 53},
+{fin = [(N 103)], trans = 53},
 {fin = [], trans = 55},
 {fin = [], trans = 56},
-{fin = [(N 119)], trans = 56},
-{fin = [(N 113)], trans = 58},
-{fin = [(N 93)], trans = 59},
-{fin = [(N 30),(N 160)], trans = 60},
+{fin = [(N 120)], trans = 56},
+{fin = [(N 114)], trans = 58},
+{fin = [(N 94)], trans = 59},
+{fin = [(N 30),(N 161)], trans = 60},
 {fin = [], trans = 61},
 {fin = [(N 34)], trans = 0},
-{fin = [(N 11),(N 160)], trans = 0},
-{fin = [(N 56),(N 65),(N 160)], trans = 64},
-{fin = [(N 156)], trans = 0},
-{fin = [(N 28),(N 160)], trans = 0},
-{fin = [(N 26),(N 160)], trans = 67},
-{fin = [(N 153)], trans = 68},
+{fin = [(N 11),(N 161)], trans = 0},
+{fin = [(N 57),(N 66),(N 161)], trans = 64},
+{fin = [(N 157)], trans = 0},
+{fin = [(N 28),(N 161)], trans = 0},
+{fin = [(N 26),(N 161)], trans = 67},
+{fin = [(N 154)], trans = 68},
 {fin = [], trans = 69},
 {fin = [], trans = 70},
 {fin = [], trans = 71},
@@ -1153,112 +1154,112 @@ in Vector.fromList(map g
 {fin = [], trans = 73},
 {fin = [], trans = 74},
 {fin = [], trans = 75},
-{fin = [(N 150)], trans = 75},
+{fin = [(N 151)], trans = 75},
 {fin = [], trans = 77},
 {fin = [], trans = 78},
 {fin = [], trans = 79},
 {fin = [], trans = 80},
 {fin = [], trans = 81},
-{fin = [(N 136)], trans = 81},
-{fin = [(N 160)], trans = 83},
-{fin = [(N 42)], trans = 84},
-{fin = [], trans = 85},
-{fin = [], trans = 86},
-{fin = [], trans = 87},
-{fin = [(N 56),(N 65),(N 160)], trans = 88},
+{fin = [(N 137)], trans = 81},
+{fin = [(N 43),(N 161)], trans = 83},
+{fin = [(N 43)], trans = 84},
+{fin = [(N 43)], trans = 85},
+{fin = [(N 43)], trans = 86},
+{fin = [(N 43)], trans = 87},
+{fin = [(N 57),(N 66),(N 161)], trans = 88},
 {fin = [(N 20)], trans = 0},
-{fin = [(N 124)], trans = 0},
-{fin = [(N 121),(N 160)], trans = 0},
-{fin = [(N 2),(N 160)], trans = 92},
+{fin = [(N 125)], trans = 0},
+{fin = [(N 122),(N 161)], trans = 0},
+{fin = [(N 2),(N 161)], trans = 92},
 {fin = [(N 2)], trans = 92},
-{fin = [(N 7),(N 160)], trans = 94},
+{fin = [(N 7),(N 161)], trans = 94},
 {fin = [(N 7)], trans = 0},
-{fin = [(N 217)], trans = 0},
-{fin = [(N 217)], trans = 97},
-{fin = [(N 215)], trans = 0},
-{fin = [(N 217)], trans = 99},
-{fin = [(N 207)], trans = 0},
-{fin = [(N 212),(N 217)], trans = 101},
-{fin = [(N 212)], trans = 0},
-{fin = [(N 300)], trans = 0},
-{fin = [(N 300)], trans = 104},
-{fin = [(N 234),(N 276),(N 300)], trans = 105},
-{fin = [(N 255)], trans = 0},
-{fin = [(N 252)], trans = 0},
-{fin = [(N 249)], trans = 0},
-{fin = [(N 246)], trans = 0},
-{fin = [(N 243)], trans = 0},
-{fin = [(N 240)], trans = 0},
-{fin = [(N 237)], trans = 0},
+{fin = [(N 218)], trans = 0},
+{fin = [(N 218)], trans = 97},
+{fin = [(N 216)], trans = 0},
+{fin = [(N 218)], trans = 99},
+{fin = [(N 208)], trans = 0},
+{fin = [(N 213),(N 218)], trans = 101},
+{fin = [(N 213)], trans = 0},
+{fin = [(N 301)], trans = 0},
+{fin = [(N 301)], trans = 104},
+{fin = [(N 235),(N 277),(N 301)], trans = 105},
+{fin = [(N 256)], trans = 0},
+{fin = [(N 253)], trans = 0},
+{fin = [(N 250)], trans = 0},
+{fin = [(N 247)], trans = 0},
+{fin = [(N 244)], trans = 0},
+{fin = [(N 241)], trans = 0},
+{fin = [(N 238)], trans = 0},
 {fin = [], trans = 113},
-{fin = [(N 269)], trans = 0},
-{fin = [(N 265),(N 269)], trans = 0},
-{fin = [(N 258)], trans = 0},
+{fin = [(N 270)], trans = 0},
+{fin = [(N 266),(N 270)], trans = 0},
+{fin = [(N 259)], trans = 0},
 {fin = [], trans = 117},
 {fin = [], trans = 118},
-{fin = [(N 274)], trans = 0},
-{fin = [(N 261)], trans = 0},
-{fin = [(N 234)], trans = 121},
-{fin = [(N 230)], trans = 122},
-{fin = [(N 230)], trans = 0},
-{fin = [(N 219),(N 300)], trans = 0},
-{fin = [(N 278),(N 300)], trans = 0},
-{fin = [(N 224),(N 278),(N 300)], trans = 126},
-{fin = [(N 224)], trans = 0},
-{fin = [(N 224),(N 278)], trans = 0},
-{fin = [(N 312)], trans = 0},
-{fin = [(N 310),(N 312)], trans = 0},
-{fin = [(N 308),(N 312)], trans = 131},
-{fin = [(N 308)], trans = 131},
-{fin = [(N 305),(N 312)], trans = 133},
-{fin = [(N 305)], trans = 0},
-{fin = [(N 329)], trans = 0},
-{fin = [(N 322),(N 329)], trans = 0},
-{fin = [(N 320),(N 329)], trans = 137},
-{fin = [(N 315)], trans = 0},
-{fin = [(N 318)], trans = 0},
-{fin = [(N 327),(N 329)], trans = 140},
-{fin = [(N 327)], trans = 0},
-{fin = [(N 353)], trans = 0},
-{fin = [(N 349),(N 353)], trans = 143},
-{fin = [(N 349)], trans = 143},
-{fin = [(N 340),(N 353)], trans = 145},
-{fin = [(N 340)], trans = 145},
-{fin = [(N 351),(N 353)], trans = 0},
-{fin = [(N 337),(N 353)], trans = 148},
-{fin = [(N 337)], trans = 148},
-{fin = [(N 334),(N 353)], trans = 150},
-{fin = [(N 334)], trans = 0},
-{fin = [(N 204)], trans = 0},
-{fin = [(N 179),(N 204)], trans = 153},
-{fin = [(N 179)], trans = 153},
-{fin = [(N 204)], trans = 155},
-{fin = [(N 202)], trans = 0},
-{fin = [(N 184)], trans = 157},
-{fin = [(N 184),(N 186)], trans = 158},
-{fin = [(N 181)], trans = 0},
-{fin = [(N 204)], trans = 160},
-{fin = [(N 189),(N 202)], trans = 0},
-{fin = [(N 193),(N 204)], trans = 0},
-{fin = [(N 204)], trans = 163},
-{fin = [(N 193)], trans = 0},
+{fin = [(N 275)], trans = 0},
+{fin = [(N 262)], trans = 0},
+{fin = [(N 235)], trans = 121},
+{fin = [(N 231)], trans = 122},
+{fin = [(N 231)], trans = 0},
+{fin = [(N 220),(N 301)], trans = 0},
+{fin = [(N 279),(N 301)], trans = 0},
+{fin = [(N 225),(N 279),(N 301)], trans = 126},
+{fin = [(N 225)], trans = 0},
+{fin = [(N 225),(N 279)], trans = 0},
+{fin = [(N 313)], trans = 0},
+{fin = [(N 311),(N 313)], trans = 0},
+{fin = [(N 309),(N 313)], trans = 131},
+{fin = [(N 309)], trans = 131},
+{fin = [(N 306),(N 313)], trans = 133},
+{fin = [(N 306)], trans = 0},
+{fin = [(N 330)], trans = 0},
+{fin = [(N 323),(N 330)], trans = 0},
+{fin = [(N 321),(N 330)], trans = 137},
+{fin = [(N 316)], trans = 0},
+{fin = [(N 319)], trans = 0},
+{fin = [(N 328),(N 330)], trans = 140},
+{fin = [(N 328)], trans = 0},
+{fin = [(N 354)], trans = 0},
+{fin = [(N 350),(N 354)], trans = 143},
+{fin = [(N 350)], trans = 143},
+{fin = [(N 341),(N 354)], trans = 145},
+{fin = [(N 341)], trans = 145},
+{fin = [(N 352),(N 354)], trans = 0},
+{fin = [(N 338),(N 354)], trans = 148},
+{fin = [(N 338)], trans = 148},
+{fin = [(N 335),(N 354)], trans = 150},
+{fin = [(N 335)], trans = 0},
+{fin = [(N 205)], trans = 0},
+{fin = [(N 180),(N 205)], trans = 153},
+{fin = [(N 180)], trans = 153},
+{fin = [(N 205)], trans = 155},
+{fin = [(N 203)], trans = 0},
+{fin = [(N 185)], trans = 157},
+{fin = [(N 185),(N 187)], trans = 158},
+{fin = [(N 182)], trans = 0},
+{fin = [(N 205)], trans = 160},
+{fin = [(N 190),(N 203)], trans = 0},
+{fin = [(N 194),(N 205)], trans = 0},
+{fin = [(N 205)], trans = 163},
+{fin = [(N 194)], trans = 0},
 {fin = [], trans = 163},
-{fin = [(N 195),(N 204)], trans = 166},
-{fin = [(N 195)], trans = 166},
-{fin = [(N 195),(N 204)], trans = 168},
-{fin = [(N 195),(N 202)], trans = 166},
-{fin = [(N 204)], trans = 170},
+{fin = [(N 196),(N 205)], trans = 166},
+{fin = [(N 196)], trans = 166},
+{fin = [(N 196),(N 205)], trans = 168},
+{fin = [(N 196),(N 203)], trans = 166},
+{fin = [(N 205)], trans = 170},
 {fin = [], trans = 171},
-{fin = [(N 199)], trans = 0},
-{fin = [(N 176)], trans = 0},
-{fin = [(N 163),(N 176)], trans = 174},
-{fin = [(N 163)], trans = 174},
-{fin = [(N 176)], trans = 176},
-{fin = [(N 174)], trans = 0},
-{fin = [(N 166),(N 176)], trans = 178},
-{fin = [(N 166)], trans = 178},
-{fin = [(N 171),(N 176)], trans = 180},
-{fin = [(N 171)], trans = 0}])
+{fin = [(N 200)], trans = 0},
+{fin = [(N 177)], trans = 0},
+{fin = [(N 164),(N 177)], trans = 174},
+{fin = [(N 164)], trans = 174},
+{fin = [(N 177)], trans = 176},
+{fin = [(N 175)], trans = 0},
+{fin = [(N 167),(N 177)], trans = 178},
+{fin = [(N 167)], trans = 178},
+{fin = [(N 172),(N 177)], trans = 180},
+{fin = [(N 172)], trans = 0}])
 end
 structure StartStates =
 	struct
@@ -1311,60 +1312,61 @@ let fun continue() : Internal.result =
 
 			(* Application actions *)
 
-  102 => (Tokens.INT0(xtoi(yytext, 2),yypos,yypos+size yytext))
-| 108 => (Tokens.INT0(TilWord64.snegate(xtoi(yytext, 3)),yypos,yypos+size yytext))
+  103 => (Tokens.INT0(xtoi(yytext, 2),yypos,yypos+size yytext))
+| 109 => (Tokens.INT0(TilWord64.snegate(xtoi(yytext, 3)),yypos,yypos+size yytext))
 | 11 => (Tokens.COMMA(yypos,yypos+1))
-| 113 => (Tokens.WORD(atoi(yytext, 2),yypos,yypos+size yytext))
-| 119 => (Tokens.WORD(xtoi(yytext, 3),yypos,yypos+size yytext))
-| 121 => (charlist := [""]; stringstart := yypos;
+| 114 => (Tokens.WORD(atoi(yytext, 2),yypos,yypos+size yytext))
+| 120 => (Tokens.WORD(xtoi(yytext, 3),yypos,yypos+size yytext))
+| 122 => (charlist := [""]; stringstart := yypos;
                     stringtype := true; YYBEGIN S; continue())
-| 124 => (charlist := [""]; stringstart := yypos;
+| 125 => (charlist := [""]; stringstart := yypos;
                     stringtype := false; YYBEGIN S; continue())
 | 13 => (Tokens.LBRACE(yypos,yypos+1))
-| 136 => (YYBEGIN L; stringstart := yypos; comLevel := 1; continue())
+| 137 => (YYBEGIN L; stringstart := yypos; comLevel := 1; continue())
 | 15 => (Tokens.RBRACE(yypos,yypos+1))
-| 150 => (YYBEGIN IMP; comLevel := 1; Tokens.IMPORT(yypos, yypos+9))
-| 153 => (YYBEGIN A; stringstart := yypos; comLevel := 1; continue())
-| 156 => (err (yypos,yypos+1) COMPLAIN "unmatched close comment"
+| 151 => (YYBEGIN IMP; comLevel := 1; Tokens.IMPORT(yypos, yypos+9))
+| 154 => (YYBEGIN A; stringstart := yypos; comLevel := 1; continue())
+| 157 => (err (yypos,yypos+1) COMPLAIN "unmatched close comment"
 		        nullErrorBody;
 		    continue())
-| 158 => (err (yypos,yypos) COMPLAIN "non-Ascii character"
+| 159 => (err (yypos,yypos) COMPLAIN "non-Ascii character"
 		        nullErrorBody;
 		    continue())
-| 160 => (err (yypos,yypos) COMPLAIN "illegal token" nullErrorBody;
+| 161 => (err (yypos,yypos) COMPLAIN "illegal token" nullErrorBody;
 		    continue())
-| 163 => (Tokens.STRING(yytext, yypos, yypos+size yytext))
-| 166 => (continue())
+| 164 => (Tokens.STRING(yytext, yypos, yypos+size yytext))
+| 167 => (continue())
 | 17 => (Tokens.LBRACKET(yypos,yypos+1))
-| 171 => (SourceMap.newline sourceMap yypos; continue())
-| 174 => (YYBEGIN INITIAL; comLevel := 0; continue())
-| 176 => (err (yypos, yypos+1) COMPLAIN
+| 172 => (SourceMap.newline sourceMap yypos; continue())
+| 175 => (YYBEGIN INITIAL; comLevel := 0; continue())
+| 177 => (err (yypos, yypos+1) COMPLAIN
 			      "ill-formed import directive" nullErrorBody
 		              ; YYBEGIN INITIAL; comLevel := 0; continue())
-| 179 => (YYBEGIN LL; charlist := [yytext]; continue())
-| 181 => ((* cheat: take n > 0 dots *) continue())
-| 184 => (YYBEGIN LLC; addString(charlist, yytext); continue())
-| 186 => (YYBEGIN LLC; addString(charlist, "1");    continue()
+| 180 => (YYBEGIN LL; charlist := [yytext]; continue())
+| 182 => ((* cheat: take n > 0 dots *) continue())
+| 185 => (YYBEGIN LLC; addString(charlist, yytext); continue())
+| 187 => (YYBEGIN LLC; addString(charlist, "1");    continue()
 		(* note hack, since ml-lex chokes on the empty string for 0* *))
-| 189 => (YYBEGIN INITIAL; mysynch(sourceMap, yypos+2, !charlist); 
+| 190 => (YYBEGIN INITIAL; mysynch(sourceMap, yypos+2, !charlist); 
 		              comLevel := 0; charlist := []; continue())
-| 193 => (YYBEGIN LLCQ; continue())
-| 195 => (addString(charlist, yytext); continue())
-| 199 => (YYBEGIN INITIAL; mysynch(sourceMap, yypos+3, !charlist); 
-		              comLevel := 0; charlist := []; continue())
+| 194 => (YYBEGIN LLCQ; continue())
+| 196 => (addString(charlist, yytext); continue())
 | 2 => (continue())
 | 20 => (Tokens.VECTORSTART(yypos,yypos+1))
-| 202 => (err (!stringstart, yypos+1) WARN 
+| 200 => (YYBEGIN INITIAL; mysynch(sourceMap, yypos+3, !charlist); 
+		              comLevel := 0; charlist := []; continue())
+| 203 => (err (!stringstart, yypos+1) WARN 
                        "ill-formed (*#line...*) taken as comment" nullErrorBody;
                      YYBEGIN INITIAL; comLevel := 0; charlist := []; continue())
-| 204 => (err (!stringstart, yypos+1) WARN 
+| 205 => (err (!stringstart, yypos+1) WARN 
                        "ill-formed (*#line...*) taken as comment" nullErrorBody;
                      YYBEGIN A; continue())
-| 207 => (inc comLevel; continue())
-| 212 => (SourceMap.newline sourceMap yypos; continue())
-| 215 => (dec comLevel; if !comLevel=0 then YYBEGIN INITIAL else (); continue())
-| 217 => (continue())
-| 219 => (let val s = makeString charlist
+| 208 => (inc comLevel; continue())
+| 213 => (SourceMap.newline sourceMap yypos; continue())
+| 216 => (dec comLevel; if !comLevel=0 then YYBEGIN INITIAL else (); continue())
+| 218 => (continue())
+| 22 => (Tokens.RBRACKET(yypos,yypos+1))
+| 220 => (let val s = makeString charlist
                         val s = if size s <> 1 andalso not(!stringtype)
                                  then (err(!stringstart,yypos) COMPLAIN
                                       "character constant not length 1"
@@ -1375,35 +1377,34 @@ let fun continue() : Internal.result =
                     in YYBEGIN INITIAL;
                        if !stringtype then Tokens.STRING t else Tokens.CHAR t
                     end)
-| 22 => (Tokens.RBRACKET(yypos,yypos+1))
-| 224 => (err (!stringstart,yypos) COMPLAIN "unclosed string"
+| 225 => (err (!stringstart,yypos) COMPLAIN "unclosed string"
 		        nullErrorBody;
 		    SourceMap.newline sourceMap yypos;
 		    YYBEGIN INITIAL; Tokens.STRING(makeString charlist,!stringstart,yypos))
-| 230 => (SourceMap.newline sourceMap (yypos+1);
+| 231 => (SourceMap.newline sourceMap (yypos+1);
 		    YYBEGIN F; continue())
-| 234 => (YYBEGIN F; continue())
-| 237 => (addString(charlist, "\007"); continue())
+| 235 => (YYBEGIN F; continue())
+| 238 => (addString(charlist, "\007"); continue())
 | 24 => (Tokens.SEMICOLON(yypos,yypos+1))
-| 240 => (addString(charlist, "\008"); continue())
-| 243 => (addString(charlist, "\012"); continue())
-| 246 => (addString(charlist, "\010"); continue())
-| 249 => (addString(charlist, "\013"); continue())
-| 252 => (addString(charlist, "\009"); continue())
-| 255 => (addString(charlist, "\011"); continue())
-| 258 => (addString(charlist, "\\"); continue())
+| 241 => (addString(charlist, "\008"); continue())
+| 244 => (addString(charlist, "\012"); continue())
+| 247 => (addString(charlist, "\010"); continue())
+| 250 => (addString(charlist, "\013"); continue())
+| 253 => (addString(charlist, "\009"); continue())
+| 256 => (addString(charlist, "\011"); continue())
+| 259 => (addString(charlist, "\\"); continue())
 | 26 => (if (null(!brack_stack))
                     then ()
                     else inc (hd (!brack_stack));
                     Tokens.LPAREN(yypos,yypos+1))
-| 261 => (addString(charlist, "\""); continue())
-| 265 => (addChar(charlist,
+| 262 => (addString(charlist, "\""); continue())
+| 266 => (addChar(charlist,
 			Char.chr(Char.ord(String.sub(yytext,2))-Char.ord #"@"));
 		    continue())
-| 269 => (err(yypos,yypos+2) COMPLAIN "illegal control escape; must be one of \
+| 270 => (err(yypos,yypos+2) COMPLAIN "illegal control escape; must be one of \
 	  \@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_" nullErrorBody;
 	 continue())
-| 274 => (let val x = Char.ord(String.sub(yytext,1))*100
+| 275 => (let val x = Char.ord(String.sub(yytext,1))*100
 	     +Char.ord(String.sub(yytext,2))*10
 	     +Char.ord(String.sub(yytext,3))
 	     -((Char.ord #"0")*111)
@@ -1412,10 +1413,10 @@ let fun continue() : Internal.result =
       else addChar(charlist, Char.chr x);
       continue())
   end)
-| 276 => (err (yypos,yypos+1) COMPLAIN "illegal string escape"
+| 277 => (err (yypos,yypos+1) COMPLAIN "illegal string escape"
 		        nullErrorBody; 
 		    continue())
-| 278 => (err (yypos,yypos+1) COMPLAIN "illegal non-printing character in string" nullErrorBody;
+| 279 => (err (yypos,yypos+1) COMPLAIN "illegal non-printing character in string" nullErrorBody;
                     continue())
 | 28 => (if (null(!brack_stack))
                     then ()
@@ -1426,59 +1427,59 @@ let fun continue() : Internal.result =
                          else dec (hd (!brack_stack));
                     Tokens.RPAREN(yypos,yypos+1))
 | 30 => (Tokens.DOT(yypos,yypos+1))
-| 300 => (addString(charlist,yytext); continue())
-| 305 => (SourceMap.newline sourceMap yypos; continue())
-| 308 => (continue())
-| 310 => (YYBEGIN S; stringstart := yypos; continue())
-| 312 => (err (!stringstart,yypos) COMPLAIN "unclosed string"
+| 301 => (addString(charlist,yytext); continue())
+| 306 => (SourceMap.newline sourceMap yypos; continue())
+| 309 => (continue())
+| 311 => (YYBEGIN S; stringstart := yypos; continue())
+| 313 => (err (!stringstart,yypos) COMPLAIN "unclosed string"
 		        nullErrorBody; 
 		    YYBEGIN INITIAL; Tokens.STRING(makeString charlist,!stringstart,yypos+1))
-| 315 => (addString(charlist, "`"); continue())
-| 318 => (addString(charlist, "^"); continue())
-| 320 => (YYBEGIN AQ;
+| 316 => (addString(charlist, "`"); continue())
+| 319 => (addString(charlist, "^"); continue())
+| 321 => (YYBEGIN AQ;
                     let val x = makeString charlist
                     in
                     Tokens.OBJL(x,yypos,yypos+(size x))
                     end)
-| 322 => ((* a closing quote *)
+| 323 => ((* a closing quote *)
                     YYBEGIN INITIAL;
                     let val x = makeString charlist
                     in
                     Tokens.ENDQ(x,yypos,yypos+(size x))
                     end)
-| 327 => (SourceMap.newline sourceMap yypos; addString(charlist,"\n"); continue())
-| 329 => (addString(charlist,yytext); continue())
-| 334 => (SourceMap.newline sourceMap yypos; continue())
-| 337 => (continue())
+| 328 => (SourceMap.newline sourceMap yypos; addString(charlist,"\n"); continue())
+| 330 => (addString(charlist,yytext); continue())
+| 335 => (SourceMap.newline sourceMap yypos; continue())
+| 338 => (continue())
 | 34 => (Tokens.DOTDOTDOT(yypos,yypos+3))
-| 340 => (YYBEGIN Q; 
+| 341 => (YYBEGIN Q; 
                     let val hash = StrgHash.hashString yytext
                     in
                     Tokens.AQID(FastSymbol.rawSymbol(hash,yytext),
 				yypos,yypos+(size yytext))
                     end)
-| 349 => (YYBEGIN Q; 
+| 350 => (YYBEGIN Q; 
                     let val hash = StrgHash.hashString yytext
                     in
                     Tokens.AQID(FastSymbol.rawSymbol(hash,yytext),
 				yypos,yypos+(size yytext))
                     end)
-| 351 => (YYBEGIN INITIAL;
+| 352 => (YYBEGIN INITIAL;
                     brack_stack := ((ref 1)::(!brack_stack));
                     Tokens.LPAREN(yypos,yypos+1))
-| 353 => (err (yypos,yypos+1) COMPLAIN
+| 354 => (err (yypos,yypos+1) COMPLAIN
 		       ("ml lexer: bad character after antiquote "^yytext)
 		       nullErrorBody;
                     Tokens.AQID(FastSymbol.rawSymbol(0,""),yypos,yypos))
-| 42 => (TokTable.checkTyvar(yytext,yypos))
-| 45 => (TokTable.checkToken(yytext,yypos))
-| 56 => (if (!Control.quotation)
+| 43 => (TokTable.checkTyvar(yytext,yypos))
+| 46 => (TokTable.checkToken(yytext,yypos))
+| 57 => (if (!Control.quotation)
                             then if (has_quote yytext)
                                  then REJECT()
                                  else TokTable.checkToken(yytext,yypos)
                             else TokTable.checkToken(yytext,yypos))
-| 65 => (TokTable.checkToken(yytext,yypos))
-| 67 => (if (!Control.quotation)
+| 66 => (TokTable.checkToken(yytext,yypos))
+| 68 => (if (!Control.quotation)
                             then (YYBEGIN Q;
                                   charlist := [];
                                   Tokens.BEGINQ(yypos,yypos+1))
@@ -1487,11 +1488,11 @@ let fun continue() : Internal.result =
 				     nullErrorBody;
                                   Tokens.BEGINQ(yypos,yypos+1)))
 | 7 => (SourceMap.newline sourceMap yypos; continue())
-| 87 => (Tokens.REAL(yytext,yypos,yypos+size yytext))
+| 88 => (Tokens.REAL(yytext,yypos,yypos+size yytext))
 | 9 => (Tokens.WILD(yypos,yypos+1))
-| 90 => (Tokens.INT(atoi(yytext, 0),yypos,yypos+size yytext))
-| 93 => (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext))
-| 97 => (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext))
+| 91 => (Tokens.INT(atoi(yytext, 0),yypos,yypos+size yytext))
+| 94 => (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext))
+| 98 => (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext))
 | _ => raise Internal.LexerError
 
 		) end )

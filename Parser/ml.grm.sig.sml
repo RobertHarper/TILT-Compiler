@@ -1,4 +1,4 @@
-(*$import Prelude TilWord64 Symbol YaccBase *)
+(*$import TilWord64 Symbol YaccBase *)
 signature ML_TOKENS =
 sig
 type ('a,'b) token
