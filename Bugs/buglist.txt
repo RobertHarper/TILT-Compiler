@@ -111,3 +111,4 @@
 0111 [open]	runtime error: failed assertion
 0112 [open]	option exception
 0113 [open]	parsing problem
+0114 [open]	overloading constants
