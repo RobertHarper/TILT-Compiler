@@ -84,6 +84,12 @@ struct
 	   of UNITI _ => true
 	    | _ => false)
 
+    fun renameIface (iface : iface, name : string) : iface =
+	(case iface
+	   of SRCI (_,dir,source) => SRCI (name, dir, source)
+	    | COMPI (_, iface, ue) => COMPI (name, iface, ue)
+	    | UNITI _ => error "renameIface saw UNITI")
+
     fun ifaceName (iface : iface) : string =
 	(case iface
 	   of SRCI (id,_,_) => id

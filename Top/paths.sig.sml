@@ -36,6 +36,8 @@ sig
     val isCompIface : iface -> bool
     val isUnitIface : iface -> bool
 
+    val renameIface : iface * string -> iface
+
     val ifaceName : iface -> string
     val ifaceSourceFile : iface -> string	(* source interfaces only *)
     val ifaceInfoFile : iface -> string		(* source interfaces only *)
