@@ -123,26 +123,26 @@ n67     duplicate type argument in type definition
 n68     duplicate type argument in datatype
 n69     duplicate type argument in abstype
 n70     unbound type variable in datatype
-n71     Denmark Core-SML failure test
-n72     Denmark Core-SML failure test
-n73     Denmark Core-SML failure test
-n74     Denmark Core-SML failure test
-n75     Denmark Core-SML failure test
-n76     Denmark Core-SML accept test
-n77     Denmark Core-SML accept test
-n78     Denmark Core-SML accept test
-n79     Denmark Core-SML accept test
-n80     Denmark Core-SML accept test
-n81     Denmark Core-SML accept test
-n82     Denmark Core-SML accept test
-n83     Denmark Core-SML accept test
-n84     Denmark Core-SML accept test
-n85     Denmark Core-SML accept test
-n86     Denmark Core-SML accept test
-n87     Denmark Core-SML accept test
-n88     Denmark Core-SML accept test
-n89     Denmark Core-SML accept test
-n90     Denmark Core-SML accept test
+n71     unbound type variable in abstype
+n72     illegal val rec
+n73     illegal val rec
+n74     illegal val rec
+n75     illegal val rec
+n76     miscellaneous
+n77     bindings
+n78     functions and pattern matchings
+n79     withtype
+n80     abstype
+n81     simple equalities
+n82     flex records
+n83     equality types
+n84     record equality
+n85     shadowing
+n86     parenthesization
+n87     records
+n88     list reversal
+n89     type constraints
+n90     exception handling
 n91     Denmark Core-SML accept test
 n92     Denmark Core-SML accept test
 n93     Denmark Core-SML accept test

@@ -11,11 +11,11 @@
 *)
 
 
-2+3+4+5;
+val it = 2+3+4+5;
 val test1 = it = 2+3+4+5;
-true::false::[];
+val it = true::false::[];
 val test2 = it = [true,false];
-"Foo";
+val it = "Foo";
 val test3 = it = "Foo";
 
 val alltrue = test1 andalso test2 andalso test3;

@@ -13,6 +13,7 @@
 *)
 
 
+val _ =
 let
    val f = fn {a=x, ... } => x
 in
