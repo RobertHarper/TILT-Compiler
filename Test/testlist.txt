@@ -197,3 +197,8 @@ m0055	character patterns
 m0056	word8, char, and general arrays
 m0057	tabulation of vectors
 m0058	command line
+m0059	signature constraints
+m0060	infinite integer conversion tests
+m0061	infinite integers
+m0062	mutual recursion
+m0063	exhaustiveness

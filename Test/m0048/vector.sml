@@ -4,8 +4,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun check b = if b then "OK" else "WRONG";
-fun check' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun chck b = if b then "OK" else "WRONG";
+fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -13,11 +13,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun checkrange bounds = check o range bounds;
+fun chckrange bounds = chck o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (check  b);
-fun tst' s f = tst0 s (check' f);
+fun tst  s b = tst0 s (chck  b);
+fun tst' s f = tst0 s (chck' f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -39,13 +39,13 @@ val a = fromList [0,1,2,3,4,5,6];
 val b = fromList [44,55,66];
 val c = fromList [0,1,2,3,4,5,6];
 
-val test1 = check'(fn _ => a<>b);
+val test1 = chck'(fn _ => a<>b);
 val _ = prtest("test1", test1);
-val test2 = check'(fn _ => a=c);
+val test2 = chck'(fn _ => a=c);
 val _ = prtest("test2", test2);
 val d = tabulate(100, fn i => i mod 7);
 
-val test3 = check'(fn _ => d sub 27 = 6);
+val test3 = chck'(fn _ => d sub 27 = 6);
 val _ = prtest("test3", test3);
 val test4a = (tabulate(maxLen+1, fn i => i) seq "WRONG")
              handle Overflow => "OK" | Size => "OK" | _ => "WRONG";
@@ -53,30 +53,30 @@ val _ = prtest("test4a", test4a);
 val test4b = (tabulate(~1, fn i => i)       seq "WRONG")
              handle Size => "OK" | _ => "WRONG";
 val _ = prtest("test4b", test4b);
-val test4c = check'(fn _ => length (tabulate(0, fn i => i div 0)) = 0);
+val test4c = chck'(fn _ => length (tabulate(0, fn i => i div 0)) = 0);
 val _ = prtest("test4c", test4c);
-val test5 = check'(fn _ => length (fromList []) = 0 andalso length a = 7);
+val test5 = chck'(fn _ => length (fromList []) = 0 andalso length a = 7);
 val _ = prtest("test5", test5);
 val test6a = (c sub ~1 seq "WRONG") handle Subscript => "OK" | _ => "WRONG";
 val _ = prtest("test6a", test6a);
 val test6b = (c sub 7  seq "WRONG") handle Subscript => "OK" | _ => "WRONG";
 val _ = prtest("test6b", test6b);
-val test6c = check'(fn _ => c sub 0 = 0);
+val test6c = chck'(fn _ => c sub 0 = 0);
 val _ = prtest("test6c", test6c);
 val e = concat [d, b, d];
 
-val test7 = check'(fn _ => length e = 203);
+val test7 = chck'(fn _ => length e = 203);
 val _ = prtest("test7", test7);
-val test8 = check'(fn _ => length (concat []) = 0);
+val test8 = chck'(fn _ => length (concat []) = 0);
 val _ = prtest("test8", test8);
 val f = extract (e, 100, SOME 3);
 
-val test9 = check'(fn _ => f = b);
+val test9 = chck'(fn _ => f = b);
 val _ = prtest("test9", test9);
-val test9a = check'(fn _ => e = extract(e, 0, SOME (length e)) 
+val test9a = chck'(fn _ => e = extract(e, 0, SOME (length e)) 
 		    andalso e = extract(e, 0, NONE));
 val _ = prtest("test9a", test9a);
-val test9b = check'(fn _ => fromList [] = extract(e, 100, SOME 0));
+val test9b = chck'(fn _ => fromList [] = extract(e, 100, SOME 0));
 val _ = prtest("test9b", test9b);
 val test9c = (extract(e, ~1, SOME (length e))  seq "WRONG") 
              handle Subscript => "OK" | _ => "WRONG"
@@ -96,17 +96,17 @@ val _ = prtest("test9g", test9g);
 val test9h = (extract(e, length e + 1, NONE)  seq "WRONG") 
              handle Subscript => "OK" | _ => "WRONG"
 val _ = prtest("test9h", test9h);
-val test9i = check'(fn _ => fromList [] = extract(e, length e, SOME 0)
+val test9i = chck'(fn _ => fromList [] = extract(e, length e, SOME 0)
 		    andalso fromList [] = extract(e, length e, NONE));
 val _ = prtest("test9i", test9i);
 fun chkiter iter f vec reslast =
-    check'(fn _ =>
+    chck'(fn _ =>
 	   let val last = ref ~1
 	       val res = iter (fn x => (last := x; f x)) vec
 	   in (res, !last) = reslast end)
 
 fun chkiteri iter f vec reslast =
-    check'(fn _ =>
+    chck'(fn _ =>
 	   let val last = ref ~1
 	       val res = iter (fn (i, x) => (last := i; f x)) vec
 	   in (res, !last) = reslast end)

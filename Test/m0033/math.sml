@@ -4,8 +4,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun check b = if b then "OK" else "WRONG";
-fun check' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun chck b = if b then "OK" else "WRONG";
+fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -13,11 +13,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun checkrange bounds = check o range bounds;
+fun chckrange bounds = chck o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (check  b);
-fun tst' s f = tst0 s (check' f);
+fun tst  s b = tst0 s (chck  b);
+fun tst' s f = tst0 s (chck' f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -39,11 +39,11 @@ local
     fun x === y = 
 	abs (x - y) <= eps orelse abs(x-y) <= eps * (abs x + abs y)
 
-    fun check1 (opr, a, r) = if opr a === r then "OK" else "WRONG"
-    fun check2 (opr, a1, a2, r) =
+    fun chck1 (opr, a, r) = if opr a === r then "OK" else "WRONG"
+    fun chck2 (opr, a1, a2, r) =
 	if opr(a1, a2) === r then "OK" else "WRONG"
-    fun tst1 s (opr, a, r) = tst0 s (check1 (opr, a, r))
-    fun tst2 s (opr, a1, a2, r) = tst0 s (check2 (opr, a1, a2, r))
+    fun tst1 s (opr, a, r) = tst0 s (chck1 (opr, a, r))
+    fun tst2 s (opr, a1, a2, r) = tst0 s (chck2 (opr, a1, a2, r))
 
 val test0a = tst "test0a" (PI === pi);
 val test0b = tst "test0b" (E === e);
@@ -140,25 +140,25 @@ val test13c = tst1 "test13c" (log10, 100.0, 2.0);
 val test13d = tst1 "test13d" (log10, 0.1, ~1.0);
 val test13e = tst1 "test13e" (log10, 0.01, ~2.0);
 
-val check14a = tst1 "test14a" (sinh, 0.0, 0.0);
-val check14b = tst1 "test14b" (sinh,  1.0, 1.17520119364);
-val check14c = tst1 "test14c" (sinh, ~1.0, ~1.17520119364);
-val check14d = tst1 "test14d" (sinh,  2.0,  3.62686040785);
-val check14e = tst1 "test14e" (sinh, ~2.0, ~3.62686040785);
+val chck14a = tst1 "test14a" (sinh, 0.0, 0.0);
+val chck14b = tst1 "test14b" (sinh,  1.0, 1.17520119364);
+val chck14c = tst1 "test14c" (sinh, ~1.0, ~1.17520119364);
+val chck14d = tst1 "test14d" (sinh,  2.0,  3.62686040785);
+val chck14e = tst1 "test14e" (sinh, ~2.0, ~3.62686040785);
 
-val check15a = tst1 "test15a" (cosh, 0.0, 1.0);
-val check15b = tst1 "test15b" (cosh,  1.0, 1.54308063482);
-val check15c = tst1 "test15c" (cosh, ~1.0, 1.54308063482);
-val check15d = tst1 "test15d" (cosh,  2.0, 3.76219569108);
-val check15e = tst1 "test15e" (cosh, ~2.0, 3.76219569108);
+val chck15a = tst1 "test15a" (cosh, 0.0, 1.0);
+val chck15b = tst1 "test15b" (cosh,  1.0, 1.54308063482);
+val chck15c = tst1 "test15c" (cosh, ~1.0, 1.54308063482);
+val chck15d = tst1 "test15d" (cosh,  2.0, 3.76219569108);
+val chck15e = tst1 "test15e" (cosh, ~2.0, 3.76219569108);
 
-val check16a = tst1 "test16a" (tanh, 0.0, 0.0);
-val check16b = tst1 "test16b" (tanh,  1.0,  0.761594155956);
-val check16c = tst1 "test16c" (tanh, ~1.0, ~0.761594155956);
-val check16d = tst1 "test16d" (tanh,  2.0,  0.964027580076);
-val check16e = tst1 "test16e" (tanh, ~2.0, ~0.964027580076);
-val check16f = tst1 "test16f" (tanh,  100.0,  1.0);
-val check16g = tst1 "test16g" (tanh, ~100.0, ~1.0);
+val chck16a = tst1 "test16a" (tanh, 0.0, 0.0);
+val chck16b = tst1 "test16b" (tanh,  1.0,  0.761594155956);
+val chck16c = tst1 "test16c" (tanh, ~1.0, ~0.761594155956);
+val chck16d = tst1 "test16d" (tanh,  2.0,  0.964027580076);
+val chck16e = tst1 "test16e" (tanh, ~2.0, ~0.964027580076);
+val chck16f = tst1 "test16f" (tanh,  100.0,  1.0);
+val chck16g = tst1 "test16g" (tanh, ~100.0, ~1.0);
 in
 end
 

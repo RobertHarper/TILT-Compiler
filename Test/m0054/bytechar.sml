@@ -4,8 +4,8 @@
 
 infix 1 seq
 fun e1 seq e2 = e2;
-fun check b = if b then "OK" else "WRONG";
-fun check' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
+fun chck b = if b then "OK" else "WRONG";
+fun chck' f = (if f () then "OK" else "WRONG") handle _ => "EXN";
 
 fun range (from, to) p = 
     let open Int 
@@ -13,11 +13,11 @@ fun range (from, to) p =
 	(from > to) orelse (p from) andalso (range (from+1, to) p)
     end;
 
-fun checkrange bounds = check o range bounds;
+fun chckrange bounds = chck o range bounds;
 
 fun tst0 s s' = print (s ^ "    \t" ^ s' ^ "\n");
-fun tst  s b = tst0 s (check  b);
-fun tst' s f = tst0 s (check' f);
+fun tst  s b = tst0 s (chck  b);
+fun tst' s f = tst0 s (chck' f);
 
 fun tstrange s bounds = (tst s) o range bounds  
 
@@ -136,7 +136,7 @@ fun equivalent p s =
 	(p (chr n) = mycontains s (chr n)) andalso h(n+1)
     in h 0 end
 
-fun checkset p s = tst' "checkset" (fn _ => equivalent p s);
+fun chckset p s = tst' "chckset" (fn _ => equivalent p s);
 
 val graphchars = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\
  \[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
@@ -165,26 +165,26 @@ open Char
 in
 
 val test21 = 
-    checkset isLower "abcdefghijklmnopqrstuvwxyz";
+    chckset isLower "abcdefghijklmnopqrstuvwxyz";
 val test22 = 
-    checkset isUpper "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    chckset isUpper "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 val test23 = 
-    checkset isDigit "0123456789";
+    chckset isDigit "0123456789";
 val test24 = 
-    checkset isAlpha "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    chckset isAlpha "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 val test25 = 
-    checkset isHexDigit "0123456789abcdefABCDEF";
+    chckset isHexDigit "0123456789abcdefABCDEF";
 val test26 = 
-    checkset isAlphaNum 
+    chckset isAlphaNum 
        "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 val test27 = 
-    checkset isPrint (" " ^ graphchars)
+    chckset isPrint (" " ^ graphchars)
 val test28 = 
-    checkset isSpace " \009\010\011\012\013";
+    chckset isSpace " \009\010\011\012\013";
 val test29 = 
-    checkset isGraph graphchars
+    chckset isGraph graphchars
 val test30 = 
-    checkset isAscii ascii
+    chckset isAscii ascii
 
 val test31 = 
     tst' "test31" (fn _ => map toLower (explode ascii) = explode lowerascii)
@@ -333,7 +333,7 @@ val test41 =
     end;
 
 val test42 = 
-    let fun checkFromCStringSucc (arg, res) = 
+    let fun chckFromCStringSucc (arg, res) = 
             str (valOf (Char.fromCString arg)) = res
 	val argResList = 
 	    [("\\n", "\010"),
@@ -374,13 +374,13 @@ val test42 =
 	     ("\\x00000000000000000000000000000000000000000000000000000000000000011+",
 	      "\017")]
     in 
-	tst' "test42" (fn _ => List.all checkFromCStringSucc argResList)
+	tst' "test42" (fn _ => List.all chckFromCStringSucc argResList)
     end;
 
 val test43 = 
-    let fun checkFromCStringFail arg = Char.fromCString arg = NONE
+    let fun chckFromCStringFail arg = Char.fromCString arg = NONE
     in
-	tst' "test43" (fn _ => List.all checkFromCStringFail 
+	tst' "test43" (fn _ => List.all chckFromCStringFail 
 	       ["\\",
 		"\\X",
 		"\\=",
