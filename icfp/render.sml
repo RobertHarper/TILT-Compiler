@@ -10,6 +10,7 @@ structure Render : RENDER =
     val black = (0.0, 0.0, 0.0)
     val eps = 1e~5
     fun realEqual (a,b) = Real.abs(a-b) < eps
+    fun flatten ls = foldl (op @) [] ls
 
     fun add2o f obj (x : real, y : real) = 
 	let val (x2,y2) = f obj
@@ -19,10 +20,13 @@ structure Render : RENDER =
     fun weakAttenuate d = 100.0 / (99.0 + Math.pow(d, 0.5))
 
     (* bump depends on how far we are from the source *)
+    val planeThickness = 1e~7
     fun bump (hit, dir, dist) = let (* val f = 1e~5 *)
 				    val f = (Real.abs dist) / 1e5
 				in  add(hit, scale(f, dir))
 				end
+    fun bumpAbs (hit, dir, dist) = add(hit, scale(dist, dir))
+
 
     (* Returns a list with one interval *)
     fun primIntersect src dir obj = 
@@ -50,7 +54,7 @@ structure Render : RENDER =
 		   in  case ls of
 			[] => []
 		      | [(t,name,{u,v,face,N,dist,hit})] => 
-				    let val hit' = bump(hit, dir, dist)
+				    let val hit' = bumpAbs(hit, dir, planeThickness)
 					val dist' = distance(src,hit')
 					val dist' = if (dist > 0.0) then dist' else ~dist'
 					val i1 = (t,name,{u=u,v=v,face=face,N=N,dist=dist,hit=hit})
@@ -115,16 +119,25 @@ structure Render : RENDER =
 	    fun flipOn r () = r := true
 	    fun flipOff r () = r := false
 	    fun flipToggle r = r := (not (!r))
-	    fun help s1 s2 combine =
+	    fun help s1 s2 shiftBackSecond combine =
 		let val i1 = (getIntersects viewerPos dir s1)
 		    val i2 = (getIntersects viewerPos dir s2)
-(*		    val _ = (showIntervals i1; print "\n"; showIntervals i2; print "\n")   *)
+(*
+		    val _ = if (not (null i2) andalso not (null i2))
+				then (showIntervals i1; print "\n"; showIntervals i2; print "\n")   
+			    else ()
+*)
 		    val i1 = map (fn (s,e) => [(flipOn in1,s),(flipOff in1,e)]) i1
 		    val i2 = map (fn (s,e) => [(flipOn in2,s),(flipOff in2,e)]) i2
-		    val flatten = foldl (op @) []
+		    val i1 = flatten i1
+		    val i2 = flatten i2
+		    fun shiftBack (f,(n,t,{dist,hit,u,v,face,N})) = 
+			(f, (n,t, {dist=dist,
+				   hit=hit,u=u,v=v,face=face,N=N}))
+		    val i2 = if shiftBackSecond then map shiftBack i2 else i2
 		    fun greater ((_,(_,_,{dist=d1,...}:l3info)),
 				 (_,(_,_,{dist=d2,...}:l3info))) = d1 > d2
-		    val iboth = ListMergeSort.sort greater ((flatten i1) @ (flatten i2))
+		    val iboth = ListMergeSort.sort greater (i1 @ i2)
 (*		    val _ = (showEndPoints (map #2 iboth); print "\n") *)
 		    val res = ref []		
 		    fun process (flipper, cur) = (flipper(); 
@@ -139,15 +152,21 @@ structure Render : RENDER =
 		    val _ = app process iboth
 		    fun pairUp [] = []
 		      | pairUp [_] = raise (Error "pairUp given odd number of elements")
-		      | pairUp (a::b::rest) = (a,b) :: (pairUp rest)
+		      | pairUp (a::b::rest) = 
+			let val (_,_,{dist=d1,...}:l3info) = a
+			    val (_,_,{dist=d2,...}:l3info) = b
+			in  if (Real.abs(d1-d2) < 0.9 * planeThickness)
+				then (pairUp rest)
+			    else (a,b) :: (pairUp rest)
+			end
 		    val final = rev (!res)
 (*		    val _ = (showEndPoints final; print "\n\n")  *)
 		in  pairUp final
 		end
 	in  (case scene of
-		 Union (s1, s2) => help s1 s2 (fn (a,b) => a orelse b)
-	       | Intersection (s1, s2) => help s1 s2 (fn (a,b) => a andalso b)
-	       | Difference (s1, s2) => help s1 s2 (fn (a,b) => a andalso (not b))
+		 Union (s1, s2) => help s1 s2 false (fn (a,b) => a orelse b)
+	       | Intersection (s1, s2) => help s1 s2 false (fn (a,b) => a andalso b)
+	       | Difference (s1, s2) => help s1 s2 true (fn (a,b) => a andalso (not b))
 	       | _ => primIntersect viewerPos dir scene)
 	end
 

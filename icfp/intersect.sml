@@ -136,7 +136,7 @@ structure Intersect : INTERSECT =
 
     val plane = plane2
 
-    fun cylinder (M: m4,orig:v3,dir:v3) : result = 
+    fun cylinder1 (M: m4,orig:v3,dir:v3) : result = 
       let
 
 	val M' = invert M
@@ -227,7 +227,7 @@ structure Intersect : INTERSECT =
       end
 	
 
-(*   fun cylinder (M: m4,orig:v3,dir:v3) : result = 
+   fun cylinder2 (M: m4,orig:v3,dir:v3) : result = 
       let
 	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)
 	  val top = Matrix.combine(M, top)
@@ -291,8 +291,8 @@ structure Intersect : INTERSECT =
 			      then NONE
 			    else 
 			      let
-				val u = (Math.atan2(x,z)) / (2.0 * Math.pi)
-				val v = y
+				val u = (Math.atan2(hitx',hitz')) / (2.0 * Math.pi)
+(*				val v = y *)
 				val face = 0
 				   
 				val hit  = Matrix.applyPoint (M,hit')
@@ -321,7 +321,9 @@ structure Intersect : INTERSECT =
 	    then noIntersect
 	  else (true, l2, l3)
       end
-*)
+
+   val cylinder = cylinder2
+
    fun cone (M: m4,orig:v3,dir:v3) : result = 
       let
 	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)

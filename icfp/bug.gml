@@ -79,8 +79,19 @@
   0.0
   1.0
 } cylinder
-0.25 uscale
+% 0.25 uscale
 /hole
+
+{ /v /u /face
+  black
+  1.0
+  0.0
+  1.0
+} cube
+% 0.25 uscale
+2.0 1.0 2.0 scale
+-1.0 0.0 -1.0 translate
+/hole2
 
 { /v /u /face
   red
@@ -109,7 +120,8 @@ difference
 
 field
 hole
-0.0 -0.25 2.0 translate
+0.0 -1.0 2.0 translate
+%0.0 -0.25 2.0 translate
 %difference
 union
 
