@@ -183,31 +183,40 @@ functor Tracetable(val little_endian    : bool
     val Count_global_rec = ref 0;
     fun inc x = x := (!x + 1)
 
+    (* these number must match up with the macros in stack.h *)
+    (* the lower 2 bits are used for other things so we only have 30 bits *)
     local
-	val factor = 64
+	val factor = 128 (* 7 bits *)
 	val maxindices = 4
 	fun folder (i,(curfactor,acc)) = 
 	    let val i = if (curfactor = 1) then i else i + 1
 	    in  if (i < factor) then (factor*curfactor, acc + i * curfactor)
-		else error "projection too big"
+		else (print "i = "; print (Int.toString i); print "\n";
+		      print "curfactor = "; print (Int.toString curfactor); print "\n";
+		      error "projection too big")
 	    end
+	fun local_error indices = 
+	     (print ("indices2int: ");
+	      app (fn m => (print (Int.toString m);
+			    print "  ")) indices;
+	      print "\n")
+    (*			 print " --> ";
+     print (Int.toString res);
+     print "\n")
+	     *)
     in
 	fun indices2int indices = 
 	    let val len = length indices
 	        val res = if (len = 0)
-		    then error "no index"
-		else if (len > maxindices)
-			 then error ("more than 3 index(" ^ (Int.toString len) ^ ")")
-		     else #2(foldl folder (1,0) indices)
-		val _ = (print ("indices2int: ");
-			 app (fn m => (print (Int.toString m);
-				       print "  ")) indices;
-			 print " --> ";
-			 print (Int.toString res);
-			 print "\n")
+			      then error "no index"
+			  else if (len > maxindices)
+				   then (local_error indices;
+					 error "too many indices")
+			       else #2(foldl folder (1,0) indices)
 	    in res
 	    end
     end
+
 
     fun tr2bot TRACE_NO                  = (inc Count_no; 0)
       | tr2bot TRACE_YES                 = (inc Count_yes; 1)

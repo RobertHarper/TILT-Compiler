@@ -23,7 +23,7 @@ sig
 		 stack_resident : Machine.stacklocation Machineutils.Regmap.map}
                     -> info (* init with callee-save registers *)
   
-  val stackOffset : info -> Machine.register -> Machine.stacklocation
+  val stackOffset : info -> Machine.register list * Machine.register -> Machine.stacklocation
   val noteUsed    : info -> Machine.register -> unit
 
   datatype summary = SUMMARY of 

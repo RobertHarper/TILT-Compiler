@@ -178,7 +178,7 @@ struct
 		    (emitString "Allocating pseudoregister "; print_reg node;
 		     emitString " on stack\n") else ();
 		  select (Regmap.insert(mapping, node,
-				       ON_STACK (stackOffset node))) nodes)
+				       ON_STACK (stackOffset (neighbors,node)))) nodes)
            end (* select *)
 
            val select = select_colors_time select 
