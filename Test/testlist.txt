@@ -200,7 +200,7 @@ n122	pass	Denmark Core-SML accept test
 n123	pass	Denmark Core-SML accept test
 n124	pass	Denmark Core-SML accept test
 n125	pass	Denmark Core-SML accept test
-n126	fail	Denmark Core-SML accept test
+n126	fail	[Bug #0158] Denmark Core-SML accept test
 n127	pass	Denmark Core-SML accept test
 n128	pass	Denmark Core-SML accept test
 n129	pass	Denmark Core-SML accept test
