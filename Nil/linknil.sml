@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy Typeof_Elim Real *)
+(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy Typeof_Elim Real CoerceElim *)
 
 (* Reorder *)
 
@@ -7,11 +7,17 @@ structure Linknil :> LINKNIL  =
 
     val do_cse = Stats.tt("doCSE")         (* do CSE during optimzie2 *)
     val do_uncurry = Stats.ff("doUncurry") (* do uncurry during optimize2 *)
-    val show_size = Stats.ff("showSize")
-    val show_html = Stats.ff("showHTML")
+	
+    val show_size = Stats.ff("showSize")   (* show size after each pass *)
+    val show_html = Stats.ff("showHTML")   (* when showing pass results, generate HTML *)
+    val typecheck = Stats.ff "Typecheck"   (* typecheck after each pass *)
+    val wtypecheck = Stats.ff "WTypecheck" (* same, using wizard *)
 
     fun makeEntry (enable, str) = ((if enable then Stats.tt else Stats.ff) ("do" ^ str),
-				   Stats.ff("show" ^ str), str)
+				   Stats.ff("show" ^ str),
+				   Stats.ff("check" ^ str),
+				   Stats.ff("wcheck" ^ str),
+				   str)
     val phasesplit  = makeEntry (true, "Phasesplit")
     val cc          = makeEntry (true, "ClosureConv")
     val optimize1   = makeEntry (true, "Optimize1")
@@ -28,29 +34,20 @@ structure Linknil :> LINKNIL  =
     val inline3     = makeEntry (true, "Inline3")
 (*  val reduce      = makeEntry (false, "Reduce") *)
 (*  val flatten     = makeEntry (false, "Flatten") *)
-    val coerce_elim = makeEntry (true, "CoerceElim")
+    val coerce_elim = makeEntry (false, "CoerceElim")
 
     val measure_after_phaseplit = makeEntry (false, "MeasureAfterPhasesplit")
 (*    val measure_after_opts      = makeEntry (false, "MeasureAfterOpts")*)
     val measure_after_cc        = makeEntry (false, "MeasureAfterCC")
 (*  val reorder     = makeEntry (false, "Reorder") *)
 
-    val typecheck_after_phasesplit = makeEntry(false,"TypecheckAfterPhasesplit")
-    val typecheck_between_opts     = makeEntry(false,"TypecheckBetweenOpts")
-    val typecheck_after_opt        = makeEntry(false,"TypecheckAfterOpt")
-    val typecheck_after_opt2       = makeEntry(false,"TypecheckAfterOpt2")
-    val typecheck_after_cc         = makeEntry(false,"TypecheckAfterCC")
-
-    val wtypecheck_after_phasesplit = makeEntry(false,"WTypecheckAfterPhasesplit")
-    val wtypecheck_after_opt        = makeEntry(false,"WTypecheckAfterOpt")
-    val wtypecheck_after_opt2       = makeEntry(false,"WTypecheckAfterOpt2")
-    val wtypecheck_after_cc         = makeEntry(false,"WTypecheckAfterCC")
-
     val error = fn s => Util.error "linknil.sml" s
 
+(*
     val debug = Stats.ff "nil_debug"
     val profile = Stats.ff "nil_profile"
     val closure_print_free = Stats.ff "closure_print_free"
+*)
 
     structure Ppnil = Ppnil
     structure Alpha = Alpha
@@ -78,9 +75,9 @@ structure Linknil :> LINKNIL  =
 			 print (Util.spaces (50 - (size str)));
 			 print " =====\n")
 
-    fun pass filename (ref false, showphase,phasename) (transformer,obj) =
+    fun pass filename (ref false, _, _, _, _) (transformer,obj) =
 	error "pass called with a false flag"
-      | pass filename (ref true, showphase,phasename) (transformer,obj) =
+      | pass filename (ref true, showphase, checkphase, wcheckphase, phasename) (transformer,obj) =
 	let val str = "Starting " ^ phasename ^ ": " ^ filename
 	    val _ = printBold str
 	    val nilmod = Stats.timer(phasename,transformer) obj
@@ -101,24 +98,25 @@ structure Linknil :> LINKNIL  =
 			    pass = phasename};
 		      print "\n")
 		    else ()
+	    val _ = if !checkphase orelse !typecheck then
+		      NilStatic.module_valid (NilContext.empty (), nilmod)
+		    else ()
+	    (* Note that these get redirected in the self-compile, 
+	     * since TIL can't handle the Wizard.  (Datatype bug)
+	     *)
+	    val _ = if !wcheckphase orelse !wtypecheck then
+		      WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod)
+		    else ()
 	in  nilmod
 	end
 
-    fun transform filename (ref false,_,phasename) (_,nilmod) = 
+    fun transform filename (ref false,_,_,_,phasename) (_,nilmod) = 
 	let val str = "Skipping " ^ phasename ^ " : " ^ filename
 	in  (* printBold str;  *)
 	    nilmod
 	end
-      | transform filename (tr as (ref true,showphase,phasename)) arg =
+      | transform filename (tr as (ref true,_,_,_,_)) arg =
 	pass filename tr arg
-
-
-    fun typecheck nilmod = (NilStatic.module_valid (NilContext.empty (), nilmod); nilmod)
-
-    (*Note that these get redirected in the self-compile, 
-     * since TIL can't handle the Wizard.  (Datatype bug)
-     *)
-    fun wtypecheck nilmod = (WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod); nilmod)
 
     val typeof_count1 = ("PS",Stats.int "PostPS_Size", Stats.int "PostPS_Diff",Stats.int "PS_Max%_Increase")
     val typeof_count2 = ("CC",Stats.int "PostCC_Size", Stats.int "PostCC_Diff",Stats.int "CC_Max%_Increase")
@@ -149,7 +147,7 @@ structure Linknil :> LINKNIL  =
        (3) Reify must occur before uncurrying which is in optimize2.
        (4) Reify2 is needed because some optimizations create TraceUnknowns.
     *)
-    fun compile' debug (filename,(ctxt,_,sbnd_entries) : Il.module) =
+    fun compile' (filename,(ctxt,_,sbnd_entries) : Il.module) =
 	let
 	    val pass = pass filename
 	    val transform = transform filename
@@ -161,11 +159,7 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform measure_after_phaseplit (do_measure typeof_count1 filename, nilmod)
 
-	    val nilmod = transform typecheck_after_phasesplit  (typecheck, nilmod)
-	    val nilmod = transform wtypecheck_after_phasesplit (wtypecheck, nilmod)
-
 	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
-
 
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)
@@ -178,26 +172,17 @@ structure Linknil :> LINKNIL  =
 						       doUncurry = false},
 				    nilmod)
 
- 	    val nilmod = transform typecheck_between_opts (typecheck,nilmod)
-
 	    val nilmod = transform vararg (Vararg.optimize, nilmod)
 
 (*	    val nilmod = transform reduce1 (Reduce.doModule, nilmod)  *)
 (*	    val nilmod = transform flatten (Flatten.doModule, nilmod) *)
-
- 	    val nilmod = transform typecheck_between_opts (typecheck,nilmod)
 
 	    val nilmod = transform inline1
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
 
- 	    val nilmod = transform typecheck_between_opts (typecheck,nilmod)
-
             val nilmod = transform reify1 (Reify.reify_mod, nilmod)
-
- 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
- 	    val nilmod = transform wtypecheck_after_opt (wtypecheck,nilmod)
 
 	    val nilmod = transform specialize (Specialize.optimize, nilmod)
 	    val nilmod = transform hoist (Hoist.optimize, nilmod)
@@ -223,21 +208,16 @@ structure Linknil :> LINKNIL  =
 				    nilmod)
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
- 	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
- 	    val nilmod = transform wtypecheck_after_opt2 (wtypecheck, nilmod)
-
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)
 
 	    val nilmod = transform measure_after_cc (do_measure typeof_count2 filename,nilmod)
 
 (*	    val nilmod = transform reorder (Reorder.optimize, nilmod) *)
- 	    val nilmod = transform typecheck_after_cc (typecheck, nilmod)
- 	    val nilmod = transform wtypecheck_after_cc (wtypecheck, nilmod)
 
 	in  nilmod
 	end
     handle Stop nilmod => nilmod
 
-    val il_to_nil = compile' false
+    val il_to_nil = compile'
 
 end
