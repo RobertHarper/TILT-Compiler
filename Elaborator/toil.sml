@@ -2526,11 +2526,12 @@ structure Toil
 	fun tyvar_help tv = 
 	    (case (Tyvar.tyvar_deref tv) of
 		 SOME _ => ()
-	       | NONE => (print "Warning: top-level unresolved tyvar -- setting to type unit: ";
+	       | NONE => (Error.warn_region_with "top-level unresolved tyvar -- setting to unit: ";
 			  pp_con (CON_TYVAR tv); print "\n";
 			  Stats.counter "toil.unresolved_tyvar" ();
-			  Tyvar.tyvar_set(tv,con_unit);
-			  xeq(ctxt, CON_TYVAR tv); ()))
+			  IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit);
+			  (* Tyvar.tyvar_set(tv,con_unit); *)
+			  ()))
 
 	val _ = reset_elaboration (fp, unitNameOpt)
 	val _ = push_region(0,1000000)

@@ -29,8 +29,15 @@ struct
     exception NoEqExp
     and ReallyNoEqExp
 
-    val cadd_eq_entry = ref (NONE : ((Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit) option);
-    fun installHelpers { add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit } = cadd_eq_entry := SOME add_eq_entry;
+    local
+	val cadd_eq_entry = ref (NONE : ((Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit) option);
+    in
+	fun installHelpers { add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit } = cadd_eq_entry := SOME add_eq_entry;
+	fun add_eq_entry arg =
+	    case !cadd_eq_entry of
+		NONE => error "add_eq_entry not installed"
+	      | SOME f => f arg
+    end
 
     (* used to create the "bind" function below for constructors and expressions.
        dontBind: predicate on objects; if true, then just pass the object directly.
@@ -137,13 +144,21 @@ struct
 	      of CON_TYVAR tyvar => (case (Tyvar.tyvar_deref tyvar, Tyvar.tyvar_eq_hole tyvar)
 				       of (NONE, NONE) => elab_error "unresolved type does not permit equailty"
 					| (NONE, SOME os) => (* hole is empty since tyvar is unset *)
-					   let val eqcon = U.con_eqfun ctxt con
+					   let 
+					       val eqcon = U.con_eqfun ctxt con
 					       val exp = OVEREXP(eqcon,true,os)
 					   in  
-					       (valOf (!cadd_eq_entry)) tyvar;
+					       add_eq_entry tyvar;
 					       (exp, eqcon)
 					   end
-					| (SOME c, SOME os) => (valOf (Util.oneshot_deref os), U.con_eqfun ctxt c)
+					| (SOME c, SOME os) => 
+					   let val exp = valOf (Util.oneshot_deref os)
+					   in  debugdo (fn () =>
+							(print "SOME/SOME grabbing from oneshot.\n";
+							 Ppil.pp_exp exp;
+							 print "\n"));
+					       (exp, U.con_eqfun ctxt c)
+					   end
 				        (* Here, we don't fill the hole since the side effect can't be 
 					   undone and isn't always appropriate. *)
 					| (SOME c, NONE) => self(SOME name,c))
@@ -335,9 +350,9 @@ struct
 		      handle _ => raise NoEqExp);
 		      (e, U.con_eqfun ctxt con)
 		  end
-	       (* XXX doc *)
 	       | CON_APP(c,types) => 
-		  let val meq = 
+		  let 
+		      val meq = 
 		      (case c of
 			   CON_MODULE_PROJECT(m,l) => 
 			       let val SIGNAT_SELF(_,_,s) = IlStatic.GetModSig(ctxt,m)
@@ -350,12 +365,12 @@ struct
 				     | _ => raise NoEqExp
 			       end
 			 | CON_VAR v => 
-			       (let val SOME (type_label,_) = C.Context_Lookup_Var(ctxt,v)
-				    val samelabel = N.to_eq type_label
-				in (case (C.Context_Lookup_Label(ctxt,samelabel)) of
-					SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
-				      | _ => raise NoEqExp)
-				end)
+			       let val SOME (type_label,_) = C.Context_Lookup_Var(ctxt,v)
+				   val eql = N.to_eq type_label
+			       in (case (C.Context_Lookup_Label(ctxt,eql)) of
+				       SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
+				     | _ => raise NoEqExp)
+			       end
 			 | _ => raise NoEqExp)
 		      val SIGNAT_SELF(_,_,s) = IlStatic.GetModSig(ctxt,meq)
 		  in  case s
