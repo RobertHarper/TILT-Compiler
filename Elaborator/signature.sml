@@ -80,18 +80,23 @@ structure Signature :> SIGNATURE =
 	let val signat' = reduce_signat ctxt signat 
 	in  (case signat' of
 	     SIGNAT_STRUCTURE sdecs =>
-		 let fun folder(SDEC(l,DEC_MOD(v,b,s)),ctxt) = 
-		     let val this_path = join_path_labels(path,[l])
-			 val s = deep_reduce_signat this_path ctxt s
-			 val sdec = SDEC(l,DEC_MOD(v,b,s))
-			 val ctxt = add_context_mod(ctxt,l,v,SelfifySig ctxt (this_path,s))
-		     in  (sdec, ctxt)
-		     end
-		       | folder(sdec,ctxt) = (sdec, ctxt)
-		     val (sdecs,_) = foldl_acc folder ctxt sdecs
-		 in  SIGNAT_STRUCTURE sdecs
+		 let val (sdecs',_) = foldl_acc (deep_reduce_sdec path) ctxt sdecs
+		 in  SIGNAT_STRUCTURE sdecs'
 		 end
 	   | s => s)
+	end
+
+    and deep_reduce_sdec path (sdec,ctxt) : sdec * context =
+	let val SDEC(l,dec) = sdec
+	    val ctxt' = add_context_dec(ctxt,dec)
+	    val sdec' = (case dec
+			   of DEC_MOD(v,b,s) =>
+			       let val this_path = join_path_labels(path,[l])
+				   val s = deep_reduce_signat this_path ctxt s
+			       in  SDEC(l,DEC_MOD(v,b,s))
+			       end
+			    | _ => sdec)
+	in  (sdec',ctxt')
 	end
 
     (* ---------------- helpers ---------------- *)
@@ -155,14 +160,13 @@ structure Signature :> SIGNATURE =
      flexible, otherwise rigid.
    *)
 
-  (* This function is staged to reduce repeated selfification. *)
-  fun follow_labels (pathopt,sdecs,ctxt) =
-      let val (v,path,ctxt) = 
+  fun follow_labels (pathopt : path option,sdecs,ctxt) : labels -> typeslot =
+      let
+	  val (v,path,ctxt) = 
 	      (case pathopt of
 		   NONE => let val v = fresh_named_var "modtemp"
-			       val path = PATH(v,[])
-			       val signat = SelfifySig ctxt (path, SIGNAT_STRUCTURE sdecs)
-			       val ctxt = add_context_mod'(ctxt,v,signat)
+			       val path = PATH (v,[])
+			       val ctxt = add_context_mod'(ctxt,v,SIGNAT_STRUCTURE sdecs)
 			   in  (v,path,ctxt)
 			   end
 		 | SOME (path as PATH(v,_)) => (v,path,ctxt))
@@ -189,8 +193,13 @@ structure Signature :> SIGNATURE =
      fun find_labels_sdecs context sdecs = 
 	 let fun driver path sdecs = rev(foldl (find_labels path) [] sdecs)
 	     (* the path being carried is backwards so we must reverse when we add to accumulator *)
-	     and find_labels path (SDEC(l,DEC_CON (_,k,NONE,_)),_) = 
-		 error "find_labels should not encounter any abstract types"
+	     and find_labels path (SDEC(l,DEC_CON (_,k,NONE,_)),_) =
+		 (debugdo(fn () =>
+			  (print "sdecs = "; pp_sdecs sdecs; print "\n";
+			   print "offending type is ";
+			   pp_pathlist pp_label' (rev (l :: path));
+			   print "\n"));
+		  error "find_labels should not encounter any abstract types")
 	       | find_labels path (SDEC(l,DEC_CON (_,k,SOME _,_)),kpaths) =  (k,rev(l::path))::kpaths
 	       | find_labels path (SDEC(l,DEC_MOD (v,_,s)),kpaths) = 
 		 (case signat2sdecs context s of
@@ -318,7 +327,7 @@ structure Signature :> SIGNATURE =
 				       end
 				 | _ => error "prematched sig not reducing to sig_struct")
 			      else s
-			val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt(PATH (v,[]),s))
+			val ctxt = add_context_mod'(ctxt,v,s)
 		  in (SDEC(l,DEC_MOD(v,b,s))) :: (traverse ctxt cur_path rest)
 		  end
                 | traverse ctxt cur_path (sdec::rest) = sdec :: (traverse ctxt cur_path rest)
@@ -329,7 +338,7 @@ structure Signature :> SIGNATURE =
       fun xsig_sharing_rewrite (ctxt,sdecs) = 
         let val v = fresh_named_var "mod_sharing_temp"
 	    val s = SIGNAT_STRUCTURE sdecs
-	    val ctxt = add_context_mod'(ctxt,v,SelfifySig ctxt (PATH (v,[]), s))
+	    val ctxt = add_context_mod'(ctxt,v,s)
 	    fun combine_path first [] = path2con(vlpath2path first)
 	      | combine_path [] _ = error "bad paths"
 	      | combine_path (first as ((v,_)::firstrest))
@@ -424,7 +433,7 @@ structure Signature :> SIGNATURE =
 			      print "kind = "; pp_kind kind; print "\n"))
 	    val mjunk = fresh_named_var "xsig_where_type_mjunk"
 	    val mpath = PATH(mjunk,[])
-	    val msig = SelfifySig ctxt (mpath,SIGNAT_STRUCTURE orig_sdecs)
+	    val msig = SIGNAT_STRUCTURE orig_sdecs
 	    val ctxt = add_context_mod'(ctxt,mjunk,msig)
 	in
 	    (case (follow_labels (SOME mpath,orig_sdecs,ctxt) lpath) of 
@@ -463,11 +472,9 @@ structure Signature :> SIGNATURE =
 	    val SOME sdecs2 = signat2sdecs context sig2
 	    val mjunk_var = fresh_named_var "mjunk_where_structure_slow"
 	    val mjunk = MOD_VAR mjunk_var
-	    val context = add_context_mod'(context,mjunk_var,
-					   SelfifySig context (PATH (mjunk_var,[]),
-							       SIGNAT_STRUCTURE sdecs))
+	    val context = add_context_mod'(context,mjunk_var,SIGNAT_STRUCTURE sdecs)
 	    val (labels1,s1) = 
-		(case Context_Lookup_Path_Open(context,PATH(mjunk_var,labs1)) of
+		(case Context_Lookup_Path(context,PATH(mjunk_var,labs1)) of
 		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,_,s1)) => (labels1,s1)
 		   | _ => (error_region();
 			   print "can't where non-existent or non-structure component\n";
@@ -486,7 +493,7 @@ structure Signature :> SIGNATURE =
 		       ABSTRACT (labs',_) =>
 			   let val plabs' = List.drop(labs',nlabels1)
 			   in
-			       (case (Sdecs_Lookup_Open context (m2,sdecs2,plabs')) of
+			       (case (Sdecs_Lookup context (m2,sdecs2,plabs')) of
 				    SOME(_,PHRASE_CLASS_CON(c,_,_,_)) => 
 					xsig_where_type(context,sdecs,labs',c,k)
 				  | _ => (error_region();
@@ -534,30 +541,21 @@ structure Signature :> SIGNATURE =
 
 
   (* ------ These structure components are being shared ----------- *)
-  fun path2triple (p,s,mjunk,ctxt') = 
-      let val SIGNAT_SELF(_,_,SIGNAT_STRUCTURE sdecs') = s
-	  val mpath = PATH (mjunk,[])
-      in  (case (Sdecs_Lookup_Open ctxt' (MOD_VAR mjunk,sdecs',p)) of
-	       SOME(lpath,PHRASE_CLASS_MOD(_,_,s)) => 
-		   let 
-		       val vpath = join_path_labels(mpath,lpath)
-		       val sdecs = 
-			   (case reduce_signat ctxt' s of
-				SIGNAT_STRUCTURE sdecs => sdecs
-			      | _ => error "sharing got bad structure component\n")
-		   in  (vpath,lpath,sdecs)
-		   end
-	     | _ => (error_region();
-			     print "structure sharing given a non-structure component: ";
-			     pp_lpath p; print "\n";
-			     raise SharingError))
-      end
-  
+  (* Look up, using the star convention, a path to a structure and
+     return its actual path and its sdecs. *)
+  fun path2triple (ctxt : context, v : var, lpath : labels) : path * labels * sdecs =
+      (case Context_Lookup_Path (ctxt,PATH(v,lpath))
+	 of SOME (path as PATH (_,labs), PHRASE_CLASS_MOD (_,_,SIGNAT_STRUCTURE sdecs)) =>
+	     (path,labs,sdecs)
+	  | _ => (error_region();
+		  print "structure sharing given a non-structure component: ";
+		  pp_lpath lpath; print "\n";
+		  raise SharingError))
+		
   and xsig_sharing_structure_slow2(ctxt,sdecs,lpathlist) : sdecs =
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
-	  val mpath = PATH (mjunk,[])
-	  val s = SelfifySig ctxt (mpath, SIGNAT_STRUCTURE sdecs)
+	  val s = SIGNAT_STRUCTURE sdecs
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
 
 	  (* 
@@ -566,7 +564,7 @@ structure Signature :> SIGNATURE =
              The i-th sdecs is the spec of the i-th structure.
           *)
 	  val (pathlist,lpathlist,sdecslist) = 
-	      Listops.unzip3(map (fn lpath => path2triple(lpath, s, mjunk, ctxt')) lpathlist)
+	      Listops.unzip3(map (fn lpath => path2triple(ctxt',mjunk,lpath)) lpathlist)
 
           (* 
 	     The i-th slabs is the list of lpaths to type components in the i-th structure.
@@ -574,18 +572,17 @@ structure Signature :> SIGNATURE =
 	  val slabslist : lpath list list = map (fn sdecs => map #2 (find_labels_sdecs ctxt' sdecs)) sdecslist
 
 
-in raise SharingError end
+      in raise SharingError end
 
 
   and xsig_sharing_structure_slow(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
-	  val mpath = PATH (mjunk,[])
-	  val s = SelfifySig ctxt (mpath, SIGNAT_STRUCTURE sdecs)
+	  val s = SIGNAT_STRUCTURE sdecs
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
 
-	  val (path1,lpath1,sdecs1) = path2triple (lpath1, s, mjunk, ctxt')
-	  val (path2,lpath2,sdecs2) = path2triple (lpath2, s, mjunk, ctxt')
+	  val (path1,lpath1,sdecs1) = path2triple (ctxt',mjunk,lpath1)
+	  val (path2,lpath2,sdecs2) = path2triple (ctxt',mjunk,lpath2)
 
 	  val slabs1 = map #2 (find_labels_sdecs ctxt' sdecs1)
 	  val slabs2 = map #2 (find_labels_sdecs ctxt' sdecs2)
@@ -599,7 +596,7 @@ in raise SharingError end
 	    end
 	  val sdecsAbstractEqual = xsig_sharing_rewrite(ctxt,sdecs) (slabs_abs,sdecs)
 	  val _ = debugdo (fn () => (print "\n";pp_signat (SIGNAT_STRUCTURE(sdecsAbstractEqual));print "\n"))
-	  val sigAbstractEqual= SelfifySig ctxt(mpath,SIGNAT_STRUCTURE(sdecsAbstractEqual))
+	  val sigAbstractEqual= SIGNAT_STRUCTURE(sdecsAbstractEqual)
 	  val ctxt'' = add_context_mod'(ctxt,mjunk,sigAbstractEqual)
 
 	  fun check labs = 
@@ -643,12 +640,11 @@ in raise SharingError end
   and xsig_sharing_structure_fast(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
-	  val mpath = PATH (mjunk,[])
-	  val s = SelfifySig ctxt (mpath, SIGNAT_STRUCTURE sdecs)
+	  val s = SIGNAT_STRUCTURE sdecs
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
 
-	  val (path1,lpath1,sdecs1) = path2triple (lpath1, s, mjunk, ctxt')
-	  val (path2,lpath2,sdecs2) = path2triple (lpath2, s, mjunk, ctxt')
+	  val (path1,lpath1,sdecs1) = path2triple (ctxt',mjunk,lpath1)
+	  val (path2,lpath2,sdecs2) = path2triple (ctxt',mjunk,lpath2)
 
 	  val slabs1 = map #2 (find_labels_sdecs ctxt' sdecs1)
 	  val slabs2 = map #2 (find_labels_sdecs ctxt' sdecs2)
@@ -660,7 +656,7 @@ in raise SharingError end
       in  if ((eq_list(eq_lpath',slabs_abs1,slabs_abs2)) andalso
 	      let val slabs_abs_both = Listops.transpose [slabs_abs1, slabs_abs2]
 		  val sdecsAbstractEqual = xsig_sharing_rewrite(ctxt,sdecs) (slabs_abs_both,sdecs)
-		  val sigAbstractEqual= SelfifySig ctxt(mpath,SIGNAT_STRUCTURE(sdecsAbstractEqual))
+		  val sigAbstractEqual= SIGNAT_STRUCTURE(sdecsAbstractEqual)
 		  val ctxt'' = add_context_mod'(ctxt,mjunk,sigAbstractEqual)
 		  val s1 = GetModSig(ctxt'',path2mod path1)
 		  val s2 = GetModSig(ctxt'',path2mod path2)
@@ -696,13 +692,14 @@ in raise SharingError end
       let val _ = if (!debug)
 		      then print "xsig_sharing_type started\n"
 		  else ()
-	  val mjunk = MOD_VAR(fresh_named_var "mjunk_sharing_type")
-	  fun path2label p = 
-	      (case (Sdecs_Lookup_Open ctxt (mjunk,sdecs,p)) of
+	  val mjunk = fresh_named_var "mjunk_sharing_type"
+	  val ctxt = add_context_mod'(ctxt,mjunk,SIGNAT_STRUCTURE sdecs)
+	  fun path2label (lpath : labels) : typeslot = 
+	      (case (Sdecs_Lookup ctxt (MOD_VAR mjunk,sdecs,lpath)) of
 		   SOME(labs,_) => follow_labels (NONE,sdecs,ctxt) labs
 		 | NONE => (error_region();
 			    print "sharing type given non-existent path ";
-			    pp_lpath p; print " with the following components\n";
+			    pp_lpath lpath; print " with the following components\n";
 			    pp_sdecs sdecs; print "\n";
 			    raise SharingError))
 	  val typeslot1 = path2label path1
@@ -723,7 +720,7 @@ in raise SharingError end
 				     pp_typeslot typeslot2; print "\n";
 				     sdecs))
 	  val _ = if (!debug)
-		      then print "xsig_sharing_type started\n"
+		      then print "xsig_sharing_type finished\n"
 		  else ()
       in   res
       end
@@ -806,14 +803,7 @@ in raise SharingError end
 		   (case varsig_spec of
 			NONE => ctxt
 		      | SOME(_,sig_spec) => 
-			    let  (* val _ = (print "adding var_actual = "; pp_var var_actual;
-				  print "\n"; pp_signat
-				  (SelfifySig ctxt (PATH (var_actual,[]), 
-				  sig_spec))) *)
-			    in add_context_mod'(ctxt,var_actual,
-						SelfifySig ctxt (PATH (var_actual,[]), 
-								 sig_spec))
-			    end)
+			    add_context_mod'(ctxt,var_actual,sig_spec))
 
 	       val (sbnds_poly,sdecs_poly,_) = polyinst(ctxt',sdecs_actual)
 
@@ -916,7 +906,7 @@ in raise SharingError end
 
 
     (* The resulting module and signature will involve var_actual.
-      The sdecs will be ordered as in sig_target.
+       The sdecs will be ordered as in sig_target.
 
 	 The main algorithm maintains:
 	       The current context to perform typecheck signature matching.
@@ -931,8 +921,6 @@ in raise SharingError end
 		 path_actual : path,
 		 sig_actual : signat,
 		 sig_target : signat) : (bool * Il.mod * Il.signat) = 
-
-
 	let val sig_actual = reduce_signat context sig_actual
 	    val sig_target = deep_reduce_signat path_actual context sig_target
 	in  (case (sig_actual,sig_target) of
@@ -942,17 +930,15 @@ in raise SharingError end
 		     val _ = if (a1 = a2) then () 
 			     else raise (FAILURE "arrow mismatch in xcoerce")
 		     val p2 = PATH(v2,[])
-		     val (_,m3body,_) = xcoerce(add_context_mod'(context,v2,
-								 SelfifySig context (p2, s2)),
+		     val (_,m3body,_) = xcoerce(add_context_mod'(context,v2,s2),
 						p2,s2,s1)
 		     val m4_arg = MOD_APP(path2mod path_actual, m3body)
 		     val m4var = fresh_named_var "var_actual_xcoerce"
 		     val p4 = PATH(m4var,[])
-		     val (_,m4body,_) = xcoerce(add_context_mod'(context,m4var,
-								       SelfifySig context (p4,s1')),
+		     val (_,m4body,_) = xcoerce(add_context_mod'(context,m4var,s1'),
 						p4,s1',s2')
 		     val m4body = mod_subst(m4body,subst_add_modvar(empty_subst,m4var,m4_arg))
-		     val context' = add_context_mod'(context,v2,(SelfifySig context (p2,s2)))
+		     val context' = add_context_mod'(context,v2,s2)
 		     val s = GetModSig(context',m4body)
 		 in (true,
 		     MOD_FUNCTOR(a1,v2,s2,m4body,s),
@@ -986,41 +972,38 @@ in raise SharingError end
 				   coerced := true)
 
 	  val sdecs_target = sdecs_rename(sdecs_target, sdecs_actual)
-	  local (* ---- Selfifying sig_target in an attempt to avoid the substitutions does not work 
-		   ---- because the shapes of sig_target and sig_actual may be very different due to open *)
-	      val SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs_actual_self) = SelfifySig ctxt (path_actual,
-											   SIGNAT_STRUCTURE sdecs_actual)
-	      val _ = if (!debug)
-			  then (print "\n\n-------xcoerce_structure------\n";
+	  local
+	      val sig_actual_self = GetModSig (ctxt,path2mod path_actual)
+	      val SIGNAT_STRUCTURE sdecs_actual_self = reduce_signat ctxt sig_actual_self
+	      val _ = debugdo (fn () =>
+			       (print "\n\n-------xcoerce_structure------\n";
+				print "path_actual = "; pp_path path_actual; print "\n";
 				print "sdecs_actual = \n"; pp_sdecs sdecs_actual; print "\n";
 				print "sdecs_actual_self = \n"; pp_sdecs sdecs_actual_self; print "\n";
-				print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n")
-		      else ()
+				print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n"))
 	      val _ = if (Listops.eq_list (fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2),
 					   sdecs_actual, sdecs_target))
 			  then () 
 		      else coerce (true,"length/order mismatch")
 	      val self = path2mod path_actual
-	  in  fun actual_self_lookup lbl = Sdecs_Lookup_Open ctxt (self, sdecs_actual_self, [lbl])
+	  in  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
 	  end
 
-        (* Substitution takes variables in the specification into the target variables. *)
 	fun doit ctxt (lab,spec_dec) : (bnd * dec) option =
 
 	    (case (spec_dec, actual_self_lookup lab) of
 
 		 (* --------------- Coercion from monoval to monoval ----------------------- *)
-		 (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_EXP (e,con_actual,eopt',inline))) => 
+		 (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_EXP (_,con_actual,eopt',inline))) => 
 		     if (sub_con(ctxt,con_actual,con_spec) andalso
 			 (case (eopt,eopt') of
-			      (SOME e, SOME e') => true (* XXX used to call "eq_exp(ctxt, exp_subst(e,subst), e')" *)
-			    | (SOME _, NONE) => false
-			    | (NONE, _) => true))
+			      (SOME _, NONE) => false
+			    | _ => true)) (* XXX: We used to call IlStatic.eq_exp in (SOME, SOME) case. *)
 			 then
 			     let val exp = (case (inline,eopt') of
 						(true, SOME e) => e
 					      | _ => path2exp(join_path_labels(path_actual,lbls)))
-				 (* Derek: Why all this normalization? *)
+				 (* Attempt to make unsealed signature smaller. *)
 				 val con_actual_reduced = con_normalize(ctxt, con_actual)
 				 val con_actual_smaller = if (con_size con_actual) < (con_size con_actual_reduced)
 							      then con_actual else con_actual_reduced
@@ -1045,7 +1028,7 @@ in raise SharingError end
 		    
 	           (* --------------- Coercion from module/polyval to monoval ----------------------- *)
 	           (* XXX not checking eopt XXX *)
-	          | (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,SIGNAT_SELF(_,_,signat)))) =>
+	          | (DEC_EXP(v_spec,con_spec,eopt,_), SOME(lbls,PHRASE_CLASS_MOD (_,_,signat))) =>
 		      (case (is_polyval_sig signat) of
 			   NONE =>
 			       (case (is_exception_sig signat) of
@@ -1102,7 +1085,7 @@ in raise SharingError end
 			      pp_label lab; print "\n"; NONE)
 
 	        (* ----- Coercion from module/polyval to module/polyval -------------------------- *)
-	        | (DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_MOD (_,_,SIGNAT_SELF(_,_,sig_actual)))) => 
+	        | (DEC_MOD (v_spec,b,sig_spec), SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual))) => 
 	            (case (is_polyval_sig sig_spec, is_polyval_sig sig_actual) of
 			 (* ----------- Coercion from polyval to polyval ------------------ *)
 			 (SOME (v1,s1,con_spec,_,_),
@@ -1197,7 +1180,7 @@ in raise SharingError end
 	     else ();
 	     case (doit ctxt (l,dec)) of
 		 SOME (resbnd,resdec) =>
-		     let val ctxt' = add_context_dec(ctxt, SelfifyDec ctxt resdec)
+		     let val ctxt' = add_context_dec(ctxt,resdec)
 			 val (sbnds,sdecs) = loop ctxt' rest
 		     in ((SBND(l,resbnd))::sbnds,
 			 (SDEC(l,resdec))::sdecs)
@@ -1224,19 +1207,48 @@ in raise SharingError end
 
     (* ---------- The exported signature coercion routines ------------ *)
 
+    (* We provide both xcoerce_seal and xcoerce_seal' because
+       Module_IsValuable can be expensive.
+
+       pds: There is another reason.  Module_IsValuable is buggy for
+       modules that are not syntactic values.  I could not compile the
+       basis after replacing xcoerce_seal with #1 o xcoerce_seal'.  *)
+   
     fun xcoerce_seal (context : context,
 		      mod_actual : mod,
 		      sig_actual : signat,
-		      sig_target : signat) : mod * signat =
+		      sig_target : signat) : mod =
 	    let val var_actual = fresh_named_var "origSeal"
 		val path_actual = PATH(var_actual,[])
-		val sig_actual_self = SelfifySig context (path_actual, sig_actual)
-		val context = add_context_mod'(context,var_actual,sig_actual_self)
-		val (_,mod_coerced, sig_coerced) = xcoerce(context, 
-							   path_actual, sig_actual, sig_target)
-	    in  (MOD_LET(var_actual, mod_actual, MOD_SEAL(mod_coerced, sig_target)), sig_coerced)
+		val context' = add_context_mod'(context,var_actual,sig_actual)
+		val (coerced,m,_) = xcoerce(context', path_actual, sig_actual, sig_target)
+	    in  if coerced then MOD_LET(var_actual, mod_actual, MOD_SEAL(m, sig_target))
+		else mod_actual
 	    end
 
+    fun xcoerce_seal' (context : context,
+		       mod_actual : mod,
+		       sig_actual : signat,
+		       sig_target : signat) : mod * signat option =
+	    let val var_actual = fresh_named_var "origSeal"
+		val path_actual = PATH(var_actual,[])
+		val context' = add_context_mod'(context,var_actual,sig_actual)
+	    in
+		(case xcoerce(context', path_actual, sig_actual, sig_target)
+		   of (false,_,_) => (mod_actual,SOME sig_actual)
+		    | (true,m,s) =>
+		       let val mod_result = MOD_LET(var_actual, mod_actual, MOD_SEAL(m, sig_target))
+			   val sigopt_unsealed =
+			       if Module_IsValuable (context, mod_actual) then
+				   let val subst = subst_add_modvar(empty_subst,var_actual,mod_actual)
+				       val sig_unsealed = sig_subst (s, subst)
+				   in  SOME sig_unsealed
+				   end
+			       else NONE
+		       in  (mod_result, sigopt_unsealed)
+		       end)
+	    end
+	
     fun xcoerce_functor (context : context,
 			 path_actual : path,
 			 sig_actual : signat,
@@ -1265,8 +1277,9 @@ in raise SharingError end
 
     val track_coerce = Stats.ff("IlstaticTrackCoerce")
 
-    fun generateModFromSig (ctxt, baseModule : mod, signat : signat, typeOnly : bool) =
-	let fun generateSdec m (sdec as (SDEC(l,dec))) = 
+    fun generateModFromSig (ctxt, path : path, signat : signat, typeOnly : bool) =
+	let val signat = deep_reduce_signat path ctxt signat
+	    fun generateSdec m (sdec as (SDEC(l,dec))) = 
 		(case dec of
 		     DEC_MOD(v,b,s) =>
 			 (case generateSig (MOD_PROJECT(m, l)) s of
@@ -1287,8 +1300,8 @@ in raise SharingError end
 			 end
 		   | SIGNAT_FUNCTOR _ => if typeOnly then NONE  (* these can be polymorphic values *)
 					 else SOME(m, s)
-		   | _ => generateSig m (IlContext.reduce_signat ctxt s))
-	in  generateSig baseModule signat
+		   | _ => error "deep_reduce_signat failed")
+	in  generateSig (path2mod path) signat
 	end
 
     fun structureGC(ctxt : context,
@@ -1296,10 +1309,7 @@ in raise SharingError end
  		    mod_client : mod,
  		    sig_client : signat,
 		    used) = 
-	let 
-	    val pp_labs = pp_pathlist pp_label'
-	    fun pp_labsList labsList = app (fn labs => (pp_labs labs; print "   ")) labsList
-
+	let
 (*
 	    val _ = (print "XXXstructureGCXXX\n";
 		     print "  var_actual = "; pp_var var_actual; print "\n";
@@ -1308,10 +1318,10 @@ in raise SharingError end
 		     print "  initial used = "; Name.PathSet.app (fn p => (pp_path (PATH p); print "\n")) used;
 		     print "\n")
 *)
-	    val ctxt = add_context_mod'(ctxt, var_actual, SelfifySig ctxt (PATH(var_actual,[]), sig_client))
+	    val ctxt = add_context_mod'(ctxt, var_actual, sig_client)
 	    fun getChildren path = 
 		Name.PathSet.filter (fn (v,_) => eq_var(v,var_actual))
-		(case Context_Lookup_Path_Open(ctxt, PATH path) of
+		(case Context_Lookup_Path(ctxt, PATH path) of
 		     SOME (_,PHRASE_CLASS_MOD(_,_,s)) => findPathsInSig s
 		   | SOME (_,PHRASE_CLASS_EXP(_,c,_,_)) => findPathsInCon c
 		   | SOME (_,PHRASE_CLASS_CON(_,k,SOME c,_)) => findPathsInCon c
@@ -1351,7 +1361,11 @@ in raise SharingError end
 		    loop (rev labs, set)
 		end
 	    val used = Name.PathSet.foldl folder Name.PathSet.empty used
-(*	    val _ = (print "  final used = "; Name.PathSet.app (fn p => (pp_path (PATH p); print "\n")) used; print "\n") *)
+(*
+	    val _ = (print "  final used = ";
+		     Name.PathSet.app (fn p => (pp_path (PATH p); print "\n")) used;
+		     print "\n")
+*)
 
 	    fun filterModSig currentPrefix (m,s) = 
 		let val MOD_STRUCTURE sbnds = m
@@ -1374,13 +1388,11 @@ in raise SharingError end
 		end
 	    
 	    val (module, signat) = filterModSig [] (mod_client, sig_client)
-
 (*
 	    val _ = (print "XXXXstructureGCXXXX\n";
 		     print "  module = "; pp_mod module; print "\n";
 		     print "  signat = "; pp_signat signat; print "\n")
 *)
-
 	in  (module, signat)
 	end
 
@@ -1419,9 +1431,8 @@ in raise SharingError end
        (1) As before, compute modCoerced and sigCoerced which has the components of sigTarget
            (with type information exposed) in terms of varActual.  Return modActual and sigCoerced
 	   if no coercion was actually necessary.
-       (2) Compute modThin and sigThin which contains all the type and type-containing module
-           components (and datatype coercions) of modActual and sigActual.
-	   Remove references to varActual in sigThin but not modThin.
+       (2) Compute modThin and sigThin which contains all the types, datatype
+           coercions, and equality functions of modActual and sigActual.
 	   Note that creating these from modCoerced and sigCoerced fails to capture all necessary type components.
        (3) Assuming sigTarget has type labels taus and term labels exps with corresponding types, return 
 
@@ -1441,7 +1452,7 @@ in raise SharingError end
        (4) Comparing against the previous solution, the returned module (code) is bigger.
            This size increase will be taken care of by NIL optimizations which eliminate the
 	   redundant copies.  What is important is that the returned HIL signature is smaller.
-	   In particular, sigThin, unlike sigCoerced, contains no term components.
+	   In particular, sigThin contains fewer term components than sigCoerced.
     *)
 
     fun xcoerce_transparent (context : context,
@@ -1455,10 +1466,8 @@ in raise SharingError end
 		    else ()
 	    val var_actual = fresh_named_var "origModule"
 	    val path_actual = PATH(var_actual,[])
-	    val sig_actual_self = SelfifySig context (path_actual, sig_actual)
-	    val context = add_context_mod'(context,var_actual,sig_actual_self)
-	    val (coerced,mod_coerced,sig_coerced) = xcoerce(context, 
-							    path_actual, sig_actual,sig_target)
+	    val context = add_context_mod'(context,var_actual,sig_actual)
+	    val (coerced,mod_coerced,sig_coerced) = xcoerce(context,path_actual,sig_actual,sig_target)
 	    val _ = if (!debug)
 			then (print "coerced to mod_coerced = \n"; pp_mod mod_coerced; print "\n";
 			      print "coerced to sig_coerced = \n"; pp_signat sig_coerced; print "\n")
@@ -1472,8 +1481,8 @@ in raise SharingError end
 	      then let val hidden_lbl = internal_label "hiddenThinModule"
 		       val var_coerced = fresh_named_var "coercedModule"
 		       val var_thin = fresh_named_var "thinModule"
-		       val SOME(mod_thick, sig_thick) = generateModFromSig(context, MOD_VAR var_actual, sig_coerced, false)
-		       val mod_sig_thin_option = generateModFromSig(context, MOD_VAR var_actual, sig_actual_self, true)
+		       val SOME(mod_thick, sig_thick) = generateModFromSig(context, path_actual, sig_coerced, false)
+		       val mod_sig_thin_option = generateModFromSig(context, path_actual, sig_actual, true)
 		       val substActualToCoerced = subst_add_modvar(empty_subst, var_actual, MOD_VAR var_coerced)
 		       val substActualToThin = subst_add_modvar(empty_subst, var_actual, MOD_VAR var_thin)
 		       val MOD_STRUCTURE copy_sbnds = mod_subst(mod_thick, substActualToCoerced)
@@ -1484,7 +1493,6 @@ in raise SharingError end
 				NONE => ([],[])
 			      | SOME (mod_thin, sig_thin) => 
 				    let
-				        (* Simply unselfifying with respect to var_actual does not work *)
 					val sig_thin = sig_subst(sig_thin, substActualToThin)
 					val paths = findPathsInSig sig_copy
 					val used = Name.PathSet.filter (fn (v,_) => eq_var(v,var_thin)) paths
@@ -1503,7 +1511,6 @@ in raise SharingError end
 					    end
 					val used = addEqSig (nil, sig_thin, used)
 					val (mod_thin, sig_thin) = structureGC(context, var_thin, mod_thin, sig_thin, used)
-					val sig_thin = UnselfifySig context (PATH(var_thin,[]), sig_thin)
 				    in  ([SBND(hidden_lbl, BND_MOD(var_thin, false, mod_thin))],
 					 [SDEC(hidden_lbl, DEC_MOD(var_thin, false, sig_thin))])
 				    end)
@@ -1538,6 +1545,3 @@ in raise SharingError end
     val xcoerce_functor = subtimer("Elab-Signature",xcoerce_functor)
 
 end
-
-
-
