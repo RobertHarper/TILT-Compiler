@@ -26,7 +26,7 @@ struct
    val il_debug = ref (Il.CON_ANY)
 *)
 
-   val elaborator_specific_optimizations = ref false
+   val elaborator_specific_optimizations = ref true
 
    fun error msg = Util.error "tonil.sml" msg
 
@@ -36,7 +36,7 @@ struct
       For the phase-splitting, we need a way of turning each module
       variable var into a new constructor variable var_c and a new
       term variable var_r.  Instead of messing around with "the
-      internal number of the variable mod 3", we simply maintain a
+      internal number of the variable mod 2 or 3", we simply maintain a
       mapping var |-> (var_c, var_r) 
    *)
    local
@@ -275,6 +275,14 @@ struct
 	   projectFromRecord con lbls'
        else
 	   projectFromRecord (Prim_c(Record_c lbls, cons)) l'
+     | projectFromRecord c labels =
+       (print "Error: bad projection from constructor ";
+	Ppnil.pp_con c;
+	print " and labels ";
+	app (fn l => (Ppnil.pp_label l; print " ")) labels;
+        print "\n";
+	error "projectFromRecord: bad projection")
+       
 
    (* xmod:  Translation of an IL module.
 
@@ -451,8 +459,6 @@ struct
 	       val type_r = Nilstatic.con_reduce (NILctx'', Nilutil.substConInCon subst2 exp_body_type)
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
-
-
 
            val ebnd_cat = APP[ebnd_cat_fun, 
 			      ebnd_cat_arg,
@@ -776,7 +782,7 @@ struct
 	    record_r_exp_items = record_r_exp_items}
        end
 
-     | xsbnds' context (do_optimize, true, sbnds as 
+     | xsbnds' context (true, true, sbnds as 
 		       Il.SBND(lbl, 
 			       Il.BND_MOD
 			       (top_var, m as 
@@ -1022,11 +1028,9 @@ struct
 
      | xcon' context ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
        let
-	   val con = Prim_c (Int_c intsize, [])
+	   val (con, knd) = Nilstatic.con_valid (NILctx_of context, Prim_c (Int_c intsize, []))
        in
-           (* XXX *)
-	   (* BUG---SHOULD CALL ISWORD SINCE INTSIZE CAN BE >= 64!  *)
-	   (con, Word_k Runtime)
+	   (con, knd)
        end
 
      | xcon' context (Il.CON_FLOAT floatsize) = 
@@ -1156,10 +1160,13 @@ struct
 			 | _ => let fun mapper (n,_) = ((Nilutil.generate_tuple_label (n+1),
 							 Name.fresh_var()),Type_k Runtime)
 				    val arg_var = Name.fresh_var()
-				    val arg_kind = Record_k(Util.sequence2list(Listops.mapcount mapper vars))
-				    fun mapper (n,v) = Con_cb(v,Type_k Runtime, 
-							      Proj_c(Var_c arg_var, 
-								     Nilutil.generate_tuple_label (n+1)))
+				    val arg_kind = Record_k(Util.sequence2list
+							    (Listops.mapcount mapper vars))
+				    fun mapper (n,v) = 
+					Con_cb(v,Type_k Runtime, 
+					       Proj_c(Var_c arg_var, 
+						      Nilutil.generate_tuple_label (n+1)))
+
 				    val con1' = Let_c(Sequential,Listops.mapcount mapper vars,con1)
 				in  ((arg_var, arg_kind), con1')
 				end
@@ -1234,8 +1241,9 @@ struct
        end
     
      | xcon' _ c = (print "Error:  Unrecognized constructor:\n";
-		      Ppil.pp_con c;
-		      error "(xcon):  Unrecognized constructor")
+		    Ppil.pp_con c;
+		    print "\n";
+		    error "(xcon):  Unrecognized constructor")
    
    and toFunction context (exp as Il.FIX _) =
        let
@@ -1607,16 +1615,41 @@ struct
 		knd_c, type_r,
 		valuable} = xmod context (module, NONE)
 
-           val con = projectFromRecord type_r [label]
+	   val specialize = (Name.eq_label(label, Ilutil.it_lab)) andalso 
+                            ! elaborator_specific_optimizations
 
 	   val cbnds = flattenCatlist cbnd_cat
 	   val bnds = (map Con_b cbnds) @ 
 	              (flattenCatlist ebnd_cat)
+
+
+           val unnormalized_con = 
+	       makeLetC (map Con_cb cbnds) 
+	                (if specialize then 
+			     type_r 
+			 else
+			     projectFromRecord type_r [label])
+
+           val _ = (print "unnormalized con = ";
+		    Ppnil.pp_con unnormalized_con;
+		    print "\n")
+
+           val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
+
+           val _ = (print "normalized con = ";
+		    Ppnil.pp_con con;
+		    print "\n")
+
+	   val let_body = 
+	       if specialize then 
+		   name_r
+	       else
+		   Prim_e (NilPrimOp (select label), [], [name_r])
+
        in
-	   (Let_e (Sequential, bnds, Prim_e (NilPrimOp (select label), 
-					     [], [name_r])),
-	    makeLetC (map Con_cb cbnds) con,
-	    valuable)
+	       (Let_e (Sequential, bnds, let_body), 
+		con,
+		valuable)
        end
 
      | xexp' context (Il.SEAL (exp,_)) = xexp context exp
