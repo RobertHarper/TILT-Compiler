@@ -378,7 +378,7 @@ structure Ppnil	:> PPNIL =
 	        Exp_b (v,t,e) => HOVbox[pp_var v, String " : ", pp_trace t,
 					String " = ", Break0 0 2, pp_exp e]
 	      | Con_b (Runtime,cb) => pp_conbnd cb
-	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
+	      | Con_b (Compiletime,cb) => HOVbox[String "STATIC ", Break0 0 2, pp_conbnd cb]
 	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset
 				    in Vbox(separate (map (pp_fix false) fixlist) Break)
 				    end
@@ -422,14 +422,16 @@ structure Ppnil	:> PPNIL =
 			  | (true, NonRecursive) => "/NORECUR-CODE\\"
 			  | (true, Leaf) => "/LEAF-CODE\\"),
 		  if isDependent then String "DEP" else String "",
-		    pp_var v, Break,
+		    pp_var v, Break0 0 2,
 		    pp_region "(" ")"
 		    [HOVbox(vkformats @
 			   (if (null vkformats) 
 				  then [String " ;; "] else 
 				[String " ;; ", Break0 0 0]) @
-			   vcformats @ [String " ;; ", Break0 0 0] @
-			   vfformats)],
+			   vcformats @ 
+			   (if (null vfformats)
+				then [String " ;; )"] 
+			    else [String " ;; ", Break0 0 0] @ vfformats @ [String ")"]))],
 		    Break0 0 0,
 		    String (case effect of 
 				Total => " -> " 

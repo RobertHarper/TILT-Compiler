@@ -1014,18 +1014,12 @@ struct
 	       end
 
 
- 
-	   fun vc_mapper (v,tr,c) = (v,NilSubst.substConInTrace internal_subst tr,
-				       NilSubst.substConInCon internal_subst c)
-	   val vklist = tFormals
-	   val vclist = eFormals 
-
+ 	   val vklist = tFormals
+	   val vclist = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c_rewrite state c)) eFormals 
 	   val codebody_tipe = c_rewrite state body_type
-
 	   val closure_tipe = AllArrow_c{openness=Closure, effect=effect, isDependent=isDependent,
 					 tFormals=vklist,
-					 eFormals=map (fn (v,_,c) => 
-						       (if isDependent then SOME v else NONE, c)) vclist,
+					 eFormals=vclist,
 					 fFormals=TilWord32.fromInt(length fFormals),
 					 body_type=codebody_tipe}
 	   val codebody_tipe = NilSubst.substConInCon internal_subst codebody_tipe
@@ -1079,8 +1073,10 @@ struct
 		     end)
 
 
-	   val vklist_code = vklist @ [(cenv_var,cenv_kind)]
-	   val vclist_code = map vc_mapper (vclist @ [(venv_var,venv_tr,venv_type)])
+	   fun vc_mapper (v,tr,c) = (v,trace_rewrite state (NilSubst.substConInTrace internal_subst tr),
+				       c_rewrite state (NilSubst.substConInCon internal_subst c))
+	   val vklist_code = tFormals @ [(cenv_var,cenv_kind)]
+	   val vclist_code = map vc_mapper (eFormals @ [(venv_var,venv_tr,venv_type)])
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
 				   eFormals=vclist_code,

@@ -19,6 +19,12 @@ struct
 	val do_diag = ref false
 	fun diag s = if !do_diag then print s else()
 
+fun path2con (v,labs) = 
+  let fun loop c [] = c
+        | loop c (l::rest) = loop (Proj_c(c,l)) rest
+  in  loop (Var_c v) labs
+  end
+
 val Normalize_type_of = Stats.timer("optimize_typeof", Normalize.type_of);
 val Normalize_reduce_hnf = Stats.timer("optimize_typeof", Normalize.reduce_hnf);
 val Normalize_allprim_uses_carg = Stats.timer("optimize_typeof", Normalize.allprim_uses_carg);
@@ -1057,7 +1063,10 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_niltrace state niltrace = 
 	    (case niltrace of
 		 TraceCompute v => (use_var(state,v); niltrace)
-	       | TraceKnown (TraceInfo.Compute(v,_)) => (use_var(state,v); niltrace)
+	       | TraceKnown (TraceInfo.Compute(path as (v,_))) => 
+			(case find_availC(state,path2con path) of
+				NONE =>	(use_var(state,v); niltrace)
+			      | SOME v => (use_var(state,v); TraceKnown(TraceInfo.Compute(v,[]))))
 	       | _ => niltrace)
 
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
