@@ -14,6 +14,7 @@ struct
   datatype info = INFO of {callee_saves: Regset.set,
 			   regs_destroyed : Regset.set ref,
 			   stackmap  : stacklocation Regmap.map ref,
+			   num_permanent_resident : int,
 			   num_ints_spilled : int ref,
 			   num_fps_spilled : int ref,
 			   num_args  : int ref}
@@ -38,6 +39,7 @@ struct
 	  stackmap         = ref stack_resident,
 	  (* num_???_spilled's are counted funny; 
 	     They're 1 less than the actual # *)
+	  num_permanent_resident = Regmap.numItems stack_resident,
 	  num_ints_spilled = ref (Regmap.numItems stack_resident-1),
 	  num_fps_spilled  = ref ~1,   
 	  (* num_args: actual max # of arguments passed on stack *)
@@ -86,6 +88,14 @@ struct
  
 *)
 
+    structure Intkey : ORD_KEY = 
+      struct
+	type ord_key = int
+	val compare = Int.compare
+      end
+    structure IntSet = BinarySetFn(Intkey)
+
+
   fun noteStackArg (INFO{stackmap,...}) (reg, arg_num) =
         (case (Regmap.find(! stackmap, reg)) of
 	   NONE => stackmap := Regmap.insert(! stackmap, reg, 
@@ -93,13 +103,24 @@ struct
          | SOME _ => error "noteStackArg:  Redefining register")
 
   fun stackOffset (INFO{callee_saves, stackmap, num_fps_spilled,
-			num_ints_spilled, ...}) reg =
+			num_permanent_resident, num_ints_spilled, ...}) (neighbors,reg) =
       (case (Regmap.find (! stackmap, reg)) of
 	 NONE =>
 	   (case reg of
 	      R _ => 
-		let val _ = inc num_ints_spilled
-                    val newpos = SPILLED_INT (! num_ints_spilled)
+		let fun folder (n,set) = (case Regmap.find(!stackmap,n) of
+					      NONE => set
+					    | SOME (SPILLED_INT pos) => IntSet.add(set,pos)
+					    | _ => set)
+		    val used = foldl folder IntSet.empty neighbors
+		    fun loop n = if (IntSet.member(used,n))
+				     then loop (n+1)
+				 else n
+		    val unused = loop num_permanent_resident
+		    val newpos = if (!num_ints_spilled < unused)
+				     then (inc num_ints_spilled;
+					   SPILLED_INT (! num_ints_spilled))
+				 else SPILLED_INT unused
 		in
 		  stackmap := Regmap.insert(! stackmap, reg, newpos);
 		  newpos
@@ -120,7 +141,8 @@ struct
   fun doubleAlign n = ((n + 7) div 8) * 8     (* round up to multiple of 8 *)
   fun stackAlign n  = ((n + 15) div 16) * 16  (* round up to multiple of 16 *)
 
-  fun summarize (INFO{callee_saves, regs_destroyed, stackmap, 
+  fun summarize (INFO{num_permanent_resident,
+		      callee_saves, regs_destroyed, stackmap, 
 		      num_ints_spilled, num_fps_spilled,
 		      num_args}) = 
     let
