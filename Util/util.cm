@@ -16,7 +16,6 @@ formatter.sml
 graphutil.sig.sml
 graphutil.sml
 splay-map-fn.sml
-ext-ord-map.sig.sml
 stats.sig.sml
 stats.sml
 graph.sig.sml
