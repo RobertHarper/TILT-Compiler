@@ -323,7 +323,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Ppnil.pp_exp exp;
      lprintl "WITH MINIMAL CONTEXT AS";
      print_context (exp_error_context (D,exp));
-     Util.raise_error explanation
+     error' explanation
        )
 
   fun c_error (D,con,explanation) =
@@ -333,7 +333,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        Ppnil.pp_con con;
        lprintl "WITH MINIMAL CONTEXT AS";
        print_context (con_error_context (D,con));
-       Util.raise_error explanation
+       error' explanation
        )
 
   fun k_error (D,kind,explanation) =
@@ -343,7 +343,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Ppnil.pp_kind kind;
      lprintl "WITH MINIMAL CONTEXT AS";
      print_context (kind_error_context (D,kind));
-     Util.raise_error explanation
+     error' explanation
        )
 
   fun ck_error (D,con,kind,explanation) =
@@ -355,7 +355,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Ppnil.pp_kind kind;
      lprintl "\nWITH MINIMAL CONTEXT AS";
      print_context (con_error_context (D,con));
-     Util.raise_error explanation
+     error' explanation
     )
 
   fun cc_error (D,con1,con2,explanation) =
@@ -368,7 +368,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
      Ppnil.pp_con con2;
      lprintl "\nWITH MINIMAL CONTEXT AS";
      print_context (cons_error_context (D,[con1,con2]));
-     Util.raise_error explanation
+     error' explanation
     )
 
 
