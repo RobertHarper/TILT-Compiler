@@ -425,9 +425,12 @@ struct
        let
 	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap_of context)
 
-	   val _ = (lprintl "MOD IS";
-		    Ppil.pp_mod ilmod_fun)
-
+	   val _ = 
+	     if (!trace) then
+	       (lprintl "MOD IS";
+		Ppil.pp_mod ilmod_fun)
+	     else
+	       ()
 	   val {cbnd_cat = cbnd_cat_fun,
 		ebnd_cat = ebnd_cat_fun,
 		name_c = name_fun_c,
@@ -474,9 +477,6 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		    | _ => (perr_k knd_fun_c;
 			    error "Expected arrow kind")
 
-	       val _ = (lprintl "Here?";
-			ignore (map (fn (v,k,c) => perr_k k) ((flattenCatlist cbnd_cat_fun))))
-			
 	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_arg_c
 	       val reduced_argument_c = Nilstatic.con_reduce (NILctx_of context, argument_c)
                val (effect,var_body_arg_c,exp_body_type) = 
@@ -606,11 +606,6 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
            val cbnd_proj_cat = APP[cbnd_mod_cat,
 				   LIST [(var_proj_c, knd_proj_c,con_proj_c)]]
-	   val _ = 
-	     if (!trace) then
-	       (lprintl "HERE!!";
-		ignore (map (fn (v,k,c) => perr_k k) ((flattenCatlist cbnd_proj_cat))))
-	     else ()
 
 	   val ebnd_proj_cat = APP[ebnd_mod_cat,
 				   LIST [Exp_b(var_proj_r, type_proj_r,
@@ -1735,12 +1730,19 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val {ebnds, valuable, final_context=context'} = xbnds context bnds
 	   val (exp, con, valuable') = xexp context' il_exp
 
-	   val _ = (lprintl "HERE WE ARE1";
-		    perr_c con)
+	   val _ = 
+	     if (!trace) then
+	       (lprintl "HERE WE ARE1";
+		perr_c con)
+	     else
+	       ()
 
 	   val reduced_con = Nilstatic.con_reduce(NILctx_of context', con)
 
-	   val _ = printl "OUT1"
+	   val _ = 
+	     if (!trace) then 
+	       printl "OUT1"
+	     else ()
 
        in
 	   (Let_e (Sequential, ebnds, exp),
@@ -1870,9 +1872,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xexp' context (il_exp as (Il.MODULE_PROJECT (module, label))) =
        let
-	 val _ = (lprintl "IL MODULE IS";
-		  Ppil.pp_mod module;
-		  printl "")
+	 val _ = 
+	   if (!trace) then
+	     (lprintl "IL MODULE IS";
+	      Ppil.pp_mod module;
+	      printl "")
+	   else ()
 	   
 	 val {cbnd_cat, ebnd_cat, 
 	      name_c, name_r, 
@@ -1885,9 +1890,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val cbnds = flattenCatlist cbnd_cat
 
 	   val _ = 
-	     (lprintl "Con bounds kinds are";
-	      ignore (map (fn (v,k,c) => perr_k k) cbnds);
-	      lprintl "DONE")
+	     if (!trace) then
+	       (lprintl "Con bounds kinds are";
+		ignore (map (fn (v,k,c) => perr_k k) cbnds);
+		lprintl "DONE")
+	     else ()
 
 	   val bnds = (map Con_b cbnds) @ 
 	              (flattenCatlist ebnd_cat)
@@ -1912,12 +1919,18 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		    NilContext.print_context (NILctx_of context); print "\n")
 *)
 
-	   val _ = (lprintl "HERE WE ARE2";
-		    perr_c unnormalized_con)
+	   val _ = 
+	     if (!trace) then
+	       (lprintl "HERE WE ARE2";
+		perr_c unnormalized_con)
+	     else ()
 
            val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
 
-	   val _ = printl "OUT2"
+	   val _ = 
+	     if (!trace) then
+	       printl "OUT2"
+	     else ()
 (*
            val _ = (print "normalized con = ";
 		    Ppnil.pp_con con;
