@@ -1,4 +1,4 @@
-(*$import UPDATE_HELP Paths FileCache Info LinkIl Util TopHelp Compiler Time UnitEnvironment List OS Tools *)
+(*$import UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools *)
 
 structure UpdateHelp
     :> UPDATE_HELP
@@ -29,7 +29,7 @@ struct
 		  asmFile : string,
 		  asmzFile : string,
 		  objFile : string}
-    type state = notes * LinkIl.module option
+    type state = notes * Compiler.il_module option
     datatype asmfiles = COMPRESSED | UNCOMPRESSED | BOTH | NEITHER
 	
     (* goalAsmFiles : unit -> asmfiles *)
@@ -61,8 +61,8 @@ struct
 				     Ue.insert (acc, Paths.unitName paths, crc)
 				 end) Ue.empty paths_list
 	
-    (* elaborate : notes -> LinkIl.module *)
-    fun elaborate ({unit, target, imports, ilFile, infoFile, ...} : notes) =
+    (* elaborate : notes * bool -> LinkIl.module *)
+    fun elaborate ({unit, target, imports, ilFile, infoFile, ...} : notes, alreadyUptodate) =
 	let val interfaceFile = Paths.interfaceFile target
 	    val sourceFile = Paths.sourceFile target
 	    val constrained = Cache.exists interfaceFile
@@ -81,6 +81,9 @@ struct
 			 imports = mkUe imports,
 			 exports = mkUe [target]}
 	    val _ = InfoCache.write (infoFile, info')
+	    (* We check after writing the .info file. *)
+	    val _ = if not (ilFileWritten andalso alreadyUptodate) then ()
+		    else error ("Elaborator overwrote an up-to-date context: " ^ ilFile)
 	in  ilModule
 	end
     
@@ -93,9 +96,9 @@ struct
     (* generate : state -> unit *)
     exception Stop
     fun generate (notes as {unit, target, asmFile, asmzFile, ...} : notes, il_module') =
-	let val _ = Help.chat ("  [Compiling to assembly file]\n")
+	let val _ = Help.chat ("  [Compiling " ^ unit ^ " to assembly]\n")
 	    val il_module = case il_module'
-			      of NONE => elaborate notes
+			      of NONE => elaborate (notes, true)
 			       | SOME il_module => il_module
 
 		val nil_module = if !Help.uptoElaborate then raise Stop
@@ -166,7 +169,7 @@ struct
 	   | BOTH => error ("cleanup wants both versions of assembler")
 				 
     (* elaborate, generate, prepare, assemble, cleanup : state -> state *)
-    val elaborate = fn (notes, _)            => (notes, SOME (elaborate notes))
+    val elaborate = fn (notes, _)            => (notes, SOME (elaborate (notes, false)))
     val generate  = fn state                 => (generate state; state)
     val prepare   = fn (state as (notes, _)) => (prepare notes; state)
     val assemble  = fn (state as (notes, _)) => (assemble notes; state)
