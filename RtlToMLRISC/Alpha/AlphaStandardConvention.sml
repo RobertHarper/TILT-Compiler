@@ -53,12 +53,9 @@ functor AlphaStandardConvention(
   val results	= (IntegerConvention.results, FloatConvention.results)
   val preserve	= (IntegerConvention.preserve, FloatConvention.preserve)
 
-  val define = (map MLTreeExtra.gpr IntegerConvention.define)@
-	       (map MLTreeExtra.fpr FloatConvention.define)
-  val use    = (map MLTreeExtra.gpr IntegerConvention.use)@
-	       (map MLTreeExtra.fpr FloatConvention.use)
-  val escape = (map MLTreeExtra.gpr IntegerConvention.escape)@
-	       (map MLTreeExtra.fpr FloatConvention.escape)
+  val escape = MLTree.ESCAPEBLOCK(
+		 (map MLTreeExtra.gpr IntegerConvention.escape)@
+		 (map MLTreeExtra.fpr FloatConvention.escape))
 
   (* -- marshaling functions ----------------------------------------------- *)
 
@@ -118,19 +115,24 @@ functor AlphaStandardConvention(
   val integer = Basis.integer
   val float   = Basis.float
 
-  fun call wrapper frame (procedure, arguments, results) =
-	let
-	  val (before_, after) = wrapper procedure
-	  val use	       = useArguments arguments
-	in
-	  [MLTree.CODE(marshalArguments frame arguments)]@
-	  [MLTree.CODE[MLTreeExtra.mv(callPointer, procedure)]]@
-	  before_@
-	  [MLTree.CODE[MLTree.CALL(MLTree.REG callPointer, define, use)]]@
-	  after@
-	  [MLTree.CODE[MLTree.MV(globalPointer, MLTree.REG returnPointer)]]@
-	  [MLTree.CODE(unmarshalResults frame results)]
-	end
+  local
+    val define = (map MLTreeExtra.gpr IntegerConvention.define)@
+		 (map MLTreeExtra.fpr FloatConvention.define)
+  in
+    fun call wrapper frame (procedure, arguments, results) =
+	  let
+	    val (before_, after) = wrapper procedure
+	    val use		 = useArguments arguments
+	  in
+	    [MLTree.CODE(marshalArguments frame arguments)]@
+	    [MLTree.CODE[MLTreeExtra.mv(callPointer, procedure)]]@
+	    before_@
+	    [MLTree.CODE[MLTree.CALL(MLTree.REG callPointer, define, use)]]@
+	    after@
+	    [MLTree.CODE[MLTree.MV(globalPointer, MLTree.REG returnPointer)]]@
+	    [MLTree.CODE(unmarshalResults frame results)]
+	  end
+  end
 
   fun save registers =
 	Basis.assignUnion(Basis.assignNew registers, Basis.assignNew' preserve)
@@ -150,7 +152,7 @@ functor AlphaStandardConvention(
 	 MLTree.CODE(Basis.getAssignment saves),
 	 MLTree.CODE(Basis.restoreReturnIfCall frame body),
 	 MLTree.CODE[Basis.deallocateFrame frame],
-	 MLTree.ESCAPEBLOCK escape,
+	 escape,
 	 MLTree.CODE[MLTree.RET]]
 
 end
