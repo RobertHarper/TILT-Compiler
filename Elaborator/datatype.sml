@@ -70,6 +70,9 @@ structure Datatype
 				   end) type_syms
 	val top_type_string = foldl (fn (s,acc) => acc ^ "_" ^ (Symbol.name s)) "" type_syms
 	val top_eq_string = top_type_string ^ "_eq"
+(* XXX
+	val top_type_var = fresh_named_var top_type_string
+*)
 	val top_type_var = if (num_datatype = 1) then (hd type_vars) else fresh_named_var top_type_string
 	val top_type_lab = to_questionable (internal_label top_type_string)
 	val top_eq_var = fresh_named_var top_eq_string
@@ -195,7 +198,7 @@ structure Datatype
 	end
 
         (* ---------- now create the top datatype tuple using var_poly ------ *)
-	val top_type_tyvar = 
+	val top_type_tyvar =
 	    CON_MU(CON_FUN(vardt_list,con_tuple_inject constr_fullsum_vdt))
 
         (* ------------ create the polymorphic type arguments --------------------- 
@@ -263,6 +266,11 @@ structure Datatype
 			then (top_type_tyvar, KIND_TUPLE num_datatype)
 		    else (con_fun(tyvar_vars, top_type_tyvar), 
 			  KIND_ARROW(num_tyvar, KIND_TUPLE num_datatype))
+(* XXX
+		in  [(SBND(top_type_lab, BND_CON(top_type_var, c)),
+		      SDEC(top_type_lab, DEC_CON(top_type_var, base_kind, SOME c, false)))]
+		end
+*)
 		in  if num_datatype = 1 
 			then []
 		     else [(SBND(top_type_lab, BND_CON(top_type_var, c)),
@@ -276,6 +284,13 @@ structure Datatype
 				   then kind
 			       else KIND_ARROW(num_tyvar,kind)
 		    fun mapper(i,l,v) =
+(* XXX
+			let val c = let val c = CON_VAR top_type_var
+					val c = if is_monomorphic then c
+						else CON_APP(c, tyvar_cons)
+				    in  CON_TUPLE_PROJECT(i,c)
+				    end
+*)
 			let val c = if num_datatype = 1 
 					then CON_TUPLE_PROJECT(0,top_type_tyvar)
 				    else 
@@ -611,10 +626,11 @@ structure Datatype
 				     val var = (case dec
 						  of DEC_EXP(v,_,_,_) => v
 						   | DEC_CON(v,_,_,_) => v
-						   | _ => fail "datatype - expected EXP or CON")
+						   | DEC_MOD(v,_,_) => v)
 				     val bnd = (case Context_Lookup_Labels(context,labs)
 						  of SOME (_, PHRASE_CLASS_EXP (e,c,eo,i)) => BND_EXP(var,e)
 						   | SOME (_, PHRASE_CLASS_CON (c,k,co,i)) => BND_CON(var,c)
+						   | SOME (_, PHRASE_CLASS_MOD (m,p,s)) => BND_MOD(var,p,m)
 						   | _ => fail "datatype - undefined component")
 				     val lab = if eq_label (old_lab, old_inner_type_lab)
 						   then inner_type_lab
