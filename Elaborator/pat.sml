@@ -370,7 +370,9 @@ structure Pat
 	val _ = if (eq_con(context,con1,argcon))
 		    then ()
 		else (error_region();
-		      print "tuple/record pattern used on a non-record argument\n")
+		      print "tuple/record pattern used on a non-record argument\n";
+		      print "Actual type: "; pp_con con1; print "\n";
+		      print "Pattern type: "; pp_con argcon; print "\n")
 	val newargs = map2 (fn (v,c) => CASE_VAR(v,c)) (rvars,rcons)
 	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c))) context newargs
 	fun extender (pats,(cl,bound,body)) = (pats @ cl, bound, body)

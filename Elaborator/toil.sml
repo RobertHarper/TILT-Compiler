@@ -1528,7 +1528,7 @@ structure Toil
 		  val boolsbnd_ctxt_list2 = xdec' false (context',dec2)
 		  fun temp (opt : (bool * sbnd) option,ce) = (mapopt #2 opt,ce)
 		  fun rename(opt,CONTEXT_SDEC(SDEC(l,dec))) = 
-		      let val lbl = fresh_internal_label ("local_" ^ (Name.label2name l))
+		      let val lbl = fresh_internal_label ("local_" ^ (IlUtil.label2name l))
 			  val lbl = to_nonexport lbl
 			  val ce' = CONTEXT_SDEC(SDEC(lbl,dec))
 		      in case opt of

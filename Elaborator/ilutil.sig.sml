@@ -94,6 +94,9 @@ signature ILUTIL =
     val is_eq : label -> bool
     val is_dt_var : var -> bool	
 
+    (* Lose all characteristics *)
+    val label2name : label -> string
+
     (* special values *)
     val con_unit : con
     val con_string : con

@@ -522,8 +522,7 @@ structure Datatype
 		       | (false,true) => con_tuple_inject cons
 		       | (true,false) => hd cons
 		       | (false,false) => 
-			     (print "case 4 \n"; 
-			      con_fun(tyvar_vars,
+			     (con_fun(tyvar_vars,
 				      con_tuple_inject
 				      (map (fn c => ConApply(true,c, tyvar_tuple)) cons))))
 	    in  (SBND(constr_sumarg_lab_i,BND_CON(constr_sumarg_var_i, c)),

@@ -1201,6 +1201,17 @@ structure IlUtil
     end
     fun to_dt_var v = fresh_named_var("*inline_ " ^ (Name.var2name v))
 
+    fun label2name lab = 
+      let
+	val str = Name.label2name lab
+	val len = size str
+	fun loop n = if (n < len andalso 
+			(String.sub(str,n) = #"+" orelse
+			String.sub(str,n) = #"-"))
+			then loop (n+2) else n
+	val start = loop 0
+      in String.substring(str,start,len - start)
+      end
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e
       | is_inline_bnd (BND_CON _) = true
