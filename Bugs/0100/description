@@ -1,0 +1,16 @@
+Number: 0100
+Title:       hidden hidden clashes
+Keywords:    assembler
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     as fails with redefinition of symbol "ml_hidden1_hidden4_BANGbindarg_INT" and similar identifiers
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0025
+Owner: rwh
+Status: open

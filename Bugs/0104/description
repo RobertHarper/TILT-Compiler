@@ -1,0 +1,16 @@
+Number: 0104
+Title:       hidden hidden name clash
+Keywords:    as
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     as fails with re-definition of "hidden hidden" identifiers, specifically ml_hidden1_bindTuple_INT and ml_hidden1_BANGbindarg_INT
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0029
+Owner: rwh
+Status: open

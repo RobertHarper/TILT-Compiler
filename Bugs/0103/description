@@ -1,0 +1,16 @@
+Number: 0103
+Title:       word8 problems
+Keywords:    word8
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     test case reports "wrong" for some cases
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0028
+Owner: rwh
+Status: open
