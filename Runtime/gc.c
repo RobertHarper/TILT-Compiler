@@ -90,7 +90,7 @@ void HeapAdjust(int show, unsigned int bytesRequested, Heap_t **froms, Heap_t *t
     if (cur != NULL)
       occupied += (sizeof (val_t)) * (cur->top - cur->bottom);
   }
-  copied = (sizeof (val_t)) * (to->alloc_start - to->bottom);
+  copied = (sizeof (val_t)) * (to->cursor - to->bottom);
   live = copied + bytesRequested;
   liveRatio = (double) live / (double) occupied;
   newSize = ComputeHeapSize(occupied, liveRatio);
@@ -148,7 +148,7 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
 Bitmap_t *paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps)
 {
   int count = 0, mi, i;
-  return scan_heap(label,curSpace->bottom, curSpace->alloc_start, 
+  return scan_heap(label,curSpace->bottom, curSpace->cursor, 
 		   curSpace->top, legalHeaps, NULL,
 		   0, 1);
 }
@@ -156,7 +156,7 @@ Bitmap_t *paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_
 void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   int count = 0, mi, i;
-  scan_heap(label,curSpace->bottom, curSpace->alloc_start, 
+  scan_heap(label,curSpace->bottom, curSpace->cursor, 
 	    curSpace->top, legalHeaps, legalStarts,
 	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), 0);
 }

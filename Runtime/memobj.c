@@ -219,18 +219,17 @@ void HeapInitialize(void)
 {
   int i;
   Heaps = (Heap_t *)malloc(sizeof(Heap_t) * NumHeap);
-  for (i=0; i<NumHeap; i++)
-    {
-      Heap_t *heap = &(Heaps[i]);
-      heap->id = i;
-      heap->valid = 0;
-      heap->top = 0;
-      heap->bottom = 0;
-      heap->alloc_start = 0;
-      heap->actualTop = 0;
-      heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
-      pthread_mutex_init(heap->lock,NULL);
-    }
+  for (i=0; i<NumHeap; i++) {
+    Heap_t *heap = &(Heaps[i]);
+    heap->id = i;
+    heap->valid = 0;
+    heap->top = 0;
+    heap->bottom = 0;
+    heap->cursor = 0;
+    heap->physicalTop = 0;
+    heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(heap->lock,NULL);
+  }
 }
 
 
@@ -245,7 +244,7 @@ void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top)
 {
   mem_t start, end;
   pthread_mutex_lock(heap->lock);
-  start = heap->alloc_start;
+  start = heap->cursor;
   end = start + size / (sizeof (val_t));
   if (end > heap->top) {
     start = 0;
@@ -253,7 +252,7 @@ void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *top)
   }
   else {
     PadHeapArea(start,end);
-    heap->alloc_start = end;
+    heap->cursor = end;
   }
   *bottom = start;
   *top = end;
@@ -327,7 +326,7 @@ int Heap_GetSize(Heap_t *h)
 
 int Heap_GetAvail(Heap_t *h)
 {
-  return (sizeof (val_t)) * (h->top - h->alloc_start);
+  return (sizeof (val_t)) * (h->top - h->cursor);
 }
 
 void Heap_Resize(Heap_t *h, long newsize)
