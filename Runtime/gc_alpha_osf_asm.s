@@ -8,7 +8,7 @@
 	.globl	old_alloc
 	.globl	cur_alloc_ptr
 	
-#define R_at2 $25
+#define R_at2 $23
 #define R_heap_limit $10
 #define R_heap_ptr $11	
 		

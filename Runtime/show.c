@@ -161,7 +161,7 @@ value_t show_obj(value_t s, int checkonly)
     case ARRAY_TAG:
     case RARRAY_TAG:
       {
-	unsigned int len = GET_POSSLEN(start[0]);
+	unsigned int len = (GET_POSSLEN(start[0]) + 3) / 4;
 	unsigned int type = GET_TYPE(tag);
 	start++;
 	if (!checkonly)

@@ -11,8 +11,8 @@
 #define FORWARD_TAG 0x7
 
 #define GET_TYPE(t)       (((unsigned int)t) & 0x7)
-#define POSSLEN_SHIFT     5
-#define GET_POSSLEN(t)    (((unsigned int)t) >> 5)
+#define POSSLEN_SHIFT     3
+#define GET_POSSLEN(t)    (((unsigned int)t) >> POSSLEN_SHIFT)        /* array length in bytes */
 #define GET_ARRAY_AGE(t)  ((((unsigned int)t) >> 3) & 3)
 #define GET_RECLEN(t)     (((unsigned int)t) >> 27)
 #define GET_RECMASK(t)    ((((unsigned int)t) << 5) >> 8)

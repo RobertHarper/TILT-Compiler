@@ -24,7 +24,7 @@ value_t alloc_iarray(int count, int n,
 
   {
     int *robj = (int *)obj;
-    robj[-1] = IARRAY_TAG | (count << POSSLEN_SHIFT);
+    robj[-1] = IARRAY_TAG | (count << (2+POSSLEN_SHIFT));
     while (len > 0)
       robj[--len]  = n;
   }
@@ -54,7 +54,7 @@ void evenword_align(value_t *alloc_ptr)
 value_t alloc_rarray(int count, double val,
 		     value_t *alloc_ptr, value_t limit)
 {
-  int len = 2 * count;
+  int len = 2 * count; /* in 4-byte words */
   int mask = 0;
   value_t obj;
 
@@ -74,7 +74,7 @@ value_t alloc_rarray(int count, double val,
 
   {
     int *robj = (int *)obj;
-    robj[-1] = RARRAY_TAG | (len << POSSLEN_SHIFT);
+    robj[-1] = RARRAY_TAG | (len << (2+POSSLEN_SHIFT));
     while (count > 0)
       {
 	count--;
@@ -188,7 +188,7 @@ value_t alloc_string(int strlen, char *str,
   int offset = 0;
   int wordlen = (strlen + 3) / 4;
   value_t res = 0; 
-  int tag = IARRAY_TAG | (wordlen << POSSLEN_SHIFT);
+  int tag = IARRAY_TAG | (strlen << POSSLEN_SHIFT);
 #ifdef HEAPPROFILE
   *(value_t *)(*alloc_ptr) = 30003;
   (*alloc_ptr) += 4;
@@ -200,12 +200,8 @@ value_t alloc_string(int strlen, char *str,
 
   ((int *)res)[-1] = tag;
   bcopy(str,(char *)res,strlen);
-  {
-    value_t xxx = 0;    
-    int *ires = (int *)res;
-    xxx = alloc_intrec(strlen,res,alloc_ptr,limit);
-    return xxx;
-  }
+
+  return res;
 }
 
 
@@ -215,7 +211,7 @@ value_t alloc_uninit_string(int strlen, char **raw,
   int offset = 0;
   int wordlen = (strlen + 3) / 4;
   value_t res;
-  int tag = IARRAY_TAG | (wordlen << POSSLEN_SHIFT);
+  int tag = IARRAY_TAG | (strlen << POSSLEN_SHIFT);
 #ifdef HEAPPROFILE
   *(value_t *)(*alloc_ptr) = 30004;
   (*alloc_ptr) += 4;
@@ -227,19 +223,17 @@ value_t alloc_uninit_string(int strlen, char **raw,
 
   ((int *)res)[-1] = tag;
   *raw = (char *)res;
-  {
-    value_t xxx = 0;    
-    int *ires = (int *)res;
-    xxx = alloc_intrec(strlen,res,alloc_ptr,limit);
-    return xxx;
-  }
+  return res;
 }
 
+/* this is dangerous .... */
 void adjust_stringlen(value_t str, int newlen)
 {
+  int newtag = IARRAY_TAG | (newlen << POSSLEN_SHIFT);
   value_t *obj = (value_t *)str;
-  obj[0] = newlen;
+  obj[-1] = newtag;
 }
+
 
 value_t alloc_recrec(value_t rec1, value_t rec2,
 		     value_t *alloc_ptr, value_t limit)

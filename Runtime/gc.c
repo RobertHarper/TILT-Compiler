@@ -384,6 +384,7 @@ unsigned int a,b;
       {
 	value_t *rawstart = v-1;
 	int i,upper = GET_POSSLEN(tag), newadd = 0;
+	upper = (upper + 3) / 4;
 
 	if (floatheap &&
 	    ((value_t) v) >= floatheap->bottom &&
@@ -625,15 +626,15 @@ void update_object_profile(Object_Profile_t *prof, value_t *objstart)
     {
     case IARRAY_TAG:
       prof->IArray++;
-      prof->IArrayWord += GET_POSSLEN(tag) + 1;
+      prof->IArrayWord += ((GET_POSSLEN(tag) + 3) / 4) + 1;
       break;
     case RARRAY_TAG:
       prof->RArray++;
-      prof->RArrayWord += GET_POSSLEN(tag) + 1;
+      prof->RArrayWord += GET_POSSLEN(tag) / 4 + 1;
       break;
     case ARRAY_TAG:
       prof->PArray++;
-      prof->PArrayWord += GET_POSSLEN(tag) + 1;
+      prof->PArrayWord += GET_POSSLEN(tag) / 4 + 1;
       break;
     case RECORD_TAG:
     case RECORD_SUB_TAG:
@@ -962,21 +963,21 @@ void gc_init()
 
 #ifdef HEAPPROFILE
 value_t int_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		  long req_size, int init_val, int profiletag)
+		  long req_wordsize, int init_val, int profiletag)
 {
   printf("no profiletag for int_alloc yet\n");
   exit(-1);
 }
 #else
 value_t int_alloc(unsigned long *saveregs, long sp, long ret_add, 
-		    long log_len, int init_val)
+		    long word_len, int init_val)
 {
   value_t *res = 0;
-  int i, tag = IARRAY_TAG | log_len << POSSLEN_SHIFT;
+  int i, tag = IARRAY_TAG | word_len << (2 + POSSLEN_SHIFT);
 
 #ifdef DEBUG
-  printf("\nint_alloc called with log_len = %d   init_val = %d\n",
-	 log_len, init_val);
+  printf("\nint_alloc called with word_len = %d   init_val = %d\n",
+	 word_len, init_val);
 #endif
 
   if (!generational_flag)
@@ -984,43 +985,43 @@ value_t int_alloc(unsigned long *saveregs, long sp, long ret_add,
       value_t alloc_ptr = saveregs[ALLOCPTR_REG];
       value_t alloc_limit = saveregs[ALLOCLIMIT_REG];
       
-      if (alloc_ptr + 4 * (log_len + 3) >= alloc_limit)
+      if (alloc_ptr + (word_len + 1) >= alloc_limit)
 	{
 #ifdef DEBUG
 	  printf("DOING GC inside int_alloc with a semispace collector\n");
 #endif
-	  gc_handler(saveregs,sp,ret_add,4 * (log_len + 3),0);
+	  gc_handler(saveregs,sp,ret_add, word_len + 1, 0);
 	}
       alloc_ptr = saveregs[ALLOCPTR_REG];
       alloc_limit = saveregs[ALLOCLIMIT_REG];
-      assert(alloc_ptr + 4 * (log_len + 3) < alloc_limit);
+      assert(alloc_ptr + (word_len + 1) < alloc_limit);
 #ifdef HEAPPROFILE
       *(value_t *)alloc_ptr = 30006;
       alloc_ptr += 4;
 #endif
       res = (value_t *)(alloc_ptr + 4);
-      alloc_ptr += 4 * (log_len + 1);
+      alloc_ptr += 4 * (word_len + 1);
       saveregs[ALLOCPTR_REG] = alloc_ptr;
     }
   else
     {
-      if (old_fromheap->alloc_start + 4 * (log_len + 3) >= old_fromheap->top)
+      if (old_fromheap->alloc_start + (word_len + 1) >= old_fromheap->top)
 	gc_handler(saveregs,sp,ret_add,4,0);
-      assert(old_fromheap->alloc_start + 4 * (log_len + 3) < old_fromheap->top);
+      assert(old_fromheap->alloc_start + (word_len + 1) < old_fromheap->top);
 #ifdef HEAPPROFILE
       *(value_t *)(old_fromheap->alloc_start) = 30007;
       old_fromheap->alloc_start += 4;
 #endif
       res = (value_t *)(old_fromheap->alloc_start + 4);
-      old_fromheap->alloc_start = (value_t)(res + log_len);
+      old_fromheap->alloc_start = (value_t)(res + word_len);
       old_alloc_ptr = old_fromheap->alloc_start;
       assert(old_fromheap->alloc_start < old_fromheap->top);
     }
   res[-1] = tag;
-  for (i=0; i<log_len; i++)
+  for (i=0; i<word_len; i++)
     res[i] = init_val;
 printf("TotalBytesAllocated 1: %ld\n",TotalBytesAllocated);
-  TotalBytesAllocated += 4*(log_len+1);
+  TotalBytesAllocated += 4*(word_len+1);
 printf("TotalBytesAllocated 1: %ld\n",TotalBytesAllocated);
   return (value_t)res;
 }
@@ -1040,7 +1041,7 @@ value_t ptr_alloc(unsigned long *saveregs, long sp, long ret_add,
 		    long log_len, int init_val)
 {
   value_t *res = 0;
-  int i, tag = ARRAY_TAG | log_len << POSSLEN_SHIFT;
+  int i, tag = ARRAY_TAG | log_len << (2+POSSLEN_SHIFT);
 
 #ifdef DEBUG
   printf("\nptr_alloc called with log_len = %d   init_val = %d\n",
@@ -1105,7 +1106,7 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 {
   double *rawstart = NULL;
   value_t *res = NULL;
-  int pos, i, tag = RARRAY_TAG + (2 * log_len) << (POSSLEN_SHIFT);
+  int pos, i, tag = RARRAY_TAG + (2 * log_len) << (2 + POSSLEN_SHIFT);
 
 #ifdef DEBUG
   printf("(log_len,init_val)  is  (%d, %lf)\n",log_len,init_val);
@@ -1170,7 +1171,7 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 	    {
 	      value_t far_val = (value_t) QueueAccess(float_roots,i);
 	      value_t tag = ((int *)far_val)[-1];
-	      int word_len = GET_POSSLEN(tag);
+	      int word_len = GET_POSSLEN(tag)/4;
 	      value_t start = RoundDown(far_val, floatbitmapsize);
 	      value_t end   = RoundUp(far_val+4*word_len, floatbitmapsize);
 	      int bitmap_start = (start - floatheap->bottom) / floatbitmapsize;
@@ -1207,7 +1208,7 @@ value_t float_alloc(unsigned long *saveregs, long sp, long ret_add,
 #ifdef HEAPPROFILE
   ((int *)res)[-2] = 30011;
 #endif
-  ((int *)res)[-1] = RARRAY_TAG | ((2 * log_len) << POSSLEN_SHIFT);
+  ((int *)res)[-1] = RARRAY_TAG | ((2 * log_len) << (2+POSSLEN_SHIFT));
   for (i=0; i<log_len; i++)
     ((double *)res)[i] = init_val;
 
@@ -1488,6 +1489,7 @@ void gc_handler_semi(unsigned long *saveregs, long sp, long ret_add, long req_si
 	printf("newsize = %d\n",newsize);
 	printf("toheap->top %d\n",toheap->top);
 	printf("to_ptr = %d\n",to_ptr);
+	exit(-1);
       }
     }
  
@@ -1904,6 +1906,7 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
     case IARRAY_TAG:
       {
 	unsigned int upper = GET_POSSLEN(tag);
+	upper = (upper + 3) / 4; /* round up to multiple of 4 first */
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
@@ -1912,6 +1915,7 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
     case RARRAY_TAG:
       {
 	unsigned int upper = GET_POSSLEN(tag);
+	upper /= 4;   /* already a multiple of 8 */
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
@@ -1920,6 +1924,7 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
     case ARRAY_TAG:
       {
 	unsigned int upper = GET_POSSLEN(tag);
+	upper /= 4;   /* already a multiple of 4 */
 	if (upper == 0)
 	  cur += 2;
 	else
@@ -2011,7 +2016,7 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
       break;
     case IARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag);
+	unsigned int upper = (GET_POSSLEN(tag) + 3) / 4;
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
@@ -2019,7 +2024,7 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
       }
     case RARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag);
+	unsigned int upper = GET_POSSLEN(tag) / 4;
 	if (upper == 0)
 	  upper = 1;
 	cur += 1 + upper;
@@ -2027,7 +2032,7 @@ value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr,
       }
     case ARRAY_TAG:
       {
-	unsigned int upper = GET_POSSLEN(tag);
+	unsigned int upper = GET_POSSLEN(tag) / 4;
 	if (upper == 0)
 	  cur += 2;
 	else

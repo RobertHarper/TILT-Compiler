@@ -251,7 +251,7 @@ unsigned long objlength(value_t *tagstart, value_t **result)
     case RARRAY_TAG:
     case ARRAY_TAG:
       if (GET_POSSLEN(tag))
-	return 2 + GET_POSSLEN(tag);
+	return 2 + ((GET_POSSLEN(tag) + 3) / 4);
       else
 	return 3;
     case FORWARD_TAG:
