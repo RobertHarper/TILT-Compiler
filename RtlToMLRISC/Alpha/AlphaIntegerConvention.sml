@@ -35,8 +35,8 @@ structure AlphaIntegerConvention
 		  [callPointer]
   val dedicated = [9, 10, 11, 26, 28, 29, 30, 31]
   val preserve	= calleeSaves
-  val define	= results@callerSaves1@arguments@callerSaves2
-  val use	= arguments
+  val define	= results@callerSaves1@arguments@callerSaves2@[callPointer]
+  val use	= arguments@[callPointer]
   val escape	= results@calleeSaves
 
 end
