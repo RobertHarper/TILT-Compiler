@@ -89,9 +89,10 @@ struct
        fun addToVmap (vmap, var, var_c, var_r) = 
 	   Name.VarMap.insert (vmap, var, (var_c, var_r))
 
+   in
        fun lookupVmap (var, vmap) = Name.VarMap.find (vmap, var)
 	   
-   in
+
        val empty_vmap = Name.VarMap.empty
 
        fun printVmap vmap = 
@@ -100,7 +101,7 @@ struct
 						Ppnil.pp_var v1;
 						print ",";
 						Ppnil.pp_var v2;
-						print ") "))
+						print ") ")) vmap
 	   	   
        fun newSplit (var, vmap) = 
 	   let
@@ -337,6 +338,7 @@ struct
      | xilprim (Prim.not_uint intsize)    = Prim.not_int intsize
      | xilprim (Prim.and_uint intsize)    = Prim.and_int intsize
      | xilprim (Prim.or_uint intsize)     = Prim.or_int intsize
+     | xilprim (Prim.xor_uint intsize)     = Prim.xor_int intsize
      | xilprim (Prim.lshift_uint intsize) = Prim.lshift_int intsize
 
    (* derefOneshot, derefTyvar, derefOvar.
@@ -622,13 +624,12 @@ end)
             name_r   = name_r,
 	    knd_c    = knd_c,
 	    type_r   = type_r,
+	    vmap     = vmap',
 	    valuable = true}
        end
 
      | xmod' context (Il.MOD_APP(ilmod_fun, ilmod_arg), preferred_name) =
        let
-
-	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap_of context)
 
 	   val _ = 
 	     if (!trace) then
@@ -642,8 +643,10 @@ end)
                 name_r = name_fun_r,
 		knd_c = knd_fun_c,
 		type_r = type_fun_r,
-		valuable = valuable_fun
+		valuable = valuable_fun,
+		vmap = vmap
 		} = xmod context (ilmod_fun, NONE)
+
 
 (*
 val _ = (print "\nMOD_APP: type_fun_r = \n";
@@ -655,13 +658,16 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
                 name_r = name_arg_r,
 		knd_c = knd_arg_c,
 		type_r = type_arg_r,
-		valuable = valuable_arg
-		} = xmod context (ilmod_arg, NONE)
+		valuable = valuable_arg,
+		vmap = vmap
+		} = xmod (update_vmap(context,vmap)) (ilmod_arg, NONE)
 	   val var_arg_c = 
 	     case strip_var name_arg_c
 	       of SOME v => v
 		| NONE => (perr_c name_arg_c;
 			   error "Expected constructor variable")
+
+	   val (var, var_c, var_r, vmap) = chooseName (preferred_name, vmap)
 
 	   val var_arg_r = 
 	     case name_arg_r
@@ -767,6 +773,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	    name_r    = name_r,
 	    knd_c     = knd_c,
 	    type_r    = type_r,
+	    vmap      = vmap,
 	    valuable  = valuable}
        end
    
@@ -785,10 +792,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		knd_c    = knd_mod_c,
 		type_r   = type_mod_r,
 		valuable = mod_valuable, 
+		vmap     = vmap,
 		...} = xmod context (il_module, NONE)
 
 	   val (var_proj, var_proj_c, var_proj_r, vmap) = 
-	       chooseName (preferred_name, vmap_of context)
+	       chooseName (preferred_name, vmap)
 
 	   val name_proj_c = Var_c var_proj_c
 	   val name_proj_r = Var_e var_proj_r
@@ -817,13 +825,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
 	       val con_proj_c = selectFromCon(name_mod_c, lbls)
 
-val _ = print "nilstatic....calling con_valid\n"
-
-
 	       val (_,knd_proj_c) = 
 		 Nilstatic.con_valid(NILctx_of context,con_proj_c)
-
-val _ = print "nilstatic....returned con_valid\n"
 
 (*
 	       val _ = (print "calling projectFromRecord with type_mod_r' = ";
@@ -848,7 +851,8 @@ val _ = print "nilstatic....returned con_valid\n"
 	    name_r   = name_proj_r,
 	    knd_c    = knd_proj_c,
 	    type_r   = type_proj_r,
-	    valuable = mod_valuable}
+	    valuable = mod_valuable,
+	    vmap     = vmap}
        end
 
      | xmod' context (Il.MOD_FUNCTOR(var_arg, il_arg_signat, ilmod_body), 
@@ -869,7 +873,8 @@ val _ = print "nilstatic....returned con_valid\n"
 		name_r = name_body_r,
 		knd_c = knd_body_c,
 		type_r = type_body_r,
-		valuable = body_valuable
+		valuable = body_valuable,
+		vmap = vmap
 		} = let
 			fun cont1 NILctx' =
 			    Nilcontext.c_insert_con(NILctx', var_arg_r, con_arg, cont2)
@@ -905,8 +910,8 @@ val _ = (print "cbnd_body_cat are ";
 	       else 
 		   (Il.PARTIAL, Partial)
 
-	   val (var_fun, var_fun_c, var_fun_r, _) = 
-	       chooseName (preferred_name, vmap_of context)
+	   val (var_fun, var_fun_c, var_fun_r, vmap) = 
+	       chooseName (preferred_name, vmap)
 
            val name_fun_c = Var_c var_fun_c
 	   val name_fun_r = Var_e var_fun_r
@@ -971,18 +976,19 @@ val _ = (print "knd_body_c is ";
 	    name_r = name_fun_r,
 	    knd_c = knd_fun_c,
 	    type_r = type_fun_r,
+	    vmap = vmap,
 	    valuable = true}
        end
    
      | xmod' context (Il.MOD_STRUCTURE sbnds, preferred_name) =
        let
-	   val (var_str, var_str_c, var_str_r, _) = 
-	       chooseName (preferred_name, vmap_of context)
-
 	   val {final_context, cbnd_cat, ebnd_cat, valuable, record_c_con_items,
 		record_c_knd_items, record_r_labels, record_r_field_types,
 		record_r_exp_items} = 
 		xsbnds context sbnds
+
+	   val (var_str, var_str_c, var_str_r, vmap) = 
+	       chooseName (preferred_name, vmap_of final_context)
 
 	   fun mapper (Il.SBND(l,Il.BND_CON(v,_))) = SOME(v,Proj_c(Var_c var_str_c,l))
 	     | mapper (Il.SBND(l,Il.BND_MOD(v,_))) = SOME(v,Proj_c(Var_c var_str_c,l))
@@ -1034,46 +1040,66 @@ val _ = (print "knd_body_c is ";
 	    name_r = name_str_r,
 	    knd_c = knd_str_c,
 	    type_r = type_str_r,
-	    valuable = valuable}
+	    valuable = valuable,
+	    vmap = vmap}
        end
 
     | xmod' context (il_let_mod as (Il.MOD_LET (var_loc, il_loc_mod, il_body_mod)),
 		   preferred_name) =
        let
-	   val (var_loc_c, var_loc_r, vmap') = splitVar (var_loc, vmap_of context)
+	   val (var_loc_c, var_loc_r, vmap) = splitVar (var_loc, vmap_of context)
 
 	   val {cbnd_cat = cbnd_loc_cat,
 		ebnd_cat = ebnd_loc_cat,
 		knd_c = knd_loc_c,
 		type_r = type_loc_r,
 		valuable = loc_valuable,
-	        ...} = xmod context (il_loc_mod, 
+	        vmap = vmap,
+		...} = xmod (update_vmap(context,vmap)) (il_loc_mod, 
 				   SOME (var_loc, var_loc_c, var_loc_r))
 
-	   val {cbnd_cat = cbnd_body_cat,
-		ebnd_cat = ebnd_body_cat,
-		name_c = name_let_c,
-		name_r = name_let_r,
-		knd_c = knd_let_c,
-		type_r = type_let_r,
-		valuable = body_valuable,
-                ...} =  let
-			    fun cont1 NILctx' =
-				Nilcontext.c_insert_con(NILctx',var_loc_r, type_loc_r, cont2)
-				
-			    and cont2 NILctx'' =
-				let
-				    val context' = 
-					update_NILctx
-					(update_vmap(context,vmap'), NILctx'')
-				in
-				    xmod context' (il_body_mod, preferred_name)
-				end
-			in
-			    Nilcontext.c_insert_kind
-			    (NILctx_of context, var_loc_c, knd_loc_c, cont1)
-			end
-		    
+
+	   local
+	       val context' = update_NILctx_cbndcat(context, cbnd_loc_cat)
+	       val context'' = update_NILctx_ebndcat(context', ebnd_loc_cat)
+	       val context''' = update_vmap(context'',vmap)
+	       val il_body_mod' = (case il_body_mod of
+				       Il.MOD_SEAL(m,_) => m
+				     | _ => il_body_mod)
+	   in
+	       val {cbnd_cat = cbnd_body_cat,
+		    ebnd_cat = ebnd_body_cat,
+		    name_c = name_let_c,
+		    name_r = name_let_r,
+		    knd_c = knd_let_c,
+		    type_r = type_let_r,
+		    valuable = body_valuable,
+		    vmap = vmap, ...} =  
+			     xmod context''' (il_body_mod', preferred_name)
+	       val (cbnd_body_cat,knd_let_c,type_let_r) = 
+		   case il_body_mod of
+		       Il.MOD_SEAL(m,s) => 
+			   let 
+			       val mod_cname = 
+				   (case name_let_c of
+					Var_c v => v
+				      | _ => error "name_let_c not a var_c")
+			       val (kc,tr) = xsig context'''(name_let_c,s)
+			       fun mapper(t as (v,k,c)) = 
+				   if (Name.eq_var(v,mod_cname))
+				       then (v,kc,c)
+				   else t
+			       val cbnd_body_list = 
+				   map mapper (flattenCatlist cbnd_body_cat)
+			   in  (LIST cbnd_body_list,kc,tr)
+			   end
+		     | _ => (cbnd_body_cat, knd_let_c, type_let_r)
+	   end
+(*
+	   val _ = (print "knd_let_c is:\n";
+		    Ppnil.pp_kind knd_let_c;
+		    print "\n")
+*)		    
            val cbnd_let_cat = APP[cbnd_loc_cat, cbnd_body_cat]
            val ebnd_let_cat = APP[ebnd_loc_cat, ebnd_body_cat]
 
@@ -1084,7 +1110,8 @@ val _ = (print "knd_body_c is ";
 	    name_r = name_let_r,
 	    knd_c = knd_let_c,
 	    type_r = type_let_r,
-	    valuable = loc_valuable andalso body_valuable}
+	    valuable = loc_valuable andalso body_valuable,
+	    vmap = vmap}
        end
 
    and xsbnds context il_sbnds =
@@ -1092,7 +1119,7 @@ val _ = (print "knd_body_c is ";
 	   val this_call = ! xsbnds_count
 	   val _ = 
 	       if (!debug andalso !full_debug) then
-		   (xcon_count := this_call + 1;
+		   (xsbnds_count := this_call + 1;
 		    print ("Call " ^ (Int.toString this_call) ^ " to xsbnds\n");
 		    Ppil.pp_sbnds il_sbnds;
 		    print ("\n");
@@ -1440,13 +1467,16 @@ val _ = (print "knd_body_c is ";
        let
 
            (* Unfortunately, the HIL may duplicate variables, and the flattening
-              of modules may put duplicates that used to have disjoing scopes
+              of modules may put duplicates that used to have disjoint scopes
               into overlapping scopes. *)
 
-	   val (var,rest) = (case Nilcontext.find_kind(NILctx_of context, var) of
+	   val (var,rest_il_sbnds) = 
+	       (case Nilcontext.find_kind(NILctx_of context, var) of
 				NONE => (var,rest_il_sbnds)
-			      | SOME _ => let val _ = print ("WARNING (xsbnds/BND_CON):  " ^ 
-				                             "Duplicate variable found\n")
+			      | SOME _ => let val _ = (print ("WARNING (xsbnds/BND_CON):  " ^
+				                             "Duplicate variable found:");
+						       Ppnil.pp_var var;
+						       print "\n")
                                               val v = Name.derived_var var
 					      val table = [(var, Il.CON_VAR v)]
 				 	      val Il.MOD_STRUCTURE rest' = 
@@ -1477,14 +1507,34 @@ val _ = (print "knd_body_c is ";
 
      | xsbnds_rewrite_3 context (Il.SBND(lbl, Il.BND_MOD(var, il_module))::rest_il_sbnds) =
        let
-	   val (var_c, var_r, vmap') = splitVar (var, vmap_of context)
+
+           (* Unfortunately, the HIL may duplicate variables, and the flattening
+              of modules may put duplicates that used to have disjoint scopes
+              into overlapping scopes. *)
+
+	   val (var,rest_il_sbnds) = 
+	       (case lookupVmap(var,vmap_of context) of
+		    NONE => (var,rest_il_sbnds)
+		  | SOME _ => let val _ = (print ("WARNING (xsbnds/BND_MOD):  " ^
+				                             "Duplicate variable found:");
+						       Ppnil.pp_var var;
+						       print "\n")
+                                              val v = Name.derived_var var
+					      val table = [(var, Il.MOD_VAR v)]
+				 	      val Il.MOD_STRUCTURE rest' = 
+						  Ilutil.mod_subst_modvar(Il.MOD_STRUCTURE rest_il_sbnds,table)
+					  in (v,rest')
+					  end)
+
+	   val (var_c, var_r, vmap) = splitVar (var, vmap_of context)
 	       
 	   val {cbnd_cat = cbnd_mod_cat, 
 		ebnd_cat = ebnd_mod_cat,
 		knd_c    = knd_mod_c,
 		type_r   = type_mod_r,
 		valuable = mod_valuable, 
-		...} = xmod context (il_module, SOME(var, var_c, var_r))
+		vmap = vmap,
+		...} = xmod (update_vmap(context,vmap)) (il_module, SOME(var, var_c, var_r))
 (*
 
            val _ = (print "Before binding of ";
@@ -1497,7 +1547,7 @@ val _ = (print "knd_body_c is ";
 	       (update_NILctx_ebndcat
 		(update_NILctx_cbndcat(context, cbnd_mod_cat),
 		 ebnd_mod_cat),
-		vmap')
+		vmap)
 (*
            val _ = (print "After binding of ";
 		    Ppnil.pp_var var;
@@ -2306,7 +2356,7 @@ val _ = (print "knd_body_c is ";
 	 val {cbnd_cat, ebnd_cat, 
 	      name_c, name_r, 
 	      knd_c, type_r,
-	      valuable} = xmod context (module, NONE)
+	      valuable, ...} = xmod context (module, NONE)
 	   
 	   val specialize = (Name.eq_label(label, Ilutil.it_lab)) andalso 
                             ! elaborator_specific_optimizations
@@ -2536,7 +2586,7 @@ val _ = (print "knd_body_c is ";
 
    and xsig context (con, il_sig) =
        let
-	   val this_call = ! xmod_count
+	   val this_call = ! xsig_count
 	   val _ = 
 	       if (!debug) then
 		   (xsig_count := this_call + 1;

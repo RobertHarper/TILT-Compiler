@@ -19,7 +19,7 @@ struct
   structure Prim = ArgPrim
   open Nil Util 
 
-  val debug = ref true
+  val debug = ref false
 
   val unzip = ListPair.unzip
   val zip = ListPair.zip

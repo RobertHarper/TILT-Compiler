@@ -429,7 +429,7 @@ val _ = (print "Nil final context is:\n";
 	in  nilmod
 	end
 
-    fun showmod debug str nilmod = 
+    fun showmod debug str (filename,nilmod) = 
 	if debug
 	    then (print "\n\n=======================================\n\n";
 		  print str;
@@ -437,32 +437,32 @@ val _ = (print "Nil final context is:\n";
 		  print (Int.toString (NilUtil.module_size nilmod));
 		  PpNil.pp_module nilmod;
 		  print "\n")
-	else (print str; print " complete\n")
+	else (print str; print " complete: "; print filename; print "\n")
 	    
-    fun pcompile' debug (ctxt,sbnd_entries) =
+    fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
 	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnd_entries)
-	    val _ = showmod debug "Phase-split" nilmod
+	    val _ = showmod debug "Phase-split" (filename,nilmod)
 	in
 	    nilmod
 	end
 
-    fun compile' debug (ctxt,sbnd_entries) =
+    fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
 	    val nilmod = (Stats.timer("Phase-splitting",phasesplit)) (ctxt,sbnd_entries)
-	    val _ = showmod debug "Phase-split" nilmod
+	    val _ = showmod debug "Phase-split" (filename, nilmod)
 
 	    val nilmod = (Stats.timer("Cleanup",Cleanup.cleanModule)) nilmod
-	    val _ = showmod debug "Cleanup" nilmod
+	    val _ = showmod debug "Cleanup" (filename, nilmod)
 
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
-	    val _ = showmod debug "Renaming" nilmod
+	    val _ = showmod debug "Renaming" (filename, nilmod)
 
  	    val nilmod' = 
 	      if (!typecheck_before_opt) then
@@ -471,12 +471,12 @@ val _ = (print "Nil final context is:\n";
 		nilmod
 	    val _ = 
 	      if (!typecheck_before_opt) then 
-		  showmod debug "Pre-opt typecheck" nilmod'
+		  showmod debug "Pre-opt typecheck" (filename, nilmod')
 	      else ()
 
 	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if (!do_opt)
-			then showmod debug "Optimization" nilmod
+			then showmod debug "Optimization" (filename,nilmod)
 		    else ()
 
  	    val nilmod' = 
@@ -486,7 +486,7 @@ val _ = (print "Nil final context is:\n";
 		nilmod
 	    val _ = 
 	      if (!typecheck_after_opt) then 
-		  showmod debug "Post-opt typecheck" nilmod'
+		  showmod debug "Post-opt typecheck" (filename, nilmod')
 	      else ()
 	
 (*
@@ -496,10 +496,10 @@ val _ = (print "Nil final context is:\n";
 *)
 
 	    val nilmod = (Stats.timer("Closure-conversion",ToClosure.close_mod)) nilmod
-	    val _ = showmod debug "Closure-conversion" nilmod
+	    val _ = showmod debug "Closure-conversion" (filename, nilmod)
 
 	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
-	    val _ = showmod debug "Renaming2" nilmod
+	    val _ = showmod debug "Renaming2" (filename, nilmod)
 
  	    val nilmod' = 
 	      if (!typecheck_after_cc) then
@@ -508,7 +508,7 @@ val _ = (print "Nil final context is:\n";
 		nilmod
 	    val _ = 
 	      if (!typecheck_after_cc) then 
-		  showmod debug "Post-cc Typecheck" nilmod'
+		  showmod debug "Post-cc Typecheck" (filename, nilmod')
 	      else ()
 	in  nilmod
 	end
@@ -519,12 +519,12 @@ val _ = (print "Nil final context is:\n";
 
     fun meta_compiles debug filenames = 
 	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
-	in  map (compile' debug) mods
+	in  map (compile' debug) (Listops.zip filenames mods)
 	end
 
     fun meta_pcompiles debug filenames = 
 	let val mods = valOf ((if debug then linkil_tests else LinkIl.compiles) filenames)
-	in  map (pcompile' debug) mods
+	in  map (pcompile' debug) (Listops.zip filenames mods)
 	end
 
     fun pcompile filename = hd(meta_pcompiles false [filename])
@@ -543,7 +543,7 @@ val _ = (print "Nil final context is:\n";
 		(true, SOME m) => m
 	      | _ => let val (ctxt,sbnd_entries) =
 				LinkIl.compile_prelude(use_cache,filename)
-			 val m = compile' false (ctxt,sbnd_entries)
+			 val m = compile' false (filename,(ctxt,sbnd_entries))
 			 val _ = cached_prelude := SOME m
 		     in  m
 		     end
