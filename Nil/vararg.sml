@@ -180,19 +180,39 @@ struct
 	  | _ => NOCHANGE
 
     and exp_rewrite' flatcount ({boundevars,...} : bound, arg_exp) : exp changeopt = 
-	let val x = 1
+	let val cr = con_rewrite flatcount
 	in  case arg_exp of
 	    ((Var_e _) | (Const_e _) | (Let_e _) | (Prim_e _) |
 	     (Switch_e _) | (Raise_e _) | (Handle_e _)) => NOCHANGE
-	   | (App_e (openness,Var_e v,clist,elist,eflist)) => 
-		 let val clist' = map (con_rewrite flatcount) clist
-		     val elist' = map (exp_rewrite flatcount) elist
-		     val eflist' = map (exp_rewrite flatcount) eflist
+	   | (App_e (openness,Var_e v,[],[arg],[])) => 
+		 let val arg' = exp_rewrite flatcount arg
 		     val con = (case (Name.VarMap.find(boundevars,v)) of
 				    SOME c => c
 				  | NONE => error "ill-typed App_e")
-		 in  raise Util.UNIMP (* App_e (openness,f',clist',elist',eflist') *)
+		     val nochange = App_e(openness,Var_e v, [],[arg'],[])
+		     fun change(labels,cons) = 
+			 if ((length labels) <= flatcount)
+			     then 
+				 let fun proj l = Prim_e(NilPrimOp(select l),cons,[arg'])
+				     val args' = map proj labels
+				 in  App_e(openness,Var_e v, [],args',[])
+				 end
+			 else nochange
+		 in  CHANGE_NORECURSE
+		     (case con of
+			  AllArrow_c(openness,effect,[],[argc],0w0,resc) =>
+			      (case (is_record con) of
+				   NOT_RECORD => nochange
+				 | RECORD(ls,cs) => change(ls,cs)
+				 | DYNAMIC => App_e(openness,
+						    Prim_e(NilPrimOp(make_vararg(openness,effect)),
+							   [cr argc,cr resc],
+							   [Var_e v]),
+						    [],[arg'],[])
+				 | NOT_TYPE => error "ill-formed application")
+			| _ => nochange)
 		 end
+	   | (App_e _) => NOCHANGE
 	end
 
     and con_rewrite (flatcount : int) con : con = NilUtil.con_rewrite (make_handlers flatcount) con

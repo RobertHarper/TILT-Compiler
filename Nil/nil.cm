@@ -8,6 +8,7 @@ Group
         functor   Ppnil 
 	functor   NilUtilFn
 (*	structure NilStatic *)
+        structure Linknil
 is
 
 smlnj-lib.cm             		(* ------ SML/NJ library ------ *)
