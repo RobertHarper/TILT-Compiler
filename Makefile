@@ -16,9 +16,11 @@
 #
 # To install into PREFIX, use "make install".  This copies binaries to
 # PREFIX/lib/tilt, manual pages to PREFIX/man, and wrapper scripts
-# to PREFIX/bin.
+# to PREFIX/bin.  The wrapper scripts run TILT from RUNPREFIX/lib/tilt
+# rather than PREFIX/lib/tilt.
 
 PREFIX=/usr/local
+RUNPREFIX=$(PREFIX)
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
 tilt=./Bin/tilt-nj -vv
@@ -91,16 +93,15 @@ install: FORCE
 	-mkdir $(PREFIX)/lib
 	-mkdir $(PREFIX)/lib/tilt
 	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)
-	tar cf - Bin Lib | (cd $(PREFIX)/lib/tilt && tar xf -)
+	tar cf - License Bin Lib | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/man/man4
 	cp Doc/tilt.man $(PREFIX)/man/man1/tilt.1 && chmod 644 $(PREFIX)/man/man1/tilt.1
 	cp Doc/project.man $(PREFIX)/man/man4/project.4 && chmod 644 $(PREFIX)/man/man4/project.4
-	cp Doc/interface.man $(PREFIX)/man/man4/interface.4 && chmod 644 $(PREFIX)/man/man4/interface.4
 	-mkdir $(PREFIX)/bin
 	for name in tilt tilt-nj tilt-slaves dump dump-nj; do \
 		(echo '#!/bin/sh'; \
-		 echo 'exec $(PREFIX)/lib/tilt/Bin/'$$name' $${1+"$$@"}'; \
+		 echo 'exec $(RUNPREFIX)/lib/tilt/Bin/'$$name' $${1+"$$@"}'; \
 		)>$(PREFIX)/bin/$$name && chmod 755 $(PREFIX)/bin/$$name; \
 	done
