@@ -8,6 +8,10 @@ struct
 
     structure NilUtil = NilUtilFn(structure ArgNil = Nil
 				  structure IlUtil = LinkIl.IlUtil)
+
+    structure Nilcontext = NilContextFn(structure ArgNil = Nil
+					structure PPNil = Ppnil
+					structure Cont = Cont)
 (*      
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
@@ -19,7 +23,9 @@ struct
     structure Tonil = Tonil(structure Ilstatic = LinkIl.IlStatic
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
+			    structure Nilcontext = Nilcontext
 			    structure Nilutil = NilUtil
+			    structure Ppnil = Ppnil
 			    structure Ppil = LinkIl.Ppil)
 
     structure ToClosure = ToClosure(structure Nil = Nil
@@ -39,30 +45,34 @@ struct
 	let
 	    val SOME(sbnds, decs) = LinkIl.elaborate s
 	    val _ = print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
+	    val _ = LinkIl.Ppil.pp_sbnds sbnds
             val _ = print "\nSize of IL = ";
 	    val _ = print (Int.toString (LinkIl.IlUtil.mod_size 
 					 (LinkIl.MOD_STRUCTURE sbnds)));
             val _ = print "\n\n"
 	    val _ = Compiler.Profile.reset () 
-	    val {cu_c, cu_c_kind, cu_r, cu_r_type} =
+	    val {cu_bnds, cu_c_var, cu_c_kind, cu_r_var, cu_r_type} =
 		Tonil.xcompunit decs sbnds
 	    val _ = print "\nPhase-splitting done.\n";
-	    val cu_c_closed = ToClosure.close_con cu_c
+(*	    val cu_c_closed = ToClosure.close_con cu_c
 	    val cu_c_kind_closed = ToClosure.close_kind cu_c_kind
 	    val cu_r_closed = ToClosure.close_exp cu_r
 	    val cu_r_type_closed = ToClosure.close_con cu_r_type
+*)
 (*	    val _ = Compiler.Profile.report TextIO.stdOut  *)
 	in
 	    print "phase-split results:\n";
-	    Ppnil.pp_con cu_c;
+	    Ppnil.pp_bnds cu_bnds;
 	    print "\n";
+	    Ppnil.pp_var cu_c_var;
+	    print " :: ";
 	    Ppnil.pp_kind cu_c_kind;
 	    print "\n\n";
-	    Ppnil.pp_exp cu_r;
-	    print "\n";
+	    Ppnil.pp_var cu_r_var;
+	    print " : ";
 	    Ppnil.pp_con cu_r_type;
 	    print "\n";
-	    
+(*	    
 	    print "\n\nclosure-conversion results:\n";
 	    Ppnil.pp_con cu_c_closed;
 	    print "\n";
@@ -72,9 +82,11 @@ struct
 	    print "\n";
 	    Ppnil.pp_con cu_r_type_closed;
 	    print "\n";
-	    
+       
             (cu_c_closed,cu_c_kind_closed,
 	     cu_r_closed,cu_r_type_closed)
+*)
+	    ()
 
 	end
 end

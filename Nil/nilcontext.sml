@@ -45,13 +45,13 @@ struct
   fun remove_kind ({kindmap,...}:context,var) = ignore (remove kindmap var)
 
   fun c_insert_con ({conmap,kindmap}:context,var,con,k) = 
-    c_insert (conmap,var,con,fn conmap => k {conmap=conmap,kindmap=kindmap})
+    c_insert (conmap,(var,con),fn conmap => k {conmap=conmap,kindmap=kindmap})
 
   fun c_remove_con ({conmap,kindmap}:context,var,k) = 
     c_remove (conmap,var,fn conmap => k {conmap=conmap,kindmap=kindmap})
 
   fun c_insert_kind ({kindmap,conmap}:context,var,kind,k) = 
-    c_insert (kindmap,var,kind,fn kindmap => k {conmap=conmap,kindmap=kindmap})
+    c_insert (kindmap,(var,kind),fn kindmap => k {conmap=conmap,kindmap=kindmap})
 
   fun c_remove_kind ({kindmap,conmap}:context,var,k) = 
     c_remove (kindmap,var,fn kindmap => k {conmap=conmap,kindmap=kindmap})
@@ -67,13 +67,13 @@ struct
     (print (Name.var2string var);
      print "::";
      PPNil.pp_kind kind;
-     print "/n")
+     print "\n")
 
   fun print_con (var,con) =
     (print (Name.var2string var);
      print ":";
      PPNil.pp_con con;
-     print "/n")
+     print "\n")
 
   fun print_context ({kindmap,conmap}:context) = 
     (print "\n Constructor variables and kinds are :\n";
