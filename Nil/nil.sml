@@ -11,7 +11,8 @@ struct
 
   type var = Name.var
   type label = Name.label
-  type annot = Annotation.annotation
+  datatype annotation = datatype Annotation.annotation
+
   type w32 = Word32.word
   type prim = Prim.prim
 
@@ -96,7 +97,7 @@ struct
              | Code_cb of (var * (var * kind) list * con * kind)
 
 
-  withtype confun = effect * (var * kind) list * con list * w32 * con
+  withtype annot = kind annotation
 
   datatype nilprim = 
       record of label list       (* record intro *)

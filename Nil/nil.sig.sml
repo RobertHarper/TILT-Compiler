@@ -5,7 +5,8 @@ sig
 
   type var = Name.var
   type label = Name.label
-  type annot = Annotation.annotation
+  datatype annotation = datatype Annotation.annotation
+
   type w32 = Word32.word
   type prim = Prim.prim
   type ('a,'b) sequence = ('a,'b) Util.sequence
@@ -90,6 +91,8 @@ sig
   and conbnd = Con_cb of (var * kind * con)
              | Open_cb of (var * (var * kind) list * con * kind)
              | Code_cb of (var * (var * kind) list * con * kind)
+
+  withtype annot = kind annotation
 
   datatype nilprim = 
       record of label list       (* record intro *)

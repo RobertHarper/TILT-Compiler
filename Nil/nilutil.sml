@@ -23,6 +23,7 @@ struct
 
   val unzip = ListPair.unzip
   val zip = ListPair.zip
+  val foldl_acc = Listops.foldl_acc
 
   fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
   fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
@@ -176,13 +177,60 @@ struct
 	   else
 	     Compiletime)
 
-  fun singletonize (phase,kind as Singleton_k _,con) = kind
-    | singletonize (phase,kind,con) = 
-      case phase
-	of SOME p => 
-	  Singleton_k (p,kind,con)
-	 | NONE => Singleton_k (get_phase kind,kind,con)
+  val fresh_named_var = Name.fresh_named_var
 
+  fun pull (c,kind) = 
+    (case kind
+       of Type_k p => c
+	| Word_k p => c
+	| Singleton_k (p,k,c2) => c2
+	| Record_k elts => 
+	 let
+	   fun folder (((label,var),kind),subst) = 
+	     let
+	       val kind = Subst.substConInKind subst kind
+	       val con = pull (Proj_c (c,label),kind)
+	       val subst = Subst.add subst (var,con)
+	     in
+	       ((label,con),subst)
+	     end
+	   val (entries,subst) = foldl_acc folder (Subst.empty()) (sequence2list elts)
+	 in
+	   (Crecord_c entries)
+	 end
+	| Arrow_k (openness, formals, return) => 
+	 let
+	   val vars = map (fn (v,_) => (Var_c v)) formals
+	   val c = pull (App_c (c,vars),return)
+	   val var = fresh_named_var "pull_arrow"
+	 in
+	   (*Closures?  *)
+	   case openness
+	     of Open => Let_c (Parallel,[Open_cb (var,formals,c,return)],Var_c var)
+	      | (Code | ExternCode) => Let_c (Parallel,[Code_cb (var,formals,c,return)],Var_c var)
+	      | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
+			   in  Let_c (Parallel,[Code_cb (var,formals @ [cenv] ,c,return)],
+				      Closure_c(Var_c var, Crecord_c []))
+			   end
+	 end)
+	 
+  fun selfify (con,kind) =
+    (case kind 
+       of Type_k phase => Singleton_k(phase,Type_k phase,con)
+	| Word_k phase => Singleton_k(phase,Word_k phase,con)
+	| Singleton_k(_) => kind
+	| Record_k entries => 
+	 Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
+	| Arrow_k (openness,args,return) => 
+	 let
+	   val (formal_vars,_) = ListPair.unzip args
+	   val actuals = List.map Var_c formal_vars
+	 in
+	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
+	 end)
+
+  fun singletonize (kind as Singleton_k(_,_,_),con) = kind
+    | singletonize (kind,con) = selfify(con,kind)
 
   local
     structure A : 
@@ -958,8 +1006,6 @@ struct
        of (Word_k p1, Word_k p2) => sub_phase(p1,p2)
 	| (Type_k p1, Type_k p2) => sub_phase(p1,p2)
 	| (Word_k p1, Type_k p2) => sub_phase(p1,p2)
-(*	| (Singleton_k (p1,_,_) ,Type_k p2) => sub_phase(p1,p2)
-	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k*)
 	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
 	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
 	| (Singleton_k (p1,k1,c1),k2) => 
@@ -995,6 +1041,9 @@ struct
   val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
 
   val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
+
+  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
+
 (* End exported functions *)
 
     fun alpha_normalize_con' (context:alpha_context) (con:con) = 

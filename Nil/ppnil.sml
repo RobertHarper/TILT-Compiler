@@ -199,6 +199,10 @@ functor Ppnil(structure ArgNil : NIL
 	 | All_c confun => HOVbox[String "ALL_C(", pp_confun confun, String ")"] 
 *)
 	 | AllArrow_c confun => pp_confun confun
+	 | Annotate_c (TYPECHECKED kind,con) => HOVbox[String "ANNOTE_C(Typechecked: ", 
+						       pp_kind kind, 
+						       String ",", 
+						       pp_con con, String ")"]
 	 | Annotate_c (annot,con) => HOVbox[String "ANNOTE_C(", String "annot not done", 
 					    String ",", 
 					    pp_con con, String ")"])

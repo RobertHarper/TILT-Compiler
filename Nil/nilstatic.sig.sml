@@ -4,7 +4,7 @@ signature NILSTATIC =
 
     type context 
     val debug : bool ref
-
+    val show_calls : bool ref
     (* removes the top-level singleton kind *)
     val strip_singleton : Nil.kind -> Nil.kind
 

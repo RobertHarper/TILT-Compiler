@@ -54,7 +54,8 @@ nilerror.sig.sml
 nilerror.sml
 subst.sml
 subst.sig.sml
-
+normalize.sml
+normalize.sig.sml
 (* ----- Optimizer Stuff ------- *)
 NilOpts/nilopts.sig.sml
 NilOpts/nilopts.sml

@@ -61,7 +61,6 @@ signature NILUTIL =
     val alpha_equiv_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
     val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
 
-    val alpha_sub_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
     val alpha_sub_kind : Nil.kind * Nil.kind -> bool
 
     val alpha_normalize_exp : Nil.exp -> Nil.exp
@@ -100,10 +99,9 @@ signature NILUTIL =
     val is_float_c : Nil.con -> bool
     val is_unit_c : Nil.con -> bool
     val strip_singleton : Nil.kind -> Nil.kind
-    val singletonize : (Nil.phase option * Nil.kind * Nil.con) -> Nil.kind
+    val singletonize : (Nil.kind * Nil.con) -> Nil.kind
+    val selfify : (Nil.con * Nil.kind) -> Nil.kind
+    val pull: (Nil.con * Nil.kind) -> Nil.con
     val get_arrow_return : Nil.con -> Nil.con option
     
-    val type_or_word : Nil.kind -> bool
-    val is_word : Nil.kind -> bool
-
   end

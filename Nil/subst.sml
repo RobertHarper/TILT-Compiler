@@ -153,6 +153,16 @@ functor NilSubstFn(structure Nil : NIL
 	in
 	  {test = test, subst = subst}
 	end
+
+      fun merge (map1 as {test = test1,subst = subst1},
+		 map2 as {test = test2,subst = subst2}) =
+	let
+	  fun combine (value1,value2) = value2
+	  val subst = VarMap.unionWith combine (subst1,subst2)
+	  val test = andb (test1,test2)
+	in
+	  {test = test, subst = subst}
+	end
     end
 
     fun rebind Con (var,subst) = 
@@ -348,14 +358,20 @@ functor NilSubstFn(structure Nil : NIL
 			  default = default,
 			  kind = kind}
 	   end
-
-	  | (Annotate_c (annot,con)) => 
+	  | (Annotate_c (TYPECHECKED kind,con)) => substConInCon' conmap con
+	  | (Annotate_c (annot as FREE_VARS {con_vars,exp_vars},con)) => 
 	   let
-	     val con = substConInCon' conmap con
+	     val {test,subst} = conmap
+	     val subst = VarMap.filteri (fn (v,c) => Name.VarSet.member (con_vars,v)) subst
+	     val con = 
+	       if (VarMap.numItems subst) = 0 then 
+		 con else
+		 substConInCon' {test=test,subst=subst} con
 	   in
 	     Annotate_c (annot, con)
 	   end)
       end
+
     fun id x = x
       
     fun substConInCon conmap = 
@@ -389,7 +405,7 @@ functor NilSubstFn(structure Nil : NIL
 	      end
 	  | Prim_e (allprim,cons,exps) => 
 	      let
-		val cons = map (substConInCon' conmap) cons
+		val cons = map (substConInCon conmap) cons
 		val exps = map (substExpConInExp' maps) exps
 	      in
 		(Prim_e (allprim,cons,exps))
@@ -398,7 +414,7 @@ functor NilSubstFn(structure Nil : NIL
 	  | App_e (openness,exp,cons,exps,floats) =>
 	   let
 	     val exp = substExpConInExp' maps exp
-	     val cons = map (substConInCon' conmap) cons
+	     val cons = map (substConInCon conmap) cons
 	     val exps = map (substExpConInExp' maps) exps
 	     val floats = map (substExpConInExp' maps) floats
 	   in
@@ -406,7 +422,7 @@ functor NilSubstFn(structure Nil : NIL
 	   end
 	  | Raise_e (exp,con) =>
 	   let 
-	     val con = substConInCon' conmap con
+	     val con = substConInCon conmap con
 	     val exp = substExpConInExp' maps exp
 	   in
 	     Raise_e (exp,con)
@@ -424,14 +440,14 @@ functor NilSubstFn(structure Nil : NIL
 	 of ((Prim.int _) | (Prim.uint _) |(Prim.float _)) => value
 	  | Prim.array (con,arr) => 
 	   let
-	     val con = substConInCon' conmap con
+	     val con = substConInCon conmap con
 	   in
 	     Array.modify (substExpConInExp' maps) arr;
 	     Prim.array (con,arr)
 	   end
 	| Prim.vector (con,vec) => 
 	   let
-	     val con = substConInCon' conmap con
+	     val con = substConInCon conmap con
 	   in
 	     Array.modify (substExpConInExp' maps) vec;
 	     Prim.vector (con,vec)
@@ -445,7 +461,7 @@ functor NilSubstFn(structure Nil : NIL
 	 end
 	| Prim.tag (atag,con) => 
 	 let
-	   val con = substConInCon' conmap con
+	   val con = substConInCon conmap con
 	 in
 	   Prim.tag (atag,con)
 	 end)
@@ -456,7 +472,7 @@ functor NilSubstFn(structure Nil : NIL
 	 of Con_b (var, kind, con) =>
 	   let
 	     val kind = substConInKind conmap kind
-	     val con = substConInCon' conmap con
+	     val con = substConInCon conmap con
 	     val (var,conmap) = con_rebind (var,conmap)
 	     val bnd = (Con_b (var,kind,con))
 	   in
@@ -464,7 +480,7 @@ functor NilSubstFn(structure Nil : NIL
 	   end
 	  | Exp_b (var, con, exp) =>
 	   let
-	     val con = substConInCon' conmap con
+	     val con = substConInCon conmap con
 	     val exp = substExpConInExp' maps exp
 	     val (var,expmap) = exp_rebind (var,expmap)
 	     val bnd = (Exp_b (var,con,exp))
@@ -511,7 +527,7 @@ functor NilSubstFn(structure Nil : NIL
 	   let
 	     val arg = substExpConInExp' maps arg
 	     val arms = map_second (substExpConInFunction' maps) arms
-	     val decl_cons = map (substConInCon' conmap) decl_cons
+	     val decl_cons = map (substConInCon conmap) decl_cons
 	     val default = mapopt (substExpConInExp' maps) default
 	   in
 	     Sumsw_e {info=(tagcount,decl_cons),arg=arg,
@@ -535,7 +551,7 @@ functor NilSubstFn(structure Nil : NIL
 	   end
 	  | Typecase_e {info,arg,arms,default} =>
 	   let
-	     val arg = substConInCon' conmap arg
+	     val arg = substConInCon conmap arg
 	     val arms = map_second (substExpConInFunction' maps) arms
 	     val default = mapopt (substExpConInExp' maps) default
 	   in
@@ -547,7 +563,7 @@ functor NilSubstFn(structure Nil : NIL
       let
 	fun con_folder ((var,kind),conmap) = 
 	  let
-	    val kind = substConInKind' conmap kind
+	    val kind = substConInKind conmap kind
 	    val (var,conmap) = con_rebind (var,conmap)
 	  in
 	    ((var,kind),conmap)
@@ -557,7 +573,7 @@ functor NilSubstFn(structure Nil : NIL
 
 	fun exp_folder ((var,con),expmap) = 
 	  let
-	    val con = substConInCon' conmap con
+	    val con = substConInCon conmap con
 	    val (var,expmap) = exp_rebind (var,expmap)
 	  in
 	    ((var,con),expmap)
@@ -566,7 +582,7 @@ functor NilSubstFn(structure Nil : NIL
 	  foldl_acc exp_folder expmap formals
 	val (fformals,expmap) = exp_rebind_list (fformals,expmap)
 	val body = substExpConInExp' (expmap,conmap) body
-	val return = substConInCon' conmap return
+	val return = substConInCon conmap return
       in
 	Function (effect,recursive,tformals,formals,fformals,body,return)
       end
@@ -577,9 +593,9 @@ functor NilSubstFn(structure Nil : NIL
 	  (case substitute expmap code 
 	     of SOME (Var_e var) => var
 	      | _ => code)
-	val cenv = substConInCon' conmap cenv
+	val cenv = substConInCon conmap cenv
 	val venv = substExpConInExp' maps venv
-	val tipe = substConInCon' conmap tipe
+	val tipe = substConInCon conmap tipe
       in
 	{code=code,cenv=cenv,venv=venv,tipe=tipe}
       end

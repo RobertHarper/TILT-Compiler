@@ -20,7 +20,7 @@ struct
   val var2string = Name.var2string
   val mapsequence = Util.mapsequence
   val get_phase = NilUtil.get_phase
-    
+  val selfify = NilUtil.selfify    
   fun error s = Util.error "nilcontext.sml" s
 
   local fun id () = () 
@@ -95,19 +95,6 @@ struct
 
   fun foldli_kind f acc ({kindmap,...} : context) = V.foldli f acc kindmap
     
-  local
-    open Nil
-  in
-    fun selfify (con,kind) =
-      (case kind 
-	 of Type_k phase => Singleton_k(phase,Type_k phase,con)
-	  | Word_k phase => Singleton_k(phase,Word_k phase,con)
-	  | Singleton_k(_) => kind
-	  | Record_k entries => Singleton_k(get_phase kind,kind,con)
-	  | Arrow_k (openness,args,return) => 
-	   Singleton_k(get_phase kind,kind,con))
-  end
-
   fun insert_kind ({kindmap,conmap,top_level,c_binds_top,e_binds_top}:context,var,kind) = 
     (case V.find (kindmap, var)
        of NONE => 

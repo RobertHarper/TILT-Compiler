@@ -76,6 +76,12 @@ structure Linknil (* : LINKNIL *) =
     structure NilError = NilErrorFn(structure ArgNil = Nil
 				    structure PpNil = PpNil)
 
+    structure Normalize = NormalizeFn(structure Nil = Nil
+				      structure NilUtil = NilUtil
+				      structure NilContext = NilContext
+				      structure PpNil = PpNil
+				      structure Subst = NilSubst)
+
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
 				      structure ArgNil = Nil
@@ -85,7 +91,8 @@ structure Linknil (* : LINKNIL *) =
 				      structure PpNil = PpNil
 				      structure Alpha = Alpha
 				      structure NilError = NilError
-				      structure Subst = NilSubst)
+				      structure Subst = NilSubst
+				      structure Normalize = Normalize)
 
     val nilstatic_exp_valid = NilStatic.exp_valid
 
@@ -426,7 +433,6 @@ structure Linknil (* : LINKNIL *) =
 	      if (!typecheck_before_opt) then 
 		  showmod debug "Pre-opt typecheck" nilmod'
 	      else ()
-
 
 	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if (!do_opt)

@@ -1,4 +1,7 @@
 structure Annotation : ANNOTATION = 
     struct
-	type annotation = unit
+      structure VarSet = Name.VarSet
+      datatype 'a annotation = 
+	FREE_VARS of {con_vars:VarSet.set ,exp_vars:VarSet.set} 
+      | TYPECHECKED of 'a
     end

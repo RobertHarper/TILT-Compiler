@@ -1914,7 +1914,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val (con, _) = xcon context il_con
 	   val (exp, _, valuable) = xexp context il_exp1
 	   val con' = (case con of
-			   Mu_c (flag,vc_seq,v) => Nilutil.muExpand(flag,vc_seq,v)
+			 Mu_c (flag,vc_seq,v) => Nilutil.muExpand(flag,vc_seq,v)
 			 | _ => error "type of unroll is not a mu type")
        in
 	   (Prim_e(NilPrimOp unroll, [con], [exp]), con', valuable)

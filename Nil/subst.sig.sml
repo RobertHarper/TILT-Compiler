@@ -28,6 +28,11 @@ signature NILSUBST =
      *)
     val compose : ('a subst -> 'a -> 'a) -> ('a subst * 'a subst) -> 'a subst 
 
+    (* Merge two substs, without looking at the ranges.
+     * If the domains overlap at v, the image of v in the 
+     * new map is that of the second map
+     *)
+    val merge : ('a subst * 'a subst) -> 'a subst 
     val substConInCon : con subst -> con -> con
     val substConInKind : con subst -> kind -> kind
     val substConInExp : con subst -> exp -> exp
