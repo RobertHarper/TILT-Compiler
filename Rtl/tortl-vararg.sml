@@ -6,9 +6,8 @@
 
 val number_flatten = 6
 
-structure TortlVararg
-    :> TORTL_VARARG where TortlBase = TortlBase
-=
+structure TortlVararg :> TORTL_VARARG =
+
 struct
 
 structure TortlBase = TortlBase

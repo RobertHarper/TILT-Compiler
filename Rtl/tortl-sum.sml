@@ -21,8 +21,8 @@
 (* xtagsum_dynamic record case is fragile *)
 
 
-structure TortlSum :> TORTL_SUM where TortlBase = TortlBase
-=
+structure TortlSum :> TORTL_SUM =
+
 struct
 
 structure TortlBase = TortlBase

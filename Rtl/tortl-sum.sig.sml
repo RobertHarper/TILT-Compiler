@@ -1,9 +1,8 @@
-(*$import TORTLBASE Name *)
+(*$import TortlBase Name *)
 
 signature TORTL_SUM = 
 sig
 
-  structure TortlBase : TORTL_BASE
   type state = TortlBase.state
   type var = Name.var
   type con =  Nil.con
