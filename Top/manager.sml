@@ -132,8 +132,12 @@ local
 		    | E.SRCU (U,I,dec,imports) => E.SRCU (U,I,dec,fix imports)
 		    | E.MAKE_EXE (exe,units) => E.MAKE_EXE (exe,fix' units)
 		    | E.MARK (pos,ent) => E.MARK (pos,fixEntry ent)
+		    | E.IF (e,ents,ents') =>
+			E.IF (e,fixEntries ents,fixEntries ents')
 		    | _ => ent)
-	    val groupfile = map fixEntry groupfile
+	    and fixEntries (ents : E.entries) : E.entries =
+		map fixEntry ents
+	    val groupfile = fixEntries groupfile
 	    val import = E.IMPORT (E.EXP_STR (group()))
 	in  import :: groupfile
 	end
