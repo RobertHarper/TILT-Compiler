@@ -5,10 +5,6 @@ Group
 	signature PPNIL
         signature NILCONTEXT
 
-        functor   Nil 
-        functor   Ppnil 
-	functor   NilUtilFn
-(*	structure NilStatic *)
         structure Linknil
 is
 
@@ -38,8 +34,6 @@ nilstatic.sig.sml
 nilstatic.sml 
 cont.sig.sml
 cont.sml
-typecheck.sig.sml
-(*typecheck.sml*)
 vararg.sig.sml
 vararg.sml
 nilprimutilparam.sml
@@ -48,7 +42,6 @@ nileval.sml
 toclosure.sig.sml
 toclosure.sml
 linknil.sml
-(*linkstatic.sml*)
 linearize.sig.sml
 linearize.sml
 cleanup.sig.sml

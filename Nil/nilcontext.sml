@@ -41,7 +41,7 @@ struct
       {conmap = #1 (V.remove (conmap, var)), kindmap = kindmap}
 
   fun foldli_kind f acc ({kindmap,...} : context) = V.foldli f acc kindmap
-
+    
   local
     open Nil
   in
@@ -67,6 +67,9 @@ struct
 	  | _ => error ("Constructor variable "^(var2string var)^" already in context"))
   end
        
+  fun insert_kind_list (C:context,defs : (var * kind) list) =
+    List.foldl (fn ((v,k),C) => insert_kind (C,v,k)) C defs
+
   fun find_kind ({kindmap,...}:context,var) = V.find (kindmap, var)
     
   fun remove_kind ({kindmap,conmap}:context,var) = 

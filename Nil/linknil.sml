@@ -385,6 +385,14 @@ struct
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else print "Renaming complete\n"
+	    val D = NilContext.empty()
+	    val nilmod = (Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
+	    val _ = if debug 
+			then (print "\n\n=======================================\n\n";
+			      print "nil typechecking results:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Nil typechecking complete\n"
 	    val nilmod = (Stats.timer("Beta-reduction",BetaReduce.reduceModule)) nilmod
 	    val _ = if debug 
 			then (print "\n\n=======================================\n\n";

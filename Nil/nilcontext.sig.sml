@@ -33,6 +33,7 @@ signature NILCONTEXT =
     val find_kind : context*var -> kind option
     val remove_kind : context*var -> context
     val foldli_kind : ((var * kind * 'a) -> 'a) -> 'a -> context -> 'a
+    val insert_kind_list : context* (var * kind) list -> context
 
     val c_insert_con : context*var*con*(context->'a) -> 'a
     val c_remove_con : context*var*(context -> 'a) -> 'a

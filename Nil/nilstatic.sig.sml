@@ -69,4 +69,5 @@ signature NILSTATIC =
     * to be valid.
     *)
 
+    val module_valid : context * Nil.module -> Nil.module
   end
