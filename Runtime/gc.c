@@ -29,6 +29,7 @@ int SHOW_GCERROR   = 1;
 int SHOW_GCSTATS   = 0;
 int SHOW_GCDEBUG   = 0;
 int SHOW_HEAPS     = 0;
+int SHOW_GLOBALS   = 0;
 int SHOW_GCFORWARD = 0;
 
 
@@ -145,7 +146,7 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
     mem_t stop = (mem_t) (&GLOBALS_END_VAL)[mi];
     sprintf(buffer, "globals of module %d: %s", mi, label);
     scan_heap(buffer,start,stop,stop, legalHeaps, legalStarts, 
-	      SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), 0);
+	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), 0);
   }
 }
 

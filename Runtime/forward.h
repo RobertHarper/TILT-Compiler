@@ -23,12 +23,13 @@ typedef struct CopyRange__t
   Heap_t *heap;
   expand_t *expand;
   discharge_t *discharge; 
+  int stid;
 } CopyRange_t;
 
 void dischargeWithPad(CopyRange_t *copyRange);           /* Leftover area is padded with PadHeapArea */
 void expandWithPad(CopyRange_t *copyRange, int size);    /* Leftover area is padded with PadHeapArea */
 
-void SetCopyRange(CopyRange_t *copyRange, Heap_t *heap, expand_t *expand, discharge_t *discharge);
+void SetCopyRange(CopyRange_t *copyRange, int stid, Heap_t *heap, expand_t *expand, discharge_t *discharge);
 
 unsigned long objectLength(ptr_t obj);
 
@@ -140,6 +141,7 @@ static inline int forward1_coarseParallel_stack(ploc_t vpp, CopyRange_t *copyRan
   ptr_t p = *vpp;							
   if ((val_t) p - (val_t)from->low < from->diff) {
     int bytesCopied = forward_coarseParallel(vpp,copyRange);
+    assert(*vpp != p);
     if (bytesCopied) {
       sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(*vpp);
       assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
@@ -172,6 +174,7 @@ static inline int forward2_coarseParallel_stack(ploc_t vpp, CopyRange_t *copyRan
   if (((val_t) p - (val_t)from->low < from->diff) ||
       ((val_t)  p - (val_t)from2->low < from2->diff)) {
     int bytesCopied = forward_coarseParallel(vpp,copyRange);
+    assert(*vpp != p);
     if (bytesCopied) {
       sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(*vpp);
       assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
@@ -198,6 +201,7 @@ static inline int forward1_concurrent_stack(ptr_t p, CopyRange_t *copyRange, ran
 { 
   if ((val_t) p - (val_t)from->low < from->diff) {
     int bytesCopied = copy_coarseParallel(p,copyRange);
+    assert((ptr_t) p[-1] != p);
     if (bytesCopied) {
       sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(p[-1]);
       assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));

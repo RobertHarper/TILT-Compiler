@@ -328,6 +328,7 @@ void thread_init()
     char temp[40];
     SysThread_t *sth = &(SysThreads[i]); /* Structures are by-value in C */
     sth->stid = i;
+    sth->LocalCursor = 0;
     sth->allocStart = StartHeapLimit;
     sth->allocCursor = StartHeapLimit;
     sth->allocLimit = StartHeapLimit;

@@ -19,6 +19,7 @@
 #include "gc_large.h"
 
 
+
 /* ------------------  Generational array allocation routines ------------------- */
 
 static mem_t alloc_big(int byteLen, int hasPointers)
@@ -167,6 +168,8 @@ void GCStop_GenPara(SysThread_t *sysThread)
   */
   isFirst = (asynchReachBarrier(&synch1)) == 0;
   if (isFirst) {
+    if (paranoid) 
+      paranoid_check_all(nursery, tenuredFrom, NULL, NULL);
     /* A Major GC is forced if the tenured space is potentially too small */
     if ((tenuredFrom->top - tenuredFrom->cursor) < 
 	2 * (nursery->top - nursery->bottom))
@@ -186,14 +189,15 @@ void GCStop_GenPara(SysThread_t *sysThread)
     ;
 
   /* Get local ranges ready for use; check local stack empty; reset root lists */
-  assert(sysThread->LocalCursor = 0);
+  assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
 
   /* All processors compute thread-specific roots in parallel
      and determine whether a major GC has been requested. */
   while ((curThread = NextJob()) != NULL) {
-    assert(curThread->requestInfo >= 0);
-    FetchAndAdd(&req_size, curThread->requestInfo);
+    /* If negative, requestnfo signifies full writelist */
+    if (curThread->requestInfo >= 0)
+      FetchAndAdd(&req_size, curThread->requestInfo);
     local_root_scan(sysThread,curThread);
     if (GCType == Minor && curThread->request == MajorGCRequestFromC) 
       GCType = Major;      
@@ -229,9 +233,9 @@ void GCStop_GenPara(SysThread_t *sysThread)
     ;
 
   if (GCType == Minor)
-    SetCopyRange(&copyRange, tenuredFrom, expandWithPad, dischargeWithPad);
+    SetCopyRange(&copyRange, sysThread->stid, tenuredFrom, expandWithPad, dischargeWithPad);
   else
-    SetCopyRange(&copyRange, tenuredTo, expandWithPad, dischargeWithPad);
+    SetCopyRange(&copyRange, sysThread->stid, tenuredTo, expandWithPad, dischargeWithPad);
 
   /* Now forward all the roots which initializes the local work stacks */
   while (!QueueIsEmpty(sysThread->root_lists)) {
@@ -265,24 +269,26 @@ void GCStop_GenPara(SysThread_t *sysThread)
   asynchReachBarrier(&synch3);
   if (diag)
     printf("Proc %d: Entering global state\n",sysThread->stid);
-  while (!(asynchCheckBarrier(&synch3, NumSysThread, &synch2))) {
-    if (!(isEmptyGlobalStack(workStack))) {
-      int i, numToFetch = 10;
-      SynchStart(workStack);
-      fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
-      /* Work on up to 10 items */
-      for (i=0; i < 10 && sysThread->LocalCursor > 0; i++) {
-	loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
-	if (GCType == Minor)
-	  scan1_object_coarseParallel_stack(grayCell,&copyRange,&nursery->range,&tenuredTo->range,sysThread);
-	else 
-	  scan2_object_coarseParallel_stack(grayCell,&copyRange,&nursery->range,&tenuredFrom->range,&tenuredTo->range,sysThread);
-      }
-      SynchMid(workStack);
-      moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
-      SynchEnd(workStack);
+  while (1) {
+    int i, numToFetch = 10, numToWork = 20;
+    if (asynchCheckBarrier(&synch3, NumSysThread, &synch2) &&
+	isEmptyGlobalStack(workStack))
+      break;
+    /* Stack may be empty at this point */
+    SynchStart(workStack);
+    fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
+    for (i=0; i < numToWork && sysThread->LocalCursor > 0; i++) {
+      loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
+      if (GCType == Minor)
+	scan1_object_coarseParallel_stack(grayCell,&copyRange,&nursery->range,&tenuredFrom->range,sysThread);
+      else 
+	scan2_object_coarseParallel_stack(grayCell,&copyRange,&nursery->range,&tenuredFrom->range,&large->range,sysThread);
     }
+    SynchMid(workStack);
+    moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+    SynchEnd(workStack);
   }
+  assert(isEmptyGlobalStack(workStack));
   if (GCType != Minor)
     gc_large_addRoots(sysThread->largeRoots);
 

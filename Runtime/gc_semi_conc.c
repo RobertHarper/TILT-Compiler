@@ -218,7 +218,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
 
   /* Get local ranges ready for use */
   assert(sysThread->LocalCursor == 0);
-  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+  SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
 
   if (diag)
     printf("Proc %d: Scanning/Replicating %d to %d\n",sysThread->stid,allocCurrent,allocStop);
@@ -240,7 +240,7 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
   while (writelistCurrent < writelistStop) {
     ptr_t primary = *writelistCurrent++, replica;
     tag_t tag;
-    int wordDisp = (int) *writelistCurrent++;
+    int byteDisp = (int) *writelistCurrent++;
 
     forward1_concurrent_stack(primary,&copyRange,&fromSpace->range,sysThread);
     replica = (ptr_t) primary[-1];
@@ -248,19 +248,21 @@ void GCRelease_SemiConc(SysThread_t *sysThread)
 
     switch (GET_TYPE(tag)) {
     case PARRAY_TAG: {
+      int wordDisp = byteDisp/ sizeof(val_t);
       ptr_t primaryField = (ptr_t) primary[wordDisp], replicaField;
       forward1_concurrent_stack(primaryField,&copyRange,&fromSpace->range,sysThread);
-      replicaField = (ptr_t) primaryField[-1];
+      replicaField = IsTagData(primaryField) ? primaryField : (ptr_t) primaryField[-1];
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
     case IARRAY_TAG: {
+      int wordDisp = byteDisp/ sizeof(val_t);
       int primaryField = (int) primary[wordDisp];
       replica[wordDisp] = primaryField;       /* update replica with primary's non-pointer value */
       break;
     }
     case RARRAY_TAG: {
-      int doublewordDisp = wordDisp * sizeof(val_t) / (sizeof(double));
+      int doublewordDisp = byteDisp / (sizeof(double));
       double primaryField = (int) primary[doublewordDisp];
       replica[doublewordDisp] = primaryField;  /* update replica with primary's non-pointer value */
       break;
@@ -290,7 +292,7 @@ static void do_work(SysThread_t *sysThread, int bytesToCopy)
   int lastAndEmpty = 0;
 
   assert(sysThread->LocalCursor == 0); 
-  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+  SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
 
   while (!(isEmptyGlobalStack(workStack)) && bytesCopied < bytesToCopy) {
     int i;
@@ -309,8 +311,11 @@ static void do_work(SysThread_t *sysThread, int bytesToCopy)
   /* XXX wastage of space */
   copyRange.discharge(&copyRange);
 
-  if (lastAndEmpty)
+  if (lastAndEmpty) {
+    if (diag)
+      printf("Proc %d: Turning Collector Off\n", sysThread->stid); 
     CollectorOff(sysThread);
+  }
   flushStore();
 }
 
@@ -323,10 +328,12 @@ static int GCTry_SemiConcHelp(SysThread_t *sysThread, int roundSize)
   switch (GCStatus) {
     case GCOff: 
     case GCOn: 
+    case GCPendingOn: 
        GetHeapArea(fromSpace,roundSize,&tmp_alloc,&tmp_limit);
        break;
-    case GCPendingOn: 
     case GCPendingOff: 
+      tmp_alloc = tmp_limit = 0;
+      break;
     default : 
        assert(0);
   }
@@ -366,7 +373,7 @@ static void CollectorOn(SysThread_t *sysThread)
   /* Check local stack empty; reset root lists */
   assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
-  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+  SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
 
   req_size = 0;
   ResetJob();

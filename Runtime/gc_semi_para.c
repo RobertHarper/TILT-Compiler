@@ -121,7 +121,7 @@ static void stop_copy(SysThread_t *sysThread)
   /* All threads get local structures ready */
   assert(sysThread->LocalCursor == 0);
   QueueClear(sysThread->root_lists);
-  SetCopyRange(&copyRange, toSpace, expandWithPad, dischargeWithPad);
+  SetCopyRange(&copyRange, sysThread->stid, toSpace, expandWithPad, dischargeWithPad);
 
   /* Write list can be ignored */
   discard_writelist(sysThread);
@@ -167,22 +167,23 @@ static void stop_copy(SysThread_t *sysThread)
   asynchReachBarrier(&numGlobalThread);
   if (diag)
     printf("Proc %d: Entering global state\n",sysThread->stid);
-  while (!(asynchCheckBarrier(&numGlobalThread, NumSysThread, &numWaitThread))) {
-    if (!(isEmptyGlobalStack(workStack))) {
-      int i, numToFetch = 10;
-      SynchStart(workStack);
-      fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
-      /* Work on up to 10 items */
-      for (i=0; i < 10 && sysThread->LocalCursor > 0; i++) {
-	loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
+  while (1) {
+    int i, numToFetch = 10, numToWork = 20;
+    if (asynchCheckBarrier(&numGlobalThread, NumSysThread, &numWaitThread) &&
+	isEmptyGlobalStack(workStack))
+      break;
+    /* Stack may be empty at this point */
+    SynchStart(workStack);
+    fetchFromGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor), numToFetch);
+    for (i=0; i < numToWork && sysThread->LocalCursor > 0; i++) {
+      loc_t grayCell = (loc_t)(sysThread->LocalStack[--sysThread->LocalCursor]);
 	scan1_object_coarseParallel_stack(grayCell,&copyRange,&fromSpace->range,&toSpace->range,sysThread);
-      }
-      SynchMid(workStack);
-      moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
-      SynchEnd(workStack);
     }
+    SynchMid(workStack);
+    moveToGlobalStack(workStack,sysThread->LocalStack, &(sysThread->LocalCursor));
+    SynchEnd(workStack);
   }
-
+  assert(isEmptyGlobalStack(workStack));
   copyRange.discharge(&copyRange);
 
   /* Wait for all active threads to reach this point so all forwarding is complete */

@@ -1335,10 +1335,12 @@ struct
 	  val effect = (case effect of
 			    Total => Total
 			  | Partial => if body_valuable then 
-				          (print "Making function ";
-					   Ppnil.pp_var fnvar;
-					   print " Total\n";
-					   Total) 
+				          (if (!debug)
+					       then (print "Making function ";
+						     Ppnil.pp_var fnvar;
+						     print " Total\n")
+					   else ();
+					   Total)
 				       else Partial)
 (*
 	  val _ = (print "Function ";

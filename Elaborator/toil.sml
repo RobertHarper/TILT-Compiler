@@ -1543,7 +1543,7 @@ val _ = print "plet0\n"
 	      end
 	| Ast.ExceptionDec [Ast.EbGen {exn,etype}] =>
 		let 
-		  val exn_str = Symbol.symbolToString exn
+		  val exn_str = Symbol.name exn
 		  val id_bar = symbol_label exn
 		  val var = fresh_named_var "exn_stamp"
 		  val mkvar = fresh_named_var "mk"

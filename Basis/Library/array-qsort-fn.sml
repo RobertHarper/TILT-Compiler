@@ -1,4 +1,4 @@
-(*$import MONO_ARRAY_SORT *)
+(*$import TopLevel MONO_ARRAY_SORT *)
 (* array-qsort-fn.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

@@ -10,6 +10,7 @@
 #include "exn.h"
 #include "til-signal.h"
 #include "thread.h"
+#include "global.h"
 
 #ifdef alpha_osf
 #include <siginfo.h>
@@ -321,22 +322,22 @@ void fpe_handler(int signum,
     case FPE_INTDIV:
       if (paranoid) 
 	printf("Integer divide by zero: %d %d ",errno,code);
-      raise_exception(uctxt,divide_exn);
+      raise_exception(uctxt,DivideByZeroExn);
       break;
     case FPE_FLTDIV:
       if (paranoid) 
 	printf("Float divide by zero: %d %d ",errno,code);
-      raise_exception(uctxt,divide_exn);
+      raise_exception(uctxt,DivideByZeroExn);
       break;
     case FPE_INTOVF:
       if (paranoid) 
 	printf("Integer overflow: we are not getting this... %d %d ",errno,code);
-      raise_exception(uctxt,overflow_exn);
+      raise_exception(uctxt,OverflowExn);
       break;
     case FPE_FLTOVF: 
       if (paranoid)
 	printf("Float OR integer overflow: %d %d ",errno,code);
-      raise_exception(uctxt,overflow_exn);
+      raise_exception(uctxt,OverflowExn);
       break;
     case FPE_FLTUND:
       printf("Float underflow: %d %d ",errno,code);

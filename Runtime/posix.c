@@ -1291,3 +1291,20 @@ ptr_t til_realtime()
   return alloc_intint(tp.time, tp.millitm);
 }
 
+
+void printString(ptr_t str)
+{
+  char buf[1024];
+  int len;
+  tag_t tag = str[-1];
+  if (IS_FORWARDPTR(tag))
+    tag = ((ptr_t)tag) [-1];
+  len = GET_ARRLEN(tag);
+  if (!(len + 1 <= sizeof(buf))) {
+    printf("str = %d\n", str);
+    assert(0);
+  }
+  strncpy(buf, (char *) str, len);
+  buf[len] = 0;
+  printf("%s", buf);
+}

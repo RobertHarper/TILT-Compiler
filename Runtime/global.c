@@ -24,10 +24,12 @@ extern unsigned long _ftext;
 extern unsigned long _fbss;
 extern unsigned long _end;
 
-ptr_t DivideByZeroExn = 0;
-ptr_t OverflowExn = 0;
 mem_t datastart, dataend;
 mem_t textstart, textend;
+
+/* From Basis */
+extern ptr_t Div_r_INT, Overflow_r_INT;
+ptr_t DivideByZeroExn, OverflowExn;
 
 /* Little allocation area for data allocated by the runtime. */
 static mem_t RuntimeGlobalData_Start;
@@ -77,15 +79,8 @@ void global_init()
   RuntimeGlobalData_Cur = RuntimeGlobalData_Start;
   RuntimeGlobalData_End = RuntimeGlobalData_Start + RuntimeGlobalDataSize;
 
-  fields[0] = MLEXN_DIVZERO;
-  fields[1] = 0;
-  masks[0] = 0;
-  DivideByZeroExn = alloc_record(fields,masks,2);
-
-  fields[0] = MLEXN_OVERFLOW;
-  fields[1] = 0;
-  masks[0] = 0;
-  OverflowExn  = alloc_record(fields,masks,2);
+  DivideByZeroExn = Div_r_INT;
+  OverflowExn  = Overflow_r_INT;
   
 #ifdef alpha_osf
   datastart = (mem_t) &_fdata;

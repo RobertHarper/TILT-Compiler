@@ -48,6 +48,7 @@ extern int SHOW_GCFORWARD;
 extern int SHOW_GCDEBUG;
 extern int SHOW_GCERROR;
 extern int SHOW_HEAPS;
+extern int SHOW_GLOBALS;
 extern int MinHeap, MaxHeap;
 extern double TargetRatio;
 extern int StackSize;

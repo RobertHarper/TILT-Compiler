@@ -115,7 +115,8 @@ struct option_entry table[] =
    0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
    0, "gcforward", &SHOW_GCFORWARD, "Show object forwarding infomation during GC",
    0, "gcerror", &SHOW_GCERROR, "Show GC errors",
-   0, "gcheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
+   0, "showheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
+   0, "showglobals", &SHOW_GLOBALS, "Show globals before and after each GC",
    1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
    1, "stacksize", &StackSize, "Stack size of threads measured in Kbytes",
    1, "proc", &NumSysThread, "Use this many processors",
@@ -167,8 +168,10 @@ void process_option(int argc, char **argv)
 	}
 	if (matched) break;
       }
-      if (!matched)
+      if (!matched) {
 	printf("Unknown option argument '%s'\n",option);
+	assert(0);
+      }
     }
   if (semi) collector_type = Semispace;
   if (gen) collector_type = Generational;

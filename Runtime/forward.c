@@ -257,6 +257,8 @@ mem_t forward(ploc_t vpp, mem_t alloc_ptr)
 
 void dischargeWithPad(CopyRange_t *copyRange)
 {
+  if (diag)
+    printf("Proc %d: discharge %d - %d - %d\n", copyRange->stid, copyRange->start, copyRange->cursor, copyRange->stop);
   /* Include unused space in copy count */
   gcstat_normal(0, (val_t) copyRange->stop - (val_t) copyRange->start, 0);
   PadHeapArea(copyRange->cursor, copyRange->stop);
@@ -266,15 +268,22 @@ void dischargeWithPad(CopyRange_t *copyRange)
 void expandWithPad(CopyRange_t *copyRange, int size)
 {
   int roundSize = RoundUp(size, pagesize);
+  mem_t oldStart = copyRange->start, oldCursor = copyRange->cursor, oldStop = copyRange->stop;
   /* Include unused space in copy count */
   gcstat_normal(0, (val_t) copyRange->stop - (val_t) copyRange->start, 0);
   PadHeapArea(copyRange->cursor, copyRange->stop);
   GetHeapArea(copyRange->heap, roundSize, &copyRange->start, &copyRange->stop);
   copyRange->cursor = copyRange->start;
+  if (diag)
+    printf("Proc %d: expand (%d - %d - %d) to (%d - %d - %d)\n", 
+	   copyRange->stid, 
+	   oldStart, oldCursor, oldStop,
+	   copyRange->start, copyRange->cursor, copyRange->stop);
 }
 
-void SetCopyRange(CopyRange_t *copyRange, Heap_t *heap, expand_t *expand, discharge_t *discharge)
+void SetCopyRange(CopyRange_t *copyRange, int stid, Heap_t *heap, expand_t *expand, discharge_t *discharge)
 {
+  copyRange->stid = stid;
   copyRange->start = copyRange->cursor = copyRange->stop = 0;
   copyRange->heap = heap;
   copyRange->expand = expand;
@@ -464,7 +473,9 @@ int copy_coarseParallel(ptr_t white, CopyRange_t *copyRange)
     default:
       if (IS_FORWARDPTR(tag)) {
 	ptr_t gray = (ptr_t) tag;
-	assert(!(IS_FORWARDPTR(gray[-1])));
+	if (IS_FORWARDPTR(gray[-1]))
+	  printf("Proc %d: white = %d, gray = %d, tag = %d\n", copyRange->stid, white, gray, gray[-1]);
+	assert(!(IS_FORWARDPTR(gray[-1]))); /* Make sure object is not doubly forwarded */
 	return 0;
       }
       else {
@@ -479,6 +490,7 @@ int forward_coarseParallel(ploc_t vpp, CopyRange_t *copyRange)
 {
   ptr_t obj = *vpp;
   int bytesCopied = copy_coarseParallel(obj, copyRange);
+  assert(obj != obj[-1]);
   *vpp = (loc_t) obj[-1];
   return bytesCopied;
 }
@@ -948,7 +960,7 @@ int scan1_object_coarseParallel_stack(ptr_t gray,  CopyRange_t *copyRange,
       }
     case SKIP_TAG:
     default:
-      printf("\n\nScan1_object_coarseParallel_stack impossible: tag = %d at gray=%d\n",tag,gray);
+      printf("\n\nProc %d: Scan1_object_coarseParallel_stack got bad tag: tag = %d at gray=%d\n",copyRange->stid,tag,gray);
       assert(0);
     }
   assert(0);

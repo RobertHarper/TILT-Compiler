@@ -24,6 +24,7 @@ structure Tortl :> TORTL =
 struct
 
   val diag = ref false
+  val extraWordForEmptyArray = Stats.ff "extraWordForEmptyArray"
   val debug = Stats.ff("TortlDebug")
   val debug_full_when = Stats.int("TortlDebugFull")
   val _ = debug_full_when := 99999
@@ -282,7 +283,7 @@ struct
 			     | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
 			     | _ => wordVector())
 		  (* Empty arrays have one word of storage for the collector *)
-		  val _ = if (numElem = 0w0)  
+		  val _ = if (!extraWordForEmptyArray andalso numElem = 0w0)  
 			       then add_data(INT32 0w0)
 			   else ()
 	      in  (VALUE(LABEL label), state)
