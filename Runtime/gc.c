@@ -614,7 +614,7 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 #ifdef solaris
   curThread->saveregs[LINK] = (val_t) (&PopStackletFromML) - 8;
 #else
-  /* Thread/stacklet support not yet implemented for alpha.  Leave RA alone. */
+  curThread->saveregs[RA] = (reg_t) (&PopStackletFromML);
 #endif
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, returnToCallee);
