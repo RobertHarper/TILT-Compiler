@@ -416,14 +416,14 @@ xxxxx *)
 					     val argc = con_tuple[CON_ARRAY c, uint32]
 					     val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 					     val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
-					 in #1(make_total_lambda(v,argc,c,
+					 in #1(make_lambda(v,argc,c,
 								 PRIM(sub (OtherArray false),[c],[x,y])))
 					 end)),
 		  ("unsafe_vector",(fn c => let val v = fresh_var()
 						 val argc = con_tuple[uint32, c]
 						 val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 						 val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
-					     in #1(make_lambda(v,argc,CON_VECTOR c,
+					     in #1(make_total_lambda(v,argc,CON_VECTOR c,
 							       PRIM(create_table (OtherVector false), [c],[x,y])))
 					    end)),
 		  ("unsafe_vsub",(fn c => let val v = fresh_var()
@@ -438,7 +438,7 @@ xxxxx *)
 						val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 						val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 						val z = RECORD_PROJECT(VAR v,generate_tuple_label 3,argc)
-					    in #1(make_total_lambda(v,argc,con_unit,
+					    in #1(make_lambda(v,argc,con_unit,
 								    PRIM(update (OtherArray false),[c],[x,y,z])))
 					    end)),
 		  ("array_length",(fn c => let val v = fresh_var()
@@ -455,15 +455,15 @@ xxxxx *)
 							    ILPRIM(mk_ref,[c],[VAR v])))
 				    end)),
 		   ("!", (fn c => let val v = fresh_var()
-				  in #1(make_total_lambda(v,CON_REF c,c,
+				  in #1(make_lambda(v,CON_REF c,c,
 							  ILPRIM(deref,[c],[VAR v])))
 				  end)),
 		   (":=", (fn c => let val v = fresh_var()
 				       val pc = con_tuple[CON_REF c, c]
 				       fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
-				   in #1(make_total_lambda(v,pc,
-							   con_unit,ILPRIM(setref,[c],
-									 [proj 1, proj 2])))
+				   in #1(make_lambda(v,pc,
+						     con_unit,ILPRIM(setref,[c],
+								     [proj 1, proj 2])))
 				   end))]
 	  in val _ = app poly_entry basepolyvalue_list
 	  end

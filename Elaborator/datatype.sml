@@ -18,9 +18,14 @@ structure Datatype
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
 
+    fun con_fun(args,body) = 
+	let val args' = map Name.derived_var args
+	    val subst = Listops.map2 (fn (v,v') => (v,CON_VAR v')) (args,args')
+	in  CON_FUN(args', con_subst_convar(body,subst))
+	end
 
     (* ------------------------------------------------------------------
-      The datatype compiler for compiling a single stronglg-connected type.
+      The datatype compiler for compiling a single strongly-connected type.
       ------------------------------------------------------------------ *)
     fun driver (transparent : bool,
 		xty : Il.context * Ast.ty -> Il.con,
@@ -160,9 +165,10 @@ structure Datatype
 	end
 
         (* ---------- now create the top datatype tuple using var_poly ------ *)
-	val top_type_tyvar = if is_noncarrying 
-			       then hd(constr_nrc_sum)
-		              else CON_MU(CON_FUN(vardt_list,con_tuple_inject(constr_nrc_sum)))
+	val top_type_tyvar = 
+	    if is_noncarrying 
+		then hd(constr_nrc_sum)
+	    else CON_MU(CON_FUN(vardt_list,con_tuple_inject(constr_nrc_sum)))
 
 
         (* ------------ create the polymorphic type arguments --------------------- 
@@ -216,9 +222,10 @@ structure Datatype
 	fun mapper(constr_con_vars_i, constr_con_labs_i, constr_rf_i) = 
 	    map (fn (NONE,_,_) => NONE
 	          | (SOME v,SOME l,SOME c) => 
-		 let val (c,k) = if is_monomorphic 
-				     then (c, KIND_TUPLE 1)
-				 else (CON_FUN(tyvar_vars,c), KIND_ARROW(num_tyvar,1))
+		 let val (c,k) = 
+		     if is_monomorphic 
+			 then (c, KIND_TUPLE 1)
+		     else (con_fun(tyvar_vars,c), KIND_ARROW(num_tyvar,1))
 		 in  SOME(c,SBND(l,BND_CON(v,c)),
 			  SDEC(l,DEC_CON(v,k,SOME c)))
 		 end) (zip3 constr_con_vars_i constr_con_labs_i constr_rf_i)
@@ -471,9 +478,11 @@ structure Datatype
 
 
 	val top_type_sbnd_sdec = 
-		let val (c,base_kind) = if is_monomorphic
-					then (top_type_tyvar, KIND_TUPLE num_datatype)
-				else (CON_FUN(tyvar_vars, top_type_tyvar), KIND_ARROW(num_tyvar, num_datatype))
+		let val (c,base_kind) = 
+		    if is_monomorphic
+			then (top_type_tyvar, KIND_TUPLE num_datatype)
+		    else (con_fun(tyvar_vars, top_type_tyvar), 
+			  KIND_ARROW(num_tyvar, num_datatype))
 		    val k = if (!do_inline) then KIND_INLINE(base_kind,c) else base_kind
 		in  if num_datatype = 1 
 			then []
@@ -487,7 +496,8 @@ structure Datatype
 		    fun mapper(i,l,v) =
 			let val c = if num_datatype = 1 then top_type_tyvar 
 					else CON_TUPLE_PROJECT(i,CON_VAR top_type_var)
-			    val c = if is_monomorphic then c else CON_FUN(tyvar_vars, c)
+			    val c = if is_monomorphic then c 
+				    else con_fun(tyvar_vars, c)
 			    val k = if (!do_inline) then KIND_INLINE(base_kind,c) else base_kind
 			in  (SBND(l,BND_CON(v,c)), 
 			     (SDEC(l,DEC_CON(v,k,
@@ -513,7 +523,7 @@ structure Datatype
 		       | (true,false) => hd cons
 		       | (false,false) => 
 			     (print "case 4 \n"; 
-			      CON_FUN(tyvar_vars,
+			      con_fun(tyvar_vars,
 				      con_tuple_inject
 				      (map (fn c => ConApply(true,c, tyvar_tuple)) cons))))
 	    in  (SBND(constr_sumarg_lab_i,BND_CON(constr_sumarg_var_i, c)),
@@ -526,7 +536,7 @@ structure Datatype
 	fun mapper(constr_sum_lab_i,constr_sum_var_i, constr_rf_sum_i) = 
 	    let val (c,k) = if is_monomorphic 
 				then (constr_rf_sum_i, KIND_TUPLE 1)
-			    else (CON_FUN(tyvar_vars,constr_rf_sum_i), KIND_ARROW(num_tyvar,1))
+			    else (con_fun(tyvar_vars,constr_rf_sum_i), KIND_ARROW(num_tyvar,1))
 	    in  (SBND(constr_sum_lab_i,BND_CON(constr_sum_var_i, c)),
 		 SDEC(constr_sum_lab_i,DEC_CON(constr_sum_var_i, k, SOME c)))
 	    end
@@ -537,7 +547,7 @@ structure Datatype
 	fun mapper(constr_ssum_lab_ij,constr_ssum_var_ij, constr_rf_ssum_ij) = 
 	    let val (c,k) = if is_monomorphic 
 				then (constr_rf_ssum_ij, KIND_TUPLE 1)
-			    else (CON_FUN(tyvar_vars,constr_rf_ssum_ij), KIND_ARROW(num_tyvar,1))
+			    else (con_fun(tyvar_vars,constr_rf_ssum_ij), KIND_ARROW(num_tyvar,1))
 	    in  (SBND(constr_ssum_lab_ij,BND_CON(constr_ssum_var_ij, c)),
 		 SDEC(constr_ssum_lab_ij,DEC_CON(constr_ssum_var_ij, k, SOME c)))
 	    end

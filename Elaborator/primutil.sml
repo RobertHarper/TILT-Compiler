@@ -40,10 +40,9 @@ struct
 	    fun create_vector instance = thelp'([con_uint W32, instance], con_vector instance)
 	    fun len_array instance = thelp(con_array instance, con_uint W32)
 	    fun len_vector instance = thelp(con_vector instance, con_uint W32)
-	    fun sub_array instance = thelp'([con_array instance, con_uint W32], instance)
+	    fun sub_array instance = help'([con_array instance, con_uint W32], instance)
 	    fun sub_vector instance = thelp'([con_vector instance, con_uint W32], instance)
-	    fun update_array instance =  thelp'([con_array instance, con_uint W32, instance], con_unit)
-	    fun update_vector instance =  thelp'([con_vector instance, con_uint W32, instance], con_unit)
+	    fun update_array instance =  help'([con_array instance, con_uint W32, instance], con_unit)
 	    fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
 	    fun eq_vector instance = help(partial_arrow([instance, instance],con_bool),
 					  partial_arrow([con_vector instance, 
@@ -67,7 +66,7 @@ struct
 		   | create_empty_table _ => create_empty_vector instance
 		   | length_table _ => len_vector instance
 		   | sub _ => sub_vector instance
-		   | update _ => update_vector instance
+		   | update _ => error "no vector update"
 		   | equal_table _ => eq_vector instance
 		   | array2vector _ => error "use vector2array"
 		   | vector2array _ => vector2array_vector instance
