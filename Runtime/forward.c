@@ -37,13 +37,18 @@
 
 
 /* ---------------------------- CopyRange functions --------------------------------------- */
+void InitCopyRange(CopyRange_t* copyRange, Proc_t* proc, Heap_t* heap)
+{
+  copyRange->proc = proc;
+  copyRange->start = copyRange->cursor = copyRange->stop = copyRange->reserve = 0;
+  copyRange->heap = heap;
+}
+
 void SetCopyRange(CopyRange_t *copyRange, Proc_t *proc, Heap_t *heap, Set_t *rStack)
 {
   if (copyRange->heap == heap)
     return;
-  copyRange->proc = proc;
-  copyRange->start = copyRange->cursor = copyRange->stop = copyRange->reserve = 0;
-  copyRange->heap = heap;
+  InitCopyRange(copyRange, proc, heap);
 }
 
 void ClearCopyRange(CopyRange_t *copyRange)

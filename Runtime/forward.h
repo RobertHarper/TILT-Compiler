@@ -23,6 +23,7 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to);
 
 void  DischargeCopyRange(CopyRange_t *copyRange);           /* Leftover area is padded with PadHeapArea */
 mem_t AllocFromCopyRangeSlow(Proc_t *proc, int size, Align_t align);    /* Leftover area is padded with PadHeapArea */
+void InitCopyRange(CopyRange_t* copyRange, Proc_t* proc, Heap_t* heap);
 void  SetCopyRange(CopyRange_t *copyRange, Proc_t *, Heap_t *heap, Set_t *region);
 void  PadCopyRange(CopyRange_t *copyRange);                 /* Current unused area is padded with PadHeapArea */
 void  ClearCopyRange(CopyRange_t *copyRange);
