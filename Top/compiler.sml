@@ -92,7 +92,7 @@ structure Til : COMPILER =
 		val (sFile,_) = rtl_to_asm(unitName, rtlmod)    
 		val _ = if (!uptoAsm) then raise Stop else ()
 
-		val oFile = base2o (String.substring(sFile,0,size sFile - 2))
+		val oFile = base2o unitName
 		val _ = assemble(sFile, oFile)
 	    in  oFile
 	    end
