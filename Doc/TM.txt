@@ -10,16 +10,16 @@ The TILT make system has four components: mapfiles, import lists,
 interface files, and include lists.
 
 Mapfiles are analogous to UNIX makefiles and SML/NJ's .cm files.
-Mapfiles do not need to have any particular suffix. Mapfiles map logical
-module names to filenames and specify a set of targets (executables to
-build). For example,
+Mapfiles do not need to have any particular suffix. Mapfiles map
+compilation unit names to filenames and specify a set of targets
+(executables to build). For example,
 
 	FooBar Bar/foobar
 
-in a mapfile would indicate that the logical module name FooBar is to be
-associated with the file Baz/foobar.sml.  Note that the extension .sml
-is omitted.  To specify that TILT should create an executable from FooBar
-(and the modules it depends on), we would write
+in a mapfile would indicate that the unit name FooBar is to be associated
+with the file Baz/foobar.sml.  Note that the extension .sml is omitted.
+To specify that TILT should create an executable from FooBar (and the
+units it depends on), we would write
 
 	FooBar Bar/foobar TARGET
 
@@ -28,7 +28,7 @@ Mapfiles support a simple include directive.  The line
 	#include mapfile-basis
 
 adds associations for the standard basis library to a mapfile. Most
-basis structures, signatures, and functors are defined in a module of
+basis structures, signatures, and functors are defined in a unit of
 the same name. Examples include List, LIST, and TextIO. The exceptions
 are IO_SIG, OS_SIG, and SML90_SIG which provide signatures IO, OS, and
 SML90. The logical names IO, OS, and SML90 provide the corresponding
@@ -40,10 +40,10 @@ SML source file. For example,
 
 	(*$import FooBar Goo *)
 
-as the first line of a file indicates that the file depends on the
-modules named FooBar and Goo. A file can only depend on modules which
-appear earlier in the mapfile.  If a file depends on a module that has
-not been imported, then unbound variable errors will result.  For example,
+as the first line of a file indicates that the file depends on the units
+named FooBar and Goo. A file can only depend on units which appear earlier
+in the mapfile.  If a file depends on a unit that has not been imported,
+then unbound variable errors will result.  For example,
 
 	(*$import Prelude TopLevel *)
 	val _ = TextIO.print "Hello, world"
@@ -51,20 +51,20 @@ not been imported, then unbound variable errors will result.  For example,
 will not compile because TextIO is missing from the import list.
 Only direct dependencies need to be listed.
 
-Interfaces specify the exports of a module (and their types). Interfaces
-have include lists which play a role similar to import lists: they specify
-which modules are necessary to elaborate the interface.  An interface
-file contains a list of declarations as they might appear in a signature
-('spec' in the Definition; p14).  For example,
+Interfaces specify the exports of a compilation unit (and their
+types). Interfaces have include lists which play a role similar to import
+lists: they specify which units are necessary to elaborate the interface.
+An interface file contains a list of declarations as they might appear
+in a signature ('spec' in the Definition; p14).  For example,
 
 	(*$include Prelude TopLevel MAIN *)
 	structure Main : MAIN
 	val x : int
 	type t
 
-describes the interface of a module providing a top-level structure
-Main, value x, and type t.  This interface depends on signature MAIN
-(presumably provided by module MAIN).
+describes the interface of a unit providing a top-level structure Main,
+value x, and type t.  This interface depends on signature MAIN (presumably
+provided by the unit named MAIN).
 
 When processing a mapfile, TILT recompiles any files which are out-of-date
 and generates an executable file for each TARGET.  For each mapfile entry
@@ -80,17 +80,17 @@ elaboration of the source).
 DISCUSSION
 ----------
 
-A module can contain any number of top-level declarations. It can be
-defined by an interface file, an implementation file, or both.
+A compilation unit can contain any number of top-level declarations. It
+can be defined by an interface file, an implementation file, or both.
 
-A module has two sets of dependencies called imports and includes.
-We say "set" because order is not important inside import and include
-lists.  Imports are the modules needed to compile the implementation;
-includes are the modules necessary to elaborate the interface. Only
-direct dependencies are listed.
+A unit has two sets of dependencies called imports and includes.  We say
+"set" because order is not important inside import and include lists.
+Imports are the units needed to compile the implementation; includes are
+the units necessary to elaborate the interface. Only direct dependencies
+are listed.
 
-A module can only depend on modules which are listed earlier in the
-mapfile. Thus the order in which modules are listed gives a "use-file"
+A compilation unit can only depend on units which are listed earlier in
+the mapfile. Thus the order in which units are listed gives a "use-file"
 ordering. Specifying this ordering allows the user to decide on the
 order in which effects take place.
 
@@ -98,12 +98,12 @@ Steve Weeks asked that there be an easy way to go from a project
 description to an SML source file (without, for instance, doing dependency
 analysis). This is almost the case with our system.
 
-If there are no interface files, concatenating the source of the modules
-in mapfile order gives such an SML source file.
+If there are no interface files, concatenating the sources in mapfile
+order gives such an SML source file.
 
-If both an implementation and interface file are supplied, it is necessary
+For units which have both a source file and and interface, it is necessary
 to check/seal the implementation with respect to the interface. This may
-be possible with signature matching and 'open'.  Suppose we have a module
+be possible with signature matching and 'open'.  Suppose we have a unit
 with source M and interface I. We can translate this to the following
 (where N is a new structure name):
 
@@ -137,8 +137,8 @@ environment.  We plan to eliminate this nuisance but we may not do so
 by extending the project description language.
 
 We haven't got a concrete proposal for fitting libraries into this
-framework.  One issue here is that our module names must be globally
-unique (they are used to generate symbols for the linker).
+framework.  One issue here is that our unit names must be globally unique
+(they are used to generate symbols for the linker).
 
 Tom Murphy
 Dave Swasey
