@@ -116,12 +116,7 @@ struct
     let 
       val self = f_con state
       val (STATE{boundcvars,conhandler,...}) = state
-      fun do_cbnd (Con_cb(var, kind, con),state) = 
-	  let val kind' = f_kind state kind
-	      val con' = f_con state con
-	  in (Con_cb(var, kind', con'), add_convar(state,var))
-	  end
-	| do_cbnd (Fun_cb(var, openness, vklist, c, k),state) = 
+      fun cbnd_help wrap (var, vklist, c, k) state  = 
 	  let fun folder((v,k),(vklist,s)) = 
 	      let val k' = f_kind state k
 		  val s' = add_convar (s,v)
@@ -130,8 +125,16 @@ struct
 	      val (rev_vklist',state') = foldl folder ([],state) vklist
 	      val c' = f_con state' c
 	      val k' = f_kind state' k
-	  in (Fun_cb(var, openness, rev rev_vklist', c', k'), add_convar(state,var))
+	  in (wrap(var, rev rev_vklist', c', k'), add_convar(state,var))
 	  end
+
+      fun do_cbnd (Con_cb(var, kind, con),state) = 
+	  let val kind' = f_kind state kind
+	      val con' = f_con state con
+	  in (Con_cb(var, kind', con'), add_convar(state,var))
+	  end
+	| do_cbnd (Open_cb args,state) = cbnd_help Open_cb args state
+	| do_cbnd (Code_cb args,state) = cbnd_help Code_cb args state
       fun docon con = 
 	  (case con of
 	       (Prim_c (pcon,args)) => (Prim_c (pcon,map self args))
@@ -146,11 +149,7 @@ struct
 		       (Mu_c (defs',var))
 		   end
 	       
-	     | (Arrow_c (openness,confun)) =>
-		   Arrow_c (openness,f_arrow state confun)
-		   
-	     | (Code_c confun) =>
-		   Code_c (f_arrow state confun)
+	     | (AllArrow_c confun) => AllArrow_c (f_arrow state confun)
 		   
 	     | (Var_c var) => con
 
@@ -229,7 +228,7 @@ struct
 	  | NOCHANGE => docon con
     end
 
-  and f_arrow (state : state) ((effect, knds, cons, numfloat, result) : confun) = 
+  and f_arrow (state : state) (openness, effect, knds, cons, numfloat, result) =
     let
       val con_vars = map (fn (var,_) => var) knds
       val knds' = map (fn (var,kind) => 
@@ -238,7 +237,7 @@ struct
       val cons'  = map (f_con state') cons
       val result' = f_con state' result
     in
-      (effect, knds', cons', numfloat, result')
+	(openness, effect, knds', cons', numfloat, result')
     end
 
   and f_kind (state : state) (kind : kind) = 
@@ -280,10 +279,8 @@ struct
 		val (args', result') = f_arrow_kind state (args, result)
 	      in
 		Arrow_k (openness, args, result)
-	      end
+	      end)
 
-	     | (Code_k kindfun) =>
-	      Code_k (f_arrow_kind state kindfun))
     in
       case (kindhandler (boundcvars,kind)) of
 	CHANGE_NORECURSE k => k
@@ -314,9 +311,9 @@ struct
   fun f_exp state (exp : exp) : exp = 
       let val self = f_exp state
 	  val (STATE{boundevars,exphandler,...}) = state
-	  fun dofun(Function(openness,effect,recur,
+	  fun dofun(Function(effect,recur,
 			     vklist,vclist,vflist,body,con)) = 
-	      Function(openness,effect,recur,
+	      Function(effect,recur,
 		       map (fn (v,k) => (v,f_kind state k)) vklist,
 		       map (fn (v,c) => (v,f_con state c)) vclist,
 		       vflist,
@@ -337,9 +334,13 @@ struct
 			  case bnd of
 			      Con_b(v,k,c) => Con_b(v,f_kind state k,f_con state c)
 			    | Exp_b(v,c,e) => Exp_b(v,f_con state c, self e)
-			    | Fixfun_b vfset => 
+			    | Fixopen_b vfset => 
 				  let fun doer(v,f) = (v,dofun f)
-				  in  Fixfun_b(Util.mapset doer vfset)
+				  in  Fixopen_b(Util.mapset doer vfset)
+				  end
+			    | Fixcode_b vfset => 
+				  let fun doer(v,f) = (v,dofun f)
+				  in  Fixcode_b(Util.mapset doer vfset)
 				  end
 			    | Fixclosure_b vcset => 
 				  let fun doer(v,{code,cenv,venv}) = 
@@ -364,20 +365,12 @@ struct
 							 self identity)
 				 | Exncase_e sw => Exncase_e(dosw sw identity self identity)
 				 | Typecase_e sw => Typecase_e(dosw sw identity (f_con state) identity))
-		| (App_e (func,clist,elist,eflist)) => 
-		      App_e(self func,
+		| (App_e (openness,func,clist,elist,eflist)) => 
+		      App_e(openness,
+			    self func,
 			    map (f_con state) clist,
 			    map self elist, 
 			    map self eflist)
-		| (Call_e (codevar,clist,elist,eflist)) => 
-		      Call_e((case (exphandler (boundevars,Var_e codevar)) of
-				  NOCHANGE => codevar
-				| (CHANGE_RECURSE (Var_e v')) => v'
-				| (CHANGE_NORECURSE (Var_e v')) => v'
-				| _ => error "can't have non-var in cllosure code comp"),
-		      map (f_con state) clist,
-		      map self elist, 
-		      map self eflist)
 		| Raise_e (e,c) => Raise_e(self e, f_con state c)
 		| Handle_e (e1,f) => Handle_e(self e1, dofun f)
       in case (exphandler (boundevars,exp)) of
@@ -493,7 +486,8 @@ struct
   end
 
   fun same_openness (Open,Open) = true
-    | same_openness (Closed,Closed) = true
+    | same_openness (Closure,Closure) = true
+    | same_openness (Code,Code) = true
     | same_openness _ = false
 
   fun same_effect (Total,Total) = true
@@ -618,11 +612,7 @@ struct
 	   same_openness (openness1,openness2) andalso 
 	   alpha_equiv_arrow_kind context ((formals1,return1),
 					   (formals1,return2))
-	 | (Code_k (formals1, return1),
-	    Code_k (formals2, return2)) => 
-	   alpha_equiv_arrow_kind context ((formals1,return1),
-					   (formals1,return2))
-	  | _ => false)
+	 | _ => false)
     end
   and alpha_equiv_arrow_kind context ((formals1, return1),
 				      (formals2, return2)) = 
@@ -669,12 +659,9 @@ struct
 	     alpha_equiv_con_list context' (con_list1,con_list2)
 	   end
 
-	  | (Arrow_c (openness1,confun1),Arrow_c (openness2,confun2)) => 
-	   same_openness(openness1,openness2) andalso
+	  | (AllArrow_c confun1, AllArrow_c confun2) => 
 	   alpha_equiv_confun context (confun1,confun2)
 
-	  | (Code_c confun1,Code_c confun2) => 
-	   alpha_equiv_confun context (confun1,confun2)
 
 	  | (Var_c var1,Var_c var2) => 
 	   subst_eq(context,var1,var2)
@@ -689,9 +676,12 @@ struct
 		       (context', 
 			so_far andalso alpha_equiv_con' context' (con1,con2))
 		   end
-		 | equiv_one (Fun_cb(var1,openness1,formals1,con1,k1),
-			      Fun_cb(var2,openness2,formals2,con2,k2),
-			      (context,so_far)) = 
+		 | equiv_one ((Open_cb(var1,formals1,con1,k1),
+			      Open_cb(var2,formals2,con2,k2),
+			      (context,so_far)) |
+			      (Code_cb(var1,formals1,con1,k1),
+			       Code_cb(var2,formals2,con2,k2),
+			       (context,so_far))) =
 		   let
 		       fun equiv_one ((var1,kind1),(var2,kind2),(context,so_far)) = 
 			   let
@@ -707,7 +697,7 @@ struct
 		       val context'' =  alpha_vary_var(context',var1,var2)
 		   in
 		       (context', 
-			so_far andalso same_openness (openness1,openness2) andalso
+			so_far andalso 
 			alpha_equiv_con' context' (con1,con2))
 		   end
 		 | equiv_one(_,_,(context,_)) = (context,false)
@@ -763,8 +753,8 @@ struct
 	 | _ => false)
     end
   
-  and alpha_equiv_confun context ((effect1,tformals1,formals1,flength1,return1),
-				  (effect2,tformals2,formals2,flength2,return2)) =
+  and alpha_equiv_confun context ((openness1,effect1,tformals1,formals1,flength1,return1),
+				  (openness2,effect2,tformals2,formals2,flength2,return2)) =
     let
       fun tformal_equiv ((var1,kind1),(var2,kind2),(context,so_far)) = 
 	let
@@ -777,6 +767,7 @@ struct
       val (context',t_equiv) = 
 	ListPair.foldl tformal_equiv (context,same_len) (tformals1,tformals2)
     in
+      same_openness(openness1,openness2) andalso
       t_equiv andalso 
       alpha_equiv_con_list context' (formals1,formals2) andalso
       (flength1 = flength2) andalso
@@ -811,10 +802,6 @@ struct
 	 (same_openness (openness1,openness2) andalso 
 	  alpha_sub_arrow_kind context ((formals1,return1),
 					(formals1,return2)))
-
-	| (Code_k (formals1, return1), Code_k (formals2, return2)) => 
-	 alpha_sub_arrow_kind context ((formals1,return1),
-				       (formals1,return2))
 
 	| (Record_k elts1,Record_k elts2) => 
 	 let

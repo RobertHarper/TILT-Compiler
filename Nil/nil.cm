@@ -4,8 +4,8 @@ Group
 	signature NILSTATIC
 	signature PPNIL
 
-        functor   Nil
-        functor   Ppnil
+(*      functor   Nil *)
+(*        functor   Ppnil *)
 (*	structure NilUtil   *)
 (*	structure NilStatic *)
 is
@@ -31,8 +31,12 @@ nilutil.sml
 nilstatic.sig.sml
 (* nilstatic.sml *)
 cont.sig.sml
-cont.sml
+(*cont.sml*)
 typecheck.sig.sml
 (*typecheck.sml*)
 nileval.sig.sml
-nileval.sml
+vararg.sig.sml
+vararg.sml
+nileval.sml 
+toclosure.sig.sml
+toclosure.sml

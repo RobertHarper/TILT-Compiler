@@ -48,14 +48,14 @@ functor NilEvaluate (structure Nil : NIL
 	  (case bnd of
 	       (Con_b _) => false
 	     | (Exp_b _) => false
-	     | (Fixfun_b vf_set) => (member_eq(eq_var,v,map #1(set2list vf_set)))
+	     | (Fixopen_b vf_set) => (member_eq(eq_var,v,map #1(set2list vf_set)))
+	     | (Fixcode_b vf_set) => (member_eq(eq_var,v,map #1(set2list vf_set)))
 	     | (Fixclosure_b vc_set) => (member_eq(eq_var,v,map #1(set2list vc_set))))
 	| exp_isval (Let_e _) = false
 	| exp_isval (Prim_e (NilPrimOp np,clist,elist)) = nilprim_isval(np,clist,elist)
 	| exp_isval (Prim_e (PrimOp _,_,_)) = false
 	| exp_isval (Switch_e _) = false
 	| exp_isval (App_e _) = false
-	| exp_isval (Call_e _) = false
 	| exp_isval (Raise_e _) = false
 	| exp_isval (Handle_e _) = false
 
@@ -84,16 +84,16 @@ functor NilEvaluate (structure Nil : NIL
 	      | (Vararg_c _) => raise Util.UNIMP)
 
       and con_isval (con : con) : bool = 
-	  let fun confun_isval (_,vklist,clist,_,c) = 
+	  let fun confun_isval (_,_,vklist,clist,_,c) = 
 	      (con_isval c) andalso (Listops.andfold con_isval clist)
 	      andalso (vklist_isval vklist)
 	  in  case con of
 	      Prim_c (pc,clist) => (primcon_isval pc) andalso (Listops.andfold con_isval clist)
 	    | Mu_c (vc_seq,v) => vclist_isval (sequence2list vc_seq)
-	    | Arrow_c (openness,confun) => confun_isval confun
-	    | Code_c confun => confun_isval confun
+	    | AllArrow_c confun => confun_isval confun
 	    | Var_c v => false
-	    | Let_c (_,[Fun_cb(v,_,vklist,c,k)],Var_c v') => eq_var(v,v') 
+	    | Let_c (_,[Open_cb(v,vklist,c,k)],Var_c v') => eq_var(v,v') 
+	    | Let_c (_,[Code_cb(v,vklist,c,k)],Var_c v') => eq_var(v,v') 
 	    | Let_c (letsort, cbnds, c) => false
 	    | Crecord_c lclist => lclist_isval lclist
 	    | Proj_c (c,l) => false
@@ -134,8 +134,7 @@ functor NilEvaluate (structure Nil : NIL
 		 | Arrow_k (openness,vklist,k) => 
 		       let val vklist' = map (fn (v,k) => (v,self k)) vklist
 		       in  Arrow_k(openness,vklist',self k)
-		       end
-		 | Code_k (vklist,k) => Code_k(map (fn (v,k) => (v,self k)) vklist, self k))
+		       end)
 	  end
 
       and primconEval (pc, clist) : con = 
@@ -147,21 +146,20 @@ functor NilEvaluate (structure Nil : NIL
 
       and conEval env (con : con) : con = 
 	  let val self = conEval env
-	      fun confunEval (effect,vklist,clist,numfloats,c) = 
+	      fun confunEval (openness,effect,vklist,clist,numfloats,c) = 
 		  let val vklist' = map (fn (v,k) => (v, kindEval env k)) vklist
-		  in  (effect,vklist',map self clist, numfloats, self c)
+		  in  (openness,effect,vklist',map self clist, numfloats, self c)
 		  end
 	  in  case con of
 	      Prim_c (pc,clist) => primconEval(pc,map self clist)
 	    | Mu_c (vc_seq,v) => let fun doer(v,c) = (v,self c)
 				 in  Mu_c(mapsequence doer vc_seq, v)
 				 end
-	    | Arrow_c (openness,confun) => Arrow_c(openness, confunEval confun)
-	    | Code_c confun => Code_c(confunEval confun)
+	    | AllArrow_c confun => AllArrow_c(confunEval confun)
 	    | Var_c v => find_convar env v
 	    | Let_c (letsort, cbnds, c) => 
 		  let fun do_cbnd(Con_cb(v,k,c),env) = add_convar(env,v,self c)
-			| do_cbnd(cbnd as (Fun_cb (v,_,_,_,_)),env) = 
+			| do_cbnd(cbnd as ((Open_cb (v,_,_,_))|(Code_cb (v,_,_,_))),env) = 
 			  let val cfun = Let_c(Sequential,[cbnd], Var_c v)
 			  in  add_convar(env,v,cfun)
 			  end
@@ -183,7 +181,8 @@ functor NilEvaluate (structure Nil : NIL
 		  let val c' = self c
 		      val clist' = map self clist
 		  in  (case c' of 
-			   Let_c(_,[Fun_cb(v,_,vklist,body,k)],Var_c v') =>
+			   Let_c(_,[((Open_cb(v,vklist,body,k)) |
+				     (Code_cb(v,vklist,body,k)))],Var_c v') =>
 			       if (eq_var(v,v'))
 				   then let val conmap = map2 (fn ((v,_),c) => (v,c)) (vklist,clist')
 					    val body' = substConInCon(c,conmap)
@@ -277,9 +276,9 @@ functor NilEvaluate (structure Nil : NIL
 	  end
 
      
-      fun doCall(Let_e(Sequential,[Fixfun_b vfset],Var_e v),clist,elist,eflist) = 
+      fun doCall(Let_e(Sequential,[((Fixopen_b vfset) | (Fixcode_b vfset))],Var_e v),clist,elist,eflist) = 
 	  let val vflist = set2list vfset
-	      val Function(_,_,_,vklist,vclist,vflist,body,_) = (case (assoc_eq(eq_var,v,vflist)) of
+	      val Function(_,_,vklist,vclist,vflist,body,_) = (case (assoc_eq(eq_var,v,vflist)) of
 								     SOME f => f
 								   | NONE => error "doCall failed")
 	      val cmap = map2 (fn ((v,_),c) => (v,c)) (vklist,clist)
@@ -292,7 +291,8 @@ functor NilEvaluate (structure Nil : NIL
 	  end
 	| doCall _ = error "doCall failed"
 
-      fun doApp(_, f as Let_e(_,[Fixfun_b _],_),clist,elist,eflist) = doCall(f,clist,elist,eflist)
+      fun doApp(_, f as Let_e(_,[((Fixopen_b _) | (Fixcode_b _))],_),
+		clist,elist,eflist) = doCall(f,clist,elist,eflist)
 	| doApp(env, Let_e(Sequential,[Fixclosure_b vcset],Var_e v),clist,elist,eflist) = 
 	  let val vclist = set2list vcset
 	      val {code=codevar,cenv,venv} = (case (assoc_eq(eq_var,v,vclist)) of
@@ -315,7 +315,7 @@ functor NilEvaluate (structure Nil : NIL
 			   NONE => loop rest
 			 | SOME (cargs,eargs) => 
 			       let val funvar = Name.fresh_var()
-				   val fb =Fixfun_b(list2set[(funvar,f)])
+				   val fb =Fixopen_b(list2set[(funvar,f)])
 				   val f = Let_e(Sequential,[fb],Var_e funvar)
 				   val reduced = doCall(f,cargs,eargs,[])
 			       in  expEval env reduced
@@ -376,7 +376,7 @@ functor NilEvaluate (structure Nil : NIL
 			  case bnd of
 			      Con_b(v,_,c) => add_convar(env,v,conEval env c)
 			    | Exp_b(v,_,e) => add_var(env,v,expEval env e)
-			    | Fixfun_b vfset => 
+			    | ((Fixopen_b vfset) | (Fixcode_b vfset)) =>
 				  let val vflist = set2list vfset
 				      fun folder((v,_),env) = add_var(env,v,Let_e(Sequential,[bnd],Var_e v))
 				  in  foldl folder env vflist
@@ -400,7 +400,7 @@ functor NilEvaluate (structure Nil : NIL
 		      in  PrimUtil.apply p clist' elist'
 		      end
 		| (Switch_e switch) => doSwitch env switch
-		| (App_e (func,clist,elist,eflist)) => 
+		| (App_e (openness,func,clist,elist,eflist)) => 
 		      let val func' = self func
 			  val clist' = map (conEval env) clist
 			  val elist' = map self elist
@@ -408,16 +408,8 @@ functor NilEvaluate (structure Nil : NIL
 			  val res = doApp(env,func',clist',elist',eflist')
 		      in  self res
 		      end
-		| (Call_e (codevar,clist,elist,eflist)) => 
-		      let val code = find_var env codevar
-			  val clist' = map (conEval env) clist
-			  val elist' = map self elist
-			  val eflist' = map self eflist
-			  val res = doCall(code,clist',elist',eflist')
-		      in  self res
-		      end
 		| (Raise_e (e,_)) => raise (RuntimeExn (self e))
-		| (Handle_e (e1,Function(_,_,_,[],[(v,_)],[],body,_))) => 
+		| (Handle_e (e1,Function(_,_,[],[(v,_)],[],body,_))) => 
 		      ((self e1) 
 		       handle RuntimeExn e => let val env' = add_var(env,v,e)
 					      in expEval env' body

@@ -18,7 +18,7 @@ sig
   (* In general, we want to distinguish between functions/arrow types that 
    * are open (possibly having free variables) or those that are closed.
    *)
-  datatype openness = Open | Closure
+  datatype openness = Open | Code | Closure
 
   (* In addition, we would like to know if application of an arrow object
    * is total(i.e. effect-free) or partial (i.e. not necessarily effect-free)
@@ -46,10 +46,9 @@ sig
 				           constructors *)
     | Record_k of ((label*var),kind) sequence
                                     (* dependent arrow kinds classify open 
-				       constructor funs or closures *)
+				       constructor funs, closed funs, or closures *)
     | Arrow_k of openness * (var * kind) list * kind 
-                                    (* classifies constructor functions or closures *)
-    | Code_k of (var * kind) list * kind 
+
 
 
   and primcon =                          (* classifies term-level ... *)
@@ -71,16 +70,14 @@ sig
                                                        of primitive types *)
     | Mu_c of (var,con) sequence * var            (* Constructors that classify values of
 						       a recursive type *)
-    | All_c   of openness * polyfun   * con        (* open type functions and closures *)
-    | Arrow_c of openness * arrowfun * con        (* open functions and closures *)
-    | Code_c  of polyfun  * arrowfun * con        (* code includes type function and function *)
-
+    | AllArrow_c of openness * effect *           (* open functions, code functions, and closures *)
+                    (var * kind) list * con list * w32 * con
     | Var_c of var
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
     | Crecord_c of (label * con) list             (* Constructor-level records *)
     | Proj_c of con * label                       (* Constructor-level record projection *)
     | Closure_c of con * con                      (* Constructor-level closure: 
-					               code and environment *)
+                                                       code and environment *)
     | App_c of con * con list                     (* Constructor-level application 
 						       of open or closed constructor function *)
     | Typecase_c of {arg : con,
@@ -89,12 +86,8 @@ sig
     | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
   and conbnd = Con_cb of (var * kind * con)
-             | Fun_cb of (var * openness * (var * kind) list * con * kind)
-
-  withtype polyfun  = (var * kind) list 
-  and      arrowfun =  effect * con list * w32
-
-                  
+             | Open_cb of (var * (var * kind) list * con * kind)
+             | Code_cb of (var * (var * kind) list * con * kind)
 
   datatype nilprim = 
       record of label list       (* record intro *)
@@ -140,9 +133,8 @@ sig
     | Let_e of letsort * bnd list * exp                   (* Binding construct *)
     | Prim_e of allprim * (con list) * (exp list)         (* primops must be fully applied *)
     | Switch_e of switch                                  (* Switch statements *)
-    | Tapp_e of openness * exp * (con list)               (* Type application of open functions and closures *)
-    | App_e of openness * exp * exp list * exp list       (* Term application of open functions and closures *)
-    | Call_e of var * (con list) * exp list * exp list    (* Application of code pointers *)
+    | App_e of openness * exp * con list *                (* application of open funs, code, or closures *)
+                       exp list * exp list                (* in the case of code, the first exp must be a var *)
     | Raise_e of exp * con                                
     | Handle_e of exp * function
 
@@ -157,12 +149,10 @@ sig
   and bnd =                                (* Term-level Bindings with optional classifiers *)
       Con_b of var * kind * con              (* Binds constructors *)
     | Exp_b of var * con * exp               (* Binds expressions *)
-    | Fixfun_b of  (var,function) set        (* Binds mutually recursive functions *)
-    | Fixtfun_b of (var,tfunction) set       (* Binds mutually recursive type functions *)
-    | Fixpfun_b of (var,pfunction) set       (* Binds mutually recursive polymorhic functions *)
-    | Fixcode_b of (var,pfunction) set       (* Binds mutually recursive polymorhic code *)
+    | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
+    | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures *)
-    | Fixclosure_b of (var , {code:var, is_term : bool, cenv:con, venv:exp}) set
+    | Fixclosure_b of (var , {code:var, cenv:con, venv:exp}) set
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.
    * It may or may not be effect-free and may or may not be recursive.
@@ -171,14 +161,12 @@ sig
    * Note that the type of the function can be easily given from these ingredients.
    *)
 
-  and function = Function of effect * recursive * (var * con) list * var list * exp * con
-  and tfunction = Tfunction of effect * recursive * (var * kind) list * exp * con  
-  and pfunction = Pfunction of effect * recursive * (var * kind) list * (var * con) list * (var list) *
-		     exp * con  
+  and function = Function of effect * recursive * (var * kind) list * 
+                             (var * con) list * (var list) * exp * con  
 
   (* a generic term-level switch construct. *)
   withtype ('info,'arg,'t) sw = 
-    {info : 'info, arg: 'arg, arms : ('t * pfunction) list, default : exp option}
+    {info : 'info, arg: 'arg, arms : ('t * function) list, default : exp option}
 
 
 end

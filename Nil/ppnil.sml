@@ -38,7 +38,8 @@ functor Ppnil(structure Nil : NIL
       | pp_arrow CODE = String "-CODE>"
 *)
     fun pp_openness Open = String "Open"
-      | pp_openness Closed = String "Close"
+      | pp_openness Closure = String "Closure"
+      | pp_openness Code = String "Code"
     fun pp_effect Partial = String "->"
       | pp_effect Total = String "=>"
 
@@ -72,12 +73,6 @@ functor Ppnil(structure Nil : NIL
 
 
     fun pp_kind kind =
-	let fun help adj ks k = HOVbox[pp_list (fn (v,k) => Hbox[pp_var v, String " : ", 
-									 pp_kind k])
-					 ks ("(", ",",")", false),
-					 String adj,
-					 pp_kind k]
-	in
 	    (case kind of
 		 Type_k Compiletime => String "TYPE_C"
 	       | Type_k Runtime => String "TYPE_R"
@@ -88,15 +83,18 @@ functor Ppnil(structure Nil : NIL
 								  pp_kind k])
 				      (sequence2list lvk_seq) ("REC_K{", ",","}", false))
 (*	       | List_k k => pp_region "LIST_K)" ")" [pp_kind k] *)
-	       | Arrow_k (Open,ks,k) => help "Open" ks k
-	       | Arrow_k (Closed,ks,k) => help "Closed" ks k
-	       | Code_k (ks,k) => help "Code" ks k
+	       | Arrow_k (openness,ks,k) => 
+		     HOVbox[pp_list (fn (v,k) => Hbox[pp_var v, String " : ", 
+						      pp_kind k])
+			    ks ("(", ",",")", false),
+			    pp_openness openness,
+			    pp_kind k]
 	       | Singleton_k (p,k,c) => (pp_region 
 					 (case p of 
 					      Compiletime => "SINGLE_KC(" 
 					    | Runtime => "SINGLE_KR(")
 					 ")" [pp_kind k, String ",", pp_con c]))
-	end
+
 (*
     and pp_primcon (Mono_c monocon) = pp_monocon monocon
       | pp_primcon (List_c listcon) = pp_listcon listcon
@@ -116,9 +114,18 @@ functor Ppnil(structure Nil : NIL
 	       let fun do_cbnd (Con_cb(v,k,c)) = Hbox[pp_var v, String " : ",
 							   pp_kind k, String " = ", 
 							   pp_con c]
-		     | do_cbnd (Fun_cb(v,openness,vklist,c,k)) = 
+		     | do_cbnd (Open_cb(v,vklist,c,k)) = 
 		       HOVbox[pp_var v, String " = ",
 			      String "FUN_C",
+			      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
+			       vklist),
+			      Break0 0 5,
+			      pp_con c,
+			      Break0 0 5,
+			      pp_kind k]
+		     | do_cbnd (Code_cb(v,vklist,c,k)) = 
+		       HOVbox[pp_var v, String " = ",
+			      String "CODE_C",
 			      (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
 			       vklist),
 			      Break0 0 5,
@@ -181,9 +188,7 @@ functor Ppnil(structure Nil : NIL
 									   pp_con con])]
 	 | All_c confun => HOVbox[String "ALL_C(", pp_confun confun, String ")"] 
 *)
-	 | Code_c (confun) => pp_confun "CODE_C" confun
-	 | Arrow_c (Open,confun) => pp_confun "ARROW_OPEN_C" confun
-	 | Arrow_c (Closed,confun) => pp_confun "ARROW_CLOSED_C" confun
+	 | AllArrow_c confun => pp_confun confun
 	 | Annotate_c (annot,con) => HOVbox[String "ANNOTE_C(", String "annot not done", 
 					    String ",", 
 					    pp_con con, String ")"])
@@ -206,8 +211,8 @@ functor Ppnil(structure Nil : NIL
       | pp_primcon (Record_c labels) = String "RECORD"
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "RECORD", pp_openness oness, pp_effect e]
 
-    and pp_confun id (effect,vklist,clist,numfloats,con) = 
-	HOVbox[String (id ^ "("),
+    and pp_confun (openness,effect,vklist,clist,numfloats,con) = 
+	HOVbox[pp_openness openness,
 	       (case effect of
 		    Total => String "TOTAL; "
 		  | Partial => String "PARTIAL; "),
@@ -243,16 +248,12 @@ functor Ppnil(structure Nil : NIL
 						   pp_list pp_con cons ("[",",","]",false)] @
 						   [pp_list pp_exp exps
 						    ("[",",","]",false)])
-	   | App_e (efun,cons,exps,fexps) => (pp_region "APP(" ")" 
-					      [pp_exp efun, String ",", Break, 
-					       pp_list pp_con cons ("[",",","]",false),
-					       pp_list pp_exp exps ("[",",",";",false),
-					       pp_list pp_exp fexps (" ",",","]",false)])
-	   | Call_e (v,cons,exps,fexps) => (pp_region "CALL(" ")" 
-					    [pp_var v, String ",", Break, 
-					     pp_list pp_con cons ("[",",","]",false),
-					     pp_list pp_exp exps ("[",",",";",false),
-					     pp_list pp_exp fexps (" ",",","]",false)])
+	   | App_e (openness,efun,cons,exps,fexps) => (pp_region "APP(" ")" 
+						       [pp_openness openness,
+							pp_exp efun, String ",", Break, 
+							pp_list pp_con cons ("[",",","]",false),
+							pp_list pp_exp exps ("[",",",";",false),
+							pp_list pp_exp fexps (" ",",","]",false)])
 	   | Let_e (letsort,bnds,e) => Vbox0 0 1 [String (case letsort of
 							      Sequential => "LET  "
 							    | Parallel => "LETP "),
@@ -272,7 +273,7 @@ functor Ppnil(structure Nil : NIL
 	   | Switch_e sw => pp_switch sw)
 
 	 
-    and pp_function (Function(openness,effect,recursive,vklist,vclist,vflist,exp,c)) = 
+    and pp_function (Function(effect,recursive,vklist,vclist,vflist,exp,c)) = 
 	HOVbox[String "/\\",
 	       (pp_list' (fn (v,k) => Hbox[pp_var v,pp_kind k])
 		vklist),
@@ -320,9 +321,12 @@ functor Ppnil(structure Nil : NIL
 	  in (case bnd of
 	        Exp_b (v,c,e) => Hbox[pp_var v, String ":", pp_con c, String "=", pp_exp e]
 	      | Con_b (v,k,c) => Hbox[pp_var v, String ":", pp_kind k, String "=", pp_con c]
-	      | Fixfun_b fixset => let val fixlist = set2list fixset
-				   in Vbox(map pp_fix fixlist)
-				   end
+	      | Fixopen_b fixset => let val fixlist = set2list fixset
+				    in Vbox(map (pp_fix false) fixlist)
+				    end
+	      | Fixcode_b fixset => let val fixlist = set2list fixset
+				    in Vbox(map (pp_fix true) fixlist)
+				    end
 	      | Fixclosure_b vceset => let val vcelist = set2list vceset
 				       in pp_list (fn (v,{code,cenv,venv}) => 
 						   HOVbox[pp_var v, String "=",
@@ -334,9 +338,8 @@ functor Ppnil(structure Nil : NIL
 				       end)
 	end
 
-     and pp_fix (v,Function(openness,effect,
-                          recursive,vklist,vclist,vflist,e,c)) : format = 
-       HOVbox([String (case openness of Open => "/\\ "| Closed => "/CLOSED\\"),
+    and pp_fix is_code (v,Function(effect,recursive,vklist,vclist,vflist,e,c)) : format = 
+	HOVbox([String (if is_code then "/CODE\\" else "/\\ "),
                pp_var v,
                String " ["] @
               (foldr (op @) nil 
