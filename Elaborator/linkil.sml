@@ -114,17 +114,22 @@ structure LinkIl (* : LINKIL *) =
 	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
-	val empty_context = IlContext.empty_context
-	val (initial_context, initial_sbnds) = Basis.initial_context()
-	val initial_sbnds_len = length initial_sbnds
-
-
 	fun local_add_context_entries(ctxt,entries) = 
 	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
 		  | help ce = ce
 		val entries' = map help entries
 	    in IlContext.add_context_entries(ctxt,entries')
 	    end
+
+	val empty_context = IlContext.empty_context
+	val (initial_context, initial_sbnds, initial_sdecs) = Basis.initial_context()
+(*
+	val initial_context' = local_add_context_entries(empty_context, 
+							 map CONTEXT_SDEC
+							 (IlStatic.GetSbndsSdecs(empty_context,initial_sbnds)))
+*)
+	val initial_sbnds_len = length initial_sbnds
+
 
 	fun elaborate_help (context,(filepos,astdec)) = 
 	    (case (Toil.xdec(context,filepos,astdec)) of
@@ -136,8 +141,9 @@ structure LinkIl (* : LINKIL *) =
 	       | _ => NONE)
 
 	fun elaborate s = (case (elaborate_help(initial_context,parse s)) of
-			       SOME (sbnds,entries) => SOME(initial_sbnds @ sbnds, 
-							    local_add_context_entries(initial_context,entries))
+			       SOME (sbnds,entries) => (* SOME(sbnds, 
+							    local_add_context_entries(initial_context,tentries)) *)
+				   SOME((*initial_sbnds @ *) sbnds, empty_context)
 			     | NONE => NONE)
 	    
 (*
@@ -162,17 +168,18 @@ structure LinkIl (* : LINKIL *) =
 		val fp = Source.filepos is
   	        val astdec = (Stats.timer("PARSE_TVSCOPE",LinkParse.tvscope_dec)) astdec
   	        val astdec = (Stats.timer("PARSE_NAMEDFORM",LinkParse.named_form_dec)) astdec
-		val (sbnds,cdiff) = 
+		val (sbnds,cdiff) =
 		    (case (Stats.timer("ELABORATION",elaborate_help)) (initial_context,(fp,astdec)) of
 			 SOME res => res
 		       | NONE => error "Elaboration failed")
 		val sbnds = initial_sbnds @ sbnds
+		val sdecs = List.mapPartial (fn CONTEXT_SDEC sdec => SOME sdec | _ => NONE) cdiff
+		val sdecs = initial_sdecs @ sdecs
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)
 			else ()
 		val m = MOD_STRUCTURE sbnds
-		val sdecs = List.mapPartial (fn (CONTEXT_SDEC sdec) => SOME sdec | _ => NONE) cdiff
 		val given_s = SIGNAT_STRUCTURE (NONE,sdecs)
 		val _ =  if doprint
 			     then (print "\ngiven_s is:\n";

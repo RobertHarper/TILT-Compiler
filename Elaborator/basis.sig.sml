@@ -4,6 +4,6 @@ signature BASIS =
     structure Il : IL
 
     val empty_context : Il.context
-    val initial_context : unit -> Il.context * Il.sbnd list
+    val initial_context : unit -> Il.context * Il.sbnd list * Il.sdec list
 
   end;

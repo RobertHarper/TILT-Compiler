@@ -280,12 +280,9 @@ functor Ppil(structure Il : IL
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
        | FIX (a,[FBND(v',v,c,cres,e)]) => 
 		  HOVbox[String (case a of TOTAL => "/TOTAL\\ " | PARTIAL => "/\\"),
-			 pp_var v',
-			 String " (", pp_var v, Break0 0 5,
-			 String " : ",
-			 pp_con seen c, String ")", Break0 0 5,
-			 String " :", pp_con seen cres, 
-			 String " =", Break,
+			 pp_var v', Break0 0 5,
+			 String " (", pp_var v,	 String " : ", pp_con seen c, String ")", Break0 0 5,
+			 String " : ", pp_con seen cres, String " =", Break,
 			 pp_exp seen e]
        | FIX (a,fbnds) => HOVbox[String (case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX"),
 				 pp_list (pp_fbnd seen) fbnds ("[",",","]", true),
@@ -333,14 +330,15 @@ functor Ppil(structure Il : IL
 		  NONE => String "NONE"
 		| SOME e => pp_exp seen e]
        (*       | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
-       | CASE {noncarriers,carriers,arg,arms,default} =>
+       | CASE {noncarriers,carriers,arg,arms,tipe,default} =>
 	     pp_region "CASE(" ")"
 	     ((pp_con seen (CON_SUM {special = NONE,
 				     carriers = carriers,
 				     noncarriers = noncarriers})) :: (String ",") :: Break ::
 	      (pp_exp seen arg) :: (String ",") :: Break ::
+	      (pp_con seen tipe) :: (String ",") :: Break ::
 	      (pp_list (fn NONE => String "NONE" 
-	    | SOME e => pp_exp seen e) arms ("[",", ","]",true)) ::
+	                | SOME e => pp_exp seen e) arms ("[",", ","]",true)) ::
 	      (case default of
 		   NONE => [String "NODEFAULT"]
 		 | SOME e => [String ", DEFAULT: ", pp_exp seen e]))

@@ -18,12 +18,11 @@ functor IlPrimUtilParam(structure Il : IL)
 	fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
 	val unit_exp : exp = RECORD[]
 	val con_unit = CON_RECORD[]
-	val con_bool = CON_MUPROJECT(0,CON_FUN([Name.fresh_named_var "dummy"],
-					       CON_SUM{noncarriers = 2,
-						       carriers = [],
-						       special = NONE}))
-	val false_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=0,inject=NONE})
-	val true_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=1,inject=NONE})
+	val con_bool = CON_SUM{noncarriers = 2,
+			       carriers = [],
+			       special = NONE}
+	val false_exp = INJ{noncarriers=2,carriers=[],special=0,inject=NONE}
+	val true_exp = INJ{noncarriers=2,carriers=[],special=1,inject=NONE}
 	    
 	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
 							     (generate_tuple_label (i+1),c)) conlist)

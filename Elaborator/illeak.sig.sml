@@ -49,6 +49,7 @@ signature ILLEAK =
 			       carriers : con list,
 			       arg : exp,
 			       arms : (exp option) list,
+			       tipe : con,
 			       default : exp option}
                  (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *) 
                  | EXN_CASE of exp * (exp * con * exp) list * exp option

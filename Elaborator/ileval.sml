@@ -280,14 +280,15 @@ functor IlEval(structure Il : IL
 			       in FIX(a,map help fbnds)
 			       end
 	  | (APP(e1,e2)) => APP(reduce_exp env e1, reduce_exp env e2)
-	  | CASE {noncarriers,carriers,arg,arms,default} =>
+	  | CASE {noncarriers,carriers,arg,arms,default,tipe} =>
 			       ((* print "----------- REDUCING CASE cons:\n";
 				Ppil.pp_con (CON_SUM(NONE,cons)); *)
 				CASE{noncarriers = noncarriers,
 				     carriers = (map (reduce_con env) carriers),
 				     arg = reduce_exp env arg, 
 				     arms = map (fn NONE => NONE | SOME e => SOME(reduce_exp env e)) arms, 
-				     default = Util.mapopt (reduce_exp env) default})
+				     default = Util.mapopt (reduce_exp env) default,
+				     tipe = reduce_con env tipe})
 	  | LET (bnds,body) => LET(map (reduce_bnd env) bnds, reduce_exp env body)
 	  | HANDLE(e1,e2) => HANDLE(reduce_exp env e1, reduce_exp env e2)
 	  | RAISE (c,e) => RAISE(reduce_con env c, reduce_exp env e)
@@ -381,7 +382,7 @@ functor IlEval(structure Il : IL
 							      special = special,
 							      inject = Util.mapopt (eval_exp env) inject,
 							      noncarriers = noncarriers}
-	   | CASE {noncarriers,carriers,arg,arms,default} =>
+	   | CASE {noncarriers,carriers,arg,arms,default,tipe} =>
                (case (eval_exp env arg) of
 		    ee as INJ{carriers,noncarriers,special,inject} => 
 			let fun loop 1 [] = error "too few arms in CASE or bad sum value"

@@ -2389,7 +2389,8 @@ functor Toil(structure Il : IL
 						       carriers = carriers,
 						       arg = VAR v2,
 						       arms = arms2,
-						       default = NONE}
+						       default = NONE,
+						       tipe = con_bool}
 				 in SOME (if is_carrier
 					      then #1(make_lambda(var', sumc,
 								  con_bool,
@@ -2401,7 +2402,8 @@ functor Toil(structure Il : IL
 					  carriers = carriers,
 					  arg = VAR v1,
 					  arms = arms1,
-					  default = NONE}
+					  default = NONE,
+					  tipe = con_bool}
 		    val body = make_catch(inner_body,con_bool,false_exp)
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))

@@ -85,12 +85,11 @@ functor IlUtil(structure Ppil : PPIL
 			    in  RECORD(mapcount help explist)
 			    end
     val con_string = CON_VECTOR (CON_UINT W8)
-    val con_bool = CON_MUPROJECT(0,CON_FUN([fresh_named_var "dummy"],
-					   CON_SUM{noncarriers = 2,
-						   carriers = [],
-						   special = NONE}))
-    val false_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=0,inject=NONE})
-    val true_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=1,inject=NONE})
+    val con_bool =  CON_SUM{noncarriers = 2,
+			    carriers = [],
+			    special = NONE}
+    val false_exp = INJ{noncarriers=2,carriers=[],special=0,inject=NONE}
+    val true_exp = INJ{noncarriers=2,carriers=[],special=1,inject=NONE}
     fun make_lambda_help (a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
@@ -99,8 +98,8 @@ functor IlUtil(structure Ppil : PPIL
     fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
     fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
-	CASE{noncarriers=2,carriers=[],arg=UNROLL(con_bool,e1),
-	     arms=[SOME e3,SOME e2],default=NONE}
+	CASE{noncarriers=2,carriers=[],arg=e1,
+	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
     fun make_seq eclist =
 	let fun loop _ [] = error "make_seq given empty list"
 	      | loop [] [ec] = ec
@@ -245,12 +244,13 @@ functor IlUtil(structure Ppil : PPIL
 							      carriers = map (f_con state) carriers, 
 							      special = special,
 							      inject = Util.mapopt self inject}
-	   | CASE{carriers,noncarriers,arg,arms,default} =>
+	   | CASE{carriers,noncarriers,arg,arms,default,tipe} =>
 		 CASE{noncarriers = noncarriers,
 		      carriers = map (f_con state) carriers,
 		      arg = self arg,
 		      arms = map (Util.mapopt self) arms,
-		      default = Util.mapopt self default}
+		      default = Util.mapopt self default,
+		      tipe = f_con state tipe}
 	   | EXN_CASE(earg,ecelist,eopt) => let fun help (e1,c,e2) = (self e1, f_con state c, self e2)
 						val eopt' = (case eopt of 
 								 NONE => NONE

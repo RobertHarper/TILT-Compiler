@@ -378,7 +378,8 @@ functor Pat(structure Il : IL
 				 carriers = ca,
 				 arg = APP(expose_exp,casearg),
 				 arms = expopt_list,
-				 default = NONE}, con_deref rescon))
+				 default = NONE,
+				 tipe = con_deref rescon}, con_deref rescon))
     end
 
   and match (args : case_exp list, 

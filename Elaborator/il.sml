@@ -54,6 +54,7 @@ functor Il(structure Prim : PRIM
 			       carriers : con list,
 			       arg : exp,
 			       arms : (exp option) list,
+			       tipe : con,
 			       default : exp option}
                  | EXN_CASE of exp * (exp * con * exp) list * exp option
                  | MODULE_PROJECT of mod * label

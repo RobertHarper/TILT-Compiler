@@ -49,7 +49,7 @@ functor Basis(structure Il : IL
       val default_fixity_table = map (fn (str,f) => (symbol_label(varSymbol(str)), f)) table
     end
 
-    fun initial_context () : context * sbnd list =
+    fun initial_context () : context * sbnd list * sdec list =
       let
 	  val result = ref (add_context_fixity(empty_context,default_fixity_table))
 	  val sbnds_result = ref ([] : sbnd list)
@@ -381,20 +381,28 @@ functor Basis(structure Il : IL
 							eq_compile = Toil.xeq}
 		    
 		    
-		val (mlist,slist) = (MOD_STRUCTURE(map #1 list_sbnd_sdecs),
-				     SIGNAT_STRUCTURE(NONE, map #2 list_sbnd_sdecs))
-		    
+		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
+					       map #2 list_sbnd_sdecs)
+
+		val _ = (print "=========================================\n";
+			 print "list_sbnds are: ";
+			 Ppil.pp_sbnds list_sbnds;
+			 print "\n\n";
+			 print "list_sdecss are: ";
+			 Ppil.pp_sdecs list_sdecs;
+			 print "\n\n\n")
+
 		val bool_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = booldb : Ast.db list,
 							withtycs = [] : Ast.tb list,
 							eq_compile = Toil.xeq}
-		val (mbool,sbool) = (MOD_STRUCTURE(map #1 bool_sbnd_sdecs),
-				     SIGNAT_STRUCTURE(NONE, map #2 bool_sbnd_sdecs))
+		val (bool_sbnds,_) = (map #1 bool_sbnd_sdecs,
+				      map #2 bool_sbnd_sdecs)
 
 		(* we compute a precise signature for bool type so that the elaborator can use
 		   the fact that a bool is a CON_MUPROJECT(unit + unit) *)
-		val sbool = IlStatic.GetModSig(!result,mbool)
+		val bool_sdecs = IlStatic.GetSbndsSdecs(!result,bool_sbnds)
 
 		val susp_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
@@ -403,31 +411,18 @@ functor Basis(structure Il : IL
 							eq_compile = Toil.xeq}
 		    
 		    
-		val (msusp,ssusp) = (MOD_STRUCTURE(map #1 susp_sbnd_sdecs),
-				     SIGNAT_STRUCTURE(NONE, map #2 susp_sbnd_sdecs))
+		val (susp_sbnds,susp_sdecs) = (map #1 susp_sbnd_sdecs,
+					       map #2 susp_sbnd_sdecs)
 
-		val bool_label = open_internal_label "bools"
-		val bool_var = fresh_named_var "bools"
-		val list_label = open_internal_label "lists"
-		val list_var = fresh_named_var "lists"
-		val susp_label = open_internal_label "susps"
-		val susp_var = fresh_named_var "susps"
-		val sbool = IlStatic.SelfifySig(SIMPLE_PATH bool_var, sbool)
-		val slist = IlStatic.SelfifySig(SIMPLE_PATH list_var, slist)
-		val ssusp = IlStatic.SelfifySig(SIMPLE_PATH susp_var, ssusp)
-
-	      val (datatype_sdecs, datatype_sbnds) =
-		  ([SDEC(bool_label, DEC_MOD(bool_var, sbool)),
-		    SDEC(susp_label, DEC_MOD(susp_var, ssusp)),
-		    SDEC(list_label, DEC_MOD(list_var, slist))],
-		   [SBND(bool_label, BND_MOD(bool_var,mbool)),
-		    SBND(susp_label, BND_MOD(susp_var,msusp)),
-		    SBND(list_label, BND_MOD(list_var,mlist))])
+	      val datatype_sbnds = bool_sbnds @ susp_sbnds @ list_sbnds 
+	      val datatype_sdecs = bool_sdecs @ susp_sdecs @ list_sdecs 
+	      val datatype_self_sdecs = map (fn (SDEC(l,dec)) => SDEC(l,IlStatic.SelfifyDec dec)) datatype_sdecs
 	  in
-	      val _ = result := add_context_sdecs(!result,datatype_sdecs)
+	      val _ = result := add_context_sdecs(!result,datatype_self_sdecs)
 	      val _ = sbnds_result := datatype_sbnds
+	      val datatype_sdecs = datatype_sdecs
 	  end
-      in  (!result, !sbnds_result)
+      in  (!result, !sbnds_result, datatype_sdecs)
       end
   
   end

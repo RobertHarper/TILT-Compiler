@@ -902,63 +902,44 @@ functor IlStatic(structure Il : IL
 		       else error "rescon does not match in EXN_CASE"
 	      else error "arg not a CON_ANY in EXN_CASE"
 	   end
-     | (CASE {noncarriers,carriers,arg,arms,default}) => 
+     | (CASE {noncarriers,carriers,arg,arms,tipe,default}) => 
 	   let 
 	       val n = length arms
-	       val consNorm = map (fn c => Normalize' "CASE" (c,ctxt)) carriers
+	       val carriers = map (fn c => Normalize' "CASE" (c,ctxt)) carriers
 	       val (_,eargCon) = GetExpCon(arg,ctxt)
 	       val sumcon = CON_SUM {special = NONE,
-				     carriers = consNorm,
+				     carriers = carriers,
 				     noncarriers = noncarriers}
-	       val rescon = fresh_con ctxt
-	       val guess_arm_cons = 
-		   mapcount (fn (i,_) => CON_ARROW(CON_SUM{special = SOME (i + noncarriers),
-							   carriers = consNorm,
-							   noncarriers = noncarriers},
-						   rescon,oneshot())) consNorm
-	       fun loop still_none [] 0 [] = 
+	       fun loop _ [] =  
 		   (case default of 
-			NONE => if still_none 
-				    then error "CASE statement with no arms and no default"
-				else (false, con_deref rescon)
+			NONE => (false, tipe)
 		      | SOME edef => 
 			    let val (_,defcon) = GetExpCon(edef,ctxt)
-			    in  if (eq_con_from_get_exp13(CON_ARROW(sumcon,rescon,
-								    oneshot()),
-					   defcon,ctxt))
-				    then (false, con_deref rescon)
+			    in  if (sub_con(defcon,tipe,ctxt))
+				    then (false, tipe)
 				else error "default arm type mismatch"
 			    end)
-		 | loop still_none (NONE::arms) 0 (con::cons) = loop still_none arms 0 cons
-		 | loop _ ((SOME exp)::arms) 0 (con::cons) =
-		   let val (_,c) = GetExpCon(exp,ctxt)
-		   in if (eq_con_from_get_exp14(con,c,ctxt))
-			  then loop false arms 0 cons
-		      else (print "case arm type mismatch: checking exp = ";
-			    pp_exp exparg; print "\nwith ctxt = ";
-			    pp_context ctxt; print "\n";
-			    print "exp = \n"; pp_exp exp;
-			    print "c = \n"; pp_con c;
-			    print "guess_arm_con = \n"; pp_con con;
-			    error "case arm type mismatch")
-		   end
-		 | loop still_none (NONE::arms) n cons = loop still_none arms (n-1) cons
-		 | loop still_none ((SOME exp)::arms) n cons = 
-		   let val (_,c) = GetExpCon(exp,ctxt)
-		   in  if (eq_con(rescon,c,ctxt))
-		       then loop false arms (n-1) cons
-		       else (print "case arm type mismatch: checking exp = ";
-			    pp_exp exparg; print "\nwith ctxt = ";
-			    pp_context ctxt; print "\n";
-			    print "exp = \n"; pp_exp exp;
-			    print "c = \n"; pp_con c;
-			    print "guess_rescon = \n"; pp_con rescon;
-			    error "case arm type mismatch")
-		   end
-
-		 | loop _ _ _ _ = error "CASE: number of con != number of arms"
+		 | loop n (NONE::rest) = loop (n+1) rest
+		 | loop n ((SOME exp)::rest) = 
+			let val (_,c) = GetExpCon(exp,ctxt)
+			    val tipe' = if (n < noncarriers) then tipe 
+					else CON_ARROW(CON_SUM{special = SOME n,
+							       carriers = carriers,
+							       noncarriers = noncarriers},
+						       tipe,oneshot())
+			in  
+			    if (sub_con(c,tipe',ctxt))
+				then loop (n+1) rest
+			    else (print "case arm type mismatch: checking exp = ";
+				  pp_exp exparg; print "\nwith ctxt = ";
+				  pp_context ctxt; print "\n";
+				  print "exp = \n"; pp_exp exp;
+				  print "c = \n"; pp_con c;
+				  print "tipe' = \n"; pp_con tipe';
+				  error "case arm type mismatch")
+			end
 	   in if (eq_con_from_get_exp15(eargCon,sumcon,ctxt))
-		  then loop true arms noncarriers guess_arm_cons
+		  then (loop 0 arms)
 	      else 
 		  error "CASE: expression type and decoration con mismatch"
 	   end
@@ -1055,8 +1036,7 @@ functor IlStatic(structure Il : IL
       case module of
        (MOD_VAR v) => (case Context_Lookup'(ctxt,v) of
 			   SOME(_,PHRASE_CLASS_MOD(_,s)) => (true,s)
-			 | SOME _ => error "MOD_VAR v with v not bound to a module"
-			 | NONE => error "MOD_VAR v with v not bound")
+			 | _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound to a module"))
      | MOD_STRUCTURE (sbnds) => 
 	   let fun loop va [] acc ctxt = (va,rev acc)
 		 | loop va (sb::sbs) acc ctxt = 
@@ -1443,7 +1423,6 @@ functor IlStatic(structure Il : IL
 		 else raise NOPE
 	       | match_var _ _ = (print "Sdecs_IsSub: length mismatch\n";
 				  raise NOPE)
-	     val sdecs2' = match_var sdecs1 sdecs2
 	     fun loop ctxt [] [] = true
 	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) = 
 		 let val dec1 = SelfifyDec dec1
@@ -1451,7 +1430,7 @@ functor IlStatic(structure Il : IL
 		     andalso loop (add_context_dec(ctxt,dec1)) rest1 rest2)
 		 end
 	       | loop ctxt _ _ = false
-	 in loop ctxt sdecs1 sdecs2'
+	 in (loop ctxt sdecs1 (match_var sdecs1 sdecs2))
 	     handle NOPE => false
 	 end
 
