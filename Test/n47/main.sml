@@ -11,6 +11,7 @@
 *)
 
 
+val _ =
 let                                   (* 17, 26, 42, 35, 9, 6, *)
    exception A of 'a                  (* 21, Error in 31, 47, *)
 in

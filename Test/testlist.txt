@@ -87,21 +87,20 @@ n30     type inference with refs
 n31     type inference with refs
 n32     distinct type variables don't unify
 n33     scope of explicit type variables
-n34     Denmark Core-SML failure test
-n35     Denmark Core-SML failure test
-n36     Denmark Core-SML failure test
-n37     Denmark Core-SML failure test
-n38     Denmark Core-SML failure test
-n39     Denmark Core-SML failure test
-n40     Denmark Core-SML failure test
-n41     Denmark Core-SML failure test
-n42     Denmark Core-SML failure test
-n43     Denmark Core-SML failure test
-n44     Denmark Core-SML failure test
-n45     Denmark Core-SML failure test
-n46     Denmark Core-SML failure test
-n47     Denmark Core-SML failure test
-n48     Denmark Core-SML failure test
+n34     non-equality datatype
+n35     abstypes are not equality types
+n36     scoping of abstype
+n37     exception constructor in pattern match
+n38     scoping of local
+n39     opaque datatypes
+n40     ints aren't reals
+n41     scoping of and
+n42     scoping of val
+n43     occurs check in type inference
+n44     scoping of "and" in type definition
+n45     opaque datatypes and shadowing
+n46     opaque datatypes and shadowing
+n47     polymorphic exception
 n49     Denmark Core-SML failure test
 n50     Denmark Core-SML failure test
 n51     Denmark Core-SML failure test
