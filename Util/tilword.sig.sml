@@ -1,6 +1,7 @@
 signature TILWORD =
     sig
 	
+	type halfword
 	type word
 	val wordsize : int    (* guaranteed to be an positive even integer *)
 	val zero : word       (* all bits zero *)
@@ -54,14 +55,18 @@ signature TILWORD =
 	val rshifta : word * int -> word   (* arithmatic right shift *)
 	    
   
-  (* ----- conversion operations *)
-  val fromInt : int -> word       (* converts from int to word with sign extension *)
-  val toInt : word -> int       (* converts to int treating word as signed *)
-  val fromHexString : string -> word         (* for exmaple, "ff0a435" *)
-  val fromDecimalString : string -> word     (* for example, "~342" *)
-  val fromWordStringLiteral : string -> word  (* for exmaple, "0wx024334" or "0w123" *)
-  val toHexString : word -> string
-  val toDecimalString : word -> string
+	(* ----- conversion operations *)
+	val fromSignedHalf : halfword -> word
+	val fromUnsignedHalf : halfword -> word
+	val toSignedHalf : word -> halfword
+	val toUnsignedHalf : word -> halfword
+	val fromInt : int -> word       (* converts from int to word with sign extension *)
+	val toInt : word -> int       (* converts to int treating word as signed *)
+	val fromHexString : string -> word         (* for exmaple, "ff0a435" *)
+	val fromDecimalString : string -> word     (* for example, "~342" *)
+	val fromWordStringLiteral : string -> word  (* for exmaple, "0wx024334" or "0w123" *)
+	val toHexString : word -> string
+	val toDecimalString : word -> string
 
 (*
   val wordToString : word -> string    (* prints a signed base10 representation 

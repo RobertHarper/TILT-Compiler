@@ -3,45 +3,46 @@
  * Robert Harper, and Peter Lee.
  *)
 
-structure TilWord32 : TILWORD =
+structure TilWord32 :> TILWORD where type word = Word32.word =
 struct
 
-  type word = Word32.word
-  val wordsize = 32
-  val zero = 0w0 : word
-  val one = 0w1 : word
-  val neg_one = 0wxffffffff : word
-  val low_mask = 0wx0000ffff : word
-  val high_mask = 0wxffff0000 : word
-  val most_neg = 0wx80000000 : word
-  val error = fn s => Util.error "tilword32.sml" s
+    type halfword = unit
+    type word = Word32.word
+    val wordsize = 32
+    val zero = 0w0 : word
+    val one = 0w1 : word
+    val neg_one = 0wxffffffff : word
+    val low_mask = 0wx0000ffff : word
+    val high_mask = 0wxffff0000 : word
+    val most_neg = 0wx80000000 : word
+    val error = fn s => Util.error "tilword32.sml" s
+	
+    (* ------ EQUALITY OPERATIONS --------- *)
+    fun equal(x:word,y) = x = y
+    fun nequal(x:word,y) = not(equal(x,y))
 
-  (* ------ EQUALITY OPERATIONS --------- *)
-  fun equal(x:word,y) = x = y
-  fun nequal(x:word,y) = not(equal(x,y))
-
-  (* ---------- LOGICAL OPERATIONS ---------- *)
-  val andb = Word32.andb
-  val orb = Word32.orb
-  val xorb = Word32.xorb
-  val notb = Word32.notb
-  fun lshift(w,i) = Word32.<<(w,Word31.fromInt i)
-  fun rshiftl(w,i) = Word32.>>(w,Word31.fromInt i)
-  fun rshifta(w,i) = Word32.~>>(w,Word31.fromInt i)
-
-  (* ------ UNSIGNED OPERATIONS --------- *)
-  val uplus = Word32.+
-  val uminus = Word32.-
-  fun unegate a = uplus(one,notb(a))
-  val umult = Word32.*
-  val udiv = Word32.div
-  val ult = Word32.<
-  val ugt = Word32.>
-  val ulte = Word32.<=
-  val ugte = Word32.>=
-  val umod = Word32.mod
-  fun umult'(a,b) = 
-      let 
+    (* ---------- LOGICAL OPERATIONS ---------- *)
+    val andb = Word32.andb
+    val orb = Word32.orb
+    val xorb = Word32.xorb
+    val notb = Word32.notb
+    fun lshift(w,i) = Word32.<<(w,Word31.fromInt i)
+    fun rshiftl(w,i) = Word32.>>(w,Word31.fromInt i)
+    fun rshifta(w,i) = Word32.~>>(w,Word31.fromInt i)
+	
+    (* ------ UNSIGNED OPERATIONS --------- *)
+    val uplus = Word32.+
+    val uminus = Word32.-
+    fun unegate a = uplus(one,notb(a))
+    val umult = Word32.*
+    val udiv = Word32.div
+    val ult = Word32.<
+    val ugt = Word32.>
+    val ulte = Word32.<=
+    val ugte = Word32.>=
+    val umod = Word32.mod
+    fun umult'(a,b) = 
+	let 
 	  val half_size = wordsize div 2
 	  fun get_low x = andb(low_mask,x)
 	  fun get_high x = rshiftl(andb(high_mask,x),half_size)
@@ -140,6 +141,10 @@ struct
   fun sgte(x,y) = not(slt(x,y))
 
   (* ----- Conversion Operations ------ *)
+  fun fromSignedHalf () = zero
+  fun fromUnsignedHalf () = zero
+  fun toSignedHalf _ = ()
+  fun toUnsignedHalf _ = ()
   val fromInt = Word32.fromInt
   fun toInt i =
       let val i' = Word32.toInt i

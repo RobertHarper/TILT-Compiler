@@ -1,9 +1,10 @@
-structure TilWord64 : TILWORD =
+structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
  struct
 
   structure W = TilWord32
   val error = fn s => Util.error "tilword64.sml" s
 
+  type halfword = W.word
   type word32 = W.word
   type word = word32 * word32           (* high bits * low bits *)
   val wordsize = 64
@@ -101,7 +102,7 @@ structure TilWord64 : TILWORD =
 			div_loop (uminus(n1,n2), rshiftl (n2, 1), shifts-1))
 		  
       in
-	  if b = zero then raise Div
+	  if equal(b,zero) then raise Div
 	  else
 	      let val shift = find_shift (a,b)
 	      in div_loop (a, lshift (b, shift), shift)
@@ -186,6 +187,16 @@ structure TilWord64 : TILWORD =
   fun srem _ = raise Util.UNIMP
 
   (* ----- Conversion Operations ------ *)
+  fun fromUnsignedHalf w32 = (W.zero,w32)
+  fun fromSignedHalf w32 = let val high = if ((W.sign w32) < 0) then W.neg_one else W.zero
+			   in (high,w32)
+			   end
+  fun toUnsignedHalf (high,low) = if (W.equal(W.zero,high)) then low else error "toUnsignedHalf failed"
+  fun toSignedHalf (high,low) = let val high' = if ((W.sign low) < 0) then W.neg_one else W.zero
+				in if (W.equal(high,high'))
+				       then low
+				   else error "toSignedHalf failed"
+				end
   fun toHexString (high,low) = W.toHexString(high) ^ W.toHexString(low)
   fun fromInt i = 
       let val low = W.fromInt i
