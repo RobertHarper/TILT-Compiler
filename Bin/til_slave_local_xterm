@@ -3,10 +3,8 @@
 # usage: til_slave n count host commdir
 #
 # Create count slaves on host.  n is used to set window geometry.  We
-# create a local xterm running the slave via ssh.  Advantage: since
-# the X window is local, there is less communication and less overhead
-# on the remote machine.  Drawback:  when you hit ^C, the slave goes
-# away instead of entering the SML/NJ top-level loop.
+# create the slaves in a remote emacs displaying on a local xterm.
+# Advantage: less communication overhead.
 #
 # As a hack, the host "localhost" is treated specially.
 #
@@ -62,97 +60,116 @@ title="TIL $mldir @ $arghost"
 # Default SML/NJ version to use (matters at CMU, harmless elsewhere)
 : ${SML_VERSION:=110}
 
-num="$argn"
-max=`expr $num + "$argcount"`
-while test $num -lt $max
-do
-	num=`expr $num + 1`
+# The X11 geometry specification for window n.
 
-	# The X11 geometry specification for window n.
+yoffset=`echo "$argn % 5 * 160" | bc`
+xoffset=`echo "$argn / 5 * 300" | bc`
+nrows=`echo "11 * $argcount" | bc`
+geometry="120x$nrows+$xoffset+$yoffset"
 
-	yoffset=`echo "$num % 5 * 160" | bc`
-	xoffset=`echo "$num / 5 * 300" | bc`
-	geometry="120x11+$xoffset+$yoffset"
+# The bourne shell script to run remotely.
 
-	# The bourne shell script to run remotely.
+cmdfile=/tmp/til_slave.$$
 
-	cmdfile=/tmp/til_slave.$num.$$
+cmd='	PATH="'"$PATH"'"
+	export PATH
 
-	cmd='	PATH="'"$PATH"'"
-		export PATH
-	
-		# We assume that unlinking $cmdfile (in /tmp) wont break
-		# anything.
-		rm -f '$cmdfile'
+	# We assume that unlinking $cmdfile (in /tmp) wont break
+	# anything.
+	rm -f '$cmdfile'
 
-		# Required for access to AFS at CMU
+	# Required for access to AFS at CMU
 
-		if [ "'"$arghost"'" = localhost ]
+	if [ "'"$arghost"'" = localhost ]
+	then
+		:
+	else
+		if kinit '$USER'
 		then
 			:
 		else
-			if kinit '$USER'
-			then
-				:
-			else
-				exit 1
-			fi
+			exit 1
 		fi
-	
-		# Required by TIL
+	fi
 
-		SYS=`sys`
-		export SYS
+	# Required by TIL
 
-		HOST=`hostname`
-		export HOST
+	SYS=`sys`
+	export SYS
 
-		# Required by SML/NJ at CMU, harmless elsewhere
+	HOST=`hostname`
+	export HOST
 
-		SML_VERSION='$SML_VERSION'
-		export SML_VERSION
+	# Required by SML/NJ at CMU, harmless elsewhere
 
-		# Run a slave inside NJ.
-	
-		# Hack for now.  We should be using a custom heap.  We
-		# should be using something like expect(1) so the user
-		# can interrupt Manager and continue to work inside
-		# NJ.
-	
-		cd "'"$mldir"'"
-		exec sml << "END_ML"
-			SMLofNJ.Internals.GC.messages false;
-			CM.verbose (SOME false);
-			CM.make();
-			Manager.slave();
-END_ML
+	SML_VERSION='$SML_VERSION'
+	export SML_VERSION
+
+	# Run a slave inside NJ inside emacs.
+
+	# Hack for now.  We should be using a custom
+	# heap.
+
+	cd "'"$mldir"'"
+
+	cat << "END_EMACS" > /tmp/elisp'$$'
+(setq load-path (cons "/usr/local/lib/sml/sml-mode" load-path))
+(require '\''sml-mode)
+(require '\''comint)
+(require '\''sml-proc)
+(defun til-slave-startup ()
+  (interactive)
+  (set-default-font "6x10")
+  (menu-bar-mode -1)
+  (delete-file "/tmp/elisp'$$'")
+  (til-slaves '$argcount' nil))
+(defun til-launch-slave ()
+  (sml-run "/usr/local/bin/sml" "")
+  (sml-skip-errors)
+  (comint-send-string (sml-proc)
+		      (concat "SMLofNJ.Internals.GC.messages false;"
+			      "CM.verbose (SOME false);"
+			      "CM.make();"
+			      "Manager.slave();\n")))
+(defun til-slave ()
+  (interactive)
+  (til-launch-slave)
+  (switch-to-buffer sml-buffer))
+(defun til-slaves (n split)
+  (if (= n 0)
+      (balance-windows)
+    (progn
+      (if split (split-window-vertically))
+      (til-slave)
+      (rename-buffer "*til slave*" t)
+      (til-slaves (- n 1) t))))
+END_EMACS
+	exec emacs -nw --no-init-file -bg black -fg yellow \
+	     -geometry '$geometry' -l /tmp/elisp'$$' -f til-slave-startup
 '
 
-	# We put the command into a file because ssh doesn't send the
-	# command exactly to the remote sh.  Rather than using $argdir
-	# to hold the file (which may be on AFS -- causing
-	# synchronization problems we don't want to deal with), we
-	# send it to /tmp on the remote machine.  Ug.
+# We put the command into a file because ssh doesn't send the
+# command exactly to the remote sh.  Rather than using $argdir
+# to hold the file (which may be on AFS -- causing
+# synchronization problems we don't want to deal with), we
+# send it to /tmp on the remote machine.  Ug.
 
-	if [ "$arghost" = localhost ]
-	then
-		echo "$cmd" > $cmdfile
-	else	
-		echo "$cmd" > $cmdfile.local
-		$scp $cmdfile.local "$arghost:$cmdfile"
-		rm -f $cmdfile.local
-	fi
+if [ "$arghost" = localhost ]
+then
+	echo "$cmd" > $cmdfile
+else	
+	echo "$cmd" > $cmdfile.local
+	$scp $cmdfile.local "$arghost:$cmdfile"
+	rm -f $cmdfile.local
+fi
 
-	if [ "$arghost" = localhost ]
-	then
-		xterm -fn 6x10 -geometry "$geometry" -title "$title" \
-			-n "$title" -e /bin/sh $cmdfile &
-	else
-		# Launch script remotely
-		xterm -fn 6x10 -geometry "$geometry" -title "$title" \
-			-n "$title" -e ssh -t -o 'ForwardX11 no' \
-			"$arghost" exec /bin/sh $cmdfile &
-	fi
-done # while
-
-wait
+if [ "$arghost" = localhost ]
+then
+	xterm -fn 6x10 -geometry "$geometry" -title "$title" \
+		-n "$title" -e /bin/sh $cmdfile &
+else
+	# Launch script remotely
+	xterm -fn 6x10 -geometry "$geometry" -title "$title" \
+		-n "$title" -e ssh -t -o 'ForwardX11 no' \
+		"$arghost" exec /bin/sh $cmdfile &
+fi
