@@ -296,7 +296,7 @@ struct
    (* Determines the corresponding _c and _r variables for a
       use of a module variable that should already have been bound.
 
-      XXX  Why is this returning the vmap?  Consistency with splitNewVar?
+      XXX  Why is this returning a vmap?  Consistency with splitNewVar?
     *)
    fun splitVar (var : N.var, vmap : vmap) : N.var * N.var * vmap = 
      (case (lookupVmap (var,vmap)) of
@@ -1366,9 +1366,6 @@ struct
 				   (Var_e tvar)::exps)
 
 		   (* Note that exps will always be of the form (Var_e v)
-
-                      XXX: Use of Typeof_c to get the types of the term
-                           parts of the record. 
                     *)
 		   val rtype = Prim_c(Record_c(labels, NONE),
 				      map Typeof_c exps)
@@ -2699,10 +2696,18 @@ struct
        end
            
      | xexp' context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
-         (* XXX:  Is there any reason why, other than optimization, 
-	          that we reduce trivial redices here?
-	  *)
-         (case IlUtil.exp_reduce (get_hilctxt context,il_exp) of
+         (* An easy optimization:  reduce trivial redices (e.g.,
+              an application of a lambda to a variable, or an
+              eta-expanded primop to an argument).  This does
+              *not* due general beta-reductions.
+
+              XXX: The HIL context being supplied to exp_reduce
+                   only contains the imports, and so il_exp
+                   may not be well-formed with respect to this
+                   context.   Does it matter?  (It may not,
+                   if only things like "bool" are being accessed.)
+          *)
+         (case IlUtil.exp_reduce (get_hilctxt context, il_exp) of
 	    NONE => 
 	      let
 		val exp1 = xexp context il_exp1
@@ -3080,7 +3085,7 @@ struct
                                  that doesn't end in "it", or another
                                  discardable label?  If so, fun_part_r
                                  might need to project "lbls @ [lbl]"
-                                 in such cases.
+                                 instead of just "lbls" in such cases.
                               *)
 			     let
 			       val {ebnd_cat, cbnd_cat, name_c, name_r, ...} = 
@@ -3289,17 +3294,25 @@ struct
      | xsig' context (con0, Il.SIGNAT_STRUCTURE sdecs) = 
            xsig_struct context (con0,sdecs)
 
-     (* XXX The following 2 cases may never happen, since the imports
-        are unselfified before we get there, and the elaborator
-        never translates a user-written signature into SIGNAT_SELF
-      *)
-
      | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = 
 	   (print "xsig' --- found SIGNAT_SELF with unselfified copy\n";
 	    xsig' context (con0, unselfSig))
+
+     (* XXX: How is it possible that the following case can happen,
+             since the imports are unselfified before we get there,
+             and the elaborator should never need to translates a
+             user-written signature into SIGNAT_SELF.  But
+             nevertheless, the pqueens benchmark does trigger this
+             case; it appears to be the only benchmark that translates
+             a SIGNAT_SELF. 
+      *)
+
      (* the self signature has no self-references; 
-        but rather has no internal variable uses (???)
+        but rather has no internal variable uses 
+        
+        XXX: What does this comment mean?
       *) 
+
      | xsig' context (con0, Il.SIGNAT_SELF(_, NONE, selfSig)) = 
 	   (* XXX:  Why don't we call unselfify here, since the previous
                     case goes to the selfified version.
