@@ -1,0 +1,16 @@
+Number: 0156
+Title:       datatypes and scope
+Keywords:    elaborator, datatypes, let
+Submitter:   swasey
+Date:        10/08/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     TILT bombs on test n16 in the reduce_to_remove part of compiling a LetExp.
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: n16
+Owner: swasey
+Status: open
