@@ -83,10 +83,11 @@ struct
 	   | SOME (Comm.FLUSH ((_,id),plan)) => Update.flush plan
 	   | SOME (Comm.REQUEST (job, plan)) =>
 		   compile (state,job,plan) handle e =>
-		   if !ExnHandler.Interactive then raise e
-		   else
+		   (ExnHandler.print e;
+		    if !ExnHandler.Interactive then raise e
+		    else
 			(Comm.send (Comm.ACK_ERROR (job, ExnHandler.errorMsg e)) out_channel;
-			 Comm.send Comm.READY out_channel))
+			 Comm.send Comm.READY out_channel)))
 
     fun complete ((identity, in_channel, out_channel) : state) : unit =
 	(Comm.closeIn in_channel;
