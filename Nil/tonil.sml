@@ -992,6 +992,10 @@ end (* local defining splitting context *)
 	    xsbnds_rewrite_2 context il_sbnds
 
 
+     | xsbnds_rewrite_1 context il_sbnds = 
+	    xsbnds_rewrite_2 context il_sbnds
+
+
    and xsbnds_rewrite_2 context 
                         (il_sbnds as
 			 Il.SBND(lbl, 
