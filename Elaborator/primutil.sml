@@ -31,15 +31,13 @@ struct
 
   fun get_type prim cons =
      let 
-	 fun help (arg,res) = partial_arrow(arg,res)
-	 fun help' (args,res) = help(con_tuple args,res)
-	 fun thelp (arg,res) = total_arrow(arg,res)
-	 fun thelp' (args,res) = thelp(con_tuple args,res)
+	 fun help (arg,res) = (false,[arg],res)
+	 fun help' (args,res) = (false,args,res)
+	 fun thelp (arg,res) = (true,[arg],res)
+	 fun thelp' (args,res) = (true,args,res)
      in
 	 (case (prim,cons) of
-(*	     NIL {instance} => CON_LIST instance *)
-	 ((soft_vtrap _ | soft_ztrap _ | hard_vtrap _ | hard_ztrap _),[]) => con_unit
-(*		NOT  => help(con_bool,con_bool) *)
+	 ((soft_vtrap _ | soft_ztrap _ | hard_vtrap _ | hard_ztrap _),[]) => (false,[],con_unit)
        | (mk_ref, [instance]) => thelp(instance,con_ref instance)
        | (deref, [instance]) => thelp(con_ref instance,instance)
 (*	      | SIZE => help(con_string, con_int)
@@ -125,9 +123,9 @@ struct
 		 fun update_array instance =  thelp'([con_array instance, con_uint W32, instance], con_unit)
 		 fun update_vector instance =  thelp'([con_vector instance, con_uint W32, instance], con_unit)
 		 fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
-		 fun eq_vector instance = help(help'([instance, instance],con_bool),
-					       help'([con_vector instance, 
-						      con_vector instance],con_bool))
+		 fun eq_vector instance = help(partial_arrow(con_tuple [instance, instance],con_bool),
+					       partial_arrow(con_tuple [con_vector instance, 
+									con_vector instance],con_bool))
 		 fun array2vector_array instance = thelp(con_array instance, con_vector instance)
 		 fun do_array instance = 
 		     (case prim of
@@ -173,17 +171,28 @@ struct
      end
 
   fun get_iltype ilprim _ =
-     let 
-	 fun help (arg,res) = partial_arrow(arg,res)
-	 fun help' (args,res) = help(con_tuple args,res)
-     in
-	 case ilprim of
-	     (not_uint is) => help(con_uint is, con_uint is)
-	   | (and_uint is | or_uint is) => help'([con_uint is, con_uint is], con_uint is)
-	   | (lshift_uint is) => help'([con_uint is, con_int W32], con_uint is)
-	   | (eq_uint is | neq_uint is) => help'([con_uint is, con_uint is], con_bool)
-     end
+      (case ilprim of
+	   (not_uint is) => (false,[con_uint is], con_uint is)
+	 | (and_uint is | or_uint is) => (false,[con_uint is, con_uint is], con_uint is)
+	 | (lshift_uint is) => (false,[con_uint is, con_int W32], con_uint is)
+	 | (eq_uint is | neq_uint is) => (false, [con_uint is, con_uint is], con_bool))
 
+	   
+  fun get_type' prim args = 
+      let val (total,incons,outcon) = get_type prim args
+	  val arrow = if total then total_arrow else partial_arrow
+      in  (case incons of
+	       [incon] => arrow(incon,outcon)
+	     | _ => arrow(con_tuple incons, outcon))
+      end
+
+  fun get_iltype' ilprim arg = 
+      let val (total,incons,outcon) = get_iltype ilprim arg
+	  val arrow = if total then total_arrow else partial_arrow
+      in  (case incons of
+	       [incon] => arrow(incon,outcon)
+	     | _ => arrow(con_tuple incons, outcon))
+      end
 
     fun apply prim cons vals = (* instance arg *)
 	let 

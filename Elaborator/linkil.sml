@@ -12,6 +12,7 @@ signature LINKIL =
       type module = (Il.context * Il.sbnd list * Il.sdec list) 
       val compile_prelude : bool * string -> module
       val compile : string -> module option
+      val compiles : string -> (module list) option
       val test : string ->  module option
       val setdepth : int -> unit (* printing depth *)
   end
@@ -109,6 +110,9 @@ structure LinkIl (* : LINKIL *) =
 		val entries' = map help entries
 	    in IlContext.add_context_entries(ctxt,entries')
 	    end
+
+	fun local_add_context_sdecs(ctxt,sdecs) = 
+	    local_add_context_entries(ctxt,map CONTEXT_SDEC sdecs)
 
 	val empty_context = IlContext.empty_context
 
@@ -271,6 +275,25 @@ structure LinkIl (* : LINKIL *) =
 		(case (!inlineprelude_quad) of
 		     NONE => error "prelude not elaborated yet"
 		   | SOME q => elaborate_prepend q filename)
+	    fun compiles filenames = 
+		let fun loop q [] = SOME []
+		      | loop q (filename::rest) = 
+			(case (elaborate_prepend q filename) of
+			     NONE => NONE
+			   | SOME (m as (_,_,sdecs)) => 
+				 (let val (ct1,sb,sd,ct2) = q
+				      val ct1' = local_add_context_sdecs(ct1,sdecs)
+				      val ct2' = local_add_context_sdecs(ct2,sdecs)
+				      val q' = (ct1',sb,sd,ct2')
+				  in  (case (loop q' rest) of
+					   NONE => NONE
+					 | SOME ms => SOME(m :: ms))
+				  end))
+		    val q = (case (!inlineprelude_quad) of
+				 NONE => error "prelude not elaborated yet"
+			       | SOME q => q)
+		in  loop q filenames
+		end
 	end
 
 (*
@@ -328,7 +351,9 @@ structure LinkIl (* : LINKIL *) =
 		val _ =
 		    if docheck
 			then 
-			    let val precise_s = (Stats.timer("TYPECHECKING",IlStatic.GetModSig))(context,m)
+			    let 
+(* XXX				val context = break_abstract context *)
+				val precise_s = (Stats.timer("TYPECHECKING",IlStatic.GetModSig))(context,m)
 				fun sanity_check (ctxt,m,precise_s,given_s) = 
 				    if (not (IlStatic.Sig_IsSub(ctxt,precise_s,given_s)))
 					then SOME "precise_s is not a subsig of given_s"

@@ -140,8 +140,8 @@ functor IlUtil(structure Ppil : PPIL
 			   primer(prim,cargs,eargs)))
 	end
 
-    val prim_etaexpand = etaexpand_help (PRIM,PrimUtil.get_type)
-    val ilprim_etaexpand = etaexpand_help (ILPRIM,PrimUtil.get_iltype)
+    val prim_etaexpand = etaexpand_help (PRIM,PrimUtil.get_type')
+    val ilprim_etaexpand = etaexpand_help (ILPRIM,PrimUtil.get_iltype')
 
     fun beta_reduce_mod(x : mod, y : mod) : mod option = 
 	(case (x,y) of
@@ -158,12 +158,12 @@ functor IlUtil(structure Ppil : PPIL
 	     (ETAPRIM(p,cs),RECORD rbnds) => SOME(PRIM(p,cs,map #2 rbnds))
 	   | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
 	   | (x as ETAPRIM(p,cs),y) =>
-		     (case (PrimUtil.get_type p cs) of
+		     (case (PrimUtil.get_type' p cs) of
 			  CON_ARROW([CON_RECORD _],_,_,_) => NONE
 			| CON_ARROW(_,_,_,_) => SOME(PRIM(p,cs,[y]))
 			| _ => NONE)
 	   | (x as ETAILPRIM(ip,cs),y) =>
-		     (case (PrimUtil.get_iltype ip cs) of
+		     (case (PrimUtil.get_iltype' ip cs) of
 			  CON_ARROW([CON_RECORD _],_,_,_) => NONE
 			| CON_ARROW(_,_,_,_) => SOME(ILPRIM(ip,cs,[y]))
 			| _ => NONE)

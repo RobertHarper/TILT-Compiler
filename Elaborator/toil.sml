@@ -169,15 +169,23 @@ functor Toil(structure Il : IL
     fun overload_help warn ocon =
 	let val helpers = {hard = fn (c1,c2) => eq_con(empty_context,c1,c2),
 			   soft = fn (c1,c2) => soft_eq_con(empty_context,c1,c2)}
-	in (case (ocon_constrain(ocon,helpers)) of
+	in (
+(*
+	    print "overload_help: internal type is: ";
+	    Ppil.pp_con (CON_TYVAR (ocon_deref ocon));
+	    print "\n";
+*)
+	    case (ocon_constrain(ocon,helpers)) of
 		[] => (error_region();
-		       print "overloaded type: none of the constraints are satisfied\n")
-	      | [pos] => ()
-	      | pos::_ => if warn 
-			      then 
-				  (error_region();
-				   print "Warning: more than one constraint satisfied by overloaded type")
-			  else ())
+		       print "overloaded type: none of the constraints are satisfied\n";
+		       true)
+	      | [pos] => true
+	      | pos::_ => (if warn 
+			       then 
+				   (error_region(); 
+				    print "Warning: more than one constraint satisfied by overloaded type")
+			   else ();
+			       false))
 	end
 
      (* ----------------- Helper Functions ----------------------- *)
@@ -668,7 +676,7 @@ functor Toil(structure Il : IL
 		 fun red (exp as (OVEREXP (c,_,oe))) = 
 		     ((case c of 
 			   CON_OVAR ocon => overload_help false ocon
-			 | _ => ());
+			 | _ => false);
 		      (case (oneshot_deref oe) of
 			   SOME exp => exp
 			 | NONE => exp))
@@ -2679,6 +2687,18 @@ functor Toil(structure Il : IL
 				 Stats.counter "toil.unresolved_tyvar" ();
 				 Tyvar.tyvar_set(tv,con_unit)))
 			
+	fun overload_loop warn overload_table = 
+	    let fun folder (entry,(rest,change)) = 
+		if (overload_help false entry)
+		    then (rest,true)
+		else (entry::rest, change)
+		val (rest,change) = foldl folder ([],warn) overload_table
+	    in  if warn
+		    then ()
+		else (if change 
+			  then overload_loop warn rest
+		      else overload_loop true rest)
+	    end
 
 	val _ = reset_elaboration fp
 	val _ = push_region(0,1000000)
@@ -2688,7 +2708,8 @@ functor Toil(structure Il : IL
         val tyvar_table = get_tyvar_table()
 	val overload_table = get_overload_table()
 	val flex_table = get_flex_table()
-        val _ = app (overload_help true) overload_table 
+val _ = print "\n\n-----------calling overload_help on table---------\n\n"
+        val _ = overload_loop false overload_table 
 	val _ = app flex_help flex_table 
         val _ = app tyvar_help tyvar_table
 
