@@ -1,4 +1,4 @@
-(*$import Prelude STRING_CVT *)
+(*$import Prelude STRING_CVT PreString *)
 (* string-cvt.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,6 +7,16 @@
 
 structure StringCvt :> STRING_CVT =
   struct
+      
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+
+    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
 
   (* get radix and realfmt types from type-only structure *)
 
@@ -39,7 +49,7 @@ structure StringCvt :> STRING_CVT =
     in
 	fun padLeft padChr wid s = 
 	    let
-		val len = size s
+		val len = PreString.size s
 		val pad = wid - len
 	    in
 		if (pad > 0)
@@ -54,7 +64,7 @@ structure StringCvt :> STRING_CVT =
 	    end
 	fun padRight padChr wid s = 
 	    let
-		val len = size s
+		val len = PreString.size s
 		val pad = wid - len
 	    in
 		if (pad > 0)
@@ -72,20 +82,20 @@ structure StringCvt :> STRING_CVT =
 
     fun splitl pred getc rep = let
 	  fun lp (n, chars, rep) = (case (getc rep)
-		 of NONE => (revImplode(n, chars), rep)
+		 of NONE => (PreString.revImplode(n, chars), rep)
 		  | SOME(c, rep) => if (pred c)
 		      then lp(n+1, c::chars, rep)
-		      else (revImplode(n, chars), rep)
+		      else (PreString.revImplode(n, chars), rep)
 		(* end case *))
 	  in
 	    lp (0, [], rep)
 	  end
     fun takel pred getc rep = let
 	  fun lp (n, chars, rep) = (case (getc rep)
-		 of NONE => revImplode(n, chars)
+		 of NONE => PreString.revImplode(n, chars)
 		  | SOME(c, rep) => if (pred c)
 		      then lp(n+1, c::chars, rep)
-		      else revImplode(n, chars)
+		      else PreString.revImplode(n, chars)
 		(* end case *))
 	  in
 	    lp (0, [], rep)
@@ -126,18 +136,5 @@ structure StringCvt :> STRING_CVT =
 		 NONE => NONE
 	       | SOME(x, _) => SOME x
 	 end
-    fun getNChars (getc : 'a -> (char * 'a) option) (cs, n) = let
-          fun rev ([], l2) = l2
-            | rev (x::l1, l2) = rev(l1, x::l2)
-          fun get (cs, 0, l) = SOME(rev(l, []), cs)
-            | get (cs, i, l) = (case getc cs
-                 of NONE => NONE
-                  | (SOME(c, cs')) => get (cs', i-1, c::l)
-                (* end case *))
-          in
-            get (cs, n, [])
-          end
-
-
   end
 

@@ -1,4 +1,4 @@
-(*$import Prelude List Int POSIX_Signal Word32 Time Word8 POSIX_extern POSIX_PROCESS *)
+(*$import Prelude PrePosix List POSIX_Signal SysWord SysInt Time Word8 POSIX_extern POSIX_PROCESS *)
 (* posix-process.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -27,19 +27,17 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
     fun osval (s : string) : s_int = Ccall(posix_process_num,s)
     val w_osval = SysWord.fromInt o osval
 
-    fun sysconf (s : string) : SysWord.word = Ccall(posix_process_sysconf,s)
-
     fun fork () =
           case Ccall(posix_process_fork,()) of
             0 => NONE
           | child_pid => SOME(PID child_pid)
     
     fun exec (x: string, y : string list) : 'a = (Ccall(posix_process_exec, x, y);
-						  raise LibFail "exec cannot return")
+						  raise TiltExn.LibFail "exec cannot return")
     fun exece (x: string, y : string list, z : string list) : 'a = (Ccall(posix_process_exece, x, y, z);
-								    raise LibFail "exece cannot return")
+								    raise TiltExn.LibFail "exece cannot return")
     fun execp (x: string, y : string list) : 'a = (Ccall(posix_process_execp, x, y);
-						  raise LibFail "execp cannot return")
+						  raise TiltExn.LibFail "execp cannot return")
 
     datatype waitpid_arg
       = W_ANY_CHILD 
@@ -95,7 +93,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
         fun orF (WF f,acc) = f ++ acc
 
         val untraced =
-          WF(sysconf "JOB_CONTROL"; w_osval "WUNTRACED") handle _ => WF 0w0
+          WF(PrePosix.sysconf "JOB_CONTROL"; w_osval "WUNTRACED") handle _ => WF 0w0
       end
 
     fun waitpid (arg,flags) = let
@@ -112,7 +110,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
     fun wait () = waitpid(W_ANY_CHILD,[])
     
     fun exit (x: Word8.word) : 'a = (Ccall(posix_process_exit, x);
-				     raise LibFail "execp cannot return")
+				     raise TiltExn.LibFail "execp cannot return")
     
     fun kill' (x : s_int, y : s_int) : unit = Ccall(posix_process_kill, x, y)
     fun kill (K_PROC (PID pid), s) = kill'(pid, SysWord.toInt(Sig.toWord s))
@@ -131,9 +129,12 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:40  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:40  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:40  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:13  pscheng
  * *** empty log message ***
  *

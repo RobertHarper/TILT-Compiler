@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Prelude TopLevel *)
 (* Paths, Occurrences, and Error Locations *)
 (* Author: Frank Pfenning *)
 

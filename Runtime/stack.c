@@ -46,7 +46,7 @@ typedef unsigned int bot;
 extern val_t global_exnrec; /* C/asm convention has asm label be the Lvalue in C */
 
 
-void stub_error()
+void stub_error(void)
 {
   printf("stub_error: should be a dead ra");
   assert(0);
@@ -83,7 +83,7 @@ long MutableTableSize = 0;
 
 void global_root_init(void);
 
-void stack_init()
+void stack_init(void)
 {
   struct HashEntry e;
   unsigned int mi = 0, count=0, i,j;

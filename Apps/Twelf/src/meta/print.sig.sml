@@ -1,4 +1,4 @@
-(*$import Prelude FORMATTER STATESYN *)
+(*$import Prelude TopLevel FORMATTER STATESYN *)
 (* Meta Printer Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

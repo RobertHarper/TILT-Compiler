@@ -5,12 +5,34 @@
  *
  *)
 
-structure Array : ARRAY =
+structure Array :> ARRAY where type 'a array = 'a array
+			   and type 'a vector = 'a vector =
   struct
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+
+    val array_length = TiltPrim.array_length
+    val empty_array = TiltPrim.empty_array
+    val empty_vector = TiltPrim.empty_vector
+    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_sub = TiltPrim.unsafe_sub
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+
+    val ugt = TiltPrim.ugt
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+    val ulte = TiltPrim.ulte
+
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
     type 'a array = 'a array
     type 'a vector = 'a vector
 
-    val maxLen = arraymaxlength
+    val maxLen = 1024 * 1024
 
     val array0 : 'a array = empty_array
     val vector0 : 'a vector = empty_vector
@@ -265,9 +287,12 @@ structure Array : ARRAY =
 
 (*
  * $Log$
-# Revision 1.5  2000/09/12  18:54:06  swasey
-# Changes for cutoff compilation
+# Revision 1.6  2000/11/27  22:36:20  swasey
+# *** empty log message ***
 # 
+ * Revision 1.5  2000/09/12 18:54:06  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.4  1999/09/22 15:44:59  pscheng
  * *** empty log message ***
  *

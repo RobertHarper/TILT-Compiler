@@ -1,4 +1,4 @@
-(*$import Prelude Int PreOS Word32 POSIX_FLAGS Time *)
+(*$import Prelude Position PreOS SysWord POSIX_FLAGS Time *)
 (* posix-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -13,11 +13,6 @@ signature POSIX_FILE_SYS =
     eqtype uid
     eqtype gid
     eqtype file_desc
-
-    val uidToWord : uid -> SysWord.word
-    val wordToUid : SysWord.word -> uid
-    val gidToWord : gid -> SysWord.word
-    val wordToGid : SysWord.word -> gid
 
     val fdToWord    : file_desc -> SysWord.word
     val wordToFD    : SysWord.word -> file_desc
@@ -63,10 +58,6 @@ signature POSIX_FILE_SYS =
 
       end
 
-    datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
-    val omodeFromWord : SysWord.word -> open_mode
-    val omodeToWord : open_mode -> SysWord.word 
-
     structure O :
       sig
         include POSIX_FLAGS
@@ -82,9 +73,11 @@ signature POSIX_FILE_SYS =
 
       end
 
-    val openf     : (string * open_mode * O.flags) -> file_desc
-    val createf   : (string * open_mode * O.flags * S.mode) -> file_desc
-    val creat     : (string * S.mode) -> file_desc
+    datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
+
+    val openf     : string * open_mode * O.flags -> file_desc
+    val createf   : string * open_mode * O.flags * S.mode -> file_desc
+    val creat     : string * S.mode -> file_desc
     val umask     : S.mode -> S.mode
     val link      : {old : string, new : string} -> unit
     val mkdir     : string * S.mode -> unit
@@ -94,8 +87,7 @@ signature POSIX_FILE_SYS =
     val rename    : {old : string, new : string} -> unit
     val symlink   : {old : string, new : string} -> unit  (* POSIX 1003.1a *)
     val readlink  : string -> string                      (* POSIX 1003.1a *)
-    val ftruncate : file_desc * Position.int -> unit      (* POSIX 1003.1a *)
-
+	
     eqtype dev
     val wordToDev : SysWord.word -> dev
     val devToWord : dev -> SysWord.word
@@ -134,24 +126,29 @@ signature POSIX_FILE_SYS =
     datatype access_mode = A_READ | A_WRITE | A_EXEC
     val access : string * access_mode list -> bool
 
-    val chmod   : (string * S.mode) -> unit
-    val fchmod  : (file_desc * S.mode) -> unit
+    val chmod   : string * S.mode -> unit
+    val fchmod  : file_desc * S.mode -> unit
 
-    val chown   : (string * uid * gid) -> unit
-    val fchown   : (file_desc * uid * gid) -> unit
+    val chown    : string * uid * gid -> unit
+    val fchown   : file_desc * uid * gid -> unit
 
     val utime : string * {actime : Time.time, modtime : Time.time} option -> unit
     
-    val pathconf  : (string * string) -> SysWord.word option
-    val fpathconf : (file_desc * string) -> SysWord.word option
+    val ftruncate : file_desc * Position.int -> unit      (* POSIX 1003.1a *)
+
+    val pathconf  : string * string -> SysWord.word option
+    val fpathconf : file_desc * string -> SysWord.word option
 
   end (* signature POSIX_FILE_SYS *)
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:37  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:39  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:37  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:53:19  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN Prelude *)
+(*$import Prelude TopLevel INTSYN Prelude *)
 (* Termination checker *)
 (* Author: Carsten Schuermann *)
 
@@ -9,5 +9,5 @@ sig
   exception Error of string
     
   val reset : unit -> unit
-  val checkFam : int(*IntSyn.cid*) -> unit 
+  val checkFam : IntSyn.cid -> unit 
 end;  (* signature TERMINATE *)

@@ -5,8 +5,27 @@
  *
  *)
 
-structure String :> STRING where type string = string =
+structure String :> STRING where type string = string
+			     and type Char.char = char
+			     and type Char.string = string =
   struct
+      
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+    val uint8touint32 = TiltPrim.uint8touint32
+	
+    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+	
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+	
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+	
+    val uplus = TiltPrim.uplus
+
 (*
     val op + = InlineT.DfltInt.+
     val op - = InlineT.DfltInt.-
@@ -19,11 +38,10 @@ structure String :> STRING where type string = string =
     val unsafeUpdate = InlineT.CharVector.update
 *)
 
-
-
     type string = string
+    structure Char = Char
 
-    val maxSize = stringmaxsize
+    val maxSize = 1024 * 1024
 
   (* the length of a string *)
     val i2w = int32touint32
@@ -242,7 +260,7 @@ structure String :> STRING where type string = string =
 	  end
     val toString = translate Char.toString
 
-    fun fromCString s = raise LibFail "String.fromCString not implemented"
+    fun fromCString s = raise TiltExn.LibFail "String.fromCString not implemented"
     val toCString = translate Char.toCString
 
   end (* structure String *)	   

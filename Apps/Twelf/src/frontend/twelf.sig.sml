@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Prelude TopLevel *)
 (* Front End Interface *)
 (* Author: Frank Pfenning *)
 

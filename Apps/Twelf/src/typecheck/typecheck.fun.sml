@@ -1,4 +1,4 @@
-(*$import Prelude TYPECHECK INTSYN CONV WHNF PRINT *)
+(*$import Prelude TopLevel TYPECHECK INTSYN CONV WHNF PRINT *)
 (* Type Checking *)
 (* Author: Carsten Schuermann *)
 

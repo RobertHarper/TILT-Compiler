@@ -1,4 +1,4 @@
-(*$import Prelude THMSYN MODESYN ABSTRACT WHNF PATHS *)
+(*$import Prelude TopLevel THMSYN MODESYN ABSTRACT WHNF PATHS *)
 (* Theorems *)
 (* Author: Carsten Schuermann *)
 
@@ -25,7 +25,7 @@ struct
   | Simul of Order list
 
   datatype Callpats =
-    Callpats of (int (*ModeSyn.IntSyn.cid*) * Param list) list 
+    Callpats of (ModeSyn.IntSyn.cid * Param list) list 
 
   (* Termination declaration *)
   datatype TDecl = 

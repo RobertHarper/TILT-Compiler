@@ -1,32 +1,4 @@
-(*$import TIMER Time *)
-
-(* user sec, user usec, system sec, system usec *)
-extern til_selfusage : (unit, int * int * int * int) -->
-(* wall clock sec, wall clock msec *)
-extern til_realtime : (unit, int * int) --> 
-
-(*
-structure Timer :> TIMER =
-  struct
-
-    type cpu_timer = int
-    type real_timer = int
-
-    fun totalCPUTimer() = 1
-    fun startCPUTimer() = 1
-    fun checkCPUTimer (_ : cpu_timer) = 
-	{usr = Time.zeroTime,
-	sys = Time.zeroTime,
-	gc = Time.zeroTime}
-
-
-    fun totalRealTimer() = 5
-    fun startRealTimer() = 5
-    fun checkRealTimer(_ : real_timer) = Time.zeroTime
-
-  end 
-
-*)
+(*$import Prelude TIMER PreTime Time *)
 
 structure Timer :> TIMER =
   struct

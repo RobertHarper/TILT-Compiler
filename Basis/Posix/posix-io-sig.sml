@@ -1,4 +1,4 @@
-(*$import Prelude POSIX_FLAGS Word8Vector Word8Array Int *)
+(*$import Prelude POSIX_FLAGS Word8Vector Word8Array Position *)
 (* posix-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -17,13 +17,10 @@ signature POSIX_IO =
     val dup : file_desc -> file_desc
     val dup2 : {old : file_desc, new : file_desc} -> unit
     val close : file_desc -> unit
-    val readVec : (file_desc * int) -> Word8Vector.vector
-    val readArr : (file_desc * 
-                   {buf : Word8Array.array, i : int, sz : int option}) -> int
-    val writeVec : (file_desc * 
-                    {buf : Word8Vector.vector, i : int, sz : int option}) -> int
-    val writeArr : (file_desc * 
-                    {buf : Word8Array.array, i : int, sz : int option}) -> int
+    val readVec : file_desc * int -> Word8Vector.vector
+    val readArr : file_desc * {buf : Word8Array.array, i : int, sz : int option} -> int
+    val writeVec : file_desc * {buf : Word8Vector.vector, i : int, sz : int option} -> int
+    val writeArr : file_desc * {buf : Word8Array.array, i : int, sz : int option} -> int
     
     datatype whence = SEEK_SET | SEEK_CUR | SEEK_END
     
@@ -32,7 +29,6 @@ signature POSIX_IO =
         include POSIX_FLAGS
 
         val cloexec : flags
-
       end
 
     structure O :
@@ -40,9 +36,11 @@ signature POSIX_IO =
         include POSIX_FLAGS
 
         val append   : flags
+(*
         val dsync    : flags
-        val nonblock : flags
         val rsync    : flags
+*)
+        val nonblock : flags
         val sync     : flags
 
       end
@@ -51,10 +49,14 @@ signature POSIX_IO =
     
     val dupfd : {old : file_desc, base : file_desc} -> file_desc
     val getfd : file_desc -> FD.flags
-    val setfd : (file_desc * FD.flags) -> unit
-    val getfl : file_desc -> (O.flags * open_mode)
-    val setfl : (file_desc * O.flags) -> unit
+    val setfd : file_desc * FD.flags -> unit
+    val getfl : file_desc -> O.flags * open_mode
+    val setfl : file_desc * O.flags -> unit
     
+    val lseek : file_desc * Position.int * whence -> Position.int
+
+    val fsync : file_desc -> unit
+
     datatype lock_type = F_RDLCK | F_WRLCK | F_UNLCK
 
     structure FLock :
@@ -74,21 +76,20 @@ signature POSIX_IO =
         val pid      : flock -> pid option
       end
 
-    val getlk  : (file_desc * FLock.flock) -> FLock.flock
-    val setlk  : (file_desc * FLock.flock) -> FLock.flock
-    val setlkw : (file_desc * FLock.flock) -> FLock.flock
+    val getlk  : file_desc * FLock.flock -> FLock.flock
+    val setlk  : file_desc * FLock.flock -> FLock.flock
+    val setlkw : file_desc * FLock.flock -> FLock.flock
     
-    val lseek : (file_desc * Position.int * whence) -> Position.int
-
-    val fsync : file_desc -> unit
-
   end (* signature POSIX_IO *)
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:11  pscheng
+# Revision 1.3  2000/11/27  22:36:39  swasey
 # *** empty log message ***
 # 
+ * Revision 1.2  1999/09/22 15:45:11  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:53:22  pscheng
 # added basis
 #

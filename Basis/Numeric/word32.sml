@@ -6,10 +6,31 @@
  *)
 
 
-structure Word32 :> WORD where type word = word32 =
+structure Word32 :> WORD where type word = word =
   struct
+    val !! = TiltPrim.!!
+    val && = TiltPrim.&&
+    val << = TiltPrim.<<
+    val >> = TiltPrim.>>
+    val ^^ = TiltPrim.^^
+    val || = TiltPrim.||
+    val ~>> = TiltPrim.~>>
+	
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val ugt = TiltPrim.ugt
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+    val ulte = TiltPrim.ulte
+	
+    val udiv = TiltPrim.udiv
+    val umod = TiltPrim.umod
+    val uminus = TiltPrim.uminus
+    val umult = TiltPrim.umult
+    val uplus = TiltPrim.uplus
 
-    type word = word32
+    type word = TiltPrim.uint32
 
     val wordSize = 32
     val wordSizeW = 0w32
@@ -35,14 +56,14 @@ structure Word32 :> WORD where type word = word32 =
   (** These should be inline functions **)
     fun lshift (w : word, k) = if ulte(wordSizeW, k)
 					 then 0w0
-				     else (w << (toi32 k))
+				     else <<(w, toi32 k)
     fun rshiftl (w : word, k) = if ulte(wordSizeW, k)
 					  then 0w0
-				      else (w >> (toi32 k))
+				      else >>(w, toi32 k)
     fun rshifta (w : word, k) = int32touint32
 				      (if ulte(wordSizeW, k)
-					   then (toi32 w) ~>> 31
-				       else (toi32 w) ~>> (toi32 k))
+					   then ~>>(toi32 w, 31)
+				       else ~>>(toi32 w, toi32 k))
 
     nonfix << >> ~>> + - * div mod <= = >= < > || && ^^
     val << = lshift
@@ -81,7 +102,3 @@ structure Word32 :> WORD where type word = word32 =
     val fromString = StringCvt.scanString (NumScan.scanWord StringCvt.HEX)
 
   end  (* structure Word32 *)
-
-structure Word = Word32
-structure LargeWord = Word32
-structure SysWord = Word32

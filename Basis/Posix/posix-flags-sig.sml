@@ -1,4 +1,4 @@
-(*$import Prelude Word32 *)
+(*$import Prelude SysWord *)
 (* posix-flags.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -29,9 +29,12 @@ signature POSIX_FLAGS =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:21  pscheng
-# added basis
+# Revision 1.2  2000/11/27  22:36:39  swasey
+# *** empty log message ***
 # 
+ * Revision 1.1  1998/03/09 19:53:21  pscheng
+ * added basis
+ *
  * Revision 1.1.1.1  1997/01/14  01:38:22  george
  *   Version 109.24
  *

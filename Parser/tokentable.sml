@@ -29,7 +29,6 @@ val tokenList =
    ("="		, fn yypos => Tokens.EQUALOP(yypos,yypos+1)),
    ("#"		, fn yypos => Tokens.HASH(yypos,yypos+1)),
    ("and"	, fn yypos => Tokens.AND(yypos,yypos+3)),
-   ("abstraction"	, fn yypos => Tokens.ABSTRACTION(yypos,yypos+11)),
    ("abstype"	, fn yypos => Tokens.ABSTYPE(yypos,yypos+7)),
    ("->"	, fn yypos => Tokens.ARROW(yypos,yypos+2)),
    ("as"	, fn yypos => Tokens.AS(yypos,yypos+2)),
@@ -44,7 +43,6 @@ val tokenList =
    ("fn"	, fn yypos => Tokens.FN(yypos,yypos+2)),
    ("fun"	, fn yypos => Tokens.FUN(yypos,yypos+3)),
    ("functor"	, fn yypos => Tokens.FUNCTOR(yypos,yypos+7)),
-   ("funsig"	, fn yypos => Tokens.FUNSIG(yypos,yypos+7)),
    ("handle"	, fn yypos => Tokens.HANDLE(yypos,yypos+6)),
    ("if"	, fn yypos => Tokens.IF(yypos,yypos+2)),
    ("in"	, fn yypos => Tokens.IN(yypos,yypos+2)),
@@ -112,9 +110,12 @@ end
 
 (*
  * $Log$
-# Revision 1.7  2000/09/12  18:57:15  swasey
-# Changes for cutoff compilation
+# Revision 1.8  2000/11/27  22:37:10  swasey
+# *** empty log message ***
 # 
+ * Revision 1.7  2000/09/12 18:57:15  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.6  99/05/12  15:27:55  pscheng
 # *** empty log message ***
 # 

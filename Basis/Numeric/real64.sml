@@ -1,12 +1,16 @@
-(*$import Prelude REAL Ieee StringCvt Math64 General Bool Int RealFormat NumScan *)
+(*$import Prelude REAL IEEEReal StringCvt Math64 General Bool Int32 RealFormat NumScan PreReal *)
 (* real64.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *
  *)
 
-structure Real64 :> REAL where type real = real = 
+structure Real64 :> REAL where type real = real
+			   and type Math.real = real = 
   struct
+    val abs_float = TiltPrim.fabs
+    val float_eq = TiltPrim.float_eq
+    val float_neq = TiltPrim.float_neq
 (*    structure I = InlineT.DfltInt *)
 
     structure Math = Math64
@@ -21,13 +25,6 @@ structure Real64 :> REAL where type real = real =
     val gt : int * int -> bool = op >
     val lt : int * int -> bool = op <
 
-(*
-    val ~ = InlineT.Real64.~
-    val op +  = InlineT.Real64.+
-    val op -  = InlineT.Real64.-
-    val op *  = InlineT.Real64.*
-    val op /  = InlineT.Real64./
-*)
     val ~ : real -> real = ~
     val op + : real * real -> real = op +
     val op - : real * real -> real = op -
@@ -35,16 +32,7 @@ structure Real64 :> REAL where type real = real =
     val op / : real * real -> real = op /
     fun *+(a,b,c) = a*b+c
     fun *-(a,b,c) = a*b-c
-
-(*
-    val op >  = InlineT.Real64.>
-    val op <  = InlineT.Real64.<
-    val op >= = InlineT.Real64.>=
-    val op <= = InlineT.Real64.<=
-
-    val op == = InlineT.Real64.==
-    val op != = InlineT.Real64.!=
-*)
+	
     val op >  : real * real -> bool = op >
     val op <  : real * real -> bool = op <
     val op >= : real * real -> bool = op >=
@@ -55,7 +43,7 @@ structure Real64 :> REAL where type real = real =
     fun unordered(x,y) = Bool.not(x>y orelse x <= y)
     fun ?= (x, y) = (x == y) orelse unordered(x, y)
 
-    fun real_scalb (x, k) = raise Fail "scalb and real_scalb not implemented: multiarg C fun..."
+    fun real_scalb (x, k) = raise TiltExn.LibFail "scalb and real_scalb not implemented: multiarg C fun..."
 
   (* The next three values are computed laboriously, partly to
    * avoid problems with inaccurate string->float conversions
@@ -102,14 +90,43 @@ structure Real64 :> REAL where type real = real =
 	    | _ => true
 	  (* end case *))
 
-    val floor = fn x => if isNormal x then floor x
-			else if x==0.0 then 0 
-			     else if isNan x then raise General.Domain
-				  else raise General.Overflow
+    local
+	val SOME minInt = Int32.minInt
+	val minInt = TiltPrim.int2float minInt
+	val minInt' = minInt - 1.0
+	    
+	val SOME maxInt = Int32.maxInt
+	val maxInt = TiltPrim.int2float maxInt
+	val maxInt' = maxInt + 1.0
 
-    fun trunc n = if n < 0.0 then negate(floor(~n)) else floor n
-    fun ceil n = negate(floor(~n))
-    fun round x = floor(x+0.5)  (* bug: does not do round-to-nearest *)
+	fun wrap f (r : real) : int =
+	    if r == 0.0 then 0
+	    else if isNan r then raise General.Domain
+		 else if isNormal r then f r
+		      else raise General.Overflow
+    in
+	val floor = wrap (fn r =>
+			  if r < minInt orelse r >= maxInt'
+			      then raise General.Overflow
+			  else
+			      let val a = TiltPrim.float2int r
+			      in  if (TiltPrim.int2float a) <= r then a
+				  else TiltPrim.iminus(a,1)
+			      end)
+	val trunc = wrap (fn r =>
+			  if r <= minInt' orelse r >= maxInt'
+			      then raise General.Overflow
+			  else TiltPrim.float2int r)
+	val ceil = wrap (fn r =>
+			 if r <= minInt' orelse r > maxInt
+			     then raise General.Overflow
+			 else
+			     let val a = TiltPrim.float2int r
+			     in  if (TiltPrim.int2float a) >= r then a
+				 else TiltPrim.iplus(a,1)
+			     end)
+	fun round r = floor (r + 0.5)
+    end
     val abs : real -> real = abs_float
     val fromInt : int -> real = real
 
@@ -124,7 +141,7 @@ structure Real64 :> REAL where type real = real =
 
      (* bug: only one rounding mode implemented *)
     fun toInt IEEEReal.TO_NEGINF = floor
-      | toInt _ = raise Fail "toInt supports only NEGINF rounding mode now"
+      | toInt _ = raise TiltExn.LibFail "toInt supports only NEGINF rounding mode now"
 
       (* bug: doesn't support full range of large ints *)
     fun toLargeInt mode x = Int32.fromInt(toInt mode x)
@@ -133,7 +150,7 @@ structure Real64 :> REAL where type real = real =
     fun fromLarge _ x = x       
 
     fun sign x = if (x < 0.0) then ~1 else if (x > 0.0) then 1 
-                  else if isNan x then raise Domain else 0
+                  else if isNan x then raise General.Domain else 0
     fun signBit x = (* Bug: negative zero not handled properly *)
 	real_scalb(x, negate(real_logb x)) < 0.0
 
@@ -226,9 +243,9 @@ structure Real64 :> REAL where type real = real =
     val realTrunc = realround IEEEReal.TO_ZERO
     end
 (*
-    fun realFloor _ = raise Fail "Real.realFloor unimplemented"
-    fun realCeil _ = raise Fail "Real.realCeil unimplemented"
-    fun realTrunc _ = raise Fail "Real.realTrunc unimplemented"
+    fun realFloor _ = raise TiltExn.LibFail "Real.realFloor unimplemented"
+    fun realCeil _ = raise TiltExn.LibFail "Real.realCeil unimplemented"
+    fun realTrunc _ = raise TiltExn.LibFail "Real.realTrunc unimplemented"
 *)
 
   (* realround(x) returns x rounded to some nearby integer, almost always
@@ -286,7 +303,7 @@ structure Real64 :> REAL where type real = real =
 	      scalb(scalb(x, k1), I.-(k, k1))
 	    end
 *)
-    fun scalb (x, k) = raise Fail "scalb and real_scalb not implemented: multiarg C fun..."
+    fun scalb (x, k) = raise TiltExn.LibFail "scalb and real_scalb not implemented: multiarg C fun..."
 (*
 if lt(plus(k,1022),2046)
 	  then Assembly.A.scalb(x,k)
@@ -296,13 +313,13 @@ if lt(plus(k,1022),2046)
 	    end
 *)
   
-    fun nextAfter _ = raise Fail "Real.nextAfter unimplemented"
+    fun nextAfter _ = raise TiltExn.LibFail "Real.nextAfter unimplemented"
 
     fun min(x,y) = if x<y orelse isNan y then x else y
     fun max(x,y) = if x>y orelse isNan y then x else y
 
-    fun toDecimal _ = raise Fail "Real.toDecimal unimplemented"
-    fun fromDecimal _ = raise Fail "Real.fromDecimal unimplemented"
+    fun toDecimal _ = raise TiltExn.LibFail "Real.toDecimal unimplemented"
+    fun fromDecimal _ = raise TiltExn.LibFail "Real.fromDecimal unimplemented"
 
     val fmt = RealFormat.fmtReal
     val toString = fmt (StringCvt.GEN NONE)
@@ -311,14 +328,14 @@ if lt(plus(k,1022),2046)
 
   end (* Real64 *)
 
-structure Real = Real64
-structure LargeReal = Real64
-
 (*
  * $Log$
-# Revision 1.5  2000/09/12  18:54:32  swasey
-# Changes for cutoff compilation
+# Revision 1.6  2000/11/27  22:36:34  swasey
+# *** empty log message ***
 # 
+ * Revision 1.5  2000/09/12 18:54:32  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.4  1999/09/22 15:45:09  pscheng
  * *** empty log message ***
  *

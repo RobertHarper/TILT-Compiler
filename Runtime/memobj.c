@@ -572,7 +572,7 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
 }
 
 
-mem_t StackError(struct ucontext *ucontext, mem_t badadd)
+mem_t StackError(ucontext_t *ucontext, mem_t badadd)
 {
   Stacklet_t *faultstack = 0;
   StackChain_t *faultchain = 0;

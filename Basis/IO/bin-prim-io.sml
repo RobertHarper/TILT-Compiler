@@ -1,4 +1,4 @@
-(*$import PrimIOFn Word8Vector Word8Array Word8 Int *)
+(*$import PrimIOFn Word8Vector Word8Array Word8 Position *)
 (* bin-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -6,19 +6,20 @@
  *)
 
 
-structure BinPrimIO = PrimIOFn (
-    structure Vector = Word8Vector
-    structure Array = Word8Array
-    val someElem = (#"\000" : Word8.word)
-    type pos = Position.int
-    val compare = Position.compare);
+structure BinPrimIO = PrimIOFn (structure A = Word8Array
+				val someElem = (#"\000" : Word8.word)
+				type pos = Position.int
+				val compare = Position.compare)
 
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:00  pscheng
+# Revision 1.3  2000/11/27  22:36:25  swasey
 # *** empty log message ***
 # 
+ * Revision 1.2  1999/09/22 15:45:00  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:50:39  pscheng
 # added basis
 #

@@ -3,6 +3,8 @@
 structure PosixTextPrimIO : sig
 
     include OS_PRIM_IO
+	where PrimIO = TextPrimIO
+	where type file_desc = Posix.ProcEnv.file_desc	
 
     val stdIn  : unit -> PrimIO.reader
     val stdOut : unit -> PrimIO.writer
@@ -11,5 +13,3 @@ structure PosixTextPrimIO : sig
     val strReader : string -> PrimIO.reader
 
   end
-	where PrimIO = TextPrimIO
-	where type file_desc = Posix.ProcEnv.file_desc	

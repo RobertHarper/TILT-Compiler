@@ -1,4 +1,4 @@
-(*$import Prelude OS_PROCESS Posix PreOS OS_FileSys OS_Path OS_Process OS_IO OS_SIG *)
+(*$import Prelude OS_PROCESS Posix PreOS OS_FileSys OS_Path OS_Process OS_IO_Str OS_SIG *)
 (* os.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -15,9 +15,6 @@ structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc
 
     open PreOS (* open type-only structure to get types *)
 
-    type syserror = Posix.Error.syserror
-    exception SysErr of (string * syserror option) (* = Assembly.SysErr *) 
-
     val errorMsg = Posix.Error.errorMsg
     val errorName = Posix.Error.errorName
     val syserror = Posix.Error.syserror
@@ -32,9 +29,12 @@ structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc
 
 (*
  * $Log$
-# Revision 1.3  2000/09/21  01:08:39  pscheng
+# Revision 1.4  2000/11/27  22:36:44  swasey
 # *** empty log message ***
 # 
+ * Revision 1.3  2000/09/21 01:08:39  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.2  2000/09/12  18:55:04  swasey
 # Changes for cutoff compilation
 # 

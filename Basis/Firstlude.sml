@@ -1,248 +1,90 @@
 (*$import *)
-(* At the time the prelude is elaborated, it may assume that
- * compiler primitives are available.  Of special interest
- * is the identifier littleEndian which is a boolean value.
- *)
 
-(* standard fixity *)
-infix  0 before
-infix  3 := o
-infix  4 = <> < > <= >= 
-infix  5 @
-infixr 5 ::
+(* The purpose of Prelude is to set up types, fixity information, and
+   values that are used throughout the basis library implementation.
+   It is also a convienient place to hang values required by other
+   parts of the compiler.  The interface provided by Prelude should
+   not be assumed by users of the basis library.
+
+   Users who want the standard top-level environment should import
+   Prelude and TopLevel.
+
+   A few compiler primitives are pre-defined at the top-level.  Most
+   are in structure TiltPrim.  See Elaborator/basis.sml.
+*)
+
+(* overloads *)
+overload + : 'a as TiltPrim.iplus  and TiltPrim.bplus  and TiltPrim.uplus  and TiltPrim.fplus
+overload - : 'a as TiltPrim.iminus and TiltPrim.bminus and TiltPrim.uminus and TiltPrim.fminus
+overload * : 'a as TiltPrim.imult  and TiltPrim.bmult  and TiltPrim.umult  and TiltPrim.fmult
+overload / : 'a as TiltPrim.fdiv
+overload ~ : 'a as TiltPrim.ineg and TiltPrim.fneg
+overload <  : 'a as TiltPrim.ilt  and TiltPrim.blt  and TiltPrim.ult  and TiltPrim.flt
+overload >  : 'a as TiltPrim.igt  and TiltPrim.bgt  and TiltPrim.ugt  and TiltPrim.fgt
+overload <= : 'a as TiltPrim.ilte and TiltPrim.blte and TiltPrim.ulte and TiltPrim.flte
+overload >= : 'a as TiltPrim.igte and TiltPrim.bgte and TiltPrim.ugte and TiltPrim.fgte
+(* Overloads for div, mod, abs and string comparisons provided in TopLevel. *)
+
+(* fixity *)
+infix  7 * / div mod
 infix  6 + - ^
-infix  7 div mod quot rem / *
-infix  9 << >> ~>> && || 
-
-(* standard types *)
-datatype bool = false | true
-datatype 'a list = nil | :: of 'a * 'a list
-datatype 'a susp = Susp of unit -> 'a	(* nonstandard *)
-datatype 'a option = NONE | SOME of 'a
-datatype order = GREATER | LESS | EQUAL 
-type int32 = int			(* nonstandard *)
-type word = word32
-
-
-(* standard exceptions *)
-exception Match and Bind                   (* pattern related *)
-exception Overflow and Div and Mod and Quot (* arithmetic *)
-      and Floor and Sqrt and Exp and Ln
-exception Ord and Chr and Substring       (* character/string *)
-exception Hd and Tl and NthTail and Nth   (* list related *)
-exception Subscript and Size              (* array related *)
-exception Interrupt            
-exception Io of char vector
-exception Domain
-exception Span
-exception Fail of char vector
-
-(* must have vector_eq for vector types to be used: may change if elaborator changes *)
-fun vector_eq (equaler : 'a * 'a -> bool) (x : 'a vector, y : 'a vector) = 
-    let val lx = vector_length x
-	val ly = vector_length y
-	fun vector_eq_loop n = 
-	    ugte(n,lx) orelse (equaler(unsafe_vsub(x,n),unsafe_vsub(y,n))
-			       andalso (vector_eq_loop (uplus(n,0w1))))
-    in  (lx = ly) andalso vector_eq_loop 0w0
-    end
-type string = char vector
-datatype substring = SS of (string * int * int)
-
-(* Predefined external functions *)
-(* we cannot use types defined in this module for the externs 
-   because of a deficiency in the phase-splitter *)
-extern exnNameRuntime : (exn, char vector) -->
-extern exnMessageRuntime : (exn, char vector) -->
-extern real_logb : (float, int) -->
-extern real_scalb : (float * int, float) -->
-extern sqrt : (float, float) -->
-extern exp : (float, float) -->
-extern ln : (float, float) -->
-extern log10 : (float, float) -->
-extern sin : (float, float) -->
-extern cos : (float, float) -->
-extern tan : (float, float) -->
-extern atan : (float, float) -->
-extern asin : (float, float) -->
-extern acos : (float, float) -->
-extern tanh : (float, float) -->
-extern sinh : (float, float) -->
-extern cosh : (float, float) -->
-extern setRoundingMode : (int, int) -->
-extern getRoundingMode : (int, int) -->
-extern ml_timeofday : (unit, (int * int)) -->
-extern printString : (char vector, unit) -->
-
-    fun f o g = fn x => f(g x)
-    fun a before b = a
-    fun ignore _ = ()
-
-    fun exnName exn = Ccall(exnNameRuntime,exn)
-    fun exnMessage exn = Ccall(exnMessageRuntime,exn)
-
-	fun rev l = 
-	    let fun revappend([],x) = x
-		  | revappend(hd::tl,x) = revappend(tl,hd::x)
-	    in  revappend(l,[])
-	    end
-
-	fun length l = 
-	    let fun length' (n,[]) = n
-		  | length' (n,_::rest) = length' (n+1,rest)
-	    in  length' (0,l)
-	    end
-
-	fun array (s:int, e : 'a) : 'a array =
-	    if s<0 then raise Size
-	    else unsafe_array(int32touint32 s,e) 
-
-
-
-	fun vsub (a : 'a vector, index :int) : 'a =
-	    let val index = int32touint32 index
-	    in  if (ugte(index, vector_length a))
-		    then raise Subscript
-		else unsafe_vsub(a,index)
-	    end
-
-
-
-
-
-	fun ord(x : char) : int = uint8toint32 x
-	fun chr(x : int) : char = int32touint8 x
-
-val stringmaxsize = 1024 * 1024
-val vectormaxlength = 1024 * 1024
-val arraymaxlength = 1024 * 1024
-
-
-
-	fun size(x : string) : int = uint32toint32(vector_length x)
-	fun explode(x:string): char list =
-	    let val sz = vector_length x
-		fun explode_loop(i,accum) = 
-		    if ult(i,sz)
-			then explode_loop (uplus(i,0w1),(unsafe_vsub(x,i))::accum)
-		    else rev accum
-	    in
-		explode_loop(0w0,[])
-	    end
-	
-	local
-    (* copies len words from vector x starting at x_start to array y starting at y_start *)
-	    fun wordcopy(len : uint,
-			 x:uint vector, x_start:uint,
-			 y:uint array, y_start:uint) =
-		let val y_stop = uplus(y_start,len)
-		    fun wordcopyLoop (x_cur,y_cur) = 
-			if ult(y_cur,y_stop)
-			    then (unsafe_update(y,y_cur,unsafe_vsub(x,x_cur)); 
-				  wordcopyLoop(uplus(x_cur,0w1),uplus(y_cur,0w1)))
-			else ()
-		in  wordcopyLoop(x_start,y_start)
-		end
-    (* same as before with with bytes *)	    
-	    fun bytecopy(len : uint,
-			 x:char vector, x_start:uint,
-			 y:char array, y_start:uint) =
-		let val y_stop = uplus(y_start,len)
-		    fun bytecopyLoop (x_cur,y_cur) = 
-			if ult(y_cur,y_stop)
-			    then (unsafe_update(y,y_cur,unsafe_vsub(x,x_cur)); 
-				  bytecopyLoop(uplus(x_cur,0w1),uplus(y_cur,0w1)))
-			else ()
-		in  bytecopyLoop(x_start,y_start)
-		end
-	in
-	    fun (x : string) ^ (y : string) = 
-		let val x_sz = vector_length x
-		    val y_sz = vector_length y
-		    val a_sz = uplus(x_sz,y_sz)
-		    val c = chr 0
-		    val a : char array = unsafe_array(a_sz,c)
-		    val aw = uinta8touinta32 a
-		    val xw = uintv8touintv32 x
-		    val _ = wordcopy((uplus(x_sz,0w3))>>2, xw,0w0, aw,0w0)
-		    val _ = bytecopy(y_sz,y,0w0,  a,x_sz)
-		in  unsafe_array2vector a
-		end
-		
-	    fun implode(x : char list) : string = 
-		let val sz = int32touint32 (length x)
-		    val c = chr 0
-		    val a : char array = unsafe_array(sz,c)
-		    fun loop i [] = ()
-		      | loop i (c::rest) = 
-			(unsafe_update(a,i,c);
-			 loop (uplus(i,0w1)) rest)
-		    val _ = loop 0w0 x
-		in  unsafe_array2vector a
-		end
-
-	    fun revImplode(len : int, x : char list) : string = 
-		let val sz = int32touint32 len
-		    val c = chr 0
-		    val a : char array = unsafe_array(sz,c)
-		    fun loop i [] = ()
-		      | loop i (c::rest) = 
-			(unsafe_update(a,i,c);
-			 loop (uminus(i,0w1)) rest)
-		    val _ = loop (uminus(sz,0w1)) x
-		in  unsafe_array2vector a
-		end
-	    
-	    fun substring (a : string, start : int, len : int) : string =
-		let val size = vector_length a
-		    val start = if start<0 then raise Substring else (int32touint32 start)
-		    val len = if len<0 then raise Substring else (int32touint32 len)
-		    val stop = uplus(len,start)
-		    val c = chr 0
-		    val res : char array = unsafe_array(len,c)
-		    val _ = if (ugt(stop,size))
-				then raise Substring
-			    else
-				bytecopy(len,a,start,res,0w0)
-		in  unsafe_array2vector res
-		end
-	end
+infixr 5 :: @
+infix  4 = <> > >= < <=
+infix  3 := o
+infix  0 before
     
-	fun char_eq (cx:char,cy:char) = cx = cy
-	val string_eq = vector_eq char_eq
+(* types *)
+(* unit, int, word, real, char -- primitive *)
+(* eqtype string -- provided later *)
+(* type substring -- provided by TopLevel *)
+(* exn, 'a array, 'a vector, 'a ref -- primitive *)
+datatype bool = false | true
+datatype 'a option = NONE | SOME of 'a
+datatype order = LESS | EQUAL | GREATER
+datatype 'a list = nil | :: of 'a * 'a list
+    
+(* vector_eq needed so we can use vector types: may change if elaborator changes *)
+structure TiltVectorEq =
+struct
+    fun vector_eq (equaler : 'a * 'a -> bool) (x : 'a vector, y : 'a vector) : bool = 
+	let val lx = TiltPrim.vector_length x
+	    val ly = TiltPrim.vector_length y
+	    fun vector_eq_loop n =
+		n >= lx orelse (equaler(TiltPrim.unsafe_vsub(x,n),TiltPrim.unsafe_vsub(y,n))
+				andalso (vector_eq_loop (n + 0w1)))
+	in  (lx = ly) andalso vector_eq_loop 0w0
+	end
+end
 
-	(* create returns a character array filled with any character it likes *)
-	fun create sz : char array = if (sz>0)
-					 then unsafe_array(int32touint32 sz,#"\000")
-				     else raise Size
+type string = char vector
 
+(* exceptions *)
+exception Bind
+exception Chr
+exception Div				(* must be toplevel for runtime *)
+exception Domain
+exception Empty
+exception Fail of string
+exception Match
+exception Option
+exception Overflow			(* must be toplevel for runtime *)
+exception Size
+exception Span
+exception Subscript
 
+(* values *)
+fun f o g = fn x => f(g x)
+fun a before b = a
+fun ignore _ = ()
+    
+fun rev l = 
+    let fun revappend([],x) = x
+	  | revappend(hd::tl,x) = revappend(tl,hd::x)
+    in  revappend(l,[])
+    end
 
-
-
-	fun imod(a : int, b : int) =
-	    let val temp = a rem b
-	    in if ((b>0 andalso temp>=0) orelse
-		   (b<0 andalso temp<=0))
-		   then temp
-	       else temp+b
-	    end
-
-	fun idiv(a : int, b : int) =
-	    let val temp = a quot b
-	    in  (* same if sign of a and b agree *)
-		if ((a>=0 andalso b>0) orelse (a<=0 andalso b<0))
-		    then temp
-		else 
-		    if (b * temp = a)   (* same if exact div *)
-			then temp
-		    else temp - 1       (* here's where they differ *)
-	    end
-
-
-(* unimped parts of the standard basis - or exception indicating internal error in basis *)
-exception LibFail of string
-
-(* raised by runtime functions and coerced into OS.SysErr in basis. *)
-exception RuntimeError of int		(* SysErr(s, SOME e) *)
-exception RuntimeError' of string	(* SysErr(s, NONE) *)
+structure TiltExn =			(* must agree with Runtime/exn.c *)
+struct
+    exception SysErr of string * int option
+    exception LibFail of string
+end

@@ -1,4 +1,4 @@
-(*$import Atom Word8 Word32 Real64 *)
+(*$import Atom Word8 Word Real *)
 (* scan-sig.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

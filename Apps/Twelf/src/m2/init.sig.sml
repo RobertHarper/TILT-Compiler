@@ -1,4 +1,4 @@
-(*$import Prelude METASYN *)
+(*$import Prelude TopLevel METASYN *)
 (* Initialization *)
 (* Author: Carsten Schuermann *)
 
@@ -8,5 +8,5 @@ sig
 
   exception Error of string
 
-  val init : int (*MetaSyn.IntSyn.cid*) list -> MetaSyn.State list
+  val init : MetaSyn.IntSyn.cid list -> MetaSyn.State list
 end;  (* signature INIT *)

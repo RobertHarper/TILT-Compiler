@@ -69,7 +69,6 @@ and exp
 				(* while (derived form) *)
   | MarkExp of exp * region	(* mark an expression *)
   | VectorExp of exp list       (* vector *)
-  | DelayExp of exp             (* create suspension *)
   | CcallExp of exp * exp list (* call a C function *)
 
 (* RULE for case functions and exception handler *)
@@ -93,12 +92,11 @@ and pat = WildPat				(* empty pattern *)
 	| LayeredPat of {varPat:pat,expPat:pat}	(* as expressions *)
 	| MarkPat of pat * region	(* mark a pattern *)
         | VectorPat of pat list                 (* vector pattern *)
-	| OrPat of pat list			(* or-pattern *)
-        | DelayPat of pat                       (* match suspension *)
 
 (* STRUCTURE EXPRESSION *)
 and strexp = VarStr of path			(* variable structure *)
-	   | StructStr of dec			(* defined structure *)
+	   | BaseStr of dec			(* defined structure *)
+           | ConstrainedStr of strexp * sigexp sigConst (* signature constrained *)
 	   | AppStr of path * (strexp * bool) list
 						(* application *)
 	   | LetStr of dec * strexp		(* let in structure *)
@@ -106,7 +104,7 @@ and strexp = VarStr of path			(* variable structure *)
 
 (* FUNCTOR EXPRESSION *)
 and fctexp = VarFct of path * fsigexp sigConst	(* functor variable *)
-	   | FctFct of {			(* definition of a functor *)
+	   | BaseFct of {			(* definition of a functor *)
 		params	   : (symbol option * sigexp) list,
 		body	   : strexp,
 		constraint : sigexp sigConst}
@@ -122,7 +120,7 @@ and wherespec = WhType of symbol list * tyvar list * ty
 (* SIGNATURE EXPRESSION *)
 and sigexp = VarSig of symbol			(* signature variable *)
            | AugSig of sigexp * wherespec list (* sig augmented with where spec *)
-	   | SigSig of spec list		(* defined signature *)
+	   | BaseSig of spec list		(* defined signature *)
 	   | MarkSig of sigexp * region	(* mark *)
 
 (* FUNCTOR SIGNATURE EXPRESSION *)
@@ -132,7 +130,7 @@ and fsigexp = VarFsig of symbol			(* funsig variable *)
 	    | MarkFsig of fsigexp * region	(* mark a funsig *)
 
 (* SPECIFICATION FOR SIGNATURE DEFINITIONS *)
-and spec = StrSpec of (symbol * sigexp option * path option) list
+and spec = StrSpec of (symbol * sigexp * path option) list
                                                                 (* structure *)
          | TycSpec of ((symbol * tyvar list * ty option) list * bool)
                                                                 (* type *)
@@ -140,11 +138,9 @@ and spec = StrSpec of (symbol * sigexp option * path option) list
 	 | ValSpec of (symbol * ty) list			(* value *)
          | DataSpec of {datatycs: db list, withtycs: tb list}	(* datatype *)
 	 | ExceSpec of (symbol * ty option) list		(* exception *)
-	 | FixSpec of  {fixity: fixity, ops: symbol list} 	(* fixity *)
 	 | ShareStrSpec of path list			(* structure sharing *)
 	 | ShareTycSpec of path list			(* type sharing *)
-	 | IncludeSpec of symbol			(* include specif *)
-         | SigSpec of sigb list                         (* signature *)
+	 | IncludeSpec of sigexp			(* include specif *)
 	 | MarkSpec of spec * region		(* mark a spec *)
 
 (* DECLARATIONS (let and structure) *)
@@ -159,7 +155,6 @@ and dec	= ValDec of vb list * tyvar list ref		(* values *)
 							(* abstract type *)
 	| ExceptionDec of eb list			(* exception *)
 	| StrDec of strb list				(* structure *)
-	| AbsDec of strb list				(* abstract struct *)
 	| FctDec of fctb list				(* functor *)
 	| SigDec of sigb list				(* signature *)
 	| FsigDec of fsigb list				(* funsig *)
@@ -238,9 +233,12 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.10  2000/09/12  18:56:45  swasey
-# Changes for cutoff compilation
+# Revision 1.11  2000/11/27  22:36:59  swasey
+# *** empty log message ***
 # 
+ * Revision 1.10  2000/09/12 18:56:45  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.9  99/05/12  15:27:41  pscheng
 # *** empty log message ***
 # 

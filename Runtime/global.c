@@ -34,20 +34,6 @@ val_t GetGlobal(ptr_t globalLoc)
   return globalLoc[primaryGlobalOffset / sizeof(val_t)];
 }
 
-extern val_t Div_r_INT, Overflow_r_INT;   /* Must use & to get global's address */
-  
-ptr_t getOverflowExn(void)
-{
-  return (ptr_t) GetGlobal(&Div_r_INT);
-}
-
-ptr_t getDivExn(void)
-{
-  return (ptr_t) GetGlobal(&Overflow_r_INT);
-}
-
-
-
 /* Little allocation area for data allocated by the runtime. */
 mem_t RuntimeGlobalData_Start;
 mem_t RuntimeGlobalData_Cur;

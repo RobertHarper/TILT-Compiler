@@ -241,13 +241,13 @@ structure Machine =
   fun fp_to_ascii CPYS     = "cpys"
     | fp_to_ascii CPYSN    = "cpysn"
     | fp_to_ascii CPYSE    = "cpyse"
-    | fp_to_ascii CMPTEQ   = "cmpteq"
+    | fp_to_ascii CMPTEQ   = "cmpteq" (* su allowed for these three *)
     | fp_to_ascii CMPTLE   = "cmptle"
     | fp_to_ascii CMPTLT   = "cmptlt"
-    | fp_to_ascii ADDT     = "addtsu"
-    | fp_to_ascii SUBT     = "subtsu"
-    | fp_to_ascii MULT     = "multsu"
-    | fp_to_ascii DIVT     = "divtsu"
+    | fp_to_ascii ADDT     = "addtsud"
+    | fp_to_ascii SUBT     = "subtsud"
+    | fp_to_ascii MULT     = "multsud"
+    | fp_to_ascii DIVT     = "divtsud"
     | fp_to_ascii FCMOVEQ  = "fcmoveq"
     | fp_to_ascii FCMOVNE  = "fcmovne"
     | fp_to_ascii FCMOVLT  = "fcmovlt"
@@ -672,16 +672,16 @@ structure Machine =
      | std_return_code(SOME sra) = [SPECIFIC(LOADI(LDGP, Rgp, 0, sra))]
    fun push (src,actual_location) =
        case (src,actual_location)
-       of (R _, ACTUAL8 offset) => SPECIFIC(STOREI(STQ, src, offset, Rsp))
-        | (R _, ACTUAL4 offset) => SPECIFIC(STOREI(STL, src, offset, Rsp))
-	| (F _, ACTUAL8 offset) => SPECIFIC(STOREF(STT, src, offset, Rsp))
+       of (R _, ACTUAL8 offset) => [SPECIFIC(STOREI(STQ, src, offset, Rsp))]
+        | (R _, ACTUAL4 offset) => [SPECIFIC(STOREI(STL, src, offset, Rsp))]
+	| (F _, ACTUAL8 offset) => [SPECIFIC(STOREF(STT, src, offset, Rsp))]
 	| _ => error "push"
 
    fun pop (dst,actual_location) = 
        case (dst,actual_location)
-       of (R _,ACTUAL8 offset) => SPECIFIC(LOADI(LDQ, dst, offset, Rsp))
-        | (R _,ACTUAL4 offset) => SPECIFIC(LOADI(LDL, dst, offset, Rsp))
-	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDT, dst, offset, Rsp))
+       of (R _,ACTUAL8 offset) => [SPECIFIC(LOADI(LDQ, dst, offset, Rsp))]
+        | (R _,ACTUAL4 offset) => [SPECIFIC(LOADI(LDL, dst, offset, Rsp))]
+	| (F _,ACTUAL8 offset) => [SPECIFIC(LOADF(LDT, dst, offset, Rsp))]
 	| _ => error "allocateBlock: pop"
 
 

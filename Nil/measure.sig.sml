@@ -1,4 +1,4 @@
-(*$import Nil *)
+(*$import Prelude TopLevel Nil *)
 
 signature MEASURE = 
   sig 

@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Manipulating Constraints *)
 (* Author: Jeff Polakow, Frank Pfenning *)
 

@@ -1,4 +1,4 @@
-(*$import Name ANNOTATION *)
+(*$import Prelude TopLevel Name ANNOTATION *)
 
 structure Annotation : ANNOTATION = 
     struct

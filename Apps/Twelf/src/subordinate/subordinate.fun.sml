@@ -1,4 +1,4 @@
-(*$import Prelude Array List SUBORDINATE GLOBAL INTSYN WHNF *)
+(*$import Prelude TopLevel Array List SUBORDINATE GLOBAL INTSYN WHNF *)
 (* Subordination a la Virga [Technical Report 96] *)
 (* Author: Carsten Schuermann *)
 
@@ -29,7 +29,7 @@ struct
 	   reflexive
     *)
 
-    val soArray : (int(*IntSyn.cid*) list * int(*IntSyn.cid*) list) Array.array    
+    val soArray : (IntSyn.cid list * IntSyn.cid list) Array.array    
         = Array.array (Global.maxCid + 1, (nil, nil)) 
 
     (* reset () = ()

@@ -1,4 +1,4 @@
-(*$import TopLevel HashTableFn Word32 *)
+(*$import TopLevel HashTableFn Word *)
 
 
 (* =========================================================================

@@ -1,4 +1,4 @@
 (*$include WORD *)
 
-structure Word8 : WORD where type word = word8
+structure Word8 : WORD where type word = TiltPrim.uint8
 

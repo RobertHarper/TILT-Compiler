@@ -1,4 +1,4 @@
-(*$import Prelude Int PRIM_IO Word8Vector Word8Array Posix IO BinPrimIO OS_PRIM_IO OS *)
+(*$import Prelude Position PRIM_IO Word8Vector Word8Array Posix IO BinPrimIO OS_PRIM_IO OS *)
 (* posix-bin-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -10,10 +10,10 @@
  *)
 
 functor PosixPrimIO(structure PrimIO : PRIM_IO
-			               where type vector = Word8Vector.vector
-			                 and type array = Word8Array.array
-			                 and type elem = char
-			                 and type pos = Position.int) =
+			where type vector = Word8Vector.vector
+			  and type array = Word8Array.array
+			  and type elem = char
+			  and type pos = Position.int) =
   struct
       
     structure PrimIO = PrimIO
@@ -204,9 +204,12 @@ functor PosixPrimIO(structure PrimIO : PRIM_IO
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:55:05  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:44  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:55:05  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:16  pscheng
  * *** empty log message ***
  *

@@ -4,12 +4,12 @@ Group is
   ../names/sources.cm	
   ../paths/sources.cm
   ../index/sources.cm
-  modesyn.sig.sml
-  modesyn.fun.sml
-  modedec.sig.sml
-  modedec.fun.sml
-  modecheck.sig.sml
-  modecheck.fun.sml 
-  modeprint.sig.sml
-  modeprint.fun.sml
+  modesyn.sig
+  modesyn.fun
+  modedec.sig
+  modedec.fun
+  modecheck.sig
+  modecheck.fun 
+  modeprint.sig
+  modeprint.fun
   modes.sml

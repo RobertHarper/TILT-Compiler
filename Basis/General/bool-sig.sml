@@ -8,12 +8,12 @@
 signature BOOL =
   sig
 
-(*    datatype bool = true | false *)
+    datatype bool = false | true
     val not : bool -> bool
 
-    val toString   : bool -> string
     val fromString : string -> bool option
     val scan : (char, 'a) StringCvt.reader -> (bool, 'a) StringCvt.reader
+    val toString   : bool -> string
 
   end
 

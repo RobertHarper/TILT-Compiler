@@ -152,7 +152,6 @@ structure Stream :> STREAM =
 structure MStream :> STREAM =
   Stream (structure BasicStream = BasicMemoStream);
 
-
 (*
 structure S = Stream;  (* abbreviation *)
 

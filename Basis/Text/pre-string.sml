@@ -11,6 +11,25 @@
 structure PreString =
   struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val int32touint8 = TiltPrim.int32touint8
+    val uint32toint32 = TiltPrim.uint32toint32
+    val uint8touint32 = TiltPrim.uint8touint32
+
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
+
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+    val unsafe_sub = TiltPrim.unsafe_sub
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_array = TiltPrim.unsafe_array
+
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+	
     local
 (*
       structure C = InlineT.Char
@@ -32,14 +51,14 @@ structure PreString =
 *)
 	val unsafeSub = unsafe_sub
 	val unsafeUpdate = unsafe_update
-	val unsafeCreate = create
+	fun unsafeCreate (sz : int) : char array = unsafe_array(int32touint32 sz,#"\000")
 	val maxOrd = 255
     in
 
-    datatype substring = datatype substring
+    datatype substring = SS of (string * int * int)
 
   (* allocate an uninitialized string of given length (with a size check) *)
-    fun create n = unsafeCreate n
+    fun create n = if n > 0 then unsafeCreate n else raise Size
 (*
  if (InlineT.DfltInt.ltu(maxSize, n))
 		       then raise General.Size
@@ -49,7 +68,7 @@ structure PreString =
   (* a vector of single character strings *)
     val chars : string vector =
 	let
-	    val a = array(maxOrd+1,"")
+	    val a = unsafe_array (int32touint32 (maxOrd+1),"")
 	    fun next i = if (i <= maxOrd)
 			     then let val s = unsafeCreate 1
 				      val _ = unsafeUpdate(s, 0w0, int32touint8 i)
@@ -71,6 +90,8 @@ structure PreString =
 	in  copy 0w0
 	end
 
+    fun size (x : string) : int = TiltPrim.uint32toint32(TiltPrim.vector_length x)
+	
   (* concatenate a pair of non-empty strings *)
     fun concat2 (x, y) = 
 	let
@@ -194,6 +215,20 @@ structure PreString =
 	  end
 
     end (* local *)
+
+    (* getNChars : (char, 'a) reader -> ('a * int) -> (char list * 'a) option *)
+    fun getNChars (getc : 'a -> (char * 'a) option) (cs, n) = let
+          fun rev ([], l2) = l2
+            | rev (x::l1, l2) = rev(l1, x::l2)
+          fun get (cs, 0, l) = SOME(rev(l, []), cs)
+            | get (cs, i, l) = (case getc cs
+                 of NONE => NONE
+                  | (SOME(c, cs')) => get (cs', i-1, c::l)
+                (* end case *))
+          in
+            get (cs, n, [])
+          end
+
   end; (* PreString *)
 
 

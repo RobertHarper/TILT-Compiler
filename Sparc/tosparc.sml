@@ -314,6 +314,8 @@ struct
      | negate_icmp BGU = BLEU
      | negate_icmp BCC = BCS
      | negate_icmp BCS = BCC
+     | negate_icmp BVC = BVS
+     | negate_icmp BVS = BVC
 
    fun translate_fcmp Rtl.EQ = FBE
      | translate_fcmp Rtl.NE = FBNE
@@ -340,7 +342,63 @@ struct
 				end)
 
    val loadEA = loadEA' NONE
+   fun translate_local_label ll =
+       (* Begin new basic block *)
+       (saveBlock ();
+	resetBlock ll true true)
 
+   (* Overflow checks occur after the operation. *)
+   fun trap_overflow trapi = emit (SPECIFIC (TRAP (trapi, ST_INT_OVERFLOW)))
+(*
+   fun test_overflow trapi =
+       let val cc = (case trapi
+		       of TVS => BVC
+			| TNE => BE)
+	   val afterLabel = Rtl.fresh_code_label "afterOverflowCheck"
+       in  emit (SPECIFIC (CBRANCHI (cc, afterLabel, true)));
+	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("OverflowFromML"), NONE,
+			    {regs_modified=[], regs_destroyed=[], args=[]})));
+	   translate_local_label afterLabel
+       end
+*)
+   fun test_overflow trapi =
+       let val branch = (case trapi
+			   of TVS => BVS
+			    | TNE => BNE)
+       in  emit (SPECIFIC (CBRANCHI (branch, Rtl.ML_EXTERN_LABEL "localOverflowFromML", false)))
+       end
+   fun hard_vbarrier (trapi : trap_instruction) = if (!branchingTraps) then test_overflow trapi
+						  else trap_overflow trapi
+(*
+   (* Division by check occurs before the operation.  The trap always occurs.  *)
+   fun test_zero' (IMMop (INT 0)) = emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("DivFromML"), NONE,
+						     {regs_modified=[], regs_destroyed=[], args=[]})))
+     | test_zero' (IMMop (INT _)) = ()
+     | test_zero' opDivisor =
+       let val afterLabel = Rtl.fresh_code_label "afterZeroCheck"
+	   val _ = (case opDivisor
+		      of REGop rDivisor => emit (SPECIFIC (CBRANCHR (BRNZ, rDivisor, afterLabel, true)))
+		       | _ => (emit (SPECIFIC (CMP (Rzero, opDivisor)));
+			       emit (SPECIFIC (CBRANCHI (BNE, afterLabel, true)))))
+	   val _ = emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("DivFromML"), NONE,
+				    {regs_modified=[], regs_destroyed=[], args=[]})))
+	   val _ = translate_local_label afterLabel
+       in  ()
+       end
+*)
+   local
+       val divLbl = Rtl.ML_EXTERN_LABEL "localDivFromML"
+   in
+       (* Division by zero check occurs before the operation.  The trap always occurs.  *)
+       fun test_zero' (IMMop (INT 0)) = emit (BASE (BR divLbl))
+	 | test_zero' (IMMop (INT _)) = ()
+	 | test_zero' (REGop rDivisor) = emit (SPECIFIC (CBRANCHR (BRZ, rDivisor, divLbl, false)))
+	 | test_zero' opDivisor = (emit (SPECIFIC (CMP (Rzero, opDivisor)));
+				   emit (SPECIFIC (CBRANCHI (BE, divLbl, false))))
+   end
+   fun test_zero opDivisor = if (!branchingTraps) then test_zero' opDivisor
+			     else ()
+       
    fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
      | translate (Rtl.LADDR (ea, rtl_Rdest)) =
           let val Rdest = translateIReg rtl_Rdest
@@ -367,7 +425,7 @@ struct
          val label = Rtl.fresh_code_label "cmv"
          val cmp = translate_icmp rtl_cmp
        in emit(SPECIFIC(CMP (Rsrc1, IMMop (INT 0))));
-	  emit(SPECIFIC(CBRANCHI(negate_icmp cmp,label)));
+	  emit(SPECIFIC(CBRANCHI(negate_icmp cmp,label,true)));
 	  emit(SPECIFIC NOP);
 	  emit(SPECIFIC(INTOP(OR, Rzero, Rop2, Rdest)));
           translate(Rtl.ILABEL label)
@@ -489,7 +547,8 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (ADDCC, Rsrc1, src2, Rdest)))
+	 emit (SPECIFIC(INTOP (ADDCC, Rsrc1, src2, Rdest)));
+	 hard_vbarrier TVS
        end
 
      | translate (Rtl.SUBT (rtl_Rsrc1, op2, rtl_Rdest)) =
@@ -498,7 +557,8 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SUBCC, Rsrc1, src2, Rdest)))
+	 emit (SPECIFIC(INTOP (SUBCC, Rsrc1, src2, Rdest)));
+	 hard_vbarrier TVS
        end
 
 
@@ -507,8 +567,15 @@ struct
 	 val Rsrc1 = translateIReg rtl_Rsrc1
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
+	 val Ry = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
+	 val Rmsb = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
        in
-	 emit (SPECIFIC(INTOP (SMULCC, Rsrc1, src2, Rdest)))
+         (* SMULCC is useless for detecting overflow *)
+	 emit (SPECIFIC(INTOP (SMUL, Rsrc1, src2, Rdest)));
+	 emit (SPECIFIC(RDY   Ry));
+	 emit (SPECIFIC(INTOP (SRA, Rdest, IMMop (INT 31), Rmsb)));
+	 emit (SPECIFIC(CMP   (Ry, REGop Rmsb)));
+	 hard_vbarrier TNE
        end
 
      | translate (Rtl.DIVT (rtl_Rsrc1, op2, rtl_Rdest)) = 
@@ -517,9 +584,12 @@ struct
 	 val src2 = translateOp op2
 	 val Rdest = translateIReg rtl_Rdest
        in
+	 test_zero src2;
 	 emit (SPECIFIC(INTOP (SRA, Rsrc1, IMMop (INT 31), Rat)));
 	 emit (SPECIFIC(WRY   Rat));
-	 emit (SPECIFIC(INTOP (SDIV, Rsrc1, src2, Rdest)))
+	 emit (SPECIFIC(INTOP (SDIVCC, Rsrc1, src2, Rdest)));
+	 (* hard division by zero trap is free *)
+	 hard_vbarrier TVS
        end
 
      | translate (Rtl.MODT (rtl_Rsrc1, op2, rtl_Rdest)) = 
@@ -533,11 +603,13 @@ struct
 			in  temp
 			end)
        in
-	 translate(Rtl.CALL{call_type = Rtl.C_NORMAL,
+	 test_zero (translateOp op2);
+	 translate(Rtl.CALL{call_type = Rtl.C_NORMAL, (* XXX should use our own asm routine so this can ML_NORMAL *)
 			    func = Rtl.LABEL' (Rtl.ML_EXTERN_LABEL ".rem"),
 			    args = [Rtl.I rtl_Rsrc1, Rtl.I rtl_Rsrc2],
 			    results = [Rtl.I rtl_Rdest],
 			    save = []})
+	 (* hard division by zero trap is free *)
        end
 
      | translate (Rtl.CMPSI (cmp, rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
@@ -555,7 +627,7 @@ struct
          val label = Rtl.fresh_code_label "cmpsi"
        in emit(SPECIFIC(CMP(Rsrc1, op2)));
 	  load_imm(0w1, Rdest);
-	  emit(SPECIFIC(CBRANCHI(br,label)));
+	  emit(SPECIFIC(CBRANCHI(br,label,true)));
 	  load_imm(0w0, Rdest);
           translate(Rtl.ILABEL label)
        end
@@ -575,7 +647,7 @@ struct
          val label = Rtl.fresh_code_label "cmpui"
        in emit(SPECIFIC(CMP(Rsrc1, op2)));
 	  load_imm(0w1, Rdest);
-	  emit(SPECIFIC(CBRANCHI(br,label)));
+	  emit(SPECIFIC(CBRANCHI(br,label,true)));
 	  load_imm(0w0, Rdest);
           translate(Rtl.ILABEL label)
        end
@@ -768,7 +840,7 @@ struct
 	   val cmp = translate_icmp comparison
        in 
 	   emit(SPECIFIC(CMP(Rsrc1,op2)));
-	   emit(SPECIFIC(CBRANCHI(cmp, loc_label)))
+	   emit(SPECIFIC(CBRANCHI(cmp, loc_label, pre)))
        end
 
      | translate (Rtl.BCNDF (cmp, rtl_Fsrc1, rtl_Fsrc2, loc_label, pre)) =
@@ -973,7 +1045,7 @@ struct
 		    end);
 	  emit (SPECIFIC (LOADI (LD, Rhlimit, INT heapLimit_disp, Rth)));
 	  emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
-	  emit (SPECIFIC (CBRANCHI(BLE, rtl_loclabel)));
+	  emit (SPECIFIC (CBRANCHI(BLE, rtl_loclabel,true)));
 	  emit (BASE (GC_CALLSITE rtl_loclabel));
 	  emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 			   {regs_modified=[Rat], regs_destroyed=[Rat],
@@ -984,14 +1056,10 @@ struct
 
      | translate (Rtl.SOFT_VBARRIER _) = ()
      | translate (Rtl.SOFT_ZBARRIER _) = ()
-     | translate (Rtl.HARD_VBARRIER _) = ()
-     | translate (Rtl.HARD_ZBARRIER _) = ()
+     | translate (Rtl.HARD_VBARRIER _) = hard_vbarrier TVS
+     | translate (Rtl.HARD_ZBARRIER _) = () (* free *)
 
-     | translate (Rtl.ILABEL ll) = 
-          (* Begin new basic block *)
-          (saveBlock ();
-	   resetBlock ll true true)
-
+     | translate (Rtl.ILABEL ll) = translate_local_label ll
 	  
      | translate Rtl.HALT = 
        (* HALT is a no-op from the translator's point of view *)

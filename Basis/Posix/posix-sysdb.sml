@@ -1,4 +1,4 @@
-(*$import Prelude POSIX_FileSys Word32 POSIX_SYS_DB POSIX_extern *)
+(*$import Prelude PrePosix SysWord POSIX_SYS_DB POSIX_extern *)
 (* posix-sysdb.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -8,16 +8,13 @@
  *)
 
 structure POSIX_Sys_DB :> POSIX_SYS_DB 
-    where type uid = POSIX_FileSys.uid
-    and type gid = POSIX_FileSys.gid =
+    where type uid = PrePosix.uid
+      and type gid = PrePosix.gid =
   struct
 
-    structure FS = POSIX_FileSys
-
-
     type word = SysWord.word
-    type uid = FS.uid
-    type gid = FS.gid
+    type uid = PrePosix.uid
+    type gid = PrePosix.gid
     
     structure Passwd =
       struct
@@ -51,11 +48,11 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
     
       end
     
-    fun getgrgid gid = let val gid = FS.gidToWord gid
+    fun getgrgid gid = let val gid = PrePosix.gidToWord gid
           val (name,gid,members) = Ccall(posix_sysdb_getgrgid, gid)
           in
             Group.GROUP { name = name,
-              gid = FS.wordToGid gid,
+              gid = PrePosix.wordToGid gid,
               members = members
             }
           end
@@ -63,17 +60,17 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
           val (name,gid,members) = Ccall(posix_sysdb_getgrnam, gname)
           in
             Group.GROUP { name = name,
-              gid = FS.wordToGid gid,
+              gid = PrePosix.wordToGid gid,
               members = members
             }
           end
 
-    fun getpwuid uid = let val uid = FS.uidToWord uid
+    fun getpwuid uid = let val uid = PrePosix.uidToWord uid
           val (name,uid,gid,dir,shell) = Ccall(posix_sysdb_getpwuid, uid)
           in
             Passwd.PWD { name = name,
-              uid = FS.wordToUid uid,
-              gid = FS.wordToGid gid,
+              uid = PrePosix.wordToUid uid,
+              gid = PrePosix.wordToGid gid,
               home = dir,
               shell = shell
             }
@@ -82,8 +79,8 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
           val (name,uid,gid,dir,shell) = Ccall(posix_sysdb_getpwnam, name)
           in
             Passwd.PWD { name = name,
-              uid = FS.wordToUid uid,
-              gid = FS.wordToGid gid,
+              uid = PrePosix.wordToUid uid,
+              gid = PrePosix.wordToGid gid,
               home = dir,
               shell = shell
             }
@@ -93,9 +90,12 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:42  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:40  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:42  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:53:40  pscheng
 # added basis
 # 

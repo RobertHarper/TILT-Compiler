@@ -82,8 +82,8 @@ signature MACHINE =
    val std_return_code : register option -> instruction list (* register contains pv for gp reload *)
    val std_entry_code : unit -> instruction list
 
-   val pop  : register * stacklocation -> instruction
-   val push : register * stacklocation -> instruction
+   val pop  : register * stacklocation -> instruction list
+   val push : register * stacklocation -> instruction list
 
    val defUse : instruction -> register list * register list
 

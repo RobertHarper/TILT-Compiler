@@ -1,4 +1,4 @@
-(*$import Prelude PATHS INTSYN *)
+(*$import Prelude TopLevel PATHS INTSYN *)
 (* External Syntax and Type Reconstruction *)
 (* Author: Frank Pfenning *)
 
@@ -69,8 +69,8 @@ sig
 
   exception Error of string
 
-  val decToDec : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * dec -> IntSyn.Dec (* reconstructs D such that G |- D dec *)
-  val termToExp : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * term -> IntSyn.Exp (* reconstructs V such that G |- V : type *)
+  val decToDec : IntSyn.dctx * dec -> IntSyn.Dec (* reconstructs D such that G |- D dec *)
+  val termToExp : IntSyn.dctx * term -> IntSyn.Exp (* reconstructs V such that G |- V : type *)
 
   val queryToQuery : query * Paths.location
                      -> IntSyn.Exp * string option * (IntSyn.Exp * string) list

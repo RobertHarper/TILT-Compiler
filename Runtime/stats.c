@@ -429,7 +429,7 @@ void check(WindowQuotient_t *wq, int i)
 {
   int c = wq->start[i], on = 0, off = 0;
   while (c != wq->last) {
-    (wq->data[c] ? on : off)++;
+    if (wq->data[c]) { on++; } else { off++; }
     c++;
     if (c >= wq->size) 
       c = 0;
@@ -448,7 +448,8 @@ void add_windowQuotient(WindowQuotient_t *wq, double time, int on)
   int ticks = (int) units;
   
   assert(time >= 0.0);
-  (on ? wq->onRemain : wq->offRemain) += (units - ticks);
+  if (on) { wq->onRemain += (units - ticks); }
+  else { wq->offRemain += (units - ticks); }
   if (on && wq->onRemain >= 1.0) {
     wq->onRemain -= 1.0;
     ticks++;

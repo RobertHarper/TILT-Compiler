@@ -1,4 +1,4 @@
-(*$import Prelude UNIFY INTSYN WHNF TRAIL *)
+(*$import Prelude TopLevel UNIFY INTSYN WHNF TRAIL *)
 (* Unification *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

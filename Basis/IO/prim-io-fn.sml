@@ -5,24 +5,23 @@
  *
  *)
 
-functor PrimIOFn (
+(* Note: this is not the standard PrimIO functor. *)
 
-    structure Vector : MONO_VECTOR
-    structure Array : MONO_ARRAY
-      sharing type Vector.vector = Array.vector
-      sharing type Vector.elem = Array.elem
-    val someElem : Vector.elem
-    eqtype pos
-    val compare : (pos * pos) -> order
+functor PrimIOFn (structure A : MONO_ARRAY
+		      sharing type A.elem = A.Vector.elem
+		  val someElem : A.elem
+		  eqtype pos
+		  val compare : (pos * pos) -> order)
+    :> PRIM_IO where type array = A.array
+		 and type vector = A.Vector.vector
+		 and type elem = A.elem
+		 and type pos = pos =
+struct
 
-  ) : PRIM_IO = struct
-
-    structure A = Array
-    structure V = Vector
-
-    type elem = A.elem
-    type vector = V.vector
+    structure V = A.Vector
     type array = A.array
+    type vector = V.vector
+    type elem = A.elem
     type pos = pos
 
     val compare = compare
@@ -235,9 +234,12 @@ functor PrimIOFn (
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:16  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:25  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:16  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  2000/01/20 13:31:53  pscheng
  * *** empty log message ***
  *

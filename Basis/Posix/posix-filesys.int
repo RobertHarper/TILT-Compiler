@@ -1,2 +1,4 @@
 (*$include POSIX_FILE_SYS *)
-structure POSIX_FileSys : POSIX_FILE_SYS 
+structure POSIX_FileSys : POSIX_FILE_SYS where type uid = PrePosix.uid
+					   and type gid = PrePosix.gid
+					   and type open_mode = PrePosix.open_mode

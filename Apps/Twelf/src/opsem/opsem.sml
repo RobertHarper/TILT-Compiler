@@ -25,23 +25,6 @@ structure Assign =
 	  structure Unify = UnifyTrail);
 *)
 
-signature HERE =
-sig
-    structure IntSyn : INTSYN
-    structure CompSyn : COMPSYN
-      sharing CompSyn.IntSyn = IntSyn
-    structure CPrint : CPRINT
-      sharing CPrint.CompSyn = CompSyn
-      sharing CPrint.IntSyn = IntSyn
-end;
-
-structure ShouldFail : HERE =
-struct
-    structure IntSyn = IntSyn
-    structure CompSyn = CompSyn
-    structure CPrint = CPrint
-end;
-   
 structure AbsMachine = 
   AbsMachine (structure IntSyn' = IntSyn
               structure CompSyn' = CompSyn
@@ -49,7 +32,7 @@ structure AbsMachine =
 	      (* structure Assign = Assign *)
 	      structure Index = Index
               structure Trail = Trail
-	      structure CPrint = CPrint
+              structure CPrint = CPrint
               structure Names = Names); 
 
 structure Trace =
@@ -65,6 +48,6 @@ structure TMachine =
 	    structure Unify = UnifyTrail
 	    structure Index = Index
 	    structure Trail = Trail
-(*XXX	    structure CPrint = CPrint*)
+	    structure CPrint = CPrint
             structure Names = Names
 	    structure Trace = Trace);

@@ -3,6 +3,9 @@
 #ifndef _stats_h
 #define _stats_h
 
+#ifdef alpha_osf
+#include <sys/sysmisc.h>	/* for struct timespec */
+#endif
 #include <sys/time.h>
 #include <sys/resource.h>
 

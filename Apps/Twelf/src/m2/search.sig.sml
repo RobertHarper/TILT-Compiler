@@ -1,4 +1,4 @@
-(*$import Prelude METASYN *)
+(*$import Prelude TopLevel METASYN *)
 (* Basic search engine *)
 (* Author: Carsten Schuermann *)
 
@@ -9,13 +9,13 @@ sig
   exception Error of string
 
   val searchEx : 
-     MetaSyn.IntSyn.Dec MetaSyn.IntSyn.Ctx (*MetaSyn.IntSyn.dctx*) * MetaSyn.IntSyn.Exp list
+      MetaSyn.IntSyn.dctx * MetaSyn.IntSyn.Exp list
       * (MetaSyn.IntSyn.Exp * MetaSyn.IntSyn.Sub)
       * (unit -> unit)
       -> MetaSyn.State list
     
   val searchAll : 
-      MetaSyn.IntSyn.Dec MetaSyn.IntSyn.Ctx (*MetaSyn.IntSyn.dctx*) * MetaSyn.IntSyn.Exp list
+      MetaSyn.IntSyn.dctx * MetaSyn.IntSyn.Exp list
       * (MetaSyn.IntSyn.Exp * MetaSyn.IntSyn.Sub)
       * (MetaSyn.State list -> MetaSyn.State list)
       -> MetaSyn.State list

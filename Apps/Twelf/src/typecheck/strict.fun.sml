@@ -1,4 +1,4 @@
-(*$import Prelude STRICT INTSYN PATHS *) 
+(*$import Prelude TopLevel STRICT INTSYN PATHS *)
 (* Checking Definitions for Strict *)
 (* Author: Carsten Schuermann *)
 

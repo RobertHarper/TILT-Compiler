@@ -1,4 +1,4 @@
-(*$import Posix Prelude TextIO *)
+(*$import Prelude TextIO OS *)
 (* unix-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -8,6 +8,7 @@
 signature UNIX =
   sig
     type proc
+    type signal
 
       (* executeInEnv (path, args, env)
        *   forks/execs new process given by path
@@ -48,21 +49,24 @@ signature UNIX =
        * the process will remain a zombie and take a slot in the
        * process table.
        *)
-    val reap : proc -> Posix.Process.exit_status
+    val reap : proc -> OS.Process.status
 
       (* kill (proc, signal)
        * sends the Posix signal to the associated process.
        *)
-    val kill : proc * Posix.Signal.signal -> unit
+    val kill : proc * signal -> unit
 
   end
 
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:54:32  pscheng
-# added basis
+# Revision 1.2  2000/11/27  22:36:45  swasey
+# *** empty log message ***
 # 
+ * Revision 1.1  1998/03/09 19:54:32  pscheng
+ * added basis
+ *
  * Revision 1.1.1.1  1997/01/14  01:38:25  george
  *   Version 109.24
  *

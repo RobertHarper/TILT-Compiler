@@ -1,7 +1,7 @@
 #include "general.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <signal.h>
+
 #include <sys/sysinfo.h>
 #include <sys/proc.h>
 
@@ -11,6 +11,8 @@
 #include "til-signal.h"
 #include "thread.h"
 #include "global.h"
+
+#include <signal.h>
 
 #ifdef alpha_osf
 #include <siginfo.h>
@@ -23,31 +25,32 @@
 #include <fptrap.h> 
 #endif
 
+extern int my_sigaction(int signal, const struct sigaction* action, struct sigaction* o_action);
+
 #define WRITE
 
-
 #ifdef alpha_osf
-mem_t GetPc(struct ucontext *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_pc); }
-mem_t GetSp(struct ucontext *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_sp); }
-unsigned long GetIReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
-void SetIReg(struct ucontext *uctxt, int i, unsigned long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
-double GetFReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_fpregs[i]); }
-void SetFReg(struct ucontext *uctxt, int i, double v) { uctxt->uc_mcontext.sc_fpregs[i]= v; }
-mem_t GetBadAddr(struct ucontext *uctxt, 
+mem_t GetPc(ucontext_t *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_pc); }
+mem_t GetSp(ucontext_t *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_sp); }
+unsigned long GetIReg(ucontext_t *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
+void SetIReg(ucontext_t *uctxt, int i, unsigned long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
+double GetFReg(ucontext_t *uctxt, int i) { return (uctxt->uc_mcontext.sc_fpregs[i]); }
+void SetFReg(ucontext_t *uctxt, int i, double v) { uctxt->uc_mcontext.sc_fpregs[i]= v; }
+mem_t GetBadAddr(ucontext_t *uctxt, 
 		 siginfo_t *siginfo)   { return (mem_t) (siginfo->si_addr); }
 #endif
 
 
 #ifdef rs_aix
 scp is sigcontext obtained from uctxt
-mem_t GetPc(struct ucontext *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.iar); }
-mem_t GetSp(struct ucontext *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
-unsigned long *GetIRegs(struct ucontext *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
-mem_t GetBadAddr(struct ucontext *uctxt, int dummy) { return (mem_t)((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
+mem_t GetPc(ucontext_t *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.iar); }
+mem_t GetSp(ucontext_t *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
+unsigned long *GetIRegs(ucontext_t *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
+mem_t GetBadAddr(ucontext_t *uctxt, int dummy) { return (mem_t)((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
 #endif
 
 #ifdef solaris
-unsigned long GetIReg(struct ucontext *uctxt, int i)    
+unsigned long GetIReg(ucontext_t *uctxt, int i)    
 { 
   if (i == 0)
     return 0;
@@ -71,7 +74,7 @@ unsigned long GetIReg(struct ucontext *uctxt, int i)
   assert(0);
 }
 
-void SetIReg(struct ucontext *uctxt, int i, unsigned long v)    
+void SetIReg(ucontext_t *uctxt, int i, unsigned long v)    
 { 
   if (i == 0)
     return;
@@ -87,13 +90,13 @@ void SetIReg(struct ucontext *uctxt, int i, unsigned long v)
     else assert(0);
   }
 }
-mem_t GetPc(struct ucontext *uctxt)    { return (mem_t) (uctxt->uc_mcontext.gregs[REG_PC]); }
-mem_t GetSp(struct ucontext *uctxt)    { return (mem_t) (GetIReg(uctxt,SP)); }
-mem_t GetBadAddr(struct ucontext *uctxt, 
+mem_t GetPc(ucontext_t *uctxt)    { return (mem_t) (uctxt->uc_mcontext.gregs[REG_PC]); }
+mem_t GetSp(ucontext_t *uctxt)    { return (mem_t) (GetIReg(uctxt,SP)); }
+mem_t GetBadAddr(ucontext_t *uctxt, 
 		 siginfo_t *siginfo)   { return (mem_t) (siginfo->si_addr); }
 #endif
 
-void GetIRegs(struct ucontext *uctxt, unsigned long *dest) 
+void GetIRegs(ucontext_t *uctxt, unsigned long *dest) 
 { 
   int i;
   for (i=0; i<32; i++)
@@ -146,6 +149,45 @@ void buserror_on(void)
 {}
 #endif
 
+#ifndef NSIG
+#define NSIG __sys_nsig
+#endif
+
+static void printmask(const char* what, int error, sigset_t* set)
+{
+  if (error == -1) {
+    perror(what);
+  } else {
+    int i;
+    printf("%s [", what);
+    for (i=0; i<NSIG; i++) {
+      if (sigismember(set, i)) {
+	printf(" %d", i);
+      }
+    }
+    printf(" ]\n");
+  }
+}
+
+static void unblock_signals(void)
+{
+  sigset_t oset;
+  sigset_t set;
+  if (0) {
+    printf("XXX unblocking signals\n");
+    printmask("sigprocmask", sigprocmask(0, NULL, &oset), &oset);
+    printmask("pthread_sigmask", pthread_sigmask(0, NULL, &oset), &oset);
+  }
+  if (sigfillset(&set) == -1 ||
+      sigprocmask(SIG_UNBLOCK, &set, &oset) == -1) {
+    perror("can't clear signal mask");
+    exit(-1);
+  }
+  if (0) {
+    printmask("new sigprocmask", sigprocmask(0, NULL, &oset), &oset);
+    printmask("new pthread_sigmask", pthread_sigmask(0, NULL, &oset), &oset);
+  }
+}
 
 /*
 void signaltest(void)
@@ -212,7 +254,7 @@ void memfault_handler(int signum,
 #elif (defined rs_aix)
 		      int always_zero,
 #endif
-		      struct ucontext *uctxt)
+		      ucontext_t *uctxt)
 {
   Proc_t *proc = getProc();
 #if (defined alpha_osf) || (defined solaris)
@@ -301,7 +343,7 @@ void memfault_handler(int signum,
   exit(-1);
 }
 
-typedef void (*sa_sigaction_t)(int, struct siginfo*, void*);
+typedef void (*sa_sigaction_t)(int, siginfo_t*, void*);
 struct sigaction old_fpe_action;
 void fpe_handler(int signum, 
 #if (defined alpha_osf || defined solaris)
@@ -309,7 +351,7 @@ void fpe_handler(int signum,
 #elif (defined rs_aix)
 		 int always_zero,
 #endif
-		 struct ucontext *uctxt)
+		 ucontext_t *uctxt)
 {
 
   int signo = siginfo->si_signo;
@@ -322,21 +364,25 @@ void fpe_handler(int signum,
     case FPE_INTDIV:
       if (paranoid) 
 	printf("Integer divide by zero: %d %d ",errno,code);
+      unblock_signals();
       raise_exception(uctxt,getDivExn());
       break;
     case FPE_FLTDIV:
       if (paranoid) 
 	printf("Float divide by zero: %d %d ",errno,code);
+      unblock_signals();
       raise_exception(uctxt,getDivExn());
       break;
     case FPE_INTOVF:
       if (paranoid) 
 	printf("Integer overflow: we are not getting this... %d %d ",errno,code);
+      unblock_signals();
       raise_exception(uctxt,getOverflowExn());
       break;
     case FPE_FLTOVF: 
       if (paranoid)
 	printf("Float OR integer overflow: %d %d ",errno,code);
+      unblock_signals();
       raise_exception(uctxt,getOverflowExn());
       break;
     case FPE_FLTUND:
@@ -372,7 +418,7 @@ void alarm_handler(int signum,
 #ifdef rs_aix
 		   int always_zero,
 #endif
-		   struct ucontext *uctxt)
+		   ucontext_t *uctxt)
 {
 #ifdef alpha_osf
   if (siginfo != 0)
@@ -394,19 +440,19 @@ void install_signal_handlers(int isMain)
 
   sigfillset(&newact.sa_mask);
 #if (defined alpha_osf) || (defined solaris)
-  newact.sa_flags = SA_SIGINFO | SA_NODEFER;
+  newact.sa_flags = SA_SIGINFO /* | SA_NODEFER -- conflicts with sa_mask */;
 #endif
 #ifdef rs_aix
   newact.sa_flags = 0;
 #endif
 
   if (!isMain) {
-    newact.sa_handler = (voidhandler_t) fpe_handler;
-    sigaction(SIGFPE,&newact,&old_fpe_action); 
-    newact.sa_handler = (voidhandler_t) memfault_handler;
-    sigaction(SIGSEGV,&newact,NULL);
-    sigaction(SIGBUS,&newact,NULL); 
-    sigaction(SIGILL,&newact,NULL);
+    newact.sa_sigaction = (sa_sigaction_t) fpe_handler;
+    my_sigaction(SIGFPE,&newact,&old_fpe_action); 
+    newact.sa_sigaction = (sa_sigaction_t) memfault_handler;
+    my_sigaction(SIGSEGV,&newact,NULL);
+    my_sigaction(SIGBUS,&newact,NULL); 
+    my_sigaction(SIGILL,&newact,NULL);
   }
   { /* Main thread is asleep so we don't want it to handle signals */
     sigset_t sigset;
@@ -421,8 +467,8 @@ void install_signal_handlers(int isMain)
 if (0)
   {
     struct itimerval newtimer,oldtimer;
-    newact.sa_handler = (voidhandler_t) alarm_handler;
-    sigaction(SIGVTALRM,&newact,NULL); 
+    newact.sa_sigaction = (sa_sigaction_t) alarm_handler;
+    my_sigaction(SIGVTALRM,&newact,NULL); 
     newtimer.it_interval.tv_sec = 0;
     newtimer.it_interval.tv_usec = 20000;
     newtimer.it_value.tv_sec = 0;

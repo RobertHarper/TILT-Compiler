@@ -28,18 +28,25 @@ struct
       let
 	  val _ = debugdo (fn () => (print "CALLED xeq with con = ";
 				     pp_con con; print "\n"))
-(*
-	  val con = con_normalize(ctxt,con) 
-	  val _ = debugdo (fn () => (print "NORMALIZE to con = ";
-				     pp_con con'; print "\n"))
-*)
+
+	  val _ = debugdo (fn () => (print "NORMALIZED con = ";
+				     pp_con (con_normalize(ctxt,con)); print "\n"))
+
 	  val xeq = xeq(polyinst_opt,vector_eq)
 	  val self = xeq ctxt
 	  open Prim
       in case con of
-	    CON_TYVAR tyvar => (case (tyvar_deref tyvar) of
-				NONE => elab_error "unresolved type does not permit equailty"
-			      | SOME c => self (name,c))
+	    CON_TYVAR tyvar => (case (tyvar_deref tyvar, tyvar_eq_hole tyvar)
+				  of (NONE, NONE) => elab_error "unresolved type does not permit equailty"
+				   | (NONE, SOME os) => (* hole is empty since tyvar is unset *)
+				      let val eq_con = con_eqfun con
+					  val exp = OVEREXP(eq_con,true,os)
+				      in  (exp,eq_con)
+				      end
+				   | (SOME c, SOME os) => (valOf (oneshot_deref os), con_eqfun c)
+				   | (SOME c, NONE) => self(name,c))
+				    (* In the last case, we aren't filling the hole since the side
+				     * effect can't be undone and isn't always appropriate. *)
 	  | CON_VAR v => (let val SOME(type_label,pc) = Context_Lookup_Var(ctxt,v) 
 			      val eq_label = to_eq type_label
 			  in (case (Context_Lookup_Label(ctxt,eq_label)) of
@@ -223,9 +230,12 @@ struct
 		end
 	  | _ => raise NoEqExp
       end
-  handle NoEqExp => (case con_reduce_once(ctxt,con) of
-			 NONE => raise NoEqExp
-		       | SOME c => xeq(polyinst_opt,vector_eq) ctxt (name,c))
+  handle NoEqExp =>
+      let val _ = debugdo(fn() => print "NoEqExp\n")
+      in  (case con_reduce_once(ctxt,con) of
+	       NONE => raise NoEqExp
+	     | SOME c => xeq(polyinst_opt,vector_eq) ctxt (name,c))
+      end
 
 
       and xeq_mu (polyinst_opt : context * sdecs -> 
@@ -314,8 +324,7 @@ struct
 		  context : IlContext.context,
 		  con : con}) : (exp * con) option = 
 	let val _ = debugdo (fn () => (print "equality compile called with con = ";
-				       pp_con con; print "\nand ctxt = \n";
-				       pp_context context))
+				       pp_con con; print "\n"))
 	    val eqexp_con = xeq (polyinst_opt,vector_eq) context (con,con)
 	in  SOME eqexp_con
 	end

@@ -1,4 +1,4 @@
-(*$import Int Prelude Time *)
+(*$import Position Prelude Time *)
 (* os-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -29,31 +29,35 @@ signature OS_FILE_SYS =
     val fullPath : string -> string
     val realPath : string -> string
 
-    val fileSize : string -> Position.int
     val modTime  : string -> Time.time
-    val setTime  : (string * Time.time option) -> unit
+    val fileSize : string -> Position.int
+    val setTime  : string * Time.time option -> unit
+	
     val remove   : string -> unit
     val rename   : {old : string, new : string} -> unit
 
     datatype access_mode = A_READ | A_WRITE | A_EXEC
 
-    val access : (string * access_mode list) -> bool
+    val access : string * access_mode list -> bool
 
     val tmpName : unit -> string
 
     eqtype file_id
     val fileId  : string -> file_id
     val hash    : file_id -> word
-    val compare : (file_id * file_id) -> order
+    val compare : file_id * file_id -> order
 
   end; (* FILE_SYS *)
 
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:34  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:37  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:34  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:10  pscheng
  * *** empty log message ***
  *

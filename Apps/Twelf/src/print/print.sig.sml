@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN FORMATTER *)
+(*$import Prelude TopLevel INTSYN FORMATTER *)
 (* Printing *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)
@@ -12,15 +12,15 @@ sig
   val printDepth : int option ref
   val printLength : int option ref
 
-  val formatDec : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Dec -> Formatter.format
-  val formatExp : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Exp -> Formatter.format
-  val formatSpine : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Spine -> Formatter.format list
+  val formatDec : IntSyn.dctx * IntSyn.Dec -> Formatter.format
+  val formatExp : IntSyn.dctx * IntSyn.Exp -> Formatter.format
+  val formatSpine : IntSyn.dctx * IntSyn.Spine -> Formatter.format list
   val formatConDec : IntSyn.ConDec -> Formatter.format
   val formatConDecI : IntSyn.ConDec -> Formatter.format
   val formatEqn : IntSyn.Eqn -> Formatter.format
 
-  val decToString : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Dec -> string
-  val expToString : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Exp -> string
+  val decToString : IntSyn.dctx * IntSyn.Dec -> string
+  val expToString : IntSyn.dctx * IntSyn.Exp -> string
   val conDecToString : IntSyn.ConDec -> string
   val eqnToString : IntSyn.Eqn -> string
   val eqnsToString : IntSyn.Eqn list -> string (* assigns names in contexts *)

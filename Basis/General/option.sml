@@ -4,11 +4,11 @@
  * COPYRIGHT (c) 1997 AT&T Labs Research.
  *)
 
-structure Option : OPTION =
+structure Option :> OPTION where type 'a option = 'a option =
   struct
 
     datatype 'a option = datatype option
-    exception Option
+    exception Option = Option
 
     fun getOpt (SOME x, y) = x
       | getOpt (NONE, y) = y

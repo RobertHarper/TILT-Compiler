@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Indexing *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)
@@ -15,6 +15,6 @@ sig
   (* lookup a = [c1,...,cn] *)
   (* c1,...,cn are all constants with target family a *)
   (* in order of declaration, defined constants are omitted *)
-  val lookup : int (*IntSyn.cid*) -> IntSyn.Head list
+  val lookup : IntSyn.cid -> IntSyn.Head list
 
 end;  (* signature INDEX *)

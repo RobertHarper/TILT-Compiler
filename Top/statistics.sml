@@ -1,4 +1,4 @@
-(*$import Prelude STATISTICS Vector Real64 Math64 *)
+(*$import Prelude STATISTICS Vector Real Math *)
 
 structure VectorStats :> STATISTICS where type seq = real Vector.vector =
 struct

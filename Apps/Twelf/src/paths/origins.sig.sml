@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN PATHS *)
+(*$import Prelude TopLevel INTSYN PATHS *)
 (* Origins of Declarations *)
 (* Author: Frank Pfenning *)
 
@@ -9,7 +9,7 @@ sig
   structure Paths : PATHS
 
   (* val reset : unit -> unit *)
-  val installOrigin : int (*IntSyn.cid*) * (string * Paths.occConDec option) -> unit
-  val originLookup : int (*IntSyn.cid*) -> (string * Paths.occConDec option)
+  val installOrigin : IntSyn.cid * (string * Paths.occConDec option) -> unit
+  val originLookup : IntSyn.cid -> (string * Paths.occConDec option)
 
 end;  (* signature ORIGINS *)

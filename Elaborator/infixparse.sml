@@ -228,8 +228,7 @@ structure InfixParse
 									     constraint=constraint}
 	      | Ast.LayeredPat {varPat,expPat} => Ast.LayeredPat {varPat=self_one varPat, expPat=self_one expPat} 
 	      | Ast.VectorPat pats => Ast.VectorPat (map self_one pats)
-	      | Ast.MarkPat (p,r) => Ast.MarkPat(self_one p,r)
-	      | Ast.OrPat pats => Ast.OrPat (map self_one pats))
+	      | Ast.MarkPat (p,r) => Ast.MarkPat(self_one p,r))
 	  val pat_list' = map help pat_list
 
 		   

@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 signature TRACE =
 sig
 
@@ -26,7 +26,7 @@ sig
   | Unify of (IntSyn.Head * IntSyn.Head) * IntSyn.Exp * IntSyn.Exp (* clause head == goal *)
   | FailUnify of (IntSyn.Head * IntSyn.Head) * string (* failure message *)
 
-  val signal : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * Event -> unit
+  val signal : IntSyn.dctx * Event -> unit
   val init : unit -> unit		(* initialize trace, break and tag *)
 
   (* User interface *)

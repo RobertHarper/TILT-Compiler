@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN FUNSYN STATESYN *)
+(*$import Prelude TopLevel INTSYN FUNSYN STATESYN *)
 (* Basic search engine: Version 1.3*)
 (* Author: Carsten Schuermann *)
 
@@ -10,8 +10,8 @@ sig
 
   exception Error of string
 
-  (*type acctype = IntSyn.Exp*)
+  type acctype = IntSyn.Exp
 
   val searchEx : int * StateSyn.FunSyn.IntSyn.Exp list
-      * (IntSyn.Exp list -> IntSyn.Exp list) -> IntSyn.Exp list
+      * (acctype list -> acctype list) -> acctype list
 end;  (* signature SEARCH *)

@@ -8,15 +8,20 @@
 signature TEXT_STREAM_IO =
   sig
     include STREAM_IO
-    val inputLine    : instream -> (string * instream)
-    val outputSubstr : (outstream * Substring.substring) -> unit
+      where type vector = string
+        and type elem = char
+    val inputLine    : instream -> string * instream
+    val outputSubstr : outstream * Substring.substring -> unit
   end
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:18  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:26  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:18  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:50:54  pscheng
 # added basis
 # 

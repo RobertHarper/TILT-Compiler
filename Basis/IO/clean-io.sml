@@ -69,7 +69,7 @@ structure CleanIO :> sig
     fun getTag ({tag, ...} : cleaner) = tag
 
     fun rebindCleaner (t, {init, flush, close}) = let
-	  fun f [] = raise LibFail "rebindCleaner: tag not found"
+	  fun f [] = raise TiltExn.LibFail "rebindCleaner: tag not found"
 	    | f (x :: r) = let
 		val t' = getTag x
 		in
@@ -112,9 +112,12 @@ structure CleanIO :> sig
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:50:40  pscheng
-# added basis
+# Revision 1.2  2000/11/27  22:36:25  swasey
+# *** empty log message ***
 # 
+ * Revision 1.1  1998/03/09 19:50:40  pscheng
+ * added basis
+ *
  * Revision 1.2  1997/01/31  20:39:47  jhr
  * Replaced uses of "abstraction" with opaque signature matching.
  *

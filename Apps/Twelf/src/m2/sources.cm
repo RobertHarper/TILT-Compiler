@@ -15,36 +15,36 @@ Group is
   ../opsem/sources.cm
   ../table/sources.cm
   ../timing/sources.cm
-  meta-global.sig.sml
+  meta-global.sig
   meta-global.sml
-  skolem.sig.sml
-  skolem.fun.sml
-  metasyn.sig.sml
-  metasyn.fun.sml
-  meta-abstract.sig.sml
-  meta-abstract.fun.sml
-  meta-print.sig.sml
-  meta-print.fun.sml 
-  init.sig.sml
-  init.fun.sml
-  search.sig.sml
-  search.fun.sml
-  lemma.sig.sml
-  lemma.fun.sml
-  splitting.sig.sml
-  splitting.fun.sml
-  filling.sig.sml
-  filling.fun.sml
-  qed.sig.sml
-  qed.fun.sml
-  recursion.sig.sml
-  recursion.fun.sml
-  strategy.sig.sml
-  strategy.fun.sml	
-  prover.sig.sml
-  prover.fun.sml
-  mpi.sig.sml
-  mpi.fun.sml
+  skolem.sig
+  skolem.fun
+  metasyn.sig
+  metasyn.fun
+  meta-abstract.sig
+  meta-abstract.fun
+  meta-print.sig
+  meta-print.fun 
+  init.sig
+  init.fun
+  search.sig
+  search.fun
+  lemma.sig
+  lemma.fun
+  splitting.sig
+  splitting.fun
+  filling.sig
+  filling.fun
+  qed.sig
+  qed.fun
+  recursion.sig
+  recursion.fun
+  strategy.sig
+  strategy.fun	
+  prover.sig
+  prover.fun
+  mpi.sig
+  mpi.fun
   m2.sml
 
 

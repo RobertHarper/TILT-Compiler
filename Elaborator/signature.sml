@@ -702,7 +702,7 @@ structure Signature :> SIGNATURE =
 		   (case varsig_spec of
 			NONE => ctxt
 		      | SOME(_,sig_spec) => 
-			    let  (* (print "adding var_actual = "; pp_var var_actual;
+			    let  (* val _ = (print "adding var_actual = "; pp_var var_actual;
 				  print "\n"; pp_signat
 				  (SelfifySig ctxt (PATH (var_actual,[]), 
 				  sig_spec))) *)
@@ -732,7 +732,7 @@ structure Signature :> SIGNATURE =
 		       else () *)
 
 	   val res = 
-	       if (sub_con(ctxt',con_actual_tyvar,con_spec))
+	       if sub_con(ctxt',con_actual_tyvar,con_spec)
 		 then 
 		   ((case varsig_spec of
 			 NONE => 
@@ -995,7 +995,7 @@ structure Signature :> SIGNATURE =
 			       	   NONE => res
 				 | SOME con_spec =>
 				     let val con_spec = con_subst(con_spec,subst)
-				     in	 if sub_con(ctxt,con_actual,con_spec) 
+				     in	 if sub_con(ctxt,con_actual,con_spec)
 					     then res
 					 else 
 					     let val con_actual' = con_normalize(ctxt,con_actual)

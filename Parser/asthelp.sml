@@ -79,32 +79,32 @@ structure AstHelp : ASTHELP =
 	   | Ast.StringExp _ => exp
 	   | Ast.CharExp _ => exp
 	   | Ast.SelectorExp _ => exp
-	 | (Ast.ListExp elist) => Ast.ListExp(map self elist)
-	 | (Ast.TupleExp elist) => Ast.TupleExp(map self elist)
-	 | (Ast.VectorExp elist) => Ast.VectorExp(map self elist)
-	 | (Ast.SeqExp elist) => Ast.SeqExp(map self elist)
-	 | (Ast.AndalsoExp (e1,e2)) => Ast.AndalsoExp(f_exp state e1,f_exp state e2)
-	 | (Ast.OrelseExp (e1,e2)) => Ast.OrelseExp(f_exp state e1,f_exp state e2)
-	 | (Ast.FnExp rlist) => Ast.FnExp(map (f_rule state) rlist)
-	 | (Ast.FlatAppExp exp_fix_list) => Ast.FlatAppExp 
-	   (map (fn {item,fixity,region} => {item=self item,fixity=fixity,region=region}) exp_fix_list)
-	 | (Ast.AppExp {function,argument}) => Ast.AppExp{function=self function,
-							  argument=self argument}
-	 | (Ast.CaseExp {expr,rules}) => Ast.CaseExp{expr=self expr,rules=map (f_rule state) rules}
-	 | (Ast.HandleExp {expr,rules}) => Ast.HandleExp{expr=self expr,rules=map (f_rule state) rules}
-	 | (Ast.LetExp {dec,expr}) => Ast.LetExp{dec=f_dec state dec, expr=self expr}
-	 | (Ast.PletExp {dec,expr}) => Ast.PletExp{dec=f_dec state dec, expr=self expr}
-	 | (Ast.RecordExp symexp_list) => Ast.RecordExp(map (fn (s,e) => (s,self e)) symexp_list)
-	 | (Ast.ConstraintExp {expr,constraint}) => Ast.ConstraintExp{expr=self expr,
-								     constraint=f_ty state constraint}
-	 | (Ast.RaiseExp e) => Ast.RaiseExp(self e)
-	 | (Ast.IfExp {test,thenCase,elseCase}) => Ast.IfExp{test=self test,
-							     thenCase=self thenCase,
-							     elseCase=self elseCase}
-	 | (Ast.WhileExp {test,expr}) => Ast.WhileExp{test=self test,
-						      expr=self expr}
-	 | (Ast.MarkExp (e,r)) => Ast.MarkExp(self e,r)
-	 | (Ast.DelayExp e) => Ast.DelayExp (self e))
+	   | (Ast.ListExp elist) => Ast.ListExp(map self elist)
+	   | (Ast.TupleExp elist) => Ast.TupleExp(map self elist)
+	   | (Ast.VectorExp elist) => Ast.VectorExp(map self elist)
+	   | (Ast.SeqExp elist) => Ast.SeqExp(map self elist)
+	   | (Ast.AndalsoExp (e1,e2)) => Ast.AndalsoExp(f_exp state e1,f_exp state e2)
+	   | (Ast.OrelseExp (e1,e2)) => Ast.OrelseExp(f_exp state e1,f_exp state e2)
+	   | (Ast.FnExp rlist) => Ast.FnExp(map (f_rule state) rlist)
+	   | (Ast.FlatAppExp exp_fix_list) => Ast.FlatAppExp 
+		 (map (fn {item,fixity,region} => {item=self item,fixity=fixity,region=region}) exp_fix_list)
+	   | (Ast.AppExp {function,argument}) => Ast.AppExp{function=self function,
+							    argument=self argument}
+	   | (Ast.CaseExp {expr,rules}) => Ast.CaseExp{expr=self expr,rules=map (f_rule state) rules}
+	   | (Ast.HandleExp {expr,rules}) => Ast.HandleExp{expr=self expr,rules=map (f_rule state) rules}
+	   | (Ast.LetExp {dec,expr}) => Ast.LetExp{dec=f_dec state dec, expr=self expr}
+	   | (Ast.PletExp {dec,expr}) => Ast.PletExp{dec=f_dec state dec, expr=self expr}
+	   | (Ast.RecordExp symexp_list) => Ast.RecordExp(map (fn (s,e) => (s,self e)) symexp_list)
+	   | (Ast.ConstraintExp {expr,constraint}) => Ast.ConstraintExp{expr=self expr,
+									constraint=f_ty state constraint}
+	   | (Ast.RaiseExp e) => Ast.RaiseExp(self e)
+	   | (Ast.IfExp {test,thenCase,elseCase}) => Ast.IfExp{test=self test,
+							       thenCase=self thenCase,
+							       elseCase=self elseCase}
+	   | (Ast.WhileExp {test,expr}) => Ast.WhileExp{test=self test,
+							expr=self expr}
+	   | (Ast.MarkExp (e,r)) => Ast.MarkExp(self e,r)
+	   | (Ast.CcallExp (e, es)) => error "Don't handle Ccall expressions")
 	end
       and f_rule state (Ast.Rule {pat,exp}) = Ast.Rule{pat=f_pat state pat, exp=f_exp state exp}
       and f_pat state pat = 
@@ -119,7 +119,6 @@ structure AstHelp : ASTHELP =
 								 flexibility=flexibility}
  	 | (Ast.ListPat plist) => Ast.ListPat(map (f_pat state) plist)
 	 | (Ast.VectorPat plist) => Ast.VectorPat(map (f_pat state) plist)
-	 | (Ast.OrPat plist) => Ast.OrPat(map (f_pat state) plist)
 	 | (Ast.TuplePat plist) => Ast.TuplePat(map (f_pat state) plist)
 	 | (Ast.FlatAppPat pat_fixitem_list) =>
 	         Ast.FlatAppPat(map (fn {item,fixity,region} => 
@@ -130,8 +129,7 @@ structure AstHelp : ASTHELP =
 								  expPat=f_pat state expPat}
 	 | (Ast.ConstraintPat {pattern,constraint}) => Ast.ConstraintPat{pattern=f_pat state pattern,
 									     constraint=f_ty state constraint}
-	 | (Ast.MarkPat (p,r)) => Ast.MarkPat(f_pat state p,r)
-	 | (Ast.DelayPat p) => Ast.DelayPat (f_pat state p))
+	 | (Ast.MarkPat (p,r)) => Ast.MarkPat(f_pat state p,r))
        
       and f_dec (state as (doconstr, constrbound,
 			   doty, tybound,
@@ -139,6 +137,7 @@ structure AstHelp : ASTHELP =
 	(case dec of
 	  Ast.ValDec (vb_list,tvr) => Ast.ValDec (map (f_vb state) vb_list, tvr)
 	| Ast.ValrecDec (rvb_list ,tvr)=> Ast.ValrecDec (map (f_rvb state) rvb_list, tvr)
+	| Ast.PvalDec (vb_list,tvr) => error "Don't handle parallel value declarations"
 	| Ast.FunDec (fb_list,tvr) => Ast.FunDec (map (f_fb state) fb_list, tvr)
 	| Ast.TypeDec tb_list => Ast.TypeDec (map (f_tb state) tb_list)
 	| Ast.DatatypeDec {datatycs,withtycs} => 
@@ -156,7 +155,6 @@ structure AstHelp : ASTHELP =
 								  body=f_dec state body}
 	| Ast.ExceptionDec eb_list => Ast.ExceptionDec (map (f_eb state) eb_list)
 	| Ast.StrDec strb_list => Ast.StrDec (map (f_strb state) strb_list)
-	| Ast.AbsDec strb_list => error "Don't handle abstract structure"
 	| Ast.FctDec fctb_list => Ast.FctDec (map (f_fctb state) fctb_list)
 	| Ast.SigDec sigb_list => Ast.SigDec (map (f_sigb state) sigb_list)
 	| Ast.FsigDec fsigb_list => Ast.FsigDec (map (f_fsigb state) fsigb_list)
@@ -166,6 +164,7 @@ structure AstHelp : ASTHELP =
 	| Ast.OvldDec _ => error "Don't handle overloading declaration"
 	| Ast.FixDec _ => dec
 	| Ast.ImportDec _ => dec
+	| Ast.ExternDec (sym,ty) => error "Don't handle extern declarations"
 	| Ast.MarkDec (dec,r) => Ast.MarkDec(f_dec state dec,r))
       and f_vb state (Ast.Vb{pat,exp}) = Ast.Vb{pat=f_pat state pat,exp=f_exp state exp}
 	| f_vb state (Ast.MarkVb(vb,r)) = Ast.MarkVb(f_vb state vb,r)
@@ -221,7 +220,13 @@ structure AstHelp : ASTHELP =
       and f_strexp state strexp = 
 	(case strexp of
 	   Ast.VarStr _ => strexp
-	 | Ast.StructStr dec => Ast.StructStr (f_dec state dec)
+	 | Ast.BaseStr dec => Ast.BaseStr (f_dec state dec)
+	 | Ast.ConstrainedStr (strexp,constraint) =>
+	       Ast.ConstrainedStr (f_strexp state strexp,
+				   (case constraint of 
+					Ast.NoSig => Ast.NoSig
+				      | Ast.Transparent se => Ast.Transparent(f_sigexp state se)
+				      | Ast.Opaque se => Ast.Opaque(f_sigexp state se)))
 	 | Ast.AppStr (p,strexp_bool_list) => Ast.AppStr(p, map 
 							 (fn(s,b) => (f_strexp state s,b)) strexp_bool_list)
 	 | Ast.LetStr (dec, strexp) => Ast.LetStr(f_dec state dec, f_strexp state strexp)
@@ -231,18 +236,18 @@ structure AstHelp : ASTHELP =
 	   Ast.VarFct (p,Ast.NoSig) => fctexp
 	 | Ast.VarFct (p,Ast.Transparent fsigexp) => Ast.VarFct(p,Ast.Transparent (f_fsigexp state fsigexp))
 	 | Ast.VarFct (p,Ast.Opaque fsigexp) => Ast.VarFct(p,Ast.Opaque (f_fsigexp state fsigexp))
-	 | Ast.FctFct {params,body,constraint} => 
-	     Ast.FctFct{params=map (fn (so,sigexp) => (so,f_sigexp state sigexp)) params,
-			body=f_strexp state body,
-			constraint=case constraint of 
-			Ast.NoSig => Ast.NoSig
-		      | Ast.Transparent se => Ast.Transparent(f_sigexp state se)
-		      | Ast.Opaque se => Ast.Opaque(f_sigexp state se)}
+	 | Ast.BaseFct {params,body,constraint} => 
+	     Ast.BaseFct{params=map (fn (so,sigexp) => (so,f_sigexp state sigexp)) params,
+			 body=f_strexp state body,
+			 constraint=(case constraint of 
+					 Ast.NoSig => Ast.NoSig
+				       | Ast.Transparent se => Ast.Transparent(f_sigexp state se)
+				       | Ast.Opaque se => Ast.Opaque(f_sigexp state se))}
 	 | Ast.LetFct (dec,fctexp) => Ast.LetFct(f_dec state dec, f_fctexp state fctexp)
 	 | Ast.AppFct _ => error "don't handle (higher-order) functor application"
 	 | Ast.MarkFct (f,r) => Ast.MarkFct(f_fctexp state f, r))
       and f_sigexp state (Ast.VarSig s) = Ast.VarSig s
-	| f_sigexp state (Ast.SigSig speclist) = Ast.SigSig(map (f_spec state) speclist)
+	| f_sigexp state (Ast.BaseSig speclist) = Ast.BaseSig(map (f_spec state) speclist)
 	| f_sigexp state (Ast.MarkSig (se,r)) = Ast.MarkSig(f_sigexp state se,r)
 	| f_sigexp state (Ast.AugSig (se,_)) = raise UNIMP
       and f_fsigexp state (Ast.VarFsig s) = Ast.VarFsig s  
@@ -255,8 +260,7 @@ structure AstHelp : ASTHELP =
 			    dovar, varbound : symbol list)) spec = 
 	(case spec of
 	   Ast.StrSpec s_se_popt_list => 
-	       let fun mapper (arg as (s,NONE,popt)) = arg
-		     | mapper (s,SOME se,popt) = (s,SOME (f_sigexp state se),popt)
+	       let fun mapper (s,se,popt) = (s,f_sigexp state se,popt)
 	       in  Ast.StrSpec (map mapper s_se_popt_list)
 	       end
 	 | Ast.TycSpec (s_tvs_tyop_list,b) => 
@@ -273,10 +277,9 @@ structure AstHelp : ASTHELP =
 							 withtycs=map (f_tb state) withtycs}
 	| Ast.ExceSpec s_to_list => Ast.ExceSpec(map (fn (s,NONE) => (s,NONE)
 	                                    | (s,SOME ty) => (s,SOME(f_ty state ty))) s_to_list)
-	| Ast.FixSpec _  => spec
 	| Ast.ShareStrSpec _ => spec
 	| Ast.ShareTycSpec _ => spec
-	| Ast.IncludeSpec _ => spec
+	| Ast.IncludeSpec s => Ast.IncludeSpec (f_sigexp state s)
 (*	| Ast.OpenSpec _ => spec
         | Ast.LocalSpec (slist1,slist2) => Ast.LocalSpec(map (f_spec state) slist1,
 							 map (f_spec state) slist2) *)
@@ -414,14 +417,13 @@ structure AstHelp : ASTHELP =
 	     pp_region "(" ")" [pp_pat pattern, String ":", pp_ty constraint]
        | Ast.LayeredPat _ => String "LayeredPatUNIMPED"
        | Ast.VectorPat pats => String "VectorPatUNIMPED"
-       | Ast.MarkPat (p,r) => pp_pat p
-       | Ast.DelayPat p => pp_region "(" ")" [String "$", pp_pat p]
-       | Ast.OrPat _ => String "OrPatUNIMPED")
+       | Ast.MarkPat (p,r) => pp_pat p)
 
     fun pp_strexp strexp = 
       (case strexp of
 	 Ast.VarStr p => pp_path p
-       | Ast.StructStr dec => String "StructStr"
+       | Ast.BaseStr dec => String "BaseStr"
+       | Ast.ConstrainedStr (se,c) => HOVbox[String "ConstrainedStr", pp_strexp se]
        | Ast.AppStr dec => String "AppStr"
        | Ast.LetStr dec => String "LetStr"
        | Ast.MarkStr (se,r) => HOVbox[String "MarkStr ", pp_strexp se])
@@ -437,7 +439,6 @@ structure AstHelp : ASTHELP =
        | Ast.AppExp{function,argument} => pp_region "App(" ")" 
 	     [pp_exp function, String ",", Break, pp_exp argument]
        | Ast.MarkExp (e,r) => pp_exp e
-       | Ast.DelayExp e => pp_region "(" ")" [String "$",pp_exp e]
        | _ => String "Asthelp.pp_exp UNIMPED")
 
 

@@ -31,7 +31,7 @@ struct
 			 end
 	fun eq_conexp ctxt ((c1,e1),(c2,e2)) = eq_con(ctxt,c1,c2)
 	fun ce_sub(ctxt, ce1, ce2) = Listops.list_diff_eq(eq_conexp ctxt, ce1, ce2)
-	fun ce_add(ctxt, ce1, ce2) = Listops.list_sum_eq(eq_conexp ctxt, ce1, ce2)
+	fun ce_add(ctxt, ce1, ce2) = rev (Listops.list_sum_eq(eq_conexp ctxt, rev ce1, ce2)) (* ordered like ce1 @ ce2 *)
     end
 
     (* ---------------- LOOKUP RULES --------------------------- 

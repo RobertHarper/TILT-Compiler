@@ -5,8 +5,16 @@
  *
  *)
 
-structure Byte : BYTE =
+structure Byte :> BYTE =
   struct
+    val int32touint32 = TiltPrim.int32touint32
+	
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+	
+    val uplus = TiltPrim.uplus
+    val uminus = TiltPrim.uminus
+	
     fun chr (b : Word8.word) : char = b
     fun ord (c : char) : Word8.word = c
     fun vectorToString (v,pos,len) : string = Word8Vector.extract(v,pos,SOME len)
@@ -42,9 +50,12 @@ structure Byte : BYTE =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:28  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:29  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:28  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:52:32  pscheng
 # added basis
 # 

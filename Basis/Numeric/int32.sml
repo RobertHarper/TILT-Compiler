@@ -7,6 +7,9 @@
 
 structure Int32 :> INTEGER where type int = int =
   struct
+    val quot = TiltPrim.iquot
+    val andb = TiltPrim.andb
+    val xorb = TiltPrim.xorb
 (*
     structure I32 = InlineT.Int32
 
@@ -52,8 +55,8 @@ structure Int32 :> INTEGER where type int = int =
     fun min(a:int, b:int):int = if <(a,b) then a else b
     fun max(a:int, b:int):int = if >(a,b) then a else b
     fun op rem(a:int,b:int):int =  -(a, *(b, quot(a, b)))
+(*
     fun abs(a:int):int = if >(a, 0) then ~(a) else a
-
     fun op div(a:int, b:int):int = if >=(b, 0)
 	  then if >=(a, 0)
 	    then quot(a, b) 
@@ -71,7 +74,11 @@ structure Int32 :> INTEGER where type int = int =
 	  else if =(a, ~2147483648) andalso =(b, ~1)
 	    then 0
 	    else -(a, * (quot(a, b), b))
-
+*)
+    val abs = PreInt.iabs
+    val op div = PreInt.idiv
+    val op mod = PreInt.imod
+	
     fun sign(0) = 0
       | sign i = if <(i, 0) then ~1 else 1
 
@@ -103,16 +110,14 @@ structure Int32 :> INTEGER where type int = int =
 
   end
 
-structure Position = Int32
-structure Int = Int32
-structure LargeInt = Int32
-structure SysInt = Int32
-
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:29  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:30  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:29  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  2000/01/20 13:31:54  pscheng
  * *** empty log message ***
  *

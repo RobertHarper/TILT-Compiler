@@ -1,3 +1,15 @@
 (*$include POSIX *)
 
-structure Posix : POSIX 
+structure Posix :
+    sig
+	include POSIX
+	  where type Error.syserror = int
+	  
+	sharing type Process.pid = ProcEnv.pid = TTY.pid
+	    and type Process.signal = Signal.signal
+	    and type ProcEnv.file_desc = FileSys.file_desc = TTY.file_desc = IO.file_desc
+	    and type FileSys.open_mode = IO.open_mode
+	    and type ProcEnv.uid = FileSys.uid = SysDB.uid
+	    and type ProcEnv.gid = FileSys.gid = SysDB.gid
+	    and type FileSys.O.flags = IO.O.flags
+    end

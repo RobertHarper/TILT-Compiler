@@ -1,10 +1,13 @@
-(*$import MATH Prelude *)
+(*$import MATH Prelude PreReal PreInt *)
 
 structure Math64 :> MATH where type real = real =
   struct
+    val float_eq = TiltPrim.float_eq
+    val floor = TiltPrim.float2int
+	
     (* div and mod will eventually be overloaded to work at multiple types *)
-    val div = idiv
-    val mod = imod
+    val div = PreInt.idiv
+    val mod = PreInt.imod
 
     type real = real
 
@@ -132,4 +135,3 @@ structure Math64 :> MATH where type real = real =
 	       else 1.0
     end
   end
-structure Math = Math64

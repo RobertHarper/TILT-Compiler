@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)
@@ -11,7 +11,7 @@ sig
   datatype Goal =                       (* Goals                      *)
     Atom of IntSyn.Exp                  (* g ::= p                    *)
   | Impl of ResGoal * IntSyn.Exp        (*     | (r,A,a) => g         *)
-            * int (*IntSyn.cid*) * Goal		
+            * IntSyn.cid * Goal		
   | All  of IntSyn.Dec * Goal           (*     | all x:A. g           *)
 
   and ResGoal =                         (* Residual Goals             *)
@@ -34,15 +34,15 @@ sig
   (* type dpool = (ResGoal * IntSyn.Sub * IntSyn.cid) option IntSyn.Ctx *)
 
   (* Dynamic programs: context with synchronous clause pool *)
-  datatype DProg = DProg of (IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (ResGoal * IntSyn.Sub * int (*IntSyn.cid*)) option IntSyn.Ctx)
+  datatype DProg = DProg of (IntSyn.dctx * (ResGoal * IntSyn.Sub * IntSyn.cid) option IntSyn.Ctx)
 
   (* Static programs --- compiled version of the signature *)
   datatype ConDec =			(* Compiled constant declaration *)
     SClause of ResGoal	                (* c : A                      *)
   | Void 		                (* Other declarations are ignored  *)
 
-  val sProgInstall : int (*IntSyn.cid*) * ConDec -> unit
-  val sProgLookup: int (*IntSyn.cid*) -> ConDec
+  val sProgInstall : IntSyn.cid * ConDec -> unit
+  val sProgLookup: IntSyn.cid -> ConDec
   val sProgReset : unit -> unit
 
   (* Explicit Substitutions *)

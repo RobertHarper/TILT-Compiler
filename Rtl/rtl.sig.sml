@@ -106,7 +106,7 @@ sig
     | ADDT   of regi * sv * regi        (* c <- a+b, trap on overflow *)
     | SUBT   of regi * sv * regi        (* c <- a-b, trap on overflow *)
     | MULT   of regi * sv * regi        (* c <- a*b, trap on overflow *)
-    | DIVT   of regi * sv * regi        (* c <- a/b, trap on zero *)
+    | DIVT   of regi * sv * regi        (* c <- a/b, trap on zero, overflow *)
     | MODT   of regi * sv * regi        (* c <- a mod b, trap on zero *)
     | CMPSI  of cmp * regi * sv * regi  (* c <- a op b *)
     | CMPUI  of cmp * regi * sv * regi  (* c <- a op b *)
@@ -253,7 +253,7 @@ sig
     | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)
 
     (* for signalling hardware(Alpha): SOFT -> BARRIER; HARD -> nop
-      for non-signalling hardware(PPC): SOFT -> NOP; HARD -> test-and-branch *)
+       for non-signalling hardware(PPC): SOFT -> NOP; HARD -> test-and-branch *)
     | SOFT_VBARRIER of traptype
     | SOFT_ZBARRIER of traptype
     | HARD_VBARRIER of traptype

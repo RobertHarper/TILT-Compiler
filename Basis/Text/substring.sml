@@ -5,9 +5,22 @@
  *
  *)
 
-structure Substring :> SUBSTRING where type substring = substring =
+structure Substring :> SUBSTRING where type substring = PreString.substring
+				   and type String.string = string
+				   and type String.Char.char = char
+				   and type String.Char.string = string =
   struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+	
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+	
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
 (*
     val op + = InlineT.DfltInt.+
     val op - = InlineT.DfltInt.-
@@ -26,15 +39,23 @@ structure Substring :> SUBSTRING where type substring = substring =
     fun rev ([], l) = l
       | rev (x::r, l) = rev (r, x::l)
 
+    structure String = String
     datatype substring = datatype PreString.substring
     fun base (PreString.SS arg) = arg
 
     fun string (PreString.SS(s,st,sz)) = PreString.unsafeSubstring(s,i2w st,i2w sz)
 
+				   
     fun substring (s, i, n) =
 	  if ((0 <= i) andalso (0 <= n) andalso (i+n <= String.size s))
 	    then PreString.SS(s, i, n)
 	    else raise General.Subscript
+		
+    fun extract (s, i, NONE) = if ((0 <= i) andalso (i <= String.size s))
+				   then PreString.SS(s, i, String.size s - i)
+			       else raise General.Subscript
+      | extract (s, i, SOME n) = substring (s, i, n)
+
     fun all s = PreString.SS(s, 0, String.size s)
 
     fun isEmpty (PreString.SS(_, _, 0)) = true

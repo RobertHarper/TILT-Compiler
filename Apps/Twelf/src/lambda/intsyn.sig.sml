@@ -1,11 +1,11 @@
-(*$import Prelude *)
+(*$import Prelude TopLevel *)
 (* Internal Syntax *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 
 signature INTSYN =
 sig
 
-  (*type cid = int*)			(* Constant identifier        *)
+  type cid = int			(* Constant identifier        *)
 
   (* Contexts *)
 
@@ -40,10 +40,10 @@ sig
 
   and Head =				(* Head:                      *)
     BVar  of int			(* H ::= k                    *)
-  | Const of int (*cid*)		(*     | c                    *)
-  | Skonst of int (*cid*)			(*     | c#                   *)
-  | Def   of int (*cid*)			(*     | d (strict)           *)
-  | NSDef of int (*cid*)			(*     | d (non strict)       *)
+  | Const of cid			(*     | c                    *)
+  | Skonst of cid			(*     | c#                   *)
+  | Def   of cid			(*     | d (strict)           *)
+  | NSDef of cid			(*     | d (non strict)       *)
   | FVar  of string * Exp * Sub		(*     | F[s]                 *)
 
   and Spine =				(* Spines:                    *)
@@ -67,8 +67,8 @@ sig
     Eqn of  Dec Ctx * Exp * Exp	       	(* Eqn ::= G|-(U1 == U2)      *)
 
   (* Type abbreviations *)
-  (*type dctx = Dec Ctx*)		(* G = . | G,D                *)
-  (*type eclo = Exp * Sub*)   		(* Us = U[s]                  *)
+  type dctx = Dec Ctx			(* G = . | G,D                *)
+  type eclo = Exp * Sub   		(* Us = U[s]                  *)
 
   (* Global signature *)
 
@@ -87,21 +87,21 @@ sig
   val conDecName : ConDec -> string
   val conDecType : ConDec -> Exp
 
-  val sgnAdd   : ConDec -> int (*cid*)
-  val sgnLookup: int (*cid*) -> ConDec
+  val sgnAdd   : ConDec -> cid
+  val sgnLookup: cid -> ConDec
   val sgnReset : unit -> unit
   val sgnSize  : unit -> int
 
-  val sgnApp   : (int (*cid*) -> unit) -> unit
+  val sgnApp   : (cid -> unit) -> unit
     
-  val constType : int (*cid*) -> Exp		(* type of c or d             *)
-  val constDef  : int (*cid*) -> Exp		(* definition of d            *)
-  val constImp  : int (*cid*) -> int
-  val constUni  : int (*cid*) -> Uni
+  val constType : cid -> Exp		(* type of c or d             *)
+  val constDef  : cid -> Exp		(* definition of d            *)
+  val constImp  : cid -> int
+  val constUni  : cid -> Uni
 
   (* Declaration Contexts *)
 
-  val ctxDec    : Dec Ctx * int -> Dec	(* get variable declaration   *)
+  val ctxDec    : dctx * int -> Dec	(* get variable declaration   *)
 
   (* Explicit substitutions *)
 
@@ -119,14 +119,14 @@ sig
 
   (* EVar related functions *)
 
-  val newEVar   : Dec Ctx * Exp -> Exp	(* creates X:G|-V, []         *) 
-  val newEVarCnstr : Dec Ctx * Exp * Eqn list -> Exp 
+  val newEVar   : dctx * Exp -> Exp	(* creates X:G|-V, []         *) 
+  val newEVarCnstr : dctx * Exp * Eqn list -> Exp 
 					(* creates X:G|-V, Cnstr      *)
-  val newTypeVar : Dec Ctx -> Exp		(* creates X:G|-type, []      *)
+  val newTypeVar : dctx -> Exp		(* creates X:G|-type, []      *)
 
   (* Type related functions *)
 
-  val targetFamOpt : Exp -> int (*cid*) option  (* target type family or NONE *)
-  val targetFam : Exp -> int (*cid*)            (* target type family         *)
+  val targetFamOpt : Exp -> cid option  (* target type family or NONE *)
+  val targetFam : Exp -> cid            (* target type family         *)
 
 end;  (* signature INTSYN *)

@@ -103,7 +103,6 @@ struct
     | pass1_exp (WhileExp {test, expr}) =
 	TVSet.merge (pass1_exp test, pass1_exp expr)
     | pass1_exp (MarkExp (exp, region)) = pass1_exp exp
-    | pass1_exp (DelayExp expr) = pass1_exp expr
 
   and pass1_rule (Rule {pat, exp}) = TVSet.merge (pass1_pat pat, pass1_exp exp)
 
@@ -127,11 +126,10 @@ struct
 	TVSet.merge (pass1_pat varPat, pass1_pat expPat)
     | pass1_pat (VectorPat pats) = TVSet.union (map pass1_pat pats)
     | pass1_pat (MarkPat (pat, region)) = pass1_pat pat
-    | pass1_pat (OrPat pats) = TVSet.union (map pass1_pat pats)
-    | pass1_pat (DelayPat pat) = pass1_pat pat
 
   and pass1_strexp (VarStr path) = ()
-    | pass1_strexp (StructStr dec) = (pass1_dec dec; ())
+    | pass1_strexp (BaseStr dec) = (pass1_dec dec; ())
+    | pass1_strexp (ConstrainedStr (strexp, constraint)) = pass1_strexp strexp
     | pass1_strexp (AppStr (path, strexpbools)) =
         app (pass1_strexp o #1) strexpbools
     | pass1_strexp (LetStr (dec, strexp)) =
@@ -139,7 +137,7 @@ struct
     | pass1_strexp (MarkStr (strexp, region)) = pass1_strexp strexp
 
   and pass1_fctexp (VarFct _) = ()
-    | pass1_fctexp (FctFct {params, body, constraint}) = pass1_strexp body
+    | pass1_fctexp (BaseFct {params, body, constraint}) = pass1_strexp body
     | pass1_fctexp (LetFct (dec, fctexp)) =
         (pass1_dec dec; pass1_fctexp fctexp)
     | pass1_fctexp (AppFct (path, strexpbools, fsigconst)) =
@@ -169,7 +167,6 @@ struct
 		     pass1_dec body]
     | pass1_dec (ExceptionDec ebs) = TVSet.union (map pass1_eb ebs)
     | pass1_dec (StrDec strbs) = (app pass1_strb strbs; [])
-    | pass1_dec (AbsDec strbs) = (app pass1_strb strbs; [])
     | pass1_dec (FctDec fctbs) = (app pass1_fctb fctbs; [])
     | pass1_dec (SigDec sigbs) = []
     | pass1_dec (FsigDec fsigbs) = []
@@ -272,12 +269,12 @@ struct
     | pass2_exp env (WhileExp {test, expr}) =
 	(pass2_exp env test; pass2_exp env expr)
     | pass2_exp env (MarkExp (exp, region)) = pass2_exp env exp
-    | pass2_exp env (DelayExp expr) = pass2_exp env expr
 
   and pass2_rule env (Rule {pat, exp}) = pass2_exp env exp
 
   and pass2_strexp (VarStr path) = ()
-    | pass2_strexp (StructStr dec) = pass2_dec [] dec
+    | pass2_strexp (BaseStr dec) = pass2_dec [] dec
+    | pass2_strexp (ConstrainedStr (strexp, constraint)) = pass2_strexp strexp
     | pass2_strexp (AppStr (path, strexpbools)) =
         app (pass2_strexp o #1) strexpbools
     | pass2_strexp (LetStr (dec, strexp)) =
@@ -285,7 +282,7 @@ struct
     | pass2_strexp (MarkStr (strexp, region)) = pass2_strexp strexp
 
   and pass2_fctexp (VarFct _) = ()
-    | pass2_fctexp (FctFct {params, body, constraint}) = pass2_strexp body
+    | pass2_fctexp (BaseFct {params, body, constraint}) = pass2_strexp body
     | pass2_fctexp (LetFct (dec, fctexp)) =
         (pass2_dec [] dec; pass2_fctexp fctexp)
     | pass2_fctexp (AppFct (path, strexpbools, fsigconst)) =
@@ -323,7 +320,6 @@ struct
     | pass2_dec env (AbstypeDec {abstycs, withtycs, body}) = pass2_dec env body
     | pass2_dec env (ExceptionDec ebs) = ()
     | pass2_dec env (StrDec strbs) = app pass2_strb strbs
-    | pass2_dec env (AbsDec strbs) = app pass2_strb strbs
     | pass2_dec env (FctDec fctbs) = app pass2_fctb fctbs
     | pass2_dec env (SigDec sigbs) = ()
     | pass2_dec env (FsigDec fsigbs) = ()

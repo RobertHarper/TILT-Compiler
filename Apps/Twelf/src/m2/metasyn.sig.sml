@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Meta syntax *)
 (* Author: Carsten Schuermann *)
 
@@ -11,7 +11,7 @@ sig
   | Top					(*     | Top                  *)
 
   datatype Prefix =			(* Prefix P := *)
-    Prefix of IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*)		(* G   declarations           *)
+    Prefix of IntSyn.dctx		(* G   declarations           *)
             * Mode IntSyn.Ctx		(* Mtx modes                  *)
             * int IntSyn.Ctx		(* Btx splitting depths       *)
 
@@ -24,6 +24,6 @@ sig
     SgnEmpty				(* IS ::= .                   *)
   | ConDec of IntSyn.ConDec * Sgn       (*      | c:V, IS             *)
 
-  val createAtomConst : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Head -> (IntSyn.Exp * (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*))
-  val createAtomBVar : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * int -> (IntSyn.Exp * (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*))
+  val createAtomConst : IntSyn.dctx * IntSyn.Head -> (IntSyn.Exp * IntSyn.eclo)
+  val createAtomBVar : IntSyn.dctx * int -> (IntSyn.Exp * IntSyn.eclo)
 end; (* signature METASYN *)

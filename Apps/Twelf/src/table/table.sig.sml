@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Prelude TopLevel *)
 (* Tables *)
 (* Author: Frank Pfenning *)
 
@@ -8,19 +8,19 @@
 signature TABLE =
 sig
   type key (* parameter *)
-  (*type 'a entry = key * 'a*)
+  type 'a entry = key * 'a
 
   type 'a Table
   val new : int -> 'a Table		(* size hint for some implementations *)
 
-  val insert : 'a Table -> key * 'a (*'a entry*) -> unit
+  val insert : 'a Table -> 'a entry -> unit
   (* insert entry, return shadowed entry if there is one *)
-  val insertShadow : 'a Table -> key * 'a (*'a entry*) -> (key * 'a (*'a entry*)) option
+  val insertShadow : 'a Table -> 'a entry -> ('a entry) option
 
   val lookup : 'a Table -> key -> 'a option
   val clear : 'a Table -> unit
 
   (* Apply function to all entries in unpredictable order *)
-  val app : (key * 'a (*'a entry*) -> unit) -> 'a Table -> unit
+  val app : ('a entry -> unit) -> 'a Table -> unit
 
 end;  (* signature TABLE *)

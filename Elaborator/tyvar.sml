@@ -18,34 +18,39 @@ structure Tyvar :> TYVAR =
 	fun new_stamp() = (stamp := (!stamp) + 1; !stamp)
     end
 
-    type ('ctxt,'con) tyvar_info = {stampref : int,
-				     name : var,
-				     constrained : bool,
-				     use_equal : bool,
-				     body : 'con option ref,
-				     ctxts : 'ctxt list} ref
+    (* Eq is NONE if we have not been marked for equality by the user or by type inference.
+     * Eq is SOME full_oneshot if we have been marked for equality and set to a constructor c
+     *   which admits equality.  (The oneshot is filled early by the unification routines.)
+     * Eq is SOME empty_oneshot if we have been marked for equality.
+     *)
+    type ('ctxt,'con,'exp) tyvar_info = {stampref : int,
+					 name : var,
+					 constrained : bool,
+					 eq : 'exp oneshot option,
+					 body : 'con option ref,
+					 ctxts : 'ctxt list} ref
 
-    datatype ('ctxt,'con) tyvar = TYVAR of ('ctxt,'con) tyvar_info
+    datatype ('ctxt,'con,'exp) tyvar = TYVAR of ('ctxt,'con,'exp) tyvar_info
 
     (* input bool represents hardness *)
-    type ('ctxt,'con) constraint = (unit -> unit) * (('ctxt,'con) tyvar * bool -> bool) 
+    type ('ctxt,'con,'exp) constraint = (unit -> unit) * (('ctxt,'con,'exp) tyvar * bool -> bool) 
 	
-    datatype ('ctxt,'con) ocon = OCON of {constraints : ('ctxt,'con) constraint list ref,
+    datatype ('ctxt,'con,'exp) ocon = OCON of {constraints : ('ctxt,'con,'exp) constraint list ref,
 					  name : var,
-					  body : ('ctxt,'con) tyvar}
+					  body : ('ctxt,'con,'exp) tyvar}
 
     fun stamp2int stamp = (stamp : int)
     fun stamp_join(a : stamp,b) = if (a<b) then a else b
-    fun tyvar_copy(TYVAR (ref {stampref, name, constrained, use_equal, body, ctxts})) =
+    fun tyvar_copy(TYVAR (ref {stampref, name, constrained, eq, body, ctxts})) =
 	TYVAR(ref{stampref = stampref, name = name, constrained = constrained,
-		  use_equal = use_equal, body = (case !body of
-						     SOME _ => body
-						   | _ => ref NONE), ctxts = ctxts})
+		  eq = eq, body = (case !body of
+				       SOME _ => body
+				     | _ => ref NONE), ctxts = ctxts})
     fun tyvar_update(TYVAR r, TYVAR(ref info)) = r := info
     fun fresh_stamped_tyvar (ctxts,name,stamp) = TYVAR(ref{stampref = stamp,
 							   name = fresh_named_var name, 
 							   constrained = false, 
-							   use_equal = false,
+							   eq = NONE,
 							   body = ref NONE,
 							   ctxts = [ctxts]})
     val tyvar_counter = ref (Stats.counter "Elab-NumTyvars")
@@ -53,13 +58,13 @@ structure Tyvar :> TYVAR =
     fun fresh_tyvar ctxts = fresh_named_tyvar (ctxts,"tv")
     fun tyvar_after stamp (TYVAR(ref {stampref,...})) = stamp < stampref
     fun tyvar_stamp (TYVAR(ref {stampref,...})) = stampref
-    fun update_stamp (TYVAR(r as ref {stampref,name,constrained,use_equal,body,ctxts}),
+    fun update_stamp (TYVAR(r as ref {stampref,name,constrained,eq,body,ctxts}),
 		      stamp) = 
 	let val stampref = Int.min(stampref,stamp)
 	in  r := {stampref = stampref,
 		  name=name,
 		  constrained=constrained,
-		  use_equal = use_equal,
+		  eq = eq,
 		  body=body,
 		  ctxts=ctxts}
 	end
@@ -74,29 +79,32 @@ structure Tyvar :> TYVAR =
 		    | SOME _  => error "cannot set tyvar more than once")
     fun tyvar_reset(TYVAR(ref {body,...}),c) = body := SOME c
     fun tyvar_isconstrained(TYVAR(ref {constrained,...})) = constrained 
-    fun tyvar_constrain(TYVAR(r as ref ({stampref,name,constrained,use_equal,body,ctxts}))) =
+    fun tyvar_constrain(TYVAR(r as ref ({stampref,name,constrained,eq,body,ctxts}))) =
 	  r := {stampref = stampref,
 		name=name,
 		constrained=true,
-		use_equal=use_equal,
+		eq=eq,
 		body=body,
 		ctxts=ctxts}
 
-    fun tyvar_is_use_equal(TYVAR(ref{use_equal,...})) = use_equal
-    fun tyvar_use_equal(TYVAR(r as ref ({stampref,name,constrained,use_equal,body,ctxts}))) =
-	  r := {stampref = stampref,
-		  name=name,
-		  constrained=constrained,
-		  use_equal=true,
-		  body=body,
-		  ctxts=ctxts}
+    fun tyvar_is_use_equal(TYVAR(ref{eq,...})) = isSome eq
+    fun tyvar_use_equal(TYVAR(r as ref ({stampref,name,constrained,eq,body,ctxts}))) =
+	(case eq
+	   of NONE => r := {stampref = stampref,
+			    name=name,
+			    constrained=constrained,
+			    eq=SOME (oneshot()),
+			    body=body,
+			    ctxts=ctxts}
+	    | SOME _ => ())
+    fun tyvar_eq_hole(TYVAR(ref{eq,...})) = eq
     fun tyvar_getctxts(TYVAR(ref {ctxts,...})) = ctxts
-    fun tyvar_addctxts(TYVAR(r as ref ({stampref,name,constrained,use_equal,body,ctxts})), 
+    fun tyvar_addctxts(TYVAR(r as ref ({stampref,name,constrained,eq,body,ctxts})), 
 		       ctxts') =
 	  r := {stampref = stampref,
 		name=name,
 		constrained=constrained,
-		use_equal=use_equal,
+		eq=eq,
 		body=body,
 		ctxts=(ctxts' @ ctxts)}
 

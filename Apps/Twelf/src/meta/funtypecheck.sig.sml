@@ -1,4 +1,4 @@
-(*$import Prelude FUNSYN STATESYN *)
+(*$import Prelude TopLevel FUNSYN STATESYN *)
 (* Type checking for functional proof term calculus *)
 (* Author: Carsten Schuermann *)
 
@@ -9,9 +9,9 @@ sig
 
   exception Error of string
 
-  val isFor : FunSyn.IntSyn.Dec FunSyn.IntSyn.Ctx(*FunSyn.IntSyn.dctx*) * FunSyn.For -> unit
+  val isFor : FunSyn.IntSyn.dctx * FunSyn.For -> unit
   val check : FunSyn.Pro * FunSyn.For -> unit    
-  val checkSub : FunSyn.LFDec FunSyn.IntSyn.Ctx(*FunSyn.lfctx*) * FunSyn.IntSyn.Sub * FunSyn.LFDec FunSyn.IntSyn.Ctx(*FunSyn.lfctx*) -> unit
+  val checkSub : FunSyn.lfctx * FunSyn.IntSyn.Sub * FunSyn.lfctx -> unit
 
   val isState : StateSyn.State -> unit
 end (* Signature FUNTYPECHECK *)       

@@ -15,6 +15,19 @@ structure NumFormat : sig
 
   end = struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+
+    val && = TiltPrim.&&
+    val >> = TiltPrim.>>
+
+    val udiv = TiltPrim.udiv
+    val umult = TiltPrim.umult
+    val uminus = TiltPrim.uminus
+
+    val ult = TiltPrim.ult
+
+    val unsafe_vsub = TiltPrim.unsafe_vsub
 (*
     structure W = InlineT.Word32
     structure I = InlineT.Int31
@@ -41,17 +54,17 @@ structure NumFormat : sig
     fun mkDigit (w : word) = unsafe_vsub("0123456789abcdef", w)
 
     fun wordToBin w = let
-	  fun mkBit w = if ((w && 0w1) = 0w0) then #"0" else #"1"
+	  fun mkBit w = if (&&(w, 0w1) = 0w0) then #"0" else #"1"
 	  fun f (0w0, n, l) = (plus(n : int, 1), #"0" :: l)
 	    | f (0w1, n, l) = (plus(n : int, 1), #"1" :: l)
-	    | f (w, n, l) = f((w >> 1), plus(n, 1), (mkBit w) :: l)
+	    | f (w, n, l) = f(>>(w, 1), plus(n, 1), (mkBit w) :: l)
 	  in
 	    f (w, 0, [])
 	  end
     fun wordToOct w = let
 	  fun f (w, n, l) = if (w < 0w8)
 		then (plus(n, 1), (mkDigit w) :: l)
-		else f((w >> 3), plus(n : int, 1), mkDigit(w && 0wx7) :: l)
+		else f(>>(w, 3), plus(n : int, 1), mkDigit(&&(w, 0wx7)) :: l)
 	  in
 	    f (w, 0, [])
 	  end
@@ -68,7 +81,7 @@ structure NumFormat : sig
     fun wordToHex w = let
 	  fun f (w, n, l) = if (w < 0w16)
 		then (plus(n, 1), (mkDigit w) :: l)
-		else f((w >> 4), plus(n, 1), mkDigit((w && 0wxf)) :: l)
+		else f(>>(w, 4), plus(n, 1), mkDigit(&&(w, 0wxf)) :: l)
 	  in
 	    f (w, 0, [])
 	  end

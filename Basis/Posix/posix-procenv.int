@@ -2,6 +2,6 @@
 structure POSIX_ProcEnv : POSIX_PROC_ENV 
 	where type pid = POSIX_Process.pid 
 	and   type file_desc = POSIX_FileSys.file_desc 
-	and   type uid = POSIX_FileSys.uid 
-	and   type gid = POSIX_FileSys.gid 
+	and   type uid = PrePosix.uid 
+	and   type gid = PrePosix.gid 
 

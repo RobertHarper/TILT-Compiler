@@ -1,4 +1,4 @@
-(*$import Prelude List PreTime DATE Time POSIX_extern Vector Int *)
+(*$import Prelude List PreTime DATE Time POSIX_extern Vector StringCvt Int *)
 (* date.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -78,7 +78,9 @@ structure Date :> DATE =
     fun yearDay (DATE{yday, ...}) = yday
     fun isDst (DATE{isDst, ...}) = isDst
     fun offset (DATE{offset,...}) = offset
-	
+
+    fun localOffset () = raise TiltExn.LibFail "Date.localOffset not implemented"
+ 
     (* 
      * This code is taken from Reingold's paper
      *)
@@ -203,8 +205,8 @@ structure Date :> DATE =
 	 * what to add to local time to get gmt
 	 *)
 
-	val secInDay = Int32.fromInt(60 * 60 * 24)
-	val secInHDay = Int32.fromInt(30 * 30 * 24)
+	val secInDay = Int.fromInt(60 * 60 * 24)
+	val secInHDay = Int.fromInt(30 * 30 * 24)
 (*
 	fun diffToOffset (d) =
 	    if (d<0) then Time.fromSeconds (secInDay+d)
@@ -277,13 +279,12 @@ structure Date :> DATE =
 	fun toString d = ascTime (toTM d)
 	    
 	fun fmt fmtStr d = strfTime (fmtStr, toTM d)
-	    
-	(**
-val fromString : string -> date option
-val scan       : (getc : (char, 'a) StringCvt.reader) -> 'a -> (date * 'a) option
-	 **)
 
+	fun fromString (_ : string) : date option = raise TiltExn.LibFail "Date.fromString unimplemented"
 
+	fun scan (_ : (char, 'a) StringCvt.reader) (_ : 'a) : (date * 'a) option =
+	    raise TiltExn.LibFail "Date.scan unimplemented"
+		
 	(* comparison does not take into account the offset
 	 * thus, it does not compare dates in different time zones
 	 *)
@@ -304,9 +305,12 @@ val scan       : (getc : (char, 'a) StringCvt.reader) -> 'a -> (date * 'a) optio
 
 (*
  * $Log$
-# Revision 1.4  2000/09/12  18:54:03  swasey
-# Changes for cutoff compilation
+# Revision 1.5  2000/11/27  22:36:17  swasey
+# *** empty log message ***
 # 
+ * Revision 1.4  2000/09/12 18:54:03  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.3  2000/08/21 20:29:19  swasey
  * Changes for the new Manager.
  *

@@ -1,4 +1,4 @@
-(*$import Prelude CONV INTSYN WHNF *)
+(*$import Prelude TopLevel CONV INTSYN WHNF *)
 (* Convertibility Modulo Beta and Eta *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

@@ -332,7 +332,8 @@ struct
 					 end)
    val loadEA = loadEA' NONE
 
-
+   fun barrier () = emit (SPECIFIC TRAPB)
+       
    fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
      | translate (Rtl.LADDR (ea, rtl_Rdest)) =
           let val Rdest = translateIReg rtl_Rdest
@@ -428,6 +429,7 @@ struct
 			      resregs = SOME [ireg 27],
 			      destroys = SOME [ireg 23, ireg 24, ireg 25, 
 					       ireg 26, ireg 27, ireg 29]})))
+	 (* barrier() unnecessary *)
        end
 
      | translate (Rtl.DIVT (rtl_Rsrc1, Rtl.IMM denom, rtl_Rdest)) =
@@ -452,6 +454,7 @@ struct
 				  destroys = SOME [ireg 23, ireg 24, ireg 25, 
 						   ireg 26, ireg 27, ireg 29]})))
 	   end
+	 (* barrier() unnecessary *)
        end
 
      | translate (Rtl.MODT (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
@@ -476,6 +479,7 @@ struct
 				resregs = SOME [ireg 27],
 				destroys = SOME [ireg 23, ireg 24, ireg 25, 
 						 ireg 26, ireg 27, ireg 29]})))
+	 (* barrier() unnecessary *)
        end
 
      | translate (Rtl.UDIV (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
@@ -573,7 +577,8 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (ADDLV, Rsrc1, src2, Rdest)))
+	 emit (SPECIFIC(INTOP (ADDLV, Rsrc1, src2, Rdest)));
+	 barrier()
        end
 
      | translate (Rtl.SUBT (rtl_Rsrc1, op2, rtl_Rdest)) =
@@ -582,7 +587,8 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SUBLV, Rsrc1, src2, Rdest)))
+	 emit (SPECIFIC(INTOP (SUBLV, Rsrc1, src2, Rdest)));
+	 barrier()
        end
 
 
@@ -592,7 +598,8 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (MULLV, Rsrc1, src2, Rdest)))
+	 emit (SPECIFIC(INTOP (MULLV, Rsrc1, src2, Rdest)));
+	 barrier()
        end
 
      | translate (Rtl.CMPSI (comparison, rtl_Rsrc1, Rtl.REG rtl_Rsrc2,
@@ -1115,8 +1122,8 @@ struct
 	 translate (Rtl.ILABEL rtl_loclabel)
        end
 
-     | translate (Rtl.SOFT_VBARRIER _) = emit (SPECIFIC TRAPB)
-     | translate (Rtl.SOFT_ZBARRIER _) = emit (SPECIFIC TRAPB)
+     | translate (Rtl.SOFT_VBARRIER _) = barrier()
+     | translate (Rtl.SOFT_ZBARRIER _) = barrier()
      | translate (Rtl.HARD_VBARRIER _) = ()
      | translate (Rtl.HARD_ZBARRIER _) = ()
 

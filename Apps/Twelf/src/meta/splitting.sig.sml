@@ -1,4 +1,4 @@
-(*$import Prelude STATESYN *)
+(*$import Prelude TopLevel STATESYN *)
 (* Splitting : Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

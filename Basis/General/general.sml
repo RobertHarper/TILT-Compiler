@@ -1,4 +1,4 @@
-(*$import Prelude GENERAL *)
+(*$import Prelude GENERAL General_extern *)
 (* general.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -14,30 +14,26 @@ structure General :> GENERAL where type unit = unit
     type exn = exn
 
     exception Bind = Bind
-    exception Match = Match
-    exception Subscript = Subscript
-    exception Size = Size
-    exception Overflow = Overflow
     exception Chr = Chr
     exception Div = Div
     exception Domain = Domain
-    exception Span = Span
     exception Fail = Fail
-    datatype order = datatype order
+    exception Match = Match
+    exception Overflow = Overflow
+    exception Size = Size
+    exception Span = Span
+    exception Subscript = Subscript
+    
+    fun exnName exn = Ccall(exnNameRuntime,exn)
+    fun exnMessage exn = Ccall(exnMessageRuntime,exn)
 
-    fun equal(x,y) = x = y
-    fun nequal(x,y) = x <> y
-    val op = = equal
-    val op <> = nequal
+    datatype order = datatype order
 
     val ! = fn x => !x
     val op := = fn (x,y) => x := y
-
     val op o = op o
+	
     val op before = (op before)
     val ignore = ignore
-
-    val exnName = exnName
-    val exnMessage = exnMessage
 
   end (* structure General *)

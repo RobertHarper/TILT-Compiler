@@ -371,9 +371,7 @@ structure Pat
 		      in  (s :: syms, cons, bp)
 		      end
 		| LayeredPat _ => error "Funny varPat in LayeredPat"
-		| MarkPat (p,r) => pat2Pattern p
-		| OrPat _ => error "OrPat not handled"
-		| DelayPat _ => error "DelayPat not handled")
+		| MarkPat (p,r) => pat2Pattern p)
 	   end
      end
 
@@ -808,7 +806,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
       end
 
 
-      val _ = if (sub_con(context,casecon,datacon))
+      val _ = if sub_con(context,casecon,datacon)
 		  then ()
 	      else (error_region();
 		    print "datacon is "; Ppil.pp_con datacon; print "\n";
@@ -1190,9 +1188,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
           | ConstraintPat {pattern:pat,constraint:ty} => get_bound context  pattern
           | LayeredPat {varPat:pat,expPat:pat} => (get_bound context varPat) @ (get_bound context expPat)
           | VectorPat p => Listops.flatten(map (get_bound context) p)
-          | MarkPat (p,r) => get_bound context p
-          | OrPat _ => error "orpat not handler"
-          | DelayPat _ => error "delaypat not handled")
+          | MarkPat (p,r) => get_bound context p)
 	end
 
 

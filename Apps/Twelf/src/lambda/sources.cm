@@ -1,18 +1,18 @@
 Group is
   ../global/sources.cm
-  intsyn.sig.sml
-  intsyn.fun.sml
-  trail.sig.sml
-  trail.fun.sml
-  notrail.fun.sml
-  whnf.sig.sml
-  whnf.fun.sml
-  conv.sig.sml
-  conv.fun.sml
-  constraints.sig.sml
-  constraints.fun.sml
-  unify.sig.sml
-  unify.fun.sml
-  abstract.sig.sml
-  abstract.fun.sml
+  intsyn.sig
+  intsyn.fun
+  trail.sig
+  trail.fun
+  notrail.fun
+  whnf.sig
+  whnf.fun
+  conv.sig
+  conv.fun 
+  constraints.sig
+  constraints.fun
+  unify.sig
+  unify.fun 
+  abstract.sig	
+  abstract.fun
   lambda.sml

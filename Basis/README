@@ -1,0 +1,88 @@
+implemenation problems:
+	* Date.localOffset, Date.fromString, Date.scan unimplemented.
+	  We need to search for other unimplemented functions in the
+	  structures we provide.
+
+specification problems:
+	* functor PrimIO's argument type pos should be eqtype.
+	* functor PrimIO's argument structure V is redundant.
+	* functor StreamIO's argument structure Vector is redundant.
+	* functor ImperativeIO's argument structure Vector is redundant.
+	* Missing from signature MONO_ARRAY: sharing type elem = Vector.elem.
+	* Missing from signature REAL: sharing type real = Math.real
+	* Missing from signature POSIX:
+		sharing type Process.pid = ProcEnv.pid = TTY.pid
+		sharing type Process.signal = Signal.signal
+		sharing type ProcEnv.file_desc = FileSys.file_desc = TTY.file_desc = IO.file_desc
+		sharing type FileSys.open_mode = IO.open_mode
+		sharing type ProcEnv.uid = FileSys.uid = SysDB.uid
+		sharing type ProcEnv.gid = FileSys.gid = SysDB.gid
+		sharing type FileSys.O.flags = IO.O.flags
+	* Missing from signature STRING: sharing type string = Char.string
+	* No optional structures WordVector, WordNVector, WordArray, WordNArray,
+	  WordArray2, WordNArray2.
+
+The following are not implemented:
+	structure Int8 : INTEGER
+	structure Int16 : INTEGER
+	structure FixedInt : INTEGER
+	
+	signature INT_INF
+	structure IntInf : INT_INF
+
+	structure Word16 : WORD
+
+	structure Pack32Little : PACK_WORD
+	structure Pack8Big : PACK_WORD
+	structure Pack8Little : PACK_WORD
+	structure Pack16Little : PACK_WORD
+	structure Pack16Big : PACK_WORD
+
+	signature PACK_REAL
+	structure PackRealBig : PACK_REAL
+	structure PackRealLittle : PACK_REAL
+	structure PackReal64Big : PACK_REAL
+	structure PackReal64Little : PACK_REAL
+
+	structure BoolVector : MONO_VECTOR
+	structure IntVector : MONO_VECTOR
+	structure RealVector : MONO_VECTOR
+	structure Int8Vector : MONO_VECTOR
+	structure Int16Vector : MONO_VECTOR
+	structure Int32Vector : MONO_VECTOR
+	structure Real64Vector : MONO_VECTOR
+	
+	structure BoolArray : MONO_ARRAY
+	structure IntArray : MONO_ARRAY
+	structure RealArray : MONO_ARRAY
+	structure Int8Array : MONO_ARRAY
+	structure Int16Array : MONO_ARRAY
+	structure Int32Array : MONO_ARRAY
+	structure Real64Array : MONO_ARRAY
+
+	signature ARRAY2
+	structure Array2
+
+	signature MONO_ARRAY2
+	structure Word8Array2 : MONO_ARRAY2
+	structure CharArray2 : MONO_ARRAY2
+	structure BoolArray2 : MONO_ARRAY2
+	structure IntArray2 : MONO_ARRAY2
+	structure RealArray2 : MONO_ARRAY2
+	structure Int8Array2 : MONO_ARRAY2
+	structure Int16Array2 : MONO_ARRAY2
+	structure Int32Array2 : MONO_ARRAY2
+	structure Real64Array2 : MONO_ARRAY2
+	
+	functor PrimIO
+	functor StreamIO
+	functor ImperativeIO
+	
+The following may never be implemented
+	structure WideChar : CHAR
+	structure WideString : STRING
+	structure WideSubstring : SUBSTRING
+	structure WideCharVector : MONO_VECTOR
+	structure WideCharArray : MONO_ARRAY
+	structure WideCharArray2 : MONO_ARRAY2
+	structure WideTextPrimIO : PRIM_IO

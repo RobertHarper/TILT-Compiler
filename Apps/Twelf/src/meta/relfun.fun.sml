@@ -1,4 +1,4 @@
-(*$import Prelude List RELFUN GLOBAL FUNSYN MODESYN NAMES TRAIL UNIFY WHNF WEAKEN TYPECHECK FUNWEAKEN FUNNAMES SubordinateStructs *)
+(*$import Prelude TopLevel List RELFUN GLOBAL FUNSYN MODESYN NAMES TRAIL UNIFY WHNF WEAKEN TYPECHECK FUNWEAKEN FUNNAMES SubordinateStructs *)
 (* Converter from relational representation to a functional
    representation of proof terms *)
 (* Author: Carsten Schuermann *)

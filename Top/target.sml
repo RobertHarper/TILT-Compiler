@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TARGET Stats Word32 Util Platform Linkrtl *)
+(*$import Prelude TopLevel TARGET Stats Word32 Util Platform Linkrtl Core *)
 
 structure Target :> TARGET =
 struct
@@ -9,7 +9,8 @@ struct
 	[("PtrWriteBarrier", Linkrtl.ptrWriteBarrier, true),
 	 ("FullWriteBarrier", Linkrtl.fullWriteBarrier, true),
 	 ("MirrorGlobal", Linkrtl.mirrorGlobal, true),
-	 ("MirrorPtrArray", Linkrtl.mirrorPtrArray, false)]
+	 ("MirrorPtrArray", Linkrtl.mirrorPtrArray, false),
+	 ("BranchingTraps", Core.branchingTraps, true)]
 
     (* flagsString : (bool ref * bool) list -> string *)
     fun flagsString flags =

@@ -14,13 +14,13 @@ signature OS_IO =
 	(* an iodesc is an abstract descriptor for an OS object that
 	 * supports I/O (e.g., file, tty device, socket, ...).
 	 *)
-    eqtype iodesc_kind
-
     val hash : iodesc -> word
 	(* return a hash value for the I/O descriptor. *)
 
-    val compare : (iodesc * iodesc) -> order
+    val compare : iodesc * iodesc -> order
 	(* compare two I/O descriptors *)
+
+    eqtype iodesc_kind
 
     val kind : iodesc -> iodesc_kind
 	(* return the kind of I/O descriptor. *)
@@ -61,7 +61,7 @@ signature OS_IO =
     val pollPri : poll_desc -> poll_desc
 
   (* polling function *)
-    val poll : (poll_desc list * Time.time option) -> poll_info list
+    val poll : poll_desc list * Time.time option -> poll_info list
 	(* a timeout of NONE means wait indefinitely; a timeout of
 	 * (SOME Time.zeroTime) means do not block.
 	 *)
@@ -77,9 +77,12 @@ signature OS_IO =
 
 (*
  * $Log$
-# Revision 1.2  99/09/22  15:45:11  pscheng
+# Revision 1.3  2000/11/27  22:36:38  swasey
 # *** empty log message ***
 # 
+ * Revision 1.2  1999/09/22 15:45:11  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:53:04  pscheng
 # added basis
 #

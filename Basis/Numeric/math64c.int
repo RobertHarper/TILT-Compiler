@@ -1,3 +1,2 @@
 (*$include MATH *)
 structure Math64 : MATH where type real = real
-structure Math : MATH where type real = real

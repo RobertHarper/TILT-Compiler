@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Generic Traversal Intended for Language-Specific Printing *)
 (* Author: Frank Pfenning *)
 

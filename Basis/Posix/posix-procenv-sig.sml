@@ -1,4 +1,4 @@
-(*$import Prelude Word32 Time *)
+(*$import Prelude SysWord Time *)
 (* posix-procenv-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,10 +11,9 @@ signature POSIX_PROC_ENV =
   sig
 
     eqtype pid
-    eqtype file_desc
-
     eqtype uid
     eqtype gid
+    eqtype file_desc
 
     val uidToWord : uid -> SysWord.word
     val wordToUid : SysWord.word -> uid
@@ -65,9 +64,12 @@ signature POSIX_PROC_ENV =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:39  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:39  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:39  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:53:28  pscheng
 # added basis
 # 

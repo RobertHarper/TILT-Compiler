@@ -1,3 +1,0 @@
-(*$include ENV Symbol *)
-
-structure FastSymbol : FASTSYMBOL where type symbol = Symbol.symbol

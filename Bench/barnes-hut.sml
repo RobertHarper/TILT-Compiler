@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Int List Help Math64 Real64 String Help *)
+(*$import Prelude TopLevel Int List Help Math Real String Help *)
 
 (* Thread safety due to no top-level refs *)
 

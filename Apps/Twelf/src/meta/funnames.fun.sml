@@ -1,4 +1,4 @@
-(*$import Prelude Array FUNNAMES GLOBAL FUNSYN TABLE LambdaStructs *)
+(*$import Prelude TopLevel Array FUNNAMES GLOBAL FUNSYN TABLE LambdaStructs *)
 (* Names of Constants and Variables *)
 (* Author: Carsten Schuermann *)
 
@@ -48,7 +48,7 @@ struct
       : nameInfo Array.array
 
     (* sgnHashTable maps identifiers (strings) to constants (cids) *)
-    val sgnHashTable : int (*IntSyn.cid*) HashTable.Table = HashTable.new (4096)
+    val sgnHashTable : IntSyn.cid HashTable.Table = HashTable.new (4096)
     val hashInsert = HashTable.insertShadow sgnHashTable (* returns optional shadowed entry *)
     val hashLookup = HashTable.lookup sgnHashTable (* returns optional cid *)
     fun hashClear () = HashTable.clear sgnHashTable

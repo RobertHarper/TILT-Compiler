@@ -2,14 +2,14 @@ Group is
   ../lambda/sources.cm
   ../names/sources.cm
   ../formatter/sources.cm
-  symbol.sig.sml
-  symbol.fun.sml
-  print.sig.sml
-  print.fun.sml
-  clause-print.sig.sml
-  clause-print.fun.sml
+  symbol.sig
+  symbol.fun
+  print.sig
+  print.fun
+  clause-print.sig
+  clause-print.fun
   print.sml
-  traverse.sig.sml
-  traverse.fun.sml
-  print-twega.sig.sml
-  print-twega.fun.sml
+  traverse.sig
+  traverse.fun
+  print-twega.sig
+  print-twega.fun

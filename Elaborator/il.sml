@@ -65,8 +65,8 @@ structure Il :> IL =
 	         | INDIRECT_FLEXINFO of flexinfo ref (* <--- this ref is necessary for unification *)
 
     and      con = CON_VAR           of var
-                 | CON_TYVAR         of (context,con) Tyvar.tyvar  (* supports type inference *)
-                 | CON_OVAR          of (context,con) Tyvar.ocon   (* supports "overloaded" types *)
+                 | CON_TYVAR         of (context,con,exp) Tyvar.tyvar  (* supports type inference *)
+                 | CON_OVAR          of (context,con,exp) Tyvar.ocon   (* supports "overloaded" types *)
                  | CON_FLEXRECORD    of flexinfo ref
                  | CON_INT           of Prim.intsize
                  | CON_UINT          of Prim.intsize

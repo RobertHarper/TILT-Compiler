@@ -1,4 +1,4 @@
-(*$import Prelude Array HASH_TABLE Word32 HashTableRep *)
+(*$import Prelude Array HASH_TABLE Word HashTableRep *)
 (* hash-table.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.

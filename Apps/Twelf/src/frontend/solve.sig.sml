@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN TP_RECON PATHS *)
+(*$import Prelude TopLevel INTSYN TP_RECON PATHS *)
 (* Solve and query declarations, interactive top level *)
 (* Author: Frank Pfenning *)
 

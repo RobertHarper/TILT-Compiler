@@ -18,7 +18,7 @@ structure Util :> UTIL =
 		val a = n div 2
 		val b = n - a
 		val aSpace = rawSpaces a
-		val bSpace = if (a = b) then aSpace 
+		val bSpace = if (a = b) then aSpace
 			     else (aSpace ^ " ")
 	    in  aSpace ^ bSpace
 	    end
@@ -48,7 +48,7 @@ structure Util :> UTIL =
     fun CharStr2char s = String.sub(s,0)
 
 
-    datatype '1a oneshot = ONESHOT of int * '1a option ref
+    datatype 'a oneshot = ONESHOT of int * 'a option ref
     val oneshot_count = ref 0
     fun inc r = (r := (!r) + 1; !r)
     fun oneshot() = ONESHOT(inc oneshot_count, ref NONE)

@@ -5,14 +5,43 @@
  *
  *)
 
-structure Word8 :> WORD where type word = word8 =
+structure Word8 :> WORD where type word = TiltPrim.uint8 =
   struct
+    val !! = TiltPrim.!!
+    val && = TiltPrim.&&
+    val << = TiltPrim.<<
+    val >> = TiltPrim.>>
+    val ^^ = TiltPrim.^^
+    val || = TiltPrim.||
+    val ~>> = TiltPrim.~>>
+	
+    val andbyte = TiltPrim.andbyte
+    val orbyte = TiltPrim.orbyte
+	
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+    val uint32touint8 = TiltPrim.uint32touint8
+    val uint8toint32 = TiltPrim.uint8toint32
+    val uint8touint32 = TiltPrim.uint8touint32
+	
+    val ugt = TiltPrim.ugt
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+    val ulte = TiltPrim.ulte
+	
+    val udiv = TiltPrim.udiv
+    val uminus = TiltPrim.uminus
+    val umod = TiltPrim.umod
+    val uplus = TiltPrim.uplus
+	
+    type word32 = TiltPrim.uint32
+    type word8 = TiltPrim.uint8
 (*
     structure W8 = InlineT.Word8
     structure W31 = InlineT.Word31
     structure LW = Word32
 *)
-    type word = word8  (* 31 bits *)
+    type word = word8
 
     val wordMask = 0w255
     val wordSize = 8
@@ -24,18 +53,18 @@ structure Word8 :> WORD where type word = word8 =
     val toi32 = uint32toint32
     val tow32 = uint8touint32
     val tow8 = uint32touint8
-    fun adapt arg = tow8(arg && 0wxFF)
+    fun adapt arg = tow8(&& (arg, 0wxFF))
 
     fun sextend (w8 : word8) : word32 = 
 	let val w32 = uint8touint32 w8
-	    val neg = (w32 && 0w128)
-	    val mask = int32touint32(uint32toint32((neg << 24)) ~>> 23)
-	in  w32 || mask
+	    val neg = &&(w32, 0w128)
+	    val mask = int32touint32(~>>(uint32toint32(<<(neg, 24)), 23))
+	in  ||(w32, mask)
 	end
 
     val toInt   : word -> int = uint8toint32
     fun toIntX  (x : word) : int = uint32toint32(sextend x)
-    fun fromInt (x : int) : word = uint32touint8(wordMask && (int32touint32 x))
+    fun fromInt (x : int) : word = uint32touint8(&& (wordMask, int32touint32 x))
 
     val toLargeInt   : word -> int = toInt
     val toLargeIntX  : word -> int = toIntX
@@ -43,7 +72,7 @@ structure Word8 :> WORD where type word = word8 =
 
     val toLargeWord : word -> PreLargeWord.word = uint8touint32
     fun toLargeWordX (x : word) : PreLargeWord.word = sextend x
-    fun fromLargeWord (x : PreLargeWord.word) : word = uint32touint8(x && wordMask)
+    fun fromLargeWord (x : PreLargeWord.word) : word = uint32touint8(&& (x, wordMask))
 
 (*
     val toInt   : word -> int = W8.toInt
@@ -64,15 +93,15 @@ structure Word8 :> WORD where type word = word8 =
   (** These should be inline functions **)
     fun lshift (w : word, k) = adapt(if ulte(wordSizeW, k)
 					 then 0w0
-				     else ((tow32 w) << (toi32 k)))
+				     else <<(tow32 w, toi32 k))
     fun rshiftl (w : word, k) = adapt(if ulte(wordSizeW, k)
 					  then 0w0
-				      else ((tow32 w) >> (toi32 k)))
+				      else >> (tow32 w, toi32 k))
     fun rshifta (w : word, k) = adapt(int32touint32
 				      (if ulte(wordSizeW, k)
-					   then toi32((tow32 w) << wordShifti) ~>> 31
-				       else (toi32((tow32 w) << wordShifti)) ~>> 
-					   (toi32 (uplus(wordShift, k)))))
+					   then ~>>(toi32(<< (tow32 w, wordShifti)), 31)
+				       else ~>>(toi32 (<< (tow32 w, wordShifti)),
+						toi32 (uplus(wordShift, k)))))
     nonfix << >> ~>> + - * div mod <= = >= < >
     val << = lshift
     val >> = rshiftl
@@ -126,9 +155,12 @@ structure Word8 :> WORD where type word = word8 =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:33  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:37  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:33  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:52:58  pscheng
 # added basis
 # 

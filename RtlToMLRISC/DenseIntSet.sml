@@ -1,4 +1,4 @@
-(*$import TopLevel ORD_SET LibBase IntMap Word32 IntBinaryMap Array *)
+(*$import TopLevel ORD_SET LibBase IntMap Word Word32 IntBinaryMap Array *)
 
 
 (* =========================================================================

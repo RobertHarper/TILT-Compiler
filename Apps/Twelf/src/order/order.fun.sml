@@ -26,8 +26,8 @@ struct
   
   datatype Mutual =		        (* Mutual dependencies        *)
       Empty				(* C ::= .                    *)
-    | LE of int (*IntSyn.cid*) * Mutual		(*     |  <= (a) C            *)
-    | LT of int (*IntSyn.cid*) * Mutual		(*     |  > (a) C             *)
+    | LE of IntSyn.cid * Mutual		(*     |  <= (a) C            *)
+    | LT of IntSyn.cid * Mutual		(*     |  > (a) C             *)
 
   datatype TDec =                       (* Termination declaration    *)
       TDec of int Order * Mutual        (* TDec ::= (O, C)            *)

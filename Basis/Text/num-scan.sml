@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt String Option *)
+(*$import Prelude StringCvt String Option PreInt PreWord PreReal *)
 (* num-scan.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,13 +11,31 @@
 structure NumScan : sig
 
     val scanWord : StringCvt.radix
-	  -> (char, 'a) StringCvt.reader -> (word32, 'a) StringCvt.reader
+	  -> (char, 'a) StringCvt.reader -> (PreLargeWord.word, 'a) StringCvt.reader
     val scanInt  : StringCvt.radix
-	  -> (char, 'a) StringCvt.reader -> (int32, 'a) StringCvt.reader
-    val scanReal : (char, 'a) StringCvt.reader -> (real, 'a) StringCvt.reader
+	  -> (char, 'a) StringCvt.reader -> (PreLargeInt.int, 'a) StringCvt.reader
+    val scanReal : (char, 'a) StringCvt.reader -> (PreLargeReal.real, 'a) StringCvt.reader
 	(** should be to LargeReal.real **)
 
   end = struct
+  
+    val && = TiltPrim.&&
+    val << = TiltPrim.<<
+	
+    type int32 = TiltPrim.int32
+    type word32 = TiltPrim.uint32
+	
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+	
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+	
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
+    val umult = TiltPrim.umult
 (*
     structure W = InlineT.Word32
     structure I = InlineT.Int31
@@ -142,7 +160,7 @@ structure NumScan : sig
    * at the hi (1, 3 or 4) bits.
    *)
     fun chkOverflow mask w =
-	  if ((mask && w) = 0w0) then () else raise Overflow
+	  if (&&(mask, w) = 0w0) then () else raise Overflow
 
     fun isBinDigit d = (d < 0w2)
     fun isOctDigit d = (d < 0w8)
@@ -165,7 +183,7 @@ structure NumScan : sig
 			      if (isBinDigit d)
 				then (
 				  chkOverflow w;
-				  cvt((w << 1) + d, rest'))
+				  cvt(<<(w, 1) + d, rest'))
 				else SOME{neg=neg, word=w, rest=rest}
 			    end
 		      (* end case *))
@@ -185,7 +203,7 @@ structure NumScan : sig
 			      if (isOctDigit d)
 				then (
 				  chkOverflow w;
-				  cvt((w << 3) + d, rest'))
+				  cvt(<<(w, 3) + d, rest'))
 				else SOME{neg=neg, word=w, rest=rest}
 			    end
 		      (* end case *))
@@ -228,7 +246,7 @@ structure NumScan : sig
 			      if (isHexDigit d)
 				then (
 				  chkOverflow w;
-				  cvt(((w << 4) + d), rest'))
+				  cvt((<<(w, 4) + d), rest'))
 				else SOME{neg=neg, word=w, rest=rest}
 			    end
 		      (* end case *))
@@ -407,9 +425,12 @@ structure NumScan : sig
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:45  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:41  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:45  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.2  99/03/03  19:32:54  leaf
 # *** empty log message ***
 # 

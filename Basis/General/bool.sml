@@ -1,13 +1,13 @@
-(*$import Prelude StringCvt BOOL *)
+(*$import Prelude PreString StringCvt BOOL *)
 (* bool.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *)
 
-structure Bool : BOOL =
+structure Bool :> BOOL where type bool = bool =
   struct
 
-(*    datatype bool = datatype bool *)
+    datatype bool = datatype bool
 
     val not = not
 
@@ -16,11 +16,11 @@ structure Bool : BOOL =
    *)
     fun scan (getc : (char, 'a) StringCvt.reader) cs = (
 	  case (getc (StringCvt.skipWS getc cs))
-	   of (SOME(#"t", cs')) => (case (StringCvt.getNChars getc (cs', 3))
+	   of (SOME(#"t", cs')) => (case (PreString.getNChars getc (cs', 3))
 		 of (SOME([#"r", #"u", #"e"], cs'')) => SOME(true, cs'')
 		  | _ => NONE
 		(* end case *))
-	    | (SOME(#"f", cs')) => (case (StringCvt.getNChars getc (cs', 4))
+	    | (SOME(#"f", cs')) => (case (PreString.getNChars getc (cs', 4))
 		 of (SOME([#"a", #"l", #"s", #"e"], cs'')) => SOME(false, cs'')
 		  | _ => NONE
 		(* end case *))

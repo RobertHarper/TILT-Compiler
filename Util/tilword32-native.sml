@@ -29,9 +29,9 @@ struct
     val orb = Word32.orb
     val xorb = Word32.xorb
     val notb = Word32.notb
-    fun lshift(w,i) = Word32.<<(w, int32touint32 i)
-    fun rshiftl(w,i) = Word32.>>(w, int32touint32 i)
-    fun rshifta(w,i) = Word32.~>>(w, int32touint32 i)
+    fun lshift(w,i) = Word32.<<(w, Word32.fromInt i)
+    fun rshiftl(w,i) = Word32.>>(w, Word32.fromInt i)
+    fun rshifta(w,i) = Word32.~>>(w, Word32.fromInt i)
 	
     (* ------ UNSIGNED OPERATIONS --------- *)
     val uplus = Word32.+

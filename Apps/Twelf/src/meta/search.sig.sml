@@ -1,4 +1,4 @@
-(*$import Prelude STATESYN *)
+(*$import Prelude TopLevel STATESYN *)
 (* Basic search engine: Version 1.3*)
 (* Author: Carsten Schuermann *)
 

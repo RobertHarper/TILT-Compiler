@@ -8,19 +8,20 @@
  *
  *)
 
-functor TextIOFn (
-
-    structure OSPrimIO : sig
-        include OS_PRIM_IO
-	val stdIn   : unit -> PrimIO.reader
-	val stdOut  : unit -> PrimIO.writer
-	val stdErr  : unit -> PrimIO.writer
-	val strReader : string -> PrimIO.reader
-      end
-      where PrimIO = TextPrimIO
-
-  ) : TEXT_IO = struct
-
+functor TextIOFn (structure OSPrimIO :
+		      sig
+		          include OS_PRIM_IO
+                          val stdIn   : unit -> PrimIO.reader
+			  val stdOut  : unit -> PrimIO.writer
+			  val stdErr  : unit -> PrimIO.writer
+			  val strReader : string -> PrimIO.reader
+		      end
+		      where PrimIO = TextPrimIO)
+    :> TEXT_IO where type StreamIO.pos = TextPrimIO.pos
+                 and type StreamIO.reader = TextPrimIO.reader
+		 and type StreamIO.writer = TextPrimIO.writer =
+struct
+    
     structure PIO = OSPrimIO.PrimIO
     structure A = CharArray
     structure V = CharVector
@@ -375,7 +376,7 @@ functor TextIOFn (
 		      fun readN 0 = ()
 			| readN n = (case V.length(readVec n)
 			     of 0 => inputExn (
-				    info, "filePosIn", Fail "bogus position")
+				    info, "filePosIn", TiltExn.LibFail "bogus position")
 			      | k => readN(n-k)
 			    (* end case *))
 		      in
@@ -383,7 +384,7 @@ functor TextIOFn (
 			readN offset;
 			getPos () before setPos tmpPos
 		      end
-		  | _ => raise Fail "filePosIn: impossible"
+		  | _ => raise TiltExn.LibFail "filePosIn: impossible"
 		(* end case *)
 	      end
 	fun setPosIn (pos as INP{info as INFO{reader, ...}, ...}) = let
@@ -889,9 +890,12 @@ functor TextIOFn (
 
 (*
  * $Log$
-# Revision 1.4  2000/09/21  01:08:31  pscheng
+# Revision 1.5  2000/11/27  22:36:26  swasey
 # *** empty log message ***
 # 
+ * Revision 1.4  2000/09/21 01:08:31  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.3  2000/09/12  18:54:16  swasey
 # Changes for cutoff compilation
 # 

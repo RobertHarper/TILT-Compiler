@@ -3,14 +3,22 @@
 #ifndef _exn_h
 #define _exn_h
 
+#include "thread.h"
 #include "tag.h"
 
 void exn_init(void);
 
-void raise_exception(struct ucontext *, ptr_t);
-void raise_exn(ptr_t, int, val_t, int);
+ptr_t exnNameRuntime(ptr_t);
+ptr_t exnMessageRuntime(ptr_t);
 
-int  RuntimeStamp(void);
-int  RuntimePrimeStamp(void);
+void raise_exception(ucontext_t *, ptr_t);
+void raise_exn(ptr_t);
+
+void toplevel_exnhandler(Thread_t *);
+	
+/* From Basis - access is safe only though GetGlobal */
+ptr_t getOverflowExn(void);
+ptr_t getDivExn(void);
+ptr_t mkSysErrExn(ptr_t, int, int);
 
 #endif

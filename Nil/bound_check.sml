@@ -1,4 +1,4 @@
-(*$import Prelude Util Name Nil NilContext NilRewrite BOUNDCHECK *)
+(*$import Prelude TopLevel Util Name Nil NilContext NilRewrite BOUNDCHECK *)
 structure BoundCheck :> BOUNDCHECK = 
   struct
   

@@ -1,4 +1,4 @@
-(*$import Prelude List MTPABSTRACT INTSYN FUNSYN STATESYN WHNF CONSTRAINTS SUBORDINATE TYPECHECK FUNTYPECHECK ABSTRACT TRAIL GlobalStructs *)
+(*$import Prelude TopLevel List MTPABSTRACT INTSYN FUNSYN STATESYN WHNF CONSTRAINTS SUBORDINATE TYPECHECK FUNTYPECHECK ABSTRACT TRAIL GlobalStructs *)
 (* Meta Theorem Prover abstraction : Version 1.3 *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 
@@ -32,8 +32,8 @@ struct
   exception Error of string
   
   datatype ApproxFor =			(* Approximat formula *)
-    Head of IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (FunSyn.For * IntSyn.Sub) * int	(* AF ::= F [s] *)
-  | Block of (IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Sub * int * IntSyn.Dec list) * ApproxFor
+    Head of IntSyn.dctx * (FunSyn.For * IntSyn.Sub) * int	(* AF ::= F [s] *)
+  | Block of (IntSyn.dctx * IntSyn.Sub * int * IntSyn.Dec list) * ApproxFor
 					(*      | (t, G2), AF *)
 
   local

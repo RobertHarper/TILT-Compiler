@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel BinIO List TopHelp Int Name Time ListPair Real64 Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay *)
+(*$import Prelude TopLevel BinIO List TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay *)
 
 structure Compiler :> COMPILER =
 struct

@@ -1,10 +1,10 @@
-(*$import Prelude IEEE String Int *)
+(*$import Prelude IEEE_REAL String Int PreReal *)
 (* ieee-real.sml
  *
  * COPYRIGHT (c) 1996 AT&T Bell Laboratories.
  *)
 
-structure IEEEReal : IEEE_REAL =
+structure IEEEReal :> IEEE_REAL =
   struct
 
   (* this may cause portability problems to 64-bit systems *)
@@ -92,9 +92,12 @@ structure IEEEReal : IEEE_REAL =
 
 (*
  * $Log$
-# Revision 1.4  2000/09/12  18:54:29  swasey
-# Changes for cutoff compilation
+# Revision 1.5  2000/11/27  22:36:29  swasey
+# *** empty log message ***
 # 
+ * Revision 1.4  2000/09/12 18:54:29  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.3  1999/09/22 15:45:08  pscheng
  * *** empty log message ***
  *

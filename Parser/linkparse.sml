@@ -1,4 +1,4 @@
-(*$import Prelude TextIO Source SourceMap FrontEnd LINKPARSE NamedForm TVClose ErrorMsg Util Stats *)
+(*$import Prelude TopLevel TextIO Source SourceMap FrontEnd LINKPARSE NamedForm TVClose ErrorMsg Util Stats *)
 
 
 structure LinkParse :> LINK_PARSE =

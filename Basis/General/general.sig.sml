@@ -8,35 +8,31 @@
 signature GENERAL =
   sig
 
-    type unit
+    eqtype unit
     type exn
 
     exception Bind
-    exception Match
-    exception Subscript
-    exception Size
-    exception Overflow
     exception Chr
     exception Div
     exception Domain
-    exception Span
-
     exception Fail of string
-
-    datatype order = LESS | EQUAL | GREATER
-
-    val = : ''a * ''a -> bool
-    val <> : ''a * ''a -> bool 
-
-    val !  : 'a ref -> 'a
-    val := : ('a ref * 'a) -> unit
-
-    val o      : ('b -> 'c) * ('a -> 'b) -> ('a -> 'c)
-    val before : ('a * 'b) -> 'a
-    val ignore : 'a -> unit
+    exception Match
+    exception Overflow
+    exception Size
+    exception Span
+    exception Subscript
 
     val exnName : exn -> string
     val exnMessage: exn -> string
+
+    datatype order = LESS | EQUAL | GREATER
+
+    val !  : 'a ref -> 'a
+    val := : 'a ref * 'a -> unit
+    val o  : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
+
+    val before : 'a * 'b -> 'a
+    val ignore : 'a -> unit
 
   end
 

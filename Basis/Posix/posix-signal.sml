@@ -1,4 +1,4 @@
-(*$import Int Word32 POSIX_extern POSIX_SIGNAL *)
+(*$import Word32 SysInt SysWord POSIX_extern POSIX_SIGNAL *)
 (* posix-signal.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -42,9 +42,12 @@ structure POSIX_Signal :> POSIX_SIGNAL =
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:41  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:40  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:41  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:13  pscheng
  * *** empty log message ***
  *

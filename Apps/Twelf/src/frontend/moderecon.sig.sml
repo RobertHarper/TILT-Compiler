@@ -1,4 +1,4 @@
-(*$import Prelude MODESYN TP_RECON PATHS *)
+(*$import Prelude TopLevel MODESYN TP_RECON PATHS *)
 (* External Syntax of Mode Declarations *)
 (* Author: Carsten Schuermann *)
 
@@ -46,5 +46,5 @@ sig
   include EXTMODES
 
   exception Error of string
-  val modeToMode : modedec -> (int (*ModeSyn.IntSyn.cid*) * ModeSyn.ModeSpine) * Paths.region
+  val modeToMode : modedec -> (ModeSyn.IntSyn.cid * ModeSyn.ModeSpine) * Paths.region
 end;  (* signature MODE_RECON *)

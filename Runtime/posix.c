@@ -161,7 +161,7 @@ struct termio_rep_struct
 };
 typedef struct termio_rep_struct *termio_rep;
 
-static int stringlen(ptr_t string)
+int stringlen(ptr_t string)
 {
   tag_t tag = string[-1];
   int len;
@@ -223,21 +223,21 @@ static char* mlstring2cstring_malloc(string mlstring)
   return mlstring2cstring_buffer(mlstring, bytelen+1, buf);
 }
 
+string posix_error_msg(int);
 static void runtime_error(int e)
 {
-   string exnname = cstring2mlstring_alloc("VAL$RuntimeError");
-   int exnstamp = RuntimeStamp();
-   raise_exn(exnname, exnstamp, e, 0);
-   assert(0);
+  string msg = posix_error_msg(e);
+  ptr_t exn = mkSysErrExn(msg, 1, e);
+  raise_exn(exn);
+  assert(0);
 }
 
 static void runtime_error_msg(char* msg)
 {
-   string exnname = cstring2mlstring_alloc("VAL$RuntimeErrorPRIME");
-   int exnstamp = RuntimePrimeStamp();
-   string exnarg = cstring2mlstring_alloc(msg);
-   raise_exn(exnname, exnstamp, (val_t) exnarg, 1);
-   assert(0);
+  string mlmsg = cstring2mlstring_alloc(msg);
+  ptr_t exn = mkSysErrExn(mlmsg, 0, 0);
+  raise_exn(exn);
+  assert(0);
 }
 
 static void runtime_error_fmt(const char* fmt, ...)
@@ -313,42 +313,6 @@ ptr_t setRoundingMode(int ml_mode)
   fpsetround(mode);
 #endif  
   return empty_record;
-}
-
-ptr_t exnNameRuntime(ptr_t exn)
-{
-  return (ptr_t) get_record(exn,2);
-}
-
-ptr_t exnMessageRuntime(ptr_t exn)
-{
-  char buf[1024];
-  char* msg = NULL;
-  val_t exnstamp = get_record(exn,0);
-  
-  if (exnstamp == *getDivExn())
-    msg = "divide by zero";
-  else if (exnstamp == *getOverflowExn())
-    msg = "overflow";
-  else if (exnstamp == RuntimeStamp()) {
-    int e = get_record(exn,1);
-    sprintf(buf, "RuntimeError: %s (errno=%d)", strerror(e), e);
-    msg = buf;
-  } else if (exnstamp == RuntimePrimeStamp()) {
-    char* prefix = "RuntimeError': ";
-    ptr_t errmsg = (ptr_t) get_record(exn,1);
-    int len = stringlen(errmsg);
-    assert(len < sizeof(buf) - sizeof(prefix));
-    sprintf(buf, "%s%.*s", prefix, len, (char*) errmsg);
-    msg = buf;
-  } else {
-    ptr_t exnname = (ptr_t) get_record(exn,2);
-    int len = stringlen(exnname);
-    assert(len < sizeof(buf));
-    sprintf(buf, "%.*s", len, (char*) exnname);
-    msg = buf;
-  }
-  return cstring2mlstring_alloc(msg);
 }
 
 /* extract the exponent */

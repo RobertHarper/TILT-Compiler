@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real64 PRIMUTIL *)
+(*$import Prelude TopLevel TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL *)
 
 functor PrimUtil(structure PrimUtilParam : PRIMUTILPARAM)
     :> PRIMUTIL where type con = PrimUtilParam.con
@@ -14,7 +14,7 @@ struct
     type exp = PrimUtilParam.exp
     type value = (con,exp) Prim.value
     val error = fn s => error "primutil.sml" s
-    structure Float = Real64
+    structure Float = Real
 
     val con_string = con_vector(con_uint W8)
     fun value_type exp_typer scon : con = 

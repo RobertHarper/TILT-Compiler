@@ -2,7 +2,6 @@
 (* Type Reconstruction with Tracing *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)
-(* Modified: David Swasey.  Renamed SS to SS_ in patterns for TILT.  *)
 
 functor TpTrace (structure Global : GLOBAL
 		 structure IntSyn' : INTSYN
@@ -55,9 +54,9 @@ struct
 
      raises exception Error if such a tp* does not exist
   *)
-  type term = IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (IntSyn.Exp -> (IntSyn.Spine * IntSyn.Exp) * Paths.occSpine)
+  type term = IntSyn.dctx * (IntSyn.Exp -> (IntSyn.Spine * IntSyn.Exp) * Paths.occSpine)
                 -> (IntSyn.Exp * IntSyn.Exp) * Paths.occExp
-  type dec = IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) -> IntSyn.Dec * Paths.occExp option	(* must be x:A where A:type *)
+  type dec = IntSyn.dctx -> IntSyn.Dec * Paths.occExp option	(* must be x:A where A:type *)
 
   (* Various error-related functions *)
 
@@ -230,9 +229,9 @@ struct
   (* as constant, bound variable, or free variable *)
 
   (* Constant *)
-  fun const ((c,i,V'), r, (G, SS_)) =
+  fun const ((c,i,V'), r, (G, SS)) =
       let
-	fun supplyImplicit (0, (V', s)) = SS_ (IntSyn.EClo(V', s))
+	fun supplyImplicit (0, (V', s)) = SS (IntSyn.EClo(V', s))
 	  | supplyImplicit (i, (IntSyn.Pi ((IntSyn.Dec (x, V1), _), V2), s)) =
 	    let
 	      val U1 = IntSyn.newEVar (G, IntSyn.EClo(V1, s))
@@ -248,9 +247,9 @@ struct
       end
 
   (* Bound variable *)
-  fun bvar ((n, V'), r, SS_) =
+  fun bvar ((n, V'), r, SS) =
       let
-	val ((S, V), os) = SS_ V'
+	val ((S, V), os) = SS V'
       in
 	((IntSyn.Root (n, S), V),
 	 Paths.root (Paths.toRegionSpine (os, r), Paths.leaf r, 0, os))
@@ -258,10 +257,10 @@ struct
 
   (* Free variable *)
   (* Translated to FVar in declarations, to EVar in queries *)
-  fun var (name, r, depth, SS_) =
+  fun var (name, r, depth, SS) =
       let
         val (V', H) = Vars.var (name, depth)
-	val ((S, V), os) = SS_ V'
+	val ((S, V), os) = SS V'
       in
 	((H S, V),
 	 Paths.root (Paths.toRegionSpine (os, r), Paths.leaf r, 0, os))
@@ -271,54 +270,54 @@ struct
 
   (* Resolving lower-case, upper-case or quoted identifiers *)
   (* lcid -- lower case identifier *)
-  fun lcid (name, r) (G, SS_) =
+  fun lcid (name, r) (G, SS) =
       (case findBVar (name, G)
 	 of NONE => (case findConst (name)
 		       of NONE => (error (r, "Undeclared constant " ^ name);
 				   (* translate to FVar or EVar *)
-				   var (name, r, IntSyn.ctxLength G, SS_))
-			| SOME info => (const (info, r, (G, SS_))))
-          | SOME nV => bvar (nV, r, SS_))
+				   var (name, r, IntSyn.ctxLength G, SS))
+			| SOME info => (const (info, r, (G, SS))))
+          | SOME nV => bvar (nV, r, SS))
 
   (* ucid -- upper case identifier *)
-  fun ucid (name, r) (G, SS_) =
+  fun ucid (name, r) (G, SS) =
       (case findBVar (name, G)
 	 of NONE => (case findConst (name)
-		       of NONE => var (name, r, IntSyn.ctxLength G, SS_)
-			| SOME info => const (info, r, (G, SS_)))
-	  | SOME nV => bvar (nV, r, SS_))
+		       of NONE => var (name, r, IntSyn.ctxLength G, SS)
+			| SOME info => const (info, r, (G, SS)))
+	  | SOME nV => bvar (nV, r, SS))
 
   (* quid -- quoted identifier *)
   (* currently not used *)
-  fun quid (name, r) (G, SS_) =
+  fun quid (name, r) (G, SS) =
       (case findConst (name)
 	 of NONE => (error (r, "Undeclared quoted constant " ^ name);
 		     (* translate to FVar or EVar *)
-		     var (name, r, IntSyn.ctxLength G, SS_))
-	  | SOME info => const (info, r, (G, SS_)))
+		     var (name, r, IntSyn.ctxLength G, SS))
+	  | SOME info => const (info, r, (G, SS)))
 
   (* Application "tm1 tm2" *)
-  fun app (tm1, tm2) (G, SS_) =
+  fun app (tm1, tm2) (G, SS) =
         (* argument first or function first? Here: function first *)
-        tm1 (G, fn V1 => app2 (tm2) (G, SS_) (V1))
+        tm1 (G, fn V1 => app2 (tm2) (G, SS) (V1))
 
-  and app2 (tm2) (G, SS_) (V1) =
+  and app2 (tm2) (G, SS) (V1) =
          (* convert tm2 early to obtain error location *)
       let
 	val ((U2, V2), oc2) = tm2 (G, nilSS)
 	val _ = showInferred (G, ((U2, V2), oc2))
       in
-         app2' ((U2, V2), oc2) (G, SS_) (V1)
+         app2' ((U2, V2), oc2) (G, SS) (V1)
       end
 
-  and app2' (UV2 as ((U2, V2), oc2)) (G, SS_) (V1) =
+  and app2' (UV2 as ((U2, V2), oc2)) (G, SS) (V1) =
       (case Whnf.whnf (V1, IntSyn.id)
 	 of (IntSyn.Pi ((IntSyn.Dec (x, V1'), P), V1''), s) =>
 	    let
 	      val _ = unify (G, (V1', s), (V2, IntSyn.id))
 		      handle Unify.Unify(msg) => mismatchError (G, (V1', s), UV2, msg)
 	      (* ignore mismatch error and continue *)
-	      val ((S, V), os) = SS_ (IntSyn.EClo (V1'', Whnf.dotEta (IntSyn.Exp(U2), s)))
+	      val ((S, V), os) = SS (IntSyn.EClo (V1'', Whnf.dotEta (IntSyn.Exp(U2), s)))
 	    in
 	      ((IntSyn.App (U2, S), V), Paths.app (oc2, os))
 	    end
@@ -336,11 +335,11 @@ struct
 	      handle Unify.Unify (msg) => extraneousError (G, (V1, s), (U2, oc2));
 	      (* ignore error and continue *)
 	      (* now, first case must apply *)
-	      app2' (UV2) (G, SS_) (V)
+	      app2' (UV2) (G, SS) (V)
 	    end)
 
   (* Non-dependent function type "tm1 -> tm2" *)
-  fun arrow (tm1, tm2) (G, SS_) =
+  fun arrow (tm1, tm2) (G, SS) =
       let
 	val ((V1, L1), oc1) = tm1 (G, nilSS)
 	val _ = showInferred (G, ((V1, L1), oc1))
@@ -351,7 +350,7 @@ struct
 	val _ = checkUni (L2, Paths.toRegion oc2)
 	val r = joinRegions (oc1, oc2)
       in
-	case SS_ L2
+	case SS L2
 	  of ((IntSyn.Nil, L2'), _) =>
 	      ((IntSyn.Pi ((D1, IntSyn.No), IntSyn.EClo(V2,IntSyn.shift)), L2),
 	       Paths.bind (r, SOME(oc1), oc2))
@@ -364,11 +363,11 @@ struct
       end
 
   (* Non-dependent function type "tm2 <- tm1" *)
-  fun backarrow (tm2, tm1) (G, SS_) =
-        arrow (tm1, tm2) (G, SS_)
+  fun backarrow (tm2, tm1) (G, SS) =
+        arrow (tm1, tm2) (G, SS)
 
   (* Explicit type ascription "tm1 : tm2" *)
-  fun hastype (tm1, tm2) (G, SS_) =
+  fun hastype (tm1, tm2) (G, SS) =
       let
 	val ((U1, V1), oc1) = tm1 (G, nilSS)
 	val _ = showInferred (G, ((U1, V1), oc1))
@@ -380,7 +379,7 @@ struct
       (* regions apply only to normal forms: errors in type ascriptions are hard *)
       (* to trace -- V2 and oc2 are ignored below. -fp *)
       in
-	case SS_ V2
+	case SS V2
 	  of ((IntSyn.Nil, _), _) => ((U1, V2), oc1)
 	   | ((S, V'), os) =>
 	      ((IntSyn.Redex (U1, S), V'),
@@ -388,29 +387,29 @@ struct
       end
 
   (* Omitted objects (from underscore) "_" *)
-  fun omitobj (r) (G, SS_) =
+  fun omitobj (r) (G, SS) =
       let
 	val V = IntSyn.newTypeVar (G)
 	val X = IntSyn.newEVar (G, V)
       in
-	  case SS_ V
+	  case SS V
 	    of ((IntSyn.Nil, V'), _) => ((X, V), Paths.leaf r) (* V = V' *)
 	     | ((S, V'), _) => ((IntSyn.Redex (X, S), V'), Paths.leaf r)
       end
 
   (* Omitted types (from definitions) *)
-  fun omittyp (r) (G, SS_) =
+  fun omittyp (r) (G, SS) =
       let
 	val X = IntSyn.newTypeVar (G)
       in
-	case SS_ (IntSyn.Uni (IntSyn.Type))
+	case SS (IntSyn.Uni (IntSyn.Type))
 	  of ((IntSyn.Nil, L), _) => ((X, L), Paths.leaf r) (* L = type *)
 	   | (S, V') => (error (r, "omitted type applied to argument");
 			 ((X, IntSyn.Uni (IntSyn.Type)), Paths.leaf r))
       end
 
   (* Dependent function type "{id:tm} tm" where dec = "id:tm" *)
-  fun pi (dec, tm, r1) (G, SS_) =
+  fun pi (dec, tm, r1) (G, SS) =
       let
 	val (D1 as IntSyn.Dec (x, V1), oc1Opt) = dec G
 	val ((V2, L2), oc2) = tm (IntSyn.Decl (G, D1), nilSS)
@@ -418,7 +417,7 @@ struct
 	val _ = checkUni (L2, Paths.toRegion oc2)
 	val r = Paths.join (r1, Paths.toRegion oc2)
       in
-	case SS_ L2
+	case SS L2
 	  of ((IntSyn.Nil, L2'), _) =>
 	       ((IntSyn.Pi ((D1, IntSyn.Maybe), V2), L2), (* L2 = L2' *)
 	        Paths.bind (r, oc1Opt, oc2))
@@ -431,12 +430,12 @@ struct
       end
 
   (* Lambda abstraction "[id:tm] tm" where dec = "id:tm" *)
-  fun lam (dec, tm, r1) (G, SS_) =
+  fun lam (dec, tm, r1) (G, SS) =
       let
 	val (D1 as IntSyn.Dec (x, V1), oc1Opt) = dec G
 	val ((U2, V2), oc2) = tm (IntSyn.Decl (G, D1), nilSS)
 	val _ = showInferred (IntSyn.Decl (G, D1), ((U2, V2), oc2))
-	val ((S, V), os) = SS_ (IntSyn.Pi ((D1, IntSyn.Maybe), V2))
+	val ((S, V), os) = SS (IntSyn.Pi ((D1, IntSyn.Maybe), V2))
 	val r = Paths.join (r1, Paths.toRegion oc2)
       in
 	case S
@@ -449,9 +448,9 @@ struct
       end
 
   (* Type "type" *)
-  fun typ (r) (G, SS_) =
+  fun typ (r) (G, SS) =
       let
-	val ((S, V), os) = SS_ (IntSyn.Uni (IntSyn.Kind))
+	val ((S, V), os) = SS (IntSyn.Uni (IntSyn.Kind))
       in
 	case S
 	  of IntSyn.Nil => ((IntSyn.Uni (IntSyn.Type), V), Paths.leaf r)

@@ -1,8 +1,8 @@
-(*$import Prelude TopLevel Real64 Math64 TextIO String *)
+(*$import Prelude TopLevel Real Math TextIO String *)
 
 fun runSomePia dataFile = 
 let
-open Math64
+open Math
 val open_in = TextIO.openIn
 val open_out = TextIO.openOut
 val close_out = TextIO.closeOut
@@ -66,8 +66,8 @@ fun real_abs (x:real) = if x < 0.0 then ~x else x
 fun real_zero (x:real) =      (* accept that reals need care :-) *)
        (real_abs x) < 1E~15(*;*)
 fun real_equal (x:real) y = 
-        if Real64.==(x,y) then true
-                 else if Real64.==(x+y,0.0) then false
+        if Real.==(x,y) then true
+                 else if Real.==(x+y,0.0) then false
                  else real_abs((x-y)/(x+y)) < 1E~15(*;*)
 
 fun int_equal (x:int) y = (x=y)(*;*)
@@ -97,7 +97,7 @@ exception e_power(*;*)
 fun pow x y = if real_zero x then 0.0    (* x to a real power *)
               else if x<0.0 then raise e_power
               else if real_zero y then 1.0
-              else exp( y* (Math64.ln x))(*;*)
+              else exp( y* (Math.ln x))(*;*)
 
 fun cube_root x =
        if x <0.0

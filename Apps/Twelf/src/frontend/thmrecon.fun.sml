@@ -1,4 +1,4 @@
-(*$import Prelude List THM_RECON GLOBAL MODESYN THMSYN PATHS TP_RECON NAMES *)
+(*$import Prelude TopLevel List THM_RECON GLOBAL MODESYN THMSYN PATHS TP_RECON NAMES *)
 (* Reconstruct Termination Information *)
 (* Author: Carsten Schuermann *)
 

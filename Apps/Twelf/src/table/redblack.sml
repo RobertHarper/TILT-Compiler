@@ -1,4 +1,4 @@
-(*$import Prelude String Int TABLE *)
+(*$import Prelude TopLevel String Int TABLE *)
 (* Red/Black Trees *)
 (* Author: Frank Pfenning *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude MODESYN PATHS *)
+(*$import Prelude TopLevel MODESYN PATHS *)
 (* Theorems *)
 (* Author: Carsten Schuermann *)
 
@@ -9,7 +9,7 @@ sig
 
   exception Error of string
 
-  (*type Param = string option*)
+  type Param = string option
 
   datatype Order =
     Varg of string list
@@ -17,7 +17,7 @@ sig
   | Simul of Order list
 
   datatype Callpats =
-    Callpats of (int (*ModeSyn.IntSyn.cid*) * string option list) list 
+    Callpats of (ModeSyn.IntSyn.cid * Param list) list 
 
   (* Termination declaration *)
   datatype TDecl = 

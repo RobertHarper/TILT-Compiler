@@ -60,7 +60,7 @@ struct
 
   datatype Operator = 
     Operator of (StateSyn.State * int) * StateSyn.State flag list
-		   * {sd:int,ind:int option,c:int,m:int,r:int,p:int}(*Heuristic.index*)
+		   * Heuristic.index 
 
   type operator = Operator
 

@@ -1,8 +1,3 @@
 (*$include Prelude INTEGER *)
 
-
 structure Int32 : INTEGER where type int = int
-structure Position : INTEGER where type int = int
-structure Int : INTEGER where type int = int
-structure LargeInt : INTEGER where type int = int
-structure SysInt : INTEGER where type int = int

@@ -14,6 +14,7 @@
 functor OS_PathFn (OSPathBase : sig
 
     exception Path
+    exception InvalidArc
 
     datatype arc_kind = Null | Parent | Current | Arc of string
     val classify : string -> arc_kind
@@ -30,12 +31,16 @@ functor OS_PathFn (OSPathBase : sig
     val arcSepChar : char
 	(* the character used to separate arcs (e.g., #"/" on UNIX) *)
 
-  end) : OS_PATH = struct
+    val toUnixPath  : string -> string
+    val fromUnixPath : string -> string
+
+  end) :> OS_PATH = struct
 
     structure P = OSPathBase
     structure SS = Substring
 
     exception Path = P.Path
+    exception InvalidArc = P.InvalidArc
 
     val arcSepStr = String.str P.arcSepChar
 
@@ -62,6 +67,7 @@ functor OS_PathFn (OSPathBase : sig
 	    }
 	  end
 
+    (* XXX -- raise InvalidArc *)
     fun toString {isAbs=false, vol, arcs="" :: _} = raise Path
       | toString {isAbs, vol, arcs} = let
 	  fun f [] = [""]
@@ -108,6 +114,7 @@ functor OS_PathFn (OSPathBase : sig
 	  in
 	    split' arcs
 	  end
+    (* XXX: May raise InvalidArc *)
     fun joinDirFile {dir="", file} = file
       | joinDirFile {dir, file} = let
 	  val {isAbs, vol, arcs} = fromString dir
@@ -155,7 +162,7 @@ functor OS_PathFn (OSPathBase : sig
 	  fun scanPath relPath = scanArcs([], relPath)
 	  fun mkArc (P.Arc a) = a
 	    | mkArc (P.Parent) = parentArc
-	    | mkArc _ = raise LibFail "mkCanonical: impossible"
+	    | mkArc _ = raise TiltExn.LibFail "mkCanonical: impossible"
 	  fun filterArcs (true, P.Parent::r) = filterArcs (true, r)
 	    | filterArcs (true, []) = [""]
 	    | filterArcs (true, [P.Null]) = [""]
@@ -230,14 +237,19 @@ functor OS_PathFn (OSPathBase : sig
 		  else raise Path
 	  (* end case *))
 
+    val toUnixPath = P.toUnixPath
+    val fromUnixPath = P.fromUnixPath
   end;
 
 
 (*
  * $Log$
-# Revision 1.2  2000/08/22  17:22:05  swasey
-# Brought up to date with SML/NJ basis
+# Revision 1.3  2000/11/27  22:36:38  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/08/22 17:22:05  swasey
+ * Brought up to date with SML/NJ basis
+ *
 # Revision 1.1  98/03/09  19:53:05  pscheng
 # added basis
 # 

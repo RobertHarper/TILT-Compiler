@@ -1,4 +1,4 @@
-(*$import Prelude METASYN INTSYN WHNF *)
+(*$import Prelude TopLevel METASYN INTSYN WHNF *)
 (* Meta syntax *)
 (* Author: Carsten Schuermann *)
 
@@ -18,7 +18,7 @@ struct
   | Top					(*     | Top                  *)
 
   datatype Prefix =			(* Prefix P := *)
-    Prefix of IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*)		(* G   declarations           *)
+    Prefix of IntSyn.dctx		(* G   declarations           *)
             * Mode IntSyn.Ctx		(* Mtx modes                  *)
             * int IntSyn.Ctx		(* Btx splitting depths       *)
 

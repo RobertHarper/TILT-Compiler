@@ -1,6 +1,6 @@
 Group is
   ../table/sources.cm
   ../lambda/sources.cm
-  order.sig.sml
-  order.fun.sml
+  order.sig
+  order.fun
   order.sml

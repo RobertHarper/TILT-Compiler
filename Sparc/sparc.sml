@@ -1,8 +1,7 @@
-(*$import Prelude TopLevel TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops *)
+(*$import Prelude TopLevel TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops Stats *)
 
 structure  Sparc :> SPARC =
 struct
-
 
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
@@ -79,12 +78,13 @@ structure Machine =
   datatype loadi_instruction  = LD | LDUB | LDD
   datatype loadf_instruction  = LDF | LDDF
   (* BCC = branch on carry-clear = BGEU;  BCS = branch on carry-set = BLU *)
-  datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS 
+  datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS | BVC | BVS
+  datatype cbrr_instruction   = BRZ | BRLEZ | BRLZ | BRNZ | BRGZ | BRGEZ
   datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE 
-  datatype trap_instruction   = TVS
+  datatype trap_instruction   = TVS | TNE
   datatype int_instruction    =
     ADD | ADDCC | SUB | SUBCC
-  | SMUL | SMULCC | UMUL | UMULCC 
+  | SMUL | SMULCC | UMUL | UMULCC
   | SDIV | SDIVCC | UDIV | UDIVCC 
   | AND | OR | XOR | ANDNOT | ORNOT | XORNOT
   | SRA | SRL | SLL
@@ -105,6 +105,8 @@ structure Machine =
     REGop of register
   | IMMop of imm
 
+  datatype software_trap_number = ST_INT_OVERFLOW
+      
   datatype specific_instruction =
     NOP  (* stylized for easier reading *)
   (* For sethi, the imm must be of the HIGH flavor *)
@@ -118,12 +120,13 @@ structure Machine =
   | LOADI  of loadi_instruction * register * imm * register
   | STOREF of storef_instruction * register * imm * register
   | LOADF  of loadf_instruction * register * imm * register
-  | CBRANCHI of cbri_instruction * label
+  | CBRANCHI of cbri_instruction * label * bool (* predict taken? *)
+  | CBRANCHR of cbrr_instruction * register * label * bool (* predict taken? *)
   | CBRANCHF of cbrf_instruction * label
   | INTOP  of int_instruction * register * operand * register
   | FPOP   of fp_instruction * register * register * register
   | FPMOVE  of fpmove_instruction * register * register
-  | TRAP of trap_instruction
+  | TRAP of trap_instruction * software_trap_number
 
     datatype instruction = 
 	BASE     of base_instruction
@@ -202,8 +205,21 @@ structure Machine =
     | cbri_to_ascii BLEU = "bleu"
     | cbri_to_ascii BCC  = "bcc"
     | cbri_to_ascii BCS  = "bcs"
+    | cbri_to_ascii BVS  = "bvs"
+    | cbri_to_ascii BVC  = "bvc"
 
+  fun cbrr_to_ascii BRZ   = "brz"
+    | cbrr_to_ascii BRLEZ = "brlez"
+    | cbrr_to_ascii BRLZ  = "brlz"
+    | cbrr_to_ascii BRNZ  = "brnz"
+    | cbrr_to_ascii BRGZ  = "brgz"
+    | cbrr_to_ascii BRGEZ = "brgez"
+      
   fun trap_to_ascii TVS  = "tvs"
+    | trap_to_ascii TNE  = "tne"
+
+  (* constants from <sys/trap.h> *)
+  fun trap_code_to_ascii ST_INT_OVERFLOW = "0x07"
 
   fun cbrf_to_ascii FBE  = "fbe"
     | cbrf_to_ascii FBNE = "fbne"
@@ -292,8 +308,8 @@ structure Machine =
          NOP => "nop"
        | (SETHI (imm, Rdest)) => ("sethi" ^ tab ^
 				  (msImm imm) ^ comma ^ (msReg Rdest))
-       | (WRY Rsrc) => ("mov " ^  (msReg Rsrc) ^ ", %y")
-       | (RDY Rdest) => ("mov %y, " ^  (msReg Rdest))
+       | (WRY Rsrc) => ("mov" ^ tab ^ (msReg Rsrc) ^ ",%y")
+       | (RDY Rdest) => ("mov" ^ tab ^ "%y," ^  (msReg Rdest))
        | (CMP (Rsrc1, op2)) => ("cmp" ^ tab ^
 				 (msReg Rsrc1) ^ comma ^ (msOperand op2))
        | (FCMPD (Rsrc1, Rsrc2)) =>
@@ -311,8 +327,14 @@ structure Machine =
        | (LOADF (instr, Rdest, disp, Raddr)) =>
                                 ((loadf_to_ascii instr) ^ tab ^
 				 (msDisp(Raddr, disp)) ^ comma ^ (msReg Rdest))
-       | (CBRANCHI (instr, label)) =>
+       | (CBRANCHI (instr, label, true)) =>
                                 ((cbri_to_ascii instr) ^ tab ^ (msLabel label))
+       | (CBRANCHI (instr, label, false)) =>
+                                ((cbri_to_ascii instr) ^ ",pn" ^ tab ^ "%icc," ^ (msLabel label))
+       | (CBRANCHR (instr, Rsrc, label, true)) =>
+                                ((cbrr_to_ascii instr) ^ tab ^ (msReg Rsrc) ^ comma ^ (msLabel label))
+       | (CBRANCHR (instr, Rsrc, label, false)) =>
+                                ((cbrr_to_ascii instr) ^ ",pn" ^ tab ^ (msReg Rsrc) ^ comma ^ (msLabel label))
        | (CBRANCHF (instr, label)) =>
                                 ((cbrf_to_ascii instr) ^ tab ^ (msLabel label))
        | (INTOP(instr, Rsrc1, op2, Rdest)) =>
@@ -326,7 +348,8 @@ structure Machine =
        | (FPMOVE(instr, Rsrc, Rdest)) =>
                                 ((fpmove_to_ascii instr)^ tab ^
 				 (msReg Rsrc) ^ comma ^ (msReg Rdest))
-       | (TRAP instr) => (trap_to_ascii instr))
+       | (TRAP (instr, code)) => ((trap_to_ascii instr) ^ tab ^
+				  (trap_code_to_ascii code)))
 
 
   datatype finalInstr = NO_INSTRUCTION of string        (* do not prepend tab *)
@@ -337,8 +360,9 @@ structure Machine =
   fun msInstrBase (base : base_instruction) = 
       (case base of
 	BSR (label, NONE, _) => DELAY_INSTRUCTION ("call" ^ tab ^ (msLabel label))
-      | BSR (label, SOME sra, _) => DELAY_INSTRUCTION ("jmpl" ^ tab ^ (msLabel label) ^
-						       comma ^ (msReg sra))
+      | BSR (label, SOME sra, _) => error "can't generate code for BSR(label, SOME linkreg, _)"
+	    (* The problem is jmpl is a register-indirect jump.  We could use sra as a temp. *)
+	    (* DELAY_INSTRUCTION ("jmpl" ^ tab ^ (msLabel label) ^ comma ^ (msReg sra)) *)
       | (TAILCALL label) => DELAY_INSTRUCTION ("TAILCALL\t" ^ (msLabel label))
       | (BR label) => DELAY_INSTRUCTION ("ba" ^ tab ^ (msLabel label))
       | (ILABEL label) => NO_INSTRUCTION ((msLabel label) ^ ":")
@@ -499,9 +523,10 @@ structure Machine =
       | defUse (SPECIFIC(LOADI (_, Rdest, _, Raddr)))   = ([Rdest], [Raddr])
       | defUse (SPECIFIC(STOREF (_, Rsrc, _, Raddr)))   = ([], [Raddr,Rsrc])
       | defUse (SPECIFIC(LOADF (_, Rdest, _, Raddr)))   = ([Rdest], [Raddr])
-      | defUse (SPECIFIC(CBRANCHI (_, _)))        = ([], [])
-      | defUse (SPECIFIC(CBRANCHF (_, _)))        = ([], [])
-      | defUse (BASE(BR _))                       = ([], [])
+      | defUse (SPECIFIC(CBRANCHI (_, _, _)))       = ([], [])
+      | defUse (SPECIFIC(CBRANCHR (_, Rsrc, _, _))) = ([], [Rsrc])
+      | defUse (SPECIFIC(CBRANCHF (_, _)))          = ([], [])
+      | defUse (BASE(BR _))                         = ([], [])
       | defUse (BASE(BSR (_,NONE,{regs_modified,regs_destroyed,args}))) = (Rra::regs_destroyed, args)
       | defUse (BASE(BSR (_, SOME sra, {regs_modified,regs_destroyed,args}))) = (sra::regs_destroyed, args)
       | defUse (SPECIFIC(INTOP (opcode, Rsrc1, REGop Rsrc2, Rdest))) = ([Rdest], [Rsrc1, Rsrc2])
@@ -542,6 +567,7 @@ structure Machine =
 
 
    datatype instr_flow = NOBRANCH | BRANCH of bool * label list | DELAY_BRANCH of bool * label list
+    (* XXX -- cbranch?  with ML_EXTERN_LABEL -- should label be mentioned? *)
     (* BASE(BR/BSR/...) is not DELAY_BRANCH because we include the nop in the printing *)
     fun cFlow (BASE (BR (label as LOCAL_CODE _)))      = BRANCH (false, [label])
       | cFlow (BASE (BR (label as LOCAL_DATA _)))      = BRANCH (false, [label])
@@ -549,8 +575,12 @@ structure Machine =
       | cFlow (BASE (BSR (label as LOCAL_CODE _,_,_))) = BRANCH (true, [label])
       | cFlow (BASE (BSR (label as LOCAL_DATA _,_,_))) = BRANCH (true, [label])
       | cFlow (BASE (BSR (label as _,_,_)))            = BRANCH (true, [])
-      | cFlow (SPECIFIC (CBRANCHI(_, label))) = DELAY_BRANCH (true, [label])
-      | cFlow (SPECIFIC (CBRANCHF(_, label))) = DELAY_BRANCH (true, [label])
+      | cFlow (SPECIFIC (CBRANCHI(_, ML_EXTERN_LABEL _, _))) = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHI(_, llabel, _)))                = DELAY_BRANCH (true, [llabel])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, ML_EXTERN_LABEL _, _)))  = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHR(_, _, llabel, _)))             = DELAY_BRANCH (true, [llabel])
+      | cFlow (SPECIFIC (CBRANCHF(_, ML_EXTERN_LABEL _)))        = DELAY_BRANCH (true, [])
+      | cFlow (SPECIFIC (CBRANCHF(_, llabel)))                   = DELAY_BRANCH (true, [llabel])
       | cFlow (BASE (Core.JSR(_,_,_,labels))) = BRANCH (false, labels)
       | cFlow (BASE (Core.RET(_,_)))  = BRANCH (false, [])
       | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = BRANCH (true, []) (* why possible *)
@@ -595,8 +625,9 @@ structure Machine =
          | xspec (LOADI(oper, Rdst, offset, Raddr)) = LOADI(oper, fd Rdst, offset, fs Raddr)
 	 | xspec (STOREF(oper, Fsrc, offset, Raddr)) = STOREF(oper, fs Fsrc,offset, fs Raddr)
          | xspec (LOADF(oper, Fdst, offset, Raddr)) = LOADF(oper, fd Fdst,offset, fs Raddr)
-	 | xspec (CBRANCHI(oper, llabel)) = CBRANCHI(oper, llabel)
-	 | xspec (CBRANCHF(oper, llabel)) = CBRANCHF(oper, llabel)
+	 | xspec (CBRANCHI(oper, label, taken)) = CBRANCHI(oper, label, taken)
+	 | xspec (CBRANCHR(oper, Rsrc, label, taken)) = CBRANCHR(oper, fs Rsrc, label, taken)
+	 | xspec (CBRANCHF(oper, label)) = CBRANCHF(oper, label)
 	 | xspec (INTOP(oper, Rsrc1, REGop Rsrc2, Rdst)) = INTOP(oper, fs Rsrc1,REGop (fs  Rsrc2),fd Rdst)
 	 | xspec (INTOP(oper, Rsrc1, src2, Rdst) ) = INTOP(oper, fs Rsrc1,src2, fd Rdst)
 	 | xspec (FPOP(oper, Fsrc1, Fsrc2, Fdest)) = FPOP(oper, fs Fsrc1,fs Fsrc2,fd Fdest)
@@ -642,7 +673,7 @@ structure Machine =
 	   SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp)),
 	   SPECIFIC(LOADI(LD, Rat, INT stackLimit_disp, Rth)),
 	   SPECIFIC(CMP (Rsp, REGop Rat)),
-	   SPECIFIC(CBRANCHI(BG, after)),
+	   SPECIFIC(CBRANCHI(BG, after, true)),
 	   BASE(MOVE(Rsp, Rframe)),
 	   SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp)),   (* Restore stack pointer to original value *)
 	   SPECIFIC(INTOP(OR, Rzero, IMMop (INT prevframe_maxoffset), Rat)),
@@ -662,18 +693,20 @@ structure Machine =
      | std_return_code(SOME sra) = []
    fun push (src,actual_location) =
        case (src,actual_location) of
-          (R _, ACTUAL8 offset) => SPECIFIC(STOREI(STD,  src, INT offset, Rsp))
-        | (R _, ACTUAL4 offset) => SPECIFIC(STOREI(ST,   src, INT offset, Rsp))
-	| (F _, ACTUAL8 offset) => SPECIFIC(STOREF(STDF, src, INT offset, Rsp))
-	| (F _, ACTUAL4 offset) => SPECIFIC(STOREF(STF,  src, INT offset, Rsp))
+          (R n, ACTUAL8 offset) => [SPECIFIC(STOREI(ST,   src,     INT offset,     Rsp)),
+				    SPECIFIC(STOREI(ST,   R (n+1), INT (offset+4), Rsp))]
+        | (R _, ACTUAL4 offset) => [SPECIFIC(STOREI(ST,   src,     INT offset,     Rsp))]
+	| (F _, ACTUAL8 offset) => [SPECIFIC(STOREF(STDF, src,     INT offset,     Rsp))]
+	| (F _, ACTUAL4 offset) => [SPECIFIC(STOREF(STF,  src,     INT offset,     Rsp))]
 	| _ => error "push"
 
    fun pop (dst,actual_location) = 
        case (dst,actual_location) of
-          (R _,ACTUAL8 offset) => SPECIFIC(LOADI(LDD,  dst, INT offset, Rsp))
-        | (R _,ACTUAL4 offset) => SPECIFIC(LOADI(LD,   dst, INT offset, Rsp))
-	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDDF, dst, INT offset, Rsp))
-	| (F _,ACTUAL4 offset) => SPECIFIC(LOADF(LDF,  dst, INT offset, Rsp))
+          (R n,ACTUAL8 offset) => [SPECIFIC(LOADI(LD, dst,     INT offset,     Rsp)),
+				   SPECIFIC(LOADI(LD, R (n+1), INT (offset+4), Rsp))]
+        | (R _,ACTUAL4 offset) => [SPECIFIC(LOADI(LD,   dst,   INT offset,     Rsp))]
+	| (F _,ACTUAL8 offset) => [SPECIFIC(LOADF(LDDF, dst,   INT offset,     Rsp))]
+	| (F _,ACTUAL4 offset) => [SPECIFIC(LOADF(LDF,  dst,   INT offset,     Rsp))]
 	| _ => error "pop"
 
 

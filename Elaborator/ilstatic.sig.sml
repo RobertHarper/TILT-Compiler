@@ -5,7 +5,9 @@ signature ILSTATIC =
 
     val trace : bool ref
     val debug : bool ref
- 
+
+    val installHelpers : {eq_compile : Il.context * Il.con -> (Il.exp * Il.con) option}
+	                 -> unit
 
     (* ------------ functions that manipulate constructors -------------------- 
        eq_onearrow: returns true if the arrows are equal: will set the oneshot if needed

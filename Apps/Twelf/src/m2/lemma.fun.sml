@@ -1,4 +1,4 @@
-(*$import Prelude LEMMA METASYN METAABSTRACT *)
+(*$import Prelude TopLevel LEMMA METASYN METAABSTRACT *)
 (* Lemma *)
 (* Author: Carsten Schuermann *)
 

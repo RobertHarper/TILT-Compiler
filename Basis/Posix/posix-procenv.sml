@@ -1,4 +1,4 @@
-(*$import Prelude Time Real64 Int List POSIX_FileSys POSIX_Process Word32 POSIX_PROC_ENV POSIX_Process POSIX_extern *)
+(*$import Prelude PrePosix Time Real SysInt List POSIX_FileSys POSIX_Process SysWord POSIX_PROC_ENV POSIX_Process POSIX_extern *)
 (* posix-procenv.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -10,26 +10,29 @@
 structure POSIX_ProcEnv :> POSIX_PROC_ENV 
 	where type pid = POSIX_Process.pid 
 	and   type file_desc = POSIX_FileSys.file_desc 
-	and   type uid = POSIX_FileSys.uid 
-	and   type gid = POSIX_FileSys.gid =
+	and   type uid = PrePosix.uid 
+	and   type gid = PrePosix.gid =
   struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
     structure FS = POSIX_FileSys
     structure P  = POSIX_Process
 
 
     type pid = P.pid
-    type uid = FS.uid
-    type gid = FS.gid
+    type uid = PrePosix.uid
+    type gid = PrePosix.gid
     type file_desc = FS.file_desc
 
     type s_int = SysInt.int
 
-    val uidToWord = FS.uidToWord
-    val wordToUid = FS.wordToUid
+    val uidToWord = PrePosix.uidToWord
+    val wordToUid = PrePosix.wordToUid
 
-    val gidToWord = FS.gidToWord
-    val wordToGid = FS.wordToGid
+    val gidToWord = PrePosix.gidToWord
+    val wordToGid = PrePosix.wordToGid
 
 
     fun getpid () = P.wordToPid(int32touint32(Ccall(posix_procenv_getpid,())))
@@ -57,7 +60,7 @@ structure POSIX_ProcEnv :> POSIX_PROC_ENV
 
     fun uname () : (string * string) list = Ccall(posix_procenv_uname, ())
 
-    val sysconf = P.sysconf
+    val sysconf = PrePosix.sysconf
 
     fun time () = Time.fromSeconds(Ccall(posix_procenv_time, ()))
 
@@ -90,9 +93,12 @@ structure POSIX_ProcEnv :> POSIX_PROC_ENV
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:40  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:40  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:40  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:12  pscheng
  * *** empty log message ***
  *

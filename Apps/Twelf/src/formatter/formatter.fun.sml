@@ -1,5 +1,4 @@
 (*$import Prelude TextIO TopLevel List String FORMATTER *)
-
 (*
 % ForML Version 0.6 - 25 January 1993 - er@cs.cmu.edu
 %************************************************************************

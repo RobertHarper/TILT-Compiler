@@ -3,6 +3,8 @@
 signature CORE =
   sig
 
+    val branchingTraps : bool ref
+	
     type label = Rtl.label
     type data = Rtl.data
 	

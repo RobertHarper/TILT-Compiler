@@ -4,19 +4,19 @@ Group is
   ../formatter/sources.cm  
   ../index/sources.cm
   ../typecheck/sources.cm
-  compsyn.sig.sml
-  compsyn.fun.sml
-  compile.sig.sml
-  compile.fun.sml
-  cprint.sig.sml
-  cprint.fun.sml
+  compsyn.sig
+  compsyn.fun
+  compile.sig
+  compile.fun
+  cprint.sig
+  cprint.fun
   (*
-  assign.sig.sml
-  assign.fun.sml
+  assign.sig
+  assign.fun
   *)
-  absmachine.sig.sml
-  absmachine.fun.sml
-  trace.sig.sml
-  trace.fun.sml
-  tmachine.fun.sml
+  absmachine.sig
+  absmachine.fun
+  trace.sig
+  trace.fun
+  tmachine.fun
   opsem.sml

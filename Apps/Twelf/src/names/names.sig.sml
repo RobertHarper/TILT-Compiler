@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Names of Constants and Variables *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)
@@ -43,12 +43,12 @@ sig
   val reset : unit -> unit
 
   val installFixity : string * Fixity.fixity -> unit
-  val getFixity : int (*IntSyn.cid*) -> Fixity.fixity
+  val getFixity : IntSyn.cid -> Fixity.fixity
   val fixityLookup : string -> Fixity.fixity
 
-  val installName : string * int (*IntSyn.cid*) -> unit
-  val nameLookup : string -> int (*IntSyn.cid*) option
-  val constName : int (*IntSyn.cid*) -> string	(* will mark if shadowed *)
+  val installName : string * IntSyn.cid -> unit
+  val nameLookup : string -> IntSyn.cid option
+  val constName : IntSyn.cid -> string	(* will mark if shadowed *)
 
   (* Name preferences for anonymous variables: a, EPref, UPref *)
   val installNamePref : string * (string * string option) -> unit
@@ -58,16 +58,16 @@ sig
   val getFVarType : string -> IntSyn.Exp (* create, if undefined *)
   val getEVar : string -> IntSyn.Exp (* create, if undefined *)
   val getEVarOpt : string -> IntSyn.Exp option (* NONE, if undefined or not EVar *)
-  val evarName : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Exp -> string (* create, if undefined *)
-  val bvarName : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * int -> string (* must be defined *)
+  val evarName : IntSyn.dctx * IntSyn.Exp -> string (* create, if undefined *)
+  val bvarName : IntSyn.dctx * int -> string (* must be defined *)
 
-  val decName  : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Dec -> IntSyn.Dec (* status unknown, like decEName *)
-  val decEName : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Dec -> IntSyn.Dec (* assign existential name *)
-  val decUName : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Dec -> IntSyn.Dec (* assign universal name *)
-  val decLUName: IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Dec -> IntSyn.Dec (* assign local universal name *)
+  val decName  : IntSyn.dctx * IntSyn.Dec -> IntSyn.Dec (* status unknown, like decEName *)
+  val decEName : IntSyn.dctx * IntSyn.Dec -> IntSyn.Dec (* assign existential name *)
+  val decUName : IntSyn.dctx * IntSyn.Dec -> IntSyn.Dec (* assign universal name *)
+  val decLUName: IntSyn.dctx * IntSyn.Dec -> IntSyn.Dec (* assign local universal name *)
 
-  val ctxName  : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) -> IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) (* assign global existential names *)
-  val ctxLUName: IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) -> IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) (* assign local universal names *)
+  val ctxName  : IntSyn.dctx -> IntSyn.dctx (* assign global existential names *)
+  val ctxLUName: IntSyn.dctx -> IntSyn.dctx (* assign local universal names *)
 
   val nameConDec : IntSyn.ConDec -> IntSyn.ConDec
 

@@ -1,4 +1,4 @@
-(*$import Prelude MODE_RECON GLOBAL MODESYN WHNF PATHS MODEPRINT MODEDEC TP_RECON NamesStructs *)
+(*$import Prelude TopLevel MODE_RECON GLOBAL MODESYN WHNF PATHS MODEPRINT MODEDEC TP_RECON NamesStructs *)
 (* Reconstructing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 
@@ -35,11 +35,11 @@ struct
     fun star r = (M.Star, r)
     fun minus r = (M.Minus, r)
 
-    type modedec = (int (*I.cid*) * M.ModeSpine) * P.region
+    type modedec = (I.cid * M.ModeSpine) * P.region
 
     structure Short =
     struct
-      type mterm = (int (*I.cid*) * M.ModeSpine) * P.region
+      type mterm = (I.cid * M.ModeSpine) * P.region
       type mspine = M.ModeSpine * P.region
 
       fun mnil r = (M.Mnil, r)
@@ -57,7 +57,7 @@ struct
 
     structure Full =
     struct
-      type mterm = (I.Dec I.Ctx (*I.dctx*)) * M.Mode I.Ctx -> (int (*I.cid*) * M.ModeSpine) * P.region
+      type mterm = I.dctx * M.Mode I.Ctx -> (I.cid * M.ModeSpine) * P.region
 
       fun mpi ((m, _), d, t) (G, D) =  
 	  t (I.Decl (G, T.decToDec (G, d)), I.Decl (D, m))

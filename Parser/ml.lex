@@ -3,9 +3,12 @@
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
-# Revision 1.4  97/10/21  21:00:35  pscheng
-# got rid of int inf
+# Revision 1.5  2000/11/27  22:37:06  swasey
+# *** empty log message ***
 # 
+ * Revision 1.4  1997/10/21 21:00:35  pscheng
+ * got rid of int inf
+ *
 # Revision 1.3  1997/09/03  20:10:37  pscheng
 # added extern and ccall syntax
 #
@@ -97,18 +100,19 @@ idchars=[A-Za-z'_0-9];
 id=[A-Za-z]{idchars}*;
 ws=("\012"|[\t\ ])*;
 nrws=("\012"|[\t\ ])+;
-some_sym=[!%&+/:<=>?@~|#*]|\-|\^;
+eol=("\013\010"|"\010"|"\013");
+some_sym=[!%&$+/:<=>?@~|#*]|\-|\^;
 sym={some_sym}|"\\";
 quote="`";
 full_sym={sym}|{quote};
 num=[0-9]+;
 frac="."{num};
-exp="E"(~?){num};
+exp=[eE](~?){num};
 real=(~?)(({num}{frac}?{exp})|({num}{frac}{exp}?));
 hexnum=[0-9a-fA-F]+;
 %%
 <INITIAL>{ws}	=> (continue());
-<INITIAL>\n	=> (SourceMap.newline sourceMap yypos; continue());
+<INITIAL>{eol}	=> (SourceMap.newline sourceMap yypos; continue());
 <INITIAL>"_"	=> (Tokens.WILD(yypos,yypos+1));
 <INITIAL>","	=> (Tokens.COMMA(yypos,yypos+1));
 <INITIAL>"{"	=> (Tokens.LBRACE(yypos,yypos+1));
@@ -117,7 +121,6 @@ hexnum=[0-9a-fA-F]+;
 <INITIAL>"#["	=> (Tokens.VECTORSTART(yypos,yypos+1));
 <INITIAL>"]"	=> (Tokens.RBRACKET(yypos,yypos+1));
 <INITIAL>";"	=> (Tokens.SEMICOLON(yypos,yypos+1));
-<INITIAL>"$"    => (Tokens.DOLLAR(yypos,yypos+1));
 <INITIAL>"("	=> (if (null(!brack_stack))
                     then ()
                     else inc (hd (!brack_stack));
@@ -178,7 +181,7 @@ hexnum=[0-9a-fA-F]+;
 		    continue());
 <IMP>{id}                 => (Tokens.STRING(yytext, yypos, yypos+size yytext));
 <IMP>{ws}                 => (continue());
-<IMP>\n                   => (SourceMap.newline sourceMap yypos; continue());
+<IMP>{eol}                 => (SourceMap.newline sourceMap yypos; continue());
 <IMP>"*)"                 => (YYBEGIN INITIAL; comLevel := 0; continue());
 <IMP>.			  => (err (yypos, yypos+1) COMPLAIN
 			      "ill-formed (*$import...*) or (*$include...*)" nullErrorBody
@@ -201,7 +204,7 @@ hexnum=[0-9a-fA-F]+;
                        "ill-formed (*#line...*) taken as comment" nullErrorBody;
                      YYBEGIN A; continue());
 <A>"(*"		=> (inc comLevel; continue());
-<A>\n		=> (SourceMap.newline sourceMap yypos; continue());
+<A>{eol}	=> (SourceMap.newline sourceMap yypos; continue());
 <A>"*)" => (dec comLevel; if !comLevel=0 then YYBEGIN INITIAL else (); continue());
 <A>.		=> (continue());
 <S>\"	        => (let val s = makeString charlist
@@ -215,11 +218,11 @@ hexnum=[0-9a-fA-F]+;
                     in YYBEGIN INITIAL;
                        if !stringtype then Tokens.STRING t else Tokens.CHAR t
                     end);
-<S>\n		=> (err (!stringstart,yypos) COMPLAIN "unclosed string"
+<S>{eol}	=> (err (!stringstart,yypos) COMPLAIN "unclosed string"
 		        nullErrorBody;
 		    SourceMap.newline sourceMap yypos;
 		    YYBEGIN INITIAL; Tokens.STRING(makeString charlist,!stringstart,yypos));
-<S>\\\n	       	=> (SourceMap.newline sourceMap (yypos+1);
+<S>\\{eol}     	=> (SourceMap.newline sourceMap (yypos+1);
 		    YYBEGIN F; continue());
 <S>\\{ws}   	=> (YYBEGIN F; continue());
 <S>\\a		=> (addString(charlist, "\007"); continue());
@@ -256,7 +259,7 @@ hexnum=[0-9a-fA-F]+;
 <S>[\000-\031]  => (err (yypos,yypos+1) COMPLAIN "illegal non-printing character in string" nullErrorBody;
                     continue());
 <S>({idchars}|{some_sym}|\[|\]|\(|\)|{quote}|[,.;^{}])+|.  => (addString(charlist,yytext); continue());
-<F>\n		=> (SourceMap.newline sourceMap yypos; continue());
+<F>{eol}	=> (SourceMap.newline sourceMap yypos; continue());
 <F>{ws}		=> (continue());
 <F>\\		=> (YYBEGIN S; stringstart := yypos; continue());
 <F>.		=> (err (!stringstart,yypos) COMPLAIN "unclosed string"
@@ -275,10 +278,10 @@ hexnum=[0-9a-fA-F]+;
                     in
                     Tokens.ENDQ(x,yypos,yypos+(size x))
                     end);
-<Q>\n           => (SourceMap.newline sourceMap yypos; addString(charlist,"\n"); continue());
+<Q>{eol}        => (SourceMap.newline sourceMap yypos; addString(charlist,"\n"); continue());
 <Q>.            => (addString(charlist,yytext); continue());
 
-<AQ>\n          => (SourceMap.newline sourceMap yypos; continue());
+<AQ>{eol}       => (SourceMap.newline sourceMap yypos; continue());
 <AQ>{ws}        => (continue());
 <AQ>{id}        => (YYBEGIN Q; 
                     let val hash = StrgHash.hashString yytext

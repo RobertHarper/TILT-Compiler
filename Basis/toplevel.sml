@@ -1,40 +1,70 @@
-(*$import Prelude TopLevelHelp *)
+(*$import Prelude PreString PreInt Real Char String Option List General TextIO Vector Word31 *)
 (* see http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
-(* these are for debugging only 
-extern ml_output : (int, string, unit) --> 
-fun raw_print(s : string) : unit = Ccall(ml_output,1,s)
+(* The interface provided by TopLevel should not be assumed by users
+   of the basis library.
+
+   Users who want the standard top-level environment should import
+   Prelude and TopLevel.
 *)
 
-val valOf = option_valOf
-val isSome = option_isSome
+(* overloads *)
+overload + : 'a as Word31.+
+overload - : 'a as Word31.-
+overload * : 'a as Word31.*
+overload div : 'a as PreInt.idiv and TiltPrim.bdiv and TiltPrim.udiv and Word31.div
+overload mod : 'a as PreInt.imod and TiltPrim.bmod and TiltPrim.umod and Word31.mod
+overload abs : 'a as PreInt.iabs and TiltPrim.fabs
+overload <  : 'a as String.<  and Word31.<
+overload >  : 'a as String.>  and Word31.>
+overload <= : 'a as String.<= and Word31.<=
+overload >= : 'a as String.>= and Word31.>=
 
-val app = list_app
-val map = list_map
-val hd = list_hd
-val tl = list_tl
-val (op @) = list_append
-val foldl = list_foldl
-val foldr = list_foldr
-val null = list_null
+(* types *)
+type substring = PreString.substring
 
-val concat = string_concat
-val print = textio_print
-val trunc = real_trunc
+(* values *)
+(* !, := primitive, ref -- primitive *)
+(* before, ignore, o -- Prelude *)
+val exnName = General.exnName
+val exnMessage = General.exnMessage
+    
+val getOpt = Option.getOpt
+val isSome = Option.isSome
+val valOf = Option.valOf
+    
+(* not -- primitive *)
 
+(* real -- primitive *)
+val trunc = Real.trunc
+val floor = Real.floor
+val ceil = Real.ceil
+val round = Real.round
 
-(* --- These identifier are already done in build-in context *)
-(* overload + : 'a as iplus and bplus and uplus and fplus *)
-(* overload - : 'a as iminus and bminus and uminus and fminus *)
-(* overload * : 'a as imult and bmult and umult and fmult *)
+(* ord -- primitive *)
+val chr = Char.chr
+    
+val size = String.size
+val str = String.str
+val concat = String.concat
+val implode = String.implode
+val explode = String.explode
+val substring = String.substring
+val op^ = String.^
+    
+val null = List.null
+val hd = List.hd
+val tl = List.tl
+val length = List.length
+(* rev -- Prelude *)
+val op@ = List.@
+val app = List.app
+val map = List.map
+val foldr = List.foldr
+val foldl = List.foldl
 
-(* --- These identifier were undefined before ---- *)
-overload div : 'a as idiv and bdiv and udiv
-overload mod : 'a as imod and bmod and umod
+val print = TextIO.print
+    
+val vector = Vector.fromList
 
-(* --- These identifiers were partially defined before --- *)
-overload <  : 'a as (* ilt  and blt  and ult  and flt  and *) string_lt
-overload <= : 'a as (* ilte and blte and ulte and flte and *) string_le
-overload >  : 'a as (* igt  and bgt  and ugt  and fgt  and *) string_gt
-overload >= : 'a as (* igte and bgte and ugte and fgte and *) string_ge
-
+fun use (_ : string) : unit = raise TiltExn.LibFail "use unimplemented"

@@ -71,7 +71,7 @@ Stacklet_t* CurrentStacklet(StackChain_t *);  /* Get bottom stacklet of chain */
 Stacklet_t *NewStacklet(StackChain_t *); /* Allocate new stacklet to chain */
 Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp); /* fix stackchain cursor (possible exceptions); return active stacklet */
 void PopStacklet(StackChain_t *); /* Pop most recent stacklet - at least one must remain */
-mem_t StackError(struct ucontext *, mem_t);
+mem_t StackError(ucontext_t*, mem_t);
 int Stacklet_Copy(Stacklet_t *);   /* Replica area copied from primary area of stacklet; returns whether caller was copier */
 void Stacklet_KillReplica(Stacklet_t *);                  /* Mark replica area inconsistent with primary area */
 void DequeueStacklet(StackChain_t *stackChain);

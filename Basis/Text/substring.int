@@ -1,2 +1,5 @@
-(*$include Prelude SUBSTRING *)
-structure Substring : SUBSTRING where type substring = substring
+(*$include Prelude PreString SUBSTRING *)
+structure Substring : SUBSTRING where type substring = PreString.substring
+				  and type String.string = string
+				  and type String.Char.char = char
+				  and type String.Char.string = string

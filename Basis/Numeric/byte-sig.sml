@@ -14,17 +14,20 @@ signature BYTE =
     val bytesToString : Word8Vector.vector -> string
     val stringToBytes : string -> Word8Vector.vector
 
-    val unpackStringVec : (Word8Vector.vector * int * int option) -> string
-    val unpackString    : (Word8Array.array * int * int option) -> string
-    val packString      : (Word8Array.array * int * Substring.substring) -> unit
+    val unpackStringVec : Word8Vector.vector * int * int option -> string
+    val unpackString    : Word8Array.array * int * int option -> string
+    val packString      : Word8Array.array * int * Substring.substring -> unit
 
   end
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:28  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:29  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:28  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:52:31  pscheng
 # added basis
 # 

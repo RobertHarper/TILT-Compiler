@@ -1,23 +1,46 @@
-(*$import Prelude General MONO_ARRAY Array List *)
+(*$import Prelude General MONO_ARRAY Array List Word8Vector *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
  *
  *)
 
-structure Word8Array : MONO_ARRAY where type elem = char 
-                                  and   type array = char array 
-                                  and   type vector = char vector =
+structure Word8Array :> MONO_ARRAY where type elem = char
+				     and type array = char array 
+				     and type Vector.vector = char vector
+				     and type Vector.elem = char =
   struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val array_length = TiltPrim.array_length
+    val empty_array = TiltPrim.empty_array
+    val empty_vector = TiltPrim.empty_vector
+    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_sub = TiltPrim.unsafe_sub
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+	
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+	
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
+	
+    val ugt = TiltPrim.ugt
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+    val ulte = TiltPrim.ulte
+	
     type elem = char
     type array = char array
-    type vector = char vector
+    structure Vector = Word8Vector
 
-    val maxLen = arraymaxlength
+    val maxLen = Array.maxLen
 
     val array0 : array = empty_array
-    val vector0 : vector = empty_vector
+    val vector0 : Vector.vector = empty_vector
 
     fun array (0, _) = array0
       | array (n, init) = 
@@ -77,7 +100,7 @@ structure Word8Array : MONO_ARRAY where type elem = char
 
     fun extract (v, base : int, optLen : int option) = let
 	  val len = length v
-	  fun newVec (n : int) : vector = let
+	  fun newVec (n : int) : Vector.vector = let
 		fun tab (~1, l) = unsafe_array2vector(fromList'(n,l))
 		  | tab (i, l) = tab(i-1, (unsafe_sub(v, int32touint32(base+i)))::l)
 		in  tab (n-1, [])
@@ -268,9 +291,12 @@ structure Word8Array : MONO_ARRAY where type elem = char
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:10  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:22  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:10  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.2  98/05/14  16:38:58  pscheng
 # result types on sme functions were wrong
 # 

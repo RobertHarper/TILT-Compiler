@@ -1,4 +1,4 @@
-(*$import Prelude Word8Vector Int Word8Array *)
+(*$import Prelude Word8Vector Position Word8Array Word8 *)
 type statrep = (int * word * word * word * word * word * 
 		word * int * int * int * int)
 type flock_rep = int * int * Position.int * Position.int * int
@@ -91,7 +91,7 @@ extern posix_process_exec : (string, string list, unit) -->
 extern posix_process_exece : (string, string list, string list, unit) -->
 extern posix_process_execp : (string, string list, unit) -->
 extern posix_process_waitpid : (int, word, (int * int * int)) -->
-extern posix_process_exit : (word8, unit) -->
+extern posix_process_exit : (Word8.word, unit) -->
 extern posix_process_kill : (int, int, unit) -->
 extern posix_process_alarm : (int, int) -->
 extern posix_process_pause : (unit, unit) -->

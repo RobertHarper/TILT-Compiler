@@ -1,4 +1,4 @@
-(*$import String Real64 TopLevel *)
+(*$import String Real TopLevel *)
 (* real-format.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.

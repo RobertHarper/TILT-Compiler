@@ -160,24 +160,7 @@ static name_val_t io_values [] = {
   {"SEEK_CUR", SEEK_CUR},
   {"SEEK_END", SEEK_END},
   {"SEEK_SET", SEEK_SET},
-  {"append",   O_APPEND},
   {"cloexec",  FD_CLOEXEC},
-#ifdef O_DSYNC
-  {"dsync",    O_DSYNC},
-#else
-  {"dsync",    0},
-#endif
-  {"nonblock", O_NONBLOCK},
-#ifdef O_RSYNC
-  {"rsync",    O_RSYNC},
-#else
-  {"rsync",    0},
-#endif
-#ifdef O_SYNC
-  {"sync",     O_SYNC},
-#else
-  {"sync",     0},
-#endif
 };
 
 static name_val_t process_values [] = {

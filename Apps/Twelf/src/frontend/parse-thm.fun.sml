@@ -1,4 +1,4 @@
-(*$import Prelude PARSE_THM PATHS PARSING THM_RECON PARSE_TERM *)
+(*$import Prelude TopLevel PARSE_THM PATHS PARSING THM_RECON PARSE_TERM *)
 (* Parsing Thm Declarations *)
 (* Author: Carsten Schuermann *)
 

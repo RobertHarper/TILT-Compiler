@@ -23,12 +23,13 @@ sig
   datatype loadi_instruction  = LD | LDUB | LDD
   datatype loadf_instruction  = LDF | LDDF
   (* BCC = branch on carry-clear = BGEU;  BCS = branch on carry-set = BLU *)
-  datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS 
+  datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS | BVC | BVS
+  datatype cbrr_instruction   = BRZ | BRLEZ | BRLZ | BRNZ | BRGZ | BRGEZ
   datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE 
-  datatype trap_instruction   = TVS
+  datatype trap_instruction   = TVS | TNE
   datatype int_instruction    =
     ADD | ADDCC | SUB | SUBCC
-  | SMUL | SMULCC | UMUL | UMULCC 
+  | SMUL | SMULCC | UMUL | UMULCC
   | SDIV | SDIVCC | UDIV | UDIVCC 
   | AND | OR | XOR | ANDNOT | ORNOT | XORNOT
   | SRA | SRL | SLL
@@ -49,6 +50,8 @@ sig
     REGop of register
   | IMMop of imm
 
+  datatype software_trap_number = ST_INT_OVERFLOW
+
   datatype specific_instruction =
     NOP  (* stylized for easier reading *)
   (* For sethi, the imm must be of the HIGH flavor *)
@@ -62,12 +65,13 @@ sig
   | LOADI  of loadi_instruction * register * imm * register
   | STOREF of storef_instruction * register * imm * register
   | LOADF  of loadf_instruction * register * imm * register
-  | CBRANCHI of cbri_instruction * label
+  | CBRANCHI of cbri_instruction * label * bool (* predict taken? *)
+  | CBRANCHR of cbrr_instruction * register * label * bool (* predict taken? *)
   | CBRANCHF of cbrf_instruction * label
   | INTOP  of int_instruction * register * operand * register
   | FPOP   of fp_instruction * register * register * register
   | FPMOVE  of fpmove_instruction * register * register
-  | TRAP of trap_instruction
+  | TRAP of trap_instruction * software_trap_number
 
   structure Machine : MACHINE where type specific_instruction = specific_instruction
 

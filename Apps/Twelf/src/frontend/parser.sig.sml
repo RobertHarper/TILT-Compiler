@@ -1,4 +1,4 @@
-(*$import Prelude PARSING StreamStructs TP_RECON NAMES MODE_RECON THM_RECON TextIO *)
+(*$import Prelude TopLevel PARSING StreamStructs TP_RECON NAMES MODE_RECON THM_RECON TextIO *)
 (* Top-Level Parser *)
 (* Author: Frank Pfenning *)
 

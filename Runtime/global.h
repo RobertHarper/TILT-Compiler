@@ -4,9 +4,6 @@
 /* From Basis - access is safe only though GetGlobal */
 val_t GetGlobal(ptr_t);
 
-ptr_t getOverflowExn(void);
-ptr_t getDivExn(void);
-
 extern mem_t RuntimeGlobalData_Start, RuntimeGlobalData_Cur, RuntimeGlobalData_End; 
 extern mem_t datastart, dataend;
 extern mem_t textstart, textend;

@@ -3,21 +3,9 @@
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *
- * Available (unqualified) at top level:
- *   type list
- *   val nil, ::, hd, tl, null, length, @, app, map, foldr, foldl, rev
- *
- * Consequently the following are not visible at top level:
- *   val last, nth, take, drop, concat, revAppend, mapPartial, find, filter,
- *       partition, exists, all, tabulate
- *   exception Empty
- *
- * The following infix declarations will hold at top level:
- *   infixr 5 :: @
- *
  *)
 
-structure List : LIST =
+structure List :> LIST where type 'a list = 'a list =
   struct
 
 (*
@@ -31,7 +19,7 @@ structure List : LIST =
 *)
     datatype list = datatype list
 
-    exception Empty
+    exception Empty = Empty
 
     fun null [] = true | null _ = false
 
@@ -73,13 +61,16 @@ structure List : LIST =
             | loop(acc, _::x) = loop(acc+1,x)
           in loop(0,l) end
 
+(*
     fun rev l = let 
           fun loop ([], acc) = acc
             | loop (a::r, acc) = loop(r, a::acc)
           in
 	    loop (l, [])
 	  end
-
+*)
+    val rev = rev
+	
     fun op @(x,[]) = x
       | op @(x,l) = let 
           fun f([],l) = l
@@ -161,9 +152,12 @@ structure List : LIST =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:09  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:21  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:09  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:50:16  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Mode Syntax *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)
@@ -15,8 +15,8 @@ sig
   and Marg = Marg of Mode * string option
 
   val reset : unit -> unit
-  val installMode : (int (*IntSyn.cid*) * ModeSpine) -> unit 
-  val modeLookup : int (*IntSyn.cid*) -> ModeSpine option
+  val installMode : (IntSyn.cid * ModeSpine) -> unit 
+  val modeLookup : IntSyn.cid -> ModeSpine option
 
   val modeEqual : Mode * Mode -> bool
   val modeToString : Mode -> string

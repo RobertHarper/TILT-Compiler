@@ -1,4 +1,4 @@
-(*$import Prelude Array Int FUNSYN INTSYN WHNF CONV GlobalStructs *)
+(*$import Prelude TopLevel Array Int FUNSYN INTSYN WHNF CONV GlobalStructs *)
 (* Internal syntax for functional proof term calculus *)
 (* Author: Carsten Schuermann *)
 
@@ -25,7 +25,7 @@ struct
 
   datatype CtxBlock =                   (* ContextBlocks              *)
     CtxBlock of 
-      label option * IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*)	(* B ::= l : Phi              *) 
+      label option * IntSyn.dctx	(* B ::= l : Phi              *) 
 
   datatype LFDec =			(* Contexts                   *)
     Prim of IntSyn.Dec			(* LD ::= x :: A              *)

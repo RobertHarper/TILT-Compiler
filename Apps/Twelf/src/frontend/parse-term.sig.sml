@@ -8,7 +8,7 @@ sig
   structure Parsing : PARSING
   structure ExtSyn : EXTSYN
 
-  val parseTerm' : (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front -> ExtSyn.term * (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front(*ExtSyn.term Parsing.parser*)
-  val parseDec'  : (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front -> ExtSyn.dec * (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front(*ExtSyn.dec Parsing.parser*)
+  val parseTerm' : ExtSyn.term Parsing.parser
+  val parseDec'  : ExtSyn.dec Parsing.parser
 
 end;  (* signature PARSE_TERM *)

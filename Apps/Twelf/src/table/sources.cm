@@ -1,5 +1,5 @@
 Group is
-  table.sig.sml
+  table.sig
   hash.sml
   redblack.sml
   ring.sml

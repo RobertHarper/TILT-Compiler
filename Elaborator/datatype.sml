@@ -49,7 +49,6 @@ structure Datatype
 				      map (symbol_label o AstHelp.tyvar_strip) tyvars) std_list)
 	val tyvar_labs = foldr (fn (l,acc) => if (Listops.member_eq(eq_label,l,acc))
 						  then acc else l::acc) [] tyvar_labs
-
 	val num_tyvar = length tyvar_labs
 	val tyvar_vars = map (fn lab => fresh_named_var "poly") tyvar_labs
 	val tyvar_cons = map CON_VAR tyvar_vars
@@ -293,17 +292,29 @@ structure Datatype
 		in  map2count mapper (type_labs,type_vars)
 		end
 
-	(* ----------------- compute the equality function  ------------------- *)
+	(* ----------------- compute the equality function and reduced sdecs_eq and sigpoly_eq  ------------------- *)
 	local
 	    val var_poly_dec = DEC_MOD(mpoly_var,false,
 				       SelfifySig context (PATH(mpoly_var,[]),sigpoly_eq))
 	    val ctxt = add_context_dec(context, var_poly_dec)
 	    val ctxt = add_context_entries(ctxt, map (CONTEXT_SDEC o #2) 
 						(top_type_sbnd_sdec @ type_sbnd_sdecs))
-	in  val eq_exp_con = eqcomp(ctxt, if is_monomorphic 
-					      then CON_VAR top_type_var
-					  else CON_APP(CON_VAR top_type_var, tyvar_mprojs))
-				    (*  top_type_tyvar *)
+	    val eq_con = if is_monomorphic 
+			     then CON_VAR top_type_var
+			 else CON_APP(CON_VAR top_type_var, tyvar_mprojs)
+				       (*  top_type_tyvar *)
+	in
+	    val eq_exp_con = eqcomp(ctxt, eq_con)
+	    val (sdecs_eq, sigpoly_eq) =
+		if is_monomorphic orelse not (isSome eq_exp_con)
+		    then (sdecs_eq, sigpoly_eq)
+		else
+		    let val (eq_exp,_) = valOf eq_exp_con
+			val vpath = (mpoly_var, [])
+			val sdecs_eq' = reduce_typearg_sdecs (eq_exp, vpath, sdecs_eq)
+			val sigpoly_eq' = SIGNAT_STRUCTURE sdecs_eq'
+		    in  (sdecs_eq', sigpoly_eq')
+		    end
 	end
 
 

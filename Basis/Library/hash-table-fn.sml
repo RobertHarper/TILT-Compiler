@@ -1,4 +1,4 @@
-(*$import Prelude Word32 HASH_KEY MONO_HASH_TABLE Array HashTableRep *)
+(*$import Prelude Word HASH_KEY MONO_HASH_TABLE Array HashTableRep *)
 (* hash-table-fn.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.

@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Abstraction *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 
@@ -18,6 +18,6 @@ sig
   val abstractDef : (IntSyn.Exp * IntSyn.Exp) -> 
                        (int * (IntSyn.Exp * IntSyn.Exp))
 
-  val collectEVars : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*) * IntSyn.Exp list -> IntSyn.Exp list
+  val collectEVars : IntSyn.dctx * IntSyn.eclo * IntSyn.Exp list -> IntSyn.Exp list
 
 end;  (* signature ABSTRACT *)

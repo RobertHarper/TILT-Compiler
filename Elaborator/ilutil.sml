@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats *)
+(*$import Prelude TopLevel PRIMUTIL IL Il Symbol Int Array String Prim Ppil Util Listops Name Tyvar PrimUtil IlPrimUtilParam ILUTIL ListMergeSort Stats List *)
 (* Il Utility *)
 structure IlPrimUtil :> PRIMUTIL where type con = Il.con
                                  where type exp = Il.exp = PrimUtil(structure PrimUtilParam = IlPrimUtilParam)
@@ -10,7 +10,7 @@ structure IlUtil :> ILUTIL =
     open Util Listops Name 
     open Prim Tyvar
 
-    type tyvar = (context,con) Tyvar.tyvar
+    type tyvar = (context,con,exp) Tyvar.tyvar
     exception BUG
     exception UNIMP
     val debug = Stats.ff("IlutilDebug")
@@ -19,7 +19,7 @@ structure IlUtil :> ILUTIL =
 
     exception FAILURE of string
 
-    
+
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
     fun fresh_named_con (ctxt,s) = CON_TYVAR (fresh_named_tyvar (ctxt,s))
@@ -76,6 +76,67 @@ structure IlUtil :> ILUTIL =
 	if (n<0 orelse n>25) then error "canonical_tyvar_label given number out of range"
 	else symbol_label(Symbol.tyvSymbol ((if is_equal then "''" else "'")
 					    ^ (String.str (chr (ord #"a" + n)))))
+
+
+    (* Internal labels follow special conventions *)
+    (* Some internal labels are opened for lookup *)
+    (* Some internal labels are non-exported *)
+    (* Eq labels are identifiable as eq labels *)
+	 
+    val questionable_str = "+Q"
+    val open_str = "+O"
+    val nonexport_str = "-X"
+    val eq_str = "+E"
+    val dt_str = "+O+D"
+    val cluster_str = "+C"
+
+    fun is_questionable lab =  isSome(substring (questionable_str,label2name lab))
+    fun is_open lab = isSome(substring (open_str,label2name lab))
+    fun is_nonexport lab =  isSome(substring (nonexport_str,label2name lab))
+    fun is_eq lab = isSome(substring (eq_str,label2name lab))
+    fun is_dt lab = isSome(substring (dt_str,label2name lab))
+    fun is_cluster lab = isSome(substring (cluster_str,label2name lab))
+
+    local
+	fun to_meta_lab meta_str lab =
+	  let val str = label2name lab
+	      val final_str = meta_str ^ str
+	  in  internal_label final_str
+	  end
+    in  val to_questionable = to_meta_lab questionable_str
+	val to_open = to_meta_lab open_str 
+	val to_nonexport = to_meta_lab nonexport_str
+	val to_eq = to_meta_lab eq_str
+	val to_dt = to_meta_lab dt_str
+	val to_cluster = to_meta_lab cluster_str
+    end
+
+    local 
+	fun split str = 
+	    let val len = size str
+		fun loop n = if ((n+1) < len andalso 
+				 (String.sub(str,n) = #"+" orelse
+				  String.sub(str,n) = #"-"))
+				 then loop (n+2) else n
+		val start = loop 0
+	    in  (String.substring(str,0, start),
+		 String.substring(str,start,len - start))
+	    end
+
+    in
+	fun prependToInternalLabel (prefix, lab) = 
+	    let val str = Name.label2name lab
+		val (attributes, name) = split str
+		val name = prefix ^ name
+	    in  internal_label(attributes ^ name)
+	    end
+	
+	fun label2name lab = 
+	    let val str = Name.label2name lab
+		val (attributes, name) = split str
+	    in  name
+	    end
+    end
 
 
     val unit_exp : exp = RECORD[]
@@ -485,20 +546,25 @@ structure IlUtil :> ILUTIL =
 
       fun rebind_free_type_var(skip : int, tv_stamp : stamp,
 			       argcon : con, context, targetv : var) 
-	  : ((context,con)Tyvar.tyvar * label * bool) list = 
+	  : ((context,con,exp)Tyvar.tyvar * label * bool) list = 
 	let 
 	    val _ = debugdo (fn () => (print "rebind_free_type_var called on argcon = ";
 				       pp_con argcon;
 				       print "\n"))
-	  val free_tyvar = ref ([] : (context,con) Tyvar.tyvar list)
+	  val free_tyvar = ref ([] : (context,con,exp) Tyvar.tyvar list)
 	  fun con_handler (CON_TYVAR tv,_) = 
 	      ((case (tyvar_deref tv) of
 		    SOME _ => ()
 		  | NONE => (if (not (member_eq(eq_tyvar,tv,!free_tyvar))
 				 andalso not (tyvar_isconstrained tv)
 				 andalso (tyvar_after tv_stamp tv))
-				 then free_tyvar := (tv::(!free_tyvar))
-			     else ()));
+				 then (debugdo (fn () =>
+						(print "free, eligble tyvar: ";
+						 print (tyvar2string tv); print "\n"));
+				       free_tyvar := (tv::(!free_tyvar)))
+			     else (debugdo (fn () =>
+					    (print "free, ineligble tyvar: ";
+					     print (tyvar2string tv); print "\n")))));
 		    NONE)
 	    | con_handler (CON_FLEXRECORD r,_) = (flex_handler r;
 						NONE)
@@ -519,8 +585,18 @@ structure IlUtil :> ILUTIL =
 	  fun mapper (n,tv) = 
 	      let val is_equal = tyvar_is_use_equal tv
 		  val lbl = canonical_tyvar_label is_equal (n + skip)
-		  val proj = CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
+		  val m = MOD_VAR targetv
+		  val proj = CON_MODULE_PROJECT(m, lbl)
+		  val _ = debugdo (fn () =>
+				   (print "setting "; pp_con (CON_TYVAR tv); print " to ";
+				    pp_con proj; print "\n"))
 		  val _ = tyvar_set(tv,proj)
+		  val eq = MODULE_PROJECT(m, to_eq lbl)
+		  val _ = case tyvar_eq_hole tv
+			    of NONE => ()
+			     | SOME os => (debugdo (fn () =>
+						    (print "   with equality: "; pp_exp eq; print "\n"));
+					   oneshot_set(os, eq))
 	      in  (tv, lbl, is_equal)
 	      end
 	in mapcount mapper free_tyvar
@@ -702,6 +778,7 @@ structure IlUtil :> ILUTIL =
 	  val findPathsInMod = findPaths f_mod
 	  val findPathsInSig = findPaths f_signat
 	  val findPathsInCon = findPaths f_con
+	  val findPathsInExp = findPaths f_exp
       end
 
       local
@@ -758,47 +835,6 @@ structure IlUtil :> ILUTIL =
 	in f_con handlers argcon
 	end
 
-
-      fun find_tyvars_flexes con = 
-	  let val tyvars = ref []
-	      val flexes = ref []
-	      (* opt is not in acc *)
-	      fun compress tv acc opt = 
-		  (case tyvar_deref tv of
-		       NONE => ((case opt of 
-				     NONE => ()
-				   | SOME c => app (fn tv => tyvar_reset(tv,c)) acc);
-				false)
-		     | SOME (c as CON_TYVAR tv2) => compress tv2 (tv::acc) (SOME c)
-		     | SOME c => (app (fn tv => tyvar_reset(tv,c)) acc; true))
-	      fun help in_array_ref argcon = 
-		  let
-		      fun con_handler (c : con,bound : var list) = 
-			  (case c of
-			       CON_TYVAR tyvar =>
-				   let val seen = member_eq(eq_tyvar,tyvar,map #2 (!tyvars))
-				       val set =  compress tyvar [] NONE
-				       val _ = if (seen orelse set)
-						   then ()
-					       else (tyvars := (in_array_ref,tyvar) :: (!tyvars))
-				   in  NONE
-				   end
-			      | CON_FLEXRECORD r => (flexes := r :: (!flexes); NONE)
-			      | CON_ARRAY elemc => (help true elemc; SOME c)
-			      | CON_REF elemc => (help true elemc; SOME c)
-			      | _ => NONE)
-		      val handlers = STATE(default_bound,
-					   {sdec_handler = default_sdec_handler,
-					    exp_handler = default_exp_handler,
-					    con_handler = con_handler,
-					    mod_handler = default_mod_handler,
-					    sig_handler = default_sig_handler})
-		      val _ = f_con handlers argcon
-		  in  (!tyvars, !flexes)
-		  end
-	  in  help false con
-	  end
-      
 
 
       fun ConApply (reduce_small,cfun,cargs) = 
@@ -887,65 +923,6 @@ structure IlUtil :> ILUTIL =
     val error_mod = fn m => fn s => error_obj pp_mod  "module" m s
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
-    (* Internal labels follow special conventions *)
-    (* Some internal labels are opened for lookup *)
-    (* Some internal labels are non-exported *)
-    (* Eq labels are identifiable as eq labels *)
-	 
-    val questionable_str = "+Q"
-    val open_str = "+O"
-    val nonexport_str = "-X"
-    val eq_str = "+E"
-    val dt_str = "+O+D"
-    val cluster_str = "+C"
-
-    fun is_questionable lab =  isSome(substring (questionable_str,label2name lab))
-    fun is_open lab = isSome(substring (open_str,label2name lab))
-    fun is_nonexport lab =  isSome(substring (nonexport_str,label2name lab))
-    fun is_eq lab = isSome(substring (eq_str,label2name lab))
-    fun is_dt lab = isSome(substring (dt_str,label2name lab))
-    fun is_cluster lab = isSome(substring (cluster_str,label2name lab))
-
-    local
-	fun to_meta_lab meta_str lab =
-	  let val str = label2name lab
-	      val final_str = meta_str ^ str
-	  in  internal_label final_str
-	  end
-    in  val to_questionable = to_meta_lab questionable_str
-	val to_open = to_meta_lab open_str 
-	val to_nonexport = to_meta_lab nonexport_str
-	val to_eq = to_meta_lab eq_str
-	val to_dt = to_meta_lab dt_str
-	val to_cluster = to_meta_lab cluster_str
-    end
-
-    local 
-	fun split str = 
-	    let val len = size str
-		fun loop n = if ((n+1) < len andalso 
-				 (String.sub(str,n) = #"+" orelse
-				  String.sub(str,n) = #"-"))
-				 then loop (n+2) else n
-		val start = loop 0
-	    in  (String.substring(str,0, start),
-		 String.substring(str,start,len - start))
-	    end
-
-    in
-	fun prependToInternalLabel (prefix, lab) = 
-	    let val str = Name.label2name lab
-		val (attributes, name) = split str
-		val name = prefix ^ name
-	    in  internal_label(attributes ^ name)
-	    end
-	
-	fun label2name lab = 
-	    let val str = Name.label2name lab
-		val (attributes, name) = split str
-	    in  name
-	    end
-    end
 
     fun exp_reduce e : exp option = 
 	(case e of
@@ -997,4 +974,40 @@ structure IlUtil :> ILUTIL =
 	   | _ => (print "Cannot unroll this con: ";
 		   pp_con con; print "\n";
 		   error "Bad con to ConUnroll"))
+
+    fun make_typearg_sdecs' [] = []
+      | make_typearg_sdecs' ((type_lab,is_eq) :: more) = 
+	let 
+	    val rest = make_typearg_sdecs' more
+	    val type_str = label2string type_lab
+	    val type_var = fresh_named_var type_str 
+	    val type_sdec = SDEC(type_lab,DEC_CON(type_var, KIND, NONE, false))
+	    val eq_lab = to_eq type_lab
+	    val eq_str = label2string eq_lab
+	    val eq_var = fresh_named_var eq_str
+	    val eq_con =  con_eqfun (CON_VAR type_var)
+	    val eq_sdec = SDEC(eq_lab,DEC_EXP(eq_var, eq_con,NONE,false))
+	in  if (is_eq) then (type_sdec :: eq_sdec :: rest) else type_sdec :: rest
+	end
+    fun make_typearg_sdecs arg =
+	let val sdecs = make_typearg_sdecs' arg
+	    val _ = debugdo (fn () =>
+			     (print "make_typearg_sdecs made: "; pp_sdecs sdecs; print "\n"))
+	in  sdecs
+	end
+
+    fun reduce_typearg_sdecs (exp, (modVar,modLabels) : Name.vpath, sdecs) =
+	let
+	    val freePaths = findPathsInExp exp
+	    fun free l = Name.PathSet.member (freePaths, (modVar, modLabels @ [l]))
+	    fun discard (SDEC (l, DEC_EXP(_, CON_ARROW _, _, _))) = is_eq l andalso not (free l)
+	      | discard _ = false
+	    val (irrelevant, kept) = List.partition discard sdecs
+	    val _ = debugdo (fn () =>
+			     (print "reduce_typearg_sdecs keeping: "; pp_sdecs kept; print "\n";
+			      print "and discarding: "; pp_sdecs irrelevant; print "\n";
+			      print "exp = "; pp_exp exp; print "\n"))
+	in  kept
+	end
+	     
   end

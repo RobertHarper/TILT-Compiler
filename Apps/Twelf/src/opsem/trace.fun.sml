@@ -84,8 +84,8 @@ struct
 	  then detail := n
 	else print ("Trace warning: detail must be positive\n")
 
-    val traceTSpec : int (*I.cid*) Spec ref = ref None
-    val breakTSpec : int (*I.cid*) Spec ref = ref None
+    val traceTSpec : I.cid Spec ref = ref None
+    val breakTSpec : I.cid Spec ref = ref None
 
     fun toCids (nil) = nil
       | toCids (name::names) =
@@ -118,7 +118,7 @@ struct
 \v X1 ... Xn - variables --- show instantiation of X1 ... Xn\n\
 \? for help"
 
-    val currentGoal : (I.Dec I.Ctx(*I.dctx*) * I.Exp) ref =
+    val currentGoal : (I.dctx * I.Exp) ref =
           ref (I.Null, I.Uni (I.Type)) (* dummy initialization *)
 
     val currentEVarInst : (I.Exp * string) list ref =

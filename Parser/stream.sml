@@ -1,8 +1,11 @@
-(*$import YaccBase *)
+(*$import Prelude YaccBase *)
 
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
+# Revision 1.4  2000/11/27  22:37:09  swasey
+# *** empty log message ***
+# 
 # Revision 1.3  98/01/21  20:40:50  pscheng
 # moved the .sig files to .sig.sml file
 # 

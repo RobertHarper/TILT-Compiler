@@ -1,4 +1,4 @@
-(*$import Prelude PreTime List Word32 Int OS_IO_SIG PreOS Posix POSIX_extern *)
+(*$import Prelude PreTime List Word SysWord Int OS_IO PreOS Posix POSIX_extern *)
 (* os-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -95,7 +95,7 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
     in
     fun poll (pds, timeOut) = let
 	  val timeOut = (case timeOut
-		 of SOME(TIME{sec, usec}) => SOME(sec, usec)
+		 of SOME(PreTime.TIME{sec, usec}) => SOME(sec, usec)
 		  | NONE => NONE
 		(* end case *))
 	  val info = Ccall(posix_os_poll, List.map fromPollDesc pds, timeOut)
@@ -116,9 +116,12 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 (*
 
  * $Log$
-# Revision 1.3  2000/09/21  01:08:38  pscheng
+# Revision 1.4  2000/11/27  22:36:42  swasey
 # *** empty log message ***
 # 
+ * Revision 1.3  2000/09/21 01:08:38  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.2  2000/09/12  18:55:02  swasey
 # Changes for cutoff compilation
 # 

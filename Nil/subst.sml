@@ -1,5 +1,134 @@
 (*$import Prelude TopLevel Listops Util Name Nil List TextIO Ppnil NILSUBST Stats NilError NilRewrite NilRename Option *)
 
+signature SUBST_DELAY =
+sig
+    type 'a delay
+    val delay : (unit -> 'a) -> 'a delay
+    val immediate : 'a -> 'a delay
+    val thaw : 'a delay -> 'a
+    val delayed : 'a delay -> bool
+end
+
+signature SUBST_DLIST =
+sig
+    type 'a dlist
+    val DNIL : 'a dlist
+    val LCONS : 'a * 'a dlist -> 'a dlist
+    val RCONS : 'a dlist * 'a -> 'a dlist
+    val dempty : 'a dlist -> bool
+    val dListToList : 'a dlist -> 'a list
+    val dListFromList : 'a list -> 'a dlist
+    val dListApp : 'a dlist * 'a dlist -> 'a dlist
+end
+
+signature SUBST_HELP =
+sig
+    structure Delay : SUBST_DELAY
+    structure Dlist : SUBST_DLIST
+    val make_lets : bool ref
+    val error : string -> string -> 'a
+end
+
+(* Here we define the abstract interface for substitutions.  This section 
+ * defines the bits that are generic to all levels in a functor parameterized 
+ * by the actual substitution functions, which are level specific. 
+ *)
+
+functor SubstFn(structure Help : SUBST_HELP
+		type item                                          (*What is it: e.g. con, exp *)
+		type item_subst =				   (*The substitution type  *)
+		    item Help.Delay.delay Name.VarMap.map * (Name.var * item Help.Delay.delay) Help.Dlist.dlist
+		val substItemInItem : item_subst -> item -> item   (*For composition *)
+		val renameItem : item -> item                      (*To avoid shadowing *)
+		val printer : item -> unit)                        (*To print them out *)
+  :> SUBST where type item = item
+	     and type item_subst = item_subst =
+struct
+
+  (* Help *)
+  val make_lets = Help.make_lets
+  val error = Help.error
+  open Help.Dlist Help.Delay
+
+  (* Util *)
+  val mapopt   = Util.mapopt
+	
+  (* Listops *)
+  val map_second = Listops.map_second
+      
+  (* Name *)
+  structure VarMap = Name.VarMap
+  type var = Name.var
+
+      
+  type item = item
+  type item_subst = item_subst
+
+  fun rename (item :item) : item delay = delay (fn () => renameItem item)
+
+  fun empty () : item_subst = (VarMap.empty,DNIL)
+	
+  fun substitute (subst,items) var = mapopt thaw (VarMap.find (subst,var))
+	
+  fun toList (subst : item_subst) = if !make_lets then map_second thaw (dListToList (#2 subst)) else (map_second thaw (VarMap.listItemsi (#1 subst)))
+	
+  fun item_insert (subst as (s,i),var,delay) = 
+	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
+
+  fun sim_add subst (var,value) : item_subst = item_insert(subst,var,rename value)
+  
+  fun addl (var,item,(subst,items)) = 
+	let
+	  val item_delay = rename item
+	  val map_subst = item_insert(empty(),var,item_delay)
+	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
+	in item_insert((VarMap.map domap subst,items),var,item_delay)
+	end
+  
+  fun addr (s as (subst,items),var,item) = 
+	let 
+	  val item_delay = rename item
+	in (VarMap.insert (subst,var,delay (fn () => substItemInItem s (thaw item_delay))),
+	    RCONS(items,(var,item_delay)))
+	end
+
+  fun is_empty (subst,_) = (VarMap.numItems subst) = 0
+	
+  fun compose (s1 as (subst1,items1),(subst2,items2)) = 
+	let
+	  fun domap item_delay = delay (fn () => substItemInItem s1 (thaw item_delay))
+	  val subst2 = VarMap.map domap subst2
+	  val subst = VarMap.unionWith (fn _ => error "compose" "Duplicate variables in substitution composition") (subst1,subst2)
+	in (subst,dListApp(items1,items2))
+	end
+  
+  fun merge ((subst1,items1),(subst2,items2)) = 
+	(VarMap.unionWith (fn _ => error "merge" "Duplicate variables in merged substitutions") (subst1,subst2),
+	 dListApp(items1,items2))
+
+  fun simFromList (list : (var * item) list) : item_subst = List.foldl (fn (v,s) => sim_add s v) (empty()) list
+
+  fun seqFromList (list : (var * item) list) : item_subst = List.foldl (fn ((v,i),s) => addr (s,v,i)) (empty()) list
+
+  (* N.B. doesn't print items
+   *)
+  fun printf (printer : item -> unit) ((subst,items): item_subst) = 
+	let
+	  fun print1 (v,a) = 
+	    (TextIO.print (Name.var2string v);
+	     TextIO.print "->";
+	     printer (thaw a);
+	     TextIO.print "\n")
+	in
+	  (Util.lprintl "Substitution is";
+	   VarMap.appi print1 subst;
+	   Util.printl "")
+	end
+
+  val print = printf printer
+end
+
+
 (* This stucture implements and abstract type of substitutions, supporting
  * both simultaneuous (parallel) and sequential substitutions.  Included
  * are notions of composition of substitutions
@@ -52,12 +181,11 @@ structure NilSubst :> NILSUBST =
     (* Thunks.  This is useful to avoid renaming things that
      * won't actually be substituted in.
      *)
-    local
+    structure Delay :> SUBST_DELAY =
+    struct
       datatype 'a thunk = FROZEN of (unit -> 'a) | THAWED of 'a
       type 'a delay = 'a thunk ref
       val eager = Stats.ff "subst_eager"
-    in
-      type 'a delay = 'a delay
       fun delay thunk = ref(if (!eager)
 			      then THAWED (thunk())
 			    else FROZEN thunk)
@@ -69,13 +197,13 @@ structure NilSubst :> NILSUBST =
 				      end
       fun delayed (ref (FROZEN _)) = true
 	| delayed (ref (THAWED _)) = false
-    end
+    end (* Delay *)
+    open Delay
 
-    local
+    structure Dlist :> SUBST_DLIST =
+    struct
       (* (aa,bb) == aa @ (rev bb) *)
       type 'a dlist = ('a list * 'a list)
-    in
-      type 'a dlist = 'a dlist
       val DNIL = (nil,nil)
       fun LCONS (a,(left,right)) = if !make_lets then (a::left,right) else DNIL
       fun RCONS ((left,right),a) = if !make_lets then (left,a::right) else DNIL
@@ -87,7 +215,8 @@ structure NilSubst :> NILSUBST =
       fun dListToList (left,right)    = left @ (rev right)
       fun dListFromList ll = (ll,nil)
       fun dListApp ((l1,r1),(l2,r2))  = (l1 @ (List.revAppend (r1,(l2 @ (rev r2)))),nil)
-    end
+    end (* Dlist *)
+    open Dlist
 
     type 'a map = 'a VarMap.map
 
@@ -271,99 +400,29 @@ structure NilSubst :> NILSUBST =
     end  
 
 
-
     (* Here we define the abstract interface for substitutions.  This section 
      * defines the bits that are generic to all levels in a functor parameterized 
      * by the actual substitution functions, which are level specific. 
      *)
-
-    functor SubstFn(type item                                          (*What is it: e.g. con, exp *)
-		    type item_subst = 
-		      item delay VarMap.map * (var * item delay) dlist (*The substitution type  *)
-		    val substItemInItem : item_subst -> item -> item   (*For composition *)
-		    val renameItem : item -> item                      (*To avoid shadowing *)
-		    val printer : item -> unit)                        (*To print them out *)
-      :> SUBST where type item = item
-		 and type item_subst = item_subst =
+    structure Help =
     struct
-      
-      type var = Name.var
-      type item = item
-      type item_subst = item_subst
-
-      fun rename (item :item) : item delay = delay (fn () => renameItem item)
-
-      fun empty () : item_subst = (VarMap.empty,DNIL)
-	
-      fun substitute (subst,items) var = mapopt thaw (VarMap.find (subst,var))
-	
-      fun toList (subst : item_subst) = if !make_lets then map_second thaw (dListToList (#2 subst)) else (map_second thaw (VarMap.listItemsi (#1 subst)))
-	
-      fun item_insert (subst as (s,i),var,delay) = 
-	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
-
-      fun sim_add subst (var,value) : item_subst = item_insert(subst,var,rename value)
-      
-      fun addl (var,item,(subst,items)) = 
-	let
-	  val item_delay = rename item
-	  val map_subst = item_insert(empty(),var,item_delay)
-	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
-	in item_insert((VarMap.map domap subst,items),var,item_delay)
-	end
-      
-      fun addr (s as (subst,items),var,item) = 
-	let 
-	  val item_delay = rename item
-	in (VarMap.insert (subst,var,delay (fn () => substItemInItem s (thaw item_delay))),
-	    RCONS(items,(var,item_delay)))
-	end
-
-      fun is_empty (subst,_) = (VarMap.numItems subst) = 0
-	
-      fun compose (s1 as (subst1,items1),(subst2,items2)) = 
-	let
-	  fun domap item_delay = delay (fn () => substItemInItem s1 (thaw item_delay))
-	  val subst2 = VarMap.map domap subst2
-	  val subst = VarMap.unionWith (fn _ => error "compose" "Duplicate variables in substitution composition") (subst1,subst2)
-	in (subst,dListApp(items1,items2))
-	end
-      
-      fun merge ((subst1,items1),(subst2,items2)) = 
-	(VarMap.unionWith (fn _ => error "merge" "Duplicate variables in merged substitutions") (subst1,subst2),
-	 dListApp(items1,items2))
-
-      fun simFromList (list : (var * item) list) : item_subst = List.foldl (fn (v,s) => sim_add s v) (empty()) list
-
-      fun seqFromList (list : (var * item) list) : item_subst = List.foldl (fn ((v,i),s) => addr (s,v,i)) (empty()) list
-
-      (* N.B. doesn't print items
-       *)
-      fun printf (printer : item -> unit) ((subst,items): item_subst) = 
-	let
-	  fun print1 (v,a) = 
-	    (TextIO.print (Name.var2string v);
-	     TextIO.print "->";
-	     printer (thaw a);
-	     TextIO.print "\n")
-	in
-	  (Util.lprintl "Substitution is";
-	   VarMap.appi print1 subst;
-	   Util.printl "")
-	end
-
-      val print = printf printer
+	structure Delay = Delay
+	structure Dlist = Dlist
+	val make_lets = make_lets
+	val error = error
     end
 
     (* Instantiate the functor for constructors*)
-    structure C = SubstFn(type item = con
+    structure C = SubstFn(structure Help = Help
+			  type item = con
 			  type item_subst = con_subst
 			  val substItemInItem = substConInCon
 			  val renameItem = NilRename.renameCon
 			  val printer = Ppnil.pp_con)
       
     (* Instantiate the functor for expressions*)
-    structure E = SubstFn(type item = exp
+    structure E = SubstFn(structure Help = Help
+			  type item = exp
 			  type item_subst = exp_subst
 			  val substItemInItem = substExpInExp
 			  val renameItem = NilRename.renameExp

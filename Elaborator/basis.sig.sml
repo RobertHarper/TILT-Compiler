@@ -1,4 +1,4 @@
-(*$import Il *)
+(*$import Prelude TopLevel Il *)
 (* Contains the initial basis context to translate in. *)
 signature BASIS = 
   sig

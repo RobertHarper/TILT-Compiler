@@ -1,11 +1,5 @@
 # ------------------------------ Makefile Usage ------------------------
-# While in this directory, execute "make target=foo out=goo"
-#
-# This will assume the existence of an "foo.s" file as input.
-# The final executable will be deposited as "goo".
-# The object file "foo.o" will be created as an intermediate.
-# By default, the non-threading version is generated.
-# Define "runtime_lib" to be "runtime.hprof.a" to turn on heapprofile.
+# While in this directory, execute "gmake runtime"
 # ----------------------------------------------------------------------
 
 # ------------------------------ Top Targets ---------------------------
@@ -15,7 +9,7 @@ all:
 	echo "Try gmake runtime"
 
 purge:
-	rm -rf obj*/*.o obj*/*.d obj*/*.i *~
+	rm -rf obj*/*.o obj*/*.d obj*/*.i *~ runtime.*.a
 
 test:
 	echo ${asm_name}
@@ -43,7 +37,7 @@ sys_name=${${full_sys_name}_sys_name}
 chip_name=${${full_sys_name}_chip_name}
 
 ASM=${sys_name}_asm
-ROOT_OBJ=posix gcstat  forward gc_semi gc_gen gc_large gc_para gc_semi_para gc_gen_para gc_semi_conc gc_gen_conc gc create main show service global hash queue stats stack bitmap platform memobj thread exn signal  gc_${ASM} service_${ASM} rooms barriers
+ROOT_OBJ=posix gcstat  forward gc_semi gc_gen gc_large gc_para gc_semi_para gc_gen_para gc_semi_conc gc_gen_conc gc create main show service global hash queue stats stack bitmap platform memobj thread exn signal  gc_${ASM} service_${ASM} rooms barriers sigaction
 objdir=obj_${sys_name}
 COREFILES_OBJ=${patsubst %,${objdir}/%.o,${ROOT_OBJ}}
 COREFILES_HPROF_OBJ=${patsubst %,${objdir}/%.hprof.o,${ROOT_OBJ}}
@@ -78,7 +72,7 @@ endif
 M4=m4
 M4FLAGS=-D${sys_name} prelude.m4
 
-# -std will define __STDC__ 
+# -std will define __STDC__
 alpha_osf_cppflags=-newc -std
 solaris_cppflags=
 CPP=${CC} -E
@@ -92,7 +86,9 @@ solaris_cc=gcc
 
 # The xtaso flag instructs the Alpha compiler to honor #pragma pointer_size directives
 # This allows the runtime to use pointer type that are 32-bit when interacting with ML.
-alpha_osf_cflags=-warnprotos -xtaso -inline size -w0 -c -g3
+# The -fprm d flag instructs the Alpha compiler to respect dynamic IEEE rounding mode
+# changes.
+alpha_osf_cflags=-warnprotos -xtaso -inline size -w0 -c -g3 -fprm d
 solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g 
 CC=${${sys_name}_cc}
 CFLAGS=${CPPFLAGS} ${${sys_name}_cflags}

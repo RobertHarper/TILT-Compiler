@@ -1,4 +1,4 @@
-(*$import Prelude Substring OS_PATH OS_PathFn *)
+(*$import Prelude String Substring OS_PATH OS_PathFn *)
 (* os-path.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,10 +7,13 @@
  *
  *)
 
-structure OS_Path : OS_PATH = OS_PathFn (
+structure OS_Path = OS_PathFn (
   struct
-
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val op ^ = String.^
+					 
     exception Path
+    exception InvalidArc
 
     datatype arc_kind = Null | Parent | Current | Arc of string
 
@@ -39,13 +42,18 @@ structure OS_Path : OS_PATH = OS_PathFn (
 
     val arcSepChar = #"/"
 
+    fun toUnixPath (s : string) = s
+    fun fromUnixPath (s : string) = s
   end);
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:55:02  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:43  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:55:02  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  2000/08/22 18:28:24  swasey
  * Brought up to date
  *

@@ -3,6 +3,8 @@
  * Copyright 1989,1992 by AT&T Bell Laboratories
  *)
 
+(* Based on grammar in SML/NJ 110.0.7 *)
+
 open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
 
 type raw_symbol = FastSymbol.raw_symbol
@@ -18,16 +20,16 @@ fun markdec(d as MarkDec _, _,_) = d
 fun marktop(t as MarkTop _, _,_) = t
   | marktop(t,a,b) = MarkTop(t,(a,b))
 
-  val asteriskHash = StrgHash.hashString "*"
-  val asteriskString = "*"
-  val equalHash = StrgHash.hashString "="
-  val equalString = "="
-  val bogusHash = StrgHash.hashString "BOGUS"
-  val bogusString = "BOGUS"
-  val quotedBogusHash = StrgHash.hashString "'BOGUS"
-  val quotedBogusString = "'BOGUS"
-  val quotedBogusHash = StrgHash.hashString "'BOGUS"
-  val quotedBogusString = "'BOGUS"
+val asteriskHash = StrgHash.hashString "*"
+val asteriskString = "*"
+val equalHash = StrgHash.hashString "="
+val equalString = "="
+val bogusHash = StrgHash.hashString "BOGUS"
+val bogusString = "BOGUS"
+val quotedBogusHash = StrgHash.hashString "'BOGUS"
+val quotedBogusString = "'BOGUS"
+val quotedBogusHash = StrgHash.hashString "'BOGUS"
+val quotedBogusString = "'BOGUS"
 
   %%
   %term
@@ -38,17 +40,16 @@ fun marktop(t as MarkTop _, _,_) = t
     | REAL of string
     | STRING of string 
     | CHAR of string
-    | ABSTRACTION | ABSTYPE | AND
+    | ABSTYPE | AND
     | ARROW | AS | BAR | CASE | DATATYPE | DOTDOTDOT | ELSE | END | EQUALOP
     | EQTYPE | EXCEPTION | DO | DOT | DARROW | FN | FUN | FUNCTOR | HANDLE 
-    | HASH | IF | IMPORT | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL 
-    | NONFIX | OF 
+    | HASH | IF | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL | NONFIX | OF 
     | OP | OPEN | OVERLOAD | RAISE | REC | SHARING | SIG | SIGNATURE | STRUCT
     | STRUCTURE | THEN | TYPE | VAL | WHERE | WHILE | WILD | WITH | WITHTYPE 
     | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
-    | RBRACKET | RPAREN | ORELSE | ANDALSO | FUNSIG | VECTORSTART | BEGINQ 
+    | RBRACKET | RPAREN | ORELSE | ANDALSO | VECTORSTART | BEGINQ 
     | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
-    | DOLLAR | EXTERN | CCALL | PLET | PVAL
+    | IMPORT | EXTERN | CCALL | PLET | PVAL
 
 %nonterm ident of FastSymbol.raw_symbol
        | id of FastSymbol.raw_symbol
@@ -82,7 +83,6 @@ fun marktop(t as MarkTop _, _,_) = t
        | plabels of  ((symbol * pat) list * bool)
        | pat_2c of  pat list
        | pat_list of  pat list
-       | or_pat_list of  pat list
        | vb of  vb list
        | constraint of ty option
        | rvb of  rvb list
@@ -95,8 +95,8 @@ fun marktop(t as MarkTop _, _,_) = t
        | tyvarseq of tyvar list
        | tyvar_pc of tyvar list
        | db of  db list
-       | dbrhs of dbrhs                
-       | constrs of  (symbol * ty option) list
+       | dbrhs of dbrhs
+       | constrs of (symbol * ty option) list
        | constr of  symbol * ty option
        | eb of  eb list
        | qid_p of Symbol.symbol list list
@@ -108,8 +108,7 @@ fun marktop(t as MarkTop _, _,_) = t
        | spec_s of  spec list
        | spec of  spec list
        | idents of spec list
-       | strspec of  (symbol * sigexp option * path option) list
-       | fctspec of  (symbol * fsigexp) list
+       | strspec of  (symbol * sigexp * path option) list
        | tyspec of  (symbol * tyvar list * ty option) list
        | valspec of (symbol * ty) list
        | exnspec of (symbol * ty option) list
@@ -118,20 +117,17 @@ fun marktop(t as MarkTop _, _,_) = t
        | whspec of wherespec list
        | sign of  sigexp
        | sigconstraint_op of  sigexp sigConst
-       | fsigconstraint_op of fsigexp sigConst
        | sigb of  sigb list
-       | fsigb of  fsigb list
-       | fsig of  fsigexp
        | str of  strexp
        | arg_fct of  (strexp * bool) list
-       | sdecs of  dec
-(*       | sdecs' of  dec   *)
+       | strdec of  dec
+       | strdecs of  dec
        | sdec of  dec
+       | sdecs of  dec
        | strb of  strb list
        | fparam of  symbol option * sigexp
        | fparamList of  (symbol option * sigexp) list
        | fctb of  fctb list
-       | fct_exp of fsigexp sigConst -> fctexp
        | interdec of  dec
        | strlist of string list
        | imple of string list
@@ -161,13 +157,13 @@ fun marktop(t as MarkTop _, _,_) = t
 
 %name ML
 
-%keyword ABSTRACTION ABSTYPE AND AS CASE DATATYPE DOTDOTDOT ELSE END 
+%keyword ABSTYPE AND AS CASE DATATYPE DOTDOTDOT ELSE END 
   EQTYPE EXCEPTION  DO  DARROW  FN  FUN  FUNCTOR  HANDLE
   IF IN INCLUDE  INFIX  INFIXR  LET  LOCAL  NONFIX  OF  OP
   OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
   STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
   ORELSE ANDALSO 
-  DOLLAR CCALL EXTERN PLET PVAL
+  CCALL EXTERN PLET PVAL
 
 %change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
         DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
@@ -269,7 +265,6 @@ exp	: exp HANDLE match	(HandleExp{expr=exp,rules=match})
 				   elseCase=markexp(exp3,exp3left,exp3right)})
 	 | RAISE exp	     (markexp(markexp(RaiseExp exp, expleft,expright),
 				      RAISEleft,expright))
-         | DOLLAR exp           (DelayExp exp)
 	 | CCALL LPAREN exp_list RPAREN 		(CcallExp (hd exp_list, tl exp_list))
 
 app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
@@ -336,7 +331,6 @@ exp_list : exp			([exp])
 pat	: pat AS pat		(layered(pat1, pat2, 
 					 error(pat1left,pat2right)))
 	| pat COLON ty		(ConstraintPat{pattern=pat, constraint=ty})
-        | DOLLAR pat            (DelayPat pat)
 	| apats			(FlatAppPat apats)
 
 apat	: apat'		({item=apat', region=(apat'left,apat'right),
@@ -354,10 +348,6 @@ apat	: apat'		({item=apat', region=(apat'left,apat'right),
   				({item=TuplePat(pat :: pat_list),
 				  region=(LPARENleft,RPARENright),
 				  fixity=NONE})
-	| LPAREN pat BAR or_pat_list RPAREN
-				({item=OrPat(pat :: or_pat_list),
-				  region=(LPARENleft,RPARENright),
-				  fixity=NONE})
 
 apat'	: OP ident		(VarPat [varSymbol ident])
 	| ID DOT qid		(VarPat (strSymbol ID :: qid varSymbol))
@@ -369,9 +359,11 @@ apat'	: OP ident		(VarPat [varSymbol ident])
 	| LBRACKET RBRACKET	(ListPat nil)
 	| LBRACKET pat_list 
 		RBRACKET	(ListPat pat_list)
+(* problem in pattern compilation
         | VECTORSTART RBRACKET  (VectorPat nil)
 	| VECTORSTART pat_list 
 		RBRACKET	(VectorPat pat_list)
+*)
 	| LBRACE RBRACE		(unitPat)
 	| LBRACE plabels RBRACE	
 		            (let val (d,f) = plabels
@@ -399,9 +391,6 @@ plabels : plabel COMMA plabels	(let val (a,(b,fx))=(plabel, plabels)
 
 pat_list: pat			([pat])
 	| pat COMMA pat_list	(pat :: pat_list)
-
-or_pat_list : pat			([pat])
-	    | pat BAR or_pat_list	(pat :: or_pat_list)
 
 vb	: vb AND vb		(vb1 @ vb2)
 	| pat EQUALOP exp	([MarkVb(Vb{exp=exp, pat=pat}, (patleft,expright))])
@@ -445,27 +434,27 @@ tyvars	: TYVAR			([MarkTyv(Tyv(tyvSymbol TYVAR),
 	| LPAREN tyvar_pc RPAREN  (tyvar_pc)
 	|			  (nil)
 
-tyvarseq : TYVAR                 ([MarkTyv(Tyv(tyvSymbol TYVAR),
-                                         (TYVARleft,TYVARright))])
-         | LPAREN tyvar_pc RPAREN  (tyvar_pc)                      
+tyvarseq: TYVAR			([MarkTyv(Tyv(tyvSymbol TYVAR),
+					 (TYVARleft,TYVARright))])
+	| LPAREN tyvar_pc RPAREN  (tyvar_pc)
 
-tyvar_pc : TYVAR	([MarkTyv(Tyv(tyvSymbol TYVAR), (TYVARleft,TYVARright))])
-	 | TYVAR COMMA tyvar_pc
-			(MarkTyv(Tyv(tyvSymbol TYVAR),(TYVARleft,TYVARright))
-		         :: tyvar_pc)
+tyvar_pc: TYVAR	([MarkTyv(Tyv(tyvSymbol TYVAR), (TYVARleft,TYVARright))])
+	| TYVAR COMMA tyvar_pc
+		(MarkTyv(Tyv(tyvSymbol TYVAR),(TYVARleft,TYVARright))
+		 :: tyvar_pc)
 
 db	: db AND db			(db1 @ db2)
 	| tyvars ident EQUALOP dbrhs	([Db{tyc=tycSymbol ident,
 					     tyvars=tyvars,
 					     rhs=dbrhs}])
 
-dbrhs   : constrs                       (Constrs constrs)
-        | DATATYPE tycon                (Repl tycon)
+dbrhs   : constrs			(Constrs constrs)
+        | DATATYPE tycon		(Repl tycon)
 
 constrs : constr		([constr])
 	| constr BAR constrs	(constr :: constrs)
 
-constr	: op_op ident		(varSymbol ident,NONE)
+constr	: op_op ident		(varSymbol ident, NONE)
 	| op_op ident OF ty	(varSymbol ident, SOME ty)
 
 eb	: op_op ident		([EbGen{exn=(varSymbol ident),etype=NONE}])
@@ -527,30 +516,25 @@ spec_s	: 			([])
 	| SEMICOLON spec_s	(spec_s)
 
 spec	: STRUCTURE strspec	([StrSpec strspec])
-        | FUNCTOR fctspec	([FctSpec fctspec])
 	| DATATYPE db		([DataSpec{datatycs=db,withtycs=nil}])
 	| DATATYPE db WITHTYPE tb ([DataSpec{datatycs=db,withtycs=tb}])
 	| TYPE tyspec		([TycSpec(tyspec,false)])
 	| EQTYPE tyspec		([TycSpec(tyspec,true)])
 	| VAL valspec		([ValSpec valspec])
 	| EXCEPTION exnspec	([ExceSpec exnspec])
-        | SIGNATURE sigb        ([SigSpec sigb])
-	| fixity ops		([FixSpec {fixity=fixity, ops=ops}])
 	| SHARING sharespec	(sharespec)
-	| INCLUDE idents	(idents)
+	| INCLUDE sign		([IncludeSpec sign])
+	| INCLUDE ident idents	(IncludeSpec(VarSig(FastSymbol.sigSymbol ident))
+				:: idents)
 
-idents	: ident			([IncludeSpec(FastSymbol.sigSymbol ident)])
-	| ident idents		(IncludeSpec(FastSymbol.sigSymbol ident)
+idents	: ident			([IncludeSpec(VarSig(FastSymbol.sigSymbol ident))])
+	| ident idents		(IncludeSpec(VarSig(FastSymbol.sigSymbol ident))
 				 :: idents)
 
 strspec	: strspec AND strspec	(strspec1 @ strspec2)
-        | ident COLON sign      ([(strSymbol ident, SOME sign, NONE)])
-        | ident EQUALOP qid     ([(strSymbol ident, NONE, SOME(qid strSymbol))])
-        | ident COLON sign EQUALOP qid
-                                ([(strSymbol ident, SOME sign, SOME(qid strSymbol))])
-
-fctspec	: fctspec AND fctspec	(fctspec1 @ fctspec2)
-	| ident fsig		([(fctSymbol ident, fsig)])
+	| ident COLON sign	([(strSymbol ident, sign, NONE)])
+	| ident COLON sign EQUALOP qid
+				([(strSymbol ident, sign, SOME(qid strSymbol))])
 
 tyspec	: tyspec AND tyspec	(tyspec1 @ tyspec2)
 	| tyvars ID		([(tycSymbol ID,tyvars,NONE)])
@@ -565,79 +549,69 @@ exnspec : exnspec AND exnspec	(exnspec1 @ exnspec2)
 	| ident OF ty		([(varSymbol ident,SOME ty)])
 
 sharespec: sharespec AND sharespec	(sharespec1 @ sharespec2)
-         | TYPE patheqn ([MarkSpec (ShareTycSpec(patheqn tycSymbol),
-                                    (patheqnleft,patheqnright))])
-         | patheqn      ([MarkSpec (ShareStrSpec (patheqn strSymbol),
-                                    (patheqnleft,patheqnright))])
+	 | TYPE patheqn	([MarkSpec (ShareTycSpec(patheqn tycSymbol),
+				    (patheqnleft,patheqnright))])
+	 | patheqn	([MarkSpec (ShareStrSpec (patheqn strSymbol),
+				    (patheqnleft,patheqnright))])
 	
-patheqn: qid EQUALOP qid	(fn kind => [qid1 kind, qid2 kind])
-       | qid EQUALOP patheqn	(fn kind => qid kind :: patheqn kind)
+patheqn : qid EQUALOP qid	(fn kind => [qid1 kind, qid2 kind])
+        | qid EQUALOP patheqn	(fn kind => qid kind :: patheqn kind)
 
 whspec  : whspec AND whspec     (whspec1 @ whspec2)
         | TYPE tyvars qid EQUALOP ty
-                                ([WhType(qid tycSymbol,tyvars,ty)])
-        | qid EQUALOP qid       ([WhStruct(qid1 strSymbol,qid2 strSymbol)])
+				([WhType(qid tycSymbol,tyvars,ty)])
+        | qid EQUALOP qid	([WhStruct(qid1 strSymbol,qid2 strSymbol)])
 
-sign    : ident                 (MarkSig(VarSig (sigSymbol ident),
-                                         (identleft,identright)))
-        | SIG spec_s END        (MarkSig(SigSig(spec_s),(spec_sleft,spec_sright)))
+sign	: ident			(MarkSig(VarSig (sigSymbol ident),
+				         (identleft,identright)))
+	| SIG spec_s END	(MarkSig(BaseSig(spec_s),(spec_sleft,spec_sright)))
         | sign WHERE whspec     (MarkSig(AugSig(sign,whspec),(signleft,whspecright)))
 
 sigconstraint_op :		(NoSig)
 	| COLON sign		(Transparent(sign))
  	| COLONGT sign		(Opaque(sign))
 
-fsigconstraint_op :		(NoSig)
-	| COLON ident		(Transparent(VarFsig (fsigSymbol ident)))
- 	| COLONGT ident		(Opaque(VarFsig (fsigSymbol ident)))
-
 sigb	: sigb AND sigb		(sigb1 @ sigb2)
 	| ident EQUALOP sign	([Sigb{name=sigSymbol ident,def=sign}])
 
-fsigb	: fsigb AND fsigb	(fsigb1 @ fsigb2)
-	| ident fparamList EQUALOP sign
-		([Fsigb{name=fsigSymbol ident,
-			def=FsigFsig{param=fparamList,def=sign}}])
-
-fsig	: COLON ident	(VarFsig (fsigSymbol ident))
-	| fparamList COLON sign
-			(FsigFsig{param=fparamList,def=sign})
-
 str	: qid	((MarkStr(VarStr(qid strSymbol),(qidleft,qidright))))
-	| STRUCT sdecs END	
-		(MarkStr(StructStr sdecs,(STRUCTleft,ENDright)))
+	| STRUCT strdecs END	
+		(MarkStr(BaseStr strdecs,(STRUCTleft,ENDright)))
 	| qid arg_fct
-		(MarkStr(AppStr(qid fctSymbol,arg_fct), 
+		(MarkStr(AppStr(qid fctSymbol,arg_fct),
 			 (qidleft,arg_fctright)))
-	| LET sdecs IN str END	
-		(MarkStr(LetStr(sdecs, str), (LETleft,ENDright)))
+	| LET strdecs IN str END	
+		(MarkStr(LetStr(strdecs, str), (LETleft,ENDright)))
+        | str COLON sign
+	        (MarkStr(ConstrainedStr(str,Transparent sign),
+		         (strleft,signright)))
+        | str COLONGT sign
+	        (MarkStr(ConstrainedStr(str,Opaque sign),
+		         (strleft,signright)))
 
-arg_fct : LPAREN sdecs RPAREN arg_fct   ((MarkStr(StructStr sdecs,
-						  (sdecsleft,sdecsright)),
-					  false) :: arg_fct)
-	| LPAREN str RPAREN arg_fct	((str, true) :: arg_fct)
-	| LPAREN str RPAREN 		([(str, true)])
-	| LPAREN sdecs RPAREN 		([(MarkStr(StructStr sdecs,
-						   (sdecsleft,sdecsright)),
+arg_fct : LPAREN str RPAREN 		([(str, true)])
+	| LPAREN strdecs RPAREN		([(MarkStr(BaseStr strdecs,
+						   (strdecsleft,strdecsright)),
 					   false)])
 
+strdecs	: strdec strdecs	(makeSEQdec (markdec(strdec,strdecleft,strdecright),
+					     strdecs))
+	| SEMICOLON strdecs	(strdecs)
+	|			(SeqDec[])
 
 sdecs	: sdec sdecs		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
 					     sdecs))
 	| SEMICOLON sdecs	(sdecs)
 	|			(SeqDec[])
 
-
-(*
-sdecs'	: sdec sdecs'		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
-					     sdecs'))
-	 | sdec			(markdec(sdec, sdecleft,sdecright))
-*)
+strdec	: STRUCTURE strb	(StrDec strb)
+	| LOCAL strdecs IN strdecs END (LocalDec(markdec(strdecs1,
+				     strdecs1left,strdecs1right),
+  			       markdec(strdecs2,strdecs2left,strdecs2right)))
+	| ldec			(markdec(ldec,ldecleft,ldecright))
 
 sdec	: STRUCTURE strb	(StrDec strb)
-	| ABSTRACTION strb	(AbsDec strb)
 	| SIGNATURE sigb	(SigDec sigb)
-	| FUNSIG fsigb		(FsigDec fsigb)
 	| FUNCTOR fctb		(FctDec fctb)
 	| LOCAL sdecs IN sdecs END (LocalDec(markdec(sdecs1,
 						     sdecs1left,sdecs1right),
@@ -651,41 +625,18 @@ strb	: ident sigconstraint_op EQUALOP str
 	| strb AND strb		(strb1 @ strb2)
 
 fparam	: ID COLON sign		((SOME(strSymbol ID),sign))
-	| spec_s		((NONE,MarkSig(SigSig(spec_s), 
+	| spec_s		((NONE,MarkSig(BaseSig(spec_s), 
 					       (spec_sleft,spec_sright))))
 
 fparamList
 	: LPAREN fparam	RPAREN			([fparam])
-	| LPAREN fparam RPAREN fparamList	(fparam :: fparamList)
 
 fctb	: ident fparamList sigconstraint_op EQUALOP str
 		([MarkFctb(Fctb {name = fctSymbol ident,
-					   def = FctFct{params=fparamList,
-							body=str,
-					  		constraint=
-							  sigconstraint_op}},
+                                 def = BaseFct{params=fparamList, body=str,	
+				              constraint=sigconstraint_op}},
 			   (identleft,strright))])
-	| ident fsigconstraint_op EQUALOP fct_exp
-		    ([MarkFctb(Fctb {name=fctSymbol ident,
-				    def=fct_exp (fsigconstraint_op)},
-			      (identleft,fct_expright))])
 	| fctb AND fctb		(fctb1 @ fctb2)
-
-fct_exp: qid	(fn constraint => VarFct(qid fctSymbol,constraint))
-       | qid arg_fct
-  		(fn constraint =>
-		    MarkFct(AppFct(qid fctSymbol,arg_fct,constraint),
-			    (qidleft,arg_fctright)))
-       | LET sdecs IN fct_exp END	
-		(fn constraint =>
-		   MarkFct(LetFct(sdecs, fct_exp constraint),
-		   (LETleft,ENDright)))
-(*
-interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
-
-	| exp		(markdec(ValDec([Vb{exp=exp,pat=VarPat itsym}],ref []),
-				 expleft,expright))
-*)
 
 strlist: STRING strlist (STRING :: strlist)
         |               ([])
@@ -702,9 +653,12 @@ top: sdecs              (marktop(ImplTop([], sdecs), sdecsleft, sdecsright))
 
 (*
  * $Log$
-# Revision 1.8  99/05/12  15:27:42  pscheng
+# Revision 1.9  2000/11/27  22:37:01  swasey
 # *** empty log message ***
 # 
+ * Revision 1.8  1999/05/12 15:27:42  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.7  1999/01/18  20:18:24  pscheng
 # *** empty log message ***
 #

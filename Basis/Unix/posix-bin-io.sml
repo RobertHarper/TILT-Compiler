@@ -8,20 +8,16 @@
  *
  *)
 
-structure BinIO 
-    :> BIN_IO  
-    where type StreamIO.reader = BinPrimIO.reader
-    where type StreamIO.writer = BinPrimIO.writer
-(*    where type StreamIO.pos = BinPrimIO.pos  - redundant *)
-  = BinIOFn (structure OSPrimIO = PosixBinPrimIO);
-
-
+structure BinIO = BinIOFn (structure OSPrimIO = PosixBinPrimIO);
 
 (*
  * $Log$
-# Revision 1.2  98/03/21  23:59:43  pscheng
-# remove debugging bindings
+# Revision 1.3  2000/11/27  22:36:44  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  1998/03/21 23:59:43  pscheng
+ * remove debugging bindings
+ *
 # Revision 1.1  1998/03/09  19:54:24  pscheng
 # added basis
 #

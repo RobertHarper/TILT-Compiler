@@ -1,4 +1,4 @@
-(*$import Prelude ABSMACHINE INTSYN COMPSYN UNIFY INDEX TRAIL CPRINT NAMES TRACE *)
+(*$import Prelude TopLevel ABSMACHINE INTSYN COMPSYN UNIFY INDEX TRAIL CPRINT NAMES TRACE *)
 (* Abstract Machine for Tracing *)
 (* Author: Frank Pfenning *)
 
@@ -11,9 +11,9 @@ functor TMachine (structure IntSyn' : INTSYN
 		    sharing Index.IntSyn = IntSyn'
 		  structure Trail : TRAIL
 		    sharing Trail.IntSyn = IntSyn'
-(*XXX             structure CPrint : CPRINT 
+                  structure CPrint : CPRINT 
                     sharing CPrint.IntSyn = IntSyn'
-                    sharing CPrint.CompSyn = CompSyn'*)
+                    sharing CPrint.CompSyn = CompSyn'
 		  structure Names : NAMES
 		    sharing Names.IntSyn = IntSyn'
 		  structure Trace : TRACE

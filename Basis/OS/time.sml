@@ -1,19 +1,22 @@
-(*$import Prelude Int String StringCvt TIME PreTime Real64 Bool NumFormat Char *)
+(*$import Prelude Int String StringCvt TIME PreTime Real Bool NumFormat Char *)
 (* time.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *
  *)
 
-structure Time : TIME =
+structure Time :> TIME where type time = PreTime.time =
   struct
+    val uint8touint32 = TiltPrim.uint8touint32
+    val ulte = TiltPrim.ulte
+    val op^ = String.^
 
 (*    structure PB = PreBasis *)
 
   (* get time type from type-only structure *)
 (*    open Time *)
 
-    datatype time = datatype time
+    datatype time = datatype PreTime.time
     exception Time
 
     val zeroTime = TIME{sec=0, usec=0}
@@ -96,9 +99,9 @@ structure Time : TIME =
       val numZeros = String.size zeros
       fun pad 0 = []
 	| pad n = if (n <= numZeros)
-	    then [substring(zeros, 0, n)]
+	    then [String.substring(zeros, 0, n)]
 	    else zeros :: pad(n - numZeros)
-      val fmtInt = (NumFormat.fmtInt StringCvt.DEC) o Int32.fromInt
+      val fmtInt = (NumFormat.fmtInt StringCvt.DEC) o Int.fromInt
     in
     fun fmt prec (TIME{sec, usec}) = let
 	  val sec' = fmtInt sec
@@ -185,9 +188,12 @@ structure Time : TIME =
 
 (*
  * $Log$
-# Revision 1.4  2000/09/12  18:54:36  swasey
-# Changes for cutoff compilation
+# Revision 1.5  2000/11/27  22:36:39  swasey
+# *** empty log message ***
 # 
+ * Revision 1.4  2000/09/12 18:54:36  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.3  1999/09/22 15:45:11  pscheng
  * *** empty log message ***
  *

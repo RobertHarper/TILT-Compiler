@@ -11,6 +11,7 @@ signature OS_PATH =
   sig
 
     exception Path
+    exception InvalidArc
 
     val parentArc  : string
     val currentArc : string
@@ -36,22 +37,28 @@ signature OS_PATH =
     val mkCanonical : string -> string
     val isCanonical : string -> bool
 
-    val mkAbsolute  : (string * string) -> string
-    val mkRelative  : (string * string) -> string
+    val mkAbsolute  : string * string -> string
+    val mkRelative  : string * string -> string
     val isAbsolute  : string -> bool
     val isRelative  : string -> bool
 
     val isRoot      : string -> bool
 
-    val concat      : (string * string) -> string
+    val concat      : string * string -> string
+
+    val toUnixPath   : string -> string
+    val fromUnixPath : string -> string
 
   end; (* OS_PATH *)
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:06  pscheng
-# added basis
+# Revision 1.2  2000/11/27  22:36:38  swasey
+# *** empty log message ***
 # 
+ * Revision 1.1  1998/03/09 19:53:06  pscheng
+ * added basis
+ *
  * Revision 1.1.1.1  1997/01/14  01:38:21  george
  *   Version 109.24
  *

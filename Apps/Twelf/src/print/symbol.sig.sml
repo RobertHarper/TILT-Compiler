@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Prelude TopLevel *)
 signature SYMBOL =
 sig
 

@@ -1,4 +1,4 @@
-(*$import Prelude MODESYN INTSYN NAMES TABLE INDEX *)
+(*$import Prelude TopLevel MODESYN INTSYN NAMES TABLE INDEX *)
 (* Mode Syntax *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

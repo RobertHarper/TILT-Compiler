@@ -29,13 +29,13 @@ struct
   | RLdone
 
   datatype Tag = 
-    Parameter of int (*FunSyn.label*) option
+    Parameter of FunSyn.label option
   | Lemma of Info
   | None
 
   datatype State =			(* S = <n, (G, B), (IH, OH), d, O, H, F> *)
     State of int			(* Part of theorem                   *)
-	   * (FunSyn.IntSyn.Dec FunSyn.IntSyn.Ctx(*FunSyn.IntSyn.dctx*)	(* Context of Hypothesis in general not named *)
+	   * (FunSyn.IntSyn.dctx	(* Context of Hypothesis in general not named *)
            * Tag FunSyn.IntSyn.Ctx) (* Status information *)
            * (FunSyn.For * Order)	(* Induction hypothesis, order       *)
            * int			(* length of meta context            *)

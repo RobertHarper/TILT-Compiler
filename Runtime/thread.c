@@ -1,4 +1,8 @@
+#if (defined alpha_osf)
+#include <float.h>
+#elif (defined solaris)
 #include <ieeefp.h>
+#endif
 #include "general.h"
 #include "tag.h"
 #include "thread.h"
@@ -1124,7 +1128,7 @@ Thread_t *YieldRest(void)
 }
 
 /* Should be called from the timer handler.  Causes the current user thread to GC soon. */ 
-void Interrupt(struct ucontext *uctxt)
+void Interrupt(ucontext_t *uctxt)
 {
   Thread_t *th = getThread();
   if (!th->notInML) {

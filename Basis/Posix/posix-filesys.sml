@@ -1,4 +1,4 @@
-(*$import Prelude Int Word32 PreOS POSIX_extern List Time POSIX_FILE_SYS *)
+(*$import Prelude PrePosix Position Word SysWord PreOS POSIX_extern List Time POSIX_FILE_SYS String *)
 (* posix-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,23 +7,20 @@
  *
  *)
 
-structure POSIX_FileSys :> POSIX_FILE_SYS =
+structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
+					    and type gid = PrePosix.gid
+					    and type open_mode = PrePosix.open_mode =
   struct
+    val int32touint32 = TiltPrim.int32touint32
+    val op^ = String.^
+	
     val ++ = Word.orb
     val & = Word.andb
     infix ++ &
 
-    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
-
-    datatype uid = UID of word
-    datatype gid = GID of word
-
-    fun uidToWord (UID i) = i
-    fun wordToUid i = UID i
-
-    fun gidToWord (GID i) = i
-    fun wordToGid i = GID i
-
+    type uid = PrePosix.uid
+    type gid = PrePosix.gid
+	
     datatype file_desc = FD of {fd : int}
     fun intOf (FD{fd,...}) = fd
     fun fd fd = FD{fd=fd}
@@ -34,27 +31,8 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
     fun fdToIOD (FD{fd,...}) = PreOS.IO.IODesc fd
     fun iodToFD (PreOS.IO.IODesc fd) = SOME(FD{fd = fd})
 
-    val o_rdonly = w_osval "O_RDONLY"
-    val o_wronly = w_osval "O_WRONLY"
-    val o_rdwr = w_osval "O_RDWR"
-
-    datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
-    fun omodeFromWord omode =
-          if omode = o_rdonly then O_RDONLY
-          else if omode = o_wronly then O_WRONLY
-          else if omode = o_rdwr then O_RDWR
-          else raise Fail ("POSIX_FileSys.omodeFromWord: unknown mode "^
-                                  (Word32.toString omode))
-
-    fun omodeToWord O_RDONLY = o_rdonly
-      | omodeToWord O_WRONLY = o_wronly
-      | omodeToWord O_RDWR = o_rdwr
-
-    fun uidToWord (UID i) = i
-    fun wordToUid i = UID i
-    fun gidToWord (GID i) = i
-    fun wordToGid i = GID i
-
+    datatype open_mode = datatype PrePosix.open_mode
+	
     type c_dirstream = int   (* the underlying C DIRSTREAM - which is a DIR pointer *)
 
     datatype dirstream = DS of {
@@ -71,11 +49,11 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
 	    isOpen = ref true
 	  }
     fun readdir (DS{dirStrm, isOpen = ref false}) =
-	  raise Fail "readdir on closed directory stream"
+	  raise TiltExn.LibFail "readdir on closed directory stream"
 	  (* PreOS.error "readdir on closed directory stream" ??? *)
       | readdir (DS{dirStrm, ...}) = readdir' dirStrm
     fun rewinddir (DS{dirStrm, isOpen = ref false}) =
-	  raise Fail "rewinddir on closed directory stream"
+	  raise TiltExn.LibFail "rewinddir on closed directory stream"
 	  (* PreOS.error "rewinddir on closed directory stream" ??? *)
       | rewinddir (DS{dirStrm, ...}) = rewinddir' dirStrm
     fun closedir (DS{dirStrm, isOpen = ref false}) = ()
@@ -90,6 +68,9 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
     val stdout = fd 1
     val stderr = fd 2
 
+    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
+    val o_wronly = w_osval "O_WRONLY"
+	 
     structure S =
       struct
         datatype flags = MODE of word
@@ -101,7 +82,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
         fun flags ms = MODE(List.foldl (fn (MODE m,acc) => m ++ acc) 0w0 ms)
         fun anySet (MODE m, MODE m') = (m & m') <> 0w0
         fun allSet (MODE m, MODE m') = (m & m') = m
- 
+
         val irwxu = MODE(w_osval "irwxu")
         val irusr = MODE(w_osval "irusr")
         val iwusr = MODE(w_osval "iwusr")
@@ -146,9 +127,9 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
 
 
     fun openf (fname : string, omode, O.OFL flags) =
-          fd(Ccall (posix_filesys_openf,fname, flags ++ (omodeToWord omode), 0w0))
+          fd(Ccall (posix_filesys_openf,fname, flags ++ (PrePosix.omodeToWord omode), 0w0))
     fun createf (fname:string, omode, O.OFL oflags, S.MODE mode) = let
-          val flags = O.o_creat ++ oflags ++ (omodeToWord omode)
+          val flags = O.o_creat ++ oflags ++ (PrePosix.omodeToWord omode)
           in
             fd(Ccall(posix_filesys_openf,fname, flags, mode))
           end
@@ -226,8 +207,8 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
             nlink = SysWord.toInt(#5 sr),	(* probably should be an int in
 						 * the run-time too.
 						 *)
-            uid = UID(#6 sr),
-            gid = GID(#7 sr),
+            uid = PrePosix.wordToUid(#6 sr),
+            gid = PrePosix.wordToGid(#7 sr),
             size = #8 sr,
             atime = Time.fromSeconds (#9 sr),
             mtime = Time.fromSeconds (#10 sr),
@@ -256,8 +237,8 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
     fun access (fname, aml) = Ccall(posix_filesys_access,fname, amodeToWord aml)
     fun chmod (fname, S.MODE m) = Ccall(posix_filesys_chmod,fname, m)
     fun fchmod (FD{fd}, S.MODE m) = Ccall(posix_filesys_fchmod,fd, m)
-    fun chown (fname, UID uid, GID gid) = Ccall(posix_filesys_chown,fname, uid, gid)
-    fun fchown (fd, UID uid, GID gid) = Ccall(posix_filesys_fchown,intOf fd, uid, gid)
+    fun chown (fname, uid, gid) = Ccall(posix_filesys_chown,fname, PrePosix.uidToWord uid, PrePosix.gidToWord gid)
+    fun fchown (fd, uid, gid) = Ccall(posix_filesys_fchown,intOf fd, PrePosix.uidToWord uid, PrePosix.gidToWord gid)
 
     fun utime (file, NONE) = Ccall(posix_filesys_utime,file, ~1, 0)
       | utime (file, SOME{actime, modtime}) = let

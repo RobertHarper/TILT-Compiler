@@ -1,4 +1,4 @@
-(*$import RAND TopLevel Real64 LibBase *)
+(*$import RAND TopLevel Real LibBase *)
 (* rand.sml
  *
  * COPYRIGHT (c) 1991 by AT&T Bell Laboratories.  See COPYRIGHT file for details

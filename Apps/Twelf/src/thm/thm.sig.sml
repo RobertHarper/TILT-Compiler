@@ -1,4 +1,4 @@
-(*$import Prelude THMSYN PATHS *)
+(*$import Prelude TopLevel THMSYN PATHS *)
 (* Theorem Declarations *)
 (* Author: Carsten Schuermann *)
 
@@ -10,5 +10,5 @@ sig
   exception  Error of string
 
   val install : ThmSyn.TDecl * (Paths.region * Paths.region list) 
-                -> int (*ThmSyn.ModeSyn.IntSyn.cid*) list
+                -> ThmSyn.ModeSyn.IntSyn.cid list
 end;  (* signature THM *)

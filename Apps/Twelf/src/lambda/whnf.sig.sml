@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Weak Head-Normal Forms *)
 (* Authors: Frank Pfenning, Carsten Schuermann *)
 
@@ -14,20 +14,20 @@ sig
   val etaContract : IntSyn.Exp -> int	(* can raise Eta *)
 
   (* Weak head normalization *)
-  val whnf : (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*) -> (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*)
-  val expandDef : (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*) -> (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*)
+  val whnf : IntSyn.eclo -> IntSyn.eclo
+  val expandDef : IntSyn.eclo -> IntSyn.eclo
   val etaExpandRoot : IntSyn.Exp -> IntSyn.Exp
-  val whnfEta : ((IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*) * (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*)) -> ((IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*) * (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*))
+  val whnfEta : (IntSyn.eclo * IntSyn.eclo) -> (IntSyn.eclo * IntSyn.eclo)
   val lowerEVar : IntSyn.Exp -> IntSyn.Exp
 
   (* Full normalization *)
-  val normalize: (IntSyn.Exp * IntSyn.Sub)(*IntSyn.eclo*) -> IntSyn.Exp
+  val normalize: IntSyn.eclo -> IntSyn.Exp
   val normalizeDec: IntSyn.Dec * IntSyn.Sub -> IntSyn.Dec
-  val normalizeCtx: IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) -> IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*)
+  val normalizeCtx: IntSyn.dctx -> IntSyn.dctx
 
   (* Inverting substitutions *)
   val invert : IntSyn.Sub -> IntSyn.Sub
-  val strengthen: IntSyn.Sub * IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) -> IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) 
+  val strengthen: IntSyn.Sub * IntSyn.dctx -> IntSyn.dctx 
   val isId : IntSyn.Sub -> bool
 
   val cloInv : IntSyn.Exp * IntSyn.Sub -> IntSyn.Exp

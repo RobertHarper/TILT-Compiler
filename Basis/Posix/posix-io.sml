@@ -1,4 +1,4 @@
-(*$import Int Prelude Word8Vector Word8Array List POSIX_IO_SIG POSIX_FileSys POSIX_Process Word32 POSIX_extern *)
+(*$import Prelude PrePosix SysInt Int Position Word8Vector Word8Array List POSIX_IO POSIX_FileSys POSIX_Process SysWord POSIX_extern String *)
 (* posix-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,17 +7,21 @@
  *
  *)
 
-structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode 
-				     and type file_desc = POSIX_FileSys.file_desc =
+structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
+				 and type file_desc = POSIX_FileSys.file_desc
+				 and type O.flags = POSIX_FileSys.O.flags =
 
   struct
+      
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val unsafe_vector2array = TiltPrim.unsafe_vector2array
+    val op^ = String.^
 
     structure FS = POSIX_FileSys
 
-    structure OM : sig 
-                      datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR 
-                    end = FS
-    open OM
+    datatype open_mode = datatype PrePosix.open_mode
 
     type word = SysWord.word
     type s_int = SysInt.int
@@ -28,7 +32,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode
 
     fun osval (s : string) : s_int = Ccall(posix_io_num,s)
     val w_osval = SysWord.fromInt o osval
-    fun fail (fct,msg) = raise Fail ("POSIX_IO."^fct^": "^msg)
+    fun fail (fct,msg) = raise TiltExn.LibFail ("POSIX_IO."^fct^": "^msg)
 
     type file_desc = FS.file_desc
     type pid = POSIX_Process.pid
@@ -126,24 +130,8 @@ structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode
         val cloexec = FDF(w_osval "cloexec")
       end
 
-    structure O =
-      struct
-        datatype flags = FS of word
-
-        fun wordTo w = FS w
-        fun toWord (FS w) = w
-
-        fun flags ms = FS(List.foldl (fn (FS m,acc) => m ++ acc) 0w0 ms)
-        fun anySet (FS m, FS m') = (m & m') <> 0w0
-        fun allSet (FS m, FS m') = (m & m') = m
-
-        val append   = FS(w_osval "append")
-        val dsync    = FS(w_osval "dsync")
-        val nonblock = FS(w_osval "nonblock")
-        val rsync    = FS(w_osval "rsync")
-        val sync     = FS(w_osval "sync")
-      end
-
+    structure O = POSIX_FileSys.O
+	
     fun fcntl_d (x : s_int, y : s_int) : s_int = Ccall(posix_io_fcntl_d,x,y)
     fun fcntl_gfd (x : s_int) : word = Ccall(posix_io_fcntl_gfd, x)
     fun fcntl_sfd (x : s_int, y : word) : unit = Ccall(posix_io_fcntl_sfd, x, y)
@@ -155,9 +143,9 @@ structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode
     fun getfl fd = let
           val (sts, omode) = fcntl_gfl (fs_intof fd)
           in
-            (O.FS sts, FS.omodeFromWord omode)
+            (O.wordTo sts, PrePosix.omodeFromWord omode)
           end
-    fun setfl (fd, O.FS sts) = fcntl_sfl (fs_intof fd, sts)
+    fun setfl (fd, sts) = fcntl_sfl (fs_intof fd, O.toWord sts)
 
     datatype lock_type = F_RDLCK | F_WRLCK | F_UNLCK
 
@@ -226,9 +214,12 @@ structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:39  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:39  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:39  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:12  pscheng
  * *** empty log message ***
  *

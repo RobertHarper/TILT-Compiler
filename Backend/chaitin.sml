@@ -607,7 +607,7 @@ struct
 				  print "free_ftemps are "; print_reglist free_ftemps; print "\n";
 				  raise e))
 
-		 fun allocAny mover _ [] precode localmap = (precode, localmap)
+		 fun allocAny mover _ [] precode localmap = (List.concat precode, localmap)
                    | allocAny mover temps (src :: rest) precode localmap = 
 		     (case getreg src of
 			IN_REG r => 
@@ -646,7 +646,7 @@ struct
 	       (case instr of
 		  BASE(ILABEL _) => [instr]
 		| BASE(RTL (JMP(Raddr,rtllabs))) => 
-		      let val fixup_code = map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots
+		      let val fixup_code = List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots)
 			  val (def,use) = defUse instr
 			  val {precode, srcmap, dstmap, postcode} = putInRegs use def
 			  val jump_reg = (if isPhysical Raddr then Raddr else 
@@ -681,7 +681,7 @@ struct
 *)
 			    
 		      fun stack_fixup_code1 () = 
-			(map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots) 
+			(List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots))
 		      val stack_fixup_code2 = deallocate_stack_frame stackframe_size
 			
 		      val no_moddef_info = { regs_modified = [] : register list,
@@ -753,8 +753,8 @@ struct
 		     end) (* allocateCall *)
 		  
 		  | BASE(RTL(RETURN{results})) =>
-		       let val callee_restore_code = 
-			 map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots
+		       let val callee_restore_code =
+			   List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots)
 			   val res : instruction list = callee_restore_code @ 
 			       (deallocate_stack_frame stackframe_size) @
 			       [BASE(RET(false, 1))]
@@ -772,10 +772,10 @@ struct
 				   if !delete_moves andalso eqRegs r r' 
 				       then []
 				   else [BASE(MOVE(r,r'))]
-			     | (ON_STACK l,IN_REG r') => [pop(r',l)]
-			     | (IN_REG r,ON_STACK l') => [push(r,l')]
+			     | (ON_STACK l,IN_REG r') => pop(r',l)
+			     | (IN_REG r,ON_STACK l') => push(r,l')
 			     | (ON_STACK l,ON_STACK l') =>
-				       [pop(Rat,l),push(Rat,l')]
+				       pop(Rat,l) @ push(Rat,l')
 			     | _ => error "allocateInstr: MOVE"
 		       end
                  | _ =>
@@ -795,13 +795,13 @@ struct
 		            val instr' =
 			       case instr of
 				  BASE(JSR(link, Raddr, hint, labels)) =>
-					  BASE(JSR(link, fs Raddr,hint, labels))
-				| BASE(RET args) => BASE(RET args)
+					  [BASE(JSR(link, fs Raddr,hint, labels))]
+				| BASE(RET args) => [BASE(RET args)]
 				| BASE(PUSH(src,al)) => push(fs src,al)
 				| BASE(POP(dst,al)) => pop(fd dst,al)
-				| i => translate_to_real_reg(i,fs,fd)
+				| i => [translate_to_real_reg(i,fs,fd)]
 
-			in precode @ (instr' :: postcode)
+			in List.concat [precode, instr', postcode]
 			end)
 	                (* allocateInstr *)
 	       
@@ -1039,7 +1039,7 @@ struct
 	   val reversed_i = ((std_entry_code()) @
 			     (allocate_stack_frame (stackframe_size, prevframe_maxoffset)) @
 			     [BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
-			     (map (fn (r, i) => push(r, i)) callee_save_slots))
+			     (List.concat (map (fn (r, i) => push(r, i)) callee_save_slots)))
 	   val ordered_i = rev (map NO_ANN reversed_i)
        in instrs := !instrs @ ordered_i
        end

@@ -20,8 +20,9 @@ signature ILUTIL =
     type path = Il.path
     type context = Il.context
     type decs = Il.decs
-    type tyvar = (context,con) Tyvar.tyvar
+    type tyvar = (context,con,exp) Tyvar.tyvar
 
+	
     val fresh_con : context -> con
     val fresh_named_con : context * string -> con
 
@@ -104,6 +105,8 @@ signature ILUTIL =
     val prependToInternalLabel : string * label -> label   (* Keeps characteristics *)
     val label2name : label -> string                       (* Lose all characteristics *)
 
+    val canonical_tyvar_label : bool (*is_eq*) -> int -> label
+	
     (* special values *)
     val con_unit : con
     val con_string : con
@@ -174,6 +177,7 @@ signature ILUTIL =
     val findPathsInMod : mod    -> Name.PathSet.set
     val findPathsInSig : signat -> Name.PathSet.set
     val findPathsInCon : con    -> Name.PathSet.set
+    val findPathsInExp : exp    -> Name.PathSet.set
 
     (* ----------- Functions that compute object sizes ----------- *)
     val con_size : con -> int
@@ -181,7 +185,7 @@ signature ILUTIL =
     val bnd_size : bnd -> int
     val sig_size : signat -> int
 
-
+(*
     (* ----------- Functions related to type inference ----------- 
        find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag
                             indicating whether it occurred inside a CON_REF or CON_ARRAY
@@ -189,7 +193,7 @@ signature ILUTIL =
 			    also performs path compression on chains of CON_TYVARs
     *)
     val find_tyvars_flexes : con -> (bool * tyvar) list * Il.flexinfo ref list
-
+*)
 
     (* ------------ More Miscellaneous/General Substituter ------- *)
     type handler = (exp -> exp option) * (con -> con option) * 
@@ -218,15 +222,13 @@ signature ILUTIL =
 			     if all occurrences of the modvar cannot be removed,
 				 an exception is generated
 
-        rebind_free_type_var:  given a type and the current context and a variable v,
-                    change all free type BUT not constructor variables to a 
-		    projection of v.fresh_label().  Also take a list of labels
-		    and tyvars and convert the tyvars to projections.  These are
-			not considered newly generated.
-                    Finally, also return the the list of the newly generated labels
-                    and a bool indicating whether the type variable is an eqtype 
-		The initial int indicates how many tyvar names to skip.
-			       *)
+        rebind_free_type_var: given a type and the current context and a variable v,
+                    change all free type BUT not constructor variables to a projection of
+                    v.fresh_label() and bind their equality expression holes, when
+                    appropriate, to the corresponding equality function projection.
+                    Finally, also return the the list of the newly generated labels and a
+                    bool indicating whether the type variable is an eqtype.  The initial
+                    int indicates how many tyvar names to skip.  *)
 
     val con_subst_conapps : (con * (con * con list -> con option)) -> con
     val remove_modvar_type : con * var * Il.sdecs -> con
@@ -238,6 +240,8 @@ signature ILUTIL =
     val sig_resolved : signat -> bool
 
 
+    (* Help creating type/eqtype sigs *)
+    val make_typearg_sdecs : (label * bool) list -> Il.sdecs
+    val reduce_typearg_sdecs : exp * Name.vpath * Il.sdecs -> Il.sdecs
+	
   end;
-
-

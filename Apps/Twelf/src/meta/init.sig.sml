@@ -1,4 +1,4 @@
-(*$import Prelude FUNSYN STATESYN *)
+(*$import Prelude TopLevel FUNSYN STATESYN *)
 (* Initialization *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude FUNSYN STATESYN *)
+(*$import Prelude TopLevel FUNSYN STATESYN *)
 (* Inference: Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

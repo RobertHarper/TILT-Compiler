@@ -1,4 +1,4 @@
-(*$import Prelude PARSING StreamStructs LEXER *)
+(*$import Prelude TopLevel PARSING StreamStructs LEXER *)
 functor Parsing
   (structure Stream' : STREAM
    structure Lexer' : LEXER

@@ -19,6 +19,17 @@ signature DATE =
     exception Date
 	(* raised on errors, as described below *)
 
+    val date : {
+	    year   : int,
+	    month  : month,
+	    day    : int,
+	    hour   : int,
+	    minute : int,
+	    second : int,
+	    offset : Time.time option
+	  } -> date
+	(* creates a date from the given values. *)
+
     val year    : date -> int
 	(* returns the year (e.g., 1997) *)
     val month   : date -> month
@@ -35,26 +46,20 @@ signature DATE =
 	(* returns the day of the week *)
     val yearDay : date -> int
 	(* returns the day of the year *)
-    val isDst   : date -> bool option
-	(* returns SOME(true) if daylight savings time is in effect; returns
-	 * SOME(false) if not, and returns NONE if we don't know.
-	 *)
+
     val offset  : date -> Time.time option
 	(* return time west of UTC.  NONE is localtime, SOME(Time.zeroTime)
 	 * is UTC.
 	 *)
 
-    val date : {
-	    year   : int,
-	    month  : month,
-	    day    : int,
-	    hour   : int,
-	    minute : int,
-	    second : int,
-	    offset : Time.time option
-	  } -> date
-	(* creates a date from the given values. *)
+    val isDst   : date -> bool option
+	(* returns SOME(true) if daylight savings time is in effect; returns
+	 * SOME(false) if not, and returns NONE if we don't know.
+	 *)
 
+    val localOffset : unit -> Time.time
+	(* return the offset from UTC for the local time *)
+ 
     val fromTimeLocal : Time.time -> date
 	(* returns the date for the given time in the local timezone.
 	 * this is like the ANSI C function localtime.
@@ -73,12 +78,10 @@ signature DATE =
 
     val toString   : date -> string
     val fmt        : string -> date -> string
-(** not yet implemented **
     val fromString : string -> date option
-    val scan       : (char, 'a) StringCvt.reader -> (date, 'a) StringCvt.reader
-**)
+    val scan : (char, 'a) StringCvt.reader -> (date, 'a) StringCvt.reader
 
-    val compare : (date * date) -> order
+    val compare : date * date -> order
 	(* returns the relative order of two dates. *)
 
   end;
@@ -86,9 +89,12 @@ signature DATE =
 
 (*
  * $Log$
-# Revision 1.2  2000/08/21  20:29:19  swasey
-# Changes for the new Manager.
+# Revision 1.3  2000/11/27  22:36:17  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/08/21 20:29:19  swasey
+ * Changes for the new Manager.
+ *
 # Revision 1.1  98/03/09  15:45:44  pscheng
 # adding the basis
 # 

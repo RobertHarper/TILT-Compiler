@@ -1150,10 +1150,6 @@ struct
 	      in (LOCATION(REGISTER(false, I dest)), state)
 	      end
 
-	  fun add_ibar b1 b2 = (add_instr (b1 INT_TT); add_instr (b2 INT_TT))
-	  fun trapZero result = (add_ibar SOFT_ZBARRIER HARD_ZBARRIER; result)
-	  fun trapOver result = (add_ibar SOFT_VBARRIER HARD_VBARRIER; result)
-
 	  (* ----------- binary and unary float operations ----------------- *)
 	  fun op2f oper : term * state =
 	      let val (vl_list,state) = xexp_list(state,elist)
@@ -1247,13 +1243,13 @@ struct
 	    | eq_float fs => cmpf EQ
 	    | neq_float fs => cmpf NE
 
-	    | plus_int W32 =>  trapOver(op2i (true,ADDT))
-	    | mul_int W32 =>   trapOver(op2i (true,MULT))
-	    | minus_int W32 => trapOver(op2i (false,SUBT))
+	    | plus_int W32 =>  op2i (true,ADDT)
+	    | mul_int W32 =>   op2i (true,MULT)
+	    | minus_int W32 => op2i (false,SUBT)
 	    | div_int W32 =>   error "ml style div not implemented!"
 	    | mod_int W32 =>   error "ml style mod not implemented!"
-	    | quot_int W32 =>  trapZero(op2i (false,DIVT))
-	    | rem_int W32 =>   trapZero(op2i (false,MODT))
+	    | quot_int W32 =>  op2i (false,DIVT)
+	    | rem_int W32 =>   op2i (false,MODT)
 
 	    | plus_uint W32 =>  op2i (true, ADD)
 	    | mul_uint W32 =>   op2i (true, MUL)

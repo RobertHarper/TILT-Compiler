@@ -1,4 +1,4 @@
-(*$import Prelude Array COMPSYN GLOBAL INTSYN NAMES *)
+(*$import Prelude TopLevel Array COMPSYN GLOBAL INTSYN NAMES *)
 (* Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)
@@ -16,7 +16,7 @@ struct
   datatype Goal =                       (* Goals                      *)
     Atom of IntSyn.Exp                  (* g ::= p                    *)
   | Impl of ResGoal * IntSyn.Exp        (*     | (r,A,a) => g         *)
-            * int (*IntSyn.cid*) * Goal		
+            * IntSyn.cid * Goal		
   | All  of IntSyn.Dec * Goal           (*     | all x:A. g           *)
 
   and ResGoal =                         (* Residual Goals             *)
@@ -77,7 +77,7 @@ struct
   (* The dynamic clause pool --- compiled version of the context *)
   (* Dynamic programs: context with synchronous clause pool *)
 
-  datatype DProg = DProg of IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (ResGoal * IntSyn.Sub * int (*IntSyn.cid*)) option IntSyn.Ctx
+  datatype DProg = DProg of IntSyn.dctx * (ResGoal * IntSyn.Sub * IntSyn.cid) option IntSyn.Ctx
 
   (* Static programs --- compiled version of the signature *)
   datatype ConDec =			(* Compiled constant declaration *)

@@ -18,6 +18,8 @@
 	.globl  Yield
 	.globl	memOrder
 	.globl	memBarrier
+	.globl  OverflowFromML
+	.globl  DivFromML
 
 	.proc	07
 	.align	4
@@ -251,6 +253,50 @@ raise_exception_raw:
 	jmpl	ASMTMP_REG, %g0			! jump not return and do not link
 	nop
 	.size	raise_exception_raw,(.-raise_exception_raw)
+
+ ! ----------------- OverflowFromML --------------------------------------------------------------------
+ ! Ignores link register
+ ! Does not use a stack frame
+ ! -----------------------------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+OverflowFromML:
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
+	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
+	call	save_regs					
+	nop
+	mov	THREADPTR_REG, %l0				! when calling C code, %l0 (but not %g2) is unmodified
+	call	getOverflowExn					! normal C call to get exn packet
+	nop
+	mov	RESULT_REG, CSECONDARG_REG			! normal C call to raise_exception_raw
+	mov	%l0, CFIRSTARG_REG
+	ba	raise_exception_raw
+	nop
+	.size OverflowFromML,(.-OverflowFromML)
+
+ ! ----------------- DivFromML -------------------------------------------------------------------------
+ ! Ignores link register
+ ! Does not use a stack frame
+ ! -----------------------------------------------------------------------------------------------------
+	.proc	07
+	.align  4
+DivFromML:
+	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
+	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
+	call	save_regs					
+	nop
+	mov	THREADPTR_REG, %l0				! when calling C code, %l0 (but not %g2) is unmodified
+	call	getDivExn					! normal C call to get exn packet
+	nop
+	mov	RESULT_REG, CSECONDARG_REG			! normal C call to raise_exception_raw
+	mov	%l0, CFIRSTARG_REG
+	ba	raise_exception_raw
+	nop
+	.size DivFromML,(.-DivFromML)
 
 	.data
 

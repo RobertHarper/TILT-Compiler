@@ -5,10 +5,19 @@
  *
  *)
 
-structure Char :> CHAR where type char = char = 
+structure Char :> CHAR where type char = char
+                         and type string = string = 
   struct
 
-(*
+    val int32touint32 = TiltPrim.int32touint32
+    val && = TiltPrim.&&
+    val uplus = TiltPrim.uplus
+    val ult = TiltPrim.ult
+    val unsafe_sub = TiltPrim.unsafe_sub
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val unsafe_array = TiltPrim.unsafe_array
+;(*
     structure C = InlineT.Char
 
     val op + = InlineT.DfltInt.+
@@ -18,17 +27,19 @@ structure Char :> CHAR where type char = char =
     val itoc : int -> char = InlineT.cast
     val ctoi : char -> int = InlineT.cast
 *)
-    val itoc = chr
+    val itoc = TiltPrim.int32touint8
     val ctoi = ord
 
     type char = char
+    type string = string
 
-    val chr = chr
-    val ord = ord
-    val minChar : char	= chr 0
+    val minChar : char	= itoc 0
     val maxOrd		= 255
-    val maxChar	: char	= chr maxOrd
+    val maxChar	: char	= itoc maxOrd
 
+    fun chr (i : int) : char = if 0 <= i andalso i <= maxOrd then itoc i
+			       else raise General.Chr
+    val ord = ord
 
     fun pred (c : char) : char = let
 	  val c' = (ctoi c - 1)
@@ -59,7 +70,7 @@ structure Char :> CHAR where type char = char =
       fun mkArray (s, sLen) = 
 	  let
 	      val sLen = int32touint32 sLen
-	      val ca = array(maxOrd+1,#"\000")
+	      val ca = unsafe_array (int32touint32 (maxOrd+1),#"\000")
 	      fun ins i = if ult(i,sLen)
 			      then (unsafe_update (ca, ord'(unsafe_vsub(s, i)), #"\001");
 				    ins(uplus(i,0w1)))
@@ -70,7 +81,7 @@ structure Char :> CHAR where type char = char =
     in
 	fun contains "" = (fn c => false)
 	  | contains s = 
-	    let val sLen = size s
+	    let val sLen = PreString.size s
 	    in
 		if (sLen = 1)
 		    then let val c' = unsafe_vsub(s, 0w0)
@@ -81,7 +92,7 @@ structure Char :> CHAR where type char = char =
 	    end
 	fun notContains "" = (fn c => true)
 	  | notContains s = 
-	    let val sLen = size s
+	    let val sLen = PreString.size s
 	    in
 		if (sLen = 1)
 		    then let val c' = unsafe_vsub(s,0w0)
@@ -122,8 +133,8 @@ structure Char :> CHAR where type char = char =
 	    \\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
 	  \"
     fun inSet (c : char, s : word) = let
-	  val m = int32touint32(ord(vsub(ctypeTbl, ord c)))
-	  in  (m && s) <> 0w0
+	  val m = int32touint32(ord(unsafe_vsub(ctypeTbl, int32touint32 (ord c))))
+	  in  &&(m, s) <> 0w0
 	  end
 
   (* predicates on integer coding of Ascii values *)
@@ -215,7 +226,7 @@ structure Char :> CHAR where type char = char =
 		    unsafe_vsub (PreString.chars, int32touint32(c'+64)))
 	      end
 
-    fun fromCString s = raise LibFail "Char.fromCString not implemented"
+    fun fromCString s = raise TiltExn.LibFail "Char.fromCString not implemented"
 
     fun toCString #"\a" = "\\a"
       | toCString #"\b" = "\\b"

@@ -1,4 +1,4 @@
-(*$import Prelude List Word8Vector Word8Array Int POSIX_FileSys POSIX_Process Word32 Byte POSIX_TTY POSIX_extern *)
+(*$import Prelude List Word8Vector Word8Array SysInt POSIX_FileSys POSIX_Process SysWord Byte POSIX_TTY POSIX_extern *)
 (* posix-tty.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,10 +7,11 @@
  *
  *)
 
-structure POSIX_TTY :> POSIX_TTY
-    where type pid = POSIX_Process.pid
-    and type file_desc = POSIX_FileSys.file_desc =
+structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
+				   and type file_desc = POSIX_FileSys.file_desc =
   struct
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
 
     structure FS = POSIX_FileSys
     structure P = POSIX_Process
@@ -189,30 +190,35 @@ structure POSIX_TTY :> POSIX_TTY
     fun getlflag (TIOS{lflag, ...}) = lflag
     fun getcc (TIOS{cc,...}) = cc
 
-    fun getospeed (TIOS{ospeed,...}) = ospeed
-    fun getispeed (TIOS{ispeed,...}) = ispeed
+    structure CF =
+      struct
+	fun getospeed (TIOS{ospeed,...}) = ospeed
+	fun getispeed (TIOS{ispeed,...}) = ispeed
 
-    fun setospeed (TIOS r, ospeed) =
-          TIOS {
-            iflag = #iflag r,
-            oflag = #oflag r,
-            cflag = #cflag r,
-            lflag = #lflag r,
-            cc = #cc r,
-            ispeed = #ispeed r,
-            ospeed = ospeed
-          }
-    fun setispeed (TIOS r, ispeed) =
-          TIOS {
-            iflag = #iflag r,
-            oflag = #oflag r,
-            cflag = #cflag r,
-            lflag = #lflag r,
-            cc = #cc r,
-            ispeed = ispeed,
-            ospeed = #ospeed r
-          }
+	fun setospeed (TIOS r, ospeed) =
+	    TIOS {
+		  iflag = #iflag r,
+		  oflag = #oflag r,
+		  cflag = #cflag r,
+		  lflag = #lflag r,
+		  cc = #cc r,
+		  ispeed = #ispeed r,
+		  ospeed = ospeed
+		  }
+	fun setispeed (TIOS r, ispeed) =
+	    TIOS {
+		  iflag = #iflag r,
+		  oflag = #oflag r,
+		  cflag = #cflag r,
+		  lflag = #lflag r,
+		  cc = #cc r,
+		  ispeed = ispeed,
+		  ospeed = #ospeed r
+		  }
+      end
     
+    fun fs_intof fd = uint32toint32(FS.fdToWord fd)
+	
     structure TC =
       struct
         datatype set_action = SA of s_int
@@ -233,52 +239,54 @@ structure POSIX_TTY :> POSIX_TTY
         val iflush = QS (osval "TCIFLUSH")
         val oflush = QS (osval "TCOFLUSH")
         val ioflush = QS (osval "TCIOFLUSH")
+
+(*
+	type termio_rep = (
+			   word *       	(* iflags *)
+			   word *       	(* oflags *)
+			   word *       	(* cflags *)
+			   word *       	(* lflags *)
+			   V.WV.vector *	(* cc *)
+			   word *		(* inspeed *)
+			   word			(* outspeed *)
+			   )
+*)
+	fun getattr fd = let
+			     val (ifs,ofs,cfs,lfs,cc,isp,osp) = Ccall(posix_tty_tcgetattr, fs_intof fd)
+			 in
+			     TIOS {
+				   iflag = I.F ifs,
+				   oflag = O.F ofs,
+				   cflag = C.F cfs,
+				   lflag = L.F lfs,
+				   cc = V.CC cc,
+				   ispeed = B isp,
+				   ospeed = B osp
+				   }
+			 end
+		     
+	fun setattr (fd, SA sa, TIOS tios) = let
+						 val (I.F iflag) = #iflag tios
+						 val (O.F oflag) = #oflag tios
+						 val (C.F cflag) = #cflag tios
+						 val (L.F lflag) = #lflag tios
+						 val (V.CC cc) = #cc tios
+						 val (B ispeed) = #ispeed tios
+						 val (B ospeed) = #ospeed tios
+						 val trep = (iflag,oflag,cflag,lflag,cc,ispeed,ospeed)
+					     in
+						 Ccall(posix_tty_tcsetattr,fs_intof fd, sa, trep)
+					     end
+
+	fun sendbreak (fd, duration) = Ccall(posix_tty_tcsendbreak, fs_intof fd, duration)
+	    
+	fun drain fd = Ccall(posix_tty_tcdrain, fs_intof fd)
+	    
+	fun flush (fd, QS qs) = Ccall(posix_tty_tcflush,fs_intof fd, qs)
+	    
+	fun flow (fd, FA action) = Ccall(posix_tty_tcflow,fs_intof fd, action)
+	    
       end
-
-    type termio_rep = (
-           word *       	(* iflags *)
-           word *       	(* oflags *)
-           word *       	(* cflags *)
-           word *       	(* lflags *)
-           V.WV.vector *	(* cc *)
-           word *		(* inspeed *)
-	   word			(* outspeed *)
-         )
-    fun fs_intof fd = uint32toint32(FS.fdToWord fd)
-    fun getattr fd = let
-			 val (ifs,ofs,cfs,lfs,cc,isp,osp) = Ccall(posix_tty_tcgetattr, fs_intof fd)
-          in
-            TIOS {
-              iflag = I.F ifs,
-              oflag = O.F ofs,
-              cflag = C.F cfs,
-              lflag = L.F lfs,
-              cc = V.CC cc,
-              ispeed = B isp,
-              ospeed = B osp
-            }
-          end
-
-    fun setattr (fd, TC.SA sa, TIOS tios) = let
-          val (I.F iflag) = #iflag tios
-          val (O.F oflag) = #oflag tios
-          val (C.F cflag) = #cflag tios
-          val (L.F lflag) = #lflag tios
-          val (V.CC cc) = #cc tios
-          val (B ispeed) = #ispeed tios
-          val (B ospeed) = #ospeed tios
-          val trep = (iflag,oflag,cflag,lflag,cc,ispeed,ospeed)
-          in
-            Ccall(posix_tty_tcsetattr,fs_intof fd, sa, trep)
-          end
-
-    fun sendbreak (fd, duration) = Ccall(posix_tty_tcsendbreak, fs_intof fd, duration)
-
-    fun drain fd = Ccall(posix_tty_tcdrain, fs_intof fd)
-
-    fun flush (fd, TC.QS qs) = Ccall(posix_tty_tcflush,fs_intof fd, qs)
-
-    fun flow (fd, TC.FA action) = Ccall(posix_tty_tcflow,fs_intof fd, action)
 
     fun getpgrp fd = P.wordToPid(int32touint32(Ccall(posix_tty_tcgetpgrp,fs_intof fd)))
 
@@ -289,9 +297,12 @@ structure POSIX_TTY :> POSIX_TTY
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:43  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:40  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:43  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:14  pscheng
  * *** empty log message ***
  *

@@ -7,10 +7,10 @@
 
 void signal_init(void);
 void install_signal_handlers(int isMain);
-mem_t GetSp(struct ucontext *);
-mem_t GetPc(struct ucontext *);
-unsigned long GetIReg(struct ucontext *, int);
-void GetIRegs(struct ucontext *, unsigned long *);
-void SetIReg(struct ucontext *, int, unsigned long);
+mem_t GetSp(ucontext_t *);
+mem_t GetPc(ucontext_t *);
+unsigned long GetIReg(ucontext_t *, int);
+void GetIRegs(ucontext_t *, unsigned long *);
+void SetIReg(ucontext_t *, int, unsigned long);
 
 #endif

@@ -1,13 +1,14 @@
-(*$import UNIX Posix Substring PosixTextPrimIO *)
+(*$import Prelude TextIO IO UNIX Posix Substring String PosixTextPrimIO OS *)
 (* unix.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
  *
  *)
 
-structure Unix :> UNIX =
+structure Unix :> UNIX where type signal = Posix.Signal.signal =
   struct
-
+    val op^ = String.^
+	
     structure P = Posix.Process
     structure PE = Posix.ProcEnv
     structure PF = Posix.FileSys
@@ -56,6 +57,7 @@ structure Unix :> UNIX =
         ins : TextIO.instream,
         outs : TextIO.outstream
       }
+    type signal = Posix.Signal.signal
 
     fun executeInEnv (cmd, argv, env) = let
           val p1 = PIO.pipe ()
@@ -116,7 +118,13 @@ structure Unix :> UNIX =
         (* protect is probably too much; typically, one
          * would only mask SIGINT, SIGQUIT and SIGHUP
          *)
-          fun waitProc () = #2(protect P.waitpid (P.W_CHILD pid,[]))
+          fun waitProc () = case #2(protect P.waitpid (P.W_CHILD pid,[]))
+			      of P.W_EXITED => OS.Process.success
+			       | P.W_EXITSTATUS status =>
+				  if status = #"\000" then OS.Process.success
+				  else OS.Process.failure
+			       | P.W_SIGNALED signal => OS.Process.failure
+			       | P.W_STOPPED signal => OS.Process.failure (* impossible -- no WUNTRACED *)
           in
             TextIO.closeIn ins;
             TextIO.closeOut outs;
@@ -127,9 +135,12 @@ structure Unix :> UNIX =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:54:36  pscheng
-# added basis
+# Revision 1.2  2000/11/27  22:36:46  swasey
+# *** empty log message ***
 # 
+ * Revision 1.1  1998/03/09 19:54:36  pscheng
+ * added basis
+ *
  * Revision 1.1.1.1  1997/01/14  01:38:25  george
  *   Version 109.24
  *

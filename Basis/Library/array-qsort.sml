@@ -1,4 +1,4 @@
-(*$import Prelude ARRAY_SORT Word32 Array TopLevel *)
+(*$import Prelude ARRAY_SORT Word Array TopLevel *)
 (* array-qsort.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

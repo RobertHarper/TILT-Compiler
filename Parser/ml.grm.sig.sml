@@ -7,13 +7,12 @@ val PVAL:  'a * 'a -> (svalue,'a) token
 val PLET:  'a * 'a -> (svalue,'a) token
 val CCALL:  'a * 'a -> (svalue,'a) token
 val EXTERN:  'a * 'a -> (svalue,'a) token
-val DOLLAR:  'a * 'a -> (svalue,'a) token
+val IMPORT:  'a * 'a -> (svalue,'a) token
 val AQID: (FastSymbol.raw_symbol) *  'a * 'a -> (svalue,'a) token
 val OBJL: (string) *  'a * 'a -> (svalue,'a) token
 val ENDQ: (string) *  'a * 'a -> (svalue,'a) token
 val BEGINQ:  'a * 'a -> (svalue,'a) token
 val VECTORSTART:  'a * 'a -> (svalue,'a) token
-val FUNSIG:  'a * 'a -> (svalue,'a) token
 val ANDALSO:  'a * 'a -> (svalue,'a) token
 val ORELSE:  'a * 'a -> (svalue,'a) token
 val RPAREN:  'a * 'a -> (svalue,'a) token
@@ -52,7 +51,6 @@ val INFIXR:  'a * 'a -> (svalue,'a) token
 val INFIX:  'a * 'a -> (svalue,'a) token
 val INCLUDE:  'a * 'a -> (svalue,'a) token
 val IN:  'a * 'a -> (svalue,'a) token
-val IMPORT:  'a * 'a -> (svalue,'a) token
 val IF:  'a * 'a -> (svalue,'a) token
 val HASH:  'a * 'a -> (svalue,'a) token
 val HANDLE:  'a * 'a -> (svalue,'a) token
@@ -75,7 +73,6 @@ val AS:  'a * 'a -> (svalue,'a) token
 val ARROW:  'a * 'a -> (svalue,'a) token
 val AND:  'a * 'a -> (svalue,'a) token
 val ABSTYPE:  'a * 'a -> (svalue,'a) token
-val ABSTRACTION:  'a * 'a -> (svalue,'a) token
 val CHAR: (string) *  'a * 'a -> (svalue,'a) token
 val STRING: (string) *  'a * 'a -> (svalue,'a) token
 val REAL: (string) *  'a * 'a -> (svalue,'a) token

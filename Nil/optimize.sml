@@ -353,13 +353,13 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun lookup_cproj(state,v,labs) = 
 	      let fun loop c [] = SOME c
 		    | loop (Crecord_c lclist) (l::rest) =
-		         let val _ = (case assoc_eq(Name.eq_label,l,lclist) of
+		         let val c = (case assoc_eq(Name.eq_label,l,lclist) of
 					  NONE => (print "lookup_cproj could not find ";
 						   Ppnil.pp_label l; print "  among ";
 						   app (fn (l,_) => (Ppnil.pp_label l; print "  ")) lclist;
-						   print "\n")
-					| _ => ())
-			     val SOME c = assoc_eq(Name.eq_label,l,lclist)
+						   print "\n";
+						   error "lookup_cproj: could not find label")
+					| SOME c => c)
 			 in  loop c rest
 			 end
 		    | loop (Var_c v) labs = lookup_cproj(state,v,labs)

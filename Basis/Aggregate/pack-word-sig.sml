@@ -1,4 +1,4 @@
-(*$import Prelude Word8Vector Word8Array Word32 *)
+(*$import Prelude Word8Vector Word8Array LargeWord *)
 (* pack-word-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -12,13 +12,13 @@ signature PACK_WORD =
 
     val isBigEndian : bool
 
-    val subVec : (Word8Vector.vector * int) -> Word32.word
-    val subVecX : (Word8Vector.vector * int) -> Word32.word
+    val subVec : Word8Vector.vector * int -> LargeWord.word
+    val subVecX : Word8Vector.vector * int -> LargeWord.word
 
-    val subArr : (Word8Array.array * int) -> Word32.word
-    val subArrX : (Word8Array.array * int) -> Word32.word
+    val subArr : Word8Array.array * int -> LargeWord.word
+    val subArrX : Word8Array.array * int -> LargeWord.word
 
-    val update : (Word8Array.array * int * Word32.word) -> unit
+    val update : Word8Array.array * int * LargeWord.word -> unit
 
   end;
 

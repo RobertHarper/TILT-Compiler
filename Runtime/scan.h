@@ -1,6 +1,8 @@
 #ifndef _scan_h
 #define _scan_h
 
+#include <string.h> /* for memcpy prototype */
+
 /* ------------------- Scanning Routines ---------------------- */
 typedef enum LocAllocCopy__t {Copy, LocCopy, LocAlloc} LocAllocCopy_t;
 typedef enum SourceSpaceCheck__t {OneSpace, OneSpaceLarge, TwoSpaceLarge} SourceSpaceCheck_t;

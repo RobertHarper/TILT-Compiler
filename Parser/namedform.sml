@@ -88,7 +88,7 @@ struct
     val unique_n = ref 0 (* for gensym in namify_strexpbools *)
     fun is_varstr (VarStr _) = true
       | is_varstr (MarkStr (s, _)) = is_varstr s
-      | is_varstr _ = false
+      | is_varstr _ = false		(* a ConstrainedStr is not a VarStr *)
     fun grind name name_strexp (strexp, _) =
       if is_varstr strexp then ([], (strexp, false)) else
 	let
@@ -114,8 +114,10 @@ struct
   (* Here's the beef - traverse the syntax, naming anomnymous functor
      arguments along the way *)
   fun name_strexp name (VarStr path) = Unaltered
-    | name_strexp name (StructStr dec) =
-        process (name_dec dec, fn d => StructStr d)
+    | name_strexp name (BaseStr dec) =
+        process (name_dec dec, fn d => BaseStr d)
+    | name_strexp name (ConstrainedStr (strexp, constraint)) =
+	process (name_strexp name strexp, fn se => ConstrainedStr (se, constraint))
     | name_strexp name (AppStr (path, strexpbools)) =
 	let
 	  val (newstrbs, newsebs) = nameify_strexpbools name (name_strexp name) strexpbools
@@ -127,10 +129,10 @@ struct
 	process (name_strexp name strexp, fn se => MarkStr (se, region))
 
   and name_fctexp name (VarFct _) = Unaltered
-    | name_fctexp name (FctFct {params, body, constraint}) =
+    | name_fctexp name (BaseFct {params, body, constraint}) =
         process
 	(name_strexp name body,
-	 fn se => FctFct {params=params, body=se, constraint=constraint})
+	 fn se => BaseFct {params=params, body=se, constraint=constraint})
     | name_fctexp name (LetFct (dec, fctexp)) =
 	namify_let (LetFct, name_dec, dec, name_fctexp name, fctexp)
     | name_fctexp name (AppFct (path, strexpbools, fsigconst)) =
@@ -147,8 +149,6 @@ struct
 
   and name_dec (StrDec strbs) =
 	dec_declare (process (grind_list name_strb strbs, fn ss => StrDec ss))
-    | name_dec (AbsDec strbs) =
-	dec_declare (process (grind_list name_strb strbs, fn ss => AbsDec ss))
     | name_dec (FctDec fctbs) =
 	dec_declare (process (grind_list name_fctb fctbs, fn fs => FctDec fs))
     | name_dec (LocalDec (dec1, dec2)) =

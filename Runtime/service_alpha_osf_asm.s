@@ -243,19 +243,19 @@ global_exn_handler_dummy:
  # ------------------------------------------------------------
 	.ent	raise_exception_raw
 raise_exception_raw:
-	mov	$16, THREADPTR_REG	# restore thread point
-	mov	$17, $16		# save the exn value;  load_regs_MLtoC does not change $16
+	mov	$16, THREADPTR_REG	# restore thread pointer
+	mov	$17, $1			# save the exn value;  load_regs does not change $1
+	addq    THREADPTR_REG, MLsaveregs_disp, $0 # use ML save area of thread pointer structure
 	br	$gp, restore_dummy
 restore_dummy:	
 	ldgp	$gp, 0($gp)		# get own gp
 .set noat
-					# restore address from argument
-	bsr	load_regs_MLtoC
-	mov	$16, EXNARG_REG		# restore exn arg - which is same as $26
-	ldq	$16, MLsaveregs_disp+16*8(THREADPTR_REG)	# restore $16 which was used to save exn arg
-	ldq	$0, MLsaveregs_disp+0*8(THREADPTR_REG)		# restore $0 due to load_regs
-	ldq	$1, MLsaveregs_disp+1*8(THREADPTR_REG)		# restore $1 due to load_regs
+	bsr	load_regs
+	mov	$1, EXNARG_REG		# restore exn arg from $1 temp (unmodified by load_regs)
+	ldq	$0, MLsaveregs_disp+0*8(THREADPTR_REG)		# restore $0 which was used as arg to load_regs
+	ldq	$1, MLsaveregs_disp+1*8(THREADPTR_REG)		# restore $1 which was used to save exn arg unmodified by load_regs
 								# don't need to restore r26 and r29 due to load_regs
+								# at this point, all registers restored
 	br	$gp, restore_dummy2	# Fix gp
 restore_dummy2:
 	ldgp	$gp, 0($gp)

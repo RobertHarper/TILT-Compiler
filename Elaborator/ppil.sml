@@ -11,7 +11,7 @@ struct
     val convarMode = Stats.int("convarMode")
     val showOnlyModule = Stats.ff("showOnlyModule")
 
-    val _ = convarMode := 0  (* 0 - variable only; 1 - value only; 2 - variable and value *)
+    val _ = convarMode := 0  (* 0 - value only; 1 - variable only; 2 - variable and value *)
     val error = fn s => error "ppil.sml" s
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
@@ -112,7 +112,7 @@ struct
 
     datatype flex = RIGID | FLEXIBLE | FROZEN
 
-    fun pp_recordcon (seen : (context,con) tyvar list) (isflex,rdecs) : format = 
+    fun pp_recordcon (seen : (context,con,exp) tyvar list) (isflex,rdecs) : format = 
 	let val is_tuple = rdecs_is_tuple rdecs
 	    val separator = if is_tuple then " *" else ","
 	    val (left,right) = 
@@ -130,36 +130,39 @@ struct
 	in pp_list doer rdecs format
 	end
     
-    and pp_con (seen : (context,con) tyvar list) (arg_con : con) : format = 
+    and pp_con (seen : (context,con,exp) tyvar list) (arg_con : con) : format = 
       (case arg_con of
 	 CON_OVAR ocon => pp_con seen (CON_TYVAR (ocon_deref ocon))
        | CON_VAR var => pp_var var
        | CON_TYVAR tyvar =>
-	     let val varname = if (tyvar_isconstrained tyvar)
-				   then ("C" ^ tyvar2string tyvar)
-			       else tyvar2string tyvar
+	     let val varname = tyvar2string tyvar
+		 val varname = if (tyvar_isconstrained tyvar)
+				   then ("C" ^ varname)
+			       else varname
 		 val stamp = Int.toString(stamp2int (tyvar_stamp tyvar))
 		 val varname = varname ^ "_" ^ stamp
-	     in (case (tyvar_deref tyvar) of
-		     NONE => Hbox[String varname]
-		   | (SOME con) => (if (member_eq(eq_tyvar,tyvar,seen)) then
-					(print "tyvar is "; print varname; print "\n";
-					 print "seen_refs("; print (Int.toString (length seen));
-					 print ")var is: ";
-					 map (fn tv => print (tyvar2string tv)) seen;
-					 print "\n\n";
-					 error "circular";
-					 Hbox0 0 [String ("KNOT_" ^ varname)])
-				    else
-					let val seen = tyvar :: seen
-					in (case (!convarMode) of
-						0 => pp_con seen con
-					      | 1 => Hbox0 0 [String varname]
-					      | 2 => (pp_region "(" ")"
-						      [String varname,
-						       String "==", pp_con seen con])
-					      | _ => error "Bad convar mode")
-					end))
+	     in
+		 (case (tyvar_deref tyvar) of
+		      NONE => Hbox[String varname]
+		    | (SOME con) =>
+			  (if (member_eq(eq_tyvar,tyvar,seen)) then
+			       (print "tyvar is "; print varname; print "\n";
+				print "seen_refs("; print (Int.toString (length seen));
+				print ")var is: ";
+				map (fn tv => print (tyvar2string tv)) seen;
+				print "\n\n";
+				error "circular";
+				Hbox0 0 [String ("KNOT_" ^ varname)])
+			   else
+			       let val seen = tyvar :: seen
+			       in (case (!convarMode) of
+				       0 => pp_con seen con
+				     | 1 => Hbox0 0 [String varname]
+				     | 2 => (pp_region "(" ")"
+					     [String varname,
+					      String "==", pp_con seen con])
+				     | _ => error "Bad convar mode")
+			       end))
 	     end
        | CON_INT is    => Hbox[String "INT", pp_is' is]
        | CON_UINT is   => Hbox[String "UINT", pp_is' is]

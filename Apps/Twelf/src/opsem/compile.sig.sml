@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN COMPSYN *)
+(*$import Prelude TopLevel INTSYN COMPSYN *)
 (* Compiler *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)
@@ -13,7 +13,7 @@ sig
 
   val optimize : bool ref
 
-  val install : int (*IntSyn.cid*) -> unit
+  val install : IntSyn.cid -> unit
 
   val compileClause: bool -> (IntSyn.Dec IntSyn.Ctx * IntSyn.Exp)
                           -> CompSyn.ResGoal

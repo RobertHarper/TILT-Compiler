@@ -5,12 +5,31 @@
  *
  *)
 
-structure Vector : VECTOR =
+structure Vector :> VECTOR where type 'a vector = 'a vector =
   struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val empty_vector = TiltPrim.empty_vector
+    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+	
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+    val unsafe_vector2array = TiltPrim.unsafe_vector2array
+	
+    val ugt = TiltPrim.ugt
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+	
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
+	
     type 'a vector = 'a vector
 
-    val maxLen = vectormaxlength
+    val maxLen = 1024 * 1024
 
     fun checkLen n = if maxLen < n then raise General.Size else ()
     val vector0 : 'a vector = empty_vector
@@ -117,9 +136,12 @@ structure Vector : VECTOR =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:10  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:22  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:10  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:50:20  pscheng
 # added basis
 # 

@@ -1,4 +1,4 @@
-(*$import Prelude INTSYN *)
+(*$import Prelude TopLevel INTSYN *)
 (* Type Checking *)
 (* Author: Carsten Schuermann *)
 
@@ -9,9 +9,9 @@ sig
     exception Error of string
 
     val check : IntSyn.Exp * IntSyn.Exp  -> unit
-    val checkDec : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (IntSyn.Dec * IntSyn.Sub) -> unit 
+    val checkDec : IntSyn.dctx * (IntSyn.Dec * IntSyn.Sub) -> unit 
     val infer : IntSyn.Exp -> IntSyn.Exp
-    val infer' : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * IntSyn.Exp -> IntSyn.Exp
-    val typeCheck : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) * (IntSyn.Exp * IntSyn.Exp) -> unit
-    val typeCheckCtx : IntSyn.Dec IntSyn.Ctx(*IntSyn.dctx*) -> unit
+    val infer' : IntSyn.dctx * IntSyn.Exp -> IntSyn.Exp
+    val typeCheck : IntSyn.dctx * (IntSyn.Exp * IntSyn.Exp) -> unit
+    val typeCheckCtx : IntSyn.dctx -> unit
 end;  (* signature TYPECHECK *)

@@ -8,6 +8,6 @@ sig
   structure Parsing : PARSING
   structure ExtModes: EXTMODES
 
-  val parseMode' : (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front -> ExtModes.modedec * (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front (*ExtModes.modedec Parsing.parser*)
+  val parseMode' : ExtModes.modedec Parsing.parser
 
 end;  (* signature PARSE_MODE *)

@@ -1,4 +1,4 @@
-(*$import Prelude Int TopLevel Math64 Real64 Array *)
+(*$import Prelude Int TopLevel Math Real Array *)
 
 (* Thread safety automatic since no top-level mutable values are present *)
 
@@ -18,7 +18,7 @@
 local
 
 
-open Math64
+open Math
 open Array
 fun abs_real(x:real) = if x < 0.0 then ~x else x
 fun print_real (x:real) = print(Real.toString x)

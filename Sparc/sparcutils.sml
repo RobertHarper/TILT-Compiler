@@ -121,9 +121,25 @@ struct
     end
   fun msRegSet s = msRegList (setToList s)
 
+  fun localLink s =
+      let val s' = "local" ^ s
+      in
+	  String.concat ["\t.align 8\n",
+			 "\t.proc 07\n",
+			 s' ^ ":\n",
+			 "\tcall\t" ^ s ^ "\n",
+			 "\tnop\n",
+			 "\tcall\tabort\n",
+			 "\tnop\n",
+			 "\t.size " ^ s' ^ ",(.-" ^ s' ^")\n"]
+      end
   (* ".align 8" even-word aligns *)
-  val programHeader = []
-  fun procedureHeader label = [" \t.align 8\n", "\t.global " ^ (msLabel (label)) ^ "\n"]
+  val programHeader = ["\t.section\t\".rodata\"\n",
+		       "\t.text\n",
+		       localLink "DivFromML",
+		       localLink "OverflowFromML"]
+
+  fun procedureHeader label = ["\t.align 8\n", "\t.global " ^ (msLabel (label)) ^ "\n"]
   fun procedureTrailer s = ["\t.size " ^ s ^ ",(.-" ^ s ^ ")\n"]
   val textStart = ["\t.text\n"]
   val dataStart = ["\t.data\n\t.align 8\n"]          (* RTL data segment assumes even-word alignment *)

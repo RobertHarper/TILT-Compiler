@@ -68,7 +68,6 @@ FrontEnd frontend
 // unused --- FreeTypeVars freetyvars
 // unused --- SortedList sortedlist
 // ppast
-// tokentable
 
 LINKPARSE linkparse.sig
 LinkParse linkparse

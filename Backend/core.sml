@@ -1,8 +1,9 @@
-(*$import Prelude TopLevel TilWord32 ORD_KEY RTL CORE String Rtl Util Char Int BinaryMapFn BinarySetFn *)
+(*$import Prelude TopLevel TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int BinaryMapFn BinarySetFn *)
 
 structure Core :> CORE =
 struct
-      
+
+    val branchingTraps = Stats.tt("BranchingTraps")
     val error = fn s => Util.error "core.sml" s
     open Rtl
 

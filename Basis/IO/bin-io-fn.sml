@@ -1,4 +1,4 @@
-(*$import Prelude Word8 Int IO BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
+(*$import Prelude Word8 Int Position IO BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
 (* bin-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -8,12 +8,12 @@
  *
  *)
 
-functor BinIOFn (
-
-    structure OSPrimIO : OS_PRIM_IO
-      where PrimIO = BinPrimIO
-
-  ) : BIN_IO = struct
+functor BinIOFn (structure OSPrimIO : OS_PRIM_IO
+		     where PrimIO = BinPrimIO)
+    :> BIN_IO where type StreamIO.pos = BinPrimIO.pos
+                and type StreamIO.reader = BinPrimIO.reader
+		and type StreamIO.writer = BinPrimIO.writer =
+struct
 
     structure PIO = OSPrimIO.PrimIO
     structure A = Word8Array
@@ -649,9 +649,12 @@ functor BinIOFn (
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:14  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:24  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:14  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  1999/09/22 15:45:00  pscheng
  * *** empty log message ***
  *

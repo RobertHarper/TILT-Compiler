@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Real64 Sequence Array TraceInfo Name TilWord32 TilWord64 Int Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool *)
+(*$import Prelude TopLevel Util Real Sequence Array TraceInfo Name TilWord32 TilWord64 Int Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool *)
 
 structure TortlBase
     :> TORTL_BASE 

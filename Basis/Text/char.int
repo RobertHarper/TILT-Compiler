@@ -1,3 +1,4 @@
-(*$include CHAR *)
+(*$include Prelude CHAR *)
 
-structure Char : CHAR where type char = char 
+structure Char : CHAR where type char = char
+                        and type string = string

@@ -65,7 +65,6 @@ sig
     | WhileExp of {test:exp,expr:exp}
 				  (* while (derived form) *)
     | MarkExp of exp * region	(* mark an expression *)
-    | DelayExp of exp           (* create suspension *)
     | CcallExp of exp * exp list (* call a C function *)
 
   (* RULE for case functions and exception handler *)
@@ -80,29 +79,28 @@ sig
 	  | CharPat of string			(* char *)
 	  | RecordPat of {def:(symbol * pat) list, flexibility:bool}
 						(* record *)
-          | ListPat of pat list		       (*  [list,in,square,brackets] *)
+          | ListPat of pat list			(*  [list,in,square,brackets] *)
 	  | TuplePat of pat list		(* tuple *)
           | FlatAppPat of pat fixitem list
-                                        (* patterns prior to fixity parsing *)
-	  | AppPat of {constr:pat,argument:pat}(* application *)
+						(* patterns prior to fixity parsing *)
+	  | AppPat of {constr:pat,argument:pat}	(* application *)
 	  | ConstraintPat of {pattern:pat,constraint:ty}
-						  (* constraint *)
-	  | LayeredPat of {varPat:pat,expPat:pat}	(* as expressions *)
-          | VectorPat of pat list                 (* vector pattern *)
-	  | MarkPat of pat * region	(* mark a pattern *)
-	  | OrPat of pat list			(* or-pattern *)
-          | DelayPat of pat                     (* match suspension *)
+						(* constraint *)
+	  | LayeredPat of {varPat:pat,expPat:pat} (* as expressions *)
+          | VectorPat of pat list		(* vector pattern *)
+	  | MarkPat of pat * region		(* mark a pattern *)
 
   (* STRUCTURE EXPRESSION *)
   and strexp = VarStr of path			(* variable structure *)
-	     | StructStr of dec			(* defined structure *)
+	     | BaseStr of dec			(* defined structure *)
+             | ConstrainedStr of strexp * sigexp sigConst (* signature constrained *)
 	     | AppStr of path * (strexp * bool) list (* application *)
 	     | LetStr of dec * strexp		(* let in structure *)
 	     | MarkStr of strexp * region (* mark *)
 
   (* FUNCTOR EXPRESSION *)
   and fctexp = VarFct of path * fsigexp sigConst	(* functor variable *)
-	     | FctFct of  {			(* definition of a functor *)
+	     | BaseFct of  {			(* definition of a functor *)
 		params	   : (symbol option * sigexp) list,
 		body	   : strexp,
 		constraint : sigexp sigConst}
@@ -118,7 +116,7 @@ sig
   (* SIGNATURE EXPRESSION *)
   and sigexp = VarSig of symbol			(* signature variable *)
              | AugSig of sigexp * wherespec list (* sig augmented with where spec *)
-	     | SigSig of spec list		(* defined signature *)
+	     | BaseSig of spec list		(* defined signature *)
 	     | MarkSig of sigexp * region	(* mark *)
 
   (* FUNCTOR SIGNATURE EXPRESSION *)
@@ -128,7 +126,7 @@ sig
 	      | MarkFsig of fsigexp * region	(* mark a funsig *)
 
   (* SPECIFICATION FOR SIGNATURE DEFINITIONS *)
-  and spec = StrSpec of (symbol * sigexp option * path option) list
+  and spec = StrSpec of (symbol * sigexp * path option) list
                                                                 (* structure *)
            | TycSpec of ((symbol * tyvar list * ty option) list * bool)
                                                                 (* type *)
@@ -136,11 +134,9 @@ sig
 	   | ValSpec of (symbol * ty) list			(* value *)
 	   | DataSpec of {datatycs: db list, withtycs: tb list}	(* datatype *)
 	   | ExceSpec of (symbol * ty option) list		(* exception *)
-	   | FixSpec of  {fixity: fixity, ops: symbol list} 	(* fixity *)
 	   | ShareStrSpec of path list			(* structure sharing *)
 	   | ShareTycSpec of path list			(* type sharing *)
-	   | IncludeSpec of symbol			(* include specif *)
-           | SigSpec of sigb list                       (* signature *)
+	   | IncludeSpec of sigexp			(* include specif *)
 	   | MarkSpec of spec * region	(* mark a spec *)
 
   (* DECLARATIONS (let and structure) *)
@@ -155,7 +151,6 @@ sig
 							  (* abstract type *)
 	  | ExceptionDec of eb list			(* exception *)
 	  | StrDec of strb list				(* structure *)
-	  | AbsDec of strb list				(* abstract struct *)
 	  | FctDec of fctb list				(* functor *)
 	  | SigDec of sigb list				(* signature *)
 	  | FsigDec of fsigb list			(* funsig *)
@@ -235,9 +230,12 @@ end (* signature AST *)
 
 (*
  * $Log$
-# Revision 1.6  2000/09/12  18:56:45  swasey
-# Changes for cutoff compilation
+# Revision 1.7  2000/11/27  22:36:59  swasey
+# *** empty log message ***
 # 
+ * Revision 1.6  2000/09/12 18:56:45  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.5  2000/01/20 13:32:25  pscheng
  * *** empty log message ***
  *

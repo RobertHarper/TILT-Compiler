@@ -1,4 +1,4 @@
-(*$import Prelude Word32 List General OS_FILE_SYS OS_Path Posix POSIX_extern *)
+(*$import Prelude SysWord List General OS_FILE_SYS OS_Path Posix POSIX_extern *)
 (* os-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -46,8 +46,7 @@ structure OS_FileSys :> OS_FILE_SYS =
 	  val oldCWD = getDir()
 	  fun mkPath pathFromRoot =
 		P.toString{isAbs=true, vol="", arcs=List.rev pathFromRoot}
-	  and walkPath (0, _, _) = (* xxx raise Assembly.SysErr("too many links", NONE) *)
-	                           raise LibFail("too many links")
+	  and walkPath (0, _, _) = raise TiltExn.SysErr ("too many links", NONE)
 	    | walkPath (n, pathFromRoot, []) =
 		mkPath pathFromRoot
 	    | walkPath (n, pathFromRoot, ""::al) =
@@ -143,9 +142,12 @@ structure OS_FileSys :> OS_FILE_SYS =
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:55:00  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:42  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:55:00  swasey
+ * Changes for cutoff compilation
+ *
  * Revision 1.2  2000/04/20 20:00:04  pscheng
  * *** empty log message ***
  *

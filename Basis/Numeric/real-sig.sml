@@ -1,4 +1,4 @@
-(*$import Prelude StringCvt PreInt PreReal MATH Ieee *)
+(*$import Prelude StringCvt PreInt PreReal MATH IEEEReal *)
 (* real-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -12,7 +12,7 @@ signature REAL =
     type real
 
     structure Math : MATH
-      sharing type real = Math.real
+      (* sharing type real = Math.real -- holds for TILT structures but non-standard *)
 
     val radix     : PreInt.int
     val precision : PreInt.int
@@ -77,14 +77,14 @@ signature REAL =
     val nextAfter  : real * real -> real
     val checkFloat : real -> real
 
+    val realFloor : real -> real
+    val realCeil  : real -> real
+    val realTrunc : real -> real
+
     val floor : real -> PreInt.int
     val ceil  : real -> PreInt.int
     val trunc : real -> PreInt.int
     val round : real -> PreInt.int
-
-    val realFloor : real -> real
-    val realCeil  : real -> real
-    val realTrunc : real -> real
 
     val toInt : IEEEReal.rounding_mode -> real -> int
     val toLargeInt : IEEEReal.rounding_mode -> real -> PreLargeInt.int
@@ -102,9 +102,12 @@ signature REAL =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:31  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:34  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:31  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:52:47  pscheng
 # added basis
 # 

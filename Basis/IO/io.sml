@@ -5,7 +5,7 @@
  *
  *)
 
-structure IO : IO =
+structure IO :> IO =
   struct
 
     exception Io of {
@@ -27,9 +27,12 @@ structure IO : IO =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/12  18:54:15  swasey
-# Changes for cutoff compilation
+# Revision 1.3  2000/11/27  22:36:25  swasey
+# *** empty log message ***
 # 
+ * Revision 1.2  2000/09/12 18:54:15  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.1  98/03/09  19:50:43  pscheng
 # added basis
 # 

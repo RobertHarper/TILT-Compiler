@@ -8,6 +8,6 @@ sig
   structure Parsing : PARSING
   structure ExtSyn : EXTSYN
 
-  val parseConDec' : (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front -> ExtSyn.condec * (Parsing.Lexer.Token * Parsing.Lexer.Paths.region) Parsing.Stream.front (*ExtSyn.condec Parsing.parser*)
+  val parseConDec' : ExtSyn.condec Parsing.parser
 
 end;  (* signature PARSE_CONDEC *)

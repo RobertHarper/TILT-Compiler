@@ -1,4 +1,4 @@
-(*$import Prelude StreamStructs LEXER *)
+(*$import Prelude TopLevel StreamStructs LEXER *)
 (* General basis for parsing modules *)
 (* Author: Frank Pfenning *)
 
@@ -8,9 +8,9 @@ sig
   structure Lexer : LEXER
     sharing Lexer.Stream = Stream
 
-  (*type lexResult = Lexer.Token * Lexer.Paths.region*)
+  type lexResult = Lexer.Token * Lexer.Paths.region
 
-  (*type 'a parser = (Lexer.Token * Lexer.Paths.region (*lexResult*)) Stream.front -> 'a * (Lexer.Token * Lexer.Paths.region (*lexResult*)) Stream.front*)
+  type 'a parser = lexResult Stream.front -> 'a * lexResult Stream.front
 
   exception Error of string
   val error : Lexer.Paths.region * string -> 'a	(* always raises Error *)

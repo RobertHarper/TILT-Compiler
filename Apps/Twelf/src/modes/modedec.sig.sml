@@ -1,4 +1,4 @@
-(*$import Prelude MODESYN PATHS LambdaStructs *)
+(*$import Prelude TopLevel MODESYN PATHS LambdaStructs *)
 (* Modes: short and long forms *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)
@@ -11,7 +11,7 @@ sig
 
   exception  Error of string
 
-  val shortToFull : int (*IntSyn.cid*) * ModeSyn.ModeSpine * Paths.region -> ModeSyn.ModeSpine
-  val checkFull : int (*IntSyn.cid*) * ModeSyn.ModeSpine * Paths.region -> unit
+  val shortToFull : IntSyn.cid * ModeSyn.ModeSpine * Paths.region -> ModeSyn.ModeSpine
+  val checkFull : IntSyn.cid * ModeSyn.ModeSpine * Paths.region -> unit
  
 end;  (* signature MODEDEC *)

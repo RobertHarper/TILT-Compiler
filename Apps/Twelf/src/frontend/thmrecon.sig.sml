@@ -1,4 +1,4 @@
-(*$import Prelude TP_RECON PATHS THMSYN *)
+(*$import Prelude TopLevel TP_RECON PATHS THMSYN *)
 (* External Syntax for meta theorems *)
 (* Author: Carsten Schuermann *)
 

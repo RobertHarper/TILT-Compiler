@@ -19,6 +19,19 @@ structure IlStatic
     fun debugdo' t = t()
     fun fail s = raise (FAILURE s)
 
+   local
+       val Ceq_compile = ref (NONE : (Il.context * Il.con -> (Il.exp * Il.con) option) option)
+   in
+       fun installHelpers {eq_compile} =
+	   ((case !Ceq_compile
+	       of NONE => ()
+		| SOME _ => (print "WARNING: installHelpers called more than once.\n";
+			     print "         Possibly because CM.make does not have the semantics of a fresh make\n"));
+	    Ceq_compile := SOME eq_compile)
+       fun eq_compile arg = let val SOME eq_compile = !Ceq_compile
+			    in  eq_compile arg
+			    end
+   end
 
    fun reduce_sigvar(context,v) = 
 	(case (Context_Lookup_Var(context,v)) of
@@ -105,7 +118,6 @@ structure IlStatic
 
 
 
-
    (* ------------------------------------------------------------ 
       type (sub)-equality:
 	 First, normalize argument types:
@@ -117,31 +129,205 @@ structure IlStatic
 	     is called with the type variable and the given type.
 	     The unifier may be side-effecting or not.
     -------------------------------------------------------------- *)
-   (* XXXX we are not able to undo the effects of the con_constrain *)
-   fun constrain_tyvars_flexes(bools_tyvars,flexes,
-			       {gen_constrain,eq_constrain,constrain_ctxts,stamp}) = 
-      let
-	 fun do_tyvar (is_ref,tv) = 
-	     let 
-		 val _ = if gen_constrain then tyvar_constrain tv else ()
-		 val _ = if (eq_constrain andalso not is_ref)
-			     then tyvar_use_equal tv else ()
-		 val _ = tyvar_addctxts(tv,constrain_ctxts)
-		 val _ = update_stamp(tv,stamp)
-	     in  ()
-	     end
-	 fun do_flex (r as (ref (FLEXINFO (st,resolved,rdecs)))) =
-	     r := FLEXINFO(stamp_join(stamp,st),resolved,rdecs)
-	   | do_flex (ref (INDIRECT_FLEXINFO rf)) = do_flex rf
-      in  app do_tyvar bools_tyvars;
-	  app do_flex flexes
-      end
-  
-   fun unify_maker () = 
-     let 
-       val table = ref ([] : {saved : (context,con) tyvar, active : (context,con) tyvar} list)
-       fun set (tyvar,c) = 
-	   let 
+	
+    (* find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag indicating
+                            whether it occurred inside a CON_REF, CON_ARRAY, or CON_APP which never
+                            uses equality at that type and all flexinfo refs in con.  Also performs
+                            path compression on chains of CON_TYVARs.  *)
+    fun find_tyvars_flexes (con,ctxt) = 
+	let val tyvars = ref []
+	    val flexes = ref []
+	    val _ = debugdo (fn () =>
+			     (print "find_tyvars_flexes con = ";
+			      pp_con con; print "\n"))
+	    fun reset (tv,c) = (debugdo (fn () =>
+					 (print "find_tyvars_flexes: path compression resetting ";
+					  print (tyvar2string tv); print " to "; pp_con c; print "\n"));
+				tyvar_reset(tv,c))
+	    (* opt is not in acc *)
+	    fun compress tv acc opt =
+		(case tyvar_deref tv
+		   of NONE => (case opt
+				 of NONE => false
+				  | SOME c => (app (fn tv => reset(tv, c)) acc;
+					       false))
+		    | SOME (c as CON_TYVAR tv2) => compress tv2 (tv::acc) (SOME c)
+		    | SOME c => (app (fn tv => reset(tv, c)) acc;
+				 true))
+	    fun selfSig (SIGNAT_SELF (_, _, signat)) = signat
+	      | selfSig _ = error "find_tyvars_flexes: expected SIGNAT_SELF"
+	    fun funArgSdecs (SIGNAT_FUNCTOR (_, SIGNAT_STRUCTURE sdecs, _, _)) = sdecs
+	      | funArgSdecs _ = error "find_tyvars_flexes: expected SIGNAT_FUNCTOR"
+	    fun getsig m =
+		let val (_,signat) = GetModSig(m,ctxt)
+		    val signat = reduce_signat ctxt signat
+		    val signat = selfSig signat
+		in  signat
+		end
+	    fun geteqmodsig (CON_MODULE_PROJECT(m,l)) =
+		let val sdecs =
+		    (case getsig m
+		       of SIGNAT_STRUCTURE sdecs => sdecs
+			| _ => error "find_tyvars_flexes: projecting from non-structure")
+		    val eql = to_eq l
+		in  case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[eql])
+		      of SOME (_,PHRASE_CLASS_MOD(_,_,signat)) => SOME signat
+		       | SOME _ => error ("find_tyvars_flexes: label " ^ (label2string eql) ^
+					  " not bound to a module")
+		       | NONE => NONE
+		end
+	      | geteqmodsig (CON_VAR v) =
+		let val l =
+		    (case Context_Lookup_Var(ctxt,v)
+		       of SOME(l,PHRASE_CLASS_CON _) => l
+			| SOME _ => error ("find_tyvars_flexes: CON_VAR " ^ (var2string v) ^
+					   " not bound to a con")
+			| NONE => error ("find_tyvars_flexes: CON_VAR " ^ (var2string v) ^
+					 " not bound"))
+		    val eql = to_eq l
+		in  case Context_Lookup_Label(ctxt,eql)
+		      of SOME(_,PHRASE_CLASS_MOD(_,_,signat)) => SOME signat
+		       | SOME _ => error ("find_tyvars_flexes: label " ^ (label2string eql) ^
+					  " not bound to a module")
+		       | NONE => NONE
+		end
+	      | geteqmodsig _ = error "find_tyvars_flexes: expected CON_MODULE_PROJECT or CON_VAR"
+	    fun help in_array_ref argcon = 
+		let
+		    fun con_handler (c : con) =
+			(case c of
+			     CON_TYVAR tyvar =>
+				 let val seen = member_eq(eq_tyvar,tyvar,map #2 (!tyvars))
+				     val set =  compress tyvar [] NONE
+				     val _ = if (seen orelse set)
+						 then ()
+					     else (tyvars := (in_array_ref,tyvar) :: (!tyvars))
+				 in  NONE
+				 end
+			   | CON_FLEXRECORD r => (flexes := r :: (!flexes); NONE)
+			   | CON_ARRAY elemc => (if in_array_ref then NONE else (help true elemc; SOME c))
+			   | CON_REF elemc => (if in_array_ref then NONE else (help true elemc; SOME c))
+			   | CON_APP (c',types) =>
+				 (* For each a in types we recurse with in_ref true if the equality
+				  * functor for c' does not require equality at a.  *)
+				 if in_array_ref then NONE
+				 else
+				     (case geteqmodsig c'
+					of NONE => NONE
+					 | SOME eqsig =>
+					    let
+						val sdecs = funArgSdecs(selfSig eqsig)
+						fun eqLabel (SDEC (l, DEC_EXP(_, CON_ARROW _, _, _))) =
+						    if is_eq l then SOME l else NONE
+						  | eqLabel _ = NONE
+						val eqLabels = List.mapPartial eqLabel sdecs
+						fun wants_eq tyl =
+						    let val eql = to_eq tyl
+						    in  List.exists (fn eql' => eq_label(eql,eql')) eqLabels
+						    end
+						fun tyLabel (SDEC (l, DEC_CON(_, KIND, _, _))) = SOME l
+						  | tyLabel _ = NONE
+						val tyLabels = List.mapPartial tyLabel sdecs
+						val _ = if length tyLabels = length types then ()
+							else error "find_tyvars_flexes: meq requires wrong number of types"
+						fun help' (tyl,ty) = help (not (wants_eq tyl)) ty
+					    in  help false c';
+						app help' (Listops.zip tyLabels types);
+						SOME c
+					    end)
+			   | _ => NONE)
+		    val handlers = (default_exp_handler,
+				    con_handler,
+				    default_mod_handler,
+				    default_sdec_handler)
+
+		    val _ = con_handle handlers argcon
+		in  ()
+		end
+	in  help false con;
+	    (!tyvars, !flexes)
+	end
+
+	
+   and unify_maker () = 
+     let
+	 (* Commit establishes the invariant that a tyvar which wants equality is set
+	  * iff its eq_hole is filled.
+	  *)
+       datatype undo_info =
+	   UNDO_TYVAR of {saved : (context,con,exp) tyvar, active : (context,con,exp) tyvar}
+	 | UNDO_FLEX of flexinfo ref * stamp
+	   
+       datatype commit_info =
+	   COMMIT_EQEXP of {hole : exp oneshot,
+			    exp : exp,
+			    tyvar : (context,con,exp) tyvar,
+			    con : con}
+
+       local 
+	   fun undo_flex (r as (ref (FLEXINFO (_,resolved,rdecs))), stamp) = r := FLEXINFO(stamp,resolved,rdecs)
+	     | undo_flex (ref (INDIRECT_FLEXINFO rf), stamp) = undo_flex (rf,stamp)
+	       
+	   fun undo' (UNDO_TYVAR {saved, active}) = tyvar_update(active,saved)
+	     | undo' (UNDO_FLEX arg) = undo_flex arg
+	       
+	   fun commit' (COMMIT_EQEXP {hole, exp, tyvar, con}) =
+	       let val _ = debugdo (fn () =>
+				    (print "unification committing to equality function\n";
+				     print "  tyvar = "; print (tyvar2string tyvar); print "\n";
+				     print "  con = "; pp_con con; print "\n";
+				     print "  exp = "; pp_exp exp; print "\n"))
+	       in  oneshot_set(hole, exp)
+	       end
+	       
+	   val undo_table = ref ([] : undo_info list)
+	   val commit_table = ref ([] : commit_info list)
+       in
+	   fun add_undo entry = undo_table := entry :: (!undo_table)
+	   fun add_commit entry = commit_table := entry :: (!commit_table)
+	   fun undo() = app undo' (!undo_table)
+	   fun commit() = app commit' (!commit_table)
+	   fun marker () =
+	       let val undo = !undo_table
+		   val commit = !commit_table
+		   fun restore () =
+		       let val current_undo = !undo_table
+			   val count = (length current_undo) - (length undo)
+		       in  app undo' (List.take(current_undo,count));
+			   undo_table := undo;
+			   commit_table := commit
+		       end
+	       in  restore
+	       end		   
+       end
+   
+       fun constrain(bools_tyvars,flexes,
+		     {gen_constrain,eq_constrain,constrain_ctxts,stamp}) =
+	   let
+	       fun do_tyvar (in_ref,tv) = 
+		   let val saved = tyvar_copy tv
+		       val _ = if gen_constrain then tyvar_constrain tv else ()
+		       val _ = if (eq_constrain andalso not in_ref)
+				   then tyvar_use_equal tv else ()
+		       val _ = tyvar_addctxts(tv,constrain_ctxts)
+		       val _ = update_stamp(tv,stamp)
+		   in
+		       add_undo (UNDO_TYVAR{saved = saved, active = tv})
+		   end
+	       fun do_flex (r as (ref (FLEXINFO (st,resolved,rdecs)))) =
+		   let val _ = r := FLEXINFO(stamp_join(stamp,st),resolved,rdecs)
+		   in  add_undo (UNDO_FLEX (r,stamp))
+		   end
+		 | do_flex (ref (INDIRECT_FLEXINFO rf)) = do_flex rf
+	   in  app do_tyvar bools_tyvars;
+	       app do_flex flexes
+	   end
+
+       fun set (ctxt,tyvar,c) = 
+	   let
+	       (* If tyvar is marked for equality its oneshot will be set UNLESS the equality
+		* compiler fails for c.  In that case, unification fails.  *)
+	       val local_undo = marker()
 	       val _ = (case (tyvar_deref tyvar) of
 			    NONE => ()
 			  | (SOME c') => error "cannot set an already set tyvar")
@@ -151,53 +337,54 @@ structure IlStatic
 			    | SOME c => follow_tyvar c)
 		 | follow_tyvar c = c
 	       val c = follow_tyvar c
-
-	       val (tyvars,flexes) = find_tyvars_flexes c
-
+	       val (tyvars,flexes) = find_tyvars_flexes (c,ctxt)
 	       val _ =  if (!showing)
-			    then (print "setting "; 
+			    then (print "unification setting ";
+				  print (tyvar2string tyvar); print " == ";
 				  pp_con (CON_TYVAR tyvar); print "\n  to "; 
 				  pp_con c; print "\n";
 				  print "  tyvars are "; 
-				  app (fn (_,tv) => (pp_con (CON_TYVAR tv); 
-						     print "  ")) tyvars;
+				  app (fn (_,tv) => (print (tyvar2string tv); print " == ";
+						     pp_con (CON_TYVAR tv); print "   ")) tyvars;
 				  print "\n\n")
 			else ()
-
 	       val tyvar_ctxts = tyvar_getctxts tyvar
+	       val use_equal = tyvar_is_use_equal tyvar
+	       val _ = constrain (tyvars,flexes,
+				  {gen_constrain = tyvar_isconstrained tyvar,
+				   eq_constrain = use_equal,
+				   stamp = tyvar_stamp tyvar,
+				   constrain_ctxts = tyvar_ctxts})
+	       val eq_compile_failed =	(* Must follow constrain *)
+		   (use_equal andalso
+		    (case eq_compile (ctxt, c)
+		       of SOME (exp,con) =>
+			   (add_commit (COMMIT_EQEXP {hole=valOf (tyvar_eq_hole tyvar),
+						      exp=exp, tyvar=tyvar, con=con});
+			    false)
+			| NONE => true))
+		   
 	       val fv = Name.VarSet.listItems(con_free c)
 	       fun var_bound ctxt v = (case Context_Lookup_Var(ctxt,v) of
 					   SOME _ => true
 					 | _ => false)
 	       fun bounded ctxt = Listops.andfold (var_bound ctxt) fv
-
-	       val occurs = Listops.member_eq(eq_tyvar,tyvar,map #2 tyvars) (* occurs check *)
 	       val well_formed = Listops.andfold bounded tyvar_ctxts
 
-	   in  if occurs
-		   then (if (!debug)
-			     then (print "Fails occurs check\n";
-				   print "tyvar = "; pp_con (CON_TYVAR tyvar);
-				   print "\ncon = "; pp_con c;
-				   print "\n")
-			 else ();
-			 false)
-	       else if well_formed
-			then 
-			    let val _ = constrain_tyvars_flexes
-				(tyvars,flexes,
-				 {gen_constrain = tyvar_isconstrained tyvar,
-				  eq_constrain = tyvar_is_use_equal tyvar,
-				  stamp = tyvar_stamp tyvar,
-				  constrain_ctxts = tyvar_ctxts})
-				val entry = {saved = tyvar_copy tyvar, active = tyvar}
-				val _ = table := (entry::(!table))
-			    in  tyvar_set(tyvar,c); true
-			    end
-		    else (if (!debug)
-			      then print "Fails well-formed in tyvar contexts"
-			  else ();
-			  false)
+	       val occurs = Listops.member_eq(eq_tyvar,tyvar,map #2 tyvars) (* occurs check *)
+
+	       fun fail why = (debugdo (fn () =>
+					(print "Fails "; print why; print "\n"));
+			       local_undo();
+			       false)
+	   in
+	       case (occurs, eq_compile_failed, not well_formed)
+		 of (true, _, _) => fail "occurs check"
+		  | (_, true, _) => fail "equality compilation"
+		  | (_, _, true) => fail "well-formed in tyvar contexts"
+		  | _ => (add_undo (UNDO_TYVAR {saved = tyvar_copy tyvar, active = tyvar});
+			  tyvar_set(tyvar,c);
+			  true)
 	   end
 
 (*
@@ -213,15 +400,12 @@ structure IlStatic
 	   in  res
 	   end
 *)
-
-       (* Undo is not undoing effects of constrain operations *)
-       fun undo() = app (fn {saved,active} => tyvar_update(active,saved)) (!table)
-     in  (set, undo)
+     in  (set, constrain, undo, commit)
      end
 
 
-   fun meta_eq_con (setter,is_sub,equations) (con1,con2,ctxt) = 
-       let val self = meta_eq_con (setter, is_sub, equations)
+   and meta_eq_con (setter,constrain,is_sub,equations) (con1,con2,ctxt) = 
+       let val self = meta_eq_con (setter, constrain, is_sub, equations)
 	   val _ = if (!showing)
 		       then (print "meta_eq_con called on:-------------\n";
 			     print "con1 = "; pp_con con1; print "\n";
@@ -230,19 +414,19 @@ structure IlStatic
 	   fun path_match p1 p2 = not(null(Listops.list_inter_eq(eq_path, p1, p2)))
        in
 	   case (con1,con2) of
-	       (CON_TYVAR tv1, CON_TYVAR tv2) => 
+	       (CON_TYVAR tv1, CON_TYVAR tv2) =>
 		   (eq_tyvar(tv1,tv2) orelse
 		    (case (tyvar_deref tv1, tyvar_deref tv2) of
-			 (NONE, NONE) => setter(tv1,con2)
+			 (NONE, NONE) => setter(ctxt,tv1,con2)
 		       | (NONE, SOME c2) => self(con1,c2,ctxt)
 		       | (SOME c1,_) => self (c1,con2,ctxt)))
-	     | (CON_TYVAR tv1, _) => 
+	     | (CON_TYVAR tv1, _) =>
 		   (case tyvar_deref tv1 of
-			NONE => setter(tv1,con2)
+			NONE => setter(ctxt,tv1,con2)
 		      | SOME c => self (c,con2,ctxt))
 	     | (_, CON_TYVAR tv2) =>
 		   (case tyvar_deref tv2 of
-			NONE => setter(tv2,con1)
+			NONE => setter(ctxt,tv2,con1)
 		      | SOME c => self (con1,c,ctxt))
 	     | _ =>
 		   let val same = 
@@ -256,21 +440,21 @@ structure IlStatic
 			   val (_, con1, path1) = HeadNormalize(con1,ctxt)
 			   val (_, con2, path2) = HeadNormalize(con2,ctxt)
 		       in  (path_match path1 path2) orelse
-			   (meta_eq_con_hidden (setter,is_sub,equations) (con1,con2,ctxt))
+			   (meta_eq_con_hidden (setter,constrain,is_sub,equations) (con1,con2,ctxt))
 		       end
 		   end
        end
 
 
    (* ------------ con1 and con2 are head-normalized *)
-   and meta_eq_con_hidden (setter,is_sub,equations) (con1,con2,ctxt) = 
+   and meta_eq_con_hidden (setter,constrain,is_sub,equations) (con1,con2,ctxt) = 
      let 
 	   val _ = if (!showing)
 		       then (print "meta_eq_con_hidden called on:-------------\n";
 			     print "con1 = "; pp_con con1; print "\n";
 			     print "con2 = "; pp_con con2; print "\n")
 		   else ()
-	 val self = meta_eq_con (setter, is_sub, equations)
+	 val self = meta_eq_con (setter, constrain, is_sub, equations)
 
        (* the flex record considered as an entirety is not generalizeable
 	  but its subparts are generalizable *)
@@ -307,12 +491,12 @@ structure IlStatic
 		    end
 		    fun stamp_constrain stamp rdecs = 
 			let val temp = CON_RECORD rdecs
-			    val (tyvars, flexes) = find_tyvars_flexes temp
-			in  constrain_tyvars_flexes(tyvars,flexes,
-						    {gen_constrain = false,
-						     eq_constrain = false,
-						     stamp = stamp,
-						     constrain_ctxts = []})
+			    val (tyvars, flexes) = find_tyvars_flexes (temp,ctxt)
+			in  constrain(tyvars,flexes,
+				      {gen_constrain = false,
+				       eq_constrain = false,
+				       stamp = stamp,
+				       constrain_ctxts = []})
 			end
 		    fun follow (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf))) = follow (CON_FLEXRECORD rf)
 		      | follow (CON_FLEXRECORD (ref (FLEXINFO (_,true,rdecs)))) = CON_RECORD rdecs
@@ -350,7 +534,7 @@ structure IlStatic
 	       let val c1 = ConUnroll con1
 		   val c2 = ConUnroll con2
 		   val equations = (con1,con2)::equations
-	       in  meta_eq_con (setter, is_sub, equations) (c1,c2,ctxt)
+	       in  self (c1,c2,ctxt)
 	       end
 	   end
      in
@@ -418,31 +602,35 @@ structure IlStatic
        let val _ = if (!showing) 
 		       then print "eq_con calling meta_eq_con\n"
 		   else ()
-	   val (setter,undo) = unify_maker()
-       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,false,[])
-	   (con1, con2, ctxt)
+	   val (setter,constrain,undo,commit) = unify_maker()
+	   val is_eq = (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,constrain,false,[])
+	               (con1, con2, ctxt)
+	   val _ = commit()
+       in  is_eq
        end
 
    and sub_con (arg as (ctxt, con1, con2)) = 
        let val _ = if (!showing) 
 		       then print "sub_con calling meta_eq_con\n"
 		   else ()
-	   val (setter,undo) = unify_maker()
-       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,true,[])
-	   (con1, con2, ctxt)
+	   val (setter,constrain,undo,commit) = unify_maker()
+	   val is_sub = (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,constrain,true,[])
+	                (con1, con2, ctxt)
+	   val _ = commit()
+       in  is_sub
        end
 
    and soft_eq_con (ctxt,con1,con2) = 
-       let val (setter,undo) = unify_maker()
-	   val is_eq = meta_eq_con (setter,false,[]) (con1,con2,ctxt)
+       let val (setter,constrain,undo,commit) = unify_maker()
+	   val is_eq = meta_eq_con (setter,constrain,false,[]) (con1,con2,ctxt)
 	   val _ = undo()
        in  is_eq
        end
 
    and semi_sub_con (ctxt,con1,con2) = 
-       let val (setter,undo) = unify_maker()
-	   val is_eq = meta_eq_con (setter,true,[]) (con1,con2,ctxt)
-	   val _ = if is_eq then () else undo()
+       let val (setter,constrain,undo,commit) = unify_maker()
+	   val is_eq = meta_eq_con (setter,constrain,true,[]) (con1,con2,ctxt)
+	   val _ = if is_eq then commit() else undo()
        in  is_eq
        end
 
@@ -452,8 +640,9 @@ structure IlStatic
 	MODULE_PROJECT (m,l) => Module_IsValuable m ctxt
       | APP(e1,e2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
 			  val (va2,e2_con) = GetExpCon(e1,ctxt)
-			  val _ = (print "exp_isvaluable: app case: e1_con is: \n";
-				   Ppil.pp_con e1_con; print "\n")
+			  val _ = debugdo (fn () =>
+					   (print "exp_isvaluable: app case: e1_con is: \n";
+					    Ppil.pp_con e1_con; print "\n"))
 			  val e1_con_istotal = 
 			      (case e1_con of
 				   CON_ARROW(_,_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
@@ -461,8 +650,9 @@ structure IlStatic
 		      in va1 andalso e1_con_istotal andalso va2
 		      end
       | EXTERN_APP(_,e1,es2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
-			  val _ = (print "exp_isvaluable: app case: e1_con is: \n";
-				   Ppil.pp_con e1_con; print "\n")
+			  val _ = debugdo (fn () =>
+					   (print "exp_isvaluable: app case: e1_con is: \n";
+					    Ppil.pp_con e1_con; print "\n"))
 			  val e1_con_istotal = 
 			      (case e1_con of
 				   CON_ARROW(_,_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
@@ -567,17 +757,21 @@ structure IlStatic
 			   then
 			       if (andfold (fn KIND => true | _ => false) kargs)
 				   then kres
-			       else (print "GetConKind: arguments of app not of kind KIND in ";
-				     pp_con con; print "Argument kinds = ";
-				     app pp_kind kargs;
+			       else (debugdo (fn () =>
+					      (print "GetConKind: arguments of app not of kind KIND in ";
+					       pp_con con; print "Argument kinds = ";
+					       app (fn k => (pp_kind k; print "  ")) kargs;
+					       print "\n"));
 				     error "GetConKind: arguments not of kind KIND")
-		       else (print "GetConKind: kind mismatch in "; pp_con con;
-			     print "\nDomain arity = "; print (Int.toString a);
-			     print "\nNumber of arguments = "; 
-			     print (Int.toString b); print "\n";
+		       else (debugdo (fn () =>
+				      (print "GetConKind: kind mismatch in "; pp_con con;
+				       print "\nDomain arity = "; print (Int.toString a);
+				       print "\nNumber of arguments = "; 
+				       print (Int.toString b); print "\n"));
 			     error "GetConKind: kind mismatch in CON_APP")
-		 | _ => (print "GetConKind: bad function kind in "; pp_con con;
-			   print "\nFunction kind = "; pp_kind k1;
+		 | _ => (debugdo (fn () =>
+				  (print "GetConKind: bad function kind in "; pp_con con;
+				   print "\nFunction kind = "; pp_kind k1; print "\n"));
 			   error "GetConKind: wrong kind in CON_APP"))
 	   end
      | (CON_MU c) => (case GetConKind(c,ctxt) of
@@ -598,15 +792,17 @@ structure IlStatic
 					 (if (i >= 0 andalso i < n)
 					    then KIND
 					  else
-					    (print "GetConKind got: ";
-					     pp_con con;
-					     print "\n";
+					    (debugdo (fn () =>
+						      (print "GetConKind got: ";
+						       pp_con con;
+						       print "\n"));
 					     error "got CON_TUPLE_PROJECT in GetConKind"))
-				     | k => (print "GetConKind got: ";
-					     pp_con con;
-					     print "\nwith kind";
-					     pp_kind k;
-					     print "\n";
+				     | k => (debugdo (fn () =>
+						      (print "GetConKind got: ";
+						       pp_con con;
+						       print "\nwith kind";
+						       pp_kind k;
+						       print "\n"));
 					     error "got CON_TUPLE_PROJECT in GetConKind"))
      | (CON_MODULE_PROJECT (m,l)) => 
 	   let val (_,signat) = GetModSig(m,ctxt)
@@ -616,9 +812,10 @@ structure IlStatic
 			SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
 		      | _ => error "cannot project from unselfified sig_structure")
 	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
-		    NONE => (print "no such label = ";
-			     pp_label l; print " in sig \n";
-			     Ppil.pp_signat signat; print "\n";
+		    NONE => (debugdo (fn () =>
+				      (print "no such label = ";
+				       pp_label l; print " in sig \n";
+				       Ppil.pp_signat signat; print "\n"));
 			     error "no such label in sig")
 		  | SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 		  | _ => error "label in sig not a DEC_CON")
@@ -648,8 +845,9 @@ structure IlStatic
 	   in (case k of
 		   KIND_ARROW(a,kres) => kres
 		 | _ => 
-			(print "GetConKindFast: kind mismatch in "; pp_con con;
-			 print "\nFunction kind = "; pp_kind k;
+			(debugdo (fn () =>
+				  (print "GetConKindFast: kind mismatch in "; pp_con con;
+				   print "\nFunction kind = "; pp_kind k; print "\n"));
 			 error "GetConKindFast: kind mismatch in CON_APP"))
 	   end
      | (CON_MU c) => (case GetConKindFast(c,ctxt) of
@@ -671,15 +869,17 @@ structure IlStatic
 					 (if (i >= 0 andalso i < n)
 					    then KIND
 					  else
-					    (print "GetConKind got: ";
-					     pp_con con;
-					     print "\n";
+					    (debugdo (fn () =>
+						      (print "GetConKind got: ";
+						       pp_con con;
+						       print "\n"));
 					     error "got CON_TUPLE_PROJECT in GetConKindFast"))
-				     | k => (print "GetConKindFast got: ";
-					     pp_con con;
-					     print "\nwith kind";
-					     pp_kind k;
-					     print "\n";
+				     | k => (debugdo (fn () =>
+						      (print "GetConKindFast got: ";
+						       pp_con con;
+						       print "\nwith kind";
+						       pp_kind k;
+						       print "\n"));
 					     error "got CON_TUPLE_PROJECT in GetConKindFast"))
      | (CON_MODULE_PROJECT (m,l)) => 
 	   let val (_,signat) = GetModSig(m,ctxt)
@@ -689,10 +889,11 @@ structure IlStatic
 			SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
 		      | _ => error "cannot project from unselfified sig_structure")
 	   in  (case Sdecs_Lookup ctxt (MOD_VAR (fresh_var()),sdecs,[l]) of
-		    NONE => (print "no such label = ";
-			     pp_label l; print " in sig \n";
-			     Ppil.pp_signat signat;
-			     print "\n";
+		    NONE => (debugdo (fn () =>
+				      (print "no such label = ";
+				       pp_label l; print " in sig \n";
+				       Ppil.pp_signat signat;
+				       print "\n"));
 			     error "no such label in sig")
 		  | SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 		  | _ => error "label in sig not a DEC_CON")
@@ -740,29 +941,32 @@ structure IlStatic
 	       val va = va1 andalso va2 andalso total
 	   in  if is_sub
 		   then (va,con_deref res_con)
-	       else (print "\nfunction type is = "; pp_con con1;
-		     (case cons2 of
-			  [con2] => (print "\nargument type is = "; pp_con con2; print "\n")
-			| _ => (print "\nargument types are = "; app pp_con cons2; print "\n"));
-		     print "Type mismatch in expression application:\n";
-		     pp_exp exparg;
+	       else (debugdo (fn () =>
+			      (print "\nfunction type is = "; pp_con con1;
+			       (case cons2 of
+				    [con2] => (print "\nargument type is = "; pp_con con2; print "\n")
+				  | _ => (print "\nargument types are = "; app pp_con cons2; print "\n"));
+			       print "Type mismatch in expression application:\n";
+			       pp_exp exparg; print "\n"));
 		     error "Type mismatch in expression application")
 	   end
 
    and GetExpRollCon' (ctxt,isroll,e,c) : bool * con = 
        let val (_,cNorm,_) = HeadNormalize(c,ctxt)
 	   val (va,econ) = GetExpCon(e,ctxt)
-	   val error = fn str => (print "typing roll/unroll expression:\n";
-				  Ppil.pp_exp e;
-				  print "\n";
+	   val error = fn str => (debugdo (fn () =>
+					   (print "typing roll/unroll expression:\n";
+					    Ppil.pp_exp e;
+					    print "\n"));
 				  error str)
 	   val (i,cInner) = 
 	       (case cNorm of
 		    CON_TUPLE_PROJECT(i,CON_MU cInner) => (i, cInner)
-		  | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
-			  pp_con c; print "\n";
-			  print "\nNormalized Decoration of (UN)ROLL was ";
-			  pp_con cNorm; print "\n";
+		  | _ => (debugdo (fn () =>
+				   (print "\nUnnormalized Decoration of (UN)ROLL was ";
+				    pp_con c; print "\n";
+				    print "\nNormalized Decoration of (UN)ROLL was ";
+				    pp_con cNorm; print "\n"));
 			  error "decoration of ROLL not of the form CON_TUPLE_PROJ(CON_MU ...)"))
        in (va,
 	   (case GetConKind(cInner,ctxt) of
@@ -779,8 +983,9 @@ structure IlStatic
 					 (if (sub_con(ctxt,econ,cUnroll))
 					      then cNorm
 					  else
-					      (Ppil.pp_con econ; print "\n";
-					       Ppil.pp_con cUnroll; print "\n";
+					      (debugdo (fn () =>
+							(Ppil.pp_con econ; print "\n";
+							 Ppil.pp_con cUnroll; print "\n"));
 					       error "ROLL: expression type does not match decoration"))
 				 else 
 				     (if (eq_con(ctxt,econ,cNorm))
@@ -832,10 +1037,11 @@ structure IlStatic
 		       val res = sub_con(lctxt,bodyc,c')
 		       val _ = if res
 				   then ()
-			       else (print "ILSTATIC - ptest yielded false\n";
-				     print "e = \n"; pp_exp e; print "\n";
-				     print "c' = \n"; pp_con c'; print "\n";
-				     print "bodyc = \n"; pp_con bodyc; print "\n")
+			       else debugdo (fn () =>
+					     (print "ILSTATIC - ptest yielded false\n";
+					      print "e = \n"; pp_exp e; print "\n";
+					      print "c' = \n"; pp_con c'; print "\n";
+					      print "bodyc = \n"; pp_con bodyc; print "\n"))
 
 		   in res
 		   end
@@ -843,13 +1049,15 @@ structure IlStatic
 	       case a of
 	       PARTIAL => if (andfold (ptest full_ctxt) fbnds)
 			      then res_type
-			  else (print "could not type-check FIX expression:\n";
-				pp_exp exparg;
+			  else (debugdo (fn () =>
+					 (print "could not type-check FIX expression:\n";
+					  pp_exp exparg; print "\n"));
 				error "could not type-check FIX expression")
 	     | TOTAL =>  if ((andfold (ttest ctxt) fbnds))
 			     then res_type
-			 else (print "could not type-check TOTALFIX expression:\n";
-			       pp_exp exparg;
+			 else (debugdo (fn () =>
+					(print "could not type-check TOTALFIX expression:\n";
+					 pp_exp exparg; print "\n"));
 			       error "could not type-check TOTALFIX expression"))
 	   end
      | (RECORD (rbnds)) => 
@@ -865,9 +1073,10 @@ structure IlStatic
 	   let 
 	       val (va,con) = GetExpCon(exp,ctxt)
 	       val con' = #2(HeadNormalize(con,ctxt))
-	       fun RdecLookup (label,[]) = (print "RdecLookup could not find label ";
-					    pp_label label; print "in type ";
-					    pp_con con';
+	       fun RdecLookup (label,[]) = (debugdo (fn () =>
+						     (print "RdecLookup could not find label ";
+						      pp_label label; print "in type ";
+						      pp_con con'));
 					    error "RdecLookup could not find label")
 		 | RdecLookup (label,(l,c)::rest) = if eq_label(label,l) then c
 						    else RdecLookup (label,rest)
@@ -876,8 +1085,9 @@ structure IlStatic
 	   in (case con' of
 		   (CON_RECORD rdecs) => (va,RdecLookup(l,rdecs))
 		 | (CON_FLEXRECORD fr) => (va,RdecLookup(l,chase fr))
-		 | _ => (print "Record Proj on exp not of type CON_RECORD; type = ";
-			 pp_con con; print "\n";
+		 | _ => (debugdo (fn () =>
+				  (print "Record Proj on exp not of type CON_RECORD; type = ";
+				   pp_con con; print "\n"));
 			 error "Record Proj on exp not of type CON_RECORD"))
 	   end
      | (SUM_TAIL (_,c,e)) => 
@@ -954,17 +1164,19 @@ structure IlStatic
 				 | _ => (1,SOME carrier))
 		      in if (i >= n)
 			     then
-				 (print "INJ: injection field out of range in exp:";
-				  Ppil.pp_exp exparg; print "\n";
+				 (debugdo (fn () =>
+					   (print "INJ: injection field out of range in exp:";
+					    Ppil.pp_exp exparg; print "\n"));
 				  error "INJ: injection field out of range")
 			 else
 			     if (eq_con(ctxt, econ, valOf fieldcon_opt))
 				 then (va,CON_SUM{names=names,noncarriers=noncarriers,
 						  carrier=carrier,special=NONE})
-			     else (print "INJ: injection does not type check eq_con failed on: ";
-				   Ppil.pp_exp exparg; print "\n";
-				   print "econ is "; Ppil.pp_con econ; print "\n";
-				   print "nth clist is "; Ppil.pp_con (valOf fieldcon_opt); print "\n";
+			     else (debugdo (fn () =>
+					    (print "INJ: injection does not type check eq_con failed on: ";
+					     Ppil.pp_exp exparg; print "\n";
+					     print "econ is "; Ppil.pp_con econ; print "\n";
+					     print "nth clist is "; Ppil.pp_con (valOf fieldcon_opt); print "\n"));
 				   error "INJ: injection does not typecheck")
 		      end)
 	   end
@@ -990,11 +1202,12 @@ structure IlStatic
 			    let val (_,optcon) = GetExpCon(e,ctxt)
 			    in if (eq_con(ctxt,optcon,tipe))
 				   then ()
-			       else (print "EXN_CASE: default case mismatches";
-				     print "default con is:\n";
-				     Ppil.pp_con optcon; print "\n";
-				     print "tipe con is :\n";
-				     Ppil.pp_con tipe; print "\n";
+			       else (debugdo (fn () =>
+					      (print "EXN_CASE: default case mismatches";
+					       print "default con is:\n";
+					       Ppil.pp_con optcon; print "\n";
+					       print "tipe con is :\n";
+					       Ppil.pp_con tipe; print "\n"));
 				     error "EXN_CASE: default case mismatches")
 			    end)
 	   in (false, tipe)
@@ -1007,8 +1220,9 @@ structure IlStatic
 	       val {names,carrier,noncarriers,special=_} = 
 		   (case sumtype of
 			CON_SUM info => info
-		      | _ => (print "CASE statement is decorated with non-sumtype:\n";
-			      pp_exp exparg; print "\n";
+		      | _ => (debugdo (fn () =>
+				       (print "CASE statement is decorated with non-sumtype:\n";
+					pp_exp exparg; print "\n"));
 			      error "CASE statement is decorated with non-sumtype"))
 	       val n = length arms
 	       val (_,carrier,_) = HeadNormalize(carrier,ctxt)
@@ -1050,10 +1264,11 @@ structure IlStatic
 	   in if (eq_con(ctxt,eargCon,sumcon))
 		  then (loop 0 va arms)
 	      else 
-		  (print "CASE: expression's type and decoration type are unequal\n";
-		   print "  eargCon = "; pp_con eargCon; print "\n";
-		   print "  sumcon = "; pp_con sumcon; print "\n";
-		   print "  CASE exp = "; pp_exp exparg; print "\n";
+		  (debugdo (fn () =>
+			    (print "CASE: expression's type and decoration type are unequal\n";
+			     print "  eargCon = "; pp_con eargCon; print "\n";
+			     print "  sumcon = "; pp_con sumcon; print "\n";
+			     print "  CASE exp = "; pp_exp exparg; print "\n"));
 		   error "CASE: expression type and decoration type are unequal")
 	   end
      | (MODULE_PROJECT(m,l)) => 
@@ -1064,7 +1279,7 @@ structure IlStatic
 		      | SOME _ => fail "MODULE_PROJECT: label not of exp"
 		      | NONE => fail "MODULE_PROJECT: label not in modsig")
 	       fun notself_case(sdecs) = 
-		   let val _ = print "MODULE_PROJECT: notself case\n"
+		   let val _ = debugdo (fn () => print "MODULE_PROJECT: notself case\n")
 		       val v = fresh_named_var "tempModuleProj"
 		       val (_,c) = self_case(PATH(v,[]),sdecs)
 		       val (count,c) = con_subst'(c,list2subst([],[],[(v,m)]))
@@ -1254,18 +1469,20 @@ structure IlStatic
 	       fun self_case(p,sdecs) = 
 		   (case Sdecs_Lookup ctxt (path2mod p, sdecs,[l]) of
 			NONE =>  
-			 (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
-			     pp_label l;
-			     print "\nand with signat = \n";  pp_signat signat; 
-			     print "\n";
+			    (debugdo (fn () =>
+				      (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
+				       pp_label l;
+				       print "\nand with signat = \n";  pp_signat signat; 
+				       print "\n"));
 			     fail "MOD_PROJECT failed to find label ")
 		      | (SOME (_,PHRASE_CLASS_MOD(_,_,s))) => (va,s)
-		      | _ => (print "MOD_PROJECT at label "; pp_label l; 
-			      print "did not find DEC_MOD.  \nsig was = ";
-			      pp_signat signat; print "\n";
+		      | _ => (debugdo (fn () =>
+				       (print "MOD_PROJECT at label "; pp_label l; 
+					print "did not find DEC_MOD.  \nsig was = ";
+					pp_signat signat; print "\n"));
 			      fail "MOD_PROJECT found label not of flavor DEC_MOD"))
 	       fun notself_case sdecs = 
-		   let val _ = print "MOD_PROJECT: notself case\n"
+		   let val _ = debugdo (fn () => print "MOD_PROJECT: notself case\n")
 		       val v = fresh_named_var "tempModProj"
 		       val (_,s) = self_case(PATH(v,[]), sdecs)
 		       val (count,s) = sig_subst'(s,list2subst([],[],[(v,m)]))
@@ -1453,7 +1670,7 @@ structure IlStatic
 			  | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
 			  | NONE => NONE)
 		   fun notself_case sdecs = 
-		       let val _ = print "CON_MOD_PROJECT: notself case\n"
+		       let val _ = debugdo (fn () => print "CON_MOD_PROJECT: notself case\n")
 			   val v = fresh_named_var "tempModProj"
 		       in  (case self_case(PATH(v,[]), sdecs) of
 				NONE => NONE
@@ -1468,8 +1685,9 @@ structure IlStatic
 	       in (case (reduce_signat ctxt s) of 
 		       SIGNAT_STRUCTURE sdecs => notself_case sdecs
 		     | SIGNAT_SELF(self, _, SIGNAT_STRUCTURE sdecs) => self_case(self,sdecs)
-		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from a functor = \n";
-					    pp_mod m;
+		     | SIGNAT_FUNCTOR _ => (debugdo (fn () =>
+						     (print "CON_MODULE_PROJECT from a functor = \n";
+						      pp_mod m; print "\n"));
 					    error "CON_MODULE_PROJECT from a functor")
 		     | _ => error "signat_var of signat_of is not reduced")
 	       end))
@@ -1578,9 +1796,10 @@ structure IlStatic
 		  INJ {sumtype=s2,field=f2,inject=e2opt}) =>
 		     eq_con(ctxt,s1,s2) andalso f1 = f2 andalso 
 		     Util.eq_opt(fn (e1,e2) => eq(e1,e2,subst), e1opt, e2opt)
-	       | _ => (print "eq_exp failed with \n    exp1 = ";
-		       pp_exp e1; print "\n\nand exp2 = "; 
-		       pp_exp e2; print "\n\n"; 
+	       | _ => (debugdo (fn () =>
+				(print "eq_exp failed with \n    exp1 = ";
+				 pp_exp e1; print "\n\nand exp2 = "; 
+				 pp_exp e2; print "\n\n"));
 		       false))
 	 in  eq(exp1,exp2,[])
 	 end
@@ -1628,8 +1847,8 @@ structure IlStatic
 				   end
 			     | _ => SDEC(l2,dec2)::(match_var subst rest1 rest2))
 		 else raise NOPE
-	       | match_var _ _ _ = (print "Sdecs_IsSub: length mismatch\n";
-				  raise NOPE)
+	       | match_var _ _ _ = (debugdo (fn () => print "Sdecs_IsSub: length mismatch\n");
+				    raise NOPE)
 	     fun loop ctxt [] [] = true
 	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) = 
 		 let val dec1 = SelfifyDec ctxt dec1
@@ -1668,13 +1887,16 @@ structure IlStatic
 		       val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,false,s2_arg))
 		       val b1 = Sig_IsSub' isSub (ctxt',s2_arg,s1_arg) 
 		       val b2 = Sig_IsSub' isSub (ctxt',s1_res,s2_res)
-		       val _ = if b1 then () else print "argument sig mismatch\n"
-		       val _ = if b2 then () else  print "result sig mismatch\n" 
+		       val _ = debugdo (fn () =>
+					(if b1 then () else print "argument sig mismatch\n";
+					 if b2 then () else print "result sig mismatch\n" ))
 		   in  b1 andalso b2
 		   end)
-		 | _ => (print "Warning: ill-formed call to Sig_IsSub' with sig1 = \n";
-			 pp_signat sig1; print "\n and sig2 = \n";
-			 pp_signat sig2; print "\n";
+		 | _ => (print "Warning: ill-formed call to Sig_IsSub'\n";
+			 debugdo (fn () =>
+				  (print " with sig1 = \n";
+				   pp_signat sig1; print "\n and sig2 = \n";
+				   pp_signat sig2; print "\n"));
 			 false))
 	 end
 

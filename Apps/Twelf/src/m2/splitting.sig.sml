@@ -1,4 +1,4 @@
-(*$import Prelude METASYN *)
+(*$import Prelude TopLevel METASYN *)
 (* Splitting *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,4 @@
-(*$import Prelude METASYN *)
+(*$import Prelude TopLevel METASYN *)
 (* Lemma *)
 (* Author: Carsten Schuermann *)
 
@@ -8,5 +8,5 @@ sig
     
   exception Error of string
 
-  val apply : MetaSyn.State * int (*MetaSyn.IntSyn.cid*) -> MetaSyn.State 
+  val apply : MetaSyn.State * MetaSyn.IntSyn.cid -> MetaSyn.State 
 end;  (* signature LEMMA *)

@@ -5,13 +5,33 @@
  *
  *)
 
-structure Word8Vector : MONO_VECTOR =
+structure Word8Vector :> MONO_VECTOR where type elem = char
+				       and type vector = char vector =
   struct
 
+    val int32touint32 = TiltPrim.int32touint32
+    val uint32toint32 = TiltPrim.uint32toint32
+	
+    val empty_vector = TiltPrim.empty_vector
+    val unsafe_array = TiltPrim.unsafe_array
+    val unsafe_update = TiltPrim.unsafe_update
+    val unsafe_vsub = TiltPrim.unsafe_vsub
+    val vector_length = TiltPrim.vector_length
+	
+    val unsafe_array2vector = TiltPrim.unsafe_array2vector
+    val unsafe_vector2array = TiltPrim.unsafe_vector2array
+	
+    val ugt = TiltPrim.ugt
+    val ugte = TiltPrim.ugte
+    val ult = TiltPrim.ult
+	
+    val uminus = TiltPrim.uminus
+    val uplus = TiltPrim.uplus
+	
     type elem = char
     type vector = char vector
 
-    val maxLen = vectormaxlength
+    val maxLen = Vector.maxLen
 
     fun checkLen n = if maxLen < n then raise General.Size else ()
     val vector0 : vector = empty_vector
@@ -118,9 +138,12 @@ structure Word8Vector : MONO_VECTOR =
 
 (*
  * $Log$
-# Revision 1.3  2000/09/12  18:54:11  swasey
-# Changes for cutoff compilation
+# Revision 1.4  2000/11/27  22:36:22  swasey
+# *** empty log message ***
 # 
+ * Revision 1.3  2000/09/12 18:54:11  swasey
+ * Changes for cutoff compilation
+ *
 # Revision 1.2  98/05/14  16:38:59  pscheng
 # result types on sme functions were wrong
 # 

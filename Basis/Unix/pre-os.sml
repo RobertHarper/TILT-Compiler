@@ -11,7 +11,7 @@ structure PreOS =
   struct
     type syserror = int                     (* the integer code; we may need to beef this up *)
 
-(*    exception SysErr of (string * syserror option) (* = Assembly.SysErr *) *)
+    exception SysErr = TiltExn.SysErr
 
 
     structure Process =
@@ -37,9 +37,12 @@ structure PreOS =
 
 (*
  * $Log$
-# Revision 1.2  2000/09/21  01:08:39  pscheng
+# Revision 1.3  2000/11/27  22:36:45  swasey
 # *** empty log message ***
 # 
+ * Revision 1.2  2000/09/21 01:08:39  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.1  1998/03/09  19:54:31  pscheng
 # added basis
 #

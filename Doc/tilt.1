@@ -43,6 +43,8 @@ You can run slaves
 .RB ( \-s
 or
 .BR \-S )
+or perform partial compiles (see
+.BR \-t )
 on any platform for which TILT has been compiled.
 .SH OPTIONS
 .TP
@@ -56,10 +58,26 @@ See
 below for information on what a mapfile is and how to set up sources
 for use with a mapfile.
 .TP
+.BI "\-t " platform
+Generate code for
+.I platform
+(alpha or sparc).
+The default is to target the current platform when a backend exists and
+to target alpha otherwise.  Note that slaves
+.RB ( "\-s"
+or
+.BR "\-S" )
+ignore this option and generate code for whatever platforms are
+required by their masters
+.RB ( "-m" ).
+.TP
 .BI "\-c " mapfile
-Remove object files (and other compiler-generated files)
+Remove platform-specific object files (and other compiler-generated files)
 associated with
 .IR mapfile .
+.TP
+.BI "\-C " mapfile
+Also remove platform-independent files.
 .TP
 .BI "\-m " mapfile
 Perform a parallel make of
@@ -124,7 +142,11 @@ adds associations for the standard basis library to a mapfile.
 Most basis structures, signatures, and functors are defined in a
 module of the same name.
 Examples include List, LIST, and TextIO.
-The logical name TopLevel corresponds to the module containing terms
+The exceptions are IO_SIG, OS_SIG, and SML90_SIG which provide
+signatures IO, OS, and SML90.  The logical names IO, OS, and SML90
+provide the corresponding structures.
+The logical names Prelude and TopLevel together
+provide the terms
 and types bound at the top level like print, map, etc.
 A complete list of logical names used by the basis can be found in
 /usr/local/lib/tilt/Basis/mapfile-basis.
@@ -142,7 +164,7 @@ If a file depends on a module that has not been imported, then unbound
 variable errors will result.
 For example,
 .BE
-(*$import *)
+(*$import Prelude TopLevel *)
 val _ = TextIO.print "Hello, world"
 .EE
 will not compile because TextIO is missing from the import list.
@@ -153,6 +175,7 @@ module in the mapfile.
 See
 .B PROGRAM EXECUTION
 below for information on what happens when this executable is run.
+.\" XXX: TARGET in mapfiles
 .PP
 Suppose you have a directory of SML files called twelf.
 To get twelf to compile with TILT, the first thing needed is to create
@@ -180,7 +203,7 @@ OS.Process.getEnv     : string -> string option
 For example, here is an SML program which behaves similar to
 .BR echo (1):
 .BE
-(*$import CommandLine OS TopLevel *)
+(*$import Prelude TopLevel CommandLine OS *)
 
 (* echo : string list -> unit *)
 fun echo nil = print "\\n"

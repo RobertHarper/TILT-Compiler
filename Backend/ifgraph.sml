@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Word32 List Int MONO_HASH_TABLE Core MACHINE IFGRAPH Util HashTableFn SplaySetFn *)
+(*$import Prelude TopLevel Word List Int MONO_HASH_TABLE Core MACHINE IFGRAPH Util HashTableFn SplaySetFn *)
 (* interference graph *)
 
 (*
