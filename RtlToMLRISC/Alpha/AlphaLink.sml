@@ -9,27 +9,14 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   structure Rtl = Linkrtl.Rtl
 
-  structure Decalpha = Decalpha(val exclude_intregs = []
-				structure Rtl	    = Rtl)
-
-  structure Regset = Regset(structure Machine = Decalpha)
-
-  structure Regmap = Regmap(structure Machine = Decalpha)
-
-  structure Labelmap = Labelmap(structure Machine = Decalpha)
-
-  structure Decalphautils = Decalphautils(structure Decalpha = Decalpha
-					  structure Labelmap = Labelmap
-					  structure Regmap   = Regmap
-					  structure Regset   = Regset)
-
   structure TraceTable = Tracetable(val little_endian = true
-				    structure MU      = Decalphautils)
+				    structure Rtl     = Rtl)
 
   (* -- MLRISC structures -------------------------------------------------- *)
 
   structure Constant = AlphaMLRISCConstant
   structure Pseudo   = AlphaMLRISCPseudo
+  structure Region   = AlphaMLRISCRegion
 
   structure RegisterSpillMap =
     RegisterSpillMap(type offset	   = Constant.const
@@ -38,7 +25,10 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
   structure StackFrame =
     AlphaStackFrame(structure MLRISCConstant = Constant)
 
-  structure Instr = Alpha32Instr(Constant)
+  structure Instr = Alpha32Instr(structure Const  = Constant
+				 structure Region = Region)
+
+  structure PseudoInstr = AlphaPseudoInstr(structure Alpha32Instr = Instr)
 
   structure Rewrite = Alpha32Rewrite(Instr)
 
@@ -57,7 +47,8 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 				       structure Asm = AsmEmitter)
 
   structure MLTree = MLTreeF(structure Const = Constant
-			     structure P     = Pseudo)
+			     structure P     = Pseudo
+			     structure R     = Region)
 
   structure MLTreeExtra = MLTreeExtra(structure MLTree = MLTree)
 
@@ -73,6 +64,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 			   structure Cells	       = Alpha32Cells
 			   structure FlowGraph	       = FlowGraph
 			   structure IntegerConvention = Integer
+			   structure MLRISCRegion      = Region
 			   structure RegisterMap       = RegisterMap
 			   structure RegisterSpillMap  = RegisterSpillMap
 			   functor RegisterAllocation  = RegAlloc.IntRa)
@@ -84,6 +76,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 			 structure FloatConvention   = Float
 			 structure FlowGraph	     = FlowGraph
 			 structure IntegerConvention = Integer
+			 structure MLRISCRegion      = Region
 			 structure RegisterSpillMap  = RegisterSpillMap
 			 functor RegisterAllocation  = RegAlloc.FloatRa)
 
@@ -101,13 +94,15 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 
   structure MLTreeComp = Alpha32(structure Flowgen	 = FlowGraphGen
 				 structure Alpha32MLTree = MLTree
-				 structure Alpha32Instr	 = Instr)
+				 structure Alpha32Instr	 = Instr
+				 structure PseudoInstrs  = PseudoInstr)
 
   (* -- emitter structures ------------------------------------------------- *)
 
   structure CallConventionBasis =
     CallConventionBasis(structure Cells		    = Alpha32Cells
 			structure IntegerConvention = Integer
+			structure MLRISCRegion      = Region
 			structure MLTreeExtra	    = MLTreeExtra
 			structure StackFrame	    = StackFrame)
 
@@ -157,6 +152,7 @@ structure AlphaLink (* :> LINKALPHA ??? *) = struct
 		  structure IntSet		= IntBinarySet
 		  structure MLRISCConstant	= Constant
 		  structure MLRISCPseudo	= Pseudo
+		  structure MLRISCRegion        = Region
 		  structure MLTreeComp		= MLTreeComp
 		  structure MLTreeExtra		= MLTreeExtra
 		  structure RegisterMap		= RegisterMap
