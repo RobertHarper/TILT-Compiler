@@ -1,0 +1,2 @@
+(*$include STATS *)
+structure Stats : STATS

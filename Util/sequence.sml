@@ -1,4 +1,4 @@
-(*$import TopLevel Util *)
+(*$import TopLevel Util SEQUENCE Listops *)
 
 structure Sequence : SEQUENCE =
 struct

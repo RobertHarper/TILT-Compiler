@@ -20,6 +20,7 @@ struct
   val stat_each_file = ref false
   val cache_context = ref false
   val stop_early_compiling_sml_to_ui = ref false
+  val eager = ref true
 
   structure Basis = Elaborator.Basis
 (*  structure UIBlast = mkBlast(type t = Elaborator.context) *)
@@ -535,7 +536,7 @@ struct
                                    compileSML true unitname)
 	| (false, true, true)  => compileINT unitname
 	| (false, true, false) => compileINT unitname
-	| (_, false, true)     => compileSML make_uo unitname
+	| (_, false, true)     => compileSML ((!eager) orelse make_uo) unitname
         | (true, _, false) => error ("Missing " ^ source_sml ^
                                      ": cannot generate .uo")
 	| _ => error ("Missing " ^ source_sml ^ " and " ^ source_int ^ 
