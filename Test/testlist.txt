@@ -25,11 +25,14 @@
 0007	pass	overload resolution order (top-level)
 0008	pass	overload resolution order (in structures)
 0009	pass	overload resolution order (in functors)
-0010	pass	name-mangling test [x] <- [x]
-0011	fail	[Bug# 0151] name-mangling test [x] <- * -> [x]
-0011b	fail	[Bug# 0151] name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
-0012	fail	[Bug# 0151] name-mangling test [x] <- * <- * -> [x]
-0013	fail	[Bug# 0159] Datatype replication.
+bug55a	fail	Unresolved tyvar breaking elaborator.
+bug55b	fail	Unresolved tyvar breaking phase-splitter.
+bug80	fail	Phase splitter and signatures.
+bug151a	pass	name-mangling test [x] <- [x]
+bug151b	fail	name-mangling test [x] <- * -> [x]
+bug151c	fail	name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
+bug151d	fail	name-mangling test [x] <- * <- * -> [x]
+bug159	fail	Datatype replication.
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
@@ -113,7 +116,7 @@ m0081	pass	known case
 m0082	fail	[Bug #0128] llv?
 m0083	pass	nested loops
 m0084	pass	non-exhaustive match
-m0085	pass	generativity
+m0085	fail	[Bug #0080] generativity
 m0086	pass	opaque types
 m0087	pass	open scoping
 m0088	fail	[Bug #0129] exit status
