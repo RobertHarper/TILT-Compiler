@@ -1,4 +1,4 @@
-(*$import Util Listops Name Prim Int Symbol TilWord64 Array Tyvar List Ast Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp Stats *)
+(*$import Util Listops Name Prim Int Symbol TilWord64 Array Tyvar List Ast Il IlStatic Ppil IlUtil IlContext Datatype Error PAT AstHelp Stats Option *)
 
 (* XXX should coalesce constants (what do you mean?) *)
 
@@ -83,6 +83,21 @@ XXXXX change choosing criterion of (5) to stop at first non-wild in other column
 *)
 
 
+(* XXX tom - put this comment somewhere? *)
+
+    (* The core routine is a match function that takes 
+     
+     (0) a typing context
+     (1) a list of arguments - variables and types
+     (2) a list of rules 
+         (a) ML source level patterns
+	 (b) variables that have already been bound
+	 (c) a function called with the bound variables which generates the HIL expression
+     (3) a default expression generator to be executed if the patterns all fail
+
+     *)
+
+
 
 structure Pat :> PAT =
 struct
@@ -103,118 +118,9 @@ struct
     fun debugdo t = if (!debug) then (t(); ()) else ()
     val wildSymbol = (Symbol.varSymbol "_")
 
-    (* If an overloaded expression is known, use it. *)
-    fun derefOverexp (exp as (OVEREXP (_,_,eOneshot))) = 
-	(case Util.oneshot_deref eOneshot of
-	     NONE => exp
-	   | SOME e => e)
-      | derefOverexp e = e
-
-    (* reduces eta-expanded records 
-
-       (1)
-       let ... no variable bindings ...
-       in { l1 = v }
-       end
-
-       ==>
-
-       { l1 = v }
-
-       (2)
-       
-       
-       *)
-    fun reduce_expression e = 
-      (case e of
-	 LET(bnds, letBody) =>
-	   (case derefOverexp letBody of
-		(* 1 *)
-	      body as (RECORD [(_,VAR v)]) => if (List.all (fn BND_EXP _ => false
-	                                                     | _ => true)) bnds
-						  then body
-					      else e
-	        (* 2 *)
-	    | RECORD le_exp =>
-		 let val vars = map (fn (_,VAR v) => v
-	                              | _ => N.fresh_named_var "dummy") le_exp
-		     fun search [] (n,v) = NONE
-		       | search ((BND_EXP(v',RECORD_PROJECT(VAR base,label,_))) :: rest) (n,v) = 
-			      if (N.eq_var(v,v') andalso N.eq_label(label,U.generate_tuple_label (n+1)))
-				  then SOME base 
-			      else search rest (n,v)
-		       | search (_::rest) nv = search rest nv
-		     val baseVarOpts = Listops.mapcount (search bnds) vars
-		 in  (case baseVarOpts of
-			  (SOME baseVar) :: rest =>
-			      if ((List.all (fn SOME v => N.eq_var(v,baseVar)
-			                      | _ => false) rest) andalso
-				  (case search bnds (0,baseVar) of
-				       NONE => true
-				     | _ => false))
-				  then VAR baseVar
-			      else e
-		        | _ => e)
-		 end
-	    | _ => e)
-       | _ => e)
-
-    (* ------ Eliminate empty CASE expressions ------ *)
-    fun compress_expression (exp as (CASE{arms,default,...})) : exp option = 
-	let fun do_arms (no_arms,acc,[]) = (no_arms, rev acc)
-	      | do_arms (no_arms,acc,NONE::rest) = do_arms(no_arms,NONE::acc,rest)
-	      | do_arms (no_arms,acc,(SOME e)::rest) = (case compress_expression e of
-							    NONE => do_arms(no_arms,NONE::acc,rest)
-							  | se => do_arms(false,se::acc,rest))
-	    val (no_arms,arms) = do_arms (true,[],arms)
-	in  (case default of
-		 NONE => if no_arms then NONE else SOME exp
-	       | SOME def => if no_arms then compress_expression def else SOME exp)
-	end
-      | compress_expression exp = SOME exp
-
-
-    (* Link in some functions from modules that depend on this one.
-       The linking is performed in linkil.sml;
-       polyinst will be Toil.polyinst,
-       typecompile will be Toil.typecompile,
-       expcompile will be Toil.expcompile.
-    *)
-    local
-	val cxexp = ref (NONE : (Il.context * Ast.exp -> Il.exp * Il.con * bool) option)
-	val cxty = ref (NONE : (Il.context * Ast.ty -> Il.con) option)
-	val cpolyinst = ref (NONE : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) option)
-    in
-	fun installHelpers {typecompile, expcompile, polyinst} = 
-	    let in
-		(case !cxexp of 
-		     NONE => ()
-		   | SOME _ => print ("WARNING: installHelpers called more than once.\n" ^
-				      "         Possibly because CM.make does not have the semantics of a fresh make\n"));
-	        cxty := SOME typecompile;
-		cpolyinst := SOME polyinst;
-		cxexp := SOME expcompile
-	    end
-	fun typecompile arg = (Option.valOf (!cxty)) arg
-	fun polyinst arg = (Option.valOf (!cpolyinst)) arg
-	fun expcompile arg = (Option.valOf (!cxexp)) arg
-    end
-
-    (* The core routine is a match function that takes 
-     
-     (0) a typing context
-     (1) a list of arguments - variables and types
-     (2) a list of rules 
-         (a) ML source level patterns
-	 (b) variables that have already been bound
-	 (c) a function called with the bound variables which generates the HIL expression
-     (3) a default expression generator to be executed if the patterns all fail
-
-     *)
-
     type symbol = Symbol.symbol
 
-    (* This is not the same as the Ast.pat.   *)
+    (* This is not the same as Ast.pat *)
     datatype basePattern = 
 	(* Irrefutable or non-branching patterns *)
 	Record of {fields : (label * pattern) list, flexibility : bool}
@@ -248,7 +154,7 @@ struct
                         | SUMWILD of int * basePattern  (* must be Constructor or Exception *) 
                         | INTWILD of int (* zero based *)
 
-    (* ------------ file specific pretty-printed stuff  ------------------ *)
+    (* ------------ pattern specific pretty-printing stuff  ------------------ *)
     fun pp_arg (v,c) = (Ppil.pp_var v; print " : "; Ppil.pp_con c)
     fun pp_bound bound = 
 	let fun pp_svc (s,v,c) = (AstHelp.pp_sym s; print " -> ";
@@ -291,6 +197,125 @@ struct
 *)
 	 )
 
+    (* Link in some functions from modules that depend on this one.
+       The linking is performed in linkil.sml;
+       polyinst will be Toil.polyinst,
+       typecompile will be Toil.typecompile,
+       expcompile will be Toil.expcompile.
+    *)
+    local
+	val cxexp = ref (NONE : (Il.context * Ast.exp -> Il.exp * Il.con * bool) option)
+	val cxty = ref (NONE : (Il.context * Ast.ty -> Il.con) option)
+	val cpolyinst = ref (NONE : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) option)
+    in
+	fun installHelpers {typecompile, expcompile, polyinst} = 
+	    let in
+		(case !cxexp of 
+		     NONE => ()
+		   | SOME _ => print ("WARNING: installHelpers called more than once.\n" ^
+				      "         Possibly because CM.make does not have the semantics of a fresh make\n"));
+	        cxty := SOME typecompile;
+		cpolyinst := SOME polyinst;
+		cxexp := SOME expcompile
+	    end
+	fun typecompile arg = (Option.valOf (!cxty)) arg
+	fun polyinst arg = (Option.valOf (!cpolyinst)) arg
+	fun expcompile arg = (Option.valOf (!cxexp)) arg
+    end
+
+    (* If an overloaded expression is known, use it. *)
+    fun derefOverexp (exp as (OVEREXP (_,_,eOneshot))) = 
+	(case Util.oneshot_deref eOneshot of
+	     NONE => exp
+	   | SOME e => e)
+      | derefOverexp e = e
+
+    (* reduces eta-expanded records 
+
+       (1)
+       let ... no variable bindings ...
+       in { l1 = v }                        ==>     { l1 = v }
+       end
+
+       (2)
+       let v1 = #1 r
+	   ...
+	   v3 = #3 r
+	   ...                              ==>     r
+	   v2 = #2 r
+	   ...
+       in { l1 = v1, l2 = v2, l3 = v3 }
+       end
+
+       XXX tom how do we know this won't erase effectful bindings in (2)?
+       *)
+    fun reduce_let e = 
+      (case e of
+	 LET(bnds, letBody) =>
+	   (case derefOverexp letBody of
+		(* 1 *)
+	      body as (RECORD [(_,VAR _)]) => if (List.all (fn BND_EXP _ => false
+	                                                     | _ => true)) bnds
+						  then body
+					      else e
+	        (* 2 *)
+	    | RECORD le_exp =>
+		 let val vars = map (fn (_,VAR v) => v
+	                              | _ => N.fresh_named_var "dummy") le_exp
+
+		     (* see if the variable used in the expression for this field is
+			bound as a projection of the same field from another record *)
+		     fun search [] (n,v) = NONE
+		       | search ((BND_EXP(v',RECORD_PROJECT(VAR base,label,_))) :: rest) (n,v) = 
+			                             (* XXX tom - why tuple_label and not the actual label? *)
+			      if (N.eq_var(v,v') andalso N.eq_label(label,U.generate_tuple_label (n+1)))
+				  then SOME base 
+			      else search rest (n,v)
+		       | search (_::rest) nv = search rest nv
+		     val baseVarOpts = Listops.mapcount (search bnds) vars
+		 in  
+		     case baseVarOpts of
+			 SOME baseVar :: rest =>
+			     (* If every field is a projection from the existing record variable *)
+			     if List.all (fn SOME v => N.eq_var (v,baseVar)
+			                        | _ => false) rest then
+				 (* And that variable is not bound here 
+				    XXX (but only checked if to a projection from a variable!) *)
+				 case search bnds (0,baseVar) of
+				     NONE => VAR baseVar
+				   | _ => e
+			     else e
+			 | _ => e
+		 end
+	    | _ => e)
+       | _ => e)
+
+    (* Arms and defaults of cases are an expression option. We might
+       as well make them NONE if the expression is a case that won't
+       ever match anything. This checks for such cases and returns
+       NONE (empty case) or SOME e (a possibly reduced expression)
+       accordingly.       
+       
+       XXX tom - really ok to throw away the argument?
+       *)
+    fun compress_case (exp as (CASE{arms,default,...})) : exp option = 
+	let fun do_arms (no_arms,acc,[]) = (no_arms, rev acc)
+	      | do_arms (no_arms,acc,NONE::rest) = do_arms(no_arms,NONE::acc,rest)
+	      | do_arms (no_arms,acc,SOME e::rest) = (case compress_case e of
+							    NONE => do_arms(no_arms,NONE::acc,rest)
+							  | se => do_arms(false,se::acc,rest))
+	    val (no_arms, arms) = do_arms (true, [], arms)
+	in  
+	    if no_arms then
+		case default of
+		    SOME def => compress_case def
+		  | NONE => NONE 
+	    else SOME exp
+	end
+      | compress_case exp = SOME exp
+
+
+    (* compute the columnType of a column *)
     fun computeColumnType (pat::pats) = 
 	let fun reduce (bp as (Record _)) = IRREF bp
 	      | reduce (bp as (Ref _)) = IRREF bp
@@ -778,7 +803,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	  val arms' : (exp * con * exp) list = map helper info_arms
 	  val default' = 
 	      let val e = def()
-	      in  compress_expression e 
+	      in  compress_case e 
 	      end
       in  EXN_CASE{arg=exnarg, arms=arms', default = default', tipe = !(#shortCon(resCon))}
       end
@@ -856,7 +881,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	    else (case (relevants, argopt) of
 	      ([],_) => NONE
 	    | (_,NONE) => let val me = match(context, restArgs, relevants, def, resCon)
-			  in  compress_expression me 
+			  in  compress_case me 
 			  end
 	    | (_,SOME (newArg as (var,rcon))) => 
 			  let val context = C.add_context_dec(context,DEC_EXP(var,rcon,NONE,false))
@@ -880,13 +905,8 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 		arg = arg,
 		bound=rsvar,
 		arms = expopt_list,
-		default = 
-		if exhaustive
-		    then NONE
-		else 
-		    let val e = def()
-		    in  compress_expression e
-		    end,
+		default = if exhaustive then NONE
+			  else compress_case (def ()),
 		tipe = !(#shortCon(resCon))})
 
     in   case_exp
@@ -1222,7 +1242,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 	val arms = [([bindpat],astTuple)]
 	val default_exn = U.matchexn_exp
 	val (binde,bindc) = compile(context,args,arms,default_exn)
-	val binde = reduce_expression binde
+	val binde = reduce_let binde
 
 
 	local
