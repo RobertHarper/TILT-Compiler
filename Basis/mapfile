@@ -121,8 +121,8 @@ source unit REAL = "Numeric/real-sig.sml" {
 	Firstlude TiltPrim Prelude StringCvt PreInt PreReal MATH IEEEReal
 }
 source unit RealFormat = "Numeric/real-format.sml" {
-	Firstlude TiltPrim Prelude PreString General String StringCvt
-	NumFormat List
+	Firstlude TiltPrim Prelude VectorEq PreString General String
+	StringCvt NumFormat List
 }
 source interface Real64 = "Numeric/real64.int" {Firstlude TiltPrim Prelude REAL}
 source unit Real64 : Real64 = "Numeric/real64.sml" {
@@ -158,13 +158,13 @@ source unit ARRAY = "Aggregate/array-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
 source unit Array = "Aggregate/array.sml" {
-	Firstlude TiltPrim Prelude ARRAY General PreVector
+	Firstlude TiltPrim Prelude VectorEq ARRAY General PreVector
 }
 source unit VECTOR = "Aggregate/vector-sig.sml" {
 	Firstlude TiltPrim Prelude
 }
 source unit Vector = "Aggregate/vector.sml" {
-	Firstlude TiltPrim Prelude VECTOR General Array PreVector
+	Firstlude TiltPrim Prelude VectorEq VECTOR General Array PreVector
 }
 source unit MONO_VECTOR = "Aggregate/mono-vector-sig.sml" {
 	Firstlude TiltPrim Prelude
@@ -173,11 +173,12 @@ source unit MONO_ARRAY = "Aggregate/mono-array-sig.sml" {
 	Firstlude TiltPrim Prelude MONO_VECTOR
 }
 source unit Word8Vector = "Aggregate/word8-vector.sml" {
-	Firstlude TiltPrim Prelude General Array MONO_VECTOR Vector List
+	Firstlude TiltPrim Prelude VectorEq General Array MONO_VECTOR
+	Vector List
 }
 source unit Word8Array = "Aggregate/word8-array.sml" {
-	Firstlude TiltPrim Prelude General MONO_ARRAY Array List
-	Word8Vector
+	Firstlude TiltPrim Prelude VectorEq General MONO_ARRAY Array
+	List Word8Vector
 }
 source unit PACK_WORD = "Aggregate/pack-word-sig.sml" {
 	Firstlude TiltPrim Prelude Word8Vector Word8Array LargeWord
@@ -234,7 +235,8 @@ source unit OS_PATH = "OS/os-path-sig.sml" {
 	Firstlude TiltPrim Prelude Substring
 }
 source unit OS_PathFn = "OS/os-path-fn.sml" {
-	Firstlude TiltPrim Prelude Substring String List Bool OS_PATH TiltExn
+	Firstlude TiltPrim Prelude VectorEq Substring String List Bool
+	OS_PATH TiltExn
 }
 source unit OS_PROCESS = "OS/os-process-sig.sml" {
 	Firstlude TiltPrim Prelude
@@ -299,8 +301,9 @@ source unit BinPrimIO : BinPrimIO = "IO/bin-prim-io.sml" {
 	Firstlude PrimIOFn Word8Vector Word8Array Word8 Position
 }
 source unit BinIOFn = "IO/bin-io-fn.sml" {
-	Firstlude TiltPrim Prelude Word8 Int Position IO BIN_IO OS_PRIM_IO
-	Word8Array Word8Vector BinPrimIO Option CleanIO
+	Firstlude TiltPrim Prelude VectorEq Word8 Int Position IO
+	BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option
+	CleanIO
 }
 source unit TIMER = "timer-sig.sml" {
 	Firstlude TiltPrim Prelude Time
@@ -309,7 +312,8 @@ source unit Timer = "useless-timer.sml" {
 	Firstlude TiltPrim Prelude TIMER PreTime Time
 }
 source unit POSIX_extern = "extern.sml" {
-	Firstlude TiltPrim Prelude Word8Vector Position Word8Array Word8
+	Firstlude TiltPrim Prelude VectorEq Word8Vector Position
+	Word8Array Word8
 }
 source unit PrePosix = "Posix/pre-posix.sml" {
 	Firstlude TiltPrim Prelude POSIX_extern String SysWord TiltExn
@@ -390,8 +394,9 @@ source interface POSIX_Tty = "Posix/posix-tty.int" {
 	POSIX_TTY POSIX_Process POSIX_FileSys
 }
 source unit POSIX_Tty : POSIX_Tty = "Posix/posix-tty.sml" {
-	Firstlude TiltPrim Prelude List Word8Vector Word8Array SysInt
-	POSIX_FileSys POSIX_Process SysWord Byte POSIX_TTY POSIX_extern
+	Firstlude TiltPrim Prelude VectorEq List Word8Vector
+	Word8Array SysInt POSIX_FileSys POSIX_Process SysWord Byte
+	POSIX_TTY POSIX_extern
 }
 source unit POSIX_SYS_DB = "Posix/posix-sysdb-sig.sml" {
 	Firstlude TiltPrim Prelude
@@ -414,7 +419,8 @@ source unit Posix : Posix = "Posix/posix.sml" {
 	POSIX
 }
 source unit OS_Path = "Unix/os-path.sml" {
-	Firstlude TiltPrim Prelude String Substring OS_PATH OS_PathFn
+	Firstlude TiltPrim Prelude VectorEq String Substring OS_PATH
+	OS_PathFn
 }
 source unit OS_FileSys = "Unix/os-filesys.sml" {
 	Firstlude TiltPrim Prelude SysWord List General OS_FILE_SYS
@@ -426,8 +432,8 @@ source unit OS_Process = "Unix/os-process.sml" {
 }
 source interface OS_IO_Str = "Unix/os-io.int" {OS_IO PreOS}
 source unit OS_IO_Str : OS_IO_Str = "Unix/os-io.sml" {
-	Firstlude TiltPrim Prelude PreTime List Word SysWord Int OS_IO
-	PreOS Posix POSIX_extern
+	Firstlude TiltPrim Prelude VectorEq PreTime List Word SysWord
+	Int OS_IO PreOS Posix POSIX_extern
 }
 source interface OS = "Unix/os.int" {
 	OS_SIG PreOS Posix
@@ -437,8 +443,9 @@ source unit OS : OS = "Unix/os.sml" {
 	OS_Path OS_Process OS_IO_Str OS_SIG
 }
 source unit TextIOFn = "IO/text-io-fn.sml" {
-	Firstlude TiltPrim Prelude Int CharArray CharVector TextPrimIO
-	CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option TiltExn
+	Firstlude TiltPrim Prelude VectorEq Int CharArray CharVector
+	TextPrimIO CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option
+	TiltExn
 }
 source unit PosixPrimIOFn = "Unix/posix-prim-io-fn.sml" {
 	Firstlude TiltPrim Prelude Position PRIM_IO Word8Vector Word8Array
