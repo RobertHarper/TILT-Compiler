@@ -678,7 +678,7 @@ end (* local defining splitting context *)
 	    fun find_structure_paths m acc 
 		(Il.SIGNAT_STRUCTURE(popt,(Il.SDEC(l,Il.DEC_MOD (_,_,s)))::rest)) = 
 		let val skip_project = 
-		    ((IlUtil.is_datatype_lab l) orelse 
+		    ((IlUtil.is_dt l) orelse 
 		     (case s of 
 			  Il.SIGNAT_FUNCTOR(_,_,Il.SIGNAT_STRUCTURE(_,[Il.SDEC(l,_)]),_) => 
 			      Name.eq_label(l,IlUtil.it_lab)
@@ -842,7 +842,7 @@ end (* local defining splitting context *)
 	   val lbls = [lbl]
 
 	   val _ = if (!omit_datatype_bindings)
-		       then app (fn l => if (IlUtil.is_datatype_lab l)
+		       then app (fn l => if (IlUtil.is_dt l)
 					     then error "use of datatype labels detected"
 					 else ()) lbls
 		   else ()
@@ -1109,7 +1109,7 @@ end (* local defining splitting context *)
 	record_r_exp_items = nil}
 
      | xsbnds_rewrite_1 context (il_sbnds as (Il.SBND(lab, _))::rest_il_sbnds) =
-        if ((IlUtil.is_datatype_lab lab) andalso (! omit_datatype_bindings)) then
+        if ((IlUtil.is_dt lab) andalso (! omit_datatype_bindings)) then
 	    xsbnds context rest_il_sbnds
         else
 	    xsbnds_rewrite_2 context il_sbnds
@@ -1193,7 +1193,7 @@ end (* local defining splitting context *)
 		    orelse (Util.substring("polyfun!",Name.label2string lbl))
 		    orelse (Util.substring("polyfun!",Name.var2name top_var)))
 	   andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
-	   andalso (not (IlUtil.is_eq_lab lbl))) then
+	   andalso (not (IlUtil.is_eq lbl))) then
 				  
 	   let
 	       val _ = clear_memo top_var
@@ -2290,7 +2290,7 @@ end (* local defining splitting context *)
   and rewrite_sdecs sdecs =
        let 
 	   fun filter (Il.SDEC(lab,_)) =
-	       not ((IlUtil.is_datatype_lab lab) andalso (! omit_datatype_bindings)) 
+	       not ((IlUtil.is_dt lab) andalso (! omit_datatype_bindings)) 
 	   fun loop [] = []
 	     | loop ((sdec as 
 		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con))) :: rest) = 
@@ -2323,7 +2323,7 @@ end (* local defining splitting context *)
 		   andalso (Name.is_label_internal lbl)
 		   andalso (Util.substring("polyfun!",Name.label2string lbl))
 		   andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
-		   andalso (not (IlUtil.is_eq_lab lbl))) then
+		   andalso (not (IlUtil.is_eq lbl))) then
 		   let
 (*		       val _ = print "entered poly optimization case\n" *)
                        val _ = if is_polyfun then () else (print "warning: function ";
@@ -2493,8 +2493,8 @@ end (* local defining splitting context *)
 		  | _ => (imports,context))
 	   fun folder (v,acc) =
 	       let val SOME(l,pc) = IlContext.Context_Lookup'(HILctx,v)
-	       in  if (IlUtil.is_datatype_lab l andalso (!omit_datatype_bindings)
-		       orelse (IlUtil.is_nonexport_lab l))
+	       in  if (IlUtil.is_dt l andalso (!omit_datatype_bindings)
+		       orelse (IlUtil.is_nonexport l))
 		       then acc
 		   else dopc(v,l,pc,acc)
 	       end
@@ -2573,7 +2573,7 @@ end (* local defining splitting context *)
 
 	    (* create the exports *)
 	    fun folder ((Il.SDEC(l,dec)),exports) = 
-		    (case (not (is_nonexport_lab l), dec) of
+		    (case (not (is_nonexport l), dec) of
 			 (false,_) => exports
 		       | (true,Il.DEC_EXP (v,_)) => (ExportValue(l,v)::exports)
 		       | (true,Il.DEC_CON (v,_,_)) =>

@@ -69,7 +69,7 @@ structure Datatype
 	val top_type_lab = internal_label top_type_string
 	val top_eq_var = fresh_named_var_transparent top_eq_string
 	val top_eq_lab = symbol_label (Symbol.tycSymbol top_eq_string)
-	val module_labvars = map (fn s => (openlabel(IlUtil.to_datatype_lab(symbol_label s)),
+	val module_labvars = map (fn s => (IlUtil.to_dt(symbol_label s),
 					   fresh_named_var_inline (Symbol.name s))) type_syms
 	val constr_sumarg_strings = map (fn s => (Symbol.name s) ^ "_sumarg") type_syms
 	val constr_sumarg_vars = map fresh_named_var_transparent constr_sumarg_strings
@@ -114,7 +114,7 @@ structure Datatype
 	  val sdecs = (map2 (fn (tv,v) => SDEC(tv,DEC_CON(v,KIND_TUPLE 1,NONE))) 
 		       (tyvar_labs, tyvar_vars))
 	  val sdecs_eq = (map2 (fn (tv,v) => 
-				let val eq_label = to_eq_lab tv
+				let val eq_label = to_eq tv
 				    val eq_con = con_eqfun(CON_VAR v)
 				in SDEC(eq_label,DEC_EXP(fresh_var(),eq_con))
 				end)
@@ -418,7 +418,7 @@ structure Datatype
 		     NONE => error "must have eqfuntion at this point"
 		   | SOME (top_eq_exp,top_eq_con) =>
 			 let 
-			     val eq_lab = to_eq_lab type_lab_i
+			     val eq_lab = to_eq type_lab_i
 			     val equal_var = fresh_named_var_transparent (label2string eq_lab)
 			     val bnd_var = fresh_named_var ("poly" ^ (label2string eq_lab))
 			     val exp_eq = if num_datatype = 1
@@ -647,17 +647,17 @@ structure Datatype
 	    val old_constr_sumarg_string = (Symbol.name old_type_sym) ^ "_sumarg"
 	    val old_constr_sumarg_lab = internal_label old_constr_sumarg_string
 
-	    val eq_lab = to_eq_lab type_lab 
+	    val eq_lab = to_eq type_lab 
 	    val eq_var = fresh_named_var "eqfun"
-	    val dt_lab = to_datatype_lab type_lab
+	    val dt_lab = to_dt type_lab
 	    val dt_var = fresh_named_var "dt"
 	    fun change_path [] _ = error "empty path"
 	      | change_path [l] base = [base l]
 	      | change_path (a::b) base = a :: change_path b base
 	    val change_path = change_path (map symbol_label path)
 	    val type_labs = change_path (fn l => l)
-	    val eq_labs = change_path to_eq_lab
-	    val dt_labs = change_path to_datatype_lab
+	    val eq_labs = change_path to_eq
+	    val dt_labs = change_path to_dt
 	    val constr_sum_labs = change_path (fn _ => old_constr_sum_lab)
 	    val constr_sumarg_labs = change_path (fn _ => old_constr_sumarg_lab)
 
@@ -1011,7 +1011,7 @@ structure Datatype
 	   let val is_inline = 
 	       (case path of 
 		   (PATH (v,ls)) => (Util.substring("inline",Name.var2name v) orelse
-					       orfold IlUtil.is_datatype_lab ls))
+					       orfold IlUtil.is_dt ls))
 	   in  if is_inline
 		   then (case (Context_Lookup_Path(context,path)) of
 			     (SOME(_,PHRASE_CLASS_CON(c,_))) => c

@@ -1293,7 +1293,7 @@ fun show_state ({modunself,...}:state) =
 					    else loop(lbl,r)
 		       | (BND_MOD (_,_,m)) => (if (eq_label(l,lbl)) 
 						 then SOME([l],PHRASE_MOD m) 
-					     else if (is_label_open l)
+					     else if (is_open l)
 						      then 
 							  (case m of 
 							       MOD_STRUCTURE sbnds =>
@@ -1331,7 +1331,7 @@ fun show_state ({modunself,...}:state) =
 			    | (DEC_MOD (_,b,s)) => 
 				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),b,s),[l]))
 			    | _ => loop m lbl rest)
-		else if (is_label_open l)
+		else if (is_open l)
 		    then 
 		     (case d of
 		       (DEC_MOD(_,_,s)) =>

@@ -41,7 +41,7 @@ struct
 	  | CON_VAR v => (let val type_label = (case (Context_Lookup'(ctxt,v)) of
 						    SOME(l,_) => l
 						  | _ => raise NoEqExp)
-			      val eq_label = to_eq_lab type_label
+			      val eq_label = to_eq type_label
 			  in (case (Context_Lookup(ctxt,eq_label)) of
 				  SOME(_,PHRASE_CLASS_EXP(e,_)) => e
 				| _ => raise NoEqExp)
@@ -145,7 +145,7 @@ struct
 		end
 	  | CON_REF c => ETAILPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
-		let val e = MODULE_PROJECT(m,to_eq_lab l)
+		let val e = MODULE_PROJECT(m,to_eq l)
 		in (GetExpCon(ctxt,e) 
 			handle _ => raise NoEqExp);
 		  	e
@@ -155,11 +155,11 @@ struct
 		    (case c of
 			 CON_MODULE_PROJECT(m,l) => 
 			     let val s = GetModSig(ctxt,m)
-				 val eql = to_eq_lab l
+				 val eql = to_eq l
 			     in  case s of
 				 SIGNAT_STRUCTURE(_,sdecs) =>
 				     if (List.exists (fn (SDEC(l,_)) => eq_label(l,eql)) sdecs)
-					 then MOD_PROJECT(m,to_eq_lab l)
+					 then MOD_PROJECT(m,to_eq l)
 				     else raise NoEqExp
 				   | _ => raise NoEqExp
 			     end
@@ -167,7 +167,7 @@ struct
 			     (let val type_label = (case (Context_Lookup'(ctxt,v)) of
 							SOME(l,_) => l
 						      | _ => raise NoEqExp)
-				  val eq_label = to_eq_lab type_label
+				  val eq_label = to_eq type_label
 			      in (case (Context_Lookup(ctxt,eq_label)) of
 				      SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
 				    | _ => raise NoEqExp)
@@ -242,7 +242,7 @@ struct
 		 | _ => error "xeq_mu given confun which is not CON_FUN")
 	  val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) n
 	  val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) n
-	  val eq_lbls = map to_eq_lab type_lbls
+	  val eq_lbls = map to_eq type_lbls
 	  val evars = map0count (fn i => fresh_named_var ("evar" ^ (Int.toString i))) n
 	  val cvars = map0count (fn i => fresh_named_var ("cvar" ^ (Int.toString i))) n
 	  val elist = zip evars (map VAR vars_eq)

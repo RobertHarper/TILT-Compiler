@@ -100,7 +100,7 @@ struct
 		   | INLINE_OVER arg => help (ctxt,path,lbl,PHRASE_CLASS_OVEREXP arg)
 		   | INLINE_MODSIG (b,m,s) => 
 			 let val ctxt = help (ctxt,path,lbl,PHRASE_CLASS_MOD (m,b,s))
-			 in  (case (is_label_open lbl,m,s) of
+			 in  (case (is_open lbl,m,s) of
 				  (true,MOD_STRUCTURE sbnds,SIGNAT_STRUCTURE(_,sdecs)) =>
 				      foldl (sbnd_sdec_help path) ctxt (zip sbnds sdecs)
 				| _ => ctxt)
@@ -112,7 +112,7 @@ struct
 	    let val s = SIGNAT_INLINE_STRUCTURE quad
 		val ctxt = add_context_flat(ctxt, CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
 		val ctxt = help (ctxt,PATH(v,[]),l,PHRASE_CLASS_MOD (MOD_STRUCTURE code,false,s))
-	    in  if (is_label_open l) 
+	    in  if (is_open l) 
 		    then foldl (sbnd_sdec_help (PATH(v,[]))) ctxt (zip code abs_sig)
 		else ctxt
 	    end
@@ -167,13 +167,13 @@ struct
 	          add_context_inline_signature (ctxt,l,v,quad)
 	  | DEC_MOD(v,_,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
 		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, false,s)))
-		  in  if (is_label_open l)
+		  in  if (is_open l)
 			  then foldl (sdec_help (v,l)) ctxt sdecs
 		      else ctxt
 		  end
 	  | DEC_MOD(v,b,s) =>
 		  let val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, b, s)))
-		  in  if (is_label_open l)
+		  in  if (is_open l)
 			  then error "add_context_sdec got DEC_MOD with open label but not a SIGNAT_STRUCTURE"
 		      else ctxt
 		  end

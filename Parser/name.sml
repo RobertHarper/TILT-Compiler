@@ -9,13 +9,11 @@ structure Name :> NAME =
     val error = fn s => error "Name.sml" s
 
     type var   = int
-    type label = int * string * bool
+    type label = int * string
     type labels = label list
     type loc  = int
     type tag  = int * string
 
-
-    fun is_label_open ((_,_,flag) : label) = flag
 
     (* equality and generation functions on Nameitive types *)
     fun eq_var   (v1 : var, v2)     = v1 = v2
@@ -30,7 +28,7 @@ structure Name :> NAME =
     val varmap = ref (VarMap.empty : string VarMap.map)
     fun reset_varmap() = varmap := VarMap.empty
 
-    fun eq_label (l1 as (h1,_,_) : label, l2 as (h2,_,_)) = 
+    fun eq_label (l1 as (h1,_) : label, l2 as (h2,_)) = 
 		let val res = (h1=h2) andalso (l1=l2)
 		in  res
 		end
@@ -38,14 +36,9 @@ structure Name :> NAME =
     fun eq_tag   (n1, n2)     = n1 = n2
     fun compare_tag ((a,_),(b,_)) = Int.compare(a,b)
 
-    fun compare_label((a,sa,oa) : label, (b,sb,ob) : label) = 
+    fun compare_label((a,sa) : label, (b,sb) : label) = 
 	(case Int.compare(a,b) of
-	     EQUAL => (case String.compare(sa,sb) of
-			   EQUAL => (case (oa,ob) of
-					 (false,true) => LESS
-				       | (true,false) => GREATER
-				       | _ => EQUAL)
-			 | res => res)
+	     EQUAL => String.compare(sa,sb) 
 	   | res => res)
 
 
@@ -105,38 +98,32 @@ structure Name :> NAME =
     fun fresh_named_tag s = (inc_counter tag_counter,s)
     fun fresh_tag  () = fresh_named_tag "t"
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
-    fun internal_label s : label = (internal_hash s,s,false)
-    fun open_internal_label s : label = (internal_hash s,s,true)
-    fun is_label_internal ((num,str,flag) : label) = internal_hash str = num
+    fun internal_label s : label = (internal_hash s,s)
+    fun is_label_internal ((num,str) : label) = internal_hash str = num
 
-    fun symbol_label sym = 
+    fun symbol_label sym : label = 
 	let val str = Symbol.name sym
 	    val numOpt = Int.fromString str
 	    val hash = case numOpt of 
 		SOME num => num 
 	      | NONE => Symbol.number sym
-	in  (hash, str, false)
+	in  (hash, str)
 	end
 
-    fun open_symbol_label s = (Symbol.number s, Symbol.name s, true)
     fun fresh_string s = s ^ "_" ^ Int.toString(inc_counter label_counter)
     fun fresh_internal_label s = internal_label(fresh_string s)
-    fun fresh_open_internal_label s = open_internal_label(fresh_string s)
-    fun openlabel ((i,s,_) : label) = (i,s,true)
 
 
-
-    fun label2name ((num,str,flag) : label) = str
-    fun label2string (num,str,flag) =
+    fun label2name ((_,str) : label) = str
+    fun label2string ((num,str) : label) =
       let
-	fun help s = if flag then "*" ^ s else s
         val is_internal = internal_hash str = num
         val is_generative = (size str > 0) andalso Char.isDigit(String.sub(str,0))
         val space = namespaceint(num,str) 
       in (case (is_internal,is_generative) of
-	    (true,false) => help (str ^ "_INT")
-	  | (true,true) => help (str ^ "_INT_GEN")
-	  | (false,_) => help (str ^ (case space of
+	    (true,false) => (str ^ "_INT")
+	  | (true,true) => (str ^ "_INT_GEN")
+	  | (false,_) => (str ^ (case space of
 					   0 => ""
 					 | x => "_" ^ (Int.toString x))))
       end

@@ -4,15 +4,11 @@ signature NAME =
   sig
 
     type var = int                   (* IS  generative *)
-    type label = int * string * bool (* NOT generative *)
+    type label = int * string        (* NOT generative *)
     type tag
     type loc
 
     (* predicates *)
-    val is_label_open     : label -> bool
-(*
-    val is_label_barred   : label -> bool
-*)
     val is_label_internal : label -> bool
 
     val eq_label : (label * label) -> bool
@@ -33,7 +29,6 @@ signature NAME =
     val fresh_tag : unit -> tag
     val gen_var_from_symbol : Symbol.symbol -> var  (* conveniently extracts string for you *)
     val fresh_internal_label  : string -> label          
-    val fresh_open_internal_label : string -> label      
     val derived_var : var -> var
 
 
@@ -41,10 +36,6 @@ signature NAME =
     val tag2int : tag -> int
     val internal_label  : string -> label
     val symbol_label    : Symbol.symbol -> label   
-    val open_internal_label : string -> label      
-    val open_symbol_label : Symbol.symbol -> label 
-    val openlabel       : label -> label
-
 
     (* useful printing routine *)
     val var2int      : var   -> int     (* v_23 -> 23 *)
@@ -56,8 +47,8 @@ signature NAME =
 
     (* These should be used by NameBlast only *)
     val reset_varmap : unit -> unit (* clear out the variable names *)
-    val deconstruct_label : label -> int * string * bool
-    val construct_label : int * string * bool -> label
+    val deconstruct_label : label -> int * string 
+    val construct_label : int * string -> label
     val deconstruct_var : var -> int * string
     val construct_var : int * string -> var
     val deconstruct_loc : loc -> int

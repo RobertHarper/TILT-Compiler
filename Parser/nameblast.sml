@@ -43,18 +43,16 @@ structure NameBlast :> NAMEBLAST =
 	end
 
     fun blastOutLabel os label = 
-	let val (n,str,b) = deconstruct_label label
+	let val (n,str) = deconstruct_label label
 	in  (blastOutInt os n;
-	     blastOutString os str;
-	     blastOutBool os b)
+	     blastOutString os str)
 	end
 
     fun blastInLabel is = 
 	let val n = blastInInt is
 	    val _ = update_label_counter n
 	    val str = blastInString is
-	    val b = blastInBool is
-	in  construct_label(n, str, b)
+	in  construct_label(n, str)
 	end
     
     fun blastOutVarmap os blaster vmap = 

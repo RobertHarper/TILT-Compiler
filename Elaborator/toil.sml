@@ -914,7 +914,7 @@ structure Toil
 	     val type_str = label2string type_lab
 	     val type_var = fresh_named_var type_str 
 	     val type_sdec = SDEC(type_lab,DEC_CON(type_var, KIND_TUPLE 1, NONE))
-	     val eq_lab = to_eq_lab type_lab
+	     val eq_lab = to_eq type_lab
 	     val eq_str = label2string eq_lab
 	     val eq_var = fresh_named_var eq_str
 	     val eq_con =  con_eqfun (CON_VAR type_var)
@@ -1014,7 +1014,7 @@ structure Toil
 		 
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
-	     val top_label = to_nonexport_lab(fresh_internal_label "polyfun!")
+	     val top_label = to_nonexport(fresh_internal_label "polyfun!")
 	     val top_var = fresh_named_var "polyfun!"
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				case fbnd_cons of
@@ -1129,9 +1129,9 @@ structure Toil
 		end
 
 		val tyvar_stamp = get_stamp()
-		val lbl = fresh_open_internal_label "varpoly"
+		val lbl = to_open(fresh_internal_label "varpoly")
 		val var_poly = fresh_named_var "varpoly"
-		val lbl' = fresh_internal_label "valbind"
+		val lbl' = to_nonexport (fresh_internal_label "valbind")
 		val var' = fresh_named_var "valbind"
 		val tyvars = map tyvar_strip tyvars
 		local
@@ -1258,7 +1258,7 @@ structure Toil
 		end
 	 
 		val var_poly = fresh_named_var "var_poly"
-		val open_lbl = fresh_open_internal_label "lbl"
+		val open_lbl = to_open(fresh_internal_label "lbl")
 		val context' = add_context_mod(context,open_lbl,var_poly,
 					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE(NONE, sdecs1)))
@@ -1310,7 +1310,7 @@ structure Toil
 		end
 	 
 		val var_poly = fresh_named_var "var_poly"
-		val open_lbl = fresh_open_internal_label "lbl"
+		val open_lbl = to_open(fresh_internal_label "lbl")
 		val context' = add_context_mod(context,open_lbl,var_poly,
 					       SelfifySig context (PATH (var_poly,[]),
 								   SIGNAT_STRUCTURE(NONE, sdecs1)))
@@ -1367,10 +1367,9 @@ structure Toil
 		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
 		       SOME(_,PHRASE_CLASS_MOD(m,b,s)) => 
 			   let 
-(* val l = fresh_open_internal_label ("openlbl" ^ (Int.toString i)) *)
 			       val str = foldl (fn (s,acc) => acc ^ (Symbol.name s))
 				            "openlbl" path
-                               val l = open_internal_label str
+                               val l = to_open(fresh_internal_label str)
 			       val v = fresh_named_var "openvar"
 			       (* the context wants a SINGAT_STRUCTURE for opens *)
 			       val s = reduce_signat context s
@@ -1395,7 +1394,7 @@ structure Toil
 				      let
 					  val lbls = Listops.map0count canonical_tyvar_label m
 					  fun mapper l = 
-					      let val eql = to_eq_lab l
+					      let val eql = to_eq l
 						  val v = fresh_var()
 						  val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE))
 						  val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
@@ -1411,7 +1410,7 @@ structure Toil
 					  val c'' = ConApply(true,c,arg_con)
 				      in  (ctxt',c',c'',sp)
 				      end
-			  val eqlab = to_eq_lab l
+			  val eqlab = to_eq l
 			  val eq_con = con_eqfun c''
 		    in case (xeq(ctxt',c')) of
 			SOME eq_exp =>
@@ -1530,7 +1529,7 @@ structure Toil
 		  fun temp (opt : (bool * sbnd) option,ce) = (mapopt #2 opt,ce)
 		  fun rename(opt,CONTEXT_SDEC(SDEC(l,dec))) = 
 		      let val lbl = fresh_internal_label ("local_" ^ (Name.label2name l))
-			  val lbl = to_nonexport_lab lbl
+			  val lbl = to_nonexport lbl
 			  val ce' = CONTEXT_SDEC(SDEC(lbl,dec))
 		      in case opt of
 			  NONE => (NONE,ce')
@@ -1635,7 +1634,7 @@ structure Toil
 			    (case path of
 			       PATH (v,labs) =>
 			          Util.substring("inline",Name.var2name v) orelse 
-				  Listops.orfold IlUtil.is_datatype_lab labs)
+				  Listops.orfold IlUtil.is_dt labs)
 			    val con = if inline then inline_con 
 					     else path2con path
 			in
@@ -1712,7 +1711,7 @@ structure Toil
 		   let 
 		       val type_label = symbol_label sym
 		       val type_var = gen_var_from_symbol sym
-		       val eq_label = to_eq_lab type_label
+		       val eq_label = to_eq type_label
 		       val eq_var = fresh_named_var (label2string eq_label)
 		       val kind = 
 			   (case tyvars of
@@ -1739,7 +1738,7 @@ structure Toil
 				let val vpoly = fresh_named_var "vpoly"
 				    val lbls = Listops.map0count canonical_tyvar_label (length tyvars)
 				    fun mapper l = 
-					let val eql = to_eq_lab l
+					let val eql = to_eq l
 					    val v = fresh_var()
 					    val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE))
 					    val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
@@ -1867,7 +1866,7 @@ structure Toil
 			    val varpoly = fresh_named_var "var_poly"
 			    fun help (n,tv_sym) = 
 				let val type_lab = symbol_label tv_sym
-				    val eq_lab = to_eq_lab type_lab
+				    val eq_lab = to_eq type_lab
 				    val type_var = fresh_var()
 				    val eq_var = fresh_var()
 				    val type_str = Symbol.name tv_sym
@@ -1882,7 +1881,7 @@ structure Toil
 				end
 			    val sigpoly = SIGNAT_STRUCTURE(NONE,flatten(mapcount help ftv_sym))
 			    val context' = add_context_mod(context,
-							      fresh_open_internal_label "lbl",
+							      to_open(fresh_internal_label "lbl"),
 							      varpoly, 
 							      SelfifySig context (PATH (varpoly,[]),sigpoly))
 			    val con = xty(context',ty)
@@ -2027,7 +2026,7 @@ structure Toil
 			  let 
 			      val _ = print "FCTFCT 1\n"
 			      val arglabel = (case argnameopt of
-						  NONE => fresh_open_internal_label "FunctorArg"
+						  NONE => to_open(fresh_internal_label "FunctorArg")
 						| SOME s => symbol_label s)
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "functor_arg_var"
@@ -2203,9 +2202,10 @@ structure Toil
 				  print "higher order functors not supported\n";
 				  ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[])))
 	   | Ast.LetStr (dec,strexp) => (* rule 254 *) 
-		 let val (var1,var2) = (fresh_var(), fresh_var())
-		     val (lbl1,lbl2) = (fresh_open_internal_label "lbl1",
-					fresh_open_internal_label "lbl2")
+		 let val var1 = fresh_var()
+		     val var2 = fresh_var()
+		     val lbl1 = to_open(fresh_internal_label "lbl1")
+		     val lbl2 = to_open(fresh_internal_label "lbl2")
 		     val boolsbnd_sdec_list = xdec' true (context,dec)
 		     val (mod1,sig1) = boolsbnd_ctxt_list2modsig boolsbnd_sdec_list
 		     val context' = add_context_mod(context,lbl1,var1,

@@ -31,7 +31,7 @@ structure Signature :> SIGNATURE =
 			(eq_label(l1,l2) andalso eq_label(l2,l3) andalso eq_var(vsig,v))
 		| _ => false)
 	      | match (SBND(l1,BND_EXP(_,_)), SDEC(l2,DEC_EXP _)) = 
-		     (eq_label(l1,l2) andalso is_eq_lab l1)
+		     (eq_label(l1,l2) andalso is_eq l1)
 	      | match _ = (print "match OTHER case\n"; false)
 	in  (case (signat,arg) of
 		(SIGNAT_STRUCTURE(_,sdecs),MOD_STRUCTURE sbnds) => 
@@ -765,7 +765,7 @@ structure Signature :> SIGNATURE =
 				 SDEC(l,DEC_CON(v',k',copt')))
 			end
 		  | SDEC(l,DEC_EXP(v,c)) => 
-			if (is_eq_lab l)
+			if (is_eq l)
 			    then
 				let val v' = derived_var v
 				    val e = path2exp(labels2path_actual(rev(l::p)))
@@ -830,7 +830,7 @@ structure Signature :> SIGNATURE =
 						sdec_augment::sdecs))
 		       | _ => 
 			  let val _ = print "WARN: extract_hidden given coerced_mod/sig not strutures\n"
-			      val l = fresh_open_internal_label "internal_mod"
+			      val l = to_open(fresh_internal_label "internal_mod")
 			      val v = fresh_named_var "internal_mod"
 			      val sbnd = SBND(l,BND_MOD(v,false,coerced_mod))
 			      val sdec = SDEC(l,DEC_MOD(v,false,coerced_sig))
@@ -1001,7 +1001,7 @@ structure Signature :> SIGNATURE =
 		| find lbl (SDEC(l,d)::rest) = 
 		  if (eq_label(l,lbl))
 		      then SOME d
-		  else (case (is_label_open l, d) of
+		  else (case (is_open l, d) of
 			    (true, DEC_MOD(_,_,s)) =>
 				(case s of
 				     SIGNAT_STRUCTURE(_,sdecs) =>
@@ -1055,7 +1055,7 @@ structure Signature :> SIGNATURE =
 		(case (sig_actual_lookup labs) of
 		     SOME(lbls,PHRASE_CLASS_MOD (_,b,s1)) =>
 		     let 
-			 val s = (case (is_label_open (hd lbls), dec_target_lookup labs, sig_target) of
+			 val s = (case (is_open (hd lbls), dec_target_lookup labs, sig_target) of
 				      (_,SOME(DEC_MOD (_,_,s)),_) =>  s
 				    | (true,_,SIGNAT_STRUCTURE(popt,sdecs1)) =>
 					  SIGNAT_STRUCTURE(popt,

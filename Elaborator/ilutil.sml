@@ -1166,23 +1166,37 @@ structure IlUtil
     val error_mod = fn m => fn s => error_obj pp_mod  "module" m s
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
+    (* Internal labels follow special conventions *)
+    (* Some internal labels are opened for lookup *)
+    (* Some internal labels are non-exported *)
+    (* Datatype labels are internal, non-exported, opened, and identifiable as dt labels *)
+    (* Eq labels are identifiable as eq labels *)
+	 
+    val open_str = "+O"
+    val nonexport_str = "-X"
+    val dt_str = "+D"
+    val eq_str = "+E"
 
-    val nonexport_str = "*nonexport_"
-    val dt_str = nonexport_str ^ "dt_"
-    val eq_str = "*eq_"
-    fun is_nonexport_lab lab = substring (nonexport_str,label2string lab)
-    fun is_eq_lab lab = substring (eq_str,label2string lab)
-    fun is_datatype_lab lab =  substring (dt_str,label2string lab)
+    fun is_open lab = 
+	let val str = label2name lab
+	    val c = String.sub(str,0)
+	in  (c = #"+" orelse c = #"-") andalso substring (open_str,str)
+	end
+    fun is_nonexport lab =  substring (nonexport_str,label2name lab)
+    fun is_dt lab =  substring (dt_str,label2name lab)
+    fun is_eq lab = substring (eq_str,label2name lab)
+
     local
 	fun to_meta_lab meta_str lab =
 	  let
-	      val str = label2string lab
+	      val str = label2name lab
 	      val final_str = meta_str ^ str
 	  in  internal_label final_str
 	  end
-    in  fun to_nonexport_lab lab = to_meta_lab nonexport_str lab 
-	fun to_eq_lab lab = to_meta_lab eq_str lab
-	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
+    in  fun to_open lab = to_meta_lab open_str lab
+	fun to_nonexport lab = to_meta_lab nonexport_str lab 
+	fun to_dt lab = to_meta_lab (open_str ^ nonexport_str ^ dt_str) lab
+	fun to_eq lab = to_meta_lab eq_str lab
     end
 
 

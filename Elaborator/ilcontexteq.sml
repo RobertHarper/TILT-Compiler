@@ -796,7 +796,7 @@ struct
 		val vlist' = Context_Varlist c'
 		fun mapper ctxt v = (case Context_Lookup'(ctxt,v) of
 				    SOME (l,_) => (* () this too conservative? *)
-					if (IlUtil.is_nonexport_lab l)
+					if (IlUtil.is_nonexport l)
 					    then NONE else SOME(l, v)
 				  | NONE => (print "extend_vm_context: could not find var = ";
 					     Ppil.pp_var v; print "\n";

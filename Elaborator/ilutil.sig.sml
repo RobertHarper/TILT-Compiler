@@ -69,22 +69,30 @@ signature ILUTIL =
     val false_exp : exp
 
 
-    (* special values *)
+    (* special labels *)
     val mk_lab   : label
     val km_lab   : label
     val it_lab   : label
     val stamp_lab   : label
     val case_lab : label
     val expose_lab : label
-    val to_nonexport_lab : label -> label  (* make corresponding nonexportable label *)
-    val to_datatype_lab : label -> label (* make an open nonexportable datatype label *)
-    val to_eq_lab : label -> label       (* from a label to the equal function label *)
-
-    val is_nonexport_lab : label -> bool
-    val is_datatype_lab : label -> bool 
-    val is_eq_lab : label -> bool
-
     val functor_arg_lab : label
+
+    (* Some internal labels are opened for lookup *)
+    (* Some internal labels are non-exported *)
+    (* Datatype labels are internal, non-exported, opened, and identifiable as dt labels *)
+    (* Eq labels are internal, non-exported, and identifiable as eq labels *)
+    val to_open : label -> label
+    val to_nonexport : label -> label
+    val to_dt : label -> label 
+    val to_eq: label -> label       
+
+    val is_open : label -> bool
+    val is_nonexport : label -> bool
+    val is_dt : label -> bool 
+    val is_eq : label -> bool
+
+    (* special values *)
     val con_unit : con
     val con_string : con
     val unit_exp : exp

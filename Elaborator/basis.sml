@@ -545,7 +545,7 @@ xxxxx *)
 (*
 	      fun self_sdec (SDEC(l,dec)) = SDEC(l,IlStatic.SelfifyDec dec)
 
-	      val lbl = fresh_open_internal_label "basis_dt_inline"
+	      val lbl = to_open(fresh_internal_label "basis_dt_inline")
 	      val v = fresh_named_var "basis_dt_inline"
 	      val bool_sbnds_inline = 
 		  let val temp = MOD_STRUCTURE(bool_sbnds)

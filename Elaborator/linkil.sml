@@ -81,11 +81,11 @@ structure LinkIl :> LINKIL  =
 					 val first = (SBND(l,BND_MOD(fv,b,label2obj path2mod l)),
 						      SDEC(l,DEC_MOD(fv,b,s)))
 					 val rest = 
-					     (case (Name.is_label_open l, s) of
+					     (case (IlUtil.is_open l, s) of
 						  (true,SIGNAT_STRUCTURE(_,inner_sdecs)) =>
 						      export_sdecs subst (join_path_labels(path,[l])) inner_sdecs
 						| _ => [])
-				     in  if (Name.is_label_open l)
+				     in  if (IlUtil.is_open l)
 					     then (rest @ acc, subst)
 					 else (first :: acc, subst)
 				     end)
@@ -95,7 +95,7 @@ structure LinkIl :> LINKIL  =
 		end
 
 	fun kill_datatype (pair as (SOME(SBND(l,_)),entry)) =
-	    if IlUtil.is_datatype_lab l
+	    if IlUtil.is_dt l
 		then NONE
 	    else SOME pair
 	  | kill_datatype pair = SOME pair
