@@ -1,4 +1,4 @@
-#This file was created by <leaf> Mon Oct  5 15:03:16 1998
+#This file was created by <leaf> Mon Oct  5 17:43:29 1998
 #LyX 0.12 (C) 1995-1998 Matthias Ettrich and the LyX Team
 \lyxformat 2.15
 \textclass article
@@ -139,9 +139,9 @@ c & ::= & \alpha \mid Int\mid BoxFloat\mid \mu (a=c,b=c)\mid c\times c\mid c\rig
  &  & \\
 p & ::= & \alpha \mid p.1\mid p.2\mid p\, c\\
  &  & \\
-e & ::= & v\mid \lete{x}{e}{e}\mid \lete{\alpha }{c}{e}\mid \rec{f}{\alpha }{\kappa }{x}{\tau }{\tau }{e}\\
- &  & \mid e[c]e\mid <e,e>\mid e.1\mid e.2\mid n\mid r\mid box(e)\mid \ifz{e}{e}{e}\\
- &  & \mid \iffloat{\tau }{e}{e}\\
+e & ::= & x\mid \lete{x}{e}{e}\mid \lete{\alpha }{c}{e}\mid \rec{f}{\alpha }{\kappa }{x}{\tau }{\tau }{e}\\
+ &  & \mid e[c]e\mid <e,e>\mid e.1\mid e.2\mid n\mid r\mid box(e)\mid unbox(e)\\
+ &  & \mid \ifz{e}{e}{e}\mid \iffloat{\tau }{e}{e}\\
  &  & \\
 \Delta  & ::= & \bullet \mid \caddt{x}{\tau }\mid \caddk{\alpha }{\kappa }
 \end{eqnarray*}
@@ -269,6 +269,18 @@ Judgements for the algorithmic core nil
 \end_inset 
 
 
+\begin_inset FormulaMacro 
+\newcommand{\selfify}[3]{#1 ::#2 =#3 }
+
+\end_inset 
+
+
+\begin_inset FormulaMacro 
+\newcommand{\kcheck}[3]{#1 \vdash #2 \Downarrow #3 }
+
+\end_inset 
+
+
 \layout Subsection
 
 Well Formed Context 
@@ -290,7 +302,7 @@ Kind
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\kindvalid{\context }{\kappa } & \cok{\context }
+\cok{\context } & \kindvalid{\context }{\kappa }
 \end{array}}{\cok{\caddk{\alpha }{\kappa }}}\alpha \notin dom(\context )\]
 
 \end_inset 
@@ -474,6 +486,106 @@ Singletons
 
 \layout Subsection
 
+Selfification 
+\begin_inset Formula \( \selfify{c}{\kappa }{\kappa '} \)
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+Type 
+\begin_inset Formula 
+\[
+\axiom{\selfify{c}{T}{\st{c}}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+Singleton 
+\begin_inset Formula 
+\[
+\axiom{c::\st{d}=\st{d}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+
+\begin_inset Formula \( \Pi  \)
+\end_inset 
+
+ 
+\begin_inset Formula 
+\[
+\infrule{\selfify{c\, \alpha }{\kappa _{2}}{\kappa _{2}'}}{\selfify{c}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}'}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+
+\begin_inset Formula \( \Sigma  \)
+\end_inset 
+
+ 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\selfify{c.1}{\kappa _{1}}{\kappa _{1}'} & \selfify{c.2}{\kappa _{2}}{\kappa _{2}'}
+\end{array}}{\selfify{c}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}{\Sigma (\alpha ::\kappa _{1}').\kappa _{2}'}}\]
+
+\end_inset 
+
+
+\layout Subsection
+
+Kind Analysis 
+\begin_inset Formula \( \kcheck{\context }{c}{\kappa } \)
+\end_inset 
+
+
+\layout Standard
+
+Assume 
+\begin_inset Formula \( \context  \)
+\end_inset 
+
+ and 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ are well formed.
+ Check that 
+\begin_inset Formula \( c \)
+\end_inset 
+
+ is well formed and can be given kind 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+.
+\layout Standard
+
+
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\kindsynth{\context }{c}{\kappa '} & \subkind{\context }{\kappa '}{\kappa }
+\end{array}}{\kcheck{\context }{c}{\kappa }}\]
+
+\end_inset 
+
+
+\layout Subsection
+
 Kind Synthesis 
 \begin_inset Formula \( \kindsynth{\Delta }{c}{\kappa } \)
 \end_inset 
@@ -506,7 +618,7 @@ Assumes that
 Variable 
 \begin_inset Formula 
 \[
-\axiom{\kindsynth{\Delta [\alpha ::\kappa ]}{\alpha }{\kappa }}\]
+\infrule{\selfify{\alpha }{\kappa }{\kappa '}}{\kindsynth{\Delta [\alpha ::\kappa ]}{\alpha }{\kappa }'}\]
 
 \end_inset 
 
@@ -566,12 +678,8 @@ BoxFloat
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\kindsynth{\Delta [a::T,b::T]}{c_{1}}{\kappa _{1}} & \subkind{\caddk{a}{T}\extk{b}{T}}{\kappa _{1}}{T}\\
-\kindsynth{\Delta [a::T,b::T]}{c_{2}}{\kappa _{2}} & \subkind{\caddk{a}{T}\extk{b}{T}}{\kappa _{2}}{T}
-\end{array}}{\kindsynth{\Delta }{\mu (a=c_{1},b=c_{2})}{\Sigma (\alpha ::\st{\mu (a=c_{1},b=c_{2}).1}).\st{\mu (a=c_{1},b=c_{2}).2}}}\begin{array}{l}
-a,b\notin dom(\Delta )\\
-\alpha \notin fv(\mu (a=c_{1},b=c_{2}))
-\end{array}\]
+\kcheck{\Delta [a::T,b::T]}{c_{1}}{T} & \kcheck{\Delta [a::T,b::T]}{c_{2}}{T}
+\end{array}}{\kindsynth{\Delta }{\mu (a=c_{1},b=c_{2})}{\st{\mu (a=c_{1},b=c_{2}).1}\times \st{\mu (a=c_{1},b=c_{2}).2}}}a,b\notin dom(\Delta )\]
 
 \end_inset 
 
@@ -583,8 +691,7 @@ Pair
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\kindsynth{\Delta }{c_{1}}{\kappa _{1}} & \kindsynth{\Delta }{c_{2}}{\kappa _{2}}\\
-\subkind{\context }{\kappa _{1}}{T} & \subkind{\context }{\kappa _{2}}{T}
+\kcheck{\context }{c_{1}}{T} & \kcheck{\context }{c_{2}}{T}
 \end{array}}{\kindsynth{\Delta }{c_{1}\times c_{2}}{\st{c_{1}\times c_{2}}}}\]
 
 \end_inset 
@@ -597,8 +704,7 @@ Arrow
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\kindsynth{\Delta }{c_{1}}{\kappa _{1}} & \subkind{\Delta }{\kappa _{1}}{T}\\
-\kindsynth{\Delta }{c_{2}}{\kappa _{2}} & \subkind{\Delta }{\kappa _{2}}{T}
+\kcheck{\context }{c_{1}}{T} & \kcheck{\context }{c_{2}}{T}
 \end{array}}{\kindsynth{\Delta }{c_{1}\rightarrow c_{2}}{\st{c_{1}\rightarrow c_{2}}}}\]
 
 \end_inset 
@@ -625,8 +731,7 @@ App
 \[
 \infrule{\begin{array}{cc}
 \begin{array}{ll}
-\kindsynth{\Delta }{c_{1}}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}} & \\
-\kindsynth{\Delta }{c_{2}}{\kappa _{1}'} & \subkind{\Delta }{\kappa _{1}'}{\kappa _{1}}
+\kindsynth{\Delta }{c_{1}}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}} & \kcheck{\context }{c_{2}}{\kappa _{1}}
 \end{array}
 \end{array}}{\kindsynth{\Delta }{c_{1}\, c_{2}}{\subst{c_{2}}{\alpha }{\kappa _{2}}}}\]
 
@@ -641,7 +746,7 @@ Record
 \[
 \infrule{\begin{array}{ll}
 \kindsynth{\Delta }{c_{1}}{\kappa _{1}} & \kindsynth{\Delta }{c_{2}}{\kappa _{2}}
-\end{array}}{\kindsynth{\Delta }{<c_{1},c_{2}>}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}}x\notin fv(\kappa _{2})\]
+\end{array}}{\kindsynth{\Delta }{<c_{1},c_{2}>}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}}}\alpha \notin fv(\kappa _{2})\]
 
 \end_inset 
 
@@ -706,9 +811,7 @@ Assume
 Constructor 
 \begin_inset Formula 
 \[
-\frac{\begin{array}{ll}
-\kindsynth{\context }{c}{\kappa } & \subkind{\context }{\kappa }{T}
-\end{array}}{\typev{c}}\]
+\frac{\kcheck{\context }{c}{T}}{\typev{c}}\]
 
 \end_inset 
 
@@ -854,28 +957,12 @@ rec
 \layout List
 \labelwidthstring 00.00.0000
 
-app
-\begin_float footnote 
-\layout Standard
-
-Since we are being predicative, we don't need to normalize the result of
- synthesis on 
-\begin_inset Formula \( e_{1} \)
-\end_inset 
-
-, e.g.
- 
-\begin_inset Formula \( \hnf{\context }{\tau _{e}}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}} \)
-\end_inset 
-
-
-\end_float 
- 
+app 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{lll}
-\types{e_{1}}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}} &  & \types{c}{\kappa '}\\
-\subkind{\context }{\kappa '}{\kappa } & \types{e_{2}}{\tau _{1}'} & \typeeq{\tau _{1}'}{\subst{c}{\alpha }{\tau _{1}}}
+\types{e_{1}}{(\alpha ::\kappa ,\tau _{1})\rightarrow \tau _{2}} &  & \kcheck{\context }{c}{\kappa }\\
+\types{e_{2}}{\tau _{1}'} &  & \typeeq{\tau _{1}'}{\subst{c}{\alpha }{\tau _{1}}}
 \end{array}}{\types{e_{1}[c]e_{2}}{\subst{c}{\alpha }{\tau _{2}}}}\]
 
 \end_inset 
@@ -911,17 +998,7 @@ pair
 \layout List
 \labelwidthstring 00.00.0000
 
-type_proj1
-\begin_float footnote 
-\layout Standard
-
-Again, don't need to normalize? 
-\begin_inset Formula \( \hnf{\context }{\tau }{\tau _{1}\times \tau _{2}} \)
-\end_inset 
-
-
-\end_float 
- 
+type_proj1 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
@@ -947,17 +1024,7 @@ con_proj1
 \layout List
 \labelwidthstring 00.00.0000
 
-type_proj2
-\begin_float footnote 
-\layout Standard
-
-
-\begin_inset Formula \( \hnf{\context }{\tau }{\tau _{1}\times \tau _{2}} \)
-\end_inset 
-
-
-\end_float 
- 
+type_proj2 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
@@ -1005,16 +1072,21 @@ float
 \layout List
 \labelwidthstring 00.00.0000
 
-box
-\begin_float footnote 
-\layout Standard
-
-No need to normalize - predicativity enforces.
-\end_float 
- 
+box 
 \begin_inset Formula 
 \[
 \infrule{\types{e}{Float}}{\types{box(e)}{BoxFloat}}\]
+
+\end_inset 
+
+
+\layout List
+\labelwidthstring 00.00.0000
+
+unbox 
+\begin_inset Formula 
+\[
+\infrule{\types{e}{BoxFloat}}{\types{unbox(e)}{Float}}\]
 
 \end_inset 
 
@@ -1051,7 +1123,7 @@ ifFloat
 \layout Subsection
 
 Path Extraction 
-\begin_inset Formula \( \pext{p}{c} \)
+\begin_inset Formula \( \pext{p}{\kappa } \)
 \end_inset 
 
 
@@ -1066,82 +1138,19 @@ Assumes that
 \end_inset 
 
  are well-formed.
- Returns the head normal form of 
+ Returns the unselfified kind of 
 \begin_inset Formula \( p \)
 \end_inset 
 
 .
- I overload syntax here slightly to use an internal version of this relation
- defined over the following syntactic construct.
-\begin_inset Formula 
-\begin{eqnarray*}
-R & ::= & K(\kappa )\mid C(c)
-\end{eqnarray*}
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Extract
-\begin_inset Formula \( C \)
-\end_inset 
-
  
-\begin_inset Formula 
-\[
-\infrule{\pext{p}{C(c)}}{\pext{p}{c}}\]
-
-\end_inset 
-
-
 \layout List
 \labelwidthstring 00.00.0000
 
-Extract
-\begin_inset Formula \( K \)
-\end_inset 
-
- 
+Variable 
 \begin_inset Formula 
 \[
-\infrule{\begin{array}{ll}
-\pext{p}{K(S_{T}(c))} & \hnf{\context }{c}{c'}
-\end{array}}{\pext{p}{c'}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Otherwise 
-\begin_inset Formula 
-\[
-\infrule{\pext{p}{K(\kappa )}}{\pext{p}{p}}\]
-
-\end_inset 
-
-where 
-\begin_inset Formula \( \kappa  \)
-\end_inset 
-
- is not a singleton
-\layout Standard
-
-The internal version:
-\layout List
-\labelwidthstring 00.00.0000
-
-Variable
-\begin_inset Formula \( K \)
-\end_inset 
-
- 
-\begin_inset Formula 
-\[
-\axiom{\pathextract{\caddk{\alpha }{\kappa }}{\alpha }{K(\kappa )}}\]
+\axiom{\pathextract{\caddk{\alpha }{\kappa }}{\alpha }{\kappa }}\]
 
 \end_inset 
 
@@ -1152,7 +1161,7 @@ Variable
 Weakening1 
 \begin_inset Formula 
 \[
-\infrule{\pext{\alpha }{R}}{\pathextract{\caddk{\alpha '}{\kappa '}}{\alpha }{R}}\]
+\infrule{\pext{\alpha }{\kappa }}{\pathextract{\caddk{\alpha '}{\kappa '}}{\alpha }{\kappa }}\]
 
 \end_inset 
 
@@ -1163,7 +1172,7 @@ Weakening1
 Weakening2 
 \begin_inset Formula 
 \[
-\infrule{\pext{\alpha }{R}}{\pathextract{\caddt{x}{\tau }}{\alpha }{R}}\]
+\infrule{\pext{\alpha }{\kappa }}{\pathextract{\caddt{x}{\tau }}{\alpha }{\kappa }}\]
 
 \end_inset 
 
@@ -1171,16 +1180,12 @@ Weakening2
 \layout List
 \labelwidthstring 00.00.0000
 
-Proj1
-\begin_inset Formula \( C \)
-\end_inset 
-
- 
+Proj1 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\pext{p}{C(<c_{1},c_{2}>)} & \Hnf{c_{1}}{c_{1}'}
-\end{array}}{\pext{p.1}{C(c_{1}')}}\]
+\pext{p}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}} & 
+\end{array}}{\pext{p.1}{\kappa _{1}}}\]
 
 \end_inset 
 
@@ -1188,16 +1193,12 @@ Proj1
 \layout List
 \labelwidthstring 00.00.0000
 
-Proj1
-\begin_inset Formula \( K \)
-\end_inset 
-
- 
+Proj2 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\pext{p}{K(\Sigma (\alpha ::\kappa _{1}).\kappa _{2})} & 
-\end{array}}{\pext{p.1}{K(\kappa _{1})}}\]
+\pext{p}{\Sigma (\alpha ::\kappa _{1}).\kappa _{2}} & 
+\end{array}}{\pext{p.2}{K(\subst{p.1}{\alpha }{\kappa _{2}})}}\]
 
 \end_inset 
 
@@ -1205,67 +1206,12 @@ Proj1
 \layout List
 \labelwidthstring 00.00.0000
 
-Proj2
-\begin_inset Formula \( C \)
-\end_inset 
-
- 
+App 
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\pext{p}{C(<c_{1},c_{2}>)} & \Hnf{c_{2}}{c_{2}'}
-\end{array}}{\pext{p.2}{C(c_{2}')}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-Proj2
-\begin_inset Formula \( K \)
-\end_inset 
-
- 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\kindsynth{\context }{p}{\Sigma (\alpha ::\kappa ).\kappa '} & 
-\end{array}}{\pext{p.2}{K(\subst{p.1}{\alpha }{\kappa '})}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-App
-\begin_inset Formula \( C \)
-\end_inset 
-
- 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\pext{p}{\lambda (\alpha ::\kappa ).c} & \Hnf{\subst{c_{\alpha }}{\alpha }{c}}{c'}
-\end{array}}{\pext{p\, c_{\alpha }}{C(c')}}\]
-
-\end_inset 
-
-
-\layout List
-\labelwidthstring 00.00.0000
-
-App
-\begin_inset Formula \( K \)
-\end_inset 
-
- 
-\begin_inset Formula 
-\[
-\infrule{\begin{array}{ll}
-\kindsynth{\context }{p}{\Pi (\alpha ::\kappa ).\kappa '} & 
-\end{array}}{\pext{p\, c_{\alpha }}{K(\subst{c_{\alpha }}{\alpha }{\kappa '}})}\]
+\pext{p}{\Pi (\alpha ::\kappa _{1}).\kappa _{2}} & 
+\end{array}}{\pext{p\, c}{\subst{c}{\alpha }{\kappa _{2}}}}\]
 
 \end_inset 
 
@@ -1287,7 +1233,7 @@ Assumes that
 \begin_inset Formula \( c \)
 \end_inset 
 
-are well-formed.
+ are well-formed.
  Returns the head normal form of 
 \begin_inset Formula \( c \)
 \end_inset 
@@ -1399,12 +1345,36 @@ App
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\Hnf{c_{1}}{p} & \pext{p\, c_{2}}{c'}
+\Hnf{c_{1}}{p} & \pext{p\, c_{2}}{\st{c}}\\
+\hnf{\context }{c}{c'} & 
 \end{array}}{\Hnf{c_{1}\, c_{2}}{c'}}\]
 
 \end_inset 
 
 
+\layout List
+\labelwidthstring 00.00.0000
+
+App
+\begin_inset Formula \( \sim \kappa  \)
+\end_inset 
+
+ 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c_{1}}{p} & \pext{p\, c_{2}}{\kappa }
+\end{array}}{\Hnf{c_{1}\, c_{2}}{p\, c_{2}}}\]
+
+\end_inset 
+
+
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
 \layout List
 \labelwidthstring 00.00.0000
 
@@ -1440,12 +1410,36 @@ Proj1
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\Hnf{c}{p} & \pext{p.1}{c'}
-\end{array}}{\Hnf{c.1}{c'}}\]
+\Hnf{c}{p} & \pext{p.1}{\st{c'}}\\
+\hnf{\context }{c'}{c''} & 
+\end{array}}{\Hnf{c.1}{c''}}\]
 
 \end_inset 
 
 
+\layout List
+\labelwidthstring 00.00.0000
+
+Proj1
+\begin_inset Formula \( \sim \kappa  \)
+\end_inset 
+
+ 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c}{p} & \pext{p.1}{\kappa }
+\end{array}}{\Hnf{c.1}{p.1}}\]
+
+\end_inset 
+
+
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
 \layout List
 \labelwidthstring 00.00.0000
 
@@ -1470,12 +1464,36 @@ Proj2
 \begin_inset Formula 
 \[
 \infrule{\begin{array}{ll}
-\Hnf{c}{p} & \pext{p.2}{c'}
-\end{array}}{\Hnf{c.2}{c'}}\]
+\Hnf{c}{p} & \pext{p.2}{\st{c'}}\\
+\hnf{\context }{c'}{c''} & 
+\end{array}}{\Hnf{c.2}{c''}}\]
 
 \end_inset 
 
 
+\layout List
+\labelwidthstring 00.00.0000
+
+Proj2
+\begin_inset Formula \( \sim \kappa  \)
+\end_inset 
+
+ 
+\begin_inset Formula 
+\[
+\infrule{\begin{array}{ll}
+\Hnf{c}{p} & \pext{p.2}{\kappa }
+\end{array}}{\Hnf{c.2}{p.2}}\]
+
+\end_inset 
+
+
+\newline 
+where 
+\begin_inset Formula \( \kappa  \)
+\end_inset 
+
+ is not a singleton
 \layout List
 \labelwidthstring 00.00.0000
 
