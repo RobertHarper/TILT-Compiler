@@ -29,9 +29,14 @@ structure Name :> NAME =
     fun eq_tag   (GTAG n1, GTAG n2)     = n1 = n2
     fun compare_var ((a,_) : var,(b,_) : var) = Int.compare(a,b)
     fun compare_tag (GTAG(a,_),GTAG(b,_)) = Int.compare(a,b)
-    fun compare_label((a,sa,_) : label, (b,sb,_) : label) = 
+    fun compare_label((a,sa,oa) : label, (b,sb,ob) : label) = 
 	(case Int.compare(a,b) of
-	     EQUAL => String.compare(sa,sb)
+	     EQUAL => (case String.compare(sa,sb) of
+			   EQUAL => (case (oa,ob) of
+					 (false,true) => LESS
+				       | (true,false) => GREATER
+				       | _ => EQUAL)
+			 | res => res)
 	   | res => res)
 
     fun make_counter() = 
