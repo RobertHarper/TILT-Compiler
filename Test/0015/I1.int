@@ -1,0 +1,1 @@
+functor F (structure O : sig type t end) : sig type elem = O.t end

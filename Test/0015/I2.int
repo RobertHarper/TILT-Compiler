@@ -1,0 +1,1 @@
+functor F (Order : sig type t end) : sig type elem = Order.t end
