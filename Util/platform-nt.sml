@@ -4,10 +4,12 @@ structure Platform :> PLATFORM =
 
 struct
 
-    val error = fn s => Util.error "platform.sml" s
+    val error = fn s => UtilError.error "platform.sml" s
     datatype platform = NT | DUNIX | SOLARIS | LINUX
 	
-    val platform = NT
+    fun platform () = NT
+
+    fun hostname () = "NTMachine"
 
     fun spinMilli start 0 = ()
       | spinMilli start n = 

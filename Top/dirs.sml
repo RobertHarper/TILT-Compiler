@@ -1,4 +1,4 @@
-(*$import TopLevel DIRS Delay Util *)
+(*$import TopLevel DIRS Delay Util Platform *)
 
 structure Dirs :> DIRS =
 struct
@@ -6,6 +6,21 @@ struct
     (* error : string -> 'a *)
     val error = fn s => Util.error "dirs.sml" s
 	
+    (* dir : string -> string *)
+    fun dir s =
+	if (Platform.platform() = Platform.NT) then
+           let
+	      fun loop [] = ""
+                | loop (#"/"::rest) = String.implode(rev rest)
+                | loop (#"\\"::rest) = String.implode(rev rest)
+                | loop (_::rest) = loop rest
+           in
+	      loop (List.rev (String.explode s))
+           end 
+        else
+           OS.Path.dir s
+	
+ 
     (* relative : string * string -> string *)
     (* could be smarter about symbolic links *)
     fun relative (dir, file) =
@@ -67,14 +82,31 @@ struct
 				inDirByName (realFullPath parent, realFullPath path))
 
     (* dirAvailable : string -> bool *)
-    fun dirAvailable dir = ((OS.FileSys.isDir dir andalso
-			     OS.FileSys.access(dir, [OS.FileSys.A_READ, OS.FileSys.A_EXEC]))
-			    handle _ => false)
+    fun dirAvailable dir = 
+	let
+	  val permissions = if (Platform.platform() = Platform.NT) then
+	                       [OS.FileSys.A_READ]
+                            else
+	                       [OS.FileSys.A_READ, OS.FileSys.A_EXEC]
+        in
+	   (OS.FileSys.isDir dir andalso 
+            OS.FileSys.access(dir, permissions))
+           handle _ => false
+        end
 
     (* chopSlash : string -> string *)
-    fun chopSlash s = if size s > 0 andalso String.sub (s, 0) = #"/"
+    val chopSlash = 
+        if (Platform.platform() = Platform.NT) then
+           fn s => if size s > 0 andalso 
+                      ((String.sub (s, 0) = #"/") orelse
+                       (String.sub (s, 0) = #"\\"))
 			  then String.extract (s, 1, NONE)
 		      else s
+        else
+           fn s => if size s > 0 andalso (String.sub (s, 0) = #"/")
+			  then String.extract (s, 1, NONE)
+		      else s
+
 
     (* strip : string * string -> string option *)
     fun strip (dir, file) = if inDirByName (dir, file)

@@ -7,6 +7,13 @@ structure Til :> COMPILER =
 
     datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
 
+    val uptoElaborate = Stats.ff("UptoElaborate")
+    val uptoPhasesplit = Stats.ff("UptoPhasesplit")
+    val uptoClosureConvert = Stats.ff("UptoClosureConvert")
+    val uptoRtl = Stats.ff("UptoRtl")
+    val uptoAsm = Stats.ff("UptoAsm")
+
+
     (* defaultPlatform () -> platform *)
     fun defaultPlatform () =
 	(case Platform.platform()
@@ -37,7 +44,7 @@ structure Til :> COMPILER =
 	   | _ => error "MLRISC not supported")
 	     
     (* checkNative : unit -> unit *)
-    fun checkNative () = if native() then ()
+    fun checkNative () = if native() orelse (!uptoAsm) then ()
 			 else error "No backend exists for this platform."
 
     type sbnd = Il.sbnd
@@ -88,12 +95,6 @@ structure Til :> COMPILER =
 	   | MLRISC_SPARC => SparcLink.base2uo *) ) base
 
 
-
-    val uptoElaborate = Stats.ff("UptoElaborate")
-    val uptoPhasesplit = Stats.ff("UptoPhasesplit")
-    val uptoClosureConvert = Stats.ff("UptoClosureConvert")
-    val uptoRtl = Stats.ff("UptoRtl")
-    val uptoAsm = Stats.ff("UptoAsm")
 
     fun assemble_help background base =
 	let val s_file = base2s base

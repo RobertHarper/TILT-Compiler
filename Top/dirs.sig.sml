@@ -3,6 +3,10 @@
 signature DIRS =
 sig
     (* Utilities *)
+
+    (* dir (path) returns the directory part of the given path.
+       if there is no such part, then the empty string is returned. *)
+    val dir : string -> string
     
     (* relative (dir, path) is the canonical path p equivalent to dir/path.
      * Note if path is absolute then p = path, and if dir is absolute then so is p.

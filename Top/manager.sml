@@ -104,12 +104,20 @@ struct
     val flush = "FLUSH"
     val request = "REQUEST"
 
+    fun prints s = (print "\n"; app (fn s => print (s ^ " &&& ")) s; print "\n")
+
     fun changeFiles f (platform::unit::absBase::absImportBases) =
 	(platform::unit::(f absBase)::(map f absImportBases))
       | changeFiles f _ = error "wrong number of words - bad msg"
 	
     fun jobToWords job = changeFiles (Dirs.encode (Dirs.getDirs())) job
-    fun wordsToJob words = changeFiles (Dirs.decode (Dirs.getDirs())) words
+    fun wordsToJob words = 
+         let val _ = prints words
+             val result = changeFiles (Dirs.decode (Dirs.getDirs())) words
+             val _ = prints result
+         in
+             result
+         end
 	
     fun messageToWords READY = [ready]
       | messageToWords (ACK_INTERFACE job) = ack_interface :: (jobToWords job)
@@ -117,7 +125,8 @@ struct
       | messageToWords (ACK_OBJECT job) = ack_object :: (jobToWords job)
       | messageToWords (ACK_ERROR job) = ack_error :: (jobToWords job)
       | messageToWords (FLUSH job) = flush :: job
-      | messageToWords (REQUEST job) = request :: (jobToWords job)
+      | messageToWords (REQUEST job) = (print "job = "; prints job;
+                                        request :: (jobToWords job))
     fun wordsToMessage [] = error "no words - bad msg"
       | wordsToMessage (first::rest) = 
 	if (first = ready andalso null rest)
@@ -208,7 +217,8 @@ struct
 			 end)
 
     fun remove (file : string) = 
-	(if (OS.FileSys.access(file, [OS.FileSys.A_READ]))
+	(if OS.FileSys.access(file,[]) andalso
+            OS.FileSys.access(file, [OS.FileSys.A_READ])
 	    then OS.FileSys.remove file
 	 else ())
 	    handle e => (print ("WARNING: remove - file " ^ file ^ " exists but then remove failed\n"); ())
@@ -219,10 +229,14 @@ struct
 
     fun exists channel = 
 	let val filename = channelToName channel
-	in  (OS.FileSys.access(filename,[OS.FileSys.A_READ]) andalso
-	     (OS.FileSys.fileSize filename > 0))
+	in  ((OS.FileSys.access(filename,[]))
+             andalso
+             (OS.FileSys.access(filename,[OS.FileSys.A_READ])
+               handle _ => false)
+             andalso
+	     ((OS.FileSys.fileSize filename > 0)
 	    handle e => (print "WARNING: channel disappeared in the middle of exists\n"; 
-			 exists channel)
+			 exists channel)))
 	end
 
     fun send (channel, message) = 
@@ -337,9 +351,10 @@ struct
   (* This is the underlying uncached function *)
   fun modTimeSize_raw file =
       let val exists = 
-	  ((OS.FileSys.access(file, [OS.FileSys.A_READ]))
+	  ((OS.FileSys.access(file, [])) andalso
+           (OS.FileSys.access(file, [OS.FileSys.A_READ])
 	   handle _ => (print ("Warning: OS.FileSys.access on " ^ 
-			       file ^ " failed \n"); false))
+			       file ^ " failed \n"); false)))
       in  (if exists
 	      then SOME(OS.FileSys.fileSize file, OS.FileSys.modTime file)
 	  else NONE)
@@ -974,7 +989,7 @@ struct
 	(* readAssociation : string -> (string * string * bool) list *)
 	fun readAssociation mapfile = 
 	    let
-		val dir = OS.Path.dir mapfile
+		val dir = Dirs.dir mapfile
 		val findMapfile = Dirs.accessPath (mapfilePath dir, [OS.FileSys.A_READ])
 		fun relative file = Dirs.relative (dir, file)
 		val is = TextIO.openIn mapfile
