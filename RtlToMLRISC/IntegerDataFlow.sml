@@ -4,15 +4,16 @@
  * ========================================================================= *)
 
 functor IntegerDataFlow(
-	  structure IntSet:	 ORD_SET where type Key.ord_key = int
 	  structure MLTreeExtra: MLTREE_EXTRA
 	) :> REGISTER_DATA_FLOW
-	       where type idSet	 = IntSet.set
+	       where type idSet	 = DenseIntSet.set
 		 and type mlrisc = MLTreeExtra.MLTree.mlrisc
 		 and type mltree = MLTreeExtra.MLTree.mltree
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure IntSet = DenseIntSet
 
   structure MLTree = MLTreeExtra.MLTree
 
