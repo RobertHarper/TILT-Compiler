@@ -530,6 +530,9 @@ Hoist Nil/hoist
 INLINE Nil/inline.sig
 Inline Nil/inline
 
+MEASURE Nil/measure.sig
+Measure Nil/measure
+
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
 

@@ -5,7 +5,7 @@ General     Basis/General/general
 OPTION      Basis/General/option-sig
 Option      Basis/General/option
 STRING_CVT  Basis/Text/string-cvt-sig
-StringCvt   Basis/Text/string-cvt 
+StringCvt   Basis/Text/string-cvt
 # "Prelude", "GENERAL", "General", "OPTION", "Option", "STRING_CVT", "StringCvt"
 BOOL        Basis/General/bool-sig
 Bool        Basis/General/bool
@@ -529,6 +529,9 @@ Hoist Nil/hoist
 
 INLINE Nil/inline.sig
 Inline Nil/inline
+
+MEASURE Nil/measure.sig
+Measure Nil/measure
 
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
