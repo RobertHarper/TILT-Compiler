@@ -1230,7 +1230,7 @@ struct
 	   val (con, _) = xcon context il_con
        in 
 	   (Prim_e(NilPrimOp make_exntag, [con], []),
-	    Prim_c (Exntag_c, []),
+	    Prim_c (Exntag_c, [con]),
 	    false)
        end
 
@@ -1257,7 +1257,6 @@ struct
 	   val (con, _) = xcon context il_con
 	   val (exp, _, valuable) = xexp context il_exp1
        in
-	   (* XXX BUG XXX  WRONG CON ARGUMENT!!! *)
 	   (Prim_e(NilPrimOp unroll, [con], [exp]), con, valuable)
        end
 
