@@ -1,7 +1,6 @@
-(*$import Time Crc *)
-
-signature FILECACHE = 
+signature FILECACHE =
     sig
+	type name
 	type internal
 	val flushAll : unit -> unit
 	val flushSome : string list -> unit
@@ -9,9 +8,9 @@ signature FILECACHE =
 	val modTime : string -> Time.time
 	val lastModTime : string list -> string option * Time.time
 	val size : string -> int
-	val read : string -> bool * internal         (* Was it cached? *) 
-	val write : string * internal -> bool        (* Did we write?  *)
-	val updateCache : string * internal -> bool  (* Update the cache if object cached; succeed? *)
+	val read : name -> internal
+	val write : string * internal -> unit
 	val crc : string -> Crc.crc
+	val remove : string -> unit
 	val tick : unit -> unit
-    end 
+    end
