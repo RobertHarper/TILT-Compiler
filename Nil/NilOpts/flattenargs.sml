@@ -72,7 +72,10 @@ struct
 		    val _ = NilOpts.inc_click flatten_con_click 
 		    val newFnVar = (Name.fresh_var())
 		    val args = map (fn _ => (Name.fresh_var())) labels
-		    val newvklist = Listops.zip args kinds 
+		    local val ls = Listops.map2 (fn (v,v') => (v,Var_c v')) (vars,args)
+			  val kinds = map (Subst.substConInKind (Subst.fromList ls)) kinds
+		    in    val newvklist = Listops.zip args kinds
+		    end
 		    val cons = map Var_c args
 		    val _ = HashTable.insert flattenedc (fnVar, (newFnVar, labels, recordKind,  kinds))
 		    val con_record = Crecord_c (Listops.zip labels cons)
@@ -90,13 +93,15 @@ struct
 		    val args = map (fn _ => (Name.fresh_var())) labels
 		    val call = Name.fresh_var()
 		    val newRecordArg = Name.fresh_var()
-		    local val subst' = Subst.fromList[(recordArg, Var_c newRecordArg)]
-		    in    val newKind' = Subst.substConInKind subst' kind
+		    local val ls = Listops.map2 (fn (v,v') => (v,Var_c v')) (vars,args)
+			  val subst = Subst.fromList((recordArg, Var_c newRecordArg)::ls)
+			  val kinds = map (Subst.substConInKind subst) kinds
+		    in    val newKind' = Subst.substConInKind subst kind
+			  val newbnds = Listops.map3
+			      (fn (v, k, l) =>
+			       Con_cb (v, k, (Proj_c( Var_c newRecordArg, l)))) 
+			      (args, kinds, labels)
 		    end
-		    val newbnds = Listops.map3
-			(fn (v, k, l) =>
-			 Con_cb (v, k, (Proj_c( Var_c newRecordArg, l)))) 
-			(args, kinds, labels)
 		       
 		    val func = 
 			(fnVar, [(newRecordArg, recordKind)], 

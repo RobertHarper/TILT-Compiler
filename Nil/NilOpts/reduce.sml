@@ -20,11 +20,13 @@ functor Reduce  (
 			) : PASS =
 
 struct 
+
     val do_inline = NilOpts.do_inline_once
     val do_project_known = NilOpts.do_project_known
     val do_dead = NilOpts.do_dead
     
     open Nil Name Util Nil.Prim
+    val error = fn s => Util.error "reduce.sml" s
     structure Nil = Nil
 
     exception FnNotFound
@@ -497,10 +499,11 @@ struct
 			
 	    fun is_pure exp = 
 		case exp of 
-		    ( Var_e _ | Const_e _ )  => true
-		 
+		    Var_e _ => true
+		  | Const_e _ => true
 		  | App_e (_, Var_e f, _,_,_) => 
 		        VarSet.member (!total_set, f) (* We don't have to check args because of A-normal form *)
+		  | App_e _ => error "not in A-normal form"
 		  | Prim_e (allp, _, _) =>
 			is_pure_allp allp
 		  | Let_e (_, bnds, exp) => 
@@ -516,8 +519,8 @@ struct
 			    
 		(* ----- Have to recur on the kind here as well ----------------- *)	
 	in  fun xcon_project fset (t :var, kind:kind, (Var_c a):con, label:label) binder do_body do_kind =
-	    let fun cleanup unit = 
-		(update_count_c count_esc (sc(a)) ~1 fset;
+	    let fun cleanup () = 
+		(update_count_c count_esc (sc a) (~1) fset;
 		 census_kind (~1, kind) )
 	    in 
 		if (dead_var t) then 
@@ -544,7 +547,11 @@ struct
 				       end)
 		      | _=> raise BUG
 	    end
-			
+	    | xcon_project fset (t :var, kind:kind, c:con, label:label) binder do_body do_kind = 
+	    (print "Warning: xcon_project in reduce not anormal: given con =\n";
+	     Ppnil.pp_con c; print "\n"; 
+	     binder (t, do_kind fset kind, Proj_c (c, label), do_body()))
+
 	    and xcon_record fset (x, kind, lclist) binder do_body do_kind = 
 		 let val (labels, cons) = Listops.unzip lclist
 		     val cons = map subst_c cons
@@ -1181,6 +1188,7 @@ struct
 					       
 					       xexp fset exp ) 
 					  end
+				    | SOME _ => new_app 
 				    | NONE => new_app )
 			else
 			    new_app

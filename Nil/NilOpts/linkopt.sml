@@ -5,8 +5,7 @@ signature DOOPTS =
     end 
 
 
-functor DoOpts (structure Normalize : NORMALIZE
-                structure PpNil : PPNIL
+functor DoOpts (structure PpNil : PPNIL
 		structure Nil : NIL
 		structure NilContext : NILCONTEXT
 		structure NilEval : NILEVAL
@@ -20,10 +19,10 @@ functor DoOpts (structure Normalize : NORMALIZE
 		     = NilUtil.Nil = Linearize.Nil
 
 		sharing Nil.Prim = NilPrimUtil.Prim
-                sharing type Nil.kind = Normalize.kind = NilSubst.kind
-		sharing type Nil.con = NilSubst.con = NilPrimUtil.con = Normalize.con 
+                sharing type Nil.kind = NilSubst.kind
+		sharing type Nil.con = NilSubst.con = NilPrimUtil.con 
 		sharing type Nil.exp = NilSubst.exp = NilPrimUtil.exp 
-	        sharing type NilContext.context = NilStatic.context = Normalize.context
+	        sharing type NilContext.context = NilStatic.context 
 		    ) = 
 			 
 struct
@@ -60,8 +59,7 @@ struct
 				  structure Ppnil = PpNil
 				      )
 
-    structure Anormalize = Anormalize (structure Normalize = Normalize
-				       structure ExpTable = ExpTable
+    structure Anormalize = Anormalize (structure ExpTable = ExpTable
 				       structure Squish = Squish
 				       structure NilUtil = NilUtil
 				       structure Subst = NilSubst

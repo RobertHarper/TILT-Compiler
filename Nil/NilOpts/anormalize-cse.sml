@@ -74,10 +74,9 @@ signature ANORMALIZE =
 	   
 	val doModule : bool -> Nil.module -> Nil.module
 	val test_exp : Nil.exp -> Nil.exp
-
+	val debug : bool ref
     end 
-functor Anormalize (structure Normalize : NORMALIZE
-		    structure Ppnil : PPNIL
+functor Anormalize (structure Ppnil : PPNIL
 		    structure Nil : NIL
 		    structure NilUtil : NILUTIL
 		    structure Subst : NILSUBST
@@ -90,9 +89,8 @@ functor Anormalize (structure Normalize : NORMALIZE
 		    
 		    sharing  Ppnil.Nil = Nil = NilStatic.Nil = NilEval.Nil = NilContext.Nil = NilUtil.Nil = Squish.Nil = ExpTable.Nil
 		    sharing  PrimUtil.Prim = Nil.Prim
-		    sharing type Nil.kind = Normalize.kind
-		    sharing type PrimUtil.con = Nil.con = Subst.con = Normalize.con 
-		    sharing type NilContext.context = NilStatic.context = Normalize.context
+		    sharing type PrimUtil.con = Nil.con = Subst.con 
+		    sharing type NilContext.context = NilStatic.context 
 			) : ANORMALIZE =
     
 struct 
@@ -383,8 +381,8 @@ struct
 (*	let val (con, kind) = NilStatic.con_valid (D, con)
 	    val kind = NilUtil.strip_singleton kind 
 *)
-	let val con = Normalize.con_normalize D con
-	    val kind = Normalize.get_shape D con
+	let val con =  NilStatic.con_reduce(D,con)
+	    val kind = NilStatic.get_shape D con
 	    val kind = Rename.rename_kind VarMap.empty kind
 	    val _ =  if !debug then ( print "Kinding " ; Ppnil.pp_con con ; print " to be " ; Ppnil.pp_kind kind ; print "\n" ) else ()
 	in 
@@ -592,31 +590,29 @@ struct
 	  | Record_k lvkseq =>
 		let val lvklist = Util.sequence2list lvkseq
 		    val (lvs, kinds) = Listops.unzip lvklist
-		    val vklist = Listops.zip (map #2 lvs) kinds
-		    val newD = insert_kind_list (D, vklist)
-		    val kinds =  normalize_kinds kinds newD avail
-		in
-			Record_k (Util.list2sequence (Listops.zip lvs kinds))
+		    val (ls,vs) = Listops.unzip lvs
+		    val vklist = Listops.zip vs kinds
+		    val (vklist,_) = normalize_kinds vklist D avail
+		    val (vs,kinds) = Listops.unzip vklist
+		in  Record_k (Util.list2sequence (Listops.zip lvs kinds))
 		end
 
 	    
 	  | Arrow_k (openn, vklist, knd) => 
-		let 
-		    val (vs, ks) = Listops.unzip vklist
-		    val ks = normalize_kinds ks D avail
-
-		    (* As the type variables can occur in the return kind, 
-		     we have to extend the context with them *)
-		    val resultD = insert_kind_list (D, vklist)
-
-		    val knd = normalize_kind knd resultD avail 
-			
-		in 
-		    Arrow_k (openn, Listops.zip vs ks, knd)
+		let val (vklist,newD) = normalize_kinds vklist D avail 
+		    val knd = normalize_kind knd newD avail 
+		in  Arrow_k (openn, vklist, knd)
 		end)
 	     
-    and normalize_kinds kinds D avail = 
-	map (fn (k) => normalize_kind k D avail) kinds
+    and normalize_kinds vklist D avail = 
+	let fun loop acc [] D = (rev acc,D)
+	      | loop acc ((v,k)::rest) D = 
+	    let val k' = normalize_kind k D avail
+		val D' = insert_kind(D, v, k')
+	    in  loop ((v,k')::acc) rest D'
+	    end
+	in  loop [] vklist D
+	end
 
     and normalize_con con D (avail as (ae,ac)) (bind, k) = 
 	(if !debug then print "c" else ();
@@ -633,26 +629,18 @@ struct
 		 end ))
 	  | Mu_c (bool,vcseq, var) => 
 		let val vclist = sequence2list vcseq
-		    fun folder((v,_),subst) = (case find_kind(D, v) of
-						   NONE => subst
-						 | SOME _ => Subst.add subst (v,Var_c(Name.derived_var v)))
-		    val subst = foldl folder (Subst.empty()) vclist
-		    fun substcon c = if (Subst.is_empty subst)
-					 then c
-				     else Subst.substConInCon subst c
-		    fun lookup var = (case (substcon (Var_c var)) of
-					  (Var_c v) => v
-					| _ => error "substcon returned non Var_c")
-		    val var_kinds = map (fn (var,con) => (lookup var, Word_k Runtime)) vclist
+		    val (vclist,var) = NilUtil.alpha_mu 
+			(fn v => (case find_kind(D, v) of
+				      NONE => false
+				    | SOME _ => true)) (vclist,var)
+		    val var_kinds = map (fn (var,con) => (var, Word_k Runtime)) vclist
 		    val newD = insert_kind_list (D, var_kinds)
 		    fun do_con (var, con) = 
-			let val var = lookup var
-			    val con = substcon con
-			    val CON con = normalize_con con newD avail (TOCON, CONk)
+			let val CON con = normalize_con con newD avail (TOCON, CONk)
 			in (var, con)
 			end 
 		in 
-		    k ( Mu_c (bool,map do_con vclist, lookup var), D, avail)
+		    k ( Mu_c (bool,map do_con vclist, var), D, avail)
 		end 
 	  | AllArrow_c ( openness, effect, vklist, clist, w32, con) => 
 	        if null vklist then
@@ -670,9 +658,7 @@ struct
 		 *)
 		
 		else 
-		    let val (vs, ks) = Listops.unzip vklist
-			val kinds = normalize_kinds ks D avail 
-			val vklist = Listops.zip vs kinds
+		    let val (vklist,newD) = normalize_kinds vklist D avail 
 			val newD = insert_kind_list (D, vklist)
 			     fun do_con con = 
 				 let val CON con = normalize_con con newD avail (TOCON, CONk)
@@ -738,6 +724,8 @@ struct
 		      val _ = HashTable.insert env (t,con)
 		      val _ = if !debug then (print "Kinding "; Ppnil.pp_con con ) else ();
 		      val kind =  contype (D, con) 
+			  handle e => (print "contype failed with con = \n";
+				       Ppnil.pp_con con; print "\n\n"; raise e)
 		      val kind =  normalize_kind kind D (ae,ac)
 		      val _ = if !debug then (print " with kind "; Ppnil.pp_kind kind ; print "\n") else ();
 		      val _ = NilOpts.inc_click normalize_click
@@ -785,7 +773,6 @@ struct
 
       | Open_cb (v, vklist, con, kind) => 
 	    let val vklist = map (fn (v,k) => (v, normalize_kind k D avail)) vklist
-	
 		val newD = insert_kind_list (D, vklist)
 		val kind = normalize_kind kind newD avail 
 		val returnD = insert_kind (D, v, Arrow_k (Open, vklist, kind))
@@ -929,7 +916,8 @@ struct
     and normalize_exp_bnd bnd D (ae, ac) (k:bnd list*context*avail->bnd list*context*avail) = 
 	case bnd of 
 	    Con_b (v, knd, c) =>
-		let val BNDLIST returnbnds = normalize_con c D (ae, ac) 
+		let
+		    val BNDLIST returnbnds = normalize_con c D (ae, ac) 
 		    (TOBNDLIST, (fn (con,D, (ae,ac)) =>
 				 let val knd = normalize_kind knd D (ae,ac)
 				     val ac = if !do_cse andalso (is_elim_con con) then 
@@ -939,8 +927,9 @@ struct
 				     case con of 
 					 (* If it is only one con-fun leave it where it is *)
 					 Let_c (sort, [Open_cb _ ], bdy) => 
-						BNDLIST ( HashTable.insert env (v, con) ; 
-							 k ([ Con_b(v,knd, con) ], insert_kind (D, v, knd), (ae, ac)))
+					     BNDLIST ( HashTable.insert env (v, con) ; 
+					          k ([ Con_b(v,knd, con) ], insert_kind (D, v, knd), (ae, ac)))
+					     
 
 				       | Let_c ( sort, bnds, bdy) =>
 					     let val Let_c(sort, conbnds, bdy) = Squish.squish_con con
@@ -953,7 +942,7 @@ struct
 					     end 
 				       | _ => 
 					     BNDLIST ( HashTable.insert env (v, con) ; 
-						      k ([ Con_b(v,knd, con) ], insert_kind (D, v, knd), (ae, ac)))
+					           k ([ Con_b(v,knd, con) ], insert_kind (D, v, knd), (ae, ac)))
 				 end ))
 		in returnbnds end 
 	    
@@ -1019,7 +1008,6 @@ struct
 	     val newD = insert_con_list (D, vclist) 
 	     val newD = insert_con_list (newD, map (fn v=> (v, Prim_c (Float_c Prim.F32, [])))  vlist) 
 	     val exp = normalize_exp exp newD (ae, ac) (fn (x, D, (ae, ac))=>x)
-
 	 in ( k ((v,Function(e,r,vklist, vclist, vlist, exp, con)), D, (ae,ac)))
 	 end 
     and normalize_fcns (hd :: fcns) D a (k:(var*function)list*context*avail->(var*function)list) =
