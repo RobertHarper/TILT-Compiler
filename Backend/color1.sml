@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR *)
+(*$import Prelude TopLevel Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR List *)
 (* Original implementation.  Does not try cycling through temporary regs. *)
 
 
