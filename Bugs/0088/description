@@ -7,7 +7,7 @@ Version:     CVS
 System:	     solaris
 Severity:    various
 Problem:     various
-Code:	     tests 
+Code:	     tests m0005, m0025, m0026, m0027, m0028, m0030
 Transcript:  see test directory
 Comments:    from mlton suite
 Fix:	     <optional - but you get extra credit>
