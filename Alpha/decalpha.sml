@@ -97,7 +97,8 @@ functor Decalpha (val exclude_intregs : int list
 
   datatype rtl_instruction =
     CALL of 
-    {func: call_type,                  (* label or temp containing addr. *)
+    {extern_call : bool,               (* Is this an extern call to C *)
+     func: call_type,                  (* label or temp containing addr. *)
      args : register list,             (* integer, floating temps *)
      results : register list,          (* integer, floating temps *)
      argregs : register list option,   (* actual registers *)
@@ -107,6 +108,7 @@ functor Decalpha (val exclude_intregs : int list
 
     | RETURN of {results: register list}       (* formals *)
 
+    | JMP of register * loclabel list
     | HANDLER_ENTRY
     | SAVE_CS of loclabel
 
@@ -326,6 +328,7 @@ functor Decalpha (val exclude_intregs : int list
            "CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
+    | rtl_to_ascii (JMP (Raddr,_)) = "JMP " ^ (msReg Raddr)
     | rtl_to_ascii (RETURN{results}) = "RETURN [" ^ (reglist_to_ascii results) ^ "]"
     | rtl_to_ascii HANDLER_ENTRY = "HANDLER_ENTRY"
     | rtl_to_ascii (SAVE_CS _) = "SAVE_CS"
@@ -614,6 +617,7 @@ functor Decalpha (val exclude_intregs : int list
       | defUse (BASE (RET (true, _)))               = ([Rra], [Rra])
       | defUse (SPECIFIC TRAPB)                         = ([], [])
       | defUse (BASE (LADDR (Rdest,_)))             = ([Rdest], [])
+      | defUse (BASE (RTL (JMP (Raddr, _))))        = ([], [Raddr])
       | defUse (BASE (RTL (CALL {func=DIRECT (CE (_,SOME sra)),args,
 				 results, ...})))   = (results, real_Rpv :: sra :: args)
       | defUse (BASE (RTL (CALL {func=DIRECT (CE (_,NONE)), args,

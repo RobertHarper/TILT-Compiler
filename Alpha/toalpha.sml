@@ -359,7 +359,8 @@ struct
 	 (* This is a special call to the libc __divl routine, which
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27. *)
-	 emit (BASE(RTL (CALL{func = DIRECT (CE( "__divl", SOME (ireg 23))),
+	 emit (BASE(RTL (CALL{extern_call = true,
+			      func = DIRECT (CE( "__divl", SOME (ireg 23))),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -382,7 +383,8 @@ struct
 	     val Rsrc2 = freshIreg ()
 	   in
 	     emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
-	     emit (BASE(RTL (CALL{func = DIRECT (CE ("__divl",SOME (ireg 23))),
+	     emit (BASE(RTL (CALL{extern_call = true,
+				  func = DIRECT (CE ("__divl",SOME (ireg 23))),
 				  args = [Rsrc1, Rsrc2],
 				  results = [Rdest],
 				  argregs = SOME [ireg 24, ireg 25],
@@ -401,7 +403,8 @@ struct
 	 (* This is a special call to the libc __reml routine, which
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27 and the pv in $23. *)
-		   emit (BASE(RTL (CALL{func = DIRECT (CE ("__reml",SOME(ireg 23))),
+		   emit (BASE(RTL (CALL{extern_call = true,
+					func = DIRECT (CE ("__reml",SOME(ireg 23))),
 					args = [Rsrc1, Rsrc2],
 					results = [Rdest],
 					argregs = SOME [ireg 24, ireg 25],
@@ -418,7 +421,8 @@ struct
 	 val Rsrc2 = freshIreg ()
        in
 	 emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
-	 emit (BASE(RTL (CALL{func = DIRECT (CE ("__reml",SOME(ireg 23))),
+	 emit (BASE(RTL (CALL{extern_call = true,
+			      func = DIRECT (CE ("__reml",SOME(ireg 23))),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -740,7 +744,8 @@ struct
 	 val Fdest = translateFReg rtl_Fdest
        in
 	 (* Call to a C routine in libm *)
-	 emit (BASE (RTL (CALL{func = DIRECT (CE ("sqrt",NONE)),
+	 emit (BASE (RTL (CALL{extern_call = true,
+			       func = DIRECT (CE ("sqrt",NONE)),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -755,7 +760,8 @@ struct
 	 val Fdest = translateFReg rtl_Fdest
        in
 	 (* Call to a C routine in libm *)
-	 emit (BASE (RTL (CALL{func = DIRECT (CE ("sin",NONE)),
+	 emit (BASE (RTL (CALL{extern_call = true,
+			       func = DIRECT (CE ("sin",NONE)),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -770,7 +776,8 @@ struct
 	 val Fdest = translateFReg rtl_Fdest
        in
 	 (* Call to a C routine in libm *)
-	 emit (BASE (RTL (CALL{func = DIRECT (CE ("cos",NONE)),
+	 emit (BASE (RTL (CALL{extern_call = true,
+			       func = DIRECT (CE ("cos",NONE)),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -785,7 +792,8 @@ struct
 	 val Fdest = translateFReg rtl_Fdest
        in
 	 (* Call to a C routine in libm *)
-	 emit (BASE (RTL (CALL{func = DIRECT (CE ("atan",NONE)),
+	 emit (BASE (RTL (CALL{extern_call = true,
+			       func = DIRECT (CE ("atan",NONE)),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -800,7 +808,8 @@ struct
 	 val Fdest = translateFReg rtl_Fdest
        in
 	 (* Call to a C routine in libm *)
-	 emit (BASE (RTL (CALL{func = DIRECT (CE ("exp",NONE)),
+	 emit (BASE (RTL (CALL{extern_call = true,
+			       func = DIRECT (CE ("exp",NONE)),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -815,7 +824,8 @@ struct
 	 val Fdest = translateFReg rtl_Fdest
        in
 	 (* Call to a C routine in libm *)
-	 emit (BASE (RTL (CALL{func = DIRECT (CE ("log",NONE)),
+	 emit (BASE (RTL (CALL{extern_call = true,
+			       func = DIRECT (CE ("log",NONE)),
 			       args = [Fsrc],
 			       results = [Fdest],
 			       argregs = NONE,
@@ -917,13 +927,15 @@ struct
        let
 	 val Raddr = translateIReg rtl_Raddr
 	 val loclabels = map translateCodeLabel rtllabels
-       in
-	 emit (BASE (MOVI (Raddr,Rpv)));
+       in (* JMP must first restore callee-save registers first *)
+(*	 emit (BASE (MOVI (Raddr,Rpv)));
 	 emit (BASE (JSR (false, Raddr, 1, loclabels)))
-
+*)
+	   emit (BASE (RTL (JMP (Raddr, rtllabels))))
        end
 
-     | translate (Rtl.CALL {func     = Rtl.REG' rtl_Raddr,
+     | translate (Rtl.CALL {extern_call,
+			    func     = Rtl.REG' rtl_Raddr,
 			    return   = return,
 			    args     = (argI, argF),
 			    results  = (resI, resF),
@@ -942,7 +954,8 @@ struct
 	      else ());
 
 	 if (tailcall andalso (! do_tailcalls)) then
-	   emit (BASE(RTL (CALL{func     = INDIRECT Raddr, 
+	   emit (BASE(RTL (CALL{extern_call = extern_call,
+				func     = INDIRECT Raddr, 
 				args     = (map translateIReg argI) @
 				(map translateFReg argF),
 				results  = (map translateIReg resI) @
@@ -952,7 +965,8 @@ struct
 				destroys = NONE,
 				tailcall = tailcall})))
 	 else
-	   (emit (BASE (RTL (CALL{func     = INDIRECT Raddr, 
+	   (emit (BASE (RTL (CALL{extern_call = extern_call,
+				  func     = INDIRECT Raddr, 
 				  args     = (map translateIReg argI) @
 				  (map translateFReg argF),
 				  results  = (map translateIReg resI) @
@@ -968,14 +982,15 @@ struct
 
        end
 
-     | translate (Rtl.CALL {func     = Rtl.LABEL' l,
+     | translate (Rtl.CALL {extern_call,
+			    func     = Rtl.LABEL' l,
 			    return   = return,
 			    args     = (argI, argF),
 			    results  = (resI, resF),
 			    tailcall = tailcall, ...}) =
        let
 	 val destlabel = translateLabel l
-	 val c_call = case destlabel of (CE _) => true | _ => false
+	 val c_call = extern_call (* case destlabel of (CE _) => true | _ => false *)
        in
          (* Sanity check:  do tailcall & return agree? *)
 	 (case return of
@@ -1002,7 +1017,8 @@ struct
 
 	 if (tailcall andalso (not c_call) andalso (! do_tailcalls)) then
 
-	     emit (BASE(RTL (CALL{func     = DIRECT destlabel,
+	     emit (BASE(RTL (CALL{extern_call = extern_call,
+				  func     = DIRECT destlabel,
 				  args     = (map translateIReg argI) @
 				  (map translateFReg argF),
 				  results  = (map translateIReg resI) @
@@ -1013,7 +1029,8 @@ struct
 				  tailcall = tailcall})))
 
 	 else
-	   (emit (BASE( RTL (CALL{func     = DIRECT destlabel, 
+	   (emit (BASE( RTL (CALL{extern_call = extern_call,
+				  func     = DIRECT destlabel, 
 				  args     = (map translateIReg argI) @
 				  (map translateFReg argF),
 				  results  = (map translateIReg resI) @

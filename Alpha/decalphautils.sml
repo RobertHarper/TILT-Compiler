@@ -93,8 +93,10 @@ struct
    val C_fp_res   = [freg 0]
 
    local
-       val num_indirect_int_args = 14
-       val num_indirect_fp_args = 21
+(*       val num_indirect_int_args = 14 *)
+(*       val num_indirect_fp_args = 21 *)
+       val num_indirect_int_args = 32
+       val num_indirect_fp_args = 32
    in
        val indirect_int_args = 
 	   listdiff(Regset.listItems (regsBelow (ireg (num_indirect_int_args - 1))), special_iregs)
