@@ -27,6 +27,7 @@
 0009	pass	overload resolution order (in functors)
 0010	pass	name-mangling test [x] <- [x]
 0011	fail	[Bug# 0151] name-mangling test [x] <- * -> [x]
+0011b	fail	[Bug# 0151] name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
 0012	fail	[Bug# 0151] name-mangling test [x] <- * <- * -> [x]
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
