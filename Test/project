@@ -1,4 +1,4 @@
-include $libdir ^ "/arg/desc"
+include $libdir ^ "/arg/project"
 unit Runtest = "runtest.sml" {
 	Posix TextIO CharVector Byte Word8 OS List CommandLine Arg
 }

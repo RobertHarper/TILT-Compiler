@@ -1,7 +1,7 @@
-include "../Util/mapfile-util"
-include "../Lil/mapfile"
-include "../Parser/mapfile-parse"
-include "../Backend/mapfile"
+include "../Util/project"
+include "../Lil/project"
+include "../Parser/project"
+include "../Backend/project"
 
 unit TAL = "tal.sml" { Lil Util Name TilWord32 Int List } 
 

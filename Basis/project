@@ -2,7 +2,7 @@
 	Project description used to compile the basis library.
 
 	This is not used directly:  Other projects automatically
-	include $libdir/basis/description to access the compiled basis
+	include $libdir/basis/project to access the compiled basis
 	library.
 *)
 

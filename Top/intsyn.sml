@@ -47,9 +47,9 @@ struct
 	val Bin = "Bin"
 	val Runtime = "Runtime"
 	val Basis = "basis"
-	val Impl = "impl"
-	val Inter = "inter"
-	val Desc = "desc"
+	val Impl = "implementation"
+	val Inter = "interface"
+	val Desc = "project"
 
 	val Target : unit -> string = Target.targetString
 

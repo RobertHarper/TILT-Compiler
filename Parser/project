@@ -1,6 +1,6 @@
-include $libdir ^ "/smlnj-lib/desc"
-include $libdir ^ "/ml-yacc-lib/desc"
-include "../Util/mapfile-util"
+include $libdir ^ "/smlnj-lib/project"
+include $libdir ^ "/ml-yacc-lib/project"
+include "../Util/project"
 
 unit CONTROL = "control.sig.sml" {}
 interface Control = "control.int" {CONTROL}

@@ -1,8 +1,8 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Parser/mapfile-parse"
-include "../Elaborator/mapfile-elaborate"
-include "../Nil/mapfile-nil"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Parser/project"
+include "../Elaborator/project"
+include "../Nil/project"
 
 unit RTL = "rtl.sig.sml" {Name TilWord32}
 unit Rtl = "rtl.sml" {

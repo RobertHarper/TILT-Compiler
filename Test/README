@@ -10,13 +10,14 @@ description.  Each line in the file describes one test.
 
 Each test directory has at least the following files:
 
-	mapfile
+	project
 	result
 
 Loosely speaking, these are the test code and expected test result,
 respectively.
 
-The result file is a text file.  The first line must be one of the strings
+The result file is a text file.  The first line must be one of the
+strings
 
 	Bomb Reject Exit Suicide
 
@@ -24,9 +25,9 @@ In the case of Exit, subsequent lines contain the output expected from
 the test code.  (The test code's exit status is ignored.  See
 runtest.sml for more information.)
 
-The mapfile is a TILT project description.  The harness will create an
-executable containing all the units in this description.
+The file project is a TILT project description.  The harness will
+create an executable containing all the units in this description.
 
 Each test directory should also contain ML source files (referenced by
-the mapfile) and documentation, but there are as yet no conventions
-governing these.
+the project file) and documentation, but there are as yet no
+conventions governing these.

@@ -1,5 +1,5 @@
-include $libdir ^ "/smlnj-lib/desc"
-include $libdir ^ "/arg/desc"
+include $libdir ^ "/smlnj-lib/project"
+include $libdir ^ "/arg/project"
 
 unit RUN = "run.sig.sml" {}
 
@@ -14,7 +14,7 @@ unit fft = "fft.sml" {
 unit boyer = "boyer.sml" {Int RUN}
 
 unit simple = "simple.sml" {
-	Array Array2 Int Real64 Math64 List PreReal RUN
+	Array Array2 Int Real64 Math64 List TiltPreReal RUN
 }
 
 unit tyan = "tyan.sml" {
@@ -33,15 +33,13 @@ unit lexgen = "lexgen.sml" {
 
 unit frank = "frank.sml" {Int TextIO RUN}
 
-unit Arithmetic = "arithmetic.sml" {Int Real RUN}
+unit arithmetic = "arithmetic.sml" {Int Real RUN}
 
 unit BarnesHut = "barnes-hut.sml" {
 	Int List Math64 Real String RUN
 }
 
-interface PQueensInt = "pqueens.int" {RUN}
-
-unit PQueens : PQueensInt = "pqueens.sml" {
+unit PQueens = "pqueens.sml" {
 	Int Array CharVector RUN
 }
 
@@ -57,7 +55,7 @@ unit Taku = "taku.sml" {Int RUN}
 
 unit btimes = "btimes.sml" {
 	Time Timer List String life leroy fft boyer simple tyan msort pia
-	frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort
+	frank lexgen ListPair Real arithmetic BarnesHut PQueens Quicksort
 	Quicksort2 Isort Takc Taku Arg TextIO CommandLine Int OS RUN
 }
 

@@ -1,4 +1,4 @@
-include $libdir ^ "/smlnj-lib/desc"
+include $libdir ^ "/smlnj-lib/project"
 
 unit UTIL_ERROR = "util-error.sig.sml" {}
 interface UTIL_ERROR = "util-error.int" {UTIL_ERROR}

@@ -1,7 +1,7 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Parser/mapfile-parse"
-include "../Rtl/mapfile-rtl"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Parser/project"
+include "../Rtl/project"
 
 unit CORE = "core.sig.sml" {
 	ORD_MAP ORD_SET Rtl TilWord32

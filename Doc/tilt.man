@@ -1,8 +1,10 @@
 .\" NB Sentences should start on a new line.
-.\" EX uses a fixed width font; typically "C", "CW(", or "LucidaCW".
-.\" Ideally we'd change .B, .BI, etc. to use the same font.
+.\" This page mounts a fixed-width font L for literals and
+.\" assumes .B, .BI, etc. use the same font.  The fixed
+.\" width font is typically named "C" or "CW".
+.fp 5 L CW
 .de EX
-.if t .ft C
+.if t .ft L
 .nf
 ..
 .de EE
@@ -85,7 +87,7 @@ With a second
 .BR -p ,
 purge all compiler-generated files for every source unit and source
 interface.
-Files associated with compiled units and interfaces (ie, library files)
+Files associated with compiled units and interfaces (i.e., library files)
 are not removed.
 .TP
 .B -s
@@ -158,333 +160,229 @@ if the
 option is present).
 .SS Project descriptions
 .PP
-A project description assigns logical names to compilation units and
-their interfaces and describes the dependencies between them.
-A project description is built up from the project description files
-specified on the command line and any project description files they
-include.
-See
+A project consists of an agglomeration of compilation units and their
+interfaces.
+A project description assigns unit names to units and interface names
+to interfaces, and specifies the dependencies among them.
+An interface must be declared by binding its source to an interface
+identifier.
+A compilation unit may be declared either as a separately compiled
+unit with specified interface, or as a source unit bound to a unit
+identifier.
+(See
 .IR project (4)
-for more information.
+for the full syntax of projection description files.)
 .PP
-A source unit is any SML top-level declaration
-.RI ( topdec )
+A source unit consists of an SML top-level declaration
+.RI ( topdec ),
 stored in a file.
-A
-.I topdec
-can bind top-level signatures, structures,
-functors, values, and so forth.
-It is almost true that a source unit is a structure body (a
-.IR strdec ),
-except that SML limits what can go into a structure.
-For example, the project description file
+The source unit declaration
 .EX
 	unit U = "u.sml"
 .EE
-declares a source unit with logical name
-.I U
-whose
-.I topdec
-is stored in the file
-.BR u.sml .
-.PP
-A source interface is a top-level specification
-.RI ( topspec )
-stored in a file.
-.I Topspecs
-do not exist in SML but the meaning should be clear.
-A
-.I topspec
-can contain fixity declarations, signature definitions,
-functor specs, structure specs, type specs, value specs, and so
-on.
-See
-.IR interface (4)
-for the full syntax.
-It is almost true that a source interface is a signature body (a
-.IR spec ),
-except that SML limits what can go into a signature.
-For example, the project description file
-.EX
-	interface I = "u.sig"
-.EE
-declares a source interface with logical name
-.I I
-whose
-.I topspec
-is stored in the file
-.BR u.sig .
-.PP
-An interface may be ascribed to a unit in order to facilitate separate
-compilation of those units and interfaces that depend on it.
-Interface ascription is similar to opaque signature ascription. 
-The unit must match the interface and the interface can hide components
-and type information from dependents.
-If an interface contains signature definitions, then equivalent
-definitions must occur in any unit to which it is ascribed.
-If an interface contains fixity declarations, then the same
-declarations must occur in any unit to which it is ascribed.
-If we do not ascribe an interface to a unit, then it has to be
-compiled to obtain one before any dependent can be compiled.
-If we do, then the dependent can be compiled without having compiled
-the unit.
-For example, the project description file
-.EX
-	interface I = "u.sig"
-	unit U : I = "u.sml"
-.EE
-ascribes interface
-.I I
-to unit
+binds the unit whose source is the file
+.B u.sml
+to the unit identifier
 .IR U .
 .PP
-A separately compiled unit is a unit with an ascribed interface and no
-implementation.
-A separately compiled unit can not be linked into an executable.
-For example, the project description file
+An interface is a top-level specification
+.RI ( topspec ),
+stored in a file.
+(See
+.IR project (4)
+for the full syntax of interfaces.)
+The interface declaration
 .EX
-	interface I = "u.sig"
-	unit U : I
+	interface I = "u.int"
 .EE
-declares a separately compiled unit
-.I U
-that has interface
+binds the interface whose source is in the file
+.B u.int
+to the interface identifier
 .IR I .
 .PP
-In a project description, every declaration must specify those units
-on which it depends.
-This is not required in a project description file.
-If, as in the preceeding examples, a source interface or source unit
-declaration specifies no list of dependencies, then it depends on all
-of the preceding units in the project description file.
-A source declaration's dependencies specify precisely those units that
-are
-.I opened
-for use when its file is compiled and, for source units that
-are linked into an executable, those units whose effects must be
-computed before the unit's effects are computed.
-Specifying a dependency list allows you to manage name clashes because
-the order in which units are opened determines the order of shadowing
-in case multiple units bind the same identifiers.
-It can cut down on compilation overhead to specify dependencies
-because you are saying that certain units do not matter for this unit
-or interface.
-For example, the project description file
+A source unit declaration may specify an interface, as well as an
+implementation, in order to require that the source unit match that
+interface.
+Interface matching is similar to opaque signature matching in SML.
+In particular, only the components and type sharing information
+specified in
+.I I
+is propagated to clients of
+.IR U .
+For example,
+the source unit declaration
 .EX
-	unit A = "a.sml"
-	unit B = "b.sml"
-	unit C = "c.sml" { A }
+	unit U : I = "u.sml"
 .EE
-specifies that unit
-.I C
-depends on unit
-.I A
-but not unit
-.IR B .
+specifies that the implementation of
+.I U
+in the file
+.B u.sml
+must match the interface
+.IR I .
+An advantage of specifying an interface on a source unit is that units
+that depend on it can be compiled before the unit itself has been
+compiled.
+Otherwise, an interface must be obtained by compiling the unit, and
+any dependents can only be compiled afterward.
 .PP
-A project description file can include another project description
-file by name.
-There may not be any cycles.
-Including a project description file in this way is similar to writing
-out all of its declarations and changing any relative file names.
-For example, the project description file
+A unit specification declares a separately compiled unit with an
+assumed interface, but with no implementation.
+For example,
+.EX
+	unit U : I
+.EE
+declares
+.I U
+to be a separately compiled unit with interface
+.IR I .
+.PP
+By default, a source unit or interface depends implicitly on the units
+that precede it in its project description file.
+All preceding units are implicitly opened for use at the time that the
+source is compiled.
+The order of declaration in the project description determines the
+scopes of identifiers according to the usual rules of lexical scoping.
+.PP
+A source unit or interface declaration may explicitly specify on which
+of the preceding units it depends.
+For example, consider the following unit declarations:
+.EX
+	unit U : I
+	unit V : J
+	unit W : K
+	unit X : L = "x.sml" { U W }
+.EE
+The declaration of
+.I X
+specifies that this unit depends only on the units
+.I U
+and
+.IR W ,
+and not on
+.I V
+(on which it would also depend in the absence of an explicit
+specification).
+Explicit dependency specifications are useful to speed up compilation,
+and to provide finer control over the scopes of identifiers.
+Specifically, if in the above example both
+.I U
+and
+.I V
+define an identifier
+.IR a ,
+then uses of
+.I a
+in
+.I X
+refer to the unit
+.IR U ,
+rather than to the default
+.IR V .
+.PP
+One project description file may be included into another.
+Doing so re-orients relative paths in the included description to be
+relative to the including description.
+For example, the declarations
 .EX
 	include "help.proj"
 	unit U : I
 .EE
-is well-formed provided the project description file
+incorporate the project description file
 .B help.proj
-declares an interface named
-.IR I .
-.PP
-In a project description, every unit and interface name
-must be a definite reference to a specific unit or interface.
-As the declarations in a project description file are added to a
-project description, redundant declarations are discarded.
-A second declaration for a unit
+and, in addition, declares a separately compiled unit
 .I U
-is redundant provided it is a separately compiled unit and
-the first declaration has an equivalent ascribed interface.
-Thus, if
-.I U
-has an implementation, then it must come before any other declarations
-for
-.I U
-in the project description.
-A second declaration for an interface
+with interface
 .I I
-is redundant provided it is equivalent to the first.
-Two interfaces are equivalent if they are defined with identical
-source code and if they open the same units in the same order.
-For example, the project description file
-.EX
-	interface I = "a.sig" { }
-	unit U : I = "a.sml"
-
-	interface I' = "b.sig" { }
-	unit U : I'
-
-	interface I' = "c.sig" { }
-.EE
-is well-formed provided the files
-.BR a.sig ,
-.BR b.sig ,
-and
-.B c.sig
-are identical.
+(which must be defined in
+.B help.proj
+for this example to be well-formed).
 .PP
-.PP
-In a project description file, no unit or interface name
-may be used before it is declared.
-The order of declarations in project description file is important.
-It determines the order of shadowing when a source interface or unit
-declaration does not specify a list of units on which it depends.
-It determines the order in which new declarations are added to a
-project description.
-The order of declarations in a project description is important.
-It determines the order of effects when units are linked into an
-executable.
-.SS Libraries
-.PP
-The preceeding section describes source units, source interfaces, and
-separately compiled units.
-A project description can also declare units and interface that have
-already been compiled; see
-.IR project (4)
-for the syntax.
-.PP
-A project description in which every unit has an ascribed interface
-can be packed into a self-contained, compiled library (with
-.B -l
-.IR lib ).
-A library is a directory containing a copy of every source interface
-file in the project description, (optionally) a copy of every source
-unit file in the project description, compiled files for every interface
-and unit in the project description, and three project description
-files that describe the library using these copies.
-The first,
-.IB lib /impl \fR,
-describes the entire library.
-The second,
-.IB lib /inter \fR,
-is similar but does not define any unit implementations.
-The third,
-.IB lib /desc \fR,
-includes
-.IB lib /impl
-if TILT is generating an executable and includes
-.IB lib /inter
-otherwise.
-(If a library is packed on an unsupported architecture, then
-.IB lib /impl
-will be the same as
-.IB lib /inter \fR.)
-.PP
-The convention for using a library
-.I lib
-is to either add
-.IB lib /desc
-to the command line or to use
-.EX
-	include "\fIlib\fP/desc"
-.EE
-in a project description file.
-When TILT is linking an executable, it will see the compiled
-units in
-.IR lib .
-When TILT is packing a library, it will not and the new library will
-merely describe the compiled units in
-.IR lib .
-If we want the new library to contain a copy of
-.IR lib ,
-then we would use
-.IB lib /impl
-rather than
-.IB lib /desc \fR.
-.PP
-You can learn the interface of a library
-.I lib
-by looking at the project description file
-.IB lib /inter
-and the interface sources files
-.IB lib /I/* \fR.
-If the compiler flag
-.B PackUnitSource
-was set to true when the library was packed, then the
-unit source files
-.IB lib /U/*
-can also be studied.
-.PP
-The basis library is special.
-It is compiled when TILT is installed and every non-basis project
-description file implicitly starts with
-.EX
-	include $libdir ^ "/basis/desc"
-.EE
-to pull in the units defined by the compiled basis library.
-(The predefined variable
-.B libdir
-refers to the location where TILT was installed.)
-Every source unit and interface declaration that specifies a list of
-dependencies implicitly opens (before any listed units) the basis
-library units that define the standard top-level environment.
-Most basis structures, signatures, and functors are defined in a unit
-of the same name; examples include
-.BR List ,
-.BR LIST ,
-and
-.BR TextIO .
-The exceptions are
-.BR IO_SIG ,
-.BR OS_SIG ,
-and
-.B SML90_SIG
-which provide signatures
-.BR IO ,
-.BR OS ,
-and
-.BR SML90 .
-The units named
-.BR IO ,
-.BR OS ,
-and
-.B SML90
-provide the corresponding structures.
-.PP
-TILT is installed with a few other libraries in
-.BR libdir .
-The library
-.B ml-yacc-lib
-is used by parsers generated by ml-yacc.
-The library
-.B smlnj-lib
-contains a collection of utilities.
-The library
-.B arg
-is for command-line option parsing.
+Unit and interface names in a project description are treated as
+definite references in that an identifier designates a unique unit or
+interface in the project.
+There can be at most one source unit declaration for any given unit,
+but there may be many unit specifications for any unit, provided only
+that they declare the same interface (i.e., the same
+.I topspec
+with the same list of open units).
+A given interface identifier may be declared more than once, provided
+that they are all defined to be the same interface.
+(Multiple declarations of units and interfaces arise when several
+project descriptions that depend on the same unit are included in a
+single project description.)
 .SS Executables
 .PP
-SML has no analogue of C's function
-.BR main .
-TILT-generated executables evaluate their top-level
-declarations; this evaluation can have side-effects.
-The order of units in a project description determines the order in which effects
-occur.
-Command line arguments and environment variables are available via
-the basis library.
-The following are particularly useful:
+A TILT executable is created by linking the implementations of all of
+the units in a project.
+There is no conventional
+.B main
+entry point, but rather the units are executed in the order they are
+specified in the project description when the program is started.
+To access the command line name and arguments, use the following
+functions from the Standard Basis:
 .EX
 	CommandLine.name : unit -> string
 	CommandLine.arguments : unit -> string list
-	OS.Process.getEnv : string -> string option
 .EE
+.SS Libraries
+.PP
+A project may be packed into a library, which is a fully compiled copy
+of the project that is regarded as stable, regardless of any changes
+to the sources of the project.
+The packed library contains the sources of all of its constituent
+interfaces, which are necessary for the use of that library, and may
+or may not contain the sources of its constituent units.
+The library is represented by a directory containing the interface
+sources in a sub-directory named
+.BR I ,
+the unit sources (if any) in a sub-directory named
+.BR U ,
+and a project description file named
+.BR project .
+.PP
+To use a library
+.B lib
+in a project, simply include the project description for
+.BR lib . 
+For example,
+.EX
+	include "lib/project"
+	interface I = "i.int"
+	unit U : I = "u.sml" { W X }
+.EE
+From the point of view of the importing project, the library consists
+of an up-to-date collection of separately compiled units.
+When the project is linked, the implementations of these units is
+obtained from
+.BR lib .
+.PP
+The Standard Basis library is automatically included as part of every
+project description.
+Moreover, each interface and source unit is implicitly declared to
+depend on those Standard Basis units that comprise the standard
+top-level environment.
+All structures and functors in the Standard Basis are defined in units
+of the same name as the structure or functor.
+Most signatures defined in the Standard Basis are defined in units of
+the same name as the signature, with the exception of the signatures
+.BR IO ,
+.BR OS ,
+and
+.BR SML90 ,
+which reside in units named
+.BR IO_SIG ,
+.BR OS_SIG ,
+and
+.BR SML90_SIG ,
+respectively.
 .SH EXAMPLES
 .PP
 An SML implementation of
 .IR echo (1):
 .EX
-	(* \fIecho.proj\fP *)
-	(* Run "tilt -vv -o echo -c Echo echo.proj". *)
+	(* \fIecho.project\fP *)
+	(* Run "tilt -vv -o echo -c Echo echo.project". *)
 	unit Echo = "echo.sml" { CommandLine OS }
 
 	(* \fIecho.sml\fP *)
@@ -504,9 +402,9 @@ An SML implementation of
 .PP
 A demonstration of cutoff recompilation:
 .EX
-	(* \fIco.proj\fP *)
+	(* \fIco.project\fP *)
 	(*
-		Run "tilt -vv -o co -c C co.proj".
+		Run "tilt -vv -o co -c C co.project".
 
 		Change the representation of S.t in a.sml
 		and recompile to observe that C is not
@@ -546,10 +444,9 @@ A demonstration of cutoff recompilation:
 .PP
 A demonstration of separate compilation:
 .EX
-	(* \fIsc1.proj\fP *)
+	(* \fIsc1.project\fP *)
 	interface AI = "a.int" { }
 	unit A : AI = "a.sml" { Int }
-
 	interface BI = "b.int" { A }
 	unit B : BI = "b.sml" { A }
 
@@ -570,23 +467,20 @@ A demonstration of separate compilation:
 
 	(* \fIuse b.sml from previous example\fP *)
 
-	(* \fIsc2.proj\fP *)
+	(* \fIsc2.project\fP *)
 	(*
-		Run "tilt -vv sc1.proj" to compile A and B.
-		Run "tilt -vv sc2.proj" to compile C separately
+		Run "tilt -vv sc1.project" to compile A and B.
+		Run "tilt -vv sc2.project" to compile C separately
 		from A and B.
-		Run "tilt -vv -o sc -c C sc1.proj sc2.proj" to link.
+		Run "tilt -vv -o sc -c C sc1.project sc2.project" to link.
 	*)
 	interface AI = "a.int" { }
 	unit A : AI
-
 	interface BI = "b.int" { A }
 	unit B : BI
-
 	unit C = "c.sml" { B }
 
 	(* \fIuse c.sml from previous example\fP *)
 .EE
 .SH SEE ALSO
-.IR project (4),
-.IR interface (4)
+.IR project (4)

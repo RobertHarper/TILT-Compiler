@@ -343,7 +343,7 @@ struct
 		  fail : unit -> unit} (testdir : string) : unit =
 	let
 	    val _ = print ("running test " ^ testdir ^ "\n")
-	    val mapfile = P.joinDirFile{dir=testdir, file="mapfile"}
+	    val mapfile = P.joinDirFile{dir=testdir, file="project"}
 	    val corefile = P.joinDirFile{dir=testdir, file="core"}
 	    val result = P.joinDirFile{dir=testdir, file="result"}
 	    val binary = P.joinDirFile{dir=testdir, file="Test."^platform^".exe"}

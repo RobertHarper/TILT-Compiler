@@ -1,6 +1,6 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Parser/mapfile-parse"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Parser/project"
 
 unit PRIM = "prim.sig.sml" {
 	TilWord64 Array Name

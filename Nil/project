@@ -1,7 +1,7 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Parser/mapfile-parse"
-include "../Elaborator/mapfile-elaborate"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Parser/project"
+include "../Elaborator/project"
 
 unit ANNOTATION = "annote.sig.sml" {Name}
 unit Annotation = "annote.sml" {Name ANNOTATION}

@@ -27,7 +27,7 @@ default : twelf-server
 all : twelf-server
 
 twelf-server:
-	$(tilt) -vv -cTwelfServer -obin/twelf-server-$(cputype) mapfile-twelf-server
+	$(tilt) -vv -cTwelfServer -obin/twelf-server-$(cputype) project-twelf-server
 
 old-twelf-server: ; 
 	@echo "*************************************************"
@@ -66,4 +66,4 @@ old-twelf-emacs: ;
 
 clean: ;
 	rm -rf $(twelfdir)/src/*/CM ;
-	$(tilt) -pp mapfile-twelf-server
+	$(tilt) -pp project-twelf-server

@@ -1,8 +1,10 @@
 .\" NB Sentences should start on a new line.
-.\" EX uses a fixed width font; typically "C", "CW(", or "LucidaCW".
-.\" Ideally we'd change .B, .BI, etc. to use the same font.
+.\" This page mounts a fixed-width font L for literals and
+.\" assumes .B, .BI, etc. use the same font.  The fixed
+.\" width font is typically named "C" or "CW".
+.fp 5 L CW
 .de EX
-.if t .ft C
+.if t .ft L
 .nf
 ..
 .de EE
@@ -11,16 +13,16 @@
 ..
 .TH PROJECT 4
 .SH NAME
-project \- TILT project description files
+project \- TILT project descriptions
 .SH DESCRIPTION
 .PP
-The project description file language has value, interface, and unit
+The project description language has value, interface, and unit
 expressions; value, interface, and unit declarations; conditional
-declarations; and an include mechanism.
+declarations; and file inclusion.
 .SS Lexical structure
 .PP
-Project description files are written in the ASCII character set.
-A project description file is a sequence of reserved words,
+Project descriptions are written in the ASCII character set.
+A project description is a sequence of reserved words,
 identifiers, and special constants.
 Whitespace and comments separate lexical items (except within string
 constants) and are otherwise ignored.
@@ -56,323 +58,229 @@ same name to a unit and its interface.
 The syntax of value expressions
 .I ve
 is
-.EX
-	\fIid\fP	::=	unit \fIU\fP
-		|	interface \fII\fP
-		|	$ \fIx\fP
-		|	env \fIX\fP
-	\fIave\fP	::=	\fIscon\fP
-		|	$ \fIx\fP
-		|	env \fIX\fP
-		|	true
-		|	false
-		|	( \fIve\fP )
-	\fIve\fP	::=	\fIave\fP
-		|	\fIve\fP ^ \fIve\fP
-		|	if \fIve1\fP then \fIve2\fP else \fIve3\fP
-		|	not \fIve\fP
-		|	\fIve1\fP andalso \fIve2\fP
-		|	\fIve1\fP orelse \fIve2\fP
-		|	\fIve1\fP S= \fIve2\fP
-		|	\fIve1\fP B= \fIve2\fP
-		|	\fIve1\fP = \fIve2\fP
-		|	\fIve1\fP < \fIve2\fP
-		|	\fIve1\fP <= \fIve2\fP
-		|	\fIve1\fP > \fIve2\fP
-		|	\fIve1\fP >= \fIve2\fP
-		|	defined \fIid\fP
-		|	defined ( \fIid\fP )
-.EE
+.TS
+center ;
+li r lfL l.
+ave	::=	\fIscon\fP	literal
+		$ \fIx\fP	variable
+		env \fIX\fP	environment variable
+		true	constants
+		false
+		( \fIve\fP )	bracketing
+ve	::=	\fIave\fP	atomic
+		\fIve\fP ^ \fIve\fP	string concatenation
+		if \fIve1\fP then \fIve2\fP else \fIve3\fP	conditional
+		not \fIve\fP	negation
+		\fIve1\fP andalso \fIve2\fP	conjunction
+		\fIve1\fP orelse \fIve2\fP	disjunction
+		\fIve1\fP S= \fIve2\fP	string equality
+		\fIve1\fP B= \fIve2\fP	boolean equality
+		\fIve1\fP = \fIve2\fP	integer comparisons
+		\fIve1\fP < \fIve2\fP
+		\fIve1\fP <= \fIve2\fP
+		\fIve1\fP > \fIve2\fP
+		\fIve1\fP >= \fIve2\fP
+		defined \fIref\fP	definedness test
+		defined ( \fIref\fP )
+ref	::=	unit \fIU\fP
+		interface \fII\fP
+		$ \fIx\fP
+		env \fIX\fP
+.TE
 .PP
-The following words are left associative and listed (by line) in order
+The following words are left associative and listed in order
 of increasing precedence:
-.EX
-	else
-	orelse
-	andalso
-	S= B= = < <= > >=
-	^
-.EE
+.BR else ;
+.BR orelse ;
+.BR andalso ;
+.BR "S= B= = < <= > >=" ;
+and
+.BR ^ .
 .PP
 The syntax of interface expressions
 .I ie
 is
-.EX
-	\fIuseq\fP	::=
-		|	\fIU\fP \fIuseq\fP
-	\fIopen\fP	::=	{ \fIuseq\fP }
-	\fIopen'\fP	::=
-		|	\fIopen\fP
-	\fIie\fP	::=	\fIve\fP \fIopen'\fP
-		|	compiled \fIve\fP \fIopen\fP
-		|	primitive
-		|	compiled
-.EE
+.TS
+center ;
+li r lfL l.
+ids	::=	\fIU\fP \fR[\fIids\fR]\fP
+deps	::=	{ \fIids\fP }
+ie	::=	\fIve\fP \fR[\fIdeps\fR]	source interface
+		compiled \fR[\fIve deps\fR]	compiled interface
+		primitive	primitive interface
+.TE
 .PP
 The syntax of unit expressions
 .I ue
 is
-.EX
-	\fIasc\fP	::=	: \fII\fP
-	\fIasc'\fP	::=
-		|	\fIasc\fP
-	\fIue\fP	::=	\fIve\fP \fIopen'\fP \fIasc'\fP
-		|	compiled \fIopen\fP \fIasc\fP
-		|	compiled \fIve\fP \fIopen\fP \fIasc\fP
-		|	primitive \fIasc\fP
-.EE
+.TS
+center ;
+li r lfL l.
+asc	::=	: \fII\fP
+ue	::=	\fIve\fP \fR[\fIdeps\fR]\fL \fR[\fIasc\fR]	source unit
+		compiled \fR[\fIve\fR]\fL \fIdeps\fP \fIasc	compiled unit
+		primitive \fIasc	primitive unit
+.TE
 .PP
 The syntax of declarations
-.I dec
+.I decs
 is
-.EX
-	\fIcc\fP	::=
-		|	#else \fIdecs\fP
-		|	#elif \fIve\fP \fIdecs\fP \fIcc\fP
-	\fIdec\fP	::=	val \fIx\fP = \fIve\fP
-		|	interface \fII\fP = \fIie\fP
-		|	unit \fIU\fP = \fIue\fP
-		|	unit \fIU\fP : \fII\fP
-		|	unit \fIU\fP :: \fII\fP
-		|	include \fIve\fP
-		|	#if \fIve\fP \fIdecs\fP \fIcc\fP #endif
-		|	#error \fIve\fP
-		|	unit \fIU\fP \fIasc\fP = \fIve\fP \fIopen'\fP
-		|	unit \fIU\fP \fIasc\fP = compiled \fIopen\fP
-		|	unit \fIU\fP \fIasc\fP = compiled \fIve\fP \fIopen\fP
-	\fIdecs\fP	::=
-		|	\fIdec\fP \fIdecs\fP
-.EE
+.TS
+center ;
+li r lfL l.
+dec	::=	interface \fII\fP = \fIie	interface declaration
+		unit \fIU\fP = \fIue	unit implementation
+		unit \fIU\fP : \fII	unit specification
+		include \fIve	inclusion
+		val \fIx\fP = \fIve	value declaration
+		#if \fIve\fP \fIdecs\fP \fR[\fIcc\fR]\fL #endif	conditional
+		#error \fIve	abort
+cc	::=	#else \fIdecs
+		#elif \fIve\fP \fIdecs\fP \fR[\fIcc\fR]
+decs	::=	\fIdec\fP \fR[\fIdecs\fR]
+.TE
 .PP
-The last three forms of declarations are derived forms for
-(respectively) the declarations
+The declarations
 .EX
-	unit \fIU\fP = \fIve\fP \fIopen'\fP \fIasc\fP
-	unit \fIU\fP = compiled \fIopen\fP \fIasc\fP
-	unit \fIU\fP = compiled \fIve\fP \fIopen\fP \fIasc\fP
+	unit \fIU\fP \fIasc\fP = \fIve\fP \fR[\fIdeps\fR]\fL
+	unit \fIU\fP \fIasc\fP = compiled \fR[\fIve\fR]\fL \fIdeps
 .EE
+are derived forms for
+.EX
+	unit \fIU\fP = \fIve\fP \fR[\fIdeps\fR]\fL \fIasc\fP
+	unit \fIU\fP = compiled \fR[\fIve\fR]\fL \fIdeps\fP \fIasc\fR,
+.EE
+respectively.
+.PP
 TILT accepts a list of project description files on the command line.
 The list
 .I file1 ...  filen
-is treated as a derived form for the decs
+is treated as a derived form for the declarations
 .B include
 .I file1 ...
 .B include
 .IR filen .
-These derived forms are not discussed further.
+.SS Dependencies
+.PP
+An interface or unit declaration may specify a list of units on which
+it depends.
+For source interfaces and units these units are implicitly opened, in
+the order given, when the source is compiled.
+For compiled units, these units are those that are required by the
+given unit.
+By default, a source interface or unit is assumed to depend on all of
+the units that precede it in the project description file.
 .SS Interface expressions
 .PP
-The first form of interface expression is called a source interface.
-The
-.I ve
-names an interface source file (see
-.IR interface (4)).
-The optional list of unit identifiers specifies what units to open
-(and the order) when the source file is compiled.
-If the list is not present, then every unit declared to this point in
-the project description file is opened.
+A source interface specifies a source file and, optionally, a list of
+dependencies.
+The source file contains a top-level specification
+.IR topspec .
+The character set and lexical conventions for a
+.I topspec
+are those specified in the Definition of Standard ML (Revised).
+The syntax of a
+.I topspec
+is built up from the syntactic categories
+.IR spec ,
+.IR sigbind ,
+.IR sigexp ,
+.IR funid ,
+.IR strid ,
+.IR vid ,
+and
+.I d
+from the Definition:
+.TS
+center ;
+li r lfL l.
+topspec	::=	\fIspec	basic
+		functor \fIfundesc	functor
+		signature \fIsigbind	signature
+		infix \fR[\fId\fR]\fL \fIvids	fixity
+		infixr \fR[\fId\fR]\fL \fIvids
+		nonfix \fIvids
+		\fItopspec1\fP \fR[\fP;\fR]\fP \fItopspec2	sequential
+fundesc	::=	\fIfunid\fP ( \fIstrid\fP : \fIsigexp\fP ) : \fIsigexp
+		\fIfunid\fP ( \fIspec\fP ) : \fIsigexp
+		\fIfundesc\fP and \fIfundesc\fP
+vids	::=	\fIvid\fP \fR[\fIvids\fR]
+.TE
 .PP
-The second form of interface expression is called a pre-compiled
-interface.
-It is similar to a source interface except that TILT expects to find
-up-to-date compiled files and will complain if they do not exist.
-Pre-compiled interfaces are used by the project description files
-generated for libraries.
+A compiled interface specifies a pre-compiled interface, and,
+optionally, a source file and its dependencies.
+The pre-compiled interface must be present, and, if the source is
+specified, must be up-to-date.
 .PP
-The remaining interface expressions are used by the basis library
-implementation and are not described further.
+A primitive interface is for internal use only.
+It describes those components of the Standard Basis that are
+implemented directly by the compiler.
 .SS Unit expressions
 .PP
-The first form of unit expression is called a source unit.
-The
-.I ve
-names an SML source file.
-The optional list of unit identifiers specifies what units to open
-(and the order) when the source file is compiled.
-If the list is not present, then every unit declared to this point in
-the project description file is opened.
-The optional interface identifier specifies an interface for the unit.
-When the unit is compiled, it will be opaquely sealed to its
-interface.
-Interface ascriptions are required for units that will be packed into
-libraries.
+A source unit specifies a source file, an optional list of
+dependencies, and an optional ascribed interface.
+The source unit must match the ascribed interface, if present, which
+is propagated to clients of the unit.
+Interface ascriptions are required for units that are to be packed
+into a library.
 .PP
-The second form of unit expression is called a compiled unit.
-TILT expects to find up-to-date compiled files and will complain if
-they do not exist.
-TILT assumes the compiled files are compatible with the ascribed
-interface.
-Compiled units are used by the project description files generated for
-libraries.
+A compiled unit specifies a pre-compiled unit, an optional source
+file, its dependencies, and an ascribed interface.
+The pre-compiled unit must be present and, if a source is specified,
+must be up-to-date.
+The unit is assumed to satisfy the ascribed interface.
 .PP
-The third form of unit expression is called a pre-compiled unit.
-It is similar to a source unit except that TILT expects to find
-up-to-date compiled files and will complain if they do not exist.
-TILT assumes the compiled files are compatible with the ascribed
-interface.
-Pre-compiled units are used by the project description files generated
-for libraries if the compiler flag
-.B PackUnitSource
-is set to true.
-.PP
-The fourth form of unit expression is used by the basis library
-implementation and is not described further.
+A primitive unit is for internal use only.
+It provides those components of the Standard Basis that are
+implemented directly by the compiler.
 .SS Declarations
 .PP
-The first three forms of declaration bind value, interface, and
-unit identifiers.
-Unit identifiers bound to a unit expression are said to have an
-implementation.
+An interface declaration binds an interface to an identifier.
 .PP
-The fourth form of declaration is called a separately compiled unit.
-Other units and interfaces can be compiled against
-.I U
-using the information in its interface
-.IR I .
-Separately compiled units can not be linked into executables because
-they have no implementation.
+A unit implementation binds a unit to an identifier.
 .PP
-The fifth form of declaration is similar to a separately compiled unit
-except that when TILT is compiling for the (unfinished) Typed Assembly
-Language (TAL) x86 backend, it expects to find an up-to-date TAL
-interface for the unit and will complain if it does not exist.
+A unit specification declares a separately compiled unit with an
+assumed interface, but with no implementation.
 .PP
-The sixth form of declaration is an include declaration.
-The
-.I ve
-names the file to include.
+An inclusion specifies a project description file to be included at
+this point.
 .PP
-The seventh form of declaration is a conditional declaration.
-Each
-.I ve
-is evaluated in turn until one of them evaluates to
-.B true
-and then the conditional is replaced by the corresponding
-.IR decs .
-If no
-.I ve
-is
-.BR true ,
-then the conditional is deleted.
-The entire conditional must be syntactically correct but
-unevaluated expressions and all unselected
-.I decs
-are otherwise ignored.
+A value declaration binds an identifier to the value of the given
+expression.
 .PP
-The eigth form of declaration causes TILT to terminate with
-an error message containing
-.IR ve .
+A conditional declaration selects among declarations according to
+the first test whose value is
+.BR true .
+.PP
+An abort declaration forces termination of the compiler with the
+specified error.
 .SS Static checks
 .PP
-TILT
-.I elaborates
-each project description file it encounters and creates an
-internal language project description.
-Elaboration ensures that each project description file is well-formed;
-that the internal language project description is well-formed;
-eliminates all value declarations, conditional declarations, and
-include declarations; eliminates redundant interface and unit
-declarations; and inserts missing lists of opened units.
-When a project description file is elaborated, its (new) unit and
-interface declarations are added to the internal language project
-description.
-.PP
-The internal language permits a list of unit and interface
-declarations.
-An internal language project description is well-formed if every
-identifier has exactly one declaration and no identifier is used
-before it is declared.
-.PP
-Project description files may refer to one another with
-.BR include .
-There may be no cycles.
-The order in which files are elaborated is important because it
-determines the order of unit declarations in the internal language
-project description which, in turn, determines the order of run-time
-effects in executables.
-If
-.I file
-includes
-.IR "file1 ... filen" ,
-then
-.I file1
-through
-.I filen
-are elaborated (in order) before
-.I file
-is elaborated.
-No file is elaborated twice.
-.PP
-Every project description file read by TILT must be well-formed.
-The balance of this section informally describes what this means.
+Project descriptions are elaborated into an internal form that guides
+the compilation manager.
+Elaboration consists of parsing, checking scopes of identifiers,
+evaluating expressions, including project description files, and
+resolving conditionals.
+File inclusion ensures that only one copy of a project description
+file is incorporated, even if it is included more than once.
 .PP
 All identifiers must be bound before they are used.
 The bindings for environment variables, predefined variables, and
-basis library units and interfaces are implicit.
+Standard Basis units and interfaces are implicit.
 .PP
-File names in project description files are written in Unix syntax and
+File names in project descriptions are written in Unix syntax and
 relative paths are resolved relative to the directory containing the
 project description file.
-File names in a project description file are syntactically rewritten
-to a canonical form and these are compared to detect include cycles
-and to avoid elaborating the same file twice.
 .PP
 Value identifiers may not be redeclared.
-Unit and interface identifiers may be redeclared provided every
-declaration after the first is redundant (see
-.IR tilt (1)).
 .PP
-Value expressions are implicitly typed with types
-.BR bool ,
-.BR string ,
-and
-.BR int .
-The typing rules are straightforward and are not presented here.
-The value expressions in interface expressions, unit expressions,
-.B include
-declarations, and
-.B #error
-declarations must have type
-.BR string .
-The value expressions in conditional compilation declarations must
-have type
-.BR bool .
-The value expressions in value declarations can have any type.
+An interface may be multiply declared, provided that all declarations
+specify equivalent interfaces.
+A unit may be multiply declared, provided that all declarations after
+the first are unit specifications and that all declarations specify
+equivalent interfaces.
 .PP
-The evaluation rules for value expressions are straightforward and not
-presented here.
-.BI $ x
-looks up a variable.
-.B env
-.I X
-looks up an environment variable and has type
-.BR string .
-.B ^
-(string concatenation),
-.BR true ,
-.BR false ,
-.BR "if then else" ,
-.BR andalso ,
-.BR orelse ,
-and
-.B not
-are similar to SML.
-.BR S= ,
-.BR B= ,
-and
-.B =
-test, respectively, string, boolean, and integer equality. 
-.BR < ,
-.BR <= ,
-.BR > ,
-and
-.BR >=
-compare integers.
-.B defined
-.I id
-has type
-.B bool
-and tests whether \fIid\fP is bound.
+The typing rules for value expressions are self-evident.
 .SS Predefined variables
 .PP
 The predefined variables are:
@@ -385,19 +293,18 @@ Possible values are
 and
 .BR unsupported .
 .TP
-.B objtype : string
+.B
+objtype, target : string
 The target CPU type.
-Possible values are
+Possible values for
+.B $objtype
+are
 .B sparc
 and
 .BR alpha .
-.TP
-.B target : string
-A combination of the target CPU type (as in
-.BR $objtype )
-and an optional word representing a few compiler flags which lead to
-incompatible object code.
-Sample values are
+.B $target
+has an additional suffix representing a few compiler flags which lead to
+incompatible object code; sample values are
 .B sparc
 and
 .BR sparc-8 .
@@ -405,16 +312,13 @@ and
 .B littleEndian : bool
 The target byte-order.
 .TP
-.B majorVersion : int
-.TP
-.B minorVersion : int
-.TP
-.B version : string
+.B
+majorVersion, minorVersion : int; version : string
 TILT's version number; the string has the form
 .IR major.minor .
 .TP
 .B libdir : string
-Absolute path to a directory containing (at least) compiled basis
+Absolute path to a directory containing (at least) the Standard Basis
 and SML/NJ libraries.
 .TP
 .B linking : bool
@@ -423,11 +327,6 @@ when TILT is creating an executable.
 .TP
 .B bootstrapping : bool
 .B true
-when the compiler flag
-.B Bootstrap
-is set to
-.BR true ;
-used to compile the basis library.
+when the compiler is used to compile the Standard Basis.
 .SH SEE ALSO
-.IR tilt (1),
-.IR interface (4)
+.IR tilt (1)

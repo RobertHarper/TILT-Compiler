@@ -1,8 +1,8 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Nil/mapfile-nil"
-include "../Parser/mapfile-parse"
-include "../Elaborator/mapfile-elaborate"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Nil/project"
+include "../Parser/project"
+include "../Elaborator/project"
 
 unit LIL = "lil.sig.sml" { Word32 TilWord32 Name Prim Word ORD_MAP ORD_SET }
 unit Lil = "lil.sml" { LIL ORD_KEY HASH_KEY Word32 TilWord32 

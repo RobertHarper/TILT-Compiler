@@ -17,9 +17,9 @@ use "load.sml";	(* compile TILT and the Load interface with NJ *)
 Load.toExe();	(* arrange for TILT to generate executables *)
 		(* see load.sml for other options *)
 Boot.boot();	(* compile Basis with TILT *)
-Manager.make "mapfile-all";
+Manager.make "Top/project";
 		(* compile TILT with TILT *)
-Manager.make "Bench/mapfile-timings";
+Manager.make "Bench/project";
 		(* compile benchmarks with TILT *)
 Load.make();    (* recompile the compiler after some source *)
 	         * has been changed. *)

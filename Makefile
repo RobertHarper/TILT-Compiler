@@ -52,13 +52,13 @@ dump-heap: FORCE
 # TILT-compiled libraries
 
 basis: FORCE
-	$(tilt) -fBootstrap -lLib/basis Basis/mapfile
+	$(tilt) -fBootstrap -lLib/basis Basis/project
 smlnj-lib: FORCE
-	$(tilt) -lLib/smlnj-lib Basis/Library/group
+	$(tilt) -lLib/smlnj-lib Basis/Library/project
 ml-yacc-lib: FORCE
-	$(tilt) -lLib/ml-yacc-lib Parser/Library/group
+	$(tilt) -lLib/ml-yacc-lib Parser/Library/project
 arg: FORCE
-	$(tilt) -lLib/arg Util/arg.group
+	$(tilt) -lLib/arg Util/project-arg
 
 # TILT runtime
 
@@ -68,21 +68,21 @@ runtime: FORCE
 # TILT-compiled binaries
 
 tilt: FORCE
-	$(tilt) -oBin/$(cputype)/tilt -c Top Top/mapfile
+	$(tilt) -oBin/$(cputype)/tilt -c Top Top/project
 dump: FORCE
-	$(tilt) -oBin/$(cputype)/dump -c DumpTop Top/mapfile
+	$(tilt) -oBin/$(cputype)/dump -c DumpTop Top/project
 runtest: FORCE
-	if test -d Test; then $(tilt) -oBin/$(cputype)/runtest -c Runtest Test/mapfile; fi
+	if test -d Test; then $(tilt) -oBin/$(cputype)/runtest -c Runtest Test/project; fi
 
 # Other targets
 
 clean: FORCE
-	-if test -d Test; then $(tilt) -pp Test/mapfile; fi
-	-$(tilt) -pp Top/mapfile
-	-$(tilt) -pp Util/arg.group
-	-$(tilt) -pp Parser/Library/group
-	-$(tilt) -pp Basis/Library/group
-	-$(tilt) -pp -fBootstrap Basis/mapfile
+	-if test -d Test; then $(tilt) -pp Test/project; fi
+	-$(tilt) -pp Top/project
+	-$(tilt) -pp Util/project-arg
+	-$(tilt) -pp Parser/Library/project
+	-$(tilt) -pp Basis/Library/project
+	-$(tilt) -pp -fBootstrap Basis/project
 
 slaves: FORCE
 	$(slaves) -n 4/localhost

@@ -1,8 +1,8 @@
-include $libdir ^ "/smlnj-lib/desc"
-include "../Util/mapfile-util"
-include "../Parser/mapfile-parse"
-include "../Rtl/mapfile-rtl"
-include "../Backend/mapfile"
+include $libdir ^ "/smlnj-lib/project"
+include "../Util/project"
+include "../Parser/project"
+include "../Rtl/project"
+include "../Backend/project"
 
 unit DECALPHA = "decalpha.sig.sml" {Core Rtl MACHINE}
 unit DecAlpha = "decalpha.sml" {
