@@ -337,6 +337,14 @@ struct
 		end
 	   | PHRASE_CLASS_SIG (_, s) => VarSet.union(set, sig_free s))
 
+    fun check_pathmap pathmap = 
+	PathMap.appi (fn (p as (v,labs), _) =>
+		      (case PathMap.find(pathmap,(v,[])) of
+			   NONE => (print "bad path since variable is not in pathmap: "; pp_path (PATH p); 
+				    print "\n")
+			 | SOME _ => ()))
+	pathmap
+
 
     (* adding the partial context to the context *)
     fun plus (orig_pctxt : partial_context,
@@ -362,6 +370,12 @@ struct
 		   | _ => let val len = length labs
 			  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
 			  end)
+	    val _ = print "checking pathmap1\n"
+	    val _ = check_pathmap pm1
+	    val _ = print "pathmap1 ok\n"
+	    val _ = print "checking pathmap2\n"
+	    val _ = check_pathmap pm2
+	    val _ = print "pathmap2 ok\n"
 	    val labelMap = LabelMap.unionWithi 
 		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
 			     if (is_open_internal_path(pm1,p1) handle e => (print "first\n"; pp_context ctxt; 
@@ -488,6 +502,9 @@ struct
 					SOME (l, _) => VarMap.insert(vm,v,l)
 				      | NONE => error "Missing variable in sub_context"))
 				  Name.VarMap.empty keepVars
+	    val _ = print "checking sub_context\n"
+	    val _ = check_pathmap p3
+	    val _ = print "sub_context ok\n"
 	    val _ = print ("sub_context: " ^
 			   Int.toString(PathMap.numItems p2) ^
 			   " items in smaller context. " ^ 
