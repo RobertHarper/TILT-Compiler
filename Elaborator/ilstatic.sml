@@ -17,17 +17,12 @@ structure IlStatic
     fun debugdo' t = t()
 
    local
-       val Ceq_compile = ref (NONE : (Il.context * Il.con -> (Il.exp * Il.con) option) option)
+       val Ceq_compile : (context * con -> (exp * con) option) ref =
+	   ref (fn _ => error "eq_compile not installed")
    in
-       fun installHelpers {eq_compile} =
-	   ((case !Ceq_compile
-	       of NONE => ()
-		| SOME _ => (print "WARNING: installHelpers called more than once.\n";
-			     print "         Possibly because CM.make does not have the semantics of a fresh make\n"));
-	    Ceq_compile := SOME eq_compile)
-       fun eq_compile arg = let val SOME eq_compile = !Ceq_compile
-			    in  eq_compile arg
-			    end
+       fun installHelpers {eq_compile : context * con -> (exp * con) option} : unit =
+	   Ceq_compile := eq_compile
+       fun eq_compile arg = !Ceq_compile arg
    end
 
    fun reduce_sigvar(context,v) =
@@ -1289,15 +1284,17 @@ structure IlStatic
      let fun msg() = (print "GetModSig called with module = \n";
 			 pp_mod module; print "\n")
 	 val _ = debugdo msg
-     in GetModSig'(module,ctxt)
-	  handle e => (if !trace then msg() else (); raise e)
+     in (case GetModSig'(module,ctxt)
+	   of SOME r => r
+	    | NONE => error "GetModSig failed")
+	handle e => (if !trace then msg() else (); raise e)
      end
 
-   and GetModSig' (module, ctxt : context) : bool * signat =
+   and GetModSig' (module, ctxt : context) : (bool * signat) option =
      (case module of
        (MOD_VAR v) =>
 	   (case Context_Lookup_Var(ctxt,v) of
-		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => (true,s)
+		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
 	      | NONE => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound"))
      | MOD_STRUCTURE (sbnds) =>
@@ -1310,7 +1307,7 @@ structure IlStatic
 		   end
 	       val (va,sdecs) = (loop true sbnds [] ctxt)
 	       val res = SIGNAT_STRUCTURE sdecs
-	   in (va,res)
+	   in SOME (va,res)
 	   end
      | MOD_FUNCTOR (a,v,s,m,s2) =>
 	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,false,s))
@@ -1321,7 +1318,7 @@ structure IlStatic
 			else error "TOTAL annotation on non-valuable functor"
 		| PARTIAL => a
 	       (* check equivalence of s2 and signat *)
-	   in  (true,SIGNAT_FUNCTOR(v,s,s2,a))
+	   in  SOME (true,SIGNAT_FUNCTOR(v,s,s2,a))
 	   end
      | MOD_APP (a,b) =>
 	   let val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig\n";
@@ -1332,13 +1329,14 @@ structure IlStatic
 	       val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig got asignat and bsignat\n";
 					  print "asignat is\n"; pp_signat asignat; print "\n";
 					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
+	       val _ = if vab then ()
+		       else error "trying to obtain signature of MOD_APP with invaluable module"
 	   in case (reduce_signat ctxt asignat) of
 	       SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
-		       then (vaa andalso vab andalso (ar = TOTAL),
-			     sig_subst_modvar(dsignat,[(v,b)]))
-			    else error ("Module Application where" ^
-					" argument and parameter signature mismatch")
+		       then SOME (vaa andalso vab andalso (ar = TOTAL),
+				  sig_subst_modvar(dsignat,[(v,b)]))
+			    else error "MOD_APP argument and parameter signature mismatch"
 	     | SIGNAT_STRUCTURE _ => error "Can't apply a structure"
 	     | _ => error "signat_var or signat_of is not reduced"
 	   end
@@ -1346,21 +1344,22 @@ structure IlStatic
 	   let val (va1,s1) = GetModSig(m1,ctxt)
 	       val ctxt' = add_context_mod'(ctxt,v,s1)
 	       val (va2,s2) = GetModSig(m2,ctxt')
-	   in (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
+	       val _ = if va1 then () else
+		       error "trying to obtain signature of MOD_LET with invaluable module"
+	   in  SOME (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
 	   end
      | MOD_PROJECT (m,l) =>
-	   let
-	       val (va,signat) = GetModSig(m,ctxt)
-	       val s = (case Signat_Project (ctxt,m,signat,l)
-			  of (SOME (PHRASE_CLASS_MOD(_,_,s,_))) => s
-			   | pcopt => error "MOD_PROJECT lookup failed")
-	   in  if va then (va,s)
-	       else error "trying to obtain signature of invaluable projection"
-	   end
+	   (case GetModSig'(m,ctxt)
+	      of NONE => NONE
+	       | SOME (false,_) => error "trying to obtain signature of invaluable projection"
+	       | SOME (true,signat) =>
+		   (case Signat_Project (ctxt,m,signat,l)
+		      of SOME (PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s)
+		       | _ => NONE))
      | MOD_SEAL (m,s) => let val (va,ps) = GetModSig(m,ctxt)
 			     val _ = if (Sig_IsSub(ctxt,ps,s)) then()
 				     else error "MOD_SEAL: Sig_IsSub failed"
-			 in (va,s)
+			 in SOME (va,s)
 			 end)
 
     and Normalize (con,ctxt) : (bool * con) =
@@ -1530,18 +1529,24 @@ structure IlStatic
 		  end
 	    | CON_MODULE_PROJECT (m,l) =>
 		(let
-		   val (va,s) = GetModSig(m,ctxt)
-		   val cOpt = (case Signat_Project (ctxt,m,s,l)
-				 of SOME(PHRASE_CLASS_CON(c,_,cOpt,_)) => cOpt
-				  | _ => error "CON_MODULE_PROJECT lookup failed")
-		   val reducedOpt =
+		   val sOpt : (bool * signat) option =
+		       GetModSig'(m,ctxt)
+		   val va = isSome sOpt andalso #1(valOf sOpt)
+		   val cOpt : con option =
+		       Option.mapPartial
+		       (fn (_,s) =>
+			(case Signat_Project (ctxt,m,s,l)
+			   of SOME(PHRASE_CLASS_CON(_,_,cOpt,_)) => cOpt
+			    | _ => NONE)) sOpt
+		   val reducedOpt : (con * path list) option =
 		       Option.mapPartial
 		       (fn c =>
 			(case (con2path argcon, con2path c)
 			   of (SOME argpath, SOME cpath) =>
 			       if eq_path(argpath,cpath) then NONE (* break self loop *)
 			       else ReduceAgainWith(c,argpath)
-			    | (SOME argpath, NONE) => ReduceAgainWith(c,argpath)
+			    | (SOME argpath, NONE) =>
+				ReduceAgainWith(c,argpath)
 			    | (NONE, _) => ReduceAgain c)) cOpt
 		 in  Option.map
 		     (fn (c,_) =>
@@ -1592,7 +1597,7 @@ structure IlStatic
 	  Sig_Valid(add_context_mod'(ctxt,v,s_arg),s_res))
        | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
        | Sig_Valid (ctxt : context, SIGNAT_OF p) =
-	    ((UtilError.dontShow GetModSig (path2mod p,ctxt); true)
+	    ((GetModSig (path2mod p,ctxt); true)
 	     handle _ => false)
 
      and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2)
@@ -1737,8 +1742,9 @@ structure IlStatic
 						   else subst_add_convar(subst, v2, CON_VAR v1)
 				   in  sdec2 :: (match_var subst rest1 rest2)
 				   end
-			     | _ => SDEC(l2,dec2)::(match_var subst rest1 rest2))
-		 else raise NOPE
+			     | _ => sdec2::(match_var subst rest1 rest2))
+		 else (debugdo (fn () => print "Sdecs_IsSub: label mismatch\n");
+		       raise NOPE)
 	       | match_var _ _ _ = (debugdo (fn () => print "Sdecs_IsSub: length mismatch\n");
 				    raise NOPE)
 	     fun loop ctxt [] [] = true
