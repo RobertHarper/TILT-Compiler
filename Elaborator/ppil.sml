@@ -14,7 +14,7 @@ struct
     val _ = convarMode := 0  (* 0 - value only; 1 - variable only; 2 - variable and value *)
     val error = fn s => error "ppil.sml" s
 
-    fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
+    fun pp_region s1 s2 fmt = HOVbox[String s1,HOVbox fmt,String s2]
     fun separate [] sep = []
       | separate [a] sep = [a]
       | separate (a::rest) sep = a :: sep :: (separate rest sep)
@@ -160,7 +160,7 @@ struct
 				     | 1 => Hbox0 0 [String varname]
 				     | 2 => (pp_region "(" ")"
 					     [String varname,
-					      String "==", pp_con seen con])
+					      String " == ", Break0 0 6, pp_con seen con])
 				     | _ => error "Bad convar mode")
 			       end))
 	     end
@@ -197,18 +197,17 @@ struct
 		pp_recordcon seen (if isFrozen then FROZEN else FLEXIBLE, rdecs)
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
+				       Break0 0 0,
 				       pp_con seen con]
        | CON_SUM {names,noncarriers,carrier,special} => 
-	      HOVbox[String (case special of 
-				 NONE => "SUM"
-			       | SOME x => "SUM_" ^ (Int.toString x)),
-		     String "[", Break,
-		     pp_commalist pp_label names,
-		     String ";", Break,
-		     String (Int.toString noncarriers),
-		     String ";", Break,
-		     pp_con seen carrier,
-		     String "]"]
+	      pp_region (case special of 
+			     NONE => "SUM["
+			   | SOME x => "SUM_" ^ (Int.toString x) ^ "[") "]"
+	      [pp_commalist pp_label names,
+	       String ";", Break,
+	       String (Int.toString noncarriers),
+	       String ";", Break,
+	       pp_con seen carrier]
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
        | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
        | CON_MODULE_PROJECT (module,label) => 
@@ -228,6 +227,7 @@ struct
 					       pp_var v,
 					       String ": ",
 					       pp_signat seen s1,
+					       String " ",
 					       pp_arrow a, Break,
 					       pp_mod seen m, Break,
 					       String ": ", Break,
@@ -334,10 +334,10 @@ struct
 			 String " (", pp_var v,	 String " : ", pp_con c, String ")", Break0 0 5,
 			 String " : ", pp_con cres, String " =", Break,
 			 pp_exp e]
-       | FIX (r,a,fbnds) => HOVbox[String ((case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX") ^
+       | FIX (r,a,fbnds) => HOVbox[String ((case a of TOTAL => "/TOTALFIX" | PARTIAL => "/FIX") ^
 					   (if r then "\\" else "-LEAF\\")),
-				 pp_list pp_fbnd fbnds ("[",",","]", true),
-				 String "END "]
+				   Break0 0 0,
+				   pp_list pp_fbnd fbnds ("[",", ","]", true)]
        | RECORD [] => String "unit"
        | RECORD rbnds =>  let val (format,doer) = if (rbnds_is_tuple rbnds)
 						    then (("(", ",",")", false), 
@@ -351,7 +351,7 @@ struct
 			  in pp_list doer rbnds format
 			  end
        | RECORD_PROJECT (e,l,_) => HOVbox[pp_region "(" ")" [pp_exp e], String "#", pp_label l]
-       | SUM_TAIL (i,c,e) => pp_region "SUM_TAIL(" ")" [pp_con c, String ",", pp_exp e]
+       | SUM_TAIL (i,c,e) => pp_region "SUM_TAIL(" ")" [pp_con c, String ",", Break, pp_exp e]
        | HANDLE (con,body,handler) => HOVbox[String "HANDLE ",
 					     pp_con con, Break0 0 0,
 					     pp_exp body, Break0 0 0,
@@ -368,17 +368,16 @@ struct
        | EXN_INJECT (s,e1,e2) => pp_region "EXN_INJECT(" ")" [String s, String ",",
 							      pp_exp e1, String ",", pp_exp e2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
-			  [pp_con con, String ",", pp_exp e]
+			  [pp_con con, String ",", Break, pp_exp e]
        | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"
-			  [pp_con con1, String ",", 
-			   pp_con con2, String ",", pp_exp e]
+			  [pp_con con1, String ",", Break,
+			   pp_con con2, String ",", Break, pp_exp e]
        | INJ {sumtype,field,inject} => 
 	     pp_region "INJ(" ")"
-	     [String (Int.toString field), String ", ",
-	      pp_con sumtype, 
-	      case inject of
-		  NONE => String ""
-		| SOME e => HOVbox[String ",", pp_exp e]]
+	     (String (Int.toString field) :: String "," :: Break :: pp_con sumtype ::
+	      (case inject of
+		   NONE => nil
+		 | SOME e => String "," :: Break :: pp_exp e :: nil))
        | CASE {sumtype,bound,arg,arms,tipe,default} =>
 	     let val rules = (mapcount (fn (n,e) => ((Int.toString n) ^ ": ", e)) arms) @ 
 	                     [("Default: ", default)]
@@ -413,16 +412,14 @@ struct
       end
 
 	 
-    and pp_fbnd seen (FBND(vname,varg,carg,cres,exp)) = 
-      HOVbox[pp_var vname,
-	     (pp_region "=" "" [String "(",
-				pp_var varg,
-				String " : ",
-				pp_con seen carg,
-				String ") : ",
-				pp_con seen cres,
-				String " -> ",
-				pp_exp seen exp])]
+    and pp_fbnd seen (FBND(vname,varg,carg,cres,exp)) =
+	Depth(HOVbox[Hbox[pp_var vname, String " = "],
+		     Break0 0 3,
+		     Hbox[String "(", pp_var varg, String " : ", pp_con seen carg, String ") : "],
+		     Break0 0 3,
+		     Hbox[pp_con seen cres, String " -> "],
+		     Break0 0 3,
+		     pp_exp seen exp])
 
     and pp_signat seen signat = 
       (case signat of
@@ -473,11 +470,11 @@ struct
 	    DEC_EXP (v,c,NONE, _) => help (pp_var v) [pp_con seen c]
 	  | DEC_EXP (v,c,SOME e, inline) => 
 		help (pp_var v) [pp_con seen c, String (if inline then " == " else " = "), 
-				 pp_exp seen e]
+				 Break0 0 6, pp_exp seen e]
 	  | DEC_CON (v,k,NONE, _) => help (pp_var v) [pp_kind seen k]
 	  | DEC_CON (v,k,SOME c, inline) => 
 		help (pp_var v) [pp_kind seen k, String (if inline then " == " else " = "), 
-				 pp_con seen c]
+				 Break0 0 6, pp_con seen c]
 	  | DEC_MOD (v,false,s) => help (pp_var v) [pp_signat seen s]
 	  | DEC_MOD (v,true,s) => help (pp_var v) [String " $POLY$ ", 
 						   pp_signat seen s])
