@@ -26,6 +26,16 @@ structure Listops : LISTOPS =
 	in unzip4_loop abcd_list ([],[],[],[])
 	end
 
+    fun all2 pred = 
+      let
+	fun check ([],[]) = true
+	  | check (a::arest,b::brest) = 
+	  (pred (a,b)) andalso check (arest,brest)
+	  | check _ = false
+      in
+	check 
+      end
+
     fun all3 pred = 
       let
 	fun check ([],[],[]) = true
@@ -121,16 +131,15 @@ structure Listops : LISTOPS =
 
     fun foldl_acc ffun init list = 
       let 
-	fun loop (state,[]) = ([],state)
-	  | loop (state,fst::rest) =
+	fun loop (state,[],acc) = (rev acc,state)
+	  | loop (state,fst::rest,acc) =
 	  let
 	    val (fst',state') = ffun (fst,state)
-	    val (rest',state'') = loop (state',rest)
 	  in
-	    (fst'::rest',state'')
+	    loop (state',rest,fst'::acc)
 	  end
       in
-	loop (init,list)
+	loop (init,list,[])
       end
     
     fun eq_len (l1,l2) = ((List.length l1) = (List.length l2))

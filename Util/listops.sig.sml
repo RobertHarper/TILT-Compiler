@@ -14,6 +14,7 @@ signature LISTOPS =
     val unzip3 : ('a * 'b * 'c) list -> ('a list * 'b list * 'c list)
     val unzip4 : ('a * 'b * 'c * 'd) list -> ('a list * 'b list * 'c list * 'd list)
 
+    val all2 : (('a * 'b) -> bool) -> ('a list * 'b list) -> bool
     val all3 : (('a * 'b *'c) -> bool) -> ('a list * 'b list * 'c list) -> bool
     val map2 : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
     val map3 : ('a * 'b * 'c -> 'd) -> 'a list * 'b list * 'c list -> 'd list
