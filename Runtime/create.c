@@ -7,7 +7,6 @@
 #include "gc.h"
 
 int exncounter = 4000;
-const ptr_t empty_record = (ptr_t) 256; /* This is the ML unit. */
 
 mem_t oddword_align(mem_t ptr)
 {

@@ -9,7 +9,8 @@
 void get_alloc_limit(mem_t *alloc, mem_t *limit);
 val_t get_record(ptr_t rec, int which);
 
-const ptr_t empty_record;
+#define empty_record ((ptr_t)256)/* This is the ML unit. */
+
 ptr_t alloc_intint(int m, int n);
 ptr_t alloc_intrec(int k, ptr_t rec);
 ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2);
