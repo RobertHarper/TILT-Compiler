@@ -1,5 +1,5 @@
 Number: 0095
-Title:       Errno is sometimes clobbered leading to spurious SysErr exceptions from the runtime.
+Title:       Errno is sometimes clobbered leading to incorrect SysErr exceptions from the runtime.
 Keywords:    Runtime
 Submitter:   swasey
 Date:        08/16/02
@@ -41,8 +41,8 @@ Problem:
 
 	Running
 
-		tilt-nj -o test.exe -c Test project
 		rm nosuchfile	# just in case
+		tilt-nj -o test.exe -c Test project
 		./test.exe
 
 	on cuff yields
@@ -55,6 +55,32 @@ Problem:
 Code:
 Transcript:
 Comments:
+
+	<ASIDE>
+	The value 22 in in the SysErr exception comes from the
+	processor_info loop around
+
+		../../Runtime/thread.c:/processor_info
+
+	If we handle the case when a processor number is not added to
+	activeProcs[] with "else errno = 0", then the program terminates
+	with
+
+		Proc 0: Thread 0 (0): Uncaught exception SysErr: Error 0 (errno=0)
+	</ASIDE>
+
+	The file /usr/include/errno.h mentions a macro _REENTRANT.  If
+	this is defined (or some other conditions are satisfied), then
+	errno is thread-specific; otherwise it is not.  The manual page
+	intro(2) verifies that defining this macro is required for
+	multi-threaded applications.  (It would be nice if the pthreads
+	manual pages mentioned this or if Solaris got it right without a
+	magic macro.)
+
 Fix:
-Owner:
-Status: open
+
+	I changed the runtime's makefile to invoke the Solaris C compiler
+	with -D_REENTRANT.  This solved the problem.
+
+Owner: swasey
+Status: closed

@@ -39,6 +39,8 @@ Comments:
 	Alternatively, we could have the Manager switch to an empty
 	directory prior to invoking TAL.
 
+	We decided to generate a patch to talc for Tom to commit.
+
 Fix:
 Test:
 Owner: swasey

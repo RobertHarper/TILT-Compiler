@@ -24,7 +24,15 @@ Problem:
 Code:        
 Transcript:  
 Comments:    
+
+	This form of the "where strid=strid" extension is also supported
+	by SML/NJ and Moscow ML. Those compilers also reject this test
+	code.
+
+	We decided to leave the compiler alone and classify this as a
+	known deviation from SML.  The test is now skipped.
+
 Fix:         
 Test: m0129
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

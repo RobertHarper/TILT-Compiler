@@ -28,21 +28,35 @@ Code:
 	val () =
 		let
 			open StringCvt
-			val SOME 0w0 = Word.fromString "0w20Af"
-			val SOME 0w0 = Word.fromString "0W1"
-			val SOME 0w0 = scanString (Word.scan DEC) "0W1"
-			val SOME 0w0 = scanString (Word.scan OCT) "0W1"
-			val SOME 0w0 = scanString (Word.scan HEX) "0w1"
-			val SOME 0w0 = scanString (Word.scan HEX) "0W1"
-			val SOME 0w0 = scanString (Word.scan BIN) "0W1"
 
-			val SOME 0w0 = Word8.fromString "0w20Af"
-			val SOME 0w0 = Word8.fromString "0W1"
-			val SOME 0w0 = scanString (Word8.scan DEC) "0W1"
-			val SOME 0w0 = scanString (Word8.scan OCT) "0W1"
-			val SOME 0w0 = scanString (Word8.scan HEX) "0w1"
-			val SOME 0w0 = scanString (Word8.scan HEX) "0W1"
-			val SOME 0w0 = scanString (Word8.scan BIN) "0W1"
+			fun testX (name:string, inc : 'word -> LargeWord.word)
+					(f:string -> 'word option) (s:string) : unit =
+				let	val r =
+						(case (Option.map inc (f s)) of
+							SOME 0w0 => "OK"
+						|	NONE => "WRONG: NONE"
+						|	SOME w =>
+								"WRONG: SOME " ^ LargeWord.toString w)
+				in	print(concat[name," ",s," ",r,"\n"])
+				end
+			val test8 = testX ("Word8", Word8.toLargeWord)
+			val test = testX ("Word", Word.toLargeWord)
+
+			val _ = test Word.fromString "0w20Af"
+			val _ = test Word.fromString "0W1"
+			val _ = test (scanString (Word.scan DEC)) "0W1"
+			val _ = test (scanString (Word.scan OCT)) "0W1"
+			val _ = test (scanString (Word.scan HEX)) "0w1"
+			val _ = test (scanString (Word.scan HEX)) "0W1"
+			val _ = test (scanString (Word.scan BIN)) "0W1"
+
+			val _ = test8 Word8.fromString "0w20Af"
+			val _ = test8 Word8.fromString "0W1"
+			val _ = test8 (scanString (Word8.scan DEC)) "0W1"
+			val _ = test8 (scanString (Word8.scan OCT)) "0W1"
+			val _ = test8 (scanString (Word8.scan HEX)) "0w1"
+			val _ = test8 (scanString (Word8.scan HEX)) "0W1"
+			val _ = test8 (scanString (Word8.scan BIN)) "0W1"
 		in	()
 		end
 Transcript:
@@ -51,6 +65,9 @@ Comments:
 	Test m0028 fails for other reasons too; see ../0103/description
 
 Fix:
+
+	Corrected ../../Basis/Text/num-scan.sml
+
 Test: m0025 m0028
 Owner: swasey
-Status: open
+Status: closed

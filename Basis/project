@@ -228,7 +228,7 @@ interface Word8 = "Numeric/word8.int" {
 	TiltPrim WORD
 }
 unit Word8 : Word8 = "Numeric/word8.sml" {
-	TiltPrim TiltPrelude TiltExn TiltPreWord TiltNumFmt
+	TiltPrim TiltPrelude TiltExn TiltNumFmt
 	TiltNumScan WORD StringCvt
 }
 interface Word32 = "Numeric/word32.int" {TiltPrim WORD}

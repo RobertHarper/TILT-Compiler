@@ -49,6 +49,9 @@ Comments:
 	backends support the primitive type.
 
 Fix:         
+
+	Corrected ../../Basis/Numeric/word8.sml
+
 Test: m0028
 Owner: swasey
-Status: open
+Status: closed
