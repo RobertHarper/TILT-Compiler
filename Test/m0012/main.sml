@@ -1,4 +1,4 @@
-(*$import *)
+(*$import Word Word8 *)
 (* words *)
 fun f x = x
 val _ = f (0w1: Word8.word)

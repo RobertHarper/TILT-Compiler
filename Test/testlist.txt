@@ -21,5 +21,8 @@ m0016	Hello world.
 m0017	Hello world in two lines.
 m0018	Hello world in three lines.
 m0019	Hello world in four lines.
-
-
+m0020	Empty structure.
+m0021	Explicit polymorphism and recursion.
+m0022	Null tuple.
+m0024   Merge sort.
+m0025	Word value ranges.
