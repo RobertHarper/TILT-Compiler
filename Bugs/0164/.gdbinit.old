@@ -1,0 +1,374 @@
+define gcstatus
+	printf "0x%x %d: allocptr=0x%x, alloclimit=0x%x\n", $pc, NumGC, $g4, $g5
+end
+
+break GCFromML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break RestoreStackFromML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break NewStackletFromML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break PopStackletFromML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break returnToML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break save_regs_MLtoC
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break load_regs_MLtoC
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break start_client
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break global_exnhandler
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break raise_exception_raw
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break OverflowFromML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break DivFromML
+commands
+	silent
+	gcstatus
+	continue
+end
+
+break forward.c:465
+commands
+	silent
+	printf "%d add_global_root 0x%x\n", NumGC, obj
+	if (obj != &ml__PLUSULinkIl__INT__r__INT)
+		continue
+	end
+end
+
+break GC_Gen
+
+disable 1 2 3 4 5 6 7 8 9 10 11 12 13
+break code__7232
+commands
+	silent
+	printf "\nInitialized\n"
+	status
+	gcstatus
+	enable 1 2 3 4 5 6 7 8 9 10 11 12 13
+	continue
+end
+############
+break needgc__10463
+disable 14
+
+break funtop__2188798
+commands
+	silent
+	enable 14
+	continue
+end
+disable 15
+
+break code__17306767
+commands
+	silent
+	enable 15
+	ignore 14 79
+	continue
+end
+########
+break code__7232
+commands
+	silent
+	printf "\nInitialized\n"
+	status
+	continue
+end
+
+break needgc__10463
+disable 2
+
+break funtop__2188798
+commands
+	silent
+	enable 2
+	continue
+end
+disable 3
+
+break code__17306767
+commands
+	silent
+	enable 3
+	ignore 2 79
+	continue
+end
+#########
+break VectorEq_DOTanonfun__code__10184
+disable 1
+
+break funtop__2188798
+commands
+	silent
+	enable 1
+	continue
+end
+disable 2
+
+break code__17306767
+commands
+	silent
+	enable 2
+	ignore 2 81
+	continue
+end
+#######
+define status
+	printf "closure: "
+	set $statusa = (unsigned)&anonfun__11101
+	x/1w $statusa
+	printf "global: "
+	set $statusa = (unsigned)&ml__PLUSULinkIl__INT__r__INT
+	x/1w $statusa
+	printf "rec1: "
+	set $statusa = (unsigned)*(ptr_t)$statusa
+	x/1w $statusa
+	printf "rec16: "
+	set $statusa = (unsigned)*(ptr_t)$statusa
+	x/1w $statusa
+	printf "ref: "
+	set $statusa = (unsigned)*(ptr_t)$statusa
+	x/1w $statusa
+end
+#########
+
+set $ready = 0
+break code__7232
+commands
+	silent
+	set $ready = 1
+	continue
+end
+
+define bstatus
+	if $ready
+		set $arg1 = $arg1 + 1
+		printf "%s %d\n", $arg0, $arg1
+		status
+	end
+end
+
+set $Listops = 0
+break Listops_DOTassoc__eq__inner__code__2164127
+commands
+	silent
+	bstatus "Listops_DOTassoc__eq__inner__code__2164127" $Listops
+	continue
+end
+
+set $Stats = 0
+break Stats_DOTanonfun__code__1920480
+commands
+	silent
+	bstatus "Stats_DOTanonfun__code__1920480" $Stats
+	continue
+end
+
+set $Stats2 = 0
+break Stats_DOTanonfun__code__1920559
+commands
+	silent
+	bstatus "Stats_DOTanonfun__code__1920559" $Stats2
+	continue
+end
+
+set $Linknil = 0
+break Linknil_DOTmakeEntry__code__17285921
+commands
+	silent
+	bstatus "Linknil_DOTmakeEntry__code__17285921" $Linknil
+	continue
+end
+##########
+break code__2205739
+commands
+	silent
+	printf "code__2205739 %d\n", NumGC
+	status
+	continue
+end
+
+set $n = 0
+break Linknil_DOTmakeEntry__code__17285921
+commands
+	silent
+	set $n = $n + 1
+	printf "Linknil_DOTmakeEntry__code__17285921 %d\n", $n
+	status
+	continue
+end
+##########
+break GCFromML
+commands
+	silent
+	printf "GCFromML %d\n", NumGC
+	status
+	continue
+end
+
+break RestoreStackFromML
+commands
+	silent
+	printf "RestoreStackFromML %d\n", NumGC
+	status
+	continue
+end
+
+break NewStackletFromML
+commands
+	silent
+	printf "NewStackletFromML %d\n", NumGC
+	status
+	continue
+end
+
+break PopStackletFromML
+commands
+	silent
+	printf "PopStackletFromML %d\n", NumGC
+	status
+	continue
+end
+
+break returnToML
+commands
+	silent
+	printf "returnToML %d\n", NumGC
+	status
+	continue
+end
+
+break save_regs_MLtoC
+commands
+	silent
+	printf "save_regs_MLtoC %d\n", NumGC
+	status
+	continue
+end
+
+break load_regs_MLtoC
+commands
+	silent
+	printf "load_regs_MLtoC %d\n", NumGC
+	status
+	continue
+end
+
+break start_client
+commands
+	silent
+	printf "start_client %d\n", NumGC
+	status
+	continue
+end
+
+break global_exnhandler
+commands
+	silent
+	printf "global_exnhandler %d\n", NumGC
+	status
+	continue
+end
+
+break raise_exception_raw
+commands
+	silent
+	printf "raise_exception_raw %d\n", NumGC
+	status
+	continue
+end
+
+break OverflowFromML
+commands
+	silent
+	printf "OverflowFromML %d\n", NumGC
+	status
+	continue
+end
+
+break DivFromML
+commands
+	silent
+	printf "DivFromML %d\n", NumGC
+	status
+	continue
+end
+
+disable 1 2 3 4 5 6 7 8 9 10 11 12
+break code__12573628
+commands
+	silent
+	printf "LinkIL initialized\n"
+	status
+	enable 1 2 3 4 5 6 7 8 9 10 11 12
+	continue
+end
+##########
+break Manager_DOTanonfun__code__2532627
+commands
+	silent
+	printf "Manager setting a bool ref\n"
+	status
+	continue
+end
+ignore 14 12

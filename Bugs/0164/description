@@ -1,0 +1,64 @@
+Number: 0164
+Title:       Garbage collector skipping global roots.
+Keywords:    Runtime, globals
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        4/29/03
+Version:     CVS
+System:	     solaris,alpha
+Severity:    critical
+Problem:
+	The GC was leaving live data, reachable from globals, in the
+	allocation area and subsequent allocation was trashing it.
+Code:
+	This occurred while bootstrapping TILT; there is no nice
+	code snippet that demonstrates the bug.
+Transcript:
+Comments:
+	Global roots are discovered in stages.  The garbage collector
+	has a work list of roots to scan.  In order for a global to
+	get added to this list, it must first be noticed by
+	process_writelist and then moved to the work list by either
+	major_global_scan or minor_global_scan.  The routine
+	process_writelist scans a write log created by the mutator
+	and, for globals, calls add_global_root.  The routine
+	add_global_root records the globals in a private data
+	structure.  The routines major_global_scan and
+	minor_global_scan move globals from the private data structure
+	onto the work list.  (This complicated arrangement ensures
+	that only initialized globals are counted as roots and
+	probably benefits the parallel and concurrent collectors.)
+
+	The generational garbage collector was, under certain
+	circumstances, calling major/minor_global_scan prior to
+	calling process_writelist.  Newly initialized globals were
+	being put into the private data structure but not the root
+	work list.  They were not counted as roots during the GC.
+
+	There are two things I want to mention, just in case you find
+	yourself debugging TILT's runtime.  First, the version of GDB
+	on cuff (4.16) has a fundamental bug whereby some breakpoints
+	set at assembler labels are ignored.  GDB 5.3 does not appear
+	to have this bug.  Second, I might have saved a lot of time if
+	I had thought to turn on the runtime's @paranoid flag.
+
+	Other files:
+		notes
+		stack-code__2205739
+		stack-segv
+		.gdbinit
+		.gdbinit.old
+
+Fix:
+	The code involved was essentially
+	
+		if (usually true)
+			process_writelist(proc, nursery, fromSpace);
+		...
+		minor_global_scan(proc);
+		process_writelist(proc, nursery, fromSpace);
+	
+	The "usually true" condition did not hold.  The fix was to
+	swap the order of process_writelist and minor_global_scan.
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,40 @@
+from	breakpoint
+loc	/n/tilt/Util/TM/mapfile-util/U/Listops/sparc/asm:23835
+code	Listops_DOTassoc__eq__inner__code__2164127
+size	144
+offset	92
+
+from	$sp+92
+label	code__1938749
+loc	/n/tilt/Util/TM/mapfile-util/U/Stats/sparc/asm:16471
+code	Stats_DOTanonfun__code__1920480
+size	112
+offset	92
+
+from	$sp+144+92
+label	code__1938372
+loc	/n/tilt/Util/TM/mapfile-util/U/Stats/sparc/asm:13830
+code	Stats_DOTanonfun__code__1920559
+size	96
+offset	92
+
+from	$sp+144+112+92
+label	code__17306757
+loc	/n/tilt/Nil/TM/mapfile-nil/U/Linknil/sparc/asm:9227
+code	Linknil_DOTmakeEntry__code__17285921
+size	128
+offset	92
+
+from	$sp+144+112+96+92
+label	code__17304716
+loc	/n/tilt/Nil/TM/mapfile-nil/U/Linknil/sparc/asm:1085
+code	link_Linknil_DOTcode	GOOD
+size	240
+offset	92
+
+from	$sp+144+112+96+128+92
+label	code__7277
+loc	/n/tilt/Bin/sparc/TM/L/tilt/sparc/asm:3670
+code	link_LINKUNIT_DOTcode
+size	96
+offset	92
