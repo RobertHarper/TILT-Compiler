@@ -1,52 +1,91 @@
-(*$import FILECACHE Paths *)
-
+(* Interface to the compiler. *)
+(*
+	The compiler has side effects on the file system.
+	Parameterized interface files and unit environment files are
+	read and written through FileCache.  Unit and interface source
+	files are read directly from the file system.  Assembler files
+	are written directly to the file system.
+*)
 signature COMPILER =
 sig
 
+    val CompilerDiag : bool ref
+
     exception Reject of string		(* User code is bad. *)
-    
-    val showWrittenContext : bool ref	(* Print contexts as they are written to disk. *)
-    val showImports : bool ref		(* Print imports when building contexts. *)
 
-    (* Contains only ilFiles *)
-    structure IlCache : FILECACHE
+    structure FileCache :
+    sig
+	include FILECACHE
 
-    type unit_paths = Paths.unit_paths
+	val read_ue : string -> UnitEnvironment.ue
+	val write_ue : string * UnitEnvironment.ue -> unit
+
+	val read_info : string -> Info.info
+	val write_info : string * Info.info -> unit
+    end
+
+    (*
+	Invariant: If f : iface, then f names an up-to-date
+	parameterized interface file.
+    *)
+    type file = string
+    type iface = file
+    type unitname = string
+    type imports = unitname list
+    (*
+	Invariant: If L : precontext, then
+	1. No two units have the same name.
+	2. L is ordered so that each interface's parameters precede it.
+    *)
+    type precontext = (unitname * iface) list
+
     type il_module
-    type unitmap
     type nil_module
     type rtl_module
 
-    datatype kind =
-	DIRECT				(* direct import; labels available *)
-      | INDIRECT			(* indirect import; labels hidden *)
+    val eq : unitname * precontext * iface * iface -> bool
 
-    datatype import =
-	FILE of unit_paths * kind
-      | PRIM of kind
+    (*
+	Unit elaboration returns true when a new compiled interface is
+	written.  This occurs if the old parameterized interface file
+	had a bad magic number or was not equivalent to the new
+	interface.
+    *)
 
-    (* In all compiler phases, unit names may be used to generate
-     * unique identifiers.  We assume that unit names are globally
-     * unique.  *)
+    val elaborate_srci : {precontext : precontext,
+			  imports : imports,
+			  ifacename : string,
+			  source : file,
+			  ifaceTarget : file,
+			  ueTarget : file} -> unit
 
-    val parse_impl_import : string -> string list
-    val parse_inter_import : string -> string list
-	
-    (* Elaborate source file (against interface file if constrained)
-     * in the context of imports.  May write a new targetIlFile and
-     * modify Cache.
-     *)
-    val elaborate : {unit : string, smlFile : string, intFile : string option,
-		     targetIlFile : string, imports : import list}
-	-> il_module * unitmap * bool				(* true if ilFile written to disk  *)
-	
-    val il_to_nil : string * il_module -> nil_module		(* unit name *)
-	
-    val nil_to_rtl : string * unitmap * nil_module -> rtl_module (* unit name *)
-	
-    val rtl_to_asm : string * rtl_module -> unit	        (* assembler target *)
+    val elaborate_primu : {precontext : precontext,
+			   imports : imports,
+			   unitname : unitname,
+			   ifaceTarget : file,
+			   ueTarget : file} -> il_module * bool
+
+    val elaborate_srcu : {precontext : precontext,
+			  imports : imports,
+			  unitname : unitname,
+			  source : file,
+			  ifaceTarget : file,
+			  ueTarget : file} -> il_module * bool
+
+    val elaborate_srcu' : {precontext : precontext,
+			   imports : imports,
+			   unitname : unitname,
+			   source : file,
+			   interface : iface} -> il_module
+
+    val il_to_nil : unitname * il_module -> nil_module
+    val nil_to_rtl : unitname * nil_module -> rtl_module
+    val rtl_to_asm : {precontext : precontext,
+		      asmTarget : file,
+		      ueTarget : file,
+		      rtl_module : rtl_module} -> unit
 
     (* Create initialization code for the given units. *)
-    val link : string * string list -> unit			(* assembler target, unit names *)
-			 
+    val link : {asmTarget : file, unitnames : unitname list} -> unit
+
 end
