@@ -199,8 +199,7 @@ struct
 	 if (is_elim_con con) then  
 	      ( case Conmap.find (ac, con) of 
 		    SOME (var) => 
-			(
-			 inc_click cse_con_click ; Var_c var )
+			( inc_click cse_con_click ; Var_c var )
 		  | NONE => con)
 	  else con)
 

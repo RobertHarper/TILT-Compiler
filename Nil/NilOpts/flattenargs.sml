@@ -1,4 +1,3 @@
-(* Unfortunately normalization of constructors pretty much ruins this *)
 
 
 

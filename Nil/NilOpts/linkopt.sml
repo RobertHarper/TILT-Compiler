@@ -78,7 +78,7 @@ struct
 
 
     fun do_opts debug nilmod = 
-	let 
+	let val debug = debug orelse (!NilOpts.debug)
 	   
 	    val _ = ( NilOpts.init_clicks() )
 
@@ -111,39 +111,18 @@ struct
 			 
 	    (* val _ = PpNil.elide_bnd := true; *)
 
-	    val nilmod = if !do_reduce then
-		let val nilmod = (Stats.timer("Reduce1", Reduce.doModule debug)) nilmod
-		in ( if !NilOpts.print_reduce 
-			 then (print "\n\n=======================================\n\n";
-			       print "Reduced 1:\n";
-			       PpNil.pp_module nilmod;
-			       print "\n") 
-		     else print "Reduction 1 complete\n"; nilmod )
-		end 
-			 else nilmod
  
-
-	    val nilmod = if !do_reduce then
-		let val nilmod = (Stats.timer("Reduce2", Reduce.doModule debug)) nilmod
-		in ( if !NilOpts.print_reduce 
-			 then (print "\n\n=======================================\n\n";
-			       print "Reduced 2:\n";
-			       PpNil.pp_module nilmod;
-			       print "\n") 
-		     else print "Reduction 2 complete\n"; nilmod )
-		end 
-			 else nilmod
-
-	    val nilmod =  if !do_flatten then 
-		let val nilmod = (Stats.timer("Flatten args", FlattenArgs.doModule debug)) nilmod
-		in (  if !NilOpts.print_flatten andalso !do_flatten 
-			 then (print "\n\n=======================================\n\n";
-			       print "Flattened args:\n";
-			       PpNil.pp_module nilmod;
-			       print "\n") 
-		     else print "Flatten args complete\n"; nilmod )
-		end 
-			  else nilmod
+	   val nilmod =
+		if (!do_flatten) then 
+		    (let val nilmod = (Stats.timer("Flatten args", FlattenArgs.doModule debug)) nilmod
+		     in (  if !NilOpts.print_flatten andalso !do_flatten 
+			       then (print "\n\n=======================================\n\n";
+				     print "Flattened args:\n";
+				     PpNil.pp_module nilmod;
+				     print "\n") 
+			   else print "Flatten args complete\n"; nilmod )
+		     end)
+		else nilmod
 
 	  	    
 	    val nilmod = if !do_uncurry then 
@@ -178,18 +157,27 @@ struct
 			      print "\n")
 		    else print "Renaming complete\n"
 			
-
 	    val nilmod = if !do_reduce then
-		let val nilmod = (Stats.timer("Reduce3", Reduce.doModule debug)) nilmod
+		let val nilmod = (Stats.timer("Reduce", Reduce.doModule debug)) nilmod
 		in ( if !NilOpts.print_reduce 
 			 then (print "\n\n=======================================\n\n";
-			       print "Reduced 3:\n";
+			       print "Reduced:\n";
 			       PpNil.pp_module nilmod;
 			       print "\n") 
-		     else print "Reduction 3 complete\n"; nilmod )
+		     else print "Reduction complete\n"; nilmod )
 		end 
 			 else nilmod
-
+			
+	    val nilmod = if !do_reduce then
+		let val nilmod = (Stats.timer("Reduce", Reduce.doModule debug)) nilmod
+		in ( if !NilOpts.print_reduce 
+			 then (print "\n\n=======================================\n\n";
+			       print "Reduced:\n";
+			       PpNil.pp_module nilmod;
+			       print "\n") 
+		     else print "Reduction complete\n"; nilmod )
+		end 
+			 else nilmod
 
 	    val _ = ( NilOpts.print_clicks() )
 	in

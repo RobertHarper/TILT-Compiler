@@ -20,6 +20,9 @@ functor Reduce  (
 			) : PASS =
 
 struct 
+    val do_inline = true
+    val do_project_known = true
+    val do_dead = true
     
     open Nil Name Util Nil.Prim
     structure Nil = Nil
@@ -62,13 +65,8 @@ struct
 	  | Prim_c (primcon, clist) => length clist = 0 
 	  | _ => false
 
-    fun resingletonize kind con = 
-	case kind of 
-	    Singleton_k (phase, kind, oldcon) => Singleton_k (phase, kind, con)
-	  | _ =>kind
-		
 
-    fun doModule  debug (module as MODULE{bnds=bnds, imports=imports, exports=exports}) = 
+    fun doModule debug (module as MODULE{bnds=bnds, imports=imports, exports=exports}) = 
 	let 
 
 	    (* Now, tables to keep information about the code as
@@ -214,7 +212,7 @@ struct
 					  HashTable.insert count_rec(x,ref 0))
 				 else () 
 			 
-		fun insesc fset x  = 
+		fun insesc fset x = 
 		    let  val y = s(x)
 		    in 
 			case y of 
@@ -228,7 +226,7 @@ struct
 			  | _ => ()
 		    end 
 
-		fun insapp fset x =
+		fun insapp fset x  =
 		    let  val  y = s(x) 
 		    in 
 			case y of 
@@ -239,6 +237,29 @@ struct
 					  NONE => () 
 					| SOME use => inc use ) 
 				end 
+			  |  _  => () (* Constant expression *)
+		    end 
+
+			 
+		fun insesc_c fset x  = 
+		    let  val y = sc(x)
+		    in 
+			case y of 
+			    Var_c y =>
+				( case (HashTable.find count_esc y) of
+				      NONE =>  () 
+				    | SOME use =>   inc use ) 
+			  | _ => ()
+		    end 
+
+		fun insapp_c fset x  =
+		    let  val  y = sc(x) 
+		    in 
+			case y of 
+			    Var_c y => 
+				( case (HashTable.find count_app y ) of
+					  NONE => () 
+					| SOME use => inc use ) 
 			  |  _  => () (* Constant expression *)
 		    end 
 
@@ -258,8 +279,8 @@ struct
 
 		and scan_con fset con =
 		    let 
-			val insesc = insesc fset
-			val insapp = insapp fset
+			val insesc = insesc_c fset
+			val insapp = insapp_c fset
 		    in 
 			case con of 
 			    Prim_c (primcon, cons) => app (scan_con fset) cons 
@@ -272,14 +293,14 @@ struct
 				(app ((scan_kind fset) o #2) vklist;
 				 app (scan_con fset) clist; 
 				 (scan_con fset) con )
-			  | Var_c v => insesc v
+			  | Var_c v => insesc v 
 			  | Let_c (sort, conbnds, con) => 
 				(app (scan_conbnd fset) conbnds ; (scan_con fset) con)
 			  | Crecord_c (lclist) =>
 				(app ((scan_con fset) o #2) lclist)
 			  | Proj_c (con, label) => (scan_con fset) con
 			  | App_c (con, cons) => ( case con of 
-						  Var_c v => insapp v
+						  Var_c v => insapp v 
 						| _ => scan_con fset con ; app (scan_con fset) cons)
 			  | Typecase_c { arg=arg, arms = arms, default = default, kind = kind} =>
 				((scan_con fset) arg ; (scan_con fset) default ;
@@ -307,17 +328,17 @@ struct
 			val insapp = insapp fset
 		    in 
 		    case exp of
-			(Var_e v) => insesc v
+			(Var_e v) => insesc v 
 		      | (Const_e v) => ()
 		      | (Let_e (_, bndlist , body)) => ( app scan_bnd bndlist; scan_exp body )
-		      | (Prim_e (NilPrimOp (select label), clist, [ Var_e r ] )) =>
-			    ( insapp r ; app scan_con clist )
+		 (*     | (Prim_e (NilPrimOp (select label), clist, [ Var_e r ] )) =>
+			    ( insapp r ; app scan_con clist )           *)
 		      | (Prim_e ( allp, clist, elist)) =>
 			    ( app scan_con clist; app scan_exp elist)
 		      | (Switch_e switch) => (scan_switch fset switch)
 		      | (App_e ( openness, efunc, clist, elist, eflist)) =>
 			    ( case efunc of 
-				  Var_e v => insapp v
+				  Var_e v => insapp v 
 				| _ => scan_exp efunc ; app scan_con clist; app scan_exp elist)
 		      | (Raise_e (e, c)) => (scan_exp e; scan_con c)
 		      | (Handle_e (e, function)) =>
@@ -403,17 +424,18 @@ struct
 
 	    end (* Census functions *)
 
-	val print_table = fn (var, use)=>
-	    ( Ppnil.pp_var var; print " : "; print (Int.toString (!use)); print "\n")
-	   
+	fun print_table str = fn (var, use)=>
+	    (if not ((!use) = 0) then   
+		( print str;  Ppnil.pp_var var; print " : "; print (Int.toString (!use)); print "\n")
+		 else ())
 	fun print_stats unit = 
 	    ( print "****************************************************\n"; 
 	     print "APP TABLE\n";
-	     HashTable.appi print_table count_app;
+	     HashTable.appi (print_table "app ") count_app;
 	     print "\nESC TABLE\n";
-	     HashTable.appi print_table count_esc;
+	     HashTable.appi (print_table "esc ") count_esc;
 	     print "\nREC TABLE\n";
-	     HashTable.appi print_table count_rec;
+	     HashTable.appi (print_table "rec ")count_rec;
 	     print "****************************************************\n" ) 
 
 
@@ -421,19 +443,20 @@ struct
 
 	local 
 	    fun dead_var x =
-		if (look count_app x = 0 andalso look count_esc x = 0 andalso look count_rec x = 0)
-		    then ( (* Ppnil.pp_var x; print " is dead\n"; *) 			  
+		if (do_dead andalso look count_app x = 0 andalso look count_esc x = 0 andalso look count_rec x = 0)
+		    then ( if debug then ( Ppnil.pp_var x; print " is dead\n" ) else () ;
 			  inc_click dead_click ; true )
 		else false
 
 	    fun dead_funcs xs = 
-		let fun dead x = (look count_app x = 0 andalso look count_esc x = 0) (* Don't count recursive apps of funcs *)
+		let fun dead x = (do_dead andalso look count_app x = 0 andalso look count_esc x = 0) (* Don't count recursive apps of funcs *)
 		in 
 		    if ( Listops.andfold dead xs ) 
 			then   ( (* app Ppnil.pp_var xs; print " are dead\n"; *) inc_click dead_click ; true )
 		    else
 			false
 		end 
+
 	    fun subst exp = 
 		case exp of
 		    Var_e v => s(v)
@@ -478,30 +501,34 @@ struct
 			    
 		(* ----- Have to recur on the kind here as well ----------------- *)	
 	in  fun xcon_project fset (t :var, kind:kind, (Var_c a):con, label:label) binder do_body do_kind =
-	    if (dead_var t) then 
-		(update_count_c count_esc (sc(a)) ~1 fset; (do_body()))
-	    else 
-		case sc(a) of 
-		    Var_c a => 
-			(case HashTable.find bind a of 
-			     SOME ( RC (labels, cons) ) => 
-				 let val _ = inc_click select_con_click 
-				     val temp = Listops.zip labels cons
-				     val b = ( case Listops.assoc_eq(Name.eq_label, label, temp ) of 
-					      SOME v => v
-					    | NONE => raise BUG )
-				 in
-				     ( replace_c t b fset; update_count_c count_esc (Var_c a) ~1 fset; do_body() )
-				 end
-			   | _ =>  let
-				       val N' = (do_body())
-				   in 
-				       if (dead_var t ) then 
-					   ( update_count count_esc (s(a)) ~1 fset;  N' )
-				       else
-					   binder (t, do_kind fset kind, Proj_c (Var_c a, label), N')
-				   end)
-		  | _=> raise BUG
+	    let fun cleanup unit = 
+		(update_count_c count_esc (sc(a)) ~1 fset;
+		 census_kind (~1, kind) )
+	    in 
+		if (dead_var t) then 
+		    ( cleanup(); (do_body()))
+		else 
+		    case sc(a) of 
+			Var_c a => 
+			    (case HashTable.find bind a of 
+				 SOME ( RC (labels, cons) ) => 
+				     let val _ = inc_click select_con_click 
+					 val temp = Listops.zip labels cons
+					 val SOME b = ( Listops.assoc_eq(Name.eq_label, label, temp ) )
+					     
+				     in
+				     ( replace_c t b fset; cleanup(); do_body() )
+				     end
+			       | _ =>  let
+					   val N' = (do_body())
+				       in 
+					   if (dead_var t ) then 
+					       ( cleanup() ;  N' )
+					   else
+					       binder (t, do_kind fset kind, Proj_c (Var_c a, label), N')
+				       end)
+		      | _=> raise BUG
+	    end
 			
 	    and xcon_record fset (x, kind, lclist) binder do_body do_kind = 
 		 let val (labels, cons) = Listops.unzip lclist
@@ -509,21 +536,45 @@ struct
 		     val lclist = Listops.zip labels cons
 		     fun dec (Var_c a) =  update_count_c count_esc (sc(a)) ~1 fset
 		       | dec _ = ()
-			
+		     fun cleanup unit = 
+			 ( app dec cons; census_kind(~1, kind) )
 		 in 
 		     if (dead_var x) 
-			 then ( app dec cons ; do_body() )
+			 then ( cleanup()  ; do_body() )
 		     else 
-			 let val _ = HashTable.insert bind ( x, RC ( labels,  cons))
+			 let val _ = if do_project_known then HashTable.insert bind ( x, RC ( labels,  cons)) else ()
 			      val N' = do_body()
 			 in
-			     if (dead_var x )
-				 then ( app dec cons ; N' )
+			     if (dead_var x)
+				 then ( cleanup()  ; N' )
 			     else
 				 binder (x, do_kind fset kind, Crecord_c lclist, N')
 			 end
 		 end 
-	      
+	    fun xcon_else fset (x, kind, con) binder do_body do_kind do_con =
+		 if (small_con con) then 
+		     (replace_c x con fset;
+		      census_kind (~1, kind);
+		      (case con of 
+			   Var_c v => update_count_c count_esc (sc(v)) ~1 fset
+			 | _ => ());
+		      do_body ())
+		 else
+		     if (dead_var x) then 
+			 (census_kind (~1, kind);
+			  census_con (~1, con);
+			  do_body ())
+		     else 
+			 let val N' = do_body ()
+			 in 
+			     if (dead_var x) then
+				 (census_kind (~1, kind);
+				  census_con (~1, con);
+				  N')
+			     else
+				 binder (x, do_kind fset kind, do_con fset con, N')
+			 end
+
 	    fun xkind fset kind = 
 		case kind of 
 		    Type_k p => kind
@@ -552,49 +603,46 @@ struct
 			   in  
 			       xcon_record fset (t, kind, lclist) bind do_body xkind
 			   end 
+		    
+		  (* Variables and other bindings *) 
+		  | Let_c (Sequential, (Con_cb (x, kind, con) :: rest), N) =>
+			let fun do_body unit = xcon fset (Let_c (Sequential, rest, N))
+			    fun bind (x,kind, con, body) = Let_c (Sequential, [ Con_cb (x,kind, con)], body)
+			in 
+			    xcon_else fset (x, kind, con) bind do_body xkind xcon
+			end
+
 			   
 		  (* Function definitions *)
 		  | Let_c (Sequential, (Open_cb (x, vklist, con, kind)) :: rest, N) =>
 			let val N' = Let_c ( Sequential, rest, N)
+			    fun cleanup unit = 
+				( app (fn (v,k) => census_kind(~1, k)) vklist; 
+				 census_con ( ~1, con); 
+				 census_kind (~1, kind) )
 			   in if (dead_var x) then 
-			       ( app (fn (v,k) => census_kind(~1, k)) vklist; census_con ( ~1, con); xcon fset N')
+			       (cleanup (); xcon fset N')
 			      else 
 				  let val _ = HashTable.insert bind (x, FC (vklist, con, kind))
 				      val N' = xcon fset N'
-				  in if (dead_var x) then 
-				      ( app (fn (v,k) => census_kind(~1, k)) vklist; census_con ( ~1,con); N')
-				     else let val newvklist = map (fn (v,k) => (v, xkind fset k)) vklist
-					      val newcon =  xcon fset con
-					      val newkind = xkind fset kind
-					  in 
-					      Let_c (Sequential, [ (Open_cb (x, newvklist, newcon, newkind)) ], N')
-					  end 
+				  in case (HashTable.find bind x) of
+				      (*
+				       If the function was inlined, only the return kind and the kinds on the args have gone 
+				       away. The con was inlined. 
+				       *)
+				      SOME INLINED => 
+					  (app (fn (v,k) => census_kind(~1, k)) vklist; 
+					   census_kind (~1, kind);
+					   N')
+				    | _ => if (dead_var x) then (cleanup () ; N')
+					   else let val newvklist = map (fn (v,k) => (v, xkind fset k)) vklist
+						    val newcon =  xcon fset con
+						    val newkind = xkind fset kind
+						in 
+						    Let_c (Sequential, [ (Open_cb (x, newvklist, newcon, newkind)) ], N')
+						end 
 				  end 
-			   end 
-
-		  (* Variables and other bindings *) 
-		  | Let_c (Sequential, (Con_cb (x, kind, con) :: rest), N) =>
-			   let val N' = Let_c ( Sequential, rest, N)
-			   in 
-			       if small_con con then 
-				   ( replace_c x con fset; 
-				    ( case con of
-					  Var_c v => update_count_c count_esc (sc(v)) ~1 fset
-					| _ => () );
-					  xcon fset N' )
-			       else  
-				   if (dead_var x ) then (census_kind (~1, kind); census_con(~1, con) ;  xcon fset N' )
-				    else 
-					let val N' = xcon fset N' 
-					in 
-					    if (dead_var x ) then (census_kind (~1, kind); census_con(~1, con); N')
-					    else  let val newcon =  xcon fset con
-						  val newkind = xkind fset kind 
-						  in 
-						      Let_c (Sequential, [Con_cb (x, newkind, newcon)], N')
-						  end 
-					end 
-			   end
+			end 
 
 		  | Let_c (Sequential, [], N) => xcon fset N
 		  | Let_c _ => raise UNIMP
@@ -604,7 +652,7 @@ struct
 			let val new_app = App_c (sc(f), map (xcon fset) cons)
 			    val Var_c sf = sc(f) 
 			in 
-			    if look count_app sf = 1 andalso look count_esc sf = 0 
+			    if do_inline andalso look count_app sf = 1 andalso look count_esc sf = 0 
 				then ( case (HashTable.find bind sf) of
 				      SOME (FC ( vklist, con, kind)) =>
 					  let val _ = inc_click con_inline_click
@@ -618,6 +666,7 @@ struct
 							  
 					  in ( Listops.map2 do_args (cons, map #1 vklist);
 					      update_count_c count_app (sc(f)) ~1 fset;
+					      HashTable.insert bind (sf, INLINED);
 					      xcon fset con)
 					  end
 				    | NONE => new_app )
@@ -724,67 +773,64 @@ struct
 	    and xbnds fset ( (bnd :: rest) : bnd list )
 		( body : body ) = 
 		( case bnd of
- 		      (* Constructor bindings *)
+ 		      (* --------------------- Constructor bindings ----------------------- *)
 		      (* Constructor Record Projection *)
 		      Con_b (t, kind, Proj_c (con, label)) => 
 			  let fun do_body unit = xbnds fset rest body
 			      fun bind (t, kind, con, (rest,body) ) = (Con_b (t, kind, con)::rest, body)
 			  in  
 			      xcon_project fset (t, kind, con, label) bind do_body xkind
-			end 
+			end
+		    (* Constructor Record Creation *)
 		    | Con_b (t, kind, Crecord_c lclist) => 
 			  let fun do_body unit = xbnds fset rest body
 			      fun bind (t, kind, con, (rest,body) ) = (Con_b (t, kind, con)::rest, body)
 			  in  
 			      xcon_record fset (t, kind, lclist) bind do_body xkind
 			  end 
-       
+
+
 		    (* --------------- Constructor function creation --------------- *)
 		    | Con_b (t, kind, conbnd as (Let_c (Sequential, [ Open_cb ( var, vklist, con, retkind) ], Var_c var2))) =>
-			  ( if Name.eq_var (var, var2) then 
-			      if (dead_var t) then 
-				  (census_kind (~1, kind); census_con (~1, conbnd); xbnds fset rest body) 
-			      else 
-				  let val _ = HashTable.insert bind (t, FC(vklist, con, retkind))
-				      val (rest,body) = xbnds fset rest body
-				  in if (dead_var t) then 
-				      (census_kind (~1, kind); census_con (~1, conbnd); (rest, body) )
-				     else 
-					 let val newcon = xcon fset con
-					     val newretkind = xkind fset retkind
-					     val newkind = xkind fset kind 
-					 in 
-					    ( Con_b (t, newkind, Let_c (Sequential, 
-								     [Open_cb (var, vklist, newcon, newretkind)], Var_c var))::rest, body)
-					 end
-				  end
-			  else 		    
-			      (* This constructor function is dead anyways. I doubt this case will come up very often *)
-			      xbnds fset rest body )
-			      
-       
+			  if (dead_var t) then 
+			      (census_kind (~1, kind); census_con (~1, conbnd); xbnds fset rest body) 
+			  else 
+			      ( if Name.eq_var (var, var2) then 
+				    let val _ = HashTable.insert bind (t, FC(vklist, con, retkind))
+					val (rest,body) = xbnds fset rest body
+				    in ( case (HashTable.find bind t) of 
+					SOME INLINED => 
+					    (app (fn (v,k) => census_kind(~1, k)) vklist; 
+					     census_kind (~1, retkind);
+					     update_count_c count_esc (sc(var2)) ~1 fset;
+					     (rest, body) )
+				      | _ =>  if (dead_var t) then 
+					    (census_kind (~1, kind); census_con (~1, conbnd); (rest, body) )
+					      else 
+						  let val newcon = xcon fset con
+						      val newretkind = xkind fset retkind
+						      val newkind = xkind fset kind 
+						  in 
+						      ( Con_b (t, newkind, Let_c (Sequential, 
+										  [Open_cb (var, vklist, newcon, newretkind)], Var_c var))::rest, body)
+						  end )
+				    end
+				else 		    
+				    raise BUG)
+		  (* This constructor function is dead anyways. I doubt this case will come up very often *)
+		  (* xbnds fset rest body *) 
+
 		    (* Constructor  Variables and other bindings *) 
-		  | Con_b (x, kind, con) => 
-			( if small_con con then 
-			    ( replace_c x con fset; 
-			     ( case con of
-				   Var_c v => update_count_c count_esc (sc(v)) ~1 fset
-				 | _ => () );
-				   xbnds fset rest body)
-			else  
-			    if (dead_var x ) then (census_kind(~1, kind); census_con(~1, con) ;  xbnds fset rest body)
-			    else 
-				let val (rest,body) = xbnds fset rest body
-				in 
-				    if (dead_var x ) then (census_kind(~1, kind); census_con(~1, con); (rest,body) )
-				    else  let val newcon =  xcon fset con
-					      val newkind = xkind fset kind 
-					  in 
-					      (Con_b (x, newkind, newcon)::rest, body)
-					  end 
-				end )
-       
-			    
+		    | Con_b (x, kind, con) => 
+			  let fun do_body unit = xbnds fset rest body
+			      fun bind (x, kind, con, (rest,body) ) = (Con_b (x, kind, con)::rest, body)
+			  in  
+			      xcon_else fset (x, kind, con) bind do_body xkind xcon
+			  end 
+              
+				    
+             
+		  (* --------------------- Term bindings ---------------------------- *)		
 		  (* Term Record creation *)
 		  | Exp_b ( x, con, Prim_e (NilPrimOp (record labels), cons, exps )) => 
 			let fun dec (Var_e a) =  update_count count_esc (s(a)) ~1 fset
@@ -793,15 +839,17 @@ struct
 			  in  
 			      if ( dead_var x ) 
 				  then ( app dec exps; 
+					census_con(~1, con);
 					app (fn (con) => (census_con (~1, con))) cons;
 				        xbnds fset rest body )
 					    
 			      else
-				  let val _ = HashTable.insert bind ( x, R ( labels, exps))
+				  let val _ = if do_project_known then HashTable.insert bind ( x, R ( labels, exps)) else ()
 				      val (rest,body) = xbnds fset rest body
 				  in
 				      if (dead_var x )
 					  then ( app dec exps ;
+						census_con(~1, con);
 						app (fn (con) => (census_con (~1, con))) cons;
 						(rest, body) )
 				      else
@@ -813,9 +861,13 @@ struct
 
 	  (* ------------------------ Term Record Projection --------------------- *)
 	  | Exp_b ( x, con, Prim_e (NilPrimOp (select label), cons, [ Var_e a ] )) => 
+		let fun cleanup unit = 
+		     ( update_count count_esc (s(a)) ~1 fset;
+                     census_con (~1, con);
+                     app (fn (con) => (census_con (~1, con))) cons)
+		in 
 		if ( dead_var x ) then
-		    ( update_count count_esc (s(a)) ~1 fset;
-		     app (fn (con) => (census_con (~1, con))) cons;
+		    ( cleanup ();
 		     xbnds fset rest body )
 		else 
 		     ( case (s(a)) of
@@ -830,13 +882,16 @@ struct
 						   | NONE => raise BUG )
 						
 					in
-					    ( replace x b fset; update_count count_esc (Var_e a) ~1 fset; xbnds fset rest body )
+					    ( replace x b fset;
+					     cleanup ();
+					     xbnds fset rest body )
 					end
 				  (* Can change to project_sum_record *)
 				  | SOME (S (r, {tagcount, sumtype}, sum_cons))  =>
 					let val _ = inc_click sum_record_click
 					    val _ = update_count count_esc (Var_e r) 1 fset
 					    val _ = update_count count_esc (Var_e a) ~1 fset
+					    val _ = map (fn (con) => (census_con (1, con))) sum_cons
 					    val (rest, body) = xbnds fset rest body
 					in 					  
 					    (( Exp_b ( x, xcon fset con, 
@@ -849,35 +904,37 @@ struct
 				  | _ =>  let val (rest,body) = xbnds fset rest body
 					  in 
 					      if (dead_var x ) then 
-						  ( update_count count_esc (s(a)) ~1 fset;
-						   app (fn (con) => (census_con (~1, con))) cons;
+						  (cleanup ();
 						   (rest,body) )
 					      else
 						 ( Exp_b ( x, xcon fset con, Prim_e(NilPrimOp (select label),
 										    map (xcon fset) cons, [ s(a) ]))::rest, body)
 					  end)
 			 | _ => raise BUG )
-
+		end
 		   (* ------------- Sum projection ... perhaps it was from a record ------------ *)
 		   | Exp_b ( x, con, Prim_e (NilPrimOp (project_sum sum), sum_cons, [ Var_e a ] )) =>
-			 if ( dead_var x ) 
-			     then ( update_count count_esc (s(a)) ~1 fset; 
-				   app (fn (con) => (census_con (~1, con))) sum_cons;
+			 let fun cleanup unit = 
+			     ( census_con(~1, con);
+			     update_count count_esc (s(a)) ~1 fset; 
+			     app (fn (con) => (census_con (~1, con))) sum_cons )
+			in 	   
+			     if ( dead_var x ) 
+			     then (cleanup();
 				   xbnds fset rest body) 
 			 else 
 			     let 
-				 val _ = HashTable.insert bind ( x, S (a, sum, sum_cons))
+				 val _ = if do_project_known then HashTable.insert bind ( x, S (a, sum, sum_cons)) else ()
 				 val (rest,body) = xbnds fset rest body
 			     in
 				 if (dead_var x )
-				     then (  update_count count_esc (s(a)) ~1 fset  ;
-					   app (fn (con) => (census_con (~1, con))) sum_cons;
+				     then (cleanup();
 					   (rest,body) )
 				 else
 				     ( Exp_b ( x, xcon fset con, Prim_e (NilPrimOp (project_sum sum), 
 									 map (xcon fset) sum_cons, [(s a)]))::rest, body)
 			     end 
-
+			 end
 		    (* ----------------- Variables --------- *)
 		    | Exp_b (x, con, Var_e v) =>
 			  ( inc_click var_click ;
@@ -898,19 +955,27 @@ struct
 			let val vclist = Util.set2list vcset
 			    val vars = map #1 vclist
 			    fun possible_func  v  =
-				look count_app v = 1 andalso look count_esc v = 0 
-			    fun remove_func 
+				do_inline andalso look count_app v = 1 andalso look count_esc v = 0 
+				
+				(* Even when we inline the function, the cons & kinds on the args and the return con
+				   go away, so we need to update the counts for them *)
+
+			    fun remove_rest
 				( vc as ( v, Function(eff, _, vklist, vclist, vlist, exp, con))) =  
 				(app (fn (var, kind) => census_kind (~1, kind)) vklist; 
 				 app (fn (var,con) => census_con (~1, con)) vclist; 
-				  census_exp ( ~1, exp); 
-				  census_con (~1, con) )
+				 census_con (~1, con))
+			    fun remove_func 
+				( vc as ( v, Function(eff, _, vklist, vclist, vlist, exp, con))) =  
+				( census_exp ( ~1, exp); 
+				 remove_rest vc
+				 )
 			    fun recur_func ( v, function) = 
-				let val newfset = VarSet.addList (fset, map #1 vclist)
+				let val newfset = VarSet.addList (fset, vars)
 				in ( v, xfunction newfset function)
 				end 
 			    (* Drop unused arguments from functions that don't escape *)
-			    fun drop_arg ( v, Function ( eff, a, vklist, vclist, vlist, exp, con)) = 
+			    (* fun drop_arg ( v, Function ( eff, a, vklist, vclist, vlist, exp, con)) = 
 				if look count_esc v = 0 then 
 				    let fun used v = 
 					look count_app v > 0 orelse look count_esc v > 0 orelse look count_rec v > 0
@@ -927,11 +992,13 @@ struct
 				    in 
 					(v, Function ( eff, a, vklist, vclist, vlist, exp, con))
 				    end 
-				else (v, Function ( eff, a, vklist, vclist, vlist, exp, con))
+				else (v, Function ( eff, a, vklist, vclist, vlist, exp, con)) *)
 			    (* val vclist = map drop_arg vclist *)
 			in
-			    if (Listops.orfold (fn v => (look count_rec v > 0)) (map #1 vclist)) then
-				if (dead_funcs vars ) then
+			    (* If any of the  functions are recursive, we won't inline them, just check to see
+			       if they are dead *)
+			    if (Listops.orfold (fn v => (look count_rec v > 0)) vars ) then
+				if (dead_funcs vars) then
 				    ( census_bnds (~1, [Fixopen_b vcset])   ; xbnds fset rest body)
 				else 
 				    let val (rest,body) = xbnds fset rest body
@@ -944,18 +1011,12 @@ struct
 				    ( map remove_func vclist ; xbnds fset rest body )
 				else
 				    let 		
-					val possible = VarSet.addList (VarSet.empty,(List.filter possible_func vars))
 					val _ = app  (fn (v, f) => HashTable.insert bind (v, F f)) vclist
 					val (rest,body) = xbnds fset rest body
 					fun final (vc as (v:var,c:function)) = 
-					    if (VarSet.member (possible,v) ) then
-						case HashTable.find bind v of
-						    SOME INLINED  =>   false 
-						  | _ => ( remove_func vc ; false)
-					    else
-						case HashTable.find bind v of
-						    SOME INLINED => false
-						  | _ =>( if dead_var v then (remove_func vc; false)  else true )
+					    case HashTable.find bind v of
+						SOME INLINED => (remove_rest vc ; false )
+					      | _ =>( if dead_var v then (remove_func vc; false)  else true )
 						       
 					val vclist' = map recur_func (List.filter final vclist)
 					    
@@ -965,7 +1026,7 @@ struct
 					   ( Fixopen_b ( list2set  vclist') :: rest, body)
 				    end
 			end
-
+		    
 		  (* ----------- Other expression bindings ----------- *)
 		  | Exp_b (x, con, exp)=> 
 			if is_pure exp
@@ -1032,25 +1093,25 @@ struct
 				  case exp' of 
 				      (* Unroll a  Roll *)
 				      Prim_e ( NilPrimOp (unroll), con , [ Prim_e (NilPrimOp (roll), clist2, [exp] ) ] ) =>
-					  exp
+					  (inc_click fold_click; exp)
 					  (* box an unbox *)
 				| Prim_e ( NilPrimOp (box_float (sz1)), [], 
 						      [ Prim_e (NilPrimOp (unbox_float(sz2)), [], [ exp ] ) ] ) =>
 				  if sz1 = sz2
-				      then exp
+				      then (inc_click fold_click; exp)
 				  else exp'
 				      (* unbox a box *)
 				| Prim_e ( NilPrimOp (unbox_float (sz1)), [], 
 						      [ Prim_e (NilPrimOp (box_float(sz2)), [], [ exp ] ) ] ) =>
 				  if sz1 = sz2
-				      then exp
+				      then (inc_click fold_click; exp)
 				  else exp'
 				      (* inject a known record into a faster version *)
 				| Prim_e ( NilPrimOp (inject info), [], 
 					  [ Var_e v ] ) =>
 				  ( case ( HashTable.find bind v)  of
 					SOME ( R(labels, exps ) ) =>
-					    Prim_e ( NilPrimOp (inject_record info), [], exps) 
+					    (inc_click fold_click; Prim_e ( NilPrimOp (inject_record info), [], exps) )
 				      | NONE =>  exp' )  
 					  
 				 | _ => exp' 
@@ -1060,7 +1121,7 @@ struct
 		    (* Application, look for possible inlining *)
 		  | App_e (openness, Var_e f, clist, elist, elist2) =>
 			let (* Drop unused fcn args *)
-			    val (elist, elist2) = case HashTable.find drop_table f of
+			    (* val (elist, elist2) = case HashTable.find drop_table f of
 				SOME (elist_mask, elist2_mask) =>
 				    let fun foo (v,b) = (if b then true
 							 else ( update_count count_esc (subst v) ~1 fset; false ))
@@ -1069,13 +1130,13 @@ struct
 					 map #1 (filter foo  (Listops.zip elist2 elist2_mask)) )
 				    end 
 			      | NONE => (elist, elist2)
-				      
+				*)      
 			val new_app = App_e (openness, s(f), map (xcon fset) clist,
 					     map subst elist, map subst elist2)
 			(* val _ = (print "S(f) is "; Ppnil.pp_exp (s(f)) ; print "\n") *)
 			val Var_e sf = s(f)
 		    in 
-			if look count_app sf = 1 andalso look count_esc sf = 0 
+			if do_inline andalso look count_app sf = 1 andalso look count_esc sf = 0 
 			    then 
 				( case (HashTable.find bind sf) of
 				      SOME (F (Function( effect, recur, vklist, vclist, vlist, exp, con))) =>
@@ -1158,7 +1219,7 @@ struct
 			  (  print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
 			   print "ITERATION\n";
 			   print_round_clicks();
-			   app Ppnil.pp_bnd bnds;print "\n";
+			   app Ppnil.pp_bnd bnds; print "\n";
 			   print_stats() )
 		      else 
 			  print_round_clicks()) ; 
