@@ -11,8 +11,8 @@ echo Skipping:  `{awk '/^#/ {next} $2 ~ /skip/ {print $1 " "}' testlist.txt}
 
 # Run the ones we expect to fail
 echo 'These tests should fail....'
-./Runtest.$objtype.exe '@fixheap=20000' $* -F `{awk '/^#/ {next} $2 ~ /fail/ {print $1}' testlist.txt}
+../Bin/$objtype/runtest '@fixheap=20000' $* -F `{awk '/^#/ {next} $2 ~ /fail/ {print $1}' testlist.txt}
 
 # Run the ones we expect to succeed
 echo 'These tests should succeed....'
-./Runtest.$objtype.exe '@fixheap=20000' $* -S `{awk '/^#/ {next} $2 ~ /pass/ {print $1}' testlist.txt}
+../Bin/$objtype/runtest '@fixheap=20000' $* -S `{awk '/^#/ {next} $2 ~ /pass/ {print $1}' testlist.txt}
