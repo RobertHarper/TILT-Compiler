@@ -20,7 +20,6 @@ sig
     type sv = Rtl.sv
     type reg = Rtl.reg
 
-
     (* A location contains a value.  Local values are in registers while those
        bound at top level reside at global labels *)
     datatype location =
@@ -52,7 +51,7 @@ sig
    val set_args : reg list * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 
-   val get_mutable : unit -> (label * rep) list
+   val get_mutable : unit -> label list
    val pl : Rtl.proc list ref
    val dl : Rtl.data list ref
    
@@ -141,7 +140,7 @@ sig
    val unboxFloat : regi -> regf
    val fparray : state * term list -> regi * state
 
-   (* make_record statically allocates if all the arguments are values
+   (* make_record statically allocates if all the arguments are values or we are at top-level
      make_record_const will always statically allocate
      make_record_mutable will never statically allocate *)
    val make_record : state * regi option * rep list * term list -> term * state

@@ -23,6 +23,27 @@ structure Machine =
     val Rzero   = R 0   (* Standard Sparc convention *)
     val Rsp     = R 14  (* Standard Sparc convention *)
     val Rat     = R 16  (* Standard Sparc convention *)
+    val Rframe  = R 30   (* Standard Sparc convention - we reserve but do not keep this up to date
+			    Messing up the frame pointer can cause extremely weird behavior.
+			    For example, the VM system may be triggered at any point and it will 
+			    freak out if this register contains a weird value. To demonstrate,
+			    the following program will act weird when compiled with cc or gcc 
+			    unless the static option is used:
+
+			    .text
+			    .global main
+			  loop:
+			    retl
+			    !	ba	loop		! PC is here when illegal instruction is delivered
+			    nop			! delay slot
+			  main:
+			    save	%sp,-96,%sp
+			    mov	1, %fp		! this is the cause of the illegal instruction; change to 0 for seg fault
+			    call	loop
+			    nop			! delay slot
+			    ret
+			    restore
+			  *)
     val Rra     = R 15  (* Standard Sparc convention *)
     val Rexnarg = R 15  (* Rexnarg and Rra are never simultaneously live
 			      since exnarg is active only when about to raise
@@ -582,7 +603,7 @@ structure Machine =
     | assign2s UNKNOWN = "UNKNOWN"    
 
    val special_iregs = listunique[Rzero, Rexnptr, Rth, R 3, Rheap, Rhlimit, R 6, R 7,
-				  Rat, Rat2, Rsp, Rexnarg, Rra]
+				  Rat, Rat2, Rsp, Rexnarg, Rra, Rframe]
    val special_fregs = listunique[Fat, Fat2]
 
    val general_iregs = listdiff(int_regs, listunion(special_iregs, map ireg exclude_intregs))

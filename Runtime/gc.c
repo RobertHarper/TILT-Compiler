@@ -18,6 +18,7 @@
 
 
 
+
 /* use generational by default */
 long paranoid = 0;
 long diag = 0;
@@ -56,8 +57,8 @@ Object_Profile_t collected_object_profile;
 
 
 extern int module_count;
-extern value_t SML_GLOBALS_BEGIN_VAL;
-extern value_t SML_GLOBALS_END_VAL;
+extern value_t GLOBALS_BEGIN_VAL;
+extern value_t GLOBALS_END_VAL;
 
 static range_t null_range;
 
@@ -296,8 +297,8 @@ void paranoid_check_heap(Heap_t *fromspace, Heap_t *tospace)
       }
   /* check globals */
     for (mi=0; mi<module_count; mi++) {
-      value_t *current = (value_t *)((&SML_GLOBALS_BEGIN_VAL)[mi]);
-      value_t *stop = (value_t *)((&SML_GLOBALS_END_VAL)[mi]);
+      value_t *current = (value_t *)((&GLOBALS_BEGIN_VAL)[mi]);
+      value_t *stop = (value_t *)((&GLOBALS_END_VAL)[mi]);
       for ( ; current < stop; current++)
 	{
 	  static int newval = 72000;
@@ -355,13 +356,13 @@ void measure_semantic_garbage_before()
 
 
 
-void debug_after_collect()
+void debug_after_collect(Heap_t *fromheap, Heap_t* old_fromheap)
 {
 #ifdef DEBUG
       value_t a = fromheap->bottom, b = fromheap->top;
-      gc_sanity_stackreg_check(saveregs,fromheap,(int *) sp, (int *)stack->top);
+      /*      gc_sanity_stackreg_check(saveregs,fromheap,(int *) sp, (int *)stack->top); */
       if (SHOW_HEAPS)
-	show_heap("FINAL FROM",fromheap->bottom,allocptr,fromheap->top);
+	show_heap("FINAL FROM",fromheap->bottom,fromheap->alloc_start,fromheap->top);
       fromheap->bottom = 0;
       fromheap->top = 0;
       if (SHOW_HEAPS)
@@ -424,18 +425,27 @@ Thread_t *gc(Thread_t *curThread)
       assert(0);
     }
 
-#ifdef DEBUG
-  printf("NumGC = %d\n",NumGC);
-#endif
+
+  /*  printf("NumGC = %d started\n",NumGC); */
+
   switch (collector_type) 
     {
     case Semispace : { gc_semi(curThread); break; }
     case Generational : { gc_gen(curThread,0); break; }
     case Parallel : { gc_para(curThread); break; }
     }
-#ifdef DEBUG
-  printf("NumGC = %d over\n",NumGC-1);
-#endif
+
+  {
+    static int count = 0;
+    count++;
+    if (count >= 33) {
+      return;
+    }
+    /*       printf("count = %d\n", count); */
+  }
+
+  /*  printf("NumGC = %d over\n",NumGC); */
+
   return curThread;
 }
 

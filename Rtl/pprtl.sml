@@ -120,8 +120,7 @@ struct
     | calltype2s (ML_TAIL r) = "ML_TAIL(" ^ (regi2s r) ^")"
     | calltype2s C_NORMAL = "C_NORMAL"
 
-  fun pp_LabelPair' (l,t) =
-      HOVbox [String (label2s l),String (rep2s t)]
+  fun pp_Label' l = String(label2s l)
 
   fun pp_List' pr l = 
      let fun f (h::t) = String "," :: Break :: pr h :: f t
@@ -331,7 +330,7 @@ struct
 		      pp_code' code,
 		      String "}", Break])
 	   
-  fun pp_Module' (MODULE{procs,data,main,mutable}) =
+  fun pp_Module' (MODULE{procs,data,main,global}) =
       Vbox0 0 1 ([Break,
 		 String ("main = "^(label2s main)),
 		 Break, Break]
@@ -342,8 +341,8 @@ struct
 		  Break,
 		  pp_DataList'  data,
 		  Break,
-		  HOVbox[String "mutable vars = ",
-			 pp_List' pp_LabelPair' mutable],
+		  HOVbox[String "global = ",
+			 pp_List' pp_Label' global],
 		  Break])
 
   fun pp_rep_path _ = String "rep_path_not_done"

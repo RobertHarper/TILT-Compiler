@@ -290,7 +290,10 @@ struct
      | negate_icmp BGE = BL
      | negate_icmp BL  = BGE
      | negate_icmp BLE = BG
-
+     | negate_icmp BLEU = BGU
+     | negate_icmp BGU = BLEU
+     | negate_icmp BCC = BCS
+     | negate_icmp BCS = BCC
 
    fun translate_fcmp Rtl.EQ = FBE
      | translate_fcmp Rtl.NE = FBNE

@@ -45,8 +45,7 @@ struct
 
 (* ----------------------------------------------------------------- *)
 
-   fun allocateModule (prog as Rtl.MODULE{procs, data, main, 
-					  mutable}) =
+   fun allocateModule (prog as Rtl.MODULE{procs, data, main, global}) =
      let
       
        val {callee_map, rtl_scc, ...} = Recursion.procGroups prog
@@ -353,11 +352,12 @@ struct
 
        val main' = Machine.msLabel main
        val client_entry = main'^"_client_entry"
-       val sml_global = main'^"_SML_GLOBALS_BEGIN_VAL"
-       val end_sml_global = main'^"_SML_GLOBALS_END_VAL"
+       val global_start = main'^"_GLOBALS_BEGIN_VAL"
+       val global_end = main'^"_GLOBALS_END_VAL"
+       val trace_global_start = main'^"_TRACE_GLOBALS_BEGIN_VAL"
+       val trace_global_end = main'^"_TRACE_GLOBALS_END_VAL"
 
        
-
        val _ = app emitString programHeader;
        val _ = dumpDatalist (Tracetable.MakeTableHeader main');
 
@@ -376,21 +376,20 @@ struct
 
 
        app emitString dataStart;
-       emitString ("\t.globl "^sml_global^"\n");
-       emitString ("\t.globl "^end_sml_global^"\n");
-       emitString (sml_global^":\n");
-
+       emitString ("\t.globl "^global_start^"\n");
+       emitString ("\t.globl "^global_end^"\n");
+       emitString (global_start^":\n");
        dumpCodeLabel code_labels;
        dumpDatalist data;
-       app emitString dataStart;
-       emitString ("\n"^end_sml_global^":   ");
-       emitString commentHeader;
-       emitString " filler next\n";
-       emitString ("\t.long 0\n\n");
-       dumpDatalist (Tracetable.MakeMutableTable 
-		          (main', 
-			   map (fn (l, rep) => (l,#2(Toasm.translateRep rep)))
-			        mutable));
+       emitString (global_end^":\n");
+       emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
+
+       emitString ("\t.globl "^trace_global_start^"\n");
+       emitString ("\t.globl "^trace_global_end^"\n");
+       emitString (trace_global_start^":\n");
+       dumpDatalist (map (fn l => DATA l) global);
+       emitString (trace_global_end^":\n");
+       emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
 
        ()
      end (* allocateProg *)

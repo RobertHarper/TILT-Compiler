@@ -231,10 +231,10 @@ void stats_finish()
 	 finish.ru_idrss,	          finish.ru_isrss,
 	 finish.ru_minflt,	          finish.ru_majflt,   finish.ru_nswap,
 	 finish.ru_nvcsw,	          finish.ru_nivcsw);
-  printf("MISC:    GCTableSize   = %9d    CodeSize = %d\n"
+  printf("MISC:    GCTableSize   = %9d    \n"
 	 "         SMLGlobalSize = %9d    \n"
 	 "         GlobalTableSz = %9d    MutableTableSz = %d\n",
-	 GCTableSize,                     CodeSize,
+	 GCTableSize,                    
          SMLGlobalSize,                   
 	 GlobalTableSize,    MutableTableSize);
 #endif

@@ -27,7 +27,6 @@ extern int module_count;
 
 static Heap_t *fromheap = NULL, *toheap = NULL;
 static Queue_t *global_roots = 0;
-static Queue_t *promoted_global_roots = 0;
 
 
 /* ------------------  Semispace array allocation routines ------------------- */
@@ -185,9 +184,8 @@ void gc_semi(Thread_t *curThread)
 
   /* Compute the roots from the stack and register set */
   local_root_scan(curThread,fromheap);
-  global_root_scan(global_roots,promoted_global_roots,fromheap);
+  global_root_scan(global_roots,fromheap);
   Enqueue(root_lists,global_roots);
-  Enqueue(root_lists,promoted_global_roots);
 
   /* Also add in the locative roots */
   QueueClear(loc_roots);
@@ -317,7 +315,6 @@ void gc_init_semi()
   fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   global_roots = QueueCreate(0,100);
-  promoted_global_roots = QueueCreate(0,100);
 }
 
 

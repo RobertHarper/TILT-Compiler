@@ -29,7 +29,6 @@ extern int pagesize;
 
 static Heap_t *fromheap = NULL, *toheap = NULL;
 static Queue_t *global_roots = 0;
-static Queue_t *promoted_global_roots = 0;
 
 
 /* ------------------  Parallel array allocation routines ------------------- */
@@ -131,8 +130,8 @@ static void stop_copy(SysThread_t *sysThread)
   /* The "first" GC thread is in charge of the globals */
   if (isFirst)
     {
-      /* Since it's semispace, we must consider (all of) global_roots each time */
-      global_root_scan(global_roots,promoted_global_roots,fromheap);
+      /* Since it's semispace, we must consider the global_roots each time */
+      global_root_scan(global_roots,fromheap);
       while (!(QueueIsEmpty(global_roots))) {
 	value_t *root = Dequeue(global_roots);
 	value_t temp = *root;
@@ -319,9 +318,9 @@ void gc_para(Thread_t *curThread)
   value_t *tmp1, *tmp2;
   int req_size = saveregs[ASMTMP_REG] - (int) alloc;
 
+  assert(saveregs[ALLOCPTR_REG] <= saveregs[ALLOCLIMIT_REG]);
   assert(alloc <= limit);    
-  assert(limit == sysThread->limit);
-
+  assert(writelist_cursor <= writelist_end); /* XXX writelist is not synchronized */
   
   /* See if we can grab another page from the fromspace; if not, then it's time to stop and copy */
   GetHeapArea(fromheap,pagesize,&tmp1,&tmp2);
@@ -370,7 +369,6 @@ void gc_init_para()
   fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   global_roots = QueueCreate(0,100);
-  promoted_global_roots = QueueCreate(0,100);
   SharedCursor = 0;
 }
 

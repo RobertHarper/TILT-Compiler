@@ -19,14 +19,12 @@
 
 
 extern Queue_t *ScanQueue;
-extern value_t MUTABLE_TABLE_BEGIN_VAL;
-extern value_t MUTABLE_TABLE_END_VAL;
+
 
 static int floatheapsize = 16384 * 1024;
 static int floatbitmapsize = 128;
 Queue_t   *float_roots = 0;
 static Queue_t *global_roots;
-static Queue_t *promoted_global_roots;
 
 
 enum GCType { Minor, Major, ForcedMajor, Complete };
@@ -213,26 +211,6 @@ value_t alloc_bigfloatarray_gen(int log_len, double init_val, int ptag)
 
 /* --------------------- Generational collector --------------------- */
 
-value_t *forward_mutables_gen(value_t *to_ptr, 
-			      range_t *from_range, range_t *from2_range, range_t *to_range)
-{
-  int mi,i;
-  for (mi=0; mi<module_count; mi++)
-    {
-      for (i=(value_t)*((&MUTABLE_TABLE_BEGIN_VAL)+mi);
-	   i<(value_t)*((&MUTABLE_TABLE_END_VAL)+mi); i+=4)
-	{
-	  value_t *table_entry = (value_t *)(((value_t *)i)[0]);
-	  table_entry --;
-	  while (GET_TYPE(*table_entry) == RECORD_SUB_TAG)
-	    table_entry--;
-          /* notice that scan_major won't work here because of the stopping criterion */
-	  to_ptr = scan_oneobject_major(&table_entry,to_ptr,
-			                from_range,from2_range,to_range);
-	}
-    }
-  return to_ptr;
-}
 
 value_t *forward_writelist_major(value_t *more_roots, value_t *to_ptr, 
 				 range_t *from_range, range_t *from2_range, range_t *to_range)
@@ -357,8 +335,6 @@ void gc_gen(Thread_t *curThread, int isMajor)
 
   /* Compute the roots from the stack and register set */
   local_root_scan(curThread,nursery);
-  global_root_scan(global_roots,promoted_global_roots,nursery);
-  Enqueue(root_lists,promoted_global_roots);
 
   /* -------------- the actual heap collection ---------------------- */
     {
@@ -488,6 +464,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 #endif
 
 	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
+	  global_root_scan(global_roots,nursery);
 	  Enqueue(root_lists,global_roots);
 	  SetRange(&from_range,nursery->bottom, nursery->top);
 	  SetRange(&from2_range,old_fromheap->bottom, old_alloc_ptr);
@@ -511,7 +488,6 @@ void gc_gen(Thread_t *curThread, int isMajor)
 					   &from_range, &from2_range, &to_range);
 	  
 	  to_ptr = forward_gen_locatives(to_ptr,&from_range,&from2_range,&to_range); 
-/*	  to_ptr = forward_mutables_gen(to_ptr,&from_range,&from2_range,&to_range);  */
 	  to_ptr = scan_major(old_toheap->bottom,to_ptr,(value_t *)to_range.high,
 			      &from_range,&from2_range,&to_range);
 
@@ -571,7 +547,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 
 
     Heap_Unprotect(old_fromheap);
-    debug_after_collect();
+    debug_after_collect(nursery, old_fromheap);
 
     saveregs[ALLOCPTR_REG] = nursery->bottom;
     saveregs[ALLOCLIMIT_REG] = nursery->top;
@@ -627,7 +603,6 @@ void gc_init_gen()
   floatbitmap = CreateBitmap(floatheapsize / floatbitmapsize);
   float_roots = QueueCreate(0,100);
   global_roots = QueueCreate(0,100);
-  promoted_global_roots = QueueCreate(0,100);
 #ifdef OLD_ALLOC
   old_alloc_ptr = old_fromheap->alloc_start;
   old_alloc_limit = old_fromheap->top;

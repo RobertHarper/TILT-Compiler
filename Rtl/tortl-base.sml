@@ -81,7 +81,7 @@ struct
   (* ----- Global data structures ------------------------------
    dl: list of data for module
    pl: list of procedures for the entire module
-   mutable : global variables that may contain pointers to heap objects
+   mutable : addresses of global objects that may contain pointers to heap objects
    gvarmap: how a top-level NIL code variable is represented at the RTL level
    gconvarmap: how a top-level NIL code type variable is represented at the RTL level
    varmap: how a NIL variable is represented at the RTL level
@@ -113,7 +113,7 @@ struct
 	print "\n\n")
 
    local
-       val mutable : (label * rep) list ref = ref nil
+       val mutable : label list ref = ref nil
    in  fun add_mutable lr = mutable := lr :: !mutable
        fun get_mutable() = !mutable
        fun reset_mutable() = mutable := nil
@@ -921,52 +921,236 @@ struct
 		  add_instr(ADD(reg,REG size,dest))
 	      end
 
+
+  fun repIsPointer rtl_rep = (case rtl_rep of
+				  TRACE  => true
+				| COMPUTE _ => true
+				| _ => false)
+
+  (* -- create a record given a list of tagwords for the fields,
+   the first n fields which are already in integer registers,
+   and the rest of the fields, which are values *)
+
+
+  fun make_record_core (const, state, destopt, reps, vl : term list, labopt) = 
+    let 
+
+	val is_mutable = ref false
+	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
+	val tagwords = mk_recordtag reps
+	val dest = (case destopt of
+			NONE => alloc_regi TRACE
+		      | SOME d => d)
+	val tagwords = 
+	    if (not (!HeapProfile))
+		then tagwords
+	    else ({dynamic=nil,static=MakeProfileTag()}) :: tagwords
+        (* total number of words needed *)
+	val words_alloced = length vl+length tagwords
+
+
+	(* shadow heapptr with thunk to prevent accidental use *)
+	val (heapptr,state) = 
+	    if const
+		then let fun f _ = error "should not use heapptr here"
+		     in (add_data(COMMENT "static record tag");
+			 (f, state))
+		     end
+	    else let val state = needgc(state,IMM(words_alloced))
+		 in  (fn _ => heapptr, state)
+		 end
+
+	fun loadpath path = 
+	    let val tipe = alloc_regi TRACE
+		fun project (cur,[]) = cur
+		  | project (cur,i::rest) = (add_instr(LOAD32I(EA(cur,4*i),tipe)); project(tipe,rest))
+	    in  case path of
+		     Projvar_p (regi,indices) => project(regi,indices)
+		   | Projlabel_p(label,indices) => (* NOT global; is label *)
+			 (add_instr(LADDR(label,0,tipe));
+			  project(tipe,indices))
+		   | Notneeded_p => error "record: Notneeded_p hit"
+	    end
+
+	fun storenew(base,offset,r,rep) = 
+	    (case rep of
+		 TRACE => add_instr(INIT(EA(base,offset),r,NONE))
+	       | NOTRACE_INT => add_instr(STORE32I(EA(base,offset),r))
+	       | NOTRACE_CODE => add_instr(STORE32I(EA(base,offset),r))
+	       | NOTRACE_LABEL => add_instr(STORE32I(EA(base,offset),r))
+	       | COMPUTE path => let val tipe = loadpath path
+				     val tmp = alloc_regi NOTRACE_INT
+				 in  add_instr(CMPUI(GE,tipe,IMM 3, tmp));
+				     add_instr(INIT(EA(base,offset),r,SOME tmp))
+				 end
+	       | _ => error "storenew got funny rep")
+
+	fun scan_vals (offset,_,[]) = offset
+	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
+	  | scan_vals (offset,rep::reps,vl::vls) =
+	    ((case (const,vl) of
+		  (true, VALUE (INT w32)) => add_data(INT32 w32)
+		| (true, VALUE (TAG w32)) => add_data(INT32 w32)
+		| (true, VALUE (RECORD (l,_))) => add_data(DATA l)
+		| (true, VALUE (LABEL l)) => add_data(DATA l)
+		| (true, VALUE (CODE l)) => add_data(DATA l)
+		| (true, VALUE (REAL l)) => error "make_record_core given REAL"
+		| (true, VALUE (VOID _)) => error "make_record_core given VOID"
+		| _ => let val r = load_ireg_term(vl,NONE)
+		       in  if const 
+			       then 
+				   let val fieldl = fresh_data_label "location"
+				       val addr = alloc_regi NOTRACE_LABEL
+				       val isPointer = repIsPointer rep
+				   in  (add_data(DLABEL fieldl);
+					add_data(INT32 uninit_val);
+					add_instr(LADDR(fieldl,0,addr));
+					if isPointer 
+					    then (is_mutable := true;
+						  add_instr(MUTATE(addr, IMM 0, r, NONE)))
+					else add_instr(STORE32I(EA(addr,0),r)))
+				   end
+			   else 
+			       storenew(heapptr(),offset,r,rep)
+		       end);
+	    scan_vals(offset+4,reps,vls))
+
+        (* sometime the tags must be computed at run-time *)
+	fun do_dynamic (r,{bitpos,path}) =
+	    let val tipe = loadpath path
+		val tmp1 = alloc_regi NOTRACE_INT
+		val tmp2 = alloc_regi NOTRACE_INT
+	    in (* add_instr(LI(i2w 0,tmp1));
+		add_instr(CMV(NE,tipe,IMM 1,tmp1)); *)
+		add_instr(CMPUI(GT, tipe, IMM 3, tmp1)); (* is it not an int *)
+		add_instr(SLL(tmp1,IMM bitpos,tmp2));
+		add_instr(ORB(tmp2,REG r,r))
+	    end
+
+      (* usually, the tags are known at compile time *)	
+      fun scantags (offset,nil : Rtltags.tags) = offset
+	| scantags (offset,({static,dynamic}::vl) : Rtltags.tags) =
+	  (if const
+	       then (if (null dynamic)
+			 then add_data(INT32 static)
+		     else error "making constant record with dynamic tag")
+	   else 
+	       let val r = alloc_regi(NOTRACE_INT)
+	       in  add_instr (LI(static,r));
+		   app (fn a => do_dynamic(r,a)) dynamic;
+		   add_instr(STORE32I(EA(heapptr(),offset),r)) (* tags *)
+	       end;
+	   scantags(offset+4,vl))
+
+      val offset = 0
+      val offset = scantags(offset,tagwords);
+      val (result,templabelopt) = 
+	  if const
+	      then let val label = (case labopt of
+					SOME lab => lab
+				      | NONE => fresh_data_label "record")
+		       val _ = if (!is_mutable) then add_mutable label else ()
+		   in  (add_data(DLABEL label);
+			(VALUE(LABEL label), SOME label))
+		   end
+	  else (LOCATION (REGISTER (false,I dest)), NONE)
+
+      val offset = scan_vals (offset, reps, vl)
+      val _ = if const
+		  then ()
+	      else (add(heapptr(),4 * length tagwords,dest);
+		    add(heapptr(),4 * words_alloced,heapptr()))
+      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length vl)) ^ " record"))
+    in  (result, state)
+    end
+
+  fun make_record_help (const, state, destopt, _ , [], _) = (unit_term, state)
+    | make_record_help (const, state, destopt, reps, terms, lapopt) =
+      let  fun check [] = make_record_core(const, state, destopt, reps, terms, lapopt)
+	     | check ((VALUE (VOID _))::_) = (VALUE(VOID Rtl.TRACE), state)
+	     | check (_::rest) = check rest
+      in   check terms
+      end
+
+  (* These are the interface functions: determines static allocation *)
+  fun make_record (state, destopt, reps, vl) = 
+      let fun is_varval (VALUE vv) = true 
+	    | is_varval _ = false
+	  val const = (!do_constant_records andalso ((istoplevel()) orelse (andfold is_varval vl)))
+      in  make_record_help(const,state,destopt,reps,vl,NONE)
+      end
+
+  and make_record_const (state, destopt, reps, vl, labopt) = 
+      let val res as (lv,_) = make_record_help(!do_forced_constant_records,state, 
+					       destopt, reps, vl, labopt)
+	  val labopt2 = (case lv of
+			     VALUE(RECORD(lab,_)) => SOME lab
+			   | VALUE(LABEL lab) => SOME lab
+			   | _ => NONE)
+	  val _ = (case (labopt,labopt2) of
+		       (NONE,_) => ()
+		     | (SOME lab, SOME lab') =>
+			   if (Rtl.eq_label(lab,lab'))
+			       then () else error "make_record_const failed"
+		     | _ => error "make_record_const failed")
+      in  res
+      end
+
+  and make_record_mutable (state, destopt, reps, vl) = 
+      make_record_help(false,state, destopt, reps, vl,NONE)
+
+
   fun allocate_global (label,labels,rtl_rep,lv) = 
       let 
-	  val is_pointer = (case rtl_rep of
-				TRACE  => true
-			      | COMPUTE _ => true
-			      | _ => false)
-	  val _ = (case lv of
-		       LOCATION (REGISTER (_, F _)) => add_data(ALIGN QUAD)
-		     | VALUE (REAL _) => add_data(ALIGN QUAD)
-		     | _ => ())
-	  val _ = app (fn l => add_data(DLABEL l)) labels
-	  val _ = add_data(DLABEL (label));
-	  val addr = alloc_regi NOTRACE_LABEL
-	  val loc = alloc_regi NOTRACE_LABEL
+	  fun add_label align = (if align then add_data(ALIGN QUAD) else ();
+				 app (fn l => add_data(DLABEL l)) (label::labels))
+	  fun add_tag() = let val [tagData] = mk_recordtag [TRACE]
+			      val {dynamic=[],static=tag} = tagData
+			  in  add_mutable label; add_data (INT32 tag)
+			  end
+	  val is_pointer = repIsPointer rtl_rep
+	  fun get_addr() = let val addr = alloc_regi NOTRACE_LABEL
+			   in  add_instr(LADDR(label,0,addr)); addr
+			   end
       in  (case lv of
-	     LOCATION varloc =>
-		(add_mutable(label,rtl_rep);
-		 case varloc of
-		     REGISTER (_,reg) => 
-			 (add_instr(LADDR(label,0,addr));
-			  (case reg of
-			       I r => (add_data(INT32 uninit_val);
-				       add_instr(STORE32I(EA(addr,0),r)))
-			     | F r => (add_data(FLOAT "0.0");
-				       add_instr(STOREQF(EA(addr,0),r)))))
-		   | GLOBAL (l,rep) => 
-			 let val value = alloc_regi rep
-			 in  (add_data(INT32 uninit_val);
-			      add_instr(LADDR(label,0,addr));
-			      add_instr(LADDR(l,0,loc));
-			      add_instr(LOAD32I(EA(loc,0),value));
-			      add_instr(STORE32I(EA(addr,0),value)))
-			 end)
-	     | VALUE (VOID _) => error "alloc_global got nvoid"
-	     | VALUE (INT w32) => add_data(INT32 w32)
-	     | VALUE (TAG w32) => add_data(INT32 w32)
-	     | VALUE (REAL l) => let val fr = alloc_regf()
-				 in  add_data(FLOAT "0.0");
-				     add_instr(LADDR(l,0,addr));
-				     add_instr(LOADQF(EA(addr,0), fr));
-				     add_instr(LADDR(label,0,addr));
-				     add_instr(STOREQF(EA(addr,0), fr))
-				 end
-	     | VALUE (RECORD (l,_)) => add_data(DATA l)
-	     | VALUE (LABEL l) => add_data(DATA l)
-	     | VALUE (CODE l) => add_data(DATA l))
+	     LOCATION (REGISTER (_,reg)) =>
+		 (case reg of
+		      I r => (if is_pointer then add_tag() else ();
+			      add_label false;
+			      add_data(INT32 uninit_val);
+			      if is_pointer 
+				  then add_instr(MUTATE(get_addr(), IMM 0,r, NONE))
+			      else add_instr(STORE32I(EA(get_addr(),0),r)))
+		    | F r => (add_label true;
+			      add_data(FLOAT "0.0");
+			      add_instr(STOREQF(EA(get_addr(),0),r))))
+	   | LOCATION (GLOBAL (l,rep)) => 
+		      let val value = alloc_regi rep
+			  val loc = alloc_regi NOTRACE_LABEL
+		      in  (if is_pointer then add_tag() else ();
+			   add_label false;
+			   add_data(INT32 uninit_val);
+			   add_instr(LADDR(l,0,loc));
+			   add_instr(LOAD32I(EA(loc,0),value));
+			   if is_pointer
+			       then add_instr(MUTATE(get_addr(), IMM 0, value, NONE))
+			   else add_instr(STORE32I(EA(get_addr(),0),value)))
+		      end
+	   | VALUE (VOID _) => (print "Warning: alloc_global got a VOID\n";
+				add_label false; add_data(INT32 0w0))
+	   | VALUE (INT w32) => (add_label false; add_data(INT32 w32))
+	   | VALUE (TAG w32) => (add_label false; add_data(INT32 w32))
+	   | VALUE (REAL l) => let val fr = alloc_regf()
+				   val addr2 = alloc_regi NOTRACE_LABEL
+			       in  add_label true;
+				   add_data(FLOAT "0.0");
+				   add_instr(LADDR(l,0,addr2));
+				   add_instr(LOADQF(EA(addr2,0), fr));
+				   add_instr(STOREQF(EA(get_addr(),0), fr))
+			       end
+	   | VALUE (RECORD (l,_)) => (add_label false; add_data(DATA l))
+	   | VALUE (LABEL l) => (add_label false; add_data(DATA l))
+	   | VALUE (CODE l) => (add_label false; add_data(DATA l)))
       end
 
 
@@ -1169,167 +1353,6 @@ struct
     val shuffle_iregs = shuffle (eqregi, iclone, MV)
     val shuffle_regs  = shuffle (eqreg, clone, mv)
   end
-
-
-  (* -- create a record given a list of tagwords for the fields,
-   the first n fields which are already in integer registers,
-   and the rest of the fields, which are values *)
-
-
-  fun make_record_help (const, state, destopt, _ , [], _) : term * state = (unit_term, state)
-    | make_record_help (const, state, destopt, reps : rep list, vl : term list, labopt) = 
-    let 
-
-	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
-	val tagwords = mk_recordtag reps
-	val dest = (case destopt of
-			NONE => alloc_regi TRACE
-		      | SOME d => d)
-	val tagwords = 
-	    if (not (!HeapProfile))
-		then tagwords
-	    else ({dynamic=nil,static=MakeProfileTag()}) :: tagwords
-        (* total number of words needed *)
-	val words_alloced = length vl+length tagwords
-
-
-	(* shadow heapptr with thunk to prevent accidental use *)
-	val (heapptr,state) = 
-	    if const
-		then let fun f _ = error "should not use heapptr here"
-		     in (add_data(COMMENT "static record tag");
-			 (f, state))
-		     end
-	    else let val state = needgc(state,IMM(words_alloced))
-		 in  (fn _ => heapptr, state)
-		 end
-
-	fun loadpath path = 
-	    let val tipe = alloc_regi TRACE
-		fun project (cur,[]) = cur
-		  | project (cur,i::rest) = (add_instr(LOAD32I(EA(cur,4*i),tipe)); project(tipe,rest))
-	    in  case path of
-		     Projvar_p (regi,indices) => project(regi,indices)
-		   | Projlabel_p(label,indices) => (* NOT global; is label *)
-			 (add_instr(LADDR(label,0,tipe));
-			  project(tipe,indices))
-		   | Notneeded_p => error "record: Notneeded_p hit"
-	    end
-
-	fun storenew(base,offset,r,rep) = 
-	    (case rep of
-		 TRACE => add_instr(INIT(EA(base,offset),r,NONE))
-	       | NOTRACE_INT => add_instr(STORE32I(EA(base,offset),r))
-	       | NOTRACE_CODE => add_instr(STORE32I(EA(base,offset),r))
-	       | NOTRACE_LABEL => add_instr(STORE32I(EA(base,offset),r))
-	       | COMPUTE path => let val tipe = loadpath path
-				     val tmp = alloc_regi NOTRACE_INT
-				 in  add_instr(CMPUI(GE,tipe,IMM 3, tmp));
-				     add_instr(INIT(EA(base,offset),r,SOME tmp))
-				 end
-	       | _ => error "storenew got funny rep")
-
-	fun scan_vals (offset,_,[]) = offset
-	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
-	  | scan_vals (offset,rep::reps,vl::vls) =
-	    ((case (const,vl) of
-		  (true, VALUE (INT w32)) => add_data(INT32 w32)
-		| (true, VALUE (TAG w32)) => add_data(INT32 w32)
-		| (true, VALUE (RECORD (l,_))) => add_data(DATA l)
-		| (true, VALUE (LABEL l)) => add_data(DATA l)
-		| (true, VALUE (CODE l)) => add_data(DATA l)
-		| (true, VALUE (REAL l)) => error "make_record given REAL"
-		| (true, VALUE (VOID _)) => error "make_record given VOID"
-		| _ => let val r = load_ireg_term(vl,NONE)
-		       in  if const 
-			       then 
-				   let val fieldl = fresh_data_label "location"
-				       val addr = alloc_regi NOTRACE_LABEL
-				   in  (add_data(DLABEL fieldl);
-					add_mutable (fieldl, rep);
-					add_data(INT32 uninit_val);
-					add_instr(LADDR(fieldl,0,addr));
-					add_instr(STORE32I(EA(addr,0),r)))
-				   end
-			   else 
-			       storenew(heapptr(),offset,r,rep)
-		       end);
-	    scan_vals(offset+4,reps,vls))
-
-        (* sometime the tags must be computed at run-time *)
-	fun do_dynamic (r,{bitpos,path}) =
-	    let val tipe = loadpath path
-		val tmp1 = alloc_regi NOTRACE_INT
-		val tmp2 = alloc_regi NOTRACE_INT
-	    in (* add_instr(LI(i2w 0,tmp1));
-		add_instr(CMV(NE,tipe,IMM 1,tmp1)); *)
-		add_instr(CMPUI(GT, tipe, IMM 3, tmp1)); (* is it not an int *)
-		add_instr(SLL(tmp1,IMM bitpos,tmp2));
-		add_instr(ORB(tmp2,REG r,r))
-	    end
-
-      (* usually, the tags are known at compile time *)	
-      fun scantags (offset,nil : Rtltags.tags) = offset
-	| scantags (offset,({static,dynamic}::vl) : Rtltags.tags) =
-	  (if const
-	       then (if (null dynamic)
-			 then add_data(INT32 static)
-		     else error "making constant record with dynamic tag")
-	   else 
-	       let val r = alloc_regi(NOTRACE_INT)
-	       in  add_instr (LI(static,r));
-		   app (fn a => do_dynamic(r,a)) dynamic;
-		   add_instr(STORE32I(EA(heapptr(),offset),r)) (* tags *)
-	       end;
-	   scantags(offset+4,vl))
-
-      val offset = 0
-      val offset = scantags(offset,tagwords);
-      val (result,templabelopt) = 
-	  if const
-	      then let val label = (case labopt of
-					SOME lab => lab
-				      | NONE => fresh_data_label "record")
-		   in  (add_data(DLABEL label);
-			(VALUE(LABEL label), SOME label))
-		   end
-	  else (LOCATION (REGISTER (false,I dest)), NONE)
-
-      val offset = scan_vals (offset, reps, vl)
-      val _ = if const
-		  then ()
-	      else (add(heapptr(),4 * length tagwords,dest);
-		    add(heapptr(),4 * words_alloced,heapptr()))
-      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length vl)) ^ " record"))
-    in  (result, state)
-    end
-
-  (* These are the interface functions: determines static allocation *)
-  fun make_record (state, destopt, reps, vl) = 
-      let fun is_varval (VALUE vv) = true 
-	    | is_varval _ = false
-	  val const = (!do_constant_records andalso (andfold is_varval vl))
-      in  make_record_help(const,state,destopt,reps,vl,NONE)
-      end
-
-  and make_record_const (state, destopt, reps, vl, labopt) = 
-      let val res as (lv,_) = make_record_help(!do_forced_constant_records,state, 
-					       destopt, reps, vl, labopt)
-	  val labopt2 = (case lv of
-			     VALUE(RECORD(lab,_)) => SOME lab
-			   | VALUE(LABEL lab) => SOME lab
-			   | _ => NONE)
-	  val _ = (case (labopt,labopt2) of
-		       (NONE,_) => ()
-		     | (SOME lab, SOME lab') =>
-			   if (Rtl.eq_label(lab,lab'))
-			       then () else error "make_record_const failed"
-		     | _ => error "make_record_const failed")
-      in  res
-      end
-
-  and make_record_mutable (state, destopt, reps, vl) = 
-      make_record_help(false,state, destopt, reps, vl,NONE)
 
 
 end

@@ -20,12 +20,10 @@ long use_stack_gen = 0;
 
 static value_t *GCTABLE_BEGIN_ADDR = &GCTABLE_BEGIN_VAL;
 static value_t *GCTABLE_END_ADDR = &GCTABLE_END_VAL;
-static value_t *CODE_BEGIN_ADDR = &CODE_BEGIN_VAL;
-static value_t *CODE_END_ADDR = &CODE_END_VAL;
-static value_t *SML_GLOBALS_BEGIN_ADDR = &SML_GLOBALS_BEGIN_VAL;
-static value_t *SML_GLOBALS_END_ADDR = &SML_GLOBALS_END_VAL;
-static value_t *MUTABLE_TABLE_BEGIN_ADDR = &MUTABLE_TABLE_BEGIN_VAL;
-static value_t *MUTABLE_TABLE_END_ADDR = &MUTABLE_TABLE_END_VAL;
+static value_t *GLOBALS_BEGIN_ADDR = &GLOBALS_BEGIN_VAL;
+static value_t *GLOBALS_END_ADDR = &GLOBALS_END_VAL;
+static value_t *TRACE_GLOBALS_BEGIN_ADDR = &TRACE_GLOBALS_BEGIN_VAL;
+static value_t *TRACE_GLOBALS_END_ADDR = &TRACE_GLOBALS_END_VAL;
 
 long MaxStackDepth = 0;
 long TotalStackDepth = 0;
@@ -172,7 +170,6 @@ void LookupSpecialWordPair(Callinfo_t *callinfo, int pos, int *a, int *b)
 
 HashTable_t *CallinfoHashTable = NULL;
 long GCTableSize = 0;
-long CodeSize = 0;
 long SMLGlobalSize = 0;
 long GlobalTableSize = 0;
 long MutableTableSize = 0;
@@ -225,12 +222,10 @@ void stack_init()
 	  curpos += GET_ENTRYSIZE(((Callinfo_t *)curpos)->sizes);
 	}
        GCTableSize += (long)endpos - (long)startpos;
-       CodeSize += (long)(CODE_END_ADDR[mi]) - 
-	           (long)(CODE_BEGIN_ADDR[mi]);
-       SMLGlobalSize += (long)(SML_GLOBALS_END_ADDR[mi]) - 
-	           (long)(SML_GLOBALS_BEGIN_ADDR[mi]);
-       MutableTableSize += (long)(MUTABLE_TABLE_END_ADDR[mi]) - 
-	           (long)(MUTABLE_TABLE_BEGIN_ADDR[mi]);
+       SMLGlobalSize += (long)(GLOBALS_END_ADDR[mi]) - 
+	           (long)(GLOBALS_BEGIN_ADDR[mi]);
+       MutableTableSize += (long)(TRACE_GLOBALS_END_ADDR[mi]) - 
+	           (long)(TRACE_GLOBALS_BEGIN_ADDR[mi]);
 /*
        GlobalTableSize += (long)(GLOBAL_TABLE_END_ADDR[mi]) - 
 	           (long)(GLOBAL_TABLE_BEGIN_ADDR[mi]);
@@ -960,88 +955,18 @@ void local_root_scan(Thread_t *th, Heap_t *fromspace)
 
 }
 
-void global_root_scan(Queue_t *global_roots, Queue_t *promoted_global_roots, Heap_t *fromspace)
+void global_root_scan(Queue_t *global_roots, Heap_t *fromspace)
 {
   static Queue_t *uninit_global_roots;
   static Queue_t *temp;
-  static int first_time = 1;
   unsigned long i,mi, stack_top, len;
 
-  if (first_time)
-    { 
-      uninit_global_roots = QueueCreate(0,100); 
-      temp = QueueCreate(0,100); 
-      for (mi=0; mi<module_count; mi++) {
-	value_t *start = (value_t *)((&MUTABLE_TABLE_BEGIN_VAL)[mi]);
-	value_t *stop = (value_t *)((&MUTABLE_TABLE_END_VAL)[mi]);
-	for ( ; start < stop; start += 4) {
-	  Enqueue(uninit_global_roots,start); 
-	}
-      }
+  QueueClear(global_roots);
+  for (mi=0; mi<module_count; mi++) {
+    value_t *start = (value_t *)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
+    value_t *stop = (value_t *)((&TRACE_GLOBALS_END_VAL)[mi]);
+    for ( ; start < stop; start += 4) {
+      Enqueue(global_roots,start); 
     }
-
-  QueueClear(promoted_global_roots);
-  QueueClear(temp);
-  len = QueueLength(uninit_global_roots);
-  for (i=0; i<len; i++)
-    {
-      value_t *e = QueueAccess(uninit_global_roots,i);
-      value_t table_entry = ((value_t *)e)[0];
-      int     trace       = ((value_t *)e)[1];
-      value_t data = *((value_t *)table_entry);
-      int should_trace = 0;
-      int resolved = (data != 258);
-
-      if (!resolved)
-	{ Enqueue(temp,e); }
-      else if (IS_TRACE_YES(trace))
-	should_trace = 1;
-      else if (IS_TRACE_NO(trace))
-	;
-      else if (IS_TRACE_CALLEE(trace))
-	{ printf("cannot have trace_callee for globals\n"); exit(-1); }
-      else if (IS_TRACE_SPECIAL(trace))
-	{ 
-	  int special_type = ((value_t *)e)[2];
-	  int special_data = ((value_t *)e)[3];
-	  int res;
-	  
-	  if (IS_SPECIAL_STACK(special_type))
-	    { printf("cannot have trace_special_stack for globals\n"); exit(-1); }
-	  else if (IS_SPECIAL_UNSET(special_type))
-	    { printf("cannot have trace_special_unset for globals\n"); exit(-1); }
-	  else if (IS_SPECIAL_STACK_REC(special_type))
-	    { printf("cannot have trace_special_stackrec for globals\n"); exit(-1); }
-	  else if (IS_SPECIAL_GLOBAL(special_type))
-	    res = *((int *)special_data);
-	  else if (IS_SPECIAL_GLOBAL_REC(special_type))
-	    {
-	      int rec_pos = GET_SPECIAL_STACK_GLOBAL_POS(special_type);
-	      int rec_pos2 = GET_SPECIAL_STACK_GLOBAL_POS2(special_type);
-	      int rec_pos3 = GET_SPECIAL_STACK_GLOBAL_POS3(special_type);
-	      int rec_pos4 = GET_SPECIAL_STACK_GLOBAL_POS4(special_type);
-	      res = ((int *)(((int *)special_data)))[rec_pos];
-	      if (rec_pos2 > 0)
-		res = ((int *)res)[rec_pos2-1];
-	      if (rec_pos3 > 0)
-		res = ((int *)res)[rec_pos3-1];
-	      if (rec_pos4 > 0)
-		res = ((int *)res)[rec_pos4-1];
-	    }
-	  else
-	    { printf("impossible trace_special wordpair entry: %d %d\n",
-		     special_type,special_data);
-	    exit(-1);
-	    }
-	  should_trace = (res >= 3);
-	} /* TRACE_SPECIAL */ 
-
-      Enqueue(global_roots,(void *)table_entry); /* this is accumulated */
-      Enqueue(promoted_global_roots,(void *)table_entry); /* this is reset each time */
-    }
-
-
-  typed_swap(Queue_t *, uninit_global_roots,temp);
-
+  }
 }
-

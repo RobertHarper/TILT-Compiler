@@ -271,24 +271,22 @@ sig
 
      main is the entry point for the module.
 
-     mutable_variables and mutable_objects are used to track
-     pointers from static data to the heap for the garbage
-     collector.   When the garbage collector moves objects in
-     the heap, it needs to update the pointers to these
-     objects in static data.
+     global is a list of addresses of objects whose fields may point into the heap
+       (1) The list contains addresses of statically allocated objects which have
+             pointers into the heap.
+       (2) The list also contains the addresses of globals by treating them as
+             records of one field.  Globals pointing to statically allocated
+	     objects are not recorded only globals that may contain heap pointers.
 
-     mutable is a list of addresses whose contents may be initialized 
-        once during program execution by a pointer into the heap.
-        This list is used to represent globals and cells of statically
-	allocated byt uninitialized objects.  The rep for a mutable
-        is either TRACE or COMPUTE (COMPUTEs may arise from imports)
+     Objects in the global list must contain a header word.
+
   *)
  
   datatype module = MODULE of
                           {procs : proc list,
 			   data : data list,
 			   main : label,
-			   mutable : (label * rep) list}
+			   global : label list}
 
 end (* RTL *)
 

@@ -1805,7 +1805,7 @@ struct
 	     val module = Rtl.MODULE {procs = procs,
 				      data = rev(!dl),
 				      main= mainName,
-				      mutable = get_mutable()}
+				      global = get_mutable()}
 
 	     val _ = resetDepth()
 	     val _ = resetWork()
@@ -1821,30 +1821,26 @@ struct
              fun mktable(name,suffix) =
 		 DLABEL (ML_EXTERN_LABEL name) ::
 		 map (fn s => DATA(ML_EXTERN_LABEL (s ^ suffix))) nl
-	     val gc_table_begin =    mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
-	     val gc_table_end =	     mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
-	     val sml_globals =       mktable("SML_GLOBALS_BEGIN_VAL","_SML_GLOBALS_BEGIN_VAL")
-	     val end_sml_globals =   mktable("SML_GLOBALS_END_VAL","_SML_GLOBALS_END_VAL")
-	     val muttable_begin =    mktable("MUTABLE_TABLE_BEGIN_VAL","_MUTABLE_TABLE_BEGIN_VAL")
-	     val muttable_end =      mktable("MUTABLE_TABLE_END_VAL","_MUTABLE_TABLE_END_VAL")
-	     val codetable_begin =   mktable("CODE_BEGIN_VAL","_CODE_BEGIN_VAL")
-	     val codetable_end =     mktable("CODE_END_VAL","_CODE_END_VAL")
-             val entrytable =        mktable("client_entry","")
+	     val gc_table_begin =  mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
+	     val gc_table_end =	   mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
+	     val globals_start =   mktable("GLOBALS_BEGIN_VAL","_GLOBALS_BEGIN_VAL")
+	     val globals_end =     mktable("GLOBALS_END_VAL","_GLOBALS_END_VAL")
+	     val trace_globals_start = mktable("TRACE_GLOBALS_BEGIN_VAL","_TRACE_GLOBALS_BEGIN_VAL")
+	     val trace_globals_end =   mktable("TRACE_GLOBALS_END_VAL","_TRACE_GLOBALS_END_VAL")
+             val entrytable =      mktable("client_entry","")
 	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
 			  INT32 (TilWord32.fromInt count)]
 	     val data = count @
 		 gc_table_begin @
 		 gc_table_end @
-		 sml_globals @
-		 end_sml_globals @
-		 muttable_begin @
-		 muttable_end @
-		 codetable_begin @
-		 codetable_end @
+		 globals_start @
+		 globals_end @
+		 trace_globals_start @
+		 trace_globals_end @
 		 entrytable
 	 in  MODULE{procs = [], data = data,
 		    main = ML_EXTERN_LABEL "linkfile", 
-		    mutable = []}
+		    global = []}
          end
 
 end

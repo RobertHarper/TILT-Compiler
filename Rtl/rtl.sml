@@ -217,7 +217,7 @@ struct
                           {procs : proc list,
 			   data : data list,
 			   main : label,
-			   mutable : (label * rep) list}
+			   global : label list}
 
 end (* fuctor RTL *)
 

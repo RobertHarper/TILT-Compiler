@@ -225,15 +225,13 @@ struct
 
    fun dumpData data =
      (app emitString dataStart;
-      Array.app emitData data;
-(*      app emitString textStart; *)
-      emitString "\n")
+      Array.app emitData data)
+(*      app emitString textStart; emitString "\n" *)
 
    fun dumpDatalist data =
      (app emitString dataStart;
-      app emitData data;
-(*      app emitString textStart; *)
-      emitString "\n")
+      app emitData data)
+(*      app emitString textStart; emitString "\n" *)
 
 
 end 

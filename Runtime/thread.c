@@ -10,6 +10,7 @@
 #include "gc.h"
 
 
+
 static Thread_t    *Threads;                  /* array of NumUserThread user threads */
 static SysThread_t *SysThreads;               /* array of NumSystemThread system threads */
 
@@ -286,6 +287,9 @@ void work(SysThread_t *sth)
   /* System thread should not be mapped */
   assert(th == NULL);
 
+  if (diag)
+    printf("SysThread %d: entered work\n", sth->stid);
+
   /* Wait for next user thread and remove from queue. Map system thread. */
   while (th == NULL) {
     if (NumReadyJob() == 0)
@@ -329,10 +333,15 @@ void work(SysThread_t *sth)
     }
   else  /* Thread not starting for first time */
     {
-      int request = th->saveregs[ALLOCLIMIT_REG];
+      int request = th->saveregs[ASMTMP_REG] - th->saveregs[ALLOCPTR_REG];
       value_t stack_top = th->stackchain->stacks[0]->top;
-      if (request + sth->alloc >= sth->limit) 
-	gc(th); /* this call will not return */
+      if (request + sth->alloc >= sth->limit) {
+	gc(th); /* this call will not return if real gc */
+	if (!(request + sth->alloc < sth->limit))
+	  printf("request = %d  alloc = %d  limit = %d\n",
+		 request, sth->alloc, sth->limit);
+	assert(request + sth->alloc < sth->limit);
+      }
       th->saveregs[ALLOCPTR_REG] = sth->alloc;
       th->saveregs[ALLOCLIMIT_REG] = sth->limit;
       if (diag)
@@ -346,10 +355,10 @@ void work(SysThread_t *sth)
 }
 
 
-static void* systhread(void* addr)
+static void* systhread_go(void* addr)
 {
   SysThread_t *st = getSysThread();
-  st->stack = (int)(&st) & (~31);
+  st->stack = (int)(&st) & (~255);
   work(st);
   assert(0);
 }
@@ -362,7 +371,7 @@ void thread_go(value_t start_adds, int num_add)
 
   /* Create system threads that run off the user thread queue */
   for (i=0; i<NumSysThread; i++)
-    pthread_create(&(SysThreads[i].pthread),NULL,systhread,(void *)i);
+    pthread_create(&(SysThreads[i].pthread),NULL,systhread_go,(void *)i);
   /* Wait until the work stack is empty;  work stack contains running jobs too */
   while ((i = NumTotalJob()) > 0) {
       printf("Main thread found %d jobs.\n", i);
