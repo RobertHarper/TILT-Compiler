@@ -123,7 +123,7 @@ that file are specified. When both files are present, they are
 elaborated together in a context built up from both sets of units.
 
 The dependencies specified for a unit's external interface file and
-its implementation file may be disjoint. For example,
+it's implementation file may be different. For example,
 
 	--- implementation: dependencies are SplayTree, MAP, ... ---
 
@@ -179,6 +179,7 @@ relative to the directory containing the mapfile, to the unit's source
 file (path.sml) and optional external interface file (path.int), and
 TARGET, if present, indicates that unit A is a target. If no targets
 are specified, TILT treats the last unit in the mapfile as a target.
+(Recall that TILT will build executables for the targets.)
 
 Another reasonable design would be to require that source and external
 interface filenames be provided explicitly. This would eliminate the
