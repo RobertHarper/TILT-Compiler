@@ -1,4 +1,4 @@
-(*$import ML_TOKENS ErrorMsg TilWord64 TokenTable Vector *)
+(*$import ML_TOKENS Symbol ErrorMsg TilWord64 TokenTable Vector *)
 
 functor MLLexFun(structure Tokens : ML_TOKENS)=
    struct
@@ -9,9 +9,15 @@ functor MLLexFun(structure Tokens : ML_TOKENS)=
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
-# Revision 1.7  98/02/15  22:43:49  pscheng
-# bootstrapping changes
+# Revision 1.8  98/02/27  17:32:17  pscheng
+# The fix in compilation of implementation files with interfaces
+# allows Symbol and FastSymbol to be exported without Env.
+# Thus, HIL no longer depends on Env (which had depended on many
+# Basis modules) .
 # 
+# Revision 1.7  1998/02/15  22:43:49  pscheng
+# bootstrapping changes
+#
 # Revision 1.6  1998/01/21  20:40:32  pscheng
 # moved the .sig files to .sig.sml file
 #

@@ -6,7 +6,10 @@ Group is
 symbol.sig.sml  (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/symbol.sig *)
 env.sig.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/env.sig *)
 env.sml         (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/env/env.sml *)
+(*
 symbol.sml      (* split off portion of env.sml *)
+fastsymbol.sml      (* split off portion of env.sml *)
+*)
 printutil.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sig *)
 printutil.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sml *)
 strghash.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/strghash.sml *)

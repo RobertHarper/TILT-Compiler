@@ -5,7 +5,7 @@
 
 
 
-structure Env (* : ENV *) =
+structure Env :> ENV =
 struct
 
 (* debugging *)
@@ -344,16 +344,22 @@ fun consolidate (env as TABLE(_,EMPTY)) = env
 
 end (* structure Env *)
 
-(*
+
 structure Symbol = Env.Symbol
 structure FastSymbol = Env.FastSymbol
-*)
+
 
 (*
  * $Log$
-# Revision 1.4  98/02/15  22:43:24  pscheng
-# bootstrapping changes
+# Revision 1.5  98/02/27  17:32:14  pscheng
+# The fix in compilation of implementation files with interfaces
+# allows Symbol and FastSymbol to be exported without Env.
+# Thus, HIL no longer depends on Env (which had depended on many
+# Basis modules) .
 # 
+# Revision 1.4  1998/02/15  22:43:24  pscheng
+# bootstrapping changes
+#
 # Revision 1.3  1998/01/21  20:40:13  pscheng
 # moved the .sig files to .sig.sml file
 #
