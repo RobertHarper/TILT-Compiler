@@ -1,4 +1,4 @@
-(*$import Prelude Name Symbol Prim Tyvar IL Il *)
+(*$import Name Symbol Prim Tyvar IL Il *)
 (* Utility routines for the internal language. *)
 signature ILUTIL =
   sig
@@ -23,6 +23,7 @@ signature ILUTIL =
     type path = Il.path
     type context = Il.context
     type decs = Il.decs
+    type phrase_class = Il.phrase_class
     type tyvar = (context,con,exp) Tyvar.tyvar
 
 	
@@ -151,6 +152,7 @@ signature ILUTIL =
     val con_subst : con * subst -> con
     val mod_subst : mod * subst -> mod
     val sig_subst : signat * subst -> signat
+    val pc_subst : phrase_class * subst -> phrase_class
 
     val con_subst' : con * subst -> int * con  (* int indicates number of substitutions performed *)
     val sig_subst' : signat * subst -> int * signat
@@ -162,6 +164,9 @@ signature ILUTIL =
     val sig_free : signat -> Name.VarSet.set
     val sbnd_free : sbnd -> Name.VarSet.set
     val entry_free : Il.context_entry -> Name.VarSet.set
+
+    val classifier_free : phrase_class -> Name.VarSet.set
+    val pc_free         : phrase_class -> Name.VarSet.set
 
     val findPathsInMod : mod    -> Name.PathSet.set
     val findPathsInSig : signat -> Name.PathSet.set
