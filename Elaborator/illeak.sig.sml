@@ -28,7 +28,7 @@ signature ILLEAK =
                  | ETAPRIM of prim * con list
                  | ETAILPRIM of ilprim * con list
                  | VAR     of var
-                 | APP     of exp * exp
+                 | APP     of exp * exp list
                  | FIX     of bool * arrow * fbnd list
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
@@ -77,7 +77,7 @@ signature ILLEAK =
                  | CON_ANY
                  | CON_REF           of con
                  | CON_TAG           of con
-                 | CON_ARROW         of con * con * (arrow Util.oneshot)
+                 | CON_ARROW         of con list * con * bool * (arrow Util.oneshot)
                  | CON_APP           of con * con
                  | CON_MUPROJECT     of int * con
                  | CON_RECORD        of (label * con) list

@@ -66,7 +66,7 @@ functor IlEval(structure Il : IL
 	   | (CON_MUPROJECT(i,c)) => con_isval c
 	   | (CON_VAR _ | CON_FUN _ | CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY ) => true
 	   | (CON_ARRAY c | CON_VECTOR c | CON_REF c | CON_TAG c) => con_isval c
-	   | (CON_ARROW (c1,c2,_)) => (con_isval c1) andalso (con_isval c2)
+	   | (CON_ARROW (cs1,c2,_,_)) => (Listops.andfold con_isval cs1) andalso (con_isval c2)
 	   | (CON_RECORD rdecs) => andfold (fn (l,bnd) => con_isval bnd) rdecs
 	   | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)) => con_isval (CON_FLEXRECORD r)
 	   | CON_FLEXRECORD (ref (FLEXINFO(_,false,_))) => error "can't have unresovled flexrecord here"
@@ -156,7 +156,7 @@ functor IlEval(structure Il : IL
 	  | CON_VECTOR c => CON_VECTOR (eval_con env c)
 	  | CON_REF c => CON_REF (eval_con env c)
 	  | CON_TAG c => CON_TAG (eval_con env c)
-	  | CON_ARROW (c1,c2,a) => CON_ARROW(eval_con env c1, eval_con env c2, a)
+	  | CON_ARROW (cs1,c2,cl,a) => CON_ARROW(map (eval_con env) cs1, eval_con env c2,cl,a)
 	  | CON_APP (c1,c2) => 
 		let val c1' = eval_con env c1
 		    val c2' = eval_con env c1
@@ -200,7 +200,7 @@ functor IlEval(structure Il : IL
 	  | CON_VECTOR c => CON_VECTOR (reduce_con env c)
 	  | CON_REF c => CON_REF (reduce_con env c)
 	  | CON_TAG c => CON_TAG (reduce_con env c)
-	  | CON_ARROW (c1,c2,a) => CON_ARROW(reduce_con env c1, reduce_con env c2, a)
+	  | CON_ARROW (cs1,c2,cl,a) => CON_ARROW(map (reduce_con env) cs1, reduce_con env c2, cl, a)
 	  | CON_APP (c1,c2) => 
 		let val c1' = reduce_con env c1
 		    val c2' = reduce_con env c1
@@ -279,7 +279,7 @@ functor IlEval(structure Il : IL
 									 reduce_exp env e)
 			       in FIX(r,a,map help fbnds)
 			       end
-	  | (APP(e1,e2)) => APP(reduce_exp env e1, reduce_exp env e2)
+	  | (APP(e1,es2)) => APP(reduce_exp env e1, map (reduce_exp env) es2)
 	  | CASE {noncarriers,carriers,arg,arms,default,tipe} =>
 			       ((* print "----------- REDUCING CASE cons:\n";
 				Ppil.pp_con (CON_SUM(NONE,cons)); *)
@@ -361,7 +361,7 @@ functor IlEval(structure Il : IL
 					| (e',c') => error_exp (SUM_TAIL (c',e'))
 					      "SUM_TAIL: unexpected val/types")
 	   | HANDLE (body,handler) => (eval_exp env body 
-					 handle (exn_packet e) => eval_exp env (APP(handler,e)))
+					 handle (exn_packet e) => eval_exp env (APP(handler,[e])))
 	   | RAISE (c,e) => raise (exn_packet e)
 	   | LET ([],body) => eval_exp env body
 	   | LET (bnd::bnds,body) => let val env' = env_bndextend(env,eval_bnd env bnd)
@@ -390,7 +390,7 @@ functor IlEval(structure Il : IL
 							   NONE => error "no matches and no def in CASE"
 							 | SOME e => eval_exp env e)
 			      | loop 1 ((SOME e)::rest) = (case inject of
-							       SOME ee => eval_exp env (APP(e,ee))
+							       SOME ee => eval_exp env (APP(e,[ee]))
 							     | NONE => eval_exp env e)
 			      | loop n [] = error "too few arms in CASE or bad sum value"
 			      | loop n (_::rest) = loop (n-1) rest
@@ -402,11 +402,11 @@ functor IlEval(structure Il : IL
 			 (ep as (EXN_INJECT(SCON(tag(t,c)),value))) => 
 			     let fun loop [] = (case default of
 						    NONE => raise (exn_packet ep)
-						  | SOME e => eval_exp env (APP(e,ep)))
+						  | SOME e => eval_exp env (APP(e,[ep])))
 				   | loop ((e1,_,e2)::rest) = 
 				 case (eval_exp env e1) of
 				     (tag' as (SCON(tag(t',c')))) => if (eq_tag(t,t'))
-								then eval_exp env (APP(e2,value))
+								then eval_exp env (APP(e2,[value]))
 							    else loop rest
 				   | _ => error "EXN_CASE arms not labelled with tags"
 			     in loop arms

@@ -52,17 +52,17 @@ functor Basis(structure Il : IL
     fun initial_context () : context * sbnd list * sdec list * context =
       let
 	  val result = ref (add_context_fixity(empty_context,default_fixity_table))
+	  val noninline_result = ref empty_context
 	  val sbnds_result = ref ([] : sbnd list)
 
 	  fun mk_var_lab str = symbol_label(Symbol.varSymbol str)
 	  fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
 	  fun mk_var str = fresh_named_var str
-	  fun binop_con(conopt) = let val con = (case conopt of 
-						     NONE => fresh_con empty_context
-						   | SOME c => c)
-				  in CON_ARROW(con_tuple[con,con],con,oneshot_init PARTIAL)
-				  end
-	  fun var_entry (s,c) = result := add_context_sdec(!result,SDEC(mk_var_lab s, DEC_EXP(mk_var s, c)))
+	  fun var_entry (s,c) = 
+	      let val v = mk_var s
+	      in  (result := add_context_sdec(!result,SDEC(mk_var_lab s, DEC_EXP(v,c)));
+		   noninline_result := add_context_sdec(!noninline_result,SDEC(mk_var_lab s, DEC_EXP(v, c))))
+	      end
 	  fun type_entry ctxt s k c = add_context_sdec(ctxt,SDEC(mk_tyc_lab s, DEC_CON(mk_var s, k, SOME c)))
 	  fun exp_entry (str,e) = 
 	      let val inline = INLINE_EXPCON(e,IlStatic.GetExpCon(!result,e))
@@ -133,8 +133,8 @@ functor Basis(structure Il : IL
 					     end),
 				   ("->",let val v1 = fresh_var()
 					     val v2 = fresh_var()
-					 in CON_FUN([v1,v2],CON_ARROW (CON_VAR v1, CON_VAR v2, 
-								       oneshot_init PARTIAL))
+					 in CON_FUN([v1,v2],CON_ARROW ([CON_VAR v1], CON_VAR v2, 
+								       false, oneshot_init PARTIAL))
 					 end)]
 	      fun add_basetype (s,c) =
 		  result := add_context_inline(!result,
@@ -145,7 +145,7 @@ functor Basis(structure Il : IL
 	      val _ = app add_basetype basetype_list
 	  end
       
-	    
+        (* -------------- add the overloaded base values ---------------- *)	    
 	val context = 
 	   let
 	       fun constraints (c,res) (tyvar, 
@@ -161,16 +161,16 @@ functor Basis(structure Il : IL
 			(SOME _,_) => ()
 		      | (NONE,INT_CASE) => oneshot_set(exp_oneshot,intres)
 		      | (NONE,FLOAT_CASE) => oneshot_set(exp_oneshot,floatres))
-	       val intbin = (CON_ARROW(con_tuple[int32, int32], 
-				       int32, oneshot_init PARTIAL), INT_CASE)
-	       val intuni = (CON_ARROW(int32,int32, oneshot_init PARTIAL), INT_CASE)
-	       val intpred = (CON_ARROW(con_tuple[int32, int32], 
-					con_bool, oneshot_init PARTIAL), INT_CASE)
-	       val floatuni = (CON_ARROW(float64,float64, oneshot_init PARTIAL), FLOAT_CASE)
-	       val floatbin = (CON_ARROW(con_tuple[float64, float64], 
-					 float64, oneshot_init PARTIAL), FLOAT_CASE)
-	       val floatpred = (CON_ARROW(con_tuple[float64, float64], 
-					  con_bool, oneshot_init PARTIAL), FLOAT_CASE)
+	       val intbin = (CON_ARROW([con_tuple[int32, int32]], 
+				       int32, false, oneshot_init PARTIAL), INT_CASE)
+	       val intuni = (CON_ARROW([int32],int32, false, oneshot_init PARTIAL), INT_CASE)
+	       val intpred = (CON_ARROW([con_tuple[int32, int32]], 
+					con_bool, false, oneshot_init PARTIAL), INT_CASE)
+	       val floatuni = (CON_ARROW([float64],float64, false, oneshot_init PARTIAL), FLOAT_CASE)
+	       val floatbin = (CON_ARROW([con_tuple[float64, float64]], 
+					 float64, false, oneshot_init PARTIAL), FLOAT_CASE)
+	       val floatpred = (CON_ARROW([con_tuple[float64, float64]], 
+					  con_bool, false, oneshot_init PARTIAL), FLOAT_CASE)
 	       fun add_uni_entry (str,thunk) = over_entry str thunk (map constraints [intuni,floatuni])
 	       fun add_bin_entry (str,thunk) = over_entry str thunk (map constraints [intbin,floatbin])
 	       fun add_pred_entry (str,thunk) = over_entry str thunk (map constraints [intpred,floatpred])
@@ -242,8 +242,7 @@ functor Basis(structure Il : IL
 		   ("udiv", (div_uint W32)),
 
 		   (* XXX need to do unsigned and real stuff *)
-		   (* 	   mono_entry "explode" (EXPLODE), *)
-		   (*	   mono_entry "implode" (IMPLODE), *)
+
 
 		   ("floor", (float2int)),
 		   ("real", (int2float)),
@@ -260,9 +259,12 @@ functor Basis(structure Il : IL
 		   ("flush_out", flush_out),
 		   ("close_out", close_out)]
 
+	      val basevar_list = [("sin", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL)),
+				  ("cos", CON_ARROW([CON_FLOAT F64], CON_FLOAT F64, true, oneshot_init TOTAL))]
 
 	  in  val _ = app exp_entry basevalue_list
 	      val _ = app mono_entry baseprimvalue_list
+	      val _ = app var_entry basevar_list
 	  end
 
 
@@ -450,7 +452,7 @@ functor Basis(structure Il : IL
 									imp_sig = bool_imp_sdecs,
 									code = bool_sbnds_inline}))
 	      val final_sdec = self_sdec final_sdec
-	      val new_context = add_context_sdec(!result, final_sdec)
+	      val _ = result := add_context_sdec(!result, final_sdec)
 
 (*
 	      val _ = (print "!result is: "; Ppil.pp_context (!result); print "\n";
@@ -460,11 +462,10 @@ functor Basis(structure Il : IL
 		      
 	  in
 (*	      val datatype_self_sdecs = datatype_self_sdecs *)
-	      val new_context = new_context
 (*	      val _ = sbnds_result := datatype_sbnds *)
 (*	      val datatype_sdecs = datatype_sdecs *)
 	  end
-      in  (new_context, [], [], empty_context)
+      in  (!result, [], [], !noninline_result)
         (* (!result, !sbnds_result, datatype_sdecs, 
 	    add_context_sdecs(!result,datatype_self_sdecs)) *)
       end

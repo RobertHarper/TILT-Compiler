@@ -67,11 +67,11 @@ functor Ppil(structure Il : IL
       end
     fun pp_arrow PARTIAL = String "->"
       | pp_arrow TOTAL = String "=>"
-    fun pp_complete oneshot = 
-      String (case (oneshot_deref oneshot) of
-		(SOME TOTAL) => "=>"
-	      | (SOME PARTIAL) => "->"
-	      | NONE => "?>")
+    fun complete2string oneshot = 
+	(case (oneshot_deref oneshot) of
+	     (SOME TOTAL) => "=>"
+	   | (SOME PARTIAL) => "->"
+	   | NONE => "?>")
 
     val member = fn (a,lst) =>
       let val _ = (print "member: lst of length "; print (Int.toString (length lst)); print "\n")
@@ -129,11 +129,16 @@ functor Ppil(structure Il : IL
        | CON_ANY     => String "ANY"
        | CON_REF c   => pp_region "REF("  ")" [pp_con seen c]
        | CON_TAG c  => pp_region "NAME(" ")" [pp_con seen c]
-       | CON_ARROW (c1,c2,comp) => HOVbox [String "(",	
-					   pp_con seen c1,String " ",
-					   pp_complete comp,
-					   Break,
-					   pp_con seen c2, String ")"]
+       | CON_ARROW (cons,c2,closed,comp) => 
+	     HOVbox [String "(",	
+		     (case cons of
+			  [c1] => pp_con seen c1
+			| _ => pp_list (pp_con seen) cons ("[", ",","]", false)),
+			  String " ",
+			  String ((if closed then "" else "CODE") ^ 
+				  (complete2string comp)),
+			  Break,
+			  pp_con seen c2, String ")"]
        | CON_APP (c1,c2) => pp_region "CON_APP(" ")"
 	                              [pp_con seen c1,
 				       String ",",
@@ -291,7 +296,9 @@ functor Ppil(structure Il : IL
 					    pp_list (pp_con seen) cons ("[",",","]",false),
 					    pp_list (pp_exp seen) elist ("[",",","]",false)]
        | VAR var => pp_var var
-       | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
+       | APP (e1,[e2]) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
+       | APP (e1,elist) => pp_region "APP(" ")" [pp_exp seen e1, String ";", Break, 
+						 pp_list (pp_exp seen) elist ("[",",","]", true)]
        | FIX (r,a,[FBND(v',v,c,cres,e)]) => 
 		  HOVbox[String ((case a of TOTAL => "/TOTAL" | PARTIAL => "/") ^
 				 (if r then "\\" else "LEAF\\")),

@@ -94,7 +94,7 @@ functor IlUtil(structure Ppil : PPIL
     fun make_lambda_help (is_recur,a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
-		    in (FIX(is_recur,a,[fbnd]), CON_ARROW(con,rescon,oneshot_init a))
+		    in (FIX(is_recur,a,[fbnd]), CON_ARROW([con],rescon,false,oneshot_init a))
 		    end
     fun make_total_lambda (var,con,rescon,e) = make_lambda_help(false,TOTAL,var,con,rescon,e)
     fun make_lambda (var,con,rescon,e) = make_lambda_help(true,PARTIAL,var,con,rescon,e)
@@ -110,21 +110,22 @@ functor IlUtil(structure Ppil : PPIL
 	end
 
     fun make_let (ve_list : (var * exp) list, body) = LET (map BND_EXP ve_list,body)
-    fun make_catch (e,con,efail) : exp =
+    fun make_catch (e,con,tag_exp,tag_con,efail) : exp =
        let 
 	   val v = fresh_var()
-	   val efail' = #1(make_lambda(fresh_named_var "dummy",con_unit,con,efail))
-	   val outer = EXN_CASE{arg = VAR v, arms = [(fail_exp, con_unit, efail')],
+	   val efail' = #1(make_lambda(fresh_named_var "dummy",tag_con,con,efail))
+	   val outer = EXN_CASE{arg = VAR v, arms = [(tag_exp, tag_con,efail')],
 				default = NONE, tipe = con}
        in HANDLE(e,#1 (make_lambda(v,CON_ANY,con,outer)))
        end
 
     fun etaexpand_help (primer,typer) (prim,cargs) = 
 	let val prim_tipe = typer prim cargs
-	    val (res_tipe,args_tipes) = (case prim_tipe of
-					     CON_ARROW(CON_RECORD lclist,res_tipe,_) => (res_tipe,map #2 lclist)
-					   | CON_ARROW(c,res_tipe,_) => (res_tipe,[c])
-					   | _ => error "cannot expand a non-arrow primitive")
+	    val (res_tipe,args_tipes) = 
+		(case prim_tipe of
+		     CON_ARROW([CON_RECORD lclist],res_tipe,false,_) => (res_tipe,map #2 lclist)
+		   | CON_ARROW([c],res_tipe,false,_) => (res_tipe,[c])
+		   | _ => error "cannot expand unexpected non-arrow primitive")
 	    val vars = map (fn _ => fresh_var()) args_tipes
 	    val arg_var = fresh_var()
 	    val (eargs,arg_tipe) = (case args_tipes of 
@@ -158,13 +159,13 @@ functor IlUtil(structure Ppil : PPIL
 	   | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
 	   | (x as ETAPRIM(p,cs),y) =>
 		     (case (PrimUtil.get_type p cs) of
-			  CON_ARROW(CON_RECORD _,_,_) => NONE
-			| CON_ARROW(_,_,_) => SOME(PRIM(p,cs,[y]))
+			  CON_ARROW([CON_RECORD _],_,_,_) => NONE
+			| CON_ARROW(_,_,_,_) => SOME(PRIM(p,cs,[y]))
 			| _ => NONE)
 	   | (x as ETAILPRIM(ip,cs),y) =>
 		     (case (PrimUtil.get_iltype ip cs) of
-			  CON_ARROW(CON_RECORD _,_,_) => NONE
-			| CON_ARROW(_,_,_) => SOME(ILPRIM(ip,cs,[y]))
+			  CON_ARROW([CON_RECORD _],_,_,_) => NONE
+			| CON_ARROW(_,_,_,_) => SOME(ILPRIM(ip,cs,[y]))
 			| _ => NONE)
 	   | _ => NONE)
 	end
@@ -259,7 +260,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | ILPRIM (ilp,cs,es) => ILPRIM(ilp, map (f_con state) cs, map self es)
 	   | ETAPRIM (p,cs) => ETAPRIM(p, map (f_con state) cs)
 	   | ETAILPRIM (ilp,cs) => ETAILPRIM (ilp, map (f_con state) cs)
-	   | APP (e1,e2) => APP(self e1, self e2)
+	   | APP (e1,elist) => APP(self e1, map self elist)
 	   | FIX (r,a,fbnds) => FIX(r,a,map (f_fbnd state) fbnds)
 	   | RECORD (rbnds) => RECORD(map (f_rbnd state) rbnds)
 	   | RECORD_PROJECT (e,l,c) => RECORD_PROJECT(self e,l,f_con state c)
@@ -320,7 +321,7 @@ functor IlUtil(structure Ppil : PPIL
 		     | CON_VECTOR c => CON_VECTOR (self c)
 		     | CON_REF c => CON_REF (self c)
 		     | CON_TAG c => CON_TAG (self c)
-		     | CON_ARROW (c1,c2,complete) => CON_ARROW (self c1, self c2, complete)
+		     | CON_ARROW (cons,c2,closed,complete) => CON_ARROW (map self cons, self c2, closed, complete)
 		     | CON_APP (c1,c2) => CON_APP (self c1, self c2)
 		     | CON_MUPROJECT (i,c) =>  CON_MUPROJECT (i, self c)
 		     | CON_RECORD rdecs => CON_RECORD (map (f_rdec state) rdecs)

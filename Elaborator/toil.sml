@@ -327,16 +327,18 @@ functor Toil(structure Il : IL
 						 val _ = tyvar_use_equal tyvar
 						 val con = CON_TYVAR tyvar
 						 val exp_os = oneshot()
-						 val eq_con = CON_ARROW(con_tuple[con,con],
+						 val eq_con = CON_ARROW([con_tuple[con,con]],
 									con_bool,
+									false,
 									oneshot_init PARTIAL)
 						 val _ = add_eq_entry(tyvar,exp_os)
 						 val e2 = OVEREXP(eq_con,true,exp_os)
 					     in (con,eq_con,e2)
 					     end
 				   | SOME con => let val e2 = xeq(ctxt,con)
-						     val eq_con = CON_ARROW(con_tuple[con,con],
+						     val eq_con = CON_ARROW([con_tuple[con,con]],
 									    con_bool,
+									    false,
 									    oneshot_init PARTIAL)
 						 in (con,eq_con,e2)
 						 end)
@@ -408,7 +410,7 @@ functor Toil(structure Il : IL
 			val (tyvar,(sbnd1,sdec1)) = dotype l1 v1
 			val _ = tyvar_use_equal tyvar
 			val con = CON_TYVAR tyvar
-			val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
+			val eq_con = CON_ARROW([con_tuple[con,con]],con_bool,false,oneshot_init PARTIAL)
 			val exp_os = oneshot()
 			val _ = add_eq_entry(tyvar,exp_os)
 			val eqexp = OVEREXP(eq_con,true,exp_os)
@@ -531,8 +533,8 @@ functor Toil(structure Il : IL
 		 val stamp = get_stamp()
 		 val fieldcon = fresh_con context
 		 val the_ref = ref(FLEXINFO(stamp,false,[(label,fieldcon)]))
-		 val rescon = CON_ARROW(CON_FLEXRECORD the_ref,
-					fieldcon,oneshot_init PARTIAL)
+		 val rescon = CON_ARROW([CON_FLEXRECORD the_ref],
+					fieldcon, false, oneshot_init PARTIAL)
 		 val eshot : exp Util.oneshot = oneshot()
 		 val exp = OVEREXP(rescon,true,eshot)
 		 val _ = add_flex_entry(label,the_ref,fieldcon,eshot)
@@ -552,7 +554,8 @@ functor Toil(structure Il : IL
 			      val tyvar = fresh_named_tyvar (context,"teq")
 			      val _ = tyvar_use_equal tyvar
 			      val con = CON_TYVAR tyvar
-			      val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
+			      val eq_con = CON_ARROW([con_tuple[con,con]],con_bool,
+						     false,oneshot_init PARTIAL)
 			      val _ = add_eq_entry(tyvar,exp_os)
 			  in (OVEREXP(eq_con,true,exp_os),eq_con,true)
 			  end
@@ -606,12 +609,12 @@ functor Toil(structure Il : IL
 		      fun make_thunk(c,e) = make_lambda(fresh_named_var "dummy_var",con_unit, c, e) 
 		      val ref_arg = fresh_named_var "delay_ref"
 		      val value_arg = fresh_named_var "delay_value"
-		      val thunk_c = CON_ARROW(con_unit,c,oneshot_init PARTIAL)
+		      val thunk_c = CON_ARROW([con_unit],c,false,oneshot_init PARTIAL)
 		      val dummy_fun = #1(make_thunk(c, RAISE(c,bindexn_exp)))
 		      val bnd = BND_EXP(ref_arg,PRIM(mk_ref,[thunk_c], [dummy_fun]))
 		      val thunk_e = #1(make_thunk(c, APP(PRIM(deref,[thunk_c],[VAR ref_arg]),
-							 unit_exp)))
-		      val wrapped_exp = APP(wrapper_exp,thunk_e)
+							 [unit_exp])))
+		      val wrapped_exp = APP(wrapper_exp,[thunk_e])
 		      val final_c = CON_APP(sc, c)
 		      val inner_body = #1(make_seq[(PRIM(setref,[thunk_c],
 						    [VAR ref_arg,
@@ -638,12 +641,17 @@ functor Toil(structure Il : IL
        | Ast.AppExp {argument,function} => 
 	     let val (e1',con1,va1) = xexp(context,function)
 		 val (e2',con2,va2) = xexp(context,argument)
+		 val (closed,arrow_oe) = 
+		     (case con1 of
+			  CON_ARROW(_,_,closed,arrow) => (closed,arrow)
+			| _ => (case (con_normalize(context,con1)) of
+				    CON_ARROW(_,_,closed,arrow) => (closed,arrow)
+				  | _ => (false,oneshot())))
 		 val spec_rescon = fresh_con context
-		 val arrow_oe = oneshot()
-		 val spec_funcon = CON_ARROW(con2,spec_rescon, arrow_oe)
+		 val spec_funcon = CON_ARROW([con2],spec_rescon,closed,arrow_oe)
 		 fun reduce(x,y) = 
 		     (case (IlUtil.beta_reduce(x,y)) of
-			 NONE => APP(x,y)
+			 NONE => APP(x,[y])
 		       | SOME e => e)
 		 fun red (exp as (OVEREXP (c,_,oe))) = 
 		     ((case c of 
@@ -664,7 +672,7 @@ functor Toil(structure Il : IL
 			   end)
 		 else
 		     (case con1 of
-			 CON_ARROW(argcon,rescon,_) => 
+			 CON_ARROW([argcon],rescon,_,_) => 
 			     (error_region(); print " application is ill-typed.\n";
 			      print "  Function domain: "; pp_con argcon;
 			      print "\n  Argument type: "; pp_con con2;
@@ -718,10 +726,10 @@ functor Toil(structure Il : IL
 		     then 
 			 let val loop_var = fresh_named_var "loop"
 			     val arg_var = fresh_named_var "loop_arg"
-			     val (then_exp,_) = make_seq[body_ec, (APP(VAR loop_var, unit_exp),con_unit)]
+			     val (then_exp,_) = make_seq[body_ec, (APP(VAR loop_var, [unit_exp]),con_unit)]
 			     val loop_body = make_ifthenelse(teste,then_exp,unit_exp,con_unit)
 			     val loop_fun = FIX(true,PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
-			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, unit_exp)),
+			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, [unit_exp])),
 			     con_unit, false)
 			 end
 		 else (error_region();
@@ -821,8 +829,8 @@ functor Toil(structure Il : IL
 	     val eq_lab = to_eq_lab type_lab
 	     val eq_str = label2string eq_lab
 	     val eq_var = fresh_named_var eq_str
-	     val eq_con =  CON_ARROW(con_tuple[CON_VAR type_var, CON_VAR type_var],
-				     con_bool, oneshot_init PARTIAL)
+	     val eq_con =  CON_ARROW([con_tuple[CON_VAR type_var, CON_VAR type_var]],
+				     con_bool, false, oneshot_init PARTIAL)
 	     val eq_sdec = SDEC(eq_lab,DEC_EXP(eq_var, eq_con))
 	 in  if (is_eq) then (type_sdec :: eq_sdec :: rest) else type_sdec :: rest
 	 end
@@ -1158,7 +1166,7 @@ functor Toil(structure Il : IL
 				      arglist} = funCompile{patarg = patarg,
 							    rules = matches,
 							    reraise = false}
-				 fun con_folder ((_,c),acc) = CON_ARROW(c,acc,oneshot_init PARTIAL)
+				 fun con_folder ((_,c),acc) = CON_ARROW([c],acc,false,oneshot_init PARTIAL)
 				 val func = foldr con_folder bodyc arglist
 				 val _ = if (eq_con(context'',body_con,bodyc) andalso
 					     eq_con(context'',fun_con,func))
@@ -1313,7 +1321,7 @@ functor Toil(structure Il : IL
 			   NONE => (EXN_INJECT(VAR var,unit_exp), CON_ANY)
 			 | SOME ty => (#1 (make_total_lambda(v,con,CON_ANY,
 							     EXN_INJECT(VAR var,VAR v))),
-				       CON_ARROW(con, CON_ANY, oneshot_init TOTAL)))
+				       CON_ARROW([con], CON_ANY, false, oneshot_init TOTAL)))
 		  val inner_mod = MOD_STRUCTURE[SBND(stamp_lab, BND_EXP(var,NEW_STAMP con)),
 						SBND(mk_lab, BND_EXP(mkvar,mk_exp))]
 		  val inner_sig = SIGNAT_STRUCTURE(NONE,
@@ -1522,8 +1530,8 @@ functor Toil(structure Il : IL
 				  | _ => (CON_FUN(vars,con')))
 			   end
 		       val conopt = mapopt doty tyopt
-		       val eq_con = CON_ARROW(con_tuple[CON_VAR type_var, CON_VAR type_var],
-					      con_bool,oneshot_init PARTIAL)
+		       val eq_con = CON_ARROW([con_tuple[CON_VAR type_var, CON_VAR type_var]],
+					      con_bool,false, oneshot_init PARTIAL)
 		       val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt))
 		       val eq_sdec = SDEC(eq_label, DEC_EXP(eq_var,eq_con))
 		   in if (is_eq) then type_sdec :: eq_sdec:: (loop rest)
@@ -1612,8 +1620,8 @@ functor Toil(structure Il : IL
 				    val type_str = Symbol.name tv_sym
 				    val is_eq =  ((size type_str > 1) andalso 
 						  (String.substring(type_str,0,2) = "''"))
-				    val eq_con = CON_ARROW(con_tuple[CON_VAR type_var, CON_VAR type_var],
-							   con_bool,oneshot_init PARTIAL)
+				    val eq_con = CON_ARROW([con_tuple[CON_VAR type_var, CON_VAR type_var]],
+							   con_bool,false, oneshot_init PARTIAL)
 				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND_TUPLE 1, NONE))
 				    val eq_sdec = SDEC(eq_lab, DEC_EXP(eq_var,eq_con))
 				in if is_eq
@@ -1681,7 +1689,7 @@ functor Toil(structure Il : IL
 			  (case tyopt of
 			     NONE => (CON_ANY, CON_TAG con_unit)
 			   | (SOME ty) => let val con = xty(context,ty)
-					  in (CON_ARROW(con,CON_ANY,oneshot_init TOTAL),
+					  in (CON_ARROW([con],CON_ANY,false,oneshot_init TOTAL),
 					      CON_TAG con)
 					  end)
 			    val inner_sig = 
@@ -2420,7 +2428,7 @@ functor Toil(structure Il : IL
 			    val eqexp = self fieldcon
 			    val e1 = RECORD_PROJECT(VAR v1,lbl,con')
 			    val e2 = RECORD_PROJECT(VAR v2,lbl,con')
-			in APP(eqexp,exp_tuple[e1,e2])
+			in APP(eqexp,[exp_tuple[e1,e2]])
 			end
 		    fun folder (rdec,exp) = 
 			let val exp' = help rdec
@@ -2449,8 +2457,8 @@ functor Toil(structure Il : IL
 							special = SOME i}
 				     val armbody = if is_carrier
 						       then APP(self(List.nth(carriers,i-noncarriers)),
-								exp_tuple[SUM_TAIL(sumc,VAR var'),
-									  SUM_TAIL(sumc,VAR var'')])
+								[exp_tuple[SUM_TAIL(sumc,VAR var'),
+									  SUM_TAIL(sumc,VAR var'')]])
 						   else true_exp
 				     val arms2 = map0count 
 					 (fn j =>
@@ -2482,7 +2490,7 @@ functor Toil(structure Il : IL
 					  arms = arms1,
 					  default = NONE,
 					  tipe = con_bool}
-		    val body = make_catch(inner_body,con_bool,false_exp)
+		    val body = make_catch(inner_body,con_bool,match_exp,con_unit,false_exp)
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
@@ -2490,13 +2498,13 @@ functor Toil(structure Il : IL
 (*	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c) *)
 	  | CON_VECTOR c => 
 		let val (e,vc,_) = xexp(ctxt,Ast.VarExp[Symbol.varSymbol "vector_eq"])
-		    val ac = CON_ARROW(CON_ARROW(con_tuple[c,c],con_bool,oneshot()),
-				       CON_ARROW(con_tuple[CON_VECTOR c,CON_VECTOR c],con_bool,oneshot()),
-				       oneshot())
+		    val ac = CON_ARROW([CON_ARROW([con_tuple[c,c]],con_bool,false,oneshot())],
+				       CON_ARROW([con_tuple[CON_VECTOR c,CON_VECTOR c]],con_bool,false,oneshot()),
+				       false, oneshot())
 		    val _ = if (eq_con(ctxt,vc,ac))
 				then ()
 			    else (elab_error "Prelude vector_eq is bad")
-		in  APP(e,self c) 
+		in  APP(e,[self c]) 
 		end
 	  | CON_REF c => ETAPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
@@ -2560,8 +2568,8 @@ functor Toil(structure Il : IL
 				 end
 			     fun efolder ((evar,cvar,el),ctxt) = 
 				 let 
-				     val con = CON_ARROW(con_tuple[CON_VAR cvar, CON_VAR cvar],
-							 con_bool,oneshot_init PARTIAL)
+				     val con = CON_ARROW([con_tuple[CON_VAR cvar, CON_VAR cvar]],
+							 con_bool,false,oneshot_init PARTIAL)
 				     val dec = DEC_EXP(evar,con)
 				 in add_context_sdec(ctxt,SDEC(el,SelfifyDec dec))
 				 end
@@ -2589,7 +2597,7 @@ functor Toil(structure Il : IL
 				     val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
 				     val e1' = UNROLL(mu_con,e1)
 				     val e2' = UNROLL(mu_con,e2)
-				 in (var,APP(expv',exp_tuple[e1',e2']))
+				 in (var,APP(expv',[exp_tuple[e1',e2']]))
 				 end
 			     val exps_eq = map2 make_expeq (mu_cons,exps_v)
 			     val fbnds = map3 (fn (mu_con,vareq,(vararg,expeq)) =>
@@ -2597,8 +2605,8 @@ functor Toil(structure Il : IL
 						    con_bool,expeq))
 				 (mu_cons,vars_eq,exps_eq)
 			     val fbnd_types = 
-				 map (fn mu_con => CON_ARROW(con_tuple[mu_con,mu_con],
-							     con_bool,
+				 map (fn mu_con => CON_ARROW([con_tuple[mu_con,mu_con]],
+							     con_bool,false,
 							     oneshot_init PARTIAL))
 				 mu_cons
 			     val fix_exp = FIX(true,PARTIAL,fbnds)

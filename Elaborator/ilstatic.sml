@@ -514,9 +514,11 @@ exception XXX
 	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,ctxt,is_sub)
 	  | (CON_REF c1, CON_REF c2) => self(c1,c2,ctxt,is_sub)
 	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,ctxt,is_sub)
-	  | (CON_ARROW (c1_a,c1_r,comp1), CON_ARROW(c2_a,c2_r,comp2)) => 
-		(eq_comp(comp1,comp2,is_sub)
-		 andalso self (c2_a,c1_a,ctxt,is_sub)
+	  | (CON_ARROW (c1_a,c1_r,flag1,comp1), CON_ARROW(c2_a,c2_r,flag2,comp2)) => 
+		(flag1 = flag2 
+		 andalso eq_comp(comp1,comp2,is_sub)
+		 andalso (length c1_a = length c2_a andalso
+			  Listops.andfold (fn (c2,c1) => self (c2,c1,ctxt,is_sub)) (zip c1_a c2_a))
 		 andalso self(c1_r,c2_r,ctxt,is_sub))
 	  | (CON_MUPROJECT (i1,c1), CON_MUPROJECT(i2,c2)) => (i1=i2) andalso (self(c1,c2,ctxt,is_sub))
 	  | ((CON_RECORD _ | CON_FLEXRECORD _),(CON_RECORD _ | CON_FLEXRECORD _)) =>
@@ -638,15 +640,15 @@ exception XXX
      (Exp_IsSyntacticValue exp) orelse
      (case exp of
 	MODULE_PROJECT (m,l) => Module_IsValuable m ctxt
-      | APP(e1,e2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
+      | APP(e1,es2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
 			  val _ = (print "exp_isvaluable: app case: e1_con is: \n";
 				   Ppil.pp_con e1_con; print "\n")
 			  val e1_con_istotal = 
 			      (case e1_con of
-				   CON_ARROW(_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
+				   CON_ARROW(_,_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
 				 | _ => false)
 		      in va1 andalso e1_con_istotal
-			  andalso (Exp_IsValuable (ctxt,e2))
+			  andalso (Listops.andfold (fn e2 => Exp_IsValuable (ctxt,e2)) es2)
 		      end
      | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
                        (map (fn (_,e) => Exp_IsValuable(ctxt,e)) rbnds)
@@ -797,21 +799,26 @@ exception XXX
 				   | NONE => (va,con))
      | ETAPRIM (p,cs) => (true, PrimUtil.get_type p cs)
      | ETAILPRIM (ip,cs) => (true, PrimUtil.get_iltype ip cs)
-     | PRIM(p,cs,[e]) => GetExpCon(APP(ETAPRIM(p,cs),e),ctxt)
-     | ILPRIM(ip,cs,[e]) => GetExpCon(APP(ETAILPRIM(ip,cs),e),ctxt)
-     | PRIM(p,cs,es) => GetExpCon(APP(ETAPRIM(p,cs),exp_tuple es),ctxt)
-     | ILPRIM(ip,cs,es) => GetExpCon(APP(ETAILPRIM(ip,cs),exp_tuple es),ctxt)
+     | PRIM(p,cs,[e]) => GetExpCon(APP(ETAPRIM(p,cs),[e]),ctxt)
+     | ILPRIM(ip,cs,[e]) => GetExpCon(APP(ETAILPRIM(ip,cs),[e]),ctxt)
+     | PRIM(p,cs,es) => GetExpCon(APP(ETAPRIM(p,cs),[exp_tuple es]),ctxt)
+     | ILPRIM(ip,cs,es) => GetExpCon(APP(ETAILPRIM(ip,cs),[exp_tuple es]),ctxt)
      | (VAR v) => (case Context_Lookup'(ctxt,v) of
 		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
 		     | SOME _ => error "VAR looked up to a non-value"
 		     | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
-     | (APP (e1,e2)) => 
+     | (APP (e1,es2)) => 
 	   let val (va1,con1) = GetExpCon(e1,ctxt)
 	       val con1 = Normalize(con1,ctxt)
-	       val (va2,con2) = GetExpCon(e2,ctxt)
+  (*	       val (va2,con2) = GetExpCon(e2,ctxt) *)
+	       val vacon2 = map (fn e => GetExpCon(e,ctxt)) es2
+	       val va2 = Listops.andfold #1 vacon2
+	       val cons2 = map #2 vacon2
 	       val res_con = fresh_con ctxt
-	       val arrow = oneshot()
-	       val guesscon = CON_ARROW (con2,res_con,arrow)
+	       val (guesscon,arrow) = 
+		   (case con1 of
+			CON_ARROW(_,_,closed,arrow) => (CON_ARROW(cons2,res_con,closed,arrow),arrow)
+		      | _ => (CON_ARROW (cons2,res_con,false,oneshot()), oneshot()))
 	       val is_sub = sub_con(guesscon,con1,ctxt) 
 	       val total = (case oneshot_deref arrow of
 				NONE => false
@@ -821,18 +828,20 @@ exception XXX
 	   in  if is_sub
 		   then (va,con_deref res_con)
 	       else (print "\nfunction type is = "; pp_con con1;
-		     print "\nargument type is = "; pp_con con2; print "\n";
+		     (case cons2 of
+			  [con2] => (print "\nargument type is = "; pp_con con2; print "\n")
+			| _ => (print "\nargument types are = "; app pp_con cons2; print "\n"));
 		     print "Type mismatch in expression application:\n";
 		     pp_exp exparg;
 		     error "Type mismatch in expression application")
 	   end
      | (FIX (r,a,fbnds)) => (* must check that there are no function calls for TOTAL *)
-	   let fun get_arm_type(FBND(_,_,c,c',_)) = CON_ARROW(c,c',oneshot_init a)
+	   let fun get_arm_type(FBND(_,_,c,c',_)) = CON_ARROW([c],c',false,oneshot_init a)
 	       val res_type = (case fbnds of
 				   [fbnd] => get_arm_type fbnd
 				 | _ => con_tuple(map get_arm_type fbnds))
 	       fun folder (FBND(v',v,c,c',e), ctxt) = 
-		   add_context_exp'(ctxt,v',CON_ARROW(c,c',oneshot_init PARTIAL))
+		   add_context_exp'(ctxt,v',CON_ARROW([c],c',false,oneshot_init PARTIAL))
 	       val full_ctxt = foldl folder ctxt fbnds
 	       fun ttest lctxt (FBND(v',v,c,c',e)) =
 		   let val (va,bodyc) = GetExpCon(e,add_context_exp'(lctxt,v,c))
@@ -898,7 +907,7 @@ exception XXX
 	   let val (_,bcon) = GetExpCon(body,ctxt)
 	       val (_,hcon) = GetExpCon(handler,ctxt)
 	       val res_con = fresh_con ctxt
-	       val hcon' = CON_ARROW (CON_ANY,res_con,oneshot())
+	       val hcon' = CON_ARROW ([CON_ANY],res_con,false,oneshot())
 	   in  if (eq_con_from_get_exp3(hcon,hcon',ctxt)) 
 		   then (false,bcon)
 	       else error "Type mismatch between handler and body of HANDLE"
@@ -1015,7 +1024,7 @@ exception XXX
 		   let val (_,c1) = GetExpCon(e1,ctxt)
 		       val (_,c2) = GetExpCon(e2,ctxt)
 		   in if ((eq_con_from_get_exp9(c1,CON_TAG c, ctxt))
-			  andalso eq_con_from_get_exp10(c2,CON_ARROW(c,tipe,oneshot()),ctxt))
+			  andalso eq_con_from_get_exp10(c2,CON_ARROW([c],tipe,false,oneshot()),ctxt))
 			  then ()
 		      else error "rescon does not match in EXN_CASE"
 		   end
@@ -1057,10 +1066,10 @@ exception XXX
 		 | loop n ((SOME exp)::rest) = 
 			let val (_,c) = GetExpCon(exp,ctxt)
 			    val tipe' = if (n < noncarriers) then tipe 
-					else CON_ARROW(CON_SUM{special = SOME n,
+					else CON_ARROW([CON_SUM{special = SOME n,
 							       carriers = carriers,
-							       noncarriers = noncarriers},
-						       tipe,oneshot())
+							       noncarriers = noncarriers}],
+						       tipe,false,oneshot())
 			in  
 			    if (sub_con(c,tipe',ctxt))
 				then loop (n+1) rest
@@ -1383,7 +1392,8 @@ exception XXX
       | (CON_ARRAY c)             => CON_ARRAY (Normalize(c,ctxt))
       | (CON_VECTOR c)            => CON_VECTOR (Normalize(c,ctxt))
       | (CON_TAG c)               => CON_TAG (Normalize(c,ctxt))
-      | (CON_ARROW (c1,c2,comp))  => CON_ARROW (Normalize(c1,ctxt),Normalize(c2,ctxt),comp)
+      | (CON_ARROW (cs1,c2,closed,comp))  => CON_ARROW (map (fn c => Normalize(c,ctxt)) cs1, 
+						 Normalize(c2,ctxt),closed,comp)
       | (CON_MUPROJECT (i,c))     => CON_MUPROJECT (i, Normalize(c,ctxt))
       | (CON_RECORD rdecs)        => let fun f (l,c)= (l,Normalize(c,ctxt))
 	                             in CON_RECORD (map f rdecs)

@@ -12,8 +12,8 @@ functor IlPrimUtilParam(structure Il : IL)
 	type ('con,'exp) value = ('con,'exp) Prim.value
 	val error = fn s => error "ilprimutilparam.sml" s
 
-	fun partial_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init PARTIAL)
-	fun total_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init TOTAL)
+	fun partial_arrow (c1,c2) = CON_ARROW([c1],c2,false,oneshot_init PARTIAL)
+	fun total_arrow (c1,c2) = CON_ARROW([c1],c2,false,oneshot_init TOTAL)
 	fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
 	fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
 	val unit_exp : exp = RECORD[]

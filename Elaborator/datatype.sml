@@ -62,8 +62,8 @@ functor Datatype(structure Il : IL
 	  val sdecs = (map2 (fn (tv,v) => SDEC(tv,DEC_CON(v,KIND_TUPLE 1,NONE))) 
 		       (tyvar_label, varpoly_list))
 	  val sdecs_eq = (map2 (fn (tv,v) => let val eq_label = to_eq_lab tv
-						 val eq_con = CON_ARROW(con_tuple[CON_VAR v, CON_VAR v],
-									con_bool, oneshot_init PARTIAL)
+						 val eq_con = CON_ARROW([con_tuple[CON_VAR v, CON_VAR v]],
+									con_bool, false, oneshot_init PARTIAL)
 					     in SDEC(eq_label,DEC_EXP(fresh_var(),eq_con))
 					     end)
 			  (tyvar_label, varpoly_list))
@@ -194,8 +194,8 @@ functor Datatype(structure Il : IL
 		    val _ = (case eq_exp of 
 				 NONE => (is_eq := false)
 			       | _ => ())
-		    val eq_con = CON_ARROW(con_tuple[cons_rf_i,cons_rf_i],
-					   con_bool,oneshot_init PARTIAL)
+		    val eq_con = CON_ARROW([con_tuple[cons_rf_i,cons_rf_i]],
+					   con_bool,false,oneshot_init PARTIAL)
 
 		in (case eq_exp of 
 			SOME e => ((* eqfun_search e; *)
@@ -389,7 +389,7 @@ functor Datatype(structure Il : IL
 		       | PHRASE_CLASS_EXP(_,con) => con
 		       | _ => (error "ill-formed constructor phrase_class"))
 		in  (case innercon of
-			 CON_ARROW(_,CON_RECORD[],_) => true
+			 CON_ARROW(_,CON_RECORD[],false,_) => true
 		       | _ => false)
 		end
 	    val _ = (debugdo (fn () => (print "constr_lookup called with path = ";
@@ -449,7 +449,7 @@ functor Datatype(structure Il : IL
 			    let 
 				val (vso,mkc) = des_dec mkdec
 				val argcon = case mkc of
-				    CON_ARROW(c,_,_) => SOME c
+				    CON_ARROW([c],_,_,_) => SOME c
 				  | _ => NONE
 			    in (vso,{name=constr_name,arg_type=argcon})
 			    end

@@ -445,7 +445,7 @@ functor Pat(structure Il : IL
     in  (flatten vfll_list,
 	 (CASE{noncarriers = nca,
 	       carriers = ca,
-	       arg = APP(expose_exp,casearg),
+	       arg = APP(expose_exp,[casearg]),
 	       arms = expopt_list,
 	       default = (case (exhaustive,def) of
 			      (true,_) => NONE
@@ -757,7 +757,7 @@ functor Pat(structure Il : IL
 					val (a,b,c,d) = (shift 0 a, shift 8 b, shift 16 c, shift 24 d)
 					val e = TilWord64.orb(TilWord64.orb(a,b),TilWord64.orb(c,d))
 					val match = ILPRIM(eq_uint W32,[],
-							 [SCON(uint (W32, TilWord64.fromInt len)),
+							 [SCON(uint (W32, e)),
 							  PRIM(sub (IntVector W32),[],
 							       [VAR v', 
 								SCON(uint (W32, TilWord64.fromInt n))])])
