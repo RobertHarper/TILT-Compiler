@@ -75,7 +75,8 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 
     fun tabulate (0, _) = array0
       | tabulate (n, f) : array = 
-          let val a = array(n, f 0)
+          let val _ = if (n < 0) then raise Size else ()
+	      val a = array(n, f 0)
 	      val n = int32touint32 n
               fun tab i = 
                 if ult(i,n) then (unsafe_update(a, i, f (uint32toint32 i)); 
