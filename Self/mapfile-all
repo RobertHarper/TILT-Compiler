@@ -490,14 +490,14 @@ NilHNF	Nil/nilhnf
 NILCONTEXT Nil/nilcontext.sig
 NilContext Nil/nilcontext
 
+TRACEOPS Nil/traceops.sig
+TraceOps Nil/traceops
+
 NILSTATIC Nil/nilstatic.sig
 NilStatic Nil/nilstatic
 
 LINEARIZE Nil/linearize.sig
 Linearize Nil/linearize
-
-TRACEOPS Nil/traceops.sig
-TraceOps Nil/traceops
 
 REIFY Nil/reify.sig
 Reify Nil/reify
@@ -563,6 +563,8 @@ Linkrtl Rtl/linkrtl
 
 
 ##################### Backend directory #################
+CORE  Backend/core.sig
+Core  Backend/core
 MACHINE Backend/machine.sig
 MACHINEUTILS Backend/machineutils.sig
 CALLCONV Backend/callconv.sig
@@ -572,8 +574,6 @@ BBLOCK Backend/bblock.sig
 Bblock Backend/bblock
 PRINTUTILS Backend/printutils.sig
 PrintUtils Backend/printutils
-CORE  Backend/core.sig
-Core  Backend/core
 
 IFGRAPH Backend/ifgraph.sig
 IfGraph Backend/ifgraph
@@ -606,6 +606,17 @@ DivMult       Alpha/divmult
 ToAlpha       Alpha/toalpha
 TrackStorage  Alpha/trackstorage
 Linkalpha     Alpha/linkalpha
+
+##################### Sparc directory #################
+SPARC         Sparc/sparc.sig
+Sparc         Sparc/sparc
+SparcUtils    Sparc/sparcutils
+SparcCallConv Sparc/sparccallconv
+SparcTrackStorage	Sparc/sparctrackstorage
+ToSparc       Sparc/tosparc
+Linksparc     Sparc/linksparc
+
+
 #
 ##################### Top directory #################
 COMPILER Top/compiler.sig
