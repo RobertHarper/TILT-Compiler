@@ -1,6 +1,6 @@
 (*$import MATH Prelude *)
 
-structure Math64 : MATH =
+structure Math64 :> MATH where type real = real =
   struct
     (* div and mod will eventually be overloaded to work at multiple types *)
     val div = idiv
@@ -132,3 +132,4 @@ structure Math64 : MATH =
 	       else 1.0
     end
   end
+structure Math = Math64

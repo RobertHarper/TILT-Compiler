@@ -397,6 +397,9 @@ end
 
 (*
  * $Log$
+# Revision 1.2  2000/08/23  16:06:05  swasey
+# Minor improvements.
+# 
 # Revision 1.1  98/03/09  19:52:39  pscheng
 # added basis
 # 
