@@ -281,13 +281,15 @@ functor Ppil(structure Il : IL
 					    pp_list (pp_exp seen) elist ("[",",","]",false)]
        | VAR var => pp_var var
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
-       | FIX (a,[FBND(v',v,c,cres,e)]) => 
-		  HOVbox[String (case a of TOTAL => "/TOTAL\\ " | PARTIAL => "/\\"),
+       | FIX (r,a,[FBND(v',v,c,cres,e)]) => 
+		  HOVbox[String ((case a of TOTAL => "/TOTAL" | PARTIAL => "/") ^
+				 (if r then "\\" else "LEAF\\")),
 			 pp_var v', Break0 0 5,
 			 String " (", pp_var v,	 String " : ", pp_con seen c, String ")", Break0 0 5,
 			 String " : ", pp_con seen cres, String " =", Break,
 			 pp_exp seen e]
-       | FIX (a,fbnds) => HOVbox[String (case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX"),
+       | FIX (r,a,fbnds) => HOVbox[String ((case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX") ^
+					   (if r then "\\" else "-LEAF\\")),
 				 pp_list (pp_fbnd seen) fbnds ("[",",","]", true),
 				 String "END "]
 (*       | SEQ elist => pp_list (pp_exp seen) elist ("(", ";",")", true) *)

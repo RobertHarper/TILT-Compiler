@@ -274,10 +274,10 @@ functor IlEval(structure Il : IL
 	((* print "********** reduce_exp called on exp:";
 	 Ppil.pp_exp exp; print "\n\n";  *)
 	  case exp of
-	    (FIX (a,fbnds)) => let fun help (FBND(v1,v2,c1,c2,e)) = FBND(v1,v2,reduce_con env c1,
+	    (FIX (r,a,fbnds)) => let fun help (FBND(v1,v2,c1,c2,e)) = FBND(v1,v2,reduce_con env c1,
 									 reduce_con env c2, 
 									 reduce_exp env e)
-			       in FIX(a,map help fbnds)
+			       in FIX(r,a,map help fbnds)
 			       end
 	  | (APP(e1,e2)) => APP(reduce_exp env e1, reduce_exp env e2)
 	  | CASE {noncarriers,carriers,arg,arms,default,tipe} =>
@@ -315,7 +315,7 @@ functor IlEval(structure Il : IL
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
 	   | (SCON _ | ETAPRIM _ | ETAILPRIM _) => exp
-	   | (FIX (a,fbnds)) => 
+	   | (FIX (r,a,fbnds)) => 
 		 let fun help (FBND(v1,v2,c1,c2,e)) = 
 		     FBND(v1,v2,
 			  reduce_con env c1,
@@ -323,7 +323,7 @@ functor IlEval(structure Il : IL
 			  (case (subst_var(BND_EXP(fresh_var(),reduce_exp env e),env)) of
 			       BND_EXP(v,e) => e
 			     | _ => error "subst_var got exp, returned non-exp"))
-		 in FIX(a,map help fbnds)
+		 in FIX(r,a,map help fbnds)
 		 end
 	   | (VAR v) => eval_exp env (exp_lookup env v)
 	   | ((PRIM _) | (ILPRIM _)) => raise UNIMP

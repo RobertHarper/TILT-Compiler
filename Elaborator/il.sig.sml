@@ -30,7 +30,7 @@ signature IL =
                  | ETAILPRIM of ilprim * con list
                  | VAR     of var
                  | APP     of exp * exp
-                 | FIX     of arrow * fbnd list
+                 | FIX     of bool * arrow * fbnd list (* bool = false indicates non-recursive *)
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp

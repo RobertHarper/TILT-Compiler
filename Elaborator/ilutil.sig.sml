@@ -43,13 +43,14 @@ signature ILUTIL =
 
     (* derived forms *)
     val make_lambda : var * con * con * exp -> (exp * con)
-    val make_total_lambda : var * con * con * exp -> (exp * con)
+    val make_total_lambda : var * con * con * exp -> (exp * con) (* no function calls in body *)
     val make_let  : ((var * exp) list * exp) -> exp
     val make_catch : exp * con * exp -> exp
     val make_ifthenelse : exp * exp * exp * con -> exp
     val make_seq : (exp * con) list -> exp * con
     val prim_etaexpand : (Il.Prim.prim * con list) -> exp
     val ilprim_etaexpand : (Il.Prim.ilprim * con list) -> exp
+    val beta_reduce_mod : mod * mod -> mod option
     val beta_reduce : exp * exp -> exp option
 
     val con_bool : con
@@ -69,9 +70,11 @@ signature ILUTIL =
     val it_lab   : label
     val case_lab : label
     val expose_lab : label
-    val to_eq_lab : label -> label (* takes any internal label and 
-				      generate the unique eq internal label *)
+    val to_eq_lab : label -> label       (* takes any internal label and 
+				           generate the unique eq internal label *)
     val is_eq_lab : label -> bool
+    val to_datatype_lab : label -> label (* these are used for the inner datatype structures *)
+    val is_datatype_lab : label -> bool 
     val is_exportable_lab : label -> bool
     val functor_arg_lab : label
     val con_unit : con

@@ -28,7 +28,12 @@ functor Datatype(structure Il : IL
 		withtycs : Ast.tb list,
 		eqcomp : Il.context * Il.con -> Il.exp option) : (sbnd * sdec) list = 
       let 
-	  fun sort_std' (ncs,cs) [] = (rev ncs) @ (rev cs)
+	  fun geq_sym((s1,_),(s2,_)) = 
+	      (case (String.compare(Symbol.symbolToString s1,Symbol.symbolToString s2)) of
+		   GREATER => true
+		 | EQUAL => true
+		 | LESS => false)
+	  fun sort_std' (ncs,cs) [] = (ListMergeSort.sort geq_sym ncs) @ (ListMergeSort.sort geq_sym cs)
 	    | sort_std' (ncs,cs) ((nc as (_,NONE))::rest) = sort_std' (nc::ncs,cs) rest
 	    | sort_std' (ncs,cs) ((c as (_,SOME _))::rest) = sort_std' (ncs,c::cs) rest
 	fun sort_std (s,tvs,st_list) = (s,tvs,sort_std' ([],[]) st_list)
@@ -85,7 +90,7 @@ functor Datatype(structure Il : IL
 	      | conapper _ = NONE
 	in fun to_var_dt c = con_subst_conapps(c,conapper)
 	end
-	fun conopts_split (nca,ca) [] = (nca,ca)
+	fun conopts_split (nca,ca) [] = (nca,rev ca)
 	  | conopts_split (nca,ca) (NONE::rest) = conopts_split (nca+1,ca) rest
 	  | conopts_split (nca,ca) ((SOME c)::rest) = conopts_split (nca,c::ca) rest
 	val conopts_split = conopts_split (0,[])
@@ -261,7 +266,7 @@ functor Datatype(structure Il : IL
 	    val inner_mod = MOD_STRUCTURE(type_sbnd::expose_sbnd::sbnds)
 	    val inner_sig = SIGNAT_STRUCTURE(NONE,type_sdec::expose_sdec::sdecs)
 
-	    val tc_star = openlabel type_label
+	    val tc_star = to_datatype_lab type_label
 	    val tc_var = fresh_var()
 	  in (SBND(tc_star,BND_MOD(tc_var,inner_mod)),
 	      SDEC(tc_star,DEC_MOD(tc_var,inner_sig)))
@@ -280,10 +285,10 @@ functor Datatype(structure Il : IL
 		   | SOME (exp_eq_i,con_eq_i) =>
 			 let 
 			     val eq_lab = to_eq_lab type_label
-			     val equal_var = fresh_var()
+			     val equal_var = fresh_named_var (label2string eq_lab)
+			     val bnd_var = fresh_named_var ("poly" ^ (label2string eq_lab))
 			     val eq_expbnd = BND_EXP(equal_var,exp_eq_i)
 			     val eq_expdec = DEC_EXP(equal_var,con_eq_i)
-			     val bnd_var = fresh_var()
 			     val eq_sbnd = 
 				 SBND((eq_lab,
 				       if (is_monomorphic)

@@ -822,7 +822,7 @@ exception XXX
 		     pp_exp exparg;
 		     error "Type mismatch in expression application")
 	   end
-     | (FIX (a,fbnds)) => 
+     | (FIX (r,a,fbnds)) => (* must check that there are no function calls for TOTAL *)
 	   let fun get_arm_type(FBND(_,_,c,c',_)) = CON_ARROW(c,c',oneshot_init a)
 	       val res_type = (case fbnds of
 				   [fbnd] => get_arm_type fbnd
@@ -988,10 +988,18 @@ exception XXX
 		   val clist = map (fn c => Normalize(c,ctxt)) carriers
 		   val i = special - noncarriers (* i >= 0 *)
 		   val n = length clist
-	       in if (i < n andalso 
-		      (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt)))
-		      then (va,CON_SUM{noncarriers=noncarriers,carriers=clist,special=NONE})
-		  else (error "INJ: injection field out of range")
+	       in if (i >= n)
+		      then
+			  (print "INJ: injection field out of range in exp:";
+			   Ppil.pp_exp exparg; print "\n";
+			   error "INJ: injection field out of range")
+		  else if (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt))
+			   then (va,CON_SUM{noncarriers=noncarriers,carriers=clist,special=NONE})
+		       else (print "INJ: injection does not type check eq_con failed on: ";
+			     Ppil.pp_exp exparg; print "\n";
+			     print "econ is "; Ppil.pp_con econ; print "\n";
+			     print "nth clist is "; Ppil.pp_con (List.nth(clist,i)); print "\n";
+			     error "INJ: injection does not typecheck")
 	       end
      | (EXN_CASE (arg,arms,eopt)) =>
 	   let 

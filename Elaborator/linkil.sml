@@ -161,18 +161,11 @@ structure LinkIl (* : LINKIL *) =
 		in  rev_sdecs
 		end
 
-	fun export_open (pair as (SOME(SBND(l,_)),
-				  CONTEXT_SDEC(SDEC(_,DEC_MOD(v,
-							      ((SIGNAT_INLINE_STRUCTURE {imp_sig=sdecs,...}) |
-							       (SIGNAT_STRUCTURE (_,sdecs)))))))) = 
-	    if Name.is_label_open l
-		then
-		    let val sbnd_sdec = rev(export_sdecs ([],[],[]) (SIMPLE_PATH v) sdecs)
-			val unwrapped = map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdec
-		    in  pair :: unwrapped
-		    end
-	    else [pair]
-	  | export_open pair = [pair]
+	fun kill_datatype (pair as (SOME(SBND(l,_)),entry)) =
+	    if IlUtil.is_datatype_lab l
+		then NONE
+	    else SOME pair
+	  | kill_datatype pair = SOME pair
 
 	fun elaborate (context,filename) : (sbnds * context_entry list) option = 
 	    let val (filepos,astdec) = LinkParse.parse_all filename
@@ -180,7 +173,7 @@ structure LinkIl (* : LINKIL *) =
 		(case (Toil.xdec(context,filepos,astdec)) of
 		     SOME sbnd_ctxt_list =>
 			 let 
-(*			     val sbnd_ctxt_list = Listops.flatten (map export_open sbnd_ctxt_list) *)
+(*			     val sbnd_ctxt_list = List.mapPartial kill_datatype sbnd_ctxt_list *)
 			     val sbnds = List.mapPartial #1 sbnd_ctxt_list
 			     val entries = map #2 sbnd_ctxt_list
 			 in  SOME(sbnds,entries)
@@ -239,9 +232,11 @@ structure LinkIl (* : LINKIL *) =
 		       NONE => error "prelude failed to elaborate"
 		     | SOME (sbnds,entries) =>
 		     let val sdecs = entries2sdecs entries
+
 			 (* compute prelude_module *)
 			 val m = (ctxt_noninline,sbnds,sdecs)
 			 val _ = prelude_module := SOME m
+
 			 (* compute inlineprelude_quad *)
 			 val ctxt_inline = local_add_context_entries(ctxt_inline,entries)
 			 val ctxt_noninline = local_add_context_entries(ctxt_noninline,entries)
@@ -250,7 +245,7 @@ structure LinkIl (* : LINKIL *) =
 				  print "ctxt_noninline is:\n"; Ppil.pp_context ctxt_noninline; print "\n\n")
 *)
 			 val (sb_filt,sd_filt) = filter(sbnds,sdecs)
-			 val (sb_filt,sd_filt) = hide_sbnd_sdec(sb_filt,sd_filt)
+(*			 val (sb_filt,sd_filt) = hide_sbnd_sdec(sb_filt,sd_filt) *)
 			 val _ = inlineprelude_quad := SOME (ctxt_inline,sb_filt,sd_filt,ctxt_noninline)
 		     in  m
 		     end)

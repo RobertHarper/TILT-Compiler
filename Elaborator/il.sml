@@ -34,7 +34,7 @@ functor Il(structure Prim : PRIM
                  | ETAILPRIM of ilprim * con list
                  | VAR     of var
                  | APP     of exp * exp
-                 | FIX     of arrow * fbnd list
+                 | FIX     of bool * arrow * fbnd list
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp

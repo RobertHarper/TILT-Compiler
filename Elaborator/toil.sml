@@ -704,7 +704,7 @@ functor Toil(structure Il : IL
 			     val arg_var = fresh_named_var "loop_arg"
 			     val (then_exp,_) = make_seq[body_ec, (APP(VAR loop_var, unit_exp),con_unit)]
 			     val loop_body = make_ifthenelse(teste,then_exp,unit_exp,con_unit)
-			     val loop_fun = FIX(PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
+			     val loop_fun = FIX(true,PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
 			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, unit_exp)),
 			     con_unit)
 			 end
@@ -1147,7 +1147,7 @@ functor Toil(structure Il : IL
 		  val fbnd_cons : con list = map #2 fbnd_con_list
 		  val top_label = fresh_internal_label "polyfuns"
 		  val top_var = fresh_named_var "polyfuns"
-		  val top_exp_con = (FIX(PARTIAL,fbnds),
+		  val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				     case fbnd_cons of
 					 [c] => c
 				       | _ => con_tuple fbnd_cons)
@@ -1206,7 +1206,7 @@ functor Toil(structure Il : IL
 		  fun modsig_helper nameopt (id,(exp,con)) = 
 		      let val v1 = fresh_named_var "fixexp"
 			  val v2 = (case nameopt of
-					NONE => fresh_named_var "polyfixexp"
+					NONE => fresh_named_var (label2string id)
 				      | SOME v => v)
 			  fun poly_case () = 
 			      let 
@@ -2557,7 +2557,7 @@ functor Toil(structure Il : IL
 							     con_bool,
 							     oneshot_init PARTIAL))
 				 mu_cons
-			     val fix_exp = FIX(PARTIAL,fbnds)
+			     val fix_exp = FIX(true,PARTIAL,fbnds)
 			 in case fbnds of
 			     [fbnd] => fix_exp
 			   | _ => RECORD_PROJECT(fix_exp, generate_tuple_label j,

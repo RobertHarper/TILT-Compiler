@@ -200,7 +200,9 @@ functor Basis(structure Il : IL
 	  (* ----------------- add base monomorphic values -------------- *)
 	  local
 	      val basevalue_list = 
-		  [("true", true_exp),
+		  [("littleEndian", if (!(Stats.bool "littleEndian"))
+					then true_exp else false_exp),
+	           ("true", true_exp),
 		   ("false", false_exp),
 		   ("not", let
 			       val arg_var = fresh_named_var "not_arg"

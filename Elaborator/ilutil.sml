@@ -90,13 +90,13 @@ functor IlUtil(structure Ppil : PPIL
 			    special = NONE}
     val false_exp = INJ{noncarriers=2,carriers=[],special=0,inject=NONE}
     val true_exp = INJ{noncarriers=2,carriers=[],special=1,inject=NONE}
-    fun make_lambda_help (a,var,con,rescon,e) 
+    fun make_lambda_help (is_recur,a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
-		    in (FIX(a,[fbnd]), CON_ARROW(con,rescon,oneshot_init a))
+		    in (FIX(is_recur,a,[fbnd]), CON_ARROW(con,rescon,oneshot_init a))
 		    end
-    fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
-    fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
+    fun make_total_lambda (var,con,rescon,e) = make_lambda_help(false,TOTAL,var,con,rescon,e)
+    fun make_lambda (var,con,rescon,e) = make_lambda_help(true,PARTIAL,var,con,rescon,e)
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
 	CASE{noncarriers=2,carriers=[],arg=e1,
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
@@ -139,6 +139,11 @@ functor IlUtil(structure Ppil : PPIL
 
     val prim_etaexpand = etaexpand_help (PRIM,PrimUtil.get_type)
     val ilprim_etaexpand = etaexpand_help (ILPRIM,PrimUtil.get_iltype)
+
+    fun beta_reduce_mod(x : mod, y : mod) : mod option = 
+	(case (x,y) of
+	     (MOD_FUNCTOR(v,s,m), _) => SOME (MOD_LET(v,y,m))
+	   | _ => NONE)
 
     fun beta_reduce(x : exp, y : exp) : exp option = 
 	let fun red (exp as (OVEREXP (c,_,oe))) = 
@@ -253,7 +258,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | ETAPRIM (p,cs) => ETAPRIM(p, map (f_con state) cs)
 	   | ETAILPRIM (ilp,cs) => ETAILPRIM (ilp, map (f_con state) cs)
 	   | APP (e1,e2) => APP(self e1, self e2)
-	   | FIX (a,fbnds) => FIX(a,map (f_fbnd state) fbnds)
+	   | FIX (r,a,fbnds) => FIX(r,a,map (f_fbnd state) fbnds)
 	   | RECORD (rbnds) => RECORD(map (f_rbnd state) rbnds)
 	   | RECORD_PROJECT (e,l,c) => RECORD_PROJECT(self e,l,f_con state c)
 	   | SUM_TAIL (c,e) => SUM_TAIL(f_con state c, self e)
@@ -1107,22 +1112,27 @@ functor IlUtil(structure Ppil : PPIL
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
 
-    fun is_eq_lab lab = is_label_internal lab andalso (substring ("_eq",label2string lab))
+    val eq_str = "*eq_"
+    val dt_str = "*dt_"
+    fun is_eq_lab lab = is_label_internal lab andalso (substring (eq_str,label2string lab))
+    fun is_datatype_lab lab = is_label_internal lab andalso (substring (dt_str,label2string lab))
+    local
+	fun to_meta_lab meta_str lab =
+	  let
+	      val str = label2string lab
+	      val final_str = meta_str ^ str
+	  in  internal_label final_str
+	  end
+    in  fun to_eq_lab lab = to_meta_lab eq_str lab
+	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
+    end
+
     fun is_exportable_lab l =
 	(not (is_label_internal l)) orelse
-	(is_eq_lab l) orelse 
+	(is_eq_lab l) orelse
 	let val str = label2string l
 	in (substring ("top",str)) orelse (substring ("open",str))
 	end
-
-    fun to_eq_lab type_lab =
-	  let
-	      val type_str = label2string type_lab
-	      val eq_str = type_str ^ "_eq"
-	      val eq_lab = internal_label eq_str
-	  in
-	      eq_lab
-	  end
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e
       | is_inline_bnd (BND_CON _) = true

@@ -407,7 +407,12 @@ functor Pat(structure Il : IL
 		     | _ => error "expose_exp is non expresion")
 	      fun polycase module types l = 
 		  (case path2pc(mod2path module) of
-		       PHRASE_CLASS_MOD(m,_) => MODULE_PROJECT(MOD_APP(m,types),l)
+		       PHRASE_CLASS_MOD(m,_) => 
+			   let val p = (case beta_reduce_mod (m,types) of
+					    SOME reduced => reduced
+					  | NONE => MOD_APP(m,types))
+			   in  MODULE_PROJECT(p,l)
+			   end
 		     | _ => error "expose_mod is non module")
 	  in  (case expose_exp of
 		   MODULE_PROJECT (MOD_APP(m,types),l) => polycase m types l
@@ -737,6 +742,9 @@ functor Pat(structure Il : IL
 				  | loop n [a,b,c] = loop n [a,b,c,z]
 				  | loop n (a::b::c::d::rest) = 
 				    let fun shift sh ch = TilWord64.lshift(TilWord64.fromInt(ord ch),sh)
+					val (a,b,c,d) = if (!(Stats.bool "littleEndian"))
+								then (a,b,c,d)
+								else (d,c,b,a)
 					val (a,b,c,d) = (shift 0 a, shift 8 b, shift 16 c, shift 24 d)
 					val e = TilWord64.orb(TilWord64.orb(a,b),TilWord64.orb(c,d))
 					val match = ILPRIM(eq_uint W32,[],
