@@ -134,7 +134,7 @@ functor InfixParse(structure Il : IL
 						   then scan(rightscan rest [v2,op1,v1])
 						 else v1::op1::(scan (v2::rest)))
               | scan [e] = [e]
-              | scan _ = raise (BUG "scan encountered ill-formed expression")
+              | scan _ = error "scan encountered ill-formed pattern or expression"
             and rightscan (op1::v2::rest) acc = if ((get_fix op1) = Fixity.infixright cur_prec)
 						   then rightscan rest (v2::op1::acc)
 						 else (right_rewrite_list acc)::op1::v2::rest

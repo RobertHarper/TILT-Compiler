@@ -639,6 +639,8 @@ exception XXX
      (case exp of
 	MODULE_PROJECT (m,l) => Module_IsValuable m ctxt
       | APP(e1,e2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
+			  val _ = (print "exp_isvaluable: app case: e1_con is: \n";
+				   Ppil.pp_con e1_con; print "\n")
 			  val e1_con_istotal = 
 			      (case e1_con of
 				   CON_ARROW(_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
@@ -763,11 +765,13 @@ exception XXX
 	   let val (_,signat) = GetModSig(m,ctxt)
 	   in (case signat of
 		   SIGNAT_FUNCTOR _ => error "cannot project from functor"
-		 | ((SIGNAT_STRUCTURE (_,sdecs)) |
-		       (SIGNAT_INLINE_STRUCTURE {abs_sig=sdecs,...})) =>
+		 | ((SIGNAT_STRUCTURE (self,sdecs)) |
+		       (SIGNAT_INLINE_STRUCTURE {self,abs_sig=sdecs,...})) =>
 		       (case Sdecs_Lookup(MOD_VAR (fresh_var()),sdecs,[l]) of
-			    NONE => (print "no such label in sig: ";
-				     pp_label l; print "\n";
+			    NONE => (print "no such label = ";
+				     pp_label l; print " in sig \n";
+				     Ppil.pp_signat (SIGNAT_STRUCTURE(self,sdecs));
+				     print "\n";
 				     error "no such label in sig")
 			  | SOME(PHRASE_CLASS_CON(_,k)) => k
 			  | _ => error "label in sig not a DEC_CON"))
@@ -1001,29 +1005,36 @@ exception XXX
 			     print "nth clist is "; Ppil.pp_con (List.nth(clist,i)); print "\n";
 			     error "INJ: injection does not typecheck")
 	       end
-     | (EXN_CASE (arg,arms,eopt)) =>
+     | (EXN_CASE {arg,arms,default,tipe}) =>
 	   let 
 	       val (_,argcon) = GetExpCon(arg,ctxt)
-	       val rescon = fresh_con ctxt
+	       val _ = if (eq_con_from_get_exp12(argcon,CON_ANY,ctxt))
+			   then () 
+		       else error "arg not a CON_ANY in EXN_CASE"
 	       fun checkarm(e1,c,e2) = 
 		   let val (_,c1) = GetExpCon(e1,ctxt)
 		       val (_,c2) = GetExpCon(e2,ctxt)
-		   in (eq_con_from_get_exp9(c1,CON_TAG c, ctxt))
-		       andalso eq_con_from_get_exp10(c2,CON_ARROW(c,rescon,oneshot()),ctxt)
+		   in if ((eq_con_from_get_exp9(c1,CON_TAG c, ctxt))
+			  andalso eq_con_from_get_exp10(c2,CON_ARROW(c,tipe,oneshot()),ctxt))
+			  then ()
+		      else error "rescon does not match in EXN_CASE"
 		   end
-	       fun check_opt NONE = true
-		 | check_opt (SOME e) = 
-		   let val (_,optcon) = GetExpCon(e,ctxt)
-		   in eq_con_from_get_exp11(optcon,CON_ARROW(CON_ANY,rescon,
-							     oneshot()),ctxt)
-		   end
-	   in if (eq_con_from_get_exp12(argcon,CON_ANY,ctxt))
-		  then if (andfold checkarm arms)
-			   then if check_opt eopt
-				    then (false, rescon)
-				else error "EXN_CASE: default case mismatches"
-		       else error "rescon does not match in EXN_CASE"
-	      else error "arg not a CON_ANY in EXN_CASE"
+	       val _ = app checkarm arms
+	       val _ = 
+		   (case default of 
+			NONE => ()
+		      | (SOME e) =>
+			    let val (_,optcon) = GetExpCon(e,ctxt)
+			    in if (eq_con_from_get_exp11(optcon,tipe,ctxt))
+				   then ()
+			       else (print "EXN_CASE: default case mismatches";
+				     print "default con is:\n";
+				     Ppil.pp_con optcon; print "\n";
+				     print "tipe con is :\n";
+				     Ppil.pp_con tipe; print "\n";
+				     error "EXN_CASE: default case mismatches")
+			    end)
+	   in (false, tipe)
 	   end
      | (CASE {noncarriers,carriers,arg,arms,tipe,default}) => 
 	   let 
@@ -1159,9 +1170,11 @@ exception XXX
 			 pp_context ctxt; print "\n"));
 	       
       case module of
-       (MOD_VAR v) => (case Context_Lookup'(ctxt,v) of
-			   SOME(_,PHRASE_CLASS_MOD(_,s)) => (true,s)
-			 | _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound to a module"))
+       (MOD_VAR v) => 
+	   (case Context_Lookup'(ctxt,v) of
+		SOME(_,PHRASE_CLASS_MOD(_,s)) => (true,s)
+	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
+	      | NONE => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound"))
      | MOD_STRUCTURE (sbnds) => 
 	   let fun loop va [] acc ctxt = (va,rev acc)
 		 | loop va (sb::sbs) acc ctxt = 
@@ -1272,12 +1285,15 @@ exception XXX
 				     NONE => arg
 				   | SOME c => #2(HeadNormalize(c,ctxt)))
 	    | (CON_VAR v) => (case (Context_Lookup'(ctxt,v)) of
-				    SOME(_,PHRASE_CLASS_CON (CON_VAR v',_)) => if (eq_var(v,v'))
-									       then (false, CON_VAR v)
-									   else HeadNormalize(CON_VAR v',ctxt)
-				  | SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)
-				  | SOME _ => error "Normalize given CON_VAR v with v bound to a non-con"
-				  | NONE => error "Normalize given CON_VAR v with v unbound")
+				  SOME(_,PHRASE_CLASS_CON (CON_VAR v',k)) => 
+				      if (eq_var(v,v'))
+					  then (case k of
+						    KIND_INLINE(k,c) => HeadNormalize(c,ctxt)
+						  | _ => (false, CON_VAR v))
+				      else HeadNormalize(CON_VAR v',ctxt)
+				| SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)
+				| SOME _ => error "Normalize given CON_VAR v with v bound to a non-con"
+				| NONE => error "Normalize given CON_VAR v with v unbound")
 	    | CON_TUPLE_PROJECT (i,c) => 
 		  let val (f,c) = HeadNormalize(c,ctxt)
 		  in case c of
@@ -1582,6 +1598,8 @@ exception XXX
 		      val ctxt = add_context_mod'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
 		  in help(ctxt,sdecs1,sdecs2)
 		  end
+		| (SIGNAT_INLINE_STRUCTURE {self,abs_sig,...},_) => Sig_IsSub'(ctxt,SIGNAT_STRUCTURE(self,abs_sig),sig2)
+		| (_,SIGNAT_INLINE_STRUCTURE {self,abs_sig,...}) => Sig_IsSub'(ctxt,sig1,SIGNAT_STRUCTURE(self,abs_sig))
 		| (SIGNAT_STRUCTURE (NONE,sdecs1), 
 		   SIGNAT_STRUCTURE (SOME p,sdecs2)) => help(ctxt,SelfifySdecs(p,sdecs1),sdecs2)
 		| (SIGNAT_STRUCTURE (SOME p,sdecs1), 

@@ -53,7 +53,10 @@ signature IL =
 			       tipe : con,
 			       default : exp option}
                  (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *) 
-                 | EXN_CASE of exp * (exp * con * exp) list * exp option
+                 | EXN_CASE of {arg : exp,
+				arms : (exp * con * exp) list,
+				default : exp option,
+				tipe : con}
                  | MODULE_PROJECT of mod * label
                  | SEAL    of exp * con
 

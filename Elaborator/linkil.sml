@@ -226,7 +226,11 @@ structure LinkIl (* : LINKIL *) =
 			    else (loop acc_b acc_d  rest_b rest_d)
 		in  loop [] [] sbnds sdecs
 		end
-	    val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
+ 	    val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()  
+(*
+	    val ctxt_inline = Basis.empty_context
+	    val ctxt_noninline = Basis.empty_context
+*)
        	    fun reparse filename : module = 
 		(case elaborate(ctxt_inline,filename) of 
 		       NONE => error "prelude failed to elaborate"
@@ -274,7 +278,21 @@ structure LinkIl (* : LINKIL *) =
 	    end
 *)
 
-	
+
+	fun has_unset m = 
+	    let val unset = ref false
+		fun ehandle (OVEREXP (_,_,oe)) = ((case Util.oneshot_deref oe of
+						       NONE => unset := true
+						     | _ => ()); NONE)
+		  | ehandle _ = NONE
+		fun chandle (CON_TYVAR tv) = ((case Tyvar.tyvar_deref tv of
+						   NONE => unset := true
+						 | _ => ()); NONE)
+		  | chandle _ = NONE
+		val _ = mod_all_handle(m,ehandle,chandle,fn _ => NONE)
+	    in  !unset
+	    end
+
 	fun check' filename {doprint,docheck} =
 	    let
 		val (context,sbnds,sdecs) = 
@@ -295,6 +313,9 @@ structure LinkIl (* : LINKIL *) =
 		val ssize = IlUtil.sig_size given_s
 		val _ = (Stats.int "Module Size") := msize
 		val _ = (Stats.int "Signature Size") := ssize
+		val _ = if (has_unset m)
+			    then error "module is not fully resolved"
+			else ()
 		val _ =
 		    if docheck
 			then 
@@ -315,13 +336,13 @@ structure LinkIl (* : LINKIL *) =
 						   Ppil.pp_context context;
 						   print "\n")
 					 else ()
-			    in (case ((Stats.timer("SANITY_CHECK",sanity_check))
-				      (context,m,precise_s,given_s)) of
-				    NONE => ()
-				  | SOME str => (print "\n\n****** SANITY_CHECK FAILED: ";
-						 print str;
-						 print " ******\n\n";
-						 error "sanity-check"))
+			    in   (case ((Stats.timer("SANITY_CHECK",sanity_check))
+					(context,m,precise_s,given_s)) of
+				      NONE => ()
+				    | SOME str => (print "\n\n****** SANITY_CHECK FAILED: ";
+						   print str;
+						   print " ******\n\n";
+						   error "sanity-check"))
 			    end
 		    else ()
 		val _ = if doprint
@@ -359,7 +380,7 @@ structure LinkIl (* : LINKIL *) =
 	    in res
 	    end
 
-	val test = (fn filename => SOME(ptest_res filename) handle _ => NONE)
+	val test = (fn filename => SOME(ptest_res' filename) handle _ => NONE)
 
     end (* struct *)
 

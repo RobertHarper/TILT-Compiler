@@ -9,7 +9,7 @@ signature TOIL =
     type decresult = (Il.sbnd option * Il.context_entry) list
     type filepos = Ast.srcpos -> string * int * int
 
-    val xexp    : Il.context * filepos * Ast.exp -> (Il.exp * Il.con) option
+    val xexp    : Il.context * filepos * Ast.exp -> (Il.exp * Il.con * bool) option
     val xdec    : Il.context * filepos * Ast.dec -> decresult option
     val xstrexp : Il.context * filepos * Ast.strexp
 	                     * Ast.sigexp Ast.sigConst -> (decresult * Il.mod * Il.signat) option

@@ -1,4 +1,5 @@
-(* todo : optimize coercion functors to recognize when it is entirely unndeeded 
+(* todo : LetExp and CaseExp: valuability coputation too conservative
+          optimize coercion functors to recognize when it is entirely unndeeded 
           optimize coercion functions of polymorphic values to be identity by normalizing type argument positions
 *)
 
@@ -124,7 +125,7 @@ functor Toil(structure Il : IL
 *)
 				  in (eq_stack := first'::rest)
 				  end)
-	fun eq_table_push() = (debugdo (fn () => (print "EQ_PUSING depth = "; 
+	fun eq_table_push() = (debugdo (fn () => (print "EQ_PUSHING depth = "; 
 						  print (Int.toString (length (!eq_stack)));
 						  print "\n"));
 			       eq_stack := [] :: (!eq_stack))
@@ -142,11 +143,16 @@ functor Toil(structure Il : IL
 		     tyvar,expos)
 	    in case stack' of
 		[] => elab_error "cannot pop: empty eq_stack"
-	      | (first :: rest) => (debugdo (fn () => (print "EQ-There are "; 
-						       print (Int.toString (length first));
-						       print " items in first\n"));
-				    eq_stack := rest;
+	      | (first :: rest) => 
+		    let val _ = (debugdo (fn () => (print "EQ-There are "; 
+						    print (Int.toString (length first));
+						    print " items in first\n")))
+			val first' = map help2 first
+		    in  (case rest of
+			     [] => (eq_stack := [];
 				    eq_table := (map help2 first) @ (!eq_table))
+			   | (second::rest') => (eq_stack := (first @ second) :: rest'))
+		    end
 	    end
     end
 
@@ -178,7 +184,7 @@ functor Toil(structure Il : IL
     fun dummy_exp (context,str) =
 	let val c = fresh_named_con(context,str)
 	    val e = RAISE(c,EXN_INJECT(NEW_STAMP con_unit,RECORD[]))
-	in (e,c)
+	in (e,c,true)
 	end
 
 
@@ -461,29 +467,29 @@ functor Toil(structure Il : IL
 		 elab_error "rule 224 or 226 not applicable in polyfun_inst"))
 
 	  
-     and xexp (context : context, exp : Ast.exp) : (exp * con) = 
+     and xexp (context : context, exp : Ast.exp) : (exp * con * bool) = (* returns valuablilty *)
       (case exp of
 	 Ast.IntExp lit =>  
 	     let val ds = IntInf.toString lit
-	     in (SCON(int(W32,TilWord64.fromDecimalString ds)), CON_INT W32)
+	     in (SCON(int(W32,TilWord64.fromDecimalString ds)), CON_INT W32, true)
 	     end
        | Ast.WordExp lit => 
 	     let val ds = IntInf.toString lit
-	     in (SCON(uint(W32,TilWord64.fromDecimalString ds)), CON_UINT W32)
+	     in (SCON(uint(W32,TilWord64.fromDecimalString ds)), CON_UINT W32, true)
 	     end
        | Ast.RealExp s => 
-	     (SCON(float(F64,s)), CON_FLOAT F64)
+	     (SCON(float(F64,s)), CON_FLOAT F64, true)
        | Ast.StringExp s => 
 	     (SCON(vector (CON_UINT W8,
 			   Array.fromList
 			   (map (fn c => SCON(uint(W8,TilWord64.fromInt (ord c))))
-			    (explode s)))), con_string)
+			    (explode s)))), con_string, true)
        | Ast.CharExp s =>   
 	     (SCON(uint(W8,
 			(case (explode s) of
 			     [c] => TilWord64.fromInt (ord c)
 			   | _ => parse_error "Ast.CharExp carries non-charcter string"))),
-	      CON_UINT W8)
+	      CON_UINT W8, true)
        | (Ast.TupleExp _ | Ast.RecordExp _) =>
 	     let val (sorted, sym_expr_list) = 
 		 (case exp of
@@ -491,15 +497,16 @@ functor Toil(structure Il : IL
 			  (true,mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
 		    | Ast.RecordExp sym_exps => (false,sym_exps)
 		    | _ => pat_error "must have a TupleExp or RecordExp here")
-		 fun doer(sym,expr) = let val label = symbol_label sym
-					  val (exp,con) = xexp(context,expr)
-				      in (label,(label,exp),(label,con))
-				      end
-		 val label_rbnd_rdec = map doer sym_expr_list 
+		 fun doer((sym,expr),(acc,va_acc)) = 
+		     let val label = symbol_label sym
+			 val (exp,con,va) = xexp(context,expr)
+		     in ((label,(label,exp),(label,con))::acc,va andalso va_acc)
+		     end
+		 val (label_rbnd_rdec,va) = foldr doer ([],true) sym_expr_list 
 		 val sorted = sorted orelse (label_issorted (map #1 label_rbnd_rdec))
 	     in
 		 if sorted 
-		     then (RECORD(map #2 label_rbnd_rdec), CON_RECORD(map #3 label_rbnd_rdec))
+		     then (RECORD(map #2 label_rbnd_rdec), CON_RECORD(map #3 label_rbnd_rdec),va)
 		 else
 		     let
 			 fun make_var(l,rb,rd) = (l,(fresh_named_var (label2string l),rb,rd))
@@ -508,7 +515,7 @@ functor Toil(structure Il : IL
 			 val label_var_rbnd_rdec = sort_labelpair label_var_rbnd_rdec
 			 val con = CON_RECORD(map (fn (_,(_,_,rd)) => rd) label_var_rbnd_rdec)
 			 val body = RECORD(map (fn (l,(v,_,_)) => (l,VAR v)) label_var_rbnd_rdec)
-		     in (LET(bnds,body), con)
+		     in (LET(bnds,body), con, va)
 		     end
 	     end
        | Ast.ListExp args => 
@@ -518,7 +525,7 @@ functor Toil(structure Il : IL
 	     in xexp(context,loop args)
 	     end
        | Ast.SelectorExp s => 
-	     (* for the record, i'd like to say that this construct is a pain in the butt - Perry *)
+     (* for the record, i'd like to say that this construct is a pain in the butt - Perry *)
 	     let 
 		 val label = symbol_label s
 		 val stamp = get_stamp()
@@ -529,7 +536,7 @@ functor Toil(structure Il : IL
 		 val eshot : exp Util.oneshot = oneshot()
 		 val exp = OVEREXP(rescon,true,eshot)
 		 val _ = add_flex_entry(label,the_ref,fieldcon,eshot)
-	     in (exp,rescon)
+	     in (exp,rescon,true)
 	     end
        | Ast.VarExp path => 
 	     let fun unbound() = 
@@ -547,28 +554,32 @@ functor Toil(structure Il : IL
 			      val con = CON_TYVAR tyvar
 			      val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
 			      val _ = add_eq_entry(tyvar,exp_os)
-			  in (OVEREXP(eq_con,true,exp_os),eq_con)
+			  in (OVEREXP(eq_con,true,exp_os),eq_con,true)
 			  end
 		 else 
 		     (case (Context_Lookup(context,map symbol_label path)) of
-			  SOME(_,PHRASE_CLASS_EXP ec) => ec
+			  SOME(_,PHRASE_CLASS_EXP (e,c)) => (e,c,Exp_IsValuable(context,e))
 			| SOME(_,PHRASE_CLASS_OVEREXP thunk) =>
 			      let val (exp,ocon) = thunk()
 				  val _ = add_overload_entry ocon
-			      in (exp,CON_OVAR ocon)
+			      in (exp,CON_OVAR ocon,Exp_IsValuable(context,exp))
 			      end
-			| SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => polyfun_inst (context,m,s)
+			| SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => 
+			      let val (e,c) = polyfun_inst (context,m,s)
+			      in  (e,c,true)
+			      end
 			| SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec]))))) =>
 			      (case sdec of
 				   SDEC(l,DEC_EXP(_,c)) =>
 				       if (eq_label (l,mk_lab))
-					   then (MODULE_PROJECT(m,mk_lab),c)
+					   then (MODULE_PROJECT(m,mk_lab),c,true)
 				       else unbound()
 				 | SDEC(l,DEC_MOD(_,s)) =>
 				       if (eq_label(l,mk_lab))
 					   then 
 					       let val mk_mod = MOD_PROJECT(m,mk_lab)
-					       in  polyfun_inst(context,mk_mod,s)
+						   val (e,c) = polyfun_inst(context,mk_mod,s)
+					       in  (e,c,true)
 					       end
 				       else unbound()
 				 | _ => unbound())
@@ -580,7 +591,7 @@ functor Toil(structure Il : IL
 		 (SOME (_,PHRASE_CLASS_MOD(sm,SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE(_,[sdec]),_,_))), 
 		  SOME(_,PHRASE_CLASS_CON(sc,sk))) =>  
 		 (let 
-		      val (e,c) = xexp(context,expr)
+		      val (e,c,va) = xexp(context,expr)
 		      local
 			  val (type_sbnds,_,new_cons) = poly_inst(context,[sdec])
 			  val _ = (case new_cons of
@@ -610,23 +621,23 @@ functor Toil(structure Il : IL
 					    [VAR ref_arg,
 					     #1(make_thunk(c, LET([BND_EXP(value_arg,e)], inner_body)))])
 		      val body = #1(make_seq[(assign_exp, con_unit),(wrapped_exp,final_c)])
-		  in  (LET([bnd],body), final_c)
+		  in  (LET([bnd],body), final_c, va)
 		  end)
 		| _ => elab_error "constructor #Susp or type #susp not defined in initial basis\n")
        | Ast.LetExp {dec,expr} => 
 	     let val boolsbnd_ctxt_list = xdec'(context, dec)
 		 val (sbnds,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
-		 val (e,c) = xexp(context',expr)
+		 val (e,c,va) = xexp(context',expr)
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
-	     in  (LET(bnds,e),c)
+	     in  (LET(bnds,e),c,false) 
 	     end
        | Ast.FlatAppExp _ => let val exp' = InfixParse.parse_exp(fixity context, exp)
 			     in xexp(context,exp')
 			     end 
 
        | Ast.AppExp {argument,function} => 
-	     let val (e1',con1) = xexp(context,function)
-		 val (e2',con2) = xexp(context,argument)
+	     let val (e1',con1,va1) = xexp(context,function)
+		 val (e2',con2,va2) = xexp(context,argument)
 		 val spec_rescon = fresh_con context
 		 val arrow_oe = oneshot()
 		 val spec_funcon = CON_ARROW(con2,spec_rescon, arrow_oe)
@@ -644,12 +655,15 @@ functor Toil(structure Il : IL
 		   | red exp = exp
 	     in
 		 if (eq_con(context,con1,spec_funcon))
-		     then ((case oneshot_deref arrow_oe of
-			       NONE => oneshot_set(arrow_oe,PARTIAL)
-			     | SOME _ => ());
-			   (reduce(red e1',red e2'),con_deref spec_rescon))
+		     then (let val va3 = (case oneshot_deref arrow_oe of
+					      NONE => (oneshot_set(arrow_oe,PARTIAL); false)
+					    | SOME PARTIAL => false
+					    | SOME TOTAL => true)
+			   in  (reduce(red e1',red e2'),con_deref spec_rescon,
+				va1 andalso va2 andalso va3)
+			   end)
 		 else
-		     case con1 of
+		     (case con1 of
 			 CON_ARROW(argcon,rescon,_) => 
 			     (error_region(); print " application is ill-typed.\n";
 			      print "  Function domain: "; pp_con argcon;
@@ -659,7 +673,7 @@ functor Toil(structure Il : IL
 		       | nonarrow => (error_region(); print " operator is not a function. Has type:";
 				      pp_con nonarrow;
 				      print "\n";
-				      dummy_exp(context,"bad_application"))
+				      dummy_exp(context,"bad_application")))
 	     end
        | Ast.AndalsoExp (e1,e2) => 
 	     xexp(context,Ast.IfExp{test=e1,thenCase=e2,elseCase=AstHelp.false_exp})
@@ -672,32 +686,34 @@ functor Toil(structure Il : IL
 					  rules=[Ast.Rule pr1, Ast.Rule pr2]})
 	     end
        | Ast.ConstraintExp {expr, constraint} => 
-	     let val (exp,con) = xexp(context,expr)
+	     let val (exp,con,va) = xexp(context,expr)
 		 val con' = xty(context,constraint)
 	     in if (sub_con(context,con,con'))
-		    then (SEAL(exp,con'),con')
-		else let val (e,c) = dummy_exp(context,"badseal")
+		    then (SEAL(exp,con'),con',va)
+		else let val (e,c,_) = dummy_exp(context,"badseal")
 		     in  error_region();
 			 print " constraint does not match expression type\n";
-			 (SEAL(e,con'),con')
+			 (SEAL(e,con'),con',va)
 		     end
 	     end		    
        | Ast.VectorExp expr_list => 
 	     let val c = fresh_con context
-		 val ec_list = map (fn e => xexp(context,e)) expr_list
-		 val elist = map #1 ec_list
-		 fun folder (_,c') = (eq_con(context,c,c') orelse
-				      (error_region();
-				       print "ill-typed vector expression\n";
-				       false))
-	     in if (andfold folder ec_list)
-		    then (SCON(vector(c,Array.fromList elist)), CON_VECTOR c)
+		 val ecv_list = map (fn e => xexp(context,e)) expr_list
+		 val elist = map #1 ecv_list
+		 fun folder (_,c',_) = (eq_con(context,c,c') orelse
+					(error_region();
+					 print "ill-typed vector expression\n";
+					 false))
+	     in if (andfold folder ecv_list)
+		    then (SCON(vector(c,Array.fromList elist)), CON_VECTOR c,
+			  andfold (fn (_,_,va) => va) ecv_list)
 		else dummy_exp(context, "bad_vector")
 	     end
        | Ast.WhileExp {test,expr} => 
 	     let 
-		 val (teste,testc) = xexp(context,test)
-		 val body_ec = xexp(context,expr)
+		 val (teste,testc,_) = xexp(context,test)
+		 val (be,bc,_) = xexp(context,expr)
+		 val body_ec = (be,bc)
 	     in  if (eq_con(context,testc,con_bool)) 
 		     then 
 			 let val loop_var = fresh_named_var "loop"
@@ -706,7 +722,7 @@ functor Toil(structure Il : IL
 			     val loop_body = make_ifthenelse(teste,then_exp,unit_exp,con_unit)
 			     val loop_fun = FIX(true,PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
 			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, unit_exp)),
-			     con_unit)
+			     con_unit, false)
 			 end
 		 else (error_region();
 		       print "while construct given a test clause not of boolean type\n";
@@ -714,35 +730,38 @@ functor Toil(structure Il : IL
 	     end
        | Ast.HandleExp {expr,rules} => (* almost same as CaseExp except need to wrap with HANDLE *)
 	     let 
-		 val (exp',rescon) = xexp(context,expr)
+		 val (exp',rescon,va) = xexp(context,expr)
 		 val v = fresh_named_var "handle_exn"
 		 val patarg = {context = context,
 			       typecompile = xty,
 			       expcompile = xexp,
 			       polyinst = poly_inst,
-			       error_region = error_region}
+			       error_region = error_region,
+			       fresh_con = fresh_con}
 		 val arms = map (fn (Ast.Rule{pat,exp})=>(pat,exp)) rules
 		 val (hbe,hbc) = caseCompile{patarg = patarg,
 					     arms = arms,
 					     arg = (v,CON_ANY)}
 		 val (he,hc) = make_lambda(v,CON_ANY,hbc,hbe)
 	     in if (eq_con(context,rescon,hbc))
-		    then (HANDLE(exp',he),rescon)
+		    then (HANDLE(exp',he),rescon,va)
 		else (error_region();
 		      print "mismatch between handle body and handler\n";
 		      dummy_exp(context,"bad_handle"))
 	     end
        | Ast.RaiseExp e => 
-	     let val (exp,con) = xexp(context,e)
+	     let val (exp,con,_) = xexp(context,e)
 		 val c = fresh_con context
 	     in if (eq_con(context,con,CON_ANY)) 
-		    then (RAISE (c,exp),c)
+		    then (RAISE (c,exp),c,false)
 		else (error_region(); print "raise not given an expression of exn type\n";
 		      dummy_exp(context,"badraise"))
 	     end
        | Ast.SeqExp elist => 
-	     let val eclist = map (fn e => xexp(context,e)) elist
-	     in  make_seq eclist
+	     let val ecvlist = map (fn e => xexp(context,e)) elist
+		 val eclist = map (fn (e,c,v) => (e,c)) ecvlist
+		 val (e,c) = make_seq eclist
+	     in  (e,c,andfold (fn (e,c,v) => v) ecvlist)
 	     end
        | Ast.FnExp [] => parse_error "Ast.FnExp with empty list"
        | Ast.FnExp rules => 
@@ -750,18 +769,20 @@ functor Toil(structure Il : IL
 			       typecompile = xty, 
 			       expcompile = xexp, 
 			       polyinst = poly_inst,
-			       error_region = error_region}
+			       error_region = error_region,
+			       fresh_con = fresh_con}
 		 val arms = map (fn (Ast.Rule{pat,exp}) => ([pat],exp)) rules
 		 val {arglist,body} = funCompile{patarg = patarg,
 						 rules = arms,
 						 reraise = false}
 		 fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
-	     in foldr help body arglist
+		 val (e,c) = foldr help body arglist
+	     in  (e,c,true)
 	     end
        | Ast.CaseExp {expr,rules} =>  
 	     let fun getarm (Ast.Rule{pat,exp}) = (pat,exp)
 		 val arms = map getarm rules
-		 val (arge,argc) = xexp(context,expr)
+		 val (arge,argc,_) = xexp(context,expr)
 		 val (context,wrap,v) = (case arge of 
 					     VAR v => (context,fn e => e, v)
 					   | _ => let val v = fresh_named_var "casearg"
@@ -772,11 +793,12 @@ functor Toil(structure Il : IL
 			       typecompile = xty,
 			       expcompile = xexp,
 			       polyinst = poly_inst,
-			       error_region = error_region}
+			       error_region = error_region,
+			       fresh_con = fresh_con}
 		 val (e,c) = caseCompile{patarg = patarg,
 					 arms = arms,
 					 arg = (v,argc)}
-	     in (wrap e,c)
+	     in (wrap e,c,false)
 	     end
        | Ast.MarkExp(exp,region) => 
 	     let val _ = push_region region
@@ -910,19 +932,20 @@ functor Toil(structure Il : IL
 		val _ = eq_table_push()
 		val lbl = fresh_internal_label "bindarg"
 		val v = fresh_named_var "bindarg"
-		val (e,con) = xexp(context',expr)
+		val (e,con,va) = xexp(context',expr)
 		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con)))
 		val context' = add_context_exp'(context',v,con)
 		val patarg = {context = context', 
 			      typecompile = xty, 
 			      expcompile = xexp, 
 			      polyinst = poly_inst,
-			      error_region = error_region}
+			      error_region = error_region,
+			       fresh_con = fresh_con}
 		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
 							     bindpat = pat,
 							     arg = (v,con)})
 		val sbnd_sdec_list = sbnd_sdec::bind_sbnd_sdec
-		val is_irrefutable = Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
+		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
 		fun refutable_case () = 
 		    let val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", SIGNAT_STRUCTURE(NONE,[])))
 		    in  map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
@@ -966,15 +989,18 @@ functor Toil(structure Il : IL
 									     [SDEC(it_lab,
 										   DEC_EXP(inner_var,c))])
 					     val bnd = BND_MOD(outer_var,MOD_FUNCTOR(var_poly,sig_poly,temp_mod))
-					     val dec = DEC_MOD(outer_var,SIGNAT_FUNCTOR(var_poly,sig_poly,
-											temp_sig,
-											TOTAL))
+					     val dec = DEC_MOD(outer_var,
+							       SIGNAT_FUNCTOR(var_poly,sig_poly,
+									      temp_sig,
+									      	   if is_irrefutable 
+										       then TOTAL else PARTIAL))
 					 in (SBND(l,bnd),SDEC(l,dec))
 					 end
 				     val temp_mod = MOD_FUNCTOR(var_poly,sig_poly,MOD_STRUCTURE sbnds)
 				     val temp_sig = SIGNAT_FUNCTOR(var_poly,sig_poly,
 								   SIGNAT_STRUCTURE(NONE, sdecs),
-								   TOTAL)
+								   if is_irrefutable 
+								       then TOTAL else PARTIAL)
 				     val rest_sbnds_sdecs = map2 mod_sig_help (labs,cons)
 				     val final_sbnds = ((SBND(lbl',BND_MOD(var',temp_mod)))::
 							(map #1 rest_sbnds_sdecs))
@@ -1024,15 +1050,21 @@ functor Toil(structure Il : IL
 			      fun help (Ast.Clause{pats : Ast.pat Ast.fixitem list, resultty,exp}) =
 				  let 
 				      fun getitem ({item,...} : Ast.pat Ast.fixitem) = item
-				      val (s,restpats) = 
+				      fun default () = 
 					  (case pats of
 					       ({item=Ast.VarPat[s],...}::rest) => (s, map getitem rest)
-					 | [p1,{item=Ast.VarPat[s],...},p2] => (s, [Ast.TuplePat[getitem p1,
-												 getitem p2]])
-					 | {item=Ast.FlatAppPat[p1,{item=Ast.VarPat[s],...},p2],
-					    ...}::rest => (s, (Ast.TuplePat[getitem p1,
+					     | _ => parse_error "can't find funid")
+				      val (s,restpats) = 
+					  (case pats of
+					       [p1,{item=Ast.VarPat[s],...},p2] => 
+						   (case (assoc_eq(eq_label,symbol_label s,fixity context)) of
+							SOME _ => (s, [Ast.TuplePat[getitem p1,getitem p2]])
+						      | NONE => default())
+					     | {item=Ast.FlatAppPat[p1,{item=Ast.VarPat[s],...},p2],
+							...}::rest => (s, (Ast.TuplePat
+									   [getitem p1,
 									    getitem p2]) :: (map getitem rest))
-					 | _ => parse_error "can't find funid")
+					     | _ => default())
 				      val _  = (case resultty of
 						    NONE => ()
 						  | SOME ty => 
@@ -1120,7 +1152,8 @@ functor Toil(structure Il : IL
 					       typecompile = xty, 
 					       expcompile = xexp, 
 					       polyinst = poly_inst,
-					       error_region = error_region}
+					       error_region = error_region,
+					       fresh_con = fresh_con}
 				 val {body = (bodye,bodyc), 
 				      arglist} = funCompile{patarg = patarg,
 							    rules = matches,
@@ -1281,10 +1314,10 @@ functor Toil(structure Il : IL
 			 | SOME ty => (#1 (make_total_lambda(v,con,CON_ANY,
 							     EXN_INJECT(VAR var,VAR v))),
 				       CON_ARROW(con, CON_ANY, oneshot_init TOTAL)))
-		  val inner_mod = MOD_STRUCTURE[SBND(it_lab, BND_EXP(var,NEW_STAMP con)),
+		  val inner_mod = MOD_STRUCTURE[SBND(stamp_lab, BND_EXP(var,NEW_STAMP con)),
 						SBND(mk_lab, BND_EXP(mkvar,mk_exp))]
 		  val inner_sig = SIGNAT_STRUCTURE(NONE,
-						   [SDEC(it_lab,DEC_EXP(var,CON_TAG con)),
+						   [SDEC(stamp_lab,DEC_EXP(var,CON_TAG con)),
 						    SDEC(mk_lab,DEC_EXP(mkvar,mk_con))])
 		in [(SOME(SBND(id_bar,BND_MOD(exnmodvar,inner_mod))),
 		     CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(exnmodvar,inner_sig))))]
@@ -1294,17 +1327,17 @@ functor Toil(structure Il : IL
 		   SOME(_,PHRASE_CLASS_MOD(m,s)) => 
 		       let val id_bar = symbol_label exn
 			   val path_mk_exp = MODULE_PROJECT(m,mk_lab)
-			   val path_it_exp = MODULE_PROJECT(m,it_lab)
+			   val path_stamp_exp = MODULE_PROJECT(m,stamp_lab)
 			   val path_mk_con = GetExpCon(context,path_mk_exp)
-			   val path_it_con = GetExpCon(context,path_it_exp)
+			   val path_stamp_con = GetExpCon(context,path_stamp_exp)
 			   val itvar = fresh_named_var "exn_tag"
 			   val mkvar = fresh_named_var "exn_injector"
 			   val modvar = fresh_named_var "exn_structure"
 			   val inner_mod = MOD_STRUCTURE[SBND(mk_lab, BND_EXP(mkvar,path_mk_exp)),
-							 SBND(it_lab, BND_EXP(itvar,path_it_exp))]
+							 SBND(stamp_lab, BND_EXP(itvar,path_stamp_exp))]
 			   val inner_sig = SIGNAT_STRUCTURE(NONE,
-							    [SDEC(it_lab, DEC_EXP(itvar,path_mk_con)),
-							     SDEC(mk_lab, DEC_EXP(mkvar,path_it_con))])
+							    [SDEC(stamp_lab, DEC_EXP(itvar,path_mk_con)),
+							     SDEC(mk_lab, DEC_EXP(mkvar,path_stamp_con))])
 		       in [(SOME(SBND(id_bar,BND_MOD(modvar,inner_mod))),
 			    CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(modvar,inner_sig))))]
 		       end
@@ -2372,7 +2405,8 @@ functor Toil(structure Il : IL
 	  | CON_OVAR ocon => self (CON_TYVAR (ocon_deref ocon))
 	  | CON_INT is => ETAPRIM(eq_int is,[])
 	  | CON_UINT is => ETAILPRIM(eq_uint is,[])
-	  | CON_FLOAT fs => ETAPRIM(eq_float fs,[])
+(*	  | CON_FLOAT fs => ETAPRIM(eq_float fs,[]) *)
+	  | CON_FLOAT fs => raise NoEqExp
 	  | CON_RECORD fields => 
 		let 
 		    val v = fresh_var()
@@ -2453,7 +2487,17 @@ functor Toil(structure Il : IL
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
 	  | CON_ARRAY c => ETAPRIM(equal_table WordArray,[c])
-	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c)
+(*	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c) *)
+	  | CON_VECTOR c => 
+		let val (e,vc,_) = xexp(ctxt,Ast.VarExp[Symbol.varSymbol "vector_eq"])
+		    val ac = CON_ARROW(CON_ARROW(con_tuple[c,c],con_bool,oneshot()),
+				       CON_ARROW(con_tuple[CON_VECTOR c,CON_VECTOR c],con_bool,oneshot()),
+				       oneshot())
+		    val _ = if (eq_con(ctxt,vc,ac))
+				then ()
+			    else (elab_error "Prelude vector_eq is bad")
+		in  APP(e,self c) 
+		end
 	  | CON_REF c => ETAPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
 		let val e = MODULE_PROJECT(m,to_eq_lab l)
@@ -2579,7 +2623,7 @@ functor Toil(structure Il : IL
 	    let val v = fresh_named_var "flex_eta_var"
 		val recc = CON_RECORD rdecs
 		val body = RECORD_PROJECT(VAR v,l,recc)
-		val (e,c) = make_lambda(v,fieldc,recc,body)
+		val (e,c) = make_lambda(v,recc,fieldc,body)
 	    in oneshot_set(eshot,e)
 	    end
 	  | flex_help (l,ref(INDIRECT_FLEXINFO fr),fieldc,eshot) = flex_help (l,fr,fieldc,eshot)

@@ -397,10 +397,10 @@ functor IlEval(structure Il : IL
 			in loop special arms
 			end
 	          | v => error_exp v "CASE got a non-sum value arguments")
-	   | EXN_CASE (arg,arms,eopt) => 
+	   | EXN_CASE {arg,arms,default,tipe} =>
 		    (case (eval_exp env arg) of
 			 (ep as (EXN_INJECT(SCON(tag(t,c)),value))) => 
-			     let fun loop [] = (case eopt of
+			     let fun loop [] = (case default of
 						    NONE => raise (exn_packet ep)
 						  | SOME e => eval_exp env (APP(e,ep)))
 				   | loop ((e1,_,e2)::rest) = 

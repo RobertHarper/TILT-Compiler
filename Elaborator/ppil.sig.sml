@@ -1,7 +1,11 @@
 (* Pretty-printing routines for the internal language. *)
 signature PPIL =
   sig
+
     structure Il : IL
+    structure IlContext : ILCONTEXT 
+    sharing IlContext.Il = Il
+
 
     (* type variables can be displayed in different ways *)
     datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
@@ -35,6 +39,7 @@ signature PPIL =
     val pp_pathlist' : ('a -> Formatter.format) -> 'a list -> Formatter.format
     val pp_commalist' : ('a -> Formatter.format) -> 'a list -> Formatter.format
     val pp_semicolonlist' : ('a -> Formatter.format) -> 'a list -> Formatter.format
+    val pp_phrase_class' : IlContext.phrase_class -> Formatter.format
 
     (* these go to std_out *)
     val pp_bnd     : Il.bnd -> unit
@@ -62,5 +67,6 @@ signature PPIL =
     val pp_pathlist : ('a -> Formatter.format) -> 'a list -> unit
     val pp_commalist : ('a -> Formatter.format) -> 'a list -> unit
     val pp_semicolonlist : ('a -> Formatter.format) -> 'a list -> unit
+    val pp_phrase_class : IlContext.phrase_class -> unit
 
   end

@@ -56,7 +56,10 @@ functor Il(structure Prim : PRIM
 			       arms : (exp option) list,
 			       tipe : con,
 			       default : exp option}
-                 | EXN_CASE of exp * (exp * con * exp) list * exp option
+                 | EXN_CASE of {arg : exp,
+				arms : (exp * con * exp) list,
+				default : exp option,
+				tipe : con}
                  | MODULE_PROJECT of mod * label
                  | SEAL    of exp * con
 

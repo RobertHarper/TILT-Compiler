@@ -36,6 +36,7 @@ functor IlUtil(structure Ppil : PPIL
     val mk_lab = internal_label "mk"
     val km_lab = internal_label "km"
     val it_lab = internal_label "it"
+    val stamp_lab = internal_label "stamp"
     val case_lab = internal_label "case"
     val expose_lab = internal_label "expose"
     val eq_lab = internal_label "eq"
@@ -113,7 +114,8 @@ functor IlUtil(structure Ppil : PPIL
        let 
 	   val v = fresh_var()
 	   val efail' = #1(make_lambda(fresh_named_var "dummy",con_unit,con,efail))
-	   val outer = EXN_CASE(VAR v,[(fail_exp, con_unit, efail')],NONE)
+	   val outer = EXN_CASE{arg = VAR v, arms = [(fail_exp, con_unit, efail')],
+				default = NONE, tipe = con}
        in HANDLE(e,#1 (make_lambda(v,CON_ANY,con,outer)))
        end
 
@@ -287,12 +289,13 @@ functor IlUtil(structure Ppil : PPIL
 		      arms = map (Util.mapopt self) arms,
 		      default = Util.mapopt self default,
 		      tipe = f_con state tipe}
-	   | EXN_CASE(earg,ecelist,eopt) => let fun help (e1,c,e2) = (self e1, f_con state c, self e2)
-						val eopt' = (case eopt of 
-								 NONE => NONE
-							       | SOME e => SOME (self e))
-					    in EXN_CASE(self earg, map help ecelist, eopt')
-					    end
+	   | EXN_CASE{arg,arms,default,tipe} => 
+		 let fun help (e1,c,e2) = (self e1, f_con state c, self e2)
+		     val default' = Util.mapopt self default
+		     val tipe' = f_con state tipe
+		 in EXN_CASE{arg = self arg, arms = map help arms, 
+			     default = default', tipe = tipe'}
+		 end
 	   | MODULE_PROJECT (m,l) => MODULE_PROJECT(f_mod state m,l)
 	   | SEAL (e,c) =>  SEAL (self e, f_con state c)))
 	end
@@ -947,26 +950,27 @@ functor IlUtil(structure Ppil : PPIL
 	  in f_signat handlers argsig
 	  end
 
+      fun all_handlers(exp_handler, con_handler, mod_handler) =
+	  STATE(default_bound,
+		{sdec_handler = default_sdec_handler,
+		 exp_handler = fn (e,_) => exp_handler e,
+		 con_handler = fn (c,_) => con_handler c,
+		 mod_handler = fn (m,_) => mod_handler m,
+		 sig_handler = default_sig_handler})
+
        fun sig_all_handle (argsig : signat, exp_handler, con_handler, mod_handler) : signat =
-	  let
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = fn (e,_) => exp_handler e,
-				    con_handler = fn (c,_) => con_handler c,
-				    mod_handler = fn (m,_) => mod_handler m,
-				    sig_handler = default_sig_handler})
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler) 
 	  in f_signat handlers argsig
 	  end
 
        fun con_all_handle (argcon : con, exp_handler, con_handler, mod_handler) : con =
-	  let
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = fn (e,_) => exp_handler e,
-				    con_handler = fn (c,_) => con_handler c,
-				    mod_handler = fn (m,_) => mod_handler m,
-				    sig_handler = default_sig_handler})
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler) 
 	  in f_con handlers argcon
+	  end
+
+       fun mod_all_handle (argmod : mod, exp_handler, con_handler, mod_handler) : mod =
+	  let val handlers = all_handlers(exp_handler, con_handler, mod_handler) 
+	  in f_mod handlers argmod
 	  end
 
 
@@ -1242,5 +1246,21 @@ functor IlUtil(structure Ppil : PPIL
      | eq_mod _ = false
 
 
+   fun rename_confun(is_bound,vars,con) = 
+       	let
+	    fun make_entry v = if (is_bound v)
+				   then SOME(v,CON_VAR(Name.derived_var v))
+			       else NONE
+	    val table = List.mapPartial make_entry vars
+	    val con' = (case table of
+			    [] => con
+			  | _ => con_subst_convar(con,table))
+	    fun find_var v = (case Listops.assoc_eq(eq_var,v,table) of
+				  SOME (CON_VAR v) => v 
+				| SOME _ => error "table has only Var_c's"
+				| NONE => v)
+	    val vars' = map find_var vars
+	in  CON_FUN(vars',con')
+	end
 
   end;

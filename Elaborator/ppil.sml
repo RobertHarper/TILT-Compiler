@@ -8,7 +8,7 @@ functor Ppil(structure Il : IL
 	: PPIL  = 
   struct
 
-    structure Il = Il
+    structure IlContext = IlContext
     structure Formatter = Formatter
     datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
     val convar_display = ref VALUE_ONLY
@@ -243,7 +243,18 @@ functor Ppil(structure Il : IL
 			    Break,
 			    String "END"]
 	   | MOD_SEAL(m,s) => pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true))
-	     
+	
+    and pp_phrase_class seen pc = 
+	(case pc of
+	    PHRASE_CLASS_EXP  (e,c) => HOVbox[String "PC_EXP(", pp_exp seen e,
+					      String ", ", pp_con seen c, String ")"]
+	  | PHRASE_CLASS_CON  (c,k) => HOVbox[String "PC_CON(", pp_con seen c,
+					      String ", ", pp_kind seen k, String ")"]
+	  | PHRASE_CLASS_MOD  (m,s)  => HOVbox[String "PC_MOD(", pp_mod seen m,
+					       String ", ", pp_signat seen s, String ")"]
+	  | PHRASE_CLASS_SIG  s  => HOVbox[String "PC_SIG(", pp_signat seen s, String ")"]
+	  | PHRASE_CLASS_OVEREXP _ => String "PC_OVEREXP")
+
     and pp_inline seen inline = 
 	let
 	    open IlContext
@@ -344,11 +355,15 @@ functor Ppil(structure Il : IL
 	      (pp_con seen tipe) :: (String ",") :: Break ::
 	      (pp_list (fn NONE => String "NONE" 
 	                | SOME e => pp_exp seen e) arms ("[",", ","]",true)) ::
+	      (String ", ") :: Break ::
 	      (case default of
 		   NONE => [String "NODEFAULT"]
-		 | SOME e => [String ", DEFAULT: ", pp_exp seen e]))
-       | EXN_CASE (earg,elist,eopt) => pp_region "EXN_CASE(" ")"
-			  [pp_exp seen earg,
+		 | SOME e => [String "DEFAULT: ", pp_exp seen e]))
+       | EXN_CASE {arg=earg,arms=elist,default=eopt,tipe} => 
+	     pp_region "EXN_CASE(" ")"
+			  [pp_con seen tipe,
+			   String ",",
+			   pp_exp seen earg,
 			   String ",",
 			   Break,
 			   (pp_list (fn (e1,c,e2) => HOVbox[pp_exp seen e1,
@@ -477,6 +492,7 @@ functor Ppil(structure Il : IL
     val pp_decs' = help pp_decs
     val pp_sdecs' = help pp_sdecs
     val pp_inline' = help (pp_inline [])
+    val pp_phrase_class' = help (pp_phrase_class [])
 
     fun pp_context' (context : context) : Formatter.format = 
 	let val pp_record = {pp_exp = pp_exp',
@@ -517,5 +533,6 @@ functor Ppil(structure Il : IL
     val pp_decs = help' pp_decs
     val pp_sdecs = help' pp_sdecs
     val pp_inline = help' (pp_inline [])
+    val pp_phrase_class = help' (pp_phrase_class [])
 
   end

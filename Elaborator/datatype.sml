@@ -518,12 +518,12 @@ functor Datatype(structure Il : IL
 	  NONE=> NONE
 	| SOME (path_mod,PHRASE_CLASS_MOD(m,exn_sig as 
 		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]))) =>
-	      if (eq_label(lab1,it_lab) andalso eq_label(lab2,mk_lab))
+	      if (eq_label(lab1,stamp_lab) andalso eq_label(lab2,mk_lab))
 		  then 
 		      (case (ctag,cmk) of 
-			      (_, CON_ANY) => SOME {stamp=MODULE_PROJECT(path2mod path_mod,it_lab), 
+			      (_, CON_ANY) => SOME {stamp=MODULE_PROJECT(path2mod path_mod,stamp_lab), 
 						    carried_type = NONE}
-			    | (CON_TAG c, _) => SOME {stamp=MODULE_PROJECT(path2mod path_mod,it_lab), 
+			    | (CON_TAG c, _) => SOME {stamp=MODULE_PROJECT(path2mod path_mod,stamp_lab), 
 						      carried_type = SOME c}
 			    | _ => error_sig exn_sig "bad exn signature")
 	      else NONE

@@ -68,6 +68,7 @@ signature ILUTIL =
     val mk_lab   : label
     val km_lab   : label
     val it_lab   : label
+    val stamp_lab   : label
     val case_lab : label
     val expose_lab : label
     val to_eq_lab : label -> label       (* takes any internal label and 
@@ -183,6 +184,8 @@ signature ILUTIL =
 	                          (mod -> mod option) -> signat
     val con_all_handle : con * (exp -> exp option) * (con -> con option) * 
 	                       (mod -> mod option) -> con
+    val mod_all_handle : mod * (exp -> exp option) * (con -> con option) * 
+	                       (mod -> mod option) -> mod
     val sig_subst_allproj : (signat * (mod * label -> exp option) * 
 			     (mod * label -> con option) * 
 			     (mod * label -> mod option) * 
@@ -246,6 +249,7 @@ signature ILUTIL =
 
     val eq_modval : mod * mod -> bool
     val eq_mod : mod * mod -> bool
+    val rename_confun : (Il.var -> bool) * (var list) * con -> con
 
   end;
 

@@ -13,12 +13,13 @@ functor Pat(structure Il : IL
     
     type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con
-    type expcompile = Il.context * Ast.exp -> Il.exp * Il.con
+    type expcompile = Il.context * Ast.exp -> Il.exp * Il.con * bool
     type patarg = {context : Il.context,
 		   typecompile : typecompile,
 		   expcompile : expcompile,
 		   polyinst : polyinst,
-		   error_region : unit -> unit}
+		   error_region : unit -> unit,
+		   fresh_con : Il.context -> Il.con}
 
 
     open Il IlStatic IlUtil Ppil
@@ -111,7 +112,7 @@ functor Pat(structure Il : IL
       | wrapbnds (bnds, (e,c)) = (LET (bnds, e),c)
 
 
-    fun letprojecthelp' (context : context, rv : Il.var, labels)
+    fun letprojecthelp' fresh_con (context : context, rv : Il.var, labels : label list)
       : Il.bnds * Il.var list * Il.con list = 
       let 
 	  val vars = map (fn _ => fresh_var()) labels
@@ -119,13 +120,6 @@ functor Pat(structure Il : IL
 	  val rcon = CON_RECORD(sort_labelpair(zip labels cons))
 	  val bnds = map2 (fn (v,l) => BND_EXP(v,RECORD_PROJECT(VAR rv,l,rcon))) (vars,labels)
       in (bnds,vars,cons)
-      end
-
-    fun letprojecthelp (context : context, rv : Il.var, recsyms : Symbol.symbol list)
-      : Il.bnds * Il.var list * Il.con list = 
-      let 
-	  val labels = map symbol_label recsyms
-      in letprojecthelp'(context,rv,labels)
       end
 
 
@@ -168,12 +162,17 @@ functor Pat(structure Il : IL
      Also returned is a list, one for each match-rule supplied, 
      of the variables and their types bound in each pattern.
     -------------------------------------------------------------- *)
- fun compile ({context, typecompile = xty, expcompile = xexp, polyinst, error_region} : patarg,
+ fun compile ({context, typecompile = xty, expcompile, polyinst, error_region, fresh_con} : patarg,
 	       compile_args : case_exp list, 
 	       compile_arms : arm list,
 	       compile_default : (Il.exp * Il.con) option)
      : (exp * con * (Symbol.symbol * con) list list) = 
     let
+
+      fun xexp arg = let val (e,c,va) = expcompile arg 
+		     in  (e,c)
+		     end
+      val letprojecthelp = letprojecthelp' fresh_con
 
       val _ = debugdo (fn () => print "pat.sml: main compile called\n")
  (* ------------------------------------------------------------------------------
@@ -257,7 +256,7 @@ functor Pat(structure Il : IL
 	fun acc_normalize((splist,flex),arm) = (map (fetch splist) syms, arm)
 	val accs' = map acc_normalize accs
 	val (bnd1,(var1,con1)) = lethelp("recordcase",arg1)
-	val (rbnds,rvars,rcons) = letprojecthelp'(context,var1,syms)
+	val (rbnds,rvars,rcons) = letprojecthelp(context,var1,syms)
 	val lc = sort_labelpair (zip syms rcons)
 	val argcon = if flex 
 			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.get_stamp(),false,lc)))
@@ -312,8 +311,16 @@ functor Pat(structure Il : IL
 *)
 	  val arms' = map #2 temp
 	  val bound' = map #1 temp
+	  val default' = 
+	      (case def of
+		   NONE => NONE
+		 | SOME (e,c) => 
+		       ((if (check_rescon c)
+			     then ()
+			 else (error_region();
+			       print "exn: arm and default type mismatch\n")); SOME e))
       in (flatten bound', (* LET(local_bnds,... *)
-	  (EXN_CASE(exnarg,arms',mapopt #1 def),!rescon))
+	  (EXN_CASE{arg=exnarg, arms=arms', default = default', tipe = (!rescon)},!rescon))
       end
 
 
@@ -434,14 +441,16 @@ functor Pat(structure Il : IL
       val sumtypes = map (fn {arg_type=NONE,...} => con_unit | {arg_type=SOME c,...} => c)  constr_patconopt_list
       val expopt_list = map #2 vfll_expopt_list
       val vfll_list = map #1 vfll_expopt_list
+      val exhaustive = (length accs) = (nca + length ca)
     in  (flatten vfll_list,
 	 (CASE{noncarriers = nca,
 	       carriers = ca,
 	       arg = APP(expose_exp,casearg),
 	       arms = expopt_list,
-	       default = (case def of
-			      NONE => NONE
-			    | SOME (e,c) => 
+	       default = (case (exhaustive,def) of
+			      (true,_) => NONE
+			    | (_,NONE) => NONE
+			    | (_,SOME (e,c)) => 
 				  (if (eq_con(context,c,(!rescon)))
 				       then ()
 				   else (error_region();
