@@ -65,7 +65,7 @@ structure NumScan : sig
 
   (* A table for mapping digits to values.  Whitespace characters map to
    * 128, "+" maps to 129, "-","~" map to 130, "." maps to 131, and the
-   * characters 0-9,A-Z,a-z map to their * base-36 value.  All other
+   * characters 0-9,A-V,X-Z,a-z map to their base-36 value.  All other
    * characters map to 255.
    *)
     local
@@ -75,7 +75,7 @@ structure NumScan : sig
 	    \\128\255\255\255\255\255\255\255\255\255\255\129\255\130\131\255\
 	    \\000\001\002\003\004\005\006\007\008\009\255\255\255\255\255\255\
 	    \\255\010\011\012\013\014\015\016\017\018\019\020\021\022\023\024\
-	    \\025\026\027\028\029\030\031\032\033\034\035\255\255\255\255\255\
+	    \\025\026\027\028\029\030\031\255\033\034\035\255\255\255\255\255\
 	    \\255\010\011\012\013\014\015\016\017\018\019\020\021\022\023\024\
 	    \\025\026\027\028\029\030\031\032\033\034\035\255\255\255\130\255\
 	    \\255\255\255\255\255\255\255\255\255\255\255\255\255\255\255\255\
@@ -96,15 +96,15 @@ structure NumScan : sig
     val minusCode : word = 0w130	(* code for #"-" and #"~" *)
     val ptCode : word = 0w131		(* code for #"." *)
     val eCode : word = 0w14		(* code for #"e" and #"E" *)
-    val wCode : word = 0w32		(* code for #"w" and #"W" *)
+    val wCode : word = 0w32		(* code for #"w" *)
     val xCode : word = 0w33		(* code for #"X" and #"X" *)
     end (* local *)
 
     type prefix_pat = {
-	wOkay : bool,		(* true if 0[wW] prefix is okay; if this is
+	wOkay : bool,		(* true if 0w prefix is okay; if this is
 				 * true, then signs (+, -, ~) are not okay.
 				 *)
-	xOkay : bool,		(* true if 0[xX] prefix is okay *)
+	xOkay : bool,		(* true if 0w?[xX] prefix is okay *)
 	isDigit : word -> bool	(* returns true for allowed digits *)
       }
 
@@ -141,7 +141,9 @@ structure NumScan : sig
 	    | getOptX (neg, savedCS, arg as SOME(c, cs)) =
 		if ((c = xCode) andalso (#xOkay p))
 		  then chkDigit (neg, savedCS, getNext cs)
-		  else chkDigit (neg, savedCS, arg)
+		  else if (#xOkay p)
+			 then finish (neg, savedCS)
+			 else chkDigit (neg, savedCS, arg)
 	  and chkDigit (neg, savedCS, NONE) = finish (neg, savedCS)
 	    | chkDigit (neg, savedCS, SOME(c, cs)) =
 		if ((#isDigit p) c)
