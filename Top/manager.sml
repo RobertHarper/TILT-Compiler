@@ -42,13 +42,14 @@ struct
   fun tilc arg =
       let fun runner args = 
 	  let val {setup,step,complete} = Master.once args
-	      val _ = Slave.setup()
-	      fun loop state = 
+	      val {setup=setup', step=step', complete=complete'} = Slave.slave NONE
+	      fun slaveStep state' = #1 (step' state')
+	      fun loop (state,state') = 
 		  (case (step state) of
-		       Master.COMPLETE t => complete()
-		     | Master.PROCESSING (t,state) => (Slave.step(); loop state)
-		     | Master.IDLE (t,state, _) => (Slave.step(); loop state))
-	  in  loop (setup())
+		       Master.COMPLETE t => (complete(); complete' state')
+		     | Master.PROCESSING (t,state) => loop (state, slaveStep state')
+		     | Master.IDLE (t,state, _) => loop (state, slaveStep state'))
+	  in  loop (setup(), setup'())
 	  end
 	  val _ = Help.startTime "Starting compilation"
 	  val _ = helper runner arg
