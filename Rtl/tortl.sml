@@ -133,7 +133,7 @@ val simplify_type = fn state =>
 	    | Fixcode_b var_fun_seq =>
 		  let 
 		      fun folder ((v,f as Function(effect,recur,vklist,_,vclist,vflist,b,c)),s) =
-			  let val funcon = NilUtil.get_function_type Code f
+			  let val funcon = NilUtil.function_type Code f
 			  in  add_code (s, v, funcon, LOCAL_LABEL (LOCAL_CODE v))
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
@@ -2710,7 +2710,7 @@ val simplify_type = fn state =>
 		     else ()
 
 	    (* translate the expression as a function taking no arguments *)
-	     val mainName = non_generative_named_var ("main_" ^ unitname ^ "_doit")
+	     val mainName = Name.construct_var(0,"main_" ^ unitname ^ "_doit")
 	     fun folder (ImportValue(l,v,c),s) = 
 		 (* hack, the imports are not making a distinction between labels
 		    as values (as in the first case) or labels as positions where the value is located *)

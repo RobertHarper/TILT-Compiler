@@ -1,6 +1,6 @@
 (*$import LinkIl Annotation Nil NilUtil NilContext PpNil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil *)
 
-structure Linknil :> LINKNIL  =
+structure Linknil (* :> LINKNIL  *) =
   struct
     val typecheck_before_opt = ref true
     val typecheck_after_opt = ref true

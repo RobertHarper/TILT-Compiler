@@ -327,10 +327,6 @@ struct
       fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(#1 var_list,v)
       fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
-   fun reduce_sigvar(context,v) = 
-	(case (Context_Lookup'(context,v)) of
-			SOME(_,PHRASE_CLASS_SIG(v,s)) => s
-		      | NONE => error "reduce_sigvargiven unbound SIGVAR")
 
 (*
     fun Sbnds_Lookup ctxt (sbnds, labs) : (labels * phrase) option =

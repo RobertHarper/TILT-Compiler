@@ -52,6 +52,7 @@ structure Til : COMPILER =
 	val uptoNil = Stats.ff("UptoNil")
 	val uptoRtl = Stats.ff("UptoRtl")
 	val uptoAlpha = Stats.ff("UptoAlpha")
+	val uptoAsm = Stats.ff("UptoAsm")
 	fun compile (ctxt: context, unitName: string, 
 		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : unit =
 	    let val sFile = unitName ^ ".s"
@@ -71,6 +72,7 @@ structure Til : COMPILER =
 *)
 		val _ = rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
 								     * `unitName_doit' *)
+		val _ = if (!uptoAsm) then raise Stop else ()
 		val _ = assemble(sFile, oFile)
 	    in ()
 	    end

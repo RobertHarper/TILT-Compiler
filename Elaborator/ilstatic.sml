@@ -26,11 +26,6 @@ functor IlStatic(structure IlContext : ILCONTEXT
     fun fail s = raise (FAILURE s)
 
 
-   fun mod_ispath (MOD_VAR _) = true
-     | mod_ispath (MOD_PROJECT (m,_)) = mod_ispath m
-     | mod_ispath _ = false
-
-
    fun reduce_sigvar(context,v) = 
 	(case (Context_Lookup'(context,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
@@ -396,7 +391,7 @@ fun show_state ({modunself,...}:state) =
       | PRIM _ => true
       | ILPRIM _ => true
       | VAR _ => true
-      | MODULE_PROJECT(m,_) => mod_ispath m
+      | MODULE_PROJECT(m,_) => Option.isSome(mod2path m)
       | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
 	                (map (fn (l,e) => Exp_IsSyntacticValue e) rbnds)
       | FIX _ => true

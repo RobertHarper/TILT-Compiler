@@ -460,7 +460,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 				   end
 		| Fixopen_b vfset => 
 		       let val vflist = Sequence.toList vfset
-			   val state = foldl (fn ((v,f),s) => add_con(s,v,NilUtil.function_type f)) state vflist
+			   val state = foldl (fn ((v,f),s) => add_con(s,v,NilUtil.function_type Open f)) state vflist
 			   val vflist_list = map (do_fun state) vflist
 			   val vflist = List.concat vflist_list
 		       in  ([Fixopen_b(Sequence.fromList vflist)], state)

@@ -1145,7 +1145,7 @@ val show_context = ref false
      let
        val def_list = Sequence.toList defs
        val (vars,functions) = unzip def_list
-       val declared_c = map (NilUtil.get_function_type openness) functions
+       val declared_c = map (NilUtil.function_type openness) functions
        val bnd_types = zip vars declared_c
        val D = NilContext.insert_con_list (D,bnd_types)
      in

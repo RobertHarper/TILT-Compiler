@@ -27,11 +27,22 @@ functor IlUtil(structure Ppil : PPIL
     (* --------------------- Misc helper functions ------------ *)
     fun fresh_named_con (ctxt,s) = CON_TYVAR (fresh_named_tyvar (ctxt,s))
     fun fresh_con ctxt = fresh_named_con (ctxt,"con")
-    fun generate_tuple_symbol 0 = error "generate_tuple_symbol called with 0"
-      | generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
-    fun generate_tuple_label 0 = error "generate_tuple_label called with 0"
-      | generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
-	
+    local
+	val size = 20
+	fun make i = let val s = Symbol.labSymbol(Int.toString i)
+		     in  (s, symbol_label s)
+		     end
+	val table = Array.tabulate(size, make)
+    in
+	fun generate_tuple_symbol 0 = error "generate_tuple_symbol called with 0"
+	  | generate_tuple_symbol i = #1(if (i<size)
+					     then Array.sub(table,i)
+					 else make i)
+	fun generate_tuple_label 0 = error "generate_tuple_label called with 0"
+	  | generate_tuple_label i = #2(if (i<size)
+					    then Array.sub(table,i)
+					else make i)
+    end
       
     val mk_lab = internal_label "mk"
     val km_lab = internal_label "km"

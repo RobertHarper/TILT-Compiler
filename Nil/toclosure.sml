@@ -630,7 +630,7 @@ struct
 			val fids = map #1 var_arm_list
 			val _ = app add_fun fids
 			val local_fids_types = map (fn (v,pf) => 
-						    (v,NilUtil.get_function_type Open pf)) 
+						    (v,NilUtil.function_type Open pf)) 
 			                       var_arm_list
 			val free = (foldl (fn (a,f) => let val f' = do_arm local_fids_types a
 					               in  join_free(f,f')

@@ -20,8 +20,17 @@ struct
   val zip = ListPair.zip
   val foldl_acc = Listops.foldl_acc
 
-  fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
-  fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
+   fun extractCbnd (Con_cb(v,c)) = (v,c)
+     | extractCbnd (Open_cb(v,vklist,c,k)) = 
+       let val v' = Name.derived_var v
+       in  (v,Let_c(Sequential,
+		    [Open_cb(v',vklist,c,k)],
+		    Var_c v'))
+       end
+     | extractCbnd _ = error "Code_cb not handled"
+
+  val generate_tuple_symbol = IlUtil.generate_tuple_symbol
+  val generate_tuple_label = IlUtil.generate_tuple_label
   fun exp_tuple (elist : exp list) = 
       let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) elist
       in Prim_e(NilPrimOp(record labels),[],elist)
@@ -51,8 +60,8 @@ struct
   val true_exp = Prim_e(NilPrimOp (inject 0w1),[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
-  fun function_type(Function(effect,recur,vklist,dep,vclist,vflist,_,c)) = 
-      AllArrow_c(Open,effect,vklist, if dep then SOME (map #1 vclist) else NONE,
+  fun function_type openness (Function(effect,recur,vklist,dep,vclist,vflist,_,c)) = 
+      AllArrow_c(openness,effect,vklist, if dep then SOME (map #1 vclist) else NONE,
 		 map #2 vclist,TilWord32.fromInt(length vflist),c)
 
   fun effect (e : exp) = true (* very conservative *)
@@ -1208,9 +1217,6 @@ struct
 *)
 
 
-  fun get_function_type openness (Function(effect, recur, vklist, dep, vclist, vlist, _, con)) =
-      AllArrow_c(openness, effect, vklist, if dep then SOME(map #1 vclist) else NONE, map #2 vclist, 
-		 Word32.fromInt (List.length vlist), con)
 
   fun alpha_mu is_bound (vclist) = 
       let fun folder((v,_),subst) = if (is_bound v)

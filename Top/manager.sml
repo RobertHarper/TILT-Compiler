@@ -290,7 +290,8 @@ struct
        end
 
   fun getContext (lines, imports) = 
-      let val _ = tick_cache()
+      let val _ = Name.reset_varmap()
+	  val _ = tick_cache()
 	  val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
 	  val _ = (chat "  [Creating context from imports: ";
 	           chat_imports 4 imports;

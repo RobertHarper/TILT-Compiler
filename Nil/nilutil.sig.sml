@@ -24,11 +24,12 @@ signature NILUTIL =
     val false_exp : Nil.exp
     val int_con : Nil.con   (* 32-bit ints *)
     val char_con : Nil.con  (* 8-bit ints *)
-    val function_type : Nil.function -> Nil.con
+    val function_type : Nil.openness -> Nil.function -> Nil.con
 
     val makeLetC : Nil.conbnd list -> Nil.con -> Nil.con
     val makeLetE : Nil.bnd list -> Nil.exp -> Nil.exp
     val makeAppE : Nil.exp -> Nil.con list -> Nil.exp list -> Nil.exp list -> Nil.exp
+    val extractCbnd : Nil.conbnd -> Nil.var * Nil.con
 
     val effect : Nil.exp -> bool (* could the expression have an effect *)
 
@@ -100,6 +101,5 @@ signature NILUTIL =
     val singletonize : (Nil.kind * Nil.con) -> Nil.kind
     val selfify : (Nil.con * Nil.kind) -> Nil.kind
 
-    val get_function_type : Nil.openness -> Nil.function -> Nil.con
     
   end

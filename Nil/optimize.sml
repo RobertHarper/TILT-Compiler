@@ -408,7 +408,7 @@ struct
 		fun loop (depth,alias,funcons,curry_call,args,cwrapper_opt,v,function) = 
 		    let val (body,con,vk,vc,vf,wrapper) = separate function
 			val alias = if (depth>1) then (v,true,curry_call)::alias else alias
-			val funcon = NilUtil.get_function_type Open function
+			val funcon = NilUtil.function_type Open function
 			val funcons = if (depth>1) then (v,funcon)::funcons else funcons
 			val curry_call = App_e(Open,curry_call,
 						map (Var_c o #1) vk, 
@@ -453,7 +453,7 @@ struct
 		    val (depth,uncurry_call,vk,vc,vf,body,con,aliases,funcons,
 			 cwrapper,uwrapper) = extract_uncurry(Open,v,v',f)
 		    val temp = (v,vk,vc,vf,body,con,cwrapper,uwrapper,uncurry_call)
-		    val state = add_con(state,v,NilUtil.get_function_type Open f)
+		    val state = add_con(state,v,NilUtil.function_type Open f)
 
 		    val state = 
 			if (depth>1)
