@@ -1,35 +1,23 @@
-(*
 signature LINKIL = 
   sig
-      structure Tyvar : TYVAR
       structure Prim : PRIM
       structure Il : IL
-      structure Ppprim : PPPRIM
+      structure Ppprim : PPPRIM 
       structure Ppil : PPIL
       structure IlUtil : ILUTIL
       structure IlPrimUtil : PRIMUTIL
-      structure IlLookup : ILLOOKUP
+      structure IlContext : ILCONTEXT
       structure IlStatic : ILSTATIC 
-      structure Datatype : DATATYPE
-      structure Basis : BASIS
-      structure InfixParse : INFIXPARSE
-      structure Pat : PAT
-      structure Toil : TOIL
-      structure IlEval : ILEVAL
 
       val initial_sbnds : Il.sbnd list
       val initial_context : Il.context
 
-      val elaborate       : string -> Il.sbnd list * Il.context (* uses the inital_context *)
-      val elaborate_diff  : string -> Il.sbnd list * Il.context_entry list (* returns only the differential *)
-      val elaborate'      : Il.context * string -> Il.sbnd list * Il.context
-      val elaborate_diff' : Il.context * string -> Il.sbnd list * Il.context_entry list
-      val evaluate  : Il.sbnd list -> Il.sbnd list
-      val parse : string -> Ast.dec
-      val setdepth : int -> unit
+      val compile : string -> (Il.sbnd list * Il.sdec list * Il.context) option
+      val test : string -> (Il.sbnd list * Il.sdec list * Il.context) option
+      val setdepth : int -> unit (* printing depth *)
   end
-*)
-structure LinkIl (* : LINKIL *) =
+
+structure LinkIl : LINKIL =
     struct
 	structure Tyvar = Tyvar();
 	structure Prim = Prim();
@@ -107,11 +95,12 @@ structure LinkIl (* : LINKIL *) =
 	val error = fn s => Util.error "linkil.sml" s
 
 	fun setdepth d = Compiler.Control.Print.printDepth := d
+(*
 	fun parse s = 
 	    let val (is,dec) = LinkParse.parse_one s
 	    in (Source.filepos is, LinkParse.named_form_dec(LinkParse.tvscope_dec dec))
 	    end
-	    
+*)	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
 	fun local_add_context_entries(ctxt,entries) = 
@@ -139,12 +128,21 @@ structure LinkIl (* : LINKIL *) =
 		     in	SOME(sbnds,ctxts)
 		     end
 	       | _ => NONE)
-
-	fun elaborate s = (case (elaborate_help(initial_context,parse s)) of
-			       SOME (sbnds,entries) => (* SOME(sbnds, 
-							    local_add_context_entries(initial_context,tentries)) *)
-				   SOME((*initial_sbnds @ *) sbnds, empty_context)
-			     | NONE => NONE)
+	val elaborate_help = Stats.timer("Elaboration",elaborate_help)
+	    
+	fun elaborate filename = 
+	    (case (elaborate_help(initial_context,LinkParse.parse_all filename)) of
+		 SOME (sbnds,entries) =>
+		     (* SOME(sbnds, local_add_context_entries(initial_context,tentries)) *)
+		     let fun get_sdec (CONTEXT_SDEC sdec) = SOME sdec
+			   | get_sdec _ = NONE
+			 val sdecs = List.mapPartial get_sdec entries
+			 val sbnds = initial_sbnds @ sbnds
+			 val sdecs = initial_sdecs @ sdecs
+			 val _ = print "Elaboration complete\n"
+		     in  SOME(sbnds, sdecs, empty_context)
+		     end
+	       | NONE => NONE)
 	    
 (*
 	fun evaluate target_sbnds =
@@ -163,18 +161,9 @@ structure LinkIl (* : LINKIL *) =
 	
 	fun check' filename {doprint,docheck} =
 	    let
-		val _ = Stats.reset_stats()
-  	        val (is,astdec) = (Stats.timer("PARSING",LinkParse.parse_one)) filename
-		val fp = Source.filepos is
-  	        val astdec = (Stats.timer("PARSE_TVSCOPE",LinkParse.tvscope_dec)) astdec
-  	        val astdec = (Stats.timer("PARSE_NAMEDFORM",LinkParse.named_form_dec)) astdec
-		val (sbnds,cdiff) =
-		    (case (Stats.timer("ELABORATION",elaborate_help)) (initial_context,(fp,astdec)) of
-			 SOME res => res
-		       | NONE => error "Elaboration failed")
-		val sbnds = initial_sbnds @ sbnds
-		val sdecs = List.mapPartial (fn CONTEXT_SDEC sdec => SOME sdec | _ => NONE) cdiff
-		val sdecs = initial_sdecs @ sdecs
+		val (sbnds,sdecs,context) = (case elaborate filename of
+					       SOME res => res
+					     | NONE => error "Elaboration failed")
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)
@@ -207,8 +196,7 @@ structure LinkIl (* : LINKIL *) =
 						   Ppil.pp_signat precise_s;
 						   print "\n";
 						   print "\ncontext is\n";
-						   Ppil.pp_context (local_add_context_entries(empty_context,
-											      cdiff));
+						   Ppil.pp_context context;
 						   print "\n")
 					 else ()
 			    in (case ((Stats.timer("SANITY_CHECK",sanity_check))
@@ -219,9 +207,19 @@ structure LinkIl (* : LINKIL *) =
 						 print " ******\n\n";
 						 error "sanity-check"))
 			    end
+		    else ()
+		val _ = if doprint
+			    then (print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
+				  Ppil.pp_sbnds sbnds;
+				  print "\nSize of IL = ";
+				  print (Int.toString (IlUtil.mod_size 
+						       (Il.MOD_STRUCTURE sbnds)));
+				  print "\n\n========================================\n";
+				  print "\n\ninitial_context = ctxt = \n";
+				  Ppil.pp_context ctxt;
+				  print "\n")
 			else ()
-		val _ = Stats.print_stats()
-	    in  (m,given_s)
+	    in  (sbnds,sdecs,context)
 	    end
 
 
@@ -244,5 +242,9 @@ structure LinkIl (* : LINKIL *) =
 		val _ = P.report TextIO.stdOut
 	    in res
 	    end
+
+	val compile = elaborate
+	val test = (fn filename => SOME(ptest_res filename) handle _ => NONE)
+
     end (* struct *)
 

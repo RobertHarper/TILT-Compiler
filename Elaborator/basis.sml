@@ -384,6 +384,7 @@ functor Basis(structure Il : IL
 		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
 					       map #2 list_sbnd_sdecs)
 
+(*
 		val _ = (print "=========================================\n";
 			 print "list_sbnds are: ";
 			 Ppil.pp_sbnds list_sbnds;
@@ -391,6 +392,7 @@ functor Basis(structure Il : IL
 			 print "list_sdecss are: ";
 			 Ppil.pp_sdecs list_sdecs;
 			 print "\n\n\n")
+*)
 
 		val bool_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,

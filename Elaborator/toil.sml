@@ -620,12 +620,10 @@ functor Toil(structure Il : IL
 		 val spec_rescon = fresh_con context
 		 val spec_funcon = CON_ARROW(con2,spec_rescon, oneshot())
 		 fun reduce(ETAPRIM(p,cs),RECORD rbnds) = 
-		     (print "reduce: etaprim-record case\n";
-		      PRIM(p,cs,map #2 rbnds))
+		      PRIM(p,cs,map #2 rbnds)
 		   | reduce(ETAILPRIM(ip,cs),RECORD rbnds) = ILPRIM(ip,cs,map #2 rbnds)
 		   | reduce(x as ETAPRIM(p,cs),y) = 
-		     (print "reduce: etaprim-nonrecord case\n";
-		      case (IlStatic.PrimUtil.get_type p cs) of
+		     (case (IlStatic.PrimUtil.get_type p cs) of
 			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
 			| CON_ARROW(_,_,_) => PRIM(p,cs,[y])
 			| _ => APP(x,y))
@@ -634,11 +632,7 @@ functor Toil(structure Il : IL
 			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
 			| CON_ARROW(_,_,_) => ILPRIM(ip,cs,[y])
 			| _ => APP(x,y))
-		   | reduce(x,y) = 
-			  (print "reduce: default case\n"; 
-			   print "x is: "; Ppil.pp_exp x; print "\n";
-			   print "y is: "; Ppil.pp_exp y; print "\n";
-			   APP(x,y))
+		   | reduce(x,y) = APP(x,y)
 		 fun red (exp as (OVEREXP (c,_,oe))) = 
 		     ((case c of 
 			   CON_OVAR ocon => overload_help false ocon
