@@ -1,4 +1,4 @@
-(*$import Int String Substring TextIO *)
+(*$import Int String Substring TextIO OS *)
 
 (* Auxiliary functions for test cases *)
 
@@ -346,3 +346,5 @@ val _ =
     end;
 
 end
+
+val _ = app OS.FileSys.remove ["empty.dat", "medium.dat", "small1.dat", "small2.dat", "text.dat"]

@@ -1,4 +1,4 @@
-(*$import Int Bool Char StringCvt List TextIO *)
+(*$import Int Bool Char StringCvt List TextIO OS *)
 
 (* Auxiliary functions for test cases *)
 
@@ -193,6 +193,6 @@ val test10 =
 	    ("gryf",   NONE)
 	    ]);
     
-(*val _ = FileSys.remove tmpfile*)
+val _ = OS.FileSys.remove tmpfile
 
 end
