@@ -51,6 +51,7 @@ structure Util : UTIL =
     fun list2set x = x
     fun set2list x = x
     val foldsequence = foldl
+    val foldset = foldl
     val mapsequence = map
     val mapset = map
     val appsequence = app

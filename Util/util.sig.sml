@@ -39,6 +39,7 @@ signature UTIL =
     val sequenceconcat : ('a , 'b) sequence * ('a, 'b) sequence -> ('a, 'b) sequence
     val sequence2set : ('a , 'b) sequence -> ('a , 'b) set
     val foldsequence : (('a*'b) * 'c -> 'c) -> 'c -> ('a,'b) sequence -> 'c (* like foldl *)
+    val foldset : (('a*'b) * 'c -> 'c) -> 'c -> ('a,'b) set -> 'c (* like foldl *)
     val mapsequence : (('a*'b) -> ('c*'d)) -> ('a,'b) sequence -> ('c,'d) sequence
     val mapset : (('a*'b) -> ('c*'d)) -> ('a,'b) set -> ('c,'d) set
     val appsequence : (('a*'b) -> unit) -> ('a,'b) sequence -> unit
