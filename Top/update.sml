@@ -5,7 +5,7 @@ structure Update
         where type unit_paths = Paths.unit_paths =
 struct
 
-    val error = fn s => Util.error "analyze.sml" s
+    val error = fn s => Util.error "update.sml" s
 	
     type unit_paths = Paths.unit_paths
 
