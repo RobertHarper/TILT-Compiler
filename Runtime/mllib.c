@@ -8,6 +8,8 @@
 #include "tag.h"
 #include "mllib.h"
 
+int exncounter = 4200;
+
 long cur_alloc_pointer;
 long cur_alloc_limit;
 
@@ -49,7 +51,13 @@ void mllib_init()
   mllib_inited = 1;
 }
 
-int ml_output(int _des, value_t mlstring)
+value_t ml_input1(value_t _des)
+{
+  printf("ml_input1 not implemented in runtime\n");
+  assert(0);
+}
+
+int ml_output(value_t _des, value_t mlstring)
 {
 /* XXX this treatment of descriptor is wrong */
   FILE *F = des2ptr(_des);
