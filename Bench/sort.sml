@@ -1,3 +1,6 @@
+(*$import Prelude *)
+
+
 (* simple quadratic insertion sort; space consumption is also quadratic;
    the generator i am sure is quite unrandom but that is immaterial; the key
    is to make it generate the data quickly so that we are mostly measuring

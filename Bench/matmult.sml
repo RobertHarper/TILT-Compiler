@@ -1,3 +1,5 @@
+(*$import Prelude *)
+
 (* 2-d matrix multiply *)
 
 local

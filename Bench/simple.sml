@@ -1,3 +1,5 @@
+(*$import Prelude *)
+
 local
 
   val makestring_real = Real.toString

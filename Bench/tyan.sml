@@ -1,3 +1,4 @@
+(*$import Prelude *)
 
 fun fold f l acc = foldr f acc l
 fun revfold f l acc = foldl f acc l
@@ -24,7 +25,7 @@ val char_explode = explode
 fun string_implode [] = ""
   | string_implode (s1::srest) = s1 ^ (string_implode srest)
 fun string_explode s = map (fn c => implode[c]) (explode s)
-datatype 'a option = NONE | SOME of 'a
+
 exception Tabulate
 fun tabulate (i,f) = 
 if i <= 0 then raise Tabulate else
@@ -366,14 +367,15 @@ structure MI = struct (* MONO_IDEAL *)
 end (* structure MI *)
 
 
-val log = let fun log(n,l) = if n<=1 then l else log((n >> 1),1+l)
-          in fn n => log(n,0) end
+
 val maxLeft = ref 0
 val maxRight = ref 0
 val counts = tabulate(20,fn _ => array(20,0))
 val indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
 fun resetCounts() = app(fn i => app (fn j => update(sub(counts,i),j,0)) indices) indices
 fun pair(l,r) = let
+      val log = let fun log(n,l) = if n<=1 then l else log((n >> 1),1+l)
+          in fn n => log(n,0) end
       val l = log l and r = log r
       val _ = maxLeft := max(!maxLeft,l) and _ = maxRight := max(!maxRight,r)
       val a = sub(counts,l)
