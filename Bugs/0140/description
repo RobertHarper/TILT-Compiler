@@ -1,16 +1,20 @@
 Number: 0140
-Title:       discrepancies on string tests
+Title:       String.fromCString not implemented
 Keywords:    string, char
 Submitter:   rwh
 Date:        08/18/02
 Version:     CVS
 System:      any
-Severity:    major
-Problem:     discrepancies with test
+Severity:    minor
+Problem:
+
+	Test m0112 does not work because String.fromCString is
+	unimplemented.
+
 Code:        
 Transcript:  
 Comments:    
 Fix:         
 Test: m0112
-Owner: 
+Owner: swasey
 Status: open

@@ -35,24 +35,6 @@ structure PreString =
 
 
     local
-(*
-      structure C = InlineT.Char
-
-      val op + = InlineT.DfltInt.+
-      val op - = InlineT.DfltInt.-
-      val op * = InlineT.DfltInt.*
-      val op quot = InlineT.DfltInt.quot
-      val op < = InlineT.DfltInt.<
-      val op <= = InlineT.DfltInt.<=
-      val op > = InlineT.DfltInt.>
-      val op >= = InlineT.DfltInt.>=
-      val op = = InlineT.=
-      val unsafeSub = InlineT.CharVector.sub
-      val unsafeUpdate = InlineT.CharVector.update
-      val unsafeCreate = Assembly.A.create_s
-      val maxSize = Core.max_length
-      val size = InlineT.CharVector.length
-*)
 	val unsafeSub = unsafe_sub
 	val unsafeUpdate = unsafe_update
 	val unsafeUpdate32 = unsafe_update32
@@ -64,11 +46,6 @@ structure PreString =
 
   (* allocate an uninitialized string of given length (with a size check) *)
     fun create n = if n > 0 then unsafeCreate n else raise Size
-(*
- if (InlineT.DfltInt.ltu(maxSize, n))
-		       then raise General.Size
-		   else unsafeCreate n
-*)
 
   (* a vector of single character strings *)
     val chars : string vector =

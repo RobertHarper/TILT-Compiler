@@ -8,29 +8,51 @@ System:      solaris
 Severity:    major
 Problem:
 
-	This is going to be hard to reproduce.  I spotted it again in
-	January, 2004.
+	The runtime is throwing SysErr exceptions (when an error actually
+	occurs) with the wrong error message.
 
-	You will be able to reproduce this bug on cuff if bug number
-	94 has not been fixed.  If bug 94 has been fixed, you will
-	need to arrange for fork to fail somehow.  For example, you
-	could find and use a program that deliberately consumes all
-	virtual memory.
+	Originally, the bug came up with the following code:
 
-	The problem is that when posix_process_fork fails, it raises a
-	SysErr exception with errno=22 (EINVAL) on Solaris while truss
-	reports that fork1 failed with errno=12 (ENOMEM).
+		structure test =
+		struct
+		    val _ = POSIX_Process.fork ()
+		end
 
-	Hunch: This is due to our use of threads.  Inspect those
-	manual pages.
+	At the time, the runtime demanded a large amount of virtual memory
+	so fork posix_process_fork would fail (this was fixed; see bug 94)
+	The problem is it raised a SysErr exception with errno=22 (EINVAL)
+	on Solaris while truss reports that fork1 failed with errno=12
+	(ENOMEM).
+
+	Hunch: This is due to our use of threads; errno is thread-local.
+	Inspect those manual pages.
+
+	I spotted this bug again in January, 2004 while doing a parallel
+	make on solaris.
+
+	The bug is apparantly reliably reproduced with the following
+	project on cuff:
+
+		(* project *)
+		unit Test = "test.sml" {OS}
+
+		(* test.sml *)
+		val _ = OS.FileSys.remove "nosuchfile"
+
+	Running
+
+		tilt-nj -o test.exe -c Test project
+		rm nosuchfile	# just in case
+		./test.exe
+
+	on cuff yields
+
+		Proc 0: Thread 0 (0): Uncaught exception SysErr: Invalid argument (errno=22)
+
+	Truss shows that unlink() set errno=2 (No such file or directory)
+	but the SysErr shows errno=22.
 
 Code:
-	(*$import Prelude TopLevel POSIX_Process *)
-
-	structure test =
-	struct
-	    val _ = POSIX_Process.fork ()
-	end
 Transcript:
 Comments:
 Fix:

@@ -175,7 +175,7 @@ m0109	pass	file system
 m0111	pass	signatures
 m0112	fail	strings
 m0113	pass	strings
-m0114	fail	string conversion
+m0114	pass	string conversion
 m0115	pass	substring overflow
 m0116	pass	take
 m0117	pass	matrices

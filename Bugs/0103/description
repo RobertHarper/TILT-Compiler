@@ -1,16 +1,54 @@
 Number: 0103
-Title:       word8 problems
+Title:       Word8 arithmetic errors.
 Keywords:    word8
 Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
-Severity:    minor
-Problem:     test case reports "wrong" for some cases
-Code:        
+Severity:    major
+Problem:
+
+	Test m0028 fails because of bug # 0169 (fromString and scan accept
+	a nonstandard 0W prefix) and for the following, more serious, reasons:
+
+	Word8.~>>(0w255,0w1) = 0wx7f (should be 0wxff)
+	Word8.~>>(0wx80,0w1) = 0wx40 (should be 0wxc0)
+	Word8.*(0w5,0w11) = 0wx10 (should be 0wx37)
+	Word8.*(0w4,0w35) = 0wx27 (should be 0wx8c)
+	Word8.*(0w3,0w129) = 0wx84 (should be 0wx83)
+
+Code:
+
+	fun w2s (w:Word8.word) : string =
+		"0wx" ^ Word8.toString w
+
+	fun test (exp:string, a:Word8.word, b:Word8.word) : unit =
+		if a = b then print (exp ^ " OK \n")
+		else print (exp ^ " = " ^ w2s a ^ " (should be " ^ w2s b ^ ")\n")
+
+	val _ = test("Word8.~>>(0w255,0w1)", Word8.~>>(0w255,0w1), 0w255)
+
+	val _ = test("Word8.~>>(0wx80,0w1)", Word8.~>>(0wx80,0w1), 0wxc0)
+
+	val _ = test("Word8.*(0w5,0w11)", Word8.*(0w5,0w11), 0w55)
+
+	val _ = test("Word8.*(0w4,0w35)", Word8.*(0w4,0w35), 0w140)
+
+	val _ = test("Word8.*(0w3,0w129)", Word8.*(0w3,0w129), 0w131)
+
 Transcript:  
-Comments:    
+Comments:
+
+	Word8 implements its operations in terms of Word32.  I suspect the
+	implementation of Word8 rather than Word32.  The entire structure
+	should be audited.
+
+	We define a primitive 8-bit word type and operations on that type.
+	An alternative to fixing the current structure Word8 is to replace
+	it with an implementation in terms TiltPrim and to ensure that the
+	backends support the primitive type.
+
 Fix:         
 Test: m0028
-Owner: rwh
+Owner: swasey
 Status: open

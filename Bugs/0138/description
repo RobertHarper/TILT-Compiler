@@ -1,16 +1,44 @@
 Number: 0138
-Title:       date failure
+Title:       Unimplemented functions in structure Date.
 Keywords:    date
 Submitter:   rwh
 Date:        08/18/02
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     fails date tests
-Code:        
+Problem:
+
+	Test m0108 fails because:
+
+	- Date.fromString is unimplemented
+
+	- Date.date raises Time with certain inputs (see the following code)
+
+Code:     
+   
+	fun test (what:string, y:int, mo:Date.month, d:int, h:int, mi:int, s:int) : unit =
+		let	val date = Date.date {year=y, month=mo, day=d, hour=h,
+				minute=mi, second=s, offset=NONE}
+			val _ = print (what ^ ": " ^ Date.toString date ^ "\n")
+		in	()
+		end handle e => print (what ^ ": " ^ exnMessage e ^ "\n")
+	
+	val _ = app test
+	[
+	("25Jun62", 1962, Date.Jun, 25, 1, 2, 3),
+	("1Jan62", 1962, Date.Jan, 1, 1, 2, 3),
+	("28Feb59", 1959, Date.Feb, 28, 1, 2, 3),
+	("1Mar59", 1959, Date.Mar, 1, 1, 2, 3),
+	("31Dec59", 1959, Date.Dec, 31, 1, 2, 3),
+	("28Feb60", 1960, Date.Feb, 28, 1, 2, 3),
+	("29Feb60", 1960, Date.Feb, 29, 1, 2, 3),
+	("1Mar60", 1960, Date.Mar, 1, 1, 2, 3),
+	("31Dec60", 1960, Date.Dec, 31, 1, 2, 3)
+	]
+
 Transcript:  
 Comments:    
 Fix:         
 Test: m0108
-Owner: rwh
+Owner: swasey
 Status: open

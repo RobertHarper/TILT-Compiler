@@ -1,16 +1,34 @@
 Number: 0141
-Title:       stringcvt discrepancies
+Title:       Bugs in StringCvt.
 Keywords:    stringcvt, textio
 Submitter:   rwh
 Date:        08/18/02
 Version:     CVS
 System:      any
 Severity:    major
-Problem:     discrepancies with test results
+Problem:
+
+	Test m0114 does not work because
+
+	- ScanString.{splitl, takel, dropl} raise Size when no input
+	matches the predicate.
+
+	- ScanString.splitl eats an extra character when there is input
+	that does not match the predicate.
+
 Code:        
 Transcript:  
-Comments:    
-Fix:         
+Comments:
+Fix:
+
+	PreString provides some utility functions that operate on
+	non-empty strings or lists of characters.  StringCvt was calling
+	one of these (revImplode) with an empty list.  I fixed StringCvt
+	and checked every use of PreString in the basis to ensure that no
+	other code uses these functions incorrectly.
+
+	The other problem was that splitl was returning the wrong stream.
+
 Test: m0114
-Owner: 
-Status: open
+Owner: swasey
+Status: closed

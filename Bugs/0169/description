@@ -1,5 +1,5 @@
 Number: 0169
-Title: Word.scan and Word.fromString errors in corner cases
+Title: Word scanning errors in corner cases
 Keywords: basis, Word
 Submitter: swasey
 Date: 1/16/2004
@@ -8,9 +8,9 @@ System: any
 Severity: minor
 Problem:
 
-	The scanning functions Word.fromString and Word.scan are wrong.
-	These functions are supposed to match a prefix of the input string
-	to a regular expression.  The regular expressions are
+	The word scanning functions (eg, Word.fromString and Word.scan)
+	are wrong.  These functions are supposed to match a prefix of the
+	input string to a regular expression.  The regular expressions are
 
 		BIN	{ws}(0w)?[0-1]+
 		OCT	{ws}(0w)?[0-7]+
@@ -27,18 +27,30 @@ Problem:
 Code:
 	val () =
 		let
-			open StringCvt Word
-			val SOME 0w0 = fromString "0w20Af"
-			val SOME 0w0 = fromString "0W1"
-			val SOME 0w0 = scanString (scan DEC) "0W1"
-			val SOME 0w0 = scanString (scan OCT) "0W1"
-			val SOME 0w0 = scanString (scan HEX) "0w1"
-			val SOME 0w0 = scanString (scan HEX) "0W1"
+			open StringCvt
+			val SOME 0w0 = Word.fromString "0w20Af"
+			val SOME 0w0 = Word.fromString "0W1"
+			val SOME 0w0 = scanString (Word.scan DEC) "0W1"
+			val SOME 0w0 = scanString (Word.scan OCT) "0W1"
+			val SOME 0w0 = scanString (Word.scan HEX) "0w1"
+			val SOME 0w0 = scanString (Word.scan HEX) "0W1"
+			val SOME 0w0 = scanString (Word.scan BIN) "0W1"
+
+			val SOME 0w0 = Word8.fromString "0w20Af"
+			val SOME 0w0 = Word8.fromString "0W1"
+			val SOME 0w0 = scanString (Word8.scan DEC) "0W1"
+			val SOME 0w0 = scanString (Word8.scan OCT) "0W1"
+			val SOME 0w0 = scanString (Word8.scan HEX) "0w1"
+			val SOME 0w0 = scanString (Word8.scan HEX) "0W1"
+			val SOME 0w0 = scanString (Word8.scan BIN) "0W1"
 		in	()
 		end
 Transcript:
 Comments:
+
+	Test m0028 fails for other reasons too; see ../0103/description
+
 Fix:
-Test: m0025
+Test: m0025 m0028
 Owner: swasey
 Status: open

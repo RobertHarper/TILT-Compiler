@@ -1,16 +1,53 @@
 Number: 0145
-Title:       discrepancies with time results
+Title:       Problems with Time.fromReal and Time.fmt.
 Keywords:    time
 Submitter:   rwh
 Date:        08/18/02
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     run test
+Problem:
+
+	Test m0120 fails for the following reasons:
+
+	Time.fromReal 1E300 = exception overflow (expected exception Time)
+	Time.fmt ~1 454.501701 = "454" (expected "455")
+	Time.fmt 0 454.501701 = "454" (expected "455")
+	Time.fmt 3 454.501701 = "454.501" (expected "454.502")
+
 Code:        
+	val _ =
+		let	val _ = print "Time.fromReal 1E300 = "
+			val s =
+				(Time.toString(Time.fromReal 1E300)
+				handle e => "exception " ^ exnMessage e)
+			val _ = print (s ^ " (expected exception Time)\n")
+		in	()
+		end
+	
+	val t : Time.time = Time.+(Time.fromSeconds 454, Time.fromMicroseconds 501701)
+	
+	fun test (prec:int, r:string) : unit =
+		let	val s = Time.fmt prec t
+		in	if s=r then ()
+			else print ("Time.fmt " ^ Int.toString prec ^ " 454.501701 = \"" ^
+				s ^ "\" (expected \"" ^ r ^ "\")\n")
+		end
+	
+	val _ = app test
+	[
+		(~1,"455"),
+		(0,"455"),
+		(1,"454.5"),
+		(2,"454.50"),
+		(3,"454.502"),
+		(4,"454.5017"),
+		(5,"454.50170"),
+		(6,"454.501701")
+	]
 Transcript:  
 Comments:    
 Fix:         
 Test: m0120
-Owner: 
+Owner: swasey
 Status: open

@@ -78,23 +78,25 @@ structure StringCvt :> STRING_CVT =
 	    end
     end (* local *)
 
+    fun revImplode' (0,_) = ""
+      | revImplode' x = PreString.revImplode x
 
     fun splitl pred getc rep = let
 	  fun lp (n, chars, rep) = (case (getc rep)
-		 of NONE => (PreString.revImplode(n, chars), rep)
-		  | SOME(c, rep) => if (pred c)
-		      then lp(n+1, c::chars, rep)
-		      else (PreString.revImplode(n, chars), rep)
+		 of NONE => (revImplode'(n, chars), rep)
+		  | SOME(c, rep') => if (pred c)
+		      then lp(n+1, c::chars, rep')
+		      else (revImplode'(n, chars), rep)
 		(* end case *))
 	  in
 	    lp (0, [], rep)
 	  end
     fun takel pred getc rep = let
 	  fun lp (n, chars, rep) = (case (getc rep)
-		 of NONE => PreString.revImplode(n, chars)
+		 of NONE => revImplode'(n, chars)
 		  | SOME(c, rep) => if (pred c)
 		      then lp(n+1, c::chars, rep)
-		      else PreString.revImplode(n, chars)
+		      else revImplode'(n, chars)
 		(* end case *))
 	  in
 	    lp (0, [], rep)
