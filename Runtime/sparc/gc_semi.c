@@ -142,15 +142,17 @@ static void GCCollect_Semi(Proc_t *proc)
   assert(proc->writelistCursor == proc->writelistStart);
 }
 
-void GC_Semi(Proc_t *proc, Thread_t *th)
+void
+GC_Semi(Proc_t* proc, Thread_t* th)
 {
-  if (proc->allocLimit == StartHeapLimit)                  
-    ResetAllocation(proc, fromSpace);                      /* One processor can grab all of fromSpace for further allocation */
-  process_writelist(proc, NULL, NULL);                     /* Get globals; discard backpointers */
-  if (GCSatisfiable(proc,th))
-    return;
-  GCCollect_Semi(proc);
-  assert(GCSatisfiable(proc,th));
+	if (proc->allocLimit == StartHeapLimit)                  
+		/* One processor can grab all of fromSpace for further allocation */
+		ResetAllocation(proc, fromSpace);
+	process_writelist(proc, NULL, NULL);	/* Get globals; discard backpointers */
+	if(GCSatisfiable(proc,th))
+		return;
+	GCCollect_Semi(proc);
+	assert(GCSatisfiable(proc,th));
 }
 
 

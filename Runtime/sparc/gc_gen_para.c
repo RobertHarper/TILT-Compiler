@@ -233,34 +233,38 @@ static void GCCollect_GenPara(Proc_t *proc)
 
 }
 
-void GC_GenPara(Proc_t *proc, Thread_t *th)
+void
+GC_GenPara(Proc_t* proc, Thread_t* th)
 {
-  int roundSize = RoundUp(th->requestInfo, minOffRequest);
+	int roundSize = RoundUp(th->requestInfo, minOffRequest);
 
-  /* Check for forced Major GC's */
-  if (th->request != MajorGCRequestFromC) {
-    if (GCSatisfiable(proc,th))
-      return;
-    if (th->requestInfo > 0) {
-      GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-      if (proc->allocStart != NULL)
-	return;
-    }   
-  }
-  /* Process write list if we can; now can we resume mutator? */
-  if (2 * SetLength(&proc->work.roots) < SetFullSize(&proc->work.roots)) 
-    process_writelist(proc,nursery,fromSpace);
-  if (th->request != MajorGCRequestFromC) {
-    if (GCSatisfiable(proc,th))
-      return;
-  }
-  retry:
-  GCCollect_GenPara(proc);
-  GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-  if (!GCSatisfiable(proc,th)) {
-    printf("Warning: GC_GenPara failed to obtain enough memory. Processor %d unmapped for too long? Retrying...\n", proc->procid);
-    goto retry;
-  }
+	if(th->request != MajorGCRequestFromC){
+		if(GCSatisfiable(proc,th))
+			return;
+		if(th->requestInfo > 0){
+			GetHeapArea(nursery,roundSize,&proc->allocStart,
+				&proc->allocCursor,&proc->allocLimit);
+			if(proc->allocStart != NULL)
+				return;
+		}
+		/* NB the comment in GC_Gen. */
+		else if(th->request < 0
+		&& 2 * SetLength(&proc->work.roots) < SetFullSize(&proc->work.roots)){
+			process_writelist(proc,nursery,fromSpace);
+			if (GCSatisfiable(proc,th))
+				return;
+		}
+	}
+	for(;;){
+		GCCollect_GenPara(proc);
+		GetHeapArea(nursery,roundSize,&proc->allocStart,
+			&proc->allocCursor,&proc->allocLimit);
+		if(GCSatisfiable(proc,th))
+			return;
+		printf("Warning: GC_GenPara failed to obtain enough memory."
+			" Processor %d unmapped for too long? Retrying...\n",
+			proc->procid);
+	}
 }
 
 void GCPoll_GenPara(Proc_t *proc)

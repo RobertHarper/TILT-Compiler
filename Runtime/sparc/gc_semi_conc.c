@@ -692,22 +692,27 @@ static void do_work(Proc_t *proc, int additionalWork)
 	   bytesCopied(&proc->cycleUsage) + bytesCopied(&proc->segUsage));
 }
 
-/* Satisfy space requirements by allocating space.  
-   If enough allocation space exists, no additional space is obtained.
-   Write list is not extended. 
-   */
-static int GC_SemiConcHelp(Thread_t *th, Proc_t *proc, int roundSize)
+/*
+	Satisfy space requirements by allocating space.  If enough
+	allocation space exists, no additional space is obtained.
+	Write list is not extended.
+*/
+static int
+GC_SemiConcHelp(Thread_t* th, Proc_t* proc, int roundSize)
 {
-  if (th == NULL)
-    return 1;
-  if (GCSatisfiable(proc,th))
-    return 1;
-  GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-  if (collectDiag >= 3)
-    printf("Proc %d: GCSemiConcHelp %s in allocating %d bytes. %ld bytes allocated this GC cycle\n",
-	   proc->procid, (proc->allocStart != NULL) ? "succeeded" : "failed", roundSize,
-	   proc->cycleUsage.bytesAllocated + proc->segUsage.bytesAllocated);
-  return GCSatisfiable(proc,th);
+	if(th == NULL)
+		return 1;
+	if(GCSatisfiable(proc,th))
+		return 1;
+	GetHeapArea(fromSpace,roundSize,&proc->allocStart,
+		&proc->allocCursor,&proc->allocLimit);
+	if(collectDiag >= 3)
+		printf("Proc %d: GCSemiConcHelp %s in allocating %d bytes."
+			" %ld bytes allocated this GC cycle\n",
+			proc->procid, (proc->allocStart != NULL) ? "succeeded" : "failed",
+			roundSize, proc->cycleUsage.bytesAllocated +
+			proc->segUsage.bytesAllocated);
+	return GCSatisfiable(proc,th);
 }
 
 void GC_SemiConc(Proc_t *proc, Thread_t *th)

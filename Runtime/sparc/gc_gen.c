@@ -172,19 +172,30 @@ void GCCollect_Gen(Proc_t *proc)
 
 }
 
-void GC_Gen(Proc_t *proc, Thread_t *th)
+void
+GC_Gen(Proc_t* proc, Thread_t* th)
 {
-  /* First time */
-  if (proc->allocLimit == StartHeapLimit) 
-    ResetAllocation(proc, nursery);
-  if (2 * SetLength(&proc->work.roots) < SetFullSize(&proc->work.roots))
-    process_writelist(proc,nursery,fromSpace);
-  /* Check for forced Major GC's */
-  if (th->request != MajorGCRequestFromC &&
-      GCSatisfiable(proc,th))
-    return;
-  GCCollect_Gen(proc);
-  assert(GCSatisfiable(proc,th));
+	/* First time */
+	if(proc->allocLimit == StartHeapLimit)
+		ResetAllocation(proc, nursery);
+	/*
+		Try to satisfy the request without a collection.  Note
+		that th->request<0 ensures that we do not call
+		process_writelists if we are going to collect.  That
+		would be a bug because any back pointers added to the
+		work.roots set prior to a Major GC become nursery
+		locations whose contents point to toSpace rather than
+		fromSpace.
+	*/
+	if(th->request != MajorGCRequestFromC
+	&& th->request < 0
+	&& 2 * SetLength(&proc->work.roots) < SetFullSize(&proc->work.roots)){
+		process_writelist(proc,nursery,fromSpace);
+		if(GCSatisfiable(proc,th))
+			return;
+	}
+	GCCollect_Gen(proc);
+	assert(GCSatisfiable(proc,th));
 }
 
 void GCInit_Gen(void)

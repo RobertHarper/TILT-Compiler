@@ -455,7 +455,8 @@ paranoid_check_stack(char* label, Thread_t* thread, Heap_t** legalHeaps,
 	}
 }
 
-void paranoid_check_all(Heap_t* firstPrimary, Heap_t* secondPrimary,
+void
+paranoid_check_all(Heap_t* firstPrimary, Heap_t* secondPrimary,
 	Heap_t* firstReplica, Heap_t* secondReplica,
 	Heap_t* largeSpace)
 {
@@ -716,11 +717,11 @@ GCSatisfiable(Proc_t* proc, Thread_t* th)
 		requestInfo == 0 is illegal
 	*/
 	long requestInfo = th->requestInfo;
-	if (requestInfo < 0) {
+	if(requestInfo < 0){
 		return ((val_t)proc->writelistCursor - requestInfo <=
 			(val_t)proc->writelistEnd);
 	}
-	else if (requestInfo > 0) {
+	else if(requestInfo > 0){
 		int allocSpaceLeft = (val_t) proc->allocLimit - (val_t) proc->allocCursor;
 		return (allocSpaceLeft > minAllocRegion)
 			&& (requestInfo < allocSpaceLeft);

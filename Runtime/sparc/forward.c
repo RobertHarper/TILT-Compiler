@@ -271,8 +271,8 @@ tag_t acquireOwnership(Proc_t* proc, ptr_t white, tag_t tag)
 	(2) Check proc->needScan (in addition to bytesCopied) for non-zero
 	to see if copied object might have pointer field
 */
-static inline
-ptr_t genericAlloc(Proc_t* proc, ptr_t white, int doCopy, 
+static inline ptr_t
+genericAlloc(Proc_t* proc, ptr_t white, int doCopy, 
 	int doCopyCopy, int skipSpaceCheck, StackType_t stackType)
 {
 	ptr_t obj;	/* forwarded object */

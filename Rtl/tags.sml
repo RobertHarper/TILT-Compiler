@@ -1,5 +1,5 @@
 (* It is crucial that the layout of tags here matches that of the runtime.
-   Compare with file Runtime/tag.h
+   Compare with ../Runtime/sparc/sparc.h
 *)
 structure Rtltags :> RTLTAGS =
 struct

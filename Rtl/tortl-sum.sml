@@ -83,10 +83,10 @@ struct
 	(case simplify_type state field_type of
 	     (true,Prim_c(Int_c _, _)) => true
 	   | (true,Mu_c _) => true
-           | (true,Nurec_c _) => true
-           (* The Proj_c and App_c cases can only arise as eliminations of a Nurec_c. *)
+	   | (true,Nurec_c _) => true
+	   (* The Proj_c and App_c cases can only arise as eliminations of a Nurec_c. *)
 	   | (true,Proj_c _) => true
-           | (true,App_c _) => true
+	   | (true,App_c _) => true
 	   | (true,Prim_c(Sum_c _,_)) => true
 	   | (true,Prim_c(Exntag_c, _)) => true
 	   | (true,_) => false

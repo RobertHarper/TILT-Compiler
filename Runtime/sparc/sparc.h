@@ -743,6 +743,7 @@ enum {
 
 	/*
 		Tags and related constants.
+		Must agree with ../../Rtl/tags.sml
 	*/
 	FORWARD1_TYPE	= 0x0,
 	FORWARD2_TYPE	= 0x4,
@@ -977,7 +978,7 @@ void	ReturnCopyRange(CopyRange_t*);
 void	AddGrayCopyRange(CopyRange_t*);
 /*
 	The following definitions apply to these prototypes and to the
-	inlined forwarding and scanning code in this header.
+	inlined forwarding and scanning code in gcinline.h.
 
 	Note that "copy" = "alloc" + "transfer"
 
@@ -1021,7 +1022,7 @@ void	AddGrayCopyRange(CopyRange_t*);
 		a copy/alloc routine that inserts the primary into the set if
 		the primary was actually copied
 	replicaSet_*
-		a copy/alloc routine that inserts the replica into the setk if
+		a copy/alloc routine that inserts the replica into the set if
 		the primary was actually copied
 	1_, 1L_
 		qualifying the copy/alloc by checking if the pointer is in the
@@ -1509,19 +1510,13 @@ int	exitRoom(Rooms_t*);
 int	changeRoom(Rooms_t*, int);
 
 /* show.c */
-extern long	SemanticGarbageSize;
 extern int	numErrors;
 extern int	errorsToShow;
-mem_t	show_obj(mem_t start, ptr_t* objRef, int show,
-	ShowType_t replicaType, Heap_t** legalHeaps,
-	Bitmap_t** legalStarts);
+int	inHeaps(ptr_t, Heap_t** legalHeaps, Bitmap_t** legalStarts);
 void	scan_heap(char* label, mem_t start, mem_t finish, mem_t top,
 	Heap_t** legalHeaps, Bitmap_t** legalStarts, int show,
 	ShowType_t replicaType, Bitmap_t* makeStart);
-void	show_heap_raw(char* label, int numwords, mem_t from_low,
-	mem_t from_high, mem_t to_low, mem_t to_high);
 void	memdump(char* title, unsigned int* start, int len, unsigned int* target);
-int	inHeaps(ptr_t, Heap_t** legalHeaps, Bitmap_t** legalStarts);
 
 /* sigaction.c */
 

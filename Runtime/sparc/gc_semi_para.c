@@ -173,27 +173,33 @@ void GCPoll_SemiPara(Proc_t *proc)
 }
 
 
-void GC_SemiPara(Proc_t *proc, Thread_t *th)
+void
+GC_SemiPara(Proc_t* proc, Thread_t* th)
 {
-  int roundSize = RoundUp(th->requestInfo,maxOffRequest);
-  if (Heap_GetAvail(fromSpace) <= NumProc * roundSize)
-    roundSize = RoundUp(th->requestInfo,minOffRequest);
+	int roundSize = RoundUp(th->requestInfo,maxOffRequest);
 
-  process_writelist(proc,NULL,NULL);
-  if (GCSatisfiable(proc,th))   
-    return;
-  if (th->requestInfo > 0) {
-    GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-    if (proc->allocStart != NULL)
-      return;
-  }
- retry:
-  stop_copy(proc);
-  GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-  if (!GCSatisfiable(proc,th)) {
-    printf("Warning: GC_SemiPara failed to obtain enough memory. Processor %d unmapped for too long? Retrying...\n", proc->procid);
-    goto retry;
-  }
+	if(Heap_GetAvail(fromSpace) <= NumProc * roundSize)
+		roundSize = RoundUp(th->requestInfo,minOffRequest);
+
+	process_writelist(proc,NULL,NULL);
+	if(GCSatisfiable(proc,th))   
+		return;
+	if(th->requestInfo > 0){
+		GetHeapArea(fromSpace,roundSize,&proc->allocStart,
+			&proc->allocCursor,&proc->allocLimit);
+		if(proc->allocStart != NULL)
+			return;
+	}
+	for(;;){
+		stop_copy(proc);
+		GetHeapArea(fromSpace,roundSize,&proc->allocStart,
+			&proc->allocCursor,&proc->allocLimit);
+		if(GCSatisfiable(proc,th))
+			return;
+		printf("Warning: GC_SemiPara failed to obtain enough memory."
+			" Processor %d unmapped for too long? Retrying...\n",
+			proc->procid);
+	}
 }
 
 void GCInit_SemiPara(void)
