@@ -332,7 +332,7 @@ structure Ppnil	:> PPNIL =
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
-			   String ")"]
+			   String ")",String" : ",pp_con result_type]
 	      | Sumsw_e {arg,sumtype,bound,arms,default,result_type} => 
 		    HOVbox[String "SUM_SWITCH(", 
 			   pp_exp arg, String ": ",
@@ -344,7 +344,7 @@ structure Ppnil	:> PPNIL =
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
-			   String ")"]
+			   String ")",String" : ",pp_con result_type]
 	      | Exncase_e {arg,bound,arms,default,result_type} => 
 		    HOVbox[String "EXN_SWITCH(", 
 			   pp_exp arg, String ": EXN, ",
@@ -355,7 +355,7 @@ structure Ppnil	:> PPNIL =
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
-			   String ")"]
+			   String ")",String" : ",pp_con result_type]
 	      | Typecase_e sw => error "can't print typecase"
 
 	end

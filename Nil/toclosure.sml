@@ -1177,7 +1177,7 @@ struct
 				 arg = e_rewrite arg,
 				 arms = map_second e_rewrite arms,
 				 default = Util.mapopt e_rewrite default,
-				 result_type=result_type}
+				 result_type=c_rewrite result_type}
 		   | Sumsw_e{sumtype,arg,bound,arms,default,result_type} => 
 			 Sumsw_e{sumtype=c_rewrite sumtype, 
 				 arg=e_rewrite arg,
@@ -1186,13 +1186,13 @@ struct
 						(w, trace_rewrite state tr,
 						 e_rewrite e)) arms,
 				 default=Util.mapopt e_rewrite default,
-				 result_type=result_type}
+				 result_type=c_rewrite result_type}
 		   | Exncase_e{arg,arms,bound,default,result_type} => 
 			 Exncase_e{arg=e_rewrite arg,
 				   bound=bound,
 				   arms=map (fn (e,tr,f) => (e_rewrite e,trace_rewrite state tr,e_rewrite f)) arms,
 				   default=Util.mapopt e_rewrite default,
-				   result_type=result_type}
+				   result_type=c_rewrite result_type}
 		   | Typecase_e _ => error "typecase not handled")
 			 
 	  | Let_e(letsort,bnds,e) => let val bnds_list = map (bnd_rewrite state) bnds
