@@ -46,6 +46,8 @@ functor LocalSplayMapFn (K : ORD_KEY) : ORD_MAP =
               }
           | (_,SplayNil) => raise LibBase.Impossible "SplayMapFn.insert SplayNil"
 
+  fun insert'((key, value), map) = insert(map, key, value)
+
   (* Look for an item, return NONE if the item doesn't exist *)
     fun find (EMPTY,_) = NONE
       | find (MAP{root,nobj},key) = (case splay (cmpf key, !root)
