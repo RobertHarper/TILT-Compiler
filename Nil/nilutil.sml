@@ -4,13 +4,13 @@ functor NilUtilFn(structure ArgNil : NIL
 		  structure ArgPrim : PRIM
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
-		  structure Subst : NILSUBST
+	(*	  structure Subst : NILSUBST*)
 		  structure PpNil : PPNIL
 		  sharing ArgNil = Alpha.Nil = PpNil.Nil
 		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim
-		  and type ArgNil.exp = Subst.exp
+		(*  and type ArgNil.exp = Subst.exp
 		  and type ArgNil.con = Subst.con
-		  and type ArgNil.kind = Subst.kind) 
+		  and type ArgNil.kind = Subst.kind*)) 
   :(*>*) NILUTIL where Nil = ArgNil 
 		   and type alpha_context = Alpha.alpha_context =
 struct
@@ -176,14 +176,26 @@ struct
 	   else
 	     Compiletime)
 
-  fun singletonize (phase,kind as Singleton_k _,con) = kind
-    | singletonize (phase,kind,con) = 
-      case phase
-	of SOME p => 
-	  Singleton_k (p,kind,con)
-	 | NONE => Singleton_k (get_phase kind,kind,con)
+  fun selfify (con,kind) =
+    (case kind 
+       of Type_k phase => Singleton_k(phase,Type_k phase,con)
+	| Word_k phase => Singleton_k(phase,Word_k phase,con)
+	| Singleton_k(_) => kind
+	| Record_k entries => 
+	 Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
+	| Arrow_k (openness,args,return) => 
+	 let
+	   val (formal_vars,_) = ListPair.unzip args
+	   val actuals = List.map Var_c formal_vars
+	 in
+	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
+	 end)
 
-
+  fun singletonize (kind as Singleton_k _,con) = kind
+    | singletonize (kind,con) = selfify(con,kind)
+(*
+  fun simplify_singleton (Singleton_k(phase,kind,con)) = selfify(con,kind)
+    | simplify_singleton kind = *)
   local
     structure A : 
       sig
@@ -711,15 +723,6 @@ struct
 	end
   end
 
-  fun muExpand (vcseq,v) = 
-      let val vc_list = sequence2list vcseq
-	  val vc_list' = map (fn (v,_) => (v,Mu_c(vcseq,v))) vc_list
-	  val conmap = Subst.fromList vc_list'
-	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
-		     SOME c => c | NONE => error "bad mu type")
-      in  Subst.substConInCon conmap c
-      end
-
   fun same_openness (Open,Open) = true
     | same_openness (Closure,Closure) = true
     | same_openness (Code,Code) = true
@@ -914,48 +917,11 @@ struct
     eq_len list_pair andalso
     ListPair.all (alpha_equiv_con' context) list_pair
 
-  fun alpha_sub_kind' context (k1,k2) = 
-    (case (k1,k2)
-       of (Word_k p1, Word_k p2) => sub_phase(p1,p2)
-	| (Type_k p1, Type_k p2) => sub_phase(p1,p2)
-	| (Word_k p1, Type_k p2) => sub_phase(p1,p2)
-(*	| (Singleton_k (p1,_,_) ,Type_k p2) => sub_phase(p1,p2)
-	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k*)
-	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
-	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
-	| (Singleton_k (p1,k1,c1),k2) => 
-	 sub_phase(p1,get_phase k2) andalso alpha_sub_kind' context (k1,k2)
-	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
-	 let
-	   val conref = ref context
-	   fun sub_one ((var1,kind1),(var2,kind2)) = 
-	     (alpha_sub_kind' (!conref) (kind1,kind2))
-	     before (conref := alpha_equate_pair (!conref,(var1,var2)))
-	 in
-	   (same_openness (openness1,openness2) andalso 
-	    eq_len (formals1,formals2) andalso 
-	    ListPair.all sub_one (formals1,formals2) andalso
-	    alpha_sub_kind' (!conref) (return1,return2))
-	 end
-       
-	| (Record_k elts1,Record_k elts2) => 
-	 let
-	   val conref = ref context
-	   fun sub_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
-	     (eq_label (lbl1,lbl2) andalso
-	      alpha_sub_kind' (!conref) (kind1,kind2))
-	     before (conref := (alpha_equate_pair (!conref,(var1,var2))))
-	 in
-	   eq_len (elts1,elts2) andalso 
-	   (ListPair.all sub_one (elts1,elts2))
-	 end
-	| (_,_) => false)
-       
   val alpha_equiv_con = alpha_equiv_con' (empty_context (),empty_context ())
 
   val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
 
-  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
+
 (* End exported functions *)
 
     fun alpha_normalize_con' (context:alpha_context) (con:con) = 
@@ -1362,8 +1328,5 @@ struct
 	end
 
 *)
-
-  fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
-  fun is_word T = alpha_sub_kind (T,Word_k Runtime)
 
 end;
