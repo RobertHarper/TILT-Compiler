@@ -709,15 +709,15 @@ functor Pat(structure Il : IL
 		  | (Ast.MarkPat (p,_))   => error "no MarkPat should be here"
 		  | (Ast.ConstraintPat _) => error "no ConstaintPat should be here"
 		  | (Ast.WordPat lit) => 
-			let val ds = IntInf.toString lit
+			let val const = uint (W32,lit)
 			    fun equaler v = ILPRIM (eq_uint W32,[],
-						    [VAR v,SCON(uint (W32,TilWord64.fromDecimalString ds))])
+						    [VAR v,SCON const])
 			in constant_dispatch(CON_UINT W32, equaler)
 			end
 		  | (Ast.IntPat lit)  => 
-			let val ds = IntInf.toString lit
+			let val const = int (W32,lit)
 			    fun equaler v = PRIM (eq_int W32,[],
-						  [VAR v, SCON(int (W32,TilWord64.fromDecimalString ds))])
+						  [VAR v, SCON const])
 			in constant_dispatch(CON_INT W32, equaler)
 			end
 		  | (Ast.StringPat ss) => 

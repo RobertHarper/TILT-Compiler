@@ -62,15 +62,16 @@ functor InfixParse(structure Il : IL
       Otherwise, implicit application is not assumed so
           that the result list may be of arbitrary length.
       ---------------------------------------------------------------------- *)
-    fun driver(objlist       : ''a list, 	
-	       print_obj     : ''a -> unit,
-	       get_fixity    : ''a -> Fixity.fixity option, 
-	       is_app        : ''a -> bool,
-	       convert       : ''a -> ''b,
-	       app_obj       : ''a, 
-	       apper         : ''a * ''a -> ''a, 
-	       tupler        : ''a list -> ''a)
-      : ''b list = 
+    fun driver(objlist       : 'a list, 	
+	       print_obj     : 'a -> unit,
+	       get_fixity    : 'a -> Fixity.fixity option, 
+	       is_app        : 'a -> bool,
+	       convert       : 'a -> 'b,
+	       is_app_obj    : 'a -> bool , 
+	       app_obj       : 'a, 
+	       apper         : 'a * 'a -> 'a, 
+	       tupler        : 'a list -> 'a)
+      : 'b list = 
       let
 	  fun get_fix obj = (case (get_fixity obj) of
 					NONE => (print "obj has no fixity: ";
@@ -84,7 +85,7 @@ functor InfixParse(structure Il : IL
             at the same time, preclist is updated to contain only 
 	     the precendence levels we need to collapse 
 	     -------------------------------------------------- *)
-	fun normalize (objlist : ''a list) : (''a list * int list) = 
+	fun normalize (objlist : 'a list) : ('a list * int list) = 
 	  let 
 	    val preclist = ref []
 	    fun is_infix obj =  (case (get_fixity (obj)) of
@@ -119,7 +120,7 @@ functor InfixParse(structure Il : IL
 	  let
             fun rewrite(op1,v1,v2) = 
 	      let 
-		val (f,a) = if (app_obj = op1) then (v1,v2) else (op1,tupler([v1,v2]))
+		val (f,a) = if (is_app_obj op1) then (v1,v2) else (op1,tupler([v1,v2]))
 	      in apper(f,a)
 	      end
             fun right_rewrite_list(v2::op1::v1::rest) = right_rewrite_list((rewrite(op1,v1,v2))::rest)
@@ -187,6 +188,8 @@ functor InfixParse(structure Il : IL
 		     | (true,e) => exp_fixity_lookup table e, 
 		    fn _ => true,
 		    fn (_,e) => e,
+		    fn (true,Ast.VarExp[s]) => Symbol.eq(s,app_sym)
+		     | _ => false,
 		    (true,app_exp),
 		    apper,
 		    tupler) of
@@ -246,6 +249,8 @@ functor InfixParse(structure Il : IL
 			   pat_fixity_lookup table, 
 			   is_applicable,
 			   fn x => x,
+			   fn (Ast.VarPat[s]) => Symbol.eq(s,app_sym)
+			    | _ => false,
 			   app_pat, 
 			   apper, 
 			   tupler)

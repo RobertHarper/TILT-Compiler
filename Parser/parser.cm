@@ -3,8 +3,6 @@ Group is
 ../Util/util.cm
 
 (* --------------- Support files for the Parser --------------------------- *)
-int-inf-sig.sml (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/bignums/int-inf-sig.sml *)
-int-inf.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/bignums/int-inf.sml *)
 symbol.sig      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/symbol.sig *)
 printutil.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sig *)
 printutil.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sml *)

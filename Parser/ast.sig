@@ -8,7 +8,7 @@ sig
   type symbol  (* = Symbol.symbol *)
   val infixleft : int -> fixity
   val infixright : int -> fixity
-  type literal = IntInf.int
+  type literal = TilWord64.word
 
   (* to mark positions in files *)
   type srcpos  (* = int *)
@@ -231,9 +231,12 @@ end (* signature AST *)
 
 (*
  * $Log$
-# Revision 1.4  97/09/03  20:10:13  pscheng
-# added extern and ccall syntax
+# Revision 1.5  97/10/21  21:00:21  pscheng
+# got rid of int inf
 # 
+# Revision 1.4  1997/09/03  20:10:13  pscheng
+# added extern and ccall syntax
+#
 # Revision 1.3  97/07/02  22:03:02  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 

@@ -76,9 +76,9 @@ val ABSTRACTION:  'a * 'a -> (svalue,'a) token
 val CHAR: (string) *  'a * 'a -> (svalue,'a) token
 val STRING: (string) *  'a * 'a -> (svalue,'a) token
 val REAL: (string) *  'a * 'a -> (svalue,'a) token
-val WORD: (IntInf.int) *  'a * 'a -> (svalue,'a) token
-val INT0: (IntInf.int) *  'a * 'a -> (svalue,'a) token
-val INT: (IntInf.int) *  'a * 'a -> (svalue,'a) token
+val WORD: (TilWord64.word) *  'a * 'a -> (svalue,'a) token
+val INT0: (TilWord64.word) *  'a * 'a -> (svalue,'a) token
+val INT: (TilWord64.word) *  'a * 'a -> (svalue,'a) token
 val TYVAR: (FastSymbol.raw_symbol) *  'a * 'a -> (svalue,'a) token
 val ID: (FastSymbol.raw_symbol) *  'a * 'a -> (svalue,'a) token
 val SEMICOLON:  'a * 'a -> (svalue,'a) token

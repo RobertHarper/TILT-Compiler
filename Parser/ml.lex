@@ -3,9 +3,12 @@
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
-# Revision 1.3  97/09/03  20:10:37  pscheng
-# added extern and ccall syntax
+# Revision 1.4  97/10/21  21:00:35  pscheng
+# got rid of int inf
 # 
+# Revision 1.3  1997/09/03  20:10:37  pscheng
+# added extern and ccall syntax
+#
 # Revision 1.2  97/07/02  22:03:18  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 
@@ -53,13 +56,16 @@ fun addString (charlist,s:string) = charlist := s :: (!charlist)
 fun addChar (charlist, c:char) = addString(charlist, String.str c)
 fun makeString charlist = (concat(rev(!charlist)) before charlist := nil)
 
-local
-  fun cvt radix (s, i) =
-	#1(valOf(IntInf.scan radix Substring.getc (Substring.triml i (Substring.all s))))
-in
-val atoi = cvt StringCvt.DEC
-val xtoi = cvt StringCvt.HEX
-end (* local *)
+fun atoi(s,i) = 
+     let val s = String.substring(s,i,size s - i)
+     in  TilWord64.fromDecimalString s
+     end
+
+fun xtoi(s,i) = 
+     let val s = String.substring(s,i,size s - i)
+     in  TilWord64.fromHexString s
+     end
+
 
 fun mysynch (src, pos, parts) =
   let fun digit d = Char.ord d - Char.ord #"0"
@@ -148,7 +154,7 @@ hexnum=[0-9a-fA-F]+;
 <INITIAL>{num}	=> (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext));
 <INITIAL>~{num}	=> (Tokens.INT0(atoi(yytext, 0),yypos,yypos+size yytext));
 <INITIAL>"0x"{hexnum} => (Tokens.INT0(xtoi(yytext, 2),yypos,yypos+size yytext));
-<INITIAL>"~0x"{hexnum} => (Tokens.INT0(IntInf.~(xtoi(yytext, 3)),yypos,yypos+size yytext));
+<INITIAL>"~0x"{hexnum} => (Tokens.INT0(TilWord64.snegate(xtoi(yytext, 3)),yypos,yypos+size yytext));
 <INITIAL>"0w"{num} => (Tokens.WORD(atoi(yytext, 2),yypos,yypos+size yytext));
 <INITIAL>"0wx"{hexnum} => (Tokens.WORD(xtoi(yytext, 3),yypos,yypos+size yytext));
 <INITIAL>\"	=> (charlist := [""]; stringstart := yypos;

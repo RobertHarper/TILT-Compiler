@@ -375,7 +375,8 @@ structure AstHelp : ASTHELP =
       (case pat of
 	 Ast.WildPat => String "_"
        | Ast.VarPat p => pp_path p
-       | (Ast.IntPat lit | Ast.WordPat lit) => String (IntInf.toString lit)
+       | Ast.IntPat lit => String(TilWord64.toDecimalString lit)
+       | Ast.WordPat lit => String(TilWord64.toHexString lit)
        | (StringPat s | CharPat s) => String s
        | Ast.RecordPat _ => String "RecordPatUNIMPED"
        | Ast.ListPat _ => String "ListPatUNIMPED"
@@ -401,8 +402,8 @@ structure AstHelp : ASTHELP =
     fun pp_exp exp = 
       (case exp of
 	 Ast.VarExp p => pp_path p
-       | Ast.IntExp lit => String(IntInf.toString lit)
-       | Ast.WordExp lit => String(IntInf.toString lit)
+       | Ast.IntExp lit => String(TilWord64.toDecimalString lit)
+       | Ast.WordExp lit => String(TilWord64.toHexString lit)
        | Ast.FlatAppExp exp_fix_list => let fun help {item,fixity,region} = pp_exp item
 					in pp_list help exp_fix_list ("FlatAppExp(",",",")",false)
 					end

@@ -1344,8 +1344,9 @@ datatype svalue = VOID | ntVOID of unit ->  unit
  | AQID of unit ->  (FastSymbol.raw_symbol)
  | OBJL of unit ->  (string) | ENDQ of unit ->  (string)
  | CHAR of unit ->  (string) | STRING of unit ->  (string)
- | REAL of unit ->  (string) | WORD of unit ->  (IntInf.int)
- | INT0 of unit ->  (IntInf.int) | INT of unit ->  (IntInf.int)
+ | REAL of unit ->  (string) | WORD of unit ->  (TilWord64.word)
+ | INT0 of unit ->  (TilWord64.word)
+ | INT of unit ->  (TilWord64.word)
  | TYVAR of unit ->  (FastSymbol.raw_symbol)
  | ID of unit ->  (FastSymbol.raw_symbol) | top of unit ->  (top)
  | inter of unit ->  (string list) | imple of unit ->  (string list)
@@ -1400,7 +1401,7 @@ datatype svalue = VOID | ntVOID of unit ->  unit
  | tlabel of unit ->  ( ( symbol * ty ) )
  | tycon of unit ->  (symbol list) | selector of unit ->  (symbol)
  | qid of unit ->  ( ( FastSymbol.raw_symbol ->symbol )  -> symbol list)
- | op_op of unit ->  (unit) | int of unit ->  (IntInf.int)
+ | op_op of unit ->  (unit) | int of unit ->  (TilWord64.word)
  | id of unit ->  (FastSymbol.raw_symbol)
  | ident of unit ->  (FastSymbol.raw_symbol)
 end
@@ -1555,9 +1556,9 @@ val errtermvalue=
 fn (T 2) => MlyValue.ID(fn () => (rawSymbol(bogusHash,bogusString))) | 
 (T 3) => MlyValue.TYVAR(fn () => (
 rawSymbol(quotedBogusHash,quotedBogusString))) | 
-(T 4) => MlyValue.INT(fn () => (IntInf.fromInt 1)) | 
-(T 5) => MlyValue.INT0(fn () => (IntInf.fromInt 0)) | 
-(T 6) => MlyValue.WORD(fn () => (IntInf.fromInt 0)) | 
+(T 4) => MlyValue.INT(fn () => (TilWord64.fromInt 1)) | 
+(T 5) => MlyValue.INT0(fn () => (TilWord64.fromInt 0)) | 
+(T 6) => MlyValue.WORD(fn () => (TilWord64.fromInt 0)) | 
 (T 7) => MlyValue.REAL(fn () => ("0.0")) | 
 (T 8) => MlyValue.STRING(fn () => ("")) | 
 (T 9) => MlyValue.CHAR(fn () => ("a")) | 
@@ -1639,7 +1640,7 @@ result=MlyValue.selector(fn _ => let val id as id1=id1 ()
  in (LrTable.NT 5,(result,id1left,id1right),rest671) end
 | (12,(_,(MlyValue.INT INT1,INT1left,INT1right))::rest671) => let val 
 result=MlyValue.selector(fn _ => let val INT as INT1=INT1 ()
- in (Symbol.labSymbol(IntInf.toString INT)) end
+ in (Symbol.labSymbol (TilWord64.toDecimalString INT)) end
 )
  in (LrTable.NT 5,(result,INT1left,INT1right),rest671) end
 | (13,(_,(MlyValue.tycon tycon1,_,tycon1right))::_::(_,(MlyValue.ID 
@@ -2668,8 +2669,8 @@ MlyValue.fixity(fn _ => (infixleft 0))
 | (157,(_,(MlyValue.int int1,intleft,intright as int1right))::(_,(_,
 INFIX1left,_))::rest671) => let val result=MlyValue.fixity(fn _ => 
 let val int as int1=int1 ()
- in (infixleft (checkFix(IntInf.toInt int,error(intleft,intright))))
- end
+ in (infixleft (checkFix(TilWord64.toInt int,error(intleft,intright)))
+) end
 )
  in (LrTable.NT 50,(result,INFIX1left,int1right),rest671) end
 | (158,(_,(_,INFIXR1left,INFIXR1right))::rest671) => let val result=
@@ -2678,7 +2679,8 @@ MlyValue.fixity(fn _ => (infixright 0))
 | (159,(_,(MlyValue.int int1,intleft,intright as int1right))::(_,(_,
 INFIXR1left,_))::rest671) => let val result=MlyValue.fixity(fn _ => 
 let val int as int1=int1 ()
- in (infixright (checkFix(IntInf.toInt int,error(intleft,intright))))
+ in (
+infixright (checkFix(TilWord64.toInt int,error(intleft,intright))))
  end
 )
  in (LrTable.NT 50,(result,INFIXR1left,int1right),rest671) end

@@ -20,7 +20,7 @@ type region = srcpos * srcpos   (* start and end position of region *)
 type path = symbol list
 type 'a fixitem = {item: 'a, fixity: symbol option, region: region}
 
-type literal = IntInf.int
+type literal = TilWord64.word
 
 datatype 'a sigConst
   = NoSig
@@ -234,9 +234,12 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.4  97/09/03  20:10:16  pscheng
-# added extern and ccall syntax
+# Revision 1.5  97/10/21  21:00:23  pscheng
+# got rid of int inf
 # 
+# Revision 1.4  1997/09/03  20:10:16  pscheng
+# added extern and ccall syntax
+#
 # Revision 1.3  97/07/02  22:03:03  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 

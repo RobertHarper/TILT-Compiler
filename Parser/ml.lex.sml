@@ -7,9 +7,12 @@ functor MLLexFun(structure Tokens : ML_TOKENS)=
  * Copyright 1989 by AT&T Bell Laboratories
  *
  * $Log$
-# Revision 1.4  97/09/03  20:10:39  pscheng
-# added extern and ccall syntax
+# Revision 1.5  97/10/21  21:00:37  pscheng
+# got rid of int inf
 # 
+# Revision 1.3  1997/09/03  20:10:37  pscheng
+# added extern and ccall syntax
+#
 # Revision 1.2  97/07/02  22:03:18  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 
@@ -57,13 +60,16 @@ fun addString (charlist,s:string) = charlist := s :: (!charlist)
 fun addChar (charlist, c:char) = addString(charlist, String.str c)
 fun makeString charlist = (concat(rev(!charlist)) before charlist := nil)
 
-local
-  fun cvt radix (s, i) =
-	#1(valOf(IntInf.scan radix Substring.getc (Substring.triml i (Substring.all s))))
-in
-val atoi = cvt StringCvt.DEC
-val xtoi = cvt StringCvt.HEX
-end (* local *)
+fun atoi(s,i) = 
+     let val s = String.substring(s,i,size s - i)
+     in  TilWord64.fromDecimalString s
+     end
+
+fun xtoi(s,i) = 
+     let val s = String.substring(s,i,size s - i)
+     in  TilWord64.fromHexString s
+     end
+
 
 fun mysynch (src, pos, parts) =
   let fun digit d = Char.ord d - Char.ord #"0"
@@ -1307,7 +1313,7 @@ let fun continue() : Internal.result =
 
   10 => (Tokens.LBRACE(yypos,yypos+1))
 | 101 => (Tokens.INT0(xtoi(yytext, 2),yypos,yypos+size yytext))
-| 107 => (Tokens.INT0(IntInf.~(xtoi(yytext, 3)),yypos,yypos+size yytext))
+| 107 => (Tokens.INT0(TilWord64.snegate(xtoi(yytext, 3)),yypos,yypos+size yytext))
 | 112 => (Tokens.WORD(atoi(yytext, 2),yypos,yypos+size yytext))
 | 118 => (Tokens.WORD(xtoi(yytext, 3),yypos,yypos+size yytext))
 | 12 => (Tokens.RBRACE(yypos,yypos+1))

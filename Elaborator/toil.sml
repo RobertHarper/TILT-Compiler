@@ -625,16 +625,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	  
      and xexp (context : context, exp : Ast.exp) : (exp * con * bool) = (* returns valuablilty *)
       (case exp of
-	 Ast.IntExp lit =>  
-	     let val ds = IntInf.toString lit
-	     in (SCON(int(W32,TilWord64.fromDecimalString ds)), CON_INT W32, true)
-	     end
-       | Ast.WordExp lit => 
-	     let val ds = IntInf.toString lit
-	     in (SCON(uint(W32,TilWord64.fromDecimalString ds)), CON_UINT W32, true)
-	     end
-       | Ast.RealExp s => 
-	     (SCON(float(F64,s)), CON_FLOAT F64, true)
+	 Ast.IntExp lit => (SCON(int(W32,lit)), CON_INT W32, true)
+       | Ast.WordExp lit => (SCON(uint(W32,lit)), CON_UINT W32, true)
+       | Ast.RealExp s => (SCON(float(F64,s)), CON_FLOAT F64, true)
        | Ast.StringExp s => 
 	     (SCON(vector (CON_UINT W8,
 			   Array.fromList
@@ -3333,7 +3326,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 						       carriers = carriers,
 						       arg = VAR v2,
 						       arms = arms2,
-						       default = NONE,
+						       default = SOME false_exp,
 						       tipe = con_bool}
 				 in SOME (if is_carrier
 					      then #1(make_lambda(var', sumc,
@@ -3342,13 +3335,13 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					  else switch)
 				 end
 		    val arms1 = map0count help totalcount
-		    val inner_body = CASE{noncarriers = noncarriers,
+		    val body = CASE{noncarriers = noncarriers,
 					  carriers = carriers,
 					  arg = VAR v1,
 					  arms = arms1,
 					  default = NONE,
 					  tipe = con_bool}
-		    val body = make_catch(inner_body,con_bool,match_exp,con_unit,false_exp)
+(*		    val body = make_catch(inner_body,con_bool,match_exp,con_unit,false_exp) *)
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
