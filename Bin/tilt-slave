@@ -111,7 +111,7 @@ cmd='	PATH="'"$PATH"'"
 (defun initial-tilt-slaves ()
   (interactive)
 ; (set-default-font "6x10")  Window resize due to font change here does not work with Exceed for wide (>100) windows
-  (menu-bar-mode -1)
+  (if (fboundp '\''menu-bar-mode) (menu-bar-mode -1))
   (delete-file "'$elisp'")
   (tilt-slaves '$argcount'))
 END_EMACS

@@ -67,7 +67,7 @@ arg: FORCE
 # TILT runtime
 
 runtime: FORCE
-	(cd Runtime && $(MAKE))
+	(cd Runtime && $(MAKE) opt dbg)
 
 # TILT-compiled binaries
 
@@ -92,12 +92,13 @@ slaves: FORCE
 	$(slaves) -n 4/localhost
 
 install: FORCE
-	-mkdir $(PREFIX)/lib $(PREFIX)/lib/tilt
-	if test -f Runtime/runtime-$(cputype)-opt.a; then \
-		tar cf - Runtime/*.a | (cd $(PREFIX)/lib/tilt && tar xf -); \
-	fi
+	-mkdir $(PREFIX)/lib
+	-mkdir $(PREFIX)/lib/tilt
+	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)
 	tar cf - Bin Lib Heaps | (cd $(PREFIX)/lib/tilt && tar xf -)
-	-mkdir $(PREFIX)/man $(PREFIX)/man/man1 $(PREFIX)/man/man6
+	-mkdir $(PREFIX)/man
+	-mkdir $(PREFIX)/man/man1
+	-mkdir $(PREFIX)/man/man6
 	cp Doc/tilt.1 $(PREFIX)/man/man1 && chmod 644 $(PREFIX)/man/man1/tilt.1
 	cp Doc/project.6 $(PREFIX)/man/man6 && chmod 644 $(PREFIX)/man/man6/project.6
 	-mkdir $(PREFIX)/bin
