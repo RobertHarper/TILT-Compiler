@@ -83,9 +83,6 @@ Transcript:
 	      $r30 = 0x1005bf80 = Threads[0].stack->stacklets[1].baseTop
 	      $r1 = 0x20005980
 Comments:
-	[The file link_Top.nomirror.alpha.exe.alpha.s was renamed
-	 to link_alpha.s. -pds 8/8/02]
-
 	The bug was in gc_alpha_osf_asm.s.  returnToML wasn't properly
 	setting RA to saveregs[RA].
 
