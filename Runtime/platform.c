@@ -153,7 +153,7 @@ void resetPerfMon(Proc_t *proc)
   assert(hasPerfMon == 1);
   if (perfType == NoPerf)
     return;
-  for (i=0; i<(sizeof(proc->pic0) / sizeof(long)); i++)
+  for (i=0; i<arraysize(proc->pic0); i++)
     proc->pic0[i] = proc->pic1[i] = proc->pic2[i] = proc->pic3[i] = 0;
   proc->picCursor = 0;
   clr_pic();
@@ -179,7 +179,7 @@ void lapPerfMon(Proc_t *proc, int which)
     proc->picCursor++;
   proc->last0 = cur0;
   proc->last1 = cur1;
-  assert(proc->picCursor < (sizeof(proc->pic0) / sizeof(long)));
+  assert(proc->picCursor < arraysize(proc->pic0));
 }
 
 void showPerfMon(Proc_t *proc, int which)

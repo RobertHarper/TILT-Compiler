@@ -195,8 +195,8 @@ double addTimeList(void *procVoid, int w, int d)
   data[cursor] = d;
   times[cursor] = t;
   cursor++;
-  if (cursor >= sizeof(which) / sizeof(int)) {
-    printf("Time list overflowed with %d entries:\n", sizeof(which) / sizeof(int));
+  if (cursor >= arraysize(which)) {
+    printf("Time list overflowed with %d entries:\n", arraysize(which));
     showTimeList(0.0);
     assert(0);
   }

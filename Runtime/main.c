@@ -200,7 +200,7 @@ void process_option(int argc, char **argv)
       if (*poss_option != '@')
 	/* First non-option signals start of user-program options.*/
 	break;
-      for (i=0; i<sizeof(table) / sizeof(struct option_entry); i++) {
+      for (i=0; i<arraysize(table); i++) {
 	switch (table[i].type) {
 	  case 0 : {
 	    matched = process_bool(table[i].item, table[i].name, option);
@@ -256,7 +256,7 @@ void process_option(int argc, char **argv)
     printf("Boolean options are activated like this: @diag\n");
     printf("Int, long, and double options are activated like this: @nursery=512\n");
     printf("The following options are available.\n");
-    for (i=0; i<sizeof(table) / sizeof(struct option_entry); i++) {
+    for (i=0; i<arraysize(table); i++) {
       char *type;
       printf("%12s : ", table[i].name);
       switch (table[i].type) {

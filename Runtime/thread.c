@@ -215,7 +215,7 @@ void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
   assert(th->status == -1);
   assert(!th->pinned);
   assert(&(Threads[th->id]) == th);
-  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+  for (i=0; i<arraysize(th->rootLocs); i++) {
     th->rootVals[i] = NULL;
     th->rootLocs[i] = NULL;
   }
@@ -342,7 +342,11 @@ Thread_t *getThread(void)
     Proc_t *proc2 = getProcPthread();
     if (thread->proc != proc2) {
       printf("thread->proc  %d  %d\n", thread->proc->procid, thread->proc);
-      printf("getProcPthread()  %d %d\n", proc2->procid, proc2);
+      if (proc2 != NULL) {
+	printf("getProcPthread()  %d %d\n", proc2->procid, proc2);
+      } else {
+	printf("getProcPthread()  NULL\n");
+      }
     }
     assert(thread->proc == getProcPthread());
   }
@@ -416,7 +420,7 @@ static void attributeUsage(Usage_t *from, Usage_t *to)
 void fillThread(Thread_t *th, int id)
 {  
   int i;
-  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+  for (i=0; i<arraysize(th->rootLocs); i++) {
     th->rootVals[i] = NULL;
     th->rootLocs[i] = NULL;
   }
@@ -508,8 +512,8 @@ void thread_init(void)
     proc->allocLimit = (mem_t) StartHeapLimit;
     proc->writelistStart = &(proc->writelist[0]);
     proc->writelistCursor = proc->writelistStart;
-    proc->writelistEnd = &(proc->writelist[(sizeof(proc->writelist) / sizeof(ptr_t)) - 2]);
-    for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
+    proc->writelistEnd = &(proc->writelist[arraysize(proc->writelist) - 2]);
+    for (j=0; j<arraysize(proc->writelist); j++)
       proc->writelist[j] = 0;
     init_localWork(&proc->work, 16384, 16384, 8192, 4096, 128, 2048, 4096);  
     reset_timer(&(proc->totalTimer));
@@ -623,7 +627,7 @@ void showHistory(Proc_t *proc, int howMany)
 {
   int cur = howMany ? proc->lastHistory - howMany : proc->firstHistory;
   if (cur < 0)
-    cur += (sizeof(proc->history) / sizeof(Summary_t));
+    cur += arraysize(proc->history);
   while (cur != proc->lastHistory) {
     Summary_t *s = &proc->history[cur];
     printf("%6d: %5.2f ms  %12s       util = %.3f",
@@ -652,7 +656,7 @@ void showHistory(Proc_t *proc, int howMany)
     printf("\n");
     
     cur++;
-    if (cur >= (sizeof(proc->history) / sizeof(Summary_t)))
+    if (cur >= arraysize(proc->history))
       cur = 0;
   }
 }
@@ -751,11 +755,11 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
   if (diff >= 0.01 || proc->state == Mutator) {
     captureSummary(proc, diff, &proc->history[proc->lastHistory]);
     proc->lastHistory++;
-    if (proc->lastHistory >= (sizeof(proc->history) / sizeof(Summary_t)))
+    if (proc->lastHistory >= arraysize(proc->history))
       proc->lastHistory = 0;
     if (proc->lastHistory == proc->firstHistory) {
       proc->firstHistory++;
-      if (proc->firstHistory >= (sizeof(proc->history) / sizeof(Summary_t)))
+      if (proc->firstHistory >= arraysize(proc->history))
 	proc->firstHistory = 0;
     }
   }
@@ -1100,8 +1104,10 @@ void thread_go(ptr_t thunk)
   AddJob(mainThread);
 
   /* Create system threads that run off the user thread queue */
+#ifdef solaris
   if (curActive >= active)
     curActive = 0;
+#endif
   for (i=0; i<NumProc; i++) {
     pthread_attr_t attr;
     struct sched_param schedParam;
@@ -1122,7 +1128,11 @@ void thread_go(ptr_t thunk)
     status = pthread_attr_setschedparam(&attr,&schedParam);
     if (status)
       printf("pthread_attr_setschedparam returned status = %d\n", status);
-    pthread_create(&discard,&attr,proc_go,&Procs[i]);
+    status = pthread_create(&discard,&attr,proc_go,&Procs[i]);
+    if (status) {
+      printf("pthread_create returned status = %d (%s)\n", status, strerror(status));
+      assert(0);
+    }
     if (threadDiag)
       printf("Proc %d:  processor %d and pthread = %d\n",
 	     Procs[i].procid, Procs[i].processor, Procs[i].pthread);

@@ -218,7 +218,7 @@ int CacheCursor(CallinfoCursor_t *cursor)
 	cursor->slot[cursor->slotCount] = i;
 	cursor->trace[cursor->slotCount] = trace;
 	cursor->slotCount++;
-	if (cursor->slotCount > (sizeof(cursor->slot) / sizeof(int))) {
+	if (cursor->slotCount >= arraysize(cursor->slot)) {
 	  cursor->slotCount = -4;
 	  return 0;
 	}
@@ -453,7 +453,7 @@ static void addRegRoots(Proc_t *proc, unsigned long *saveregs, unsigned int regM
 void installThreadRoot(Thread_t *th, vploc_t rootLoc)
 {
   int i;
-  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+  for (i=0; i<arraysize(th->rootLocs); i++) {
     if (th->rootLocs[i] == rootLoc)
       return;
     if (th->rootLocs[i] == NULL) {
@@ -469,7 +469,7 @@ void installThreadRoot(Thread_t *th, vploc_t rootLoc)
 void uninstallThreadRoot(Thread_t *th, vploc_t rootLoc)
 {
   int i;
-  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+  for (i=0; i<arraysize(th->rootLocs); i++) {
     if (th->rootLocs[i] == rootLoc) {
       th->rootLocs[i] = NULL;
       th->rootVals[i] = NULL;
@@ -490,7 +490,7 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   if (collectDiag >= 2)
     printf("Proc %d: GC %d: thread_root_scan on thread %d with thunk %d\n", proc->procid, NumGC, th->tid, thunk);
 
-  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+  for (i=0; i<arraysize(th->rootLocs); i++) {
     if (th->rootLocs[i] != NULL) {
       ptr_t rootVal = *th->rootLocs[i];
       if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
@@ -661,7 +661,7 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
 
   installThreadRoot(th, (ploc_t) &th->thunk);   /* Thread may not have existed at the beginning of the GC and
 						   so initial_root_scan was not called on it */
-  for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
+  for (i=0; i<arraysize(th->rootLocs); i++) {
     if (th->rootLocs[i] != NULL) {
       ptr_t rootVal = *th->rootLocs[i];
       if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
