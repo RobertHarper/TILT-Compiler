@@ -9,7 +9,9 @@ structure Util : UTIL =
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
     fun count n = loop 0 (n-1)
     val error = fn s => real_error "util.sml" s
-			      
+	
+    fun printl s = print (s^"\n")
+    fun lprintl s = print ("\n"^s^"\n")
 
     fun mapopt f NONE = NONE
       | mapopt f (SOME x) = SOME(f x)

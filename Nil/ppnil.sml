@@ -1,11 +1,12 @@
 (* Nil pretty-printer. *)
-functor Ppnil(structure Nil : NIL
+functor Ppnil(structure ArgNil : NIL
 	      structure Ppprim : PPPRIM
-	      sharing Nil.Prim = Ppprim.Prim)
-	: PPNIL  = 
+	      structure Prim : PRIM
+	      sharing Prim = ArgNil.Prim = Ppprim.Prim)
+	: PPNIL where structure Nil = ArgNil = 
   struct
 
-    structure Nil = Nil
+    structure Nil = ArgNil
     structure Formatter = Formatter
 
     open Nil Formatter

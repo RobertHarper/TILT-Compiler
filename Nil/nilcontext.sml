@@ -1,7 +1,8 @@
 functor NilContextFn(structure ArgNil : NIL
 		     structure PpNil : PPNIL
-		     structure Cont : CONT
-		     sharing PpNil.Nil = ArgNil) :(*>*)
+		     structure Cont : CONT_SIG
+		     structure NilUtil : NILUTIL
+		     sharing PpNil.Nil = NilUtil.Nil = ArgNil) :(*>*)
    NILCONTEXT where structure Nil = ArgNil = 
 struct
   structure Nil = ArgNil
@@ -11,6 +12,7 @@ struct
   type var = Nil.var
   val var2string = Name.var2string
   val mapsequence = Util.mapsequence
+  val get_phase = NilUtil.get_phase
 
   fun error s = Util.error "nilcontext.sml" s
 
@@ -50,15 +52,17 @@ struct
 	 of Type_k phase => Singleton_k(phase,Type_k phase,con)
 	  | Word_k phase => Singleton_k(phase,Word_k phase,con)
 	  | Singleton_k(_) => kind
-	  | Record_k entries => 
-	   Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
+	  | Record_k entries => Singleton_k(get_phase kind,kind,con)
+(*	   Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)*)
 	  | Arrow_k (openness,args,return) => 
-	   let
+	   Singleton_k(get_phase kind,kind,con)
+    (*	   let
 	     val (formal_vars,_) = ListPair.unzip args
 	     val actuals = List.map Var_c formal_vars
 	   in
 	     Arrow_k (openness,args,selfify(App_c (con,actuals),return))
-	   end)
+	   end
+*))
 
     fun insert_kind ({kindmap,conmap}:context,var,kind) = 
       (case V.find (kindmap, var)

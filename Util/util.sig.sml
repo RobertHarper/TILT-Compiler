@@ -7,6 +7,10 @@ signature UTIL =
     (* takes filename and then error msg *)
     val error : string -> string -> 'a
 
+    (* printl s => print (s^"\n") *)
+    val printl : string -> unit
+    (* lprintl s => print ("\n"^s^"\n") *)
+    val lprintl : string -> unit
 
     (* Misc helpers *)
     val eq_opt : (('a * 'a -> bool) * 'a option * 'a option) -> bool

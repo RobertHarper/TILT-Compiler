@@ -32,10 +32,12 @@
 *)
 
 functor Cleanup(structure Nil : NIL
-		   structure Ppnil : PPNIL
-		   structure NilUtil : NILUTIL
-		   structure IlUtil : ILUTIL
-		   sharing NilUtil.Nil = Ppnil.Nil = Nil) 
+		structure Prim : PRIM
+		structure Ppnil : PPNIL
+		structure NilUtil : NILUTIL
+		structure IlUtil : ILUTIL
+		sharing NilUtil.Nil = Ppnil.Nil = Nil
+		and Prim = NilUtil.Prim = Nil.Prim) 
     : CLEANUP = 
 struct
 

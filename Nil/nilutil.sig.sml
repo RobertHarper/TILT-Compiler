@@ -1,7 +1,7 @@
 signature NILUTIL =
   sig
     structure Nil : NIL
-
+    structure Prim : PRIM
     val substConInExp : (Nil.var -> Nil.con option) -> Nil.exp -> Nil.exp
     val substConInCon : (Nil.var -> Nil.con option) -> Nil.con -> Nil.con
     val substConInKind : (Nil.var -> Nil.con option) -> Nil.kind -> Nil.kind
@@ -75,4 +75,28 @@ signature NILUTIL =
 
     val sub_phase : Nil.phase * Nil.phase -> bool
     val get_phase : Nil.kind -> Nil.phase
+
+    val is_var_e : Nil.exp -> bool
+
+    val map_annotate : (Nil.con -> Nil.con) -> Nil.con -> Nil.con 
+
+    val strip_var : Nil.con -> Nil.var option
+    val strip_exntag : Nil.con -> Nil.con option
+    val strip_recursive : Nil.con -> ((Nil.var,Nil.con) Util.set * Nil.var) option
+    val strip_boxfloat : Nil.con -> Prim.floatsize option
+    val strip_float : Nil.con -> Prim.floatsize option
+    val strip_int : Nil.con -> Prim.intsize option
+    val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 option * Nil.con list) option
+    val strip_arrow : Nil.con -> 
+      (Nil.openness*Nil.effect*(Nil.var*Nil.kind) list*Nil.con list*Nil.w32*Nil.con) option
+    val strip_record : Nil.con -> (Nil.label list * Nil.con list) option
+    val strip_crecord : Nil.con -> (Nil.label*Nil.con) list option
+    val strip_proj : Nil.con -> (Nil.con*Nil.label) option
+    val strip_prim : Nil.con -> (Nil.primcon*Nil.con list) option
+    val strip_app : Nil.con -> (Nil.con*Nil.con list) option
+
+    val is_exn_con : Nil.con -> bool
+    val is_var_c : Nil.con -> bool
+
+    val get_arrow_return : Nil.con -> Nil.con option
   end

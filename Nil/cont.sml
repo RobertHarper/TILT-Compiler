@@ -1,6 +1,6 @@
 (*   Leaf Petersen, January 1997 *)
 
-structure Cont :> CONT =
+structure Cont :> CONT_SIG =
   struct
 
     type ('key,'val) table = ('key,'val) HashTable.hash_table

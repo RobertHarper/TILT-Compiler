@@ -379,8 +379,18 @@ struct
 			     print "\n")
 		   else ()
 
-           val (SOME knd_c) = Nilcontext.find_kind (NILctx_of context, var_mod_c)
-           val (SOME type_r) = Nilcontext.find_con (NILctx_of context, var_mod_r)
+           val knd_c = 
+	     case Nilcontext.find_kind (NILctx_of context, var_mod_c)
+	       of SOME knd => knd
+		| _ => (print "Variable: ";
+			Ppnil.pp_var var_mod_c;
+			error "Constructor variable not found in context")
+           val type_r = 
+	     case Nilcontext.find_con (NILctx_of context, var_mod_r)
+	       of SOME con => con
+		| _ => (print "Variable: ";
+			Ppnil.pp_var var_mod_r;
+			error "Expression variable not found in context")
 
 	   val (cbnd_cat, ebnd_cat) =
 	       (case preferred_name of
@@ -2207,7 +2217,10 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
    fun xHILctx context HILctx =
        let
 	   fun folder (v,context) =
-	       let val SOME(l,pc) = Ilcontext.Context_Lookup'(HILctx,v)
+	       let val (l,pc) = 
+		 case Ilcontext.Context_Lookup'(HILctx,v)
+		   of SOME v => v
+		    | NONE => error "Variable not found in ilcontext"
 	       in 
 		   (case pc of
 			Ilcontext.PHRASE_CLASS_EXP (_,il_type) => 

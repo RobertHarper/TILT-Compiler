@@ -20,7 +20,8 @@ struct
     structure Nil = Nil(structure ArgAnnotation = Annotation
 			structure ArgPrim = LinkIl.Prim)      
 	
-    structure PpNil = Ppnil(structure Nil = Nil
+    structure PpNil = Ppnil(structure ArgNil = Nil
+			    structure Prim = LinkIl.Prim
 			    structure Ppprim = LinkIl.Ppprim)
 
     structure Alpha = Alpha(structure ArgNil = Nil)
@@ -33,13 +34,17 @@ struct
 
     structure NilUtil = NilUtilFn(structure ArgNil = Nil
 				  structure IlUtil = LinkIl.IlUtil
-				  structure Prim = LinkIl.Prim
+				  structure ArgPrim = LinkIl.Prim
 				  structure PrimUtil = NilPrimUtil
 				  structure Alpha = Alpha)
 
-    structure NilContext = NilContextFn(structure ArgNil = Nil
+    structure NilContext = NilContextFn(structure NilUtil = NilUtil
+					structure ArgNil = Nil
 					structure PpNil = PpNil
 					structure Cont = Cont)
+
+    structure NilError = NilErrorFn(structure ArgNil = Nil
+				    structure PpNil = PpNil)
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure Prim = LinkIl.Prim
@@ -48,7 +53,8 @@ struct
 				      structure NilUtil = NilUtil
 				      structure NilContext = NilContext
 				      structure PpNil = PpNil
-				      structure Alpha = Alpha)
+				      structure Alpha = Alpha
+				      structure NilError = NilError)
 
     fun nilstatic_exp_valid (nilctxt : NilContext.context ,nilexp : Nil.exp) : Nil.exp * Nil.con = 
 	let val (e,c,k) = NilStatic.exp_valid(nilctxt,nilexp) in (e,c) end
@@ -101,12 +107,14 @@ struct
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil)
 
-    structure BetaReduce = BetaReduce(structure Nil = Nil
+    structure BetaReduce = BetaReduce(structure Prim = LinkIl.Prim
+				      structure Nil = Nil
 				      structure NilUtil = NilUtil
 				      structure Ppnil = PpNil
 				      structure IlUtil = LinkIl.IlUtil)
 
-    structure Cleanup = Cleanup(structure Nil = Nil
+    structure Cleanup = Cleanup(structure Prim = LinkIl.Prim
+				structure Nil = Nil
 				structure NilUtil = NilUtil
 				structure Ppnil = PpNil
 				structure IlUtil = LinkIl.IlUtil)
@@ -131,7 +139,7 @@ struct
 	    datatype import_type = ImpExp | ImpType | ImpMod
 		
 	    fun mapper v =
-		let val SOME(l,pc) = LinkIl.IlContext.Context_Lookup'(ctxt,v)
+		let val (l,pc) = valOf (LinkIl.IlContext.Context_Lookup'(ctxt,v))
 		in
 		    (case pc of
 			 PHRASE_CLASS_EXP _ => SOME(ImpExp,v,l)
@@ -191,7 +199,7 @@ struct
 	      | folder ((ImpMod,v,l),imps) = 
 		if (LinkIl.IlUtil.is_exportable_lab l) (* a label is exportable iff it is importable *)
 		    then
-			let val SOME(cvar,rvar) = VarMap.find(import_varmap,v)
+			let val (cvar,rvar) = valOf (VarMap.find(import_varmap,v))
 			    val (cl,rl) = make_cr_labels l
 			in  folder((ImpExp,rvar,rl),folder((ImpType,cvar,cl),imps))
 			end
@@ -411,11 +419,11 @@ struct
 	end
 
     fun test filename = 
-	let val SOME(ctxt,sbnds,sdecs) = LinkIl.test filename
+	let val (ctxt,sbnds,sdecs) = valOf (LinkIl.test filename)
 	in  compile' true (ctxt,sbnds,sdecs)
 	end
     fun compile filename = 
-	let val SOME(ctxt,sbnds,sdecs) = LinkIl.compile filename
+	let val (ctxt,sbnds,sdecs) = valOf (LinkIl.compile filename)
 	in  compile' false (ctxt,sbnds,sdecs)
 	end
     val cached_prelude = ref (NONE : Nil.module option)

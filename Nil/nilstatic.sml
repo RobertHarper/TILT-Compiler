@@ -6,17 +6,19 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure Alpha : ALPHA
 		    structure NilUtil : NILUTIL 
 		    structure NilContext : NILCONTEXT
-		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil = PpNil.Nil = ArgNil
+		    structure NilError : NILERROR 
+		    sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil 
+		      = PpNil.Nil = NilError.Nil = ArgNil
 		    and Annotation = ArgNil.Annotation
-		    and Prim = ArgNil.Prim = PrimUtil.Prim
+		    and Prim = ArgNil.Prim = PrimUtil.Prim = NilUtil.Prim
 		    and type NilUtil.alpha_context = Alpha.alpha_context
 		    and type PrimUtil.con = ArgNil.con
 		    and type PrimUtil.exp = ArgNil.exp) :(*>*)
-  NILSTATIC where structure Nil = ArgNil and type context = NilContext.context = 
+  NILSTATIC where structure Nil = ArgNil 
+		  and type context = NilContext.context = 
 struct	
   
   structure Annotation = Annotation
-  structure Prim = Prim
   structure Nil = ArgNil
   open Nil Prim
 
@@ -49,208 +51,133 @@ struct
 
   (* Local rebindings from imported structures *)
 
-  local
-    structure C :(*>*)
-      sig 
-	type context = NilContext.context
-	val empty : unit -> context
-	val insert_con : context*var*con -> context
-	val insert_con_list : context * (var * con) list -> context
-	val find_con : context*var -> con option
-	val remove_con : context*var -> context
-	val insert_kind : context*var*kind -> context
-	val insert_kind_list : context* (var * kind) list -> context
-	val find_kind : context*var -> kind option
-	val remove_kind : context*var -> context
-      end = NilContext
+  (*From NilContext*)
+  type context = NilContext.context
+  val empty = NilContext.empty
+  val insert_con = NilContext.insert_con
+  val insert_con_list = NilContext.insert_con_list
+  val find_con = NilContext.find_con
+  val remove_con = NilContext.remove_con
+  val insert_kind = NilContext.insert_kind
+  val insert_kind_list = NilContext.insert_kind_list
+  val find_kind = NilContext.find_kind
+  val remove_kind = NilContext.remove_kind
 
-    structure NU :(*>*)
-      sig 
-	val substConInExp : (Nil.var -> Nil.con option) -> Nil.exp -> Nil.exp
-	val substConInCon : (Nil.var -> Nil.con option) -> Nil.con -> Nil.con
-	val substConInKind : (Nil.var -> Nil.con option) -> Nil.kind -> Nil.kind
-	val substExpInExp : (Nil.var -> Nil.exp option) -> Nil.exp -> Nil.exp
-	val convar_occurs_free : Name.var * Nil.con -> bool
-	val con_free_convar : Nil.con -> var list 
-	val same_openness : Nil.openness * Nil.openness -> bool
-	val same_effect : Nil.effect * Nil.effect -> bool
-	val primequiv : primcon * primcon -> bool
-	val sub_phase : phase*phase -> bool
-	val get_phase : kind -> phase
+  (*From Alpha*)
+  type alpha_context = Alpha.alpha_context
 
-	type alpha_context = Alpha.alpha_context
-	val alpha_equiv_con : Nil.con * Nil.con -> bool
-	val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
-	val alpha_sub_kind : Nil.kind * Nil.kind -> bool
-	val alpha_normalize_con : Nil.con -> Nil.con
-	val alpha_normalize_kind : Nil.kind -> Nil.kind
-      end = NilUtil
-  in
-    open C NU
-    val eq_var = Name.eq_var
-    val eq_label = Name.eq_label
-    val var2string = Name.var2string
-    val label2string = Name.label2string
-    val fresh_var = Name.fresh_var
-    val assoc_eq = Listops.assoc_eq
-    val eq_len = Listops.eq_len
-    val eq_len3 = Listops.eq_len3
-    val map_second = Listops.map_second
-    val foldl_acc = Listops.foldl_acc
-    val map2 = ListPair.map
-    val map3 = Listops.map3
-    val app2 = Listops.app2
-    val app3 = Listops.app3
-    val zip = ListPair.zip
-    val zip3 = Listops.zip3
-    val unzip = ListPair.unzip
-    val unzip3 = Listops.unzip3
-    val unzip4 = Listops.unzip4
-    val all = List.all
-    val all2 = Listops.all2
-    val all3 = Listops.all3
-    val map = List.map
-    val same_intsize = PrimUtil.same_intsize
-    val same_floatsize = PrimUtil.same_floatsize
-    val set2list = Util.set2list
-    val list2set = Util.list2set
-    val mapsequence = Util.mapsequence
-    val sequence2list = Util.sequence2list
-    val list2sequence = Util.list2sequence
-    val eq_opt = Util.eq_opt
-  end
+  (*From NilUtil*)
+  val substConInExp = NilUtil.substConInExp
+  val substConInCon = NilUtil.substConInCon
+  val substConInKind = NilUtil.substConInKind
+  val substExpInExp = NilUtil.substExpInExp
+  val convar_occurs_free = NilUtil.convar_occurs_free
+  val con_free_convar = NilUtil.con_free_convar
+  val same_openness = NilUtil.same_openness
+  val same_effect = NilUtil.same_effect
+  val primequiv = NilUtil.primequiv
+  val sub_phase = NilUtil.sub_phase
+  val get_phase = NilUtil.get_phase
+  val alpha_equiv_con = NilUtil.alpha_equiv_con
+  val alpha_equiv_kind = NilUtil.alpha_equiv_kind
+  val alpha_sub_kind = NilUtil.alpha_sub_kind
+  val alpha_normalize_con = NilUtil.alpha_normalize_con
+  val alpha_normalize_kind = NilUtil.alpha_normalize_kind
 
+  val is_var_e = NilUtil.is_var_e
 
+  val map_annotate = NilUtil.map_annotate
+  val get_arrow_return = NilUtil.get_arrow_return
+
+  val strip_var = NilUtil.strip_var
+  val strip_exntag = NilUtil.strip_exntag
+  val strip_recursive = NilUtil.strip_recursive
+  val strip_boxfloat = NilUtil.strip_boxfloat
+  val strip_float = NilUtil.strip_float
+  val strip_int = NilUtil.strip_int
+  val strip_sum = NilUtil.strip_sum
+  val strip_arrow = NilUtil.strip_arrow
+  val strip_record = NilUtil.strip_record
+  val strip_crecord = NilUtil.strip_crecord
+  val strip_proj = NilUtil.strip_proj
+  val strip_prim = NilUtil.strip_prim
+  val strip_app = NilUtil.strip_app
+  val is_exn_con = NilUtil.is_exn_con
+  val is_var_c = NilUtil.is_var_c
+
+  (*From Name*)
+  val eq_var = Name.eq_var
+  val eq_label = Name.eq_label
+  val var2string = Name.var2string
+  val label2string = Name.label2string
+  val fresh_var = Name.fresh_var
+
+  (*From Listops*)
+  val assoc_eq = Listops.assoc_eq
+  val eq_len = Listops.eq_len
+  val eq_len3 = Listops.eq_len3
+  val map_second = Listops.map_second
+  val foldl_acc = Listops.foldl_acc
+  val map = Listops.map
+  val map2 = Listops.map2
+  val map3 = Listops.map3
+  val app2 = Listops.app2
+  val app3 = Listops.app3
+  val zip = Listops.zip
+  val zip3 = Listops.zip3
+  val unzip = Listops.unzip
+  val unzip3 = Listops.unzip3
+  val unzip4 = Listops.unzip4
+  val all = Listops.all
+  val all2 = Listops.all2
+  val all3 = Listops.all3
+
+  (*From PrimUtil*)
+  val same_intsize = PrimUtil.same_intsize
+  val same_floatsize = PrimUtil.same_floatsize
+
+  (*From Util *)
+  val set2list = Util.set2list
+  val list2set = Util.list2set
+  val mapsequence = Util.mapsequence
+  val sequence2list = Util.sequence2list
+  val list2sequence = Util.list2sequence
+  val eq_opt = Util.eq_opt
+  val printl = Util.printl
+  val lprintl = Util.lprintl
+
+  (*From NilError*)
+  val c_all = NilError.c_all
+  val c_all1 = NilError.c_all1
+  val c_all2 = NilError.c_all2
+  val c_all3 = NilError.c_all3
+
+  val perr_e = NilError.perr_e
+  val perr_c = NilError.perr_c
+  val perr_k = NilError.perr_k
+  val perr_e_c = NilError.perr_e_c
+  val perr_c_c = NilError.perr_c_c
+  val perr_c_k = NilError.perr_c_k
+  val perr_k_k = NilError.perr_k_k
+  val perr_c_k_k = NilError.perr_c_k_k
+  val perr_e_c_c = NilError.perr_e_c_c
+
+  val b_perr_k = NilError.b_perr_k
+
+  val o_perr = NilError.o_perr
+    
+  val o_perr_e = NilError.o_perr_e
+  val o_perr_c = NilError.o_perr_c
+  val o_perr_k = NilError.o_perr_k
+  val o_perr_e_c = NilError.o_perr_e_c
+  val o_perr_c_c = NilError.o_perr_c_c
+  val o_perr_k_k = NilError.o_perr_k_k
+  val o_perr_c_k_k = NilError.o_perr_c_k_k
+  val o_perr_e_c_c = NilError.o_perr_e_c_c
   (* Local helpers *)
 
 
   fun error s = Util.error "nilstatic.sml" s
-
-  fun c_all pred fc = 
-    let
-      fun all [] = true
-	| all (fst::rest) = 
-	if pred fst then
-	  all rest
-	else
-	  fc fst
-    in
-      all
-    end
-
-  fun c_all1 pred fc = 
-    let
-      fun all [] = true
-	| all (fst::rest) = 
-	if pred fst then
-	  all rest
-	else
-	  fc (SOME fst)
-    in
-      all
-    end
-
-  fun c_all2 pred fc = 
-    let
-      fun all ([],[]) = true
-	| all (a::arest,b::brest) = 
-	if pred (a,b) then
-	  all (arest,brest)
-	else
-	  fc (SOME (a,b))
-	| all _ = fc NONE
-    in
-      all
-    end
-
-  fun c_all3 pred fc = 
-    let
-      fun all ([],[],[]) = true
-	| all (a::arest,b::brest,c::crest) = 
-	if pred (a,b,c) then
-	  all (arest,brest,crest)
-	else
-	  fc (SOME (a,b,c))
-	| all _ = fc NONE
-    in
-      all
-    end
-
-  fun printl s = print (s^"\n")
-  fun lprintl s = print ("\n"^s^"\n")
-
-
-  fun perr_e exp = 
-    (printl "Expression is";
-     PpNil.pp_exp exp)
-
-  fun perr_c con =
-    (printl "Constructor is";
-     PpNil.pp_con con)
-
-  fun perr_k kind = 
-    (printl "Kind is";
-     PpNil.pp_kind kind)
-
-  fun b_perr_k kind = (perr_k kind;false)
-
-  fun perr_e_c (exp,con) = 
-    (printl "Expression is";
-     PpNil.pp_exp exp;
-     lprintl "of type";
-     PpNil.pp_con con)
-
-  fun perr_c_c (con1,con2) = 
-    (printl "Expected constructor";
-     PpNil.pp_con con1;
-     printl "Found constructor";
-     PpNil.pp_con con2)
-
-  fun perr_c_k (con1,kind) = 
-    (printl "Constructor";
-     PpNil.pp_con con1;
-     printl "of Kind";
-     PpNil.pp_kind kind)
-
-  fun perr_k_k (kind1,kind2) = 
-    (printl "Expected kind";
-     PpNil.pp_kind kind1; print "\n";
-     printl "Found kind";
-     PpNil.pp_kind kind2; print "\n")
-
-  fun perr_c_k_k (con,kind1,kind2) = 
-    (printl "Constructor is";
-     PpNil.pp_con con;
-     lprintl "Expected kind";
-     PpNil.pp_kind kind1;
-     lprintl "Found kind";
-     PpNil.pp_kind kind2)
-
-  fun perr_e_c_c (exp,con1,con2) = 
-    (printl "Expression is";
-     PpNil.pp_exp exp;
-     lprintl "Expected type";
-     PpNil.pp_con con1;
-     lprintl "Found type";
-     PpNil.pp_con con2)
-
-  fun o_perr pr s opt =  
-    let
-      val _ = case opt 
-		of (SOME arg) => pr arg
-		 | NONE => printl s
-    in
-      false
-    end
-
-  val o_perr_e = o_perr perr_e
-  val o_perr_c = o_perr perr_c
-  val o_perr_k = o_perr perr_k
-  val o_perr_e_c = o_perr perr_e_c
-  val o_perr_c_c = o_perr perr_c_c
-  val o_perr_k_k = o_perr perr_k_k
-  val o_perr_c_k_k = o_perr perr_c_k_k
-  val o_perr_e_c_c = o_perr perr_e_c_c
 
   fun split ls = 
       let fun split' _ [] = error "split given empty list"
@@ -258,79 +185,6 @@ struct
 	    | split' acc (a::rest) = split' (a::acc) rest
       in split' [] ls
       end
-
-  fun is_var_e (Var_e v) = true
-    | is_var_e _ = false
-
-  fun map_annotate f = 
-    let
-      fun map (Annotate_c (note,con)) =  (Annotate_c (note,map con))
-	| map con = f con
-    in
-      map
-    end
-  
-  fun strip_annotate f = 
-    let
-      fun strip (Annotate_c (annotate,con)) =  strip con
-	| strip con = f con
-    in
-      strip
-    end
-  
-  local
-    fun strip_var' (Var_c var) = SOME var
-      | strip_var' _ = NONE
-    fun strip_exntag' (Prim_c (Exntag_c,[con])) = SOME con
-      | strip_exntag' _ = NONE
-    fun strip_recursive' (Mu_c (set,var)) = SOME (set,var)
-      | strip_recursive' _ = NONE
-    fun strip_boxfloat' (Prim_c (BoxFloat_c floatsize,[])) = SOME floatsize
-      | strip_boxfloat' _ = NONE
-    fun strip_float' (Prim_c (Float_c floatsize,[])) = SOME floatsize
-      | strip_float' _ = NONE
-    fun strip_int' (Prim_c (Int_c intsize,[])) = SOME intsize
-      | strip_int' _ = NONE
-    fun strip_sum' (Prim_c (Sum_c {tagcount,known},cons)) = SOME (tagcount,known,cons)
-      | strip_sum' _ = NONE
-    fun strip_arrow' (AllArrow_c body) = SOME body
-      | strip_arrow' _ = NONE
-    fun strip_record' (Prim_c (Record_c labels,cons)) = SOME (labels,cons)
-      | strip_record' _ = NONE
-    fun strip_crecord' (Crecord_c entries) = SOME entries
-      | strip_crecord' _ = NONE
-    fun strip_proj' (Proj_c (con,label)) = SOME (con,label)
-      | strip_proj' _ = NONE
-    fun strip_prim' (Prim_c (pcon,args)) = SOME (pcon,args)
-      | strip_prim' _ = NONE
-    fun strip_app' (App_c (con,actuals)) = SOME (con,actuals)
-      | strip_app' _ = NONE
-
-    fun is_exn_con' (Prim_c (Exn_c,[])) = true
-      | is_exn_con' _ = false
-  in
-    val strip_var = strip_annotate strip_var'
-    val strip_exntag = strip_annotate strip_exntag'
-    val strip_recursive = strip_annotate strip_recursive'
-    val strip_boxfloat = strip_annotate strip_boxfloat'
-    val strip_float = strip_annotate strip_float'
-    val strip_int = strip_annotate strip_int'
-    val strip_sum = strip_annotate strip_sum'
-    val strip_arrow = strip_annotate strip_arrow'
-    val strip_record = strip_annotate strip_record'
-    val strip_crecord = strip_annotate strip_crecord'
-    val strip_proj = strip_annotate strip_proj'
-    val strip_prim = strip_annotate strip_prim'
-    val strip_app = strip_annotate strip_app'
-
-    val is_exn_con = strip_annotate is_exn_con'
-    val is_var_c = isSome o strip_var
-  end
-
-  fun get_arrow_return con = 
-    case strip_arrow con
-      of SOME (_,_,_,_,_,body_c) => SOME body_c
-       | NONE => NONE
 
   fun curry2 f = fn a => fn b => f (a,b)
   fun curry3 f = fn a => fn b => fn c => f (a,b,c)
@@ -481,7 +335,7 @@ struct
 		of SOME (pcon',formals,body) => 
 		  let
 		    val (vars,_) = unzip formals
-		    val conmap = list2cmap (zip (vars,args))
+		    val conmap = list2cmap (zip vars args)
 		  in
 		    if eq_len (vars,args) then
 		      substConInCon conmap body
@@ -553,7 +407,7 @@ struct
 		 if eq_var (var,var2) then
 		   let
 		     val (vars,_) = unzip formals
-		     val conmap = list2cmap (zip (vars,actuals))
+		     val conmap = list2cmap (zip vars actuals)
 		     val body' = substConInCon conmap body
 		     val (body'',_) = con_valid(D,body')
 		   in
@@ -711,7 +565,7 @@ struct
 	   val D' = insert_kind_list (D,var_kinds)
 	     
 	   val (cons',kinds) = unzip (map (curry2 con_valid D') cons)
-	   val defs' = list2sequence (zip (vars,cons'))
+	   val defs' = list2sequence (zip vars cons')
 	   val con' = Mu_c (defs',var)
 	   val kind = singletonize (SOME Runtime,Word_k Runtime,con')
 	 in
@@ -725,15 +579,17 @@ struct
 	   val (D',tformals') = foldKSR (D,tformals)
 	   val (tformals'',conmap) = foldSubstSingleton tformals'
 	   val body' = substConInCon conmap body
-	   val (body'',body_kind) = con_valid (D,body')
+	   val (body'',body_kind) = con_valid (D',body')
 	   val (formals',formal_kinds) = 
-	     unzip (map (curry2 con_valid D) formals)
+	     unzip (map (curry2 con_valid D') formals)
 	   val con' = AllArrow_c (openness,effect,tformals',formals',numfloats,body'')
+	   val kind = Word_k Runtime
+	   val kind' = singletonize (SOME Runtime,kind,con')
 	 in
 	   (*ASSERT*)
 	   if (c_all type_or_word b_perr_k formal_kinds) andalso 
 	     (type_or_word body_kind) then
-	     (con',Singleton_k(Runtime,Word_k Runtime,con'))
+	     (con',kind')
 	   else
 	     error "Invalid arrow constructor"
 	 end
@@ -775,13 +631,14 @@ struct
 	     case cbnd 
 	       of Open_cb _ => (Open_cb,Open)
 		| _ => (Code_cb,Code)
-	   val bndkind = Arrow_k(openness,formals'',body_kind')
 	   val lambda = (Let_c (sort,[Con (var,formals'',body'',body_kind')],Var_c var))
 	   val lambda' = eta_reduce_fun lambda
+	   val bndkind = Arrow_k(openness,formals'',body_kind')
+	   val bndkind' = singletonize(NONE,bndkind,lambda')
 	 in
 	   if (null rest) andalso (is_var_c con) andalso 
 	     eq_opt (eq_var,SOME var,strip_var con) then
-	     (lambda',bndkind)
+	     (lambda',bndkind')
 	   else
 	     con_valid (D,varConConSubst var lambda' (Let_c (sort,rest,con)))
 	 end
@@ -789,13 +646,10 @@ struct
 	   let
 	     val kind' = kind_valid(D,kind) (* must normalize the constructors inside the kind *)
 	     val (con',kind'') = con_valid (D,con)
-	     val recur_on = 
-	       case rest 
-		 of nil => varConConSubst var con' body
-		  | _ => varConConSubst var con' (Let_c (sort,rest,body))
+	     val let' = varConConSubst var con' (Let_c (sort,rest,body))
 	   in
 	     if alpha_sub_kind (kind'',kind') then
-	       con_valid (D,recur_on)
+	       con_valid (D,let')
 	     else
 	       (printl "Kind error in constructor declaration.";
 		perr_k_k (kind',kind'');
@@ -813,9 +667,12 @@ struct
 	       of Arrow_k (Code,vklist,body_kind) => 
 		 let 
 		   val (first,(v,klast)) = split vklist
+		   val con' = Closure_c (code',env')
+		   val kind = Arrow_k(Closure,first,body_kind)
+		   val kind' = singletonize (NONE,kind,con')
 		 in
 		   if alpha_sub_kind (env_kind,klast) then
-		     (Closure_c (code',env'), Arrow_k(Closure,first,body_kind))
+		     (con',kind')
 		   else
 		     (print "Invalid kind for closure environment:";
 		      print " env_kind < klast failed\n";
@@ -832,7 +689,7 @@ struct
 	     val distinct = sorted_unique eq_label labels
 	     val (cons',kinds) = unzip (map (curry2 con_valid D) cons)
 	     val k_entries = map2 (fn (l,k) => ((l,fresh_var()),k)) (labels,kinds)
-	     val entries' = zip (labels,cons')
+	     val entries' = zip labels cons
 	     val con = Crecord_c entries'
 	     val con' = eta_reduce_record con
 	     val kind = singletonize (NONE,Record_k (list2sequence k_entries),con')
@@ -886,7 +743,7 @@ struct
 	     if c_all2 alpha_sub_kind 
 	       (o_perr_k_k "Constructor function applied to wrong number of arguments") 
 	       (actual_kinds,formal_kinds) 
-	       then zip (formal_vars,actuals')
+	       then zip formal_vars actuals'
 	     else
 		error "Constructor function failed: argument not subkind of expected kind"
 
@@ -905,7 +762,7 @@ struct
 	       val (vars,kinds) = unzip args
 	       val kinds' = map (curry2 kind_valid D) kinds
 	       val argcons = map Var_c vars
-	       val args' = zip (vars,kinds')
+	       val args' = zip vars kinds'
 	       val D' = insert_kind_list (D,args')
 	       val (pcon',pkind,argcons',kinds'') = pcon_valid (D',pcon,argcons)
 	       val (body',body_kind) = con_valid(D',body)
@@ -1387,7 +1244,7 @@ struct
 	   val (ns,arm_exps) = unzip arms
 	   val (arm_exps',arm_cons,arm_kinds) =
 	     unzip3 (map (curry2 function_valid D) arm_exps)
-	   val arms' = zip (ns,arm_exps')
+	   val arms' = zip ns arm_exps'
 	   val _ = 
 	     case strip_int argcon
 	       of SOME intsize' => 
@@ -1424,7 +1281,7 @@ struct
 	   val (ns,arm_exps) = unzip arms
 	   val (arm_exps',arm_cons,arm_kinds) =
 	     unzip3 (map (curry2 function_valid D) arm_exps)
-	   val arms' = zip (ns,arm_exps')
+	   val arms' = zip ns arm_exps'
 	   val (decl_cons',decl_kinds) = unzip (map (curry2 con_valid D) decl_cons)
 	   val sum_cons = 
 	     case strip_sum argcon
@@ -1476,7 +1333,7 @@ struct
 	   val _ = if c_all is_var_e (fn e => (perr_e e;false)) vars' then ()
 		   else error "Non-variable index in exncase"
 
-	   val arms' = zip (vars',arm_exps')
+	   val arms' = zip vars' arm_exps'
 
 	   fun check_one con (var_con,arm_con) = 
 	     case strip_arrow arm_con
@@ -1540,7 +1397,7 @@ struct
 	       of SOME v => v
 		| NONE => error "No valid arms in type case"
 	   val pcons' = map2 (check_one rep_con) (pcons,arm_cons)
-	   val arms' = zip (pcons',arm_fns')
+	   val arms' = zip pcons' arm_fns'
 	 in
 	   (Typecase_e {info=(),arg=argcon',
 			arms=arms',default=default'},
@@ -1629,10 +1486,10 @@ struct
 		 | _ => (Code,Fixcode_b))
 	   val (declared_c,declared_k) = 
 	     (unzip (map (curry3 get_function_type D openness) functions))
-	   val D' = insert_con_list (D,zip (vars,declared_c))
+	   val D' = insert_con_list (D,zip vars declared_c)
 	   val (functions',found_c,found_k) = 
 	     unzip3 (map (curry2 function_valid D') functions)
-	   val defs' = list2set (zip (vars,functions'))
+	   val defs' = list2set (zip vars functions')
 	   val bnd' = constructor defs'
 	 in
 	   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch") (declared_c,found_c) then
@@ -1644,7 +1501,7 @@ struct
 	 let
 	   val (vars,closures) = unzip (set2list defs)
 	   val tipes = map (fn cl => #1 (con_valid (D,#tipe cl))) closures
-	   val D' = insert_con_list (D,zip (vars,tipes))
+	   val D' = insert_con_list (D,zip vars tipes)
 	   fun do_closure ({code,cenv,venv,tipe},tipe') = 
 	     let
 	       val (cenv',ckind) = con_valid (D',cenv)
@@ -1682,7 +1539,7 @@ struct
 	     end
 	   
 	   val closures' = map2 do_closure (closures,tipes)
-	   val defs' = list2set (zip (vars,closures'))
+	   val defs' = list2set (zip vars closures')
 	   val bnd' = Fixclosure_b defs
 	 in
 	   (bnd',D')

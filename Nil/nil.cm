@@ -5,7 +5,7 @@ Group
 	signature PPNIL
         signature NILCONTEXT
 
-        structure Linknil
+(*        structure Linknil*)
 is
 
 ../smlnj-lib.cm         	(* ------ SML/NJ library ------ *)
@@ -24,6 +24,8 @@ ppnil.sig.sml
 ppnil.sml
 tonil.sig.sml
 tonil.sml
+cont.sig.sml
+cont.sml
 nilcontext.sig.sml
 nilcontext.sml
 alpha_context.sig.sml
@@ -32,8 +34,6 @@ nilutil.sig.sml
 nilutil.sml
 nilstatic.sig.sml
 nilstatic.sml 
-cont.sig.sml
-cont.sml
 vararg.sig.sml
 vararg.sml
 nilprimutilparam.sml
@@ -48,3 +48,5 @@ cleanup.sig.sml
 cleanup.sml
 betareduce.sig.sml
 betareduce.sml
+nilerror.sig.sml
+nilerror.sml

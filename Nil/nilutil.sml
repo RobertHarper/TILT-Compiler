@@ -1,18 +1,18 @@
-
 (* -------------------------------------------------------- *)
-(* ------------ Context manipulation functions ------------ *)
-
 functor NilUtilFn(structure ArgNil : NIL
 		  structure PrimUtil : PRIMUTIL
-		  structure Prim : PRIM
+		  structure ArgPrim : PRIM
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
 		  sharing ArgNil = Alpha.Nil
-		  and Prim = PrimUtil.Prim = ArgNil.Prim) 
-  : (*>*) NILUTIL where structure Nil = ArgNil and type alpha_context = Alpha.alpha_context =
+		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim) 
+  : (*>*) NILUTIL where structure Nil = ArgNil 
+			and structure Prim = ArgPrim
+			and type alpha_context = Alpha.alpha_context =
 struct
 
   structure Nil = ArgNil
+  structure Prim = ArgPrim
   open Nil Util 
 
   val unzip = ListPair.unzip
@@ -67,6 +67,79 @@ struct
 	  val k = Arrow_k(Code,vklist,resk)
       in  Con_b(v',k,Let_c(Sequential,[Code_cb confuns], Var_c v))
       end
+
+  fun is_var_e (Var_e v) = true
+    | is_var_e _ = false
+
+  fun map_annotate f = 
+    let
+      fun map (Annotate_c (note,con)) =  (Annotate_c (note,map con))
+	| map con = f con
+    in
+      map
+    end
+  
+  fun strip_annotate f = 
+    let
+      fun strip (Annotate_c (annotate,con)) =  strip con
+	| strip con = f con
+    in
+      strip
+    end
+  
+  local
+    fun strip_var' (Var_c var) = SOME var
+      | strip_var' _ = NONE
+    fun strip_exntag' (Prim_c (Exntag_c,[con])) = SOME con
+      | strip_exntag' _ = NONE
+    fun strip_recursive' (Mu_c (set,var)) = SOME (set,var)
+      | strip_recursive' _ = NONE
+    fun strip_boxfloat' (Prim_c (BoxFloat_c floatsize,[])) = SOME floatsize
+      | strip_boxfloat' _ = NONE
+    fun strip_float' (Prim_c (Float_c floatsize,[])) = SOME floatsize
+      | strip_float' _ = NONE
+    fun strip_int' (Prim_c (Int_c intsize,[])) = SOME intsize
+      | strip_int' _ = NONE
+    fun strip_sum' (Prim_c (Sum_c {tagcount,known},cons)) = SOME (tagcount,known,cons)
+      | strip_sum' _ = NONE
+    fun strip_arrow' (AllArrow_c body) = SOME body
+      | strip_arrow' _ = NONE
+    fun strip_record' (Prim_c (Record_c labels,cons)) = SOME (labels,cons)
+      | strip_record' _ = NONE
+    fun strip_crecord' (Crecord_c entries) = SOME entries
+      | strip_crecord' _ = NONE
+    fun strip_proj' (Proj_c (con,label)) = SOME (con,label)
+      | strip_proj' _ = NONE
+    fun strip_prim' (Prim_c (pcon,args)) = SOME (pcon,args)
+      | strip_prim' _ = NONE
+    fun strip_app' (App_c (con,actuals)) = SOME (con,actuals)
+      | strip_app' _ = NONE
+
+    fun is_exn_con' (Prim_c (Exn_c,[])) = true
+      | is_exn_con' _ = false
+  in
+    val strip_var = strip_annotate strip_var'
+    val strip_exntag = strip_annotate strip_exntag'
+    val strip_recursive = strip_annotate strip_recursive'
+    val strip_boxfloat = strip_annotate strip_boxfloat'
+    val strip_float = strip_annotate strip_float'
+    val strip_int = strip_annotate strip_int'
+    val strip_sum = strip_annotate strip_sum'
+    val strip_arrow = strip_annotate strip_arrow'
+    val strip_record = strip_annotate strip_record'
+    val strip_crecord = strip_annotate strip_crecord'
+    val strip_proj = strip_annotate strip_proj'
+    val strip_prim = strip_annotate strip_prim'
+    val strip_app = strip_annotate strip_app'
+
+    val is_exn_con = strip_annotate is_exn_con'
+    val is_var_c = isSome o strip_var
+  end
+
+  fun get_arrow_return con = 
+    case strip_arrow con
+      of SOME (_,_,_,_,_,body_c) => SOME body_c
+       | NONE => NONE
 
   (* Local rebindings from imported structures *)
 
@@ -811,17 +884,32 @@ struct
   fun sub_phase (Compiletime, Runtime) = false
     | sub_phase _ = true
 
+  fun get_phase kind = 
+    (case kind 
+       of (Type_k p | Word_k p | Singleton_k (p,_,_)) => p
+	| Record_k entries => 
+	 if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
+	   Runtime
+	 else
+	   Compiletime
+       | Arrow_k (openness,args,result) => 
+	   if List.all (fn (v,k) => sub_phase (get_phase k,Runtime)) args 
+	     andalso sub_phase(get_phase result,Runtime) then
+	     Runtime
+	   else
+	     Compiletime)
+
   fun alpha_sub_kind' context (k1,k2) = 
     (case (k1,k2)
        of (Word_k p1, Word_k p2) => sub_phase(p1,p2)
 	| (Type_k p1, Type_k p2) => sub_phase(p1,p2)
 	| (Word_k p1, Type_k p2) => sub_phase(p1,p2)
-	| (Singleton_k (p1,_,_) ,Type_k p2) => sub_phase(p1,p2)
-	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k
+(*	| (Singleton_k (p1,_,_) ,Type_k p2) => sub_phase(p1,p2)
+	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k*)
 	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
 	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
-	| (Singleton_k (_,k,_),_) => alpha_sub_kind' context (k,k2)
-
+	| (Singleton_k (p1,k1,c1),k2) => 
+	 sub_phase(p1,get_phase k2) andalso alpha_sub_kind' context (k1,k2)
 	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	 let
 	   val conref = ref context
@@ -1238,21 +1326,6 @@ struct
 
     val alpha_normalize_exp = 
 	 alpha_normalize_exp' (empty_context(),empty_context())
-
-    fun get_phase kind = 
-      (case kind 
-	 of (Type_k p | Word_k p | Singleton_k (p,_,_)) => p
-	  | Record_k entries => 
-	   if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
-	     Runtime
-	   else
-	     Compiletime
-	 | Arrow_k (openness,args,result) => 
-	     if List.all (fn (v,k) => sub_phase (get_phase k,Runtime)) args 
-	       andalso sub_phase(get_phase result,Runtime) then
-	       Runtime
-	     else
-	       Compiletime)
 
     fun rename_mu (is_bound,defs,var) = 
 	let

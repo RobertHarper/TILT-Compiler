@@ -1,4 +1,4 @@
-signature CONT = 
+signature CONT_SIG = 
   sig
 
     type ('key,'val) table = ('key,'val) HashTable.hash_table
