@@ -12,22 +12,26 @@ struct
     val error = fn s => Util.error "linkall.sml" s
     val debug = ref false
 
-    datatype platform = ALPHA | PPC
+    datatype platform = ALPHA | ALPHA_MLRISC | PPC
     val cur_platform = ref ALPHA
     fun specific_link_file arg = 
 	(case (!cur_platform) of
 	     ALPHA => Linkalpha.link arg
+	   | ALPHA_MLRISC => AlphaLink.link arg
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
     fun specific_comp_files (debug,args) = 
 	(case (args,!cur_platform) of
 	     ([arg],ALPHA) => [(if debug then Linkalpha.test else Linkalpha.compile) arg]
 	   | (_,ALPHA) => (if debug then error "no test" else Linkalpha.compiles) args
+	   | ([arg],ALPHA_MLRISC) => [(if debug then AlphaLink.test else AlphaLink.compile) arg]
+	   | (_,ALPHA_MLRISC) => (if debug then error "no test" else AlphaLink.compiles) args
 	   | (_,PPC) => error "no PPC") (* Linkppc.comp_file arg *)
     val cached_prelude = ref (NONE : (string * Rtl.label) option)
     fun specific_reparse_prelude arg = 
 	let val (littleEndian,compile_prelude) = 
 	    (case (!cur_platform) of
 		 ALPHA => (true,Linkalpha.compile_prelude)
+	       | ALPHA_MLRISC => (true,AlphaLink.compile_prelude)
 	       | PPC => (false,error "no PPC"))
 		 (* Linkppc.reparse_prelude arg *)
 	    val _ = (Stats.bool "littleEndian") := littleEndian
