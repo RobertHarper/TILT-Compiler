@@ -42,19 +42,31 @@ structure Intersect : INTERSECT =
 
     (* Where does the plane y=0 transformed by m4 intersect the vector originating from src0 in the direction of dir0 *)
     fun plane (m4, src0, dir0) = (* Plane is Ax + By + Cz = D *)
-	let val N = v4tov3 (Matrix.apply(m4, (0.0, 1.0, 0.0, 0.0)))  (* A, B, C *)
-	    val newOrigin = v4tov3 (Matrix.apply(m4, (0.0, 0.0, 0.0, 1.0)))
+	let val newOrigin = v4tov3 (Matrix.apply(m4, (0.0, 0.0, 0.0, 1.0)))
+	    val newNormalPoint = v4tov3 (Matrix.apply(m4, (0.0, 1.0, 0.0, 1.0)))
+	    val N = makeDir(newOrigin, newNormalPoint)
 	    val D = dp(N, newOrigin)
 	    val numerator = D - dp(N, src0)
 	    val denominator = dp(N, dir0)
+(*
+	    val _ = (print "\n--newOrigin = "; printV3 newOrigin;
+		     print "\n  newNormalPoint= "; printV3 newNormalPoint;
+		     print "\n  N = "; printV3 N;
+		     print "\n  D = "; printR D;
+		     print "  num = "; printR numerator;
+		     print "  denom = "; printR denominator; print "\n")
+*)
 	in  if (Real.==(numerator, 0.0) orelse  (* point in plane *)
 		Real.==(denominator, 0.0))      (* direction parallel to plane *)
 		then noIntersect
 	    else let val t = numerator / denominator 
+(*
+		     val _ = (print "  t = "; printR t; print "\n")
+*)
 		     fun l2() : l2 = let val dist = Real.abs t (* since dir0 is unit vector *)
-				    val hit = add(src0, scale(t, dir0))
-				in  [{dist = dist, hit = hit}]
-				end
+					 val hit = add(src0, scale(t, dir0))
+				     in  [{dist = dist, hit = hit}]
+				     end
 		     val l2 = memoize l2
 		     fun l3() : l3 = let val [{hit, dist}] = l2()
 				    val (u,_,v) = v4tov3(Matrix.apply(Matrix.invert m4, v3tov4 hit))
@@ -68,7 +80,9 @@ structure Intersect : INTERSECT =
 				      hit = hit, dist = dist}]
 				end
 		     val l3 = memoize l3
-		 in  (true, l2, l3)
+		 in  if (t < 0.0)
+			 then noIntersect
+		     else (true, l2, l3)
 		 end
 	end
 

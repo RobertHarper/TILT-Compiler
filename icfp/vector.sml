@@ -4,11 +4,17 @@ structure Vect : VECT =
 	type v3 =  real * real * real
  	type v4 =  real * real * real * real
 
-	val r2s = Real.toString
+	val r2s = Real.fmt (StringCvt.FIX (SOME 4))
 	fun printV3(x,y,z) = (print "(";
 			      print (r2s x); print ", ";
 			      print (r2s y); print ", ";
 			      print (r2s z); print ")")
+	fun printV4(x,y,z,s) = (print "(";
+				print (r2s x); print ", ";
+				print (r2s y); print ", ";
+				print (r2s z); print ", ";
+				print (r2s s); print ")")
+	fun printR r = print (r2s r)
 
 	val deg2radConv = Math.pi / 180.0
 	val rad2degConv = 180.0 / Math.pi 
@@ -30,7 +36,7 @@ structure Vect : VECT =
 	fun magnitude4 ((x,y,z,s) : v4) = Math.sqrt(x*x+y*y+z*z) / s
 	fun scale4 (t, (x,y,z,s) : v4) = (x,y,z,s/t)
 
-	fun dp (v1 as (x1,y1,z1) : v3, v2 as (x2,y2,z2)) = x1+x2 + y1*y2 + z1*z2
+	fun dp (v1 as (x1,y1,z1) : v3, v2 as (x2,y2,z2)) = x1*x2 + y1*y2 + z1*z2
 	fun angle (v1,v2) : real =  (* Angle between vectors in degrees *)
 		   let val prod = dp(v1,v2)
 		       val cosTheta = prod / ((magnitude v1) * (magnitude v2))

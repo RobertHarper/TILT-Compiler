@@ -28,25 +28,25 @@ structure Render : RENDER =
 	   | _ => raise (Error "Difference and Intersection not implemented"))
 
     fun primIntersect src dir obj = 
-	let val (t,(hit,l2,l3)) = (case obj of
-				  Sphere (_,m4, t) => (t,sphere(m4,src,dir))
-				| Plane (_,m4, t) => (t,plane(m4,src,dir))
-				| Cube (_,m4, t) => (t,cylinder(m4,src,dir))
-				| Cone (_,m4, t) => (t,cube(m4,src,dir))
-				| Cylinder (_,m4, t) => (t,cone(m4,src,dir))
+	let val (t,name,(hit,l2,l3)) = (case obj of
+				  Sphere (name, m4,t) => (t,name,sphere(m4,src,dir))
+				| Plane (name, m4,t) => (t,name,plane(m4,src,dir))
+				| Cube (name, m4,t) => (t,name,cylinder(m4,src,dir))
+				| Cone (name, m4,t) => (t,name,cube(m4,src,dir))
+				| Cylinder (name, m4,t) => (t,name,cone(m4,src,dir))
 				| _ => raise (Error "primIntersect for non-primitive object"))
 	in  if hit
-		then map (fn info => (t, info)) (l3 ())
+		then map (fn info => (t, name, info)) (l3 ())
 	    else []
 	end
 
     fun primHit src dir obj : bool = 
 	#1 (case obj of
-		Sphere (_,m4, _) => sphere(m4,src,dir)
-	      | Plane (_,m4, _) => plane(m4,src,dir)
-	      | Cube (_,m4, _) => cylinder(m4,src,dir)
-	      | Cone (_,m4, _) => cube(m4,src,dir)
-	      | Cylinder (_,m4, _) => cone(m4,src,dir)
+		Sphere (_, m4, _) => sphere(m4,src,dir)
+	      | Plane (name, m4, _) => plane(m4,src,dir)
+	      | Cube (name, m4, _) => cylinder(m4,src,dir)
+	      | Cone (name, m4, _) => cube(m4,src,dir)
+	      | Cylinder (name, m4, _) => cone(m4,src,dir)
 	      | _ => raise (Error "primIntersect for non-primitive object"))
 
     fun shadowed (hit, dir, []) = false
@@ -67,13 +67,23 @@ structure Render : RENDER =
       | cast (apply, Ia, viewerPos, dir, scene, lights, depth) : color =  
 	let 
 (*	    val _ = say "." *)
+(*	    val _ = (print "Casting in direction "; printV3 dir; print "\n") *)
 	    val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
-	    fun greater ((_,{dist=d1,...}:l3info),
-			 (_,{dist=d2,...}:l3info)) = d1 > d2
+	    fun greater ((_,_,{dist=d1,...}:l3info),
+			 (_,_,{dist=d2,...}:l3info)) = d1 > d2
 	    val intersects = ListMergeSort.sort greater intersects
+(*
+	    val _ = for (0, (length intersects),
+			 fn i => let val intersect = List.nth(intersects, i)
+				     val (_,name,{hit, dist, u,v,face,N}) = intersect
+				 in   (print "Intersect #"; print (Int.toString i);
+				       print " at distance "; printR dist;
+				       print " and intersection "; printV3 hit; print "\n")
+				 end)
+*)
 	in  if (null intersects)
 		then black
-	    else let val (t, {u,v,face,N,hit,dist}) = hd intersects
+	    else let val (t, name, {u,v,face,N,hit,dist}) = hd intersects
 		     (* Surface properties *)
 		     val (C : Base.color, kd, ks, n) = apply(t,face,u,v)
 		     (* Recursive reflection *)
@@ -108,7 +118,7 @@ structure Render : RENDER =
 	    val pixelSize = width / hresR
 	    val upperLeftX = ~ width / 2.0
 	    val height = pixelSize * vresR  (* Since pixels are squares *)
-	    val upperLeftY = ~ height / 2.0
+	    val upperLeftY = height / 2.0
 
 	    val image = Ppm.ppm (vres, hres)
 	    val viewPos = (0.0, 0.0, ~1.0)   (* Viewer position *)
@@ -117,10 +127,11 @@ structure Render : RENDER =
 	    val _ = for(0, vres, fn row => 
 			(say "\nRendering row "; say (Int.toString row); say ":  ";
 			 for (0, hres, fn col => 
-			      let val dir = (upperLeftX + (i2r col + 0.5) * pixelSize,
-					     upperLeftY - (i2r row + 0.5) * pixelSize, 1.0)
-				  val dir = normalize dir
+			      let val toScreen = (upperLeftX + (i2r col + 0.5) * pixelSize,
+						  upperLeftY - (i2r row + 0.5) * pixelSize, 1.0)
+				  val dir = normalize toScreen
 				  val _ = if (col mod 10 = 0) then say "!" else ()
+(*				  val _ = (print "\nDrawing pixel: "; printV3 toScreen; print "\n") *)
 				  val color = cast (apply, amb, viewPos, dir, scene, lights, depth)
 			      in  Ppm.pxl(col,row,Ppm.colortorgb color, image)
 			      end)))

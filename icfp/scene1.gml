@@ -20,6 +20,7 @@
 1.0 0.0 0.0 point /red
 0.0 1.0 0.0 point /green
 0.0 0.0 1.0 point /blue
+1.0 1.0 0.0 point /yellow
 
 % this function takes a color and returns a surfaceparm fun
 
@@ -29,27 +30,29 @@
 
 % defs are done; the scene:
 
-0.2  0.2  0.2  point   % ambient light
+0.5  0.5  0.5  point   % ambient light
 [ ]   % lights (none!)
 
 % wall facing us (z=0), push back
 red solid-color apply "red back wall" plane 
         90.0 rotatex
-        0.0 0.0 3.0 translate 
+        0.0 0.0 5.0 translate 
 
 % wall to our left, (x=0), push left
 blue solid-color apply "blue left wall" plane
         90.0 rotatez
 	-3.0 0.0 0.0 translate
 
-% ceiling and floor
+% green floor
 green solid-color apply plane
-        dup apply
-	0.0 12.0 0.0 translate 
-	union
-	0.0 -4.0 0.0 translate	
+	0.0 -2.0 0.0 translate	
+
+% yellow floor
+yellow solid-color apply plane
+	0.0 2.0 0.0 translate 
 
 % make into one object
+union
 union
 union
 
@@ -58,10 +61,10 @@ union
 
 % final params to render:
 
-3     % depth
+1     % depth
 90.0  % fov
-320   % width
-200   % height
+50   % width
+50   % height
 "scene1.ppm"   % file output
 
 render
