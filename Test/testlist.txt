@@ -111,7 +111,9 @@ n35     fail	abstypes are not equality types
 n36     pass	scoping of abstype
 n37     pass	exception constructor in pattern match
 n38     pass	scoping of local
-n39     fail	opaque datatypes
+n39     pass	opaque datatypes and type scope
+n39a	pass	type scope
+n39b	pass	opaque datatypes
 n40     pass	ints aren't reals
 n41     pass	scoping of and
 n42     pass	scoping of val
