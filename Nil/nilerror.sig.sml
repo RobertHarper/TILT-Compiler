@@ -1,10 +1,15 @@
-(*$import Prelude Nil *)
+(*$import Nil *)
+
+(*
+ Miscellaneous functions for use in error checking/reporting
+*)
+
 signature NILERROR = 
   sig
     exception FailedAssert of string
 
     type location = string
-    (*Create a location from a filenam and a function name*)
+    (*Create a location from a filename and a function name*)
     val locate : string -> string -> location
 
     (*Given a location and a list of pairs of flags and error
@@ -44,6 +49,7 @@ signature NILERROR =
     val c_all3 : (('elt * 'elt * 'elt) -> bool) -> (('elt * 'elt * 'elt) option -> bool) 
         -> ('elt list * 'elt list * 'elt list) -> bool
 
+    (* Printing functions suitable for use in error reporting *)
     val perr_e : Nil.exp -> unit
     val perr_c : Nil.con -> unit
     val perr_k : Nil.kind -> unit
@@ -53,10 +59,15 @@ signature NILERROR =
     val perr_k_k : Nil.kind * Nil.kind -> unit
     val perr_c_k_k : Nil.con * Nil.kind * Nil.kind -> unit
     val perr_e_c_c : Nil.exp * Nil.con * Nil.con -> unit
+
+    (* Prints its parameter with perr_k and returns false *)
     val b_perr_k : Nil.kind -> bool
 
+    (* Converts a printing function like one of the above into one that takes an optional version of its usual parameter
+       and returns false *)
     val o_perr : ('val -> unit) -> string -> 'val option -> bool
     
+    (* o_perr'd versions of the corresponding functions above *)
     val o_perr_e : string -> Nil.exp option -> bool
     val o_perr_c : string -> Nil.con option -> bool
     val o_perr_k : string -> Nil.kind option -> bool

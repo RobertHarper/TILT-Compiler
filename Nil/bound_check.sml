@@ -1,4 +1,10 @@
-(*$import Prelude TopLevel Util Name Nil NilContext NilRewrite BOUNDCHECK *)
+(*$import TopLevel Util Name Nil NilContext NilRewrite BOUNDCHECK *)
+
+(*
+ Verification that a module contains no unbound variables.
+ Uses NilRewriting to do the bulk of the work.
+*)
+
 structure BoundCheck :> BOUNDCHECK = 
   struct
   
@@ -20,7 +26,14 @@ structure BoundCheck :> BOUNDCHECK =
 		    context : NilContext.context,
 		    cbound  : VarSet.set,
 		    ebound  : VarSet.set}
+      (*
+       !error = whether or not an unbound variable has been found
+       context = Nil context for bound variables at a certain point in a Nil module
+       cbound = bound constructor variables at the current point
+       ebound = bound term variables at the current point
+      *)
 
+      (* Term variable binder *)
       fun exp_var_xxx (state : state as {error,context,ebound,cbound},var,any) : (state * var option)= 
 	(if member (ebound, var) orelse NilContext.bound_exp (context,var) then
 	   (lprintl ("Warning! Expression variable " ^ (Name.var2string var) ^ " rebound");
@@ -31,6 +44,7 @@ structure BoundCheck :> BOUNDCHECK =
 	   ({error = error,context = context,ebound = add (ebound,var),cbound = cbound},
 	    NONE))
 
+      (* Constructor variable binder *)
       fun con_var_xxx (state :state as {error,context,cbound,ebound},var,any) : (state * var option)= 
 	(if member (cbound, var) orelse NilContext.bound_con (context,var) then
 	   (lprintl ("Warning! Constructor variable " ^ (Name.var2string var) ^ " rebound");
@@ -41,6 +55,7 @@ structure BoundCheck :> BOUNDCHECK =
 	   ({error = error,context = context,cbound = add (cbound,var),ebound = ebound},
 	    NONE))
 	   
+      (* Constructor handler *)
       fun conhandler (state as {error,context,cbound,...} : state,con : con) =
 	(case con
 	   of Var_c var => 
@@ -52,6 +67,7 @@ structure BoundCheck :> BOUNDCHECK =
 		)
 	    | _ => NOCHANGE)
 
+      (* Term handler *)
       fun exphandler (state as {error,context,ebound,...} : state,exp : exp) =
 	(case exp
 	   of Var_e var => 

@@ -1,10 +1,17 @@
-(*$import Prelude TopLevel List Nil MEASURE NilRewrite Stats Option Int *)
+(*$import List Nil MEASURE NilRewrite Stats Option Int *)
+
+(*
+ Measuring the size of a module, in terms of numbers of imports, bindings, and exports
+*)
 
 structure Measure :> MEASURE =
   struct
     open Nil NilRewrite
 
     val chatlev = ref 0
+    (* Controls how much extra printed output to produce.
+       Greater than 0 gets some output. Greater than 1 gets extra ouput, including counts of specific types of constructors. *)
+
     fun chat i s = if !chatlev > i then print s else ()
     local 
       
@@ -12,7 +19,18 @@ structure Measure :> MEASURE =
 		    con:int ref,exp:int ref,kind:int ref,con_vars:int ref,exp_vars:int ref,
 		    active:(string*(int ref)) list,counters:(string*(int ref)) list,
 		    containers:(string*(int ref)) list}
-	
+      (* cstring = function to translate constructors to string name
+         !con = number of constructors encountered so far
+         !exp = number of expressions encountered
+         !kind = number of kinds encountered
+         !con_vars = number of constructor variables bound
+         !exp_vars = number of expression variables bound
+         active = mapping from constructor names to refs to the number of constructor nodes that occur as
+	          subconstructors of that variety; only includes constructor names that correspond with constructors that
+		  are actually parents of the current subconstructor
+	 counters = mapping from constructor names to refs to the number of times that variety of constructor occurs
+         containers = mapping from constructor names to refs to the number of constructor nodes that occur as
+	          subconstructors of that variety *)
 
       fun inc x = x := !x + 1
 
@@ -47,7 +65,9 @@ structure Measure :> MEASURE =
 
       fun exphandler ({exp,active,...} : state,_ : exp) = (inc exp;incl active; NOCHANGE)
 
+      (* con binder *)
       fun con_var_xxx (state as {con_vars,...} : state,_,_) = (inc con_vars;(state,NONE))
+      (* exp binder *)
       fun exp_var_xxx (state as {exp_vars,...} : state,_,_) = (inc exp_vars;(state,NONE))
 
       val all_handlers =  
@@ -72,6 +92,10 @@ structure Measure :> MEASURE =
       type measure = {cstring  : Nil.con -> string, 
 		      count    : string list,
 		      count_in : string list}
+      (* cstring = map from constructors to names
+         count = names of constructor varieties for which to count the numbers of occurrences
+         count_in = names of constructor varieties for which to count the number of constructor nodes in children
+	            of their occurrences *)
 
       type size = {kinds :int,
 		   cons  :int,
@@ -79,7 +103,9 @@ structure Measure :> MEASURE =
 		   cvars :int,
 		   evars :int,
 		   total :int}
+      (* measure count results *)
 
+      (* polymorphic function to measure starting at different top-level entities *)
       fun item_size rewrite_item {cstring  : con -> string,
 				  count    : string list,
 				  count_in : string list} item = 
@@ -126,13 +152,25 @@ structure Measure :> MEASURE =
       val con_size  = item_size rewrite_con
       val exp_size  = item_size rewrite_exp
       val kind_size = item_size rewrite_kind
-      val mod_size  = item_size rewrite_mod
 
+      val mod_size  = item_size rewrite_mod
+      (* mod_size meas module ==> counts of components of module, using the constructor string conversion function in meas.
+	 count and count_in in meas only matter if the chat level is high enough to generate printed output, in which case
+	 the counts of the constructor varieties they give will be printed.
+        Effects: Prints count information with chat level above 1. *)
+
+      (* add the counts in two different measure results *)
       fun adds 
 	  {kinds=ks1,cons=cs1,exps=es1,cvars=cvs1,evars=evs1,total=t1}
 	  {kinds=ks2,cons=cs2,exps=es2,cvars=cvs2,evars=evs2,total=t2} = 
 	  {kinds=ks1+ks2,cons=cs1+cs2,exps=es1+es2,cvars=cvs1+cvs2,evars=evs1+evs2,total=t1+t2}
 
+      (*
+        val mod_size' : measure -> Nil.module -> size * size * size
+        mod_size meas module ==> (impsize, bndsize, exportsize), where these sizes are the results of measuring the
+	    imports, bindings, and exports of module, respectively.
+        Effects: Prints total size information with chat level above 0
+      *)
       fun mod_size' args (MODULE {bnds,imports,exports}) =
 	let
 	  val _ = chat 0 "\nIMPORTS\n" 
