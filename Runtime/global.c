@@ -96,7 +96,7 @@ void global_init()
 #ifdef solaris
   datastart = (mem_t) &firstdata;
   dataend   = (mem_t) &_edata;
-  textstart = (mem_t) &_ftext;
+  textstart = (mem_t) 0;	/*&_ftext*/
   textend   = (mem_t) &_etext;  
 #endif
 
