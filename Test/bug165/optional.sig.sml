@@ -5,5 +5,5 @@ signature OPTIONAL =
 sig
 	structure Posix : POSIX
 	structure PosixSysDB : POSIX_SYS_DB
-		sharing Posix.SysDB = Posix.SysDB
+		sharing Posix.SysDB = PosixSysDB
 end
