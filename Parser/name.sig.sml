@@ -20,9 +20,9 @@ signature NAME =
     val eq_tag   : (tag * tag) -> bool
     val compare_tag : (tag * tag) -> order
     val compare_var : (var * var) -> order
-    val compare_label : (label * label) -> order
+    val compare_label_name : (label * label) -> order
 
-    val labels_sorted_distinct : label list -> bool
+    val labels_name_sorted_distinct : label list -> bool
 
     (* generative *)
     val fresh_named_var : string -> var
@@ -50,6 +50,7 @@ signature NAME =
     val var2int      : var   -> int     (* v_23 -> 23 *)
     val var2name     : var   -> string  (* v_23 -> "v" *)
     val var2string   : var   -> string  (* v_23 -> "v_23" *)
+    val label2name   : label -> string
     val label2string : label -> string
     val tag2string   : tag  -> string
 

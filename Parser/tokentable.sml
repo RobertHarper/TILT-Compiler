@@ -1,3 +1,4 @@
+(*$import ML_TOKENS Env StrgHash IntStrMap *)
 (* tokentable.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
@@ -109,9 +110,12 @@ end
 
 (*
  * $Log$
-# Revision 1.2  97/09/03  20:10:41  pscheng
-# added extern and ccall syntax
+# Revision 1.3  98/01/21  20:40:52  pscheng
+# moved the .sig files to .sig.sml file
 # 
+# Revision 1.2  1997/09/03  20:10:41  pscheng
+# added extern and ccall syntax
+#
 # Revision 1.1  97/03/26  14:12:38  pscheng
 # added copy of SMLNJ parser files
 # 

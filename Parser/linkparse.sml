@@ -11,11 +11,15 @@ struct
   exception Parse of FrontEnd.parseResult
 
   local
-    fun make_source s = Source.newSource(s,0,TextIO.openIn s,true,
-					 ErrorMsg.defaultConsumer())
+    fun make_source s = 
+	let val instream = TextIO.openIn s
+	in  (instream,
+	     Source.newSource(s,0,instream,true,
+			      ErrorMsg.defaultConsumer()))
+	end
 
-    fun parse s = let val src = make_source s
-		  in  (Source.filepos src, FrontEnd.parse src)
+    fun parse s = let val (instream,src) = make_source s
+		  in  (instream,Source.filepos src, FrontEnd.parse src)
 		  end
 		  
     fun tvscope_dec dec = (TVClose.closeDec dec; dec)
@@ -24,16 +28,17 @@ struct
     type filepos = SourceMap.charpos -> string * int * int
     fun parse_impl s =
       case parse s of 
-	(fp,FrontEnd.PARSE_IMPL (imports,dec)) => 
+	(ins,fp,FrontEnd.PARSE_IMPL (imports,dec)) => 
 	  let val dec = tvscope_dec dec
-	    val dec = named_form_dec dec
+	      val dec = named_form_dec dec
+	      val _ = TextIO.closeIn ins
 	  in (fp,imports,dec)
 	  end
-      | (_,result) => raise Parse result
+      | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
     fun parse_inter s =
       case parse s of 
-	(fp,FrontEnd.PARSE_INTER (includes,specs)) => (fp,includes,specs)
-      | (_,result) => raise Parse result
+	(ins,fp,FrontEnd.PARSE_INTER (includes,specs)) => (TextIO.closeIn ins; (fp,includes,specs))
+      | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
   end
 end;
 (*

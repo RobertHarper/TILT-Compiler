@@ -1,9 +1,14 @@
+(*$import YaccBase Stream LrTable TextIO Int32 *)
+
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.2  97/10/24  21:36:28  cstone
-# update to 109.32 & NT
+# Revision 1.3  98/01/21  20:40:38  pscheng
+# moved the .sig files to .sig.sml file
 # 
+# Revision 1.2  1997/10/24  21:36:28  cstone
+# update to 109.32 & NT
+#
 # Revision 1.2  1997/08/26  19:18:54  jhr
 #   Replaced used of "abstraction" with ":>".
 #

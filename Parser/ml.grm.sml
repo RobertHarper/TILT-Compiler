@@ -1,3 +1,5 @@
+(*$import YaccBase ML_TOKENS Ast ErrorMsg Env Fixity AstUtil *)
+
 functor MLLrValsFun(structure Token : TOKEN)
  : sig structure ParserData : PARSER_DATA
        structure Tokens : ML_TOKENS

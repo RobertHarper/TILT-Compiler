@@ -1,3 +1,5 @@
+(*$import TopLevel TextIO *)
+
 (* control.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -300,6 +302,9 @@ end
 
 (*
  * $Log$
+# Revision 1.2  98/01/21  20:40:11  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.1  97/03/26  14:12:24  pscheng
 # added copy of SMLNJ parser files
 # 

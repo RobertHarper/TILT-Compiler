@@ -1,3 +1,5 @@
+(*$import Ast Env SortedList *)
+
 structure FreeTypeVars =
 struct
   open Ast

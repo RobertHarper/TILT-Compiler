@@ -1,3 +1,5 @@
+(*$import TopLevel Control Array Vector PpQueue *)
+
 (* pp.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
@@ -571,6 +573,9 @@ end (* PrettyPrint *)
 
 (*
  * $Log$
+# Revision 1.2  98/01/21  20:40:41  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.1  97/03/26  14:12:33  pscheng
 # added copy of SMLNJ parser files
 # 

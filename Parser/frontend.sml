@@ -1,3 +1,5 @@
+(*$import Join MLLrValsFun MLLexFun Ast Source Control *)
+
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* frontend.sml *)
 
@@ -126,9 +128,12 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
-# Revision 1.4  97/11/19  16:48:48  pscheng
-# changed timers to subtimers
+# Revision 1.5  98/01/21  20:40:18  pscheng
+# moved the .sig files to .sig.sml file
 # 
+# Revision 1.4  1997/11/19  16:48:48  pscheng
+# changed timers to subtimers
+#
 # Revision 1.3  1997/10/21  18:06:56  pscheng
 # added copies of files from ml-yacc
 #

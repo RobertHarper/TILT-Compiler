@@ -35,6 +35,18 @@ structure Name :> NAME =
     fun eq_tag   (GTAG n1, GTAG n2)     = n1 = n2
     fun compare_var ((a,_) : var,(b,_) : var) = Int.compare(a,b)
     fun compare_tag (GTAG(a,_),GTAG(b,_)) = Int.compare(a,b)
+    fun compare_label_name((a,sa,oa) : label, (b,sb,ob) : label) = 
+	let val is_num_a = (size sa > 0) andalso Char.isDigit(String.sub(sa,0))
+	    val is_num_b = (size sb > 0) andalso Char.isDigit(String.sub(sb,0))
+	in  (case (is_num_a,is_num_b) of
+		 (true,false) => LESS
+	       | (false,true) => GREATER
+	       | (true,true) => 
+		     (case Int.compare(size sa, size sb) of
+			  EQUAL => String.compare(sa,sb)
+			| res => res)
+	       | _ => String.compare(sa,sb))
+	end
     fun compare_label((a,sa,oa) : label, (b,sb,ob) : label) = 
 	(case Int.compare(a,b) of
 			   EQUAL => (case String.compare(sa,sb) of
@@ -46,12 +58,7 @@ structure Name :> NAME =
 			 | res => res)
 
 
-    fun lt_label (l1,l2) = 
-      (case compare_label (l1,l2)
-	 of LESS => true
-	  | _ => false)
-	 
-    val labels_sorted_distinct = all_pairs lt_label
+    val labels_name_sorted_distinct = all_pairs (fn (l1,l2) => compare_label_name(l1,l2) = LESS)
     
     val var_counter = ref 0
     val tag_counter = ref 0
@@ -105,11 +112,12 @@ structure Name :> NAME =
     fun var2int    ((i,s) : var) = i
     fun var2name   ((i,s) : var) = s
     fun var2string ((i,s) : var) = (s ^ "_" ^ (Int.toString i))
+    fun label2name ((num,str,flag) : label) = str
     fun label2string (num,str,flag) =
       let
 	fun help s = if flag then "*" ^ s else s
         val is_internal = internal_hash str = num
-        val is_generative = Char.isDigit(String.sub(str,0))
+        val is_generative = (size str > 0) andalso Char.isDigit(String.sub(str,0))
         val space = namespaceint(num,str) 
       in (case (is_internal,is_generative) of
 	    (true,false) => help (str ^ "_INT")

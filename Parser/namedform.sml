@@ -1,3 +1,4 @@
+(*$import Ast *)
 (*
   Rewrite declarations so all functor applications are in named form
   (i.e. all arguments are structure ids).

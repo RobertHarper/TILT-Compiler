@@ -1,3 +1,5 @@
+(*$import TopLevel Array *)
+
 (* ppqueue.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
@@ -33,11 +35,10 @@ struct
   fun ++ i n = (i + 1) mod n
   fun -- i n = (i - 1) mod n
 
-  abstype 'a queue = QUEUE of {elems: 'a array, (* the contents *)
+  datatype 'a queue = QUEUE of {elems: 'a array, (* the contents *)
 			       front: int ref,
 			       back: int ref,
 			       size: int}  (* fixed size of element array *)
-  with
 
     fun is_empty (QUEUE{front=ref ~1, back=ref ~1,...}) = true
       | is_empty _ = false
@@ -80,12 +81,14 @@ struct
 	  then clear_queue Q
 	  else back := --(!back) size
 
-  end (* abstype *)
 
 end (* structure PPQueue *)
 
 (*
  * $Log$
+# Revision 1.2  98/01/21  20:40:42  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.1  97/03/26  14:12:34  pscheng
 # added copy of SMLNJ parser files
 # 

@@ -1,3 +1,5 @@
+(*$import ASTHELP Ast Util Listops Env Formatter *)
+
 (* Helper routines on the EL syntax tree AST *)
 structure AstHelp : ASTHELP = 
   struct
@@ -63,9 +65,12 @@ structure AstHelp : ASTHELP =
 	in
 	  (case exp of
 	     Ast.VarExp var => if (is_var_bound(var,varbound)) then exp else dovar var
-	     | ( Ast.IntExp _ | Ast.WordExp _ |
-		Ast.RealExp _ | Ast.StringExp _ | Ast.CharExp _ |
-		Ast.SelectorExp _) => exp
+	   | Ast.IntExp _ => exp
+	   | Ast.WordExp _ => exp
+	   | Ast.RealExp _ => exp
+	   | Ast.StringExp _ => exp
+	   | Ast.CharExp _ => exp
+	   | Ast.SelectorExp _ => exp
 	 | (Ast.ListExp elist) => Ast.ListExp(map self elist)
 	 | (Ast.TupleExp elist) => Ast.TupleExp(map self elist)
 	 | (Ast.VectorExp elist) => Ast.VectorExp(map self elist)
@@ -95,9 +100,13 @@ structure AstHelp : ASTHELP =
       and f_rule state (Ast.Rule {pat,exp}) = Ast.Rule{pat=f_pat state pat, exp=f_exp state exp}
       and f_pat state pat = 
 	(case pat of
-	   (Ast.WildPat | Ast.VarPat _ | Ast.IntPat _ 
-                                | Ast.WordPat _ | Ast.StringPat _ | Ast.CharPat _) => pat
-         | (Ast.RecordPat{def,flexibility}) => Ast.RecordPat{def=(map (fn(s,p) => (s,f_pat state p)) def),
+	     Ast.WildPat  => pat
+	   | Ast.VarPat _  => pat
+	   | Ast.IntPat _  => pat
+	   | Ast.WordPat _  => pat
+	   | Ast.StringPat _  => pat
+	   | Ast.CharPat _ => pat
+	   | (Ast.RecordPat{def,flexibility}) => Ast.RecordPat{def=(map (fn(s,p) => (s,f_pat state p)) def),
 								 flexibility=flexibility}
  	 | (Ast.ListPat plist) => Ast.ListPat(map (f_pat state) plist)
 	 | (Ast.VectorPat plist) => Ast.VectorPat(map (f_pat state) plist)
@@ -255,7 +264,10 @@ structure AstHelp : ASTHELP =
 							 withtycs=map (f_tb state) withtycs}
 	| Ast.ExceSpec s_to_list => Ast.ExceSpec(map (fn (s,NONE) => (s,NONE)
 	                                    | (s,SOME ty) => (s,SOME(f_ty state ty))) s_to_list)
-	| (Ast.FixSpec _ | Ast.ShareStrSpec _ | Ast.ShareTycSpec _ | Ast.IncludeSpec _) => spec
+	| Ast.FixSpec _  => spec
+	| Ast.ShareStrSpec _ => spec
+	| Ast.ShareTycSpec _ => spec
+	| Ast.IncludeSpec _ => spec
 (*	| Ast.OpenSpec _ => spec
         | Ast.LocalSpec (slist1,slist2) => Ast.LocalSpec(map (f_spec state) slist1,
 							 map (f_spec state) slist2) *)
@@ -377,7 +389,8 @@ structure AstHelp : ASTHELP =
        | Ast.VarPat p => pp_path p
        | Ast.IntPat lit => String(TilWord64.toDecimalString lit)
        | Ast.WordPat lit => String(TilWord64.toHexString lit)
-       | (StringPat s | CharPat s) => String s
+       | Ast.StringPat s => String s
+       | CharPat s => String s
        | Ast.RecordPat _ => String "RecordPatUNIMPED"
        | Ast.ListPat _ => String "ListPatUNIMPED"
        | Ast.TuplePat pats => pp_list pp_pat pats ("(",", ",")",false)

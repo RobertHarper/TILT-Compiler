@@ -1,3 +1,5 @@
+(*$import ASTHELP Ast Util Listops Env Formatter ASTUTIL PrintUtil *)
+
 (* Copyright 1992 by AT&T Bell Laboratories 
  *)
 
@@ -81,6 +83,9 @@ end (* structure *)
 
 (*
  * $Log$
+# Revision 1.2  98/01/21  20:40:09  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.1  97/03/26  14:12:23  pscheng
 # added copy of SMLNJ parser files
 # 

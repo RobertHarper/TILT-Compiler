@@ -1,3 +1,5 @@
+(*$import SOURCEMAP TopLevel *)
+
 (* I can imagine at least three implementations: one that doesn't           *)
 (* support resynchronization, one that supports resynchronization only at   *)
 (* column 1, and one that supports arbitrary resynchronization.             *)
@@ -188,6 +190,9 @@ end
 
 (*
  * $Log$
+# Revision 1.2  98/01/21  20:40:49  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.1  97/03/26  14:12:37  pscheng
 # added copy of SMLNJ parser files
 # 

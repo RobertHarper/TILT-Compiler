@@ -1,3 +1,5 @@
+(*$import Char TopLevel Int32 *)
+
 (* stringhash.sml
  *
  * Copyright 1989 by AT&T Bell Laboratories
@@ -39,6 +41,9 @@ structure StrgHash =
 
 (*
  * $Log$
+# Revision 1.2  98/01/21  20:40:51  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.1  97/03/26  14:12:37  pscheng
 # added copy of SMLNJ parser files
 # 

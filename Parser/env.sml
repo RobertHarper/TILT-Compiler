@@ -1,3 +1,5 @@
+(*$import ENV TopLevel StrgHash Array Vector Control ErrorMsg *)
+
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sml *)
 
@@ -360,6 +362,9 @@ structure FastSymbol = Env.FastSymbol
 
 (*
  * $Log$
+# Revision 1.3  98/01/21  20:40:13  pscheng
+# moved the .sig files to .sig.sml file
+# 
 # Revision 1.2  97/07/24  11:24:27  pscheng
 # changed Unbound exception for 109.30
 # 

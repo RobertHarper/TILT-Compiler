@@ -1,3 +1,5 @@
+(*$import AST Env Fixity TilWord64 *)
+
 (* Copyright 1992 by AT&T Bell Laboratories 
  *
  *)
@@ -234,9 +236,12 @@ end (* structure Ast *)
 
 (*
  * $Log$
-# Revision 1.5  97/10/21  21:00:23  pscheng
-# got rid of int inf
+# Revision 1.6  98/01/21  20:40:05  pscheng
+# moved the .sig files to .sig.sml file
 # 
+# Revision 1.5  1997/10/21  21:00:23  pscheng
+# got rid of int inf
+#
 # Revision 1.4  1997/09/03  20:10:16  pscheng
 # added extern and ccall syntax
 #
