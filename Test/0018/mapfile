@@ -1,2 +1,2 @@
 source unit Bug = "bug.sml" {Array}
-make executable "test." $sparc ^ ".exe" {Bug}
+make executable "test." ^ $target ^ ".exe" {Bug}
