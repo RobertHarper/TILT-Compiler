@@ -52,7 +52,7 @@ sig
    (* (global) RTL translation state *)
    val reset_global_state : (var * label) list * Name.VarSet.set -> unit
    val reset_state : bool * (var * label) -> unit
-   val get_code: unit -> instr list
+   val get_proc : unit -> Rtl.proc
    val set_args : (regi list * regf list) * regi -> unit
    val add_proc : Rtl.proc -> unit
    val exports : Rtl.label list Name.VarMap.map ref 

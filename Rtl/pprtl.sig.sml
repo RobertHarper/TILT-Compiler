@@ -1,9 +1,7 @@
-(*$import Formatter RTL RTLTAGS *)
+(*$import Formatter RTL Rtltags *)
 
 signature PPRTL =
 sig
-
-   structure Rtltags : RTLTAGS
 
    val regi2s : Rtl.regi -> string
    val regf2s : Rtl.regf -> string

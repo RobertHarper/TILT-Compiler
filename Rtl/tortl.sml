@@ -1,4 +1,4 @@
-(*$import TortlVararg Rtl Pprtl TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TORTL *)
+(*$import TortlVararg Rtl Pprtl TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL *)
 
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
@@ -1131,36 +1131,11 @@ struct
 	 | peq => error "peq not done")
       end
 
-  and xprim(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
-      let open Prim
-	  open TraceInfo
-	  fun makecall str arg_types ret_type ret_trace =
-	  let 
-	      val codevar = fresh_var()
-	      val label = C_EXTERN_LABEL str
-	      val tipe = ExternArrow_c(arg_types,ret_type)
-	      val state' = add_var (state,codevar,tipe,NONE,SOME(VCODE label))
-	      val exp = ExternApp_e(Var_e codevar,elist)
-	  in xexp(state',fresh_var(),exp,SOME (TraceKnown ret_trace),context)
-	  end
-      in (case prim of
-	      output => makecall "ml_output" [int_con,string_con] unit_con Trace
-	    | input => makecall "ml_input"  [int_con] string_con Trace
-	    | input1 => makecall "ml_input1" [int_con] char_con Notrace_Int
-	    | lookahead => makecall "ml_lookahead" [int_con] char_con Notrace_Int
-	    | open_in => makecall "ml_open_in" [string_con] int_con Notrace_Int
-	    | open_out => makecall "ml_open_out" [string_con] int_con Notrace_Int
-	    | close_in => makecall "ml_close_in" [int_con] unit_con Trace
-	    | close_out => makecall "ml_close_out" [int_con] unit_con Trace
-	    | end_of_stream => makecall "ml_end_of_stream" [int_con] bool_con Trace
-	    | flush_out => makecall "ml_flush_out" [int_con] unit_con Trace
-	    | neg_int is => xprim'(state,minus_int Prim.W32,clist,
-				   (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context)
-	    | _ => xprim'(state,prim,clist,elist,context))
-      end
 
 
-  and xprim'(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
+  and xprim(state,Prim.neg_int is,clist,elist,context) =
+          xprim(state, Prim.minus_int is, clist, (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context)
+    | xprim(state : state, prim,clist,elist,context) : loc_or_val * con * state = 
       let 
 	  fun error' s = (print "nilprimexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.PrimOp prim, clist,elist));
@@ -1344,11 +1319,11 @@ struct
 	    | quot_int W32 =>  trapZero(stdop2i DIVT)
 	    | rem_int W32 =>   trapZero(stdop2i MODT)
 
-	    | plus_uint W32 =>  (commutesop2i ADDT)
-	    | mul_uint W32 =>   (commutesop2i MULT)
-	    | minus_uint W32 => (stdop2i SUBT)
-	    | div_uint W32 =>   (stdop2i DIVT)
-	    | mod_uint W32 =>   (stdop2i MODT)
+	    | plus_uint W32 =>  (commutesop2i ADD)
+	    | mul_uint W32 =>   (commutesop2i MUL)
+	    | minus_uint W32 => (stdop2i SUB)
+	    | div_uint W32 =>   (stdop2i DIV)
+	    | mod_uint W32 =>   (stdop2i MOD)
 
 	    (* XXXXX should this mod with 255 *)
 	    | plus_uint W8 =>  (commutesop2i ADDT)
@@ -1770,17 +1745,7 @@ struct
 	      val I resulti = result
 	      val _ = (add_instr(MV(ir,resulti));
 		       add_instr(RETURN return))
-	      val I resulti = result
-	      val results = ([resulti],[])
-	      val code = get_code()
-	      val p = PROC{name=name,
-			   return=return,
-			   args=args,
-			   results=results,
-			   code=Array.fromList code,
-			   known=false,
-			   save=SAVE(nil,nil),
-			   vars=NONE}
+	      val p = get_proc()
 	  in add_proc p
 	  end
      fun dofun_help is_top (state,vname,Function(effect,recur,vklist,_,vclist,vflist,body,con)) = 
@@ -1827,15 +1792,7 @@ struct
 			       | _ => error "register mismatch")
 	      val _ = (add_instr mvinstr;
 		       add_instr(RETURN return))
-	      val code = get_code()
-	      val p = PROC{name=name,
-			   return=return,
-			   args=args,
-			   results=results,
-			   code=Array.fromList code,
-			   known=false,
-			   save=SAVE(nil,nil),
-			   vars=NONE}
+	      val p = get_proc()
 	  in  p
 	  end
      fun dofun arg = add_proc(dofun_help false arg)
@@ -1922,7 +1879,7 @@ struct
 			 then print "tortl - handling imports now\n"
 		     else ()
 
-	    (* translate the expression as a function taking no arguments *)
+	     val _ = reset_state(true, (mainVar, mainName))
 	     fun folder (ImportValue(l,v,c),s) = 
 		 (* For extern or C functions, the label IS the value rather than a pointer *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
@@ -1936,18 +1893,21 @@ struct
 		 let val vl = (VGLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
 		 in  add_conglobal "1" (s,v,k,NONE,NONE, VAR_LOC vl)
 		 end
-	     val state = foldl folder (make_state()) imports
-	     val p as PROC{name,return,args,results,code,known,save,vars} =
-		 dofun_top (state,mainVar,Function(Partial,Arbitrary,[],false,[],[],exp,con))
-(*	     val p' = PROC{name=name,
-			   return=return,
-			   args=args,
-			   results=([],[]),
-			   code=code,
-			   known=known,
-			   save=save,
-			   vars=vars}
-	     val _ = add_proc p' *)
+	     val state = needgc(make_state(),IMM 0)
+	     val state = foldl folder state imports
+	     val return = alloc_regi(LABEL)
+	     val args = ([],[])
+	     val _ = set_args(args, return)
+	     val (r,c,state) = xexp'(state,fresh_named_var "result",exp,
+				      NONE, ID return)
+	      val result = getResult(fn() => r)
+	      val mvinstr = (case (r,result) of
+				 (I ir1,I ir2) => MV(ir1,ir2)
+			       | (F fr1,F fr2) => FMV(fr1,fr2)
+			       | _ => error "register mismatch")
+	      val _ = (add_instr mvinstr;
+		       add_instr(RETURN return))
+	      val p = get_proc()
 	     val _ = add_proc p
 
 	     val _ = if (!debug)

@@ -5,19 +5,6 @@ structure TortlBase
    =
 struct
 
-    val do_constant_records = ref true
-    val do_forced_constant_records = ref true
-    val do_gcmerge = ref true
-    val do_single_crecord = ref true
-
-
-val diag = ref true
-val debug = Stats.ff("TortlBaseDebug")
-val debug_simp = Stats.ff("tortl_base_debug_simp")
-
-val debug_bound = ref false
-
-
    (* Module-level declarations *)
 
     open Util Listops
@@ -28,10 +15,18 @@ val debug_bound = ref false
     open Rtltags 
     open Pprtl 
     type label = Rtl.label
-
-    val error = fn s => (Util.error "tortl-base.sml" s)
+    fun error s = Util.error "tortl-base.sml" s
     structure TW32 = TilWord32
     structure TW64 = TilWord64
+
+    val do_constant_records = ref true
+    val do_forced_constant_records = ref true
+    val do_gcmerge = ref true
+    val do_single_crecord = ref true
+    val diag = ref true
+    val debug = Stats.ff("TortlBaseDebug")
+    val debug_simp = Stats.ff("tortl_base_debug_simp")
+    val debug_bound = ref false
 
 
    (* ------------------ Overall Data Structures ------------------------------ *)
@@ -489,6 +484,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        val il : (Rtl.instr ref) list ref = ref nil
        val localregi : regi list ref = ref nil
        val localregf : regf list ref = ref nil
+       val returnreg : regi option ref = ref NONE
        val argregi : regi list ref = ref nil
        val argregf : regf list ref = ref nil
        val curgc : instr ref option ref = ref NONE
@@ -616,6 +612,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
        fun set_args ((iargs,fargs),return) = 
 	   (argregi := iargs;
 	    argregf := fargs;
+	    returnreg := SOME return;
 	    localregi := return :: iargs;
 	    localregf := fargs)
 
@@ -647,6 +644,24 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	   end
 
        fun get_code() = map ! (rev (!il))
+       fun get_proc() = 
+	let val (_,name) = !currentfun
+	    val code =  map ! (rev (!il))
+	    val results = (case !resultreg of
+			       NONE => error "result reg still unknown"
+			     | SOME(I ir) => ([ir],[])
+			     | SOME(F fr) => ([],[fr]))
+	    val SOME return = !returnreg
+	in  PROC{name=name,
+		 return=return,
+		 args=(!argregi,!argregf),
+		 results=results,
+		 code=Array.fromList code,
+		 known=false,
+		 save=SAVE(nil,nil),
+		 vars=NONE}
+	end
+
    end
 	   
 
@@ -971,75 +986,69 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		  add_instr(ADD(reg,REG size,dest))
 	      end
 
+  fun allocate_global (label,labels,rtl_rep,lv) = 
+      let 
+	  val _ = (case rtl_rep of
+		       TRACE  => add_mutable_variable(label,rtl_rep)
+		     | COMPUTE _ => add_mutable_variable(label,rtl_rep)
+		     | _ => ())
+	      
+	  val _ = (case lv of
+		       VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
+		     | _ => ())
+	  val _ = app (fn l => add_data(DLABEL l)) labels
+	  val _ = add_data(DLABEL (label));
+	  val addr = alloc_regi LABEL
+	  val loc = alloc_regi LABEL
+      in  (case lv of
+	       VAR_LOC (VREGISTER (_,reg)) => 
+		   (add_instr(LADDR(label,0,addr));
+		    (case reg of
+			 I r => (add_data(INT32(i2w 0));
+				 add_instr(STORE32I(EA(addr,0),r)))
+		       | F r => (add_data(FLOAT "0.0");
+				 add_instr(STOREQF(EA(addr,0),r)))))
+	     | VAR_LOC (VGLOBAL (l,rep)) => 
+		   let val value = alloc_regi rep
+		   in  (add_data(INT32 0w99);
+			add_instr(LADDR(label,0,addr));
+			add_instr(LADDR(l,0,loc));
+			add_instr(LOAD32I(EA(loc,0),value));
+			add_instr(STORE32I(EA(addr,0),value)))
+		   end
+	     | VAR_VAL (VVOID _) => error "alloc_global got nvoid"
+	     | VAR_VAL (VINT w32) => add_data(INT32 w32)
+	     | VAR_VAL (VTAG w32) => add_data(INT32 w32)
+	     | VAR_VAL (VREAL l) => add_data(DATA l)
+	     | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
+	     | VAR_VAL (VLABEL l) => add_data(DATA l)
+	     | VAR_VAL (VCODE l) => add_data(DATA l))
+      end
+
   fun add_global (state,v : var,
 		    con : con,
 		    lv : loc_or_val) : state =
     let 
+	val _ = Stats.counter("RTLglobal") ()
+	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
+					   SOME (lab::rest) => (true,lab,rest)
+					 | SOME [] => error "no labels in export entry"
+					 | NONE => (false,LOCAL_DATA (Name.var2string v),[]))
+	val rtl_rep = con2rep state con
+	val (is_reg,vl_opt,vv_opt) = 
+	    (case lv of
+		 VAR_VAL vv => (false,NONE,SOME vv)
+	       | VAR_LOC vl => (case vl of
+				    VGLOBAL _ => (false,SOME vl, NONE)
+				  | _ => (true,SOME(VGLOBAL(label,rtl_rep)), NONE)))
+	val state' = add_var (state,v,con,vl_opt, vv_opt)
 
-	val (label_opt,labels) = 
-	    (case (Name.VarMap.find(!exports,v)) of
-		 SOME [] => error "no label for export"
-	       | SOME (first::rest) => (SOME first, rest)
-	       | NONE => (NONE,[]))
-
-	val (label_opt,vv_opt) = 
-	    (case (lv,label_opt) of
-               (VAR_VAL vv, NONE) => (NONE,SOME vv)
-	     | (_, NONE) => (SOME(LOCAL_DATA (Name.var2string v)),NONE)
-	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
-	     | (_, SOME _) => (label_opt, NONE))
-
-
-
-      val addr = alloc_regi LABEL
-      val loc = alloc_regi LABEL
-      val rtl_rep = con2rep state con
-
-      val state' = add_var (state,v,con,
-			    case label_opt of
-				NONE => NONE
-			      | SOME label => 
-				    SOME(VGLOBAL(label,rtl_rep)),
-			    vv_opt)
-
-    in  (case label_opt of
-	NONE => ()
-      | SOME label =>
-	    (Stats.counter("RTLglobal") ();
-	     (case rtl_rep of
-		  TRACE  => add_mutable_variable(label,rtl_rep)
-		| COMPUTE _ => add_mutable_variable(label,rtl_rep)
-		| _ => ());
-	      (case lv of
-		   VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
-		 | _ => ());
-	       app (fn l => add_data(DLABEL l)) labels;
-	       add_data(DLABEL (label));
-	       (case lv of
-		    VAR_LOC (VREGISTER (_,reg)) => 
-			(add_instr(LADDR(label,0,addr));
-			 (case reg of
-			      I r => (add_data(INT32(i2w 0));
-				      add_instr(STORE32I(EA(addr,0),r)))
-			    | F r => (add_data(FLOAT "0.0");
-				      add_instr(STOREQF(EA(addr,0),r)))))
-		  | VAR_LOC (VGLOBAL (l,rep)) => let val value = alloc_regi rep
-						 in  (add_data(INT32 0w99);
-						      add_instr(LADDR(label,0,addr));
-						      add_instr(LADDR(l,0,loc));
-						      add_instr(LOAD32I(EA(loc,0),value));
-						      add_instr(STORE32I(EA(addr,0),value)))
-						 end
-		  | VAR_VAL (VVOID _) => error "alloc_global got nvoid"
-		  | VAR_VAL (VINT w32) => add_data(INT32 w32)
-		  | VAR_VAL (VTAG w32) => add_data(INT32 w32)
-		  | VAR_VAL (VREAL l) => add_data(DATA l)
-		  | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
-		  | VAR_VAL (VLABEL l) => add_data(DATA l)
-		  | VAR_VAL (VCODE l) => add_data(DATA l))));
-	state'
+	val _ = if (exported orelse is_reg)
+		    then allocate_global(label,labels,rtl_rep,lv)
+		else ()
+    in  state'
     end
-
+	
   fun add_conglobal str (state : state,
 		     v : var,
 		     kind : kind,
@@ -1047,46 +1056,23 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		     copt : con option,
 		     lv : loc_or_val) : state = 
     let 
-	(* we lay out the convar as a global if it is exported or we
-	   don't already know its value; if the value is known and
-	   it is not exported, then later code will simply use the VAR_VAL *)
-	val (label_opt,labels) = 
-	    (case (Name.VarMap.find(!exports,v)) of
-		 SOME [] => error "no label for export"
-	       | SOME (first::rest) => (SOME first, rest)
-	       | NONE => (NONE,[]))
-	val (label_opt,vv_opt) = 
-	    (case (lv,label_opt) of
-               (VAR_VAL vv, NONE) => (NONE,SOME vv)
-	     | (_, NONE) => (SOME(LOCAL_DATA (Name.var2string v)),NONE)
-	     | (VAR_VAL vv, SOME _) => (label_opt, SOME vv)
-	     | (_, SOME _) => (label_opt, NONE))
-      val state' = add_convar str (state,v,kind,kshape_opt,
-			       copt,
-			       case label_opt of
-				   NONE => NONE
-				 | SOME label => 
-				       SOME(VGLOBAL(label,TRACE)),
-			       vv_opt)
-    in
-	(case label_opt of
-	    SOME label => 
-		let val _ = Stats.counter("RTLconglobal") ()
-		    val addr = alloc_regi LABEL
-		    val _ = add_mutable_variable(label,TRACE)
-		in 
-		    app (fn l => add_data(DLABEL l)) labels;
-		    add_data(DLABEL (label));
-		    (case lv of
-			 (VAR_VAL(VLABEL l)) => add_data(DATA l)
-		       | _ => (let val ir = load_ireg_locval(lv,NONE)
-			       in  add_data(INT32(i2w 0));
-				   add_instr(LADDR(label,0,addr));
-				   add_instr(STORE32I(EA(addr,0),ir))
-			       end))
-		end
-	    | NONE => ());
-	state'
+	val _ = Stats.counter("RTLconglobal") ()
+	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
+					   SOME (lab::rest) => (true,lab,rest)
+					 | SOME [] => error "no labels in export entry"
+					 | NONE => (false,LOCAL_DATA (Name.var2string v),[]))
+	val (is_reg,vl_opt,vv_opt) = 
+	    (case lv of
+		 VAR_VAL vv => (true,NONE,SOME vv)
+	       | VAR_LOC vl => (case vl of
+				    VGLOBAL _ => (false,SOME vl, NONE)
+				  | _ => (true,SOME(VGLOBAL(label,TRACE)), NONE)))
+	val state' = add_convar str (state,v,kind,kshape_opt, copt, vl_opt, vv_opt)
+
+	val _ = if (exported orelse is_reg)
+		    then allocate_global(label,labels,TRACE,lv)
+		else ()
+    in state'
     end
 
   fun unboxFloat regi : regf = let val fr = alloc_regf()

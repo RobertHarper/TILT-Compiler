@@ -35,10 +35,8 @@ struct
 	   state)
       end
 
-  fun xsub_int (state : state, is)  (vl1 : loc_or_val, vl2 : loc_or_val) =
-      let
-	  val a' = load_ireg_locval(vl1,NONE)
-	  val c = Prim_c(Int_c is, [])
+  fun xsub_help (state : state, is, c)  (vl1 : loc_or_val, vl2 : loc_or_val) =
+      let val a' = load_ireg_locval(vl1,NONE)
 	  val desti = alloc_regi(con2rep state c)
       in  (case is of
 	       Prim.W32 => (add_instr(ICOMMENT "int sub start");
@@ -71,10 +69,14 @@ struct
 	  (VAR_LOC(VREGISTER(false,I desti)), c, state)
       end
 
-  fun xsub_known(state : state, c) (vl1 : loc_or_val, vl2 : loc_or_val) =
-      let val (lv, _, state) = xsub_int(state, Prim.W32) (vl1,vl2)
-      in  (lv, c, state)
+  fun xsub_int (state : state, is)  (vl1 : loc_or_val, vl2 : loc_or_val) =
+      let val c = Prim_c(Int_c is, [])
+      in  xsub_help (state,is,c) (vl1,vl2)
       end
+
+  fun xsub_known(state : state, c) (vl1 : loc_or_val, vl2 : loc_or_val) =
+      xsub_help(state, Prim.W32,c) (vl1,vl2)
+
 
   fun xsub_dynamic(state,c, con_ir) (vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con * state =
       let
@@ -530,10 +532,10 @@ struct
 
   fun xarray_known(state, c) vl_list : loc_or_val * con * state =
       let
-	  val is_ptr = true
-	      (* (case #2(simplify_type state c) of
-			    Prim_c(Sum_c{totalcount,tagcount,...},_) => totalcount <> tagcount
-			  | _ => true) *)
+	  val is_ptr =
+	      (case #2(simplify_type state c) of
+		   Prim_c(Sum_c{totalcount,tagcount,...},_) => totalcount <> tagcount
+		 | _ => true)
       in  if  is_ptr
 	      then xarray_ptr(state, c) vl_list
 	  else xarray_int(state,Prim.W32) vl_list

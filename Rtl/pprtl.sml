@@ -3,8 +3,6 @@
 structure Pprtl :> PPRTL =
 struct
 
-  structure Rtltags = Rtltags
-
   open Rtl Formatter
   structure Formatter = Formatter
 
