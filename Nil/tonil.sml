@@ -540,8 +540,8 @@ end)
 			 fun folder(Exp_b(v,c,_),ctxt) = 
 			        Nilcontext.insert_con(ctxt,v,c)
                            | folder(Con_b(v,_,c),ctxt) = 
-			        Nilcontext.insert_kind
-				 (ctxt,v,#2 (Nilstatic.con_valid (ctxt, c)))
+			     (Nilcontext.insert_kind
+				 (ctxt,v,#2 (Nilstatic.con_valid (ctxt, c))))
                            | folder(Fixopen_b vfset, ctxt) =
 			        Util.foldset (folder' Open) ctxt vfset
                            | folder(Fixcode_b vfset, ctxt) =
@@ -565,9 +565,7 @@ end)
 	       if (!debug) then
 		   (xmod_count := this_call + 1;
 		    print ("\nCall " ^ (Int.toString this_call) ^ " to xmod\n");
-		    Ppil.pp_mod il_mod;
-		    (* print"\n";
-		     Nilcontext.print_context (NILctx_of context); *)
+		    if (!full_debug) then Ppil.pp_mod il_mod else ();
 		    print"\n")
 	       else ()
 
@@ -589,7 +587,7 @@ end)
 		    NONE => (Var_c var_mod_c, Var_e var_mod_r)
 		  | SOME (_, name_c, name_r) => (Var_c name_c, Var_e name_r))
 
-           val _ = if (!debug)
+           val _ = if (!full_debug)
 		       then (print "About to look up :\n";
 			     Ppnil.pp_exp (Var_e var_mod_r);
 			     print " and ";
@@ -631,8 +629,9 @@ end)
      | xmod' context (Il.MOD_APP(ilmod_fun, ilmod_arg), preferred_name) =
        let
 
-
+(*
 val _ = print "MOD_APP start\n"
+*)
 
 	   val _ = 
 	     if (!trace) then
@@ -664,6 +663,7 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		valuable = valuable_arg,
 		vmap = vmap
 		} = xmod (update_vmap(context,vmap)) (ilmod_arg, NONE)
+
 	   val var_arg_c = 
 	     case strip_var name_arg_c
 	       of SOME v => v
@@ -690,8 +690,6 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 		    | _ => (perr_k knd_fun_c;
 			    error "Expected arrow kind")
 
-	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_arg_c
-	       val reduced_argument_c = Nilstatic.con_reduce (NILctx_of context, argument_c)
                val (effect,var_body_arg_c,exp_body_type) = 
 		 case strip_arrow type_fun_r 
 		   of SOME (_,effect,[(var_body_arg_c,_)],_,_,exp_body_type) =>
@@ -700,8 +698,7 @@ val _ = (print "\nMOD_APP: type_fun_r = \n";
 			    error "Expected arrow constructor with one arg")
 	   in
 
-	     val knd_c = Subst.varConKindSubst v_c reduced_argument_c con_body_kind
-(* inf loop with text-io.sml     val knd_c = Nilstatic.kind_reduce(NILctx_of context, knd_c) *)
+             val knd_c = Subst.varConKindSubst v_c name_arg_c con_body_kind
 
 	     val cbnd_cat = 
 		 APP[cbnd_cat_fun, 
@@ -750,8 +747,8 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	 Ppnil.pp_con (Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type);
 	 print "\n\n")
 *)
-	       val type_r = Nilstatic.con_reduce 
-		 (NILctx'', Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type)
+               val type_r = Subst.varConConSubst var_body_arg_c name_arg_c exp_body_type
+
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
 
@@ -766,7 +763,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 					      []
 					   else [name_arg_r])
 					  [])]]
-val _ = print "MOD_APP finished\n"
+(*val _ = print "MOD_APP finished\n" *)
 
        in
 	   {cbnd_cat  = cbnd_cat,
@@ -821,7 +818,7 @@ val _ = print "MOD_APP finished\n"
 *)
 	       val type_mod_r = Subst.substConInCon subst type_mod_r
 (*	       val _ = (print "type_mod_r after is "; Ppnil.pp_con type_mod_r; print "\n") *)
-(*	       val type_mod_r' = Nilstatic.con_reduce(NILctx_of context, type_mod_r) *)
+
 	       val type_mod_r' = type_mod_r
 	   in
 
@@ -1123,14 +1120,15 @@ val _ = print "MOD_FUNCTOR finished\n"
        let
 	   val this_call = ! xsbnds_count
 	   val _ = 
-	       if (!debug andalso !full_debug) then
+	       if (!debug) then
 		   (xsbnds_count := this_call + 1;
 		    print ("Call " ^ (Int.toString this_call) ^ " to xsbnds\n");
-		    Ppil.pp_sbnds il_sbnds;
-		    print ("\n");
-		    print "vmap = ";
-		    printVmap (vmap_of context);
-		    print ("\n"))
+		    if (!full_debug) then 
+			(Ppil.pp_sbnds il_sbnds;
+		        print ("\n");
+		        print "vmap = ";
+		        printVmap (vmap_of context);
+		        print ("\n")) else ())
 	       else ()
 
 	   val result = (xsbnds_rewrite_1 context il_sbnds)
@@ -1139,7 +1137,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 			    raise e)
 
 	in
-	    if (!debug andalso !full_debug) then 
+	    if (!debug) then 
                print ("Return " ^ (Int.toString this_call) ^ " from xsbnds\n") else ();
 	    result
         end
@@ -1601,11 +1599,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 	       if (!debug) then
 		   (xcon_count := this_call + 1;
 		    print ("Call " ^ (Int.toString this_call) ^ " to xcon\n");
-		    Ppil.pp_con il_con;
-		    (*
-		     print"\n";
-		     Nilcontext.print_context (NILctx_of context); *)
-		    print"\n")
+		    if (!full_debug) then (Ppil.pp_con il_con; print"\n") else ())
 	       else ()
 
 	   val result = (xcon' context il_con)
@@ -1638,9 +1632,13 @@ val _ = print "MOD_FUNCTOR finished\n"
 
      | xcon' context (Il.CON_FLEXRECORD fr) = xflexinfo context fr
 
+     | xcon' context ((Il.CON_INT Prim.W64) | (Il.CON_UINT Prim.W64)) =
+       raise Util.BUG "64-bit integers not handled during/after phase-split"
+
      | xcon' context ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
        let
-	   val (con, knd) = Nilstatic.con_valid (NILctx_of context, Prim_c (Int_c intsize, []))
+           val con = Prim_c (Int_c intsize, [])
+           val knd = Word_k Runtime
        in
 	   (con, knd)
        end
@@ -1730,10 +1728,11 @@ val _ = print "MOD_FUNCTOR finished\n"
 *)
      | xcon' context (il_con as Il.CON_APP (il_con1, il_con2)) = 
        let
-	   val (con1, _) = xcon context il_con1
+	   val (con1, knd1) = xcon context il_con1
+           val (Arrow_k(_,[(v_arg,_)],body)) = Nilutil.strip_singleton knd1
            val (con2, _) = xcon context il_con2
 	   val con = App_c(con1, [con2])
-           val (_, knd) = Nilstatic.con_valid(NILctx_of context, con)
+	   val knd = Subst.varConKindSubst v_arg con1 body
        in
 	   (con, knd)
        end
@@ -1883,11 +1882,13 @@ val _ = print "MOD_FUNCTOR finished\n"
 
      | xcon' context (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
        let
-	   val {cbnd_cat,name_c,...} = 
+	   val {cbnd_cat,name_c,knd_c,...} = 
 	       xmod context (modv, NONE)
+           val cbnd_list = flattenCatlist cbnd_cat
 
-	   val con = makeLetC (map Con_cb (flattenCatlist cbnd_cat))
+	   val con = makeLetC (map Con_cb cbnd_list)
 	                      (Proj_c (name_c, lbl))
+
 	   val (_,knd) = Nilstatic.con_valid (NILctx_of context, con)
        in
 	   (con, knd)
@@ -1964,8 +1965,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 	       if (!debug) then
 		   (xexp_count := this_call + 1;
 		    print ("Call " ^ (Int.toString this_call) ^ " to xexp\n");
-		    Ppil.pp_exp il_exp;
-		    print"\n")
+		    if (!full_debug) then (Ppil.pp_exp il_exp; print"\n") else ())
 	       else ()
 
 	   val result = (xexp' context il_exp)
@@ -2192,15 +2192,11 @@ val _ = print "MOD_FUNCTOR finished\n"
      | xexp' context (Il.LET (bnds, il_exp)) = 
        let
 	   val {cbnd_cat, ebnd_cat, valuable, final_context=context'} = xbnds context bnds
-           val ebnds = (map Con_b (flattenCatlist cbnd_cat)) @ (flattenCatlist ebnd_cat)
+           val cbnd_list = flattenCatlist cbnd_cat
+           val ebnds = (map Con_b cbnd_list) @ (flattenCatlist ebnd_cat)
+           val cbnds = (map Con_cb cbnd_list)
 	   val (exp, con, valuable') = xexp context' il_exp
 
-	   val _ = 
-	     if (!trace) then
-	       (lprintl "HERE WE ARE1";
-		perr_c con)
-	     else
-	       ()
 
 	   val reduced_con = Nilstatic.con_reduce(NILctx_of context', con)
 
@@ -2210,7 +2206,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 	     else ()
 
            val _ =
-             if (!debug) then
+             if (!full_debug) then
 	       (print "\nInput to LET:\n";
                 Ppil.pp_exp (Il.LET (bnds, il_exp));
                 print "\nUnoptimized output from LET:\n";
@@ -2222,7 +2218,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 
        in
 	   (makeLetE ebnds exp,
-	    reduced_con, valuable andalso valuable')
+	    makeLetC cbnds con, valuable andalso valuable')
        end
 
      | xexp' context (Il.NEW_STAMP il_con) = 
@@ -2398,18 +2394,8 @@ val _ = print "MOD_FUNCTOR finished\n"
 		    NilContext.print_context (NILctx_of context); print "\n")
 *)
 
-	   val _ = 
-	     if (!trace) then
-	       (lprintl "HERE WE ARE2";
-		perr_c unnormalized_con)
-	     else ()
-
            val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
 
-	   val _ = 
-	     if (!trace) then
-	       printl "OUT2"
-	     else ()
 (*
            val _ = (print "normalized con = ";
 		    Ppnil.pp_con con;
@@ -2596,8 +2582,7 @@ val _ = print "MOD_FUNCTOR finished\n"
 	       if (!debug) then
 		   (xsig_count := this_call + 1;
 		    print ("\nCall " ^ (Int.toString this_call) ^ " to xsig\n");
-		    Ppil.pp_signat il_sig;
-		    print "\n")
+		    if (!full_debug) then (Ppil.pp_signat il_sig; print "\n") else ())
 	       else ()
 	   val result = xsig' context (con, il_sig)
 	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
@@ -2614,7 +2599,8 @@ val _ = print "MOD_FUNCTOR finished\n"
 	   val _ = if (! debug) then
 	            (xsdecs_count := this_call + 1;
 		     print ("Call " ^ (Int.toString this_call) ^ " to xsdecs\n");
-		     Ppil.pp_sdecs sdecs) else ()
+		     if (!full_debug) then (Ppil.pp_sdecs sdecs; print "\n") else ())
+                   else ()
 
 	   val result = xsdecs'' context args
 	       handle e => (if (!debug) then print ("Exception detected in call " ^ 
@@ -2791,13 +2777,9 @@ val _ = print "MOD_FUNCTOR finished\n"
 		  [(Name.fresh_var(), Word_k Runtime)], 
 		  makeKindTuple m)
      | xkind context (Il.KIND_ARROW (n,m)) = 
-         let 
-	     val (Record_k args) = makeKindTuple n
-	 in
-	     Arrow_k (Open,
-		      map (fn ((_,v),k) => (v,k)) args,
-		      makeKindTuple m)
-	 end
+          Arrow_k (Open,
+		   [(Name.fresh_var(), makeKindTuple n)],
+		   makeKindTuple m)
      | xkind context (Il.KIND_INLINE (k,c)) = 
 	 let 
 	     val (con,knd) = xcon context c
