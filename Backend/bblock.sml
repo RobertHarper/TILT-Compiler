@@ -115,14 +115,9 @@ struct
 		   in
 		       revDFS (!succs @ rest) (blk :: block_names)
 		   end
-       in
-	   val almost_rev_blocklabel_list = revDFS [first_label] []
-	   fun filter l = if (memberLabel almost_rev_blocklabel_list l)
-			      then NONE
-			  else SOME l
-	   val rest = List.mapPartial filter all_labels
-	   val rev_blocklabel_list = almost_rev_blocklabel_list @ rest
-	   val blocklabel_list = rev rev_blocklabel_list
+       in  (* some blocks are reachable via jsr's so we must include all labels *)
+	   val rev_blocklabel_list = revDFS (first_label :: all_labels) []
+(*	   val blocklabel_list = rev rev_blocklabel_list *)
        end
 
        (* Flag: have we gone an entire pass through the function
@@ -139,6 +134,7 @@ struct
 		 if (eqLLabs blk first_label) (* the in_live of the first block never changes *)
 		     then (!in_live)
 		 else Regset.union (use, Regset.difference(out_live', def))
+(*
 	     val _ = (print "reverse_step call on: ";
 		      print (msLoclabel blk); 
 		      print "     and first_label = ";
@@ -148,6 +144,7 @@ struct
 		      print "\nin_live' = ";
 		      Regset.app (fn r => (print (msReg r); print ", ")) use;
 		      print "\n\n")
+*)
 	   in
 	       unchanged := ((!unchanged) andalso 
 			     (Regset.equal(!in_live, in_live')));

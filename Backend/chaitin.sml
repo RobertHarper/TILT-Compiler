@@ -205,9 +205,11 @@ struct
 		     res_pos = res_pos,
 		     C_call = false}
 		 end
-           | (CALL{func = DIRECT (MLE _), args,results, ...}) =>
-	          error "getCallInstRegs: ML extern in call"
-	   | (CALL{func = DIRECT (CE (_,NONE)), args, results, 
+(*           | (CALL{func = DIRECT (MLE _), args,results, ...}) =>
+	          error "getCallInstRegs: ML extern in call" 
+	   | (CALL{func = DIRECT (CE (_,NONE)), args, results,  *)
+	   | (CALL{extern_call = true,
+		   func = DIRECT ((MLE _) | (CE (_,NONE))), args, results,  
 				 argregs, resregs, destroys, ...}) =>
 		  let 
 		    val ACTUALS{args=arg_pos_default,
@@ -387,7 +389,7 @@ struct
 	   fun check_arg (ON_STACK (THIS_FRAME_ARG i)) =
 	              max_on_stack := Int.max (!max_on_stack,i+1)
 	     | check_arg _ = ()
-	   fun expand_call (call as CALL{args,func,results,
+	   fun expand_call (call as CALL{extern_call,args,func,results,
 					  tailcall,destroys,...}) : instruction list =
 	           let val {arg_pos,res_pos,
 			    C_call,regs_destroyed=destroyed_by_call,
@@ -407,13 +409,18 @@ struct
 			   mvlist(map IN_REG args,arg_pos) @
 			   (case func of
 			      DIRECT (I label) => if hasRpv then [BASE(LADDR(Rpv_virt,I label))] else []
-			    | DIRECT (CE (label,NONE)) => if hasRpv then [BASE(LADDR(Rpv_virt,CE (label,NONE)))] 
-							  else []
+(* new code *)           | DIRECT (MLE label) => 
+				  if hasRpv then [BASE(LADDR(Rpv_virt,MLE label))] 
+				  else []
+			    | DIRECT (CE (label,NONE)) =>  
+				  if hasRpv then [BASE(LADDR(Rpv_virt,CE (label,NONE)))] 
+				  else []
 			    | DIRECT (CE (label,SOME sra)) => 
 				if hasRpv then [BASE(LADDR(Rpv_virt,CE (label,SOME sra)))] else []
 			    | INDIRECT reg => [mvregs(reg,Rpv_virt)]
 			    | _ => error "replace_calls: pv move")
-			      @ (BASE(RTL(CALL{func=func,
+			      @ (BASE(RTL(CALL{extern_call = extern_call,
+					       func=func,
 					       args=arg_regs,
 					       results=result_regs,
 					       argregs=SOME arg_regs,
@@ -722,6 +729,18 @@ struct
 	       | allocateInstr (LIVE (live,instr)) next_label =
 	       (case instr of
 		  BASE(ILABEL _) => [instr]
+		| BASE(RTL (JMP(Raddr,rtllabs))) => 
+		      let val fixup_code = map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots
+			  val (def,use) = defUse instr
+			  val {precode, srcmap, dstmap, postcode} = putInRegs use def
+			  val jump_reg = (if isPhysical Raddr then Raddr else 
+					      (case Regmap.find(srcmap,Raddr) of
+						   SOME r => r
+						 | NONE => error "can't translate JMP"))
+			  val mov_instr = BASE(MOVI(jump_reg, Rpv_virt))
+			  val jump_instr = BASE(JSR(false,jump_reg,1,rtllabs))
+		      in  mov_instr :: fixup_code @ [jump_instr]
+		      end
 		  | BASE(RTL (CALL{func, args, results, 
 				   tailcall, ...})) =>
 		    (let val return_label = (case next_label of
@@ -757,7 +776,12 @@ struct
 			    ([BASE(BSR (I label, NONE, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
-			| (DIRECT (CE (label,NONE)), false) =>
+(*			| (DIRECT (MLE _), _) => error "br_instrs: ML extern" *)
+			| (DIRECT (MLE label), false) => 
+			    ([BASE(BSR (MLE label, NONE, no_moddef_info)),
+			      BASE(ILABEL return_label)] @
+			     (std_return_code NONE))
+			| (DIRECT (CE (label,NONE)), false) => 
 			    ([BASE(BSR (CE (label,NONE), NONE, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code NONE))
@@ -765,7 +789,6 @@ struct
 			    ([BASE(BSR (CE (label,SOME sra), SOME sra, no_moddef_info)),
 			      BASE(ILABEL return_label)] @
 			     (std_return_code(SOME sra)))
-			| (DIRECT (MLE _), _) => error "br_instrs: ML extern"
 			| (INDIRECT _, false) =>
 			    ([BASE (JSR(true, Rpv_virt, 1, [])),
 			      BASE(ILABEL return_label)] @
@@ -845,20 +868,20 @@ struct
 		       | BASE(RTL (SAVE_CS _)) => []
 		       | BASE(GC_CALLSITE llabel) => (add_info{label=llabel,live=live}; [])
 		       | BASE(MOVI (src,dest)) =>
-		       let val dest' = getreg_posdead dest
-			 val src' = getreg src
-		       in
-			 case (src',dest') of
-			   (IN_REG r,IN_REG r') => 
-			     if !delete_moves andalso eqRegs r r' 
-			     then []
-			     else [BASE(MOVI(r,r'))]
-		      | (ON_STACK l,IN_REG r') => [pop(r',l)]
-		      | (IN_REG r,ON_STACK l') => [push(r,l')]
-		      | (ON_STACK l,ON_STACK l') =>
-			       [pop(Rat,l),push(Rat,l')]
-		      | _ => error "allocateInstr: MOVI"
-		    end
+		           let val dest' = getreg_posdead dest
+			       val src' = getreg src
+			   in
+			       case (src',dest') of
+				   (IN_REG r,IN_REG r') => 
+				       if !delete_moves andalso eqRegs r r' 
+					   then []
+				       else [BASE(MOVI(r,r'))]
+				 | (ON_STACK l,IN_REG r') => [pop(r',l)]
+				 | (IN_REG r,ON_STACK l') => [push(r,l')]
+				 | (ON_STACK l,ON_STACK l') =>
+					   [pop(Rat,l),push(Rat,l')]
+				 | _ => error "allocateInstr: MOVI"
+			   end
 		 | BASE(MOVF (src,dest)) =>
 		    let val dest' = getreg_posdead dest
 		        val src' = getreg src

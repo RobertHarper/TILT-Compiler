@@ -48,14 +48,15 @@ signature MACHINE =
     datatype call_type = DIRECT of label | INDIRECT of register
     datatype rtl_instruction =
       CALL of 
-      {func: call_type,                  (* label or temp containing addr. *)
+      {extern_call : bool,               (* is this a C call? *)
+       func: call_type,                  (* label or temp containing addr. *)
        args : register list,             (* integer, floating temps *)
        results : register list,          (* integer, floating temps *)
        argregs : register list option,   (* actual registers *)
        resregs : register list option,   (*   "         "    *)
        destroys: register list option,   (*   "         "    *)
        tailcall : bool}
-      
+    | JMP of register * loclabel list
     | RETURN of {results: register list}        (* formals *)
     | SAVE_CS of loclabel
     | HANDLER_ENTRY
