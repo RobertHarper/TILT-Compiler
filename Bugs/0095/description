@@ -1,15 +1,34 @@
 Number: 0095
 Title:       Errno is sometimes clobbered.
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    Runtime
 Submitter:   swasey
 Date:        08/16/02
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of exectution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     CVS
+System:      solaris
+Severity:    minor
+Problem:
+	You will be able to reproduce this bug on cuff if bug number
+	94 has not been fixed.  If bug 94 has been fixed, you will
+	need to arrange for fork to fail somehow.  For example, you
+	could find and use a program that deliberately consumes all
+	virtual memory.
+
+	The problem is that when posix_process_fork fails, it raises a
+	SysErr exception with errno=22 (EINVAL) on Solaris while truss
+	reports that fork1 failed with errno=12 (ENOMEM).
+
+	Hunch: This is due to our use of threads.  Inspect those
+	manual pages.
+
+Code:
+	(*$import Prelude TopLevel POSIX_Process *)
+
+	structure test =
+	struct
+	    val _ = POSIX_Process.fork ()
+	end
+Transcript:
+Comments:
+Fix:
 Owner:
 Status: open
