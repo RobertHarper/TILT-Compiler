@@ -12,7 +12,7 @@ structure Linknil :> LINKNIL  =
     val UptoPhasesplit = Stats.ff("UptoPhasesplit")
     val show_size  = Stats.ff("showSize")   (* show size after each pass *)
     val show_html  = Stats.ff("showHTML")   (* when showing pass results, generate HTML *)
-    val typecheck  = Stats.ff "Typecheck"   (* typecheck after each pass *)
+    val typecheck  = Stats.tt "Typecheck"   (* typecheck after each pass *)
     val measure    = Stats.ff "Measure"     (* measure after each pass *)
     val show       = Stats.ff "ShowNil"     (* show after each pass *)
 
