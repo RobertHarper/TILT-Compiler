@@ -116,8 +116,10 @@ struct
     fun blastOutTag t = NameBlast.blastOutTag (curOut()) t
     fun blastInTag () = NameBlast.blastInTag (curIn())
 
-    fun blastOutPath (PATH (v,ls)) = (blastOutVar v;  blastOutList blastOutLabel ls)
-    fun blastInPath () = PATH(blastInVar(), blastInList blastInLabel)
+    fun blastOutVpath ((v,ls) : vpath) = (blastOutVar v;  blastOutList blastOutLabel ls)
+    fun blastInVpath () : vpath = (blastInVar(), blastInList blastInLabel)
+    fun blastOutPath (PATH vpath) = blastOutVpath vpath
+    fun blastInPath () = PATH (blastInVpath())
 
 	fun blastOutArrow TOTAL = blastOutInt 0
 	  | blastOutArrow PARTIAL = blastOutInt 1
@@ -795,8 +797,6 @@ struct
 		 (tab "    blastInSig\n"; 
 		  case s of
 		 SIGNAT_STRUCTURE sdecs => (blastOutInt 0; blastOutSdecs sdecs)
-	       | SIGNAT_SELF(self, unselfSigOpt, selfSig) => (blastOutInt 1; blastOutPath self; 
-							      blastOutOption blastOutSig unselfSigOpt; blastOutSig selfSig)
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutInt 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
 	       | SIGNAT_VAR v => (blastOutInt 5; blastOutVar v)
@@ -805,7 +805,6 @@ struct
 	and blastInSig () =
 	    (case (blastInInt()) of
 		 0 => SIGNAT_STRUCTURE (blastInSdecs ())
-	       | 1 => SIGNAT_SELF (blastInPath (), blastInOption blastInSig, blastInSig ())
 	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
 	       | 5 => SIGNAT_VAR(blastInVar ())
 	       | 6 => SIGNAT_OF(blastInPath ())
@@ -848,7 +847,7 @@ struct
 
 	fun blastOutFixity Fixity.NONfix = blastOutInt 0
 	  | blastOutFixity (Fixity.INfix (m,n)) = (blastOutInt 1; 
-						      blastOutInt m; blastOutInt n)
+						   blastOutInt m; blastOutInt n)
 	fun blastInFixity () =
 	    if (blastInInt() = 0) 
 		then Fixity.NONfix 
@@ -867,16 +866,15 @@ struct
 	fun blastInOverloadMap () = 
 	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInOvld())
 
+	fun blastOutVarMap vm = 
+	    NameBlast.blastOutVarmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) vm
+	fun blastInVarMap () = 
+	    NameBlast.blastInVarmap int2var (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
 
-	fun blastOutPathMap label_list = 
-	    NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) label_list
-	fun blastInPathMap () = 
-	    NameBlast.blastInPathmap int2var (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
-
-	fun reconstructLabelMap pathMap = 
-	    let fun folder(p,(l,pc),pmap) = Name.LabelMap.insert(pmap,l,(PATH p,pc))
-	    in  Name.PathMap.foldli folder Name.LabelMap.empty pathMap 
-	    end
+	fun blastOutLabelMap lm =
+	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutVpath) lm
+	fun blastInLabelMap () =
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInVpath())	    
 
 	fun blastOutUnresolved unresolved = 
 	    NameBlast.blastOutVarmap (curOut()) (fn _ => blastOutLabel) unresolved
@@ -884,24 +882,25 @@ struct
 	fun blastInUnresolved () : Name.label Name.VarMap.map =
 	    NameBlast.blastInVarmap int2var (curIn()) (fn _ => blastInLabel())
 
-    fun blastOutContext (CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}) = 
+    fun blastOutContext (CONTEXT {varMap, ordering, labelMap, memo, fixityMap, overloadMap}) = 
 	(Blaster.reset();
          local_reset();
          blastOutFixityMap fixityMap;
          blastOutOverloadMap overloadMap;
-	 blastOutPathMap pathMap;
-	 blastOutList blastOutPath ordering)
+	 blastOutLabelMap labelMap;
+	 blastOutVarMap varMap;
+	 blastOutList blastOutVar ordering)
 
     fun blastInContext () = 
-	let val _ = Blaster.reset();
-            val _ = local_reset();
+	let val _ = Blaster.reset()
+            val _ = local_reset()
 	    val fixityMap = blastInFixityMap ()
-	    val overloadMap = blastInOverloadMap()	 
-	    val pathMap = blastInPathMap ()
-	    val ordering = blastInList blastInPath
-	    val labelMap = reconstructLabelMap pathMap
-	in CONTEXT {fixityMap = fixityMap, overloadMap = overloadMap,
-		    labelMap = labelMap, pathMap = pathMap, ordering = ordering}
+	    val overloadMap = blastInOverloadMap()
+	    val labelMap = blastInLabelMap()
+	    val varMap = blastInVarMap ()
+	    val ordering = blastInList blastInVar
+	in CONTEXT {varMap = varMap, ordering = ordering, labelMap = labelMap,
+		    memo = ref Name.VarMap.empty, fixityMap = fixityMap, overloadMap = overloadMap}
 	end
 
     fun blastOutPartialContext (ctxt, unresolved) = 
@@ -982,13 +981,9 @@ struct
 	    end
 
 	fun extend_vm_context (c : context, c' : context, vm, vlist) : vm * var list =
-	    let val ord = Context_Ordering c
-		val ord' = Context_Ordering c'
-		fun getVar(PATH(v,[])) = SOME v
-		  | getVar _ = NONE
-		val vlist = List.mapPartial getVar ord
-		val vlist' = List.mapPartial getVar ord'
-		fun mapper ctxt v = (case Context_Lookup_Var(ctxt,v) of
+	    let val vlist = Context_Ordering c
+		val vlist' = Context_Ordering c'
+		fun mapper ctxt v = (case Context_Lookup_Var_Raw(ctxt,v) of
 					 SOME (l,_) => SOME(l, v)
 				       | NONE => (print "extend_vm_context: could not find var = ";
 						  Ppil.pp_var v; print "\n";
@@ -1013,7 +1008,7 @@ struct
 			else ()
 		fun folder ((l,v), (vm,vlist)) =
 		      case Context_Lookup_Label(c',l) of
-			   SOME(PATH (v',_),_) => (VM.add(v,v',vm), v::vlist)
+			   SOME (PATH(v',_)) => (VM.add(v,v',vm), v::vlist)
 			 | NONE => let val _ = if (!debug)
 						   then (print "label "; Ppil.pp_label l;
 							 print " not found in c'\n")
@@ -1212,8 +1207,6 @@ struct
 	    case (signat,signat') of
 	         (SIGNAT_STRUCTURE sdecs, SIGNAT_STRUCTURE sdecs') =>
 		     eq_sdecs(vm,sdecs,sdecs')
-	       | (SIGNAT_SELF (p1, uso1, s1), SIGNAT_SELF(p2, uso2, s2)) =>
-		  eq_path(vm,p1,p2) andalso eq_opt (fn(a,b) => eq_signat(vm,a,b)) (uso1,uso2) andalso eq_signat(vm,s1,s2)
 	       | (SIGNAT_FUNCTOR(v,signat1,signat2,a), SIGNAT_FUNCTOR(v',signat1',signat2',a')) =>
 		  eq_signat(vm,signat1,signat1') andalso a=a' andalso
 		  eq_signat(VM.add(v,v',vm),signat2,signat2')
@@ -1347,7 +1340,7 @@ struct
 				      print "\n\n")
 			    else ()
 			val res = 
-			    (case (Context_Lookup_Var(c,v), Context_Lookup_Var(c',VM.lookup vm v)) of
+			    (case (Context_Lookup_Var_Raw(c,v), Context_Lookup_Var_Raw(c',VM.lookup vm v)) of
 				 (SOME (_, pc), SOME (_, pc')) => eq_pc(vm,pc,pc')
 			       | _ => false)
 				handle e => (diag "eq_cntxt caught exception\n";
