@@ -395,7 +395,9 @@ struct
     fun check_info_file (eq : equiv, infoFile : string,
 			 current : Info.info) : status =
 	if FileCache.exists infoFile then
-	    check_info (eq, current, FileCache.read_info infoFile)
+	    (case FileCache.read_old_info infoFile
+	       of SOME old => check_info (eq, current, old)
+		| NONE => Bad "bad magic number in info file")
 	else Bad "first compilation"
 
     fun check (eq : equiv, infoFile : string, current : Info.info) : bool =
@@ -423,16 +425,19 @@ struct
 	else FileCache.write_info (infoFile, info)
 
     fun make_precontext (eq : equiv, context : context) : precontext =
-	(Prelink.check (eq, map importEntry context);
-	 map (fn (name, iface) => (name, Paths.ifaceFile iface)) context)
+	map (fn (name, iface) => (name, Paths.ifaceFile iface)) context
 
-    fun plan_srci (equiv, context, imports, iface : Paths.iface) : plan =
+    fun plan_srci (eq : equiv, context, imports, iface : Paths.iface) : plan =
 	let val what = Paths.ifaceName iface
 	    val _ = msg ("[checking interface " ^ what ^ "]\n")
 	    val infoFile = Paths.ifaceInfoFile iface
-	    val precontext = make_precontext (equiv, context)
+	    val precontext = make_precontext (eq, context)
 	    val info = srci_info (precontext, imports, iface)
-	    val uptodate = check (equiv, infoFile, info)
+	    val uptodate = check (eq, infoFile, info)
+	    val _ =
+		if uptodate
+		then Prelink.check (eq, map importEntry context)
+		else ()
 	    val exists = FileCache.exists (Paths.ifaceFile iface)
 	    val plan = if uptodate andalso exists
 		       then (writeInfo (infoFile,info); EMPTY_PLAN)
@@ -441,7 +446,8 @@ struct
 	in  plan
 	end
 
-    fun plan_compile (equiv, context, imports, unit : Paths.compunit) : plan =
+    fun plan_compile (eq : equiv, context, imports,
+		      unit : Paths.compunit) : plan =
 	let val what = Paths.unitName unit
 	    val _ = msg ("[checking unit " ^ what ^ "]\n")
 	    val infoFile = Paths.infoFile unit
@@ -450,11 +456,15 @@ struct
 	    val iface : iface option =
 		if Paths.isUnitIface iface then NONE
 		else SOME (Paths.ifaceFile iface)
-	    val precontext = make_precontext (equiv, context)
+	    val precontext = make_precontext (eq, context)
 	    val info = if Paths.isSrcUnit unit
 		       then srcu_info (precontext, imports, iface, unit)
 		       else Info.PRIMU
-	    val uptodate = check (equiv, infoFile, info)
+	    val uptodate = check (eq, infoFile, info)
+	    val _ =
+		if uptodate
+		then Prelink.check (eq, map importEntry context)
+		else ()
 	    val uptoElaborate = !UptoElaborate
 	    val uptoAsm = !UptoAsm
 	    val keepAsm = !KeepAsm
@@ -530,6 +540,7 @@ struct
 	    val Ucrc = FileCache.crc Uiface
 	    val Icrc = FileCache.crc Iiface
 	    val precontext = make_precontext (eq, context)
+	    val _ = Prelink.check (eq, map importEntry context)
 	    val plan = if eq (Ucrc,Icrc) then EMPTY_PLAN
 		       else CHECK (precontext, U, I)
 	    val _ = showPlan (what, plan)
