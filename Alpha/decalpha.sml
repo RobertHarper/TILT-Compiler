@@ -651,7 +651,7 @@ structure Machine =
 	       val after = freshCodeLabel()
 	   in [SPECIFIC (LOADI (LDA, Rsp, ~sz, Rsp)),
 	       SPECIFIC (LOADI (LDL, Rat, stackLimit_disp, Rth)),
-	       SPECIFIC (INTOP (CMPULE, Rsp, REGop Rat, Rat)),
+	       SPECIFIC (INTOP (CMPULT, Rsp, REGop Rat, Rat)),
 	       SPECIFIC (CBRANCHI (BEQ, Rat, after)),
 	       SPECIFIC (LOADI (LDA, Rsp, sz, Rsp)),	(* Restore stack pointer to original value *)
 	       SPECIFIC (LOADI (LDA, Rat, prevframe_maxoffset, Rzero)),
