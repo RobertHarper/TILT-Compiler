@@ -1,0 +1,16 @@
+Number: 0162
+Title:       Queue.delete is broken.
+Keywords:    SML/NJ library
+Submitter:   swasey
+Date:        03/25/03
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     The helper doFront in ../Basis/Library/fifo.sml:/delete does not filter front elements after the first.  Thus Fifo.delete and Queue.delete with predicate fn _ => true can return non-empty queues.
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: 
+Owner: swasey
+Status: open
