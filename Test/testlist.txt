@@ -1,3 +1,7 @@
 0001	Arithmetic exceptions.
 0002	Top-level types and values, basis structures and sharing.
 0003	Overloading.
+0004	Hello world.
+m0001	Raise uncaught exception.
+m0002	Raise uncaught exception.
+m0003	Type variable syntax.
