@@ -4,8 +4,6 @@
  * ========================================================================= *)
 
 functor BasicBlock(
-	  structure IntMap:	  ORD_MAP where type Key.ord_key = int
-	  structure IntSet:	  ORD_SET where type Key.ord_key = int
 	  structure MLRISCPseudo: MLRISC_PSEUDO
 	  structure MLTreeExtra:  MLTREE_EXTRA
 
@@ -16,6 +14,9 @@ functor BasicBlock(
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure IntMap = IntBinaryMap
+  structure IntSet = DenseIntSet
 
   structure MLTree = MLTreeExtra.MLTree
 
