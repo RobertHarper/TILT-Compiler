@@ -160,7 +160,18 @@ structure NiltoLil :> NILTOLIL =
 	end
       fun wrap_with_globals p = P.bind (!globals) (fn () => p)
     end
-      
+    local 
+      val data : Lil.data list ref = ref []
+      fun add_data d = data := d :: !data
+    in
+      fun add_dtuple (l,c,q,svs) = add_data (Lil.Dtuple (l,c,q,svs))
+      fun add_dboxed (l,sv)    = add_data (Lil.Dboxed (l,sv))
+      fun add_darray (l,sz,t,sv) = add_data (Lil.Darray (l,sz,t,sv))
+      fun add_dcode (l,f)      = add_data (Lil.Dcode (l,f))
+      fun get_data () = rev (!data)
+      fun reset_data () = data := []
+    end
+
     fun new_rep_var env v = 
       let 
 	val new_var = Name.fresh_named_var ((Name.var2string v)^"_rep")
@@ -220,6 +231,7 @@ structure NiltoLil :> NILTOLIL =
       end
     
     fun find_type (Env {D,...}) a = ((NC.find_con (D,a)) handle NC.Unbound => error ("Unbound NIL con variable: "^(Name.var2string a)))
+    fun find_labelled_var (Env {D,...}) a = NC.find_labelled_var (D,a)
     fun add_type env (x,t) = set_ctx env (NC.insert_con (get_ctx env,x,t))
     fun add_type_list env xts = set_ctx env (NC.insert_con_list (get_ctx env,xts))
 
@@ -878,10 +890,10 @@ structure NiltoLil :> NILTOLIL =
 		let
 		  val svs = Array.foldr (op ::) nil v
 		  val svs = map (sv32_trans' env) svs
-		  val args = map Lil.arg32 svs
 		  val c = ttrans env con
-		in
-		  (Lil.Const_32 (Prim.vector (c, Array.fromList args)),Nil.Prim_c (Nil.Vector_c ,[con]))
+		  val l = Name.fresh_internal_label "vec_const"
+		  val () = add_darray (l,Lil.B4,c,svs)
+		in (Lil.Label l,Nil.Prim_c (Nil.Vector_c ,[con]))
 		end
 	       | _ => (print "ERROR: ";
 		       Ppnil.pp_exp e;
@@ -1183,14 +1195,12 @@ structure NiltoLil :> NILTOLIL =
       end
     and allprim32_trans (env : env) (prim,cons,exps) : (Lil.op32 P.pexp * Nil.con) = 
       let
+
 	fun tag2nilbool rtype (sv : Lil.sv32) : Lil.op32 = 
 	  let
-	    val t = get_global env "true"
-	    val f = get_global env "false"
-	  in Lil.Switch (Lil.Ifthenelse {arg = Lil.Exp_cc (Lil.mk_exp (Lil.Val32_e sv)),
-					 thenArm = Lil.mk_exp (Lil.Val32_e t),
-					 elseArm = Lil.mk_exp (Lil.Val32_e f),
-					 rtype = rtype})
+	    val bool_in = get_global env "bool_in"
+	    val sv = LD.Q.coerce bool_in sv
+	  in Lil.Val sv
 	  end
 
 	fun tonilbool (op32,rtype) = 
@@ -1738,6 +1748,30 @@ structure NiltoLil :> NILTOLIL =
 	val e = P.SV32.from_op e
       in e
       end
+    fun trans_nil_bool_in env = fn () =>
+      let
+
+	val unitlab = Name.to_unit(Name.internal_label "Firstlude")
+	val (unit_c, unit_r) = Name.make_cr_labels unitlab
+	val bool_in_lab = Name.to_coercion (Name.internal_label ("bool_in"))
+	val bool_mod = Name.to_open (Name.internal_label "_bool")
+
+	val rv = find_labelled_var env unit_r
+	val cv = find_labelled_var env unit_c
+		  
+	val mod_var = Name.fresh_named_var "bool_mod"
+	val coercion_var = Name.fresh_named_var "bool_in"
+		  
+	val mod_exp = Nil.Prim_e (Nil.NilPrimOp (Nil.select bool_mod),[],[],[Nil.Var_e rv])
+	val coercion_exp = Nil.Prim_e (Nil.NilPrimOp (Nil.select bool_in_lab),[],[],[Nil.Var_e mod_var])
+	val bnds = [Nil.Exp_b(mod_var,Nil.TraceKnown TraceInfo.Trace,mod_exp),
+		    Nil.Exp_b(coercion_var,Nil.TraceKnown TraceInfo.Notrace_Int,coercion_exp)
+		    ]
+	val e = Nil.Let_e (Nil.Sequential,bnds,Nil.Var_e coercion_var)
+	val (e,_) = exp32_trans env e
+      in P.SV32.from_op e
+      end
+
     fun add_globals env = 
       let
 	val env = add_global env ("vararg",TD.mk_vararg_fn)
@@ -1746,6 +1780,7 @@ structure NiltoLil :> NILTOLIL =
 	val env = add_global env ("inject_dyn",TD.mk_inject_dynamic_fn)
 	val env = add_global env ("true",  trans_nil_bool env true)
 	val env = add_global env ("false", trans_nil_bool env false)
+	val env = add_global env ("bool_in", trans_nil_bool_in env)
       in env
       end
 
@@ -1765,6 +1800,7 @@ structure NiltoLil :> NILTOLIL =
       let
 
 	val () = reset_globals ()
+	val () = reset_data()
 	val env = new_env module
 	val (timports,tlam,vlam) = modfuns module
 
@@ -1866,9 +1902,11 @@ structure NiltoLil :> NILTOLIL =
 
 	val _ = chat 1 "  Finished translation to LIL\n"
 
+	val data = get_data ()
 	val () = reset_globals ()
+	val () = reset_data ()
       in Lil.MODULE {timports = targs,
-		     data   = [],
+		     data   = data,
 		     confun = tfun,
 		     expfun = exp}
       end

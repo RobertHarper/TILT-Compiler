@@ -1131,6 +1131,13 @@ structure LilTypecheck :> LILTYPECHECK =
 		 val () = LO.app2 (fn (sv,t) => E.sv32check env sv t "Dtuple: bad field") (svs,ts)
 	       in ()
 	       end
+	      | Darray (l,sz,t,svs) => 
+	       let
+		 val () = T.check32 env t "Darray: bad type"
+		 val () = app (fn sv => E.sv32check env sv t "Darray: bad elt") svs
+	       in ()
+	       end
+	
 	      | Dcode (l,f) => 
 	       let
 		 val fvar = Name.fresh_named_var (Name.label2name l)
@@ -1140,6 +1147,7 @@ structure LilTypecheck :> LILTYPECHECK =
 	fun add_dtype (d,env) = 
 	  (case d
 	     of Dboxed (l,sv64) => bind_label(env,(l,LD.T.ptr (LD.T.boxed_float())))
+	      | Darray (l,sz,t,svs) => bind_label (env,(l,LD.T.ptr (LD.T.array sz t)))
 	      | Dtuple (l,t,qs,svs) => bind_label(env,(l,t))
 	      | Dcode (l,f) => bind_label(env,(l,Synth.Typeof.code f)))
 

@@ -206,6 +206,9 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	fun exp_var32_bind (ENV{state,ctxt,csubst},(var,con)) = ENV{state = State.add_boundvar32 (state,var),
 								    ctxt = LC.bind_var32 (ctxt,(var,con)),
 								    csubst = csubst}
+	fun exp_label_bind (ENV{state,ctxt,csubst},(label,con)) = ENV{state = state,
+								      ctxt = LC.bind_label (ctxt,(label,con)),
+								      csubst = csubst}
 	fun exp_var64_bind (ENV{state,ctxt,csubst},(var,con)) = ENV{state = State.add_boundvar64 (state,var),
 								    ctxt = LC.bind_var64 (ctxt,(var,con)),
 								    csubst = csubst}
@@ -815,6 +818,64 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	      | Or_cc (cc1,cc2) => findfv_cc env (findfv_cc env frees cc1) cc2
 	      | Not_cc cc => findfv_cc env frees cc)
 
+
+	fun findfv_code env 
+	  (Function {tFormals    : (var * kind) list,
+		     eFormals    : (var * con) list,
+		     fFormals    : (var * con) list,
+		     rtype       : con,
+		     body        : exp}) = 
+	  let 
+	    val frees = Frees.empty_frees
+	    val env = con_var_list_bind  (env, tFormals)
+	    val (env,frees) = findvc32list env frees eFormals
+	    val (env,frees) = findvc64list env frees fFormals
+	    val frees = findfv_con env frees rtype
+	    val frees = findfv_exp env frees body
+	  in ()
+	  end
+
+
+	fun findfv_datum env d = 
+	  (case d
+	     of Dboxed (l,sv64) => 
+	       let
+		 val frees = findfv_sv64 env Frees.empty_frees sv64
+	       in ()
+	       end
+	      | Dtuple (l,t,q,svs) => 
+	       let
+		 val _ = findfv_con env 
+		 val _ = Util.mapopt (findfv_sv32 env Frees.empty_frees) q
+		 val () = app (fn sv => ignore (findfv_sv32 env Frees.empty_frees sv)) svs
+	       in ()
+	       end
+	      | Darray (l,sz,t,svs) => 
+	       let 
+		 val _ = findfv_con env Frees.empty_frees t
+		 val () = app (fn sv => ignore(findfv_sv32 env Frees.empty_frees sv)) svs
+	       in ()
+	       end    
+	      | Dcode (l,f) => 
+	       let
+		 val () = findfv_code env f
+	       in ()
+	       end)
+
+	fun findfv_data env data = 
+	  let
+	    fun add_dtype (d,env) = 
+	      (case d
+		 of Dboxed (l,sv64) => exp_label_bind(env,(l,LD.T.ptr (LD.T.boxed_float())))
+		  | Dtuple (l,t,qs,svs) => exp_label_bind(env,(l,t))
+		  | Darray (l,sz,c,svs) => exp_label_bind (env,(l,LD.T.ptr (LD.T.array sz c)))
+		  | Dcode (l,f) => exp_label_bind(env,(l,Typeof.code f)))
+	    val env = foldl add_dtype env data
+	    val data = app (findfv_datum env) data
+	  in env
+	  end
+
+
         (* ------- compute the final free-variable list by closing over the callgraph ------ *)
 
         (* close_fun : fid * (fid VarSet.set) -> fid VarSet.set *)
@@ -872,11 +933,15 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	    val _ = Global.reset ()
 
 	    val env = initial_env top_fid
+
 	    val env = 
 	      if !do_con_globals then 
 		foldl (fn (vk,env) => con_gvar_bind(env,vk)) env timports
 	      else
 		con_var_list_bind(env,timports)
+
+	    val env = findfv_data env data
+
 	    val _ = findfv_exp env Frees.empty_frees expfun
 	      
 	    val _ = chat 1 "  Computing transitive closure of close funs\n"

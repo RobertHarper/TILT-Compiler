@@ -446,6 +446,13 @@ struct
 	 of (Exp32_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
 	  | (Exp64_b(v,e)) => if is_used_var(state,v) then SOME bnd else NONE
 	  | (Unpack_b (a,x,sv)) => if is_used_var(state,x) orelse is_used_var(state,a) then SOME bnd else NONE
+	  | (Fixcode_b vflist) => 
+	   let
+	     val vflist = List.filter (fn (v,f) => is_used_var (state,v)) vflist
+	   in case vflist 
+		of [] => NONE
+		 | _ => SOME (Fixcode_b vflist)
+	   end
 	  | _ => SOME bnd  (* We could eliminate these, but it's a but more subtle than
 			    * I want to do right now.  Note that redundant refinements
 			    * get eliminated anyway.
@@ -486,6 +493,7 @@ struct
     fun do_vc ((v,c),state) = 
       let
 	val c = do_con state c
+	val state = add_var(state,v)
       in ((v,c),bind_var32(state,(v,c)))
       end
 
@@ -494,6 +502,7 @@ struct
     fun do_vc64 ((v,c),state) = 
       let
 	val c = do_con state c
+	val state = add_var(state,v)
       in ((v,c),bind_var64(state,(v,c)))
       end
 
@@ -694,23 +703,28 @@ struct
 	    | _ => (use_var(state,v); sv))
 	    | Const_64 v => sv)
 
-    and do_op32 (state : state) (oper : op32) : op32 P.pexp = 
+    (* Some operations may result in new bindings in the context *)
+    and do_op32 (state : state) (oper : op32) : (op32 P.pexp * state) = 
       (case oper
-	 of Val sv => P.ret (Val (do_sv32 state sv))
-	  | Prim32 args => P.ret(do_prim32 state args)
-	  | LilPrimOp32 args => P.ret(do_lilprim32 state args)
-	  | Switch sw => do_switch state sw
+	 of Switch sw => do_switch state sw
+	  | _ => (P.ret (do_op32_small state oper),state))
+    and do_op32_small (state : state) (oper : op32) : op32 = 
+      (case oper
+	 of Val sv => Val (do_sv32 state sv)
+	  | Prim32 args => do_prim32 state args
+	  | LilPrimOp32 args => do_lilprim32 state args
+	  | Switch sw => error "Impossible"
 	  | ExternApp(f,sv32s,sv64s) =>
-	   P.ret(ExternApp(do_sv32 state f, map (do_sv32 state) sv32s, map (do_sv64 state) sv64s))
+	   ExternApp(do_sv32 state f, map (do_sv32 state) sv32s, map (do_sv64 state) sv64s)
 	  | App(f,elist,eflist) =>
-	   P.ret(App(do_sv32 state f,
-		     map (do_sv32 state) elist,
-		     map (do_sv64 state) eflist))
+	   App(do_sv32 state f,
+	       map (do_sv32 state) elist,
+	       map (do_sv64 state) eflist)
 	  | Call(f,elist,eflist) =>
-	   P.ret(Call(do_sv32 state f,
-		      map (do_sv32 state) elist,
-		      map (do_sv64 state) eflist))
-	  | Raise (c,sv) => P.ret(Raise(do_con state c,do_sv32 state sv))
+	   Call(do_sv32 state f,
+		map (do_sv32 state) elist,
+		map (do_sv64 state) eflist)
+	  | Raise (c,sv) => Raise(do_con state c,do_sv32 state sv)
 	  | Handle (result_type,body,(bound,handler)) => 
 	   let 
 	     val body = do_exp' state body
@@ -718,7 +732,7 @@ struct
 	     val (_,state) = do_vc ((bound,LD.T.exn()),state)
 	     val handler = do_exp' state handler
 	   in  
-	     P.ret(Handle (result_type,body,(bound,handler)))
+	     Handle (result_type,body,(bound,handler))
 	   end)
 
     and do_op64 (state : state) (oper : op64) : op64 = 
@@ -782,15 +796,15 @@ struct
 	    val arms = map do_arm arms
 	    val default = Util.mapopt (do_exp' state) default
 	  in  
-	    P.ret(Switch(Sumcase {arg=arg,
-				  arms=arms,
-				  default=default,
-				  rtype = rtype}))
+	    (P.ret(Switch(Sumcase {arg=arg,
+				   arms=arms,
+				   default=default,
+				   rtype = rtype})),state)
 	  end
 
       in
 	case (reduce_known_switch sw)
-	  of SOME exp => do_exp state exp
+	  of SOME exp => do_exp_state state exp
 	   | NONE => sum_switch sw
       end
     and do_ifthenelse state {arg,thenArm,elseArm,rtype} =
@@ -802,20 +816,20 @@ struct
 	    val thenArm = do_exp' state thenArm
 	    val elseArm = do_exp' state elseArm
 	    val rtype = do_con state rtype
-	  in P.ret (Switch(Ifthenelse{arg=arg,thenArm=thenArm,elseArm=elseArm,rtype=rtype}))
+	  in (P.ret (Switch(Ifthenelse{arg=arg,thenArm=thenArm,elseArm=elseArm,rtype=rtype})),state)
 	  end
 
       in 
 	case arg
 	  of Exp_cc e => 
 	    (case lilboolexp2bool state e
-	       of SOME true => do_exp state thenArm
-		| SOME false => do_exp state elseArm
+	       of SOME true => do_exp_state state thenArm
+		| SOME false => do_exp_state state elseArm
 		| NONE => default())
 	   | _ => default()
       end
 	    
-    and do_switch (state : state) (switch : switch) : op32 P.pexp = 
+    and do_switch (state : state) (switch : switch) : (op32 P.pexp * state)= 
       let 
 	
 	fun int_switch {arg,arms,default,rtype} =
@@ -831,17 +845,17 @@ struct
 		      SOME arm => arm
 		    | NONE => default
 		in
-		  do_exp state arm
+		  do_exp_state state arm
 		end
 	       | arg =>
 		let
 		  val rtype = do_con state rtype
 		  val arms = LO.map_second (do_exp' state) arms
 		  val default = do_exp' state default
-		in  P.ret(Switch(Intcase {arg=arg, 
-					  arms=arms,
-					  default=default,
-					  rtype=rtype}))
+		in  (P.ret(Switch(Intcase {arg=arg, 
+					   arms=arms,
+					   default=default,
+					   rtype=rtype})),state)
 		end
 	  end
 	fun sumsw_to_if {arg,arms,default,rtype} =
@@ -891,10 +905,10 @@ struct
 		end
 	      val arms = map do_arm arms
 	      val default = do_exp' state default
-	    in  P.ret(Switch(Dyncase {arg=arg,
-				      arms=arms,
-				      default=default,
-				      rtype = rtype}))
+	    in  (P.ret(Switch(Dyncase {arg=arg,
+				       arms=arms,
+				       default=default,
+				       rtype = rtype})),state)
 	    end
 	   | Ifthenelse ifte => do_ifthenelse state ifte
       end
@@ -1026,8 +1040,7 @@ struct
 	    let
 	      val state = add_var(state,v)
 	      val state' = enter_var(state,v)
-	      val oper = do_op32 state' oper
-	      val state = pexp_define(state,oper)
+	      val (oper,state) = do_op32 state' oper
 	    in P.bind oper
 	      (fn oper =>
 	       let
@@ -1114,9 +1127,8 @@ struct
 	   | Fixcode_b vfset => 
 	    let 
 	      val vflist = Sequence.toList vfset
-	      fun folder ((v,f),state) = bind_var32(state,(v,Typeof.function f))
+	      fun folder ((v,f),state) = add_var(bind_var32(state,(v,Typeof.function f)),v)
 	      val state = foldl folder state vflist
-	      val state = foldl (fn ((v,_),state) => add_var(state,v)) state vflist
 	      val vflist = map (do_function state) vflist
 	    in
 	      (case vflist
@@ -1164,6 +1176,16 @@ struct
 		 | NONE => 
 		  let
 		    val state = unpack_define (state,(a,x,sv)) 
+		    val state = 
+		      (case sv
+			 of Var_32 v => 
+			   let
+			     val tas = typeof_sv32 (state,sv)
+			     val thiding  = mk_con (Var_c a)
+			   in
+			     add_alias(state,v,MUST32(LD.E.pack' tas thiding (Var_32 x)))
+			   end
+			  | _ => state)
 		  in P.Bind.unpack' (a,x) (P.ret sv) (P.ret state)
 		  end
 	    end
@@ -1228,6 +1250,7 @@ struct
       (case d
 	 of Dboxed (l,sv64) => Dboxed (l,do_sv64 state sv64)
 	  | Dtuple (l,t,q,svs) => Dtuple (l,do_con state t,Util.mapopt (do_sv32 state) q,map (do_sv32 state) svs)
+	  | Darray (l,sz,t,svs) => Darray (l,sz,do_con state t,map (do_sv32 state) svs)
 	  | Dcode (l,f) => 
 	   let
 	     val fvar = Name.fresh_named_var (Name.label2name l)
@@ -1242,6 +1265,7 @@ struct
 	  (case d
 	     of Dboxed (l,sv64) => bind_label(state,(l,LD.T.ptr (LD.T.boxed_float())))
 	      | Dtuple (l,t,qs,svs) => bind_label(state,(l,t))
+	      | Darray (l,sz,c,svs) => bind_label (state,(l,LD.T.ptr (LD.T.array sz c)))
 	      | Dcode (l,f) => bind_label(state,(l,Typeof.code f)))
 	val state = foldl add_dtype state data
 	val data = map (do_datum state) data

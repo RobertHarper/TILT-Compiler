@@ -164,7 +164,7 @@ structure Lil :> LIL =
     (* Invariant: data is closed *)
     datatype data = 
       Dboxed of label * sv64 
-(*      | Darray of label * con * sv32 list*)
+      | Darray of label * size * con * sv32 list
       | Dtuple of label * con * sv32 option * sv32 list  (* l : c = sv @ <svs> *)
       | Dcode of label * function
       

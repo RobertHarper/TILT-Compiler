@@ -78,23 +78,25 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 	  interpr_tuple_case c
 	else 
 	  (case (Dec.C.inj' c,!simplify)
-	     of (SOME _,true) => interpr_tuple c
+	     of (SOME _,true) => interpr_tuple_case c
 	      | _ => LD.C.app (interpr_tuple_fn ()) c)
 	     
       fun interpr (c : Lil.con) : Lil.con = LD.T.ptr (interpr_tuple c)
+
+      fun interp_ptr_case (c : Lil.con) : Lil.con = 
+	LD.T.ptr (LD.C.sumcase c [ (Tupleidx,fn l => interpr_tuple l),
+				  (BFloatidx,fn _ => LD.T.boxed_float ()),
+				  (Ptridx,fn t => t),
+				  (Otheridx,fn t => (LD.T.boxed B4 t))
+				  ] NONE)
 
       fun interp_case (c : Lil.con) : Lil.con = 
 	LD.C.sumcase c
 	[ 
 	 (Otheridx,fn t => t)
 	 ] 
-	(SOME(LD.T.ptr (LD.C.sumcase c [ 
-					(Tupleidx,fn l => interpr_tuple l),
-					(BFloatidx,fn _ => LD.T.boxed_float ()),
-					(Ptridx,fn t => t),
-					(Otheridx,fn t => (LD.T.boxed B4 t))
-					] NONE)))
-				      
+	(SOME(interp_ptr_case c))
+	
 
 
       fun interp_fn () = 
@@ -115,6 +117,7 @@ structure TranslationDefs :> TRANSLATIONDEFS =
     in
       val Tmilr = Tmilr
       val Tmil = Tmil
+      val interp_ptr_case = interp_ptr_case
       val interpr = interpr
       val interp = interp
 
@@ -233,11 +236,15 @@ structure TranslationDefs :> TRANSLATIONDEFS =
 *)
       fun Array arg = 
 	let
-	  val Tuplea = fn a => LD.T.array Lil.B4 (interpr a)
+	  val BFloata = fn _ => LD.T.array Lil.B8 (LD.T.float())
+(*	  val Tuplea = fn a => LD.T.array Lil.B4 (interpr a)
 	  val BFloata = fn _ => LD.T.array Lil.B8 (LD.T.float())
 	  val Ptra = fn t => LD.T.array Lil.B4 (LD.T.ptr t)
-	  val Otherwisea = fn t => LD.T.array Lil.B4 t
-	in LD.C.sumcase arg [(Tupleidx,Tuplea),(BFloatidx,BFloata),(Ptridx,Ptra),(Otheridx,Otherwisea)] NONE
+	  val Otherwisea = fn t => LD.T.array Lil.B4 t*)
+	in (*LD.C.sumcase arg [(Tupleidx,Tuplea),(BFloatidx,BFloata),(Ptridx,Ptra),(Otheridx,Otherwisea)] NONE*)
+	  LD.C.sumcase arg 
+	  [(BFloatidx,BFloata)] 
+	  (SOME (LD.T.array Lil.B4 (interp arg)))
 	end
       fun Arrayptr arg = LD.T.ptr (Array arg)
     end

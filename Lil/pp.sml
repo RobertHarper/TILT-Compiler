@@ -562,6 +562,16 @@ structure PpLil :> PPLIL =
 
     fun pp_bnds bnds = pp_list pp_bnd bnds ("[",",","]",true)
     fun pp_data d = 
+      let
+	fun pp_char sv = 
+	  (case sv
+	     of Const_32 (Prim.uint(W8,c)) => 
+	       let val c = chr(TilWord64.toInt c)
+	       in  if (c = #"\n") then String ("\\n") else String (Char.toString c)
+	       end
+	      | _ => error "bad vector value: corrupt string")
+		
+      in 
       (case d
 	 of Dboxed (l,sv) => HOVbox[pp_label l,String " = ",Break0 0 2,pp_sv64 sv]
 	  | Dtuple (l,c,qopt,svs) => 
@@ -569,8 +579,13 @@ structure PpLil :> PPLIL =
 		  (case qopt of SOME sv => pp_sv32 sv | NONE => String ""),Break,
 		     String "@",Break,
 		     pp_list pp_sv32 svs ("<",",",">",false)]
-	  | Dcode (l,f) => HOVbox[pp_label l,String " = ",Break0 0 2,pp_function f])
 
+	  | Darray (l,sz,c,svs) => 
+	   HOVbox[pp_label l, String ":",Break0 0 2,pp_con c,String " = ",Break0 0 2,
+		     pp_list pp_char svs ("\"","","\"",false)]
+
+	  | Dcode (l,f) => HOVbox[pp_label l,String " = ",Break0 0 2,pp_function f])
+      end
     fun pp_datalist ds = pp_list pp_data ds ("",",","",true)
 
     fun pp_module (MODULE{timports,data,confun,expfun}) = 

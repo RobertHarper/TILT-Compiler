@@ -119,6 +119,9 @@ structure LilClosure :> LILCLOSURE =
     fun flip (a,b) = (b,a)
 
 
+    datatype dcall = 
+      DCALL of {code : sv32,venv : sv32} 
+      | FLATCALL of {code : sv32, sv32s : sv32 list, sv64s : sv64 list}
     (* info : the results of the closure_analyze pass
      * dcalls : a mapping from the original function name to it's codeptr and value environment
      *          so that we can catch direct calls here instead of waiting for the (non-existent)
@@ -131,7 +134,7 @@ structure LilClosure :> LILCLOSURE =
      * subst : a mapping from old variables to new things
      *)
     datatype env = ENV of {info    : CA.funentry VarMap.map,
-			   dcalls  : {code : sv32,venv : sv32} VarMap.map,
+			   dcalls  : dcall VarMap.map,
 			   globals : label VarMap.map,
 			   curfid  : var list,
 			   context : LilContext.context, 
@@ -145,7 +148,7 @@ structure LilClosure :> LILCLOSURE =
     fun copy_env (env as ENV{info,globals,dcalls,curfid,context,subst},fid) = 
       ENV{info=info,
 	  globals = globals,
-	  dcalls = VarMap.filteri (fn (v,_) => is_global env v) dcalls,
+	  dcalls = dcalls (*VarMap.filteri (fn (v,_) => is_global env v) dcalls*),
 	  curfid = fid::curfid,context=context,
 	  subst = subst}
 
@@ -190,7 +193,14 @@ structure LilClosure :> LILCLOSURE =
     fun add_dcall (ENV{info,globals,dcalls,curfid,context,subst},fid,codeptr,venv) = 
       ENV{info=info,
 	  globals = globals,
-	  dcalls = VarMap.insert (dcalls,fid,{code=codeptr,venv=venv}),
+	  dcalls = VarMap.insert (dcalls,fid,DCALL {code=codeptr,venv=venv}),
+	  curfid = curfid,context=context,
+	  subst = subst}
+
+    fun add_flatcall (ENV{info,globals,dcalls,curfid,context,subst},fid,codeptr,sv32s,sv64s) = 
+      ENV{info=info,
+	  globals = globals,
+	  dcalls = VarMap.insert (dcalls,fid,FLATCALL{code=codeptr,sv32s = sv32s, sv64s = sv64s}),
 	  curfid = curfid,context=context,
 	  subst = subst}
 
@@ -299,6 +309,29 @@ structure LilClosure :> LILCLOSURE =
 	    val v' = Name.derived_var v
 	    val _ = debugdo(5,fn () => (print "Renaming cvar: ";PpLil.pp_var v;print " -> ";PpLil.pp_var v';print "\n"))
 	  in (v',cvarrename (env,v,v'))
+	  end
+      in LO.foldl_acc folder env cvars
+      end
+
+
+    fun vars32rename env cvars = 
+      let 
+	fun folder (v,env) = 
+	  let 
+	    val v' = Name.derived_var v
+	    val _ = debugdo(5,fn () => (print "Renaming var32: ";PpLil.pp_var v;print " -> ";PpLil.pp_var v';print "\n"))
+	  in (v',sv32rename (env,v,v'))
+	  end
+      in LO.foldl_acc folder env cvars
+      end
+
+    fun vars64rename env cvars = 
+      let 
+	fun folder (v,env) = 
+	  let 
+	    val v' = Name.derived_var v
+	    val _ = debugdo(5,fn () => (print "Renaming var32: ";PpLil.pp_var v;print " -> ";PpLil.pp_var v';print "\n"))
+	  in (v',sv64rename (env,v,v'))
 	  end
       in LO.foldl_acc folder env cvars
       end
@@ -693,6 +726,24 @@ structure LilClosure :> LILCLOSURE =
 	  in bnds_env
 	  end
 
+
+	fun build_flatcall (fname,env) = 
+	  let
+	    val _ = chat 4 ("Adding flatcall for: "^(Name.var2string fname)^"\n")
+	    val {cvars,vars32,vars64} = get_frees env fname
+	    val cvars  = VarSet.listItems cvars
+	    val vars32 = VarSet.listItems vars32
+	    val vars64 = VarSet.listItems vars64
+	    val code_lbl = get_code_lbl env fname
+	    val codeptr = rewrite_sv32 env (Label code_lbl)
+	    val codeptr = LD.E.nary_tapp' (build_cenv env cvars) codeptr
+	    val sv64s = map ((rewrite_sv64 env) o Var_64) vars64 
+	    val sv32s = map ((rewrite_sv32 env) o Var_32) vars32
+
+	  in add_flatcall(env,fname,codeptr,sv32s,sv64s)
+	  end
+      
+	fun build_flatcalls env fvars = foldl build_flatcall env fvars
       
 	fun build_closure ((fname,fclos_type),env) = 
 	  let
@@ -781,11 +832,11 @@ structure LilClosure :> LILCLOSURE =
 	  end
 
 
-	fun rewrite_function fvars env (fname,Function {tFormals    : (var * kind) list,
-							eFormals    : (var * con) list,
-							fFormals    : (var * con) list,
-							rtype       : con,
-							body        : exp}) = 
+	fun rewrite_function_escape fvars env (fname,Function {tFormals    : (var * kind) list,
+							       eFormals    : (var * con) list,
+							       fFormals    : (var * con) list,
+							       rtype       : con,
+							       body        : exp}) = 
 	  let
 	    val _ = chat 4 ("Rewriting function: "^(Name.var2string fname)^"\n")
 	    val env = copy_env (env,fname)
@@ -837,33 +888,102 @@ structure LilClosure :> LILCLOSURE =
 	    val _ = chat 4 ("Done rewriting function: "^(Name.var2string fname)^"\n")
 	  in ()
 	  end
+
+	(* Call this function if no function in the nest escapes.  
+	 *)
+	fun rewrite_function_nonescape env (fname,Function {tFormals    : (var * kind) list,
+								  eFormals    : (var * con) list,
+								  fFormals    : (var * con) list,
+								  rtype       : con,
+								  body        : exp}) = 
+	  let
+	    val _ = chat 4 ("Rewriting non-escaping function: "^(Name.var2string fname)^"\n")
+	    val env = copy_env (env,fname)
+	    val {cvars=cvars_set,vars32=vars32_set,vars64=vars64_set} = get_frees env fname
+	    val cvars  = VarSet.listItems cvars_set
+	    val vars32 = VarSet.listItems vars32_set
+	    val vars64 = VarSet.listItems vars64_set
+	    val cenv_kinds = build_cenv_kinds env cvars
+	    val (cvars,env) = cvarsrename env cvars 
+	    val (tvars,tkinds) = LO.unzip tFormals
+	    val (tvars,env) = cvarsrename env tvars
+	    val tFormals = (LO.zip cvars cenv_kinds)@(LO.zip tvars tkinds)
+	    val env = con_vars_bind (env,tFormals)
+	      
+	    val vars32_types = map (find_var32 env) vars32
+	    val vars64_types = map (find_var64 env) vars64
+
+	    val (vars32,env) = vars32rename env vars32
+	    val (vars64,env) = vars64rename env vars64
+
+	    val eFormals = map_second (rewrite_con env) eFormals
+	    val eFormals = (LO.zip vars32 vars32_types)@eFormals
+	    val fFormals = map_second (rewrite_con env) fFormals
+	    val fFormals = (LO.zip vars64 vars64_types)@fFormals
+
+	    val env = exp_var32s_bind (env,eFormals)
+	    val env = exp_var64s_bind (env,fFormals)
+
+	    val rtype = rewrite_con env rtype
+	      
+	    val () = chat 4 ("Rewriting function body\n")
+	    val body = rewrite_exp env body
+	      
+	    val code_fun = Function{tFormals=tFormals,
+				    eFormals=eFormals,
+				    fFormals=fFormals,
+				    rtype = rtype,
+				    body = body}
+	    val lbl = get_code_lbl env fname
+	    val _ = add_dcode (lbl,code_fun)
+	    val _ = chat 4 ("Done rewriting function: "^(Name.var2string fname)^"\n")
+	  in ()
+	  end
 	
 	val vftypes = LO.map_second S.Typeof.function vfs
 	val fvars = map #1 vfs
 
+	val escape = List.exists (get_escape env) fvars
 
 	val () = chat 3 ("Working on function nest: ")
 	val () = if chatp 3 then PpLil.pp_list PpLil.pp_var' fvars ("<",",",">",false) else ()
 	val () = chat 3 "\n"
-	val () = chat 3 ("Rewriting function types to closure types\n")
-	val vfclosure_types = LO.map_second (rewrite_con env) vftypes
-	val () = chat 3 ("Rewriting function types to code types\n")
-	val code_vftypes = map (build_code_type env) vfs
+	val bnds_env = 
+	  if escape then
+	    let
+	      val () = chat 3 ("Rewriting function types to closure types\n")
+	      val vfclosure_types = LO.map_second (rewrite_con env) vftypes
+	      val () = chat 3 ("Rewriting function types to code types\n")
+	      val code_vftypes = map (build_code_type env) vfs
+		
+	      val env = exp_var32s_bind (env,vfclosure_types)
+	      val env = exp_labels_bind (env,code_vftypes)
 
-	val env = exp_var32s_bind (env,vfclosure_types)
-	val env = exp_labels_bind (env,code_vftypes)
 
+	      val () = chat 3 ("Rewriting functions\n")
+	      val () = app (rewrite_function_escape fvars env) vfs
 
-	val () = chat 3 ("Rewriting functions\n")
-	val () = app (rewrite_function fvars env) vfs
+	      val () = chat 3 ("Rewriting closures\n")
+	      (* XXX: I think all of the functions should share the same venv under this 
+	       * strategy.  We may wish to catch this here.
+	       *)
+	      val bnds_env : env P.pexp = 
+		P.List.foldl_from_list build_closure env vfclosure_types
+	    in bnds_env
+	    end
+	  else
+	    let
+	      val () = chat 3 ("Rewriting function types to code types\n")
+	      val code_vftypes = map (build_code_type env) vfs
+		
+	      val env = exp_labels_bind (env,code_vftypes)
+	      val env = build_flatcalls env fvars
 
-	val () = chat 3 ("Rewriting closures\n")
-	(* XXX: I think all of the functions should share the same venv under this 
-	 * strategy.  We may wish to catch this here.
-	 *)
-	val bnds_env : env P.pexp = 
-	  P.List.foldl_from_list build_closure env vfclosure_types
+	      val () = chat 3 ("Rewriting functions\n")
+	      val () = app (rewrite_function_nonescape env) vfs
 
+	    in P.ret env
+	    end
       in  
 	bnds_env
       end
@@ -979,6 +1099,19 @@ structure LilClosure :> LILCLOSURE =
 		     val f = LD.E.nary_tapp' cargs code
 		   in P.ret (Call(f, sv32s, sv64s))
 		   end
+
+		 fun doflatcall (code,cargs,free32s,free64s) = 
+		   let 
+		     val _ = debugdo(6,fn() => (print "Type of code is:\n";
+						PpLil.pp_con (typeof_sv32(env,code));print "\n"))
+		     val free32s = map recur_sv32 free32s
+		     val free64s = map recur_sv64 free64s
+		     val code = recur_sv32 code
+		     val sv32s = free32s @ sv32s
+		     val sv64s = free64s @ sv64s
+		     val f = LD.E.nary_tapp' cargs code
+		   in P.ret (Call(f, sv32s, sv64s))
+		   end
 		 val res = 
 		   case Dec.E.nary_tapp f
 		     of (Var_32 fvar,cargs) => 
@@ -986,7 +1119,10 @@ structure LilClosure :> LILCLOSURE =
 			 val cargs = map recur_c cargs
 		       in
 			 case get_dcall(env,fvar) 
-			   of SOME {code,venv} => dodirectcall (code,cargs,venv)
+			   of SOME (DCALL{code,venv}) => 
+			       dodirectcall (code,cargs,venv)
+			    | SOME (FLATCALL {code,sv32s,sv64s}) => 
+			       doflatcall (code,cargs,sv32s,sv64s)
 			    | NONE => LD.E.closure_app'(recur_sv32 (Var_32 fvar),cargs,sv32s,sv64s)
 		       end
 		      | _ => error "Shouldn't be anything else here, should there?"
@@ -1104,6 +1240,55 @@ structure LilClosure :> LILCLOSURE =
 	    | Or_cc (cc1,cc2) => Or_cc(recur_cc cc1,recur_cc cc2))
       end
 
+    fun rewrite_code env (Function {tFormals    : (var * kind) list,
+					  eFormals    : (var * con) list,
+					  fFormals    : (var * con) list,
+					  rtype       : con,
+					  body        : exp}) = 
+      let
+	val env = con_vars_bind (env,tFormals)
+	val eFormals = map_second (rewrite_con env) eFormals
+	val env = exp_var32s_bind (env,eFormals)
+	val fFormals = map_second (rewrite_con env) fFormals
+	val env = exp_var64s_bind (env,fFormals)
+	val rtype = rewrite_con env rtype
+	      
+	val body = rewrite_exp env body
+	val rtype = rewrite_con env rtype
+	      
+	val code_fun = Function{tFormals=tFormals,
+				eFormals=eFormals,
+				fFormals=fFormals,
+				rtype = rtype,
+				body = body}
+      in code_fun
+      end
+	
+
+    fun rewrite_datum env d = 
+      (case d
+	 of Dboxed (l,sv64) => Dboxed (l,rewrite_sv64 env sv64)
+	  | Dtuple (l,t,q,svs) => Dtuple (l,rewrite_con env t,Util.mapopt (rewrite_sv32 env) q,map (rewrite_sv32 env) svs)
+	  | Darray (l,sz,t,svs) => Darray (l,sz,rewrite_con env t,map (rewrite_sv32 env) svs)
+	  | Dcode (l,f) => 
+	   let
+	     val f = rewrite_code env f
+	   in Dcode(l,f)
+	   end)
+
+    fun rewrite_data env data = 
+      let
+	fun add_dtype (d,env) = 
+	  (case d
+	     of Dboxed (l,sv64) => exp_label_bind(env,(l,LD.T.ptr (LD.T.boxed_float())))
+	      | Dtuple (l,t,qs,svs) => exp_label_bind(env,(l,t))
+	      | Darray (l,sz,c,svs) => exp_label_bind (env,(l,LD.T.ptr (LD.T.array sz c)))
+	      | Dcode (l,f) => exp_label_bind(env,(l,S.Typeof.code f)))
+	val env = foldl add_dtype env data
+	val data = map (rewrite_datum env) data
+      in (data,env)
+      end
+
 
     fun show_analysis (info,globals) = 
       let
@@ -1133,7 +1318,7 @@ structure LilClosure :> LILCLOSURE =
       end
 
 
-    fun close_mod (module as MODULE{timports,data=[],confun,expfun}) = 
+    fun close_mod (module as MODULE{timports,data,confun,expfun}) = 
       let 
 
 	val () = reset_data()	  
@@ -1149,6 +1334,9 @@ structure LilClosure :> LILCLOSURE =
 	val _ = chat 1 "  Adding timports\n"
 	val env = con_vars_bind (env,timports)
 
+	val _ = chat 1 "  Rewriting data\n"	  
+	val (data,env) = rewrite_data env data
+
 	val _ = chat 1 "  Rewriting confun\n"	  
 	val confun = rewrite_con env confun
 
@@ -1157,7 +1345,7 @@ structure LilClosure :> LILCLOSURE =
 
 	val _ = chat 1 "  Module rewritten\n"
 
-	val data = get_data()
+	val data = data @ (get_data())
 	val () = reset_data()
 	val () = reset_rewritten()
       in  MODULE{timports = timports,data=data,confun=confun,expfun=expfun}
