@@ -210,7 +210,7 @@ functor Basis(structure Il : IL
 			   end)]
 
 	      val baseprimvalue_list = 
-		  [("/", (mul_float F64)),
+		  [("/", (div_float F64)),
 		   ("div", (div_int W32)),
 		   ("mod", (mod_int W32)),
 		   ("quot", (quot_int W32)),

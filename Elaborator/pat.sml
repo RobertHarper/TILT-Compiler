@@ -142,11 +142,11 @@ functor Pat(structure Il : IL
       | pp_def (SOME (e,c)) = (print "SOME = "; pp_exp e)
     fun pp_arm ((cl, bound, body) : arm) = (print "arm has clause: "; 
 					    map (fn p => (AstHelp.pp_pat p; print "   ")) cl;
-					    print "\n    and bound: ";
+					    print "\n      and bound: ";
 					    map (fn (s,v,c) => (print "("; AstHelp.pp_sym s; print ", ";
 								pp_var v; print ","; 
 								pp_con c; print ")  ")) bound;
-					    print "\n    and body: ";
+					    print "\n      and body: ";
 					    (case body of 
 					       NONE => ()
 					     | SOME e => AstHelp.pp_exp e);
@@ -399,12 +399,20 @@ functor Pat(structure Il : IL
       val sumtypes = map (fn {arg_type=NONE,...} => con_unit | {arg_type=SOME c,...} => c)  constr_patconopt_list
       val expopt_list = map #2 vfll_expopt_list
       val vfll_list = map #1 vfll_expopt_list
-    in  (flatten vfll_list,(CASE{noncarriers = nca,
-				 carriers = ca,
-				 arg = APP(expose_exp,casearg),
-				 arms = expopt_list,
-				 default = NONE,
-				 tipe = con_deref (!rescon)}, con_deref (!rescon)))
+    in  (flatten vfll_list,
+	 (CASE{noncarriers = nca,
+	       carriers = ca,
+	       arg = APP(expose_exp,casearg),
+	       arms = expopt_list,
+	       default = (case def of
+			      NONE => NONE
+			    | SOME (e,c) => 
+				  (if (eq_con(context,c,(!rescon)))
+				       then ()
+				   else (error_region();
+					 print "result type of constructor patterns mismatch");
+				       SOME e)),
+	       tipe = con_deref (!rescon)}, con_deref (!rescon)))
     end
 
   and match (args : case_exp list, 
@@ -460,7 +468,7 @@ functor Pat(structure Il : IL
 					mapcount (fn (i,a) => (print "arm #"; printint i; 
 							       print " has ";
 							       printint (length(#1 a));
-							       print "pats in clause\n")) arms))
+							       print " pats in clause\n")) arms))
 	     val arms = map do_mark_and_constraint arms
 	     val (arm1,armrest) = (hd arms, tl arms)
 	     val (clauses, bound, bodies) = (map #1 arms, map #2 arms, map #3 arms)
@@ -481,11 +489,11 @@ functor Pat(structure Il : IL
 	     ---------------------------------------------------------------- *)
 	   local
 	     fun find_maxseq' patpred (arms : arm list) : (('a * arm) list * arm list) = 
-	       let fun loop [] acc = (acc,[])
+	       let fun loop [] acc = (rev acc,[])
 		     | loop (arms as ((hdpat::tlpat,bound,body)::armrest)) acc = 
 		 (case (patpred hdpat) of
 		    SOME obj => loop armrest ((obj,(tlpat,bound,body))::acc)
-		  | NONE => (acc,arms))
+		  | NONE => (rev acc,arms))
 		     | loop _ _ = error "find_maxseq' got an arm with no patterns"
 	       in loop arms []
 	       end
@@ -643,6 +651,7 @@ functor Pat(structure Il : IL
 		 in (vc_ll @ vc_ll2, ec)
 		 end
 
+(* xxx should coalesce constants *)
 	       fun constant_dispatch(eqcon,eq) : bound list * (exp * con) = 
 		   let
 		     fun conszip a b = map (op ::) (zip a b)
@@ -651,9 +660,10 @@ functor Pat(structure Il : IL
 				 then ()
 			     else (error_region();
 				   print "base type mismatches argument type\n")
-		     val (vc_ll1,(e1,c1)) = match(argrest, [(tlpat1, bound1, body1)], def)
 		     val (vc_ll2,(e2,c2)) = match(args, zip3 (conszip headpat_rest tlpat_rest) 
 						  boundrest bodyrest, def)
+		     val def' = SOME(e2,c2)
+		     val (vc_ll1,(e1,c1)) = match(argrest, [(tlpat1, bound1, body1)], def')
 		     val _ = if (eq_con(context,c1,c2))
 				 then ()
 			     else (error_region();
