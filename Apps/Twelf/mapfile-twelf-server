@@ -6,5 +6,4 @@ unit Server = "src/server/server.sml" {
 	OS TextIO String Char Int Bool TimersStructs SIGINT LEXER TWELF
 	FrontendStructs TimingStructs SigINT
 }
-%SERVER	src/server/server.sml
 unit TwelfServer = "src/server/server-tilt.sml" {Server}

@@ -11,7 +11,7 @@ sml = SML_VERSION=110 sml
 # What is TILT called?
 tilt = ../../Bin/tilt-nj
 
-target=`uname -p`
+cputype=`../../Bin/cputype`
 
 # Twelf root directory
 twelfdir = .
@@ -27,7 +27,7 @@ default : twelf-server
 all : twelf-server
 
 twelf-server:
-	$(tilt) -vv -c TwelfServer -o bin/twelf-server-$(target) mapfile-twelf-server
+	$(tilt) -vv -cTwelfServer -obin/twelf-server-$(cputype) mapfile-twelf-server
 
 old-twelf-server: ; 
 	@echo "*************************************************"
@@ -66,4 +66,4 @@ old-twelf-emacs: ;
 
 clean: ;
 	rm -rf $(twelfdir)/src/*/CM ;
-	rm -rf $(twelfdir)/src/*/TM ;
+	$(tilt) -pp mapfile-twelf-server

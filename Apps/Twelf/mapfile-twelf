@@ -1,16 +1,15 @@
-% Some sources are excluded since they don't appear in CM description
-% files: opsem/assign.sig, opsem/assign.fun, and meta/prover.sig.
+(*
+	Some sources are excluded since they don't appear in CM
+	description files: opsem/assign.sig, opsem/assign.fun, and
+	meta/prover.sig.
 
-% The topological sort was found by running CM.mkusefile.
-% The sort affects the order that global effects are computed
-% at runtime.
-
+	The topological sort was found by running CM.mkusefile.  The sort
+	affects the order that global effects are computed at runtime.
+*)
 unit INTSYN = "src/lambda/intsyn.sig.sml" {}
 unit WHNF = "src/lambda/whnf.sig.sml" {INTSYN}
 unit NAMES = "src/names/names.sig.sml" {INTSYN}
-%FIXITY	src/names/names.sig.sml
 unit TRAVERSE = "src/print/traverse.sig.sml" {INTSYN}
-%TRAVERSER	src/print/traverse.sig.sml
 unit Traverse = "src/print/traverse.fun.sml" {
 	TRAVERSE INTSYN WHNF NAMES
 }
@@ -87,8 +86,6 @@ unit PrintTwega = "src/print/print-twega.fun.sml" {
 }
 unit SYMBOL = "src/print/symbol.sig.sml" {}
 unit SymbolFunctors = "src/print/symbol.fun.sml" {String SYMBOL}
-%SymbolAscii	src/print/symbol.fun.sml
-%SymbolTeX	src/print/symbol.fun.sml
 unit PRINT = "src/print/print.sig.sml" {INTSYN FORMATTER}
 unit Print = "src/print/print.fun.sml" {
 	List Int PRINT INTSYN WHNF ABSTRACT CONSTRAINTS NAMES FORMATTER
@@ -304,7 +301,6 @@ unit MTProver = "src/meta/prover.fun.sml" {
 	List MTPGlobal MTPGLOBAL PROVER INTSYN FUNSYN STATESYN TWELF_ORDER
 	MTPINIT MTPSTRATEGY RELFUN MTPGlobal M2Structs
 }
-%CombiProver	src/meta/prover.fun.sml
 unit FUNPRINT = "src/meta/funprint.sig.sml" {FUNSYN FORMATTER}
 unit MTPRINT = "src/meta/print.sig.sml" {
 	FORMATTER STATESYN
@@ -424,14 +420,10 @@ unit Parsing = "src/frontend/parsing.fun.sml" {
 	PARSING StreamStructs LEXER
 }
 unit TP_RECON = "src/frontend/tprecon.sig.sml" {PATHS INTSYN}
-%EXTSYN	src/frontend/tprecon.sig.sml
-%VARS		src/frontend/tprecon.sig.sml
 unit TpRecon = "src/frontend/tprecon.fun.sml" {
 	List INTSYN NAMES GLOBAL PATHS WHNF UNIFY ABSTRACT TYPECHECK
 	STRICT PRINT TIMERS TP_RECON
 }
-%EVars		src/frontend/tprecon.fun.sml
-%FVars		src/frontend/tprecon.fun.sml
 unit TpTrace = "src/frontend/tptrace.fun.sml" {
 	List Int TP_RECON GLOBAL INTSYN NAMES PATHS WHNF UNIFY ABSTRACT
 	TYPECHECK STRICT PRINT TIMERS
@@ -439,7 +431,6 @@ unit TpTrace = "src/frontend/tptrace.fun.sml" {
 unit MODE_RECON = "src/frontend/moderecon.sig.sml" {
 	MODESYN TP_RECON PATHS
 }
-%EXTMODES	src/frontend/moderecon.sig.sml
 unit ModeRecon = "src/frontend/moderecon.fun.sml" {
 	MODE_RECON GLOBAL MODESYN WHNF PATHS MODEPRINT MODEDEC TP_RECON
 	NamesStructs
@@ -447,7 +438,6 @@ unit ModeRecon = "src/frontend/moderecon.fun.sml" {
 unit THM_RECON = "src/frontend/thmrecon.sig.sml" {
 	TP_RECON PATHS THMSYN
 }
-%THMEXTSYN	src/frontend/thmrecon.sig.sml
 unit ThmRecon = "src/frontend/thmrecon.fun.sml" {
 	List THM_RECON GLOBAL MODESYN THMSYN PATHS TP_RECON NAMES
 }
