@@ -1057,20 +1057,13 @@ val debug = ref false
 	  val x = 5
       in
 	  case bnd of
-	      Con_b (v,k,c) => let val _ = (print "processing Con_b\n";
-					    stat_state state;
-					    print "\n")
-				   val (ir,k) = xcon(state,v,c)
+	      Con_b (v,k,c) => let val (ir,k) = xcon(state,v,c)
 				   val s' =  (if (istoplevel())
 						  then alloc_conglobal (state,v,ir,k,SOME c)
 					      else add_convar state (v,ir,k,SOME c))
 			       in  s'
 			       end
-	    | Exp_b (v,c,e) => let val _ = (print "processing Exp_b ";
-					    Ppnil.pp_var v; print "\n";
-					    stat_state state;
-					    print "\n")
-				   val (loc_or_val,_) = xexp(state,v,e,SOME c,NOTID)
+	    | Exp_b (v,c,e) => let val (loc_or_val,_) = xexp(state,v,e,SOME c,NOTID)
 				   val s' = (if istoplevel()
 						 then alloc_global (state,v,c,loc_or_val)
 					     else 
@@ -1080,10 +1073,6 @@ val debug = ref false
 							 let val reg = load_reg_val(var_val, NONE)
 							 in  add_var_val state (v,reg,c,var_val)
 							 end)
-				   val _ = (print "done processing Exp_b "; 
-					    Ppnil.pp_var v; print "\n";
-					    stat_state state;
-					    print "\n")
 			       in  s'
 			       end
 	    | Fixopen_b (var_fun_set : (var,function) Nil.set) => error "no open functions permitted"
@@ -1247,7 +1236,7 @@ val debug = ref false
 	    | Switch_e sw => xswitch(state,name,sw,copt,context)
 	    | App_e (openness, f, clist, elist, eflist) => (* assume the environment is passed in first *)
 		  let 
-		      val _ = stat_state state
+(*		      val _ = stat_state state *)
 		      local
 			  val cregsi = map (fn c => #1(xcon(state,fresh_named_var "call_carg", c))) clist
 			  val eregs = map (fn e => #1(xexp'(state,fresh_named_var "call_e", 
@@ -1837,22 +1826,26 @@ val debug = ref false
 
   and xprim(state : state, prim,clist,elist,context) : loc_or_val * con = 
       let open Prim
-	  fun makecall str tipe =
+	  fun makecall str arg_types ret_type =
 	  let 
 	      val codevar = fresh_var()
 	      val label = C_EXTERN_LABEL str
+	      val tipe = AllArrow_c(Code,Partial,[],arg_types,0w0,ret_type)
 	      val state' = add_varloc state (codevar,VCODE label, tipe)
 	      val exp = App_e(Code,Var_e codevar,[],elist,[])
 	  in xexp(state',fresh_var(),exp,NONE,context)
 	  end
-	  val char_con = Prim_c(Int_c W8,[])
       in (case prim of
-	      output => makecall "ml_output" (AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[]),string_con],
-							 0w0,unit_con))
-	    | input => makecall "ml_input" (AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[])],
-						       0w0,string_con))
-	    | input1 => makecall "ml_input1" (AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[])],
-							 0w0,char_con))
+	      output => makecall "ml_output" [int_con,string_con] unit_con
+	    | input => makecall "ml_input"  [int_con] string_con
+	    | input1 => makecall "ml_input1" [int_con] char_con
+	    | lookahead => makecall "ml_lookahead" [int_con] char_con
+	    | open_in => makecall "ml_open_in" [string_con] int_con
+	    | open_out => makecall "ml_open_out" [string_con] int_con
+	    | close_in => makecall "ml_close_in" [int_con] unit_con
+	    | close_out => makecall "ml_close_out" [int_con] unit_con
+	    | end_of_stream => makecall "ml_end_of_stream" [int_con] bool_con
+	    | flush_out => makecall "ml_flush_out" [int_con] unit_con
 	    | neg_int is => xprim'(state,minus_int Prim.W32,clist,
 				   (Const_e(Prim.int(Prim.W32,W64.zero)))::elist,context)
 	    | _ => xprim'(state,prim,clist,elist,context))
@@ -2480,29 +2473,30 @@ val debug = ref false
 		val ptag = if (!HeapProfile) then MakeProfileTag() else (i2w 0)
 		val (wordlen,v,afteropt) = 
 		    (case is of
-			 Prim.W8 => let val fullres = alloc_regi NOTRACE_INT
-					val endres = alloc_regi NOTRACE_INT
-					val wordlen = alloc_regi(NOTRACE_INT)
-					val _ = (add_instr(ICOMMENT "about to make tag");
-						 mk_intarraytag(loglen,tag);
-						 add_instr(ICOMMENT "done making tag");
-						 add_instr(ANDB(wordlen,IMM 3,tmp));
-						 add_instr(ADD(wordlen,IMM 3,wordlen));
-						 add_instr(SRL(wordlen,IMM 2,wordlen));
-						 add_instr(SLL(wordlen,IMM 2,wordlen));
-						 add_instr(LI(0w4,fullres));
-						 add_instr(SUB(tmp,REG fullres,tmp));
-						 add_instr(ANDB(tmp,IMM 3,tmp));
-						 add_instr(SLL(tmp, IMM 3, tmp));
-						 
-						 add_instr(SLL(vtemp,IMM 8,fullres));
-						 add_instr(ORB(fullres,REG vtemp,vtemp));
-						 add_instr(SLL(vtemp,IMM 16,fullres));
-						 add_instr(ORB(fullres,REG vtemp,fullres));
-						 add_instr(SRL(fullres,REG tmp, endres)))
-					    
-				    in  (wordlen,fullres, SOME endres)
-				    end
+			 Prim.W8 => 
+			     let val fullres = alloc_regi NOTRACE_INT
+				 val endres = alloc_regi NOTRACE_INT
+				 val wordlen = alloc_regi(NOTRACE_INT)
+				 val shift = alloc_regi(NOTRACE_INT)
+				 val _ = (add_instr(ICOMMENT "about to make tag");
+					  mk_intarraytag(loglen,tag);
+					  add_instr(ICOMMENT "done making tag");
+					  add_instr(ANDB(loglen,IMM 3,tmp));     (* tmp = loglen % 3 *)
+					  add_instr(ADD(loglen,IMM 3,wordlen));
+					  add_instr(SRL(wordlen,IMM 2,wordlen)); (* wordlen = (loglen + 3)/4*4 *)
+					  add_instr(LI(0w4,shift));              (* use shift as a temp *)
+					  add_instr(SUB(tmp,REG shift,tmp));
+					  add_instr(ANDB(tmp,IMM 3,tmp));  (* tmp = (4 - (loglen % 4)) % 4 *)
+					  add_instr(SLL(tmp, IMM 3,shift));         (* computed shift amount *)
+					  
+					  add_instr(SLL(vtemp,IMM 8,fullres));
+					  add_instr(ORB(fullres,REG vtemp,vtemp));
+					  add_instr(SLL(vtemp,IMM 16,fullres));
+					  add_instr(ORB(fullres,REG vtemp,fullres)); (* computed fullres *)
+					  add_instr(SRL(fullres,REG shift, endres)))   (* computed endres *)
+				     
+			     in  (wordlen,fullres, SOME endres)
+			     end
 		       | Prim.W16 => error "someday"
 		       | Prim.W32 => (add_instr(SLL(loglen,IMM 2, tmp));
 				      mk_intarraytag(tmp,tag);
