@@ -24,13 +24,13 @@ structure Name :> NAME =
 	    type ord_key = var
 	    val compare = compare_var
 	end
-(*
+
     structure VarSet = SplaySetFn(VarKey)
     structure VarMap = SplayMapFn(VarKey)
-*)
+(*
     structure VarSet = RedBlackSetFn(VarKey)
     structure VarMap = RedBlackMapFn(VarKey)
-
+*)
     val varmap : string VarMap.map ref = ref VarMap.empty
 
     fun reset_varmap() = varmap := VarMap.empty
