@@ -11,13 +11,16 @@ infix  5 @
 infixr 5 ::
 infix  6 + - ^
 infix  7 div mod quot rem / * 
-infix  9 << >> && || 
+infix  9 << >> ~>> && || 
 
 (* standard types *)
-type string = char vector
+
 datatype 'a list = nil | :: of 'a * 'a list
 datatype 'a susp = Susp of unit -> 'a 
+datatype 'a option = NONE | SOME of 'a
 datatype order = GREATER | LESS | EQUAL
+type int32 = int
+type word = word32
 
 
 (* standard exceptions *)
@@ -28,8 +31,9 @@ exception Ord and Chr and Substring       (* character/string *)
 exception Hd and Tl and NthTail and Nth   (* list related *)
 exception Subscript and Size              (* array related *)
 exception Interrupt            
-exception Io of string
-  
+exception Io of char vector
+exception Domain
+exception Span
 
 structure List = 
     struct
@@ -118,11 +122,11 @@ open Array
 
 structure Vector =
     struct
-	fun vector1 (s:int, e : 'a) : 'a vector =
+	fun vector (s:int, e : 'a) : 'a vector =
 	    if s<0 then raise Size
 	    else unsafe_vector(int32touint32 s,e)
 		
-	fun vsub1 (a : 'a vector, index :int) : 'a =
+	fun vsub (a : 'a vector, index :int) : 'a =
 	    let val index = int32touint32 index
 	    in  if (ugte(index, vector_length a))
 		    then raise Subscript
@@ -138,6 +142,7 @@ structure Vector =
 	    end
     end
 open Vector
+type string = char vector
 
 structure Misc = 
     struct
@@ -171,6 +176,10 @@ structure Char =
     end
 open Char
 
+val stringmaxsize = 1024 * 1024
+val vectormaxlength = 1024 * 1024
+val arraymaxlength = 1024 * 1024
+
 structure String = 
     struct
 	fun size(x : string) : int = uint32toint32(vector_length x)
@@ -178,13 +187,13 @@ structure String =
 	    let val sz = size x
 		fun explode_loop(i,accum) = 
 		    if (i < sz)
-			then explode_loop (i+1,(vsub1(x,i))::accum)
+			then explode_loop (i+1,(vsub(x,i))::accum)
 		    else List.rev accum
 	    in
 		explode_loop(0,[])
 	    end
 	
-	fun sub(x : string, i : int) = Vector.vsub1(x,i)
+	fun sub(x : string, i : int) = Vector.vsub(x,i)
 
 	local
     (* copies len words from vector x starting at x_start to array y starting at y_start *)
@@ -237,6 +246,18 @@ structure String =
 		    val _ = loop 0w0 x
 		in  unsafe_array2vector a
 		end
+
+	    fun revImplode(len : int, x : char list) : string = 
+		let val sz = int32touint32 len
+		    val c = chr 0
+		    val a : char array = unsafe_array(sz,c)
+		    fun loop i [] = ()
+		      | loop i (c::rest) = 
+			(unsafe_update(a,i,c);
+			 loop (uminus(i,0w1)) rest)
+		    val _ = loop (uminus(sz,0w1)) x
+		in  unsafe_array2vector a
+		end
 	    
 	    fun substring (a : string, start : int, len : int) : string =
 		let val size = vector_length a
@@ -283,12 +304,18 @@ structure String =
 	fun leq(x,y) = (case compare(x,y) of
 			    GREATER => false
 			  | _ => true)
+	(* create returns a character array filled with any character it likes *)
+	fun create sz : char array = if (sz>0)
+					 then unsafe_array(int32touint32 sz,#"\000")
+				     else raise Size
     end
 
 val size = String.size
 val implode = String.implode
+val revImplode = String.revImplode
 val explode = String.explode
 val (op ^) = String.^
+val substring = String.substring
 
 	fun (a : int) mod (b : int) =
 	    let val temp = a rem b
@@ -308,8 +335,18 @@ val (op ^) = String.^
 		    else temp - 1       (* here's where they differ *)
 	    end
 
+structure Word = 
+    struct
+	type word = word32
+	val orb = ||
+	val andb = &&
+	fun fromInt (x : int) = int32touint32 x
+	fun toInt (x : uint) = uint32toint32 x
+    end
+
 structure Int = 
     struct  
+	type int = int
 	fun toChars (i:int):char list =
 	    let fun ord' (i : uint) = chr(uint32toint32(uplus(i,0w48)))
 		fun loop (i : uint) = 
@@ -437,3 +474,5 @@ structure IO =
     end
 open IO
 
+(* unimped parts of the standard basis *)
+exception LibFail of string

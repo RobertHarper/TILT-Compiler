@@ -336,10 +336,10 @@ struct
 		       | _ => NONE))
 	end
 
-    fun Sdecs_Lookup_help (m, sdecs, labs) : (bool * (phrase_class * labels)) option = 
+    fun Sdecs_Lookup_help (om, sdecs, labs) : (bool * (phrase_class * labels)) option = 
 	let 
-	    fun loop lbl [] = NONE
-	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
+	    fun loop m lbl [] = NONE
+	      | loop m lbl ((sdec as (SDEC(l,d)))::rest) =
 		if (eq_label(l,lbl)) 
 		    then (case d of
 			      (DEC_EXP (_,c)) => 
@@ -351,29 +351,30 @@ struct
 							   k),[l]))
 			    | (DEC_MOD (_,s)) => 
 				SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
-			    | _ => loop lbl rest)
+			    | _ => loop m lbl rest)
 		else if (is_label_open l)
 		    then (case d of
 			      (DEC_MOD(_,SIGNAT_STRUCTURE (_,sdecs))) =>
-				  (case (loop lbl (rev sdecs)) of
+				  (case (loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
 				       SOME (flag,(class,lbls')) => SOME(flag,(class,l::lbls'))
-				     | NONE => loop lbl rest)
+				     | NONE => loop m lbl rest)
 			    | (DEC_MOD(_,((SIGNAT_INLINE_STRUCTURE{code,abs_sig=sdecs,...})))) =>
-				  (case (Sbnds_Lookup(code,[lbl]),loop lbl (rev sdecs)) of
+				  (case (Sbnds_Lookup(code,[lbl]),
+					 loop (MOD_PROJECT(m,l)) lbl (rev sdecs)) of
 				       (SOME (lbl,p), SOME(_,(pc,lbls'))) => 
 						SOME(true,(combine_pc(p,pc2class pc),l::lbls'))
 				     | (SOME _, NONE) => error "sdecs_Lookup: open case:  SOME/NONE"
 				     | (NONE, SOME _) => error "sdecs_Lookup: open case:  NONE/SOME"
-				     | (NONE,NONE) => loop lbl rest)
-			    | _ => loop lbl rest)
-		     else loop lbl rest
+				     | (NONE,NONE) => loop m lbl rest)
+			    | _ => loop m lbl rest)
+		     else loop m lbl rest
 
 	in
 	    (case labs of
 		 [] => error "Sdecs_Lookup_help got []"
-	       | [lbl] => loop lbl (rev sdecs)
+	       | [lbl] => loop om lbl (rev sdecs)
 	       | (lbl :: lbls) =>
-		     case (loop lbl (rev sdecs)) of
+		     case (loop om lbl (rev sdecs)) of
 			 SOME(_,(phrase_class,labs)) =>
 			     (case phrase_class of
 				  PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs')))) =>

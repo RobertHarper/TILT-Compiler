@@ -347,8 +347,11 @@ structure LinkIl (* : LINKIL *) =
 		val _ = print "XXXXXXXXXXXXXXXXX linkil.sml:check not done\n"
 
 		val _ = if doprint 
-			    then (print "test: sbnds are: \n";
-				  Ppil.pp_sbnds (List.mapPartial #1 sbnd_entries))
+			    then (print "\ntest: sbnds are: \n";
+				  Ppil.pp_sbnds (List.mapPartial #1 sbnd_entries);
+				  print "\ntest: entries are: \n";
+				  app (fn (_,CONTEXT_SDEC sdec) => (Ppil.pp_sdec sdec; print "\n")
+				        | _ => ()) sbnd_entries)
 			else ()
 (*
 		val m = MOD_STRUCTURE sbnds

@@ -2100,72 +2100,181 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     (* --------------------------------------------------------- 
       ------------------ STRUCTURE EXPRESSION -----------------
       --------------------------------------------------------- *)
-     and extract_hidden(avar, asig as (SIGNAT_STRUCTURE(_,all_sdecs)),
+     and extract_hidden(avar, 
+			asig as (SIGNAT_STRUCTURE(_,all_sdecs)),
+			tmod as (MOD_STRUCTURE target_sbnds),
 			tsig as (SIGNAT_STRUCTURE(_,target_sdecs))) = 
 			
 	 let
-	     val (free_convars,free_modvars) = sig_free_conmodvar tsig
-	     fun sdec_copy m (SDEC(l,DEC_EXP _),acc) = acc
-	       | sdec_copy m (SDEC(l,DEC_EXCEPTION _),acc) = acc
-	       | sdec_copy m (SDEC(l,DEC_CON(v,k,c)),(csubst,msubst,sbnd_sdec)) = 
-		 let val csubst' = (v,CON_MODULE_PROJECT(m,l))::csubst
-		     val c' = (case c of
-				   SOME con => SOME(con_subst_conmodvar(con,csubst,msubst))
-				 | NONE => NONE)
-		     val sbnd_sdec' = (SBND(l,BND_CON(v,CON_MODULE_PROJECT(m,l))),
-				       SDEC(l,DEC_CON(v,k,c'))) :: sbnd_sdec
-		 in  (csubst',msubst,sbnd_sdec')
+
+(* subst maps from renamed vars now 
+val k = (case k of 
+  KIND_INLINE(k',c) => 
+	KIND_INLINE(k',con_subst_conmodvar(c,csubst,msubst))
+  | _ => k)
+*)
+(*
+	     val _ = (print "extract_hidden called with avar = ";
+		      pp_var avar;
+		      print "\nand asig =\n";
+		      pp_signat asig;
+		      print "\nand tmod =\n";
+		      pp_mod tmod;
+		      print "\nand tsig =\n";
+		      pp_signat tsig;
+		      print "\n\n")
+*)
+
+	    fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
+	      | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	      | eq_modproj _ = false
+	    fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
+	      | eq_conproj (CON_MODULE_PROJECT (m,l), 
+			    CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	      | eq_conproj _ = false
+	    fun chandle csubst c = assoc_eq(eq_conproj, c, csubst)
+	    fun mhandle msubst m = assoc_eq(eq_modproj, m, msubst)
+(* xxxxxxxxxxxxxxxxxxx need to do vars too not just projections *)
+	    fun local_con_subst(c, csubst, msubst) = 
+		let 
+(*
+		    val _ = (print "local_con_subst on con: ";
+			     pp_con c; print "\nwith csubst = \n";
+			     app (fn (c,c') => (pp_con c; print "  -->  "; pp_con c'; print "\n")) csubst;
+			     print "\n")
+*)
+		in  con_all_handle(c, fn _ => NONE,
+		                  chandle csubst,
+			          mhandle msubst)
+		end
+	    fun local_sig_subst(s, csubst, msubst) = 
+		let 
+		in  sig_all_handle(s, fn _ => NONE,
+		                  chandle csubst,
+			          mhandle msubst)
+		end
+
+	    fun make_mod(m,v,l) = SOME(case m of 
+					   NONE => MOD_VAR v
+					 | SOME m => MOD_PROJECT(m,l))
+	    fun make_con(m,v,l) = (case m of 
+				       NONE => CON_VAR v
+				     | SOME m => CON_MODULE_PROJECT(m,l))
+
+	     fun sdec_work (cs,ms,(sb,sd)) (_,_,[],_,_) = (cs,ms,(rev sb, rev sd))
+	       | sdec_work (triple as (csubst,msubst,sbnd_sdecs as (sbnds,sdecs)))
+		           (amod : mod, tmod : mod option,
+			    (SDEC(la,deca)::resta),sbnds_b,sdecs_b) = 
+		 let fun missing(sbnds_next,sdecs_next) = 
+		     (case deca of
+			  DEC_MOD(va,SIGNAT_STRUCTURE(_,sdecs_a)) => 
+			      let val (_,_,(sbnds_b,sdecs_b)) = sdec_work_sort (csubst,msubst,([],[]))
+				           (MOD_PROJECT(amod,la), NONE,
+					    sdecs_a, [], [])
+				  val va' = Name.derived_var va
+				  val sbnd_sdecs' = (SBND(la,BND_MOD(va',MOD_STRUCTURE sbnds_b))::sbnds,
+						     SDEC(la,DEC_MOD(va',SIGNAT_STRUCTURE(NONE,sdecs_b)))::sdecs)
+			      in  sdec_work (csubst, (MOD_PROJECT(amod,la), MOD_VAR va') ::msubst, sbnd_sdecs')
+				  (amod,tmod,resta, sbnds_next, sdecs_next)
+			      end
+			| DEC_CON (va,k,copt) => 
+			      let val hidden_lbl = fresh_internal_label "hidden_type"
+				  val va' = Name.derived_var va
+				  val oldcon = CON_MODULE_PROJECT(amod,la)
+				  val newcon = CON_VAR va'
+				  val csubst' = (oldcon,newcon)::csubst
+				  val sbnds_sdecs' = 
+				      (SBND(hidden_lbl, BND_CON(va', oldcon)) :: sbnds,
+				       SDEC(hidden_lbl, DEC_CON(va', k, NONE))::sdecs)
+			      in sdec_work (csubst',msubst,sbnds_sdecs') (amod,tmod,resta, 
+									  sbnds_next, sdecs_next)
+			      end 
+		       | DEC_MOD _ => sdec_work triple (amod,tmod,resta, sbnds_next, sdecs_next)
+		       | DEC_EXP _ => sdec_work triple (amod,tmod,resta, sbnds_next, sdecs_next)
+		       | DEC_EXCEPTION _ => sdec_work triple (amod,tmod,resta, sbnds_next, sdecs_next))
+
+		     fun match(sbnds_next,sdecs_next, bndb, decb) =
+			 (case (deca,bndb,decb) of
+			      (DEC_MOD(va,(SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs_a,...} |
+					   SIGNAT_STRUCTURE(_, sdecs_a))),
+			       BND_MOD(_,MOD_STRUCTURE sbnds_b), 
+			       DEC_MOD(vb,(SIGNAT_INLINE_STRUCTURE{abs_sig=sdecs_b,...} |
+					   SIGNAT_STRUCTURE(_, sdecs_b)))) =>
+			      let val (_,_,(sbnds_b,sdecs_b)) = sdec_work_sort (csubst,msubst,([],[]))
+				           (MOD_PROJECT(amod,la),make_mod(tmod,vb,la), (* la = lb *)
+					    sdecs_a, sbnds_b, sdecs_b)
+				  val sbnd_sdecs' = (SBND(la,BND_MOD(vb,MOD_STRUCTURE sbnds_b))::sbnds,
+						     SDEC(la,DEC_MOD(vb,SIGNAT_STRUCTURE(NONE,sdecs_b)))::sdecs)
+			      in  sdec_work (csubst, (MOD_PROJECT(amod,la), MOD_VAR vb) ::msubst, sbnd_sdecs')
+				  (amod,tmod,resta, sbnds_next, sdecs_next)
+			      end
+			  | (DEC_CON(va,_,copt_a), _, DEC_CON(vb,k,copt)) => 
+				  (* don't make a copy, just redirect *)
+				  let val oldcon = CON_MODULE_PROJECT(amod,la)
+				      val newcon = make_con(tmod,vb,la) (* la = lb *)
+				      val copt' = (case (copt_a) of
+						       (* neither copy nor copt_a is what we want :( *)
+						       NONE => NONE
+						     | SOME c => SOME (local_con_subst(c, csubst, msubst)))
+				      val sbnd_sdecs' = ((SBND(la,bndb))::sbnds, SDEC(la,DEC_CON(vb,k,copt'))::sdecs)
+				  in  sdec_work ((CON_VAR va,newcon)::(oldcon,newcon)::csubst, msubst, sbnd_sdecs') 
+				      (amod,tmod,resta, sbnds_next, sdecs_next)
+				  end
+			 | (_, _, (DEC_MOD (v,s as (SIGNAT_FUNCTOR _)))) =>
+				  let val s' = local_sig_subst(s, csubst, msubst)
+				  in  sdec_work 
+				      (csubst, msubst, ((SBND(la,bndb))::sbnds, SDEC(la,DEC_MOD(v,s'))::sdecs))
+				      (amod,tmod,resta, sbnds_next, sdecs_next)
+				  end
+			 | (_, _, (DEC_EXP (v,c))) =>
+				  let val c' = local_con_subst(c, csubst, msubst)
+				  in  sdec_work 
+				      (csubst, msubst, ((SBND(la,bndb))::sbnds, SDEC(la,DEC_EXP(v,c'))::sdecs))
+				      (amod,tmod,resta, sbnds_next, sdecs_next)
+				  end
+			 | (_, _, (DEC_EXCEPTION (t,c))) =>
+				  let val c' = local_con_subst(c, csubst, msubst)
+				  in  sdec_work 
+				      (csubst, msubst, ((SBND(la,bndb))::sbnds, SDEC(la,DEC_EXCEPTION(t,c'))::sdecs))
+				      (amod,tmod,resta, sbnds_next, sdecs_next)
+				  end
+			 | (_, _, DEC_MOD _) => error "no MOD_STRUCTURE in match")
+		 (* xxx this is not so fast but needed due to possible reordering *)
+
+		 in  (case (sbnds_b,sdecs_b) of
+			  (SBND(lb,bndb)::restbnd,SDEC(_,decb)::restdec) =>
+			      if (eq_label(la,lb))
+				  then match(restbnd,restdec,bndb,decb)
+			      else missing(sbnds_b, sdecs_b)
+			| _ => missing(sbnds_b, sdecs_b))
 		 end
-	       | sdec_copy m (SDEC(l,DEC_MOD(v,s)),(csubst,msubst,sbnd_sdec)) =
-		 let val msubst' = (v,MOD_PROJECT(m,l))::msubst
-		     val sbnd_sdec' = (case mod_copy' (MOD_PROJECT(m,l),csubst,msubst) s of
-					   SOME(m',s') => (SBND(l,BND_MOD(v,m')),
-							   SDEC(l,DEC_MOD(v,s')))::sbnd_sdec
-					 | NONE => sbnd_sdec)
-		 in  (csubst,msubst',sbnd_sdec')
+
+	     and sdec_work_sort triple (amod,tmod,asdecs,tsbnds,tsdecs) = 
+		 let val m = (foldl (fn ((n,l),m) => Name.LabelMap.insert(m,n,l)) 
+			      Name.LabelMap.empty 
+			      (Listops.mapcount (fn (n,SDEC(l,_)) => (l,n)) asdecs))
+		     fun order(l1,l2) = 
+			 (case (Name.LabelMap.find(m,l1), Name.LabelMap.find(m,l2)) of
+			      (SOME x, SOME y) => x > y
+			    | _ => error "asdecs must be superset of tsbnds/tsdecs")
+		     fun border(SBND(l1,_),SBND(l2,_)) = order(l1,l2)
+		     fun dorder(SDEC(l1,_),SDEC(l2,_)) = order(l1,l2)
+		     val tsbnds' = ListMergeSort.sort border tsbnds
+		     val tsdecs' = ListMergeSort.sort dorder tsdecs
+		 in  sdec_work triple (amod,tmod,asdecs,tsbnds',tsdecs')
 		 end
-	     and mod_copy' (m,csubst,msubst) ((SIGNAT_STRUCTURE(_,sdecs)) |
-			      (SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs, ...})) = 
-		 let val (_,_,sbnds_sdecs) = foldl (sdec_copy m) (csubst,msubst,[]) sdecs
-		 in SOME(MOD_STRUCTURE(map #1 sbnds_sdecs),
-			 SIGNAT_STRUCTURE(NONE, map #2 sbnds_sdecs))
-		 end
-	       | mod_copy' _ (SIGNAT_FUNCTOR _) = NONE
-	     fun mod_copy ((csubst,msubst,(sbnds,sdecs)),l,vm,s) = 
-		 case (mod_copy' (MOD_PROJECT(MOD_VAR avar, l),csubst,msubst) s) of
-		     SOME(pruned_mod,pruned_sig) =>
-			 let val hidden_lbl = fresh_internal_label "hidden_mod"
-			     val sbnd = SBND(hidden_lbl, BND_MOD(vm,pruned_mod))
-			     val sdec = SDEC(hidden_lbl, DEC_MOD(vm,pruned_sig))
-			 in (sbnd::sbnds, sdec::sdecs)
-			 end
-		   | NONE => (sbnds,sdecs)
-	     fun type_copy ((sbnds,sdecs),l,vt,k,copt) = 
-		 let val hidden_lbl = fresh_internal_label "hidden_type"
-		     val sbnd = SBND(hidden_lbl, BND_CON(vt, CON_MODULE_PROJECT(MOD_VAR avar,l)))
-		     val sdec = SDEC(hidden_lbl, DEC_CON(vt, k, SOME(CON_MODULE_PROJECT(MOD_VAR avar,l))))
-		 in (sbnd::sbnds, sdec::sdecs)
-		 end
-	     fun loop (_,_,acc) [] = acc
-	       | loop (triple as (csubst,msubst,acc)) (SDEC(la,deca)::resta) =
-		     let val triple' = 
-			 (case deca of
-			      DEC_MOD (vm,s) => (csubst,
-						 (vm,MOD_PROJECT(MOD_VAR avar,la))::msubst,
-						 mod_copy(triple,la,vm,s))
-			    | DEC_CON (vt,k,copt) => 
-				  ((vt,CON_MODULE_PROJECT(MOD_VAR avar,la))::csubst,
-				   msubst,
-				   if (true orelse member_eq(eq_var,vt,free_convars))
-				       then type_copy(acc,la,vt,k,copt)
-				   else acc)
-			    | DEC_EXP _ => triple
-			    | DEC_EXCEPTION _ => triple)
-		     in loop triple' resta
-		     end
-	 in loop ([],[],([],[])) all_sdecs (* target_sdecs *)
+	     val res as (_,_,(sb,sd)) = sdec_work_sort ([],[],([],[])) (MOD_VAR avar,NONE,all_sdecs,target_sbnds,target_sdecs)
+(*
+	     val _ = (print "returning sb =\n";
+		      pp_mod (MOD_STRUCTURE sb);
+		      print "\n and sd=\n";
+		      pp_signat (SIGNAT_STRUCTURE(NONE,sd));
+		      print "\n\n")
+*)
+	 in res
 	 end
-       | extract_hidden _ = elab_error "extract_hidden not passed SIGNAT_STRUCTURE"
+       | extract_hidden _ = elab_error "extract_hidden not passed STRUCTUREs"
+
      and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp) 
 	 : (decresult * mod * signat) = 
 	 let 
@@ -2180,33 +2289,95 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					    sig'))
 	 in  (sbnd_ce_list,resmod, sig')
 	 end
+(* space-safe but buggy version  *)
       | xstrexp (context, strb, Ast.Transparent sigexp) = 
 	let 
 	    val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
 	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	    val sig' = xsigexp(context,sigexp) 
 	    val orig_var = fresh_named_var "orig_var"
-	    val (coerced_mod,sig_ret') = 
+	    val (coerced_mod,coerced_sig) = 
 				  (if (Util.substring("xxxposix-bin-io",peek_region_str()))
 				       then xcoerce_show else xcoerce)
 				       (context',orig_var,signat,sig')
-	    (* --- we would like to use sig_ret' but it contains references to mod'_var --- *)
+	    (* --- we would like to use sig_ret but it contains references to mod'_var --- *)
 	    val let_var = fresh_named_var "let_var"
-	    val coerced_var = fresh_named_var "coerced_var"
-	    val (hidden_sbnds, hidden_sdecs) = extract_hidden(orig_var, signat, sig_ret')
-	    local val orig_lbl = fresh_internal_label "orig_lbl"
-	    in    val orig_sbnd = SBND(orig_lbl,BND_MOD(orig_var,module))
-		  val orig_sdec = SDEC(orig_lbl,DEC_MOD(orig_var,signat))
-	    end
-	    val open_lbl = fresh_open_internal_label "open_lbl"
-	    val resmod = MOD_STRUCTURE(orig_sbnd :: (hidden_sbnds @ 
-					  [SBND(open_lbl, BND_MOD(coerced_var, coerced_mod))]))
-	    val ressig = SIGNAT_STRUCTURE(NONE,
-					  orig_sdec :: (hidden_sdecs @ 
-							[SDEC(open_lbl,DEC_MOD(coerced_var, sig_ret'))]))
-	in  (sbnd_ce_list,resmod, ressig)
+	    val (csubst,msubst,(new_sbnds,new_sdecs)) = 
+		extract_hidden(orig_var, signat, coerced_mod, coerced_sig)
+
+	    val coerced_mod_augmented = MOD_STRUCTURE new_sbnds
+	    val coerced_sig_augmented = SIGNAT_STRUCTURE(NONE, new_sdecs)
+(*
+	    val coerced_mod_augmented = 
+		(case coerced_mod of
+		     MOD_STRUCTURE sbnds => MOD_STRUCTURE(hidden_sbnds @ sbnds)
+		   | _ => error "coerced_mod must be a structure")
+	    fun eq_modproj (MOD_VAR v, MOD_VAR v') = eq_var (v,v')
+	      | eq_modproj (MOD_PROJECT (m,l), MOD_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	      | eq_modproj _ = false
+	    fun eq_conproj (CON_VAR v, CON_VAR v') = eq_var (v,v')
+	      | eq_conproj (CON_MODULE_PROJECT (m,l), 
+			    CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_modproj(m,m')
+	      | eq_conproj _ = false
+	    val csubst' = map (fn (v,c) => (c,CON_VAR v)) csubst
+	    val msubst' = map (fn (v,m) => (m,MOD_VAR v)) msubst
+	    fun chandler (m,l) = 
+		assoc_eq(eq_conproj, CON_MODULE_PROJECT(m,l), csubst')
+	    fun mhandler (m,l) = 
+		assoc_eq(eq_modproj, MOD_PROJECT(m,l), msubst')
+	    val coerced_sig_augmented = 
+		(case (sig_subst_allproj(coerced_sig, fn _ => NONE,
+					 chandler,mhandler, fn _ => NONE)) of
+		    SIGNAT_STRUCTURE(popt,sdecs) => 
+			  SIGNAT_STRUCTURE(popt, hidden_sdecs @ sdecs)
+		  | _ => error "coerced_sig must be a sig_struct")
+	    val _ = (print "\nactual signat is\n        ";
+		     pp_signat signat;
+		     print "\ntarget sig' is\n        ";
+		     pp_signat sig';
+		     print "\n\ncoerced_sig is\n        ";
+		     pp_signat coerced_sig;
+		     print "\nand csubst' is\n";
+		     app (fn (c,c') => (pp_con c; print "  -->  "; pp_con c'; print "\n")) csubst';
+		     print "\ncoerced_sig_augmented is\n       ";
+		     pp_signat coerced_sig_augmented;
+		     print "\n\n")
+*)
+
+	    val resmod = MOD_LET(orig_var, module, 
+				 MOD_SEAL(coerced_mod_augmented,
+					  coerced_sig_augmented))
+	in  (sbnd_ce_list,resmod, coerced_sig_augmented)
 	end
-      | xstrexp (context, strb, Ast.NoSig) =
+(*
+       | xstrexp (context, strb, Ast.Transparent sigexp) = 
+        let 
+            val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
+            val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
+            val sig' = xsigexp(context,sigexp) 
+            val orig_var = fresh_named_var "orig_var"
+            val (coerced_mod,sig_ret') = 
+                                  (if (Util.substring("xxxposix-bin-io",peek_region_str()))
+                                       then xcoerce_show else xcoerce)
+                                       (context',orig_var,signat,sig')
+            (* --- we would like to use sig_ret' but it contains references to mod'_var --- *)
+            val let_var = fresh_named_var "let_var"
+            val coerced_var = fresh_named_var "coerced_var"
+            val (hidden_sbnds, hidden_sdecs) = extract_hidden(orig_var, signat, sig_ret')
+            local val orig_lbl = fresh_internal_label "orig_lbl"
+            in    val orig_sbnd = SBND(orig_lbl,BND_MOD(orig_var,module))
+                  val orig_sdec = SDEC(orig_lbl,DEC_MOD(orig_var,signat))
+            end
+            val open_lbl = fresh_open_internal_label "open_lbl"
+            val resmod = MOD_STRUCTURE(orig_sbnd :: (hidden_sbnds @ 
+                                          [SBND(open_lbl, BND_MOD(coerced_var, coerced_mod))]))
+            val ressig = SIGNAT_STRUCTURE(NONE,
+                                          orig_sdec :: (hidden_sdecs @ 
+                                                        [SDEC(open_lbl,DEC_MOD(coerced_var, sig_ret'))]))
+        in  (sbnd_ce_list,resmod, ressig)
+        end
+*)
+     | xstrexp (context, strb, Ast.NoSig) =
 	(case strb of
 	     Ast.VarStr path => 
 			 (case Context_Lookup(context,map symbol_label path) of
@@ -2226,15 +2397,37 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      val (sbnd_ce_list,argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argmod = (mod2path argmod; argmod)
 				  handle _ => elab_error "xstrexp: str path looked up to non-path"
+
 			      val modc_v0 = fresh_named_var "v0_xcoerce"
 			      val (modc_body,temp_sig1') = xcoerce(context,modc_v0,signat,sig1)
-			      val newvar = fresh_named_var "coerced_structure"
 			      val sig1' = sig_subst_modvar(temp_sig1',[(modc_v0, argmod)])
+
+			      val (_, context') = add_context_sbnd_ctxts(context, sbnd_ce_list)
+			      val _ = if Sig_IsSub(context',sig1',sig1)
+				  then ()
+				      else (error_region();  
+					    print "functor application failed\n";
+					    tab_region();
+					    print "Expected signature";
+					    pp_signat sig1;
+					    print "\n";
+					    tab_region();
+					    print "Actual (original) signature";
+					    pp_signat signat;
+					    print "Actual (almost_coerced) signature";
+					    pp_signat temp_sig1';
+					    print "Actual (coerced) signature";
+					    pp_signat sig1';
+					    print "\n")
+
+
+			      val newvar = fresh_named_var "coerced_structure"
 			      val sig2' = sig_subst_modvar(sig2,[(var1,MOD_VAR newvar)])
 			      val fsig = SIGNAT_FUNCTOR(var1,sig1',sig2,PARTIAL)
 			      val fsig' = SIGNAT_FUNCTOR(var1,sig1',sig2',PARTIAL)
 			      val context' = add_context_mod'(context,newvar,
 							      SelfifySig(SIMPLE_PATH newvar, sig1'))
+(*
 			      val _ = if Sig_IsSub(context',fsig,fsig')
 					  then ()
 				      else (error_region();  
@@ -2247,6 +2440,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					    print "Actual signature";
 					    pp_signat fsig;
 					    print "\n")
+
+*)
 
 			      val temp = mod_subst_modvar(modc_body,
 							  [(modc_v0,argmod)])
@@ -2655,7 +2850,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			     val m' = path2mod(COMPOUND_PATH(v0,lbls))
 			     val bnd = BND_MOD(v,mod_subst_modvar(mbody,[(mvar,m')]))
 			     val dec = DEC_MOD(v,sig_subst_modvar(sig_ret,[(mvar,m')])) 
-			 in SOME(bnd,dec,dec)
+			     val extdec = DEC_MOD(v,sig_subst_modvar(s1,[(mvar,m')])) 
+			 in SOME(bnd,dec,extdec)
 			 end
 		   | _ => (error_region();
 			   print "coercion of a non-structure component to a ";
@@ -2726,23 +2922,30 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			 (case (sig_actual_lookup lbl) of
 			      SOME(lbls,PHRASE_CLASS_CON (_,knd)) => 
 				  let val con' = path2con(COMPOUND_PATH(v0,lbls))
-				      val _ = (case copt of 
-						   NONE => ()
+				      val copt' = (case copt of 
+						   NONE => SOME con'
 						 | SOME con => 
 						       if (eq_con(ctxt,con,con'))
-							   then ()
+							   then SOME con
 						       else (error_region();
 							     print "coercion of a type component to a ";
-							     print "type specification failed at";
+							     print "type specification failed at ";
 							     pp_label lbl;
-							     print "\n"))
+							     print "\nExpected type: ";
+							     pp_con con;
+							     print "\nActual type: ";
+							     pp_con con';
+							     print "\n";
+							     NONE))
 				      val bnd = BND_CON(v,con')
-				      val dec = DEC_CON(v,k,SOME con')
-				  in SOME(bnd,dec,dec)
+				      val dec = DEC_CON(v,k,copt') 
+(*				      val dec = DEC_CON(v,k,SOME con') *)
+				      val extdec = DEC_CON(v,k,SOME con')
+				  in SOME(bnd,dec,extdec)
 				  end
 			    | _ => (error_region();
 				    print "coercion of a non-type or non-existent component to a ";
-				    print "type specification failed at";
+				    print "type specification failed at ";
 				    pp_label lbl;
 				    print "\n";
 				    NONE))

@@ -466,8 +466,13 @@ functor Pat(structure Il : IL
 				  (if (eq_con(context,c,(!rescon)))
 				       then ()
 				   else (error_region();
-					 print "result type of constructor patterns mismatch");
-				       SOME e)),
+					 print "result type of constructor patterns mismatch";
+				         print "result type is: ";
+					 pp_con (!rescon);
+				         print "\nfound type is: ";
+					 pp_con c;
+					 print "\n");
+				   SOME e)),
 	       tipe = con_deref (!rescon)}, con_deref (!rescon)))
     end
 
