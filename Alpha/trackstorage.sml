@@ -36,7 +36,7 @@ struct
     INFO {callee_saves     = listToSet callee_saves,
 	  regs_destroyed   = ref (listToSet regs_destroyed),
 	  stackmap         = ref stack_resident,
-	  (* num_xxx_spilled's are counted funny; 
+	  (* num_???_spilled's are counted funny; 
 	     They're 1 less than the actual # *)
 	  num_ints_spilled = ref (Regmap.numItems stack_resident-1),
 	  num_fps_spilled  = ref ~1,   

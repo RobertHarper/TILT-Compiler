@@ -173,7 +173,7 @@ struct
        else
 	 lab :: (removeAllLabel rest lab')
 
-   (* Package up the current_xxx values into a basic block,
+   (* Package up the current_??? values into a basic block,
       and store it in the block_map if the label must occur
       in the output program or the list of instructions is nonempty. *)
    fun saveBlock () =
@@ -197,7 +197,7 @@ struct
 	  (! block_map)
 	
 
-   (* Reset the current_xxx values.  If a add_to_predecessor is
+   (* Reset the current_??? values.  If a add_to_predecessor is
       true, and we weren't told the previous block does not
       fall through, then the last block stored in the block_map
       will have the newly reset block added as a successor. *)
@@ -218,7 +218,7 @@ struct
       no_fallthrough := false)
 
    (* Adds an instruction to the current basic block, updating the other
-      relevant current_xxx values.  If this is a control-flow instruction,
+      relevant current_??? values.  If this is a control-flow instruction,
       saves the current basic block and sets up a new, empty block. *)
    fun emit (instr : instruction) =
        (current_instrs := (NO_ANN instr) :: (! current_instrs);
