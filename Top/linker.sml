@@ -9,6 +9,9 @@ structure Linker : LINKER =
                   (* runtime, etc *)
     val error = fn x => Util.error "Linker" x
 
+    fun base2uo s = s ^ ".uo"
+    fun base2o s = s ^ ".o"
+
     structure Crc = Crc
 
 
@@ -103,9 +106,9 @@ structure Linker : LINKER =
     in
       fun mk_uo {imports : (string * Crc.crc) list,
 		 exports : (string * Crc.crc) list,
-		 uo_result : string,
-		 emitter : BinIO.outstream -> unit} : unit =
+		 base_result : string} : unit = 
 	let 
+	    val uo_result = base2uo base_result
 	    val os = BinIO.openOut uo_result
 	  val out_pairs = app (fn (name,crc) =>
 			       (output_string (os, name ^ ":");
@@ -115,8 +118,6 @@ structure Linker : LINKER =
 	  out_pairs imports;
 	  output_string (os, "$exports:\n");
 	  out_pairs exports;
-	  output_string (os, "$code:\n");
-	  emitter os;
 	  BinIO.closeOut os
 	end
 
@@ -137,14 +138,14 @@ structure Linker : LINKER =
 	end
  
       fun input_pairs (is : BinIO.instream) : (string * Crc.crc) list =
-	let fun loop a = case lookahead is
-			   of SOME #"$" => rev a
+	let fun loop a = case lookahead is of
+			      NONE => rev a
+			    | SOME #"$" => rev a
 			    | SOME _ => let val unitname = read_unitname_and_colon is
 					    val crc = Crc.input_crc is
 					    val _ = read_string(is,"\n")
 					in loop((unitname,crc)::a)
 					end
-			    | NONE => error "input_pairs: nothing in stream"
 	in loop []
 	end
 
@@ -159,19 +160,14 @@ structure Linker : LINKER =
 	end
 
 
-      (* read imports and exports from uo-file and copy code-segment
-       * into the file code_o. *)
-      fun read_header_and_extract_code {uo_arg : string, o_file : string} : 
+      (* read imports and exports from uo-file *)
+      fun read_header_and_extract_code {uo_arg : string} : 
 	{imports : (string * Crc.crc) list,
 	 exports : (string * Crc.crc) list} =
 	let
 	    val is = BinIO.openIn uo_arg
 	    val imports = read_imports is
 	    val exports = read_exports is
-	    val _ = read_string(is, "$code:\n")
-	    val os = BinIO.openOut o_file
-	    val _ = bincopy(is,os)
-	    val _ = BinIO.closeOut os
 	    val _ = BinIO.closeIn is
 	in {imports=imports, exports=exports}
 	end
@@ -180,17 +176,18 @@ structure Linker : LINKER =
     (* link: Link a sequence of uo-files into a new uo-file 
      * and perform consistency check. *)
 
-    fun link {uo_args : string list,       (* Current directory, or absolute path. *)
-	      uo_result : string} : unit = (* Strings should contain extension. *) 
+    fun link {base_args : string list,       (* Current directory, or absolute path. *)
+	      base_result : string} : unit = (* Strings should not contain extension. *) 
       let 
 	  val linkinfo =
-	    map (fn uo_file =>
-		 let val base = OS.Path.base uo_file
-		     val o_file = base ^ ".o"
+	    map (fn base =>
+		 let
+		     val o_file = base2o base
+		     val uo_file = base2uo base
 		     val {imports,exports} = read_header_and_extract_code 
-		       {uo_arg = uo_file, o_file = o_file}
+		       {uo_arg = uo_file}
 		 in {unitname=base, imports=imports, exports=exports,ofile=o_file}
-		 end) uo_args
+		 end) base_args
 	  fun li (iue0,eue0,[]) = (iue0,eue0)
 	    | li (iue0,eue0,{unitname,imports=iue,exports=eue,ofile}::rest) =
 	    let val iue' = UE.confine(unitname,iue,eue0)
@@ -200,15 +197,15 @@ structure Linker : LINKER =
 	    end
 	  val (imports, exports) = li ([],[],linkinfo)
 	  val o_files = map #ofile linkinfo
-	  val o_file = OS.Path.base uo_result ^ ".o"
+	  val o_file = base2o base_result
 	  fun pr_list [] = ""
 	    | pr_list [a] = a
 	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
 	  val command = (ld_path ^ " -non_shared -r -o " ^ o_file ^ 
 			 " " ^ pr_list o_files)
+	  val _ = (print "Running: "; print command; print "\n")
 	  val res = if OS.Process.system command = OS.Process.success then 
-	      mk_uo {imports=imports,exports=exports,uo_result=uo_result,
-		     emitter=mk_emitter o_file}
+	      mk_uo {imports=imports,exports=exports,base_result=base_result}
 		    else (print "link failed: "; print command; print "\n";
 			  error "link. System command ld failed")
       in  res
@@ -216,14 +213,12 @@ structure Linker : LINKER =
 
     (* mk_exe: Make an executable from a uo-file and check 
      * that the sequence of imports is empty. *)
-    fun mk_exe {uo_arg : string,
+    fun mk_exe {base_arg : string,
 		exe_result : string} : unit =
-      let val _ = case OS.Path.ext uo_arg
-		    of SOME "uo" => () 
-		     | _ => error "mk_exe - argument does not have uo-extension"
-	  val o_temp = OS.Path.base uo_arg ^ ".o"
-	  val {imports,exports} = read_header_and_extract_code {uo_arg = uo_arg,
-								o_file = o_temp}
+      let val o_temp = base2o base_arg
+	  val uo_arg  = base2uo base_arg
+	  val {imports,exports} = read_header_and_extract_code {uo_arg = uo_arg}
+
       in case imports
 	   of nil => (* everything has been resolved *)
 	       let val unitnames = map #1 exports

@@ -324,8 +324,7 @@ struct
 			  val _ = chat ("  [Creating " ^ uoFile ^ " ...")
 		      in   Linker.mk_uo {imports = import_uis,
 					 exports = exports,
-					 uo_result = uoFile,
-					 emitter = emitter oFile}
+					 base_result = srcBase}
 		      end
 	  val _ = if (!up_to_elaborate orelse !up_to_phasesplit)
 		      then (* create dummy .uo file or update time if it exists *)
@@ -445,21 +444,22 @@ struct
   fun compileThem(mapping, linkopt, exeopt, units) = 
       let val bases = map (name2base mapping) units
 	  val _ = List.app (compile true mapping) units
-	  val tmp_uo = OS.FileSys.tmpName() ^ ".uo"
-	  val uo_args = map (fn u => base2uo(name2base mapping u)) units
+	  val tmp = OS.FileSys.tmpName()
+	  val tmp_uo = tmp ^ ".uo"
+	  val base_args = map (fn u => (name2base mapping u)) units
       in
 	  (case (linkopt,exeopt) of
 	       (NONE,NONE) => ()
 	     | (NONE, SOME out) => (print "manager calling linker with: ";
-				    app (fn s => (print s; print " ")) uo_args;
+				    app (fn s => (print s; print " ")) base_args;
 				    print "\nand with uo_result = ";
 				    print tmp_uo; print "\n";
-				    Linker.link {uo_args = uo_args, uo_result = tmp_uo};
-				    Linker.mk_exe {uo_arg = tmp_uo, exe_result = out};
+				    Linker.link {base_args = base_args, base_result = tmp};
+				    Linker.mk_exe {base_arg = tmp, exe_result = out};
 				    OS.FileSys.remove tmp_uo)
-	     | (SOME f, NONE) => Linker.link {uo_args = uo_args, uo_result = f}
-	     | (SOME f, SOME out) => (Linker.link {uo_args = uo_args, uo_result = f};
-				      Linker.mk_exe {uo_arg = f, exe_result = out}))
+	     | (SOME f, NONE) => Linker.link {base_args = base_args, base_result = f}
+	     | (SOME f, SOME out) => (Linker.link {base_args = base_args, base_result = f};
+				      Linker.mk_exe {base_arg = f, exe_result = out}))
       end
        
   fun getMapping mapFile : mapping = 
