@@ -1,0 +1,27 @@
+Number: 0089
+Title:       Printing from runtime.
+Keywords:    runtime, testnig
+Submitter:   swasey
+Date:        8/15/02
+Version:     CVS
+System:	     solaris,alpha
+Severity:    minor
+Problem:
+	For the test harness, we need to eliminate any runtime
+	messages to stdout in favor of stderr.
+
+	Also, the runtime uses the idiom
+
+		print error message
+		assert(0)
+
+	to fail.  We should use abort() rather than assert(0) (which
+	is sometimes a noop).  Perhaps we should define a function
+	(panic) that both prints and aborts.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner:
+Status: open
