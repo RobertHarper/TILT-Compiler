@@ -24,6 +24,8 @@ functor AlphaStackFrame(
    * |	 ...			     n*8 bytes
    * | incoming argument 0
    * +------------------------------ <-- incoming SP
+   * | octaword pad (optional)	     0 or 8 bytes
+   * +------------------------------
    * | local float n-1
    * |	 ...			     n*8 bytes
    * | local float 0
@@ -59,7 +61,11 @@ functor AlphaStackFrame(
   fun topInteger(frame as (_, _, ref integer, _)) =
 	integer+integer mod 8+topReturn frame
   fun topFloat(frame as (_, _, _, ref float)) =
-	float+topInteger frame
+	let
+	  val total = float+topInteger frame
+	in
+	  total+total mod 16
+	end
 
   fun frame() = (ref 0, ref 0, ref 0, ref 0)
 
