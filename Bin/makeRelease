@@ -60,6 +60,7 @@ umask 022
 # Also establish
 #	MAN_PAGE_FILTER		name of a filter command
 #	SMLNJ			full path to SML/NJ driver
+#	LIBDIR			full path to TILT_LIBDIR
 
 switch ($0) {
 case *makeRelease
@@ -73,6 +74,7 @@ case *makeRelease
 	}
 	MAN_PAGE_FILTER = cat
 	SMLNJ = /usr/local/bin/sml
+	LIBDIR = /usr/local/lib/tilt
 
 	# No depot.conf tweaks necessary with the misc collection.
 	ENABLE_COMMON=()
@@ -88,6 +90,7 @@ case *makeAndrewRelease
 	}
 	MAN_PAGE_FILTER = andrewFilter
 	SMLNJ = /afs/cs.cmu.edu/local/sml/common/andrew/bin/sml
+	LIBDIR = /usr/contributed/lib/tilt
 
 	# Enable common directory for every target platform.
 	ENABLE_COMMON = ($SPARC $ALPHA $LINUX)
@@ -213,7 +216,10 @@ fn makeCommon { common=$1 {
 	# Special treatment for driver script
 	tmp=/tmp/tilt$pid {
 		trace creating driver script
-		sed s,/usr/local/bin/sml,$SMLNJ,g <Bin/tilt >$tmp
+		sed '
+			s,/usr/local/bin/sml,'$SMLNJ',g
+			s,/usr/local/lib/tilt,'$LIBDIR',g
+		' <Bin/tilt >$tmp
 		copyFile $tmp $common/bin/tilt
 		copyFile $tmp $common/lib/tilt/Bin/tilt
 		rm -f $tmp

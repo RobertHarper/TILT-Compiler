@@ -13,8 +13,8 @@ TILT)
 	;;
 NJ)
 	case "$TILT_LIBDIR" in
-	/usr/local/lib/*|/usr/lib*)
-		# The misc collection heaps are compiled with 110.9.1
+	/usr/local/lib/*|/usr/lib/*|/usr/contributed/lib/*)
+		# The released heaps are compiled with version 110.9.1
 		SML_VERSION=110.9.1
 		export SML_VERSION
 		;;
