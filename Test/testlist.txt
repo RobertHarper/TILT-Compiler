@@ -46,6 +46,13 @@ m0042	two-dimensional arrays
 m0043	arrays
 m0044	arrays
 m0045	asterisk parsing
+m0046	case analysis
+m0047	withtype
+m0048	vectors
+m0049	vectors
+m0050	vectors
+m0051	vectors
+m0052	vector looping
 n0      abstype not equality type
 n1      scoping of abstype
 n2      syntax error (exp in local top)
@@ -185,5 +192,3 @@ n135    Denmark Core-SML accept test
 n136    Denmark Core-SML accept test
 n137    Denmark Core-SML accept test
 n138    Denmark Core-SML accept test
-withtype	 withtype
-m0047	withtype
