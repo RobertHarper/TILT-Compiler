@@ -1,7 +1,8 @@
 (*$import Prelude TopLevelHelp *)
 (* http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
-fun raw_print(s : string) : unit = output(1,s)
+extern ml_output : (int, string, unit) -->
+fun raw_print(s : string) : unit = Ccall(ml_output,1,s)
 
 val valOf = option_valOf
 val app = list_app
