@@ -100,6 +100,15 @@ struct
 	in  fn () => !cell()
 	end
 
+    (*
+	NB We need to redirect stdin in every child process to prevent
+	any confusion caused by the parent and child interleaving
+	input.	Also, interactive SML/NJ apparantly handles SIGINT in
+	the child and uses isatty(0) to determine whether or not the
+	process should terminate.  If we redirect stdin, then a user
+	interrupt kills children.
+    *)
+
     structure IO = Posix.IO
     structure FS = Posix.FileSys
     structure P = Posix.Process
@@ -193,6 +202,13 @@ struct
 	in  ()
 	end
 
+    (*
+	A child created by fork' prints information about uncaught
+	exceptions.  A child created by fork pipes uncaught exception
+	information to the parent.  Fork' returns a function (that can
+	only be called once) to read the pipe and raise a related
+	exception in the parent.
+    *)
     fun flush_buffers () : unit =
 	(TextIO.flushOut (TextIO.stdOut);
 	 TextIO.flushOut (TextIO.stdErr))
@@ -200,11 +216,12 @@ struct
     fun fork' (child:unit -> 'a) : P.pid =
 	let val _ = flush_buffers()
 	in  (case (P.fork()) of
-		NONE => P.exit ((child(); 0w0) handle _ => 0w1)
+		NONE =>
+		    ((child(); P.exit 0w0)
+		     handle e => UtilError.print_and_exit e)
 	    |	SOME childpid => childpid)
 	end
 
-    (* The returned function can only be called once. *)
     fun fork (child : unit -> 'a) : P.pid * (unit -> unit) =
 	let val {infd,outfd} = IO.pipe()
 	    fun child' () : unit =
@@ -227,9 +244,12 @@ struct
 	end
 
     (*
-	When we are not waiting, we fork twice so that the OS reaps
-	the command as soon as it dies.	 We get status information
-	from the forked child but no information from the grandchild.
+	When we are not waiting, we use fork' instead of fork because
+	waiting for the exception message pipe to close is tantamount
+	to waiting for the child to exit.  Also, we fork twice so that
+	the OS reaps the child process exit status rather than
+	leaveing a zombie for the parent to reap (there does not
+	appear to be a Basis interface to sigaction).
     *)
     fun run {command:string list, stdin:string option, stdout:string option, wait:bool} : unit =
 	let fun wait_child () : unit =
@@ -283,8 +303,13 @@ struct
 	in  output
 	end
 
+    fun nostdin (f : unit -> 'a) () : 'a =
+	let val _ = connect(FS.stdin, readonly "/dev/null")
+	in  f()
+	end
+
     fun background (f : unit -> 'a) : unit -> bool =
-	let val (pid,waitexn) = fork f
+	let val (pid,waitexn) = fork (nostdin f)
 	    fun finished (status:P.exit_status) : bool =
 		let val _ = waitexn()
 		    val _ = check_status(pid,status)
@@ -306,7 +331,7 @@ struct
 	end
 
     fun background' (f:unit -> 'a) : unit -> unit =
-	let val (pid,waitexn) = fork f
+	let val (pid,waitexn) = fork (nostdin f)
 	    fun kill () : unit =
 		let val _ = P.kill (P.K_PROC pid, S.kill) handle _ => ()
 		    val status = waitpid pid

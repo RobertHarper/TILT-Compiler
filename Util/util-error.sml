@@ -48,6 +48,8 @@ struct
 	Posix.Process.exit (exitstatus e)
 
     fun print_and_exit (e : exn) : 'a =
-	(print e; exit e)
+	let val _ = (print e handle _ => ())
+	in  exit e
+	end
 
 end
