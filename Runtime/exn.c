@@ -11,11 +11,11 @@
 #include <sys/proc.h>
 #include <string.h>
 #include "tag.h"
-#include "exn.h"
 #include "create.h"
 #include "til-signal.h"
 #include "global.h"
 #include "thread.h"
+#include "exn.h"
 
 exn divide_exn;
 exn overflow_exn;

@@ -1,3 +1,4 @@
-#ifdef solaris
+/* Used only for solaris */
+
 int firstdata = 1;
-#endif
+
