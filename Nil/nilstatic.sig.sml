@@ -5,6 +5,9 @@ signature NILSTATIC =
     type context 
     val debug : bool ref
 
+    (* removes the top-level singleton kind *)
+    val strip_singleton : Nil.kind -> Nil.kind
+
     val exp_valid : context * Nil.exp -> Nil.exp * Nil.con * Nil.kind 
 
     val con_valid : context * Nil.con -> Nil.con * Nil.kind

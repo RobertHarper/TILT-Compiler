@@ -411,8 +411,8 @@ struct
 	       val (cbnd,k) = lkind state k
 	   in  ((rev cbnd)@cbnds, (v,k)::acc, state)
 	   end
-	   val (rev_cbnds, vklist,state) = foldl vkfolder ([],[],state) vklist
-       in  (rev rev_cbnds, vklist, state)
+	   val (rev_cbnds, rev_vklist,state) = foldl vkfolder ([],[],state) vklist
+       in  (rev rev_cbnds, rev rev_vklist, state)
        end
 
    and lvclist state vclist = 

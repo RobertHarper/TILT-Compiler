@@ -387,26 +387,26 @@ struct
 		  Con_b(v,k,c) => (Con_b(v,f_kind state k,f_con state c), add_convar(state,v,k))
 		| Exp_b(v,c,e) => (Exp_b(v,f_con state c, f_exp state e), add_var(state,v,c))
 		| Fixopen_b vfset => 
-		      let fun doer(v,f) = (v,dofun state f)
-			  val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Open f)) s vfset
+		      let val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Open f)) s vfset
+			  fun doer(v,f) = (v,dofun s' f)
 		      in  (Fixopen_b(Util.mapset doer vfset), s')
 		      end
 		| Fixcode_b vfset => 
-		      let fun doer(v,f) = (v,dofun state f)
-			  val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Code f)) s vfset
+		      let val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Code f)) s vfset
+			  fun doer(v,f) = (v,dofun s' f)
 		      in  (Fixcode_b(Util.mapset doer vfset), s')
 		      end
 		| Fixclosure_b vcset => 
-		      let fun doer(v,{code,cenv,venv,tipe}) = 
+		      let val s' = foldset (fn ((v,{tipe,...}),s) => add_var(s,v,tipe)) s vcset 
+			  fun doer(v,{code,cenv,venv,tipe}) = 
 			  (v,{code = (case (exphandler (bound,Var_e code)) of
 					  NOCHANGE => code
 					| (CHANGE_RECURSE (Var_e v')) => v'
 					| (CHANGE_NORECURSE (Var_e v')) => v'
 					| _ => error "can't have non-var in cllosure code comp"),
-			  cenv = f_con state cenv,
-			  venv = f_exp state venv,
-			  tipe = f_con state tipe})
-			  val s' = foldset (fn ((v,{tipe,...}),s) => add_var(s,v,tipe)) s vcset 
+			  cenv = f_con s' cenv,
+			  venv = f_exp s' venv,
+			  tipe = f_con s' tipe})
 		      in  (Fixclosure_b(Util.mapset doer vcset), s')
 		      end
       in  case (bndhandler (bound,bnd)) of
@@ -820,7 +820,8 @@ struct
 	| (Singleton_k (p1,k,c),Word_k p2) => sub_phase(p1,p2) andalso is_word k
 	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
 	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
-	      
+	| (Singleton_k (_,k,_),_) => alpha_sub_kind' context (k,k2)
+
 	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	 let
 	   val conref = ref context
@@ -1252,4 +1253,25 @@ struct
 	       Runtime
 	     else
 	       Compiletime)
+
+    fun rename_mu (is_bound,defs,var) = 
+	let
+	    val defs = sequence2list defs
+	    fun make_entry (v,_) = if (is_bound v)
+				       then SOME(v,Var_c(Name.derived_var v))
+				   else NONE
+	    val table = List.mapPartial make_entry defs
+	    fun subster v = Listops.assoc_eq(eq_var,v,table)
+	    fun find_var v = (case Listops.assoc_eq(eq_var,v,table) of
+				  SOME (Var_c v) => v 
+				| SOME _ => error "table has only Var_c's"
+				| NONE => v)
+	    fun rebind [] pair = pair
+	      | rebind table (v,c) = (find_var v,substConInCon subster c)
+	    val defs' = list2sequence (map (rebind table) defs)
+	    val var' = find_var var
+	in  Mu_c(defs',var')
+	end
+
+
 end;

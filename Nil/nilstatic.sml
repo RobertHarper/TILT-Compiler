@@ -691,22 +691,11 @@ struct
 	   (* Assumes that set implementation guarantees entries are 
 	    * all distinct - i.e., no duplicates
 	    *)
-         local 
-	     val temp = sequence2list defs
-	     fun make_entry (v,_) = (case find_kind(D,var) of
-					 NONE => NONE
-				       | SOME _ => SOME(v,Var_c(Name.derived_var v)))
-	     val table = List.mapPartial make_entry temp
-	     fun subster v = assoc_eq(eq_var,v,table)
-	     fun find_var v = (case assoc_eq(eq_var,v,table) of
-				   SOME (Var_c v) => v 
-				 | SOME _ => error "table has only Var_c's"
-				 | NONE => v)
-	     fun rebind [] pair = pair
-	       | rebind table (v,c) = (find_var v,substConInCon subster c)
-	 in  val def_list = map (rebind table) temp
-	     val var = find_var var
-	 end
+
+	   fun is_bound var = (case find_kind(D,var) of
+				     SOME _ => true
+				   | NONE => false)
+	   val Mu_c(def_list,var) = NilUtil.rename_mu(is_bound,defs,var)
 
 	   val var_kinds = map (fn (var,con) => (var,Word_k Runtime)) def_list
 

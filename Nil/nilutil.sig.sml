@@ -29,6 +29,7 @@ signature NILUTIL =
     val letc : Nil.conbnd list * Nil.con -> Nil.con
     val lete : Nil.bnd list * Nil.exp -> Nil.exp
     val cbnd2bnd : Nil.conbnd -> Nil.bnd
+    val rename_mu : (Nil.var -> bool) * (Nil.var, Nil.con) Util.sequence * Nil.var -> Nil.con
 
     val effect : Nil.exp -> bool (* could the expression have an effect *)
 

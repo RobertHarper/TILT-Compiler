@@ -1257,8 +1257,12 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
        end
 
      | xcon' context (Il.CON_MUPROJECT(i, Il.CON_FUN(vars, 
-						       Il.CON_TUPLE_INJECT cons))) =
+						     Il.CON_TUPLE_INJECT cons))) =
        let
+	   fun is_bound v = (case Nilcontext.find_kind (NILctx_of context, v) of
+				 NONE => false | SOME _ => true)
+	   val Il.CON_FUN(vars, Il.CON_TUPLE_INJECT cons) = 
+	       Ilutil.rename_confun(is_bound,vars,Il.CON_TUPLE_INJECT cons)
 	   fun cont1 NILctx' = 
 	       let
 		   val context' = 
@@ -1279,6 +1283,9 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xcon' context (Il.CON_MUPROJECT(i, Il.CON_FUN([var], con))) =
        let
+	   fun is_bound v = (case Nilcontext.find_kind (NILctx_of context, v) of
+				 NONE => false | SOME _ => true)
+	   val Il.CON_FUN([var],con) = Ilutil.rename_confun(is_bound,[var],con)
 	   fun cont1 NILctx' = 
 	       let
 		   val context' = 
@@ -1769,7 +1776,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	    false)
        end
 
-     | xexp' context (e as Il.EXN_CASE (il_exp, il_arms, il_default)) =
+     | xexp' context (e as Il.EXN_CASE {arg = il_exp, arms = il_arms, default = il_default, tipe}) =
        let
 	   val (exp, _, _) = xexp context il_exp
 
@@ -1804,10 +1811,11 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	              (flattenCatlist ebnd_cat)
 
 
+(*
 	   val _ = (print "tonil.sml: MODULE_PROEJCT case.  type_r =\n";
 		    Ppnil.pp_con type_r;
 		    print "\n\n")
-
+*)
            val unnormalized_con = 
 	       makeLetC (map Con_cb cbnds) 
 	                (if specialize then 
@@ -1815,17 +1823,19 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			 else
 			     projectFromRecord type_r [label])
 
+(*
            val _ = (print "unnormalized con = ";
 		    Ppnil.pp_con unnormalized_con;
 		    print "\n\nwith a context of\n";
 		    NilContext.print_context (NILctx_of context); print "\n")
+*)
 
            val con = Nilstatic.con_reduce(NILctx_of context, unnormalized_con)
-
+(*
            val _ = (print "normalized con = ";
 		    Ppnil.pp_con con;
 		    print "\n")
-
+*)
 	   val let_body = 
 	       if specialize then 
 		   name_r
