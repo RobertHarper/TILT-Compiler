@@ -33,20 +33,25 @@ struct
 
     fun get_error() = !error_level
 
-    fun peek_region () = (hd(!src_region))
-    fun peek_filename() = let val (p1,p2) = (hd(!src_region))
-			      val fp = !filepos
-			      val (f1,_,_) = fp p1
+    val pos0 = LinkParse.lexer_initial_position
+
+    fun peek_region () : region =
+	(case !src_region
+	   of nil => (pos0,pos0)
+	    | r :: _ => r)
+
+    fun peek_filename() = let val fp = !filepos
+			      val (f1,_,_) = fp pos0
 			  in  f1
 			  end
-    fun peek_region_string () : string = let val (p1,p2) = (hd(!src_region))
-					  val fp = !filepos
-					  val (f1,r1,c1) = fp p1
-					  val (f2,r2,c2) = fp p2
-				      in f1 ^ ":" ^
-					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^
-					  ((Int.toString r2) ^ "." ^ (Int.toString c2))
-				      end handle _ => "unknown"
+    fun peek_region_string () : string =
+	let val (p1,p2) = peek_region()
+	    val fp = !filepos
+	    val (f1,r1,c1) = fp p1
+	    val (f2,r2,c2) = fp p2
+	in concat[f1,":",Int.toString r1,".",Int.toString c1,"-",
+		  Int.toString r2,".",Int.toString c2]
+	end
     fun push_region p = (src_region := (p :: (!src_region));
 			 if (!track)
 			     then (tab ((length (!src_region)) - 1);

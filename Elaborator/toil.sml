@@ -2272,7 +2272,6 @@ structure Toil
 			  ignore(IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit))))
 
 	val _ = reset_elaboration fp
-	val _ = push_region(0,1000000)
 	val res = xobj arg
         val tyvar_table = get_tyvar_table()
 	val flex_table = get_flex_table()

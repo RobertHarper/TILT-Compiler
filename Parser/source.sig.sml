@@ -16,6 +16,7 @@ signature SOURCE =
         errConsumer: PrettyPrint.ppconsumer
       }
 
+    val lexer_initial_position : int
     val newSource : (string * int * TextIO.instream * bool * PrettyPrint.ppconsumer)
           -> inputSource
     val closeSource: inputSource -> unit

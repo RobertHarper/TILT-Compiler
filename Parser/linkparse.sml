@@ -10,6 +10,8 @@ struct
   type filepos = SourceMap.charpos -> string * int * int
   type 'a parser = string * string -> (filepos * 'a) option
 
+  val lexer_initial_position = Source.lexer_initial_position
+
   fun make_source s =
       let val instream = TextIO.openIn s
       in  (instream,
@@ -22,6 +24,7 @@ struct
 	  val _ = msg ("===== Parsing " ^ name ^ ": " ^ what ^ " =====\n")
 	  val (instream,src) = make_source filename
 	  val fp = Source.filepos src
+	  val fp = (fn pos => (fp pos handle _ => (filename,0,1)))
       in
 	  case parser src
 	    of FrontEnd.SUCCESS contents =>
