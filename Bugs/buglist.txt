@@ -9,7 +9,6 @@
 0009 [closed]	Stack overflow segv on alpha.
 0010 [open]	Want a separate stack for signal handlers on alpha.
 0011 [closed]	Segv on alpha.
-0012 [closed]	"Invalid Float operation" on alpha.
 0013 [closed]	Prolog-based stacklet allocation not working properly on alpha.
 0014 [closed]	Stack overflow in C code on alpha.
 0015 [closed]	Large string constant compiles incorrectly on alpha.
@@ -36,12 +35,11 @@
 0036 [closed]	Incorret code generation on the alpha.
 0037 [open]	High overhead on alpha.
 0038 [closed]	Nontermination in elaborator.
-0039 [open]	Problems with our treatment of reals.
+0039 [open]	Real numbers are broken.
 0040 [closed]	Datatype replication doesn't work behind opaque ascription.
 0041 [closed]	Assertion failure when running TILT+wizard.
 0042 [open]	Runtime not being made up-to-date.
 0043 [open]	Assembler warnings on Alpha.
-0044 [open]	TILT on alpha fails TestBasis/Dynamic tests.
 0045 [closed]	Equality for datatypes.
 0046 [closed]	Generativity.
 0047 [closed]	Mishandling ref in patterns.
@@ -102,41 +100,33 @@
 0105 [closed]	overloading with words
 0106 [closed]	internal Option failure
 0107 [closed]	tilt option failure
-0108 [open]	Parsing of infix(r) declarations is not correct.
+0108 [closed]	Parsing of infix(r) declarations is not correct.
 0109 [closed]	listpair discrepancies
-0110 [open]	math discrepancies
 0111 [closed]	runtime error: failed assertion
 0112 [closed]	option exception
-0113 [open]	parsing problem
+0113 [closed]	Parsing (op*)
 0114 [open]	overloading constants
 0115 [closed]	withtype scoping wrong
 0117 [closed]	option failure
-0118 [open]	syntax discrepancies
-0119 [open]	discrepancies on byte/char tests
+0118 [closed]	Parsing of val rec
+0119 [closed]	discrepancies on byte/char tests
 0120 [closed]	zero-sized word8array
 0121 [closed]	nonexhaustive binding failure in optimize1
 0122 [closed]	overflow in compiler
 0123 [open]	possible nontermination
-0124 [open]	flexible records
 0125 [closed]	bug in runtime exception handling
 0126 [closed]	parsing identifiers incorrectly
 0127 [closed]	integer overflow discrepancy
-0128 [open]	discrepancy on arguments to datatypes
+0128 [closed]	bombing on nonuniform datatypes
 0129 [open]	os exit status and textio
 0130 [closed]	type_of failed in Reify2
-0131 [open]	scalb and real_scalb unimplemented
-0132 [open]	scalb, real_scalb unimplemented
-0133 [open]	~inf vs nan
-0134 [open]	discrepancies for real number operations
-0135 [open]	discrepancies on real numbers
-0136 [open]	more real number discrepancies and unimplemented functions
 0137 [open]	syntax of special constants
 0138 [open]	date failure
 0139 [closed]	filesys discrepancies
 0140 [open]	discrepancies on string tests
 0141 [open]	stringcvt discrepancies
 0142 [closed]	uncaught exception leads to assertion failure in runtime
-0143 [open]	parsing problem with test file
+0143 [closed]	PrimUtil gets negative integers wrong
 0144 [closed]	redefinition problem in as
 0145 [open]	discrepancies with time results
 0146 [closed]	integer constant too large
