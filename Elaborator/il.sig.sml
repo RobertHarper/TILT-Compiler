@@ -21,14 +21,14 @@ signature IL =
 
     type fixity_table = (label * Fixity.fixity) list 
 
-
+    type context
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
                  | PRIM    of prim * con list (* no polymorphic primitives *)
                  | ILPRIM  of ilprim          (* for type-checking reasons *)
                  | VAR     of var
                  | APP     of exp * exp
-                 | FIX     of fbnd list * var
+                 | FIX     of arrow * fbnd list * var
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
                  | SUM_TAIL of con * exp
@@ -37,14 +37,10 @@ signature IL =
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
                  | EXN_INJECT of exp * exp (* tag and value *)
-                 | MK_REF  of exp
-                 | GET     of exp
-                 | SET     of exp * exp
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
-                 | INJ     of con list * int * exp
-                 | PROJ    of con list * int * exp
                  | TAG     of tag * con       (* used only for evaluation: the result of a NEW_STAMP *)
+                 | INJ     of con list * int * exp
                  (* case over sum types of exp with arms and defaults*)
                  | CASE    of con list * exp * (exp option) list * exp option 
                  (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *) 
@@ -53,14 +49,14 @@ signature IL =
                  | SEAL    of exp * con
 
                               (* var = (var : con) : con |-> exp *)
-    and     fbnd = FBND    of var * var * con * con * exp  
+    and  fbnd = FBND    of var * var * con * con * exp  
 
     and flexinfo = FLEXINFO of (Tyvar.stamp * bool * (label * con) list)
 	         | INDIRECT_FLEXINFO of flexinfo ref (* <--- this ref is necessary for unification *)
 
     and      con = CON_VAR           of var
-                 | CON_TYVAR         of (decs,con) Tyvar.tyvar  (* supports type inference *)
-                 | CON_OVAR          of (decs,con) Tyvar.ocon   (* supports "overloaded" types *)
+                 | CON_TYVAR         of (context,con) Tyvar.tyvar  (* supports type inference *)
+                 | CON_OVAR          of (context,con) Tyvar.ocon   (* supports "overloaded" types *)
                  | CON_FLEXRECORD    of flexinfo ref
                  | CON_INT           of Prim.intsize
                  | CON_UINT          of Prim.intsize
@@ -87,12 +83,13 @@ signature IL =
                  | MOD_APP of mod * mod
                  | MOD_PROJECT of mod * label
                  | MOD_SEAL of mod * signat
+                 | MOD_LET of var * mod * mod
     and     sbnd = SBND of label * bnd
     and      bnd = BND_EXP of var * exp
                  | BND_MOD of var * mod
                  | BND_CON of var * con
                  | BND_FIXITY    of fixity_table
-    and   signat = SIGNAT_STRUCTURE       of sdec list
+    and   signat = SIGNAT_STRUCTURE         of path option * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * (arrow Util.oneshot)
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con
@@ -100,22 +97,22 @@ signature IL =
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
                  | DEC_FIXITY    of fixity_table
-    and inline = INLINE_MODSIG of mod * signat
-                    | INLINE_EXPCON of exp * con
-                    | INLINE_CONKIND of con * kind
-                    | INLINE_OVER   of unit -> exp * (decs,con) Tyvar.ocon
 
-    and context_entry = CONTEXT_INLINE of label * var * inline
-                      | CONTEXT_SDEC   of sdec
-                      | CONTEXT_SIGNAT of label * var * signat
-                      | CONTEXT_SCOPED_TYVAR of Symbol.symbol list             
-    and context = CONTEXT of context_entry list
-
-    withtype value = exp Prim.value
+    withtype value = (con,exp) Prim.value
     and decs = dec list
 
     type bnds  = bnd list
     type sdecs = sdec list
     type sbnds = sbnd list
 
-  end
+    datatype inline = INLINE_MODSIG of mod * signat
+      | INLINE_EXPCON of exp * con
+      | INLINE_CONKIND of con * kind
+      | INLINE_OVER   of unit -> exp * (context,con) Tyvar.ocon
+    datatype context_entry = 
+	CONTEXT_INLINE of label * var * inline
+      | CONTEXT_SDEC   of sdec
+      | CONTEXT_SIGNAT of label * var * signat
+
+
+end

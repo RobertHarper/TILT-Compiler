@@ -16,32 +16,32 @@ functor Tyvar()
 		end
     type stamp = int
 
-    datatype ('decs,'1con) tyvar = TYVAR of {stampref : int ref,
+    datatype ('ctxt,'1con) tyvar = TYVAR of {stampref : int ref,
 					     name : var,
 					     constrained : bool ref,
 					     use_equal : bool ref,
 					     body : '1con Util.oneshot,
-					     decs : 'decs ref}
+					     ctxts : 'ctxt list ref}
     type '1con con_helpers = {hard : '1con * '1con -> bool,
 			      soft : '1con * '1con -> bool}
     datatype 'a status = FAIL | MAYBE | MATCH of 'a
-    type ('decs,'1con,'a) constraint = ('decs,'1con) tyvar * '1con con_helpers * bool -> 'a status (* bool represents hardness *)
+    type ('ctxt,'1con,'a) constraint = ('ctxt,'1con) tyvar * '1con con_helpers * bool -> 'a status (* bool represents hardness *)
 	
-    datatype ('decs,'1con,'a) uocon  = UOCON of {constraints : ('decs,'1con,'a) constraint list}
-    datatype ('decs,'1con) ocon = OCON of {constrainer : '1con con_helpers -> (int * bool) list,
+    datatype ('ctxt,'1con,'a) uocon  = UOCON of {constraints : ('ctxt,'1con,'a) constraint list}
+    datatype ('ctxt,'1con) ocon = OCON of {constrainer : '1con con_helpers -> (int * bool) list,
 					   name : var,
-					   body : ('decs,'1con) tyvar}
+					   body : ('ctxt,'1con) tyvar}
     fun get_stamp() = inc()
     fun stamp2int stamp = (stamp : int)
     fun stamp_join(a : stamp,b) = if (a<b) then a else b
-    fun fresh_stamped_tyvar (decs,name,stamp) = TYVAR{stampref = ref stamp,
+    fun fresh_stamped_tyvar (ctxts,name,stamp) = TYVAR{stampref = ref stamp,
 						      name = fresh_named_var name, 
 						      constrained = ref false, 
 						      use_equal = ref false,
 						      body = oneshot(),
-						      decs = ref decs}
-    fun fresh_named_tyvar (decs,s) = fresh_stamped_tyvar(decs,s,inc())
-    fun fresh_tyvar decs = fresh_named_tyvar (decs,"tv")
+						      ctxts = ref [ctxts]}
+    fun fresh_named_tyvar (ctxts,s) = fresh_stamped_tyvar(ctxts,s,inc())
+    fun fresh_tyvar ctxts = fresh_named_tyvar (ctxts,"tv")
     fun tyvar_after stamp (TYVAR{stampref,...}) = stamp < !stampref
     fun tyvar_stamp (TYVAR{stampref,...}) = !stampref
     fun update_stamp (TYVAR{stampref,...},stamp) = let val curval = !stampref
@@ -67,18 +67,18 @@ functor Tyvar()
 
     fun tyvar_use_equal(TYVAR{use_equal,...}) = use_equal := true
     fun tyvar_is_use_equal(TYVAR{use_equal,...}) = !use_equal
-    fun tyvar_getdecs(TYVAR{decs,...}) = !decs
-    fun tyvar_setdecs(TYVAR{decs,...},decs') = decs := decs'
+    fun tyvar_getctxts(TYVAR{ctxts,...}) = !ctxts
+    fun tyvar_addctxts(TYVAR{ctxts,...},ctxts') = ctxts := (ctxts' @ (!ctxts))
 
 
     fun fresh_uocon c = UOCON{constraints = c}
     fun ocon2string (OCON{name,...}) = var2string name
     fun ocon_deref (OCON{body,...}) = body
 
-    fun uocon_inst (decs : 'decs,
-		    UOCON{constraints} : ('decs,'1con,'a) uocon, thunk : 'a -> unit) : ('decs,'1con) ocon = 
+    fun uocon_inst (ctxts : 'ctxt,
+		    UOCON{constraints} : ('ctxt,'1con,'a) uocon, thunk : 'a -> unit) : ('ctxt,'1con) ocon = 
 	let
-	    val body = fresh_named_tyvar (decs,"ocon")
+	    val body = fresh_named_tyvar (ctxts,"ocon")
 	    val name = fresh_named_var "ocon"
 	    val constraints = ref(mapcount (fn (i,c) => (i,c)) constraints)
 	    fun constrainer (helpers as {hard : '1con * '1con -> bool,

@@ -5,13 +5,13 @@ functor Pat(structure Il : IL
 	    structure InfixParse : INFIXPARSE
 	    structure AstHelp : ASTHELP
 	    structure Datatype : DATATYPE
-	    structure IlLookup : ILLOOKUP
-	    sharing IlLookup.Il = InfixParse.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Datatype.Il = Il)
+	    structure IlContext : ILCONTEXT
+	    sharing IlContext.Il = InfixParse.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Datatype.Il = Il)
   : PAT =
   struct
     
     type modsig_lookup = Il.context * Il.label list -> (Il.path * Il.mod * Il.signat) option
-    type polyinst = Il.decs * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
+    type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con
     type expcompile = Il.context * Ast.exp -> Il.exp * Il.con
     type patarg = {context : Il.context,
@@ -21,7 +21,8 @@ functor Pat(structure Il : IL
 
 
     open Il IlStatic IlUtil Ppil
-    open Util Listops Name IlLookup Prim
+    open Util Listops Name (* IlLookup *) Prim
+    open IlContext
 
     val error = fn s => error "pat.sml" s
     val debug = ref false
@@ -57,7 +58,7 @@ functor Pat(structure Il : IL
 
     type clause = Ast.pat list
     type def =  (Il.exp * Il.con) option
-    type delay_exp = Il.context_entry list * Ast.exp
+    type delay_exp = context_entry list * Ast.exp
     type bound = (Symbol.symbol * var * con) list 
     type arm = clause * bound * Ast.exp option
 
@@ -65,9 +66,11 @@ functor Pat(structure Il : IL
 										 DEC_EXP(v,c)))) svc_list
     fun arm_addbind(s,v,c,(cl,svc_list,expopt) : arm) = (cl,(s,v,c)::svc_list,expopt)
     fun is_constr (modsig_lookup, context) (p : Ast.path) = 
-      (case Datatype.constr_lookup context p of
-	 SOME _ => true
-       | NONE => false)
+      let val res = (case Datatype.constr_lookup context p of
+			 SOME _ => true
+		       | NONE => false)
+      in res
+      end
     fun is_exn (modsig_lookup, context) (p : Ast.path) = 
 	(case Datatype.exn_lookup context p of
 	     NONE => false
@@ -97,11 +100,10 @@ functor Pat(structure Il : IL
     fun letprojecthelp (context : context, rv : Il.var, recsyms : Symbol.symbol list)
       : Il.bnds * Il.var list * Il.con list = 
       let 
-	  val decs = context2decs context
 	  val labels = map symbol_label recsyms
 	  val vars = map (fn _ => fresh_var()) labels
-	  val cons = map (fn _ => fresh_con decs) labels
-	  val rcon = CON_RECORD(zip labels cons)
+	  val cons = map (fn _ => fresh_con context) labels
+	  val rcon = CON_RECORD(sort_labelpair(zip labels cons))
 	  val bnds = map2 (fn (v,l) => BND_EXP(v,RECORD_PROJECT(VAR rv,l,rcon))) (vars,labels)
       in (bnds,vars,cons)
       end
@@ -161,13 +163,14 @@ functor Pat(structure Il : IL
 	       acc : (Ast.pat * arm) list,
 	       def : def) : bound list * (exp * con) = 
     let
-	val decs = context2decs context
-	val elemcon = fresh_con decs
+	val elemcon = fresh_con context
 	val (bnd,(var,con)) = lethelp("refvar",arg1)
 	val _ = con_unify'(context,"ref_case",
 			   ("refcon",con),
 			   ("elemcon", CON_REF elemcon),nada)
-	val newargs = (CASE_NONVAR(fresh_var(),GET(VAR var), elemcon))::args
+	val newargs = (CASE_NONVAR(fresh_var(),
+				   APP(PRIM(deref,[elemcon]),VAR var),
+				   elemcon))::args
 	val newarms = map (fn (p,(c,b,eopt)) => (p::c,b,eopt)) acc
     in match(newargs,newarms,def)
     end
@@ -217,8 +220,7 @@ functor Pat(structure Il : IL
 	       accs: ((Ast.symbol * Il.exp * Il.con option * Ast.pat option) * arm) list,
 	       def : def) : bound list * (exp * con) = 
       let
-	  val decs = context2decs context
-	  val rescon = fresh_con decs
+	  val rescon = fresh_con context
 	  fun helper ((s,stamp,carried_type,patopt),arm : arm) = 
 	      let val con = (case carried_type of 
 				 SOME c => c
@@ -266,8 +268,7 @@ functor Pat(structure Il : IL
       val (casearg, casecon) = (case arg1 of
 				  CASE_VAR(v,con) => (VAR v, con)
 				| CASE_NONVAR (_,binde,bindc) => (binde,bindc))
-      val decs = context2decs context
-      val rescon = fresh_con decs
+      val rescon = fresh_con context
       fun getarm datacon sumcon (i,{name=cur_constr,arg_type}) : bound list * exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
@@ -278,18 +279,18 @@ functor Pat(structure Il : IL
 	  val relevants : arm list = List.mapPartial armhelp accs
 	  val _ = con_unify'(context,"constructor with argument con",
 			     ("datacon",datacon),("casecon",casecon),nada)
+	  val rsvar = fresh_var()
+	  val rscon = CON_SUM(SOME i,sumcon)
 	in (case (relevants : arm list, arg_type) of
 	      ([],_) => ([],NONE)
 	    | (_,NONE) => let 
 			    val (vf_ll : bound list, (me,mc)) = match(args, relevants, def)
 			    val _ = con_unify'(context,"rescon with arms's result type",
 					       ("rescon",rescon),("mc",mc),nada)
-			  in (vf_ll,SOME (#1 (make_lambda(fresh_var(),con_unit,mc,me))))
+			  in (vf_ll,SOME (#1 (make_lambda(rsvar,rscon,mc,me))))
 			  end
 	    | (_,SOME at) => let 
 			   val var = fresh_var()
-			   val rsvar = fresh_var()
-			   val rscon = CON_SUM(SOME i,sumcon)
 			   val rcon = List.nth(sumcon,i)
 			   val (vf_ll,(me,mc)) = match((CASE_VAR (var,rcon))::args, relevants, def)
 			   val _ = con_unify'(context,"rescon with arm result type",
@@ -301,7 +302,7 @@ functor Pat(structure Il : IL
 
       val {instantiated_type = datacon,
 	   arms = constr_patconopt_list,
-	   case_exp, expose_exp} =
+	   expose_exp} =
 	(case (Datatype.constr_lookup context (#1(#1(hd accs)))) of
 	   NONE => error "constructor_lookup got path not to constructor"
 	 | (SOME {name,datatype_path,constr_sig,datatype_sig}) => 
@@ -335,9 +336,7 @@ functor Pat(structure Il : IL
      case (arms,args) of
        ([],_) => (case def of
 		    SOME ec => ([] : bound list, ec)
-		  | NONE => let 
-				val decs = context2decs context
-				val c = fresh_con decs
+		  | NONE => let val c = fresh_con context
 			    in ([], (Il.RAISE(c,bindexn_exp),c))
 			    end)
      | ((_,[bound1 as (_,v,c)],NONE)::_,[]) => ([[bound1]],(VAR v,c))
@@ -348,9 +347,6 @@ functor Pat(structure Il : IL
 	 let
 	   val ce = arm2context_entries arm
 	   val context' = add_context_entries(context,ce)
-	   val _ = debugdo (fn () => (print "calling xexp with ce = \n";
-				      pp_context (CONTEXT ce);
-				      print "\n"))
 	   val ec = xexp(context',exp)
 	 in ([bound],ec)
 	 end
@@ -555,7 +551,7 @@ functor Pat(structure Il : IL
 		     val (vc_ll2,(e2,c2)) = match(args, zip3 (conszip headpat_rest tlpat_rest) 
 						  boundrest bodyrest, def)
 		     val _ = con_unify'(context,"Base type Pattern",("c1",c1),("c2",c2),nada)
-		     val ite_exp = make_ifthenelse(Il.APP(eq,exp_tuple[VAR var,Il.SCON sc]),e1,e2)
+		     val ite_exp = make_ifthenelse(Il.APP(eq,exp_tuple[VAR var,Il.SCON sc]),e1,e2,c1)
 		     val ec = (case bndopt of
 				 NONE => (ite_exp,c1)
 			       | SOME bnd => (LET([bnd],ite_exp),c1))
@@ -586,13 +582,14 @@ functor Pat(structure Il : IL
 							    float (F64,rs))
 		  | (Ast.StringPat ss) => constant_dispatch(CON_VECTOR (CON_UINT W8),
 							    PRIM (raise UNIMP),
-							    vector(Array.fromList
+							    vector(CON_UINT W8,
+								   Array.fromList
 								   (map (fn c => 
 									 (SCON(uint(W8,TilWord64.fromInt
 										    (ord c)))))
 								    (explode ss))))
 		  | (Ast.CharPat cs)   => constant_dispatch(CON_UINT W8,
-							    PRIM (eq_int W8,[]), 
+							    ILPRIM (eq_uint W8), 
 							    uint(W8,TilWord64.fromInt
 								 (ord (CharStr2char cs))))
 		  | (Ast.RecordPat _ | Ast.TuplePat _) => tuple_record_dispatch()
@@ -620,10 +617,10 @@ functor Pat(structure Il : IL
     (* ============ parse possibly infix patterns =========================== *)
     fun parse_pats ({context,...} : patarg, pats) : Ast.pat list = 
       let 
-	fun is_non_const (s : Symbol.symbol) = 
-	  (s = Symbol.varSymbol "ref") orelse
-	  (case (Datatype.constr_lookup context [s]) of
-	      NONE => (case Datatype.exn_lookup context[s] of
+	fun is_non_const (syms : Symbol.symbol list) = 
+	     (syms = [Symbol.varSymbol "ref"]) orelse
+	     (case (Datatype.constr_lookup context syms) of
+	      NONE => (case Datatype.exn_lookup context syms of
 			   NONE => false
 			 | SOME {stamp,carried_type=NONE} => false
 			 | SOME {stamp,carried_type=SOME _} => true)
@@ -649,8 +646,7 @@ functor Pat(structure Il : IL
 	val pat = parse_pat(patarg,bindpat)
 	val args = [CASE_NONVAR (fresh_named_var "bindComp",arge,argc)]
 	val arms = [([pat],[],NONE)]
-	val decs = context2decs context
-	val res_con = fresh_con decs
+	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,bindexn_exp),res_con)
 	val (e,c,bindings_list) = compile(patarg,args,arms,def)
 	val sbnd_sdecs =
@@ -698,8 +694,7 @@ functor Pat(structure Il : IL
       let 
 	val args = [CASE_NONVAR (fresh_named_var "caseComp", arge,argc)]
 	val arms : arm list = map (fn (pat,body) => ([parse_pat(patarg,pat)],[], SOME body)) cases
-	val decs = context2decs context
-	val res_con = fresh_con decs
+	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con)
 	val (e,c,_) = compile (patarg,args,arms,def)
       in (e,c)
@@ -710,7 +705,7 @@ functor Pat(structure Il : IL
     fun funCompile {patarg = patarg as {context, ...},
 		    rules = cases : (clause * Ast.exp) list,
 		    reraise}
-      : {arg : Il.var * Il.con, body : Il.exp * Il.con} =
+      : {arglist : (Il.var * Il.con) list, body : Il.exp * Il.con} =
       let 
 	val _ = debugdo (fn () => print "\n\n****MATCH COMPILE ENTER*********\n")
 	(* -------- we begin by creating arguments of the same name as the 
@@ -725,11 +720,10 @@ functor Pat(structure Il : IL
 	    | getnames clauses = (getname (map hd clauses)) :: (getnames (map tl clauses))
 	  val clauses = map #1 cases
 	  val names = getnames clauses
-	  val decs = context2decs context
 	in 
 	  val bound = map (fn s => (Symbol.varSymbol s, 
 				    fresh_named_var s,
-				    fresh_named_con (decs,s))) names
+				    fresh_named_con (context,s))) names
 	  val argsyms = map #1 bound
 	  val argvars = map #2 bound
 	  val argcons = map #3 bound
@@ -741,27 +735,18 @@ functor Pat(structure Il : IL
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)
 				 val _ = con_unify'(context,"funCompile",("ANY",CON_ANY),("c",c),nada)
-				 val decs = context2decs context
-				 val res_con = fresh_con decs
+				 val res_con = fresh_con context
 			     in SOME(RAISE (res_con,VAR v),res_con)
 			     end
 		      else NONE
 	val (e,c,_) = compile (patarg,args,arms,default)
 
 
-	(* ---- wrap up the body almost completely --------------- *)
-	local 
-	  fun help ((s,v,c),(e,resc)) = make_lambda(v,c,resc,e)
-	in 
-	  val body = foldr help (e,c) (tl bound)
-	  val arg =  (hd argvars, hd argcons)
-	end
-
 	val _ = debugdo (fn () => (print "\n\n***************\n";
 				   pp_exp e;
 				   print "\n\n*******MATCH COMPILE EXIT********\n"))
 
-      in {arg = arg, body = body }
+      in {arglist = (zip argvars argcons), body = (e,c) }
       end
 
 

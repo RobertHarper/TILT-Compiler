@@ -33,37 +33,39 @@ structure LinkIl (* : LINKIL *) =
     struct
 	structure Tyvar = Tyvar();
 	structure Prim = Prim();
-	structure Il = Il(structure Prim = Prim
-			  structure Tyvar = Tyvar);
+	structure IlLeak = Il(structure Prim = Prim
+			      structure Tyvar = Tyvar);
+	structure Il : IL = IlLeak
+	structure IlContext = IlContext(structure Il = IlLeak);
 	structure Formatter = Formatter;
 	structure AstHelp = AstHelp;
 	structure Ppprim = Ppprim(structure Prim = Prim);
 	structure Ppil = Ppil(structure AstHelp = AstHelp
 			      structure Ppprim = Ppprim
+			      structure IlContext = IlContext
 			      structure Il = Il); 
 	structure IlUtil = IlUtil(structure Il = Il
+				  structure IlContext = IlContext
 				  structure AstHelp = AstHelp
 				  structure Ppil = Ppil);
 	structure IlPrimUtilParam = IlPrimUtilParam(structure IlUtil = IlUtil);
 	structure IlPrimUtil = PrimUtil(structure Prim = Prim
 					structure Ppprim = Ppprim
 					structure PrimUtilParam = IlPrimUtilParam);
-	structure IlLookup = IlLookup(structure Il = Il
-				      structure AstHelp = AstHelp
-				      structure IlUtil = IlUtil
-				      structure Ppil = Ppil);
 	structure IlStatic = IlStatic(structure Il = Il
-				      structure IlLookup = IlLookup
+				      structure IlContext = IlContext
 				      structure PrimUtil = IlPrimUtil
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
 	structure Datatype = Datatype(structure Il = Il
-				      structure IlLookup = IlLookup
+				      structure IlContext = IlContext
 				      structure AstHelp = AstHelp
 				      structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
 	structure Basis = Basis(structure Il = Il		
+				structure IlContext = IlContext
+				structure IlStatic = IlStatic
 				structure Ppil = Ppil
 				structure Datatype = Datatype      
 				structure IlUtil = IlUtil);
@@ -71,7 +73,7 @@ structure LinkIl (* : LINKIL *) =
 					  structure Ppil = Ppil
 					  structure AstHelp = AstHelp);
 	structure Pat = Pat(structure Il = Il
-			    structure IlLookup = IlLookup
+			    structure IlContext = IlContext
 			    structure IlStatic = IlStatic
 			    structure IlUtil = IlUtil
 			    structure AstHelp = AstHelp
@@ -79,7 +81,7 @@ structure LinkIl (* : LINKIL *) =
 			    structure Ppil = Ppil
 			    structure InfixParse = InfixParse);
 	structure Toil = Toil(structure Il = Il
-			      structure IlLookup = IlLookup
+			      structure IlContext = IlContext
 			      structure AstHelp = AstHelp
 			      structure IlStatic = IlStatic
 			      structure IlUtil = IlUtil
@@ -89,11 +91,11 @@ structure LinkIl (* : LINKIL *) =
 			      structure Datatype = Datatype
 			      structure InfixParse = InfixParse);
 	structure IlEval = IlEval(structure Il = Il
+				  structure IlContext = IlContext
 				  structure PrimUtil = IlPrimUtil
 				  structure IlStatic = IlStatic
 				  structure IlUtil = IlUtil
-				  structure Ppil = Ppil
-				  structure IlLookup = IlLookup);
+				  structure Ppil = Ppil);
 	    
 	open Il IlUtil Ppil IlStatic Formatter
 	    
@@ -110,24 +112,22 @@ structure LinkIl (* : LINKIL *) =
 	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 	    
-	val (initial_context, initial_sbnds) = Basis.initial_context(fn e => GetExpCon([],e),
-								     fn c => GetConKind([],c),
-								     fn m => GetModSig([],m),
-								     Toil.xty) 
+	val (initial_context, initial_sbnds) = Basis.initial_context(Toil.xty,
+								     Toil.xeq) 
 	val initial_sbnds_len = length initial_sbnds
 	    
 	fun elaborate_diff'(context,s) = 
 	    let
 		val what = parse s
 		val sbnd_ctxt_list = Toil.xdec(context,what) 
-		    handle (e as IlUtil.NOTFOUND s) => (print "NOTFOUND: "; print s; print "\n"; raise e)
+		    handle (e as IlContext.NOTFOUND s) => (print "NOTFOUND: "; print s; print "\n"; raise e)
 		val sbnds = List.mapPartial #1 sbnd_ctxt_list
 		val ctxts = map #2 sbnd_ctxt_list
 	    in	(sbnds,ctxts)
 	    end;
 	fun elaborate'(context,s) = 
 	    let val (sbnds,context_diff) = elaborate_diff'(context,s)
-	    in	(sbnds,add_context_entries(context,context_diff))
+	    in	(sbnds,IlContext.add_context_entries(context,context_diff))
 	    end
 	fun elaborate s = elaborate'(initial_context,s)
 	fun elaborate_diff s = elaborate_diff'(initial_context,s)
@@ -142,5 +142,50 @@ structure LinkIl (* : LINKIL *) =
 		       | _ => Util.error "help.sml" "a structure evaluated to a non-structure")
 	    in ressbnds
 	    end
+
+	fun foobaz arg = IlContext.add_context_entries(IlContext.empty_context,arg)
+	
+	fun check filename doprint =
+	    let
+		val (sbnds,cdiff) = elaborate_diff filename
+	    in  if doprint 
+		    then
+			(print "test: sbnds are: \n";
+			 Ppil.pp_sbnds sbnds;
+			 print "test: context is: \n";
+			 Ppil.pp_context (foobaz cdiff))
+		else ()
+	    end
+	
+	fun check' filename doprint =
+	    let
+		open Il
+		open IlContext
+		val (sbnds,cdiff) = elaborate_diff filename
+		val _ = print "ELABORATED\n"
+		val m = MOD_STRUCTURE sbnds
+		val sdecs = List.mapPartial (fn (CONTEXT_SDEC sdec) => SOME sdec | _ => NONE) cdiff
+		val given_s = SIGNAT_STRUCTURE (NONE,sdecs)
+		val ctxt = initial_context 
+		val precise_s = IlStatic.GetModSig(ctxt,m)
+		val _ = print "OBTAINED SIGNATURE\n"
+	    in  if doprint
+		    then (print "\ncontext is\n";
+			  Ppil.pp_context (foobaz cdiff);
+			  print "\ngiven_s is:\n";
+			  Ppil.pp_signat given_s;
+			  print "\nprecise_s is:\n";
+			  Ppil.pp_signat precise_s;
+			  print "\n")
+		else ();
+		if (IlStatic.Sig_IsSub(ctxt,precise_s,given_s))
+		    then print "check worked\n"
+		else Util.error "help.sml" "test'' failed: precise_s not a subsig of given_s";
+		    (m,given_s,precise_s,ctxt)
+	    end
+	val test = fn s => check s false
+	val ptest = fn s => check s true
+	val test' = fn s => check' s false
+	val ptest' = fn s => check' s true
     end (* struct *)
 

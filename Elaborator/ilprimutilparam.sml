@@ -9,11 +9,11 @@ functor IlPrimUtilParam(structure IlUtil : ILUTIL)
 
 	type con = con
 	type exp = exp
-	type 'a value = 'a Prim.value
+	type ('con,'exp) value = ('con,'exp) Prim.value
 	val error = fn s => error "ilprimutilparam.sml" s
 
 	fun partial_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init PARTIAL)
-	fun total_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init PARTIAL)
+	fun total_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init TOTAL)
 	val con_int = CON_INT
 	val con_uint = CON_UINT
 	val con_float = CON_FLOAT

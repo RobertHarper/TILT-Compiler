@@ -3,8 +3,8 @@ functor IlEval(structure Il : IL
 	       structure IlUtil : ILUTIL
 	       structure PrimUtil : PRIMUTIL
 	       structure Ppil : PPIL
-	       structure IlLookup : ILLOOKUP
-	       sharing IlLookup.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il
+	       structure IlContext : ILCONTEXT
+	       sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il
 	       sharing Il.Prim = PrimUtil.Prim
 	       sharing type PrimUtil.con = Il.con
 	       sharing type PrimUtil.exp = Il.exp)
@@ -14,7 +14,8 @@ functor IlEval(structure Il : IL
     structure Il = Il
     structure Float = Real64
     open Il IlStatic IlUtil Ppil 
-    open Util Listops Name IlLookup Tyvar
+    open Util Listops Name (* IlLookup *) Tyvar
+    open IlContext
     open Prim
 
     val error = fn s => error "ileval.sml" s
@@ -28,9 +29,9 @@ functor IlEval(structure Il : IL
     fun exp_isval (exp : exp) = 
 	(case exp of
 	     (OVEREXP _ | VAR _ | APP _ | RECORD_PROJECT _ | SUM_TAIL _ 
-	     | HANDLE _ | RAISE _ | LET _ | NEW_STAMP _ | MK_REF _ | GET _ 
-	     | SET _ | PROJ _ | CASE _ | EXN_CASE _ | MODULE_PROJECT _ 
-	     | SEAL _ (* | SEQ _ *)) => false
+	     | HANDLE _ | RAISE _ | LET _ | NEW_STAMP _ 
+	     | CASE _ | EXN_CASE _ | MODULE_PROJECT _ 
+	     | SEAL _) => false
            | (SCON (vector _)) => true (* XXX not really *)
 	   | (SCON (array _)) => true  (* XXX not really *)
 	   | (SCON _ | PRIM _ | FIX _ | TAG _) => true
@@ -157,9 +158,9 @@ functor IlEval(structure Il : IL
 		    val c2' = eval_con env c1
 		in (case (c1',c2') of
 			(CON_FUN ([],_),_) => error "CON_APP applied to CON_FUN taking no argument"
-		      | (CON_FUN([v],body),_) => eval_con env (con_subst_var(body,[(v,c2')]))
+		      | (CON_FUN([v],body),_) => eval_con env (con_subst_convar(body,[(v,c2')]))
 		      | (CON_FUN(vars,body),CON_TUPLE_INJECT (args)) => 
-							       eval_con env (con_subst_var(body,
+							       eval_con env (con_subst_convar(body,
 											   zip vars args))
 		      | _ => error "CON_APP applied to a first arg which is not CON_FUN")
 		end
@@ -196,9 +197,9 @@ functor IlEval(structure Il : IL
 		    val c2' = reduce_con env c1
 		in (case (c1',c2') of
 			(CON_FUN ([],_),_) => error "CON_APP applied to CON_FUN taking no argument"
-		      | (CON_FUN([v],body),_) => reduce_con env (con_subst_var(body,[(v,c2')]))
+		      | (CON_FUN([v],body),_) => reduce_con env (con_subst_convar(body,[(v,c2')]))
 		      | (CON_FUN(vars,body),CON_TUPLE_INJECT (args)) => 
-							       reduce_con env (con_subst_var(body,
+							       reduce_con env (con_subst_convar(body,
 											   zip vars args))
 		      | _ => CON_APP(c1',c2'))
 		end
@@ -262,10 +263,10 @@ functor IlEval(structure Il : IL
 	((* print "********** reduce_exp called on exp:";
 	 Ppil.pp_exp exp; print "\n\n";  *)
 	  case exp of
-	    (FIX (fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = FBND(v1,v2,reduce_con env c1,
+	    (FIX (a,fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = FBND(v1,v2,reduce_con env c1,
 									 reduce_con env c2, 
 									 reduce_exp env e)
-			       in FIX(map help fbnds, v)
+			       in FIX(a,map help fbnds, v)
 			       end
 	  | (APP(e1,e2)) => APP(reduce_exp env e1, reduce_exp env e2)
 	  | CASE (cons,arg,arms,default) => 
@@ -303,26 +304,26 @@ functor IlEval(structure Il : IL
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
 	   | (SCON _ | PRIM _ | TAG _ ) => exp
-	   | (FIX (fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = 
+	   | (FIX (a,fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = 
 		                             FBND(v1,v2,
 						  reduce_con env c1,
 						  reduce_con env c2, 
 						  (case (subst_var(BND_EXP(fresh_var(),reduce_exp env e),env)) of
 						       BND_EXP(v,e) => e
 						     | _ => error "subst_var got exp, returned non-exp"))
-			       in FIX(map help fbnds, v)
+			       in FIX(a,map help fbnds, v)
 			       end
 	   | (VAR v) => eval_exp env (exp_lookup env v)
 	   | (APP (e1,e2)) => let val e1' = eval_exp env e1
 				  val e2' = eval_exp env e2
 			      in (case e1' of
-				      FIX (fbnds,tarv) => 
+				      FIX (a,fbnds,tarv) => 
 					  let fun loop [] = error "ill-formed FIX"
 						| loop ((FBND(v,argv,argc,resc,body))::rest) = 
 					      if (eq_var(v,tarv)) then (argv,body) else loop rest
 					      val (argv,body) = loop fbnds
-					      val table = map (fn (FBND(v,_,_,_,_)) => (v,FIX(fbnds,v))) fbnds
-					      val body' = exp_subst_var(body,(argv,e2')::table)
+					      val table = map (fn (FBND(v,_,_,_,_)) => (v,FIX(a,fbnds,v))) fbnds
+					      val body' = exp_subst_expvar(body,(argv,e2')::table)
 					  in eval_exp env body'
 					  end
 				    | PRIM prim_cons => eval_prim(prim_cons,e2')
@@ -351,28 +352,16 @@ functor IlEval(structure Il : IL
 				     end
 	   | NEW_STAMP c => TAG(fresh_tag(),eval_con env c)
 	   | EXN_INJECT (e1,e2) => EXN_INJECT(eval_exp env e1, eval_exp env e2)
-	   | MK_REF e => SCON(refcell (ref (eval_exp env e)))
-	   | GET (e) => (case (eval_exp env e) of
-				     SCON(refcell vr) => !vr
-				   | _ => error "Can't do a GET on a non-loc value")
-	   | SET (e1,e2) => (case (eval_exp env e1) of
-				     SCON(refcell vr) => (vr := (eval_exp env e2); unit_exp)
-				   | _ => error "Can't do a SET on a non-loc value")
 	   | ROLL(c,e) => ROLL(eval_con env c, eval_exp env e)
 	   | UNROLL(c,e) => let val c' = eval_con env c
 				val e' = eval_exp env e
 			    in case e' of
-				ROLL(c'',e'') => if (eq_con([],c',c'')) then e'' 
+				ROLL(c'',e'') => if (eq_con'(empty_context,c',c'')) then e'' 
 						 else error_exp (UNROLL(c',ROLL(c'',e''))) 
 						     "UNROLL(ROLL(e)) bad"
 			      | _ => error_exp e' "UNROLL did not get a ROLL arg"
 			    end
 	   | INJ (cs,i,e) => INJ(map (eval_con env) cs, i, eval_exp env e)
-	   | PROJ(c,i,e) => (case (eval_exp env e) of
-					 INJ(_,i',ee) => if (i=i') 
-							     then ee
-							 else error "Projection from sum type failed"
-				       | _ => error "Projection not from a sum type value")
 	   | CASE (cons,arg,arms,default) => 
                (case (eval_exp env arg) of
 		    ee as INJ(_,i,_) => 

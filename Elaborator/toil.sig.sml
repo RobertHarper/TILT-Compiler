@@ -4,9 +4,6 @@ signature TOIL =
     structure Il : IL
 
     val debug : bool ref
-    val s1 : Il.signat ref
-    val s2 : Il.signat ref
-    val decs1 : Il.decs ref
 
     (* Translations *)
     val xexp    : Il.context * Ast.exp -> (Il.exp * Il.con)  
@@ -16,8 +13,8 @@ signature TOIL =
     val xsigexp : Il.context * Ast.sigexp -> Il.signat
     val xty     : Il.context * Ast.ty -> Il.con
     val xtybind : Il.context * Ast.tb list -> (Il.sbnd option * Il.context_entry) list
-    val poly_inst : Il.decs * Il.sdec list -> Il.sbnd list * Il.sdec list * Il.con list
-
+    val poly_inst : Il.context * Il.sdec list -> Il.sbnd list * Il.sdec list * Il.con list
+    val xeq     : Il.context * Il.con -> Il.exp
 
     (* Signature Patching *)
     val xsig_wheretype : Il.signat * Il.label list * Il.con * Il.kind -> Il.signat

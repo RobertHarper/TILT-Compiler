@@ -9,7 +9,7 @@ signature PAT =
     type patarg = {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   expcompile : Il.context * Ast.exp -> Il.exp * Il.con,
-		   polyinst : Il.decs * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list }
+		   polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list }
 
     (* BindCompile creates bindings of all variables in the given pattern Ast.pat
         when the pattern is applied to the expression (Il.exp/Il.con). *)
@@ -38,6 +38,6 @@ signature PAT =
        so that packaging into the IL FIX construct is more convenient. *)
     val funCompile : {patarg : patarg,
 		      rules : (Ast.pat list * Ast.exp) list,
-		      reraise : bool} -> {arg : Il.var * Il.con,
+		      reraise : bool} -> {arglist : (Il.var * Il.con) list,
 					  body : Il.exp * Il.con}
   end

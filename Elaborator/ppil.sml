@@ -1,8 +1,10 @@
 (* Il pretty-printer. *)
 functor Ppil(structure Il : IL
+	     structure IlContext : ILCONTEXT
 	     structure AstHelp : ASTHELP
 	     structure Ppprim : PPPRIM
-	     sharing Il.Prim = Ppprim.Prim)
+	     sharing Il.Prim = Ppprim.Prim
+	     sharing IlContext.Il = Il)
 	: PPIL  = 
   struct
 
@@ -12,7 +14,7 @@ functor Ppil(structure Il : IL
     val convar_display = ref VALUE_ONLY
 
     open Util Listops Name 
-    open Il Formatter
+    open Il IlContext Formatter
     open Prim Ppprim Tyvar
 
     val error = fn s => error "ppil.sml" s
@@ -91,7 +93,7 @@ functor Ppil(structure Il : IL
 
 
 
-    fun pp_con (seen : (decs,con) tyvar list) (arg_con : con) : format = 
+    fun pp_con (seen : (context,con) tyvar list) (arg_con : con) : format = 
       (case arg_con of
 	 CON_OVAR ocon => pp_con seen (CON_TYVAR (ocon_deref ocon))
        | CON_VAR var => pp_var var
@@ -231,31 +233,46 @@ functor Ppil(structure Il : IL
                                     [pp_mod seen m,
 				     String ",",
 				     pp_label l]
+	   | MOD_LET (v,m,body) =>
+		 Vbox0 0 1 [String "MOD_LET ",
+			    pp_var v,
+			    String " = ",
+			    pp_mod seen m,
+			    Break,
+			    String "IN  ",
+			    pp_mod seen body,
+			    Break,
+			    String "END"]
 	   | MOD_SEAL(m,s) => pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true))
 	     
-    and pp_inline seen (INLINE_MODSIG (m,s)) = HOVbox[pp_mod seen m, String ":", Break, pp_signat seen s]
-      | pp_inline seen (INLINE_EXPCON (e,c)) = HOVbox[pp_exp seen e, String ":", pp_con seen c]
-      | pp_inline seen (INLINE_CONKIND (c,k)) = HOVbox[pp_con seen c, String ":", pp_kind k]
-      | pp_inline seen (INLINE_OVER _) = String "INLINE_OVER"
+    and pp_inline seen inline = 
+	let
+	    open IlContext
+	in
+	    case inline of
+		(INLINE_MODSIG (m,s)) => HOVbox[pp_mod seen m, String ":", Break, pp_signat seen s]
+	      | (INLINE_EXPCON (e,c)) => HOVbox[pp_exp seen e, String ":", pp_con seen c]
+	      | (INLINE_CONKIND (c,k)) => HOVbox[pp_con seen c, String ":", pp_kind k]
+	      | (INLINE_OVER _) => String "INLINE_OVER"
+	end
 
-    and pp_context seen (CONTEXT entries) = 
-      let fun dolv l v fmts = HOVbox((pp_label l) :: (String ">") :: (pp_var v) :: 
-				     (String "=") :: (Break0 0 3) :: fmts)
+    and pp_context seen context =
+      let 
+	  val entries = context_entries context
+	  fun dolv l v fmts = HOVbox((pp_label l) :: (String ">") :: (pp_var v) :: 
+				     (String ":") :: (Break0 0 3) :: fmts)
 	fun helper (CONTEXT_INLINE (l,v,inl)) = HOVbox[pp_label l, String " >> ", pp_var v, 
 						       String " = ", pp_inline seen inl]
 	  | helper (CONTEXT_SDEC(SDEC(l,dec))) = 
 	    (case dec of
 		 (DEC_EXP(v,c)) => dolv l v [pp_con seen c]
-	       | (DEC_CON(v,k,SOME c)) => dolv l v [pp_con seen c, String ":", pp_kind k]
-	       | (DEC_CON(v,k,NONE)) => dolv l v [String ":", pp_kind k]
+	       | (DEC_CON(v,k,SOME c)) => dolv l v [pp_kind k, String "=", pp_con seen c]
+	       | (DEC_CON(v,k,NONE)) => dolv l v [pp_kind k]
 	       | (DEC_MOD(v,s)) => dolv l v [pp_signat seen s]
 	       | (DEC_FIXITY vf_list) => HOVbox[String "FIXITY", pp_fixity_list vf_list]
 	       | (DEC_EXCEPTION (tag,c)) => HOVbox[String "EXCEPTION: ", pp_tag tag, String " = ",
 						   pp_con seen c])
 	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat seen s]
-	  | helper (CONTEXT_SCOPED_TYVAR syms) = pp_list AstHelp.pp_sym'
-	                                             syms ("TYVARS[", ", ", "]", false)
-
       in pp_list helper entries ("CONTEXT(", ", ", ")", true)
       end
 
@@ -265,26 +282,28 @@ functor Ppil(structure Il : IL
 	 OVEREXP (c,_,exp) => (case oneshot_deref exp of
 				 NONE => String "OVEREXP_NONE"
 			       | (SOME e) => pp_exp seen e)
-       | SCON scon => pp_value' (pp_exp seen) scon
+       | SCON scon => pp_value' (pp_exp seen) (pp_con seen) scon
        | PRIM (prim,cons) => HOVbox[pp_prim' prim,
 				    pp_list (pp_con seen) cons ("[",",","]",false)]
        | ILPRIM ip => pp_ilprim' ip
        | VAR var => pp_var var
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
-       | FIX ([FBND(v',v,c,cres,e)],var) => if eq_var(v',var)
-						  then HOVbox[String "/\\",  pp_var v',
-							      String " (", pp_var v, Break0 0 5,
-							      String " : ",
-							      pp_con seen c, String ")", Break0 0 5,
-							      String " :", pp_con seen cres, 
-							      String " =", Break,
-							      pp_exp seen e]
-						else error "FIX of one thing not a lambda"
-       | FIX (fbnds, var) => HOVbox[String "FIX ",
-						  pp_list (pp_fbnd seen) fbnds ("[",",","]", true),
-						  String "IN  ",
-						  pp_var var,
-						  String "END "]
+       | FIX (a,[FBND(v',v,c,cres,e)],var) => 
+	     if eq_var(v',var)
+		 then HOVbox[String (case a of TOTAL => "/TOTAL\\ " | PARTIAL => "/\\"),
+			     pp_var v',
+			     String " (", pp_var v, Break0 0 5,
+			     String " : ",
+			     pp_con seen c, String ")", Break0 0 5,
+			     String " :", pp_con seen cres, 
+			     String " =", Break,
+			     pp_exp seen e]
+	     else error "FIX of one thing not a lambda"
+       | FIX (a,fbnds, var) => HOVbox[String (case a of TOTAL => "TOTALFIX " | PARTIAL => "FIX"),
+				      pp_list (pp_fbnd seen) fbnds ("[",",","]", true),
+				      String "IN  ",
+				      pp_var var,
+				      String "END "]
 (*       | SEQ elist => pp_list (pp_exp seen) elist ("(", ";",")", true) *)
        | RECORD [] => String "unit"
        | RECORD rbnds =>  let val (format,doer) = if (rbnds_is_tuple rbnds)
@@ -315,10 +334,6 @@ functor Ppil(structure Il : IL
 				  String "END"]
        | NEW_STAMP con => pp_region "NEW_STAMP(" ")" [pp_con seen con]
        | EXN_INJECT (e1,e2) => pp_region "EXN_INJECT(" ")" [pp_exp seen e1, String ",", pp_exp seen e2]
-       | MK_REF (exp)  =>  pp_region "REF(" ")" 
-			  [pp_exp seen exp]
-       | GET (exp)  => pp_region "GET(" ")" [pp_exp seen exp]
-       | SET (e1,e2) => pp_region "SET(" ")" [pp_exp seen e1, String ",", pp_exp seen e2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
 			  [pp_con seen con, pp_exp seen e]
        | UNROLL (con,e) => pp_region "UNROLL(" ")"
@@ -326,10 +341,6 @@ functor Ppil(structure Il : IL
        | INJ  (conlist, i, e) => pp_region "INJ(" ")"
 			  [pp_list (pp_con seen) conlist ("[",", ","]",false), 
 			   String ("," ^ (Int.toString i) ^ ","), pp_exp seen e]
-       | PROJ (conlist,i,e) => pp_region "PROJ(" ")" 
-			  [pp_list (pp_con seen) conlist ("[",", ","]",false),
-			   String ((Int.toString i) ^ ","), 
-			   pp_exp seen e]
        | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c]
        | CASE (cs,earg,elist,edef) => pp_region "CASE(" ")"
 			  ((pp_con seen (CON_SUM (NONE,cs))) :: (String ",") :: Break ::
@@ -368,7 +379,11 @@ functor Ppil(structure Il : IL
 
     and pp_signat seen signat = 
       (case signat of
-	 SIGNAT_STRUCTURE sdecs => pp_list (pp_sdec seen) sdecs ("SIGS[",", ", "]", true)
+	 SIGNAT_STRUCTURE (NONE,sdecs) => pp_list (pp_sdec seen) sdecs ("SIGS[",", ", "]", true)
+       | SIGNAT_STRUCTURE (SOME p,sdecs) => HOVbox[String "SIGS_NORM(",
+						   pp_path p, String ", ",
+						   pp_list (pp_sdec seen) sdecs ("[",",","]",true),
+						   String ")"]
        | SIGNAT_FUNCTOR (v,s1,s2,comp) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",
 						 pp_var v,
@@ -440,7 +455,7 @@ functor Ppil(structure Il : IL
     val pp_label'  = help pp_label
     val pp_con' = help (pp_con [])
     val pp_kind' = help pp_kind
-    val pp_value' = pp_value' (pp_exp [])
+    val pp_value' = pp_value' (pp_exp []) (pp_con [])
     val pp_prim' = help pp_prim'
     val pp_mod' = help (pp_mod [])
     val pp_exp' = help (pp_exp [])

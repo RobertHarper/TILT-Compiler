@@ -26,8 +26,13 @@ infixparse.sig.sml
 infixparse.sml
 basis.sig.sml
 basis.sml
+illeak.sig.sml
+ilcontext.sig.sml
+ilcontext.sml
+(*
 illookup.sig.sml
 illookup.sml
+*)
 datatype.sig.sml
 datatype.sml
 pat.sig.sml

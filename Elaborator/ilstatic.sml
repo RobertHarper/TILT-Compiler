@@ -1,21 +1,20 @@
-(* XXX what about adding contexts to tyvars  ----
-Static semantics *)
+(* Static semantics *)
 functor IlStatic(structure Il : IL
-		 structure IlLookup : ILLOOKUP 
+		 structure IlContext : ILCONTEXT
 		 structure PrimUtil : PRIMUTIL
 		 structure Ppil : PPIL
 		 structure IlUtil : ILUTIL
-		 sharing Ppil.Il = IlUtil.Il = IlLookup.Il = Il
+		 sharing Ppil.Il = IlUtil.Il = IlContext.Il = Il
 		 sharing PrimUtil.Prim = Il.Prim
 		 sharing type PrimUtil.con = Il.con
 		 sharing type PrimUtil.exp = Il.exp)
-(*  : ILSTATIC  *) =
+  : ILSTATIC  =
   struct
 
     open Util Listops
     structure Il = Il
-    open Il Ppil IlUtil
-    open IlLookup  
+    open Il Ppil IlUtil 
+    open IlContext 
     open Prim Tyvar Name
 
     val error = fn s => error "ilstatic.sml" s
@@ -23,74 +22,209 @@ functor IlStatic(structure Il : IL
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun fail s = raise (FAILURE s)
 
-   (* ------- decs extension ------------------------------------------- *)
-   fun add_dec_mod (m,(v,s)) = (DEC_MOD(v,s)) :: m
-   fun add_dec_exp (m,(v,c)) = (DEC_EXP(v,c)) :: m
-   fun add_dec_con (m,(v,k,c)) = (DEC_CON(v,k,SOME c)) :: m
-   fun add_dec_exps (decs,[]) = decs
-     | add_dec_exps (decs,(a::rest)) = add_dec_exps(add_dec_exp(decs,a),rest)
-   fun add_dec_cons (decs,[]) = decs
-     | add_dec_cons (decs,(a::rest)) = add_dec_cons(add_dec_con(decs,a),rest)
-   fun add_dec_dec (decs,dec) = dec::decs
 
-   (* ------- decs and signat lookup ------------------------------------- *)
-   local
-     fun help s match fetch ([]) = raise (NOTFOUND s)
-       | help s match fetch (a::rest) = if (match a) then fetch a 
-					else help s match fetch rest
-   in
-     fun DecVarLookup (var, decs) = 
-	 help ("Var " ^ var2string var)
-	 (fn (DEC_EXP (v,_)) => eq_var(var,v) | _ => false)
-	 (fn (DEC_EXP (_,con)) => con | _ => error "DecVarLookup") decs
-     fun DecExnLookup (tag, decs) = 
-	 help ("Exn " ^ tag2string tag)
-	 (fn (DEC_EXCEPTION (n,_)) => eq_tag(tag,n) | _ => false)
-	 (fn (DEC_EXCEPTION (_,con)) => con 
-           | _ => error "DecExnLookup") decs
-     fun DecConvarLookup (var, decs) = 
-	 help ("Convar " ^ var2string var)
-	 (fn (DEC_CON (v,_,SOME _)) => eq_var(var,v) | _ => false)
-	 (fn (DEC_CON (_,_,SOME con)) => con | _ => error "DecConvarLookup") decs
-     fun DecKindLookup (var, decs) = 
-	 help ("Kind "^ var2string var)
-	 (fn (DEC_CON (v,_,_)) => eq_var(var,v) | _ => false)
-	 (fn (DEC_CON (_,k,_)) => k | _ => error "DecKindLookup") decs
-     fun DecSignatLookup (var, decs) = 
-	 help ("Signat " ^ var2string var)
-	 (fn (DEC_MOD (v,_)) => eq_var(var,v) | _ => false)
-	 (fn (DEC_MOD(_,s)) => s | _ => error "DecSignatLookup") decs
-     fun RdecLookup (label,rdecs) = 
-	 help ("rdec " ^ label2string label)
-	 (fn (l,_) => eq_label(label,l))
-	 (fn (_,con) => con) rdecs
+   fun mod_ispath (MOD_VAR _) = true
+     | mod_ispath (MOD_PROJECT (m,_)) = mod_ispath m
+     | mod_ispath _ = false
+   fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
+     | eq_modval (MOD_PROJECT (m,l), 
+		  MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
+     | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
+     | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
+     | eq_modval(m1,m2) = false
+   fun eq_path (p1 : path, p2 : path) = p1 = p2
 
-     (* if the module argument is present, 
-         then the component returned, if it is a DEC_CON, will have
-	 all occurrences of variables that occur as part of that
-	 signature replaced by a module projection *)
-     fun SignatLookup (label,signat : Il.signat ,mopt : mod option) : sdec option = 
-       (case signat of
-	  (SIGNAT_FUNCTOR _) => error "SignatLookup on a functor signature"
-	| (SIGNAT_STRUCTURE sdecs) => 
-	    let val _ = debugdo (fn () => (print "signat_lookup called with label = : "; 
-					   pp_label label;
-					   print "\nand signat:\n"; pp_signat signat; 
-					   print "\n\n"))
-	      fun help (acc,SDEC(l,DEC_CON(v,k,SOME c))) = 
-		let val newc = (case mopt of
-				  NONE => c
-				| SOME m => con_subst_var_withproj(c,acc,m))
-		in SOME(SDEC(l,DEC_CON(v,k,SOME newc)))
-		end
-		| help (acc,sdec) = SOME sdec
-	      fun loop acc [] = NONE
-		| loop acc ((cur as (SDEC (l,d))) :: rest) = if (eq_label(label,l)) 
-							       then help(acc,cur)
-							     else loop (cur::acc) rest
-	    in  loop [] sdecs
+   (* --- remove references to internal variables from signature with given module ---- *)
+   fun SelfifySig'(ctable : (var * con) list, 
+		   mtable : (var * mod) list,
+		   popt: path option, signat : signat) : signat = 
+     let 
+       fun loop tables [] = []
+	 | loop (ctable,mtable) ((sdec as (SDEC(l,dec)))::rest) = 
+	  (case dec of
+		 DEC_EXP(v,c) =>  ((SDEC(l,DEC_EXP(v,con_subst_conmodvar(c,ctable,mtable))))::
+				   (loop (ctable,mtable) rest))
+	       | DEC_MOD(v,s) => 
+		     let val popt' = mapopt (fn p => join_path_labels(p,[l])) popt
+			 val this_dec = DEC_MOD(v,SelfifySig'(ctable,mtable,popt',s))
+			 val mtable' = (case popt' of
+					    NONE => mtable
+					  | SOME p => (v,path2mod p)::mtable)
+			 val rest_sdecs = loop (ctable,mtable') rest
+		     in SDEC(l,this_dec)::rest_sdecs
+		     end
+	       | DEC_CON(v,k,copt) => 
+		   let
+		       val this_dec = 
+			   (case copt of
+				NONE => 
+			      (*  dec    do we want this? if we do this, Unselfify is hard to write. *)
+			        DEC_CON(v,k,(case popt of
+						 NONE => NONE
+					       | SOME p => SOME(CON_MODULE_PROJECT(path2mod p,l))))
+			      | SOME c => 
+				     let val c' = con_subst_conmodvar(c,ctable,mtable)
+				     in
+					 DEC_CON(v,k,SOME (con_subst_conmodvar(c,ctable,mtable)))
+				     end)
+			 val ctable' = (case popt of
+					    NONE => ctable
+					  | SOME p => (v,CON_MODULE_PROJECT(path2mod p,l))::ctable)
+			 val rest_sdecs = loop (ctable',mtable) rest
+		   in (SDEC(l,this_dec))::rest_sdecs
+		   end
+	     | ((DEC_EXCEPTION _) | (DEC_FIXITY _)) => sdec::(loop (ctable,mtable) rest))
+     in (case signat of
+	   SIGNAT_FUNCTOR (v,s1,s2,a) => 
+	       let val s1' = SelfifySig'(ctable,mtable,NONE,s1)
+		   val s2' = SelfifySig'(ctable,mtable,NONE,s2)
+	       in  SIGNAT_FUNCTOR(v,s1',s2',a)
+	       end
+	 | SIGNAT_STRUCTURE (NONE,sdecs) => 
+	       let val sdecs' = loop (ctable,mtable) sdecs
+	       in case popt of
+		   SOME p => SIGNAT_STRUCTURE(SOME p,sdecs')
+		 | _ => SIGNAT_STRUCTURE(NONE, sdecs')
+	       end
+	 | SIGNAT_STRUCTURE (SOME _,sdecs) => signat)
+     end
+(*
+	       let 
+		   val (var,lbls) = (case path of
+					 SIMPLE_PATH v => (v,[])
+				       | COMPOUND_PATH (v,l) => (v,rev l))
+		   fun con_handler [] (MOD_VAR v) = if (eq_var(v,var)) then SOME mopt else NONE
+		     | con_handler (l::lrest) (CON_MODULE_PROJECT (m,l')) = 
+		       if (eq_label(l,l')) then con_handler lrest m else NONE
+		     | con_handler _ _ = NONE
+		   val sdecs' = 
+		       (case sig_mod_handler(SIGNAT_NORMAL_STRUCTURE sdecs,con_handler lbls) of
+			    SIGNAT_NORMAL_STRUCTURE sdecs => sdecs
+			  | _ => error "sig_con_handler changed shape of sig")
+
+				 (case mopt of
+				     SOME(MOD_VAR v) => if (eq_var(v,sv)) 
+							    then sdecs 
+							else Unselfify(sv,sdecs)
+				   | _ => Unselfify(sv,sdecs))
+		   val sdecs'' = loop (ctable,mtable) sdecs'
+	       in case mopt of
+		   SOME(MOD_VAR v) => SIGNAT_NORMAL_STRUCTURE(v,sdecs'')
+		 | _ => SIGNAT_STRUCTURE sdecs''
+	       end
+*)
+
+(*
+   and Unselfify (v, sdecs) = 
+       let 
+	   fun help (SDEC(l,DEC_EXP(v,_))) = SOME(l,v)
+	     | help (SDEC(l,DEC_MOD(v,_))) = SOME(l,v)
+	     | help (SDEC(l,DEC_CON(v,_,_))) = SOME(l,v)
+	     | help _ = NONE
+	   val table = List.mapPartial help sdecs
+	   fun lookup l = (case (assoc_eq(eq_label,l,table)) of
+			       SOME x => x
+			     | _ => error "Unselfify given bad sdecs: contains bad projections")
+	   fun eproj(MOD_VAR v',l) = if (eq_var(v,v')) 
+					 then SOME(VAR(lookup l))
+				     else NONE
+	     | eproj _ = NONE
+	   fun cproj(MOD_VAR v',l) = if (eq_var(v,v')) 
+					 then SOME(CON_VAR(lookup l))
+				     else NONE
+	     | cproj _ = NONE
+	   fun mproj(MOD_VAR v',l) = if (eq_var(v,v')) 
+					 then SOME(MOD_VAR(lookup l))
+				     else NONE
+	     | mproj _ = NONE
+	  fun sdecer (SDEC(l,DEC_CON(v',k,SOME (CON_MODULE_PROJECT(MOD_VAR v'',l'))))) =
+	      if (eq_var(v,v'') andalso eq_label(l,l'))
+		   then SOME(SDEC(l,DEC_CON(v',k,NONE)))
+	      else NONE
+	     | sdecer _ = NONE
+	   val m = SIGNAT_STRUCTURE sdecs
+	   val res = sig_subst_allproj(m,eproj,cproj,mproj,sdecer)
+       in case res of
+	   SIGNAT_STRUCTURE sdecs' => sdecs'
+	 | _ => error "mod_subst_allproj returned non structure"
+       end
+*)
+     (* Performs lookup in a structure signature, performing
+        normalization as needed with the supplied module argument. *)
+    local
+	fun wrap vm NONE = NONE
+	  | wrap vm (SOME pc) = 
+	    SOME(case pc of
+		     PHRASE_CLASS_EXP(e,c) => PHRASE_CLASS_EXP(exp_subst_modvar(e,[vm]),
+							       con_subst_modvar(c,[vm]))
+		   | PHRASE_CLASS_CON(c,k) => PHRASE_CLASS_CON(con_subst_modvar(c,[vm]),k)
+		   | PHRASE_CLASS_MOD(m,s) => PHRASE_CLASS_MOD(mod_subst_modvar(m,[vm]),
+							       sig_subst_modvar(s,[vm]))
+		   | _ => pc)
+	fun NormalSignatLookup(p :path, label,sdecs) : (bool * phrase_class) option =
+	    (let val signat' = SelfifySig'([],[],SOME p,SIGNAT_STRUCTURE(NONE,sdecs))
+	     in  (case signat' of
+		      (SIGNAT_STRUCTURE (_,sdecs')) =>
+			  let val (f,(_,pc)) = Sdecs_Lookup'(path2mod p, sdecs', [label])
+			  in SOME(f,pc)
+			  end
+		    | _ => error "NormalizeSig' took SIGNAT_STRUCTURE and returned ?")
+	     end
+		 handle (NOTFOUND _) => NONE)
+	fun local_Sdecs_Lookup (m,sdecs,labels) = 
+	    (let val (_,pc) = Sdecs_Lookup(m,sdecs,labels)
+	    in SOME pc
 	    end)
-   end
+		 handle (NOTFOUND _) => NONE
+
+	fun local_Sdecs_Project(mopt, sdecs, l) = 
+	    let
+		fun eh m et (VAR v) = mapopt (fn l => MODULE_PROJECT(m,l)) (assoc_eq (eq_var,v,et))
+		  | eh m et _ = NONE
+		fun ch m ct (CON_VAR v) = mapopt (fn l => CON_MODULE_PROJECT(m,l)) (assoc_eq (eq_var,v,ct))
+		  | ch m ct _ = NONE
+		fun mh m mt (MOD_VAR v) = mapopt (fn l => MOD_PROJECT(m,l)) (assoc_eq (eq_var,v,mt))
+		  | mh m mt _ = NONE
+		fun nada _ _ = error "local_Sdecs_Project failed"
+		val (eh,ch,mh) = (case mopt of
+				      NONE => (nada,nada,nada)
+				    | SOME m => (eh m, ch m, mh m))
+		fun externalize (et,ct,mt) dec =
+		    case dec of
+			(DEC_MOD(_,s)) => CLASS_MOD(sig_all_handle(s,eh et,ch ct,mh mt))
+		      | (DEC_EXP(_,c)) => CLASS_EXP(con_all_handle(c,eh et,ch ct,mh mt))
+		      | (DEC_CON(_,k,SOME c)) => CLASS_CON k
+		      | (DEC_CON(_,k,NONE)) => CLASS_CON k
+		fun extend (et,ct,mt) (l,DEC_MOD(v,_)) = (et,ct,(v,l)::mt)
+		  | extend (et,ct,mt) (l,DEC_EXP(v,_)) = ((v,l)::et,ct,mt)
+		  | extend (et,ct,mt) (l,DEC_CON(v,_,_)) = (et,(v,l)::ct,mt)
+		  | extend tables _ = tables
+		fun loop t [] = NONE
+		  | loop t ((SDEC(l',dec))::rest) = if (eq_label(l,l')) 
+							then SOME(externalize t dec)
+						    else loop (extend t (l',dec)) rest
+	    in loop ([],[],[]) sdecs
+	    end
+    in					     
+	val Sdecs_Lookup = local_Sdecs_Lookup
+	val Sdecs_Project = local_Sdecs_Project
+
+	fun SelfifySig(p : path, signat : signat) = 
+	    let val res = SelfifySig'([],[],SOME p,signat)
+		val _ = debugdo 
+		    (fn () => (print "SelfifySig': p is "; pp_path p;
+			       print "\nsignat is\n";
+			       pp_signat signat; print "\n\nand returning res:\n";
+			       pp_signat res; print "\n\n"))
+	    in res
+	    end
+	fun SelfifyDec (DEC_MOD (v,s)) = DEC_MOD(v,SelfifySig(SIMPLE_PATH v,s))
+	  | SelfifyDec dec = dec
+	fun SelfifySdecs(p : path, sdecs : sdecs) =
+	    case (SelfifySig(p,SIGNAT_STRUCTURE(NONE,sdecs))) of
+		SIGNAT_STRUCTURE (SOME _,sdecs) => sdecs
+	      | _ => error "SelfifySdecs: SelfifySig returned non-normal structure"
+    end
 
 
 
@@ -98,6 +232,10 @@ functor IlStatic(structure Il : IL
    fun Exp_IsSyntacticValue exp = 
      (case exp of
 	SCON _ => true
+      | PRIM _ => true
+      | ILPRIM _ => true
+      | VAR _ => true
+      | MODULE_PROJECT(m,_) => mod_ispath m
       | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
 	                (map (fn (l,e) => Exp_IsSyntacticValue e) rbnds)
       | FIX _ => true
@@ -108,6 +246,7 @@ functor IlStatic(structure Il : IL
       (case module of
 	 MOD_STRUCTURE sbnds => foldr (fn (a,b) => a andalso b) true 
 	                        (map (fn SBND(l,b) => Bnd_IsSyntacticValue b) sbnds)
+       | MOD_LET (v,m1,m2) => (Module_IsSyntacticValue m1) andalso (Module_IsSyntacticValue m2)
        | (MOD_FUNCTOR _) => true
        | _ => false)
    and Bnd_IsSyntacticValue bnd = 
@@ -118,25 +257,6 @@ functor IlStatic(structure Il : IL
      | BND_FIXITY _ => true)
 
 
-     (* ---------- Bound Rules from page 15 - 16 ----------------- *)
-   datatype bound_name = BOUND_VAR of var | BOUND_NAME of tag
-   fun Decs_Bound x = 
-     let
-       fun Dec_Bound (DEC_EXP (v,_)) = SOME(BOUND_VAR v)
-	 | Dec_Bound (DEC_MOD (v,_)) = SOME(BOUND_VAR v)
-	 | Dec_Bound (DEC_CON (v,_,_)) = SOME(BOUND_VAR v)
-	 | Dec_Bound (DEC_EXCEPTION (n,_)) = SOME(BOUND_NAME n)
-	 | Dec_Bound (DEC_FIXITY _) = NONE
-     in List.mapPartial Dec_Bound x
-     end
-   fun var_in (var,[]) = false
-     | var_in (var,(BOUND_VAR v)::rest) = eq_var(var,v) orelse var_in(var,rest)
-     | var_in (var,_::rest) = var_in(var,rest)
-   fun name_in (name,[]) = false
-     | name_in (name,(BOUND_NAME v)::rest) = eq_tag(name,v) orelse name_in(name,rest)
-     | name_in (name,_::rest) = name_in(name,rest)
-   fun Sdecs_Domain sdecs = map (fn SDEC(l,_) => l) sdecs
- 
 
 
    (* --------- structural equality on scons, kinds ------------ *)
@@ -149,13 +269,14 @@ functor IlStatic(structure Il : IL
    (* ---------------------------------------------------------------
       oneshot arrow unifier: note that unset does NOT unify with unset
      ---------------------------------------------------------------- *)
-   fun eq_comp (comp1,comp2,is_sub) = (case (oneshot_deref comp1,oneshot_deref comp2) of
-					   (SOME x, SOME y) => (x = y) orelse (is_sub andalso x = TOTAL)
-					 | (SOME x, NONE) => (oneshot_set(comp2,x); true)
-					 | (NONE, SOME x) => (oneshot_set(comp1,x); true)
-					 | (NONE, NONE) => ((eq_oneshot(comp1,comp2)) orelse
-							    (oneshot_set(comp1,PARTIAL); 
-							     oneshot_set(comp2,PARTIAL); true)))
+   fun eq_comp (comp1,comp2,is_sub) = 
+       (case (oneshot_deref comp1,oneshot_deref comp2) of
+	    (SOME x, SOME y) => (x = y) orelse (is_sub andalso x = TOTAL)
+	  | (SOME x, NONE) => (oneshot_set(comp2,x); true)
+	  | (NONE, SOME x) => (oneshot_set(comp1,x); true)
+	  | (NONE, NONE) => ((eq_oneshot(comp1,comp2)) orelse
+			     (oneshot_set(comp1,PARTIAL); 
+			      oneshot_set(comp2,PARTIAL); true)))
    fun comp_unify (a1,a2) = if (eq_comp(a1,a2,false)) then () else error "comp_unify failed"
 
 
@@ -172,45 +293,68 @@ functor IlStatic(structure Il : IL
 	     is called with the type variable and the given type.
 	     The unifier may be side-effecting or not.
     -------------------------------------------------------------- *)
-   fun unify_maker is_hard (fetch : (decs,con) tyvar -> con option) 
+   fun unify_maker is_hard (fetch : (context,con) tyvar -> con option) 
        set (constrained,tyvar,c,decs,is_sub) = 
      let 
        val self = unify_maker is_hard fetch set 
      in (case (fetch tyvar) of
-	   NONE => (case c of
-		      CON_TYVAR tv =>
-			  eq_tyvar(tv,tyvar) orelse 
-			(case (fetch tv) of
-			   SOME c' => self(constrained,tyvar,c',decs,is_sub)
-			 | NONE => (set(constrained,tyvar,c); true))
-		    | _ => not (con_occurs(c,tyvar))
-			  andalso (let val decs = tyvar_getdecs tyvar
-				   in (GetConKind(c,decs); true)
-				       handle _ => false
-				   end)
-			  andalso (set(constrained,tyvar,c); true))
+	   NONE => let val tyvar_ctxts = tyvar_getctxts tyvar
+		   in (case c of
+			   CON_TYVAR tv =>
+			       eq_tyvar(tv,tyvar) orelse 
+			       (case (fetch tv) of
+				    SOME c' => self(constrained,tyvar,c',decs,is_sub)
+				  | NONE => (set(constrained,tyvar,c); true))
+			 | _ => not (con_occurs(c,tyvar))
+			       andalso (map (fn ctxt => GetConKind(c,ctxt)) tyvar_ctxts; true
+					handle _ => false)
+			       andalso (set(constrained,tyvar,c); true))
+		   end
 	 | (SOME c') => meta_eq_con (is_hard,self) constrained (c',c,decs,is_sub))
      end
 
-   and hard_unifier arg =
+   and local_con_constrain(ctxt,c,param as {constrain,stamp,...},ctxts) : con = 
+       let
+	   val _ = debugdo (fn () => (print "local_con_constrain called on c = ";
+				      pp_con c; print "\n"))
+	   val param' = {constrain = constrain,
+			 stamp = stamp,
+			 eq_constrain = false}
+	   fun help (CON_REF c) = (con_constrain(c,help,param',ctxts);
+				   SOME(CON_REF c))
+	     | help (CON_ARRAY c) = (con_constrain(c,help,param',ctxts);
+				     SOME(CON_ARRAY c))
+	     | help _ = NONE
+	   val c' = Normalize(c,ctxt) 
+	   val _ = con_constrain(c',help,param,ctxts)
+       in c'
+       end
+
+   and hard_unifier (arg as (_,_,_,ctxt,_)) =
      let 
        fun hard_fetch tv = tyvar_deref tv
-       fun hard_set (constr,tv,c) = (debugdo (fn () => (print "now hard-setting ";
-							pp_con (CON_TYVAR tv); print " to ";
-							pp_con c; print "\n"));
-				     hardset_targets := c::(!hardset_targets);
-				     con_constrain(c,{constrain = constr,
-						      eq_constrain = (tyvar_is_use_equal tv),
-						      stamp = SOME(tyvar_stamp tv)});
-				     tyvar_set(tv,c))
+       fun hard_set (constr,tv,c) = 
+	   let val _ = (debugdo (fn () => (print "now hard-setting ";
+					   pp_con (CON_TYVAR tv); print " to ";
+					   pp_con c; print "\n")))
+	       val tyvar_ctxts = tyvar_getctxts tv
+	       val c = local_con_constrain(ctxt,c,
+					   {constrain = constr,
+					    eq_constrain = (tyvar_is_use_equal tv),
+					    stamp = SOME(tyvar_stamp tv)},tyvar_ctxts);
+
+	   in
+	       (hardset_targets := c::(!hardset_targets);
+		tyvar_set(tv,c))
+	   end
      in  unify_maker true hard_fetch hard_set arg
      end
    and soft_unifier () =
      let 
-       val table = ref ([] : ((decs,con) tyvar * con) list)
+       val table = ref ([] : ((context,con) tyvar * con) list)
        val constr_con = ref ([] : con list)
        val useeq_con = ref ([] : con list)
-       fun soft_fetch (tyvar : (decs,con) tyvar) = let 
+       fun soft_fetch (tyvar : (context,con) tyvar) = let 
 (*				  val v = tyvar_getvar tyvar *)
 				  fun loop [] = NONE
 				    | loop ((tv,c)::rest) = 
@@ -222,34 +366,37 @@ functor IlStatic(structure Il : IL
 				    SOME c' => SOME c'
 				  | NONE => loop (!table))
 			      end
-       fun soft_set (constr,tv,c) = let val _ = debugdo (fn () => 
-							 (print "now soft-setting ";
-							  print (tyvar2string tv); print " to ";
-							  pp_con c; print "\n"))
-					val _ = if constr then constr_con := c::(!constr_con) else ()
-					val _ = if (tyvar_is_use_equal tv) 
-						  then useeq_con := c::(!useeq_con) else ()
-				    in table := (tv,c)::(!table)
-				    end
+       fun soft_set (constr,tv,c) = 
+	   let val _ = debugdo (fn () => 
+				(print "now soft-setting ";
+				 print (tyvar2string tv); print " to ";
+				 pp_con c; print "\n"))
+	       val _ = if constr then constr_con := c::(!constr_con) else ()
+	       val _ = if (tyvar_is_use_equal tv) 
+			   then useeq_con := c::(!useeq_con) else ()
+	   in table := (tv,c)::(!table)
+	   end
        fun soft_unify arg = unify_maker false soft_fetch soft_set arg
      in (soft_unify,table,constr_con,useeq_con)
      end
    and eq_con (con1,con2,decs) = meta_eq_con (true,hard_unifier) false (con1,con2,decs,false)
    and sub_con (con1,con2,decs) = meta_eq_con (false,hard_unifier) false (con1,con2,decs,true)
-   and soft_eq_con (con1,con2,decs) = 
+   and soft_eq_con (con1,con2,ctxt) = 
      let val (soft_unify,table,constr_con,useeq_con) = soft_unifier()
-     in  if (meta_eq_con (false,soft_unify) false (con1,con2,decs,false))
+     in  if (meta_eq_con (false,soft_unify) false (con1,con2,ctxt,false))
 	   then (app tyvar_set (!table); 
-		 app (fn c => con_constrain(c,{constrain = true,
+		 map (fn c => local_con_constrain(ctxt,c,{constrain = true,
 					       stamp = NONE,
-					       eq_constrain = false})) (!constr_con);
-		 app (fn c => con_constrain(c,{constrain=false,
+					       eq_constrain = false},
+(* XXX *)					    [ctxt])) (!constr_con);
+		 map (fn c => local_con_constrain(ctxt,c,{constrain=false,
 					       stamp = NONE,
-					       eq_constrain = true})) (!useeq_con);
+					       eq_constrain = true},
+ (* XXX *)			[ctxt])) (!useeq_con);
 		 true)
 	 else false
      end
-   and meta_eq_con (is_hard,unifier) constrained (con1,con2,decs,is_sub) = 
+   and meta_eq_con (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
      let 
 
        val _ = debugdo (fn () => (print "\nUnifying"; 
@@ -258,10 +405,10 @@ functor IlStatic(structure Il : IL
 				  else print " not constrained: ";
 				  pp_con con1;
 				  print "\nwith:     "; pp_con con2;
-				  print "\nusing decs = \n"; pp_decs decs;
+				  print "\nusing ctxt = \n"; pp_context ctxt;
 				  print "\n"))
-       val (isocon1, con1) = HeadNormalize(con1,decs)
-       val (isocon2, con2) = HeadNormalize(con2,decs)
+       val (isocon1, con1) = HeadNormalize(con1,ctxt)
+       val (isocon2, con2) = HeadNormalize(con2,ctxt)
        val _ = debugdo (fn () => (print "\nHeadNormalized to: "; pp_con con1;
 				  print "\nand:     "; pp_con con2;
 				  if isocon1 then
@@ -286,21 +433,21 @@ functor IlStatic(structure Il : IL
 	 (case (con1,con2) of
 	    (CON_TYVAR tv1, CON_TYVAR tv2) => 
 		(eq_tyvar(tv1,tv2) 
-		 orelse (unifier(constrained,tv1,con2,decs,is_sub)))
-	  | (CON_TYVAR tv1, CON_FLEXRECORD _) => unifier(constrained,tv1,con2,decs,is_sub)
-	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,decs,is_sub)
-	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,decs,is_sub)
+		 orelse (unifier(constrained,tv1,con2,ctxt,is_sub)))
+	  | (CON_TYVAR tv1, CON_FLEXRECORD _) => unifier(constrained,tv1,con2,ctxt,is_sub)
+	  | (CON_TYVAR tv1, _) => unifier(constrained,tv1,con2,ctxt,is_sub)
+	  | (_, CON_TYVAR tv2) => unifier(constrained,tv2,con1,ctxt,is_sub)
 	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
-	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,decs,is_sub) 
-	                                                andalso self(c1_r,c2_r,decs,is_sub)
+	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,ctxt,is_sub) 
+	                                                andalso self(c1_r,c2_r,ctxt,is_sub)
 	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => 
 		let fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
 		      | eq_modval (MOD_PROJECT (m,l), 
 				   MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
 		      | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
 		      | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
-		      | eq_modval((MOD_VAR _ | MOD_PROJECT _),
-				  (MOD_VAR _ | MOD_PROJECT _)) = false
+		      | eq_modval (MOD_VAR _, MOD_PROJECT _) = false
+		      | eq_modval (MOD_PROJECT _, MOD_VAR _) = false
 		      | eq_modval(m1,m2) = (print "eq_modval for a non value\nm1 = \n";
 					    pp_mod m1; print "\nm2 = \n";
 					    pp_mod m2; print "\n";
@@ -310,22 +457,22 @@ functor IlStatic(structure Il : IL
 	  | ((CON_INT is1, CON_INT is2) | (CON_UINT is1, CON_UINT is2)) => is1 = is2
 	  | (CON_FLOAT fs1, CON_FLOAT fs2) => fs1 = fs2
 	  | (CON_ANY, CON_ANY) => true
-	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,decs,is_sub)
-	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,decs,is_sub)
-	  | (CON_REF c1, CON_REF c2) => self(c1,c2,decs,is_sub)
-	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,decs,is_sub)
+	  | (CON_ARRAY c1, CON_ARRAY c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_VECTOR c1, CON_VECTOR c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_REF c1, CON_REF c2) => self(c1,c2,ctxt,is_sub)
+	  | (CON_TAG c1, CON_TAG c2) => self(c1,c2,ctxt,is_sub)
 	  | (CON_ARROW (c1_a,c1_r,comp1), CON_ARROW(c2_a,c2_r,comp2)) => 
 		(eq_comp(comp1,comp2,is_sub)
-		 andalso self (c2_a,c1_a,decs,is_sub)
-		 andalso self(c1_r,c2_r,decs,is_sub))
-	  | (CON_MUPROJECT (i1,c1), CON_MUPROJECT(i2,c2)) => (i1=i2) andalso (self(c1,c2,decs,is_sub))
+		 andalso self (c2_a,c1_a,ctxt,is_sub)
+		 andalso self(c1_r,c2_r,ctxt,is_sub))
+	  | (CON_MUPROJECT (i1,c1), CON_MUPROJECT(i2,c2)) => (i1=i2) andalso (self(c1,c2,ctxt,is_sub))
 	  | ((CON_RECORD _ | CON_FLEXRECORD _),(CON_RECORD _ | CON_FLEXRECORD _)) =>
 		let 
 		    fun match rdecs1 rdecs2 = 
-			let val rdecs1' = sort_labelpair rdecs1
-			    val rdecs2' = sort_labelpair rdecs2
+			let  val rdecs1' = sort_labelpair rdecs1
+			       val rdecs2' = sort_labelpair rdecs2    (* <-- no need to sort here *)
 			    fun help ((l1,c1),(l2,c2)) = eq_label(l1,l2) 
-				andalso self(c1,c2,decs,is_sub)
+				andalso self(c1,c2,ctxt,is_sub)
 			in  eq_list(help,rdecs1',rdecs2')
 			end
 		    fun check_one addflag (l,c) rdecs =
@@ -334,7 +481,7 @@ functor IlStatic(structure Il : IL
 			      | loop ((l',c')::rest) = 
 				if (eq_label(l,l'))
 				    (* do we need to flip the sense of is_sub *)
-				    then if (self(c,c',decs,is_sub))
+				    then if (self(c,c',ctxt,is_sub))
 					     then SOME rdecs
 					 else NONE
 				else loop rest
@@ -345,10 +492,10 @@ functor IlStatic(structure Il : IL
 			(case (check_one true rdec rdecs) of
 			     NONE => NONE
 			   | SOME x => (union rest x))
-		    fun stamp_constrain stamp rdecs = app (fn (_,c) => 
-							    con_constrain(c,{constrain=false,
+		    fun stamp_constrain stamp rdecs = map (fn (_,c) => 
+							    local_con_constrain(ctxt,c,{constrain=false,
 									     stamp = SOME stamp,
-									     eq_constrain=false})) rdecs
+									     eq_constrain=false},[])) rdecs
 		    fun subset ([]) rdecs = true
 		      | subset (rdec::rest) rdecs = 
 			(case (check_one false rdec rdecs) of
@@ -381,122 +528,139 @@ functor IlStatic(structure Il : IL
 		end
 	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) => 
 		(length vs1 = length vs2) andalso
-		let val decs' = foldl (fn (v,acc) => ((DEC_CON(v,KIND_TUPLE 1, NONE))::acc)) decs vs1
+		let fun folder (v,acc) = add_context_convar'(acc,v,KIND_TUPLE 1, NONE)
+		    val ctxt' = foldl folder ctxt vs1
 		    val table = map2 (fn (v1,v2) => (v2,CON_VAR v1)) (vs1,vs2)
 		    val c2' = con_subst_convar(c2,table)
-		in self(c1,c2',decs',is_sub)
+		in self(c1,c2',ctxt',is_sub)
 		end
 	  | (CON_SUM (i1,cs1), CON_SUM (i2,cs2)) => 
 		(i1=i2) andalso
-		eq_list (fn (a,b) => self(a,b,decs,is_sub), cs1, cs2)
+		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), cs1, cs2)
 	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
-		eq_list (fn (a,b) => self(a,b,decs,is_sub), cs1, cs2)
+		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), cs1, cs2)
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
-		(i1 =i2) andalso (self(c1,c2,decs,is_sub))
+		(i1 =i2) andalso (self(c1,c2,ctxt,is_sub))
 	  | _ => false)
        val _ = debugdo (fn () => print (if res then "unified\n" else "NOT unified\n"))
      in res
      end
 
 
-   and eq_dec (d1,d2,decs) = 
+   and eq_dec (d1,d2,ctxt) = 
        (case (d1,d2) of
-	    (DEC_EXP (v1,c1), DEC_EXP(v2,c2)) => (eq_var(v1,v2)) andalso eq_con (c1,c2,decs)
-	  | (DEC_MOD(v1,s1), DEC_MOD(v2,s2)) => (eq_var(v1,v2)) andalso eq_sig (decs,s1,s2)
+	    (DEC_EXP (v1,c1), DEC_EXP(v2,c2)) => (eq_var(v1,v2)) andalso eq_con (c1,c2,ctxt)
+	  | (DEC_MOD(v1,s1), DEC_MOD(v2,s2)) => (eq_var(v1,v2)) andalso eq_sig (ctxt,s1,s2)
 	  | (DEC_CON (v1,k1,NONE), DEC_CON(v2,k2,NONE)) => (eq_var(v1,v2)) 
 	  | (DEC_CON (v1,k1,SOME c1), DEC_CON(v2,k2,SOME c2)) => ((eq_var(v1,v2)) andalso 
-								  eq_con (c1,c2,decs))
+								  eq_con (c1,c2,ctxt))
 	  | (DEC_EXCEPTION (n1,c1), DEC_EXCEPTION(n2,c2)) => ((eq_tag(n1,n2)) andalso 
-							      eq_con (c1,c2,decs))
+							      eq_con (c1,c2,ctxt))
 	  | (DEC_FIXITY ft1, DEC_FIXITY ft2) => eq_list(fn ((l1,f1),(l2,f2)) => 
 							(eq_label(l1,l2) andalso f1=f2),ft1,ft2)
 	  | _ => false)
 
-   and eq_sdec decs (SDEC(l1,d1),SDEC(l2,d2)) = eq_label(l1,l2) andalso (eq_dec(d1,d2,decs))
-   and eq_sdecs (decs,sdecs1,sdecs2) = eq_list(eq_sdec decs, sdecs1, sdecs2)
+   and eq_sdec ctxt (SDEC(l1,d1),SDEC(l2,d2)) = eq_label(l1,l2) andalso (eq_dec(d1,d2,ctxt))
+   and eq_sdecs (ctxt,sdecs1,sdecs2) = eq_list(eq_sdec ctxt, sdecs1, sdecs2)
 
 
-   and eq_sig (decs,SIGNAT_STRUCTURE sdecs1, 
-	       SIGNAT_STRUCTURE sdecs2) = eq_sdecs(decs,sdecs1,sdecs2)
-     | eq_sig (decs,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,comp1), 
+   and eq_sig (ctxt,SIGNAT_STRUCTURE (NONE,sdecs1), 
+	       SIGNAT_STRUCTURE (NONE,sdecs2)) = eq_sdecs(ctxt,sdecs1,sdecs2)
+     | eq_sig (ctxt,SIGNAT_FUNCTOR (v1,s1_arg,s1_res,comp1), 
 	       SIGNAT_FUNCTOR (v2,s2_arg,s2_res,comp2)) = 
-       (eq_comp(comp1,comp2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(decs,s1_arg,s2_arg)))
-       andalso let val decs' = add_dec_mod(decs,(v1,s1_arg))
-	       in  eq_sig (decs',s1_res,s2_res)
+       (eq_comp(comp1,comp2,false) andalso (eq_var(v1,v2)) andalso (eq_sig(ctxt,s1_arg,s2_arg)))
+       andalso let val s1_arg' = SelfifySig(SIMPLE_PATH v1,s1_arg)
+		   val ctxt' = add_context_module'(ctxt,v1,s1_arg')
+	       in  eq_sig (ctxt',s1_res,s2_res)
 	       end
-     | eq_sig _ = false
+     | eq_sig _ = raise UNIMP
 
 
 
-   and Exp_IsValuable exp decs = 
+   and Exp_IsValuable(ctxt,exp) =
      (Exp_IsSyntacticValue exp) orelse
      (case exp of
-	MODULE_PROJECT (m,l) => Module_IsValuable m decs
-      | APP(e1,e2) => let val e1_con = GetExpCon(e1,decs)
+	MODULE_PROJECT (m,l) => Module_IsValuable m ctxt
+      | APP(e1,e2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
 			  val e1_con_istotal = 
 			      (case e1_con of
 				   CON_ARROW(_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
 				 | _ => false)
-		      in e1_con_istotal andalso (Exp_IsValuable e1 decs) 
-			  andalso (Exp_IsValuable e2 decs)
+		      in va1 andalso e1_con_istotal
+			  andalso (Exp_IsValuable (ctxt,e2))
 		      end
      | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
-                       (map (fn (l,e) => Exp_IsValuable e decs) rbnds)
-     | LET (bnds,e) => (case (Bnds_IsValuable' bnds decs) of 
+                       (map (fn (_,e) => Exp_IsValuable(ctxt,e)) rbnds)
+     | RECORD_PROJECT(e,_,_) => Exp_IsValuable(ctxt,e)
+     | LET (bnds,e) => (case (Bnds_IsValuable' bnds ctxt) of 
 			  NONE => false
-			| SOME decs => Exp_IsValuable e decs)
-     | ROLL (c,e) => Exp_IsValuable e decs
-     | UNROLL (c,e) => Exp_IsValuable e decs
-     | PROJ (c,i,e) =>  Exp_IsValuable e decs
+			| SOME ctxt' => Exp_IsValuable(ctxt',e))
+     | ROLL (c,e) => Exp_IsValuable(ctxt,e)
+     | UNROLL (c,e) => Exp_IsValuable(ctxt,e)
      | OVEREXP (_,v,os) => v orelse (case (oneshot_deref os) of
 				       NONE => false
-				     | SOME e => Exp_IsValuable e decs)
+				     | SOME e => Exp_IsValuable(ctxt,e))
+     | NEW_STAMP _ => true
+     | SUM_TAIL (_,e) => Exp_IsValuable(ctxt,e)
+     | EXN_INJECT(e1,e2) => (Exp_IsValuable(ctxt,e1)) andalso (Exp_IsValuable(ctxt,e2))
      | _ => false)
 
    (* Rules 140 - 143 *)
-   and Bnds_IsValuable' [] decs = SOME decs
-     | Bnds_IsValuable' (bnd::rest) decs = 
+   and Bnds_IsValuable' [] ctxt = SOME ctxt
+     | Bnds_IsValuable' (bnd::rest) ctxt = 
        let val self = Bnds_IsValuable' rest
        in  (case bnd of
-		BND_EXP (v,e) => if (Exp_IsValuable e decs) 
-				     then self (add_dec_exp(decs,(v,GetExpCon(e,decs))))
+		BND_EXP (v,e) => if (Exp_IsValuable(ctxt,e))
+				     then self (add_context_var'(ctxt,v,#2 (GetExpCon(e,ctxt))))
 				 else NONE
-	      | BND_MOD (v,m) => if (Module_IsValuable m decs)
-				     then self (add_dec_mod(decs,(v,GetModSig(m,decs)))) 
-				 else NONE
-	      | BND_CON (v,c) => self (add_dec_con(decs,(v,GetConKind(c,decs),c)))
-	      | BND_FIXITY _ => self decs)
+	      | BND_MOD (v,m) => let val (va,s) = GetModSig(m,ctxt)
+				     val s' = SelfifySig(SIMPLE_PATH v,s)
+				 in if va then self (add_context_module'(ctxt,v,s'))
+				    else NONE
+				 end
+	      | BND_CON (v,c) => self (add_context_convar'(ctxt,v,GetConKind(c,ctxt),SOME c))
+	      | BND_FIXITY _ => self ctxt)
        end
 
-   and Bnds_IsValuable bnds decs = (case (Bnds_IsValuable' bnds decs) of
-				      NONE => false
-				    | SOME decs => true)
-   and Sbnds_IsValuable sbnds decs = Bnds_IsValuable (map (fn (SBND(_,b)) => b) sbnds) decs
+   and Bnds_IsValuable bnds ctxt = (case (Bnds_IsValuable' bnds ctxt) of
+					NONE => false
+				      | SOME decs => true)
+   and Sbnds_IsValuable sbnds ctxt = Bnds_IsValuable (map (fn (SBND(_,b)) => b) sbnds) ctxt
      
    (* Rules 144 - 147 *)
-   and Module_IsValuable m decs =
+   and Module_IsValuable m ctxt =
      (Module_IsSyntacticValue m) orelse
      (case m of
        MOD_VAR v => true
-     | MOD_STRUCTURE sbnds => Sbnds_IsValuable sbnds decs
-     | MOD_PROJECT (m,l) => true
-     | MOD_APP (m1,m2) => (case (GetModSig(m1,decs)) of
-			     SIGNAT_FUNCTOR(_,_,_,comp) =>
-			       eq_comp(oneshot_init TOTAL,comp,false) andalso
-			       (Module_IsValuable m1 decs) andalso (Module_IsValuable m2 decs)
-			   | _ => false)
+     | MOD_STRUCTURE sbnds => Sbnds_IsValuable sbnds ctxt
+     | MOD_LET (v,m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
+			    in va1 andalso
+				(Module_IsValuable m2 (add_context_module'(ctxt,v,
+									   SelfifySig(SIMPLE_PATH v,s1))))
+			    end
+     | MOD_PROJECT (m,l) => Module_IsValuable m ctxt
+     | MOD_APP (m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
+			  in case s1 of
+			      SIGNAT_FUNCTOR(_,_,_,comp) =>
+				  va1 andalso eq_comp(oneshot_init TOTAL,comp,false) 
+				  andalso (Module_IsValuable m2 ctxt)
+			    | _ => false
+			  end
      | _ => false)
 	
-   and GetSconCon (scon) : con = PrimUtil.value_type scon
+   and GetSconCon(ctxt,scon) : con = PrimUtil.value_type (fn e => #2(GetExpCon(e,ctxt))) scon
 
 
   (* Rules 35 - 48 *)
-   and GetConKind (arg : con, decs) : kind = 
-     let val con = arg (* Normalize(arg,decs) *)
+   and GetConKind (arg : con, ctxt : context) : kind = 
+     let val con = arg (* Normalize(arg,ctxt) *)
      in case con of
        (CON_TYVAR tv) => KIND_TUPLE 1 
-     (* (DecKindLookup(tyvar_getvar tv,decs) : kind) *)
-     | (CON_VAR v) => (DecKindLookup(v,decs) : kind)
+     | (CON_VAR v) => 
+	   ((case Context_Lookup'(ctxt,v) of
+			   PHRASE_CLASS_CON(c,k) => k
+			 | _ => error "CON_VAR looked up to a non-con")
+		 handle (NOTFOUND _) => error "GetConKind: v of (CON_VAR v) not in context")
      | (CON_OVAR ocon) => raise UNIMP
      | (CON_INT _) => KIND_TUPLE 1
      | (CON_FLOAT _) => KIND_TUPLE 1
@@ -507,23 +671,28 @@ functor IlStatic(structure Il : IL
      | (CON_VECTOR _) => KIND_TUPLE 1
      | (CON_TAG _) => KIND_TUPLE 1
      | (CON_ARROW _) => KIND_TUPLE 1
-     | (CON_APP (c1,c2)) => let val (k1,k2) = (GetConKind(c1,decs),GetConKind(c2,decs))
-			    in (case (k1,k2) of
-				  (KIND_ARROW(a,b),KIND_TUPLE c) => 
-				    if (a=c) then KIND_TUPLE b
-				    else error "GetConKind: kind mismatch in CON_APP"
-				| _ => error "GetConKind: kind mismatch in CON_APP")
-			    end
+     | (CON_APP (c1,c2)) => 
+	   let val (k1,k2) = (GetConKind(c1,ctxt),GetConKind(c2,ctxt))
+	   in (case (k1,k2) of
+		   (KIND_ARROW(a,b),KIND_TUPLE c) => 
+		       if (a=c) then KIND_TUPLE b
+		       else error "GetConKind: kind mismatch in CON_APP"
+		 | _ => error "GetConKind: kind mismatch in CON_APP")
+	   end
      | (CON_MUPROJECT _) => KIND_TUPLE 1
      | (CON_FLEXRECORD _) => KIND_TUPLE 1
      | (CON_RECORD _) => KIND_TUPLE 1
-     | (CON_FUN (vs,c)) => (case GetConKind(c,foldl (fn (v,acc) => 
-						     ((DEC_CON(v,KIND_TUPLE 1, NONE))::acc)) decs vs) of
-			      KIND_TUPLE n => KIND_ARROW(length vs,n)
-			    | (KIND_ARROW _) => error "kind of constructor body not a KIND_TUPLE")
+     | (CON_FUN (vs,c)) => 
+	   let fun folder(v,ctxt) = add_context_convar'(ctxt,v,KIND_TUPLE 1,NONE)
+	       val ctxt' = foldl folder ctxt vs
+	   in (case GetConKind(c,ctxt') of
+		   KIND_TUPLE n => KIND_ARROW(length vs,n)
+		 | (KIND_ARROW _) => error "kind of constructor body not a KIND_TUPLE")
+	   end
      | (CON_SUM _) => KIND_TUPLE 1
+     | (CON_TUPLE_INJECT [_]) => error "Cannot CON_TUPLE_INJECT one con"
      | (CON_TUPLE_INJECT cs) => KIND_TUPLE (length cs)
-     | (CON_TUPLE_PROJECT (i,c)) => (case (GetConKind(c,decs)) of
+     | (CON_TUPLE_PROJECT (i,c)) => (case (GetConKind(c,ctxt)) of
 				       KIND_TUPLE n =>
 					 (if (i > 0 andalso i <= n)
 					    then KIND_TUPLE 1
@@ -533,411 +702,483 @@ functor IlStatic(structure Il : IL
 					     print "\n";
 					     error "got CON_TUPLE_PROJECT in GetConKind"))
 				     | _ => error "got CON_TUPLE_PROJECT in GetConKind")
-     | (CON_MODULE_PROJECT (m,l)) => let val signat = GetModSig(m,decs)
-				     in (case (SignatLookup(l,signat,NONE)) of
-					   NONE => error "no such label in sig"
-					 | SOME(SDEC(_,DEC_CON(v,k,_))) => k
-					 | _ => error "label in sig not a DEC_CON")
-				     end
+     | (CON_MODULE_PROJECT (m,l)) => 
+	   let val (_,signat) = GetModSig(m,ctxt)
+	   in (case signat of
+		   SIGNAT_FUNCTOR _ => error "cannot project from functor"
+		 | (SIGNAT_STRUCTURE (_,sdecs)) =>
+		       (case Sdecs_Lookup(MOD_VAR (fresh_var()),sdecs,[l]) of
+			    NONE => error "no such label in sig"
+			  | SOME(PHRASE_CLASS_CON(_,k)) => k
+			  | _ => error "label in sig not a DEC_CON"))
+	   end
+(*		       (SignatLookup(m,l,signat)) of
+		   NONE => error "no such label in sig"
+		 | SOME(PHRASE_CLASS_CON(_,k)) => k
+		 | _ => error "label in sig not a DEC_CON")
+*)
+
      end
 
    (* --------- Rules 69 to 96 ----------- *)
-   and GetExpCon (earg,decs) = 
+   and GetExpCon (exparg,ctxt) : bool * con = 
      (debugdo (fn () => (print "GetExpCon called with exp = \n";
-			 pp_exp earg; print "\nand decs = \n";
-			 pp_decs decs; print "\n"));
-     case earg of
-       SCON scon => GetSconCon scon
-     | OVEREXP (con,_,_) => con
-     | PRIM (p,cs) => PrimUtil.get_type p cs
-     | ILPRIM (ip) => PrimUtil.get_iltype ip
-     | (VAR v) => DecVarLookup(v,decs)
-(*     | SEQ elist => GetExpCon(List.last elist, decs) *)
-     | (APP (e1,e2)) => let val con1 = Normalize(GetExpCon(e1,decs),decs)
-			    val con2 = GetExpCon(e2,decs)
-			in  (case con1 of
-			       CON_ARROW (arg_con,res_con,discard_complete) => 
-				 if sub_con(arg_con,con2,decs) then res_con
-				 else error "Type mismatch in expression application"
-			     | _ => error "Type of first expression in application is not an arrow")
-			end
-     | (FIX (fbnds, var)) => 
+			 pp_exp exparg; print "\nand ctxt = \n";
+			 pp_context ctxt; print "\n"));
+     case exparg of
+       SCON scon => (true,GetSconCon(ctxt,scon))
+     | OVEREXP (con,va,eone) => (case oneshot_deref eone of
+				     SOME e => if va then (va,con)
+					       else GetExpCon(e,ctxt)
+				   | NONE => (va,con))
+     | PRIM (p,cs) => (true, PrimUtil.get_type p cs)
+     | ILPRIM (ip) => (true, PrimUtil.get_iltype ip)
+     | (VAR v) => ((case Context_Lookup'(ctxt,v) of
+			   PHRASE_CLASS_EXP(_,c) => (true,c)
+			 | _ => error "CON_VAR looked up to a non-con")
+		   handle (NOTFOUND _) => error "GetExpCon: v of (VAR v) not in context")
+     | (APP (e1,e2)) => 
+	   let val (va1,con1) = GetExpCon(e1,ctxt)
+	       val con1 = Normalize(con1,ctxt)
+	       val (va2,con2) = GetExpCon(e2,ctxt)
+	       val res_con = fresh_con ctxt
+	       val arrow = oneshot()
+	       val guesscon = CON_ARROW (con2,res_con,arrow)
+	       val is_sub = sub_con(guesscon,con1,ctxt) 
+	       val total = (case oneshot_deref arrow of
+				NONE => false
+			      | SOME PARTIAL => false
+			      | SOME TOTAL => true)
+	       val va = va1 andalso va2 andalso total
+	   in  if is_sub
+		   then (va,con_deref res_con)
+	       else (print "\nfunction type is = "; pp_con con1;
+		     print "\nargument type is = "; pp_con con2; print "\n";
+		     error "Type mismatch in expression application")
+	   end
+     | (FIX (a,fbnds, var)) => 
 	   let fun loop [] = error "FIX: var is not in any fbnd expression"
 		 | loop ((FBND(v',v,c,c',e))::rest) = if (eq_var(var,v')) 
-							  then (v,c,e)
+							  then (v',v,c,c',e)
 						      else loop rest
-	       val (v,c,e) = loop fbnds
-	   in if (Exp_IsValuable e decs)
-		  then let (* Rule 75 *)
-			   val decs' = add_dec_exp(decs,(v,c))
-			   val econ = GetExpCon(e,decs')
-		       in CON_ARROW(c,econ,oneshot_init TOTAL)
-		       end
-	      else (* Rule 74 *)
-		  let
-		      fun extend [] ds = ds
-			| extend ((FBND(v',v,c,c',e))::rest) ds = 
-			  extend rest (add_dec_exp(ds,(v',CON_ARROW(c,c',
-								    oneshot_init PARTIAL))))
-		      val decs' = extend fbnds decs
-		      fun test [] = ()
-			| test ((FBND(v',v,c,c',e))::rest) = 
-			  let val bodyc = GetExpCon(e,add_dec_exp(decs',(v,c)))
-			      fun local_error s = (print ("GetExpCon " ^ s ^ " failed on: ");
-						   pp_exp earg; print "\nc' = "; pp_con c';
-						   print "\nbodyc = "; pp_con bodyc;
-						   print "\nwith context";
-						   pp_decs decs'; print "\n";
-						   error "FIX(rule 74): premises fails: ill-typed")
-			  in if (eq_con(c',bodyc,decs'))
-				 then test rest 
-			     else local_error ""
-				 handle _ => local_error "raise error"
-			  end
-		      val _ = test fbnds
-		      val decs'' = add_dec_exp(decs',(v,c))
-		  in CON_ARROW(c,GetExpCon(e,decs''),oneshot_init PARTIAL)
-		  end
+	       val (v',v,c,c',e) = loop fbnds
+	       fun folder (FBND(v',v,c,c',e), ctxt) = 
+		   add_context_var'(ctxt,v',CON_ARROW(c,c',oneshot_init PARTIAL))
+	       val full_ctxt = foldl folder ctxt fbnds
+	       fun ttest lctxt (FBND(v',v,c,c',e)) =
+		   let val (va,bodyc) = GetExpCon(e,add_context_var'(lctxt,v,c))
+		   in va andalso sub_con(bodyc,c',lctxt)
+		   end
+	       fun ptest lctxt (FBND(v',v,c,c',e)) =
+		   let val (_,bodyc) = GetExpCon(e,add_context_var'(lctxt,v,c))
+		   in sub_con(bodyc,c',lctxt)
+		   end
+	   in (true,
+	       case a of
+	       PARTIAL => if (andfold (ptest full_ctxt) fbnds)
+					then CON_ARROW(c,c',oneshot_init PARTIAL)
+				    else (print "could not type-check FIX expression:\n";
+					  pp_exp exparg;
+					  error "could not type-check FIX expression")
+	     | TOTAL =>  if ((andfold (ttest ctxt) fbnds))
+			     then CON_ARROW(c,c',oneshot_init TOTAL)
+			 else (print "could not type-check TOTALFIX expression:\n";
+			       pp_exp exparg;
+			       error "could not type-check TOTALFIX expression"))
 	   end
      | (RECORD (rbnds)) => 
-	   let val rdecs = (map (fn r => GetRbndRdec r decs) rbnds)
-	       val rdecs' = sort_labelpair rdecs
-	   in CON_RECORD rdecs'
+	   let fun help (l,e) = let val (va,c) = GetExpCon(e,ctxt)
+				in (va,(l,c))
+				end
+	       val temp = map help rbnds
+	       val va = andfold #1 temp
+	       val rdecs = sort_labelpair(map #2 temp)
+	   in (va, CON_RECORD rdecs)
 	   end
      | (RECORD_PROJECT (exp,l,c)) => 
-	   let val con = GetExpCon(exp,decs)
-	   in (case con of 
-		   (CON_RECORD rdecs) => RdecLookup(l,rdecs)
-		 | _ => error "Record Proj on exp not of type CON_RECORD")
+	   let 
+	       fun RdecLookup (label,[]) = raise (NOTFOUND "RdecLookup")
+		 | RdecLookup (label,(l,c)::rest) = if eq_label(label,l) then c
+						    else RdecLookup (label,rest)
+	       val (va,con) = GetExpCon(exp,ctxt)
+	   in (case (#2(HeadNormalize(con,ctxt))) of 
+		   (CON_RECORD rdecs) => (va,RdecLookup(l,rdecs))
+		 | _ => (print "Record Proj on exp not of type CON_RECORD; type = ";
+			 pp_con con; print "\n";
+			 error "Record Proj on exp not of type CON_RECORD"))
 	   end
      | (SUM_TAIL (c,e)) => 
-	   let val con = GetExpCon(e,decs)
-	   in if (eq_con(c,con,decs)) 
-		  then (case con of
-			    CON_SUM(SOME i,cons) => List.nth(cons,i)
-			  | _ => error "adornment of SUM_TAIL not a CON_SUM_I")
-	      else error "SUM_TAIL: adornment wrong"
+	   let val (va,con) = GetExpCon(e,ctxt)
+	   in if (eq_con_from_get_exp2(c,con,ctxt)) 
+		  then (case c of
+			    CON_SUM(SOME i,cons) => (va,List.nth(cons,i))
+			  | _ => error "adornment of SUM_TAIL not a CON_SUM(SOME _,...)")
+	      else error "SUM_TAIL: adornment mismatches type of expression"
 	   end
      | (HANDLE (body,handler)) => 
-	   let val bcon = GetExpCon(body,decs)
-	       val hcon = GetExpCon(handler,decs)
-	   in (case hcon of
-		   CON_ARROW (CON_ANY,res_con,discard_complete) =>
-		       if (eq_con(res_con,bcon,decs)) then bcon 
-		       else error "Type mismatch between handler and body of HANDLE"
-		 | _ => error "Handler not of type Any -> con")
+	   let val (_,bcon) = GetExpCon(body,ctxt)
+	       val (_,hcon) = GetExpCon(handler,ctxt)
+	       val res_con = fresh_con ctxt
+	       val hcon' = CON_ARROW (CON_ANY,res_con,oneshot())
+	   in  if (eq_con_from_get_exp3(hcon,hcon',ctxt)) 
+		   then (false,bcon)
+	       else error "Type mismatch between handler and body of HANDLE"
 	   end
-     | (RAISE (c,e)) => let val econ = GetExpCon(e,decs)
-			in (case econ of
-				CON_ANY => c
-			      | _ => error "type of expression raised is not ANY")
-		    end
-     | (LET (bnds,e)) => let 
-			    val decs' = GetBndsDecs(decs,bnds) @ decs
-			    val econ = GetExpCon(e,decs')
-			    val econ_kind = GetConKind(econ,decs)
-			in  (case econ_kind of
-			      (KIND_TUPLE 1) => econ
-			    | _ => error "body of let has a type not of kind KIND_TUPLE(1)")
-		       end
-     | (NEW_STAMP con) => CON_TAG con
-     | (EXN_INJECT (e1,e2)) => let 
-				   val c1 = GetExpCon(e1,decs)
-				   val c2 = GetExpCon(e2,decs)
-			       in if (eq_con (c1,CON_TAG c2,decs))
-				   then CON_ANY
-				  else error "EXN_INJECT tag type and value: type mismatch"
-			       end
-     | (MK_REF e) => CON_REF (GetExpCon(e,decs))
-     | (GET e) => (case GetExpCon(e,decs) of
-			CON_REF c => Normalize(c,decs)
-		      | _ => error "GET given expression whose normalized type is not CON_REF(con)")
-     | (SET (e1,e2)) => CON_RECORD []  (* unit *)
-     | (ROLL (c,e) | UNROLL(c,e)) => 
-       let val cNorm = Normalize' "ROLL/UNROLL" (c,decs)
-	   val cNorm_kind = GetConKind(cNorm,decs)
-	   val econ = GetExpCon(e,decs)
-       in (case (cNorm,cNorm_kind) of
-	     (CON_MUPROJECT(i,cInner),KIND_TUPLE 1) => 
-	       let val cInner_norm = Normalize' "ROLL/UNROLL 2" (cInner,decs)
-	       in  (case GetConKind(cInner_norm,decs) of
-		    KIND_ARROW(n,n') =>
-		      (if ((n = n') andalso (0 <= i) andalso (i < n))
-			   then 
-			       let 
-				   val temp = (fn j => CON_MUPROJECT(j,cInner_norm))
-				   val contemp = if (n=1) then temp 0
-						 else CON_TUPLE_INJECT(map0count temp n)
-				   val con2 = if (n = 1)
-						  then CON_APP(cInner_norm,contemp)
-					      else CON_TUPLE_PROJECT(i,CON_APP(cInner_norm,contemp))
-			       in
-				   case earg of
-				       (ROLL _) => 
-					   if (eq_con(econ,con2,decs))
-					       then cNorm
-					   else error "ROLL: expression type does not match decoration"
-				     | (UNROLL _) => 
-					   if (eq_con(econ,cNorm,decs))
-					       then Normalize' "ROLL/UNROLL 3" (con2,decs)
-					   else (print "UNROLL: expression type does not match decoration";
-						 print "\necon = "; pp_con econ;
-						 print "\ncNorm = "; pp_con cNorm;
-						 print "\ndecs = "; pp_decs decs;
-						 error "UNROLL: expression type does not match decoration")
-				     | _ => error "IMPOSSIBLE: what happened to (UN)ROLL"
-			       end
-		       else error "projected decoration has the wrong KIND_ARROW")
-		  | _ => error "projected decoration has the wrong kind")
-	       end
-	   | _ => (print "Decoration of ROLL has kind ";
-		   pp_kind cNorm_kind;
-		   print " and was:\n"; pp_con cNorm;
-		   print "\n";
-		   error "decoration of ROLL not a projection"))
+     | (RAISE (c,e)) => 
+	   let val (_,econ) = GetExpCon(e,ctxt)
+	       val _ = (GetConKind(c,ctxt) 
+		   handle _ => error "RAISE: con decoration ill-formed")
+	   in (case econ of
+		   CON_ANY => (false,c)
+		 | _ => error "type of expression raised is not ANY")
+	   end
+     | (LET (bnds,e)) => 
+	   let 
+	       fun folder ((_,dec),ctxt) = add_context_dec(ctxt,SelfifyDec dec)
+	       val vdecs = GetBndsDecs(ctxt,bnds)
+	       val va_decs = andfold #1 vdecs
+	       val ctxt' = foldl folder ctxt vdecs
+	       val (va,econ) = GetExpCon(e,ctxt')
+	   in (va andalso va_decs,econ)
+	   end
+     | (NEW_STAMP con) => ((GetConKind(con,ctxt); (true,CON_TAG con))
+			   handle _ => error "NEW_STAMP: type is ill-formed")
+     | (EXN_INJECT (e1,e2)) => 
+	   let 
+	       val (va1,c1) = GetExpCon(e1,ctxt)
+	       val (va2,c2) = GetExpCon(e2,ctxt)
+	   in if (eq_con_from_get_exp4(c1,CON_TAG c2,ctxt))
+		  then (va1 andalso va2, CON_ANY)
+	      else error "EXN_INJECT tag type and value: type mismatch"
+	   end
+     | (ROLL(c,e) | UNROLL(c,e)) => 
+       let val cNorm = Normalize' "ROLL/UNROLL" (c,ctxt)
+	   val (va,econ) = GetExpCon(e,ctxt)
+	   val isroll = (case exparg of
+			     ROLL _ => true
+			   | UNROLL _ => false
+			   | _ => error "IMPOSSIBLE: what happened to (UN)ROLL")
+       in (va,
+	   case cNorm of
+	       CON_MUPROJECT(i,cInner) =>
+		   (case GetConKind(cInner,ctxt) of
+			KIND_ARROW(n,n') =>
+			    (if ((n = n') andalso (0 <= i) andalso (i < n))
+				 then 
+				     let 
+					 fun temp j = CON_MUPROJECT(j,cInner)
+					 val contemp = CON_APP(cInner,con_tuple_inject(map0count temp n))
+					 val con2 = if (n = 1) then contemp
+						    else CON_TUPLE_PROJECT(i,contemp)
+				     in
+					 if isroll
+					     then
+						 (if (eq_con_from_get_exp5(econ,con2,ctxt))
+						      then cNorm
+						  else error "ROLL: expression type does not match decoration")
+					 else 
+					     (if (eq_con_from_get_exp6(econ,cNorm,ctxt))
+						  then Normalize' "ROLL/UNROLL 3" (con2,ctxt)
+					      else (print "UNROLL: expression type does not match decoration";
+						    print "\necon = "; pp_con econ;
+						    print "\ncNorm = "; pp_con cNorm;
+						    print "\nctxt = "; pp_context ctxt;
+						    error "UNROLL: expression type does not match decoration"))
+				     end
+			     else error "projected decoration has the wrong KIND_ARROW")
+		      | _ => error "projected decoration has the wrong kind")
+	   | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
+		   pp_con c; print "\n";
+		   print "\nNormalized Decoration of (UN)ROLL was ";
+		   pp_con cNorm; print "\n";
+		   error "decoration of ROLL not a recursive type CON_MUPROJ"))
        end
-    | (INJ (cons,i,e)) => let val econ = GetExpCon(e,decs)
-			       val clist = map (fn c => Normalize(c,decs)) cons
-			       val n = length clist
-			   in if (0 <= i andalso i < n andalso 
-				  (eq_con(econ, List.nth(clist,i), decs)))
-				then CON_SUM(NONE,clist)
-			      else (error "INJ: injection field out of range")
-			   end
-     | (PROJ (cons,i,e)) => let val econ = GetExpCon(e,decs)
-				val clist = map (fn c => Normalize(c,decs)) cons
-			    in (case econ of
-				    CON_SUM(_,clist2) =>
-					let val n = length clist
-					in if (0 <= i andalso i <n andalso 
-					       eq_list (fn (x,y) => eq_con(x,y,decs), clist, clist2))
-					       then List.nth(clist,i)
-					   else error "PROJ: index out of range"
-					end
-				  | _ =>  (print "PROJ: expression type is not sum type.\n";
-					   print "Expression is: \n"; pp_exp e; print "\n";
-					   print "Reduce type is: \n"; pp_con econ; print "\n";
-					   error "PROJ: expression not of con CON_SUM"))
-			    end
-     | (TAG (n,con)) => let val nCon = Normalize(DecExnLookup(n,decs),decs)
-			in (case nCon of
-				CON_TAG c => if (eq_con(c,con,decs)) 
-						 then CON_ANY
-					     else error "TAG: decorated name con and exp con mismatch"
-			      | _ => error "TAG: decorated name does not have con CON_TAG")
+    | (INJ (cons,i,e)) => 
+	  let val (va,econ) = GetExpCon(e,ctxt)
+	      val clist = map (fn c => Normalize(c,ctxt)) cons
+	      val n = length clist
+	  in if (0 <= i andalso i < n andalso 
+		 (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt)))
+		 then (va,CON_SUM(NONE,clist))
+	     else (error "INJ: injection field out of range")
+	  end
+     | (TAG (n,con)) => let val nCon = Normalize(Context_Exn_Lookup(ctxt,n),ctxt)
+			in  if (eq_con_from_get_exp8(nCon,con,ctxt))
+				then (true, CON_TAG con)
+			    else error "TAG: decorated name con and exp con mismatch"
 		      end
      | (EXN_CASE (arg,arms,eopt)) =>
 	   let 
-	       val argcon = GetExpCon(arg,decs)
-	       val rescon = fresh_con decs
+	       val (_,argcon) = GetExpCon(arg,ctxt)
+	       val rescon = fresh_con ctxt
 	       fun checkarm(e1,c,e2) = 
-		   let val c1 = GetExpCon(e1,decs)
-		       val c2 = GetExpCon(e2,decs)
-		   in (eq_con(c1,CON_TAG c, decs))
-		       andalso eq_con(c2,CON_ARROW(c,rescon,oneshot()),decs)
+		   let val (_,c1) = GetExpCon(e1,ctxt)
+		       val (_,c2) = GetExpCon(e2,ctxt)
+		   in (eq_con_from_get_exp9(c1,CON_TAG c, ctxt))
+		       andalso eq_con_from_get_exp10(c2,CON_ARROW(c,rescon,oneshot()),ctxt)
 		   end
-	       val _ = (case eopt of
-			    NONE => ()
-			  | SOME e => let val optcon = GetExpCon(e,decs)
-				      in if (eq_con(optcon,CON_ARROW(CON_ANY,rescon,
-								     oneshot()),decs)) then ()
-					 else error "default case has bad type in EXN_CASE"
-				      end)
-	   in if (eq_con(argcon,CON_ANY,decs))
+	       fun check_opt NONE = true
+		 | check_opt (SOME e) = 
+		   let val (_,optcon) = GetExpCon(e,ctxt)
+		   in eq_con_from_get_exp11(optcon,CON_ARROW(CON_ANY,rescon,
+							     oneshot()),ctxt)
+		   end
+	   in if (eq_con_from_get_exp12(argcon,CON_ANY,ctxt))
 		  then if (andfold checkarm arms)
-			   then rescon
+			   then if check_opt eopt
+				    then (false, rescon)
+				else error "EXN_CASE: default case mismatches"
 		       else error "rescon does not match in EXN_CASE"
 	      else error "arg not a CON_ANY in EXN_CASE"
 	   end
      | (CASE (cons,earg,earms,edef)) => 
 	   let 
 	       val n = length earms
-	       val consNorm = map (fn c => Normalize' "CASE" (c,decs)) cons
-	       val eargCon = GetExpCon(earg,decs)
+	       val consNorm = map (fn c => Normalize' "CASE" (c,ctxt)) cons
+	       val (_,eargCon) = GetExpCon(earg,ctxt)
 	       val sumcon = CON_SUM (NONE,consNorm)
-	       val rescon = fresh_con decs
+	       val rescon = fresh_con ctxt
+	       val guess_arm_cons = 
+		   mapcount (fn (i,_) => CON_ARROW(CON_SUM(SOME i,consNorm),
+						   rescon,oneshot())) consNorm
 	       fun loop [] [] = 
 		   (case edef of 
-			NONE => rescon
+			NONE => (false, con_deref rescon)
 		      | SOME edef => 
-			    let val defcon = GetExpCon(edef,decs)
-			    in  if (eq_con(CON_ARROW(sumcon,rescon,
-						     oneshot_init PARTIAL),
-					   defcon,decs))
-				    then con_deref rescon
+			    let val (_,defcon) = GetExpCon(edef,ctxt)
+			    in  if (eq_con_from_get_exp13(CON_ARROW(sumcon,rescon,
+								    oneshot()),
+					   defcon,ctxt))
+				    then (false, con_deref rescon)
 				else error "default arm type mismatch"
 			    end)
 		 | loop (NONE::arms) (con::cons) = loop arms cons
 		 | loop ((SOME exp)::arms) (con::cons) = 
-		   let val c = GetExpCon(exp,decs)
-		   in if (eq_con(CON_ARROW(con,rescon,
-					   oneshot_init PARTIAL),
-				 c,decs))
+		   let val (_,c) = GetExpCon(exp,ctxt)
+		   in if (eq_con_from_get_exp14(con,c,ctxt))
 			  then loop arms cons
-		      else error "case arm type mismatch"
+		      else (print "case arm type mismatch: checking exp = ";
+			    pp_exp exparg; print "\nwith ctxt = ";
+			    pp_context ctxt; print "\n";
+			    print "exp = \n"; pp_exp exp;
+			    print "c = \n"; pp_con c;
+			    print "guess_arm_con = \n"; pp_con con;
+			    error "case arm type mismatch")
 		   end
 		 | loop _ _ = error "CASE: number of con != number of arms"
-	   in if (eq_con(eargCon,sumcon,decs))
-		  then loop earms consNorm
+	   in if (eq_con_from_get_exp15(eargCon,sumcon,ctxt))
+		  then loop earms guess_arm_cons
 	      else 
 		  error "CASE: expression type and decoration con mismatch"
 	   end
      | (MODULE_PROJECT(m,l)) => 
-		  let val signat = GetModSig(m,decs)
-		  in (case SignatLookup(l,signat,SOME m) of
+	   let val (va,signat) = GetModSig(m,ctxt)
+	   in case signat of
+	       SIGNAT_FUNCTOR _ => error "cannot project from module with functor signature"
+	     | SIGNAT_STRUCTURE(SOME p,sdecs) => 
+		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
+		       NONE => ((* print "Normalize: label "; pp_label l;
+				 print " not in signature s = \n";
+				 pp_signat signat; print "\n"; *)
+				fail "MODULE_PROJECT: label not in modsig")
+		     | (SOME (PHRASE_CLASS_EXP(_,con))) => (va,Normalize(con,ctxt))
+		     | SOME _ => fail "MODULE_PROJECT: label not of exp")
+	     | SIGNAT_STRUCTURE (NONE,sdecs) => 
+		   (case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
 			NONE => error "MODULE_PROJECT: label not in modsig"
-		      | (SOME (SDEC(_,DEC_EXP(_,con)))) => con
-		      | _ => fail "MODULE_PROJECT: label in modsig not DEC_EXP")
+		      | SOME (CLASS_EXP con) => (va,Normalize(con,ctxt))
+		      | SOME _ => fail "MODULE_PROJECT: label not of exp")
+(* 	(print "MODULE_PROJECT with m = ";
+	pp_mod m; raise UNIMP) *)
+	   end
+(*
+	   in (case SignatLookup(m,l,signat) of
+			  NONE => ((* print "Normalize: label "; pp_label l;
+				    print " not in signature s = \n";
+				    pp_signat signat; print "\n"; *)
+				   error "MODULE_PROJECT: label not in modsig")
+			| (SOME (PHRASE_CLASS_EXP(_,con))) => (va,Normalize(con,ctxt))
+			| _ => fail "MODULE_PROJECT: label in modsig not DEC_EXP")
 		  end
-     | (SEAL (e,c)) => Normalize(c,decs))
+*)
+     | (SEAL (e,c)) => let val (va,c') = GetExpCon(e,ctxt)
+			   val c'' = Normalize(c,ctxt)
+		       in if sub_con(c',c'',ctxt)
+			      then (va,c'')
+			  else error "SEAL: expression type does not match sealing type"
+		       end)
 
+   and eq_con_from_get_exp1(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp2(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp3(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp4(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp5(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp6(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp7(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp8(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp9(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp10(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp11(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp12(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp13(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp14(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp15(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
+   and eq_con_from_get_exp16(c1,c2,ctxt) = eq_con(c1,c2,ctxt)
 
    (* ----------- rules 22 - 25 ------------------------- *)
-   and GetBndDec (decs,BND_EXP (v,e))  = DEC_EXP(v,GetExpCon (e,decs))
-     | GetBndDec (decs,BND_MOD (v,m))  = DEC_MOD(v,GetModSig (m,decs))
-     | GetBndDec (decs,BND_CON (v,c))  = DEC_CON(v,GetConKind(c,decs),SOME c)
-     | GetBndDec (decs,BND_FIXITY arg) = DEC_FIXITY arg
-   and GetBndsDecs (decs,bnds) = GetBndsDecs'(decs,bnds,[])
-   and GetBndsDecs' (decs,[],acc) = rev acc
-     | GetBndsDecs' (decs,bnd::rest,acc) = let val d = GetBndDec(decs,bnd)
-					   in GetBndsDecs' (add_dec_dec(decs,d),rest, d::acc)
-					   end
-   and GetSbndSdec (decs,SBND (l, bnd)) = SDEC(l,GetBndDec(decs,bnd))
-   and GetSbndsSdecs (decs, sbnds) = map (fn sbnd => GetSbndSdec(decs,sbnd)) sbnds
+   and GetBndDec (ctxt,BND_EXP (v,e))  = let val (va,c) = GetExpCon (e,ctxt)
+					 in (va,DEC_EXP(v,c))
+					 end
+     | GetBndDec (ctxt,BND_MOD (v,m))  = let val (va,s) = GetModSig(m,ctxt)
+					 in (va,DEC_MOD(v,s))
+					 end
+     | GetBndDec (ctxt,BND_CON (v,c))  = (true,DEC_CON(v,GetConKind(c,ctxt),SOME c))
+     | GetBndDec (ctxt,BND_FIXITY arg) = (true,DEC_FIXITY arg)
+   and GetBndsDecs (ctxt,bnds) = GetBndsDecs'(ctxt,bnds,[])
+   and GetBndsDecs' (ctxt,[],acc) = rev acc
+     | GetBndsDecs' (ctxt,bnd::rest,acc) = 
+       let val (va,d) = GetBndDec(ctxt,bnd)
+	   val ctxt' = add_context_dec(ctxt,SelfifyDec d)
+       in GetBndsDecs' (ctxt',rest, (va,d)::acc)
+       end
+   and GetSbndSdec (ctxt,SBND (l, bnd)) = let val (va,dec) = GetBndDec(ctxt,bnd)
+					  in (va,SDEC(l,dec))
+					  end
+   and GetSbndsSdecs (ctxt, sbnds) = map (fn sbnd => GetSbndSdec(ctxt,sbnd)) sbnds
 
-   (* ----------- rules 31 - 32 ------------------------- *)
-   and GetRbndRdec (l,e) decs = (l,GetExpCon(e,decs))
 
 
-   (* ----------------------------------------------------------------
-    Given a signature s of a module m, replace each use of an internal
-      variable by a module projection(s). *)
-   and NormalizeSig'(t : (var * con) list, mopt: mod option, signat : signat) = 
-     let 
-       fun loop table [] = []
-	 | loop table ((SDEC(l,dec))::rest) = 
-	 let 
-	   fun self d vopt =
-	     (case (vopt,mopt) of
-		(SOME v, SOME m) => (SDEC(l,d) :: 
-				     (loop ((v,CON_MODULE_PROJECT(m,l))::table) rest))
-	      | _ => (SDEC(l,d)) :: (loop table rest))
-	 in (case dec of
-	       DEC_EXP(v,c) => self (DEC_EXP(v,con_subst_var(c,table))) NONE
-	     | DEC_MOD(v,s) => let val mopt' = (case mopt of
-						    SOME m => SOME (MOD_PROJECT(m,l))
-						  | NONE => NONE)
-			       in self (DEC_MOD(v,NormalizeSig'(table,mopt', s))) NONE
-			       end
-	     | DEC_CON(v,k,NONE) => self dec (SOME v)
-	     | DEC_CON(v,k,SOME c) => self (DEC_CON(v,k,SOME (con_subst_var(c,table)))) (SOME v)
-	     | DEC_EXCEPTION _ => self dec NONE
-	     | DEC_FIXITY _ => self dec NONE)
-	 end
-     in (case signat of
-	   SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v,NormalizeSig'(t,NONE,s1),
-							NormalizeSig'(t,NONE,s2),a)
-	 | SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE(loop t sdecs))
-     end
-   and NormalizeSig(m: mod, signat : signat) = 
-     let val res = NormalizeSig'([],SOME m,signat)
-       val _ = debugdo (fn () => (print "NormalizeSig': signat is\n";
-				  pp_signat signat; print "\n\nand returning res:\n";
-				  pp_signat res; print "\n\n"))
-     in res
-     end
 
    (* ------------ Return a module's signature    -------------- *)
-   and GetModSig (module, decs : decs) =
+   and GetModSig (module, ctxt : context) : bool * signat =
      (debugdo (fn () => (print "GetModSig called with module = \n";
-			 pp_mod module; print "\nand decs = \n";
-			 pp_decs decs; print "\n"));
+			 pp_mod module; print "\nand ctxt = \n";
+			 pp_context ctxt; print "\n"));
 	       
       case module of
-       (MOD_VAR v) => NormalizeSig(MOD_VAR v, DecSignatLookup(v,decs))
+       (MOD_VAR v) => (case Context_Lookup'(ctxt,v) of
+			   PHRASE_CLASS_MOD(m,s) => (true,s)
+			 | _ => error "expected a module")
      | MOD_STRUCTURE (sbnds) => 
-	   let fun loop [] acc decs = rev acc
-		 | loop (sb::sbs) acc decs = 
+	   let fun loop va [] acc ctxt = (va,rev acc)
+		 | loop va (sb::sbs) acc ctxt = 
 		   let 
-		       val sdec = GetSbndSdec(decs,sb)
+		       val (lva,sdec) = GetSbndSdec(ctxt,sb)
 		       val SDEC(_,dec) = sdec
-		   in loop sbs (sdec::acc) (decs@[dec])
+		   in loop (va andalso lva) sbs (sdec::acc) (add_context_dec(ctxt,SelfifyDec dec))
 		   end
-	       val res = SIGNAT_STRUCTURE ((loop sbnds [] decs) : sdec list)
-	   in res
+	       val (va,sdecs) = (loop true sbnds [] ctxt)
+	       val res = SIGNAT_STRUCTURE(NONE,sdecs)
+	   in (va,res)
 	   end
      | MOD_FUNCTOR (v,s,m) => 
-	   let val decs' = add_dec_mod(decs,(v,s))
-	       val signat = GetModSig(m,decs')
-	   in  SIGNAT_FUNCTOR(v,s,signat,oneshot_init 
-			      (if (Module_IsValuable m decs') then TOTAL else PARTIAL))
+	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig(SIMPLE_PATH v, s)))
+	       val (va,signat) = GetModSig(m,ctxt')
+	   in  (true,SIGNAT_FUNCTOR(v,s,signat,oneshot_init 
+				    (if va then TOTAL else PARTIAL)))
 	   end
      | MOD_APP (a,b) => 
-	   let val _ = print "\n\nMOD_APP case in GetModSig\n"
-	       val _ = (print "a is\n"; pp_mod a; print "\n")
-	       val _ = (print "b is\n"; pp_mod b; print "\n")
-	       val asignat = GetModSig(a,decs)
-	       val bsignat = GetModSig(b,decs)
-	       val _ = print "\n\nMOD_APP case in GetModSig got asignat and bsignat\n"
-	       val _ = (print "asignat is\n"; pp_signat asignat; print "\n")
-	       val _ = (print "bsignat is\n"; pp_signat bsignat; print "\n")
+	   let val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig\n";
+					  print "a is\n"; pp_mod a; print "\n";
+					  print "b is\n"; pp_mod b; print "\n"))
+	       val (vaa,asignat) = GetModSig(a,ctxt)
+	       val (vab,bsignat) = GetModSig(b,ctxt)
+	       val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig got asignat and bsignat\n";
+					  print "asignat is\n"; pp_signat asignat; print "\n";
+					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
 	   in case asignat of
 	       (SIGNAT_STRUCTURE _) => error "Can't apply a structure signature"
-	     | SIGNAT_FUNCTOR (v,csignat,dsignat,_) =>
-		   if (Sig_IsSub(decs, bsignat, csignat))
-		       then dsignat
-			    else error ("Signature Application where" ^ 
+	     | SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
+		   if (Sig_IsSub(ctxt, bsignat, csignat))
+		       then (vaa andalso vab andalso (oneshot_deref ar = SOME TOTAL),
+			     sig_subst_modvar(dsignat,[(v,b)]))
+			    else error ("Module Application where" ^ 
 					" argument and parameter signature mismatch")
+	   end
+     | MOD_LET (v,m1,m2) => 
+	   let val (va1,s1) = GetModSig(m1,ctxt)
+	       val s1' = SelfifySig(SIMPLE_PATH v,s1)
+	       val ctxt' = add_context_module'(ctxt,v,s1')
+	       val (va2,s2) = GetModSig(m2,ctxt')
+	   in (va1 andalso va2,sig_subst_modvar(s2,[(v,m1)]))
 	   end
      | MOD_PROJECT (m,l) => 
 	   let 
 	       val _ = debugdo (fn () => (print "GetModSig called with: "; 
 					  pp_mod module; print "\n"))
-	       val signat = GetModSig(m,decs)
+	       val (va,signat) = GetModSig(m,ctxt)
 	       val _ = debugdo (fn () => (print "retrieved signat of \n"; 
 					  pp_signat signat; print "\n"))
-	       val res = case SignatLookup(l,signat,SOME m) of
+	   in case signat of
+	       SIGNAT_FUNCTOR _ => error "cannot project from functor"
+	     | SIGNAT_STRUCTURE (SOME p,sdecs) => 
+		   (case Sdecs_Lookup(path2mod p, sdecs,[l]) of
+			NONE =>  (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
+					 pp_label l;
+					 print "\nand with signat = \n";
+					 pp_signat signat;
+					 print "\n";
+					 fail "MOD_PROJECT failed to find label ")
+		      | (SOME (PHRASE_CLASS_MOD(_,s))) => (va,s)
+		      | _ => (print "MOD_PROJECT at label "; pp_label l; 
+			      print "did not find DEC_MOD.  sig was = ";
+			      pp_signat signat; print "\n";
+			      fail "MOD_PROJECT found label not of flavor DEC_MOD"))
+	     | SIGNAT_STRUCTURE (NONE,sdecs) =>
+		   (case Sdecs_Project(if va then SOME m else NONE, sdecs, l) of
+			NONE => error "MOD_PROJECT: label not in modsig"
+		      | SOME (CLASS_MOD s) => (va,s)
+		      | SOME _ => fail "MOD_PROJECT: label found wrong flavor")
+	   end
+(*		   
+	       val res = case SignatLookup(m,l,signat) of
 				NONE => (print "GetModSig: SignatLookup MOD_PROJECT failed with label ";
 					 pp_label l;
 					 print "\nand with signat = \n";
 					 pp_signat signat;
 					 print "\n";
-					 error "MOD_PROJECT failed to find label ")
-			      | (SOME (SDEC(_,DEC_MOD(v,s)))) => s
-			      | _ => error "MOD_PROJECT found label not of flavor DEC_MOD"
+					 fail "MOD_PROJECT failed to find label ")
+			      | (SOME (PHRASE_CLASS_MOD(_,s))) => s
+			      | _ => (print "MOD_PROJECT at label "; pp_label l; 
+				      print "did not find DEC_MOD.  sig was = ";
+				      pp_signat signat; print "\n";
+				      fail "MOD_PROJECT found label not of flavor DEC_MOD")
 	       val _ = debugdo (fn () => (print "returning res = "; pp_signat res; print "\n"))
-	   in res
+	   in (va,res)
 	   end
-     | MOD_SEAL (m,s) => s)
+*)
+     | MOD_SEAL (m,s) => let val (va,ps) = GetModSig(m,ctxt)
+			     val _ = if (Sig_IsSub(ctxt,ps,s)) then()
+				     else error "MOD_SEAL: Sig_IsSub failed"
+			 in (va,s)
+			 end)
 
-    and HeadNormalize (arg,decs) : (bool * con) = 
+    and HeadNormalize (arg,ctxt) : (bool * con) = 
 	 (case arg of
 	      CON_OVAR ocon => let val tv = ocon_deref ocon
-				   val (_,c') = HeadNormalize(CON_TYVAR tv,decs)
+				   val (_,c') = HeadNormalize(CON_TYVAR tv,ctxt)
 			       in (true,c')
 			       end
 	    | (CON_TYVAR tv) => (tyvar_isconstrained tv,
 				 case tyvar_deref tv of
 				     NONE => arg
-				   | SOME c => #2(HeadNormalize(c,decs)))
-	    | (CON_VAR v) => let fun loop [] = error "Normalize could not reduce CON_VAR"
-				   | loop (DEC_CON(v',_,copt)::rest) = 
-				     if (eq_var (v,v'))
-					 then (case copt of
-						   NONE => (false, CON_VAR v)
-						 | SOME c => HeadNormalize(c,decs))
-				     else loop rest
-				   | loop (_::rest) = loop rest
-			     in loop decs
+				   | SOME c => #2(HeadNormalize(c,ctxt)))
+	    | (CON_VAR v) => let val lbl = var2label(ctxt,v)
+			     in (case (Context_Lookup(ctxt,[lbl])) of
+				     PHRASE_CLASS_CON (CON_VAR v',k) => if (eq_var(v,v'))
+									then (false, CON_VAR v)
+								    else HeadNormalize(CON_VAR v',ctxt)
+				   | PHRASE_CLASS_CON (c,k) => HeadNormalize(c,ctxt)
+				   | _ => error "Normalize could not lookup CON_VAR")
 			     end
-	  | CON_TUPLE_PROJECT (i,c) => let val (f,c) = HeadNormalize(c,decs)
+	  | CON_TUPLE_PROJECT (i,c) => let val (f,c) = HeadNormalize(c,ctxt)
 				       in case c of
 					   CON_TUPLE_INJECT cons => 
 					       let val len = length cons
 					       in if (i >= 0 andalso i < len)
 						      then 
 							  let val (f',c') = HeadNormalize(List.nth(cons,i),
-											  decs)
+											  ctxt)
 							  in (f orelse f', c')
 							  end
 						  else
@@ -945,17 +1186,17 @@ functor IlStatic(structure Il : IL
 					       end
 					 | _ => (f,CON_TUPLE_PROJECT(i,c))
 				       end
-	  | CON_APP(c1,c2) => let val (f1,c1') = HeadNormalize(c1,decs)
-				  val (f2,c2') = HeadNormalize(c2,decs)
+	  | CON_APP(c1,c2) => let val (f1,c1') = HeadNormalize(c1,ctxt)
+				  val (f2,c2') = HeadNormalize(c2,ctxt)
 				  val (f,c) = (case (c1',c2') of
 						   (CON_FUN(vars,cons), _) =>
-						    HeadNormalize(ConApply(c1',c2'),decs)
+						    HeadNormalize(ConApply(c1',c2'),ctxt)
 						  | _ => (false,CON_APP(c1',c2')))
 			      in (f1 orelse f2 orelse f, c)
 			      end
 	  | (CON_MODULE_PROJECT (m,l)) =>
 	       (let 
-		   val s = GetModSig(m,decs)
+		   val (_,s) = GetModSig(m,ctxt)
 		   fun loop _ [] = (false,arg)
 		     | loop (tables as (ctable,mtable)) ((SDEC(curl,dec))::rest) = 
 		       (case dec of
@@ -964,7 +1205,13 @@ functor IlStatic(structure Il : IL
 				in  if eq_label(curl,l)
 					then let val curc' = con_subst_convar(curc,ctable)
 						 val curc'' = con_subst_modvar(curc',mtable)
-					     in HeadNormalize(curc'',decs)
+					     in (case curc'' of
+						     CON_MODULE_PROJECT(m',l') =>
+							 if (eq_label(l,l') andalso eq_modval(m,m')) 
+(* self rule would otherwise introduce infinite loop *)
+							     then (false,curc'')
+							 else HeadNormalize(curc'',ctxt)
+						   | _ => HeadNormalize(curc'',ctxt))
 					     end
 				    else loop tables' rest
 				end
@@ -973,220 +1220,304 @@ functor IlStatic(structure Il : IL
 					    end
 			  | _ => loop tables rest)
 	       in (case s of 
-		       SIGNAT_STRUCTURE sdecs => 
+		       SIGNAT_STRUCTURE(NONE,sdecs) => 
 			   (debugdo (fn () => (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; pp_label l;
 					       print "\n and sdecs = ";
 					       pp_sdecs sdecs;
 					       print "\n"));
 			    loop ([],[]) sdecs)
-		     | _ => (false,arg))
+		     | SIGNAT_STRUCTURE (SOME p,sdecs) => loop ([],[]) sdecs
+		     | SIGNAT_FUNCTOR _ => error "CON_MODULE_PROJECT from a functor")
 	       end
 	   handle NOTFOUND _ => (false,arg))
 	  | c => (false,c))
 
 	
-    and Normalize' str (arg,decs) = 
+    and Normalize' str (arg,ctxt) = 
 	(debugdo (fn () => (print "Normalize called with string = ";
 			    print str; print "\n"));
-	 Normalize (arg,decs))
+	 Normalize (arg,ctxt))
 	
  (* -------- performs CON application, tuple projection, and module projections ----- *)
-   and Normalize (arg,decs) = 
+   and Normalize (arg,ctxt) = 
        (debugdo (fn () => (print "Normalize called with con = ";
-			   pp_con arg; print "\nand decs = \n";
-			   pp_decs decs;	print "\n"));
+			   pp_con arg; print "\nand ctxt = \n";
+			   pp_context ctxt;	print "\n"));
       case arg of
 	(CON_INT _ | CON_FLOAT _ | CON_UINT _ | CON_ANY) => arg
-      | (CON_REF c)               => CON_REF (Normalize(c,decs))
-      | (CON_ARRAY c)             => CON_ARRAY (Normalize(c,decs))
-      | (CON_VECTOR c)            => CON_VECTOR (Normalize(c,decs))
-      | (CON_TAG c)               => CON_TAG (Normalize(c,decs))
-      | (CON_ARROW (c1,c2,comp))  => CON_ARROW (Normalize(c1,decs),Normalize(c2,decs),comp)
-      | (CON_MUPROJECT (i,c))     => CON_MUPROJECT (i, Normalize(c,decs))
-      | (CON_RECORD rdecs)        => let fun f (l,c)= (l,Normalize(c,decs))
+      | (CON_OVAR ocon)           => let val tv = ocon_deref ocon
+				     in Normalize(CON_TYVAR tv,ctxt)
+				     end
+      | (CON_REF c)               => CON_REF (Normalize(c,ctxt))
+      | (CON_ARRAY c)             => CON_ARRAY (Normalize(c,ctxt))
+      | (CON_VECTOR c)            => CON_VECTOR (Normalize(c,ctxt))
+      | (CON_TAG c)               => CON_TAG (Normalize(c,ctxt))
+      | (CON_ARROW (c1,c2,comp))  => CON_ARROW (Normalize(c1,ctxt),Normalize(c2,ctxt),comp)
+      | (CON_MUPROJECT (i,c))     => CON_MUPROJECT (i, Normalize(c,ctxt))
+      | (CON_RECORD rdecs)        => let fun f (l,c)= (l,Normalize(c,ctxt))
 	                             in CON_RECORD (map f rdecs)
                                      end
-      | (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf))) => Normalize(CON_FLEXRECORD rf,decs)
+      | (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf))) => Normalize(CON_FLEXRECORD rf,ctxt)
       | (CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs)))) => 
-	    let fun f (l,c)= (l,Normalize(c,decs))
+	    let fun f (l,c)= (l,Normalize(c,ctxt))
 		val _ = r := FLEXINFO(stamp,flag,map f rdecs)
 	    in arg
 	    end
       | (CON_FUN (vs,c))          => CON_FUN (vs,c)
-      | (CON_SUM (i,cs))          => CON_SUM (i,map (fn c => Normalize(c,decs)) cs)
-      | (CON_TUPLE_INJECT cs)     => CON_TUPLE_INJECT (map (fn c => Normalize(c,decs)) cs)
-      | (CON_TUPLE_PROJECT (i,c)) => Normalize(#2(HeadNormalize(arg,decs)),decs)
+      | (CON_SUM (i,cs))          => CON_SUM (i,map (fn c => Normalize(c,ctxt)) cs)
+      | (CON_TUPLE_INJECT cs)     => CON_TUPLE_INJECT (map (fn c => Normalize(c,ctxt)) cs)
+      | (CON_TUPLE_PROJECT (i,c)) => let val c' = Normalize(c,ctxt)
+					 val arg' = CON_TUPLE_PROJECT(i,c')
+				     in #2(HeadNormalize(arg',ctxt))
+				     end
       | (CON_MODULE_PROJECT (m as MOD_STRUCTURE sbnds,l)) => (* no need to normalize m *)
-	    (case Sbnds_Lookup(m,sbnds,[l]) of
-		 (_, PHRASE_CON c) => Normalize(c,decs)
+	    (case Sbnds_Lookup(sbnds,[l]) of
+		 (_, PHRASE_CON c) => Normalize(c,ctxt)
 	       | _ => error "Module_Lookup found a non con while normalizing a con_mod_proj")
       | (CON_MODULE_PROJECT (m,l)) => 
 	    (let val _ = debugdo (fn () =>
 				  (print "normalize about to call getmodsig of m = \n";
 				   pp_mod m;
-				   print "\nand decs = \n";
-				   pp_decs decs;
+				   print "\nand ctxt = \n";
+				   pp_context ctxt;
 				   print "\n"))
-		 val signat = GetModSig(m,decs)
+		 val (_,signat) = GetModSig(m,ctxt)
 		 val _ = debugdo (fn () => (print "normalize got back sig:\n";
 					    pp_signat signat; print "\n"))
-	     in  case SignatLookup(l,signat,SOME m) of
+	     in  
+		 case (m,signat) of
+		     (_,SIGNAT_FUNCTOR _) => error "cannot project for functor"
+		   | (_,SIGNAT_STRUCTURE (SOME p,sdecs)) => 
+			 (case Sdecs_Lookup(path2mod p, sdecs, [l]) of
+			      NONE => (print "CON_MOD_PROJECT failed to find label = ";
+				       pp_label l; print " and signat = \n";
+				       pp_signat signat; print "\n";
+				       error "CON_MOD_PROJECT failed to find label")
+			    | (SOME (PHRASE_CLASS_CON(c,k))) => 
+				  (case c of
+				       CON_MODULE_PROJECT(m',l') => 
+					   if (eq_label(l,l') andalso eq_modval(m,m'))
+					       then c
+					   else Normalize(c,ctxt)
+				     | _ => Normalize(c,ctxt))
+			    | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON")
+		   | (MOD_STRUCTURE sbnds,
+		      SIGNAT_STRUCTURE (_,sdecs)) => 
+		     let val p = SIMPLE_PATH (fresh_named_var "badbadbad")
+		     in case Sdecs_Lookup(path2mod p, sdecs, [l]) of
+					  NONE => (print "CON_MOD_PROJECT failed to find label = ";
+						   pp_label l; print " and signat = \n";
+						   pp_signat signat; print "\n";
+						   error "CON_MOD_PROJECT failed to find label")
+			    | (SOME (PHRASE_CLASS_CON(c,k))) => 
+				  (case c of
+				       CON_MODULE_PROJECT(m',l') => 
+					   if (eq_label(l,l') andalso eq_modval(m,m'))
+					       then c
+					   else Normalize(c,ctxt)
+				     | _ => Normalize(c,ctxt))
+			    | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON"
+		     end
+		    | _ => (print "Normalize: CON_MODULE_PROJECT with m = ";
+			    pp_mod m;
+			    print "and context = ";
+			    pp_context ctxt;
+			    raise UNIMP)
+	     end)
+		 (* case SignatLookup'(m,l,signat) of
 		 NONE => (print "CON_MOD_PROJECT failed to find label = ";
 			  pp_label l; print " and signat = \n";
 			  pp_signat signat; print "\n";
 			  error "CON_MOD_PROJECT failed to find label")
-	       | (SOME (SDEC(_,DEC_CON(v,k,SOME con)))) => con
-	       | (SOME (SDEC(_,DEC_CON(v,k,NONE)))) => arg
-	       | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON"
-	     end)
-      | (CON_VAR v) => Normalize(#2(HeadNormalize(arg,decs)),decs)
+	       | (SOME (_,PHRASE_CLASS_CON(c,k))) => 
+		     (case c of
+			  CON_MODULE_PROJECT(m',l') => 
+			      if (eq_label(l,l') andalso eq_modval(m,m'))
+				  then c
+			      else Normalize(c,ctxt)
+			| _ => Normalize(c,ctxt))
+	       | (SOME _) => error "CON_MOD_PROJECT found label not DEC_CON" *)
+      | (CON_VAR v) => (case #2(HeadNormalize(arg,ctxt)) of
+			    CON_VAR v' => if (eq_var(v,v')) 
+					      then arg else Normalize(CON_VAR v',ctxt)
+			  | c => Normalize(c,ctxt))
       | (CON_TYVAR co) => (case tyvar_deref co of
-			      SOME c => Normalize(c,decs)
+			      SOME c => Normalize(c,ctxt)
 			    | NONE => arg)
-      | (CON_APP(a,b)) => Normalize(#2(HeadNormalize(arg,decs)),decs))
-
+      | (CON_APP(a,b)) => let val a' = Normalize(a,ctxt)
+			      val b' = Normalize(b,ctxt)
+			      val c' = CON_APP(a',b')
+			  in #2(HeadNormalize(c',ctxt))
+			  end)
 
 
      (* Rule 33 - 34 *)
      and Kind_Valid (KIND_TUPLE n)     = n >= 0
        | Kind_Valid (KIND_ARROW (m,n)) = (m >= 0) andalso (n >= 0)
 
-     (* Rules 1 - 2 *)	
-     and Decs_Valid [] = true
-       | Decs_Valid (a::rest) = Dec_Valid(rest,a) andalso Decs_Valid rest
-     (* Rule 7 - 12 *)
-     and Dec_Valid (decs : decs,dec) = 
-       let fun var_notin v  = (not (var_in(v,Decs_Bound decs)))
-	   fun name_notin n = (not (name_in(n,Decs_Bound decs)))
+     and Context_Valid ctxt = raise UNIMP
+
+     and Decs_Valid (ctxt,[]) = true
+       | Decs_Valid (ctxt,a::rest) = Dec_Valid(ctxt,a) andalso 
+	 Decs_Valid(add_context_dec(ctxt,SelfifyDec a),rest)
+
+     and Dec_Valid (ctxt : context, dec) = 
+       let fun var_notin v  = (not (var_bound(ctxt,v)))
+	   fun name_notin n = (not (name_bound(ctxt,n)))
        in  (case dec of
-	      DEC_EXP(v,c) => (var_notin v) andalso (GetConKind(c,decs) = (KIND_TUPLE 1))
-	    | DEC_MOD(v,s) => (var_notin v) andalso (Sig_Valid(decs,s))
+	      DEC_EXP(v,c) => (var_notin v) andalso (GetConKind(c,ctxt) = (KIND_TUPLE 1))
+	    | DEC_MOD(v,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))
 	    | DEC_CON (v,k,NONE) => (var_notin v) andalso (Kind_Valid k)
 	    | DEC_EXCEPTION(name,CON_TAG c) => ((name_notin name) andalso 
-						(GetConKind(c,decs) = (KIND_TUPLE 1)))
+						(GetConKind(c,ctxt) = (KIND_TUPLE 1)))
 	    | _ => false)
        end
-					       
-     (* Rules 97 - 98 *)	
-     and Sdecs_Valid (decs, []) = Decs_Valid decs
-       | Sdecs_Valid (decs, (SDEC(label,dec)::rest)) = 
-	 (Dec_Valid(decs,dec) andalso 
-	  Sdecs_Valid(add_dec_dec(decs,dec),rest) andalso 
-	  (not (List.exists (fn l => eq_label(label,l)) 
+				
+
+     and Sdecs_Domain sdecs = map (fn SDEC(l,_) => l) sdecs
+     and Sdecs_Valid (ctxt, []) = Context_Valid ctxt
+       | Sdecs_Valid (ctxt, (SDEC(label,dec)::rest)) = 
+	 (Dec_Valid(ctxt,dec) andalso 
+	  Sdecs_Valid(add_context_dec(ctxt,SelfifyDec dec),rest) andalso 
+	  (not (List.exists (fn l => eq_label(label,l))
 		(Sdecs_Domain rest))))
 
-     (* Rules 106 - 108 *)
-     and Sig_Valid (decs, SIGNAT_STRUCTURE sdecs) = Sdecs_Valid(decs,sdecs)
-       | Sig_Valid (decs, SIGNAT_FUNCTOR(v,s_arg,s_res,comp)) = 
-	 (Sig_Valid(decs,s_arg) andalso 
-	  Sig_Valid(add_dec_mod(decs,(v,s_arg)),s_res))
-     (* Rules 13 - 15 *)
-     and Dec_IsSub (decs,d1,d2) = 
-	 let val temp = 
-	     (case (d1,d2) of
-		  (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) => 
-		      eq_var(v1,v2) andalso Sig_IsSub(decs,s1,s2)
-		| (DEC_CON(v1,k1,SOME c1),DEC_CON(v2,k2,NONE)) => 
-		      eq_var(v1,v2) andalso eq_kind(k1,k2) 
-		      andalso eq_kind(k1,GetConKind(c1,decs))
-		| _ => false)
-	 in temp orelse (eq_dec(d1,d2,decs))
-	 end
+     and Sig_Valid (ctxt : context, SIGNAT_STRUCTURE(NONE, sdecs)) = Sdecs_Valid(ctxt,sdecs)
+       | Sig_Valid (ctxt : context, SIGNAT_STRUCTURE (SOME p,sdecs)) = Sdecs_Valid(ctxt,sdecs)
+       | Sig_Valid (ctxt, SIGNAT_FUNCTOR(v,s_arg,s_res,comp)) = 
+	 (Sig_Valid(ctxt,s_arg) andalso 
+	  Sig_Valid(add_context_module'(ctxt,v,SelfifySig(SIMPLE_PATH v,s_arg)),s_res))
+
+     and Dec_IsSub (ctxt,d1,d2) = 
+	 (case (d1,d2) of
+	      (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) => 
+		  eq_var(v1,v2) andalso Sig_IsSub(ctxt,s1,s2)
+	    | (DEC_CON(v1,k1,SOME c1),DEC_CON(v2,k2,NONE)) => 
+		  eq_var(v1,v2) andalso eq_kind(k1,k2) 
+		  andalso eq_kind(k1,GetConKind(c1,ctxt))
+	    | (DEC_CON(v1,k1,SOME c1),DEC_CON(v2,k2,SOME c2)) => 
+		  eq_var(v1,v2) andalso eq_kind(k1,k2) 
+		  andalso sub_con(c1,c2,ctxt)
+	    | (DEC_EXP(v1,c1),DEC_EXP(v2,c2)) => 
+		  eq_var(v1,v2) andalso sub_con(c1,c2,ctxt)
+	    | _ => (eq_dec(d1,d2,ctxt)))
+
 
      (* Rules 99 - 100 *)
-     and Sdecs_IsSub (decs,sdecs1,sdecs2) =
+     and Sdecs_IsSub (ctxt,sdecs1,sdecs2) =
 	 let 
 	     exception NOPE
 	     fun help subster (v1,v2,sdecs) =
-		 (case (subster(SIGNAT_STRUCTURE sdecs,[(v1,v2)])) of
-		      SIGNAT_STRUCTURE sdecs' => sdecs'
+		 (case (subster(SIGNAT_STRUCTURE (NONE,sdecs),[(v1,v2)])) of
+		      SIGNAT_STRUCTURE (_,sdecs') => sdecs'
 		    | _ => error "Sdecs_IsSub subst failed")
 	     fun match_var [] [] = []
-	       | match_var (SDEC(l1,dec1)::rest1) (SDEC(l2,dec2)::rest2) = 
-		 (case (dec1,dec2) of
-		      (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) =>
-			  SDEC(l2,(DEC_MOD(v1,s2)))::
-			  (match_var rest1 (help sig_subst_modvar (v1,MOD_VAR v2,rest2)))
-		    | (DEC_EXP(v1,c1),DEC_EXP(v2,c2)) =>
-			  SDEC(l2,(DEC_EXP(v1,c2)))
-			  ::(match_var rest1 (help sig_subst_expvar (v1,VAR v2,rest2)))
-		    | (DEC_CON(v1,k1,c1),DEC_CON(v2,k2,c2)) =>
-			  SDEC(l2,(DEC_CON(v1,k2,c2)))
-			  ::(match_var rest1 (help sig_subst_convar (v1,CON_VAR v2,rest2)))
-		    | _ => SDEC(l2,dec2)::(match_var rest1 rest2))
-	       | match_var _ _ = raise NOPE
+	       | match_var (SDEC(l1,dec1)::rest1) ((sdec2 as (SDEC(l2,dec2)))::rest2) : sdec list = 
+		 if (eq_label (l1,l2))
+		     then (case (dec1,dec2) of
+			       (DEC_MOD(v1,s1),DEC_MOD(v2,s2)) =>
+				   if (eq_var(v1,v2))
+				       then sdec2::(match_var rest1 rest2)
+				   else SDEC(l2,(DEC_MOD(v1,s2)))::
+				       (match_var rest1 (help sig_subst_modvar (v1,MOD_VAR v2,rest2)))
+			     | (DEC_EXP(v1,c1),DEC_EXP(v2,c2)) =>
+				   if (eq_var(v1,v2))
+				       then sdec2::(match_var rest1 rest2)
+				   else SDEC(l2,(DEC_EXP(v1,c2)))
+				       ::(match_var rest1 (help sig_subst_expvar (v1,VAR v2,rest2)))
+			     | (DEC_CON(v1,k1,c1),DEC_CON(v2,k2,c2)) =>
+				   if (eq_var(v1,v2))
+				       then sdec2::(match_var rest1 rest2)
+				   else SDEC(l2,(DEC_CON(v1,k2,c2)))
+				       ::(match_var rest1 (help sig_subst_convar (v1,CON_VAR v2,rest2)))
+			     | _ => SDEC(l2,dec2)::(match_var rest1 rest2))
+		 else raise NOPE
+	       | match_var _ _ = (print "Sdecs_IsSub: length mismatch\n";
+				  raise NOPE)
 	     val sdecs2' = match_var sdecs1 sdecs2
-	     fun loop decs [] [] = true
-	       | loop decs (SDEC(l1,dec1)::rest1) (SDEC(l2,dec2)::rest2) = 
-		 (eq_label(l1,l2) andalso Dec_IsSub(decs,dec1,dec2)
-		  andalso  Sdecs_IsSub(add_dec_dec(decs,dec1),rest1, rest2))
-	       | loop decs _ _ = false
-	 in loop decs sdecs1 sdecs2'
+	     fun loop ctxt [] [] = true
+	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) = 
+		 let val dec1 = SelfifyDec dec1
+		 in (Dec_IsSub(ctxt,dec1,dec2)
+		     andalso loop (add_context_dec(ctxt,dec1)) rest1 rest2)
+		 end
+	       | loop ctxt _ _ = false
+	 in loop ctxt sdecs1 sdecs2'
 	     handle NOPE => false
 	 end
 
      (* Rules 109 - 112 *)
-     and Sig_IsSub' (decs, SIGNAT_STRUCTURE sdecs1, SIGNAT_STRUCTURE sdecs2) = 
-	 Sdecs_IsSub(decs,sdecs1,sdecs2)
-       | Sig_IsSub' (decs, SIGNAT_FUNCTOR(v1,s1_arg,s1_res,comp1), 
-		     SIGNAT_FUNCTOR(v2,s2_arg,s2_res,comp2)) = 
-	 ((eq_comp(comp1,comp2,true)) andalso 
-	  Sig_IsSub(decs,s2_arg,s1_arg) andalso 
-	  let val s1_res' = if (eq_var(v1,v2)) then s1_res
-			    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
-	  in Sig_IsSub(add_dec_mod(decs,(v2,s2_arg)), s1_res', s2_res)
-	  end)
-       | Sig_IsSub' _ = false
-     and Sig_IsSub (decs,s1,s2) = 
+     and Sig_IsSub' (ctxt, sig1, sig2) = 
+	 let fun help(ctxt,sdecs1,sdecs2) = Sdecs_IsSub(ctxt,sdecs1,sdecs2)
+	 in
+	     (case (sig1,sig2) of
+		  (SIGNAT_STRUCTURE (NONE,sdecs1), 
+		   SIGNAT_STRUCTURE (NONE,sdecs2)) => 
+		  let val v = fresh_named_var "selfvar"
+		      val p = SIMPLE_PATH v
+		      val sdecs1 = SelfifySdecs(p,sdecs1)
+		      val sdecs2 = SelfifySdecs(p,sdecs2)
+		      val ctxt = add_context_module'(ctxt,v,SIGNAT_STRUCTURE(SOME p,sdecs1))
+		  in help(ctxt,sdecs1,sdecs2)
+		  end
+		| (SIGNAT_STRUCTURE (NONE,sdecs1), 
+		   SIGNAT_STRUCTURE (SOME p,sdecs2)) => help(ctxt,SelfifySdecs(p,sdecs1),sdecs2)
+		| (SIGNAT_STRUCTURE (SOME p,sdecs1), 
+		   SIGNAT_STRUCTURE (NONE, sdecs2)) => help(ctxt,sdecs1,SelfifySdecs(p,sdecs2))
+		| (SIGNAT_STRUCTURE (SOME p1,sdecs1), 
+		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => if (eq_path(p1,p2))
+							       then help(ctxt,sdecs1,sdecs2)
+							   else false
+		| (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,comp1), 
+		   SIGNAT_FUNCTOR(v2,s2_arg,s2_res,comp2)) =>
+		  ((eq_comp(comp1,comp2,true)) andalso 
+		   let val s1_res = if (eq_var(v1,v2)) then s1_res
+				    else sig_subst_modvar(s1_res,[(v1,MOD_VAR v2)])
+		       val s2_arg = SelfifySig(SIMPLE_PATH v2, s2_arg)
+		       val ctxt' = add_context_dec(ctxt,DEC_MOD(v2,s2_arg))
+		   in  Sig_IsSub(ctxt',s2_arg,s1_arg) andalso 
+		       Sig_IsSub(ctxt',s1_res,s2_res)
+		   end)
+		 | _ => (print "Warning: ill-formed call to Sig_IsSub' with sig1 = \n";
+			 pp_signat sig1; print "\n and sig2 = \n";
+			 pp_signat sig2; print "\n";
+			 false))
+	 end
+
+     and Sig_IsSub (ctxt,s1,s2) = 
 	 let val _ = debugdo (fn () => (print "Sig_issub with s1 = \n";
 					pp_signat s1; print "\n\nand s2 = ";
 					pp_signat s2; print "\n\n\n"))
-	 in Sig_IsSub'(decs,s1,s2)
+	 in Sig_IsSub'(ctxt,s1,s2)
 	 end
-
-     fun context2decs (CONTEXT c) : decs = 
-	let
-	    fun loop [] = []
-	      | loop ((CONTEXT_INLINE (_,v,inline))::rest) = 
-		      (case inline of
-			   INLINE_MODSIG(m,s) => (DEC_MOD(v,s))::loop rest
-			 | INLINE_EXPCON(e,c) => (DEC_EXP(v,c))::loop rest
-			 | INLINE_CONKIND(c,k) => (DEC_CON(v,k,SOME c))::loop rest
-			 | _ => loop rest)
-	      | loop (CONTEXT_SDEC(SDEC(_,dec))::rest) = dec :: (loop rest)
-	      | loop ((CONTEXT_SIGNAT _ | CONTEXT_SCOPED_TYVAR _)::rest) = loop rest
-	in loop c
-	end
 
     (* --------- type unifiers with error messages ------------------------ *)
     type printer = Il.con -> unit
-    fun con_unify(decs : decs, msg : string, 
+    fun con_unify'(ctxt : context, msg : string, 
 		  (str1 : string, con1 : con),
 		  (str2 : string, con2 : con), thunk) =
-	if (eq_con(con1,con2,decs)) then ()
-	else (print "\n\n>>>In "; print msg;
-	      print ", could not unify "; print str1; print ":\n"; pp_con con1;
-	      print "\n>>>with "; print str2; print ":\n"; pp_con con2; print "\n\n\n";
-	      thunk();
-	      error ("In " ^ msg ^ ", could not unify " ^  str1 ^ " with " ^ str2))
-    fun con_unify'(context : context, msg, arg1, arg2, thunk) =
-	con_unify(context2decs context, msg, arg1, arg2, thunk)
-    val eq_con = fn (d,c1,c2) => eq_con(c1,c2,d)
-    val eq_con' = fn (context,c1,c2) => eq_con(context2decs context,c1,c2)
-    val sub_con = fn (d,c1,c2) => sub_con(c1,c2,d)
-    val sub_con' = fn (context,c1,c2) => sub_con(context2decs context,c1,c2)
-    val soft_eq_con = fn (d,c1,c2) => soft_eq_con(c1,c2,d)
-    val soft_eq_con' = fn (context,c1,c2) => soft_eq_con(context2decs context,c1,c2)
-    val con_normalize = fn (d,c) => Normalize(c,d)
-    val con_head_normalize = fn (d,c) => #2(HeadNormalize(c,d))
-    val con_normalize' = fn (context,c) => Normalize(c,context2decs context)
-    val con_head_normalize' = fn (context,c) => #2(HeadNormalize(c,context2decs context))
+	let fun bad() =  (print "\n\n>>>In "; print msg;
+			  print ", could not unify "; print str1; print ":\n"; pp_con con1;
+			  print "\n>>>with "; print str2; print ":\n"; pp_con con2; print "\n\n\n";
+			  thunk();
+			  error ("In " ^ msg ^ ", could not unify " ^  str1 ^ " with " ^ str2))
+	in (if (eq_con(con1,con2,ctxt)) then () else bad())
+	    handle e => bad()
+	end
 
-    val GetExpCon = fn (d,e) => GetExpCon(e,d)
+    val eq_con' = fn (ctxt,c1,c2) => eq_con(c1,c2,ctxt)
+    val sub_con' = fn (ctxt,c1,c2) => sub_con(c1,c2,ctxt)
+    val soft_eq_con' = fn (ctxt,c1,c2) => soft_eq_con(c1,c2,ctxt)
+    val con_normalize' = fn (context,c) => Normalize(c,context)
+    val con_head_normalize' = fn (context,c) => #2(HeadNormalize(c,context))
+
+    val GetExpCon = fn (d,e) => #2(GetExpCon(e,d))
     val GetConKind = fn (d,c) => GetConKind(c,d)
-    val GetModSig = fn (d,m) => GetModSig(m,d)
+    val GetModSig = fn (d,m) => #2(GetModSig(m,d))
+    val GetBndDec = fn arg => #2(GetBndDec arg)
+    val GetBndsDecs = fn arg => map #2 (GetBndsDecs arg)
+    val GetSbndsSdecs = fn arg => map #2(GetSbndsSdecs arg)
     val Module_IsValuable = fn (d,m) => Module_IsValuable m d
-    val Exp_IsValuable = fn (d,e) => Exp_IsValuable e d
     val Bnds_IsValuable = fn (d,bs) => Bnds_IsValuable bs d
     val Sbnds_IsValuable = fn (d,ss) => Sbnds_IsValuable ss d
 

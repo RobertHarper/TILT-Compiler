@@ -4,12 +4,13 @@ signature PRIM =
     datatype intsize = W8 | W16 | W32 | W64
     datatype floatsize = F32 | F64
 
-    datatype 'exp value = int     of intsize * TilWord64.word
-                        | uint    of intsize * TilWord64.word
-                        | float   of floatsize * string
-                        | array   of 'exp Array.array
-                        | vector  of 'exp Array.array
-                        | refcell of 'exp ref
+    (* zero-length arrays and vectors need type *)
+    datatype ('con,'exp) value = int     of intsize * TilWord64.word
+                               | uint    of intsize * TilWord64.word
+			       | float   of floatsize * string
+			       | array   of 'con * 'exp Array.array 
+			       | vector  of 'con * 'exp Array.array
+			       | refcell of 'exp ref
 
     datatype traptype = int_tt | real_tt | both_tt
 

@@ -194,7 +194,7 @@ functor InfixParse(structure Il : IL
       | parse_exp (table : fixity_table, e) = e
 
     fun parse_pat (table : fixity_table, 
-		   is_constr : Ast.symbol -> bool, 
+		   is_constr : Ast.symbol list -> bool, 
 		   pat_list : Ast.pat list) : Ast.pat list = 
       let
 	fun self arg = parse_pat(table,is_constr,arg)
@@ -205,7 +205,7 @@ functor InfixParse(structure Il : IL
 	val table = (app_lab, Fixity.infixleft 10) :: table  
 	fun apper (f,a) = Ast.AppPat{constr=f,argument=a}
 	val tupler = Ast.TuplePat
-	fun is_applicable (Ast.VarPat [s]) = is_constr s
+	fun is_applicable (Ast.VarPat p) = is_constr p
 	  | is_applicable _ = false
 	fun help (pat : Ast.pat) : Ast.pat = 
 	    (case pat of

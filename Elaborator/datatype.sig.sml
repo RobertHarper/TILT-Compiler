@@ -11,7 +11,8 @@ signature DATATYPE =
     val compile : {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   datatycs : Ast.db list,
-		   withtycs : Ast.tb list} -> (Il.sbnd * Il.sdec) list
+		   withtycs : Ast.tb list,
+		   eq_compile : Il.context * Il.con -> Il.exp} -> (Il.sbnd * Il.sdec) list
 
 
     (* The datatype module/signature returned will be such that:
@@ -44,17 +45,16 @@ signature DATATYPE =
 	and the arm types *)
     val destructure_datatype_signature : 
                          Il.signat -> {name : Il.label,
-				       abstract_type : Il.con,
 				       var_poly : Il.var option,
 				       sdecs_poly : Il.sdecs option,
 				       arm_types : {name : Il.label, arg_type : Il.con option} list}
 
     val instantiate_datatype_signature : 
                          Il.path * Il.signat * Il.context * 
-			 (Il.decs * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list)
+			 (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list)
 			 -> {instantiated_type : Il.con,
 			     arms : {name : Il.label, arg_type : Il.con option} list,
-			     case_exp : Il.exp,
+(*			     case_exp : Il.exp, *)
 			     expose_exp : Il.exp}
 			 
   end;

@@ -167,14 +167,16 @@ functor Ppprim(structure Prim : PRIM)
 
 
 
-    fun pp_value pp_exp scon =
+    fun pp_value pp_exp pp_con scon =
 	let 
 	    fun doint ((W64 | W32 | W16 | W8),w) = TilWord64.toDecimalString w
 	in case scon of
 	    int (is,i) => String (doint (is,i))
 	  | uint (is,i) => String (doint (is,i))
 	  | float (_,s) => String s
-	  | _ => raise UNIMP
+	  | array (c,a) => String "ArrayValue"
+	  | vector (c,a) => String "VectorValue"
+	  | refcell r => String "RefCellValue"
 	end
 
     fun wrapper pp out obj = 
@@ -195,6 +197,6 @@ functor Ppprim(structure Prim : PRIM)
     fun pp_ilprim obj = (wrapper pp_ilprim' TextIO.stdOut obj; ())
     fun pp_is obj = (wrapper pp_is' TextIO.stdOut obj; ())
     fun pp_fs obj = (wrapper pp_fs' TextIO.stdOut obj; ())
-    fun pp_value pp_exp obj = (wrapper (pp_value' pp_exp) TextIO.stdOut obj; ())
+    fun pp_value pp_exp pp_con obj = (wrapper (pp_value' pp_exp pp_con) TextIO.stdOut obj; ())
 
   end

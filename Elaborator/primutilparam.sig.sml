@@ -2,7 +2,7 @@ signature PRIMUTILPARAM =
     sig
 	type con
 	type exp
-	type 'a value
+	type ('con,'exp) value
 	type intsize
 	type floatsize
 
@@ -18,7 +18,7 @@ signature PRIMUTILPARAM =
 	val con_ref : con -> con
 	val con_vector : con -> con
 	val unit_value : exp
-	val exp2value : exp -> (exp value) option
-	val value2exp : exp value -> exp
+	val exp2value : exp -> (con,exp) value option
+	val value2exp : (con,exp) value -> exp
 	val bool2exp : bool -> exp
     end

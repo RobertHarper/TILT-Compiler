@@ -14,28 +14,32 @@ struct
     open PrimUtilParam Prim
     type con = con
     type exp = PrimUtilParam.exp
-    type value = exp Prim.value
+    type value = (con,exp) Prim.value
     val error = fn s => error "primutil.sml" s
     structure Float = Real64
 
-    fun value_type (scon) : con = 
+    fun value_type exp_typer scon : con = 
 	(case scon of
 	     (int (is,_)) => con_int is
 	   | (uint (is,_)) => con_uint is
 	   | (float (fs,_)) => con_float fs
-	   | _ => raise UNIMP)
+	   | (array (c,_)) => con_array c
+	   | (vector (c,_)) => con_vector c
+	   | (refcell (ref e)) => con_ref (exp_typer e))
 
   fun get_type prim cons =
      let 
 	 fun help (arg,res) = partial_arrow(arg,res)
 	 fun help' (args,res) = help(con_tuple args,res)
+	 fun thelp (arg,res) = total_arrow(arg,res)
+	 fun thelp' (args,res) = thelp(con_tuple args,res)
      in
 	 (case (prim,cons) of
 (*	     NIL {instance} => CON_LIST instance *)
 	 ((soft_vtrap _ | soft_ztrap _ | hard_vtrap _ | hard_ztrap _),[]) => con_unit
 (*		NOT  => help(con_bool,con_bool) *)
-       | (mk_ref, [instance]) => help(instance,con_ref instance)
-       | (deref, [instance]) => help(con_ref instance,instance)
+       | (mk_ref, [instance]) => thelp(instance,con_ref instance)
+       | (deref, [instance]) => thelp(con_ref instance,instance)
 (*	      | SIZE => help(con_string, con_int)
 	      | CHR  => help(con_int, con_char)
 	      | ORD  => help(con_char, con_int)
@@ -64,11 +68,11 @@ struct
 	      | CLOSE_OUT => raise UNIMP
 	      | USE => raise UNIMP
 	      | FLUSH_OUT => raise UNIMP *)
-	| (length1, [instance]) => help(con_array instance, con_int W32)
+	| (length1, [instance]) => thelp(con_array instance, con_int W32)
 (*	      | length2 {instance} => raise UNIMP *)
 
 (*	     and  => help'([con_bool,con_bool],con_bool) *)
-	| (setref, [instance]) => help'([con_ref instance,instance],con_unit)
+	| (setref, [instance]) => thelp'([con_ref instance,instance],con_unit)
 (*	   | or  => help'([con_bool,con_bool],con_bool) 
 	   | eq_bool  => help'([con_bool,con_bool],con_bool)
 	   | xor  => help'([con_bool,con_bool],con_bool) *)
@@ -96,16 +100,16 @@ struct
 	       lesseq_uint is | greatereq_uint is),[]) => help'([con_uint is, con_uint is], con_bool)
 (*	  | cons {instance} => help'([instance,con_list instance],con_list instance) *)
 
-	  | (array1, [instance]) => help'([con_int W32, instance], con_array instance)
+	  | (array1, [instance]) => thelp'([con_int W32, instance], con_array instance)
 	  | (sub1, [instance]) => help'([con_array instance, con_int W32], instance)
 	  | (array_eq, [instance]) => help'([con_array instance, con_array instance],con_bool)
 
-	  | (vector1, [instance]) => help'([con_int W32, instance], con_vector instance)
+	  | (vector1, [instance]) => thelp'([con_int W32, instance], con_vector instance)
 	  | (vlength1, [instance]) => help(con_vector instance, con_int W32)
 	  | (vsub1, [instance]) => help'([con_vector instance, con_int W32], instance)
-	  | (vector_eq, [instance]) => help'([help'([instance, instance],con_bool)],
-					     help'([con_vector instance, 
-						    con_vector instance],con_bool))
+	  | (vector_eq, [instance]) => help(help'([instance, instance],con_bool),
+					    help'([con_vector instance, 
+						   con_vector instance],con_bool))
 		
 (*	  | output => help'([con_int, con_string], con_unit) *)
 	      
