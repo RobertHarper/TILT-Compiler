@@ -1449,7 +1449,6 @@ struct
 	 | (AllArrow_c _)        => (state,constructor,false)
 	 | (ExternArrow_c _)     => (state,constructor,false)
 	 | (Crecord_c _)         => (state,constructor,false)
-	 | (Proj_c (Mu_c _,lab)) => (state,constructor,false)
 	 | (Var_c var)           => (state,constructor,true)
 	     
 	 | (Let_c (sort,((cbnd as Open_cb (var,formals,body))::rest),con)) =>
