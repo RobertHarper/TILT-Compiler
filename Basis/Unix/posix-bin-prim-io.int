@@ -1,3 +1,0 @@
-structure PosixBinPrimIO : OS_PRIM_IO
-   where PrimIO = BinPrimIO
-   where type file_desc = Posix.ProcEnv.file_desc	
