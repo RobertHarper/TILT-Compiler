@@ -15,7 +15,8 @@ sig
   val rotz : real -> m4
 *)
   val apply : m4 * v4 -> v4
-	val applyV3: m4 * v3 -> v3
+  val applyPoint: m4 * v3 -> v3
+  val applyVector : m4 * v3 -> v3
   val combine : m4 * m4 -> m4
 
   val translateM : real * real * real * m4 -> m4
@@ -30,5 +31,5 @@ sig
 	val m4toString: m4 -> string
   val v4toString: v4 -> string
   val v3toString: v3 -> string
-
+  val printM4 : m4 -> unit
 end
