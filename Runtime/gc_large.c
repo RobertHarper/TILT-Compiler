@@ -67,7 +67,7 @@ void gc_large_endCollect()
 
 void gc_large_init()
 {
-  largeSpace = Heap_Alloc(largeheapsize * 1024,largeheapsize);
+  largeSpace = Heap_Alloc(largeheapsize * 1024, largeheapsize * 1024);
   allocMap = CreateBitmap(largeheapsize * 1024 / largebitmapsize);
   markMap = CreateBitmap(largeheapsize * 1024 / largebitmapsize);
 }
