@@ -1,3 +1,12 @@
+Contents
+--------
+
+	Contents
+	Preparing TILT for release to CMU campus
+	Creating a misc collection release
+	Creating a /usr/contributed release
+	
+
 Preparing TILT for release to CMU campus
 ----------------------------------------
 
@@ -169,7 +178,7 @@ Creating a misc collection release
 	% unset TILT_LIBDIR
 	% /usr/local/bin/tilt -v
 
-* Announce the new release to the newsgroup cmu.cs.unix.forum.
+* Announce the new release to the newsgroup cmu.cs.unix.announce.
   Announcing alpha releases isn't so important since most machines
   ignore them.
 
@@ -179,4 +188,55 @@ Creating a misc collection release
 Creating a /usr/contributed release
 -----------------------------------
 
-[to be written]
+Andrew has a central contributed maintainer who takes care of
+allocating volumes and tweaking depot configuration files.  So you
+don't have as many details to worry about but pushing a release
+through takes more time.
+
+* Request space for a new release of TILT by connecting to an Andrew
+  unix machine and running carpe(1).  Your input to carpe should be
+  along the lines of:
+
+	(c)reate
+	collection name: tilt
+	tree: contributed
+	version: <accept default; remember this VERSION number>
+	systypes: <accept default>
+	source volumes: no
+	object volumes: no
+	common volume: yes
+	common volume quota: 25000
+	dest volumes quota: 25000
+	new commanders: <your andrew and cs ids; eg ps3u,swasey@cs>
+	comments: none
+	special instructions: none
+
+* Your Andrew account will receive email when the volumes are created.
+  Then on an SCS linux machine, issue the command:
+
+  ./Bin/makeAndrewRelease VERSION
+
+  This installs TILT into the newly created volumes, modifying some files
+  to work under /usr/contributed.
+
+* Connect to an Andrew unix machine and run carpe(1) with input:
+
+	(r)elease
+	collection name: tilt
+	tree: contributed
+	version: <the VERSION from above>
+	systypes: <accept default>
+	environments: <gamma or beta>
+	specific date: no
+	comments: none
+	special instructions: none
+
+* Your Andrew account will receive email when the release is ready.
+
+* To test TILT out of /usr/contributed you need to clear TILT_LIBDIR and use
+  the /usr/contributed/bin/tilt driver.  Eg:
+
+	% unset TILT_LIBDIR
+	% /usr/contributed/bin/tilt -v
+
+* Announce the new release to the newsgroup cyrus.andrew.contributed.
