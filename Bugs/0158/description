@@ -1,0 +1,16 @@
+Number: 0158
+Title:       pattern compiler rejecting valid code
+Keywords:    elaborator,pattern compiler,redundant matches
+Submitter:   swasey
+Date:        10/15/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     untilSelfWild is failing with "untilPred: matched empty"
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: n126
+Owner: swasey
+Status: open
