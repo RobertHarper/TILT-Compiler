@@ -13,6 +13,8 @@ signature NAMEBLAST =
 
     val blastOutVarmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a Name.VarMap.map -> unit
     val blastInVarmap    : BinIO.instream -> 'a Blaster.blastin -> 'a Name.VarMap.map
+    val blastOutPathmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a Name.PathMap.map -> unit
+    val blastInPathmap    : BinIO.instream -> 'a Blaster.blastin -> 'a Name.PathMap.map
     val blastOutLabelmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a Name.LabelMap.map -> unit
     val blastInLabelmap    : BinIO.instream -> 'a Blaster.blastin -> 'a Name.LabelMap.map
     val blastOutTagmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a Name.TagMap.map -> unit

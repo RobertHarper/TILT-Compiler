@@ -55,13 +55,29 @@ structure NameBlast :> NAMEBLAST =
 	in  construct_label(n, str)
 	end
     
+    fun blastOutPath os (v,labs) = (blastOutVar os v; blastOutList blastOutLabel os labs)
+
+    fun blastInPath is = let val v = blastInVar is
+			     val labs = blastInList blastInLabel is
+			 in  (v,labs)
+			 end
+
     fun blastOutVarmap os blaster vmap = 
 	blastOutList (blastOutPair blastOutVar blaster) os (VarMap.listItemsi vmap)
+
+    fun blastOutPathmap os blaster pmap = 
+	blastOutList (blastOutPair blastOutPath blaster) os (PathMap.listItemsi pmap)
 
     fun blastInVarmap is blaster =
 	let val ls = blastInList (blastInPair blastInVar blaster)  is
 	    fun folder((v,item),acc) = VarMap.insert(acc,v,item)
 	    in  foldl folder VarMap.empty ls
+	end
+
+    fun blastInPathmap is blaster =
+	let val ls = blastInList (blastInPair blastInPath blaster)  is
+	    fun folder((p,item),acc) = PathMap.insert(acc,p,item)
+	    in  foldl folder PathMap.empty ls
 	end
     
     fun blastOutLabelmap os blaster vmap = 
