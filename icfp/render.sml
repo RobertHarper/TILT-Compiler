@@ -8,9 +8,6 @@ structure Render =
 	
     val i2r = Real.fromInt
     val black = (0.0, 0.0, 0.0)
-    local val conv = Math.pi / 180.0
-    in    fun deg2rad d = conv * d
-    end
 
     fun for(start,stop,f) = 
 	let fun loop cur = if (cur >= stop) 
