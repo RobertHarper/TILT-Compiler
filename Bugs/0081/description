@@ -73,19 +73,27 @@ Comments:
 		caller asm/normalize.sml.s:9349
 		callee asm/normalize.sml.s:8792
 
-	XXX: Try to use watchpoints to notice when the stack chain
-	and SP go out of sync.
-	
-	XXX: Add stack checks after an exception is raised.
-	XXX: Add stack checks and after collections.
-
-	Debug Aid: Write some code to do a stack dump.
-	Output a list of mutator return addresses with |
-	indicating stacklet boundaries.
-
-	Suspicion: There is a signed pointer comparison
-	somewhere in PopStackletFromMutator.
+	The problem was in our handling of exceptions.  We must
+	activate an exception handler's stack frame before jumping to
+	its code.  We were doing this incorrectly.  We changed SP
+	without regard for the runtime's chain of stacklets.
 Fix:
+	The fix is to pop stacklets while raising an exception.
+
+	The code to do this is delicate.  First, we use different
+	register conventions while raising an exception.  Second, the
+	register allocator is not available since we are switching
+	stack frames and it is unclear how to get spilling right in
+	this situation.  See the translations of Rtl.RESTORESP for
+	details.
+
+	I defined a runtime function to establish the correct stacklet
+	chain for the mutator's SP.  It is extremely rare for an
+	exception to cross a stacklet boundary and switching between
+	the mutator and the runtime is expensive.  So my translation
+	of RESTORESP tests if the handler's stack frame lies in the
+	current stacklet and avoids the call to the runtime in that
+	case.
 Test:
 Owner: swasey
-Status: open
+Status: closed
