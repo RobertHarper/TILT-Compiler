@@ -105,6 +105,7 @@ struct
 	   (VarStr [symbol], false))
 	end
   in
+    fun resetCounter () = unique_n := 0
     fun nameify_strexpbools name name_strexp strexpbools =
       case ListPair.unzip (map (grind name name_strexp) strexpbools) of
 	(newstrbs, newsebs) => (List.concat newstrbs, newsebs)
@@ -175,9 +176,12 @@ struct
 	process (name_fctb fctb, fn fb => MarkFctb (fb, region))
 
   fun namedForm dec =
-        case name_dec dec of
-	  Unaltered => dec
-	| Altered d => d
-	| _ => impossible "namedForm"
+      let val _ = resetCounter()	(* Names can be exported so they must match up for each compile. *)
+      in
+	  case name_dec dec of
+	      Unaltered => dec
+	    | Altered d => d
+	    | _ => impossible "namedForm"
+      end
 
 end
