@@ -239,3 +239,5 @@ m0094	self-printer
 m0095	maximum real
 m0096	reals
 m0097	reals
+m0098	reals
+m0099	reals
