@@ -1,3 +1,11 @@
+(*
+ Harness to run and time the benchmarks, individually or as a group.
+ Usage:  btimes [-r n] [ benchmarks ]
+   -r n, if present, indicates that n runs should be done, and the results
+         averaged before reporting.  Defaults to 1.
+   benchmarks is an optional list of which benchmarks to run.  Defaults
+         to all of them.
+ *)
 local 
   val stringem = String.concat
   val printem = List.app print
@@ -116,11 +124,11 @@ local
      (runTaku,"Taku")
      ]
     
-  fun run1 _ = map run benchmarks;
-  fun runn n = List.tabulate (n,run1)
-  fun report n = 
+  fun run1 benchmarks _ = map run benchmarks;
+  fun runn (n,benchmarks) = List.tabulate (n,run1 benchmarks)
+  fun report (n,benchmarks) = 
     let
-      val results = runn n
+      val results = runn (n,benchmarks)
       val summaries = map summarize results
       val (namess,totalss) = unzip summaries
       val names = hd namess
@@ -134,12 +142,29 @@ local
   fun eprint (s : string) : unit =
     TextIO.output(TextIO.stdErr, s)
 
+  fun FAIL msg = raise Fail msg
+    
+  fun findall [] _ = []
+    | findall (a::aa) l = 
+    let
+      fun isb b (_,b') = b = b'
+
+      val bench = 
+	(case List.find (isb a) l
+	   of SOME bench => bench
+	    | NONE => (print "Benchmarks are \n";
+		       List.app (fn (_,name) => print ("\t"^name^"\n")) l;
+		       FAIL (a^" is not a known benchmark\n")))
+    in bench :: findall aa l
+    end
+       
   fun main () : unit =
     (let
 	 
        fun usage msg = 
-	 (msg ^ "\nusage: " ^ CommandLine.name() ^  " -r n \n")
-       fun fail msg = raise Fail (usage msg)
+	 (msg ^ "\nusage: " ^ CommandLine.name() ^  " [-r n] [ benchmarks ]\n")
+
+       fun fail msg = FAIL (usage msg)
        fun parseInt s = 
 	 (case Int.fromString s
 	    of SOME i => i
@@ -148,11 +173,18 @@ local
        val opts = [G.Arg (#"r",parseInt)]
 
        val args = CommandLine.arguments() 
-     in
-       (case G.getopt (opts,args)
-	  of G.Error msg => fail msg
-	   | G.Success ([i], _) => report i
-	   | _ => fail "wrong arguments")
+       val (runs,args) = 
+	 (case G.getopt (opts,args)
+	    of G.Error msg => fail msg
+	     | G.Success (num,args) => 
+	      let 
+		val num = case num of [i] => i | _ => 1
+		val args = case args 
+			     of [] => benchmarks
+			      | _ => findall args benchmarks 
+	      in (num,args)
+	      end)
+     in report (runs,args)
      end)
        handle e => (eprint (CommandLine.name());
 		    eprint ": ";

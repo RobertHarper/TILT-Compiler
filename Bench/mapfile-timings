@@ -39,9 +39,10 @@ source unit Isort = "sort.sml" {Int}
 source unit Takc = "takc.sml" {Int}
 source unit Taku = "taku.sml" {Int}
 
-source unit bench_times = "bench_times.sml" {
+source unit btimes = "btimes.sml" {
 	Time Timer List String life leroy fft boyer simple tyan msort pia
 	frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort
 	Quicksort2 Isort Takc Taku Getopt TextIO CommandLine Int OS
 }
-make executable "bench_times." ^ $target ^ ".exe" {bench_times}
+make executable "btimes." ^ $target ^ ".exe" {btimes}
+
