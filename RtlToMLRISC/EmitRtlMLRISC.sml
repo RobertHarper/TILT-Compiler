@@ -1025,11 +1025,9 @@ functor EmitRtlMLRISC(
        * of Rtl doesn't cause any traps
        *)
       val SUB  = code MLTree.SUB
-      (* val DIV  = code MLTree.DIVT
-	 broken in MLRISC--see CVTI2D ??? *)
+      val DIV  = code MLTree.DIVT
       val SUBT = code MLTree.SUBT
-      (* val DIVT = code MLTree.DIVT
-	 broken in MLRISC--see CVTI2D ??? *)
+      val DIVT = code MLTree.DIVT
     end
 
     local
@@ -1056,7 +1054,6 @@ functor EmitRtlMLRISC(
       val S8SUB = code 3
     end
 
-    (* DIVT broken in MLRISC--see CVTI2D ???
     fun MODT(left, right, dest) =
 	  let
 	    val quotient  = MLTree.DIVT(left, right, MLTree.LR)
@@ -1071,33 +1068,6 @@ functor EmitRtlMLRISC(
      * of Rtl doesn't cause any traps
      *)
     val MOD = MODT
-    *)
-
-    (*
-     * replace MLRISC stack-using instructions with library functions
-     * until fixed ???
-     *)
-    local
-      fun code procedure (left, right, dest) =
-	    let
-	      val left'	 = Cells.newReg()
-	      val right' = Cells.newReg()
-	    in
-	      [MLTree.CODE[
-		 mv(left', left),
-		 mv(right', right)
-	       ]]@
-	      callC(externalExp procedure,
-		    [ExternalConvention.integer left',
-		     ExternalConvention.integer right'],
-		    [ExternalConvention.integer dest])
-	    end
-    in
-      val DIV  = code "til_div"
-      val DIVT = code "til_divt"
-      val MOD  = code "til_mod"
-      val MODT = code "til_modt"
-    end
 
     local
       fun code((testCondition, testExp), dest) =
@@ -1155,9 +1125,6 @@ functor EmitRtlMLRISC(
 	  callC(externalExp "cvt_int2real",
 		[ExternalConvention.integer src],
 		[ExternalConvention.float dest])
-	  (* [MLTree.CODE[MLTree.FMV(dest, MLTree.CVTI2D src)]]
-	     CVTI2D is currently broken in MLRISC/Alpha: it allocates on
-	     the stack, which messes up spill offsets ??? *)
 
     local
       fun code operator (left, right, dest) =
