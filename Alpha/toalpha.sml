@@ -1029,13 +1029,12 @@ struct
 			  Rtl.SUB (Rsp, Rtl.REG stackletOffset, Rdest)]
        end
 
-     (* RESTORESP must preserve Rhandler = Rpv' = %r27, Rexnarg = Rra
-        = %r26, and Rexnptr = %r15.  Fresh temporaries (which may be
+     (* RESTORESP must preserve Rhandler = Rpv' = $27, Rexnarg = Rra
+        = $26, and Rexnptr = $15.  Fresh temporaries (which may be
         spilled) can not be used because we are switching stack
         frames.  We use Rat both as a temporary and to save Rexnarg
         around the call to RestoreStackFromML.  Note that BSR does not
-        trash Rpv' because we do not use that alpha convention for ML
-        code.  *)
+        trash Rpv' or Rat but does trash Rat2 (see returnToML).  *)
 
      | translate (Rtl.RESTORESP) =
        let val afterLabel = Rtl.fresh_code_label "after_sp"
