@@ -1,0 +1,88 @@
+The TILT compiler consists of 3 main phases which we will call the front end,
+the middle end, and the back end.  The front end, also called the elaborator,
+is responsible for type-checking the source ML program and converts the program 
+to HIL or high-intermediate language.  The HIL program is then phase-split
+to remove modules and signatures, resulting in a MIL (middle-intermediate-language)
+program.  MIL programs are optimized and closure-converted before being converted
+to RTL.  Until the translation to RTL, the program remains explicitly typed.
+In the back-end, RTL is then converted to a machine-specific assembly
+program.  At this time, register allocation and stack layout is determined.
+The result is an assembly file which is sent to the system assembler, producing an
+object file that is linked with the runtime.
+
+-----------------------------------------------------------------------------------------
+
+HIL is a strongly-typed language with expressions, types, kinds, signatures, and
+modules.  The elaborator type checks an ML program and generates a fully-typed
+HIL program.  During elaboration, we compile datatype, patterns, and polymorphism
+to the more primitive constructs of HIL.  Equality types, coercions,
+and hidden types are made explicit in HIL as well.
+
+-----------------------------------------------------------------------------------------
+
+Throughout elaboration, types are inferred using a standard unification algorithm.
+To achieve type inference for ML, three type constructs 
+(type meta-variable, flexible record types, and overloaded types)
+and one term constrct (overloaded expression) were added to HIL.
+
+Whenever we encounter a variable binding without an explicit type,
+we create a new type meta-variable to stand for the unknown type.  
+For a well-typed program, the meta-variable will eventually be unified with a type.
+(Note that type variables and type meta-variable are different.
+Type variables are part of the HIL language whereas
+meta-variable exist solely for the purpose of type inference.)
+
+Flexible record types are needed to typecheck the ML projection construct "#" and "...".
+When unified with record types, they become inflexible.
+Two flexible record types can also be unified to produce a consistent union
+flexible record type.
+
+Overloaded types are needed to typecheck overloaded identifiers like "+".
+An overloaded type is a disjunction of several types.
+During unification with other types, the choices of overloaded types are 
+pruned until only one choice remains.  Corresponding to each overloaded type
+is an overloaded expression which consists of the same number of choices.
+When an overloaded type is narrowed, the corresponding expression is narrowed.
+
+If there is still an unresolved meta-variable, flexible record type, or overloaded type
+when the compilation unit has been elaborated, an appropriate default is taken.
+Meta-variables are resolved to the unit type, flexible record types are made inflexible
+without additional widening, and the default choice of the overloaded type is used.
+
+Meta-variables include two flags indicating whether it is an equality
+type and whether it may be generalized.  Meta-variables that have been
+unified with overloaded types may no longer be generalized.  At a
+valuable binding, type meta-variables created during elaboration of the
+bound expression that have not been unified or marked ungeneralizable
+may be generalized to yield a polymorphic value binding.  If an
+equality type is required the generalization must parameterize over
+the unknown type and an equality function at that type.  The
+translation of an ML polymorphic value is a HIL module which takes a
+structure containing types and equality functions.
+
+Datatypes are compiled structures containing a abstract type constructor,
+an equality function on the datatype,
+functions corresponding to the datatype constructors, and a function taking
+datatype values to the members of a corresponding sum type.
+
+Patterns are compiled into variable bindings, uses of equality
+functions, projections, and derefernces, and case analyses on sums and
+exceptions tags.
+
+All uses of where (type) and sharing (type) are translated into 
+uses of type abbreviations.
+
+Equality functions on base types are primitive.  On sum types, product types,
+recursive types, they are generated as needed.  Equality functions are 
+passed to polymorphic functions expecting an eqaulity type as well as to other 
+equality functions.
+
+When a module is given a subsignature, a new module is generated via
+by copying the needed components and sub-component, with 
+partial or total polymorphic instantiation as needed.  Sometimes, 
+to propagate type information, extra type components with hidden names
+need to be included.  Similarly, functor arguments are always named 
+to expand their scope, allowing functor results to refer to the 
+functor arguments.
+
+-----------------------------------------------------------------------------------------

@@ -1,0 +1,97 @@
+
+ Structure of TILT
+  - Intro: Name the phases
+  - Elaborator details
+     - Summarize HIL, point to other papers
+     - Summarize components of elaboration 
+        - type reconstruction
+        - eliminating polymorphism
+        - eliminating datatypes
+        - pattern compilation
+        - signature patching
+        - equality compilation
+        - eliminating coercive subsignaturing
+        - propagating hidden types
+        - named form at functor application
+     - Implementation issues
+        - Contexts: selfification, normalization, aliasing
+        - inlining and datatypes
+        - beta reduction and eta-expanded primitives
+        - summarize differences from tech report
+          - derived forms like let are primitive
+	  - patterns, datatypes
+          - flatten polymorphic arguments
+
+  - Phase splitter details
+     - Mainly cite Harper/Mitchell/Moggi
+        - But target is not a structure calculus
+     - Eliminating type abstraction
+     - Avoiding inlining (hence duplication) of constructors
+     - Optimization of polymorphism
+     - Preservation of sharing
+     - Elimination of trivial constructors
+     - Early projection of substructures of functor arguments
+		permit paths to be replaced by variables
+       - in constract to memoiztion and closure-conversion WRT paths
+     - Summarize MIL
+        - Describe language
+        - Design considerations
+           - Adequate as a target of phase-splitting
+           - Closure under optimizations, closure-conversion, data representations
+           - Requires typecase/Typecase (not typerec)
+           - Special treatment of units in Sums
+           - float vs. boxedfloat
+           - word kinds
+           - separate sub and floatsub primitives
+           - vararg/Vararg.  definable via typecase?
+           - open vs. code vs. closure
+           - Lambda-lambda only, must be named
+	   - inject/inject_record
+	   - project_sum/project_sum_record
+        - Typing issues
+           - Algorithm status
+           - Implementation experience
+
+  - Transformations/Optimizations
+     - Hoisting
+     - Common-subexpression elimination
+     - Constant propagation
+     - Dead code elimination
+     - GC Reification
+     - Renaming/Linearization
+     - Closure conversion
+	- types vs constructors
+	- "simple" kinds
+	- no lifting to top-level
+     - Translation to RTL
+     - Backend (point to Andrew)
+     - Run-time (point to PLDI)
+     - To do: uncurrying, partial applications (poly. instantiation)
+
+  - Representation
+     - Varisbles(not deBruijn indices)
+     - Context
+
+  - Separate Compilation
+    - Imports/Exports
+    - Contexts
+    - binary interface files, object files, ...
+
+  - Performance
+
+  - GC 
+
+  - Reflection
+     - Is factoring through phase-splitting necessary?
+         - Directly to MIL
+            - would need separate pre-check to verify abstraction is respected 
+         - Compiling the HIL
+            - Duplications between expression & module levels (e.g., closure conversion)
+         - First-class module system
+            - Undecidable type system (Lillibridge)
+     - Add polymorphism to HIL?  Possibly
+     - Singleton kinds vs. FLINT-style substitution
+         - biggest issue decidability of typing
+         - more complex type system requires more complex implementation
+     - Hash-consing vs. CSE for reducing types
+
