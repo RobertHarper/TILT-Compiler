@@ -1,4 +1,0 @@
-(*$include LINKALPHA *)
-
-structure Linkalpha : LINKALPHA
-
