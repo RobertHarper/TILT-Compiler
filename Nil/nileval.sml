@@ -450,9 +450,9 @@ functor NilEvaluate (structure Nil : NIL
 						       Ppnil.pp_var v;
 						       raise e)
 
-      fun eval_mod (con,exp) = 
-	  let val con_res = eval_con con
-	      val exp' = App_e(Closure,exp,[con_res],[],[])
+      fun eval_mod (MODULE{bnds,imports,exports}) = 
+	  let (* val con_res = eval_con con *)
+	      val exp' = Let_e(Sequential, bnds, NilUtil.unit_exp)
 	  in  eval_exp exp'
 	  end
   end

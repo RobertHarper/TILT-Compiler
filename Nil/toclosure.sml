@@ -13,6 +13,7 @@ functor ToClosure(structure Nil : NIL
 struct
 
 
+
     open Util NilUtil Name Nil
     structure Nil = Nil
 
@@ -24,15 +25,48 @@ struct
 
     (* -------------- types and values manipulating free variables ------------- *)
     type frees = {freecvars : kind VarMap.map,
-		  freeevars : con VarMap.map}
+		  freeevars : con VarMap.map,
+		  boundevars : VarSet.set,
+		  boundcvars : VarSet.set}
     val empty_frees = {freeevars = VarMap.empty,
-		       freecvars = VarMap.empty}
+		       freecvars = VarMap.empty,
+		       boundevars = VarSet.empty,
+		       boundcvars = VarSet.empty}
     fun map_member(m,v) = (case (VarMap.find(m,v)) of
 			       NONE => false
 			     | SOME _ => true)
-    fun map_union(m1,m2) = VarMap.foldli (fn (k,d,m) => VarMap.insert(m,k,d)) m1 m2
-    fun join_free({freeevars=e1,freecvars=c1},{freeevars=e2,freecvars=c2}) = 
-	{freeevars = map_union(e1,e2), freecvars = map_union(c1,c2)}
+
+    (* returns m1 + (m2 - s) *)
+    fun map_union_diff(m1,m2,s) = 
+	let fun folder(k,d,m) = if (VarSet.member(s,k))
+				    then m
+				else VarMap.insert(m,k,d)
+	in  VarMap.foldli folder m1 m2
+	end
+    val set_union = VarSet.union
+    fun map_set_remove(m,s) = VarMap.foldli (fn (k,d,m) => if VarSet.member(s,k) 
+						then m else VarMap.insert(m,k,d)) VarMap.empty m
+
+    fun join_free'({freeevars=e1,freecvars=c1,boundevars=be1,boundcvars=bc1},
+		   {freeevars=e2,freecvars=c2,boundevars=be2,boundcvars=bc2}) = 
+	let val be = set_union(be1,be2)
+	    val bc = set_union(bc1,bc2)
+	    val fe = map_union_diff(e1,e2,be)
+	    val fc = map_union_diff(c1,c2,bc)
+	    val same = (((VarMap.numItems fe) = (VarMap.numItems e1)) andalso
+			((VarMap.numItems fc) = (VarMap.numItems c1)))
+	in  (same, {freeevars = fe, freecvars = fc,
+		    boundevars = be, boundcvars = bc})
+	end
+
+    fun join_free args = #2(join_free' args)
+
+    fun remove_bound({freeevars=e,freecvars=c},bounds) =
+	{freeevars=map_set_remove(e,bounds), freecvars=map_set_remove(c,bounds)}
+
+    fun show_free({freeevars, freecvars,...} : frees) =
+	(print "freeevars are: "; VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) freeevars; print "\n";
+	 print "freecvars are: "; VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) freecvars; print "\n")
 
     (* -------------- types and values manipulating functions and related information ------- *)
     type funentry = {static : {fid : fid, 
@@ -99,6 +133,7 @@ struct
 	fun get_escape caller = (case (VarMap.find(!fids,caller)) of
 				     NONE => error ((Name.var2string caller) ^ "fid not found for get_escape")
 				   | SOME (ref{escape,...}) => escape)
+
 	fun add_frees (fid,f) =
 	    (case (VarMap.find(!fids,fid)) of
 		 NONE => error ((Name.var2string fid) ^ "fid not found for add_frees")
@@ -107,15 +142,29 @@ struct
 			   escape = escape,
 			   callee = callee,
 			   frees = join_free(frees,f)})
-		 
+
+	fun augment_frees (fid,evars,cvars) =
+	    (case (VarMap.find(!fids,fid)) of
+		 NONE => error ((Name.var2string fid) ^ "fid not found for aug_frees")
+	       | SOME (r as (ref{static,escape,callee,frees})) =>
+		     let val f = {freeevars=evars,
+				  freecvars=cvars,
+				  boundevars=VarSet.empty,
+				  boundcvars=VarSet.empty}
+			 val (same,frees) = join_free'(frees,f)
+		     in  if same 
+			     then false
+			 else 
+			     (r := {static = static,
+				    escape = escape,
+				    callee = callee,
+				    frees = frees}; true)
+		     end)
     end
 
 
 
-
     (* ---------------- code to perform the initial free-variable computation ------------- *)
-    type freevars = {freeevars : con VarMap.map,
-		     freecvars : kind VarMap.map}
     local
 	datatype expentry = GLOBALe of con | LOCALe of con | SHADOWe of con
 	datatype conentry = GLOBALc of kind | LOCALc of kind | SHADOWc of kind
@@ -169,19 +218,28 @@ struct
 	fun is_boundfid(STATE{boundfids,...}, f) = VarSet.member(boundfids,f)
 
 
-	fun free_cvar (STATE{boundcvars,...},cvar) = 
-	    {freeevars = VarMap.empty,
+	fun locale_map2set m = (VarMap.foldli (fn (v,LOCALe _,s) => VarSet.add(s,v) | (_,_,s) => s) 
+				VarSet.empty m)
+	fun localc_map2set m = (VarMap.foldli (fn (v,LOCALc _,s) => VarSet.add(s,v) | (_,_,s) => s) 
+				VarSet.empty m)
+
+	fun free_cvar (STATE{boundcvars,boundevars,...},cvar) = 
+	    {boundevars = locale_map2set boundevars,
+	     boundcvars = localc_map2set boundcvars,
+	     freeevars = VarMap.empty,
 	     freecvars = (case (VarMap.find(boundcvars,cvar)) of
 			      SOME ((GLOBALc _) | (LOCALc _)) => VarMap.empty
 			    | SOME (SHADOWc k) => VarMap.insert(VarMap.empty,cvar,k)
 			    | NONE => error ("free_cvar: variable " ^
 					     (var2string cvar) ^ " not bound"))}
 
-	fun free_evar (STATE{boundevars,...},evar) = 
-	    {freeevars = (case (VarMap.find(boundevars,evar)) of
+	fun free_evar (STATE{boundcvars,boundevars,...},evar) = 
+	    {boundevars = locale_map2set boundevars,
+	     boundcvars = localc_map2set boundcvars,
+	     freeevars = (case (VarMap.find(boundevars,evar)) of
 			      SOME ((GLOBALe _) | (LOCALe _)) => VarMap.empty
 			    | SOME (SHADOWe c) => VarMap.insert(VarMap.empty,evar,c)
-			    | NONE => error ("free_cvar: variable " ^
+			    | NONE => error ("free_evar: variable " ^
 					     (var2string evar) ^ " not bound")),
 	    freecvars = VarMap.empty}
 
@@ -209,7 +267,7 @@ struct
 	fun get_curfid(STATE{curfid,...}) = curfid
 
     fun remove_free(s as (STATE{boundevars,boundcvars,...}),
-		    {freeevars,freecvars}) = 
+		    {freeevars,freecvars,boundcvars=bc,boundevars=be}) : frees = 
 	let 
 (*
 	    val _ = (print "\nfreeevars has ";
@@ -229,7 +287,8 @@ struct
 		     print "\n")
 *)
 	in  {freeevars = freeevars',
-	     freecvars = freecvars'}
+	     freecvars = freecvars',
+	     boundcvars=bc,boundevars=be}
 	end
 
     in  type state = state
@@ -245,15 +304,17 @@ struct
 	val add_boundfids = add_boundfids
 	val get_curfid = get_curfid
 	val remove_free = remove_free
+	val is_boundevar = is_boundevar
+	val is_boundcvar = is_boundcvar
     end
 
-    fun bnd_find_fv (state : state) bnd : state * freevars =
+    fun bnd_find_fv (state : state) bnd : state * frees =
 	    let
 		fun vkfolder((v,k),(f,s)) = (join_free(f,k_find_fv s k), add_boundcvar(s,v,k))
 		fun vcfolder((v,c),(f,s)) = (join_free(f,(c_find_fv s c)), add_boundevar(s,v,c))
 		fun fun_type(Function(effect,recur,vklist,vclist,vflist,body,c)) = 
 		    AllArrow_c(Open,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
-		fun do_fix var_arm_set do_arm do_add get_type = 
+		fun do_fix var_arm_set do_arm do_add get_type =
 		    let val var_arm_list = set2list var_arm_set
 			val _ = app (fn (fid,_) => do_add fid) var_arm_list
 			val local_fids_types = map (fn (v,pf) => (v,get_type pf)) var_arm_list
@@ -289,6 +350,9 @@ struct
 						  (vclist @ (map (fn v => (v,float64)) vflist)))
 				     val f = join_free(f,e_find_fv s body)
 				     val f = join_free(f,c_find_fv s tipe)
+				     val _ = (print "adding the following frees to ";
+					      Ppnil.pp_var v; print "\n";
+					      show_free f; print "\n")
 				     val _ = add_frees(v,f)
 				 in  f
 				 end
@@ -299,13 +363,33 @@ struct
 	    in  (state, remove_free(state,frees))
 	    end
 	
-    and e_find_fv (state : state) exp : freevars =
+    and e_find_fv (state : state) exp : frees =
+	let val _ = if (!debug)
+			 then (print "exp_find_fv called on\n";
+			       Ppnil.pp_exp exp; print "\n\n")
+		     else ()
+	    val res = e_find_fv' state exp
+	    val _ = if (!debug)
+			 then (print "exp_find_fv called on\n";
+			       Ppnil.pp_exp exp; print "\nreturning:\n";
+			       show_free res; print "\n\n")
+		     else ()
+
+	in  res 
+	end
+
+    and e_find_fv' (state : state) exp : frees =
 	(if (!debug)
 	     then (print "exp_find_fv called on\n";
 		   Ppnil.pp_exp exp; print "\n\n")
 	 else ();
 	 case exp of
 	     Var_e v => (if (is_boundfid(state,v)) then add_escape v else ();
+			     print "In "; 
+			     Ppnil.pp_var (get_curfid state); print ": ";
+			     Ppnil.pp_var v; 
+			     if (is_boundevar(state,v)) then print "is bound\n" else print "is not bound\n";
+				 show_free (free_evar(state,v)); print "\n";
 			     free_evar(state,v))
 	   | Const_e v => 
 		 (case v of
@@ -318,11 +402,13 @@ struct
 		    | Prim.refcell (ref e) => (e_find_fv state e)
 		    | Prim.tag (_,c) => (c_find_fv state c))
 	   | Let_e (_,bnds,e) => (* treat as though a sequential let *)
-		 let fun folder (bnd,(state,frees)) = bnd_find_fv state bnd 
-		     val (state',funfree) = foldl folder (state,empty_frees) bnds
-		     val bodyfree = e_find_fv state' e
-		 in  join_free(funfree,bodyfree)
-		 end
+		      let fun folder (bnd,(state,frees)) = let val (state,frees') = bnd_find_fv state bnd
+							   in  (state,join_free(frees,frees'))
+							   end
+			  val (state',funfree) = foldl folder (state,empty_frees) bnds
+			  val bodyfree = e_find_fv state' e
+		      in  remove_free(state',join_free(funfree,bodyfree))
+		      end
 	   | Prim_e (ap,clist,elist) =>
 		 let fun cfold(c,f) = join_free(f,c_find_fv state c)
 		     fun efold(e,f) = join_free(f,e_find_fv state e)
@@ -370,7 +456,10 @@ struct
 	   | App_e (Open, e, clist, elist, eflist) =>
 		 let val free1 = (case e of
 				      Var_e v => if (is_fid v)
-						     then (add_callee(get_curfid state,v);
+						     then (print "***** adding callee ";
+							   Ppnil.pp_var v; print " to ";
+							   Ppnil.pp_var (get_curfid state); print "\n";
+							   add_callee(get_curfid state,v);
 							   empty_frees)
 						 else (e_find_fv state e)
 				    | _ => (e_find_fv state e))
@@ -392,7 +481,7 @@ struct
 	   | Handle_e _ => error "ill-typed Handle_e")
 
 		 
-	and c_find_fv (state : state) con : freevars =
+	and c_find_fv (state : state) con : frees =
 	    (if (!debug)
 		 then (print "c_find_fv called on\n";
 		       Ppnil.pp_con con; print "\n\n")
@@ -429,7 +518,7 @@ struct
 		     end
 	       | Let_c(_,cbnds,c) => 
 		     let 
-			 fun cb_folder (Con_cb(v,k,c),(f,s)) = 
+			 fun cb_folder (Con_cb(v,k,c),(f,s)) =
 			     let val f' = c_find_fv s c
 			     in (join_free(f, f'), add_boundcvar(s,v,k))
 			     end
@@ -444,7 +533,7 @@ struct
 			     in  (join_free(f, f'), add_boundcvar(s,v,k))
 			     end
 			 val (f,s) = foldl cb_folder (empty_frees,state) cbnds
-			 val f' = c_find_fv s c
+			 val f' = remove_free(s,c_find_fv s c)
 		     in  join_free(f, f')
 		     end
 	       | Crecord_c lclist => let val flist = map (fn (_,c) => c_find_fv state c) lclist
@@ -458,7 +547,7 @@ struct
 				   end
 	       | Annotate_c (_,c) => c_find_fv state c)
 		 
-	and k_find_fv state kind : freevars =
+	and k_find_fv state kind : frees =
 	    (case kind of
 	    ((Type_k _) | (Word_k _)) => empty_frees
 	  | (Singleton_k (p,k,c)) => (k_find_fv state k; (c_find_fv state c))
@@ -477,23 +566,37 @@ struct
 
 
    (* ------- compute the final free-variable list by closing over the callgraph ------ *)
+
    local
        fun close_fun (curfid,nextset) = 
 	   let val fvs = get_frees curfid
 	       val callees = get_callee curfid
 	       val callee_fvs = VarSet.foldl (fn (f,fv) => join_free(get_frees f, fv)) empty_frees callees
-	       fun map_isSubset(m1,m2) = VarMap.foldli (fn (k,_,f) => f andalso map_member(m2,k)) true m1
-	       fun subset_free({freeevars=e1,freecvars=c1},{freeevars=e2,freecvars=c2}) = 
-		   map_isSubset(e1,e2) andalso map_isSubset(c1,c2)
-	   in if (subset_free(callee_fvs,fvs))
-		  then nextset
-	      else (add_frees(curfid,callee_fvs);
-		    VarSet.add(nextset,curfid))
+	       val {freeevars=fe,freecvars=fc,...} = fvs
+	       val changed = augment_frees(curfid,fe,fc)
+	   in if changed
+		  then VarSet.add(nextset,curfid)
+	      else nextset
 	   end
    in  fun close_funs workset = 
-       if (VarSet.isEmpty workset)
-	   then ()
-       else close_funs (VarSet.foldl close_fun VarSet.empty workset)
+       let  val _ = (print "before close_funs";
+		     VarSet.app (fn fid => (print ("fid = ");
+					    Ppnil.pp_var fid; print " --   callees are "; 
+					    VarSet.app (fn fid => (Ppnil.pp_var fid; print " ")) (get_callee fid);
+					    print "\n";
+					    show_free(get_frees fid); print "\n")) (get_fids());
+		     print "\n\n")
+	   val res = if (VarSet.isEmpty workset)
+			 then ()
+		     else close_funs (VarSet.foldl close_fun VarSet.empty workset)
+	   val _ = (print "after close_funs";
+		    VarSet.app (fn fid => (print ("fid = ");
+				    Ppnil.pp_var fid; print " -- "; 
+				    show_free(get_frees fid))) (get_fids());
+		    print "\n\n")
+       in res
+       end
+   
    end
 
 
@@ -526,7 +629,7 @@ struct
 		       then (print "fun_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
 	   val {code_var, unpack_var, ...} = get_static v
-	   val {freeevars,freecvars} = get_frees v
+	   val {freeevars,freecvars,...} = get_frees v
 	   val vklist = map (fn (v,k) => (v,k_rewrite k)) vklist
 	   val vclist = map (fn (v,c) => (v,c_rewrite c)) vclist
 	   val escape = get_escape v
@@ -636,7 +739,7 @@ struct
 		let val clist' = map c_rewrite clist
 		    val elist' = map e_rewrite elist
 		    val eflist' = map e_rewrite eflist
-		    fun docall (cv,{freeevars, freecvars}) = 
+		    fun docall (cv,{freeevars, freecvars,...} : frees) = 
 			let val clist'' = map (fn (v,_) => Var_c v) (VarMap.listItemsi freecvars)
 			    val elist'' = map (fn (v,_) => Var_e v) (VarMap.listItemsi freeevars)
 			in App_e(Code, Var_e cv, clist' @ clist'', elist' @ elist'', eflist')
@@ -660,7 +763,7 @@ struct
 		       then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
 	   val {code_var, unpack_var, ...} = get_static v
-	   val {freeevars,freecvars} = get_frees v (* freeevars must be empty *)
+	   val {freeevars,freecvars,...} = get_frees v (* freeevars must be empty *)
 	   val vk_free = (VarMap.listItemsi freecvars)
 	   val cfv_var = fresh_named_var "free_cons"
 	   fun get_cbnd (i,(v,k)) = Con_cb(v,k, Proj_c(Var_c cfv_var,
@@ -721,7 +824,7 @@ struct
 	   val top_fid = fresh_named_var "top_fid"
 	   val _ = add_fun top_fid
 	   val state = initial_state top_fid
-	   val {freeevars,freecvars} = e_find_fv state arg_exp
+	   val {freeevars,freecvars,...} = e_find_fv state arg_exp
 	   val _ = if (!debug)
 		       then (print "Done with e_find_fv\n";
 			     print "free is empty: ";
@@ -741,7 +844,7 @@ struct
        let val _ = reset_table Name.VarMap.empty
 	   val top_fid = fresh_named_var "top_fid"
 	   val state = initial_state top_fid
-	   val {freeevars,freecvars} = c_find_fv state arg_con
+	   val {freeevars,freecvars,...} = c_find_fv state arg_con
 	   val _ = if (!debug)
 		       then (print "Done with c_find_fv\n";
 			     print "free is empty: ";
@@ -761,7 +864,7 @@ struct
        let val _ = reset_table Name.VarMap.empty
 	   val top_fid = fresh_named_var "top_fid"
 	   val state = initial_state top_fid
-	   val {freeevars,freecvars} = k_find_fv state arg_kind
+	   val {freeevars,freecvars,...} = k_find_fv state arg_kind
 	   val _ = if (!debug)
 		       then 
 			   (print "Done with k_find_fv\n";
@@ -784,7 +887,7 @@ struct
 	   val _ = add_fun top_fid
 	   val state = initial_state top_fid
 	   val arg_exp = Let_e(Sequential, bnds, Const_e (Prim.int (Prim.W32, TilWord64.fromInt 0)))
-	   val {freeevars,freecvars} = e_find_fv state arg_exp
+	   val {freeevars,freecvars,...} = e_find_fv state arg_exp
 	   val _ = if (!debug)
 		       then (print "Done with e_find_fv\n";
 			     print "free is empty: ";

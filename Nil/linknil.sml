@@ -12,7 +12,7 @@ sig
 
 end
 
-structure Linknil : LINKNIL =
+structure Linknil (* : LINKNIL *) =
 struct
 
     val error = fn s => Util.error "linknil.sml" s

@@ -13,7 +13,7 @@ signature NILEVAL =
 	val eval_exp : Nil.exp -> result
 	val eval_con : Nil.con -> Nil.con
 
-	val eval_mod : Nil.con * Nil.exp -> result
+	val eval_mod : Nil.module -> result
 
     end
 

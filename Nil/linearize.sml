@@ -90,7 +90,14 @@ struct
 
    fun lbnd state arg_bnd : state * bnd list =
        let val _ = state_stat "lbnd" state
-	   fun vf_help(v,f) = (v, lfunction state f)
+	   fun add_vars state vx_set = foldl (fn ((v,_),s) => #1(add_var(s,v))) state (set2list vx_set)
+	   fun vf_help wrapper vf_set = 
+	       let val vf_list = set2list vf_set
+		   val state = add_vars state vf_set
+		   val vf_list = map (fn (v,f) => (find_var(state,v),
+						   lfunction state f)) vf_list
+	       in  (state, [wrapper (list2set vf_list)])
+	       end
 	   fun vcl_help(v,{code,cenv,venv,tipe}) = 
 	       let val (bnd_cenv,cenv') = lcon2 state cenv
 		   val (bnd_venv,venv') = lexp state venv
@@ -99,7 +106,7 @@ struct
 	       in  (bnd,(v,{code=code',cenv=cenv',venv=venv',tipe=tipe}))
 	       end
 	   fun mapset f s = list2set(map f (set2list s))
-	   fun add_vars state vx_set = foldl (fn ((v,_),s) => #1(add_var(s,v))) state (set2list vx_set)
+
        in  (case arg_bnd of
 		Con_b (v,k,c) => let val (cbnds,c) = lcon state c
 				     val (cbnds_k,k) = lkind state k
@@ -113,8 +120,8 @@ struct
 				     val bnd = Exp_b(v,c,e)
 				 in  (state, bnds @ bnds_c @ [bnd])
 				 end
-	      | Fixopen_b vf_set => (add_vars state vf_set, [Fixopen_b(mapset vf_help vf_set)])
-	      | Fixcode_b vf_set => (add_vars state vf_set,[Fixcode_b(mapset vf_help vf_set)])
+	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
+	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
 	      | Fixclosure_b vcl_set => let val state' = add_vars state vcl_set
 					    val vcl_list = set2list vcl_set
 					    val bnd_vcl = map vcl_help vcl_list
@@ -159,7 +166,7 @@ struct
 	let 
 	    val self = lexp state
 	in  case arg_exp of
-	    Var_e _ => ([],arg_exp)
+	    Var_e v => ([],Var_e(find_var(state,v)))
 	  | Const_e _ => ([],arg_exp)
 	  | Let_e (_,bnds,e) => 
 		let fun folder (bnd,(s,acc)) = let val (s,bnds) = lbnd s bnd
