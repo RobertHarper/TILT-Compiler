@@ -1,12 +1,10 @@
-(*$import BACKGROUND Posix Word8 SysWord UtilError TextIO Option Int OS Util Stats *)
-
 structure Background :> BACKGROUND =
 struct
 
     val error = fn s => Util.error "background.sml" s
 
     val noFork = Stats.ff "NoFork"
-	
+
     open Posix.Process
 
     (* There is a bug either in SML/NJ's runtime or in the digital
@@ -18,24 +16,17 @@ struct
 	(waitpid_nh arg handle OS.SysErr ("unknown child status", _) =>
 	    (print "Warning: caught and ignored an unknown child status\n";
 	     NONE))
-	    
-    structure Signal = Posix.Signal
 
-    val zero = Word8.fromInt 0
-    val one = Word8.fromInt 1
+    structure Signal = Posix.Signal
 
     val statusToString : Word8.word -> string =
 	Int.toString o Word8.toInt
-	
+
     val pidToString : pid -> string =
 	Int.toString o SysWord.toInt o pidToWord
-	
+
     val signalToString : Signal.signal -> string =
 	Int.toString o SysWord.toInt o Signal.toWord
-
-    (* printError : exn -> unit *)
-    fun printError (UtilError.BUG msg) = print ("tilt: " ^ msg ^ "\n")
-      | printError e = print ("tilt: " ^ exnMessage e ^ "\n")
 
     (* background : (unit -> unit) -> unit -> bool *)
     fun background f =
@@ -46,9 +37,7 @@ struct
 	in
 	    case fork()
 	      of NONE =>		(* child process *)
-		  let val status = (f(); zero) handle e => (printError e; one)
-		  in  exit status
-		  end
+		  ((f(); exit 0w0) handle e => ExnHandler.printAndExit e)
 		| SOME pid =>		(* parent process *)
 		  let
 		      local
@@ -60,12 +49,12 @@ struct
 			      else (exit_status := Option.map #2 (my_waitpid_nh (W_CHILD pid, []));
 				    !exit_status)
 		      end
-		  
+
 		      fun isdone () =
 			  case get_status()
 			    of NONE => false
 			     | SOME W_EXITED => true
-			     | SOME (W_EXITSTATUS s) => if s = zero then true
+			     | SOME (W_EXITSTATUS s) => if s = 0w0 then true
 							else error ("child " ^ pidToString pid ^
 								    " exitted with status " ^ statusToString s)
 			     | SOME (W_SIGNALED s) => error ("child " ^ pidToString pid ^
@@ -75,11 +64,11 @@ struct
 		      isdone
 		  end
 	end
-    
+
     (* Handle noFork *)
     val background = (fn f =>
 		      if (!noFork) then
 			  (f(); fn () => true)
 		      else background f)
-	
+
 end
