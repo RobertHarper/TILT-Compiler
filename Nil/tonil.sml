@@ -4058,6 +4058,13 @@ end (* local defining splitting context *)
 		       else
 			   (filtering l; result)
 		   end
+              | filter_imports ((ib as ImportBnd cb) :: rest) =
+		   let
+		       val result as (imports, used) = filter_imports rest
+		   in
+		       (ib :: imports, 
+			used)
+		   end
 
 	    val imports = if (!killDeadImport) then 
 	                    #1 (filter_imports imports) 

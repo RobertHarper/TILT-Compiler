@@ -178,10 +178,10 @@ structure Linknil :> LINKNIL  =
 
 (*
 
-	    val nilmod = transform sing_elim (SingletonElim.R_module, nilmod)*)
+	    val nilmod = transform sing_elim (SingletonElim.R_module, nilmod)
 
 	    val nilmod = transform rename (Linearize.linearize_mod, nilmod)
-
+*)
 	    val nilmod = transform hoist1 (Hoist.optimize, nilmod)
 
 	    val nilmod = transform optimize1 

@@ -377,6 +377,9 @@ struct
   fun reduce_to_arrow ({env,...}:state) c = 
       Normalize.strip_arrow_norm (#1 env) c
 
+  fun kind_of_cbnd ({env=(D,_),...}:state) c =
+      NilStatic.kind_of_cbnd (D, c)
+
   fun reduce_to_nondep_record ({env,...} : state) con =
       (case #2 (subtimer("RTL_reduce_hnf",Normalize.reduce_hnf) (#1 env,con)) of
 	 Prim_c (Record_c labs, cons) => (labs, cons)

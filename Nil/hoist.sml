@@ -380,6 +380,9 @@ struct
 	fun stripArrow (ENV{context,...}, c) =
 	    Normalize.strip_arrow_norm context c
 
+	fun kind_of_cbnd (ENV{context,...}, c) =
+	    NilStatic.kind_of_cbnd (context, c)
+
 	(* insertLabel : env * label * var -> env *)
 	fun insertLabel (ENV{currentlevel,context,econtext,levelmap,lastfnlevel}, l, v) =
 	    let
@@ -1679,24 +1682,46 @@ struct
 	  (* mark imports as top-level variables;
              estimate totality of term-level imports *)
 
-	  fun split ([], env) = env
-	    | split (ImportValue(l,v,_,c)::rest, env) =
+	  fun split ([], env, imps) = (env, rev imps)
+	    | split ((imp as ImportValue(l,v,_,c))::rest, env, imps) =
 	      let
 		  val env = bindLevel(env, v, toplevel)
 		  val env = bindEff(env, v, con2eff c)
 	      in
-		  split(rest, env)
+		  split(rest, env, imp :: imps)
 	      end
-	    | split (ImportType(l,v,k)::rest, env) = 
+	    | split ((imp as ImportType(l,v,k))::rest, env, imps) = 
 	      let
 		  val env = insertKind(env, v, k)
 		  val env = insertLabel(env, l, v)
 		  val env = bindLevel(env, v, toplevel)
 	      in
-		  split(rest, env)
+		  split(rest, env, imp :: imps)
+	      end
+	    | split (ImportBnd (phase, cb)::rest, env, imps) = 
+	      let
+		  (*val (inner_env, state, inner_level) = 
+		      bumpCurrentlevel (env, empty_state)*)
+
+		  val (inner_env, state) =
+		      rcbnd (cb, env, empty_state)
+
+		  val (bnds, _, _) = extractCbnds (state, toplevel)
+
+		  fun folder (cb, env) = 
+		      let
+			  val (v, k) = kind_of_cbnd (env, cb)
+			  val env = insertKind(env, v, k)
+			  val env = bindLevel(env, v, toplevel)
+		      in
+			  (ImportBnd (phase, cb), env)
+		      end
+		  val (bnds, env) = Listops.foldl_acc folder env bnds
+	      in
+		  split(rest, env, List.revAppend(bnds, imps))
 	      end
 
-	  val initial_env = split (imports, empty_env)
+	  val (initial_env, imports) = split (imports, empty_env, [])
 	  val initial_state = empty_state
 
           val _ = print "Imports Processed\n"

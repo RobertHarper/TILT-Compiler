@@ -788,11 +788,15 @@ struct
       fun con_size argcon = let val (count,handlers) = count_handler()
 			    in  (f_con handlers argcon; !count)
 			    end
+      fun cbnd_size argbnd = let val (count,handlers) = count_handler()
+			     in  (f_cbnd handlers argbnd; !count)
+			     end
       fun kind_size argkind = let val (count,handlers) = count_handler()
 			     in  (f_kind handlers argkind; !count)
 			     end
       fun import_size (ImportValue (_,_,_,c)) = 1 + con_size c
 	| import_size (ImportType (_,_,k)) = 1 + kind_size k
+	| import_size (ImportBnd (_, cb)) = 1 + cbnd_size cb
       fun export_size (ExportValue (_,v)) = 2
 	| export_size (ExportType (_,v)) = 2
       fun module_size (MODULE{bnds,imports,exports}) =

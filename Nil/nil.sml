@@ -237,6 +237,7 @@ struct
 
   datatype import_entry = ImportValue of label * var * niltrace * con
                         | ImportType  of label * var * kind
+                        | ImportBnd   of phase * conbnd
 
   datatype export_entry = ExportValue of label * var
                         | ExportType  of label * var

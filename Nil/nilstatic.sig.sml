@@ -83,6 +83,8 @@ signature NILSTATIC =
       *)
 *)
 
+    val kind_of_cbnd : context * Nil.conbnd -> Nil.var * Nil.kind
+  (* Given a context and a constructor binding, returns the variable bound and the kind of the binding *)
   end
 
 

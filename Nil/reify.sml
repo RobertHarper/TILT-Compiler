@@ -486,11 +486,37 @@ struct
       | reify_exports ctxt ((ExportValue _)::exports, pset) =
 	reify_exports ctxt (exports, pset)
 	
-    fun reify_imports ([], ctxt, is') = (ctxt, rev is')
-      | reify_imports ((imp as ImportType (l, v, k)) :: is,
-		       ctxt, is') =
-	reify_imports (is, NilContext.insert_label(NilContext.insert_kind(ctxt, v, k),l,v), imp :: is')
-      | reify_imports (ImportValue (l, v, nt, c) :: is, ctxt, is') = 
+    fun reify_mod' ([], ctxt, MODULE {bnds, exports, ...}) =
+	let
+	    val (bnds', BODY_EXPORTS exports', pset) = 
+                  reify_seq_bnds ctxt (bnds, BODY_EXPORTS exports, empty_pset)
+	in
+	    (bnds', exports', pset, ctxt, [])
+	end
+      | reify_mod' ((imp as ImportType (l, v, k)) :: is,
+		       ctxt, module) =
+	let
+	    val ctxt = NilContext.insert_kind(ctxt, v, k)
+	    val ctxt = NilContext.insert_label(ctxt, l, v)
+
+	    val (bnds', exports', pset, ctxt, is') =
+		reify_mod' (is, ctxt, module)
+	in
+	    (bnds', exports', pset, ctxt, imp :: is')
+	end
+      | reify_mod' (ImportBnd (_, cb) :: is, ctxt, module) =
+	let
+	    val (v, k) = NilStatic.kind_of_cbnd (ctxt, cb)
+	    val ctxt = NilContext.insert_kind(ctxt, v, k)
+
+	    val (bnds', exports', pset, ctxt, is') =
+		reify_mod' (is, ctxt, module)
+
+	    val (phase, pset) = decide_con_b_phase ctxt (cb, pset)		
+	in
+	    (bnds', exports', pset, ctxt, ImportBnd (phase, cb) :: is')
+	end
+      | reify_mod' (ImportValue (l, v, nt, c) :: is, ctxt, module) = 
 	let
 	    val nt' = 
 		if (TraceOps.valid_trace (ctxt, nt)) then
@@ -503,17 +529,17 @@ struct
 	    val imp' = ImportValue(l, v, nt', c)
 	    val ctxt = NilContext.insert_con(ctxt, v, c)
 	    val ctxt = NilContext.insert_label(ctxt, l, v)
+
+	    val (bnds', exports', pset, ctxt, is') =
+		reify_mod' (is, ctxt, module)
 	in
-	    reify_imports (is, ctxt, imp' :: is')
+	    (bnds', exports', pset, ctxt, imp' :: is')
 	end
-
 	
-    fun reify_mod (nilmod as MODULE {bnds, imports, exports}) =
-        let val (ctxt, imports') = 
-	       reify_imports (imports, NilContext.empty (), [])
+    fun reify_mod (nilmod as MODULE {imports, ...}) =
+        let val (bnds', exports', pset, ctxt, imports') = 
+	       reify_mod' (imports, NilContext.empty (), nilmod)
 
-	    val (bnds', BODY_EXPORTS exports', pset) = 
-                  reify_seq_bnds ctxt (bnds, BODY_EXPORTS exports, empty_pset)
 	in  if (!debug) then print_pset pset else ();
             MODULE {bnds = bnds', imports = imports',
 		    exports = exports'}

@@ -831,6 +831,7 @@ struct
     in
       (ImportType (label,var,kind),state)
     end
+    | import_normalize' _ _ = raise Fail "Don't think this will be reached...."
   
   fun export_normalize' state (ExportValue (label,v)) = ExportValue (label,v)
     | export_normalize' state (ExportType (label,v)) = ExportType (label,v)

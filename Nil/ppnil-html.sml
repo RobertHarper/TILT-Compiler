@@ -477,6 +477,10 @@ structure PpnilHtml :> PPNIL =
 		     String " : ", pp_con c]
 	      |  pp_importentry (ImportType (l,v,k)) = 
 		Hbox[pp_label l, String " > ", pp_bound_var v, String " :: ", pp_kind k]
+	      |  pp_importentry (ImportBnd (Compiletime, cb)) = 
+		Hbox[String "STATIC ", pp_conbnd cb]
+	      |  pp_importentry (ImportBnd (Runtime, cb)) = 
+		Hbox[pp_conbnd cb]
 	    fun pp_exportentry (ExportValue (l,v)) = 
 		Hbox[pp_label l, String " = ", pp_var v]
 	      |  pp_exportentry (ExportType (l,v)) = 

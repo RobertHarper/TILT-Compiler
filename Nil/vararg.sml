@@ -238,6 +238,7 @@ struct
 
 	fun reduce_hnf (STATE{ctxt,...}) c = Normalize.reduce_hnf(ctxt, c)
 	fun strip_arrow_norm (STATE{ctxt,...}) c = Normalize.strip_arrow_norm ctxt c
+	fun kind_of_cbnd (STATE{ctxt,...}) cb = NilStatic.kind_of_cbnd (ctxt, cb)
     end
 
 
@@ -706,6 +707,13 @@ struct
 						      add_label(add_con(state,v,c),l,v))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_label(add_kind(state,v,k),l,v))
+	  | do_import(ImportBnd (phase, cb),state) =
+	    let
+		val (cb, state) = do_cbnd (cb, state)
+	    in
+		(ImportBnd (phase, cb),
+		 state)
+	    end
 
 	fun do_export(ExportValue(l,v),state) = (ExportValue(l,v),state)
 	  | do_export(ExportType(l,v),state)  = (ExportType(l,v),state)

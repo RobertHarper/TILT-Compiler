@@ -431,7 +431,7 @@ struct
 		      val fun_reglabel =
 			case getrep state expvar of
 			  VALUE (CODE (ML_EXTERN_LABEL s)) => LABEL' (C_EXTERN_LABEL s)
-			| LOCATION loc => REG'(load_ireg_loc(loc,NONE))
+			| LOCATION loc => (print "Bad rep for "; Ppnil.pp_exp f; print "\n"; REG'(load_ireg_loc(loc,NONE)))
 			| _ => error "bad varval for function"
 				     
 		      val (_,dest) = alloc_reg_trace state trace
@@ -1817,6 +1817,16 @@ struct
 	  (* First do the imports and exports *)
 	  fun scanImport (ImportValue(l,v,_,_),s) = Name.VarSet.add(s,v)
 	    | scanImport (ImportType(l,v,_),s) = Name.VarSet.add(s,v)
+	    | scanImport (ImportBnd (phase, cb),s) =
+	      let
+		  val v =
+		      case cb of
+			  Con_cb(v,_) => v
+			| Open_cb(v,_,_) => v
+			| Code_cb(v,_,_) => v
+	      in
+		  Name.VarSet.add(s,v)
+	      end
 	  fun scanExport (ExportValue(l,v),s) = Name.VarSet.add(s,v)
 	    | scanExport (ExportType(l,v),s) = Name.VarSet.add(s,v)
 	  val fvs = foldl scanImport Name.VarSet.empty imports
@@ -1930,6 +1940,9 @@ struct
 		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
 		 in  add_conterm (s,SOME l,v,k, SOME(LOCATION vl))
 		 end
+	       | folder (ImportBnd (phase, cb), s) =
+		 xcbnd s (phase, cb)
+
 	     val localMirrorArray = load_ireg_val(INT (if (!TortlArray.mirrorPtrArray) then 0w1 else 0w0), NONE)
 	     val _ = add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (C_EXTERN_LABEL "AssertMirrorPtrArray"),

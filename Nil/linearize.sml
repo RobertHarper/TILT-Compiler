@@ -779,25 +779,42 @@ struct
     limport (import, state) ==> (import', state'), where import is import' with its variable renamed according to state
 	and constructor (if present) A-normalized (with state' updated from state appropriately)
    *)
-   fun limport (ImportValue(l,v,tr,c),s) =
-       let val (s,v) = add_var(s,v)
-	   val _ = inc depth_lcon_import
-	   val c = lcon_flat s c
-	   val _ = dec depth_lcon_import
-       in  (ImportValue(l,v,tr,c),s)
-	   handle e => (print "exception in limport call\n";
-			raise e)
-       end
+   fun limport (imp as ImportValue(l,v,tr,c),s) =
+       (case c of
+	    ExternArrow_c _ =>
+		let val (s,v) = add_var(s,v)
+		    val _ = inc depth_lcon_import
+		    val c = lcon_flat s c
+		    val _ = dec depth_lcon_import
+		in  ([ImportValue(l,v,tr,c)],s)
+		    handle e => (print "exception in limport call\n";
+				 raise e)
+		end
+	  | _ =>
+		let val (s,v) = add_var(s,v)
+		    val _ = inc depth_lcon_import
+		    val (cbs, c) = lcon_lift s c
+		    val _ = dec depth_lcon_import
+		in  ((map (fn cb => ImportBnd (Runtime, cb)) cbs) @ [ImportValue(l,v,tr,c)],s)
+		    handle e => (print "exception in limport call\n";
+				 raise e)
+		end)
      | limport (ImportType(l,v,k),s) =
        let val (s,v) = add_var(s,v)
-       in  (ImportType(l,v,lkind s k),s)
+       in  ([ImportType(l,v,lkind s k)],s)
        end
+     | limport (imp as ImportBnd _,s) = ([imp],s)
 
    (*
     val limports : import_entry list * state -> import_entry_list * state
     limports (imports, state) ==> folding of limport over imports using state
    *)
-   fun limports (imports,s) = foldl_acc limport s imports
+   fun limports (imports,s) =
+       let
+	   val (imps, s) = foldl_acc limport s imports
+       in
+	   (List.concat imps, s)
+       end
 
    (*
     val linearize_exp : exp -> exp

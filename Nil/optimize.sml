@@ -463,9 +463,11 @@ struct
 	  fun reduce_vararg(STATE{equation,...},openness,effect,argc,resc,arg) = 
 	      subtimer("optimizeReduceVararg", Vararg.reduce_vararg)(equation,openness,effect,argc,resc,arg)
 
+	  fun kind_of_cbnd(STATE{equation,...},c) =
+	      NilStatic.kind_of_cbnd (equation, c)
+
 	  fun reduce_onearg(STATE{equation,...},openness,effect,argc,resc,arg) = 
 	      subtimer("optimizeReduceOnearg", Vararg.reduce_onearg)(equation,openness,effect,argc,resc,arg)
-
 
 	  fun find_availC(STATE{avail,params,...},c) = 
 	      if (#doCse params) then ExpTable.Conmap.find(#2 avail,c) else NONE
@@ -1802,6 +1804,13 @@ struct
 						      add_label(add_con(state,v,c),l,v))
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_label(add_kind(state,v,k),l,v))
+	  | do_import(ImportBnd (phase, cb),state)  =
+	    let
+		val (cb, state) = do_cbnd (cb, state)
+	    in
+		(ImportBnd (phase, cb), 
+		 state)
+	    end
 
 	fun do_export state (ExportValue(l,v)) = 
 	    let val v = (case lookup_alias(state,v) of
@@ -1837,6 +1846,24 @@ struct
 	      val bnds = flattenBnds bnds
 	      val _ = chat_stats ()
 
+	      fun import_used (ImportBnd (_, cbnd)) = cbnd_used state cbnd
+		| import_used _ = true
+	      val imports = List.filter import_used imports
+
+	      val _ = if !chat then
+		(print "\t";
+		 print (Int.toString (!folds_reduced));
+		 print " fold/unfold pairs reduced\n";
+		 print "\t";
+		 print (Int.toString (!coercions_cancelled));
+		 print " coercion pairs reduced\n";
+		 print "\t";
+		 print (Int.toString (!switches_flattened));
+		 print " int switches flattened\n" ;
+		 print "\t";
+		 print (Int.toString (!switches_reduced));
+		 print " known switches reduced\n" 
+		 ) else ()
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end
 

@@ -1720,6 +1720,16 @@ struct
 	       let val f = k_find_fv (state,empty_frees) k
 	       in  add_gboundcvar(state,v,k)
 	       end
+	     | import_folder (ImportBnd (_, cb),state) =
+	       let
+		   val v =
+		       case cb of
+			   Con_cb (v, _) => v
+			 | Open_cb (v, _, _) => v
+			 | Code_cb (v, _, _) => v
+	       in
+		   add_gboundcvar(state,v,Type_k)
+	       end
 	   val _ = chat "  Scanning for free variables\n"
 	   val state = foldl import_folder state imports
 	   val ({free_evars,free_cvars,...},state) = foldl bnd_find_fv (empty_frees,state) bnds
@@ -1763,6 +1773,13 @@ struct
 		   val D = insert_kind(D, v, k)
 		   val D = insert_label(D, l, v)
 	       in  (ImportType(l,v,k),D)
+	       end
+	     | import_folder (ImportBnd (phase, cb),D) =
+	       let val cb = List.last (cbnd_rewrite initial_state cb)
+		   val (v, k) = NilStatic.kind_of_cbnd (D, cb)
+		   val D = insert_kind(D, v, k)
+	       in
+		   (ImportBnd (phase, cb),D)
 	       end
 	   val (imports', D) = Listops.foldl_acc import_folder (NilContext.empty()) imports
 

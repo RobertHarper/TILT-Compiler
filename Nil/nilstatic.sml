@@ -1360,6 +1360,17 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     end
 
 
+  and kind_of_cbnd (D, cbnd) =
+      let
+	  val v =
+	      case cbnd of
+		  Con_cb (v, _) => v
+		| Open_cb (v, _, _) => v
+		| Code_cb (v, _, _) => v
+	  val con = Let_c(Sequential, [cbnd], Var_c v)
+      in
+	  (v, NilRename.renameKind (con_valid (D, con)))
+      end
   
   and con_valid' (D : context, constructor : con) : kind = 
     let
@@ -2383,6 +2394,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		    else ()
 	in
 	  D
+	end
+	| import_valid' (ImportBnd (_, cb),D) = 
+	let
+	    val (var,kind) = kind_of_cbnd (D, cb)
+	    val D = insert_stdkind(D,var,kind)
+	in
+	    D
 	end
 
       fun import_valid (D,import) = import_valid' (import,D)
