@@ -279,7 +279,7 @@ struct
 	    val _ = cleanup()
 	    val expected = read_result resultfile
 	    val actual =
-		(case run_program [tilt,"-m",mapfile]
+		(case run_program [tilt,"-fTypecheck","-m",mapfile]
 		   of Exit (0, _) => Raw (run_program [binary])
 		    | Exit (10, _) => Reject
 		    | Exit _ => Bomb
