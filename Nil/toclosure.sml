@@ -601,7 +601,12 @@ struct
 					     in  trace_find_fv(state, frees) tr
 					     end))
 	   | Prim_e (p,clist,elist) =>
-		 let fun tfold(t,f) = t_find_fv (state,f) t
+		 let val p = 
+		     (case p of
+			  NilPrimOp(make_vararg(_,e)) => NilPrimOp(make_vararg(Closure,e))
+			| NilPrimOp(make_onearg(_,e)) => NilPrimOp(make_onearg(Closure,e))
+			| _ => p)
+		     fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
 		     val frees = if (NilUtil.allprim_uses_carg p)
