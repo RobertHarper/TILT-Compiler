@@ -207,7 +207,7 @@ struct
 
 	   fun checkloop (Il.MOD_PROJECT(module, lbl), accum) =
 	            if (N.is_dt lbl) then
-	              error "Use of datatype label detected"
+		      error "Use of datatype label detected"
 		    else
 		      checkloop (module, lbl :: accum)
              | checkloop (module, accum) = (module, accum)
@@ -3761,6 +3761,7 @@ end (* local defining splitting context *)
 	   val (knd, con) = xsig context' (Proj_c(con0, lbl), signat)
 
 	   val context' = update_NILctx_insert_kind(context', var_c, knd)
+	   val context' = update_NILctx_insert_con(context', var_r,con)  
 
 	   val {crdecs, erdecs} =
 	       xsdecs' context' (con0,
