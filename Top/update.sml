@@ -37,11 +37,11 @@ struct
     val UpdateDebug = Stats.ff "UpdateDebug"
     fun debugdo f = if !UpdateDebug then (f(); ()) else ()
 
-    val UpdateDiag = Stats.ff("UpdateDiag")
+    val UpdateDiag = Stats.tt("UpdateDiag")
     fun msg str = if (!UpdateDiag) then print str else ()
 
     val ShowPlan = Stats.ff "ShowPlan"
-    val ShowStale = Stats.ff "ShowStale"
+    val ShowStale = Stats.tt "ShowStale"
     val KeepAsm = Stats.tt "KeepAsm"
     val CompressAsm = Stats.ff "CompressAsm"
     val UptoElaborate = Stats.ff "UptoElaborate"
@@ -425,7 +425,8 @@ struct
 	else FileCache.write_info (infoFile, info)
 
     fun make_precontext (eq : equiv, context : context) : precontext =
-	map (fn (name, iface) => (name, Paths.ifaceFile iface)) context
+	(Prelink.check (eq, map importEntry context);
+	 map (fn (name, iface) => (name, Paths.ifaceFile iface)) context)
 
     fun plan_srci (eq : equiv, context, imports, iface : Paths.iface) : plan =
 	let val what = Paths.ifaceName iface
@@ -434,10 +435,6 @@ struct
 	    val precontext = make_precontext (eq, context)
 	    val info = srci_info (precontext, imports, iface)
 	    val uptodate = check (eq, infoFile, info)
-	    val _ =
-		if uptodate
-		then Prelink.check (eq, map importEntry context)
-		else ()
 	    val exists = FileCache.exists (Paths.ifaceFile iface)
 	    val plan = if uptodate andalso exists
 		       then (writeInfo (infoFile,info); EMPTY_PLAN)
@@ -461,10 +458,6 @@ struct
 		       then srcu_info (precontext, imports, iface, unit)
 		       else Info.PRIMU
 	    val uptodate = check (eq, infoFile, info)
-	    val _ =
-		if uptodate
-		then Prelink.check (eq, map importEntry context)
-		else ()
 	    val uptoElaborate = !UptoElaborate
 	    val uptoAsm = !UptoAsm
 	    val keepAsm = !KeepAsm
@@ -540,7 +533,6 @@ struct
 	    val Ucrc = FileCache.crc Uiface
 	    val Icrc = FileCache.crc Iiface
 	    val precontext = make_precontext (eq, context)
-	    val _ = Prelink.check (eq, map importEntry context)
 	    val plan = if eq (Ucrc,Icrc) then EMPTY_PLAN
 		       else CHECK (precontext, U, I)
 	    val _ = showPlan (what, plan)
