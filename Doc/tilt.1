@@ -1,5 +1,12 @@
 .\" TILT manual page
 .\"
+.\" Portability note (from rc man page):
+.\" Note that sentences should end at the end of a line.  nroff and
+.\" troff will supply the correct intersentence spacing, but only if
+.\" the sentences end at the end of a line.  Explicit spaces, if given,
+.\" are apparently honored and the normal intersentence spacing is
+.\" suppressed.
+.\"
 .\" Use .BE and .EE to bracket example code.
 .\" BE
 .de BE
@@ -23,104 +30,115 @@ tilt \- Standard ML compiler
 .RI [ mapfile " .\|.\|.]"
 .SH DESCRIPTION
 The TILT (or TIL-Two) Compiler Project is a joint effort between
-researchers at Cornell and Carnegie Mellon.  The goal of the project
-is to produce a compiler for SML'97 that takes advantage of types
-throughout compilation in order to produce better code without
-compromising safety or correctness.
+researchers at Cornell and Carnegie Mellon.
+The goal of the project is to produce a compiler for SML'97 that takes
+advantage of types throughout compilation in order to produce better
+code without compromising safety or correctness.
 .PP
 TILT has sparc and alpha back-ends and will only produce executables
-on those platforms.  You can run slaves
-.RB ( -s
+on those platforms.
+You can run slaves
+.RB ( \-s
 or
-.BR -S )
+.BR \-S )
 on any platform for which TILT has been compiled.
 .SH OPTIONS
 .TP
 .RI [ mapfile " .\|.\|.\|]"
-This is the primary method for building SML source files.  Each
+This is the primary method for building SML source files.
+Each
 .I mapfile
-is recompiled in turn.  See
+is recompiled in turn.
+See
 .B MAKE SYSTEM
 below for information on what a mapfile is and how to set up sources
 for use with a mapfile.
 .TP
-.BI "-c " mapfile
+.BI "\-c " mapfile
 Remove object files (and other compiler-generated files)
 associated with
 .IR mapfile .
 .TP
-.BI "-m " mapfile
+.BI "\-m " mapfile
 Perform a parallel make of
 .IR mapfile ,
-using the current host as master.  Any slaves launched in the current
-directory will contribute to the compilation.
+using the current host as master.
+Any slaves launched in the current directory will contribute to the
+compilation.
 .TP
-.B -s
+.B \-s
 This flag causes TILT to act as a slave for any (future or on-going)
 parallel make in the current directory.
 .TP
-\fB-S\fP [\fInum\fP/]\fIhost\fP
+\fB\-S\fP [\fInum\fP/]\fIhost\fP
 Launch
 .I num
 slaves on
 .I host
-in the current directory.  For this to work, you must be able to
+in the current directory.
+For this to work, you must be able to
 .BR ssh (1)
 to
 .IR host .
 .TP
-.BI "-f " flag
+.BI "\-f " flag
 Set
 .I flag
-to true.  TILT's internal flags are primarily used to debug the
-compiler and are not documented further.  If you're curious, grep for
-the strings Stats.tt and Stats.ff under /afs/cs/local/tilt/src.
+to true.
+TILT's internal flags are primarily used to debug the compiler and are
+not documented further.
+If you're curious, grep for the strings Stats.tt and Stats.ff under
+/afs/cs/local/tilt/src.
 .\" Want to list interesting flags here?
 .TP
-.BI "-r " flag
+.BI "\-r " flag
 Set
 .I flag
 to false.
 .TP
-.B -?
+.B \-?
 Print usage summary.
 .TP
-.B -v
+.B \-v
 Print version information.
 .SH MAKE SYSTEM
 The TILT make system has two components: mapfiles and import lists.
 .PP
 Mapfiles are analogous to UNIX makefiles and SML/NJ's .cm files.
 Mapfiles do not need to have any particular suffix.
-Mapfiles map logical module names to filenames.  For example,
+Mapfiles map logical module names to filenames.
+For example,
 .BE
 FooBar  Bar/foobar
 .EE
 in a mapfile would indicate that the logical module name FooBar is to
 be associated with the file Baz/foobar.sml.
-.\"
-Note that the extension .sml is omitted.  The line
+Note that the extension .sml is omitted.
+The line
 .BE
 #include mapfile-basis
 .EE
-adds associations for the standard basis library to a mapfile.  Most
-basis structures, signatures, and functors are defined in a module of
-the same name.  Examples include List, LIST, and TextIO.  The logical
-name TopLevel corresponds to the module containing terms and types
-bound at the top level like print, map, etc.  A complete list of
-logical names used by the basis can be found in
+adds associations for the standard basis library to a mapfile.
+Most basis structures, signatures, and functors are defined in a
+module of the same name.
+Examples include List, LIST, and TextIO.
+The logical name TopLevel corresponds to the module containing terms
+and types bound at the top level like print, map, etc.
+A complete list of logical names used by the basis can be found in
 /usr/local/lib/tilt/Basis/mapfile-basis.
 .PP
 The second feature is a specialized comment placed as the first line
-of an SML source file.  For example,
+of an SML source file.
+For example,
 .BE
 (*$import FooBar Goo *)
 .EE
 as the first line of a file indicates that the file depends on the
-modules named FooBar and Goo.  A file can only depend on
-modules which appear earlier in the mapfile.  If a file depends on a
-module that has not been imported, then unbound variable errors will
-result.  For example,
+modules named FooBar and Goo.
+A file can only depend on modules which appear earlier in the mapfile.
+If a file depends on a module that has not been imported, then unbound
+variable errors will result.
+For example,
 .BE
 (*$import *)
 val _ = TextIO.print "Hello, world"
@@ -129,19 +147,21 @@ will not compile because TextIO is missing from the import list.
 .PP
 When processing a mapfile, TILT recompiles any files which are
 out-of-date and generates an executable file named after the last
-module in the mapfile.  There is no analogue of C's function main().
-Top-level declarations are executed at runtime.  The order of modules
-in a mapfile determines the order in which these top-level
-declarations are processed.
+module in the mapfile.
+There is no analogue of C's function main().
+Top-level declarations are executed at runtime.
+The order of modules in a mapfile determines the order in which these
+top-level declarations are processed.
 .PP
-Suppose you have a directory of SML files called twelf.  To get twelf
-to compile with TILT, the first thing needed is to create a mapfile in
-the twelf directory called mapfile-twelf.  The basis can be included
-in mapfile-twelf with the line ``#include mapfile-basis''.  Then each
-of the SML source files in the twelf directory must be listed in the
-mapfile along with its assigned logical name.  Then the proper
-dependencies among the modules needs to be inserted by adding import
-lines to each source file.
+Suppose you have a directory of SML files called twelf.
+To get twelf to compile with TILT, the first thing needed is to create
+a mapfile in the twelf directory called mapfile-twelf.
+The basis can be included in mapfile-twelf with the line ``#include
+mapfile-basis''.
+Then each of the SML source files in the twelf directory must be
+listed in the mapfile along with its assigned logical name.
+Then the proper dependencies among the modules needs to be inserted by
+adding import lines to each source file.
 .SH FILES
 .TP
 /usr/local/lib/tilt
@@ -152,8 +172,9 @@ Source code for TITL.
 .TP
 /usr/local/lib/sml/sml-mode/sml-site.el
 .BR emacs (1)
-major mode for editing SML files.  Read the comments at the top of the file
-for information on setting this up.
+major mode for editing SML files.
+Read the comments at the top of the file for information on setting
+this up.
 .SH SEE ALSO
 .BR sml (1),
 .BR ml-lex (1),
@@ -161,7 +182,8 @@ for information on setting this up.
 .BR ml-burg (1),
 .BR make (1).
 .SH BUGS
-This is an alpha release of TILT.  If you think you've found a bug,
+This is an alpha release of TILT.
+If you think you've found a bug,
 send mail to the
 .B til-bugs@cs.cmu.edu
 mailing list.
