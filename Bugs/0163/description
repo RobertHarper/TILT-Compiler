@@ -1,5 +1,5 @@
 Number: 0163
-Title:       Elaborator bombing.
+Title:       Pattern compiler causing elaborator to bomb.
 Keywords:    Pattern compiler, records and tuples
 Submitter:   swasey
 Date:        04/15/03
@@ -14,10 +14,25 @@ Code:
 		in  ()
 		end
 Transcript:  
-Comments:    
-	It looks like the pattern compiler is calling GetExpCon
-	on a variable it has not bound into context.
-Fix:         
+Comments:
+	The pattern compiler's reduce_let was returning a variable
+	expression where the variable was not bound.
+
+	For example, an expression like
+
+		let a = bindarg#main
+		    b = a#1
+		    c = a#2
+		in  (b,c)
+		end
+
+	was being reduced, incorrectly, to
+
+		a
+
+	This is fixed in my working directory.
+	The fix is not yet in CVS.
+Fix:
 Test: ../../Test/bug163
 Owner: swasey
-Status: open
+Status: closed

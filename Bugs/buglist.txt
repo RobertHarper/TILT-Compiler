@@ -156,4 +156,4 @@
 0160 [open]	Ugly hack: add_context_label
 0161 [open]	should not allow whitespace in long.identifier
 0162 [open]	Queue.delete is broken.
-0163 [open]	Elaborator bombing.
+0163 [open]	Pattern compiler causing elaborator to bomb.
