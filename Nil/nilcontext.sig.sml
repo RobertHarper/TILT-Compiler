@@ -67,6 +67,8 @@ signature NILCONTEXT' =
       *    If var is already bound, raises an exception
       *)
     val insert_kind : (context -> con -> con) -> context * var * kind -> context
+    val insert_kind_equation : (context -> con -> con) -> (context -> con -> kind) 
+					-> context * var * con -> context
     val insert_kind_list : (context -> con -> con) -> context* (var * kind) list -> context
     val unpull_convar : context * var -> context
 
@@ -166,6 +168,7 @@ signature NILCONTEXT =
       *    If var is already bound, raises an exception
       *)
     val insert_kind : context * var * kind -> context
+    val insert_kind_equation : context * var * con -> context
     val insert_kind_list : context* (var * kind) list -> context
 
     (* unpull_convar will modify the constructor that is returned to

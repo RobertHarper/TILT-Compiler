@@ -57,6 +57,7 @@ subst.sml
 subst.sig.sml
 normalize.sml
 normalize.sig.sml
+optimize.sml  
 (* ----- Optimizer Stuff ------- *)
 NilOpts/nilopts.sig.sml
 NilOpts/nilopts.sml

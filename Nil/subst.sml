@@ -21,6 +21,10 @@ functor NilSubstFn(structure Nil : NIL
     (*Preliminary results suggest that this is a bad idea.*)
     val subst_use_hash = Stats.bool "subst_use_hash"
 
+    val local_subst_count = ref 0
+    fun get_subst_count() = !local_subst_count
+    fun reset_subst_count() = local_subst_count := 0
+
     val (subst_counter,
 	 subst_total_size) = 
       (Stats.counter "subst_counter",
@@ -203,7 +207,7 @@ functor NilSubstFn(structure Nil : NIL
 
     fun con_var_replace (subst,var) = 
       (case substitute subst var
-	 of SOME (Nil.Var_c var) => var
+	 of SOME (Nil.Var_c var) => (local_subst_count := !local_subst_count + 1; var)
 	  | _ => var)
 
     fun substConInTFormals (conmap : con subst) (formals : (var * kind) list) = 
@@ -293,7 +297,7 @@ functor NilSubstFn(structure Nil : NIL
 
 	  | (Var_c var) => 
 	   (case substitute conmap var
-	      of SOME con => con
+	      of SOME con => (local_subst_count := !local_subst_count + 1; con)
 	       | _ => con)
 
 	  | (Let_c (letsort, cbnds, body)) => 
@@ -405,7 +409,7 @@ functor NilSubstFn(structure Nil : NIL
       (case exp
 	 of Var_e var => 
 	   (case substitute expmap var
-	      of SOME exp => exp
+	      of SOME exp => (local_subst_count := !local_subst_count + 1; exp)
 	       | _ => exp)
 	  | Const_e value => 
 	      Const_e (substExpConInValue' maps value)
@@ -605,7 +609,7 @@ functor NilSubstFn(structure Nil : NIL
       let
 	val code = 
 	  (case substitute expmap code 
-	     of SOME (Var_e var) => var
+	     of SOME (Var_e var) => (local_subst_count := !local_subst_count + 1; var)
 	      | _ => code)
 	val cenv = substConInCon conmap cenv
 	val venv = substExpConInExp' maps venv

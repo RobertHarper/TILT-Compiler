@@ -632,8 +632,8 @@ struct
 	     val k_entries = map2 (fn (l,k) => ((l,fresh_named_var "crec_static"),k)) (labels,kinds)
 	     val entries = zip labels cons
 	     val con = Crecord_c entries
-	     val con = eta_conrecord D con
-	     val kind = singletonize D (Record_k (list2sequence k_entries),con)
+	     val eta_con = eta_conrecord D con
+	     val kind = singletonize D (Record_k (list2sequence k_entries),eta_con)
 	   in 
 	     if distinct then
 	       (con,kind)
@@ -673,9 +673,9 @@ struct
 	 in
 	   (con,kind)
 	 end
-	| (App_c (cfun,actuals)) => 
+	| (App_c (cfun_orig,actuals)) => 
 	 let
-	   val (cfun,cfun_kind) = con_valid (D,cfun)
+	   val (cfun,cfun_kind) = con_valid (D,cfun_orig)
 	   val (formals,body_kind) = 
 	     case (strip_singleton cfun_kind) of
 	         (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
@@ -699,9 +699,9 @@ struct
 	       (error "Constructor function failed: argument not subkind of expected kind" handle e => raise e)
 		 
 	   val con = App_c (cfun,actuals)
-	      val D = (case cfun of
-			   Var_c v => unpull_convar(D,v)
-			 | _ => D)
+	   val D = (case cfun_orig of
+			Var_c v => unpull_convar(D,v)
+		      | _ => D)
 	   val con = beta_confun D con
 	   val kind = singletonize D (body_kind,con)
 	 in
@@ -1328,6 +1328,8 @@ struct
 		      (error "Branch argument not of sum type" handle e => raise e))
 	       else
 		 (perr_e_c (arg,argcon);
+		  print "given type:\n";
+	  	  PpNil.pp_con sum_decl; print "\n";
 		  error "Type given for sum switch argument does not match found type")
 
 	     fun mk_sum field = 
@@ -1521,7 +1523,12 @@ struct
 	     if sub_kind' (origD,found_kind,given_kind) then
 	       (bnd,(D,subst))
 	     else
-	       (perr_c_k_k (con,given_kind,found_kind);
+	       if (!bnds_made_precise)
+		 then (print "Warning: kind mismatch in constructor binding;  probably a result of\n";
+			print "  dropping all singleton information including those in negative positions\n";
+	 		(bnd,(D,subst)))
+	       else 
+		(perr_c_k_k (con,given_kind,found_kind);
 		(error ("kind mismatch in constructor binding of "^(var2string var)) handle e => raise e))
 	   end
 	  | Exp_b (var, con, exp) =>

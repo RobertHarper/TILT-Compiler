@@ -455,12 +455,14 @@ struct
    val xsbnds_count = ref 0
 
 local
-   datatype splitting_context = CONTEXT of {NILctx : Nilcontext.context,
-					    used   : (bool ref) Name.VarMap.map,
-					    vmap   : (var * var) Name.VarMap.map,
-					    convarmap : kind Name.VarMap.map,
-					    alias  : (con * exp * kind * kind * con) Name.PathMap.map}
-
+   datatype splitting_context = 
+       CONTEXT of {NILctx : Nilcontext.context,
+		   used   : (bool ref) Name.VarMap.map,
+		   vmap   : (var * var) Name.VarMap.map,
+		   convarmap : kind Name.VarMap.map,
+		   alias  : (var * label list) Name.VarMap.map,
+		   memoized_mpath : (con * exp * kind * kind * con) Name.PathMap.map}
+       
 
 in
     type splitting_context = splitting_context
@@ -468,9 +470,10 @@ in
 					      used = Name.VarMap.empty,
 					      vmap = vmap,
 					      convarmap = Name.VarMap.empty,
-					      alias = Name.PathMap.empty}
+					      alias = Name.VarMap.empty,
+					      memoized_mpath = Name.PathMap.empty}
 
-   fun print_splitting_context (CONTEXT{NILctx,used,vmap,alias,convarmap}) = 
+   fun print_splitting_context (CONTEXT{NILctx,used,vmap,alias,memoized_mpath,convarmap}) = 
        (Name.VarMap.appi (fn (v,(vc,vr)) => (Ppnil.pp_var v; print "  -->  "; 
 					     Ppnil.pp_var vc; print ", ";
 					     Ppnil.pp_var vr; print "\n")) vmap;
@@ -524,33 +527,42 @@ in
    fun nilcontext_con_valid(CONTEXT{NILctx,...},c) = Nilstatic.con_valid(NILctx,c)
    fun nilcontext_print(CONTEXT{NILctx,...}) = Nilcontext.print_context NILctx
 
-   fun update_vmap  (CONTEXT{NILctx,used,vmap,alias,convarmap}, vmap') = 
-       CONTEXT{NILctx=NILctx, used=used, vmap=vmap',alias=alias,convarmap=convarmap}
+   fun update_vmap  (CONTEXT{NILctx,used,vmap,alias,memoized_mpath,convarmap}, vmap') = 
+       CONTEXT{NILctx=NILctx, used=used, vmap=vmap',
+	       memoized_mpath=memoized_mpath,alias=alias,convarmap=convarmap}
 
-   fun update_NILctx_insert_con(CONTEXT{NILctx,vmap,used,alias,convarmap},v,c) = 
+   fun update_NILctx_insert_con(CONTEXT{NILctx,vmap,used,
+					memoized_mpath,alias,convarmap},v,c) = 
        let val NILctx' = Nilcontext.insert_con(NILctx, v, c)
 	   val used' = Name.VarMap.insert(used,v,ref false)
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used',alias=alias,convarmap=convarmap}
+       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used',
+		   memoized_mpath=memoized_mpath, alias=alias,convarmap=convarmap}
        end
-   fun update_NILctx_insert_kind(CONTEXT{NILctx,vmap,used,alias,convarmap},v,k) = 
+   fun update_NILctx_insert_kind(CONTEXT{NILctx,vmap,used,
+					 memoized_mpath,alias,convarmap},v,k) = 
        let val NILctx' = Nilcontext.insert_kind(NILctx,v,k)
 	   val used' = Name.VarMap.insert(used,v,ref false)
 	   val convarmap' = Name.VarMap.insert(convarmap,v,k)
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used', alias = alias,convarmap=convarmap'}
+       in  CONTEXT{NILctx=NILctx', vmap=vmap, used = used', 
+		   memoized_mpath=memoized_mpath, alias = alias,convarmap=convarmap'}
        end
 
-   fun update_NILctx_insert_con_list(CONTEXT{NILctx,used,vmap,alias,convarmap},vclist) = 
+   fun update_NILctx_insert_con_list(CONTEXT{NILctx,used,vmap,
+					     memoized_mpath, alias,convarmap},vclist) = 
        let val NILctx' = foldl (fn ((v,c),ctxt) => Nilcontext.insert_con(ctxt, v, c)) NILctx vclist
 	   val used' = foldl (fn ((v,_),used) => Name.VarMap.insert(used,v,ref false)) used vclist
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used',alias=alias,convarmap=convarmap}
+       in  CONTEXT{NILctx=NILctx', vmap=vmap, 
+		   memoized_mpath=memoized_mpath, used=used',alias=alias,convarmap=convarmap}
        end
 
 
-   fun update_NILctx_insert_kind_list(CONTEXT{NILctx,used,vmap,alias,convarmap},vklist) =
+   fun update_NILctx_insert_kind_list(CONTEXT{NILctx,used,vmap,
+					      memoized_mpath, alias,convarmap},vklist) =
        let val NILctx' = foldl (fn ((v,k),ctxt) => Nilcontext.insert_kind(ctxt, v, k)) NILctx vklist
 	   val used' = foldl (fn ((v,_),used) => Name.VarMap.insert(used,v,ref false)) used vklist
 	   val convarmap' = foldl (fn ((v,k),m) => Name.VarMap.insert(m,v,k)) convarmap vklist
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used',alias=alias,convarmap=convarmap'}
+       in  CONTEXT{NILctx=NILctx', vmap=vmap, 
+		   memoized_mpath=memoized_mpath, used=used',alias=alias,convarmap=convarmap'}
        end
 
        fun check_cbndpresent (CONTEXT{NILctx,...}) cbnd_cat = 
@@ -574,7 +586,8 @@ in
 	  in  loop ebnds
 	  end
 
-   fun update_NILctx_cbndcat_help strict (CONTEXT{NILctx,used,vmap,alias,convarmap},cbnd_cat) = 
+   fun update_NILctx_cbndcat_help strict (CONTEXT{NILctx,used,vmap,
+						  memoized_mpath,alias,convarmap},cbnd_cat) = 
        let fun folder((v,k,c:con),(ctxt,used,cm)) = 
            let val insert = (strict orelse 
 			     (case (Nilcontext.find_kind(ctxt,v)) of
@@ -591,10 +604,12 @@ in
            end
            val cbnd_flat = flattenCatlist cbnd_cat
            val (NILctx',used',convarmap') =  foldl folder (NILctx,used,convarmap) cbnd_flat
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used',alias=alias, convarmap=convarmap'}
+       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used', 
+		   memoized_mpath=memoized_mpath, alias=alias, convarmap=convarmap'}
        end
 
-    fun update_NILctx_ebndcat_help strict (CONTEXT{NILctx,vmap,used,alias,convarmap},ebnd_cat) = 
+    fun update_NILctx_ebndcat_help strict (CONTEXT{NILctx,vmap,used,
+						   memoized_mpath,alias,convarmap},ebnd_cat) = 
        let fun folder' openness ((v,f), (ctxt, used,cm)) = 
              let val insert = (strict orelse 
 			        (case (Nilcontext.find_con(ctxt,v)) of
@@ -634,7 +649,8 @@ in
                
            val ebnd_flat = flattenCatlist ebnd_cat
            val (NILctx',used',convarmap') = foldl folder (NILctx,used, convarmap) ebnd_flat
-       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used',alias=alias, convarmap=convarmap'}
+       in  CONTEXT{NILctx=NILctx', vmap=vmap, used=used',
+		   memoized_mpath=memoized_mpath, alias=alias, convarmap=convarmap'}
        end
 
 
@@ -643,22 +659,37 @@ in
    val update_NILctx_ebndcat = update_NILctx_ebndcat_help true
    val update_NILctx_ebndcat' = update_NILctx_ebndcat_help false
 
-   local fun extract_path labs (Il.MOD_VAR v) = SOME(v,labs)
-	   | extract_path labs (Il.MOD_PROJECT(m,l)) = extract_path (l::labs) m
-	   | extract_path _ _ = NONE
-   in    fun add_module_alias(CONTEXT{NILctx,vmap,used,alias,convarmap},m,name_c,name_r,k1,k2,c) = 
-		case (extract_path [] m) of
-		  SOME p => let val alias' = Name.PathMap.insert(alias,p,(name_c,name_r,k1,k2,c))
-			    in  CONTEXT{NILctx=NILctx, vmap=vmap, 
-					used=used,alias=alias', convarmap=convarmap}
-			    end
-		| NONE => error "add_module_alias given non-path module"
+    fun add_modvar_alias(CONTEXT{NILctx,vmap,used,
+				 memoized_mpath,alias,convarmap},var,path) =
+	let val alias' = Name.VarMap.insert(alias,var,path)
+	in  CONTEXT{NILctx=NILctx, vmap=vmap, 
+		    used=used,alias=alias',  memoized_mpath=memoized_mpath, convarmap=convarmap}
+	end
+    fun add_module_alias(CONTEXT{NILctx,vmap,used,alias,
+				 memoized_mpath,convarmap},m,name_c,name_r,k1,k2,c) = 
+	case (extractPathLabels m) of
+		  (Il.MOD_VAR v, labs) => 
+		      let val p = (v,labs)
+			  val memoized_mpath' = Name.PathMap.insert(memoized_mpath,p,(name_c,name_r,k1,k2,c))
+		      in  CONTEXT{NILctx=NILctx, vmap=vmap, 
+				  used=used,alias=alias,  memoized_mpath=memoized_mpath',
+				  convarmap=convarmap}
+		      end
+		| _ => error "add_module_alias given non-path module"
 
-	 fun lookup_module_alias(CONTEXT{alias,...},m) = 
-		case (extract_path [] m) of
-		   NONE =>  error "lookup_module_alias given non-path module"
-	 	 | SOME p => Name.PathMap.find(alias,p)
-  end
+	 fun lookup_module_alias(CONTEXT{alias,memoized_mpath,...},m) = 
+		case (extractPathLabels m) of
+	 	  (Il.MOD_VAR v,labs) => 
+		       let fun follow_alias(v,labs) = 
+			   (case (Name.VarMap.find(alias,v)) of
+				NONE => (v,labs)
+			      | SOME (v',labs') => follow_alias(v',labs' @ labs))
+			   val p = follow_alias(v,labs)
+		       in  Name.PathMap.find(memoized_mpath,p)
+		       end
+		| _ =>  error "lookup_module_alias given non-path module"
+
+
 
 end (* local defining splitting context *)
 
@@ -915,13 +946,22 @@ end (* local defining splitting context *)
 
    and preproject (var_arg, il_signat, context) = 
 	let val _ =  print "preproject 1\n"
-	    fun find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,(Il.SDEC(l,Il.DEC_MOD (_,s)))::rest)) = 
-		if (Ilutil.is_datatype_lab l)
-		then find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
-		else	let val acc = (Il.MOD_PROJECT(m,l))::acc
-			    val acc = find_structure_paths (Il.MOD_PROJECT(m,l)) acc s
-			in  find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
-			end
+	    fun find_structure_paths m acc 
+		(Il.SIGNAT_STRUCTURE(popt,(Il.SDEC(l,Il.DEC_MOD (_,s)))::rest)) = 
+		let val skip_project = 
+		    ((Ilutil.is_datatype_lab l) orelse 
+		     (case s of 
+			  Il.SIGNAT_FUNCTOR(_,_,Il.SIGNAT_STRUCTURE(_,[Il.SDEC(l,_)]),_) => 
+			      Name.eq_label(l,Ilutil.it_lab)
+			| _ => false))
+			  
+		in  if skip_project
+			then find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
+		    else	let val acc = (Il.MOD_PROJECT(m,l))::acc
+				    val acc = find_structure_paths (Il.MOD_PROJECT(m,l)) acc s
+				in  find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
+				end
+		end
 	      | find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,_::rest)) =
 			    find_structure_paths m acc (Il.SIGNAT_STRUCTURE(popt,rest))
 	      | find_structure_paths m acc _ = acc
@@ -1983,6 +2023,9 @@ end (* local defining splitting context *)
 		    print "\n\n")
 *)
 
+	   val context = (case (extractPathLabels il_module) of
+			      (Il.MOD_VAR tovar,labs) => add_modvar_alias(context,var,(tovar,labs))
+			    | _ => context)
 	   val {final_context, cbnd_cat, ebnd_cat, valuable, record_c_con_items,
 		record_c_knd_items, record_c_knd_items_context, 
 		record_r_labels, record_r_field_types,
@@ -2440,7 +2483,7 @@ end (* local defining splitting context *)
         end
 
 
-   and xexp' context (Il.OVEREXP(_, true, exp_oneshot)) = 
+   and xexp' context (Il.OVEREXP(_, _, exp_oneshot)) = 
        xexp context (derefOneshot exp_oneshot)
 
      | xexp' context (Il.SCON il_scon) = xvalue context il_scon
@@ -2510,15 +2553,7 @@ end (* local defining splitting context *)
        in
 	   (Prim_e (PrimOp (xilprim ilprim), cons, args), con, valuable)
        end
-(*
-     | xexp' context (il_exp as (Il.ILPRIM ilprim)) = 
-       let
-	   val il_con = Ilstatic.GetExpCon (decs, il_exp)
-	   val (con, _) = xcon context il_con
-       in
-	   (Prim_e (PrimOp (xilprim ilprim), [], NONE), con, true)
-       end
-*)
+
      | xexp' context (il_exp as (Il.VAR var)) = 
        let
 	   val con = (case (nilcontext_find_con(context, var)) of
@@ -2626,12 +2661,11 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.SUM_TAIL (_, il_exp)) =
        let
-	   val (exp, Prim_c(Sum_c {known = SOME i, tagcount}, cons), valuable) = xexp context il_exp
-
-       in
-	   (Prim_e (NilPrimOp (project_sum {sumtype = i, tagcount = tagcount}), 
-		    cons, [exp]),
-	    List.nth (cons, TilWord32.toInt (TilWord32.uminus(i,tagcount))), valuable)
+	   val (exp, con as (Prim_c(Sum_c {known = SOME i, tagcount}, cons)), valuable) = xexp context il_exp
+	   val which_con = TilWord32.toInt (TilWord32.uminus(i,tagcount))
+	   val field_con = List.nth(cons, which_con)
+       in  (Prim_e (NilPrimOp (project_sum {sumtype = i, tagcount = tagcount}), 
+		    cons, [exp]), field_con, valuable)
        end
 
      | xexp' context (Il.HANDLE (il_exp1, il_exp2)) = 
@@ -2854,7 +2888,6 @@ end (* local defining splitting context *)
 
      | xexp' context (Il.SEAL (exp,_)) = xexp context exp
 
-     | xexp' _ _ = error "(xexp) unrecognized expression"
 
    and xfbnds context (is_recur, fbnds) = 
        let

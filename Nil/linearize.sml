@@ -22,11 +22,13 @@ struct
     in
 	type state = state
 	val num_renamed = ref 0
+	val num_var = ref 0
 	val num_lexp = ref 0
 	val num_lcon = ref 0
 	val num_lkind = ref 0
 	fun reset_state() : state = (seen := VarSet.empty; 
 				     num_renamed := 0;
+				     num_var := 0;
 				     num_lexp := 0;
 				     num_lcon := 0;
 				     num_lkind := 0;
@@ -156,7 +158,7 @@ struct
 	let val _ = num_lexp := !num_lexp + 1;
 	    val self = lexp state
 	in  case arg_exp of
-	    Var_e v => (Var_e(find_var(state,v)))
+	    Var_e v => (num_var := !num_var + 1; Var_e(find_var(state,v)))
 	  | Const_e _ => (arg_exp)
 	  | Let_e (_,bnds,e) => 
 		let fun folder (bnd,s) = lbnd s bnd
@@ -231,7 +233,7 @@ struct
    and lcon state arg_con : con = 
        (num_lcon := !num_lcon + 1;
 	case arg_con of
-	    Var_c v => Var_c(find_var(state,v))
+	    Var_c v => (num_var := !num_var + 1; Var_c(find_var(state,v)))
 	  | Prim_c (pc,cons) => 
 		let val cons = map (lcon state) cons
 		in  Prim_c(pc,cons)
@@ -298,8 +300,8 @@ struct
 
    and lvklist state vklist = 
        let fun vkfolder((v,k),(acc,state)) = 
-	   let val (state,v) = add_var(state,v)
-	       val k = lkind state k
+	   let val k = lkind state k
+	       val (state,v) = add_var(state,v)
 	   in  ((v,k)::acc, state)
 	   end
 	   val (rev_vklist,state) = foldl vkfolder ([],state) vklist
@@ -308,8 +310,8 @@ struct
 
    and lvclist state vclist = 
        let fun vcfolder((v,c),(acc,state)) = 
-	   let val (state,v) = add_var(state,v)
-	       val c = lcon state c
+	   let val c = lcon state c
+	       val (state,v) = add_var(state,v)
 	   in  ((v,c)::acc, state)
 	   end
 	   val (rev_vclist,state) = foldl vcfolder ([],state) vclist
@@ -375,6 +377,8 @@ struct
 	   val exports = map (lexport state) exports
 	   val _ = (print "Number of renamed variables: ";
 		    print (Int.toString (!num_renamed)); print "\n";
+		    print "Number of variables: ";
+		    print (Int.toString (!num_var)); print "\n";
 		    print "Number of lexp calls: ";
 		    print (Int.toString (!num_lexp)); print "\n";
 		    print "Number of lcon calls: ";

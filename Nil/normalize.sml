@@ -90,6 +90,45 @@ val closed_check = ref false
   val show_calls = ref false
 val show_context = ref false
 
+
+  fun pull (c,kind) = 
+    let open Nil NilUtil Name Util
+    in  (case kind
+       of Type_k p => c
+	| Word_k p => c
+	| Singleton_k (p,k,c2) => c2
+	| Record_k elts => 
+	 let
+	   fun folder (((label,var),kind),subst) = 
+	     let
+	       val kind = Subst.substConInKind subst kind
+	       val con = pull (Proj_c (c,label),kind)
+	       val subst = Subst.add subst (var,con)
+	     in
+	       ((label,con),subst)
+	     end
+	   val (entries,subst) = Listops.foldl_acc folder (Subst.empty()) (sequence2list elts)
+	 in
+	   (Crecord_c entries)
+	 end
+	| Arrow_k (openness, formals, return) => 
+	 let
+	   val vars = map (fn (v,_) => (Var_c v)) formals
+	   val c = pull (App_c (c,vars),return)
+	   val var = fresh_named_var "pull_arrow"
+	 in
+	   (*Closures?  *)
+	   case openness
+	     of Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
+	      | (Code | ExternCode) => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
+	      | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
+			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c,return)],
+				      Closure_c(Var_c var, Crecord_c []))
+			   end
+	 end)
+    end
+
+
   local
       datatype entry = 
 	EXP of exp * (NilContext.context * (con subst))
@@ -198,7 +237,9 @@ val show_context = ref false
 
   fun get_shape' (D : context) (constructor : con) : kind = 
       let fun letcase() = 
-	  error "Warning: get_shape' got un-normalized constructor Let_c\n"
+	  (print "Warning: get_shape' got un-normalized constructor Let_c\n";
+	   PpNil.pp_con constructor; print "\n";
+	   error "Warning: get_shape' got un-normalized constructor Let_c\n")
 	   
       in
       (case constructor of
@@ -505,8 +546,8 @@ val show_context = ref false
 		local val (D,subst) = state
 		    fun extract (Var_c v) = 
 			(case (substitute subst v) of
-			    NONE =>  unpull_convar(D,v)
-			  | SOME (Var_c v) => unpull_convar(D,v)
+			    NONE =>  unpull_convar(D,v) 
+			  | SOME (Var_c v) => D (* unpull_convar(D,v) *)
 			  | _ => D)
 		      | extract (Proj_c (c,_)) = extract c
 		      | extract _ = D
@@ -527,6 +568,229 @@ val show_context = ref false
 	    end
 	| _ => constructor)
 
+(*
+  and con_normalize state (constructor : con) : con  = 
+    let (* there are two kinds of substitutions:
+	       equations arising from the context : 
+	          these are selfified and arise from non-equational conbinds
+		equations arising from equational let-bindings
+	   we always eagerly perform the first to avoid loops
+	   the second is delayed for efficiency *)
+
+	val _ = (print "new con_normalized entered with \n";
+		 PpNil.pp_con constructor; print "\n" )
+	fun vchandle state var =
+	    let val (D,subst) = state
+		val con = (case (substitute subst var) of
+			       SOME c => c
+			     | _ => constructor)
+		val res = 
+		    (case strip_var con of
+			 SOME v => 
+			     (case find_kind' (D,v) of
+				  SOME (c,_) => c
+				| _ => 
+				      (NilContext.print_context D;
+				       error ("Variable not found in context: "^(var2string v))))
+		       | _ => con)
+	    in  NilUtil.CHANGE_NORECURSE res
+	    end
+	val con = NilUtil.con_rewrite(fn _ => NilUtil.NOCHANGE,
+				      fn _ => NilUtil.NOCHANGE,
+				      fn ({boundcvars,...},Var_c v) => 
+				            (case Name.VarMap.find(boundcvars,v) of
+						 NONE => vchandle state v
+					       | _ => NilUtil.NOCHANGE)
+				       | _ => NilUtil.NOCHANGE,
+				      fn _ => NilUtil.NOCHANGE,
+				      fn _ => NilUtil.NOCHANGE) constructor
+	val _ = (print "new con_normalized - performed initial substitution = \n";
+		 PpNil.pp_con con; print "\n" )
+
+	(* then, we perform reductions without looking up variables in context *)
+	fun creduce' esubst subst con = if (Subst.is_empty esubst)
+					    then creduce subst con
+					else creduce subst (substConInCon esubst con)
+	and creduce subst con = 
+	  (
+(*
+	   print "creduce entered with con = ";
+	   PpNil.pp_con con; print "\nand subst = ";
+
+	   app (fn (v,c) => (PpNil.pp_var v; print " --> "; PpNil.pp_con c; print "\n"))
+	   (Subst.toList subst);
+*)
+
+	   case con of
+	       (Prim_c (pcon,args)) =>
+		   let val args = map (creduce subst) args
+		   in (Prim_c (pcon,args))
+		   end
+	     | (Mu_c (recur,defs,var)) =>
+		 let val def_list = sequence2list defs
+		     val (vars,cons) = unzip def_list
+		     val cons = map (creduce subst) cons
+		     val defs = list2sequence (zip vars cons)
+		 in Mu_c (recur,defs,var)
+		 end
+	     | (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
+		 let
+		     val (esubst,tformals) = bind_at_kinds subst tformals
+		     val formals = map (creduce' esubst subst) formals
+		     val body = creduce' esubst subst body
+		 in  AllArrow_c (openness,effect,tformals,formals,numfloats,body)
+		 end
+	     | (Var_c var) => (case (substitute subst var) of
+				   SOME c => c
+				 | _ => con)
+	     | (Let_c (sort,(((cbnd as Open_cb (var,formals,body,body_kind))::rest) | 
+			       ((cbnd as Code_cb (var,formals,body,body_kind))::rest)),con)) => 
+		 let
+		     val constructor = (case cbnd of
+					    Open_cb _ => Open_cb
+					  | _ => Code_cb)
+			 
+		 in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+			then
+			    let val (esubst,formals) = bind_at_kinds subst formals
+				val body = creduce' esubst subst body
+				val body_kind = kreduce' esubst subst body_kind
+				val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+						     Var_c var))
+				val lambda = eta_confun lambda
+			    in  lambda
+			    end
+		    else
+			let 
+			    val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+						 Var_c var))
+			    val lambda = substConInCon subst lambda 
+			    val res = creduce subst (Let_c (sort,rest,con))
+			in  res
+			end
+		 end
+         | (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
+		 let val con = creduce subst con
+		     val subst = add subst (var,con)
+		 in creduce subst (Let_c (sort,rest,body))
+		 end
+	| (Let_c (sort,[],body)) => creduce subst body
+	| (Closure_c (code,env)) => 
+	    let val env = creduce subst env 
+	        val code = creduce subst code
+	    in Closure_c (code,env)
+	    end
+	| (Crecord_c (entries as orig_entries)) => 
+	    let val (labels,cons) = unzip entries
+		val cons = map (creduce subst) cons
+		val entries = zip labels cons
+		val con = Crecord_c entries
+	    in con
+	    end
+	| (Proj_c (rvals,label)) => 
+	    let val rvals = creduce subst rvals
+		val con = Proj_c (rvals,label)
+		val con = beta_conrecord con
+	    in  con
+	    end
+	| (App_c (cfun,actuals)) => 
+	    let val cfun = creduce subst cfun
+		val actuals = map (creduce subst) actuals
+	    in beta_confun subst (cfun,actuals)
+	    end
+	| (Typecase_c {arg,arms,default,kind}) => 
+	    let val kind = kreduce subst kind
+		fun doarm (pcon,args,body) = 
+		    let
+			val (esubst,args) = bind_at_kinds subst args
+			val body = creduce' esubst subst body
+		    in (pcon,args,body)
+		    end
+	      val arg = creduce subst arg
+	      val default = creduce subst default
+	      val arms = map doarm arms
+	      val con = Typecase_c {arg=arg,arms=arms,
+				    default=default,kind=kind}
+	      val  _ = error "no typecase"
+(*	      val con = beta_typecase (#1 state) con *)
+	    in con
+	    end
+	| (Annotate_c (annot,con)) => Annotate_c (annot,creduce subst con))
+
+	and kreduce' esubst subst kind = if (Subst.is_empty esubst)
+					     then kreduce subst kind
+					 else kreduce subst (substConInKind esubst kind)
+	and kreduce subst kind = 
+	    (case kind of
+		 Type_k p => (Type_k p)
+	       | Word_k p => (Word_k p)
+	       | Singleton_k (p,kind,con) => 
+		     let val con = creduce subst con
+			 val kind = kreduce subst kind
+		     in  singletonize(kind,con)
+		     end
+	       | Record_k elts => 
+		     let
+			 val elt_list = sequence2list elts
+			 val (labels,vars_and_kinds) = unzip (map (fn ((l,v),k) => (l,(v,k))) elt_list)
+			 val (_,vars_and_kinds) =  bind_at_kinds subst vars_and_kinds
+			 val elts = map2 (fn (l,(v,k)) => ((l,v),k)) (labels,vars_and_kinds)
+		     in  Record_k elts
+		     end
+	       | Arrow_k (openness, formals, return) => 
+		     let val (esubst,formals) = bind_at_kinds subst formals
+			 val return = kreduce' esubst subst return
+		     in	 (Arrow_k (openness, formals,return))
+		     end)
+
+	and beta_confun subst (confun,actuals) = 
+	    let fun reduce actuals (formals,body,body_kind) = 
+		let val (vars,_) = unzip formals
+		    val subst = foldl (fn ((v,c),s) => add  subst(v,c)) subst (zip vars actuals)
+		in  creduce subst body
+		end
+		val app = App_c(confun,actuals)
+	    in  (case confun of
+		     Let_c (_,(([Open_cb (var,formals,body,body_kind)]) |
+			       ([Code_cb (var,formals,body,body_kind)])),Var_c v) =>
+		     if eq_var(var,v)
+			 then reduce actuals (formals,body,body_kind) 
+		     else app
+		   | Let_c (_,[Code_cb (var,formals,body,body_kind)],
+			    Closure_c(Var_c v,env)) =>
+			 if eq_var(var,v)
+			     then reduce (actuals @ [env]) (formals,body,body_kind) 
+			 else app
+		   | Closure_c(Let_c (_,
+					      [Code_cb (var,formals,body,body_kind)],Var_c v), env) =>
+			     if eq_var(var,v)
+				 then reduce (actuals @ [env]) (formals,body,body_kind) 
+			     else app
+		   | _ => app)
+	    end
+
+
+	and bind_at_kind esubst subst (var,kind) = 
+	    let val kind = kreduce' esubst subst kind
+		val con = pull(Var_c var, kind)
+		val esubst = add esubst (var,con)
+	    in (esubst,var,kind)
+	    end
+  
+	and bind_at_kinds subst kinds = 
+	    let	fun folder ((v,k),esubst) = 
+		    let val (esubst,v,k) = bind_at_kind esubst subst (v,k)
+		    in	((v,k),esubst)
+		    end
+		val (kinds,esubst) = foldl_acc folder (Subst.empty()) kinds
+	    in	(esubst,kinds)
+	    end
+	val res = creduce (Subst.empty()) con
+	val _ = print "new con_normalized - done\n"
+    in  res
+    end
+
+*)
   and con_normalize state (constructor : con) : con  = 
     (case constructor 
        of (Prim_c (pcon,args)) =>
@@ -582,20 +846,35 @@ val show_context = ref false
 		case cbnd 
 		  of Open_cb _ => Open_cb
 		   | _ => Code_cb
-	      val (state,formals) = bind_at_kinds state formals
-	      val body = con_normalize' state body
-	      val body_kind = kind_normalize' state body_kind
-	      val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],Var_c var))
-	      val lambda = eta_confun lambda
-	      val state = 
-		let val (D,subst) = old_state
-		in (D,add subst (var,lambda))
-		end
-	    in
-	      if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) then
-		lambda
-	      else
-		con_normalize' state (Let_c (sort,rest,con))
+
+	    in if (null rest) andalso eq_opt (eq_var,SOME var,strip_var con) 
+		   then
+		       let val (state,formals) = bind_at_kinds state formals
+			   val body = con_normalize' state body
+			   val body_kind = kind_normalize' state body_kind
+			   val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+						Var_c var))
+			   val lambda = eta_confun lambda
+		       in  lambda
+		       end
+	       else
+		   let 
+(*                val _ = print "optimized case entered\n" *)
+		       val lambda = (Let_c (sort,[constructor (var,formals,body,body_kind)],
+					    Var_c var))
+		       val _ = 
+			   (case (substitute (#2 old_state) var)  of
+				SOME c => error "XXX var already in subst"
+			      | _ => ())
+		       val lambda = substConInCon (#2 old_state) lambda 
+		       val state = 
+			   let val (D,subst) = old_state
+			   in (D,add subst (var,lambda))
+			   end
+		       val res = con_normalize' state (Let_c (sort,rest,con))
+(*		       val _ = print "optimized case exitted\n" *)
+		   in   res
+		   end
 	    end
 	| (Let_c (sort,cbnd as (Con_cb(var,kind,con)::rest),body)) =>
 	    let
@@ -619,11 +898,13 @@ val show_context = ref false
 	      val cons = map (con_normalize' state) cons
 	      val entries = zip labels cons
 	      val con = Crecord_c entries
+(*
 	      val con = eta_conrecord (#1 state) con 
 		  handle e => (print "eta_conrecord in con_normalize failed.\noriginal con = \n";
 			       PpNil.pp_con (Crecord_c orig_entries);
 			       print "\n eta_conrecord in con_normalized reduced to \n";
 			       PpNil.pp_con con; print "\n"; raise e)
+*)
 	    in con
 	    end
 	| (Proj_c (rvals,label)) => 
@@ -639,7 +920,7 @@ val show_context = ref false
 		    fun extract (Var_c v) = 
 			(case (substitute subst v) of
 			    NONE => unpull_convar(D,v)
-			  | SOME (Var_c v) => unpull_convar(D,v)
+			  | SOME (Var_c v) => D (* unpull_convar(D,v) *)
 			  | _ => D)
 		      | extract (Proj_c (c,_)) = extract c
 		      | extract _ = D

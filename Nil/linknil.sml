@@ -14,6 +14,7 @@ sig
     val il_to_nil : LinkIl.module -> Nil.module
 
     val do_opt : bool ref
+    val do_one_optimize : bool ref
 end
 
 structure Linknil (* : LINKNIL *) =
@@ -25,10 +26,13 @@ structure Linknil (* : LINKNIL *) =
 
     val do_cleanup = ref false
     val do_opt = ref false
+    val do_one_optimize = ref true
     val show_size = ref false
     val show_hil = ref false
     val show_phasesplit = ref false
     val show_renamed = ref false
+    val show_opt = ref false
+    val show_one_optimize = ref false
     val show_cc = ref false
     val show_before_rtl = ref false
 
@@ -123,6 +127,10 @@ structure Linknil (* : LINKNIL *) =
 			    structure Ppil = LinkIl.Ppil
 			    structure ArgNil = Nil
 			    structure Subst = NilSubst)
+
+    structure Optimize = Optimize(structure Nil = Nil
+				    structure NilUtil = NilUtil
+				    structure Ppnil = PpNil)
 
     structure Linearize = Linearize(structure Nil = Nil
 				    structure NilUtil = NilUtil
@@ -417,6 +425,14 @@ val _ = (print "Nil final context is:\n";
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
 	    val _ = showmod (!show_renamed orelse debug,!show_size) "Renaming" (filename, nilmod)
 
+
+	    val nilmod = if (!do_one_optimize)
+			     then (Stats.timer("OneOptimize",Optimize.optimize)) nilmod
+			 else nilmod
+	    val _ = if (!do_one_optimize)
+			then showmod (!show_one_optimize orelse debug,!show_size) "OneOptimize" (filename, nilmod)
+		    else ()
+
  	    val nilmod' = 
 	      if (!typecheck_before_opt) then
 		(Stats.timer("Nil typechecking - pre opt",NilStatic.module_valid)) (D,nilmod)
@@ -429,7 +445,7 @@ val _ = (print "Nil final context is:\n";
 
 	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", DoOpts.do_opts debug)) nilmod else nilmod
 	    val _ = if (!do_opt)
-			then showmod (debug,!show_size) "Optimization" (filename,nilmod)
+			then showmod (!show_opt orelse debug,!show_size) "Optimization" (filename,nilmod)
 		    else ()
 
  	    val nilmod' = 

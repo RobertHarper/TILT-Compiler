@@ -194,7 +194,14 @@ struct
 	     | Singleton_k (p,k,c2) => 
 		   if (Subst.is_empty subst)
 		       then c2
-		   else normalizer D (Subst.substConInCon subst c2)
+		   else let val _ = Subst.reset_subst_count()
+			    val c2 = (Subst.substConInCon subst c2)
+(*		       val _ = (print "pull_normal - subst_count = ";
+				print (Int.toString(Subst.get_subst_count())); print "\n")
+*)
+			in  if (Subst.get_subst_count() = 0)
+				then c2 else normalizer D c2
+			end
 	     | Record_k elts => 
 		   let
 		       fun folder (((label,var),kind),subst) = 
@@ -224,15 +231,27 @@ struct
       end
 	      
 
+  and insert_kind_equation normalizer get_shape (D as {kindmap,...}:context,var,con) = 
+    (case V.find (kindmap, var) of
+       NONE => 
+	 let val con = Stats.subtimer("ins_kind_eq_norm",normalizer D) con
+             val kind = Stats.subtimer("ins_kind_eq_get_shape",get_shape D) con
+             val kind = Stats.subtimer("ins_kind_single",NilUtil.singletonize)(kind,con)
+         in  inject_kind(D, var, con, kind)
+	 end
+      | _ => error ("Constructor variable "^(var2string var)^" already in context"))
+
   and insert_kind normalizer (D as {kindmap,...}:context,var,kind) = 
     (case V.find (kindmap, var)
        of NONE => 
 	 let
 	   val var_con = Var_c var
+(*	   val kind = Stats.subtimer("nilcontext_insert_kind_self",selfify)(var_con,kind) *)
 	   val kind = selfify(var_con,kind)
 	   val D' = inject_kind (D,var,var_con,kind)
 (*	   val con = normalizer D' (pull(var_con,kind))  *)
 
+(*	   val con = Stats.subtimer("nilcontext_insert_kind_pull_normal",pull_normal normalizer D')(var,kind) *)
 	   val con = pull_normal normalizer D' (var,kind)
 (*	   val con = if substed then normalizer D' con else con *)
 
@@ -265,7 +284,10 @@ struct
   fun unpull_convar (D as {kindmap,...}:context,var) = 
     (case (V.find (kindmap, var))
        of SOME(c,k) => inject_kind(D,var,Var_c var,k)
-	| NONE => error ("unpull_convar: variable " ^ (Name.var2string var) ^ " not found"))
+	| NONE => 
+	   (print ("unpull_convar: variable " ^ (Name.var2string var) ^ " not found");
+	    D))
+(*	   error ("unpull_convar: variable " ^ (Name.var2string var) ^ " not found")) *)
 
 
 
@@ -373,9 +395,14 @@ functor NilContextFn(structure NilContext' : NILCONTEXT'
 struct
   open NilContext'
   val con_norm = Normalize.con_normalize
-  fun insert_kind (D,v,k) = let val k' = Normalize.kind_normalize D k
+  val get_shape = Normalize.get_shape
+(* xxx calls to insert_kind are supposed to pass normalized kinds; but some
+	clients are not doing this. perhaps the interface needs to change *)
+  fun insert_kind (D,v,k) = let  val k' = Normalize.kind_normalize D k 
+(*				val k' = k *)
 			    in  NilContext'.insert_kind con_norm (D,v,k')
 			    end
+  fun insert_kind_equation(D,v,c) = NilContext'.insert_kind_equation con_norm get_shape (D,v,c)
   val insert_kind_list = insert_kind_list con_norm
   val bind_kind = bind_kind con_norm
   val bind_kind_list = bind_kind_list con_norm

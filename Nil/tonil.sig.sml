@@ -11,6 +11,7 @@ sig
     val omit_datatype_bindings : bool ref
     val do_memoize : bool ref
 
+(*
     val xcompunit : Il.context -> 
                     (Name.var * Name.var) Name.VarMap.map ->
                     Il.sbnds ->
@@ -18,6 +19,7 @@ sig
 		     nil_final_context : NilContext.context,
 		     cu_bnds : NilContext.Nil.bnd list,
 		     vmap : (Name.var * Name.var) Name.VarMap.map}
+*)
 
     val phasesplit : Il.context *  (Il.sbnd option * Il.context_entry) list -> NilContext.Nil.module
 

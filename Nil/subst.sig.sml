@@ -20,6 +20,9 @@ signature NILSUBST =
 
     val substitute : 'a subst -> var -> 'a option
 
+    val get_subst_count : unit -> int
+    val reset_subst_count : unit -> unit
+
     val is_empty : 'a subst -> bool
 
     (* val compose : ('a subst -> 'a -> 'a) -> ('a subst * 'a subst) -> 'a subst 

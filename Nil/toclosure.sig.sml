@@ -5,8 +5,8 @@ signature TOCLOSURE =
 	val use_kind_at_bind : bool ref
 	val debug : bool ref
 	val debug_full : bool ref
-
-
+val do_close_path : bool ref
+val closure_print_free : bool ref
 (*
 	val liftCode : bool ref
 	val close_exp : Nil.exp -> Nil.exp
