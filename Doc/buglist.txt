@@ -11,6 +11,8 @@ HIGH PRIORITY
 
 (3) modify tortl to fully rely on reification results;
 	after this, all "assuming TRACE" messages should disappear
+        Also, make sure the xxx_type variables don't appear in the
+        assembly code
 
 (4) document how the system is used (mapfiles and make)
 
@@ -18,6 +20,24 @@ HIGH PRIORITY
         it doesn't have enough information.  Either it has to keep
         a term-level context, or HIL functors must be marked TOTAL/PARTIAL
 
+(6) It appears that some functions in the run-time allocate memory on the
+        heap, but assert(0) rather than invoking GC if the heap happens to
+        already be full.
+
+(7) If you run the TILT executable and don't give it a valid mapfile,
+        the program crashes with a bus error (?)
+
+(8) Type sharing between datatypes and non-datatypes isn't handled
+        properly by the elaborator.  If we have
+            type t
+            datatype u = A
+            sharing t = u
+        it seems the equality between t and u is forgotten when the
+        datatype is exposed as a recursive type. (that is, t remains
+        abstract.)  Symptom: Parser/join.sml does not typecheck
+        (the hil code ought not typecheck if we did typechecking, 
+        the phase-split code definitely does not typecheck)
+        
 
 
 NORMAL PRIORITY
@@ -81,22 +101,7 @@ structure Outer = Maker(structure Middle1 = Middle1
 	The OS handler may not be able to detect the correct answer
 		if the floating point instruction's src and dest registers are the same.
 
-(7) backend liveness analysis is too conservative
-        We recently fixed a backend bug where liveness analysis was not taking
-        COMPUTE's into account, so that a variable could be live long after
-        its type was considered dead; when the type was needed to GC this
-        variable, the program crashed.
 
-        The fix was to ensure that the type was always live whenever the
-        variable was, by defining the pseudoregisters used by an instruction
-        to include the variables in the representation of the
-        pseudoregisters used.
-
-        This is too conservative; we don't need to keep the type live
-        if we know the variable will not be live across a function or
-        GC call.  A better fix is to undo this last change to defUse
-        and instead define function/GC calls to be uses of the types
-        of all variables live across the call.
 
         
 LOW PRIORITY
@@ -118,3 +123,20 @@ fun f thunk =
 (2) improve this error msg:
 
 	Error: infixparse.sml: parse_pat on subcall yielded multiple patterns
+
+(3) backend liveness analysis is too conservative
+        We recently fixed a backend bug where liveness analysis was not taking
+        COMPUTE's into account, so that a variable could be live long after
+        its type was considered dead; when the type was needed to GC this
+        variable, the program crashed.
+
+        The fix was to ensure that the type was always live whenever the
+        variable was, by defining the pseudoregisters used by an instruction
+        to include the variables in the representation of the
+        pseudoregisters used.
+
+        This is too conservative; we don't need to keep the type live
+        if we know the variable will not be live across a function or
+        GC call.  A better fix is to undo this last change to defUse
+        and instead define function/GC calls to be uses of the types
+        of all variables live across the call.
