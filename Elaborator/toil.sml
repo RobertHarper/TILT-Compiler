@@ -480,10 +480,11 @@ structure Toil
 	    end
 	    val new_rescon : con =
 		remove_modvar_type(resc,v,signat_poly_sdecs)
-		handle e => (print "remove_modvar failed: called from polyfun_inst";
-			     print "target con: "; pp_con resc; print "\n";
-			     print "variable to be removed  =  "; pp_var v; print "\n";
-			     print "sdecs of var = \n"; pp_sdecs signat_poly_sdecs; print "\n";
+		handle e => (debugdo (fn () =>
+				      (print "remove_modvar failed: called from polyfun_inst";
+				       print "target con: "; pp_con resc; print "\n";
+				       print "variable to be removed  =  "; pp_var v; print "\n";
+				       print "sdecs of var = \n"; pp_sdecs signat_poly_sdecs; print "\n"));
 			     error "remove_modvar failed: called from polyfun_inst")
 	    val exp = (case (eopt,inline) of
 			   (SOME e,inline) =>
@@ -1959,9 +1960,9 @@ structure Toil
 		end
 	   | (Ast.DataSpec {datatycs, withtycs}) => parse_error "withtype specs not supported"
 	   | (Ast.ShareTycSpec paths) => ALL_NEW(Signature.xsig_sharing_types
-						 (context,prev_sdecs,mapmap symbol_label paths))
-	   | (Ast.ShareStrSpec paths) => ALL_NEW(Signature.xsig_sharing_structures
-						 (context,prev_sdecs,mapmap symbol_label paths))
+						 (orig_ctxt,prev_sdecs,mapmap symbol_label paths))
+	   | (Ast.ShareStrSpec paths) => (ALL_NEW(Signature.xsig_sharing_structures
+						 (orig_ctxt,prev_sdecs,mapmap symbol_label paths)))
 	   | (Ast.MarkSpec (s,r)) => let val _ = push_region r
 					 val res = xspec1 context prev_sdecs s
 					 val _ = pop_region ()
@@ -1988,8 +1989,7 @@ structure Toil
 		      in loop ctxt' (prev_sdecs @ sdecs') specrest
 		      end
 		| ALL_NEW sdecs' =>
-		      let val ctxt' = foldl (fn (sdec,ctxt) =>
-					    add_context_sdec(ctxt, sdec)) orig_ctxt sdecs'
+		      let val ctxt' = add_context_sdecs(orig_ctxt,sdecs')
 		      in loop ctxt' sdecs' specrest
 		      end)
        in loop orig_ctxt [] specs
@@ -2115,6 +2115,23 @@ structure Toil
 				      val signat' = sig_subst (signat, subst)
 				  in  signat'
 				  end
+			      (* Eliminate SIGNAT_OF(var1,_) in sig2; see ../Test/0022/. *)
+			      val sig2' =
+				  let val context = add_context_mod' (context, var1, sig1)
+				      fun sig_handler (s : signat) : signat option =
+					  (case s
+					     of SIGNAT_OF (path as PATH (v,_)) =>
+						if Name.eq_var (v,var1) then
+						    (case Context_Lookup_Path (context, path)
+						       of SOME (_, PHRASE_CLASS_MOD (_,_,s',_)) => SOME s'
+							| _ => error "sig_elim_of saw strange SIGOF")
+						else NONE
+					      | _ => NONE)
+				      val handler = (default_exp_handler, default_con_handler,
+						     default_mod_handler, default_sdec_handler,
+						     sig_handler)
+				  in  IlUtil.sig_handle handler sig2
+				  end
 			      val ([],argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argpath =
 				  (case (mod2path argmod) of
@@ -2124,11 +2141,12 @@ structure Toil
 			      val coerced_var = fresh_named_var ("coerced_" ^ varName)
 			      val mod_coerced = Signature.xcoerce_functor(context,argpath,signat,sig1)
 			      val mod_result = MOD_LET(coerced_var,mod_coerced, MOD_APP(m, MOD_VAR coerced_var))
-			      val sig_result = sig_subst(sig2,subst_add_modvar(empty_subst,var1,argmod))
+			      val sig_result = sig_subst(sig2',subst_add_modvar(empty_subst,var1,argmod))
 			      val sig_result' = sig_elim_open (context, sig_result)
 (*
 			      val _ = (print "XXX sig1 = "; pp_signat sig1; print "\n";
 			               print "XXX sig2 = "; pp_signat sig2; print "\n";
+				       print "XXX sig2' = "; pp_signat sig2'; print "\n";
 			               print "XXX argmod = "; pp_mod argmod; print "\n";
 			               print "XXX signat = "; pp_signat signat; print "\n";
 			               print "XXX argpath = "; pp_path argpath; print "\n";
