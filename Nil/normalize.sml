@@ -1476,16 +1476,13 @@ struct
 	     (case context_beta_reduce (state,c) of
 		(state,constructor,true)  => (state,Proj_c(constructor,lab),true)
 	      | (state,constructor,false) => 
-		  let val field = 
-		    (case strip_crecord constructor
-		       of SOME entries =>
-			 (case (List.find (fn ((l,_)) => eq_label (l,lab))
-				entries )
-			    of SOME (l,c) => c
-			     | NONE => error (locate "context_beta_reduce") "Field not in record")
-			| NONE => error (locate "context_beta_reduce") "Proj from non-record")
-		  in context_beta_reduce(state,field)
-		  end)
+		  (case strip_crecord constructor
+		     of SOME entries =>
+		       (case (List.find (fn ((l,_)) => eq_label (l,lab))
+			      entries )
+			  of SOME (l,c) => context_beta_reduce(state,c)
+			   | NONE => error (locate "context_beta_reduce") "Field not in record")
+		      | NONE => (state,Proj_c(constructor,lab),false))) (* constructor is a mu *)
 	 | (App_c (cfun,actuals)) => 
 	      (case context_beta_reduce (state,cfun) of
 		 (state,constructor,true)  => (state,App_c(constructor,actuals),true)
