@@ -61,7 +61,7 @@ struct
        | (input,[]) => help'([con_int W32, con_int W32], con_vector (con_uint W8))
        | (input1,[]) => help(con_int W32, con_uint W8)
        | (lookahead,[]) => help'([con_int W32], con_uint W8)
-       | (end_of_stream,[]) => help(con_int W32, con_uint W32)
+       | (end_of_stream,[]) => help(con_int W32, con_bool)
        | (open_out,[]) => help(con_string, con_int W32)
        | (close_in,[]) => help(con_int W32, con_unit)
        | (output,[]) => help'([con_int W32, con_vector (con_uint W8)], con_unit)
