@@ -1369,7 +1369,8 @@ struct
        (* initialize information on storage *)
 
        val storage_info = 
-	 Trackstorage.newInfo {callee_saves = callee_saved,
+	 Stats.subtimer("chaitin_newinfo",
+	 Trackstorage.newInfo) {callee_saves = callee_saved,
 			       stack_resident = stack_resident,
 			       max_on_stack = max_passed_args,
 			       max_C_args = max_C_args,
@@ -1378,7 +1379,7 @@ struct
        val stackOffset = Trackstorage.stackOffset storage_info
        val _ = Stats.subtimer("chaitin_initbias",initBias) block_map
        val _ = msg "\tbuilding interference graph\n"
-       val igraph = buildGraph(getSignature,name,block_map,
+       val igraph =  buildGraph(getSignature,name,block_map,
 			       args,res,callee_saved)
        val _ = if (!msgs) then Ifgraph.print_stats igraph else ()
        val _ = msg "\tcoloring interference graph\n"
