@@ -23,8 +23,9 @@ structure AlphaFloatConvention
   val callerSaves2 = [22, 23, 24, 25, 26, 27, 28]
   val calleeSaves  = [9, 10, 11, 12, 13, 14, 15]
 
-  val available = results@callerSaves1@calleeSaves@arguments@callerSaves2
-  val dedicated = [29, 30, 31]
+  val available = results@callerSaves1@calleeSaves@arguments@callerSaves2@
+		  [temporary2]
+  val dedicated = [30, 31]
   val preserve	= calleeSaves
   val define	= results@callerSaves1@arguments@callerSaves2
   val use	= arguments
