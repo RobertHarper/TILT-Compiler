@@ -134,7 +134,7 @@ cmd='	PATH="'"$PATH"'"
 ; (set-default-font "6x10")  Window resize due to font change here does not work with Exceed for wide (>100) windows
   (menu-bar-mode -1)
   (delete-file "/tmp/elisp'$$'")
-  (til-slaves '$argcount' nil))
+  (til-slaves '$argcount'))
 (defun til-launch-slave ()
   (sml-run "/usr/local/bin/sml" "")
   (sml-skip-errors)
@@ -143,23 +143,24 @@ cmd='	PATH="'"$PATH"'"
 			      "CM.verbose (SOME false);"
 			      "CM.make();"
 			      "Manager.slave();\n")))
-(defun til-slave ()
-  (interactive)
+(defun til-slave (n)
+  (interactive "p")
   (til-launch-slave)
-  (switch-to-buffer sml-buffer))
-(defun til-slaves (n split)
+  (switch-to-buffer sml-buffer)
+  (rename-buffer (concat "*til slave*" (int-to-string n)) t))
+(defun til-make-slaves (n split)
   (if (= n 0)
       (balance-windows)
     (progn
       (balance-windows)
       (if split (split-window-vertically))
       (balance-windows)
-      (til-slave)
-      (rename-buffer (concat "*til slave*" (int-to-string n)) t)
-      (til-slaves (- n 1) t))))
+      (til-slave n)
+      (til-make-slaves (- n 1) t))))
+(defun til-slaves (n) (interactive "p") (til-make-slaves n nil))
 END_EMACS
-	exec emacs --no-init-file -bg black -fg yellow -fn 6x10 -geometry '$geometry' \
-	     -l /tmp/elisp'$$' -f til-slave-startup
+	exec emacs --no-init-file -bg black -fg yellow -fn 6x10 \
+		-geometry '$geometry' -l /tmp/elisp'$$' -f til-slave-startup
 '
 
 # We put the command into a file because ssh doesn't send the command
