@@ -3,7 +3,7 @@ struct
 
     val error = fn s => Util.error "blast.sml" s
     val BlastDebug = ref false
-    exception BadMagicNumber of string
+    exception BadMagicNumber = UtilError.BadMagicNumber
 
     structure B = BinIO
     structure S = B.StreamIO

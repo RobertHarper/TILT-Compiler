@@ -1,10 +1,10 @@
 include $libdir ^ "/smlnj-lib/desc"
 
-unit EQUIV = "equiv.sig.sml" {}
-unit Equiv = "equiv.sml" {EQUIV ORD_MAP URef}
-
 unit UTIL_ERROR = "util-error.sig.sml" {}
-unit UtilError = "util-error.sml" {UTIL_ERROR TextIO}
+interface UTIL_ERROR = "util-error.int" {UTIL_ERROR}
+unit UtilError = "util-error.sml" {
+	UTIL_ERROR TextIO Word8 Posix
+}
 
 unit UTIL = "util.sig.sml" {ORD_MAP ORD_SET}
 unit Util = "util.sml" {
@@ -43,7 +43,7 @@ interface BLASTER = "blast.int" {BLASTER}
 unit Blaster : BLASTER = "blast.sml" {
 	BLASTER BinIO Util TilWord64 Word8Vector Word8 Word32 Int String
 	IntListMap Option HashTableFn HashString Byte Real64 LargeReal
-	IEEEReal Time Real Position
+	IEEEReal Time Real Position UtilError
 }
 
 unit STATS = "stats.sig.sml" {Blaster}

@@ -522,7 +522,7 @@ structure LilTypecheck :> LILTYPECHECK =
 
 	fun checklist checker env args types s = 
 	  ((LO.app2 (fn (a,t) => checker env a t s) (args,types)) 
-	   handle UtilError.BUG msg => FAIL (UtilError.errormsg msg))
+	   handle (e as UtilError.BUG _) => FAIL (UtilError.errormsg e))
 
 	fun checkopt checker env arg t s =
 	  (case arg

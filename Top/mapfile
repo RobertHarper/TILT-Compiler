@@ -16,7 +16,7 @@ unit Version = "version.sml" {Int}
 
 unit TARGET = "target.sig.sml" {Platform}
 unit Target = "target.sml" {
-	TARGET Platform Util Linkrtl Core Word32
+	TARGET Platform Util Linkrtl Core Word32 CompilerControl
 }
 
 unit FILECACHE = "filecache.sig.sml" {Crc}
@@ -82,16 +82,11 @@ unit Communication = "communication.sml" {
 	Stats Name IntSyn NameBlast String Posix OS
 	List Platform BinIO Bool Fs
 }
-unit EXN_HANDLER = "exnhandler.sig.sml" {}
-interface EXN_HANDLER = "exnhandler.int" {EXN_HANDLER}
-unit ExnHandler : EXN_HANDLER = "exnhandler.sml" {
-	EXN_HANDLER Stats UtilError Word8 TextIO Posix Blaster
-}
 
 unit SLAVE = "slave.sig.sml" {}
 unit Slave = "slave.sml" {
 	SLAVE Util Stats Communication Time Platform IntSyn Compiler
-	UtilError ExnHandler Target Fs Name
+	UtilError Target Fs Name
 }
 
 unit UPDATE = "update.sig.sml" {IntSyn}
@@ -114,19 +109,19 @@ unit Manager : Manager = "manager.sml" {
 	MANAGER Util Stats Name Slave Update Compiler Master Compiler
 	LinkParse Linknil Linkrtl Linksparc Linkalpha LinkIl Linknil
 	IlContext Hoist Inline NilStatic Specialize Normalize Tools
-	LilTypecheck Int List ExnHandler IntSyn ToNil
+	LilTypecheck Int List UtilError IntSyn ToNil
 }
 
 unit MAIN = "main.sig.sml" {OS}
 interface Main = "main.int" {MAIN}
 unit Main : Main = "main.sml" {
 	MAIN Manager Util TextIO OS Arg Platform Target Int String
-	ExnHandler Stats
+	UtilError Stats
 }
 
 unit Dump = "dump.sml" {
 	MAIN Util Blaster Formatter List Char String Ppil IlBlast
-	IntSyn Communication Crc TextIO OS ExnHandler Arg
+	IntSyn Communication Crc TextIO OS UtilError Arg
 }
 
 unit RUN = "run.sig.sml" {OS}

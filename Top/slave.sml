@@ -84,7 +84,7 @@ struct
 	    val _ = if !PrintEachFile then Stats.print_measurements() else ()
 	in  ()
 	end handle (e as UtilError.Reject {msg}) =>
-	    let val _ = if !Standalone then ExnHandler.print e else ()
+	    let val _ = if !Standalone then UtilError.print e else ()
 		val _ = send (comm, Comm.ACK_REJECT (job,msg))
 	    in  ()
 	    end
@@ -104,9 +104,9 @@ struct
 		    | SOME desc => (compile(comm,desc,job); state))
 	    | _ => error "slave got unexpected message")
 	 handle e =>
-	    let val _ = if !Standalone then ExnHandler.print e else ()
-		val _ = send (comm, Comm.BOMB (ExnHandler.errorMsg e))
-		val _ = if !ExnHandler.Interactive then raise e else ()
+	    let val _ = if !Standalone then UtilError.print e else ()
+		val _ = send (comm, Comm.BOMB (UtilError.errormsg e))
+		val _ = if !UtilError.Interactive then raise e else ()
 	    in  state
 	    end)
 

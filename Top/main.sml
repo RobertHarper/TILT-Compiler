@@ -146,12 +146,12 @@ struct
 	end
 
     fun main (_ : string, args : string list) : OS.Process.status =
-	let val _ = ExnHandler.Interactive := false
+	let val _ = UtilError.Interactive := false
 	    val options : options =
 		{action=MAKE, master=false, targets=nil}
 	    val (args,options) = Arg.arguments process_arg (args,options)
 	in  run (args,options);
 	    OS.Process.success
-	end handle e => ExnHandler.printAndExit e
+	end handle e => UtilError.print_and_exit e
 
 end

@@ -66,7 +66,7 @@ struct
 	 OS.Process.exit (OS.Process.failure))
 
     fun main (_ : string, args : string list) : OS.Process.status =
-	let val _ = ExnHandler.Interactive := false
+	let val _ = UtilError.Interactive := false
 	    type acc = string -> unit
 	    fun option ({argc,...} : acc Arg.argument) : acc =
 		(case argc
@@ -75,6 +75,6 @@ struct
 	    val (files, f) = Arg.arguments option (args,dump)
 	in  app f files;
 	    OS.Process.success
-	end handle e => ExnHandler.printAndExit e
+	end handle e => UtilError.print_and_exit e
 
 end

@@ -41,8 +41,6 @@ compiler.sml
 
 communication.sig.sml
 communication.sml
-exnhandler.sig.sml
-exnhandler.sml
 
 slave.sig.sml
 slave.sml

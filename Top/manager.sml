@@ -65,8 +65,8 @@ struct
 
     fun Exn (f : 'a -> 'b) (x : 'a) : 'b =
 	(f x handle e =>
-	    if !ExnHandler.Interactive then
-		(ExnHandler.print e; raise e)
+	    if !UtilError.Interactive then
+		(UtilError.print e; raise e)
 	    else
 		raise e)
 
@@ -86,9 +86,7 @@ struct
 		[til_slave,Int.toString num,
 		 Int.toString count,machine,commdir]
 	    fun startSlave (arg:int * int * string) : unit =
-		let fun run () : unit = Util.run (cmdline arg)
-		in  ignore(Util.background' run)
-		end
+		Util.run {command=cmdline arg, stdin=NONE, stdout=NONE, wait=false}
 	    fun loop (cur : int, slaveList : (int * string) list) : unit =
 		(case slaveList
 		   of nil => ()
