@@ -147,7 +147,7 @@ cc	:	(nil)
 ent	: INTERFACE ID EQ ie
 		(E.INTERFACE(interface_label ID,ie))
 	| UNIT ID COLON ID
-		(E.SC(unit_label ID, interface_label ID))
+		(E.SC(unit_label ID1, interface_label ID2))
 	| UNIT ID EQ ue
 		(E.UNIT(unit_label ID, ue))
 	| UNIT ID asc EQ exp opopt

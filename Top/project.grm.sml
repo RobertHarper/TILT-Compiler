@@ -639,9 +639,9 @@ _,(MlyValue.exp exp,_,_))::(_,(_,ELIFleft as ELIF1left,_))::rest671)
 ,(_,INTERFACE1left,_))::rest671) => let val result=MlyValue.ent((
 E.INTERFACE(interface_label ID,ie)))
  in (LrTable.NT 11,(result,INTERFACE1left,ie1right),rest671) end
-| (45,(_,(_,_,ID2right))::_::(_,(MlyValue.ID ID,_,_))::(_,(_,UNIT1left
-,_))::rest671) => let val result=MlyValue.ent((
-E.SC(unit_label ID, interface_label ID)))
+| (45,(_,(MlyValue.ID ID2,_,ID2right))::_::(_,(MlyValue.ID ID1,_,_))::
+(_,(_,UNIT1left,_))::rest671) => let val result=MlyValue.ent((
+E.SC(unit_label ID1, interface_label ID2)))
  in (LrTable.NT 11,(result,UNIT1left,ID2right),rest671) end
 | (46,(_,(MlyValue.ue ue,_,ue1right))::_::(_,(MlyValue.ID ID,_,_))::(_
 ,(_,UNIT1left,_))::rest671) => let val result=MlyValue.ent((
