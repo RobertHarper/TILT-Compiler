@@ -45,6 +45,16 @@ uncaught exception BUG
 Comments:    This is pretty pathological, but we should
              be careful about this kind of thing because it
              can easily lead to unsoundness.
+
+	[pds] To fix the meaning of derived forms, it is reasonable to
+	disallow bindings for :: and nil (except in the Basis) and
+	document the resulting small deviation from the standard.
+
+	[pds] If you take over this bug, then you should search the
+	elaborator for other derived forms and symbols which should
+	not be rebound.  For example, I think SOME and NONE are used
+	to translate pval declarations.
+
 Fix:
 Test: *
 Owner: *
