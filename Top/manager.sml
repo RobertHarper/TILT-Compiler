@@ -13,11 +13,13 @@ struct
 
   val up_to_phasesplit = ref false
   val up_to_elaborate = ref false
+  val stat_each_file = ref false
 
   structure Basis = Elaborator.Basis
 (*  structure UIBlast = mkBlast(type t = Elaborator.context) *)
 
   val error = fn x => Util.error "Manager" x
+  fun access arg = OS.FileSys.access arg handle _ => false
 
   val chat_ref = ref true
   val diag_ref = ref false
@@ -34,16 +36,20 @@ struct
       end
 
   fun help() = print "This is TILT - no help available.\n"
-  fun readContext file = let val is = TextIO.openIn file
+  fun readContext file = let val is = BinIO.openIn file
 			     val res = Elaborator.IlContext.blastInContext is
-			     val _ = TextIO.closeIn is
+			     val _ = BinIO.closeIn is
 			 in  res
 			 end
-  fun writeContext (file,ctxt) = let val os = TextIO.openOut file
+  fun writeContext (file,ctxt) = let val os = BinIO.openOut file
 				     val _ = Elaborator.IlContext.blastOutContext os ctxt
-				     val _ = TextIO.closeOut os
+				     val _ = BinIO.closeOut os
 				 in  ()
 				 end
+  val readContext = Stats.timer("ReadingContext",readContext)
+  val writeContext = Stats.timer("WritingContext",writeContext)
+  val addContext = Stats.timer("AddingContext",Elaborator.plus_context)
+
   type unitname = string
   type filebase = string
   local
@@ -77,8 +83,8 @@ struct
 (*	  val ctxts = List.map (fn file => UIBlast.blastIn (base2ui file)) imports *)
 	  val ctxts = List.map (fn file => readContext (base2ui file)) imports
 	  val _ = chat ("  [Adding contexts now]\n")
-	  val context_basis = Elaborator.plus_context (ctxt_inline :: ctxts)
-	  val context = Elaborator.plus_context ctxts
+	  val context_basis = addContext (ctxt_inline :: ctxts)
+	  val context = addContext ctxts
       in (context_basis, context)
       end
 
@@ -103,7 +109,7 @@ struct
       case Elaborator.elab_dec(pre_ctxt, fp, dec)
 	of SOME(sbnd_entries, new_ctxt) => 
 	    let	val same = 
-		(OS.FileSys.access(uiFile, [OS.FileSys.A_READ]) andalso
+		(access(uiFile, [OS.FileSys.A_READ]) andalso
 		 Elaborator.eq_context(new_ctxt, readContext uiFile))
 		val _ = if same 
 			    then (if Time.<(OS.FileSys.modTime uiFile, least_new_time)
@@ -174,7 +180,7 @@ struct
 					 then error ("Loop detected in: " ^
 						     foldr (fn (a,b) => (a ^ " " ^ b)) "" seenunits)
 				     else ()) imports
-	      in  if (not use_imp andalso OS.FileSys.access(intfile, [OS.FileSys.A_READ]))
+	      in  if (not use_imp andalso access(intfile, [OS.FileSys.A_READ]))
 		      then let val _ = diag ("  [Scanning " ^ intfile ^ " for includes]\n")
 			       val imports = parse_inter_include intfile
 			       val _ = check_loop imports
@@ -237,10 +243,10 @@ struct
 		      end
 	      in  Listops.andfold folder files
 	      end
-	  val fresh = (OS.FileSys.access(uofile, [OS.FileSys.A_READ]) andalso
+	  val fresh = (access(uofile, [OS.FileSys.A_READ]) andalso
 		       is_fresh(OS.FileSys.modTime uofile, uofile) andalso
-		       (OS.FileSys.access(intfile, [OS.FileSys.A_READ]) orelse
-			(OS.FileSys.access(uifile, [OS.FileSys.A_READ]) andalso
+		       (access(intfile, [OS.FileSys.A_READ]) orelse
+			(access(uifile, [OS.FileSys.A_READ]) andalso
 			 is_fresh(OS.FileSys.modTime uifile, uifile))))
 	  val _ = if fresh
 		      then diag ("  [" ^ uofile ^ " is up-to-date]\n")
@@ -256,8 +262,8 @@ struct
 	  val source_sml = base2sml sourcebase
 	  val source_int = base2int sourcebase
       in  case (make_uo,
-		OS.FileSys.access(source_int, [OS.FileSys.A_READ]),
-		OS.FileSys.access(source_sml, [OS.FileSys.A_READ])) of
+		access(source_int, [OS.FileSys.A_READ]),
+		access(source_sml, [OS.FileSys.A_READ])) of
 	  (true, true, true) => (compileINT mapping unit;
 				 compileSML make_uo mapping unit)
 	| (false, true, true) => compileINT mapping unit
@@ -267,7 +273,10 @@ struct
       end
 
   and compileSML'' mapping (unit, imports, least_new_time) : unit = 
-      let val srcBase = name2base mapping unit
+      let val _ = if (!stat_each_file)
+		      then Stats.clear_stats()
+		  else ()
+	  val srcBase = name2base mapping unit
 	  val smlfile = base2sml srcBase
 	  val _ = chat ("  [Parsing " ^ smlfile ^ "]\n")
 	  val (fp, _, dec) = Parser.parse_impl smlfile
@@ -282,7 +291,7 @@ struct
 	  val oFile = srcBase ^ ".o"
 	  val uoFile = srcBase ^ ".uo"
 	  val (sbnds, ctxt') = 
-	      if OS.FileSys.access(intFile, []) then 
+	      if access(intFile, []) then 
 		  let val _ = compileINT mapping unit 
 		      val (fp2, _, specs) = Parser.parse_inter intFile
 		      val _ = chat ("  [Elaborating " ^ smlfile ^ " with constraint]\n"  )
@@ -317,7 +326,9 @@ struct
 			  end
 		  else ()
 	  val _ = chat "]\n"
-
+	  val _ = if (!stat_each_file)
+		      then Stats.print_stats()
+		  else ()
       in  ()
       end
 
@@ -332,7 +343,7 @@ struct
 	  val includes_uo = map base2uo includes_base
 	  val unitName = OS.Path.base(OS.Path.file sourcefile)
 	  val uiFile = (OS.Path.base sourcefile) ^ ".ui"
-      in if (OS.FileSys.access(uiFile, [OS.FileSys.A_READ]) andalso
+      in if (access(uiFile, [OS.FileSys.A_READ]) andalso
 	     is_fresh includes_uo (OS.FileSys.modTime uiFile, uiFile))
 	     then ()
 	 else let val (ctxt_for_elab,ctxt) = getContext includes_base
@@ -442,7 +453,7 @@ struct
       end
        
   fun getMapping mapFile : mapping = 
-      let val _ = if (OS.FileSys.access(mapFile, [OS.FileSys.A_READ]))
+      let val _ = if (access(mapFile, [OS.FileSys.A_READ]))
 		      then ()
 		  else error "Cannot read map file"
 	  val is = TextIO.openIn mapFile
@@ -462,7 +473,7 @@ struct
 
   fun tilc(mapfile : string, cs : bool, rs : string option, 
 	   os : string option, srcs : string list) =
-	let val _ = Stats.reset_stats()
+	let val _ = Stats.clear_stats()
 	    val mapping = getMapping mapfile
 	    val srcs = if srcs = [] 
 			   then list_units mapping

@@ -221,7 +221,7 @@ void LookupSpecialWordPair(Callinfo_t *callinfo, int pos, int *a, int *b)
   int *special_word_stuff = (int *) (special_byte + bytedata_bytesize);
   *a = special_word_stuff[2*pos];
   *b = special_word_stuff[2*pos+1];
-  if (*b >= ((int)callinfo) + (GET_ENTRYSIZE(callinfo->sizes) << 2))
+  if (&(special_word_stuff[2*pos+1]) >= ((int)callinfo) + (GET_ENTRYSIZE(callinfo->sizes) << 2))
     {
       printf("ERROR in lookupspecialwordpair\n");
       printf("stacktrace_bytesize = %d\n",stacktrace_bytesize);

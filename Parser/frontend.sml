@@ -32,7 +32,9 @@ fun debugmsg  (msg : string) =
       printit
   end
 
-(* val addLines = Stats.addStat(Stats.makeStat "Source Lines") *)
+fun addLines lines = let val r = Stats.int("SourceLines") 
+		     in  r := !r + lines
+		     end
 
 datatype parseResult
   = EOF   (* end of file reached *)
@@ -104,7 +106,7 @@ fun parse (source as {sourceStream,errConsumer,interactive,
                  else let val _ = prompt := !Control.secondaryPrompt;
                           val (result, lexer'') =
                             MLP.parse(lookahead,!lexer',parseerror,err)
-(*                        val _ = addLines(linesRead()) *)
+			  val _ = addLines(linesRead()) 
                           val _ = lexer' := lexer''
 			  val Ast.MarkTop(top, _) = result
 		      in if !anyErrors then ERROR
@@ -124,9 +126,12 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
-# Revision 1.3  97/10/21  18:06:56  pscheng
-# added copies of files from ml-yacc
+# Revision 1.4  97/11/19  16:48:48  pscheng
+# changed timers to subtimers
 # 
+# Revision 1.3  1997/10/21  18:06:56  pscheng
+# added copies of files from ml-yacc
+#
 # Revision 1.2  97/07/02  22:03:04  jgmorris
 # Modified syntax to allow for interfaces and implementations.
 # 

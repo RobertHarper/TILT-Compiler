@@ -1204,6 +1204,7 @@ struct
 	 translate (Rtl.ILABEL rtl_loclabel)
        end
 
+     | translate (Rtl.NEEDGC (Rtl.IMM 0)) = ()
      | translate (Rtl.NEEDGC (Rtl.IMM words)) =
        let
 	 val rtl_Itemp = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)

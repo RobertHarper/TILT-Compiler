@@ -74,19 +74,19 @@ signature NAME =
 
 
     (* blasting routines *)
-    val blastInVar    : TextIO.instream -> var
-    val blastOutVar   : TextIO.outstream -> var -> unit
-    val blastInLabel  : TextIO.instream -> label
-    val blastOutLabel : TextIO.outstream -> label -> unit
-    val blastInTag    : TextIO.instream -> tag
-    val blastOutTag   : TextIO.outstream -> tag -> unit
+    val blastInVar    : BinIO.instream -> var
+    val blastOutVar   : BinIO.outstream -> var -> unit
+    val blastInLabel  : BinIO.instream -> label
+    val blastOutLabel : BinIO.outstream -> label -> unit
+    val blastInTag    : BinIO.instream -> tag
+    val blastOutTag   : BinIO.outstream -> tag -> unit
 
-    val blastOutVarmap   : TextIO.outstream -> 'a Blaster.blastout -> 'a VarMap.map -> unit
-    val blastInVarmap    : TextIO.instream -> 'a Blaster.blastin -> 'a VarMap.map
-    val blastOutLabelmap   : TextIO.outstream -> 'a Blaster.blastout -> 'a LabelMap.map -> unit
-    val blastInLabelmap    : TextIO.instream -> 'a Blaster.blastin -> 'a LabelMap.map
-    val blastOutTagmap   : TextIO.outstream -> 'a Blaster.blastout -> 'a TagMap.map -> unit
-    val blastInTagmap    : TextIO.instream -> 'a Blaster.blastin -> 'a TagMap.map
+    val blastOutVarmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a VarMap.map -> unit
+    val blastInVarmap    : BinIO.instream -> 'a Blaster.blastin -> 'a VarMap.map
+    val blastOutLabelmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a LabelMap.map -> unit
+    val blastInLabelmap    : BinIO.instream -> 'a Blaster.blastin -> 'a LabelMap.map
+    val blastOutTagmap   : BinIO.outstream -> 'a Blaster.blastout -> 'a TagMap.map -> unit
+    val blastInTagmap    : BinIO.instream -> 'a Blaster.blastin -> 'a TagMap.map
 
 
   end

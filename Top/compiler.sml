@@ -1,17 +1,31 @@
 
 structure Til : COMPILER =
     struct
+
+
 	type sbnd = Linknil.Il.sbnd
 	and context_entry = Linknil.Il.context_entry
 	and context = Linknil.Il.context
 
 	val error = fn x => Util.error "Compiler" x
 	val as_path = "as"
+	val has_sys = OS.Process.system "sys" = OS.Process.success
 
 	fun assemble(s_file,o_file) =
 	    let val command = as_path ^ " -c -o " ^ o_file ^ " " ^ s_file
-	    in  if OS.Process.system command =  OS.Process.success then ()
-		else error "assemble. System command as failed"
+	    in  if (not has_sys)
+	        then 
+                  let val os = TextIO.openOut "worklist"
+	              val _ = TextIO.output(os,command)
+	              val _ = TextIO.closeOut os
+		      fun sleep() = ()
+		      fun loop() = if OS.FileSys.access("worklist",[])
+					then (sleep(); loop()) else ()
+                  in  loop()
+                  end
+	        else 
+	          (if OS.Process.system command =  OS.Process.success then ()
+		  else error "assemble. System command as failed")
 	    end
 
 	fun compile (ctxt: context, unitName: string, 

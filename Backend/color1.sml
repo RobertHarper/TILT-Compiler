@@ -23,8 +23,8 @@ struct
 
    (* Color the interference graph *)
 
-   fun simplify_graph_time f = Stats.timer("simplify graph",f)
-   fun select_colors_time f = Stats.timer("select colors",f)
+   fun simplify_graph_time f = Stats.subtimer("simplify graph",f)
+   fun select_colors_time f = Stats.subtimer("select colors",f)
 
 
    (* returns a mapping from all pseudo-registers used in a procedure

@@ -81,12 +81,12 @@ struct
 
    (* time various phases *)
 
-   fun precolor_time f = Stats.timer("precolor",f)
-   fun replace_calls_time f = Stats.timer("replace calls",f)
-   fun annotate_time f =      Stats.timer("annotate",f)
-   fun build_graph_time f =   Stats.timer("build graph",f)
-   fun summarize_time f =     Stats.timer("summarize info",f)
-   fun rewrite_time f =       Stats.timer("rewrite prog",f)
+   fun precolor_time f = Stats.subtimer("precolor",f)
+   fun replace_calls_time f = Stats.subtimer("replace calls",f)
+   fun annotate_time f =      Stats.subtimer("annotate",f)
+   fun build_graph_time f =   Stats.subtimer("build graph",f)
+   fun summarize_time f =     Stats.subtimer("summarize info",f)
+   fun rewrite_time f =       Stats.subtimer("rewrite prog",f)
 
 
 

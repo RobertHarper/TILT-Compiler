@@ -122,7 +122,7 @@ struct
     fun compile_prelude arg = specific_reparse_prelude arg
 	
 
-    fun reset_wrapper f arg = let val _ = Stats.reset_stats()
+    fun reset_wrapper f arg = let val _ = Stats.clear_stats()
 				  val res = f arg
 				  val _ = Stats.print_stats()
 			      in  res
