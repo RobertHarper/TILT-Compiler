@@ -5,7 +5,11 @@ Group is
 util.sig.sml
 util.sml
 platform.sig.sml
+# if defined(OPSYS_WIN32)
+platform-nt.sml
+# else
 platform.sml
+# endif
 sequence.sig.sml
 sequence.sml
 tilword.sig.sml
