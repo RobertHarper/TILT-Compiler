@@ -9,7 +9,8 @@ signature PAT =
     type patarg = {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   expcompile : Il.context * Ast.exp -> Il.exp * Il.con,
-		   polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list }
+		   polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list,
+		   error_region : unit -> unit }
 
     (* BindCompile creates bindings of all variables in the given pattern Ast.pat
         when the pattern is applied to the expression (Il.exp/Il.con). *)

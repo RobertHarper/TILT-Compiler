@@ -25,7 +25,7 @@ functor Basis(structure Il : IL
       open Symbol
       open Fixity
     in 
-      val table = [(":=", infixleft 3), (* XXX is this right? *)
+      val table = [(":=", infixleft 3), 
 		   ("o",  infixleft 3),
 		   ("=",  infixleft 4),
 		   ("<>", infixleft 4),
@@ -164,12 +164,11 @@ functor Basis(structure Il : IL
        val context = exp_entry context "size" (PRIM(vlength1,[CON_UINT W8]))
 
 (*
-	   mono_entry "size" (SIZE),
-	   mono_entry "chr" (CHR),
-	   mono_entry "ord" (ORD),
 	   mono_entry "explode" (EXPLODE),
 	   mono_entry "implode" (IMPLODE), 
 *)
+       val context = var_entry context "chr" (CON_ARROW(CON_INT W32, CON_UINT W8, oneshot_init PARTIAL))
+       val context = var_entry context "ord" (CON_ARROW(CON_UINT W8, CON_INT W32, oneshot_init TOTAL))
        val context = var_entry context "^" (CON_ARROW(con_tuple[con_string,con_string],
 						      con_string,oneshot_init TOTAL))
 
@@ -249,8 +248,14 @@ functor Basis(structure Il : IL
 			      tyvars=[Tyv (tyvSymbol "'a")]}]
 		    
 
+		fun typecompile(ctxt,ty) = 
+		    let fun zfp(_:Ast.srcpos) = ("zfp",0,0)
+		    in (case Toil.xty(ctxt,zfp,ty) of
+			    SOME c => c
+			  | NONE => error "Compilation error in initial basis")
+		    end
 		val list_sbnd_sdecs = Datatype.compile {context = context,
-							typecompile = Toil.xty,
+							typecompile = typecompile,
 							datatycs = listdb : Ast.db list,
 							withtycs = [] : Ast.tb list,
 							eq_compile = Toil.xeq}
@@ -258,56 +263,33 @@ functor Basis(structure Il : IL
 		    
 		val (mlist,slist) = (MOD_STRUCTURE(map #1 list_sbnd_sdecs),
 				     SIGNAT_STRUCTURE(NONE, map #2 list_sbnd_sdecs))
-		(*
-                 val (mlist,slist) = (case (make_inline_module(context,mlist)) of
-		                             SOME m => (
-						  print "original mlist is\n";
-						  pp_mod mlist;
-						  print "inlinable mlist is\n";
-						  pp_mod m;
-						  print "\n";
+		    
+		val bool_sbnd_sdecs = Datatype.compile {context = context,
+							typecompile = typecompile,
+							datatycs = booldb : Ast.db list,
+							withtycs = [] : Ast.tb list,
+							eq_compile = Toil.xeq}
+		val (mbool,sbool) = (MOD_STRUCTURE(map #1 bool_sbnd_sdecs),
+				     SIGNAT_STRUCTURE(NONE, map #2 bool_sbnd_sdecs))
 
-						  (m,IlStatic.GetModSig(context,m)))
-				     | NONE => (print "cannot inline module mlist = \n";
-						pp_mod mlist;
-						print "\n";
-						error "cannot inline list module"))
-		  handle e as (IlUtil.NOTFOUND s) => (print "\n***"; print s; print "\n"; raise e)
-*)						 
+		(* we compute a precise signature for bool type so that the elaborator can use
+		   the fact that a bool is a CON_MUPROJECT(unit + unit) *)
+		val sbool = IlStatic.GetModSig(context,mbool)
 
-
-	      val bool_sbnd_sdecs = Datatype.compile {context = context,
-						      typecompile = Toil.xty,
-						      datatycs = booldb : Ast.db list,
-						      withtycs = [] : Ast.tb list,
-						      eq_compile = Toil.xeq}
-	      val (mbool,sbool) = (MOD_STRUCTURE(map #1 bool_sbnd_sdecs),
-				   SIGNAT_STRUCTURE(NONE, map #2 bool_sbnd_sdecs))
-	      val (mbool,sbool) = (case (make_inline_module(context,mbool)) of
-				       SOME m => (m,IlStatic.GetModSig(context,m))
-				     | NONE => (print "cannot inline bool mbool = \n";
-						pp_mod mbool;
-						print "\n";
-						error "cannot inline bool module"))
-
-
-	      val bool_label = open_internal_label "bools"
-	      val bool_var = fresh_named_var "bools"
-	      val list_label = open_internal_label "lists"
-	      val list_var = fresh_named_var "lists"
-	      val sbool = IlStatic.SelfifySig(SIMPLE_PATH bool_var, sbool)
-	      val slist = IlStatic.SelfifySig(SIMPLE_PATH list_var, slist)
+		val bool_label = open_internal_label "bools"
+		val bool_var = fresh_named_var "bools"
+		val list_label = open_internal_label "lists"
+		val list_var = fresh_named_var "lists"
+		val sbool = IlStatic.SelfifySig(SIMPLE_PATH bool_var, sbool)
+		val slist = IlStatic.SelfifySig(SIMPLE_PATH list_var, slist)
 	    in
-		(
-(*		 [CONTEXT_INLINE(bool_label, bool_var, INLINE_MODSIG(mbool,sbool)),
-		  CONTEXT_INLINE(list_label, list_var, INLINE_MODSIG(mlist,slist))], *)
-		 [SDEC(bool_label, DEC_MOD(bool_var, sbool)),
+		([SDEC(bool_label, DEC_MOD(bool_var, sbool)),
 		  SDEC(list_label, DEC_MOD(list_var, slist))],
 		 [SBND(bool_label, BND_MOD(bool_var,mbool)),
 		  SBND(list_label, BND_MOD(list_var,mlist))])
 	    end
 
-	val context = add_context_sdecs(context,datatype_sdecs)
+           val context = add_context_sdecs(context,datatype_sdecs)
       in
 	  (context, datatype_sbnds)      
       end

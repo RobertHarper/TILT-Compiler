@@ -366,7 +366,7 @@ functor IlEval(structure Il : IL
 	   | UNROLL(c,e) => let val c' = eval_con env c
 				val e' = eval_exp env e
 			    in case e' of
-				ROLL(c'',e'') => if (eq_con'(empty_context,c',c'')) then e'' 
+				ROLL(c'',e'') => if (eq_con(empty_context,c',c'')) then e'' 
 						 else error_exp (UNROLL(c',ROLL(c'',e''))) 
 						     "UNROLL(ROLL(e)) bad"
 			      | _ => error_exp e' "UNROLL did not get a ROLL arg"

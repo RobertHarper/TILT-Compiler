@@ -99,6 +99,17 @@ functor IlUtil(structure Ppil : PPIL
 	in CASE([con_unit,con_unit],UNROLL(con_bool,e1),
 		[SOME e3',SOME e2'],NONE)
 	end
+    fun make_seq eclist =
+	let fun loop [] = error "make_seq given empty list"
+	      | loop [ec] = ec
+	      | loop ((e,c)::erest) = 
+		let val (erest',erestcon) = loop erest
+		    val (abs,_) = make_lambda(fresh_var(),c,
+					      erestcon,erest')
+		in (APP(abs,e),erestcon)
+		end
+	in  loop eclist
+	end
 
     fun make_let (ve_list : (var * exp) list, body) = LET (map BND_EXP ve_list,body)
     fun make_catch (e,con,efail) : exp =

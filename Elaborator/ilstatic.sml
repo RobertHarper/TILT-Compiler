@@ -213,7 +213,7 @@ functor IlStatic(structure Il : IL
 	  | (NONE, NONE) => ((eq_oneshot(comp1,comp2)) orelse
 			     (oneshot_set(comp1,PARTIAL); 
 			      oneshot_set(comp2,PARTIAL); true)))
-   fun comp_unify (a1,a2) = if (eq_comp(a1,a2,false)) then () else error "comp_unify failed"
+   fun eq_onearrow (a1,a2) = eq_comp(a1,a2,false)
 
 
    val hardset_targets = ref ([] : con list);
@@ -1444,25 +1444,13 @@ functor IlStatic(structure Il : IL
 	 in Sig_IsSub'(ctxt,s1,s2)
 	 end
 
-    (* --------- type unifiers with error messages ------------------------ *)
-    type printer = Il.con -> unit
-    fun con_unify'(ctxt : context, msg : string, 
-		  (str1 : string, con1 : con),
-		  (str2 : string, con2 : con), thunk) =
-	let fun bad() =  (print "\n\n>>>In "; print msg;
-			  print ", could not unify "; print str1; print ":\n"; pp_con con1;
-			  print "\n>>>with "; print str2; print ":\n"; pp_con con2; print "\n\n\n";
-			  thunk();
-			  error ("In " ^ msg ^ ", could not unify " ^  str1 ^ " with " ^ str2))
-	in (if (eq_con(con1,con2,ctxt)) then () else bad())
-	    handle e => bad()
-	end
 
-    val eq_con' = fn (ctxt,c1,c2) => eq_con(c1,c2,ctxt)
-    val sub_con' = fn (ctxt,c1,c2) => sub_con(c1,c2,ctxt)
-    val soft_eq_con' = fn (ctxt,c1,c2) => soft_eq_con(c1,c2,ctxt)
-    val con_normalize' = fn (context,c) => Normalize(c,context)
-    val con_head_normalize' = fn (context,c) => #2(HeadNormalize(c,context))
+
+    val eq_con = fn (ctxt,c1,c2) => eq_con(c1,c2,ctxt)
+    val sub_con = fn (ctxt,c1,c2) => sub_con(c1,c2,ctxt)
+    val soft_eq_con = fn (ctxt,c1,c2) => soft_eq_con(c1,c2,ctxt)
+    val con_normalize = fn (context,c) => Normalize(c,context)
+    val con_head_normalize = fn (context,c) => #2(HeadNormalize(c,context))
 
     val GetExpCon = fn (d,e) => #2(GetExpCon(e,d))
     val GetConKind = fn (d,c) => GetConKind(c,d)

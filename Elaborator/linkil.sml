@@ -106,7 +106,10 @@ structure LinkIl (* : LINKIL *) =
 	val error = fn s => Util.error "linkil.sml" s
 
 	fun setdepth d = Compiler.Control.Print.printDepth := d
-	val parse = LinkParse.named_form_dec o LinkParse.tvscope_dec o LinkParse.parse_one
+	fun parse s = 
+	    let val (is,dec) = LinkParse.parse_one s
+	    in (Source.filepos is, LinkParse.named_form_dec(LinkParse.tvscope_dec dec))
+	    end
 	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
@@ -122,18 +125,20 @@ structure LinkIl (* : LINKIL *) =
 	    in IlContext.add_context_entries(ctxt,entries')
 	    end
 
-	fun elaborate_diff'(context,astdec) = 
-	    let
-		val sbnd_ctxt_list = Toil.xdec(context,astdec)
-		val sbnds = List.mapPartial #1 sbnd_ctxt_list
-		val ctxts = map #2 sbnd_ctxt_list
-	    in	(sbnds,ctxts)
-	    end;
+	fun elaborate_diff'(context,(filepos,astdec)) = 
+	    (case (Toil.xdec(context,filepos,astdec)) of
+		SOME sbnd_ctxt_list =>
+		    let val sbnds = List.mapPartial #1 sbnd_ctxt_list
+			val ctxts = map #2 sbnd_ctxt_list
+		    in	SOME(sbnds,ctxts)
+		    end
+	      | _ => NONE)
 
-	fun elaborate'(context,astdec) = 
-	    let val (sbnds,context_diff) = elaborate_diff'(context,astdec)
-	    in	(sbnds,local_add_context_entries(context,context_diff))
-	    end
+	fun elaborate'(context,(filepos,astdec)) = 
+	    (case (elaborate_diff'(context,(filepos,astdec))) of
+		 SOME(sbnds,context_diff) =>
+		     SOME(sbnds,local_add_context_entries(context,context_diff))
+	       | _ => NONE)
 
 	fun elaborate s = elaborate'(initial_context,parse s)
 	fun elaborate_diff s = elaborate_diff'(initial_context,parse s)
@@ -154,10 +159,14 @@ structure LinkIl (* : LINKIL *) =
 	fun check' filename {doprint,docheck} =
 	    let
 		val _ = Stats.reset_stats()
-  	        val astdec = (Stats.timer("PARSING",LinkParse.parse_one)) filename
+  	        val (is,astdec) = (Stats.timer("PARSING",LinkParse.parse_one)) filename
+		val fp = Source.filepos is
   	        val astdec = (Stats.timer("PARSE_TVSCOPE",LinkParse.tvscope_dec)) astdec
   	        val astdec = (Stats.timer("PARSE_NAMEDFORM",LinkParse.named_form_dec)) astdec
-		val (sbnds,cdiff) = (Stats.timer("ELABORATION",elaborate_diff')) (initial_context,astdec)
+		val (sbnds,cdiff) = 
+		    (case (Stats.timer("ELABORATION",elaborate_diff')) (initial_context,(fp,astdec)) of
+			 SOME res => res
+		       | NONE => error "Elaboration failed")
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)

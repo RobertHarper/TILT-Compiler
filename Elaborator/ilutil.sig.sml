@@ -44,6 +44,7 @@ signature ILUTIL =
     val make_let  : ((var * exp) list * exp) -> exp
     val make_catch : exp * con * exp -> exp
     val make_ifthenelse : exp * exp * exp * con -> exp
+    val make_seq : (exp * con) list -> exp * con
 
     val con_bool : con
 

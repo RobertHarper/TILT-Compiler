@@ -23,6 +23,9 @@ functor Toil(structure Il : IL
     open Util Listops Name IlContext Tyvar
     open Prim
 
+    val parse_error = fn s => error "toil.sml: parse impossibility" s
+    val pat_error = fn s => error "toil.sml: pattern impossibility" s
+    val elab_error = fn s => error "toil.sml: elaborator impossibility" s
     val error = fn s => error "toil.sml" s
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
@@ -38,23 +41,62 @@ functor Toil(structure Il : IL
     type tyvar = (context,con) Tyvar.tyvar
     type ocon = (context,con) Tyvar.ocon
     type decresult = (sbnd option * context_entry) list
+    type filepos = Ast.srcpos -> string * int * int
     exception NoEqExp
 
-    (*  ------- Table to hold overload, eq, and flex entries -------
-      -------------------------------------------------------------- *)
+
+
+
+
+    (*  --------- Elaboration state contains: -------------------------
+        overload table, eq table, flex tables, 
+	source position stack, error state
+        -------------------------------------------------------------- *)
+    datatype ErrorLevel = NoError | Warn | Error
     local 
       val tyvar_table = ref([] : tyvar list)
       val overload_table = ref ([] : ocon list)
       val eq_table = ref ([] : (context * tyvar * exp Util.oneshot) list)
       val eq_stack = ref ([] : (dec list * context * tyvar * exp Util.oneshot) list list)
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
+      val error_level = ref NoError
+      val src_region = ref ([] : (Ast.srcpos * Ast.srcpos) list)
+      fun nofilepos _ = ("nofilepos",0,0)
+      val filepos = ref nofilepos
+      fun error_max (Error,_) = Error
+	| error_max (_,Error) = Error
+	| error_max (Warn,_) = Warn
+	| error_max (_,Warn) = Warn
+	| error_max (NoError,NoError) = NoError
     in
-	fun clear_tables () = (tyvar_table := [];
-			       overload_table := [];
-			       flex_table := [];
-			       eq_table := [];
-			       eq_stack := [])
+	fun reset_elaboration fp = (reset_counters();
+				    tyvar_table := [];
+				    overload_table := [];
+				    flex_table := [];
+				    eq_table := [];
+				    eq_stack := [];
+				    error_level := NoError;
+				    src_region := [];
+				    filepos := fp)
 	    
+	fun get_elaboration_error() = !error_level
+
+	fun push_region p = src_region := (p :: (!src_region))
+	fun pop_region () = src_region := (tl(!src_region))
+	fun peek_region () : string = let val (p1,p2) = (hd(!src_region))
+					  val fp = !filepos
+					  val (f1,r1,c1) = fp p1
+					  val (f2,r2,c2) = fp p2
+				      in f1 ^ ":" ^ 
+					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^ 
+					  ((Int.toString r2) ^ "." ^ (Int.toString c2))
+				      end
+	fun error_region() = (error_level := error_max(!error_level,Error);
+			      print "Error at "; print (peek_region()); print ", ")
+	fun warn_region() = (error_level := error_max(!error_level,Warn);
+			     print "Warning at "; print (peek_region()); print ", ")
+	    
+
 	fun get_tyvar_table () = !tyvar_table
 	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
 
@@ -68,7 +110,7 @@ functor Toil(structure Il : IL
 	fun get_eq_table () = !eq_table
 	fun add_eq_entry (ctxt,tyvar,expos) = 
 	    (case (!eq_stack) of
-		 [] => error "cannot add entry: empty eq_stack"
+		 [] => elab_error "cannot add entry: empty eq_stack"
 	       | (first::rest) => let val first' = ([],ctxt,tyvar,expos)::first
 				  in (eq_stack := first'::rest)
 				  end)
@@ -89,7 +131,7 @@ functor Toil(structure Il : IL
 		    (foldr (fn (dec,ctxt) => add_context_dec(ctxt,SelfifyDec dec)) context extra_decs,
 		     tyvar,expos)
 	    in case stack' of
-		[] => error "cannot pop: empty eq_stack"
+		[] => elab_error "cannot pop: empty eq_stack"
 	      | (first :: rest) => (debugdo (fn () => (print "EQ-There are "; 
 						       print (Int.toString (length first));
 						       print " items in first\n"));
@@ -99,57 +141,16 @@ functor Toil(structure Il : IL
     end
 
     fun tyvar_getctxt tyvar = (case (tyvar_getctxts tyvar) of
-				  [] => error "tyvar must have some context"
+				  [] => elab_error "XXX tyvar must have some context"
 				| a::_ => a)
 
 
      (* ----------------- Helper Functions ----------------------- *)
-
-
-     (* make inlineable by substituting all variables.  
-      However, substituing an expression is not legal except in certain cases *)
-     fun make_inline_module (context,m) : mod option = 
-	 (case m of
-	     MOD_STRUCTURE sbnds => 
-		 let 
-		     exception FAIL
-		     val freevars = mod_free_expvar m
-		     fun doit (ee,cc,mm) (SBND(l,bnd)) = 
-			 SBND(l,case bnd of
-			      BND_EXP(v,e) => BND_EXP(v, ee e)
-			    | BND_CON(v,c) => BND_CON(v, cc c)
-			    | BND_MOD(v,m) => BND_MOD(v, mm m))
-		     fun loop [] : sbnd list = []
-		       | loop ((sbnd as SBND(l,bnd))::rest) =
-			 case bnd of
-			     BND_EXP(v,e) => 
-				 if member_eq(eq_var,v,freevars)
-				     then raise FAIL
-				 else sbnd::(loop rest)
-			   | BND_CON (v,c) => 
-				 let 
-				     fun ee earg = exp_subst_convar(earg, [(v,c)])
-				     fun cc carg = con_subst_convar(carg, [(v,c)])
-				     fun mm marg = mod_subst_convar(marg, [(v,c)])
-				     val rest' = map (doit (ee,cc,mm)) rest
-				 in sbnd::(loop rest')
-				 end
-			   | BND_MOD (v,m) =>
-				 let 
-				     fun ee earg = exp_subst_modvar(earg, [(v,m)])
-				     fun cc carg = con_subst_modvar(carg, [(v,m)])
-				     fun mm marg = mod_subst_modvar(marg, [(v,m)])
-				     val rest' = map (doit (ee,cc,mm)) rest
-				     val sbnd = SBND(l,BND_MOD(v,case make_inline_module (context,m) of
-							       SOME m => m
-							     | NONE => raise FAIL))
-				 in sbnd::(loop rest')
-				 end
-		 in
-		     SOME (MOD_STRUCTURE(loop sbnds))
-		     handle FAIL => NONE
-		 end
-	   | _ => NONE)
+    fun dummy_exp (context,str) =
+	let val c = fresh_named_con(context,str)
+	    val e = RAISE(c,EXN_INJECT(NEW_STAMP con_unit,RECORD[]))
+	in (e,c)
+	end
 
 
      fun add_inline_module (context,label,var,module,signat) =
@@ -175,7 +176,7 @@ functor Toil(structure Il : IL
 		  [] => (acc1,acc2)
 		| ((NONE,_)::rest) => loop (acc1,acc2) rest
 		| ((SOME sbnd,CONTEXT_SDEC sdec)::rest) => loop (sbnd::acc1,sdec::acc2) rest
-		| ((SOME sbnd,_)::_) => error "sbnd_ctxt_list2modsig: sbnd without sdec")
+		| ((SOME sbnd,_)::_) => elab_error "sbnd_ctxt_list2modsig: sbnd without sdec")
 	     val (sbnds,sdecs) = loop ([],[]) sbnd_ctxt_list
 	 in (MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE (NONE,sdecs))
 	 end
@@ -193,8 +194,8 @@ functor Toil(structure Il : IL
 		     [] => (rev sbnds,ctxt)
 		   | ((NONE,CONTEXT_SIGNAT(l,v,s))::rest) => 
 			 loop (sbnds,add_context_sig(ctxt,l,v,s)) rest
-		   | ((NONE,CONTEXT_SDEC _)::_) => error "cannot have context_sdec without sbnd"
-		   | ((NONE,CONTEXT_INLINE _)::rest) => error "cannot have context_inline without sbnd"
+		   | ((NONE,CONTEXT_SDEC _)::_) => elab_error "cannot have context_sdec without sbnd"
+		   | ((NONE,CONTEXT_INLINE _)::rest) => elab_error "cannot have context_inline without sbnd"
 		   | ((NONE,cf as (CONTEXT_FIXITY _))::rest) => 
 			 loop (sbnds,add_context_entries(ctxt,[cf])) rest
 		   | ((SOME (flag,sbnd as SBND(l,bnd)), CONTEXT_SDEC (sdec as SDEC(l',dec)))::rest) => 
@@ -206,12 +207,12 @@ functor Toil(structure Il : IL
 					  if (eq_label(l,l') andalso (eq_var(v,v')))
 					      then add_inline_module(ctxt,l,v,m,
 								     SelfifySig(SIMPLE_PATH v,s))
-					  else error "add_context_boolsbnd_ctxts: inconsistent sbnd_sdeclist"
+					  else elab_error "add_context_boolsbnd_ctxts: inconsistent sbnd_sdeclist"
 				    | _ => add_context_sdec(ctxt,SDEC(l',SelfifyDec dec)))
 			 in
 			     loop (sbnds',ctxt') rest 
 			 end
-		   | ((SOME _,_)::rest) => error "add_context_boolsbnd_ctxts: cannot have sbnd without sdec"
+		   | ((SOME _,_)::rest) => elab_error "add_context_boolsbnd_ctxts: cannot have sbnd without sdec"
 	 in loop ([],context) boolsbnd_ctxt
 	 end
 
@@ -255,20 +256,20 @@ functor Toil(structure Il : IL
 		    | (SOME(_,sbnd as (SBND(l,bnd))),
 		       ce as (CONTEXT_SDEC(SDEC(_,dec)))) => 
 		          (case (Name.LabelMap.find(maxmap,l)) of
-			      NONE => error "maxmap must have entry at this point"
+			      NONE => elab_error "maxmap must have entry at this point"
 			    | SOME r =>
 				  (r := (!r) - 1;
 				   if (!r = 0)
 				       then (SOME sbnd, ce) :: (uniquify rest)
 				   else if (!r < 0)
-					    then error "maxmap count inconsistency"
+					    then elab_error "maxmap count inconsistency"
 					else (* rename case *)
 					    let val l' = fresh_internal_label "hidden"
 					    in (SOME (SBND(l',bnd)), 
 						CONTEXT_SDEC(SDEC(l',dec)))
 						:: (uniquify rest)
 					    end))
-		    | (SOME(_,sbnd), _) => error "packagedec: got sbnd without CONTEXT_SDEC")
+		    | (SOME(_,sbnd), _) => elab_error "packagedec: got sbnd without CONTEXT_SDEC")
 	 in uniquify boolsbnd_ctxt_list 
 	 end
 
@@ -332,7 +333,7 @@ functor Toil(structure Il : IL
 			end
 		  | _ => (print "poly_inst got strange sdecs:\n";
 			  pp_sdecs sdecs;
-			  error "poly_inst received strange sdecs"))
+			  elab_error "poly_inst received strange sdecs"))
        in help sdecs
        end
 
@@ -386,7 +387,7 @@ functor Toil(structure Il : IL
 			val sdec2 = SDEC(l2,DEC_EXP(v2,c2))
 		    in (sbnd1,sdec1) :: (sbnd2,sdec2) :: (help rest)
 		    end
-		  | help _ = error "unexpected sig to arg struct of polymorphic fun"
+		  | help _ = elab_error "unexpected sig to arg struct of polymorphic fun"
 		val temp = help arg_sdecs
 	    in 
 	      val mod_poly = MOD_STRUCTURE(map #1 temp)
@@ -407,7 +408,7 @@ functor Toil(structure Il : IL
 		    else (print "s is\n";
 			  pp_signat s; print "\nsignat' is \n";
 			  pp_signat signat'; print "\n";
-			  error "Failed rule 24 Sig_IsSub")
+			  elab_error "Failed rule 24 Sig_IsSub")
 	    val exp = MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab)
 	    val _ = debugdo (fn () => (print "polyfun_inst returning exp :\n";
 				       pp_exp exp; print "\n\n  and rescon:\n";
@@ -417,34 +418,39 @@ functor Toil(structure Il : IL
        |  _ =>  (print "polyfun_inst received s of\n";
 		 pp_signat s;
 		 print "\n";
-		 error "rule 224 or 226 not applicable in polyfun_inst"))
+		 elab_error "rule 224 or 226 not applicable in polyfun_inst"))
 
 	  
      and xexp (context : context, exp : Ast.exp) : (exp * con) = 
       (case exp of
-	 Ast.IntExp lit =>  let val ds = IntInf.toString lit
-			    in (SCON(int(W32,TilWord64.fromDecimalString ds)), CON_INT W32)
-			    end
-       | Ast.WordExp lit => let val ds = IntInf.toString lit
-			    in (SCON(uint(W32,TilWord64.fromDecimalString ds)), CON_UINT W32)
-			    end
-       | Ast.RealExp s =>   (SCON(float(F64,s)), CON_FLOAT F64)
-       | Ast.StringExp s => (SCON(vector (CON_UINT W8,
-					  Array.fromList
-					  (map (fn c => SCON(uint(W8,TilWord64.fromInt (ord c))))
-					   (explode s)))), con_string)
-       | Ast.CharExp s =>   (SCON(uint(W8,
-				       (case (explode s) of
-					    [c] => TilWord64.fromInt (ord c)
-					  | _ => error "Ast.CharExp carries bad string"))),
-			     CON_UINT W8)
+	 Ast.IntExp lit =>  
+	     let val ds = IntInf.toString lit
+	     in (SCON(int(W32,TilWord64.fromDecimalString ds)), CON_INT W32)
+	     end
+       | Ast.WordExp lit => 
+	     let val ds = IntInf.toString lit
+	     in (SCON(uint(W32,TilWord64.fromDecimalString ds)), CON_UINT W32)
+	     end
+       | Ast.RealExp s => 
+	     (SCON(float(F64,s)), CON_FLOAT F64)
+       | Ast.StringExp s => 
+	     (SCON(vector (CON_UINT W8,
+			   Array.fromList
+			   (map (fn c => SCON(uint(W8,TilWord64.fromInt (ord c))))
+			    (explode s)))), con_string)
+       | Ast.CharExp s =>   
+	     (SCON(uint(W8,
+			(case (explode s) of
+			     [c] => TilWord64.fromInt (ord c)
+			   | _ => parse_error "Ast.CharExp carries non-charcter string"))),
+	      CON_UINT W8)
        | (Ast.TupleExp _ | Ast.RecordExp _) =>
 	     let val (sorted, sym_expr_list) = 
 		 (case exp of
 		      Ast.TupleExp exps => 
 			  (true,mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
 		    | Ast.RecordExp sym_exps => (false,sym_exps)
-		    | _ => error "must have a TupleExp or RecordExp here")
+		    | _ => pat_error "must have a TupleExp or RecordExp here")
 		 fun doer(sym,expr) = let val label = symbol_label sym
 					  val (exp,con) = xexp(context,expr)
 				      in (label,(label,exp),(label,con))
@@ -465,11 +471,12 @@ functor Toil(structure Il : IL
 		     in (LET(bnds,body), con)
 		     end
 	     end
-       | Ast.ListExp args => let fun loop [] = AstHelp.nil_exp
-				   | loop (a::b) = Ast.AppExp{function=AstHelp.cons_exp,
-							      argument=Ast.TupleExp[a,loop b]}
-			     in xexp(context,loop args)
-			     end
+       | Ast.ListExp args => 
+	     let fun loop [] = AstHelp.nil_exp
+		   | loop (a::b) = Ast.AppExp{function=AstHelp.cons_exp,
+					      argument=Ast.TupleExp[a,loop b]}
+	     in xexp(context,loop args)
+	     end
        | Ast.SelectorExp s => 
 	     (* for the record, i'd like to say that this construct is a pain in the butt - Perry *)
 	     let 
@@ -485,51 +492,45 @@ functor Toil(structure Il : IL
 	     in (exp,rescon)
 	     end
        | Ast.VarExp path => 
-	   if (path = [Symbol.varSymbol "="]) 
-	     then let val exp_os = oneshot()
-		      val tyvar = fresh_named_tyvar (context,"teq")
-		      val _ = tyvar_use_equal tyvar
-		      val con = CON_TYVAR tyvar
-		      val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
-		      val _ = add_eq_entry(context,tyvar,exp_os)
-		  in (OVEREXP(eq_con,true,exp_os),eq_con)
-		  end
-	   else 
-	     (case (Context_Lookup(context,map symbol_label path)) of
-	       SOME(_,PHRASE_CLASS_EXP ec) => ec
-	     | SOME(_,PHRASE_CLASS_OVEREXP thunk) =>
-		   let 
-		       val (exp,ocon) = thunk()
-		       val _ = add_overload_entry ocon
-		   in (exp,CON_OVAR ocon)
-		   end
-	     | SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => polyfun_inst (context,m,s)
-	     | SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec]))))) =>
-		(case sdec of
-		  SDEC(l,DEC_EXP(_,c)) =>
-			 if (eq_label (l,mk_lab))
-				then (MODULE_PROJECT(m,mk_lab),c)
-			 else (print "Ast.VarExp path leads to MOD.EXP with sdec\n";
-			       pp_sdec sdec;
-			       error "Ast.VarExp path leads to MOD.EXP")
-	        | SDEC(l,DEC_MOD(_,s)) =>
-			if (eq_label(l,mk_lab))
-				then 
-				  let val mk_mod = MOD_PROJECT(m,mk_lab)
-				  in  polyfun_inst(context,mk_mod,s)
-				  end
-			 else (print "Ast.VarExp path leads to MOD.MOD with sdec\n";
-			       pp_sdec sdec;
-			       error "Ast.VarExp path leads to MOD.MOD")
-	        | _ => (print "Ast.VarExp path leads to MOD.MOD with sdec\n";
-			pp_sdec sdec;
-			error "Ast.VarExp path leads to MOD"))
-	     | SOME(_,PHRASE_CLASS_MOD (m,s)) => (print "Ast.VarExp path leads to MOD with sig\n";
-						pp_signat s;
-						error "Ast.VarExp path leads to MOD")
-	     | SOME(_,PHRASE_CLASS_CON _) => error "Ast.VarExp path leads to CON"
-	     | SOME(_,PHRASE_CLASS_SIG _) => error "Ast.VarExp path leads to SIG"
-	     | NONE => error "unbound variable or constructor")
+	     let fun unbound() = 
+		 let val _ = (error_region(); print "unbound variable or constructor: ???\n")
+		 in dummy_exp(context,"unbound_var")
+		 end
+	     in
+		 if (path = [Symbol.varSymbol "="]) 
+		     then let val exp_os = oneshot()
+			      val tyvar = fresh_named_tyvar (context,"teq")
+			      val _ = tyvar_use_equal tyvar
+			      val con = CON_TYVAR tyvar
+			      val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
+			      val _ = add_eq_entry(context,tyvar,exp_os)
+			  in (OVEREXP(eq_con,true,exp_os),eq_con)
+			  end
+		 else 
+		     (case (Context_Lookup(context,map symbol_label path)) of
+			  SOME(_,PHRASE_CLASS_EXP ec) => ec
+			| SOME(_,PHRASE_CLASS_OVEREXP thunk) =>
+			      let val (exp,ocon) = thunk()
+				  val _ = add_overload_entry ocon
+			      in (exp,CON_OVAR ocon)
+			      end
+			| SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => polyfun_inst (context,m,s)
+			| SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec]))))) =>
+			      (case sdec of
+				   SDEC(l,DEC_EXP(_,c)) =>
+				       if (eq_label (l,mk_lab))
+					   then (MODULE_PROJECT(m,mk_lab),c)
+				       else unbound()
+				 | SDEC(l,DEC_MOD(_,s)) =>
+				       if (eq_label(l,mk_lab))
+					   then 
+					       let val mk_mod = MOD_PROJECT(m,mk_lab)
+					       in  polyfun_inst(context,mk_mod,s)
+					       end
+				       else unbound()
+				 | _ => unbound())
+			| _ => unbound())
+	     end
        | Ast.LetExp {dec,expr} => 
 	     let val boolsbnd_ctxt_list = xdec'(context, dec)
 		 val (sbnds,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
@@ -541,93 +542,144 @@ functor Toil(structure Il : IL
 			     in xexp(context,exp')
 			     end 
 
-       | Ast.AppExp {argument,function} => let val (e1',con1) = xexp(context,function)
-					       val (e2',con2) = xexp(context,argument)
-					       val spec_rescon = fresh_con context
-					       val spec_funcon = CON_ARROW(con2,spec_rescon, oneshot())
-					       val _ =  con_unify'(context,"",
-								   ("function type", con1),
-								   ("argument -> ? type", spec_funcon),
-								   fn () => (pp_exp e1';
-									     print "\n\n";
-									     pp_exp e2'))
-					   in (APP(e1',e2'),con_deref spec_rescon)
-					   end
-       | Ast.AndalsoExp (e1,e2) => xexp(context,Ast.IfExp{test=e1,thenCase=e2,elseCase=AstHelp.false_exp})
-       | Ast.OrelseExp (e1,e2) => xexp(context,Ast.IfExp{test=e1,thenCase=AstHelp.true_exp,elseCase=e2})
-       | Ast.IfExp {test,thenCase,elseCase} => let val pr1 = {pat=true_pat,exp=thenCase}
-						   val pr2 = {pat=false_pat,exp=elseCase}
-					       in xexp(context,Ast.CaseExp {expr=test, 
-									    rules=[Ast.Rule pr1, Ast.Rule pr2]})
-					       end
-       | Ast.ConstraintExp {expr, constraint} => let val (exp,con) = xexp(context,expr)
-						     val con' = xty(context,constraint)
-						 in con_unify'(context,"Contrained expression",
-							       ("expressionn type",con),
-							       ("constraint type",con'), nada);
-						    (exp,con)
-						 end
-       | Ast.VectorExp elist => error "VectorExp not handler"
-       | Ast.WhileExp {test,expr} => error "WhileExp not handled"
+       | Ast.AppExp {argument,function} => 
+	     let val (e1',con1) = xexp(context,function)
+		 val (e2',con2) = xexp(context,argument)
+		 val spec_rescon = fresh_con context
+		 val spec_funcon = CON_ARROW(con2,spec_rescon, oneshot())
+	     in
+		 if (eq_con(context,con1,spec_funcon))
+		     then (APP(e1',e2'),con_deref spec_rescon)
+		 else
+		     case con1 of
+			 CON_ARROW(argcon,rescon,_) => 
+			     (error_region(); print " application is ill-typed.\n";
+			      print "  Function domain: "; pp_con argcon;
+			      print "\n  Argument type: "; pp_con con2;
+			      print "\n";
+			      dummy_exp(context,"bad_application"))
+		       | nonarrow => (error_region(); print " operator is not a function. Has type:";
+				      pp_con nonarrow;
+				      print "\n";
+				      dummy_exp(context,"bad_application"))
+	     end
+       | Ast.AndalsoExp (e1,e2) => 
+	     xexp(context,Ast.IfExp{test=e1,thenCase=e2,elseCase=AstHelp.false_exp})
+       | Ast.OrelseExp (e1,e2) => 
+	     xexp(context,Ast.IfExp{test=e1,thenCase=AstHelp.true_exp,elseCase=e2})
+       | Ast.IfExp {test,thenCase,elseCase} => 
+	     let val pr1 = {pat=true_pat,exp=thenCase}
+		 val pr2 = {pat=false_pat,exp=elseCase}
+	     in xexp(context,Ast.CaseExp {expr=test, 
+					  rules=[Ast.Rule pr1, Ast.Rule pr2]})
+	     end
+       | Ast.ConstraintExp {expr, constraint} => 
+	     let val (exp,con) = xexp(context,expr)
+		 val con' = xty(context,constraint)
+	     in if (sub_con(context,con,con'))
+		    then (SEAL(exp,con'),con')
+		else let val (e,c) = dummy_exp(context,"badseal")
+		     in  error_region();
+			 print " constraint does not match expression type\n";
+			 (SEAL(e,con'),con')
+		     end
+	     end		    
+       | Ast.VectorExp expr_list => 
+	     let val c = fresh_con context
+		 val ec_list = map (fn e => xexp(context,e)) expr_list
+		 val elist = map #1 ec_list
+		 fun folder (_,c') = (eq_con(context,c,c') orelse
+				      (error_region();
+				       print "ill-typed vector expression\n";
+				       false))
+	     in if (andfold folder ec_list)
+		    then (SCON(vector(c,Array.fromList elist)), CON_VECTOR c)
+		else dummy_exp(context, "bad_vector")
+	     end
+       | Ast.WhileExp {test,expr} => 
+	     let 
+		 val (teste,testc) = xexp(context,test)
+		 val body_ec = xexp(context,expr)
+	     in  if (eq_con(context,testc,con_bool)) 
+		     then 
+			 let val loop_var = fresh_named_var "loop"
+			     val arg_var = fresh_named_var "loop_arg"
+			     val (then_exp,_) = make_seq[body_ec, (APP(VAR loop_var, unit_exp),con_unit)]
+			     val loop_body = make_ifthenelse(teste,then_exp,unit_exp,con_unit)
+			     val loop_fun = FIX(PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
+			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, unit_exp)),
+			     con_unit)
+			 end
+		 else (error_region();
+		       print "while construct given a test clause not of boolean type\n";
+		       dummy_exp(context,"badwhile"))
+	     end
        | Ast.HandleExp {expr,rules} => (* almost same as CaseExp except need to wrap with HANDLE *)
-		       let 
-			   val (exp',rescon) = xexp(context,expr)
-			   val v = fresh_var()
-			   val patarg = {context = context,
-					 typecompile = xty,
-					 expcompile = xexp,
-					 polyinst = poly_inst}
-			   val arms = map (fn (Ast.Rule{pat,exp})=>(pat,exp)) rules
-			   val handler_body = caseCompile{patarg = patarg,
-							  arms = arms,
-							  arg = (VAR v,CON_ANY)}
-			   val handler = make_lambda(v,CON_ANY,#2 handler_body,#1 handler_body)
-			   val _ = con_unify'(context,"handle",
-					      ("body type",rescon),
-					      ("handler body type", #2 handler_body), nada)
-		       in (HANDLE(exp',#1 handler),rescon)
-		       end
-       | Ast.RaiseExp e => let val (exp,con) = xexp(context,e)
-			       val _ = con_unify'(context,"raise",("ANY",CON_ANY),("con",con),nada)
-			       val c = fresh_con context
-			   in (RAISE (c,exp),c)
-			   end
-       | Ast.SeqExp elist => let fun loop [] = error "Ast.SeqExp with empty list"
-				   | loop [e] = xexp(context,e)
-				   | loop (e::erest) = let val (e',c') = xexp(context,e)
-							   val (erest',erestcon) = loop erest
-							   val (abs,_) = make_lambda(fresh_var(),c',
-										     erestcon,erest')
-						       in (APP(abs,e'),erestcon)
-						       end
-			     in  loop elist
-			     end
-       | Ast.FnExp [] => error "Ast.FnExp with empty list"
-       | Ast.FnExp rules => let val patarg = {context = context, 
-					      typecompile = xty, 
-					      expcompile = xexp, 
-					      polyinst = poly_inst}
-				val arms = map (fn (Ast.Rule{pat,exp}) => ([pat],exp)) rules
-				val {arglist,body} = funCompile{patarg = patarg,
-								rules = arms,
-								reraise = false}
-				fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
-			    in foldr help body arglist
-			    end
+	     let 
+		 val (exp',rescon) = xexp(context,expr)
+		 val v = fresh_var()
+		 val patarg = {context = context,
+			       typecompile = xty,
+			       expcompile = xexp,
+			       polyinst = poly_inst,
+			       error_region = error_region}
+		 val arms = map (fn (Ast.Rule{pat,exp})=>(pat,exp)) rules
+		 val (hbe,hbc) = caseCompile{patarg = patarg,
+					     arms = arms,
+					     arg = (VAR v,CON_ANY)}
+		 val (he,hc) = make_lambda(v,CON_ANY,hbc,hbe)
+	     in if (eq_con(context,rescon,hbc))
+		    then (HANDLE(exp',he),rescon)
+		else (error_region();
+		      print "mismatch between handle body and handler\n";
+		      dummy_exp(context,"bad_handle"))
+	     end
+       | Ast.RaiseExp e => 
+	     let val (exp,con) = xexp(context,e)
+		 val c = fresh_con context
+	     in if (eq_con(context,con,CON_ANY)) 
+		    then (RAISE (c,exp),c)
+		else (error_region(); print "raise not given an expression of exn type\n";
+		      dummy_exp(context,"badraise"))
+	     end
+       | Ast.SeqExp elist => 
+	     let val eclist = map (fn e => xexp(context,e)) elist
+	     in  make_seq eclist
+	     end
+       | Ast.FnExp [] => parse_error "Ast.FnExp with empty list"
+       | Ast.FnExp rules => 
+	     let val patarg = {context = context, 
+			       typecompile = xty, 
+			       expcompile = xexp, 
+			       polyinst = poly_inst,
+			       error_region = error_region}
+		 val arms = map (fn (Ast.Rule{pat,exp}) => ([pat],exp)) rules
+		 val {arglist,body} = funCompile{patarg = patarg,
+						 rules = arms,
+						 reraise = false}
+		 fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
+	     in foldr help body arglist
+	     end
        | Ast.CaseExp {expr,rules} =>  
-			    let fun getarm (Ast.Rule{pat,exp}) = (pat,exp)
-			        val arms = map getarm rules
-				val (arge,argc) = xexp(context,expr)
-				val patarg = {context = context,
-					      typecompile = xty,
-					      expcompile = xexp,
-					      polyinst = poly_inst}
-				val (e,c) = caseCompile{patarg = patarg,
-							arms = arms,
-							arg = (arge,argc)}
-			    in (e,c)
-			    end
-       | Ast.MarkExp(exp,region) => xexp(context,exp))
+	     let fun getarm (Ast.Rule{pat,exp}) = (pat,exp)
+		 val arms = map getarm rules
+		 val (arge,argc) = xexp(context,expr)
+		 val patarg = {context = context,
+			       typecompile = xty,
+			       expcompile = xexp,
+			       polyinst = poly_inst,
+			       error_region = error_region}
+		 val (e,c) = caseCompile{patarg = patarg,
+					 arms = arms,
+					 arg = (arge,argc)}
+	     in (e,c)
+	     end
+       | Ast.MarkExp(exp,region) => 
+	     let val _ = push_region region
+		 val res = xexp(context,exp)
+		 val _ = pop_region()
+	     in res 
+	     end)
 
 
     (* --------------------------------------------------------- 
@@ -653,9 +705,8 @@ functor Toil(structure Il : IL
        let 
 	   fun strip (Ast.MarkDec(d,r)) = strip d
 	     | strip d = d
-	   val d = strip d
 	   val sbndsdec_list = xdec(context,d)
-	   val inlineflag = (case d of
+	   val inlineflag = (case (strip d) of
 				 (Ast.DatatypeDec {datatycs,withtycs}) => false
 			       | _ => false)
 	   fun help (SOME b,d) = (SOME(inlineflag,b),d)
@@ -688,23 +739,17 @@ functor Toil(structure Il : IL
              ---     well-formed type. 
              --- (3) Note that until pattern matching is done, metavariables that seem to be generalizable
              ---     may not be yet. *)
-	  Ast.ValDec (vblist,ref tyvars) => (* non-recursive bindings *)
+	  Ast.ValDec ([],_) => []
+	| Ast.ValDec (vblist,ref tyvars) => (* non-recursive bindings *)
 	    let local
 		  val pe_list = map vb_strip vblist
 		in
 		  val (pat,expr) = (case pe_list of
-				      [] => error "let with nothing"
+				      [] => pat_error "let with nothing should not get here"
 				    | [(p,e)] => (p,e)
 				    | _ => (Ast.TuplePat(map #1 pe_list),
 					    Ast.TupleExp(map #2 pe_list)))
 		end
-	        (* ---- we used to compute this here but Ast has been changed to compute it ----- *)
-		(* local fun is_sym_bound s = (case (Context_Lookup(context,[symbol_label s])) of
-						PHRASE_CLASS_CON _ => true
-					      | _ => error "tyvar symbol bound to a non-type")
-	           in val tyvars = free_tyvar_exp(expr, is_sym_bound)
-		   end 
-                   ------------------------------------------------------------------------------ *)
 		val tyvars = map tyvar_strip tyvars
 		val tyvar_stamp = get_stamp()
 		val lbl = fresh_open_internal_label "lbl"
@@ -727,7 +772,8 @@ functor Toil(structure Il : IL
 		val patarg = {context = context', 
 			      typecompile = xty, 
 			      expcompile = xexp, 
-			      polyinst = poly_inst}
+			      polyinst = poly_inst,
+			       error_region = error_region}
 		val sbnd_sdec_list = bindCompile{patarg = patarg,
 						 bindpat = pat,
 						 arg = (e,con)}
@@ -759,7 +805,7 @@ functor Toil(structure Il : IL
 				 let 
 				     val sig_poly = SIGNAT_STRUCTURE (NONE,poly_sdecs)
 				     val labs = map (fn SDEC (l,_) => l) sdecs
-				     val cons = map (fn SDEC(l,DEC_EXP(_,c)) => c | _ => error "Rule 237") sdecs
+				     val cons = map (fn SDEC(l,DEC_EXP(_,c)) => c | _ => elab_error "Rule 237") sdecs
 				     fun mod_sig_help (l,c) =
 					 let val modapp = MOD_APP(MOD_VAR var',MOD_VAR var_poly)
 					     val inner_var = fresh_var()
@@ -835,21 +881,27 @@ functor Toil(structure Il : IL
 					       ({item=Ast.VarPat[s],...}::rest) => (s, map getitem rest)
 					 | [p1,{item=Ast.VarPat[s],...},p2] => (s, [Ast.TuplePat[getitem p1,
 												 getitem p2]])
-					 | _ => error "rule 238: can't find funid")
+					 | _ => parse_error "can't find funid")
 				      val _  = (case resultty of
 						    NONE => ()
 						  | SOME ty => 
 							let val given_result_con = xty(context',ty)
-							in con_unify'(context',"fb_help",
-								      ("given_result_con",given_result_con),
-								      ("body_con",body_con),nada)
+							in if (eq_con(context',given_result_con,body_con))
+							       then ()
+							   else (error_region();
+								 print "funtion type constraints do not match,";
+								 print " using the first one\n")
 							end)
 				  in (symbol_label s, (restpats, exp))
 				  end
-			      fun getid [] = error "no ids"
+			      fun getid [] = parse_error "no ids"
 				| getid [a] = a
-				| getid (a::(rest as b::_)) = if eq_label(a,b) then getid rest 
-							      else error "not all ids are same"
+				| getid (a::(rest as b::_)) = 
+				  (if eq_label(a,b) 
+				       then ()
+				   else (error_region();
+					 print "clauses don't all have same function name\n");
+				   getid rest)
 			      val temp = map help clause_list
 			      val id = getid (map #1 temp)
 			      val matches = map #2 temp
@@ -858,28 +910,26 @@ functor Toil(structure Il : IL
 		      fun rvb_help {var:Ast.symbol, fixity: (Ast.symbol * 'a) option,
 				    exp:Ast.exp, resultty: Ast.ty option} = 
 			let 
-			    val fun_con = fresh_named_con (context',"fun_con")
 			    val body_con = fresh_named_con (context',"body_con")
-			    val _ = (case resultty of
-					 NONE => ()
-				       | SOME ty => let val given_fun_con = xty(context',ty)
-						    in con_unify'(context',"rvb_help",
-								  ("given_fun_con",given_fun_con),
-								  ("fun_con",fun_con),nada)
-						    end)
+			    val fun_con = (case resultty of
+					       NONE => fresh_named_con (context',"fun_con")
+					     | SOME ty => xty(context',ty))
 			    fun help (Ast.Rule{pat,exp}) = 
 				(case pat of
 				     Ast.ConstraintPat{constraint=ty,pattern} =>  
 					 let val given_res_con = xty(context',ty)
-					 in con_unify'(context',"rvb_help",
-						       ("given_res_con",given_res_con),
-						       ("body_con",body_con),nada);
+					 in  if (eq_con(context',given_res_con,body_con))
+						 then ()
+					     else (error_region();
+						   print "fn matches have conflicting constraints,";
+						   print " using the first one\n");
 					     ([pattern],exp)
 					 end
 				   | _ => ([pat],exp))
-			    val matches = (case exp of 
-					       Ast.FnExp rules => map help rules
-					     | _ => error "val rec requires an fn expression")
+			    val matches = 
+				(case exp of 
+				     Ast.FnExp rules => map help rules
+				   | _ => parse_error "val rec requires an fn expression")
 			in  (symbol_label var, (fun_con, body_con), matches)
 			end
 		  in
@@ -889,7 +939,7 @@ functor Toil(structure Il : IL
 			  (case d of
 			       Ast.ValrecDec (rvblist,_) => map (rvb_help o rvb_strip) rvblist
 			     | Ast.FunDec (fblist,_) => map (fb_help o fb_strip) fblist
-			     | _ => error "must have ValrecDec or FunDec here")
+			     | _ => pat_error "must have ValrecDec or FunDec here")
 		  end (* local ------ ValRecDec and FunDec are assimilated now ---- *)
 
 		  val fun_ids = map #1 dec_list
@@ -918,18 +968,19 @@ functor Toil(structure Il : IL
 				 val patarg = {context = context'', 
 					       typecompile = xty, 
 					       expcompile = xexp, 
-					       polyinst = poly_inst}
-
+					       polyinst = poly_inst,
+					       error_region = error_region}
 				 val {body = (bodye,bodyc), 
 				      arglist} = funCompile{patarg = patarg,
 							    rules = matches,
 							    reraise = false}
 				 fun con_folder ((_,c),acc) = CON_ARROW(c,acc,oneshot_init PARTIAL)
 				 val func = foldr con_folder bodyc arglist
-				 val _ = con_unify'(context'',"fundef",
-						    ("body_con",body_con),("bodyc", bodyc),nada)
-				 val _ = con_unify'(context'',"fundef",
-						    ("fun_con",fun_con),("func",func),nada)
+				 val _ = if (eq_con(context'',body_con,bodyc) andalso
+					     eq_con(context'',fun_con,func))
+					     then ()
+					 else (error_region();
+					       print "function constraint does not match body type\n")
 				 local 
 				     fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
 				 in 
@@ -1037,15 +1088,16 @@ functor Toil(structure Il : IL
 
 	| Ast.SeqDec decs => packagedecs xdec' context decs
 	| Ast.OpenDec pathlist => 
-	      let fun help path = 
+	      let fun help (i,path) = 
 		  (case (Context_Lookup(context,map symbol_label path)) of
-		       SOME(_,PHRASE_CLASS_MOD(m,s)) => (m,s)
-		     | _ => error "unbound structure")
-		  val modsig_list = map help pathlist
-		  val temp = mapcount (fn (i,a) => (fresh_open_internal_label ("openlbl" ^ (Int.toString i)),
-						    fresh_named_var "openvar",a)) modsig_list
-		  fun help(l,v,(m,s)) = (SOME (SBND(l,BND_MOD(v,m))), CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
-	      in map help temp
+		       SOME(_,PHRASE_CLASS_MOD(m,s)) => 
+			   let val l = fresh_open_internal_label ("openlbl" ^ (Int.toString i))
+			       val v = fresh_named_var "openvar"
+			   in  SOME(SOME (SBND(l,BND_MOD(v,m))), CONTEXT_SDEC(SDEC(l,DEC_MOD(v,s))))
+			   end
+		     | _ => (error_region(); print "unbound structure: ???\n";
+			     NONE))
+	      in List.mapPartial (fn x => x) (mapcount help pathlist)
 	      end
 	| Ast.TypeDec tblist => xtybind(context,tblist) 
 	| Ast.DatatypeDec {datatycs,withtycs} => 
@@ -1059,8 +1111,13 @@ functor Toil(structure Il : IL
 	| Ast.StrDec strblist => xstrbinds(context,strblist) 
  	| Ast.FctDec fctblist => xfctbind(context,fctblist) 
 
-	| Ast.ExceptionDec [] => error "ExceptionDec []"
-	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] => xdec(context, Ast.ExceptionDec [eb])
+	| Ast.ExceptionDec [] => parse_error "ExceptionDec []"
+	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] => 
+	      let val _ = push_region r
+		  val res = xdec(context, Ast.ExceptionDec [eb])
+		  val _ = pop_region()
+	      in res
+	      end
 	| Ast.ExceptionDec [Ast.EbGen {exn,etype}] =>
 		let 
 		  val id_bar = symbol_label exn
@@ -1104,7 +1161,8 @@ functor Toil(structure Il : IL
 		       in [(SOME(SBND(id_bar,BND_MOD(modvar,inner_mod))),
 			    CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(modvar,inner_sig))))]
 		       end
-		 | _ => error "unbound variable or constructor")
+		 | _ => (error_region(); print "unbound exception: ???\n";
+			 []))
 	| Ast.ExceptionDec eblist => xdec(context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
 
         (* Rule 244 *)
@@ -1126,29 +1184,7 @@ functor Toil(structure Il : IL
 		  val sbnd_ctxt_list2 = map temp boolsbnd_ctxt_list2
 	      in sbnd_ctxt_list1 @ sbnd_ctxt_list2
 	      end
-(*
-	      let 
-		  val boolsbnd_ctxt_list1 = xdec'(context,dec1)
-		  val (var1,var2,var3) = (fresh_var(),fresh_var(),fresh_var())
-		  val (m1,s1) = boolsbnd_ctxt_list2modsig boolsbnd_ctxt_list1
-		  val (lbl1,lbl2,lbl3) = (fresh_open_internal_label "lbl1",
-					  fresh_open_internal_label "lbl2",
-					  fresh_open_internal_label "lbl3")
-		  val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list1)
-		  val boolsbnd_ctxt_list2 = xdec'(context',dec2)
-		  val (m2,s2) = boolsbnd_ctxt_list2modsig boolsbnd_ctxt_list2
-		  val final_sig = s2 (* XXX <--- *)
-		  val final_mod = MOD_PROJECT(MOD_STRUCTURE[SBND(lbl1,BND_MOD(var1,m1)),
-							    SBND(lbl2,BND_MOD(var2,m2))],
-					      lbl2)
-		  val context'' = add_context_mod(context,fresh_internal_label "lbl",
-						     var1,SelfifySig(SIMPLE_PATH var1, s1))
-	      in if (Sig_IsSub(context'',s2,final_sig))
-		     then [(SOME(SBND(lbl3,BND_MOD(var3,final_mod))),
-			    CONTEXT_SDEC(SDEC(lbl3,DEC_MOD(var3,final_sig))))]
-		 else error "Sig_IsSub in rule 244 failed"
-	      end
-*)
+
         (* Must augment translation context with fixity information *)
 	| Ast.FixDec {fixity,ops} => let (* given symbol is in FixSymbol space *)
 				       fun helper sym = 
@@ -1174,7 +1210,11 @@ functor Toil(structure Il : IL
 	| Ast.ImportDec strlist => error "ImportDec not handled"
 
         (* translate declaration by dropping region information *)
-	| Ast.MarkDec (dec,region) => xdec(context,dec))
+	| Ast.MarkDec (dec,region) => let val _ = push_region region
+					  val res = xdec(context,dec)
+					  val _ = pop_region()
+				      in res
+				      end)
 
 	    
     (* --------------------------------------------------------- 
@@ -1182,16 +1222,24 @@ functor Toil(structure Il : IL
       --------------------------------------------------------- *)
     and xty (context, ty) : con = 
       (case ty of
-	 Ast.VarTy tyvar => let val sym = AstHelp.tyvar_strip tyvar
-			    in (case (Context_Lookup(context,[symbol_label sym])) of
-				    SOME(_,PHRASE_CLASS_CON (c,_)) => c
-				  | _ => error "unbound type constructor")
-			    end
-       | Ast.MarkTy (ty,r) => xty(context,ty)
-       | Ast.TupleTy(tys) => let fun loop _ [] = []
-				   | loop n (a::rest) = (generate_tuple_symbol n,a)::(loop (n+1) rest)
-					  in xty(context, Ast.RecordTy(loop 1 tys))
-			     end
+	 Ast.VarTy tyvar => 
+	     let val sym = AstHelp.tyvar_strip tyvar
+	     in (case (Context_Lookup(context,[symbol_label sym])) of
+		     SOME(_,PHRASE_CLASS_CON (c,_)) => c
+		   | _ => (error_region(); print "unbound type constructor: ???\n";
+			   fresh_named_con(context,"unbound_type")))
+	     end
+       | Ast.MarkTy (ty,r) => 
+	     let val _ = push_region r
+		 val res = xty(context,ty)
+		 val _ = pop_region()
+	     in res
+	     end
+       | Ast.TupleTy(tys) => 
+	     let fun loop _ [] = []
+		   | loop n (a::rest) = (generate_tuple_symbol n,a)::(loop (n+1) rest)
+	     in xty(context, Ast.RecordTy(loop 1 tys))
+	     end
        | Ast.RecordTy(sym_ty_list) => let val lab_ty_list = map (fn (s,t) => (symbol_label s,t)) sym_ty_list
 					  val sorted_lab_ty_list = sort_labelpair lab_ty_list
 					  fun doer (lab,ty) = (lab,xty(context,ty))
@@ -1202,33 +1250,26 @@ functor Toil(structure Il : IL
 		 val _ = debugdo (fn () => (print "xty: Ast.Conty(["; 
 					    pp_list AstHelp.pp_sym' syms ("","",".",false); print "])"))
 		 val con_list = map (fn t => xty(context,t)) ty_list
-		 fun general() = (case (con_list,Context_Lookup(context, map symbol_label syms)) of
-				      ([],SOME(_,PHRASE_CLASS_CON(con,KIND_TUPLE 1))) => con
-				    | (_,SOME(_,PHRASE_CLASS_CON(con,KIND_ARROW(n,1)))) => 
-					  if (n = length con_list) 
-					      then CON_APP(con,(case con_list of
-								    [c] => c
-								  | _ => CON_TUPLE_INJECT(con_list)))
-					  else error "constructor applied to wrong # of types"
-				    | (_,SOME(_,PHRASE_CLASS_CON (c',k'))) => 
-					  (print "bad kindness: got args but k' =";
-					   pp_kind k'; print "\nand c' = ";
-					   pp_con c';
-					   error "bad kindness")
-				    | (_,_) => error "unbound type constructor")
 	     in
-		 (* XXX can they be overridden ? *)
-		 case syms of
-		     [sym] => (if (false andalso sym = (Symbol.tycSymbol "ref"))
-				   then (case con_list of
-					     [c] => CON_REF c 
-					   | _ => error "ref expects one constructor")
-			       else if (false andalso sym = (Symbol.tycSymbol "->"))
-					then (case con_list of
-						  [c1,c2] => CON_ARROW(c1,c2,oneshot_init PARTIAL)
-						| _ => error "-> expects two constructors")
-				    else general())
-		   | _ => general()
+		 (case (con_list,Context_Lookup(context, map symbol_label syms)) of
+		      ([],SOME(_,PHRASE_CLASS_CON(con,KIND_TUPLE 1))) => con
+		    | (_,SOME(_,PHRASE_CLASS_CON(con,KIND_ARROW(n,1)))) => 
+			  if (n = length con_list) 
+			      then CON_APP(con,(case con_list of
+						    [c] => c
+						  | _ => CON_TUPLE_INJECT(con_list)))
+			  else (error_region();
+				print "type constructor wants ";
+				print (Int.toString n);
+				print "arguments, given ";
+				print (Int.toString (length con_list));
+				fresh_named_con(context,"badarity_type"))
+		    | (_,SOME(_,PHRASE_CLASS_CON (c',k'))) => 
+			  (pp_kind k'; print "\nand c' = "; pp_con c';
+			   elab_error "external_label mapped to type with KIND_ARROW(_,!= 1)")
+		    | (_,_) => (error_region();
+				print "unbound type constructor: ???\n";
+				fresh_named_con(context,"unbound_type")))
 	     end)
 
 				  
@@ -1304,33 +1345,47 @@ functor Toil(structure Il : IL
        (case sigexp of
 	  Ast.VarSig s => (case (Context_Lookup(context,[symbol_label s])) of
 			       SOME(_,PHRASE_CLASS_SIG s) => s
-			     | _ => error "unbound signature")
+			     | _ => (error_region();
+				     print "unbound signature: ???\n";
+				     SIGNAT_STRUCTURE(NONE,[])))
 	| Ast.SigSig speclist => SIGNAT_STRUCTURE(NONE,xspec(context,speclist))
-	| Ast.MarkSig (s,r) => xsigexp(context,s)
-	| Ast.AugSig (s, [], tyvars, ty) => error "ill-formed where type"
+	| Ast.MarkSig (s,r) => let val _ = push_region r
+				   val res = xsigexp(context,s)
+				   val _ = pop_region()
+			       in res 
+			       end
+	| Ast.AugSig (s, [], tyvars, ty) => parse_error "ill-formed where type"
 	| Ast.AugSig (s, syms, tyvars, ty) =>
-	      let val (popt,sdecs) = (case xsigexp(context,s) of
-					  SIGNAT_STRUCTURE popt_sdecs => popt_sdecs
-					| _ => error "can't where type a non-structure")
-		  val mjunk = MOD_VAR(fresh_named_var "mjunk")
-		  val (labels,pc) = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label syms)) of
-					 SOME lpc => lpc
-				       | NONE => error "wheretype given non-existent components")
-		  val k = (case pc of
-			       PHRASE_CLASS_CON(_,k) => k
-			     | _ => error "where type given a non-type")
-		  fun folder (tv,context) = 
-		      let val s = AstHelp.tyvar_strip tv
-		      in add_context_sdec(context,SDEC(symbol_label s, 
+	      (case xsigexp(context,s) of
+		   s as SIGNAT_STRUCTURE (popt,sdecs) => 
+		       let val mjunk = MOD_VAR(fresh_named_var "mjunk")
+		       in (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label syms)) of
+			       SOME(labels,PHRASE_CLASS_CON(_,k)) => 
+				   let fun folder (tv,context) = 
+				       let val s = AstHelp.tyvar_strip tv
+				       in add_context_sdec(context,SDEC(symbol_label s, 
 						       DEC_CON(gen_var_from_symbol s, 
 							       KIND_TUPLE 1, NONE)))
-		      end
-		  val context = foldl folder context tyvars
-		  val c = xty(context,ty)
-	      in SIGNAT_STRUCTURE(popt,xsig_wheretype(sdecs,labels,c,k))
-	      end)
+				       end
+				       val context = foldl folder context tyvars
+				       val c = xty(context,ty)
+				   in SIGNAT_STRUCTURE(popt,xsig_wheretype(sdecs,labels,c,k))
+				   end
+			     | _ => (error_region();
+				     print "can't where type a non-type component";
+				     s))
+		       end
+		 | s => (error_region();
+			 print "can't where type a non-structure signature\n";
+			 s)))
 
-     and xsigb(context,Ast.MarkSigb(sigb,_)) : context_entry = xsigb(context,sigb)
+
+     and xsigb(context,Ast.MarkSigb(sigb,r)) : context_entry = 
+	 let val _ = push_region r
+	     val res = xsigb(context,sigb)
+	     val _ = pop_region()
+	 in res
+	 end
        | xsigb(context,Ast.Sigb{name,def}) = 
 	 let val v = gen_var_from_symbol name
 	 in CONTEXT_SIGNAT(symbol_label name,v,
@@ -1395,20 +1450,24 @@ functor Toil(structure Il : IL
 	   | (Ast.IncludeSpec sym) =>
 	       (case (xsigexp(context,Ast.VarSig sym)) of
 		  SIGNAT_STRUCTURE (NONE,sdecs) => ADDITIONAL sdecs
-		| SIGNAT_STRUCTURE (SOME _, _) => error "xsigexp compiled to normal signature"
-		| _ => error "xsigexp compiled to signature != SIGNAT_STRUCTURE")
+		| SIGNAT_STRUCTURE (SOME _, _) => elab_error "xsigexp compiled to selfified signature"
+		| _ => elab_error "xsigexp compiled to non-structure signature")
 	   | (Ast.FctSpec sym_fsigexp_list) =>
 		  let 
 		    fun doer (funid,fsig) = 
 		      let 
 			val var = fresh_var()
 			fun help (Ast.VarFsig _) = error "Ast.VarFsig encountered"
-			  | help (Ast.MarkFsig (fs,_)) = help fs
+			  | help (Ast.MarkFsig (fs,r)) = let val _ = push_region r
+							     val res = help fs
+							     val _ = pop_region ()
+							 in res
+							 end
 			  | help (Ast.FsigFsig {param,def=sigexp'}) = 
 			     let (* this is a derived form *)
 			       val strid = functor_arg_lab
 			       val sym_sigexp_list = (map (fn (SOME s,se) => (s,se)
-			                                    | (NONE, _) => error "functor arg unnamed")
+			                                    | (NONE, _) => elab_error "functor arg unnamed")
 						      param)
 			       val sigexp = Ast.SigSig[Ast.StrSpec sym_sigexp_list]
 			       val signat = xsigexp(context,sigexp)
@@ -1452,7 +1511,11 @@ functor Toil(structure Il : IL
 	   | (Ast.ShatycSpec paths) => ALL_NEW(xsig_sharing_type(context,prev_sdecs,paths))
 	   | (Ast.ShareSpec paths) => ALL_NEW(xsig_sharing_structure(context,prev_sdecs,paths))
 	   | (Ast.FixSpec _) => error "Ast.FixitySpec not implemented"
-	   | (Ast.MarkSpec (s,r)) => xspec1 context prev_sdecs s
+	   | (Ast.MarkSpec (s,r)) => let val _ = push_region r
+					 val res = xspec1 context prev_sdecs s
+					 val _ = pop_region ()
+				     in res
+				     end
          fun loop ctxt prev_sdecs [] = prev_sdecs
            | loop ctxt prev_sdecs (spec::specrest) =
 	     (case (xspec1 ctxt prev_sdecs spec) of
@@ -1499,11 +1562,15 @@ functor Toil(structure Il : IL
 									     PARTIAL)))
 			  in sbnd_ce_list' @ [(SOME(false,sbnd), CONTEXT_SDEC sdec)]
 			  end
-		    | (Ast.FctFct {params=[],body,constraint}) => error "Functor of order 0"
-		    | (Ast.FctFct _) => error "No higher order functors"
-		    | (Ast.LetFct _) => error "No lets in functor bindings"
-		    | (Ast.AppFct _) => error "No higher order functors"
-		    | (Ast.MarkFct (f,r)) => help (context,(name,f)))
+		    | (Ast.FctFct {params=[],body,constraint}) => parse_error "Functor of order 0"
+		    | (Ast.FctFct _) => parse_error "No higher order functors"
+		    | (Ast.LetFct _) => parse_error "No lets in functor bindings"
+		    | (Ast.AppFct _) => parse_error "No higher order functors"
+		    | (Ast.MarkFct (f,r)) => let val _ = push_region r
+						 val res = help (context,(name,f))
+						 val _ = pop_region()
+					     in res
+					     end)
 	 in  packagedecs help context (map fctb_strip fctbs)
 	 end
 
@@ -1560,7 +1627,7 @@ functor Toil(structure Il : IL
 		     end
 	 in loop ([],[]) all_sdecs (* target_sdecs *)
 	 end
-       | extract_hidden _ = error "extract_hidden not passed SIGNAT_STRUCTURE"
+       | extract_hidden _ = elab_error "extract_hidden not passed SIGNAT_STRUCTURE"
      and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp) 
 	 : (decresult * mod * signat) = 
 	 let 
@@ -1601,8 +1668,10 @@ functor Toil(structure Il : IL
 	     Ast.VarStr path => 
 			 (case Context_Lookup(context,map symbol_label path) of
 			      SOME (path,PHRASE_CLASS_MOD(m,s)) => ([],m,s)
-			    | _ => error "unbound structure")
-	   | Ast.AppStr (_,[]) => error "AppStr with no arguments"
+			    | _ => (error_region();
+				    print "unbound structure: ???\n";
+				    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[]))))
+	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
 	   | Ast.AppStr (f,[(Ast.MarkStr (se,r),flag)]) =>
 		 xstrexp(context, Ast.AppStr(f,[(se,flag)]), Ast.NoSig)
 	   | Ast.AppStr (funpath,[(strexp as (Ast.VarStr argpath),_)]) =>
@@ -1611,7 +1680,7 @@ functor Toil(structure Il : IL
 			  let 
 			      val (sbnd_ce_list,argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argmod = (mod2path argmod; argmod)
-				  handle _ => error "xstrexp: str path looked up to non-path"
+				  handle _ => elab_error "xstrexp: str path looked up to non-path"
 			      val modc_v0 = fresh_named_var "v0_xcoerce"
 			      val (modc_body,temp_sig1') = xcoerce(context,modc_v0,signat,sig1)
 			      val newvar = fresh_named_var "coerced_structure"
@@ -1621,41 +1690,47 @@ functor Toil(structure Il : IL
 			      val fsig' = SIGNAT_FUNCTOR(var1,sig1',sig2',PARTIAL)
 			      val context' = add_context_mod'(context,newvar,
 							      SelfifySig(SIMPLE_PATH newvar, sig1'))
-			  in if Sig_IsSub(context',fsig,fsig')
-				 then 
-				     (let 
-					  val temp = mod_subst_modvar(modc_body,
-								      [(modc_v0,argmod)])
-					  val sealed = MOD_SEAL(temp,sig1')
-					  val lbl = fresh_internal_label "coerced"
-					  val sbnd_ce = 
-					      (SOME(SBND(lbl,BND_MOD(newvar,sealed))),
-					       CONTEXT_SDEC(SDEC(lbl,DEC_MOD(newvar,sig1'))))
-				      in (sbnd_ce_list @ [sbnd_ce],
-					  MOD_APP(m,MOD_VAR newvar),
-					  sig2')
-				      end)
-			     else (print "sig_issub failed: want fsig < fsig'\n  fsig = ";
-				   pp_signat fsig; print "\n  fsig' = ";
-				   pp_signat fsig';
-				   print "\n\ncontext' is\n";
-				   pp_context context';
-				   print "\n";
-				   print "sig1' < sig1 is ";
-				   print (Bool.toString (Sig_IsSub(context',sig1',sig1)));
-				   print "\n";
-				   print "sig2 < sig2' is ";
-				   print (Bool.toString (Sig_IsSub(add_context_mod'(context',var1,
-										   SelfifySig(SIMPLE_PATH var1, sig1')),
-								   sig2,sig2')));
-				   print "\n";
-				   error "rule 251-3 failed")
+			      val _ = if Sig_IsSub(context',fsig,fsig')
+					  then ()
+				      else (error_region();
+					    print "functor application failed\n")
+
+			      val temp = mod_subst_modvar(modc_body,
+							  [(modc_v0,argmod)])
+			      val sealed = MOD_SEAL(temp,sig1')
+			      val lbl = fresh_internal_label "coerced"
+			      val sbnd_ce = 
+				  (SOME(SBND(lbl,BND_MOD(newvar,sealed))),
+				   CONTEXT_SDEC(SDEC(lbl,DEC_MOD(newvar,sig1'))))
+			  in (sbnd_ce_list @ [sbnd_ce],
+			      MOD_APP(m,MOD_VAR newvar),
+			      sig2')
 			  end
-	            | _ => error "Structure Application failed: did not get functor")
-	   | Ast.AppStr (_,[(strexp,_)]) => (print "AppStr applied to a non-path";
-					     AstHelp.pp_strexp strexp;
-					     error "AppStr applied to a non-path")
-	   | Ast.AppStr (_,_) => error "AppStr with more than one argument"
+
+(*
+		   print "sig_issub failed: want fsig < fsig'\n  fsig = ";
+		   pp_signat fsig; print "\n  fsig' = ";
+		   pp_signat fsig';
+		   print "\n\ncontext' is\n";
+		   pp_context context';
+		   print "\n";
+		   print "sig1' < sig1 is ";
+		   print (Bool.toString (Sig_IsSub(context',sig1',sig1)));
+		   print "\n";
+		   print "sig2 < sig2' is ";
+		   print (Bool.toString (Sig_IsSub(add_context_mod'(context',var1,
+								   SelfifySig(SIMPLE_PATH var1, sig1')),
+						   sig2,sig2')));
+		   print "\n";
+*)
+
+	            | _ => (error_region();
+			    print "cannot apply a non-functor\n";
+			    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[]))))
+	   | Ast.AppStr (_,[(strexp,_)]) => parse_error "AppStr applied to a non-path: we should be in named form"
+	   | Ast.AppStr (_,_) => (error_region();
+				  print "higher order functors not supported\n";
+				  ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[])))
 	   | Ast.LetStr (dec,strexp) => (* rule 254 *) 
 		 let val (var1,var2) = (fresh_var(), fresh_var())
 		     val (lbl1,lbl2) = (fresh_open_internal_label "lbl1",
@@ -1680,7 +1755,7 @@ functor Toil(structure Il : IL
 		 (*
 		     if (Sig_IsSub(context',sig2,sig2'))
 			then (sbnd_ce_list,final_mod, final_sig)
-		    else error "Rule 254 failed" *)
+		    else old_err_or "Rule 254 failed" *)
 		 end
 	   | Ast.StructStr dec => 
 		 let 
@@ -1690,7 +1765,11 @@ functor Toil(structure Il : IL
 		   | _ => NONE) sbnd_ctxt_list
 		 in ([], MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE, sdecs))
 		 end
-	   | Ast.MarkStr (strexp,r) => xstrexp(context,strexp,Ast.NoSig))
+	   | Ast.MarkStr (strexp,r) => let val _ = push_region r
+					   val res = xstrexp(context,strexp,Ast.NoSig)
+					   val _ = pop_region()
+				       in res
+				       end)
 	     
 	     
 
@@ -1712,69 +1791,56 @@ functor Toil(structure Il : IL
     (* --------------------------------------------------------- 
       ------------------ SIGNATURE PATCHING -------------------
       --------------------------------------------------------- *)
-    and xsig_wheretype(osdecs : sdecs, lbls : label list, con : con, kind : kind) : sdecs =
+    and xsig_wheretype(orig_sdecs,lbls, con, kind) : sdecs =
       let 
-	val fv = con_free_convar con
-	fun bound v = if (member_eq(eq_var,v,fv)) 
-			then error "xsig_wheretype: FV(con) ^ BV(sdecs) != nil"
-		      else ()
-	fun docon curl sdecs =
-	  (case sdecs of
-	     [] => error "xsig_wheretype: docon got empty lbls"
-	   | (sdec::rest) => 
-	       (case sdec of
-		  SDEC(l,DEC_CON(v,k,NONE)) => (bound v; 
-						if eq_label(l,curl)
-						  then if (k = kind) 
-							 then (SDEC(l,DEC_CON(v,k,SOME con)))::rest
-						       else error "xsig_wheretype kind mismatch"
-						else sdec::(docon curl rest))
-		| SDEC(l,(DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_))) => (bound v; sdec::(docon curl rest))
-		| SDEC(l,DEC_EXCEPTION _) => sdec::(docon curl rest)))
-	fun dosig [] sdecs = error "xsig_wheretype got empty lbls"
-	  | dosig [l] sdecs = docon l sdecs
-	  | dosig (curl::restl) sdecs = 
+	  local val fv = con_free_convar con
+	  in    fun bound v = if (member_eq(eq_var,v,fv)) 
+				  then (error_region();
+					print "signature wheretype leads to variable capture\n")
+			      else ()
+	  end
+	  fun docon curl sdecs : sdecs =
+	      (case sdecs of
+		   [] => (error_region();
+			  print "signature wheretype could not find specificed component\n";
+			  [])
+		 | ((sdec as SDEC(l,dec))::rest) => 
+		       (case dec of
+			    DEC_CON(v,k,NONE) => 
+				(bound v; 
+				 if eq_label(l,curl)
+				     then if (k = kind) 
+					      then (SDEC(l,DEC_CON(v,k,SOME con)))::rest
+					  else (error_region();
+						print "signature wheretype failed due to constructor arity\n";
+						sdecs)
+				 else sdec::(docon curl rest))
+			  | (DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_)) => (bound v; sdec::(docon curl rest))
+			  | DEC_EXCEPTION _ => sdec::(docon curl rest)))
+	  fun dosig [] sdecs = elab_error "xsig_wheretype got empty lbls"
+	    | dosig [l] sdecs = docon l sdecs
+	    | dosig (curl::restl) sdecs = 
 	      let 
-		fun loop [] = error "xsig_where could not find sig"
-		  | loop (sdec::rest) = 
-		  (case sdec of
-		     (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE(NONE, sdecs)))) => 
-		                  (bound v; if eq_label(l, curl) 
-					      then (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE
-								   (NONE, dosig restl sdecs))))::rest
-					    else sdec::(loop rest))
-		   | (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE (SOME _,sdecs)))) =>
-			 loop ((SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE (NONE, sdecs))))::rest)
-		   | SDEC(l,(DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_))) => 
-			 (bound v; sdec::(loop rest))
-		   | SDEC(l,DEC_EXCEPTION _) => sdec::(loop rest))
+		  fun loop [] : sdecs = (error_region();
+					 print "signature wheretype could not find specificed component\n";
+					 [])
+		    | loop (sdec::rest) = 
+		      (case sdec of
+			   (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE(NONE, sdecs)))) => 
+			       (bound v; if eq_label(l, curl) 
+					     then (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE
+								  (NONE, dosig restl sdecs))))::rest
+					 else sdec::(loop rest))
+			 | (SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE (SOME _,sdecs)))) =>
+			       loop ((SDEC(l,DEC_MOD(v,SIGNAT_STRUCTURE (NONE, sdecs))))::rest)
+			 | SDEC(l,(DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_))) => 
+			       (bound v; sdec::(loop rest))
+			 | SDEC(l,DEC_EXCEPTION _) => sdec::(loop rest))
 	      in loop sdecs
 	      end		
-      in dosig lbls osdecs
+      in dosig lbls orig_sdecs
       end
 
- (* looks for label and returns a triple of (1) sdecs that precede the label, 
-    (2) the found dec, (3) sdecs that follow the label *)
-  and xsig_find (cl : label) (sdecs : sdecs) : (sdecs * dec * sdecs) = 
-     let fun loop [] _ = (print "xsig_find: could not find label "; pp_label cl;
-			   error "xsig_find_type: could not find label")
-	   | loop (SDEC(l,dec)::rest) acc = if eq_label(l,cl) then (rev acc,dec,rest)
-					    else loop rest (SDEC(l,dec)::acc)
-     in loop sdecs []
-     end
-
- (* looks for the label that occurs second and returns a 4-tuple  of (1) sdecs that precede the label, 
-    (2) sdecs that follow the label, (3) the label/dec of the the found/second label,
-    (4) the label/dec of the not found/first label *)
-  and xsig_find2 (lbl1,lbl2,sdecs) = 
-      let
-	  val (prev_sdecs1,dec1,rest_sdecs1) = xsig_find lbl1 sdecs
-	  val (prev_sdecs2,dec2,rest_sdecs2) = xsig_find lbl2 sdecs
-      in 
-	  if (length rest_sdecs1) < (length rest_sdecs2)
-	      then (prev_sdecs1,rest_sdecs1,(lbl1,dec1),(lbl2,dec2))
-	  else (prev_sdecs2,rest_sdecs2,(lbl2,dec2),(lbl1,dec1))
-      end
 
   and type_is_abstract(v,CON_MODULE_PROJECT(m,l)) = 
 	let fun loop acc (MOD_VAR v') = if eq_var(v,v') then SOME acc else NONE
@@ -1785,58 +1851,78 @@ functor Toil(structure Il : IL
     | type_is_abstract _ = NONE
 
   and xsig_sharing_structure(ctxt,sdecs,paths) : sdecs = 
-      let
-	  type lpath = label list
-	  val mjunk = MOD_VAR(fresh_named_var "mjunk")
-	  fun path2sdecs p = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label p)) of
-				  SOME(l,PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE(_,sd))) => (l,sd)
-				| _ => error "xsig_sharing_structure: path led to non-structure")
-	  val lpath_sdecs_list : (lpath * sdecs) list = map path2sdecs paths
-	  fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
-	      let
-		  fun traverse (SDEC(l,DEC_CON _)) = [[l]]
-		    | traverse (SDEC(l,DEC_MOD (v,SIGNAT_STRUCTURE(_,sdecs)))) = 
-		      let val lpaths = List.concat (map traverse sdecs)
-		      in map (fn lpath => (l :: lpath)) lpaths
-		      end
-		    | traverse _ = []
-	      in (lpath, List.concat (map traverse sdecs))
-	      end
-	  val lpath_lpaths_list : (lpath * lpath list) list = map getcomponents lpath_sdecs_list
-	  val lpaths = #2 (hd lpath_lpaths_list)
-	  val num_types = length lpaths
-	  val _ = if (andfold (fn (_,lpaths) => length lpaths = num_types) lpath_lpaths_list)
-		      then ()
-		  else error "xsig_sharing_structure failed"
-	  val labels : lpath list list = (map (fn (lpath,lpaths) => map (fn lps => lpath @ lps) lpaths) 
-					  lpath_lpaths_list)
-	  val labels_list : lpath list list = mapmap (follow_labels (sdecs,ctxt)) labels
-	  val labels_list = Listops.transpose labels_list
-	  fun folder (labels : label list list,sdecs) = xsig_sharing_rewrite(sdecs,labels)
-      in foldl folder sdecs labels_list
+      let exception LocalError
+      in
+	  let
+	      type lpath = label list
+	      val mjunk = MOD_VAR(fresh_named_var "mjunk")
+	      fun path2sdecs p = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label p)) of
+				      SOME(l,PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE(_,sd))) => (l,sd)
+				    | _ => (error_region();
+					    print "structure sharing given a non-structure component\n";
+					    raise LocalError))
+	      val lpath_sdecs_list : (lpath * sdecs) list = map path2sdecs paths
+	      fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
+		  let
+		      fun traverse (SDEC(l,DEC_CON _)) = [[l]]
+			| traverse (SDEC(l,DEC_MOD (v,SIGNAT_STRUCTURE(_,sdecs)))) = 
+			  let val lpaths = List.concat (map traverse sdecs)
+			  in map (fn lpath => (l :: lpath)) lpaths
+			  end
+			| traverse _ = []
+		  in (lpath, List.concat (map traverse sdecs))
+		  end
+	      val lpath_lpaths_list : (lpath * lpath list) list = map getcomponents lpath_sdecs_list
+	      val lpaths = #2 (hd lpath_lpaths_list)
+	      val num_types = length lpaths
+	      val _ = if (andfold (fn (_,lpaths) => length lpaths = num_types) lpath_lpaths_list)
+			  then ()
+		      else (error_region();
+			    print "structure sharing failed\n";
+			    raise LocalError)
+	      val labels : lpath list list = (map (fn (lpath,lpaths) => map (fn lps => lpath @ lps) lpaths) 
+					      lpath_lpaths_list)
+	      val labels_list : lpath list list = mapmap (fn l => case follow_labels (sdecs,ctxt) l of
+							  SOME lbls => lbls
+							| NONE => raise LocalError) labels
+	      val labels_list = Listops.transpose labels_list
+	      fun folder (labels : label list list,sdecs) = xsig_sharing_rewrite(sdecs,labels)
+	  in (foldl folder sdecs labels_list)
+	  end
+      handle LocalError => sdecs
       end
 
   and follow_labels (sdecs,ctxt) =
       let val v = fresh_named_var "modtemp"
 	  val s = SIGNAT_STRUCTURE(NONE, sdecs)
 	  val ctxt = add_context_mod'(ctxt,v,SelfifySig(SIMPLE_PATH v, s))
-	  fun result labels : label list =
+	  fun result labels : label list option =
 	      let val c = path2con(COMPOUND_PATH(v,labels))
-		  val c' = con_normalize'(ctxt,c)
+		  val c' = con_normalize(ctxt,c)
 	      in  case (type_is_abstract(v,c')) of
-		  SOME lbls => lbls
-		| NONE => error "can't share non-abstract types"
+		  SOME lbls => SOME lbls
+		| NONE => (error_region();
+			   print "can't share non-type components";
+			   NONE)
 	      end
       in result
       end
   and xsig_sharing_type(ctxt,sdecs,path) : sdecs = 
-      let val mjunk = MOD_VAR(fresh_named_var "mjunk")
+      let exception LocalError
+	  val mjunk = MOD_VAR(fresh_named_var "mjunk")
 	  fun path2label p = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label p)) of
 				  SOME(l,_) => l
-				| NONE => error "xsig_sharing_type found bad path")
-          val labels = map path2label path
-          val labels = map (follow_labels (sdecs,ctxt)) labels
-      in xsig_sharing_rewrite(sdecs,labels)
+				| NONE => (error_region();
+					   print "sharing type got a non-existent component\n";
+					   raise LocalError))
+      in  
+	  let val labels = map path2label path
+	      val labels = map (fn l => case (follow_labels (sdecs,ctxt) l) of 
+				SOME lbls => lbls
+			      | NONE => raise LocalError) labels
+	  in xsig_sharing_rewrite(sdecs,labels)
+	  end
+      handle LocalError => sdecs
       end
 
       (* labels is a list of paths (relative to the sdecs) to opaque type
@@ -1861,7 +1947,7 @@ functor Toil(structure Il : IL
 			if (eq_label(l,lab))
 				then (labs::match,mismatch)
 			else (match,(lab::labs)::mismatch)
-	          | folder([],_) = error "xsig_sdecs_rewrite: match failed"
+	          | folder([],_) = elab_error "xsig_sdecs_rewrite: match failed"
             in foldl folder ([],[]) labels
 	    end
 	    fun traverse _ [] = [] 
@@ -1899,109 +1985,112 @@ functor Toil(structure Il : IL
 				      pp_context context; print "\n"))
 	  val sig_actual_self = SelfifySig (SIMPLE_PATH v0, sig_actual)
 	  val context = add_context_mod'(context,v0,sig_actual_self)
-	  fun sig_actual_lookup lbl = 
+	  fun sig_actual_lookup lbl : (label list * phrase_class) option = 
 	      (case sig_actual_self of
 		   SIGNAT_STRUCTURE (_,self_sdecs) =>
-		       (case Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl]) of
-			    SOME lpc => lpc
-			  | NONE => error "sig_actual_lookup failed")
-		 | SIGNAT_FUNCTOR _ => error "sig_actual_Lookup for functor")
+		       Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl])
+		 | SIGNAT_FUNCTOR _ => NONE)
 
         (* ---- coercion of a polymorphic component to a mono or polymorphic specification --- *)
-	fun polyval_case (ctxt : context) (lbl,v,con : con,varsig_option) = 
-	     (case (sig_actual_lookup lbl) of
-		(lbls,PHRASE_CLASS_MOD (_,s)) => 
-		  let val (lbls,s) = 
-		      (case s of
-			   SIGNAT_FUNCTOR _ => (lbls,s)
-			     | (SIGNAT_STRUCTURE(_,[SDEC(mk_lab,
-						      DEC_MOD(v,s)),_])) => (lbls @ [mk_lab], s)
-						    | _ => error "no way to coerce")
-		    val path = COMPOUND_PATH(v0,lbls)
-		    val _ = debugdo (fn () => (print "XXXX xcoerce: polyvalcase where s = sig = ";
-					       pp_signat s; print "\n"))
-		  in (case s of
-		     SIGNAT_FUNCTOR(var_poly,sig_poly as SIGNAT_STRUCTURE (NONE,sig_poly_sdecs),
-				    SIGNAT_STRUCTURE(NONE,[SDEC(maybe_it_lab,con'')]),_) =>
-			let 
-			    val itsig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,DEC_EXP(fresh_var(),con))])
-			    val (bnd,dec,sdecs_poly,ctxt') = 
-				(case varsig_option of
-				     NONE => let val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt,sig_poly_sdecs)
-						 val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
-					     in (BND_EXP(v,MODULE_PROJECT(mtemp,it_lab)),
-						 DEC_EXP(v,con),
-						 sdecs_poly,
-						 ctxt)
-					     end
-				   | SOME (v1,s1) => 
-					 let val ctxt' = add_context_mod'(ctxt,v1,
-									     SelfifySig(SIMPLE_PATH v1, s1))
-					     val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt',sig_poly_sdecs)
+	fun polyval_case (ctxt : context) (lbl,v,con : con,varsig_option) : (bnd * dec * dec) option = 
+	    let 
+		fun bad i = (error_region();
+			     print "coercion of a polymorphic value component to a ";
+			     print "monomorphic/polymorphic specification failed at ";
+			     pp_label lbl;
+			     print "\n";
+			     NONE)
+		fun getsig() : (path * signat) option = 
+		    (case (sig_actual_lookup lbl) of
+			 SOME (lbls,PHRASE_CLASS_MOD (_,s)) => 
+			     (case s of
+				  SIGNAT_FUNCTOR _ => SOME(COMPOUND_PATH(v0,lbls),s)
+				| SIGNAT_STRUCTURE(_,[SDEC(mk_lab,dec),_]) => (* exceptions *)
+				      (case dec of
+					   DEC_MOD(v,s) => SOME(COMPOUND_PATH(v0,lbls @ [mk_lab]), s)
+					 | _ => bad(1))
+				| _ => bad(2))
+		       | _ => bad(3))
+	    in (case (getsig()) of
+		    SOME(path,s as SIGNAT_FUNCTOR(var_poly,sig_poly as SIGNAT_STRUCTURE (NONE,sig_poly_sdecs),
+						  SIGNAT_STRUCTURE(NONE,[SDEC(maybe_it_lab,con'')]),_)) =>
+		    let 
+			val itsig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,DEC_EXP(fresh_var(),con))])
+			val (bnd,dec,sdecs_poly,ctxt') = 
+			    (case varsig_option of
+				 NONE => let val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt,sig_poly_sdecs)
 					     val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
-					 in (BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
-					     DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,TOTAL)),
+					 in (BND_EXP(v,MODULE_PROJECT(mtemp,it_lab)),
+					     DEC_EXP(v,con),
 					     sdecs_poly,
-					     ctxt')
-					 end)
-			    val sig_poly' = SIGNAT_STRUCTURE(NONE, sdecs_poly)
-			    val s'' = SIGNAT_FUNCTOR(fresh_var(),sig_poly',itsig,TOTAL)
-			    fun bad() = (print "varsig_option is:\n";
-					  (case varsig_option of
-					       NONE => print "NONE\n"
-					     | SOME(v,s) => pp_signat s);
-					  print "\n";
-					  print "s is: \n";
-					  pp_signat s;
-					  print "\ns'' is: \n";
-					  pp_signat s'';
-					  print "ctxt' is: \n";
-					  pp_context ctxt';
-					  error "cannot coerce : 1")
-			    val _ = (if (Sig_IsSub(ctxt',s,s''))
-				      then ()
-				    else bad())
-				handle e => bad()
-			in (bnd,dec,dec)
-			end
-		   | _ => error "cannot coerce : 2")
-		  end
-	      | _ => error "cannot coerce : 3")
-		    
-	fun doit ctxt (lbl,dec) : (bnd * dec * dec) = 
+					     ctxt)
+					 end
+			       | SOME (v1,s1) => 
+				     let val ctxt' = add_context_mod'(ctxt,v1,
+								      SelfifySig(SIMPLE_PATH v1, s1))
+					 val (sbnds_poly,sdecs_poly,_) = poly_inst(ctxt',sig_poly_sdecs)
+					 val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
+				     in (BND_MOD(v,MOD_FUNCTOR(v1,s1,mtemp)),
+					 DEC_MOD(v,SIGNAT_FUNCTOR(v1,s1,itsig,TOTAL)),
+					 sdecs_poly,
+					 ctxt')
+				     end)
+			val sig_poly' = SIGNAT_STRUCTURE(NONE, sdecs_poly)
+			val s'' = SIGNAT_FUNCTOR(fresh_var(),sig_poly',itsig,TOTAL)
+
+		    in (if (Sig_IsSub(ctxt',s,s''))
+			    then SOME(bnd,dec,dec)
+			else (print "s is "; pp_signat s;
+			      print "\ns'' is "; pp_signat s'';
+			      bad(4)))
+			handle e => bad(5)
+		    end
+		| _ => bad(6))
+	    end
+		  
+	fun doit ctxt (lbl,dec) : (bnd * dec * dec) option = 
 	    let fun general_mod(v,s) = 
 		(case (sig_actual_lookup lbl) of
-		     (lbls,PHRASE_CLASS_MOD (_,s1)) => 
+		     SOME(lbls,PHRASE_CLASS_MOD (_,s1)) => 
 			 let val mvar = fresh_named_var "v0_xcoerce"
 			     val (mbody,sig_ret) = xcoerce(ctxt,mvar,s1,s)
 			     val v1 = fresh_var()
 			     val m' = path2mod(COMPOUND_PATH(v0,lbls))
 			     val bnd = BND_MOD(v,mod_subst_modvar(mbody,[(mvar,m')]))
 			     val dec = DEC_MOD(v,sig_subst_modvar(sig_ret,[(mvar,m')])) 
-			 in (bnd,dec,dec)
+			 in SOME(bnd,dec,dec)
 			 end
-		   | _ => error "cannot coerce : 5")
+		   | _ => (error_region();
+			   print "coercion of a non-structure component to a ";
+			   print "structure specification failed\n";
+			   NONE))
 	    in
 		(case dec of
                    (* ------- coercion to a monomorphic value specificiation ---- *)
 		     DEC_EXP(v,c) =>
 			 (case (sig_actual_lookup lbl) of
-			      (lbls,PHRASE_CLASS_EXP (_,con)) => 
+			      SOME(lbls,PHRASE_CLASS_EXP (_,con)) => 
 				  (debugdo (fn () => 
 					    (print "Looking up with v0 = "; pp_var v0; 
 					     print " with label = "; pp_label lbl;
 					     print "\nand sig_actual = "; pp_signat sig_actual;
 					     print "\ngot back "; pp_con con; print "\n"));
-				   con_unify'(ctxt,"coerce structure components",
-					      ("target type",c),
-					      ("actual type",con),nada);
-				   let val bnd = BND_EXP(v,path2exp(COMPOUND_PATH(v0,lbls)))
-				       val dec = DEC_EXP(v,con)
-				   in (bnd,dec,dec)
-				   end)
-			    | (lbls,PHRASE_CLASS_MOD (_,s)) => 
+				  if (eq_con(ctxt,c,con)) 
+				      then
+					  let val bnd = BND_EXP(v,path2exp(COMPOUND_PATH(v0,lbls)))
+					      val dec = DEC_EXP(v,con)
+					  in SOME(bnd,dec,dec)
+					  end
+				  else (error_region();
+					print "coercion of a monomorphic value component to a ";
+					print "monomorphic value specification failed\n";
+					NONE))
+			    | SOME(lbls,PHRASE_CLASS_MOD (_,s)) => 
 				  polyval_case ctxt (lbl,v,c,NONE)  (* rule 250 *)
-			    | _ => error "cannot coerce : 4")
+			    | _ => (error_region();
+				    print "coercion of a polymorphic non-value component to a ";
+				    print "monomorphic specification failed\n";
+				    NONE))
 
 	           (* ----- check for polymorphic specification case first ---- *)
 		   | DEC_MOD(v,s as (SIGNAT_FUNCTOR(v1,s1,SIGNAT_STRUCTURE (NONE,
@@ -2014,34 +2103,42 @@ functor Toil(structure Il : IL
 		   (* ------- coercion of a type component to a type spec ---- *)
 		   | DEC_CON(v,k,copt) =>
 			 (case (sig_actual_lookup lbl) of
-			      (lbls,PHRASE_CLASS_CON (_,knd)) => 
+			      SOME(lbls,PHRASE_CLASS_CON (_,knd)) => 
 				  let val con' = path2con(COMPOUND_PATH(v0,lbls))
 				      val _ = (case copt of 
 						   NONE => ()
-						 | SOME con => con_unify'(ctxt,"xcoerce_eqcon",
-									  ("target type",con),
-									  ("actual type",con'),nada))
+						 | SOME con => 
+						       if (eq_con(ctxt,con,con'))
+							   then ()
+						       else (error_region();
+							     print "coercion of a type component to a ";
+							     print "type specification failed\n"))
 				      val bnd = BND_CON(v,con')
 				      val dec = DEC_CON(v,k,SOME con')
-				  in (bnd,dec,dec)
+				  in SOME(bnd,dec,dec)
 				  end
-			    | _ => error "cannot coerce : 6")
-		   | _ => error "cannot coerce : 7")
+			    | _ => (error_region();
+				    print "coercion of a non-type or non-existent component to a ";
+				    print "type specification failed\n";
+				    NONE))
+		   | _ => error "compiler impossibility: ill-formed specification")
 	    end
 
 	fun sdecs_loop (ctxt : context) [] : (sbnds * sdecs) = ([],[])
 	  | sdecs_loop ctxt ((SDEC(l,dec))::rest) = 
-	    let val (resbnd,resdec,extenddec) = doit ctxt (l,dec)
-		val _ = debugdo (fn () =>
-				 (print "!!!! doit once returned resdec = ";
-				  pp_dec resdec; print "\n";
-				  print "\nand extenddec = ";
-				  pp_dec extenddec; print "\n"))
-		val ctxt' = add_context_dec(ctxt,SelfifyDec extenddec)
-		val (sbnds,sdecs) = sdecs_loop ctxt' rest
-	    in ((SBND(l,resbnd))::sbnds, 
-		(SDEC(l,resdec))::sdecs)
-	    end
+	    case (doit ctxt (l,dec)) of
+		SOME (resbnd,resdec,extenddec) =>
+		    let val _ = debugdo (fn () =>
+					 (print "!!!! doit once returned resdec = ";
+					  pp_dec resdec; print "\n";
+					  print "\nand extenddec = ";
+					  pp_dec extenddec; print "\n"))
+			val ctxt' = add_context_dec(ctxt,SelfifyDec extenddec)
+			val (sbnds,sdecs) = sdecs_loop ctxt' rest
+		    in ((SBND(l,resbnd))::sbnds, 
+			(SDEC(l,resdec))::sdecs)
+		    end
+	      | NONE => sdecs_loop ctxt rest
 	val (m,s) = (case (sig_actual,signat) of
 		       (SIGNAT_FUNCTOR(v1,s1,s1',a1), SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
 			 let 
@@ -2065,7 +2162,9 @@ functor Toil(structure Il : IL
 			   in (MOD_STRUCTURE sbnds,
 			       SIGNAT_STRUCTURE (NONE, sdecs))
 			   end
-		     | _ => error "xcoerce got bad sigs")
+		     | _ => (error_region();
+			     print "cannot coerce a functor to a structure or vice-versa";
+			     (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]))))
       in (m,s)
       end
 
@@ -2075,7 +2174,7 @@ functor Toil(structure Il : IL
     and xeq (ctxt : context, argcon : con) : exp = 
 	(xeq_hidden (ctxt, argcon))
 	handle NoEqExp => (debugdo (fn () => (print "no equality at this type:\n";
-					      pp_con (con_normalize'(ctxt,argcon))));
+					      pp_con (con_normalize(ctxt,argcon))));
 			   raise NoEqExp)
 
     and xeq_hidden (ctxt : context, argcon : con) : exp = 
@@ -2083,7 +2182,7 @@ functor Toil(structure Il : IL
 	  val _ = debugdo (fn () => (print "CALLED xeq with con = ";
 				     pp_con argcon; print "\nand ctxt = \n";
 				     pp_context ctxt))
-	  val con' = con_normalize'(ctxt,argcon) 
+	  val con' = con_normalize(ctxt,argcon) 
 	  val _ = debugdo (fn () => (print "NORMALIZE to con = ";
 				     pp_con con'; print "\n"))
 	  fun self c = xeq_hidden(ctxt,c)
@@ -2201,7 +2300,7 @@ functor Toil(structure Il : IL
 		     KIND_TUPLE _ => error "cannot perform equality on con tuples"
 		   | KIND_ARROW(n,m) => 
 			 let
-			     val _ = if (m=n) then () else error "datatype constructor must have kind n=>n"
+			     val _ = if (m=n) then () else elab_error "datatype constructor must have kind n=>n"
 			     val mu_cons = map0count (fn i => CON_MUPROJECT(i,con')) n
 			     val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) n
 			     val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) n
@@ -2267,14 +2366,14 @@ functor Toil(structure Il : IL
       end
 
     (* ------------ Exported interface to resolve overloading ------------ *)
-    fun overload_wrap xobj arg = 
+    fun overload_wrap fp xobj arg = 
       let 
 	fun flex_help (l,ref(FLEXINFO(stamp,false,rdecs)),fieldc,eshot) = 
-	    (print "Unresolved flex record with label: ";
+	    (error_region();
+	     print "Unresolved flex record with label: ";
 	     pp_label l; print "\nrdecs are:";
 	     pp_con (CON_RECORD rdecs); print "\nfieldc is:";
-	     pp_con fieldc; print "\n";
-	     error "Unresolved flex record")
+	     pp_con fieldc; print "\n")
 	  | flex_help (l,ref(FLEXINFO(_,true,rdecs)),fieldc,eshot) = 
 	    let val v = fresh_named_var "flex_eta_var"
 		val recc = CON_RECORD rdecs
@@ -2284,12 +2383,14 @@ functor Toil(structure Il : IL
 	    end
 	  | flex_help (l,ref(INDIRECT_FLEXINFO fr),fieldc,eshot) = flex_help (l,fr,fieldc,eshot)
 	fun overload_help ocon =
-		 let val helpers = {hard = fn (c1,c2) => eq_con'(empty_context,c1,c2),
-				    soft = fn (c1,c2) => soft_eq_con'(empty_context,c1,c2)}
+		 let val helpers = {hard = fn (c1,c2) => eq_con(empty_context,c1,c2),
+				    soft = fn (c1,c2) => soft_eq_con(empty_context,c1,c2)}
 		 in (case (ocon_constrain(ocon,helpers)) of
-			   [] => error "overloaded type: none of the constraints are satisfied"
+			 [] => (error_region();
+				print "overloaded type: none of the constraints are satisfied\n")
 			 | [pos] => ()
-			 | pos::_ => error "Warning: more than one constraint satisfied by overloaded type")
+			 | pos::_ => (error_region();
+				      print "Warning: more than one constraint satisfied by overloaded type"))
 		 end
 	fun eq_help (decs,tyvar,exp_oneshot) = 
 	  let
@@ -2303,11 +2404,12 @@ functor Toil(structure Il : IL
 	(case (Tyvar.tyvar_deref tv) of
 			SOME _ => ()
 		      | NONE => (print "Warning: top-level unresolved tyvar -- setting to type unit\n"; 
-				Stats.counter "toil.unresolved_tyvar" ();
-				Tyvar.tyvar_set(tv,con_unit)))
+				 Stats.counter "toil.unresolved_tyvar" ();
+				 Tyvar.tyvar_set(tv,con_unit)))
 			
-        val _ = reset_counters()
-	val _ = clear_tables()
+
+	val _ = reset_elaboration fp
+	val _ = push_region(0,1000000)
 	val _ = eq_table_push()
 	val res = xobj arg
 	val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", SIGNAT_STRUCTURE(NONE,[])))
@@ -2318,7 +2420,7 @@ functor Toil(structure Il : IL
 	val _ = app flex_help flex_table 
         val _ = app tyvar_help tyvar_table
 
-	fun eq_loop 10 = error "eq_loop reached 10"
+	fun eq_loop 10 = elab_error "eq_loop reached 10"
 	  | eq_loop n = 
 	    let val eq_table = get_eq_table()
 	    in case eq_table of
@@ -2326,7 +2428,7 @@ functor Toil(structure Il : IL
 	      | _ => let val _ = debugdo (fn() =>
 					  (print "eq_table had "; print (Int.toString (length eq_table));
 					   print " things\n"))
-			 val _ = clear_tables()
+			 val _ = reset_elaboration fp
 			 val _ = eq_table_push()
 			 val _ = app eq_help eq_table 
 			 val _ = eq_table_pop (DEC_MOD(fresh_named_var "dummy", 
@@ -2334,12 +2436,25 @@ functor Toil(structure Il : IL
 		     in eq_loop (n+1)
 		     end
 	    end
-      in eq_loop 1; res
+	val _ = eq_loop 1
+      in (case (get_elaboration_error()) of
+	      NoError => SOME res
+	    | Warn => SOME res
+	    | Error => NONE)
       end
     
-    val xdec = overload_wrap xdec
-    val xexp = overload_wrap xexp
+    val xdec = fn (ctxt,fp,dec) => overload_wrap fp xdec (ctxt,dec)
+    val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)
+    val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap fp xstrexp (ctxt,strexp,sigc)
+    val xspec = fn (ctxt,fp,specs) => overload_wrap fp xspec (ctxt,specs)
+    val xsigexp = fn (ctxt,fp,se) => overload_wrap fp xsigexp (ctxt,se)
+    val xty = fn (ctxt,fp,ty) => overload_wrap fp xty (ctxt,ty)
+    val xtybind = fn (ctxt,fp,tyb) => overload_wrap fp xtybind (ctxt,tyb)
     val xeq = xeqopt
 
+    fun zfp (_ : Ast.srcpos) = ("zfp",0,0)
+    val xsig_sharing_type = fn arg => overload_wrap zfp xsig_sharing_type arg
+    val xsig_sharing_structure = fn arg => overload_wrap zfp xsig_sharing_structure arg
+    val xsig_wheretype = fn arg => overload_wrap zfp xsig_wheretype arg
 
   end;

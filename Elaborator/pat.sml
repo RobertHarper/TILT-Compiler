@@ -17,7 +17,8 @@ functor Pat(structure Il : IL
     type patarg = {context : Il.context,
 		   typecompile : typecompile,
 		   expcompile : expcompile,
-		   polyinst : polyinst}
+		   polyinst : polyinst,
+		   error_region : unit -> unit}
 
 
     open Il IlStatic IlUtil Ppil
@@ -29,6 +30,7 @@ functor Pat(structure Il : IL
     fun printint i = print (Int.toString i)
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun nada() = ()
+
 
     (* ---------- auxilliary types, datatypes, and functions -------------- 
      A case_exp is the argument to the case statement.  It distinguishes
@@ -154,7 +156,7 @@ functor Pat(structure Il : IL
      Also returned is a list, one for each match-rule supplied, 
      of the variables and their types bound in each pattern.
     -------------------------------------------------------------- *)
- fun compile ({context, typecompile = xty, expcompile = xexp, polyinst} : patarg,
+ fun compile ({context, typecompile = xty, expcompile = xexp, polyinst, error_region} : patarg,
 	       compile_args : case_exp list, 
 	       compile_arms : arm list,
 	       compile_default : (Il.exp * Il.con) option)
@@ -171,9 +173,10 @@ functor Pat(structure Il : IL
     let
 	val elemcon = fresh_con context
 	val (bnd,(var,con)) = lethelp("refvar",arg1)
-	val _ = con_unify'(context,"ref_case",
-			   ("refcon",con),
-			   ("elemcon", CON_REF elemcon),nada)
+	val _ = if (eq_con(context,con,CON_REF elemcon))
+		    then ()
+		else (error_region();
+		      print "ref pattern used on a non-ref argument\n")
 	val newargs = (CASE_NONVAR(fresh_var(),
 				   APP(PRIM(deref,[elemcon]),VAR var),
 				   elemcon))::args
@@ -203,25 +206,7 @@ functor Pat(structure Il : IL
 	 in (vc_ll, wrapbnd(bnd,ec))
 	 end)
 
-(*
-  and tuprec_case (arg1,
-		   args,
-		   syms : Symbol.symbol list,
-		   accs : (Ast.pat list * arm) list,
-		   def : def) : bound list * (exp * con) = 
-    let
-      val (bnd1,(var1,con1)) = lethelp("recordcase",arg1)
-      val (rbnds,rvars,rcons) = letprojecthelp(context,var1,syms)
-      val _ = con_unify'(context,"tuprec_case",
-			 ("con1",con1),
-			 ("(rcons)",con_record(zip syms rcons)),nada)
-      val newargs = map2 (fn (v,c) => CASE_VAR(v,c)) (rvars,rcons)
-      fun extender (pats,(cl,bound,body)) = (pats @ cl, bound, body)
-      val newarms = map extender accs
-      val (vc_ll : bound list, ec) = match(newargs @ args,newarms,def)
-    in (vc_ll,wrapbnd(bnd1,wrapbnds(rbnds,ec)))
-    end
-*)
+
   and tuprec_case (arg1,
 		   args,
 		   accs : (((label * Ast.pat) list * bool) * arm) list,
@@ -264,9 +249,10 @@ functor Pat(structure Il : IL
 	val argcon = if flex 
 			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.get_stamp(),false,lc)))
 		     else CON_RECORD lc
-	val _ = con_unify'(context,"tuprec_case",
-			   ("con1",con1),
-			   ("(rcons)",argcon),nada)
+	val _ = if (eq_con(context,con1,argcon))
+		    then ()
+		else (error_region();
+		      print "tuple/record pattern used on a non-record argument\n")
 	val newargs = map2 (fn (v,c) => CASE_VAR(v,c)) (rvars,rcons)
 	fun extender (pats,(cl,bound,body)) = (pats @ cl, bound, body)
 	val newarms = map extender accs'
@@ -292,9 +278,10 @@ functor Pat(structure Il : IL
 				   val arm' = (argpat::cl,bound,body)
 			       in  match((CASE_VAR (v,con))::args,[arm'],def)
 			       end)
-		  val _ = con_unify'(context,"exnhandler type",
-				     ("exp type",rescon),
-				     ("return type of exnhandler",c), nada)
+		  val _ =  if (eq_con(context,rescon,c))
+			       then ()
+			   else (error_region();
+				 print "body and handler type mismatch\n")
 		  val body = #1(make_lambda(v,con,c,e))
 	      in (bound',(stamp,con,body))
 	      end
@@ -335,24 +322,30 @@ functor Pat(structure Il : IL
 	     | (true,NONE) => SOME(clause,bound,body)
 	     | (true,SOME argument) => SOME(argument::clause,bound,body))
 	  val relevants : arm list = List.mapPartial armhelp accs
-	  val _ = con_unify'(context,"constructor with argument con",
-			     ("datacon",datacon),("casecon",casecon),nada)
+	  val _ = if (eq_con(context,datacon,casecon))
+		      then ()
+		  else (error_region();
+			print "constructor pattern used on an argument of the wrong type\n")
 	  val rsvar = fresh_var()
 	  val rscon = CON_SUM(SOME i,sumcon)
 	in (case (relevants : arm list, arg_type) of
 	      ([],_) => ([],NONE)
 	    | (_,NONE) => let 
 			    val (vf_ll : bound list, (me,mc)) = match(args, relevants, def)
-			    val _ = con_unify'(context,"rescon with arms's result type",
-					       ("rescon",rescon),("mc",mc),nada)
+			    val _ = if (eq_con(context,rescon,mc))
+					 then ()
+				     else (error_region();
+					   print "results types of rules mismatch\n")
 			  in (vf_ll,SOME (#1 (make_lambda(rsvar,rscon,mc,me))))
 			  end
 	    | (_,SOME at) => let 
 			   val var = fresh_var()
 			   val rcon = List.nth(sumcon,i)
 			   val (vf_ll,(me,mc)) = match((CASE_VAR (var,rcon))::args, relevants, def)
-			   val _ = con_unify'(context,"rescon with arm result type",
-					      ("rescon",rescon),("mc",mc),nada)
+			    val _ = if (eq_con(context,rescon,mc))
+					 then ()
+				     else (error_region();
+					   print "results types of rules mismatch\n")
 		       in (vf_ll,SOME(#1 (make_lambda(rsvar,rscon,mc,
 						      LET([BND_EXP(var,SUM_TAIL(rscon,VAR rsvar))],me)))))
 		       end)
@@ -414,11 +407,14 @@ functor Pat(structure Il : IL
 	   local
 	     fun dopat (Ast.MarkPat(p,r)) = dopat p
 	       | dopat (Ast.ConstraintPat{pattern,constraint}) = 
-	       let val c = xty(context,constraint)
-		 val con = get_case_exp_con arg1
-		 val _ = con_unify'(context,"Constraint Pattern",("constraint type",c),("pattern type",con),nada)
-	       in dopat pattern
-	       end
+		 let val c = xty(context,constraint)
+		     val con = get_case_exp_con arg1
+		     val _ = if (eq_con(context,c,con))
+				 then ()
+			     else (error_region();
+				   print "constraint pattern mismatches pattern type\n")
+		 in dopat pattern
+		 end
 	       | dopat (Ast.ListPat []) = Ast.VarPat [Symbol.varSymbol "nil"]
 	       | dopat (Ast.ListPat (p::rest)) = Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "::"],
 							    argument=Ast.TuplePat[p,dopat (Ast.ListPat rest)]}
@@ -617,11 +613,17 @@ functor Pat(structure Il : IL
 		   let
 		     fun conszip a b = map (op ::) (zip a b)
 		     val (bndopt,(var,con)) = lethelp("casevar_scon",arg1)
-		     val _ = con_unify'(context,"Base type Pattern",("",eqcon),("con",con),nada)
+		     val _ = if (eq_con(context,eqcon,con))
+				 then ()
+			     else (error_region();
+				   print "base type mismatches argument type\n")
 		     val (vc_ll1,(e1,c1)) = match(argrest, [(tlpat1, bound1, body1)], def)
 		     val (vc_ll2,(e2,c2)) = match(args, zip3 (conszip headpat_rest tlpat_rest) 
 						  boundrest bodyrest, def)
-		     val _ = con_unify'(context,"Base type Pattern",("c1",c1),("c2",c2),nada)
+		     val _ = if (eq_con(context,c1,c2))
+				 then ()
+			     else (error_region();
+				   print "base type mismatches argument type\n")
 		     val ite_exp = make_ifthenelse(Il.APP(eq,exp_tuple[VAR var,Il.SCON sc]),e1,e2,c1)
 		     val ec = (case bndopt of
 				 NONE => (ite_exp,c1)
@@ -776,7 +778,7 @@ functor Pat(structure Il : IL
 
 
     (* ---- funCompile creates a curried function ----------------------- *)
-    fun funCompile {patarg = patarg as {context, ...},
+    fun funCompile {patarg = patarg as {context, error_region, ...},
 		    rules = cases : (clause * Ast.exp) list,
 		    reraise}
       : {arglist : (Il.var * Il.con) list, body : Il.exp * Il.con} =
@@ -808,7 +810,10 @@ functor Pat(structure Il : IL
 	val args = map2 (fn (v,c) => CASE_VAR(v,c)) (argvars,argcons)
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)
-				 val _ = con_unify'(context,"funCompile",("ANY",CON_ANY),("c",c),nada)
+				 val _ =  if (eq_con(context,c,CON_ANY))
+					      then ()
+					  else (error_region();
+						print "default of pattern not an exn type\n")
 				 val res_con = fresh_con context
 			     in SOME(RAISE (res_con,VAR v),res_con)
 			     end
