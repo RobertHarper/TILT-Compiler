@@ -10,7 +10,7 @@ signature REGISTER_DATA_FLOW = sig
   (*
    * A set of register ids.
    *)
-  type set
+  type idSet
 
   (*
    * An expression.
@@ -36,16 +36,16 @@ signature REGISTER_DATA_FLOW = sig
    * exp -> the expression to return the define/use set of
    * <- the define/use set for exp
    *)
-  val defineExpression: mlrisc -> set
-  val useExpression:	mlrisc -> set
+  val defineExpression: mlrisc -> idSet
+  val useExpression:	mlrisc -> idSet
 
   (*
    * Return the define/use set of a given sequence of statement/directives.
    * mltrees -> the statement/directives to return the define/use set of
    * <- the define/use set for mltrees
    *)
-  val define: mltree list -> set
-  val use_:   mltree list -> set
+  val define: mltree list -> idSet
+  val use_:   mltree list -> idSet
 
 end
 
