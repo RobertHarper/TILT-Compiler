@@ -7,6 +7,8 @@ signature BLASTER = sig
   type 'a blastin = TextIO.instream -> 'a
   type 'a blastout = TextIO.outstream -> 'a -> unit
 
+  val useOldBlast : bool ref
+
   val blastOutInt : TextIO.outstream -> int -> unit
   val blastInInt : TextIO.instream -> int
   val blastOutWord64 : TextIO.outstream -> TilWord64.word -> unit
@@ -26,29 +28,12 @@ signature BLASTER = sig
 
 end
 
-(*
-functor mkBlast(type t):BLASTER = struct
-  type t = t
 
-  fun blastOut (filename, (x:t)) = let
-    val out = BinIO.openOut filename
-    val _ = BinIO.output(out, (System.Unsafe.blastWrite x))
-    val _ = BinIO.closeOut out
-  in
-    ()
-  end
-
-  fun blastIn filename = let
-    val i = BinIO.openIn filename
-    val v = BinIO.input i
-  in
-    (System.Unsafe.blastRead v) : t
-  end
-*)
 
 structure Blaster : BLASTER = struct
 
   val error = fn s => Util.error "blast.sml" s
+  val useOldBlast = ref false
 
   type 'a blastin = TextIO.instream -> 'a
   type 'a blastout = TextIO.outstream -> 'a -> unit
@@ -56,7 +41,9 @@ structure Blaster : BLASTER = struct
     local
 	open TextIO
     in
-	val input1 = fn is => String.sub(inputN(is,1),0)
+	val input1 = fn is => (case input1 is of
+				   SOME c => c
+				 | NONE => error "premature end of file in input1")
 
 	fun blastOutString os str = 
 	    (output1(os, chr (size str));
@@ -67,11 +54,49 @@ structure Blaster : BLASTER = struct
 		val str = inputN(is, sz)
 	    in  str
 	    end
+
+	fun blastOutWord32 os w = 
+	    let val a = Word32.andb(w,0w255)
+		val w = Word32.>>(w,0w8)
+		val b = Word32.andb(w,0w255)
+		val w = Word32.>>(w,0w8)
+		val c = Word32.andb(w,0w255)
+		val w = Word32.>>(w,0w8)
+		val d = w
+		val a' = Word32.toInt a
+		val b' = Word32.toInt b
+		val c' = Word32.toInt c
+		val d' = Word32.toInt d
+	    in  output1(os, chr a');
+		output1(os, chr b');
+		output1(os, chr c');
+		output1(os, chr d')
+	    end
+
+	fun blastInWord32 is =
+	    let val a' = Word32.fromInt(ord(input1 is))
+		val b' = Word32.fromInt(ord(input1 is))
+		val c' = Word32.fromInt(ord(input1 is))
+		val d' = Word32.fromInt(ord(input1 is))
+		val w = Word32.orb(c',Word32.<<(d',0w8))
+	    in  Word32.orb(a',Word32.<<(Word32.orb(b',Word32.<<(w,0w8)),0w8))
+	    end
 	
-	fun blastOutInt os i = blastOutString os (Int.toString i)
-	fun blastInInt is = (case Int.fromString(blastInString is) of
+	fun blastOutInt' os i = blastOutString os (Int.toString i)
+	fun blastInInt' is = (case Int.fromString(blastInString is) of
 				 NONE => error "blastInInt failed\n"
 			       | SOME n => n)
+
+	fun blastOutInt'' os i = blastOutWord32 os (Word32.fromInt i)
+	fun blastInInt'' is = Word32.toInt(blastInWord32 is)
+
+	fun blastOutInt os i = if (!useOldBlast)
+				   then blastOutInt' os i
+			       else blastOutInt'' os i
+	fun blastInInt is = if (!useOldBlast)
+				then blastInInt' is
+			    else blastInInt'' is
+
 
 	fun blastOutWord64 os i = blastOutString os (TilWord64.toDecimalString i)
 	fun blastInWord64 is = TilWord64.fromDecimalString(blastInString is) 
