@@ -1,6 +1,6 @@
  # (0) Remember to be careful about the usage of $gp
  # (1) Assumes that the save area begins with 32 longs and then 32 doubles
- # (2) Assumes that the thread pointer is unmodified by call to gcFomrML
+ # (2) Assumes that the thread pointer is unmodified by call to gcFromML
 		
 #define _asm_
 #include "general.h"
@@ -9,8 +9,8 @@
 		
 	.text	
 	.align	4
-	.globl	load_regs		# helper function used locally and in service_solaris_asm.s
-	.globl	save_regs		# helper function used locally and in service_solaris_asm.s
+	.globl	load_regs		# helper function used locally and in service_alpha_osf_asm.s
+	.globl	save_regs		# helper function used locally and in service_alpha_osf_asm.s
 	.globl	GCFromML		# called from ML mutator
 	.globl	returnFromGCFromML	# used by scheduler to go back to ML
 	.globl	GCFromC			# called from C function including those of runtime
@@ -223,7 +223,7 @@ GCFromML:
 .set noat
 	stq	$0,  MLsaveregs_disp(THREADPTR_REG)	# save $0, $1, $26, $29 manually
 	stq	$1,  MLsaveregs_disp+8(THREADPTR_REG)	
-	stq	$26, RA_DISP(THREADPTR_REG)
+	stq	$26, MLsaveregs_disp+RA_DISP(THREADPTR_REG)
 	stq	$29, MLsaveregs_disp+232(THREADPTR_REG)
 	br	$gp, GCFromMLgetgp1
 GCFromMLgetgp1:	
@@ -231,11 +231,11 @@ GCFromMLgetgp1:
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer
 	bsr	save_regs
 	subl	$at, ALLOCPTR_REG, $at			# compute how many bytes requested
-	stl	$at, requestInfo_disp(THREADPTR_REG)	# record bytes needed
+	stq	$at, requestInfo_disp(THREADPTR_REG)	# record bytes needed
 	lda	$at, GCRequestFromML($31)
-	stl	$at, request_disp(THREADPTR_REG)	# record that this is an MLtoGC request
-	ldl	$at, proc_disp(THREADPTR_REG)		# get system thread pointer
-	ldl	$sp, ($at)				# run on system thread stack
+	stq	$at, request_disp(THREADPTR_REG)	# record that this is an MLtoGC request
+	ldq	$at, proc_disp(THREADPTR_REG)		# get system thread pointer
+	ldq	$sp, ($at)				# run on system thread stack
 	mov	THREADPTR_REG, $16			# pass user thread pointer as arg
 	jsr	$26, GCFromMutator
 	br	$gp, GCFromMLgetgp2
@@ -279,7 +279,7 @@ returnToML:
 	ldgp	$gp, 0($27)				# compute self-gp for load_regs
 	mov	CFIRSTARG_REG, THREADPTR_REG		# restore THREADPTR_REG
 	mov	CSECONDARG_REG, $1			# use $1 as temp for return address
-	stl	$31, notinml_disp(THREADPTR_REG)	# set notInML to zero
+	stq	$31, notinml_disp(THREADPTR_REG)	# set notInML to zero
 	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
 	bsr	load_regs				
 	mov	$1, $26					# restore return address to r26

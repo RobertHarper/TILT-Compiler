@@ -122,7 +122,7 @@ start_client_getgp1:
 	stq	$31, notinml_disp(THREADPTR_REG)
 .set noat
  	ldq	$at, thunk_disp(THREADPTR_REG)		# fetch thunk
-	stl	$31, thunk_disp(THREADPTR_REG)		# erase thunk
+	stq	$31, thunk_disp(THREADPTR_REG)		# erase thunk
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$1, 8($at)				# fetch term env
@@ -134,12 +134,12 @@ start_client_retadd_val:				# used by stack.c
 start_client_getgp2:	
 	ldgp	$gp, 0($gp)				# fix gp
 	lda	$at, 1($31)
-	stl	$at, notinml_disp(THREADPTR_REG)
+	stq	$at, notinml_disp(THREADPTR_REG)
 	addq	THREADPTR_REG, MLsaveregs_disp, $0
 	bsr	save_regs				# need to save register set to get 
 							#    alloction pointer into thread state
-	ldl	$at, proc_disp(THREADPTR_REG)	# get system thread pointer
-	ldl	$sp, ($at)				# run on system thread stack	
+	ldq	$at, proc_disp(THREADPTR_REG)	# get system thread pointer
+	ldq	$sp, ($at)				# run on system thread stack	
 	jsr	Finish
 	lda	$16, $$errormsg				# should not return from Finish
 	jsr	printf
@@ -158,8 +158,8 @@ Yield:
 	br	$gp, Yield_getgp
 Yield_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self to we can jsr	
-	ldl	$at, proc_disp(THREADPTR_REG) # get system thread pointer
-	ldl	$sp, ($at)		        # run on system thread stack
+	ldq	$at, proc_disp(THREADPTR_REG) # get system thread pointer
+	ldq	$sp, ($at)		        # run on system thread stack
 	jsr	$26, YieldRest			# no need to restore $gp after this call
 	br	$gp, Yield_getgp2
 Yield_getgp2:	
@@ -178,8 +178,8 @@ Spawn:
 	br	$gp, Spawn_getgp
 Spawn_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	ldl	$at, proc_disp(THREADPTR_REG) # get system thread pointer
-	ldl	$sp, ($at)		        # run on system thread stack
+	ldq	$at, proc_disp(THREADPTR_REG) # get system thread pointer
+	ldq	$sp, ($at)		        # run on system thread stack
 	jsr	$26, SpawnRest			# no need to restore $gp after this call
 	ldgp	$gp, 0($26)			# compute correct gp for self	
 	bsr	load_regs			# THREADPTR_REG is a callee-save register
@@ -196,7 +196,7 @@ scheduler:
 scheduler_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self		
 .set noat
-	ldl	$sp, (CFIRSTARG_REG)	        # run on system thread stack
+	ldl	$sp, (CFIRSTARG_REG)	        # run on system thread stack  XXX:	ldq?
 	jsr	$26, schedulerRest		# no need to restore $gp after this call
 	br	$gp, scheduler_getgp2
 scheduler_getgp2:	
@@ -244,15 +244,18 @@ restore_dummy:
 					# restore address from argument
 	bsr	load_regs_MLtoC
 	mov	$16, EXNARG_REG		# restore exn arg - which is same as $26
-	ldq	$16, MLsaveregs_disp+16*4(THREADPTR_REG)	# restore $16 which was used to save exn arg
-	ldq	$0, MLsaveregs_disp+0*4(THREADPTR_REG)		# restore $0 due to load_regs
-	ldq	$1, MLsaveregs_disp+1*4(THREADPTR_REG)		# restore $1 due to load_regs
+	ldq	$16, MLsaveregs_disp+16*8(THREADPTR_REG)	# restore $16 which was used to save exn arg
+	ldq	$0, MLsaveregs_disp+0*8(THREADPTR_REG)		# restore $0 due to load_regs
+	ldq	$1, MLsaveregs_disp+1*8(THREADPTR_REG)		# restore $1 due to load_regs
 								# don't need to restore r26 and r29 due to load_regs
+	br	$gp, restore_dummy2	# Fix gp
+restore_dummy2:
+	ldgp	$gp, 0($gp)
 	lda	ASMTMP2_REG, primaryStackletOffset
 	ldl	ASMTMP2_REG, (ASMTMP2_REG)
-	ldq	ASMTMP_REG, 4(EXNPTR_REG)	# fetch sp in handler
-	addq	ASMTMP_REG, ASMTMP2_REG, $sp	# restore sp		
-	ldq	$27, 0(EXNPTR_REG)	# fetch pc of handler
+	ldl	ASMTMP_REG, 4(EXNPTR_REG)	# fetch sp in handler
+	addl	ASMTMP_REG, ASMTMP2_REG, $sp	# restore sp		
+	ldl	$27, 0(EXNPTR_REG)	# fetch pc of handler
 	jmp	$31, ($27), 1		# jump without link
 .set at
 	.end	raise_exception_raw
