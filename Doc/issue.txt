@@ -1,0 +1,110 @@
+
+Status
+------
+	TILT has successfully compiled all of the original TIL
+benchmarks which are single files varying from 50 to 2000 lines.  I
+have not measured the runtime performance but I think TILT is about
+perhaps 2 or 3 times slower than TIL at this point.  TILT has
+successfully compiled the CW (Concurrency Workbench) benchmark which
+is about 10000 lines of code distributed over 30 files.  Importantly,
+since CW is completely functorized, it provided a good test of
+features of TILT not in TIL.
+
+	The bootstrapping process has begun!  This has provided
+valuable information about what parts of the compiler are buggy 
+or slow.  So far, 3 of the 8 directories have been compiled.
+At the current projections, the TILT compiler (without removing 
+unnecessary code) will be about 15 megabytes.  This is a ballpark
+figure and the final result may well be less.  
+
+	The biggest problem facing the compiler right now is
+scalability.  When the input is too large, the compiler generates
+intermediate programs that are so large that too much time is spent in
+garbage collecting.  When the input file is sufficiently complex,
+there can be so much swapping that the wall clock time exceeds the CPU
+time by a factor of 2 to 4.  Although reducing the program size is not
+the only way to combat this problem, it is certainly one of the most
+effective ways at this time.
+
+	The memory behavior can be explained by a bad interaction
+with the NJ garbage collector, a space leak in the TILT compiler,
+or one in the NJ compilation manager.  More work needs to go into
+into determining the cause.  
+
+	Here is one possible explanation of the frequent swapping and
+major garbage collection when compiling large programs.  If the input
+program is sufficiently large, the compiler phases can run long enough
+that the input program is promoted to a tenured area.  During a
+subsequent phase, a new copy of the program is created.  This copy
+will need to be promoted as well.  During this phase though, we may
+have to retain both copies at the same time.  Further, if we are
+unlucky, the program may last long enough to be promoted but then die
+soon thereafter.  A few well-placed GC triggers may solve most of this
+problem.
+
+	The current strategy is to try to bootstrap and learn from 
+the experience.  Some optimizations and language redesign will and have
+already been made to achieve this.  The goal is to have a robust
+compiler before trying anything fancy since a fundamentally flawed
+design will probably require painfully systematic rewrites.  To that
+end, the NIL language design and NIL typechecking process are crucial.
+The goals are soundness, completeness, simplicity, and scalability
+without sacrificing the opportunity of conceivable program optimizations
+and compiler performance.
+
+
+Things to do
+============
+Util
+----
+	Periodically, it's a good idea to look at the helper functions
+		littered throughout the compiler and move them here.
+
+Parser
+------
+	Clean up the code; since we took the NJ parser wholesale, we ended up
+		incorporating many files which are used only tangentially
+
+HIL
+---
+	Naming datatypes components
+	HIL signature variables
+	HIL SIGNAT_OF helps with structure sharing
+	Elaborator can preserve type sharing via type meta-variables
+	Smarter pattern matcher
+	Introduce HIL signature "where type" construct
+	Friendly error messages
+
+NIL
+---
+	Nil kind binding
+	Speed up typechecking
+	Compiler optimizations
+	Code optimizations
+	
+RTL
+---
+	Determine the bottleneck
+	Speed up the translation
+
+
+Backend/Alpha
+-------------
+	Determine the bottleneck
+	Speed up the translation
+	Switch to MLRISC and compare the reulst
+
+
+
+Compilation Manager
+-------------------
+	Evaluate the current setup
+	Edinburgh style vs NJ/CM style
+	Does it scale well?
+		Costs:	
+			Reading contexts
+			Concatenating contexts
+		Related issue:
+			Context representation in the face of compilation units
+
+		  
