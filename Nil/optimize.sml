@@ -962,16 +962,30 @@ fun pp_alias UNKNOWN = print "unknown"
 					  end
 				      else
 					  default()
+                                | (true, _) => do_exp state (App_e(Open, Var_e orig_var, [], args, []))
 				| _ => default())
-                           | do_onearg _ = error "do_onearg: found application of onearg'ed function not given a single variable argument!"
+                           | do_onearg (_,onearg_var, orig_var, args) = 
+	                                   (print "do_onearg: bad app ";
+	                                    Ppnil.pp_var onearg_var;
+	                                    print " = onearg of ";
+	                                    Ppnil.pp_var orig_var;
+	                                    print " applied to ";
+	                                    Ppnil.pp_list Ppnil.pp_exp' args
+                                                  (" ", " ", " ", false);
+	                                    print "\n";
+	                                    error "do_onearg: found application of onearg'ed function not given a single variable argument!")
 
 		     in (case f of 
 			     Var_e v =>
 			         (case (lookup_alias(state,v)) of
 				      ETAe (1,uncurry,args)=> do_eta (uncurry,args)
-                                    | OPTIONALe(Prim_e(NilPrimOp (make_onearg_),
+                                    | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),
 						       [c1,_],[Var_e v'])) =>
-					  do_onearg(c1, v, v', elist)
+					  ((do_onearg(c1, v, v', elist))
+	 handle e => (print "Error detected from do_onearg on expression ";
+	              Ppnil.pp_exp exp; 
+	              print "\nwhere the function part has alias ";
+	              Ppnil.pp_exp alias_exp; print "\n"; raise e))
 				    | _ => default())
 			      | _ => default())
 		     end
