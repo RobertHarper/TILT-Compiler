@@ -406,7 +406,7 @@ struct
        emitString (sml_global^":\n");
 
        dumpCodeLabel code_labels;
-       dumpData data;
+       dumpDatalist data;
        app emitString dataStart;
        emitString ("\n"^end_sml_global^":   ");
        emitString commentHeader;
