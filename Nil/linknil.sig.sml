@@ -12,7 +12,6 @@ sig
     structure Vararg : VARARG
 
     val typecheck : bool ref
-    val wtypecheck : bool ref
 
     val il_to_nil  : string * Il.module -> Nil.module
     val show_html : bool ref    

@@ -1,4 +1,4 @@
-(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename *)
+(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.
@@ -83,7 +83,7 @@ struct
 					     (item,  TraceCompute c, Var_c c)],
 				 fFormals = [],
 				 body = body, 
-				 body_type = unit_con}
+				 body_type = NilDefs.unit_con}
 		    end
 
 		fun make_aggregate (aggregate,constr) = 
@@ -367,7 +367,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			   (case NilContext.find_con (ctxt,v) of
 				AllArrow_c{effect=Total,...} => valuableList (elist @ eflist)
 			      | _ => false)
-		     | _ => not (NilUtil.effect e))
+		     | _ => not (NilDefs.effect e))
 	      end
 
 	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail,params},e,v) = 
@@ -399,7 +399,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	      in  (case lookup_alias(state,v) of
 		       OPTIONALc c => loop c labs
 		     | MUSTc c => loop c labs
-		     | _ => (case find_availC(state,path2con(v,labs)) of
+		     | _ => (case find_availC(state,NilDefs.path2con(v,labs)) of
 				NONE =>	NONE
 			      | SOME v => SOME(Var_c v)))
 	      end
@@ -813,8 +813,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
 	   (case cbnd of
 		Con_cb(v,c) =>
-		  (*One for outer Let, one for body*)
-		  (case NilUtil.strip_two c of 
+		  (case c of 
 		       Let_c(_,[Open_cb(v',vklist,c)],Var_c v'') => 
 		       if (Name.eq_var(v',v''))
 			 then do_cbnd(Open_cb(v,vklist,c), state)
@@ -986,7 +985,7 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	     fun getVals [] = SOME []
 	       | getVals (e::rest) = 
-			if (NilUtil.is_closed_value e) then
+			if (NilDefs.is_closed_value e) then
 			  (case (getVals rest) of
 			       NONE => NONE
 			     | SOME es => SOME (e :: es))
@@ -1173,7 +1172,7 @@ fun pp_alias UNKNOWN = print "unknown"
 						   known=SOME i},
 					     case carrier of
 						 [_] => carrier
-					       | _ => [con_tuple_inject carrier])
+					       | _ => [NilDefs.con_tuple carrier])
 		    fun do_arm(n,tr,body) = 
 			let val ssumtype = make_ssum n
 			    val tr = do_niltrace state tr
@@ -1287,7 +1286,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	  let
 	    fun compute path = 
 	      let 
-		val c = path2con path
+		val c = NilDefs.path2con path
 		val c = do_con state c
 	      in
 		case get_trace (state,c)

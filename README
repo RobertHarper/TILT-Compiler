@@ -7,6 +7,7 @@ hierarchy:
 	csh% setenv TILT_LIBDIR `pwd`
 	sh$ TILT_LIBDIR=`pwd`; export TILT_LIBDIR
 
+
 Run SML/NJ with "sml"; all of the examples below should be entered at
 the SML/NJ prompt "-".
 
@@ -18,6 +19,11 @@ Manager.make "mapfile-all";
 		(* compile TILT with TILT *)
 Manager.make "Bench/mapfile-timings";
 		(* compile benchmarks with TILT *)
+Load.make();    (* recompile the compiler after some source *)
+	         * has been changed. *)
+
+
 
 A brief introduction to TILT's compilation manager is Doc/tilt.1 (a
 manual page).  More details can be found in Doc/TM.txt.
+

@@ -34,6 +34,9 @@ NilRename	nilrename
 NILSUBST subst.sig
 NilSubst subst
 
+NILDEFS nildefs.sig
+NilDefs nildefs
+
 NILUTIL nilutil.sig
 NilUtil nilutil
 
@@ -106,14 +109,8 @@ Inline inline
 
 Reorder reorder
 
-Dummy   dummy
-
 TYPEOF_ELIM	typeof_elim.sig
 Typeof_Elim	typeof_elim
-
-// WNIL    ../Wizard/nil.sig
-// CURTAIN ../Wizard/curtain.sig
-// Curtain ../Wizard/curtain
 
 COERCEELIM coerce-elim.sig
 CoerceElim coerce-elim

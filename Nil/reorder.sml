@@ -1,4 +1,4 @@
-(*$import Nil NilUtil Stats Name Util Sequence TraceOps Listops Ppnil *)
+(*$import Nil NilUtil Stats Name Util Sequence TraceOps Listops Ppnil NilDefs *)
 
 structure Reorder = 
 struct
@@ -215,7 +215,7 @@ struct
                         hoisting of GC checks.  They may or may not
                         be movable, which is approximated as valuable *)
 		   | _ => (OTHER,
-                           if NilUtil.effect exp then Immovable else Movable))
+                           if NilDefs.effect exp then Immovable else Movable))
 
 	      val (cons, cons_vset, cons_category) = 
 		     rcons (cons, env)

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL Optimize String *)
+(*$import Prelude TopLevel Util Listops Name TilWord32 TilWord64 Int Sequence Prim List Array TraceInfo Symbol Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL Optimize String NilDefs *)
 
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
@@ -34,6 +34,8 @@ struct
   val debug_full_env = ref false
   val debug_simp = ref false
   val debug_bound = ref false
+
+  val char_con = NilDefs.char_con
       
   fun msg str = if (!debug) then print str else ()
 
@@ -691,9 +693,9 @@ struct
 			 end
 	  fun no_match state = 
 	      (case (!dest) of
-		   SOME _ => let val c = NilUtil.bool_con (* XXX not really *)
+		   SOME _ => let val c = NilDefs.bool_con (* XXX not really *)
 				 val (r,newstate) = 
-		                      xexp'(state,fresh_var(),Raise_e(NilUtil.match_exn,c),
+		                      xexp'(state,fresh_var(),Raise_e(NilDefs.match_exn,c),
 					    trace, context)
 			     in  move r; newstate
 			     end
@@ -755,7 +757,7 @@ struct
 			  (add_instr(ILABEL lab);
 			   case default of
 			       NONE => 
-				   let val con = NilUtil.bool_con  (* XXX not really *)
+				   let val con = NilDefs.bool_con  (* XXX not really *)
 				       val (r,newstate) = xexp'(state,fresh_var(),
 								  Raise_e(arg,con),trace,context)
 				   in  move r; newstate :: states
@@ -852,7 +854,7 @@ struct
 					     known = SOME i}, 
 				       if (length cons = 1)
 					   then cons
-				       else [con_tuple_inject cons])
+				       else [NilDefs.con_tuple cons])
 	      in 
 	       (case (tagcount,cons,arms, default) of
 		  (0w2,[], [(0w0,_,zeroexp),(0w1,_,oneexp)], NONE) => 
@@ -1855,8 +1857,8 @@ struct
 				       trueGlobals)
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val exp = Let_e(Sequential, bnds, NilUtil.unit_exp)
-	     val con = NilUtil.unit_con
+	     val exp = Let_e(Sequential, bnds, NilDefs.unit_exp)
+	     val con = NilDefs.unit_con
 
 	     val _ = reset_state(true, (mainCodeVar, mainCodeName))
 	     fun folder (ImportValue(l,v,tr,c),s) = 

@@ -225,8 +225,7 @@ struct
 	 ("ShowWrittenContext", Compiler.showWrittenContext),
 	 ("WriteUnselfContext", Compiler.writeUnselfContext),
 	 ("ShowTools", Tools.showTools),
-	 ("Typecheck", Linknil.typecheck),
-	 ("WTypecheck", Linknil.wtypecheck)]
+	 ("Typecheck", Linknil.typecheck)]
 
     fun getFlags () =
 	let

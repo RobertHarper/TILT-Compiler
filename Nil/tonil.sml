@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name Listops Util Sequence List Prim Tyvar Int Word32 Array TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL Option NilPrimUtil *)
+(*$import Prelude TopLevel Name Listops Util Sequence List Prim Tyvar Int Word32 Array TilWord64 TilWord32 Il Nil Ppil IlUtil IlContext IlStatic NilUtil NilError NilContext Ppnil NilSubst Normalize Stats LibBase TONIL Option NilPrimUtil NilDefs *)
 
 (* We box all floats and translate floating point operations accordingly.
    Thus, kind type is replaced by work types.
@@ -161,7 +161,7 @@ struct
          Creates the kind for a "tuple" of types of length n. 
          1-tuples yield kind Word, rather than a record kind.
     *)
-   val makeKindTuple = NilUtil.kind_type_tuple
+   val makeKindTuple = NilDefs.kind_type_tuple
 
    fun substConInCon subst con = NilSubst.substConInCon subst con
 
@@ -2355,7 +2355,7 @@ end (* local defining splitting context *)
 
      | xsig' context (con0, Il.SIGNAT_STRUCTURE sdecs) = xsig_struct context (con0,sdecs)
      | xsig' context (con0, Il.SIGNAT_SELF(_, SOME unselfSig, _)) = xsig' context (con0, unselfSig)
-     (* the self signature has no self-references; but rather just has no internal variable uses *)
+     (* the self signature has no self-references; but rather has no internal variable uses *)
      | xsig' context (con0, Il.SIGNAT_SELF(_, NONE, selfSig)) = xsig' context (con0, selfSig)
 
 

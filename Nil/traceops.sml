@@ -1,4 +1,4 @@
-(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name List Stats NilUtil *)
+(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name List Stats NilUtil NilDefs *)
 
 structure TraceOps :> TRACEOPS = 
 struct
@@ -11,7 +11,7 @@ struct
 
   fun error s = Util.error "traceops.sml" s 
 
-  val path2TraceCompute = (Util.mapopt TI.Compute) o NilUtil.con2path
+  val path2TraceCompute = (Util.mapopt TI.Compute) o NilDefs.con2path
 
   fun get_trace_primcon (p, _) =
     (case p of 

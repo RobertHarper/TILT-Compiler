@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy Typeof_Elim Real CoerceElim Timestamp *)
+(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Typeof_Elim Real CoerceElim Timestamp *)
 
 (* Reorder *)
 
@@ -11,7 +11,6 @@ structure Linknil :> LINKNIL  =
     val show_size = Stats.ff("showSize")   (* show size after each pass *)
     val show_html = Stats.ff("showHTML")   (* when showing pass results, generate HTML *)
     val typecheck = Stats.ff "Typecheck"   (* typecheck after each pass *)
-    val wtypecheck = Stats.ff "WTypecheck" (* same, using wizard *)
 
     val typeof_elim = fn nilmod => Typeof_Elim.mod_elim (NilContext.empty()) nilmod
 
@@ -105,12 +104,6 @@ structure Linknil :> LINKNIL  =
 	    val _ = if !checkphase orelse !typecheck then
 		      NilStatic.module_valid (NilContext.empty (), nilmod)
 		    else ()
-	    (* Note that these get redirected in the self-compile, 
-	     * since TIL can't handle the Wizard.  (Datatype bug)
-	     *)
-	    val _ = if !wcheckphase orelse !wtypecheck then
-		      WNilStatic.module_valid (WNilContext.empty (), NilToWizard.nil_to_wizard nilmod)
-		    else ()
 	val _ = 
 	  if !measurephase then 
 	    let
@@ -120,7 +113,7 @@ structure Linknil :> LINKNIL  =
 	      val totsr = Stats.int (phasename^"::totalsize")
 	    in
 	       impsr := !impsr + (#total imps);
-	       totcsr := !totsr + (#cons imps) + (#cons bnds) + (#cons exps);
+	       totcsr := !totcsr + (#cons imps) + (#cons bnds) + (#cons exps);
 	       totsr := !totsr + (#total imps) + (#total bnds) + (#total exps)
 	    end
 	  else ()

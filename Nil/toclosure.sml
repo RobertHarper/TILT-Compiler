@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32 NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool *)
+(*$import Prelude TopLevel Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32 NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool NilDefs *)
 
 (* XXX Are argument traces being properly closure converted? *)
 
@@ -47,8 +47,6 @@ struct
 
     val error = fn s => error "toclosure.sml" s
     val debug = Stats.ff("ToclosureDebug")
-
-    val float64 = Prim_c(Float_c Prim.F64,[])
 
     structure FidSet = VarSet
 
@@ -667,7 +665,7 @@ struct
 		     fun efold(e,f) = e_find_fv (state,f) e
 		     fun trfold(tr,f) = trace_find_fv(state,f) tr
 
-		     val frees = if (NilUtil.allprim_uses_carg p)
+		     val frees = if (NilDefs.allprim_uses_carg p)
 				     then foldl cfold frees clist
 				 else foldl tfold frees clist
 		     val frees = foldl efold frees elist
@@ -1252,7 +1250,7 @@ struct
 	   end
        in (case trace of
 	       TraceUnknown => trace
-	     | TraceKnown (TraceInfo.Compute(v,labs)) => help(path2con(v,labs))
+	     | TraceKnown (TraceInfo.Compute(v,labs)) => help(NilDefs.path2con(v,labs))
 	     | TraceKnown _ => trace
 	     | TraceCompute v => help(Var_c v))
        end

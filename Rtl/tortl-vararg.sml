@@ -43,7 +43,7 @@ val debug_full = ref false
 	    let val cenv_var = Name.fresh_named_var "vararg_support_cenv"
 		val cenv_kind = kind_tuple(map0count (fn n => Type_k) (n+1))
 		fun proj k = Proj_c(Var_c cenv_var, generate_tuple_label (k+1))
-		val argc = con_tuple(map0count proj n)
+		val argc = tuple_con(map0count proj n)
 		val resc = proj n
 		val venv_var = Name.fresh_named_var "vararg_support_venv"
 		val venv_type = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
@@ -71,7 +71,7 @@ val debug_full = ref false
 		val funcon = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
 					tFormals=[],
 					eFormals=[(NONE,
-						   con_tuple(map (Var_c o #1) (Listops.butlast vklist)))],
+						   tuple_con(map (Var_c o #1) (Listops.butlast vklist)))],
 					fFormals=0w0,
 					body_type=Var_c(#1(List.last vklist))}
 		val flat_funcon = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
@@ -81,7 +81,7 @@ val debug_full = ref false
 					     fFormals=0w0,
 					     body_type=Var_c(#1(List.last vklist))}
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
-				   cenv=con_tuple_inject(map Var_c convars),
+				   cenv=tuple_con_inject(map Var_c convars),
 				   tipe=flat_funcon})
 
 		val body = Let_e(Sequential,
@@ -106,7 +106,7 @@ val debug_full = ref false
 		val cenv_kind = kind_tuple(map0count (fn n => Type_k) (n+1))
 		fun proj k = Proj_c(Var_c cenv_var, generate_tuple_label (k+1))
 		val argcs = map0count proj n
-		val argc = con_tuple argcs
+		val argc = tuple_con argcs
 		val resc = proj n
 		val venv_var = Name.fresh_named_var "onearg_support_venv"
 		val venv_type = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
@@ -136,7 +136,7 @@ val debug_full = ref false
 		val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					tFormals=[], 
 					eFormals=[(NONE,
-						   con_tuple(map (Var_c o #1) (Listops.butlast vklist)))], 
+						   tuple_con(map (Var_c o #1) (Listops.butlast vklist)))], 
 					fFormals=0w0,
 					body_type=Var_c(#1(List.last vklist))}
 		val flat_funcon = AllArrow_c{openness=Closure,effect=Partial, isDependent=false,
@@ -146,7 +146,7 @@ val debug_full = ref false
 					     fFormals=0w0,
 					     body_type=Var_c(#1(List.last vklist))}
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
-				   cenv=con_tuple_inject(map Var_c convars),
+				   cenv=tuple_con_inject(map Var_c convars),
 				   tipe=funcon})
 
 		val body = Let_e(Sequential,
@@ -202,7 +202,7 @@ val debug_full = ref false
 					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					    tFormals=[], 
-					    eFormals=[(NONE,con_tuple(map Var_c convars))],
+					    eFormals=[(NONE,NilDefs.tuple_con(map Var_c convars))],
 					    fFormals=0w0, body_type=Var_c resconvar}
 		    val state = add_term  (state,funvar,funcon, 
 					   LOCATION(REGISTER (false,I function)), NONE)
@@ -261,7 +261,7 @@ val debug_full = ref false
 					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					    tFormals=[], 
-					    eFormals=[(NONE,con_tuple(map Var_c convars))],
+					    eFormals=[(NONE,NilDefs.tuple_con(map Var_c convars))],
 					    fFormals=0w0, body_type=Var_c resconvar}
 		    val newfuncon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					       tFormals=[], 

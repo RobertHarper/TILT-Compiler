@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil *)
+(*$import Prelude TopLevel Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs *)
 
 structure Reify :> REIFY =
 struct
@@ -84,7 +84,7 @@ struct
       in case (TraceOps.valid_trace (ctxt,nt),nt)
 	   of (false,_) => doit con
 	    | (_,TraceCompute v) => doit (Var_c v)
-	    | (_,TraceKnown (TraceInfo.Compute p)) => doit (NilUtil.path2con p)
+	    | (_,TraceKnown (TraceInfo.Compute p)) => doit (NilDefs.path2con p)
 	    | (_,ti) => (ti,[],pset)
       end
 
@@ -117,7 +117,7 @@ struct
 		   end
 		 | _ =>
                    ([],trs,
-		    if (NilUtil.allprim_uses_carg p) then
+		    if (NilDefs.allprim_uses_carg p) then
 		      reify_cons_rt (cons, pset)
 		    else
 		      pset)

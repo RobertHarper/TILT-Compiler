@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util TraceInfo *)
+(*$import Prelude TopLevel Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util TraceInfo NilDefs *)
 
 (* Assumptions:
 
@@ -974,7 +974,7 @@ struct
 
 	  val levels = mergeMultiLevels[levels1, levels2,levels3]
 
-	  val valuable = (not (NilUtil.effect exp)) andalso args_valuable
+	  val valuable = (not (NilDefs.effect exp)) andalso args_valuable
       in
 	  (Prim_e (prim, trs,cons, exps), state, levels, eff, valuable)
       end

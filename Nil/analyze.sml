@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil NilSubst ANALYZE *)
+(*$import Prelude TopLevel Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil NilSubst ANALYZE NilDefs *)
 
 (* This module performs function usage analysis.
    The result is some information for each term-level function
@@ -159,7 +159,7 @@ struct
            end
          | Let_e(ls,bnds,e) => (doBnds bnds) + (doExp e)
          | Prim_e(ap,_,cs,es) => 
-	     (if (NilUtil.allprim_uses_carg ap) then
+	     (if (NilDefs.allprim_uses_carg ap) then
                  doCons cs
 	      else
 	         (doCons cs; 0)) 

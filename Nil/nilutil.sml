@@ -1,17 +1,22 @@
-(*$import Prelude TopLevel Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List TraceInfo Stats NilRewrite Int *)
+(*$import Name Util TilWord32 TilWord64 Sequence Prim Array Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL Alpha Option ListPair List TraceInfo Stats NilRewrite Int NilDefs *)
 
-(* This structure contains a miscellaneous collection of functions
- * for dealing with the NIL that have no other natural place.
- *)
+(*
+ This structure is a repository for useful functions for operating on the NIL syntax.
+ It should not rely on the NIL contexts, static semantics, or the normalizer: conceptually
+ it exists at a level just above the datatype itself.
+
+*)
 
 structure NilUtil
   :> NILUTIL =
 struct
 
   (* IMPORTS *)
-  open Nil Util 
+  open Nil 
   open Name
 
+  val printl  = Util.printl
+  val lprintl = Util.lprintl
     
   val debug = ref false
 
@@ -30,8 +35,20 @@ struct
   val foldl4    = Listops.foldl4
   val eq_list   = Listops.eq_list
 
+  val generate_tuple_symbol = IlUtil.generate_tuple_symbol
+  val generate_tuple_label = IlUtil.generate_tuple_label
+
+  val fresh_named_var = Name.fresh_named_var
+
+  val allprim_uses_carg = NilDefs.allprim_uses_carg
+  val path2con          = NilDefs.path2con
+  val con2path          = NilDefs.con2path
+  val covariant_prim    = NilDefs.covariant_prim
+  val small_con         = NilDefs.small_con
   (* END IMPORTS *)
 
+
+  (******Functions for destructing NIL terms*********)
 
   fun extractCbnd (Con_cb(v,c)) = (v,c)
     | extractCbnd (Open_cb(v,vklist,c)) = 
@@ -47,42 +64,20 @@ struct
 		 Var_c v'))
     end
 
-  val generate_tuple_symbol = IlUtil.generate_tuple_symbol
-  val generate_tuple_label = IlUtil.generate_tuple_label
 
-
-  fun con_tuple clist = 
-      let fun mapper(i,_) = generate_tuple_label(i+1)
-	  val labs = Listops.mapcount mapper clist
-      in Prim_c(Record_c (labs,NONE),clist)
+  (* Loses Parallel information *)
+  fun flattenCbnds cbnds = 
+      let fun loop [] acc = rev acc
+	    | loop (cbnd::rest) acc = 
+	  loop rest (case cbnd of
+			 Con_cb(v,Let_c(sort, cbnds, c)) => 
+			     let val cbnds = flattenCbnds cbnds
+				 val cbnd = Con_cb(v,c)
+			     in  cbnd :: ((rev cbnds) @ acc)
+			     end
+		       | _ => cbnd::acc)
+      in  loop cbnds []
       end
-  fun con_tuple_inject clist = 
-      let val lc_list = Listops.mapcount (fn (i,c) => (generate_tuple_label(i+1),c)) clist
-      in  Crecord_c lc_list
-      end
-  fun kind_tuple klist = let fun doer(i,k) = ((generate_tuple_label(i+1),fresh_var()),k)
-			     val lvk_list = Listops.mapcount doer klist
-			 in  Record_k(Sequence.fromList lvk_list)
-			 end
-
-  fun kind_type_tuple 1   = Type_k
-    | kind_type_tuple len = kind_tuple(Listops.map0count (fn _ => Type_k) len)
-
-  val unit_con = con_tuple []
-
-  val unit_exp = Prim_e(NilPrimOp(record []),[],[],[])
-
-  val bool_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[con_tuple_inject[]])
-  val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[con_tuple_inject[]])
-  val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[con_tuple_inject[]])
-  val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
-  val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
-  val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[],[],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[],[false_con],[])
-  val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[],[true_con],[])
-  val int_con = Prim_c(Int_c Prim.W32,[])
-  val char_con = Prim_c(Int_c Prim.W8,[])
-  val exn_con = Prim_c(Exn_c, [])
 
   fun function_type openness (Function{effect,recursive,isDependent,
 				       tFormals,eFormals,fFormals, body=_, body_type}) =
@@ -91,68 +86,69 @@ struct
 		  eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals,
 		  fFormals = TilWord32.fromInt(length fFormals), body_type = body_type}
 
-  fun intsize_leq (Prim.W8, _) = true
-    | intsize_leq (Prim.W16, Prim.W8) = false
-    | intsize_leq (Prim.W16, _) = true
-    | intsize_leq (Prim.W32, Prim.W32) = true
-    | intsize_leq (Prim.W32, Prim.W64) = true
-    | intsize_leq (Prim.W32, _) = false
-    | intsize_leq (Prim.W64, Prim.W64) = true
-    | intsize_leq (Prim.W64, _) = false
+  fun project_from_kind(lvk_seq,con,label) = 	     
+    let
+      val lvk_list = Sequence.toList lvk_seq
+      fun loop (subst,[]) = error ("project_kind: Missing label in record kind:  "^(Name.label2string label))
+	| loop (subst,((l,v),k)::rest) = 
+	if (Name.eq_label(label,l))
+	  then NilSubst.substConInKind subst k
+	else loop (NilSubst.C.sim_add subst (v,Proj_c(con,l)),rest)
+    in  loop (NilSubst.C.empty(),lvk_list)
+    end
+  
+  fun project_from_kind_nondep (rkind,label) = 
+    case rkind
+      of Record_k lvk_seq => 
+	(case Sequence.find (fn (l,_) => (Name.eq_label(label,l))) lvk_seq
+	   of SOME k => k
+	    | NONE => error "project_from_kind_nondep: Field not in record kind")
+       | other => 
+	   (Ppnil.pp_kind other; print "\n";
+	    error  "project_from_kind_nondep: Trying to project from non-record kind ")
+	       
+    (* get the bound var from a conbnd *)
+    fun varBoundByCbnd (Con_cb (v,c)) = v
+      | varBoundByCbnd (Open_cb (v,_,_)) = v
+      | varBoundByCbnd (Code_cb (v,_,_)) = v
 
-  (*Correct if in a-normal form
-   *)
-  fun effect (Var_e _) = false
-    | effect (Const_e _) = false
-    | effect (Unfold_e _) = false
-    | effect (Fold_e _)   = false
-    | effect (Coerce_e _) = false
-    | effect (Prim_e (NilPrimOp make_exntag, _,_, _)) = true
-    | effect (Prim_e (NilPrimOp _, _,_, _)) = false
-    | effect (Prim_e (PrimOp p, _,_, _)) = 
-      (case p of
-	   Prim.plus_uint _ => false
-	 | Prim.minus_uint _ => false
-	 | Prim.mul_uint _ => false
-	 | Prim.less_int _ => false
-	 | Prim.greater_int _ => false
-	 | Prim.lesseq_int _ => false
-	 | Prim.greatereq_int _ => false
-	 | Prim.less_uint _ => false
-	 | Prim.lesseq_uint _ => false
-	 | Prim.greatereq_uint _ => false
-	 | Prim.eq_int _ => false
-	 | Prim.neq_int _ => false
-	 | Prim.neg_int _ => false
-	 | Prim.abs_int _ => false
-	 | Prim.not_int _ => false
-	 | Prim.and_int _ => false
-	 | Prim.or_int _ => false
-	 | Prim.xor_int _ => false
-	 | Prim.lshift_int _ => false
-	 | Prim.rshift_int _ => false 
-	 | Prim.rshift_uint _ => false
-	 | _ => true)
+    val varsBoundByCbnds = map varBoundByCbnd
+	
+    (* get the bound vars from a list of bnds *)
+    fun varsBoundByBnds bnds = 
+	let
+	    fun gv ([],l) = rev l
+	      | gv (Con_b (p,cb)::rest,l) = gv(rest,(varBoundByCbnd cb)::l)
+	      | gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
+	      | gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+	      | gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+	      | gv (Fixclosure_b(_,vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
+	in
+	    gv (bnds,[])
+	end
 
-(*Do NaN's raise an exception?
-	 | Prim.less_float _ => false
-	 | Prim.greater_float _ => false
-	 | Prim.lesseq_float _ => false
-	 | Prim.greatereq_float _ => false
-	 | Prim.eq_float _ => false
-	 | Prim.neq_float _ => false
-*)
-    | effect (Let_e (_, bnds, e)) = (Listops.orfold bnd_effect bnds) orelse (effect e)
-    | effect _ = true
 
-  and bnd_effect (Exp_b (_,_,e)) = effect e
-    | bnd_effect (Con_b _) = false
-    | bnd_effect (Fixopen_b _) = false
-    | bnd_effect (Fixcode_b _) = false
-    | bnd_effect (Fixclosure_b _) = false
+    fun convert_sum_to_special 
+      (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
+      Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount, 
+		    known = SOME w}, carriers)
+      
+    fun sum_project_carrier_type (Prim_c(Sum_c {known=SOME sumtype,tagcount,totalcount},[carrier])) =
+      let
+	val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
+	val which = TilWord32.toInt(TilWord32.uminus(sumtype,tagcount))
+      in 
+	case (Int.compare (which,0),Int.compare (nontagcount,1)) of
+	  (LESS,_) => error ("Injecting value into non tag field")
+	| (_,LESS) => error("Illegal injection - no non value fields!")
+	| (EQUAL,EQUAL) => carrier
+	| _ => Proj_c(carrier,generate_tuple_label (which + 1))
+      end
+      | sum_project_carrier_type _ = error "projecting carrier from non-sum"
 
-  fun is_var_e (Var_e v) = true
-    | is_var_e _ = false
+
+    (* Functions for dealing with annotations
+     *)
 
   fun map_annotate f = 
     let
@@ -214,26 +210,14 @@ struct
     fun is_mu_c' (Mu_c _) = true
       | is_mu_c' _ = false
 
-    fun is_closed_value (Var_e v) = false
-      | is_closed_value (Const_e v) = true
-      | is_closed_value (Let_e _) = false
-      | is_closed_value (Prim_e (NilPrimOp np,trlist,clist,elist)) = 
-	nilprim_is_closed_value(np,clist,elist)
-      | is_closed_value (Prim_e (PrimOp _,_,_,_)) = false
-      | is_closed_value (Switch_e _) = false
-      | is_closed_value (App_e _) = false
-      | is_closed_value (ExternApp_e _ ) = false
-      | is_closed_value (Raise_e _) = false
-      | is_closed_value (Handle_e _) = false  
-
-    and nilprim_is_closed_value(np,clist,elist) = 
-	(case np of
-	     record _ => Listops.andfold is_closed_value elist
-	   | inject _ => Listops.andfold is_closed_value elist
-	   | box_float _ => Listops.andfold is_closed_value elist
-	   | roll => Listops.andfold is_closed_value elist
-	   | inj_exn _ => Listops.andfold is_closed_value elist
-	   | _ => false)
+    fun is_taglike' c = 
+      (case c
+	 of Prim_c(Int_c _, _)  => true
+	  | Prim_c(Sum_c _,_)   => true
+	  | Mu_c _              => true
+	  | Proj_c(Mu_c _,_)    => true
+	  | Prim_c(Exntag_c, _) => true
+	  | _                   => false)
 
   in
     val strip_var = strip_annotate strip_var'
@@ -257,68 +241,22 @@ struct
     val is_var_c = Option.isSome o strip_var
     val is_float_c = Option.isSome o strip_float
     val is_mu_c = strip_annotate is_mu_c'
-    val is_closed_value = is_closed_value
+    val is_taglike = strip_annotate is_taglike'
+
     val strip_annotate = strip_annotate (fn x => x)
+
   end
 
-  local
-    open NilRewrite
-      
-    type state = {depth:int,bound:int}
+    fun is_var_e (Var_e v) = true
+      | is_var_e _ = false
 
-    fun conhandler (state : state as {depth,bound},con : con) =
-      let
-	val con = strip_annotate con
-      in
-	if depth < bound then
-	  CHANGE_RECURSE({depth = depth + 1,bound = bound},con)
-	else
-	  CHANGE_NORECURSE(state,con)
-      end
-	   
-    fun resthandler (state : state as {depth,bound},item : 'item) = 
-      if depth < bound then
-	CHANGE_RECURSE({depth = depth + 1,bound = bound},item)
-      else 
-	NORECURSE
-
-    fun bndhandler (state : state as {depth,bound},item : 'item) = 
-      if depth < bound then
-	NOCHANGE   (*Don't increment for each bnd - want to view Lets as flat*)
-      else 
-	NORECURSE
-
-    val all_handlers = 
-      HANDLER {
-	       conhandler     = conhandler,
-	       bndhandler     = bndhandler,
-	       cbndhandler    = bndhandler,
-	       exphandler     = resthandler,
-	       kindhandler    = resthandler,
-	       tracehandler   = resthandler,
-	       con_var_bind   = null_binder,
-	       con_var_define = null_binder,
-	       exp_var_bind   = null_binder,
-	       exp_var_define = null_binder,
-	       sum_var_bind   = null_binder,
-	       exn_var_bind    = null_binder,
-	       labelled_var   = null_label_binder
-	       }
-
-    val {rewrite_con  = strip_con,
-	 ...} = rewriters all_handlers
-      
-  in
-    fun strip_to_depth n c = strip_con {depth = 1,bound = n} c
-    val strip_one   = strip_to_depth 1
-    val strip_two   = strip_to_depth 2
-    val strip_three = strip_to_depth 3
-  end
 
   fun get_arrow_return con = 
     case strip_arrow con of
 	SOME {body_type,...} => SOME body_type
        | NONE => NONE
+
+
   (* Local rebindings from imported structures *)
 
 
@@ -326,7 +264,7 @@ struct
     | sub_phase _ = true
 
 
-  val fresh_named_var = Name.fresh_named_var
+
 
   fun selfify'(con,kind,subst) = 
     (case kind of
@@ -360,10 +298,6 @@ struct
   val selfify = subtimer ("NilUtil:selfify",selfify)
   val selfify' = subtimer ("NilUtil:selfify'",selfify')
 
-  fun singletonize (kind as SingleType_k(_),con) = kind
-    | singletonize (kind as Single_k(_),con) = kind
-    | singletonize (kind,con) = selfify(con,kind)
-
   local
     structure A : 
       sig
@@ -393,57 +327,6 @@ struct
   end
   (**)
     
-  fun makeProjC c [] = c
-    | makeProjC c (l::ls) = makeProjC (Proj_c(c,l)) ls
-
-  fun stripProjC c =
-      let fun loop (Proj_c(c',l), ls) = loop (c', l::ls)
-	    | loop args = args
-      in
-	  loop (c,[])
-      end
-
-  fun nilprim_uses_carg np =
-	(case np of
-	     record _ => false
-	   | select _ => false
-	   | roll => false
-	   | unroll => false
-	   | project_known_record _ => false
-	   | project_known _ => false
-	   | project _ => true
-	   | inject_known_record _ => false
-	   | inject_known _ => false
-	   | inject _ => true
-           | box_float _ => false
-           | unbox_float _ => false
-           | make_exntag => false
-           | inj_exn _ => false
-           | make_vararg _ => true
-           | make_onearg _ => true
-	   | mk_record_gctag  => false
-	   | mk_sum_known_gctag  => false)
-
-  fun aggregate_uses_carg (Prim.OtherArray false) = true
-    | aggregate_uses_carg (Prim.OtherVector false) = true
-    | aggregate_uses_carg _ = false
-
-  fun prim_uses_carg p =
-      let open Prim
-      in  (case p of
-	     array2vector t => aggregate_uses_carg t
-	   | vector2array t => aggregate_uses_carg t
-	   | create_table t => aggregate_uses_carg t
-	   | create_empty_table t => aggregate_uses_carg t
-	   | sub t => aggregate_uses_carg t
-	   | update t => aggregate_uses_carg t
-	   | length_table t => aggregate_uses_carg t
-	   | equal_table t => aggregate_uses_carg t
-	   | _ => true)
-      end
-
-  fun allprim_uses_carg (NilPrimOp np) = nilprim_uses_carg np
-    | allprim_uses_carg (PrimOp p) = prim_uses_carg p
 
 
     type bound = {isConstr : bool,
@@ -757,10 +640,10 @@ struct
 	     | _ => TraceUnknown)
 	| TraceKnown (TraceInfo.Compute(v,ls)) =>
 	       let
-		 val con = f_con state (makeProjC (Var_c v) ls)
+		 val con = f_con state (path2con (v,ls))
 	       in
-		 case (stripProjC con) of
-		   (Var_c v', ls') => 
+		 case (con2path con) of
+		   SOME (v', ls') => 
 		     TraceKnown (TraceInfo.Compute(v',ls'))
 		 | _ => TraceUnknown
 	       end
@@ -1104,7 +987,6 @@ struct
 
   end
 
-
   fun muExpand (flag,vcseq,v) = 
       let val vc_list = Sequence.toList vcseq
 	  val mu_con = Mu_c(flag,vcseq)
@@ -1162,13 +1044,6 @@ struct
 	 | (GCTag_c,GCTag_c) => true
 	 | _  => false
     end
-
-  fun covariant_prim p =
-      (case p of
-	   Sum_c _ => true
-	 | Record_c _ => true
-	 | _ => false)
-
 
   
   fun same_phase (Compiletime, Compiletime) = true
@@ -1393,25 +1268,7 @@ struct
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
 
-  (* Loses Parallel information *)
-  fun flattenCbnds cbnds = 
-      let fun loop [] acc = rev acc
-	    | loop (cbnd::rest) acc = 
-	  loop rest (case cbnd of
-			 Con_cb(v,Let_c(sort, cbnds, c)) => 
-			     let val cbnds = flattenCbnds cbnds
-				 val cbnd = Con_cb(v,c)
-			     in  cbnd :: ((rev cbnds) @ acc)
-			     end
-		       | _ => cbnd::acc)
-      in  loop cbnds []
-      end
-
-    fun small_con con =
-	case con of 
-	    Var_c _ => true
-	  | Prim_c (primcon, clist) => length clist = 0 
-	  | _ => false
+	
 
    (* makeLetC.
          Creates a constructor-level sequential let given bindings and
@@ -1442,7 +1299,6 @@ struct
      | makeLetC cbnds body = Let_c (Sequential, cbnds, body)
 
 
-
    fun createBindings (vklist, con_args, vtclist, exp_args, fplist, fp_args) =
        let
 	   val con_bnds = map (fn((cvar, knd), con) => Con_b (Runtime, Con_cb(cvar, con)))
@@ -1455,6 +1311,7 @@ struct
        in
            con_bnds @ exp_bnds @ fp_bnds
        end
+
 
    fun makeExpB (v,nt,exp) =
        (case exp of
@@ -1536,107 +1393,4 @@ struct
       | makeAppE fn_exp cargs eargs fargs = 
             App_e(Open, fn_exp, cargs, eargs, fargs)
 
-    fun project_from_kind(lvk_seq,con,label) = 	     
-      let
-	val lvk_list = Sequence.toList lvk_seq
-	fun loop (subst,[]) = error ("project_kind: Missing label in record kind:  "^(Name.label2string label))
-	  | loop (subst,((l,v),k)::rest) = 
-	  if (Name.eq_label(label,l))
-	    then NilSubst.substConInKind subst k
-	  else loop (NilSubst.C.sim_add subst (v,Proj_c(con,l)),rest)
-      in  loop (NilSubst.C.empty(),lvk_list)
-      end
-
-    fun project_from_kind_nondep (rkind,label) = 
-      case rkind
-	of Record_k lvk_seq => 
-	  (case Sequence.find (fn (l,_) => (Name.eq_label(label,l))) lvk_seq
-	     of SOME k => k
-	      | NONE => error "project_from_kind_nondep: Field not in record kind")
-	 | other => 
-	     (Ppnil.pp_kind other; print "\n";
-	      error  "project_from_kind_nondep: Trying to project from non-record kind ")
-	     
-    fun convert_sum_to_special 
-          (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
-       Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount, 
-                     known = SOME w}, carriers)
-
-    (* get the bound var from a conbnd *)
-    fun varBoundByCbnd (Con_cb (v,c)) = v
-      | varBoundByCbnd (Open_cb (v,_,_)) = v
-      | varBoundByCbnd (Code_cb (v,_,_)) = v
-
-    val varsBoundByCbnds = map varBoundByCbnd
-	
-    (* get the bound vars from a list of bnds *)
-    fun varsBoundByBnds bnds = 
-	let
-	    fun gv ([],l) = rev l
-	      | gv (Con_b (p,cb)::rest,l) = gv(rest,(varBoundByCbnd cb)::l)
-	      | gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
-	      | gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	      | gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	      | gv (Fixclosure_b(_,vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	in
-	    gv (bnds,[])
-	end
-
-    fun path2con (v,labs) = 
-	let fun loop c [] = c
-	      | loop c (l::rest) = loop (Proj_c(c,l)) rest
-	in  loop (Var_c v) labs
-	end
-
-    fun con2path c = 
-	let fun loop (Var_c v,labs) = SOME(v,labs)
-  	      | loop (Proj_c(c,l),labs) = loop (c,l::labs)
-	      | loop _ = NONE
- 	in  loop (c,[])
-	end
-
-    fun is_taglike c = 
-      (case c
-	 of Prim_c(Int_c _, _)  => true
-	  | Prim_c(Sum_c _,_)   => true
-	  | Mu_c _              => true
-	  | Proj_c(Mu_c _,_)    => true
-	  | Prim_c(Exntag_c, _) => true
-	  | _                   => false)
-
-    fun sum_project_carrier_type (Prim_c(Sum_c {known=SOME sumtype,tagcount,totalcount},[carrier])) =
-      let
-	val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
-	val which = TilWord32.toInt(TilWord32.uminus(sumtype,tagcount))
-      in 
-	case (Int.compare (which,0),Int.compare (nontagcount,1)) of
-	  (LESS,_) => error ("Injecting value into non tag field")
-	| (_,LESS) => error("Illegal injection - no non value fields!")
-	| (EQUAL,EQUAL) => carrier
-	| _ => Proj_c(carrier,generate_tuple_label (which + 1))
-      end
-      | sum_project_carrier_type _ = error "projecting carrier from non-sum"
-
-    fun mk_record_with_gctag (labels,trs_opt,cons,exps,name_opt) : (bnd list * exp) = 
-      let 
-	val (bnds,rcrd) = 
-	  (case labels
-	     of [] => ([],Prim_e(NilPrimOp (record labels),[],[],[]))
-	      | _  => 
-	       let
-		 val rt = Prim_c (Record_c (labels,NONE),cons)
-		 val rtvar = Name.fresh_named_var "record_gctag_type"
-		 val rtbnd = Con_b(Compiletime,Con_cb(rtvar,rt))
-		 val trs = case trs_opt of SOME trs => trs | _ => map (fn _ => TraceUnknown) labels
-		 val gctag = Prim_e(NilPrimOp mk_record_gctag,trs,[Var_c rtvar],[])
-		 val gtvar = Name.fresh_named_var "record_gctag"
-		 val gtbnd = Exp_b(gtvar,TraceKnown TraceInfo.Notrace_Int,gctag)
-		 val rcrd = Prim_e(NilPrimOp (record labels),[],[],(Var_e gtvar)::exps)
-	       in ([rtbnd,gtbnd],rcrd)
-	       end)
-      in case name_opt 
-	   of SOME v => (bnds @ [Exp_b(v,TraceKnown TraceInfo.Trace,rcrd)],Var_e v)
-	    | _ => (bnds,rcrd)
-      end
-	
 end

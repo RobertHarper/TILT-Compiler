@@ -729,6 +729,8 @@ struct
 			in  SIGNAT_SELF(p, NONE, selfSig)
 			end
 	      | (false, SIGNAT_SELF(_, SOME unselfSig, _)) => unselfSig
+
+	      (* Is this correct??? -leaf *)
 	      | (false, SIGNAT_SELF(_, NONE, selfSig)) => TransformSig state (self, selfSig)
 	      | (true, SIGNAT_VAR v) => let val expanded = reduce_sigvar ctxt v
 					    val SIGNAT_SELF(p, _, selfSig) = TransformSig state (self, expanded)

@@ -73,9 +73,10 @@ end
 local
     fun noMapfile () = NONE
     fun basisMapfile () =
-	Option.map
-	(fn dir => OS.Path.joinDirFile {dir=dir,file="mapfile-basis"})
-	(OS.Process.getEnv "TILT_LIBDIR")
+      (case OS.Process.getEnv "TILT_LIBDIR"
+	 of NONE => (print "WARNING: The TILT_LIBDIR environment variable is not set.\n";
+		     NONE)
+	  | SOME dir => SOME (OS.Path.joinDirFile {dir=dir,file="mapfile-basis"}))
 
     structure BootMaster =
 	Master (val bootstrap  = true

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name List Sequence Listops Int Util NilError NilRename Stats Prim Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst NORMALIZE NilPrimUtil *)
+(*$import Prelude TopLevel Name List Sequence Listops Int Util NilError NilRename Stats Prim Array TilWord32 Alpha Nil Ppnil NilUtil NilContextPre NilSubst NORMALIZE NilPrimUtil NilDefs *)
 
 structure Normalize :> NORMALIZE =
 struct	
@@ -41,7 +41,6 @@ struct
   val strip_app            = NilUtil.strip_app
   val generate_tuple_label = NilUtil.generate_tuple_label
   val primequiv            = NilUtil.primequiv
-  val singletonize         = NilUtil.singletonize 
 
   (*From NilRename*)
   val renameExp         = NilRename.renameExp
@@ -1118,7 +1117,7 @@ struct
     and removeDependence vclist c = 
 	let fun loop subst [] = substExpInCon subst c
 	      | loop subst ((v,c)::rest) = 
-	           let val e = Raise_e(NilUtil.match_exn,c)
+	           let val e = Raise_e(NilDefs.match_exn,c)
 		   in  loop (NilSubst.E.addr (subst,v,e)) rest
 		   end
 	in  loop (NilSubst.E.empty()) vclist
@@ -1210,7 +1209,7 @@ struct
 					       known=SOME 0w0}, 
 					case carriers of
 					    [_] => carriers
-					  | _ => [NilUtil.con_tuple_inject carriers])
+					  | _ => [NilUtil.con_tuple carriers])
 		   val D = NilContext.insert_con(D,bound,ssumcon)
 	       in  type_of(D,#2(hd arms))
 	       end
@@ -1291,7 +1290,7 @@ struct
 	       end
 	in
 	 (case prim of
-	    record [] => NilUtil.unit_con
+	    record [] => NilDefs.unit_con
 	  | record labs => Prim_c(Record_c (labs,NONE), map (fn e => type_of(D,e)) (tl exps))
 	  | select lab => projectRecordType(D,type_of(D,hd exps),lab)
 	  | inject s => specialize_sumtype(s,hd cons)

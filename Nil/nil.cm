@@ -43,6 +43,8 @@ measure.sml
 
 nilutil.sig.sml
 nilutil.sml
+nildefs.sig.sml
+nildefs.sml
 nilerror.sig.sml
 nilerror.sml
 nilcontext.sig.sml
@@ -147,9 +149,3 @@ NilOpts/inline.sml
 NilOpts/linkopt.sml
 *)
 
-(* ----- Killed the wizard ----- *)
-(*
-../Wizard/Nil/nil.cm
-nil_to_wizard.sml
-*)
-dummy.sml

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize *)
+(*$import Prelude TopLevel Name Util Listops Sequence List TraceInfo Int TilWord32 NilSubst NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs *)
 
 (* A note about renaming: there is an optimizer invariant that all
    bound variables must be unique.  Constructor level variables get
@@ -82,7 +82,7 @@ struct
 
 		    val rvar = Name.fresh_named_var "vararg_record_arg"
 
-		    val (bnds,rcrd) = NilUtil.mk_record_with_gctag(labels,SOME trs,types,map Var_e vars,SOME rvar)
+		    val (bnds,rcrd) = NilDefs.mk_record_with_gctag(labels,SOME trs,types,map Var_e vars,SOME rvar)
 
 		    val body = 
 		      NilUtil.makeLetE Sequential bnds  (App_e(Open, Var_e funvar,[],[rcrd],[]))
@@ -494,7 +494,7 @@ struct
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
 		     val vtrclist = Listops.map2 (fn (v,c) => (v, TraceUnknown, NilRename.renameCon (do_con state c))) (vars,cons)
 		     val (_,trs,cons) = unzip3 vtrclist
-		     val (recordBnds,_) = NilUtil.mk_record_with_gctag(labels,
+		     val (recordBnds,_) = NilDefs.mk_record_with_gctag(labels,
 								       SOME trs,
 								       map NilRename.renameCon cons,
 								       map Var_e vars,

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Listops Name Int Normalize List Prim Sequence Nil NilUtil Ppnil LibBase SPECIALIZE NilContext *)
+(*$import Prelude TopLevel Util Listops Name Int Normalize List Prim Sequence Nil NilUtil Ppnil LibBase SPECIALIZE NilContext NilDefs *)
 
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert
@@ -99,7 +99,7 @@ struct
 				      | _ => true)
 		    val entry = 
 			(case fFormals of
-			     [] => if (nonRecur andalso not (NilUtil.effect body))
+			     [] => if (nonRecur andalso not (NilDefs.effect body))
 				       then Candidate{body = body,
 						      context = context,
 						      tFormals = map #1 tFormals,
@@ -133,7 +133,7 @@ struct
 		end
 	    fun checkCandidate (v, callContext, tArgs, eArgs) = 
 		let fun isUnit e = 
-		       (not (NilUtil.effect e)) andalso 
+		       (not (NilDefs.effect e)) andalso 
 		       (case (Normalize.reduce_hnf(callContext,Normalize.type_of (callContext,e))) of
 			    (_,Prim_c(Record_c ([],_), _)) => true
 			  | _ => false)
@@ -174,7 +174,7 @@ struct
 			 let val bnds1 = Listops.map2 (fn (v,(c,_)) => (Con_b(Runtime,Con_cb(v,c)))) 
 			                (tFormals, tActs)
 
-			     val bnds2 = map (fn v => Exp_b(v,TraceUnknown,unit_exp)) eFormals
+			     val bnds2 = map (fn v => Exp_b(v,TraceUnknown,NilDefs.unit_exp)) eFormals
 			 in  SOME(replace, bnds1 @ bnds2, body)
 			 end
 		   | SOME (Candidate _) => (if (!debug)

@@ -1,4 +1,4 @@
-(*$import Annotation Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck NilPrimUtil *)
+(*$import Annotation Prim NilRename Name Listops Sequence List Array Option Int TilWord32 Word32 Bool Util NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil TraceOps Measure Trace Alpha Trail BoundCheck NilPrimUtil NilDefs *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
 
@@ -155,15 +155,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val varExpConSubst  = fn v => fn e => flagtimer (import_profile,"Tchk:varConExpSubst", Subst.varExpConSubst  v e)
 
 
+  val kind_type_tuple        = NilDefs.kind_type_tuple
+  val bool_con               = NilDefs.bool_con
+
   (*From NilUtil*)
   val makeLetC               = NilUtil.makeLetC
   val generate_tuple_label   = NilUtil.generate_tuple_label
   val function_type          = NilUtil.function_type
   val convert_sum_to_special = NilUtil.convert_sum_to_special
-  val kind_type_tuple        = NilUtil.kind_type_tuple
-  val con_tuple              = NilUtil.con_tuple
-
-  val bool_con               = NilUtil.bool_con
 
   val same_openness          = NilUtil.same_openness
   val same_effect            = NilUtil.same_effect
@@ -176,7 +175,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
   val project_from_kind_nondep = NilUtil.project_from_kind_nondep
 
-  val singletonize      = flagtimer (import_profile,"Tchk:singletonize",NilUtil.singletonize)
   val get_arrow_return  = NilUtil.get_arrow_return
 
   val strip_var         = NilUtil.strip_var
@@ -1451,7 +1449,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 con_equiv((D,T),resc1,resc2,Type_k,sk)
 	       | (Prim_c(pcon1,clist1), Prim_c(pcon2,clist2)) => 
 		 let
-		   val sk' = sk andalso (NilUtil.covariant_prim pcon1)
+		   val sk' = sk andalso (NilDefs.covariant_prim pcon1)
 		 in
 		   NilUtil.primequiv(pcon1,pcon2) andalso 
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,Type_k,sk'),
@@ -2185,7 +2183,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 let val con_k = project_sum_xxx(D,argcon,argexp,k)
 		 in projectRecordType (D,con_k,l)
 		 end
-	     | (record [],[],[]) => NilUtil.unit_con
+	     | (record [],[],[]) => NilDefs.unit_con
 	     | (record labels,[],t::exps) =>
 		 let 
 		   val cons = map (curry2 exp_valid D) exps

@@ -1,4 +1,4 @@
-(*$import Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize *)
+(*$import Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize NilDefs *)
 
 (*
  Tools for putting Nil code into A-normal form
@@ -18,6 +18,9 @@ struct
     val foldl_acc = Listops.foldl_acc
     val flatten = Listops.flatten
     val mapmap = Listops.mapmap
+
+    val small_con = NilDefs.small_con
+    val small_exp = NilDefs.small_exp
 
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
@@ -155,29 +158,6 @@ struct
 
 
     end
-
-    (*
-     val small_con : con -> bool
-	 small_con con ==> whether con is a "small constructor" suitable to be bound in A-normal form
-    *)
-    fun small_con con =
-	case con of 
-	    Var_c _ => true
-	  | Prim_c (primcon, clist) => length clist = 0 
-	  | _ => false
-
-    (*
-     val small_exp : exp -> bool
-	 small_exp exp ==> whether exp is a "small expression" suitable to be bound in A-normal form
-    *)
-    fun small_exp exp =
-	case exp of 
-	    Var_e _ => true
-          | Const_e (Prim.int (Prim.W64,_)) => false
-          | Const_e (Prim.uint (Prim.W64,_)) => false
-          | Const_e (Prim.int _) => true
-          | Const_e (Prim.uint _) => true
-	  | _ => false
 
 
     (*
@@ -338,12 +318,13 @@ struct
 		    body=body,body_type=body_type}
        end
 
+
    (*
     val lexp : bool -> state -> exp -> bnd list * exp
     lexp lift state exp ==> (bnds, exp') such that Let bnds In exp' End is an A-normal equivalent of exp, using state.
    *)
-   and lexp lift state arg_exp : bnd list * exp =
-       let val (bnds,e) = lexp' lift state arg_exp
+    and lexp lift state arg_exp : bnd list * exp =
+      let val (bnds,e) = lexp' lift state arg_exp
        in  if (small_exp e orelse not (!linearize) orelse not lift)
 	       then (bnds, e)
 	   else
