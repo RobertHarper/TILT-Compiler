@@ -554,6 +554,8 @@ struct
 			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExnHandler(false, 0, handler_body)
 			  (* Include only constructors that have locations *)
 			  val cTerms = List.mapPartial
+			    (* getconvarrep' instead of getconvarrep, because handler_body might contain some *)
+			    (* compile-time convars that were bound outside of the current function.    joev  *)
 			                    (fn v => (case (getconvarrep' state v) of
 							SOME (SOME (LOCATION loc)) => SOME (LOCATION loc)
 						      | _ => NONE)) 
