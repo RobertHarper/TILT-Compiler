@@ -26,7 +26,7 @@ mem_t evenword_align(mem_t ptr)
 }
 
 static mem_t alloc_space(int bytesNeeded) 
-{
+{				/* XXX should allocate large request from largespace */
   mem_t alloc, limit, newAlloc;
   Thread_t *th = getThread();
   int wordsNeeded = bytesNeeded / 4;

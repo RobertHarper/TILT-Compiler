@@ -1,8 +1,13 @@
+#include <limits.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdarg.h>
 #include "general.h"
 #include <sys/stat.h>
+#include <grp.h>
+#include <pwd.h>
 #include <sys/types.h>
+#include <sys/times.h>
 #include <utime.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
@@ -149,12 +154,11 @@ struct termio_rep_struct
   word oflags;
   word cflags;
   word lflags;
-  word cc;
+  string cc;
   word inspeed;
   word outspeed;
 };
 typedef struct termio_rep_struct *termio_rep;
-
 
 static int stringlen(ptr_t string)
 {
@@ -222,6 +226,7 @@ static void runtime_error(int e)
    string exnname = cstring2mlstring_alloc("VAL$RuntimeError");
    int exnstamp = RuntimeStamp();
    raise_exn(exnname, exnstamp, e, 0);
+   assert(0);
 }
 
 static void runtime_error_msg(char* msg)
@@ -230,6 +235,7 @@ static void runtime_error_msg(char* msg)
    int exnstamp = RuntimePrimeStamp();
    string exnarg = cstring2mlstring_alloc(msg);
    raise_exn(exnname, exnstamp, (val_t) exnarg, 1);
+   assert(0);
 }
 
 static void runtime_error_fmt(const char* fmt, ...)
@@ -266,7 +272,6 @@ int getRoundingMode(unit ignored)
     case FP_RND_RM: return 3;
   }
   runtime_error_fmt("read_rnd retrurned unrecognized mode %d", mode);
-  assert(0);
 #elif (defined solaris)
   fp_rnd mode = fpgetround();
   switch (mode) {
@@ -276,7 +281,6 @@ int getRoundingMode(unit ignored)
     case FP_RM: return 3;
   }
   runtime_error_fmt("fpgetround retrurned unrecognized mode %d", mode);
-  assert(0);
 #endif
 }
 
@@ -292,7 +296,6 @@ ptr_t setRoundingMode(int ml_mode)
     case 3: mode = FP_RND_RM; break;
     default :
       runtime_error_fmt("setRoundingMode given unknown ML rounding mode %d", ml_mode);
-      assert(0);
     }
   write_rnd(mode);
 #elif (defined solaris)
@@ -304,7 +307,6 @@ ptr_t setRoundingMode(int ml_mode)
     case 3: mode = FP_RM; break;
     default :
       runtime_error_fmt("setRoundingMode given unknown ML rounding mode %d", ml_mode);
-      assert(0);
     }
   fpsetround(mode);
 #endif  
@@ -376,7 +378,6 @@ intpair ml_timeofday()
   struct timezone tzp;
   if (gettimeofday(&tp, &tzp) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return alloc_intint(tp.tv_sec,tp.tv_usec);
 }
@@ -440,7 +441,6 @@ int posix_mkTime(mltm mltm)
   time_t time = mktime (mltm2ctm(mltm, &tm));
   if (time == (time_t)-1) {
     runtime_error_msg("invalid date");
-    assert(0);
   }
   return (int) time;
 }
@@ -454,14 +454,22 @@ string posix_strfTime(string_mltm arg)
   return cstring2mlstring_alloc(buf);
 }
 
-string posix_error_msg(int unused)
+string posix_error_msg(int e)
 {
-  UNIMP();
+  char* cmsg = strerror(e);
+  return cstring2mlstring_alloc(cmsg);
 }
 
-string posix_error_name(int unused)
+string posix_error_name(int e)
 {
-  UNIMP();
+  int i;
+  for (i=0; i < arraysize(tbl); i++) {
+    int e2 = tbl[i].id;
+    if (e == tbl[i].id) {
+      return cstring2mlstring_alloc(tbl[i].name);
+    }
+  }
+  runtime_error_fmt("unknown error %d", e);
 }
 
 int posix_error_num(string arg)
@@ -474,7 +482,6 @@ int posix_error_num(string arg)
       return tbl[i].id;
   }
   runtime_error_fmt("posix_error_num could not find entry '%s'",carg);
-  assert(0);
 }
 
 string posix_os_tmpname(unit unused)
@@ -485,6 +492,21 @@ string posix_os_tmpname(unit unused)
   assert(result == buf);
   adjust_stringlen(res,strlen(buf));
   return (word8vector) res;
+}
+
+static ptr_t cons_rec_alloc(ptr_t car, ptr_t list)
+{
+  return alloc_recrec(car, list);
+}
+
+static ptr_t cons_val_alloc(val_t val, ptr_t list)
+{
+  val_t fields[2];
+  int masks[1];
+  masks[0] = 2;
+  fields[0] = val;
+  fields[1] = (val_t) list;
+  return alloc_record(fields, masks, 2);
 }
 
 intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_option)
@@ -512,16 +534,14 @@ intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_o
       count++;
       if (count == arraysize(fds)) {
 	runtime_error_fmt("posix_os_poll has static limit of %d file descriptors", arraysize(fds));
-	assert(0);
       }
     }
   if (poll(fds,count,timeout) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   for (i=count-1; i>=0; i--) {
     ptr_t car = alloc_intint(fds[i].fd, fds[i].revents);
-    result = alloc_recrec(car,result);
+    result = cons_rec_alloc(car,result);
   }
   return result;
 }
@@ -537,29 +557,38 @@ int posix_io_num(string arg)
 	return io_values[i].id;
     }
   runtime_error_fmt("posix_io_num could not find entry '%s'",carg);
-  assert(0);
 }
 
 intpair posix_io_pipe(unit unused)
 {
-  UNIMP();
+  int fds[2];
+  if (pipe(fds) == -1) {
+    runtime_error(errno);
+  }
+  return alloc_intint(fds[0], fds[1]);
 }
 
-int posix_io_dup(int unused)
+int posix_io_dup(int fd)
 {
-  UNIMP();
+  int newfd = dup(fd);
+  if (newfd == -1) {
+    runtime_error(errno);
+  }
+  return newfd;
 }
 
-unit posix_io_dup2(int unused1, int unused2)
+unit posix_io_dup2(int oldfd, int newfd)
 {
-  UNIMP();
+  if (dup2(oldfd, newfd) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 unit posix_io_close(int fd)
 {
   if (close(fd) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
@@ -578,7 +607,6 @@ word8vector posix_io_read(int fd, int size)
   bytes_read = read(fd,buf,size);
   if (bytes_read == -1) {
     runtime_error(errno);
-    assert(0);
   }
   assert(bytes_read <= size);
   adjust_stringlen(res,bytes_read);
@@ -591,7 +619,6 @@ int posix_io_readbuf(int fd, word8array buf, int len, int start)
   int bytes_read = read(fd, ((char *)buf) + start, len);
   if (bytes_read == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return bytes_read;
 }
@@ -601,39 +628,84 @@ int posix_io_writebuf(int fd, word8array buf, int len, int start)
   int written = write(fd, ((char *)buf) + start, len);
   if (written == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return written;
 }
 
-int posix_io_fcntl_d(int unused1, int unused2)
+int posix_io_fcntl_d(int fd, int basefd)
 {
-  UNIMP();
+  int newfd = fcntl(fd, F_DUPFD, basefd);
+  if (newfd == -1) {
+    runtime_error(errno);
+  }
+  return newfd;
 }
 
-word posix_io_fcntl_gf(int unused)
+word posix_io_fcntl_gfd(int fd)
 {
-  UNIMP();
+  int r = fcntl(fd, F_GETFD);
+  if (r == -1) {
+    runtime_error(errno);
+  }
+  return r;			/* mask with FD_CLOEXEC? */
 }
 
-unit posix_io_fcntl_sfd(int unused1, word unused2)
-{
-  UNIMP();
+unit posix_io_fcntl_sfd(int fd, word flag)
+{				/* mask with FD_CLOEXEC? */
+  if (fcntl(fd, F_SETFD, flag) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-wordpair posix_io_fcntl_gfl(int unused)
+wordpair posix_io_fcntl_gfl(int fd)
 {
-  UNIMP();
+  int r = fcntl(fd, F_GETFL);
+  word flags, mode;
+  if (r == -1) {
+    runtime_error(errno);
+  }
+  flags = r & (~O_ACCMODE);
+  mode = r & O_ACCMODE;
+  return alloc_intint(flags, mode);
 }
 
-unit posix_io_fcntl_sfl(int unusde1, word unused2)
+unit posix_io_fcntl_sfl(int fd, word flags)
 {
-  UNIMP();
+  if (fcntl(fd, F_SETFL, flags) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-flock_rep posix_io_fcntl_l(int unused1, int unused2, flock_rep unused3)
+static flock_rep cflock2mlflock(struct flock* flock)
 {
-  UNIMP();
+  ptr_t result = alloc_manyint(5,0);
+  result[0] = flock->l_type;
+  result[1] = flock->l_whence;
+  result[2] = flock->l_start;
+  result[3] = flock->l_len;
+  result[4] = flock->l_pid;
+  return (flock_rep) result;
+}
+
+static struct flock* mlflock2cflock(struct flock* flock, flock_rep rep)
+{
+  flock->l_type = rep->a;
+  flock->l_whence = rep->b;
+  flock->l_start = rep->c;
+  flock->l_len = rep->d;
+  flock->l_pid = rep->e;
+  return flock;
+}
+  
+flock_rep posix_io_fcntl_l(int fd, int cmd, flock_rep rep)
+{
+  struct flock flock;
+  if (fcntl(fd, cmd, mlflock2cflock(&flock, rep)) == -1) {
+    runtime_error(errno);
+  }
+  return cflock2mlflock(&flock);
 }
 
 int posix_io_lseek(int filedes, int offset, int whence)
@@ -641,7 +713,6 @@ int posix_io_lseek(int filedes, int offset, int whence)
   int result_pos = lseek(filedes, offset, whence);
   if (result_pos == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return result_pos;
 }
@@ -651,79 +722,101 @@ unit posix_io_fsync(int fd)
   int status = fsync(fd);
   if (status == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
 
 int posix_procenv_getpid(unit unused)
 {
-  int pid = (int)getpid();
-  if (pid == -1) {
-    runtime_error(errno);
-    assert(0);
-  }
-  return pid;
+  return (int)getpid();
 }
 
 int posix_procenv_getppid(unit unused)
 {
-  UNIMP();
+  return (int)getppid();
 }
 
 word posix_procenv_getuid(unit unused)
 {
-  UNIMP();
+  return (word)getuid();
 }
 
 word posix_procenv_geteuid(unit unused)
 {
-  UNIMP();
+  return (word)geteuid();
 }
 
 word posix_procenv_getgid(unit unused)
 {
-  UNIMP();
+  return (word)getgid();
 }
 
 word posix_procenv_getegid(unit unused)
 {
-  UNIMP();
+  return (word)getegid();
 }
 
-unit posix_procenv_setuid(word unused)
+unit posix_procenv_setuid(word uid)
 {
-  UNIMP();
+  if (setuid((uid_t) uid) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_procenv_setgid(word unused)
+unit posix_procenv_setgid(word gid)
 {
-  UNIMP();
+  if (setgid((gid_t) gid) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 word_list posix_procenv_getgroups(unit unused)
 {
-  UNIMP();
+  int i;
+  ptr_t result = 0;
+  gid_t grouplist[NGROUPS_MAX];
+  int ngroups = getgroups(NGROUPS_MAX, grouplist);
+  if (ngroups == -1) {
+    runtime_error(errno);
+  }
+  for (i=ngroups-1; i>=0; i--) {
+    val_t car = (val_t)(word)grouplist[i];
+    result = cons_val_alloc(car, result);
+  }
+  return result;
 }
 
 string posix_procenv_getlogin(unit unused)
 {
-  UNIMP();
+  char* cname = getlogin();
+  if (cname == NULL) {
+    runtime_error_msg("no login name");
+  }
+  return cstring2mlstring_alloc(cname);
 }
 
 int posix_procenv_getpgrp(unit unused)
 {
-  UNIMP();
+  return (int)getpgrp();
 }
 
 int posix_procenv_setsid(unit unused)
 {
-  UNIMP();
+  pid_t r = setsid();
+  if (r == (pid_t)-1) {
+    runtime_error(errno);
+  }
+  return (int)r;
 }
 
-unit posix_procenv_setpgid(int unused1, int unused2)
+unit posix_procenv_setpgid(int pid, int pgid)
 {
-  UNIMP();
+  if (setpgid((pid_t) pid, (pid_t) pgid) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 static ptr_t stringpair_ctoml_alloc(char* a, char* b)
@@ -733,21 +826,15 @@ static ptr_t stringpair_ctoml_alloc(char* a, char* b)
   return alloc_recrec(ml_a, ml_b);
 }
 
-static ptr_t consrec_alloc(val_t val, ptr_t list)
-{
-  return alloc_recrec((ptr_t) val, list);
-}
-
 string_stringlist posix_procenv_uname(unit unused)
 {
   ptr_t acc = NULL;
   struct utsname name;
   if (uname(&name) == -1) {
     runtime_error(errno);
-    assert(0);
   }
 
-  #define ACC(n,v) acc = consrec_alloc((val_t) stringpair_ctoml_alloc(n, v), acc);
+  #define ACC(n,v) acc = cons_rec_alloc(stringpair_ctoml_alloc(n, v), acc);
 
   ACC("sysname", name.sysname);
   ACC("nodename", name.nodename);
@@ -770,78 +857,232 @@ int posix_tty_num(string arg)
       return tty_values[i].id;
   }
   runtime_error_fmt("posix_tty_num could not find entry '%s'",carg);
-  assert(0);
   return 0;
 }
 
-termio_rep  posix_tty_tcgetattr(int unused)
+static termio_rep ctermios2mltermios(struct termios* termios)
 {
-  UNIMP();
+  int masks[1];
+  val_t fields[7];
+  masks[0] = 16;
+  fields[0] = (val_t) termios->c_iflag;
+  fields[1] = (val_t) termios->c_oflag;
+  fields[2] = (val_t) termios->c_cflag;
+  fields[3] = (val_t) termios->c_lflag;
+  fields[4] = (val_t) alloc_string(NCCS, (char*) termios->c_cc);
+  fields[5] = (val_t) cfgetispeed(termios);
+  fields[6] = (val_t) cfgetospeed(termios);
+  return (termio_rep) alloc_record(fields, masks, arraysize(fields));
 }
 
-unit posix_tty_tcsetattr(int unused1, int unused2, termio_rep  unused3)
+static struct termios* mltermios2ctermios(struct termios* termios, termio_rep rep)
 {
-  UNIMP();
+  termios->c_iflag = rep->iflags;
+  termios->c_oflag = rep->oflags;
+  termios->c_cflag = rep->cflags;
+  termios->c_lflag = rep->lflags;
+  assert(stringlen(rep->cc) == NCCS);
+  memcpy(termios->c_cc, rep->cc, NCCS);
+  return termios;
 }
 
-unit posix_tty_tcsendbreak(int unused1, int unused2)
+termio_rep  posix_tty_tcgetattr(int fd)
 {
-  UNIMP();
+  struct termios termios;
+  if (tcgetattr(fd, &termios) == -1) {
+    runtime_error(errno);
+  }
+  return ctermios2mltermios(&termios);
 }
 
-unit posix_tty_tcdrain(int unused)
+unit posix_tty_tcsetattr(int fd, int action, termio_rep rep)
 {
-  UNIMP();
+  struct termios termios;
+  if (tcsetattr(fd, action, mltermios2ctermios(&termios, rep)) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_tty_tcflush(int unused1, int unused2)
+unit posix_tty_tcsendbreak(int fd, int duration)
 {
-  UNIMP();
+  if (tcsendbreak(fd, duration) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_tty_tcflow(int unused1, int unused2)
+unit posix_tty_tcdrain(int fd)
 {
-  UNIMP();
+  if (tcdrain(fd) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-int posix_tty_tcgetpgrp(int unused)
+unit posix_tty_tcflush(int fd, int queue_selector)
 {
-  UNIMP();
+  if (tcflush(fd, queue_selector) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_tty_tcsetpgrp(int unused1, int unused2)
+unit posix_tty_tcflow(int fd, int action)
 {
-  UNIMP();
+  if (tcflow(fd, action) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-string_word_stringlist posix_sysdb_getgrgid(word unused)
+int posix_tty_tcgetpgrp(int fd)
 {
-  UNIMP();
+  pid_t r = tcgetpgrp(fd);
+  if (r == (pid_t) -1) {
+    runtime_error(errno);
+  }
+  return (int)r;
 }
 
-string_word_stringlist posix_sysdb_getgrnam(string unused)
+unit posix_tty_tcsetpgrp(int fd, int pgid)
 {
-  UNIMP();
+  if (tcsetpgrp(fd, (pid_t) pgid) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-string_word_word_string_string posix_sysdb_getpwuid(word unused)
+static int string_list_length(string_list_long list)
 {
-  UNIMP();
+  int length = 0;
+  while (list) {
+    length++;
+    list = (string_list_long) list->cdr;
+  }
+  return length;
 }
 
-string_word_word_string_string posix_sysdb_getpwnam(string unused)
+static char** string_list_to_array_malloc(string_list_long list)
 {
-  UNIMP();
+  int i;
+  int length = string_list_length(list);
+  char** v = (char**)emalloc(length + 1);
+  for (i=0; i<length; i++) {
+    v[i] = mlstring2cstring_malloc(list->car);
+    list = (string_list_long) list->cdr;
+  }
+  v[length] = 0;
+  return v;
+}
+
+static void free_string_array(char** arr)
+{
+  int i;
+  for (i=0; arr[i]; i++) {
+    free(arr[i]);
+  }
+  free(arr);
+}
+
+static string_list array_to_string_list(char** arr)
+{
+  /* Convert a NULL-terminated array of strings into a value of type string list.
+   */
+  char* string = *arr;
+  char** next = arr+1;
+  if (string == NULL) return (ptr_t) 0;
+  else {
+    ptr_t car = cstring2mlstring_alloc(string);
+    ptr_t cdr = array_to_string_list(next);
+    return cons_rec_alloc(car,cdr);
+  }
+}
+
+static string_word_stringlist cgroup2ml(struct group* group)
+{
+  val_t fields[3];
+  int masks[1];
+  int i;
+  masks[0] = 5;
+  fields[0] = (val_t) cstring2mlstring_alloc(group->gr_name);
+  fields[1] = (val_t) group->gr_gid;
+  fields[2] = (val_t) array_to_string_list(group->gr_mem);
+  return (string_word_stringlist) alloc_record(fields, masks, arraysize(fields));
+}
+
+string_word_stringlist posix_sysdb_getgrgid(word gid)
+{
+  struct group* r = getgrgid((gid_t) gid);
+  if (r == NULL) {
+    runtime_error(errno);
+  }
+  return cgroup2ml(r);
+}
+
+string_word_stringlist posix_sysdb_getgrnam(string mlname)
+{
+  char* cname = mlstring2cstring_static(mlname);
+  struct group* r = getgrnam(cname);
+  if (r == NULL) {
+    runtime_error(errno);
+  }
+  return cgroup2ml(r);
+}
+
+static string_word_word_string_string cpasswd2ml(struct passwd* passwd)
+{
+  val_t fields[5];
+  int masks[1];
+  masks[0] = 25;
+  fields[0] = (val_t) cstring2mlstring_alloc(passwd->pw_name);
+  fields[1] = (val_t) passwd->pw_uid;
+  fields[2] = (val_t) passwd->pw_gid;
+  fields[3] = (val_t) cstring2mlstring_alloc(passwd->pw_dir);
+  fields[4] = (val_t) cstring2mlstring_alloc(passwd->pw_shell);
+  return (string_word_word_string_string) alloc_record(fields, masks, arraysize(fields));
+}
+
+string_word_word_string_string posix_sysdb_getpwuid(word uid)
+{
+  struct passwd* r = getpwuid((uid_t) uid);
+  if (r == NULL) {
+    runtime_error(errno);
+  }
+  return cpasswd2ml(r);
+}
+
+string_word_word_string_string posix_sysdb_getpwnam(string mlname)
+{
+  char* cname = mlstring2cstring_static(mlname);
+  struct passwd* r = getpwnam(cname);
+  if (r == NULL) {
+    runtime_error(errno);
+  }
+  return cpasswd2ml(r);
 }
 
 int posix_procenv_time(unit unused)
 {
-  UNIMP();
+  return (int) time(NULL);
 }
 
 int_int_int_int_int posix_procenv_times(unit unused)
 {
-  UNIMP();
+  val_t fields[5];
+  int masks[1];
+  struct tms buf;
+  clock_t t = times(&buf);
+  if (t == (clock_t)-1) {
+    runtime_error(errno);
+  }
+  masks[0] = 0;
+  fields[0] = (val_t) t;
+  fields[1] = (val_t) buf.tms_utime;
+  fields[2] = (val_t) buf.tms_stime;
+  fields[3] = (val_t) buf.tms_cutime;
+  fields[4] = (val_t) buf.tms_cstime;
+  return (int_int_int_int_int) alloc_record(fields, masks, arraysize(fields));
 }
 
 /* This code relies on NONE being represented by 0. */
@@ -855,22 +1096,31 @@ string_option posix_procenv_getenv(string mlname)
 
 string_list posix_procenv_environ(unit unused)
 {
-  UNIMP();
+  extern char** environ;
+  return array_to_string_list(environ);
 }
 
 string posix_procenv_ctermid(unit unused)
 {
-  UNIMP();
+  char name[L_ctermid];
+  if (ctermid(name) == NULL) {
+    runtime_error(errno);
+  }
+  return cstring2mlstring_alloc(name);
 }
 
-string posix_procenv_ttyname(int unused)
+string posix_procenv_ttyname(int fd)
 {
-  UNIMP();
+  char* r = ttyname(fd);
+  if (r == NULL) {
+    runtime_error_msg("not a terminal device");
+  }
+  return cstring2mlstring_alloc(r);
 }
 
-bool posix_procenv_isatty(int unused)
+bool posix_procenv_isatty(int fd)
 {
-  UNIMP();
+  return isatty(fd) ? 1 : 0;
 }
 
 int posix_process_num(string arg)
@@ -884,7 +1134,6 @@ int posix_process_num(string arg)
 	return process_values[i].id;
     }
   runtime_error_fmt("posix_process_num could not find entry '%s'",carg);
-  assert(0);
   return 0;
 }
 
@@ -899,7 +1148,6 @@ word posix_process_sysconf(string arg)
 	return sysconf(sysconf_keys[i].id);
     }
   runtime_error_fmt("posix_process_sysconf could not find entry '%s'",carg);
-  assert(0);
   return 0;
 }
 
@@ -914,46 +1162,43 @@ int posix_process_fork(unit unused)
   }
   if (code == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return code;
 }
 
-unit posix_process_exec(string path, string_list args)
+unit posix_process_exec(string mlpath, string_list args)
 {
-  int code, i, length = 0, errorsave;
-  string_list cur = args;
-  char **argv;
-  while (cur) {
-    length++;
-    cur = ((string_list_long) cur)->cdr;
-  }
-  argv = emalloc((length + 1) * sizeof(char *));
-  for (cur=args, i=0; i<length; i++) {
-    argv[i] = mlstring2cstring_malloc(((string_list_long) cur)->car);
-    cur = ((string_list_long) cur)->cdr;
-  }
-  argv[length] = NULL;
-  code = execv(mlstring2cstring_malloc(path),argv);
-  errorsave = errno;
-  /* couldn't exec, might as well free things */
-  for (i=0; i<length; i++)
-    free(argv[i]);
-  free(argv);
+  char* cpath = mlstring2cstring_static(mlpath);
+  char** argv = string_list_to_array_malloc((string_list_long)args);
+  int ignored = execv (cpath, argv);
+  int errorsave = errno;
+  free_string_array(argv);
   runtime_error(errorsave);
-  assert(0);
-  return 0;
+  return empty_record;
 }
 
-
-unit posix_process_exece(string unused1, string_list unused2, string_list unused)
+unit posix_process_exece(string mlpath, string_list args, string_list envs)
 {
-  UNIMP();
+  char* cpath = mlstring2cstring_static(mlpath);
+  char** argv = string_list_to_array_malloc((string_list_long)args);
+  char** envp = string_list_to_array_malloc((string_list_long)envs);
+  int ignored = execve (cpath, argv, envp);
+  int errorsave = errno;
+  free_string_array(argv);
+  free_string_array(envp);
+  runtime_error(errorsave);
+  return empty_record;
 }
 
-unit posix_process_execp(string unused1, string_list unused)
+unit posix_process_execp(string mlpath, string_list args)
 {
-  UNIMP();
+  char* cpath = mlstring2cstring_static(mlpath);
+  char** argv = string_list_to_array_malloc((string_list_long)args);
+  int ignored = execvp (cpath, argv);
+  int errorsave = errno;
+  free_string_array(argv);
+  runtime_error(errorsave);
+  return empty_record;
 }
 
 inttriple posix_process_waitpid(int argpid, word options)
@@ -964,7 +1209,6 @@ inttriple posix_process_waitpid(int argpid, word options)
   int how, val;
   if (pid < 0) {
     runtime_error(errno);
-    assert(0);
   }
 
   if (WIFEXITED(status)) {
@@ -981,7 +1225,6 @@ inttriple posix_process_waitpid(int argpid, word options)
   }
   else {
     runtime_error_fmt("POSIX waitpid got back unknown child status = %d", status);
-    assert(0);
   }
 
   result = alloc_manyint(3,0);
@@ -997,24 +1240,28 @@ unit posix_process_exit(word8 status)
   return 0; /* NOTREACHED */
 }
 
-unit posix_process_kill(int unused1, int unused2)
+unit posix_process_kill(int pid, int sig)
 {
-  UNIMP();
+  if (kill ((pid_t) pid, sig) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-int posix_process_alarm(int unused)
+int posix_process_alarm(int sec)
 {
-  UNIMP();
+  return (int) alarm((unsigned)sec);
 }
 
 unit posix_process_pause(unit unused)
 {
-  UNIMP();
+  int ignored = pause();
+  return empty_record;
 }
 
-int posix_process_sleep(int unused)
+int posix_process_sleep(int sec)
 {
-  UNIMP();
+  return (int)sleep((unsigned) sec);
 }
 
 int posix_signal_num(string arg)
@@ -1028,7 +1275,6 @@ int posix_signal_num(string arg)
 	return signal_values[i].id;
     }
   runtime_error_fmt("posix_signal_num could not find entry '%s'",carg);
-  assert(0);
   return 0;
 }
 
@@ -1043,7 +1289,6 @@ word posix_filesys_num(string arg)
 	return filesys_values[i].id;
     }
   runtime_error_fmt("posix_filesys_num could not find entry '%s'",carg);
-  assert(0);
   return 0;
 }
 
@@ -1083,7 +1328,6 @@ unit posix_filesys_chdir(string dirname)
   const char *cdirname = mlstring2cstring_static(dirname);
   if (chdir (cdirname) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
@@ -1092,12 +1336,10 @@ string posix_filesys_getcwd(unit unused)
 {
   char buffer[1024];
   if (getcwd(buffer, sizeof(buffer) - 1) == NULL) {
-    if (errno == ERANGE) {	/* XXX: Should try a static buffer then loop with malloced buffers */
-      printf("posix_filesys_getcwd: buffer too small\n");
-      assert(0);
+    if (errno == ERANGE) {
+      /* XXX */
     }
     runtime_error(errno);
-    assert(0);
   }
   return cstring2mlstring_alloc(buffer);
 }
@@ -1108,14 +1350,13 @@ int posix_filesys_openf(string filename, word oflag, word mode)
   int fd = open(cfilename,oflag,mode);
   if (fd == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return fd;
 }
 
-int posix_filesys_umask(word unused)
+word posix_filesys_umask(word mask)
 {
-  UNIMP();
+  return (word)umask((mode_t) mask);
 }
 
 unit posix_filesys_link(string from, string to)
@@ -1125,7 +1366,6 @@ unit posix_filesys_link(string from, string to)
   char *cto = mlstring2cstring_buffer(to, sizeof(buf), buf);  /* can't use ..._static twice */
   if (link (cfrom, cto) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
@@ -1137,14 +1377,19 @@ unit posix_filesys_rename(string from, string to)
   char *cto = mlstring2cstring_buffer(to, sizeof(buf), buf);  /* can't use ..._static twice */
   if (rename (cfrom,cto) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
 
-unit posix_filesys_symlink(string unused1, string unused)
+unit posix_filesys_symlink(string from, string to)
 {
-  UNIMP();
+  char buf[1024];
+  char *cfrom = mlstring2cstring_static(from);
+  char *cto = mlstring2cstring_buffer(to, sizeof(buf), buf);  /* can't use ..._static twice */
+  if (symlink(cfrom, cto) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 unit posix_filesys_mkdir(string mlDir, word mode)
@@ -1154,14 +1399,17 @@ unit posix_filesys_mkdir(string mlDir, word mode)
   alpha */
   if (mkdir(cDir,mode) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
 
-unit posix_filesys_mkfifo(string unused1, word unused)
+unit posix_filesys_mkfifo(string path, word mode)
 {
-  UNIMP();
+  char* cpath = mlstring2cstring_static(path);
+  if (mkfifo(cpath, (mode_t) mode) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 unit posix_filesys_unlink(string arg)
@@ -1170,14 +1418,17 @@ unit posix_filesys_unlink(string arg)
   int result = unlink(path);
   if (result == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return empty_record;
 }
 
-unit posix_filesys_rmdir(string unused)
+unit posix_filesys_rmdir(string path)
 {
-  UNIMP();
+  char* cpath = mlstring2cstring_static(path);
+  if (rmdir(cpath) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 string posix_filesys_readlink(string link)
@@ -1186,16 +1437,18 @@ string posix_filesys_readlink(string link)
   int status = readlink(mlstring2cstring_static(link), buf, sizeof(buf) - 1);
   if (status == -1) {
     runtime_error(errno);
-    assert(0);
   } else {
     buf[status] = 0;
     return cstring2mlstring_alloc(buf);
   }
 }
 
-unit posix_filesys_ftruncate(int unused1, int unused)
+unit posix_filesys_ftruncate(int fd, int length)
 {
-  UNIMP();
+  if (ftruncate(fd, (off_t) length) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 #define MODE_BITS (S_IRWXU | S_IRWXG | S_IRWXO | S_ISUID | S_ISGID)
@@ -1225,7 +1478,6 @@ statrep posix_filesys_stat(string name)
   struct stat buffer;
   if (stat(mlstring2cstring_static(name),&buffer) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return cstat2mlstat_alloc(&buffer);
 }
@@ -1235,7 +1487,6 @@ statrep posix_filesys_lstat(string name)
   struct stat buffer;
   if (lstat(mlstring2cstring_static(name),&buffer) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return cstat2mlstat_alloc(&buffer);
 }
@@ -1245,7 +1496,6 @@ statrep posix_filesys_fstat(int filedesc)
   struct stat buffer;
   if (fstat(filedesc,&buffer) == -1) {
     runtime_error(errno);
-    assert(0);
   }
   return cstat2mlstat_alloc(&buffer);
 }
@@ -1266,35 +1516,48 @@ bool posix_filesys_access(string name, word mode)
 
     case EINTR:
       runtime_error(errno);
-      assert(0);
       return 0;	/* notreached */
     }
   }
 }
 
-unit posix_filesys_chmod(string unused1, word unused2)
+unit posix_filesys_chmod(string path, word mode)
 {
-  UNIMP();
+  char* cpath = mlstring2cstring_static(path);
+  if (chmod(cpath, (mode_t) mode) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_filesys_fchmod(int unused1, word unused2)
+unit posix_filesys_fchmod(int fd, word mode)
 {
-  UNIMP();
+  if (fchmod(fd, (mode_t) mode) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_filesys_chown(string unused1, word unused2, word unused3)
+unit posix_filesys_chown(string path, word owner, word group)
 {
-  UNIMP();
+  char* cpath = mlstring2cstring_static(path);
+  if (chown(cpath, (uid_t) owner, (gid_t) group) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
-unit posix_filesys_fchown(int unused1, word unused2, word unused)
+unit posix_filesys_fchown(int fd, word owner, word group)
 {
-  UNIMP();
+  if (fchown(fd, (uid_t)owner, (gid_t)group) == -1) {
+    runtime_error(errno);
+  }
+  return empty_record;
 }
 
 unit posix_filesys_utime(string filename, int atime, int modtime)
 {
-  char* cfilename = mlstring2cstring_malloc(filename);
+  char* cfilename = mlstring2cstring_static(filename);
   int r;
   if (atime == -1) {
     r = utime (cfilename, NULL);
@@ -1306,13 +1569,11 @@ unit posix_filesys_utime(string filename, int atime, int modtime)
   }
   if (r == -1) {
     runtime_error(errno);
-    assert(0);			/* notreached */
   }
-  free(cfilename);
   return empty_record;
 }
 
-intpair posix_filesys_pathconf(string unusde1, string unused)
+intpair posix_filesys_pathconf(string unused1, string unused)
 {
   UNIMP();
 }
@@ -1323,25 +1584,19 @@ intpair posix_filesys_fpathconf (int unused1, string unused)
 }
 
 
-word posix_io_fcntl_gfd()
-{ 
-  UNIMP();
-}
-
 ptr_t til_selfusage()
 {
   val_t fields[4];
-  int masks[4];
+  int masks[1];
   struct rusage rusage;
   if (getrusage(RUSAGE_SELF, &rusage) == -1) {
     runtime_error(errno);
-    assert(0);
   }
-  fields[0] = rusage.ru_utime.tv_sec;
-  fields[1] = rusage.ru_utime.tv_usec;
-  fields[2] = rusage.ru_stime.tv_sec;
-  fields[3] = rusage.ru_stime.tv_usec;
-  masks[0] = masks[1] = masks[2] = masks[3] = 0;
+  masks[0] = 0;
+  fields[0] = (val_t) rusage.ru_utime.tv_sec;
+  fields[1] = (val_t) rusage.ru_utime.tv_usec;
+  fields[2] = (val_t) rusage.ru_stime.tv_sec;
+  fields[3] = (val_t) rusage.ru_stime.tv_usec;
   return alloc_record(fields, masks, 4);
 }
 
@@ -1375,20 +1630,6 @@ string commandline_name(unit ignored)
 {
   assert(commandline_name != NULL);
   return cstring2mlstring_alloc(commandline_cmd);
-}
-
-string_list array_to_string_list(char** arr)
-{
-  /* Convert a NULL-terminated array of strings into a value of type string list.
-   */
-  char* string = *arr;
-  char** next = arr+1;
-  if (string == NULL) return (ptr_t) 0;
-  else {
-    ptr_t car = cstring2mlstring_alloc(string);
-    ptr_t cdr = array_to_string_list(next);
-    return alloc_recrec(car, cdr);
-  }
 }
 
 string_list commandline_arguments(unit ignored)
