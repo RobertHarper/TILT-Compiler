@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Abstraction *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import PARSING TP_RECON *)
 (* Parsing Signature Entries *) 
 (* Author: Frank Pfenning *)
 

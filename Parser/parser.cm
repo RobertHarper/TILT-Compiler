@@ -1,28 +1,4 @@
 Group 
-
-
-signature LINK_PARSE
-signature NAME
-signature NAMEBLAST
-signature SYMBOL
-signature FIXITY
-signature AST
-signature ASTUTIL
-signature ASTHELP
-signature SOURCE_MAP
-signature TVCLOSE
-
-structure LinkParse
-structure Name
-structure NameBlast
-structure Fixity
-structure Symbol
-structure Ast
-structure AstUtil
-structure AstHelp
-structure SourceMap
-structure TVClose
-
 is
 ../smlnj-lib.cm
 ../Util/util.cm
@@ -80,7 +56,7 @@ stream.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-ya
 
 
 (* ml.grm - letting CM use the 109.25 version fails so manually use 109.22 *)
-ml.grm.sig.sml
+ml.grm.sig
 ml.grm.sml
 
 frontend.sig.sml   (* modificication of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/parse/frontend.sml *)

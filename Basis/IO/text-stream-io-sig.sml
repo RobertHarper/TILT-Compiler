@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Substring STREAM_IO *)
 (* text-stream-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

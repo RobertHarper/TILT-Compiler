@@ -1,4 +1,3 @@
-(*$import MONO_ARRAY *)
 (* bsearch-fn.sml
  *
  * COPYRIGHT (c) 1994 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -26,7 +25,7 @@ functor BSearchFn (A : MONO_ARRAY) : sig
    * type.
    *)
     fun bsearch cmp (key, arr) = let
-	  fun look (lo, hi) = 
+	  fun look (lo, hi) =
                 if hi >= lo then let
 		  val m = lo + (hi - lo) div 2
 		  val x = A.sub(arr, m)

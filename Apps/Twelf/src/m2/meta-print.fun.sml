@@ -1,4 +1,3 @@
-(*$import Int METAPRINT GLOBAL METASYN FORMATTER PRINT CLAUSEPRINT *)
 (* Meta printer for proof states *)
 (* Author: Carsten Schuermann *)
 

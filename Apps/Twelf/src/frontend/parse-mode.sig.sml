@@ -1,4 +1,3 @@
-(*$import PARSING MODE_RECON *)
 (* Parsing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import Int Real StringCvt HEURISTIC *)
 (* Heuristics : Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

@@ -1,5 +1,3 @@
-(*$import Int *)
-
 (* Thread safety by wrapping entire benchmark in a function *)
 (***********************************************************************)
 (*                                                                     *)

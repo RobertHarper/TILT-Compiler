@@ -1,4 +1,3 @@
-(*$import TextIO Char String LEXER PATHS StreamStructs *)
 (* Lexer *)
 (* Author: Frank Pfenning *)
 

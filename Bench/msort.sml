@@ -1,5 +1,3 @@
-(*$import *)
-
 (* Thread safety guaranteed by lack of mutable types *)
 
 (* Merge sort *)

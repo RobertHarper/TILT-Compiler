@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude ARRAY General PreVector *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -49,12 +48,12 @@ structure Array :> ARRAY where type 'a array = 'a array
       | rev (x::r, l) = rev (r, x::l)
 
     fun tabulate (0, _) = array0
-      | tabulate (n, f) : 'a array = 
+      | tabulate (n, f) : 'a array =
           let val _ = if (n < 0) then raise Size else ()
 	      val a = array(n, f 0)
 	      val n = int32touint32 n
-              fun tab i = 
-                if ult(i,n) then (unsafe_update(a, i, f (uint32toint32 i)); 
+              fun tab i =
+                if ult(i,n) then (unsafe_update(a, i, f (uint32toint32 i));
 				  tab(uplus(i,0w1)))
                 else a
            in tab 0w1
@@ -99,10 +98,10 @@ structure Array :> ARRAY where type 'a array = 'a array
 	    (* end case *)
 	  end
 
-    fun copy {src, si=si', len, dst, di} = 
+    fun copy {src, si=si', len, dst, di} =
         let
 
-            val (sstop', dstop') = 
+            val (sstop', dstop') =
                 let val srcLen = length src
                 in  case len
                     of NONE => if ((si' < 0) orelse (srcLen < si'))
@@ -123,7 +122,7 @@ structure Array :> ARRAY where type 'a array = 'a array
                                 else ()
 
         (* check to continue *after* update; otherwise we might underflow j  - Tom 7 *)
-            fun copyDown (j, k) = 
+            fun copyDown (j, k) =
                 let in
                     unsafe_update(dst, k, unsafe_sub(src, j));
                     if ult(si,j) then copyDown (uminus(j, 0w1),
@@ -134,7 +133,7 @@ structure Array :> ARRAY where type 'a array = 'a array
         in  if ((di < 0) orelse (length dst < dstop'))
                 then raise Subscript
             else if (si' < di) then
-                if (0w0 = sstop) then () 
+                if (0w0 = sstop) then ()
                 else copyDown (uminus(sstop,0w1), uminus(dstop,0w1))
               else copyUp (si, int32touint32 di)
         end
@@ -196,9 +195,9 @@ structure Array :> ARRAY where type 'a array = 'a array
 	      else raise Subscript
 	  end
 
-    fun foldr f init arr = 
+    fun foldr f init arr =
 	let
-	    fun fold (i, accum) = 
+	    fun fold (i, accum) =
 		let val accum' = f (unsafe_sub(arr, i), accum)
 		in  if (i = 0w0)
 			then accum'
@@ -245,7 +244,7 @@ structure Array :> ARRAY where type 'a array = 'a array
     fun foldli f init slice = let
 	  val (vec, start, stop) = chkSlice slice
 	  fun fold (i, accum) = if ult(i,stop)
-				    then fold (uplus(i,0w1), f (uint32toint32 i, 
+				    then fold (uplus(i,0w1), f (uint32toint32 i,
 								unsafe_sub(vec, i), accum))
 				else accum
 	  in  fold (start, init)

@@ -1,5 +1,4 @@
-(*$import Name Rtl Nil TilWord32 *)
-signature TORTL_BASE = 
+signature TORTL_BASE =
 sig
 
     val mirrorGlobal : bool ref
@@ -38,7 +37,7 @@ sig
       | RECORD of label * value list (* a record whose components are at the given label *)
       | LABEL of label          (* the value of this label: e.g. boxed real, array, vector, ... *)
       | CODE of label           (* code that residing at this label *)
-	
+
    datatype term = LOCATION of location
                  | VALUE of value
 
@@ -59,7 +58,7 @@ sig
    val get_proc : unit -> Rtl.proc
    val set_args : reg list * regi -> unit
    val add_proc : Rtl.proc -> unit
-   val exports : Rtl.label list Name.VarMap.map ref 
+   val exports : Rtl.label list Name.VarMap.map ref
    val add_static_record : label * int * int -> unit   (* Number of non-heap pointer fields and (possible) heap pointer fields *)
    val get_static_records : unit -> {partialRecords : int,
 				     totalRecords : int,
@@ -68,7 +67,7 @@ sig
 				     partialRecordLabels : label list}
    val pl : Rtl.proc list ref
    val dl : Rtl.data list ref
-   
+
    (* (local) RTL translation state *)
    type state
    val make_state : unit -> state

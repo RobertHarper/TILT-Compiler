@@ -1,4 +1,3 @@
-(*$import MODECHECK MODESYN PATHS *)
 (* Mode Checking *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

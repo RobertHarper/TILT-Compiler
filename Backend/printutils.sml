@@ -1,4 +1,3 @@
-(*$import Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops IO OS *)
 functor Printutils(val commentHeader : string
 		   structure Machineutils : MACHINEUTILS
                    structure Tracetable : TRACETABLE
@@ -33,8 +32,8 @@ struct
    fun emitInstr cmt_instr = emitString (msInstruction cmt_instr)
    fun emitInstrs cmt_instr_list = app emitString (msInstructions cmt_instr_list)
 
-   fun emitData arg = 
-     let 
+   fun emitData arg =
+     let
        val list = msData arg
        fun doer (0,_) = ()
 	 | doer (count,s) = (emitString s; doer (count-1,s))
@@ -46,13 +45,13 @@ struct
    val print_lab = emitString o msLabel
 
    fun print_pos (IN_REG r) = print_reg r
-     | print_pos (ON_STACK s) = (emitString "STACK:"; 
+     | print_pos (ON_STACK s) = (emitString "STACK:";
 			      emitString (msStackLocation s))
      | print_pos (HINT r) = (emitString "HINT("; print_reg r; emitString ")")
      | print_pos UNKNOWN = emitString "UNKNOWN"
 
 
-   fun print_asn (tempname,pos) = (emitString "["; print_reg tempname; 
+   fun print_asn (tempname,pos) = (emitString "["; print_reg tempname;
 				emitString ","; print_pos pos; emitString "]")
 
    fun print_move (t,(x,y)) = (print_reg t; emitString ":"; print_pos x;
@@ -72,7 +71,7 @@ struct
 
    fun print_trace Tracetable.TRACE_YES = emitString "*YES*"
      | print_trace Tracetable.TRACE_NO = emitString "*NO*"
-     | print_trace (Tracetable.TRACE_CALLEE r) = 
+     | print_trace (Tracetable.TRACE_CALLEE r) =
        (emitString "*CALLEE["; print_reg r; emitString "]*")
      | print_trace Tracetable.TRACE_UNSET = emitString "*UNSET*"
      | print_trace (Tracetable.TRACE_STACK _) = emitString "*STACK*"
@@ -81,7 +80,7 @@ struct
      | print_trace (Tracetable.TRACE_GLOBAL_REC _) = emitString "*GLOBAL_REC*"
      | print_trace (Tracetable.TRACE_IMPOSSIBLE) = emitString "*IMPOSSIBLE*"
 
-       
+
    fun abortIO (fileName, {cause = OS.SysErr (msg, _), function = f, name = n}) =
 	error ("IO Error on file " ^ fileName ^ ":\n" ^ msg ^ "\n")
       | abortIO (fileName, {function = f, ...}) =
@@ -97,30 +96,30 @@ struct
 
    fun openOutput outfilename =
        (if (!debug) then (print "about to open_out "; print outfilename; print "\n") else ();
-	output_stream := SOME (TextIO.openOut outfilename) handle exn => io_error ("openOutput", "error opening output stream",exn))
+	output_stream := SOME (TextIO.openOut outfilename) handle exn => io_error ("openOutput", outfilename,exn))
 
    fun openAppend outfilename =
        (if (!debug) then (print "about to open_append"; print outfilename; print "\n") else ();
-	output_stream := SOME (TextIO.openAppend outfilename) handle exn => io_error ("openAppend", "error opening append stream",exn))
+	output_stream := SOME (TextIO.openAppend outfilename) handle exn => io_error ("openAppend", outfilename,exn))
 
-   fun closeOutput () = 
+   fun closeOutput () =
      (case (! output_stream) of
 	NONE => error "Can't close output stream; it's not open."
-      | SOME s => ((TextIO.closeOut s) handle exn => io_error ("closeOutput", "error closing output stream",exn); 
+      | SOME s => ((TextIO.closeOut s) handle exn => io_error ("closeOutput", "some file",exn);
 		   output_stream := NONE))
 
    (* OUTPUT PROGRAM *)
 
-   fun dumpBlocks debug proc_name 
-                  (psig as (KNOWN_PROCSIG{framesize, 
-					  linkage = LINKAGE{argCallee = arg_ra_pos, 
+   fun dumpBlocks debug proc_name
+                  (psig as (KNOWN_PROCSIG{framesize,
+					  linkage = LINKAGE{argCallee = arg_ra_pos,
 							    resCallee = ra_offset,
 							    ...},
 					  ...}))
                   block_map blocklabels  =
-     let 
+     let
 
-       fun dumpBlock l = 
+       fun dumpBlock l =
 	 let
 	   val (BLOCK{instrs,in_live,out_live,succs,def,use,truelabel,...}) =
 	       (case Labelmap.find (block_map, l) of
@@ -131,10 +130,10 @@ struct
 	 in
 	   if debug then
 	     (emitString commentHeader;
-	      emitString " LIVE_IN : "; 
+	      emitString " LIVE_IN : ";
 	      print_list print_reg (Regset.listItems (!in_live)))
 	   else ();
-	     
+
 	   if (! show_labels orelse truelabel) then
 	       (print_lab l;
 		emitString ":\n")
@@ -164,7 +163,7 @@ struct
 	      print_list print_lab (! succs);
 	      emitString "\n")
 	   else ()
-		   
+
 	 end
        val res = app dumpBlock blocklabels
      in
@@ -173,18 +172,18 @@ struct
 
 
 
-   fun dumpProc (name, 
-		 psig as KNOWN_PROCSIG{argFormal = args, 
-				       resFormal = res, 
-				       regs_destroyed, 
+   fun dumpProc (name,
+		 psig as KNOWN_PROCSIG{argFormal = args,
+				       resFormal = res,
+				       regs_destroyed,
 				       regs_modified,
-				       linkage = LINKAGE{argCallee = arg_ra_pos, 
+				       linkage = LINKAGE{argCallee = arg_ra_pos,
 							 resCallee = res_ra_pos, ...},
 				       ...},
 		 block_map,
 		 block_labels,
 		 debug) =
-     (app emitString textStart; 
+     (app emitString textStart;
       app emitString (procedureHeader name);
       emitString commentHeader;
 
@@ -204,7 +203,7 @@ struct
       emitString "\n";
 
       (case block_labels of
-        (first_label::_) => 
+        (first_label::_) =>
 		let val (BLOCK{instrs,...}) = (case (Labelmap.find(block_map, first_label)) of
 						   SOME bl => bl
 						 | _ => error "missing block")
@@ -238,4 +237,4 @@ struct
 
 
 
-end 
+end

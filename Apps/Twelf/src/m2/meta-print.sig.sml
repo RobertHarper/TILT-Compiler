@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Meta printer for proof states *)
 (* Author: Carsten Schuermann *)
 

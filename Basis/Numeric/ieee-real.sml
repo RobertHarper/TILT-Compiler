@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude IEEE_REAL String Int PreReal *)
 (* ieee-real.sml
  *
  * COPYRIGHT (c) 1996 AT&T Bell Laboratories.
@@ -37,7 +36,7 @@ structure IEEEReal :> IEEE_REAL =
 (*
     val ctlRoundingMode : int option -> int =
 	    CInterface.c_function "SMLNJ-Math" "ctlRoundingMode"
-    fun setRoundingMode' m = (ctlRoundingMode (SOME m); ()) 
+    fun setRoundingMode' m = (ctlRoundingMode (SOME m); ())
 *)
     fun setRoundingMode' m = (Ccall(setRoundingMode,m); ())
     fun getRoundingMode'() = Ccall(getRoundingMode,0)

@@ -1,5 +1,3 @@
-(*$import RTL *)
-
 signature TRACETABLE =
   sig
     structure Machine: sig

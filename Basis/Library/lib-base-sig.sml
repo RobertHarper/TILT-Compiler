@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* lib-base-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

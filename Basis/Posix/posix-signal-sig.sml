@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim SysWord *)
 (* posix-signal-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

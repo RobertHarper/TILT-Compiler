@@ -1,6 +1,4 @@
-(*$import Nil NilSubst NilUtil Normalize NilContext *)
-
-structure SingletonElim :> SINGLETONELIM = 
+structure SingletonElim :> SINGLETONELIM =
   struct
     open Nil
 
@@ -21,37 +19,37 @@ structure SingletonElim :> SINGLETONELIM =
     fun new_env()                          = Env {ctxt=NilContext.empty()}
 
 
-    fun erasek env k = 
+    fun erasek env k =
       case k
 	of Type_k => Type_k
 	 | SingleType_k c => Type_k
 	 | Single_k c => erasek env (kind_of env c)
-	 | Record_k lvks => 
-	  let 
+	 | Record_k lvks =>
+	  let
 	    val (lvks,_) =
 	      foldl_acc (fn (((l,v),k),env) => (((l,v),erasek env k),insert_kind env (v,k))) env lvks
 	  in Record_k lvks
 	  end
 	 | Arrow_k (os,vks,k) =>
 	  let
-	    val (vks,env) = 
+	    val (vks,env) =
 	      foldl_acc (fn ((v,k),env) => ((v,erasek env k),insert_kind env (v,k))) env vks
 	  in Arrow_k  (os,vks,erasek env k)
 	  end
-	
+
     (*PRE: con has been de-singletonized *)
-    fun R_k env (arg : con * kind) : con option  = 
+    fun R_k env (arg : con * kind) : con option  =
       let
 	val changed = ref false
-	fun trans env (c,k) = 
+	fun trans env (c,k) =
 	  (case k
 	     of Type_k => c
 	      | SingleType_k c' => (changed := true; R_c env c')
 	      | Single_k c' => (changed := true; R_c env c')
-	      | Record_k lvks => 
-	       let 
-		 fun folder (((l,v),k),env) = 
-		   let 
+	      | Record_k lvks =>
+	       let
+		 fun folder (((l,v),k),env) =
+		   let
 		     val c = trans env (Proj_c(c,l),k)
 		     val k = erasek env k
 		     val bnd = Con_cb(v,c)
@@ -64,9 +62,9 @@ structure SingletonElim :> SINGLETONELIM =
 	       in Let_c (Sequential,cbs,Crecord_c fields)
 	       end
 	      | Arrow_k (os,vks,k) =>
-	       let 
-		 fun folder ((v,k),env) = 
-		   let 
+	       let
+		 fun folder ((v,k),env) =
+		   let
 		     val newv = Name.derived_var v
 		     val newc = trans env (Var_c newv,k)
 		     val k = erasek env k
@@ -88,20 +86,20 @@ structure SingletonElim :> SINGLETONELIM =
 	       in Let_c (Sequential,[lam],Var_c name)
 	       end)
 	val res = trans env arg
-      in 
+      in
 	if !changed then SOME res
 	else NONE
       end
-    
+
     and R_clist  (env : env) (cs : con list)     : con list = map (R_c env) cs
     and R_vclist (env : env) (cs : (var*con) list) : (var * con) list = map_second (R_c env) cs
-    and R_c (env : env) (c : con) : con  = 
+    and R_c (env : env) (c : con) : con  =
       let
-	val res = 
+	val res =
 	  case c of
 	    Var_c _ => c
 	  | Prim_c (pc,cons) => Prim_c(pc,R_clist env cons)
-	  | Mu_c (flag,vc_seq) => 
+	  | Mu_c (flag,vc_seq) =>
 	      let
 		val env = foldl (fn ((v,_),env) => insert_kind env (v,Type_k)) env vc_seq
 		val vcs = R_vclist env vc_seq
@@ -109,7 +107,7 @@ structure SingletonElim :> SINGLETONELIM =
 	      end
 	  | ExternArrow_c (clist,c) => ExternArrow_c (R_clist env clist,R_c env c)
 	  | AllArrow_c {openness,effect,tFormals,eFormals,fFormals,body_type} =>
-	      let 
+	      let
 		val (vks,vcs,env) = R_vklist env tFormals
 		val subst = NilSubst.C.seqFromList vcs
 		val eFormals = R_clist env eFormals
@@ -121,7 +119,7 @@ structure SingletonElim :> SINGLETONELIM =
 			    tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			    body_type=body_type}
 	      end
-	  | Let_c (letsort,cbnds,c) => 
+	  | Let_c (letsort,cbnds,c) =>
 	      let val (cbnds,env) = R_cbnds env cbnds
 	      in Let_c(letsort,cbnds,R_c env c)
 	      end
@@ -129,18 +127,18 @@ structure SingletonElim :> SINGLETONELIM =
 	  | Proj_c (c,l) => Proj_c (R_c env c,l)
 	  | Closure_c (c1,c2) => Closure_c (R_c env c1,R_c env c2)
 	  | App_c (c,clist) => App_c(R_c env c,R_clist env clist)
-	  | Coercion_c {vars,from,to} => 
+	  | Coercion_c {vars,from,to} =>
 	      let val env = foldl (fn (v,env) => insert_kind env (v,Type_k)) env vars
 	      in Coercion_c{vars=vars,from=R_c env from,to=R_c env to}
 	      end
       in res
       end
-    and R_vklist env vks = 
+    and R_vklist env vks =
       let
-	fun folder ((v,k),env) = 
-	  let 
+	fun folder ((v,k),env) =
+	  let
 	    val newv = Name.derived_var v
-	    val (newc,k) = 		  
+	    val (newc,k) =
 	      case R_k env (Var_c newv,k)
 		of SOME newc => (newc,erasek env k)
 		 | NONE => (Var_c newv,k)
@@ -153,10 +151,10 @@ structure SingletonElim :> SINGLETONELIM =
       end
 
     and R_cbnds env cbnds =  foldl_acc (fn (cb,env) => R_cbnd env cb) env cbnds
-    and R_cbnd env cbnd = 
-      let 
-	fun R_confun wrapper (v,vklist,c) = 
-	  let 
+    and R_cbnd env cbnd =
+      let
+	fun R_confun wrapper (v,vklist,c) =
+	  let
 	    val (vks,vcs,env') = R_vklist env vklist
 	    val c = R_c env' c
 	    val c = Let_c(Sequential,map Con_cb vcs,c)
@@ -164,8 +162,8 @@ structure SingletonElim :> SINGLETONELIM =
 	    val env = insert_cbnd env cb
 	  in (cb,env)
 	  end
-      in (case cbnd 
-	    of Con_cb (v,c) => 
+      in (case cbnd
+	    of Con_cb (v,c) =>
 	      let val c = R_c env c
 	      in (Con_cb(v,R_c env c),insert_equation env (v,c))
 	      end
@@ -174,16 +172,16 @@ structure SingletonElim :> SINGLETONELIM =
       end
    and R_elist env elist = map (R_e env) elist
    and R_eopt env eopt = Option.map (R_e env) eopt
-   and R_e env e = 
+   and R_e env e =
      let
-       val res = 
+       val res =
 	 case e of
 	   Var_e v => e
-	 | Const_e value => 
+	 | Const_e value =>
 	     Const_e
 	     (
 	      case value of
-		(Prim.array (c,array)) => 
+		(Prim.array (c,array)) =>
 		  let
 		    val _ = Array.modify (R_e env) array
 		    val c = R_c env c
@@ -197,8 +195,8 @@ structure SingletonElim :> SINGLETONELIM =
 		  end
 	      | Prim.tag (t,c) => Prim.tag (t,R_c env c)
 	      | _ => value)
-	 | Let_e (sort,bnds,e) => 
-	     let 
+	 | Let_e (sort,bnds,e) =>
+	     let
 	       val (bnds,env) = R_bnds env bnds
 	     in Let_e(sort,bnds,R_e env e)
 	     end
@@ -209,27 +207,27 @@ structure SingletonElim :> SINGLETONELIM =
 	     App_e (openness,R_e env f,R_clist env clist,R_elist env elist,R_elist env flist)
 	 | Raise_e (e,c) =>  Raise_e(R_e env e,R_c env c)
 	 | Switch_e switch => Switch_e (R_switch env switch)
-	 | Handle_e {body,bound,handler,result_type} => 
+	 | Handle_e {body,bound,handler,result_type} =>
 	     Handle_e{body = R_e env body, bound = bound,
 		      handler = R_e env handler, result_type = R_c env result_type}
 	 | Coerce_e (ccn,cons,exp) => Coerce_e (R_e env ccn,R_clist env cons,R_e env exp)
 	 | Fold_e (vars,from,to) => Fold_e (vars,R_c env from,R_c env to)
 	 | Unfold_e (vars,from,to) => Unfold_e (vars,R_c env from,R_c env to)
-		     
+
      in res
      end
    and R_bnds env bnds = foldl_acc (fn (v,env) => R_bnd env v) env bnds
-   and R_bnd env bnd = 
+   and R_bnd env bnd =
      let
-       val res = 
+       val res =
 	 (case bnd
 	    of Con_b (p,cb) => let val (cb,env)=R_cbnd env cb in (Con_b(p,cb),env)  end
 	     | Exp_b (v,niltrace,e) => (Exp_b(v,niltrace,R_e env e),env)
 	     | Fixopen_b vcflist => (Fixopen_b (map (R_function env) vcflist),env)
 	     | Fixcode_b vcflist => (Fixcode_b (map (R_function env) vcflist),env)
-	     | Fixclosure_b (flag,vcl_set) => 
-	      let 
-		fun mapper((v,c),{code,cenv,venv}) = 
+	     | Fixclosure_b (flag,vcl_set) =>
+	      let
+		fun mapper((v,c),{code,cenv,venv}) =
 		  ((v,R_c env c),{code = code,cenv = R_c env cenv, venv = R_e env venv})
 	      in (Fixclosure_b (flag, Sequence.map mapper vcl_set),env)
 	      end)
@@ -237,7 +235,7 @@ structure SingletonElim :> SINGLETONELIM =
      end
    and R_function env ((v,c),Function{effect,recursive,
 				      tFormals,eFormals,fFormals,body}) =
-     let 
+     let
        val arg as {tFormals=vks,...} = rename_arrow (strip_arrow env c,tFormals)
        val c = R_c env c
 
@@ -251,7 +249,7 @@ structure SingletonElim :> SINGLETONELIM =
 			 tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			 body=body})
      end
-   and R_switch env switch = 
+   and R_switch env switch =
      (case switch of
 	Intsw_e {size,arg,arms,default,result_type} =>
 	  Intsw_e {size=size,arg=R_e env arg,arms=map_second (R_e env) arms,default=R_eopt env default,
@@ -267,12 +265,12 @@ structure SingletonElim :> SINGLETONELIM =
 		     result_type=R_c env result_type}
 	| Typecase_e {arg,arms,default,result_type} => error "Typecase_e not done")
 
-   fun R_import (ImportValue(l,v,tr,c),(s,bnds,env)) = 
+   fun R_import (ImportValue(l,v,tr,c),(s,bnds,env)) =
      (ImportValue(l,v,tr,NilSubst.substConInCon s (R_c env c)),(s,bnds,env))
      | R_import (ImportType(l,v,k),(s,bnds,env)) =
      let
        val newv = Name.derived_var v
-       val (newc,k) = 		  
+       val (newc,k) =
 	 case R_k env (Var_c newv,k)
 	   of SOME newc => (newc,erasek env k)
 	    | NONE => (Var_c newv,k)
@@ -281,13 +279,13 @@ structure SingletonElim :> SINGLETONELIM =
 
      in (ImportType(l,newv,k),(NilSubst.C.addr (s,v,newc),Con_cb(v,newc)::bnds,env))
      end
-   fun R_imports imports = 
-     let 
+   fun R_imports imports =
+     let
        val (imports,(subst,revbnds,env)) = foldl_acc R_import (NilSubst.C.empty(),[],new_env()) imports
      in (imports,rev revbnds,env)
      end
 
-   fun R_module (MODULE{bnds,imports,exports}) = 
+   fun R_module (MODULE{bnds,imports,exports}) =
      let
        val (imports,cbnds,env) = R_imports imports
        val (bnds,_) = R_bnds env bnds

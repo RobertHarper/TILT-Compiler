@@ -1,4 +1,3 @@
-(*$import *)
 (* Printing Signatures *)
 (* Author: Frank Pfenning *)
 

@@ -1,5 +1,5 @@
 functor MakeRegisterSet(structure Pprtl : PPRTL)
-	:> REGISTERSET = 
+	:> REGISTERSET =
   struct
 
       val error = fn s => Util.error "rtlregister.sml" s
@@ -16,7 +16,7 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
     open Rtl
     structure W = TilWord32
 
-    datatype iword    = WORD of W.word | INSTR of instr 
+    datatype iword    = WORD of W.word | INSTR of instr
     datatype quad_val = LONGS of (iword * iword) | QFLOAT of real
 
 (* --------------------- helper functions ---------------- *)
@@ -26,7 +26,7 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
    val w2i = W.toInt
    val i2w = W.fromInt
    val uninit_val = ref (LONGS(WORD (i2w 42), WORD (i2w 42)));
-   fun word2asc(lon) = 
+   fun word2asc(lon) =
        let val disps = [0,8,16,24]
 	   fun doer disp = chr (w2i (W.andb(W.rshiftl(lon,disp),i2w 255)))
        in  implode (map doer disps)
@@ -51,8 +51,8 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
    exception NotFound
    val iregs : quad_val IHash.hash_table = IHash.mkTable(ireg_size,NotFound);
    val fregs : quad_val IHash.hash_table = IHash.mkTable(freg_size,NotFound);
-     
-   fun reset_register() = 
+
+   fun reset_register() =
      (IHash.filter (fn _ => false) iregs;
       IHash.filter (fn _ => false) fregs)
 
@@ -65,31 +65,31 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
      | ireg2int (SREGI THREADPTR) = 5
      | ireg2int (SREGI HANDLER) = 6
 
-   fun update_ireg(ri,v) = 
+   fun update_ireg(ri,v) =
      let val rib = ireg2int ri
      in (((IHash.remove iregs rib; ())
 	  handle NotFound => ()); IHash.insert iregs (rib,v))
      end
-   fun update_freg(REGF(rfb,_),v) = 
+   fun update_freg(REGF(rfb,_),v) =
      (((IHash.remove fregs (Name.var2int rfb); ())
        handle NotFound => ()); IHash.insert fregs (Name.var2int rfb,v))
-   fun lookup_ireg ri = 
+   fun lookup_ireg ri =
      let val rib = ireg2int ri
      in  (case (IHash.find iregs rib) of
 	      SOME v => v
-	    | NONE => 
-		  let val defval = !uninit_val; 
+	    | NONE =>
+		  let val defval = !uninit_val;
 		      val _ = warn ("Warning: Reading uninitialized iregister " ^ (Int.toString rib) ^ "\n");
 		      val _ = update_ireg(ri,defval)
 		  in defval
 		  end)
      end
-   fun lookup_freg(rf as REGF(rfb,_)) = 
+   fun lookup_freg(rf as REGF(rfb,_)) =
        (case (IHash.find fregs (Name.var2int rfb)) of
 	   SOME v => v
-	 | NONE => 
+	 | NONE =>
 	       let val defval = QFLOAT 0.0
-		   val _ = warn ("Warning: Reading uninitialized fregister " ^ 
+		   val _ = warn ("Warning: Reading uninitialized fregister " ^
 				 (Int.toString (Name.var2int rfb)) ^ "\n");
 		   val _ = update_freg(rf,defval)
 	       in defval
@@ -110,11 +110,11 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
      regs
 
 
-   fun showreg() = 
+   fun showreg() =
        (show "i" iregs;
 	show "f" fregs)
 
-   fun showreg_nonzero() = 
+   fun showreg_nonzero() =
        (shownonzero "i" iregs;
 	shownonzero "f" fregs)
 
@@ -122,27 +122,27 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
 
 (* --------------------- layered access functions ---------------- *)
 
-    fun lookupval_ireg(r) = 
+    fun lookupval_ireg(r) =
     	case (lookup_ireg r) of
               (LONGS (ls as (WORD a, WORD b))) => (a,b)
             | _ => (error "lookupval_ireg");
-    fun lookupval_freg(r) = 
+    fun lookupval_freg(r) =
     	case (lookup_freg r) of
               (QFLOAT f) => f
             | _ => (error "lookupval_freg")
     fun ireg_save iregs = map lookup_ireg iregs
     fun freg_save fregs = map lookup_freg fregs
     fun ireg_restore ([],[]) = ()
-      | ireg_restore (ri::iregs,ival::ivals) = 
+      | ireg_restore (ri::iregs,ival::ivals) =
     	(update_ireg(ri,ival); ireg_restore(iregs,ivals))
       | ireg_restore _ = (error "ireg_restore given lists of unequal length")
     fun freg_restore ([],[]) = ()
-      | freg_restore (rf::fregs,fval::fvals) = 
+      | freg_restore (rf::fregs,fval::fvals) =
     	(update_freg(rf,fval); freg_restore(fregs,fvals))
       | freg_restore _ = (error "freg_restore")
     fun register_save (iregs,fregs) = (ireg_save iregs,freg_save fregs)
-    fun register_restore (iregs,fregs) (ivals,fvals) = 
+    fun register_restore (iregs,fregs) (ivals,fvals) =
     	(ireg_restore (iregs,ivals); freg_restore(fregs,fvals))
     fun register_parmove src dest = register_restore dest (register_save(src))
-  end; 
+  end;
 

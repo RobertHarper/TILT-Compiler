@@ -1,4 +1,3 @@
-(*$import List GlobalStructs PROVER METAGLOBAL METASYN INIT STRATEGY FILLING SPLITTING RECURSION QED METAPRINT NAMES TIMERS OrderStructs *)
 (* Meta Prover *)
 (* Author: Carsten Schuermann *)
 

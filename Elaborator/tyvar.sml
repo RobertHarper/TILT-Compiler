@@ -1,5 +1,3 @@
-(*$import TYVAR Listops Name Util List Stats Int *)
-
 (* XXXX thread-unsafe: new_stamp *)
 
 (* Type variables parameterized over types *)
@@ -33,8 +31,8 @@ structure Tyvar :> TYVAR =
     datatype ('ctxt,'con,'exp) tyvar = TYVAR of ('ctxt,'con,'exp) tyvar_info
 
     (* input bool represents hardness *)
-    type ('ctxt,'con,'exp) constraint = (unit -> unit) * (('ctxt,'con,'exp) tyvar * bool -> bool) 
-	
+    type ('ctxt,'con,'exp) constraint = (unit -> unit) * (('ctxt,'con,'exp) tyvar * bool -> bool)
+
     datatype ('ctxt,'con,'exp) ocon = OCON of {constraints : ('ctxt,'con,'exp) constraint list ref,
 					       default : ('ctxt,'con,'exp) constraint,
 					       name : var,
@@ -49,8 +47,8 @@ structure Tyvar :> TYVAR =
 				     | _ => ref NONE), ctxts = ctxts})
     fun tyvar_update(TYVAR r, TYVAR(ref info)) = r := info
     fun fresh_stamped_tyvar (ctxts,name,stamp) = TYVAR(ref{stampref = stamp,
-							   name = fresh_named_var name, 
-							   constrained = false, 
+							   name = fresh_named_var name,
+							   constrained = false,
 							   eq = NONE,
 							   body = ref NONE,
 							   ctxts = [ctxts]})
@@ -60,7 +58,7 @@ structure Tyvar :> TYVAR =
     fun tyvar_after stamp (TYVAR(ref {stampref,...})) = stamp < stampref
     fun tyvar_stamp (TYVAR(ref {stampref,...})) = stampref
     fun update_stamp (TYVAR(r as ref {stampref,name,constrained,eq,body,ctxts}),
-		      stamp) = 
+		      stamp) =
 	let val stampref = Int.min(stampref,stamp)
 	in  r := {stampref = stampref,
 		  name=name,
@@ -74,12 +72,12 @@ structure Tyvar :> TYVAR =
     fun tyvar_getvar(TYVAR(ref {name,...})) = name
     fun tyvar2string tv = var2string(tyvar_getvar tv)
     fun tyvar_deref(TYVAR(ref {body,...})) = !body
-    fun tyvar_set(TYVAR(ref {body,...}),c) = 
+    fun tyvar_set(TYVAR(ref {body,...}),c) =
 	          (case !body of
 		      NONE => body := (SOME c)
 		    | SOME _  => error "cannot set tyvar more than once")
     fun tyvar_reset(TYVAR(ref {body,...}),c) = body := SOME c
-    fun tyvar_isconstrained(TYVAR(ref {constrained,...})) = constrained 
+    fun tyvar_isconstrained(TYVAR(ref {constrained,...})) = constrained
     fun tyvar_constrain(TYVAR(r as ref ({stampref,name,constrained,eq,body,ctxts}))) =
 	  r := {stampref = stampref,
 		name=name,
@@ -100,7 +98,7 @@ structure Tyvar :> TYVAR =
 	    | SOME _ => ())
     fun tyvar_eq_hole(TYVAR(ref{eq,...})) = eq
     fun tyvar_getctxts(TYVAR(ref {ctxts,...})) = ctxts
-    fun tyvar_addctxts(TYVAR(r as ref ({stampref,name,constrained,eq,body,ctxts})), 
+    fun tyvar_addctxts(TYVAR(r as ref ({stampref,name,constrained,eq,body,ctxts})),
 		       ctxts') =
 	  r := {stampref = stampref,
 		name=name,
@@ -143,5 +141,5 @@ structure Tyvar :> TYVAR =
 	    | n => if unify(body,false)
 		       then (constraints := [default]; unify(body,true); thunk(); 1)
 		   else n)
-	     
+
   end

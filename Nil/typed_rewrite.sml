@@ -1,16 +1,14 @@
-(*$import Name List Sequence Prim Array TraceInfo Listops Util Nil *)
-
 (*
  * A simple rewriter that does not try to synthesize types.
  *
- * The idea is to provide a generic traversal algorithm that crawls over 
+ * The idea is to provide a generic traversal algorithm that crawls over
  * a parse tree in simple block structured fashion.  At every node, it
- * provides the client code with the current node under consideration 
- * and a current state.  The client then returns 
- * 
+ * provides the client code with the current node under consideration
+ * and a current state.  The client then returns
+ *
  * NOCHANGE        if the node was not changed, and should be
  *                 recursively traversed
- * NORECURSE       if the node was not changed, and should not be 
+ * NORECURSE       if the node was not changed, and should not be
  *                 recursively traversed
  * CHANGE_RECURSE (state,term)
  *                 if the node was changed to "term" with new state "state",
@@ -20,12 +18,12 @@
  *                 and the new term should not be recursively traversed
  *
  * One benefit of using this code is that it tries extremely hard to preserve
- * physical sharing. 
+ * physical sharing.
  *)
 
-signature TYPEDNILREWRITE = 
+signature TYPEDNILREWRITE =
   sig
-    datatype 'a changeopt = NOCHANGE | NORECURSE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a 
+    datatype 'a changeopt = NOCHANGE | NORECURSE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
 
     type ('state,'term) termhandler = 'state * 'term -> ('state * 'term) changeopt
     type ('state, 'bnd) bndhandler  = 'state * 'bnd -> ('state * 'bnd list) changeopt
@@ -52,7 +50,7 @@ signature TYPEDNILREWRITE =
 		  exn_var_bind   : ('state,Nil.exp) binder,
 		  labelled_var : 'state * Nil.label * Nil.var -> 'state
 		  }
-     
+
     val rewriters : 'state handler -> {
 				       rewrite_kind : 'state -> Nil.kind -> Nil.kind,
 				       rewrite_con :  'state -> Nil.con -> Nil.con,
@@ -86,10 +84,10 @@ signature TYPEDNILREWRITE =
     val set_label_binder    : 'state handler -> ('state * Nil.label * Nil.var -> 'state) -> 'state handler
   end
 
-structure TypedNilRewrite :> TYPEDNILREWRITE = 
+structure TypedNilRewrite :> TYPEDNILREWRITE =
   struct
     open Nil
-      
+
     val foldl_acc = Listops.foldl_acc
     val foldl_acc2 = Listops.foldl_acc2
     val map_second = Listops.map_second
@@ -125,7 +123,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		  labelled_var : 'state * Nil.label * Nil.var -> 'state
 		  }
 
-    fun rewriters (handler : 'state handler) 
+    fun rewriters (handler : 'state handler)
       : {
 	 rewrite_kind  : 'state -> Nil.kind -> Nil.kind,
 	 rewrite_con   : 'state -> Nil.con -> Nil.con,
@@ -155,14 +153,14 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	fun ensure (NONE,item) = SOME item
 	  | ensure (opt,_)     = opt
 
-	fun map_f f flag state list = 
+	fun map_f f flag state list =
 	  let val changed = ref false
-	    val temp = map (f changed state) list 
+	    val temp = map (f changed state) list
 	    val _ = flag := (!flag orelse !changed)
 	  in if !changed then temp else list
 	  end
-	
-	fun foldl_acc_f f flag state list = 
+
+	fun foldl_acc_f f flag state list =
 	  let
 	    val changed = ref false
 	    val (temp,state) = foldl_acc (f changed) state list
@@ -170,22 +168,22 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	  in if !changed then (temp,state) else (list,state)
 	  end
 
-	fun define_e changed (s,v,e) = 
+	fun define_e changed (s,v,e) =
 	  (case exp_var_define(s,v,e)
 	     of (s,SOME v) => (changed := true;(s,v))
 	      | (s,NONE) => (s,v))
 
-	fun bind_e changed (s,v,c) = 
+	fun bind_e changed (s,v,c) =
 	  (case exp_var_bind(s,v,c)
 	     of (s,SOME v) => (changed := true;(s,v))
 	      | (s,NONE) => (s,v))
 
-	fun define_c changed (s,v,c) = 
+	fun define_c changed (s,v,c) =
 	  (case con_var_define(s,v,c)
 	     of (s,SOME v) => (changed := true;(s,v))
 	      | (s,NONE) => (s,v))
 
-	fun bind_c changed (s,v,k) = 
+	fun bind_c changed (s,v,k) =
 	  (case con_var_bind(s,v,k)
 	     of (s,SOME v) => (changed := true;(s,v))
 	      | (s,NONE) => (s,v))
@@ -193,21 +191,21 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	(*If this becomes a performance critical piece of code,
 	 * it may be useful to bind these locally to encourage inlining
 	 *)
-	fun recur_e flag state exp = 
+	fun recur_e flag state exp =
 	  (case rewrite_exp state exp
 	     of SOME exp => (flag := true;exp)
 	      | NONE => exp)
-	      
-	and recur_c flag state con = 
+
+	and recur_c flag state con =
 	  (case rewrite_con state con
 	     of SOME con => (flag := true;con)
 	      | NONE => con)
-		  
-	and recur_k flag state kind = 
+
+	and recur_k flag state kind =
 	  (case rewrite_kind state kind
 	     of SOME kind => (flag := true;kind)
 	      | NONE => kind)
-	and recur_trace flag state trace = 
+	and recur_trace flag state trace =
 	  (case rewrite_trace state trace
 	     of SOME trace => (flag := true;trace)
 	      | NONE => trace)
@@ -215,22 +213,22 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	and rewrite_cbnd (state : 'state) (cbnd : conbnd) : (conbnd list option * 'state) =
 	  let
 
-	    fun define wrap (var,vklist,c) state = 
+	    fun define wrap (var,vklist,c) state =
 	      let
 		val var' = Name.derived_var var
 		val con = Let_c (Sequential,[wrap (var',vklist,c)],Var_c var')
 		val (state,varopt) = con_var_define(state,var,con)
-	      in 
-		case varopt 
+	      in
+		case varopt
 		  of SOME var => (SOME (wrap(var, vklist, c)), state)
 		   | NONE => (NONE,state)
 	      end
 
-	    fun cbnd_recur wrap (var, vklist, c) oldstate = 
-	      let 
+	    fun cbnd_recur wrap (var, vklist, c) oldstate =
+	      let
 
-		fun folder changed ((v,k),state) = 
-		  let 
+		fun folder changed ((v,k),state) =
+		  let
 		    val k = recur_k changed state k
 		    val (state,v) = bind_c changed (state,v,k)
 		  in  ((v,k),state)
@@ -241,20 +239,20 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	      in
 		case define wrap (var,vklist,c) oldstate
 		  of (SOME bnd,state) => (SOME bnd,state)
-		   | (NONE,state) => 
-		    if !changed then 
+		   | (NONE,state) =>
+		    if !changed then
 		      (SOME (wrap (var,vklist,c)),state)
 		    else
 		      (NONE,state)
 	      end
-	    
-	    fun do_cbnd recur (cbnd,state) = 
-	      (case cbnd 
+
+	    fun do_cbnd recur (cbnd,state) =
+	      (case cbnd
 		 of Con_cb(var, con) =>
-		   let 
+		   let
 		     val changed = ref false
-		     val con = 
-		       if recur then 
+		     val con =
+		       if recur then
 			 recur_c changed state con
 		       else con
 		     val (state,var) = define_c changed(state,var,con)
@@ -262,19 +260,19 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		   end
 		  | Open_cb args =>
 		   (if recur then
-		      cbnd_recur Open_cb args state 
-		    else 
+		      cbnd_recur Open_cb args state
+		    else
 		      define Open_cb args state)
-		  | Code_cb args => 
+		  | Code_cb args =>
 		      (if recur then
-			 cbnd_recur Code_cb args state 
-		       else 
+			 cbnd_recur Code_cb args state
+		       else
 			 define Code_cb args state))
 
-	    fun do_cbnds recur state cbnds = 
+	    fun do_cbnds recur state cbnds =
 	      let
 		val changed = ref false
-		fun doit (cbnd,state) = 
+		fun doit (cbnd,state) =
 		  (case do_cbnd recur (cbnd,state)
 		     of (SOME cbnd,state) => (changed := true;(cbnd,state))
 		      | (NONE,state) => (cbnd,state))
@@ -282,26 +280,26 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	      in (if !changed then SOME cbnds else NONE,state)
 	      end
 	  in
-	    (case (cbndhandler (state,cbnd)) 
+	    (case (cbndhandler (state,cbnd))
 	       of CHANGE_NORECURSE (state,cbnds) => do_cbnds false state cbnds
-		| CHANGE_RECURSE (state,cbnds) => 
+		| CHANGE_RECURSE (state,cbnds) =>
 		 let val (opt,state) = do_cbnds true state cbnds
 		 in (ensure (opt,cbnds),state)
 		 end
-		| NOCHANGE => 
+		| NOCHANGE =>
 		 (case do_cbnd true (cbnd,state)
 		    of (SOME cb,s) => (SOME [cb],s)
 		     | (NONE,s) => (NONE,s))
 		| NORECURSE => (NONE,state))
-	  end  
-	
-	and rewrite_con (state : 'state) (con : con) : con option =  
-	  let 
-	    fun docon (state,con) = 
+	  end
+
+	and rewrite_con (state : 'state) (con : con) : con option =
+	  let
+	    fun docon (state,con) =
 	      let
 	      in
-		(case con 
-		   of (Prim_c (pcon,args)) => 
+		(case con
+		   of (Prim_c (pcon,args)) =>
 		     let
 		       val changed = ref false
 		       val args = map_f recur_c changed state args
@@ -310,37 +308,37 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		    | (Mu_c (flag,defs)) =>
 		     let
 		       val changed = ref false
-		       fun folder ((v,c),state) = 
+		       fun folder ((v,c),state) =
 			 let
 			   val (state,v) = bind_c changed (state,v,Type_k)
 			 in
 			   ((v,c),state)
 			 end
-		       val (defs,state) = 
-			 if flag then 
-			   let val (temp,state) = Sequence.foldl_acc folder state defs 
+		       val (defs,state) =
+			 if flag then
+			   let val (temp,state) = Sequence.foldl_acc folder state defs
 			   in if !changed then (temp,state) else (defs,state)
-			   end 
+			   end
 			 else (defs,state)
 		       val defs = Sequence.map_second (recur_c changed state) defs
 		     in  if !changed then SOME (Mu_c (flag,defs)) else NONE
 		     end
-		   
-		    | (AllArrow_c {openness, effect, tFormals, 
+
+		    | (AllArrow_c {openness, effect, tFormals,
 				   eFormals, fFormals, body_type}) =>
 		     let
 		       val changed = ref false
 
 		       val (tFormals,state) = tformals_helper changed state tFormals
-		       val (eFormals,state) = 
+		       val (eFormals,state) =
 			   let
-			       fun efolder((vopt,c),s) = 
-				   let 
+			       fun efolder((vopt,c),s) =
+				   let
 				       val c = recur_c changed state c
-				       val (vopt,s) = 
+				       val (vopt,s) =
 					   (case vopt of
 						NONE => (vopt, s)
-					      | SOME v => let val (s,v) = bind_e changed (s,v,c) 
+					      | SOME v => let val (s,v) = bind_e changed (s,v,c)
 							  in  (SOME v, s)
 							  end)
 				   in  ((vopt,c),s)
@@ -354,11 +352,11 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		     in
 		       if !changed
 			 then SOME (AllArrow_c{openness = openness, effect = effect,
-					       tFormals = tFormals, eFormals = eFormals, 
+					       tFormals = tFormals, eFormals = eFormals,
 					       fFormals = fFormals, body_type = body_type})
 		       else NONE
 		     end
-		     
+
 		    | ExternArrow_c (cons,con) =>
 		     let
 		       val changed = ref false
@@ -367,16 +365,16 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		     in if !changed then SOME (ExternArrow_c (cons,con)) else NONE
 		     end
 		    | (Var_c var) => NONE
-		     
-		    (*This may need to be changed to handler parallel lets separately. 
+
+		    (*This may need to be changed to handler parallel lets separately.
 		     * It's not clear what the semantics should be.
 		     *)
-		    | (Let_c (letsort, cbnds, body)) => 
+		    | (Let_c (letsort, cbnds, body)) =>
 		     let
 		       val changed = ref false
-		       fun folder(cbnd,state) = 
-			 let 
-			   val (cbnds,state) = 
+		       fun folder(cbnd,state) =
+			 let
+			   val (cbnds,state) =
 			     (case rewrite_cbnd state cbnd
 				of (SOME cbnds,state) => (changed := true;(cbnds,state))
 				 | (NONE,state) => ([cbnd],state))
@@ -394,15 +392,15 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		       val env = recur_c changed state env
 		     in if !changed then SOME (Closure_c(code, env)) else NONE
 		     end
-		   
+
 		    | (Crecord_c entries) =>
 		     let
 		       val changed = ref false
 		       val entries = map_second (recur_c changed state) entries
 		     in if !changed then SOME (Crecord_c entries) else NONE
 		     end
-		   
-		    | (Proj_c (con,lbl)) => 
+
+		    | (Proj_c (con,lbl)) =>
 		     (case rewrite_con state con
 			of SOME con => SOME (Proj_c (con,lbl))
 			 | NONE => NONE)
@@ -416,7 +414,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		    | (Coercion_c {vars,from,to}) =>
 		     let
 		       val changed = ref false
-		       fun folder (v,s) = 
+		       fun folder (v,s) =
 			 let
 			   val (s,v) = bind_c changed (s,v,Type_k)
 			 in (v,s)
@@ -424,30 +422,30 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		       val (vars,state) = foldl_acc folder state vars
 		       val from = recur_c changed state from
 		       val to = recur_c changed state to
-		     in if !changed then SOME (Coercion_c {vars=vars,from=from,to=to}) 
+		     in if !changed then SOME (Coercion_c {vars=vars,from=from,to=to})
 			else NONE
 		     end)
 	      end
 	  in
-	    case (conhandler (state,con)) 
+	    case (conhandler (state,con))
 	      of CHANGE_NORECURSE (state,c) => SOME c
 	       | CHANGE_RECURSE (state,c) => ensure (docon (state,c),c)
 	       | NOCHANGE => docon (state,con)
 	       | NORECURSE => NONE
 	  end
-	
 
-	and rewrite_kind (state : 'state) (kind : kind) : kind option = 
-	  let 
-	    fun dokind (state,kind) = 
-	      (case kind 
+
+	and rewrite_kind (state : 'state) (kind : kind) : kind option =
+	  let
+	    fun dokind (state,kind) =
+	      (case kind
 		 of Type_k => NONE
 		  | (SingleType_k con) => mapopt SingleType_k (rewrite_con state con)
 		  | (Single_k con) => mapopt Single_k (rewrite_con state con)
 		  | (Record_k fieldseq) =>
 		   let
 		     val changed = ref false
-		     fun fold_one (((lbl,var),kind),state) = 
+		     fun fold_one (((lbl,var),kind),state) =
 		       let
 			 val kind  = recur_k changed state kind
 			 val (state,var) = bind_c changed (state,var,kind)
@@ -457,7 +455,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		     val (fieldseq,state) = Sequence.foldl_acc fold_one state fieldseq
 		   in if !changed then SOME(Record_k fieldseq) else NONE
 		   end
-		 
+
 		  | (Arrow_k (openness, args, result)) =>
 		   let
 		     val changed = ref false
@@ -466,19 +464,19 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		   in if !changed then SOME(Arrow_k (openness, args, result)) else NONE
 		   end)
 
-	  in		 
+	  in
 	    (case (kindhandler (state,kind)) of
 	       CHANGE_NORECURSE (state,k) => SOME k
 	     | CHANGE_RECURSE (state,k) => ensure (dokind (state,k),k)
 	     | NOCHANGE => dokind (state,kind)
 	     | NORECURSE => NONE)
 	  end
-	
-	and tformals_helper (flag : bool ref) (state : 'state) (vklist : (var * kind) list) : (var * kind) list * 'state = 
+
+	and tformals_helper (flag : bool ref) (state : 'state) (vklist : (var * kind) list) : (var * kind) list * 'state =
 	  let
-	    fun bind changed ((var,knd),state) = 
+	    fun bind changed ((var,knd),state) =
 	      let
-		val knd = 
+		val knd =
 		  (case rewrite_kind state knd
 		     of SOME knd => (changed := true;knd)
 		      | NONE => knd)
@@ -493,15 +491,15 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 
 	and fun_helper (state : 'state) (Function{effect, recursive,
 						  tFormals, eFormals, fFormals,
-						  body}) : function option = 
-	  let 
+						  body}) : function option =
+	  let
 	    val changed = ref false
 	    val (tFormals,state1) = tformals_helper changed state tFormals
 	    local
-	      fun vtrfolder changed ((v,trace),s) = 
-		let 
+	      fun vtrfolder changed ((v,trace),s) =
+		let
 		  val trace = recur_trace changed state trace
-		  val (s,v) = bind_e changed (s,v,c') 
+		  val (s,v) = bind_e changed (s,v,c')
 		in  ((v,trace,c'),s)
 		end
 	    in
@@ -519,62 +517,62 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	    else NONE
 	  end
 
-	and rewrite_bnd (state : 'state) (bnd : bnd) : (bnd list option * 'state) = 
-	  let 
-	    fun do_fix (recur,maker,vfset) = 
-	      let 
+	and rewrite_bnd (state : 'state) (bnd : bnd) : (bnd list option * 'state) =
+	  let
+	    fun do_fix (recur,maker,vfset) =
+	      let
 		val changed = ref false
 		fun folder ((v,f),s) =
-		  let 
+		  let
 		    val (s,v) = define_e changed (s,v,Let_e (Sequential,[maker vfset],Var_e v))
 		  in
 		    ((v,f),s)
 		  end
-		val (vfset,s) = 
+		val (vfset,s) =
 		  let val (temp,s) = Sequence.foldl_acc folder state vfset
 		  in if !changed then (temp,s) else (vfset,s)
 		  end
-		fun doer changed (v,f) = 
+		fun doer changed (v,f) =
 		  (v,case fun_helper s f
 		       of SOME f => (changed := true;f)
 			| NONE => f)
-		val vfset =  
-		  if recur then 
-		    let val flag = ref false 
+		val vfset =
+		  if recur then
+		    let val flag = ref false
 		      val temp = (Sequence.map (doer flag) vfset)
 		      val _ = changed := (!flag orelse !changed)
 		    in if !flag then temp else vfset
 		    end
 		  else vfset
-	      in  
+	      in
 		(if !changed then SOME [maker vfset] else NONE,s)
 	      end
-	  
-	    fun do_bnd recur (bnd,state) : bnd list option * 'state = 
-	      (case bnd 
-		 of Con_b(p,cb) => 
-		   let val (cb_opt,state) = 
-		     if recur 
+
+	    fun do_bnd recur (bnd,state) : bnd list option * 'state =
+	      (case bnd
+		 of Con_b(p,cb) =>
+		   let val (cb_opt,state) =
+		     if recur
 		       then rewrite_cbnd state cb
 		     else (NONE,state)
 		   in  (mapopt (fn cbnds => map (fn cb => Con_b(p,cb)) cbnds) cb_opt, state)
 		   end
-		  | Exp_b(v,trace,e) => 
+		  | Exp_b(v,trace,e) =>
 		   let
 		     val changed = ref false
 		     val e = if recur then recur_e changed state e else e
-		     val trace = recur_trace changed state trace 
+		     val trace = recur_trace changed state trace
 		     val (state,v) = define_e changed (state,v,e)
 		   in
 		     (if !changed then SOME [Exp_b(v,trace,e)] else NONE, state)
 		   end
 		  | Fixopen_b vfset => do_fix (recur,Fixopen_b,vfset)
 		  | Fixcode_b vfset => do_fix (recur,Fixcode_b,vfset)
-		  | Fixclosure_b (is_recur,vcset) => 
-		   let 
+		  | Fixclosure_b (is_recur,vcset) =>
+		   let
 		     val changed = ref false
 		     fun folder ((v,{tipe,cenv,venv,code}),s) =
-		       let 
+		       let
 			 val bnd = Fixclosure_b(is_recur,vcset)
 			 val (s,v) = define_e changed (s,v,Let_e (Sequential,[bnd],Var_e v))
 		       in
@@ -583,8 +581,8 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 
 		     val (vcset,s) = Sequence.foldl_acc folder state vcset
 
-		     fun doer flag s (arg as (v,{code,cenv,venv,tipe})) = 
-		       let 
+		     fun doer flag s (arg as (v,{code,cenv,venv,tipe})) =
+		       let
 			 val changed = ref false
 			 val code = (case (exphandler (state,Var_e code)) of
 				       NOCHANGE => code
@@ -601,10 +599,10 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 			   (v,{code=code,cenv=cenv,venv=venv,tipe=tipe})
 			 else arg
 		       end
-		     val vcset = 
-		       if recur 
-			 then let val flag = ref false 
-				  val temp = if is_recur then Sequence.map (doer flag s) vcset 
+		     val vcset =
+		       if recur
+			 then let val flag = ref false
+				  val temp = if is_recur then Sequence.map (doer flag s) vcset
 					     else Sequence.map (doer flag state) vcset
 				  val _ = changed := (!changed orelse !flag)
 			      in if !flag then temp else vcset
@@ -613,10 +611,10 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		   in  (if !changed then SOME [Fixclosure_b(is_recur,vcset)] else NONE, s)
 		   end)
 
-	    fun do_bnds recur (state,bs) = 
+	    fun do_bnds recur (state,bs) =
 	      let
 		val changed = ref false
-		fun do_bnd' (bnd,state) = 
+		fun do_bnd' (bnd,state) =
 		  case do_bnd recur (bnd,state)
 		    of (SOME bnds,state) => (changed := true;(bnds,state))
 		     | (NONE,state) => ([bnd],state)
@@ -625,9 +623,9 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		(if !changed then SOME (List.concat bnds) else NONE,state)
 	      end
 	  in
-	    (case (bndhandler (state,bnd)) 
+	    (case (bndhandler (state,bnd))
 	       of CHANGE_NORECURSE (state,bs) => do_bnds false (state,bs)
-		| CHANGE_RECURSE (state,bs) => 
+		| CHANGE_RECURSE (state,bs) =>
 		 let val (opt,state) = do_bnds true (state,bs)
 		 in (ensure (opt,bs),state)
 		 end
@@ -635,7 +633,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		| NORECURSE => (NONE,state))
 	  end
 
-	and switch_helper (state : 'state) (sw : switch) : exp option = 
+	and switch_helper (state : 'state) (sw : switch) : exp option =
 	  (case sw of
 	     Intsw_e {arg, size, arms, default, result_type} =>
 	       let
@@ -647,9 +645,9 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		 val default = Util.mapopt (recur_e changed state) default
 	       in
 		 if !changed then
-		   SOME (Switch_e 
+		   SOME (Switch_e
 			 (Intsw_e {arg = arg,
-				   size = size, 
+				   size = size,
 				   arms = arms,
 				   default = default,
 				   result_type = result_type}))
@@ -659,20 +657,20 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	       let
 		 val changed = ref false
 		 val arg = recur_e changed state arg
-		 val sumtype = recur_c changed state sumtype 
+		 val sumtype = recur_c changed state sumtype
 		 val result_type = recur_c changed state result_type
 		 val bnd_ref = ref bound
-		 fun recur changed state (t,tr,e) = 
-		   let 
+		 fun recur changed state (t,tr,e) =
+		   let
 		     val (state',bnd_opt) = sum_var_bind (state,!bnd_ref,(sumtype,t))
-		     val _ = (case bnd_opt 
+		     val _ = (case bnd_opt
 				of SOME bnd => (changed := true;bnd_ref := bnd)
 				 | NONE     => ())
 		   in (t,recur_trace changed state tr,recur_e changed state' e)
 		   end
 		 val arms = map_f recur changed state arms
 		 val default = Util.mapopt (recur_e changed state) default
-	       in  
+	       in
 		 if !changed then
 		   SOME (Switch_e
 			 (Sumsw_e {arg = arg,
@@ -689,19 +687,19 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		 val arg = recur_e changed state arg
 		 val result_type = recur_c changed state result_type
 		 val bnd_ref = ref bound
-		 fun recur changed state (t,tr,e) = 
-		   let 
+		 fun recur changed state (t,tr,e) =
+		   let
 		     val t = recur_e changed state t
 		     val (state',bnd_opt) = exn_var_bind (state,!bnd_ref,t)
-		     val _ = (case bnd_opt 
+		     val _ = (case bnd_opt
 				of SOME bnd => (changed := true;bnd_ref := bnd)
 				 | NONE     => ())
 		   in (t,recur_trace changed state tr,recur_e changed state' e)
 		   end
 		 val arms = map_f recur changed state arms
 		 val default = Util.mapopt (recur_e changed state) default
-	       in  
-		 if !changed then 
+	       in
+		 if !changed then
 		   SOME (Switch_e
 			 (Exncase_e {arg = arg,
 				     bound = bound,
@@ -710,11 +708,11 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				     result_type = result_type}))
 		 else NONE
 	       end
-	   | Typecase_e {arg,arms,default, result_type} => 		     
-	       let 
+	   | Typecase_e {arg,arms,default, result_type} =>
+	       let
 		 val changed = ref false
-		 fun doarm(pc,vklist,body) =   
-		   let 
+		 fun doarm(pc,vklist,body) =
+		   let
 		     val (vklist,state) = tformals_helper changed state vklist
 		     val body = recur_e changed state body
 		   in  (pc, vklist, body)
@@ -723,7 +721,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		 val arms = map doarm arms
 		 val default = recur_e changed state default
 		 val result_type = recur_c changed state result_type
-	       in  
+	       in
 		 if !changed then
 		   SOME (Switch_e
 			 (Typecase_e{arg = arg,
@@ -732,16 +730,16 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				     result_type = result_type}))
 		 else NONE
 	       end
-	   | Ifthenelse_e {arg,thenArm,elseArm,result_type} => 
+	   | Ifthenelse_e {arg,thenArm,elseArm,result_type} =>
 	       let
 		 val changed = ref false
-		 fun do_cc cc = 
+		 fun do_cc cc =
 		   (case cc
 		      of Exp_cc exp       => Exp_cc (recur_e changed state exp)
 		       | And_cc (cc1,cc2) => And_cc (do_cc cc1,do_cc cc2)
 		       | Or_cc (cc1,cc2)  => Or_cc  (do_cc cc1,do_cc cc2)
 		       | Not_cc cc        => Not_cc (do_cc cc))
-	   
+
 		 val arg     = do_cc arg
 		 val thenArm = recur_e changed state thenArm
 		 val elseArm = recur_e changed state elseArm
@@ -758,15 +756,15 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	     )
 
 	and rewrite_exp (state : 'state) (exp : exp) : exp option =
-	  let 
-	    fun doexp (state,e) = 
+	  let
+	    fun doexp (state,e) =
 	      let
 		val map_e = map_f recur_e
 		val map_c = map_f recur_c
 	      in
 		(case e of
 		   (Var_e _) => NONE
-		 | (Const_e v) => 	
+		 | (Const_e v) =>
 		     (case v of
 			(Prim.int _) => NONE
 		      | (Prim.uint _) => NONE
@@ -791,19 +789,19 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 			      SOME (Const_e (Prim.vector(c,array)))
 			    else NONE
 			  end
-		      | Prim.refcell (r as (ref e)) => 
+		      | Prim.refcell (r as (ref e)) =>
 			  (case rewrite_exp state e
 			     of SOME e => (r := e; SOME (Const_e v))
 			      | NONE => NONE)
-		      | Prim.tag (t,c) => 
+		      | Prim.tag (t,c) =>
 			 (case rewrite_con state c
 			    of SOME c => SOME (Const_e (Prim.tag(t,c)))
 			     | NONE => NONE))
-		 | (Let_e (sort,bnds,body)) => 
-		    let 
+		 | (Let_e (sort,bnds,body)) =>
+		    let
 		      val changed = ref false
-		      fun folder (bnd,s) = 
-			let 
+		      fun folder (bnd,s) =
+			let
 			  val (bnds,s) = (case rewrite_bnd s bnd
 					    of (SOME bnds,s) => (changed := true; (bnds,s))
 					     | (NONE,s) => ([bnd],s))
@@ -814,7 +812,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		      val body = recur_e changed state body
 		    in if !changed then SOME (Let_e(sort,bnds,body)) else NONE
 		    end
-		 | (Prim_e (ap,trlist, clist,elist)) => 
+		 | (Prim_e (ap,trlist, clist,elist)) =>
 		    let
 		      val changed = ref false
 		      val trlist = map_f recur_trace changed state trlist
@@ -826,14 +824,14 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		      else NONE
 		    end
 		 | (Switch_e switch) => switch_helper state switch
-		 | (App_e (openness,func,clist,elist,eflist)) => 
+		 | (App_e (openness,func,clist,elist,eflist)) =>
 		    let
 		      val changed = ref false
 		      val func = recur_e changed state func
 		      val clist = map_c changed state clist
 		      val elist = map_e changed state elist
 		      val eflist = map_e changed state eflist
-		    in 
+		    in
 		      if !changed
 			then SOME (App_e(openness,func,clist,elist,eflist))
 		      else NONE
@@ -848,7 +846,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 			SOME (ExternApp_e (exp,args))
 		      else NONE
 		    end
-		 | Raise_e (e,c) => 
+		 | Raise_e (e,c) =>
 		    let
 		      val changed = ref false
 		      val e = recur_e changed state e
@@ -856,20 +854,20 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		    in if !changed then SOME (Raise_e(e,c)) else NONE
 		    end
 		 | Handle_e {body,bound,handler,result_type} =>
-		    let 
+		    let
 		      val changed = ref false
 		      val body = recur_e changed state body
 		      val result_type = recur_c changed state result_type
-		      val (state,bound) = 
+		      val (state,bound) =
 			  bind_e changed (state,bound,Prim_c(Exn_c,[]))
 		      val handler = recur_e changed state handler
-		    in if !changed then 
+		    in if !changed then
 			SOME (Handle_e{body = body, bound = bound,
-				       handler = handler, 
+				       handler = handler,
 				       result_type = result_type})
 		       else NONE
 		    end
-		 | Coerce_e (coercion,cargs,e) => 
+		 | Coerce_e (coercion,cargs,e) =>
 		    let
 		      val changed = ref false
 		      val coercion = recur_e changed state coercion
@@ -885,7 +883,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	    and coercion_helper whichc (vars,from,to) =
 	      let
 		val changed = ref false
-		fun folder (v,s) = 
+		fun folder (v,s) =
 		  let val (s,v) = bind_c changed (s,v,Type_k)
 		  in (v,s)
 		  end
@@ -897,7 +895,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		  SOME (whichc (vars,from,to))
 		else NONE
 	      end
-	    
+
 	  in
       	    (case (exphandler (state,exp))
 	       of CHANGE_NORECURSE (state,e) => SOME e
@@ -905,7 +903,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 		| NOCHANGE => doexp (state,exp)
 		| NORECURSE => NONE)
 	  end
-	and rewrite_trace (state : 'state) (trace : niltrace) : niltrace option = 
+	and rewrite_trace (state : 'state) (trace : niltrace) : niltrace option =
 	  let
 
 	    fun loop (Var_c v) labs = TraceKnown (TraceInfo.Compute (v,labs))
@@ -914,13 +912,13 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 
 	    fun do_trace (state,trace) =
 	      (case trace of
-		 TraceCompute var => 
+		 TraceCompute var =>
 		   let val changed = ref false
 		       val trace = loop (recur_c changed state (Var_c var)) []
 		   in
 		     if !changed then SOME trace else NONE
 		   end
-	       | TraceKnown (TraceInfo.Compute (var,labels)) => 
+	       | TraceKnown (TraceInfo.Compute (var,labels)) =>
 		   let val changed = ref false
 		       val trace = loop (recur_c changed state (Var_c var)) labels
 		   in
@@ -938,14 +936,14 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	fun import_helper flag (import as (ImportValue (label,var,trace,con)),state) =
 	  let
 	    val changed = ref false
-	    val trace = recur_trace changed state trace 
+	    val trace = recur_trace changed state trace
 	    val con = recur_c changed state con
 	    val (state,var) = bind_e changed (state,var,con)
 	    val state = labelled_var (state,label,var)
 	    val _ = flag := (!changed orelse !flag)
 	  in (if !changed then ImportValue (label,var,trace,con) else import,state)
 	  end
-	  | import_helper flag (import as (ImportType (label,var,kind)),state) = 
+	  | import_helper flag (import as (ImportType (label,var,kind)),state) =
 	  let
 	    val changed = ref false
 	    val kind = recur_k changed state kind
@@ -954,13 +952,13 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	    val _ = flag := (!changed orelse !flag)
 	  in (if !changed then ImportType (label,var,kind) else import,state)
 	  end
-	
-	fun export_helper flag state (export as (ExportValue (label,var))) = 
+
+	fun export_helper flag state (export as (ExportValue (label,var))) =
 	  (case rewrite_exp state (Var_e var)
 		 of SOME (Var_e var) => (flag := true;ExportValue (label,var))
 		  | NONE => export
 		  | _ => error "Export value rewritten to non variable! Don't know what to do!")
-	  | export_helper flag state (export as (ExportType (label,var))) = 
+	  | export_helper flag state (export as (ExportType (label,var))) =
 	   (case rewrite_con state (Var_c var)
 	      of SOME (Var_c var) => (flag := true;ExportType (label,var))
 	       | NONE => export
@@ -968,12 +966,12 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 
       fun rewrite_mod (state : 'state) (module : module) : module =
 	let
-	  val changed = ref false 
+	  val changed = ref false
 	  val (MODULE {bnds,imports,exports}) = module
 	  val (imports,state) = foldl_acc_f import_helper changed state imports
 	  local
 	    val flag = ref false
-	    fun folder (bnd,s) = 
+	    fun folder (bnd,s) =
 	      (case rewrite_bnd s bnd
 		 of (SOME bndslist,state) => (flag := true;(bndslist,state))
 		  | (NONE,state) => ([bnd],state))
@@ -987,24 +985,24 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 	in if !changed then MODULE {bnds=bnds,imports=imports,exports=exports} else module
 	end
 
-      fun rewrite_item rewriter state item = 
+      fun rewrite_item rewriter state item =
 	(case rewriter state item
 	   of SOME item => item
 	    | NONE => item)
-       
+
       val rewrite_exp = rewrite_item rewrite_exp
       val rewrite_con = rewrite_item rewrite_con
       val rewrite_kind = rewrite_item rewrite_kind
       val rewrite_trace = rewrite_item rewrite_trace
 
-      val rewrite_bnd = 
-	(fn state => fn bnd => 
+      val rewrite_bnd =
+	(fn state => fn bnd =>
 	 (case rewrite_bnd state bnd
 	    of (SOME bnds,state) => (bnds,state)
 	     | (NONE,state) => ([bnd],state)))
 
-      val rewrite_cbnd = 
-	(fn state => fn cbnd => 
+      val rewrite_cbnd =
+	(fn state => fn cbnd =>
 	 (case rewrite_cbnd state cbnd
 	    of (SOME cbnds,state) => (cbnds,state)
 	     | (NONE,state) => ([cbnd],state)))
@@ -1028,7 +1026,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 
       fun null_label_binder (state,_,_) = state
 
-      val default_handler =  
+      val default_handler =
 	HANDLER {
 		 bndhandler     = null_handler,
 		 cbndhandler    = null_handler,
@@ -1049,7 +1047,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				    conhandler,exphandler,kindhandler,tracehandler,
 				    con_var_bind,exp_var_bind,
 				    con_var_define,exp_var_define,
-				    sum_var_bind,exn_var_bind,labelled_var}) new_kindhandler = 
+				    sum_var_bind,exn_var_bind,labelled_var}) new_kindhandler =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1070,7 +1068,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_conhandler = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_conhandler =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1091,7 +1089,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_exphandler = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_exphandler =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1112,7 +1110,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_exp_var_bind = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_exp_var_bind =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1133,7 +1131,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_exp_var_define = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_exp_var_define =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1154,7 +1152,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_con_var_bind = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_con_var_bind =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1175,7 +1173,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				    conhandler,exphandler,kindhandler,tracehandler,
 				    con_var_bind,exp_var_bind,
 				    con_var_define,exp_var_define,
-				    sum_var_bind,exn_var_bind,labelled_var}) new_con_var_define = 
+				    sum_var_bind,exn_var_bind,labelled_var}) new_con_var_define =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1196,7 +1194,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_sum_var_bind = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_sum_var_bind =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1217,7 +1215,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				   conhandler,exphandler,kindhandler,tracehandler,
 				   con_var_bind,exp_var_bind,
 				   con_var_define,exp_var_define,
-				   sum_var_bind,exn_var_bind,labelled_var}) new_exn_var_bind = 
+				   sum_var_bind,exn_var_bind,labelled_var}) new_exn_var_bind =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,
@@ -1238,7 +1236,7 @@ structure TypedNilRewrite :> TYPEDNILREWRITE =
 				     conhandler,exphandler,kindhandler,tracehandler,
 				     con_var_bind,exp_var_bind,
 				     con_var_define,exp_var_define,sum_var_bind,exn_var_bind,
-				     labelled_var}) new_label_binder = 
+				     labelled_var}) new_label_binder =
 	HANDLER {
 		 bndhandler     = bndhandler,
 		 cbndhandler    = cbndhandler,

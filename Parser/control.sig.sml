@@ -1,5 +1,3 @@
-(*$import *)
-
 (* control.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -14,7 +12,7 @@ signature PRINTCONTROL =
    val signatures : int ref
    val out : {say : string -> unit, flush : unit -> unit} ref
    val linewidth : int ref
-   val say : string -> unit 
+   val say : string -> unit
    val flush: unit -> unit
  end
 
@@ -94,7 +92,7 @@ sig
   val rangeopt : bool ref
   val icount : bool ref
   val mtderiv : bool ref
-  val debugRep : bool ref  
+  val debugRep : bool ref
   val checklty1 : bool ref
   val checklty2 : bool ref
   val checklty3 : bool ref
@@ -118,7 +116,7 @@ sig
   val ecdebugging : bool ref
 end
 
-signature CONTROL = 
+signature CONTROL =
    sig structure MC : MCCONTROL
        structure CG : CGCONTROL
        structure Print : PRINTCONTROL
@@ -127,7 +125,7 @@ signature CONTROL =
        val secondaryPrompt : string ref
        val internals : bool ref
        val weakUnderscore : bool ref
-       val copyToplevelOpen : bool ref  
+       val copyToplevelOpen : bool ref
            (* if true, top level open decls implemented by rebinding
 	      dynamic components *)
        val interp : bool ref

@@ -1,14 +1,12 @@
-(*$import Nil *)
-
-(*The signature of the true implementation of contexts.  In order to 
+(*The signature of the true implementation of contexts.  In order to
  * eliminate cyclic dependencies, the main implementation is paramaterized
  * over a few functions that are filled in later.  Most modules will use the
  * filled in version: structure NilContext :> NILCONTEXT
  *)
 
-signature NILCONTEXTPRE = 
+signature NILCONTEXTPRE =
   sig
-      
+
     type kind = Nil.kind
     type con = Nil.con
     type exp = Nil.exp
@@ -23,7 +21,7 @@ signature NILCONTEXTPRE =
     (*Insert a type into a context: the constructor is not necessarily normalized *)
     val insert_con : context * var * con -> context
 
-    (*Given a function to synthesize the type, 
+    (*Given a function to synthesize the type,
      * take a context and an expression and insert the corresponding type
      * (delayed and memoized)
      *)
@@ -41,17 +39,17 @@ signature NILCONTEXTPRE =
     (* insert_kind (context,var,kind) => context'
       * - inserts the previously unbound variable "var" into the context
       * at kind "kind". If var is already bound, raises an exception.
-      * Use bound_con and bound_exp to query whether or not a variable 
+      * Use bound_con and bound_exp to query whether or not a variable
       * is already bound.
       *)
     val insert_kind          : context * var * kind       -> context
     val insert_kind_equation : context * var * con * kind -> context
-    val insert_equation      : context * var * con        -> context 
+    val insert_equation      : context * var * con        -> context
     val insert_kind_list     : context* (var * kind) list -> context
 
     (*As above, except that the kind is guaranteed not to contain
      * any undecorated Singletons.  This gives substantial speedups,
-     * but must be used with care!  
+     * but must be used with care!
      *)
     val insert_stdkind          : context * var * kind       -> context
     val insert_stdkind_equation : context * var * con * kind -> context
@@ -61,7 +59,7 @@ signature NILCONTEXTPRE =
     val bound_con : context * var -> bool
     val bound_exp : context * var -> bool
 
-      
+
     val find_kind          : context * var -> kind
     val find_kind_equation : context * con -> con option
 
@@ -78,7 +76,7 @@ signature NILCONTEXTPRE =
      *)
     val kind_standardize   : context * kind -> kind
 
-    (* Return the most precise standard kind for the constructor.  
+    (* Return the most precise standard kind for the constructor.
      * This kind will also have no dependent record kinds.
      *)
     val kind_of            : context * con -> kind
@@ -89,22 +87,22 @@ signature NILCONTEXTPRE =
     val insert_label : context * label * var -> context
 
     val find_labelled_var : context * label -> var
-	
+
     (* Print functions*)
     val print_context : context -> unit
     val print_kinds : context -> unit
     val print_cons : context -> unit
     val print_labelled_vars : context -> unit
 
-    (* is_well_formed (kind_valid,con_valid,subkind) D 
+    (* is_well_formed (kind_valid,con_valid,subkind) D
      * Check whether or not a given context is well-formed.
      *)
-    val is_well_formed : 
-      (context * Nil.kind -> Nil.kind) 
+    val is_well_formed :
+      (context * Nil.kind -> Nil.kind)
       * (context * Nil.con -> Nil.kind)
       * (context * Nil.kind * Nil.kind -> bool) -> context -> bool
 
-    (*These functions take an item or a list of items and 
+    (*These functions take an item or a list of items and
      * return the minimal context necessary to cover all
      * the free variables in the item.  This can make error
      * printouts vastly shorter.
@@ -116,4 +114,4 @@ signature NILCONTEXTPRE =
     val exps_error_context  : context * exp list  -> context
     val cons_error_context  : context * con list  -> context
     val kinds_error_context : context * kind list -> context
-  end 
+  end

@@ -1,4 +1,3 @@
-(*$import String Int TABLE *)
 (* Red/Black Trees *)
 (* Author: Frank Pfenning *)
 

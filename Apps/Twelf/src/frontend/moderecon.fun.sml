@@ -1,4 +1,3 @@
-(*$import MODE_RECON GLOBAL MODESYN WHNF PATHS MODEPRINT MODEDEC TP_RECON NamesStructs *)
 (* Reconstructing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

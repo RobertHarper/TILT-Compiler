@@ -1,5 +1,3 @@
-(*$import BinIOFn PosixBinPrimIO BinPrimIO TextPrimIO *)
-
 (* bin-io.sml
  *
  * COPYRIGHT (c) 1996 AT&T Research.

@@ -1,4 +1,3 @@
-(*$import TP_RECON PATHS THMSYN *)
 (* External Syntax for meta theorems *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import UREF *)
 (* uref.sml
  *
  * UNIONFIND DATA STRUCTURE WITH PATH COMPRESSION AND RANKED UNION
@@ -27,7 +26,7 @@ structure URef : UREF =
     fun uRef x = ref (ECR(x, 0))
 
     fun !! p = let val ECR(x, _) = !(find p) in x end
-      
+
     fun equal (p, p') = (find p = find p')
 
     fun update (p, x) = let val (p' as ref(ECR(_, r))) = find p
@@ -66,12 +65,12 @@ structure URef : UREF =
 	  val p' = find p
           val q' = find q
           in
-	    if p' = q' 
+	    if p' = q'
               then ()
               else let
 		val ECR(pc, pr) = !p' and ECR(qc, qr) = !q'
 		in
-		  if pr = qr 
+		  if pr = qr
 		    then (
 		      q' := ECR(qc, qr+1);
 		      p' := PTR q')

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude SPLAY_TREE *)
 (* splaytree.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -7,10 +6,10 @@
  *
  *)
 
-structure SplayTree : SPLAY_TREE = 
+structure SplayTree : SPLAY_TREE =
   struct
 
-    datatype 'a splay = 
+    datatype 'a splay =
       SplayObj of {
         value : 'a,
         right : 'a splay,
@@ -33,9 +32,9 @@ structure SplayTree : SPLAY_TREE =
                         EQUAL => (Eq value',left',
                                     SplayObj{value=value,left=right',right=right})
                       | GREATER =>
-                          (case left' of 
+                          (case left' of
                             SplayNil => (Gt value',left',SplayObj{value=value,left=right',right=right})
-                          | _ => 
+                          | _ =>
                             let val (V,L,R) = adj left'
                                 val rchild = SplayObj{value=value,left=right',right=right}
                             in
@@ -43,7 +42,7 @@ structure SplayTree : SPLAY_TREE =
                             end
                           ) (* end case *)
                       | _ =>
-                          (case right' of 
+                          (case right' of
                             SplayNil => (Lt value',left',SplayObj{value=value,left=right',right=right})
                           | _ =>
                             let val (V,L,R) = adj right'
@@ -96,7 +95,7 @@ structure SplayTree : SPLAY_TREE =
 
     fun lrotate SplayNil = SplayNil
       | lrotate (arg as SplayObj{value,left,right=SplayNil}) = arg
-      | lrotate (SplayObj{value,left,right=SplayObj{value=v,left=l,right=r}}) = 
+      | lrotate (SplayObj{value,left,right=SplayObj{value=v,left=l,right=r}}) =
           lrotate (SplayObj{value=v,left=SplayObj{value=value,left=left,right=l},right=r})
 
     fun join (SplayNil,SplayNil) = SplayNil

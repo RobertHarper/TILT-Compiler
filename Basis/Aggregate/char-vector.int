@@ -1,3 +1,2 @@
-(*$import Prelude TiltPrim MONO_VECTOR *)
 structure CharVector : MONO_VECTOR where type elem = char
 				     and type vector = char vector 

@@ -1,4 +1,3 @@
-(*$import *)
 (* Global parameters *)
 (* Author: Frank Pfenning *)
 

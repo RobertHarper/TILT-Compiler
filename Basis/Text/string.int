@@ -1,5 +1,3 @@
-(*$import STRING Prelude *)
-
 structure String : STRING where type string = string
                             and type Char.char = char
                             and type Char.string = string

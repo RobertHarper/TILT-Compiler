@@ -1,4 +1,3 @@
-(*$import INTSYN COMPSYN *)
 (* Abstract Machine *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

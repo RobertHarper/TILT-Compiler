@@ -1,4 +1,3 @@
-(*$import TERMINATE GLOBAL INTSYN WHNF CONV UNIFY TRAIL NAMES INDEX SUBORDINATE FORMATTER PRINT TWELF_ORDER PATHS ORIGINS *)
 (* Termination checker *)
 (* Author: Carsten Schuermann *)
 (* See [Rohwedder,Pfenning ESOP'96] *)

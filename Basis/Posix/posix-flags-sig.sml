@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude SysWord *)
 (* posix-flags.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Word8 Int Position IO BIN_IO OS_PRIM_IO Word8Array Word8Vector BinPrimIO Option CleanIO *)
 (* bin-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -12,7 +11,9 @@ functor BinIOFn (structure OSPrimIO : OS_PRIM_IO
 		     where PrimIO = BinPrimIO)
     :> BIN_IO where type StreamIO.pos = BinPrimIO.pos
                 and type StreamIO.reader = BinPrimIO.reader
-		and type StreamIO.writer = BinPrimIO.writer =
+		and type StreamIO.writer = BinPrimIO.writer
+		and type StreamIO.elem = char
+		and type StreamIO.vector = char vector =
 struct
 
     structure PIO = OSPrimIO.PrimIO
@@ -322,7 +323,7 @@ struct
 (** Suggestion: When building a stream with supplied initial data,
  ** nothing can be said about the positions inside that initial
  ** data (who knows where that data even came from!).
- **) 
+ **)
 		      | (SOME v) => IBUF{
 			    basePos = NONE, data=v,
 			    info=info, more=more}

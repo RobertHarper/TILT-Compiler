@@ -1,14 +1,12 @@
-(*$import Util Listops Int List Rtl Rtltags TortlBase TORTLRECORD Stats *)
-
 structure TortlRecord :> TORTL_RECORD =
 struct
 
    (* Module-level declarations *)
 
-  
+
     open Rtl
     open TortlBase
-	
+
     fun error s = Util.error "tortl-record.sml" s
 
     val do_reject_nonValue = Stats.tt("Reject_NonValue")
@@ -40,11 +38,11 @@ struct
 	else if len > maxRtlRecord then VALUE (INT 0w0) (* Some other thing *)
 	     else tag_to_term (Rtltags.recordtag reps)
       end
-	
-  fun make_record_core_with_tag (const, state, tagword : term, terms, labopt) = 
-    let 
+
+  fun make_record_core_with_tag (const, state, tagword : term, terms, labopt) =
+    let
 	val numTerms = length terms
-	val _ = if (numTerms > maxRtlRecord) 
+	val _ = if (numTerms > maxRtlRecord)
 		    then error "max_record_core given too maxn terms" else ()
 	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length terms)) ^ "-record"))
 
@@ -56,7 +54,7 @@ struct
 	val words_alloced = numTerms + 1 (* 1 for tag word. *)
 
 	(* shadow heapptr with thunk to prevent accidental use *)
-	val (heapptr,state) = 
+	val (heapptr,state) =
 	    if const
 		then let fun f _ = error "should not use heapptr here"
 		     in (add_data(COMMENT "static record tag");
@@ -68,17 +66,17 @@ struct
 
 	(* use if statically allocated *)
 	val recordLabel = (case labopt of
-			       NONE => fresh_data_label "record" 
+			       NONE => fresh_data_label "record"
 			     | SOME l => l)
 	val staticComponents = (Listops.andfold (fn VALUE _ => true
 						 | _ => false) (tagword::terms))
 
 	(* The tag word comes first. *)
-	val _ = 	    
-	  if const then 
+	val _ =
+	  if const then
 	    if staticComponents then
 	      (* Everything in the record is static; we should just know the tag word. *)
-	      case tagword of 
+	      case tagword of
 		VALUE (INT i) => add_data (INT32 i)
 	      | _ => error "making constant record with dynamic tag" (* This can't happen. joev *)
 	    else
@@ -93,7 +91,7 @@ struct
 	    in
 	      add_instr(STORE32I(REA(heapptr(),0),r))
 	    end
-	     
+
         (* Two separate loops, one for the constant case, one for the heap. *)
 	(* Note: in both cases, offset starts from the point of allocation not from start of the object *)
 	local
@@ -147,17 +145,17 @@ struct
 
       val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length terms)) ^ " record"));
 
-    in  
+    in
       (result, state)
     end
 
 
-  fun make_record_core (const, state, reps, terms, labopt) = 
+  fun make_record_core (const, state, reps, terms, labopt) =
     let val tagword = record_tag_from_reps reps
     in make_record_core_with_tag (const,state,tagword,terms,labopt)
     end
 
-  fun propagate_void l = 
+  fun propagate_void l =
     (case l
        of [] => NONE
 	| ((VALUE (VOID _))::_) => SOME (VALUE(VOID Rtl.TRACE))
@@ -183,17 +181,17 @@ struct
 
   fun make_record_help_with_tag (const,state,tagword,[],_) = (empty_record, state)
     | make_record_help_with_tag (const,state,tagword,terms,labopt) =
-    if length terms < maxRtlRecord then 
+    if length terms < maxRtlRecord then
       case propagate_void terms
 	of SOME v => (v,state)
 	 | NONE => make_record_core_with_tag (const,state,tagword,terms,labopt)
-    else (* The precomputed tag is worthless; just do it the hard way. *) 
+    else (* The precomputed tag is worthless; just do it the hard way. *)
       make_record_help (const,state,map term2rep terms,terms,labopt)
 
-  fun is_value_nonCompute terms = 
+  fun is_value_nonCompute terms =
       let val reps = map term2rep terms
 	  fun loop (vFlag,ncFlag) [] = (vFlag,ncFlag,reps)
-	    | loop (vFlag,ncFlag) ((term,rep)::rest) = 
+	    | loop (vFlag,ncFlag) ((term,rep)::rest) =
 	      let val vFlag = vFlag andalso (case term of
 						 VALUE _ => true
 					       | _ => false)
@@ -214,15 +212,15 @@ struct
     end
 
   (* These are the interface functions: determines static allocation *)
-  fun make_record (state, terms) = 
+  fun make_record (state, terms) =
       let val (allValues, allNonComputes, reps) = is_value_nonCompute terms
 	  val const = allNonComputes andalso (if (!do_reject_nonValue)
 						  then allValues
 					      else (istoplevel() orelse allValues))
       in  make_record_help(const,state,reps,terms,NONE)
       end
-  
-  fun make_record_const (state, terms, labopt) = 
+
+  fun make_record_const (state, terms, labopt) =
       let val (allValues, allNonComputes, reps) = is_value_nonCompute terms
 	  val const = allNonComputes andalso (allValues orelse not (!do_reject_nonValue))
 	  val res as (lv,_) = make_record_help(const,state, reps, terms, labopt)
@@ -238,23 +236,23 @@ struct
 		     | _ => error "make_record_const failed")
       in  res
       end
-  
+
   fun make_record_mutable_with_tag (state,tagword,terms) =
     make_record_help_with_tag(false,state,tagword,terms,NONE)
 
-  fun make_record_mutable (state, terms) = 
+  fun make_record_mutable (state, terms) =
       let val reps = map term2rep terms
       in  make_record_help(false,state,reps,terms,NONE)
       end
 
-  (* Record_insert takes 4 arguments: (1) a totrl state, (2) a record r : TRACE, (3) a type rt where r : rt, 
+  (* Record_insert takes 4 arguments: (1) a totrl state, (2) a record r : TRACE, (3) a type rt where r : rt,
                                       (4) a value v : NOTRACE_INT
         Reutrn a record r' whose first field is v and whose remaining fields are those of r.
 	Note that (length of r < maxRtlRecord) and (length of r' < maxRecord).
 	Note that r may be the empty record, requiring special treatment.
   *)
 
-  fun record_insert (state,record : regi, recType : regi, field : regi) : state * regi = 
+  fun record_insert (state,record : regi, recType : regi, field : regi) : state * regi =
       let
 	  val state = needalloc(state,IMM (1+Rtltags.maxRecordLength)) (* one more for tag word *)
 
@@ -290,7 +288,7 @@ struct
 	  (* Now initialize the remaining fields *)
 	  val copyLoop = fresh_code_label "copyLoop"
 	  val afterLoop = fresh_code_label "afterLoop"
-	  val current = alloc_regi NOTRACE_INT                       (* When entering the loop, current contains 
+	  val current = alloc_regi NOTRACE_INT                       (* When entering the loop, current contains
 								        one more than the index of the field in r
 									we are copying *)
 	  val _ = add_instr(MV(len, current))
@@ -300,7 +298,7 @@ struct
 	  val rLoc = alloc_regi LOCATIVE
 	  val rTypeLoc = alloc_regi LOCATIVE
 	  val destLoc = alloc_regi TRACE
-	  val curFieldType = alloc_regi TRACE  
+	  val curFieldType = alloc_regi TRACE
 	  val curField = alloc_regi (COMPUTE (Projvar_p (curFieldType, [])))
 	  val _ = add_instr(S4ADD(current, REG record, rLoc))
 	  val _ = add_instr(S4ADD(current, REG recType, rTypeLoc))

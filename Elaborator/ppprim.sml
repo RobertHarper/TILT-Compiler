@@ -1,4 +1,3 @@
-(*$import Name TilWord64 Array TextIO PPPRIM PRIM Util Formatter Prim Stats Listops *)
 (* Primitives pretty-printer. *)
 structure Ppprim :> PPPRIM =
   struct
@@ -24,7 +23,7 @@ structure Ppprim :> PPPRIM =
       | pp_tt real_tt = String "REAL_TT"
       | pp_tt both_tt = String "BOTH_TT"
 
-    fun pp_ilprim ilprim = 
+    fun pp_ilprim ilprim =
 	  (case ilprim of
 	    eq_uint is => Hbox[String "EQ_UINT", pp_is is]
 	  | neq_uint is => Hbox[String "NEQ_UINT", pp_is is]
@@ -38,7 +37,7 @@ structure Ppprim :> PPPRIM =
 	  | eq_ref => String "EQ_REF"
 	  | setref => String "SETREF")
 
-    fun pp_aggregate str t = 
+    fun pp_aggregate str t =
 	let val str2 = (case t of
 			    (OtherArray true) => "_knownArray"
 			  | (OtherArray false) => "_unknownArray"
@@ -51,7 +50,7 @@ structure Ppprim :> PPPRIM =
 	in  String (str ^ str2)
 	end
 
-    fun pp_prim prim = 
+    fun pp_prim prim =
 	  (case prim of
 (*	   | NIL  {instance} => String "nil" *)
 	     soft_vtrap tt => String "SOFT_VTRAP"
@@ -177,7 +176,7 @@ structure Ppprim :> PPPRIM =
 	   | SUB2    {instance} => String "sub2" *)
 		 )
 (*
-	fun pp_prim4 prim = 
+	fun pp_prim4 prim =
 	  (case prim of
 	     UPDATE2 {instance} => String "update2")
 *)
@@ -185,28 +184,28 @@ structure Ppprim :> PPPRIM =
 
     fun pp_tag n = String(Name.tag2string n)
     fun pp_value exp2value pp_exp pp_con scon =
-	let 
+	let
 	    fun doint (intsize,w) = TilWord64.toDecimalString w
 	in case scon of
 	    int (is,i) => String (doint (is,i))
 	  | uint (is,i) => String (doint (is,i))
 	  | float (_,s) => String s
 	  | array (c,a) => String "ArrayValue"
-	  | vector (_,a) => 
+	  | vector (_,a) =>
 		if ((Array.length a) > 0)
 		    then (case (exp2value(Array.sub(a,0))) of
-			      SOME(uint(W8,_)) => 
-				  let fun folder(e,acc) = 
+			      SOME(uint(W8,_)) =>
+				  let fun folder(e,acc) =
 				      (case (exp2value e) of
-					   SOME(uint(W8,c)) => 
+					   SOME(uint(W8,c)) =>
 					       let val c = chr(TilWord64.toInt c)
 					       in  if (c = #"\n") then (#"\\")::(#"n")::acc else c::acc
 					       end
 					 | _ => error "bad vector value: corrupt string")
 				  in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
 				  end
-			       | _ => 
-				  if !elide_value then 
+			       | _ =>
+				  if !elide_value then
 				    String "VectorValue"
 				  else
 				    let
@@ -218,15 +217,15 @@ structure Ppprim :> PPPRIM =
 				    end)
 		else String "EmptyVectorValue"
 	  | refcell r => String "RefCellValue"
-	  | tag (name,c) => HOVbox[String "tag(",pp_tag name, String ", ", 
+	  | tag (name,c) => HOVbox[String "tag(",pp_tag name, String ", ",
 				   pp_con c, String ")"]
 	end
 
-    fun wrapper pp out obj = 
-      let 
+    fun wrapper pp out obj =
+      let
 	val fmtstream = open_fmt out
 	val fmt = pp obj
-      in (output_fmt (fmtstream,fmt); 
+      in (output_fmt (fmtstream,fmt);
 	  close_fmt fmtstream;
 	  fmt)
       end
@@ -240,7 +239,7 @@ structure Ppprim :> PPPRIM =
     fun pp_ilprim obj = (wrapper pp_ilprim' TextIO.stdOut obj; ())
     fun pp_is obj = (wrapper pp_is' TextIO.stdOut obj; ())
     fun pp_fs obj = (wrapper pp_fs' TextIO.stdOut obj; ())
-    fun pp_value exp2value pp_exp pp_con obj = (wrapper (pp_value' exp2value pp_exp pp_con) 
+    fun pp_value exp2value pp_exp pp_con obj = (wrapper (pp_value' exp2value pp_exp pp_con)
 						TextIO.stdOut obj; ())
 
   end

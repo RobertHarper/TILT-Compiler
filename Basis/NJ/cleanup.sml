@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude List CLEAN_UP *)
 (* cleanup.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

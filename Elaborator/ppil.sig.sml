@@ -1,4 +1,3 @@
-(*$import Name Il Formatter *)
 (* Pretty-printing routines for the internal language. *)
 signature PPIL =
   sig
@@ -19,19 +18,24 @@ signature PPIL =
     val pp_prim'    : Il.prim -> Formatter.format
     val pp_ovld'    : Il.ovld -> Formatter.format
     val pp_context_entry' : Il.context_entry -> Formatter.format
+    val pp_entries' : Il.entries -> Formatter.format
     val pp_context' : Il.context -> Formatter.format
-    val pp_pcontext' : Il.partial_context -> Formatter.format
     val pp_signat'  : Il.signat -> Formatter.format
     val pp_mod'     : Il.mod -> Formatter.format
     val pp_var'     : Name.var -> Formatter.format
     val pp_label'   : Name.label -> Formatter.format
     val pp_path'    : Il.path -> Formatter.format
-    val pp_list'    : ('a -> Formatter.format) -> 'a list -> 
+    val pp_list'    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> Formatter.format
     val pp_pathlist' : ('a -> Formatter.format) -> 'a list -> Formatter.format
     val pp_commalist' : ('a -> Formatter.format) -> 'a list -> Formatter.format
     val pp_semicolonlist' : ('a -> Formatter.format) -> 'a list -> Formatter.format
     val pp_phrase_class' : Il.phrase_class -> Formatter.format
+    val pp_decresult' : Il.decresult -> Formatter.format
+    val pp_module'  : Il.module -> Formatter.format
+    val pp_parm'    : Il.parm -> Formatter.format
+    val pp_parms'   : Il.parms -> Formatter.format
+    val pp_pinterface' : Il.pinterface -> Formatter.format
 
     (* these go to std_out *)
     val pp_bnd     : Il.bnd -> unit
@@ -49,18 +53,23 @@ signature PPIL =
     val pp_prim    : Il.prim -> unit
     val pp_ovld    : Il.ovld -> unit
     val pp_context_entry : Il.context_entry -> unit
+    val pp_entries : Il.entries -> unit
     val pp_context : Il.context -> unit
-    val pp_pcontext : Il.partial_context -> unit
     val pp_signat  : Il.signat -> unit
     val pp_mod     : Il.mod -> unit
     val pp_var     : Name.var -> unit
     val pp_label   : Name.label -> unit
     val pp_path    : Il.path -> unit
-    val pp_list    : ('a -> Formatter.format) -> 'a list -> 
+    val pp_list    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> unit
     val pp_pathlist : ('a -> Formatter.format) -> 'a list -> unit
     val pp_commalist : ('a -> Formatter.format) -> 'a list -> unit
     val pp_semicolonlist : ('a -> Formatter.format) -> 'a list -> unit
     val pp_phrase_class : Il.phrase_class -> unit
+    val pp_decresult : Il.decresult -> unit
+    val pp_module  : Il.module -> unit
+    val pp_parm    : Il.parm -> unit
+    val pp_parms   : Il.parms -> unit
+    val pp_pinterface : Il.pinterface -> unit
 
   end

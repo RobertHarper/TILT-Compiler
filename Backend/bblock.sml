@@ -1,4 +1,3 @@
-(*$import Core MACHINE MACHINEUTILS BBLOCK Int Util Listops TRACETABLE List Stats *)
 functor Bblock(structure Machine : MACHINE
 	       structure Machineutils : MACHINEUTILS
 	       structure Tracetable : TRACETABLE)
@@ -39,7 +38,7 @@ struct
 
    fun unionLists [] = Regset.empty
      | unionLists [s] = s
-     | unionLists (s::rest) = 
+     | unionLists (s::rest) =
        let fun sum(nil,accum) = accum
              | sum(h::t,accum) = sum(t,Regset.union(accum,h))
        in sum(rest,s)
@@ -72,8 +71,8 @@ struct
    val special_regs_set = listToSet special_regs
 
    (* computes s1 + (l2 - s3) *)
-   fun setPlusListMinusSet(baseset,addlist,filterset) = 
-       let fun folder (item,curset) = 
+   fun setPlusListMinusSet(baseset,addlist,filterset) =
+       let fun folder (item,curset) =
            if (Regset.member(filterset,item))
                then curset
            else Regset.add(curset,item)
@@ -87,13 +86,13 @@ struct
 				      out_live,
 				      truelabel,
 				      succs}) =
-       let 
+       let
          (* We don't want special registers to appear in def/use sets
 	    when we are done though we permit them in intermediate results *)
-           fun loop ([],use,def) = 
+           fun loop ([],use,def) =
 	       let val use = use - special_regs_set
 		   val def = def - special_regs_set
-		   val use = 
+		   val use =
 		       Regset.foldl (fn (f,acc) => (case (Regmap.find(compute_map,f)) of
 							SOME (SOME c,_) => Regset.add(acc,c)
 						      | _ => acc)) use use
@@ -137,7 +136,7 @@ struct
 	  control-flow graph. *)
        local
 	   fun revDFS [] (seenList, seenSet) = seenList
-	     | revDFS (blk :: rest) (seenList, seenSet) = 
+	     | revDFS (blk :: rest) (seenList, seenSet) =
 	       if (Labelset.member(seenSet, blk)) then
 		   revDFS rest (seenList, seenSet)
 	       else
@@ -154,18 +153,18 @@ struct
        val unchanged = ref true
 
        (* Make one pass through the entire function *)
-       fun reverse_step blk = 
-	   let 
+       fun reverse_step blk =
+	   let
 	     val (BLOCK{def, use, in_live, out_live, succs, ...}) = getBlock blk
 	     val block_liveins = map (fn l => getInLive (getBlock l)) (!succs)
              val out_live' = unionLists block_liveins
-	     val in_live'  =  
+	     val in_live'  =
 		 if (eqLabs blk first_label) (* the in_live of the first block never changes *)
 		     then (!in_live)
 		 else Regset.union (use, Regset.difference(out_live', def))
 (*
 	     val _ = (print "reverse_step call on: ";
-		      print (msLoclabel blk); 
+		      print (msLoclabel blk);
 		      print "     and first_label = ";
 		      print (msLoclabel first_label);
 		      print "\nuse = ";
@@ -175,7 +174,7 @@ struct
 		      print "\n\n")
 *)
 	   in
-	       unchanged := ((!unchanged) andalso 
+	       unchanged := ((!unchanged) andalso
 			     (Regset.equal(!in_live, in_live')));
 	       out_live := out_live';
 	       in_live  := in_live'
@@ -183,9 +182,9 @@ struct
 
 
        (* Repeat loop() until a fixpoint is reached *)
-       fun outerLoop n =      
+       fun outerLoop n =
 	 (unchanged := true;
-	  app reverse_step rev_blocklabel_list; 
+	  app reverse_step rev_blocklabel_list;
 	  if (not (! unchanged)) then outerLoop (n+1) else n)
 
        val stepsNeeded = outerLoop 1
@@ -194,9 +193,9 @@ struct
        val _ = if (!diag andalso stepsNeeded > 1 andalso size > 50)
 		   then (print "function ";
 			 print (msLabel first_label);
-			 print " with "; 
+			 print " with ";
 			 print (Int.toString size);
-			 print " labels. liveness analysis took "; 
+			 print " labels. liveness analysis took ";
 			 print (Int.toString stepsNeeded); print " steps\n")
 	       else ()
      in ()
@@ -207,11 +206,11 @@ struct
    (* Use the in_live and out_live values determined from findLiveTemps()
       to annotate individual instructions. *)
    fun liveVars compute_map (block_map : bblock Labelmap.map) first_label =
-     let 
-	                      
+     let
+
        (* Scan backwards to compute which variables are live after each instruction in
-	  the program.   Takes instructions in REVERSE order, returns 
-	  instructions in REVERSE order. 
+	  the program.   Takes instructions in REVERSE order, returns
+	  instructions in REVERSE order.
 
 	  Taken from Aho, Sethi, Ullman, live-variable analysis (eq. 10.11) *)
 
@@ -221,13 +220,13 @@ struct
                   val (def_list, use_list) = defUse instr
 		  val instr_def = listToSet def_list
 		  (* We must augment the used variables with their runtime types, if present *)
-		  val use_list = 
+		  val use_list =
 		      foldl (fn (f,acc) => (case (Regmap.find(compute_map,f)) of
 						SOME (SOME c,_) => f::c::acc
 					      | _ => f::acc)) [] use_list
-                  (* we don't want special regs in in' so we subtract 
+                  (* we don't want special regs in in' so we subtract
                      them out as we add use_list;  note that we don't
-                     need to remove special regs from instr_def since 
+                     need to remove special regs from instr_def since
                      instr_def is used to subtract away from out which
                      already doesn't have any special regs *)
 		  val in' = setPlusListMinusSet(out - instr_def, use_list, special_regs_set)
@@ -242,15 +241,15 @@ struct
      in
        (* find live vars at block boundaries *)
        subtimer("bblock_findLiveTemp", findLiveTemps block_map') first_label;
-       
-       (* use this to annotate individual instructions *)            
+
+       (* use this to annotate individual instructions *)
        subtimer("bblock_annotateBlock", Labelmap.appi annotateBlock) block_map' ;
 
        block_map'
      end
 end
 
- 
+
 
 
 

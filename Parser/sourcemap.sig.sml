@@ -1,5 +1,3 @@
-(*$import *)
-
 (* \section{Source locations}                                               *)
 (*                                                                          *)
 (* The goal of this interface is to map character positions to              *)
@@ -67,7 +65,7 @@
 (* <sourcemap.sig>=                                                         *)
 (* sourcemap.sig *)
 (* <sig RCS log>=                                                           *)
-(* 
+(*
  * changed ErrorMsg to use SourceMap to get source locations; only the
  * formatting is done internally
  *
@@ -101,7 +99,7 @@ signature SOURCE_MAP = sig
   type sourcemap (* = opaque mutable *)
   val newmap  : charpos * sourceloc -> sourcemap
   val newline : sourcemap -> charpos -> unit
-  val resynch : sourcemap -> 
+  val resynch : sourcemap ->
                 charpos * {fileName:string option, line:int, column:int option} -> unit
   val forgetOldPositions : sourcemap -> unit
 

@@ -1,5 +1,3 @@
-(*$import INTSTRMAP Array List Word Int Control *)
-
 (* Copyright 1989 by AT&T Bell Laboratories *)
 structure IntStrMap : INTSTRMAP =
 struct
@@ -15,7 +13,7 @@ struct
 	    | loop(B(i,s,j,r)) = (f(i,s,j); loop r)
       in loop
       end
-  fun roundsize size = 
+  fun roundsize size =
       let fun f x = if x >= size then x else f (x*2)
       in f 1
       end
@@ -63,7 +61,7 @@ struct
 			       if wtoi (Word.andb(itow i, itow newsize1)) = n
 			       then add'(B(i,s,j,a),b,r)
 			       else add'(a,B(i,s,j,b),r)
-			     | add'(a,b,NIL) = 
+			     | add'(a,b,NIL) =
 			       (update(new,n,a);
 				update(new,n+size,b);
 				bucket(n+1))

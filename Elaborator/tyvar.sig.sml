@@ -1,16 +1,14 @@
-(*$import Util *)
-
-signature TYVAR = 
+signature TYVAR =
   sig
 
     type stamp
 
     (* type meta-variable used for type inference *)
-    type ('ctxt,'con,'exp) tyvar_info     
+    type ('ctxt,'con,'exp) tyvar_info
     datatype ('ctxt,'con,'exp) tyvar = TYVAR of ('ctxt,'con,'exp) tyvar_info
 
 
-    (* overloaded type with constraints 
+    (* overloaded type with constraints
        bool in constraint indicates side-effecting unification *)
     type ('ctxt,'con,'exp) constraint = (unit -> unit) * (('ctxt,'con,'exp) tyvar * bool -> bool)
     type ('ctxt,'con,'exp) ocon
@@ -40,8 +38,8 @@ signature TYVAR =
     val tyvar_addctxts      : ('ctxt,'con,'exp) tyvar * 'ctxt list -> unit
 
 
-    val fresh_ocon  : 'ctxt * ('ctxt,'con,'exp) constraint list * int -> ('ctxt,'con,'exp) ocon 
-                                              (* create an overloaded type 
+    val fresh_ocon  : 'ctxt * ('ctxt,'con,'exp) constraint list * int -> ('ctxt,'con,'exp) ocon
+                                              (* create an overloaded type
                                                  with a list of the possible types, each specifying some
 						 action to perform when instantiated, and a default. *)
 
@@ -58,4 +56,4 @@ signature TYVAR =
     val ocon_constrain         : ('ctxt,'con,'exp) ocon -> int
     val ocon_constrain_default : ('ctxt,'con,'exp) ocon -> int
   end
-      
+

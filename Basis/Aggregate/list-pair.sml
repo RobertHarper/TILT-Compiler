@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude LIST_PAIR *)
 (* list-pair.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -12,7 +11,7 @@ structure ListPair :> LIST_PAIR =
   struct
 
   (* for inlining *)
-    fun rev l = let 
+    fun rev l = let
           fun loop ([], acc) = acc
             | loop (a::r, acc) = loop(r, a::acc)
           in

@@ -1,4 +1,3 @@
-(*$import PRIM Formatter Prim *)
 (* Pretty-printing routines for the primitives *)
 signature PPPRIM =
   sig
@@ -8,7 +7,7 @@ signature PPPRIM =
     (* these don't do actual output *)
     val pp_prim'    : Prim.prim -> Formatter.format
     val pp_ilprim'  : Prim.ilprim -> Formatter.format
-    val pp_value'   : ('exp -> ('con,'exp) Prim.value option) -> 
+    val pp_value'   : ('exp -> ('con,'exp) Prim.value option) ->
 	              ('exp -> Formatter.format) -> ('con -> Formatter.format) ->
 	              ('con,'exp) Prim.value -> Formatter.format
     val pp_is'      : Prim.intsize -> Formatter.format
@@ -17,7 +16,7 @@ signature PPPRIM =
     (* these go to std_out *)
     val pp_prim    : Prim.prim -> unit
     val pp_ilprim  : Prim.ilprim -> unit
-    val pp_value   : ('exp -> ('con,'exp) Prim.value option) -> 
+    val pp_value   : ('exp -> ('con,'exp) Prim.value option) ->
 	             ('exp -> Formatter.format) -> ('con -> Formatter.format) ->
 	             ('con,'exp) Prim.value -> unit
     val pp_is      : Prim.intsize -> unit

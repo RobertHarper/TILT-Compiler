@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Word8Vector Word8Array LargeWord *)
 (* pack-word-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

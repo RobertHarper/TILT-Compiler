@@ -1,4 +1,3 @@
-(*$import *)
 (* Data aquired during proof search *)
 (* Author: Carsten Schuermann *)
 

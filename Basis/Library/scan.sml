@@ -1,4 +1,3 @@
-(*$import SCAN Substring StringCvt Word8Array FmtFields Bool *)
 (* scan.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

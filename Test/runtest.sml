@@ -1,5 +1,3 @@
-(*$import Posix TextIO CharVector Byte Word8 OS List CommandLine Getopt *)
-
 (*
 NAME
 	regress, runall, runtest, tilt, tilt-nj, platform
@@ -10,7 +8,7 @@ SYNOPSIS
 
 	./runall [-fnc]
 
-	./Runtest.$platform.exe [-fncFS] testdir ...
+	./Runtest.$objtype.exe [-fncFS] testdir ...
 
 	./tilt [tilt-options]
 	./tilt-nj [tilt-options]
@@ -60,7 +58,7 @@ DESCRIPTION
 
 	Tilt and tilt-nj are the TILT executables used by runtest.
 
-	Platform sets the environment variable $platform which is used
+	Platform sets the environment variable $objtype which is used
 	by runall and tilt to help find TILT executables.
 
 EXAMPLES
@@ -71,7 +69,7 @@ EXAMPLES
 	1. Check out the sources.
 	2. Compile the runtime with gmake runtime inside ml96/Runtime.
 	3. Compile TILT under SML/NJ with gmake heap inside ml96.
-	4. Compile the Basis with ./Test/tilt-nj -b inside ml96.
+	4. Compile the Basis with ./Test/tilt-nj -b mapfile-basis inside ml96.
 	5. Compile native TILT with ./Test/tilt-nj -m mapfile-all
 	   inside ml96.
 	6. Compile runtest with ./tilt-nj -m mapfile inside ml96/Test.

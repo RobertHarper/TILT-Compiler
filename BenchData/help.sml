@@ -1,5 +1,3 @@
-(*$import *)
-
 (* ------ Looping constructs ------ *)
 fun stride(start,stop,stride,f) = 
     let fun loop cur = if (cur <= stop) then (f cur; loop (cur+stride : int)) else ()

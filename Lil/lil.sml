@@ -1,15 +1,13 @@
-(*$import LIL *)
-
 (* The main LIL datatype
- * Leaf Petersen 
+ * Leaf Petersen
  *)
 
-structure Lil :> LIL = 
+structure Lil :> LIL =
   struct
 
     type var = Name.var
     type label = Name.label
-      
+
     type w32 = Word32.word
     type prim = Prim.prim
 
@@ -27,19 +25,19 @@ structure Lil :> LIL =
 
     datatype recursive = Leaf | NonRecursive | Arbitrary
 
-    datatype kind_ = 
+    datatype kind_ =
       T of size
     | Unit_k
-    | Nat_k 
-    | Arrow_k of kind * kind 
+    | Nat_k
+    | Arrow_k of kind * kind
     | Prod_k of kind * kind
     | Sum_k of kind * kind
     | Var_k of var
     | Mu_k of var * kind
     | All_k of var * kind
-      
+
     withtype kind = { k : kind_ }
-      
+
     datatype primcon =                        (* classifies term-level ... *)
       Int_c of size                           (* register integers *)
     | Float_c of size                         (* register floating-points *)
@@ -51,14 +49,14 @@ structure Lil :> LIL =
     | Array_c of size                         (* arrays *)
     | Vector_c of size                        (* vectors *)
     | Tag_c
-    | GCTag_c 
-    | Sum_c 
+    | GCTag_c
+    | Sum_c
     | KSum_c
     | Exists_c
     | Forall_c
     | Rec_c
 
-    datatype con_ = 
+    datatype con_ =
       Star_c
     | Var_c of var
     | Nat_c of int
@@ -77,8 +75,8 @@ structure Lil :> LIL =
     withtype con = {c : con_ }
 
     datatype v64 = Var_64 of var | Const_64 of (con,exp) Prim.value
-    and v32 = 
-      Var of var 
+    and v32 =
+      Var of var
       | Const of (con,exp) Prim.value
       | Box of v64
       | Tuple of v32 list
@@ -91,8 +89,8 @@ structure Lil :> LIL =
       | ForgetKnown of v32
       | Tag of int
     and op64 = Val_64 of v64 | Sub_64 of con * v32 * v32
-    and op32 = 
-      Val of v32 
+    and op32 =
+      Val of v32
       | Unroll of con * v32
       | Select of int * v32
       | Case of v32 * (var * exp) list
@@ -104,15 +102,15 @@ structure Lil :> LIL =
       | Unbox of v32
       | App of v32 * v32 list * v64 list
       | Vcase of con * (con * (var * v32) * (var * exp))
-      | Array_32 of v32 * v32 
+      | Array_32 of v32 * v32
       | Array_64 of v64 * v64
       | Sub of v32 * v32
       | Upd_32 of v32 * v32 * v32
       | Upd_64 of v32 * v32 * v64
-    and exp_ = 
+    and exp_ =
       Val_e of v32
       | Let_e of bnd list * exp
-    and bnd = 
+    and bnd =
       Code_b of var * (var * kind) list * (var * con) list * (var * con) list * exp
       | Exp32_b of var * op32
       | Exp64_b of var * op64

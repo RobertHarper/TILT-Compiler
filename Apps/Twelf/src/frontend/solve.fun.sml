@@ -1,4 +1,3 @@
-(*$import Int String TextIO SOLVE GLOBAL INTSYN NAMES PARSER CONSTRAINTS ABSTRACT TP_RECON TIMERS COMPSYN COMPILE TRAIL ABSMACHINE STRICT PRINT *)
 (* Front End Interface *)
 (* Author: Frank Pfenning *)
 (* Modified: Carsten Schuermann, Jeff Polakow *)

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Position PRIM_IO Word8Vector Word8Array Posix IO BinPrimIO OS_PRIM_IO OS *)
 (* posix-bin-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -15,7 +14,7 @@ functor PosixPrimIO(structure PrimIO : PRIM_IO
 			  and type elem = char
 			  and type pos = Position.int) =
   struct
-      
+
     structure PrimIO = PrimIO
 
     structure Vec = Word8Vector
@@ -120,7 +119,7 @@ functor PosixPrimIO(structure PrimIO : PRIM_IO
 	      }
 	  end
 
-	     
+
     fun openRd name = mkReader{
 	    fd = announce "openf" PF.openf(name,PIO.O_RDONLY,PF.O.flags[]),
 	    name = name,
@@ -147,10 +146,10 @@ functor PosixPrimIO(structure PrimIO : PRIM_IO
 	  fun putV x = incPos(announce "writeVec" PIO.writeVec x)
 	  fun putA x = incPos(announce "writeArr" PIO.writeArr x)
 	  fun write (put, block) arg = (
-		ensureOpen(); ensureBlock block; 
+		ensureOpen(); ensureBlock block;
 		put(fd, arg))
 	  fun handleBlock writer arg = SOME(writer arg)
-		handle (e as OS.SysErr(_, SOME cause)) => 
+		handle (e as OS.SysErr(_, SOME cause)) =>
  		  if cause = Posix.Error.again then NONE else raise e
 	  fun close () = if !closed
 		then ()

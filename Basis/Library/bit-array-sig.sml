@@ -1,4 +1,3 @@
-(*$import MONO_ARRAY Firstlude TiltPrim Prelude *)
 (* bit-array-sig.sml
  *
  * COPYRIGHT (c) 1995 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -27,7 +26,7 @@ signature BIT_ARRAY =
        *)
 
     val bits : (int * int list) -> array
-      (* Create array of the given length with the indices of its set bits 
+      (* Create array of the given length with the indices of its set bits
        * given by the list argument.
        * Raises Subscript if a list item is < 0 or >= length.
        *)
@@ -40,7 +39,7 @@ signature BIT_ARRAY =
     val toString : array -> string
       (* Inverse of stringToBits.
        * The bit array is zero-padded to the next
-       * length that is a multiple of 4. 
+       * length that is a multiple of 4.
        *)
 
     val isZero  : array -> bool
@@ -63,10 +62,10 @@ signature BIT_ARRAY =
     val orb  : (array * array * int) -> array
     val xorb : (array * array * int) -> array
       (* Create new array of the given length
-       * by logically combining bits of original 
-       * array using and, or and xor, respectively. 
+       * by logically combining bits of original
+       * array using and, or and xor, respectively.
        * If necessary, the array are
-       * implicitly extended by 0 to be the same length 
+       * implicitly extended by 0 to be the same length
        * as the new array.
        *)
 
@@ -101,7 +100,7 @@ signature BIT_ARRAY =
     val union : array -> array -> unit
     val intersection : array -> array -> unit
       (* Or (and) second bitarray into the first. Second is
-       * implicitly truncated or extended by 0's to match 
+       * implicitly truncated or extended by 0's to match
        * the length of the first.
        *)
 

@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Assignment *)
 (* Author: Larry Greenfield *)
 

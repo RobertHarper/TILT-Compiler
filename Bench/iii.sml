@@ -1,4 +1,3 @@
-(*$import *)
 (* This is a compiling benchmark, not a running benchmark. 
 
    This should *not* take forever to compile (see Shao, "Implementing

@@ -1,6 +1,4 @@
-(*$import TraceInfo Nil NilContext Name *)
-
-signature TRACEOPS = 
+signature TRACEOPS =
 sig
 
   (* Get a trace if possible, optimizing for the least computation
@@ -12,8 +10,8 @@ sig
    *)
   val get_trace' : Nil.con -> TraceInfo.traceinfo option
 
-  (* Best effort: uses get_trace' and returns TraceUnknown if 
-   * it can't figure it out. 
+  (* Best effort: uses get_trace' and returns TraceUnknown if
+   * it can't figure it out.
    *)
   val con2trace : Nil.con -> Nil.niltrace
 

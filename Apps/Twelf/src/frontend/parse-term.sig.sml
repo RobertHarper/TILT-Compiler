@@ -1,4 +1,3 @@
-(*$import PARSING TP_RECON *)
 (* Parsing Terms and Declarations *)
 (* Author: Frank Pfenning *)
 

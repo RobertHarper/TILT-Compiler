@@ -1,5 +1,3 @@
-(*$import Firstlude TiltPrim Prelude SMLofNJ *)
-
 (* signals-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Word8 Word8Vector Word8Array Substring *)
 (* byte-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

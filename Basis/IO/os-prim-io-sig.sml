@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PRIM_IO *)
 (* os-prim-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -27,7 +26,7 @@ signature OS_PRIM_IO =
 	    fd : file_desc,
 	    name : string,
 	    appendMode : bool,
-	    initBlkMode : bool, 
+	    initBlkMode : bool,
 	    chunkSize : int
 	  } -> PrimIO.writer
 

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude VECTOR General Array PreVector *)
 (* vector.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -10,20 +9,20 @@ structure Vector :> VECTOR where type 'a vector = 'a vector =
 
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     val empty_vector = TiltPrim.empty_vector
     val unsafe_array = TiltPrim.unsafe_array
     val unsafe_update = TiltPrim.unsafe_update
     val unsafe_vsub = TiltPrim.unsafe_vsub
     val vector_length = TiltPrim.vector_length
-	
+
     val unsafe_array2vector = TiltPrim.unsafe_array2vector
     val unsafe_vector2array = TiltPrim.unsafe_vector2array
-	
+
     val ugt = TiltPrim.ugt
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
-	
+
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
 
@@ -50,7 +49,7 @@ structure Vector :> VECTOR where type 'a vector = 'a vector =
     fun rev ([], l) = l
       | rev (x::r, l) = rev (r, x::l)
 
-    fun extract (v : 'a vector, base : int, optLen : int option) = 
+    fun extract (v : 'a vector, base : int, optLen : int option) =
 	Array.extract (unsafe_vector2array v, base, optLen)
 
     fun concat [v] = v

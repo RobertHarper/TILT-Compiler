@@ -1,5 +1,3 @@
-(*$import RTL TRACETABLE Int32 *)
-
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 
    stack.  For each frame encountered, it will look up information generated

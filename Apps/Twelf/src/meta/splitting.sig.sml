@@ -1,4 +1,3 @@
-(*$import STATESYN *)
 (* Splitting : Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

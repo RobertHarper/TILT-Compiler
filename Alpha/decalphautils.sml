@@ -1,5 +1,3 @@
-(*$import Core MACHINEUTILS DecAlpha Int Util *)
-
 structure Decalphautils :> MACHINEUTILS =
 struct
 
@@ -21,12 +19,12 @@ struct
    val min_freg = freg 0
    val max_ireg = ireg 21
    val max_freg = freg 28
-   fun nextReg (reg as (R _)) = 
+   fun nextReg (reg as (R _)) =
           if (eqRegs reg max_ireg) then min_ireg else (ireg(regNum reg +1))
      | nextReg (reg as (F _)) =
           if (eqRegs reg max_freg) then min_freg else (freg(regNum reg +1))
 
-   fun prevReg (reg as (R _)) = 
+   fun prevReg (reg as (R _)) =
           if (eqRegs reg min_ireg) then max_ireg else (ireg(regNum reg -1))
      | prevReg (reg as (F _)) =
           if (eqRegs reg min_freg) then max_freg else (freg(regNum reg -1))
@@ -34,32 +32,32 @@ struct
    fun listToSet lst = Regset.addList(Regset.empty, lst)
    fun setToList set = Regset.listItems set
 
-   fun regsBelow' (reg as (R _)) = 
+   fun regsBelow' (reg as (R _)) =
        if (eqRegs reg min_ireg) then
 	 [min_ireg]
-       else if (regLE min_ireg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE min_ireg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
-     | regsBelow' (reg as (F _)) = 
+     | regsBelow' (reg as (F _)) =
        if (eqRegs reg min_freg) then
 	 [min_freg]
-       else if (regLE min_freg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE min_freg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
 
    val regsBelow = listToSet o regsBelow'
 
-   fun regsAbove' (reg as (R _)) = 
+   fun regsAbove' (reg as (R _)) =
        if (eqRegs reg max_ireg) then
 	 [max_ireg]
-       else if (regLE max_ireg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE max_ireg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
-     | regsAbove' (reg as (F _)) = 
+     | regsAbove' (reg as (F _)) =
        if (eqRegs reg max_freg) then
 	 [max_freg]
-       else if (regLE max_freg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE max_freg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
 
    val regsAbove = listToSet o regsAbove'
@@ -67,12 +65,12 @@ struct
 
    val unsaved_regs  = listToSet [Rat, Rzero, Fat, Fzero, Rsp, Rat2, Fat2]
 
-   val C_caller_saved_regs = 
-       listToSet [ireg 0,  ireg 1,  ireg 2,  ireg 3,  ireg 4,  ireg 5, ireg 6, 
+   val C_caller_saved_regs =
+       listToSet [ireg 0,  ireg 1,  ireg 2,  ireg 3,  ireg 4,  ireg 5, ireg 6,
 		  ireg 7,  ireg 8,  ireg 16, ireg 17, ireg 18, ireg 19,
 		  ireg 20, ireg 21, ireg 22, ireg 23, ireg 24, ireg 25,
-		  ireg 26, ireg 27, ireg 29, 
-		  freg 0,  freg 1,  freg 2, 
+		  ireg 26, ireg 27, ireg 29,
+		  freg 0,  freg 1,  freg 2,
 		  freg 10, freg 11, freg 12, freg 13, freg 14, freg 15,
 		  freg 16, freg 17, freg 18, freg 19, freg 20, freg 21,
 		  freg 22, freg 23, freg 24, freg 25, freg 26, freg 27,
@@ -93,9 +91,9 @@ struct
        val num_indirect_int_args = 32
        val num_indirect_fp_args = 32
    in
-       val indirect_int_args = 
+       val indirect_int_args =
 	   Regset.listItems(Regset.difference(regsBelow (ireg (num_indirect_int_args - 1)), listToSet special_iregs))
-       val indirect_fp_args  = 
+       val indirect_fp_args  =
 	   Regset.listItems(regsBelow (freg (num_indirect_fp_args - 1)))
    end
 
@@ -108,19 +106,19 @@ struct
    val indirect_caller_saved_regs = listToSet ([indirect_ra_reg,Rpv] @ indirect_int_args @ indirect_fp_args)
    val indirect_callee_saved_regs = Regset.difference(listToSet general_regs, indirect_caller_saved_regs)
 
-  fun makeAsmHeader(KNOWN_PROCSIG{framesize,ra_offset,...}) = 
-      let val result =  ("\t.mask (1 << 26), -" ^ 
+  fun makeAsmHeader(KNOWN_PROCSIG{framesize,ra_offset,...}) =
+      let val result =  ("\t.mask (1 << 26), -" ^
 					       (Int.toString (framesize - ra_offset)) ^
-					       "\n\t.frame $sp, " ^ 
+					       "\n\t.frame $sp, " ^
 					       (Int.toString framesize) ^ "\n" ^
 					       "\t.prologue 1\n")
       in  result
       end
     | makeAsmHeader _ = ("error: framesize/ra_offset unrealized in UNKNOWN_PROCSIG\n")
 
-  fun msRegList l = 
+  fun msRegList l =
     let fun doer(r,acc) = acc ^ " " ^ (msReg r)
-    in  foldr doer "" l 
+    in  foldr doer "" l
     end
   fun msRegSet s = msRegList (setToList s)
 

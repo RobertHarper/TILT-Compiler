@@ -1,4 +1,3 @@
-(*$import PARSER_COMB Substring *)
 (* parser-comb-sig.sml
  *
  * COPYRIGHT (c) 1996 AT&T Research.

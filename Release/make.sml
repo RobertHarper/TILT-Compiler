@@ -1,14 +1,12 @@
-(*$import Help Config OS *)
-
 (* A source release is made via "cvs export".  Some files in the CVS
    tree do not need to be released and are deleted.  *)
 
 fun makeRelease () =
     let
 	open Help
-    
+
 	val _ = OS.FileSys.chDir Config.tmpdir
-	    
+
 	val tiltRelease : string
 	    = "tilt-" ^ Config.release
 
@@ -31,7 +29,7 @@ fun makeRelease () =
 
 	val tarFile : string
 	    = ((joinExt "gz") o (joinExt "tar") o (join Config.destdir)) tiltRelease
-    
+
 	val _ = print "Creating tarball.\n"
 	val _ = (remove tarFile;
 		 execute Config.gnuTar ["czf",tarFile,tiltRelease])

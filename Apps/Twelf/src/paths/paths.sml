@@ -1,4 +1,3 @@
-(*$import Origins Paths GlobalStructs LambdaStructs *)
 structure Paths = Paths ();
 
 structure Origins =

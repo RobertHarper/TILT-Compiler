@@ -1,5 +1,3 @@
-(*$import Firstlude TiltPrim Prelude WORD Word32 *)
-
 (* Word31.word is kept abstract.  It would be bad if
  *    val x : Word31.word = 0wxFFFFFFFF;
  * could typecheck.
@@ -58,14 +56,14 @@ struct
 
     val max = W.max
     val min = W.min
-	
+
     val fmt = W.fmt
     val toString = W.toString
 
     fun fromString s = (case W.fromString s
 			  of NONE => NONE
 			   | SOME r => SOME (trapOverflow r))
-	
+
     fun scan radix getc src = (case W.scan radix getc src
 				 of NONE => NONE
 				  | SOME (r, rest) => SOME (trapOverflow r, rest))

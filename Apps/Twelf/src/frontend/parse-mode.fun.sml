@@ -1,4 +1,3 @@
-(*$import String PARSE_MODE PATHS PARSING MODE_RECON PARSE_TERM *)
 (* Parsing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

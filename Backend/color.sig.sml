@@ -1,12 +1,10 @@
-(*$import IFGRAPH TRACKSTORAGE MACHINEUTILS Core *)
-
 signature COLOR =
 sig
    structure Trackstorage : TRACKSTORAGE
    structure Ifgraph : IFGRAPH
 
    (* color:  assign registers to physical locations.
-      Takes 
+      Takes
 	  (1) an interference graph,
 	  (2) an abstract datatype for computing and tracking
 	      storage information (i.e. next stack location, etc.)
@@ -20,10 +18,10 @@ sig
    val debug : bool ref
 
 
-   val color : Ifgraph.graph * Trackstorage.info * 
+   val color : Ifgraph.graph * Trackstorage.info *
 	       Core.stacklocation Core.Regmap.map *
 	       (Core.register -> (Core.register * int) list) ->
 	        Core.assign Core.Regmap.map
 end
 
-	 
+

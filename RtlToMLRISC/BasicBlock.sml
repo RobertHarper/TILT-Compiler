@@ -1,6 +1,3 @@
-(*$import MLRISC_PSEUDO MLTREE_EXTRA BASIC_BLOCK IntBinaryMap DenseIntSet Array *)
-
-
 (* =========================================================================
  * BasicBlock.sml
  * ========================================================================= *)

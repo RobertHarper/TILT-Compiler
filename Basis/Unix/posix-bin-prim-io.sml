@@ -1,4 +1,3 @@
-(*$import PRIM_IO PosixPrimIOFn BinPrimIO OS_PRIM_IO *)
 (* posix-bin-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

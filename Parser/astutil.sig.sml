@@ -1,6 +1,4 @@
-(*$import ErrorMsg Symbol Ast *)
-
-(* Copyright 1992 by AT&T Bell Laboratories 
+(* Copyright 1992 by AT&T Bell Laboratories
  *
  *)
 signature ASTUTIL =

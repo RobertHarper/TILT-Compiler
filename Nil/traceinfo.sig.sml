@@ -1,12 +1,10 @@
-(*$import Name *)
-
 (* Trace information for the garbage collector *)
 
-signature TRACEINFO = 
+signature TRACEINFO =
 sig
 
-  datatype traceinfo = 
-              Trace 
+  datatype traceinfo =
+              Trace
             | Unset
             | Notrace_Int
             | Notrace_Code

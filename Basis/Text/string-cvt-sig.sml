@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude OPTION *)
 signature STRING_CVT =
   sig
 

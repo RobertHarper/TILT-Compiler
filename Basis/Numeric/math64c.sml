@@ -1,10 +1,8 @@
-(*$import Firstlude TiltPrim Prelude MATH PreReal PreInt *)
-
 structure Math64 :> MATH where type real = real =
   struct
     val float_eq = TiltPrim.float_eq
     val floor = TiltPrim.float2int
-	
+
     (* div and mod will eventually be overloaded to work at multiple types *)
     val div = PreInt.idiv
     val mod = PreInt.imod
@@ -40,11 +38,11 @@ structure Math64 :> MATH where type real = real =
 	fun atanpy y = (* y>=0 *)
 	    if y>one then PIo2 - atan(one/y) else atan(y)
 
-	fun atan2pypx(x,y) = 
+	fun atan2pypx(x,y) =
 	    if y>x then PIo2 - atan(x/y) else atan(y/x)
 
-	fun atan2py(x,y) = 
-	    if x >= 0.0 then atan2pypx(x,y) 
+	fun atan2py(x,y) =
+	    if x >= 0.0 then atan2pypx(x,y)
 	    else if x == 0.0 andalso y == 0.0 then 0.0
 		 else PI - atan2pypx(~x,y)
 
@@ -64,7 +62,7 @@ structure Math64 :> MATH where type real = real =
 	val plusInfinity = 1E300 * 1E300
 	val minusInfinity = ~plusInfinity
 	val NaN = 0.0 / 0.0
-	
+
         (* This is the IEEE double-precision maxint; won't work accurately on VAX *)
 	val maxint = 4503599627370496.0
 
@@ -85,9 +83,9 @@ structure Math64 :> MATH where type real = real =
 	(* may be applied to inf's and nan's *)
 	fun abs x = if x < zero then ~x else x
     in
-	fun pow(x : real,y : real) = 
+	fun pow(x : real,y : real) =
 	    if y>0.0
-		then if y<plusInfinity 
+		then if y<plusInfinity
 			 then if x > minusInfinity
 			 then if x > 0.0
 				then exp(y*ln(x))
@@ -113,7 +111,7 @@ structure Math64 :> MATH where type real = real =
 		   then if x > minusInfinity
 			then if x > 0.0
 		             then exp(y*ln(x))
-			     else if x==0.0 
+			     else if x==0.0
 			          then if isOddInt(y)
 		  		     then copysign(plusInfinity,x)
 			             else plusInfinity

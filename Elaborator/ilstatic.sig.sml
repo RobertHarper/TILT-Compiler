@@ -1,6 +1,5 @@
-(*$import Util Il *)
 (* Static Semantics of the IL. *)
-signature ILSTATIC = 
+signature ILSTATIC =
   sig
 
     val trace : bool ref
@@ -11,14 +10,14 @@ signature ILSTATIC =
 
     val reduce_signat : Il.context -> Il.signat -> Il.signat
 
-    (* ------------ functions that manipulate constructors -------------------- 
+    (* ------------ functions that manipulate constructors --------------------
        eq_onearrow: returns true if the arrows are equal: will set the oneshot if needed
        eq_con: returns true if the types are equal: will set tyvars to ensure equality
        soft_eq_con: a version of eq_con that will not set any tyvars
-       sub_con: tests whether the first constructor is a subtype of the second 
+       sub_con: tests whether the first constructor is a subtype of the second
        semi_sub_con: a version of sub_con that will not set any tyvars if not true
-       con_head_normalize: returns an equivalent constructor in head-normal form 
-       con_normalize: returns an equivalent constructor in normal form 
+       con_head_normalize: returns an equivalent constructor in head-normal form
+       con_normalize: returns an equivalent constructor in normal form
        eq_exp: alpha equivalence of expressions
     *)
     val eq_onearrow        : Il.arrow Util.oneshot * Il.arrow Util.oneshot -> bool
@@ -49,7 +48,7 @@ signature ILSTATIC =
     val GetConKind    : Il.context * Il.con  -> Il.kind
     val GetModSig     : Il.context * Il.mod  -> Il.signat
     val GetBndDec     : Il.context * Il.bnd  -> Il.dec
-    val GetBndsDecs   : Il.context * Il.bnds -> Il.decs 
+    val GetBndsDecs   : Il.context * Il.bnds -> Il.decs
     val GetSbndsSdecs : Il.context * Il.sbnds-> Il.sdecs
 
     (* ---------- Valuability ------------------------------------- *)
@@ -58,11 +57,11 @@ signature ILSTATIC =
     val Bnds_IsValuable   : Il.context * Il.bnds  -> bool
     val Sbnds_IsValuable  : Il.context * Il.sbnds -> bool
 
-    (* ----- Useful structure-related helper functions ------- *)	    
+    (* ----- Useful structure-related helper functions ------- *)
     (* ----- These look inside starred structures --------- *)
     val Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
     val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
-    val Sdecs_Lookup : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
+    val Sdecs_Lookup : Il.context -> Il.mod * Il.sdecs * Il.label list ->
 	                            (Il.label list * Il.phrase_class) option
 
     val supertype : Il.con -> Il.con  (* compute supertype by removing total arrows and special sum types *)

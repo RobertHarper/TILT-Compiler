@@ -1,5 +1,3 @@
-(*$import Rtl Array Pprtl GRAPH PRINTUTILS RECURSION Util Labelgraph *)
-
 functor Recursion(structure Printutils : PRINTUTILS)
     :> RECURSION =
 struct
@@ -13,7 +11,7 @@ struct
   fun print_rtl_label ll = print (Pprtl.label2s ll)
   fun print_rtl_var v = print (Pprtl.var2s v)
 
-  fun print_node n = if (! debug) 
+  fun print_node n = if (! debug)
 		       then print_rtl_label n
 		     else ()
 
@@ -22,7 +20,7 @@ struct
      - a mapping taking a function name to the functions it calls;
      - the list of strongly-connected components in the call graph;
      - the list of connected (viewing the call graph as undirected)
-       components only considering the tailcall edges. *)     
+       components only considering the tailcall edges. *)
   fun isLocal(Rtl.LOCAL_CODE _) = true
     | isLocal(Rtl.LOCAL_DATA _) = true
     | isLocal _ = false
@@ -46,7 +44,7 @@ struct
 		else ())
         | addCall _ _ = ()
 
-      (* Add edge to the tailcall graph if the instruction is 
+      (* Add edge to the tailcall graph if the instruction is
          a tailcall *)
       fun addTailCall proc (Rtl.CALL{func=Rtl.LABEL' l,
 				     call_type=ML_TAIL, ...}) =
@@ -57,32 +55,32 @@ struct
 	| addTailCall _ _ = ()
 
       fun procLoop f [] = ()
-        | procLoop f ((Rtl.PROC{name, code, ...}) :: rest) = 
+        | procLoop f ((Rtl.PROC{name, code, ...}) :: rest) =
 	  (Array.app (f name) code; procLoop f rest)
 
       (* Extract all the names of the Rtl functions *)
       fun procNames [] = []
-        | procNames ((Rtl.PROC{name, ...}) :: rest) = 
+        | procNames ((Rtl.PROC{name, ...}) :: rest) =
 	  name :: (procNames rest)
 
       (* Create the callgraph and the tail-callgraph *)
       fun makeGraphs (Rtl.MODULE{procs,...}) =
-	let 
+	let
 	  val procnames = procNames procs
 	in
 	  app (fn proc => Graph.insert_node(callgraph, proc)) procnames;
 	  app (fn proc => Graph.insert_node(tailcallgraph, proc)) procnames;
-	  procLoop addCall procs; 
+	  procLoop addCall procs;
 	  procLoop addTailCall procs
 	end
-	
+
       val ghash   = Graph.hash callgraph
       val gunhash = Graph.unhash callgraph
 
       (* Create the graphs *)
       val _ = makeGraphs module;
 
-      val rtl_scc = map (map gunhash) 
+      val rtl_scc = map (map gunhash)
 	(Graph.sc_components print_node callgraph)
 
       val rtl_tailcall_cc = map (map gunhash)
@@ -98,7 +96,7 @@ struct
 		print_rtl_label n;
 		emitString " : ";
 		print_list print_rtl_label edges
-	      end) 
+	      end)
 	     (Graph.nodes callgraph))
       else ();
 

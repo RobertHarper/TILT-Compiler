@@ -1,4 +1,3 @@
-(*$import MODESYN INTSYN NAMES TABLE INDEX *)
 (* Mode Syntax *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

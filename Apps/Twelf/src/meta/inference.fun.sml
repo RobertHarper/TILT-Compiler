@@ -1,4 +1,3 @@
-(*$import INFERENCE MTPGLOBAL INTSYN FUNSYN STATESYN ABSTRACT TYPECHECK FUNTYPECHECK UNIQUESEARCH PRINT WHNF GlobalStructs *)
 (* Inference:  Version 1.3*)
 (* Author: Carsten Schuermann *)
 

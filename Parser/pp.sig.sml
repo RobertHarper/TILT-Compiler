@@ -1,11 +1,9 @@
-(*$import *)
-
 signature PRETTYPRINT =
 sig
   type ppstream
   type ppconsumer = {consumer : string -> unit,
 		    linewidth : int,
-		    flush : unit -> unit} 
+		    flush : unit -> unit}
   datatype break_style
     = CONSISTENT
     | INCONSISTENT

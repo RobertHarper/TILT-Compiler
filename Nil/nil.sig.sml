@@ -1,5 +1,3 @@
-(*$import Word32 TilWord32 Name Prim Annotation Sequence TraceInfo *)
-
 signature NIL =
 sig
 
@@ -42,21 +40,21 @@ sig
                     | TraceKnown of TraceInfo.traceinfo
                     | TraceCompute of var
 
-  (* A sequential let only permits the bindings to be evaluated sequentially. 
+  (* A sequential let only permits the bindings to be evaluated sequentially.
    * A parallel let permits the bindings to be concurrently executed.
    *)
   datatype letsort = Sequential | Parallel
   datatype phase = Runtime | Compiletime
-  datatype kind = 
+  datatype kind =
       Type_k                        (* constructors that are types *)
     | SingleType_k of con           (* singleton-kind at kind type *)
     | Single_k of con               (* singleton-kind at any kind *)
                                     (* dependent record kind *)
 
     | Record_k of ((label*var),kind) sequence
-                                    (* dependent arrow kinds for open 
+                                    (* dependent arrow kinds for open
 				       constr funs, closed funs, or closures *)
-    | Arrow_k of openness * (var * kind) list * kind 
+    | Arrow_k of openness * (var * kind) list * kind
 
 
 
@@ -88,8 +86,8 @@ sig
     | GCTag_c                                 (* Type of header word for heap values *)
       (* Params: Con to tag *)
 
-  and con = 
-      Prim_c of primcon * con list                (* Classify term-level values 
+  and con =
+      Prim_c of primcon * con list                (* Classify term-level values
                                                        of primitive types *)
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						    a recursive type; bool indicates if it
@@ -98,10 +96,10 @@ sig
     (* The AllArrow constructor combines the universal and arrow type constructors into a
      * single type constructor.  This permits use to pass type and term constructors
      * together in a single function call, instead of a double function call for
-     * every function.  
-     * We do not often use this however, since we wish to be able to hoist polymorphic 
+     * every function.
+     * We do not often use this however, since we wish to be able to hoist polymorphic
      * applications to the top-level, and thereby do all of the type computations once
-     * at the top-level (for ml anyway).  
+     * at the top-level (for ml anyway).
      * Currrently used only by the closure converter, and for equality functions and true
      * functors.
      *)
@@ -116,10 +114,10 @@ sig
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
     | Crecord_c of (label * con) list             (* Constructor-level records *)
     | Proj_c of con * label                       (* Constructor-level record projection *)
-    | Closure_c of con * con                      (* Constructor-level closure: 
+    | Closure_c of con * con                      (* Constructor-level closure:
                                                        code and environment *)
-    | App_c of con * con list                     (* Constructor-level application 
-						       of open or closed constructor function 
+    | App_c of con * con list                     (* Constructor-level application
+						       of open or closed constructor function
 							 or a closure
 							 *)
     | Coercion_c of {vars : var list,     (* Coercions: *)
@@ -131,7 +129,7 @@ sig
              | Open_cb of (var * (var * kind) list * con)
              | Code_cb of (var * (var * kind) list * con)
 
-  and nilprim = 
+  and nilprim =
       record of label list       (* record intro *)
       (* Params: Terms to inject *)
     | partialRecord of label list * int (* record with a missing zero-indexed field *)
@@ -181,7 +179,7 @@ sig
    *    the arms must have type tau for some fixed result type tau, assuming bound has type c
    *)
   and switch =                                 (* Switching on / Elim Form *)
-      Intsw_e of {arg  : exp, 
+      Intsw_e of {arg  : exp,
 		  size : Prim.intsize,
 		  result_type : con,
 		  arms : (w32 * exp) list,
@@ -201,7 +199,7 @@ sig
 		     arms : (primcon * (var * kind) list * exp) list,
 		     default : exp,
 		     result_type : con}                 (* typecase *)
-    | Ifthenelse_e of {arg : conditionCode,             
+    | Ifthenelse_e of {arg : conditionCode,
 		       thenArm : exp,
 		       elseArm : exp,
 		       result_type : con}
@@ -211,13 +209,13 @@ sig
       Var_e of var                                   (* Term-level variables *)
     | Const_e of (con,exp) Prim.value                (* Term-level constants *)
     | Let_e of letsort * bnd list * exp              (* Binding construct *)
-    | Prim_e of allprim * (niltrace list) * (con list) * (exp list)    
+    | Prim_e of allprim * (niltrace list) * (con list) * (exp list)
                                                      (* primops must be fully applied *)
     | Switch_e of switch                             (* Switch statements *)
     | App_e of openness * exp * con list *           (* application of open funs, code, or closures *)
                        exp list * exp list           (* in the case of code, the first exp must be a var *)
     | ExternApp_e of exp * exp list
-    | Raise_e of exp * con                                      
+    | Raise_e of exp * con
     | Handle_e of {body :exp,
 	           bound : var,
                    handler : exp,
@@ -226,7 +224,7 @@ sig
     | Fold_e of var list * con * con           (* Fold_e and Unfold_e are coercions*)
     | Unfold_e of var list * con * con
     | Coerce_e of exp * (con list) * exp       (* Coerce_e applies a coercion;
-						  first exp is coercion, must be 
+						  first exp is coercion, must be
 						  a value. *)
     (* End of coercions *)
 
@@ -235,7 +233,7 @@ sig
       Exp_cc of exp
     | And_cc  of conditionCode * conditionCode (* Short-circuiting *)
     | Or_cc   of conditionCode * conditionCode (* Short-circuiting *)
-    | Not_cc  of conditionCode 
+    | Not_cc  of conditionCode
 
 
   (* result types are needed for recursive definitions in order to make
@@ -253,7 +251,7 @@ sig
                                             (* Allows the creation of term and for-all closures;
                                                 bool indicates if it is really recursive *)
     | Fixclosure_b of bool * (var*con , {code:var, cenv:con, venv:exp}) sequence
-                                             
+
   and function = Function of {effect      : effect,
 			      recursive   : recursive,
 			      tFormals    : var list,

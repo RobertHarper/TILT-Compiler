@@ -1,4 +1,3 @@
-(*$import List TWELF_ORDER INTSYN TABLE *)
 (* Terminiation Order *)
 (* Author: Carsten Schuermann *)
 

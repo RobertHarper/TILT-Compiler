@@ -1,5 +1,3 @@
-(*$import NILCONTEXT NilContextPre Normalize *)
-
 (* See nilcontextpre.sml for the main implementation. This file just
  * links in some extra parameters.
  *)

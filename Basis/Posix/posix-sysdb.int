@@ -1,4 +1,2 @@
-(*$import POSIX_SYS_DB POSIX_FileSys *)
-
 structure POSIX_Sys_DB : POSIX_SYS_DB where type uid = PrePosix.uid
 				        and type gid = PrePosix.gid  

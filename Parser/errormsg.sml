@@ -1,5 +1,3 @@
-(*$import Int Source ERRORMSG PrettyPrint SourceMap Control PathNames *)
-
 (* <errormsg.sml>=                                                          *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 
@@ -73,11 +71,11 @@ struct
 (*                                                                          *)
 (* <errormsg.sml>=                                                          *)
   fun location_string ({sourceMap,fileOpened,...}:Source.inputSource) (p1,p2) =
-      let fun shortpoint ({line, column,...}:sourceloc, l) = 
+      let fun shortpoint ({line, column,...}:sourceloc, l) =
              Int.toString line :: "." :: Int.toString column :: l
-          fun showpoint (p as {fileName,...}:sourceloc, l) = 
+          fun showpoint (p as {fileName,...}:sourceloc, l) =
              Pathnames.trim fileName :: ":" :: shortpoint (p, l)
-          fun allfiles(f, (src:sourceloc, _)::l) = 
+          fun allfiles(f, (src:sourceloc, _)::l) =
                 f = #fileName src andalso allfiles(f, l)
             | allfiles(f, []) = true
           fun lastpos [(_, hi)] = hi
@@ -85,7 +83,7 @@ struct
             | lastpos [] = impossible "lastpos botch in ErrorMsg.location_string"
       in  concat (
             case fileregion sourceMap (p1, p2)
-              of [(lo, hi)] => 
+              of [(lo, hi)] =>
                     if p1+1 >= p2 then showpoint (lo, [])
                     else showpoint(lo, "-" :: shortpoint(hi, []))
                | (lo, _) :: rest =>
@@ -102,13 +100,13 @@ struct
 (* <errormsg.sml>=                                                          *)
   fun error (source as {anyErrors, errConsumer,...}: Source.inputSource)
             (p1:int,p2:int) (severity:severity)
-            (msg: string) (body : ppstream -> unit) = 
+            (msg: string) (body : ppstream -> unit) =
       (ppmsg(errConsumer,(location_string source (p1,p2)),severity,msg,body);
        record(severity,anyErrors))
 
-  fun errorNoFile (errConsumer,anyErrors) ((p1,p2): region) severity msg body = 
+  fun errorNoFile (errConsumer,anyErrors) ((p1,p2): region) severity msg body =
       (ppmsg(errConsumer,
-             if p2>0 then concat[Int.toString p1, "-", Int.toString p2] 
+             if p2>0 then concat[Int.toString p1, "-", Int.toString p2]
                      else "",
              severity, msg, body);
        record(severity,anyErrors))
@@ -123,7 +121,7 @@ struct
 
   val matchErrorString = location_string
 
-  fun errors source = 
+  fun errors source =
       {error = error source,
        errorMatch = matchErrorString source,
        anyErrors = #anyErrors source}

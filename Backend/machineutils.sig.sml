@@ -1,5 +1,3 @@
-(*$import Core ORD_MAP ORD_SET *)
-
 signature MACHINEUTILS =
 sig
 

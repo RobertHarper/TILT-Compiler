@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt PreInt PreWord *)
 (* word-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -6,7 +5,7 @@
  *)
 
 
-signature WORD = 
+signature WORD =
   sig
     eqtype word
 

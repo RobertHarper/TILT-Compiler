@@ -1,4 +1,3 @@
-(*$import Array Int INTSYN GLOBAL *)
 (* Internal Syntax *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

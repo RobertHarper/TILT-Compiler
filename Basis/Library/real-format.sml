@@ -1,4 +1,3 @@
-(*$import String Real TopLevel *)
 (* real-format.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.
@@ -49,7 +48,7 @@ structure RealFormat : sig
 	  fun scaleUp (x, e) = if (x < 1.0) then scaleUp(10.0*x, e-1) else (x, e)
 	  fun scaleDn (x, e) = if (x >= 10.0) then scaleDn(0.1*x, e+1) else (x, e)
 	  fun mkdigits (f, 0) = ([], if f < 5.0 then 0 else 1)
-	    | mkdigits (f, i) = let 
+	    | mkdigits (f, i) = let
 		val d = floor f
 		val (digits, carry) = mkdigits (10.0 * (f - real d), i - 1)
 		val (digit, c) = (case (d, carry)

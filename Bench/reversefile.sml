@@ -1,5 +1,3 @@
-(*$import Int Word8Array Posix *)
-
 (* This program reverses the lines it receives from stdin,
    like the UNIX utility "tac". It assumes that no two
    consecutive lines have a total length >4096 bytes.

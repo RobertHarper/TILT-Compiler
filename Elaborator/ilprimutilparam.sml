@@ -1,5 +1,3 @@
-(*$import Symbol Listops Int IL PRIMUTILPARAM Il Util Prim Name Stats *)
-
 signature ILPRIMUTILPARAM =
 sig
     include PRIMUTILPARAM
@@ -28,7 +26,7 @@ structure IlPrimUtilParam :> ILPRIMUTILPARAM =
 
 	val debug = Stats.tt("IlPrimUtilParamDebug") (* XXX *)
 	fun debugdo t = if (!debug) then (t(); ()) else ()
-	    
+
 	local
 	    val Cbool = ref (NONE : (Il.context -> Il.con) option)
 	    val Ctrue = ref (NONE : (Il.context -> Il.exp) option)
@@ -60,7 +58,7 @@ structure IlPrimUtilParam :> ILPRIMUTILPARAM =
 	fun bool2exp context false = false_exp context
 	  | bool2exp context true = true_exp context
 
-	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
+	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) =>
 							     (generate_tuple_label (i+1),c)) conlist)
 
 	val con_int = CON_INT

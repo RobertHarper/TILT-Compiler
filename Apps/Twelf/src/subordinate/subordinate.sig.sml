@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Subordination *)
 (* Author: Carsten Schuermann *)
 

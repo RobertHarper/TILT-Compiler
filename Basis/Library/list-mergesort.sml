@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude LIST_SORT TopLevel LibBase *)
 (* listsort.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -7,10 +6,10 @@
  * Taken from, ML for the Working Programmer, LCPaulson. pg 99-100
  *)
 
-structure ListMergeSort : LIST_SORT = 
+structure ListMergeSort : LIST_SORT =
   struct
 
-    fun sort (op > : 'a * 'a -> bool) ls = let 
+    fun sort (op > : 'a * 'a -> bool) ls = let
           fun merge([],ys) = ys
             | merge(xs,[]) = xs
             | merge(x::xs,y::ys) =
@@ -24,15 +23,15 @@ structure ListMergeSort : LIST_SORT =
             | nextrun(run,x::xs) = if x > hd run then nextrun(x::run,xs)
                                    else (rev run,x::xs)
           fun samsorting([], ls, k)    = hd(mergepairs(ls,0))
-            | samsorting(x::xs, ls, k) = let 
+            | samsorting(x::xs, ls, k) = let
                 val (run,tail) = nextrun([x],xs)
                 in samsorting(tail, mergepairs(run::ls,k+1), k+1)
                 end
-          in 
+          in
             case ls of [] => [] | _ => samsorting(ls, [], 0)
           end
 
-    fun uniqueSort cmpfn ls = let 
+    fun uniqueSort cmpfn ls = let
           open LibBase
           fun merge([],ys) = ys
             | merge(xs,[]) = xs
@@ -47,21 +46,21 @@ structure ListMergeSort : LIST_SORT =
                 else mergepairs(merge(l1,l2)::ls, k div 2)
             | mergepairs _ = raise LibBase.Impossible "ListSort.uniqueSort"
           fun nextrun(run,[])    = (rev run,[])
-            | nextrun(run,x::xs) = 
+            | nextrun(run,x::xs) =
                 case cmpfn(x, hd run) of
                   GREATER => nextrun(x::run,xs)
                 | EQUAL   => nextrun(run,xs)
                 | _       => (rev run,x::xs)
           fun samsorting([], ls, k)    = hd(mergepairs(ls,0))
-            | samsorting(x::xs, ls, k) = let 
+            | samsorting(x::xs, ls, k) = let
                 val (run,tail) = nextrun([x],xs)
                 in samsorting(tail, mergepairs(run::ls,k+1), k+1)
                 end
-          in 
+          in
             case ls of [] => [] | _ => samsorting(ls, [], 0)
           end
 
-    fun sorted (op >) = let 
+    fun sorted (op >) = let
           fun s (x::(rest as (y::_))) = not(x>y) andalso s rest
             | s l = true
           in s end

@@ -1,5 +1,3 @@
-(*$import OS_PRIM_IO TextPrimIO Posix *)
-
 structure PosixTextPrimIO : sig
 
     include OS_PRIM_IO

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude STRING *)
 (* substring-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -45,7 +44,7 @@ signature SUBSTRING =
     val dropr  : (String.Char.char -> bool) -> substring -> substring
     val takel  : (String.Char.char -> bool) -> substring -> substring
     val taker  : (String.Char.char -> bool) -> substring -> substring
-	
+
     val position : String.string -> substring -> substring * substring
 
     val span : substring * substring -> substring

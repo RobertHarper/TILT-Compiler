@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* rand-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -27,7 +26,7 @@ signature RAND =
     val norm : real -> real
       (* r -> r / (randMax + 1.0) *)
 
-    val range : (int * int) -> real -> int 
+    val range : (int * int) -> real -> int
       (* Map v, randMin <= v <= randMax to integer range [i,j]
        * Exception -
        *   BadArg if j < i

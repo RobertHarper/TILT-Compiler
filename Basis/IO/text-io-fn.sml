@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Int CharArray CharVector TextPrimIO CleanIO Substring IO OS_PRIM_IO TEXT_IO OS Option *)
 (* text-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -21,7 +20,7 @@ functor TextIOFn (structure OSPrimIO :
                  and type StreamIO.reader = TextPrimIO.reader
 		 and type StreamIO.writer = TextPrimIO.writer =
 struct
-    
+
     structure PIO = OSPrimIO.PrimIO
     structure A = CharArray
     structure V = CharVector
@@ -329,7 +328,7 @@ struct
 (** Suggestion: When building a stream with supplied initial data,
  ** nothing can be said about the positions inside that initial
  ** data (who knows where that data even came from!).
- **) 
+ **)
 		      | (SOME v) => IBUF{
 			    basePos = NONE, data=v,
 			    info=info, more=more}
@@ -857,8 +856,8 @@ struct
     in
 
 
-    val stdIn = mkInstream(mkStdIn()) 
-    val stdOut = mkOutstream(mkStdOut()) 
+    val stdIn = mkInstream(mkStdIn())
+    val stdOut = mkOutstream(mkStdOut())
     val stdErr = mkOutstream(mkStdErr())
 
   (* Establish a hook function to rebuild the I/O stack *)

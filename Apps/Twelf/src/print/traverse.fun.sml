@@ -1,4 +1,3 @@
-(*$import TRAVERSE INTSYN WHNF NAMES *)
 functor Traverse
   (structure IntSyn' : INTSYN
    structure Whnf : WHNF

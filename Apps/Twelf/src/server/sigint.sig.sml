@@ -1,4 +1,3 @@
-(*$import *)
 signature SIGINT =
 sig
 

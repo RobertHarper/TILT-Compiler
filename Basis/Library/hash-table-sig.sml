@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* hash-table-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.

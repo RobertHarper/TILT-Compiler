@@ -1,5 +1,3 @@
-(*$import Name Util Listops Sequence List TraceInfo Int TilWord32 NilRename VARARG Nil NilContext NilUtil Ppnil Normalize ToClosure Reify Stats TraceOps Linearize NilDefs ListPair Prim Alpha NilStatic *)
-
 (* Converting functions with either statically and dynamically known parameter types such that they take a single record
  * argument to use multiple arguments, as well as generating code to apply vararg/onearg at runtime
  *)
@@ -13,9 +11,9 @@
    of the vararg translation (as opposed to merely guiding the
    translation).  *)
 
-structure Vararg :> VARARG = 
+structure Vararg :> VARARG =
 struct
-    
+
     open Nil
     open NilUtil
     open Name
@@ -31,12 +29,12 @@ struct
     (* produces term-level functions with the following signature and definition:
      * produces constructor-level functions with the following signature and definition:
      * flattenThreshold is a compile-time constant that is architecturally dependent
-     * 
+     *
      * vararg : All t::W,t'::W. (All.[t;]->t') -> Vararg(i)(t,t')
      * onearg : All t::W,t'::W. Vararg(i)(t,t') -> (All.[t;]->t')
      * Vararg : [t::W,t'::W] => Vararg(i)(t,t')
      *
-     * vararg[c,c'] f = 
+     * vararg[c,c'] f =
      *   typecase c of
      *     record[] => \[;].f (record[])
      *   | ...
@@ -44,7 +42,7 @@ struct
      *                                f (record[x1,...,xn])
      *   | _ => f
      *
-     * onearg[c,c'] f = 
+     * onearg[c,c'] f =
      *   typecase c of
      *     record[] => \[x1 : record[];]. f [;]
      *   | ...
@@ -52,7 +50,7 @@ struct
      *                                f [x.1, ..., x.n; ]
      *   | _ => f
      *
-     * Vararg[c,c'] = 
+     * Vararg[c,c'] =
      *   Typecase c of
      *     record[] => Arrow((); c')
      *   | ...
@@ -60,7 +58,7 @@ struct
      *   | _ => Arrow(c; c')
      *)
 
-    fun vararg () : con * function = 
+    fun vararg () : con * function =
 	let
 	    val domain_tvar = fresh_named_var "domain"
 	    val range_tvar = fresh_named_var "range"
@@ -73,8 +71,8 @@ struct
 				     body_type=Var_c range_tvar}
 	    val vtrclist = [(funvar,TraceKnown TraceInfo.Trace,funtype)]
 	    val newfuntype = Prim_c(Vararg_c(Open,Partial),[Var_c domain_tvar, Var_c range_tvar])
-	    fun make_arm n = 
-		let 
+	    fun make_arm n =
+		let
 		    (*XXX technically, this is wrong.  The function is expecting a record
 		     * with particular labels, and we pass it a tuple.  Since we never
 		     * actually typecheck applications of this, however.....
@@ -94,7 +92,7 @@ struct
 
 		    val (bnds,rcrd) = NilDefs.mk_record_with_gctag(labels,SOME trs,types,map Var_e vars,SOME rvar)
 
-		    val body = 
+		    val body =
 		      NilUtil.makeLetE Sequential bnds  (App_e(Open, Var_e funvar,[],[rcrd],[]))
 
 		    val rescon = Var_c range_tvar
@@ -122,7 +120,7 @@ struct
 	end
 
 
-    fun onearg () : con * function = 
+    fun onearg () : con * function =
 	let
 	    val domain_tvar = fresh_named_var "domain"
 	    val range_tvar = fresh_named_var "range"
@@ -135,7 +133,7 @@ struct
 	    val newfuntype = AllArrow_c{openness=Open,effect=Partial,
 					tFormals=[],eFormals=[Var_c domain_tvar],fFormals=0w0,
 					body_type=Var_c range_tvar}
-	    fun make_arm n = 
+	    fun make_arm n =
 		let val labels = Listops.map0count (fn n => generate_tuple_label (n+1)) n
 		    val primcon = Record_c labels
 		    val vklist = Listops.map0count (fn _ => (fresh_var(), Type_k)) n
@@ -173,10 +171,10 @@ struct
 	val oneargLabel = Name.internal_label "onearg"
 	val varargLabel = Name.internal_label "vararg"
 	val result = ref NONE
-    in  fun generate() = 
+    in  fun generate() =
 	(case !result of
 	     SOME res => res
-	   | NONE => 
+	   | NONE =>
 		 let val oneargVar = fresh_named_var "onearg"
 		     val varargVar = fresh_named_var "vararg"
 		     val (oneCon, oneFun) = onearg()
@@ -188,14 +186,14 @@ struct
 						    ExportValue(varargLabel,varargVar)]}
 
 		     val nilmod = Linearize.linearize_mod nilmod
-		     val nilmod = Reify.reify_mod nilmod 
+		     val nilmod = Reify.reify_mod nilmod
 		     val nilmod = ToClosure.close_mod nilmod
 
 		     val MODULE{bnds,imports=[],
 				exports=[ExportValue(oneargLabel',oneargVar),
 					 ExportValue(varargLabel',varargVar)]} = nilmod
 		     fun getClosureType v [] = error "could not find closure"
-		       | getClosureType v ((Fixclosure_b (_,cl))::rest) = 
+		       | getClosureType v ((Fixclosure_b (_,cl))::rest) =
 			 (case Sequence.toList cl of
 			      [((v',tipe),{ ...})] => if (eq_var(v,v')) then tipe else getClosureType v rest
 			    | _ => getClosureType v rest)
@@ -223,11 +221,11 @@ struct
     in  type state = state
 	fun new_state i = STATE {ctxt = NilContext.empty(),
 				 count = i}
-	fun add_kind(STATE{ctxt,count},v,k) = 
+	fun add_kind(STATE{ctxt,count},v,k) =
 	    STATE{ctxt=NilContext.insert_kind(ctxt,v,k), count=count}
-	fun add_equation(STATE{ctxt,count},v,c) = 
+	fun add_equation(STATE{ctxt,count},v,c) =
 	    STATE{ctxt=NilContext.insert_equation(ctxt,v,c), count=count}
-	fun add_con(STATE{ctxt,count},v,c) = 
+	fun add_con(STATE{ctxt,count},v,c) =
 	    STATE{ctxt=NilContext.insert_con(ctxt,v,c), count=count}
 	fun add_label(STATE{ctxt,count},l,v) =
 	    STATE{ctxt=NilContext.insert_label(ctxt,l,v), count=count}
@@ -243,21 +241,21 @@ struct
 
 
     datatype arrowType = Transform of openness * effect * con * con
-	               | NoTransform of openness * effect * 
+	               | NoTransform of openness * effect *
 	                                (var * kind) list * w32 * con list * con
-    fun getarrow (AllArrow_c {openness,effect,body_type,tFormals,fFormals,eFormals}) = 
+    fun getarrow (AllArrow_c {openness,effect,body_type,tFormals,fFormals,eFormals}) =
 	SOME(case (tFormals,fFormals,eFormals) of
 		 ([], 0w0, [argc]) => Transform(openness,effect,argc,body_type)
 	       | _ => NoTransform(openness,effect,tFormals,fFormals,eFormals,body_type))
-      | getarrow (Prim_c(Vararg_c (openness,effect), [argc,resc])) = 
+      | getarrow (Prim_c(Vararg_c (openness,effect), [argc,resc])) =
 				       SOME(Transform(openness,effect,argc,resc))
       | getarrow c = NONE
 
     fun getexn (Prim_c(Exntag_c, [c])) = SOME c
       | getexn _ = NONE
 
-    fun getsum (Prim_c(Sum_c {tagcount,totalcount,known}, [c])) = 
-	SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
+    fun getsum (Prim_c(Sum_c {tagcount,totalcount,known}, [c])) =
+	SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount,
 	     known, c)
       | getsum _ = NONE
 
@@ -269,7 +267,7 @@ struct
      * and arrows that take no type argument and having exactly one term argument.
      *)
 
-    datatype recordtype = NOT_RECORD | RECORD of label list * con list | DYNAMIC 
+    datatype recordtype = NOT_RECORD | RECORD of label list * con list | DYNAMIC
 
     (* Given an HNF constructor, return the appropriate abstraction of its type.
      *)
@@ -284,8 +282,8 @@ struct
 	   | _ => error "Function argument type is not a Type, or reduce_hnf lied about HNF")
 
     fun is_record state arg =
-	(case reduce_hnf state arg 
-	   of (false,_) => (if (!debug) 
+	(case reduce_hnf state arg
+	   of (false,_) => (if (!debug)
 			      then (print "is_record returning DYNAMIC with con = ";
 				    Ppnil.pp_con arg; print "\n")
 			    else ();
@@ -295,8 +293,8 @@ struct
 
      (* Transform kinds, cons, and con bindings *)
 
-     fun do_kind (state : state) (kind : kind) : kind = 
-	  (case kind of 
+     fun do_kind (state : state) (kind : kind) : kind =
+	  (case kind of
 	       Type_k => kind
 	     | SingleType_k c => SingleType_k(do_con state c)
 	     | Single_k c => Single_k(do_con state c)
@@ -310,11 +308,11 @@ struct
 
       and do_con (state : state) (con : con) : con =
 	  (case con of
-	       Prim_c(pc,clist) => 
+	       Prim_c(pc,clist) =>
 		   let val clist = map (do_con state) clist
 		   in  Prim_c(pc, clist)
 		   end
-	     | Mu_c(recur,vc_seq) => 
+	     | Mu_c(recur,vc_seq) =>
 		   let val state' = Sequence.foldl
 		                    (fn ((v,c),state) => add_kind(state,v,Type_k)) state vc_seq
 		   in  Mu_c(recur,Sequence.map
@@ -338,7 +336,7 @@ struct
 	     | Proj_c(c,l) => Proj_c(do_con state c, l)
 	     | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
 	     | App_c(c,clist) => App_c(do_con state c, map (do_con state) clist)
-	     | Coercion_c {vars,from,to} => 
+	     | Coercion_c {vars,from,to} =>
 		   let
 		     fun folder (v,s) = add_kind(s,v,Type_k)
 		     val state = foldl folder state vars
@@ -346,13 +344,13 @@ struct
 		     Coercion_c {vars=vars,from=do_con state from,
 				 to=do_con state to}
 		   end
-	     | Let_c(letsort,cbnds,c) => 
+	     | Let_c(letsort,cbnds,c) =>
 		   let val (cbnds,state) = foldl_acc do_cbnd state cbnds
 		       val c = do_con state c
 		   in  Let_c(letsort,cbnds,c)
 		   end)
 
-     and do_arrow state (openness,effect,argc,resc) : con = 
+     and do_arrow state (openness,effect,argc,resc) : con =
 	 let val cnr = do_con state
 	     val cr = NilRename.renameCon o cnr
 	     val flatcount = get_count state
@@ -377,9 +375,9 @@ struct
 	       | DYNAMIC => Prim_c(Vararg_c(openness,effect),[cr argc,cnr resc]))
 	 end
 
-      and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
+      and do_cbnd(cbnd : conbnd, state : state) : conbnd * state =
 	  (case cbnd of
-	       Con_cb(v,c) => (Con_cb(v,do_con state c), 
+	       Con_cb(v,c) => (Con_cb(v,do_con state c),
 			       add_kind(state,v,Single_k c))
 	     | Open_cb(v,vklist,c) => let val state' = add_kind(state,v,Arrow_k(Open,vklist,Single_k c))
 					  val (vklist,state) = do_vklist state vklist
@@ -403,34 +401,34 @@ struct
 								 in  (((v,tr),c'),add_con(acc,v,c))
 								 end) state vclist
 
-     and do_clist state clist = foldl_acc (fn (c,acc) => 
+     and do_clist state clist = foldl_acc (fn (c,acc) =>
 	                                               let val c' = do_con acc c
 						       in  (c',acc)
 						       end) state clist
 
     (* transform expressions, bindings, switches *)
-     and do_exp (state : state) (exp : exp) : exp = 
+     and do_exp (state : state) (exp : exp) : exp =
 	   (case exp of
 		  Var_e v => exp
 		| Const_e _ => exp
 		| Prim_e(p,trlist,clist,elist) => Prim_e(p,trlist,
-							 map (do_con state) clist, 
+							 map (do_con state) clist,
 							 map (do_exp state) elist)
 		| Switch_e sw => Switch_e(do_switch state sw)
-		| Let_e (letsort,bnds,e) => 
+		| Let_e (letsort,bnds,e) =>
 			let val (bnds,state) = do_bnds(bnds,state)
 			    val e = do_exp state e
 		        in  Let_e(letsort,bnds,e)
 			end
 		| App_e(Open,f,[],[e],[]) => do_app state (f,e) (* the function may have been flattened *)
-		| App_e(openness,f,clist,elist,eflist) => 
-			App_e(openness, do_exp state f, map (do_con state) clist, 
+		| App_e(openness,f,clist,elist,eflist) =>
+			App_e(openness, do_exp state f, map (do_con state) clist,
 			      map (do_exp state) elist, map (do_exp state) eflist)
 		| ExternApp_e(e,elist) => ExternApp_e(do_exp state e, map (do_exp state) elist)
 		| Raise_e (e, c) => Raise_e(do_exp state e, do_con state c)
 		| Handle_e{body,bound,handler,result_type} =>
 			let val ([(bound,_)],state') = do_vclist state [(bound,Prim_c(Exn_c,[]))]
-			in  Handle_e{bound=bound, body=do_exp state body, 
+			in  Handle_e{bound=bound, body=do_exp state body,
 				     handler = do_exp state' handler,
 				     result_type = do_con state result_type}
 			end
@@ -469,17 +467,17 @@ struct
 
 	     fun folder ((v,e),alpha) = let val v' = derived_var v
 	                                    val e' = NilRename.renameExp e
-					in  
-					    (Exp_b(v',TraceUnknown,e'), 
+					in
+					    (Exp_b(v',TraceUnknown,e'),
 					     Alpha.rename(alpha, v, v'))
 					end
 
-	     val (extraBnds,alpha) = 
-	       (case recursive 
+	     val (extraBnds,alpha) =
+	       (case recursive
 		  of NonRecursive => ([],Alpha.empty_context())
 		   | _ => foldl_acc folder (Alpha.empty_context()) extras)
 
-	     fun change(v,argc,labels,cons) = 
+	     fun change(v,argc,labels,cons) =
 		 let
 		     val innerState = add_con(state,v,argc)
 		     val vars = map (Name.fresh_named_var o Name.label2name) labels
@@ -513,7 +511,7 @@ struct
 				     body=body}))
 		 end
 	     fun default fvar =
-		 let 
+		 let
   		     val (tFa,state') = do_vklist state tFa
 		     val eFormals = zip eFormals eFa
 		     val (eFormals,state') = do_vtrclist state' eFormals
@@ -527,7 +525,7 @@ struct
 
 		     val (eFormals,eFa) = unzip eFormals
 
-		     val c = 
+		     val c =
 		       AllArrow_c{openness=openness,effect=effect,
 				  tFormals=tFa,fFormals=fFa,eFormals=eFa,body_type=body_type}
 		     val c = NilRename.renameCon c
@@ -538,7 +536,7 @@ struct
 					tFormals=tFormals, fFormals=fFormals, eFormals=eFormals,
 					body=body}))
 		 end
-	 
+
 	 in  (case (tFormals,fFormals,eFormals,eFa) of
 		  ([],[],[(v,_)],[argc]) =>
 		      (case (is_record state argc) of
@@ -563,9 +561,9 @@ struct
 	       (case (is_record state argc) of
 		  NOT_RECORD => NONE
 		| RECORD _ => NONE
-		| DYNAMIC => 
+		| DYNAMIC =>
 		    let
-		      val mkvararg = 
+		      val mkvararg =
 			Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
 			       [do_con state argc,do_con state body_type],[Var_e pvar])
 		    in SOME (var,mkvararg)
@@ -581,7 +579,7 @@ struct
 	     val nochange = App_e(Open,f',[],[arg'],[])
 	     fun change(labels) = (* single record parameter of statically known type *)
 		 if ((length labels) <= flattenThreshold)
-		     then 
+		     then
 			 let val v = fresh_named_var "funarg"
 			     fun proj l = Prim_e(NilPrimOp(select l),[],[],[Var_e v])
 			     val args' = map proj labels
@@ -616,7 +614,7 @@ struct
 			 error "application in which function does not have arrow type"))
 	 end
 
-     and do_switch (state : state) (switch : switch) : switch = 
+     and do_switch (state : state) (switch : switch) : switch =
 	    (case switch of
 		 Intsw_e {size,arg,arms,default,result_type} =>
 		     let val arg = do_exp state arg
@@ -629,7 +627,7 @@ struct
 		     end
 	       | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
-			 val (tagcount,totalcount,_,carrier) = 
+			 val (tagcount,totalcount,_,carrier) =
 			     (case reduce state getsum sumtype of
 				  Normalize.REDUCED quad => quad
 				| Normalize.UNREDUCED _ => error "sumcon of sumsw_e not reducible to sum")
@@ -637,7 +635,7 @@ struct
 			 fun make_ssum i = Prim_c(Sum_c{tagcount=TilWord32.fromInt tagcount,
 							totalcount=TilWord32.fromInt totalcount,
 							known=SOME i},[carrier])
-			 fun do_arm(n,tr,body) = 
+			 fun do_arm(n,tr,body) =
 			     let val ssumtype = make_ssum n
 				 val (_,state) = do_vclist state[(bound,ssumtype)]
 			     in  (n,tr,do_exp state body)
@@ -651,7 +649,7 @@ struct
 		     end
 	       | Exncase_e {arg,bound,arms,default,result_type} =>
 		     let val arg = do_exp state arg
-			 fun do_arm(tag,tr,body) = 
+			 fun do_arm(tag,tr,body) =
 			     let val tagcon = type_of(state,tag)
 				 val tag = do_exp state tag
 				 val (_,Prim_c(Exntag_c,[con])) = reduce_hnf state tagcon
@@ -669,13 +667,13 @@ struct
 	       | Typecase_e _ => error "typecase not done")
 
 
-     and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
+     and do_bnds(bnds : bnd list, state : state) : bnd list * state =
 	 let val (bnds_list,state) = foldl_acc do_bnd state bnds
 	 in  (List.concat bnds_list,state)
 	 end
 
-     and do_bnd (bnd : bnd, state : state) : bnd list * state = 
-	 let 
+     and do_bnd (bnd : bnd, state : state) : bnd list * state =
+	 let
 	 in  (case bnd of
 		  Exp_b(v,niltrace,e) => let val c = type_of(state,e)
 					     val e = do_exp state e
@@ -685,8 +683,8 @@ struct
 		| Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
 				   in  ([Con_b(p,cbnd)], state)
 				   end
-		| Fixopen_b vcflist => 
-		       let 
+		| Fixopen_b vcflist =>
+		       let
 			   val varFunPvar = map (fn ((v,c),f) => (v,c,f,derived_var v)) vcflist
 
 			   val extras = List.mapPartial (getExtra state) varFunPvar
@@ -703,9 +701,9 @@ struct
 		| Fixclosure_b (recur,vclset) => error "fixclosure not handled")
 	  end
 
-	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c), 
+	fun do_import(ImportValue(l,v,tr,c),state) = (ImportValue(l,v,tr,do_con state c),
 						      add_label(add_con(state,v,c),l,v))
-	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
+	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k),
 						   add_label(add_kind(state,v,k),l,v))
 	  | do_import(ImportBnd (phase, cb),state) =
 	    let
@@ -718,7 +716,7 @@ struct
 	fun do_export(ExportValue(l,v),state) = (ExportValue(l,v),state)
 	  | do_export(ExportType(l,v),state)  = (ExportType(l,v),state)
 
-	fun optimize (MODULE{imports, exports, bnds}) = 
+	fun optimize (MODULE{imports, exports, bnds}) =
 	    let val state = new_state flattenThreshold
 		val (imports,state) = foldl_acc do_import state imports
 		val (bnds,state) = do_bnds(bnds,state)
@@ -734,17 +732,17 @@ struct
 	    in  result
 	    end
 
-	fun reduce_vararg (D,openness,effect,argc,resc,arg) = 
+	fun reduce_vararg (D,openness,effect,argc,resc,arg) =
 	  let
-	    val res = 
+	    val res =
 	      case Normalize.reduce_hnf (D,argc)
 		of (false,_) => NONE
-		 | (_,argc) => 
+		 | (_,argc) =>
 		  SOME(case getrecord argc
 			 of NOT_RECORD => arg
-			  | RECORD(labels,cons) => 
-			   if ((length labels) <= flattenThreshold) then	    
-			     let 
+			  | RECORD(labels,cons) =>
+			   if ((length labels) <= flattenThreshold) then
+			     let
 			       val vtrlist = List.map (fn c => (fresh_named_var "varg_local", TraceOps.con2trace c)) cons
 
 			       val (vars,trs) = unzip vtrlist
@@ -754,7 +752,7 @@ struct
 			       val (bnds,rcrd) = NilDefs.mk_record_with_gctag(labels,SOME trs,cons,map Var_e vars,SOME rvar)
 
 			       val avar = Name.fresh_named_var "rdcd_varg_app"
-			       val body = 
+			       val body =
 				 NilUtil.makeLetE Sequential (bnds @ [Exp_b(avar,TraceOps.con2trace resc,App_e(Open, arg,[],[rcrd],[]))]) (Var_e avar)
 
 			       val funbnd = Function{effect=effect,recursive=NonRecursive,
@@ -763,7 +761,7 @@ struct
 			       val c = AllArrow_c{openness=Open,effect=Partial,
 						  tFormals=[],fFormals=0w0,
 						  eFormals=cons,
-						  body_type=resc} 
+						  body_type=resc}
 			       val cvar = fresh_named_var "rdcd_varg_fn_type"
 			       val cbnd = Con_b(Compiletime,Con_cb(cvar,c))
 
@@ -777,17 +775,17 @@ struct
 	  in res
 	  end
 
-	fun reduce_onearg (D,openness,effect,argc,resc,arg) = 
+	fun reduce_onearg (D,openness,effect,argc,resc,arg) =
 	  let
-	    val res = 
+	    val res =
 	      case Normalize.reduce_hnf (D,argc)
 		of (false,_) => NONE
-		 | (_,argc) => 
+		 | (_,argc) =>
 		  SOME(case getrecord argc
 			 of NOT_RECORD => arg
-			  | RECORD(labels,cons) => 	    
+			  | RECORD(labels,cons) =>
 			   if ((length labels) <= flattenThreshold) then
-			     let 
+			     let
 			       val argv = fresh_named_var "rdcd_1arg_arg"
 			       val argtr = TraceKnown TraceInfo.Trace
 			       val argtype = Prim_c(Record_c labels, cons)

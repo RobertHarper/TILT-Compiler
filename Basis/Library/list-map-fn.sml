@@ -1,4 +1,3 @@
-(*$import ORD_KEY ORD_MAP List LibBase *)
 (* list-map-fn.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

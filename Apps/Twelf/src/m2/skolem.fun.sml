@@ -1,4 +1,3 @@
-(*$import TextIO SKOLEM GLOBAL INTSYN WHNF ABSTRACT INDEX MODESYN PRINT COMPILE TIMERS NAMES *)
 (* Skolem constant administration *)
 (* Author: Carsten Schuermann *)
 

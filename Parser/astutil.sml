@@ -1,9 +1,7 @@
-(*$import Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL PrintUtil *)
-
-(* Copyright 1992 by AT&T Bell Laboratories 
+(* Copyright 1992 by AT&T Bell Laboratories
  *)
 
-structure AstUtil:ASTUTIL = struct    
+structure AstUtil:ASTUTIL = struct
 
   open Symbol Fixity Ast PrintUtil ErrorMsg
 
@@ -29,8 +27,8 @@ fun checkFix (i, err : ErrorMsg.complainer) =
 (* layered patterns *)
 
 fun lay3 ((x as VarPat _), y, _) = LayeredPat{varPat=x,expPat=y}
-  | lay3 (ConstraintPat{pattern,constraint}, y, err) = 
-	 (err COMPLAIN "illegal (multiple?) type constraints in AS pattern" 
+  | lay3 (ConstraintPat{pattern,constraint}, y, err) =
+	 (err COMPLAIN "illegal (multiple?) type constraints in AS pattern"
 		       nullErrorBody;
           case lay3 (pattern,y,err)
            of LayeredPat{varPat,expPat} =>
@@ -43,8 +41,8 @@ fun lay3 ((x as VarPat _), y, _) = LayeredPat{varPat=x,expPat=y}
   | lay3 (x,y,err) = (err COMPLAIN "pattern to left of AS must be variable"
 			    nullErrorBody; y)
 
-fun lay2 (ConstraintPat{pattern,constraint}, y, err) = 
-	 (err COMPLAIN "illegal (multiple?) type constraints in AS pattern" 
+fun lay2 (ConstraintPat{pattern,constraint}, y, err) =
+	 (err COMPLAIN "illegal (multiple?) type constraints in AS pattern"
 		       nullErrorBody;
           case lay2 (pattern,y,err)
            of LayeredPat{varPat,expPat} =>
@@ -56,7 +54,7 @@ fun lay2 (ConstraintPat{pattern,constraint}, y, err) =
   | lay2 (FlatAppPat[{item,...}],y,err) = lay3(item,y,err)
   | lay2 p = lay3 p
 
-fun lay (ConstraintPat{pattern,constraint}, y, err) = 
+fun lay (ConstraintPat{pattern,constraint}, y, err) =
          (case lay2 (pattern,y,err)
            of LayeredPat{varPat,expPat} =>
 	     LayeredPat{varPat=varPat,

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PrePosix SysInt Int Position Word8Vector Word8Array List POSIX_IO POSIX_FileSys POSIX_Process SysWord POSIX_extern String *)
 (* posix-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -12,10 +11,10 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
 				 and type O.flags = POSIX_FileSys.O.flags =
 
   struct
-      
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     val unsafe_vector2array = TiltPrim.unsafe_vector2array
     val op^ = String.^
 
@@ -36,7 +35,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
 
     type file_desc = FS.file_desc
     type pid = POSIX_Process.pid
-    
+
     fun fs_intof fd = uint32toint32(FS.fdToWord fd)
     fun fs_fd i = FS.wordToFD(int32touint32 i)
 
@@ -67,7 +66,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
               then readbuf'(fs_intof fd, buf, sz, i)
               else raise Subscript
           end
-    fun readVec (fd,cnt) = 
+    fun readVec (fd,cnt) =
           if cnt < 0 then raise Subscript else read'(fs_intof fd, cnt)
 
     fun writearr' (x : int, v : Word8Array.array, y : int, z : int) : int = Ccall(posix_io_writebuf,x,v,y,z)
@@ -87,7 +86,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
               then writearr'(fs_intof fd, buf, sz, i)
               else raise Subscript
           end
-    
+
     fun writeVec (fd,{buf, i, sz=NONE}) = let
           val vlen = Word8Vector.length buf
           in
@@ -102,7 +101,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
               then writevec'(fs_intof fd, buf, sz, i)
               else raise Subscript
           end
-    
+
     datatype whence = SEEK_SET | SEEK_CUR | SEEK_END
     val seek_set = osval "SEEK_SET"
     val seek_cur = osval "SEEK_CUR"
@@ -115,7 +114,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
           else if wh = seek_cur then SEEK_CUR
           else if wh = seek_end then SEEK_END
           else fail ("whFromWord","unknown whence "^(Int.toString wh))
-    
+
     structure FD =
       struct
         datatype flags = FDF of word
@@ -131,7 +130,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
       end
 
     structure O = POSIX_FileSys.O
-	
+
     fun fcntl_d (x : s_int, y : s_int) : s_int = Ccall(posix_io_fcntl_d,x,y)
     fun fcntl_gfd (x : s_int) : word = Ccall(posix_io_fcntl_gfd, x)
     fun fcntl_sfd (x : s_int, y : word) : unit = Ccall(posix_io_fcntl_sfd, x, y)
@@ -185,13 +184,13 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
             (ltypeOf l_type,whToWord l_whence, l_start, l_len, 0)
           end
     fun flockFromRep (usepid,(ltype,whence,start,len,pid)) = let
-          fun ltypeOf ltype = 
+          fun ltypeOf ltype =
                 if ltype = f_rdlck then F_RDLCK
                 else if ltype = f_wrlck then F_WRLCK
                 else if ltype = f_unlck then F_UNLCK
                 else fail ("flockFromRep","unknown lock type "^(Int.toString ltype))
           in
-            FLock.FLOCK { 
+            FLock.FLOCK {
               l_type = ltypeOf ltype,
               l_whence = whFromWord whence,
               l_start = start,

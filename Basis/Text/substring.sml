@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude SUBSTRING String PreString General *)
 (* substring.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -13,12 +12,12 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     val unsafe_vsub = TiltPrim.unsafe_vsub
-	
+
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
-	
+
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
 (*
@@ -45,12 +44,12 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 
     fun string (PreString.SS(s,st,sz)) = PreString.unsafeSubstring(s,i2w st,i2w sz)
 
-				   
+
     fun substring (s, i, n) =
 	  if ((0 <= i) andalso (0 <= n) andalso (i+n <= String.size s))
 	    then PreString.SS(s, i, n)
 	    else raise General.Subscript
-		
+
     fun extract (s, i, NONE) = if ((0 <= i) andalso (i <= String.size s))
 				   then PreString.SS(s, i, String.size s - i)
 			       else raise General.Subscript
@@ -96,7 +95,7 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 	in
 	  PreString.revConcat (length (0, [], ssl))
 	end
-	  
+
   (* explode a substring into a list of characters *)
     fun explode (PreString.SS(s, i, n)) = let
 	  fun f(l, j) = if ult(j,i2w i)
@@ -144,7 +143,7 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
     val takel  = scanl (fn (s, i, n, k) => PreString.SS(s, i, k))
     val taker  = scanr (fn (s, i, n, k) => PreString.SS(s, i+k, n-k))
     end (* local *)
-	
+
 
 
 
@@ -155,7 +154,7 @@ structure Substring :> SUBSTRING where type substring = PreString.substring
 	  val len = String.size s
 	  val len' = i2w len
 	  fun eq (j, k) = ugte(j,len') orelse
-		((unsafe_vsub(s, j) = unsafe_vsub(s', k)) andalso 
+		((unsafe_vsub(s, j) = unsafe_vsub(s', k)) andalso
 		 eq (uplus(j,0w1),uplus(k,0w1)))
 	  val stop = i+n-len
 	  fun cmp k =

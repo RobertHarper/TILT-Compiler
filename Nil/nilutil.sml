@@ -1,5 +1,3 @@
-(*$import Name Util TilWord32 TilWord64 Sequence Prim Array PRIMUTIL Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL NilSubst Alpha Option ListPair List TraceInfo Stats Int NilDefs NilRename *)
-
 (*
  This structure is a repository for useful functions for operating on the NIL syntax.
  It should not rely on the NIL contexts, static semantics, or the normalizer: conceptually
@@ -11,25 +9,25 @@ structure NilUtil
   :> NILUTIL =
 struct
   (* IMPORTS *)
-  open Nil 
+  open Nil
   open Name
 
   val printl  = Util.printl
   val lprintl = Util.lprintl
-    
+
   type arrow = {openness : openness, effect : effect,
 		tFormals : (var*kind) list,
 		eFormals : con list,
 		fFormals : w32,
 		body_type : con}
-    
+
   val debug = ref false
 
   fun error s = Util.error "nilutil.sml" s
 
   val profile       = Stats.ff "nil_profile"
   val local_profile = Stats.ff "nilutil_profile"
-  val _ = Stats.ff "closure_omit_coercions"     
+  val _ = Stats.ff "closure_omit_coercions"
 
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer args args2 else #2 args args2
 
@@ -57,13 +55,13 @@ struct
   (******Functions for destructing NIL terms*********)
 
   fun extractCbnd (Con_cb(v,c)) = (v,c)
-    | extractCbnd (Open_cb(v,vklist,c)) = 
+    | extractCbnd (Open_cb(v,vklist,c)) =
     let val v' = Name.derived_var v
     in  (v,Let_c(Sequential,
 		 [Open_cb(v',vklist,c)],
 		 Var_c v'))
     end
-    | extractCbnd (Code_cb(v,vklist,c)) = 
+    | extractCbnd (Code_cb(v,vklist,c)) =
     let val v' = Name.derived_var v
     in  (v,Let_c(Sequential,
 		 [Code_cb(v',vklist,c)],
@@ -73,11 +71,11 @@ struct
   fun makeConb cbnd = Con_b (Runtime,cbnd)
 
   (* Loses Parallel information *)
-  fun flattenCbnds cbnds = 
+  fun flattenCbnds cbnds =
       let fun loop [] acc = rev acc
-	    | loop (cbnd::rest) acc = 
+	    | loop (cbnd::rest) acc =
 	  loop rest (case cbnd of
-			 Con_cb(v,Let_c(sort, cbnds, c)) => 
+			 Con_cb(v,Let_c(sort, cbnds, c)) =>
 			     let val cbnds = flattenCbnds cbnds
 				 val cbnd = Con_cb(v,c)
 			     in  cbnd :: ((rev cbnds) @ acc)
@@ -87,38 +85,38 @@ struct
       end
 
 
-  fun project_from_kind(lvk_seq,con,label) = 	     
+  fun project_from_kind(lvk_seq,con,label) =
     let
       val lvk_list = Sequence.toList lvk_seq
       fun loop (subst,[]) = error ("project_kind: Missing label in record kind:  "^(Name.label2string label))
-	| loop (subst,((l,v),k)::rest) = 
+	| loop (subst,((l,v),k)::rest) =
 	if (Name.eq_label(label,l))
 	  then NilSubst.substConInKind subst k
 	else loop (NilSubst.C.sim_add subst (v,Proj_c(con,l)),rest)
     in  loop (NilSubst.C.empty(),lvk_list)
     end
-  
-  fun project_from_kind_nondep (rkind,label) = 
+
+  fun project_from_kind_nondep (rkind,label) =
     case rkind
-      of Record_k lvk_seq => 
+      of Record_k lvk_seq =>
 	(case Sequence.find (fn (l,_) => (Name.eq_label(label,l))) lvk_seq
 	   of SOME k => k
 	    | NONE => error "project_from_kind_nondep: Field not in record kind")
-       | other => 
+       | other =>
 	   (Ppnil.pp_kind other; print "\n";
 	    error  "project_from_kind_nondep: Trying to project from non-record kind ")
-	       
 
-    fun convert_sum_to_special 
+
+    fun convert_sum_to_special
       (Prim_c(Sum_c {tagcount,totalcount,known},carriers), w) =
-      Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount, 
+      Prim_c(Sum_c {tagcount=tagcount, totalcount=totalcount,
 		    known = SOME w}, carriers)
-      
+
     fun sum_project_carrier_type (Prim_c(Sum_c {known=SOME sumtype,tagcount,totalcount},[carrier])) =
       let
 	val nontagcount = TilWord32.toInt(TilWord32.uminus(totalcount,tagcount))
 	val which = TilWord32.toInt(TilWord32.uminus(sumtype,tagcount))
-      in 
+      in
 	case (Int.compare (which,0),Int.compare (nontagcount,1)) of
 	  (LESS,_) => error ("Injecting value into non tag field")
 	| (_,LESS) => error("Illegal injection - no non value fields!")
@@ -145,7 +143,7 @@ struct
       | strip_float' _ = NONE
     fun strip_int' (Prim_c (Int_c intsize,[])) = SOME intsize
       | strip_int' _ = NONE
-    fun strip_sum' (Prim_c (Sum_c {tagcount,totalcount,known},cons)) = 
+    fun strip_sum' (Prim_c (Sum_c {tagcount,totalcount,known},cons)) =
       (case cons
 	 of [con] => SOME (tagcount,totalcount,known,hd cons)
 	  | _ => error "strip_sum given sum not carrying exactly one type argument")
@@ -202,7 +200,7 @@ struct
 
   fun is_var_e (Var_e v) = true
     | is_var_e _ = false
-  fun is_taglike c = 
+  fun is_taglike c =
       (case c
 	of Prim_c(Int_c _, _)  => true
 	 | Prim_c(Sum_c _,_)   => true
@@ -212,7 +210,7 @@ struct
 	 | _                   => false)
 
 
-  fun get_arrow_return con = 
+  fun get_arrow_return con =
     case strip_arrow con of
 	SOME {body_type,...} => SOME body_type
        | NONE => NONE
@@ -227,14 +225,14 @@ struct
 
 
 
-  fun selfify'(con,kind,subst) = 
+  fun selfify'(con,kind,subst) =
     (case kind of
        Type_k => SingleType_k con
-     | SingleType_k _ => SingleType_k(con) 
-     | Single_k _ => Single_k con 
-     | Record_k entries => 
+     | SingleType_k _ => SingleType_k(con)
+     | Single_k _ => Single_k con
+     | Record_k entries =>
 	 let
-	   fun folder (((l,v),k),subst) = 
+	   fun folder (((l,v),k),subst) =
 	     let
 	       val proj = Proj_c (con,l)
 	       val kres = selfify' (proj,k,subst)
@@ -245,7 +243,7 @@ struct
 	   val (entries,subst) = Sequence.foldl_acc folder subst entries
 	 in Record_k entries
 	 end
-     | Arrow_k (openness,args,return) => 
+     | Arrow_k (openness,args,return) =>
 	 let
 	   val (formal_vars,_) = unzip args
 	   val args = Listops.map_second (NilSubst.substConInKind subst) args
@@ -253,14 +251,14 @@ struct
 	 in
 	   Arrow_k (openness,args,selfify'(App_c (con,actuals),return,subst))
 	 end)
-       
+
   fun selfify (con,kind) = selfify'(con,kind,NilSubst.C.empty())
 
   val selfify = subtimer ("NilUtil:selfify",selfify)
   val selfify' = subtimer ("NilUtil:selfify'",selfify')
 
   local
-    structure A : 
+    structure A :
       sig
 	type alpha_context
 	val substitute : alpha_context * var -> var
@@ -296,7 +294,7 @@ struct
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
 
-    type handlers = 
+    type handlers =
 	{exphandler : bound * Nil.exp -> Nil.exp changeopt,
 	 bndhandler : bound * Nil.bnd -> (Nil.bnd list) changeopt,
 	 conhandler : bound * Nil.con -> Nil.con changeopt,
@@ -307,8 +305,8 @@ struct
 	STATE of {bound : bound,
 		  handlers : handlers}
 
-    fun add_convars (STATE{bound={isConstr,level,boundcvars,boundevars},handlers},vs) = 
-	(STATE{bound = {level = level, 
+    fun add_convars (STATE{bound={isConstr,level,boundcvars,boundevars},handlers},vs) =
+	(STATE{bound = {level = level,
 			isConstr=isConstr,
 			boundcvars = Name.VarSet.addList(boundcvars,vs),
 			boundevars = boundevars},
@@ -316,43 +314,43 @@ struct
 
     fun add_convar (h : state ,v) = add_convars(h,[v])
 
-    fun add_var (STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}, v) = 
+    fun add_var (STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}, v) =
 	(STATE{bound = {level=level,
 			isConstr = isConstr,
 			boundcvars = boundcvars,
 			boundevars = Name.VarSet.add(boundevars, v)},
 	       handlers = handlers})
 
-    fun add_level (STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) = 
+    fun add_level (STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) =
 	(STATE{bound = {level = level + 1,
 			isConstr = isConstr,
 			boundcvars = boundcvars,
 			boundevars = boundevars},
 	       handlers = handlers})
-    
-    fun type_state(STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) = 
+
+    fun type_state(STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) =
 	(STATE{bound = {level = level,
 			isConstr = false,
 			boundcvars = boundcvars,
 			boundevars = boundevars},
 	       handlers = handlers})
-    fun constr_state(STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) = 
+    fun constr_state(STATE{bound={isConstr,level,boundevars,boundcvars},handlers=handlers}) =
 	(STATE{bound = {level = level,
 			isConstr = true,
 			boundcvars = boundcvars,
 			boundevars = boundevars},
 	       handlers = handlers})
 
-    fun f_cbnd (state : state)  (cbnd : conbnd) : (conbnd list * state) = 
-	let 
+    fun f_cbnd (state : state)  (cbnd : conbnd) : (conbnd list * state) =
+	let
 	    val (STATE{bound,handlers={cbndhandler,...},...}) = state
-	    fun cbnd_help wrap (var, vklist, c) state openness = 
+	    fun cbnd_help wrap (var, vklist, c) state openness =
 		let val state' = add_level state
 		    val (vklist',state') = f_vklist state' vklist
 		    val c' = f_con state'  c
 		in (wrap(var, vklist', c'), add_convar(state,var))
 		end
-	    fun do_cbnd (Con_cb(var, con),state) = 
+	    fun do_cbnd (Con_cb(var, con),state) =
 		let val con' = f_con state  con
 		in (Con_cb(var, con'), add_convar(state,var))
 		end
@@ -360,9 +358,9 @@ struct
 	      | do_cbnd (Code_cb args,state) = cbnd_help Code_cb args state Code
 	in (case (cbndhandler (bound,cbnd)) of
 		CHANGE_NORECURSE cbs => (cbs, state)  (* is this right? *)
-	      | CHANGE_RECURSE cbs => 
-		    let 
-			fun folder(cb,(cbs,s)) = 
+	      | CHANGE_RECURSE cbs =>
+		    let
+			fun folder(cb,(cbs,s)) =
 			    let val (cb',s') = do_cbnd(cb,s)
 			    in  (cb'::cbs,s')
 			    end
@@ -372,16 +370,16 @@ struct
 	      | NOCHANGE => let val (cb,s) = do_cbnd(cbnd,state)
 			    in ([cb],s)
 			    end)
-	end  
-		
-  and f_con (state : state)  (con : con) : con = 
-    let 
-      val self = f_con state 
+	end
+
+  and f_con (state : state)  (con : con) : con =
+    let
+      val self = f_con state
       val (STATE{bound,handlers={conhandler,...},...}) = state
-      fun docon con = 
+      fun docon con =
 	  (case con of
 	       (Prim_c (pcon,args)) => (Prim_c (pcon,map self args))
-	       
+
 	     | (Mu_c (flag,defs)) =>
 		   let
 		       val (con_vars,cons) = unzip (Sequence.toList defs)
@@ -390,15 +388,15 @@ struct
 		       val defs' = Sequence.fromList (zip con_vars cons')
 		   in  Mu_c (flag,defs')
 		   end
-	       
+
 	     | (AllArrow_c confun) => AllArrow_c (f_arrow state confun)
 	     | (ExternArrow_c (cons,c)) => ExternArrow_c(map self cons, self c)
-		   
+
 	     | (Var_c var) => con
 
-	     | (Let_c (letsort, cbnds, body)) => 
+	     | (Let_c (letsort, cbnds, body)) =>
 		   let
-		       fun folder(cbnd,(rev_cbnds,accstate)) = 
+		       fun folder(cbnd,(rev_cbnds,accstate)) =
 			   let val s = (case letsort of
 					    Parallel => state
 					  | Sequential => accstate)
@@ -411,7 +409,7 @@ struct
 		   in
 		       Let_c (letsort, cbnds', body')
 		   end
-	   
+
 	     | (Closure_c (code,env)) =>
 		   let
 		       val code' = self code
@@ -419,21 +417,21 @@ struct
 		   in
 		       Closure_c(code', env')
 		   end
-	       
+
 	     | (Crecord_c entries) =>
 		   let
 		       val entries' = map_second self entries
 		   in
 		       Crecord_c entries'
 		   end
-	       
+
 	     | (Proj_c (con,lbl)) =>
 		   let
 		       val con' = self con
 		   in
 		       Proj_c (con', lbl)
 		   end
-	       
+
 	     | (App_c (cfun,actuals)) =>
 		   let
 		       val cfun' = self cfun
@@ -455,31 +453,31 @@ struct
     end
 
   and f_arrow (state : state) {openness, effect,
-			       tFormals, eFormals, fFormals, body_type} = 
+			       tFormals, eFormals, fFormals, body_type} =
     let
       val (tFormals,state) = f_vklist state tFormals
       val eFormals = map (f_con state) eFormals
       val body_type = f_con state body_type
     in   {openness = openness,
-	  effect =  effect, 
-	  tFormals = tFormals, 
-	  eFormals = eFormals, 
-	  fFormals = fFormals, 
+	  effect =  effect,
+	  tFormals = tFormals,
+	  eFormals = eFormals,
+	  fFormals = fFormals,
 	  body_type = body_type}
     end
 
-  and f_kind (state : state) (arg_kind : kind) = 
-    let 
+  and f_kind (state : state) (arg_kind : kind) =
+    let
       val self = f_kind state
       val (STATE{bound,handlers={kindhandler,...},...}) = state
-      fun dokind kind = 
-	  (case kind 
+      fun dokind kind =
+	  (case kind
 	     of Type_k => kind
 	     | (SingleType_k con) => SingleType_k(f_con state con)
 	     | (Single_k con) => Single_k(f_con state con)
 	     | (Record_k fieldseq) =>
 	      let
-		fun fold_one (((lbl,var),kind),state) = 
+		fun fold_one (((lbl,var),kind),state) =
 		  let
 		    val kind'  = f_kind state kind
 		    val state' = add_convar (state,var)
@@ -507,7 +505,7 @@ struct
 
   and f_vklist state vklist =
     let	val tstate = type_state state
-	fun fold_one ((var,knd),state) = 
+	fun fold_one ((var,knd),state) =
 	    let
 		val knd' = f_kind tstate knd
 		val state' = add_convar (state, var)
@@ -521,10 +519,10 @@ struct
   and f_type state c = f_con (type_state state) c
 
   and f_vtclist state vtclist =
-    let fun fold_one ((var,trace,con),state) = 
+    let fun fold_one ((var,trace,con),state) =
 	    let
 		val con' = f_type state con
-		val trace' = f_niltrace state trace 
+		val trace' = f_niltrace state trace
 		val state' = add_var (state, var)
 	    in
 		((var,trace,con'),state')
@@ -534,9 +532,9 @@ struct
     end
 
   and f_vtlist state vtlist =
-    let fun fold_one ((var,trace),state) = 
+    let fun fold_one ((var,trace),state) =
 	    let
-		val trace' = f_niltrace state trace 
+		val trace' = f_niltrace state trace
 		val state' = add_var (state, var)
 	    in
 		((var,trace),state')
@@ -555,7 +553,7 @@ struct
 
 
   and dofun (state : state) (Function{effect,recursive,
-				      tFormals,eFormals,fFormals,body}) = 
+				      tFormals,eFormals,fFormals,body}) =
       let val state' = add_level state
 	  val (eFormals', state') = f_vtlist state' eFormals
 	  val body' = f_exp state' body
@@ -569,7 +567,7 @@ struct
       let val state = constr_state state
       in
 	case nt of
-	  TraceCompute v => 
+	  TraceCompute v =>
 	    (case (f_con state (Var_c v)) of
 	       Var_c v' => TraceCompute v'
 	     | _ => TraceUnknown)
@@ -578,16 +576,16 @@ struct
 		 val con = f_con state (path2con (v,ls))
 	       in
 		 case (con2path con) of
-		   SOME (v', ls') => 
+		   SOME (v', ls') =>
 		     TraceKnown (TraceInfo.Compute(v',ls'))
 		 | _ => TraceUnknown
 	       end
 	| _ => nt
       end
 
-  and f_bnd (state : state) (bnd : bnd) : bnd list * state = 
+  and f_bnd (state : state) (bnd : bnd) : bnd list * state =
       let val (STATE{bound,handlers={bndhandler,exphandler,...},...}) = state
-	  fun do_bnd (bnd,s) : bnd list * state = 
+	  fun do_bnd (bnd,s) : bnd list * state =
 	      case bnd of
 		  Con_b(p,cb) => let val state = (case p of
 						      Runtime => state
@@ -596,21 +594,21 @@ struct
 				     val state = constr_state state
 				 in  (map (fn cb => Con_b(p,cb)) cbnds, state)
 				 end
-		| Exp_b(v,nt,e) => ([Exp_b(v, f_niltrace state nt, f_exp state e)], 
+		| Exp_b(v,nt,e) => ([Exp_b(v, f_niltrace state nt, f_exp state e)],
 				       add_var(state,v))
-		| Fixopen_b vfset => 
+		| Fixopen_b vfset =>
 		      let val s' = Sequence.foldl (fn (((v,c),f),s) => add_var(s,v)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
 		      in  ([Fixopen_b(Sequence.map doer vfset)], s')
 		      end
-		| Fixcode_b vfset => 
+		| Fixcode_b vfset =>
 		      let val s' = Sequence.foldl (fn (((v,c),f),s) => add_var(s,v)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
 		      in  ([Fixcode_b(Sequence.map doer vfset)], s')
 		      end
-		| Fixclosure_b (is_recur,vcset) => 
-		      let val s' = Sequence.foldl (fn (((v,c),{...}),s) => add_var(s,v)) s vcset 
-			  fun doer(v,{code,cenv,venv}) = 
+		| Fixclosure_b (is_recur,vcset) =>
+		      let val s' = Sequence.foldl (fn (((v,c),{...}),s) => add_var(s,v)) s vcset
+			  fun doer(v,{code,cenv,venv}) =
 			  (v,{code = (case (exphandler (bound,Var_e code)) of
 					  NOCHANGE => code
 					| (CHANGE_RECURSE (Var_e v')) => v'
@@ -628,11 +626,11 @@ struct
 	| NOCHANGE => do_bnd(bnd,state)
       end
 
-  and f_switch state sw = 
+  and f_switch state sw =
       (case sw of
 	   Intsw_e {arg, size, arms, default, result_type} =>
 	       Intsw_e {arg = f_exp state arg,
-			size = size, 
+			size = size,
 			arms = map (fn (t,e) => (t,f_exp state e)) arms,
 			default = Util.mapopt (f_exp state) default,
 			result_type = f_type state result_type}
@@ -661,7 +659,7 @@ struct
 	 | Typecase_e {arg, arms, default, result_type} =>
 	       let val arg = f_con state arg
 		   val default = f_exp state default
-		   val arms = map (fn (pc,vklist,e) => 
+		   val arms = map (fn (pc,vklist,e) =>
 				   let val (vklist,state') = f_vklist state vklist
 				   in  (pc, vklist, f_exp state' e)
 				   end) arms
@@ -673,14 +671,14 @@ struct
     | f_ccode state (Or_cc (c1, c2)) = Or_cc (f_ccode state c1, f_ccode state c2)
     | f_ccode state (Not_cc c) = Not_cc (f_ccode state c)
 
-  and f_exp state (exp : exp) : exp = 
+  and f_exp state (exp : exp) : exp =
       let val self = f_exp state
 	  val (STATE{bound,handlers={exphandler,...},...}) = state
-	  fun doexp e = 
+	  fun doexp e =
 	      case e of
 		  (Var_e _) => e
-		| (Const_e v) => 	
-		    Const_e 
+		| (Const_e v) =>
+		    Const_e
 		    (case v of
 			 (Prim.int _) => v
                        | (Prim.uint _) => v
@@ -693,8 +691,8 @@ struct
 			      Prim.vector(f_con state c,array))
 		       | Prim.refcell (r as (ref e)) => (r := self e; v)
 		       | Prim.tag (t,c) => Prim.tag(t,f_con state c))
-		| (Let_e (sort,bnds,body)) => 
-		      let fun folder (bnd,(bnds_list,s)) = 
+		| (Let_e (sort,bnds,body)) =>
+		      let fun folder (bnd,(bnds_list,s)) =
 			    let val (bnds,s') = f_bnd s bnd
 			    in  (bnds :: bnds_list,s')
 			    end
@@ -703,23 +701,23 @@ struct
 			  val body' = f_exp state' body
 		      in Let_e(sort,bnds',body')
 		      end
-		| (Prim_e (ap,trlist,clist,elist)) => 
+		| (Prim_e (ap,trlist,clist,elist)) =>
 		      let val state = if (allprim_uses_carg ap) then state else type_state state
 		      in  Prim_e(ap,map (f_niltrace state) trlist,map (f_con state) clist, map self elist)
 		      end
 		| (Switch_e switch) => Switch_e(f_switch state switch)
 		| ExternApp_e (func,elist) =>
 		      ExternApp_e(self func, map self elist)
-		| (App_e (openness,func,clist,elist,eflist)) => 
+		| (App_e (openness,func,clist,elist,eflist)) =>
 		      App_e(openness,
 			    self func,
 			    map (f_con state) clist,
-			    map self elist, 
+			    map self elist,
 			    map self eflist)
 		| Raise_e (e,c) => Raise_e(self e, f_type state c)
-		| Handle_e {body,bound,handler,result_type} => 
+		| Handle_e {body,bound,handler,result_type} =>
 		      let val state' = add_var(state,bound)
-		      in  Handle_e{body = self body, bound=bound, 
+		      in  Handle_e{body = self body, bound=bound,
 				   handler = f_exp state' handler,
 				   result_type = f_type state result_type}
 		      end
@@ -743,7 +741,7 @@ struct
 	| NOCHANGE => doexp exp
       end
 
-  val default_bound : bound = {isConstr = true, level = 0, 
+  val default_bound : bound = {isConstr = true, level = 0,
 			       boundcvars = Name.VarSet.empty, boundevars = Name.VarSet.empty}
   fun default_bndhandler _ = NOCHANGE
   fun default_cbndhandler _ = NOCHANGE
@@ -751,9 +749,9 @@ struct
   fun default_conhandler _ = NOCHANGE
   fun default_kindhandler _ = NOCHANGE
 
-  (* --------------- Exported Functions -------------------------- *) 
+  (* --------------- Exported Functions -------------------------- *)
 
-  fun to_handlers handlers = 
+  fun to_handlers handlers =
       STATE{bound = default_bound,
 	    handlers = handlers}
 
@@ -765,12 +763,12 @@ struct
 
 
   local
-      fun count_handler() = 
-	  let val count = ref 0 
+      fun count_handler() =
+	  let val count = ref 0
 	      fun con_handler _ = (count := (!count) + 1; NOCHANGE)
 	      fun exp_handler _ = (count := (!count) + 1; NOCHANGE)
 	      fun kind_handler _ = (count := (!count) + 1; NOCHANGE)
-	  in 
+	  in
 	      (count,
 	       STATE{bound = default_bound,
 		     handlers = {bndhandler = default_bndhandler,
@@ -807,17 +805,17 @@ struct
 	  end
   end
 
-  local 
-    fun con_handler conmap ({boundcvars,boundevars},Var_c var) = 
-	 if (Name.VarSet.member(boundcvars,var)) 
+  local
+    fun con_handler conmap ({boundcvars,boundevars},Var_c var) =
+	 if (Name.VarSet.member(boundcvars,var))
 	   then NOCHANGE
 	 else (case (conmap var) of
 		 NONE => NOCHANGE
 	       | SOME c => CHANGE_NORECURSE c)
       | con_handler _ _ = NOCHANGE
-	   
-    fun exp_handler expmap ({boundevars,boundcvars},Var_e var) = 
-      if (Name.VarSet.member(boundevars,var)) 
+
+    fun exp_handler expmap ({boundevars,boundcvars},Var_e var) =
+      if (Name.VarSet.member(boundevars,var))
 	then NOCHANGE
       else (case (expmap var) of
 		NONE => NOCHANGE
@@ -826,16 +824,16 @@ struct
 
 
     (* var_set_handler creates a set of handlers to pass to the rewriter defined above
-     for the purpose of finding free variables.  This is presumably used for countless 
+     for the purpose of finding free variables.  This is presumably used for countless
      purposes; one very special one is in Tortl for the translation of exception handlers.
-     Since the saving that goes on there has to be compatible with the "free variable" 
+     Since the saving that goes on there has to be compatible with the "free variable"
      computation in the closure converter wrt coercion variables, we have a for_exnhandler
      flag here. *)
 
     fun var_set_handler (for_exnhandler,look_in_kind, minLevel) =
 	let val free_evars : (Name.VarSet.set ref) = ref Name.VarSet.empty
 	    val free_cvars : (Name.VarSet.set ref) = ref Name.VarSet.empty
-	    fun normal_exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) = 
+	    fun normal_exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) =
 		(if (not (Name.VarSet.member(boundevars,v))
 		     andalso (level >= minLevel))
 		     then free_evars := Name.VarSet.add(!free_evars, v)
@@ -843,7 +841,7 @@ struct
 		     NOCHANGE)
 	      | normal_exp_handler _ = NOCHANGE
 	    val ignoring_coercions = !(Stats.bool "closure_omit_coercions")
-	    fun coercion_ignoring_exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) = 
+	    fun coercion_ignoring_exp_handler ({level,boundevars,boundcvars,...}:bound,Var_e v) =
 		(if (not (Name.VarSet.member(boundevars,v))
 		     andalso (level >= minLevel))
 		     then free_evars := Name.VarSet.add(!free_evars, v)
@@ -857,7 +855,7 @@ struct
 		   else NOCHANGE
 	      | coercion_ignoring_exp_handler _ = NOCHANGE
 	    fun kind_handler (_,k) = CHANGE_NORECURSE k
-	    fun con_handler ({level,boundevars,boundcvars,...}:bound,Var_c v) = 
+	    fun con_handler ({level,boundevars,boundcvars,...}:bound,Var_c v) =
 		(if (not (Name.VarSet.member(boundcvars,v))
 		     andalso (level >= minLevel))
 		     then free_cvars := Name.VarSet.add(!free_cvars,v)
@@ -879,7 +877,7 @@ struct
 	end
 
     fun free_handler (lookInKind,minLevel) = var_set_handler(false,lookInKind,minLevel)
-    
+
   in
 
     fun freeExpConVarInExnHandler(lookInKind,minLevel,e) =
@@ -888,19 +886,19 @@ struct
 	(!evars_ref,!cvars_ref)
       end
 
-    fun freeExpConVarInExp(lookInKind,minLevel,e) = 
+    fun freeExpConVarInExp(lookInKind,minLevel,e) =
 	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_exp handler e;
 	    (!evars_ref, !cvars_ref)
 	end
 
-    fun freeExpConVarInCon(lookInKind,minLevel,c) = 
+    fun freeExpConVarInCon(lookInKind,minLevel,c) =
 	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_con handler c;
 	    (!evars_ref, !cvars_ref)
 	end
 
-    fun freeExpConVarInKind(lookInKind,minLevel,k) = 
+    fun freeExpConVarInKind(lookInKind,minLevel,k) =
 	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_kind handler k;
 	    (!evars_ref, !cvars_ref)
@@ -937,11 +935,11 @@ struct
     fun varBoundByCbnd (Con_cb (v,c)) = v
       | varBoundByCbnd (Open_cb (v,_,_)) = v
       | varBoundByCbnd (Code_cb (v,_,_)) = v
-      
+
     val varsBoundByCbnds = map varBoundByCbnd
-      
+
     (* get the bound vars from a list of bnds *)
-    fun varsBoundByBnds bnds = 
+    fun varsBoundByBnds bnds =
 	let
 	    fun gv ([],l) = rev l
 	      | gv (Con_b (p,cb)::rest,l) = gv(rest,(varBoundByCbnd cb)::l)
@@ -953,7 +951,7 @@ struct
 	    gv (bnds,[])
 	end
 
-  fun muExpand (flag,vcseq,v) = 
+  fun muExpand (flag,vcseq,v) =
       let val vc_list = Sequence.toList vcseq
 	  val mu_con = Mu_c(flag,vcseq)
 	  fun mapper (which,(v,_)) = (v,if (length vc_list = 1)
@@ -981,7 +979,7 @@ struct
     | sub_effect (sk,_,_) = false
 
   (*Pre: Records are sorted by label *)
-  fun primequiv (pcon1,pcon2) = 
+  fun primequiv (pcon1,pcon2) =
     let
     in
       case (pcon1,pcon2) of
@@ -994,41 +992,41 @@ struct
 	| (Loc_c,Loc_c) => true
 	| (Exntag_c,Exntag_c) => true
 	 | (Sum_c {known=k1,tagcount=t1,totalcount=to1},
-	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) => 
-	    Util.eq_opt (op =,k1,k2) 
+	    Sum_c {known=k2,tagcount=t2,totalcount=to2}) =>
+	    Util.eq_opt (op =,k1,k2)
 	    andalso (to1 = to2)
 	    andalso (t1 = t2)
 
-	 | (Record_c labs1,Record_c labs2) => 
+	 | (Record_c labs1,Record_c labs2) =>
 	      Listops.eq_list (eq_label,labs1,labs2)
-	 | (Vararg_c (openness1,effect1),Vararg_c (openness2,effect2)) => 
+	 | (Vararg_c (openness1,effect1),Vararg_c (openness2,effect2)) =>
 	  (same_openness (openness1,openness2) andalso
 	   same_effect (effect1,effect2))
 	 | (GCTag_c,GCTag_c) => true
 	 | _  => false
     end
 
-  
+
   fun same_phase (Compiletime, Compiletime) = true
     | same_phase (Runtime, Runtime) = true
     | same_phase _ = false
 
-  fun alpha_equiv_kind' (context) (kind1,kind2) = 
+  fun alpha_equiv_kind' (context) (kind1,kind2) =
     let
       val recur = alpha_equiv_kind' context
     in
       (case (kind1,kind2) of
 	    (Type_k, Type_k) => true
-          | (Single_k con1, Single_k con2) => 
+          | (Single_k con1, Single_k con2) =>
 	       alpha_equiv_con' context (con1,con2)
-	  | (SingleType_k con1,SingleType_k con2) => 
+	  | (SingleType_k con1,SingleType_k con2) =>
                alpha_equiv_con' context (con1,con2)
-	  | (Record_k elts1_seq,Record_k elts2_seq) => 
+	  | (Record_k elts1_seq,Record_k elts2_seq) =>
 	   let
 	     val conref = ref context
 	     val elts1 = Sequence.toList elts1_seq
 	     val elts2 = Sequence.toList elts2_seq
-	     fun equiv_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
+	     fun equiv_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) =
 	       let
 		 val kind_equiv = alpha_equiv_kind' (!conref) (kind1,kind2)
 		 val _ = conref := alpha_equate_pair (!conref,(var1,var2))
@@ -1044,53 +1042,53 @@ struct
 	     (Arrow_k (openness2, formals2, return2))) =>
 	   let
 	     val conref = ref context
-	     fun equiv_one ((var1,kind1),(var2,kind2)) = 
+	     fun equiv_one ((var1,kind1),(var2,kind2)) =
 	       (alpha_equiv_kind' (!conref) (kind1,kind2))
 	       before (conref := alpha_equate_pair (!conref,(var1,var2)))
 	   in
-	     same_openness (openness1,openness2) andalso 
-	     eq_len (formals1,formals2) andalso 
-	     (ListPair.all equiv_one (formals1,formals2)) andalso 
+	     same_openness (openness1,openness2) andalso
+	     eq_len (formals1,formals2) andalso
+	     (ListPair.all equiv_one (formals1,formals2)) andalso
 	     alpha_equiv_kind' (!conref) (return1,return2)
 	   end
 	  | _ => false)
     end
 
-  and alpha_equiv_con' context args = alpha_subequiv_con' false context args  
-  and alpha_subequiv_con_list st context (cl1,cl2) = 
+  and alpha_equiv_con' context args = alpha_subequiv_con' false context args
+  and alpha_subequiv_con_list st context (cl1,cl2) =
     Listops.eq_list (fn (c1,c2) => alpha_subequiv_con' st context (c1,c2),cl1,cl2)
-  and alpha_equiv_vk_list context (vk1,vk2) = 
-    let 
-      fun folder ((var1,kind1),(var2,kind2),(context,equal)) = 
+  and alpha_equiv_vk_list context (vk1,vk2) =
+    let
+      fun folder ((var1,kind1),(var2,kind2),(context,equal)) =
 	if equal then
 	  (alpha_equate_pair (context,(var1,var2)),alpha_equiv_kind' context (kind1,kind2))
 	else (context,false)
     in foldl2 folder (context,true) (vk1,vk2)
     end
-  and alpha_subequiv_con' st context (con1,con2) = 
+  and alpha_subequiv_con' st context (con1,con2) =
     let
-      val res = 
+      val res =
 	(case (con1,con2)
-	   of (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) => 
+	   of (Prim_c (pcon1,args1),Prim_c (pcon2,args2)) =>
 	     let
-	       val res1 = 
+	       val res1 =
 		 (case (pcon1,pcon2) of
-		    (Record_c labs1, 
+		    (Record_c labs1,
 		     Record_c labs2) => Listops.eq_list(eq_label,labs1,labs2)
 		  | (Sum_c{tagcount=tagcount1,totalcount=totalcount1,
-			   known=known1}, 
+			   known=known1},
 		     Sum_c{tagcount=tagcount2,totalcount=totalcount2,
 			   known=known2}) =>
 		    (
-		     (tagcount1 = tagcount2)     
-		     andalso (totalcount1 = totalcount2) 
+		     (tagcount1 = tagcount2)
+		     andalso (totalcount1 = totalcount2)
 		     andalso (case (known1,known2,st) of
 				(NONE,NONE,_) => true
 			      | (SOME w1, SOME w2,_) => (w1=w2)
 			      | (SOME w1, NONE, true) => true
 			      | _ => false)
 		     )
-		  | (Vararg_c(o1,eff1),Vararg_c(o2,eff2)) => 
+		  | (Vararg_c(o1,eff1),Vararg_c(o2,eff2)) =>
 		    o1 = o1 andalso (sub_effect(st,eff1,eff2)) andalso
 		    (case (args1,args2)
 		       of ([argc1,resc1],[argc2,resc2]) =>
@@ -1116,26 +1114,26 @@ struct
 	       AllArrow_c {openness = o2, effect = eff2,
 			   tFormals = t2, eFormals = e2, fFormals = f2, body_type = b2}) =>
 
-		(same_openness(o1,o2)              
-		 andalso (f1 = f2) 
+		(same_openness(o1,o2)
+		 andalso (f1 = f2)
 		 andalso (sub_effect (st,eff1,eff2))
-		 andalso (List.length t1 = List.length t2) 
+		 andalso (List.length t1 = List.length t2)
 		 andalso
 		 let val (context,equal) = alpha_equiv_vk_list context (t1,t2)
-		 in (alpha_subequiv_con_list st context (e2, e1) 
+		 in (alpha_subequiv_con_list st context (e2, e1)
 		     andalso alpha_subequiv_con' st context (b1,b2))
 		 end )
 
 			 (*Common case?*)
 
 	  | (Var_c var1,Var_c var2) => alpha_pair_eq(context,(var1,var2))
-		
+
 	  (* Note - can't subtype lets without recording variance info,
 	   * so set subtyping to false here.
 	   *)
-	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) => 
-	   let 
-	     fun equate_fun context ((var1,formals1,con1),(var2,formals2,con2)) = 
+	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) =>
+	   let
+	     fun equate_fun context ((var1,formals1,con1),(var2,formals2,con2)) =
 	       let val (context',equal) = alpha_equiv_vk_list context (formals1,formals2)
 	       in if equal then (alpha_equate_pair(context,(var1,var2)),
 				 alpha_equiv_con' context' (con1,con2))
@@ -1144,8 +1142,8 @@ struct
 
 	     fun equiv_one (_,_,(context,false))   = (context,false)
 	       | equiv_one (bnd1,bnd2,(context,_)) =
-	       (case (bnd1,bnd2) 
-		  of (Con_cb(var1,con1),Con_cb(var2,con2)) => 
+	       (case (bnd1,bnd2)
+		  of (Con_cb(var1,con1),Con_cb(var2,con2)) =>
 		    (alpha_equate_pair(context,(var1,var2)),alpha_equiv_con' context (con1,con2))
 		   | (Open_cb args1,Open_cb args2) => equate_fun context (args1,args2)
 		   | (Code_cb args1,Code_cb args2) => equate_fun context (args1,args2)
@@ -1156,28 +1154,28 @@ struct
 	      in equal andalso alpha_subequiv_con' st context (con1,con2)
 	      end)
 	   end
-	  | (Closure_c (code1,env1),Closure_c (code2,env2)) => 
+	  | (Closure_c (code1,env1),Closure_c (code2,env2)) =>
 	   alpha_subequiv_con' st context (code1,code2) andalso alpha_subequiv_con' st context (env1,env2)
-	  
-	  | (Crecord_c entries1,Crecord_c entries2) => 
+
+	  | (Crecord_c entries1,Crecord_c entries2) =>
 	   let
-	     fun equiv_each ((lbl1,con1),(lbl2,con2)) = 
-	       (eq_label (lbl1,lbl2) 
+	     fun equiv_each ((lbl1,con1),(lbl2,con2)) =
+	       (eq_label (lbl1,lbl2)
 		andalso	alpha_subequiv_con' st context (con1,con2))
 	   in eq_list (equiv_each,entries1,entries2)
 	   end
 
-	  | (Proj_c (crec1,label1),Proj_c (crec2,label2)) => 
+	  | (Proj_c (crec1,label1),Proj_c (crec2,label2)) =>
 	   eq_label (label1,label2) andalso
 	   alpha_subequiv_con' st context (crec1,crec2)
-	   
-	  | (App_c (cfun1,actuals1),App_c (cfun2,actuals2)) => 
-	   alpha_subequiv_con' st context (cfun1,cfun2) 
+
+	  | (App_c (cfun1,actuals1),App_c (cfun2,actuals2)) =>
+	   alpha_subequiv_con' st context (cfun1,cfun2)
 	   andalso alpha_subequiv_con_list st context (actuals1,actuals2)
 
 	  | _ => false)
 
-      val _ = 
+      val _ =
 	if !debug andalso not res then
 	  (lprintl "alpha_equiv_con failed!";
 	   printl "Constructor:";
@@ -1186,17 +1184,17 @@ struct
 	   Ppnil.pp_con con2;
 	   printl "")
 	else ()
-		   
+
     in res
     end
 
   fun alpha_subequiv_con st args = alpha_subequiv_con' st (empty_context (),empty_context ()) args
-  
-  val alpha_equiv_con    = alpha_subequiv_con false 
+
+  val alpha_equiv_con    = alpha_subequiv_con false
   val alpha_equiv_kind   = alpha_equiv_kind' (empty_context (),empty_context ())
 
 
-  fun alpha_mu is_bound (vclist) = 
+  fun alpha_mu is_bound (vclist) =
       let fun folder((v,_),subst) = if (is_bound v)
 				       then NilSubst.C.sim_add subst (v,Var_c(Name.derived_var v))
 				    else subst
@@ -1220,17 +1218,17 @@ struct
          LET_C cvar' = con IN cvar       ==>  cvar  [where cvar != cvar']
          LET_C cbnds, cvar = con IN cvar ==>  makeLetC cbnds con
          LET_C cbnds IN (LET_C cbnds' IN con) ==> makeLetC (cbnds@cbnds') con
-    *) 
+    *)
    fun makeLetC nil body = body
      | makeLetC [conbnd as Con_cb(var,con)] (cv as Var_c var') =
-       if (Name.eq_var(var,var')) then 
+       if (Name.eq_var(var,var')) then
 	 if small_con con then con else Let_c (Sequential,[conbnd],cv)
        else cv
      | makeLetC cbnds (cv as Var_c var') =
        (case (List.rev cbnds) of
-	    Con_cb(var,con)::rest => 
+	    Con_cb(var,con)::rest =>
 	      if (Name.eq_var(var,var')) andalso small_con con then
-		makeLetC (rev rest) con 
+		makeLetC (rev rest) con
 	      else
 		Let_c (Sequential, cbnds, cv)
 	  | _ => Let_c (Sequential, cbnds, cv))
@@ -1276,16 +1274,16 @@ struct
           makeLetE Sequential (ebnds @ ebnds') let_body
      | makeLetE _ ebnds let_body =
        (case (List.rev ebnds, let_body) of
-           (Fixopen_b fset :: rest, 
+           (Fixopen_b fset :: rest,
 	    App_e(_,Var_e evar, con_args, exp_args, fp_args))=>
 	       (case (Sequence.toList fset) of
-		    [((evar', econ), 
-		      Function{recursive = Leaf, 
+		    [((evar', econ),
+		      Function{recursive = Leaf,
 			       tFormals = vklist, eFormals = vclist, fFormals = fplist,
-			       body=fun_body,...})] => 
+			       body=fun_body,...})] =>
  		       if (Name.eq_var(evar',evar)) then
-			   makeLetE Sequential 
-			   ((List.rev rest) @ 
+			   makeLetE Sequential
+			   ((List.rev rest) @
 			    (createBindings(vklist, con_args,
 					    vclist, exp_args,
 					    fplist, fp_args)))
@@ -1296,14 +1294,14 @@ struct
 	 | _ => Let_e(Sequential, ebnds, let_body))
 
    (* makeApply
-         Creates an application.  Optimizes (beta-reduces) 
+         Creates an application.  Optimizes (beta-reduces)
          certain simple cases:
 
          APP(LET bnds IN body, arg) ==> LET bnds IN (APP(body, arg))
            [when FV(args) and BV(bnds) are disjoint]
     *)
     fun makeAppE (fn_exp as Let_e (Sequential, bnds, exp)) cargs eargs fargs =
-	let 
+	let
 	    fun addFree((fvTerm,fvType), fv) = Name.VarSet.union(fv,Name.VarSet.union(fvTerm,fvType))
             fun addExp(e,fv) = addFree(freeExpConVarInExp(true,0,e), fv)
             fun addCon(c,fv) = addFree(freeExpConVarInCon(true,0,c), fv)
@@ -1320,25 +1318,25 @@ struct
 	      | bnd_check (Exp_b(v,_,_)) = VarSet.member(fv,v)
 	      | bnd_check (Fixopen_b vfset) = Listops.orfold vf_mem (map #1 (Sequence.toList vfset))
 	      | bnd_check (Fixcode_b vfset) = Listops.orfold vf_mem (map #1 (Sequence.toList vfset))
-	      | bnd_check (Fixclosure_b (_,vfset)) = 
+	      | bnd_check (Fixclosure_b (_,vfset)) =
 		Listops.orfold vf_mem (map #1 (Sequence.toList vfset))
 
 	    val intersect = Listops.orfold bnd_check bnds
-	in  
-	    if (intersect) then 
+	in
+	    if (intersect) then
 		App_e(Open, fn_exp, cargs, eargs, fargs)
 	    else
 		makeLetE Sequential bnds (makeAppE exp cargs eargs fargs)
 	end
-      | makeAppE fn_exp cargs eargs fargs = 
+      | makeAppE fn_exp cargs eargs fargs =
             App_e(Open, fn_exp, cargs, eargs, fargs)
 
 
-    (* makeSelect.  Given a record expression r and a list lbls 
+    (* makeSelect.  Given a record expression r and a list lbls
      * of labels, produce the term corresponding to r.lbls
      *)
     fun makeSelect exp [] = exp
-      | makeSelect exp (lbl::lbls) = 
+      | makeSelect exp (lbl::lbls) =
       makeSelect (Prim_e(NilPrimOp(select lbl), [], [], [exp])) lbls
 
     (* Rename the constructor parameters in an arrow type *)
@@ -1354,5 +1352,5 @@ struct
 	  {openness = openness, effect = effect, tFormals = tFormals, eFormals = eFormals,
 	   fFormals = fFormals, body_type = body_type}
 	end
-      
+
 end

@@ -1,5 +1,3 @@
-(*$import TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int BinarySetFn SplayMapFn SplaySetFn *)
-
 structure Core :> CORE =
 struct
 
@@ -13,7 +11,7 @@ struct
 
     structure Rtl = Rtl
     datatype register = R of int | F of int
-    
+
     datatype operand = REGop of register
 	               | IMMop of int
 
@@ -22,12 +20,12 @@ struct
                            | THIS_FRAME_ARG4 of int
                            | THIS_FRAME_ARG8 of int
 		           | FRAME_TEMP
-                           | SPILLED_INT of int        
+                           | SPILLED_INT of int
                            | SPILLED_FP of int
                            | RETADD_POS
                            | ACTUAL4 of int            (* int indicates actual offset - mult of 4 *)
                            | ACTUAL8 of int
-      
+
    (* Where a given pseudoregister is physically located *)
    datatype assign = IN_REG of register
                    | ON_STACK of stacklocation
@@ -49,7 +47,7 @@ struct
     fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
 
     fun makeAsmLabel (s : string) : string =
-	let 
+	let
 	    fun xlate (#"_") = "__"
 	      | xlate (#".") = "_DOT"
 	      | xlate (#"'") = "_PRIME"
@@ -109,9 +107,9 @@ struct
 
   fun sloc2int (ACTUAL4 x) = x
     | sloc2int (ACTUAL8 x) = x
-    | sloc2int arg = error ("Attempt to concretize stacklocation: " ^ 
+    | sloc2int arg = error ("Attempt to concretize stacklocation: " ^
 			    (msStackLocation arg))
-    
+
    fun regNum (R n) = n
      | regNum (F n) = n
 
@@ -127,9 +125,9 @@ struct
      | eqAssigns _ _ = false
 
 
-  local 
+  local
       open Rtl
-      structure Labelkey : ORD_KEY = 
+      structure Labelkey : ORD_KEY =
 	  struct
 	      type ord_key = Rtl.label
 	      val compare = Rtl.compare_label
@@ -139,9 +137,9 @@ struct
   end
 
 
-  local 
+  local
       val error = fn s => Util.error "regmap.sml" s
-      structure Regkey : ORD_KEY = 
+      structure Regkey : ORD_KEY =
 	  struct
 	      type ord_key = register
 	      fun compare (R v, R v') = Int.compare(v,v')
@@ -151,9 +149,9 @@ struct
 	  end
       structure Regmap = SplayMapFn(Regkey)
   in
-      structure Regmap = 
+      structure Regmap =
 	struct
-	    
+
 	  open Regmap
 
 	  fun find (m,x) = (case Regmap.find(m,x) of
@@ -169,10 +167,10 @@ struct
 				    print(msReg x);
 				    print " not found in regmap remove\n"; *)
 				   error "regmap_notfound"))
-	      
+
 	  (* Inverses of a Regmap.dict lookup; given a position, what
 	   is currently stored in that position. *)
-	      
+
 	  exception Lookup
 	  fun lookupInv eqFun pairs key =
 	      let
@@ -182,7 +180,7 @@ struct
 	      in
 		  loop pairs
 	      end
-	  
+
 	  fun occupant eqFun regmap =
 	      let
 		  val assigns = listItems regmap
@@ -191,11 +189,11 @@ struct
 	      in
 		  occupant'
 	      end
-	  
+
 	  exception Occupant of register
 	  fun simpleOccupant eqFun (regmap, pos) =
 	      let
-		  fun match (r,pos') = 
+		  fun match (r,pos') =
 		      if (eqFun pos pos') then
 			  raise Occupant r
 		      else ()
@@ -204,12 +202,12 @@ struct
 		  NONE
 	      end
 	  handle Occupant r => SOME r
-	      
+
 	end
   end
 
-  local 
-    structure Regkey : ORD_KEY = 
+  local
+    structure Regkey : ORD_KEY =
       struct
 	type ord_key = register
 	fun compare (R v, R v') = Int.compare(v,v')
@@ -224,7 +222,7 @@ struct
   datatype call_type = DIRECT of label * register option | INDIRECT of register
 
   datatype rtl_instruction =
-    CALL of 
+    CALL of
     {calltype : Rtl.calltype,          (* Is this an extern call to C *)
      func: call_type,                  (* label or temp containing addr. *)
      args : register list,             (* integer, floating temps *)
@@ -239,7 +237,7 @@ struct
     | HANDLER_ENTRY
     | SAVE_CS of label
 
-   datatype base_instruction = 
+   datatype base_instruction =
       MOVE     of register * register
     | PUSH     of register * stacklocation
     | POP      of register * stacklocation
@@ -257,23 +255,23 @@ struct
     | ICOMMENT of string
     | LADDR of register * label         (* dest, offset, label *)
 
-    datatype linkage = 
+    datatype linkage =
 	LINKAGE of {argCaller : assign list,    (* Where are the arguments from the caller's view? *)
 		    resCaller : assign list,    (* Where are the results from the caller's view? *)
 		    argCallee : assign list,    (* Where are the arguments from the callee's view? *)
 		    resCallee : assign list     (* Where are the results from the callee's view? *)
 		    }
 
-   datatype procsig = 
-       UNKNOWN_PROCSIG of 
+   datatype procsig =
+       UNKNOWN_PROCSIG of
            {linkage : linkage,
 	    regs_destroyed  : Regset.set,     (* Physical registers modified by procedure *)
 	    regs_modified  : Regset.set,      (* Physical registers modified (but restored) by procedure *)
 	    callee_saved: Regset.set}         (* Physical registers saved by procedure *)
-     | KNOWN_PROCSIG of 
+     | KNOWN_PROCSIG of
            {linkage : linkage,                (* Physical locations of arguments and registers *)
 	    argFormal : register list,        (* What are the formal (the pseudo-registers) for args and res *)
-	    resFormal : register list,  
+	    resFormal : register list,
 	    framesize : int,                  (* How big is the stack frame for the procedure? *)
 	    ra_offset : int,                  (* Where in the stack is the return addr stored? *)
 	    blocklabels: label list,          (* A list of basic block labels of the proc *)

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Array HASH_TABLE Word HashTableRep *)
 (* hash-table.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.

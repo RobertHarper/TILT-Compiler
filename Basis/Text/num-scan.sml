@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt String Option PreInt PreWord PreReal PreVector *)
 (* num-scan.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -18,21 +17,21 @@ structure NumScan : sig
 	(** should be to LargeReal.real **)
 
   end = struct
-  
+
     val && = TiltPrim.&&
     val << = TiltPrim.<<
-	
+
     type int32 = TiltPrim.int32
     type word32 = TiltPrim.uint32
-	
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     val unsafe_vsub = TiltPrim.unsafe_vsub
-	
+
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
-	
+
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
     val umult = TiltPrim.umult
@@ -267,8 +266,8 @@ structure NumScan : sig
 
 
 (*
-      val fromword32 = W.toLargeIntX 
-       val fromword32' = W.toIntX 
+      val fromword32 = W.toLargeIntX
+       val fromword32' = W.toIntX
 *)
 	val fromword32 = uint32toint32
 	val fromword32' = uint32toint32
@@ -280,12 +279,12 @@ structure NumScan : sig
 		   SOME(ineg(fromword32 word), rest)
 		else if (largestNegInt32 < word) then
 		   raise Overflow
-		else 
+		else
 		   SOME(minInt32, rest)
 	    | (SOME{word, rest, ...}) =>
 		if (largestPosInt32 < word) then
 		   raise Overflow
-	        else 
+	        else
 	           SOME(fromword32 word, rest)
 	  (* end case *))
 
@@ -294,7 +293,7 @@ structure NumScan : sig
       | scanInt StringCvt.OCT = finalInt scanOct
       | scanInt StringCvt.DEC = finalInt scanDec
       | scanInt StringCvt.HEX = finalInt scanHex
-  
+
   (* scan a string of decimal digits (starting with d), and return their
    * value as a real number.  Also return the number of digits, and the
    * rest of the stream.

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* posix-sysdb-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,7 +10,7 @@ signature POSIX_SYS_DB =
   sig
     eqtype uid
     eqtype gid
-    
+
     structure Passwd :
       sig
         type passwd
@@ -31,9 +30,9 @@ signature POSIX_SYS_DB =
         val name    : group -> string
         val gid     : group -> gid
         val members : group -> string list
-    
+
       end
-    
+
     val getgrgid : gid -> Group.group
     val getgrnam : string -> Group.group
     val getpwuid : uid -> Passwd.passwd

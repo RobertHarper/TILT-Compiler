@@ -1,4 +1,3 @@
-(*$import List *)
 (* Queues *)
 (* Author: Frank Pfenning *)
 (* Standard functional implementation of queues *)

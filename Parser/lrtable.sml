@@ -1,7 +1,4 @@
-(*$import Array List YaccBase *)
-
-
-structure LrTable : LR_TABLE = 
+structure LrTable : LR_TABLE =
     struct
 	open Array List
 	infix 9 sub
@@ -21,7 +18,7 @@ structure LrTable : LR_TABLE =
 	val numStates = fn ({states,...} : table) => states
 	val numRules = fn ({rules,...} : table) => rules
 	val describeActions =
-	   fn ({action,...} : table) => 
+	   fn ({action,...} : table) =>
 	           fn (STATE s) => action sub s
 	val describeGoto =
 	   fn ({goto,...} : table) =>

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude List PreTime DATE Time POSIX_extern Vector StringCvt Int *)
 (* date.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -80,22 +79,22 @@ structure Date :> DATE =
     fun offset (DATE{offset,...}) = offset
 
     fun localOffset () = raise TiltExn.LibFail "Date.localOffset not implemented"
- 
-    (* 
+
+    (*
      * This code is taken from Reingold's paper
      *)
-    local 
+    local
 (*	val quot = Int.quot
 	val not = Bool.not *)
-	fun sum (f,k,p) = 
+	fun sum (f,k,p) =
 	    let fun loop (f,i,p,acc) = if (not(p(i))) then acc
 				       else loop(f,i+1,p,acc+f(i))
 	    in
 		loop (f,k,p,0)
 	    end
 	fun lastDayOfGregorianMonth (month,year) =
-	    if ((month=1) andalso 
-		(Int.mod (year,4) = 0) andalso 
+	    if ((month=1) andalso
+		(Int.mod (year,4) = 0) andalso
 		not (Int.mod (year,400) = 100) andalso
 		not (Int.mod (year,400) = 200) andalso
 		not (Int.mod (year,400) = 300))
@@ -103,16 +102,16 @@ structure Date :> DATE =
 	    else List.nth ([31,28,31,30,31,30,31,31,30,31,30,31],month)
     in
 	fun toAbsolute (month, day, year) =
-	    day  
+	    day
 	    + sum (fn (m) => lastDayOfGregorianMonth(m,year),0,
-		   fn (m) => (m<month)) 
+		   fn (m) => (m<month))
 	    + 365 * (year -1)
 	    + Int.quot (year-1,4)
 	    - Int.quot (year-1,100)
 	    + Int.quot (year-1,400)
 	fun fromAbsolute (abs) =
 	    let val approx = Int.quot (abs,366)
-		val year = (approx + sum(fn(_)=>1, approx, 
+		val year = (approx + sum(fn(_)=>1, approx,
 					 fn(y)=> (abs >= toAbsolute(0,1,y+1))))
 		val month = (sum (fn(_)=>1, 0,
 				  fn(m)=> (abs > toAbsolute(m,lastDayOfGregorianMonth(m,year),year))))
@@ -125,14 +124,14 @@ structure Date :> DATE =
 	    in
 		Vector.sub (dayTbl, Int.mod(abs,7))
 	    end
-	fun yday (month, day, year) = 
+	fun yday (month, day, year) =
 	    let val abs = toAbsolute (month, day, year)
-		val daysPrior = 
+		val daysPrior =
 		    365 * (year -1)
 		    + Int.quot (year-1,4)
 		    - Int.quot (year-1,100)
 		    + Int.quot (year-1,400)
-	    in 
+	    in
 		abs - daysPrior - 1    (* to conform to ISO standard *)
 	    end
     end
@@ -140,7 +139,7 @@ structure Date :> DATE =
     (*
      * this function should also canonicalize the time (hours, etc...)
      *)
-    fun canonicalizeDate (DATE d) = 
+    fun canonicalizeDate (DATE d) =
 	let val args = (monthToInt(#month d), #day d, #year d)
 	    val (monthC,dayC,yearC) = fromAbsolute (toAbsolute (args))
 	    val yday = yday (args)
@@ -190,14 +189,14 @@ structure Date :> DATE =
 				    offset = offset
 				    }
 
-	(* takes two tm's and returns the second tm with 
+	(* takes two tm's and returns the second tm with
 	 * its dst flag set to the first one's.
-	 * Used to compute local offsets 
+	 * Used to compute local offsets
 	 *)
 	fun toSameDstTM ((tm_sec, tm_min, tm_hour, tm_mday, tm_mon,
 			  tm_year, tm_wday, tm_yday, tm_isdst),
 			 (tm_sec', tm_min', tm_hour', tm_mday', tm_mon',
-			  tm_year', tm_wday', tm_yday', tm_isdst')) = 
+			  tm_year', tm_wday', tm_yday', tm_isdst')) =
 	    (tm_sec', tm_min', tm_hour', tm_mday', tm_mon',
 	     tm_year', tm_wday', tm_yday', tm_isdst)
 
@@ -218,14 +217,14 @@ structure Date :> DATE =
 		if (s>secInHDay) then secInHDay-s else s
 	    end
 
-	(* 
-	 * this function is meant as an analogue to 
+	(*
+	 * this function is meant as an analogue to
 	 * mkTime, but constructs UTC time instead of localtime
 	 * idea:  mkTime (localtime(t))= t
 	 *        mkGMTime (gmtime(t))= t
 	 *)
 
-	fun localDiff (tm) = 
+	fun localDiff (tm) =
 	    let val t = mkTime (tm)
 		val loc = localTime (t)
 		val gmt = gmTime (t)
@@ -234,9 +233,9 @@ structure Date :> DATE =
 	    end
 
 	fun mkGMTime (tm) = mkTime (toSameDstTM (localTime(mkTime(tm)),tm)) -
-	    localDiff (tm) 
+	    localDiff (tm)
 
-	fun toSeconds (d) = 
+	fun toSeconds (d) =
 	    let val tm = toTM (d)
 	    in
 		case (offset d) of
@@ -255,36 +254,36 @@ structure Date :> DATE =
 
 	fun fromTimeUniv (t) = fromTimeOffset (t,Time.zeroTime)
 
-	fun date {year,month,day,hour,minute,second,offset} = 
+	fun date {year,month,day,hour,minute,second,offset} =
 	    let val d = DATE {second = second,
 			      minute = minute,
 			      hour = hour,
 			      year = year,
-			      month = month, 
+			      month = month,
 			      day = day,
 			      offset = offset,
 			      isDst = NONE,
 			      yday = 0,
 			      wday = Mon}
 		val canonicalDate = canonicalizeDate (d)
-		fun internalDate () = 
+		fun internalDate () =
 		    (case (offset) of
 			 NONE => fromTimeLocal (toTime canonicalDate)
 		       | SOME (offsetV) => fromTimeOffset (toTime canonicalDate,
 							   offsetV))
-	  in 
+	  in
 		internalDate () handle Date => d
 	    end
 
 	fun toString d = ascTime (toTM d)
-	    
+
 	fun fmt fmtStr d = strfTime (fmtStr, toTM d)
 
 	fun fromString (_ : string) : date option = raise TiltExn.LibFail "Date.fromString unimplemented"
 
 	fun scan (_ : (char, 'a) StringCvt.reader) (_ : 'a) : (date * 'a) option =
 	    raise TiltExn.LibFail "Date.scan unimplemented"
-		
+
 	(* comparison does not take into account the offset
 	 * thus, it does not compare dates in different time zones
 	 *)

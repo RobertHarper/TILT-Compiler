@@ -1,4 +1,3 @@
-(*$import POSIX_ERROR POSIX_SIGNAL POSIX_PROCESS POSIX_PROC_ENV POSIX_FILE_SYS POSIX_IO POSIX_SYS_DB POSIX_TTY *)
 (* posix-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -22,7 +21,7 @@ signature POSIX =
 
     (* These hold for TILT but are not part of this signature.
         type Error.syserror = int
-	  
+
 	sharing type Process.pid = ProcEnv.pid = TTY.pid
 	    and type Process.signal = Signal.signal
 	    and type ProcEnv.file_desc = FileSys.file_desc = TTY.file_desc = IO.file_desc

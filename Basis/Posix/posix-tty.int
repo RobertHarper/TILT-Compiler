@@ -1,3 +1,2 @@
-(*$import POSIX_TTY POSIX_Process POSIX_FileSys *)
 structure POSIX_TTY : POSIX_TTY where type pid = POSIX_Process.pid
 				  and type file_desc = POSIX_FileSys.file_desc 

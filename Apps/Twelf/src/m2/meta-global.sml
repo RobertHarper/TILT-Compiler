@@ -1,4 +1,3 @@
-(*$import METAGLOBAL *)
 (* Global parameters *)
 (* Author: Carsten Schuermann *)
 

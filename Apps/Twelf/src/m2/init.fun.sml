@@ -1,4 +1,3 @@
-(*$import INIT METASYN METAABSTRACT *)
 (* Initialization *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude REAL IEEEReal StringCvt Math64 General Bool Int32 RealFormat NumScan PreReal *)
 (* real64.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -6,7 +5,7 @@
  *)
 
 structure Real64 :> REAL where type real = real
-			   and type Math.real = real = 
+			   and type Math.real = real =
   struct
     val abs_float = TiltPrim.fabs
     val float_eq = TiltPrim.float_eq
@@ -32,7 +31,7 @@ structure Real64 :> REAL where type real = real
     val op / : real * real -> real = op /
     fun *+(a,b,c) = a*b+c
     fun *-(a,b,c) = a*b-c
-	
+
     val op >  : real * real -> bool = op >
     val op <  : real * real -> bool = op <
     val op >= : real * real -> bool = op >=
@@ -94,7 +93,7 @@ structure Real64 :> REAL where type real = real
 	val SOME minInt = Int32.minInt
 	val minInt = TiltPrim.int2float minInt
 	val minInt' = minInt - 1.0
-	    
+
 	val SOME maxInt = Int32.maxInt
 	val maxInt = TiltPrim.int2float maxInt
 	val maxInt' = maxInt + 1.0
@@ -137,7 +136,7 @@ structure Real64 :> REAL where type real = real
            val i' = Int32.toInt i
 	   val j' = Int32.toInt j
         in fromInt(i')*2.0+fromInt(j')
-       end    
+       end
 
      (* bug: only one rounding mode implemented *)
     fun toInt IEEEReal.TO_NEGINF = floor
@@ -147,9 +146,9 @@ structure Real64 :> REAL where type real = real
     fun toLargeInt mode x = Int32.fromInt(toInt mode x)
 
     fun toLarge x = x
-    fun fromLarge _ x = x       
+    fun fromLarge _ x = x
 
-    fun sign x = if (x < 0.0) then ~1 else if (x > 0.0) then 1 
+    fun sign x = if (x < 0.0) then ~1 else if (x > 0.0) then 1
                   else if isNan x then raise General.Domain else 0
     fun signBit x = (* Bug: negative zero not handled properly *)
 	real_scalb(x, negate(real_logb x)) < 0.0
@@ -160,14 +159,14 @@ structure Real64 :> REAL where type real = real
            if sameSign(x,y) then x else ~x
 
     fun compare(x,y) = if x<y then General.LESS else if x>y then General.GREATER
-                       else if x == y then General.EQUAL 
+                       else if x == y then General.EQUAL
 			    else raise IEEEReal.Unordered
-    
-    fun compareReal(x,y) = 
+
+    fun compareReal(x,y) =
            if x<y then IEEEReal.LESS else if x>y then IEEEReal.GREATER
-                       else if x == y then IEEEReal.EQUAL 
+                       else if x == y then IEEEReal.EQUAL
 			    else IEEEReal.UNORDERED
-    
+
 
 (** This proably needs to be reorganized **)
     fun class x =  (* does not distinguish between quiet and signalling NaN *)
@@ -195,7 +194,7 @@ structure Real64 :> REAL where type real = real
        in f(1000, 1.0)
       end
 
-    fun toManExp x = 
+    fun toManExp x =
       case real_logb x
 	of ~1023 => if x==0.0 then {man=x,exp=0}
 		    else let val {man=m,exp=e} = toManExp(x*1048576.0)
@@ -257,7 +256,7 @@ structure Real64 :> REAL where type real = real
   (* whole and split could be implemented more efficiently if we had
    * control over the rounding mode; but for now we don't.
    *)
-    fun whole x = if x>0.0 
+    fun whole x = if x>0.0
 		    then if x > 0.5
 		      then x-0.5+maxint-maxint
 		      else whole(x+1.0)-1.0
@@ -267,11 +266,11 @@ structure Real64 :> REAL where type real = real
 		      else whole(x-1.0)+1.0
 	          else x
 
-    fun split x = let val w = whole x 
+    fun split x = let val w = whole x
                       val f = x-w
 		   in if abs(f)==1.0
 		     then {whole=w+f,frac=0.0}
-		     else {whole=w, frac=f} 
+		     else {whole=w, frac=f}
 		  end
 
     fun realMod x = let
@@ -312,7 +311,7 @@ if lt(plus(k,1022),2046)
 	      scalb(scalb(x, k1), minus(k, k1))
 	    end
 *)
-  
+
     fun nextAfter _ = raise TiltExn.LibFail "Real.nextAfter unimplemented"
 
     fun min(x,y) = if x<y orelse isNan y then x else y

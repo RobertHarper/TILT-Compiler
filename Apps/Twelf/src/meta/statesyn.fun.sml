@@ -1,4 +1,3 @@
-(*$import STATESYN INTSYN FUNSYN WHNF CONV *)
 (* State for Proof Search *)
 (* Author: Carsten Schuermann *)
 

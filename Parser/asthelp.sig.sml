@@ -1,7 +1,5 @@
-(*$import Ast Symbol Formatter *)
-
 (* Helper routines for the external AST. *)
-signature ASTHELP = 
+signature ASTHELP =
   sig
 
     (* Some pretty-printing routines for AST *)
@@ -48,8 +46,8 @@ signature ASTHELP =
     val free_tyvar_dec : Ast.dec * (Ast.symbol -> bool) -> Ast.symbol list
     val free_tyvar_exp : Ast.exp * (Ast.symbol -> bool) -> Ast.symbol list
     val free_tyvar_ty  : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list
-    val free_tyc_ty    : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list 
-    val subst_vars_exp : (Symbol.symbol * Ast.path) list * Ast.exp -> Ast.exp 
-    val subst_vars_ty  : (Symbol.symbol * Ast.tyvar) list * Ast.ty -> Ast.ty 
+    val free_tyc_ty    : Ast.ty  * (Ast.symbol -> bool) -> Ast.symbol list
+    val subst_vars_exp : (Symbol.symbol * Ast.path) list * Ast.exp -> Ast.exp
+    val subst_vars_ty  : (Symbol.symbol * Ast.tyvar) list * Ast.ty -> Ast.ty
 
   end

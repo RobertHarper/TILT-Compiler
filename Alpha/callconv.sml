@@ -1,23 +1,21 @@
-(*$import Core DecAlpha DecAlphaUtils Util CALLCONV  *)
-
 structure DecalphaCallconv
     :> CALLCONV where Machine = Decalpha.Machine =
 struct
 
   structure Machineutils = Decalphautils
-  open Machineutils 
+  open Machineutils
   open Decalpha
   open Machine
   open Core
 
 
-  datatype formals = 
+  datatype formals =
 	FORMALS of {args : register list,
 		    results : register list}
 
   val error = fn s => Util.error "callconv.sml" s
 
-   (* Return a list of positions corresponding to the given formal 
+   (* Return a list of positions corresponding to the given formal
       arguments for a function using the "unknown" calling convention. *)
 
    fun argPositions (arg_iregs,arg_fregs) argOffset arg_pseudoregs =
@@ -47,13 +45,13 @@ struct
   val knownArgPositions = argPositions
 
   fun assignRegsAmong [] _ _ = []
-     | assignRegsAmong ((R _)::rest) (IReg :: restI) FReg = 
+     | assignRegsAmong ((R _)::rest) (IReg :: restI) FReg =
        IReg :: (assignRegsAmong rest restI FReg)
      | assignRegsAmong ((F _)::rest) IReg (FReg :: restF) =
        FReg :: (assignRegsAmong rest IReg restF)
      | assignRegsAmong ((R _) :: _) [] _ =
        error "assignRegsAmong:  Ran out of integer result registers"
-     | assignRegsAmong ((F _) :: _) _ [] = 
+     | assignRegsAmong ((F _) :: _) _ [] =
        error "assignRegsAmong:  Ran out of fp result registers"
 
    (* Return a list of positions corresponding to the given formal
@@ -69,7 +67,7 @@ struct
        FReg :: (assignRegsAmongC rest restI restF)
     | assignRegsAmongC ((R _) :: _) _ _ =
        error "assignRegsAmongC:  Could not allocate integer"
-    | assignRegsAmongC ((F _) :: _) _ _ = 
+    | assignRegsAmongC ((F _) :: _) _ _ =
        error "assignRegsAmongC:  Could not allocate floating-point"
 
   fun std_c (FORMALS {args,results}) =
@@ -78,7 +76,7 @@ struct
 	      map IN_REG (assignRegsAmongC args C_int_args C_fp_args)
  	   else
 	      error ("allocateCall: More than 6 args" ^ "passed to C")
-         val actual_results = 
+         val actual_results =
 	     map IN_REG (assignRegsAmongC results C_int_res C_fp_res)
      in LINKAGE{argCaller=actual_args,
 		resCaller=actual_results,
@@ -87,9 +85,9 @@ struct
      end
 
   fun unknown_ml (FORMALS {args,results}) =
-     let val actual_Caller_args = unknownArgPositions THIS_FRAME_ARG8 args 
-	 val actual_Callee_args = unknownArgPositions CALLER_FRAME_ARG8 args 
-	 val actual_results = map IN_REG (assignRegsAmong results 
+     let val actual_Caller_args = unknownArgPositions THIS_FRAME_ARG8 args
+	 val actual_Callee_args = unknownArgPositions CALLER_FRAME_ARG8 args
+	 val actual_results = map IN_REG (assignRegsAmong results
 					    indirect_int_res indirect_fp_res)
       in LINKAGE{argCaller=actual_Caller_args,
 		 resCaller=actual_results,
@@ -101,7 +99,6 @@ struct
 end
 
 
-  
 
 
 

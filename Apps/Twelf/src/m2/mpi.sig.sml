@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Meta Prover Interface *)
 (* Author: Carsten Schuermann *)
 

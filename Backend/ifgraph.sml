@@ -1,4 +1,3 @@
-(*$import Word List Int MONO_HASH_TABLE Core MACHINE IFGRAPH Util HashTableFn *)
 (* interference graph *)
 
 functor Ifgraph (structure Machine : MACHINE) :> IFGRAPH =
@@ -68,7 +67,7 @@ struct
      val degree = fn g => Regset.numItems o (edges g)
 
      fun insert_node (GRAPH {all,graph,size}) n =
-	   if ((isPhysical n) orelse (hash_member(n,graph))) 
+	   if ((isPhysical n) orelse (hash_member(n,graph)))
 	       then ()
 	   else (A.insert graph (n,Regset.empty);
 		 all := Regset.add(!all,n);
@@ -76,8 +75,8 @@ struct
 
 
      (* remove the node entry from graph and remove the node from its neighbors's entries *)
-     fun delete_from_graph graph node = 
-	 let val neighbors = A.remove graph node handle AdjList => 
+     fun delete_from_graph graph node =
+	 let val neighbors = A.remove graph node handle AdjList =>
 			      (print ("delete_node: AdjList:"^msReg node^"\n");
 			       raise AdjList)
 	     fun find k = (case A.find graph k of
@@ -94,7 +93,7 @@ struct
 	  size := !size - 1;
 	  all := delete(n,!all))
 
-     fun copy (GRAPH {all,size,graph}) = 
+     fun copy (GRAPH {all,size,graph}) =
 	 GRAPH{graph = A.copy graph,
 	       size = ref (!size),
 	       all = ref (!all)}
@@ -108,9 +107,9 @@ struct
      (* assumes a and b are different and are of the same type
         does not assume either are in the graph already *)
      fun add_edges_direct graph a nodes =
-	     if isPhysical a 
+	     if isPhysical a
 		 then ()
-	     else let val l = A.lookup graph a 
+	     else let val l = A.lookup graph a
 		      val nodes = List.filter (canInterfere a) nodes
 		      val l' = inserts(nodes,l)
 		  in  A.insert graph (a,l')
@@ -135,7 +134,7 @@ struct
 	     val (inodeList1,fnodeList1) = List.partition isInt nodeList
 	     val (inodeList2,fnodeList2) = Regset.foldl folder ([],[]) nodeSet
 	 in  if (null inodeList2)
-		 then () 
+		 then ()
 	     else (app (fn n => add_edges_direct graph n inodeList1) inodeList2;
 		   app (fn n => add_edges_direct graph n inodeList2) inodeList1);
 
@@ -150,7 +149,7 @@ struct
 	   let val edges = ref 0
 	   in A.appi (fn (_,n) =>
 		         (edges := !edges + (Regset.numItems n))) graph;
-	      
+
 	      print "IG stat:  (V,E,avg deg) = (";
 	      print (Int.toString (!size)); print ", ";
 	      print (Int.toString (!edges)); print ", ";

@@ -1,4 +1,3 @@
-(*$import Int Symbol Ast ListPair List *)
 (*
   Rewrite declarations so all functor applications are in named form
   (i.e. all arguments are structure ids).
@@ -59,7 +58,7 @@ struct
     (case (name_dec dec, namer exp) of
        (Unaltered, Unaltered) => Unaltered
      | (Unaltered, Altered exp') => Altered (letter (dec, exp'))
-     | (Unaltered, Declare (strbs, exp')) => 
+     | (Unaltered, Declare (strbs, exp')) =>
 	 Altered (letter (SeqDec [dec, StrDec strbs], exp'))
      | (Altered dec', Unaltered) => Altered (letter (dec', exp))
      | (Altered dec', Altered exp') => Altered (letter (dec', exp'))
@@ -74,7 +73,7 @@ struct
     fun flatten_seqdec Unaltered = Unaltered
       | flatten_seqdec (Altered (SeqDec decs)) =
           Altered (SeqDec (List.concat (map extract decs)))
-      | flatten_seqdec (Altered (LocalDec (SeqDec decs, dec))) = 
+      | flatten_seqdec (Altered (LocalDec (SeqDec decs, dec))) =
           Altered (LocalDec (SeqDec (List.concat (map extract decs)), dec))
       | flatten_seqdec (Declare (strbs, SeqDec decs)) =
 	  Declare (strbs, SeqDec (List.concat (map extract decs)))
@@ -92,8 +91,8 @@ struct
     fun grind name name_strexp (strexp, _) =
       if is_varstr strexp then ([], (strexp, false)) else
 	let
-	  val name = ((Symbol.name name) ^ "_Named_Structure" ^ 
-		      Int.toString (!unique_n) 
+	  val name = ((Symbol.name name) ^ "_Named_Structure" ^
+		      Int.toString (!unique_n)
 		      before unique_n := !unique_n+1)
 	  val symbol = Symbol.strSymbol name
 	  val (strbs, strexp') = (case name_strexp strexp of

@@ -1,14 +1,12 @@
-(*$import Nil *)
-
 (* General optimizations and generation of polymorphic aggregate handling functions *)
 
-signature OPTIMIZE = 
+signature OPTIMIZE =
   sig
       val debug : bool ref
       (* Print debug information *)
 
       val optimize :  {doDead : bool,
-		       doProjection : int option,  
+		       doProjection : int option,
 		       doUncurry : bool,
 		       doCse : bool} -> Nil.module -> Nil.module
       (* Perform optimizations listed in the comment at the top of optimize.sml as always being performed, as well

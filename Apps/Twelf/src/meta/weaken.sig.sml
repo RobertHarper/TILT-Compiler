@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Weakening substitutions *)
 (* Author: Carsten Schuermann *)
 

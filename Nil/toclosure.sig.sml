@@ -1,6 +1,4 @@
-(*$import Nil *)
-
-signature TOCLOSURE = 
+signature TOCLOSURE =
     sig
 
 	val debug : bool ref

@@ -1,4 +1,3 @@
-(*$import FUNWEAKEN FUNSYN WEAKEN *)
 (* Weakening substitutions for meta substitutions *)
 (* Author: Carsten Schuermann *)
 

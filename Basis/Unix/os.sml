@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude OS_PROCESS Posix PreOS OS_FileSys OS_Path OS_Process OS_IO_Str OS_SIG *)
 (* os.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,10 +6,10 @@
  *
  *)
 
-structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc 
-                     and type IO.poll_desc = PreOS.IO.poll_desc 
+structure OS :> OS where type IO.iodesc = PreOS.IO.iodesc
+                     and type IO.poll_desc = PreOS.IO.poll_desc
                      and type IO.poll_info = PreOS.IO.poll_info
-		     and type syserror = Posix.Error.syserror = 
+		     and type syserror = Posix.Error.syserror =
   struct
 
     open PreOS (* open type-only structure to get types *)

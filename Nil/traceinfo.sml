@@ -1,12 +1,10 @@
-(*$import Name TRACEINFO *)
-
 (* Trace information for the garbage collector *)
 
-structure TraceInfo :> TRACEINFO = 
+structure TraceInfo :> TRACEINFO =
 struct
 
-  datatype traceinfo = 
-              Trace 
+  datatype traceinfo =
+              Trace
             | Unset
             | Notrace_Int
             | Notrace_Code

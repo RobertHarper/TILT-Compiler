@@ -1,11 +1,9 @@
-(*$import ErrorMsg TextIO SourceMap FRONTEND Join MLLrValsFun MLLexFun Ast Source Control LrParser Stats *)
-
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* frontend.sml *)
 
 
 structure FrontEnd :> FRONT_END =
-struct 
+struct
 
 structure MLLrVals = MLLrValsFun(structure Token = LrParser.Token)
 structure Lex = MLLexFun(structure Tokens = MLLrVals.Tokens)
@@ -22,7 +20,7 @@ fun debugmsg  (msg : string) =
       printit
   end
 
-fun addLines lines = let val r = Stats.int("SourceLines") 
+fun addLines lines = let val r = Stats.int("SourceLines")
 		     in  r := !r + lines
 		     end
 
@@ -32,7 +30,7 @@ datatype 'a parseResult
   | ABORT (* could not even parse to end of declaration *)
   | SUCCESS of 'a
 
-type 'a parser = Source.inputSource -> (int * string list * 'a) parseResult
+type 'a parser = Source.inputSource -> 'a parseResult
 
 val dummyEOF = MLLrVals.Tokens.EOF(0,0)
 val dummySEMI = MLLrVals.Tokens.SEMICOLON(0,0)
@@ -71,7 +69,7 @@ fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
                doprompt := false)
          else ();
          let val s = inputc_sourceStream k
-          in 
+          in
 (*
 	      doprompt := ((String.sub(s,size s - 1) = #"\n")
                           handle _ => false);
@@ -79,8 +77,8 @@ fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
              s
          end)
 
-      val lexer = 
-        Lex.makeLexer (if interactive then getline 
+      val lexer =
+        Lex.makeLexer (if interactive then getline
                        else inputc_sourceStream) lexarg
       val lexer = LrParser.Stream.streamify lexer
       val lexer = LrParser.Stream.cons (start, lexer)
@@ -89,26 +87,26 @@ fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
 
       fun oneparse () =
         let val _ = prompt := !Control.primaryPrompt
-            val (nextToken,rest) = LrParser.Stream.get(!lexer') 
+            val (nextToken,rest) = LrParser.Stream.get(!lexer')
 
             val startpos = SourceMap.lastChange sourceMap
-            fun linesRead() = SourceMap.newlineCount sourceMap 
+            fun linesRead() = SourceMap.newlineCount sourceMap
                       (startpos, SourceMap.lastChange sourceMap)
-         in (*if interactive then SourceMap.forgetOldPositions sourceMap 
+         in (*if interactive then SourceMap.forgetOldPositions sourceMap
               else ();*)
-            if MLP.sameToken(nextToken,dummySEMI) 
+            if MLP.sameToken(nextToken,dummySEMI)
             then (lexer' := rest; oneparse ())
             else if MLP.sameToken(nextToken,dummyEOF)
                  then EOF
                  else let val _ = prompt := !Control.secondaryPrompt;
                           val (result, lexer'') =
                             MLP.parse(lookahead,!lexer',parseerror,err)
-			  val _ = addLines(linesRead()) 
+			  val _ = addLines(linesRead())
                           val _ = lexer' := lexer''
 			  val Ast.MarkTop(top, _) = result
 		      in if !anyErrors then ERROR
-			 else cleanup (linesRead(), top)
-                      end 
+			 else cleanup top
+                      end
         end handle LrParser.ParseError => ABORT
                  | AbortLex => ABORT
             (* oneparse *)
@@ -118,13 +116,13 @@ fun parse (start, cleanup) (source as {sourceStream,errConsumer,interactive,
 
 val dummyIMPL = MLLrVals.Tokens.IMPL(0,0)
 val dummyINTER = MLLrVals.Tokens.INTER(0,0)
-    
+
 val parse_impl = parse (dummyIMPL,
-			fn (lines, Ast.ImplTop (imports,dec)) => SUCCESS (lines,imports,dec)
+			fn Ast.ImplTop dec => SUCCESS dec
 			 | _ => ERROR)
-    
+
 val parse_inter = parse (dummyINTER,
-			 fn (lines, Ast.InterTop (imports,specs)) => SUCCESS (lines,imports,specs)
+			 fn Ast.InterTop specs => SUCCESS specs
 			  | _ => ERROR)
 
 end (* structure FrontEnd *)

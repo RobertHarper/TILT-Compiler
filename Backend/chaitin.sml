@@ -1,7 +1,6 @@
-(*$import Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops List UtilError *)
 (* Graph-coloring register allocator.
        Notes on constructing the interference graph for procedures.
-       
+
        Since we use a standard calling convention, we must associate
        the formals of the procedure and actuals dictated by the calling convention
              (1) insert moves at the beginning of the procedure from the physical
@@ -17,7 +16,7 @@
        procedure call:
                    insert conflicts between (A) the physical arguments, return
 	           address, result registers, and caller-save registeers
-                   and (B) every variable live across the procedure call. 
+                   and (B) every variable live across the procedure call.
 		   Also insert conflicts between
 		   each pseudo-register argument and return.
 
@@ -29,7 +28,7 @@
        When rewriting the procedure,
                At procedure call, move the actual parameters and return
 	       address to the desired physical registers.
-	       
+
 	       After the procedure call, move the results to the desired
 	       physical registers.
 
@@ -42,19 +41,19 @@ functor Chaitin(val commentHeader: string
 		structure Machineutils : MACHINEUTILS
 		structure Callconv : CALLCONV
 
-		sharing Printutils.Bblock.Machine 
-		      = Printutils.Machine 
-		      = Callconv.Machine 
+		sharing Printutils.Bblock.Machine
+		      = Printutils.Machine
+		      = Callconv.Machine
 
 		sharing Printutils.Tracetable = Printutils.Bblock.Tracetable
 
-		  ) :> PROCALLOC where Bblock = Printutils.Bblock 
+		  ) :> PROCALLOC where Bblock = Printutils.Bblock
                                  where Tracetable = Printutils.Tracetable =
 struct
    val makeTable = Stats.tt "MakeTable"
    open Rtl
    open Callconv Color Printutils Machineutils
-   open Tracetable 
+   open Tracetable
    open Core
    open Machine
    open Bblock
@@ -69,7 +68,7 @@ struct
    val delete_moves = ref true
 
    fun msg (x : string) = if !msgs then print x else ()
-       
+
    fun print_reglist regs = app (fn r => (print(msReg r); print "  ")) regs
 
    val doTimer = Stats.ff("DoChaitinTimer")
@@ -117,15 +116,15 @@ struct
 
        val biases : (register * int) list Regmap.map ref = ref Regmap.empty
 
-       fun getBias pseudoreg =  
+       fun getBias pseudoreg =
 	        case Regmap.find(! biases, pseudoreg) of
 		     NONE => nil
 		   | SOME l => l
 
        fun addBias pseudoreg (physicalreg, bias) =
-	 let 
+	 let
 	   fun loop [] = [(physicalreg, bias)]
-	     | loop ((p as (reg,bias'))::rest) = 
+	     | loop ((p as (reg,bias'))::rest) =
 	       if (eqRegs physicalreg reg) then
 		 (reg, bias + bias') :: rest
 	       else
@@ -135,10 +134,10 @@ struct
 	     (emitString "adding bias of ";
 	      print_int bias;
 	      emitString " for ";
-	      print_list (print_pair print_reg print_reg) 
+	      print_list (print_pair print_reg print_reg)
 	           [(pseudoreg, physicalreg)]) else ();
 	   case Regmap.find (! biases, pseudoreg) of
-	     NONE => 
+	     NONE =>
 	       biases := Regmap.insert(!biases,pseudoreg,[(physicalreg, bias)])
 	   | SOME lst =>
 	       biases := Regmap.insert(!biases, pseudoreg, loop lst);
@@ -153,10 +152,10 @@ struct
 
 
   (* getCallInstrRegs: calculate the physical registers used by a call *)
-     
-       fun getLinkageDestroyedModified (UNKNOWN_PROCSIG{linkage,regs_destroyed,regs_modified,...}) = 
+
+       fun getLinkageDestroyedModified (UNKNOWN_PROCSIG{linkage,regs_destroyed,regs_modified,...}) =
 	   (linkage, regs_destroyed, regs_modified)
-	 | getLinkageDestroyedModified (KNOWN_PROCSIG{linkage,regs_destroyed,regs_modified,...}) = 
+	 | getLinkageDestroyedModified (KNOWN_PROCSIG{linkage,regs_destroyed,regs_modified,...}) =
 	   (linkage, regs_destroyed, regs_modified)
        fun getCallInstrRegs (getSignature : label -> procsig) call =
 	(case call of
@@ -166,14 +165,14 @@ struct
 			     ...},
 		     regs_destroyed,
 		     regs_modified) = getLinkageDestroyedModified (getSignature label)
-	    in  {regs_destroyed = regs_destroyed, 
-		 regs_modified = regs_modified, 
-		 arg_pos = arg_pos, 
-		 res_pos = res_pos, 
+	    in  {regs_destroyed = regs_destroyed,
+		 regs_modified = regs_modified,
+		 arg_pos = arg_pos,
+		 res_pos = res_pos,
 		 C_call = false}
 	    end
 	| (CALL{func = INDIRECT _, args : register list, results, ...})=>
-	     let 
+	     let
 		 val LINKAGE{argCaller=arg_pos, resCaller=res_pos,...} =
 		     unknown_ml (FORMALS{args=args,results=results})
 	     in {regs_destroyed = indirect_caller_saved_regs,
@@ -185,9 +184,9 @@ struct
 	     end
 
        | (CALL{calltype = ML_NORMAL,
-	       func = DIRECT (_, _), args, results,  
+	       func = DIRECT (_, _), args, results,
 	       argregs, resregs, destroys, ...}) =>
-	     let val LINKAGE{argCaller=arg_pos_default, resCaller=res_pos_default,...} = 
+	     let val LINKAGE{argCaller=arg_pos_default, resCaller=res_pos_default,...} =
 		     unknown_ml (FORMALS{args=args,results=results})
 	     in {regs_destroyed = (case destroys of
 				       NONE => indirect_caller_saved_regs
@@ -205,9 +204,9 @@ struct
 	     end
 
 	   | (CALL{calltype = C_NORMAL,
-		   func = DIRECT (_, _), args, results,  
+		   func = DIRECT (_, _), args, results,
 				 argregs, resregs, destroys, ...}) =>
-	       let val LINKAGE{argCaller=arg_pos_default, resCaller=res_pos_default, ...} = 
+	       let val LINKAGE{argCaller=arg_pos_default, resCaller=res_pos_default, ...} =
 			std_c (FORMALS{args=args,results=results})
 	       in {regs_destroyed = (case destroys of
 					  NONE => C_caller_saved_regs
@@ -227,15 +226,15 @@ struct
 	  | _ => error "getCallInstRegs: not a call")
 
 
-    
+
    (* if a function's arguments, results, and return address register are
       already assigned, then rewrite procedure as described in comments at
       the top of the file.*)
 
-   fun pre_color (name : label, actual_args, actual_results, blocklabels, args, res, block_map) = 
+   fun pre_color (name : label, actual_args, actual_results, blocklabels, args, res, block_map) =
        let val postlude_label = freshCodeLabel()
 	   val block_labels = blocklabels
-	    
+
 	   (* An empty prelude block has been created for us already *)
 	   local
 	       (* extract current name of first block *)
@@ -247,11 +246,11 @@ struct
 		val def_prelude = listToSet args
 		val use_prelude = Regset.empty
 	      in
-		val block_map = 
+		val block_map =
 		  case prelude_instr of
 		    [] => block_map
 		  | _ => let
-			   val BLOCK{succs = oldsuccs, instrs, ...} = 
+			   val BLOCK{succs = oldsuccs, instrs, ...} =
 			       (case Labelmap.find(block_map,prelude_label) of
 				    SOME bl => bl | NONE => error "missing block")
 			   val _ = (case (!instrs) of
@@ -268,7 +267,7 @@ struct
 			   Labelmap.insert(block_map,prelude_label,newbl)
 			 end
 	      end
-	    
+
 
               (* make sure actual return address has been restored.
 	         The caller expects to use it to reload the gp.*)
@@ -291,11 +290,11 @@ struct
 	         last instruction in the last block.  That can fall through
 		 to postlude code*)
 	      fun replace_returns last (label,BLOCK{instrs,succs,...}) =
-		   let fun usual () = 
+		   let fun usual () =
 		           map (fn (NO_ANN(BASE(RTL (RETURN _)))) =>
 					 (succs := postlude_label :: !succs;
 					 NO_ANN(BASE(BR postlude_label)))
-					  
+
 			       | NO_ANN i => NO_ANN i
 			       | _ => error "replace returns: annotated instruction!")
 			     (!instrs)
@@ -303,7 +302,7 @@ struct
 			   case Labelmap.Key.compare(last,label) of
 			       EQUAL =>
 		              (case !instrs
-			       of (NO_ANN (BASE(RTL (RETURN _))) :: t) => 
+			       of (NO_ANN (BASE(RTL (RETURN _))) :: t) =>
 				   (succs := postlude_label :: !succs;
 				    t)
 			        | _ => usual ())
@@ -323,7 +322,7 @@ struct
 		case prelude of
 		  NONE => (block_map,prelude_label :: restoflabels @ [postlude_label])
 		| (SOME (tmp,prelude)) =>
-		    let 
+		    let
 		      val orig_block = Labelmap.find(block_map,prelude_label)
 		      val bl_map1 = Labelmap.insert(block_map,tmp,orig_block)
 		      val bl_map2 = Labelmap.insert(bl_map1,prelude_label,prelude)
@@ -337,7 +336,7 @@ struct
 
      val pre_color = subtimer("chaitin_preColor", pre_color)
 
-     val (hasRpv,Rpv_virt) = (case Rpv of 
+     val (hasRpv,Rpv_virt) = (case Rpv of
 				NONE  => (false, Rat)
 			      | (SOME x) => (true,x))
 
@@ -378,22 +377,22 @@ struct
 		       val code : instruction list =
 			   mvlist(map IN_REG args,arg_pos) @
 			   (case func of
-			      DIRECT (LOCAL_CODE label, _) => 
+			      DIRECT (LOCAL_CODE label, _) =>
  (* CS: I don't think this is necessary (on the alpha), as the translation of
     the call (BSR (i.e., alpha jsr) to a label) puts the address in $pv
     automatically *)
-				  if hasRpv then [BASE(LADDR(Rpv_virt,LOCAL_CODE label))] 
+				  if hasRpv then [BASE(LADDR(Rpv_virt,LOCAL_CODE label))]
 				  else []
 			    | DIRECT (LINK_EXTERN_LABEL label, _) =>
-				  if hasRpv then [BASE(LADDR(Rpv_virt,LINK_EXTERN_LABEL label))] 
+				  if hasRpv then [BASE(LADDR(Rpv_virt,LINK_EXTERN_LABEL label))]
 				  else []
-                            | DIRECT (ML_EXTERN_LABEL label, _) => 
-				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))] 
+                            | DIRECT (ML_EXTERN_LABEL label, _) =>
+				  if hasRpv then [BASE(LADDR(Rpv_virt,ML_EXTERN_LABEL label))]
 				  else []
                             | DIRECT (C_EXTERN_LABEL label, _) =>
-				  if hasRpv then [BASE(LADDR(Rpv_virt,C_EXTERN_LABEL label))] 
+				  if hasRpv then [BASE(LADDR(Rpv_virt,C_EXTERN_LABEL label))]
 				  else []
-			    | INDIRECT reg => 
+			    | INDIRECT reg =>
 				  if hasRpv then [BASE(MOVE(reg,Rpv_virt))] else [])
 			      @ (BASE(RTL(CALL{calltype=calltype,
 					       func=func,
@@ -403,46 +402,46 @@ struct
 					       resregs=SOME result_regs,
 					       destroys=destroys})) ::
 				 mvlist(res_pos,map IN_REG results))
-				 
+
 
 		        (* update the set of registers destroyed by calls.
 			   This includes (1) actual argument, result, return
 			   registers and (2) registers in the destroy set.*)
 
 		       val _ =
-			   let 
+			   let
 			       val actuals = (arg_regs @ result_regs)
 			       val actuals_set = listToSet actuals
-			   in 
+			   in
 			       regs_destroyed := Regset.union(!regs_destroyed, actuals_set);
 			       regs_destroyed := Regset.union(!regs_destroyed, destroyed_by_call);
 			       regs_modified  := Regset.union(!regs_modified , actuals_set);
 			       regs_modified  := Regset.union(!regs_modified , modified_by_call)
 			   end
-		   in code	                  
+		   in code
 		   end
 	     | expand_call _ = error "expand_call: unhandled cases"
-		   
+
 	   val nonlocal_return = ref false
            fun scan_instrs (h::t) =
 	     (case (stripAnnot h : instruction) of
-	         BASE(RTL (call as CALL _)) => 
+	         BASE(RTL (call as CALL _)) =>
 		   (map NO_ANN (expand_call call)) @ scan_instrs t
 	       | BASE(RTL HANDLER_ENTRY) =>
 		      (
 		       (* here is the crucial change that actually affects exn handling *)
 		       (*
-			regs_destroyed := 
+			regs_destroyed :=
 			Regset.union(indirect_callee_saved_regs,
 			         !regs_destroyed); *)
 			nonlocal_return := true;
 		       h :: scan_instrs t)
 	       | _ => h :: scan_instrs t)
              | scan_instrs nil = nil
-       in 
+       in
 	   Labelmap.app (fn (BLOCK{instrs,...})
 			 => instrs := rev(scan_instrs (rev(!instrs)))) blockmap;
-	   (!max_on_stack, !max_C_args, 
+	   (!max_on_stack, !max_C_args,
 	    Regset.listItems (Regset.intersection(listToSet general_regs,!regs_destroyed)),
 	    Regset.listItems (Regset.intersection(listToSet general_regs,!regs_modified)))
        end (* replace_calls *)
@@ -451,10 +450,10 @@ struct
 
    (* print an interference graph *)
 
-   fun print_graph g = 
+   fun print_graph g =
 	 let
 	   val nodes = Ifgraph.nodes g
-	   fun print_node n = 
+	   fun print_node n =
 	     (print_reg n;
 	      emitString ":  ";
 	      print_list print_reg (Regset.listItems (Ifgraph.edges g n)))
@@ -466,7 +465,7 @@ struct
 
    (* Build interference graph.    Physical registers appear in the graph.*)
 
-       fun buildGraph (getSignature,name,block_map, 
+       fun buildGraph (getSignature,name,block_map,
 		       args,res,callee_saved) : Ifgraph.graph =
 	 let val igraph = Ifgraph.empty ()
 	     val insert_node = Ifgraph.insert_node igraph
@@ -477,14 +476,14 @@ struct
 	     let
 	       val (def_regs,_) = Bblock.defUse (stripAnnot instr)
 	       val live_regs = Bblock.live instr
-             in 
+             in
 
-		(* don't add nodes for pseudo-regs def'd 
+		(* don't add nodes for pseudo-regs def'd
 		   if there are no registers live after the
 		   instruction.   Those regs are dead, and
-	           wil be assigned to Rzero/Fzero 
+	           wil be assigned to Rzero/Fzero
 		   add conflicts between pseudo-regs live after
-		   instruction and pseudo-regs defined by 
+		   instruction and pseudo-regs defined by
 		   instruction *)
 
 		 app insert_node def_regs;
@@ -507,7 +506,7 @@ struct
 		     end
                 | _ => ()
 	     end
-	   
+
 	   fun processBlock (BLOCK{in_live, instrs, ...},n) =
 	       let val _ = msg ("processBlock #" ^ (Int.toString n) ^ ": " ^
 				(Int.toString (length (!instrs))) ^ "instrs \n")
@@ -523,12 +522,12 @@ struct
            (* return pseudo-reg cannot be placed in callee-saved registers,
 	      since the last thing we do before returning is restore the
 	      callee-saved registers.*)
- 
+
 	   (* if the functions arguments/results are not pre-colored,
 	      but are to be allocated.    they can't be placed in callee-saved
 	      registers either. This restriction isn't implemented right
 	      now.*)
-	     msg("There are " ^ (Int.toString (Labelmap.numItems block_map)) 
+	     msg("There are " ^ (Int.toString (Labelmap.numItems block_map))
 		 ^ " blocks in the blockmap\n");
 
 	   Labelmap.foldl processBlock 0 block_map;
@@ -551,7 +550,7 @@ struct
 	     val _ = if (! debug) then emitString "AllocateBlock\n" else ()
              val pop = fn (d,l) => pop(d,fixStackOffset l)
 	     val push = fn (s,l,t) => push(s,fixStackOffset l,t)
-	       
+
 	     (* track live variables at each call site *)
 
 	     val callsite_info = ref []
@@ -564,8 +563,8 @@ struct
 		 if isPhysical r
 		 then IN_REG r
 		 else (case Regmap.find (mapping,r) of
-		         NONE => (print ("Warning! getreg: missing register binding: nulling instruction"^ 
-					msReg r ^" (dead variable ?)\n"); 
+		         NONE => (print ("Warning! getreg: missing register binding: nulling instruction"^
+					msReg r ^" (dead variable ?)\n");
 				  raise GETREGBUG)
 		       | SOME assign => assign)
 	     fun getreg_posdead r =
@@ -599,7 +598,7 @@ struct
 		 val post_temps = (post_itemps,post_ftemps)
 		 val push' = fn (s,l) => push(s,l,push_temp)
 
-		 fun pickTemp r (itemps,ftemps) = 
+		 fun pickTemp r (itemps,ftemps) =
 		     (case (r,itemps,ftemps) of
 			  (R _, [], _) => error "pickTemp"
 			| (R _, ir::rest, _) => (ir, (rest, ftemps))
@@ -615,9 +614,9 @@ struct
 		 fun nextItemp (nil,_) = NONE
 		   | nextItemp (r::_, _) = SOME r
 		 fun allocAny mover temps [] precode localmap = (List.concat precode, localmap, nextItemp temps)
-                   | allocAny mover temps (src :: rest) precode localmap = 
+                   | allocAny mover temps (src :: rest) precode localmap =
 		     (case getreg src of
-			IN_REG r => 
+			IN_REG r =>
 			    let val localmap = Regmap.insert(localmap, src, r)
 			    in  allocAny mover temps rest precode localmap
 			    end
@@ -631,10 +630,10 @@ struct
 			  end
 		      | _ => error "putInRegs: allocAny")
 
-		 val (precode, srcmap, srctmp) = 
+		 val (precode, srcmap, srctmp) =
 		     allocAny pop pre_temps src_regs [] (Regmap.empty)
 
-		 val (postcode, dstmap, _) = 
+		 val (postcode, dstmap, _) =
 		     allocAny push' post_temps dst_regs [] (Regmap.empty)
 	       in
 		 {precode = precode,
@@ -652,11 +651,11 @@ struct
 	       | allocateInstr (LIVE (live,instr)) next_label =
 	       (case instr of
 		  BASE(ILABEL _) => [instr]
-		| BASE(RTL (JMP(Raddr,rtllabs))) => 
+		| BASE(RTL (JMP(Raddr,rtllabs))) =>
 		      let val fixup_code = List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots)
 			  val (def,use) = defUse instr
 			  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
-			  val jump_reg = (if isPhysical Raddr then Raddr else 
+			  val jump_reg = (if isPhysical Raddr then Raddr else
 					      (case Regmap.find(srcmap,Raddr) of
 						   SOME r => r
 						 | NONE => error "can't translate JMP"))
@@ -686,25 +685,25 @@ struct
 			       Regset.app (fn r => (print (msReg r); print "  ")) live;
 			       print "\n")
 *)
-			    
-		      fun stack_fixup_code1 () = 
+
+		      fun stack_fixup_code1 () =
 			(List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots))
 		      val stack_fixup_code2 = deallocate_stack_frame stackframe_size
-			
+
 		      val no_moddef_info = { regs_modified = [] : register list,
 					     regs_destroyed = [] : register list,
 					     args = [] : register list}
 
-		      val _ = 
+		      val _ =
 			  (case calltype of
-			       ML_TAIL _ => 
+			       ML_TAIL _ =>
 				   (if (length args > length Machineutils.indirect_int_args)
 				       then error "too many args in tailcall: checked? in toalpha/tosparc"
 				    else ())
-					
+
 			     | _ => add_info {label=return_label,live=live})
-				  
-		      val br_instrs : instruction list = 
+
+		      val br_instrs : instruction list =
 			case (calltype, func) of
 
 			  (C_NORMAL, DIRECT (label as (C_EXTERN_LABEL _), sraOpt)) =>
@@ -715,7 +714,7 @@ struct
 			      [BASE(BSR (C_EXTERN_LABEL "load_regs_MLtoC", NONE, no_moddef_info))] @
 			      (std_return_code NONE)
 
-			| (C_NORMAL, DIRECT (l, _)) => 
+			| (C_NORMAL, DIRECT (l, _)) =>
 			      (print "C_NORMAL call non-C_EXTERN_LABEL"; print (msLabel l); print "\n";
 			       error "C_NORMAL call non-C_EXTERN_LABEL")
 			| (C_NORMAL, _) => error "C_NORMAL call but not DIRECT"
@@ -728,7 +727,7 @@ struct
 			| (ML_NORMAL, INDIRECT r) =>
 			      let val (def,use) = defUse instr
 				  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
-				  val reg = if isPhysical r then r else 
+				  val reg = if isPhysical r then r else
 				  (case Regmap.find(srcmap,r) of
 				       SOME r => r
 				     | NONE => error "fs failed")
@@ -738,31 +737,31 @@ struct
 				   (std_return_code NONE))
 			      end
 			| (ML_TAIL _, DIRECT (label,_)) =>
-				(stack_fixup_code1 ()) @ 
+				(stack_fixup_code1 ()) @
 				[BASE(POP_RET(SOME(ra_sloc)))] @
 				stack_fixup_code2 @
 				[BASE(BR label)]
-				  
-			| (ML_TAIL _, INDIRECT r) => 
+
+			| (ML_TAIL _, INDIRECT r) =>
 			      let val (def,use) = defUse instr
 				  val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
-				  val reg = if isPhysical r then r else 
+				  val reg = if isPhysical r then r else
 				  (case Regmap.find(srcmap,r) of
 				       SOME r => r
 				     | NONE => error "fs failed")
 			      in  precode @
-				  (stack_fixup_code1 ()) @ 
+				  (stack_fixup_code1 ()) @
 				  [BASE(POP_RET(SOME(ra_sloc)))] @
 				  stack_fixup_code2 @
 				  [BASE (JSR (false, reg, 1, []))]
 			      end
 		     in br_instrs
 		     end) (* allocateCall *)
-		  
+
 		  | BASE(RTL(RETURN{results})) =>
 		       let val callee_restore_code =
 			   List.concat (map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots)
-			   val res : instruction list = callee_restore_code @ 
+			   val res : instruction list = callee_restore_code @
 			       (deallocate_stack_frame stackframe_size) @
 			       [BASE(RET(false, 1))]
 		       in  res
@@ -775,8 +774,8 @@ struct
 			   val src' = getreg src
 		       in
 			   case (src',dest') of
-			       (IN_REG r,IN_REG r') => 
-				   if !delete_moves andalso eqRegs r r' 
+			       (IN_REG r,IN_REG r') =>
+				   if !delete_moves andalso eqRegs r r'
 				       then []
 				   else [BASE(MOVE(r,r'))]
 			     | (ON_STACK l,IN_REG r') => pop(r',l)
@@ -789,12 +788,12 @@ struct
 			let val (def,use) = defUse instr
 			    val {precode, srcmap, srctmp, dstmap, postcode} = putInRegs use def
 			    (* fs: find source *)
-			    fun fs r = if isPhysical r then r else 
+			    fun fs r = if isPhysical r then r else
 				(case Regmap.find(srcmap,r) of
 				     SOME r => r
 				   | NONE => error "fs failed")
-			    fun fd (r : register) : register = 
-				if (isPhysical r) then r else 
+			    fun fd (r : register) : register =
+				if (isPhysical r) then r else
 					(case (Regmap.find(dstmap,r)) of
 					  NONE => raise DEAD
                                         | (SOME r) => r)
@@ -815,16 +814,16 @@ struct
 			in List.concat [precode, instr', postcode]
 			end)
 	                (* allocateInstr *)
-	       
+
 	     fun instructionLoop [] = []
-               | instructionLoop (instr :: rest) = 
+               | instructionLoop (instr :: rest) =
 	       ((let val next_label = (case rest of
 					 (LIVE(_,BASE(ILABEL l)))::_ => SOME l
 				       | _ => NONE)
 		     val tmp = allocateInstr instr next_label
 		 in  tmp @ (instructionLoop rest)
-		 end) 
-		   handle DEAD => 
+		 end)
+		   handle DEAD =>
 		            let val str = msInstruction ("", (stripAnnot instr))
 			    in  (emitInstr ("", (BASE (ICOMMENT ("dead instr" ^ str))));
 				 (instructionLoop rest))
@@ -837,14 +836,14 @@ struct
 			| e => (error "UNK ERROR while processing: ";
 				print (msInstruction ("", stripAnnot instr));
 				raise e))
-		   
+
 	     val instrs_in = rev (! instrs)
 
 	     val _ = if (! debug) then
 	       (emitString "block in:\n";
 		app (fn i => emitInstr ("", stripAnnot i)) instrs_in) else ()
 
-	     val instrs_out = 
+	     val instrs_out =
 	       instructionLoop instrs_in
 	       handle e =>
 		   (case e
@@ -865,7 +864,7 @@ struct
 
    val allocateBlock = subtimer("chaitin_rewrite", allocateBlock)
 
-       (* arguments: 
+       (* arguments:
 	       . name of site
 	       . summary of storage information
 	       . mapping from pseudo-regs to locations
@@ -873,9 +872,9 @@ struct
 	       . list of call sites
         *)
 
-       fun getCallInfo name summary mapping tracemap 
+       fun getCallInfo name summary mapping tracemap
 				(l : callsite_info list)=
-	let 
+	let
 	     val Trackstorage.SUMMARY
 	            {registers_used,
 		     stackframe_size,
@@ -893,7 +892,7 @@ struct
 			  to stack at beginning of procedure.*)
 
 		       val callee_save_spilled_info =
-			   let 
+			   let
 			     fun loop nil = nil
 			       | loop ((reg as R _,sloc)::t) =
 			       (sloc2int sloc,Tracetable.TRACE_CALLEE reg) :: (loop t)
@@ -903,20 +902,20 @@ struct
 
 		       (* trace information for callee-saved registers not
 			  touched by this procedure.*)
- 
+
 		       val callee_save_regs_info =
 			   let val (op -) = Regset.difference
 
 			       (* assume that all registers not used by this
 				  procedure are callee-save.*)
- 
+
 			       val implicitly_saved =
-				  Regset.listItems (listToSet general_iregs - 
+				  Regset.listItems (listToSet general_iregs -
 						    listToSet registers_used)
 			   in map (fn r => (r,Tracetable.TRACE_CALLEE r))
 			          implicitly_saved
 			   end
-	       
+
 		       (* take live psuedo-regs *)
 
 		       val live = Regset.listItems live
@@ -924,7 +923,7 @@ struct
 		       (* map them to physical locations.   Ignore any
 			  physical registers encountered in the live set.
 			 Any physical registers which are live MUST hold
-			 arguments to the called function --- they'll be traced 
+			 arguments to the called function --- they'll be traced
 			 inside the call if necessary.
 
 			 Ignore floating pointer registers, since they're never
@@ -932,28 +931,28 @@ struct
 
 		       (* calculate the real stack location of a register holding
 			  trace information.*)
- 
+
  		       fun stack_trace_location x =
 			   case x of
 			       TRACE_STACK loc => TRACE_STACK (fixStackOffset loc)
 			     | TRACE_STACK_REC (loc,i) =>
 				   TRACE_STACK_REC (fixStackOffset loc,i)
 			     | _ => x
-			   
 
-		       val physical_locations = 
+
+		       val physical_locations =
 		          let fun loop nil = nil
 			        | loop (h::t) =
 			        let fun fail x =
 				   error("getCallInfo: "^msReg h^x)
 				in if isPhysical h then loop t
 				   else if isFloat h then loop t
-				   else 
+				   else
 				     case (Regmap.find(mapping,h),
 					   Regmap.find(tracemap,h)) of
-				       (SOME loc,SOME (_,trace)) => 
-					 let  
-					 (* val _ = (print  (msReg h); print " ==> "; 
+				       (SOME loc,SOME (_,trace)) =>
+					 let
+					 (* val _ = (print  (msReg h); print " ==> ";
 						      print (msAssign loc); print "\n") *)
 					     val trace = stack_trace_location trace
 					 in  (loc,trace) :: loop t
@@ -973,7 +972,7 @@ struct
 			      | _ => error "getCallInfo: split")
 			 | split (nil, regs, stack) = (regs, stack)
 
-		       val (regtrace,stacktrace) = 
+		       val (regtrace,stacktrace) =
 			              split (physical_locations,nil,nil)
 
 		       val regtrace = regtrace @ callee_save_regs_info
@@ -1025,11 +1024,11 @@ struct
 						| _ => error "missing block")
 		  val i_in = !instrs
 		  fun realize_retadd (BASE(POP_RET NONE)) =  SOME(BASE(POP_RET(SOME(fixStackOffset RETADD_POS))))
-		    | realize_retadd (BASE(POP_RET (SOME _))) =  error "createPostamble: already realized!!!" 
+		    | realize_retadd (BASE(POP_RET (SOME _))) =  error "createPostamble: already realized!!!"
 		    | realize_retadd _ = NONE
-		  fun loop [] = error "createPostamble: no reload" 
-		    | loop (a::b) = 
-		    let val temp = 
+		  fun loop [] = error "createPostamble: no reload"
+		    | loop (a::b) =
+		    let val temp =
 		      case a of
 			(NO_ANN i) => (case (realize_retadd (i)) of
 					 NONE => NONE | (SOME ii) => SOME (NO_ANN ii))
@@ -1039,16 +1038,16 @@ struct
 			  (SOME res) => res::b
 			| NONE => a::(loop b))
 		    end
-		  val i_out = loop i_in 
+		  val i_out = loop i_in
 	   in instrs := i_out
 	   end
-		
+
 
    fun createPreamble (block_map,name,arg_pos,
 			     Trackstorage.SUMMARY{callee_save_slots,
 						  stackframe_size,prevframe_maxoffset,
 						  fixStackOffset,...}) =
-       let 
+       let
 	   val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
 					 SOME bl => bl | NONE => error "missing block")
 	   val reversed_i = ((std_entry_code()) @
@@ -1058,12 +1057,12 @@ struct
 	   val ordered_i = rev (map NO_ANN reversed_i)
        in instrs := !instrs @ ordered_i
        end
-		
+
    fun allocateProc ({getSignature : label -> procsig,
 		       name         : label,
 		       block_map    : bblock Labelmap.map,
-		       procsig = 
-		         procsig as 
+		       procsig =
+		         procsig as
 			   KNOWN_PROCSIG{linkage = linkage as LINKAGE{argCallee=arg_ra_pos,
 								      resCallee=res_ra_pos,
 								      ...},
@@ -1073,10 +1072,10 @@ struct
 					 ra_offset,
 					 callee_saved,
 					 blocklabels,
-					 argFormal = args, 
+					 argFormal = args,
 					 resFormal = res},
 		       stack_resident : stacklocation Regmap.map,
-		       tracemap     : (register option * Tracetable.trace) Regmap.map}) = 
+		       tracemap     : (register option * Tracetable.trace) Regmap.map}) =
 
      let
        val _ = msg "\tentered allocateproc1\n"
@@ -1088,7 +1087,7 @@ struct
 			     block_map,blocklabels, true))
             else ()
 
-       val (block_labels,block_map) = 
+       val (block_labels,block_map) =
 	    pre_color(name,arg_ra_pos,res_ra_pos,blocklabels,
 		      args,res,block_map)
 
@@ -1111,11 +1110,11 @@ struct
 		    emitString " done expanding\n")
 	       else ()
        val _ = msg  "\tannotating\n"
-	   
+
        val block_map = subtimer("chaitin_annotate", Bblock.liveVars tracemap block_map) name
-	   
-       val _ = 
-	   if (! debug) then 
+
+       val _ =
+	   if (! debug) then
 	       (emitString commentHeader;
 		emitString " dumping procedure after annotation\n";
 		dumpProc (name,procsig, block_map, block_labels, !debug);
@@ -1131,7 +1130,7 @@ struct
 	   fun has_exn [] = false
 	     | has_exn ((BASE(RTL HANDLER_ENTRY))::_) = true
 	     | has_exn (_::rest) = has_exn rest
-	   val instr_blocks = Labelmap.app (fn (BLOCK{instrs,...}) => 
+	   val instr_blocks = Labelmap.app (fn (BLOCK{instrs,...}) =>
 					    if (has_exn (map stripAnnot (!instrs)) )
 						then (has_exn_flag := true) else ())
 	       block_map
@@ -1143,8 +1142,8 @@ struct
        end
 
        (* initialize information on storage *)
-       val storage_info = 
-	   subtimer("chaitin_newinfo", 
+       val storage_info =
+	   subtimer("chaitin_newinfo",
 	 Trackstorage.newInfo)
 	                      {callee_saves = Regset.listItems callee_saved,
 			       stack_resident = stack_resident,
@@ -1169,11 +1168,11 @@ struct
        val summary as (Trackstorage.SUMMARY{fixStackOffset,
 					    stackframe_size,
 					    registers_used,
-					    callee_save_slots,...}) = 
+					    callee_save_slots,...}) =
 	   subtimer("chaitin_summarize", summarize )  storage_info
 
         val new_procsig =
-	       let 
+	       let
 		 val framesize  = stackframe_size
 		 val ra_offset = sloc2int (fixStackOffset RETADD_POS)
 		 val callee_save_regs = listToSet (map #1 callee_save_slots)
@@ -1197,16 +1196,16 @@ struct
 	 (* rewrite module, saving information about variables live
 	    at every call site. *)
 
-	 val callsite_info = 
-		 subtimer("chaitin_rewrite", 
-			       map (fn bblock => 
+	 val callsite_info =
+		 subtimer("chaitin_rewrite",
+			       map (fn bblock =>
 		        allocateBlock (mapping,
 				       stackframe_size,
 				       fixStackOffset,
 				       name) callee_save_slots bblock))
 		(Labelmap.listItems block_map)
 
-	 val callsite_info = List.concat callsite_info 
+	 val callsite_info = List.concat callsite_info
 
 	   (* modify the preamble and postamble code *)
 	 val _ = createPostamble(block_map,hd(rev block_labels),arg_ra_pos,summary)
@@ -1221,8 +1220,8 @@ struct
 	     else []
 
 	 val tables = subtimer("chaitin_maketable", MakeTable) callinfo
-     in	(new_procsig, 
-	 block_map, 
+     in	(new_procsig,
+	 block_map,
 	 block_labels,
 	 tables)
      end (* allocateProc *)

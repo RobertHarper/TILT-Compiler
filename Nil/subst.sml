@@ -1,5 +1,3 @@
-(*$import Listops Util Name Nil List TextIO Ppnil NILSUBST Stats NilError NilRewrite NilRename Option *)
-
 (* Delayed/memoized computations *)
 signature SUBST_DELAY =
 sig
@@ -10,7 +8,7 @@ sig
     val delayed : 'a delay -> bool
 end
 
-(* Lists with efficient insertion to both beginning and end *) 
+(* Lists with efficient insertion to both beginning and end *)
 signature SUBST_DLIST =
 sig
     type 'a dlist
@@ -35,9 +33,9 @@ sig
     val error : string -> string -> 'a
 end
 
-(* Here we define the abstract interface for substitutions.  This section 
- * defines the bits that are generic to all levels in a functor parameterized 
- * by the actual substitution functions, which are level specific. 
+(* Here we define the abstract interface for substitutions.  This section
+ * defines the bits that are generic to all levels in a functor parameterized
+ * by the actual substitution functions, which are level specific.
  *)
 
 functor SubstFn(structure Help : SUBST_HELP
@@ -63,15 +61,15 @@ struct
 
   (* Util *)
   val mapopt   = Util.mapopt
-	
+
   (* Listops *)
   val map_second = Listops.map_second
-      
+
   (* Name *)
   structure VarMap = Name.VarMap
   type var = Name.var
 
-      
+
   type item = item
   type item_subst = item_subst
 
@@ -81,18 +79,18 @@ struct
 
   (*Return the value (if any) that is associated with
    * the given variable in the given substitution
-   *)	
+   *)
   fun substitute (subst,items) var = mapopt thaw (VarMap.find (subst,var))
-	
+
   (*Return a list corresponding to the substitution
-   * Note that toList (xxxfromList list) is not 
+   * Note that toList (xxxfromList list) is not
    * required to be the identity.
    *)
   fun toList (subst : item_subst) = if !make_lets then map_second thaw (dListToList (#2 subst)) else (map_second thaw (VarMap.listItemsi (#1 subst)))
   (* The dList won't be kept if the make_lets optimization isn't used, but we want to use it if it's there for its possibly
    smaller/already computed replacements. *)
 
-  fun item_insert (subst as (s,i),var,delay) = 
+  fun item_insert (subst as (s,i),var,delay) =
 	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
 
   (*Add as if to a simultaneous substitution.
@@ -102,25 +100,25 @@ struct
    * If x is in the domain of s, then v is the new value for x
    *)
   fun sim_add subst (var,value) : item_subst = item_insert(subst,var,rename value)
-  
+
   (* Add as if to the left of a sequential substition.
-   * 
+   *
    * addl (x,v,s) = {v/x} o s (where o is the composition operator
    *)
-  fun addl (var,item,(subst,items)) = 
+  fun addl (var,item,(subst,items)) =
 	let
 	  val item_delay = rename item
 	  val map_subst = item_insert(empty(),var,item_delay)
 	  fun domap i = delay (fn () => substItemInItem map_subst (thaw i))
 	in item_insert((VarMap.map domap subst,items),var,item_delay)
 	end
-  
+
   (* Add as if to the right of a sequential substition.
-   * 
+   *
    * addr (s,x,v) = s o {v/x} (where o is the composition operator
    *)
-  fun addr (s as (subst,items),var,item) = 
-	let 
+  fun addr (s as (subst,items),var,item) =
+	let
 	  val item_delay = rename item
 	in (VarMap.insert (subst,var,delay (fn () => substItemInItem s (thaw item_delay))),
 	    RCONS(items,(var,item_delay)))
@@ -131,12 +129,12 @@ struct
    *)
   fun is_empty (subst,_) = (VarMap.numItems subst) = 0
 
-  (*Create a substitution which when applies behaves as if the two 
+  (*Create a substitution which when applies behaves as if the two
    * substitutions were applies sequentially.
    *
    * compose (s_1,s_2) = s_1 o s_2
-   *)	
-  fun compose (s1 as (subst1,items1),(subst2,items2)) = 
+   *)
+  fun compose (s1 as (subst1,items1),(subst2,items2)) =
 	let
 	  fun domap item_delay = delay (fn () => substItemInItem s1 (thaw item_delay))
 	  val subst2 = VarMap.map domap subst2
@@ -145,20 +143,20 @@ struct
 	end
 
   (* Merge two substs, without looking at the ranges.
-   * If the domains overlap at v, the image of v in the 
+   * If the domains overlap at v, the image of v in the
    * new map is that of the second map
-   *)  
-  fun merge ((subst1,items1),(subst2,items2)) = 
+   *)
+  fun merge ((subst1,items1),(subst2,items2)) =
 	(VarMap.unionWith (fn _ => error "merge" "Duplicate variables in merged substitutions") (subst1,subst2),
 	 dListApp(items1,items2))
 
-  (* Treat the list as a simultaneous substitution. 
-   * Duplicate variables in the argument list may lead to 
+  (* Treat the list as a simultaneous substitution.
+   * Duplicate variables in the argument list may lead to
    * undefined behaviour.
    *)
   fun simFromList (list : (var * item) list) : item_subst = List.foldl (fn (v,s) => sim_add s v) (empty()) list
 
-  (* Treat the list as a sequential substitution, with the 
+  (* Treat the list as a sequential substitution, with the
    * last element of the list substituted first, and the
    * first element substituted last.
    *)
@@ -167,9 +165,9 @@ struct
   (* Print every mapping in the substitution using the given item printing function *)
   (* N.B. doesn't print items
    *)
-  fun printf (printer : item -> unit) ((subst,items): item_subst) = 
+  fun printf (printer : item -> unit) ((subst,items): item_subst) =
 	let
-	  fun print1 (v,a) = 
+	  fun print1 (v,a) =
 	    (TextIO.print (Name.var2string v);
 	     TextIO.print "->";
 	     printer (thaw a);
@@ -190,7 +188,7 @@ end
  * are notions of composition of substitutions
  *)
 
-structure NilSubst :> NILSUBST = 
+structure NilSubst :> NILSUBST =
   struct
 
     (* IMPORTS *)
@@ -216,7 +214,7 @@ structure NilSubst :> NILSUBST =
     val unzip      = Listops.unzip
     val zip        = Listops.zip
 
-    (* NilError *) 
+    (* NilError *)
     val locate = NilError.locate "Subst"
     val assert = NilError.assert
 
@@ -264,7 +262,7 @@ structure NilSubst :> NILSUBST =
       fun LCONS (a,(left,right)) = if !make_lets then (a::left,right) else DNIL
       fun RCONS ((left,right),a) = if !make_lets then (left,a::right) else DNIL
 
-      fun dempty i = 
+      fun dempty i =
 	(case i
 	   of (nil,nil) => true
 	    | _ => false)
@@ -296,10 +294,10 @@ structure NilSubst :> NILSUBST =
 
       fun listItems (s,i) = map_second thaw (if !eager_lets then VarMap.listItemsi s else dListToList i)
 
-      fun kindhandler(state : state as {esubst,csubst},kind : kind) = 
+      fun kindhandler(state : state as {esubst,csubst},kind : kind) =
 	let
-	  fun makeLet c = 
-	    let  
+	  fun makeLet c =
+	    let
 	      fun makeLetC nil body = body
 		| makeLetC [conbnd as Con_cb(var,con)] (cv as Var_c var') =
 		if (Name.eq_var(var,var')) then con else cv
@@ -307,7 +305,7 @@ structure NilSubst :> NILSUBST =
 		  if (Name.eq_var(var,var')) then Proj_c(con,l) else cv
 		| makeLetC cbnds (cv as Var_c var') =
 		    (case (List.rev cbnds) of
-		       Con_cb(var,con)::rest => 
+		       Con_cb(var,con)::rest =>
 			 if (Name.eq_var(var,var')) then
 			   makeLetC (rev rest) con
 			 else
@@ -333,21 +331,21 @@ structure NilSubst :> NILSUBST =
 
       (* What to do with constructors.  If the constructor is a variable,
        * see if it is in the subst.  If it is a projection, you might as
-       * well beta-reduce it.  (This turns out to be a big win) 
+       * well beta-reduce it.  (This turns out to be a big win)
        *)
       fun conhandler (state : state as {csubst,...},con : con) =
 	(case con
-	   of Var_c var => 
+	   of Var_c var =>
 	     (case substitute (csubst,var)
-		of SOME con_delay => 
+		of SOME con_delay =>
 		  CHANGE_NORECURSE (state,thaw con_delay)
 		 | _ => NORECURSE)
-	    | (Proj_c (Var_c var,label)) => 
+	    | (Proj_c (Var_c var,label)) =>
 	     (case substitute (csubst,var)
-		of SOME con_delay => 
+		of SOME con_delay =>
 		  let val con2 = thaw con_delay
 		      val res = (case con2 of
-				   (Crecord_c entries) => 
+				   (Crecord_c entries) =>
 				     #2(valOf(List.find (fn ((l,_)) => Name.eq_label (l,label)) entries ))
 				 | _ => Proj_c(con2,label))
 		  in CHANGE_NORECURSE (state,res)
@@ -359,7 +357,7 @@ structure NilSubst :> NILSUBST =
        *)
       fun exphandler (state : state as {esubst,...},exp : exp) =
 	(case exp
-	   of Var_e var => 
+	   of Var_e var =>
 	     (case substitute (esubst,var)
 		of SOME exp_delay => CHANGE_NORECURSE (state,thaw exp_delay)
 		 | _ => NORECURSE)
@@ -367,12 +365,12 @@ structure NilSubst :> NILSUBST =
 
       (* Set the handlers, starting with a default handler
        *)
-      val exp_con_handler = 
+      val exp_con_handler =
 	let
 	  val h = set_conhandler default_handler conhandler
 	  val h = set_exphandler h  exphandler
 	  val h = set_kindhandler h kindhandler
-	in h 
+	in h
 	end
 
       (* Generate the rewriters.
@@ -383,17 +381,17 @@ structure NilSubst :> NILSUBST =
            rewrite_cbnd = substExpConInCBnd',
            rewrite_bnd = substExpConInBnd',
 	   rewrite_trace = substExpConInTrace',...} = rewriters exp_con_handler
- 
-      fun empty_state (esubst : exp_subst,csubst : con_subst) : state = 
+
+      fun empty_state (esubst : exp_subst,csubst : con_subst) : state =
 	{esubst = esubst, csubst = csubst}
 
       (* Given a rewriter, carry out an expression and constructor
        * substitution in an item
        *)
-      fun substExpConInXXX substituter (esubst,csubst) item = 
+      fun substExpConInXXX substituter (esubst,csubst) item =
 	let
-	  val item =  	
-	    if (is_empty esubst) andalso (is_empty csubst) then item 
+	  val item =
+	    if (is_empty esubst) andalso (is_empty csubst) then item
 	    else substituter (empty_state (esubst,csubst)) item
 	in item
 	end
@@ -417,17 +415,17 @@ structure NilSubst :> NILSUBST =
       val substConInExp   = fn s => subtimer("Subst:substConInExp",  substConInXXX substExpConInExp' s)
       val substConInKind  = fn s => subtimer("Subst:substConInKind", substConInXXX substExpConInKind' s)
       val substExpInKind  = fn s => subtimer("Subst:substExpInKind", substExpInXXX substExpConInKind' s)
-      val substConInTrace = fn s => subtimer("Subst:substConInTrace",substConInXXX substExpConInTrace' s) 
+      val substConInTrace = fn s => subtimer("Subst:substConInTrace",substConInXXX substExpConInTrace' s)
 
       val substExpConInExp  = fn s => subtimer("Subst:substExpConInExp", substExpConInXXX(substExpConInExp') s)
-      val substExpConInCon  = fn s => subtimer("Subst:substExpConInCon", substExpConInXXX(substExpConInCon') s) 
-      val substExpConInKind = fn s => subtimer("Subst:substExpConInKind",substExpConInXXX(substExpConInKind') s) 
+      val substExpConInCon  = fn s => subtimer("Subst:substExpConInCon", substExpConInXXX(substExpConInCon') s)
+      val substExpConInKind = fn s => subtimer("Subst:substExpConInKind",substExpConInXXX(substExpConInKind') s)
 
       (* Bnds are a bit different, since the rewriter rewrites a bnd to a bnd list
        *)
-      fun substConInCBnd csubst bnd = 
+      fun substConInCBnd csubst bnd =
 	let
-	  val bnd = 
+	  val bnd =
 	    if is_empty csubst then bnd
 	    else
 	      case substExpConInCBnd' (empty_state (empty(), csubst)) bnd
@@ -437,9 +435,9 @@ structure NilSubst :> NILSUBST =
 	  bnd
 	end
 
-      fun substConInBnd csubst bnd = 
+      fun substConInBnd csubst bnd =
 	let
-	  val bnd = 
+	  val bnd =
 	    if is_empty csubst then bnd
 	    else
 	      case substExpConInBnd' (empty_state (empty(), csubst)) bnd
@@ -451,12 +449,12 @@ structure NilSubst :> NILSUBST =
       val substConInBnd = fn s => subtimer("Subst:substExpConInBnd",substConInBnd s)
       val substConInCBnd = fn s => subtimer("Subst:substExpConInCbnd",substConInCBnd s)
 
-    end  
+    end
 
 
-    (* Here we define the abstract interface for substitutions.  This section 
-     * defines the bits that are generic to all levels in a functor parameterized 
-     * by the actual substitution functions, which are level specific. 
+    (* Here we define the abstract interface for substitutions.  This section
+     * defines the bits that are generic to all levels in a functor parameterized
+     * by the actual substitution functions, which are level specific.
      *)
     structure Help =
     struct
@@ -473,7 +471,7 @@ structure NilSubst :> NILSUBST =
 			  val substItemInItem = substConInCon
 			  val renameItem = NilRename.renameCon
 			  val printer = Ppnil.pp_con)
-      
+
     (* Instantiate the functor for expressions*)
     structure E = SubstFn(structure Help = Help
 			  type item = exp
@@ -484,11 +482,11 @@ structure NilSubst :> NILSUBST =
 
     (*Substitutions for one variable
      *)
-    local 
+    local
       fun renameCon (con :con) : con delay = delay (fn () => NilRename.renameCon con)
       fun renameExp (exp :exp) : exp delay = delay (fn () => NilRename.renameExp exp)
 
-      fun item_insert (subst as (s,i),var,delay) = 
+      fun item_insert (subst as (s,i),var,delay) =
 	(VarMap.insert(s,var,delay),RCONS(i,(var,delay)))
     in
       fun varConExpSubst var con exp   = substConInExp  (item_insert(C.empty(),var,renameCon con)) exp

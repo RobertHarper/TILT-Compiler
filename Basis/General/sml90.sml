@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude General SML90_SIG Math Real Char CharVector String TextIO *)
 (* sml90.sig
  *
  * COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies.
@@ -25,7 +24,7 @@ structure SML90 :> SML90 =
     fun sqrt x = if (x >= 0.0) then Math.sqrt x else raise Sqrt
     fun exp x = let
 	  val r = Math.exp x
-	  in 
+	  in
 	    if (Real.isFinite r) then r else raise Exp
 	  end
     fun ln x = if (x > 0.0) then Math.ln x else raise Ln

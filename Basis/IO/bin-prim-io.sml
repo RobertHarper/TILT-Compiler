@@ -1,4 +1,3 @@
-(*$import Firstlude PrimIOFn Word8Vector Word8Array Word8 Position *)
 (* bin-prim-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude CharVector Char Word *)
 (* hash-string.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories
@@ -19,5 +18,5 @@ structure HashString : sig
     fun hashChar (c, h) = Word.<<(h, 0w5) + h + 0w720 + (charToWord c)
 
     fun hashString s = CharVector.foldl hashChar 0w0 s
-	  
+
   end (* HashString *)

@@ -1,4 +1,3 @@
-(*$import *)
 (* Stream Library *)
 (* Author: Frank Pfenning *)
 

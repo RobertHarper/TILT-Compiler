@@ -1,7 +1,5 @@
-(*$import Word32 TilWord32 Name Annotation TraceInfo Prim NIL Sequence Util Listops *)
-
 structure Nil :> NIL =
-struct	
+struct
 
   open Util Name Listops
 
@@ -19,7 +17,7 @@ struct
 
 
 
-  (* In general, we want to distinguish between functions/arrow types that 
+  (* In general, we want to distinguish between functions/arrow types that
    * are open (possibly having free variables) or those that are closed.
    *)
   datatype openness = Open | Closure | Code
@@ -41,15 +39,15 @@ struct
 
   datatype letsort = Sequential | Parallel
   datatype phase = Runtime | Compiletime
-  datatype kind = 
+  datatype kind =
       Type_k                        (* constructors that are types *)
     | SingleType_k of con           (* singleton-kind at kind type *)
     | Single_k of con               (* singleton-kind at any kind *)
                                     (* dependent record kind *)
     | Record_k of ((label*var),kind) sequence
-                                    (* dependent arrow kinds for open 
+                                    (* dependent arrow kinds for open
 				       constr funs, closed funs, or closures *)
-    | Arrow_k of openness * (var * kind) list * kind 
+    | Arrow_k of openness * (var * kind) list * kind
 
   and primcon =                          (* classifies term-level ... *)
       Int_c of Prim.intsize                   (* register integers *)
@@ -79,8 +77,8 @@ struct
     | GCTag_c                                 (* Type of header word for heap values *)
       (* Params: Con to tag *)
 
-  and con = 
-      Prim_c of primcon * con list                (* Classify term-level values 
+  and con =
+      Prim_c of primcon * con list                (* Classify term-level values
                                                        of primitive types *)
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						       a recursive type *)
@@ -95,9 +93,9 @@ struct
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
     | Crecord_c of (label * con) list             (* Constructor-level records *)
     | Proj_c of con * label                       (* Constructor-level record projection *)
-    | Closure_c of con * con                      (* Constructor-level closure: 
+    | Closure_c of con * con                      (* Constructor-level closure:
 					               code and environment *)
-    | App_c of con * con list                     (* Constructor-level application 
+    | App_c of con * con list                     (* Constructor-level application
 						       of open or closed constructor function *)
     | Coercion_c of {vars : var list,         (* Coercions: *)
 		     from : con,              (* forall[vars].from=>to *)
@@ -107,7 +105,7 @@ struct
              | Open_cb of (var * (var * kind) list * con)
              | Code_cb of (var * (var * kind) list * con)
 
-  and nilprim = 
+  and nilprim =
       record of label list       (* record intro *)
       (* Params: Terms to inject *)
     | partialRecord of label list * int (* record with a missing zero-indexed field *)
@@ -150,12 +148,12 @@ struct
 
   (* Intswitch should be apparent.
    * The con list in the Sumswitch tells us the sum type and the w32
-   *    is used to index the different cases for the sum type.   
+   *    is used to index the different cases for the sum type.
    * Exncase's arms are indexed by expressions that must have type Exntag_c(c) and
    *    the arms must have type tau for some fixed result type tau, assuming bound has type c
    *)
   and switch =                                 (* Switching on / Elim Form *)
-      Intsw_e of {arg  : exp, 
+      Intsw_e of {arg  : exp,
 		  size : Prim.intsize,
 		  result_type : con,
 		  arms : (w32 * exp) list,
@@ -175,7 +173,7 @@ struct
 		     arms : (primcon * (var * kind) list * exp) list,
 		     default : exp,
 		     result_type: con }                 (* typecase *)
-    | Ifthenelse_e of {arg : conditionCode,             
+    | Ifthenelse_e of {arg : conditionCode,
 		       thenArm : exp,
 		       elseArm : exp,
 		       result_type : con}
@@ -185,13 +183,13 @@ struct
       Var_e of var                                        (* Term-level variables *)
     | Const_e of (con,exp) Prim.value                     (* Term-level constants *)
     | Let_e of letsort * bnd list * exp                   (* Binding construct *)
-    | Prim_e of allprim * (niltrace list) * (con list) * (exp list)         
+    | Prim_e of allprim * (niltrace list) * (con list) * (exp list)
                                                           (* primops must be fully applied *)
     | Switch_e of switch                                  (* Switch statements *)
     | App_e of openness * exp * (con list) *
                        exp list * exp list     (* Application of open functions and closures *)
     | ExternApp_e of exp * exp list
-    | Raise_e of exp * con                               
+    | Raise_e of exp * con
     | Handle_e of {body :exp,
 	           bound : var,
                    handler : exp,
@@ -204,7 +202,7 @@ struct
       Exp_cc of exp
     | And_cc  of conditionCode * conditionCode (* Short-circuiting *)
     | Or_cc   of conditionCode * conditionCode (* Short-circuiting *)
-    | Not_cc  of conditionCode 
+    | Not_cc  of conditionCode
 
   (* result types are needed for recursive definitions in order to make
    * type-checking syntax directed.  Also note that I've forced all functions

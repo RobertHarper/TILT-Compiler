@@ -1,5 +1,3 @@
-(*$import List Nil MEASURE NilRewrite Stats Option Int *)
-
 (*
  Measuring the size of a module, in terms of numbers of imports, bindings, and exports
 *)
@@ -15,8 +13,8 @@ structure Measure :> MEASURE =
 
     fun chat i s = if !chatlev > i then print s else ()
 
-    local 
-      
+    local
+
       type state = {cstring : con -> string,
 		    con:int ref,exp:int ref,kind:int ref,con_vars:int ref,exp_vars:int ref,
 		    active:(string*(int ref)) list,counters:(string*(int ref)) list,
@@ -38,16 +36,16 @@ structure Measure :> MEASURE =
 
       fun incl clist = List.app (fn (s,x) => inc x) clist
 
-      fun find c clist = List.find (fn (s,x) => s = c) clist 
+      fun find c clist = List.find (fn (s,x) => s = c) clist
 
-      fun inc1 c clist = 
+      fun inc1 c clist =
 	(case find c clist
 	   of SOME(_,x) => inc x
 	    | NONE => ())
 
       fun contains clist c = Option.isSome (find c clist)
 
-      fun conhandler ({cstring,exp,con,kind,active,counters,containers,con_vars,exp_vars} : state,c : con) = 
+      fun conhandler ({cstring,exp,con,kind,active,counters,containers,con_vars,exp_vars} : state,c : con) =
 	let
 	  val s = cstring c
 	in
@@ -57,7 +55,7 @@ structure Measure :> MEASURE =
 	  if contains active s then NOCHANGE
 	  else (case find s containers of
 		  NONE => NOCHANGE
-		| SOME entry => 
+		| SOME entry =>
 		    CHANGE_RECURSE ({cstring = cstring,
 				     con = con,exp = exp,kind = kind,con_vars=con_vars,exp_vars=exp_vars,
 				     active = entry::active,counters = counters,containers=containers},c))
@@ -72,7 +70,7 @@ structure Measure :> MEASURE =
       (* exp binder *)
       fun exp_var_bind (state as {exp_vars,...} : state,_) = (inc exp_vars;(state,NONE))
 
-      val all_handlers =  
+      val all_handlers =
 	let
 	  val h = set_kindhandler default_handler kindhandler
 	  val h = set_conhandler h conhandler
@@ -86,7 +84,7 @@ structure Measure :> MEASURE =
       val {rewrite_con,rewrite_exp,rewrite_kind,rewrite_mod,...} = rewriters all_handlers
 
     in
-      type measure = {cstring  : Nil.con -> string, 
+      type measure = {cstring  : Nil.con -> string,
 		      count    : string list,
 		      count_in : string list}
       (* cstring = map from constructors to names
@@ -105,8 +103,8 @@ structure Measure :> MEASURE =
       (* polymorphic function to measure starting at different top-level entities *)
       fun item_size rewrite_item {cstring  : con -> string,
 				  count    : string list,
-				  count_in : string list} item = 
-	let 
+				  count_in : string list} item =
+	let
 	  val exp = ref 0
 	  val con = ref 0
 	  val kind = ref 0
@@ -119,14 +117,14 @@ structure Measure :> MEASURE =
 			       con_vars = con_vars,exp_vars = exp_vars,
 			       containers = containers,
 			       counters   = counters}
-	    
+
 	  val _ = rewrite_item state item
 
 	  val printi = print o Int.toString
 	  val printl = List.map print
 	  fun print_count (s,r) =
 	    (printl [s," Nodes            = "];printi (!r);print "\n")
-	  fun print_container (s,r) = 	    
+	  fun print_container (s,r) =
 	    (printl ["Nodes in ",s,"         = "];printi (!r);print "\n")
 
 	  val total = !exp + !con + !kind
@@ -139,10 +137,10 @@ structure Measure :> MEASURE =
 	   print "Con  Nodes            = ";printi (!con);print "\n";
 	   print "Exp  Nodes            = ";printi (!exp);print "\n";
 	   print "All  Nodes            = ";printi (total);print "\n";
-	   
+
 	   List.app print_count counters;
 	   List.app print_container containers;
-	   
+
 	   print "\n") else ();
 	  {kinds= !kind,cons= !con,exps= !exp,cvars= !con_vars,evars= !exp_vars,total=total}
 	end
@@ -158,9 +156,9 @@ structure Measure :> MEASURE =
         Effects: Prints count information with chat level above 1. *)
 
       (* add the counts in two different measure results *)
-      fun adds 
+      fun adds
 	  {kinds=ks1,cons=cs1,exps=es1,cvars=cvs1,evars=evs1,total=t1}
-	  {kinds=ks2,cons=cs2,exps=es2,cvars=cvs2,evars=evs2,total=t2} = 
+	  {kinds=ks2,cons=cs2,exps=es2,cvars=cvs2,evars=evs2,total=t2} =
 	  {kinds=ks1+ks2,cons=cs1+cs2,exps=es1+es2,cvars=cvs1+cvs2,evars=evs1+evs2,total=t1+t2}
 
       (*
@@ -171,13 +169,13 @@ structure Measure :> MEASURE =
       *)
       fun mod_size' args (MODULE {bnds,imports,exports}) =
 	let
-	  val _ = chat 0 "\nIMPORTS\n" 
+	  val _ = chat 0 "\nIMPORTS\n"
 	  val impsize = mod_size args (MODULE {bnds=[],imports=imports,exports=[]})
 
-	  val _ = chat 0 "\nBNDS\n" 
+	  val _ = chat 0 "\nBNDS\n"
 	  val bndsize = mod_size args (MODULE {bnds=bnds,imports=[],exports=[]})
 
-	  val _ = chat 0 "\nEXPORTS\n" 
+	  val _ = chat 0 "\nEXPORTS\n"
 	  val exportsize = mod_size args (MODULE {bnds=[],imports=[],exports=exports})
 
 	  val total = adds impsize (adds bndsize exportsize)
@@ -189,7 +187,7 @@ structure Measure :> MEASURE =
 	in (impsize,bndsize,exportsize)
 	end
 
-      fun cstring con = 
+      fun cstring con =
 	(case con of
 	   Prim_c (Sum_c _,_)    => "Sum_c"
 	 | Prim_c (Record_c _,_) => "Record_c"

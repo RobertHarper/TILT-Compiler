@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PrePosix SysWord POSIX_SYS_DB POSIX_extern *)
 (* posix-sysdb.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,7 +6,7 @@
  *
  *)
 
-structure POSIX_Sys_DB :> POSIX_SYS_DB 
+structure POSIX_Sys_DB :> POSIX_SYS_DB
     where type uid = PrePosix.uid
       and type gid = PrePosix.gid =
   struct
@@ -15,7 +14,7 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
     type word = SysWord.word
     type uid = PrePosix.uid
     type gid = PrePosix.gid
-    
+
     structure Passwd =
       struct
         datatype passwd = PWD of {             (* extensible *)
@@ -45,9 +44,9 @@ structure POSIX_Sys_DB :> POSIX_SYS_DB
         fun name (GROUP{name,...}) = name
         fun gid (GROUP{gid,...}) = gid
         fun members (GROUP{members,...}) = members
-    
+
       end
-    
+
     fun getgrgid gid = let val gid = PrePosix.gidToWord gid
           val (name,gid,members) = Ccall(posix_sysdb_getgrgid, gid)
           in

@@ -1,10 +1,8 @@
-(*$import Nil *)
-
 (*
  Tools for putting Nil code into A-normal form
 *)
 
-signature LINEARIZE = 
+signature LINEARIZE =
     sig
 	val debug : bool ref
 	(* Turn debug prints on *)

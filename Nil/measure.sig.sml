@@ -1,11 +1,9 @@
-(*$import Nil *)
-
 (*
  Measuring the size of a module, in terms of numbers of imports, bindings, and exports
 *)
 
-signature MEASURE = 
-  sig 
+signature MEASURE =
+  sig
 
     val chatlev : int ref
     (* Controls how much extra printed output to produce.
@@ -32,7 +30,7 @@ signature MEASURE =
 	 | Typecase_c _          => "Typecase_c"
 	 | Annotate_c (_,c)      => "Annotate_c")
 	   *)
-    type measure = {cstring  : Nil.con -> string, 
+    type measure = {cstring  : Nil.con -> string,
 		    count    : string list,
 		    count_in : string list}
       (* cstring = map from constructors to names

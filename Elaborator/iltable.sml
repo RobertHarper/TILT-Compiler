@@ -1,10 +1,8 @@
-(*$import Array Word32 Name Sequence Listops Il Prim Util TilWord64 String BinaryMapFn Option Tyvar Int *)
-
 (* Basically revamped from NIL version *)
 
 
-structure IlTable  = 
-    
+structure IlTable  =
+
 struct
     open Il Prim
 
@@ -18,13 +16,13 @@ struct
 
     fun cmp_maker less greater =
 	fn (a,b) =>
-	if less (a, b) then 
-	    LESS 
-	else 
-	    if greater (a,b) then 
+	if less (a, b) then
+	    LESS
+	else
+	    if greater (a,b) then
 		GREATER
 	    else EQUAL
-		
+
     val cmp_int:(int*int->order) = cmp_maker op< op>
     val cmp_TilWord64 = cmp_maker TilWord64.slt TilWord64.sgt
     val cmp_uTilWord64 = cmp_maker TilWord64.ult TilWord64.ugt
@@ -47,7 +45,7 @@ struct
 	  | (NONE, NONE) => EQUAL
 
     fun cmp_bnd b = LESS
-    fun cmp_seq s = LESS 
+    fun cmp_seq s = LESS
 
     (* Takes 2 orders lexicographically to produce another *)
     fun cmp_orders [] = EQUAL
@@ -62,18 +60,18 @@ struct
 	    val length2 = Array.length arr2
 	    fun e2n (Nil.Const_e(Prim.uint(Prim.W8,n))) = n
               | e2n _ = error "cmp_vectors: e2n: ill-formed string"
-	    fun loop i = 
+	    fun loop i =
 		if (i >= length1) then
 		    EQUAL
 		else
-		    (case cmp_uTilWord64 (e2n (Array.sub(arr1,i)), 
+		    (case cmp_uTilWord64 (e2n (Array.sub(arr1,i)),
 					  e2n (Array.sub(arr2,i))) of
 			 EQUAL => loop (i+1)
 		       | ord => ord)
 	in
 	    (case (c1,c2) of
-		 (Prim_c(Int_c Prim.W8,[]), 
-		  Prim_c(Int_c Prim.W8,[])) => 
+		 (Prim_c(Int_c Prim.W8,[]),
+		  Prim_c(Int_c Prim.W8,[])) =>
 		     (* Comparison of strings *)
 		     (case cmp_int(length1, length2) of
 			  EQUAL => loop 0
@@ -91,13 +89,13 @@ struct
 		     of EQUAL => f(t,t')
 		   | r => r)
 	in f (a,b)
-	end 
+	end
 
     val sskip = 4
-    val skip = 7*sskip 
+    val skip = 7*sskip
 
     fun hash_intsize sz =
-	case sz of 
+	case sz of
 	    W8 => 0
 	  | W16 => 1
 	  | W32 => 2
@@ -110,7 +108,7 @@ struct
 
 
     fun hash_tt tt =
-	case tt of 
+	case tt of
 	    int_tt => 0
 	  | real_tt => 1
 	  | both_tt => 2
@@ -119,9 +117,9 @@ struct
 	case b of
 	    false => 0
 	  | true => 1
-	     
-    fun hash_table t = 
-	case t of 
+
+    fun hash_table t =
+	case t of
 	    IntArray sz => 0 *sskip + hash_intsize sz
 	  | IntVector sz => 1*sskip + hash_intsize sz
 	  | FloatArray sz => 2*sskip + hash_floatsize sz
@@ -137,20 +135,20 @@ struct
     fun cmp_con p =
         (case p of
 
-          (* XXX *) 
-	     (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)), c2) => 
+          (* XXX *)
+	     (CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r)), c2) =>
                      cmp_con(CON_FLEXRECORD r, c2)
-	  |  (c1, CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r))) => 
+	  |  (c1, CON_FLEXRECORD (ref (INDIRECT_FLEXINFO r))) =>
                      cmp_con(c1, CON_FLEXRECORD r)
-          |  (CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))), c2) => 
+          |  (CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist))), c2) =>
                      cmp_con(CON_RECORD lclist, c2)
-          |  (c1,CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist)))) => 
+          |  (c1,CON_FLEXRECORD (ref (FLEXINFO (_, true, lclist)))) =>
                      cmp_con(c1, CON_RECORD lclist)
 
           | (CON_FLEXRECORD _, _) => raise Incomparable
           | (_, CON_FLEXRECORD _) => raise Incomparable
 
-	  | (CON_COERCION(vs,c1,c2), CON_COERCION(vs',c1',c2')) => 
+	  | (CON_COERCION(vs,c1,c2), CON_COERCION(vs',c1',c2')) =>
 		     cmp_orders [cmp_list Name.compare_var (vs,vs'),
 				 cmp_con(c1,c1'), cmp_con(c2,c2')]
           | (CON_COERCION _,_) => GREATER
@@ -198,7 +196,7 @@ struct
           | (CON_REF c1, CON_REF c2) => cmp_con(c1,c2)
           | (CON_REF _, _) => GREATER
           | (_, CON_REF _) => LESS
-          
+
           | (CON_TAG c1, CON_TAG c2) => cmp_con(c1,c2)
           | (CON_TAG _, _) => GREATER
           | (_, CON_TAG _) => LESS
@@ -216,16 +214,16 @@ struct
           | (_, CON_ARROW _) => LESS
 
 
-	  | (CON_APP (con1, clist1) , CON_APP (con2, clist2)) => 
+	  | (CON_APP (con1, clist1) , CON_APP (con2, clist2)) =>
 		cmp_orders[cmp_con (con1, con2), cmp_con_list (clist1, clist2)]
 	  | (CON_APP _, _) => GREATER
 	  | (_, CON_APP _) => LESS
-                                         
+
           | (CON_MU c1, CON_MU c2) => cmp_con(c1,c2)
           | (CON_MU _, _) => GREATER
           | (_, CON_MU _) => LESS
 
-          | (CON_RECORD lcl1, CON_RECORD lcl2) => 
+          | (CON_RECORD lcl1, CON_RECORD lcl2) =>
               cmp_list  (fn ((l1,c1),(l2,c2)) =>
                            cmp_orders [Name.compare_label(l1,l2),
                                        cmp_con(c1,c2)]) (lcl1,lcl2)
@@ -233,7 +231,7 @@ struct
           | (_, CON_RECORD _) => LESS
 
           (* XXX No alpha equivalence *)
-          | (CON_FUN (v1,c1), CON_FUN (v2,c2)) => 
+          | (CON_FUN (v1,c1), CON_FUN (v2,c2)) =>
                cmp_orders [cmp_list Name.compare_var (v1,v2),
                            cmp_con(c1,c2)]
           | (CON_FUN _, _) => GREATER
@@ -242,7 +240,7 @@ struct
           | (CON_SUM{names=n1, noncarriers=nc1, carrier=c1, special=s1},
              CON_SUM{names=n2, noncarriers=nc2, carrier=c2, special=s2}) =>
 	       cmp_orders [cmp_list Name.compare_label (n1,n2),
-                           Int.compare(nc1, nc2), 
+                           Int.compare(nc1, nc2),
                            cmp_con (c1,c2),
                            cmp_option Int.compare (s1, s2)]
           | (CON_SUM _, _) => GREATER
@@ -293,7 +291,7 @@ struct
           | (_, MOD_PROJECT _) => LESS)
 *)
 
-    structure ConKey = 
+    structure ConKey =
 	struct
 	    type ord_key = con
 	    val compare = cmp_con
@@ -301,6 +299,6 @@ struct
     structure Conmap = BinaryMapFn(ConKey)
 
 end
-	    
+
 
 

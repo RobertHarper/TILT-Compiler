@@ -1,4 +1,3 @@
-(*$import Terminate GlobalStructs LambdaStructs NamesStructs IndexStructs SubordinateStructs FormatterStructs PrintStructs OrderStructs PathsStructs *)
 structure Terminate =
   Terminate (structure Global = Global
 	     structure IntSyn' = IntSyn

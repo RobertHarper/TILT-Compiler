@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Substring String List Bool OS_PATH *)
 (* os-path-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -123,7 +122,7 @@ functor OS_PathFn (OSPathBase : sig
 	  end
     fun dir p = #dir(splitDirFile p)
     fun file p = #file(splitDirFile p)
-    
+
     fun splitBaseExt p = let
 	  val {dir, file} = splitDirFile p
 	  val (file', ext') = SS.splitr (fn c => c <> #".") (SS.all file)
@@ -157,7 +156,7 @@ functor OS_PathFn (OSPathBase : sig
 		      of (P.Arc _ :: r) => scanArcs(r, al)
 		       | _ => scanArcs(P.Parent::l, al)
 		     (* end case *))
-		  | a' => scanArcs(a' :: l, al) 
+		  | a' => scanArcs(a' :: l, al)
 		(* end case *))
 	  fun scanPath relPath = scanArcs([], relPath)
 	  fun mkArc (P.Arc a) = a

@@ -1,4 +1,3 @@
-(*$import STRATEGY METAGLOBAL METASYN FILLING SPLITTING RECURSION LEMMA QED METAPRINT TIMERS GlobalStructs *)
 (* Strategy *)
 (* Author: Carsten Schuermann *)
 

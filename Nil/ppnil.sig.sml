@@ -1,5 +1,3 @@
-(*$import Name Nil Formatter *)
-
 (* Pretty-printing routines for the NIL *)
 
 signature PPNIL =
@@ -18,7 +16,7 @@ signature PPNIL =
     val pp_trace'   : Nil.niltrace -> Formatter.format
     val pp_var'     : Name.var -> Formatter.format
     val pp_label'   : Name.label -> Formatter.format
-    val pp_list'    : ('a -> Formatter.format) -> 'a list -> 
+    val pp_list'    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> Formatter.format
     val pp_module'   : Nil.module -> Formatter.format
 
@@ -34,7 +32,7 @@ signature PPNIL =
     val pp_trace   : Nil.niltrace -> unit
     val pp_var     : Name.var -> unit
     val pp_label   : Name.label -> unit
-    val pp_list    : ('a -> Formatter.format) -> 'a list -> 
+    val pp_list    : ('a -> Formatter.format) -> 'a list ->
                                   (string * string * string * bool) -> unit
     val pp_module   : {module: Nil.module,
                        name: string,

@@ -1,4 +1,3 @@
-(*$import IntSyn Whnf Conv Constraints Trail NoTrail Unify Abstract GlobalStructs *)
 structure IntSyn =
   IntSyn (structure Global = Global);
 

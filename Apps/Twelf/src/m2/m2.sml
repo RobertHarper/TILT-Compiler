@@ -1,4 +1,3 @@
-(*$import MetaSyn MetaAbstract MetaPrint Init Search Lemma Splitting Filling Recursion Qed Strategy Prover Mpi Skolem MetaGlobal LambdaStructs GlobalStructs ModesStructs PrintStructs NamesStructs TypeCheckStructs SubordinateStructs FormatterStructs OpsemStructs IndexStructs OrderStructs TimersStructs RingStructs *)
 structure MetaSyn = 
   MetaSyn (structure IntSyn' = IntSyn
 	   structure Whnf = Whnf);

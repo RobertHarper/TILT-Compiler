@@ -1,5 +1,3 @@
-(*$import Word32 TextIO Listops TilWord32 TraceInfo Sequence Stats Util Name Prim Nil Ppprim Formatter String PPNIL Int *)
-
 (* Nil pretty-printer that uses HTML to hyperlink variable occurrences to their binding sites *)
 
 structure PpnilHtml :> PPNIL =
@@ -16,15 +14,15 @@ structure PpnilHtml :> PPNIL =
     fun separate [] sep = []
       | separate [a] sep = [a]
       | separate (a::rest) sep = a :: sep :: (separate rest sep)
-    fun pp_list_flat doer objs (left,sep,right,break) = 
-      let 
+    fun pp_list_flat doer objs (left,sep,right,break) =
+      let
 	fun loop [] = [String right]
 	  | loop [a] = [doer a, String right]
 	  | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
 	val fmts = (String left) :: (loop objs)
       in fmts
       end
-    fun pp_list doer objs (pref as (left,_,_,break)) = 
+    fun pp_list doer objs (pref as (left,_,_,break)) =
 	let val fmts = pp_list_flat doer objs pref
 	in (if break then Vbox0 else HOVbox0 1) (size left) 1 fmts
 	end
@@ -33,12 +31,12 @@ structure PpnilHtml :> PPNIL =
     fun pp_list'' doer objs = pp_list doer objs ("", ",","", false)
     fun pp_list''' doer objs = pp_list doer objs ("", ".", "", false)
 
-    fun pp_var v = 
+    fun pp_var v =
 	let val s = var2string v
             val n = String.size s
         in String0 n ("<A HREF=\"#" ^ s ^ "\">" ^ s ^ "</A>")
         end
-    fun pp_bound_var v = 
+    fun pp_bound_var v =
 	let val s = var2string v
             val n = String.size s
         in String0 n ("<A NAME=\"" ^ s ^ "\">" ^ s ^ "</A>")
@@ -61,14 +59,14 @@ structure PpnilHtml :> PPNIL =
       | pp_effect Total = String " -T-> "
 
 
-    fun wrapper pp out obj = 
-      let 
+    fun wrapper pp out obj =
+      let
         val old_bailout = ! Formatter.Bailout
 	val fmtstream = open_fmt out
 	val fmt = pp obj
       in (Formatter.Bailout := false;
           TextIO.output (out, "<HTML><BODY><PRE>\n");
-          output_fmt (fmtstream,fmt); 
+          output_fmt (fmtstream,fmt);
           TextIO.output (out, "</PRE></BODY></HTML>\n");
           Formatter.Bailout := old_bailout;
 	  close_fmt fmtstream;
@@ -77,7 +75,7 @@ structure PpnilHtml :> PPNIL =
 
 
     (* is it basic with respect to printing *)
-    fun is_base_con con = 
+    fun is_base_con con =
       (case con of
 	 (Prim_c _) => true
        | _ => false)
@@ -90,11 +88,11 @@ structure PpnilHtml :> PPNIL =
 								   @ [String " :: ",
 								      pp_kind k]))
 				      (Sequence.toList lvk_seq) ("{", ",","}", true))
-	       | Arrow_k (openness,ks,k) => 
+	       | Arrow_k (openness,ks,k) =>
 		     HOVbox[String "Arrow_k(",
 			    pp_openness openness,
 			    String "; ",
-			    pp_list (fn (v,k) => Hbox[pp_bound_var v, String " : ", 
+			    pp_list (fn (v,k) => Hbox[pp_bound_var v, String " : ",
 						      pp_kind k])
 			    ks ("(", ",",")", false),
 			    String " => ",
@@ -105,7 +103,7 @@ structure PpnilHtml :> PPNIL =
 
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_bound_var v, String " = ", pp_con c]
-      | pp_conbnd (Open_cb(v,vklist,c)) = 
+      | pp_conbnd (Open_cb(v,vklist,c)) =
 	HOVbox[pp_bound_var v, String " = ", Break,
 	       HOVbox[String "FUN_C",
 		      (pp_list' (fn (v,k) => Hbox[pp_bound_var v, String " :: ", pp_kind k])
@@ -114,7 +112,7 @@ structure PpnilHtml :> PPNIL =
 		      String " = ",
 		      Break0 0 5,
 		      pp_con c]]
-      | pp_conbnd (Code_cb(v,vklist,c)) = 
+      | pp_conbnd (Code_cb(v,vklist,c)) =
 	HOVbox[pp_bound_var v, String " =Code= ", Break,
 	       (pp_list' (fn (v,k) => Hbox[pp_bound_var v, String " :: ", pp_kind k])
 		vklist),
@@ -126,14 +124,14 @@ structure PpnilHtml :> PPNIL =
 
     and pp_labcon (l,c) = Hbox [pp_label l, String " : ", pp_con c]
     and pp_labvarcon (l,v,c) = Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_con c]
-	
-    and pp_con arg_con : format = 
-      let 
-	val res = 
+
+    and pp_con arg_con : format =
+      let
+	val res =
 	  (case arg_con of
 	     Var_c v => pp_var v
          | Prim_c(Record_c [],[]) => HOVbox[String "UNIT"]
-         | Prim_c (Record_c labs, conlist) => 
+         | Prim_c (Record_c labs, conlist) =>
               pp_list pp_labcon (Listops.zip labs conlist) ("{",",","}", false)
          | Prim_c (primcon, nil) => HOVbox[pp_primcon primcon]
 	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon,
@@ -154,7 +152,7 @@ structure PpnilHtml :> PPNIL =
 			      pp_con cbody,
 			      Break,
 			      String "END"]
-	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",", 
+	 | Closure_c (c1,c2) => HOVbox[String "CLOSURE_C(", pp_con c1, String ",",
 				       pp_con c2, String ")"]
 (*
 	 | Typecase_c {arg, arms, default, kind} =>
@@ -190,11 +188,11 @@ structure PpnilHtml :> PPNIL =
 						  (pp_list (fn (lc,cf) => Hbox[pp_listcon lc,
 									       pp_confun cf])
 						   arms ("","","", true)),
-						  (case default of 
+						  (case default of
 						       NONE => String "NONE"
 						     | SOME con => Hbox[String "SOME ",
 									   pp_con con])]
-	 | All_c confun => HOVbox[String "ALL_C(", pp_confun confun, String ")"] 
+	 | All_c confun => HOVbox[String "ALL_C(", pp_confun confun, String ")"]
 *)
 	 | AllArrow_c confun => pp_confun confun
 	 | ExternArrow_c(cons,c) => pp_region "ExternArrow(" ")"
@@ -217,7 +215,7 @@ structure PpnilHtml :> PPNIL =
     and pp_listcon (Nil_c k) = Hbox[String "NIL_C(", pp_kind k, String ")"]
       | pp_listcon Cons_c = String "CONS_C"
 *)
-	
+
     and pp_primcon (Int_c intsize) = Hbox[String "INT", pp_is' intsize]
       | pp_primcon (Float_c fs) = Hbox[String "FLOAT", pp_fs' fs]
       | pp_primcon (BoxFloat_c fs) = Hbox[String "BOXFLOAT", pp_fs' fs]
@@ -229,7 +227,7 @@ structure PpnilHtml :> PPNIL =
       | pp_primcon (Record_c labs) = HOVbox[String "RECORD[", Break0 0 3,
 						   pp_list pp_label labs ("",",","", false),
 						   String "]"]
-       | pp_primcon (Sum_c {known = opt,tagcount,totalcount}) = 
+       | pp_primcon (Sum_c {known = opt,tagcount,totalcount}) =
 	String ("SUM" ^ (case opt of NONE => "" | SOME i => "_" ^ (TilWord32.toDecimalString i)) ^
 		"(" ^ (TilWord32.toDecimalString tagcount) ^ ","
 		^ (TilWord32.toDecimalString totalcount) ^ ")")
@@ -247,7 +245,7 @@ structure PpnilHtml :> PPNIL =
                pp_effect effect, Break0 0 5,
 	       pp_con body_type]]
 
-    and pp_nilprimop nilprimop = 
+    and pp_nilprimop nilprimop =
 	String (case nilprimop of
 		    record labels => "record"
 		  | partialRecord (labels,missField) => "partialRecord_" ^ (Int.toString missField)
@@ -269,7 +267,7 @@ structure PpnilHtml :> PPNIL =
 *)
 		  | make_exntag => "make_exntag"
 		  | inj_exn s => "inj_exn[" ^ s ^ "]"
-		  | make_vararg (openness,effect) => "make_vararg" 
+		  | make_vararg (openness,effect) => "make_vararg"
 		  | make_onearg (openness,effect) => "make_onearg"
 		  | box_float Prim.F64 => "box_float_64"
 		  | box_float Prim.F32 => "box_float_32"
@@ -278,23 +276,23 @@ structure PpnilHtml :> PPNIL =
 		  | mk_record_gctag      => "mk_record_gctag"
 		  | mk_sum_known_gctag   => "mk_sum_known_gctag")
 
-    and pp_exp exp = 
+    and pp_exp exp =
 	(case exp of
 	     Var_e var => pp_var var
 	   | Const_e v => Ppprim.pp_value' (fn (Const_e v) => SOME v | _ => NONE) pp_exp pp_con v
            | Prim_e (NilPrimOp (record labels), _, cons, exps) =>
                  let
 		     fun pp_le (label, exp) = HOVbox[pp_label label, String ">",pp_exp exp]
-		     fun pp_lce (label, con, exp) = HOVbox[pp_label label, 
+		     fun pp_lce (label, con, exp) = HOVbox[pp_label label,
 							   String ": ", pp_con con,
 							   String "> ", pp_exp exp]
 		 in
 		     HOVbox
 		     [if (length labels = length exps)
 			  then (if !elide_record
-				    then pp_list pp_le (Listops.zip labels exps) 
+				    then pp_list pp_le (Listops.zip labels exps)
 					("{",",","}",false)
-				else pp_list pp_lce (Listops.zip3 labels cons exps) 
+				else pp_list pp_lce (Listops.zip3 labels cons exps)
 				    ("{",",","}",false))
 		       else HOVbox[String "record", pp_list pp_label labels ("",",","", false),
 				   String " :LENGTH_MISMATCH: ",
@@ -302,7 +300,7 @@ structure PpnilHtml :> PPNIL =
 		 end
            | Prim_e (NilPrimOp (select label), _, _, [exp]) =>
                 Hbox[pp_exp exp, String ".", pp_label label]
-	   | Prim_e (prim,trs,cons,exps) => 
+	   | Prim_e (prim,trs,cons,exps) =>
 		 let val p = (case prim of
 				  PrimOp p => pp_prim' p
 				| NilPrimOp p => pp_nilprimop p)
@@ -311,12 +309,12 @@ structure PpnilHtml :> PPNIL =
 		   val e = pp_list pp_exp exps ("(",",",")",false)
 		 in HOVbox(if (!elide_prim) then [p,e] else [p,t,c,e])
 		 end
-	   | ExternApp_e (efun,exps) => 
-		 (pp_region ("ExternApp_(") ")" 
-		  [pp_exp efun, String ", ", 
+	   | ExternApp_e (efun,exps) =>
+		 (pp_region ("ExternApp_(") ")"
+		  [pp_exp efun, String ", ",
 		   pp_list pp_exp exps ("",",","",false)])
-	   | App_e (openness,efun,cons,exps,fexps) => (pp_region ("App_" ^ (openness2s openness) ^ "(") ")" 
-						       [pp_exp efun, String "; ", 
+	   | App_e (openness,efun,cons,exps,fexps) => (pp_region ("App_" ^ (openness2s openness) ^ "(") ")"
+						       [pp_exp efun, String "; ",
 							pp_list pp_con cons ("",",","",false), String "; ",
 							pp_list pp_exp exps ("",",","",false), String "; ",
 							pp_list pp_exp fexps (" ",",","",false)])
@@ -335,7 +333,7 @@ structure PpnilHtml :> PPNIL =
 			     String "] "],
 			     pp_exp body],
 		      Break0 0 0,
-		      HOVbox[String "WITH ", pp_bound_var bound, 
+		      HOVbox[String "WITH ", pp_bound_var bound,
 			     String ": EXN . ",
 			     pp_exp handler]]
 	   | Switch_e sw => pp_switch sw
@@ -362,8 +360,8 @@ structure PpnilHtml :> PPNIL =
 	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", pp_exp e]
 	in
 	    case sw of
-		Intsw_e {arg,size,arms,default,result_type} => 
-		    HOVbox[String "INT_SWITCH(", 
+		Intsw_e {arg,size,arms,default,result_type} =>
+		    HOVbox[String "INT_SWITCH(",
 			   pp_exp arg, String ": ",
 			   pp_is' size, String ", ",
 			   Break0 0 5,
@@ -372,8 +370,8 @@ structure PpnilHtml :> PPNIL =
 			   Break0 0 5,
 			   pp_default default,
 			   String ")",String" : ",pp_con result_type]
-	      | Sumsw_e {arg,sumtype,bound,arms,default,result_type} => 
-		    HOVbox[String "SUM_SWITCH(", 
+	      | Sumsw_e {arg,sumtype,bound,arms,default,result_type} =>
+		    HOVbox[String "SUM_SWITCH(",
 			   pp_exp arg, String ": ",
 			   pp_con sumtype, String ", ",
 			   Break0 0 5,
@@ -384,8 +382,8 @@ structure PpnilHtml :> PPNIL =
 			   Break0 0 5,
 			   pp_default default,
 			   String ")",String" : ",pp_con result_type]
-	      | Exncase_e {arg,bound,arms,default,result_type} => 
-		    HOVbox[String "EXN_SWITCH(", 
+	      | Exncase_e {arg,bound,arms,default,result_type} =>
+		    HOVbox[String "EXN_SWITCH(",
 			   pp_exp arg, String ": EXN, ",
 			   Break0 0 5,
 			   pp_bound_var bound, String ", ",  Break0 0 5,
@@ -398,7 +396,7 @@ structure PpnilHtml :> PPNIL =
 
 	end
 
-    and pp_conditionCode cc = 
+    and pp_conditionCode cc =
 	(case cc of
 	     Exp_cc exp => pp_exp exp
 	   | And_cc (cc1,cc2) => HOVbox[String "AND(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
@@ -407,8 +405,8 @@ structure PpnilHtml :> PPNIL =
 
     and pp_trace TraceUnknown = String "Unknown"
       | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]
-      | pp_trace (TraceKnown (TraceInfo.Compute(v,labs))) = 
-	Hbox[String "Compute(", pp_var v, 
+      | pp_trace (TraceKnown (TraceInfo.Compute(v,labs))) =
+	Hbox[String "Compute(", pp_var v,
 	     String ".", pp_list''' pp_label labs, String ")"]
       | pp_trace (TraceKnown (TraceInfo.Notrace_Int)) = String "Known_Int"
       | pp_trace (TraceKnown (TraceInfo.Notrace_Real)) = String "Known_Real"
@@ -423,11 +421,11 @@ structure PpnilHtml :> PPNIL =
 	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
 	      | Fixopen_b fixlist => Vbox(separate (map (pp_fix false) fixlist) Break)
 	      | Fixcode_b fixlist => Vbox(separate (map (pp_fix true) fixlist) Break)
-	      | Fixclosure_b (recur,vceset) => 
+	      | Fixclosure_b (recur,vceset) =>
 		    let val vcelist = Sequence.toList vceset
-		    in pp_list (fn ((v,c),{code,cenv,venv}) => 
+		    in pp_list (fn ((v,c),{code,cenv,venv}) =>
 				HOVbox[if recur then String "& " else String "",
-				       pp_bound_var v, 
+				       pp_bound_var v,
 				       String " : ", pp_con c,
 				       String " = ",
 				       String "(",
@@ -439,11 +437,11 @@ structure PpnilHtml :> PPNIL =
 	end
 
     and pp_fix is_code ((v,c),Function{effect,recursive,
-				    tFormals, eFormals, fFormals, 
+				    tFormals, eFormals, fFormals,
 				    body}) : format =
-	let val vkformats = (pp_list_flat (fn v => HOVbox[pp_bound_var v]) 
+	let val vkformats = (pp_list_flat (fn v => HOVbox[pp_bound_var v])
 			     tFormals ("",",","",false))
-	    val vcformats = (pp_list_flat (fn (v,nt) => HOVbox[pp_bound_var v]) 
+	    val vcformats = (pp_list_flat (fn (v,nt) => HOVbox[pp_bound_var v])
 			     eFormals ("",",","",false))
 	    val vfformats = (pp_list_flat (fn v => HOVbox[pp_bound_var v, String " : Float"])
 			     fFormals ("",",","",false))
@@ -470,20 +468,20 @@ structure PpnilHtml :> PPNIL =
 
     fun pp_conbnds bnds = pp_list pp_conbnd bnds ("[",",","]",true)
 
-    fun pp_module (MODULE{bnds,imports,exports}) = 
-	let 
-	    fun pp_importentry (ImportValue (l,v,tr,c)) = 
+    fun pp_module (MODULE{bnds,imports,exports}) =
+	let
+	    fun pp_importentry (ImportValue (l,v,tr,c)) =
 		Hbox[pp_label l, String " > ", pp_bound_var v, String " : ", pp_trace tr,
 		     String " : ", pp_con c]
-	      |  pp_importentry (ImportType (l,v,k)) = 
+	      |  pp_importentry (ImportType (l,v,k)) =
 		Hbox[pp_label l, String " > ", pp_bound_var v, String " :: ", pp_kind k]
-	      |  pp_importentry (ImportBnd (Compiletime, cb)) = 
+	      |  pp_importentry (ImportBnd (Compiletime, cb)) =
 		Hbox[String "STATIC ", pp_conbnd cb]
-	      |  pp_importentry (ImportBnd (Runtime, cb)) = 
+	      |  pp_importentry (ImportBnd (Runtime, cb)) =
 		Hbox[pp_conbnd cb]
-	    fun pp_exportentry (ExportValue (l,v)) = 
+	    fun pp_exportentry (ExportValue (l,v)) =
 		Hbox[pp_label l, String " = ", pp_var v]
-	      |  pp_exportentry (ExportType (l,v)) = 
+	      |  pp_exportentry (ExportType (l,v)) =
 		Hbox[pp_label l, String " = ", pp_var v]
 	in  Vbox0 0 1 [pp_bnds bnds,
 		       Break,
@@ -520,11 +518,11 @@ structure PpnilHtml :> PPNIL =
     val pp_conbnds = help' pp_conbnds
     val pp_bnds = help' pp_bnds
     val pp_exp = help' pp_exp
-    fun pp_module {module, name:string, pass:string, header:string} = 
+    fun pp_module {module, name:string, pass:string, header:string} =
         let val st = TextIO.openOut (name ^ "." ^ pass ^ ".html")
         in (TextIO.output(st, header);
             TextIO.output(st, "\n\n");
-            wrapper pp_module' st module; 
+            wrapper pp_module' st module;
             TextIO.closeOut st;
             ())
         end

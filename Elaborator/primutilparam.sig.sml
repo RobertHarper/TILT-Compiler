@@ -1,5 +1,4 @@
-(*$import Prim *)
-signature PRIMUTILPARAM = 
+signature PRIMUTILPARAM =
     sig
 	type context
 	type con

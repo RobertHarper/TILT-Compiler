@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt *)
 (* char-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -30,7 +29,7 @@ signature CHAR =
 
     val contains : string -> char -> bool
     val notContains : string -> char -> bool
-	
+
     val toLower : char -> char
     val toUpper : char -> char
 

@@ -1,5 +1,3 @@
-(*$import TilWord64 Int PRIM Util Prim Ppprim PRIMUTILPARAM Real PRIMUTIL *)
-
 functor PrimUtil(structure PrimUtilParam : PRIMUTILPARAM)
     :> PRIMUTIL where type con = PrimUtilParam.con
 		where type exp = PrimUtilParam.exp
@@ -9,7 +7,7 @@ functor PrimUtil(structure PrimUtilParam : PRIMUTILPARAM)
 struct
 
 
-    open Util  
+    open Util
     open PrimUtilParam Prim
     type con = con
     type exp = PrimUtilParam.exp
@@ -20,7 +18,7 @@ struct
     structure Float = Real
 
     val con_string = con_vector(con_uint W8)
-    fun value_type exp_typer scon : con = 
+    fun value_type exp_typer scon : con =
 	(case scon of
 	     (int (is,_)) => con_int is
 	   | (uint (is,_)) => con_uint is
@@ -30,8 +28,8 @@ struct
 	   | (refcell (ref e)) => con_ref (exp_typer e)
 	   | (tag (_,c)) => con_tag c)
 
-    fun get_aggregate_type (context,prim,aggregate,cons) = 
-	let      
+    fun get_aggregate_type (context,prim,aggregate,cons) =
+	let
 	    fun help (arg,res) = (false,[arg],res)
 	    fun help' (args,res) = (false,args,res)
 	    fun thelp (arg,res) = (true,[arg],res)
@@ -48,11 +46,11 @@ struct
 	    fun update_array instance =  help'([con_array instance, con_uint W32, instance], con_unit)
 	    fun eq_array instance = help'([con_array instance, con_array instance],con_bool context)
 	    fun eq_vector instance = help(partial_arrow([instance, instance],con_bool context),
-					  partial_arrow([con_vector instance, 
+					  partial_arrow([con_vector instance,
 							 con_vector instance],con_bool context))
 	    fun array2vector_array instance = thelp(con_array instance, con_vector instance)
 	    fun vector2array_vector instance = thelp(con_vector instance, con_array instance)
-	    fun do_array instance = 
+	    fun do_array instance =
 		(case prim of
 		     create_table _ => create_array instance
 		   | create_empty_table _ => create_empty_array instance
@@ -63,7 +61,7 @@ struct
 		   | array2vector _ => array2vector_array instance
 		   | vector2array _ => error "use array2vector"
 		   | _ => error "pattern impossibility")
-	    fun do_vector instance = 
+	    fun do_vector instance =
 		(case prim of
 		     create_table _ => create_vector instance
 		   | create_empty_table _ => create_empty_vector instance
@@ -74,7 +72,7 @@ struct
 		   | array2vector _ => error "use vector2array"
 		   | vector2array _ => vector2array_vector instance
 		   | _ => error "pattern impossibility")
-		     
+
 	in  (case (aggregate,cons) of
 		 (OtherArray  _, [instance]) => do_array instance
 	       | (OtherVector _, [instance]) => do_vector instance
@@ -87,7 +85,7 @@ struct
 
 
   fun get_type context prim cons =
-     let 
+     let
 	 fun help (arg,res) = (false,[arg],res)
 	 fun help' (args,res) = (false,args,res)
 	 fun thelp (arg,res) = (true,[arg],res)
@@ -133,7 +131,7 @@ struct
        | (mod_int is,[]) =>  help'([con_int is, con_int is], con_int is)
        | (quot_int is,[]) => help'([con_int is, con_int is], con_int is)
        | (rem_int is,[]) => help'([con_int is, con_int is], con_int is)
-	     
+
        | (plus_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
        | (minus_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
        | (mul_uint is,[]) => help'([con_uint is, con_uint is], con_uint is)
@@ -169,7 +167,7 @@ struct
        | (update aggregate,cons)  => get_aggregate_type(context,prim,aggregate,cons)
        | (equal_table aggregate,cons) => get_aggregate_type(context,prim,aggregate,cons)
 
-	     
+
        | _ => (Ppprim.pp_prim prim;
 	       error "can't get type"))
 
@@ -191,21 +189,21 @@ struct
 	 | (eq_ref, [instance]) => (false, [con_ref instance, con_ref instance],con_bool context)
 	 | _ => error "get_iltype is ill-formed")
 
-	   
-  fun get_type' context prim args = 
+
+  fun get_type' context prim args =
       let val (total,incons,outcon) = get_type context prim args
 	  val arrow = if total then total_arrow else partial_arrow
       in  arrow(incons,outcon)
       end
 
-  fun get_iltype' context ilprim arg = 
+  fun get_iltype' context ilprim arg =
       let val (total,incons,outcon) = get_iltype context ilprim arg
 	  val arrow = if total then total_arrow else partial_arrow
       in  arrow(incons,outcon)
       end
 
     fun apply context prim cons vals = (* instance arg *)
-	let 
+	let
 	    fun bad s = (print "Error "; print s; print " while applying ";
 			 Ppprim.pp_prim prim;
 			 print "\n";
@@ -228,7 +226,7 @@ struct
 	      | value2int' _ _ = bad "value2int'"
 	    fun value2ref (refcell r) = r
 	      | value2ref _ = bad "value2ref"
-			     
+
 	    val int2exp = value2exp o int
 	    val float2exp = value2exp o float
 	    val uint2exp = value2exp o uint
@@ -244,27 +242,27 @@ struct
 		in (is,TilWord64.andb(w,TilWord64.uminus(TilWord64.lshift(one,shift),one)))
 		end
 
-	    fun objbinary value2obj op2 = 
+	    fun objbinary value2obj op2 =
 		(case vals of
 		     [a,b] => let val obj1 = value2obj(exp2value a)
 				  val obj2 = value2obj(exp2value b)
 			      in value2exp(op2 (obj1,obj2))
 			      end
 		   | _ => bad "objbinary")
-	    fun objbinary value2obj1 value2obj2 op2 = 
+	    fun objbinary value2obj1 value2obj2 op2 =
 		(case vals of
 		     [a,b] => let val obj1 = value2obj1(exp2value a)
 				  val obj2 = value2obj2(exp2value b)
 			      in value2exp(op2 (obj1,obj2))
 			      end
 		   | _ => bad "objbinary")
-	    fun objunary value2obj op1 = 
+	    fun objunary value2obj op1 =
 		(case vals of
 		     [a] => let val obj = value2obj(exp2value a)
 			    in value2exp(op1 obj)
 			    end
 		   | _ => bad "objunary")
-	    fun objpred value2obj op2 = 
+	    fun objpred value2obj op2 =
 		(case vals of
 		     [a,b] => let val obj1 = value2obj(exp2value a)
 				  val obj2 = value2obj(exp2value b)
@@ -284,7 +282,7 @@ struct
 	    fun fpred fs pred = objpred (value2float fs) pred
 	    fun ipred is pred = objpred (value2int is) pred
 
-	in 
+	in
 	    (case (prim,cons,vals) of
 		 (soft_vtrap _,[],_) => unit_value
 	       | (soft_ztrap _,[],_) => unit_value
@@ -305,7 +303,7 @@ struct
 
 	  | (neg_float fs, [], _) => funary fs (op ~)
 	  | (plus_float fs, [], _) => fbinary fs (op +)
-	  | (minus_float fs, [], _) => fbinary fs (op -) 
+	  | (minus_float fs, [], _) => fbinary fs (op -)
 	  | (mul_float fs, [], _) => fbinary fs (op * )
 	  | (div_float fs, [], _) => fbinary fs (op /)
 	  | (less_float fs, [], _) => fpred fs (op <)
@@ -314,7 +312,7 @@ struct
 	  | (greatereq_float fs, [], _) => fpred fs (op >=)
 	  | (eq_float fs, [], _) => fpred fs (Real.==)
 	  | (neq_float fs, [], _) => fpred fs (not o (Real.==))
-					
+
 	  | (plus_int is, [], _) => ibinary is TilWord64.splus
 	  | (minus_int is, [], _) => ibinary is TilWord64.sminus
 	  | (mul_int is, [], _) => ibinary is TilWord64.smult
@@ -336,19 +334,19 @@ struct
 	  | (and_int is, [], _) => ibinary is TilWord64.andb
 	  | (or_int is, [], _) => ibinary is TilWord64.orb
 	  | (xor_int is, [], _) => ibinary is TilWord64.xorb
-					
+
 	  | (less_int is, [], _) => ipred is TilWord64.slt
 	  | (greater_int is, [], _) => ipred is TilWord64.sgt
 	  | (lesseq_int is, [], _) => ipred is TilWord64.slte
 	  | (greatereq_int is, [], _) => ipred is TilWord64.sgte
 	  | (eq_int is, [], _) => ipred is TilWord64.equal
 	  | (neq_int is, [], _) => ipred is TilWord64.nequal
-					
+
 	  | (less_uint is, [], _) => ipred is (TilWord64.ult)
 	  | (greater_uint is, [], _) => ipred is (TilWord64.ugt)
 	  | (lesseq_uint is, [], _) => ipred is (TilWord64.ulte)
 	  | (greatereq_uint is, [], _) => ipred is (TilWord64.ugte)
-					
+
 	  | (length_table _, _, _) => raise UNIMP
 	  | (sub _,_,_)  => raise UNIMP
 	  | (create_table _,_,_)  => raise UNIMP
@@ -365,8 +363,8 @@ struct
 	  | (eq_ref, [c], _) => objpred value2ref (op =)
 	  | (setref, [c], [loc1,exp2]) => ((value2ref(exp2value(loc1))) := exp2; unit_value)
 
-    fun applyil  vals = 
-	let 
+    fun applyil  vals =
+	let
 	in
 	    (case (,cons,vals) of
 	  | (PLUS_uint, [], _) => uibinary (Word32.+)
@@ -403,15 +401,15 @@ struct
       | int2intsize 1 = W16
       | int2intsize 2 = W32
       | int2intsize 3 = W64
-	
+
     fun floatsize2int F32 = 0
       | floatsize2int F64 = 1
 
     fun int2floatsize 0 = F32
       | int2floatsize 1 = F64
 
-    fun table2pair t = 
-	case t of 
+    fun table2pair t =
+	case t of
 	    IntArray sz => (0, intsize2int sz)
 	  | IntVector sz => (1, intsize2int sz)
 	  | FloatArray sz => (2, floatsize2int sz)
@@ -425,9 +423,9 @@ struct
       | pair2table (1, i) = IntVector (int2intsize i)
       | pair2table (2, i) = FloatArray (int2floatsize i)
       | pair2table (3, i) = FloatVector (int2floatsize i)
-      | pair2table (4, 0) = OtherArray false 
+      | pair2table (4, 0) = OtherArray false
       | pair2table (4, 1) = OtherArray true
-      | pair2table (5, 0) = OtherVector false 
+      | pair2table (5, 0) = OtherVector false
       | pair2table (5, 1) = OtherVector true
 
 
@@ -437,7 +435,7 @@ struct
 	  | soft_ztrap tt => (1, tt2int tt, 0)
 	  | hard_vtrap tt => (2, tt2int tt, 0)
 	  | hard_ztrap tt => (3, tt2int tt, 0)
-	    
+
 	  | float2int => (6, 0, 0)
 	  | int2float => (7, 0, 0)
 	  | int2uint (sz1, sz2) => (8, intsize2int sz1, intsize2int sz2)
@@ -452,7 +450,7 @@ struct
 	  | plus_float sz => (16, floatsize2int sz, 0)
 	  | minus_float  sz => (17, floatsize2int sz, 0)
 	  | mul_float sz => (18, floatsize2int sz, 0)
-	  | div_float sz  => (19, floatsize2int sz, 0) 
+	  | div_float sz  => (19, floatsize2int sz, 0)
 	  | less_float sz => (20, floatsize2int sz, 0)
 	  | greater_float sz => (21, floatsize2int sz, 0)
 	  | lesseq_float sz => (22, floatsize2int sz, 0)
@@ -461,30 +459,30 @@ struct
 	  | neq_float sz => (25, floatsize2int sz, 0)
 
 	  | plus_int sz => (26, intsize2int sz, 0)
-	  | minus_int sz => (27, intsize2int sz, 0) 
-	  | mul_int sz => (28, intsize2int sz, 0) 
-	  | div_int sz => (29, intsize2int sz, 0) 
-	  | mod_int sz => (30, intsize2int sz, 0) 
-	  | quot_int sz => (31, intsize2int sz, 0) 
-	  | rem_int sz => (32, intsize2int sz, 0) 
-	  | plus_uint sz => (33, intsize2int sz, 0) 
-	  | minus_uint sz => (34, intsize2int sz, 0) 
-	  | mul_uint sz => (35, intsize2int sz, 0) 
-	  | div_uint sz => (36, intsize2int sz, 0) 
-	  | mod_uint sz => (37, intsize2int sz, 0) 
-	  | less_int sz => (38, intsize2int sz, 0) 
+	  | minus_int sz => (27, intsize2int sz, 0)
+	  | mul_int sz => (28, intsize2int sz, 0)
+	  | div_int sz => (29, intsize2int sz, 0)
+	  | mod_int sz => (30, intsize2int sz, 0)
+	  | quot_int sz => (31, intsize2int sz, 0)
+	  | rem_int sz => (32, intsize2int sz, 0)
+	  | plus_uint sz => (33, intsize2int sz, 0)
+	  | minus_uint sz => (34, intsize2int sz, 0)
+	  | mul_uint sz => (35, intsize2int sz, 0)
+	  | div_uint sz => (36, intsize2int sz, 0)
+	  | mod_uint sz => (37, intsize2int sz, 0)
+	  | less_int sz => (38, intsize2int sz, 0)
 	  | greater_int sz => (39, intsize2int sz, 0)
-	  | lesseq_int sz => (40, intsize2int sz, 0) 
-	  | greatereq_int sz => (41, intsize2int sz, 0) 
-	  | less_uint sz => (42, intsize2int sz, 0) 
-	  | greater_uint sz => (43, intsize2int sz, 0) 
-	  | lesseq_uint sz => (44, intsize2int sz, 0) 
+	  | lesseq_int sz => (40, intsize2int sz, 0)
+	  | greatereq_int sz => (41, intsize2int sz, 0)
+	  | less_uint sz => (42, intsize2int sz, 0)
+	  | greater_uint sz => (43, intsize2int sz, 0)
+	  | lesseq_uint sz => (44, intsize2int sz, 0)
 	  | greatereq_uint sz => (45, intsize2int sz, 0)
-	  | eq_int sz => (46, intsize2int sz, 0) 
+	  | eq_int sz => (46, intsize2int sz, 0)
 	  | neq_int sz => (47, intsize2int sz, 0)
 	  | neg_int sz => (48, intsize2int sz, 0)
 	  | abs_int sz => (49, intsize2int sz, 0)
-		
+
 	  (* bit-pattern manipulation *)
 	  | not_int sz => (50, intsize2int sz, 0)
 	  | and_int sz => (51, intsize2int sz, 0)
@@ -493,7 +491,7 @@ struct
 	  | lshift_int sz => (54, intsize2int sz, 0)
 	  | rshift_int sz => (55, intsize2int sz, 0)
 	  | rshift_uint sz => (56, intsize2int sz, 0)
-		
+
 	  (* array and vector ops - bool = true indicates writeable *)
 	  | array2vector t => let val (a,b) = table2pair t
 				  in  (54, a, b)

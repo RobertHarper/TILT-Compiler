@@ -1,9 +1,7 @@
-(*$import TilWord32 Name Int Core RTL DECALPHA String Rtl Util Char List Stats *)
-
 structure Decalpha :> DECALPHA =
 
 struct
-      
+
     val exclude_intregs = []
     val error = fn s => Util.error "decalpha.sml" s
     (* Check against Runtime/thread.h *)
@@ -20,7 +18,7 @@ struct
 
     val heapLimit_disp     = iregs_disp + 8 * 14
 
-structure Machine = 
+structure Machine =
   struct
     open Rtl
     open Core
@@ -61,7 +59,7 @@ structure Machine =
       STT | STS
 
     datatype loadi_instruction =
-      LDA | LDAH | LDL | LDQ | LDQ_U | LDGP 
+      LDA | LDAH | LDL | LDQ | LDQ_U | LDGP
 
     datatype loadf_instruction =
       LDT | LDS
@@ -74,22 +72,22 @@ structure Machine =
 
     datatype int_instruction =
       ADDL | ADDLV | ADDQ | ADDQV | SUBL | SUBLV | SUBQ | SUBQV
-    | MULL | MULLV | MULQ | MULQV | UMULH 
+    | MULL | MULLV | MULQ | MULQV | UMULH
     | S4ADDL | S4ADDQ | S8ADDL | S8ADDQ
     | S4SUBL | S4SUBQ | S8SUBL | S8SUBQ
     | CMPEQ | CMPLE | CMPLT | CMPULE | CMPULT
     | AND | OR | XOR | EQV | ANDNOT | ORNOT | SRA | SRL | SLL | ZAP | EXTBL | INSBL | MSKBL
     | CMOVEQ | CMOVNE | CMOVLT | CMOVLE | CMOVGT | CMOVGE | CMOVLBC | CMOVLBS
 
-    datatype fp_instruction = 
+    datatype fp_instruction =
       CPYS | CPYSN | CPYSE
-    | CMPTEQ | CMPTLT | CMPTLE | ADDT | SUBT | MULT | DIVT    
+    | CMPTEQ | CMPTLT | CMPTLE | ADDT | SUBT | MULT | DIVT
     | FCMOVEQ | FCMOVNE | FCMOVLT | FCMOVLE | FCMOVGT | FCMOVGE
 
     datatype fpconv_instruction =
       CVTQT | CVTTQ | CVTTQM | CVTTQC | CVTLQ | CVTQL
 
-    datatype jmp_instruction = 
+    datatype jmp_instruction =
       JMP | JSR | RET
 
 
@@ -105,7 +103,7 @@ structure Machine =
     | FPCONV of fpconv_instruction * register * register
     | TRAPB				(* Trap barrier *)
 
-    datatype instruction = 
+    datatype instruction =
 	BASE     of base_instruction
       | SPECIFIC of specific_instruction
 
@@ -116,13 +114,13 @@ structure Machine =
     val i2w = W.fromInt
     val w2i = W.toInt
     fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
-	
+
     fun msReg (R 30) = "$sp"
       | msReg (R 29) = "$gp"
       | msReg (R 28) = "$at"
       | msReg (R n) = "$" ^ (ms n)
       | msReg (F n) = "$f" ^ (ms n)
-	
+
 
   fun storei_to_ascii STL = "stl"
     | storei_to_ascii STQ = "stq"
@@ -183,10 +181,10 @@ structure Machine =
     | int_to_ascii  CMPLE  = "cmple"
     | int_to_ascii  CMPULE = "cmpule"
     | int_to_ascii  CMPULT = "cmpult"
-    | int_to_ascii  AND    = "and"  
-    | int_to_ascii  OR     = "or"  
-    | int_to_ascii  XOR    = "xor"  
-    | int_to_ascii  EQV    = "eqv"  
+    | int_to_ascii  AND    = "and"
+    | int_to_ascii  OR     = "or"
+    | int_to_ascii  XOR    = "xor"
+    | int_to_ascii  EQV    = "eqv"
     | int_to_ascii  ANDNOT = "andnot"
     | int_to_ascii  ORNOT  = "ornot"
     | int_to_ascii  SRA    = "sra"
@@ -239,11 +237,11 @@ structure Machine =
            "(tail)CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
-    | rtl_to_ascii (CALL {func=INDIRECT Raddr, calltype = Rtl.ML_TAIL _, ...}) = 
+    | rtl_to_ascii (CALL {func=INDIRECT Raddr, calltype = Rtl.ML_TAIL _, ...}) =
            "(tail)CALL via " ^ msReg Raddr
-    | rtl_to_ascii (CALL {func=INDIRECT Raddr, ...}) = 
+    | rtl_to_ascii (CALL {func=INDIRECT Raddr, ...}) =
            "CALL via " ^ msReg Raddr
-    | rtl_to_ascii (CALL {func=DIRECT (func,_), args,results,...}) = 
+    | rtl_to_ascii (CALL {func=DIRECT (func,_), args,results,...}) =
            "CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
@@ -280,7 +278,7 @@ structure Machine =
                                 (tab ^ (cbrf_to_ascii instr) ^ tab ^
 				 (msReg Rtest) ^ comma ^ (msLabel label))
     (* the assembler doesn't like mull or mullv with $at and an immediate operand *)
-    | msInstr' (INTOP(MULL, R 28, oper as (IMMop _), R 28)) =  
+    | msInstr' (INTOP(MULL, R 28, oper as (IMMop _), R 28)) =
 				let val mv1 = tab ^ "mov $at, $25"
 				    val mul = tab ^ "mull $25, " ^ (msOperand oper) ^ ", $25"
 				    val mv2 = tab ^ "mov $25, $at"
@@ -294,12 +292,12 @@ structure Machine =
 				end
     | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
 				(tab ^ (int_to_ascii instr) ^ tab ^
-				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
+				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^
 				 comma ^ (msReg Rdest))
     | msInstr' (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =
 (* this is terrible to have traps everywhere... *)
                                 ((tab ^ (fp_to_ascii instr)^ tab ^
-				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2) ^ 
+				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2) ^
 				 comma ^ (msReg Rdest))
 				 ^ "\n\ttrapb")
     | msInstr' (FPCONV(instr, Rsrc, Rdest)) =
@@ -318,12 +316,12 @@ structure Machine =
     | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
     | msInstr_base (ICOMMENT str) = (tab ^ "# " ^ str)
     | msInstr_base (Core.JSR(link, Raddr, hint, _)) =
-                                (tab ^ "jsr" ^ tab 
+                                (tab ^ "jsr" ^ tab
 				 ^ (if link then (msReg Rra) else (msReg Rzero))
 				 ^ comma ^ (msDisp(Raddr,0)) ^
 				 comma ^ (ms hint))
     | msInstr_base (Core.RET(link, hint)) =
-                                (tab ^ "ret" ^ tab 
+                                (tab ^ "ret" ^ tab
 				 ^ (if link then (msReg Rra) else (msReg Rzero))
 				 ^ comma ^ (msDisp(Rra,0)) ^
 				 comma ^ (ms hint))
@@ -336,12 +334,12 @@ structure Machine =
 			       "\tldt\t" ^ (msReg Rdest) ^ comma ^ (msDisp(Rth, threadScratch_disp)))
 	      | (F _, R _) => ("\tstt\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
 		               "\tldl\t" ^ (msReg Rdest) ^ comma ^ (msDisp(Rth, threadScratch_disp))))
-			       
 
-    | msInstr_base (PUSH (Rsrc, sloc)) = 
+
+    | msInstr_base (PUSH (Rsrc, sloc)) =
                                 ("\tPUSH\t" ^ (msReg Rsrc) ^ comma ^
 				 (msStackLocation sloc))
-    | msInstr_base (POP (Rdest, sloc)) = 
+    | msInstr_base (POP (Rdest, sloc)) =
                                 ("\tPOP\t" ^ (msReg Rdest) ^ comma ^
 				 (msStackLocation sloc))
     | msInstr_base (PUSH_RET NONE) = "PUSH_RET none"
@@ -352,8 +350,8 @@ structure Machine =
     | msInstr_base (POP_RET (SOME sloc)) =  ("\tPOP_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (GC_CALLSITE label) = ("\tGC CALLING SITE\t" ^
                                       (msLabel label))
-    | msInstr_base (LADDR (Rdest, label)) = 
-                                ("\tlda\t" ^ (msReg Rdest) ^ comma ^ 
+    | msInstr_base (LADDR (Rdest, label)) =
+                                ("\tlda\t" ^ (msReg Rdest) ^ comma ^
 				 (msLabel label))
 
   fun msInstr (SPECIFIC i) = msInstr' i
@@ -380,7 +378,7 @@ structure Machine =
       fun explodeToSci f_s =
 	  (explode f_s) @
 	  (if ((Char.contains f_s #"e") orelse (Char.contains f_s #"E"))
-	       then [] 
+	       then []
 	   else [#"e", #"0"])
     in
       (implode o fixSigns o explodeToSci) float_string
@@ -388,18 +386,18 @@ structure Machine =
 
 
   fun fixupString string =
-    let 
+    let
       fun makeDigit n = chr (n + 48)
       fun octal n =
 	  implode [#"\\",
 		   (makeDigit (n div 64)),
 		   (makeDigit ((n div 8) mod 8)),
 		   (makeDigit (n mod 8))]
-	
+
 
       fun charLoop [] = ""
 	| charLoop (ch::chs) =
-	  if (ch = 34) then  
+	  if (ch = 34) then
 	      "\\\"" ^ (charLoop chs) (* quotation mark " *)
 	  else if (ch = 92) then (* backslash *)
 	    "\\\\" ^ (charLoop chs)
@@ -413,10 +411,10 @@ structure Machine =
 	charLoop (map ord (explode string))
     end
 
-  fun splitstring s = 
+  fun splitstring s =
       let val len = String.size s
 	  val chunksize = 64
-	  fun loop n = 
+	  fun loop n =
 	      if (n + chunksize < len) then
 		  String.substring(s, n, chunksize) :: loop (n + chunksize)
 	      else
@@ -427,7 +425,7 @@ structure Machine =
 
   fun single s = [(1, "\t" ^ s ^ "\n")]
   fun msData (COMMENT com) =  single ("\t# " ^ com)
-    | msData (STRING (s)) = 
+    | msData (STRING (s)) =
         if (s = "") then
 	  single ("# .ascii \"\" (zero length string)")
 	else
@@ -504,13 +502,13 @@ structure Machine =
 			   | CMOVLBC => [Rdest]
 			   | CMOVLBS => [Rdest]
 			   | _       => [])
-	    val temp2 = (case sv of 
+	    val temp2 = (case sv of
 		              REGop r => r::temp1
 			    | _       => temp1)
 	in
 	    ([Rdest],Rsrc1::temp2)
 	end
-      | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) = 
+      | defUse (SPECIFIC(FPOP (opcode, Fsrc1, Fsrc2, Fdest))) =
  	let
 	    val temp1 = (case opcode of
 			     FCMOVEQ  => [Fdest]
@@ -570,8 +568,8 @@ structure Machine =
 
 
    (* map src registers using fs and destination using fd and return mapped instruction *)
-   fun translate_to_real_reg(i,fs,fd) = 
-     let 
+   fun translate_to_real_reg(i,fs,fd) =
+     let
        fun xspec (STOREI(oper, Rsrc, offset, Raddr)) = STOREI(oper, fs Rsrc, offset, fs Raddr)
          | xspec (LOADI(oper, Rdst, offset, Raddr)) = LOADI(oper, fd Rdst, offset, fs Raddr)
 	 | xspec (STOREF(oper, Fsrc, offset, Raddr)) = STOREF(oper, fs Fsrc,offset, fs Raddr)
@@ -599,7 +597,7 @@ structure Machine =
          | xbase (ILABEL l) = ILABEL l
 	 | xbase (ICOMMENT l) = ICOMMENT l
 	 | xbase (LADDR (Rdst, label)) = LADDR(fd Rdst,label)
-      in 
+      in
 	case i of
 	  SPECIFIC ii => SPECIFIC(xspec ii)
 	| BASE ii => BASE(xbase ii)
@@ -613,7 +611,7 @@ structure Machine =
 
    (* load_imm' : word * register -> instruction list *)
    fun load_imm' (immed, Rdest) =
-       let  
+       let
 	   val w65535 = i2w 65535
 	   val low    = w2i (W.andb(immed, w65535))
 	   val high   = w2i (W.rshiftl(immed, 16))
@@ -626,10 +624,10 @@ structure Machine =
 	   setTemp @
 	   (if (low' >= 0) then
 		if (high' <> 0) then [SPECIFIC(LOADI(LDAH,Rdest,high',Rtemp))] else nil
-	    else 
-		if (high' = ~1) then 
+	    else
+		if (high' = ~1) then
 		    nil
-		else 
+		else
 		    if (high' <> 32767) then
 			[SPECIFIC(LOADI (LDAH, Rdest, high' + 1, Rtemp))]
 		    else
@@ -645,7 +643,7 @@ structure Machine =
        else
 	   load_imm' (i2w offset, Rat) @
 	   [SPECIFIC (INTOP (ADDL, Rsp, REGop Rat, Rsp))]
-	   
+
    val counter
        : string -> (unit -> unit)
        = fn name => ignore o (Stats.counter name)
@@ -671,7 +669,7 @@ structure Machine =
 	    bumpSp (~sz),		(* Reallocate frame on new stacklet *)
 	    [BASE (ILABEL after)]]
        end
-	   
+
    fun deallocate_stack_frame sz =
        let val _ = if (sz >= 0) then ()
 		   else error "deallocate_stack_frame given negative stack size"
@@ -698,7 +696,7 @@ structure Machine =
 			    [SPECIFIC(INTOP(ADDL,base,REGop temp,temp))],
 			    f(temp, 0)]
 	   end
-       
+
    fun push (src,actual_location,tmp) =
        let val reduce_offset = fn (offset,f) => reduce_offset (Rsp, offset, tmp, f)
        in
@@ -727,7 +725,7 @@ structure Machine =
   fun assign2s (IN_REG r) = msReg r
     | assign2s (ON_STACK s) = "STACK:" ^ (msStackLocation s)
     | assign2s (HINT r) = "HINT(" ^ (msReg r) ^ ")"
-    | assign2s UNKNOWN = "UNKNOWN"    
+    | assign2s UNKNOWN = "UNKNOWN"
 
 
    val pv = (case Rpv of
@@ -742,11 +740,11 @@ structure Machine =
 				(map ireg exclude_intregs))
    val general_fregs = listdiff(fp_regs,special_fregs)
 
-   val special_regs  = listunion(special_iregs, special_fregs) 
+   val special_regs  = listunion(special_iregs, special_fregs)
    val general_regs  = listdiff(physical_regs, special_regs)
 
  end
- 
+
  open Machine
 
 end

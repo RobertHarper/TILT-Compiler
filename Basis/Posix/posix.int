@@ -1,5 +1,3 @@
-(*$import POSIX *)
-
 structure Posix :
     sig
 	include POSIX

@@ -1,5 +1,3 @@
-(*$import *)
-
 (* pathnames.sig
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.

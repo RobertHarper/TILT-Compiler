@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Termination checker *)
 (* Author: Carsten Schuermann *)
 

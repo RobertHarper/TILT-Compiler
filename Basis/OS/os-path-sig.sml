@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Substring *)
 (* os-path-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -28,10 +27,10 @@ signature OS_PATH =
     val joinDirFile  : {dir : string, file : string} -> string
     val dir	     : string -> string
     val file	     : string -> string
-    
+
     val splitBaseExt : string -> {base : string, ext : string option}
     val joinBaseExt  : {base : string, ext : string option} -> string
-    val base	     : string -> string    
+    val base	     : string -> string
     val ext	     : string -> string option
 
     val mkCanonical : string -> string

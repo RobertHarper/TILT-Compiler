@@ -1,10 +1,8 @@
-(*$import Nil NilUtil Stats Name Util Sequence TraceOps Listops Ppnil NilDefs *)
-
 (* Reorder term-level bindings to allow operations that require memory allocation to be coalesced *)
 
 (* This phase is not currently being used *)
 
-structure Reorder = 
+structure Reorder =
 struct
     open Prim Nil
     structure VS = Name.VarSet
@@ -32,7 +30,7 @@ struct
      Flags:
       debug                : Print debugging information during hoisting
      ************************************************************************)
-    val debug = Stats.ff("ReorderDebug") 
+    val debug = Stats.ff("ReorderDebug")
 
     (************************************************************************
      Binding categories
@@ -66,7 +64,7 @@ struct
 
     datatype movability = Movable | Immovable
 
-    fun mergeMovabilities (Movable, Movable) = Movable 
+    fun mergeMovabilities (Movable, Movable) = Movable
       | mergeMovabilities _ = Immovable
 
     (************************************************************************
@@ -115,18 +113,18 @@ struct
 	      print (Int.toString (! new_count));
 	      print " remain.\n")
      end
-	       
+
 
     (************************************************************************
      Reordering routines.
 
-     val rexp   : exp      * env -> exp      * VS.set * category * movability 
-     val rexps  : exp list * env -> exp list * VS.set * category * movability 
+     val rexp   : exp      * env -> exp      * VS.set * category * movability
+     val rexps  : exp list * env -> exp list * VS.set * category * movability
 
      val rcon   : con      * env -> con      * VS.set * category
      val rcons  : con list * env -> con list * VS.set * category
 
-     val rbnds'  : bnd list * env -> 
+     val rbnds'  : bnd list * env ->
 	            {immovable : (bnd * VS.set * category) list,
 		     apply       : (bnd * VS.set) list, (* unordered *)
 		     allocates   : (bnd * VS.set) list, (* unordered *)
@@ -134,43 +132,43 @@ struct
 		     boundvars   : VS.set}
      ************************************************************************)
 
-    fun rexp (exp as Var_e var, env) = 
+    fun rexp (exp as Var_e var, env) =
 	let
-	    val vset = if interestingVar(env, var) then 
+	    val vset = if interestingVar(env, var) then
 		          VS.singleton var
 		       else
-			  VS.empty 
+			  VS.empty
 	in
 	    (exp, vset, OTHER, Movable)
 	end
-      | rexp (exp as Const_e _, env) = 
+      | rexp (exp as Const_e _, env) =
 	let
 	    (* XXX Assumes A-normal form *)
 	    val vset = VS.intersection(freeVarInExp exp, env)
 	in
 	    (exp, vset, OTHER, Movable)
 	end
-      | rexp (Let_e(letsort, bnds, body), env) = 
+      | rexp (Let_e(letsort, bnds, body), env) =
 	  let
-	      val (bnds, bnds_vset, bnds_category, bnds_movability) = 
+	      val (bnds, bnds_vset, bnds_category, bnds_movability) =
 		     rbnds (bnds, env)
-	      val (body, body_vset, body_category, body_movability) = 
+	      val (body, body_vset, body_category, body_movability) =
 		     rexp (body, env)
 	  in
-	      (Let_e(letsort, bnds, body), 
+	      (Let_e(letsort, bnds, body),
 	       VS.union (bnds_vset, body_vset),
 	       mergeCategories (bnds_category, body_category),
 	       mergeMovabilities (bnds_movability, body_movability))
 	  end
       | rexp (exp as Prim_e(prim, trs, cons, exps), env) =
 	  let
-	      val (prim_category,prim_movability) = 
-		  (case prim of 
+	      val (prim_category,prim_movability) =
+		  (case prim of
 		     (* The empty record is represeted with an integer,
 		        rather than by allocation *)
                      NilPrimOp (record []) => (OTHER, Movable)
 		   | NilPrimOp (record _) => (ALLOCATE, Movable)
-		   | NilPrimOp (partialRecord _) => 
+		   | NilPrimOp (partialRecord _) =>
 			 (print "Warning: are partialRecord's movable?\n";
 			  (ALLOCATE, Movable))
                    | NilPrimOp (inject _) =>  (ALLOCATE, Movable)
@@ -178,7 +176,7 @@ struct
                    | NilPrimOp (inject_known_record _) => (ALLOCATE, Movable)
                    | NilPrimOp (box_float _) => (ALLOCATE, Movable)
 		   | NilPrimOp (inj_exn _) => (ALLOCATE, Movable)
-                     (* The following two primitives are big and so 
+                     (* The following two primitives are big and so
                         not inlined.  *)
 		   | NilPrimOp (make_vararg _) => (APPLY, Movable)
 		   | NilPrimOp (make_onearg _) => (APPLY, Movable)
@@ -192,51 +190,51 @@ struct
 		   | PrimOp (sub (OtherVector false)) => (APPLY, Immovable)
 		   | PrimOp (update (OtherArray false)) => (APPLY, Immovable)
 		   | PrimOp (update (OtherVector false)) => (APPLY, Immovable)
-		   | PrimOp (create_table (OtherArray false)) => 
+		   | PrimOp (create_table (OtherArray false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (create_table (OtherVector false)) => 
+		   | PrimOp (create_table (OtherVector false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (create_empty_table (OtherArray false)) => 
+		   | PrimOp (create_empty_table (OtherArray false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (create_empty_table (OtherVector false)) => 
+		   | PrimOp (create_empty_table (OtherVector false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (length_table (OtherArray false)) => 
+		   | PrimOp (length_table (OtherArray false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (length_table (OtherVector false)) => 
+		   | PrimOp (length_table (OtherVector false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (equal_table (OtherArray false)) => 
+		   | PrimOp (equal_table (OtherArray false)) =>
                                                             (APPLY, Movable)
-		   | PrimOp (equal_table (OtherVector false)) => 
+		   | PrimOp (equal_table (OtherVector false)) =>
                                                             (APPLY, Movable)
 		     (* The following two lines handle updates to arrays
-                        of pointers.  Such updates modify the garbage 
-                        collector's write list, which requires memory 
+                        of pointers.  Such updates modify the garbage
+                        collector's write list, which requires memory
                         allocation for the new entry *)
 		   | PrimOp (update (OtherArray true)) => (ALLOCATE, Immovable)
 		   | PrimOp (update (OtherVector true))=> (ALLOCATE, Immovable)
-                     (* All other primitives neither allocate nor block 
+                     (* All other primitives neither allocate nor block
                         hoisting of GC checks.  They may or may not
                         be movable, which is approximated as valuable *)
 		   | _ => (OTHER,
                            if NilDefs.anyEffect exp then Immovable else Movable))
 
-	      val (cons, cons_vset, cons_category) = 
+	      val (cons, cons_vset, cons_category) =
 		     rcons (cons, env)
-	      val (exps, exps_vset, exps_category, exps_movability) = 
+	      val (exps, exps_vset, exps_category, exps_movability) =
 		     rexps (exps, env)
 
 	      val exp        = Prim_e(prim, trs,cons, exps)
 	      val vset       = VS.union(cons_vset, exps_vset)
-	      val category   = mergeCategories 
+	      val category   = mergeCategories
 		                (mergeCategories(prim_category, cons_category),
 				 exps_category)
-              val movability = mergeMovabilities(prim_movability, 
+              val movability = mergeMovabilities(prim_movability,
 						 exps_movability)
 	  in
 	      (exp, vset, category, movability)
 	  end
       | rexp (Switch_e sw, env) = rswitch (sw, env)
-      | rexp (App_e(openness,f,cons,exps,fexps), env) = 
+      | rexp (App_e(openness,f,cons,exps,fexps), env) =
 	  let
 	      val (f, f_vset, _, f_movability) = rexp (f, env)
 	      val (cons, cons_vset, _) = rcons (cons, env)
@@ -251,7 +249,7 @@ struct
 	      (* XXX We do not have totality information at this time *)
 (*
 	      val movability = mergeMovabilities
-		                (mergeMovabilities(f_movability, 
+		                (mergeMovabilities(f_movability,
 						   exps_movability),
 				 fexps_movability)
 *)
@@ -260,11 +258,11 @@ struct
 	      (exp, vset, category, movability)
 	  end
 
-      | rexp (ExternApp_e (f, exps), env) = 
+      | rexp (ExternApp_e (f, exps), env) =
 	  let
-	      val (f, f_vset, f_category, f_movability) = 
+	      val (f, f_vset, f_category, f_movability) =
 		     rexp (f, env)
-	      val (exps, exps_vset, exps_category, exps_movability) = 
+	      val (exps, exps_vset, exps_category, exps_movability) =
 		     rexps (exps, env)
 
 	      val exp = ExternApp_e(f, exps)
@@ -275,8 +273,8 @@ struct
 	  in
 	      (exp, vset, APPLY, movability)
 	  end
- 
-      | rexp (Raise_e (exp, con), env) = 
+
+      | rexp (Raise_e (exp, con), env) =
 	  let
 	      val con_vset = VS.intersection(freeVarInCon con, env)
 
@@ -285,11 +283,11 @@ struct
 	      (Raise_e (exp, con), exp_vset, exp_category, Immovable)
 	  end
 
-      | rexp (Handle_e{body, bound, handler, result_type}, env) = 
+      | rexp (Handle_e{body, bound, handler, result_type}, env) =
 	  let
-	      val (body, body_vset, body_category, body_movability) = 
+	      val (body, body_vset, body_category, body_movability) =
 		     rexp (body, env)
-	      val (handler, handler_vset, handler_category, 
+	      val (handler, handler_vset, handler_category,
 		   handler_movability) = rexp (handler, env)
 
 	      (* The result type is not evaluated at run-time,
@@ -298,7 +296,7 @@ struct
 	      val (result_type, result_type_vset, _) = rcon(result_type, env)
 
 	      val exp = Handle_e{body = body, bound = bound,
-				 handler = handler, 
+				 handler = handler,
 				 result_type = result_type}
 	      val vset = VS.union(VS.union(body_vset, handler_vset),
 				  result_type_vset)
@@ -310,21 +308,21 @@ struct
 	  end
 
     and rexps ([], _) = ([], VS.empty, OTHER, Movable)
-      | rexps (exp::exps, env) = 
+      | rexps (exp::exps, env) =
 	let
-	    val (exp, exp_vset, exp_category, exp_movability) = 
+	    val (exp, exp_vset, exp_category, exp_movability) =
 		  rexp (exp, env)
-	    val (exps, exps_vset, exps_category, exps_movability) = 
+	    val (exps, exps_vset, exps_category, exps_movability) =
 		  rexps (exps, env)
 	in
-	    (exp::exps, 
+	    (exp::exps,
 	     VS.union(exp_vset, exps_vset),
 	     mergeCategories(exp_category, exps_category),
 	     mergeMovabilities(exp_movability, exps_movability))
 	end
 
     and rexpopt (NONE, env) = (NONE, VS.empty, OTHER, Movable)
-      | rexpopt (SOME exp, env) = 
+      | rexpopt (SOME exp, env) =
 	let
 	    val (exp, exp_vset, exp_category, exp_movability) =
 		   rexp (exp, env)
@@ -332,7 +330,7 @@ struct
 	    (SOME exp, exp_vset, exp_category, exp_movability)
 	end
 
-    and rcon (Let_c(letsort, cbnds, cbody), env) = 
+    and rcon (Let_c(letsort, cbnds, cbody), env) =
 	let
 	    val (cbnds, cbnds_vset, cbnds_category) = rcbnds (cbnds, env)
 	    val (cbody, con_vset, cbody_category) = rcon (cbody, env)
@@ -344,11 +342,11 @@ struct
 	    (con, vset, category)
 	end
 
-      | rcon (Prim_c (prim, cons), env) = 
+      | rcon (Prim_c (prim, cons), env) =
 	let
 	    val (cons, cons_vset, cons_category) = rcons(cons, env)
 	    val con = Prim_c(prim, cons)
-	    val prim_category = 
+	    val prim_category =
 		(case prim of
 		     Int_c _ => OTHER
 		   | Float_c _ => OTHER
@@ -359,14 +357,14 @@ struct
 	    val category = mergeCategories (prim_category, cons_category)
 	in
 	    (con, cons_vset, category)
-	end 
+	end
 
       | rcon (con as Var_c var, env) =
 	let
-	    val vset = if interestingVar(env, var) then 
+	    val vset = if interestingVar(env, var) then
 		          VS.singleton var
 		       else
-			  VS.empty 
+			  VS.empty
 	in
 	    (con, vset, OTHER)
 	end
@@ -375,7 +373,7 @@ struct
 	let
 	    val _ = print "WARNING: reorder/rcon found a Typeof_c\n"
 
-	    val (exp, exp_vset, exp_category, _) = 
+	    val (exp, exp_vset, exp_category, _) =
 		rexp (exp, env)
 	in
 	    (Typeof_c exp, exp_vset, exp_category)
@@ -384,17 +382,17 @@ struct
       | rcon (Crecord_c lclist, env) =
 	let
 	    val (labels, cons) = Listops.unzip lclist
-	    val (cons, cons_vset, cons_category) = 
+	    val (cons, cons_vset, cons_category) =
 		rcons (cons, env)
 
 	    val vset = cons_vset
 	    val category = mergeCategories(cons_category, ALLOCATE)
 	in
-	    (Crecord_c (Listops.zip labels cons), 
+	    (Crecord_c (Listops.zip labels cons),
 	     vset, category)
 	end
 
-      | rcon (Proj_c (con, label), env) = 
+      | rcon (Proj_c (con, label), env) =
 	let
 	    val (con, con_vset, con_category) = rcon (con, env)
 	in
@@ -423,7 +421,7 @@ struct
 	in
 	    (App_c(con,cons), vset, APPLY)
 	end
-		
+
       | rcon (Typecase_c _, _) = error "rcon: Typecase_c unimplemented"
 
       | rcon (Annotate_c(annot, con), env) =
@@ -433,7 +431,7 @@ struct
 	    (Annotate_c(annot, con), vset, category)
 	end
 
-      | rcon (con as AllArrow_c _, env) = 
+      | rcon (con as AllArrow_c _, env) =
 	let
 	    val vset = VS.intersection(freeVarInCon con, env)
 	    val category = ALLOCATE
@@ -441,7 +439,7 @@ struct
 	    (con, vset, category)
 	end
 
-      | rcon (con as ExternArrow_c (arg_cons, result_con), env) = 
+      | rcon (con as ExternArrow_c (arg_cons, result_con), env) =
 	let
 	    val vset = VS.intersection(freeVarInCon con, env)
 	    val category = ALLOCATE
@@ -449,7 +447,7 @@ struct
 	    (con, vset, category)
 	end
 
-      | rcon (con as Mu_c _, env) = 
+      | rcon (con as Mu_c _, env) =
 	let
 	    val vset = VS.intersection(freeVarInCon con, env)
 	    val category = ALLOCATE
@@ -458,12 +456,12 @@ struct
 	end
 
     and rcons ([], _) = ([], VS.empty, OTHER)
-      | rcons (con::cons, env) = 
+      | rcons (con::cons, env) =
 	let
 	    val (con, con_vset, con_category)    = rcon (con, env)
 	    val (cons, cons_vset, cons_category) = rcons (cons, env)
 	in
-	    (con::cons, 
+	    (con::cons,
 	     VS.union(con_vset, cons_vset),
 	     mergeCategories(con_category, cons_category))
 	end
@@ -474,10 +472,10 @@ struct
 		   rexp (arg, env)
 	    (* The result_type is not evaluated at run-time,
 	       so we don't care if it's an allocation or not *)
-	    val result_type_vset = 
+	    val result_type_vset =
 		   VS.intersection(freeVarInCon result_type, env)
 	    fun loop [] = ([], VS.empty, OTHER, Movable)
-              | loop ((w32, arm)::arms) = 
+              | loop ((w32, arm)::arms) =
 		let
 		    val (arm, arm_vset, arm_category, arm_movability) =
 			rexp(arm, env)
@@ -517,21 +515,21 @@ struct
 	    (exp, vset, category, movability)
 	end
 
-      | rswitch (Sumsw_e{arg,sumtype, result_type, 
+      | rswitch (Sumsw_e{arg,sumtype, result_type,
 			 bound, arms, default}, env) =
 	let
 	    val (arg, arg_vset, arg_category, arg_movability) =
 		   rexp (arg, env)
 	    (* The sum_type is not evaluated at run-time,
 	       so we don't care if it's an allocation or not *)
-	    val sumtype_vset = 
+	    val sumtype_vset =
 		   VS.intersection(freeVarInCon sumtype, env)
 	    (* The result_type is not evaluated at run-time,
 	       so we don't care if it's an allocation or not *)
-	    val result_type_vset = 
+	    val result_type_vset =
 		   VS.intersection(freeVarInCon result_type, env)
 	    fun loop [] = ([], VS.empty, OTHER, Movable)
-              | loop ((w32, nt, arm)::arms) = 
+              | loop ((w32, nt, arm)::arms) =
 		let
 		    val (arm, arm_vset, arm_category, arm_movability) =
 			rexp(arm, env)
@@ -571,19 +569,19 @@ struct
 	    (exp, vset, category, movability)
 	end
 
-      | rswitch (Exncase_e{arg, result_type, 
+      | rswitch (Exncase_e{arg, result_type,
 			   bound, arms, default}, env) =
 	let
 	    val (arg, arg_vset, arg_category, arg_movability) =
 		   rexp (arg, env)
 	    (* The result_type is not evaluated at run-time,
 	       so we don't care if it's an allocation or not *)
-	    val result_type_vset = 
+	    val result_type_vset =
 		   VS.intersection(freeVarInCon result_type, env)
 	    fun loop [] = ([], VS.empty, OTHER, Movable)
-              | loop ((tagexp, nt, arm)::arms) = 
+              | loop ((tagexp, nt, arm)::arms) =
 		let
-		    val (tagexp, tag_vset, tag_category, tag_movability) = 
+		    val (tagexp, tag_vset, tag_category, tag_movability) =
 			rexp(tagexp, env)
 		    val (arm, arm_vset, arm_category, arm_movability) =
 			rexp(arm, env)
@@ -592,7 +590,7 @@ struct
 		in
 		    ((tagexp,nt,arm) :: arms,
 		     VS.union(VS.union(tag_vset, arm_vset), arms_vset),
-		     mergeCategories 
+		     mergeCategories
 		       (mergeCategories(arm_category, arms_category),
 			tag_category),
 		     mergeMovabilities
@@ -608,7 +606,7 @@ struct
 		     NONE => (NONE, VS.empty, OTHER, Immovable)
 		   | SOME arm => rexpopt (default, env))
 
-	    val exp = Switch_e(Exncase_e{arg = arg, 
+	    val exp = Switch_e(Exncase_e{arg = arg,
 					 result_type = result_type,
 					 bound = bound,
 					 arms = arms, default = default})
@@ -627,7 +625,7 @@ struct
 	    (exp, vset, category, movability)
 	end
 
-    and rcbnd (Con_cb(var, con), env) = 
+    and rcbnd (Con_cb(var, con), env) =
 	let
 	    val (con, vset, category) = rcon (con, env)
 	in
@@ -690,38 +688,38 @@ struct
 	    (Exp_b(var, nt, exp), vset, exp_category, exp_movability)
 	end
 
-      | rbnd (Fixopen_b vfseq, env) = 
+      | rbnd (Fixopen_b vfseq, env) =
 	let
 	    val (vfseq, vset) = rvfseq (vfseq, env)
 	in
 	    (Fixopen_b vfseq, vset, ALLOCATE, Movable)
 	end
 
-      | rbnd (Fixcode_b vfseq, env) = 
+      | rbnd (Fixcode_b vfseq, env) =
 	let
 	    val (vfseq, vset) = rvfseq (vfseq, env)
 	in
 	    (Fixcode_b vfseq, vset, ALLOCATE, Movable)
 	end
 
-      | rbnd (Fixclosure_b (isRecursive, closureseq), env) = 
+      | rbnd (Fixclosure_b (isRecursive, closureseq), env) =
 	let
 	    fun loop [] = ([], VS.empty, OTHER, Movable)
 	      | loop ((var,{code,cenv,venv,tipe})::rest) =
 		let
-		    val code_vset = 
+		    val code_vset =
 			(VS.intersection(VS.singleton code,
 					 env))
 		    val (cenv, cenv_vset, cenv_category) =
 			rcon (cenv, env)
 		    val (venv, venv_vset, venv_category, venv_movability) =
 			rexp (venv, env)
-		    val tipe_vset = 
+		    val tipe_vset =
 			VS.intersection(freeVarInCon tipe, env)
 
 		    val (rest, rest_vset, rest_category, rest_movability) =
 			loop rest
-			
+
 		    val vset = VS.union
 			        (VS.union(VS.union(code_vset, cenv_vset),
 					  VS.union(venv_vset, tipe_vset)),
@@ -731,12 +729,12 @@ struct
 		       (assuming they're not hoisted to top level, which
 			can't really be detected here),
 		       and might be APPLY if we're not in A-normal form. *)
-		    val category = 
+		    val category =
 			   mergeCategories
 			    (mergeCategories(cenv_category, venv_category),
 			     mergeCategories(rest_category, ALLOCATE))
 
-		    val movability = 
+		    val movability =
 			   mergeMovabilities(venv_movability, rest_movability)
 		in
 		    ((var, {code = code, cenv = cenv,
@@ -774,13 +772,13 @@ struct
 			   tFormals, eFormals, fFormals,
 			   body, body_type}, env) =
 	let
-	    val tFormals_vsets = 
+	    val tFormals_vsets =
 		   map (fn (_,k) => freeVarInKind k) tFormals
 	    val tFormals_vset = List.foldl VS.union VS.empty tFormals_vsets
 	    val tFormals_vset = VS.intersection(tFormals_vset, env)
 
 	    val eFormals_vsets =
-		   map (fn (_,nt,con) => 
+		   map (fn (_,nt,con) =>
 			 VS.union(TraceOps.get_free_vars nt,
 				  freeVarInCon con)) eFormals
 	    val eFormals_vset = List.foldl VS.union VS.empty eFormals_vsets
@@ -822,7 +820,7 @@ struct
 			             (* find free variables in the current binding bound in this sequence *)
 		    val env = makeInteresting (env, newvars)
 		    val (anss, bnds_boundvars, bnds_outer_vset,
-			 bnds_category, bnds_movability) = 
+			 bnds_category, bnds_movability) =
 			loop (bnds, env, boundvars)
 		    val ans = (bnd, local_vset, bnd_category, bnd_movability)
 			(* Entry for this binding: the binding itself, which local variables appear free, and its
@@ -854,12 +852,12 @@ struct
 		   | (APPLY, APPLY) => countAlternations (rest, mode, alts)
 		   | _ => countAlternations(rest, category, alts + 1))
 
-	    val alternations_before = 
+	    val alternations_before =
 		countAlternations (unsorted_answer, OTHER, 0)
 
 	    (* Divide bindings by category/movability *)
 	    fun split ([], rev_immovable, rev_apply, rev_allocate, rev_other) =
-		(rev rev_immovable, rev rev_apply, 
+		(rev rev_immovable, rev rev_apply,
 		 rev rev_allocate, rev rev_other)
 	      | split ((bndstuff as (_,_,category,movable))::rest,
 		      rev_immovable, rev_apply, rev_allocate, rev_other) =
@@ -867,17 +865,17 @@ struct
 		     (_, Immovable) =>
 			 split(rest, bndstuff :: rev_immovable,
 			      rev_apply, rev_allocate, rev_other)
-		   | (OTHER, _) => 
+		   | (OTHER, _) =>
 			 split(rest, rev_immovable,
 			      rev_apply, rev_allocate, bndstuff::rev_other)
-		   | (ALLOCATE, _) => 
+		   | (ALLOCATE, _) =>
 			 split(rest, rev_immovable,
 			      rev_apply, bndstuff::rev_allocate, rev_other)
-		   | (APPLY, _) => 
+		   | (APPLY, _) =>
 			 split(rest, rev_immovable,
 			      bndstuff::rev_apply, rev_allocate,rev_other))
 
-			 
+
 	    val (immovables, applies, allocates, others) =
 		     split (unsorted_answer, [], [], [], [])
 
@@ -903,12 +901,12 @@ struct
 		   in
 		       if (VS.numItems vset = 0) then (* no free variables have not already been processed in this loop *)
 			   pickValidDepSet (rest, VS.addList(alreadybound_vset,
-							     NilUtil.varsBoundByBnds 
+							     NilUtil.varsBoundByBnds
 							     [bnd]),
 					    stuff :: rev_bnds, rev_keep)
 		       else (* Defer this binding for later *)
 			   pickValidDepSet (rest, alreadybound_vset,
-					    rev_bnds, 
+					    rev_bnds,
 					    (bnd, vset, category, movability) :: rev_keep)
 		   end
 
@@ -941,20 +939,20 @@ struct
               | allocateMode(alreadybound_vset, immovables, applies, allocates, others) =
 		let
 (* 		    val _ = print "allocateMode\n"*)
-		    
+
 		    val (alreadybound_vset, bnds1, others) =
 			pickValidDepSet (others, alreadybound_vset, [], [])
 		    val (alreadybound_vset, bnds2, allocates) =
 			pickValidDepSet (allocates, alreadybound_vset, [], [])
-		    val (alreadybound_vset, bnds3, immovables) = 
+		    val (alreadybound_vset, bnds3, immovables) =
 			pickValidDepList(immovables, ALLOCATE, alreadybound_vset, [])
-			
+
 		    val bnds = bnds1 @ bnds2 @ bnds3
 		in
 		    case bnds of
-			[] => applyMode(alreadybound_vset, immovables, 
+			[] => applyMode(alreadybound_vset, immovables,
 					applies, allocates, others)
-                      | _ => bnds @ allocateMode(alreadybound_vset, immovables, 
+                      | _ => bnds @ allocateMode(alreadybound_vset, immovables,
 						 applies, allocates, others)
 		end
 
@@ -975,7 +973,7 @@ struct
 (*
 		    val _ = (print "\nbnds2 = "; Ppnil.pp_bnds (map #1 bnds2))
 *)
-		    val (alreadybound_vset, bnds3, immovables) = 
+		    val (alreadybound_vset, bnds3, immovables) =
 			pickValidDepList(immovables, APPLY, alreadybound_vset, [])
 (*
 		    val _ = (print "\nbnds3 = "; Ppnil.pp_bnds (map #1 bnds3))
@@ -984,17 +982,17 @@ struct
 
 		in
 		    case bnds of
-			[] => allocateMode(alreadybound_vset, immovables, 
+			[] => allocateMode(alreadybound_vset, immovables,
 					   applies, allocates, others)
-                      | _ => bnds @ applyMode(alreadybound_vset, immovables, 
+                      | _ => bnds @ applyMode(alreadybound_vset, immovables,
 					      applies, allocates, others)
 		end
 
 
 (*
-	    fun doit [] = 
+	    fun doit [] =
 		   allocateMode(VS.empty, immovables, applies, allocates, others)
-              | doit ((bnd,_,ALLOCATE,_)::_) = 
+              | doit ((bnd,_,ALLOCATE,_)::_) =
 		    allocateMode(VS.empty, immovables, applies, allocates, others)
               | doit ((bnd,_,APPLY,_)::_) =
 		    applyMode(VS.empty, immovables, applies, allocates, others)
@@ -1002,12 +1000,12 @@ struct
 *)
 
             (* Extract the bindings with minimal alternation while still preserving dependency order *)
-	    fun doit _ = 
+	    fun doit _ =
 		   allocateMode(VS.empty, immovables, applies, allocates, others)
 
             val sorted_answer = doit immovables
-		
-	    val alternations_after = 
+
+	    val alternations_after =
 		countAlternations (sorted_answer, OTHER, 0)
 
 
@@ -1020,20 +1018,20 @@ struct
 		    else ()
 
 
-	    val _ = declareAlternations {old = alternations_before, 
+	    val _ = declareAlternations {old = alternations_before,
 					 new = alternations_after}
 
 	in
 	    (map #1 sorted_answer,
 	     bnds_outer_vset, bnds_category, bnds_movability)
 	end
-	
+
     fun rmod (MODULE {bnds, imports, exports}) =
-        let 
+        let
 	    val _ = clearStats ()
 	    val (bnds, _, _, _) = rbnds (bnds, empty_env)
 	    val _ = printStats ()
-	in  
+	in
             MODULE {bnds = bnds, imports = imports, exports = exports}
 	end
 

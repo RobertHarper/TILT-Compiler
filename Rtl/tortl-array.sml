@@ -1,6 +1,3 @@
-(*$import TORTLARRAY TilWord32 Util Prim Name TraceInfo String Int Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
-
-
 (*
    The structure TortlArray provides the functions necessary to translate the four basic array operations:
    subscript, update, length and creation; plus a routine to statically allocate constant vectors.  (The
@@ -9,23 +6,23 @@
    There are four versions of each array operation: float, int, pointer, and dynamic.  The float and int
    cases are generally straightforward (although there are two different int sizes that must be supported.
    The "dynamic" case calls all three other versions to generate code for the three possible cases, and
-   generates code to examine the constructor describing the elements of the array and branch to the right 
+   generates code to examine the constructor describing the elements of the array and branch to the right
    case.
 
    If the "MirrorPtrArray" flag is true, then arrays of pointers are stored as two copies interleaved, i.e.
        [p1,p2,p3] would be [p1,p1,p2,p2,p3,p3]
-   As a result, accesses to mirrored arrays are scaled by 8 bytes, not 4, and a thread-specific flag must 
+   As a result, accesses to mirrored arrays are scaled by 8 bytes, not 4, and a thread-specific flag must
    be checked to determine which "copy" to use.  To do this, the MIRROR_PTR_ARRAY_OFFSET instruction loads
    either a 0 or a 4 into its destination register, which is then added to the address in the fetch.
 
    The use of a write barrier on pointer arrays is controlled by the "PtrWriteBarrier" flag; its use on
-   int and float arrays is controlled by "FullWriteBarrier".  Note that the name "Full" is misleading 
+   int and float arrays is controlled by "FullWriteBarrier".  Note that the name "Full" is misleading
    since it does not affect pointer arrays!  The write barrier consists of a STOREMUTATE instruction
    after the write; a NEEDMUATE instruction must have ensured enough space exists on the write list.
    A comment that was here before I got here said:
       Note that integer and floating-point array updates do not require a barrier
       except when using a concurent collector.  Also, the complexity of get_tag
-      is unneeded when not using a concurrent collector. 
+      is unneeded when not using a concurrent collector.
    This stands to reason.
 
    The length operation is performed by consulting the GC tag for the array.  Since we might in general try
@@ -40,8 +37,8 @@ structure TortlArray :> TORTL_ARRAY =
 struct
 
     open Rtl
-    open Nil 
-    open TortlBase 
+    open Nil
+    open TortlBase
 
 
   (* If you permanently change these flags, you must update the default values
@@ -51,7 +48,7 @@ struct
     val ptrWriteBarrier = Stats.tt "PtrWriteBarrier"     (* record pointer array mutation *)
     val fullWriteBarrier = Stats.tt "FullWriteBarrier"   (* all mutations recorded *)
     val mirrorPtrArray = Stats.ff "MirrorPtrArray"       (* replicate pointer arrays *)
-      
+
     val maxByteRequest = 2048   (* This must be less than gc.c: arraySegmentSize *)
     val w2i = TilWord32.toInt
     val i2w = TilWord32.fromInt
@@ -74,7 +71,7 @@ struct
       in  (LOCATION(REGISTER(false, F destf)), state)
       end
 
-  fun xsub_int (state : state, is)  (vl1 : term, vl2 : term, tr) = 
+  fun xsub_int (state : state, is)  (vl1 : term, vl2 : term, tr) =
       let val a' = load_ireg_term(vl1,NONE)
 	  val desti = alloc_regi (niltrace2rep state tr)
       in  add_instr(ICOMMENT "int sub start");
@@ -119,7 +116,7 @@ struct
   fun xsub_dynamic(state,c, con_ir) (vl1 : term, vl2 : term, tr) : term * state =
       let
 	  val _ = Stats.counter("Rtlxsub_dyn")()
-	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),s) = xsub_float(state,Prim.F64) 
+	  fun floatcase s = let val (LOCATION(REGISTER(_,F fr)),s) = xsub_float(state,Prim.F64)
 								(vl1,vl2,Nil.TraceKnown TraceInfo.Notrace_Real)
 				val (ir,s) = boxFloat(s,fr)
 			    in  (I ir, s)
@@ -130,7 +127,7 @@ struct
 	  fun ptrcase s = let val (LOCATION(REGISTER(_, reg)),s) = xsub_ptr s (vl1,vl2,tr)
 			  in  (reg,s)
 			  end
-				
+
 	  val r = con_ir
 	  val tmp = alloc_regi NOTRACE_INT
 	  val desti = alloc_regi(niltrace2rep state tr)
@@ -167,7 +164,7 @@ struct
 	  val state = join_states[w8_state,w32_state,ptr_state,float_state]
       in (LOCATION(REGISTER(false, I desti)), state)
       end
- 
+
   (* ----------  Update operations ----------------- *)
 
   fun xupdate_float(state : state, fs) (vl1 : term, vl2 : term, vl3 : term) : term * state =
@@ -198,9 +195,9 @@ struct
 		      else state
 	  val obj = load_ireg_term(vl1,NONE)
 	  val newVal = load_ireg_term(vl3,NONE)
-	  val _ = 
+	  val _ =
 	      (case is of
-		   Prim.W32 => 
+		   Prim.W32 =>
 		       (case (in_ea_range 4 vl2) of
 			    SOME i => (if (!fullWriteBarrier)
 					   then add_instr(STOREMUTATE (REA(obj,i), INT_MUTATE))
@@ -214,7 +211,7 @@ struct
 					else ();
 					add_instr(STORE32I(RREA(obj,byteDisp),newVal))
 				    end)
-		 | Prim.W8 => 
+		 | Prim.W8 =>
 			    let val index = load_ireg_term(vl2,NONE)
 				val byteDisp = index
 			    in  if (!fullWriteBarrier)
@@ -250,8 +247,8 @@ struct
       in  (empty_record, state)
       end
 
-  fun xupdate_dynamic(state : state,c, con_ir) 
-                     (vl1 : term, vl2 : term, vl3 : term) 
+  fun xupdate_dynamic(state : state,c, con_ir)
+                     (vl1 : term, vl2 : term, vl3 : term)
       : term * state =
       let
 	  val _ = Stats.counter("Rtlxupdate_dyn")()
@@ -287,7 +284,7 @@ struct
       end
 
 
-  fun get_tag (vl : term) : regi = 
+  fun get_tag (vl : term) : regi =
       let val obj = load_ireg_term(vl,NONE)
 	  val tag = alloc_regi NOTRACE_INT
 	  val low2 = alloc_regi NOTRACE_INT
@@ -335,7 +332,7 @@ struct
       end
 
   fun xlen_dynamic (state,c,con_ir) (vl : term) : term * state =
-      let 
+      let
 	  val _ = Stats.counter("Rtlxlen_dyn")()
 	  val tag = get_tag vl
 	  val len = alloc_regi NOTRACE_INT
@@ -370,7 +367,7 @@ struct
 
     fun xarray_float (state, Prim.F32) (_, _) : term * state = error "no 32-bit floats"
       | xarray_float (state, Prim.F64) (vl1, vl2opt) = (* logical length, float value *)
-	let 
+	let
 	    val len = load_ireg_term(vl1,NONE)    (* logical length *)
 	    val byteLen = alloc_regi NOTRACE_INT
 	    val dest = alloc_regi TRACE
@@ -380,7 +377,7 @@ struct
 	    val tmp = alloc_regi(NOTRACE_INT)
 	    val gctemp  = alloc_regi(NOTRACE_INT)
 	    val fsmall_alloc = fresh_code_label "array_float_smallalloc"
-	    val fafter       = fresh_code_label "array_float_after" 
+	    val fafter       = fresh_code_label "array_float_after"
 	    val fbottom      = fresh_code_label "array_float_bottom"
 	    val ftop         = fresh_code_label "array_float_top"
 	    (* store object tag with alignment so that
@@ -388,8 +385,8 @@ struct
 
 	    val fr = (case vl2opt of
 			  SOME vl2 => load_freg_term(vl2,NONE)
-			| NONE => alloc_regf()) 
-	    
+			| NONE => alloc_regf())
+
 	in  add_instr(ADD(len,REG len, gctemp));
 	    add_instr(ADD(gctemp, IMM 2, gctemp));     (* gctemp is # words needed - one for tag, one for alignment *)
 
@@ -405,7 +402,7 @@ struct
 			   results = [I dest],
 			   save = getLocals()});
 	    add_instr(BR fafter);
-	     
+
 	    (* inline allocation code - start by doing the tag stuff*)
 	    add_instr(ILABEL fsmall_alloc);
 
@@ -415,7 +412,7 @@ struct
 	    mk_quad_arraytag(byteLen,tag);
 	    add_instr(STORE32I(REA(heapptr,0),tag)); (* store tag *)
 	    add_instr(ADD(heapptr,IMM 4,dest));
-		
+
 	    (* now use a loop to initialize the data portion *)
 	    add_instr(S8ADD(len,REG dest,heapptr));
 	    add_instr(LI(Rtltags.skip 1, skiptag));
@@ -442,7 +439,7 @@ struct
 			v : regi,            (* word-sized value to write *)
 			gafter,              (* label to jump to when done *)
 			isptr
-			) : state = 
+			) : state =
       let val wordsNeeded = alloc_regi NOTRACE_INT
 	  val bytesNeeded = alloc_regi NOTRACE_INT
 	  val skiptag     = alloc_regi NOTRACE_INT
@@ -452,7 +449,7 @@ struct
 	  val _ = (add_instr(LI(0w1, wordsNeeded));                    (* 1 word for tag *)
 		   add_instr(ADD(wordsNeeded,REG len, wordsNeeded));   (* len words to store data of array *)
 		   needalloc(state,REG wordsNeeded))
-      in 
+      in
 	  add_instr(ICOMMENT "storing tag");
 	  add_instr(STORE32I(REA(heapptr,0),tag));           (* store tag *)
 	  add_instr(ADD(heapptr,IMM 4,dest));                (* compute final array *)
@@ -470,10 +467,10 @@ struct
 	  new_gcstate state                                     (* must occur after heapptr incremented *)
       end
 
-    fun xarray_int (state,is) (vl1,vl2opt) : term * state = 
+    fun xarray_int (state,is) (vl1,vl2opt) : term * state =
 	    let val dest  = alloc_regi TRACE
 		val i       = alloc_regi(NOTRACE_INT)
-		val initv = 
+		val initv =
 		    let val vl2 = (case vl2opt of
 				       NONE => VALUE(INT 0w0)
 				     | SOME vl2 => vl2)
@@ -485,7 +482,7 @@ struct
 		(* bytelen - the logical length of the array in bytes which is used by alloca_bigintarray
 		   wordlen - the physical length of the array in words - note padding
 		   value - word value with wihch the array needs to be filled *)
-		val (bytelen,wordlen,word) = 
+		val (bytelen,wordlen,word) =
 		    (case is of
 		         (* Byte arrays and vectors have the same format.  Since they are word aligned,
 			    there can 1 to 3 extra bytes left over.  These should not be used by
@@ -494,12 +491,12 @@ struct
 			    which are byte vectors are not the same as C strings. To make ML strings
 			    compatiable with C strings, we would not only have to null-terminate but also
 			    to introduce an extra word when the logical string length is a multiple of 4. *)
-			 Prim.W8 => 
+			 Prim.W8 =>
 			     let val word = alloc_regi NOTRACE_INT
 				 val wordlen = alloc_regi NOTRACE_INT
 				 val tmp     = alloc_regi NOTRACE_INT
 				 val tmp2    = alloc_regi NOTRACE_INT
-				 val _ = (add_instr(ADD(loglen,IMM 3,tmp));      (* tmp = loglen + 3 *)  
+				 val _ = (add_instr(ADD(loglen,IMM 3,tmp));      (* tmp = loglen + 3 *)
 					  add_instr(SRL(tmp,IMM 2,wordlen));     (* wordlen = (loglen + 3)/4 *)
 					  add_instr(SLL(initv,IMM 8,tmp2));      (* tmp2 = 00b0 where b is the byte *)
 					  add_instr(ORB(tmp2,REG initv,tmp2));   (* tmp2 = 00bb *)
@@ -535,7 +532,7 @@ struct
 	    in  (LOCATION(REGISTER(false, I dest)), state)
 	    end
 
-     fun xarray_ptr (state) (vl1,vl2opt) : term * state = 
+     fun xarray_ptr (state) (vl1,vl2opt) : term * state =
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val dest = alloc_regi TRACE
 		val i       = alloc_regi NOTRACE_INT
@@ -548,7 +545,7 @@ struct
 			else len
 		val byteLen = alloc_regi NOTRACE_INT
 
-		val initv = 
+		val initv =
 		    let val vl2 = (case vl2opt of
 				       NONE => VALUE(INT 0w0)
 				     | SOME vl2 => vl2)
@@ -582,7 +579,7 @@ struct
   (* if we allocate arrays statically, we must add labels of pointer arrays to mutable_objects *)
      (*   (What?  joev)  *)
  and xarray_dynamic (state,c, con_ir) (vl1 : term, vl2opt : term option) : term * state =
-    let 
+    let
 	val _ = Stats.counter("Rtlxarray_dyn")()
 	val dest = alloc_regi TRACE
 	val r = con_ir
@@ -594,34 +591,34 @@ struct
 	val _ = (add_instr(BCNDSI(EQ, r, IMM 11, floatl, false));
 		 add_instr(BCNDSI(EQ, r, IMM 2, intl, false));
 		 add_instr(BCNDSI(EQ, r, IMM 0, charl, false)))
-	val ptr_state = 
+	val ptr_state =
 	    let val (term,state) = xarray_ptr(state) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
-	    in  state 
+	    in  state
 	    end
 	val _ = add_instr(BR afterl)
-	    
+
 	val _ = add_instr(ILABEL intl)
-	val int_state = 
+	val int_state =
 	    let val (term,state) = xarray_int(state,Prim.W32) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
-	    in  state 
+	    in  state
 	    end
 	val _ = add_instr(BR afterl)
-	    
+
 	val _ = add_instr(ILABEL charl)
-	val char_state = 
+	val char_state =
 	    let val (term,state) = xarray_int(state,Prim.W8) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
-	    in  state 
+	    in  state
 	    end
 	val _ = add_instr(BR afterl)
-	    
+
 	val _ = add_instr(ILABEL floatl)
-	val vl2unbox_opt = 
+	val vl2unbox_opt =
 	    (case vl2opt of
 		 NONE => NONE
 	       | SOME vl2 => let val fr = alloc_regf()
@@ -629,8 +626,8 @@ struct
 				 val _ = add_instr(LOAD64F(REA(temp,0),fr))
 			     in  SOME (LOCATION(REGISTER(false, F fr)))
 			     end)
-	val float_state = 
-	    let 
+	val float_state =
+	    let
 		val (term,state) = xarray_float(state,Prim.F64) (vl1,vl2unbox_opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
@@ -645,11 +642,11 @@ struct
      (* statically allocates a vector of constants of type c. *)
      (* c is not allowed to be float.                         *)
      fun xvector (state, c, values : value list) : term * state =
-	 let 
+	 let
 	     val c = #2(simplify_type state c)
 	     val numElem = TilWord32.fromInt(length values)
 
-	     fun valsToStringData data = 
+	     fun valsToStringData data =
 		 let fun mapper (INT w) = chr (w2i w)
 		       | mapper _ = error "char vector but non-INT value"
 		     val chars = map mapper data
@@ -657,7 +654,7 @@ struct
 		 in  [COMMENT ("string size = " ^ (Int.toString (size str))),
 		      STRING str]
 		 end
-	     fun valsToData data = 
+	     fun valsToData data =
 		 let fun mapper (INT w) = INT32 w
 		       | mapper (TAG w) = INT32 w
 		       | mapper (REAL l) =  DATA l  (* XXX Can this one ever happen?  joev *)
@@ -668,18 +665,18 @@ struct
 		       | mapper (CODE l) = DATA l
 		 in  map mapper data
 		 end
-	     fun addTag (strName, shiftAmount, desc) = 
+	     fun addTag (strName, shiftAmount, desc) =
 		 let val label = fresh_data_label strName
 		     val tagword = TilWord32.orb(TilWord32.lshift(numElem, shiftAmount), desc)
 		 in  add_data(INT32 tagword); add_data(DLABEL label); label
 		 end
-	     fun addData (data, mirror) = 
+	     fun addData (data, mirror) =
 		 let fun apper d = (add_data d; if mirror then add_data d else ())
 		 in  app apper data
 		 end
 
-	     val label = 
-		 (case c of 
+	     val label =
+		 (case c of
 		      Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
 		    | Prim_c(Float_c _, []) => error "float vector  not handled"
 		    | Prim_c(Int_c Prim.W8, []) => let val label = addTag("string", Rtltags.word_array_len_offset, Rtltags.wordarray)

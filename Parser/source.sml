@@ -1,5 +1,3 @@
-(*$import SourceMap PrettyPrint IO SOURCE TextIO PathNames Control *)
-
 (* <source.sml>=                                                            *)
 (* source.sml
  *
@@ -24,7 +22,7 @@ struct
   val lexer_initial_position = 2 (* position of first char according to ml-lex *)
 
   fun newSource(fileName,lineNum,sourceStream,interactive, errConsumer) =
-      {sourceMap=SourceMap.newmap(lexer_initial_position, 
+      {sourceMap=SourceMap.newmap(lexer_initial_position,
                                   {fileName=fileName, line=lineNum, column=1}),
        sourceStream=sourceStream,interactive=interactive,fileOpened=fileName,
        errConsumer=errConsumer,anyErrors=ref false}
@@ -34,7 +32,7 @@ struct
         (* app say ["[closing ", (Pathnames.trim fileName), "]\n"];*)
         TextIO.closeIn sourceStream handle IO.Io _ => ())
 
-  fun filepos({sourceMap,...}: inputSource) pos = 
+  fun filepos({sourceMap,...}: inputSource) pos =
     let val {fileName, line, column} = SourceMap.filepos sourceMap pos
     in  (fileName, line, column)
     end

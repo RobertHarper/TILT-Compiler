@@ -1,4 +1,3 @@
-(*$import List MTPABSTRACT INTSYN FUNSYN STATESYN WHNF CONSTRAINTS SUBORDINATE TYPECHECK FUNTYPECHECK ABSTRACT TRAIL GlobalStructs *)
 (* Meta Theorem Prover abstraction : Version 1.3 *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

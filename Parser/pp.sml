@@ -1,5 +1,3 @@
-(*$import General List Control Array Vector PpQueue PRETTYPRINT String *)
-
 (* pp.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
@@ -11,29 +9,29 @@
 (* This defines an abstract type (ppstream) and associated operations. A
    ppstream is an outstream that contains prettyprinting commands. The
    commands are placed in the stream by various function calls listed below.
-   Periodically, an (mostly) invisible process goes through the stream 
+   Periodically, an (mostly) invisible process goes through the stream
    executing commands in the order in which they were added to the stream.
 
    One obtains a ppstream by "mk_ppstream". Its arguments are "linewidth"
-   (the maximum width in characters of the prettyprinted output) and 
-   "consumer" (the function that writes strings to the display). 
+   (the maximum width in characters of the prettyprinted output) and
+   "consumer" (the function that writes strings to the display).
    One can get these parameters from a ppstream by "dest_ppstream".
 
    Then there are the usual Oppen primitives for adding commands into the
    stream: begin_block, end_block, add_string, add_break, and add_newline.
 
    There are two operations on the stream. "clear_ppstream" is used
-   to restart a given stream, while keeping everything else about the stream 
-   intact. An example of its use is when an error occurs during 
+   to restart a given stream, while keeping everything else about the stream
+   intact. An example of its use is when an error occurs during
    prettyprinting; in that case the top level printing function can catch
-   the exception and clear the ppstream. "flush_ppstream" is used at the 
+   the exception and clear the ppstream. "flush_ppstream" is used at the
    end of inserting commands, to order the invisible process to execute all
-   remaining  commands in the stream. The last thing that flush_ppstream does 
+   remaining  commands in the stream. The last thing that flush_ppstream does
    is call clear_ppstream.
 
    There is also an operation that hides the state-based implementation of
    ppstream: "with_pp" takes a function operating on a ppstream, makes an
-   appropriate ppstream and applies the function to it, then flushes the 
+   appropriate ppstream and applies the function to it, then flushes the
    pp_stream and returns the value of the function. The ppstream is thus
    only a local entity and is left to be garbage collected.
 *)
@@ -53,7 +51,7 @@ datatype break_style = CONSISTENT | INCONSISTENT
 
 datatype break_info
   = FITS
-  | PACK_ONTO_LINE of int 
+  | PACK_ONTO_LINE of int
   | ONE_PER_LINE of int
 
 (* Some global values *)
@@ -74,14 +72,14 @@ with
 	 | _::rest => stk := rest
 end
 
-(* The delim_stack is used to compute the size of blocks. It is 
+(* The delim_stack is used to compute the size of blocks. It is
    a stack of indices into the token buffer. The indices only point to
    BBs, Es, and BRs. We push BBs and Es onto the stack until a BR
    is encountered. Then we compute sizes and pop. When we encounter
    a BR in the middle of a block, we compute the Distance_to_next_break
    of the previous BR in the block, if there was one.
 
-   We need to be able to delete from the bottom of the delim_stack, so 
+   We need to be able to delete from the bottom of the delim_stack, so
    we use a queue, treated with a stack discipline, i.e., we only add
    items at the head of the queue, but can delete from the front or
    back of the queue.
@@ -101,8 +99,8 @@ with
 end
 
 
-type block_info = { Block_size : int ref, 
-                    Block_offset : int, 
+type block_info = { Block_size : int ref,
+                    Block_offset : int,
                     How_to_indent : break_style }
 
 
@@ -110,7 +108,7 @@ type block_info = { Block_size : int ref,
    a local offset for the break. BB represents a sequence of contiguous
    Begins. E represents a sequence of contiguous Ends.
 *)
-datatype pp_token 
+datatype pp_token
   = S of  {String : string, Length : int}
   | BB of {Pblocks : block_info list ref,   (* Processed   *)
            Ublocks : block_info list ref}  (* Unprocessed *)
@@ -123,7 +121,7 @@ datatype pp_token
 (* The initial values in the token buffer *)
 val initial_token_value = S{String = "", Length = 0}
 
-datatype ppstream = 
+datatype ppstream =
   PPS of
      {consumer : string -> unit,
       linewidth : int,
@@ -138,9 +136,9 @@ datatype ppstream =
       left_sum : int ref,      (* size of strings and spaces inserted *)
       right_sum : int ref}     (* size of strings and spaces printed *)
 
-   
+
 type ppconsumer = {consumer : string -> unit,
-		   linewidth : int, 
+		   linewidth : int,
 		   flush : unit -> unit}
 
 fun mk_ppstream {consumer,linewidth,flush} =
@@ -194,7 +192,7 @@ fun print_BB (_,{Pblocks = ref [], Ublocks = ref []}) = raise PP_FAIL "print_BB"
              {Pblocks as ref({How_to_indent=CONSISTENT,Block_size,
                               Block_offset}::rst),
               Ublocks=ref[]}) =
-       (push ((if (!Block_size > sp_left)  
+       (push ((if (!Block_size > sp_left)
                then ONE_PER_LINE (linewidth - (sp_left - Block_offset))
                else FITS),
 	      the_indent_stack);
@@ -207,15 +205,15 @@ fun print_BB (_,{Pblocks = ref [], Ublocks = ref []}) = raise PP_FAIL "print_BB"
 	      the_indent_stack);
         Pblocks := rst)
   | print_BB (PPS{the_indent_stack, linewidth, space_left=ref sp_left,...},
-              {Ublocks,...}) = 
+              {Ublocks,...}) =
       let fun pr_end_Ublock [{How_to_indent=CONSISTENT,Block_size,Block_offset}] l =
-		(push ((if (!Block_size > sp_left)  
+		(push ((if (!Block_size > sp_left)
 			then ONE_PER_LINE (linewidth - (sp_left - Block_offset))
 			else FITS),
 		       the_indent_stack);
 		 rev l)
 	    | pr_end_Ublock [{Block_size,Block_offset,...}] l =
-		(push ((if (!Block_size > sp_left)  
+		(push ((if (!Block_size > sp_left)
 			then PACK_ONTO_LINE (linewidth - (sp_left - Block_offset))
 			else FITS),
 		       the_indent_stack);
@@ -236,11 +234,11 @@ fun print_E (_,{Pend = ref 0, Uend = ref 0}) = raise PP_FAIL "print_E"
 
 (* "cursor" is how many spaces across the page we are. *)
 
-fun print_token(PPS{consumer,space_left,...}, S{String,Length}) = 
-      (consumer String; 
+fun print_token(PPS{consumer,space_left,...}, S{String,Length}) =
+      (consumer String;
        space_left := (!space_left) - Length)
   | print_token(ppstrm,BB b) = print_BB(ppstrm,b)
-  | print_token(PPS{the_indent_stack,...},E e) = 
+  | print_token(PPS{the_indent_stack,...},E e) =
       print_E (the_indent_stack,e)
   | print_token (PPS{the_indent_stack,space_left,consumer,linewidth,...},
                  BR{Distance_to_next_break,Number_of_blanks,Break_offset}) =
@@ -248,12 +246,12 @@ fun print_token(PPS{consumer,space_left,...}, S{String,Length}) =
         of FITS =>
 	     (space_left := (!space_left) - Number_of_blanks;
               indent (consumer,Number_of_blanks))
-         | (ONE_PER_LINE cursor) => 
+         | (ONE_PER_LINE cursor) =>
              let val new_cursor = cursor + Break_offset
-              in space_left := linewidth - new_cursor; 
+              in space_left := linewidth - new_cursor;
                  cr_indent (consumer,new_cursor)
 	     end
-         | (PACK_ONTO_LINE cursor) => 
+         | (PACK_ONTO_LINE cursor) =>
 	     if (!Distance_to_next_break > (!space_left))
 	     then let val new_cursor = cursor + Break_offset
 		   in space_left := linewidth - new_cursor;
@@ -263,19 +261,19 @@ fun print_token(PPS{consumer,space_left,...}, S{String,Length}) =
 		   indent (consumer,Number_of_blanks)))
 
 
-fun clear_ppstream(PPS{the_token_buffer, the_delim_stack, 
-                       the_indent_stack,left_sum, right_sum, 
+fun clear_ppstream(PPS{the_token_buffer, the_delim_stack,
+                       the_indent_stack,left_sum, right_sum,
                        left_index, right_index,space_left,linewidth,...}) =
     let val buf_size = 3*linewidth
 	fun set i =
 	    if (i = buf_size)
 	    then ()
-	    else (update(the_token_buffer,i,initial_token_value); 
+	    else (update(the_token_buffer,i,initial_token_value);
 		  set (i+1))
      in set 0;
 	clear_indent_stack the_indent_stack;
-	reset_delim_stack the_delim_stack; 
-	left_sum := 0; right_sum := 0; 
+	reset_delim_stack the_delim_stack;
+	left_sum := 0; right_sum := 0;
 	left_index := 0; right_index := 0;
 	space_left := linewidth
     end
@@ -309,7 +307,7 @@ fun advance_left (ppstrm as PPS{consumer,left_index,left_sum,
                   instr) =
     let val NEG = ~1
 	val POS = 0
-	fun inc_left_sum (BR{Number_of_blanks, ...}) = 
+	fun inc_left_sum (BR{Number_of_blanks, ...}) =
 		 left_sum := (!left_sum) + Number_of_blanks
 	  | inc_left_sum (S{Length, ...}) = left_sum := (!left_sum) + Length
 	  | inc_left_sum _ = ()
@@ -337,24 +335,24 @@ fun advance_left (ppstrm as PPS{consumer,left_index,left_sum,
 		  else (* increment left index *)
 
     (* When this is evaluated, we know that the left_index has not yet
-       caught up to the right_index. If we are at a BB or an E, we can 
-       increment left_index if there is no work to be done, i.e., all Begins 
-       or Ends have been dealt with. Also, we should do some housekeeping and 
-       clear the buffer at left_index, otherwise we can get errors when 
-       left_index catches up to right_index and we reset the indices to 0. 
-       (We might find ourselves adding a BB to an "old" BB, with the result 
-       that the index is not pushed onto the delim_stack. This can lead to 
+       caught up to the right_index. If we are at a BB or an E, we can
+       increment left_index if there is no work to be done, i.e., all Begins
+       or Ends have been dealt with. Also, we should do some housekeeping and
+       clear the buffer at left_index, otherwise we can get errors when
+       left_index catches up to right_index and we reset the indices to 0.
+       (We might find ourselves adding a BB to an "old" BB, with the result
+       that the index is not pushed onto the delim_stack. This can lead to
        mangled output.)
     *)
 		       (case (the_token_buffer sub (!left_index))
-			  of (BB {Pblocks = ref [], Ublocks = ref []}) => 
+			  of (BB {Pblocks = ref [], Ublocks = ref []}) =>
 			       (update(the_token_buffer,!left_index,
-				       initial_token_value); 
+				       initial_token_value);
 				++left_index)
 			   | (BB _) => ()
-			   | (E {Pend = ref 0, Uend = ref 0}) => 
+			   | (E {Pend = ref 0, Uend = ref 0}) =>
 			       (update(the_token_buffer,!left_index,
-				       initial_token_value); 
+				       initial_token_value);
 				++left_index)
 			   | (E _) => ()
 			   | _ => ++left_index;
@@ -365,7 +363,7 @@ fun advance_left (ppstrm as PPS{consumer,left_index,left_sum,
 
 fun begin_block (ppstrm as PPS{the_token_buffer, the_delim_stack,left_index,
                                left_sum, right_index, right_sum,...})
-                style offset = 
+                style offset =
    (if (delim_stack_is_empty the_delim_stack)
     then (left_index := 0;
 	  left_sum := 1;
@@ -373,7 +371,7 @@ fun begin_block (ppstrm as PPS{the_token_buffer, the_delim_stack,left_index,
 	  right_sum := 1)
     else BB_inc_right_index ppstrm;
     case (the_token_buffer sub (!right_index))
-      of (BB {Ublocks, ...}) => 
+      of (BB {Ublocks, ...}) =>
 	   Ublocks := {Block_size = ref (~(!right_sum)),
 		       Block_offset = offset,
 		       How_to_indent = style}::(!Ublocks)
@@ -402,7 +400,7 @@ local
 	      then ()
 	      else case(the_token_buffer sub (top_delim_stack the_delim_stack))
 		     of (BB{Ublocks as ref ((b as {Block_size, ...})::rst),
-			    Pblocks}) => 
+			    Pblocks}) =>
 			   if (k>0)
 			   then (Block_size := !right_sum + !Block_size;
 				 Pblocks := b :: (!Pblocks);
@@ -417,11 +415,11 @@ local
 			    Uend := 0;
 			    pop_delim_stack the_delim_stack;
 			    check(k + !Pend))
-		      | (BR{Distance_to_next_break, ...}) => 
+		      | (BR{Distance_to_next_break, ...}) =>
 			   (Distance_to_next_break :=
 			      !right_sum + !Distance_to_next_break;
 			    pop_delim_stack the_delim_stack;
-			    if (k>0) 
+			    if (k>0)
 			    then check k
 			    else ())
 		      | _ => raise PP_FAIL "check_delim_stack.catchall"
@@ -442,7 +440,7 @@ in
 		 Break_offset = break_offset});
        check_delim_stack ppstrm;
        right_sum := (!right_sum) + n;
-       push_delim_stack (!right_index,the_delim_stack)) 
+       push_delim_stack (!right_index,the_delim_stack))
 
   fun flush_ppstream0(ppstrm as PPS{the_delim_stack,the_token_buffer, flush,
 				    left_index,...}) =
@@ -466,7 +464,7 @@ fun add_string (ppstrm as PPS{the_token_buffer,the_delim_stack,consumer,
     let fun fnl [{Block_size, ...}:block_info] = Block_size := INFINITY
 	  | fnl (_::rst) = fnl rst
 
-	fun set(dstack,BB{Ublocks as ref[{Block_size,...}:block_info],...}) = 
+	fun set(dstack,BB{Ublocks as ref[{Block_size,...}:block_info],...}) =
 	      (pop_bottom_delim_stack dstack;
 	       Block_size := INFINITY)
 	  | set (_,BB {Ublocks = ref(_::rst), ...}) = fnl rst
@@ -474,7 +472,7 @@ fun add_string (ppstrm as PPS{the_token_buffer,the_delim_stack,consumer,
 	      (Pend := (!Pend) + (!Uend);
 	       Uend := 0;
 	       pop_bottom_delim_stack dstack)
-	  | set (dstack,BR{Distance_to_next_break,...}) = 
+	  | set (dstack,BR{Distance_to_next_break,...}) =
 	      (pop_bottom_delim_stack dstack;
 	       Distance_to_next_break := INFINITY)
 	  | set _ = raise (PP_FAIL "add_string.set")
@@ -508,13 +506,13 @@ fun add_string (ppstrm as PPS{the_token_buffer,the_delim_stack,consumer,
 
 
 (* Derived form. The +2 is for peace of mind *)
-fun add_newline (ppstrm as PPS{linewidth, ...}) = 
+fun add_newline (ppstrm as PPS{linewidth, ...}) =
     add_break ppstrm (linewidth+2,0)
 
 (* Derived form. Builds a ppstream, sends pretty printing commands called in
    f to the ppstream, then flushes ppstream.
 *)
-fun with_pp ppconsumer ppfn = 
+fun with_pp ppconsumer ppfn =
    let val ppstrm = mk_ppstream ppconsumer
     in ppfn ppstrm;
        flush_ppstream0 ppstrm
@@ -528,7 +526,7 @@ fun with_pp ppconsumer ppfn =
 (* Derived form. Makes an outstream be the target of prettyprinting. *)
 fun out_ppstream outstrm n =
     mk_ppstream{consumer = fn s => TextIO.output(outstrm,s),
-		linewidth = n, 
+		linewidth = n,
 		flush = fn () => TextIO.flushOut outstrm}
 
 (* Derived form. Makes a ppstream that observes system parameters. *)
@@ -537,7 +535,7 @@ fun mk_std_ppstream() =
 
 *)
 
-fun pp_to_string linewidth ppfn ob = 
+fun pp_to_string linewidth ppfn ob =
     let val l = ref ([]:string list)
 	fun attach s = l := (s::(!l))
      in with_pp {consumer = attach, linewidth=linewidth, flush = fn()=>()}

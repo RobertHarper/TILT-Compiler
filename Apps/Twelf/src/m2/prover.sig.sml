@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Meta Prover *)
 (* Author: Carsten Schuermann *)
 

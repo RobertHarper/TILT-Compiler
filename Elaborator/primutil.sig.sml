@@ -1,11 +1,10 @@
-(*$import PRIM Prim *)
 signature PRIMUTIL =
     sig
 
 	type con			(* parameter *)
 	type exp			(* parameter *)
 	type context			(* parameter *)
-	    
+
 	type value = (con,exp) Prim.value
 
 	val value_type : (exp -> con) -> value -> con

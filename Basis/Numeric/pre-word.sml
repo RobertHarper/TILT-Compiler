@@ -1,10 +1,9 @@
-(*$import Firstlude TiltPrim Prelude *)
-structure PreWord = 
+structure PreWord =
     struct
 	type word = word
     end
 
-structure PreLargeWord = 
+structure PreLargeWord =
     struct
 	type word = word
     end

@@ -1,5 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Time *)
-
 (* timer-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,3 @@
-(*$import Array Char String TABLE *)
 (* Hash Tables *)
 (* Author: Frank Pfenning *)
 

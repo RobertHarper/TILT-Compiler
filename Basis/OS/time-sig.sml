@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt *)
 (* time-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,3 @@
-(*$import Core Rtl MACHINE *)
 signature DECALPHA =
 sig
 
@@ -12,10 +11,10 @@ sig
   val Fzero   : register   (* Floating-point zero *)
 
 
-  datatype operand = 
+  datatype operand =
     REGop of register
   | IMMop of int
-  
+
   val in_imm_range : int -> bool
   val in_ea_disp_range : int -> bool
   val threadScratch_disp : int
@@ -29,22 +28,22 @@ sig
 
   datatype storei_instruction = STL | STQ  | STQ_U
   datatype storef_instruction = STT | STS
-  datatype loadi_instruction  = LDA | LDAH | LDL | LDQ | LDQ_U | LDGP 
+  datatype loadi_instruction  = LDA | LDAH | LDL | LDQ | LDQ_U | LDGP
   datatype loadf_instruction  = LDT | LDS
   datatype cbri_instruction   = BEQ | BGE | BGT | BLE | BLT | BNE | BLBC | BLBS
   datatype cbrf_instruction   = FBEQ | FBGE | FBGT | FBLE | FBLT | FBNE
   datatype fpconv_instruction = CVTQT | CVTTQ | CVTTQM | CVTTQC | CVTLQ | CVTQL
   datatype int_instruction    =
     ADDL | ADDLV | ADDQ | ADDQV | SUBL | SUBLV | SUBQ | SUBQV
-  | MULL | MULLV | MULQ | MULQV | UMULH 
+  | MULL | MULLV | MULQ | MULQV | UMULH
   | S4ADDL | S4ADDQ | S8ADDL | S8ADDQ
   | S4SUBL | S4SUBQ | S8SUBL | S8SUBQ
   | CMPEQ | CMPLE | CMPLT | CMPULE | CMPULT
   | AND | OR | XOR | EQV | ANDNOT | ORNOT | SRA | SRL | SLL | ZAP | EXTBL | INSBL | MSKBL
   | CMOVEQ | CMOVNE | CMOVLT | CMOVLE | CMOVGT | CMOVGE | CMOVLBC | CMOVLBS
-  datatype fp_instruction    = 
+  datatype fp_instruction    =
     CPYS | CPYSN | CPYSE
-  | CMPTEQ | CMPTLT | CMPTLE | ADDT | SUBT | MULT | DIVT    
+  | CMPTEQ | CMPTLT | CMPTLE | ADDT | SUBT | MULT | DIVT
   | FCMOVEQ | FCMOVNE | FCMOVLT | FCMOVLE | FCMOVGT | FCMOVGE
 
 

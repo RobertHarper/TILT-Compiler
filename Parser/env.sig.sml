@@ -1,9 +1,7 @@
-(*$import SYMBOL *)
-
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* env.sig *)
 
-signature FASTSYMBOL = 
+signature FASTSYMBOL =
 sig
       type raw_symbol
       type symbol
@@ -21,12 +19,12 @@ sig
       val var'n'fix : raw_symbol -> symbol * symbol
 end
 
-signature INTSTRMAPV = 
-sig 
+signature INTSTRMAPV =
+sig
   type 'a intstrmap
   val new : (int * string * '_a) list -> '_a intstrmap
 
-  (* in case of duplicates, the element towards the head of the 
+  (* in case of duplicates, the element towards the head of the
    * list is discarded,and the one towards the tail is kept.
    *)
   val elems : 'a intstrmap -> int
@@ -44,7 +42,7 @@ sig
 
   type 'b env
 
-  exception Unbound  
+  exception Unbound
   exception SpecialEnv
 
   val empty: 'b env
@@ -62,7 +60,7 @@ sig
   val map: ('b -> 'b) -> 'b env -> 'b env
   val fold: ((Symbol.symbol * 'b) * 'a -> 'a) -> 'a -> 'b env -> 'a
 
-  val symbols : 'b env -> Symbol.symbol list 
+  val symbols : 'b env -> Symbol.symbol list
                                 (* may contain duplicate symbols *)
 
 end (* signature ENV *)

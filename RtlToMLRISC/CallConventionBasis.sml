@@ -1,6 +1,3 @@
-(*$import CELLS INTEGER_CONVENTION MLRISC_REGION MLTREE_EXTRA STACK_FRAME CALL_CONVENTION_BASIS *)
-
-
 (* =========================================================================
  * CallConventionBasis.sml
  * ========================================================================= *)

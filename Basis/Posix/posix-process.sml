@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PrePosix List POSIX_Signal SysWord SysInt Time Word8 POSIX_extern POSIX_PROCESS *)
 (* posix-process.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -23,7 +22,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
     datatype pid = PID of s_int
     fun pidToWord (PID i) = SysWord.fromInt i
     fun wordToPid w = PID (SysWord.toInt w)
-    
+
     fun osval (s : string) : s_int = Ccall(posix_process_num,s)
     val w_osval = SysWord.fromInt o osval
 
@@ -31,7 +30,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
           case Ccall(posix_process_fork,()) of
             0 => NONE
           | child_pid => SOME(PID child_pid)
-    
+
     fun exec (x: string, y : string list) : 'a = (Ccall(posix_process_exec, x, y);
 						  raise TiltExn.LibFail "exec cannot return")
     fun exece (x: string, y : string list, z : string list) : 'a = (Ccall(posix_process_exece, x, y, z);
@@ -40,11 +39,11 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
 						  raise TiltExn.LibFail "execp cannot return")
 
     datatype waitpid_arg
-      = W_ANY_CHILD 
-      | W_CHILD of pid 
+      = W_ANY_CHILD
+      | W_CHILD of pid
       | W_SAME_GROUP
       | W_GROUP of pid
-    
+
     datatype killpid_arg
       = K_PROC of pid
       | K_SAME_GROUP
@@ -55,7 +54,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
       | W_EXITSTATUS of Word8.word
       | W_SIGNALED of signal
       | W_STOPPED of signal
-    
+
       (* (pid',status,status_val) = waitpid' (pid,options)  *)
     fun waitpid' (pid : s_int, opts : word) : s_int * s_int * s_int = Ccall(posix_process_waitpid, pid, opts)
 
@@ -69,7 +68,7 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
        * the second integer gives its exit value.
        * If the first integer is 1, the child exited due to an uncaught
        * signal, and the second integer gives the signal value.
-       * Otherwise, the child is stopped and the second integer 
+       * Otherwise, the child is stopped and the second integer
        * gives the signal value that caused the child to stop.
        *)
     fun mkExitStatus (0,0) = W_EXITED
@@ -108,15 +107,15 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
           | (pid,status,sv) => SOME(PID pid, mkExitStatus(status,sv))
 
     fun wait () = waitpid(W_ANY_CHILD,[])
-    
+
     fun exit (x: Word8.word) : 'a = (Ccall(posix_process_exit, x);
 				     raise TiltExn.LibFail "execp cannot return")
-    
+
     fun kill' (x : s_int, y : s_int) : unit = Ccall(posix_process_kill, x, y)
     fun kill (K_PROC (PID pid), s) = kill'(pid, SysWord.toInt(Sig.toWord s))
       | kill (K_SAME_GROUP, s) = kill'(~1, SysWord.toInt(Sig.toWord s))
       | kill (K_GROUP (PID pid), s) = kill'(~pid, SysWord.toInt(Sig.toWord s))
-    
+
     fun alarm' (x : int) : int = Ccall(posix_process_alarm, x)
     val alarm = Time.fromSeconds o alarm' o Time.toSeconds
 

@@ -1,4 +1,3 @@
-(*$import *)
 (* Tables *)
 (* Author: Frank Pfenning *)
 

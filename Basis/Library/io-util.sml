@@ -1,4 +1,3 @@
-(*$import IO_UTIL TextIO *)
 (* io-util.sml
  *
  * COPYRIGHT (c) 1997 AT&T Labs Research.

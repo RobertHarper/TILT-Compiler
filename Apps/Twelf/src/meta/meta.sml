@@ -1,4 +1,3 @@
-(*$import MTPGlobal RingStructs FunSyn StateSyn FunNames FunPrint Weaken FunWeaken FunTypeCheck RelFun MTPData MTPAbstract MTPInit MTPrint MTPSearch MTPFilling MTPSplitting UniqueSearch Inference MTPRecursion MTPStrategy MTProver MTPi LambdaStructs GlobalStructs HashStructs FormatterStructs PrintStructs NamesStructs TypeCheckStructs SubordinateStructs ModesStructs IndexStructs OpsemStructs Heuristic OrderStructs M2Structs TimersStructs *)
 structure FunSyn = 
   FunSyn (structure IntSyn' = IntSyn
 	  structure Whnf = Whnf

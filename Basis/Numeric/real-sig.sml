@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt PreInt PreReal MATH IEEEReal *)
 (* real-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* list-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,8 +10,8 @@ signature LIST =
 
     exception Empty
 
-    val null : 'a list -> bool 
-    val length : 'a list -> int 
+    val null : 'a list -> bool
+    val length : 'a list -> int
     val @    : 'a list * 'a list -> 'a list
     val hd   : 'a list -> 'a                (* raises Empty *)
     val tl   : 'a list -> 'a list           (* raises Empty *)
@@ -24,7 +23,7 @@ signature LIST =
     val take : 'a list * int -> 'a list  (* raises Subscript *)
     val drop : 'a list * int -> 'a list  (* raises Subscript *)
 
-    val rev : 'a list -> 'a list 
+    val rev : 'a list -> 'a list
 
     val concat    : 'a list list -> 'a list
     val revAppend : 'a list * 'a list -> 'a list

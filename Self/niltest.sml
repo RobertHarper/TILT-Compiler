@@ -1,5 +1,3 @@
-(*$import TextIO LinkParse  Tyvar Prim Il Ppprim Ppil IlContext LinkIl Linknil *)
-
 exception End
 
 val _ = Stats.tt("littleEndian")

@@ -1,5 +1,3 @@
-(*$import DICT ORD_KEY *)
-
 signature REGMAP = DICT
 (*
   sig
@@ -14,7 +12,7 @@ signature REGMAP = DICT
      *)
 
     val insert : 'a dict * Key.ord_key * 'a -> 'a dict
-    (* Insert an item.  
+    (* Insert an item.
      *)
 
     val find : 'a dict * Key.ord_key -> 'a
@@ -41,9 +39,9 @@ signature REGMAP = DICT
      * in dictionary order.
      *)
 
-    val occupant : 
+    val occupant :
       ('a -> 'a -> bool) -> 'a dict -> 'a -> Key.ord_key option
-    val simpleOccupant : 
+    val simpleOccupant :
       ('a -> 'a -> bool) -> ('a dict * 'a) -> Key.ord_key option
 
   end

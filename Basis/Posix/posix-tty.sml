@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude List Word8Vector Word8Array SysInt POSIX_FileSys POSIX_Process SysWord Byte POSIX_TTY POSIX_extern *)
 (* posix-tty.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -18,7 +17,7 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
 
     type pid = POSIX_Process.pid
     type file_desc = POSIX_FileSys.file_desc
-    
+
     type word = SysWord.word
     type s_int = SysInt.int
 
@@ -171,7 +170,7 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
     val b9600 = B (w_osval "B9600")
     val b19200 = B (w_osval "B19200")
     val b38400 = B (w_osval "B38400")
-    
+
     datatype termios = TIOS of {
         iflag : I.flags,
         oflag : O.flags,
@@ -216,9 +215,9 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
 		  ospeed = #ospeed r
 		  }
       end
-    
+
     fun fs_intof fd = uint32toint32(FS.fdToWord fd)
-	
+
     structure TC =
       struct
         datatype set_action = SA of s_int
@@ -264,7 +263,7 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
 				   ospeed = B osp
 				   }
 			 end
-		     
+
 	fun setattr (fd, SA sa, TIOS tios) = let
 						 val (I.F iflag) = #iflag tios
 						 val (O.F oflag) = #oflag tios
@@ -279,18 +278,18 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
 					     end
 
 	fun sendbreak (fd, duration) = Ccall(posix_tty_tcsendbreak, fs_intof fd, duration)
-	    
+
 	fun drain fd = Ccall(posix_tty_tcdrain, fs_intof fd)
-	    
+
 	fun flush (fd, QS qs) = Ccall(posix_tty_tcflush,fs_intof fd, qs)
-	    
+
 	fun flow (fd, FA action) = Ccall(posix_tty_tcflow,fs_intof fd, action)
-	    
+
       end
 
     fun getpgrp fd = P.wordToPid(int32touint32(Ccall(posix_tty_tcgetpgrp,fs_intof fd)))
 
-    fun setpgrp (fd, pid) = Ccall(posix_tty_tcsetpgrp,fs_intof fd, 
+    fun setpgrp (fd, pid) = Ccall(posix_tty_tcsetpgrp,fs_intof fd,
 				  uint32toint32(P.pidToWord pid))
 
   end (* structure POSIX_TTY *)

@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Lemma *)
 (* Author: Carsten Schuermann *)
 

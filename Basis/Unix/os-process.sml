@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude List Word8 PreOS OS_PROCESS Posix CleanUp *)
 (* os-process.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

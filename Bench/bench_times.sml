@@ -1,5 +1,3 @@
-(*$import Time Timer List String life leroy fft boyer simple tyan msort pia frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort Quicksort2 Isort Takc Taku Getopt TextIO CommandLine Int OS *)
-
 local 
   val stringem = String.concat
   val printem = List.app print

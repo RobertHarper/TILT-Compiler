@@ -1,5 +1,3 @@
-(*$import String Core MACHINEUTILS Sparc Int Util *)
-
 structure Sparcutils
     :> MACHINEUTILS =
 struct
@@ -22,12 +20,12 @@ struct
    val min_freg = freg 0
    val max_ireg = ireg 31
    val max_freg = freg 62
-   fun nextReg (reg as (R _)) = 
+   fun nextReg (reg as (R _)) =
           if (eqRegs reg max_ireg) then min_ireg else (ireg(regNum reg +1))
      | nextReg (reg as (F _)) =
           if (eqRegs reg max_freg) then min_freg else (freg(regNum reg +2))
 
-   fun prevReg (reg as (R _)) = 
+   fun prevReg (reg as (R _)) =
           if (eqRegs reg min_ireg) then max_ireg else (ireg(regNum reg -1))
      | prevReg (reg as (F _)) =
           if (eqRegs reg min_freg) then max_freg else (freg(regNum reg -2))
@@ -35,32 +33,32 @@ struct
    fun listToSet lst = Regset.addList(Regset.empty, lst)
    fun setToList set = Regset.listItems set
 
-   fun regsBelow' (reg as (R _)) = 
+   fun regsBelow' (reg as (R _)) =
        if (eqRegs reg min_ireg) then
 	 [min_ireg]
-       else if (regLE min_ireg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE min_ireg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
-     | regsBelow' (reg as (F _)) = 
+     | regsBelow' (reg as (F _)) =
        if (eqRegs reg min_freg) then
 	 [min_freg]
-       else if (regLE min_freg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE min_freg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
 
    val regsBelow = listToSet o regsBelow'
 
-   fun regsAbove' (reg as (R _)) = 
+   fun regsAbove' (reg as (R _)) =
        if (eqRegs reg max_ireg) then
 	 [max_ireg]
-       else if (regLE max_ireg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE max_ireg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
-     | regsAbove' (reg as (F _)) = 
+     | regsAbove' (reg as (F _)) =
        if (eqRegs reg max_freg) then
 	 [max_freg]
-       else if (regLE max_freg reg) then 
-	 (reg::(regsBelow' (prevReg reg))) 
+       else if (regLE max_freg reg) then
+	 (reg::(regsBelow' (prevReg reg)))
        else []
 
    val regsAbove = listToSet o regsAbove'
@@ -68,9 +66,9 @@ struct
 
    val unsaved_regs  = listToSet [Rat, Rzero, Fat, Rsp, Rat2, Fat2]
 
-   val C_caller_saved_regs = 
+   val C_caller_saved_regs =
        listToSet[ireg 8,  ireg 9,  ireg 10, ireg 11, ireg 12, ireg 13,
-		 ireg 16, ireg 17, ireg 18, ireg 19, ireg 20, ireg 21, ireg 22, ireg 23, 
+		 ireg 16, ireg 17, ireg 18, ireg 19, ireg 20, ireg 21, ireg 22, ireg 23,
 		 ireg 24, ireg 25, ireg 26, ireg 27, ireg 28, ireg 29,
 		 freg 0,  freg 2,  freg 4,  freg 6, freg 8,
 		 freg 10, freg 12, freg 14, freg 16, freg 18,
@@ -95,29 +93,29 @@ struct
        val num_indirect_int_args = 32
        val num_indirect_fp_args = 64
    in
-       val indirect_int_args = 
+       val indirect_int_args =
 	   listdiff(Regset.listItems (regsBelow (ireg (num_indirect_int_args - 1))), special_iregs)
-       val indirect_fp_args  = 
+       val indirect_fp_args  =
 	   Regset.listItems (regsBelow (freg (num_indirect_fp_args - 2)))
    end
 
    val indirect_ra_reg   = Rra
    val indirect_int_res  = indirect_int_args
    val indirect_fp_res   = indirect_fp_args
-   val indirect_caller_saved_regs = 
+   val indirect_caller_saved_regs =
        listToSet ([indirect_ra_reg] @ indirect_int_args @ indirect_fp_args)
-   val indirect_callee_saved_regs = 
+   val indirect_callee_saved_regs =
        Regset.difference(listToSet general_regs, indirect_caller_saved_regs)
 
-  fun makeAsmHeader(KNOWN_PROCSIG{framesize,ra_offset,...}) = 
+  fun makeAsmHeader(KNOWN_PROCSIG{framesize,ra_offset,...}) =
       let val result =  "\t.proc   07\n"
       in  result
       end
     | makeAsmHeader _ = error "framesize/ra_offset unrealized in UNKNOWN_PROCSIG"
 
-  fun msRegList l = 
+  fun msRegList l =
     let fun doer(r,acc) = acc ^ " " ^ (msReg r)
-    in  foldr doer "" l 
+    in  foldr doer "" l
     end
   fun msRegSet s = msRegList (setToList s)
 

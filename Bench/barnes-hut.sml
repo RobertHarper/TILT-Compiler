@@ -1,5 +1,3 @@
-(*$import Int List Math64 Real String *)
-
 (* Thread safety due to no top-level refs *)
 
 (*This has both parallel and non-parallel versions.  The parallel version are 

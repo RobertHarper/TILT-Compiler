@@ -1,4 +1,3 @@
-(*$import Position Firstlude TiltPrim Prelude Time *)
 (* os-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -32,7 +31,7 @@ signature OS_FILE_SYS =
     val modTime  : string -> Time.time
     val fileSize : string -> Position.int
     val setTime  : string * Time.time option -> unit
-	
+
     val remove   : string -> unit
     val rename   : {old : string, new : string} -> unit
 

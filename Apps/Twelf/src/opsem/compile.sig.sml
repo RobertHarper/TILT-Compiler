@@ -1,4 +1,3 @@
-(*$import INTSYN COMPSYN *)
 (* Compiler *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

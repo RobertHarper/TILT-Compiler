@@ -1,31 +1,29 @@
-(*$import Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil NilSubst ANALYZE NilDefs *)
-
 (* This module performs function usage analysis.
    The result is some information for each term-level function
-      and the way it is used each time it appears.  First, 
-      we record the size of the function.  Second, each occurrence 
-      of the function variable is classified by 
+      and the way it is used each time it appears.  First,
+      we record the size of the function.  Second, each occurrence
+      of the function variable is classified by
 	  (1) a flag indicating whether the usage occurred
 	     inside the scope of the function (or one mutually defined)
-	  (2) a level number indicating how fully the (curried) 
-	  function is applied.  Note that if the result of early 
+	  (2) a level number indicating how fully the (curried)
+	  function is applied.  Note that if the result of early
 	  applications "escape", then later applications are not eligible.
 
-   Here are three examples of showing the occurrence levels 
+   Here are three examples of showing the occurrence levels
       of the function variable f.
 
    val g = (f, 5)      level = 0
    val g = f 5         level = 1
    val g = f 5 6       level = 2
 
-   The analysis will attempt to compute the maximum level for each use.  
+   The analysis will attempt to compute the maximum level for each use.
 
    Consider this expression:
 
    let val g = f 5
        val h = g 6
    in  ...
-   end	 
+   end
 
    If g occurs in ..., then the level number for the occurrence of f is 1.
    Otherwise, g does not escape (i.e., is used only in a further application)
@@ -37,21 +35,21 @@
        of the function, then the function is not recursive.
    (2) If all occurrences of a function has a level number higher than 0,
        then the function does not escape.
-   (3) If a function is used only once non-recursively with a level number 
+   (3) If a function is used only once non-recursively with a level number
        higher than 0, then the "inline once" optimization can be used.
    (4) If a function f is curried (e.g. has type int -> int -> int -> int)
        and each occurrence is non-recursive and has a level number higher
        than 2, then the first two arrows may be flattened to yield a function
        with type (int * int) -> int -> int, and each application of f
        is re-written.  For example, "f a b" becomes "f (a,b)".  It is guaranteed
-       that "f a" will not occur in isolation and escape.  
+       that "f a" will not occur in isolation and escape.
        This optimization is always beneficial as it requires no construction
        of wrapper functions.
 *)
 
 (* Some optimizations depend on all applications being of variables. *)
 
-structure Analyze :> ANALYZE = 
+structure Analyze :> ANALYZE =
 struct
   open Nil Name NilUtil
 
@@ -94,12 +92,12 @@ struct
       fun addConstraint(v, n, r) = constraints := Name.VarMap.insert(!constraints, v, (n,r))
 
       (* Add level constraints for a particular sequence of applications starting from a curried function. *)
-      fun applyOccur(f,binds : var list) = 
-	  let 
+      fun applyOccur(f,binds : var list) =
+	  let
 	    val _ = debugdo (fn () => (print "Variable ";Ppnil.pp_var f;print " applied\n"))
 	    val potentialLevel = 1 + (length binds)
 	    val r = ref potentialLevel
-	    (* We do not need to constrain the function itself, since it is not being 
+	    (* We do not need to constrain the function itself, since it is not being
 	     * bound here.
 	     *)
 	    val constraint = Listops.mapcount (fn (n,v) => (addConstraint(v, n + 1, r))) (binds)
@@ -110,7 +108,7 @@ struct
 
       (* Possibly update max level of a function based on an occurrence of a variable that is the result of an application
        * of it. *)
-      fun varOccur v = 
+      fun varOccur v =
 	let
 	  val _ = debugdo (fn () => (print "Variable ";Ppnil.pp_var v;print " escapes\n"))
 	in
@@ -119,7 +117,7 @@ struct
 	       (* The variable is not constrained *)
 	       NONE => ()
 	       (* The variable is a (possibly partially applied) function.
-		* r contains the highest level we can possibly assign to v 
+		* r contains the highest level we can possibly assign to v
 		* and whatever functions it is a partial application of
 		* (that is, the lowest level we have seen yet).  If this variable
 		* is an escaping occurrence of a partial application, then lower
@@ -131,7 +129,7 @@ struct
       (* Create the map to be returned based on data kept in sizeDefs and occurs *)
       fun collect() : funinfo Name.VarMap.map =
 	  let val table = Name.VarMap.map (fn (i,f) => {size = i, definition = f, occurs = []}) (!sizeDefs)
-	      fun folder ((v, inside, ref level), table) = 
+	      fun folder ((v, inside, ref level), table) =
 		  (case Name.VarMap.find(table, v) of
 		       NONE => table  (* application variable not a function *)
 		     | SOME {size, occurs, definition} =>
@@ -149,7 +147,7 @@ struct
 
   fun doList doObj objs = foldl (fn( obj,s) => (doObj obj) + s) 0 objs
 
-  fun doKind (kind:kind):int = 
+  fun doKind (kind:kind):int =
       1 + (case kind of
 	       Type_k => 0
 	     | SingleType_k c => doCon c
@@ -162,8 +160,8 @@ struct
   and doVklist vkList = doList doKind (map #2 vkList)
 
   and doCons cons = doList doCon cons
-  and doCon (con:con):int = 
-      1 + 
+  and doCon (con:con):int =
+      1 +
       (case con of
 	   Prim_c(pc,cs) => doCons cs
          | Mu_c(b,vcs) => doCons (map #2 (Sequence.toList vcs))
@@ -178,7 +176,7 @@ struct
          | App_c(c,cs) => doCons (c::cs)
 	 | Coercion_c{vars,from,to} => (doCon from) + (doCon to))
 
-  and doCbnd (conbnd:conbnd):int = 
+  and doCbnd (conbnd:conbnd):int =
 	1 + (case conbnd of
 		 Con_cb(v,c) => doCon c
 	       | Open_cb (v,vks,c) => (doVklist vks) + (doCon c)
@@ -187,8 +185,8 @@ struct
   and doTypes ts = 0
   and doTbnd tb = 0
   (* This is the function where variable occurrences are noticed and possibly used to update function max levels. *)
-  and doExp (exp:exp) : int = 
-	1 + 
+  and doExp (exp:exp) : int =
+	1 +
         (case exp of
            Var_e v => (varOccur v; 0)
 	 | Const_e pv =>
@@ -202,11 +200,11 @@ struct
                | _ => 0 (* small constants *)
            end
          | Let_e(ls,bnds,e) => (doBnds bnds) + (doExp e)
-         | Prim_e(ap,_,cs,es) => 
+         | Prim_e(ap,_,cs,es) =>
 	     (if (NilDefs.allprim_uses_carg ap) then
                  doCons cs
 	      else
-	         (doTypes cs; 0)) 
+	         (doTypes cs; 0))
              + (doExps es)
          | Switch_e sw => doSwitch sw
          | App_e(ot,e,cs,es1,es2) => (doCons cs) + (doExp e) + (doExps es1) + (doExps es2)
@@ -219,19 +217,19 @@ struct
 	 | Unfold_e (vars,from,to) => (doType from) + (doType to))
 
       and doExps (exps:exp list) : int = doList doExp exps
-    
+
       (* We look for as many applications as possible to find *)
       and doBnds [] = 0
 	(* We have an application (possibly partial) of a function.
-	 * We wish to find as many partial applications of it as possible, 
+	 * We wish to find as many partial applications of it as possible,
 	 * so that its level is less constrained.
 	 *)
-	| doBnds ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest) = 
-	  let 
+	| doBnds ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest) =
+	  let
 	    val junkVar = fresh_var()
 	    val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
 	    fun findApp (rPartials,cur,eAcc,
-			 all as ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest)) = 
+			 all as ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest)) =
 	      if (eq_var(f,cur))
 		then let val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
 		     in  findApp(v::rPartials,v,e::eAcc,rest)
@@ -251,20 +249,20 @@ struct
 	  end
 	| doBnds (first::rest) = (doBnd first) + (doBnds rest)
 
-      and doBnd (bnd: bnd) : int = 
-        1 + 
+      and doBnd (bnd: bnd) : int =
+        1 +
 	(case bnd of
 	   Con_b(Runtime,cb) => doCbnd cb
          | Con_b(Compiletime,cb) => (doTbnd cb; 0)
          | Exp_b(v,nt,e) => doExp e
-         | Fixopen_b vfSeq => 
+         | Fixopen_b vfSeq =>
 	     let val vf = Sequence.toList vfSeq
 		 fun doFunction((v, c),
-				f as Function{body,...}) = 
-	            let 
+				f as Function{body,...}) =
+	            let
 		      val _ = doType c
 	              val size = doExp body
-	              val _ = if (!debug) then 
+	              val _ = if (!debug) then
 	                         (print "size of ";
 	                          Ppnil.pp_var v;
 	                          print " is ";
@@ -284,32 +282,32 @@ struct
      and doExpopt NONE = 1
        | doExpopt (SOME e) = 1 + doExp e
 
-     and doSwitch switch = 
+     and doSwitch switch =
         (case switch of
            Intsw_e{arg,size,arms,default,result_type} =>
 	       (doExps (arg :: (map #2 arms))) +
-	       (doExpopt default) 
+	       (doExpopt default)
          | Sumsw_e{arg,sumtype,bound,arms,default,result_type} =>
-	       (doExps (arg :: (map #3 arms))) + 
+	       (doExps (arg :: (map #3 arms))) +
 	       (doExpopt default)
          | Exncase_e{arg,bound,arms,default,result_type} =>
 	       (doExps (arg :: ((map #1 arms) @ (map #3 arms)))) +
 	       (doExpopt default)
 	 | Ifthenelse_e _ => error "Ifthenelse not implemented yet"
-         | Typecase_e{arg,arms,default,result_type} => 
-	       (doCon arg) + (doExp default) + 
+         | Typecase_e{arg,arms,default,result_type} =>
+	       (doCon arg) + (doExp default) +
 	       doList (fn (pc,vks,e) => (doExp e) + (doVklist vks)) arms)
 
   fun doExport (ExportValue(l,v)) = doExp(Var_e v)
     | doExport (ExportType(l,v)) = doCon(Var_c v)
 
   (* Produce statistics on occurrences of function symbols in a module *)
-  fun analyze (Nil.MODULE{imports, bnds, exports}) = 
+  fun analyze (Nil.MODULE{imports, bnds, exports}) =
       let val _ = reset()
 	  (* Skip imports *)
 	  val _ = doBnds bnds
 	  val _ = map doExport exports
       in  collect()
-      end    
+      end
 
 end

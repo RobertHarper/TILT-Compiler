@@ -1,5 +1,3 @@
-(*$import Real Math TextIO String *)
-
 fun runSomePia dataFile = 
 let
 open Math

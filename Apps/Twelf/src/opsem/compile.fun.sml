@@ -1,4 +1,3 @@
-(*$import COMPILE INTSYN COMPSYN WHNF TYPECHECK NAMES *)
 (* Compiler *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

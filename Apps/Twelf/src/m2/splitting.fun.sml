@@ -1,4 +1,3 @@
-(*$import Int List SPLITTING GLOBAL METASYN METAABSTRACT METAPRINT MODESYN WHNF INDEX PRINT UNIFY LambdaStructs *)
 (* Splitting *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import Core MACHINE MACHINEUTILS TRACETABLE *)
 (* Definitions of annotated instructions and basic blocks, and some
    simple dataflow operations on them.*)
 
@@ -26,7 +25,7 @@ sig
 	   truelabel: true if the label of this basic block must
 	   appear in the code, i.e. it is the target of branch or jump etc.
 
-	   succs: successors in the control-flow graph 
+	   succs: successors in the control-flow graph
 
    The sets def/use are defined according section 10.6, live-variable analysis,
    of Aho, Sethi, Ullman.
@@ -49,13 +48,13 @@ sig
 
    val live : Machine.instruction annotated -> Core.Regset.set
    val defUse : Machine.instruction -> Machine.register list * Machine.register list
-  
+
    (* liveness analysis *)
    val blockDefUse : (Machine.register option * Tracetable.trace) Core.Regmap.map -> bblock -> bblock
 
    (* use the results of the liveness analysis to annotate individual instructions *)
    val liveVars : ((Machine.register option * Tracetable.trace) Core.Regmap.map)
-                   -> bblock Core.Labelmap.map -> Machine.label -> 
+                   -> bblock Core.Labelmap.map -> Machine.label ->
                       bblock Core.Labelmap.map
 
 end

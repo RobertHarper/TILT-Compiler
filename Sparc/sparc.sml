@@ -1,11 +1,9 @@
-(*$import TilWord32 Int Name Word32 Core SPARC String Rtl Util Char Listops Stats List *)
-
 structure  Sparc :> SPARC =
 struct
 
     val exclude_intregs = []
     val error = fn s => Util.error "sparc.sml" s
-	
+
     (* Check against Runtime/thread.h *)
     val iregs_disp          = 0
     val fregs_disp          = iregs_disp + 4 * 32
@@ -22,7 +20,7 @@ struct
 
     val heapLimit_disp      = iregs_disp + 4 * 5
 
-structure Machine = 
+structure Machine =
   struct
     open Rtl
     open Core
@@ -36,9 +34,9 @@ structure Machine =
     val Rat     = R 16  (* Standard Sparc convention *)
     val Rframe  = R 30   (* Standard Sparc convention - we reserve but do not keep this up to date
 			    Messing up the frame pointer can cause extremely weird behavior.
-			    For example, the VM system may be triggered at any point and it will 
+			    For example, the VM system may be triggered at any point and it will
 			    freak out if this register contains a weird value. To demonstrate,
-			    the following program will act weird when compiled with cc or gcc 
+			    the following program will act weird when compiled with cc or gcc
 			    unless the static option is used:
 
 			    .text
@@ -82,19 +80,19 @@ structure Machine =
   (* BCC = branch on carry-clear = BGEU;  BCS = branch on carry-set = BLU *)
   datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS | BVC | BVS
   datatype cbrr_instruction   = BRZ | BRLEZ | BRLZ | BRNZ | BRGZ | BRGEZ
-  datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE 
+  datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE
   datatype trap_instruction   = TVS | TNE
   datatype int_instruction    =
     ADD | ADDCC | SUB | SUBCC
   | SMUL | SMULCC | UMUL | UMULCC
-  | SDIV | SDIVCC | UDIV | UDIVCC 
+  | SDIV | SDIVCC | UDIV | UDIVCC
   | AND | OR | XOR | ANDNOT | ORNOT | XORNOT
   | SRA | SRL | SLL
 
-  datatype fp_instruction    = 
+  datatype fp_instruction    =
     FADDD | FSUBD | FMULD | FDIVD
 
-  datatype fpmove_instruction = 
+  datatype fpmove_instruction =
     FABSD | FNEGD | FMOVD | FITOD | FDTOI
 
   datatype imm = INT of int             (* Must fit in 13 bits sign-extended *)
@@ -103,12 +101,12 @@ structure Machine =
                | LOWLABEL of label * Word32.word  (* The low 10 bits of the label plus offset *)
                | HIGHLABEL of label * Word32.word (* The high 22 bits of the label plus offset *)
 
-  datatype operand = 
+  datatype operand =
     REGop of register
   | IMMop of imm
 
   datatype software_trap_number = ST_INT_OVERFLOW
-      
+
   datatype specific_instruction =
     NOP  (* stylized for easier reading *)
   (* For sethi, the imm must be of the HIGH flavor *)
@@ -130,7 +128,7 @@ structure Machine =
   | FPMOVE  of fpmove_instruction * register * register
   | TRAP of trap_instruction * software_trap_number
 
-    datatype instruction = 
+    datatype instruction =
 	BASE     of base_instruction
       | SPECIFIC of specific_instruction
 
@@ -150,7 +148,7 @@ structure Machine =
       | msReg (R 30) = "%fp"
       | msReg (R n) = "%r" ^ (ms n)
       | msReg (F n) = "%f" ^ (ms n)
-	
+
 
   fun loadi_to_ascii LD  = "ld"
     | loadi_to_ascii LDUB = "ldub"
@@ -185,7 +183,7 @@ structure Machine =
     | cbrr_to_ascii BRNZ  = "brnz"
     | cbrr_to_ascii BRGZ  = "brgz"
     | cbrr_to_ascii BRGEZ = "brgez"
-      
+
   fun trap_to_ascii TVS  = "tvs"
     | trap_to_ascii TNE  = "tne"
 
@@ -211,9 +209,9 @@ structure Machine =
     | int_to_ascii  SDIVCC = "sdivcc"
     | int_to_ascii  UDIV   = "udiv"
     | int_to_ascii  UDIVCC = "udivcc"
-    | int_to_ascii  AND    = "and"  
-    | int_to_ascii  OR     = "or"  
-    | int_to_ascii  XOR    = "xor"  
+    | int_to_ascii  AND    = "and"
+    | int_to_ascii  OR     = "or"
+    | int_to_ascii  XOR    = "xor"
     | int_to_ascii  ANDNOT = "andn"
     | int_to_ascii  ORNOT  = "orn"
     | int_to_ascii  XORNOT = "xnor"
@@ -243,11 +241,11 @@ structure Machine =
            "(tail)CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
-    | rtl_to_ascii (CALL {func=INDIRECT Raddr, calltype = Rtl.ML_TAIL _, ...}) = 
+    | rtl_to_ascii (CALL {func=INDIRECT Raddr, calltype = Rtl.ML_TAIL _, ...}) =
            "(tail)CALL via " ^ msReg Raddr
-    | rtl_to_ascii (CALL {func=INDIRECT Raddr, ...}) = 
+    | rtl_to_ascii (CALL {func=INDIRECT Raddr, ...}) =
            "CALL via " ^ msReg Raddr
-    | rtl_to_ascii (CALL {func=DIRECT (func,_), args,results,...}) = 
+    | rtl_to_ascii (CALL {func=DIRECT (func,_), args,results,...}) =
            "CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
@@ -274,7 +272,7 @@ structure Machine =
 			   | HIGHLABEL _ => error "msDisp with HIGHLABEL"
 			   | _ =>  "[" ^ (msReg rd) ^ "+" ^ (msImm imm) ^ "]")
 
-  fun msInstrSpecific instrSpecific = 
+  fun msInstrSpecific instrSpecific =
       (case instrSpecific of
          NOP => "nop"
        | (SETHI (imm, Rdest)) => ("sethi" ^ tab ^
@@ -310,11 +308,11 @@ structure Machine =
                                 ((cbrf_to_ascii instr) ^ tab ^ (msLabel label))
        | (INTOP(instr, Rsrc1, op2, Rdest)) =>
                                 ((int_to_ascii instr) ^ tab ^
-				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^ 
+				 (msReg Rsrc1) ^ comma ^ (msOperand op2) ^
 				 comma ^ (msReg Rdest))
        | (FPOP(instr, Rsrc1, Rsrc2, Rdest)) =>
                                 ((fp_to_ascii instr)^ tab ^
-				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2) ^ 
+				 (msReg Rsrc1) ^ comma ^ (msReg Rsrc2) ^
 				 comma ^ (msReg Rdest))
        | (FPMOVE(instr, Rsrc, Rdest)) =>
                                 ((fpmove_to_ascii instr)^ tab ^
@@ -326,9 +324,9 @@ structure Machine =
   datatype finalInstr = NO_INSTRUCTION of string        (* do not prepend tab *)
                       | ONE_INSTRUCTION of string
                       | DELAY_INSTRUCTION of string     (* must insert nop *)
-                      | MULTIPLE_INSTRUCTION of string list 
+                      | MULTIPLE_INSTRUCTION of string list
 
-  fun msInstrBase (base : base_instruction) = 
+  fun msInstrBase (base : base_instruction) =
       (case base of
 	BSR (label, NONE, _) => DELAY_INSTRUCTION ("call" ^ tab ^ (msLabel label))
       | BSR (label, SOME sra, _) => error "can't generate code for BSR(label, SOME linkreg, _)"
@@ -363,7 +361,7 @@ structure Machine =
 				 ("ld\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest)),
 				 ("ld\t" ^ (msDisp(Rth, scratch2) ^ comma ^ (msReg (R (n+1)))))]
 	 end
-			 
+
       | PUSH (Rsrc, sloc) => ONE_INSTRUCTION ("PUSH\t" ^ (msReg Rsrc) ^ comma ^ (msStackLocation sloc))
       | POP (Rdest, sloc) => ONE_INSTRUCTION ("POP\t" ^ (msReg Rdest) ^ comma ^ (msStackLocation sloc))
       | PUSH_RET NONE => ONE_INSTRUCTION "PUSH_RET none"
@@ -375,7 +373,7 @@ structure Machine =
       | GC_CALLSITE label => ONE_INSTRUCTION ("GC CALLING SITE\t" ^ (msLabel label))
       | LADDR (Rdest, label) =>
 	   let val str1 = msInstrSpecific(SETHI(HIGHLABEL (label, 0w0), Rdest))
-	       val str2 = msInstrSpecific(INTOP(OR, Rdest, 
+	       val str2 = msInstrSpecific(INTOP(OR, Rdest,
 						IMMop (LOWLABEL (label,0w0)), Rdest))
 	   in  MULTIPLE_INSTRUCTION[str1,str2]
 	   end)
@@ -383,7 +381,7 @@ structure Machine =
   fun msInstr (SPECIFIC i) = ONE_INSTRUCTION(msInstrSpecific i)
     | msInstr (BASE i) = msInstrBase i
 
-  fun msInstrHelp(cmt, finalInstr) = 
+  fun msInstrHelp(cmt, finalInstr) =
       let val cmt' = if (cmt = "") then "" else cmt ^ "\n"
       in  (case finalInstr of
 	       NO_INSTRUCTION str => cmt' ^ str ^ "\n"
@@ -405,7 +403,7 @@ structure Machine =
       fun explodeToSci f_s =
 	  (explode f_s) @
 	  (if ((Char.contains f_s #"e") orelse (Char.contains f_s #"E"))
-	       then [] 
+	       then []
 	   else [#"e", #"0"])
     in
       (implode o fixSigns o explodeToSci) float_string
@@ -413,18 +411,18 @@ structure Machine =
 
 
   fun fixupString string =
-    let 
+    let
       fun makeDigit n = chr (n + 48)
       fun octal n =
 	  implode [#"\\",
 		   (makeDigit (n div 64)),
 		   (makeDigit ((n div 8) mod 8)),
 		   (makeDigit (n mod 8))]
-	
+
 
       fun charLoop [] = ""
 	| charLoop (ch::chs) =
-	  if (ch = 34) then  
+	  if (ch = 34) then
 	      "\\\"" ^ (charLoop chs) (* quotation mark " *)
 	  else if (ch = 92) then (* backslash *)
 	    "\\\\" ^ (charLoop chs)
@@ -448,7 +446,7 @@ structure Machine =
     | msData (INT32 (w))  = single (".word " ^ (wms w))
     | msData (FLOAT (f))  = single (".double 0r" ^ (fixupFloat f))
     | msData (DATA (label)) = single (".long " ^ (msLabel label))
-    | msData (DLABEL (label))   = 
+    | msData (DLABEL (label))   =
 	     [(1,if globalLabel label
 		     then ("\t.globl " ^ msLabel label ^ "\n" ^
 			   msLabel label ^ ":\n")
@@ -565,13 +563,13 @@ structure Machine =
 
 
   (* We perform one peephole optimization: filling of jmpl/retl delay slots.
-     If the first two instructions do not interfere in that their 
+     If the first two instructions do not interfere in that their
      def-use sets are entirely disjoint and the second instruction
      has a delay slot while the first does not (and is ultimately exactly one instruction),
      then the second can fill the delay slot of the first.
   *)
 
-  fun msInstructions cmt_instr_list = 
+  fun msInstructions cmt_instr_list =
       let val ci_list = map (fn (cmt,instr) => (cmt, instr, msInstr instr)) cmt_instr_list
 	  fun loop [] = []
             | loop [(c,i,s)] = [msInstrHelp (c,s)]
@@ -592,8 +590,8 @@ structure Machine =
       end
 
    (* map src registers using fs and destination using fd and return mapped instruction *)
-   fun translate_to_real_reg(i,fs,fd) = 
-     let 
+   fun translate_to_real_reg(i,fs,fd) =
+     let
        fun xspec (STOREI(oper, Rsrc, offset, Raddr)) = STOREI(oper, fs Rsrc, offset, fs Raddr)
          | xspec (LOADI(oper, Rdst, offset, Raddr)) = LOADI(oper, fd Rdst, offset, fs Raddr)
 	 | xspec (STOREF(oper, Fsrc, offset, Raddr)) = STOREF(oper, fs Fsrc,offset, fs Raddr)
@@ -629,7 +627,7 @@ structure Machine =
          | xbase (ILABEL l) = ILABEL l
 	 | xbase (ICOMMENT l) = ICOMMENT l
 	 | xbase (LADDR (Rdst, label)) = LADDR(fd Rdst,label)
-      in 
+      in
 	case i of
 	  SPECIFIC ii => SPECIFIC(xspec ii)
 	| BASE ii => BASE(xbase ii)
@@ -658,7 +656,7 @@ structure Machine =
    fun load_imm' (immed, Rdest) =
        let
 	   val _ = check_not_sp Rdest
-	   (* SETHI sets the upper 22 bits and zeroes the low 10 bits; 
+	   (* SETHI sets the upper 22 bits and zeroes the low 10 bits;
 	      OR can take a 13-bit signed immediate *)
 	   val high20 = w2i(W.rshifta(immed, 12))
 	   val high22  = w2i(W.rshifta(immed, 10))
@@ -684,7 +682,7 @@ structure Machine =
       is SP, then offset is aligned and it is safe to clobber the
       memory between SP and SP+offset.  When bumpReg is used for stack
       frame (de)allocation, this assumption is justified.  *)
-  
+
    fun bumpReg (_, 0, _) = nil
      | bumpReg (r, offset, rtemp) =
        let val (intop, sz) = if offset > 0
@@ -710,7 +708,7 @@ structure Machine =
    val large_stack_frame = counter "Large Stack Frames"
    val large_frame_access = counter "Large Frame Accesses"
 
-   fun allocate_stack_frame (sz, prevframe_maxoffset) = 
+   fun allocate_stack_frame (sz, prevframe_maxoffset) =
        let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
 	   val after = freshCodeLabel()
 	   val _ = if in_imm_range sz then () else large_stack_frame()
@@ -733,7 +731,7 @@ structure Machine =
 	    bumpSp (~sz),		(* Allocate frame on new stacklet *)
 	    [BASE(ILABEL after)]]
        end
-				
+
    fun deallocate_stack_frame sz =
        let val _ = if (sz >= 0) then ()
 		   else error "deallocate_stack_frame given negative stack size"
@@ -756,7 +754,7 @@ structure Machine =
       second source register.  (This is a legal addressing mode on the
       SPARC.)  We should perhaps make the load and store instructions
       take an "operand" rather than an "imm".
-	      
+
       For example, we want to write
 
 	        sethi   %hi(offset),%rtmp       ! one- or two- instruction
@@ -764,7 +762,7 @@ structure Machine =
 	        stw     %r, [%sp + %rtmp]
 
       we have written
-	      
+
 	        sethi   %hi(offset),%rtmp       ! one- or two- instruction
 	        or      %rtmp,%lo(offset),%rtmp ! sequence to load 32-bit immediate
 		add     %sp, %rtmp, %rtmp
@@ -796,7 +794,7 @@ structure Machine =
 							 [SPECIFIC(STOREF(STF,  src,     INT offset,     base))])
 	       | _ => error "push")
        end
-   
+
    fun pop (dst,actual_location) =
        let val reduce_offset = fn (offset, f) => reduce_offset (Rsp, offset, dst, f)
        in
@@ -816,7 +814,7 @@ structure Machine =
   fun assign2s (IN_REG r) = msReg r
     | assign2s (ON_STACK s) = "STACK:" ^ (msStackLocation s)
     | assign2s (HINT r) = "HINT(" ^ (msReg r) ^ ")"
-    | assign2s UNKNOWN = "UNKNOWN"    
+    | assign2s UNKNOWN = "UNKNOWN"
 
    val special_iregs = listunique[Rzero, Rexnptr, Rth, R 3, Rheap, Rhlimit, R 6, R 7,
 				  Rat, Rat2, Rsp, Rexnarg, Rra, Rframe]
@@ -825,12 +823,12 @@ structure Machine =
    val general_iregs = listdiff(int_regs, listunion(special_iregs, map ireg exclude_intregs))
    val general_fregs = listdiff(fp_regs,special_fregs)
 
-   val special_regs  = listunion(special_iregs, special_fregs) 
+   val special_regs  = listunion(special_iregs, special_fregs)
    val general_regs  = listdiff(physical_regs, special_regs)
 
-      
+
  end
- 
+
  open Machine
 
 end

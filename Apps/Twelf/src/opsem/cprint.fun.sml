@@ -1,4 +1,3 @@
-(*$import String CPRINT INTSYN COMPSYN PRINT FORMATTER NAMES *)
 (* Printer for Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 

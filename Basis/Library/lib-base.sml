@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude LIB_BASE Int TopLevel General *)
 (* lib-base.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -21,7 +20,7 @@ structure LibBase : LIB_BASE =
 	  raise (Fail(concat[module, ".", func, ": ", msg]))
 
     val version = {
-	    date = "June 1, 1996", 
+	    date = "June 1, 1996",
 	    system = "SML/NJ Library",
 	    version_id = [1, 0]
 	  }

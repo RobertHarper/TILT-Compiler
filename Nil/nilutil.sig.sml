@@ -1,5 +1,3 @@
-(*$import Name TilWord32 Sequence Prim Nil NilSubst Alpha *)
-
 signature NILUTIL =
   sig
       type arrow = {openness : Nil.openness, effect : Nil.effect,
@@ -15,12 +13,12 @@ signature NILUTIL =
     val makeExpB : Nil.var * Nil.niltrace * Nil.exp -> Nil.bnd list
 
 
-    (* The free??? functions take 
+    (* The free??? functions take
          (1) a flag indicating whether to look inside kinds (true when not present)
-         (2) an integer indicating the minimum lambda depth a free variable has to be 
+         (2) an integer indicating the minimum lambda depth a free variable has to be
          (3) the object whose free variables are needed
-       The free variables are returned as set.  
-       When 2 sets are returned, the first is the term level fvs followed by the type level ones 
+       The free variables are returned as set.
+       When 2 sets are returned, the first is the term level fvs followed by the type level ones
     *)
     val freeExpConVarInExnHandler  : bool * int * Nil.exp  -> Name.VarSet.set * Name.VarSet.set
     val freeExpConVarInExp  : bool * int * Nil.exp  -> Name.VarSet.set * Name.VarSet.set
@@ -28,12 +26,12 @@ signature NILUTIL =
     val freeExpConVarInKind : bool * int * Nil.kind -> Name.VarSet.set * Name.VarSet.set
     val freeExpConVarInBnd  : bool * int * Nil.bnd  -> Name.VarSet.set * Name.VarSet.set
     val freeConVarInCon     : bool * int * Nil.con  -> Name.VarSet.set
-    val freeConVarInKind    :        int * Nil.kind -> Name.VarSet.set       
+    val freeConVarInKind    :        int * Nil.kind -> Name.VarSet.set
     val freeVarInKind       :        int * Nil.kind -> Name.VarSet.set
 
     (* get the bound var from a conbnd *)
     val varBoundByCbnd : Nil.conbnd -> Nil.var
-      
+
     val varsBoundByCbnds : Nil.conbnd list -> Nil.var list
     val varsBoundByBnds  : Nil.bnd list -> Nil.var list
 
@@ -47,7 +45,7 @@ signature NILUTIL =
 
     val makeConb    : Nil.conbnd -> Nil.bnd  (* Annotated as Runtime *)
 
-  (* Given a record expression r and a list lbls 
+  (* Given a record expression r and a list lbls
      of labels, produce the term corresponding to r.lbls *)
     val makeSelect  : Nil.exp -> Nil.label list -> Nil.exp
 
@@ -62,7 +60,7 @@ signature NILUTIL =
 		  level : int,
 		  boundcvars : Name.VarSet.set,
 		  boundevars : Name.VarSet.set}
-    type handlers = 
+    type handlers =
 	{exphandler : bound * Nil.exp -> Nil.exp changeopt,
 	 bndhandler : bound * Nil.bnd -> (Nil.bnd list) changeopt,
 	 conhandler : bound * Nil.con -> Nil.con changeopt,

@@ -1,3 +1,2 @@
-(*$import REAL *)
 structure Real64 : REAL where type real = real
 	 		  and type Math.real = real

@@ -1,4 +1,3 @@
-(*$import Timers TimingStructs *)
 (* Timers *)
 (* Author: Frank Pfenning *)
 

@@ -1,4 +1,3 @@
-(*$import UREF *)
 (* simple-uref.sml
  *
  * UNIONFIND DATA STRUCTURE WITH PATH COMPRESSION
@@ -29,7 +28,7 @@ structure SimpleURef : UREF =
     fun uRef x = ref (ECR x)
 
     fun !! p = let val (ECR x) = !(find p) in x end
-      
+
     fun equal (p, p') = (find p = find p')
 
     fun update (p, x) = let val p' = find p
@@ -43,7 +42,7 @@ structure SimpleURef : UREF =
 	  in
 	    if p' = q' then () else p' := PTR q'
 	  end
- 
+
     val union = link
 
     fun unify f (p, q) = let

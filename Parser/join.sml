@@ -1,6 +1,3 @@
-(*$import YaccBase *)
-
-
 (* functor Join creates a user parser by putting together a Lexer structure,
    an LrValues structure, and a polymorphic parser structure.  Note that
    the Lexer and LrValues structure must share the type pos (i.e. the type
@@ -9,7 +6,7 @@
 *)
 
 
-(* functor JoinWithArg creates a variant of the parser structure produced 
+(* functor JoinWithArg creates a variant of the parser structure produced
    above.  In this case, the makeLexer take an additional argument before
    yielding a value of type unit -> (svalue,pos) token
  *)

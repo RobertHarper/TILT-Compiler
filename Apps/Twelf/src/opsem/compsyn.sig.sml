@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

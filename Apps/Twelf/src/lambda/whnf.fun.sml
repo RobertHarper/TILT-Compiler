@@ -1,4 +1,3 @@
-(*$import WHNF INTSYN *)
 (* Weak Head-Normal Forms *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

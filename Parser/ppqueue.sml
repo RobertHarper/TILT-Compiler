@@ -1,5 +1,3 @@
-(*$import Array *)
-
 (* ppqueue.sml
  *
  * COPYRIGHT (c) 1996 Bell Laboratories.
@@ -43,7 +41,7 @@ struct
     fun is_empty (QUEUE{front=ref ~1, back=ref ~1,...}) = true
       | is_empty _ = false
 
-    fun mk_queue n init_val = 
+    fun mk_queue n init_val =
 	if (n < 2)
 	then raise REQUESTED_QUEUE_SIZE_TOO_SMALL
 	else QUEUE{elems=array(n, init_val), front=ref ~1, back=ref ~1, size=n}
@@ -62,7 +60,7 @@ struct
 		   then raise QUEUE_FULL
 		   else (update(elems,i,item); front := i)
 	       end
-      | en_queue Qback item (Q as QUEUE{elems,front,back,size}) = 
+      | en_queue Qback item (Q as QUEUE{elems,front,back,size}) =
 	  if (is_empty Q)
 	  then (front := 0; back := 0;
 		update(elems,0,item))
@@ -72,7 +70,7 @@ struct
 		   else (update(elems,i,item); back := i)
 	       end
 
-    fun de_queue Qfront (Q as QUEUE{front,back,size,...}) = 
+    fun de_queue Qfront (Q as QUEUE{front,back,size,...}) =
 	  if (!front = !back) (* unitary queue *)
 	  then clear_queue Q
 	  else front := ++(!front) size

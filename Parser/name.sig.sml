@@ -1,6 +1,4 @@
-(*$import Symbol HashTable ORD_SET ORD_MAP *)
-
-signature NAME = 
+signature NAME =
   sig
 
     type var = int                   (* IS  generative *)
@@ -35,7 +33,7 @@ signature NAME =
     (* injective *)
     val tag2int : tag -> int
     val internal_label  : string -> label
-    val symbol_label    : Symbol.symbol -> label   
+    val symbol_label    : Symbol.symbol -> label
 
     (* useful printing routine *)
     val var2int      : var   -> int     (* v_23 -> 23 *)
@@ -47,7 +45,7 @@ signature NAME =
 
     (* These should be used by NameBlast only *)
     val reset_varmap : unit -> unit  (* clear out the string part of variables *)
-    val deconstruct_label : label -> int * string 
+    val deconstruct_label : label -> int * string
     val construct_label : int * string -> label
     val deconstruct_loc : loc -> int
     val construct_loc : int -> loc
@@ -59,16 +57,16 @@ signature NAME =
        We collect the label-mangling functions here to simplify the
        interface and definition of keep_import.
     *)
+    val to_unit	     : label -> label	(* compilation unit main module *)
     val to_open      : label -> label	(* module that is open for lookup *)
     val to_dt        : label -> label	(* module that implements a datatype *)
-    val to_nonexport : label -> label	(* nonexport, top-level labels *)
     val to_cluster   : label -> label	(* cluster of mutually recursive functions *)
     val to_eq        : label -> label	(* equality function *)
     val to_coercion  : label -> label	(* coercion function *)
 
+    val is_unit	     : label -> bool
     val is_open      : label -> bool
     val is_dt        : label -> bool
-    val is_nonexport : label -> bool
     val is_cluster   : label -> bool
     val is_eq        : label -> bool
     val is_coercion  : label -> bool
@@ -97,7 +95,7 @@ signature NAME =
        GC'ed, filtered, etc.
      *)
     val keep_import : label -> bool
-	
+
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
 
@@ -113,5 +111,5 @@ signature NAME =
 
     structure PathMap : ORD_MAP where type Key.ord_key = vpath
     structure PathSet : ORD_SET  where type Key.ord_key = vpath
-   
+
   end

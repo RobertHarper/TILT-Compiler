@@ -1,4 +1,3 @@
-(*$import Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR List *)
 (* Original implementation.  Does not try cycling through temporary regs. *)
 
 
@@ -23,7 +22,7 @@ struct
    (* Color the interference graph *)
 
    (* Use Stats.subtimer(str,f) for real timing *)
-   fun subtimer (str,f) = f  
+   fun subtimer (str,f) = f
    fun simplify_graph_time f = f (* Stats.subtimer("simplify graph",f) *)
    fun select_colors_time f =  f (* Stats.subtimer("select colors",f) *)
 
@@ -45,14 +44,14 @@ struct
        fun rlookup [] _ = NONE
          | rlookup ((reg, bias) :: rest) reg' =
 	   if (eqRegs reg reg') then (SOME bias) else (rlookup rest reg')
-	     
+
 
        fun getBias' pseudoreg physicalreg =
 	      case rlookup (getBias pseudoreg) physicalreg of
 		 NONE => 0
 	       | SOME bias => bias
 
-	(* make a local copy of the interference graph 
+	(* make a local copy of the interference graph
 	   for use in the simplify phase *)
 
         val g = Ifgraph.copy igraph
@@ -63,19 +62,19 @@ struct
 
         val _ = Regmap.appi (fn (key,_) =>
 			      delete_node key
-			      handle x => 
+			      handle x =>
 				(print ("error deleting stack resident var"^Machine.msReg key);
 				 raise x)) stack_resident
-	          
 
-       (* invariant for simplify: physical registers must not 
+
+       (* invariant for simplify: physical registers must not
 	  be returned by the nodes function on interference graphs. *)
- 
+
        fun simplify node_stack =
        let val nodes = Ifgraph.nodes_excluding_physical g
        in  if (Regset.isEmpty nodes) then node_stack
 	   else
-	       let 
+	       let
 		   fun folder (node,acc as (good,bad)) =
 		       let val count = degree node
 			   val isInt = (case node of R _ => true | F _ => false)
@@ -89,7 +88,7 @@ struct
 
 		    (* if there aren't any, then spill pseudo-randomly *)
 
-		    val random_nodes = 
+		    val random_nodes =
 			  (case (good_nodes,bad_nodes) of
 			   ([],[]) => [valOf(Regset.find (fn _ => true) nodes)]
 			   | _ => [])
@@ -108,7 +107,7 @@ struct
 	      simplify  (List.concat[random_nodes, bad_nodes, good_nodes, node_stack])
 	   end
        end
-       val simplify = simplify_graph_time simplify 
+       val simplify = simplify_graph_time simplify
 
        val general_iregs_set = listToSet general_iregs
        val general_fregs_set = listToSet general_fregs
@@ -140,7 +139,7 @@ struct
 		 in
 		   if (bias > bias') then
 		     bestReg pseudoreg rest bias reg
-		   else if (bias = bias') andalso 
+		   else if (bias = bias') andalso
 		           (regNum reg < regNum reg') then
 			   bestReg pseudoreg rest bias reg
 			else
@@ -149,10 +148,10 @@ struct
 
 	     val neighbors = Ifgraph.edges igraph node
 
-	     val chosen_reg = 
+	     val chosen_reg =
 	       if (Regset.numItems neighbors > 128) then NONE
-	       else 
-	         let 
+	       else
+	         let
 		   fun folder (nbr,acc) =
 		       if isPhysical nbr then Regset.add(acc,nbr)
 		       else case Regmap.find (mapping, nbr) of
@@ -160,9 +159,9 @@ struct
 			     | _ => acc
 		   val neighborcolors = Regset.foldl folder Regset.empty neighbors
 
-	           val regs_available = 
+	           val regs_available =
 		       Regset.listItems
-		       (case node of 
+		       (case node of
 			    (R _) => Regset.difference(general_iregs_set, neighborcolors)
 			  | (F _) => Regset.difference(general_fregs_set, neighborcolors))
 
@@ -173,8 +172,8 @@ struct
 
           in
 	     case chosen_reg of
-	       SOME r => 
-		 (if (! debug) then 
+	       SOME r =>
+		 (if (! debug) then
 		    (emitString "Allocating "; print_reg r;
 		     emitString " for pseudoregister "; print_reg node;
 		     emitString "\n") else ();

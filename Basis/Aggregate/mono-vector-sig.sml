@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* mono-vector-sig.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -26,10 +25,10 @@ signature MONO_VECTOR =
 
     val mapi   : (int * elem -> elem) -> vector * int * int option -> vector
     val map    : (elem -> elem) -> vector -> vector
-	
+
     val appi   : (int * elem -> unit) -> vector * int * int option -> unit
     val app    : (elem -> unit) -> vector -> unit
-	
+
     val foldli : (int * elem * 'a -> 'a) -> 'a -> vector * int * int option -> 'a
     val foldri : (int * elem * 'a -> 'a) -> 'a -> vector * int * int option -> 'a
 

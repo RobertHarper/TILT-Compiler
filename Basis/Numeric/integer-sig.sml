@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreInt StringCvt *)
 (* integer-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -14,7 +13,7 @@ signature INTEGER =
 
     val toLarge   : int -> PreLargeInt.int
     val fromLarge : PreLargeInt.int -> int
-	
+
     val toInt     : int -> PreInt.int
     val fromInt   : PreInt.int -> int
 
@@ -30,7 +29,7 @@ signature INTEGER =
     val rem : int * int -> int
     val + : int * int -> int
     val - : int * int -> int
-	
+
     val compare : int * int -> order
     val >  : int * int -> bool
     val >= : int * int -> bool

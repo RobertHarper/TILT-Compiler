@@ -1,11 +1,9 @@
-(*$import Word32 TilWord32 Stats Rtl RTLTAGS Util *)
-
 (* It is crucial that the layout of tags here matches that of the runtime.
    Compare with file Runtime/tag.h
 *)
 structure Rtltags :> RTLTAGS =
 struct
-  
+
    val uninitVal = 0w258 : TilWord32.word
 
     (* The low 3 bits of the 32-bit word describe the object type - 0w0 and 0w4 for forwarding ptrs; 0w7 for special tags *)
@@ -22,7 +20,7 @@ struct
     val segproceed      = TilWord32.orb(0w15, TilWord32.lshift(0w2, 5))
     val mirrorGlobalTag = TilWord32.orb(0w15, TilWord32.lshift(0w3, 5))
 
-    (* For raw(bytes), pointer(words), and real(double) arrays, 
+    (* For raw(bytes), pointer(words), and real(double) arrays,
        the upper 29 bits measure the length of the array in bytes.
        The following offsets can be used for masking in the logical lengths. *)
    val word_array_len_offset = 3        (* measured in bytes *)
@@ -30,8 +28,8 @@ struct
    val ptr_array_len_offset  = 3        (* measured in bytes - mult of 4 *)
    val mirror_ptr_array_len_offset = 3  (* measured in bytes - mult of 8 *)
 
-    (* For records, bits 3 to 7 inclusive give the record length which 
-       can vary from 1 to 24.  Note that the empty record is represented 
+    (* For records, bits 3 to 7 inclusive give the record length which
+       can vary from 1 to 24.  Note that the empty record is represented
        with a small value.  Bits 8 to 31 indicate whether the fields of
        the record is a pointer or not.  If bit 8 of the header is set,
        then the first field of the record is a pointer and so on.... *)
@@ -46,7 +44,7 @@ struct
     val i2w = W.fromInt
     val w2i = W.toInt
     (* positive shift disp is left shift *)
-    fun bitshift(v,disp) = if (disp >= 0) 
+    fun bitshift(v,disp) = if (disp >= 0)
 			       then W.lshift(v,disp)
 			   else W.rshiftl(v,~disp)
     val bitor = W.orb
@@ -78,18 +76,18 @@ struct
 			   path : Rtl.rep_path} list}
 
     fun recordtag flags : tag =
-      let 
+      let
 	val len = length flags
 	fun make_tag() =
-	  let 
+	  let
 	    fun stat_loop []          = 0
 	      | stat_loop (NOTRACE_INT :: rest) = 0 + 2 * (stat_loop rest)
 	      | stat_loop (NOTRACE_CODE :: rest) = 0 + 2 * (stat_loop rest)
-	      | stat_loop (NOTRACE_REAL :: rest) = 
+	      | stat_loop (NOTRACE_REAL :: rest) =
 		error "can't have record with double-floats"
-	      | stat_loop (LOCATIVE :: rest) = 
+	      | stat_loop (LOCATIVE :: rest) =
 		error "can't have record with locatives"
-	      | stat_loop (UNSET :: rest) = 
+	      | stat_loop (UNSET :: rest) =
 		error "can't have record with unsets"
 	      | stat_loop (COMPUTE _ :: rest) = 0 + 2 * (stat_loop rest)
 	      | stat_loop (NOTRACE_LABEL :: rest)  = 0 + 2 * (stat_loop rest)

@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Recursion *)
 (* Author: Carsten Schuermann *)
 

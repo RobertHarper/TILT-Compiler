@@ -1,4 +1,3 @@
-(*$import *)
 (* Front End Interface *)
 (* Author: Frank Pfenning *)
 

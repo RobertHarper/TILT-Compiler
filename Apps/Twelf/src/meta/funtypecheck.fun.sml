@@ -1,4 +1,3 @@
-(*$import FUNTYPECHECK FUNSYN STATESYN ABSTRACT TYPECHECK CONV WHNF PRINT SUBORDINATE WEAKEN FUNPRINT *)
  (* Type checking for functional proof term calculus *)
 (* Author: Carsten Schuermann *)
 

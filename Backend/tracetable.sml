@@ -1,11 +1,9 @@
-(*$import TilWord32 Rtl Core TRACETABLE Int Util List Pprtl Stats *)
-
 (* This is how the compiler tells the runtime about how to determine all roots
-   from the registers and from the stack.  The runtime, at GC, will walk the 
+   from the registers and from the stack.  The runtime, at GC, will walk the
    stack.  For each frame encountered, it will look up information generated
    by this module and determine whether each stack location is live or not.
    In addition, it will also compute the liveness of the registers.
-   
+
    The runtime will assume that the return address of all stack frames
    are stored in slot 0 of the stack frame.
 
@@ -49,7 +47,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     open Rtl
 
     datatype calllabel = CALLLABEL of Core.label
-    datatype trace     = TRACE_YES 
+    datatype trace     = TRACE_YES
                        | TRACE_NO
                        | TRACE_UNSET   (* unset variable; handle specially for gener GC *)
       (* traceability depends on traceability of reg at this moment *)
@@ -64,14 +62,14 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		       | TRACE_GLOBAL_REC of label * int list
 
       (* trace status should never be needed.  A bug if it is.*)
-		       | TRACE_IMPOSSIBLE  
+		       | TRACE_IMPOSSIBLE
 
-    datatype callinfo = CALLINFO of 
-      {calllabel  : calllabel, 
+    datatype callinfo = CALLINFO of
+      {calllabel  : calllabel,
        framesize  : int,
        retaddpos  : int,
        regtrace   : (Core.register * trace) list,
-       stacktrace : (int * trace) list                   
+       stacktrace : (int * trace) list
        }
 
     val call_entrysize = 16;
@@ -89,13 +87,13 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     val wone = W.one
     val wzero = W.zero
     (* positive shift disp is left shift *)
-    fun bitshift(v,disp) = if (disp >= 0) 
+    fun bitshift(v,disp) = if (disp >= 0)
 			       then W.lshift(v,disp)
 			   else W.rshiftl(v,~disp)
     local
       val count = ref 5000
     in
-      fun makeintid() = 
+      fun makeintid() =
 	(count := !count + 1; !count)
     end
 
@@ -103,24 +101,24 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | layout sz n [] = (INT32 (wzero))::(layout sz (n-1) nil)
       | layout sz 0 ls = (INT32 (wzero))::(layout sz (sz-1) ls)
       | layout sz n (a::rest) = (INT32 a)::(layout sz (n-1) rest)
-	
+
     local
 	fun bot2w acc 16 []         = [acc]
 	  | bot2w acc 16 arg        = acc::(bot2w (i2w 0) 0 arg)
 	  | bot2w acc _  []         = [acc]
-	  | bot2w acc pos (a::rest) = 
+	  | bot2w acc pos (a::rest) =
 	    bot2w (W.orb(acc,bitshift(i2w a,2*pos))) (pos+1) rest
 	fun bit2w acc 32 []         = [acc]
 	  | bit2w acc 32 arg        = acc::(bit2w (i2w 0) 0 arg)
 	  | bit2w acc _  []         = [acc]
-	  | bit2w acc pos (a::rest) = 
+	  | bit2w acc pos (a::rest) =
 	    bit2w (W.orb(acc,bitshift(i2w a,pos))) (pos+1) rest
     in
 	fun botlist2wordlist arg = bot2w (i2w 0) 0 arg
 	fun bitlist2wordlist arg = bit2w (i2w 0) 0 arg
     end
 
-    fun fourbyte_2word (a,b,c,d) = 
+    fun fourbyte_2word (a,b,c,d) =
         let
           val lowshort  = a + b * 256
           val highshort = c + d * 256
@@ -133,13 +131,13 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | bytelist2wordlist [a]     = bytelist2wordlist[a,0,0,0]
       | bytelist2wordlist [a,b]   = bytelist2wordlist[a,b,0,0]
       | bytelist2wordlist [a,b,c] = bytelist2wordlist[a,b,c,0]
-      | bytelist2wordlist (a::b::c::d::rest) = 
-        let val w = if (little_endian) 
+      | bytelist2wordlist (a::b::c::d::rest) =
+        let val w = if (little_endian)
 		      then fourbyte_2word(a,b,c,d)
 		    else fourbyte_2word(d,c,b,a)
         in w::(bytelist2wordlist rest)
         end
-  
+
 
     local
 	type byte = int
@@ -154,7 +152,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 					then error "NOT A BYTE"
 				      else bytes := ((!bytes) @ [b])
 	fun getbytes() = let val x = (map INT32 (bytelist2wordlist(rev(!bytes))))
-			 in case x of 
+			 in case x of
 			     [] => []
 			   | _ => (COMMENT "bytedata")::x
 			 end
@@ -184,7 +182,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
     (*
        A special trace with indices [a0, ..., a_{n-1}] is encoded in
        2+floor(n/6) words as follows
-       
+
      		 3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1
 		 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
 		+---------------------------------------------------------------+
@@ -198,12 +196,12 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		+---------------------------------------------------------------+
 	k/6	|0 0| b_{k-1} | b_{k-2} | b_{k-3} | b_{k-4} | b_{k-5} | b_{k-6} |
 		+---------------------------------------------------------------+
-       
+
        where
        		typ encodes the type of the special trace
 
 		data is used to calculate the base address (type-specific)
-		
+
 		k = 6(1 + floor (n/6))
 
 		b_i = 1 + a_i	if 0 <= i < n
@@ -216,7 +214,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
        This information is decoded by the runtime in stack.h and stack.c.
      *)
     local
-	fun local_error indices = 
+	fun local_error indices =
 	     (print ("indices2int: ");
 	      app (fn m => (print (Int.toString m);
 			    print "  ")) indices;
@@ -245,12 +243,12 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		val zero = i2w 0
 		val error = fn s => (local_error indices; error s)
 		val bits = (map (indexBits error) indices) @ [zero]
-	    in  
+	    in
 		case foldr pack (0,zero,nil) bits
 		  of (0, _, acc) => (hd acc, tl acc) (* Gauranteed non-empty *)
 		   | (_, w, acc) => (w, acc)
 	    end
-	
+
 	datatype special_type =
 	    STACK of Core.stacklocation
 	  | LABEL of Core.label
@@ -268,7 +266,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	  | typeData (GLOBAL lab) = DATA lab
     in
 	datatype special_type = datatype special_type
-	    
+
 	(* add_special : special_type * int list -> unit *)
 	fun add_special (ty, indices) =
 	    let val tybits = W.lshift (i2w (typeInt ty), bitsPerIndex * indicesPerWord)
@@ -282,11 +280,11 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 
     fun tr2bot TRACE_NO                  = (inc Count_no; 0)
       | tr2bot TRACE_YES                 = (inc Count_yes; 1)
-      | tr2bot (TRACE_CALLEE  r)         = 
+      | tr2bot (TRACE_CALLEE  r)         =
 	(inc Count_callee; addbyte (Core.regNum r); 2)
-      | tr2bot (TRACE_UNSET) = 
-	(inc Count_unset_stack; 
-	addword_int (i2w (~1)); addword_int (i2w (~1)); 3) 
+      | tr2bot (TRACE_UNSET) =
+	(inc Count_unset_stack;
+	addword_int (i2w (~1)); addword_int (i2w (~1)); 3)
       | tr2bot (TRACE_STACK sloc) = tr2bot(TRACE_STACK_REC (sloc, []))
       | tr2bot (TRACE_LABEL lab) = tr2bot (TRACE_LABEL_REC (lab, []))
       | tr2bot (TRACE_GLOBAL lab) = tr2bot (TRACE_GLOBAL_REC (lab, []))
@@ -296,19 +294,19 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	(inc Count_label_rec; add_special (LABEL lab, indices); 3)
       | tr2bot (TRACE_GLOBAL_REC (lab,indices)) =
 	(inc Count_label_rec; add_special (GLOBAL lab, indices); 3)
-      | tr2bot TRACE_IMPOSSIBLE          = 
+      | tr2bot TRACE_IMPOSSIBLE          =
 	error "cannot get a trace impossible while making table"
 
 
     fun regtr2bits _ TRACE_NO                  = (inc Count_no; (0,0))
       | regtr2bits _ TRACE_YES                 = (inc Count_yes; (1,0))
-      | regtr2bits cr (TRACE_CALLEE  r)        = 
+      | regtr2bits cr (TRACE_CALLEE  r)        =
 	if (cr = Core.regNum r) then
 	    (inc Count_callee; (1,1))
 	else (print ("WARN ERROR WRONG WRONG WRONG: regtr2bot: non matching TRACE_CALLEE: " ^
 		    (Int.toString cr) ^ " != " ^ (Int.toString (Core.regNum r)) ^ "\n");
 	      (1,0))
-      | regtr2bits _ (TRACE_UNSET) = 
+      | regtr2bits _ (TRACE_UNSET) =
 	(inc Count_unset_reg; addword_int (i2w (~1)); addword_int (i2w (~1)); (0,1))
       | regtr2bits _ (tr as TRACE_STACK sloc) = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_STACK_REC _) = (tr2bot tr; (0,1))
@@ -316,7 +314,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
       | regtr2bits _ (tr as TRACE_GLOBAL_REC _) =  (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_LABEL _)        = (tr2bot tr; (0,1))
       | regtr2bits _ (tr as TRACE_LABEL_REC _) =  (tr2bot tr; (0,1))
-      | regtr2bits _ TRACE_IMPOSSIBLE          = 
+      | regtr2bits _ TRACE_IMPOSSIBLE          =
 	error "cannot get a trace impossible while making table"
 
 
@@ -359,11 +357,11 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	    val _ = if (framesize mod 4 = 0) then ()
 		    else error "framesize not a multiple of 4"
 
-	    fun stacklookup n = 
+	    fun stacklookup n =
 		case (List.find (fn (v,t) => (n = v)) stacktrace) of
 		    NONE => TRACE_NO
 		  | (SOME (v,t)) => t
-	    fun reglookup n = 
+	    fun reglookup n =
 		let fun mapper (v,t) = if (n = Core.regNum v)
 					   then SOME t
 				       else NONE
@@ -382,7 +380,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	    val _ = clearwords()
 	    val _ = clearbytes()
 	    local
-		fun stackloop n = 
+		fun stackloop n =
 		    if (n >= framesize) then nil
 		    else
 			let val tr = stacklookup n
@@ -392,9 +390,9 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 				     else ())
 			in  tr2bot tr :: (stackloop (n+4))
 			end
-		fun regloop n = 
+		fun regloop n =
 		    if (n = 32) then (nil,nil)
-		    else 
+		    else
 			let val tr = reglookup n
 			    val _ = (if (!ShowDiag) then
 					 print ("Reg  " ^ (Int.toString n) ^ ":" ^
@@ -419,12 +417,12 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 					    !Count_label_rec +
 					    !Count_stack_rec +
 					    !Count_global_rec)
-		val sum = (n_spec + n_yes + n_no + n_callee) - 
+		val sum = (n_spec + n_yes + n_no + n_callee) -
 		    (spec + yes + no + callee)
 		val cursize = (sum + 15) div 16
 		val newsize = ((sum - (n_no - no)) + 8) div 8
 		val _ = if (sum = (framesize div 4)) then ()
-			else (print "OOPS: framesize =  "; print (Int.toString framesize); 
+			else (print "OOPS: framesize =  "; print (Int.toString framesize);
 			print "  and  sum count = "; print (Int.toString sum); print "\n")
 		val _ = if (!ShowDiag) then
 		    (print ("no,yes,callee,spec: " ^
@@ -434,7 +432,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 			    (Int.toString (n_spec - spec)) ^ "      " ^
 			    (Int.toString sum) ^ "    " ^
 			    (Int.toString (cursize - newsize)) ^
-			    (if (cursize < newsize) then "   BAD\n" else 
+			    (if (cursize < newsize) then "   BAD\n" else
 				 if (cursize = newsize) then "   SAME\n" else "   WIN\n")))
 			else ()
 		val stacktracewords = botlist2wordlist stackbots
@@ -446,28 +444,28 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	    val (bytedata,quad_ra_offset_word) =
 	      if ((retaddpos >= 0) andalso
 		  ((retaddpos mod 4) = 0))
-		then 
+		then
 		  if (retaddpos < 31 * 4)
 		    then (getbytes(),i2w (retaddpos div 4))
 		  else if (retaddpos <= 255 * 4)
 			 then (addbyte_at_beginning(retaddpos div 4);
 			       (getbytes(),i2w 15))
-		       else error 
+		       else error
 			 ("illegal retadd stack pos too large = " ^
 			  (Int.toString retaddpos))
 	      else error
 		("illegal retadd negative or non mult of 4 = " ^
 		 (Int.toString retaddpos))
 	    val specdata = bytedata @ (getwords())
-	    val calldata = 
-		(map INT32 regtracewords) @ 
+	    val calldata =
+		(map INT32 regtracewords) @
 		[COMMENT "stacktrace"] @
-		(map INT32 stacktracewords) @ 
+		(map INT32 stacktracewords) @
 		specdata
-	    fun datalength arg = 
-		foldr ((op +): (int*int) -> int) 0 
-		    (map 
-		     (fn (INT32 _) => 1 
+	    fun datalength arg =
+		foldr ((op +): (int*int) -> int) 0
+		    (map
+		     (fn (INT32 _) => 1
 		   | (DATA _) => 1
 		   | (COMMENT _) => 0
 		   | _ => error "datalength") arg)
@@ -477,7 +475,7 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 	    val entrysizeword = if (!TagEntry) then (i2w (4 + (datalength calldata)))
 				else (i2w (3 + (datalength calldata)))
 	    val bytestuffsizeword = (i2w (datalength bytedata))
-	    val sizedata = 
+	    val sizedata =
 		let
 		    fun check (what, v, limit) =
 			if W.ugte(v,i2w limit) then
@@ -505,10 +503,10 @@ functor Tracetable(val little_endian : bool) :> TRACETABLE =
 		((COMMENT "-------- label,sizes,reg")::
 		 labeldata :: templist)
 	end
-    
+
     fun MakeTableHeader label = [DLABEL(label)]
     fun MakeTable (calllist) = List.concat (map do_callinfo calllist)
-    fun MakeTableTrailer () = 
+    fun MakeTableTrailer () =
 	(if !ShowDebug
 	     then (print ("\nTraceability Table Summary: \n");
 		   print ("  Count_unset_reg: " ^ (Int.toString (!Count_unset_reg)) ^ "\n");

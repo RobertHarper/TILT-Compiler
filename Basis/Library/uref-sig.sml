@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* uref-sig.sml
  *
  * Interface to UnionFind package.
@@ -10,7 +9,7 @@
  *
  * DESCRIPTION
  *
- * Union/Find data type with ref-like interface.  A Union/Find structure 
+ * Union/Find data type with ref-like interface.  A Union/Find structure
  * consists of a type constructor 'a uref with operations for
  * making an element of 'a uref (make), getting the contents of
  * an element (!!), checking for equality of two elements (equal), and
@@ -47,9 +46,9 @@ signature UREF =
   sig
 
     type 'a uref
-	(* type of uref-elements with contents of type 'a *)  
+	(* type of uref-elements with contents of type 'a *)
 
-      
+
     val uRef: 'a -> 'a uref
 	(* uref x creates a new element with contents x *)
 
@@ -60,8 +59,8 @@ signature UREF =
 	 *)
 
     val !! : 'a uref -> 'a
-	(* !!e returns the contents of e. 
-	 * Note: if 'a is an equality type then !!(uref x) = x, and 
+	(* !!e returns the contents of e.
+	 * Note: if 'a is an equality type then !!(uref x) = x, and
 	 * equal(uref (!!x), x) = false.
 	 *)
 
@@ -70,8 +69,8 @@ signature UREF =
 	(* update(e, x) updates the contents of e to be x *)
 
     val unify : ('a * 'a -> 'a) -> 'a uref * 'a uref -> unit
-	(* unify f (e, e') makes e and e' equal; if v and v' are the 
-	 * contents of e and e', respectively, before unioning them, 
+	(* unify f (e, e') makes e and e' equal; if v and v' are the
+	 * contents of e and e', respectively, before unioning them,
 	 * then the contents of the unioned element is f(v,v')
 	 *)
 

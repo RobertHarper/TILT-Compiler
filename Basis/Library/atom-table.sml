@@ -1,4 +1,3 @@
-(*$import HashTableFn Atom *)
 (* atom-table.sml
  *
  * COPYRIGHT (c) 1996 AT&T Research.

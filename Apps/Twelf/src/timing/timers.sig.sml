@@ -1,4 +1,3 @@
-(*$import TimingStructs *)
 (* Timers collecting statistics about Twelf *)
 (* Author: Frank Pfenning *)
 

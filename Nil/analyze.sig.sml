@@ -1,8 +1,6 @@
-(*$import Nil Name *)
-
 (* Function usage analysis *)
 
-signature ANALYZE = 
+signature ANALYZE =
     sig
 	type funinfo = {definition : Nil.function,
 			size : int,

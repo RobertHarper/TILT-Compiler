@@ -1,4 +1,3 @@
-(*$import Word32 Rtl MACHINE Core *)
 signature SPARC =
 sig
 
@@ -26,19 +25,19 @@ sig
   (* BCC = branch on carry-clear = BGEU;  BCS = branch on carry-set = BLU *)
   datatype cbri_instruction   = BE | BNE | BG | BGE | BL | BLE | BGU | BLEU | BCC | BCS | BVC | BVS
   datatype cbrr_instruction   = BRZ | BRLEZ | BRLZ | BRNZ | BRGZ | BRGEZ
-  datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE 
+  datatype cbrf_instruction   = FBE | FBNE | FBG | FBGE | FBL | FBLE
   datatype trap_instruction   = TVS | TNE
   datatype int_instruction    =
     ADD | ADDCC | SUB | SUBCC
   | SMUL | SMULCC | UMUL | UMULCC
-  | SDIV | SDIVCC | UDIV | UDIVCC 
+  | SDIV | SDIVCC | UDIV | UDIVCC
   | AND | OR | XOR | ANDNOT | ORNOT | XORNOT
   | SRA | SRL | SLL
 
-  datatype fp_instruction    = 
-    FADDD | FSUBD | FMULD | FDIVD 
+  datatype fp_instruction    =
+    FADDD | FSUBD | FMULD | FDIVD
 
-  datatype fpmove_instruction = 
+  datatype fpmove_instruction =
     FABSD | FNEGD | FMOVD | FITOD | FDTOI
 
   datatype imm = INT of int             (* Must fit in 13 bits sign-extended *)
@@ -47,7 +46,7 @@ sig
                | LOWLABEL of label * Word32.word  (* The low 10 bits of the label plus offset *)
                | HIGHLABEL of label * Word32.word (* The high 22 bits of the label plus offset *)
 
-  datatype operand = 
+  datatype operand =
     REGop of register
   | IMMop of imm
 

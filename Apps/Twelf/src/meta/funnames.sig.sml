@@ -1,4 +1,3 @@
-(*$import FUNSYN *)
 (* Names of Constants and Variables *)
 (* Author: Carsten Schuermann *)
 

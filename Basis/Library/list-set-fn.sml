@@ -1,4 +1,3 @@
-(*$import ORD_KEY ORD_SET List LibBase *)
 (* list-set-fn.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

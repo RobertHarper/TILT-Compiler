@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude STREAM_IO *)
 (* imperative-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -20,7 +19,7 @@ signature IMPERATIVE_IO =
     val inputN   : instream * int -> vector
     val inputAll : instream -> vector
     val canInput : instream * int -> int option
-	
+
     val lookahead : instream -> elem option
     val closeIn : instream -> unit
     val endOfStream : instream -> bool

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreOS MONO_VECTOR MONO_ARRAY PRIM_IO Option General *)
 (* prim-io-fn.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -78,7 +77,7 @@ struct
 		in
 		  case readaNB{buf=a, i=0, sz=NONE}
 		   of SOME n' => SOME(A.extract(a, 0, SOME n'))
-		    | NONE => NONE  
+		    | NONE => NONE
 		  (* end case *)
 		end
 	  fun readvToReada readv {buf, i, sz} = let
@@ -143,7 +142,7 @@ struct
 	      readVec=readVec', readArr=readArr',
 	      readVecNB=readVecNB', readArrNB=readArrNB',
 	      block= #block rd, canInput = #canInput rd, avail = #avail rd,
-	      getPos = #getPos rd, setPos = #setPos rd, endPos = #endPos rd, 
+	      getPos = #getPos rd, setPos = #setPos rd, endPos = #endPos rd,
 	      verifyPos = #verifyPos rd,
 	      close= #close rd,
 	      ioDesc= #ioDesc rd
@@ -185,10 +184,10 @@ struct
 	  val writeVec' = (case wr
 		 of {writeVec=SOME f, ...} => SOME f
 		  | {writeArr=SOME f, ...} => SOME(writeaToWritev f)
-		  | {writeVecNB=SOME f, block=SOME b, ...} => 
+		  | {writeVecNB=SOME f, block=SOME b, ...} =>
 		      SOME(fn i => (b(); Option.valOf(f i)))
 		  | {writeArrNB=SOME f, block=SOME b, ...} =>
-		      SOME(fn x => (b(); writeaToWritev (Option.valOf o f) x)) 
+		      SOME(fn x => (b(); writeaToWritev (Option.valOf o f) x))
 		  | _ => NONE
 		(* end case *))
 	  val writeArr' = (case wr

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude SysWord List General OS_FILE_SYS OS_Path Posix POSIX_extern *)
 (* os-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -72,7 +71,7 @@ structure OS_FileSys :> OS_FILE_SYS =
 		  | {isAbs=true, arcs, ...} =>
 		      gotoRoot (n-1, List.@(arcs, rest))
 		(* end case *))
-	  and gotoRoot (n, arcs) = 
+	  and gotoRoot (n, arcs) =
 	       (chDir "/";
 	       walkPath (n, [], arcs))
 	  fun computeFullPath arcs =

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt PreString General *)
 (* num-format.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -93,7 +92,7 @@ structure NumFormat : sig
 
     fun fmtWord radix = PreString.implode o (fmtW radix)
 
-    fun fmtInt radix i = 
+    fun fmtInt radix i =
       if i2w i = 0wx80000000 then "~2147483648"
       else let
 	  val w32 = i2w(if less(i, 0) then negate(i) else i)

@@ -1,4 +1,3 @@
-(*$import MONO_ARRAY Array Vector *)
 (* mono-array-fn.sml
  *
  * COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies.

@@ -1,5 +1,3 @@
-(*$import Stats NilRename Normalize List Nil NilContext NilUtil Util Sequence Name TraceInfo TraceOps REIFY Listops Ppnil NilDefs ListPair NilSubst Prim NilStatic *)
-
 (* Determines which constructors are used as data, creates proper traces, and possibly adds extra bindings for reified types *)
 
 structure Reify :> REIFY =
@@ -8,7 +6,7 @@ struct
 
     val debug = Stats.ff("ReifyDebug")
     val rdebug = Stats.ff("ReifyMinDebug")
-    fun error s = Util.error "reify.sml" s 
+    fun error s = Util.error "reify.sml" s
 
     val float64 = NilDefs.ftype64
     val strip_arrow_norm = Normalize.strip_arrow_norm
@@ -24,7 +22,7 @@ struct
     val empty_pset = Name.VarSet.empty
 
     val print_pset =
-	Name.VarSet.app 
+	Name.VarSet.app
            (fn v => (print (Name.var2string v); print " "))
 
     val pset_add_list = Name.VarSet.addList
@@ -38,19 +36,19 @@ struct
 
     fun type_of (D, e) = Normalize.type_of (D, e)
 
-    (* reify_con_rt 
-         post: returned pset extends input pset, ensuring that 
+    (* reify_con_rt
+         post: returned pset extends input pset, ensuring that
                all the free variables of c will be available at run-time
      *)
-    fun reify_con_rt (c, pset) = 
+    fun reify_con_rt (c, pset) =
       let
          val free_cvars = NilUtil.freeConVarInCon(false, 0, c)
       in
          pset_add_pset (pset, free_cvars)
       end
-  
+
     and reify_cons_rt ([], pset) = pset
-      | reify_cons_rt (c::cs, pset) = 
+      | reify_cons_rt (c::cs, pset) =
           reify_cons_rt (cs, reify_con_rt (c, pset))
 
     fun reify_con Compiletime  (_, pset) = pset
@@ -77,8 +75,8 @@ struct
       let
 	fun doit con =
 	  case TraceOps.get_trace (ctxt, con) of
-	    SOME tinfo => 
-	      (TraceKnown tinfo, [], 
+	    SOME tinfo =>
+	      (TraceKnown tinfo, [],
 	       pset_add_pset (pset, TraceOps.get_free_vars' tinfo))
 	  | NONE =>
 	      let
@@ -109,7 +107,7 @@ struct
       | reify_exp ctxt (Prim_e (p, trs, cons, exps), pset) =
 	  let
 
-	    fun reify1 (con,tr,(bnds,pset)) = 
+	    fun reify1 (con,tr,(bnds,pset)) =
 	      let val (tr,bnd,pset) = do_reify(ctxt,con,tr,pset)
 	      in (con,tr,(bnd @ bnds,pset))
 	      end
@@ -122,11 +120,11 @@ struct
 		   end
 	       | _ => error "record tag created with non record type")
 
-             val (bnds,trs,pset') = 
+             val (bnds,trs,pset') =
 	       case p of
 		 NilPrimOp mk_record_gctag     => reify_record_gctag_con(trs,hd cons,pset)
-	       | NilPrimOp mk_sum_known_gctag  => 
-		   let 
+	       | NilPrimOp mk_sum_known_gctag  =>
+		   let
 		     val carrier = NilUtil.sum_project_carrier_type (#2 (Normalize.reduce_hnf (ctxt,hd cons)))
 		     val (tr,bnds,pset) = do_reify(ctxt,carrier,hd trs,pset)
 		   in (bnds,[tr],pset)
@@ -139,13 +137,13 @@ struct
 		      pset)
 
              val (exps', pset'') = reify_exps ctxt (exps, pset')
-	  in  
+	  in
              (NilUtil.makeLetE Sequential bnds (Prim_e (p, trs,cons, exps'))
 	      , pset'')
 	  end
 
       | reify_exp ctxt (App_e (openness, f, cons, exps0, exps1), pset) =
-	  let 
+	  let
              val (f', pset) = reify_exp ctxt (f, pset)
              val pset = reify_cons_rt (cons, pset)
              val (exps0', pset) = reify_exps ctxt (exps0, pset)
@@ -181,20 +179,20 @@ struct
           end
 
       | reify_exp ctxt (Let_e (Sequential, bs, e), pset) =
-          let 
-	      val (bs', BODY_EXP e', pset) = 
+          let
+	      val (bs', BODY_EXP e', pset) =
                 reify_seq_bnds ctxt (bs, BODY_EXP e, pset)
-	  in  
+	  in
               (Let_e (Sequential, bs', e'), pset)
 	  end
 
       | reify_exp ctxt (Let_e (Parallel, bnds, exp), pset) =
-          let 
+          let
               (* XXX:  Correct, but turning parallel bindings into
                        sequential bindings is probably sub-optimal! *)
-	      val (bnds', BODY_EXP exp', pset) = 
+	      val (bnds', BODY_EXP exp', pset) =
 		  reify_seq_bnds ctxt (bnds, BODY_EXP exp, pset)
-	  in  
+	  in
               (Let_e (Sequential, bnds', exp'), pset)
 	  end
 
@@ -207,7 +205,7 @@ struct
 	      (* result_type is here for typechecking only, so we don't
 	         need to reify it *)
           in
-              (Switch_e(Intsw_e{arg = arg', size = size, 
+              (Switch_e(Intsw_e{arg = arg', size = size,
                                 arms = arms', default = default',
 				result_type = result_type}),
                pset)
@@ -218,13 +216,13 @@ struct
           let
               val (arg',pset) = reify_exp ctxt (arg, pset)
               val (true,sumtype') = Normalize.reduce_hnf (ctxt, sumtype)
-              val (bnds, arms', pset) = 
+              val (bnds, arms', pset) =
                     reify_sum_arms ctxt (arms, bound, sumtype', pset)
               val (default',pset) = reify_exp_option ctxt (default, pset)
           in
               (NilUtil.makeLetE Sequential bnds
 	       (Switch_e (Sumsw_e{arg = arg', sumtype = sumtype,
-				  bound = bound, arms = arms', 
+				  bound = bound, arms = arms',
 				  default = default',
 				  result_type = result_type})),
                pset)
@@ -249,7 +247,7 @@ struct
           let val pset = reify_con_rt(arg,pset)
 	      val (arms', pset) = reify_typecase_arms ctxt (arms, pset)
 	      val (default',pset) = reify_exp ctxt (default, pset)
-	  in  (Switch_e (Typecase_e {arg = arg, arms = arms', 
+	  in  (Switch_e (Typecase_e {arg = arg, arms = arms',
 				    default = default', result_type = result_type}),
 	      pset)
 	  end
@@ -264,12 +262,12 @@ struct
 	    (* the constructor arguments need not be reified.            *)
 	    val (coercion,pset) = reify_exp ctxt (coercion,pset)
 	    val (exp,pset) = reify_exp ctxt (exp,pset)
-	in 
+	in
 	    (Coerce_e (coercion,cargs,exp),pset)
 	end
 
     and reify_typecase_arms ctxt ([], pset) = ([],pset)
-      | reify_typecase_arms ctxt ((pc,vklist,e)::arms, pset) = 
+      | reify_typecase_arms ctxt ((pc,vklist,e)::arms, pset) =
 	let val (arms',pset) = reify_typecase_arms ctxt (arms,pset)
 	    val ctxt = NilContext.insert_kind_list(ctxt,vklist)
 	    val (e',pset) = reify_exp ctxt (e,pset)
@@ -340,13 +338,13 @@ struct
 
     and reify_exp_option ctxt (NONE,pset) = (NONE, pset)
       | reify_exp_option ctxt (SOME e, pset) =
-          let 
+          let
              val (e', pset) = reify_exp ctxt (e,pset)
           in
              (SOME e', pset)
           end
 
-    and reify_one_exps ctxt (e, pset) = 
+    and reify_one_exps ctxt (e, pset) =
           let
              val (e', pset) = reify_exp ctxt (e,pset)
           in
@@ -354,16 +352,16 @@ struct
           end
 
     and reify_exps ctxt ([], pset) = ([], pset)
-      | reify_exps ctxt (e::es, pset) = 
+      | reify_exps ctxt (e::es, pset) =
           let
              val (e', pset) = reify_exp ctxt (e,pset)
              val (es', pset) = reify_exps ctxt (es, pset)
           in
              (e'::es', pset)
           end
-                 
+
     and reify_int_arms ctxt ([], pset) = ([], pset)
-      | reify_int_arms ctxt ((w,e)::arms, pset) = 
+      | reify_int_arms ctxt ((w,e)::arms, pset) =
           let
              val (arms', pset) = reify_int_arms ctxt (arms, pset)
              val (e', pset) = reify_exp ctxt (e, pset)
@@ -373,7 +371,7 @@ struct
 
     (* pre: c is a sum type in whnf *)
     and reify_sum_arms ctxt ([], _, _, pset) = ([], [], pset)
-      | reify_sum_arms ctxt ((w,nt,e)::arms, v, c, pset) = 
+      | reify_sum_arms ctxt ((w,nt,e)::arms, v, c, pset) =
           let
              val (bnds, arms', pset) = reify_sum_arms ctxt (arms, v, c, pset)
              val t = NilUtil.convert_sum_to_special(c, w)
@@ -385,7 +383,7 @@ struct
           end
 
     and reify_exn_arms ctxt ([], _, pset) = ([], [], pset)
-      | reify_exn_arms ctxt ((e1,nt,e2)::arms, v, pset) = 
+      | reify_exn_arms ctxt ((e1,nt,e2)::arms, v, pset) =
           let
              val (bnds, arms', pset) = reify_exn_arms ctxt (arms, v, pset)
              val (e1', pset) = reify_exp ctxt (e1, pset)
@@ -401,7 +399,7 @@ struct
     and reify_vfseq ctxt (vfseq, openness, pset) =
           let
              val vflist = Sequence.toList vfseq
-             val ctxt = NilContext.insert_con_list 
+             val ctxt = NilContext.insert_con_list
                          (ctxt, map #1 vflist)
 
 
@@ -418,24 +416,24 @@ struct
 
                       val vks_length = List.length vksA
 
-                      val error_message = 
+                      val error_message =
 		       "reify_vflist: Cannot hoist from Lambda-lambda function"
 
                       fun folder' ((v,nt,c), (bnds, pset)) =
 	                    let
-			       val (nt', new_bnds, pset') = 
+			       val (nt', new_bnds, pset') =
 				   do_reify(ctxt, c, nt, pset)
 
 			       val _ =
 				   if (vks_length > 0) then
-				       (case new_bnds of 
+				       (case new_bnds of
 					    [] => ()
 					  | _ =>  error error_message)
 				   else
 				       ()
 
-			       val bnds' = new_bnds @ bnds   
-                            in 
+			       val bnds' = new_bnds @ bnds
+                            in
 				((v,nt',c), (bnds', pset'))
                             end
 
@@ -464,7 +462,7 @@ struct
              val ctxt = NilContext.insert_con_list (ctxt,
                           (map (fn ((v,tipe),{...}) => (v, tipe)) vcllist))
 
-             fun folder (((v,c),{code, cenv, venv}), pset) = 
+             fun folder (((v,c),{code, cenv, venv}), pset) =
                    let
                       val (venv', pset) = reify_exp ctxt (venv, pset)
                    in
@@ -483,10 +481,10 @@ struct
 	end
       | reify_exports ctxt ((ExportValue _)::exports, pset) =
 	reify_exports ctxt (exports, pset)
-	
+
     fun reify_mod' ([], ctxt, MODULE {bnds, exports, ...}) =
 	let
-	    val (bnds', BODY_EXPORTS exports', pset) = 
+	    val (bnds', BODY_EXPORTS exports', pset) =
                   reify_seq_bnds ctxt (bnds, BODY_EXPORTS exports, empty_pset)
 	in
 	    (bnds', exports', pset, ctxt, [])
@@ -510,13 +508,13 @@ struct
 	    val (bnds', exports', pset, ctxt, is') =
 		reify_mod' (is, ctxt, module)
 
-	    val (phase, pset) = decide_con_b_phase ctxt (cb, pset)		
+	    val (phase, pset) = decide_con_b_phase ctxt (cb, pset)
 	in
 	    (bnds', exports', pset, ctxt, ImportBnd (phase, cb) :: is')
 	end
-      | reify_mod' (ImportValue (l, v, nt, c) :: is, ctxt, module) = 
+      | reify_mod' (ImportValue (l, v, nt, c) :: is, ctxt, module) =
 	let
-	    val nt' = 
+	    val nt' =
 		if (TraceOps.valid_trace (ctxt, nt)) then
 		    nt
 		else
@@ -533,15 +531,15 @@ struct
 	in
 	    (bnds', exports', pset, ctxt, imp' :: is')
 	end
-	
+
     fun reify_mod (nilmod as MODULE {imports, ...}) =
-        let val (bnds', exports', pset, ctxt, imports') = 
+        let val (bnds', exports', pset, ctxt, imports') =
 	       reify_mod' (imports, NilContext.empty (), nilmod)
 
 	in  if (!debug) then print_pset pset else ();
             MODULE {bnds = bnds', imports = imports',
 		    exports = exports'}
-            
+
 	end
 
 end

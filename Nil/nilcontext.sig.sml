@@ -1,10 +1,8 @@
-(*$import Nil NILCONTEXTPRE *)
-
 (* See nilcontext.sig.sml for the signature of the main implementation.
  * This just describes a version with parameters filled in.
  *)
 
-signature NILCONTEXT = 
+signature NILCONTEXT =
   sig
     include NILCONTEXTPRE
 

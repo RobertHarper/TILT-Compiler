@@ -1,6 +1,4 @@
-(*$import PRIM_IO CharArray Int *)
-
-structure TextPrimIO : PRIM_IO where type array = CharArray.array
+structure TextPrimIO : PRIM_IO where type array = char array
 				 and type vector = string
 				 and type elem =  char
-				 and type pos = Position.int
+				 and type pos = int

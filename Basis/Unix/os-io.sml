@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreTime List Word SysWord Int OS_IO PreOS Posix POSIX_extern *)
 (* os-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -8,9 +7,9 @@
  *
  *)
 
-structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc 
-			   and type poll_desc = PreOS.IO.poll_desc 
-                           and type poll_info = PreOS.IO.poll_info = 
+structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
+			   and type poll_desc = PreOS.IO.poll_desc
+                           and type poll_info = PreOS.IO.poll_info =
   struct
 
   (* an iodesc is an abstract descriptor for an OS object that

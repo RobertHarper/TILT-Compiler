@@ -1,5 +1,3 @@
-(*$import Int String TextIO Array List *)
-
 fun runSomeLexgen str = 
 let
 val makestring_int = Int.toString

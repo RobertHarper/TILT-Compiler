@@ -1,14 +1,12 @@
-(*$import Ast Source *)
-
-signature FRONT_END = 
+signature FRONT_END =
 sig
     datatype 'a parseResult
-      = EOF   
-      | ERROR 
+      = EOF
+      | ERROR
       | ABORT
       | SUCCESS of 'a
 
-    type 'a parser = Source.inputSource -> (int * string list * 'a) parseResult
+    type 'a parser = Source.inputSource -> 'a parseResult
 
     val parse_impl : Ast.dec parser
 

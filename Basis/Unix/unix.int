@@ -1,3 +1,1 @@
-(*$import UNIX *)
-
 structure Unix : UNIX where type signal = Posix.Signal.signal

@@ -1,3 +1,1 @@
-(*$import ERRORMSG *)
-
 structure ErrorMsg : ERRORMSG

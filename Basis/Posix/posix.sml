@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude POSIX_Error POSIX_Signal POSIX_Process POSIX_FileSys POSIX_IO_Str POSIX_Sys_DB POSIX_Tty POSIX_ProcEnv POSIX *)
 (* posix.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,7 +10,7 @@ structure Posix :>
     sig
 	include POSIX
 	  where type Error.syserror = int
-	  
+
 	sharing type Process.pid = ProcEnv.pid = TTY.pid
 	    and type Process.signal = Signal.signal
 	    and type ProcEnv.file_desc = FileSys.file_desc = TTY.file_desc = IO.file_desc

@@ -1,12 +1,10 @@
-(*$import Nil *)
-
 (*
  * The NilDefs structure is a central repository for NIL syntactic
  * definitions, and functions for constructing NIL constructs.
- * 
+ *
  *)
 
-signature NILDEFS = 
+signature NILDEFS =
   sig
 
     (* Is the constructor "small", according to the definition
@@ -30,42 +28,42 @@ signature NILDEFS =
      * writes, and allocates of mutable memory.  See Tarditi's thesis
      * section 5.3.1 for additional discussion.
      *
-     * These are only correct if the expression is in a-normal form, since 
+     * These are only correct if the expression is in a-normal form, since
      * they do not check the arguments to term-constructors.
      *
      * These are a conservative approximation only, since we do not recurse inside
-     * of switches, etc.  The intention is that these should only be used on 
+     * of switches, etc.  The intention is that these should only be used on
      * small things, to keep asymptotic completexity down (c.f. Tarditi)
      *)
 
-    (* storeEffect e  
-     * This function returns true if the expression e may potentially have a 
-     * store effect.  In particular, if this function returns false, then the 
-     * effect of e is a subset of {E,N}.  If this function returns true, 
+    (* storeEffect e
+     * This function returns true if the expression e may potentially have a
+     * store effect.  In particular, if this function returns false, then the
+     * effect of e is a subset of {E,N}.  If this function returns true,
      * then the effect of e is a subset of {E,N,A,R,W} (that is, any effect).
-     * Note that code that does *not* satisfy this predicate may still raise 
-     * exceptions or not terminate.  This means that while you can safely CSE 
-     * this term (c.f. Tarditi section 6.1), you cannot eliminate it as dead code. 
+     * Note that code that does *not* satisfy this predicate may still raise
+     * exceptions or not terminate.  This means that while you can safely CSE
+     * this term (c.f. Tarditi section 6.1), you cannot eliminate it as dead code.
      *)
     val storeEffect : Nil.exp -> bool
 
-    (* controlEffect e  
-     * This function returns true if the expression e may potentially have a 
-     * control effect.  In particular, if this function returns false, then the 
-     * effect of e is a subset of {A,R,W}.  If this function returns true, 
+    (* controlEffect e
+     * This function returns true if the expression e may potentially have a
+     * control effect.  In particular, if this function returns false, then the
+     * effect of e is a subset of {A,R,W}.  If this function returns true,
      * then the effect of e is a subset of {E,N,A,R,W} (that is, any effect).
-     * Note that code that does *not* satisfy this predicate may still depend on 
+     * Note that code that does *not* satisfy this predicate may still depend on
      * or modify the store.  This means that you cannot safely CSE this term
-     * nor eliminate it as dead code.  
+     * nor eliminate it as dead code.
      *)
     val controlEffect : Nil.exp -> bool
 
-    (* anyEffect e  
-     * This function returns true if the expression e may potentially have some 
-     * effect.  In particular, if this function returns false, then the effect 
-     * of e is a subset of {}.  If this function returns true, then the effect 
-     * of e is a subset of {E,N,A,R,W} (that is, any effect). 
-     * Note that code that does *not* satisfy this predicate is 
+    (* anyEffect e
+     * This function returns true if the expression e may potentially have some
+     * effect.  In particular, if this function returns false, then the effect
+     * of e is a subset of {}.  If this function returns true, then the effect
+     * of e is a subset of {E,N,A,R,W} (that is, any effect).
+     * Note that code that does *not* satisfy this predicate is
      * guaranteed to be tantamount to a value.
      *)
     val anyEffect : Nil.exp -> bool
@@ -85,7 +83,7 @@ signature NILDEFS =
     val path2con : Nil.var * Nil.label list -> Nil.con
     val con2path : Nil.con -> (Nil.var * Nil.label list) option
 
-    (*A tuple of constructors: <c1,...,cn> 
+    (*A tuple of constructors: <c1,...,cn>
      *)
     val con_tuple : Nil.con list -> Nil.con
 
@@ -98,7 +96,7 @@ signature NILDEFS =
     val tuple_kind : Nil.kind list -> Nil.kind
 
    (*
-         Creates the kind for a "tuple" of types of length n. 
+         Creates the kind for a "tuple" of types of length n.
          1-tuples yield kind Type, rather than a record kind.
     *)
     val kind_type_tuple : int -> Nil.kind
@@ -147,9 +145,9 @@ signature NILDEFS =
      * If optional name argument is present, then the record will be bound
      * to that variable, and the expression returned will simply be that var
      *)
-    val mk_record_with_gctag : 
-      (Nil.label list) * (Nil.niltrace list option) * 
-      (Nil.con list) * (Nil.exp list) * Nil.var option->  (Nil.bnd list * Nil.exp) 
+    val mk_record_with_gctag :
+      (Nil.label list) * (Nil.niltrace list option) *
+      (Nil.con list) * (Nil.exp list) * Nil.var option->  (Nil.bnd list * Nil.exp)
 
   end
 

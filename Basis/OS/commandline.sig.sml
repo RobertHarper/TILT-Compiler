@@ -1,5 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
-
 signature COMMAND_LINE =
 sig
     val name : unit -> string

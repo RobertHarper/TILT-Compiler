@@ -1,5 +1,3 @@
-(*$import Int *)
-
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* fixity.sml *)
 

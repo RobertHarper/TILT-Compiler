@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Termination Order *)
 (* Author: Carsten Schuermann *)
 

@@ -1,8 +1,6 @@
-(*$import TORTLVARARG Rtl Pprtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
-
 (* ASSUMPTIONS and GUARANTEES:
 *)
-	
+
 
 structure TortlVararg :> TORTL_VARARG =
 
@@ -26,20 +24,20 @@ val debug_full = ref false
     open NilUtil
     open Rtl
     open Name
-    open Rtltags 
-    open Pprtl 
+    open Rtltags
+    open Pprtl
     open TortlBase
 
 
     val error = fn s => (Util.error "tortl-vararg.sml" s)
 
-    val vararg_support = map0count (fn n => Name.fresh_named_var 
+    val vararg_support = map0count (fn n => Name.fresh_named_var
 				    ("vararg_support_" ^ (Int.toString n))) (number_flatten + 1)
-    val onearg_support = map0count (fn n => Name.fresh_named_var 
+    val onearg_support = map0count (fn n => Name.fresh_named_var
 				    ("onearg_support_" ^ (Int.toString n))) (number_flatten + 1)
-	
-(*    fun xmake_vararg_support() = 
-	let fun mapper(n,supportvar) = 
+
+(*    fun xmake_vararg_support() =
+	let fun mapper(n,supportvar) =
 	    let val cenv_var = Name.fresh_named_var "vararg_support_cenv"
 		val cenv_kind = kind_tuple(map0count (fn n => Type_k) (n+1))
 		fun proj k = Proj_c(Var_c cenv_var, generate_tuple_label (k+1))
@@ -49,22 +47,22 @@ val debug_full = ref false
 		val venv_type = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
 					   tFormals=[],eFormals=[(NONE,argc)],fFormals=0w0,
 					   body_type=resc}
-		val expvars = map0count (fn n => Name.fresh_named_var 
+		val expvars = map0count (fn n => Name.fresh_named_var
 					 ("vararg_support_expvar_" ^ (Int.toString n))) n
 		val vclist = mapcount (fn (n,ev) => (ev,proj n)) expvars
 		val arg = exp_tuple(map Var_e expvars)
 		val body = App_e(Closure,Var_e venv_var,[],[arg],[])
 		val call_function = Function{effect=Partial, recursive=Arbitrary,isDependent=false,
 					     tFormals=[(cenv_var,cenv_kind)],
-					     eFormals=map (fn (v,c) => (v,TraceUnknown,c)) 
+					     eFormals=map (fn (v,c) => (v,TraceUnknown,c))
 					                (vclist@[(venv_var,venv_type)]),
 					     fFormals=[],
 					     body=body, body_type=resc}
 
-		val convars = map0count (fn n => Name.fresh_named_var 
+		val convars = map0count (fn n => Name.fresh_named_var
 					 ("vararg_support_convar_" ^ (Int.toString n))) (n+1)
 		val vklist = map (fn v => (v,Type_k)) convars
-		    
+
 		val funvar = Name.fresh_named_var "vararg_support_funvar"
 		val resvar = Name.fresh_named_var "vararg_support_resvar"
 		val codevar = Name.fresh_named_var "vararg_support_codevar"
@@ -77,7 +75,7 @@ val debug_full = ref false
 		val flat_funcon = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
 					     tFormals=[],
 					     eFormals=map (fn (v,_) => (NONE, Var_c v))
-					                 (Listops.butlast vklist), 
+					                 (Listops.butlast vklist),
 					     fFormals=0w0,
 					     body_type=Var_c(#1(List.last vklist))}
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
@@ -100,8 +98,8 @@ val debug_full = ref false
 	in  mapcount mapper vararg_support
 	end
 
-    fun xmake_onearg_support() = 
-	let fun mapper(n,supportvar) = 
+    fun xmake_onearg_support() =
+	let fun mapper(n,supportvar) =
 	    let val cenv_var = Name.fresh_named_var "onearg_support_cenv"
 		val cenv_kind = kind_tuple(map0count (fn n => Type_k) (n+1))
 		fun proj k = Proj_c(Var_c cenv_var, generate_tuple_label (k+1))
@@ -110,8 +108,8 @@ val debug_full = ref false
 		val resc = proj n
 		val venv_var = Name.fresh_named_var "onearg_support_venv"
 		val venv_type = AllArrow_c{openness=Closure,effect=Partial,isDependent=false,
-					   tFormals=[], 
-					   eFormals=map (fn c => (NONE,c)) argcs, 
+					   tFormals=[],
+					   eFormals=map (fn c => (NONE,c)) argcs,
 					   fFormals=0w0,
 					   body_type=resc}
 		val expvar = Name.fresh_named_var "onearg_support_expvar"
@@ -126,23 +124,23 @@ val debug_full = ref false
 					     body=body,
 					     body_type=resc}
 
-		val convars = map0count (fn n => Name.fresh_named_var 
+		val convars = map0count (fn n => Name.fresh_named_var
 					 ("onearg_support_convar_" ^ (Int.toString n))) (n+1)
 		val vklist = map (fn v => (v,Type_k)) convars
-		    
+
 		val funvar = Name.fresh_named_var "onearg_support_funvar"
 		val resvar = Name.fresh_named_var "onearg_support_resvar"
 		val codevar = Name.fresh_named_var "onearg_support_codevar"
 		val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
-					tFormals=[], 
+					tFormals=[],
 					eFormals=[(NONE,
-						   tuple_con(map (Var_c o #1) (Listops.butlast vklist)))], 
+						   tuple_con(map (Var_c o #1) (Listops.butlast vklist)))],
 					fFormals=0w0,
 					body_type=Var_c(#1(List.last vklist))}
 		val flat_funcon = AllArrow_c{openness=Closure,effect=Partial, isDependent=false,
 					     tFormals=[],
-					     eFormals=map (fn (v,_) => (NONE, Var_c v)) 
-					                  (Listops.butlast vklist), 
+					     eFormals=map (fn (v,_) => (NONE, Var_c v))
+					                  (Listops.butlast vklist),
 					     fFormals=0w0,
 					     body_type=Var_c(#1(List.last vklist))}
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
@@ -165,7 +163,7 @@ val debug_full = ref false
 	in  mapcount mapper onearg_support
 	end
 *)
-    fun xmake_vararg xexp (state,argc,resc,function) = 
+    fun xmake_vararg xexp (state,argc,resc,function) =
 	let val noflattenl = fresh_code_label "noflatten"
 	    val afterl = fresh_code_label "vararg_after"
 	    val flattenl = fresh_code_label "flatten"
@@ -181,16 +179,16 @@ val debug_full = ref false
 
             (* dispatch to the right record case *)
 	    val _ = record_project(argc,1,numfieldi)                     (* load record field number *)
-	    fun mapper (n,recordlab) = 
+	    fun mapper (n,recordlab) =
 		add_instr(BCNDSI(EQ, numfieldi, IMM n, recordlab, false)) (* check for records *)
 	    val _ = mapcount mapper recordlabs
 	    val _ = add_instr(BR noflattenl)
-	    fun mapper (n,recordlab,supportvar) = 
+	    fun mapper (n,recordlab,supportvar) =
 		let val _ = add_instr(ILABEL recordlab)
 		    val convars = map0count (fn n => Name.fresh_named_var "vararg_convar") n
 		    val resconvar = Name.fresh_named_var "vararg_resconvar"
 		    val funvar = Name.fresh_named_var "vararg_funvar"
-		    fun folder(convar,(n,state)) = 
+		    fun folder(convar,(n,state)) =
 			let val tempi = alloc_regi TRACE
 			    val _ = record_project(argc,2+n,tempi)
 			in  (n+1,
@@ -201,10 +199,10 @@ val debug_full = ref false
 		    val state = add_conterm (state,NONE,resconvar,Type_k,
 					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial,
-					    tFormals=[], 
+					    tFormals=[],
 					    eFormals=[NilDefs.tuple_con(map Var_c convars)],
 					    fFormals=0w0, body_type=Var_c resconvar}
-		    val state = add_term  (state,funvar,funcon, 
+		    val state = add_term  (state,funvar,funcon,
 					   LOCATION(REGISTER (false,I function)), NONE)
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
 				  [Var_e funvar],[])
@@ -213,17 +211,17 @@ val debug_full = ref false
 		    val _ = add_instr(BR afterl)
 		in  state
 		end
-	    val states = map2count mapper (recordlabs, vararg_support) 
+	    val states = map2count mapper (recordlabs, vararg_support)
 
             (* non-flattening case *)
 	    val _ = (add_instr(ILABEL noflattenl);
 		     add_instr(MV(function,desti)))
-		
+
 	    val _ = add_instr(ILABEL afterl)
 	in  (join_states states, desti)
 	end
 
-    fun xmake_onearg xexp (state,argc,resc,function) = 
+    fun xmake_onearg xexp (state,argc,resc,function) =
 	let val noflattenl = fresh_code_label "noflatten"
 	    val afterl = fresh_code_label "onearg_after"
 	    val flattenl = fresh_code_label "flatten"
@@ -239,17 +237,17 @@ val debug_full = ref false
 
             (* dispatch to the right record case *)
 	    val _ = record_project(argc,1,numfieldi)      (* load record field number *)
-	    fun mapper (n,recordlab) = 
+	    fun mapper (n,recordlab) =
 		add_instr(BCNDSI(EQ, numfieldi, IMM n, recordlab, false)) (* check for record *)
 
 	    val _ = mapcount mapper recordlabs
 	    val _ = add_instr(BR noflattenl)
-	    fun mapper (n,recordlab,supportvar) = 
+	    fun mapper (n,recordlab,supportvar) =
 		let val _ = add_instr(ILABEL recordlab)
 		    val convars = map0count (fn n => Name.fresh_named_var "onearg_convar") n
 		    val resconvar = Name.fresh_named_var "onearg_resconvar"
 		    val funvar = Name.fresh_named_var "onearg_funvar"
-		    fun folder(convar,(n,state)) = 
+		    fun folder(convar,(n,state)) =
 			let val tempi = alloc_regi TRACE
 			    val _ = record_project(argc,2+n,tempi)
 			in  (n+1,
@@ -260,17 +258,17 @@ val debug_full = ref false
 		    val state = add_conterm (state,NONE,resconvar,Type_k,
 					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial,
-					    tFormals=[], 
+					    tFormals=[],
 					    eFormals=[NilDefs.tuple_con(map Var_c convars)],
 					    fFormals=0w0, body_type=Var_c resconvar}
 		    val newfuncon = AllArrow_c{openness=Closure, effect=Partial,
-					       tFormals=[], 
+					       tFormals=[],
 					       eFormals=map Var_c convars,
 					       fFormals=0w0, body_type=Var_c resconvar}
 		    val targs = (map Var_c convars) @ [Var_c resconvar]
 		    val supportcon = AllArrow_c{openness=Code, effect=Total,
 						tFormals = map (fn _ => (fresh_var(), Type_k)) targs,
-						fFormals = 0w0, 
+						fFormals = 0w0,
 						eFormals = [funcon],
 						body_type = newfuncon}
 		    val state = add_term (state,funvar,funcon,
@@ -281,12 +279,12 @@ val debug_full = ref false
 		    val _ = add_instr(BR afterl)
 		in  state
 		end
-	    val states = map2count mapper (recordlabs, onearg_support) 
+	    val states = map2count mapper (recordlabs, onearg_support)
 
             (* non-flattening case *)
 	    val _ = (add_instr(ILABEL noflattenl);
 		     add_instr(MV(function,desti)))
-		
+
 	    val _ = add_instr(ILABEL afterl)
 	in  (join_states states, desti)
 	end

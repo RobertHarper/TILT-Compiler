@@ -1,4 +1,3 @@
-(*$import Word8 Word Real Atom *)
 (* format-sig.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

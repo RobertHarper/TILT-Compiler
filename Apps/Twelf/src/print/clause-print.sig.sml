@@ -1,4 +1,3 @@
-(*$import INTSYN FORMATTER *)
 (* Clause Printing *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude QUEUE Fifo *)
 (* queue.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -17,13 +16,13 @@ structure Queue :> QUEUE =
 
     fun enqueue (q,x) = q := (Fifo.enqueue (!q, x))
 
-    fun dequeue q = let 
-          val (newq, x) = Fifo.dequeue (!q) 
+    fun dequeue q = let
+          val (newq, x) = Fifo.dequeue (!q)
           in
             q := newq;
             x
           end
-  
+
     fun delete (q, pred) = (q := Fifo.delete (!q, pred))
     fun head q = Fifo.head (!q)
     fun peek q = Fifo.peek (!q)

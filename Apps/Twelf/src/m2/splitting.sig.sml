@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Splitting *)
 (* Author: Carsten Schuermann *)
 

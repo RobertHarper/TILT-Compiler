@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* sigs/ieee-real-sig.sml
  *
  * COPYRIGHT (c) 1996 AT&T Bell Laboratories.

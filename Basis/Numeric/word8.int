@@ -1,4 +1,2 @@
-(*$import WORD *)
-
 structure Word8 : WORD where type word = TiltPrim.uint8
 

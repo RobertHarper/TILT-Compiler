@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PACK_WORD Word8 Word32 Word8Vector Word8Array *)
 (* pack-word-b32.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.

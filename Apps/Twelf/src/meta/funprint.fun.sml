@@ -1,4 +1,3 @@
-(*$import List FUNPRINT FUNSYN FORMATTER NAMES PRINT *)
 (* Printing of functional proof terms *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import QED GLOBAL METASYN *)
 (* QED *)
 (* Author: Carsten Schuermann *)
 

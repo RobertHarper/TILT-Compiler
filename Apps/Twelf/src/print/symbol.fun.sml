@@ -1,4 +1,3 @@
-(*$import String SYMBOL *)
 functor SymbolAscii () :> SYMBOL =
 struct
 

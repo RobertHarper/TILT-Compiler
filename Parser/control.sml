@@ -1,5 +1,3 @@
-(*$import TextIO CONTROL *)
-
 (* control.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -141,7 +139,7 @@ structure Control : CONTROL =
     val quotation = ref false  (* controls backquote quotation *)
 
     val preserveLvarNames : bool ref = ref false
-    val saveit = ref false 
+    val saveit = ref false
     val saveLvarNames : bool ref = saveit
     val saveAbsyn : bool ref = saveit
     val saveLambda : bool ref = saveit

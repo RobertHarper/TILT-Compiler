@@ -1,4 +1,3 @@
-(*$import MONO_VECTOR Firstlude TiltPrim Prelude *)
 (* bit-vector-sig.sml
  *
  * COPYRIGHT (c) 1995 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -27,7 +26,7 @@ signature BIT_VECTOR =
        *)
 
     val bits : (int * int list) -> vector
-      (* Create vector of the given length with the indices of its set bits 
+      (* Create vector of the given length with the indices of its set bits
        * given by the list argument.
        * Raises Subscript if a list item is < 0 or >= length.
        *)
@@ -40,7 +39,7 @@ signature BIT_VECTOR =
     val toString : vector -> string
       (* Inverse of stringToBits.
        * The bit array is zero-padded to the next
-       * length that is a multiple of 4. 
+       * length that is a multiple of 4.
        *)
 
     val isZero  : vector -> bool
@@ -63,10 +62,10 @@ signature BIT_VECTOR =
     val orb  : (vector * vector * int) -> vector
     val xorb : (vector * vector * int) -> vector
       (* Create new vector of the given length
-       * by logically combining bits of original 
-       * vectors using and, or and xor, respectively. 
+       * by logically combining bits of original
+       * vectors using and, or and xor, respectively.
        * If necessary, the vectors are
-       * implicitly extended by 0 to be the same length 
+       * implicitly extended by 0 to be the same length
        * as the new vector.
        *)
 

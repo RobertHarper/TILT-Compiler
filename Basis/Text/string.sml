@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude STRING General PreString Char *)
 (* string.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -9,21 +8,21 @@ structure String :> STRING where type string = string
 			     and type Char.char = char
 			     and type Char.string = string =
   struct
-      
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
     val uint8touint32 = TiltPrim.uint8touint32
-	
+
     val unsafe_array = TiltPrim.unsafe_array
     val unsafe_update = TiltPrim.unsafe_update
     val unsafe_vsub = TiltPrim.unsafe_vsub
     val vector_length = TiltPrim.vector_length
-	
+
     val unsafe_array2vector = TiltPrim.unsafe_array2vector
-	
+
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
-	
+
     val uplus = TiltPrim.uplus
 
 (*
@@ -60,7 +59,7 @@ structure String :> STRING where type string = string
 	  unsafe_vsub(PreString.chars, uint8touint32 c)
 
   (* get a character from a string *)
-    fun sub(x : string, i : int) = 
+    fun sub(x : string, i : int) =
 	let val index = int32touint32 i
 	in  if (ugte(index, vector_length x))
 		then raise Subscript
@@ -137,7 +136,7 @@ structure String :> STRING where type string = string
 		      fun copy' j = if (j = len)
 			    then ()
 			    else (
-			      unsafe_update(ss, uplus(i,j), 
+			      unsafe_update(ss, uplus(i,j),
 					    unsafe_vsub(s, j));
 			      copy'(uplus(j,0w1)))
 		      in
@@ -173,7 +172,7 @@ structure String :> STRING where type string = string
 		val newVec = create len
 		val len = i2w len
 		fun mapf i = if ult(i,len)
-		      then (unsafe_update(newVec, i, 
+		      then (unsafe_update(newVec, i,
 					 f(unsafe_vsub(vec, i)));
 			    mapf(uplus(i,0w1)))
 		      else ()
@@ -263,4 +262,4 @@ structure String :> STRING where type string = string
     fun fromCString s = raise TiltExn.LibFail "String.fromCString not implemented"
     val toCString = translate Char.toCString
 
-  end (* structure String *)	   
+  end (* structure String *)

@@ -1,5 +1,3 @@
-(*$import Int TextIO *)
-
 (* Thread safety achieved by encapsulating top-level state into two functions: makeSolver and makeTest *)
 
 local

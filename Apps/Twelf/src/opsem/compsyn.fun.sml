@@ -1,4 +1,3 @@
-(*$import Array COMPSYN GLOBAL INTSYN NAMES *)
 (* Compiled Syntax *)
 (* Author: Iliano Cervesato *)
 (* Modified: Jeff Polakow *)

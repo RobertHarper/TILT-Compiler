@@ -1,4 +1,3 @@
-(*$import WORD Firstlude TiltPrim Prelude PreWord StringCvt General NumFormat NumScan *)
 (* word8.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -14,26 +13,26 @@ structure Word8 :> WORD where type word = TiltPrim.uint8 =
     val ^^ = TiltPrim.^^
     val || = TiltPrim.||
     val ~>> = TiltPrim.~>>
-	
+
     val andbyte = TiltPrim.andbyte
     val orbyte = TiltPrim.orbyte
-	
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
     val uint32touint8 = TiltPrim.uint32touint8
     val uint8toint32 = TiltPrim.uint8toint32
     val uint8touint32 = TiltPrim.uint8touint32
-	
+
     val ugt = TiltPrim.ugt
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
     val ulte = TiltPrim.ulte
-	
+
     val udiv = TiltPrim.udiv
     val uminus = TiltPrim.uminus
     val umod = TiltPrim.umod
     val uplus = TiltPrim.uplus
-	
+
     type word32 = TiltPrim.uint32
     type word8 = TiltPrim.uint8
 (*
@@ -55,7 +54,7 @@ structure Word8 :> WORD where type word = TiltPrim.uint8 =
     val tow8 = uint32touint8
     fun adapt arg = tow8(&& (arg, 0wxFF))
 
-    fun sextend (w8 : word8) : word32 = 
+    fun sextend (w8 : word8) : word32 =
 	let val w32 = uint8touint32 w8
 	    val neg = &&(w32, 0w128)
 	    val mask = int32touint32(~>>(uint32toint32(<<(neg, 24)), 23))
@@ -134,7 +133,7 @@ structure Word8 :> WORD where type word = TiltPrim.uint8 =
     fun min (w1, w2) = if <(w1,w2) then w1 else w2
     fun max (w1, w2) = if >(w1,w2) then w1 else w2
 
-    fun fmt radix = (NumFormat.fmtWord radix) o toLargeWord 
+    fun fmt radix = (NumFormat.fmtWord radix) o toLargeWord
     val toString = fmt StringCvt.HEX
 
     fun scan radix = let

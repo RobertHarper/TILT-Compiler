@@ -1,4 +1,3 @@
-(*$import BinarySetFn Atom *)
 (* atom-binary-map.sml
  *
  * COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies.

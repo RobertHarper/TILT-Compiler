@@ -1,13 +1,11 @@
-(*$import Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE SplaySetFn Util Stats *)
-
-functor SparcTrackstorage(structure Printutils : PRINTUTILS 
+functor SparcTrackstorage(structure Printutils : PRINTUTILS
 			      where type Machine.specific_instruction = Sparc.specific_instruction
 			      where type Machine.instruction = Sparc.Machine.instruction
 			  structure Machineutils : MACHINEUTILS)
     :> TRACKSTORAGE =
 struct
 
-  open Printutils  
+  open Printutils
   open Machineutils Sparc
   open Machine
   open Core
@@ -25,47 +23,47 @@ struct
 
   val error = fn s => Util.error "sparctrackstorage.sml" s
 
-  datatype summary = SUMMARY of 
+  datatype summary = SUMMARY of
                     {registers_used    : Machine.register list,
 		     stackframe_size   : int,
 		     prevframe_maxoffset : int,
 		     callee_save_slots : (Machine.register * stacklocation) list,
-		     fixStackOffset    : Machine.stacklocation -> 
+		     fixStackOffset    : Machine.stacklocation ->
 		                         Machine.stacklocation}
 
-  fun newInfo {callee_saves, max_on_stack, max_C_args, regs_destroyed, 
+  fun newInfo {callee_saves, max_on_stack, max_C_args, regs_destroyed,
 	       stack_resident} =
     INFO {callee_saves     = listToSet callee_saves,
 	  regs_destroyed   = ref (listToSet regs_destroyed),
 	  stackmap         = ref stack_resident,
-	  (* num_???_spilled's are counted funny; 
+	  (* num_???_spilled's are counted funny;
 	     They're 1 less than the actual # *)
 	  num_permanent_resident = Regmap.numItems stack_resident,
 	  num_ints_spilled = ref (Regmap.numItems stack_resident-1),
-	  num_fps_spilled  = ref ~1,   
+	  num_fps_spilled  = ref ~1,
 	  (* num_args: actual max # of arguments passed on stack *)
 	  num_args         = ref max_on_stack }
 
 
-     
+
 (* Stackframe layout:  (Stack is growing DOWNWARDS)
 
       (high memory)
 
     | Args passed to |
     | this procedure |
-    | in memory      | 
+    | in memory      |
     | 8 bytes ea.    |
     |================| <--- Previous $sp
     | Spilled FPs    |
     |   (unordered)  |
-    | 8 bytes ea.    | 
+    | 8 bytes ea.    |
     |----------------|
-    | 0/4 pad bytes  | 
+    | 0/4 pad bytes  |
     |----------------|
-    | Spilled Ints   | 
+    | Spilled Ints   |
     |   (unordered)  |
-    | 4 bytes ea.    | 
+    | 4 bytes ea.    |
     |----------------|
     | FP Callee- $f31| } Here showing regs are
     | Save Regs    : | } in numerical order; not
@@ -83,20 +81,20 @@ struct
     |----------------|
     | hidden param   | <--- we don't use this
     |----------------|
-    | 6 words which  | 
-    | callee may     | 
+    | 6 words which  |
+    | callee may     |
     | store int args |
     |----------------|
-    | 16 words to    | 
-    | save "in" and  |                 
-    | "local" regs   |                 
-    | of  window     | 
+    | 16 words to    |
+    | save "in" and  |
+    | "local" regs   |
+    | of  window     |
     |================| <--- Current $sp
 
       (low memory)
- 
+
 *)
-    structure Intkey : ORD_KEY = 
+    structure Intkey : ORD_KEY =
       struct
 	type ord_key = int
 	val compare = Int.compare
@@ -108,7 +106,7 @@ struct
       (case (Regmap.find (! stackmap, reg)) of
 	 NONE =>
 	   (case reg of
-	      R _ => 
+	      R _ =>
 		let fun folder (n,set) = (case Regmap.find(!stackmap,n) of
 					      NONE => set
 					    | SOME (SPILLED_INT pos) => IntSet.add(set,pos)
@@ -136,16 +134,16 @@ struct
        | SOME spos => spos )
       handle e => (print "exception in StackOffset\n"; raise e)
 
-  fun noteUsed (INFO{regs_destroyed,...}) reg = 
+  fun noteUsed (INFO{regs_destroyed,...}) reg =
     regs_destroyed := Regset.add(! regs_destroyed, reg)
 
   fun doubleAlign n = ((n + 7) div 8) * 8     (* round up to multiple of 8 *)
   fun stackAlign n  = ((n + 15) div 16) * 16  (* round up to multiple of 16 *)
 
   fun summarize (INFO{num_permanent_resident,
-		      callee_saves, regs_destroyed, stackmap, 
+		      callee_saves, regs_destroyed, stackmap,
 		      num_ints_spilled, num_fps_spilled,
-		      num_args}) = 
+		      num_args}) =
     let
 
       fun stride4 cur [] = []
@@ -153,7 +151,7 @@ struct
       fun stride8 cur [] = []
 	| stride8 cur (x::xs) = (x,ACTUAL8 cur) :: (stride8 (cur+8) xs)
 
-      val saved_int_regs = 
+      val saved_int_regs =
 	Regset.listItems
 	 (Regset.intersection
 	  (Regset.intersection(listToSet int_regs, callee_saves), ! regs_destroyed))
@@ -169,10 +167,10 @@ struct
       val ra_offset = extra_args_offset + 4 * (!num_args)
       val callee_save_int_offset = ra_offset + 4
       val callee_save_fp_offset  = callee_save_int_offset + 4 * num_ints_saved
-      val callee_save_slots = 
+      val callee_save_slots =
 	(stride4 callee_save_int_offset saved_int_regs) @
 	(stride8 callee_save_fp_offset saved_fp_regs)
- 
+
       val spilled_int_offset = callee_save_fp_offset + 8 * num_fps_saved
       val spilled_fp_offset  = doubleAlign(spilled_int_offset +
 					   4 * (! num_ints_spilled + 1))
@@ -192,7 +190,7 @@ struct
 
       val registers_used = Regset.listItems (! regs_destroyed)
 
-      val _ = 
+      val _ =
 	if (! debug) then
 	  (emitString "arg slots = ";
 	   print_list print_int [! num_args];
@@ -221,6 +219,6 @@ struct
 	       callee_save_slots = callee_save_slots,
 	       fixStackOffset = fixStackOffset}
     end
-       handle e => (print "exception in summarize\n"; 
+       handle e => (print "exception in summarize\n";
 		    raise e)
 end

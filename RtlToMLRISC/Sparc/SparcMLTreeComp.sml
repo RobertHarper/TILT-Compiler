@@ -1,5 +1,3 @@
-(*$import SparcInstr SparcMLRISCConstant SparcMLRISCRegion SparcMLRISCPseudo FlorGraph SparcProps SparcPseudoInstr SparcRewrite SparcAsmEmitter AsmEmit SparcIntegerAllocation SparcFloatAllocation Sparc *)
-
 (* =========================================================================
  * SparcMLTreeComp.sml
  * ========================================================================= *)

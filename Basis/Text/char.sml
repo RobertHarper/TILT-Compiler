@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude CHAR General PreString NumFormat StringCvt *)
 (* char.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -6,7 +5,7 @@
  *)
 
 structure Char :> CHAR where type char = char
-                         and type string = string = 
+                         and type string = string =
   struct
 
     val int32touint32 = TiltPrim.int32touint32
@@ -67,7 +66,7 @@ structure Char :> CHAR where type char = char
   (* testing character membership *)
     local
       fun ord' c = int32touint32(ord c)
-      fun mkArray (s, sLen) = 
+      fun mkArray (s, sLen) =
 	  let
 	      val sLen = int32touint32 sLen
 	      val ca = unsafe_array (int32touint32 (maxOrd+1),#"\000")
@@ -80,25 +79,25 @@ structure Char :> CHAR where type char = char
 	  end
     in
 	fun contains "" = (fn c => false)
-	  | contains s = 
+	  | contains s =
 	    let val sLen = PreString.size s
 	    in
 		if (sLen = 1)
 		    then let val c' = unsafe_vsub(s, 0w0)
 			 in fn c => (c = c') end
 		else let val cv = mkArray (s, sLen)
-		     in fn c => (unsafe_sub(cv, ord' c) <> #"\000") 
+		     in fn c => (unsafe_sub(cv, ord' c) <> #"\000")
 		     end
 	    end
 	fun notContains "" = (fn c => true)
-	  | notContains s = 
+	  | notContains s =
 	    let val sLen = PreString.size s
 	    in
 		if (sLen = 1)
 		    then let val c' = unsafe_vsub(s,0w0)
 			 in fn c => (c <> c') end
 		else let val cv = mkArray (s, sLen)
-		     in fn c => (unsafe_sub(cv, ord' c) = #"\000") 
+		     in fn c => (unsafe_sub(cv, ord' c) = #"\000")
 		     end
 	    end
     end (* local *)
@@ -198,7 +197,7 @@ structure Char :> CHAR where type char = char
 	      | (SOME(#"\"", rep')) => NONE	(* " *)
 	      | (SOME(c, rep')) => if (isPrint c) then (SOME(c, rep')) else NONE
 	    (* end case *)
-	  end  
+	  end
 
     val fromString = StringCvt.scanString scan
 

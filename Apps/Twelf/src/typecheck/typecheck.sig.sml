@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Type Checking *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PrePosix Time Real SysInt List POSIX_FileSys POSIX_Process SysWord POSIX_PROC_ENV POSIX_Process POSIX_extern *)
 (* posix-procenv.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,16 +6,16 @@
  *
  *)
 
-structure POSIX_ProcEnv :> POSIX_PROC_ENV 
-	where type pid = POSIX_Process.pid 
-	and   type file_desc = POSIX_FileSys.file_desc 
-	and   type uid = PrePosix.uid 
+structure POSIX_ProcEnv :> POSIX_PROC_ENV
+	where type pid = POSIX_Process.pid
+	and   type file_desc = POSIX_FileSys.file_desc
+	and   type uid = PrePosix.uid
 	and   type gid = PrePosix.gid =
   struct
 
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     structure FS = POSIX_FileSys
     structure P  = POSIX_Process
 
@@ -72,9 +71,9 @@ structure POSIX_ProcEnv :> POSIX_PROC_ENV
           val (e,u,s,cu,cs) = times' ()
           in
             { elapsed = cvt e,
-              utime = cvt u, 
-              stime = cvt s, 
-              cutime = cvt cu, 
+              utime = cvt u,
+              stime = cvt s,
+              cutime = cvt cu,
               cstime = cvt cs }
           end
 

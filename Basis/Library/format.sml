@@ -1,4 +1,3 @@
-(*$import Substring FORMAT FmtFields LibRealFormat *)
 (* format.sml
  *
  * COPYRIGHT (c) 1992 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -134,7 +133,7 @@ structure Format :> FORMAT =
 		fun hexidecimal i = let
 		      val (sign, i) = doSign i
 		      val sign = if (#base flags) then sign^"0x" else sign
-		      val s = intToHex i 
+		      val s = intToHex i
 		      in
 		        if (#zero_pad flags)
 			  then sign ^ zeroPadFn(sign, s)
@@ -143,7 +142,7 @@ structure Format :> FORMAT =
 	        fun capHexidecimal i = let
 		      val (sign, i) = doSign i
 		      val sign = if (#base flags) then sign^"0X" else sign
-		      val s = intToHeX i 
+		      val s = intToHeX i
 		      in
 		        if (#zero_pad flags)
 			  then sign ^ zeroPadFn(sign, s)

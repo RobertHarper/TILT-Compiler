@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude General MONO_ARRAY Array List Word8Vector *)
 (* array.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -6,14 +5,14 @@
  *)
 
 structure Word8Array :> MONO_ARRAY where type elem = char
-				     and type array = char array 
+				     and type array = char array
 				     and type Vector.vector = char vector
 				     and type Vector.elem = char =
   struct
 
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     val array_length = TiltPrim.array_length
     val empty_array = TiltPrim.empty_array
     val empty_vector = TiltPrim.empty_vector
@@ -22,17 +21,17 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     val unsafe_update = TiltPrim.unsafe_update
     val unsafe_vsub = TiltPrim.unsafe_vsub
     val vector_length = TiltPrim.vector_length
-	
+
     val unsafe_array2vector = TiltPrim.unsafe_array2vector
-	
+
     val uminus = TiltPrim.uminus
     val uplus = TiltPrim.uplus
-	
+
     val ugt = TiltPrim.ugt
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
     val ulte = TiltPrim.ulte
-	
+
     type elem = char
     type array = char array
     structure Vector = Word8Vector
@@ -43,15 +42,15 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     val vector0 : Vector.vector = empty_vector
 
     fun array (0, _) = array0
-      | array (n, init) = 
-	if (maxLen < n) 
-	    then raise General.Size 
+      | array (n, init) =
+	if (maxLen < n)
+	    then raise General.Size
 	else unsafe_array(int32touint32 n, init)
 
     fun checkLen n = if maxLen < n then raise General.Size else ()
     fun rev ([], l) = l
       | rev (x::r, l) = rev (r, x::l)
-    fun fromList'(n,l) = 
+    fun fromList'(n,l) =
 	let val _ = checkLen n
 	in
 	    if (n = 0)
@@ -64,7 +63,7 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 		 in  ar
 		 end
 	end
-    fun fromList l = 
+    fun fromList l =
 	let
 	    fun len ([], n) = n
 	      | len ([_], n) = n+1
@@ -74,12 +73,12 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 	end
 
     fun tabulate (0, _) = array0
-      | tabulate (n, f) : array = 
+      | tabulate (n, f) : array =
           let val _ = if (n < 0) then raise Size else ()
 	      val a = array(n, f 0)
 	      val n = int32touint32 n
-              fun tab i = 
-                if ult(i,n) then (unsafe_update(a, i, f (uint32toint32 i)); 
+              fun tab i =
+                if ult(i,n) then (unsafe_update(a, i, f (uint32toint32 i));
 				  tab(uplus(i,0w1)))
                 else a
            in tab 0w1
@@ -124,10 +123,10 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 	    (* end case *)
 	  end
 
-    fun copy {src, si=si', len, dst, di} = 
+    fun copy {src, si=si', len, dst, di} =
         let
 
-            val (sstop', dstop') = 
+            val (sstop', dstop') =
                 let val srcLen = length src
                 in  case len
                     of NONE => if ((si' < 0) orelse (srcLen < si'))
@@ -148,7 +147,7 @@ structure Word8Array :> MONO_ARRAY where type elem = char
                                 else ()
 
         (* check to continue *after* update; otherwise we might underflow j  - Tom 7 *)
-            fun copyDown (j, k) = 
+            fun copyDown (j, k) =
                 let in
                     unsafe_update(dst, k, unsafe_sub(src, j));
                     if ult(si,j) then copyDown (uminus(j, 0w1),
@@ -159,7 +158,7 @@ structure Word8Array :> MONO_ARRAY where type elem = char
         in  if ((di < 0) orelse (length dst < dstop'))
                 then raise Subscript
             else if (si' < di) then
-                if (0w0 = sstop) then () 
+                if (0w0 = sstop) then ()
                 else copyDown (uminus(sstop,0w1), uminus(dstop,0w1))
               else copyUp (si, int32touint32 di)
         end
@@ -220,9 +219,9 @@ structure Word8Array :> MONO_ARRAY where type elem = char
 	      else raise Subscript
 	  end
 
-    fun foldr f init arr = 
+    fun foldr f init arr =
 	let
-	    fun fold (i, accum) = 
+	    fun fold (i, accum) =
 		let val accum' = f (unsafe_sub(arr, i), accum)
 		in  if (i = 0w0)
 			then accum'
@@ -270,7 +269,7 @@ structure Word8Array :> MONO_ARRAY where type elem = char
     fun foldli f init slice = let
 	  val (vec, start, stop) = chkSlice slice
 	  fun fold (i, accum) = if ult(i,stop)
-				    then fold (uplus(i,0w1), f (uint32toint32 i, 
+				    then fold (uplus(i,0w1), f (uint32toint32 i,
 								unsafe_sub(vec, i), accum))
 				else accum
 	  in  fold (start, init)

@@ -1,4 +1,3 @@
-(*$import ASSIGN INTSYN WHNF UNIFY *)
 (* Assignment *)
 (* Author: Larry Greenfield *)
 

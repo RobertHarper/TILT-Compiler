@@ -1,7 +1,6 @@
-(*$import BIN_IO BinPrimIO *)
-
 structure BinIO : BIN_IO
     where type StreamIO.pos = BinPrimIO.pos
     where type StreamIO.reader = BinPrimIO.reader
     where type StreamIO.writer = BinPrimIO.writer
-
+    where type StreamIO.elem = char
+    where type StreamIO.vector = char vector

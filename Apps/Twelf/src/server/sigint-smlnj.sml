@@ -1,4 +1,3 @@
-(*$import SIGINT *)
 structure SigINT :> SIGINT =
 struct
 

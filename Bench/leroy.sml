@@ -1,5 +1,3 @@
-(*$import List Int *)
-
 (* Thread safety automatic since no mutable types are used *)
 
 local

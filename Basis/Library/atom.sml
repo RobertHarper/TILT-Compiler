@@ -1,4 +1,3 @@
-(*$import ATOM Word Array HashString *)
 (* atom.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research

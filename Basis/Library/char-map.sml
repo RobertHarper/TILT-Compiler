@@ -1,4 +1,3 @@
-(*$import CHAR_MAP Vector Char String TopLevel *)
 (* char-map.sml
  *
  * COPYRIGHT (c) 1994 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

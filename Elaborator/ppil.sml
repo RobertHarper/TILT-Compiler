@@ -1,10 +1,9 @@
-(*$import Util Int Symbol TextIO List Listops Name Il Formatter Prim Ppprim Tyvar Bool PPIL Stats Fixity *)
 (* Il pretty-printer. *)
 structure Ppil :> PPIL =
 struct
 
 
-    open Util Listops Name 
+    open Util Listops Name
     open Il Formatter
     open Prim Ppprim Tyvar
 
@@ -15,8 +14,8 @@ struct
     fun separate [] sep = []
       | separate [a] sep = [a]
       | separate (a::rest) sep = a :: sep :: (separate rest sep)
-    fun pp_list doer objs (left,sep,right,break) = 
-      let 
+    fun pp_list doer objs (left,sep,right,break) =
+      let
 	fun loop [] = [String right]
 	  | loop [a] = [doer a, String right]
 	  | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
@@ -33,7 +32,7 @@ struct
     fun pp_pathlist pobj objlist = pp_list pobj objlist ("",".","",false)
 
 
-    fun pp_fixity fixity = 
+    fun pp_fixity fixity =
       (case fixity of
 	 Fixity.NONfix => String "NONfix"
        | Fixity.INfix (a,b) => String ("INfix" ^ (if (a mod 2 = 0) then "l" else "r")
@@ -44,9 +43,9 @@ struct
     local fun loop (MOD_VAR v) acc = SOME(PATH(v,acc))
 	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
 	    | loop m _ = NONE
-    in    
+    in
 	fun mod2path (m : mod) = loop m []
-	fun exp2path (e : exp) = 
+	fun exp2path (e : exp) =
 	    (case e of
 		 VAR v => SOME(PATH (v,[]))
 	       | MODULE_PROJECT (m,l) => mod2path (MOD_PROJECT(m,l))
@@ -61,7 +60,7 @@ struct
 	fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
 	fun generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
 	fun loop [] _ = true
-	  | loop ((l,_)::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1) 
+	  | loop ((l,_)::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1)
     in
 	fun rdecs_is_tuple rdecs = loop rdecs 1
 	fun rbnds_is_tuple rbnds = loop rbnds 1
@@ -70,17 +69,17 @@ struct
 
 
 
-    fun wrapper pp out obj = 
-      let 
+    fun wrapper pp out obj =
+      let
 	val fmtstream = open_fmt out
 	val fmt = pp obj
-      in (output_fmt (fmtstream,fmt); 
+      in (output_fmt (fmtstream,fmt);
 	  close_fmt fmtstream;
 	  fmt)
       end
     fun pp_arrow PARTIAL = String "->"
       | pp_arrow TOTAL = String "=>"
-    fun complete2string oneshot = 
+    fun complete2string oneshot =
 	(case (oneshot_deref oneshot) of
 	     (SOME TOTAL) => "=>"
 	   | (SOME PARTIAL) => "->"
@@ -94,7 +93,7 @@ struct
       end
 
     (* is it basic with respect to printing *)
-    fun is_base_con con = 
+    fun is_base_con con =
       (case con of
 	 (CON_INT _) => true
        | CON_FLOAT _ => true
@@ -109,10 +108,10 @@ struct
 
     datatype flex = RIGID | FLEXIBLE | FROZEN
 
-    fun pp_recordcon (seen : (context,con,exp) tyvar list) (isflex,rdecs) : format = 
+    fun pp_recordcon (seen : (context,con,exp) tyvar list) (isflex,rdecs) : format =
 	let val is_tuple = rdecs_is_tuple rdecs
 	    val separator = if is_tuple then " *" else ","
-	    val (left,right) = 
+	    val (left,right) =
 		(case isflex of
 		     RIGID => ("{", "}")
 		   | FLEXIBLE => ("{?", "?}")
@@ -126,8 +125,8 @@ struct
 					     pp_con seen c])
 	in pp_list doer rdecs format
 	end
-    
-    and pp_con (seen : (context,con,exp) tyvar list) (arg_con : con) : format = 
+
+    and pp_con (seen : (context,con,exp) tyvar list) (arg_con : con) : format =
       (case arg_con of
 	 CON_OVAR ocon => pp_con seen (CON_TYVAR (ocon_deref ocon))
        | CON_VAR var => pp_var var
@@ -169,13 +168,13 @@ struct
        | CON_ANY     => String "ANY"
        | CON_REF c   => pp_region "REF("  ")" [pp_con seen c]
        | CON_TAG c  => pp_region "NAME(" ")" [pp_con seen c]
-       | CON_ARROW (cons,c2,closed,comp) => 
-	     HOVbox [String "(",	
+       | CON_ARROW (cons,c2,closed,comp) =>
+	     HOVbox [String "(",
 		     (case cons of
 			  [c1] => pp_con seen c1
 			| _ => pp_list (pp_con seen) cons ("[", ",","]", false)),
 			  String " ",
-			  String ((if closed then "CODE" else "") ^ 
+			  String ((if closed then "CODE" else "") ^
 				  (complete2string comp)),
 			  Break,
 			  pp_con seen c2, String ")"]
@@ -190,14 +189,14 @@ struct
        | CON_FLEXRECORD (ref(FLEXINFO(_,false,[]))) => String "FLEXUNIT"
        | CON_FLEXRECORD (ref(INDIRECT_FLEXINFO rf)) => pp_con seen (CON_FLEXRECORD rf)
        | (CON_RECORD rdecs) => pp_recordcon seen (RIGID,rdecs)
-       | CON_FLEXRECORD (ref (FLEXINFO (_,isFrozen,rdecs))) => 
+       | CON_FLEXRECORD (ref (FLEXINFO (_,isFrozen,rdecs))) =>
 		pp_recordcon seen (if isFrozen then FROZEN else FLEXIBLE, rdecs)
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
 				       Break0 0 0,
 				       pp_con seen con]
-       | CON_SUM {names,noncarriers,carrier,special} => 
-	      pp_region (case special of 
+       | CON_SUM {names,noncarriers,carrier,special} =>
+	      pp_region (case special of
 			     NONE => "SUM["
 			   | SOME x => "SUM_" ^ (Int.toString x) ^ "[") "]"
 	      [pp_commalist pp_label names,
@@ -211,7 +210,7 @@ struct
 	       pp_con seen con2]
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
        | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
-       | CON_MODULE_PROJECT (module,label) => 
+       | CON_MODULE_PROJECT (module,label) =>
 	      (case con2path arg_con of
 		   NONE => pp_region "CON_MPROJ(" ")"
 		             [pp_mod seen module,
@@ -254,42 +253,45 @@ struct
 			    Break,
 			    String "END"]
 	   | MOD_SEAL(m,s) => pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true))
-	
-    and pp_phrase_class full seen pc = 
+
+    and pp_phrase_class full seen pc =
 	let val pp_con = pp_con seen
 	    val pp_exp = pp_exp seen
 	    val pp_kind = pp_kind seen
 	    val pp_mod = pp_mod seen
 	    val pp_signat = pp_signat seen
-	    fun help leftstr rightstr items = 
+	    fun help leftstr rightstr items =
 		HOVbox(if full
 			   then (String leftstr) :: (items @ [String rightstr])
 		       else items)
-		    
-	in  
+
+	in
 	    (case pc of
-		 PHRASE_CLASS_EXP  (e,c,eopt,inline) => 
+		 PHRASE_CLASS_EXP  (e,c,eopt,inline) =>
 		     help (if inline then "PC_EXP_INLINE(" else "PC_EXP(") ")"
-		     ([pp_exp e, String ": ", pp_con c] @
+		     ([pp_exp e, String " : ", pp_con c] @
 		      (case eopt of
 			   NONE => []
-			 | SOME e => [String "= ", pp_exp e]))
+			 | SOME e => [String " = ", pp_exp e]))
 	       | PHRASE_CLASS_CON  (c,k,copt,inline) =>
 		     help (if inline then "PC_CON_INLINE(" else "PC_CON(") ")"
-		     ([pp_con c, String ": ", pp_kind k] @
+		     ([pp_con c, String " : ", pp_kind k] @
 		      (case copt of
 			   NONE => []
-			 | SOME c => [String "= ", pp_con c]))
-	       | PHRASE_CLASS_MOD  (m,false,s)  => 
-		     help "PC_MOD(" ")" [pp_mod m, String ": ", pp_signat s]
-	       | PHRASE_CLASS_MOD  (m,true,s)  => 
-		     help "PC_$POLY$MOD(" ")" [pp_mod m, String ": ", pp_signat s]
-	       | PHRASE_CLASS_SIG  (v,s)  => 
-		     help "PC_SIG(" ")" [pp_var v, String " = ", pp_signat s])
+			 | SOME c => [String " = ", pp_con c]))
+	       | PHRASE_CLASS_MOD  (m,false,s,_)  =>
+		     help "PC_MOD(" ")" [pp_mod m, String " : ", pp_signat s]
+	       | PHRASE_CLASS_MOD  (m,true,s,_)  =>
+		     help "PC_$POLY$MOD(" ")" [pp_mod m, String " : ", pp_signat s]
+	       | PHRASE_CLASS_SIG  (v,s)  =>
+		     help "PC_SIG(" ")" [pp_var v, String " = ", pp_signat s]
+	       | PHRASE_CLASS_EXT  (v,l,c)  =>
+		     help "PC_EXT(" ")" [pp_var v, String " = ", pp_label l, String " : ", pp_con c])
+
 	end
 
 
-    and pp_kind seen kind = 
+    and pp_kind seen kind =
 	(case kind of
 	     KIND => String "TYPE"
 	   | KIND_TUPLE i => String ("KIND(" ^ (Int.toString i) ^ ")")
@@ -300,7 +302,7 @@ struct
     and pp_elist seen exps = pp_list (pp_exp seen) exps ("[",",","]",false)
     and pp_clist seen cons = pp_list (pp_con seen) cons ("[",",","]",false)
 
-    and pp_exp seen exp = 
+    and pp_exp seen exp =
       let val pp_con = pp_con seen
 	  val pp_exp = pp_exp seen
 	  val pp_clist = pp_clist seen
@@ -308,7 +310,7 @@ struct
 	  val pp_mod = pp_mod seen
 	  val pp_fbnd = pp_fbnd seen
 	  val pp_bnd = pp_bnd seen
-      in  
+      in
        (case exp of
 	 OVEREXP (c,_,exp) => (case oneshot_deref exp of
 				 NONE => String "OVEREXP_NONE"
@@ -324,11 +326,11 @@ struct
 					    pp_elist elist]
        | VAR var => pp_var var
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp e1, String ",", Break, pp_exp e2]
-       | EXTERN_APP (c,e1,elist) => 
-	     pp_region "EXTERN_APP(" ")" [pp_con c, String ";", Break, 
-					  pp_exp e1, String ";", Break, 
+       | EXTERN_APP (c,e1,elist) =>
+	     pp_region "EXTERN_APP(" ")" [pp_con c, String ";", Break,
+					  pp_exp e1, String ";", Break,
 					  pp_elist elist]
-       | FIX (r,a,[FBND(v',v,c,cres,e)]) => 
+       | FIX (r,a,[FBND(v',v,c,cres,e)]) =>
 		  HOVbox[String ((case a of TOTAL => "/TOTAL" | PARTIAL => "/") ^
 				 (if r then "\\" else "NONRECUR\\")),
 			 pp_var v', Break0 0 5,
@@ -341,11 +343,11 @@ struct
 				   pp_list pp_fbnd fbnds ("[",", ","]", true)]
        | RECORD [] => String "unit"
        | RECORD rbnds =>  let val (format,doer) = if (rbnds_is_tuple rbnds)
-						    then (("(", ",",")", false), 
+						    then (("(", ",",")", false),
 							  fn (l,e) => (pp_exp e))
 						  else
-						    (("{", ",","}", false), 
-						     fn (l,e) => 
+						    (("{", ",","}", false),
+						     fn (l,e) =>
 						     Hbox[pp_label l,
 							  String " = ",
 							  pp_exp e])
@@ -385,14 +387,14 @@ struct
        | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"
 			  [pp_con con1, String ",", Break,
 			   pp_con con2, String ",", Break, pp_exp e]
-       | INJ {sumtype,field,inject} => 
+       | INJ {sumtype,field,inject} =>
 	     pp_region "INJ(" ")"
 	     (String (Int.toString field) :: String "," :: Break :: pp_con sumtype ::
 	      (case inject of
 		   NONE => nil
 		 | SOME e => String "," :: Break :: pp_exp e :: nil))
        | CASE {sumtype,bound,arg,arms,tipe,default} =>
-	     let val rules = (mapcount (fn (n,e) => ((Int.toString n) ^ ": ", e)) arms) @ 
+	     let val rules = (mapcount (fn (n,e) => ((Int.toString n) ^ ": ", e)) arms) @
 	                     [("Default: ", default)]
 	     in  pp_region "CASE(" ")"
 		 [String "arg = ", pp_exp arg, String ":", Break,
@@ -400,12 +402,12 @@ struct
 		  String "resultType = ", pp_con tipe, String ",", Break,
 		  String "boundVar = ", pp_var bound, String ",", Break,
 		  (pp_list (fn (str,eopt) => Hbox[String str,
-						  (case eopt of 
-						       NONE => String "---" 
+						  (case eopt of
+						       NONE => String "---"
 						     | SOME e => pp_exp e)])
 		   rules ("", ",", "", true))]
 	     end
-       | EXN_CASE {arg=earg,arms=elist,default=eopt,tipe} => 
+       | EXN_CASE {arg=earg,arms=elist,default=eopt,tipe} =>
 	     pp_region "EXN_CASE(" ")"
 			  [pp_con tipe,
 			   String ",",
@@ -413,8 +415,8 @@ struct
 			   String ",",
 			   Break,
 			   (pp_list (fn (e1,c,e2) => HOVbox[pp_exp e1,
-							    String " : ", 
-							    pp_con c, 
+							    String " : ",
+							    pp_con c,
 							    String " => ",
 							    pp_exp e2]) elist ("[",", ","]",true)),
 			   (case eopt of
@@ -424,7 +426,7 @@ struct
        | SEAL    (exp,con) => pp_region "SEAL(" ")" [pp_exp exp, String ",", pp_con con])
       end
 
-	 
+
     and pp_fbnd seen (FBND(vname,varg,carg,cres,exp)) =
 	Depth(HOVbox[Hbox[pp_var vname, String " = "],
 		     Break0 0 3,
@@ -434,14 +436,14 @@ struct
 		     Break0 0 3,
 		     pp_exp seen exp])
 
-    and pp_signat seen signat = 
+    and pp_signat seen signat =
       (case signat of
-	 SIGNAT_VAR v => pp_var v 
+	 SIGNAT_VAR v => pp_var v
        | SIGNAT_OF p =>  HOVbox[String "SIGS_OF(",
 				pp_path p,
 				String ")"]
        | SIGNAT_STRUCTURE sdecs => pp_sdecs seen sdecs
-       | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
+       | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1
 	                                        [String "SIGF(",
 						 pp_var v,
 						 String ", ",
@@ -451,36 +453,36 @@ struct
 						 Break0 1 8,
 						 pp_signat seen s2,
 						 String ")"])
-	     
-    and pp_path (PATH (v,ls)) = 
+
+    and pp_path (PATH (v,ls)) =
 	  (case ls of
 	     [] => pp_var v
-	   | _ => HOVbox[Hbox[pp_var v, String "."], 
+	   | _ => HOVbox[Hbox[pp_var v, String "."],
 			 pp_list pp_label ls ("",".","",false)])
 
-    and pp_bnd' seen bnd = 
+    and pp_bnd' seen bnd =
 	let fun help x y = (x,y)
 	  in (case bnd of
 		BND_EXP (v,e) => help (pp_var v) [pp_exp seen e]
 	      | BND_MOD (v,false,m) => help (pp_var v) [pp_mod seen m]
-	      | BND_MOD (v,true,m) => help (pp_var v) [String " $POLY$ ", 
+	      | BND_MOD (v,true,m) => help (pp_var v) [String " $POLY$ ",
 						       pp_mod seen m]
 	      | BND_CON (v,c) => help (pp_var v) [pp_con seen c])
 	  end
 
-    and pp_dec' seen dec = 
+    and pp_dec' seen dec =
       let fun help x y = (x,y)
       in (case dec of
 	    DEC_EXP (v,c,NONE, _) => help (pp_var v) [pp_con seen c]
-	  | DEC_EXP (v,c,SOME e, inline) => 
-		help (pp_var v) [pp_con seen c, String (if inline then " == " else " = "), 
+	  | DEC_EXP (v,c,SOME e, inline) =>
+		help (pp_var v) [pp_con seen c, String (if inline then " == " else " = "),
 				 Break0 0 6, pp_exp seen e]
 	  | DEC_CON (v,k,NONE, _) => help (pp_var v) [pp_kind seen k]
-	  | DEC_CON (v,k,SOME c, inline) => 
-		help (pp_var v) [pp_kind seen k, String (if inline then " == " else " = "), 
+	  | DEC_CON (v,k,SOME c, inline) =>
+		help (pp_var v) [pp_kind seen k, String (if inline then " == " else " = "),
 				 Break0 0 6, pp_con seen c]
 	  | DEC_MOD (v,false,s) => help (pp_var v) [pp_signat seen s]
-	  | DEC_MOD (v,true,s) => help (pp_var v) [String " $POLY$ ", 
+	  | DEC_MOD (v,true,s) => help (pp_var v) [String " $POLY$ ",
 						   pp_signat seen s])
       end
 
@@ -549,28 +551,33 @@ struct
 	in
 	    Hbox[n',Break,Vbox[pp_list pp_ce celist ("[",",","]",true)]]
 	end
-    
+
     fun pp_context_entry' (CONTEXT_SDEC sdec) = HOVbox[String "CONTEXT_SDEC: ", pp_sdec [] sdec]
       | pp_context_entry' (CONTEXT_SIGNAT (l,v,s)) = HOVbox[String "CONTEXT_SIGNAT: ",
 							    pp_label l, String " > ", pp_var v,
 							    String " = ", pp_signat [] s]
+      | pp_context_entry' (CONTEXT_EXTERN (l,v,l',c)) =
+	  HOVbox[String "CONTEXT_EXTERN: ", pp_label l, String " > ",
+		 pp_var v, String " = ", pp_label l', String ": ",
+		 pp_con [] c]
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
-      | pp_context_entry' (CONTEXT_OVEREXP (l,ovld)) = 
+      | pp_context_entry' (CONTEXT_OVEREXP (l,ovld)) =
 			   HOVbox[String "CONTEXT_OVEREXP: ", pp_label l, String " ", pp_ovld' ovld]
 
-    fun pp_context' (CONTEXT{varMap, ordering, labelMap, fixityMap, overloadMap, ...}) = 
+    fun pp_entries' entries =
+	pp_list pp_context_entry' entries ("", ",", "", true)
+
+    fun pp_context' (CONTEXT{varMap, ordering, labelMap, fixityMap, overloadMap, ...}) =
 	let fun fixity_doer (l, f) = Hbox[pp_label l, String " : ", pp_fixity f]
 	    fun overload_doer (l, ovld) =
 		Vbox[pp_label l, String " OVEREXP: ", Break, pp_ovld' ovld]
 	    fun label_doer (l,vpath) =
 		Hbox[pp_label l, String " --> ", Break, pp_path (PATH vpath)]
-	    fun var_doer v = 
+	    fun var_doer v =
 		let val SOME(label, pc) = Name.VarMap.find(varMap, v)
 		in  HOVbox[pp_label label,
-			   String " --> ",
-			   pp_var v,
-			   String " : ",
-			   pp_phrase_class true [] pc]
+			   String " > ",
+			   pp_phrase_class false [] pc]
 		end
 	in  [String "---- Fixity ----",
 	     Break,
@@ -590,15 +597,56 @@ struct
 	     Break]
 	end
 
-    fun pp_pcontext' ((ctxt, free) : Il.partial_context) = 
-	let val fmts = pp_context' ctxt
-	    fun free_doer (v,l) = Hbox[pp_var v, String " ---> ", pp_label l]
-	    val fmt = pp_list free_doer (Name.VarMap.listItemsi free) ("", "", "", true)
-	in  Vbox (fmt :: Break :: fmts)
-	end
-
     val pp_context' = fn args => Vbox (pp_context' args)
 
+    fun pp_decresult' (decresult : decresult) =
+	let
+	    datatype t =
+		SBND of sbnd
+	      | ENTRY of context_entry
+
+	    fun pp (SBND sbnd) = Hbox[String "SBND: ", pp_sbnd' sbnd]
+	      | pp (ENTRY entry) = pp_context_entry' entry
+
+	    fun flatten (nil, acc) = rev acc
+	      | flatten ((sbndopt,entry) :: rest, acc) =
+		let val acc = (case sbndopt
+				 of NONE => acc
+				  | SOME sbnd => (SBND sbnd) :: acc)
+		    val acc = (ENTRY entry) :: acc
+		in  flatten (rest, acc)
+		end
+	    val items = flatten(decresult,nil)
+	in
+	    pp_list pp items ("", ",", "", true)
+	end
+
+    fun pp_module' ((ctxt,sbnd,sdec) : module) =
+	HOVbox[String "SBND: ", pp_sbnd' sbnd, Break,
+	       String "SDEC: ", pp_sdec' sdec]
+
+    fun pp_parm' parm =
+	(case parm
+	   of PARM mainlab => pp_label' mainlab
+	    | PARM_SIG (mainlab,siglab) =>
+	       Hbox[pp_label' mainlab, String ".", pp_label' siglab]
+	    | PARM_EXT (mainlab,extlab) =>
+	       Hbox[pp_label' mainlab, String ".", pp_label' mainlab])
+
+    fun pp_parms' parms =
+	let val pp = fn (v,p) => HOVbox[pp_var' v, String " -> ", pp_parm' p]
+	in  pp_list pp (VarMap.listItemsi parms) ("", ",", "", true)
+	end
+
+    fun pp_pinterface' {parms,entries} =
+	Vbox[String "---- Parameters ----",
+	     Break,
+	     pp_parms' parms,
+	     Break,
+	     String "---- Context Entries ----",
+	     Break,
+	     pp_entries' entries,
+	     Break]
 
     val pp_var = help' pp_var
     val pp_label  = help' pp_label
@@ -610,8 +658,8 @@ struct
     val pp_exp = help' (pp_exp [])
     val pp_ovld = help' pp_ovld'
     val pp_context_entry = help' pp_context_entry'
+    val pp_entries = help' pp_entries'
     val pp_context = help' pp_context'
-    val pp_pcontext = help' pp_pcontext'
     val pp_signat = help' (pp_signat [])
     fun pp_list doer data = help' (pp_list' doer data)
     fun pp_commalist pobj objlist = pp_list pobj objlist ("(",", ",")",false)
@@ -627,5 +675,10 @@ struct
     val pp_decs = help' pp_decs
     val pp_sdecs = help' (pp_sdecs [])
     val pp_phrase_class = help' (pp_phrase_class true [])
+    val pp_decresult = help' pp_decresult'
+    val pp_module = help' pp_module'
+    val pp_parm = help' pp_parm'
+    val pp_parms = help' pp_parms'
+    val pp_pinterface = help' pp_pinterface'
 
   end

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* queue-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

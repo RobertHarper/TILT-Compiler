@@ -1,5 +1,3 @@
-(*$import MACHINE *)
-
 signature CALLCONV =
 sig
    structure Machine : MACHINE

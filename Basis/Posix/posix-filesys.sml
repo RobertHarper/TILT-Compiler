@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PrePosix Position Word SysWord PreOS POSIX_extern List Time POSIX_FILE_SYS String *)
 (* posix-filesys.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -13,14 +12,14 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
   struct
     val int32touint32 = TiltPrim.int32touint32
     val op^ = String.^
-	
+
     val ++ = Word.orb
     val & = Word.andb
     infix ++ &
 
     type uid = PrePosix.uid
     type gid = PrePosix.gid
-	
+
     datatype file_desc = FD of {fd : int}
     fun intOf (FD{fd,...}) = fd
     fun fd fd = FD{fd=fd}
@@ -32,7 +31,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
     fun iodToFD (PreOS.IO.IODesc fd) = SOME(FD{fd = fd})
 
     datatype open_mode = datatype PrePosix.open_mode
-	
+
     type c_dirstream = int   (* the underlying C DIRSTREAM - which is a DIR pointer *)
 
     datatype dirstream = DS of {
@@ -68,7 +67,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
 
     fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
     val o_wronly = w_osval "O_WRONLY"
-	 
+
     structure S =
       struct
         datatype flags = MODE of word
@@ -139,7 +138,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
     fun link {old : string, new : string} = Ccall(posix_filesys_link,old,new)
     fun rename {old : string, new : string} = Ccall(posix_filesys_rename,old,new)
     fun symlink {old : string, new : string} = Ccall(posix_filesys_symlink,old,new)
-    fun mkdir (dirname : string, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)						 
+    fun mkdir (dirname : string, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)
     fun mkfifo (name : string, S.MODE mode) = Ccall(posix_filesys_mkfifo,name,mode)
 
     fun unlink name = Ccall(posix_filesys_unlink,name)
@@ -173,7 +172,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
       (* The following assumes the C stat functions pull the
        * file type from the mode field and return the
        * integer below corresponding to the file type.
-       *) 
+       *)
 	fun isDir  (ST{ftype, ...}) = (ftype = 0x4000)
 	fun isChr  (ST{ftype, ...}) = (ftype = 0x2000)
 	fun isBlk  (ST{ftype, ...}) = (ftype = 0x6000)
@@ -192,10 +191,10 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
         fun atime (ST{atime,...}) = atime
         fun mtime (ST{mtime,...}) = mtime
         fun ctime (ST{ctime,...}) = ctime
-      end (* structure ST *) 
+      end (* structure ST *)
 
   (* this layout needs to track c-libs/posix-filesys/stat.c *)
-    type statrep = (int * word * word * word * word * word * 
+    type statrep = (int * word * word * word * word * word *
                     word * Position.int * int * int * int)
     fun mkStat (sr : statrep) = ST.ST{
 	    ftype = #1 sr,
@@ -245,16 +244,16 @@ structure POSIX_FileSys :> POSIX_FILE_SYS where type uid = PrePosix.uid
           in
             Ccall(posix_filesys_utime,file,atime,mtime)
           end
-    
-(* xxxx can't get option in basis 
+
+(* xxxx can't get option in basis
     val pathconf  : (string * string) -> word option = cfun "pathconf"
     val fpathconf'  : (int * string) -> word option = cfun "fpathconf"
 *)
-    fun pathconf  (str1, str2) : word option = 
+    fun pathconf  (str1, str2) : word option =
 	(case Ccall(posix_filesys_pathconf,str1,str2) of
 	    (0,i) => SOME (int32touint32 i)
 	  | _ => NONE)
-    fun fpathconf  (FD{fd}, s : string) : word option = 
+    fun fpathconf  (FD{fd}, s : string) : word option =
 	(case Ccall(posix_filesys_fpathconf,fd,s) of
 	    (0,i) => SOME (int32touint32 i)
 	  | _ => NONE)

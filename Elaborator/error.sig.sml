@@ -1,6 +1,4 @@
-(*$import Ast SourceMap IL Il *)
-
-signature ERROR = 
+signature ERROR =
   sig
 
     datatype ErrorLevel = Error | NoError | Warn

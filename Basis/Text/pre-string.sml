@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* pre-string.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -29,7 +28,7 @@ structure PreString =
     val unsafe_array = TiltPrim.unsafe_array
 
     val unsafe_array2vector = TiltPrim.unsafe_array2vector
-	
+
     local
 (*
       structure C = InlineT.Char
@@ -81,7 +80,7 @@ structure PreString =
 
     fun unsafeSubstring (_, _, 0w0) = ""
       | unsafeSubstring (s : string, i, 0w1) = unsafe_vsub (chars, uint8touint32 (unsafe_vsub (s, i)))
-      | unsafeSubstring (s, i, n) = 
+      | unsafeSubstring (s, i, n) =
 	let
 	    val ss = unsafeCreate (uint32toint32 n)
 	    fun copy j = if (j = n)
@@ -91,11 +90,11 @@ structure PreString =
 	end
 
     fun size (x : string) : int = TiltPrim.uint32toint32(TiltPrim.vector_length x)
-	
+
   (* concatenate a pair of non-empty strings *)
-    fun concat2 (x, y) = 
+    fun concat2 (x, y) =
 	let
-	    val xl = size x 
+	    val xl = size x
 	    val yl = size y
 	    val ss = create(xl+yl)
 	    val xl = int32touint32 xl
@@ -122,10 +121,10 @@ structure PreString =
 	  in
 	    find lst
 	  end
-      | revConcat (totLen : int, lst : string list) = 
+      | revConcat (totLen : int, lst : string list) =
 	  let val ss = create totLen
 	      fun copy ([], _) = ()
-		| copy (s::r, i) = 
+		| copy (s::r, i) =
 		  let
 		      val len = vector_length s
 		      val i = uminus(i,len)
@@ -138,7 +137,7 @@ structure PreString =
 		      copy' 0w0;
 		      copy (r, i)
 		  end
-	  in  copy (lst, int32touint32 totLen);  
+	  in  copy (lst, int32touint32 totLen);
 	      unsafe_array2vector ss
 	  end
 
@@ -158,7 +157,7 @@ structure PreString =
   (* implode a non-empty list of characters into a string where both the
    * length and list are given as arguments.
    *)
-    fun implode (len, cl) = 
+    fun implode (len, cl) =
 	let
 	    val ss = create len
 	    fun copy ([], _) = unsafe_array2vector ss
@@ -197,7 +196,7 @@ structure PreString =
 		  val c1 = unsafe_vsub(s1, uplus(i1,i))
 		  val c2 = unsafe_vsub(s2, uplus(i2,i))
 		  in
-		    case (cmpFn(c1, c2)) 
+		    case (cmpFn(c1, c2))
 		     of EQUAL => cmp' (uplus(i,0w1))
 		      | order => order
 		    (* end case *)

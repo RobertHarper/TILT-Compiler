@@ -1,5 +1,3 @@
-(*$import PATHNAMES String *)
-
 (* Copyright 1989 by AT&T Bell Laboratories *)
 
 structure Pathnames : PATHNAMES =
@@ -14,7 +12,7 @@ structure Pathnames : PATHNAMES =
                  then j+1
                  else find (j+1)
     in if (size ch) = 0 then 0 else find i end;
-  
+
   fun explodePath (path:string) :string list =
     let val slash = findChr "/" (0,path)
         val len = size path

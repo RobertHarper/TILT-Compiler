@@ -1,4 +1,3 @@
-(*$import OS_IO PreOS *)
 structure OS_IO : OS_IO where type iodesc = PreOS.IO.iodesc 
 			  and type poll_desc = PreOS.IO.poll_desc 
                           and type poll_info = PreOS.IO.poll_info

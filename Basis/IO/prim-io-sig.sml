@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreOS *)
 (* prim-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -15,7 +14,7 @@ signature PRIM_IO =
     val compare : pos * pos -> order
 
     datatype reader = RD of {
-	name      : string, 
+	name      : string,
 	chunkSize : int,
 	readVec   : (int -> vector) option,
         readArr   : ({buf : array, i : int, sz : int option} -> int) option,

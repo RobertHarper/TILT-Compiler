@@ -1,4 +1,3 @@
-(*$import Core MACHINE BBLOCK TRACETABLE Rtl *)
 (* Translation of RTL to pre-annotated assembly *)
 
 signature TOASM =
@@ -17,9 +16,9 @@ sig
 
       Also returns set of registers much must be homed to the stack.
       These are registers used in COMPUTEs.*)
-   val translateProc   : Rtl.proc -> 
+   val translateProc   : Rtl.proc ->
      (Machine.label list) * (Bblock.bblock Core.Labelmap.map)
      * ((Machine.register option * Tracetable.trace) Core.Regmap.map)
      * (Machine.stacklocation Core.Regmap.map)
-				    
+
 end

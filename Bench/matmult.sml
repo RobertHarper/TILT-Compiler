@@ -1,5 +1,3 @@
-(*$import Int Array Array2 *) 
-
 (* 2-d matrix multiply *)
 
 local

@@ -1,33 +1,31 @@
-(*$import ORD_MAP ORD_SET Rtl TilWord32 *)
-
 signature CORE =
   sig
 
     val branchingTraps : bool ref
-	
+
     type label = Rtl.label
     type data = Rtl.data
-	
+
     datatype register = R of int
                       | F of int
-	
+
     datatype stacklocation = CALLER_FRAME_ARG4 of int  (* int indicates word count *)
 	                   | CALLER_FRAME_ARG8 of int
                            | THIS_FRAME_ARG4 of int
                            | THIS_FRAME_ARG8 of int
                            | FRAME_TEMP                (* should use SPILL *)
-                           | SPILLED_INT of int        
+                           | SPILLED_INT of int
                            | SPILLED_FP of int
                            | RETADD_POS
                            | ACTUAL4 of int            (* int indicates actual offset - mult of 4 *)
                            | ACTUAL8 of int
-      
+
     (* Where a given pseudoregister is physically located *)
     datatype assign = IN_REG of register
                     | ON_STACK of stacklocation
                     | HINT of register
                     | UNKNOWN_ASSIGN
-									      
+
     structure Labelmap : ORD_MAP where type Key.ord_key = label
     structure Labelset : ORD_SET where type Key.ord_key = label
     structure Regmap   : ORD_MAP where type Key.ord_key = register
@@ -47,7 +45,7 @@ signature CORE =
     datatype call_type = DIRECT of label * register option
                        | INDIRECT of register
     datatype rtl_instruction =
-      CALL of 
+      CALL of
       {calltype : Rtl.calltype,          (* is this a C call? *)
        func: call_type,                  (* label or temp containing addr. *)
        args : register list,             (* integer, floating temps *)
@@ -61,7 +59,7 @@ signature CORE =
     | HANDLER_ENTRY
 
 
-    datatype base_instruction = 
+    datatype base_instruction =
       MOVE    of register * register
     | PUSH    of register * stacklocation
     | POP     of register * stacklocation
@@ -85,23 +83,23 @@ signature CORE =
     | ICOMMENT of string
     | LADDR of register * label         (* dest, label *)
 
-    datatype linkage = 
+    datatype linkage =
 	LINKAGE of {argCaller : assign list,    (* Where are the arguments from the caller's view? *)
 		    resCaller : assign list,    (* Where are the results from the caller's view? *)
 		    argCallee : assign list,    (* Where are the arguments from the callee's view? *)
 		    resCallee : assign list     (* Where are the results from the callee's view? *)
 		    }
 
-   datatype procsig = 
-       UNKNOWN_PROCSIG of 
+   datatype procsig =
+       UNKNOWN_PROCSIG of
            {linkage : linkage,
 	    regs_destroyed  : Regset.set,     (* Physical registers modified by procedure *)
 	    regs_modified  : Regset.set,      (* Physical registers modified (but restored) by procedure *)
 	    callee_saved: Regset.set}         (* Physical registers saved by procedure *)
-     | KNOWN_PROCSIG of 
+     | KNOWN_PROCSIG of
            {linkage : linkage,                (* Physical locations of arguments and registers *)
 	    argFormal : register list,        (* What are the formal (the pseudo-registers) for args and res *)
-	    resFormal : register list,  
+	    resFormal : register list,
 	    framesize : int,                  (* How big is the stack frame for the procedure? *)
 	    ra_offset : int,                  (* Where in the stack is the return addr stored? *)
 	    blocklabels: label list,          (* A list of basic block labels of the proc *)

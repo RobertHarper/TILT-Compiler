@@ -1,10 +1,9 @@
-(*$import Firstlude TiltPrim Prelude ARRAY_SORT Word Array TopLevel *)
 (* array-qsort.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
  *
  * Structure for in-place sorting of polymorphic arrays.
- * Uses an engineered version of quicksort due to 
+ * Uses an engineered version of quicksort due to
  * Bentley and McIlroy.
  *
  *)
@@ -16,12 +15,12 @@ structure ArrayQSort : ARRAY_SORT =
 
     type 'a array = 'a A.array
 
-    val sub = unsafe_sub
-    val update = unsafe_update
+    val sub = TiltPrim.unsafe_sub
+    val update = TiltPrim.unsafe_update
 
     fun isort (array, start : word, n : word, cmp) = let
           fun item i = sub(array,i)
-          fun swap (i,j) = let 
+          fun swap (i,j) = let
                 val tmp = sub(array,i)
                 in update(array,i,sub(array,j)); update(array,j,tmp) end
           fun vecswap (i,j,0w0) = ()
@@ -48,7 +47,7 @@ structure ArrayQSort : ARRAY_SORT =
 
     fun sortRange (array, start : word, n : word, cmp) = let
           fun item i = sub(array,i)
-          fun swap (i,j) = let 
+          fun swap (i,j) = let
                 val tmp = sub(array,i)
                 in update(array,i,sub(array,j)); update(array,j,tmp) end
           fun vecswap (i,j,0w0) = ()
@@ -84,8 +83,8 @@ structure ArrayQSort : ARRAY_SORT =
 		  (* end case *)
 		end
 
-          fun getPivot (a,n) = 
-                if n <= 0w7 
+          fun getPivot (a,n) =
+                if n <= 0w7
 		    then a + n div 0w2
                 else let
                   val p1 = a
@@ -102,7 +101,7 @@ structure ArrayQSort : ARRAY_SORT =
                         med3(p1,pm,pn)
                       end
                   end
-          
+
           fun quickSort (arg as (a, n)) = let
                 fun bottom limit = let
                       fun loop (arg as (pa,pb)) =
@@ -112,7 +111,7 @@ structure ArrayQSort : ARRAY_SORT =
                             | LESS => loop (pa,pb+0w1)
                             | _ => (swap arg; loop (pa+0w1,pb+0w1))
                       in loop end
-      
+
                 fun top limit = let
                       fun loop (arg as (pc,pd)) =
                             if limit > pc then arg
@@ -146,14 +145,14 @@ structure ArrayQSort : ARRAY_SORT =
                 val _ = if n' > 0w1 then sort(pn-n',n') else ()
                 in () end
 
-          and sort (arg as (_, n)) = if n < 0w7 then insertSort arg 
+          and sort (arg as (_, n)) = if n < 0w7 then insertSort arg
                                      else quickSort arg
           in sort (start,n) end
 
-    fun sort cmp array = sortRange(array, 0w0, int32touint32(A.length array), cmp)
+    fun sort cmp array = sortRange(array, 0w0, TiltPrim.int32touint32(A.length array), cmp)
 
     fun sorted cmp array = let
-          val len = int32touint32(A.length array)
+          val len = TiltPrim.int32touint32(A.length array)
           fun s (v,i : word) = let
                 val v' = sub(array,i)
                 in

@@ -1,5 +1,4 @@
-(*$import Name Nil Alpha *)
-signature NILRENAME = 
+signature NILRENAME =
   sig
     type exp = Nil.exp
     type con = Nil.con
@@ -14,12 +13,12 @@ signature NILRENAME =
     val renameEVarsExp : exp -> exp
     val renameEVarsCon : con -> con
     val renameEVarsKind : kind -> kind
-      
+
     (*Just rename the constructor level bindings*)
     val renameCVarsExp : exp -> exp
     val renameCVarsCon : con -> con
     val renameCVarsKind : kind -> kind
-      
+
     (*Rename all the bindings*)
     val renameExp : exp -> exp
     val renameCon : con -> con
@@ -45,10 +44,10 @@ signature NILRENAME =
     val noShadowsKind : kind -> bool
     val noShadowsMod  : module -> bool
 
-    (* These functions check as above, but also check that 
+    (* These functions check as above, but also check that
      * no bound binding occurrence fails the predicate.  So
      * for example, by passing in functions that look in a context
-     * for an occurrence of a variable, it is possible to check whether or 
+     * for an occurrence of a variable, it is possible to check whether or
      * not an item is renamed in the sense that all binding occurrences are distinct,
      * and no variable is bound which also occurs in the context
      *

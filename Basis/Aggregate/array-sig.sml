@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* array-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -32,13 +31,13 @@ signature ARRAY =
 
     val appi    : (int * 'a -> unit) -> 'a array * int * int option -> unit
     val app     : ('a -> unit) -> 'a array -> unit
-	
+
     val foldli  : (int * 'a * 'b -> 'b) -> 'b -> 'a array * int * int option -> 'b
     val foldri  : (int * 'a * 'b -> 'b) -> 'b -> 'a array * int * int option -> 'b
-	
+
     val foldl   : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
     val foldr   : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
-	
+
     val modifyi : (int * 'a -> 'a) -> 'a array * int * int option -> unit
     val modify  : ('a -> 'a) -> 'a array -> unit
 

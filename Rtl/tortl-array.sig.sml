@@ -1,6 +1,4 @@
-(*$import Nil Rtl Prim TortlBase Name *)
-
-signature TORTL_ARRAY = 
+signature TORTL_ARRAY =
 sig
 
   type state = TortlBase.state

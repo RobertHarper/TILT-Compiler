@@ -1,5 +1,3 @@
-(*$import List Array Int TextIO *)
-
 functor makeRunTyan() = 
 struct
 local

@@ -1,4 +1,3 @@
-(*$import Int MTPRINT GLOBAL INTSYN FUNSYN NAMES STATESYN FORMATTER PRINT FUNPRINT *)
 (* Meta Printer Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

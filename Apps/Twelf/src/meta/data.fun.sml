@@ -1,4 +1,3 @@
-(*$import MTPDATA MTPGLOBAL *)
 (* Meta Global parameters *)
 (* Author: Carsten Schuermann *)
 

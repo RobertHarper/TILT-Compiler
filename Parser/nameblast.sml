@@ -1,5 +1,3 @@
-(*$import Name NAMEBLAST Blaster Util Symbol Int Word31 *)
-
 structure NameBlast :> NAMEBLAST =
   struct
 
@@ -13,35 +11,35 @@ structure NameBlast :> NAMEBLAST =
 	in  blastOutInt os n
 	end
 
-    fun blastInVar int2var is = 
+    fun blastInVar int2var is =
 	let val n = blastInInt is
 	in  int2var n
 	end
-    
+
     fun blastOutTag os t =
 	let val (n,str) = deconstruct_tag t
 	in  (blastOutInt os n;
 	     blastOutString os str)
 	end
 
-    fun blastInTag is = 
+    fun blastInTag is =
 	let val n = blastInInt is
 	    val str = blastInString is
 	in  construct_tag(n, str)
 	end
 
-    fun blastOutLabel os label = 
+    fun blastOutLabel os label =
 	let val (n,str) = deconstruct_label label
 	in  (blastOutInt os n;
 	     blastOutString os str)
 	end
 
-    fun blastInLabel is = 
+    fun blastInLabel is =
 	let val n = blastInInt is
 	    val str = blastInString is
 	in  construct_label(n, str)
 	end
-    
+
     fun blastOutPath os (v,labs) = (blastOutVar os v; blastOutList blastOutLabel os labs)
 
     fun blastInPath int2var is = let val v = blastInVar int2var is
@@ -49,10 +47,10 @@ structure NameBlast :> NAMEBLAST =
 			 in  (v,labs)
 			 end
 
-    fun blastOutVarmap os blaster vmap = 
+    fun blastOutVarmap os blaster vmap =
 	blastOutList (blastOutPair blastOutVar blaster) os (VarMap.listItemsi vmap)
 
-    fun blastOutPathmap os blaster pmap = 
+    fun blastOutPathmap os blaster pmap =
 	blastOutList (blastOutPair blastOutPath blaster) os (PathMap.listItemsi pmap)
 
     fun blastInVarmap int2var is blaster =
@@ -66,17 +64,17 @@ structure NameBlast :> NAMEBLAST =
 	    fun folder((p,item),acc) = PathMap.insert(acc,p,item)
 	    in  foldl folder PathMap.empty ls
 	end
-    
-    fun blastOutLabelmap os blaster vmap = 
+
+    fun blastOutLabelmap os blaster vmap =
 	blastOutList (blastOutPair blastOutLabel blaster) os (LabelMap.listItemsi vmap)
     fun blastInLabelmap is blaster =
 	let val ls = blastInList (blastInPair blastInLabel blaster)  is
 	    fun folder((v,item),acc) = LabelMap.insert(acc,v,item)
 	in  foldl folder LabelMap.empty ls
 	end
-    
 
-    fun blastOutTagmap os blaster vmap = 
+
+    fun blastOutTagmap os blaster vmap =
 	blastOutList (blastOutPair blastOutTag blaster) os (TagMap.listItemsi vmap)
     fun blastInTagmap is blaster =
 	let val ls = blastInList (blastInPair blastInTag blaster)  is
@@ -84,7 +82,7 @@ structure NameBlast :> NAMEBLAST =
 	in  foldl folder TagMap.empty ls
 	end
 
-    
+
 end
 
 

@@ -1,6 +1,4 @@
-(*$import Il *)
-
-signature SIGNATURE = 
+signature SIGNATURE =
 sig
     val debug : bool ref
 

@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Initialization *)
 (* Author: Carsten Schuermann *)
 

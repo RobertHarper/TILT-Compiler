@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Position PreOS SysWord POSIX_FLAGS Time *)
 (* posix-filesys-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -40,7 +39,7 @@ signature POSIX_FILE_SYS =
 
         type mode
           sharing type mode = flags
- 
+
         val irwxu : mode
         val irusr : mode
         val iwusr : mode
@@ -87,7 +86,7 @@ signature POSIX_FILE_SYS =
     val rename    : {old : string, new : string} -> unit
     val symlink   : {old : string, new : string} -> unit  (* POSIX 1003.1a *)
     val readlink  : string -> string                      (* POSIX 1003.1a *)
-	
+
     eqtype dev
     val wordToDev : SysWord.word -> dev
     val devToWord : dev -> SysWord.word
@@ -133,7 +132,7 @@ signature POSIX_FILE_SYS =
     val fchown   : file_desc * uid * gid -> unit
 
     val utime : string * {actime : Time.time, modtime : Time.time} option -> unit
-    
+
     val ftruncate : file_desc * Position.int -> unit      (* POSIX 1003.1a *)
 
     val pathconf  : string * string -> SysWord.word option

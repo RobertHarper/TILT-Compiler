@@ -1,4 +1,3 @@
-(*$import Firstlude Prelude TiltPrim *)
 (* sml90.sig
  *
  * COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies.

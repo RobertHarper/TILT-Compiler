@@ -1,6 +1,4 @@
-(*$import TortlBase Name *)
-
-signature TORTL_VARARG = 
+signature TORTL_VARARG =
 sig
 
   type state = TortlBase.state

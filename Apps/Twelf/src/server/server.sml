@@ -1,4 +1,3 @@
-(*$import OS TextIO String Char Int Bool TimersStructs SIGINT LEXER TWELF FrontendStructs TimingStructs SigINT *)
 signature SERVER =
 sig
 

@@ -1,17 +1,15 @@
-(*$import Nil NilUtil Ppnil PrimUtil NilSubst REDUCE *) 
-
 (* This file is OBSOLETED by Optimize. This file mentions dropping unused args (but has no code for it), but we are ignoring
  that optimization possibility for now. *)
 
 (* This doesn't handle Fixclosure, Fixcode or Parallel lets *)
 
 structure Reduce
-  :> REDUCE 
-  = 
+  :> REDUCE
+  =
 
-  struct 
+  struct
     val debug = ref false;
-      
+
     val do_inline = Stats.tt("reduce_do_inline")
     val do_project_known = Stats.tt("reduce_do_project_known")
     val do_dead = Stats.tt("reduce_do_dead")
@@ -27,7 +25,7 @@ structure Reduce
 
     val exportbnds = ref [] : bnd list ref
 
-    fun nilprim_isval(np,clist,elist) = 
+    fun nilprim_isval(np,clist,elist) =
       (case np of
 	 record _ => Listops.andfold exp_isval elist
        | inject _ => Listops.andfold exp_isval elist
@@ -36,15 +34,15 @@ structure Reduce
        | inj_exn _ => Listops.andfold exp_isval elist
        | _ => false)
 (*
-	 | ((make_vararg _) | (make_onearg _) | 
-	    (select _) | (inject_nonrecord _) | (inject_record _) | (project_sum _) | 
-	    (project_sum_nonrecord _ )| (project_sum_record _) | (unbox_float _) 
+	 | ((make_vararg _) | (make_onearg _) |
+	    (select _) | (inject_nonrecord _) | (inject_record _) | (project_sum _) |
+	    (project_sum_nonrecord _ )| (project_sum_record _) | (unbox_float _)
        | unroll | make_exntag) => false)
 *)
-	 
+
     and exp_isval (Var_e v) = false
       | exp_isval (Const_e v) = true
-      (*      | exp_isval (Let_e (_,[bnd],Var_e v)) = 
+      (*      | exp_isval (Let_e (_,[bnd],Var_e v)) =
        (case bnd of
 	  (Con_b _) => false
        | (Exp_b _) => false
@@ -61,8 +59,8 @@ structure Reduce
       | exp_isval (Handle_e _) = false
 
    (* CS: Duplicates code in linearize *)
-   fun exp_issmall exp =  
-       (case exp of 
+   fun exp_issmall exp =
+       (case exp of
 	    Var_e _ => true
           | Const_e (Prim.int (Prim.W64,_)) => false
           | Const_e (Prim.uint (Prim.W64,_)) => false
@@ -89,7 +87,7 @@ structure Reduce
 	       loop (max_size - (size str))
 	   end
 
-    fun make_click str = 
+    fun make_click str =
 	let val _ = max_name_size := Int.max(size str, !max_name_size)
 	    val t = Stats.int(str)
 	    val click = { name = str, last = ref 0, total = t  }
@@ -97,71 +95,71 @@ structure Reduce
 	    click )
 	end
 
-    fun inc_click { last=r, name=n, total= t } = 
+    fun inc_click { last=r, name=n, total= t } =
 		t := ! t + 1
-    fun print_clicks unit = 
-	let fun pritem {name = name, last = r, total = count } = 
+    fun print_clicks unit =
+	let fun pritem {name = name, last = r, total = count } =
 	    (print "  ";
 	     fprint (!max_name_size) name;
 	     print " : ";
 	     fprint 8 (Int.toString (!count));
 	     print "\n")
-	in  
+	in
 	    print "Optimization results\n";
 	    print "-------------------------------------------\n";
 	    app pritem (rev(!clicks));
 	    print "-------------------------------------------\n"
-	end 
- 
+	end
+
     fun init_clicks unit =
 	app (fn {last = r, total = t, name=str } =>
 	     ( t:= 0 ; r := 0) ) (!clicks)
- 
-    fun round_clicks clicks = 
-	foldl  (fn ({last = r, total = t, ... }:click, acc:int) => 
+
+    fun round_clicks clicks =
+	foldl  (fn ({last = r, total = t, ... }:click, acc:int) =>
 	       ( let val temp = !t - (!r)
-		 in ( r := !t ; temp+acc ) end )) 0 clicks 
-    fun print_round_clicks clicks = 
+		 in ( r := !t ; temp+acc ) end )) 0 clicks
+    fun print_round_clicks clicks =
 	app (fn {name = n, last = r, total = t } =>
 	     print ("  " ^ n ^ " :" ^ Int.toString ((!t)-(!r)) ^ "\n") ) clicks
 
 (*    val select_con_click = make_click "Selects from known con records" *)
-    val select_click = make_click "Selects from known exp records" 
+    val select_click = make_click "Selects from known exp records"
     (* How many selections from known records have been replaced *)
 (*    val con_inline_click = make_click "Constructor Functions inlined" *)
-    val inline_click = make_click "Functions inlined (used only once)" 
+    val inline_click = make_click "Functions inlined (used only once)"
     (* How many functions called only once inlined *)
     val dead_click = make_click "Dead variables eliminated"
     (* How many dead variables have  been removed *)
-    val fold_click = make_click "Constants folded"        
+    val fold_click = make_click "Constants folded"
     (* How many constants have been folded *)
-(*    val switch_click = make_click "Known switches eliminated"  *)   
+(*    val switch_click = make_click "Known switches eliminated"  *)
     (* How many known switches have been eliminated *)
     val var_click = make_click "Vars propagated"
 (*    val sum_record_click = make_click "Project_sums to project_sum_records"
     val drop_click = make_click "Unused args dropped" *)
-	
+
     val clicks = [ select_click, (* select_con_click,  con_inline_click,*) inline_click, var_click,
 		  dead_click, fold_click (*, switch_click, sum_record_click, drop_click *) ]
-	
+
     val inc_click  = inc_click
-	
-   
+
+
     fun small_con con =
-	case con of 
+	case con of
 	    Var_c v => true
-	  | Prim_c (primcon, clist) => length clist = 0 
+	  | Prim_c (primcon, clist) => length clist = 0
 	  | _ => false
 
 
     (* Now, tables to keep information about the code as
      we walk it *)
-		
-	   			
+
+
     (* In order to project from known records or inline functions,
      we store their bodies in the following hashtable: *)
-		
-    datatype bind = F of con * function | R of label list * exp list | INLINED 
+
+    datatype bind = F of con * function | R of label list * exp list | INLINED
       | S of var * w32 * con list
       (* Constructor functions and records *)
       | FC of ((var * kind) list * con * kind)
@@ -173,44 +171,44 @@ structure Reduce
     (* Set of functions that we have dropped the arguments of *)
     val drop_table =  Name.mk_var_hash_table(200,FnNotFound):
 	(var, (bool list * bool list) ) HashTable.hash_table
-		
-		
+
+
     (* Maps variables to new variables or to constants, for
      substituting one value for another *)
-    val sigma =  Name.mk_var_hash_table(200,FnNotFound): 
+    val sigma =  Name.mk_var_hash_table(200,FnNotFound):
 	(var, exp) HashTable.hash_table
-		
-    val sigma_c = Name.mk_var_hash_table(200,FnNotFound): 
-	(var, con) HashTable.hash_table
-	
-    fun insert sigma x v = 
-	HashTable.insert sigma (x, v)
-		
 
-    fun s a  = 
-	case HashTable.find sigma a of 
+    val sigma_c = Name.mk_var_hash_table(200,FnNotFound):
+	(var, con) HashTable.hash_table
+
+    fun insert sigma x v =
+	HashTable.insert sigma (x, v)
+
+
+    fun s a  =
+	case HashTable.find sigma a of
 	    SOME x => x
 	  | NONE => Var_e a
-    fun sc a  = 
-	case HashTable.find sigma_c a of 
+    fun sc a  =
+	case HashTable.find sigma_c a of
 	    SOME x => x
 	  | NONE => Var_c a
-		
-    (* 
-     
+
+    (*
+
      Hash Table for keeping statistics on the variables
      encountered in the program. The three refs are
-     
+
      1 - app - Counts the number of times a variable appears
-	       in the function position 
+	       in the function position
      2 - esc - Counts the number of times a variable appears
-               as an argument 
+               as an argument
      3 - rec_app - Counts the number of times a variable appears in
 	       a recursive call (only valid for function
 	       names)
      4 - rec_esc - Counts the num of times a
                function escapes inside its body
-     5 - known - true if letbound, false if arg to fun 
+     5 - known - true if letbound, false if arg to fun
      *)
 
     type info = (int ref * int ref * int ref * int ref * bool ref)
@@ -232,17 +230,17 @@ structure Reduce
       else
 	NONE
 
-    fun print_escape unit = 
-      let val (apps, escs, kfs, both) =  HashTable.fold 
+    fun print_escape unit =
+      let val (apps, escs, kfs, both) =  HashTable.fold
 	(fn (info, (apps, escs, kfs, both) ) =>
 	 let val app = ! (count_app info)
 	   val esc = !(count_esc info)
 	   val recval = !(count_rec_app info)
-	 in 
-	   if (app > 0  orelse recval > 0 ) then 
+	 in
+	   if (app > 0  orelse recval > 0 ) then
 	     (apps+1,
-	      if (esc > 0) then 
-		escs+1 
+	      if (esc > 0) then
+		escs+1
 	      else
 		escs, kfs + (if (!(known info)) then 1 else 0),
 		both + (if (!(known info) andalso esc > 0) then 1 else 0))
@@ -250,99 +248,99 @@ structure Reduce
 	     (apps, escs, kfs, both)
 	 end)
 	(0,0,0,0) count_table
-	  val (apps2, escs2) = HashTable.fold 
+	  val (apps2, escs2) = HashTable.fold
 	    (fn (info, (apps2, escs2) ) =>
 	     let val app = ! (count_app info)
 	       val recval = !(count_rec_app info)
 	       val k = ! (known info)
-	     in 
-	       if (app > 0  orelse recval > 0 ) then 
+	     in
+	       if (app > 0  orelse recval > 0 ) then
 		 (apps2+app + recval,
-		  if k then 
-		    escs2+app + recval 
+		  if k then
+		    escs2+app + recval
 		  else
 		    escs2)
 	       else
 		 (apps2, escs2)
 	     end)
 	    (0,0) count_table
-	    
-      in 
+
+      in
 	print "---------------- Function Information ----------------------\n";
 	print ("Total number of vars applied: " ^ (Int.toString apps) ^ "\n");
-	print ("           which also escape: " ^ (Int.toString escs) ^ "(" ^ 
+	print ("           which also escape: " ^ (Int.toString escs) ^ "(" ^
 	       (Real.toString ((Real.fromInt(escs)/Real.fromInt(apps)) * 100.0)) ^ " %)\n");
 	print ("             which are known: " ^ (Int.toString kfs) ^ "\n");
 	print ("                    both    : " ^ (Int.toString both) ^ "\n");
 	print ("Total number of applications: " ^ (Int.toString apps2) ^ "\n");
 	print("              which are known: " ^ (Int.toString  escs2) ^ "\n");
 	print "-----------------------------------------------------------\n"
-      end 
-      
+      end
+
 
     val total_set = ref VarSet.empty  (* Set of functions encountered which are total *)
 
    (* Functions for manipulating the data in the hash tables *)
-    fun get_table which fset x = 
+    fun get_table which fset x =
       if VarSet.member(fset, x)
 	then
 	  (case which of
 	     APP => count_rec_app
 	   | ESC => count_rec_esc)
-      else 
+      else
 	case which of
 	  APP => count_app
 	| ESC => count_esc
 
     (* *)
-    fun update_count 
+    fun update_count
 	which             (* which table to look in *)
 	(Var_e x)     (* the variable to look up *)
 	(y:int)       (* the amount to change it by *)
 	fset =        (* set of recursive functions we are in the scope of *)
 	((let  val t = get_table which fset x
 	       val (cell:int ref) = t (HashTable.lookup count_table x)
-	  in 
+	  in
 	      cell := (!cell) + y
 	  end) handle FnNotFound => ())
-      | update_count t x y fset = () 
-	
-    fun zero which (Var_e x) fset = 
+      | update_count t x y fset = ()
+
+    fun zero which (Var_e x) fset =
 	((let val t = get_table which fset x
 	      val (cell:int ref) = t (HashTable.lookup count_table x)
-	  in 
+	  in
 	      cell := 0
 	  end)
 	      handle FnNotFound => ())
       | zero t x fset = ()
-	
+
     fun update_count_c which (Var_c x) y fset =
 	((let  val t = get_table which fset x
 	       val (cell:int ref) = t (HashTable.lookup count_table x)
-	  in 
+	  in
 	      cell := (!cell) + y
 	  end) handle FnNotFound => ())
-      | update_count_c t x y fset = () 
-	
-    fun zero_c which (Var_c x) fset = 
+      | update_count_c t x y fset = ()
+
+    fun zero_c which (Var_c x) fset =
 	((let val t = get_table which fset x
 	      val (cell:int ref) = t( HashTable.lookup count_table x)
-	  in 
+	  in
 	      cell := 0
 	  end)
 	      handle FnNotFound => ())
       | zero_c t x fset = ()
-	
+
     fun look t a =
 	! (t (HashTable.lookup count_table a))
-	handle FnNotFound => 
-	    (* Anything that we can't find is not declared in this file, so we can't 
-	     inline it or anything. So always return 1 *) 
-	    ( (* print "Can't find " ; Ppnil.pp_var a ; print "\n" ; *) 1 ) 
-	    
-    fun replace x exp fset = 
-	( (case exp of 
-	       Var_e b => 
+	handle FnNotFound =>
+	    (* Anything that we can't find is not declared in this file, so we can't
+	     inline it or anything. So always return 1 *)
+	    ( (* print "Can't find " ; Ppnil.pp_var a ; print "\n" ; *) 1 )
+
+    fun replace x exp fset =
+	( (case exp of
+	       Var_e b =>
 		   ( insert sigma x (s(b)) ;
 		    update_count APP (s(b)) (look count_app x) fset;
 		    update_count ESC (s(b)) (look count_esc x) fset )
@@ -350,10 +348,10 @@ structure Reduce
 		   insert sigma x exp) ;
 	       zero APP (Var_e x) fset;
 	       zero ESC (Var_e x) fset)
-(*	       
-    fun replace_c x exp fset = 
-	( (case exp of 
-	       Var_c b => 
+(*
+    fun replace_c x exp fset =
+	( (case exp of
+	       Var_c b =>
 		   ( insert sigma_c x (sc(b)) ;
 		    update_count_c count_app (sc(b)) (look count_app x) fset;
 		    update_count_c count_esc (sc(b)) (look count_esc x) fset )
@@ -361,80 +359,80 @@ structure Reduce
 		   insert sigma_c x exp) ;
 	       zero_c APP (Var_c x) fset;
 	       zero_c ESC (Var_c x) fset) *)
-	       
+
     (* The following functions implement the census algorithm, which
      determines for each variable how many times it is used or
      escapes. Unlike Appel's version, this one doesn't include
      recursive calls/uses of functions in the counts, but counts them
      separately*)
-	       
-    local 
-	val delta = ref 1  (* What should we change 
+
+    local
+	val delta = ref 1  (* What should we change
 			    the value by usually +1 or -1 *)
 	fun inc x =  x:= (!x) + (!delta)
-	    
+
 	(* b is true for lets, false for fun args *)
-	fun declare b x =  
+	fun declare b x =
             (case (HashTable.find count_table x ) of
-	      NONE => HashTable.insert 
+	      NONE => HashTable.insert
 			 count_table (x,(ref 0, ref 0, ref 0, ref 0, ref b))
                | _ => ())
-			     
-	fun insesc fset x = 
+
+	fun insesc fset x =
 	    let  val y = s(x)
-	    in 
-		case y of 
+	    in
+		case y of
 		    Var_e y =>
 			let val table = if VarSet.member (fset, y) then count_rec_esc
 					else count_esc
-			in 
+			in
 			    ( case (HashTable.find count_table y) of
-				  NONE =>  () 
-				| SOME use =>  inc (table use )) 
-			end 
+				  NONE =>  ()
+				| SOME use =>  inc (table use ))
+			end
 		  | _ => ()
-	    end 
-	
-	fun insapp fset x  =
-	    let  val  y = s(x) 
-	    in 
-		case y of 
-		    Var_e y => 
-		      let val table = if VarSet.member (fset, y) then count_rec_app 
-			  else count_app 
-			in 
-			    ( case (HashTable.find count_table y ) of
-				  NONE => () 
-				| SOME use => inc (table use) ) 
-			end 
-			  |  _  => () (* Constant expression *)
-	    end 
+	    end
 
-			 
-	fun insesc_c fset x  = 
+	fun insapp fset x  =
+	    let  val  y = s(x)
+	    in
+		case y of
+		    Var_e y =>
+		      let val table = if VarSet.member (fset, y) then count_rec_app
+			  else count_app
+			in
+			    ( case (HashTable.find count_table y ) of
+				  NONE => ()
+				| SOME use => inc (table use) )
+			end
+			  |  _  => () (* Constant expression *)
+	    end
+
+
+	fun insesc_c fset x  =
 	    let  val y = sc(x)
-	    in 
-		case y of 
+	    in
+		case y of
 		    Var_c y =>
 			( case (HashTable.find count_table y) of
-			      NONE =>  () 
-			    | SOME use =>   inc (count_esc use )) 
+			      NONE =>  ()
+			    | SOME use =>   inc (count_esc use ))
 		  | _ => ()
-	    end 
+	    end
 
 	fun insapp_c fset x  =
-	    let  val  y = sc(x) 
-	    in 
-		case y of 
-		    Var_c y => 
+	    let  val  y = sc(x)
+	    in
+		case y of
+		    Var_c y =>
 			( case (HashTable.find count_table y ) of
-			      NONE => () 
-					| SOME use => inc (count_app use )) 
+			      NONE => ()
+					| SOME use => inc (count_app use ))
 		  |  _  => () (* Constant expression *)
-	    end 
+	    end
 
 	(* ------------------------------------------------------------------ *)
-	fun scan_kind fset kind = 
+	fun scan_kind fset kind =
 	  case kind of
 	    Type_k => ()
 	  | SingleType_k con => scan_con fset con
@@ -446,64 +444,64 @@ structure Reduce
 
 
 	and scan_con fset con =
-	  case con of 
-	      Prim_c (primcon, cons) => app (scan_con fset) cons 
-	    | Mu_c (bool, vcset) => 
+	  case con of
+	      Prim_c (primcon, cons) => app (scan_con fset) cons
+	    | Mu_c (bool, vcset) =>
 		let val fset = VarSet.addList (fset,(Sequence.maptolist #1 vcset))
-		in 
+		in
 		  Sequence.app (fn (var, con) => scan_con fset con) vcset
-		end 
-	    | AllArrow_c {tFormals, eFormals, body_type, ...} => 
+		end
+	    | AllArrow_c {tFormals, eFormals, body_type, ...} =>
 		(app ((scan_kind fset) o #2) tFormals;
 		 app (scan_con fset) eFormals;
 		 (scan_con fset) body_type)
 	    | ExternArrow_c (cons, con) =>
 		(app (scan_con fset) cons ; scan_con fset con)
 	    | Var_c v => ()
-	    | Let_c (sort, conbnds, con) => 
+	    | Let_c (sort, conbnds, con) =>
 		(app (scan_conbnd fset) conbnds ; (scan_con fset) con)
 	    | Crecord_c (lclist) =>
 		(app ((scan_con fset) o #2) lclist)
 	    | Proj_c (con, label) => (scan_con fset) con
 	    | Closure_c _ => raise UNIMP
-	    | App_c (con, cons) => 
+	    | App_c (con, cons) =>
 		( scan_con fset con ; app (scan_con fset) cons)
 (*	    | Typecase_c { arg=arg, arms = arms, default = default, kind = kind} =>
 		((scan_con fset) arg ; (scan_con fset) default ;
 		 scan_kind fset kind ;
-		 app (fn (primcon, vklist, con) => 
+		 app (fn (primcon, vklist, con) =>
 		      ( app ((scan_kind fset) o #2) vklist;
 		       (scan_con fset) con)) arms )
 *)
-		
-	and scan_conbnd fset conbnd = 
-	  case conbnd of 
+
+	and scan_conbnd fset conbnd =
+	  case conbnd of
 	    Con_cb (var, con) => scan_con fset con
 	  | Open_cb (var, vklist, con) =>
-	      (app (fn (v,k) => (scan_kind fset k)) vklist; 
+	      (app (fn (v,k) => (scan_kind fset k)) vklist;
 	       scan_con fset con)
 	  | Code_cb _ =>raise UNIMP
-			    
+
 	(* Scan expressions, counting the number of times a variable is used
 	 (escapes), or is applied *)
-	      
-	and scan_exp fset exp  = 
+
+	and scan_exp fset exp  =
 	    let val scan_con = scan_con fset
 		val scan_exp = scan_exp fset
 		val scan_bnd = scan_bnd fset
 		val insesc = insesc fset
 		val insapp = insapp fset
-	    in 
+	    in
 		case exp of
-		    (Var_e v) => insesc v 
-		  | (Const_e v) => 
+		    (Var_e v) => insesc v
+		  | (Const_e v) =>
 		      (case v
 			 of Prim.array (con, arr) =>
 			   (
 			    scan_con con;
 			    Array.app scan_exp arr
 			    )
-			  | Prim.vector (con, arr) => 
+			  | Prim.vector (con, arr) =>
 			   (
 			    scan_con con;
 			    Array.app scan_exp arr
@@ -511,29 +509,29 @@ structure Reduce
 			  | Prim.refcell (ref r) => scan_exp r
 			  | Prim.tag (t,con) => scan_con con
 			  | _ => ())
-		  | (Let_e (_, bndlist , body)) => 
+		  | (Let_e (_, bndlist , body)) =>
 			( app scan_bnd bndlist; scan_exp body )
 		  | (Prim_e ( allp, _, clist, elist)) =>
 			( app scan_con clist; app scan_exp elist)
 		  | (Switch_e switch) => (scan_switch fset switch)
 		  | (App_e ( openness, efunc, clist, elist, eflist)) =>
-			( case efunc of 
-			      Var_e v => insapp v 
-			    | _ => scan_exp efunc ; 
-				  app scan_con clist; 
+			( case efunc of
+			      Var_e v => insapp v
+			    | _ => scan_exp efunc ;
+				  app scan_con clist;
 				  app scan_exp elist;
 				  app scan_exp eflist)
 		  | (ExternApp_e (efunc, explist)) =>
-			( case efunc of 
-			      Var_e v => insapp v 
-			    | _ => scan_exp efunc ; 
-				  app scan_exp explist) 
+			( case efunc of
+			      Var_e v => insapp v
+			    | _ => scan_exp efunc ;
+				  app scan_exp explist)
 		  | (Raise_e (e, c)) => (scan_exp e; scan_con c)
 		  | Handle_e {body,bound,handler,result_type} =>
 			(scan_exp body; scan_con result_type;
 			 insesc bound; scan_exp handler)
-	    end 
-		     
+	    end
+
 	and scan_switch fset s =
 	    let val scan_exp = scan_exp fset
 		val scan_con = scan_con fset
@@ -542,13 +540,13 @@ structure Reduce
 	    in
 		case s of
 		    Intsw_e {arg,size,arms, default,result_type} =>
-		       ( 
+		       (
 			scan_exp arg;
 			scan_con result_type;
 			map (scan_exp o #2) arms;
 			Option.map (scan_exp) default;
 			()
-			)			
+			)
 		  | Sumsw_e {arg,sumtype,bound,arms,default,result_type} =>
 			(
 			 scan_exp arg;
@@ -559,7 +557,7 @@ structure Reduce
 			 Option.map (scan_exp) default;
 			 ()
 			 )
-		  | Exncase_e {arg, bound, arms, default,result_type} => 
+		  | Exncase_e {arg, bound, arms, default,result_type} =>
 			(
 			 scan_exp arg;
 			 scan_con result_type;
@@ -581,146 +579,146 @@ structure Reduce
 	    end
 
 	and scan_function fset (Function{tFormals=cvarlist,eFormals=varlist,
-					 fFormals=fvarlist,body=exp,...}) = 
+					 fFormals=fvarlist,body=exp,...}) =
 		    let fun dec (v,k) = (declare false v; scan_kind fset k)
-		    in  ( 
+		    in  (
 			 app (dec false) cvarlist;
-			 app (declare false) fvarlist; 
-			 app (declare false) varlist; 
+			 app (declare false) fvarlist;
+			 app (declare false) varlist;
 			 scan_exp fset exp
 			 )
-		    end 
+		    end
 
-	and scan_bnd fset bnd = 
+	and scan_bnd fset bnd =
 	    let
 	      fun dofix vcset =
-		    let 
-			val newfset = VarSet.addList 
-			    (fset, Sequence.maptolist (#1 o #1) vcset) 
+		    let
+			val newfset = VarSet.addList
+			    (fset, Sequence.maptolist (#1 o #1) vcset)
 			fun dec ((v,_),_) = declare true v
 			val _ = Sequence.app dec vcset
 		    in
-			Sequence.app 
-			(fn ((v,c),function as 
+			Sequence.app
+			(fn ((v,c),function as
 			     Function{effect,tFormals=cvarlist,eFormals=varlist,
 				      fFormals=fvarlist,body=exp,...}) =>
-			     (if effect = Total 
+			     (if effect = Total
 				  then total_set := VarSet.add (!total_set, v)
 			      else () ;
   			      scan_function newfset function;
 			      scan_con newfset c)) vcset
-			
-		    end 
+
+		    end
 	    in
 	      case bnd of
 		(Con_b (phase, conbnd) ) => scan_conbnd fset conbnd
-	      | (Exp_b (v, nt, exp)) => 
-		    ( declare false v; 
+	      | (Exp_b (v, nt, exp)) =>
+		    ( declare false v;
 		     scan_exp fset exp)
 	      | Fixopen_b vcset => dofix vcset
               | Fixcode_b vcset => dofix vcset
 
 	      |  Fixclosure_b vcset => raise UNIMP
             end
-    in 
-	fun census_exp fset ( x , exp ) = 
+    in
+	fun census_exp fset ( x , exp ) =
 	    ( delta := x ;
-	     scan_exp fset exp) 
-	fun census_con fset ( x , con ) = 
+	     scan_exp fset exp)
+	fun census_con fset ( x , con ) =
 	    ( delta := x ;
-	     scan_con fset con) 
-	fun census_kind fset (x, kind ) = 
+	     scan_con fset con)
+	fun census_kind fset (x, kind ) =
 	    (delta := x;
 	     scan_kind fset kind)
-	    
-	fun census_bnds fset ( x, bnds ) = 
+
+	fun census_bnds fset ( x, bnds ) =
 	    ( delta := x;
 	     map (fn x=> scan_bnd fset x) bnds )
-	fun census_module (x , MODULE{imports=imports, 
-				      bnds=bnds, exports=exports} ) = 
+	fun census_module (x , MODULE{imports=imports,
+				      bnds=bnds, exports=exports} ) =
 	    ( delta := x;
 	     map (fn x=> scan_bnd VarSet.empty x) bnds;
-	     map (fn x=> 
-		  case x of 
-		      ExportValue(label, var) => 
+	     map (fn x=>
+		  case x of
+		      ExportValue(label, var) =>
 			  insesc VarSet.empty var
 		    | ExportType (label, var) =>
 			  () ) exports)
-	    
+
     end (* Census functions *)
 
     fun print_table str t = fn (var, use)=>
-	let val use = t use 
-	in 
-	    (if not ((!use) = 0) then   
-		 ( print str;  Ppnil.pp_var var; print " : "; 
+	let val use = t use
+	in
+	    (if not ((!use) = 0) then
+		 ( print str;  Ppnil.pp_var var; print " : ";
 		  print (Int.toString (!use)); print "\n")
 	     else ())
-	end 
-    val print_exp = fn (var, newexp) =>  
-	( print "exp var "; Ppnil.pp_var var; print " maps to "; 
+	end
+    val print_exp = fn (var, newexp) =>
+	( print "exp var "; Ppnil.pp_var var; print " maps to ";
 	 Ppnil.pp_exp newexp; print "\n")
-	
+
     val print_con = fn (var, newvar) =>
-	( print "con var "; Ppnil.pp_var var; print " maps to "; 
+	( print "con var "; Ppnil.pp_var var; print " maps to ";
 	 Ppnil.pp_con newvar; print "\n")
-	
-    fun print_stats unit = 
-	( print "****************************************************\n"; 
+
+    fun print_stats unit =
+	( print "****************************************************\n";
 	 print "APP TABLE\n";
 	 HashTable.appi (print_table "app " count_app) count_table;
 	 print "\nESC TABLE\n";
 	 HashTable.appi (print_table "esc " count_esc) count_table;
 	 print "\nREC TABLE\n";
 	 HashTable.appi (print_table "rec " count_rec_app) count_table;
-	 print "****************************************************\n"; 
+	 print "****************************************************\n";
 	 print "\nExp var substitution\n";
 	 HashTable.appi print_exp sigma;
 	 print "\nCon var substitution\n";
 	 HashTable.appi print_con sigma_c;
 	 print "****************************************************\n"
-	 ) 
+	 )
 
     (* The following functions implement the ncontract algorithm *)
 
-    local 
+    local
 	fun dead_var x =
 	    if (!do_dead
-		andalso look count_app x = 0 
-		andalso look count_esc x = 0 
+		andalso look count_app x = 0
+		andalso look count_esc x = 0
 		andalso look count_rec_app x = 0
 		andalso look count_rec_esc x = 0
 		)
 		then ( if !debug then ( Ppnil.pp_var x; print " is dead\n" ) else () ;
 		      inc_click dead_click ; true )
 	    else false
-	      
-	fun dead_funcs xs = 
-	    let fun dead x = (!do_dead 
-			      andalso look count_app x = 0 
-			      andalso look count_esc x = 0) 
+
+	fun dead_funcs xs =
+	    let fun dead x = (!do_dead
+			      andalso look count_app x = 0
+			      andalso look count_esc x = 0)
 	    (* Don't count recursive apps of funcs *)
-	    in 
-		if ( Listops.andfold dead xs ) 
+	    in
+		if ( Listops.andfold dead xs )
 		    then   ( (* app Ppnil.pp_var xs; print " are dead\n"; *)
 			    inc_click dead_click ; true )
 		else
 		    false
-	    end 
-	
-	fun subst exp = 
+	    end
+
+	fun subst exp =
 	    case exp of
 		Var_e v => s(v)
-	      | Const_e c  => exp 
+	      | Const_e c  => exp
 	      | _ => exp
-		    
-	fun subst_c con = 
+
+	fun subst_c con =
 	    case con of
 		Var_c v => sc(v)
 	      | _  => con
-		    
+
 	fun is_pure_allp (NilPrimOp p) = true
-	  | is_pure_allp (PrimOp p) = 
+	  | is_pure_allp (PrimOp p) =
 	    case p of
 		(*	( mk_ref | setref | deref ) => false  *)
 	      (*  | input | input1 | lookahead |open_in | open_out |close_in
@@ -735,13 +733,13 @@ structure Reduce
               | hard_ztrap _  => false
 	      | ( sub _ ) => true
 	      | _ => true
-		   
-    fun is_pure exp = 
-	case exp of 
+
+    fun is_pure exp =
+	case exp of
 	    Var_e _ => true
 	  | Const_e _ => true
-	  | App_e (_, Var_e f, _,_,_) => 
-		VarSet.member (!total_set, f) 
+	  | App_e (_, Var_e f, _,_,_) =>
+		VarSet.member (!total_set, f)
 	  (* We don't have to check args because of A-normal form *)
 	  | App_e _ => (print "WARNING: reduce.sml found App not in A-normal form";
 			false)
@@ -749,23 +747,23 @@ structure Reduce
 		false
 	  | Prim_e (allp, _, _, _) =>
 		is_pure_allp allp
-	  | Let_e (_, bnds, exp) => 
+	  | Let_e (_, bnds, exp) =>
 		let fun is_pure_bnd (Exp_b (v,c,exp)) = is_pure exp
 		      | is_pure_bnd _ = true
-		in 
-		    ( Listops.andfold is_pure_bnd bnds) 
+		in
+		    ( Listops.andfold is_pure_bnd bnds)
 		    andalso is_pure exp
-		end 
-	  | Raise_e _ => false 
+		end
+	  | Raise_e _ => false
 	  | Switch_e sw => false (* Punt on this for now *)
 	  | Handle_e {body,...} => is_pure body
 
-	in  
+	in
 
 	    (* Perhaps we can come up with a faster way of doing this *)
 
-	  fun xkind fset kind = 
-	    case kind of 
+	  fun xkind fset kind =
+	    case kind of
 	      Type_k => kind
 	    | SingleType_k c => SingleType_k (xcon fset c)
 	    | Single_k c => Single_k (xcon fset c)
@@ -775,48 +773,48 @@ structure Reduce
 	    | Arrow_k (openn, vklist, k) =>
 		Arrow_k (openn, map (fn (v,k) => (v, xkind fset k)) vklist, xkind fset k)
 
-	  and xconbnd fset cb = 
-	    case cb of 
+	  and xconbnd fset cb =
+	    case cb of
 	      Con_cb (var, con) =>
 		(Con_cb (var, xcon fset con))
 	    | Open_cb (v, vklist, con) =>
-		 Open_cb (v, 
+		 Open_cb (v,
 			  map (fn (v,k) => (v, xkind fset k)) vklist,
 			  xcon fset con)
 	    | Code_cb _ => raise UNIMP
 
 	  and xcon fset c =
-	    case c of 
+	    case c of
 	      Var_c var => sc(var)
 	    | Let_c (sort, cbnds, con) =>
 		Let_c (sort, map (xconbnd fset) cbnds, con)
 	    | App_c (con, cons) =>
 		App_c (xcon fset con, map (xcon fset) cons)
-	    | Prim_c (primcon, cons) => 
+	    | Prim_c (primcon, cons) =>
 		Prim_c (primcon, map (xcon fset) cons)
 	    | Mu_c (bool, vcseq) =>
 		let val fset = VarSet.addList (fset, (Sequence.maptolist #1 vcseq))
-		in 
+		in
 		  Mu_c (bool, Sequence.map (fn (v, c) => (v, xcon fset c)) vcseq)
-		end 
-	    | AllArrow_c {openness, effect, tFormals, 
+		end
+	    | AllArrow_c {openness, effect, tFormals,
 			  eFormals, fFormals, body_type} =>
 		AllArrow_c {openness = openness, effect = effect,
 			    tFormals = map (fn (v,k) => (v, xkind fset k)) tFormals,
 			    eFormals = map (xcon fset) eFormals,
 			    fFormals = fFormals,
 			    body_type = xcon fset body_type}
-	    | ExternArrow_c (cons, con) => 
+	    | ExternArrow_c (cons, con) =>
 		ExternArrow_c (map (xcon fset) cons, xcon fset con)
 	    | Crecord_c (lclist) =>
 		Crecord_c ( map (fn  (l,c) => (l, xcon fset c) ) lclist)
 	    | Proj_c (con, label) => Proj_c (xcon fset con, label)
 	    | Closure_c _ => raise UNIMP
-	    (*| Typecase_c { arg=arg, arms=arms, default=default, kind= kind} => 
+	    (*| Typecase_c { arg=arg, arms=arms, default=default, kind= kind} =>
 		Typecase_c { arg=xcon fset arg,
 			    default = xcon fset default,
-			    kind = xkind fset kind, 
-			    arms = map (fn (primc, vklist, con)=> 
+			    kind = xkind fset kind,
+			    arms = map (fn (primc, vklist, con)=>
 					(primc, (map (fn (v,k)=>
 						      (v,xkind fset k))vklist),
 					 xcon fset con)) arms}*)
@@ -838,7 +836,7 @@ structure Reduce
 				 arms = map (fn (w,tr,e) => (w,tr,xexp fset e)) arms,
 				 default =  Option.map (xexp fset) default
 				 }
-		  | Exncase_e {arg, bound, arms, default, result_type} =>  
+		  | Exncase_e {arg, bound, arms, default, result_type} =>
 			Exncase_e {arg = xexp fset arg,
 				   result_type = xcon fset result_type,
 				   bound = bound,
@@ -846,87 +844,87 @@ structure Reduce
 				   default =  Option.map (xexp fset) default
 				   }
 		  | Ifthenelse_e _ => error "Ifthenelse not implemented yet"
-		  | Typecase_e {arg, arms, default, result_type} => 
-			Typecase_e 
+		  | Typecase_e {arg, arms, default, result_type} =>
+			Typecase_e
 			{
 			 arg = xcon fset arg,
 			 result_type = xcon fset result_type,
-			 arms = map 
-			 (fn (pc,w,e) => 
+			 arms = map
+			 (fn (pc,w,e) =>
 			   (pc,map (fn (v,k) => (v, xkind fset k)) w,xexp fset e)) arms,
 			 default =  xexp fset default
 			 }
 
-	    and xfunction fset 
+	    and xfunction fset
 		(Function{effect, recursive,
-			  tFormals, eFormals, fFormals, 
+			  tFormals, eFormals, fFormals,
 			  body}) =
 		let
 		    val body = xexp fset body
-		in 
+		in
 		    Function{effect=effect,recursive=recursive,
 			     tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
 			     body=body}
 		end
-	
-	    and xbnds fset 
+
+	    and xbnds fset
 		( (bnd :: rest) : bnd list )
-		( body : body ) : ( bnd list * body ) = 
+		( body : body ) : ( bnd list * body ) =
 		( case bnd of
 		    Con_b (phase, conbnd) =>
 		      let val conbnd = xconbnd fset conbnd
 			val (bnds, body) = xbnds fset rest body
-		      in (Con_b(phase, conbnd)::bnds, body) end 
-             
+		      in (Con_b(phase, conbnd)::bnds, body) end
+
 		  (* --------------------- Term bindings ------------------------ *)
 
-		  | Exp_b ( x,nt, Prim_e (NilPrimOp (record labels), _, _, exps )) => 
+		  | Exp_b ( x,nt, Prim_e (NilPrimOp (record labels), _, _, exps )) =>
 		      let fun dec (Var_e a) =  update_count ESC (s(a)) ~1 fset
 			    | dec _ = ()
-			      
-		      in  
-			if ( dead_var x ) 
-			      then (app dec exps; 
+
+		      in
+			if ( dead_var x )
+			      then (app dec exps;
 				    xbnds fset rest body )
-					    
+
 			      else
-				 let val _ = if !do_project_known 
-						 then HashTable.insert 
-						     bind ( x, R ( labels, tl exps)) 
+				 let val _ = if !do_project_known
+						 then HashTable.insert
+						     bind ( x, R ( labels, tl exps))
 					     else ()
 				     val (rest,body) = xbnds fset rest body
 				 in
 				     if (dead_var x )
 					 then ( app dec exps ;
 					       (rest, body) )
-				     else 
+				     else
 					 ( Exp_b ( x, nt,
 						  Prim_e (NilPrimOp (record labels), [],
 							  [], map subst exps)) :: rest, body )
-				 end 
-			end 
-		    
+				 end
+			end
+
 	  (* ------------------------ Term Record Projection --------------------- *)
-	  | Exp_b ( x, nt, Prim_e (NilPrimOp (select label), [],cons, [ Var_e a ] )) => 
-		let fun cleanup unit = 
+	  | Exp_b ( x, nt, Prim_e (NilPrimOp (select label), [],cons, [ Var_e a ] )) =>
+		let fun cleanup unit =
 		    ( update_count ESC (s(a)) ~1 fset;
 		     app (fn (con) => (census_con fset (~1, con))) cons)
-		in 
+		in
 		if ( dead_var x ) then
 		    ( cleanup ();
 		     xbnds fset rest body )
-		else 
+		else
 		     ( case (s(a)) of
-			   Var_e a => 
+			   Var_e a =>
 			       (case ( HashTable.find bind a)  of
 				    (* Found known record *)
-				    SOME ( R(labels, exps )) =>					
-					let val _ = inc_click select_click 
+				    SOME ( R(labels, exps )) =>
+					let val _ = inc_click select_click
 					    val temp = Listops.zip labels exps
-					    val b = ( case Listops.assoc_eq(Name.eq_label, label, temp ) of 
+					    val b = ( case Listops.assoc_eq(Name.eq_label, label, temp ) of
 						     SOME v => v
 						   | NONE => error "compiler bug" )
-						
+
 					in
 					    ( replace x b fset;
 					     cleanup ();
@@ -939,16 +937,16 @@ structure Reduce
 					    val _ = update_count ESC (Var_e a) ~1 fset
 					    val _ = map (fn (con) => (census_con fset (1, con))) sum_cons
 					    val (rest, body) = xbnds fset rest body
-					in 					  
+					in
 					   ( Exp_b ( x, nt,
-						    Prim_e ( (NilPrimOp 
-							     (project_sum_record (tagcount, label)),   
+						    Prim_e ( (NilPrimOp
+							     (project_sum_record (tagcount, label)),
 							      [], [ (s r) ]))):: rest, body)
 					end  *)
 				  (* Must leave it alone *)
 				  | _ =>  let val (rest,body) = xbnds fset rest body
-					  in 
-					      if (dead_var x ) then 
+					  in
+					      if (dead_var x ) then
 						  (cleanup ();
 						   (rest,body) )
 					      else
@@ -959,16 +957,16 @@ structure Reduce
 		end
 	  (* ------------- Sum projection ... perhaps it was from a record ------------ *)
 	  | Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), [],sum_cons, [ Var_e a ] )) =>
-		let fun cleanup unit = 
-		    ( update_count ESC (s(a)) ~1 fset; 
+		let fun cleanup unit =
+		    ( update_count ESC (s(a)) ~1 fset;
 		     app (fn (con) => (census_con fset (~1, con))) sum_cons )
-		in 	   
-		    if ( dead_var x ) 
+		in
+		    if ( dead_var x )
 			then (cleanup();
-			      xbnds fset rest body) 
-		    else 
-			let 
-			    val _ = if !do_project_known 
+			      xbnds fset rest body)
+		    else
+			let
+			    val _ = if !do_project_known
 					then HashTable.insert bind ( x, S (a, sum, sum_cons)) else ()
 			    val (rest,body) = xbnds fset rest body
 			in
@@ -978,7 +976,7 @@ structure Reduce
 			    else
 				( Exp_b ( x, nt, Prim_e (NilPrimOp (project sum), [],
 								    map (xcon fset) sum_cons, [(s a)]))::rest, body)
-			end 
+			end
 		end
 		    (* ----------------- Variables --------- *)
 	  | Exp_b (x, nt, Var_e v) =>
@@ -988,7 +986,7 @@ structure Reduce
 		     val _ = update_count ESC (s(v)) ~1 fset;
 		     val nx = Name.var2name x
 		     val _ = (case s(v) of
-				  Var_e v' => 
+				  Var_e v' =>
 				      let
 					  val nv' = Name.var2name v'
 				      in
@@ -1000,146 +998,146 @@ structure Reduce
 		 in
 		     xbnds fset rest body
 		 end
-		
+
 	  (* ----------------- Constants  ----------------- *)
 	  | (bnd as Exp_b (x, nt, e as Const_e c))  =>
-		 if (dead_var x ) then 
+		 if (dead_var x ) then
 		     xbnds fset rest body
-		 else 
+		 else
 		     if (exp_issmall e) then
-			 ((inc_click var_click; 
+			 ((inc_click var_click;
 			  replace x (Const_e c) fset);
 			  xbnds fset rest body)
 		     else
 			 let val (rest,body) = xbnds fset rest body
-			 in 
+			 in
 			     if (dead_var x ) then (rest,body)
-			     else 
+			     else
 				 ( bnd :: rest, body)
 			 end
-		      
-		      
+
+
 	  (* ----------------- Function bindings ----------------- *)
-	  | (bnd as Fixopen_b vcset) => 
+	  | (bnd as Fixopen_b vcset) =>
 		let (* val vclist = VarSet.listItems vcset *)
 		    val vars = Sequence.maptolist (#1 o #1) vcset
 		    fun possible_func  v  =
-			!do_inline andalso look count_app v = 1 andalso look count_esc v = 0 
-			
+			!do_inline andalso look count_app v = 1 andalso look count_esc v = 0
+
 		    (* Even when we inline the function, the cons & kinds on the args and the return con
 		     go away, so we need to update the counts for them *)
-			
-		    fun remove_func 
+
+		    fun remove_func
 			( vcf as ((v,c), Function{body, ...})) =
-			( census_exp fset ( ~1, body); 
+			( census_exp fset ( ~1, body);
 			  census_con fset (~1, con))
 			 )
-		    fun recur_func ( (v,c), function) = 
+		    fun recur_func ( (v,c), function) =
 			let val newfset = VarSet.addList (fset, vars)
 			in ( (v, xcon newfset c), xfunction newfset function)
-			end 
+			end
 		in
-		    if (Listops.orfold 
+		    if (Listops.orfold
 			(fn v => (look count_rec_app v > 0)
 			 orelse (look count_rec_esc v > 0)) vars )
-		    then 
+		    then
 			if (dead_funcs vars) then
 			    ( census_bnds fset (~1, [Fixopen_b vcset])   ; xbnds fset rest body)
-			else 
+			else
 			    let val (rest,body) = xbnds fset rest body
-			    in 
+			    in
 				(Fixopen_b (Sequence.map recur_func vcset)::rest, body)
-			    end 
+			    end
 
 		    else
-			if dead_funcs vars  then 
+			if dead_funcs vars  then
 			    ( Sequence.app remove_func vcset ; xbnds fset rest body )
 			else
-			    let 		
+			    let
 				val _ = Sequence.app  (fn ((v, c), f) => HashTable.insert bind (v, F (c, f))) vcset
 				val (rest,body) = xbnds fset rest body
-				fun final (vc as ((v:var,_),_)) = 
+				fun final (vc as ((v:var,_),_)) =
 				    case HashTable.find bind v of
 					SOME INLINED => (remove_rest vc ; false )
 				      | _ =>( if dead_var v then (remove_func vc; false)  else true )
-					    
+
 				val vclist' = map recur_func (List.filter final (Sequence.toList vcset))
-				    
-			    in 
+
+			    in
 				if null vclist' then (rest,body)
-				else 
+				else
 				    ( Fixopen_b ( Sequence.fromList  vclist') :: rest, body)
 			    end
 			end
-		    
+
 	  | Fixclosure_b _ => raise UNIMP
           | Fixcode_b _ => raise UNIMP
-	      
+
 	  (* ----------- Other expression bindings ---------------------------- *)
-	  | Exp_b (x, nt, exp)=> 
+	  | Exp_b (x, nt, exp)=>
 	      if is_pure exp
-		then 
-		  if (dead_var x ) then (census_exp fset (~1, exp) ; 
+		then
+		  if (dead_var x ) then (census_exp fset (~1, exp) ;
 					 xbnds fset rest body)
-		  else 
+		  else
 		    let val (rest,body) = xbnds fset rest body
-		    in 
+		    in
 		      if (dead_var x ) then (census_exp fset (~1, exp);
 					     (rest,body))
-		      else 
+		      else
 			( NilUtil.makeExpB (x, nt, xexp fset exp) @ rest, body)
-		    end 
+		    end
 	      else let val (rest, body) = xbnds fset rest body
-		   in 
+		   in
 		     ( NilUtil.makeExpB (x, nt, xexp fset exp) @ rest, body)
 		   end )
-		      
-		      
-	      | xbnds fset [] body = 
-		( case body of 
-		    EXP exp => 
+
+
+	      | xbnds fset [] body =
+		( case body of
+		    EXP exp =>
 			( [] , EXP (xexp fset exp) )
 		  | EXPORTS entrys =>
-			let fun do_entry ( ExportValue ( label, var )) = 
+			let fun do_entry ( ExportValue ( label, var )) =
 			     let val newexp = xexp fset (Var_e var)
 			     in
-				    case newexp of 
-					Var_e v => 
+				    case newexp of
+					Var_e v =>
 					    (NONE, ExportValue (label,v  ))
-				      | _ => 
+				      | _ =>
 					    let val newname = Name.fresh_named_var "export"
-					    in (SOME (Exp_b (newname, TraceUnknown, newexp)), 
+					    in (SOME (Exp_b (newname, TraceUnknown, newexp)),
 						ExportValue (label, newname))
-					    end 
-			     end  
-			      | do_entry ( ExportType (label, var)) = 
-				let val Var_c v = xcon fset (Var_c var) 
+					    end
+			     end
+			      | do_entry ( ExportType (label, var)) =
+				let val Var_c v = xcon fset (Var_c var)
 				in (NONE, ExportType (label, v)) end
-						
+
 			    val (bndopts, entries) = Listops.unzip (map do_entry entrys)
 			    val bnds = List.mapPartial (fn x=>x) bndopts
 			    val _ = exportbnds := bnds @ (!exportbnds)
-			in ( [], EXPORTS entries ) 
+			in ( [], EXPORTS entries )
 			end )
 
-		
 
-	    and xexp fset exp = 
-		( case exp of 
-		      
+
+	    and xexp fset exp =
+		( case exp of
+
 		      Let_e(Sequential, bnds , body ) =>
-			  let val (bnds, EXP body) = xbnds fset bnds (EXP body) 
+			  let val (bnds, EXP body) = xbnds fset bnds (EXP body)
 			  in NilUtil.makeLetE Sequential bnds body
-			  end 
-			
-		    | Let_e (Parallel, _ , _) => raise UNIMP 
-		
+			  end
+
+		    | Let_e (Parallel, _ , _) => raise UNIMP
+
 		    | Prim_e ( ap , trlist,clist, elist ) =>
 			  let val clist' = map (xcon fset) clist
 			      val elist' = map (xexp fset) elist
 			      val exp' = Prim_e (ap, trlist, clist', elist')
 			  in
-			      case exp' of 
+			      case exp' of
 (*				  (* Unroll a  Roll *)
 				  Prim_e ( NilPrimOp (unroll), _, con , [ Prim_e (NilPrimOp (roll), _, _, [exp] ) ] ) =>
 				      (inc_click fold_click; exp)*)
@@ -1156,16 +1154,16 @@ structure Reduce
 				      then (inc_click fold_click; exp)
 				  else exp'
 				(* inject a known record into a faster version *)
-			(*	| Prim_e ( NilPrimOp (inject info), [], 
+			(*	| Prim_e ( NilPrimOp (inject info), [],
 					  [ Var_e v ] ) =>
 				  ( case ( HashTable.find bind v)  of
 					SOME ( R(labels, exps ) ) =>
-					    (inc_click fold_click; 
+					    (inc_click fold_click;
 					     Prim_e ( NilPrimOp (inject_record info), [], exps) )
 				      | NONE =>  exp' )   *)
-					  
-			        | _ => exp' 
-				      
+
+			        | _ => exp'
+
 			  end
 
 		    (* Application, look for possible inlining *)
@@ -1182,64 +1180,64 @@ structure Reduce
 								    error "expect var in reduce"))
 					     in  tmp
 					     end
-			  in 
-			      if !do_inline andalso 
-				  look count_app sf = 1 andalso 
-				  look count_esc sf = 0 
-			       then 
+			  in
+			      if !do_inline andalso
+				  look count_app sf = 1 andalso
+				  look count_esc sf = 0
+			       then
 				   ( case (HashTable.find bind sf) of
 					 SOME (F (c,
-						  Function{tFormals=vklist, 
-							   eFormals=vclist, 
-							   fFormals=vlist, 
+						  Function{tFormals=vklist,
+							   eFormals=vclist,
+							   fFormals=vlist,
 							   body=exp, ...})) =>
 					     let val _ = inc_click inline_click
 						 fun do_args (arg,  x ) =
 						     case arg of
 							 Var_e a =>
-							     ( insert sigma x (s(a)); 
+							     ( insert sigma x (s(a));
 							      update_count APP (s(a))
 							      (look count_app x)  fset ;
-							      update_count ESC (s(a)) 
+							      update_count ESC (s(a))
 							      ((look count_esc x) - 1 ) fset)
 						       | _ => insert sigma x arg
-						      
-						 fun do_cargs (arg, x) = 
+
+						 fun do_cargs (arg, x) =
 						     case arg of
 							 Var_c a =>
-							     ( insert sigma_c x (sc(a)) 
-							      (* ; 
+							     ( insert sigma_c x (sc(a))
+							      (* ;
 							       update_count_c count_app (sc(a))
 							       (look count_app x)  fset ;
-							       update_count_c count_esc (sc(a)) 
+							       update_count_c count_esc (sc(a))
 							       ((look count_esc x) - 1 ) fset *) )
-						       | _ =>  insert sigma_c x arg 
+						       | _ =>  insert sigma_c x arg
 					     in
 						 (* Substitute the args *)
 						 (Listops.map2 do_args (elist, map #1 vclist) ; (* Regular arguments *)
 						  Listops.map2 do_args (elist2, vlist) ;        (* Floating point *)
 						  Listops.map2 do_cargs (clist, vklist) ;(* Constructor arguments *)
-						  
+
 						  update_count APP (s(f)) ~1 fset;
 					       HashTable.insert bind (sf, INLINED) ;
-						  
-						  xexp fset exp ) 
+
+						  xexp fset exp )
 					  end
-				       | SOME _ => new_app 
+				       | SOME _ => new_app
 				       | NONE => new_app )
 			      else
 				  new_app
 			  end
-		    | App_e ( _, _, _, _, _) => 
+		    | App_e ( _, _, _, _, _) =>
 			  (print "WARNING: reduce.sml found app not in A-normal form\n";
 			   exp)
 		    |  ExternApp_e (exp, expl) =>
 			   ExternApp_e (xexp fset exp, map (xexp fset) expl)
 		    | Var_e v => s(v)
-		    | Const_e c => 			
+		    | Const_e c =>
 			   Const_e (case c
 			   of Prim.array (con, arr) => error "Arrays shouldn't show up ever"
-			    | Prim.vector (con, arr) => 
+			    | Prim.vector (con, arr) =>
 			     let
 			       val con = xcon fset con
 			       val arr = Array.tabulate (Array.length arr,fn i => xexp fset (Array.sub(arr,i)))
@@ -1252,26 +1250,26 @@ structure Reduce
 
 		    | Raise_e (exp, con) => Raise_e (xexp fset exp, xcon fset con)
 		    | Handle_e {body,bound,handler,result_type} =>
-			  Handle_e {body = xexp fset body, bound = bound, 
+			  Handle_e {body = xexp fset body, bound = bound,
 				    handler = xexp fset handler,
 				    result_type = xcon fset result_type}
-		    | Switch_e (sw) => Switch_e (xswitch fset sw) 
+		    | Switch_e (sw) => Switch_e (xswitch fset sw)
 			  )
-		      
+
 end (* local for ncontract *)
 
 
-fun doModule (module as MODULE{bnds=bnds, imports=imports, exports=exports}) = 
-    let 
+fun doModule (module as MODULE{bnds=bnds, imports=imports, exports=exports}) =
+    let
 
-        
+
        	(* Body of doModule *)
-    
+
 	(* In order that we don't reduce away expressions that need to
 	 be exported, we put them in a record and create a Let
 	 expression around it with the bindings of the module. After
 	 reduction, we walk the code to take the record out and get
-	 the bindings back. 
+	 the bindings back.
 
 	 Unfortunately this doesn't work as well for exported constructors.
 	 *)
@@ -1279,58 +1277,58 @@ fun doModule (module as MODULE{bnds=bnds, imports=imports, exports=exports}) =
 	(* Step 1, compute initial values of the tables. As the code
 	 is reduced these values should be maintained. *)
 	val _ = exportbnds := []
-	fun clearTable table = 
+	fun clearTable table =
 	    HashTable.appi ( fn (key, item) => ignore (HashTable.remove table key)) table
 	val x = ref 10
 	val _ = init_clicks clicks
 
-	fun init v = 
+	fun init v =
 	    let val _ = clearTable count_table
 		val _ = clearTable sigma
 		val _ = clearTable sigma_c
 		val _ = clearTable bind
 		val _ = clearTable drop_table
-		  
+
 		val _ = total_set := VarSet.empty
 		val _ = census_module(1, module)
 		val _ = info_valid := true
 (*		val _ = print_escape () *)
 	    in x := v
-	    end 
-	
-	val _ = if !debug then print_stats() else () 
-	    
+	    end
+
+	val _ = if !debug then print_stats() else ()
+
 	(* Now loop through the code until, we only do x reductions. *)
-	       
-	fun loop ( i:int , (m as (bnds, EXPORTS entrys): (bnd list * body) )) 
+
+	fun loop ( i:int , (m as (bnds, EXPORTS entrys): (bnd list * body) ))
 	  : (bnd list * body) =
 	  if ( i <= !x ) then m
-	  else 
+	  else
 	    let val _ = clearTable drop_table
-	      val _ = clearTable bind 
+	      val _ = clearTable bind
 	      val (m as (bnds, EXPORTS entrys)) = xbnds VarSet.empty bnds (EXPORTS entrys)
-	    in 
+	    in
 		if !debug
 		    then (print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
 			  print "ITERATION\n";
 			  print_round_clicks clicks;
 			  app Ppnil.pp_bnd bnds; print "\n";
 			  print_stats())
-		else 
+		else
 		    if !show_stats
 			then print_round_clicks clicks
 		    else ();
 		loop (round_clicks clicks, m)
-	    end 
-	val (newbnds,( EXPORTS newexports)) = 
+	    end
+	val (newbnds,( EXPORTS newexports)) =
 	  (init 0 ; (loop (1, (bnds, EXPORTS exports))))
-    in 
+    in
 (*      print_escape () ;  *)
       MODULE { bnds= newbnds @ (!exportbnds),
-	      imports=imports, exports=newexports}   
+	      imports=imports, exports=newexports}
     end (* do_it *)
   end (* struct *)
 
 
-		    
+
 

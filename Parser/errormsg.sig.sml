@@ -1,16 +1,14 @@
-(*$import SourceMap PrettyPrint Source *)
-
 (* <errormsg.sig>=                                                          *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 signature ERRORMSG =
  sig
     datatype severity = WARN | COMPLAIN
     type complainer = severity -> string -> (PrettyPrint.ppstream -> unit)
-                          -> unit 
+                          -> unit
     type errorFn = SourceMap.region -> complainer
     type errors = {error: errorFn,
                    errorMatch: SourceMap.region->string,
-                   anyErrors : bool ref} 
+                   anyErrors : bool ref}
     val anyErrors : errors -> bool
     exception Error
     val defaultConsumer : unit -> PrettyPrint.ppconsumer

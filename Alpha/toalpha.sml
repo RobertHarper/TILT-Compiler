@@ -1,21 +1,19 @@
-(*$import TilWord32 Core Name Rtl Int Array Pprtl DecAlpha MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
-
 (* WARNING: Use Rat or Rat2 only if sure that no spills (or at most one if one of Rat/Rat2 is used)
               will cause usage of Rat/Rat2 during the live range of Rat/Rat2.
    THREAD_UNSAFE ERROR XXX: don't use FPTOFROMINT; use thread-specific slot
 *)
 
-(* Translation from Rtl to DecAlpha pseudoregister-assembly. 
+(* Translation from Rtl to DecAlpha pseudoregister-assembly.
    Assumptions:
      (1) The thread pointer points to a structure where the first 32 longs
            store the saved general purpose registers.  In particular, when
-	   making C calls, the allocation pointer and allocation limit are 
+	   making C calls, the allocation pointer and allocation limit are
 	   saved at offset given by the 8 times the register's number.
 
 *)
-         
-functor Toalpha(structure Machineutils : MACHINEUTILS 
-	        structure ArgTracetable : TRACETABLE 
+
+functor Toalpha(structure Machineutils : MACHINEUTILS
+	        structure ArgTracetable : TRACETABLE
                 structure Bblock : BBLOCK
 		    where type Machine.specific_instruction = Decalpha.specific_instruction
 		    where type Machine.instruction = Decalpha.Machine.instruction
@@ -25,7 +23,7 @@ functor Toalpha(structure Machineutils : MACHINEUTILS
   :> TOASM where Machine = Decalpha.Machine
 	   where Bblock = Bblock
 	   where Tracetable = ArgTracetable
-= 
+=
 struct
 
    structure Bblock = Bblock
@@ -35,9 +33,9 @@ struct
    structure W = TilWord32
    val i2w = W.fromInt
    val w2i = W.toInt
-       
+
    open Machineutils Bblock
-   open Decalpha 
+   open Decalpha
    open Machine
    open Core
 
@@ -61,7 +59,7 @@ struct
      fun add_stack x =
 	 (case Regmap.find(!stack_res,x)
 	  of SOME i => i
-	   | NONE => 
+	   | NONE =>
 		 let val r = SPILLED_INT(!count)
 		 in stack_res := Regmap.insert(!stack_res,x,r);
 		    count := !count + 1;
@@ -73,24 +71,24 @@ struct
    fun var2ireg v = R (Name.var2int v)
 
    fun translateRep rep =
-       let fun translateVar v = 
+       let fun translateVar v =
 	   ((case (Regmap.find(!tracemap, var2ireg v)) of
 		 NONE => if (!inProc)
 			     then (print "Warning: Missing binding for type variable "; print (msReg (var2ireg v));
 				   error "ERROR: Missing binding for type variable ")
 			 else ()
-	       | SOME _ => ()); 
+	       | SOME _ => ());
 	    R(Name.var2int v))
        in  case rep of
 	   Rtl.TRACE => (NONE, Tracetable.TRACE_YES)
 	 | Rtl.LOCATIVE => (NONE, Tracetable.TRACE_IMPOSSIBLE)
 	 | Rtl.COMPUTE path =>
 	       (case path of
-		    Rtl.Projvar_p (Rtl.REGI(v,_),[]) => 
+		    Rtl.Projvar_p (Rtl.REGI(v,_),[]) =>
 			let val v = translateVar v
 			in  (SOME v, Tracetable.TRACE_STACK(add_stack v))
 			end
-	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) => 
+	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) =>
 			let val v = translateVar v
 			in  (SOME v, Tracetable.TRACE_STACK_REC(add_stack v, i))
 			end
@@ -107,9 +105,9 @@ struct
 	| Rtl.NOTRACE_LABEL => (NONE,Tracetable.TRACE_NO)
        end
 
-   fun internal_translateRep v Rtl.UNSET = (add_stack (R (Name.var2int v)); 
+   fun internal_translateRep v Rtl.UNSET = (add_stack (R (Name.var2int v));
 					    translateRep Rtl.UNSET)
-     | internal_translateRep _ rep = translateRep rep	
+     | internal_translateRep _ rep = translateRep rep
 
    fun translateSReg Rtl.HEAPALLOC = Rheap
      | translateSReg Rtl.HEAPLIMIT = Rhlimit
@@ -118,12 +116,12 @@ struct
      | translateSReg Rtl.EXNSTACK = Rexnptr
      | translateSReg Rtl.EXNARG = Rexnarg
      | translateSReg Rtl.HANDLER = Rhandler
-     
-   fun translateIReg (Rtl.REGI (v, rep)) = 	
+
+   fun translateIReg (Rtl.REGI (v, rep)) =
        (tracemap := Regmap.insert(!tracemap,R (Name.var2int v),internal_translateRep v rep);
 	R (Name.var2int v))
      | translateIReg (Rtl.SREGI s) = translateSReg s
-     
+
    fun translateFReg (Rtl.REGF (v, _)) = F (Name.var2int v)
 
    fun translateReg (Rtl.I ir) = translateIReg ir
@@ -133,12 +131,12 @@ struct
    fun translateIRegOpt NONE = NONE
      | translateIRegOpt (SOME Reg) = SOME (translateIReg Reg)
 
-   (* Translate the register-or-immediate value found as the second 
+   (* Translate the register-or-immediate value found as the second
       source operand in many alpha instructions *)
-   fun translateOp (Rtl.REG rtl_reg) = 
+   fun translateOp (Rtl.REG rtl_reg) =
          REGop (translateIReg rtl_reg)
      | translateOp (Rtl.IMM src2) =
-	 if (in_imm_range src2) then 
+	 if (in_imm_range src2) then
 	   IMMop src2
 	 else
 	   error ("immediate out of range: " ^ (Int.toString src2))
@@ -197,13 +195,13 @@ struct
    (* Translation functions *)
 
    (* Find a block by it's name in the block_map *)
-   fun getBlock block_label = 
+   fun getBlock block_label =
        (case (Labelmap.find(! block_map, block_label)) of
 	    SOME bl => bl | NONE => error "getBlock")
 
    (* Remove all occurrences of a given label from a list *)
    fun removeAllLabel [] _ = []
-     | removeAllLabel (lab :: rest) lab' = 
+     | removeAllLabel (lab :: rest) lab' =
        if (eqLabs lab lab') then
 	 removeAllLabel rest lab'
        else
@@ -213,7 +211,7 @@ struct
       and store it in the block_map if the label must occur
       in the output program or the list of instructions is nonempty. *)
    fun saveBlock () =
-     if (! current_truelabel orelse 
+     if (! current_truelabel orelse
 	 length (! current_instrs) > 0) then
        (block_map := Labelmap.insert (! block_map, ! current_label,
 				      BLOCK{instrs  = ref (! current_instrs),
@@ -227,11 +225,11 @@ struct
      else
        (* We have a useless, empty basic block here.  Delete all
           references to this block as the successor of somebody. *)
-       Labelmap.app 
-          (fn (BLOCK{succs,...}) => 
+       Labelmap.app
+          (fn (BLOCK{succs,...}) =>
 	   succs := (removeAllLabel (! succs) (! current_label)))
 	  (! block_map)
-	
+
 
    (* Reset the current_??? values.  If a add_to_predecessor is
       true, and we weren't told the previous block does not
@@ -245,12 +243,12 @@ struct
 
       if add_to_predecessor andalso (not (! no_fallthrough)) then
 	let val (BLOCK{succs,...}) = getBlock (hd (! current_blocklabels))
-	in 
-	  succs := new_label :: (! succs) 
+	in
+	  succs := new_label :: (! succs)
 	end
       else
 	();
-	
+
       no_fallthrough := false)
 
    (* Adds an instruction to the current basic block, updating the other
@@ -259,15 +257,15 @@ struct
    fun emit (instr : instruction) =
        (current_instrs := (NO_ANN instr) :: (! current_instrs);
 
-	case (Decalpha.Machine.cFlow instr) of 
+	case (Decalpha.Machine.cFlow instr) of
 	  NOBRANCH => ()
 	| DELAY_BRANCH _ => error "Alpha does not have delay branches"
 	| BRANCH (fallthrough, succ_labels) =>
-	    let 
+	    let
 	      val nextlabel = freshCodeLabel ()
 	    in
 	      current_succs := succ_labels @ (! current_succs);
-	      if fallthrough then 
+	      if fallthrough then
 		 current_succs := nextlabel :: (! current_succs)
 	      else
 		 ();
@@ -282,7 +280,7 @@ struct
 
    val load_imm = (app emit) o load_imm'
 
-   (* Translate an RTL instruction into one or more 
+   (* Translate an RTL instruction into one or more
       Alpha instructions *)
 
    fun translate_cmp Rtl.EQ  = BEQ
@@ -293,7 +291,7 @@ struct
      | translate_cmp Rtl.NE  = BNE
 
    (* Preferred destination *)
-   fun loadEA' destOpt ea = 
+   fun loadEA' destOpt ea =
        (case ea of
 	    Rtl.REA(rtlBase, disp) => (translateIReg rtlBase, disp)
 	  | Rtl.LEA(label, disp) => let val dest = (case destOpt of
@@ -330,7 +328,7 @@ struct
           emit (BASE(MOVE (translateIReg rtl_Rsrc, translateIReg rtl_Rdest)))
 
      | translate (Rtl.CMV (cmp, rtl_Rsrc1, op2, rtl_Rdest)) =
-       let 
+       let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
 	 val Rdest = translateIReg rtl_Rdest
        in
@@ -373,8 +371,8 @@ struct
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
          val Rdest = translateIReg rtl_Rdest
-       in if !DM.opt_on 
-	  then let val instrs = DM.quad_mult_convert (Rsrc1,i2w denom, 
+       in if !DM.opt_on
+	  then let val instrs = DM.quad_mult_convert (Rsrc1,i2w denom,
 						      Rdest)
 	       in app emit instrs
 	       end
@@ -408,7 +406,7 @@ struct
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
 			      resregs = SOME [ireg 27],
-			      destroys = SOME [ireg 23, ireg 24, ireg 25, 
+			      destroys = SOME [ireg 23, ireg 24, ireg 25,
 					       ireg 26, ireg 27, ireg 29]})))
 	 (* barrier() unnecessary *)
        end
@@ -432,7 +430,7 @@ struct
 				  results = [Rdest],
 				  argregs = SOME [ireg 24, ireg 25],
 				  resregs = SOME [ireg 27],
-				  destroys = SOME [ireg 23, ireg 24, ireg 25, 
+				  destroys = SOME [ireg 23, ireg 24, ireg 25,
 						   ireg 26, ireg 27, ireg 29]})))
 	   end
 	 (* barrier() unnecessary *)
@@ -441,7 +439,7 @@ struct
      | translate (Rtl.MODT (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
-	 val Rsrc2 = 
+	 val Rsrc2 =
 	     (case rtl_op2 of
 		  Rtl.REG r2 => translateIReg r2
 		| Rtl.IMM denom => let val Rsrc2 = freshIreg()
@@ -458,7 +456,7 @@ struct
 				results = [Rdest],
 				argregs = SOME [ireg 24, ireg 25],
 				resregs = SOME [ireg 27],
-				destroys = SOME [ireg 23, ireg 24, ireg 25, 
+				destroys = SOME [ireg 23, ireg 24, ireg 25,
 						 ireg 26, ireg 27, ireg 29]})))
 	 (* barrier() unnecessary *)
        end
@@ -466,7 +464,7 @@ struct
      | translate (Rtl.UDIV (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
-	 val Rsrc2 = 
+	 val Rsrc2 =
 	     (case rtl_op2 of
 		  Rtl.REG r2 => translateIReg r2
 		| Rtl.IMM denom => let val Rsrc2 = freshIreg()
@@ -483,14 +481,14 @@ struct
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
 			      resregs = SOME [ireg 27],
-			      destroys = SOME [ireg 23, ireg 24, ireg 25, 
+			      destroys = SOME [ireg 23, ireg 24, ireg 25,
 					       ireg 26, ireg 27, ireg 29]})))
        end
 
      | translate (Rtl.UMOD (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
-	 val Rsrc2 = 
+	 val Rsrc2 =
 	     (case rtl_op2 of
 		  Rtl.REG r2 => translateIReg r2
 		| Rtl.IMM denom => let val Rsrc2 = freshIreg()
@@ -507,7 +505,7 @@ struct
 				results = [Rdest],
 				argregs = SOME [ireg 24, ireg 25],
 				resregs = SOME [ireg 27],
-				destroys = SOME [ireg 23, ireg 24, ireg 25, 
+				destroys = SOME [ireg 23, ireg 24, ireg 25,
 						 ireg 26, ireg 27, ireg 29]})))
        end
 
@@ -610,11 +608,11 @@ struct
 	      Rtl.EQ =>  emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, IMMop src2,  Rdest)))
 	    | Rtl.LE =>  emit (SPECIFIC (INTOP (CMPLE, Rsrc1, IMMop src2,  Rdest)))
 	    | Rtl.LT =>  emit (SPECIFIC (INTOP (CMPLT, Rsrc1, IMMop src2,  Rdest)))
-	    | Rtl.GE => if (src2 = 0) 
+	    | Rtl.GE => if (src2 = 0)
 			    then  emit (SPECIFIC (INTOP (CMPLE, Rzero,   REGop Rsrc1, Rdest)))
 			else (emit (SPECIFIC (INTOP (OR, Rzero, IMMop src2,  Rat)));
 			      emit (SPECIFIC(INTOP (CMPLE, Rat, REGop Rsrc1, Rdest))))
-	    | Rtl.GT =>  if (src2 = 0) 
+	    | Rtl.GT =>  if (src2 = 0)
 			    then  emit (SPECIFIC(INTOP (CMPLT, Rzero,   REGop Rsrc1, Rdest)))
 			 else (emit (SPECIFIC(INTOP (OR,    Rzero, IMMop src2,  Rat)));
 			       emit (SPECIFIC(INTOP (CMPLT, Rat,   REGop Rsrc1, Rdest))))
@@ -658,7 +656,7 @@ struct
 	    | Rtl.NE => (emit (SPECIFIC (INTOP (CMPEQ, Rsrc1, IMMop src2, Rdest)));
 			 emit (SPECIFIC (INTOP (CMPEQ, Rdest, REGop Rzero, Rdest)))))
 	  else
-            error ("translate/CMPUI/imm: Immediate out of range: " ^ 
+            error ("translate/CMPUI/imm: Immediate out of range: " ^
                    (Int.toString src2))
        end
 
@@ -823,21 +821,21 @@ struct
 	 val Rsrc  = translateIReg rtl_Rsrc
          val Fdest = translateFReg rtl_Fdest
        in
-	 (* Converts an integer in Rsrc to a double-precision 
+	 (* Converts an integer in Rsrc to a double-precision
 	    floating-point value in Fdest; this is always precise *)
 	   emit (SPECIFIC(STOREI (STQ, Rsrc, threadScratch_disp, Rth)));
 	   emit (SPECIFIC(LOADF  (LDT, Fdest, threadScratch_disp, Rth)));
 	   emit (SPECIFIC (FPCONV (CVTQT, Fdest, Fdest)))
        end
 
- 
+
      | translate (Rtl.CMPF (comparison, rtl_Fsrc1, rtl_Fsrc2, rtl_Rdest)) =
        let
 	 val Fsrc1 = translateFReg rtl_Fsrc1
          val Fsrc2 = translateFReg rtl_Fsrc2
          val Rdest = translateIReg rtl_Rdest
 	 val label = Rtl.fresh_code_label "cmpf"
-	 val (fop,reverse_operand, reverse_result) = 
+	 val (fop,reverse_operand, reverse_result) =
 		(case comparison of
 		   Rtl.EQ =>  (CMPTEQ, false, false)
 		 | Rtl.LE =>  (CMPTLE, false, false)
@@ -852,7 +850,7 @@ struct
 	   then emit (SPECIFIC (FPOP(fop, Fsrc1, Fsrc2, Fat)))
 	 else emit (SPECIFIC (FPOP(fop, Fsrc2, Fsrc1, Fat)));
          emit (SPECIFIC (CBRANCHF (FBEQ, Fat, label)));
-    	 emit (SPECIFIC (LOADI (LDA, Rdest, pass_test, Rzero)));          
+    	 emit (SPECIFIC (LOADI (LDA, Rdest, pass_test, Rzero)));
 	 translate (Rtl.ILABEL label)
        end
 
@@ -882,19 +880,19 @@ struct
        in  translate(Rtl.CMPSI(comparison,rtl_Rsrc1,rtl_Rsrc2,rtl_tmp));
            emit(SPECIFIC(CBRANCHI(BNE, Rtmp, loc_label)))
        end
-   
+
      | translate (Rtl.BCNDUI (comparison, rtl_Rsrc1, rtl_Rsrc2, loc_label, pre)) =
        let val rtl_tmp =  Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
 	   val Rtmp = translateIReg rtl_tmp
        in  translate(Rtl.CMPUI(comparison,rtl_Rsrc1,rtl_Rsrc2,rtl_tmp));
            emit(SPECIFIC(CBRANCHI(BNE, Rtmp, loc_label)))
        end
-   
+
      | translate (Rtl.BCNDF (comparison, rtl_Fsrc1, rtl_Fsrc2, loc_label, pre)) =
-       let 
+       let
 	 val rtl_Ftemp = Rtl.REGF(Name.fresh_var(),Rtl.NOTRACE_REAL)
 	 val Ftemp = translateFReg rtl_Ftemp
-	 val (fop,reverse_operand, reverse_result) = 
+	 val (fop,reverse_operand, reverse_result) =
 		(case comparison of
 		   Rtl.EQ =>  (CMPTEQ, false, false)
 		 | Rtl.LE =>  (CMPTLE, false, false)
@@ -905,9 +903,9 @@ struct
 	 val Fsrc1 = translateFReg rtl_Fsrc1
          val Fsrc2 = translateFReg rtl_Fsrc2
 	 val (Fsrc1,Fsrc2) = if reverse_operand
-				 then (Fsrc2, Fsrc1) 
+				 then (Fsrc2, Fsrc1)
 			     else (Fsrc1, Fsrc2)
-       in 
+       in
 	 emit (SPECIFIC (FPOP(fop, Fsrc1, Fsrc2, Ftemp)));
 	 emit (SPECIFIC (CBRANCHF(if reverse_result then FBNE else FBEQ, Ftemp, loc_label)))
        end
@@ -954,7 +952,7 @@ struct
      | translate (Rtl.PUSH_EXN) = ()
      | translate (Rtl.POP_EXN) = ()
      | translate (Rtl.THROW_EXN) = ()
-     | translate (Rtl.CATCH_EXN) = 
+     | translate (Rtl.CATCH_EXN) =
 	  let val sp = Rtl.SREGI Rtl.STACK
 	      val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 	      val tmp2 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
@@ -1050,7 +1048,7 @@ struct
 	   translate (Rtl.ILABEL afterLabel)
        end
 
-     | translate (Rtl.STOREMUTATE (ea, mutateType)) = 
+     | translate (Rtl.STOREMUTATE (ea, mutateType)) =
 	   let val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	       val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	       val store_obj = Rtl.REGI(Name.fresh_var(),Rtl.TRACE)
@@ -1101,14 +1099,14 @@ struct
 			     args=[Rat]})));
 	   translate (Rtl.ILABEL afterLabel)
        end
-   
+
      | translate (Rtl.NEEDALLOC (Rtl.IMM 0)) = ()
      | translate (Rtl.NEEDALLOC rtl_operand) = (* size in words *)
        let
 	 val rtl_loclabel = Rtl.fresh_code_label "gc_check"
        in
 	 (case rtl_operand of
-	      Rtl.REG rtl_Rsize => 
+	      Rtl.REG rtl_Rsize =>
 		  let val Rsize = translateIReg rtl_Rsize
 		  in  emit (SPECIFIC (INTOP   (S4ADDL, Rsize, REGop Rheap, Rat)))
 		  end
@@ -1153,19 +1151,19 @@ struct
      | translate (Rtl.HARD_ZBARRIER _) = ()
 
 
-     | translate (Rtl.ILABEL ll) = 
+     | translate (Rtl.ILABEL ll) =
           (* Begin new basic block *)
           (saveBlock ();
 	   resetBlock ll true true)
 
-	  
-     | translate Rtl.HALT = 
+
+     | translate Rtl.HALT =
        (* HALT is a no-op from the translator's point of view *)
           ()
 
 
    (* Translates an entire Rtl procedure *)
-   fun translateProc (Rtl.PROC {name, args, code, results, return, 
+   fun translateProc (Rtl.PROC {name, args, code, results, return,
 				save = _, vars = _}) =
      let
        (* initialization *)
@@ -1188,13 +1186,13 @@ struct
        val _ = resetBlock (freshCodeLabel()) true true
 
        (* Translate instructions *)
-       val _ = (Array.app 
+       val _ = (Array.app
 		(fn arg => ((translate arg)
 			    handle e => (print "exn raised during translation of Rtl instruction:\n  ";
 					 Pprtl.pp_Instr arg;
 					 raise e)))
 		code)
-       
+
        (* Flush last block *)
        val _ = saveBlock ()
 
@@ -1209,7 +1207,7 @@ struct
       the same as the datatype for Decalpha data.  Hence the
       translation of the data is really easy---remove it from
       the array. *)
-   fun array2list a = 
+   fun array2list a =
        let val len = Array.length a
 	   fun loop n = if (n >= len) then []
 			else (Array.sub(a,n))::(loop (n+1))

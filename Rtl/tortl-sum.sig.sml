@@ -1,6 +1,4 @@
-(*$import Nil TilWord32 Rtl TortlBase Name *)
-
-signature TORTL_SUM = 
+signature TORTL_SUM =
 sig
 
   type var = Name.var

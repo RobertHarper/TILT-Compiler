@@ -1,4 +1,3 @@
-(*$import TextIOFn TEXT_IO PosixTextPrimIO TextPrimIO *)
 (* text-io.sml
  *
  * COPYRIGHT (c) 1996 AT&T Research.

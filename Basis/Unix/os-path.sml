@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude String Substring OS_PATH OS_PathFn *)
 (* os-path.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,7 +10,7 @@ structure OS_Path = OS_PathFn (
   struct
     val unsafe_vsub = TiltPrim.unsafe_vsub
     val op ^ = String.^
-					 
+
     exception Path
     exception InvalidArc
 

@@ -1,4 +1,3 @@
-(*$import ModeSyn ModeDec ModeCheck ModePrint LambdaStructs NamesStructs RedBlackStructs IndexStructs PathsStructs FormatterStructs PrintStructs *)
 structure ModeSyn = 
   ModeSyn (structure IntSyn' = IntSyn
 	   structure Names = Names

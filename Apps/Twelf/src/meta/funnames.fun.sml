@@ -1,4 +1,3 @@
-(*$import Array FUNNAMES GLOBAL FUNSYN TABLE LambdaStructs *)
 (* Names of Constants and Variables *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude MONO_VECTOR *)
 (* mono-array-sig.sml
  *
  * COPYRIGHT (c) 1994 AT&T Bell Laboratories.
@@ -13,7 +12,6 @@ signature MONO_ARRAY =
     eqtype array
     type elem
     structure Vector : MONO_VECTOR
-	(* sharing type Vector.elem = elem -- Holds for TILT but not part of this signature *)
 
     val maxLen : int
 
@@ -38,13 +36,13 @@ signature MONO_ARRAY =
 
     val appi    : (int * elem -> unit) -> array * int * int option -> unit
     val app     : (elem -> unit) -> array -> unit
-	
+
     val foldli  : (int * elem * 'a -> 'a) -> 'a -> array * int * int option -> 'a
     val foldri  : (int * elem * 'a -> 'a) -> 'a -> array * int * int option -> 'a
-	  
+
     val foldl   : (elem * 'a -> 'a) -> 'a -> array -> 'a
     val foldr   : (elem * 'a -> 'a) -> 'a -> array -> 'a
-	
+
     val modifyi : (int * elem -> elem) -> array * int * int option -> unit
 
     val modify  : (elem -> elem) -> array -> unit

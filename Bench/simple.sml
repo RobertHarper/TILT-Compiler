@@ -1,5 +1,3 @@
-(*$import Array Array2 Int Real64 Math64 List PreReal *)
-
 (* PreReal provides extern definitions for the Ccalls.
  *)
 local

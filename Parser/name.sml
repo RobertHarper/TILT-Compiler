@@ -1,5 +1,3 @@
-(*$import NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String Stats ORD_KEY HashTable *)
-
 structure Name :> NAME =
   struct
 
@@ -21,19 +19,19 @@ structure Name :> NAME =
     fun eq_var   (v1 : var, v2)     = v1 = v2
     val eq_var2 = curry2 eq_var
     val compare_var = Int.compare
-    structure VarKey = 
+    structure VarKey =
 	struct
 	    type ord_key = var
 	    val compare = compare_var
 	end
-    structure VarSet = SplaySetFn(VarKey) 
-    structure VarMap = SplayMapFn(VarKey) 
+    structure VarSet = SplaySetFn(VarKey)
+    structure VarMap = SplayMapFn(VarKey)
 
     val varmap : string VarMap.map ref = ref VarMap.empty
 
     fun reset_varmap() = varmap := VarMap.empty
 
-    fun eq_label (l1 as (h1,_) : label, l2 as (h2,_)) = 
+    fun eq_label (l1 as (h1,_) : label, l2 as (h2,_)) =
 		let val res = (h1=h2) andalso (l1=l2)
 		in  res
 		end
@@ -41,20 +39,20 @@ structure Name :> NAME =
     fun eq_tag   (n1, n2)     = n1 = n2
     fun compare_tag ((a,_),(b,_)) = Int.compare(a,b)
 
-    fun compare_label((a,sa) : label, (b,sb) : label) = 
+    fun compare_label((a,sa) : label, (b,sb) : label) =
 	(case Int.compare(a,b) of
-	     EQUAL => String.compare(sa,sb) 
+	     EQUAL => String.compare(sa,sb)
 	   | res => res)
 
 
     val labels_name_sorted_distinct = all_pairs (fn (l1,l2) => compare_label(l1,l2) = LESS)
-    
+
     (* XXX small variable numbers could be mapped to physical registers at the tortl level *)
     val var_counter = ref 256
     val tag_counter = ref 256
     val label_counter = ref 256
 
-    fun inc_counter counter = 
+    fun inc_counter counter =
       let val res = !counter
 	  val _ = counter := res + 1
       in res
@@ -64,7 +62,7 @@ structure Name :> NAME =
     fun update_tag_counter n = tag_counter := (Int.max(!tag_counter,n + 1))
 
     (* these values copied from NJ source env/env.sml *)
-    val varInt = 0 and sigInt = 1 and strInt = 2 and fsigInt = 3 and 
+    val varInt = 0 and sigInt = 1 and strInt = 2 and fsigInt = 3 and
       fctInt = 4 and tycInt = 5 and labInt = 6 and tyvInt = 7 and
       fixInt = 8
     fun namespace2int Symbol.VALspace = 0
@@ -80,11 +78,11 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
-    fun construct_label (i,s) = 
+    fun construct_label (i,s) =
 	let val _ = update_label_counter i
 	in  (i,s)
 	end
-    fun construct_tag  (i,s) = 
+    fun construct_tag  (i,s) =
 	let val _ = update_tag_counter i
 	in  (i,s)
 	end
@@ -94,7 +92,7 @@ structure Name :> NAME =
     fun deconstruct_tag x = x
     fun deconstruct_loc x = x
 
-    fun fresh_named_var (s : string) : var = 
+    fun fresh_named_var (s : string) : var =
 	let val i = inc_counter var_counter
 	    val _ = update_var_counter i
 	    val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
@@ -121,11 +119,11 @@ structure Name :> NAME =
     fun internal_label s : label = (internal_hash s,s)
     fun is_label_internal ((num,str) : label) = internal_hash str = num
 
-    fun symbol_label sym : label = 
+    fun symbol_label sym : label =
 	let val str = Symbol.name sym
 	    val numOpt = Int.fromString str
-	    val hash = case numOpt of 
-		SOME num => num 
+	    val hash = case numOpt of
+		SOME num => num
 	      | NONE => Symbol.number sym
 	in  (hash, str)
 	end
@@ -139,11 +137,11 @@ structure Name :> NAME =
       let
         val is_internal = internal_hash str = num
         val is_generative = (size str > 0) andalso Char.isDigit(String.sub(str,0))
-        val space = namespaceint(num,str) 
+        val space = namespaceint(num,str)
       in (case (is_internal,is_generative) of
 	    (true,false) => (str ^ "_INT")
 	  | (true,true) => (str ^ "_INT_GEN")
-	  | (false,_) => 
+	  | (false,_) =>
 		 (case space of
 		      0 => str
 		    | 1 => str ^ "_SIG"
@@ -165,11 +163,11 @@ structure Name :> NAME =
 	(* Internal labels follow special conventions *)
 	(* Some internal labels are opened for lookup *)
 	(* Some internal labels are non-exported *)
-	(* Eq and coercion labels are identifiable as such *)
-	 
+	(* Unit, eq, and coercion labels are identifiable as such *)
+
+	val unit_str	  = "+U"
 	val open_str      = "+O"
 	val dt_str        = "+O+D"
-	val nonexport_str = "-X"
 	val cluster_str   = "+C"
 	val eq_str        = "+E"
 	val coercion_str  = "+N"
@@ -179,12 +177,12 @@ structure Name :> NAME =
 		val final_str = meta_str ^ str
 	    in  internal_label final_str
 	    end
-	
+
 	fun is_meta_lab meta_str lab = isSome (substring (meta_str, label2name lab))
-	    
-	fun split str = 
+
+	fun split str =
 	    let val len = size str
-		fun loop n = if ((n+1) < len andalso 
+		fun loop n = if ((n+1) < len andalso
 				 (String.sub(str,n) = #"+" orelse
 				  String.sub(str,n) = #"-"))
 				 then loop (n+2) else n
@@ -193,38 +191,38 @@ structure Name :> NAME =
 		 String.substring(str,start,len - start))
 	    end
     in
-	val to_open      = to_meta_lab open_str 
+	val to_unit	 = to_meta_lab unit_str
+	val to_open      = to_meta_lab open_str
 	val to_dt        = to_meta_lab dt_str
-	val to_nonexport = to_meta_lab nonexport_str
 	val to_cluster   = to_meta_lab cluster_str
 	val to_eq        = to_meta_lab eq_str
 	val to_coercion  = to_meta_lab coercion_str
 
+	val is_unit	 = is_meta_lab unit_str
 	val is_open      = is_meta_lab open_str
 	val is_dt        = is_meta_lab dt_str
-	val is_nonexport = is_meta_lab nonexport_str
 	val is_cluster   = is_meta_lab cluster_str
 	val is_eq        = is_meta_lab eq_str
 	val is_coercion  = is_meta_lab coercion_str
 
-	fun prependToInternalLabel (prefix, lab) = 
+	fun prependToInternalLabel (prefix, lab) =
 	    let val str = label2name lab
 		val (attributes, name) = split str
 		val name = prefix ^ name
 	    in  internal_label(attributes ^ name)
 	    end
-	
-	fun label2name' lab = 
+
+	fun label2name' lab =
 	    let val str = label2name lab
 		val (attributes, name) = split str
 	    in  name
 	    end
     end
-	
+
     fun make_cr_labels l = (internal_label(label2string l ^ "_c"),
 			    internal_label(label2string l ^ "_r"))
-	
-    fun mk_var_hash_table (size,notfound_exn) = 
+
+    fun mk_var_hash_table (size,notfound_exn) =
 	let
 	    val b : word = 0wx3141592
 	    fun hash (i : var) = Word.>>(Word.*(Word.fromInt i,b),0wx12)
@@ -235,18 +233,18 @@ structure Name :> NAME =
 
 
       type vpath = var * label list
-      structure PathKey : ORD_KEY = 
+      structure PathKey : ORD_KEY =
 	  struct
 	      type ord_key = vpath
 	      fun compare_labels([],[]) = EQUAL
 		| compare_labels ([],_) = LESS
 		| compare_labels(_,[]) = GREATER
-		| compare_labels(a1::b1,a2::b2) = 
+		| compare_labels(a1::b1,a2::b2) =
 		  (case (compare_label(a1,a2)) of
 		       LESS => LESS
 		     | GREATER => GREATER
 		     | EQUAL => compare_labels(b1,b2))
-	      fun compare((v1,l1),(v2,l2)) = 
+	      fun compare((v1,l1),(v2,l2)) =
 		  case (compare_var(v1,v2)) of
 		      LESS => LESS
 		    | GREATER => GREATER
@@ -268,37 +266,36 @@ structure Name :> NAME =
 
 
     local
-	(* keep_dataty : string * LabelSet.set -> LabelSet.set *)
-	fun keep_dataty (name, set) =
+	fun keep_unit (name : string, set : LabelSet.set) : LabelSet.set =
 	    let
-		val import = to_open (internal_label ("_" ^ name))
+		val import = to_unit(internal_label name)
 		val (c,r) = make_cr_labels import
 	    in
 		LabelSet.addList (set, [import, c, r])
 	    end
 
 	val keepers = LabelSet.empty
-	val keepers = foldl keep_dataty keepers ["bool"]
-	    
-	val once = ref false
+	val keepers = foldl keep_unit keepers ["Firstlude"]
+
+	fun showKeepers () : unit =
+	    (print "keepers = ";
+	     LabelSet.app (fn l => print (" " ^ label2string l)) keepers;
+	     print "\n")
+
+	val showOnce : unit -> unit = Util.memoize showKeepers
+
     in
-	(* keep_import : label -> bool *)
-	fun keep_import l =
+	fun keep_import (l : label) : bool =
 	    let val r = LabelSet.member (keepers, l)
 		val _ = debugdo (fn () =>
-				 let val _ = if !once then ()
-					     else (print "keepers = ";
-						   LabelSet.app (fn l => print (" " ^ label2string l)) keepers;
-						   print "\n";
-						   once := true)
-				 in
-				     if r then print ("keeping import " ^ label2string l ^ "\n")
-				     else ()
-				 end)
+				 (showOnce();
+				  if r then print ("keeping import " ^
+						   label2string l ^ "\n")
+				  else ()))
 	    in  r
-	    end 
+	    end
     end
-	
+
 
     val derived_var      = (*Stats.subtimer("Name:derived_var",*)(derived_var)
     val fresh_named_var  = (*Stats.subtimer("Name:fresh_named_var",*)(fresh_named_var)

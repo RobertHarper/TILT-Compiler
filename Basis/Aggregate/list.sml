@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude LIST *)
 (* list.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -56,13 +55,13 @@ structure List :> LIST where type 'a list = 'a list =
             if n >= 0 then loop (l,n) else raise Subscript
           end
 
-    fun length l = let 
+    fun length l = let
           fun loop(acc,[]) = acc
             | loop(acc, _::x) = loop(acc+1,x)
           in loop(0,l) end
 
 (*
-    fun rev l = let 
+    fun rev l = let
           fun loop ([], acc) = acc
             | loop (a::r, acc) = loop(r, a::acc)
           in
@@ -70,9 +69,9 @@ structure List :> LIST where type 'a list = 'a list =
 	  end
 *)
     val rev = rev
-	
+
     fun op @(x,[]) = x
-      | op @(x,l) = let 
+      | op @(x,l) = let
           fun f([],l) = l
             | f([a],l) = a::l
             | f([a,b],l) = a::b::l
@@ -86,11 +85,11 @@ structure List :> LIST where type 'a list = 'a list =
     fun revAppend ([],l) = l
       | revAppend (h::t,l) = revAppend(t,h::l)
 
-    fun app f = let 
-          fun a2 (e::r) = (f e; a2 r) | a2 [] = () 
+    fun app f = let
+          fun a2 (e::r) = (f e; a2 r) | a2 [] = ()
           in a2 end
 
-    fun map f = let 
+    fun map f = let
           fun m [] = []
             | m [a] = [f a]
             | m [a,b] = [f a, f b]
@@ -112,12 +111,12 @@ structure List :> LIST where type 'a list = 'a list =
       | find pred (a::rest) = if pred a then SOME a else (find pred rest)
 
     fun filter pred [] = []
-      | filter pred (a::rest) = if pred a then a::(filter pred rest) 
+      | filter pred (a::rest) = if pred a then a::(filter pred rest)
                                 else (filter pred rest)
 
     fun partition pred l = let
           fun loop ([],trueList,falseList) = (rev trueList, rev falseList)
-            | loop (h::t,trueList,falseList) = 
+            | loop (h::t,trueList,falseList) =
                 if pred h then loop(t, h::trueList, falseList)
                 else loop(t, trueList, h::falseList)
           in loop (l,[],[]) end
@@ -132,16 +131,16 @@ structure List :> LIST where type 'a list = 'a list =
             | f2 (a::r,b) = f2(r,f(a,b))
           in f2 (l,b) end
 
-    fun exists pred = let 
+    fun exists pred = let
           fun f [] = false
             | f (h::t) = pred h orelse f t
           in f end
-    fun all pred = let 
+    fun all pred = let
           fun f [] = true
             | f (h::t) = pred h andalso f t
           in f end
 
-    fun tabulate (len, genfn) = 
+    fun tabulate (len, genfn) =
           if len < 0 then raise Size
           else let
             fun loop n = if n = len then []

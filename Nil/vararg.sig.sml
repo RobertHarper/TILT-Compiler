@@ -1,10 +1,8 @@
-(*$import Nil NilContext *)
-
 (* Converting functions with either statically and dynamically known parameter types such that they take a single record
  * argument to use multiple arguments, as well as generating code to apply vararg/onearg at runtime
  *)
 
-signature VARARG = 
+signature VARARG =
   sig
       val debug : bool ref
       (* Print debugging information *)

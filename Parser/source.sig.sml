@@ -1,5 +1,3 @@
-(*$import SourceMap PrettyPrint TextIO *)
-
 (* <source.sig>=                                                            *)
 (* source.sig
  *
@@ -13,7 +11,7 @@ signature SOURCE =
         sourceMap: SourceMap.sourcemap,
         fileOpened: string,
         interactive: bool,
-        sourceStream: TextIO.instream, 
+        sourceStream: TextIO.instream,
         anyErrors: bool ref,
         errConsumer: PrettyPrint.ppconsumer
       }

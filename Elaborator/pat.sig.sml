@@ -1,7 +1,6 @@
-(*$import Il Ast *)
-(* Pattern compiler.  
+(* Pattern compiler.
    Handles pattern bindings, case statements, and function declarations. *)
-signature PAT = 
+signature PAT =
   sig
 
     val debug : bool ref
@@ -14,7 +13,7 @@ signature PAT =
 	                -> unit
 
     (* BindCompile creates bindings of all variables in the given pattern Ast.pat
-        when the pattern is applied to the expression (Il.exp/Il.con). 
+        when the pattern is applied to the expression (Il.exp/Il.con).
 	Bind is raised of the pattern does not match. *)
     val bindCompile  : {context : Il.context,
 			bindpat :  Ast.pat,
@@ -41,7 +40,7 @@ signature PAT =
        that packaging into the IL FIX construct is more convenient. *)
 
     val funCompile : {context : Il.context,
-		      rules : (Ast.pat list * Ast.exp) list} 
+		      rules : (Ast.pat list * Ast.exp) list}
 	             ->
 		     {arglist : (Il.var * Il.con) list,
 		      body : Il.exp * Il.con}

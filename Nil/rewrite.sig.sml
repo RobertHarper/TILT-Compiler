@@ -1,8 +1,6 @@
-(*$import Nil *)
-
-signature NILREWRITE = 
+signature NILREWRITE =
   sig
-    datatype 'a changeopt = NOCHANGE | NORECURSE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a 
+    datatype 'a changeopt = NOCHANGE | NORECURSE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
 
     type ('state,'term) termhandler = 'state * 'term -> ('state * 'term) changeopt
     type ('state, 'bnd) bndhandler  = 'state * 'bnd -> ('state * 'bnd list) changeopt
@@ -24,7 +22,7 @@ signature NILREWRITE =
 		  exp_var_bind : 'state binder,
 		  labelled_var : 'state * Nil.label * Nil.var -> 'state
 		  }
-     
+
     val rewriters : 'state handler -> {
 				       rewrite_kind : 'state -> Nil.kind -> Nil.kind,
 				       rewrite_con :  'state -> Nil.con -> Nil.con,

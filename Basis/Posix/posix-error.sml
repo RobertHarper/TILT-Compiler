@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude POSIX_ERROR POSIX_extern *)
 (* posix-error.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -11,7 +10,7 @@ structure POSIX_Error :> POSIX_ERROR  where type syserror = int =
   struct
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     type syserror = int
 
     fun toWord se = int32touint32 se

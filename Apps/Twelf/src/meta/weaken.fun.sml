@@ -1,4 +1,3 @@
-(*$import WEAKEN INTSYN WHNF *)
 (* Weakening substitutions *)
 (* Author: Carsten Schuermann *)
 

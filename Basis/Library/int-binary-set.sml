@@ -1,4 +1,3 @@
-(*$import ORD_SET LibBase List *)
 (* int-binary-set.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -74,17 +73,17 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
     type item = Key.ord_key
 
     datatype set
-      = E 
+      = E
       | T of {
-	  elt : item, 
-          cnt : int, 
+	  elt : item,
+          cnt : int,
           left : set,
           right : set
 	}
 
     fun numItems E = 0
       | numItems (T{cnt,...}) = cnt
-        
+
     fun isEmpty E = true
       | isEmpty _ = false
 
@@ -157,7 +156,7 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
 
     fun concat3 (E,v,r) = add(r,v)
       | concat3 (l,v,E) = add(l,v)
-      | concat3 (l as T{elt=v1,cnt=n1,left=l1,right=r1}, v, 
+      | concat3 (l as T{elt=v1,cnt=n1,left=l1,right=r1}, v,
                   r as T{elt=v2,cnt=n2,left=l2,right=r2}) =
         if wt n1 < n2 then T'(v2,concat3(l,v,l2),r2)
         else if wt n2 < n1 then T'(v1,l1,concat3(r1,v,r))
@@ -180,7 +179,7 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
     fun min (T{elt=v,left=E,...}) = v
       | min (T{left=l,...}) = min l
       | min _ = raise Match
-        
+
     fun delmin (T{left=E,right=r,...}) = r
       | delmin (T{elt=v,left=l,right=r,...}) = T'(v,delmin l,r)
       | delmin _ = raise Match
@@ -191,7 +190,7 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
 
     fun concat (E, s) = s
       | concat (s, E) = s
-      | concat (t1 as T{elt=v1,cnt=n1,left=l1,right=r1}, 
+      | concat (t1 as T{elt=v1,cnt=n1,left=l1,right=r1},
                   t2 as T{elt=v2,cnt=n2,left=l2,right=r2}) =
           if wt n1 < n2 then T'(v2,concat(t1,l2),r2)
           else if wt n2 < n1 then T'(v1,l1,concat(r1,t2))
@@ -204,20 +203,20 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
             if (v > lo)
               then if (v < hi) then s else trim(lo,hi,l)
               else trim(lo,hi,r)
-                
+
       fun uni_bd (s,E,_,_) = s
-        | uni_bd (E,T{elt=v,left=l,right=r,...},lo,hi) = 
+        | uni_bd (E,T{elt=v,left=l,right=r,...},lo,hi) =
              concat3(split_gt(l,lo),v,split_lt(r,hi))
-        | uni_bd (T{elt=v,left=l1,right=r1,...}, 
+        | uni_bd (T{elt=v,left=l1,right=r1,...},
                    s2 as T{elt=v2,left=l2,right=r2,...},lo,hi) =
             concat3(uni_bd(l1,trim(lo,v,s2),lo,v),
-                v, 
+                v,
                 uni_bd(r1,trim(v,hi,s2),v,hi))
               (* inv:  lo < v < hi *)
 
         (* all the other versions of uni and trim are
          * specializations of the above two functions with
-         *     lo=-infinity and/or hi=+infinity 
+         *     lo=-infinity and/or hi=+infinity
          *)
 
       fun trim_lo (_, E) = E
@@ -231,24 +230,24 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
             case Key.compare(v,hi) of
               LESS => s
             | _ => trim_hi(hi,l)
-                
+
       fun uni_hi (s,E,_) = s
-        | uni_hi (E,T{elt=v,left=l,right=r,...},hi) = 
+        | uni_hi (E,T{elt=v,left=l,right=r,...},hi) =
              concat3(l,v,split_lt(r,hi))
-        | uni_hi (T{elt=v,left=l1,right=r1,...}, 
+        | uni_hi (T{elt=v,left=l1,right=r1,...},
                    s2 as T{elt=v2,left=l2,right=r2,...},hi) =
             concat3(uni_hi(l1,trim_hi(v,s2),v),v,uni_bd(r1,trim(v,hi,s2),v,hi))
 
       fun uni_lo (s,E,_) = s
-        | uni_lo (E,T{elt=v,left=l,right=r,...},lo) = 
+        | uni_lo (E,T{elt=v,left=l,right=r,...},lo) =
              concat3(split_gt(l,lo),v,r)
-        | uni_lo (T{elt=v,left=l1,right=r1,...}, 
+        | uni_lo (T{elt=v,left=l1,right=r1,...},
                    s2 as T{elt=v2,left=l2,right=r2,...},lo) =
             concat3(uni_bd(l1,trim(lo,v,s2),lo,v),v,uni_lo(r1,trim_lo(v,s2),v))
 
       fun uni (s,E) = s
         | uni (E,s) = s
-        | uni (T{elt=v,left=l1,right=r1,...}, 
+        | uni (T{elt=v,left=l1,right=r1,...},
                 s2 as T{elt=v2,left=l2,right=r2,...}) =
             concat3(uni_hi(l1,trim_hi(v,s2),v), v, uni_lo(r1,trim_lo(v,s2),v))
 
@@ -257,11 +256,11 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
     end
 
       (* The old_union version is about 20% slower than
-       *  hedge_union in most cases 
+       *  hedge_union in most cases
        *)
     fun old_union (E,s2)  = s2
       | old_union (s1,E)  = s1
-      | old_union (T{elt=v,left=l,right=r,...},s2) = 
+      | old_union (T{elt=v,left=l,right=r,...},s2) =
           let val l2 = split_lt(s2,v)
               val r2 = split_gt(s2,v)
           in
@@ -292,11 +291,11 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
       fun treeIn (t,t') = let
             fun isIn E = true
               | isIn (T{elt,left=E,right=E,...}) = member(t',elt)
-              | isIn (T{elt,left,right=E,...}) = 
+              | isIn (T{elt,left,right=E,...}) =
                   member(t',elt) andalso isIn left
-              | isIn (T{elt,left=E,right,...}) = 
+              | isIn (T{elt,left=E,right,...}) =
                   member(t',elt) andalso isIn right
-              | isIn (T{elt,left,right,...}) = 
+              | isIn (T{elt,left,right,...}) =
                   member(t',elt) andalso isIn left andalso isIn right
             in
               isIn t
@@ -368,13 +367,13 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
 	  fun map'(acc, E) = acc
 	    | map'(acc, T{elt,left,right,...}) =
 		map' (add (map' (acc, left), f elt), right)
-	  in 
+	  in
 	    map' (E, set)
 	  end
 
     fun app apf =
          let fun apply E = ()
-               | apply (T{elt,left,right,...}) = 
+               | apply (T{elt,left,right,...}) =
                    (apply left;apf elt; apply right)
          in
            apply
@@ -382,7 +381,7 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
 
     fun foldl f b set = let
 	  fun foldf (E, b) = b
-	    | foldf (T{elt,left,right,...}, b) = 
+	    | foldf (T{elt,left,right,...}, b) =
 		foldf (right, f(elt, foldf (left, b)))
           in
             foldf (set, b)
@@ -390,7 +389,7 @@ structure IntBinarySet :> ORD_SET where type Key.ord_key = Int.int =
 
     fun foldr f b set = let
 	  fun foldf (E, b) = b
-	    | foldf (T{elt,left,right,...}, b) = 
+	    | foldf (T{elt,left,right,...}, b) =
 		foldf (left, f(elt, foldf (right, b)))
           in
             foldf (set, b)

@@ -1,5 +1,3 @@
-(*$import SPARCInstr CELLS FlowGraph FLOAT_CONVENTION INTEGER_CONVENTION MLRISC_REGION RA REGISTER_ALLOCATION *)
-
 (* =========================================================================
  * SparcFloatAllocation.sml
  * ========================================================================= *)

@@ -1,4 +1,3 @@
-(*$import Index IndexSkolem GlobalStructs QueueStructs LambdaStructs *)
 structure Index =
   Index (structure Global = Global
 	 structure Queue = Queue

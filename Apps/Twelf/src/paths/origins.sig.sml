@@ -1,4 +1,3 @@
-(*$import INTSYN PATHS *)
 (* Origins of Declarations *)
 (* Author: Frank Pfenning *)
 

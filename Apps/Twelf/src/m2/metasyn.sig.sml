@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Meta syntax *)
 (* Author: Carsten Schuermann *)
 

@@ -1,8 +1,7 @@
-(*$import PRINTUTIL Symbol SYMBOL Control Char TextIO Int String *)
 (* Copyright 1989 by AT&T Bell Laboratories *)
 (* printutil.sml *)
 
-structure PrintUtil :> PRINTUTIL where Symbol = Symbol = 
+structure PrintUtil :> PRINTUTIL where Symbol = Symbol =
 struct
 
   val say = Control.Print.say
@@ -35,7 +34,7 @@ struct
   val stringDepth = Control.Print.stringDepth
 
   fun escape i = let
-	val m = Int.toString: int->string 
+	val m = Int.toString: int->string
 	in
 	  concat ["\\", m(i div 100), m((i div 10)mod 10), m(i mod 10)]
 	end

@@ -1,4 +1,3 @@
-(*$import PARSING THM_RECON *)
 (* Parsing Theorems *)
 (* Author: Carsten Schuermann *)
 

@@ -1,6 +1,4 @@
-(*$import Nil *)
-
-signature TRAIL = 
+signature TRAIL =
   sig
     type trail
     val empty  : trail

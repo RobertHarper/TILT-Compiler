@@ -1,5 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
-
 structure PreVector :
     sig
 	val maxLen : int
@@ -19,11 +17,11 @@ struct
 	in  len (l, 0)
 	end
     fun list_hd' (h :: _) = h		(* list_hd' nil does not behave like List.hd nil *)
-	    
+
     val maxLen = 1024 * 1024
     fun checkLen n = if maxLen < n then raise Size else ()
-    
-    fun arrayFromList'(n,l) = 
+
+    fun arrayFromList'(n,l) =
 	let val _ = checkLen n
 	in
 	    if (n = 0)

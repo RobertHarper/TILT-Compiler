@@ -1,5 +1,4 @@
-(*$import MONO_HASH2_TABLE HashTableRep *)
-(* mono-hash2-table-fn.sml 
+(* mono-hash2-table-fn.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.
  *

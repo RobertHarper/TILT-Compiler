@@ -1,4 +1,3 @@
-(*$import SymbolFunctors Print ClausePrint PrintTwega LambdaStructs NamesStructs FormatterStructs *)
 structure SymbolAscii = SymbolAscii ();
 
 structure SymbolTeX = SymbolTeX ();

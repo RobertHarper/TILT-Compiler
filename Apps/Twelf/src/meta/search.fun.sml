@@ -1,4 +1,3 @@
-(*$import List MTPSEARCH GLOBAL INTSYN ABSTRACT MTPGLOBAL STATESYN COMPSYN WHNF UNIFY INDEX COMPILE TRAIL CPRINT PRINT NAMES *)
 (* Search (based on abstract machine ) : Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

@@ -1,5 +1,3 @@
-(*$import Core *)
-
 signature TRACKSTORAGE =
 sig
 
@@ -20,11 +18,11 @@ sig
 		 max_C_args : int,
 		 stack_resident : Core.stacklocation Core.Regmap.map}
                     -> info (* init with callee-save registers *)
-  
+
   val stackOffset : info -> Core.register list * Core.register -> Core.stacklocation
   val noteUsed    : info -> Core.register -> unit
 
-  datatype summary = SUMMARY of 
+  datatype summary = SUMMARY of
                     {registers_used    : Core.register list,
 		     stackframe_size   : int,
 		     prevframe_maxoffset : int,

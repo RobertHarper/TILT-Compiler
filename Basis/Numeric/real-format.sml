@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreString General String StringCvt NumFormat List *)
 (* real-format.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -21,7 +20,7 @@ structure RealFormat : sig
     val floor = TiltPrim.float2int
     val int32touint32 = TiltPrim.int32touint32
     val unsafe_vsub = TiltPrim.unsafe_vsub
-	
+
     infix 4 == !=
 (*
     val op +  = InlineT.Real64.+
@@ -91,7 +90,7 @@ structure RealFormat : sig
 	  fun scaleDn (x, e) =
 		if (x >= 10.0) then scaleDn(0.1*x, inc e) else (x, e)
 	  fun mkdigits (f, 0) = ([], if f < 5.0 then 0 else 1)
-	    | mkdigits (f, i) = let 
+	    | mkdigits (f, i) = let
 		val d = floor f
 		val (digits, carry) = mkdigits (10.0 * (f - real d), dec i)
 		val (digit, c) = (case (d, carry)
@@ -216,7 +215,7 @@ structure RealFormat : sig
 	      else {sign="", whole="0", frac="", exp=NONE}
 	  end (* realGFormat *)
 
-   val infinity = let fun bigger x = let val y = x*x 
+   val infinity = let fun bigger x = let val y = x*x
 				     in if y>x then bigger y else x
 				     end
                    in bigger 100.0
@@ -231,7 +230,7 @@ structure RealFormat : sig
    * the precision (number of fractional digits) is specified by the
    * second argument.
    *)
-    fun realToSciStr prec r = 
+    fun realToSciStr prec r =
 	if ~infinity < r andalso r < infinity
 	then let
 	  val {sign, mantissa, exp} = realEFormat (r, prec)
@@ -244,7 +243,7 @@ structure RealFormat : sig
    * the precision (number of fractional digits) is specified by the
    * second argument.
    *)
-    fun realToFixStr prec x = 
+    fun realToFixStr prec x =
 	if ~infinity < x andalso x < infinity
 	then let
 	  val {sign, mantissa} = realFFormat (x, prec)
@@ -253,7 +252,7 @@ structure RealFormat : sig
 	  end
         else fmtInfNan x
 
-      fun realToGenStr prec r = 
+      fun realToGenStr prec r =
 	if ~infinity < r andalso r < infinity
 	then let
   	  val {sign, whole, frac, exp} = realGFormat(r, prec)

@@ -1,4 +1,3 @@
-(*$import List MTPINIT MTPGLOBAL MTPDATA INTSYN NAMES FUNSYN STATESYN FORMATTER WHNF PRINT FUNPRINT *)
 (* Initialization *)
 (* Author: Carsten Schuermann *)
 

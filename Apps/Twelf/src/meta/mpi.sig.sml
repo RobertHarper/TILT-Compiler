@@ -1,4 +1,3 @@
-(*$import FUNSYN STATESYN *)
 (* Meta Prover Interface *)
 (* Author: Carsten Schuermann *)
 

@@ -1,5 +1,3 @@
-(*$import Core Rtl Name TilWord32 *)
-
 signature MACHINE =
   sig
 
@@ -11,7 +9,7 @@ signature MACHINE =
     type linkage = Core.linkage
 
     type specific_instruction
-    datatype instruction = 
+    datatype instruction =
       BASE     of Core.base_instruction
     | SPECIFIC of specific_instruction
 
@@ -33,8 +31,8 @@ signature MACHINE =
     val Rexnarg : register   (* Exception argument *)
     val Rexnptr : register   (* Pointer to most-recently saved context *)
     val Rhandler : register   (* Contains the handler address as we jump to it *)
-    val Rpv     : register option   
-                  (* A register that holds the address that we are 
+    val Rpv     : register option
+                  (* A register that holds the address that we are
 		   branching or jumping to.  Some calling conventions
 		   like Alpha's, require it in which case we have SOME x.
 		   Otherwise, for other conventions, like PPC, it is NONE *)
@@ -70,9 +68,9 @@ signature MACHINE =
    val regNum    : register -> int
    val regLE     : register -> register -> bool
 
-   (* map src registers using fs and destination using fd and return mapped instruction 
+   (* map src registers using fs and destination using fd and return mapped instruction
         ---   (i,fs,fd)  --- *)
-   val translate_to_real_reg : 
+   val translate_to_real_reg :
        instruction * (register -> register)
                            * (register -> register) -> instruction
 
@@ -103,8 +101,8 @@ signature MACHINE =
 	 - allocated: whether or not the procedure has been allocated
    *)
 
-   val special_iregs : register list 
-   val special_fregs : register list 
+   val special_iregs : register list
+   val special_fregs : register list
    val general_iregs : register list
    val general_fregs : register list
    val special_regs  : register list (* special_iregs + special_fregs *)

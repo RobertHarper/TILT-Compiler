@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreString StringCvt TEXT_STREAM_IO *)
 (* text-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -21,7 +20,7 @@ sig
     val inputN   : instream * int -> vector
     val inputAll : instream -> vector
     val canInput : instream * int -> int option
-	
+
     val lookahead : instream -> elem option
     val closeIn : instream -> unit
     val endOfStream : instream -> bool

@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Generic Traversal Intended for Language-Specific Printing *)
 (* Author: Frank Pfenning *)
 

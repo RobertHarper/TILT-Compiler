@@ -1,4 +1,3 @@
-(*$import WORD Firstlude TiltPrim Prelude PreWord StringCvt NumFormat NumScan *)
 (* word32.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -15,15 +14,15 @@ structure Word32 :> WORD where type word = word =
     val ^^ = TiltPrim.^^
     val || = TiltPrim.||
     val ~>> = TiltPrim.~>>
-	
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
-	
+
     val ugt = TiltPrim.ugt
     val ugte = TiltPrim.ugte
     val ult = TiltPrim.ult
     val ulte = TiltPrim.ulte
-	
+
     val udiv = TiltPrim.udiv
     val umod = TiltPrim.umod
     val uminus = TiltPrim.uminus
@@ -36,7 +35,7 @@ structure Word32 :> WORD where type word = word =
     val wordSizeW = 0w32
 
     (* the X versions treat the word as signed *)
-    fun toInt   (x : word) : int = if (ult(x,0wx7fffffff)) 
+    fun toInt   (x : word) : int = if (ult(x,0wx7fffffff))
 				       then uint32toint32 x else raise Overflow
     fun toIntX  (x : word) : int = uint32toint32 x
     fun fromInt (x : int) : word = int32touint32 x
@@ -73,7 +72,7 @@ structure Word32 :> WORD where type word = word =
     val orb  : word * word -> word = ||
     val xorb  : word * word -> word = ^^
     val andb : word * word -> word = &&
-    val notb : word -> word = !! 
+    val notb : word -> word = !!
 
     val +  : (word * word -> word) = uplus
     val -  : (word * word -> word) = uminus

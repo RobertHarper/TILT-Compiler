@@ -1,4 +1,3 @@
-(*$import UNIFY INTSYN WHNF TRAIL *)
 (* Unification *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

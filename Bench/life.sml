@@ -1,5 +1,3 @@
-(*$import *)
-
 (* Thread safety automatic since no mutable types are used *)
 
 (*

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude SysWord POSIX_FLAGS General *)
 (* posix-tty-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -12,7 +11,7 @@ signature POSIX_TTY =
 
     eqtype pid       (* process ID *)
     eqtype file_desc (* file descriptor *)
-    
+
     structure V :
       sig
         val eof   : int
@@ -35,11 +34,11 @@ signature POSIX_TTY =
         val update : cc * (int * char) list -> cc
         val sub    : cc * int -> char
       end
-  
+
     structure I :
       sig
         include POSIX_FLAGS
-        
+
         val brkint : flags
         val icrnl  : flags
         val ignbrk : flags
@@ -56,14 +55,14 @@ signature POSIX_TTY =
     structure O :
       sig
         include POSIX_FLAGS
-        
+
         val opost : flags
       end
 
     structure C :
       sig
         include POSIX_FLAGS
-        
+
         val clocal : flags
         val cread  : flags
         val cs5    : flags
@@ -80,7 +79,7 @@ signature POSIX_TTY =
     structure L :
       sig
         include POSIX_FLAGS
-        
+
         val echo   : flags
         val echoe  : flags
         val echok  : flags
@@ -113,9 +112,9 @@ signature POSIX_TTY =
     val b9600  : speed
     val b19200 : speed
     val b38400 : speed
-    
+
     type termios
-    
+
     val termios : { iflag : I.flags,
                     oflag : O.flags,
                     cflag : C.flags,
@@ -145,7 +144,7 @@ signature POSIX_TTY =
 	  val getispeed : termios -> speed
 	  val setispeed : termios * speed -> termios
       end
-    
+
     structure TC :
       sig
         eqtype set_action

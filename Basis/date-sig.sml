@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt Time *)
 (* date-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -59,7 +58,7 @@ signature DATE =
 
     val localOffset : unit -> Time.time
 	(* return the offset from UTC for the local time *)
- 
+
     val fromTimeLocal : Time.time -> date
 	(* returns the date for the given time in the local timezone.
 	 * this is like the ANSI C function localtime.

@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude TextIO IO UNIX Posix Substring String PosixTextPrimIO OS *)
 (* unix.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -8,7 +7,7 @@
 structure Unix :> UNIX where type signal = Posix.Signal.signal =
   struct
     val op^ = String.^
-	
+
     structure P = Posix.Process
     structure PE = Posix.ProcEnv
     structure PF = Posix.FileSys
@@ -18,7 +17,7 @@ structure Unix :> UNIX where type signal = Posix.Signal.signal =
 (* xxxxxxxxxxxxxx
     fun protect f x = let
           val _ = Signals.maskSignals Signals.MASKALL
-          val y = (f x) handle ex => 
+          val y = (f x) handle ex =>
                     (Signals.unmaskSignals Signals.MASKALL; raise ex)
           in
             Signals.unmaskSignals Signals.MASKALL; y
@@ -63,9 +62,9 @@ structure Unix :> UNIX where type signal = Posix.Signal.signal =
           val p1 = PIO.pipe ()
           val p2 = PIO.pipe ()
           fun closep () = (
-                PIO.close (#outfd p1); 
+                PIO.close (#outfd p1);
                 PIO.close (#infd p1);
-                PIO.close (#outfd p2); 
+                PIO.close (#outfd p2);
                 PIO.close (#infd p2)
               )
           val base = SS.string(SS.taker (fn c => c <> #"/") (SS.all cmd))

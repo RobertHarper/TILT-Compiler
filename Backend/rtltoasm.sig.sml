@@ -1,5 +1,3 @@
-(*$import Rtl *)
-
 signature RTLTOASM =
 sig
    val msgs        : bool ref

@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Indexing *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

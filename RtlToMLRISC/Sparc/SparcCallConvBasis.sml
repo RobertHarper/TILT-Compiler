@@ -1,6 +1,3 @@
-(*$import CallConventionBasis Sparc32Cells SparcIntegerConvention SparcMLRISCRegion SparcMLTreeExtra SparcStandardFrame *)
-
-
 (* =========================================================================
  * SparcCallConvBasis.sml
  * ========================================================================= *)

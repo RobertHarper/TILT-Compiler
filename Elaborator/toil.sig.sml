@@ -1,29 +1,20 @@
-(*$import Il Ast Tyvar *)
 (* The translation from AST to IL. *)
-signature TOIL = 
-  sig
+signature TOIL =
+sig
 
     val debug : bool ref
 
-    val add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit 
+    val add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit
+    val xeq          : Il.context * Il.con -> (Il.exp * Il.con) option
+    val polyinst     : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list
 
-    (* ---------------------- Translations --------------------------- *)
-    type decresult = (Il.sbnd option * Il.context_entry) list
+    val expcompile  : Il.context * Ast.exp -> Il.exp * Il.con * bool  (* valuability *)
+    val typecompile : Il.context * Ast.ty -> Il.con
+
     type filepos = Ast.srcpos -> string * int * int
 
-    val xexp    : Il.context * filepos * Ast.exp -> (Il.exp * Il.con * bool) option
-    val xdec    : string * Il.context * filepos * Ast.dec -> decresult option
-    val xdecspec: string * Il.context * filepos * Ast.dec * filepos * Ast.spec list -> decresult option
-    val xstrexp : Il.context * filepos * Ast.strexp
-	                     * Ast.sigexp Ast.sigConst -> (decresult * Il.mod * Il.signat) option
-    val xspec   : string * Il.context * filepos * Ast.spec list -> (Il.sdec list) option
-    val xsigexp : Il.context * filepos * Ast.sigexp -> Il.signat option
-    val xty     : Il.context * filepos * Ast.ty -> Il.con option
-    val xtybind : Il.context * filepos * Ast.tb list -> decresult option
-    val xeq     : Il.context * Il.con -> (Il.exp * Il.con) option
+    val xdec   : Il.context * filepos * Ast.dec -> Il.decresult option
+    val xspecs : Il.context * filepos * Ast.spec list -> Il.sdecs option
+    val seal   : Il.context * filepos * Il.mod * Il.signat * Il.signat -> Il.mod option
 
-    val expcompile : Il.context * Ast.exp -> Il.exp * Il.con * bool  (* valuability *)
-    val typecompile : Il.context * Ast.ty -> Il.con 
-    val polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list
-
-  end;
+end

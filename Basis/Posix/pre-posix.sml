@@ -1,12 +1,10 @@
-(*$import Firstlude TiltPrim Prelude POSIX_extern String SysWord *)
-
 signature PRE_POSIX =
 sig
 
     eqtype uid
     val uidToWord : uid -> SysWord.word
     val wordToUid : SysWord.word -> uid
-	
+
     eqtype gid
     val gidToWord : gid -> SysWord.word
     val wordToGid : SysWord.word -> gid
@@ -18,7 +16,7 @@ sig
     val sysconf : string -> SysWord.word
 
 end
-	
+
 structure PrePosix :> PRE_POSIX =
 struct
 
@@ -51,4 +49,4 @@ struct
 
     fun sysconf (s : string) : SysWord.word = Ccall(posix_process_sysconf,s)
 
-end    
+end

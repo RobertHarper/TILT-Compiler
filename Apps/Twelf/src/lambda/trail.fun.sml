@@ -1,4 +1,3 @@
-(*$import TRAIL INTSYN *)
 (* Trailing EVar Instantiations *)
 (* Author: Carsten Schuermann *)
 

@@ -1,4 +1,3 @@
-(*$import FUNSYN *)
 (* Operational semantics *)
 (* Author: Carsten Schuermann *)
 

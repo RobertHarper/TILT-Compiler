@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude TopLevel Byte RANDOM Array Int Word8 Word32 Word8Array Word8Vector LibBase Pack32Big *)
 (* random.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -6,14 +5,14 @@
  * This package implements a random number generator using a subtract-with-borrow
  * (SWB) generator as described in Marsaglia and Zaman, "A New Class of Random Number
  * Generators," Ann. Applied Prob. 1(3), 1991, pp. 462-480.
- * 
- * The SWB generator is a 31-bit generator with lags 48 and 8. It has period 
+ *
+ * The SWB generator is a 31-bit generator with lags 48 and 8. It has period
  * (2^1487 - 2^247)/105 or about 10^445. In general, these generators are
  * excellent. However, they act locally like a lagged Fibonacci generator
  * and thus have troubles with the birthday test. Thus, we combine this SWB
  * generator with the linear congruential generator (48271*a)mod(2^31-1).
  *
- * Although the interface is fairly abstract, the implementation uses 
+ * Although the interface is fairly abstract, the implementation uses
  * 31-bit ML words. At some point, it might be good to use 32-bit words.
  *
  * Since TILT does not have Word31, the code is modified to use Word32.
@@ -106,13 +105,13 @@ structure Random : RANDOM =
           in
             fill (3, 0);
             RND{vals = arr,
-                index = index, 
-                congx = congx, 
+                index = index,
+                congx = congx,
                 borrow = borrow}
           end
 
       (* linear congruential generator:
-       * multiplication by 48271 mod (2^32 - 1) 
+       * multiplication by 48271 mod (2^32 - 1)
        *)
     val a : Word32.word = 0w48271
     val m : Word32.word = 0wxffffffff
@@ -149,11 +148,11 @@ structure Random : RANDOM =
           end
 
       (* Create initial seed array and state of generator.
-       * Fills the seed array one bit at a time by taking the leading 
-       * bit of the xor of a shift register and a congruential sequence. 
+       * Fills the seed array one bit at a time by taking the leading
+       * bit of the xor of a shift register and a congruential sequence.
        * The congruential generator is (c*48271) mod (2^32 - 1).
        * The shift register generator is c(I + L18)(I + R13).
-       * The same congruential generator continues to be used as a 
+       * The same congruential generator continues to be used as a
        * mixing generator with the SWB generator.
        *)
     fun rand (congy, shrgx) = let
@@ -173,9 +172,9 @@ structure Random : RANDOM =
           val congx = ((Word32.fromInt congy & maxWord) << 0w1)+0w1
           val (seeds,congx) = genseed(N,[],congx, Word32.fromInt shrgx)
           in
-            RND{vals = A.fromList seeds, 
-                index = ref 0, 
-                congx = ref congx, 
+            RND{vals = A.fromList seeds,
+                index = ref 0,
+                congx = ref congx,
                 borrow = ref false}
           end
 
@@ -201,8 +200,8 @@ structure Random : RANDOM =
     fun randReal state =
       (real(randNat state) + real(randNat state) * two2neg31) * two2neg31
 
-    fun randRange (i,j) = 
-          if j < i 
+    fun randRange (i,j) =
+          if j < i
             then error ("randRange", "hi < lo")
             else let
               val R = two2neg31*real(j - i + 1)

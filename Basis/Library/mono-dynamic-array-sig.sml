@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude *)
 (* mono-dynamic-array-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -32,7 +31,7 @@ signature MONO_DYNAMIC_ARRAY =
        *)
 
     val tabulate: int * (int -> elem) * elem -> array
-      (* tabulate (sz,fill,dflt) acts like Array.tabulate, plus 
+      (* tabulate (sz,fill,dflt) acts like Array.tabulate, plus
        * stores default value dflt.  Raises Size if sz < 0.
        *)
 
@@ -46,7 +45,7 @@ signature MONO_DYNAMIC_ARRAY =
        *)
 
     val update : array * int * elem -> unit
-      (* update (a,idx,v) sets the value at index idx of the array to v. 
+      (* update (a,idx,v) sets the value at index idx of the array to v.
        * Raises Subscript if idx < 0
        *)
 

@@ -1,4 +1,3 @@
-(*$import METASYN *)
 (* Basic search engine *)
 (* Author: Carsten Schuermann *)
 

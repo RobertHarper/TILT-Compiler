@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude STRING_CVT PreString *)
 (* string-cvt.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -7,7 +6,7 @@
 
 structure StringCvt :> STRING_CVT =
   struct
-      
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
 
@@ -32,7 +31,7 @@ structure StringCvt :> STRING_CVT =
       fun fillStr (c, s, i, n) = let
 	    val stop = i+n
 	    fun fill j = if (j < stop)
-		  then (unsafe_update(s, int32touint32 j, c); 
+		  then (unsafe_update(s, int32touint32 j, c);
 			fill(j+1))
 		  else ()
 	    in
@@ -47,7 +46,7 @@ structure StringCvt :> STRING_CVT =
 	      cpy (0, start)
 	    end
     in
-	fun padLeft padChr wid s = 
+	fun padLeft padChr wid s =
 	    let
 		val len = PreString.size s
 		val pad = wid - len
@@ -62,7 +61,7 @@ structure StringCvt :> STRING_CVT =
 			 end
 		else s
 	    end
-	fun padRight padChr wid s = 
+	fun padRight padChr wid s =
 	    let
 		val len = PreString.size s
 		val pad = wid - len
@@ -129,7 +128,7 @@ structure StringCvt :> STRING_CVT =
      fun scanString (scanFn : (char, cs) reader -> ('a, cs) reader) s =
 	 let
 	     val n = uint32toint32(vector_length s)
-	     fun getc i = 
+	     fun getc i =
 		 if (i < n) then SOME(unsafe_vsub(s, int32touint32 i), i+1) else NONE
 	 in
 	     case (scanFn getc 0) of

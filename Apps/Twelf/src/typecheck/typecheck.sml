@@ -1,4 +1,3 @@
-(*$import TypeCheck Strict LambdaStructs PrintStructs PathsStructs *)
 structure TypeCheck =
   TypeCheck (structure IntSyn' = IntSyn
 	     structure Conv = Conv

@@ -1,4 +1,3 @@
-(*$import Rtl MACHINE GRAPH HashTableFn Graph MACHINE HashString *)
 (* For procedure-level callgraph *)
 
 structure Labelgraph :> DIRECTEDGRAPH where type node = Rtl.label =

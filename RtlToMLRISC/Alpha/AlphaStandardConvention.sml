@@ -1,6 +1,3 @@
-(*$import FLOAT_CONVENTION INTEGER_CONVENTION AlphaCallconventionBasis AlphaMLTreeExtra AlphaStandardFrame *)
-
-
 (* =========================================================================
  * AlphaStandardConvention.sml
  * ========================================================================= *)

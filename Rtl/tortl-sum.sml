@@ -1,5 +1,3 @@
-(*$import Util Name List Int Prim TilWord32 TORTLSUM Rtl TortlBase TortlRecord Rtltags Nil NilUtil Ppnil Stats *)
-
 (* ASSUMPTIONS and GUARANTEES:
 	(1) Integer types are represented by the tags 0 to 3.
 	(2) (Special) Sum types are represetnted by a pointer to a record whose fields are
@@ -10,10 +8,10 @@
 		(e) type argument(s)
 		      if there are no type arguments, then this will be an empty crecord
 		      if there is one type argument, then this will be the type argument      (what? -joev)
-		      if there are more than one type arguments, then this will be a pointer 
+		      if there are more than one type arguments, then this will be a pointer
 			  to the tuple of the summand types
-	(3) Mu types are represented by a record whose first field is 8.	
-		There are currently no other fields since mu's are not fully represented.  
+	(3) Mu types are represented by a record whose first field is 8.
+		There are currently no other fields since mu's are not fully represented.
 	(4) The representation of values of sum and mu types will always be a pointer
 	        though that might include small tag values.
 *)
@@ -27,7 +25,7 @@
 
          1. n=0         we use a tag to represent the datatype
 	 3. m>0, n=1    we use a tag for the non-carriers;
-	                the carrier is boxed only if the carried type might look like a tag 
+	                the carrier is boxed only if the carried type might look like a tag
 			(e.g., ints, sums, mu's)
          4. n>1         we use tags for the non-carriers and box all carriers
 
@@ -38,19 +36,19 @@
 	   (2) The GC must now decode sum types to check for this case.
 	       This potentially requires repeated decoding of nested sum types
 	       and mu types.  The current representation of mu types is that
-	       it is a base case and has a pointer type which is possible 
+	       it is a base case and has a pointer type which is possible
 	       because we only have mu's of sums.
   *)
-	
+
 
 
 structure TortlSum :> TORTL_SUM =
 
 struct
 
-    open Nil 
-    open Rtl 
-    open TortlBase 
+    open Nil
+    open Rtl
+    open TortlBase
     structure TR = TortlRecord
 
     val debug = ref false
@@ -64,7 +62,7 @@ struct
     (* Extracts a bunch of useful facts about a sumcon. *)
     (* State remains unchanged across call. Leaf - 3/22/02
      *)
-    fun help ((state,known,sumcon) : typearg) = 
+    fun help ((state,known,sumcon) : typearg) =
 	let
 	  val (tagcount,_,sumtypes) = reduce_to_sum "xsum_???" state sumcon
 	  val known = w2i known
@@ -80,7 +78,7 @@ struct
 
     (* Check if values of the field_type might look like an int and thus require boxing
      *)
-    fun needs_boxing state field_type = 
+    fun needs_boxing state field_type =
 	(case simplify_type state field_type of
 	     (true,Prim_c(Int_c _, _)) => true
 	   | (true,Mu_c _) => true
@@ -92,7 +90,7 @@ struct
 		error "needs_boxing: field type cannot be determined"))
 
 
-    (* Emits code to check whether values of the carriedType might look like an int and 
+    (* Emits code to check whether values of the carriedType might look like an int and
      thus require boxing.  Returns a pair of labels (boxl,noboxl); if boxing is required,
      this code will jump to boxl; if not, it will jump to noboxl.  It's the responsibility
      of whoever called this function to actually emit those labels.
@@ -100,10 +98,10 @@ struct
      *)
     fun needs_boxing_dynamic carriedType =
 	let
-	  val tag = alloc_regi NOTRACE_INT		  
+	  val tag = alloc_regi NOTRACE_INT
 	  val boxl = fresh_code_label "dynamic_box"
 	  val noboxl = fresh_code_label "dynamic_nobox"
-	  val _ = 
+	  val _ =
 	      (add_instr(BCNDUI(LE, carriedType, IMM 4, boxl, false));     (* check for int types *)
 	       add_instr(BCNDUI(LE, carriedType, IMM 255, noboxl, false)); (* check for other small types *)
 	       record_project(carriedType, 0, tag);
@@ -120,8 +118,8 @@ struct
     (*      POST: r contains the type of the injected value in a value of    *)
     (*            the type in sumtype.                                       *)
     (* XXX tagcount is not used.                                             *)
-    (*        joev 8/2002                                                    *) 
-    fun projectFieldFromSum (sumtype, tagcount, nontagcount, known) = 
+    (*        joev 8/2002                                                    *)
+    fun projectFieldFromSum (sumtype, tagcount, nontagcount, known) =
 	let val sumtypeArg = alloc_regi TRACE
 	    val _ = record_project(sumtype, 4, sumtypeArg)  (* See comment at top on sum type layout *)
 	in  if (nontagcount = 1)
@@ -132,7 +130,7 @@ struct
 		 in  result
 		 end
 	end
-    
+
 
   fun xinject_sum_static (info, terms, trace) : term * state =
       let
@@ -144,14 +142,14 @@ struct
 	(* If the injected value doesn't look like a tag, then injection is a no-op. *)
 	(* If it might, then we have to box it.                                      *)
 	(*    joev                                                                   *)
-	fun single () = 
-	  if (needs_boxing state (List.nth (sumtypes,field_sub))) then 
+	fun single () =
+	  if (needs_boxing state (List.nth (sumtypes,field_sub))) then
 	    (* I suppose [hd (tl terms)] is the same as (tl terms), since *)
 	    (* terms will have exactly 2 elements.                        *)
 	    TR.make_record_with_tag(state,hd terms,[hd (tl terms)])
 	  else (hd terms,state)
-	    
-	  
+
+
 	(* For when we are injecting into one of multiple carriers. *)
 	(* Make a record containing the index of the injection and the value. *)
         (*    joev                                                            *)
@@ -161,7 +159,7 @@ struct
 	    end
 
       in  (case (is_tag, nontagcount) of
-	     (true, _) => if (known < 256) 
+	     (true, _) => if (known < 256)
 			  then (VALUE(TAG (i2w known)), state)
 			  else error ("Tag too large " ^ (Int.toString known))
 	   | (_, 0) => error "Can't get here"
@@ -171,7 +169,7 @@ struct
 
   (* Create the gctag for an injection, based on the niltrace of the injected value. *)
   (*    joev 8/2002                                                                  *)
-    fun make_sum_tag_static (info,tr) : term = 
+    fun make_sum_tag_static (info,tr) : term =
 	let
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -185,19 +183,19 @@ struct
 	    let
 	      val field_type = List.nth(sumtypes, field_sub)
 	    in  if (needs_boxing state field_type)
-		then 
+		then
 		  TR.record_tag_from_reps([niltrace2rep state tr])
-		else 
+		else
 		  VALUE(INT 0w0) (* Tag will not be used *)
 		                 (* This case should never happen!*)
 	    end
 	  | _ =>
-	    let 
+	    let
 		val field_type = List.nth(sumtypes, field_sub)
 		val rep = niltrace2rep state tr
 	    in TR.record_tag_from_reps [NOTRACE_INT,rep]
 	    end
-      end	     
+      end
 
 
     (* Translate an injection into the sole carrying arm of a sum type, where *)
@@ -207,7 +205,7 @@ struct
     fun xinject_sum_dynamic_single (info,
 				    sumtypeTerm,
 				    exp_varloc,
-				    trace) : term * state = 
+				    trace) : term * state =
       let val _ = Stats.counter("RTLxinject_sum_dyn_single") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -216,7 +214,7 @@ struct
 	  val desti = alloc_regi TRACE
 	  val afterl = fresh_code_label "xinject_sum_dyn_after"
 	  val sumtypeReg = load_ireg_term(sumtypeTerm,NONE)
-	  
+
 	  (* Perform the branching with fall-through to nobox case *)
 	  val fieldtypeReg = projectFieldFromSum (sumtypeReg, tagcount, nontagcount, known)
 	  val (boxl,noboxl) = needs_boxing_dynamic fieldtypeReg
@@ -233,7 +231,7 @@ struct
 
 	  (* afterwards *)
 	  val _ = add_instr(ILABEL afterl)
-	      
+
       in  (LOCATION(REGISTER(false, I desti)),state)
       end
 
@@ -243,9 +241,9 @@ struct
     fun xinject_sum_dynamic_multi (info,
 			    con_varloc,
 			    exp_varloc,
-			    trace) : term * state = 
+			    trace) : term * state =
 	let val _ = Stats.counter("RTLxinject_sum_dyn_multi") ()
-	    
+
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
@@ -260,7 +258,7 @@ struct
     fun xinject_sum_dynamic (info,
 		      con_varloc,
 		      exp_varloc,
-		      trace) : term * state = 
+		      trace) : term * state =
 	let
 	    val  (state,known,sumcon,
 		  tagcount,nontagcount,single_carrier,is_tag,
@@ -273,7 +271,7 @@ struct
 		    | _ => xinject_sum_dynamic_multi(info,con_varloc,exp_varloc,trace))
 	end
 
-  fun xproject_sum_dynamic (info, sumtypeReg, exp_ir, traceinfo) : term * state = 
+  fun xproject_sum_dynamic (info, sumtypeReg, exp_ir, traceinfo) : term * state =
      let val _ = Stats.counter("RTLprojsum") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -281,7 +279,7 @@ struct
 
 	  val (_,dest as I desti) = alloc_reg_trace state traceinfo
 
-	  fun single_case() = 
+	  fun single_case() =
 	      let val afterl = fresh_code_label "projsum_single_after"
 
 		  (* Perform the branching with fall-through to nobox case *)
@@ -299,7 +297,7 @@ struct
 	      in  state
 	      end
 
-	  fun multi_case() = 
+	  fun multi_case() =
 	      let val _ = record_project(exp_ir,1,desti)
 	      in  state
 	      end
@@ -313,7 +311,7 @@ struct
       end
 
 
-  fun xproject_sum_static (info, base, niltrace) : term * state = 
+  fun xproject_sum_static (info, base, niltrace) : term * state =
       let val lv = LOCATION(REGISTER(false, I base))
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -335,7 +333,7 @@ struct
 			 end
 	     | _ => unbox 1)
       end
-	       
+
 
 
 end

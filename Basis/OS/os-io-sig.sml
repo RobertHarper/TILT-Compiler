@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude Time *)
 (* os-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -27,12 +26,12 @@ signature OS_IO =
 
     structure Kind : sig
 	val file : iodesc_kind
-	val dir : iodesc_kind 
-	val symlink : iodesc_kind 
-	val tty : iodesc_kind 
-	val pipe : iodesc_kind 
-	val socket : iodesc_kind 
-	val device : iodesc_kind 
+	val dir : iodesc_kind
+	val symlink : iodesc_kind
+	val tty : iodesc_kind
+	val pipe : iodesc_kind
+	val socket : iodesc_kind
+	val device : iodesc_kind
       end
 
     type poll_desc

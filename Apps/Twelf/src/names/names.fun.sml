@@ -1,4 +1,3 @@
-(*$import Int Array Char String Substring NAMES GLOBAL INTSYN TABLE *)
 (* Names of Constants and Variables *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)

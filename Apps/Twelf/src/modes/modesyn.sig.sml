@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Mode Syntax *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 (* Names of Constants and Variables *)
 (* Author: Frank Pfenning *)
 (* Modified: Jeff Polakow *)

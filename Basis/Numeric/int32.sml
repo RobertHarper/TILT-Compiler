@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude StringCvt PreInt General NumScan NumFormat INTEGER *)
 (* int32.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -49,7 +48,7 @@ structure Int32 :> INTEGER where type int = int =
     val op <>   : int * int -> bool = <>
     nonfix * quot + - < <= > >= = <>
 
-  (* min, max, abs, rem, div, and mod should be inlined. 
+  (* min, max, abs, rem, div, and mod should be inlined.
    *     ... but this is not the time!
    *)
     fun min(a:int, b:int):int = if <(a,b) then a else b
@@ -59,7 +58,7 @@ structure Int32 :> INTEGER where type int = int =
     fun abs(a:int):int = if >(a, 0) then ~(a) else a
     fun op div(a:int, b:int):int = if >=(b, 0)
 	  then if >=(a, 0)
-	    then quot(a, b) 
+	    then quot(a, b)
 	    else -(quot(+(a, 1), b), 1)
 	  else if >(a,0)
 	    then -(quot(-(a, 1), b), 1)
@@ -78,7 +77,7 @@ structure Int32 :> INTEGER where type int = int =
     val abs = PreInt.iabs
     val op div = PreInt.idiv
     val op mod = PreInt.imod
-	
+
     fun sign(0) = 0
       | sign i = if <(i, 0) then ~1 else 1
 
@@ -95,7 +94,7 @@ structure Int32 :> INTEGER where type int = int =
     val scan = NumScan.scanInt
     val fmt = NumFormat.fmtInt
     val toString = fmt StringCvt.DEC
-    val fromString = StringCvt.scanString (scan StringCvt.DEC) 
+    val fromString = StringCvt.scanString (scan StringCvt.DEC)
 
 (*
     val toInt : int -> Int.int = toInt

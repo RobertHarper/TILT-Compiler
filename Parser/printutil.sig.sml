@@ -1,5 +1,3 @@
-(*$import SYMBOL ENV *)
-
 (* Copyright 1996 by AT&T Bell Laboratories *)
 (* printutil.sig *)
 

@@ -1,4 +1,3 @@
-(*$import Ast SourceMap Int ERROR IlUtil Il Util Stats *)
 (* Stateful module holding the error state of the elaboration process *)
 
 structure Error
@@ -31,7 +30,7 @@ struct
     fun reset fp = (error_level := NoError;
 		    src_region := [];
 		    filepos := fp)
-	    
+
     fun get_error() = !error_level
 
     fun peek_region () = (hd(!src_region))
@@ -44,19 +43,19 @@ struct
 					  val fp = !filepos
 					  val (f1,r1,c1) = fp p1
 					  val (f2,r2,c2) = fp p2
-				      in f1 ^ ":" ^ 
-					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^ 
+				      in f1 ^ ":" ^
+					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^
 					  ((Int.toString r2) ^ "." ^ (Int.toString c2))
 				      end handle _ => "unknown"
     fun push_region p = (src_region := (p :: (!src_region));
 			 if (!track)
 			     then (tab ((length (!src_region)) - 1);
-				   print "PUSH_REGION: "; 
+				   print "PUSH_REGION: ";
 				   print (peek_region_string()); print "\n")
 			 else ())
     fun pop_region () = let val _ = if (!track)
 					then (tab ((length (!src_region)) - 1);
-					      print "POP_REGION: "; 
+					      print "POP_REGION: ";
 					      print (peek_region_string()); print "\n")
 				    else ()
 			in src_region := (tl(!src_region))

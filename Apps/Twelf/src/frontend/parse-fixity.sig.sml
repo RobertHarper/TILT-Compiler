@@ -1,4 +1,3 @@
-(*$import PARSING NAMES *)
 (* Parsing Fixity Declarations *)
 (* Author: Frank Pfenning *)
 

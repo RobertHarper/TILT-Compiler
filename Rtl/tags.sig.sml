@@ -1,4 +1,3 @@
-(*$import Rtl TilWord32 *)
 signature RTLTAGS =
 sig
 
@@ -48,4 +47,4 @@ sig
 
 end
 
-     
+

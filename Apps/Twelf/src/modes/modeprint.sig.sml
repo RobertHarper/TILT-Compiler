@@ -1,4 +1,3 @@
-(*$import MODESYN *)
 (* Printing Mode Declarations *)
 (* Author: Carsten Schuermann *)
 

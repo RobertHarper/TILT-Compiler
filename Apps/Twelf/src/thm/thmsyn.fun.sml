@@ -1,4 +1,3 @@
-(*$import THMSYN MODESYN ABSTRACT WHNF PATHS *)
 (* Theorems *)
 (* Author: Carsten Schuermann *)
 

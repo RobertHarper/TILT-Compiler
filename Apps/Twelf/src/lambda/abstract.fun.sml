@@ -1,4 +1,3 @@
-(*$import ABSTRACT INTSYN WHNF UNIFY CONSTRAINTS *)
 (* Abstraction *)
 (* Author: Frank Pfenning, Carsten Schuermann *)
 

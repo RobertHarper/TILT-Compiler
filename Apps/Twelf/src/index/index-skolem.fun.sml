@@ -1,4 +1,3 @@
-(*$import Array INDEX GLOBAL INTSYN QueueStructs *)
 (* Indexing (Constants and Skolem constants) *)
 (* Author: Carsten Schuermann *)
 (* Modified: Frank Pfenning *)

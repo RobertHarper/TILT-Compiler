@@ -1,10 +1,8 @@
-(*$import Rtl Core *)
-
 signature TRACETABLE =
   sig
 
     datatype calllabel = CALLLABEL of Rtl.label
-    datatype trace     = TRACE_YES 
+    datatype trace     = TRACE_YES
                        | TRACE_NO
                        | TRACE_UNSET   (* unset variable; handle specially for gener GC *)
 		       | TRACE_CALLEE     of Core.register
@@ -17,17 +15,17 @@ signature TRACETABLE =
 		       | TRACE_GLOBAL     of Core.label
 		       | TRACE_GLOBAL_REC of Core.label * int list
 
-		       (* trace status should never be needed.  A bug 
+		       (* trace status should never be needed.  A bug
 			  if it is.*)
- 
-		       | TRACE_IMPOSSIBLE  
 
-    datatype callinfo = CALLINFO of 
-      {calllabel  : calllabel, 
+		       | TRACE_IMPOSSIBLE
+
+    datatype callinfo = CALLINFO of
+      {calllabel  : calllabel,
        framesize  : int,
        retaddpos  : int,
        regtrace   : (Core.register * trace) list,
-       stacktrace : (int * trace) list                   
+       stacktrace : (int * trace) list
        }
 
     val ShowDebug        : bool ref

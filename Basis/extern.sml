@@ -1,5 +1,4 @@
-(*$import Firstlude TiltPrim Prelude Word8Vector Position Word8Array Word8 *)
-type statrep = (int * word * word * word * word * word * 
+type statrep = (int * word * word * word * word * word *
 		word * int * int * int * int)
 type flock_rep = int * int * Position.int * Position.int * int
 type tm = (int * int * int * int * int * int * int * int * int)
@@ -37,8 +36,8 @@ extern posix_io_fcntl_gfl : (int, word * word) -->
 extern posix_io_fcntl_sfl : (int, word, unit) -->
 (* due to a deficiency in the phase-splitter, externs cannot use types
    defined within the same unit *)
-extern posix_io_fcntl_l : (int, int, 
-			   int * int * Position.int * Position.int * int (* = flock_rep *), 
+extern posix_io_fcntl_l : (int, int,
+			   int * int * Position.int * Position.int * int (* = flock_rep *),
 			   int * int * Position.int * Position.int * int (* = flock_rep *) ) -->
 extern posix_io_lseek : (int, int, int, int) -->
 extern posix_io_fsync : (int, unit) -->
@@ -115,11 +114,11 @@ extern posix_filesys_unlink : (string, unit) -->
 extern posix_filesys_rmdir : (string, unit) -->
 extern posix_filesys_readlink : (string, string) -->
 extern posix_filesys_ftruncate : (int, int, unit) -->
-extern posix_filesys_stat : (string, (int * word * word * word * word * word * 
+extern posix_filesys_stat : (string, (int * word * word * word * word * word *
 				      word * int * int * int * int) (* = statrep *) ) -->
-extern posix_filesys_lstat : (string, (int * word * word * word * word * word * 
+extern posix_filesys_lstat : (string, (int * word * word * word * word * word *
 				       word * int * int * int * int) (* = statrep *) ) -->
-extern posix_filesys_fstat : (int, (int * word * word * word * word * word * 
+extern posix_filesys_fstat : (int, (int * word * word * word * word * word *
 				    word * int * int * int * int) (* = statrep *) ) -->
 extern posix_filesys_access : (string, word, bool) -->
 extern posix_filesys_chmod : (string, word, unit) -->

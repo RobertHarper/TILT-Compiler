@@ -1,4 +1,3 @@
-(*$import *)
 (* Paths, Occurrences, and Error Locations *)
 (* Author: Frank Pfenning *)
 

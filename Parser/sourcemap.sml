@@ -1,5 +1,3 @@
-(*$import SOURCEMAP *)
-
 (* I can imagine at least three implementations: one that doesn't           *)
 (* support resynchronization, one that supports resynchronization only at   *)
 (* column 1, and one that supports arbitrary resynchronization.             *)
@@ -135,25 +133,25 @@ structure SourceMap : SOURCE_MAP = struct
     let exception Impossible
         fun gather((p, file, col)::files, (p', line)::lines, region_end, answers) =
           if p' <= lo then (* last item *)
-            ({fileName=file, line=line, column=column((p, file, col), (p', line), lo)}, 
+            ({fileName=file, line=line, column=column((p, file, col), (p', line), lo)},
              region_end) :: answers
           else
             if p < p' then
               gather((p, file, col)::files, lines, region_end, answers)
             else (* p = p'; new region *)
-              gather(files, lines, end_of (p, hd files, hd lines), 
+              gather(files, lines, end_of (p, hd files, hd lines),
                    ({fileName = file, line = line, column = col}, region_end) :: answers)
           | gather _ = raise Impossible
-        and end_of(lastpos, xx as (p, file, col), yy as (p', line)) = 
+        and end_of(lastpos, xx as (p, file, col), yy as (p', line)) =
                {fileName=file, line=line, column=column(xx, yy, lastpos)}
         val (files, lines) = remove (fn pos : int => pos >= hi andalso pos > lo) smap
         val _ = if null files orelse null lines then raise Impossible else ()
         val answer = gather(files, lines, end_of(hi, hd files, hd lines), [])
-        fun validate(({fileName=f,  line=l,  column=c}, 
-                      {fileName=f', line=l', column=c'}) :: rest) = 
+        fun validate(({fileName=f,  line=l,  column=c},
+                      {fileName=f', line=l', column=c'}) :: rest) =
               if f = f' andalso (l' > l orelse (l' = l andalso c' >= c)) then
-                validate rest 
-              else 
+                validate rest
+              else
                 raise Impossible
           | validate [] = ()
     in  validate answer; answer

@@ -1,27 +1,25 @@
-(*$import Util Name Nil NilContext NilRewrite BOUNDCHECK *)
-
 (*
  Verification that a module contains no unbound variables.
  Uses NilRewriting to do the bulk of the work.
 *)
 
-structure BoundCheck :> BOUNDCHECK = 
+structure BoundCheck :> BOUNDCHECK =
   struct
-  
+
     open Nil
-      
+
     val lprintl = Util.lprintl
     val printl = Util.printl
 
    (*Shadowing*)
-    local 
+    local
       open NilRewrite
 
       structure VarSet = Name.VarSet
 
       val add = VarSet.add
       val member = VarSet.member
-	
+
       type state = {error   : bool ref,
 		    context : NilContext.context,
 		    cbound  : VarSet.set,
@@ -34,7 +32,7 @@ structure BoundCheck :> BOUNDCHECK =
       *)
 
       (* Term variable binder *)
-      fun exp_var_bind (state : state as {error,context,ebound,cbound},var) : (state * var option)= 
+      fun exp_var_bind (state : state as {error,context,ebound,cbound},var) : (state * var option)=
 	(if member (ebound, var) orelse NilContext.bound_exp (context,var) then
 	   (lprintl ("Warning! Expression variable " ^ (Name.var2string var) ^ " rebound");
 	    error := true;
@@ -45,7 +43,7 @@ structure BoundCheck :> BOUNDCHECK =
 	    NONE))
 
       (* Constructor variable binder *)
-      fun con_var_bind (state :state as {error,context,cbound,ebound},var) : (state * var option)= 
+      fun con_var_bind (state :state as {error,context,cbound,ebound},var) : (state * var option)=
 	(if member (cbound, var) orelse NilContext.bound_con (context,var) then
 	   (lprintl ("Warning! Constructor variable " ^ (Name.var2string var) ^ " rebound");
 	    error := true;
@@ -54,13 +52,13 @@ structure BoundCheck :> BOUNDCHECK =
 	 else
 	   ({error = error,context = context,cbound = add (cbound,var),ebound = ebound},
 	    NONE))
-	   
+
       (* Constructor handler *)
       fun conhandler (state as {error,context,cbound,...} : state,con : con) =
 	(case con
-	   of Var_c var => 
+	   of Var_c var =>
 	     if NilContext.bound_con(context,var) orelse member (cbound,var) then NOCHANGE
-	     else 
+	     else
 	       (lprintl ("Warning! Constructor variable " ^ (Name.var2string var) ^ " is unbound");
 		error := true;
 		NOCHANGE
@@ -70,9 +68,9 @@ structure BoundCheck :> BOUNDCHECK =
       (* Term handler *)
       fun exphandler (state as {error,context,ebound,...} : state,exp : exp) =
 	(case exp
-	   of Var_e var => 
+	   of Var_e var =>
 	     if NilContext.bound_exp(context,var) orelse member (ebound,var) then NOCHANGE
-	     else 
+	     else
 	       (lprintl ("Warning! Expression variable " ^ (Name.var2string var) ^ " is unbound");
 		error := true;
 		NOCHANGE
@@ -80,7 +78,7 @@ structure BoundCheck :> BOUNDCHECK =
 	    | _ => NOCHANGE)
 
 
-      val all_handlers =  
+      val all_handlers =
 	let
 	  val h = set_con_binder default_handler con_var_bind
 	  val h = set_exp_binder h exp_var_bind
@@ -95,12 +93,12 @@ structure BoundCheck :> BOUNDCHECK =
 	   rewrite_kind = checkKind,
 	   rewrite_mod = checkMod,...} = rewriters all_handlers
 
-      fun checkXXX checker (context,item) = 
+      fun checkXXX checker (context,item) =
 	let
 	  val error  = ref false
 	  val cbound = VarSet.empty
 	  val ebound = VarSet.empty
-	in 
+	in
 	  ignore (checker {error = error,context = context,ebound = ebound,cbound = cbound} item);
 	  not (!error)
 	end

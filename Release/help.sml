@@ -1,5 +1,3 @@
-(*$import TextIO CommandLine OS String Posix *)
-
 signature HELP =
 sig
     val fail : string -> 'a
@@ -51,12 +49,12 @@ struct
     fun execute (path : string) (args : string list) : unit =
 	if execute' path args = OS.Process.success
 	    then ()
-	else 
+	else
 	    let val cmd = foldr (fn (s,a) => " " :: s :: a) nil (path :: args)
 		val msg = "command returned non-zero exit status:" :: cmd
 	    in  fail (String.concat msg)
 	    end
-	 
+
     fun join (dir : string) (file : string) : string =
 	OS.Path.joinDirFile {dir = dir, file = file}
 
@@ -65,7 +63,7 @@ struct
 
     datatype ty = FILE | DIR
     type ent = ty * string
-    
+
     fun expand' (path : string, acc : ent list) : ent list =
 	if not (OS.FileSys.access (path, [])) then []
 	else
@@ -81,7 +79,7 @@ struct
 		    in	foldl expand' ((DIR, path) :: acc) contents
 		    end
 	    else (FILE, path) :: acc
-		
+
     fun expand (path : string) : ent list =
 	expand' (path, nil)
 end

@@ -1,6 +1,3 @@
-(*$import Int String TextIO Array List *)
-
-
 local
 val makestring_int = Int.toString
 fun fold f l a = foldr f a l

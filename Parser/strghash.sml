@@ -1,5 +1,3 @@
-(*$import Char Int String *)
-
 (* stringhash.sml
  *
  * Copyright 1989 by AT&T Bell Laboratories
@@ -24,7 +22,7 @@ structure StrgHash =
 		  fun loop (0,n) = n
 		    | loop (i,n) = let
 			val i = i-1
-			val n' = ordof i + (base * n) 
+			val n' = ordof i + (base * n)
 			in
 			  loop (i, (n' - prime * Int.quot(n', prime)))
 			end

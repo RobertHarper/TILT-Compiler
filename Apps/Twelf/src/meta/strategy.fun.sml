@@ -1,4 +1,3 @@
-(*$import Int MTPSTRATEGY MTPGLOBAL STATESYN MTPFILLING MTPDATA MTPSPLITTING MTPRECURSION INFERENCE MTPRINT TIMERS GlobalStructs *)
 (* MTP Strategy: Version 1.3 *)
 (* Author: Carsten Schuermann *)
 

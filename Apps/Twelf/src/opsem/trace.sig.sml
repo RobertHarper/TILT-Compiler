@@ -1,4 +1,3 @@
-(*$import INTSYN *)
 signature TRACE =
 sig
 

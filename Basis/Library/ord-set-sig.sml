@@ -1,4 +1,3 @@
-(*$import ORD_KEY Firstlude TiltPrim Prelude *)
 (* ordset-sig.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -63,19 +62,19 @@ signature ORD_SET =
 	(* Create a new set by applying a map function to the elements
 	 * of the set.
          *)
-     
+
     val app : (item -> unit) -> set -> unit
-	(* Apply a function to the entries of the set 
+	(* Apply a function to the entries of the set
          * in decreasing order
          *)
 
     val foldl : (item * 'b -> 'b) -> 'b -> set -> 'b
-	(* Apply a folding function to the entries of the set 
+	(* Apply a folding function to the entries of the set
          * in increasing order
          *)
 
     val foldr : (item * 'b -> 'b) -> 'b -> set -> 'b
-	(* Apply a folding function to the entries of the set 
+	(* Apply a folding function to the entries of the set
          * in decreasing order
          *)
 
