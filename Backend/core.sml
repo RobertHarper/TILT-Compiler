@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int BinaryMapFn BinarySetFn *)
+(*$import Prelude TopLevel TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int BinarySetFn SplayMapFn SplaySetFn *)
 
 structure Core :> CORE =
 struct
@@ -125,7 +125,7 @@ struct
 		| compare (LOCAL_DATA _, _) = LESS
 		| compare (_, LOCAL_DATA _) = GREATER
 	  end
-  in  structure Labelmap = BinaryMapFn(Labelkey)
+  in  structure Labelmap = SplayMapFn(Labelkey)
       structure Labelset = BinarySetFn(Labelkey)
   end
 
@@ -140,7 +140,7 @@ struct
 		| compare (R _, F _) = LESS
 		| compare (F _, R _) = GREATER
 	  end
-      structure Regmap = BinaryMapFn(Regkey)
+      structure Regmap = SplayMapFn(Regkey)
   in
       structure Regmap = 
 	struct
@@ -209,7 +209,7 @@ struct
           | compare (F _, R _) = GREATER
       end
   in
-      structure Regset = BinarySetFn(Regkey)
+      structure Regset = SplaySetFn(Regkey)
   end
 
   datatype call_type = DIRECT of label * register option | INDIRECT of register

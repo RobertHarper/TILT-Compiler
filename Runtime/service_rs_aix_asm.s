@@ -39,7 +39,6 @@
 
 
  	.globl	.start_client
- 	.globl	start_client_retadd_val
 	.globl  global_exnrec
         .globl  GetRpcc
 	.globl	.raise_exception_raw
@@ -161,8 +160,7 @@ thunk_loop:
 	stw	r30, 0(r31)			# NOTINML is 0 now
 	mtspr	LR, r29
 	blrl					# cross-TOC call to ML
-start_client_retadd_val:	                # note that ret add label put here
-	cror	r31, r31, r31			# to be filled by linker
+	cror	r31, r31, r31			# returning from mutator
 	l	SP, 24(SP)	# restore own stack
 	l	r29, 48(SP)	# fetch current thunk counter
 	addi	r29, r29, 1	# increment counter

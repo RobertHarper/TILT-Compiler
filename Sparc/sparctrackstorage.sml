@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE BinarySetFn Util Stats *)
+(*$import Prelude TopLevel Core Int ORD_KEY Sparc PRINTUTILS MACHINEUTILS ORD_MAP ORD_SET TRACKSTORAGE SplaySetFn Util Stats *)
 
 functor SparcTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Sparc.specific_instruction
@@ -96,14 +96,12 @@ struct
       (low memory)
  
 *)
-
     structure Intkey : ORD_KEY = 
       struct
 	type ord_key = int
 	val compare = Int.compare
       end
-    structure IntSet = BinarySetFn(Intkey)
-
+    structure IntSet = SplaySetFn(Intkey)
 
   fun stackOffset (INFO{callee_saves, stackmap, num_fps_spilled,
 			num_permanent_resident, num_ints_spilled, ...}) (neighbors,reg) =

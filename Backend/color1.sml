@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR *)
+(*$import Prelude TopLevel Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR Util *)
 (* Original implementation.  Does not try cycling through temporary regs. *)
 
 
@@ -12,6 +12,8 @@ functor Color1(structure Machine : MACHINE
              where Ifgraph = Ifgraph =
 
 struct
+  val error = fn s => Util.error "color1.sml" s
+       
   structure Ifgraph = Ifgraph
   structure Trackstorage = Trackstorage
 
@@ -69,7 +71,7 @@ struct
 	          
 
        (* invariant for simplify: physical registers must not 
-	  be returned by the nodes function on interference graphs.*)
+	  be returned by the nodes function on interference graphs. *)
  
        fun simplify node_stack =
        let val nodes = Ifgraph.nodes_excluding_physical g
@@ -77,7 +79,7 @@ struct
 	   else
 	       let 
 		   fun folder (node,acc as (good,bad)) =
-		          if isPhysical node then acc
+		          if isPhysical node then error "nodes_excluding_physical is broken"
 			  else
 		             let val count = degree node
 				 val isInt = (case node of R _ => true | F _ => false)

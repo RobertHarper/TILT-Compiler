@@ -468,7 +468,7 @@ struct
 
 	   fun processInstr instr =
 	     let
-	       val (def_regs,_) =  Bblock.defUse (stripAnnot instr)
+	       val (def_regs,_) = Bblock.defUse (stripAnnot instr)
 	       val live_regs = Bblock.live instr
              in 
 
@@ -481,7 +481,7 @@ struct
 		   instruction *)
 
 		 app insert_node def_regs;
-		 app (fn def => (Ifgraph.insert_edges igraph ([def],live_regs))) def_regs;
+		 app (fn def => (insert_edges ([def],live_regs))) def_regs;
 
 		case (stripAnnot instr) of
 		 (BASE(RTL(call as (CALL{func, args, results, ...})))) =>
@@ -496,7 +496,7 @@ struct
 *)
 		         (* add conflicts between registers destroyed
 			  by call and variables live after call.*)
-		     in   Ifgraph.insert_edges igraph (Regset.listItems regs_destroyed,live_regs)
+		     in   insert_edges (Regset.listItems regs_destroyed,live_regs)
 		     end
                 | _ => ()
 	     end

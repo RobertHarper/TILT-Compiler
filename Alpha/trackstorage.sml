@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core Int ORD_KEY DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE BinarySetFn Util *)
+(*$import Prelude TopLevel Core Int ORD_KEY DecAlpha PRINTUTILS MACHINEUTILS TRACKSTORAGE SplaySetFn Util *)
 
 functor AlphaTrackstorage(structure Printutils : PRINTUTILS 
 			      where type Machine.specific_instruction = Decalpha.specific_instruction
@@ -94,7 +94,7 @@ struct
 	type ord_key = int
 	val compare = Int.compare
       end
-    structure IntSet = BinarySetFn(Intkey)
+    structure IntSet = SplaySetFn(Intkey)
 
 
   fun stackOffset (INFO{callee_saves, stackmap, num_fps_spilled,
