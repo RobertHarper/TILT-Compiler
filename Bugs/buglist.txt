@@ -83,3 +83,4 @@
 0083 [open]	Backend liveness analysis is too conservative.
 0084 [open]	Shadowing :: or nil makes list patterns fail to compile.
 0085 [open]     Elaborator/Pattern compiler not using correct exceptions.
+0086 [open]     Matching against an external interface file is broken.
