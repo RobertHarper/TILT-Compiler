@@ -168,7 +168,7 @@ structure LinkIl (* : LINKIL *) =
 	  | kill_datatype pair = SOME pair
 
 	fun elaborate (context,filename) : (sbnds * context_entry list) option = 
-	    let val (filepos,astdec) = LinkParse.parse_all filename
+	    let val (filepos,imports,astdec) = LinkParse.parse_impl filename
 	    in
 		(case (Toil.xdec(context,filepos,astdec)) of
 		     SOME sbnd_ctxt_list =>

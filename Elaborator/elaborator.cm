@@ -40,3 +40,7 @@ toil.sml
 ileval.sig.sml
 ileval.sml
 linkil.sml 
+elaborator.sig.sml
+ilcontexteq.sig.sml
+ilcontexteq.sml 
+
