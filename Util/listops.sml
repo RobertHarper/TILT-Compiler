@@ -29,6 +29,13 @@ structure Listops : LISTOPS =
     fun map5count F (a,b,c,d,e) = map6 F (count(length a),a,b,c,d,e)
     fun map6count F (a,b,c,d,e,f) = map7 F (count(length a),a,b,c,d,e,f)
     fun flatten arg = foldr (op @) [] arg
+    fun transpose [] = []
+      | transpose ([]::_) = []
+      | transpose lists = let fun split [] = error "transpose failed"
+				| split (a::b) = (a,b)
+			      val pairs = map split lists
+			  in (map #1 pairs) :: (transpose (map #2 pairs))
+			  end
     fun member (elem,[]) = false
       | member (elem,a::rest) = (elem = a) orelse member(elem,rest)
     fun member_eq (eq,elem,[]) = false

@@ -36,7 +36,6 @@ signature LISTOPS =
     val eq_list : (('a * 'a -> bool) * 'a list * 'a list) -> bool
     val eq_listlist : (('a * 'a -> bool) * 'a list list * 'a list list) -> bool
     val count : int -> int list
-    val flatten : 'a list list -> 'a list
     val member : ''a * ''a list -> bool
     val member_eq : ('a * 'a -> bool) * 'a * 'a list -> bool
     val assoc : (''a * (''a * 'b) list) -> 'b option
@@ -51,4 +50,6 @@ signature LISTOPS =
     val andfold' : ('a * 'b -> (bool * 'b)) -> 'b -> 'a list -> bool
     val orfold' : ('a * 'b -> (bool * 'b)) -> 'b -> 'a list -> bool
 
+    val flatten : 'a list list -> 'a list
+    val transpose : 'a list list -> 'a list list
   end
