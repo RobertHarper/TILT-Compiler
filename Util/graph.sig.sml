@@ -1,5 +1,3 @@
-(*$import TextIO *)
-
 signature NODE =
 sig
   type node
@@ -27,8 +25,8 @@ sig
    val nodecount : graph -> int
 
    val insert_node : graph * node -> unit
-   val insert_edge : graph * (node * node) -> unit  
-   val delete_edge : graph * (node * node) -> unit  
+   val insert_edge : graph * (node * node) -> unit
+   val delete_edge : graph * (node * node) -> unit
    val app : ((node * int) * (node * int) -> unit) -> graph -> unit
 
    (* list of nodes reachable from start without going through excluded node.
@@ -48,49 +46,29 @@ end
 
 signature DAG =
 sig
-    type node = string
+    type node		(* parameter *)
     type 'a graph
-    exception UnknownNode of node	(* Presents the offender (see parents') *)
+    exception UnknownNode of node	(* Presents the offender *)
     exception Cycle of node list	(* Presents a cycle a' la' findCycle. *)
 
-    val refresh : 'a graph -> unit                      (* Force the cache to be computed *)
-    							(* may raise Cycle *)
-
-    val empty : unit -> 'a graph                        (* Create a new graph *)
-    val insert_node : 'a graph * node * int * 'a -> unit
+    val empty : unit -> 'a graph
+    val copy : 'a graph -> 'a graph
+    val insert_node : 'a graph * node * 'a -> unit
     val insert_edge : 'a graph * node * node -> unit
 
+    val nodes : 'a graph -> node list
     val numNodes : 'a graph -> int
     val numEdges : 'a graph -> int
+    val has_node : 'a graph * node -> bool
     val has_edge : 'a graph * node * node -> bool
     val nodeAttribute : 'a graph * node -> 'a
-    val nodeWeight : 'a graph * node -> int
-    val ancestorWeight : 'a graph * node -> int
-    val descendentWeight : 'a graph * node -> int
-    val nodes : 'a graph -> node list
     val children : 'a graph * node -> node list
-    val children' : 'a graph * node -> node list    (* Doesn't use cache -- safe for exn handlers  *)
     val parents : 'a graph * node -> node list
-    val ancestors : 'a graph * node -> node list    (* topologically sorted with descendants first *)
-
-    datatype nodeStatus = Black  (* Completed nodes whose outgoing edges will not be shown *)
-	                | Gray   (* Working nodes which will be shown in boxes *)
-	                | White  (* Nodes that can be worked on if there are no incoming edges *)
-    val makeDot : {graph : 'a graph,
-		   out : TextIO.outstream,
-		   status : node -> nodeStatus}-> unit  
-    val removeTransitive : 'a graph -> 'a graph
-    val collapse : 'a graph * 
-	                {maxWeight : int,
-			 maxParents : int,
-			 maxChildren : int} -> 'a graph  (* Create a new graph by removing node 
-                                                            with weight <= maxWeight
-							    and with <= maxParents parents
-							    and with <= maxChildren children.
-							    When a node is removed, all its
-							    parents point to all its children. *)
-								
-
-				 
+    (*
+	These lists are topologically sorted; that is, if a -> b, then
+	a precedes b.
+    *)
+    val descendants : 'a graph * node -> node list
+    val descendants' : 'a graph * node list -> node list
+    val reachable : 'a graph * node list -> node list
 end
-

@@ -1,10 +1,8 @@
-(*$import GRAPH Int TextIO String List Array Util HashString HashTableFn *)
-
-functor Graph(A : NODE) : DIRECTEDGRAPH =
+functor Graph(A : NODE) :> DIRECTEDGRAPH where type node = A.node =
 struct
    open A
 
-   (* graph representation: 
+   (* graph representation:
             hashtable: used to hash vertices into integers,
 	    nodes: used to unhash integers to vertices,
 	    count: count of vertices,
@@ -13,7 +11,7 @@ struct
 		   such that for all v' in l, there is an edge from v
 		   to v'.
       Invariants: count= length (nodes) = length(edges) *)
-		   
+
  datatype graph = GRAPH of {hashtable : int A.hash_table,
 			    nodes : node Array.array ref,
 	                    count : int ref,
@@ -34,12 +32,12 @@ struct
   fun fill_array (a,a') =
       for (0,Array.length a,fn i => Array.update(a',i,Array.sub(a,i)))
 
-  fun copy_array a = 
+  fun copy_array a =
        let val a' = Array.array (Array.length a,
 				 Array.sub (a,0))
        in fill_array(a,a'); a'
        end
-      
+
   fun copy (GRAPH {hashtable,nodes,count,edges}) =
       GRAPH{hashtable=A.copy hashtable,
 	    nodes=ref (copy_array(!nodes)),
@@ -48,12 +46,12 @@ struct
 
   fun nodecount (GRAPH {count,...}) = !count
 
-  fun nodes (GRAPH {nodes=ref nodes,count=ref count,...}) = 
+  fun nodes (GRAPH {nodes=ref nodes,count=ref count,...}) =
       let fun f i = if i<count then Array.sub(nodes,i):: f(i+1)
                     else nil
       in f 0
       end
-	      
+
   fun edges (GRAPH{edges,...}) i = Array.sub(!edges,i)
 
   exception Hash
@@ -61,12 +59,12 @@ struct
        case A.find hashtable node
        of NONE => raise Hash
 	| SOME i => i
- 
+
   fun unhash (GRAPH {nodes,count,...}) i =
        if i>=0 andalso i< !count then Array.sub(!nodes,i) else raise Hash
 
   fun addhash (GRAPH{hashtable,count,nodes as ref n,
-		     edges as ref e,...},node) = 
+		     edges as ref e,...},node) =
 	let open Array
 	in case A.find hashtable node
 	   of SOME i => i
@@ -86,7 +84,7 @@ struct
 		    num
                   end
           end (* let open Array *)
- 
+
    fun insert_node (g,n1) = (addhash(g,n1); ())
 
    fun insert_edge (g as GRAPH {edges,...},(n1,n2)) =
@@ -137,7 +135,7 @@ struct
        * the path from first to last.
        *)
       fun cyclePath (parent,first,last) =
-	  let	      
+	  let
 	      (* The only way that a parent link can be noParent is if last = first.
 	       * The loop is structured to deal with that case.
 	       *)
@@ -220,7 +218,7 @@ struct
 
  fun sc_components print_node (g as GRAPH{count,...}) =
    let val visited = Array.array (!count, false)
-       val nodelistlist = map (fn n => postfix_dfs' (g, visited, n)) 
+       val nodelistlist = map (fn n => postfix_dfs' (g, visited, n))
 	                      (map (hash g) (nodes g))
        val nodelist = List.rev (foldr (op @) nil nodelistlist)
        val _ = app (print_node o (unhash g)) nodelist
@@ -244,315 +242,152 @@ struct
 	     end)
 end
 
-structure Dag :> DAG = 
+functor Dag (structure Node : NODE
+	     val dummy : Node.node
+	     val toString : Node.node -> string
+	     structure Map : ORD_MAP
+		 where type Key.ord_key = Node.node
+	     structure OrderedSet : ORDERED_SET
+		 where type item = Node.node)
+    :> DAG
+	where type node = Node.node =
 struct
 
     val error = fn str => Util.error "graph.sml" str
-    exception HashUnknownNode
-    local
-	structure HashKey =
-	    struct
-		type hash_key = string
-		val hashVal = HashString.hashString 
-		val sameKey = (op = : string * string -> bool)
-	    end
-	structure HashTable = HashTableFn(HashKey)
-	structure Node = 
-	    struct
-		type node = string
-		open HashTable
-		fun make i = HashTable.mkTable(i,HashUnknownNode)
-	    end
-    in
-	structure Graph = Graph(Node)
-    end			
 
-    structure StringMap = Util.StringMap
-    structure StringOrderedSet = Util.StringOrderedSet
-	
-    type node = string
+    structure Graph = Graph(Node)
+
+    type node = Node.node
     exception UnknownNode of node
     exception Cycle of node list
-    type 'a graph = {main        : Graph.graph,                      (* Primary info *)
-		     attributes : (int * 'a) StringMap.map ref,  
-		     cached      : bool ref,                         (* Cache up-to-date? *)
-		     reverse     : Graph.graph ref,                  (* Cached info *)
-		     upInfo      : {ancestorWeight : int,
-				    ancestors : StringOrderedSet.set}
-		                      StringMap.map ref,
-		     downInfo    : {descendentWeight : int}
-		                      StringMap.map ref}
+    type 'a graph =
+	{(* Primary info. *)
+	 main       : Graph.graph,
+	 attributes : 'a Map.map ref,
+	 cached     : bool ref,		(* Cache up-to-date? *)
 
-    fun empty () = {main = Graph.empty "", 
-		    attributes = ref StringMap.empty,
-		    cached = ref false,
-		    reverse = ref (Graph.empty ""),
-		    upInfo = ref StringMap.empty,
-		    downInfo = ref StringMap.empty}
+	 (* Cached info. *)
+	 reverse    : Graph.graph ref,
+	 downInfo   : {descendants : OrderedSet.set} Map.map ref}
 
-    fun copy ({main,attributes,...} : 'a graph) : 'a graph = 
+    fun empty () : 'a graph =
+	{main = Graph.empty dummy,
+	 attributes = ref Map.empty,
+	 cached = ref false,
+	 reverse = ref (Graph.empty dummy),
+	 downInfo = ref Map.empty}
+
+    fun copy ({main,attributes,...} : 'a graph) : 'a graph =
 	{main = Graph.copy main,
 	 attributes = ref (!attributes),
 	 cached = ref false,
-	 reverse = ref (Graph.empty ""),
-	 upInfo = ref StringMap.empty,
-	 downInfo = ref StringMap.empty}
+	 reverse = ref (Graph.empty dummy),
+	 downInfo = ref Map.empty}
 
-    fun flush ({cached, ...} : 'a graph) = cached := false
+    fun flush ({cached, ...} : 'a graph) : unit = cached := false
 
     (* Modifications to the graph require flushing the cached information *)
-    fun insert_node (g as {main, attributes, ...} : 'a graph, node, weight, attr) = 
+    fun insert_node (g as {main, attributes, ...} : 'a graph, node : node,
+		     attr : 'a) : unit =
 	(flush g;
-	 Graph.insert_node(main, node); 
-	 attributes := (StringMap.insert(!attributes, node, (weight, attr))))
-	 
-    fun insert_edge (g as {main, ...} : 'a graph, src, dest) = 
+	 Graph.insert_node(main, node);
+	 attributes := (Map.insert(!attributes, node, attr)))
+
+    fun insert_edge (g as {main, ...} : 'a graph, src : node,
+		     dest : node) : unit =
 	(flush g;
 	 Graph.insert_edge(main, (src, dest)))
 
-    fun has_edge (g as {main, ...} : 'a graph, src, dest) =
+    (* Queries requiring only inspection of non-cached information *)
+    val nodes : 'a graph -> node list = fn g => Graph.nodes (#main g)
+    val numNodes : 'a graph -> int = fn g => Graph.nodecount (#main g)
+    fun numChildren ({main,...} : 'a graph, node : node) : int =
+	length(Graph.edges main (Graph.hash main node))
+    fun numEdges(g as {main,...} : 'a graph) : int =
+	foldl (fn (n,acc) => acc + (numChildren(g,n))) 0 (nodes g)
+    fun has_node ({attributes, ...} : 'a graph, node : node) : bool =
+	(case Map.find(!attributes, node) of
+	     NONE => false
+	   | SOME _ => true)
+    fun has_edge (g as {main, ...} : 'a graph, src : node, dest : node) : bool =
 	let val edges = Graph.edges main (Graph.hash main src)
 	    val hash = Graph.hash main dest
 	in  List.exists (fn h => h = hash) edges
 	end
-    
-    (* Queries requiring only inspection of non-cached infomation *)
-    fun isNode ({attributes, ...} : 'a graph, node) = 
-	(case StringMap.find(!attributes, node) of
-	     NONE => false
-	   | SOME _ => true)
-    fun nodeWeight ({attributes, ...} : 'a graph, node) = 
-	(case StringMap.find(!attributes, node) of
+    fun nodeAttribute ({attributes, ...} : 'a graph, node : node) : 'a =
+	(case Map.find(!attributes, node) of
 	     NONE => raise (UnknownNode node)
-	   | SOME (w,_) => w)
-    fun nodeAttribute ({attributes, ...} : 'a graph, node) = 
-	(case StringMap.find(!attributes, node) of
-	     NONE => raise (UnknownNode node)
-	   | SOME (_,a) => a)
-    fun nodes ({main,...} : 'a graph) = Graph.nodes main
-    fun numNodes ({main,attributes,...} : 'a graph) = 
-	let val l1 = length(Graph.nodes main)
-	    val l2 = StringMap.numItems (!attributes)
-	    val _ = if (l1=l2) then ()
-		    else (print "numNodes detected inconsistency l1 = ";
-			  print (Int.toString l1); print "  l2 = ";
-			  print (Int.toString l2); print "\n")
-	in  l1
-	end
-    fun children (g as {main,...} : 'a graph, node : string) = 
+	   | SOME a => a)
+    fun children (g as {main,...} : 'a graph, node : node) : node list =
 	let val edges = Graph.edges main (Graph.hash main node)
 	in  map (Graph.unhash main) edges
 	end
-    val children' = children
-    fun numChildren(g as {main,...} : 'a graph, node : string) = 
-	length(Graph.edges main (Graph.hash main node))
-    fun numEdges(g as {main,...} : 'a graph) = 
-	foldl (fn (n,acc) => acc + (numChildren(g,n))) 0 (nodes g)
+    fun reachable' (g : Graph.graph) (nodes : node list) : OrderedSet.set =
+	let val edges : node -> node list =
+		let val h = Graph.hash g
+		    val e = Graph.edges g
+		    val u = Graph.unhash g
+		in  (map u) o e o h
+		end
+	    fun add (n : node, acc : OrderedSet.set) : OrderedSet.set =
+		if OrderedSet.member(n,acc) then acc
+		else OrderedSet.cons(n, foldl add acc (edges n))
+	in  foldl add OrderedSet.empty nodes
+	end
+    fun reachable (g : 'a graph, nodes : node list) : OrderedSet.set =
+	reachable' (#main g) nodes
+    fun descendants' (g : 'a graph, nodes : node list) : OrderedSet.set =
+	reachable (g, List.concat (map (fn n => children (g,n)) nodes))
 
     (* checkAcyclic : 'a graph -> unit.  May raise Cycle. *)
     fun checkAcyclic ({main,...} : 'a graph) =
 	case (Graph.findCycle main)
 	  of nil => ()
 	   | nodes => raise Cycle nodes
-	      
+
     fun refresh({cached = ref true, ...} : 'a graph) = ()
-      | refresh(g as {main, cached, reverse, upInfo, downInfo, ...} : 'a graph) = 
+      | refresh(g as {main, cached, reverse, downInfo, ...} : 'a graph) =
 	let val _ = checkAcyclic g
 	    val _ = reverse := Graph.rev main
-	    val _ = upInfo := StringMap.empty
-	    val _ = downInfo := StringMap.empty
-	    fun get_upInfo node = 
-		(case (StringMap.find(!upInfo, node)) of
-		     SOME pw_a => pw_a
-		   | NONE => 
-			 let 	
-			     val this_size = nodeWeight(g,node)
-			     fun mapper hashedNode = 
-				 let val node = Graph.unhash main hashedNode
-				     val {ancestors,ancestorWeight} = get_upInfo node
-				 in  (node, ancestors, ancestorWeight)
-				 end
-			     val parents_info = (map mapper 
-						 (Graph.edges (!reverse) (Graph.hash main node)))
-			     fun folder ((node,anc,size),(acc_anc,acc_size)) = 
-				 let val size = Int.max(size + this_size, acc_size)
-				     val acc_anc = StringOrderedSet.append(anc,acc_anc)
-				     val acc_anc = StringOrderedSet.cons(node,acc_anc)
-				 in  (acc_anc,size)
-				 end
-			     val i = foldl folder (StringOrderedSet.empty, 0) parents_info
-			     val i = {ancestors = #1 i, ancestorWeight = #2 i}
-			     val _ = upInfo := (StringMap.insert(!upInfo,node,i))
-			 in  i
-			 end)
-	    fun get_downInfo node = 
-		(case (StringMap.find(!downInfo, node)) of
+	    val _ = downInfo := Map.empty
+	    fun get_downInfo node =
+		(case (Map.find(!downInfo, node)) of
 		     SOME di => di
-		   | NONE => 
-			 let 	
-			     val this_size = nodeWeight(g,node)
-			     fun mapper hashedNode = 
+		   | NONE =>
+			 let
+			     fun mapper hashedNode =
 				 let val node = Graph.unhash main hashedNode
-				     val {descendentWeight} = get_downInfo node
-				 in  (node, descendentWeight)
+				     val {descendants} = get_downInfo node
+				 in  (node, descendants)
 				 end
-			     val children_info = (map mapper 
+			     val children_info = (map mapper
 						  (Graph.edges main (Graph.hash main node)))
-			     fun folder ((node,size),acc_size) = 
-				 Int.max(size + this_size, acc_size)
-			     val i = foldl folder 0 children_info
-			     val i = {descendentWeight = i}
-			     val _ = downInfo := (StringMap.insert(!downInfo,node,i))
+			     fun folder ((node,desc),acc) =
+				 let val acc = OrderedSet.append(desc,acc)
+				     val acc = OrderedSet.cons(node,acc)
+				 in  acc
+				 end
+			     val i = foldl folder OrderedSet.empty children_info
+			     val i = {descendants = i}
+			     val _ = downInfo := (Map.insert(!downInfo,node,i))
 			 in  i
 			 end)
-	in  map get_upInfo (Graph.nodes main); 
-	    map get_downInfo (Graph.nodes main); 
+	in  app (ignore o get_downInfo) (Graph.nodes main);
 	    cached := true
 	end
 
-    (* Queries requiring the cached parts of the graph *)
-    fun ancestorWeight (g as {upInfo, ...} : 'a graph, node) = 
-	(refresh g;
-	 case StringMap.find(!upInfo, node) of
-	     NONE => raise (UnknownNode node)
-	   | SOME {ancestorWeight,...} => ancestorWeight)
-    fun descendentWeight (g as {downInfo, ...} : 'a graph, node) : int = 
-	(refresh g;
-	 case StringMap.find(!downInfo, node) of
-	     NONE => raise (UnknownNode node)
-	   | SOME {descendentWeight,...} => descendentWeight)
-    fun parents (g as {main, reverse,...} : 'a graph, node) = 
+    fun parents (g as {main, reverse,...} : 'a graph, node : node) : node list =
 	let val _ = refresh g
 	    val edges = Graph.edges (!reverse) (Graph.hash main node)
 	in  map (Graph.unhash main) edges
 	end
-    fun ancestors (g as {upInfo,...} : 'a graph, node) = 
-	(refresh g; 
-	 (case (StringMap.find(!upInfo, node)) of
-	      NONE => raise (UnknownNode node)
-	    | SOME {ancestors = a,... } => StringOrderedSet.toList a))
+    fun descendants (g : 'a graph, node : node) : OrderedSet.set =
+	(refresh g;
+	 (case Map.find (!(#downInfo g), node)
+	    of NONE => raise UnknownNode node
+	     | SOME {descendants = d, ...} => d))
 
-    datatype nodeStatus = Black  (* Completed nodes whose outgoing edges will not be shown *)
-	                | Gray   (* Working nodes which will be shown in boxes *)
-	                | White  (* Nodes that can be worked on if there are no incoming edges *)
-
-    fun makeDot {graph = g, out, status} =
-	let val _ = TextIO.output (out, "digraph G {\n")
-	    val _ = TextIO.output (out, "  size = \"8,8\"\n")
-	    val _ = TextIO.output (out, "  rankdir = LR\n") 
-	    val _ = TextIO.output (out, "  concentrate = true\n")  
-	    fun escape "Graph" = "_Graph"
-	      | escape "GRAPH" = "_GRAPH"
-	      | escape str = implode (map (fn #"-" => #"_"
-	                                    | c => c) (explode str))
-	    val maxDescendentWeight = foldl Int.max 0 (map (fn n => descendentWeight(g,n)) (nodes g))
-	    fun doNode parent =
-		let val children = children(g,parent)
-		    val parentName = escape parent
-		    val _ = TextIO.output (out, "  " ^ parentName ^ 
-					   " [label=\"" ^ parent ^"\"");
-		    val weight = nodeWeight(g,parent) 
-		    val _ = if (weight > 100000)
-				then TextIO.output (out, ", color=red")
-			    else if (weight > 50000)
-				then TextIO.output (out, ", color=purple")
-			    else if (weight > 10000)
-				then TextIO.output (out, ", color=blue")
-			    else TextIO.output (out, ", color=black")
-		    val status = status parent
-		    val _ = (case status of
-				 White => ()
-			       | Gray => TextIO.output (out, ", shape=box, peripheries=4")
-			       | Black => ())
-		    val _ = TextIO.output (out, "];\n")
-		    fun apper child = 
-			let val childName = escape child
-			    val childNodeWeight = nodeWeight(g, child)
-			    val childAncestorWeight = ancestorWeight(g, child)
-			    val parentAncestorWeight = ancestorWeight(g, parent)
-			    val percentUpMax = (real parentAncestorWeight) / 
-				               (real (childAncestorWeight - childNodeWeight))
-			    val percentDownMax = (real (descendentWeight(g,parent))) /
-						 (real maxDescendentWeight)
-			in  TextIO.output (out, "  " ^ parentName ^ " -> " ^ childName);
-			    (case status of
-				 White => ()
-			       | Gray => ()
-			       | Black => TextIO.output (out, " [color=gray]"));
-			    TextIO.output (out, ";\n") 
-			end
-		in  app apper children
-		end
-	    val _ = app doNode (nodes g)
-	    val _ = TextIO.output (out, "}\n") 
-	in  ()
-	end
-
-
-    fun removeTransitive (g : 'a graph) = 
-	let val g as {main,...} : 'a graph = copy g
-	    fun removeEdge (parent : node) (child : node) = 
-		let val unhashedChild = Graph.hash main child
-		    val _ = Graph.delete_edge(main,(parent,child))
-		in  if (Graph.reachable main [parent] unhashedChild)
-			then ()
-		    else Graph.insert_edge(main,(parent,child))
-		end
-	    fun doNode parent = 
-		let val children = children(g,parent)
-		in  app (removeEdge parent) children
-		end
-	    val _ = app doNode (nodes g)
-	    val _ = flush g
-	in  g
-	end
-
-    fun collapse (g : 'a graph, {maxWeight, maxParents, maxChildren}) = 
-	let val g' : 'a graph = empty()
-	    fun isRemovable node = 
-		let val parents = parents(g, node)
-		    val children = children(g, node)
-		    val weight = nodeWeight(g, node)
-		in  (weight < maxWeight) andalso
-		    (length parents <= maxParents) andalso
-		    (length children <= maxChildren)
-		end
-	    fun addNodes n = if (isRemovable n)
-				 then ()
-			     else insert_node(g', n, nodeWeight(g,n), nodeAttribute(g,n))
-	    fun getUpwardDownward getLayer n = 
-		let val nextLayer = getLayer(g,n)
-		    fun folder (n,acc) = if (isRemovable n)
-						  then (getUpwardDownward getLayer n) @ acc
-					      else n :: acc
-		in  foldl folder [] nextLayer
-		end
-	    fun addEdges n = 
-		if (isRemovable n)
-		    then let val parents = getUpwardDownward parents n
-			     val children = getUpwardDownward children n
-			 in  app (fn src => app (fn dest => insert_edge(g',src,dest)) children) parents
-			 end
-		else let val children = children(g, n)
-		     in  app (fn c => if (isNode(g', c))
-					  then insert_edge(g',n,c)
-				      else ()) children
-		     end
-				
-	    val originalNodes = nodes g
-	    val _ = app addNodes originalNodes  (* First, add all nodes that will be eventually there. *)
-	    val _ = app addEdges originalNodes  (* Now, add all edges including the additional ones
-						   generated by the removal of certain nodes. *)
-	    val gV = numNodes g
-	    val gE = numEdges g
-	    val gV' =  numNodes g'
-	    val gE' = numEdges g'
-	    val _ = (print "Original graph has "; 
-		     print (Int.toString gV); print " nodes and ";
-		     print (Int.toString gE); print " edges\n";
-		     print "Collapsed graph has "; 
-		     print (Int.toString gV'); print " nodes and ";
-		     print (Int.toString gE'); print " edges\n")
-	in  g'
-	end
+    val descendants = fn x => OrderedSet.toList (descendants x)
+    val descendants' = fn x => OrderedSet.toList (descendants' x)
+    val reachable = fn x => OrderedSet.toList (reachable x)
 end
