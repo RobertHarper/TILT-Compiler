@@ -2,6 +2,7 @@ Files to check:
 
 	../README
 	../Doc/guide	# reformat manual pages
+	../Top/compiler.sml:/^KeepAsm	# set to false
 	patterns
 
 Carve out a release by serving a file system based on my CVS working

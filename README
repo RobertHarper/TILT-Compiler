@@ -1,5 +1,13 @@
 This is TILT version 1.0.
 
+Please send comments and bug reports to
+
+	til-developers@cs.cmu.edu
+
+
+INSTALLING TILT
+---------------
+
 This release is set up to compile TILT using SML/NJ 110.0.3 or 110.0.7
 available from
 
@@ -12,8 +20,8 @@ commands in Makefile and Runtime/Makefile and then try
 	make
 
 to compile TILT.  On unsupported platforms, the final message will be
-"tilt: unable to link".  This is expected: TILT cross-compiled up to
-assembler for sparc but did not assemble anything.
+"tilt: unable to link".  This is expected: TILT cross-compiled but did
+not generate any object files.
 
 Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
 TILT out of the current directory; alternatively, you can use
@@ -22,3 +30,52 @@ TILT out of the current directory; alternatively, you can use
 	make install
 
 to copy binaries to the directory PREFIX set in Makefile.
+
+
+PARALLEL MAKE
+-------------
+
+If your machine is fast and has plenty of memory, then you can
+speed up the installation of TILT by doing the following instead
+of "make".
+
+1. Compile TILT with SML/NJ:
+
+	make heap
+
+2. Launch a few compilation slaves:
+
+	./Bin/tilt-slaves 3/localhost
+
+If you do not get a window running emacs with three buffers named
+*tilt slave n*, then you can either fix ./Bin/tilt-slave (not
+tilt-slaves) for your site or run the slaves manually by opening new
+windows and executing
+
+	./Bin/tilt-nj -s
+
+in the current directory.
+
+3. Now run
+
+	make
+
+to compile TILT.  The slaves will contribute to the TILT compilation
+jobs that make starts.
+
+
+CVS ACCESS
+----------
+
+For faster access to bugs (and bug fixes), you can pull TILT from our
+CVS server:
+
+	cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot login
+	# Use an empty password
+
+	cvs -d :pserver:guest_tilt@cvs.concert.cs.cmu.edu:/cvsroot checkout ml96
+
+The CVS repository contains a few things that are not in the release:
+an old MLRISC backend, some experimental code, regression tests,
+benchmarks, a bugs database, additional (and outdated) documentation,
+and a port of twelf 1.2.
