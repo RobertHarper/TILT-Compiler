@@ -1,4 +1,4 @@
-(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name List Stats *)
+(*$import Prelude TraceInfo Nil NilContext Util Normalize TRACEOPS Name List Stats NilUtil *)
 
 structure TraceOps :> TRACEOPS = 
 struct
@@ -11,7 +11,9 @@ struct
 
   fun error s = Util.error "traceops.sml" s 
 
-  fun get_trace_primcon (_, p, _) =
+  val path2TraceCompute = (Util.mapopt TI.Compute) o NilUtil.con2path
+
+  fun get_trace_primcon (p, _) =
     (case p of 
        Int_c _ => SOME TI.Notrace_Int
      | Float_c _ => SOME TI.Notrace_Real
@@ -25,6 +27,38 @@ struct
      | Sum_c _ => SOME TI.Trace
      | Vararg_c _ => SOME TI.Trace
      | GCTag_c => SOME TI.Notrace_Int)
+
+  fun get_trace' c = 
+    let 
+      val res = 
+       case c of
+          Prim_c (p, cs) =>
+            get_trace_primcon (p, cs)
+        | AllArrow_c {openness=Open,...} => SOME TI.Trace
+        | AllArrow_c {openness=Closure,...} => SOME TI.Trace
+        | AllArrow_c {openness=Code,...} => SOME TI.Notrace_Code
+        | ExternArrow_c _ => 
+            SOME TI.Notrace_Code
+        | Mu_c _ => 
+            SOME TI.Trace
+        | Var_c v => 
+            SOME (TI.Compute (v, []))
+        | Proj_c (Mu_c _, _) => 
+            SOME TI.Trace
+	| Proj_c _ => path2TraceCompute c
+        | App_c _ => NONE
+	| Coercion_c _ => SOME TI.Notrace_Int
+        | Typecase_c _ => NONE
+        | Annotate_c (_,c) => 
+            get_trace' c
+        | Let_c (_,_,body) => get_trace' body
+        | Typeof_c _ => NONE
+        | Crecord_c _ => 
+            error "get_trace found Crecord_c"
+        | Closure_c _ =>
+            error "get_trace found Closure_c"
+    in res
+    end
 
   local
     type rank = TI.traceinfo option * int
@@ -51,58 +85,34 @@ struct
 		     | _ => if r2 < r1 then snd  (* snd is smaller, so keep it *)
 			    else fst))           (* fst is smaller or equal, so keep it. *)
 	 
-    fun best_path []        = (NONE,~1)
-      | best_path (c::rest) = rank_min(path_rank c,best_path rest) 
+    (* List is in order from outermost to innermost, so start from the right.
+     * (We prefer the outermost, all other things being equal)
+     *)
+    fun find []        = (NONE,~1)
+      | find (c::rest) = rank_min(path_rank c,find rest) 
   in  
-    val path2TraceCompute = #1 o path_rank
-    val bestTraceCompute = #1 o best_path 
+    val bestTraceCompute = #1 o find
   end
 
   fun get_trace  (ctxt, c) =
     let
       (* If c is a path, then it will be the last element of paths 
        *)
-       val (_, c',paths) = Normalize.reduce_hnf_list (ctxt, c)
-
+       val (_, c',paths) = Normalize.reduce_hnf_list (ctxt, c)	  
     in
-       case c' of
-          Prim_c (p, cs) =>
-            get_trace_primcon (ctxt, p, cs)
-        | AllArrow_c {openness=Open,...} => SOME TI.Trace
-        | AllArrow_c {openness=Closure,...} => SOME TI.Trace
-        | AllArrow_c {openness=Code,...} => SOME TI.Notrace_Code
-        | ExternArrow_c _ => 
-            SOME TI.Notrace_Code
-        | Mu_c _ => 
-            SOME TI.Trace
-        | Var_c v => 
-            SOME (TI.Compute (v, []))
-        | Proj_c (Mu_c _, _) => 
-            SOME TI.Trace
-
-	| Proj_c _ => 
-	    if !minimize_computes then 
-	      bestTraceCompute (c'::paths)  (*c' is a candidate, so include it*)
-	    else 
-	      path2TraceCompute c'
-        | App_c _ => 
-	    if !minimize_computes then 
-	      bestTraceCompute paths        (*c' is not a candidate *)
-	    else 
-	      NONE 
-	| Coercion_c _ => SOME TI.Notrace_Int
-        | Typecase_c _ => NONE
-        | Annotate_c (_,c) => 
-            get_trace (ctxt, c)
-        | Let_c _ => 
-            error "get_trace found Let_c after hnf"
-        | Typeof_c _ => 
-            error "get_trace found Typeof_c after hnf"
-        | Crecord_c _ => 
-            error "get_trace found Crecord_c"
-        | Closure_c _ =>
-            error "get_trace found Closure_c"
-     end
+       case NilUtil.strip_annotate c' of
+	 Proj_c _ => 
+	   if !minimize_computes then 
+	     bestTraceCompute (c'::paths)  (*c' is a candidate, so include it*)
+	   else 
+	     path2TraceCompute c'
+       | App_c _ => 
+	   if !minimize_computes then 
+	     bestTraceCompute paths        (*c' is not a candidate *)
+	   else 
+	     NONE 
+       | _ => get_trace' c'
+    end
 
   fun get_free_vars' (TI.Compute (v,_)) = Name.VarSet.singleton v
     | get_free_vars' _ = Name.VarSet.empty
@@ -115,12 +125,10 @@ struct
       (* XXX Unsound approximation ! *)
       (* but calling con_valid is too heavyweight; it
          would print an error message *)
-	  ((NilContext.find_kind (ctxt, v); true)
-	   handle NilContext.Unbound => false)
+    NilContext.bound_con (ctxt, v)
     | valid_trace (ctxt, TraceKnown _) = true
     | valid_trace (ctxt, TraceCompute v) =
-	  ((NilContext.find_kind (ctxt, v); true)
-	   handle NilContext.Unbound => false)
+    NilContext.bound_con (ctxt, v)
     | valid_trace (_, TraceUnknown) = false
 
 end

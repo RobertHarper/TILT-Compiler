@@ -299,10 +299,10 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun add_alias(state as STATE{mapping,...},v,alias) =
 	      let val SOME(use,_) = Name.VarMap.find(mapping,v)
 		  val mapping = Name.VarMap.insert(mapping,v,(use,alias))
-(*
-		  val _ = (print "add_alias for "; Ppnil.pp_var v; 
-				print " --> "; pp_alias alias; print "\n")
-*)
+
+(*		  val _ = (print "add_alias for "; Ppnil.pp_var v; 
+				print " --> "; pp_alias alias; print "\n") *)
+
 	      in  update_mapping(state,mapping)
 	      end
 
@@ -311,6 +311,14 @@ fun pp_alias UNKNOWN = print "unknown"
 		   NONE => UNKNOWN
 		 | SOME (_,alias) => alias)
 
+(*	  val lookup_alias = fn (s,v) =>
+	    let val alias = lookup_alias (s,v)
+	    in 
+	      print "Alias for ";Ppnil.pp_var v;print " found to be\n";
+	      pp_alias alias; print "\n";
+	      alias
+	    end
+*)
 
 	  fun find_availC(STATE{avail,params,...},c) = 
 	      if (#doCse params) then ExpTable.Conmap.find(#2 avail,c) else NONE
@@ -327,7 +335,30 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun find_availE(STATE{avail,params,...},e) = 
 	      if (#doCse params) then ExpTable.Expmap.find(#1 avail,e) else NONE
 
+(*	  val find_availC = fn (s,c) =>
+	    let val res = find_availC (s,c)
+	    in (case res 
+		  of SOME c' => (print "XXX!!!\n";
+				 Ppnil.pp_con c;
+				 print "\n Rewritten with \n";
+				 Ppnil.pp_var c';
+				 print "\n")
+		   | _ => ())
+	      ;res
+	    end
 
+	  val find_availE = fn (s,c) =>
+	    let val res = find_availE (s,c)
+	    in (case res 
+		  of SOME c' => (print "XXX!!!\n";
+				 Ppnil.pp_exp c;
+				 print "\n ExpRewritten with \n";
+				 Ppnil.pp_var c';
+				 print "\n")
+		   | _ => ())
+	      ;res
+	    end
+*)
           fun valuable (state as STATE {equation=ctxt, ...}, e) = 
 	      let fun valuableList [] = true
 		    | valuableList (e::rest) = valuable(state,e) andalso valuableList rest
@@ -426,7 +457,11 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun type_of(STATE{equation,...},e) = 
 	      subtimer("optimizeTypeof", Normalize.type_of)(equation,e)
 
-	  fun get_trace(STATE{equation,...},t) = TraceOps.get_trace (equation,t)
+	  (* Full get_trace may rewrite the con in a way that the optimizer
+	   * won't like.  We have to use get_trace' and trust that the optimizer
+	   * has Done the Right Thing. -Leaf
+	   *)
+	  fun get_trace(STATE_,t) = TraceOps.get_trace' t
 
 	end
 
@@ -674,27 +709,31 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_con' (state : state) (con : con) : con =
 	   (case con of
 		Prim_c(Record_c(labs,SOME vlist),clist) => 
-		    let val (vclist,state) = do_vclist state (Listops.zip vlist clist)
-			val (vlist,clist) = Listops.unzip vclist
-		    in  Prim_c(Record_c(labs,SOME vlist),clist)
-		    end
+		  let val (vclist,state) = do_vclist state (Listops.zip vlist clist)
+		    val (vlist,clist) = Listops.unzip vclist
+		  in  Prim_c(Record_c(labs,SOME vlist),clist)
+		  end
 	      | Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
 	      | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
 	      | ExternArrow_c(clist,c) =>
 		    ExternArrow_c(map (do_con state) clist, do_con state c)
 	      | AllArrow_c{openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
-			let val (tFormals,state) = do_vklist state tFormals
-			    val (eFormals,state) = do_voptclist state eFormals
-			in  AllArrow_c{openness=openness, effect=effect, isDependent=isDependent,
-				       tFormals=tFormals, eFormals=eFormals, 
-				       fFormals = fFormals, body_type = do_con state body_type}
-			end
+		    let val (tFormals,state) = do_vklist state tFormals
+		      val (eFormals,state) = do_voptclist state eFormals
+		    in  AllArrow_c{openness=openness, effect=effect, isDependent=isDependent,
+				   tFormals=tFormals, eFormals=eFormals, 
+				   fFormals = fFormals, body_type = do_con state body_type}
+		    end
 	      | Var_c v => 
-			 (case lookup_alias(state,v) of
-				  OPTIONALc c => (use_var(state,v); con)
-				| MUSTc c => do_con state c
-				| _ => (use_var(state,v); con))
+		  let
+		    val res = 
+		      case lookup_alias(state,v) of
+			OPTIONALc c => (use_var(state,v); con)
+		      | MUSTc c => do_con state c
+		      | _ => (use_var(state,v); con)
+		  in res
+		  end
 	      | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l, do_con state c)) lclist)
 	      | Proj_c(Var_c v, l) =>
 			 (case (lookup_cproj(state,v,[l])) of
@@ -950,7 +989,7 @@ fun pp_alias UNKNOWN = print "unknown"
 
 
 	and do_exp (state : state) (exp : exp) : exp = 
-	   ( (* print "XXX do_exp doing "; Ppnil.pp_exp exp; print "\n";   *)
+	   ((*  print "XXX do_exp doing "; Ppnil.pp_exp exp; print "\n";   *)
 	    case exp of
 		  Var_e v =>
 			 (case lookup_alias(state,v) of
@@ -1200,23 +1239,20 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_niltrace state niltrace = 
 	  let
 	    fun compute path = 
-	      let val c = path2con path
+	      let 
+		val c = path2con path
+		val c = do_con state c
 	      in
-		case find_availC(state,c)
-		  of SOME v => (use_var(state,v); TraceKnown(TraceInfo.Compute(v,[])))
-		   | NONE => 
-		    let val c = do_con state c
-		    in
-		      case get_trace (state,c)
-			of SOME tr => TraceKnown tr
-			 | NONE => TraceUnknown
-		    end
+		case get_trace (state,c)
+		  of SOME ti => TraceKnown ti
+		   | NONE => TraceUnknown
 	      end
-	  in
-	    case niltrace of
-	      TraceCompute v => compute (v,[])
-	    | TraceKnown (TraceInfo.Compute path) => compute path
-	    | _ => niltrace
+	    val res = 
+	      case niltrace of
+		TraceCompute v => compute (v,[])
+	      | TraceKnown (TraceInfo.Compute path) => compute path
+	      | _ => niltrace
+	  in res
 	  end
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
 	    let val bnds = flattenBnds bnds

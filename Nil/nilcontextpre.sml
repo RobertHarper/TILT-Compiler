@@ -823,10 +823,15 @@ structure NilContextPre
        fun k_insert (v,kopt,copt,D) = 
 	 (case kopt 
 	    of SOME k =>
-	      if contains (#kindmap D) v then D else
+	      if bound_con (D,v) then D else
 		(case copt of SOME c => insert_kind_equation (D,v,c,k) | NONE => insert_kind (D,v,k))
 	     | NONE => D)
 		   
+       fun c_insert (v,copt,D) = 
+	 (case copt
+	    of SOME c => if bound_exp (D,v) then D else insert_con (D,v,c)
+	     | NONE   => D)
+
        val (ev_list,cv_list) = Listops.unzip fvlist
        val free_cvs = Name.VarSet.listItems(foldl Name.VarSet.union Name.VarSet.empty cv_list)
        val free_evs = Name.VarSet.listItems(foldl Name.VarSet.union Name.VarSet.empty ev_list)
@@ -847,9 +852,7 @@ structure NilContextPre
 
        (*Insert the equations, kinds, and types*)
        val context = foldl3 k_insert context (free_cvs,kind_opts,eqn_opts)
-       val context = foldl2 (fn (v,SOME c,D) => insert_con (D,v,c)
-			      | (_,NONE,D)   => D)
-	             context (free_evs,type_opts)
+       val context = foldl2 c_insert context (free_evs,type_opts)
      in
        context
      end

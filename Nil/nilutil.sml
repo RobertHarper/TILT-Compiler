@@ -1583,6 +1583,13 @@ struct
 	in  loop (Var_c v) labs
 	end
 
+    fun con2path c = 
+	let fun loop (Var_c v,labs) = SOME(v,labs)
+  	      | loop (Proj_c(c,l),labs) = loop (c,l::labs)
+	      | loop _ = NONE
+ 	in  loop (c,[])
+	end
+
     fun is_taglike c = 
       (case c
 	 of Prim_c(Int_c _, _)  => true

@@ -47,7 +47,7 @@ struct
    datatypes was to allow the disabling of Shao's equation, so
    eventually it should be safe to remove this flag and cut out all
    the code that it enables.            -- Joe *)
-  val equiv_shao_recursion   = Stats.tt "nilstatic_shao_recursion"
+  val equiv_shao_recursion   = Stats.ff "nilstatic_shao_recursion"
 
 (*  
 

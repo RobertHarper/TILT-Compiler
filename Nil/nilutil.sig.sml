@@ -162,6 +162,7 @@ signature NILUTIL =
     val project_from_kind_nondep : Nil.kind * Nil.label -> Nil.kind
 
     val path2con : Nil.var * Nil.label list -> Nil.con
+    val con2path : Nil.con -> (Nil.var * Nil.label list) option
 
     val is_taglike : Nil.con -> bool
 
