@@ -11,7 +11,7 @@ struct
     fun make_source s = 
 	let val instream = TextIO.openIn s
 	in  (instream,
-	     Source.newSource(s,0,instream,true,
+	     Source.newSource(s,1,instream,true,
 			      ErrorMsg.defaultConsumer()))
 	end
 
