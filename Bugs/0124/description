@@ -1,0 +1,16 @@
+Number: 0124
+Title:       flexible records
+Keywords:    flexible records
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    major
+Problem:     test cases of flexible records do not elaborate
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0071
+Owner: 
+Status: open
