@@ -685,29 +685,54 @@ struct
 	in  assemble' (desc,pdec)
 	end
 
+    fun uexp_using (uexp:I.uexp) : I.units =
+	(case uexp of
+	    I.PRECOMPU {using,...} => using
+	|   I.COMPU {using,...} => using
+	|   _ =>
+		let val using_file = I.P.U.using_file uexp
+		    val using = Fs.read I.blastInUnits using_file
+		in  using
+		end)
+
     fun link' (desc:I.desc, files:I.F.link) : unit =
 	let val {exe,asm,asmz,obj} = files
 	    val _ = msg ("[linking " ^ exe ^ "]\n")
-	    fun unit_info (pdec:I.pdec) : (string * file) option =
+	    fun unitname (pdec:I.pdec) : label option =
 		(case pdec of
 		    I.IDEC _ => NONE
 		|   I.SCDEC _ => error "link saw unimplemented unit"
-		|   I.UDEC {name=U,uexp,...} =>
+		|   I.UDEC {name=U,...} => SOME U)
+	    val units : label list = List.mapPartial unitname desc
+	    val lookup : label -> I.uexp = I.P.D.uexp o (lookup desc)
+	    fun untyped (f:{asmFile:string, units:string list} -> unit) (tmp:string) : unit =
+		let val units = map Name.label2name' units
+		in  f{asmFile=tmp, units=units}
+		end
+	    fun typed (f:{asmFile:string, units:{name:string, imports:string list}list} -> unit) (tmp:string) : unit =
+		let fun mapper (U:label) : {name:string, imports:string list} =
 			let val name = Name.label2name' U
-			    val obj = I.P.U.obj uexp
-			in  SOME (name,obj)
-			end)
-	    val (units,objs) = Listops.unzip(List.mapPartial unit_info desc)
+			    val uexp = lookup U
+			    val imports : label list = uexp_using uexp
+			    val imports : string list =
+				map Name.label2name' imports
+			in  {name=name, imports=imports}
+			end
+		    val units = map mapper units
+		in  f{asmFile=tmp, units=units}
+		end
 	    val _ = timestamp()
-	    val generate =
+	    val generate : string -> unit =
 		(case (Target.getTarget()) of
-		    Platform.ALPHA => Linkalpha.link
-		|   Platform.SPARC => Linksparc.link
-		|   Platform.TALx86 => error "no TAL linker yet")
-	    fun writer tmp = generate {asmFile=tmp, units=units}
-	    val _ = Fs.write' writer asm
+		    Platform.ALPHA => untyped Linkalpha.link
+		|   Platform.SPARC => untyped Linksparc.link
+		|   Platform.TALx86 => typed (error "no TAL linker yet"))
+	    val _ = Fs.write' generate asm
 	in  if assemble'' (desc,asm,asmz,obj) then
-		Tools.link (tal_includes desc, objs @ [obj], exe)
+		let val objs = map (I.P.U.obj o lookup) units
+		    val includes = tal_includes desc
+		in  Tools.link (objs, objs @ [obj], exe)
+		end
 	    else ()
 	end
 
@@ -752,16 +777,6 @@ struct
 	|   _ =>
 		let val pinterface = I.P.I.pinterface iexp
 		    val using = Fs.read_pinterface_parm pinterface
-		in  using
-		end)
-
-    fun uexp_using (uexp:I.uexp) : I.units =
-	(case uexp of
-	    I.PRECOMPU {using,...} => using
-	|   I.COMPU {using,...} => using
-	|   _ =>
-		let val using_file = I.P.U.using_file uexp
-		    val using = Fs.read I.blastInUnits using_file
 		in  using
 		end)
 
@@ -923,7 +938,7 @@ struct
     fun extern_uexp (parms:externparms, U:label, uexp:I.uexp) : E.ue =
 	(case uexp of
 	    I.PRECOMPU {opened,asc=I,...} =>
-		let val {src,...} =  parms
+		let val {src,...} = parms
 		in  E.PRECOMPU(src U,opened,I)
 		end
 	|   I.COMPU {opened,asc=I,...} => E.COMPU(opened,I)
