@@ -836,6 +836,29 @@ struct
 	     step = step, 
 	     complete = fn _ => (finalReport units; app makeExe finalTargets)}
 	end
+    fun showCheckPoint state =
+	let val left = stateSize state
+	    val msg =
+		if (!checkPointVerbose) then
+		    let val (waiting, pending, working, proceeding, pending', working') = state
+			val waiting = length waiting
+			val pending = length pending
+			val working = length working
+			val proceeding = length proceeding
+			val pending' = length pending'
+			val working' = length working'
+		    in
+			String.concat ["CheckPoint (", Int.toString left, " files left = ",
+				       Int.toString waiting, " waiting + ",
+				       Int.toString pending, " pending + ",
+				       Int.toString working, " working + ",
+				       Int.toString proceeding, " proceeding + ",
+				       Int.toString pending', " pending' + ",
+				       Int.toString working', " working')"]
+		    end
+		else String.concat ["CheckPoint (", Int.toString left, " files left)"]
+	in  Help.showTime (false, msg)
+	end
     fun run mapfile =
 	let val {setup,step = step : state -> result,complete} = once mapfile
 	    val initialState = setup()
@@ -864,31 +887,9 @@ struct
 					 PROCESSING _ => ()
 				       | _ => chat "  [All processors working!]\n")
 			    val _ = if (diff > 30.0)
-					then
-					    let val left = stateSize state
-						val msg =
-						    if (!checkPointVerbose) then
-							let val (waiting, pending, working, proceeding, pending', working') = state
-							    val waiting = length waiting
-							    val pending = length pending
-							    val working = length working
-							    val proceeding = length proceeding
-							    val pending' = length pending'
-							    val working' = length working'
-							in
-							    String.concat ["CheckPoint (", Int.toString left, " files left = ",
-									   Int.toString waiting, " waiting + ",
-									   Int.toString pending, " pending + ",
-									   Int.toString working, " working + ",
-									   Int.toString proceeding, " proceeding + ",
-									   Int.toString pending', " pending' + ",
-									   Int.toString working', " working')"]
-							end
-						    else String.concat ["CheckPoint (", Int.toString left, " files left)"]
-					    in  (makeGraph'(mapfile,NONE); 
-						 Help.showTime (false, msg);
-						 lastGraphTime := (Time.now()))
-					    end
+					then (makeGraph'(mapfile,NONE);
+					      showCheckPoint state;
+					      lastGraphTime := (Time.now()))
 				    else ()
 			in  Platform.sleep 0.1;
 			    loop state
@@ -913,12 +914,9 @@ struct
 					  chat ".");
 				    chat "]\n";
 				    if (diff > 15.0)
-					then 
-					    let val left = stateSize state
-					    in  (makeGraph'(mapfile,NONE); 
-						 Help.showTime (false,"CheckPoint (" ^ (Int.toString left) ^ " files left)");
-						 lastGraphTime := (Time.now()))
-					    end
+					then (makeGraph'(mapfile,NONE);
+					      showCheckPoint state;
+					      lastGraphTime := (Time.now()))
 				    else ();
 				    Platform.sleep 0.1));
 			   loop state))
