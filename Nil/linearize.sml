@@ -502,7 +502,7 @@ struct
 
 		    print "Number of lkind calls: ";
 		    print (Int.toString (!num_lkind)); print "\n")
-
+	   val _ = reset_state()
 
        in  MODULE{bnds = bnds,
 		  imports = imports,

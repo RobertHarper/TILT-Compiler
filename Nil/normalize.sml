@@ -130,7 +130,6 @@ val show_context = ref false
       val stack = ref ([] : entry list)
       val maxdepth = 10000
       val depth = ref 0
-      fun clear_stack() = (depth := 0; stack := [])
       fun push e = (depth := !depth + 1;
 		    stack := (e :: (!stack));
 		    if (!depth mod 20 = 0)
@@ -141,6 +140,7 @@ val show_context = ref false
 			then error "stack depth exceeded"
 		    else ())
   in
+    fun clear_stack() = (depth := 0; stack := [])
     fun push_exp (e,context) = push (EXP(e,context))
     fun push_con(c,context) = push(CON(c,context))
     fun push_kind(k,context) = push(KIND(k,context))
@@ -184,9 +184,12 @@ val show_context = ref false
 				      print "\n\n")
 		       in  app show (rev st)
 		       end
-    fun wrap str f arg arg2 = (f arg arg2) 
-      handle e => (print "\n ------ ERROR in "; print str; print " ---------\n";
-		   show_stack(); raise e)
+    fun wrap str f = 
+	(clear_stack(); f())
+	handle e => (print "\n ------ ERROR in "; print str; print " ---------\n";
+		     show_stack(); raise e)
+    fun wrap1 str f arg1 = wrap str (fn () => f arg1)
+    fun wrap2 str f arg1 arg2 = wrap str (fn () => f arg1 arg2)
   end
 	 
 
@@ -861,17 +864,6 @@ val show_context = ref false
   val get_shape = get_shape'
   val beta_confun = beta_confun false
 
-  val get_shape = wrap "get_shape" get_shape
-  val kind_normalize = wrap "kind_normalize" kind_normalize
-  val con_normalize = wrap "con_normalize"  con_normalize
-  val exp_normalize = wrap "exp_normalize" exp_normalize
-  val module_normalize = wrap "mod_normalize" module_normalize
-
-  val kind_normalize' = wrap "kind_normalize'" kind_normalize'
-  val con_normalize' = wrap "con_normalize'"  con_normalize'
-  val exp_normalize' = wrap "exp_normalize'" exp_normalize'
-
-
 
     fun lab2int l ~1 = error "lab2int failed"
       | lab2int l n = if (eq_label(l,NilUtil.generate_tuple_label n))
@@ -1291,5 +1283,27 @@ val show_context = ref false
 	    )
      end
 
+  val get_shape = wrap2 "get_shape" get_shape
+  val make_shape = wrap2 "get_shape" make_shape
 
+  val kind_normalize = wrap2 "kind_normalize" kind_normalize
+  val con_normalize = wrap2 "con_normalize"  con_normalize
+  val exp_normalize = wrap2 "exp_normalize" exp_normalize
+  val module_normalize = wrap2 "mod_normalize" module_normalize
+
+  val kind_normalize' = wrap2 "kind_normalize'" kind_normalize'
+  val con_normalize' = wrap2 "con_normalize'"  con_normalize'
+  val exp_normalize' = wrap2 "exp_normalize'" exp_normalize'
+
+  val reduce_hnf = wrap1 "reduce_hnf" reduce_hnf
+  val reduce_once = wrap1 "reduce_once" reduce_once
+  val reduce_until = fn arg => wrap "reduce_until" (fn () => reduce_until arg)
+
+  val beta_conrecord = wrap1 "beta_conrecord" beta_conrecord
+  val beta_confun = wrap2 "beta_confun" beta_confun
+  val eta_confun = wrap1 "eta_confun" eta_confun
+  val beta_typecase = wrap2 "beta_typecase" beta_typecase
+
+  val reduceToSumtype = wrap1 "reduceToSumType" reduceToSumtype
+  val type_of = wrap1 "type_of" type_of
 end
