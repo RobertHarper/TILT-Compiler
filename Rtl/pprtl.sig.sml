@@ -2,7 +2,8 @@ signature PPRTL =
 sig
 
    structure Rtl : RTL
-   structure Formatter : FORMATTER
+   structure Rtltags : RTLTAGS
+   sharing Rtltags.Rtl = Rtl
 
    val regi2s : Rtl.regi -> string
    val regf2s : Rtl.regf -> string
@@ -19,6 +20,7 @@ sig
    val pp_Data' : Rtl.data -> Formatter.format
    val pp_Proc' : Rtl.proc -> Formatter.format
    val pp_Module' : Rtl.module -> Formatter.format
+   val pp_tags': Rtltags.tags -> Formatter.format
 
    val pp_var : Rtl.var -> unit
    val pp_Save : Rtl.save -> unit
@@ -26,7 +28,8 @@ sig
    val pp_Data : Rtl.data -> unit
    val pp_Proc : Rtl.proc -> unit
    val pp_Module : Rtl.module -> unit
- 
+   val pp_tags: Rtltags.tags -> unit
+
    val elideSave : bool ref
 end
 

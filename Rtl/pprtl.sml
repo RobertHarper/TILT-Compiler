@@ -1,6 +1,10 @@
-functor Pprtl(structure Rtl : RTL) : PPRTL = 
+functor Pprtl(structure Rtl : RTL
+	      structure Rtltags : RTLTAGS
+	      sharing Rtltags.Rtl = Rtl) : PPRTL = 
 struct
+
   structure Rtl = Rtl
+  structure Rtltags = Rtltags
 
   open Rtl Formatter
   structure Formatter = Formatter
@@ -12,6 +16,15 @@ struct
   val predicted = ref false
   val i2s = Int.toString
 
+  fun pp_list_flat doer objs (left,sep,right,break) = 
+      let 
+	  fun loop [] = [String right]
+	    | loop [a] = [doer a, String right]
+	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
+	  val fmts = (String left) :: (loop objs)
+      in fmts
+      end
+
   fun pp_list doer objs (left,sep,right,break) = 
       let 
 	  fun loop [] = [String right]
@@ -21,8 +34,14 @@ struct
       in (if break then Vbox0 else HOVbox0 1) (size left) 1 fmts
       end
 
-  fun plain children = pp_list String children ("",",","",true)
-  fun plainlist children = pp_list (fn x => x) children ("",",","",true)
+  fun extend name = let val diff = 10 - size name
+			fun loop n = if (n < 0) then ""
+				     else " " ^ (loop (n-1))
+		    in  name ^ loop diff
+		    end
+  fun plain [] = Hbox[]
+    | plain (c::rest) = Hbox((String (extend c))::(map String rest))
+  fun plainlist children = Hbox children
 
 
 
@@ -112,9 +131,9 @@ struct
 
   fun pp_Array' pr a =
     let fun loop i = if i<Array.length a
-		     then pr(Array.sub(a,i)) :: String "\n" :: loop(i+1)
+		     then pr(Array.sub(a,i)) :: (Break0 0 0)  :: loop(i+1)
 		     else nil
-    in HOVbox (loop 0)
+    in Vbox0 0 1 (loop 0)
     end
 
   val pp_RegiList' = pp_List' (String o regi2s)
@@ -129,40 +148,37 @@ struct
 
 
 
-  fun op3i name (r,sv,dest) = plain [name,regi2s r,",",sv2s sv,",",regi2s dest]
-  fun op2i name (r,dest) = plain [name,regi2s r,",",regi2s dest]
-  fun opif name (isrc,fdest) = plain [name,regi2s isrc,",",regf2s fdest]
-  fun opfi name (fsrc,idest) = plain [name,regf2s fsrc,",",regi2s idest]
-  fun opffi name (fsrc1,fsrc2,idest) = plain [name,regf2s fsrc1,",",regf2s fsrc2,",",regi2s idest]
-
-  fun op3f name (r1,r2,dest) = plain [name,regf2s r1,",",regf2s r2,",",regf2s dest]
-
-  fun op2f name (r,dest) = plain [name,regf2s r,",",regf2s dest]
-
-  fun op2si name (dest,ri) = plain [name,regi2s ri,",",ea2s dest]
-
-  fun op2li name (src,ri) = plain [name,regi2s ri,",",ea2s src]
+  fun op3i name (r,sv,dest) = plain [name,regi2s r,", ",sv2s sv,", ",regi2s dest]
+  fun op2i name (r,dest) = plain [name,regi2s r,", ",regi2s dest]
+  fun opif name (isrc,fdest) = plain [name,regi2s isrc,", ",regf2s fdest]
+  fun opfi name (fsrc,idest) = plain [name,regf2s fsrc,", ",regi2s idest]
+  fun opffi name (fsrc1,fsrc2,idest) = plain [name,regf2s fsrc1,", ",regf2s fsrc2,", ",regi2s idest]
+  fun op3f name (r1,r2,dest) = plain [name,regf2s r1,", ",regf2s r2,", ",regf2s dest]
+  fun op2f name (r,dest) = plain [name,regf2s r,", ",regf2s dest]
+  fun op2si name (dest,ri) = plain [name,regi2s ri,", ",ea2s dest]
+  fun op2li name (src,ri) = plain [name,regi2s ri,", ",ea2s src]
 
 
 
   val w2i = TilWord32.toInt
   val i2w = TilWord32.fromInt
-  fun word2str a = i2s (w2i a)
+  val word2str = TilWord32.toDecimalString
 
   fun wordpair2str (a,b) = "(" ^ (i2s (w2i a)) 
-      ^ "," ^ (i2s (w2i b)) ^ ")";
+      ^ ", " ^ (i2s (w2i b)) ^ ")";
 
 
   fun pp_Instr' instr =
-	     case instr
-	     of LI (i,ri) => String("li "^(word2str i)^","^(regi2s ri))
-	      | LADDR (label,i,r) => String("laddr "^(i2s i)^
-					  "("^label2s label^")  "^(regi2s r))
-	      | LEA (ea,r) => String("lea " ^ (ea2s ea)^", "^(regi2s r))
+	     case instr of
+		 LI (i,ri) => plain["li",word2str i,", ",regi2s ri]
+	       | LADDR (label,i,r) => plain ["laddr",(i2s i),"(",
+					     label2s label,"), ", regi2s r]
+	      | LEA (ea,r) => plain["lea",(ea2s ea),", ",regi2s r]
 	      | CMV (cmp,test,src,dest) =>
-		    String("cmv"^cmpi2s cmp false^" "^regi2s test^","^sv2s src^","^regi2s dest)
-	      | MV (src,dest) =>  String("mv  "^(regi2s src)^", "^(regi2s dest))
-	      | FMV (src,dest) => String("fmv  "^(regf2s src)^","^(regf2s dest))
+		    plain["cmv", cmpi2s cmp false, " ", 
+			  regi2s test, ", ", sv2s src, ", ", regi2s dest]
+	      | MV (src,dest) =>  plain["mv", regi2s src, ", ", regi2s dest]
+	      | FMV (src,dest) => plain["fmv", regf2s src, ", ", regf2s dest]
 	      | ADD a => op3i "addl" a
 	      | SUB a => op3i "subl" a
 	      | S4ADD a => op3i "s4add" a
@@ -232,34 +248,39 @@ struct
 					     pp_List' (String o local_label2s) labels]
               | CALL {func,return : regi option,args=(ia,fa),
 			results=(ir,fr),tailcall,save} =>
-		   HOVbox [String "(",
-			 pp_RegPair'(ir,fr),
-			 String " <- ",
-			 String "call ",
-			 String (case func
-			       of REG' f => (regi2s f)
-       				| LABEL' l => (label2s l)),
-			 pp_RegPair'(ia,fa),
-			 String "\n\t\t",
-			 String "{ret= ",
-			 String (case return
-			       of (SOME ret) => (regi2s ret)
-				 | _ => "none"),
-			 if !elideSave then String ""
-			 else (HOVbox [String " saved = ",pp_Save' save]),
-			 String " tailcall = ",
-			 String (bool2s tailcall),
-			 String "}"]
-              | RETURN r => String ("return "^regi2s r)
+		   HOVbox0 1 15 1
+		   [String (extend "call"),	
+		    String (case func
+				of REG' f => (regi2s f)
+			      | LABEL' l => (label2s l)),
+		    Break,
+		    String "arguments = (",
+		    pp_RegPair'(ia,fa),
+		    Break,
+
+		    String "results = (",
+		    pp_RegPair'(ir,fr),
+		    Break,
+
+		    String "{ret= ",
+		    String (case return
+				of (SOME ret) => (regi2s ret)
+			      | _ => "none"),
+		    if !elideSave then String ""
+		    else (HOVbox [String " saved = ",pp_Save' save]),
+			String " tailcall = ",
+			String (bool2s tailcall),
+			String "}"]
+              | RETURN r => plain["return", regi2s r]
 	      | SAVE_CS  l => String ("save_cs"^local_label2s l)
               | END_SAVE => String "end save"
 	      | RESTORE_CS => String "restore_cs"
 	      | LOAD32I a       => op2li "ldl" a
 	      | STORE32I a      => op2si "stl" a
-              | LOADQF (ea,r)   => plain ["ldt ",regf2s r,",",ea2s ea]
-              | STOREQF (ea,r)  => plain ["stt ",regf2s r,",",ea2s ea]
+              | LOADQF (ea,r)   => plain ["ldt ",regf2s r,", ",ea2s ea]
+              | STOREQF (ea,r)  => plain ["stt ",regf2s r,", ",ea2s ea]
               | NEEDMUTATE (r)  => plain ["needmutate ",regi2s r]
-              | NEEDGC (sv)     => plain [" <- needgc ",sv2s sv]
+              | NEEDGC (sv)     => plain ["needgc ",sv2s sv]
               | FLOAT_ALLOC(r1,r2,r3,tag) => 
 		   plain [regi2s r3, " <- float_alloc ",
 			  regi2s r1,"  ",regf2s r2]
@@ -298,47 +319,87 @@ struct
 	| ALIGN (a) =>  String (".align "^(align2s a))
 	| DLABEL (l) =>  String (label2s l^":")
 
+  fun pp_DataArray' da = 
+      let fun pp_Data'' x =
+	        let val s = pp_Data' x
+		in case x of
+		     DLABEL _ => s
+		   | _ => Hbox[String "     ", s]
+		end
+      in  pp_Array' pp_Data'' da
+      end
+
+
+  fun pp_code' code = 
+      let fun pp_Instr'' x =
+	        let val s = pp_Instr' x
+		in case x
+		   of ILABEL _ => s
+		    | _ => Hbox[String "     ", s]
+		end
+      in  pp_Array' pp_Instr'' code
+      end
+
   fun pp_Proc' (PROC{name,return,args,results,code,known,save,vars}) =
       (if !DEBUG then
 	    (print "laying out procedure "; 
 	     print (label2s (LOCAL_LABEL name)); print "\n")
       else ();
-      let fun pp_Instr'' x =
-	        let val s = pp_Instr' x
-		in case x
-		   of ILABEL _ => s
-		    | _ => HOVbox (String "\t" :: s :: nil)
-		end
-      in HOVbox [String(label2s (LOCAL_LABEL name)),
-	       String "(",pp_RegPair' args,String ")",
-	       String "\n\t\t",
-	       String "{ret = ",String (regi2s return),String " , known = ",
-	       String (bool2s known),
-	       if !elideSave then String ""
-	       else (HOVbox [String " save = ",
-			   pp_Save' save]),
-	       HOVbox [String ", results = ",pp_RegPair' results],
-	       String "}\n",
-	       String "{\n",pp_Array' pp_Instr'' code,String "}\n"]
-      end)
+	   Vbox0 0 1 [String(label2s (LOCAL_LABEL name)),
+		      String "(",pp_RegPair' args,String ")",
+		      Break,
+		      Hbox[String "     ",
+			   HOVbox[String "{ret = ",String (regi2s return),String " , known = ",
+				  String (bool2s known),
+				  if !elideSave then String ""
+			     else (HOVbox [String " save = ",
+					   pp_Save' save]),
+				  HOVbox [String ", results = ",pp_RegPair' results],
+				  String "}"]], 
+		      Break,
+		      String "{", Break,
+		      pp_code' code,
+		      String "}", Break])
 	   
   fun pp_Module' (MODULE{procs,data,main,mutable_objects,mutable_variables}) =
-      HOVbox [plain ["main = "^label2s (LOCAL_LABEL main)],
-	    String "\n",
-	    plainlist (map pp_Proc' procs),
-	    pp_Array' pp_Data'  data,
-	    String "mutable objects = ",
-	    pp_List' (String o label2s) mutable_objects,
-	    String "mutable vars = ",
-	    pp_List' pp_LabelPair' mutable_variables
-	    ]
+      Vbox0 0 1 [Break,
+		 String ("main = "^label2s (LOCAL_LABEL main)),
+		 Break, Break,
+		 plainlist (map pp_Proc' procs),
+		 pp_DataArray'  data,
+		 Break,
+		 String "mutable objects = ",
+		 pp_List' (String o label2s) mutable_objects,
+		 Break,
+		 String "mutable vars = ",
+		 pp_List' pp_LabelPair' mutable_variables,
+		 Break]
+
+  fun pp_rep_path _ = String "rep_path_not_done"
+
+  fun pp_tags' (tags : Rtltags.tags) = 
+      let 
+	  fun pp_dyn{bitpos,path} = 
+	      Hbox[String (Int.toString bitpos), String " = ",
+		   pp_rep_path path]
+	  fun pp_tag {static,dynamic} = 
+	      let val x = String ("0x" ^ (TilWord32.toHexString static))
+		  val y = map pp_dyn dynamic
+	      in  (case y of 
+		       [] => x
+		     | _ => HOVbox(x :: y))
+	      end
+      in  pp_list pp_tag tags ("(",",",")",false)
+      end
 
     fun wrapper pp out obj = 
       let 
 	val fmtstream = open_fmt out
 	val fmt = pp obj
-      in (output_fmt (fmtstream,fmt); 
+      in (Formatter.DoDepth := false;
+	  output_fmt (fmtstream,fmt); 
 	  close_fmt fmtstream;
+	  Formatter.DoDepth := true;
 	  fmt)
       end
     fun help pp obj = (wrapper pp TextIO.stdOut obj; ())
@@ -348,6 +409,7 @@ struct
     val pp_Data = help pp_Data'
     val pp_Proc = help pp_Proc'
     val pp_Module = help pp_Module'
+    val pp_tags = help pp_tags'
 
 
 

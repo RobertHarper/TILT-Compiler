@@ -1,4 +1,4 @@
-(* should varmap and convarmap be forever? *)
+(* empty records translate to 256; no allocation *)
 functor Tortl(structure Rtl : RTL
 	      structure Pprtl : PPRTL 
 	      structure Rtltags : RTLTAGS 
@@ -6,10 +6,12 @@ functor Tortl(structure Rtl : RTL
 	      structure NilUtil : NILUTIL
 	      structure Ppnil : PPNIL
 	      sharing Ppnil.Nil = NilUtil.Nil = Nil
-	      sharing Rtl = Pprtl.Rtl = Rtltags.Rtl)
+	      sharing Pprtl.Rtltags = Rtltags
+	      sharing Rtl = Pprtl.Rtl)
     : TORTL =
 struct
 
+val debug = ref false
 
     exception XXX
 fun simplify_type _ = raise XXX
@@ -23,12 +25,14 @@ fun simplify_type _ = raise XXX
     open Rtl
     open Name
     open Rtltags 
-    open  Pprtl 
+    open Pprtl 
     type label = Rtl.label
 
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
     val error = fn s => (error "tortl.sml" s)
+    structure W32 = TilWord32
+    structure W64 = TilWord64
 
 
    (* ------------------ Overall Data Structures ------------------------------ *)
@@ -127,10 +131,15 @@ fun simplify_type _ = raise XXX
 	 | SOME rep => rep)
 
 
+  fun alloc_named_code_label s = LOCAL_CODE(fresh_named_var s)
+  fun alloc_named_data_label s = LOCAL_DATA(fresh_named_var s)
+  fun alloc_named_local_code_label s = LOCAL_LABEL(alloc_named_code_label s)
+  fun alloc_named_local_data_label s = LOCAL_LABEL(alloc_named_data_label s)
   fun alloc_code_label () = LOCAL_CODE(fresh_var())
   fun alloc_data_label () = LOCAL_DATA(fresh_var())
   fun alloc_local_code_label () = LOCAL_LABEL(alloc_code_label())
   fun alloc_local_data_label () = LOCAL_LABEL(alloc_data_label())
+
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
@@ -147,7 +156,7 @@ fun simplify_type _ = raise XXX
 		 (Sum_c _) | (Record_c _) | (Vararg_c _)),_) => TRACE
        in case con of
 	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
-	 | Mu_c (vc_seq,v) => con2rep(NilUtil.muExpand(vc_seq,v))
+	 | Mu_c (vc_seq,v) => TRACE (* XXX con2rep(NilUtil.muExpand(vc_seq,v)) *)
 	 | AllArrow_c (Open,_,_,_,_,_) => error "no open lambdas allowed by this stage"
 	 | AllArrow_c(Closure,_,_,_,_,_) => TRACE
 	 | AllArrow_c(Code,_,_,_,_,_) => NOTRACE_CODE
@@ -267,9 +276,7 @@ fun simplify_type _ = raise XXX
 	     | _ => I(alloc_named_regi v (con2rep c))
 		   
        fun insert map (key,v) = (case (HashTable.find (map) key) of
-				     NONE => (print "inserting variable ";
-					      pp_var key; print "\n";
-					      HashTable.insert (map) (key,v))
+				     NONE => HashTable.insert (map) (key,v)
 				   | SOME _ => error "hash table already contains entry")
 
        fun promote_maps() = 
@@ -385,17 +392,17 @@ fun simplify_type _ = raise XXX
   fun add_var     (v,reg,con)       = insert (!varmap) (v,(VREGISTER reg, NONE, con))
   fun add_var_val (v,reg,con,value) = insert (!varmap) (v,(VREGISTER reg, SOME value, con))
   fun add_convar  (v,regi,kind)     = insert (!convarmap) (v,(VREGISTER (I regi),kind))
-  fun add_convar_label (v,l,kind)   = insert (!convarmap) (v,(VCODE l,kind))
-  fun gadd_convar_label (v,l,kind)   = insert (!gconvarmap) (v,(VCODE l,kind))
+  fun add_convar_label (v,l,kind)   = insert (!convarmap) (v,(VLABEL l,kind))
+  fun gadd_convar_label (v,l,kind)   = insert (!gconvarmap) (v,(VLABEL l,kind))
 
   fun add_global     (v,p,con)        = insert (!varmap) (v,(VGLOBAL p, NONE,con))
   fun add_global_val (v,p,con,value)  = insert (!varmap) (v,(VGLOBAL p, SOME value,con))
 
   fun add_label (v,lab, con) = insert (!varmap) (v,(VLABEL lab, NONE, con))
   fun add_loclabel (LOCAL_CODE v,lab, con) = insert (!varmap) (v,(VCODE lab, NONE, con))
-    | add_loclabel (LOCAL_DATA v,lab, con) = insert (!varmap) (v,(VCODE lab, NONE, con))
+    | add_loclabel (LOCAL_DATA v,lab, con) = insert (!varmap) (v,(VLABEL lab, NONE, con))
   fun gadd_loclabel (LOCAL_CODE v,lab, con) = insert (!gvarmap) (v,(VCODE lab, NONE, con))
-    | gadd_loclabel (LOCAL_DATA v,lab, con) = insert (!gvarmap) (v,(VCODE lab, NONE, con))
+    | gadd_loclabel (LOCAL_DATA v,lab, con) = insert (!gvarmap) (v,(VLABEL lab, NONE, con))
 
   fun add_varloc (v,VREGISTER r,con) = add_var(v,r,con)
     | add_varloc (v,VGLOBAL lr, con) = add_global(v,lr,con)
@@ -704,7 +711,7 @@ fun simplify_type _ = raise XXX
 		    con : con,
 		    lv : loc_or_val) =
     let 
-      val label = LOCAL_LABEL(alloc_data_label())
+      val label = LOCAL_LABEL(alloc_named_data_label v)
       val addr = alloc_regi LABEL
       val rtl_rep = con2rep con
       val _ = (case rtl_rep of
@@ -888,7 +895,8 @@ fun simplify_type _ = raise XXX
 			      val vls = [code_lv,
 					 VAR_LOC(VREGISTER (I cregi)),
 					 VAR_VAL(VINT 0w0)]
-			  in  make_record(NONE,[{dynamic=nil,static=0w6}],vls)
+			      val reps = [NOTRACE_CODE, TRACE, TRACE]
+			  in  make_record(NONE,reps,vls)
 			  end
 		      val clregsi = Listops.map2count loadcl (var_vcelist, cregsi)
 		      val eregs = map (fn (_,{code,cenv,venv,tipe}) =>
@@ -917,6 +925,64 @@ fun simplify_type _ = raise XXX
 	    | Open_cb _ => error "open Fun_cb"
       end
 
+  and xconst (arg_v : (con,exp) Prim.value) 
+                   : loc_or_val * con =
+      let
+	  open Prim
+	  open TilWord64
+	  fun xvector (c,a : exp Array.array) : loc_or_val * con =
+	      let 
+		  val label = alloc_named_local_data_label "string"
+		  val sz = Array.length a
+		  val tagword = W32.orb(W32.lshift(W32.fromInt sz,int_len_offset),intarray)
+		  val _ = add_data(INT32 tagword)
+		  val _ = add_data(DLABEL label)
+		  fun layout segsize packager = 
+		  let fun loop index 0 acc = (packager (rev acc); loop index segsize [])
+			| loop (index : int) remain acc =
+			  if (index < sz)
+			      then loop (index+1) (remain-1) ((Array.sub(a,index))::acc)
+			  else packager (rev acc)
+		  in  loop 0 segsize []
+		  end
+		  fun char_packager vals = 
+		      let fun getword(Const_e(uint(_,w))) = TilWord64.toUnsignedHalf w
+			    | getword _ = error "bad string"
+			  val (a,b,c,d) = (case (map getword vals) of
+					       [a,b,c,d] => (a,b,c,d)
+					     | [a,b,c] => (a,b,c,W32.zero)
+					     | [a,b] => (a,b,W32.zero,W32.zero)
+					     | [a] => (a,W32.zero,W32.zero,W32.zero)
+					     | _ => error "bad string")
+			  val b = W32.lshift(b,8)
+			  val c = W32.lshift(c,16)
+			  val d = W32.lshift(d,24)
+		      in  add_data(INT32 (W32.orb(W32.orb(a,b),W32.orb(c,d))))
+		      end
+		  val _ = (case (Array.sub(a,0)) of
+			       Const_e(uint (W8, _)) => layout 4 char_packager
+			     | _ => error "xvector not fully done")
+	      in  (VAR_LOC(VLABEL label), Prim_c(Vector_c, [c]))
+	      end
+      in
+	  (case arg_v of
+	       ((uint (ws as (W8 | W16 | W32),w64)) |
+		(int (ws as (W8 | W16 | W32),w64))) =>  
+	       let val w32 = TilWord64.toUnsignedHalf w64
+	       in  (VAR_VAL(VINT w32), Prim_c(Int_c ws, []))
+	       end
+	      | ((uint (W64, _)) | (int (W64, _))) => error "64-bit ints not done"
+	      | (float (F64, s)) => (VAR_VAL(VREAL s), Prim_c(Float_c F64, []))
+	      | (float (F32, _)) => error "32 bit floats not done"
+	      | (vector (c,a)) => xvector(c,a)
+	      | (array _ | refcell _) => 
+		    error "array/vector/refcell constants not implemented"
+	      | (tag(t,c)) => let val i = TilWord32.fromInt (tag2int t)
+			      in  (VAR_VAL(VINT i), Prim_c(Int_c W32, []))
+			      end)
+      end
+
+
   and xexp' (name : var, (* Purely for debugging and generation of useful names *)
 	     e : exp,    (* The expression being translated *)
 	     copt : con option,    (* The type of the expression being translated *)
@@ -939,25 +1005,7 @@ fun simplify_type _ = raise XXX
 	      Var_e v => (case (getrep v) of
 			      (_,SOME value,c) => (VAR_VAL value,c)
 			    | (l,_,c) => (VAR_LOC l, c))
-	    | Const_e v => 
-		  let
-		      open Prim
-		  in
-		      (case v of
-			   ((uint (ws as (W8 | W16 | W32),w64)) |
-			    (int (ws as (W8 | W16 | W32),w64))) =>  
-			       let val w32 = TilWord64.toUnsignedHalf w64
-			       in  (VAR_VAL(VINT w32), Prim_c(Int_c ws, []))
-			       end
-			 | ((uint (W64, _)) | (int (W64, _))) => error "64-bit ints not done"
-			 | (float (F64, s)) => (VAR_VAL(VREAL s), Prim_c(Float_c F64, []))
-			 | (float (F32, _)) => error "32 bit floatss not done"
-			 | (array _ | vector _ | refcell _) => 
-			       error "array/vector/refcell constants not implemented"
-			 | (tag(t,c)) => let val i = TilWord32.fromInt (tag2int t)
-					 in  (VAR_VAL(VINT i), Prim_c(Int_c W32, []))
-					 end)
-		  end
+	    | Const_e v => xconst v
 	    | Let_e (_, bnds, body) => (app xbnd bnds;
 					xexp(fresh_var(),body,copt,context))
 	    | Prim_e (NilPrimOp nilprim, clist, elist) => xnilprim(nilprim,clist,elist,context)
@@ -972,7 +1020,8 @@ fun simplify_type _ = raise XXX
 			  val (selfcall,fun_reglabel,funcon,cregsi',eregs') = 
 			      (case (openness,f) of
 				   (Code,Var_e expvar) =>
-				       let val (var_loc,_,funcon) = getrep expvar
+				       let 
+					   val (var_loc,_,funcon) = getrep expvar
 				       in  ((case (getCurrentFun()) of
 						 LOCAL_CODE v => eq_var(expvar,v)
 					       | _ => false),
@@ -1077,7 +1126,7 @@ fun simplify_type _ = raise XXX
 		      val nl = alloc_named_code_label (fresh_named_var "after_handler")
 
 
-		      val tags = mk_recordtag (LABEL :: LABEL :: TRACE :: local_int_reps)
+		      val reps = (LABEL :: LABEL :: TRACE :: local_int_reps)
 
 		      val fpbase = (* --- save the floating point values, if any *)
 			  (case local_fregs of
@@ -1088,7 +1137,7 @@ fun simplify_type _ = raise XXX
 		      val int_vallocs = (map (VAR_LOC o VREGISTER o I) 
 					 ([hlreg, stackptr,exnptr] @ local_iregs))
 		      val _ = (add_instr(LADDR(LOCAL_LABEL hl,0,hlreg));
-			       make_record(SOME exnptr,tags, int_vallocs))
+			       make_record(SOME exnptr,reps, int_vallocs))
 			  
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
 		      val (reg,arg_c) = xexp'(name,exp,copt,context)
@@ -1326,8 +1375,7 @@ fun simplify_type _ = raise XXX
 	  fun xtagsum() = 
 	      let val tag_vl = VAR_VAL(VINT (TilWord32.uminus(field,TilWord32.fromInt nontagcount)))
 		  val reps = map valloc2rep varlocs
-		  val tags = mk_recordtag reps
-		  val ir = make_record(NONE,tags,tag_vl::varlocs)
+		  val ir = make_record(NONE,reps,tag_vl::varlocs)
 	      in VAR_LOC(VREGISTER(I ir))
 	      end
 	  val varloc =
@@ -1352,8 +1400,8 @@ fun simplify_type _ = raise XXX
 		   val types = map #2 vallocs_types
 		   val vallocs = map #1 vallocs_types
 		   val c = Prim_c(Record_c labels, types)
-		   val tags = mk_recordtag(map valloc2rep vallocs)
-		   val desti = make_record(NONE,tags,vallocs)
+		   val reps = map valloc2rep vallocs
+		   val desti = make_record(NONE,reps,vallocs)
 	       in  (VAR_LOC(VREGISTER(I desti)), c)
 	       end
 	 | select label => (case (clist,elist) of 
@@ -1469,14 +1517,15 @@ fun simplify_type _ = raise XXX
 						val (vl1,_) = xexp(fresh_var(),e1,NONE,NOTID)
 						val (vl2,_) = xexp(fresh_var(),e2,NONE,NOTID)
 						val vallocs = [vl1,vl2]
-						val tags = mk_recordtag(map valloc2rep vallocs)
-					    in  (VAR_LOC(VREGISTER (I (make_record(NONE,tags,vallocs)))),
+						val reps = map valloc2rep vallocs
+					    in  (VAR_LOC(VREGISTER (I (make_record(NONE,reps,vallocs)))),
 						 Prim_c(Exn_c,[]))
 					    end
 			 | _ => error "bad make_exntag")
 	 | make_vararg _ => raise XXX     
 	 | make_onearg _ => raise XXX     
 	 | peq => error "peq not done")
+
 
   and xprim(prim,clist,elist,context) : loc_or_val * con = 
       let 
@@ -1710,7 +1759,21 @@ fun simplify_type _ = raise XXX
 				  ([c],[vl1,vl2]) => xeqarray(c,vl1,vl2)
 				| _ => error "array_eq given bad arguments")
 	     | array_eq false => raise XXX (* not the same as array equality *)
-	     | output => raise XXX
+	     | output =>
+		   let 
+		       val outvar = fresh_var()
+		       val argvar = fresh_var()
+		       val label = C_EXTERN_LABEL "ml_output"
+		       val ir_arg = load_ireg_locval((case vl_list of
+							  [vl] => vl
+							| _ => error "bad output"), NONE)
+		       val string_con = Prim_c(Vector_c,[Prim_c(Int_c W8,[])])
+		       val tipe = AllArrow_c(Code,Partial,[],[Prim_c(Int_c W32,[]),string_con],0w0,unit_con)
+		       val _ = add_varloc(outvar,VCODE label,tipe)
+		       val _ = add_var(argvar,I ir_arg, string_con)
+		       val elist' = [Const_e (Prim.int(Prim.W8,TilWord64.one)), Var_e argvar]
+		   in xexp(fresh_var(),App_e(Code,Var_e outvar,[],elist',[]),NONE,context)
+		   end
 	     | input => raise XXX)
       end
 
@@ -2089,7 +2152,6 @@ fun simplify_type _ = raise XXX
 		  val con_kinds = map (fn c => xcon(fresh_named_var "xcon_sum",c)) cons
 		  val cons' = map (fn c => VAR_LOC(VREGISTER(I(#1(xcon(fresh_named_var "xcon_sum",c)))))) cons
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
-		  val tags = mk_recordtag reps
 		  val kind = if isrec
 				 then let fun help(n,(_,k)) = ((NilUtil.generate_tuple_label n,
 								fresh_var()),k)
@@ -2097,7 +2159,7 @@ fun simplify_type _ = raise XXX
 				      in  Record_k(list2sequence temp)
 				      end
 			     else Type_k Runtime
-	      in (make_record(NONE,tags, indices' @ cons'), kind)
+	      in (make_record(NONE,reps, indices' @ cons'), kind)
 	      end
 	  fun mk_sum' (indices,cons) = mk_sum_help(false,indices,cons)
 	  fun mk_sum (index,cons) = mk_sum_help(false,[index],cons)
@@ -2150,8 +2212,8 @@ fun simplify_type _ = raise XXX
 		       val lvkList = map (fn (l,v,(_,k)) => ((l,v),k)) lvregikind
 		       val kind = Record_k(list2sequence lvkList)
 		       val vl = map (fn (_,_,(ir,_)) => VAR_LOC(VREGISTER(I ir))) lvregikind
-		       val tags = map (fn _ => TRACE) vl
-		       val ir = make_record(NONE,mk_recordtag tags,vl)
+		       val reps = map (fn _ => TRACE) vl
+		       val ir = make_record(NONE,reps,vl)
 		   in  (ir,kind)
 		   end
 	     | Proj_c (c, l) => 
@@ -2193,8 +2255,10 @@ fun simplify_type _ = raise XXX
    the first n fields which are already in integer registers,
    and the rest of the fields, which are values *)
 
-  and make_record (destopt, tagwords, vl : loc_or_val list) = 
+  and make_record (destopt, _ , []) = load_ireg_val(VINT 0w256,NONE)
+    | make_record (destopt, reps : rep list, vl : loc_or_val list) = 
     let 
+	val tagwords = mk_recordtag reps
 	val dest = (case destopt of
 			NONE => alloc_regi TRACE
 		      | SOME d => d)
@@ -2202,12 +2266,7 @@ fun simplify_type _ = raise XXX
 	    if (not (!HeapProfile))
 		then tagwords
 	    else ({dynamic=nil,static=MakeProfileTag()}) :: tagwords
-	local
-	    val temp = length vl+length tagwords
-	in
-	    val isempty = (length vl) = 0
-	    val words_alloced = temp + (if isempty then 1 else 0)
-	end
+	val words_alloced = length vl+length tagwords
 	fun scan_vals (offset,nil) = offset
 	  | scan_vals (offset,vl::vls) =
 	    let val r = load_ireg_locval(vl,NONE)
@@ -2248,8 +2307,8 @@ fun simplify_type _ = raise XXX
 		add_instr(ORB(tmp2,REG r,r))
 	    end
 	
-      fun scantags (offset,nil) = offset
-	| scantags (offset,{static,dynamic}::vl) =
+      fun scantags (offset,nil : Rtltags.tags) = offset
+	| scantags (offset,({static,dynamic}::vl) : Rtltags.tags) =
 	  let val r = alloc_regi(NOTRACE_INT)
 	  in 
 	      add_instr (LI(static,r));
@@ -2261,17 +2320,6 @@ fun simplify_type _ = raise XXX
       val offset = 0
       val offset = scantags(offset,tagwords);
       val offset = scan_vals (offset, vl)
-      (* empty array or empty record *)
-      val offset = if isempty
-		       then 
-			   let val r = alloc_regi(NOTRACE_INT)
-			   in
-			       add_instr (LI(i2w 0,r));
-			       add_instr(STORE32I
-					 (EA(heapptr,offset),r)); (* allocation *)
-			       offset+4
-			   end
-		   else offset
       val _ = (add(heapptr,4 * length tagwords,dest);
 	       add(heapptr,4 * words_alloced,heapptr))
     in   dest
@@ -2305,7 +2353,7 @@ fun simplify_type _ = raise XXX
 			   vars=NONE}
 	  in add_proc p
 	  end
-     fun dofun is_top (v,Function(effect,recur,vklist,vclist,vflist,body,con)) = 
+     fun dofun_help is_top (v,Function(effect,recur,vklist,vclist,vflist,body,con)) = 
 	  let 
 	      val cargs = map (fn (v,k) => 
 			       let val r = alloc_named_regi v TRACE
@@ -2330,9 +2378,9 @@ fun simplify_type _ = raise XXX
 			       | F fr => ([],[fr]))
 	      val return = alloc_regi(LABEL)
 	      val _ = reset_state(is_top, v, args, result,return)
-	      val {name,revcode} = get_state()
 	      val (r,c) = xexp'(fresh_named_var "result",body,
 				SOME con, ID return)
+	      val {name,revcode} = get_state()
 	      val mvinstr = (case (r,result) of
 				 (I ir1,I ir2) => MV(ir1,ir2)
 			       | (F fr1,F fr2) => FMV(fr1,fr2)
@@ -2346,25 +2394,28 @@ fun simplify_type _ = raise XXX
 			   known=false,
 			   save=SAVE(nil,nil),
 			   vars=NONE}
-	  in add_proc p
+	  in  p
 	  end
+     fun dofun arg = add_proc(dofun_help false arg)
   in
+      fun dofun_top arg = dofun_help true arg
       fun worklist_loop () = 
-	  let fun loop is_top = 
-	      (case getWork() of
-		   NONE => ()
-		 | SOME (FunWork vf) => (print "calling dofun\n";
-					 dofun is_top vf; loop false)
-		 | SOME (ConFunWork vvkck) => (print "calling doconfun\n";
-					       doconfun is_top vvkck; loop false))
-	  in (gvarmap := mk_var_hash_table(128,NotFound);
-	      gconvarmap := mk_var_hash_table(128,NotFound);
-	      loop true)
-	  end
+	  (case getWork() of
+	       NONE => ()
+	     | SOME (FunWork vf) => (print "calling dofun\n";
+				     dofun vf; worklist_loop())
+	     | SOME (ConFunWork vvkck) => (print "calling doconfun\n";
+					   doconfun false vvkck; worklist_loop()))
   end
 
-   fun translate trans_params (exp,con) = 
+   fun translate trans_params ({bnds : bnd list,
+				name_c : var,
+				name_r : var,
+				type_r : con,
+				knd_c : kind}) = 
          let 
+	     val exp = Let_e(Sequential,bnds,Var_e name_r)
+	     val con = type_r
 	     val _ = cur_params := trans_params
 	     val _ = (case trans_params of
 			  { HeapProfile = SOME c, ...} => (HeapProfile := true;
@@ -2374,8 +2425,20 @@ fun simplify_type _ = raise XXX
 		 
 	    (* translate the expression as a function taking no arguments *)
 	     val mainName = fresh_named_var "main"
-	     val _ = addWork(FunWork(mainName,
-				     Function(Partial,Nonleaf,[],[],[],exp,con)))
+	     val _ = gvarmap := mk_var_hash_table(128,NotFound)
+	     val _ = gconvarmap := mk_var_hash_table(128,NotFound)
+		 (* --- need to add locations of certain vars with labels for exports *)
+	     val PROC{name,return,args,results,code,known,save,vars} =
+		 dofun_top (mainName,Function(Partial,Nonleaf,[],[],[],exp,con))
+	     val p' = PROC{name=name,
+			   return=return,
+			   args=args,
+			   results=([],[]),
+			   code=code,
+			   known=known,
+			   save=save,
+			   vars=vars}
+	     val _ = add_proc p'
 	     val _ = worklist_loop()
 
 	     val module = MODULE {procs = rev (!pl),

@@ -1,7 +1,3 @@
-(* compute tags *)
-
-(*$RTLTAGS: RTL *)
-
 signature RTLTAGS =
 sig
    structure Rtl : RTL
@@ -15,8 +11,8 @@ sig
 
    (* bit offset of length field *)
 
-   val real_len_offset : int
-   val int_len_offset : int
+   val real_len_offset : int  (* measured in double-precision floats = 8 bytes *)
+   val int_len_offset : int   (* measured in bytes *)
 
    (* compute tags statically given size of array *)
 
@@ -36,10 +32,11 @@ sig
 	      This is a list of (1) the bitpos
 				(2) the location of the traceability
 				    information.*)
+   type tags = {static : Word32.word,
+		dynamic : {bitpos : int,
+			   path : Rtl.rep_path} list} list
+   val recordtag : Rtl.rep list -> tags
 
-   val recordtag : Rtl.rep list -> {static : Word32.word,
-				    dynamic : {bitpos : int,
-					       path : Rtl.rep_path} list} list
 
 end
 
