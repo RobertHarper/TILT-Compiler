@@ -1,1 +1,1 @@
-#include ../mapfile-lib
+include group "../mapfile-lib"

@@ -1,35 +1,83 @@
-#include ../Rtl/mapfile-rtl
+import group "../Basis/Library/mapfile"
+include group "../Util/mapfile-util"
+include group "../Parser/mapfile-parse"
+include group "../Rtl/mapfile-rtl"
 
-// ----------------- Backend directory -----------------
-CORE        core.sig.sml
-Core        core.sml
-MACHINE       machine.sig.sml
-MACHINEUTILS       machineutils.sig.sml
-CALLCONV       callconv.sig.sml
-TRACETABLE       tracetable.sig.sml
-Tracetable       tracetable.sml
-BBLOCK       bblock.sig.sml
-Bblock       bblock.sml
-PRINTUTILS       printutils.sig.sml
-PrintUtils       printutils.sml
+source unit CORE = "core.sig.sml" {
+	ORD_MAP ORD_SET Rtl TilWord32
+}
+source unit Core = "core.sml" {
+	TilWord32 ORD_KEY RTL CORE String Rtl Stats Util Char Int
+	BinarySetFn SplayMapFn SplaySetFn
+}
+source unit MACHINE = "machine.sig.sml" {
+	Core Rtl Name TilWord32
+}
+source unit MACHINEUTILS = "machineutils.sig.sml" {
+	Core ORD_MAP ORD_SET
+}
+source unit CALLCONV = "callconv.sig.sml" {MACHINE}
+source unit TRACETABLE = "tracetable.sig.sml" {Rtl Core}
+source unit Tracetable = "tracetable.sml" {
+	TilWord32 Rtl Core TRACETABLE Int Util List Pprtl Stats
+}
+source unit BBLOCK = "bblock.sig.sml" {
+	Core MACHINE MACHINEUTILS TRACETABLE
+}
+source unit Bblock = "bblock.sml" {
+	Core MACHINE MACHINEUTILS BBLOCK Int Util Listops TRACETABLE
+	List Stats
+}
+source unit PRINTUTILS = "printutils.sig.sml" {
+	Core Rtl BBLOCK TRACETABLE MACHINE MACHINEUTILS Array
+}
+source unit PrintUtils = "printutils.sml" {
+	Int Array Core BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO
+	Util Listops IO OS
+}
 
-IFGRAPH       ifgraph.sig.sml
-IfGraph       ifgraph.sml
-TRACKSTORAGE       trackstorage.sig.sml
-COLOR         color.sig.sml
-Color         color1.sml
+source unit IFGRAPH = "ifgraph.sig.sml" {Core}
+source unit IfGraph = "ifgraph.sml" {
+	Word List Int MONO_HASH_TABLE Core MACHINE IFGRAPH Util
+	HashTableFn
+}
+source unit TRACKSTORAGE = "trackstorage.sig.sml" {Core}
+source unit COLOR = "color.sig.sml" {
+	IFGRAPH TRACKSTORAGE MACHINEUTILS Core
+}
+source unit Color = "color1.sml" {
+	Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats
+	COLOR List
+}
 
-TOASM       toasm.sig.sml
-INTRAPROC       intraproc.sig.sml
-Chaitin       chaitin.sml
+source unit TOASM = "toasm.sig.sml" {
+	Core MACHINE BBLOCK TRACETABLE Rtl
+}
+source unit INTRAPROC = "intraproc.sig.sml" {
+	Core BBLOCK TRACETABLE
+}
+source unit Chaitin = "chaitin.sml" {
+	Core Int Rtl PRINTUTILS BBLOCK CALLCONV TRACKSTORAGE IFGRAPH
+	COLOR TRACETABLE MACHINEUTILS INTRAPROC Stats TextIO Util Listops
+	List UtilError
+}
 
-Labelgraph       labelgraph.sml
+source unit Labelgraph = "labelgraph.sml" {
+	Rtl MACHINE GRAPH HashTableFn Graph MACHINE HashString
+}
 
-RECURSION       recursion.sig.sml
-Recursion       recursion.sml
-RTLTOASM       rtltoasm.sig.sml
-RtlToAsm       rtltoasm.sml
+source unit RECURSION = "recursion.sig.sml" {Rtl}
+source unit Recursion = "recursion.sml" {
+	Rtl Array Pprtl GRAPH PRINTUTILS RECURSION Util Labelgraph
+}
+source unit RTLTOASM = "rtltoasm.sig.sml" {Rtl}
+source unit RtlToAsm = "rtltoasm.sml" {
+	Rtl Core PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM
+	MACHINEUTILS Stats RTLTOASM Int Util Listops List
+}
 
-VarGraph       vargraph.sml
+source unit VarGraph = "vargraph.sml" {
+	Name Graph Word HashTableFn Util GRAPH
+}
 
-LINKASM       link.sig.sml
+source unit LINKASM = "link.sig.sml" {Rtl}

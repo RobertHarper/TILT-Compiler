@@ -1,1 +1,1 @@
-#include ../Parser/mapfile-parse
+include group "../Parser/mapfile-parse"

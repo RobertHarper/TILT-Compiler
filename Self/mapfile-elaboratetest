@@ -1,3 +1,6 @@
-#include mapfile-elaborate
+include group "mapfile-elaborate"
 
-elabtest elabtest.sml
+source unit elabtest = "elabtest.sml" {
+	TextIO LinkParse Tyvar Prim Il Ppprim Ppil IlContext LinkIl Stats
+}
+make executable "elabtest." ^ $target ^ ".exe" {elabtest}

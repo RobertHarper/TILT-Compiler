@@ -1,3 +1,8 @@
-Help help.sml
-Config config.sml
-MakeRelease make.sml
+source unit Help = "help.sml" {
+	TextIO CommandLine OS String Posix
+}
+source unit Config = "config.sml" {
+	Help Date Time CommandLine
+}
+source unit MakeRelease = "make.sml" {Help Config OS}
+make executable "MakeRelease." ^ $target ^ ".exe" {MakeRelease}

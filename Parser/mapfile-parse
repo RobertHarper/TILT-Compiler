@@ -1,77 +1,140 @@
-// include the basis and NJ library
-#include    ../Util/mapfile-util
+import group "../Basis/Library/mapfile"
+include group "../Util/mapfile-util"
 
-// ------------ Parser directory ----------------
+source unit CONTROL = "control.sig.sml" {}
+source interface Control = "control.int" {CONTROL}
+source unit Control : Control = "control.sml" {TextIO CONTROL}
+source unit StrgHash = "strghash.sml" {Char Int String}
+source unit PpQueue = "ppqueue.sml" {Array}
+source unit PRETTYPRINT = "pp.sig.sml" {}
+source interface PrettyPrint = "pp.int" {PRETTYPRINT}
+source unit PrettyPrint : PrettyPrint = "pp.sml" {
+	General List Control Array Vector PpQueue PRETTYPRINT String
+}
+source unit SOURCEMAP = "sourcemap.sig.sml" {}
+source unit SourceMap = "sourcemap.sml" {SOURCEMAP}
+source unit PATHNAMES = "pathnames.sig.sml" {}
+source unit PathNames = "pathnames.sml" {PATHNAMES String}
+source unit SOURCE = "source.sig.sml" {
+	SourceMap PrettyPrint TextIO
+}
+source interface Source = "source.int" {SOURCE}
+source unit Source : Source = "source.sml" {
+	SourceMap PrettyPrint IO SOURCE TextIO PathNames Control
+}
 
-CONTROL control.sig.sml
-Control control.sml
-StrgHash strghash.sml
-PpQueue ppqueue.sml
-PRETTYPRINT pp.sig.sml
-PrettyPrint pp.sml
-SOURCEMAP sourcemap.sig.sml
-SourceMap sourcemap.sml
-PATHNAMES pathnames.sig.sml
-PathNames pathnames.sml
-SOURCE   source.sig.sml
-Source   source.sml
+source unit ERRORMSG = "errormsg.sig.sml" {
+	SourceMap PrettyPrint Source
+}
+source interface ErrorMsg = "errormsg.int" {ERRORMSG}
+source unit ErrorMsg : ErrorMsg = "errormsg.sml" {
+	Int Source ERRORMSG PrettyPrint SourceMap Control PathNames
+}
 
-ERRORMSG errormsg.sig.sml
-ErrorMsg errormsg.sml
-
-SYMBOL symbol.sig.sml
-ENV    env.sig.sml
-Symbol  env.sml
-// Symbol symbol
-// FastSymbol fastsymbol
-Fixity fixity.sml
-AST    ast.sig.sml
-Ast    ast.sml
-
-
-ASTHELP asthelp.sig.sml
-AstHelp asthelp.sml
-
-PRINTUTIL printutil.sig.sml
-PrintUtil printutil.sml
-
-ASTUTIL astutil.sig.sml
-AstUtil astutil.sml
-
-NAME    name.sig.sml
-Name    name.sml
-NAMEBLAST    nameblast.sig.sml
-NameBlast    nameblast.sml
-TVClose    tvclose.sml
-NamedForm  namedform.sml
-
-INTSTRMAP intstrmap.sig.sml
-IntStrMap intstrmap.sml
-
-YaccBase   base.sig.sml
-ML_TOKENS  ml.grm.sig.sml
-
-TokenTable tokentable.sml
-MLLexFun   ml.lex.sml
+source unit SYMBOL = "symbol.sig.sml" {}
+source unit ENV = "env.sig.sml" {SYMBOL}
+source interface Symbol = "env.int" {SYMBOL ENV}
+source unit Symbol : Symbol = "env.sml" {
+	ENV String Int List StrgHash Array Vector Control ErrorMsg
+}
+(*
+	Symbol symbol
+	FastSymbol fastsymbol
+*)
+source unit Fixity = "fixity.sml" {Int}
+source unit AST = "ast.sig.sml" {
+	Fixity Symbol TilWord64
+}
+source unit Ast = "ast.sml" {
+	Symbol AST Fixity TilWord64
+}
 
 
-Stream   stream.sml
-LrTable  lrtable.sml
-LrParser parser2.sml
+source unit ASTHELP = "asthelp.sig.sml" {
+	Ast Symbol Formatter
+}
+source unit AstHelp = "asthelp.sml" {
+	TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter
+}
 
-MLLrValsFun ml.grm.sml
+source unit PRINTUTIL = "printutil.sig.sml" {SYMBOL ENV}
+source interface PrintUtil = "printutil.int" {PRINTUTIL Symbol}
+source unit PrintUtil : PrintUtil = "printutil.sml" {
+	PRINTUTIL Symbol SYMBOL Control Char TextIO Int String
+}
 
-Join join.sml
-FRONTEND frontend.sig.sml
-FrontEnd frontend.sml
+source unit ASTUTIL = "astutil.sig.sml" {
+	ErrorMsg Symbol Ast
+}
+source unit AstUtil = "astutil.sml" {
+	Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL
+	PrintUtil
+}
 
-// unused --- FreeTypeVars freetyvars
-// unused --- SortedList sortedlist
-// ppast
+source unit NAME = "name.sig.sml" {
+	Symbol HashTable ORD_SET ORD_MAP
+}
+source interface Name = "name.int" {NAME}
+source unit Name : Name = "name.sml" {
+	NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String
+	Stats ORD_KEY HashTable
+}
+source unit NAMEBLAST = "nameblast.sig.sml" {
+	NAME Blaster Name
+}
+source unit NameBlast = "nameblast.sml" {
+	Name NAMEBLAST Blaster Util Symbol Int Word31
+}
+source unit TVClose = "tvclose.sml" {Ast Int Symbol}
+source unit NamedForm = "namedform.sml" {
+	Int Symbol Ast ListPair List
+}
 
-LINKPARSE linkparse.sig.sml
-LinkParse linkparse.sml
+source unit INTSTRMAP = "intstrmap.sig.sml" {}
+source unit IntStrMap = "intstrmap.sml" {
+	INTSTRMAP Array List Word Int Control
+}
+
+source unit YaccBase = "base.sig.sml" {}
+source unit ML_TOKENS = "ml.grm.sig" {
+	TilWord64 Symbol YaccBase
+}
+
+source unit TokenTable = "tokentable.sml" {
+	ML_TOKENS Symbol StrgHash IntStrMap
+}
+source unit MLLexFun = "ml.lex.sml" {
+	StrgHash Control SourceMap Int String Char ML_TOKENS Symbol
+	ErrorMsg TilWord64 TokenTable Vector
+}
 
 
+source unit Stream = "stream.sml" {YaccBase}
+source unit LrTable = "lrtable.sml" {
+	Array List YaccBase
+}
+source unit LrParser = "parser2.sml" {
+	List YaccBase Stream LrTable TextIO Int
+}
 
+source unit MLLrValsFun = "ml.grm.sml" {
+	Fixity Char String TilWord64 YaccBase ML_TOKENS Symbol Ast
+	ErrorMsg AstUtil StrgHash Array
+}
 
+source unit Join = "join.sml" {YaccBase}
+source unit FRONTEND = "frontend.sig.sml" {Ast Source}
+source unit FrontEnd = "frontend.sml" {
+	ErrorMsg TextIO SourceMap FRONTEND Join MLLrValsFun MLLexFun
+	Ast Source Control LrParser Stats
+}
+(*
+	unused --- FreeTypeVars freetyvars
+	unused --- SortedList sortedlist
+	ppast
+*)
+source unit LINKPARSE = "linkparse.sig.sml" {Ast SourceMap}
+source unit LinkParse = "linkparse.sml" {
+	TextIO Source SourceMap FrontEnd LINKPARSE NamedForm TVClose
+	ErrorMsg Util Stats
+}

@@ -1,1 +1,1 @@
-#include ../Nil/mapfile-nil
+include group "../Nil/mapfile-nil"

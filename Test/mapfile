@@ -1,4 +1,9 @@
-GETOPT ../Top/getopt.sig.sml
-Getopt ../Top/getopt.sml
+source unit GETOPT = "../Top/getopt.sig.sml" {}
+source unit Getopt = "../Top/getopt.sml" {
+	GETOPT String Char List
+}
 
-Runtest runtest.sml
+source unit Runtest = "runtest.sml" {
+	Posix TextIO CharVector Byte Word8 OS List CommandLine Getopt
+}
+make executable "Runtest." ^ $target ^ ".exe" {Runtest}

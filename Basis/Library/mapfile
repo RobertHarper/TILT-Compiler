@@ -1,84 +1,115 @@
-// ---------------- NJ Library ----------------------
-
-LIB_BASE       lib-base-sig.sml
-LibBase        lib-base.sml
-ORD_KEY        ord-key-sig.sml
-ORD_MAP        ord-map-sig.sml
-ORD_SET        ord-set-sig.sml
-ARRAY2         array2-sig.sml
-Array2         array2.sml
-HashString     hash-string.sml
-ATOM           atom-sig.sml
-Atom           atom.sml
-MONO_ARRAY_SORT mono-array-sort-sig.sml
-ARRAY_SORT      array-sort-sig.sml
-ArrayQSortFn    array-qsort-fn.sml
-ArrayQSort      array-qsort.sml
-BinaryMapFn     binary-map-fn.sml
-BinarySetFn     binary-set-fn.sml
-//AtomBinaryMap   atom-binary-map
-//AtomBinarySet   atom-binary-set
-HASH_KEY        hash-key-sig.sml
-MONO_HASH_TABLE  mono-hash-table-sig.sml
-MONO_HASH2_TABLE mono-hash2-table-sig.sml
-HASH_TABLE       hash-table-sig.sml
-HashTableRep    hash-table-rep.sml
-HashTableFn     hash-table-fn.sml
-HashTable       hash-table.sml
-//Hash2TableFn    hash2-table-fn
-//AtomTable       atom-table
-//BSearchFn       bsearch-fn
-//CHAR_MAP        char-map-sig
-//CharMap         char-map
-FIFO            fifo-sig.sml
-Fifo            fifo.sml
-//FmtFields       fmt-fields
-//FORMAT          format-sig
-//LibRealFormat   real-format
-//Format          format
-IntBinaryMap    int-binary-map.sml
-IntBinarySet    int-binary-set.sml
-IntListMap      int-list-map.sml
-// IntListSet      int-list-set
-//ITERATE         iterate-sig
-//Iterate         iterate
-//KeywordFn       keyword-fn
-//LIST_FORMAT   list-format-sig
-//ListFormat    list-format
-//ListMapFn     list-map-fn
-LIST_SORT     listsort-sig.sml
-ListMergeSort list-mergesort.sml
-//ListSetFn     list-set-fn
-//LIST_XPROD    list-xprod-sig
-//ListXProd     list-xprod
-//MonoArrayFn   mono-array-fn
-//MONO_DYNAMIC_ARRAY mono-dynamic-array-sig
-//PARSER_COMB   parser-comb-sig
-//ParserComb    parser-comb
-//RAND            rand-sig
-//Rand          rand
-RANDOM		random-sig.sml
-Random          random.sml
-//SCAN          scan-sig
-//Scan          scan
-//UREF          uref-sig
-//Uref          uref
-//SimpleUref    simple-uref
-SPLAY_TREE     splaytree-sig.sml
-SplayTree      splaytree.sml
-SplayMapFn     splay-map-fn.sml
-SplaySetFn     splay-set-fn.sml
-// TIME           time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
-// RANDOM         random-sig <--- useless since we are skipping Random
-// Random         random     <--- needs Pack32Big
-QUEUE          queue-sig.sml
-Queue          queue.sml
-IO_UTIL        io-util-sig.sml
-IOUtil         io-util.sml
-//DynamicArrayFn dynamic-array-fn
-//BIT_ARRAY      bit-array-sig
-//BitArray       bit-array
-//BIT_VECTOR     bit-vector-sig
-//BitVector      bit-vector
-
-
+(* NJ Library *)
+source unit LIB_BASE = "lib-base-sig.sml" {}
+source unit LibBase = "lib-base.sml" {
+	LIB_BASE Int General
+}
+source unit ORD_KEY = "ord-key-sig.sml" {}
+source unit ORD_MAP = "ord-map-sig.sml" {ORD_KEY}
+source unit ORD_SET = "ord-set-sig.sml" {ORD_KEY}
+source unit ARRAY2 = "array2-sig.sml" {Array}
+source unit Array2 = "array2.sml" {ARRAY2 Array}
+source unit HashString = "hash-string.sml" {CharVector Char Word}
+source unit ATOM = "atom-sig.sml" {}
+source unit Atom = "atom.sml" {ATOM Word Array HashString Substring}
+source unit MONO_ARRAY_SORT = "mono-array-sort-sig.sml" {MONO_ARRAY}
+source unit ARRAY_SORT = "array-sort-sig.sml" {}
+source unit ArrayQSortFn = "array-qsort-fn.sml" {
+       MONO_ARRAY MONO_ARRAY_SORT Int
+}
+source unit ArrayQSort = "array-qsort.sml" {ARRAY_SORT Word Array}
+source unit BinaryMapFn = "binary-map-fn.sml" {ORD_KEY ORD_MAP LibBase}
+source unit BinarySetFn = "binary-set-fn.sml" {ORD_KEY ORD_SET LibBase List}
+(*
+	AtomBinaryMap   atom-binary-map
+	AtomBinarySet   atom-binary-set
+*)
+source unit HASH_KEY = "hash-key-sig.sml" {}
+source unit MONO_HASH_TABLE = "mono-hash-table-sig.sml" {HASH_KEY}
+source unit MONO_HASH2_TABLE = "mono-hash2-table-sig.sml" {HASH_KEY}
+source unit HASH_TABLE = "hash-table-sig.sml" {}
+source unit HashTableRep = "hash-table-rep.sml" {Word Array}
+source unit HashTableFn = "hash-table-fn.sml" {
+	Word HASH_KEY MONO_HASH_TABLE Array HashTableRep
+}
+source interface HashTable = "hash-table.int" {HASH_TABLE}
+source unit HashTable : HashTable = "hash-table.sml" {
+	Array HASH_TABLE Word HashTableRep
+}
+(*
+	Hash2TableFn    hash2-table-fn
+	AtomTable       atom-table
+	BSearchFn       bsearch-fn
+	CHAR_MAP        char-map-sig
+	CharMap         char-map
+*)
+source unit FIFO = "fifo-sig.sml" {}
+source unit Fifo = "fifo.sml" {FIFO List}
+(*
+	FmtFields       fmt-fields
+	FORMAT          format-sig
+	LibRealFormat   real-format
+	Format          format
+*)
+source unit IntBinaryMap = "int-binary-map.sml" {ORD_MAP LibBase Int}
+source unit IntBinarySet = "int-binary-set.sml" {ORD_SET LibBase List Int}
+source unit IntListMap = "int-list-map.sml" {ORD_MAP LibBase List Int}
+(*
+	IntListSet      int-list-set
+	ITERATE         iterate-sig
+	Iterate         iterate
+	KeywordFn       keyword-fn
+	LIST_FORMAT   list-format-sig
+	ListFormat    list-format
+	ListMapFn     list-map-fn
+*)
+source unit LIST_SORT = "listsort-sig.sml" {}
+source unit ListMergeSort = "list-mergesort.sml" {LIST_SORT LibBase}
+(*
+	ListSetFn     list-set-fn
+	LIST_XPROD    list-xprod-sig
+	ListXProd     list-xprod
+	MonoArrayFn   mono-array-fn
+	MONO_DYNAMIC_ARRAY mono-dynamic-array-sig
+	PARSER_COMB   parser-comb-sig
+	ParserComb    parser-comb
+	RAND            rand-sig
+	Rand          rand
+*)
+source unit RANDOM = "random-sig.sml" {}
+source unit Random = "random.sml" {
+	Byte RANDOM Array Int Word8 LargeWord
+	Word32 Word8Array Word8Vector LibBase Pack32Big
+}
+source unit UREF = "uref-sig.sml" {}
+source interface UREF = "uref.int" {UREF}
+source unit URef : UREF = "uref.sml" {UREF}
+(*
+	SCAN          scan-sig
+	Scan          scan
+	SimpleUref    simple-uref
+*)
+source unit SPLAY_TREE = "splaytree-sig.sml" {}
+source unit SplayTree = "splaytree.sml" {SPLAY_TREE}
+source unit SplayMapFn = "splay-map-fn.sml" {
+	ORD_KEY ORD_MAP SplayTree LibBase
+}
+source unit SplaySetFn = "splay-set-fn.sml" {
+	ORD_KEY ORD_SET List SplayTree LibBase
+}
+(*
+	 TIME           time-limit <--- can't do this file, it uses SMLofNJ.IntervalTimer
+	 RANDOM         random-sig <--- useless since we are skipping Random
+	 Random         random     <--- needs Pack32Big
+*)
+source unit QUEUE = "queue-sig.sml" {}
+source unit Queue = "queue.sml" {QUEUE Fifo}
+source unit IO_UTIL = "io-util-sig.sml" {}
+source unit IOUtil = "io-util.sml" {IO_UTIL TextIO}
+(*
+	DynamicArrayFn dynamic-array-fn
+	BIT_ARRAY      bit-array-sig
+	BitArray       bit-array
+	BIT_VECTOR     bit-vector-sig
+	BitVector      bit-vector
+*)
+(*make library "../../Lib/smlnj"*)

@@ -1,3 +1,7 @@
-#include mapfile-rtl
+include group "mapfile-rtl"
 
-rtltest rtltest.sml
+source unit rtltest = "rtltest.sml" {
+	TextIO LinkParse Tyvar Prim Il Ppprim Ppil IlContext LinkIl
+	Linknil Linkrtl
+}
+make executable "rtltest." ^ $target ^ ".exe" {rtltest}

@@ -1,1 +1,1 @@
-#include ../Rtl/mapfile-rtl
+include group "../Rtl/mapfile-rtl"

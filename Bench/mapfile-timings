@@ -1,26 +1,47 @@
-#include mapfile-lib
+include group "mapfile-lib"
 
 
-GETOPT 		../Top/getopt.sig.sml
-Getopt 		../Top/getopt.sml
+source unit GETOPT = "../Top/getopt.sig.sml" {}
+source unit Getopt = "../Top/getopt.sml" {
+	GETOPT String Char List
+}
 
-life		life.sml		
-leroy		leroy.sml
-fft		fft.sml
-boyer		boyer.sml
-simple		simple.sml
-tyan		tyan.sml
-msort		msort.sml
-pia		pia.sml
-lexgen		lexgen.sml
-frank		frank.sml
-Arithmetic 	arithmetic.sml
-BarnesHut 	barnes-hut.sml
-PQueens 	pqueens.sml
-Quicksort 	quicksort.sml
-Quicksort2 	quicksort2.sml
-Isort 		sort.sml
-Takc 		takc.sml
-Taku 		taku.sml
+source unit life = "life.sml" {}
+source unit leroy = "leroy.sml" {List Int}
+source unit fft = "fft.sml" {
+	Int Math Real Array
+}
+source unit boyer = "boyer.sml" {Int}
+source unit simple = "simple.sml" {
+	Array Array2 Int Real64 Math64 List PreReal
+}
+source unit tyan = "tyan.sml" {
+	List Array Int TextIO
+}
+source unit msort = "msort.sml" {}
+source unit pia = "pia.sml" {
+	Real Math TextIO String
+}
+source unit lexgen = "lexgen.sml" {
+	Int String TextIO Array List
+}
+source unit frank = "frank.sml" {Int TextIO}
+source unit Arithmetic = "arithmetic.sml" {Int Real}
+source unit BarnesHut = "barnes-hut.sml" {
+	Int List Math64 Real String
+}
+source unit PQueens = "pqueens.sml" {
+	Int Array CharVector
+}
+source unit Quicksort = "quicksort.sml" {Array}
+source unit Quicksort2 = "quicksort2.sml" {Array}
+source unit Isort = "sort.sml" {Int}
+source unit Takc = "takc.sml" {Int}
+source unit Taku = "taku.sml" {Int}
 
-bench_times	bench_times.sml	TARGET
+source unit bench_times = "bench_times.sml" {
+	Time Timer List String life leroy fft boyer simple tyan msort pia
+	frank lexgen ListPair Real Arithmetic BarnesHut PQueens Quicksort
+	Quicksort2 Isort Takc Taku Getopt TextIO CommandLine Int OS
+}
+make executable "bench_times." ^ $target ^ ".exe" {bench_times}

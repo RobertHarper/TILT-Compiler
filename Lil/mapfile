@@ -1,7 +1,7 @@
-#include ../Elaborator/mapfile-elaborate
+include group "../Elaborator/mapfile-elaborate"
 
-// ------------- Lil directory -------------------
+% ------------- Lil directory -------------------
 
 
-LIL            lil.sig.sml
-Lil            lil.sml
+source unit LIL = "lil.sig.sml" {}
+source unit Lil = "lil.sml" {LIL}
