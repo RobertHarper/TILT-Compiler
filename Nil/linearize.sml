@@ -1,4 +1,4 @@
-(*$import Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize NilDefs *)
+(*$import Util Stats Nil Int Prim Array String Name Listops Sequence LINEARIZE NilUtil Ppnil Normalize NilDefs List *)
 
 (*
  Tools for putting Nil code into A-normal form
