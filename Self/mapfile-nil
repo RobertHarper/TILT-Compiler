@@ -98,6 +98,12 @@ Inline Nil/inline
 
 Reorder Nil/reorder
 
+Dummy   Nil/dummy
+
+// WNIL    Wizard/Nil/nil.sig
+// CURTAIN Wizard/Nil/curtain.sig
+// Curtain Wizard/Nil/curtain
+
 LINKNIL Nil/linknil.sig
 Linknil Nil/linknil
 
