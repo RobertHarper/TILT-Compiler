@@ -51,6 +51,8 @@ signature NORMALIZE =
     val expandMuType : context * con -> con
     val projectRecordType : context * con * Nil.label -> con
     val projectSumType : context * con * Nil.w32 -> con
+    val removeDependence : (Nil.var * con) list -> con -> con
+
     (*Perform the given reduction, renormalizing the result if necessary*)
 
     (*PRE: argument is a well kinded normalized record projection, c.l

@@ -1026,7 +1026,10 @@ fun pp_alias UNKNOWN = print "unknown"
 			     let val tag = do_exp state tag
 				 val tr = do_niltrace state tr
 				 val tagcon = type_of(state,tag)
-				 val Prim_c(Exntag_c, [con]) = tagcon
+				 val Prim_c(Exntag_c, [con]) = 
+				   (case Normalize_reduce_hnf(get_env state,tagcon)
+				      of (true,con) => con
+				       | (false,_)  => error "Not able to reduce tagcon")
 				 val (_,state) = do_vclist state[(bound,con)]
 			         val body = do_exp state body
 			     in  (tag,tr,body)

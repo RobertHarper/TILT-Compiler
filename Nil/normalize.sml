@@ -1241,42 +1241,44 @@ struct
        val bnd_types = zip vars declared_c
        val D = NilContext.insert_con_list (D,bnd_types)
      in
-       D
+       ((bnd_types,[]),D)
      end
    and type_of_bnds (D,bnds) = 
      let
-       fun folder (bnd,(D,subst)) = 
+       fun folder (bnd,D) = 
 	 (case bnd of
-	       Con_b (phase, cbnd) => 
-		   let val (v,c) = 
-			   (case cbnd of
-				Con_cb (v,c) => (v,c)
-			      | Open_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v))
-			      | Code_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v)))
-		       val c = substConInCon subst c
-		       val D = NilContext.insert_equation(D,v,c)
-		       val subst = add subst (v,c)
-		   in  (D,subst)
-		   end
-	     | Exp_b (var, _, exp) =>
+	    Con_b (phase, cbnd) => 
+	      let val (v,c) = 
+		(case cbnd of
+		   Con_cb (v,c) => (v,c)
+		 | Open_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v))
+		 | Code_cb(v,vklist,c) => (v,Let_c(Sequential,[cbnd],Var_c v)))
+		  val D = NilContext.insert_equation(D,v,c)
+	      in  (([],[cbnd]),D)
+	      end
+	  | Exp_b (var, _, exp) =>
 	      let
 		val con = type_of (D,exp)
 		val D = NilContext.insert_con(D,var,con)
 	      in
-		(D,subst)
+		(([(var,con)],[]),D)
 	      end
-	     | (Fixopen_b defs) => (type_of_fbnd(D,Open,Fixopen_b,defs),subst)
-	     | (Fixcode_b defs) => (type_of_fbnd(D,Code,Fixcode_b,defs),subst)
-	     | Fixclosure_b (is_recur,defs) => 
+	  | (Fixopen_b defs) => (type_of_fbnd(D,Open,Fixopen_b,defs))
+	  | (Fixcode_b defs) => (type_of_fbnd(D,Code,Fixcode_b,defs))
+	  | Fixclosure_b (is_recur,defs) => 
 	      let
 		val defs_l = Sequence.toList defs
 		val defs_l = Listops.map_second (fn cl => #tipe cl) defs_l
 		val D = NilContext.insert_con_list (D,defs_l)
 	      in 
-		(D,subst)
+		((defs_l,[]),D)
 	      end)
+       val (bnds,D) = foldl_acc folder D bnds
+       val (etypes_l,cbnds_l) = unzip bnds
+       val cbnds = List.concat cbnds_l
+       val etypes = List.concat etypes_l
      in
-       List.foldl folder (D,empty()) bnds
+       (D,etypes,cbnds)
      end
 
    and type_of_prim (D,prim,cons,exps) = 
@@ -1332,10 +1334,10 @@ struct
 	   | Const_e value => type_of_value (D,value)
 	   | Let_e (letsort,bnds,exp) => 
 	    let
-	      val (D,subst) = type_of_bnds (D,bnds)
+	      val (D,etypes,cbnds) = type_of_bnds (D,bnds)
 	      val c = type_of (D,exp)
 	    in
-	      substConInCon subst c
+	      removeDependence etypes (Let_c (Sequential,cbnds,c))
 	    end
 	   | Prim_e (NilPrimOp prim,cons,exps) => type_of_prim (D,prim,cons,exps)
 	   | Prim_e (PrimOp prim,cons,exps) =>   

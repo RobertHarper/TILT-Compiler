@@ -40,11 +40,16 @@ struct
   val assertions  = Stats.ff "nilstatic_assertions"
 
   val profile = Stats.ff "nil_profile"
-  val local_profile = Stats.ff "nilstatic_profile"
-  val internal_profile = Stats.ff "nilstatic_internal_profile"
+  val local_profile  = Stats.ff "nilstatic_profile"
+
+  val import_profile = Stats.ff "nilstatic_import_profile"
   val exp_profile      = Stats.ff "nilstatic_exp_profile"
   val bnd_profile      = Stats.ff "nilstatic_bnd_profile"
+
   val equiv_total_profile = Stats.ff "nilstatic_equiv_total_profile"
+  val equiv_profile       = Stats.ff "nilstatic_equiv_profile"
+  val con_valid_prof      = Stats.ff "nilstatic_con_valid_profile"
+  val con_valid_top       = Stats.ff "nilstatic_con_valid_top_profile"
 
   val debug = Stats.ff "nil_debug"
 
@@ -164,36 +169,38 @@ struct
 
   val timer = Stats.subtimer'
   val subtimer = fn args => fn args2 => if !profile orelse !local_profile then Stats.subtimer' args args2 else #2 args args2
-  val flagtimer = fn flag => fn args => fn args2 => if !profile orelse !local_profile orelse !flag 
-						      then Stats.subtimer' args args2 else #2 args args2
+  val flagtimer = fn (flag,name,f) => fn args => if !profile orelse !local_profile orelse !flag 
+						      then Stats.subtimer' (name,f) args  else f args
+
+
   (*From Normalize*)
 
-  val expandMuType = subtimer("Tchk:expandMuType",Normalize.expandMuType)
-  val projectRecordType = subtimer("Tchk:projectRecordType",Normalize.projectRecordType)
-  val projectSumType = subtimer("Tchk:projectSumType",Normalize.projectSumType)
-  val type_of = subtimer("Tchk:type_of",Normalize.type_of)
+  val expandMuType = flagtimer (import_profile,"Tchk:expandMuType",Normalize.expandMuType)
+  val projectRecordType = flagtimer (import_profile,"Tchk:projectRecordType",Normalize.projectRecordType)
+  val projectSumType = flagtimer (import_profile,"Tchk:projectSumType",Normalize.projectSumType)
+  val removeDependence = flagtimer (import_profile,"Tchk:removeDependence",Normalize.removeDependence)
+
   fun con_head_normalize args = #2( Normalize.reduce_hnf args)
   val is_hnf = Normalize.is_hnf
 
 (*  val con_head_normalize = NilHNF.reduce_hnf*)
 
-  val time_con_head_normalize = fn s => subtimer("Tchk:CHNF:"^s,con_head_normalize)
-  val con_head_normalize = time_con_head_normalize "All"
-
+  val con_head_normalize = flagtimer (import_profile,"Tchk:CHNF:",con_head_normalize)
 
   (*From NilContext*)
   type context = NilContext.context
   val empty = NilContext.empty
-  val insert_con = subtimer("Tchk:insert_con",NilContext.insert_con)
-  val insert_con_list = subtimer("Tchk:insert_con_list",NilContext.insert_con_list)
-  val find_con = subtimer("Tchk:find_con",NilContext.find_con)
-  val find_std_con = subtimer ("Tchk:find_std_con",NilContext.find_std_con)
-  val insert_kind = subtimer ("Tchk:insert_kind",NilContext.insert_kind)
-  val insert_kind_equation = subtimer ("Tchk:insert_kind_equation",NilContext.insert_kind_equation)
-  val insert_equation = subtimer ("Tchk:insert_equation",NilContext.insert_equation)
-  val insert_kind_list = subtimer("Tchk:insert_kind_list",NilContext.insert_kind_list)
-  val find_max_kind = subtimer ("Tchk:find_max_kind",NilContext.find_max_kind)           
-  val kind_standardize = subtimer ("Tchk:kind_standardize",NilContext.kind_standardize)
+
+  val insert_con = flagtimer (import_profile,"Tchk:insert_con",NilContext.insert_con)
+  val insert_con_list = flagtimer (import_profile,"Tchk:insert_con_list",NilContext.insert_con_list)
+  val find_con = flagtimer (import_profile,"Tchk:find_con",NilContext.find_con)
+  val find_std_con = flagtimer (import_profile,"Tchk:find_std_con",NilContext.find_std_con)
+  val insert_kind = flagtimer (import_profile,"Tchk:insert_kind",NilContext.insert_kind)
+  val insert_kind_equation = flagtimer (import_profile,"Tchk:insert_kind_equation",NilContext.insert_kind_equation)
+  val insert_equation = flagtimer (import_profile,"Tchk:insert_equation",NilContext.insert_equation)
+  val insert_kind_list = flagtimer (import_profile,"Tchk:insert_kind_list",NilContext.insert_kind_list)
+  val find_max_kind = flagtimer (import_profile,"Tchk:find_max_kind",NilContext.find_max_kind)           
+  val kind_standardize = flagtimer (import_profile,"Tchk:kind_standardize",NilContext.kind_standardize)
 
   val exp_error_context   = NilContext.exp_error_context
   val con_error_context   = NilContext.con_error_context
@@ -206,18 +213,18 @@ struct
   structure Subst = NilSubst
   type con_subst = Subst.con_subst
   type exp_subst = Subst.exp_subst
-  val substConInExp  = fn s => subtimer("Tchk:substConInExp", Subst.substConInExp  s)
-  val substConInCon  = fn s => subtimer("Tchk:substConInCon", Subst.substConInCon  s)
-  val substConInKind = fn s => subtimer("Tchk:substConInKind",Subst.substConInKind s)
-  val substConInBnd  = fn s => subtimer("Tchk:substConInBnd", Subst.substConInBnd  s)
-  val substConInCBnd = fn s => subtimer("Tchk:substConInCBnd",Subst.substConInCBnd s)
-  val substExpInExp  = fn s => subtimer("Tchk:substExpInExp", Subst.substExpInExp  s)
-  val substExpInCon  = fn s => subtimer("Tchk:substExpInCon", Subst.substExpInCon  s)
-  val substExpConInCon  = fn s => subtimer("Tchk:substExpConInCon", Subst.substExpConInCon  s)
-  val substExpConInKind = fn s => subtimer("Tchk:substExpConInKind",Subst.substExpConInKind s)
-  val varConConSubst  = fn v => fn c => subtimer("Tchk:varConConSubst", Subst.varConConSubst  v c)
-  val varConKindSubst = fn v => fn c => subtimer("Tchk:varConKindSubst",Subst.varConKindSubst v c)
-  val varExpConSubst  = fn v => fn e => subtimer("Tchk:varConExpSubst", Subst.varExpConSubst  v e)
+  val substConInExp  = fn s => flagtimer (import_profile,"Tchk:substConInExp", Subst.substConInExp  s)
+  val substConInCon  = fn s => flagtimer (import_profile,"Tchk:substConInCon", Subst.substConInCon  s)
+  val substConInKind = fn s => flagtimer (import_profile,"Tchk:substConInKind",Subst.substConInKind s)
+  val substConInBnd  = fn s => flagtimer (import_profile,"Tchk:substConInBnd", Subst.substConInBnd  s)
+  val substConInCBnd = fn s => flagtimer (import_profile,"Tchk:substConInCBnd",Subst.substConInCBnd s)
+  val substExpInExp  = fn s => flagtimer (import_profile,"Tchk:substExpInExp", Subst.substExpInExp  s)
+  val substExpInCon  = fn s => flagtimer (import_profile,"Tchk:substExpInCon", Subst.substExpInCon  s)
+  val substExpConInCon  = fn s => flagtimer (import_profile,"Tchk:substExpConInCon", Subst.substExpConInCon  s)
+  val substExpConInKind = fn s => flagtimer (import_profile,"Tchk:substExpConInKind",Subst.substExpConInKind s)
+  val varConConSubst  = fn v => fn c => flagtimer (import_profile,"Tchk:varConConSubst", Subst.varConConSubst  v c)
+  val varConKindSubst = fn v => fn c => flagtimer (import_profile,"Tchk:varConKindSubst",Subst.varConKindSubst v c)
+  val varExpConSubst  = fn v => fn e => flagtimer (import_profile,"Tchk:varConExpSubst", Subst.varExpConSubst  v e)
   val empty_subst = Subst.C.empty
   val con_subst_compose = Subst.C.compose
 
@@ -232,7 +239,7 @@ struct
   val primequiv = NilUtil.primequiv
   val sub_phase = NilUtil.sub_phase
   val project_from_kind_nondep = NilUtil.project_from_kind_nondep
-  val alpha_equiv_con = subtimer ("Tchk:alpha_equiv",NilUtil.alpha_equiv_con)
+  val alpha_equiv_con = flagtimer (import_profile,"Tchk:alpha_equiv",NilUtil.alpha_equiv_con)
   val alpha_equiv_con = fn args => ((alpha_equiv_con args) andalso (alpha_equiv_success();true))
     (*
   val alpha_equiv_kind = NilUtil.alpha_equiv_kind
@@ -243,7 +250,7 @@ struct
   val is_var_e = NilUtil.is_var_e
 
   val map_annotate = NilUtil.map_annotate
-  val singletonize = subtimer("Tchk:singletonize",NilUtil.singletonize)
+  val singletonize = flagtimer (import_profile,"Tchk:singletonize",NilUtil.singletonize)
   val get_arrow_return = NilUtil.get_arrow_return
 
   val strip_var = NilUtil.strip_var
@@ -545,7 +552,7 @@ struct
 	   (* assertRenamedCon (D,constructor) *)
 	   ]
 	else ()
-      val k = subtimer("Tchk:con_valid",con_valid') (D,constructor)
+      val k = flagtimer (con_valid_top,"Tchk:con_valid",con_valid') (D,constructor)
       val _ = if (!show_calls)
 		then (printl "con_valid returned")
 	      else ()
@@ -561,79 +568,82 @@ struct
     end
 
 
-  and pcon_valid (D,pcon,args) = 
-    let      
-      val kinds = map (curry2 con_valid D) args
-      val _ = 
-	(case pcon of
-	   (Record_c (labels,NONE)) => 
-	     let
-	       val _ = 
-		 (if labels_distinct labels then
-		    (c_all is_type b_perr_k kinds) orelse
-		    (error (locate "pcon_valid") "Record contains field of non-word kind")
-		  else
-		    (error (locate "pcon_valid") "Record contains duplicate field labels"))
-	     in () 
-	     end
-	 | (Sum_c {known,totalcount,tagcount}) => 
-	     let
-	       val kinds = 
-		 (case kinds
-		    of [rkind] =>
-		      (case rkind
-			 of Record_k entries => Sequence.maptolist (fn (_,k) => k) entries
-			  | other => [other])
-		     | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
-
-	       val _ = 
-		 (
-		  ((length kinds) = (Word32.toInt (totalcount - tagcount))) orelse
-		  (error (locate "pcon_valid") "Sum_c counts disagree with args");
-		  
-		  (List.all is_type kinds) orelse
-		  (error (locate "pcon_valid") "Sum contains non-word component" );
-
-		  (case known 
-		     of SOME i => 
-		       (Word32.<=(Word32.fromInt 0,i) andalso 
-			Word32.<(i,totalcount)) orelse
-		       (perr_c (Prim_c (pcon,args));
-			error (locate "pcon_valid") "Illegal index to sum constructor")
-		      | NONE => true)
-		     )
-
-	     in ()
-	     end
-	 | (Vararg_c _) => 
-	     let
-	       val _ = 
-		 (c_all is_type b_perr_k kinds) orelse
-		 (error (locate "pcon_valid") "Vararg has non-word component" )
-	     in ()
-	     end
-	 | _ => ())
-    in ()
-    end
   
   and con_valid' (D : context, constructor : con) : kind = 
     let
-
+      fun pcon_valid (D,pcon,args) = 
+	let      
+	  val _ = 
+	    (case pcon of
+	       (Record_c (labels,SOME vars)) =>
+		 let
+		   fun folder (v,c,(kinds,D)) = ((con_valid (D,c))::kinds,insert_con (D,v,c))
+		   val (kinds,D) = foldl2 folder ([],D) (vars,args)
+		   val _ = 
+		     (if labels_distinct labels then
+			(c_all is_type b_perr_k kinds) orelse
+			(c_error(D,constructor,"DepRecord contains field of non-word kind"))
+		      else
+			(c_error(D,constructor,"DepRecord contains duplicate field labels")))
+		 in ()
+		 end
+	     | (Record_c (labels,NONE)) => 
+		 let
+		   val kinds = map (curry2 con_valid D) args
+		   val _ = 
+		     (if labels_distinct labels then
+			(c_all is_type b_perr_k kinds) orelse
+			(error (locate "pcon_valid") "Record contains field of non-word kind")
+		      else
+			(error (locate "pcon_valid") "Record contains duplicate field labels"))
+		 in () 
+		 end
+	     | (Sum_c {known,totalcount,tagcount}) => 
+		 let
+		   val kinds = map (curry2 con_valid D) args
+		   val kinds = 
+		     (case kinds
+			of [rkind] =>
+			  (case rkind
+			     of Record_k entries => Sequence.maptolist (fn (_,k) => k) entries
+			      | other => [other])
+			 | _ => error (locate "pcon_valid") "Wrong number of args to Sum_c")
+			
+		   val _ = 
+		     (
+		      ((length kinds) = (Word32.toInt (totalcount - tagcount))) orelse
+		      (error (locate "pcon_valid") "Sum_c counts disagree with args");
+		      
+		      (List.all is_type kinds) orelse
+		      (error (locate "pcon_valid") "Sum contains non-word component" );
+		      
+		      (case known 
+			 of SOME i => 
+			   (Word32.<=(Word32.fromInt 0,i) andalso 
+			    Word32.<(i,totalcount)) orelse
+			   (perr_c (Prim_c (pcon,args));
+			    error (locate "pcon_valid") "Illegal index to sum constructor")
+			  | NONE => true)
+			 )
+		     
+		 in ()
+		 end
+	     | (Vararg_c _) => 
+		 let 
+		   val kinds = map (curry2 con_valid D) args
+		   val _ = 
+		     (c_all is_type b_perr_k kinds) orelse
+		     (error (locate "pcon_valid") "Vararg has non-word component" )
+		 in ()
+		 end
+	     | _ => ())
+	in ()
+	end
+      
       val kind = 
 	(case constructor of
-	   (Prim_c (Record_c (labels,SOME vars), args)) =>
-	     let
-	       fun folder (v,c,(kinds,D)) = ((con_valid (D,c))::kinds,insert_con (D,v,c))
-	       val (kinds,D) = foldl2 folder ([],D) (vars,args)
-	       val _ = 
-		 (if labels_distinct labels then
-		    (c_all is_type b_perr_k kinds) orelse
-		    (c_error(D,constructor,"DepRecord contains field of non-word kind"))
-		  else
-		    (c_error(D,constructor,"DepRecord contains duplicate field labels")))
-	     in SingleType_k(constructor)
-	     end
-	 | (Prim_c (pcon,args)) => ((pcon_valid (D,pcon,args);SingleType_k(constructor))
+	   (Prim_c (pcon,args)) => ((flagtimer (con_valid_prof,"Tchk:pcon_valid",pcon_valid) (D,pcon,args);
+				     SingleType_k(constructor))
 				    handle e => c_error(D,constructor,"Prim con invalid"))
 	 | (Mu_c (is_recur,defs)) =>
 	     let
@@ -720,7 +730,7 @@ struct
 	       val (vklist,body_kind) = 
 		 case code_kind of
 		   Arrow_k (Code ,vklist,body_kind) => (vklist,body_kind)
-		 | Arrow_k (ExternCode,vklist,body_kind) =>  (vklist,body_kind)
+(*		 | Arrow_k (ExternCode,vklist,body_kind) =>  (vklist,body_kind)*)
 		 | _ => (c_error(D,constructor,"Invalid closure: code component does not have code kind"))
 	       val (first,(v,klast)) = split vklist
 	       val _ = 
@@ -984,7 +994,7 @@ struct
     end
 
   and subtype   (D,c1,c2)    = type_equiv (D,c1,c2,true)
-  and type_equiv (D,c1,c2,sk) = flagtimer equiv_total_profile ("Tchk:type_equiv",con_equiv) (D,c1,c2,Type_k,sk)
+  and type_equiv (D,c1,c2,sk) = flagtimer (equiv_total_profile,"Tchk:equiv_total",con_equiv) (D,c1,c2,Type_k,sk)
 
   (* Given a well-formed context D and well-formed constructors c1 and c2 of kind k,
      return whether they are equivalent at well-formed kind k. *)
@@ -1297,7 +1307,7 @@ struct
 	( (if !show_calls then
 	     (print "\nEntering con_head_normalize, arg is:\n";
 	      Ppnil.pp_con (#2 args)) else ());
-	  let val res = time_con_head_normalize "Equiv" args
+	  let val res = flagtimer (equiv_profile,"Tchk:Equiv:HNF",con_head_normalize) args
 	  in 
 	    ( if !show_calls then (print "\nReturning with\n";Ppnil.pp_con res;print "\n") else ();
 	      res ) 
@@ -1575,7 +1585,7 @@ struct
       app checker free_vars
     end
 
-  and bnds_valid (D,bnds) = let val (D,cbnds) = (foldl bnd_valid' (D,[]) bnds) in (D,rev cbnds) end
+  and bnds_valid (D,bnds) = let val (etypes,(D,cbnds)) = (foldl_acc bnd_valid' (D,[]) bnds) in (D,rev cbnds,List.concat etypes) end
   and bnd_valid (state,bnd) = bnd_valid' (bnd,state)
   and bnd_valid'' (bnd,state) = 
     let
@@ -1594,7 +1604,6 @@ struct
 	let
 
 	  val exp_valid      = subtimer("Tchk:Bnd:fnc:exp_valid",exp_valid)
-	  val con_valid      = subtimer("Tchk:Bnd:fnc:con_valid",con_valid)
 	  val kind_valid     = subtimer("Tchk:Bnd:fnc:kind_valid",kind_valid)
 	  val subtype        = subtimer("Tchk:Bnd:fnc:subtype",subtype)
 	  val top_level = !top_fnc
@@ -1657,20 +1666,13 @@ struct
 	     print ("Rate is                      : "^(Real.toString((Real.fromInt size)/time))^" nodes/sec\n")
 	     )
 *)
-	  val eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals
-	  val fFormals = Word32.fromInt (List.length fFormals) 
-
-	  val con = AllArrow_c{openness=openness,effect=effect,isDependent=isDependent,
-			       tFormals=tFormals,
-			       eFormals=eFormals,
-			       fFormals=fFormals,body_type=body_type}
 	  val _ = if top_level then (Trace.exit fv_trace;top_fnc := true) else ()
 	  val _ = if (!trace)
 			then (print "Done processing function_valid with var = ";
 			      pp_var var; print "}\n")
 		    else ()
 	in
-	  (var,con)
+	  ()
 	end
 
       fun fbnd_valid (openness,defs) = 
@@ -1681,7 +1683,9 @@ struct
 	  val function_valid = fn p => fn D => subtimer("Tchk:Bnd:fbnd:function_valid",function_valid p D)
 	  val type_equiv     = subtimer("Tchk:Bnd:fbnd:type_equiv",type_equiv)
 	  val top_level = !top_fbnd
+
 	  val _ = if top_level then (Trace.enter fbnd_trace;top_fbnd := false) else ()
+
 	  val origD = D
 	  val _ = if (!trace)
 			then (print "{Processing fbnd_valid \n")
@@ -1695,9 +1699,9 @@ struct
 	  val _ = if (!trace)
 		      then (print "Processing fbnd_valid done with making context}\n")
 		    else ()
-	  val found_types = Sequence.map (function_valid openness D) defs
+	  val _ = Sequence.app (function_valid openness D) defs
 	  val _ = if top_level then (Trace.exit fbnd_trace;top_fbnd := false) else ()
-	in D
+	in (D,Sequence.toList bnd_types)
 	end
 
       fun do_closure D ({code,cenv,venv,tipe}) = 
@@ -1774,7 +1778,7 @@ struct
 	     let
 	       val D = cbnd_valid (cbnd,D)
 	       val subst = cbnd::subst
-	     in  (D,subst)
+	     in  ([],(D,subst))
 	     end
 	    | Exp_b (var,nt,exp) =>
 	     let
@@ -1791,10 +1795,10 @@ struct
 			       pp_var var; print "}\n")
 		       else ()
 	     in
-	       (D,subst)
+	       ([(var,bnd_con)],(D,subst))
 	     end
-	    | (Fixopen_b defs) => (fbnd_valid(Open,defs),subst)
-	    | (Fixcode_b defs) => (fbnd_valid(Code,defs),subst)
+	    | (Fixopen_b defs) => let val (D,etypes) = fbnd_valid(Open,defs) in (etypes,(D,subst)) end
+	    | (Fixcode_b defs) => let val (D,etypes) = fbnd_valid(Code,defs) in (etypes,(D,subst)) end
 	    | Fixclosure_b (is_recur,defs) => 
 	     let
 	       val origD = D
@@ -1807,7 +1811,7 @@ struct
 			 then app (do_closure D) closures
 		       else app (do_closure origD) closures
 	     in
-	       (D,subst)
+	       (bnd_types,(D,subst))
 	     end)
       val _ = if top_level then (Trace.exit bnd_trace;top_bnds := true) else ()
     in res
@@ -1881,7 +1885,7 @@ struct
 
 	  val con = exp_valid (D,app)
 	    
-	  val {openness=openness', tFormals, eFormals, fFormals, body_type, ...} = 
+	  val {openness=openness', tFormals, eFormals, fFormals, body_type, isDependent, ...} = 
 	    let
 	      val con' = con_head_normalize(D,con)
 		
@@ -1918,10 +1922,16 @@ struct
 	    in do_float (Word32.toInt fFormals,fexps)
 	    end
 	  
+	  (*Or constructor level let*)
 	  val subst = Subst.C.simFromList (zip (#1 (unzip tFormals)) cons)
 	  val body_type = Subst.substConInCon subst body_type
 	in
-	  body_type
+	  if isDependent then 
+	    removeDependence  (map (fn (SOME v,c) => (v,substConInCon subst c)
+	                             | (NONE, c) => (fresh_var(), c)) eFormals)
+	    body_type
+	  else
+	    body_type
 	end
       
       (*Type check and subtype a list of expressions against a list of types
@@ -2229,9 +2239,9 @@ struct
 	 | Const_e value => value_valid (D,value)
 	 | Let_e (letsort,bnds,exp) => 
 	     let
-	       val (D,cbnds) = bnds_valid (D,bnds)
+	       val (D,cbnds,etypes) = bnds_valid (D,bnds)
 	       val con = exp_valid (D,exp)
-	     in Let_c (Sequential,cbnds,con)
+	     in removeDependence etypes (Let_c (Sequential,cbnds,con))
 	     end
 	 | Prim_e (NilPrimOp prim,cons,exps) => prim_valid (D,prim,cons,exps)
 	 | Prim_e (PrimOp prim,cons,exps) =>   
@@ -2372,7 +2382,7 @@ struct
 	  val _ = top_fnc := !show_top
 	  val _ = top_expb := !show_top
 	  val _ = top_fbnd := !show_top
-	  val (D,_) = bnds_valid(D,bnds)
+	  val (D,_,_) = bnds_valid(D,bnds)
 	  val _ = top_bnds := false;
 	  val _ = top_fnc := false;
 	  val _ = top_expb := false;

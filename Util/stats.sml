@@ -148,7 +148,9 @@ structure Stats :> STATS =
 	fun add {usr,sys,gc} = Time.toReal(Time.+(sys,usr))
 
 	val delta_t = ref NONE;
+
 	val delta_timeout = 10000  (* If the timer doesn't advance after 10000 uses, we give up *)
+
 	fun delta () = 
 	  (case (!delta_t) of
 	       NONE =>
