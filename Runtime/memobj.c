@@ -170,13 +170,13 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
     my_mprotect(0, (caddr_t) start,  GuardStackletSize * kilobyte, PROT_NONE);  /* Guard page at bottom of primary */
     my_mprotect(1, (caddr_t) middle, GuardStackletSize * kilobyte, PROT_NONE);  /* Guard page at bottom of replica */
 
-    res->callinfoStack = createStack(size / (32 * sizeof (val_t)));
+    res->callinfoStack = SetCreate(size / (32 * sizeof (val_t)));
     res->mapped = 1;
   }
   res->baseCursor = res->baseTop;
   res->topRegstate = 0;
   res->bottomRegstate = 0;
-  resetStack(res->callinfoStack);
+  SetReset(res->callinfoStack);
   return res;
 }
 
@@ -232,8 +232,9 @@ int Stacklet_Copy(Stacklet_t *stacklet)
     mem_t primaryCursor = stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
     mem_t replicaCursor = stacklet->baseCursor + (replicaStackletOffset / sizeof(val_t));
     assert(stacklet->count > 0);
-    assert(stacklet->baseBottom <= stacklet->baseCursor && stacklet->baseCursor <= stacklet->baseTop);
-    resetStack(stacklet->callinfoStack);
+    assert(stacklet->baseExtendedBottom <= stacklet->baseCursor);
+    assert(stacklet->baseCursor <= stacklet->baseTop);
+    SetReset(stacklet->callinfoStack);
     stacklet->replicaCursor = stacklet->baseCursor;
     stacklet->replicaRetadd = stacklet->retadd;
     memcpy(replicaCursor, primaryCursor, activeSize);
@@ -263,7 +264,15 @@ Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp)
       break;
     }
   }
-  assert(active>=0);
+  if (active < 0) {
+    printf("EstablishStacklet failed for sp = %d  sp_base = %d",sp, sp_base);
+    for (i=0; i < stackChain->cursor; i++) {
+      Stacklet_t *stacklet = stackChain->stacklets[i];
+      printf("Stacklet %d: %d to %d\n",
+	     stacklet->baseExtendedBottom, stacklet->baseTop);
+    } 
+    assert(active>=0);
+  }
   for (i=active+1; i<stackChain->cursor; i++) {
     Stacklet_Dealloc(stackChain->stacklets[i]);
     stackChain->stacklets[i] = NULL;
@@ -423,28 +432,13 @@ void HeapInitialize(void)
 
 void PadHeapArea(mem_t bottom, mem_t top)
 {
+  if (bottom > top)
+    printf("bottom = %d   top = %d\n", bottom , top);
   assert(bottom <= top);
   if (bottom < top)
     *bottom = MAKE_SKIP(top - bottom);
 }
 
-void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top)
-{
-  mem_t region = (mem_t) FetchAndAdd((long *)(&heap->cursor), size);
-  mem_t newHeapCursor = region + size / sizeof(val_t);
-  if (newHeapCursor > heap->top) {
-    FetchAndAdd((long *)(&heap->cursor), -size);
-    *bottom = *cursor = *top = 0;
-  }
-  else {
-    /* Do most machines have non-blockig read? */
-    /* val_t forceRead = *newHeapCursor;     */
-    *bottom = region;
-    *cursor = region;
-    *top = newHeapCursor;
-    /* PadHeapArea(*bottom,*top); */
-  }
-}
 
 Heap_t* GetHeap(mem_t add)
 {
@@ -513,9 +507,8 @@ int Heap_ResetFreshPages(Proc_t *proc, Heap_t *h)
 {
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
   int i, pages = DivideUp(MaxSize,pagesize);
-  return 0;
   memset((int *)h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
-  proc->segUsage.pagesTouched += pages / 100;   /* These refer to pages of the pageMap itself */
+  /*  proc->segUsage.pagesTouched += pages / 100;   XXX These refer to pages of the pageMap itself */
   return pages;
 }
 
@@ -546,6 +539,7 @@ void Heap_Reset(Heap_t *h)
 
 void Heap_Resize(Heap_t *h, long newSize, int reset)
 {
+  long usedSize;
   long maxSize = (h->mappedTop - h->bottom) * sizeof(val_t);
   long oldSize = (h->top - h->bottom) * sizeof(val_t);
   long oldWriteableSize = (h->writeableTop - h->bottom) * sizeof(val_t);
@@ -559,6 +553,8 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
   if (reset) {
     h->cursor = h->bottom;
   }
+  usedSize = (h->cursor - h->bottom) * sizeof(val_t);
+  assert(usedSize <= newSize);
   h->top = h->bottom + (newSize / sizeof(val_t));
 
   if (newSizeRound > oldWriteableSize) {

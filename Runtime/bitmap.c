@@ -40,11 +40,12 @@ static int GetBit(unsigned long *data, int i)
   return (data[long_pos] >> bit_pos) & 1UL;
 }
 
-static void SetBit(unsigned long *data, int i)
+static void SetBit(Bitmap_t *bmp, int i)
 {
   int long_pos = i >> log_size_long;
   int bit_pos = i & mask_long;
-  data[long_pos] |= (1UL << bit_pos);
+  assert(long_pos < bmp->size);
+  bmp->data[long_pos] |= (1UL << bit_pos);
 }
 
 
@@ -95,8 +96,8 @@ int SetBitmapRange(Bitmap_t *bmp, int start, int size)
   int i;
   Lock(bmp);
   for (i=0; i<size; i++) {
-    if (1 || !(GetBit(bmp->data,start+i))) {
-      SetBit(bmp->data,start+i);
+    if (!(GetBit(bmp->data,start+i))) {
+      SetBit(bmp,start+i);
       bmp->used++;
     }
   }
@@ -132,7 +133,7 @@ int AllocBitmapRange(Bitmap_t *bmp, int req_size)
 	continue;
       }
       for (i=0; i<req_size; i++)
-	SetBit(data,cur+i);
+	SetBit(bmp,cur+i);
       bmp->pos = cur + req_size;
       bmp->used += req_size;
       result = cur;

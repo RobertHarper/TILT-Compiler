@@ -4,6 +4,8 @@
 #ifndef _tag_h
 #define _tag_h
 
+#include "general.h"
+
 /* value_t is to be used for the type of a pointer */
 #ifndef _asm_
 #ifdef alpha_osf
@@ -89,8 +91,19 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 #define TAG_REC_INTTRACE   (RECORD_TYPE | (2 << RECLEN_OFFSET) | (2 << RECMASK_OFFSET))
 #define TAG_REC_TRACETRACE (RECORD_TYPE | (2 << RECLEN_OFFSET) | (3 << RECMASK_OFFSET))
 
-
-#define BUG(x) {printf(x); exit(-1); }
+INLINE(getTag)
+tag_t getTag(vptr_t obj)
+{
+  tag_t tag = (tag_t) obj[-1];
+  while (tag == STALL_TAG)
+    tag = (tag_t) obj[-1];
+  while (TAG_IS_FORWARD(tag)) {
+    ptr_t replica = (ptr_t) tag;
+    fastAssert(replica != obj);
+    tag = (tag_t) replica[-1];
+  }
+  return tag;
+}
 
 #endif /* _tag_h */
 

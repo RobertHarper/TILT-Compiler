@@ -8,11 +8,13 @@
 #include "global.h"
 #include "gc.h"
 
-int traceError = 0;
-
+int numErrors = 0;
+int errorsToShow = 10000;
 
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
+  if (legalHeaps == NULL)   /* no check is performed */
+    return 1; 
   while (1) {
     Heap_t *curHeap = *(legalHeaps++);
     Bitmap_t *curStart = (legalStarts == NULL) ? NULL : *(legalStarts++);
@@ -69,17 +71,20 @@ static int show_field(int show, Field_t fieldType,
 	  inHeaps(primaryField,legalHeaps,legalStarts))
 	;
       else {
-	if (inHeaps(primaryField,legalHeaps,NULL)) 
-	  printf("\n  !!!!TRACE ERROR: bad pointer (in range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
-	else
-	  printf("\n  !!!!TRACE ERROR: bad pointer (out of range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
-	traceError = 1; 
+	if (inHeaps(primaryField,legalHeaps,NULL)) {
+	  if (numErrors++ < errorsToShow)
+	    printf("\n  !!!!TRACE ERROR: bad pointer (in range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	}
+	else {
+	  if (numErrors++ < errorsToShow)
+	    printf("\n  !!!!TRACE ERROR: bad pointer (out of range) %d at %d[%d] failed.  GC #%d\n",primaryField,primary,i,NumGC);
+	}
 	return 0;
       }
       if (replica) {
 	if (isNonheapPointer) {
-	  if (primaryField != replicaField) {
-	    traceError = 1;
+	  if (primaryField != replicaField &&
+	    (numErrors++ < errorsToShow)) {
 	    printf("\n  !!!!TRACE ERROR at GC %2d: replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
 	    printf("\n                                              %d[%d] = *%d*\n",replica,ri,replicaField);
 	    return 0;
@@ -87,8 +92,8 @@ static int show_field(int show, Field_t fieldType,
 	}
 	else {
 	  if (primaryField != replicaField &&               /* Primary and replica may share in a generational collector */
-	      (ptr_t) primaryField[-1] != replicaField) {
-	    traceError = 1;
+	      (ptr_t) primaryField[-1] != replicaField &&
+	      (numErrors++ < errorsToShow)) {
 	    printf("\n  !!!!TRACE ERROR at GC %2d: ptr replica mismatch: %d[%d] = %d -> *%d*",NumGC,
 		   primary,i,primaryField,primaryField[-1]);
 	    printf("\n                                                  %d[%d] = *%d*\n",
@@ -104,8 +109,8 @@ static int show_field(int show, Field_t fieldType,
       if (verbose) 
 	if (inHeaps(primaryField,legalHeaps,legalStarts)) 
 	  printf("\n !!!!TRACE WARNING at GC %2d: found suspicious int %d at %d[%d]\n",NumGC,primaryField,primary,i);
-      if (replica && primaryField != replicaField) {
-	traceError = 1;
+      if (replica && primaryField != replicaField &&
+	  (numErrors++ < errorsToShow)) {
 	printf("\n  !!!!TRACE ERROR at GC %2d: int replica mismatch: %d[%d] = *%d*",NumGC,primary,i,primaryField);
 	printf("\n                                                  %d[%d] = *%d*\n",replica,ri,replicaField);
 	return 0;
@@ -130,7 +135,7 @@ static int show_field(int show, Field_t fieldType,
 
 
 /* Show the object whose raw beginning (i.e. including tag(s)) is at s */
-mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **legalHeaps, Bitmap_t **legalStarts)
+mem_t show_obj(mem_t start, ptr_t *objRef, int show, ShowType_t replicaType, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   int i, type;
   mem_t temp, end = NULL;
@@ -162,7 +167,7 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
       /* printf("  TRACE ERROR: forwarding pointer is in same heap(s).  "); */
     }
   }
-  if (obj == replica || !doReplica)
+  if (obj == replica || replicaType == NoReplica)
     replica = 0;
   if (show)
     printf (": ");
@@ -203,7 +208,9 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 	  show_field(show, PointerField, obj, replica, 2*i, 2*i, legalHeaps, legalStarts);
 	}
 	else {
-	  replica = (doReplica && replica == NULL) ? obj : replica;
+	  int doReplica = replicaType != NoReplica;
+	  if (replicaType == SelfReplica && replica == NULL)  /* self is replica if in tenured space */
+	    replica = obj;
 	  if (primaryArrayOffset == 0) {
 	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 2*i,   2*i+1, legalHeaps, legalStarts);
 	    show_field(show, doReplica ? PointerField     : IntField,     obj, NULL,    2*i+1, 2*i,   legalHeaps, legalStarts);
@@ -212,7 +219,8 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 	    show_field(show, doReplica ? PointerField     : IntField,     obj, NULL,    2*i,   2*i+1, legalHeaps, legalStarts);
 	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 2*i+1, 2*i,   legalHeaps, legalStarts);
 	  }
-	  printf("   ");
+	  if (show)
+	    printf("   ");
 	}
       }
       if (show)
@@ -285,7 +293,9 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 	  show_field(show, PointerField, obj, replica, 0, 0, legalHeaps, legalStarts);
 	}
 	else {
-	  replica = (doReplica && replica == NULL) ? obj : replica;
+	  int doReplica = replicaType != NoReplica;
+	  if (replicaType == SelfReplica && replica == NULL)  /* self is replica if in tenured space */
+	    replica = obj;
 	  if (primaryGlobalOffset == 0) {
 	    show_field(show, doReplica ? OldPointerField : PointerField, obj, replica, 0, 1, legalHeaps, legalStarts);
 	    show_field(show, doReplica ? PointerField : IntField, obj, NULL, 1, 0, legalHeaps, legalStarts);
@@ -313,7 +323,7 @@ mem_t show_obj(mem_t start, ptr_t *objRef, int show, int doReplica, Heap_t **leg
 
 void scan_heap(char *label, mem_t start, mem_t finish, mem_t top, 
 	       Heap_t **legalHeaps, Bitmap_t **legalStarts,
-	       int show, int doReplica, Bitmap_t *startMap)
+	       int show, ShowType_t replicaType, Bitmap_t *startMap)
 {
   mem_t cur = start, next;
   if (startMap)
@@ -326,7 +336,7 @@ void scan_heap(char *label, mem_t start, mem_t finish, mem_t top,
   while (cur < finish) {
     if (cur < finish) {
       ptr_t obj = NULL;
-      next = show_obj(cur,&obj,show,doReplica,legalHeaps,legalStarts);
+      next = show_obj(cur,&obj,show,replicaType,legalHeaps,legalStarts);
       assert(obj != NULL);
       assert(next > cur);
       if (startMap) {

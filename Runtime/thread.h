@@ -105,11 +105,9 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
   mem_t start;
   mem_t cursor;
   mem_t stop;
+  mem_t reserve;
   Heap_t *heap;
-  expand_t *expand;
-  discharge_t *discharge; 
   struct Proc__t *proc;
-  Stack_t *regionStack;
 } CopyRange_t;
 
 /* Not volatile - not concurrently accessed */
@@ -126,7 +124,7 @@ typedef struct Usage__t
   long globalsProcessed;
   long stackSlotsProcessed;
   long workDone;         /* Weighted average of bytesCopied, bytesScanned, and rootProcessed - not always up-to-date */
-  long lastWorkDone;     /* Some snapshot of the past - upadted when sufficiently different from workDone */
+  long limitWorkDone;    /* used by recentWorkDone; workDone (in the past) + localWorkSize */
   long counter;          /* Cycles down from localWorksize to zero repeatedly.  When zero, workDone is updated. */
 } Usage_t;
 
@@ -185,7 +183,7 @@ typedef struct Thread__t
    The remaining GC* states are substates of GC.
  */
 typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done, Idle, 
-				GCStack, GCGlobal, GCReplicate, GCWork, GCWrite} ProcessorState_t;
+				GCStack, GCGlobal, GCReplicate, GCWork, GCWrite, GCIdle} ProcessorState_t;
 /* Each segment might be no collection, minor, or major. 
    Independently, it migth invole flipping the collector on or off or both */
 #define MinorWork 1
@@ -196,18 +194,28 @@ typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done, Idle,
 
 typedef struct LocalWork__t
 {
-  Stack_t  objs;
-  Stack_t  globals;          /* Global variables */
-  Stack_t  roots;            /* Stack root locations containing root values */
-  Stack_t  segments;         /* Used by incremental collector for breaking up scanning stacks */
-  Stack_t  stacklets;        /* Used by incremental collector for breaking up scanning stacks */
+  Set_t  objs;             /* Gray objects */
+  Set_t  grayRegion;       /* Regions of gray objects */
+  Set_t  globals;          /* Global variables */
+  Set_t  roots;            /* Stack root locations containing root values */
+  Set_t  segments;         /* Used by incremental collector for breaking up scanning stacks */
+  Set_t  stacklets;        /* Used by incremental collector for breaking up scanning stacks */
+  Set_t  backObjs;         /* Used by generational collectors for arrays allocated in tenured area */
+  Set_t  backLocs;         /* Used by generational, concurrent collector for modified array fields */
+  Set_t  nextBackObjs;     /* Used when double processing */
+  Set_t  nextBackLocs;     /* Used when double processing - note that the location is the mirror of the ones in backLocs */
   volatile int hasShared;    /* 1 if local stack grabbed items from shared stack */
 } LocalWork_t;
 
-void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, int rootSize, int stackletSize);
+void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, 
+		    int rootSize, int stackletSize, int backObjSize, int backLocSize);
+int isLocalWorkAlmostEmpty(LocalWork_t *lw);  /* exclued backObjs and backLocs */
 int isLocalWorkEmpty(LocalWork_t *lw);
 
-/* Not volatile - not concurently accessed */
+/* Not volatile - not concurently accessed 
+   Fields that are frequently and directly accessed should be placed first so their displacement is small.
+   Statistics, histories, histograms, or indirectly accessed fields come last.
+*/
 typedef struct Proc__t
 {
   int                stack;          /* address of system thread stack that can be used to enter scheduler */
@@ -218,63 +226,65 @@ typedef struct Proc__t
   ploc_t             writelistStart;  /* write list range */
   ploc_t             writelistCursor;
   ploc_t             writelistEnd;
-  ptr_t              writelist[3 * 4096];
   int                processor;      /* processor id that this pthread is bound to */
-  pthread_t          pthread;        /* pthread that this system thread is implemented as */
   Thread_t           *userThread;    /* current user thread mapped to this system thread */
-
   LocalWork_t        work;
-
-  /* In a generation, concurrent collector, backLocs and backObjs have to be processed twice.
-     So, each entry is a pair containing the location/object and a count, initially 0. 
-     The temp versions are necessary so we have a place to push.  At the end of the GC,
-     we swap the two versions.
-  */
-  Stack_t            *backLocs, *backLocsTemp;  /* All modified pointer array field for generational, concurrent collector */
-  Stack_t            *backObjs, *backObjsTemp;  /* Pointer arrays allocated in generational collector */
-  Stack_t            majorRegionStack; /* Possibly used by a generational concurrent collector */
-
+  Usage_t            segUsage;       /* Info for current segment which will be added to a cycle */
+  Usage_t            cycleUsage;     /* Info for current GC cycle */
+  Set_t              majorRegionStack; /* Possibly used by a generational concurrent collector */
   int                barrierPhase;   
-
   Timer_t            totalTimer;     /* Time spent in entire processor */
   Timer_t            currentTimer;   /* Time spent running any subtask */
   int                segmentNumber;  /* Current segment number */
   int                segmentType;    /* Was there minor work, major work, flip off, or flip on? */
+  double             mutatorTime;    /* Time last spent in mutator - used for computing utilization level */
   double             nonMutatorTime; /* Total time since mutator suspended */
-  int                nonMutatorSegmentType; /* Union of all segment types since mutator suspended */
-  double             nonMutatorTimes[20];   /* For debugging */
-  int                nonMutatorStates[20];
-  int                nonMutatorSubstates[20];
-  int                nonMutatorSegmentStart; /* Segment number of first segment comprising pause */
-  int                nonMutatorCount;
   ProcessorState_t   state;          /* What the processor is working on */
   int                substate;
-  int                bytesCopied;    /* Number of bytes copied (0 if not copied).  Modified by call to alloc/copy */
-  Usage_t            segUsage;       /* Info for current segment which will be added to a cycle */
-  Usage_t            cycleUsage;     /* Info for current GC cycle */
+  int                bytesCopied;    /* Number of bytes just copied (0 if not copied).  Modified by call to alloc/copy */
+  int                needScan;       /* Non-zero if object just copied (check bytesCopied) might have pointer field. */
+  CopyRange_t        copyRange;        /* Only one active per processor */
+  unsigned long      lastHashKey;     /* Last hash entry key/data for optimizing LookupCallinfo */
+  void               *lastHashData; 
+  CallinfoCursor_t   lastCallinfoCursor;
+
+
+  /* Less frequently directly accessed fields */
+  pthread_t          pthread;        /* pthread that this system thread is implemented as */
+  ptr_t              writelist[3 * 4096];
+
+  int                nonMutatorSegmentType; /* Union of all segment types since mutator suspended */
+  double             nonMutatorTimes[60];   /* For debugging */
+  int                nonMutatorStates[60];
+  int                nonMutatorSubstates[60];
+  int                nonMutatorSegmentStart; /* Segment number of first segment comprising pause */
+  int                nonMutatorCount;
+
   Statistic_t        bytesAllocatedStatistic;  /* just minor - won't this exclude large objects? XXXX */
   Statistic_t        bytesReplicatedStatistic;  /* only for concurrent collectors */
   Statistic_t        bytesCopiedStatistic;     /* both minor and major */
                                                /* XXX Should the next 3 be program-wide */
   Statistic_t        workStatistic;
   Statistic_t        schedulerStatistic;
+  Statistic_t        accountingStatistic;
   Statistic_t        idleStatistic;
   Histogram_t        mutatorHistogram;
   Statistic_t        gcStatistic;
+  Statistic_t        gcIdleStatistic;
   Statistic_t        gcWorkStatistic;
   Statistic_t        gcStackStatistic;
   Statistic_t        gcGlobalStatistic;
   Statistic_t        gcWriteStatistic;
   Statistic_t        gcReplicateStatistic;
+  Statistic_t        gcOtherStatistic;
+  Histogram_t        timeDivWorkHistogram;
   Histogram_t        gcPauseHistogram;
   Histogram_t        gcFlipOffHistogram;
   Histogram_t        gcFlipOnHistogram;
   Histogram_t        gcFlipBothHistogram;
   Histogram_t        gcFlipTransitionHistogram;
-
-
-  CopyRange_t        minorRange;   /* Used only by generational collector */
-  CopyRange_t        majorRange;
+  WindowQuotient_t   utilizationQuotient1;
+  WindowQuotient_t   utilizationQuotient2;
 
   long               numCopied;        /* Number of objects copied */
   long               numShared;        /* Number of times an object is reached after it's already been forwarded */
@@ -282,10 +292,6 @@ typedef struct Proc__t
   long               numWrite;
   long               numRoot;
   long               numLocative;
-
-  unsigned long      lastHashKey;     /* Last hash entry key/data for optimizing LookupCallinfo */
-  void               *lastHashData; 
-  CallinfoCursor_t   lastCallinfoCursor;
 
   char               buffer[1024];    /* For use in posix.c */
   char               *tab;
@@ -315,12 +321,19 @@ long getWorkDone(Proc_t *proc)
   return proc->segUsage.workDone;
 }
 
+extern int localWorkSize;
+
 INLINE(recentWorkDone)
-long recentWorkDone(Proc_t *proc, int recentWorkThreshold)
+long recentWorkDone(Proc_t *proc)
 {
-  int workDone = getWorkDone(proc);
-  if ((workDone - proc->segUsage.lastWorkDone) > recentWorkThreshold) {
-    proc->segUsage.lastWorkDone = workDone;
+  int workDone;
+  if (--proc->segUsage.counter == 0) {
+    proc->segUsage.counter = usageCount;
+    updateWorkDone(proc);
+  }
+  workDone = proc->segUsage.workDone;
+  if (workDone > proc->segUsage.limitWorkDone) {
+    proc->segUsage.limitWorkDone = workDone + localWorkSize;
     return 1;
   }
   return 0;

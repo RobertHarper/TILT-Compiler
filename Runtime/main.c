@@ -19,6 +19,7 @@
 #include "stack.h"
 
 int LEAST_GC_TO_CHECK = 0;
+int checkAtGC = 0;
 
 void setCommandLine(char* cmd, char** argv);
 
@@ -93,8 +94,11 @@ struct option_entry {
 
 extern int largeheapsize;
 
-static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0, semistack = 0;
-static int fixheap=0, youngheap=0;
+extern int cacheSize, cacheSize2, fetchSize; /* XXXXXX debugging */
+
+static int stackOrder = 0, queueOrder = 0, hybridOrder = 0, doSpaceCheck = 0;
+static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0;
+static int fixheap=0, youngheap=0, relaxFixheap=0;
 struct option_entry table[] = 
   {0, "help", &help, "Print help info but do not execute program",
    0, "semi", &semi, "Use the semispace garbage collector",
@@ -103,7 +107,6 @@ struct option_entry table[] =
    0, "genpara", &genpara, "Use the generational, parallel garbage collector",
    0, "semiconc", &semiconc, "Use the semispace, concurrent garbage collector",
    0, "genconc", &genconc, "Use the generational, concurrent garbage collector",
-   0, "semistack", &semistack, "Use the semispace, stack-based, collector",
    0, "forceMirrorArray", &forceMirrorArray, "Force collector to use mirrored pointer arrays",
    0, "useGenStack", &useGenStack, "Use generational stack tracing",
    1, "paranoid", &paranoid, "Run in paranoid mode every nth GC",
@@ -112,6 +115,7 @@ struct option_entry table[] =
    1, "collectDiag", &collectDiag, "Run in collector diagnostic mode",
    0, "timeDiag", &timeDiag, "Run in time-diagnostic mode",
    0, "threadDiag", &threadDiag, "Show thread-related diagnostic messages",
+   0, "warnThreshold", &warnThreshold, "Show information if pause exceeds threshold",
    0, "debugStack", &debugStack, "Show scanning of stack frames",
    0, "gcstats", &SHOW_GCSTATS, "Show GC statistics during execution",
    0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
@@ -119,28 +123,51 @@ struct option_entry table[] =
    0, "gcerror", &SHOW_GCERROR, "Show GC errors",
    0, "showheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
    0, "showglobals", &SHOW_GLOBALS, "Show globals before and after each GC",
-   1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
+   1, "showatgc", &LEAST_GC_TO_CHECK, "Show heaps starting at this GC",
+   1, "checkatgc", &checkAtGC, "Check heaps starting at this GC",
    1, "stackletSize", &MLStackletSize, "Stack size of thread stacklets measured in Kbytes",
    1, "proc", &NumProc, "Use this many processors",
+   1, "usageCount", &usageCount, "Update usage whenever this many gray objects processed",
    1, "largeheap", &largeheapsize, "Set large object heap size in Kbytes",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
    1, "maxheap", &MaxHeap, "Set maximum size of heap in Kbytes",
    1, "fixheap", &fixheap, "Set the size of heap in Kbytes",
+   1, "relaxFixheap", &relaxFixheap, "Set the size of heap in Kbytes when concurrent collector off",
    1, "nursery", &youngheap, "Set size of nursery in Kbytes",
    1, "nurserybyte", &YoungHeapByte, "Set size of nursery in bytes",
    1, "minratio", &MinRatio, "Set the minimum ratio of of live objects to all objects",
    1, "maxratio", &MaxRatio, "Set the maximum ratio of of live objects to all objects",
    1, "minOffRequest", &minOffRequest, "Minimum size of mutator request when collector is off",
+   1, "maxOffRequest", &maxOffRequest, "Maximum size of mutator request when collector is off",
    1, "minOnRequest", &minOnRequest, "Minimum size of mutator request when collector is on",
+   1, "copyPageSize", &copyPageSize, "Minimum size of copying area for the multi-collector case",
+   1, "copyChunkSize", &copyChunkSize, "Minimum size of objects that are copied into area directly allocated from shared pool",
    1, "objFetchSize", &objFetchSize, "Number of items to fetch from the shared work stack",
    1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
    1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
+   1, "noSharing", &noSharing, "Do not use the shared stack to distribute work",
+   1, "noWorkTrack", &noWorkTrack, "Do not update or test for work done.  Should be used only in addition to noSharing",
    1, "doAgressive", &doAgressive, "Use 2 phase concurrent collection",
    1, "doMinorAgressive", &doMinorAgressive, "Use 2 phase concurrent collection for minor collections",
    3, "majorCollectionRate", &majorCollectionRate, "Rate of concurrent collector",
+   3, "minorCollectionRate", &minorCollectionRate, "Rate of minor GC of concurrent collector",
+   3, "objCopyWeight", &objCopyWeight, "Weight given to cost of copying an object",
+   3, "objScanWeight", &objScanWeight, "Weight given to cost of scanning an object",
+   3, "fieldCopyWeight", &fieldCopyWeight, "Weight given to cost of copying a field",
+   3, "fieldScanWeight", &fieldScanWeight, "Weight given to cost of scanning a field",
+   1, "stackOrder", &stackOrder, "Use stack ordering (use pop) on local work set",
+   1, "queueOrder", &queueOrder, "Use queue ordering (use dequeue) on local work set",
+   1, "hybridOrder", &hybridOrder, "Use a set of gray regions",
+   1, "forceSpaceCheck", &doSpaceCheck, "Perform space check on allocating space for copying",
 #ifdef solaris
    1, "perfType", &perfType, "Type of performance counters",
 #endif
+
+   /* Debuggnig XXXXX */
+   1, "fetchSize", &fetchSize, "",
+   1, "cacheSize", &cacheSize, "",
+   1, "cacheSize2", &cacheSize2, "",
+
    1, "info", &information, "Level of information to print"};
 
 void process_option(int argc, char **argv)
@@ -192,8 +219,18 @@ void process_option(int argc, char **argv)
   if (genpara) collector_type = GenerationalParallel;
   if (semiconc) collector_type = SemispaceConcurrent;
   if (genconc) collector_type = GenerationalConcurrent;
-  if (semistack) collector_type = SemispaceStack;
+  if (stackOrder) ordering = StackOrder;
+  if (queueOrder) ordering = QueueOrder;
+  if (hybridOrder) ordering = HybridOrder;
+  if (doSpaceCheck) forceSpaceCheck = 1;
   if (fixheap) MinHeap = MaxHeap = fixheap;
+  if (relaxFixheap) {
+    int fixheap = (int) (relaxFixheap * (majorCollectionRate + 1.0) / majorCollectionRate);
+    relaxed = 1;
+    assert(collector_type == SemispaceConcurrent ||
+	   collector_type == GenerationalConcurrent);
+    MinHeap = MaxHeap = fixheap;
+  }
   if (youngheap) YoungHeapByte = 1024 * youngheap;
   if (help) {
     printf("Boolean options are activated like this: @diag\n");

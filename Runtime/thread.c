@@ -1,3 +1,4 @@
+#include <ieeefp.h>
 #include "general.h"
 #include "tag.h"
 #include "thread.h"
@@ -365,7 +366,7 @@ void resetUsage(Usage_t *u)
   u->globalsProcessed = 0;
   u->stackSlotsProcessed = 0;
   u->workDone = 0;
-  u->lastWorkDone = 0;
+  u->limitWorkDone = 0;
   u->counter = usageCount;
 }
 
@@ -431,23 +432,43 @@ void fillThread(Thread_t *th, int id)
 
 
 
-void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, int rootSize, int stackletSize)
+void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, int rootSize, int stackletSize, int backObjSize, int backLocSize)
 {
-  allocStack(&lw->objs, objSize);
-  allocStack(&lw->segments, segSize);
-  allocStack(&lw->globals, globalSize);
-  allocStack(&lw->roots, rootSize);
-  allocStack(&lw->stacklets, stackletSize);
+  SetInit(&lw->objs, objSize);
+  SetInit(&lw->grayRegion, 2048); /* XXX */
+  SetInit(&lw->segments, segSize);
+  SetInit(&lw->globals, globalSize);
+  SetInit(&lw->roots, rootSize);
+  SetInit(&lw->stacklets, stackletSize);
+  SetInit(&lw->backObjs, backObjSize);
+  SetInit(&lw->backLocs, backLocSize);
+  SetInit(&lw->nextBackObjs, backObjSize);
+  SetInit(&lw->nextBackLocs, backLocSize);
   lw->hasShared = 0;
 } 
 
+int isLocalWorkAlmostEmpty(LocalWork_t *lw)
+{
+  return (SetIsEmpty(&lw->stacklets) &&
+	  SetIsEmpty(&lw->globals) &&
+	  SetIsEmpty(&lw->roots) &&
+	  SetIsEmpty(&lw->objs) &&
+	  SetIsEmpty(&lw->grayRegion) &&
+	  SetIsEmpty(&lw->segments) &&
+	  lw->hasShared == 0);
+}
+
 int isLocalWorkEmpty(LocalWork_t *lw)
 {
-  return (lw->stacklets.cursor == 0 && 
-	  lw->globals.cursor == 0 && 
-	  lw->roots.cursor == 0 && 
-	  lw->objs.cursor == 0 && 
-	  lw->segments.cursor == 0);
+  return (SetIsEmpty(&lw->stacklets) &&
+	  SetIsEmpty(&lw->globals) &&
+	  SetIsEmpty(&lw->roots) &&
+	  SetIsEmpty(&lw->objs) &&
+	  SetIsEmpty(&lw->grayRegion) &&
+	  SetIsEmpty(&lw->segments) &&
+	  SetIsEmpty(&lw->backObjs) &&
+	  SetIsEmpty(&lw->backLocs) &&
+	  lw->hasShared == 0);
 }
 
 
@@ -486,29 +507,15 @@ void thread_init(void)
     proc->writelistEnd = &(proc->writelist[(sizeof(proc->writelist) / sizeof(ptr_t)) - 2]);
     for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
       proc->writelist[j] = 0;
-    init_localWork(&proc->work, 16384, 16384, 8192, 4096, 128);
-    /* YYYYY
-       allocStack(&proc->minorObjStack, 16384);
-    allocStack(&proc->majorObjStack, 1024);
-    allocStack(&proc->minorSegmentStack, 16384);
-    allocStack(&proc->majorSegmentStack, 1024);
-    allocStack(&proc->majorRegionStack, 1024);
-
-    proc->globalLocs = createStack(8192);
-    proc->rootLocs = createStack(4096);
-    allocStack(&proc->threads, 100);
-    */
-    proc->backObjs = createStack(1024);
-    proc->backObjsTemp = createStack(1024);
-    proc->backLocs = createStack(64 * 1024);
-    proc->backLocsTemp = createStack(64 * 1024);
+    init_localWork(&proc->work, 16384, 16384, 8192, 4096, 128, 2048, 4096);  
     reset_timer(&(proc->totalTimer));
     reset_timer(&(proc->currentTimer));
     proc->state = Scheduler;
     proc->substate = -1;
     proc->segmentNumber = 0;
     proc->segmentType = 0;
-    proc->nonMutatorTime = 0;
+    proc->mutatorTime = 0.0;
+    proc->nonMutatorTime = 0.0;
     proc->nonMutatorCount = -1;
     resetUsage(&proc->segUsage);
     resetUsage(&proc->cycleUsage);
@@ -517,21 +524,26 @@ void thread_init(void)
     reset_statistic(&proc->bytesCopiedStatistic);
     reset_statistic(&proc->workStatistic);
     reset_statistic(&proc->schedulerStatistic);
+    reset_statistic(&proc->accountingStatistic);
     reset_statistic(&proc->idleStatistic);
     reset_histogram(&proc->mutatorHistogram);
     reset_statistic(&proc->gcStatistic);
     reset_histogram(&proc->gcPauseHistogram);
+    reset_histogram(&proc->timeDivWorkHistogram);
     reset_histogram(&proc->gcFlipOffHistogram);
     reset_histogram(&proc->gcFlipOnHistogram);
     reset_histogram(&proc->gcFlipBothHistogram);
     reset_histogram(&proc->gcFlipTransitionHistogram);
+    reset_statistic(&proc->gcIdleStatistic);
     reset_statistic(&proc->gcWorkStatistic);
     reset_statistic(&proc->gcStackStatistic);
     reset_statistic(&proc->gcGlobalStatistic);
     reset_statistic(&proc->gcWriteStatistic);
     reset_statistic(&proc->gcReplicateStatistic);
-    SetCopyRange(&proc->minorRange, proc, NULL, NULL, NULL, NULL, 0);
-    SetCopyRange(&proc->majorRange, proc, NULL, NULL, NULL, NULL, 0);
+    reset_statistic(&proc->gcOtherStatistic);
+    reset_windowQuotient(&proc->utilizationQuotient1,0);
+    reset_windowQuotient(&proc->utilizationQuotient2,1);
+    SetCopyRange(&proc->copyRange, proc, NULL, NULL);
     proc->numCopied = proc->numShared = proc->numContention = 0;
     proc->segmentNumber = 0;
     proc->segmentType = 0;
@@ -563,31 +575,31 @@ static char* state2string(ProcessorState_t procState)
   case GCWrite: return "GCWrite";
   case GCReplicate: return "GCReplicate";
   case GCWork: return "GCWork";
+  case GCIdle: return "GCIdle";
   default : return "unknownProcState";
   }
 }
 
 void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
 {
-  int i;
-  double diff = 0.0;             /* Time just spent in current segment */
+  int i, segWork;
+  double diff = 0.0;             /* Time just spent in current segment in ms */
   int switchToMutator = (newState == Mutator || 
 			 newState == Done ||
 			 newState == Idle); /* Switching to mutator or effectievly so? */
-
-  assert(proc->substate != 0);
 
   if (proc->segmentNumber < 0)
     return;
   if (!allowSubstates && proc->state == newState)  /* No state change */
     return;
-
   if (proc->currentTimer.on) {
     restart_timer(&proc->currentTimer);
     diff = proc->currentTimer.last;
   }
   else
     start_timer(&proc->currentTimer);
+
+  segWork = updateWorkDone(proc);  /* Grab this before attributeUsage */
 
   /* Accumulate info across segments since mutator segment */
   if (proc->state != Mutator && proc->nonMutatorCount >= 0) {
@@ -596,18 +608,31 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   }
 
 
-  if (pauseWarningThreshold > 0.0  &&   /* Are we in a mutator-started pause? */
+  if (warnThreshold &&
+      pauseWarningThreshold > 0.0  &&   /* Are we in a mutator-started pause? */
       proc->nonMutatorCount >= 0) {     /* Are we doing threshold check? */ 
     if (switchToMutator) {
-      if (proc->nonMutatorTime > pauseWarningThreshold) {
-	printf("\nProc %d exceeded threshold with %.2f ms starting at segment %d\n", 
-	       proc->procid, proc->nonMutatorTime, proc->nonMutatorSegmentStart);
+      int exceed = proc->nonMutatorTime > pauseWarningThreshold;
+      int diag = timeDiag && proc->nonMutatorTime > 0.2;
+      if (exceed) 
+	printf("Proc %d: Total time = %.2f ms.  Start segment = %d.  Work = %d    <---- Exceeded Threshold\n", 
+	       proc->procid, proc->nonMutatorTime, proc->nonMutatorSegmentStart, updateWorkDone(proc));
+      if (exceed || diag) {
+	printf("   objCopy    objScan  fieldsCopy  fieldsScan   ptrFieldScan   globals  stack   pages  rep  Time  Work\n");
+	printf("   %5d        %5d       %5d       %5d          %5d        %3d      %3d     %2d    %5d   %.2f  %5d ;\n",
+	       proc->segUsage.objsCopied, proc->segUsage.objsScanned, 
+	       proc->segUsage.fieldsCopied, proc->segUsage.fieldsScanned, proc->segUsage.ptrFieldsScanned, 
+	       proc->segUsage.globalsProcessed, proc->segUsage.stackSlotsProcessed, 
+	       proc->segUsage.pagesTouched, proc->segUsage.bytesReplicated,
+	       proc->nonMutatorTime, updateWorkDone(proc));
+      }
+      if (exceed)
 	for (i=0; i<proc->nonMutatorCount; i++)
-	  printf("   %i: State %s   Time = %.2f ms    which = %d\n", 
+	  printf("   %i: State %10s   Time = %.2f ms    which = %d\n", 
 		 i, state2string(proc->nonMutatorStates[i]), 
 		 proc->nonMutatorTimes[i], 
 		 proc->nonMutatorSubstates[i]);
-      }
+      
     }
     else {
       proc->nonMutatorTimes[proc->nonMutatorCount] = diff;
@@ -621,8 +646,8 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   /* Add times to the segment that just ended */
   switch (proc->state) {
   case Mutator:
-    assert(newState == Scheduler);
     add_histogram(&proc->mutatorHistogram, diff);
+    proc->mutatorTime = diff;
     proc->nonMutatorCount = 0;
     proc->nonMutatorSegmentStart = proc->segmentNumber;
     proc->nonMutatorSegmentType = 0;
@@ -637,6 +662,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
     break;
   case GC:
   case GCWork:
+  case GCIdle:
   case GCStack:
   case GCGlobal:
   case GCWrite:
@@ -645,6 +671,10 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
     add_statistic(&proc->gcStatistic, diff);
     switch (proc->state) {
     case GC:
+      add_statistic(&proc->gcOtherStatistic, diff);
+      break;
+    case GCIdle:
+      add_statistic(&proc->gcIdleStatistic, diff);
       break;
     case GCWork:
       add_statistic(&proc->gcWorkStatistic, diff);
@@ -668,7 +698,12 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
     assert(0);
   }
   
-  if (switchToMutator) {
+  add_windowQuotient(&proc->utilizationQuotient1, diff, 
+		     proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle);
+  add_windowQuotient(&proc->utilizationQuotient2, diff, 
+		     proc->state == Mutator || proc->state == Done || proc->state == Scheduler || proc->state == Idle);
+
+  if (proc->segmentNumber > 0 && switchToMutator) {
 
     int flipOn = (proc->nonMutatorSegmentType & FlipOn);
     int flipOff = (proc->nonMutatorSegmentType & FlipOff);
@@ -696,6 +731,16 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
     if (flipTransition)
       add_histogram(&proc->gcFlipTransitionHistogram, proc->nonMutatorTime);
     add_histogram(&proc->gcPauseHistogram, proc->nonMutatorTime);
+    if (proc->nonMutatorTime > 0.2) {
+      double timeDivWork = proc->nonMutatorTime / (segWork / 1000.0);
+      add_histogram(&proc->timeDivWorkHistogram, timeDivWork);
+    }
+    if (diag && (proc->mutatorTime / proc->nonMutatorTime) < 0.2) {
+      printf("segmentNumber = %d    mutatorTime = %.3f    nonMutatorTime = %.3f   util = %.3f   segType = %d\n", 
+	     proc->segmentNumber, proc->mutatorTime, proc->nonMutatorTime,
+	     proc->mutatorTime / proc->nonMutatorTime,
+	     proc->nonMutatorSegmentType);
+    }
   }
   
   /* Perform state change */
@@ -705,6 +750,8 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   proc->substate = newSubstate;
 
   assert(proc->substate != 0);
+  restart_timer(&proc->currentTimer);
+  add_statistic(&proc->accountingStatistic, proc->currentTimer.last);
 }
 
 int thread_total(void)
@@ -1029,7 +1076,6 @@ Thread_t *SpawnRest(ptr_t thunk)
   switch (collector_type) {
   case Semispace:
   case Generational:
-  case SemispaceStack:
     assert(NumProc == 1);
   case SemispaceParallel:
   case GenerationalParallel:

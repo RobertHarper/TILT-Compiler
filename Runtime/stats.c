@@ -1,4 +1,5 @@
 #include <values.h>
+#include "math.h"
 #include "general.h"
 #include "tag.h"
 #include "memobj.h"
@@ -263,13 +264,12 @@ static void show_double(double f)
 static void show_statistic(char *str, Statistic_t *s)
 {
   if (s->count > 0) {
-    printf("       %s   ", str);
+    printf("%s", str);
     show_double(s->min);
     printf(" < ");
     show_double(s->sum/s->count);
     printf(" < ");
     show_double(s->max);
-    printf("\n");
   }
 }
 
@@ -314,7 +314,7 @@ static void show_bucket(Histogram_t *h, int i)
   show_bucket_end(h->bucketStart[i]);
   printf(",");
   show_bucket_end(h->bucketEnd[i]);
-  printf(") = %5d", h->bucket[i]);
+  printf("] = %5d", h->bucket[i]);
 }
 
 static void show_histogram(char *name, Histogram_t *h)
@@ -322,7 +322,7 @@ static void show_histogram(char *name, Histogram_t *h)
   int i, j;
   if (h->stat.sum == 0.0)
     return;
-  printf("  %10s (ms) :    ", name);
+  printf("  %10s :    ", name);
   if (h->bucket[0]) {
     show_bucket(h,0);
     printf("     ");
@@ -346,6 +346,177 @@ static void show_histogram(char *name, Histogram_t *h)
   }
 }
 
+
+void reset_windowQuotient(WindowQuotient_t *wq, int fineness)
+{
+  int i;
+  if (fineness == 0) {
+    wq->numWindows = 5;
+    wq->granularity = 50;
+    wq->size = 2 * 40 * wq->granularity;  /* Twice largest window */
+  }
+  else {
+    wq->numWindows = 14;
+    wq->granularity = 5;
+    wq->size = 2 * 4000 * wq->granularity;
+  }
+
+  wq->data = (char *) malloc(sizeof(float) * wq->size);
+  wq->first = 0;
+  wq->last = 0;
+  wq->onRemain = 0.0;
+  wq->offRemain = 0.0;
+  assert(wq->data != NULL);
+
+  for (i=0; i<wq->numWindows; i++) {
+    wq->start[i] = 0;
+    wq->onSum[i] = 0;
+    wq->offSum[i] = 0;
+    reset_statistic(&wq->stat[i]);
+  }
+
+  if (fineness == 0) {
+    wq->windowSize[0]  =    5 * wq->granularity;
+    wq->windowSize[1]  =   10 * wq->granularity;
+    wq->windowSize[2]  =   20 * wq->granularity;
+    wq->windowSize[3]  =   30 * wq->granularity;
+    wq->windowSize[4]  =   40 * wq->granularity;
+  }
+  else if (fineness == 1) {
+    wq->windowSize[0]  =   50 * wq->granularity;
+    wq->windowSize[1]  =   60 * wq->granularity;
+    wq->windowSize[2]  =   70 * wq->granularity;
+    wq->windowSize[3]  =   80 * wq->granularity;
+    wq->windowSize[4]  =   90 * wq->granularity;
+    wq->windowSize[5]  =  100 * wq->granularity;
+    wq->windowSize[6]  =  150 * wq->granularity;
+    wq->windowSize[7]  =  200 * wq->granularity;
+    wq->windowSize[8]  =  250 * wq->granularity;
+    wq->windowSize[9]  =  500 * wq->granularity;
+    wq->windowSize[10] = 1000 * wq->granularity;
+    wq->windowSize[11] = 2000 * wq->granularity;
+    wq->windowSize[12] = 3000 * wq->granularity;
+    wq->windowSize[13] = 4000 * wq->granularity;
+  }
+}
+
+/* Although there are an infinite number of windows of a given size sz, we need to consider
+   only a finite number to obtain the range of the quotients.  Also, we only need to keep
+   enough data points so that an amount just larger than the window is spanned.  Any data
+   before that is uneffected by future data and should have been computed already.
+   The question reduces to a series of times with an associated on/off bit and obtaining
+   the quotients of all windows in that range of time.
+
+   For each window size w:
+   (1) onSum_w + offSum_w == SUM (data[i])    - firstExtra_w  < windowSize_w
+                           start_w <= i < end
+
+*/
+
+
+INLINE(add_windowQuotient_addHelp)
+void add_windowQuotient_addHelp(WindowQuotient_t *wq, int i)
+{
+  /*  assert (wq->onSum[i] >= 0);
+  assert (wq->offSum[i] >= 0);
+  assert (wq->onSum[i] + wq->offSum[i] == wq->windowSize[i]);
+*/
+  double q = wq->onSum[i] / ((double)wq->windowSize[i]);
+  add_statistic(&wq->stat[i], q);
+}
+
+void check(WindowQuotient_t *wq, int i)
+{
+  int c = wq->start[i], on = 0, off = 0;
+  while (c != wq->last) {
+    (wq->data[c] ? on : off)++;
+    c++;
+    if (c >= wq->size) 
+      c = 0;
+  }
+  printf("on/off = %d %d     onSum/offSum = %d  %d\n", on, off, wq->onSum[i], wq->offSum[i]);
+  if (on != wq->onSum[i] ||
+      off != wq->offSum[i])
+    assert(0);
+}
+
+/* Time in ms */
+void add_windowQuotient(WindowQuotient_t *wq, double time, int on)
+{
+  int i, w;
+  double units = wq->granularity * time;
+  int ticks = (int) units;
+  
+  assert(time >= 0.0);
+  (on ? wq->onRemain : wq->offRemain) += (units - ticks);
+  if (on && wq->onRemain >= 1.0) {
+    wq->onRemain -= 1.0;
+    ticks++;
+  }
+  else if (!on && wq->offRemain >= 1.0) {
+    wq->offRemain -= 1.0;
+    ticks++;
+  }
+  ticks = Min(ticks, wq->size / 2);  /* Half of size is greater than largest window */
+  if (ticks == 0)
+    return;
+  /*
+  if (wq->numWindows > 0)
+    printf("adding %d  ticks  %d\n", ticks, on);
+  for (w=0; w<wq->numWindows; w++) 
+    check(wq,w);
+    */
+  for (i=0; i < ticks; i++) {
+    wq->data[wq->last] = on;
+    wq->last = (wq->last + 1 == wq->size) ? 0 : wq->last + 1;
+  }
+  
+  for (w=0; w<wq->numWindows; w++) {
+    int need = wq->windowSize[w] - (wq->onSum[w] + wq->offSum[w]);
+    int add = (need < ticks) ? need : ticks;
+    int transfer = ticks - add;
+    int *onRef = &wq->onSum[w];
+    int *offRef = &wq->offSum[w];
+    int *startRef = &wq->start[w];
+
+  assert (*onRef >= 0);
+    if (on) {
+      wq->onSum[w] += add;
+      for (i=0; i<transfer; i++) {
+	int firstOn = wq->data[(*startRef)++];
+	*startRef = (*startRef == wq->size) ? 0 : *startRef;
+	if (!firstOn) {
+	  (*onRef)++; 
+	  (*offRef)--;
+	}
+	if (firstOn != (wq->data[*startRef]))
+	  add_windowQuotient_addHelp(wq,w);
+      }
+    }
+    else {
+      wq->offSum[w] += add;
+      for (i=0; i<transfer; i++) {
+	int firstOn = wq->data[(*startRef)++];
+	*startRef = (*startRef == wq->size) ? 0 : *startRef;
+	if (firstOn) {
+	  (*offRef)++;
+	  (*onRef)--; 
+	}
+	if (firstOn != (wq->data[*startRef]))
+	  add_windowQuotient_addHelp(wq,w);
+      }
+    }
+    /*
+check(wq,w);
+printf("\n");
+*/
+    if (transfer > 0)
+      add_windowQuotient_addHelp(wq,w);
+  }
+}
+
+
+
 int statStringCursor = 0;
 char statString[2000000];
 void add_statString(char *msg)
@@ -367,12 +538,36 @@ const char *collectorTypeString(void)
 {
   return (collector_type == Semispace) ? "Semi" : 
     ((collector_type == Generational) ? "Gen" : 
-     ((collector_type == SemispaceStack) ? "SemiStack" : 
       ((collector_type == SemispaceParallel) ? "SemiPara" :
        ((collector_type == GenerationalParallel) ? "GenPara" : 
 	((collector_type == SemispaceConcurrent) ? "SemiConc" :
-	 ((collector_type == GenerationalConcurrent) ? "GenConc" : "????"))))));
+	 ((collector_type == GenerationalConcurrent) ? "GenConc" : "????")))));
 }
+
+const char* copyCopyString(void)
+{
+  int needCC = (collector_type == SemispaceParallel ||
+		collector_type == SemispaceConcurrent ||
+		collector_type == GenerationalParallel ||
+		collector_type == GenerationalConcurrent);
+  if (needCC) {
+    if (doCopyCopySync)
+      return "Needed";
+    return "Omitted";
+  }
+  else return "Unneeded";
+}
+
+const char *orderString(void)
+{
+  return (ordering == DefaultOrder) ? "Default" : 
+    ((ordering == ImplicitOrder) ? "Implicit" : 
+    ((ordering == QueueOrder) ? "Queue" : 
+     ((ordering == StackOrder) ? "Stack" : 
+     ((ordering == HybridOrder) ? "Hybrid" : "????"))));
+}
+
+
 
 
 void stats_finish(void)
@@ -414,51 +609,97 @@ void stats_finish(void)
       printf("         Work       = %8.0f kw\n", proc->workStatistic.sum / 1024.0);
       show_time_statistic_header();
       printf("         Total         |   %8.3f\n", proc->totalTimer.last / 1000.0);
+      show_time_statistic("  Accounting ", &proc->accountingStatistic, proc->totalTimer.last);
       show_time_statistic("  Scheduler  ", &proc->schedulerStatistic, proc->totalTimer.last);
       show_time_statistic("  Mutator    ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
       show_time_statistic("  GC         ", &proc->gcStatistic, proc->totalTimer.last);
       show_time_statistic("  Idle       ", &proc->idleStatistic, proc->totalTimer.last);
       show_time_statistic("Pause        ", &proc->gcPauseHistogram.stat, proc->totalTimer.last);
+      if (proc->utilizationQuotient1.stat[0].count > 0) {
+	WindowQuotient_t *wq1 = &proc->utilizationQuotient1;
+	WindowQuotient_t *wq2 = &proc->utilizationQuotient2;
+	int i, total = wq1->numWindows + wq2->numWindows;
+	int rows = (total + 2) / 3;
+	printf("\n");
+	for (i=0; i<rows; i++) {
+	  int j = i;
+	  WindowQuotient_t *wq = (i < wq1->numWindows) ? wq1 : wq2;
+	  if (j >= wq1->numWindows)
+	    j -= wq1->numWindows;
+	  printf("      %6.1f ms util:  ", (double) wq->windowSize[j] / wq->granularity);
+	  show_statistic("", &wq->stat[j]);
+
+	  j = i + rows;
+	  wq = (j < wq1->numWindows) ? wq1 : wq2;
+	  if (j >= wq1->numWindows)
+	    j -= wq1->numWindows;
+	  if (j < wq->numWindows) {
+	    printf("      %6.1f ms util:  ", (double) wq->windowSize[j] / wq->granularity);
+	    show_statistic("", &wq->stat[j]);
+	  }
+
+	  j = i + 2 * rows;
+	  wq = (j < wq1->numWindows) ? wq1 : wq2;
+	  if (j >= wq1->numWindows)
+	    j -= wq1->numWindows;
+	  if (j < wq->numWindows) {
+	    printf("      %6.1f ms util:  ", (double) wq->windowSize[j] / wq->granularity);
+	    show_statistic("", &wq->stat[j]);
+	  }
+
+	  printf("\n");
+	}
+      }
       if (information >= 2) {
 	printf("\n");
+	show_time_statistic("  GCIdle     ", &proc->gcIdleStatistic, proc->gcStatistic.sum);
 	show_time_statistic("  GCWork     ", &proc->gcWorkStatistic, proc->gcStatistic.sum);
 	show_time_statistic("  GCGlobal   ", &proc->gcGlobalStatistic, proc->gcStatistic.sum);
 	show_time_statistic("  GCStack    ", &proc->gcStackStatistic, proc->gcStatistic.sum);
 	show_time_statistic("  GCWrite    ", &proc->gcWriteStatistic, proc->gcStatistic.sum);
 	show_time_statistic("  GCReplicate", &proc->gcReplicateStatistic, proc->gcStatistic.sum);
+	show_time_statistic("  GCOther    ", &proc->gcOtherStatistic, proc->gcStatistic.sum);
       }
       if (information >= 3) {
 	printf("\n");
 	show_time_statistic("GCFlipBoth   ", &proc->gcFlipBothHistogram.stat, proc->gcStatistic.sum);
 	show_time_statistic("GCFlipOn     ", &proc->gcFlipOnHistogram.stat, proc->gcStatistic.sum);
 	show_time_statistic("GCFlipOff    ", &proc->gcFlipOffHistogram.stat, proc->gcStatistic.sum);
-	show_histogram(" Pause   Histogram", &proc->gcPauseHistogram);
-	show_histogram(" GCFlipBoth   Hist", &proc->gcFlipOffHistogram);
-	show_histogram(" GCFlipOff    Hist", &proc->gcFlipOffHistogram);
-	show_histogram(" GCFlipOn     Hist", &proc->gcFlipOnHistogram);
+	show_histogram(" Pause   Histogram (ms)", &proc->gcPauseHistogram);
+	show_histogram(" Time / Work  Hist (ms/kw)", &proc->timeDivWorkHistogram);
+	show_histogram(" GCFlipBoth   Hist (ms)", &proc->gcFlipOffHistogram);
+	show_histogram(" GCFlipOff    Hist (ms)", &proc->gcFlipOffHistogram);
+	show_histogram(" GCFlipOn     Hist (ms)", &proc->gcFlipOnHistogram);
 	/*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
       }
     }
   }
 
   printf("\n");
-  printf("GC:    GCMethod      = %8s     Allocated    = %9.0f kb   NumCopied    = %8d    MaxStkDepth  = %4d\n"
-	 "       StackMethod   = %8s     Copied       = %9.0f kb   NumShared    = %8d    AvgStkDepth  = %4.0f\n",
-	 collectorTypeString(),          bytesAllocated / 1024.0, NumCopied,      MaxStackDepth,
-	 useGenStack?"Gener":"Normal", bytesCopied / 1024.0,    NumShared,      AvgStackDepth); 
-  if (bytesReplicated)
-    printf("                                    Replicated   = %9.0f kb\n",
-	   bytesReplicated/1024.0);
+  printf("GC:    GCMethod      = %12s      StackMethod = %s\n",
+	 collectorTypeString(), useGenStack?"Gener":"Normal");
+  printf("       Ordering   = %8s        ForceSpaceCheck = %s   CopyCopy = %8s     WorkSharing = %s     WorkTrack = %s   Relaxed = %s\n",
+	 orderString(),  forceSpaceCheck ? "Yes" : "No",
+	 copyCopyString(), noSharing ? "No" : "Yes", noWorkTrack ? "No" : "Yes", relaxed ? "Yes" : "No");
+  printf("       MajorCollectionRate = %.2f  MinorCollectionRate = %.2f\n",
+       majorCollectionRate, minorCollectionRate);
+  printf("       Allocated     = %9.0f kb      Copied     = %9.0f kb    Replicated  = %9.0f kb\n",
+	 bytesAllocated / 1024.0, bytesCopied / 1024.0,  bytesReplicated/1024.0 + 0.001);
+  printf("       NumGC         = %6d            NumMajorGC = %3d\n"
+	 "       AvgFramsSize  = %4.0f         AvgStkDepth  = %4.0f           MaxStkDepth  = %4d    newStkDepth = %4.0f\n",
+	 NumGC, NumMajorGC, 
+	 AvgStackFrameSize, AvgStackDepth, MaxStackDepth, AvgNewStackDepth);
   if (information >= 1)
-    printf("       NumGC         = %8d     NumRoot      = %9d      NumConflict  = %8d    AvgFrameSize = %4.0f\n"
-	   "       NumMajorGC    = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
-	   NumGC,                          NumRoots,                NumContention,   AvgStackFrameSize,
-	   NumMajorGC,                     NumWrites,               NumLocatives);
-  if(useGenStack)
-    printf("       newStkDepth   = %4.0f\n",  AvgNewStackDepth);
-  show_statistic("MinSurvRate ", &minorSurvivalStatistic);
-  show_statistic("MajSurvRate ", &majorSurvivalStatistic);
-  show_statistic("HeapSize(kb)", &heapSizeStatistic);
+    printf("       NumCopied     = %8d     NumRoot      = %9d      NumConflict  = %8d\n"
+	   "       NumShared     = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
+	   NumCopied,                     NumRoots,                NumContention,   
+	   NumShared,                     NumWrites,               NumLocatives);
+  show_statistic("       MinSurvRate   ", &minorSurvivalStatistic);
+  printf("\n");
+  show_statistic("       MajSurvRate   ", &majorSurvivalStatistic);
+  printf("\n");
+  show_statistic("       HeapSize(kb)  ", &heapSizeStatistic);
+  printf("\n");
 
   printf("\n");
   printf("MISC:  Total time    = %8.2f s   maxPhysMem   = %9d      minPageFault = %8d    invCtxtSwap  = %5d\n"

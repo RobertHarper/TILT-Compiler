@@ -58,138 +58,127 @@ void GCRelease_SemiPara(Proc_t *proc)
   proc->segUsage.bytesAllocated += alloc;
 }
 
-static long totalRequest = 0;
-static long totalUnused = 0;
+static long totalRequest = 0;   /* Total space requested by all threads */
+static long totalUnused = 0;    /* Total allocation space unused by and mapped to all processors */
 
 static void stop_copy(Proc_t *proc)
 {
-  int i;
+  int count = 0 ; /* XXX */
   int isFirst = 0;
-  mem_t to_alloc_start;         /* Designated thread records this initially */
   Thread_t *curThread = NULL;
   ploc_t rootLoc, globalLoc;
-  int curObjFetchSize = objFetchSize;
-  int sharedSize, popSize, pushSize, itemsDone = 0; /* Debugging */
   
   /* Using a weak barrier, we detect the first thread and permit it to do some preliminary work 
      while other processors have not reached the barrier and are still in the mutator.
-     We use a strong barrier to prevent  other threads from proceeding until the first thread has finished.
+     We use a strong barrier to prevent other threads from proceeding until the first thread has finished.
   */
 
-  procChangeState(proc, GCWork, 400);
-
+  /*  procChangeState(proc, GCWork, 400);                        XXX */
+  proc->segmentType |= (MajorWork | FlipOff | FlipOn);
+  StopAllThreads();                                          /* signal all processors to stop mutators and perform collection */
   isFirst = (weakBarrier(barriers,proc) == 0);
   if (isFirst) {
-    assert(isEmptyStack(&proc->work.objs));
     assert(isEmptySharedStack(workStack));
     Heap_Resize(toSpace, Heap_GetMaximumSize(toSpace), 1);
-    ResetJob();                        /* Reset counter so all user threads are scanned */
+    ResetJob();                                              /* Prepare to scan all threads */
     totalRequest = totalUnused = 0;
   }
-  strongBarrier(barriers,proc);
-  proc->segmentType |= (MajorWork | FlipOff | FlipOn);
-
-  /* All threads get local structures ready */
-  assert(isEmptyStack(&proc->work.roots));
-  SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+  assert(isLocalWorkAlmostEmpty(&proc->work));
   assert(empty_writelist(proc));
+  if (!noSharing)                                                        
+    resetSharedStack(workStack,&proc->work, 0);              /* Prepare shared stack for later use */
+  strongBarrier(barriers,proc);
 
-  /* The "first" processor is in charge of the globals. */
-  if (isFirst) {
-    procChangeState(proc, GCGlobal, 401);
-    major_global_scan(proc);
-  }
+  SetCopyRange(&proc->copyRange, proc, toSpace, NULL);        /* Copy range initialized after toSpace prepared */
 
-  /* All other processors compute thread-specific roots in parallel */
-  procChangeState(proc, GCStack, 402);
-  FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
-  while ((curThread = NextJob()) != NULL) {
+  if (isFirst) 
+    major_global_scan(proc);                                  /* One processor gets globals */
+
+  FetchAndAdd(&totalUnused, UnusedProcAlloc(proc));           /* Accumulate total allocation space unused by processors */
+  while ((curThread = NextJob()) != NULL) {                   /* In parallel, process threads */
     if (curThread->requestInfo >= 0)
-      FetchAndAdd(&totalRequest, curThread->requestInfo);
-    thread_root_scan(proc,curThread);
+      FetchAndAdd(&totalRequest, curThread->requestInfo);     /* Accumulate total amount requested by all threads */
+    thread_root_scan(proc,curThread);                         /* Scan for root locations */
   }
 
-  procChangeState(proc, GCWork, 403);
-
-  /* Now forward all the roots which initializes the local work stacks */
-  proc->numRoot += lengthStack(&proc->work.roots) + lengthStack(&proc->work.globals);
-  while (rootLoc = (ploc_t) popStack(&proc->work.roots))
-    locCopy1_copyCopySync_replicaStack(proc, rootLoc, &proc->work.objs, &proc->majorRange,fromSpace); 
-  while (globalLoc = (ploc_t) popStack(&proc->work.globals))
-    locCopy1_copyCopySync_replicaStack(proc, globalLoc, &proc->work.objs, &proc->majorRange,fromSpace); 
-  resetSharedStack(workStack,&proc->work);
-  strongBarrier(barriers,proc);
-  pushSharedStack(0,workStack,&proc->work);       /* We must call this even if local stack is empty */
-
-  procChangeState(proc, GCWork, 404); 
-
+  procChangeState(proc, GCWork, 403);                                    /* Entering main GC work */
+  proc->numRoot += SetLength(&proc->work.roots);
+  proc->numRoot += SetLength(&proc->work.globals);
+  if (!noSharing)
+    pushSharedStack(0,workStack,&proc->work);                 /* this is necessary even if local stack is empty;
+								 this call is placed after the root/global to ensure 
+								 all root/globals are shared */
   while (1) {
+      ptr_t gray;
+      count++;      
+      if (!noSharing)
+	popSharedStack(workStack, &proc->work);               /* Grab shared work */
+      procChangeState(proc,                                   /* Switch from/to Idle to measure work imbalance */
+		      (SetIsEmpty(&proc->work.objs) && SetIsEmpty(&proc->work.grayRegion)) ? GCIdle : GCWork, 405);
 
-    int globalEmpty;
-    ptr_t gray;
+      if (ordering == StackOrder) {
+	while (rootLoc = (ploc_t) SetPop(&proc->work.roots))                   
+	  locCopy1_copyCopySync_replicaSet(proc, rootLoc, fromSpace);  
+	while (globalLoc = (ploc_t) SetPop(&proc->work.globals))               
+	  locCopy1_copyCopySync_replicaSet(proc, globalLoc, fromSpace);   
+	if (noWorkTrack) {
+	  while ((gray = SetPop(&proc->work.objs)) != NULL)    /*  or there are no more local gray objects */
+	    scanObj_locCopy1_copyCopySync_replicaSet(proc,gray,fromSpace);   
+	}
+	else {
+	  while (!recentWorkDone(proc) &&          /* Work on gray object unless time to re-distribute work */  
+		 (gray = SetPop(&proc->work.objs)) != NULL)      /*      or there are no more local gray objects */
+	    scanObj_locCopy1_copyCopySync_replicaSet(proc,gray,fromSpace);   
+	}
+      }
+      else if (ordering == HybridOrder) {
+	mem_t start = NULL, stop;
+	while (1) {
+	  while (rootLoc = (ploc_t) SetPop(&proc->work.roots))                 
+	    locCopy1_copyCopySync(proc, rootLoc, fromSpace);  
+	  while (globalLoc = (ploc_t) SetPop(&proc->work.globals))             
+	    locCopy1_copyCopySync(proc, globalLoc, fromSpace);   
+	  if (start = (mem_t) SetPop2(&proc->work.grayRegion, &stop))
+	    scanRegion_locCopy1_copyCopySync(proc,start,stop,fromSpace);
+	  AddGrayCopyRange(&proc->copyRange);
+	  if (!noWorkTrack) {
+	    updateWorkDone(proc);   /* recentWorkDone only counts down once */
+	    if (recentWorkDone(proc))
+	      break;
+	  }
+	  if (SetIsEmpty(&proc->work.grayRegion))
+	    break;
+	}
+	assert(proc->copyRange.start == proc->copyRange.cursor);
+      }
+      else 
+	assert(0);
 
-    sharedSize = lengthStack(&workStack->work.objs); 
-    if (curObjFetchSize * NumProc > sharedSize)
-      curObjFetchSize = 1 + (int) (1.0 * sharedSize / NumProc);
-
-    popSharedStack(workStack, &proc->work,
-		   threadFetchSize, 
-		   globalLocFetchSize, 
-		   rootLocFetchSize,
-		   curObjFetchSize, 
-		   0);
-
-    /*    popSize = lengthStack(&proc->majorObjStack); */
-
-    while (!recentWorkDone(proc, localWorkSize) &&
-	   (gray = popStack(&proc->work.objs)) != NULL) {
-      scanObj_locCopy1_copyCopySync_replicaStack(proc,gray,&proc->work.objs,&proc->majorRange,fromSpace);
-      /*      itemsDone++; */
-    }
-    
-    /* pushSize = lengthStack(&proc->majorObjStack); */
-
-    globalEmpty = pushSharedStack(0,workStack,&proc->work);  /* We must call this even if local stack is empty */
-    if (globalEmpty)
-      break;
+      if ((noSharing && SetIsEmpty(&proc->work.objs) && SetIsEmpty(&proc->work.grayRegion)) || 
+                                                                      /* If not sharing work, check if local stack is empty */
+	  (!noSharing && pushSharedStack(0,workStack,&proc->work)))   /* If sharing, push to shared stack, check if it is empty */
+	break;
   }
 
-  procChangeState(proc, GCWork, 405); 
-
-  assert(isEmptyStack(&proc->work.stacklets));
-  assert(isEmptyStack(&proc->work.globals));
-  assert(isEmptyStack(&proc->work.roots));
-
-  ClearCopyRange(&proc->majorRange);
+  assert(isLocalWorkEmpty(&proc->work));                    
+  ClearCopyRange(&proc->copyRange);                        /* Clean up copy range */
   strongBarrier(barriers,proc);
 
-  /* Only the designated thread needs to perform the following */
-  if (isFirst) {
-    long alloc = (sizeof (val_t)) * (fromSpace->top - fromSpace->bottom);
-    double liveRatio = 0.0;
-
-    assert(isEmptyStack(&proc->work.objs));
+  if (isFirst) {                                            /* Only one thread can perform the following */
+    double liveRatio;
     assert(isEmptySharedStack(workStack));
-    /* Check the tospace heap */
-    paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
-    /* Resize heaps and do stats */
-    liveRatio = HeapAdjust1(totalRequest,totalUnused,0,0.0,fromSpace,toSpace);
+    paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);  /* Paranoid check must precede heap adjustment */
+    liveRatio = HeapAdjust1(totalRequest, totalUnused,
+			    0, 0.0, fromSpace, toSpace);
     add_statistic(&majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);
     NumGC++;
   }
-
-  /* All system threads need to reset their limit pointer */
-  proc->allocStart = StartHeapLimit;
-  proc->allocCursor = StartHeapLimit;
-  proc->allocLimit = StartHeapLimit;
+  ResetAllocation(proc, NULL);                              /* All system threads need to reset their limit pointer */
   assert(proc->writelistCursor == proc->writelistStart);
+  strongBarrier(barriers,proc);                             /* Resume normal scheduler work and start mutators */
 
-  /* Resume normal scheduler work and start mutators */
-  memBarrier();
-  memOrder();
-  strongBarrier(barriers,proc);
 }
 
 void GCPoll_SemiPara(Proc_t *proc)
@@ -203,7 +192,9 @@ void GCPoll_SemiPara(Proc_t *proc)
 
 void GC_SemiPara(Proc_t *proc, Thread_t *th)
 {
-  int roundSize = RoundUp(th->requestInfo,minOffRequest);
+  int roundSize = RoundUp(th->requestInfo,maxOffRequest);
+  if (Heap_GetAvail(fromSpace) <= NumProc * roundSize)
+    roundSize = RoundUp(th->requestInfo,minOffRequest);
 
   process_writelist(proc,NULL,NULL);
   if (GCSatisfiable(proc,th))   
@@ -213,24 +204,20 @@ void GC_SemiPara(Proc_t *proc, Thread_t *th)
     if (proc->allocStart != NULL)
       return;
   }
+ retry:
   stop_copy(proc);
   GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-  assert(GCSatisfiable(proc,th));
+  if (!GCSatisfiable(proc,th)) {
+    printf("Warning: GC_SemiPara failed to obtain enough memory. Processor %d unmapped for too long? Retrying...\n", proc->procid);
+    goto retry;
+  }
 }
 
 void GCInit_SemiPara(void)
 {
-  minOffRequest = 4 * pagesize;
-  init_int(&MaxHeap, 128 * 1024);
-  init_int(&MinHeap, 256);
-  if (MinHeap > MaxHeap)
-    MinHeap = MaxHeap;
-  init_double(&MinRatio, 0.1);
-  init_double(&MaxRatio, 0.7);
-  init_int(&MinRatioSize, 512);         
-  init_int(&MaxRatioSize, 50 * 1024);
-  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedStack_Alloc(0, 0, 0, 32 * 1024, 1024);
+  if (ordering == DefaultOrder)
+    ordering = StackOrder;
+  GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);
+  workStack = SharedStack_Alloc(0, 0, 0, 0, 64 * 1024, 1024, 0, 0);
   barriers = createBarriers(NumProc, 5);
 }

@@ -26,7 +26,9 @@ Barriers_t *createBarriers(int numProc, int maxBarrier)
 
 int strongBarrier(Barriers_t *b, Proc_t *proc)
 {
-  int i;
+  ProcessorState_t prevState = proc->state;
+  int prevSubstate = proc->substate;
+  int i, stalled = 0;
   int which = proc->barrierPhase;
   int index = FetchAndAdd(&b->barriers[which], 1);
   proc->barrierPhase = (which + 1) % b->phase;
@@ -34,8 +36,15 @@ int strongBarrier(Barriers_t *b, Proc_t *proc)
     printf("Proc %d: Waiting at strong barrier %d.  %d more processors to pass.\n", 
 	   proc->procid, which, b->numProcessor - b->barriers[which]);
   b->index[which][index] = proc->procid;
-  while (b->barriers[which] < b->numProcessor)
+  while (b->barriers[which] < b->numProcessor) {
+    if (!stalled) {
+      stalled = 1;
+      procChangeState(proc, GCIdle, 500);
+    }
     memBarrier();
+  }
+  if (stalled)
+    procChangeState(proc, prevState, prevSubstate);
   if (collectDiag >= 2)
     printf("Proc %d: Passing strong barrier %d\n", 
 	   proc->procid, which, b->numProcessor - b->barriers[which]);

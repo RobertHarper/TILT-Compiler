@@ -6,14 +6,17 @@
 #include "thread.h"
 #include "tag.h"
 #include "queue.h"
-#include "forward.h"
 #include "gc.h"
 #include "global.h"
 #include "bitmap.h"
 #include "stats.h"
 #include "gcstat.h"
 #include "show.h"
+#include "forward.h"
 
+
+
+/* ------------------------ Main collector functions ------------------ */
 
 ptr_t AllocBigArray_Semi(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
@@ -57,22 +60,18 @@ static void GCCollect_Semi(Proc_t *proc)
   Thread_t *curThread = NULL;
   double liveRatio = 0.0;
   ploc_t globalLoc, rootLoc;
+  ptr_t gray;
 
   /* Check that processor is unmapped, write list is not overflowed, allocation region intact */
-  procChangeState(proc, GCWork, 200);
   assert(NumProc == 1);
   assert(allocCursor <= allocLimit);
   assert(totalRequested >= 0);
-
+  assert(primaryGlobalOffset == 0);
+  assert(SetIsEmpty(&proc->work.roots));
   paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
 
+  /* Compute the roots from the stack and register set and globals */
   proc->segmentType |= MajorWork | FlipOn | FlipOff;
-
-  process_writelist(proc, NULL, NULL); /* Get globals; discard backpointers */
-
-  /* Compute the roots from the stack and register set */
-  assert(isEmptyStack(&proc->work.roots));
-  procChangeState(proc, GCStack, 201);
   totalUnused += sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
   ResetJob();
   while ((curThread = NextJob()) != NULL) {
@@ -80,54 +79,91 @@ static void GCCollect_Semi(Proc_t *proc)
       totalRequested += curThread->requestInfo;
     thread_root_scan(proc,curThread);
   }
-  procChangeState(proc, GCGlobal, 202);
   major_global_scan(proc);
-  procChangeState(proc, GCWork, 203);
 
-  /* Get toSpace ready for collection. Forward roots. Do Cheney scan. */
-  /* The non-standard use of CopyRange only works for uniprocessors */
+  /* Get toSpace ready for collection. Forward roots. Process gray objects */
+  procChangeState(proc, GCWork, 203);
   Heap_Resize(toSpace, Heap_GetSize(fromSpace), 1);
-  SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
-  proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
-  proc->majorRange.stop = toSpace->top;
-  while (rootLoc = (ploc_t) popStack(&proc->work.roots))     /* NULL when empty */
-    locCopy1_noSpaceCheck(proc, rootLoc, &proc->majorRange, fromSpace);
-  assert(primaryGlobalOffset == 0);
-  while (globalLoc = (ploc_t) popStack(&proc->work.globals)) /* NULL when empty */
-    locCopy1_noSpaceCheck(proc, (ploc_t) globalLoc, &proc->majorRange, fromSpace);
-  scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,&proc->majorRange, fromSpace);
-  toSpace->cursor = proc->majorRange.cursor;
-  proc->majorRange.stop = proc->majorRange.cursor;
-  ClearCopyRange(&proc->majorRange);
+  SetCopyRange(&proc->copyRange, proc, toSpace, NULL);
+
+  if (!forceSpaceCheck)
+    AllocEntireCopyRange(&proc->copyRange);                      /* no spacecheck - uniprocessor only */
+
+  if (ordering == ImplicitOrder) {
+    if (!forceSpaceCheck) {
+      while (rootLoc = (ploc_t) SetPop(&proc->work.roots))          
+	locCopy1_noSpaceCheck(proc, rootLoc, fromSpace);
+      while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
+	locCopy1_noSpaceCheck(proc, (ploc_t) globalLoc, fromSpace);
+      scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,fromSpace);
+    }
+    else {
+      while (rootLoc = (ploc_t) SetPop(&proc->work.roots))          
+	locCopy1(proc, rootLoc, fromSpace);
+      while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
+	locCopy1(proc, (ploc_t) globalLoc, fromSpace);
+      scanUntil_locCopy1(proc,toSpace->range.low,fromSpace);
+    }
+  }
+  else if (ordering == HybridOrder) {
+    int workedSome = 1;
+    assert(forceSpaceCheck == 1);
+    while (rootLoc = (ploc_t) SetPop(&proc->work.roots))          
+      locCopy1(proc, rootLoc, fromSpace);
+    while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
+      locCopy1(proc, (ploc_t) globalLoc, fromSpace);
+    while (1) {
+      mem_t start = NULL, stop;
+      if (start = (mem_t) SetPop2(&proc->work.grayRegion, &stop))
+	scanRegion_locCopy1(proc,start,stop,fromSpace);
+      AddGrayCopyRange(&proc->copyRange);
+      if (SetIsEmpty(&proc->work.grayRegion))
+	break;
+    }
+    assert(SetIsEmpty(&proc->work.objs));
+    assert(SetIsEmpty(&proc->work.grayRegion));
+  }
+  else {
+    ptr_t gray;
+    while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
+      locCopy1_replicaSet(proc, rootLoc,fromSpace); 
+    while (globalLoc = (ploc_t) SetPop(&proc->work.globals))
+      locCopy1_replicaSet(proc, globalLoc,fromSpace); 
+    if (ordering == StackOrder) {
+      while (gray = (ptr_t) SetPop(&proc->work.objs)) 
+	(void) scanObj_locCopy1_replicaSet(proc,gray,fromSpace);   
+    }
+    else if (ordering == QueueOrder) {
+      while (gray = (ptr_t) SetDequeue(&proc->work.objs)) 
+	(void) scanObj_locCopy1_replicaSet(proc,gray,fromSpace);   
+    }
+    else
+      assert(0);
+  }
+
+  if (!forceSpaceCheck)
+    ReturnCopyRange(&proc->copyRange);                           /* no spacecheck - uniprocessor only */
+
+  ClearCopyRange(&proc->copyRange);
+  assert(SetIsEmpty(&proc->work.roots));
 
   paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
-
-  /* Resize the tospace, discard fromspace, flip space */
-  liveRatio = HeapAdjust1(totalRequested, totalUnused, 0, 0.0, fromSpace, toSpace);
+  liveRatio = HeapAdjust1(totalRequested, totalUnused, 
+			  0, 0.0, fromSpace, toSpace);
   add_statistic(&majorSurvivalStatistic, liveRatio);
   Heap_Resize(fromSpace,0,1);
   typed_swap(Heap_t *, fromSpace, toSpace);
-
-  /* Update proc's allocation variables */
-  proc->allocStart = fromSpace->cursor;
-  proc->allocCursor = fromSpace->cursor;
-  proc->allocLimit = fromSpace->top;
-  fromSpace->cursor = fromSpace->top;
-  assert(proc->writelistCursor == proc->writelistStart);
-
   NumGC++;
+
+  ResetAllocation(proc, fromSpace);                        /* One processor can grab all of fromSpace for further allocation */
+  assert(proc->writelistCursor == proc->writelistStart);
 }
 
 void GC_Semi(Proc_t *proc, Thread_t *th)
 {
-  /* If allocation pointer is StartHeapLimit, we give the single processor the whole heap */
-  if (proc->allocLimit == StartHeapLimit) {
-    proc->allocStart = fromSpace->bottom;
-    proc->allocCursor = fromSpace->bottom;
-    proc->allocLimit = fromSpace->top;
-    fromSpace->cursor = fromSpace->top;
-  }
-  process_writelist(proc,NULL,NULL);
+  if (proc->allocLimit == StartHeapLimit)                  
+    ResetAllocation(proc, fromSpace);                      /* One processor can grab all of fromSpace for further allocation */
+  process_writelist(proc, NULL, NULL);                     /* Get globals; discard backpointers */
   if (GCSatisfiable(proc,th))
     return;
   GCCollect_Semi(proc);
@@ -137,16 +173,8 @@ void GC_Semi(Proc_t *proc, Thread_t *th)
 
 void GCInit_Semi(void)
 {
-  init_int(&MaxHeap, 128 * 1024);
-  init_int(&MinHeap, 256);
-  if (MinHeap > MaxHeap)
-    MinHeap = MaxHeap;
-  init_double(&MinRatio, 0.1);
-  init_double(&MaxRatio, 0.7);
-  init_int(&MinRatioSize, 512);         
-  init_int(&MaxRatioSize, 50 * 1024);
-  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  if (ordering == DefaultOrder)
+    ordering = ImplicitOrder;
+  GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);
 }
-
 

@@ -29,10 +29,13 @@ static int finalizer(void *d)
     return StackNotEmpty;
 }
 
-SharedStack_t *SharedStack_Alloc(int stackletSize, int globalLocSize, int rootLocSize, int objSize, int segmentSize)
+SharedStack_t *SharedStack_Alloc(int doubleProcess,
+				 int stackletSize, int globalLocSize, int rootLocSize, int objSize, int segmentSize, 
+				 int backObjSize, int backLocSize)
 {
   SharedStack_t *ss = (SharedStack_t *) malloc(sizeof(SharedStack_t));
-  init_localWork(&ss->work, objSize, segmentSize, globalLocSize, rootLocSize, stackletSize);
+  ss->doubleProcess = doubleProcess;
+  init_localWork(&ss->work, objSize, segmentSize, globalLocSize, rootLocSize, stackletSize, objSize, backLocSize);
   ss->numLocalStack = 0;
   ss->threeRoom = createRooms(3);
   assignExitCode(ss->threeRoom, 1, &finalizer, (void *) ss);  /* check if stack empty in push room */
@@ -41,37 +44,37 @@ SharedStack_t *SharedStack_Alloc(int stackletSize, int globalLocSize, int rootLo
 }
 
 /* Transfer all items from 'from' to 'to' */
-static void moveToSharedStack(Stack_t *to, Stack_t *from)
+static void moveToSharedStack(Set_t *to, Set_t *from)
 {
   int i; 
-  int numToTransfer = from->cursor;
-  int oldToCursor = FetchAndAdd(&to->cursor,numToTransfer);
-  if (to->cursor >= to->size && to->cursor > 0) {
-    printf("Shared stack of size %d overflowed with %d items\n", to->size, to->cursor);
+  int numToTransfer = SetLength(from);
+  int oldToCursor = FetchAndAdd(&to->last,numToTransfer);
+  if (to->last >= to->size && to->last > 0) {
+    printf("Shared stack %d of size %d overflowed with %d items\n", to, to->size, to->last);
     assert(0);
   }
-  memcpy((void *)&to->data[oldToCursor], (void *)&from->data[0], sizeof(val_t) * numToTransfer);
-  from->cursor = 0;
+  memcpy((void *)&to->data[oldToCursor], (void *)&from->data[from->first], sizeof(val_t) * numToTransfer);
+  from->last = 0;
 }
 
 /* Transfer up to numToFetch items from 'from' to 'to', handling overreach */
-static int getFromSharedStack(Stack_t *to, Stack_t *from, long numToFetch)
+static int getFromSharedStack(Set_t *to, Set_t *from, long numToFetch)
 {
   int i;
-  int oldFromCursor = FetchAndAdd(&from->cursor,-numToFetch);  /* FetchAndAdd returns the pre-added value */
+  int oldFromCursor = FetchAndAdd(&from->last,-numToFetch);  /* FetchAndAdd returns the pre-added value */
   int newFromCursor = oldFromCursor - numToFetch;  
   if (oldFromCursor < 0) {        /* Handle complete overreach */
     numToFetch = 0;
-    from->cursor = 0;             /* Multiple processors might execute this; ok since there are no increments */
+    from->last = 0;             /* Multiple processors might execute this; ok since there are no increments */
   }
   else if (newFromCursor < 0) {   /* Handle partial overreach */
     numToFetch += newFromCursor;  /* Fetching fewer items than requested */
     newFromCursor = oldFromCursor - numToFetch; /* Recompute newFromCursor */
-    from->cursor = 0;             /* Multiple processors might execute this; ok since there are no increments */
+    from->last = 0;             /* Multiple processors might execute this; ok since there are no increments */
   }
-  memcpy((void *)&to->data[to->cursor], (void *)&from->data[newFromCursor], sizeof(val_t) * numToFetch);
-  to->cursor += numToFetch;
-  assert(to->cursor < to->size);
+  memcpy((void *)&to->data[to->last], (void *)&from->data[newFromCursor], sizeof(val_t) * numToFetch);
+  to->last += numToFetch;
+  assert(to->last < to->size);
   return numToFetch;
 }
 
@@ -85,46 +88,83 @@ int isEmptySharedStack(SharedStack_t *ss)
   return empty;
 }
 
-void resetSharedStack(SharedStack_t *ss, LocalWork_t *lw)
+void resetSharedStack(SharedStack_t *ss, LocalWork_t *lw, int getNext)
 {
+  int position;
   assert(lw->hasShared == 0);
   lw->hasShared = 1;
-  FetchAndAdd(&ss->numLocalStack, 1);
+  position = FetchAndAdd(&ss->numLocalStack, 1);
+  if (position == 0 && getNext) {
+    assert(ss->doubleProcess);
+    SetTransfer(&ss->work.nextBackObjs, &ss->work.backObjs);
+    SetTransfer(&ss->work.nextBackLocs, &ss->work.backLocs);
+  }
 }
 
-static int segSize = 3; /* Number of items that constitute a segment */
+void discardNextSharedStack(SharedStack_t *ss)
+{
+  SetReset(&ss->work.nextBackObjs);
+  SetReset(&ss->work.nextBackLocs);
+}
+
+static int segSize = 3;    /* Number of items that constitute a segment */
+static int regionSize = 2; /* Number of items that constitute a region */
 
 extern double roomTime;
 
 #define MakeFraction(a,b,c) ((int) ((a) * (((double)((b) - (c))) / (b))))
-void popSharedStack(SharedStack_t *ss, 
-		    LocalWork_t *lw,
-		    int stackletRequest,
-		    int globalLocRequest,
-		    int rootLocRequest, 
-		    int objRequest, 
-		    int segRequest)
+void popSharedStack(SharedStack_t *ss, LocalWork_t *lw)
 {
-  int stackletFetched = 0, globalLocFetched = 0, rootLocFetched = 0, objFetched = 0, segFetched = 0;
+  int stackletFetched = 0, globalLocFetched = 0, rootLocFetched = 0, grayRegionFetched = 0,
+    objFetched = 0, segFetched = 0, backLocFetched = 0, backObjFetched = 0;
+  int stackletRequest = threadFetchSize;
+  int globalLocRequest = globalLocFetchSize;
+  int rootLocRequest = rootLocFetchSize;
+  int grayRegionRequest = grayRegionFetchSize;
+  int objRequest = objFetchSize;
+  int segRequest = segFetchSize;
+  int backLocRequest = backLocFetchSize;
+  int backObjRequest = backObjFetchSize;
+  
+  int objSize = SetLength(&ss->work.objs);
+  objRequest = Min(objFetchSize, 1 + (int) (objSize / (double) NumProc));
+
   enterRoom(ss->threeRoom,0);
+
   stackletFetched = getFromSharedStack(&lw->stacklets, &ss->work.stacklets, stackletRequest);
-  globalLocRequest = MakeFraction(globalLocRequest, stackletRequest, stackletFetched);
-  if (globalLocRequest > 0) {
-    globalLocFetched = getFromSharedStack(&lw->globals, &ss->work.globals, globalLocRequest);
-    rootLocRequest = MakeFraction(rootLocRequest, globalLocRequest, globalLocFetched);
-    if (rootLocRequest > 0) {
-      rootLocFetched = getFromSharedStack(&lw->roots, &ss->work.roots, rootLocRequest);
-      objRequest = MakeFraction(objRequest, rootLocRequest, rootLocFetched);
-      if (objRequest > 0) {
-	objFetched = getFromSharedStack(&lw->objs, &ss->work.objs, objRequest);
-	segRequest = MakeFraction(segRequest, objRequest, objFetched);
-	if (segRequest > 0)
-	  segFetched = getFromSharedStack(&lw->segments, &ss->work.segments, segSize * segRequest);
-      }
-    }
-  }
+  if ((globalLocRequest = MakeFraction(globalLocRequest, stackletRequest, stackletFetched)) == 0)
+    goto done;
+
+  globalLocFetched = getFromSharedStack(&lw->globals, &ss->work.globals, globalLocRequest);
+  if ((rootLocRequest = MakeFraction(rootLocRequest, globalLocRequest, globalLocFetched)) == 0)
+    goto done;
+
+  rootLocFetched = getFromSharedStack(&lw->roots, &ss->work.roots, rootLocRequest);
+  if ((grayRegionRequest = MakeFraction(grayRegionRequest, rootLocRequest, rootLocFetched)) == 0)
+    goto done;
+
+  grayRegionFetched = getFromSharedStack(&lw->grayRegion, &ss->work.grayRegion, regionSize * grayRegionRequest) / regionSize;
+  if ((objRequest = MakeFraction(objRequest, grayRegionRequest, grayRegionFetched)) == 0)
+    goto done;
+
+  objFetched = getFromSharedStack(&lw->objs, &ss->work.objs, objRequest);
+  if ((segRequest = MakeFraction(segRequest, objRequest, objFetched)) == 0)
+    goto done;
+
+  segFetched = getFromSharedStack(&lw->segments, &ss->work.segments, segSize * segRequest) / segSize;
+  if ((backObjRequest = MakeFraction(backObjRequest, segRequest, segFetched)) == 0)
+    goto done;
+
+  backObjFetched = getFromSharedStack(&lw->backObjs, &ss->work.backObjs, backObjRequest);
+  if ((backLocRequest = MakeFraction(backLocRequest, backObjRequest, backObjFetched)) == 0)
+    goto done;
+
+  backLocFetched = getFromSharedStack(&lw->backLocs, &ss->work.backLocs, backLocRequest);
+
+ done:
   assert(ss->numLocalStack >= 0);
-  if (stackletFetched || globalLocFetched || rootLocFetched || objFetched || segFetched) {
+  if (stackletFetched || globalLocFetched || rootLocFetched || grayRegionFetched || 
+      objFetched || segFetched || backObjFetched || backLocFetched) {
     assert(lw->hasShared == 0);
     lw->hasShared = 1;
     FetchAndAdd(&ss->numLocalStack,1);  
@@ -140,7 +180,14 @@ static void helpPushSharedStack(SharedStack_t *ss, LocalWork_t *lw)
   moveToSharedStack(&ss->work.globals, &lw->globals);
   moveToSharedStack(&ss->work.roots, &lw->roots);
   moveToSharedStack(&ss->work.objs, &lw->objs);
+  moveToSharedStack(&ss->work.grayRegion, &lw->grayRegion);
   moveToSharedStack(&ss->work.segments, &lw->segments);
+  moveToSharedStack(&ss->work.backObjs, &lw->backObjs);
+  moveToSharedStack(&ss->work.backLocs, &lw->backLocs);
+  if (ss->doubleProcess) {
+    moveToSharedStack(&ss->work.nextBackObjs, &lw->nextBackObjs);
+    moveToSharedStack(&ss->work.nextBackLocs, &lw->nextBackLocs);
+  }
 }
 
 

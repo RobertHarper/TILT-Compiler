@@ -210,7 +210,7 @@ mem_t AllocBigArray_SemiConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   }
   /* If collection is on, we must double-allocate */
   if (shouldDoubleAllocate()) 
-    alloc1_copyCopySync_primaryStack(proc, obj, &proc->work.objs, &proc->majorRange, fromSpace);
+    alloc1_copyCopySync_primarySet(proc, obj, fromSpace);
   return obj;
 }
 
@@ -218,6 +218,7 @@ mem_t AllocBigArray_SemiConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 static long totalRequest = 0;     /* Total number of bytes requested by all threads */
 static long totalReplicated = 0;  /* Total number of bytes replicated by all processors */
 static long totalUnused = 0;
+static long workAhead = 0;        /* Total amount of work that is ahead of that required by amount allocated */
 
 static void CollectorOn(Proc_t *proc)
 {
@@ -241,15 +242,16 @@ static void CollectorOn(Proc_t *proc)
   }
 
   /* Check local stack empty; reset root lists */
-  assert(isEmptyStack(&proc->work.objs));
-  assert(isEmptyStack(&proc->work.roots));
-  SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
+  assert(SetIsEmpty(&proc->work.objs));
+  assert(SetIsEmpty(&proc->work.roots));
+  SetCopyRange(&proc->copyRange, proc, toSpace, NULL);
 
   isFirst = (weakBarrier(barriers, proc) == 0);
   if (isFirst) {
     int neededSize = Heap_GetSize(fromSpace);
     int pages = Heap_ResetFreshPages(proc,fromSpace);
 
+    workAhead = 0;
     neededSize += neededSize / majorCollectionRate;
     Heap_Resize(fromSpace,neededSize,0);
     Heap_Resize(toSpace,neededSize,1);
@@ -257,26 +259,24 @@ static void CollectorOn(Proc_t *proc)
     totalRequest = totalReplicated = totalUnused = 0;
     ResetJob();
   }
-  resetSharedStack(workStack,&proc->work);
+  resetSharedStack(workStack,&proc->work, 0);
   strongBarrier(barriers, proc);
 
-  if (isFirst) {
-    procChangeState(proc, GCGlobal, 101);
+  if (isFirst) 
     major_global_scan(proc);
-  }
-  procChangeState(proc, GCStack, 103);
+
   FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   while ((curThread = NextJob()) != NULL) {
     if (initial_root_scan(proc,curThread)) 
-      pushStack(&proc->work.stacklets, (ptr_t) curThread);
+      SetPush(&proc->work.stacklets, (ptr_t) curThread);
     if (curThread->requestInfo >= 0) /* Allocation request */
       FetchAndAdd(&totalRequest, curThread->requestInfo);
   }
   procChangeState(proc, GCWork, 104);
 
-  proc->numRoot += lengthStack(&proc->work.roots) + lengthStack(&proc->work.globals);
+  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
   pushSharedStack(0,workStack,&proc->work);
-  assert(isEmptyStack(&proc->work.objs));
+  assert(SetIsEmpty(&proc->work.objs));
   GCStatus = doAgressive ? GCAgressive : GCOn;
   strongBarrier(barriers, proc);
 }
@@ -307,33 +307,31 @@ static void CollectorTransition(Proc_t *proc)
   isFirst = (weakBarrier(barriers, proc) == 0);
   if (isFirst) {
     ResetJob();
+    workAhead = 0;
   }
-  resetSharedStack(workStack,&proc->work);
+  resetSharedStack(workStack,&proc->work, 0);
   strongBarrier(barriers, proc);
 
-  if (isFirst) {
-    procChangeState(proc, GCGlobal, 106);
+  if (isFirst) 
     major_global_scan(proc);
-  }
 
   /* Check local stack empty; reset root lists */
-  procChangeState(proc, GCStack, 108);
   FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   while ((curThread = NextJob()) != NULL) {
     discard_root_scan(proc,curThread);
     if (curThread->used == 0)
       continue;
     if (initial_root_scan(proc,curThread)) 
-      pushStack(&proc->work.stacklets, (ptr_t) curThread);
+      SetPush(&proc->work.stacklets, (ptr_t) curThread);
     if (curThread->requestInfo >= 0) /* Allocation request */
       FetchAndAdd(&totalRequest, curThread->requestInfo);
   }
 
   procChangeState(proc, GCWork, 109);
-  proc->numRoot += lengthStack(&proc->work.roots) + lengthStack(&proc->work.globals);
+  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
   /* Note the omission of popSharedStack since we used resetSharedStack */
   pushSharedStack(0,workStack,&proc->work);
-  assert(isEmptyStack(&proc->work.objs));
+  assert(SetIsEmpty(&proc->work.objs));
   GCStatus = GCOn;
   strongBarrier(barriers, proc);
 }
@@ -351,7 +349,7 @@ static void CollectorOff(Proc_t *proc)
 
   if (collectDiag >= 2)
     printf("Proc %d: entered CollectorOff\n", proc->procid);
-  assert(isEmptyStack(&proc->work.objs));
+  assert(SetIsEmpty(&proc->work.objs));
   memBarrier();
 
   switch (GCStatus) {
@@ -364,7 +362,7 @@ static void CollectorOff(Proc_t *proc)
   default: assert(0);
   }
 
-  ClearCopyRange(&proc->majorRange);
+  ClearCopyRange(&proc->copyRange);
   isFirst = (weakBarrier(barriers, proc) == 0);
   if (isFirst) 
     ResetJob();
@@ -373,22 +371,20 @@ static void CollectorOff(Proc_t *proc)
   /* Replace all roots (global, local registers, local stack) with replica */
   assert(isEmptySharedStack(workStack));
   assert(isLocalWorkEmpty(&proc->work));
-  procChangeState(proc, GCGlobal, 110);
   if (isFirst) 
     minor_global_scan(proc);                /* Minor scan since the tenured roots are already flipped */
-  while (globalLoc = (ploc_t) popStack(&proc->work.globals)) {
+  while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) {
     ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
     flipRootLoc(replicaLoc);
   }
 
-  procChangeState(proc, GCStack, 111);
   while ((curThread = NextJob()) != NULL) 
     complete_root_scan(proc, curThread);
   procChangeState(proc, GCWork, 112);
 
-  proc->numRoot += lengthStack(&proc->work.roots) + lengthStack(&proc->work.globals);
+  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
   /* Flip stack slots */
-  while (rootLoc = (ploc_t) popStack(&proc->work.roots)) 
+  while (rootLoc = (ploc_t) SetPop(&proc->work.roots)) 
     flipRootLoc(rootLoc);
   FetchAndAdd(&totalReplicated, proc->segUsage.bytesReplicated + proc->cycleUsage.bytesReplicated);
   strongBarrier(barriers, proc);
@@ -413,7 +409,7 @@ static void CollectorOff(Proc_t *proc)
   }
 
   /* All system threads need to reset their limit pointer */
-  proc->allocStart = proc->allocCursor = proc->allocLimit = StartHeapLimit;
+  ResetAllocation(proc, NULL);
   assert(proc->writelistCursor == proc->writelistStart);
 
   strongBarrier(barriers, proc);
@@ -430,7 +426,6 @@ void GCRelease_SemiConc(Proc_t *proc)
   int gcOn;
 
   assert(proc->work.hasShared == 0);
-  procChangeState(proc, Scheduler, 113);
 
   allocCurrent = proc->allocStart;
   allocStop = proc->allocCursor;
@@ -462,7 +457,7 @@ void GCRelease_SemiConc(Proc_t *proc)
       while (tag == SEGPROCEED_TAG || tag == SEGSTALL_TAG)
 	tag = *(++obj); /* Skip past segment tags */
       obj++;            /* Skip past object tag */
-      alloc_copyCopySync_primaryStack(proc,obj,&proc->majorRange,&proc->work.objs);
+      alloc_copyCopySync_primarySet(proc,obj);
       objSize = proc->bytesCopied;
       if (objSize == 0) {
 	mem_t dummy = NULL;
@@ -493,7 +488,7 @@ void GCRelease_SemiConc(Proc_t *proc)
       continue;
     if (!inHeap(primary, fromSpace))
       continue;
-    alloc1_copyCopySync_primaryStack(proc,primary,&proc->work.objs,&proc->majorRange,fromSpace); 
+    alloc1_copyCopySync_primarySet(proc,primary,fromSpace); 
     while ((replica = (ptr_t) primary[-1]) == (ptr_t)STALL_TAG)  /* Somebody might be scanning object */
       ;
     tag = replica[-1];
@@ -513,8 +508,8 @@ void GCRelease_SemiConc(Proc_t *proc)
       ptr_t replicaField = primaryField;
       /* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
 	 even if it might die to prevent the mutator from hiding live data */
-      alloc1_copyCopySync_primaryStack(proc,possPrevPtrVal, &proc->work.objs, &proc->majorRange, fromSpace);
-      locAlloc1_copyCopySync_primaryStack(proc,&replicaField, &proc->work.objs, &proc->majorRange, fromSpace);
+      alloc1_copyCopySync_primarySet(proc,possPrevPtrVal, fromSpace);
+      locAlloc1_copyCopySync_primarySet(proc,&replicaField, fromSpace);
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
@@ -546,62 +541,53 @@ void GCRelease_SemiConc(Proc_t *proc)
 */
 static void do_work(Proc_t *proc, int workToDo)
 {
-  int counter, start, end;
-  ptr_t gray;
 
+  if (workToDo <= 0)
+    return;
   procChangeState(proc, GCWork, 116);
   proc->segmentType |= MajorWork; 
 
   if (collectDiag >= 2)
     printf("Proc %d: do_work\n", proc->procid); 
 
-  assert(isEmptyStack(&proc->work.objs));
-  assert(proc->work.hasShared == 0);
+  assert(isLocalWorkEmpty(&proc->work));
 
   while (updateWorkDone(proc) < workToDo) {
     int i, globalEmpty;
     Thread_t *thread;
     ploc_t rootLoc, globalLoc;
+    ptr_t gray;
     
-    popSharedStack(workStack, &proc->work,
-		   threadFetchSize,
-		   globalLocFetchSize,
-		   rootLocFetchSize, 
-		   objFetchSize, 
-		   segFetchSize);
+    popSharedStack(workStack, &proc->work);
 
     if ((GCStatus == GCPendingOn || GCStatus == GCPendingOff) &&
 	isLocalWorkEmpty(&proc->work))
       break;
 
     while (updateWorkDone(proc) < workToDo &&
-	   ((thread = (Thread_t *) popStack(&proc->work.stacklets)) != NULL)) {
+	   ((thread = (Thread_t *) SetPop(&proc->work.stacklets)) != NULL)) {
       if (!work_root_scan(proc, thread, workToDo)) 
-	pushStack(&proc->work.stacklets, (ptr_t) thread);
+	SetPush(&proc->work.stacklets, (ptr_t) thread);
     }
-    while (!recentWorkDone(proc, localWorkSize) &&
-	   (rootLoc = (ploc_t) popStack(&proc->work.roots)) != NULL) 
-      locAlloc1_copyCopySync_primaryStack(proc,rootLoc,&proc->work.objs,&proc->majorRange,fromSpace);
-    while (!recentWorkDone(proc, localWorkSize) &&
-	   (globalLoc = (ploc_t) popStack(&proc->work.globals)) != NULL) {
+    while (!recentWorkDone(proc) &&
+	   (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+      locAlloc1_copyCopySync_primarySet(proc,rootLoc,fromSpace);
+    while (!recentWorkDone(proc) &&
+	   (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
       ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
-      locAlloc1_copyCopySync_primaryStack(proc,replicaLoc,&proc->work.objs,&proc->majorRange,fromSpace);  
+      locAlloc1_copyCopySync_primarySet(proc,replicaLoc,fromSpace);  
       proc->segUsage.globalsProcessed++;
     }
     while (updateWorkDone(proc) < workToDo) {
       int start, end;
-      ptr_t gray = popStack3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end);
+      ptr_t gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end);
       if (gray == NULL)
 	break;
-      transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,start,end,
-									    &proc->work.objs,&proc->work.segments,
-									    &proc->majorRange, fromSpace); 
+      transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,start,end,fromSpace); 
     }
-    while (!recentWorkDone(proc, localWorkSize) && 
-	   ((gray = popStack(&proc->work.objs)) != NULL)) {
-      transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,&proc->work.objs,
-									     &proc->work.segments,
-									     &proc->majorRange, fromSpace); 
+    while (!recentWorkDone(proc) && 
+	   ((gray = SetPop(&proc->work.objs)) != NULL)) {
+      transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,fromSpace); 
     }
 
     if (pushSharedStack(0,workStack,&proc->work)) {
@@ -614,13 +600,13 @@ static void do_work(Proc_t *proc, int workToDo)
     }
 
   }
-  assert(isEmptyStack(&proc->work.objs));
+  assert(SetIsEmpty(&proc->work.objs));
   assert(proc->work.hasShared == 0);
   if (collectDiag >= 2)
     printf("Proc %d: leaving do_work\n", proc->procid); 
 }
 
-/* Satisfy space requrements by allocating space.  
+/* Satisfy space requirements by allocating space.  
    If enough allocation space exists, no additional space is obtained.
    Write list is not extended. 
    */
@@ -659,6 +645,17 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
   /* XXXXXXXXXXXXXX might fall behind XXXXXXXXX */
   if (roundOnSize > 2 * minOnRequest)
     workToDo = (int) (1.0 + majorCollectionRate) * (2 * minOnRequest);
+  if (workAhead > workToDo) {
+    int amountToTake = Min(workToDo, workAhead / 4);
+    int oldWorkAhead = FetchAndAdd(&workAhead, -amountToTake);
+    if (oldWorkAhead - amountToTake >= 0) {
+      workToDo -= amountToTake;
+    }
+    else {  /* Overreach */
+      FetchAndAdd(&workAhead, amountToTake);
+    }
+  }
+
 
   retry:
     switch (GCStatus) {
@@ -718,9 +715,12 @@ void GCPoll_SemiConc(Proc_t *proc)
   case GCOff:
     return;
   case GCOn:
-  case GCAgressive:
-    do_work(proc, (int) majorCollectionRate * minOnRequest);  /* collect as though one page had been allocated */
+  case GCAgressive: {
+    int workToDo =  (int) majorCollectionRate * minOnRequest;
+    do_work(proc, workToDo);
+    FetchAndAdd(&workAhead, workToDo);
     return;
+  }
   case GCPendingOff:
     do_work(proc, MAXINT);
     CollectorOff(proc);
@@ -741,24 +741,18 @@ void GCPoll_SemiConc(Proc_t *proc)
 void GCInit_SemiConc(void)
 {
   int expandedSize, reducedSize;
-  init_int(&MaxHeap, 128 * 1024);
-  init_int(&MinHeap, 256);
-  if (MinHeap > MaxHeap)
-    MinHeap = MaxHeap;
-  init_double(&MinRatio, 0.1);
-  init_double(&MaxRatio, 0.7);
-  init_int(&MinRatioSize, 512);         
-  init_int(&MaxRatioSize, 50 * 1024);
-  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+
+  if (ordering == DefaultOrder)
+    ordering = StackOrder;
+  GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);   
   expandedSize = Heap_GetSize(fromSpace);
   reducedSize = expandedToReduced(expandedSize, majorCollectionRate);
   Heap_Resize(fromSpace, reducedSize, 1);
   Heap_Resize(toSpace, reducedSize, 1);
-  workStack = SharedStack_Alloc(100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024);
+  workStack = SharedStack_Alloc(0, 100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024, 0, 0);
   barriers = createBarriers(NumProc, 10);
   arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
-  pauseWarningThreshold = 7.0;
+  pauseWarningThreshold = 10.0;
 }
 

@@ -118,7 +118,8 @@ int initializePerfMon(Proc_t *proc)
     return 0;
   fd = open("/dev/perfmon", O_RDONLY);
   if (fd == -1) {
-    fprintf(stderr,"Cannot open /dev/perfmon\n");
+    if (diag)
+      fprintf(stderr,"Cannot open /dev/perfmon\n");
     hasPerfMon = -1;
     return 0;
   }

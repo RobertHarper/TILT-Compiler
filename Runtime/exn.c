@@ -33,12 +33,12 @@ static int getExnStamp(ptr_t exnstructure)
 
 int RuntimeStamp(void)
 {
-  return getExnStamp(RuntimeError_r_INT);
+  return getExnStamp(GetGlobal(&RuntimeError_r_INT));
 }
 
 int RuntimePrimeStamp(void)
 {
-  return getExnStamp(RuntimeErrorPRIME_r_INT);
+  return getExnStamp(GetGlobal(&RuntimeErrorPRIME_r_INT));
 }
 
 void exn_init(void)

@@ -23,7 +23,13 @@
 #define GenerationalParallel 3
 #define SemispaceConcurrent 4
 #define GenerationalConcurrent 5
-#define SemispaceStack 6
+#define SemispaceExplicit 6
+
+#define DefaultOrder 0
+#define ImplicitOrder 1
+#define QueueOrder 2
+#define StackOrder 3
+#define HybridOrder 4
 
 #ifndef _asm_
 
@@ -41,8 +47,10 @@
 #define RoundUp(x,mult) (((x) + (mult) - 1) / (mult) * (mult))
 #define RoundDown(x,mult) (((x) / (mult)) * (mult))
 #define Max(a,b) ((a) > (b) ? (a) : (b))
+#define Min(a,b) ((a) < (b) ? (a) : (b))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 #define arraysize(a) (sizeof(a)/sizeof(*(a)))
+#define BUG(x) {printf(x); exit(-1); }
 
 void init_int(int *, int);
 void init_double(double *, double);
@@ -52,6 +60,7 @@ int CompareAndSwap(volatile int *location, int testValue, int swapValue); /* Ret
 void memOrder(void);
 void memBarrier(void);
 
+extern int checkAtGC;
 extern int LEAST_GC_TO_CHECK;
 extern int SHOW_GCSTATS;
 extern int SHOW_GCFORWARD;
@@ -80,6 +89,8 @@ extern int NumStack;
 extern int NumStackChain;
 extern int NumHeap;
 extern int NumGC, NumMajorGC;
+extern int noSharing, noWorkTrack;
+extern int relaxed;
 
 #endif
 

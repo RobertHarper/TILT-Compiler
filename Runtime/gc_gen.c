@@ -47,7 +47,7 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                        pushStack(proc->backObjs, obj);
+                        SetPush(&proc->work.backObjs, obj);
 		        break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
@@ -86,7 +86,6 @@ void GCCollect_Gen(Proc_t *proc)
   paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
 
   /* Get all roots */
-  procChangeState(proc, GCStack, 300);
   ResetJob();
   totalUnused += sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
   while ((curThread = NextJob()) != NULL) {
@@ -102,41 +101,35 @@ void GCCollect_Gen(Proc_t *proc)
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   if (GCType == Minor) {            
-    procChangeState(proc, GCGlobal, 301);
     minor_global_scan(proc);
-    procChangeState(proc, GCWrite, 302);
     process_writelist(proc, nursery, fromSpace); /* Get globals and backpointers */
   }
   else {
-    procChangeState(proc, GCGlobal, 303);
     major_global_scan(proc);
-    procChangeState(proc, GCWork, 304);
     process_writelist(proc, NULL, NULL);  /* Get globals; Backpointers can be ignored on major GC */
   }
 
+  procChangeState(proc, GCWork, 304);
 
   /* Perform just a minor GC */
   if (GCType == Minor) {
     /* --- forward the roots and the writelist; then Cheney-scan until no gray objects */
-    /* The non-standard use of CopyRange only works for uniprocessors */
     mem_t scanStart = fromSpace->cursor;   /* Record before it gets changed */
-    SetCopyRange(&proc->minorRange, proc, fromSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
-    proc->minorRange.start = proc->minorRange.cursor = fromSpace->cursor;
-    proc->minorRange.stop = fromSpace->top;
-    while (rootLoc = (ploc_t) popStack(&proc->work.roots))
-      locCopy1_noSpaceCheck(proc, rootLoc, &proc->minorRange, nursery);
-    while (PRObj = popStack(proc->backObjs)) {
+    SetCopyRange(&proc->copyRange, proc, fromSpace, NULL);
+    AllocEntireCopyRange(&proc->copyRange);  /* no-space chech hack - only for uniprocessor*/
+    while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
+      locCopy1_noSpaceCheck(proc, rootLoc, nursery);
+    while (PRObj = SetPop(&proc->work.backObjs)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
          Since this is a stop-copy collector, we can use _locCopy_ immediately */
-      scanObj_locCopy1_noSpaceCheck(proc, PRObj, &proc->minorRange, nursery);
+      scanObj_locCopy1_noSpaceCheck(proc, PRObj, nursery);
     }
     assert(primaryGlobalOffset == 0);
-    while (globalLoc = (ploc_t) popStack(&proc->work.globals)) 
-      locCopy1_noSpaceCheck(proc, globalLoc, &proc->minorRange, nursery);
-    scanUntil_locCopy1_noSpaceCheck(proc, scanStart, &proc->minorRange, nursery);
-    fromSpace->cursor = proc->minorRange.cursor;
-    proc->minorRange.stop = proc->minorRange.cursor;
-    ClearCopyRange(&proc->minorRange);
+    while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
+      locCopy1_noSpaceCheck(proc, globalLoc, nursery);
+    scanUntil_locCopy1_noSpaceCheck(proc, scanStart, nursery);
+    ReturnCopyRange(&proc->copyRange);    /* no-space hack - uniprocessor only */
+    ClearCopyRange(&proc->copyRange);
     paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
     liveRatio = (double) (bytesCopied(&proc->cycleUsage) + bytesCopied(&proc->segUsage)) / 
                 (double) (Heap_GetUsed(nursery));
@@ -156,26 +149,22 @@ void GCCollect_Gen(Proc_t *proc)
       Heap_Resize(toSpace, maxLive, 1);
     }
 
-    /* The non-standard use of CopyRange only works for uniprocessors */
-    SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
-    proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
-    proc->majorRange.stop = toSpace->top;
+    SetCopyRange(&proc->copyRange, proc, toSpace, NULL);
+    AllocEntireCopyRange(&proc->copyRange);  /* no-space chech hack - only for uniprocessor*/
 
     /* do the normal roots; backpointers can be skipped on a major GC;
        then the usual Cheney scan followed by sweeping the large-object region */
     gc_large_startCollect();
-    while (rootLoc = (ploc_t) popStack(&proc->work.roots)) 
-      locCopy2L_noSpaceCheck(proc, rootLoc, &proc->majorRange, nursery, fromSpace, largeSpace);
-    resetStack(proc->backObjs);
+    while (rootLoc = (ploc_t) SetPop(&proc->work.roots)) 
+      locCopy2L_noSpaceCheck(proc, rootLoc, nursery, fromSpace, largeSpace);
+    SetReset(&proc->work.backObjs);
     assert(primaryGlobalOffset == 0);
-    while (globalLoc = (ploc_t) popStack(&proc->work.globals)) 
-      locCopy2L_noSpaceCheck(proc, globalLoc, &proc->majorRange, nursery, fromSpace, largeSpace);
-    scanUntil_locCopy2L_noSpaceCheck(proc,scanStart, &proc->majorRange,
+    while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
+      locCopy2L_noSpaceCheck(proc, globalLoc, nursery, fromSpace, largeSpace);
+    scanUntil_locCopy2L_noSpaceCheck(proc,scanStart, 
 				    nursery, fromSpace, largeSpace);
-    assert(proc->majorRange.cursor < toSpace->top);
-    toSpace->cursor = proc->majorRange.cursor;
-    proc->majorRange.stop = proc->majorRange.cursor;
-    ClearCopyRange(&proc->majorRange);
+    ReturnCopyRange(&proc->copyRange);    /* no-space hack - uniprocessor only */
+    ClearCopyRange(&proc->copyRange);
     gc_large_endCollect();
     paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
 
@@ -190,10 +179,7 @@ void GCCollect_Gen(Proc_t *proc)
   /* Update sole thread's allocation pointers and root lists */
   if (GCType == Minor)
     minor_global_promote(proc);
-  proc->allocStart = nursery->bottom;
-  proc->allocCursor = nursery->bottom;
-  proc->allocLimit = nursery->top;
-  nursery->cursor = nursery->top;
+  ResetAllocation(proc, nursery);
   assert(proc->writelistCursor == proc->writelistStart);
 
   /* stop timer and update counts */
@@ -206,13 +192,9 @@ void GCCollect_Gen(Proc_t *proc)
 void GC_Gen(Proc_t *proc, Thread_t *th)
 {
   /* First time */
-  if (proc->allocLimit == StartHeapLimit) {
-    proc->allocStart = nursery->bottom;
-    proc->allocCursor = nursery->bottom;
-    proc->allocLimit = nursery->top;
-    nursery->cursor = nursery->top;
-  }
-  if (2 * lengthStack(&proc->work.roots) < sizeStack(&proc->work.roots)) 
+  if (proc->allocLimit == StartHeapLimit) 
+    ResetAllocation(proc, nursery);
+  if (2 * SetLength(&proc->work.roots) < SetFullSize(&proc->work.roots))
     process_writelist(proc,nursery,fromSpace);
   /* Check for forced Major GC's */
   if (th->request != MajorGCRequestFromC &&
@@ -226,20 +208,10 @@ void GCInit_Gen(void)
 {
   int cache_size = GetBcacheSize();
 
+  GCInit_Help(1024, 128 * 1024, 0.2, 0.8, 512, 50 * 1024);   
   init_int(&YoungHeapByte, (int)(0.85 * cache_size));
-  init_int(&MaxHeap, 128 * 1024);
-  init_int(&MinHeap, 1024);
-  if (MinHeap > MaxHeap)
-    MinHeap = MaxHeap;
-  init_double(&MinRatio, 0.2);
-  init_double(&MaxRatio, 0.8);
-  init_int(&MinRatioSize, 512);
-  init_int(&MaxRatioSize, 50 * 1024);
   assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
-
   nursery = Heap_Alloc(YoungHeapByte, YoungHeapByte);
-  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   gc_large_init();
 }
 

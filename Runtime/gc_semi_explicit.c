@@ -15,7 +15,7 @@
 #include "show.h"
 
 
-ptr_t AllocBigArray_SemiStack(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
+ptr_t AllocBigArray_SemiExplicit(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
   mem_t region;
   ptr_t obj;
@@ -43,7 +43,7 @@ ptr_t AllocBigArray_SemiStack(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   return obj;
 }
 
-void GCRelease_SemiStack(Proc_t *proc)
+void GCRelease_SemiExplicit(Proc_t *proc)
 {
   int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
   proc->allocStart = proc->allocCursor;
@@ -57,63 +57,68 @@ static void stop_copy(Proc_t *proc)
   Thread_t *curThread = NULL;
   static long req_size;            /* These are shared across processors. */
   ploc_t rootLoc, globalLoc;
+  ptr_t gray;
   
-  assert(isEmptyStack(&proc->work.objs)); 
+  assert(SetIsEmpty(&proc->work.objs)); 
 
   /* Using asynchronous version, we detect the first thread and permit
      it to do some preliminary work while other processors have not reached the barrier.
      Note that we prevent other threads from proceeding until the first thread has done its work
      by counting the first thread twice in the barrier size. */
-  Heap_Resize(toSpace, Heap_GetSize(fromSpace) + NumProc * minOffRequest, 1);
+  Heap_Resize(toSpace, Heap_GetMaximumSize(toSpace), 1);
   ResetJob();                        /* Reset counter so all user threads are scanned */
   req_size = 0;
+
+
 
   proc->segmentType |= (MajorWork | FlipOn | FlipOff);
   /* All threads get local structures ready */
   assert(isLocalWorkEmpty(&proc->work));
-  SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
-  /* no-space chech hack - only for uniprocessor*/
-  proc->majorRange.start = proc->majorRange.cursor = toSpace->cursor;
-  proc->majorRange.stop = toSpace->top;
+  SetCopyRange(&proc->copyRange, proc, toSpace, NULL);
+  AllocEntireCopyRange(&proc->copyRange);  /* no-space chech hack - only for uniprocessor*/
 
   /* Write list can be ignored */
   process_writelist(proc,NULL,NULL);
 
-  /* The "first" processor is in charge of the globals. */
-  procChangeState(proc, GCGlobal, 700);
+  /* Roots include globals and stack slots */
   major_global_scan(proc);
-
-  /* All other processors compute thread-specific roots in parallel */
-  procChangeState(proc, GCStack, 701);
   while ((curThread = NextJob()) != NULL) {
     if (curThread->requestInfo >= 0)
       FetchAndAdd(&req_size, curThread->requestInfo);
     thread_root_scan(proc,curThread);
   }
+  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
 
-  procChangeState(proc, GC, 702);
-  /* Now forward all the roots which initializes the local work stacks */
-  proc->numRoot += lengthStack(&proc->work.roots) + lengthStack(&proc->work.globals);
-  while (rootLoc = (ploc_t) popStack(&proc->work.roots))
-    locCopy1_noSpaceCheck_replicaStack(proc, rootLoc,
-				       &proc->work.objs,&proc->majorRange,fromSpace); 
-  while (globalLoc = (ploc_t) popStack(&proc->work.globals))
-    locCopy1_noSpaceCheck_replicaStack(proc, globalLoc,
-				       &proc->work.objs,&proc->majorRange,fromSpace); 
-
-  while (1) {
-    ptr_t gray = popStack(&proc->work.objs);
-    if (gray == NULL) 
-      break;
-    (void) scanObj_locCopy1_noSpaceCheck_replicaStack(proc,gray,&proc->work.objs,&proc->majorRange,fromSpace);
+  /* Forward all stack slots and globals. Process until no more gray objects. */
+  procChangeState(proc, GCWork, 702);
+  if (ordering == StackOrder) {
+    while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
+      locCopy1_noSpaceCheck_replicaSet(proc, rootLoc,fromSpace); 
+    while (globalLoc = (ploc_t) SetPop(&proc->work.globals))
+      locCopy1_noSpaceCheck_replicaSet(proc, globalLoc,fromSpace); 
+    /*    while (gray = (ptr_t) SetPop(&proc->work.objs)) 
+      (void) scanObj_locCopy1_noSpaceCheck_replicaSet(proc,gray,fromSpace);   */
+    scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,fromSpace); /* XXXX */
   }
+  else if (ordering == QueueOrder) {
+    while (rootLoc = (ploc_t) SetDequeue(&proc->work.roots))
+      locCopy1_noSpaceCheck_replicaSet(proc, rootLoc,fromSpace); 
+    while (globalLoc = (ploc_t) SetDequeue(&proc->work.globals))
+      locCopy1_noSpaceCheck_replicaSet(proc, globalLoc,fromSpace); 
+    /*    while (gray = (ptr_t) SetDequeue(&proc->work.objs)) 
+      (void) scanObj_locCopy1_noSpaceCheck_replicaSet(proc,gray,fromSpace);  
+      */
+    scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,fromSpace); /* XXXX */
+  }
+  else
+    assert(0);
 
-  assert(isLocalWorkEmpty(&proc->work));
-  /* no-space hack - uniprocessor only */
-  toSpace->cursor = proc->majorRange.cursor;
-  proc->majorRange.stop = proc->majorRange.cursor;
-  ClearCopyRange(&proc->majorRange);
+  SetReset(&proc->work.objs); /* XXX */
+  /*  assert(isLocalWorkEmpty(&proc->work)); XXX */
+  SetReset(&proc->work.objs);
 
+  ReturnCopyRange(&proc->copyRange);    /* no-space hack - uniprocessor only */
+  ClearCopyRange(&proc->copyRange);
 
 
   /* Only the designated thread needs to perform the following */
@@ -132,14 +137,12 @@ static void stop_copy(Proc_t *proc)
   }
 
   /* All system threads need to reset their limit pointer */
-  proc->allocStart = StartHeapLimit;
-  proc->allocCursor = StartHeapLimit;
-  proc->allocLimit = StartHeapLimit;
+  ResetAllocation(proc, NULL);
   assert(proc->writelistCursor == proc->writelistStart);
 
 }
 
-void GC_SemiStack(Proc_t *proc, Thread_t *th)
+void GC_SemiExplicit(Proc_t *proc, Thread_t *th)
 {
   /*  int roundSize = Max(th->requestInfo, minOffRequest);    */
    int numRequest = DivideDown(Heap_GetAvail(fromSpace), minOffRequest);
@@ -158,19 +161,11 @@ void GC_SemiStack(Proc_t *proc, Thread_t *th)
   assert(GCSatisfiable(proc,th));
 }
 
-void GCInit_SemiStack(void)
+void GCInit_SemiExplicit(void)
 {
-  minOffRequest = 4 * pagesize;
-  init_int(&MaxHeap, 128 * 1024);
-  init_int(&MinHeap, 256);
-  if (MinHeap > MaxHeap)
-    MinHeap = MaxHeap;
-  init_double(&MinRatio, 0.1);
-  init_double(&MaxRatio, 0.7);
-  init_int(&MinRatioSize, 512);         
-  init_int(&MaxRatioSize, 50 * 1024);
-  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  if (ordering == DefaultOrder)
+    ordering = ImplicitOrder;
+  GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);
 }
 
 

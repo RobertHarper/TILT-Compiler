@@ -43,7 +43,7 @@ typedef volatile struct Stacklet__t
   mem_t replicaRetadd;                 /*   so that the replica stacklet can be later scanned */
   unsigned int topRegstate;            /* Register state (mask) at top frame */
   unsigned int bottomRegstate;         /* Register state (mask) at bottom frame */
-  Stack_t  *callinfoStack;             /* Corresponds to stack frames of this stacklet */
+  Set_t  *callinfoStack;             /* Corresponds to stack frames of this stacklet */
   struct StackChain__t *parent;        /* Stack chain this stacklet belongs to */
 } Stacklet_t;
 
@@ -135,16 +135,15 @@ int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
 {
   int offset = sizeof(val_t) * (addr - h->bottom);
   int page = DivideDown(offset, pagesize);
-  return 0;
-  /*
   int word = page >> 5;
   int bit = page & 31;
   int mask = 1 << bit;
   int info = h->freshPages[word];
   assert(sizeof(int) == 4);
+  assert(addr >= h->bottom && addr < h->top);
   h->freshPages[word] = info | mask;
   return !(mask & info);
-  */
+
   /*
   int info = h->freshPages[page];
   h->freshPages[page] = 1;
@@ -160,7 +159,25 @@ int Heap_GetMaximumSize(Heap_t *res);                 /* Maximum size */
 int Heap_GetAvail(Heap_t *res);                       /* Space unused under current size */
 int Heap_GetUsed(Heap_t *res);                        /* Space used or allocated to processor */
 void PadHeapArea(mem_t bottom, mem_t top);
-void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top);
+
+INLINE(GetHeapArea)
+void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top)
+{
+  mem_t region = (mem_t) FetchAndAdd((long *)(&heap->cursor), size); 
+  mem_t newHeapCursor = region + size / sizeof(val_t);
+  if (newHeapCursor > heap->top) {
+    FetchAndAdd((long *)(&heap->cursor), -size);
+    *bottom = *cursor = *top = 0;
+  }
+  else {
+    /* Do most machines have non-blockig read? */
+    /* val_t forceRead = *newHeapCursor;     */
+    *bottom = region;
+    *cursor = region;
+    *top = newHeapCursor;
+    /* PadHeapArea(*bottom,*top); */
+  }
+}
 
 extern mem_t StartHeapLimit; /* When we don't have a real initial heap limit, use this one */
 extern mem_t StopHeapLimit;  /* When heap limit is being used to interrupt a thread, use this one */

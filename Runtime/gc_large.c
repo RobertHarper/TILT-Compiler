@@ -36,7 +36,7 @@ mem_t gc_large_alloc(Proc_t *proc, int byteLen, Align_t align)
 
   region = largeSpace->bottom + (largebitmapsize * bitmapPos) / (sizeof (val_t));
   end = region + (chunksNeeded * largebitmapsize) / (sizeof (val_t));
-  AlignMemoryPointer(&region, align);
+  region = AlignMemoryPointer(region, align);
   PadHeapArea(region + byteLen / sizeof(val_t), end);
   return region;
 }

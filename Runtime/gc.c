@@ -34,7 +34,12 @@ int SHOW_HEAPS     = 0;
 int SHOW_GLOBALS   = 0;
 int SHOW_GCFORWARD = 0;
 double pauseWarningThreshold = -1.0;
+int warnThreshold = 0;
+int doCopyCopySync = 1;
+int noSharing = 0, noWorkTrack = 0;
+int relaxed = 0;
 
+int cacheSize = 4, fetchSize = 4, cacheSize2 = 0; /* in pages */
 
 volatile GCType_t GCType = Minor;
 volatile GCStatus_t GCStatus = GCOff;
@@ -64,12 +69,24 @@ int minAllocRegion = 256;         /* Minimum allocation region size in bytes.  M
 int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
-int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
+int minOffRequest, maxOffRequest, minOnRequest;
+int copyPageSize;   /* Collector allocates this much memory from a shared heap and then satisfies the normal requests from this local pool. */
+int copyCheckSize;  
+int copyChunkSize;  /* If a large amount (>= copyChunkSize) is needed by the collector and is not satisfiable from the local pool,
+		       then this amount is directly allocated from the shared heap, leaving the local pool alone. A small
+		       request that is not satisfiable from the local pool will cause the a new local pool to be allocated.
+		       Typically, copyChunkSize = 1K and copyPageSize = 8K which ensures that we waste no more than 1/8
+		       of the memory.
+		    */
+
 int threadFetchSize = 1;
 int globalLocFetchSize = 1000;
 int rootLocFetchSize = 1000;
+int grayRegionFetchSize = 2;
 int objFetchSize = 100;
 int segFetchSize = 2;             
+int backObjFetchSize = 2;
+int backLocFetchSize = 100;
 /* Work is per-byte and so each field can be up to 4.0 */
 double objCopyWeight = 2.5;      /* Corresponds to tag */
 double objScanWeight = 1.5;
@@ -83,6 +100,8 @@ int arraySegmentSize = 0;         /* If zero, not splitting arrays into segments
 				     If non-zero, must be greater than the compiler's maxByteRequest */
 int localWorkSize = 4096;
 int usageCount = 50;
+int ordering = DefaultOrder;
+int forceSpaceCheck = 0;
 
 /* Agressive: Use the Off -> On -> Commit protocol.
    Conservative: Use Off -> Commit protocol. */
@@ -124,7 +143,7 @@ long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve
     unreservedSize = 1024 * MinHeap;
     newSize = RoundDown(unreservedSize * (1.0 - reserve), 1024);
   }
-  assert(newSize > oldlive);
+  assert(newSize >= oldlive + withhold);
   return newSize;
 }
 
@@ -177,10 +196,29 @@ double HeapAdjust2(int request, int unused, int withhold,  double reserve, Heap_
   return HeapAdjust(request, unused, withhold, reserve, froms, to);
 }
 
+void GCInit_Help(int defaultMinHeap, int defaultMaxHeap, 
+		 double defaultMinRatio, double defaultMaxRatio, 
+		 int defaultMinRatioSize, int defaultMaxRatioSize)
+{
+  init_int(&MinHeap, defaultMinHeap);
+  init_int(&MaxHeap, defaultMaxHeap);
+  MinHeap = Min(MinHeap,MaxHeap);
+  init_double(&MinRatio, defaultMinRatio);
+  init_double(&MaxRatio, defaultMaxRatio);
+  init_int(&MinRatioSize, defaultMinRatioSize);
+  init_int(&MaxRatioSize, defaultMaxRatioSize);
+  fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
+  toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+}
+
 void GCInit(void)
 {
-  init_int(&minOffRequest, 4 * pagesize);
-  init_int(&minOnRequest, pagesize);
+  init_int(&minOffRequest, 1 * pagesize);
+  init_int(&maxOffRequest, 8 * pagesize);
+  init_int(&minOnRequest, 1 * pagesize);
+  init_int(&copyPageSize, pagesize / 2);
+  init_int(&copyCheckSize, pagesize / 2);
+  init_int(&copyChunkSize, 256);
   minOffRequest = RoundUp(minOffRequest, pagesize);
   minOnRequest = RoundUp(minOnRequest, pagesize);
 
@@ -225,12 +263,6 @@ void GCInit(void)
     GCPollFun = GCPoll_GenConc;
     GCInit_GenConc();
     break;
-  case SemispaceStack:
-    GCFun = GC_SemiStack;
-    GCReleaseFun = GCRelease_SemiStack;
-    GCPollFun = NULL; /* GCPoll_SemiStack; */
-    GCInit_SemiStack();
-    break;
   default: 
     assert(0);
   }
@@ -243,7 +275,7 @@ void AssertMirrorPtrArray(int moduleMirrorArray)
   assert(moduleMirrorArray == mirrorArray);
 }
 
-void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalStarts, int doReplica)
+void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalStarts, ShowType_t replicaType)
 {
   int count = 0, mi, i;
   char buffer[100];
@@ -253,24 +285,24 @@ void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalSta
     mem_t stop = (mem_t) (&GLOBALS_END_VAL)[mi];
     sprintf(buffer, "globals of module %d: %s", mi, label);
     scan_heap(buffer,start,stop,stop, legalHeaps, legalStarts, 
-	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), doReplica, NULL);
+	      SHOW_GLOBALS && (NumGC >= LEAST_GC_TO_CHECK), replicaType, NULL);
   }
 }
 
-void paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t *start, int doReplica)
+void paranoid_check_heap_without_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t *start, ShowType_t replicaType)
 {
   int count = 0, mi, i;
   scan_heap(label,curSpace->bottom, curSpace->cursor, 
 	    curSpace->top, legalHeaps, NULL,
-	    0, doReplica, start);
+	    0, replicaType, start);
 }
 
-void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t **legalStarts, int doReplica)
+void paranoid_check_heap_with_start(char *label, Heap_t *curSpace, Heap_t **legalHeaps, Bitmap_t **legalStarts, ShowType_t replicaType)
 {
   int count = 0, mi, i;
   scan_heap(label,curSpace->bottom, curSpace->cursor, 
 	    curSpace->top, legalHeaps, legalStarts,
-	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), doReplica, NULL);
+	    SHOW_HEAPS && (NumGC >= LEAST_GC_TO_CHECK), replicaType, NULL);
 }
 
 void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bitmap_t **legalStarts)
@@ -302,8 +334,9 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
       }
       else if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
 	static int newval = 42000;
-	printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
-	       NumGC,count,data,newval);
+	if (verbose)
+	  printf("TRACE WARNING GC %d: register %d has from space value %d --> changing to %d\n",
+		 NumGC,count,data,newval);
 	saveregs[count] = newval++;  
       }
       else if (verbose)
@@ -317,13 +350,14 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
 	val_t data = *cursor;
 	if (!inHeaps((ptr_t)data,legalHeaps,legalStarts) && inSomeHeap((ptr_t)data)) {
 	  static int newval = 62000;
-	  printf("TRACE WARNING GC %d: stack location %d has fromspace value %d --> changing to %d\n",
+	  if (verbose)
+	    printf("TRACE WARNING GC %d: stack location %d has fromspace value %d --> changing to %d\n",
 		 NumGC, cursor,data,newval);
 	  *cursor = newval++;  
 	}
       }
     }
-
+    
 }
 
 void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
@@ -340,10 +374,15 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   Heap_t **legalCurrentHeaps;
   Bitmap_t **legalCurrentStarts;
   Thread_t *curThread;
-  int doReplica = firstReplica != NULL;
+  int showReplica1 = (firstReplica != NULL) ? OtherReplica : NoReplica;
+  int showReplica2 = (firstReplica != NULL) ? (firstReplica == secondPrimary ? SelfReplica : OtherReplica) : NoReplica;
+  int showReplica3 = (firstReplica != NULL) ? SelfReplica : NoReplica;
 
-  if (!(paranoid && (NumGC % paranoid == 0)))
+  if (!paranoid)
     return;
+  if (NumGC < checkAtGC)
+    return;
+
   assert(firstPrimary != NULL);
   legalPrimaryHeaps[0] = firstPrimary;
   legalPrimaryHeaps[1] = secondPrimary;
@@ -364,18 +403,18 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
       legalReplicaHeaps[1] = largeSpace;
   }
   sprintf(msg, "%s: first primary heap", when);
-  paranoid_check_heap_without_start(msg,firstPrimary,legalPrimaryHeaps, legalPrimaryStarts[0], doReplica);
+  paranoid_check_heap_without_start(msg,firstPrimary,NULL, legalPrimaryStarts[0], showReplica1);
   if (secondPrimary != NULL) {
     sprintf(msg, "%s: second primary heap", when);
-    paranoid_check_heap_without_start(msg,secondPrimary,legalPrimaryHeaps, legalPrimaryStarts[1], doReplica);
+    paranoid_check_heap_without_start(msg,secondPrimary,NULL, legalPrimaryStarts[1], showReplica1);
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    paranoid_check_heap_without_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts[0], doReplica);
+    paranoid_check_heap_without_start(msg,firstReplica,NULL, legalReplicaStarts[0], showReplica2);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    paranoid_check_heap_without_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts[1], doReplica);
+    paranoid_check_heap_without_start(msg,secondReplica,NULL, legalReplicaStarts[1], showReplica1);
   }
 
   if (firstReplica == NULL) {
@@ -394,24 +433,30 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
   }
   ResetJob();
   sprintf(msg, "%s: globals", when);
-  paranoid_check_global(msg, legalCurrentHeaps,legalCurrentStarts, doReplica);
+  paranoid_check_global(msg, legalCurrentHeaps,legalCurrentStarts, showReplica3);
+
   sprintf(msg, "%s: first primary heap", when);
-  paranoid_check_heap_with_start(msg, firstPrimary, legalPrimaryHeaps, legalPrimaryStarts, doReplica);
+  paranoid_check_heap_with_start(msg, firstPrimary, legalPrimaryHeaps, legalPrimaryStarts, showReplica1);
   if (secondPrimary != NULL) {
-    sprintf(msg, "%s: second primary heap", when);
-    paranoid_check_heap_with_start(msg, secondPrimary, legalPrimaryHeaps, legalPrimaryStarts, doReplica);
+    if (firstReplica != NULL && secondPrimary != firstReplica) {
+      printf("Skipping paranoid check on secondPrimary on major GC\n");
+    }
+    else {
+      sprintf(msg, "%s: second primary heap", when);
+      paranoid_check_heap_with_start(msg, secondPrimary, legalPrimaryHeaps, legalPrimaryStarts, showReplica2);
+    }
   }
   if (firstReplica != NULL) {
     sprintf(msg, "%s: first replica heap", when);
-    paranoid_check_heap_with_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts, doReplica);
+    paranoid_check_heap_with_start(msg,firstReplica,legalReplicaHeaps, legalReplicaStarts, showReplica2);
   }
   if (secondReplica != NULL) {
     sprintf(msg, "%s: second replica heap", when);
-    paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts, doReplica);
+    paranoid_check_heap_with_start(msg,secondReplica,legalReplicaHeaps, legalReplicaStarts, showReplica1);
   }
 
-  if (traceError) {
-    printf("\n\nProgram halted due to TRACE ERROR(s)\n\n");
+  if (numErrors) {
+    printf("\n\nProgram halted due to %d TRACE ERROR(s).  At most %d shown.\n\n", numErrors, errorsToShow);
     assert(0);
   }
 }
@@ -428,7 +473,7 @@ mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* byte
   int wordsToAlloc = bytesToAlloc >> 2;
   mem_t region = NULL;
   if (alloc + wordsToAlloc + (align == NoWordAlign ? 0 : 1) <= limit) {
-    AlignMemoryPointer(&alloc, align);
+    alloc = AlignMemoryPointer(alloc, align);
     region = alloc;
     alloc += wordsToAlloc;
     thread->saveregs[ALLOCPTR] = (val_t) alloc;
@@ -446,7 +491,7 @@ mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t al
   GetHeapArea(fromSpace, pagePadBytes, &start, &cursor, &limit);
   if (start == NULL) 
     return NULL;
-  AlignMemoryPointer(&cursor, align);
+  cursor = AlignMemoryPointer(cursor, align);
   PadHeapArea(cursor + bytesToAlloc / sizeof(val_t), limit);
   return cursor;
 }
@@ -466,7 +511,6 @@ static ptr_t alloc_bigdispatcharray(ArraySpec_t *spec)
     case GenerationalParallel:   result = AllocBigArray_GenPara(proc,thread,spec); break;
     case SemispaceConcurrent:    result = AllocBigArray_SemiConc(proc,thread,spec); break;
     case GenerationalConcurrent: result = AllocBigArray_GenConc(proc,thread,spec); break;
-    case SemispaceStack:         result = AllocBigArray_SemiStack(proc,thread,spec); break;
     default: assert(0);
   }
   if (spec->type == PointerField || spec->type == MirrorPointerField)
@@ -553,6 +597,20 @@ int GCSatisfiable(Proc_t *proc, Thread_t *th)
     assert(0);
 }
 
+/* Assign heap to allocation area of a processor - if heap is null, fields set to StartHeapLimit - must be null for multiple processors*/
+void ResetAllocation(Proc_t *proc, Heap_t *heap)
+{
+  if (heap == NULL) {
+    proc->allocStart = StartHeapLimit;
+    proc->allocCursor = StartHeapLimit;
+    proc->allocLimit = StartHeapLimit;
+    return;
+  }
+  proc->allocStart = heap->cursor;
+  proc->allocCursor = heap->cursor;
+  proc->allocLimit = heap->top;
+  heap->cursor = heap->top;
+}
 
 void GCFromScheduler(Proc_t *proc, Thread_t *th)
 {  

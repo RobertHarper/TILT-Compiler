@@ -80,6 +80,41 @@ typedef struct Histogram__t
 void reset_histogram(Histogram_t *);
 void add_histogram(Histogram_t *, double);
 
+
+/* A sequence of numbers (times) s1, s2, ... , each associated with a bit-value on/off, is fed
+   to this data structure and it computes the smallest fraction of on to off values in any given
+   window of size w.  That is, it computes values
+
+   s_x1 + s_x2 + ... + s_xm    with x1 < x2 < ...
+   ------------------------ 
+   s_y1 + s_y2 + ... + s_ym    with y1 < y2 < ...
+
+   where the x and y values are distinct and form a contiguous sequence and so that
+
+   w - s_max(xm,yn) > s_x1 + s_x2 + ... + s_xm + s_y1 + s_y2 + ... + s_ym > w
+
+
+*/
+   
+typedef struct WindowQuotient__t   /* quotient = on / off */
+{
+  int    granularity;             /* number of parts millisecond is divided into */
+  int    size;
+  double onRemain, offRemain;
+  char   *data;                   /* Each char indicates state of 1 ms / granularity */
+  int    first;                   /* first occupied slot */
+  int    last;                    /* first unused slot */
+  int    numWindows;
+  int    windowSize[20];          /* in tens of microseconds */
+  int    onSum[20];               /* sum of active data values that are on */
+  int    offSum[20];              /* sum of active data values that are off */
+  int    start[20];               /* first slot for this window size */
+  Statistic_t stat[20];
+} WindowQuotient_t;
+
+void reset_windowQuotient(WindowQuotient_t *, int fineness);
+void add_windowQuotient(WindowQuotient_t *, double, int on);
+
 /* Initializing timers; show statistics */
 void add_statString(char *);
 void stats_init(void);

@@ -308,18 +308,18 @@ int should_trace(unsigned long trace,
 
 static void uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOffset)
 {
-  Stack_t *callinfoStack = stacklet->callinfoStack;
+  Set_t *callinfoStack = stacklet->callinfoStack;
   int count = 0;
   mem_t curSP = stacklet->replicaCursor + stackletOffset / sizeof(val_t), nextSP;
   mem_t curRA = stacklet->replicaRetadd, nextRA;
   mem_t top = stacklet->baseTop + stackletOffset / sizeof(val_t);
   mem_t guardSP = curSP;
 
-  assert(isEmptyStack(callinfoStack));
+  assert(SetIsEmpty(callinfoStack));
   while (curSP < top) {
     Callinfo_t *callinfo = LookupCallinfo(proc,(val_t)curRA);
     CallinfoCursor_t *cursor = getCursor(proc, callinfo);
-    pushStack(callinfoStack, (ptr_t) callinfo);
+    SetPush(callinfoStack, (ptr_t) callinfo);
     if (debugStack) {
       mem_t nextRA = (mem_t)curSP[cursor->RAQuadOffset];
       mem_t nextSP = curSP + cursor->frameSize;
@@ -330,7 +330,7 @@ static void uptrace_stacklet(Proc_t *proc, Stacklet_t *stacklet, int stackletOff
     curSP = curSP + cursor->frameSize;
     count++;
   }
-  proc->segUsage.stackSlotsProcessed += lengthStack(callinfoStack) * 4;
+  proc->segUsage.stackSlotsProcessed += SetLength(callinfoStack) * 4;
   assert(curSP == top);
 }
 
@@ -351,10 +351,10 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
   int i, j, k;
   mem_t cur_sp = stacklet->baseTop + stackletOffset / sizeof(val_t);
   unsigned int regstate = stacklet->topRegstate;
-  Stack_t *callinfoStack = stacklet->callinfoStack;
+  Set_t *callinfoStack = stacklet->callinfoStack;
 
-  while (!isEmptyStack(callinfoStack)) {
-    Callinfo_t *callinfo = (Callinfo_t *) popStack(callinfoStack);
+  while (!SetIsEmpty(callinfoStack)) {
+    Callinfo_t *callinfo = (Callinfo_t *) SetPop(callinfoStack);
     CallinfoCursor_t *cursor = getCursor(proc, callinfo);
     int numChunks = (cursor->frameSize+15)>>4; /* A chunk is the number of slots for one word of info */
 
@@ -383,7 +383,7 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 	    continue;
 	  if (debugStack) 
 	    printf("   pushed location %d\n", (ptr_t) &cur_sp[slot]);
-	  pushStack(&proc->work.roots, (ptr_t) &cur_sp[slot]); 
+	  SetPush(&proc->work.roots, (ptr_t) &cur_sp[slot]); 
 	}
       }
     }
@@ -406,7 +406,7 @@ static unsigned int downtrace_stacklet(Proc_t *proc, Stacklet_t *stacklet,
 		continue;
 	      if (debugStack) 
 		printf("   pushed location %d\n", (ptr_t) &cur_sp[curSlot]);
-	      pushStack(&proc->work.roots, (ptr_t) &cur_sp[curSlot]);
+	      SetPush(&proc->work.roots, (ptr_t) &cur_sp[curSlot]);
 	    }
 	  }
 	}
@@ -445,7 +445,7 @@ static void addRegRoots(Proc_t *proc, unsigned long *saveregs, unsigned int regM
       ploc_t rootLoc = (ploc_t) &saveregs[i];
       ptr_t rootVal = *rootLoc;
       if (!(IsTagData(rootVal)) && !(IsGlobalData(rootVal))) 
-	pushStack(&proc->work.roots, (ptr_t) rootLoc);
+	SetPush(&proc->work.roots, (ptr_t) rootLoc);
     }
 }
 
@@ -486,6 +486,7 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack = th->stack;
   ptr_t thunk = th->thunk;
 
+  procChangeState(proc, GCStack, 500);
   if (collectDiag >= 2)
     printf("Proc %d: GC %d: thread_root_scan on thread %d with thunk %d\n", proc->procid, NumGC, th->tid, thunk);
 
@@ -493,14 +494,14 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
     if (th->rootLocs[i] != NULL) {
       ptr_t rootVal = *th->rootLocs[i];
       if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
-	pushStack(&proc->work.roots, (ptr_t) th->rootLocs[i]);
+	SetPush(&proc->work.roots, (ptr_t) th->rootLocs[i]);
     }
   }
 
   /* Alternatively, we can call installThreadRoot and uninstallThreadRoot */
   if (thunk != NULL) {
     if (!IsTagData(thunk) && !IsGlobalData(thunk)) 
-      pushStack(&proc->work.roots, (ptr_t) &(th->thunk));
+      SetPush(&proc->work.roots, (ptr_t) &(th->thunk));
     return;   /* Thunk not yet started and so no more roots */
   }
 
@@ -509,7 +510,7 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
     stacklet->state = Pending;
     Stacklet_Copy(stacklet);
     uptrace_stacklet(proc, stacklet, primaryStackletOffset);
-    numFrames += lengthStack(stacklet->callinfoStack);
+    numFrames += SetLength(stacklet->callinfoStack);
     numWords += stacklet->baseTop - stacklet->baseCursor;
   }
   TotalStackDepth += numFrames;
@@ -533,6 +534,7 @@ int initial_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack = th->stack;
   ptr_t thunk = th->thunk;
 
+  procChangeState(proc, GCStack, 510);
   Thread_Pin(th);
 
   installThreadRoot(th, (ploc_t) &th->thunk);
@@ -540,7 +542,7 @@ int initial_root_scan(Proc_t *proc, Thread_t *th)
     ptr_t rootVal = th->rootVals[i];
     if (rootVal != NULL) {
       if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
-	pushStack(&proc->work.roots, (ptr_t) &th->rootVals[i]);
+	SetPush(&proc->work.roots, (ptr_t) &th->rootVals[i]);
     }
   }
 
@@ -590,6 +592,7 @@ int work_root_scan(Proc_t *proc, Thread_t *th, int workToDo)
   int i, done, uptraceDone = 1;
   StackChain_t *snapshot = th->snapshot;
 
+  procChangeState(proc, GCStack, 520);
   assert(!useGenStack);
   assert(snapshot->cursor>0);
 
@@ -608,9 +611,9 @@ int work_root_scan(Proc_t *proc, Thread_t *th, int workToDo)
     /* Scan from bottom to get frame sizes and descriptors */
     if (updateWorkDone(proc) >= workToDo) 
       break;
-    if (isEmptyStack(stacklet->callinfoStack)) {
+    if (SetIsEmpty(stacklet->callinfoStack)) {
       uptrace_stacklet(proc, stacklet, replicaStackletOffset);
-      numFrames += lengthStack(stacklet->callinfoStack);
+      numFrames += SetLength(stacklet->callinfoStack);
       numWords += stacklet->baseTop - stacklet->baseCursor;
       TotalStackDepth += numFrames;
       TotalStackSize += numWords * sizeof(val_t);
@@ -643,6 +646,8 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack= th->stack;
   int firstActive = stack->cursor;
 
+  procChangeState(proc, GCStack, 530);
+
   /* Thread might not be really be live but was pinned to preserve liveness so 
      that snapshot and snapshotRegs can be used */
   Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
@@ -660,7 +665,7 @@ void complete_root_scan(Proc_t *proc, Thread_t *th)
     if (th->rootLocs[i] != NULL) {
       ptr_t rootVal = *th->rootLocs[i];
       if (!IsTagData(rootVal) && !IsGlobalData(rootVal)) 
-	pushStack(&proc->work.roots, (ptr_t) th->rootLocs[i]);
+	SetPush(&proc->work.roots, (ptr_t) th->rootLocs[i]);
     }
   }
   uninstallThreadRoot(th, (ploc_t) &th->thunk);
@@ -696,6 +701,7 @@ void discard_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack= th->stack;
   int firstActive = stack->cursor;
 
+  procChangeState(proc, GCStack, 540);
   /* Thread might not be really be live but was pinned to preserve liveness so 
      that snapshot and snapshotRegs can be used */
   Thread_Unpin(th);   /* Might not have been pinned if thread created after start of GC */
@@ -716,9 +722,9 @@ void discard_root_scan(Proc_t *proc, Thread_t *th)
    it is not known whether is it of a pointer type (due to abstraction).
    Global variables of type float should not be considered.
 */
-static Stack_t promotedGlobal;       /* An initialized global is put in this stack after being trapped by
+static Set_t *promotedGlobal;       /* An initialized global is put in this stack after being trapped by
 					a write-barrier. */
-static Stack_t tenuredGlobal;        /* Accumulates the contents of promotedGlobal
+static Set_t *tenuredGlobal;        /* Accumulates the contents of promotedGlobal
 					across all previous calls to minor_global_promote */
 
 
@@ -730,8 +736,8 @@ void global_root_init(void)
     mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[mi]);
     numGlobals += stop - start;
   }
-  allocStack(&promotedGlobal, numGlobals);
-  allocStack(&tenuredGlobal, numGlobals);
+  promotedGlobal = SetCreate(numGlobals);
+  tenuredGlobal = SetCreate(numGlobals);
 }
 
 void add_global_root(Proc_t *proc, mem_t global)
@@ -742,13 +748,13 @@ void add_global_root(Proc_t *proc, mem_t global)
   else if (tag == TAG_REC_TRACE) {
     ptr_t globalVal = (ptr_t) *global;
     if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
-      pushStack(&promotedGlobal, global);
+      SetPush(promotedGlobal, global);
   }
   else if (tag == MIRROR_GLOBAL_PTR_TAG) {
     ptr_t globalVal = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
     assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
     if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
-      pushStack(&promotedGlobal, global);
+      SetPush(promotedGlobal, global);
     else
       DupGlobal(global);
   }
@@ -759,22 +765,24 @@ void add_global_root(Proc_t *proc, mem_t global)
 
 void minor_global_scan(Proc_t *proc)
 {  
-  copyStack(&promotedGlobal, &proc->work.globals);
+  procChangeState(proc, GCGlobal, 600);
+  SetCopy(promotedGlobal, &proc->work.globals);
 }
 
 /* Transfers items from promotedGlobal to tenuredGlobal */
 void minor_global_promote(Proc_t *proc)
 {
-  proc->segUsage.globalsProcessed += lengthStack(&promotedGlobal) / 10;
-  transferStack(&promotedGlobal, &tenuredGlobal);
+  proc->segUsage.globalsProcessed += SetLength(promotedGlobal) / 10;
+  SetTransfer(promotedGlobal, tenuredGlobal);
 }
 
 void major_global_scan(Proc_t *proc)
 {
+  procChangeState(proc, GCGlobal, 610);
   minor_global_promote(proc);
-  assert(isEmptyStack(&promotedGlobal));
-  proc->segUsage.globalsProcessed += lengthStack(&tenuredGlobal) / 10;
-  copyStack(&tenuredGlobal, &proc->work.globals);
+  assert(SetIsEmpty(promotedGlobal));
+  proc->segUsage.globalsProcessed += SetLength(tenuredGlobal) / 10;
+  SetCopy(tenuredGlobal, &proc->work.globals);
 }
 
 void NullGlobals(int globalOffset)

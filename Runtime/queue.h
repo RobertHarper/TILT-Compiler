@@ -7,182 +7,136 @@
 #include "general.h"
 #include "tag.h"
 
-typedef struct Queue__t
+/* A set is a collection of non-NULL values with 2 different sets of operations: stack-like or queue-like. */
+typedef struct Set__t
 {
-  long start;   /* First entry of queue */
-  long end;     /* Index beyond last entry of queue */
-                /* Number of entries is  end - start (+ size if end - start is negative);
-		   When empty, start = end.  When full with size - 1 entries, start = end + 1. */
-  long size;    /* Size of table */
-  void **table; /* Table of entries */
-} Queue_t;
+  long size;         /* Size of data array */
+  ptr_t *data;       /* Array of data elements - layout depends on whether accessed as a stack or queue */
+  long first, last;
+                    /* The data elements are from first to last - 1 with no wraparound.  
+		       If first = last, then the set is empty.  
+		       If size = last + 1, then the set is full.  The last slot of the data array at last is always NULL.
+		       When access is always stack-like, then first will be zero. Stack operations may be used
+		       only if no queue-like operations are ever used since stack operations rely on first being zero.
 
-void        QueueResize (Queue_t *, int additionalSize);  /* not to be called by client code */
-Queue_t    *QueueCreate (long);
-void        QueueDestroy(Queue_t *);
-void       *QueuePop    (Queue_t *);
-void       *QueuePopPeek(Queue_t *);
-void       *QueueAccess (Queue_t *, long);
-void        QueueSet    (Queue_t *, long, void *);
-void        QueueClear  (Queue_t *);
-void        QueueCopy(Queue_t *target, Queue_t *src);   /* Copies the contents of src into target without changing src */
-/* These are so commonly used that they are inlined. */
-/* long        QueueLength (Queue_t *); */
-/* int         QueueIsEmpty(Queue_t *); */
-/* void       *Dequeue     (Queue_t *); */
-/* void        Enqueue     (Queue_t *, void *data); */
+		       The stack-like operations are Push and Pop.  
+		           When last + 1 equals size on a Push, the stack is increased in size.
+		       The queue-like operations are Push and Dequeue.
+		           When last + 1 equals size on a Push, the queue is normalized.
+			   If the queue is mostly full (75%), normalization will increase the size.
+			   In any case the elements are shifted downwards so that first becomes 0.
+		   */
+} Set_t;
 
-INLINE(QueueLength)
-long QueueLength(Queue_t *q)
+Set_t*   SetCreate (long initialSize);
+void     SetInit (Set_t *, long initialSize);
+void     SetDestroy(Set_t *);
+void     SetNormalize (Set_t *);                /* There will always be at least 3 slots free after a call to Normalize */
+void     SetNormalizeExpand(Set_t *s, int addSize);
+void     SetCopy(Set_t *from, Set_t *to);       /* Copies the contents of from into to without changing from */
+void     SetTransfer(Set_t *from, Set_t *to);   /* Transfers the contents of from into to, leaving from empty */
+
+INLINE(SetLength)
+long SetLength(Set_t *s)
 {
-  int diff = q->end - q->start; /* Up to but not including q->size */
-  return (diff >= 0) ? diff : diff + q->size;
+  int diff = s->last - s->first;
+  return (diff >= 0) ? diff : diff + s->size;
 }
 
-INLINE(QueueIsEmpty)
-int QueueIsEmpty(Queue_t *q)
+INLINE(SetFullSize)
+long SetFullSize(Set_t *s)
 {
-  return (q->start == q->end);
+  return s->size;
 }
 
-INLINE(Dequeue)
-void *Dequeue(Queue_t *q)
+INLINE(SetReset)
+void SetReset(Set_t *s)
 {
-  void *res;
-  if (QueueIsEmpty(q))
+  s->first = s->last = 0;
+}
+
+INLINE(SetIsEmpty)
+int SetIsEmpty(Set_t *s)
+{
+  return (s->first == s->last);
+}
+
+INLINE(SetPush)
+void SetPush(Set_t *set, ptr_t item)
+{
+  fastAssert(item != NULL); 
+  if (set->last + 1 >= set->size) 
+    SetNormalize(set);
+  set->data[set->last++] = item;
+
+}
+
+INLINE(SetPush2)
+void SetPush2(Set_t *set, ptr_t item1, ptr_t item2)
+{
+  fastAssert(item1 != NULL); 
+  fastAssert(item2 != NULL); 
+  if (set->last + 2 >= set->size)
+    SetNormalize(set);
+  set->data[set->last++] = item1;
+  set->data[set->last++] = item2;
+}
+
+INLINE(SetPush3)
+void SetPush3(Set_t *set, ptr_t item1, ptr_t item2, ptr_t item3)
+{
+  fastAssert(item1 != NULL); 
+  fastAssert(item2 != NULL); 
+  fastAssert(item3 != NULL); 
+  if (set->last + 3 >= set->size)
+    SetNormalize(set);
+  set->data[set->last++] = item1;
+  set->data[set->last++] = item2;
+  set->data[set->last++] = item3;
+}
+
+/* Dequeue and SetPop* return NULL if the set is empty */
+INLINE(SetDequeue)
+ptr_t SetDequeue(Set_t *s)
+{
+  ptr_t result = s->data[s->first];
+  if (s->first == s->last)
     return NULL;
-  res = q->table[q->start];
-  q->start++;
-  if (q->start >= q->size)
-    q->start -= q->size;
-  return res;
+  s->first++;
+  return result;
 }
 
-INLINE(Enqueue)
-void Enqueue(Queue_t *q, void *data)
+INLINE(SetPop)
+ptr_t SetPop(Set_t *set)
 {
-  if (QueueLength(q) + 2 >= q->size)  /* + 2 since last entry of table cannot be used */
-    QueueResize(q, q->size);
-  q->table[q->end++] = data;
-  if (q->end >= q->size)
-    q->end -= q->size;
+  assert(set->first == 0);
+  if (set->last) 
+    return set->data[--set->last];
+  return NULL;
 }
 
-
-typedef struct Stack__t
+INLINE(SetPop2)
+ptr_t SetPop2(Set_t *set, ptr_t *item2Ref)
 {
-  ptr_t *data;
-  long cursor;
-  long size;
-} Stack_t;
-
-
-void copyStack(Stack_t *from, Stack_t *to);     /* non-destructive operation on from */
-void transferStack(Stack_t *from, Stack_t *to); /* destructive operation on from */
-void resizeStack(Stack_t *ostack, int newSize);
-void allocStack(Stack_t *ostack, int size);     /* allocate the data portion of an existing stack */
-Stack_t *createStack(int size);                 /* make a stack from scratch */
-
-INLINE(resetStack)
-void resetStack(Stack_t *oStack)
-{
-  oStack->cursor = 0;
-}
-
-INLINE(lengthStack)
-int lengthStack(Stack_t *oStack)
-{
-  return oStack->cursor;
-}
-
-
-INLINE(sizeStack)
-int sizeStack(Stack_t *oStack)
-{
-  return oStack->size;
-}
-
-INLINE(pushStack)
-void pushStack(Stack_t *oStack, ptr_t item)
-{
-  /* assert(item != NULL); */
-  oStack->data[oStack->cursor++] = item;
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);  /* Enough to maintain invariant that it is not full */
-}
-
-INLINE(pushStack2)
-void pushStack2(Stack_t *oStack, ptr_t item1, ptr_t item2)
-{
-  /* assert(item != NULL); */
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-  oStack->data[oStack->cursor++] = item1;
-  oStack->data[oStack->cursor++] = item2;
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-}
-
-INLINE(pushStack3)
-void pushStack3(Stack_t *oStack, ptr_t item1, ptr_t item2, ptr_t item3)
-{
-  /* assert(item != NULL); */
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-  oStack->data[oStack->cursor++] = item1;
-  oStack->data[oStack->cursor++] = item2;
-  oStack->data[oStack->cursor++] = item3;
-  if (oStack->cursor == oStack->size)
-    resizeStack(oStack, 2 * oStack->size);
-}
-
-/* Returns NULL if stack is empty */
-INLINE(popStack)
-ptr_t popStack(Stack_t *oStack)
-{
-  if (oStack->cursor) {
-    return oStack->data[--oStack->cursor];
+  assert(set->first == 0);
+  if (set->last > 1) {
+    *item2Ref = set->data[--set->last];  /* In reverse order of push */
+    return set->data[--set->last];
   }
   return NULL;
 }
 
-/* Returns NULL if stack is empty */
-INLINE(peekStack)
-ptr_t peekStack(Stack_t *oStack)
+INLINE(SetPop3)
+ptr_t SetPop3(Set_t *set, ptr_t *item2Ref, ptr_t *item3Ref)
 {
-  if (oStack->cursor) {
-    return oStack->data[oStack->cursor-1];
+  assert(set->first == 0);
+  if (set->last > 2) {
+    *item3Ref = set->data[--set->last];  /* In reverse order of push */
+    *item2Ref = set->data[--set->last];  /* In reverse order of push */
+    return set->data[--set->last];
   }
   return NULL;
 }
 
-/* Returns NULL if stack is empty */
-INLINE(popStack2)
-ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref)
-{
-  if (oStack->cursor > 1) {
-    *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
-    return oStack->data[--oStack->cursor];
-  }
-  return NULL;
-}
-
-/* Returns NULL if stack is empty */
-INLINE(popStack3)
-ptr_t popStack3(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
-{
-  if (oStack->cursor > 2) {
-    *item3Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
-    *item2Ref = oStack->data[--oStack->cursor];  /* In reverse order of push */
-    return oStack->data[--oStack->cursor];
-  }
-  return NULL;
-}
-
-INLINE(isEmptyStack)
-int isEmptyStack(Stack_t *oStack)
-{
-  return oStack->cursor == 0;
-}
 
 #endif
