@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR Util *)
+(*$import Prelude TopLevel Core MACHINE IFGRAPH TRACKSTORAGE MACHINEUTILS PRINTUTILS Stats COLOR *)
 (* Original implementation.  Does not try cycling through temporary regs. *)
 
 
@@ -12,8 +12,6 @@ functor Color1(structure Machine : MACHINE
              where Ifgraph = Ifgraph =
 
 struct
-  val error = fn s => Util.error "color1.sml" s
-       
   structure Ifgraph = Ifgraph
   structure Trackstorage = Trackstorage
 
@@ -79,15 +77,13 @@ struct
 	   else
 	       let 
 		   fun folder (node,acc as (good,bad)) =
-		          if isPhysical node then error "nodes_excluding_physical is broken"
-			  else
-		             let val count = degree node
-				 val isInt = (case node of R _ => true | F _ => false)
-			         val isGood = count < (if isInt then num_iregs else num_fregs)
-			         val isBad = count > (if isInt then 4*num_iregs else 4*num_fregs)
-			     in  (if isGood then node::good else good,
-				  if isBad then node::bad else bad)
-			     end
+		       let val count = degree node
+			   val isInt = (case node of R _ => true | F _ => false)
+			   val isGood = count < (if isInt then num_iregs else num_fregs)
+			   val isBad = count > (if isInt then 4*num_iregs else 4*num_fregs)
+		       in  (if isGood then node::good else good,
+				if isBad then node::bad else bad)
+		       end
 		    (* get low-degree nodes which can be removed *)
 	            val (good_nodes, bad_nodes) = Regset.foldl folder ([],[]) nodes
 
@@ -109,7 +105,7 @@ struct
 			     (app delete_node good_nodes;
 			      app delete_node bad_nodes;
 			      app delete_node random_nodes)) ();
-	      simplify  (random_nodes @ bad_nodes @ good_nodes @ node_stack)
+	      simplify  (List.concat[random_nodes, bad_nodes, good_nodes, node_stack])
 	   end
        end
        val simplify = simplify_graph_time simplify 
@@ -193,14 +189,14 @@ struct
 							       node)))) nodes)
           end (* select *)
 
-        val select = select_colors_time select 
+        val select = select_colors_time (fn (m, l) => select m l)
 
 	val node_stack = simplify []
 
         (* color the local registers *)
 
 	val t = Regmap.map ON_STACK stack_resident
-        val mapping = select t node_stack
+        val mapping = select (t, node_stack)
 
      in mapping
      end
