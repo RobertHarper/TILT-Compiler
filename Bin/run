@@ -21,7 +21,7 @@ i=0 path=(/usr/local/bin /bin /usr/bin) {
 	while (! ~ $#* 0) {
 		TILT_ARG_$i = $1
 		shift
-		i = `{$expr $i + 1}
+		i = `{expr $i + 1}
 	}
 }
 exec $TILT_CMD
