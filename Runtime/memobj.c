@@ -331,12 +331,12 @@ int Heap_GetAvail(Heap_t *h)
 
 void Heap_Resize(Heap_t *h, long newsize)
 {
-  int actualSize = h->physicalTop - h->bottom;
+  int actualSize = (val_t) h->physicalTop - (val_t) h->bottom;
   if (newsize > actualSize) {
-      fprintf(stderr,"FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n",
-	      NumGC, actualSize, newsize);
-      assert(0);
-    }
+    fprintf(stderr,"FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n",
+	    NumGC, actualSize, newsize);
+    assert(0);
+  }
   h->top = h->bottom + (newsize / (sizeof (val_t))); 
   Heap_Check(h);
 }
