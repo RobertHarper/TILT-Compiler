@@ -36,6 +36,7 @@ typecheck.sig.sml
 (*typecheck.sml*)
 vararg.sig.sml
 vararg.sml
+nilprimutilparam.sml
 nileval.sig.sml
 nileval.sml 
 toclosure.sig.sml

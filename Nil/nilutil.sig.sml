@@ -15,10 +15,12 @@ signature NILUTIL =
     val con_tuple : Nil.con list -> Nil.con
     val con_tuple_inject : Nil.con list -> Nil.con
     val kind_tuple : Nil.kind list -> Nil.kind
-    val unitcon : Nil.con
-    val unitexp : Nil.exp
+    val unit_con : Nil.con
+    val unit_exp : Nil.exp
     val match_exn : Nil.exp
-    val boolcon : Nil.con
+    val bool_con : Nil.con
+    val true_exp : Nil.exp
+    val false_exp : Nil.exp
 
     val con_free_convar : Nil.con -> Name.var list
     val convar_occurs_free : Name.var * Nil.con -> bool

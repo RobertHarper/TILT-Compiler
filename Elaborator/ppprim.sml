@@ -8,14 +8,18 @@ functor Ppprim(structure Prim : PRIM)
     open Prim Formatter Util
 
     val error = fn s => error "ppprim.sml" s
+    val elide = ref true
 
-    fun pp_is W8 = String "8"
-      | pp_is W16 = String "16"
-      | pp_is W32 = String "32"
-      | pp_is W64 = String "64"
+    fun pp_is_real W8 = String "8"
+      | pp_is_real W16 = String "16"
+      | pp_is_real W32 = String "32"
+      | pp_is_real W64 = String "64"
 
-    fun pp_fs F32 = String "32"
-      | pp_fs F64 = String "64"
+    fun pp_fs_real F32 = String "32"
+      | pp_fs_real F64 = String "64"
+
+    fun pp_is arg = if (!elide) then String "" else pp_is_real arg
+    fun pp_fs arg = if (!elide) then String "" else pp_fs_real arg
 
     fun pp_tt int_tt = String "INT_TT"
       | pp_tt real_tt = String "REAL_TT"
@@ -97,54 +101,52 @@ functor Ppprim(structure Prim : PRIM)
 	  | STRING_CONCAT => String "STRING_CONCAT"
 *)
 (*
-	  | EQ_CHAR => String "EQ_CHAR"
+	  | EQ_CHAR => String "EQ_CHAR""
 	  | NEQ_CHAR => String "NEQ_CHAR"
 	  | EQ_STRING => String "EQ_STRING"
 	  | NEQ_STRING => String "NEQ_STRING"
 *)
-	  | plus_float fs => Hbox[String "PLUS_FLOAT", pp_fs fs]
-	  | minus_float fs => Hbox[String "MINUS_FLOAT", pp_fs fs]
-	  | mul_float fs => Hbox[String "MUL_FLOAT", pp_fs fs]
-	  | div_float fs => Hbox[String "DIV_FLOAT", pp_fs fs]
-	  | less_float fs => Hbox[String "LESS_FLOAT", pp_fs fs]
-	  | greater_float fs => Hbox[String "GREATER_FLOAT", pp_fs fs]
-	  | lesseq_float fs => Hbox[String "LESSEQ_FLOAT", pp_fs fs]
-	  | greatereq_float fs => Hbox[String "GREATEREQ_FLOAT", pp_fs fs]
-	  | eq_float fs => Hbox[String "EQ_FLOAT", pp_fs fs]
-	  | neq_float fs => Hbox[String "NEQ_FLOAT", pp_fs fs]
-	  | plus_int is => Hbox[String "PLUS_INT", pp_is is]
-	  | minus_int is => Hbox[String "MINUS_INT", pp_is is]
-	  | mul_int is => Hbox[String "MUL_INT", pp_is is]
-	  | div_int is => Hbox[String "DIV_INT", pp_is is]
-	  | mod_int is => Hbox[String "MOD_INT", pp_is is]
-	  | quot_int is => Hbox[String "QUOT_INT", pp_is is]
-	  | rem_int is => Hbox[String "REM_INT", pp_is is]
-	  | plus_uint is => Hbox[String "PLUS_UINT", pp_is is]
-	  | minus_uint is => Hbox[String "MINUS_UINT", pp_is is]
-	  | mul_uint is => Hbox[String "MUL_UINTp", pp_is is]
-	  | div_uint is => Hbox[String "DIV_UINT", pp_is is]
-	  | mod_uint is => Hbox[String "MOD_UINT", pp_is is]
-	  | less_int is => Hbox[String "LESS_INT", pp_is is]
-	  | greater_int is => Hbox[String "GREATER_INT", pp_is is]
-	  | lesseq_int is => Hbox[String "LESSEQ_INT", pp_is is]
-	  | greatereq_int is => Hbox[String "GREATEREQ_INT", pp_is is]
-	  | eq_int is => Hbox[String "EQ_INT", pp_is is]
-	  | neq_int is => Hbox[String "NEQ_INT", pp_is is]
-	  | lshift_int is => Hbox[String "LSHIFT_INT", pp_is is]
-	  | rshift_int is => Hbox[String "RSHIFT_INT", pp_is is]
-	  | and_int is => Hbox[String "AND_INT", pp_is is]
-	  | or_int is => Hbox[String "OR_INT", pp_is is]
-	  | less_uint is => Hbox[String "LESS_UINT", pp_is is]
-	  | greater_uint is => Hbox[String "GREATER_UINT", pp_is is]
-	  | lesseq_uint is => Hbox[String "LESSEQ_UINT", pp_is is]
-	  | greatereq_uint is => Hbox[String "GREATEREQ_UINT", pp_is is]
-	  | rshift_uint is => Hbox[String "RSHIFT_UINT", pp_is is]
+	  | plus_float fs => Hbox[String "plusF", pp_fs fs]
+	  | minus_float fs => Hbox[String "minusF", pp_fs fs]
+	  | mul_float fs => Hbox[String "mulF", pp_fs fs]
+	  | div_float fs => Hbox[String "divF", pp_fs fs]
+	  | less_float fs => Hbox[String "lessF", pp_fs fs]
+	  | greater_float fs => Hbox[String "greaterF", pp_fs fs]
+	  | lesseq_float fs => Hbox[String "lesseqF", pp_fs fs]
+	  | greatereq_float fs => Hbox[String "greaterF", pp_fs fs]
+	  | eq_float fs => Hbox[String "eqF", pp_fs fs]
+	  | neq_float fs => Hbox[String "neqF", pp_fs fs]
+	  | plus_int is => Hbox[String "plusI", pp_is is]
+	  | minus_int is => Hbox[String "minusI", pp_is is]
+	  | mul_int is => Hbox[String "mulI", pp_is is]
+	  | div_int is => Hbox[String "divI", pp_is is]
+	  | mod_int is => Hbox[String "modI", pp_is is]
+	  | quot_int is => Hbox[String "quotI", pp_is is]
+	  | rem_int is => Hbox[String "remI", pp_is is]
+	  | plus_uint is => Hbox[String "plusUI", pp_is is]
+	  | minus_uint is => Hbox[String "minusUI", pp_is is]
+	  | mul_uint is => Hbox[String "mulUI", pp_is is]
+	  | div_uint is => Hbox[String "divUI", pp_is is]
+	  | mod_uint is => Hbox[String "modUI", pp_is is]
+	  | less_int is => Hbox[String "lessI", pp_is is]
+	  | greater_int is => Hbox[String "greaterI", pp_is is]
+	  | lesseq_int is => Hbox[String "lesseqI", pp_is is]
+	  | greatereq_int is => Hbox[String "greatereqI", pp_is is]
+	  | eq_int is => Hbox[String "eqI", pp_is is]
+	  | neq_int is => Hbox[String "neqI", pp_is is]
+	  | lshift_int is => Hbox[String "lshiftI", pp_is is]
+	  | rshift_int is => Hbox[String "rshiftI", pp_is is]
+	  | and_int is => Hbox[String "andI", pp_is is]
+	  | or_int is => Hbox[String "orI", pp_is is]
+	  | less_uint is => Hbox[String "lessUI", pp_is is]
+	  | greater_uint is => Hbox[String "greaterUI", pp_is is]
+	  | lesseq_uint is => Hbox[String "lesseqUI", pp_is is]
+	  | greatereq_uint is => Hbox[String "greatereqUI", pp_is is]
+	  | rshift_uint is => Hbox[String "rshiftUI", pp_is is]
 
 	  | output => String "output"
 	  | input => String "input"
 (*
-	  | OUTPUT => String "OUTPUT"
-
 	  | CONS => String "::"
 *)
 	  | array1 true => String "array1"
@@ -176,7 +178,7 @@ functor Ppprim(structure Prim : PRIM)
 
 
     fun pp_tag n = String(Name.tag2string n)
-    fun pp_value pp_exp pp_con scon =
+    fun pp_value exp2value pp_exp pp_con scon =
 	let 
 	    fun doint ((W64 | W32 | W16 | W8),w) = TilWord64.toDecimalString w
 	in case scon of
@@ -184,7 +186,18 @@ functor Ppprim(structure Prim : PRIM)
 	  | uint (is,i) => String (doint (is,i))
 	  | float (_,s) => String s
 	  | array (c,a) => String "ArrayValue"
-	  | vector (c,a) => String "VectorValue"
+	  | vector (c,a) =>  (case (exp2value(Array.sub(a,0))) of
+				 SOME(uint(W8,_)) => 
+				     let fun folder(e,acc) = 
+					 (case (exp2value e) of
+					      SOME(uint(W8,c)) => 
+						  let val c = chr(TilWord64.toInt c)
+						  in  if (c = #"\n") then (#"\\")::(#"n")::acc else c::acc
+						  end
+					    | _ => error "bad vector value: corrupt string")
+				     in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
+				     end
+			       | _ => String "VectorValue")
 	  | refcell r => String "RefCellValue"
 	  | tag (name,c) => HOVbox[String "tag(",pp_tag name, String ", ", 
 				   pp_con c, String ")"]
@@ -201,13 +214,14 @@ functor Ppprim(structure Prim : PRIM)
 
     val pp_prim' = pp_prim
     val pp_ilprim' = pp_ilprim
-    val pp_is' = pp_is
-    val pp_fs' = pp_fs
+    val pp_is' = pp_is_real
+    val pp_fs' = pp_fs_real
     val pp_value' = pp_value
     fun pp_prim obj = (wrapper pp_prim' TextIO.stdOut obj; ())
     fun pp_ilprim obj = (wrapper pp_ilprim' TextIO.stdOut obj; ())
     fun pp_is obj = (wrapper pp_is' TextIO.stdOut obj; ())
     fun pp_fs obj = (wrapper pp_fs' TextIO.stdOut obj; ())
-    fun pp_value pp_exp pp_con obj = (wrapper (pp_value' pp_exp pp_con) TextIO.stdOut obj; ())
+    fun pp_value exp2value pp_exp pp_con obj = (wrapper (pp_value' exp2value pp_exp pp_con) 
+						TextIO.stdOut obj; ())
 
   end

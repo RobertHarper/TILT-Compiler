@@ -102,7 +102,7 @@ structure LinkIl (* : LINKIL *) =
 	structure Il = Il
 
 	val _ = Compiler.Control.Print.printDepth := 15;
-	val _ = Pagewidth := 100;
+	val _ = Pagewidth := 80;
 	val error = fn s => Util.error "linkil.sml" s
 
 	fun setdepth d = Compiler.Control.Print.printDepth := d

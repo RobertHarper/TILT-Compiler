@@ -16,11 +16,11 @@ ilprimutilparam.sml
 tyvar.sig.sml
 tyvar.sml
 il.sig.sml
-il.sml 
+il.sml
 ppil.sig.sml
-ppil.sml 
+ppil.sml
 ilutil.sig.sml
-ilutil.sml  
+ilutil.sml
 ilstatic.sig.sml
 ilstatic.sml
 infixparse.sig.sml

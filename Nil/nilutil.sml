@@ -33,12 +33,13 @@ struct
 			     val lvk_list = Listops.mapcount doer klist
 			 in  Record_k(Util.list2sequence lvk_list)
 			 end
-  val unitcon = con_tuple []
-  val unitexp = exp_tuple []
-  val boolcon = Prim_c(Sum_c{tagcount=0w2,known=NONE},[])
-  val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unitcon))
-  val match_exn = Prim_e(NilPrimOp inj_exn,[unitcon],[match_tag,unitexp])
-
+  val unit_con = con_tuple []
+  val unit_exp = exp_tuple []
+  val bool_con = Prim_c(Sum_c{tagcount=0w2,known=NONE},[])
+  val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
+  val match_exn = Prim_e(NilPrimOp inj_exn,[unit_con],[match_tag,unit_exp])
+  val false_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])])
+  val true_exp = Prim_e(NilPrimOp roll, [bool_con], [Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])])
 
   (* Local rebindings from imported structures *)
 
@@ -399,13 +400,14 @@ struct
 		       | Prim.refcell (r as (ref e)) => (r := self e; v)
 		       | Prim.tag (t,c) => Prim.tag(t,f_con state c))
 		| (Let_e (sort,bnds,body)) => 
-		      let fun folder (bnd,(bnds,s)) = 
-			    let val (bnds',s') = f_bnd s bnd
-			    in  (bnds' @ bnds,s')
+		      let fun folder (bnd,(bnds_list,s)) = 
+			    let val (bnds,s') = f_bnd s bnd
+			    in  (bnds :: bnds_list,s')
 			    end
-			  val (rev_bnds',state') = foldl folder ([],state) bnds
+			  val (rev_bndslist,state') = foldl folder ([],state) bnds
+			  val bnds' = List.concat(rev rev_bndslist)
 			  val body' = f_exp state' body
-		      in Let_e(sort,rev rev_bnds',body')
+		      in Let_e(sort,bnds',body')
 		      end
 		| (Prim_e (ap,clist,elist)) => Prim_e(ap,map (f_con state) clist, map self elist)
 		| (Switch_e switch) => 

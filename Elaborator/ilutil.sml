@@ -7,6 +7,7 @@ functor IlUtil(structure Ppil : PPIL
   : ILUTIL = 
   struct
     structure Il = Il
+
     open Il IlContext Ppil 
     open Util Listops Name 
     open Prim Tyvar
@@ -97,15 +98,11 @@ functor IlUtil(structure Ppil : PPIL
 	CASE{noncarriers=2,carriers=[],arg=UNROLL(con_bool,e1),
 	     arms=[SOME e3,SOME e2],default=NONE}
     fun make_seq eclist =
-	let fun loop [] = error "make_seq given empty list"
-	      | loop [ec] = ec
-	      | loop ((e,c)::erest) = 
-		let val (erest',erestcon) = loop erest
-		    val (abs,_) = make_lambda(fresh_var(),c,
-					      erestcon,erest')
-		in (APP(abs,e),erestcon)
-		end
-	in  loop eclist
+	let fun loop _ [] = error "make_seq given empty list"
+	      | loop [] [ec] = ec
+	      | loop bnds [(e,c)] = (LET (rev bnds, e), c)
+	      | loop bnds ((e,c)::erest) = loop (BND_EXP(fresh_var(),e)::bnds) erest
+	in  loop [] eclist
 	end
 
     fun make_let (ve_list : (var * exp) list, body) = LET (map BND_EXP ve_list,body)
@@ -194,8 +191,10 @@ functor IlUtil(structure Ppil : PPIL
 	  (case exp of
 	     (SCON _ | OVEREXP _) => exp
 	   | VAR v => exp
-	   | PRIM (p,cs) => PRIM(p, map (f_con state) cs)
-	   | ILPRIM ilp => ILPRIM ilp
+	   | PRIM (p,cs,es) => PRIM(p, map (f_con state) cs, map self es)
+	   | ILPRIM (ilp,cs,es) => ILPRIM(ilp, map (f_con state) cs, map self es)
+	   | ETAPRIM (p,cs) => ETAPRIM(p, map (f_con state) cs)
+	   | ETAILPRIM (ilp,cs) => ETAILPRIM (ilp, map (f_con state) cs)
 	   | APP (e1,e2) => APP(self e1, self e2)
 	   | FIX (a,fbnds) => FIX(a,map (f_fbnd state) fbnds)
 	   | RECORD (rbnds) => RECORD(map (f_rbnd state) rbnds)

@@ -2,6 +2,10 @@
 signature ILSTATIC = 
   sig
     structure Il : IL
+    structure PrimUtil : PRIMUTIL
+    sharing Il.Prim = PrimUtil.Prim
+    sharing type Il.con = PrimUtil.con
+    sharing type Il.exp = PrimUtil.exp
     val debug : bool ref
  
 

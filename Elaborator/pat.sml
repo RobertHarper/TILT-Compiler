@@ -178,7 +178,7 @@ functor Pat(structure Il : IL
 		else (error_region();
 		      print "ref pattern used on a non-ref argument\n")
 	val newargs = (CASE_NONVAR(fresh_var(),
-				   APP(PRIM(deref,[elemcon]),VAR var),
+				   PRIM(deref,[elemcon],[VAR var]),
 				   elemcon))::args
 	val newarms = map (fn (p,(c,b,eopt)) => (p::c,b,eopt)) acc
     in match(newargs,newarms,def)
@@ -631,7 +631,7 @@ functor Pat(structure Il : IL
 				 then ()
 			     else (error_region();
 				   print "base type mismatches argument type\n")
-		     val ite_exp = make_ifthenelse(Il.APP(eq,exp_tuple[VAR var,Il.SCON sc]),e1,e2,c1)
+		     val ite_exp = make_ifthenelse(eq[VAR var,Il.SCON sc],e1,e2,c1)
 		     val ec = (case bndopt of
 				 NONE => (ite_exp,c1)
 			       | SOME bnd => (LET([bnd],ite_exp),c1))
@@ -654,17 +654,17 @@ functor Pat(structure Il : IL
 		  | (Ast.WordPat lit) => 
 			let val ds = IntInf.toString lit
 			in constant_dispatch(CON_UINT W32,   
-					     ILPRIM (eq_uint W32), 
+					     (fn elist => ILPRIM (eq_uint W32,[],elist)),
 					     uint (W32,TilWord64.fromDecimalString ds))
 			end
 		  | (Ast.IntPat lit)  => 
 			let val ds = IntInf.toString lit
 			in constant_dispatch(CON_INT W32,   
-					     PRIM (eq_int W32, []), 
+					     (fn elist => PRIM (eq_int W32,[],elist)),
 					     int (W32,TilWord64.fromDecimalString ds))
 			end
 		  | (Ast.StringPat ss) => constant_dispatch(CON_VECTOR (CON_UINT W8),
-							    PRIM (raise UNIMP),
+							    raise UNIMP,
 							    vector(CON_UINT W8,
 								   Array.fromList
 								   (map (fn c => 
@@ -672,7 +672,7 @@ functor Pat(structure Il : IL
 										    (ord c)))))
 								    (explode ss))))
 		  | (Ast.CharPat cs)   => constant_dispatch(CON_UINT W8,
-							    ILPRIM (eq_uint W8), 
+							    (fn elist => ILPRIM (eq_uint W8,[],elist)),
 							    uint(W8,TilWord64.fromInt
 								 (ord (CharStr2char cs))))
 		  | (Ast.RecordPat _ | Ast.TuplePat _) => tuple_record_dispatch()

@@ -265,19 +265,17 @@ functor Ppil(structure Il : IL
 	 OVEREXP (c,_,exp) => (case oneshot_deref exp of
 				 NONE => String "OVEREXP_NONE"
 			       | (SOME e) => pp_exp seen e)
-       | SCON (scon as Prim.vector(_,a)) => 
-	     (case (Array.sub(a,0)) of
-		SCON(Prim.uint(W8,_)) => 
-		    let fun folder(SCON(Prim.uint(W8,c)),acc) = (chr(TilWord64.toInt c))::acc
-			  | folder _ = error "bad vector value: corrupt string"
-		    in  String(implode(#"\"" :: (Array.foldr folder [#"\""] a)))
-		    end
-              | _ => pp_value' (pp_exp seen) (pp_con seen) scon)
-       | SCON scon => pp_value' (pp_exp seen) (pp_con seen) scon
-       | PRIM (prim,[]) => pp_prim' prim
-       | PRIM (prim,cons) => HOVbox[pp_prim' prim,
-				    pp_list (pp_con seen) cons ("[",",","]",false)]
-       | ILPRIM ip => pp_ilprim' ip
+       | SCON scon => pp_value' (fn (SCON scon) => SOME scon | _ => NONE) (pp_exp seen) (pp_con seen) scon
+       | ETAPRIM (prim,cons) => HOVbox[pp_prim' prim,
+				       pp_list (pp_con seen) cons ("[",",","]",false)]
+       | ETAILPRIM (ilprim,cons) => HOVbox[pp_ilprim' ilprim,
+				       pp_list (pp_con seen) cons ("[",",","]",false)]
+       | PRIM (prim,cons,elist) => HOVbox[pp_prim' prim,
+					  pp_list (pp_con seen) cons ("[",",","]",false),
+					  pp_list (pp_exp seen) elist ("[",",","]",false)]
+       | ILPRIM (prim,cons,elist) => HOVbox[pp_ilprim' prim,
+					    pp_list (pp_con seen) cons ("[",",","]",false),
+					    pp_list (pp_exp seen) elist ("[",",","]",false)]
        | VAR var => pp_var var
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
        | FIX (a,[FBND(v',v,c,cres,e)]) => 
@@ -449,7 +447,7 @@ functor Ppil(structure Il : IL
     val pp_label'  = help pp_label
     val pp_con' = help (pp_con [])
     val pp_kind' = help pp_kind
-    val pp_value' = pp_value' (pp_exp []) (pp_con [])
+    val pp_value' = pp_value' (fn (SCON scon) => SOME scon | _ => NONE) (pp_exp []) (pp_con [])
     val pp_prim' = help pp_prim'
     val pp_mod' = help (pp_mod [])
     val pp_exp' = help (pp_exp [])

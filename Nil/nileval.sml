@@ -2,8 +2,9 @@
 functor NilEvaluate (structure Nil : NIL
 		     structure NilUtil : NILUTIL
 		     structure PrimUtil : PRIMUTIL
+		     structure Ppnil : PPNIL
 		     sharing PrimUtil.Prim = Nil.Prim
-		     sharing NilUtil.Nil = Nil
+		     sharing NilUtil.Nil = Nil = Ppnil.Nil
 		     sharing type PrimUtil.con = Nil.con
 		     sharing type PrimUtil.exp = Nil.exp)
      : NILEVAL = 
@@ -104,16 +105,19 @@ functor NilEvaluate (structure Nil : NIL
 	  end
 
       (* ------------------ Evaluation ---------------- *)
-      exception NotFound
-      exception RuntimeExn of exp
+      datatype env = HENV of result Name.VarMap.map * con Name.VarMap.map
+      and result = VALUE of Nil.exp
+	              | CLOSURE_VALUE of result * Nil.con ref * result ref
+	              | CODE_VALUE of Nil.exp * env ref
+	              | EXCEPTION of result
+      exception NotFound of var
+      exception RuntimeExn of result
       local
-	  datatype henv = HENV of exp Name.VarMap.map * con Name.VarMap.map
 	  val add = Name.VarMap.insert
 	  fun find(map,v) = (case (Name.VarMap.find(map,v)) of
 				 (SOME x) => x
-			       | NONE => raise NotFound)
+			       | NONE => raise (NotFound v))
       in
-	  type env = henv
 	  val empty_env = HENV(Name.VarMap.empty, Name.VarMap.empty)
 	  fun add_var(HENV(venv,cenv),v,e) = HENV(add(venv,v,e),cenv)
 	  fun add_convar(HENV(venv,cenv),v,c) = HENV(venv,add(cenv,v,c))
@@ -264,7 +268,7 @@ functor NilEvaluate (structure Nil : NIL
 				       | _ => error "unbox_float given bad argument")
 		| roll => default
 		| unroll => (case elist of
-				 [Prim_e(NilPrimOp unroll,_,[v])] => v
+				 [Prim_e(NilPrimOp roll,_,[v])] => v
 			       | _ => error "unroll given bad argument")
 		| make_exntag => (case clist of
 				      [c] => Const_e(Prim.tag(Name.fresh_tag(),c))
@@ -276,7 +280,8 @@ functor NilEvaluate (structure Nil : NIL
 	  end
 
      
-      fun doCall(Let_e(Sequential,[((Fixopen_b vfset) | (Fixcode_b vfset))],Var_e v),clist,elist,eflist) = 
+      fun doApp(Code,oldenv,CODE_VALUE(Let_e(Sequential,[(Fixcode_b vfset)],Var_e v),ref env),
+		clist,elist,eflist) : env * exp = 
 	  let val vflist = set2list vfset
 	      val Function(_,_,vklist,vclist,vflist,body,_) = (case (assoc_eq(eq_var,v,vflist)) of
 								     SOME f => f
@@ -284,53 +289,60 @@ functor NilEvaluate (structure Nil : NIL
 	      val cmap = map2 (fn ((v,_),c) => (v,c)) (vklist,clist)
 	      val eimap = map2 (fn ((v,_),e) => (v,e)) (vclist,elist)
 	      val efmap = map2 (fn (v,ef) => (v,ef)) (vflist,eflist)
-	      val emap = eimap @ efmap
-	      val body' = substConInExp(body,cmap)
-	      val body'' = substExpInExp(body',emap)
-	  in body''
+	      val env' = foldl (fn ((v,c),env) => add_convar(env,v,c)) env cmap
+	      val env' = foldl (fn ((v,e),env) => add_var(env,v,e)) env' (eimap @ efmap)
+	  in (env',body)
 	  end
-	| doCall _ = error "doCall failed"
-
-      fun doApp(_, f as Let_e(_,[((Fixopen_b _) | (Fixcode_b _))],_),
-		clist,elist,eflist) = doCall(f,clist,elist,eflist)
-	| doApp(env, Let_e(Sequential,[Fixclosure_b vcset],Var_e v),clist,elist,eflist) = 
-	  let val vclist = set2list vcset
-	      val {code=codevar,cenv,venv,tipe} = (case (assoc_eq(eq_var,v,vclist)) of
-						       SOME cl => cl
-						     | NONE => error "doApp failed")
-	      val code = find_var env codevar
-	      val clist' = clist @ [cenv]
+	| doApp(Open, env, VALUE(Let_e(letsort,[Fixopen_b vfset],e)),clist,elist,eflist) = 
+	  let val f = CODE_VALUE(Let_e(letsort,[Fixcode_b vfset],e),ref env)
+	  in  doApp(Code,env,f,clist,elist,eflist)
+	  end
+	| doApp(Open, env, VALUE e,_,_,_) = (print "doApp(Open, _, VALUE (non-fun))\n";
+				       Ppnil.pp_exp e;
+				       print "\n"; error "doapp(Open, _, non-fun)")
+	| doApp(Open, env, _,_,_,_) = error "doApp(Open, _, non-VALUE)"
+	| doApp(Closure, env, CLOSURE_VALUE(code,ref cenv,ref venv),clist,elist,eflist) = 
+	  let val clist' = clist @ [cenv]
 	      val elist' = elist @ [venv]
-	  in  doCall(code,clist',elist',eflist)
+	  in  doApp(Code,env,code,clist',elist',eflist)
 	  end
+	| doApp(Closure, env, VALUE e,_,_,_) = (print "doApp(Closure, _, VALUE (non-fun))\n";
+				       Ppnil.pp_exp e;
+				       print "\n"; error "doapp(Closure, _, non-fun)")
+	| doApp(Closure, env, _,_,_,_) = error "doApp(Open, _, non-VALUE)"
+	| doApp(Code, env, VALUE e,_,_,_) = (print "doApp(Code, _, VALUE (non-fun))\n";
+				       Ppnil.pp_exp e;
+				       print "\n"; error "doapp(Code, _, non-fun)")
+	| doApp(Code, env, _,_,_,_) = error "doApp(Open, _, non-VALUE)"
 
-      fun doSwitch env switch =
-	  let fun do_sw {info,arg,arms,default} doarg match = 
+      fun doSwitch env switch : result =
+	  let fun do_sw {info,arg,arms,default} doarg match : result = 
 	      let val arg' = doarg arg
 		  fun loop [] = (case default of
-				     NONE => raise (RuntimeExn NilUtil.match_exn)
-				   | SOME e => expEval env e)
+				     NONE => raise (RuntimeExn (VALUE NilUtil.match_exn))
+				   | SOME (e : exp) => expEval env e)
 		    | loop ((t,f)::rest) = 
 		      (case (match info arg' t) of
 			   NONE => loop rest
 			 | SOME (cargs,eargs) => 
 			       let val funvar = Name.fresh_var()
-				   val fb =Fixopen_b(list2set[(funvar,f)])
-				   val f = Let_e(Sequential,[fb],Var_e funvar)
-				   val reduced = doCall(f,cargs,eargs,[])
-			       in  expEval env reduced
+				   val fb =Fixcode_b(list2set[(funvar,f)])
+				   val f = CODE_VALUE(Let_e(Sequential,[fb],Var_e funvar),ref env)
+				   val (env',reduced) = doApp(Code,env,f,cargs,eargs,[])
+			       in  expEval env' reduced
 			       end)
 	      in  loop arms
 	      end
 	      fun intmatch _ arg w32 = 
 		  (case arg of
-		       Const_e (Prim.int(_,w64)) => if (TilWord64.equal(w64,TilWord64.fromUnsignedHalf w32))
-							then SOME ([],[])
-						    else NONE
+		       VALUE(Const_e (Prim.int(_,w64))) => 
+			   if (TilWord64.equal(w64,TilWord64.fromUnsignedHalf w32))
+			       then SOME ([],[])
+			   else NONE
 		     | _ => error "ill-typed int switch")
 	      fun summatch (tagcount,conlist) arg t = 
 		  (case arg of
-		       Prim_e(NilPrimOp(inject {tagcount,field}), clist, elist) =>
+		       VALUE(Prim_e(NilPrimOp(inject {tagcount,field}), clist, elist)) =>
 			   if (TilWord32.equal(field,t))
 			       then SOME(if TilWord32.ult(t,tagcount)
 					     then ([],[])
@@ -339,11 +351,11 @@ functor NilEvaluate (structure Nil : NIL
 		     | _ => error "ill-typed sum switch")
 	      fun exnmatch () arg texp = 
 		  (case (arg,expEval env texp) of
-		       (Prim_e(NilPrimOp(inj_exn),clist,[Const_e(Prim.tag(t',_)),carrier]),
-			Const_e(Prim.tag(t,_))) =>
-			   if (Name.eq_tag(t,t'))
-			       then SOME([],[carrier])
-			   else NONE
+		       (VALUE(Prim_e(NilPrimOp(inj_exn),clist,[Const_e(Prim.tag(t',_)),carrier])),
+			     VALUE(Const_e(Prim.tag(t,_)))) =>
+		       if (Name.eq_tag(t,t'))
+			   then SOME([],[VALUE carrier])
+		       else NONE
 		     | _ => error "ill-typed int switch")
 	      fun typematch () arg pc = 
 		  (case (pc,arg) of
@@ -365,12 +377,12 @@ functor NilEvaluate (structure Nil : NIL
 		 | Typecase_e sw => do_sw sw (conEval env) typematch)
 	  end
 
-      and expEval env (exp : exp) : exp = 
+      and expEval env (exp : exp) : result =
 	  let val self = expEval env
 	  in
 	      case exp of
 		  (Var_e v) => find_var env v
-		| (Const_e v) => exp
+		| (Const_e v) => VALUE exp
 		| (Let_e (_,bnds,body)) => 
 		      let fun folder (bnd,env) = 
 			  case bnd of
@@ -378,26 +390,41 @@ functor NilEvaluate (structure Nil : NIL
 			    | Exp_b(v,_,e) => add_var(env,v,expEval env e)
 			    | ((Fixopen_b vfset) | (Fixcode_b vfset)) =>
 				  let val vflist = set2list vfset
-				      fun folder((v,_),env) = add_var(env,v,Let_e(Sequential,[bnd],Var_e v))
-				  in  foldl folder env vflist
+				      val renv = ref env
+				      fun folder((v,_),env) = 
+					  add_var(env,v,
+						  CODE_VALUE(Let_e(Sequential,[bnd],Var_e v),renv))
+				      val env' = foldl folder env vflist
+				      val _ = renv := env'
+				  in  env'
 				  end
 			    | Fixclosure_b vcset => 
 				  let val vclist = set2list vcset
-				      fun folder((v,_),env) = add_var(env,v,Let_e(Sequential,[bnd],Var_e v))
-				  in  foldl folder env vclist
+				      val u = VALUE NilUtil.unit_exp
+				      val c = NilUtil.unit_con
+				      val closures = map (fn (_,{code,...}) => 
+							      CLOSURE_VALUE(find_var env code,
+									    ref c, ref u)) vclist
+				      val env' = (foldl (fn (((v,_),cl),env) => add_var(env,v,cl)) 
+						  env (Listops.zip vclist closures))
+				      val cenv_venv = map (fn (_,{cenv,venv,...}) =>
+							   (conEval env' cenv, expEval env' venv)) vclist
+				      fun setter(CLOSURE_VALUE(_,rc,rv),(c,v)) = (rc := c; rv := v)
+					| setter _ = error "closure disappeared"
+				      val _ = map2 setter (closures,cenv_venv)
+				  in  env'
 				  end
 			  val env' = foldl folder env bnds
 		      in expEval env' body
 		      end
-		| (Prim_e (NilPrimOp np,clist,elist)) => 
+		| (Prim_e (ap,clist,elist)) => 
 		      let val clist' = map (conEval env) clist
 			  val elist' = map self elist
-		      in  nilprimopEval(np,clist',elist')
-		      end
-		| (Prim_e (PrimOp p,clist,elist)) => 
-		      let val clist' = map (conEval env) clist
-			  val elist' = map self elist
-		      in  PrimUtil.apply p clist' elist'
+			  val elist'' = map (fn (VALUE v) => v 
+			                      | _ => error "primitives can't get closures") elist'
+		      in  case ap of
+			  (NilPrimOp np) => VALUE(nilprimopEval(np,clist',elist''))
+			| (PrimOp p) => VALUE(PrimUtil.apply p clist' elist'')
 		      end
 		| (Switch_e switch) => doSwitch env switch
 		| (App_e (openness,func,clist,elist,eflist)) => 
@@ -405,8 +432,8 @@ functor NilEvaluate (structure Nil : NIL
 			  val clist' = map (conEval env) clist
 			  val elist' = map self elist
 			  val eflist' = map self eflist
-			  val res = doApp(env,func',clist',elist',eflist')
-		      in  self res
+			  val (env',reduced) = doApp(openness,env,func',clist',elist',eflist')
+		      in  expEval env' reduced
 		      end
 		| (Raise_e (e,_)) => raise (RuntimeExn (self e))
 		| (Handle_e (e1,Function(_,_,[],[(v,_)],[],body,_))) => 
@@ -417,10 +444,17 @@ functor NilEvaluate (structure Nil : NIL
 		| (Handle_e _) => error "ill-formed handle_e"
 	  end
 
-      datatype result = VALUE of Nil.exp
-	              | EXCEPTION of Nil.exp
 
-      fun eval_exp exp = (VALUE (expEval empty_env exp)
-			  handle RuntimeExn e => EXCEPTION e)
+      fun eval_con con = (conEval empty_env con)
+      fun eval_exp exp = (expEval empty_env exp)
+			  handle RuntimeExn e => EXCEPTION e
+			       | e as (NotFound v) => (print "Variable not bound: ";
+						       Ppnil.pp_var v;
+						       raise e)
 
+      fun eval_mod (con,exp) = 
+	  let val con_res = eval_con con
+	      val exp' = App_e(Closure,exp,[con_res],[],[])
+	  in  eval_exp exp'
+	  end
   end

@@ -4,6 +4,8 @@ signature PPNIL =
     structure Nil : NIL
     structure Formatter : FORMATTER
 
+    val elide_prim : bool ref (* hide the type arguments to primitives *)
+    val elide_bnd  : bool ref (* hide the type/kind at bindings *)
 
     (* these don't do actual output *)
     val pp_bnd'     : Nil.bnd -> Formatter.format

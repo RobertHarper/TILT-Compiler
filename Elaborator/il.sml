@@ -28,8 +28,10 @@ functor Il(structure Prim : PRIM
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot
                  | SCON    of value
-                 | PRIM    of prim * con list
-                 | ILPRIM  of ilprim          (* for type-checking reasons *)
+                 | PRIM    of prim * con list * exp list   (* fully applied primitivies only *)
+                 | ILPRIM  of ilprim * con list * exp list (* for type-checking reasons *)
+                 | ETAPRIM of prim * con list
+                 | ETAILPRIM of ilprim * con list
                  | VAR     of var
                  | APP     of exp * exp
                  | FIX     of arrow * fbnd list

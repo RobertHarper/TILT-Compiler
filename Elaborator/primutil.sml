@@ -1,4 +1,4 @@
-functor PrimUtil(structure  Prim : PRIM
+functor PrimUtil(structure Prim : PRIM
 		 structure Ppprim : PPPRIM
 		 structure PrimUtilParam : PRIMUTILPARAM
 		 sharing Ppprim.Prim = Prim
@@ -143,7 +143,7 @@ struct
 	 fun help' (args,res) = help(con_tuple args,res)
      in
 	 case ilprim of
-	     (not_uint is) => help'([con_uint is], con_uint is)
+	     (not_uint is) => help(con_uint is, con_uint is)
 	   | (and_uint is | or_uint is) => help'([con_uint is, con_uint is], con_uint is)
 	   | (lshift_uint is) => help'([con_uint is, con_int W32], con_uint is)
 	   | (eq_uint is | neq_uint is) => help'([con_uint is, con_uint is], con_bool)
@@ -152,28 +152,28 @@ struct
 
     fun apply prim cons vals = (* instance arg *)
 	let 
-	    fun bad() = (print "Error while applying ";
+	    fun bad s = (print "Error "; print s; print " while applying ";
 			 Ppprim.pp_prim prim;
 			 print "\n";
-			 error "bad  apply")
+			 error "bad apply")
 	    (* Some converters.  If the conversion is impossible, a type error has occurred *)
 	    val exp2value = (fn e => (case (exp2value e) of
-					  NONE => bad()
+					  NONE => bad "exp2value"
 					| SOME v => v))
 	    fun value2float fs (float (fs',s)) = if (fs = fs')
 						     then (case (Float.fromString s) of
-							       NONE => bad()
+							       NONE => bad "value2float"
 							     | SOME f => f)
-						 else bad()
-	      | value2float _ _ = bad()
-	    fun value2int is (int (is',w)) = if (is = is') then w else bad()
-	      | value2int is (uint (is',w)) = if (is = is') then w else bad()
-	      | value2int _ _ = bad()
-	    fun value2int' is (int (is',w)) = if (is = is') then TilWord64.toInt w else bad()
-	      | value2int' is (uint (is',w)) = if (is = is') then TilWord64.toInt w else bad()
-	      | value2int' _ _ = bad()
+						 else bad "value2float"
+	      | value2float _ _ = bad "value2float"
+	    fun value2int is (int (is',w)) = if (is = is') then w else bad "value2int"
+	      | value2int is (uint (is',w)) = if (is = is') then w else bad "value2int"
+	      | value2int _ _ = bad "value2int"
+	    fun value2int' is (int (is',w)) = if (is = is') then TilWord64.toInt w else bad "value2int'"
+	      | value2int' is (uint (is',w)) = if (is = is') then TilWord64.toInt w else bad "value2int'"
+	      | value2int' _ _ = bad "value2int'"
 	    fun value2ref (refcell r) = r
-	      | value2ref _ = bad()
+	      | value2ref _ = bad "value2ref"
 			     
 	    val int2exp = value2exp o int
 	    val float2exp = value2exp o float
@@ -196,27 +196,28 @@ struct
 				  val obj2 = value2obj(exp2value b)
 			      in value2exp(op2 (obj1,obj2))
 			      end
-		   | _ => bad())
+		   | _ => bad "objbinary")
 	    fun objbinary value2obj1 value2obj2 op2 = 
 		(case vals of
 		     [a,b] => let val obj1 = value2obj1(exp2value a)
 				  val obj2 = value2obj2(exp2value b)
 			      in value2exp(op2 (obj1,obj2))
 			      end
-		   | _ => bad())
+		   | _ => bad "objbinary")
 	    fun objunary value2obj op1 = 
 		(case vals of
 		     [a] => let val obj = value2obj(exp2value a)
 			    in value2exp(op1 obj)
 			    end
-		   | _ => bad())
+		   | _ => bad "objunary")
 	    fun objpred value2obj op2 = 
 		(case vals of
 		     [a,b] => let val obj1 = value2obj(exp2value a)
 				  val obj2 = value2obj(exp2value b)
 			      in bool2exp(op2 (obj1,obj2))
 			      end
-		   | _ => bad())
+		   | x => (print ("x has length " ^ (Int.toString (length x)) ^ "\n");
+			   bad "objpred"))
 
 	    fun ibinary is op2 = objbinary (value2int is) (value2int is) (int o (filter is) o op2)
 	    fun iunary is op1 = objunary (value2int is) (int o (filter is) o op1)
@@ -292,7 +293,22 @@ struct
 	  | (update1, _, _) => raise UNIMP
 	  | (array_eq _,_,_)  => raise UNIMP
 
-	  | _ => bad())
+	  | (output,_,[e]) => 
+		(case (exp2value e) of
+		     vector(_,a) =>
+			 (case (PrimUtilParam.exp2value(Array.sub(a,0))) of
+			      SOME(uint(W8,_)) => 
+				  let fun folder(e,acc) = 
+				      (case (PrimUtilParam.exp2value e) of
+					   SOME(uint(W8,c)) => (chr(TilWord64.toInt c))::acc
+					 | _ => error "bad vector value: corrupt string")
+				  in  print(implode((Array.foldr folder [] a)));
+				      unit_value
+				  end
+			    | _ => bad "output")
+		   | _ => bad "output")
+
+	  | _ => bad "general"())
 	end
     
 (*

@@ -954,17 +954,20 @@ struct
 
      | xexp context (Il.SCON il_scon) = xvalue context il_scon
 
-     | xexp context (il_exp as (Il.APP (Il.PRIM (prim, il_cons), il_arg))) = 
+     | xexp context (il_exp as (Il.PRIM (prim, il_cons, il_args))) = 
        let
 	   val cons = map (#1 o (xcon context)) il_cons
-	   val (arg, _, valuable) = xexp context il_arg
+	   val temp = map (xexp context) il_args
+	   val args = map #1 temp
+	   val valuables = map #3 temp
+	   val valuable = Listops.andfold (fn x => x) valuables
            (* slow *)
 	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
            val valuable = Ilstatic.Exp_IsValuable (HILctx_of context, il_exp)
 
 	   val (con, _) = xcon context il_con
        in
-	   (Prim_e (PrimOp prim, cons, [arg]), con, valuable)
+	   (Prim_e (PrimOp prim, cons, args), con, valuable)
        end
 (*
      | xexp context (il_exp as Il.PRIM (prim, il_cons)) = 
@@ -976,16 +979,17 @@ struct
 	   (Prim_e (PrimOp prim, cons, NONE), con, true)
        end
 *)
-     | xexp context (il_exp as (Il.APP (Il.ILPRIM ilprim, il_arg))) = 
+     | xexp context (il_exp as (Il.ILPRIM (ilprim, il_cons, il_args))) = 
        let
-	   val (arg, _, _) = xexp context il_arg
+	   val temp = map (xexp context) il_args
+	   val args = map #1 temp
 	   (* SLOW *)
 	   val il_con = Ilstatic.GetExpCon (HILctx_of context, il_exp)
            val valuable = Ilstatic.Exp_IsValuable (HILctx_of context, il_exp)
 
 	   val (con, _) = xcon context il_con
        in
-	   (Prim_e (PrimOp (xilprim ilprim), [], [arg]), con, valuable)
+	   (Prim_e (PrimOp (xilprim ilprim), [], args), con, valuable)
        end
 (*
      | xexp context (il_exp as (Il.ILPRIM ilprim)) = 

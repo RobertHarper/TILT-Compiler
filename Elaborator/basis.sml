@@ -64,7 +64,7 @@ functor Basis(structure Il : IL
 	      let val inline = INLINE_EXPCON(e,IlStatic.GetExpCon(!result,e))
 	      in  result := add_context_inline(!result, mk_var_lab str, fresh_named_var str, inline)
 	      end
-	  fun mono_entry (str,prim) = exp_entry(str, PRIM (prim,[]))
+	  fun mono_entry (str,prim) = exp_entry(str, ETAPRIM (prim,[]))
 	  fun scon_entry (str,scon) = exp_entry(str, SCON scon)
 	  fun poly_entry (str,c2exp) = 
 	      let val argvar = fresh_var()
@@ -143,8 +143,8 @@ functor Basis(structure Il : IL
 	       fun con_thunk exp_oneshot x = 
 		   (case (oneshot_deref exp_oneshot,x) of
 			(SOME _,_) => ()
-		      | (NONE,A) => oneshot_set(exp_oneshot,PRIM (plus_int W32,[]))
-		      | (NONE,B) => oneshot_set(exp_oneshot,PRIM (plus_float F64,[])))
+		      | (NONE,A) => oneshot_set(exp_oneshot,ETAPRIM (plus_int W32,[]))
+		      | (NONE,B) => oneshot_set(exp_oneshot,ETAPRIM (plus_float F64,[])))
 	       fun constraints (c,res) (tyvar, 
 					helpers as  {hard : con * con -> bool,
 						     soft : con * con -> bool},
@@ -171,7 +171,7 @@ functor Basis(structure Il : IL
 			       val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
 			   in  #1(make_lambda(arg_var, con_bool, con_bool, not_body))
 			   end),
-		   ("size", PRIM(length1 false,[CON_UINT W8]))]
+		   ("size", ETAPRIM(length1 false,[CON_UINT W8]))]
 
 	      val baseprimvalue_list = 
 		  [("+", (plus_int W32)),
@@ -227,18 +227,18 @@ functor Basis(structure Il : IL
 	      val basepolyvalue_list = 
 		  [("ref", (fn c => let val v = fresh_var()
 				    in #1(make_total_lambda(v,c,CON_REF c,
-							    APP(PRIM(mk_ref,[c]),VAR v)))
+							    PRIM(mk_ref,[c],[VAR v])))
 				    end)),
 		   ("!", (fn c => let val v = fresh_var()
 				  in #1(make_total_lambda(v,CON_REF c,c,
-							  APP(PRIM(deref,[c]),VAR v)))
+							  PRIM(deref,[c],[VAR v])))
 				  end)),
 		   (":=", (fn c => let val v = fresh_var()
 				       val pc = con_tuple[CON_REF c, c]
 				       fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
 				   in #1(make_total_lambda(v,pc,
-							   con_unit,APP(PRIM(setref,[c]),
-									exp_tuple[proj 1, proj 2])))
+							   con_unit,PRIM(setref,[c],
+									 [proj 1, proj 2])))
 				   end))]
 	  in val _ = app poly_entry basepolyvalue_list
 	  end

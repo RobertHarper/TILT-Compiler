@@ -22,6 +22,19 @@ struct
 			    structure Nilutil = NilUtil
 			    structure Ppil = LinkIl.Ppil)
 
+    structure ToClosure = ToClosure(structure Nil = Nil
+				    structure NilUtil = NilUtil)
+
+    structure NilPrimUtilParam = NilPrimUtilParam(structure NilUtil = NilUtil);
+	
+    structure NilPrimUtil = PrimUtil(structure Prim = LinkIl.Prim
+				     structure Ppprim = LinkIl.Ppprim
+				     structure PrimUtilParam = NilPrimUtilParam);
+	
+    structure NilEval = NilEvaluate(structure Nil = Nil
+				    structure NilUtil = NilUtil
+				    structure Ppnil = Ppnil
+				    structure PrimUtil = NilPrimUtil)
     fun test s = 
 	let
 	    val SOME(sbnds, decs) = LinkIl.elaborate s
@@ -34,16 +47,35 @@ struct
 	    val {cu_c, cu_c_kind, cu_r, cu_r_type} =
 		Tonil.xcompunit decs sbnds
 	    val _ = print "\nPhase-splitting done.\n";
-	    val _ = Compiler.Profile.report TextIO.stdOut 
+	    val cu_c_closed = ToClosure.close_con cu_c
+	    val cu_c_kind_closed = ToClosure.close_kind cu_c_kind
+	    val cu_r_closed = ToClosure.close_exp cu_r
+	    val cu_r_type_closed = ToClosure.close_con cu_r_type
+(*	    val _ = Compiler.Profile.report TextIO.stdOut  *)
 	in
+	    print "phase-split results:\n";
 	    Ppnil.pp_con cu_c;
 	    print "\n";
 	    Ppnil.pp_kind cu_c_kind;
-	    print "\n";
+	    print "\n\n";
 	    Ppnil.pp_exp cu_r;
 	    print "\n";
 	    Ppnil.pp_con cu_r_type;
-	    print "\n"
+	    print "\n";
+	    
+	    print "\n\nclosure-conversion results:\n";
+	    Ppnil.pp_con cu_c_closed;
+	    print "\n";
+	    Ppnil.pp_kind cu_c_kind_closed;
+	    print "\n\n";
+	    Ppnil.pp_exp cu_r_closed;
+	    print "\n";
+	    Ppnil.pp_con cu_r_type_closed;
+	    print "\n";
+	    
+            (cu_c_closed,cu_c_kind_closed,
+	     cu_r_closed,cu_r_type_closed)
+
 	end
 end
 

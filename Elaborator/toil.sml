@@ -554,15 +554,18 @@ functor Toil(structure Il : IL
 		      val value_arg = fresh_named_var "delay_value"
 		      val thunk_c = CON_ARROW(con_unit,c,oneshot_init PARTIAL)
 		      val dummy_fun = #1(make_thunk(c, RAISE(c,bindexn_exp)))
-		      val bnd = BND_EXP(ref_arg,APP(PRIM(mk_ref,[thunk_c]), dummy_fun))
-		      val thunk_e = #1(make_thunk(c, APP(APP(PRIM(deref,[thunk_c]),VAR ref_arg),unit_exp)))
+		      val bnd = BND_EXP(ref_arg,PRIM(mk_ref,[thunk_c], [dummy_fun]))
+		      val thunk_e = #1(make_thunk(c, APP(PRIM(deref,[thunk_c],[VAR ref_arg]),
+							 unit_exp)))
 		      val wrapped_exp = APP(wrapper_exp,thunk_e)
 		      val final_c = CON_APP(sc, c)
-		      val inner_body = #1(make_seq[(APP(PRIM(setref,[thunk_c]),
-						     #1(make_thunk(c, VAR value_arg))), con_unit),
+		      val inner_body = #1(make_seq[(PRIM(setref,[thunk_c],
+						    [VAR ref_arg,
+						     #1(make_thunk(c, VAR value_arg))]), con_unit),
 						   (VAR value_arg, c)])
-		      val assign_exp = APP(PRIM(setref,[thunk_c]),
-					   #1(make_thunk(c, LET([BND_EXP(value_arg,e)], inner_body))))
+		      val assign_exp = PRIM(setref,[thunk_c],
+					    [VAR ref_arg,
+					     #1(make_thunk(c, LET([BND_EXP(value_arg,e)], inner_body)))])
 		      val body = #1(make_seq[(assign_exp, con_unit),(wrapped_exp,final_c)])
 		  in  (LET([bnd],body), final_c)
 		  end)
@@ -583,9 +586,22 @@ functor Toil(structure Il : IL
 		 val (e2',con2) = xexp(context,argument)
 		 val spec_rescon = fresh_con context
 		 val spec_funcon = CON_ARROW(con2,spec_rescon, oneshot())
+		 fun reduce(ETAPRIM(p,cs),RECORD rbnds) = PRIM(p,cs,map #2 rbnds)
+		   | reduce(ETAILPRIM(ip,cs),RECORD rbnds) = ILPRIM(ip,cs,map #2 rbnds)
+		   | reduce(x as ETAPRIM(p,cs),y) = 
+		     (case (IlStatic.PrimUtil.get_type p cs) of
+			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
+			| CON_ARROW(_,_,_) => PRIM(p,cs,[y])
+			| _ => APP(x,y))
+		   | reduce(x as ETAILPRIM(ip,cs),y) = 
+		     (case (IlStatic.PrimUtil.get_iltype ip) of
+			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
+			| CON_ARROW(_,_,_) => ILPRIM(ip,cs,[y])
+			| _ => APP(x,y))
+		   | reduce(x,y) = APP(x,y)
 	     in
 		 if (eq_con(context,con1,spec_funcon))
-		     then (APP(e1',e2'),con_deref spec_rescon)
+		     then (reduce(e1',e2'),con_deref spec_rescon)
 		 else
 		     case con1 of
 			 CON_ARROW(argcon,rescon,_) => 
@@ -2259,9 +2275,9 @@ functor Toil(structure Il : IL
 				| _ => raise NoEqExp)
 			  end)
 	  | CON_OVAR ocon => self (CON_TYVAR (ocon_deref ocon))
-	  | CON_INT is => PRIM(eq_int is,[])
-	  | CON_UINT is => ILPRIM(eq_uint is)
-	  | CON_FLOAT fs => PRIM(eq_float fs,[])
+	  | CON_INT is => ETAPRIM(eq_int is,[])
+	  | CON_UINT is => ETAILPRIM(eq_uint is,[])
+	  | CON_FLOAT fs => ETAPRIM(eq_float fs,[])
 	  | CON_RECORD fields => 
 		let 
 		    val v = fresh_var()
@@ -2339,9 +2355,9 @@ functor Toil(structure Il : IL
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
-	  | CON_ARRAY c => PRIM(array_eq true,[c])
-	  | CON_VECTOR c => APP(PRIM(array_eq false,[c]),self c)
-	  | CON_REF c => PRIM(eq_ref,[c])
+	  | CON_ARRAY c => ETAPRIM(array_eq true,[c])
+	  | CON_VECTOR c => APP(ETAPRIM(array_eq false,[c]),self c)
+	  | CON_REF c => ETAPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
 		let val e = MODULE_PROJECT(m,to_eq_lab l)
 		in (GetExpCon(ctxt,e) 

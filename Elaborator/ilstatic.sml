@@ -13,6 +13,7 @@ functor IlStatic(structure Il : IL
 
     open Util Listops
     structure Il = Il
+    structure PrimUtil = PrimUtil
     open Il Ppil IlUtil 
     open IlContext 
     open Prim Tyvar Name
@@ -675,8 +676,12 @@ functor IlStatic(structure Il : IL
 				     SOME e => if va then (va,con)
 					       else GetExpCon(e,ctxt)
 				   | NONE => (va,con))
-     | PRIM (p,cs) => (true, PrimUtil.get_type p cs)
-     | ILPRIM (ip) => (true, PrimUtil.get_iltype ip)
+     | ETAPRIM (p,cs) => (true, PrimUtil.get_type p cs)
+     | ETAILPRIM (ip,_) => (true, PrimUtil.get_iltype ip)
+     | PRIM(p,cs,[e]) => GetExpCon(APP(ETAPRIM(p,cs),e),ctxt)
+     | ILPRIM(ip,cs,[e]) => GetExpCon(APP(ETAILPRIM(ip,cs),e),ctxt)
+     | PRIM(p,cs,es) => GetExpCon(APP(ETAPRIM(p,cs),exp_tuple es),ctxt)
+     | ILPRIM(ip,cs,es) => GetExpCon(APP(ETAILPRIM(ip,cs),exp_tuple es),ctxt)
      | (VAR v) => (case Context_Lookup'(ctxt,v) of
 		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
 		     | SOME _ => error "VAR looked up to a non-value"
@@ -698,6 +703,8 @@ functor IlStatic(structure Il : IL
 		   then (va,con_deref res_con)
 	       else (print "\nfunction type is = "; pp_con con1;
 		     print "\nargument type is = "; pp_con con2; print "\n";
+		     print "Type mismatch in expression application:\n";
+		     pp_exp exparg;
 		     error "Type mismatch in expression application")
 	   end
      | (FIX (a,fbnds)) => 

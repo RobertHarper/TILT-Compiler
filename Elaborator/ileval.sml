@@ -34,7 +34,7 @@ functor IlEval(structure Il : IL
 	     | SEAL _) => false
            | (SCON (vector _)) => true (* XXX not really *)
 	   | (SCON (array _)) => true  (* XXX not really *)
-	   | (SCON _ | PRIM _ | ILPRIM _ | FIX _) => true
+	   | (SCON _ | PRIM _ | ILPRIM _ | ETAPRIM _ | ETAILPRIM _ | FIX _) => true
 	   | (RECORD rbnds) => andfold (fn (l,bnd) => exp_isval bnd) rbnds
 	   | EXN_INJECT (t,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
@@ -313,7 +313,7 @@ functor IlEval(structure Il : IL
 	     (OVEREXP (_,_,oe)) => (case oneshot_deref oe of
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
-	   | (SCON _ | PRIM _ | ILPRIM _) => exp
+	   | (SCON _ | ETAPRIM _ | ETAILPRIM _) => exp
 	   | (FIX (a,fbnds)) => 
 		 let fun help (FBND(v1,v2,c1,c2,e)) = 
 		     FBND(v1,v2,
@@ -325,6 +325,7 @@ functor IlEval(structure Il : IL
 		 in FIX(a,map help fbnds)
 		 end
 	   | (VAR v) => eval_exp env (exp_lookup env v)
+	   | ((PRIM _) | (ILPRIM _)) => raise UNIMP
 	   | (APP (e1,e2)) => raise UNIMP
 (*
 		 let val e1' = eval_exp env e1

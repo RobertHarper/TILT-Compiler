@@ -14,6 +14,7 @@ functor IlPrimUtilParam(structure IlUtil : ILUTIL)
 
 	fun partial_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init PARTIAL)
 	fun total_arrow (c1,c2) = CON_ARROW(c1,c2,oneshot_init TOTAL)
+	val con_tuple = con_tuple
 	val con_int = CON_INT
 	val con_uint = CON_UINT
 	val con_float = CON_FLOAT

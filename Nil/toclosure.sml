@@ -135,19 +135,24 @@ struct
 	     freecvars = VarMap.insert(VarMap.empty,cvar,
 				       case (VarMap.find(boundcvars,cvar)) of
 					   SOME k => k
-					 | NONE => error "free_cvar: variable not bound")}
+					 | NONE => error ("free_cvar: variable " ^
+							  (var2string cvar) ^ " not bound"))}
 	fun free_evar (STATE{boundevars,...},evar) = 
 	    {freeevars = VarMap.insert(VarMap.empty,evar,
 				       case (VarMap.find(boundevars,evar)) of
 					   SOME c => c
-					 | NONE => error "free_evar: variable not bound"),
+					 | NONE => error ("free_evar: variable " ^
+							  (var2string evar) ^ " not bound")),
 	     freecvars = VarMap.empty}
 	    
     in
-	fun new_state boundfids fid = STATE{curfid=fid,boundfids=boundfids,
-					    boundevars = VarMap.empty,
-					    boundcvars = VarMap.empty}
-	fun initial_state top_fid = new_state VarSet.empty  top_fid
+	fun initial_state topfid = STATE{curfid=topfid,boundfids=VarSet.empty,
+					 boundevars = VarMap.empty,
+					 boundcvars = VarMap.empty}
+	fun copy_state (STATE{boundevars,boundcvars,...}) 
+	    boundfids fid = STATE{curfid=fid,boundfids=boundfids,
+				     boundevars = boundevars,
+				     boundcvars = boundcvars}
 	fun bnd_find_fv (state as STATE({curfid,boundevars,boundcvars,boundfids})) bnd : state * freevars =
 	    let
 		fun vkfolder((v,k),(f,s)) = (join_free(f,k_find_fv s k), add_boundcvar(s,v,k))
@@ -173,7 +178,7 @@ struct
 				     end
 		   | Fixopen_b var_fun_set =>
 			 let fun do_arm boundfids' (v,Function(_,_,vklist,vclist,vflist,body,tipe)) =
-			     let val local_state = new_state boundfids' v
+			     let val local_state = copy_state state boundfids' v
 				 val fs = (empty_frees, local_state)
 				 val fs = foldl vkfolder fs vklist
 				 val (f,s) = (foldl vcfolder fs 
@@ -393,6 +398,7 @@ struct
       f == Function(vargs, fargs) = body --->
       
       [fcode == Pfunction(cargs @ cfv, vargs @ vfv, fargs) = body
+       funpack == Pfunction(cargs @ [cenv], vargs @ [venv], fargs) = body
        f == Closure(fcode,cenv,venv)]
 
        ------------------------------------------------------------------------ *)
@@ -403,7 +409,7 @@ struct
 
 
    and fun_rewrite(v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
-       let val {code_var, ...} = get_static v
+       let val {code_var, unpack_var, ...} = get_static v
 	   val {freeevars,freecvars} = get_frees v
 	   val escape = get_escape v
 	   val vk_free = (VarMap.listItemsi freecvars)
@@ -413,21 +419,36 @@ struct
 	   val cenv_var = fresh_named_var "free_cons"
 	   val venv_var = fresh_named_var "free_exp"
 	   val cenv_kind = kind_tuple(map #2 vk_free)
-	   val venv_type = con_tuple(map #2 vc_free)
+	   val vc_free_types = map #2 vc_free
+	   val venv_type = con_tuple vc_free_types
 	   val vklist_code = vklist @ vk_free
 	   val vclist_code = vclist @ vc_free
+	   val vklist_unpack = vklist @ [(cenv_var,cenv_kind)]
+	   val vclist_unpack = vclist @ [(venv_var,venv_type)]
 	   val codebody_tipe = c_rewrite tipe
-	   val code_fun = Function(effect,recur,
-				   vklist_code,vclist_code,vflist,
-				   e_rewrite body, codebody_tipe)
+	   val unpackbody_tipe = codebody_tipe
 	   val closure_tipe = AllArrow_c(Closure,effect,
 					 vklist,map #2 vclist,
 					 TilWord32.fromInt(length vflist),codebody_tipe)
-	   val closure = {code = code_var,
+	   val code_fun = Function(effect,recur,
+				   vklist_code,vclist_code,vflist,
+				   e_rewrite body, codebody_tipe)
+	   val unpack_body = 
+	       App_e(Code,Var_e code_var,
+		     (map (Var_c o #1) vklist) @ 
+		     (Listops.map0count (cproj cenv_var) num_vk_free),
+		     (map (Var_e o #1) vclist) @ 
+		     (Listops.map0count (eproj (venv_var,vc_free_types)) num_vc_free),
+		     map Var_e vflist)
+	   val unpack_fun = Function(effect,recur,
+				     vklist_unpack,vclist_unpack,vflist,
+				     unpack_body, unpackbody_tipe)
+	   val closure = {code = unpack_var,
 			  cenv = con_tuple_inject(map (Var_c o #1) vk_free),
 			  venv = exp_tuple(map (fn (v,c) => (Var_e v, c)) vc_free),
 			  tipe = closure_tipe}
-       in if escape then ([(code_var,code_fun)],
+       in if escape then ([(code_var,code_fun),
+			   (unpack_var,unpack_fun)],
 			  [(v,closure)])
 	  else ([(code_var,code_fun)],[])
        end
@@ -478,16 +499,18 @@ struct
 		let val clist' = map c_rewrite clist
 		    val elist' = map e_rewrite elist
 		    val eflist' = map e_rewrite eflist
-		    fun docall (v,{freeevars, freecvars}) = 
+		    fun docall (cv,{freeevars, freecvars}) = 
 			let val clist'' = map (fn (v,_) => Var_c v) (VarMap.listItemsi freecvars)
 			    val elist'' = map (fn (v,_) => Var_e v) (VarMap.listItemsi freeevars)
-			in App_e(Code, Var_e v, clist' @ clist'', elist' @ elist'', eflist')
+			in App_e(Code, Var_e cv, clist' @ clist'', elist' @ elist'', eflist')
 			end
 		    fun default() = App_e(Closure,e_rewrite e, clist', elist', eflist')
 		in CHANGE_NORECURSE
 		    (case e of
 			 Var_e v => if (is_fid v)
-					then docall(v,get_frees v)
+					then let val {code_var,...} = get_static v
+					     in  docall(code_var,get_frees v)
+					     end
 				    else default()
 		       | _ => default())
 		end
@@ -565,6 +588,38 @@ struct
 	   val _ = close_funs(get_fids())
 	   val _ = print "Done with close_funs\n"
 	   val result = e_rewrite arg_exp
+       in  result
+       end	   
+
+   fun close_con arg_con = 
+       let val _ = reset_table()
+	   val top_fid = fresh_named_var "top_fid"
+	   val state = initial_state top_fid
+	   val {freeevars,freecvars} = c_find_fv state arg_con
+	   val _ = print "Done with c_find_fv\n"
+	   val _ = (print "free is empty: ";
+		    print (Bool.toString (VarMap.numItems freeevars = 0
+					  andalso VarMap.numItems freecvars = 0));
+		    print "\n")
+	   val _ = close_funs(get_fids())
+	   val _ = print "Done with close_funs\n"
+	   val result = c_rewrite arg_con
+       in  result
+       end	   
+
+   fun close_kind arg_kind = 
+       let val _ = reset_table()
+	   val top_fid = fresh_named_var "top_fid"
+	   val state = initial_state top_fid
+	   val {freeevars,freecvars} = k_find_fv state arg_kind
+	   val _ = print "Done with k_find_fv\n"
+	   val _ = (print "free is empty: ";
+		    print (Bool.toString (VarMap.numItems freeevars = 0
+					  andalso VarMap.numItems freecvars = 0));
+		    print "\n")
+	   val _ = close_funs(get_fids())
+	   val _ = print "Done with close_funs\n"
+	   val result = k_rewrite arg_kind
        in  result
        end	   
 
