@@ -33,6 +33,13 @@ signature CALL_CONVENTION = sig
   type rexp
   type mltree
 
+  (* -- values ------------------------------------------------------------- *)
+
+  (*
+   * A statement/directive to annotate the escaping set of registers.
+   *)
+  val escape: mltree
+
   (* -- functions ---------------------------------------------------------- *)
 
   (*
