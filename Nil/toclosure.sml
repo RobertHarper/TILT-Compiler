@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32 NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool NilDefs *)
+(*$import Prelude TopLevel Util Name Nil Prim TraceInfo Sequence List Array Int TilWord32 NilUtil Ppnil NilSubst Normalize TOCLOSURE Stats Listops Bool NilDefs NilRename *)
 
 (* XXX Are argument traces being properly closure converted? *)
 
@@ -1229,6 +1229,13 @@ struct
 					 eFormals=vclist_cl,
 					 fFormals=TilWord32.fromInt(length fFormals),
 					 body_type=codebody_tipe}
+
+	   (* We will reuse parts of this type below, so we must rename 
+	    * the bound variables if we wish to maintain the renaming
+	    * invariant
+	    *)
+	   val closure_tipe = NilRename.renameCon closure_tipe
+
 	   (* Should codebody_tipe be called something else now?  -joev *)
 	   val codebody_tipe = NilSubst.substConInCon internal_subst codebody_tipe
 

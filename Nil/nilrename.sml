@@ -240,6 +240,8 @@ structure NilRename :> NILRENAME =
     local 
       open NilRewrite
 
+      val continue = Stats.tt "isRenamedContinue"
+
       val find = HashTable.find
       val insert = HashTable.insert
 
@@ -253,14 +255,22 @@ structure NilRename :> NILRENAME =
 		    ebound : varset}
 
       fun exp_var_bind (state : state as {epred,ebound,...},var) = 
-	(if isSome (find ebound var) orelse (epred var)
-	   then raise Rebound var
-	 else (insert ebound (var,());(state,NONE)))
+	let 
+	  val _ =if isSome (find ebound var) orelse (epred var)
+		   then if !continue then lprintl ("Expression variable "^(Name.var2string var)^" rebound: continuing")
+			else raise Rebound var
+		 else insert ebound (var,())
+	in (state,NONE)
+	end
 
-      fun con_var_bind (state :state as {cpred,cbound,...},var) = 
-	(if isSome (find cbound var) orelse (cpred var)
-	   then raise Rebound var
-	 else (insert cbound (var,());(state,NONE)))
+      fun con_var_bind (state : state as {cpred,cbound,...},var) = 
+	let 
+	  val _ =if isSome (find cbound var) orelse (cpred var)
+		   then if !continue then lprintl ("Constructor variable "^(Name.var2string var)^" rebound: continuing")
+			else raise Rebound var
+		 else insert cbound (var,())
+	in (state,NONE)
+	end
 
       val all_handlers =  
 	let

@@ -95,4 +95,5 @@ in
     structure Manager =
 	Manager (val bootMapfile = noMapfile
 		 structure Master = Master)
+
 end

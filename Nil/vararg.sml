@@ -557,7 +557,7 @@ struct
 	      NOT_RECORD => NONE
 	    | RECORD _ => NONE
 	    | DYNAMIC => SOME(var, Prim_e(NilPrimOp(make_vararg(Open,effect)),[],
-					  [argc,do_con state body_type],[Var_e pvar]))
+					  [do_con state argc,do_con state body_type],[Var_e pvar]))
 	    | NOT_TYPE => error "ill-formed lambda type")
        | getExtra _ _ = NONE
 

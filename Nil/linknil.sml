@@ -132,7 +132,7 @@ structure Linknil :> LINKNIL  =
     exception Stop of Nil.module
 
     (* (1) Rename must precede everything.
-       (2) Vararg must precede Reify
+       (2) Vararg must precede Reify because vararg changes traceability
        (3) Reify must occur before uncurrying which is in optimize2.
        (4) Reify2 is needed because some optimizations create TraceUnknowns.
     *)
