@@ -1,12 +1,12 @@
 #!/bin/sh
 
-# usage: til_slave n host commdir
+# usage: til_slave n count host commdir
 #
-# We create the nth slave (n is used to set window geometry) by
-# having a remote emacs display locally.  Advantage: You have a full
-# transcript of the slave output and you can interrupt the slave to
-# get to the SML/NJ top-level loop.  Drawback: emacs (heh) and
-# all the X11 communication.
+# Create count slaves on host.  n is used to set window geometry.
+# We create a remote emacs process displaying the slaves locally.
+# Advantage: You have a full transcript of the slave output and you
+# can interrupt the slave to get to the SML/NJ top-level loop.
+# Drawback: emacs (heh) and all the X11 traffic.
 #
 # As a hack, the host "localhost" is treated specially.
 #
@@ -21,16 +21,17 @@ PATH=/usr/local/bin:/usr/bin:/bin:/usr/X11/bin:$PATH
 export PATH
 
 case $# in
-3)	;;
+4)	;;
 *)
-	echo 1>&2 usage: $0 n host commdir
+	echo 1>&2 usage: $0 n count host commdir
 	exit 1
 	;;
 esac
 
 argn="$1"
-arghost="$2"
-argdir="$3"
+argcount="$2"
+arghost="$3"
+argdir="$4"
 
 # At CMU, scp will print diagnostics on some systems unless -q is
 # specified.  On other systems, scp -q causes a usage error.
@@ -56,13 +57,13 @@ mldir=`cd "$argdir/.."; pwd`
 
 # The X11 geometry specification for window n.
 
-xoffset=`echo $argn % 5 '*' 160 | bc`
-yoffset=`echo $argn / 5 '*' 300 | bc`
-geometry="120x12+$xoffset+$yoffset"
+yoffset=`echo "$argn % 5 * 160" | bc`
+xoffset=`echo "$argn / 5 * 300" | bc`
+nrows=`echo "11 * $argcount" | bc`
+geometry="120x$nrows+$xoffset+$yoffset"
 
 # The X11 geometry specification for kerberos window n.
 
-yoffset=`echo $argn / 5 '*' 300 | bc`
 kgeometry="70x5-0+$yoffset"
 
 # The X11 title for kerberos window n.
@@ -134,21 +135,31 @@ cmd='	PATH="'"$PATH"'"
   (interactive)
   (set-default-font "6x10")
   (menu-bar-mode -1)
-  (delete-file "/tmp/elisp'$$'"))
-(defun til-slave ()
-  (interactive)
-  ;; launch sml if necessary, avoiding interactive prompts
-  (if (sml-noproc) (save-excursion (sml)))
+  (delete-file "/tmp/elisp'$$'")
+  (til-slaves '$argcount' nil))
+(defun til-launch-slave ()
+  (sml-run "/usr/local/bin/sml" "")
   (sml-skip-errors)
   (comint-send-string (sml-proc)
 		      (concat "SMLofNJ.Internals.GC.messages false;"
 			      "CM.verbose (SOME false);"
 			      "CM.make();"
-			      "Manager.slave();\n"))
+			      "Manager.slave();\n")))
+(defun til-slave ()
+  (interactive)
+  (til-launch-slave)
   (switch-to-buffer sml-buffer))
+(defun til-slaves (n split)
+  (if (= n 0)
+      (balance-windows)
+    (progn
+      (if split (split-window-vertically))
+      (til-slave)
+      (rename-buffer "*til slave*" t)
+      (til-slaves (- n 1) t))))
 END_EMACS
 	exec emacs --no-init-file -bg black -fg yellow -geometry '$geometry' \
-	     -l /tmp/elisp'$$' -f til-slave-startup -f til-slave
+	     -l /tmp/elisp'$$' -f til-slave-startup
 '
 
 # We put the command into a file because ssh doesn't send the command
