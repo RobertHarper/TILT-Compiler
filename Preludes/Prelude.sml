@@ -1,3 +1,4 @@
+(*$import *)
 (* At the time the prelude is elaborated, it may assume that
  * truly basic primitives are available.  Of special interest
  * is the identifier littleEndian which is a boolean value.
