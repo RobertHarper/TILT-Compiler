@@ -84,19 +84,25 @@ Comments:
 		in	a = b
 		end
 
-	evaluates to false.  No compiler changes are needed to fix this
-	bug but a cosmetic change to TiltPrim is appropriate.
+	evaluates to false.
 
-	This is a library error.  Word8Array returns TiltPrim.empty_array8
-	whenever an empty array is constructed.
+	TiltPrim.empty_array should have type unit -> 'a array.
+
+	TiltPrim.empty_array8 should go away.
+
+	Word8Array and Array should construct new empty arrays rather than
+	always use a single value.
+
+	The missing bounds check in Word8Array.array should be inserted.
+
+	The other Array, Word8Array, PreVector, and PreVector8 array
+	constructors should be audited to ensure they do appropriate
+	bounds checks.
+
+	The duplication of code between Array and PreVector and between
+	Word8Array and PreVector8 should be reduced.
 
 Fix:
-
-	Need to remove TiltPrim.empty_array8 and TiltPrim.empty_array.
-
-	Need to update Word8Array and Array to construct new empty arrays
-	rather than reuse a single value.
-
 Test: m0029
 Owner: swasey
 Status: open
