@@ -34,10 +34,11 @@ struct
   structure Ifgraph   = Ifgraph    (structure Machine = Machine)
 
 
-  structure Bblock = Bblock(structure Machineutils = Decalphautils)
-
   structure Tracetable = Tracetable(val little_endian = true
 				    structure MU = Decalphautils)
+
+  structure Bblock = Bblock(structure Machineutils = Decalphautils
+			    structure Tracetable = Tracetable)
 
 
   structure Divmult = Divmult(structure Decalpha = Decalpha

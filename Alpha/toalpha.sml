@@ -9,7 +9,8 @@ functor Toalpha(val do_tailcalls : bool ref
                 structure DM : DIVMULT
 (*		sharing Decalpha.Rtl = Pprtl.Rtl  *)
 (*		sharing Machineutils.Machine.Rtl = ArgTracetable.Machine.Rtl = Bblock.Machine.Rtl = DM.DA.Machine.Rtl = Decalpha.Machine.Rtl = Pprtl.Rtl *)
-		sharing Machineutils.Machine = ArgTracetable.Machine = Bblock.Machine = DM.DA.Machine = Decalpha.Machine)
+		sharing Machineutils.Machine = ArgTracetable.Machine = Bblock.Machine = DM.DA.Machine = Decalpha.Machine
+		sharing ArgTracetable = Bblock.Tracetable)
   :> TOASM where Machine = Decalpha.Machine
 	   where Bblock = Bblock
 	   where Tracetable = ArgTracetable
@@ -33,7 +34,7 @@ struct
    (* Translate the two RTL register types into the single
       DECALPHA register type.  *)
 
-   val tracemap = ref (Regmap.empty) : Tracetable.trace Regmap.map ref
+   val tracemap = ref (Regmap.empty) : (register option * Tracetable.trace) Regmap.map ref
 
    local
      (* stack slot position of next variable to be made stack-resident *)
@@ -60,23 +61,32 @@ struct
 
    fun translateRep rep =
        case rep
-       of Rtl.TRACE => Tracetable.TRACE_YES
-        | Rtl.LOCATIVE => Tracetable.TRACE_IMPOSSIBLE
+       of Rtl.TRACE => (NONE, Tracetable.TRACE_YES)
+        | Rtl.LOCATIVE => (NONE, Tracetable.TRACE_IMPOSSIBLE)
         | Rtl.COMPUTE path =>
 	      (case path of
-	         Rtl.Projvar_p (Rtl.REGI(v,_),[]) => Tracetable.TRACE_STACK(add_stack (R (Name.var2int v)))
-	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) => Tracetable.TRACE_STACK_REC(add_stack(R (Name.var2int v)),i)
+	         Rtl.Projvar_p (Rtl.REGI(v,_),[]) => 
+		     ((case (Regmap.find(!tracemap,R (Name.var2int v))) of
+			   NONE => NONE
+			 | SOME (ropt,_) => ropt),
+			   Tracetable.TRACE_STACK(add_stack (R (Name.var2int v))))
+	       | Rtl.Projvar_p (Rtl.REGI(v,_),i) => 
+		     ((case (Regmap.find(!tracemap,R (Name.var2int v))) of
+			   NONE => NONE
+			 | SOME (ropt,_) => ropt),
+		       Tracetable.TRACE_STACK_REC(add_stack(R (Name.var2int v)),i))
 	       | Rtl.Projvar_p (Rtl.SREGI _, i) => error "SREG should not contain type"
-	       | Rtl.Projlabel_p (l,[]) => Tracetable.TRACE_GLOBAL l
-	       | Rtl.Projlabel_p (l,i) => Tracetable.TRACE_GLOBAL_REC (l,i)
-	       | Rtl.Notneeded_p => Tracetable.TRACE_IMPOSSIBLE)
-	| Rtl.UNSET => Tracetable.TRACE_UNSET
-	| Rtl.NOTRACE_INT => Tracetable.TRACE_NO
-	| Rtl.NOTRACE_REAL => Tracetable.TRACE_NO
-	| Rtl.NOTRACE_CODE => Tracetable.TRACE_NO
-	| Rtl.LABEL => Tracetable.TRACE_NO
+	       | Rtl.Projlabel_p (l,[]) => (NONE,Tracetable.TRACE_GLOBAL l)
+	       | Rtl.Projlabel_p (l,i) => (NONE,Tracetable.TRACE_GLOBAL_REC (l,i))
+	       | Rtl.Notneeded_p => (NONE,Tracetable.TRACE_IMPOSSIBLE))
+	| Rtl.UNSET => (NONE,Tracetable.TRACE_UNSET)
+	| Rtl.NOTRACE_INT => (NONE,Tracetable.TRACE_NO)
+	| Rtl.NOTRACE_REAL => (NONE,Tracetable.TRACE_NO)
+	| Rtl.NOTRACE_CODE => (NONE,Tracetable.TRACE_NO)
+	| Rtl.LABEL => (NONE,Tracetable.TRACE_NO)
 
-   fun internal_translateRep v Rtl.UNSET = (add_stack (R (Name.var2int v)); translateRep Rtl.UNSET)	
+   fun internal_translateRep v Rtl.UNSET = (add_stack (R (Name.var2int v)); 
+					    translateRep Rtl.UNSET)
      | internal_translateRep _ rep = translateRep rep	
 
    fun translateSReg Rtl.HEAPPTR = Rheap
