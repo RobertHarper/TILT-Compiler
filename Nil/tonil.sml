@@ -892,7 +892,9 @@ struct
 	       SOME f => f
 	     | NONE => error "(toFunction): impossible"
        end
-     | toFunction _ _ _ = error "(toFunction): not a FIX expression"
+     | toFunction _ _ e = 
+       (Ppil.pp_exp e;
+	error "(toFunction): not a FIX expression")
 
    and xvalue decs _(Prim.int (intsize, w)) = 
        (Const_e (Prim.int (intsize, w)), Prim_c(Int_c intsize, nil), true)
@@ -1435,5 +1437,43 @@ struct
 		      map (fn ((_,v),k) => (v,k)) args,
 		      makeKindTuple m)
 	 end
+
+   fun xcompunit decs il_sbnds =
+       let
+	   val vmap = empty_vmap
+
+	   val (cuvar, cuvar_c, cuvar_r, vmap') = splitFreshVar vmap
+
+	   val {name_c, name_r, knd_c, type_r, cbnd_cat, ebnd_cat, ...} =
+		xmod decs (Il.MOD_STRUCTURE il_sbnds, vmap',
+			   SOME (cuvar, cuvar_c, cuvar_r))
+	   val cu_c = Let_c (Sequential,
+			     map Con_cb (flattenCatlist cbnd_cat),
+			     name_c)
+           val cu_r_var = Name.fresh_var ()
+
+	   val cu_r = Let_e (Sequential,
+			     [Fixopen_b 
+			      (Util.list2set 
+			       [(cu_r_var,
+				 Function(Total, Leaf, [(cuvar_c, knd_c)], [], [], 
+					  Let_e (Sequential,
+						 flattenCatlist ebnd_cat,
+						 name_r),
+					  type_r))])],
+			     Var_e cu_r_var)
+
+	   val cu_r_type = AllArrow_c(Open, Total, [(cuvar_c, knd_c)], [], w0, type_r)
+
+       in
+	   {cu_c = cu_c,
+	    cu_c_kind = knd_c,
+	    cu_r = cu_r,
+	    cu_r_type = cu_r_type}
+       end
+			     
+			     
+	       
+
 end
 

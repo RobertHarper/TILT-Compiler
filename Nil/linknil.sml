@@ -24,25 +24,25 @@ struct
 
     fun test s = 
 	let
-(*	    val _ = print "1\n" *)
 	    val SOME(sbnds, decs) = LinkIl.elaborate s
-(*	    val _ = LinkIl.Ppil.pp_sbnds sbnds  *)
 	    val _ = print "\n\n\nELABORATION SUCESSFULLY COMPLETED\n\n\n"; 
-            val _ = print "\n"
-(* 	    val _ = print "2\n" *)
+            val _ = print "\nSize of IL = ";
+	    val _ = print (Int.toString (LinkIl.IlUtil.mod_size 
+					 (LinkIl.MOD_STRUCTURE sbnds)));
+            val _ = print "\n\n"
 	    val _ = Compiler.Profile.reset () 
-	    val {name_c, name_r, cbnd_cat, ebnd_cat, ...} =
-		Tonil.xmod decs (LinkIl.MOD_STRUCTURE sbnds, Tonil.empty_vmap, NONE)
-	    val _ = Compiler.Profile.report TextIO.stdOut
-(*	    val _ = print "4\n" *)
-	    val bnds = (map Nil.Con_b (Tonil.flattenCatlist cbnd_cat)) @ 
-		       (Tonil.flattenCatlist ebnd_cat)
+	    val {cu_c, cu_c_kind, cu_r, cu_r_type} =
+		Tonil.xcompunit decs sbnds
+	    val _ = print "\nPhase-splitting done.\n";
+	    val _ = Compiler.Profile.report TextIO.stdOut 
 	in
-	    print "\nPhase-splitting done.\n";
-	    Ppnil.pp_bnds bnds; 
-            print "\nSize of IL = \n";
-	    print (Int.toString (LinkIl.IlUtil.mod_size 
-				 (LinkIl.MOD_STRUCTURE sbnds)));
+	    Ppnil.pp_con cu_c;
+	    print "\n";
+	    Ppnil.pp_kind cu_c_kind;
+	    print "\n";
+	    Ppnil.pp_exp cu_r;
+	    print "\n";
+	    Ppnil.pp_con cu_r_type;
 	    print "\n"
 	end
 end
