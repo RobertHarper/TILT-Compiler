@@ -1,7 +1,7 @@
+(*$import Nil *)
 
 signature EXPTABLE =
 sig
-    structure Nil : NIL
     
     structure ExpKey :
 	sig 
@@ -11,11 +11,8 @@ sig
 	    val compare : Nil.exp * Nil.exp -> order
 	end 
 
-    structure Expmap : ORD_MAP
-    sharing type Expmap.Key.ord_key = Nil.exp
-
-    structure Conmap : ORD_MAP
-    sharing type Conmap.Key.ord_key = Nil.con
+    structure Expmap : ORD_MAP where type Key.ord_key = Nil.exp
+    structure Conmap : ORD_MAP where type Key.ord_key = Nil.con
 
 end
 
