@@ -197,6 +197,17 @@ struct
 				    default = default', result_type = result_type}),
 	      pset)
 	  end
+      | reify_exp ctxt (e_and_pset as (Fold_e (vars,from,to),_)) = e_and_pset
+      | reify_exp ctxt (e_and_pset as (Unfold_e (vars,from,to),_)) = e_and_pset
+      | reify_exp ctxt (Coerce_e (coercion,cargs,exp),pset) =
+	let
+	    (* Since we plan to erase the coercion application entirely, *)
+	    (* the constructor arguments need not be reified.            *)
+	    val (coercion,pset) = reify_exp ctxt (coercion,pset)
+	    val (exp,pset) = reify_exp ctxt (exp,pset)
+	in 
+	    (Coerce_e (coercion,cargs,exp),pset)
+	end
 
     and reify_seq_bnds ctxt ([], BODY_EXP e, pset) =
            let

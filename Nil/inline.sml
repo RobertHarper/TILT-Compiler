@@ -99,7 +99,11 @@ struct
 			handler = rexp handler, 
 			result_type = rcon result_type}
 	 | Raise_e (exp, con) => 
-		    Raise_e (rexp exp, rcon con))
+		    Raise_e (rexp exp, rcon con)
+	 | Fold_e (vars,from,to) => Fold_e (vars,rcon from,rcon to)
+	 | Unfold_e (vars,from,to) => Unfold_e (vars,rcon from, rcon to)
+	 | Coerce_e (coercion,cargs,exp) => 
+	   Coerce_e (rexp coercion,map rcon cargs,rexp exp))
 
 
   and rbnd b = 

@@ -49,6 +49,7 @@ struct
             NONE
         | App_c _ => 
             NONE
+	| Coercion_c _ => SOME TI.Notrace_Int
         | Typecase_c _ => 
             NONE
         | Annotate_c (_,c) => 

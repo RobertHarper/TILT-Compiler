@@ -201,6 +201,8 @@ struct
       | strip_prim' _ = NONE
     fun strip_app' (App_c (con,actuals)) = SOME (con,actuals)
       | strip_app' _ = NONE
+    fun strip_coercion' (Coercion_c stuff) = SOME stuff
+      | strip_coercion' _ = NONE
 
     fun is_exn_con' (Prim_c (Exn_c,[])) = true
       | is_exn_con' _ = false
@@ -247,6 +249,7 @@ struct
     val strip_proj = strip_annotate strip_proj'
     val strip_prim = strip_annotate strip_prim'
     val strip_app = strip_annotate strip_app'
+    val strip_coercion = strip_annotate strip_coercion'
 
     val is_exn_con = strip_annotate is_exn_con'
     val is_unit_c = strip_annotate is_unit_c'
@@ -592,6 +595,12 @@ struct
 		   in
 		       App_c (cfun', actuals')
 		   end
+	     | (Coercion_c {vars,from,to}) =>
+		   let
+		     val state' = foldl (fn (v,s) => add_convar (s,v)) state vars
+		   in
+		     Coercion_c {vars=vars,from=f_con state' from,to=f_con state' to}
+		   end
 	       
              | Typecase_c {arg, arms, default, kind} => 
                    let fun doarm(pc,vklist,c) =   
@@ -884,6 +893,20 @@ struct
 				   handler = f_exp state' handler,
 				   result_type = f_type state result_type}
 		      end
+		| Fold_e (vars,from,to) =>
+		  let
+		      val state' = foldl (fn (v,s) => add_var (s,v)) state vars
+		  in
+		      Fold_e (vars, f_con state' from, f_con state' to)
+		  end
+		| Unfold_e (vars,from,to) =>
+		  let
+		      val state' = foldl (fn (v,s) => add_var (s,v)) state vars
+		  in
+		      Unfold_e (vars, f_con state' from, f_con state' to)
+		  end
+		| Coerce_e (coercion,cargs,exp) =>
+		  Coerce_e (self coercion, map (f_con state) cargs, self exp)
       in case (exphandler (bound,exp)) of
 	  CHANGE_NORECURSE e => e
 	| CHANGE_RECURSE e => doexp e

@@ -32,6 +32,11 @@ struct
 
     val do_single_venv = Stats.tt("Closure_TermCompress")
     val closure_print_free = Stats.ff "closure_print_free"
+    (* If omit_coercions is true, coercion values that only apper in *)
+    (* application position will be omitted from closures.  This will *)
+    (* result in one more way that code might not be closed, but will *)
+    (* save some space.                                               *)
+    val omit_coercions = Stats.ff ("closure_omit_coercions")
 
     val typeof_count = Stats.counter "CC_typeofs"
 
@@ -716,7 +721,34 @@ struct
 		     val f = e_find_fv (add_boundevar(state,bound,TraceKnown TraceInfo.Trace,NONE), f) handler
 		     val f = t_find_fv (state,f) result_type
 		 in  f
-		 end)
+		 end
+	   | Fold_e (vars,from,to) =>
+	     let
+		 val state = foldl (fn (v,s) => add_boundcvar (s,v)) state vars
+		 val f = t_find_fv (state,frees) from
+		 val f = t_find_fv (state,f) to
+	     in f
+	     end
+	   | Unfold_e (vars,from,to) =>
+	     let 
+		 val state = foldl (fn (v,s) => add_boundcvar (s,v)) state vars
+		 val f = t_find_fv (state,frees) from
+		 val f = t_find_fv (state,f) to
+	     in f
+	     end
+	   | Coerce_e (coercion,cargs,exp) =>
+	     let
+		 val f = 
+		   if !omit_coercions then
+		     case coercion of 
+		       (Var_e v) => frees 
+		     | _ => e_find_fv (state,frees) coercion
+		   else
+		     e_find_fv (state,frees) coercion
+		 val f = foldl (fn (c,f) => c_find_fv (state,f) c) f cargs
+		 val f = e_find_fv (state,f) exp
+	     in f
+	     end)
 
 
 
@@ -816,6 +848,12 @@ struct
 		     if (cvar_isfree(state,frees,v))
 			then free_cvar_add(frees,v)
 		     else frees
+	       | Coercion_c {vars,from,to} =>
+		       let 
+			 val state = foldl (fn (v,s) => add_boundcvar(s,v)) state vars
+			 val f = c_find_fv (state,frees) from
+		       in c_find_fv (state,f) to
+		       end
 	       | Typecase_c {arg, arms, default, kind} => 
 		     let val f = c_find_fv (state,frees) arg
 			 val f = c_find_fv (state,f) default
@@ -1289,7 +1327,12 @@ struct
 	  | Handle_e {body,bound,handler,result_type} => 
 		Handle_e{body = e_rewrite body, bound = bound,
 			 handler = e_rewrite handler,
-			 result_type = c_rewrite result_type})
+			 result_type = c_rewrite result_type}
+	  | Fold_e (vars,from,to) => Fold_e (vars,c_rewrite from,c_rewrite to)
+	  | Unfold_e (vars,from,to) => Unfold_e (vars,c_rewrite from,c_rewrite to)
+	  | Coerce_e (coercion,cargs,exp) => 
+	    Coerce_e (e_rewrite coercion, map c_rewrite cargs, e_rewrite exp)
+)
        end
 
    and cbnd_rewrite state (Con_cb(v,c)) : conbnd list = 
@@ -1380,6 +1423,9 @@ struct
 							 else Let_c(letsort,cbnds',c)
 		       | _ => Let_c(letsort,cbnds',c))
 		end
+	  | Coercion_c {vars,from,to} =>
+		Coercion_c {vars=vars, 
+			    from=c_rewrite from,to=c_rewrite to}
 	  | Typecase_c {arg,arms,default,kind} => 
 		Typecase_c{arg = c_rewrite arg,
 			   arms = map (fn (pc,vklist,c) => (pc,map (fn (v,k) => (v,k_rewrite state k)) vklist,

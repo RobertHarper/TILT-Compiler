@@ -694,6 +694,14 @@ fun pp_alias UNKNOWN = print "unknown"
 	      | Typeof_c e => Typeof_c(do_exp state e)
 	      | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
 	      | App_c(c,clist) => App_c(do_con state c, map (do_con state) clist)
+	      | Coercion_c {vars,from,to} =>
+			    let
+			      fun folder (v,s) = add_kind(s,v,Type_k)
+			      val state = foldl folder state vars
+			    in
+			      Coercion_c {vars=vars,from=do_con state from,
+					  to=do_con state to}
+			    end
 	      | Typecase_c _ => error "typecase not handled"
 	      | Annotate_c (a,c) => Annotate_c(a,do_con state c)
 	      | Let_c(letsort,cbnds,c) => 
@@ -1010,7 +1018,25 @@ fun pp_alias UNKNOWN = print "unknown"
 			in  Handle_e{body = body, bound = bound,
 				     handler = handler, 
 				     result_type = result_type}
-			end)
+			end
+		| Coerce_e (coercion,cargs,exp) =>
+		  let val coercion = do_exp state coercion
+		      val cargs = map (do_con state) cargs
+		      val exp = do_exp state exp
+		  in Coerce_e (coercion,cargs,exp)
+		  end
+		| Fold_e (vars,from,to) =>
+		  let val state = add_vars(state,vars)
+		      val from = do_con state from
+		      val to = do_con state to
+		  in Fold_e (vars,from,to)
+		  end
+		| Unfold_e (vars,from,to) =>
+		  let val state = add_vars(state,vars)
+		      val from = do_con state from
+		      val to = do_con state to
+		  in Unfold_e (vars,from,to)
+		  end)
 
 
 

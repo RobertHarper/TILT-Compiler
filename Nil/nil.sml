@@ -90,6 +90,9 @@ struct
 					               code and environment *)
     | App_c of con * con list                     (* Constructor-level application 
 						       of open or closed constructor function *)
+    | Coercion_c of {vars : var list,         (* Coercions: *)
+		     from : con,              (* forall[vars].from=>to *)
+		     to : con}
     | Typecase_c of {arg : con,
                      arms : (primcon * (var * kind) list * con) list,
                      default : con,
@@ -170,6 +173,10 @@ struct
 	           bound : var,
                    handler : exp,
                    result_type : con}
+    | Fold_e of var list * con * con           (* Fold_e and Unfold_e are coercions*)
+    | Unfold_e of var list * con * con
+    | Coerce_e of exp * (con list) * exp       (* Coerce_e applies a coercion *)
+
 
   and conditionCode =                          (* Usd by Ifthenelse_e *)
       Exp_cc of exp

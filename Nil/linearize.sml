@@ -350,6 +350,35 @@ struct
 		    ([],Handle_e{body = body, bound = bound,
 				 handler = handler, result_type = result_type})
 		end
+	  | Coerce_e (ccn,cons,exp) =>
+		let 
+		  val (bnds,ccn) = lexp lift state ccn
+		  val (cbnds,cons) = map_unzip (lcon lift state) cons
+		  val (bnds',exp) = lexp lift state exp
+		in (bnds @ 
+		    (flatten (mapmap (fn cb => Con_b(Runtime,cb)) cbnds)) @
+		    bnds',
+		    Coerce_e (ccn,cons,exp))
+		end
+	  | Fold_e (vars,from,to) =>
+	    let
+		fun folder (v,s) = let val (s,v) = add_var (s,v) in s end
+		val state = foldl folder state vars
+		val from = lcon_lift' state from
+		val to = lcon_lift' state to
+	    in
+		([], Fold_e (vars,from,to))
+	    end
+	  | Unfold_e (vars,from,to) =>
+	    let
+		fun folder (v,s) = let val (s,v) = add_var (s,v) in s end
+		val state = foldl folder state vars
+		val from = lcon_lift' state from
+		val to = lcon_lift' state to
+	    in
+		([],Unfold_e (vars,from,to))
+	    end
+		     
 	end
 
 
@@ -516,6 +545,16 @@ struct
 				   val (cbnds',clist) = Listops.unzip temp
 			       in  (cbnds@flatten cbnds', App_c(c,clist))
 			       end
+	  | Coercion_c {vars,from,to} =>
+	    let
+		fun folder (v,state) = let val (state,v) = add_var (state,v) 
+				       in state
+				       end
+		val state = foldl folder state vars
+		val from = lcon_lift' state from
+		val to = lcon_lift' state to
+	    in ([],Coercion_c{vars=vars,from=from,to=to})
+	    end
           | Typecase_c _ => error "typecase not done"
 
 	  | Annotate_c (a,c) => let val (cbnds,c) = local_lcon state c

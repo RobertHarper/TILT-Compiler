@@ -102,6 +102,9 @@ sig
 						       of open or closed constructor function 
 							 or a closure
 							 *)
+    | Coercion_c of {vars : var list,     (* Coercions: *)
+		     from : con,              (* forall[vars:Type].from=>to *)
+		     to : con}
     | Typecase_c of {arg : con,
                      arms : (primcon * (var * kind) list * con) list,
                      default : con,
@@ -190,6 +193,13 @@ sig
 	           bound : var,
                    handler : exp,
                    result_type : con}
+    (* Beginning of coercions for opaque datatypes *)
+    | Fold_e of var list * con * con           (* Fold_e and Unfold_e are coercions*)
+    | Unfold_e of var list * con * con
+    | Coerce_e of exp * (con list) * exp       (* Coerce_e applies a coercion;
+						  first exp is coercion, must be 
+						  a value. *)
+    (* End of coercions *)
 
   and conditionCode =                          (* Usd by Ifthenelse_e *)
       Exp_cc of exp

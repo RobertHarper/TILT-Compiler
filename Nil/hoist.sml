@@ -780,6 +780,17 @@ struct
 	  (App_c(con,cons), state, levels)
       end
 
+    | rcon' (Coercion_c {vars,from,to}, env, state) =
+      let
+	val (env, state, arglevel) = bumpCurrentlevel (env, state)
+	val env = foldl (fn (v,e) => bindLevel(e,v,arglevel)) env vars
+	val (from,state,levels1) = rcon (from,env,state)
+	val (to,state,levels2) = rcon (to,env,state)
+	val levels = mergeLevels (levels1,levels2)
+      in
+	(Coercion_c {vars=vars,from=from,to=to},state,levels)
+      end
+
     | rcon' (Typecase_c _,_, _) = 
       (error "rcon of Typecase_c unimplemented")
 
@@ -1010,6 +1021,43 @@ struct
 	  (Handle_e {body = body, bound = bound,
 		     handler = handler, result_type = result_type},
 	   state, levels, eff, valuable)
+      end
+    | rexp' (Fold_e (vars,from,to), env, state) =
+      let
+	  val (inner_env,state,ccnlevel) = bumpCurrentlevel (env,state)
+	  fun folder (v,e) = bindLevel (e,v,ccnlevel)
+	  val inner_env = foldl folder inner_env vars
+	  val (from,state,levels1) = rcon (from,inner_env,state)
+	  val (to,state,levels2) = rcon (to,inner_env,state)
+	  val levels = mergeLevels (levels1,levels2)
+	  val valuable = true
+	  val eff = UNKNOWN_EFF
+      in 
+	  (Fold_e (vars,from,to),state,levels,eff,valuable)
+      end
+    | rexp' (Unfold_e (vars,from,to), env, state) =
+      let
+	  val (inner_env,state,ccnlevel) = bumpCurrentlevel (env,state)
+	  fun folder (v,e) = bindLevel (e,v,ccnlevel)
+	  val inner_env = foldl folder inner_env vars
+	  val (from,state,levels1) = rcon (from,inner_env,state)
+	  val (to,state,levels2) = rcon (to,inner_env,state)
+	  val levels = mergeLevels (levels1,levels2)
+	  val valuable = true
+	  val eff = UNKNOWN_EFF
+      in 
+	  (Unfold_e (vars,from,to),state,levels,eff,valuable)
+      end
+    | rexp' (Coerce_e (coercion,cargs,exp), env, state) =
+      let
+	  val (coerceion,state,levels1,effs1,valuable1) = rexp (coercion,env,state)
+	  val (cargs,state,levels2) = rcons (cargs,env,state)
+	  val (exp,state,levels3,effs3,valuable3) = rexp (exp,env,state)
+	  val levels = foldr mergeLevels levels1 [levels2,levels3]
+	  val valuable = valuable1 andalso valuable3
+	  val eff = UNKNOWN_EFF
+      in
+	  (Coerce_e (coercion,cargs,exp),state,levels,eff,valuable)
       end
 
   and rexp_limited levnum (exp, env, state) = 

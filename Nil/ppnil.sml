@@ -182,6 +182,14 @@ structure Ppnil	:> PPNIL =
 	                            [pp_list pp_con cons ("",",","",false),
 				     String " --> ",
 				     pp_con c]
+	 | Coercion_c {vars,from,to} =>
+				    HOVbox[String "COERCION[ ",
+					   pp_list'' pp_var vars,
+					   String " ](",
+					   pp_con from,
+					   String ",",
+					   pp_con to,
+					   String ")"]
 	 | Annotate_c (Annotation.TYPECHECKED kind,con) => HOVbox[String "ANNOTE(Typechecked: ", 
 						       pp_kind kind, 
 						       String ",", 
@@ -319,6 +327,20 @@ structure Ppnil	:> PPNIL =
 		      HOVbox[String "With ", pp_var bound, 
 			     String ": EXN = ", Break0 0 5,
 			     pp_exp handler]]
+	   | Coerce_e (coercion,cargs,exp) =>
+		 HOVbox [String "COERCE( ",
+			 pp_exp coercion,
+			 String "[",pp_list'' pp_con cargs,String "],",
+			 pp_exp exp,
+			 String " )"]
+	   | Fold_e (cvars,from,to) =>
+		 HOVbox [String "FOLD( ",pp_list'' pp_var cvars,
+			 String ",",pp_con from,String ",",pp_con to,
+			 String " )"]
+	   | Unfold_e (cvars,from,to) =>
+		 HOVbox [String "UNFOLD( ",pp_list'' pp_var cvars,
+			 String ",",pp_con from,String ",",pp_con to,
+			 String " )"]
 	   | Switch_e sw => pp_switch sw)
 
 	 

@@ -1619,6 +1619,7 @@ end (* local defining splitting context *)
 	   con
        end
      | xcon' context (Il.CON_COERCION (vars,il_from_con,il_to_con)) =
+(******************** Replacing this with a Nil coercion type
        let
 	 val (vars', context) = insert_rename_vars(vars, context)
 	 val tformals = map (fn v => (v,Type_k)) vars'
@@ -1634,6 +1635,15 @@ end (* local defining splitting context *)
 				 body_type   = to_con}
        in arrow
        end
+**************************************************************)
+       let
+	 val (vars', context) = insert_rename_vars(vars, context)
+	 val tformals = map (fn v => (v,Type_k)) vars'
+	 val context = update_NILctx_insert_kind_list(context,tformals)
+	 val from_con = xcon context il_from_con
+	 val to_con = xcon context il_to_con
+       in Coercion_c {vars=vars',from=from_con,to=to_con}
+       end	 
 
      | xcon' context (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
        let
@@ -1944,10 +1954,15 @@ end (* local defining splitting context *)
 	 val coercion = xexp context il_coercion
 	 val cons = map (xcon context) il_cons
 	 val exp = xexp context il_exp
+(*********** Replacing this with a Nil coercion application
        in App_e(Open,coercion,cons,[exp],[])
+       end
+***********************************************************)
+       in Coerce_e(coercion,cons,exp)
        end
 
      | xexp' context (Il.FOLD (vars, il_expanded_con, il_mu_con)) = 
+(*********** Replacing this with a Nil coercion value ******
        let
 
 	   val (vars',context) = insert_rename_vars(vars, context)
@@ -1973,7 +1988,19 @@ end (* local defining splitting context *)
 	   val exp = Let_e (Sequential,[Fixopen_b (Sequence.fromList [(fun_name,lambda)])],Var_e fun_name)
        in exp
        end
+***********************************************************)
+       let 
+	 val (vars',context) = insert_rename_vars(vars, context)
+	 val tformals = map (fn v => (v,Type_k)) vars'
+	 val context = update_NILctx_insert_kind_list(context,tformals)
+	 val expanded_con = xcon context il_expanded_con
+	 val mu_con = xcon context il_mu_con
+	 val exp = Fold_e(vars',expanded_con,mu_con)
+       in exp
+       end
+	 
   | xexp' context (Il.UNFOLD (vars, il_mu_con, il_expanded_con)) = 
+(*********** Replacing this with a Nil coercion value ******
        let
 
 	   val (vars',context) = insert_rename_vars(vars, context)
@@ -1999,20 +2026,48 @@ end (* local defining splitting context *)
 	   val exp = Let_e (Sequential,[Fixopen_b (Sequence.fromList [(fun_name,lambda)])],Var_e fun_name)
        in exp
        end
+***********************************************************)
+       let 
+	 val (vars',context) = insert_rename_vars(vars, context)
+	 val tformals = map (fn v => (v,Type_k)) vars'
+	 val context = update_NILctx_insert_kind_list(context,tformals)
+	 val expanded_con = xcon context il_expanded_con
+	 val mu_con = xcon context il_mu_con
+	 val exp = Unfold_e(vars',mu_con,expanded_con)
+       in exp
+       end
 
      | xexp' context (Il.ROLL (il_con, il_exp)) = 
+(*********** Replacing this with a Nil coercion application
        let
 	   val con = xcon context il_con
 	   val exp = xexp context il_exp
        in
 	   Prim_e(NilPrimOp roll, [con], [exp])
        end
+***********************************************************)
+       let
+	   val to_con = xcon context il_con
+	   val nilctx = get_nilctxt context
+	   val from_con = Normalize.expandMuType (nilctx,xcon context il_con)
+	   val exp = xexp context il_exp
+       in Coerce_e(Fold_e([],from_con,to_con),[],exp)
+       end
+	   
 
      | xexp' context (il_exp as (Il.UNROLL (il_mu_con, il_expanded_con, il_exp1))) = 
+(*********** Replacing this with a Nil coercion application
        let
 	   val mu_con = xcon context il_mu_con
 	   val exp = xexp context il_exp1
        in  Prim_e(NilPrimOp unroll, [mu_con], [exp])
+       end
+***********************************************************)
+       let
+	 val from_con = xcon context il_mu_con
+	 val to_con = xcon context il_expanded_con
+	 val exp = xexp context il_exp1
+       in Coerce_e(Unfold_e([],from_con,to_con),[],exp)
        end
 
      | xexp' context (Il.INJ {sumtype, field, inject = eopt}) =

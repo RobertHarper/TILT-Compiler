@@ -332,6 +332,21 @@ structure NilRewrite :> NILREWRITE =
 		     in if !changed then SOME (App_c (cfun, actuals)) else NONE
 		     end
 		   
+		    | (Coercion_c {vars,from,to}) =>
+		     let
+		       val changed = ref false
+		       fun folder (v,s) = 
+			 let
+			   val (s,v) = bind_c changed (s,v,Type_k)
+			 in (v,s)
+			 end
+		       val (vars,state) = foldl_acc folder state vars
+		       val from = recur_c changed state from
+		       val to = recur_c changed state to
+		     in if !changed then SOME (Coercion_c {vars=vars,from=from,to=to}) 
+			else NONE
+		     end
+
 		    | Typecase_c {arg, arms, default, kind} => 
 		     let 
 		       val changed = ref false
@@ -787,9 +802,38 @@ structure NilRewrite :> NILREWRITE =
 				       handler = handler, 
 				       result_type = result_type})
 		       else NONE
-		    end)
+		    end
+		 | Coerce_e (coercion,cargs,e) => 
+		    let
+		      val changed = ref false
+		      val coercion = recur_e changed state coercion
+		      val cargs = map (recur_c changed state) cargs
+		      val e = recur_e changed state e
+		    in if !changed then
+		         SOME (Coerce_e (coercion,cargs,e))
+		       else NONE
+		    end
+		 | Fold_e stuff => coercion_helper Fold_e stuff
+		 | Unfold_e stuff => coercion_helper Unfold_e stuff)
+
 	      end
-	    
+
+	    and coercion_helper whichc (vars,from,to) =
+	      let
+		val changed = ref false
+		fun folder (v,s) = 
+		  let val (s,v) = bind_c changed (s,v,Type_k)
+		  in (v,s)
+		  end
+		val (vars,state) = foldl_acc folder state vars
+		val from = recur_c changed state from
+		val to = recur_c changed state to
+	      in
+		if !changed then
+		  SOME (whichc (vars,from,to))
+		else NONE
+	      end
+
 	  in
       	    (case (exphandler (state,exp))
 	       of CHANGE_NORECURSE (state,e) => SOME e

@@ -130,6 +130,7 @@ struct
          | Proj_c(c,l) => doCon c
          | Closure_c(c1,c2) => doCons [c1,c2]
          | App_c(c,cs) => doCons (c::cs)
+	 | Coercion_c{vars,from,to} => (doCon from) + (doCon to)
          | Typecase_c{arg,arms,default,kind} =>
 	       (doKind kind;
 	        (doCon arg) + (doCon default) + 
@@ -168,7 +169,11 @@ struct
          | ExternApp_e(e,es) => doExps (e::es)
          | Raise_e(e,c) => (doExp e) + (doCon c)
          | Handle_e{body,bound,handler,result_type} => 
-	       (doExps [body,handler]) + (doCon result_type))
+	       (doExps [body,handler]) + (doCon result_type)
+	 | Coerce_e (coercion,cargs,exp) =>
+	   (doCons cargs) + (doExp coercion) + (doExp exp)
+	 | Fold_e (vars,from,to) => (doCon from) + (doCon to)
+	 | Unfold_e (vars,from,to) => (doCon from) + (doCon to))
 
       and doExps (exps:exp list) : int = doList doExp exps
     

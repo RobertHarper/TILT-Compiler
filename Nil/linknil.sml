@@ -28,6 +28,7 @@ structure Linknil :> LINKNIL  =
     val inline3     = makeEntry (true, "Inline3")
 (*  val reduce      = makeEntry (false, "Reduce") *)
 (*  val flatten     = makeEntry (false, "Flatten") *)
+    val coerce_elim = makeEntry (true, "CoerceElim")
 
     val measure_after_phaseplit = makeEntry (false, "MeasureAfterPhasesplit")
 (*    val measure_after_opts      = makeEntry (false, "MeasureAfterOpts")*)
@@ -162,6 +163,9 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform typecheck_after_phasesplit  (typecheck, nilmod)
 	    val nilmod = transform wtypecheck_after_phasesplit (wtypecheck, nilmod)
+
+	    val nilmod = transform coerce_elim (CoerceElim.transform, nilmod)
+
 
 	    val _ = if !(Stats.bool("UptoPhasesplit"))
 			then raise (Stop nilmod)

@@ -468,6 +468,21 @@ struct
 				 new_gcstate state)))
 		  end
 
+	    | Fold_e (vars,from,to) => (VALUE (INT 0w258),state)
+	    | Unfold_e (vars,from,to) => (VALUE (INT 0w258),state)
+	    | Coerce_e (coercion,cargs,exp) => 
+	      let
+		  (* We need to translate the coercion in case it generates        *)
+		  (* any code that might diverge.  (It would be nice if we         *)
+	          (* were guaranteed at this point that that wouldn't happen, but  *)
+		  (* I'm not certain that we're sure of that.)                     *)
+		  (* Are all of these parameters right?                 joev, 6/01 *) 
+		  val (_,state) = xexp (state,name,coercion,
+					Nil.TraceKnown TraceInfo.Notrace_Int,NOTID)
+	      in
+		  xexp (state,name,exp,trace,NOTID)
+	      end
+
 	    | Raise_e (exp, _) => (* Restore the stack pointer for CATCH_EXN to use *)
 		  let val (I except,state) = xexp'(state,name,exp,Nil.TraceUnknown,NOTID)
 		      val rep = niltrace2rep state trace
@@ -1603,6 +1618,8 @@ struct
 		       val _ = add_instr(ICOMMENT "done making constructor call")
 		   in (const,LOCATION (REGISTER (const,I desti)),state)
 		   end
+	     | Coercion_c {vars,from,to} =>
+		   error "Coercion types are not supposed to be constructors."
 	     | Annotate_c (_,c) => xcon'(state,name,c))
       end
 

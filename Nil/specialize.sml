@@ -211,7 +211,11 @@ struct
 			(scan_exp ctxt f; app (scan_exp ctxt) elist)
 		| Raise_e(e,c) => scan_exp ctxt e
 		| Handle_e{body,bound,handler,result_type} =>
-			(scan_exp ctxt body; scan_exp ctxt handler))
+			(scan_exp ctxt body; scan_exp ctxt handler)
+		| Coerce_e (coercion,cargs,exp) =>
+		  (scan_exp ctxt coercion; scan_exp ctxt exp)
+		| Fold_e _ => ()
+		| Unfold_e _ => ())
 
 	and scan_switch ctxt (switch : switch) : unit = 
 	  let fun scan_default NONE = ()
@@ -315,7 +319,11 @@ struct
 		| Handle_e{body,bound,handler,result_type} => 
 		      Handle_e{body = do_exp body, bound = bound,
 			       handler = do_exp handler, 
-			       result_type = result_type})
+			       result_type = result_type}
+		| Coerce_e (coercion,cargs,exp) =>
+		  Coerce_e (do_exp coercion, cargs, do_exp exp)
+		| Fold_e _ => exp
+		| Unfold_e _ => exp)
 
 	and do_explist (explist : exp list) = map do_exp explist
 

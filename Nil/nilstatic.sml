@@ -41,6 +41,13 @@ struct
 
   val print_lets          = Stats.ff "nilstatic_print_lets"
 
+  (* "Shao-recursion" refers to the use of the Trail data structure
+   when comparing types (specifically recursive types) for equality.
+   The main reason for implementing an opaque interpretation of
+   datatypes was to allow the disabling of Shao's equation, so
+   eventually it should be safe to remove this flag and cut out all
+   the code that it enables.            -- Joe *)
+  val equiv_shao_recursion   = Stats.tt "nilstatic_shao_recursion"
 
 (*  
 
@@ -186,6 +193,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
   val strip_proj        = NilUtil.strip_proj
   val strip_prim        = NilUtil.strip_prim
   val strip_app         = NilUtil.strip_app
+  val strip_coercion    = NilUtil.strip_coercion
   val is_exn_con        = NilUtil.is_exn_con
   val is_float_c        = NilUtil.is_float_c 
   val is_var_e          = NilUtil.is_var_e
@@ -727,6 +735,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 in if sub_kind(D,body_kind,kind1) then ()
 	    else k_error(D,kind1, "Analyzed kind and return kind from app don't match")
 	 end
+       | (Coercion_c {vars,from,to},Type_k) =>
+	  let
+	    fun folder (v,D) = insert_stdkind(D,v,Type_k)
+	    val D = foldl folder D vars
+	  in
+	    con_analyze(D,from,Type_k);
+	    con_analyze(D,to,Type_k)
+	  end
        | (Typecase_c {arg,arms,default,kind=given_kind},kind) => 
 	 let
 	   val given_kind = kind_valid (D,given_kind)
@@ -985,6 +1001,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	   in  
 	     substConInKind subst body_kind
 	   end
+	 | (Coercion_c {vars,from,to}) =>
+	   (type_analyze (D,constructor);
+	    SingleType_k constructor)
 	 | (Typecase_c {arg,arms,default,kind=given_kind}) => 
 	   let
 	     val given_kind = kind_valid (D,given_kind)
@@ -1379,6 +1398,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       and con_structural_equiv ((D,T),c1,c2,sk) : bool (*kind option *)=
 	let
 
+	  (* PRE: if we're calling this function, !equiv_shao_recursion
+	   is true. *)
 	  fun mu_equate ((D,T),con1,con2) =
 	    (print "Checking trail\n";
 	     (Trail.equal(T,(con1,con2))) orelse
@@ -1435,6 +1456,9 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,Type_k,sk'),
 				   clist1,clist2)
 		 end
+	       (* This case is purely structural comparison; when
+		!equiv_shao_recursion is false all mu's will be
+		compared this way and no other way. *)
 	       | (Mu_c(ir1,defs1), Mu_c(ir2,defs2)) => 
 		 let 
 		   fun do_mu () = 
@@ -1506,11 +1530,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		 
 	     | (Proj_c (con1,l1), Proj_c(con2,l2)) => 
 		 ((eq_label(l1,l2)) andalso (con_structural_equiv((D,T),con1,con2,false))) orelse
-		 (case (con1,con2)
-		    of (Mu_c _,Mu_c _) => mu_equate((D,T),c1,c2)
-		     | _ => false)
-	     | (Proj_c (Mu_c _,l1),Mu_c _) => mu_equate((D,T),c1,c2)
-	     | (Mu_c _,Proj_c (Mu_c _,l1)) => mu_equate((D,T),c1,c2)
+		 (!equiv_shao_recursion andalso   (* Possibly "rescue" the equivalence with Shao's eqn. *)
+		  (case (con1,con2)
+		     of (Mu_c _,Mu_c _) => mu_equate((D,T),c1,c2)
+		   | _ => false))
+
+	     | (Proj_c (Mu_c _,l1),Mu_c _) => (!equiv_shao_recursion andalso mu_equate((D,T),c1,c2))
+	     | (Mu_c _,Proj_c (Mu_c _,l1)) => (!equiv_shao_recursion andalso mu_equate((D,T),c1,c2))
 
 	     | (App_c (f1,clist1), App_c (f2,clist2)) =>
 		 if con_structural_equiv((D,T),f1,f2,false) then
@@ -1531,6 +1557,26 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 			end
 		    | _ => false)
 		 else false
+		 | (Coercion_c {vars=vars1,from=from1,to=to1},
+		    Coercion_c {vars=vars2,from=from2,to=to2}) =>
+		   length vars1 = length vars2 andalso
+		   let
+		     fun folder(v1,v2,(D,rename)) = 
+		       if NilContext.bound_con (D,v1) then
+			 let
+			   val vnew = Name.derived_var v1
+			   val D = insert_kind(D,vnew,Type_k)
+			   val rename = Alpha.rename(rename,v1,vnew)
+			   val rename = Alpha.rename(rename,v2,vnew)
+			 in (D,rename)
+			 end
+		       else (insert_kind(D,v1,Type_k),Alpha.rename(rename,v2,v1))
+		     val (D,rename) =
+		       Listops.foldl2 folder (D,Alpha.empty_context()) (vars1, vars2)
+		   in
+		     con_equiv ((D,T),from2,from1,Type_k,sk) andalso
+		     con_equiv ((D,T),to1,to2,Type_k,sk)
+		   end
 	     | (Var_c v, Var_c v') => eq_var(v,v')
 	     | (Typecase_c {arg=arg1,arms=arms1,default=d1,kind=k1}, 
 		Typecase_c {arg=arg2,arms=arms2,default=d2,kind=k2}) => 
@@ -1864,6 +1910,47 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	      else e_error(D,exp,"Formal/actual parameter mismatch in arglist")
 	    end
 	in (app2 do_one (formals,actuals)) handle e => (print "Length Mismatch?";raise e)
+	end
+
+      (* Type check a coercion application expression. *)
+      fun do_coerce (ccn,cons,arg) =
+	let
+	  val ccon = exp_valid(D,ccn)
+	  val {vars,from,to} = 
+	    (case strip_coercion (con_head_normalize(D,ccon))
+	       of SOME x => x
+	     | NONE => e_error(D,exp,"Coercing with a non-coercion value"))
+	       
+	  local
+	    fun bind_kind(D,cRename,rev_bnds,var,actual) = 
+	      if NilContext.bound_con (D,var) then
+		let
+		  val vnew = Name.derived_var var
+		  val D = insert_kind_equation(D,vnew,actual,Type_k)
+		  val cRename = Alpha.rename(cRename,var,vnew)
+		in (D,cRename,(Con_cb(vnew,actual))::rev_bnds)
+		end
+	      else (insert_kind_equation(D,var,actual,Type_k),cRename,(Con_cb(var,actual))::rev_bnds)
+	      
+	    fun do_one (var,actual,(D,rename,cbnds)) = 
+	      let
+		val _ = type_analyze(D,actual)
+	      in bind_kind (D,rename,cbnds,var,actual)
+	      end
+	  in	      
+	    val (D,rename,rev_bnds) = 
+	      (foldl2 do_one (D,Alpha.empty_context(),[]) (vars,cons))
+	      handle e => (print "Possible Formal/Actual length mismatch?\n";raise e)
+	    val cbnds = rev rev_bnds
+	  end
+
+	  val from = alphaCRenameCon rename from
+	  val _ = exp_analyze (D,arg,from)
+	    
+	  val return_type = alphaCRenameCon rename to
+	  
+	in 
+	  makeLetC cbnds return_type
 	end
 
       (* Check a value*)
@@ -2236,6 +2323,36 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       val _ = exp_analyze(D,handler,result_type)
 	       val _ = type_analyze (D,result_type)
 	     in result_type
+	     end
+	 | Coerce_e stuff => do_coerce stuff
+	 | Fold_e (vars,from,to) =>
+	     let
+	       (* Should we check whether v is already in D and do *)
+	       (* renaming? *)
+	       fun folder (v,D) = insert_stdkind (D,v,Type_k)
+	       val D = foldl folder D vars
+
+	       val expanded = expandMuType (D,to)
+	     in
+	       if con_equiv (D,from,expanded,Type_k,false) then
+		 Coercion_c {vars=vars, from=from, to=to}
+	       else
+		 e_error (D,Fold_e(vars,from,to),"Fold coercion has bad argument type") 
+	     end
+	 | Unfold_e (vars,from,to) =>
+	     let
+	       (* Should we check whether v is already in D and do *)
+	       (* renaming? *)
+	       fun folder (v,D) = insert_stdkind (D,v,Type_k)
+	       val D = foldl folder D vars
+		 
+	       val expanded = expandMuType (D,from)
+	     in
+	       if con_equiv (D,to,expanded,Type_k,false) then
+		 Coercion_c {vars=vars, from=from, to=to}
+	       else
+		 e_error (D,Unfold_e(vars,from,to),
+			  "Unfold coercion has bad result type") 
 	     end
 	   )
     in

@@ -130,6 +130,7 @@ signature NILUTIL =
     val strip_proj : Nil.con -> (Nil.con*Nil.label) option
     val strip_prim : Nil.con -> (Nil.primcon*Nil.con list) option
     val strip_app : Nil.con -> (Nil.con*Nil.con list) option
+    val strip_coercion : Nil.con -> {vars:Nil.var list,from:Nil.con,to:Nil.con} option
     val strip_annotate : Nil.con -> Nil.con
 
     (*strip_to_depth n c, n>=1

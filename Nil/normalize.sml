@@ -1012,6 +1012,7 @@ struct
 				then (PROGRESS,subst,con)
 			    else (IRREDUCIBLE,subst,con)
 			end)
+	| (Coercion_c _) => (HNF,#2 state,constructor)
 	| (Typecase_c {arg,arms,default,kind}) => error' "typecase not done yet"
 	| (Annotate_c (annot,con)) => con_reduce state con)
 
@@ -1377,7 +1378,25 @@ struct
 
 	   | Raise_e (exp,con) => con
 	   | Handle_e {result_type,...} => result_type
-	    )
+	   | Fold_e (vars,from,to) => Coercion_c {vars=vars,from=from,to=to}
+	   | Unfold_e (vars,from,to) => Coercion_c {vars=vars,from=from,to=to}
+	   | (exp as (Coerce_e (coercion,cargs,_))) =>
+	     let
+		 val coerce_con = type_of (D,coercion)
+		 val (vars,to) = case #2 (reduce_hnf(D,coerce_con)) of 
+				     Coercion_c {vars,to,...} => (vars,to)
+				   | c => (print "Ill Typed expression - coercion has type: \n";
+			      Ppnil.pp_con coerce_con;
+			      print "\nwhich reduces to:";
+			      Ppnil.pp_con c;
+			      print "\nexp = \n";
+			      Ppnil.pp_exp exp;
+			      print "\n";
+			      error' "Ill Typed expression - not a coercion type")
+		 val subst = fromList (zip vars cargs)
+		 val to = substConInCon subst to
+	     in to
+	     end)
      end
 
     local

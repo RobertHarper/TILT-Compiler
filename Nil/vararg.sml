@@ -347,6 +347,14 @@ struct
 	     | Proj_c(c,l) => Proj_c(do_con state c, l)
 	     | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
 	     | App_c(c,clist) => App_c(do_con state c, map (do_con state) clist)
+	     | Coercion_c {vars,from,to} => 
+		   let
+		     fun folder (v,s) = add_kind(s,v,Type_k)
+		     val state = foldl folder state vars
+		   in
+		     Coercion_c {vars=vars,from=do_con state from,
+				 to=do_con state to}
+		   end
 	     | Typecase_c _ => error "typecase not handled"
 	     | Annotate_c (a,c) => Annotate_c(a,do_con state c)
 	     | Typeof_c e => Typeof_c(do_exp state e)
@@ -435,7 +443,28 @@ struct
 			in  Handle_e{bound=bound, body=do_exp state body, 
 				     handler = do_exp state' handler,
 				     result_type = do_con state result_type}
-			end)
+			end
+		| Coerce_e (coercion,cargs,exp) =>
+		  Coerce_e (do_exp state coercion, map (do_con state) cargs,
+			    do_exp state exp)
+		| Fold_e (vars,from,to) =>
+		  let
+		      fun folder (v,st) = add_kind (st,v,Type_k)
+		      val state = foldl folder state vars
+		      val from = do_con state from
+		      val to = do_con state to
+		  in
+		      Fold_e (vars,from,to)
+		  end
+		| Unfold_e (vars,from,to) =>
+		  let
+		      fun folder (v,st) = add_kind (st,v,Type_k)
+		      val state = foldl folder state vars
+		      val from = do_con state from
+		      val to = do_con state to
+		  in
+		      Unfold_e (vars,from,to)
+		  end)
 
      and do_fun (state, extras)
 	        (funvar,Function{effect,recursive,isDependent,

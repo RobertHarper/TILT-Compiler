@@ -111,6 +111,9 @@ bound_check.sig.sml
 typeof_elim.sml
 typeof_elim.sig.sml
 
+coerce-elim.sig.sml
+coerce-elim.sml
+
 (*
 cleanup.sig.sml
 cleanup.sml
