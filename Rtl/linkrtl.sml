@@ -6,7 +6,9 @@ sig
 
     val compile_prelude : bool * string -> Rtl.module
     val compile : string -> Rtl.module
+    val compiles : string list -> Rtl.module list
     val test : string -> Rtl.module
+    val tests : string list -> Rtl.module list
 end
 
 structure Linkrtl : LINKRTL =
@@ -68,14 +70,16 @@ struct
 	in  rtlmod
 	end
 
-    fun compile filename = 
-	let val nilmodule : Linknil.Nil.module = Linknil.compile filename
-	in  compile' false nilmodule
+    fun metacompiles debug filenames = 
+	let val nilmodules : Linknil.Nil.module list = 
+	    if debug then Linknil.tests filenames else Linknil.compiles filenames 
+	in  map (compile' debug) nilmodules
 	end
-    fun test filename = 
-	let val nilmodule : Linknil.Nil.module = Linknil.test filename
-	in  compile' true nilmodule
-	end
+
+    fun compiles filenames = metacompiles false filenames
+    fun compile filename = hd(metacompiles false [filename])
+    fun tests filenames = metacompiles true filenames
+    fun test filename = hd(metacompiles true [filename])
 
     val cached_prelude = ref (NONE : Rtl.module option)
     fun compile_prelude (use_cache,filename) = 

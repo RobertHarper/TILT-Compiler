@@ -3251,12 +3251,11 @@ val debug = ref false
 		 
 	    (* translate the expression as a function taking no arguments *)
 	     val mainName = fresh_named_var "main"
-	     val state = make_state()
 	     fun folder (ImportValue(l,v,c),s) = 
-		 add_global s (v,(ML_EXTERN_LABEL(Name.label2string l),con2rep state c),c)
+		 add_global s (v,(ML_EXTERN_LABEL(Name.label2string l),con2rep s c),c)
 	       | folder (ImportType(l,v,k),s) = 
 		 add_conglobal s (v,ML_EXTERN_LABEL(Name.label2string l),k,NONE)
-	     val state = foldl folder state imports
+	     val state = foldl folder (make_state()) imports
 	     val PROC{external_name,name,return,args,results,code,known,save,vars} =
 		 dofun_top (state,mainName,Function(Partial,Nonleaf,[],[],[],exp,con))
 	     val p' = PROC{external_name=external_name,
