@@ -93,6 +93,10 @@ struct
      | sieve_regs (_ :: t) = sieve_regs t
      | sieve_regs nil = nil
 
+   fun assigns2regs [] = []
+     | assigns2regs ((IN_REG r) :: rest) = r :: (assigns2regs rest)
+     | assigns2regs (_ :: rest) = assigns2regs rest
+
    fun mv (src : assign,dest : assign) : instruction list =
      case (src,dest) of
 	 (IN_REG r, IN_REG r') => [BASE(MOVE (r,r'))]
@@ -275,7 +279,7 @@ struct
 	      val postlude_instr =
 		   mvlist (map IN_REG res,actual_results) @
 		   [BASE(POP_RET NONE),  (* return address offset not known yet *)
-		    BASE(RTL (RETURN {results=res}))]
+		    BASE(RTL (RETURN {results=assigns2regs actual_results}))]
 	      val def_postlude = Regset.empty
 	      val use_postlude = listToSet res
 	      val postlude = BLOCK{instrs=ref (rev (map NO_ANN postlude_instr)),
