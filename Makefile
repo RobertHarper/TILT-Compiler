@@ -93,7 +93,9 @@ install: FORCE
 	-mkdir $(PREFIX)/lib
 	-mkdir $(PREFIX)/lib/tilt
 	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)
-	tar cf - License Bin Lib | (cd $(PREFIX)/lib/tilt && tar xf -)
+	if test -f Bin/$(cputype)/tilt; then strip Bin/$(cputype)/tilt; fi
+	if test -f Bin/$(cputype)/dump; then strip Bin/$(cputype)/dump; fi
+	tar cf - License Bin Lib Doc | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/man/man4
