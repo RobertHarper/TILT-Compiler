@@ -1,17 +1,18 @@
 (* Forms the initial basis for elaboration *)
 functor Basis(structure Il : IL
+	      structure Ppil : PPIL
 	      structure IlUtil : ILUTIL
 	      structure Datatype : DATATYPE
-	      sharing IlUtil.Il = Datatype.Il = Il) : BASIS =
+	      sharing Ppil.Il = IlUtil.Il = Datatype.Il = Il) : BASIS =
   struct
 
     structure Il = Il
     structure Datatype = Datatype
-    open Il IlUtil Datatype
+    open Il IlUtil Datatype Ppil
     open Util Name Prim Tyvar
 
     val empty_context : context = CONTEXT []
-    val error = error "basis.sml"
+    val error = fn s => error "basis.sml" s
 
     local
       open Ast
@@ -38,7 +39,7 @@ functor Basis(structure Il : IL
       val default_fixity_table = map (fn (str,f) => (symbol2label(varSymbol(str)), f)) table
     end
 
-    fun initial_context (exp2con, mod2sig, xty) : context =
+    fun initial_context (exp2con, mod2sig, xty) : context * sbnd list =
       let
 	fun mk_var_lab str = symbol2label(Symbol.varSymbol str)
 	fun mk_tyc_lab str = symbol2label(Symbol.tycSymbol str)
@@ -46,10 +47,10 @@ functor Basis(structure Il : IL
 	fun binop_con(conopt) = let val con = (case conopt of NONE => fresh_con() | SOME c => c)
 				in CON_ARROW(con_tuple[con,con],con,oneshot_init PARTIAL)
 				end
-	fun var_entry s c = CONTEXT_VAR(mk_var_lab s, mk_var s, c)
-	fun type_entry s k c = CONTEXT_CONVAR(mk_tyc_lab s, mk_var s, k, SOME c)
-	fun exp_entry str e = CONTEXT_INLINE(mk_var_lab str, INLINE_EXPCON(e,exp2con e))
-	fun mono_entry str prim = exp_entry str (PRIM prim)
+	fun var_entry s c = CONTEXT_SDEC(SDEC(mk_var_lab s, DEC_EXP(mk_var s, c)))
+	fun type_entry s k c = CONTEXT_SDEC(SDEC(mk_tyc_lab s, DEC_CON(mk_var s, k, SOME c)))
+	fun exp_entry str e = CONTEXT_INLINE(mk_var_lab str, fresh_named_var str, INLINE_EXPCON(e,exp2con e))
+	fun mono_entry str prim = exp_entry str (PRIM (prim,[]))
 	fun scon_entry str scon = exp_entry str (SCON scon)
 	fun poly_entry str c2exp = let val argvar = fresh_var()
 				       val l = fresh_int_label()
@@ -62,10 +63,11 @@ functor Basis(structure Il : IL
 									       (c2exp instcon)))]
 				       val m = MOD_FUNCTOR(argvar,argsig,resmod)
 				       val s = mod2sig m
-				   in CONTEXT_INLINE(mk_var_lab str, INLINE_MODSIG(m,s))
+				   in CONTEXT_INLINE(mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
 				   end
 	fun over_entry str exp bvc = 
 	  CONTEXT_INLINE(mk_var_lab str, 
+			 fresh_named_var str,
 			 INLINE_OVER(fn _ => 
 				       let 
 					 fun subst(c,v_tv) = let fun help (v,tv) = (v,CON_TYVAR tv)
@@ -76,10 +78,9 @@ functor Basis(structure Il : IL
 				       end))
 
 	val fixity_entries = 
-	  [CONTEXT_MODULE(fresh_open_label(),fresh_var(),
-			  SIGNAT_STRUCTURE[SDEC(fresh_int_label(),DEC_FIXITY default_fixity_table)])]
+	    [CONTEXT_SDEC(SDEC(fresh_int_label(),DEC_FIXITY default_fixity_table))]
 
-	val datatype_entries =
+	val (datatype_entries, datatype_sbnds) =
 	    let
 		open Ast 
 		open Symbol
@@ -99,24 +100,73 @@ functor Basis(structure Il : IL
 				    (varSymbol "nil",NONE)],
 			       tyc=tycSymbol "list",
 			       tyvars=[Tyv (tyvSymbol "'a")]}]
-	      val (mlist,slist) = Datatype.compile {context = CONTEXT [],
-						    typecompile = xty,
-						    datatycs = listdb : Ast.db list,
-						    withtycs = [] : Ast.tb list}
-	      val (mbool,sbool) = Datatype.compile {context = CONTEXT [],
-						    typecompile = xty,
-						    datatycs = booldb : Ast.db list,
-						    withtycs = [] : Ast.tb list}
+	      val list_sbnd_sdecs = Datatype.compile {context = CONTEXT [],
+						      typecompile = xty,
+						      datatycs = listdb : Ast.db list,
+						      withtycs = [] : Ast.tb list}
+	      val (mlist,slist) = (MOD_STRUCTURE(map #1 list_sbnd_sdecs),
+				   SIGNAT_STRUCTURE(map #2 list_sbnd_sdecs))
+	      val (mlist,slist) = (case (make_inline_module(CONTEXT[],mlist)) of
+				       SOME m => (
+(*
+						  print "original mlist is\n";
+						  pp_mod mlist;
+						  print "inlinable mlist is\n";
+						  pp_mod m;
+						  print "\n";
+*)
+						  (m,mod2sig m)) (* slist *)
+				     | NONE => (print "cannot inline module mlist = \n";
+						pp_mod mlist;
+						print "\n";
+						error "cannot inline list module"))
+	      val bool_sbnd_sdecs = Datatype.compile {context = CONTEXT [],
+						      typecompile = xty,
+						      datatycs = booldb : Ast.db list,
+						      withtycs = [] : Ast.tb list}
+	      val (mbool,snool) = (MOD_STRUCTURE(map #1 bool_sbnd_sdecs),
+				   SIGNAT_STRUCTURE(map #2 bool_sbnd_sdecs))
+	      val (mbool,sbool) = (case (make_inline_module(CONTEXT[],mbool)) of
+				       SOME m => (m,mod2sig m)
+				     | NONE => (print "cannot inline bool mbool = \n";
+						pp_mod mbool;
+						print "\n";
+						error "cannot inline bool module"))
+(*
+	      val _ = (print "DONE BOOLS with mbool = \n";
+		       pp_mod mbool; print "\n")
+*)
+	      val bool_label = fresh_named_open_label "bools"
+	      val bool_var = fresh_named_var "bools"
+	      val list_label = fresh_named_open_label "lists"
+	      val list_var = fresh_named_var "lists"
 	    in
-		[CONTEXT_MODULE(fresh_open_label(),fresh_var(),sbool),
-		 CONTEXT_MODULE(fresh_open_label(),fresh_var(),slist)]
+		([CONTEXT_INLINE(bool_label, bool_var, INLINE_MODSIG(mbool,sbool)),
+		  CONTEXT_INLINE(list_label, list_var, INLINE_MODSIG(mlist,slist))],
+		 [SBND(bool_label, BND_MOD(bool_var,mbool)),
+		  SBND(list_label, BND_MOD(list_var,mlist))])
 	    end
+
+	local
+	    val basetype_list = [("float", CON_FLOAT F32),
+				 ("int", CON_INT W32), 
+				 ("uint", CON_UINT W32),
+				 ("real", CON_FLOAT F64), 
+				 ("char", CON_UINT W8), 
+				 ("string", con_string),
+				 ("unit", con_unit)]
+	    fun entry_maker (s,c) = CONTEXT_INLINE(symbol2label (Symbol.tycSymbol s),
+						   fresh_named_var s,
+						   INLINE_CONKIND(c,KIND_TUPLE 1))
+	in
+	    val type_entries = map entry_maker basetype_list
+	end
 
 	val val_entries = 
 	  [
 	   over_entry "over" 
-	   (fn [i] => if (i=0) then PRIM (PRIM2 PLUS_INTprim)
-		     else if (i=1) then PRIM (PRIM2 PLUS_FLOATprim)
+	   (fn [i] => if (i=0) then PRIM (plus_int W32,[])
+		     else if (i=1) then PRIM (plus_float F64,[])
 			  else error "over receieved int not 0 or 1"
 	     | _ => error "over did not receiev 1 int")
 
@@ -124,66 +174,69 @@ functor Basis(structure Il : IL
 	      val c = CON_TYVAR tv
 	      val v = tyvar_getvar tv
 	      val body = CON_ARROW(con_tuple[c,c],c,oneshot_init TOTAL)
-	      val var_constraint = [(v,[CON_INT, CON_FLOAT])]
+	      val var_constraint = [(v,[CON_INT W32, CON_FLOAT F64])]
 	    in  (body,var_constraint)
 	    end,
 	   
-	   scon_entry "true" (BOOL true),
-	   scon_entry "false" (BOOL false),
+	   exp_entry "true" true_exp,
+	   exp_entry "false" false_exp,
 	   
 (*
-	   mono_entry "not" (PRIM1 NOTprim),
+	   mono_entry "not" (NOT),
 	   
-	   mono_entry "size" (PRIM1 SIZEprim),
-	   mono_entry "chr" (PRIM1 CHRprim),
-	   mono_entry "ord" (PRIM1 ORDprim),
-	   mono_entry "explode" (PRIM1 EXPLODEprim),
-	   mono_entry "implode" (PRIM1 IMPLODEprim),
-	   mono_entry "^" (PRIM2 STRING_CONCATprim), *)
+	   mono_entry "size" (SIZE),
+	   mono_entry "chr" (CHR),
+	   mono_entry "ord" (ORD),
+	   mono_entry "explode" (EXPLODE),
+	   mono_entry "implode" (IMPLODE), 
+*)
+	   var_entry "^" (CON_ARROW(con_tuple[con_string,con_string],con_string,oneshot_init TOTAL)),
 
 	   poly_entry "ref" (fn c => let val v = fresh_var()
-				     in #1(make_lambda(v,c,CON_REF c,REF(c,VAR v)))
+				     in #1(make_lambda(v,c,CON_REF c,MK_REF(VAR v)))
 				     end),
 	   poly_entry "!" (fn c => let val v = fresh_var()
-				   in #1(make_lambda(v,CON_REF c,c,GET(c,VAR v)))
+				   in #1(make_lambda(v,CON_REF c,c,GET(VAR v)))
 				   end),
 	   poly_entry ":=" (fn c => let val v = fresh_var()
 					val pc = con_tuple[CON_REF c, c]
 					fun proj n = RECORD_PROJECT(VAR v,generate_tuple_label n,pc)
 				    in #1(make_lambda(v,pc,
-						      con_unit,SET(c,proj 1, proj 2)))
+						      con_unit,SET(proj 1, proj 2)))
 				    end),
 	   
-	   mono_entry "+" (PRIM2 PLUS_INTprim),
-	   mono_entry "-" (PRIM2 MINUS_INTprim),
-	   mono_entry "*" (PRIM2 MUL_INTprim),
-	   mono_entry "div" (PRIM2 DIV_INTprim),
-	   mono_entry "mod" (PRIM2 MOD_INTprim),
-	   mono_entry "quot" (PRIM2 QUOT_INTprim),
-	   mono_entry "rem" (PRIM2 REM_INTprim),
-	   mono_entry "<" (PRIM2 LESS_INTprim),
-	   mono_entry ">" (PRIM2 GREATER_INTprim),
-	   mono_entry "<=" (PRIM2 LESSEQ_INTprim),
-	   mono_entry ">=" (PRIM2 GREATEREQ_INTprim),
-	   mono_entry "<>" (PRIM2 NEQ_INTprim),
-	   mono_entry "notb" (PRIM1 NOT_INTprim),
-	   mono_entry "<<" (PRIM2 LSHIFT_INTprim),
-	   mono_entry ">>" (PRIM2 RSHIFT_INTprim),
-	   mono_entry "&&" (PRIM2 AND_INTprim),
-	   mono_entry "||" (PRIM2 OR_INTprim),
-	   mono_entry "~" (PRIM1 NEG_INTprim),
-	   mono_entry "abs" (PRIM1 ABS_INTprim),
+	   mono_entry "+" (plus_int W32),
+	   mono_entry "-" (minus_int W32),
+	   mono_entry "*" (mul_int W32),
+	   mono_entry "div" (div_int W32),
+	   mono_entry "mod" (mod_int W32),
+	   mono_entry "quot" (quot_int W32),
+	   mono_entry "rem" (rem_int W32),
+	   mono_entry "<" (less_int W32),
+	   mono_entry ">" (greater_int W32),
+	   mono_entry "<=" (lesseq_int W32),
+	   mono_entry ">=" (greatereq_int W32),
+	   mono_entry "<>" (neq_int W32),
+	   mono_entry "notb" (not_int W32),
+	   mono_entry "<<" (lshift_int W32),
+	   mono_entry ">>" (rshift_uint W32),
+	   mono_entry "~>>" (rshift_int W32),
+	   mono_entry "&&" (and_int W32),
+	   mono_entry "||" (or_int W32),
+	   mono_entry "~" (neg_int W32),
+	   mono_entry "abs" (abs_int W32),
 	   (* XXX need to do unsigned and real stuff *)
 	   
-	   mono_entry "floor" (PRIM1 FLOAT2INTprim),
-	   mono_entry "real" (PRIM1 INT2FLOATprim)
+	   mono_entry "floor" (float2int),
+	   mono_entry "real" (int2float),
 	   
-(*	   mono_entry "output" (PRIM2 OUTPUTprim) *)
-	   
+	   mono_entry "output" output,
+	   mono_entry "input" input
 	   ]
 
       in
-	CONTEXT (fixity_entries (* @ datatype_entries *) @ val_entries)
+	(CONTEXT (fixity_entries @ type_entries @ datatype_entries @ val_entries),
+	 datatype_sbnds)
       end
     
   end

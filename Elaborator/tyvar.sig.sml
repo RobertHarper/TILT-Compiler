@@ -1,8 +1,6 @@
 signature TYVAR = 
   sig
 
-    structure Name : NAME
-
     type '1con tyvar     (* type variable *)
     type '1con ocon      (* overloaded type with constraints *)
 

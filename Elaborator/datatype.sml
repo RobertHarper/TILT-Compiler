@@ -5,23 +5,22 @@ functor Datatype(structure Il : IL
 		 structure Ppil : PPIL
 		 structure AstHelp : ASTHELP
 		 structure IlLookup : ILLOOKUP
-		 structure GraphUtil : GRAPHUTIL
-		 sharing IlLookup.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il
-		 sharing Ppil.Formatter = AstHelp.Formatter)
+		 sharing IlLookup.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
     : DATATYPE  = 
   struct
 
     structure Il = Il
     open AstHelp Il IlStatic IlUtil Ppil 
-    open Util Name IlLookup Tyvar
+    open Util Listops Name IlLookup Tyvar
 
   
-    val error = error "datatype.sml"
-    val error_sig = error_sig "datatype.sml"
+    val error = fn s => error "datatype.sml" s
+    val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s 
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-
+    fun con_tuple_inject [c] = c
+      | con_tuple_inject clist = CON_TUPLE_INJECT clist
 
     (* ------------------------------------------------------------------
       The datatype compiler for compiling a single strong-connected type.
@@ -78,13 +77,13 @@ functor Datatype(structure Il : IL
 	   val _ = mapmap (fn c => (Ppil.pp_con c; print "\n")) cons'
 	end 
 	val con_sum = map (fn x => CON_SUM(NONE,x)) cons'
-	val con_all = CON_FUN(vardt_list,CON_TUPLE_INJECT(con_sum))
+	val con_all = CON_FUN(vardt_list,con_tuple_inject(con_sum))
 	val _ = (print "\ncon_all is: "; Ppil.pp_con con_all; print "\n")
 	local 
 	  val con = if (is_monomorphic) 
 		      then CON_VAR(var_all)
 		    else CON_APP(CON_VAR(var_all),
-				 CON_TUPLE_INJECT(map (fn tv => CON_MODULE_PROJECT(MOD_VAR var_poly,tv))
+				 con_tuple_inject(map (fn tv => CON_MODULE_PROJECT(MOD_VAR var_poly,tv))
 						  tv_list))
 	in
 	  val con_dt = if (is_onedatatype)
@@ -142,7 +141,7 @@ functor Datatype(structure Il : IL
 				       KIND_TUPLE 1)
 			       else (CON_FUN(varpoly_list,
 					     let val temp = CON_APP(CON_VAR(var_all),
-									 CON_TUPLE_INJECT
+									 con_tuple_inject
 									 (map CON_VAR varpoly_list))
 					     in if (is_onedatatype)
 						 then temp
@@ -188,9 +187,12 @@ functor Datatype(structure Il : IL
 		    val sig_dec = DEC_EXP(fresh_var(), s)
 		  in if (is_monomorphic) then (exp_bnd,sig_dec)
 		     else
-		       (BND_MOD(fresh_var(),MOD_FUNCTOR(var_poly,sigpoly,MOD_STRUCTURE[SBND(it_lab,exp_bnd)])),
+		       (BND_MOD(fresh_var(),MOD_FUNCTOR(var_poly,sigpoly,
+							MOD_STRUCTURE[SBND(it_lab,exp_bnd)])),
 			DEC_MOD(fresh_var(),
-				   SIGNAT_FUNCTOR(var_poly,sigpoly,SIGNAT_STRUCTURE[SDEC(it_lab,sig_dec)],oneshot_init TOTAL)))
+				   SIGNAT_FUNCTOR(var_poly,sigpoly,
+						  SIGNAT_STRUCTURE[SDEC(it_lab,sig_dec)],
+						  oneshot_init TOTAL)))
 		  end
 		val (mk_bnd,mk_dec) = maker exp_mk_ij con_mk_ij 
 		val (km_bnd,km_dec) = maker exp_km_ij  con_km_ij 
@@ -214,8 +216,8 @@ functor Datatype(structure Il : IL
 	  val lbl = fresh_int_label()
 	in 
 	  val help_con = if (is_onedatatype)
-			     then CON_MUPROJECT(1,con_all)
-			 else CON_TUPLE_INJECT(mapcount (fn (i,_) => CON_MUPROJECT(i,con_all)) ids)
+			     then CON_MUPROJECT(0,con_all)
+			 else con_tuple_inject(mapcount (fn (i,_) => CON_MUPROJECT(i,con_all)) ids)
 	  val first_sbnd = SBND(lbl,BND_CON(var_all,
 					    if (is_monomorphic)
 					      then help_con
@@ -225,7 +227,8 @@ functor Datatype(structure Il : IL
 	end
 	val final_mod = MOD_STRUCTURE(first_sbnd :: (map #1 temp))
 	val final_sig = SIGNAT_STRUCTURE(first_sdec :: (map #2 temp))
-      in (MOD_SEAL(final_mod,final_sig),final_sig)
+      in (* (MOD_SEAL(final_mod,final_sig),final_sig) *)
+	 (final_mod,final_sig) 
       end
 
  
@@ -233,12 +236,12 @@ functor Datatype(structure Il : IL
       The datatype compiler for compiling a single datatype statement.
       ------------------------------------------------------------------ *)
     fun compile {context, typecompile,
-		 datatycs : Ast.db list, withtycs : Ast.tb list} =
+		 datatycs : Ast.db list, withtycs : Ast.tb list} : (sbnd * sdec) list =
       let 
 	(* ---- Find the strongly-connected components of datatypes. *)
 	local
 	  type node = int * (Symbol.symbol * Ast.tyvar list * (Ast.symbol * Ast.ty option) list)
-	  val nodes = mapcount (fn (i,arg) => (i-1,db_strip arg)) datatycs
+	  val nodes = mapcount (fn (i,arg) => (i,db_strip arg)) datatycs
 	  val syms = map (fn (_,(s,_,_)) => s) nodes
 	  fun help (_,NONE) = []
 	    | help (_,SOME ty) = let val s = free_tyc_ty(ty,[])
@@ -264,11 +267,10 @@ functor Datatype(structure Il : IL
 			    sym_tyvar_def_listlist)
 	val sbnds_sdecs = map (fn (m,s) => let val l = fresh_open_label()
 					      val v = fresh_var()
-					  in (SBND(l,BND_MOD(v,m)),SDEC(l,DEC_MOD(v,s)))
+					  in (SBND(l,BND_MOD(v,m)),
+					      SDEC(l,DEC_MOD(v,s)))
 					  end) mod_sig_list
-      in ((* MOD_DATATYPE (datatycs,withtycs,map #1 sbnds_sdecs),  *)
-	  MOD_STRUCTURE (map #1 sbnds_sdecs),
-	  SIGNAT_STRUCTURE (map #2 sbnds_sdecs))
+      in sbnds_sdecs
       end
 
 
@@ -283,29 +285,36 @@ functor Datatype(structure Il : IL
 			  pp_context context;
 			  print "\n"));
        (case (modsig_lookup(context,map symbol2label p)) of
-	  NONE=> NONE
-	| SOME (path_mod,m,constr_sig as
-		SIGNAT_STRUCTURE(_ :: (SDEC(lab2,_)) :: (SDEC(lab3,_)) :: _)) => 
-	    let 
-	      val decs = context2decs context
-	      val (short_p,name) = (case path_mod of
-				      SIMPLE_PATH v => error "constr_lookup encountered SIMPLE PATH"
-				    | COMPOUND_PATH (v,[]) => error "constr_lookup got empty COMPOUND PATH"
-				    | COMPOUND_PATH (v,ls) => (COMPOUND_PATH(v, butlast ls), List.last ls))
-	      val data_sig = GetModSig(decs,path2mod short_p)
-	      val _ = debugdo (fn () => (print "\ndata_sig "; pp_signat data_sig))
-		  handle NOTFOUND _ => error "constr_lookup's shortened path didn't find mod/sig"
-	    in
-		if (eq_label(lab2,case_lab) andalso (eq_label(lab3,expose_lab)))
-		    then SOME{name = name,
-			      constr_sig = constr_sig,
-			      datatype_path = short_p,
-			      datatype_sig = data_sig}
-		else NONE
-	    end
-	| _ => NONE)
-	    handle NOTFOUND _ => NONE)
-
+	    NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup returned NONE\n");
+		     NONE)
+	  | SOME (path_mod,m,constr_sig as
+		  SIGNAT_STRUCTURE[SDEC(clab1,_),SDEC(clab2,_)]) =>
+	    (case path_mod of
+		 SIMPLE_PATH v => NONE
+	       | COMPOUND_PATH (v,[]) => error "constr_lookup got empty COMPOUND PATH"
+	       | COMPOUND_PATH (v,ls) => 
+		     let val (short_p,name) = (COMPOUND_PATH(v, butlast ls), List.last ls)
+			 val decs = context2decs context
+			 val _ = debugdo (fn () => (print "BEFORE GETMODSIG with short_p = "; pp_path short_p;
+						    print " and decs = \n"; pp_decs decs;
+						    print "\n\n"))
+			 val data_sig = GetModSig(decs,path2mod short_p)
+			 val _ = debugdo(fn () => print "AFTER GETMODSIG\n")
+		     in
+			 (case data_sig of
+			      SIGNAT_STRUCTURE(_ :: (SDEC(dlab2,_)) :: (SDEC(dlab3,_)) :: _) =>
+				  if (eq_label(dlab2,case_lab) andalso (eq_label(dlab3,expose_lab)))
+				      then SOME{name = name,
+						constr_sig = constr_sig,
+						datatype_path = short_p,
+						datatype_sig = data_sig}
+				  else NONE
+			    | _ => NONE)
+		     end)
+	     | _ => (debugdo (fn () => print "constr_lookup modsig_lookup returned SOME(unk)\n");
+		     NONE))
+	    handle NOTFOUND _ => (debugdo (fn () => print "constr_lookup failed ...\n");
+				  NONE))
 
      fun is_const_constr signat = 
        (case signat of
@@ -320,7 +329,7 @@ functor Datatype(structure Il : IL
 		       | _ => (pp_signat signat;
 			       error "ill-formed constructor signature"))
 	  in (case con of
-		CON_ARROW(_,res,_) => eq_con(con_unit,res,[])
+		CON_ARROW(_,res,_) => eq_con([],con_unit,res)
 	      | _ => false)
 	  end
 	| _ => (pp_signat signat; error "This is not a valid constr_sig"))
@@ -387,7 +396,7 @@ functor Datatype(structure Il : IL
 	    arg_type=(case (arg_type,var_sdecs_option) of
 			  (NONE,_) => NONE
 			| (SOME x,NONE) => SOME x
-			| (SOME x,SOME(var_poly,sdecs)) => SOME(make_non_dependent_type(x,var_poly,sdecs)))}
+			| (SOME x,SOME(var_poly,sdecs)) => SOME(remove_modvar_type(x,var_poly,sdecs)))}
 	end
 
      val {name,abstract_type,var_poly,
@@ -398,7 +407,7 @@ functor Datatype(structure Il : IL
        (case (var_poly,sdecs_poly) of
 	  (SOME vp,SOME sp) => let val (sbnds,sdecs,cons) = polyinst(context2decs context, sp)
 				   val inst_con = ConApply(abstract_type,
-							   CON_TUPLE_INJECT 
+							   con_tuple_inject 
 							   cons)
 			       in (MODULE_PROJECT(MOD_APP(path2mod expose_path,MOD_STRUCTURE sbnds),it_lab),
 				   MODULE_PROJECT(MOD_APP(path2mod case_path,MOD_STRUCTURE sbnds),it_lab),
@@ -413,7 +422,7 @@ functor Datatype(structure Il : IL
    end
 
 
-   fun exn_lookup context path : {name : Il.label,
+   fun old_exn_lookup context path : {name : Il.label,
 				  carried_type : Il.con option} option =
        (case (modsig_lookup(context,map symbol2label path)) of
 	  NONE=> NONE
@@ -432,5 +441,23 @@ functor Datatype(structure Il : IL
 		      end
 	      else NONE
 	| _ => NONE)
+
+   fun exn_lookup context path : {stamp : Il.exp,
+				  carried_type : Il.con option} option =
+       (case (modsig_lookup(context,map symbol2label path)) of
+	  NONE=> NONE
+	| SOME (path_mod,m,exn_sig as 
+		SIGNAT_STRUCTURE [SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]) =>
+	      if (eq_label(lab1,it_lab) andalso eq_label(lab2,mk_lab))
+		  then 
+		      (case (ctag,cmk) of 
+			      (_, CON_ANY) => SOME {stamp=MODULE_PROJECT(path2mod path_mod,it_lab), 
+						    carried_type = NONE}
+			    | (CON_TAG c, _) => SOME {stamp=MODULE_PROJECT(path2mod path_mod,it_lab), 
+						      carried_type = SOME c}
+			    | _ => error_sig exn_sig "bad exn signature")
+	      else NONE
+	| _ => NONE)
+
 
   end

@@ -11,7 +11,7 @@ signature DATATYPE =
     val compile : {context : Il.context,
 		   typecompile : Il.context * Ast.ty -> Il.con,
 		   datatycs : Ast.db list,
-		   withtycs : Ast.tb list} -> (Il.mod * Il.signat)  
+		   withtycs : Ast.tb list} -> (Il.sbnd * Il.sdec) list
 
 
     (* The datatype module/signature returned will be such that:
@@ -31,7 +31,9 @@ signature DATATYPE =
 						   constr_sig : Il.signat,
 						   datatype_sig : Il.signat} option 
 
-    val exn_lookup : Il.context -> Ast.path -> {name : Il.label,
+    val old_exn_lookup : Il.context -> Ast.path -> {name : Il.label,
+						    carried_type : Il.con option} option
+    val exn_lookup : Il.context -> Ast.path -> {stamp : Il.exp,
 						carried_type : Il.con option} option
 
     val is_const_constr : Il.signat -> bool

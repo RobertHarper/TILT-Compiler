@@ -1,33 +1,35 @@
-
 functor IlLookup(structure Il : IL
-		 structure IlStatic : ILSTATIC
 		 structure IlUtil : ILUTIL
 		 structure Ppil : PPIL
 		 structure AstHelp : ASTHELP
-		 sharing Ppil.Il = IlUtil.Il = IlStatic.Il = Il
-		 sharing Ppil.Formatter = AstHelp.Formatter)
-   : ILLOOKUP = 
+		 sharing Ppil.Il = IlUtil.Il = Il)
+
+    : ILLOOKUP  = 
   struct
 
     structure Il = Il
-    open AstHelp Il IlStatic IlUtil Ppil
-    open Util Name
+    open AstHelp Il (* IlStatic *) IlUtil Ppil
+    open Util Listops Name
   
-    val error = error "illookup.sml"
+    val error = fn s => error "illookup.sml" s
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
-
 
     (* ---------------- LOOKUP RULES --------------------------- 
      The lookup rules can return item from different grammatical classes
      so we need some additional datatypes to package up the results 
      --------------------------------------------------------- *)
+    datatype phrase = PHRASE_EXP of exp
+                    | PHRASE_CON of con
+                    | PHRASE_MOD of mod
+                    | PHRASE_SIG of signat
+                    | PHRASE_OVEREXP of unit -> (int list -> Il.exp) * Il.con Il.Tyvar.ocon
+
     datatype class = CLASS_EXP of con
                    | CLASS_CON of kind
                    | CLASS_MOD of signat
                    | CLASS_SIG
                    | CLASS_OVEREXP
-
 
     datatype phrase_class = PHRASE_CLASS_EXP  of exp * con
                           | PHRASE_CLASS_CON  of con * kind
@@ -35,151 +37,229 @@ functor IlLookup(structure Il : IL
                           | PHRASE_CLASS_SIG  of signat
                           | PHRASE_CLASS_OVEREXP of unit -> (int list -> Il.exp) * Il.con Il.Tyvar.ocon
 
-    datatype phrase_class_p = PHRASE_CLASS_P_EXP  of path * con
-                            | PHRASE_CLASS_P_CON  of path * kind
-                            | PHRASE_CLASS_P_MOD  of path * signat
-                            | PHRASE_CLASS_P_SIG  of signat
-                            | PHRASE_CLASS_P_INLINE  of phrase_class
-    local
-      datatype phrase = PHRASE_EXP  of path
-                      | PHRASE_CON  of path
-                      | PHRASE_MOD  of path
-                      | PHRASE_SIG  of signat
-                      | PHRASE_INLINE  of phrase_class
-      datatype flavor = FL_EXP | FL_CON | FL_MOD | FL_SIG | FL_INLINE
-      fun pp_phrase (PHRASE_EXP p)   = (print "PHRASE_EXP: "; pp_path p)
-	| pp_phrase (PHRASE_CON p)   = (print "PHRASE_CON: "; pp_path p)
-	| pp_phrase (PHRASE_MOD p)   = (print "PHRASE_MOD: "; pp_path p)
-	| pp_phrase (PHRASE_SIG s)   = (print "PHRASE_SIG: "; pp_signat s)
-	| pp_phrase (PHRASE_INLINE inline) = (print "PHRASE_INLINE: not done")
+    type phrase_class_p = path * phrase_class
 
+    fun combine_pc (PHRASE_EXP e, CLASS_EXP c) = PHRASE_CLASS_EXP (e,c)
+      | combine_pc (PHRASE_CON c, CLASS_CON k) = PHRASE_CLASS_CON (c,k)
+      | combine_pc (PHRASE_MOD m, CLASS_MOD s) = PHRASE_CLASS_MOD (m,s)
+      | combine_pc (PHRASE_SIG s, CLASS_SIG) = PHRASE_CLASS_SIG s
+      | combine_pc (PHRASE_OVEREXP oe, CLASS_OVEREXP) = PHRASE_CLASS_OVEREXP oe
+      | combine_pc _ = error "combine_pc got a phrase and a class of conflicting flavors"
 
-      fun Context_Phrase_Class_Lookup (context, labels : label list) : phrase_class_p = 
+    fun classpath2pc (p, CLASS_EXP c) = (p, PHRASE_CLASS_EXP (path2exp p, c))
+      | classpath2pc (p, CLASS_CON k) = (p, PHRASE_CLASS_CON (path2con p, k))
+      | classpath2pc (p, CLASS_MOD s) = (p, PHRASE_CLASS_MOD (path2mod p, s))
+      | classpath2pc (p, CLASS_SIG) = error "classpath2pc got a CLASS_SIG"
+      | classpath2pc (p, CLASS_OVEREXP) = error "classpath2pc got a CLASS_OVEREXP"
+
+    fun Context_Lookup (context, labels : label list) : path * phrase_class =
 	let 
-	  val decs = context2decs context
-	  val ph = Context_Phrase_Lookup (context, labels)
-	    handle e as NOTFOUND _ => (debugdo (fn () => (print "Context_Phrase_Class_Lookup calling ";
-							  print "Context_PHRASE_Lookup did not find ";
-							  pp_list pp_label' labels ("",".","",false);
-							  print "\n"));
-				       raise e)
-	  val _ = debugdo (fn () => (pp_phrase ph; print "\n"))
-	in
-	  (case ph of
-	     PHRASE_EXP p => let val exp = path2exp p in PHRASE_CLASS_P_EXP(p,GetExpCon(decs,exp)) end
-	   | PHRASE_CON p => let val con = path2con p 
-			     in PHRASE_CLASS_P_CON(p,GetConKind(decs,con)) 
-			     end
-	   | PHRASE_MOD p => let val m   = path2mod p in PHRASE_CLASS_P_MOD(p,GetModSig(decs,m)) end
-	   | PHRASE_SIG signat => PHRASE_CLASS_P_SIG signat
-	   | PHRASE_INLINE b  => PHRASE_CLASS_P_INLINE b)
-	end
-      
-      and Context_Phrase_Lookup (context, labels : label list) : phrase =
-	let 
-	  fun help lab l v maker r = if (eq_label(lab,l)) 
-				       then maker(SIMPLE_PATH v) else loop lab r
-	  and loop lab (CONTEXT_INLINE (l,b)::r) = 
-	    if (eq_label(lab,l))
-	      then (case b of
-		      (INLINE_MODSIG ms) => PHRASE_INLINE(PHRASE_CLASS_MOD ms)
-		    | (INLINE_EXPCON ec) => PHRASE_INLINE(PHRASE_CLASS_EXP ec)
-		    | (INLINE_OVER over) => PHRASE_INLINE(PHRASE_CLASS_OVEREXP over))
-	    else (loop lab r)
-	    | loop lab (CONTEXT_VAR (l,v,c)::r)                  = help lab l v PHRASE_EXP r
-	    | loop lab (CONTEXT_CONVAR (l,v,k,c)::r)             = help lab l v PHRASE_CON r
-	    | loop lab (CONTEXT_MODULE (l,v,s)::r) = 
-			if (is_label_open l) 
-			  then (let val (fl,sig_path) = Signat_Label_Lookup(s,lab)
-				in  (case fl of
-				       FL_EXP => PHRASE_EXP(COMPOUND_PATH(v,sig_path))
-				     | FL_CON => PHRASE_CON(COMPOUND_PATH(v,sig_path))
-				     | FL_MOD => PHRASE_MOD(COMPOUND_PATH(v,sig_path))
-				     | FL_SIG => error "FL_SIG returned from SIG_Lookup"
-				     | FL_INLINE => error "FL_INLINE returned from SIG_Lookup")
-				end
-				  handle NOTFOUND _ => loop lab r)
-			else help lab l v PHRASE_MOD r
-	    | loop lab (CONTEXT_SIGNAT (l,v,s)::r) = if (eq_label(lab,l)) then PHRASE_SIG s else loop lab r
-            | loop lab _ = (debugdo (fn () => (print "Context_Phrase_Lookup failed on ";
+	    val _ = debugdo (fn () => (print "Context_Lookup called with labels = ";
+				       pp_list pp_label' labels ("","",", ",false);
+				       print " and context: \n";
+				       pp_context context;
+				       print "\n\n"))
+	  fun context_search lab centry = 
+	      (case centry of
+		  (CONTEXT_INLINE (l,v,b)::r) =>
+		      if (eq_label(lab,l))
+			  then (SIMPLE_PATH v,
+				case b of
+				    (INLINE_MODSIG ms) =>  PHRASE_CLASS_MOD ms
+				  | (INLINE_EXPCON ec) =>  PHRASE_CLASS_EXP ec
+				  | (INLINE_CONKIND ck) => PHRASE_CLASS_CON ck
+				  | (INLINE_OVER over) =>  PHRASE_CLASS_OVEREXP over)
+		      else if (is_label_open l)
+			       then 
+				   (case b of
+					INLINE_MODSIG (m as MOD_STRUCTURE sbnds,
+						       s as SIGNAT_STRUCTURE sdecs) => 
+					    (let 
+						 val (phrase,labels) = Sbnds_Lookup(m,sbnds,[lab])
+(*						 val (class,labels') = Signat_Lookup(s,[lab]) *)
+						 val (class,labels') = Sdecs_Lookup(m,sdecs,[lab]) 
+					     in  if (eq_list(eq_label,labels,labels'))
+						     then (COMPOUND_PATH(v,labels), combine_pc(phrase,class))
+						 else error "Context_Lookup labels and labels' different"
+					     end
+					 handle NOTFOUND _ => context_search lab r)
+				      | _ => context_search lab r)
+			   else (context_search lab r)
+		| (CONTEXT_SDEC(SDEC(l,dec))::r) =>
+		     (case dec of
+			  DEC_EXP(v,c) =>
+			      if (eq_label(lab,l))
+				  then (SIMPLE_PATH v, PHRASE_CLASS_EXP(path2exp (SIMPLE_PATH v), c))
+			      else (context_search lab r)
+			| DEC_CON(v,k,c) =>
+			      if (eq_label(lab,l))
+				  then (SIMPLE_PATH v, PHRASE_CLASS_CON(path2con (SIMPLE_PATH v), k))
+			      else (context_search lab r)
+			| DEC_MOD(v,s) =>
+			      if (eq_label(lab,l))
+				  then (SIMPLE_PATH v, PHRASE_CLASS_MOD(path2mod (SIMPLE_PATH v), s))
+			      else if (is_label_open l) 
+				       then (case s of 
+						 SIGNAT_STRUCTURE sdecs =>
+						     (let val (class,labels) = 
+							  Sdecs_Lookup(MOD_VAR v,sdecs,[lab])
+						      in  classpath2pc(COMPOUND_PATH(v,labels),class)
+						      end
+							  handle NOTFOUND _ => context_search lab r)
+					       | _ => context_search lab r)
+				   else context_search lab r
+		        | ((DEC_EXCEPTION _) | (DEC_FIXITY _)) => context_search lab r)
+	      | (CONTEXT_SIGNAT (l,v,s)::r) => if (eq_label(lab,l)) 
+							 then (SIMPLE_PATH v,PHRASE_CLASS_SIG s)
+						     else context_search lab r
+	      | _ => (debugdo (fn () => (print "Context_Lookup failed on ";
 					       print (label2string lab);
 					       print ".  Context was\n";
 					       pp_context context; print "\n"));
-			    raise (NOTFOUND ("Context_Phrase_Lookup failed on " 
-					     ^ (label2string lab))))
-	  (* Rule 271 *)
-	  fun listloop [] = error "Context_Phrase_Lookup got empty label list"
-	    | listloop [lab : label] = loop lab (case context of (CONTEXT entries) => entries)
-	    | listloop (lab::labrest) = 
-	    (case (Context_Phrase_Class_Lookup(context,[lab])) of
-	       PHRASE_CLASS_P_MOD(path,signat) => 
-		 let 
-		   val (labrest',class) = Signat_Labels_Class_Lookup(context2decs context,
-								     (path,signat),labrest)
-		   val p = join_path_labels(path,labrest')
-		 in  (case class of
-			CLASS_EXP _ => PHRASE_EXP p
-		      | CLASS_CON _ => PHRASE_CON p
-		      | CLASS_MOD _ => PHRASE_MOD p
-		      | _ => error "Rule 309")
-		 end
-	     | _ => raise (NOTFOUND ("lbl looked up not to a normal module")))
-	in listloop labels
-	end (* Context_Phrase_Lookup *)
+			    raise (NOTFOUND ("Context_Lookup failed on " 
+					     ^ (label2string lab)))))
+	  val CONTEXT context_entries = context
+	in case labels of
+	     [] => error "Context_Lookup got empty label list"
+	   | [lab] => context_search lab context_entries
+	   | (lab::labrest) =>
+		 (case (context_search lab context_entries) of
+		      (path,PHRASE_CLASS_MOD(module as (MOD_STRUCTURE sbnds),
+					     signat as (SIGNAT_STRUCTURE sdecs))) => 
+			  let 
+			      val (phrase,labels) = Sbnds_Lookup(module,sbnds,labrest)
+			      val (class,labels') = Sdecs_Lookup(path2mod path,sdecs,labrest)
+			      val p = join_path_labels(path,labels)
+			  in  (p,combine_pc(phrase,class))
+			  end
+		   | (path,PHRASE_CLASS_MOD(_,signat as SIGNAT_STRUCTURE sdecs)) => 
+			  let 
+			      val (class,labels) = Sdecs_Lookup(path2mod path,sdecs,labrest)
+			      val p = join_path_labels(path,labels)
+			  in  classpath2pc(p,class)
+			  end
+		    | _ => raise (NOTFOUND ("lbl did not look up to a structure")))
+	end (* Context_Lookup *)
       
 
-      (* Signature Lookup - Rules 272 - 283 *)
-    and Signat_Labels_Class_Lookup (decs, (path : path, signat : signat), labs) : (labels * class) = 
-	(case labs of
-	   [] => error "Signat_Labels_Class_Lookup got []"
-	 | [lbl] => let val (fl,lbls') = Signat_Label_Lookup(signat,lbl)
-			val p = join_path_labels(path,lbls')
-		    in (lbls',(case fl of
-				 FL_EXP => CLASS_EXP(GetExpCon(decs,path2exp p))
-			       | FL_CON => CLASS_CON(GetConKind(decs,path2con p))
-			       | FL_MOD => CLASS_MOD(GetModSig(decs,path2mod p))
-			       | _ => error "Signat_Label_Lookup returned strange flavor"))
-		    end
-	 | (lbl :: lbls) =>
-		    (case (Signat_Labels_Class_Lookup(decs, (path,signat), [lbl])) of
-		       (labels',CLASS_MOD signat') =>
-			 let val (labels'',class) = Signat_Labels_Class_Lookup(decs, 
-									       (join_path_labels(path,labels'),
-										signat'), lbls)
-			 in  (labels' @ labels'', class)
-			 end
-	       | _ => error "Signat_Labels_Class_Lookup failed"))
 
-      and Signat_Label_Lookup (SIGNAT_FUNCTOR _, lab) = error "Signat_Label_Lookup got functor"
-	| Signat_Label_Lookup (SIGNAT_DATATYPE (_,_,sdecs), lab : label) : flavor * labels =
-	Signat_Label_Lookup (SIGNAT_STRUCTURE sdecs, lab)
-	| Signat_Label_Lookup (SIGNAT_STRUCTURE sdecs, lab : label) : flavor * labels =
-	let  (* Rules 276 - 283 *)
-	  fun loop [] = raise (NOTFOUND "Signat_Label_Lookup reched []")
-	    | loop (SDEC(l,d)::r) = 
-	    (case (is_label_open l,d) of
-	       (true,DEC_MOD(_,s)) => ((let val (fl,lbls') = Signat_Label_Lookup(s,lab)
-					in (fl,l::lbls')
-					end) handle NOTFOUND _ => loop r)
-	     |  (_,DEC_EXP _) => if (eq_label(l,lab)) then (FL_EXP,[l]) else loop r
-	     |  (_,DEC_CON _) => if (eq_label(l,lab)) then (FL_CON,[l]) else loop r
-	     |  (_,DEC_MOD _) => if (eq_label(l,lab)) then (FL_MOD,[l]) else loop r
-	     |  _ => loop r)
-	in loop sdecs
+    and Sbnds_Lookup (replace_mod, sbnds, labs) : (phrase * labels) = 
+	let 
+	    fun loop lbl _ [] = raise (NOTFOUND "Sdecs_Lookup reached []")
+	      | loop lbl prev ((sbnd as SBND(l,b))::r) = 
+		let val self = loop lbl (b::prev) 
+		in
+		    (case b of
+			 (BND_EXP (_,e)) => if (eq_label(l,lbl)) 
+						then (PHRASE_EXP e,[l]) else self r
+		   | (BND_CON (_,c)) => if (eq_label(l,lbl)) 
+					    then let val c' = c (* XXX *)
+						 in (PHRASE_CON c',[l]) 
+						 end
+					else self r
+		   | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
+					     then (PHRASE_MOD m,[l]) 
+					 else if (is_label_open l)
+						  then 
+						      (case m of 
+							   MOD_STRUCTURE sbnds =>
+							       (let val (phrase,lbls') = self sbnds
+								in (phrase,l::lbls')
+								end handle (NOTFOUND _) => self r)
+							 | _ => self r)
+					      else self r)
+		   | _ => self r)
+		end
+	in
+	    (case labs of
+		 [] => error "Sbnds_Lookup got []"
+	       | [lbl] => loop lbl [] sbnds
+	       | (lbl :: lbls) =>
+		     let val (phrase,labs) = loop lbl [] sbnds
+		     in
+			 (case phrase of
+			      PHRASE_MOD (MOD_STRUCTURE sbnds) => 
+				  let val (phrase2,labs2) = Sbnds_Lookup(MOD_PROJECT(replace_mod,lbl),
+									 sbnds,lbls)
+				  in (phrase2,labs @ labs2)
+				  end 
+			    | _ => error "Sbnds_Lookup did not find a structure")
+		     end)
 	end
-      
-    in
-      val Signat_Lookup = Signat_Labels_Class_Lookup 
-      val Context_Lookup' = Context_Phrase_Class_Lookup
-      fun Context_Lookup arg = (case Context_Phrase_Class_Lookup arg of
-				  PHRASE_CLASS_P_EXP (p,c)   => PHRASE_CLASS_EXP(path2exp p,c)
-				| PHRASE_CLASS_P_CON (p,k)   => PHRASE_CLASS_CON(path2con p,k)
-				| PHRASE_CLASS_P_MOD (p,s)   => PHRASE_CLASS_MOD(path2mod p,s)
-				| PHRASE_CLASS_P_SIG s       => PHRASE_CLASS_SIG s
-				| PHRASE_CLASS_P_INLINE pc    => pc)
-      fun modsig_lookup arg = ((case Context_Phrase_Class_Lookup arg of
-				  PHRASE_CLASS_P_MOD (p,s)   => SOME(p,path2mod p,s)
+
+    and Sdecs_Lookup (replace_mod, sdecs, labs) : (class * labels) = 
+	let fun loop lbl prev [] : (class * labels) = raise (NOTFOUND "Sdecs_Lookup reached []")
+	      | loop lbl prev ((sdec as (SDEC(l,d)))::rest) =
+		let val self = loop lbl (sdec::prev) 
+		in case d of
+		    (DEC_EXP (_,c)) => if (eq_label(l,lbl)) 
+					   then let val c' = add_modvar_type(c,replace_mod,rev prev)
+						in (CLASS_EXP c',[l]) 
+						end
+				       else self rest
+		  | (DEC_CON (_,k,_)) => if (eq_label(l,lbl)) 
+					     then (CLASS_CON k,[l]) else self rest
+		  | (DEC_MOD (_,s)) => (if (eq_label(l,lbl)) (* XXX need to make independent *) 
+					    then 
+						let val s' = add_modvar_sig(s,replace_mod,rev prev)
+						in (CLASS_MOD s',[l]) 
+						end
+				       else if (is_label_open l)
+						then (case s of
+							  SIGNAT_STRUCTURE sdecs => 
+							      (let val (class,lbls') = self sdecs
+							       in (class,l::lbls')
+							       end 
+								   handle (NOTFOUND _) => self rest)
+							| _ => self rest)
+					    else self rest)
+		  | _ => self rest
+		end
+	in
+	    (case labs of
+		 [] => error "Sdecs_Lookup got []"
+	       | [lbl] => loop lbl [] sdecs
+	       | (lbl :: lbls) =>
+		     let val (class,labs) = loop lbl [] sdecs
+		     in
+			 (case class of
+			      CLASS_MOD (SIGNAT_STRUCTURE sdecs') => 
+				  let val (class2,labs2) = Sdecs_Lookup(MOD_PROJECT(replace_mod,lbl),
+									sdecs',lbls)
+				  in (class2,labs @ labs2)
+				  end 
+			    | _ => error "Sdecs_Lookup did not find a structure sig")
+		     end)
+	end
+
+
+      fun modsig_lookup arg = ((case Context_Lookup arg of
+				  (path,PHRASE_CLASS_MOD (m,s)) => SOME(path,m,s)
 				| _ => NONE)
 			       handle (NOTFOUND _) => NONE)
-    end
+      val Sbnds_Lookup =
+	  fn (m,sbnds,labels) => (let val (phrase,labels) = Sbnds_Lookup (m,sbnds,labels)
+				  in (labels,phrase)
+				  end)
+      val Sdecs_Lookup = 
+	  fn (d,(m,sdecs),labels) => (let val (class,labels) = Sdecs_Lookup (m,sdecs,labels)
+				  in (labels,class)
+				  end
+				      handle e => (print "error in Sdecs_Lookup with decs = ...\n";
+						   print "  and m = "; pp_mod m;
+						   print "  and sig = \n"; pp_sdecs sdecs;
+						   print "\n and labels = "; 
+						   pp_list pp_label' labels ("","",".",false);
+						   raise e))
+      val Context_Lookup = 
+	  fn (arg as (context,labels)) =>
+	  (#2(Context_Lookup arg)
+	       handle e => (print "error in Context_Lookup with labels = ";
+			    pp_pathlist pp_label' labels;
+			    print "\nand context = ";
+			    pp_context context;
+			    print "\n";
+			    raise e))
+
+
   end

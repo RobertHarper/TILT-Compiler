@@ -4,25 +4,36 @@ signature ILSTATIC =
     structure Il : IL
     val debug : bool ref
  
-    (* The exception NOTFOUND is returned on any lookup that fails. *)
-    exception NOTFOUND of string
 
     val context2decs : Il.context -> Il.decs
 
+    (* unifying arrows *)
+    val comp_unify : Il.arrow Util.oneshot * Il.arrow Util.oneshot -> unit
+
+    (* Side-effecting: a failure to unify will set typevars *)
+    val eq_con      : Il.decs * Il.con * Il.con -> bool
+    val eq_con'     : Il.context * Il.con * Il.con -> bool
+    val con_unify   : Il.decs * string * (string * Il.con) * (string * Il.con) * (unit -> unit) -> unit
+    val con_unify'  : Il.context * string * (string * Il.con) * (string * Il.con) * (unit -> unit) -> unit
+
+    (* Possibly side-effecting: if unified, tyvars are set; otherwise
+         it will be as though the tyvars were unchanged *)
+    val soft_eq_con      : Il.decs * Il.con * Il.con -> bool
+    val soft_eq_con'     : Il.context * Il.con * Il.con -> bool
+
+(*
     (* Side-effecting: a failure to unify will set typevars *)
     val eq_con    : Il.con * Il.con * Il.decs -> bool
-
 
     (* Side-effecting: a failure to unify will set typevars *)
     val con_unify : Il.context * string * Il.con * string * Il.con * string -> unit
     val con_unify': Il.context * string * Il.con * string * (unit -> 'a) 
                                         * Il.con * string * (unit -> 'a) -> unit
-    val comp_unify : Il.arrow Il.Util.oneshot * Il.arrow Il.Util.oneshot -> unit
 
     (* Possibly side-effecting: if unified, tyvars are set; otherwise
          it will be as though the tyvars were unchanged *)
     val soft_eq_con : Il.con * Il.con * Il.decs -> bool
-
+*)
     (* Tests for well-formed constructs. *)
     val Decs_Valid  : Il.decs -> bool
     val Dec_Valid   : Il.decs * Il.dec -> bool

@@ -1,8 +1,8 @@
 (* Il pretty-printer. *)
 functor Ppil(structure Il : IL
 	     structure AstHelp : ASTHELP
-	     structure Formatter : FORMATTER
-	     sharing AstHelp.Formatter = Formatter)
+	     structure Ppprim : PPPRIM
+	     sharing Il.Prim = Ppprim.Prim)
 	: PPIL  = 
   struct
 
@@ -11,10 +11,11 @@ functor Ppil(structure Il : IL
     datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
     val convar_display = ref VALUE_ONLY
 
+    open Util Listops Name 
     open Il Formatter
-    open Util Name Prim Tyvar
+    open Prim Ppprim Tyvar
 
-    val error = error "ppil.sml"
+    val error = fn s => error "ppil.sml" s
 
 
     fun pp_region s1 s2 fmt = HOVbox((String s1) :: (fmt @ [String s2]))
@@ -35,28 +36,21 @@ functor Ppil(structure Il : IL
     fun pp_label l = String(label2string l)
     fun pp_tag n = String(tag2string n)
 
-    fun pp_scon scon =
-      (case scon of
-	 INT i => String (makestring (Word32.toInt i))
-       | UINT i => String ("u" ^ (makestring (Word32.toInt i)))
-       | STRING s => String ("\"" ^ s ^ "\"")
-       | BOOL b => String (makestring b)
-       | FLOAT s => String s
-       | CHAR c => String ("#\"" ^ (str c) ^ "\""))
+
     fun pp_fixity fixity = 
       (case fixity of
 	 Fixity.NONfix => String "NONfix"
        | Fixity.INfix (a,b) => String ("INfix" ^ (if (a mod 2 = 0) then "l" else "r")
-				       ^ (makestring (a div 2))))
+				       ^ (Int.toString (a div 2))))
     fun pp_kind kind = String (case kind of
 				 KIND_TUPLE 1 => "TYPE"
-			       | KIND_TUPLE i => ("KIND(" ^ (makestring i) ^ ")")
-			       | KIND_ARROW (i,j) => ("KIND(" ^ (makestring i) ^
-						      " -> " ^ (makestring j) ^ ")"))
+			       | KIND_TUPLE i => ("KIND(" ^ (Int.toString i) ^ ")")
+			       | KIND_ARROW (i,j) => ("KIND(" ^ (Int.toString i) ^
+						      " -> " ^ (Int.toString j) ^ ")"))
 
     local
       (* these 3 functions copied from ilutil.sml; no recursive modules... *)
-      fun generate_tuple_symbol (i : int) = Symbol.labSymbol(makestring i)
+      fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
       fun generate_tuple_label (i : int) = symbol2label(generate_tuple_symbol i)
       fun loop [] _ = true
 	| loop (l::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1) 
@@ -80,20 +74,22 @@ functor Ppil(structure Il : IL
 	      | NONE => "?>")
 
     val member = fn (a,lst) =>
-      let val _ = (print "member: lst of length "; print (length lst); print "\n")
+      let val _ = (print "member: lst of length "; print (Int.toString (length lst)); print "\n")
 	val res = member(a,lst)
-	val _ = (print "returning: "; print res; print "\n")
+	val _ = (print "returning: "; print (Bool.toString res); print "\n")
       in res
       end
 
     (* is it basic with respect to printing *)
     fun is_base_con con = 
       (case con of
-	 (CON_INT | CON_FLOAT | CON_UINT | CON_CHAR  | CON_ANY | CON_VAR _) => true
+	 (CON_INT _ | CON_FLOAT _ | CON_UINT _ | CON_ANY | CON_VAR _) => true
        | (CON_TYVAR tyvar) => (case tyvar_deref tyvar of
 				       NONE => true
 				     | SOME c => is_base_con c)
        | _ => false)
+
+
 
     fun pp_con seen arg_con : format = 
       (case arg_con of
@@ -106,10 +102,10 @@ functor Ppil(structure Il : IL
 		      else pp_var (tyvar_getvar tyvar)
 	    | (SOME con) => let val var = tyvar_getvar tyvar
 			    in if (member_eq(eq_tyvar,tyvar,seen)) then
-			      (print "var is "; (wrapper pp_var) std_out var; print "\n";
-			       print "seen_refs("; print (length seen);
+			      (print "var is "; (wrapper pp_var) TextIO.stdOut var; print "\n";
+			       print "seen_refs("; print (Int.toString (length seen));
 			       print ")var is: ";
-			       map (fn v => (wrapper pp_var) std_out (tyvar_getvar v)) seen;
+			       map (fn v => (wrapper pp_var) TextIO.stdOut (tyvar_getvar v)) seen;
 			       print "\n\n";
 			       error "circular";
 			       Hbox0 0 [String "KNOT_", pp_var var])
@@ -122,13 +118,11 @@ functor Ppil(structure Il : IL
 						     [pp_var var, String "==", pp_con seen con]))
 				 end
 			    end)
-       | CON_INT     => String "INT"
-       | CON_UINT    => String "UINT"
-       | CON_FLOAT   => String "FLOAT"
-       | CON_LIST c => Hbox[pp_con seen c, Break, String "LIST"]
+       | CON_INT is    => Hbox[String "INT", pp_is' is]
+       | CON_UINT is   => Hbox[String "UINT", pp_is' is]
+       | CON_FLOAT fs  => Hbox[String "FLOAT", pp_fs' fs]
        | CON_VECTOR c => Hbox[pp_con seen c, Break, String "VECTOR"]
        | CON_ARRAY c => Hbox[pp_con seen c, Break, String "ARRAY"]
-       | CON_CHAR    => String "CHAR"
        | CON_ANY     => String "ANY"
        | CON_REF c   => pp_region "REF("  ")" [pp_con seen c]
        | CON_TAG c  => pp_region "NAME(" ")" [pp_con seen c]
@@ -142,8 +136,8 @@ functor Ppil(structure Il : IL
 				       String ",",
 				       Break,
 				       pp_con seen c2]
-       | CON_MUPROJECT(i,c) => pp_region "[" ("]_" ^ (makestring i))
-			      [pp_con seen c]
+       | CON_MUPROJECT(i,c) => pp_region ("CON_MUPROJECT(" ^ (Int.toString i) ^ "; ") ")"
+	                              [pp_con seen c]
        | CON_RECORD [] => String "UNIT"
        | CON_RECORD rdecs => let val (format,doer) = if (rdecs_is_tuple rdecs)
 							   then (("{", " *","}", false), 
@@ -161,11 +155,11 @@ functor Ppil(structure Il : IL
 				       pp_con seen con]
        | CON_SUM (iopt,conlist) => pp_list (pp_con seen) conlist ("SUM"^ (case iopt of 
 									      NONE => ""
-									    | SOME x => (makestring x))
+									    | SOME x => (Int.toString x))
 								  ^"(", 
 							   ",",")", false)
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
-       | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (makestring i))]
+       | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
        | CON_MODULE_PROJECT (module,label) => pp_region "CON_MPROJ(" ")"
 				                 [pp_mod seen module,
 						  String ", ",
@@ -217,7 +211,7 @@ functor Ppil(structure Il : IL
 					   pp_var v,
 					   String ", ",
 					   pp_signat seen s,
-					   Break,
+					   String ", ", Break,
 					   pp_mod seen m,
 					   String ")"]
 	   | MOD_APP (m1,m2) => pp_region "MAPP(" ")"
@@ -231,185 +225,42 @@ functor Ppil(structure Il : IL
 				     pp_label l]
 	   | MOD_SEAL(m,s) => pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true))
 	     
-    and pp_inline seen (INLINE_MODSIG (m,s)) = HOVbox[pp_mod seen m, String ":", pp_signat seen s]
+    and pp_inline seen (INLINE_MODSIG (m,s)) = HOVbox[pp_mod seen m, String ":", Break, pp_signat seen s]
       | pp_inline seen (INLINE_EXPCON (e,c)) = HOVbox[pp_exp seen e, String ":", pp_con seen c]
+      | pp_inline seen (INLINE_CONKIND (c,k)) = HOVbox[pp_con seen c, String ":", pp_kind k]
       | pp_inline seen (INLINE_OVER _) = String "INLINE_OVER"
 
     and pp_context seen (CONTEXT entries) = 
       let fun dolv l v fmts = HOVbox((pp_label l) :: (String ">") :: (pp_var v) :: 
 				     (String "=") :: (Break0 0 3) :: fmts)
-	fun helper (CONTEXT_INLINE (l,inl)) = HOVbox[pp_label l, String ">>", pp_inline seen inl]
-	  | helper (CONTEXT_VAR (l,v,c)) = dolv l v [pp_con seen c]
-	  | helper (CONTEXT_CONVAR(l,v,k,SOME c)) = dolv l v [pp_con seen c, String ":", pp_kind k]
-	  | helper (CONTEXT_CONVAR(l,v,k,NONE)) = dolv l v [String ":", pp_kind k]
-	  | helper (CONTEXT_MODULE(l,v,s)) = dolv l v [pp_signat seen s]
-	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [pp_signat seen s, String " : OMEGA"]
+	fun helper (CONTEXT_INLINE (l,v,inl)) = HOVbox[pp_label l, String " >> ", pp_var v, 
+						       String " = ", pp_inline seen inl]
+	  | helper (CONTEXT_SDEC(SDEC(l,dec))) = 
+	    (case dec of
+		 (DEC_EXP(v,c)) => dolv l v [pp_con seen c]
+	       | (DEC_CON(v,k,SOME c)) => dolv l v [pp_con seen c, String ":", pp_kind k]
+	       | (DEC_CON(v,k,NONE)) => dolv l v [String ":", pp_kind k]
+	       | (DEC_MOD(v,s)) => dolv l v [pp_signat seen s]
+	       | (DEC_FIXITY vf_list) => HOVbox[String "FIXITY", pp_fixity_list vf_list]
+	       | (DEC_EXCEPTION (tag,c)) => HOVbox[String "EXCEPTION: ", pp_tag tag, String " = ",
+						   pp_con seen c])
+	  | helper (CONTEXT_SIGNAT(l,v,s)) = dolv l v [String " OMEGA = ",pp_signat seen s]
 	  | helper (CONTEXT_SCOPED_TYVAR syms) = pp_list AstHelp.pp_sym'
 	                                             syms ("TYVARS[", ", ", "]", false)
-	  | helper (CONTEXT_FIXITY vf_list) = HOVbox[String "FIXITY", pp_fixity_list vf_list]
+
       in pp_list helper entries ("CONTEXT(", ", ", ")", true)
       end
 
-    and pp_prim seen prim = 
-      let
-	open Prim
-	fun pp_tt INT_TT = String "INT_TT"
-	  | pp_tt REAL_TT = String "REAL_TT"
-	  | pp_tt BOTH_TT = String "BOTH_TT"
-
-	fun pp_prim0 prim = 
-	  (case prim of
-(*	   | NILprim  {instance} => String "nil" *)
-	     SOFT_VTRAPprim tt => String "SOFT_VTRAP"
-	   | SOFT_ZTRAPprim tt => String "SOFT_ZTRAP"
-	   | HARD_VTRAPprim tt => String "HARD_VTRAP"
-	   | HARD_ZTRAPprim tt => String "HARD_ZTRAP")
-	     
-	fun pp_prim1 prim = 
-	  (case prim of
-(*	   | NOTprim => String "NOT" *)
-	     MK_REFprim {instance : 'Type} => String "MK_REF"
-	   | DEREFprim {instance : 'Type} => String "DEREF"
-(*
-	   | SIZEprim => String "SIZE"
-	   | CHRprim => String "CHR"
-	   | ORDprim => String "ORD"
-	   | EXPLODEprim => String "EXPLODE"
-	   | IMPLODEprim => String "IMPLODE"
-*)
-	   | NEG_FLOATprim => String "NEG_FLOAT"
-	   | ABS_FLOATprim => String "ABS_FLOAT"
-(*
-	   | SQRTprim => String "SQRT"
-	   | SINprim => String "SIN"
-	   | COSprim => String "COS"
-	   | ARCTANprim => String "ARCTAN"
-	   | EXPprim => String "EXP"
-	   | LNprim => String "LN"
-*)
-	   | NOT_INTprim  => String "NOT_INTp"
-	   | NEG_INTprim  => String "NEG_INTp"
-	   | ABS_INTprim => String "ABS_INT"
-	   | NOT_UINTprim  => String "NOT_UINTp"
-	   | FLOAT2INTprim => String "FLOAT2INT"
-	   | INT2FLOATprim => String "INT2FLOAT"
-	   | INT2UINTprim => String "INT2UINT"
-	   | UINT2INTprim => String "UINT2INT"
-(*
-	   | OPEN_INprim => String "OPEN_INprim"
-	   | OPEN_OUTprim => String "OPEN_OUT"
-	   | INPUTprim => String "INPUT"
-	   | LOOKAHEADprim => String "LOOKAHEAD"
-	   | CLOSE_INprim => String "CLOSE_IN"
-	   | END_OF_STREAMprim => String "END_OF_STREAM"
-	   | CLOSE_OUTprim => String "CLOSE_OUT"
-	   | USEprim => String "USE"
-	   | FLUSH_OUTprim  => String "FLUSH_OUTp"
-
-	   | ISNILprim {instance} => String "isnil"
-	   | CARprim {instance} => String "car"
-	   | CDRprim {instance} => String "cdr"
-*)
-	   | LENGTH1prim {instance} => String "length1"
-(*	   | LENGTH2prim {instance} => String "length2" *)
-		 )
-
-	fun pp_prim2 prim = 
-	  (case prim of
-(*
-	    ANDprim => String "AND"
-	  | ORprim => String "OR"
-	  | EQ_BOOLprim => String "EQ_BOOL"
-	  | XORprim => String "XOR"
-*)
-	    EQ_REFprim _ => String "EQ_REF"
-	  | SETREFprim _ => String "SETREF"
-(*
-	  | STRING_CONCATprim => String "STRING_CONCAT"
-*)
-	  | EQ_CHARprim => String "EQ_CHAR"
-	  | NEQ_CHARprim => String "NEQ_CHAR"
-(*
-	  | EQ_STRINGprim => String "EQ_STRING"
-	  | NEQ_STRINGprim => String "NEQ_STRING"
-*)
-	  | PLUS_FLOATprim => String "PLUS_FLOAT"
-	  | MINUS_FLOATprim => String "MINUS_FLOAT"
-	  | MUL_FLOATprim => String "MUL_FLOAT"
-	  | DIV_FLOATprim => String "DIV_FLOATprim"
-	  | LESS_FLOATprim => String "LESS_FLOAT"
-	  | GREATER_FLOATprim => String "GREATER_FLOAT"
-	  | LESSEQ_FLOATprim => String "LESSEQ_FLOAT"
-	  | GREATEREQ_FLOATprim => String "GREATEREQ_FLOAT"
-	  | EQ_FLOATprim => String "EQ_FLOAT"
-	  | NEQ_FLOATprim => String "NEQ_FLOAT"
-	  | PLUS_INTprim => String "PLUS_INT"
-	  | MINUS_INTprim => String "MINUS_INT"
-	  | MUL_INTprim => String "MUL_INT"
-	  | DIV_INTprim => String "DIV_INT"
-	  | MOD_INTprim => String "MOD_INT"
-	  | QUOT_INTprim => String "QUOT_INT"
-	  | REM_INTprim => String "REM_INT"
-	  | LESS_INTprim => String "LESS_INT"
-	  | GREATER_INTprim => String "GREATER_INT"
-	  | LESSEQ_INTprim => String "LESSEQ_INT"
-	  | GREATEREQ_INTprim => String "GREATEREQ_INT"
-	  | EQ_INTprim => String "EQ_INT"
-	  | NEQ_INTprim => String "NEQ_INT"
-	  | LSHIFT_INTprim => String "LSHIFT_INT"
-	  | RSHIFT_INTprim => String "RSHIFT_INT"
-	  | AND_INTprim => String "AND_INT"
-	  | OR_INTprim => String "OR_INT"
-	  | PLUS_UINTprim => String "PLUS_UINT"
-	  | MINUS_UINTprim => String "MINUS_UINT"
-	  | MUL_UINTprim  => String "MUL_UINTp"
-	  | DIV_UINTprim => String "DIV_UINT"
-	  | MOD_UINTprim => String "MOD_UINT"
-	  | LESS_UINTprim => String "LESS_UINT"
-	  | GREATER_UINTprim => String "GREATER_UINT"
-	  | LESSEQ_UINTprim => String "LESSEQ_UINT"
-	  | GREATEREQ_UINTprim => String "GREATEREQ_UINT"
-	  | EQ_UINTprim => String "EQ_UINT"
-	  | NEQ_UINTprim => String "NEQ_UINT"
-	  | LSHIFT_UINTprim => String "LSHIFT_UINT"
-	  | RSHIFT_UINTprim => String "RSHIFT_UINT"
-	  | AND_UINTprim => String "AND_UINT"
-	  | OR_UINTprim => String "OR_UINT"
-(*
-	  | OUTPUTprim => String "OUTPUT"
-
-	  | CONSprim {instance} => String "::"
-*)
-	  | ARRAY1prim  {instance} => String "array1"
-	  | SUB1prim    {instance} => String "sub1")
-
-	fun pp_prim3 prim = 
-	  (case prim of
-	     UPDATE1prim {instance} => String "update1"
-(*	   | ARRAY2prim  {instance} => String "array2"
-	   | SUB2prim    {instance} => String "sub2" *)
-		 )
-(*
-	fun pp_prim4 prim = 
-	  (case prim of
-	     UPDATE2prim {instance} => String "update2")
-*)
-      in
-	case prim of
-	  PRIM0 p => pp_prim0 p
-	| PRIM1 p => pp_prim1 p
-	| PRIM2 p => pp_prim2 p
-	| PRIM3 p => pp_prim3 p
-(*	| PRIM4 p => pp_prim4 p *)
-      end
 
     and pp_exp seen exp = 
       (case exp of
 	 OVEREXP (c,_,exp) => (case oneshot_deref exp of
 				 NONE => String "OVEREXP_NONE"
 			       | (SOME e) => pp_exp seen e)
-       | SCON scon => pp_scon scon
-       | PRIM prim => pp_prim seen prim
+       | SCON scon => pp_value' (pp_exp seen) scon
+       | PRIM (prim,cons) => HOVbox[pp_prim' prim,
+				    pp_list (pp_con seen) cons ("[",",","]",false)]
+       | ILPRIM ip => pp_ilprim' ip
        | VAR var => pp_var var
        | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
        | FIX ([FBND(v',v,c,cres,e)],var) => if eq_var(v',var)
@@ -426,8 +277,7 @@ functor Ppil(structure Il : IL
 						  String "IN  ",
 						  pp_var var,
 						  String "END "]
-       | SEQ elist => pp_list (pp_exp seen) elist ("(", ";",")", true)
-       | LOC (con,exp) => pp_region "LOC(" ")" [pp_exp seen (!exp)]
+(*       | SEQ elist => pp_list (pp_exp seen) elist ("(", ";",")", true) *)
        | RECORD [] => String "unit"
        | RECORD rbnds =>  let val (format,doer) = if (rbnds_is_tuple rbnds)
 						    then (("(", ",",")", false), 
@@ -457,20 +307,20 @@ functor Ppil(structure Il : IL
 				  String "END"]
        | NEW_STAMP con => pp_region "NEW_STAMP(" ")" [pp_con seen con]
        | EXN_INJECT (e1,e2) => pp_region "EXN_INJECT(" ")" [pp_exp seen e1, String ",", pp_exp seen e2]
-       | REF (con,exp)  =>  pp_region "REF(" ")" 
-			  [pp_con seen con, String ",", pp_exp seen exp]
-       | GET (c,exp)  => pp_region "GET(" ")" [pp_exp seen exp]
-       | SET (c,e1,e2) => pp_region "SET(" ")" [pp_exp seen e1, String ",", pp_exp seen e2]
+       | MK_REF (exp)  =>  pp_region "REF(" ")" 
+			  [pp_exp seen exp]
+       | GET (exp)  => pp_region "GET(" ")" [pp_exp seen exp]
+       | SET (e1,e2) => pp_region "SET(" ")" [pp_exp seen e1, String ",", pp_exp seen e2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
 			  [pp_con seen con, pp_exp seen e]
        | UNROLL (con,e) => pp_region "UNROLL(" ")"
 			  [pp_con seen con, String ",", pp_exp seen e]
        | INJ  (conlist, i, e) => pp_region "INJ(" ")"
 			  [pp_list (pp_con seen) conlist ("[",", ","]",false), 
-			   String ("," ^ (makestring i) ^ ","), pp_exp seen e]
+			   String ("," ^ (Int.toString i) ^ ","), pp_exp seen e]
        | PROJ (conlist,i,e) => pp_region "PROJ(" ")" 
 			  [pp_list (pp_con seen) conlist ("[",", ","]",false),
-			   String ((makestring i) ^ ","), 
+			   String ((Int.toString i) ^ ","), 
 			   pp_exp seen e]
        | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c]
        | CASE (cs,earg,elist,edef) => pp_region "CASE(" ")"
@@ -585,20 +435,22 @@ functor Ppil(structure Il : IL
     fun pp_sdecs sdecs = pp_list (pp_sdec []) sdecs ("[",",","]",true)
 
     fun help pp = pp
-    fun help' pp obj = (wrapper pp std_out obj; ())
+    fun help' pp obj = (wrapper pp TextIO.stdOut obj; ())
 
     val pp_var' = help pp_var
     val pp_label'  = help pp_label
     val pp_con' = help (pp_con [])
     val pp_kind' = help pp_kind
-    val pp_scon' = help pp_scon
-    val pp_prim' = help (pp_prim [])
+    val pp_value' = pp_value' (pp_exp [])
+    val pp_prim' = help pp_prim'
     val pp_mod' = help (pp_mod [])
     val pp_exp' = help (pp_exp [])
     val pp_context' = help (pp_context [])
     val pp_signat' = help (pp_signat [])
-
-    val pp_list' = help pp_list
+    val pp_list' = pp_list
+    fun pp_commalist' pobj objlist = pp_list' pobj objlist ("(",", ",")",false)
+    fun pp_semicolonlist' pobj objlist = pp_list' pobj objlist ("(","; ",")",true)
+    fun pp_pathlist' pobj objlist = pp_list' pobj objlist ("",".","",false)
     val pp_path' = help pp_path
     val pp_bnd' = help (pp_bnd [])
     val pp_bnds' = help pp_bnds
@@ -613,13 +465,16 @@ functor Ppil(structure Il : IL
     val pp_label  = help' pp_label
     val pp_con = help' (pp_con [])
     val pp_kind = help' pp_kind
-    val pp_scon = help' pp_scon
-    val pp_prim = help' (pp_prim [])
+    val pp_value = help' pp_value'
+    val pp_prim = help' Ppprim.pp_prim'
     val pp_mod = help' (pp_mod [])
     val pp_exp = help' (pp_exp [])
     val pp_context = help' (pp_context [])
     val pp_signat = help' (pp_signat [])
     fun pp_list doer data = help' (pp_list' doer data)
+    fun pp_commalist pobj objlist = pp_list pobj objlist ("(",", ",")",false)
+    fun pp_semicolonlist pobj objlist = pp_list pobj objlist ("(","; ",")",true)
+    fun pp_pathlist pobj objlist = pp_list pobj objlist ("",".","",false)
     val pp_path = help' pp_path
     val pp_bnd = help' (pp_bnd [])
     val pp_bnds = help' pp_bnds

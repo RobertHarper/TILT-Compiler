@@ -1,19 +1,25 @@
 functor IlEval(structure Il : IL
 	       structure IlStatic : ILSTATIC
 	       structure IlUtil : ILUTIL
+	       structure PrimUtil : PRIMUTIL
 	       structure Ppil : PPIL
 	       structure IlLookup : ILLOOKUP
-	     sharing IlLookup.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
+	       sharing IlLookup.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il
+	       sharing Il.Prim = PrimUtil.Prim
+	       sharing type PrimUtil.con = Il.con
+	       sharing type PrimUtil.exp = Il.exp)
    : ILEVAL =  
   struct
 
     structure Il = Il
+    structure Float = Real64
     open Il IlStatic IlUtil Ppil 
-    open Util Name IlLookup Tyvar
+    open Util Listops Name IlLookup Tyvar
     open Prim
 
-    val error = error "ileval.sml"
-    val error_exp = error_exp "ileval.sml"
+    val error = fn s => error "ileval.sml" s
+    val error_exp = fn e => fn s => error_exp "ileval.sml" e s
+
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
@@ -22,15 +28,17 @@ functor IlEval(structure Il : IL
     fun exp_isval (exp : exp) = 
 	(case exp of
 	     (OVEREXP _ | VAR _ | APP _ | RECORD_PROJECT _ | SUM_TAIL _ 
-	     | HANDLE _ | RAISE _ | LET _ | NEW_STAMP _ | REF _ | GET _ 
-	     | SET _ | PROJ _ | CASE _ | EXN_CASE _ | MODULE_PROJECT _ | SEAL _ | SEQ _) => false
+	     | HANDLE _ | RAISE _ | LET _ | NEW_STAMP _ | MK_REF _ | GET _ 
+	     | SET _ | PROJ _ | CASE _ | EXN_CASE _ | MODULE_PROJECT _ 
+	     | SEAL _ (* | SEQ _ *)) => false
+           | (SCON (vector _)) => true (* XXX not really *)
+	   | (SCON (array _)) => true  (* XXX not really *)
 	   | (SCON _ | PRIM _ | FIX _ | TAG _) => true
 	   | (RECORD rbnds) => andfold (fn (RBND(l,bnd)) => exp_isval bnd) rbnds
 	   | EXN_INJECT (tag,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
 	   | UNROLL (c,e) => (con_isval c) andalso (exp_isval e)
-	   | INJ (cons,i,e) => (andfold con_isval cons) andalso (exp_isval e)
-	   | LOC(c,er) => (con_isval c) andalso (exp_isval (!er)))
+	   | INJ (cons,i,e) => (andfold con_isval cons) andalso (exp_isval e))
 
     and bnd_isval (bnd : bnd) = 
 	(case bnd of
@@ -53,8 +61,8 @@ functor IlEval(structure Il : IL
 	     (CON_OVAR _ | CON_APP _ 
 	     | CON_TUPLE_PROJECT _ | CON_MODULE_PROJECT _) => false
 	   | (CON_MUPROJECT(i,c)) => con_isval c
-	   | (CON_VAR _ | CON_FUN _ | CON_INT | CON_UINT | CON_FLOAT | CON_CHAR | CON_ANY ) => true
-	   | (CON_LIST c | CON_ARRAY c | CON_VECTOR c | CON_REF c | CON_TAG c) => con_isval c
+	   | (CON_VAR _ | CON_FUN _ | CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY ) => true
+	   | (CON_ARRAY c | CON_VECTOR c | CON_REF c | CON_TAG c) => con_isval c
 	   | (CON_ARROW (c1,c2,_)) => (con_isval c1) andalso (con_isval c2)
 	   | (CON_RECORD rdecs) => andfold (fn (RDEC(l,bnd)) => con_isval bnd) rdecs
 	   | (CON_SUM (iopt,cons)) => andfold con_isval cons
@@ -131,7 +139,7 @@ functor IlEval(structure Il : IL
 
     fun eval_con env (con : con) : con = 
 	(case con of
-	    (CON_INT | CON_UINT | CON_FLOAT | CON_CHAR | CON_ANY) => con
+	    (CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY) => con
 	  | (CON_TYVAR tv) => (case (tyvar_deref tv) of
 				  SOME c => eval_con env c
 				| NONE => (print "encountered unresolved "; Ppil.pp_con con;
@@ -139,7 +147,6 @@ functor IlEval(structure Il : IL
 				      error "encountered unresolved CON_TYVAR during eval_con"))
 	  | (CON_VAR v) => con_lookup env v
 	  | (CON_OVAR oc) => if (ocon_is_inst oc) then (ocon_deref oc) else error "uninst overloaded ovar"
-	  | CON_LIST c => CON_LIST (eval_con env c)
 	  | CON_ARRAY c => CON_ARRAY (eval_con env c)
 	  | CON_VECTOR c => CON_VECTOR (eval_con env c)
 	  | CON_REF c => CON_REF (eval_con env c)
@@ -159,7 +166,7 @@ functor IlEval(structure Il : IL
 	  | CON_RECORD rdecs => CON_RECORD (map (fn (RDEC(l,c)) => RDEC(l,eval_con env c)) rdecs)
 	  | CON_TUPLE_INJECT cs => CON_TUPLE_INJECT(map (eval_con env) cs)
 	  | CON_TUPLE_PROJECT(i,c) => (case (eval_con env c) of
-					   CON_TUPLE_INJECT cs => List.nth(cs,i-1)
+					   CON_TUPLE_INJECT cs => List.nth(cs,i)
 					 | _ => error "Cannot project out from non CON_TUPLE_INJ")
 	  | CON_MODULE_PROJECT (m,l) => (case (eval_mod env m) of
 					     MOD_STRUCTURE sbnds => eval_con env (con_str_lookup sbnds l)
@@ -170,7 +177,7 @@ functor IlEval(structure Il : IL
 
     and reduce_con env (con : con) : con = 
 	(case con of
-	    (CON_INT | CON_UINT | CON_FLOAT | CON_CHAR | CON_ANY) => con
+	    (CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY) => con
 	  | (CON_VAR v) => (con_lookup env v
 			    handle (NOTFOUND _) => con)
 	  | (CON_TYVAR tv) => (case (tyvar_deref tv) of
@@ -179,7 +186,6 @@ functor IlEval(structure Il : IL
 					   print " during reduce_con";
 					   error "encountered unresolved CON_TYVAR during reduce_con"))
 	  | (CON_OVAR oc) => if (ocon_is_inst oc) then (ocon_deref oc) else error "uninst overloaded ovar"
-	  | CON_LIST c => CON_LIST (reduce_con env c)
 	  | CON_ARRAY c => CON_ARRAY (reduce_con env c)
 	  | CON_VECTOR c => CON_VECTOR (reduce_con env c)
 	  | CON_REF c => CON_REF (reduce_con env c)
@@ -199,7 +205,7 @@ functor IlEval(structure Il : IL
 	  | CON_RECORD rdecs => CON_RECORD (map (fn (RDEC(l,c)) => RDEC(l,reduce_con env c)) rdecs)
 	  | CON_TUPLE_INJECT cs => CON_TUPLE_INJECT(map (reduce_con env) cs)
 	  | CON_TUPLE_PROJECT(i,c) => (case (reduce_con env c) of
-					   CON_TUPLE_INJECT cs => List.nth(cs,i-1)
+					   CON_TUPLE_INJECT cs => List.nth(cs,i)
 					 | c' => CON_TUPLE_PROJECT(i,c'))
 	  | CON_MODULE_PROJECT (m,l) => (case (reduce_mod env m) of
 					     MOD_STRUCTURE sbnds => reduce_con env (con_str_lookup sbnds l)
@@ -208,138 +214,27 @@ functor IlEval(structure Il : IL
 	  | CON_SUM (iopt,cs) => CON_SUM(iopt,map (reduce_con env) cs)
 	  | CON_MUPROJECT(i,c) => con)
 
-    and eval_prim (prim,arg) = 
-	(case (prim,arg) of
-	   (PRIM0 p0,_) =>
-	     (case p0 of
-		  (SOFT_VTRAPprim _ | SOFT_ZTRAPprim _ | HARD_VTRAPprim _ | HARD_ZTRAPprim _) => unit_exp)
-	 | (PRIM1 p1, a) =>
-	      (case (p1,a) of
-		   (MK_REFprim {instance},_) => LOC(instance,ref a)
-		 | (DEREFprim {instance}, LOC(_,er)) => (er := a; unit_exp)
-		 | (DEREFprim _,_) => error "DEREF did not get loc"
-        	 | (NEG_FLOATprim, SCON(FLOAT str)) => SCON(FLOAT(float2str(~(str2float str))))
-		 | (NOT_INTprim, SCON(INT w)) => SCON(INT(Word32.notb w))
-		 | (NEG_INTprim, SCON(INT w)) => SCON(INT(Word32.fromLargeInt(~(Word32.toLargeInt w))))
-		 | (ABS_INTprim, SCON(INT w)) => SCON(INT(Word32.fromLargeInt(abs(Word32.toLargeInt w))))
-		 | ((NOT_INTprim | NEG_INTprim | ABS_INTprim), _) => error "not/neg/abs_int got a non-int"
-		 | (FLOAT2INTprim, SCON(FLOAT str)) => SCON(INT(Word32.fromInt(floor(str2float str))))
-        	 | ((NEG_FLOATprim | ABS_FLOATprim | FLOAT2INTprim), _) => 
-		       error "neg/abs/floor_float got a non-float"
-		 | (INT2FLOATprim, SCON(INT w)) => SCON(FLOAT(float2str(real(Word32.toInt w))))
-		 | (INT2UINTprim, SCON(INT w)) => SCON(UINT w)
-		 | (UINT2INTprim, SCON(UINT w)) => SCON(INT w)
-		 | ((INT2FLOATprim | INT2UINTprim), _) => error "INT2FLOAT or INT2UINTprim got non-int"
-		 | (UINT2INTprim, _) => error "UINT2INT got non-uint"
-		 | (LENGTH1prim {instance}, _) => raise UNIMP)
-	 | (PRIM2 p2, RECORD[RBND(l1,a),RBND(l2,b)]) =>
-	      (case (p2,a,b) of
-		   (EQ_REFprim{instance}, LOC(_,er1), LOC(_,er2)) => if (er1 = er2) then true_exp else false_exp
-		 | (SETREFprim{instance}, LOC(_,er1), _) => (er1 := b; unit_exp)
-		 | (EQ_CHARprim, SCON(CHAR c1), SCON(CHAR c2)) => if (c1 = c2) then true_exp else false_exp
-		 | (NEQ_CHARprim, SCON(CHAR c1), SCON(CHAR c2)) => if (not(c1 = c2)) then true_exp else false_exp
-		 | ((PLUS_FLOATprim | MINUS_FLOATprim | MUL_FLOATprim | DIV_FLOATprim                
-		    | LESS_FLOATprim | GREATER_FLOATprim | LESSEQ_FLOATprim | GREATEREQ_FLOATprim 
-		    | EQ_FLOATprim | NEQ_FLOATprim), SCON(FLOAT str1), SCON(FLOAT str2)) =>
-		       let val f1 = str2float str1
-			   val f2 = str2float str2
-			   fun bwrapper booler = if booler(f1,f2) then true_exp else false_exp
-			   fun fwrapper fooler = SCON(FLOAT(float2str(fooler(f1,f2))))
-		       in (case p2 of
-			       PLUS_FLOATprim => fwrapper (op +)
-			     | MINUS_FLOATprim => fwrapper (op -)
-			     | MUL_FLOATprim => fwrapper (op * )
-			     | DIV_FLOATprim => fwrapper (op /)
-			     | LESS_FLOATprim => bwrapper (op <)
-			     | GREATER_FLOATprim  => bwrapper (op >)
-			     | LESSEQ_FLOATprim  => bwrapper (op <=)
-			     | GREATEREQ_FLOATprim  => bwrapper (op >=)
-			     | EQ_FLOATprim  => bwrapper (op =)
-			     | NEQ_FLOATprim => bwrapper (not o (op =))
-			     | _ => error "what happened to float op")
-		       end
-		 | ((PLUS_INTprim | MINUS_INTprim | MUL_INTprim | DIV_INTprim | MOD_INTprim
-                    | QUOT_INTprim | REM_INTprim 
-		    | LESS_INTprim | GREATER_INTprim | LESSEQ_INTprim | GREATEREQ_INTprim 
-		    | EQ_INTprim | NEQ_INTprim
-		    | LSHIFT_INTprim | RSHIFT_INTprim | AND_INTprim | OR_INTprim), 
-		       SCON(INT w1), SCON(INT w2)) =>
-		       let val i1 = Word32.toInt w1
-			   val i2 = Word32.toInt w2
-			   val ws2 = Word31.fromInt i2
-			   fun wwrapper wooler = SCON(INT(wooler(w1,w2)))
-			   fun wiwrapper wiooler = SCON(INT(wiooler(w1,ws2)))
-			   fun bwrapper booler = if booler(i1,i2) then true_exp else false_exp
-			   fun iwrapper iooler = SCON(INT(Word32.fromInt(iooler(i1,i2))))
-		       in (case p2 of
-			       PLUS_INTprim => iwrapper (op +)
-			     | MINUS_INTprim => iwrapper (op -)
-			     | MUL_INTprim => iwrapper (op * )
-			     | DIV_INTprim => iwrapper (op div)
-			     | MOD_INTprim => iwrapper (op mod)
-			     | QUOT_INTprim => iwrapper (op quot)
-			     | REM_INTprim => iwrapper (op rem)
-			     | LESS_INTprim => bwrapper (op <)
-			     | GREATER_INTprim  => bwrapper (op >)
-			     | LESSEQ_INTprim  => bwrapper (op <=)
-			     | GREATEREQ_INTprim  => bwrapper (op >=)
-			     | EQ_INTprim  => bwrapper (op =)
-			     | NEQ_INTprim => bwrapper (not o (op =))
-			     | LSHIFT_UINTprim => wiwrapper(Word32.<<)
-			     | RSHIFT_UINTprim => wiwrapper(Word32.>>)
-			     | AND_UINTprim => wwrapper(Word32.andb)
-			     | OR_UINTprim => wwrapper(Word32.orb)
-			     | _ => error "what happened to int op")
-		       end
-		 | ((PLUS_UINTprim | MINUS_UINTprim | MUL_UINTprim | DIV_UINTprim | MOD_UINTprim
-		    | LESS_UINTprim | GREATER_UINTprim | LESSEQ_UINTprim | GREATEREQ_UINTprim 
-		    | EQ_UINTprim | NEQ_UINTprim 
-		    | LSHIFT_UINTprim | RSHIFT_UINTprim | AND_UINTprim | OR_UINTprim), 
-		       SCON(UINT w1), SCON(UINT w2)) =>
-		       let val i2 = Word32.toInt w2
-			   val ws2 = Word31.fromInt i2
-			   fun bwrapper booler = if booler(w1,w2) then true_exp else false_exp
-			   fun wwrapper wooler = SCON(UINT(wooler(w1,w2)))
-			   fun wiwrapper wooler = SCON(UINT(wooler(w1,ws2)))
-		       in (case p2 of
-			       PLUS_UINTprim => wwrapper (Word32.+)
-			     | MINUS_UINTprim => wwrapper (Word32.-)
-			     | MUL_UINTprim => wwrapper (Word32.* )
-			     | DIV_UINTprim => wwrapper (Word32.div)
-			     | MOD_UINTprim => wwrapper (Word32.mod)
-			     | LESS_UINTprim => bwrapper (Word32.<)
-			     | GREATER_UINTprim  => bwrapper (Word32.>)
-			     | LESSEQ_UINTprim  => bwrapper (Word32.<=)
-			     | GREATEREQ_UINTprim  => bwrapper (Word32.>=)
-			     | EQ_UINTprim  => bwrapper (op =)
-			     | NEQ_UINTprim => bwrapper (not o (op =))
-			     | LSHIFT_UINTprim => wiwrapper(Word32.<<)
-			     | RSHIFT_UINTprim => wiwrapper(Word32.>>)
-			     | AND_UINTprim => wwrapper(Word32.andb)
-			     | OR_UINTprim => wwrapper(Word32.orb)
-			     | _ => error "what happened to uint op")
-		       end
-		 | (SUB1prim _,_,_)  => raise UNIMP
-		 | (ARRAY1prim _,_,_)  => raise UNIMP
-		 | _ => error "could not evaluate some prim2")
-	 | (PRIM2 p2, _) => error "prim2 did not get 2 arguments"
-	 | (PRIM3 p3, RECORD[RBND(l1,a),RBND(l2,b),RBND(l3,c)]) =>
-	      (case (p3,a,b,c) of
-		   (UPDATE1prim{instance},_,_,_) => raise UNIMP)
-	 | (PRIM3 p3, _) => error "prim3 did not get 3 arguments")
+    and eval_prim ((prim,cons),arg) = 
+	let val vals = (case arg of
+			    RECORD rbnds => map (fn (RBND(_,v)) => v) rbnds
+			  | _ => [arg])
+	in PrimUtil.apply prim cons vals
+	end
 
     and eval_exp env (exp : exp) : exp = 
 	let 
 	    val show = (!debug andalso (not (exp_isval exp)))
 	    val _ = if show
-			then (print (!indent); print " eval_exp got: "; Ppil.pp_exp exp; print "\n"; 
+			then (print (Int.toString(!indent)); 
+			      print " eval_exp got: "; Ppil.pp_exp exp; print "\n"; 
 			      indent := (!indent + 1))
 		    else ()
 	    val res = eval_exp' env exp 
 	    handle exn_packet p => raise (exn_packet p)
 		 | e => (print "\n\nError while eval_exp doing: "; Ppil.pp_exp exp; print "\n"; raise e)
 	    val _ = if (show)
-			then (print (!indent); print "   returning: "; Ppil.pp_exp res; print "\n"; 
+			then (print (Int.toString (!indent));
+			      print "   returning: "; Ppil.pp_exp res; print "\n"; 
 			      indent := (!indent - 1))
 		    else ()
 	in res
@@ -348,7 +243,7 @@ functor IlEval(structure Il : IL
     and eval_mod env (module : mod) : mod =
 	let 
 	    val _ =  if (!debug)
-			 then (print (!indent); print " eval_mod got: "; 
+			 then (print (Int.toString (!indent)); print " eval_mod got: "; 
 			       Ppil.pp_mod module; print "\n\n";
 			       indent := (!indent + 1))
 		     else ()
@@ -404,7 +299,7 @@ functor IlEval(structure Il : IL
 	     (OVEREXP (_,_,oe)) => (case oneshot_deref oe of
 					NONE => error "uninst overloaded exp"
 				      | SOME e => eval_exp env e)
-	   | (SCON _ | PRIM _ | TAG _ | LOC _) => exp
+	   | (SCON _ | PRIM _ | TAG _ ) => exp
 	   | (FIX (fbnds,v)) => let fun help (FBND(v1,v2,c1,c2,e)) = 
 		                             FBND(v1,v2,
 						  reduce_con env c1,
@@ -427,7 +322,7 @@ functor IlEval(structure Il : IL
 					      val body' = exp_subst_var(body,(argv,e2')::table)
 					  in eval_exp env body'
 					  end
-				    | PRIM prim => eval_prim(prim,e2')
+				    | PRIM prim_cons => eval_prim(prim_cons,e2')
 				    | _ => error_exp exp "APP applying a non-(FIX or PRIM)")
 			      end
 	   | (RECORD rbnds) => RECORD(map (fn (RBND(l,e)) => RBND(l,eval_exp env e)) rbnds)
@@ -453,18 +348,18 @@ functor IlEval(structure Il : IL
 				     end
 	   | NEW_STAMP c => TAG(fresh_tag(),eval_con env c)
 	   | EXN_INJECT (e1,e2) => EXN_INJECT(eval_exp env e1, eval_exp env e2)
-	   | REF (c,e) => LOC(eval_con env c, ref (eval_exp env e))
-	   | GET (c,e) => (case (eval_exp env e) of
-				     LOC(_,vr) => !vr
+	   | MK_REF e => SCON(refcell (ref (eval_exp env e)))
+	   | GET (e) => (case (eval_exp env e) of
+				     SCON(refcell vr) => !vr
 				   | _ => error "Can't do a GET on a non-loc value")
-	   | SET (c,e1,e2) => (case (eval_exp env e1) of
-				     LOC(_,vr) => (vr := (eval_exp env e2); unit_exp)
-				   | _ => error "Can't do a GET on a non-loc value")
+	   | SET (e1,e2) => (case (eval_exp env e1) of
+				     SCON(refcell vr) => (vr := (eval_exp env e2); unit_exp)
+				   | _ => error "Can't do a SET on a non-loc value")
 	   | ROLL(c,e) => ROLL(eval_con env c, eval_exp env e)
 	   | UNROLL(c,e) => let val c' = eval_con env c
 				val e' = eval_exp env e
 			    in case e' of
-				ROLL(c'',e'') => if (eq_con(c',c'',[])) then e'' 
+				ROLL(c'',e'') => if (eq_con([],c',c'')) then e'' 
 						 else error_exp (UNROLL(c',ROLL(c'',e''))) 
 						     "UNROLL(ROLL(e)) bad"
 			      | _ => error_exp e' "UNROLL did not get a ROLL arg"
@@ -508,8 +403,9 @@ functor IlEval(structure Il : IL
 					  MOD_STRUCTURE sbnds => exp_str_lookup sbnds l
 					| _ => error_exp exp "MODULE_PROJECT applied to non-s"
 				      end
-	   | SEAL (e,c) => eval_exp env e
-	   | SEQ(elist) => foldl (fn (e,cur) => eval_exp env e) (SCON (INT 0w0)) elist)
+(*	   | SEQ(elist) => foldl (fn (e,cur) => eval_exp env e) (SCON (INT 0w0)) elist *)
+	   | SEAL (e,c) => eval_exp env e)
+
 
     and eval_bnd (env : env) (bnd : bnd) : bnd = 
 	(case bnd of

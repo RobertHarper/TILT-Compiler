@@ -1,13 +1,11 @@
 (* Type variables parameterized over types *)
-functor Tyvar(structure Util : UTIL
-	      structure Name : NAME)
+functor Tyvar()
   : TYVAR =
   struct
 
-    structure Name = Name
-    open Name Util
+    open Listops Name Util
 
-    val error = error "tyvar.sml"
+    val error = fn s => error "tyvar.sml" s
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 

@@ -1,29 +1,34 @@
 (* The Il datatypes. *)
-functor Il(structure Util : UTIL
-	   structure Prim : PRIM
-	   structure Name : NAME
-	   structure Tyvar : TYVAR
-	   sharing Tyvar.Name = Name)
+functor Il(structure Prim : PRIM
+	   structure Tyvar : TYVAR)
   : IL = 
   struct
 
-    structure Util = Util
+    open Util Listops Name
     structure Prim = Prim
-    structure Name = Name
     structure Tyvar = Tyvar
-    open Name Prim
+    open Prim
 
-    type   labels = label list
+    type tag = Name.tag
+    type var = Name.var
+    type label = Name.label
+    type labels = Name.label list
+    type prim = Prim.prim
+    type ilprim = Prim.ilprim
+
     datatype path = SIMPLE_PATH   of var 
                   | COMPOUND_PATH of var * labels
 
     type fixity_table = (label * Fixity.fixity) list 
+    type prim = Prim.prim
+    type ilprim = Prim.ilprim
 
     datatype arrow = TOTAL | PARTIAL
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot
-                 | SCON    of scon
-                 | PRIM    of prim
+                 | SCON    of value
+                 | PRIM    of prim * con list
+                 | ILPRIM  of ilprim          (* for type-checking reasons *)
                  | VAR     of var
                  | APP     of exp * exp
                  | FIX     of fbnd list * var
@@ -35,9 +40,9 @@ functor Il(structure Util : UTIL
                  | LET     of bnd list * exp
                  | NEW_STAMP of con
                  | EXN_INJECT of exp * exp (* tag and value *)
-                 | REF     of con * exp
-                 | GET     of con * exp
-                 | SET     of con * exp * exp      (* exp1 := exp2 *)
+                 | MK_REF  of exp
+                 | GET     of exp
+                 | SET     of exp * exp      (* exp1 := exp2 *)
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
                  | INJ     of con list * int * exp
@@ -48,19 +53,16 @@ functor Il(structure Util : UTIL
                  | EXN_CASE of exp * (exp * con * exp) list * exp option
                  | MODULE_PROJECT of mod * label
                  | SEAL    of exp * con
-                 | SEQ     of exp list
-                 | LOC     of con * exp ref (* the exp will be of type CON_REF con *)
+
 
     and     rbnd = RBND    of label * exp
     and     fbnd = FBND    of var * var * con * con * exp  (* var = (var : con) : con |-> exp *)
     and      con = CON_VAR           of var
                  | CON_TYVAR         of  con Tyvar.tyvar  (* supports type inference *)
                  | CON_OVAR          of  con Tyvar.ocon   (* supports "overloaded" types *)
-                 | CON_INT
-                 | CON_UINT
-                 | CON_FLOAT
-                 | CON_CHAR
-                 | CON_LIST          of con
+                 | CON_INT           of Prim.intsize
+                 | CON_UINT          of Prim.intsize
+                 | CON_FLOAT         of Prim.floatsize
                  | CON_ARRAY         of con
                  | CON_VECTOR        of con
                  | CON_ANY
@@ -99,8 +101,7 @@ functor Il(structure Util : UTIL
                  | DEC_CON       of var * kind * con option 
                  | DEC_EXCEPTION of tag * con
                  | DEC_FIXITY    of fixity_table   (* tracks infix precedence *)
-
-    withtype prim = con Prim.prim
+    withtype value = exp Prim.value
 
     type bnds  = bnd list
     type sdecs = sdec list
@@ -109,15 +110,14 @@ functor Il(structure Util : UTIL
 
     datatype inline = INLINE_MODSIG of mod * signat
                     | INLINE_EXPCON of exp * con
+                    | INLINE_CONKIND of con * kind
                     | INLINE_OVER   of unit -> (int list -> exp) * con Tyvar.ocon
 
-    datatype context_entry = CONTEXT_INLINE of label * inline    
-                           | CONTEXT_VAR    of label * var * con
-                           | CONTEXT_CONVAR of label * var * kind * con option
-                           | CONTEXT_MODULE of label * var * signat
+    datatype context_entry = CONTEXT_INLINE of label * var * inline    
+                           | CONTEXT_SDEC   of sdec
                            | CONTEXT_SIGNAT of label * var * signat
                            | CONTEXT_SCOPED_TYVAR of Symbol.symbol list (* tracks of scoped type var *)
-                           | CONTEXT_FIXITY of fixity_table     (* tracks infix precedence *)
+
 
 
     datatype context = CONTEXT of context_entry list
