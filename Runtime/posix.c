@@ -10,6 +10,7 @@
 #elif (defined solaris)
 #include <ieeefp.h>
 #endif
+#include <dirent.h>
 
 #include "tag.h"
 #include "thread.h"
@@ -137,28 +138,35 @@ typedef struct termio_rep_struct *termio_rep;
 
 
 
-static char* mlstring2cstring(string mlstring)
+string cstring2mlstring(char *str)
 {
-  static char buf[1024];
+  return alloc_string(strlen(str),str);
+}
+
+
+char* mlstring2cstring_buffer(string mlstring, int len, char *buf)
+{
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = GET_ARRLEN(tag);
   char *raw = (char *)mlstring;
-  assert((bytelen+1) < sizeof(buf));
+  assert((bytelen+1) <= len);
   bcopy(raw,buf,bytelen);
   buf[bytelen] = 0;
   return (char *)buf;
 }
 
+static char* mlstring2cstring_static(string mlstring)
+{
+  static char buf[1024];
+  return mlstring2cstring_buffer(mlstring, sizeof(buf), buf);
+}
 
 static char* mlstring2cstring_malloc(string mlstring)
 {
   unsigned int tag = ((int *)mlstring)[-1];
   int bytelen = GET_ARRLEN(tag);
   char *buf = malloc(bytelen+1);
-  char *raw = (char *)mlstring;
-  bcopy(raw,buf,bytelen);
-  buf[bytelen] = 0;
-  return (char *)buf;
+  return mlstring2cstring_buffer(mlstring, bytelen+1, buf);
 }
  
 double ln(double arg)
@@ -335,7 +343,7 @@ string posix_error_name(int unused)
 int posix_error_num(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof tbl)/(sizeof (sys_const_t))); i++)
     {
       char *name = tbl[i].name;
@@ -365,7 +373,7 @@ intword_list posix_os_poll(intword_list unused1, intpair_option unused2)
 int posix_io_num(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof io_values)/(sizeof (name_val_t))); i++)
     {
       char *name = io_values[i].name;
@@ -517,8 +525,7 @@ unit posix_io_fsync(int fd)
 
 int posix_procenv_getpid(unit unused)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  return (int)getpid();
 }
 
 int posix_procenv_getppid(unit unused)
@@ -602,7 +609,7 @@ string_stringlist posix_procenv_uname(unit unused)
 int posix_tty_num(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof tty_values)/(sizeof (name_val_t))); i++)
     {
       char *name = tty_values[i].name;
@@ -701,8 +708,8 @@ int_int_int_int_int posix_procenv_times(unit unused)
 string_option posix_procenv_getenv(string mlname)
 {
   char *empty = "";
-  char *cname = mlstring2cstring(mlname);      /* Don't need to free this */
-  char *cvalue = getenv(cname);                /* Don't need to free this and cannot modify it */
+  char *cname = mlstring2cstring_static(mlname);  /* Don't need to free this */
+  char *cvalue = getenv(cname);                   /* Don't need to free this and cannot modify it */
   value_t mlvalue = (cvalue == NULL) ? 0 : alloc_string(strlen(cvalue),cvalue);
   return mlvalue;
 }
@@ -734,7 +741,7 @@ bool posix_procenv_isatty(int unused)
 int posix_process_num(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof process_values)/(sizeof (name_val_t))); i++)
     {
       char *name = process_values[i].name;
@@ -748,7 +755,7 @@ int posix_process_num(string arg)
 word posix_process_sysconf(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof sysconf_keys)/(sizeof (name_val_t))); i++)
     {
       char *name = sysconf_keys[i].name;
@@ -890,7 +897,7 @@ int posix_process_sleep(int unused)
 int posix_signal_num(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof signal_values)/(sizeof (name_val_t))); i++)
     {
       char *name = signal_values[i].name;
@@ -904,7 +911,7 @@ int posix_signal_num(string arg)
 word posix_filesys_num(string arg)
 {
   int i;
-  char* carg = mlstring2cstring(arg);
+  char* carg = mlstring2cstring_static(arg);
   for (i=0; i<((sizeof filesys_values)/(sizeof (name_val_t))); i++)
     {
       char *name = filesys_values[i].name;
@@ -915,28 +922,35 @@ word posix_filesys_num(string arg)
   assert(0);
 }
 
-int posix_filesys_opendir(string unused)
+int posix_filesys_opendir(string dirname)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  char* cdir = mlstring2cstring_static(dirname);
+  DIR *dir = opendir(cdir);
+  return (int)dir;
 }
 
-string posix_filesys_readdir(int unused)
+string posix_filesys_readdir(int arg)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  DIR *dir = (DIR *)arg;
+  struct dirent *entry = readdir(dir);
+  if (entry == NULL)
+    return cstring2mlstring("");
+  else 
+    return cstring2mlstring(entry->d_name);
 }
 
-unit posix_filesys_rewinddir(int unused)
+unit posix_filesys_rewinddir(int arg)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  DIR *dir = (DIR *)arg;
+  rewinddir(dir);
+  return 256; /* unit */
 }
 
-unit posix_filesys_closedir(int unused)
+unit posix_filesys_closedir(int arg)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  DIR *dir = (DIR *)arg;
+  closedir(dir);
+  return 256; /* unit */
 }
 
 unit posix_filesys_chdir(string unused)
@@ -953,7 +967,7 @@ string posix_filesys_getcwd(unit unused)
 
 int posix_filesys_openf(string filename, word oflag, word mode)
 {
-  int fd = open(mlstring2cstring(filename),oflag,mode);
+  int fd = open(mlstring2cstring_static(filename),oflag,mode);
   if (fd == -1)
     {
       printf("POSIX function open returned with errno = %d\n", errno);
@@ -974,10 +988,13 @@ unit posix_filesys_link(string unusd1, string unused2)
   assert(0);
 }
 
-unit posix_filesys_rename(string unused1, string unused)
+unit posix_filesys_rename(string from, string to)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+  char buf[1024];
+  char *cfrom = mlstring2cstring_static(from);
+  char *cto = mlstring2cstring_buffer(to, sizeof(buf), buf);  /* can't use ..._static twice */
+  rename(cfrom,cto);
+  return 256; /* unit */
 }
 
 unit posix_filesys_symlink(string unused1, string unused)
@@ -1000,7 +1017,7 @@ unit posix_filesys_mkfifo(string unused1, word unused)
 
 unit posix_filesys_unlink(string arg)
 {
-  char* path = mlstring2cstring(arg);
+  char* path = mlstring2cstring_static(arg);
   int result = unlink(path);
   if (result) {
     printf("posix_filesys_unlink failed with errno = %d\n", errno);
@@ -1052,7 +1069,7 @@ statrep cstat2mlstat(struct stat *buffer)
 statrep posix_filesys_stat(string name)
 {
   struct stat buffer;
-  int error = stat(mlstring2cstring(name),&buffer);
+  int error = stat(mlstring2cstring_static(name),&buffer);
   if (error)
     {
       printf("POSIX function stat returned error: errno = %d should raise exn\n",
@@ -1065,7 +1082,7 @@ statrep posix_filesys_stat(string name)
 statrep posix_filesys_lstat(string name)
 {
   struct stat buffer;
-  int error = lstat(mlstring2cstring(name),&buffer);
+  int error = lstat(mlstring2cstring_static(name),&buffer);
   if (error)
     {
       printf("POSIX function lstat returned error: errno = %d should raise exn\n",
@@ -1091,7 +1108,7 @@ statrep posix_filesys_fstat(int filedesc)
 /* XXX what about errno's other than NOENT - shouldn't an exception be raised by posix-filesys.sml? */
 bool posix_filesys_access(string name, word mode)
 {
-  char *cname = mlstring2cstring(name);
+  char *cname = mlstring2cstring_static(name);
   int code = access(cname,mode);
   if (code == 0)
     return 1; /* true */

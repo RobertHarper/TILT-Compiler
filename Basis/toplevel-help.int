@@ -2,6 +2,8 @@
 
 
 val option_valOf  : 'a option -> 'a
+val option_isSome : 'a option -> bool
+
 val list_app : ('a -> unit) -> 'a list -> unit
 val list_map : ('a -> 'b) -> 'a list -> 'b list
 val list_hd : 'a list -> 'a

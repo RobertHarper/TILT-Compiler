@@ -5,6 +5,8 @@ extern ml_output : (int, string, unit) -->
 fun raw_print(s : string) : unit = Ccall(ml_output,1,s)
 
 val valOf = option_valOf
+val isSome = option_isSome
+
 val app = list_app
 val map = list_map
 val hd = list_hd

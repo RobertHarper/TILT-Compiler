@@ -11,7 +11,8 @@ struct
     open Nil
     open TortlBase TortlRecord
     open Rtltags
-    
+
+    val maxByteRequest = 8192
     val w2i = TilWord32.toInt
     val i2w = TilWord32.fromInt
     val do_writelist = ref true
@@ -285,7 +286,7 @@ struct
 	    let
 		val tmp' = alloc_regi(NOTRACE_INT)
 	    in
-		add_instr(LI(TilWord32.fromInt 4096,tmp'));
+		add_instr(LI(TilWord32.fromInt (maxByteRequest div 8),tmp'));
 		add_instr(BCNDI(LE, len, REG tmp', fsmall_alloc, true))
 	    end;
 	    add_instr(CALL{call_type = C_NORMAL,
@@ -438,7 +439,7 @@ struct
 		    (let
 			 val tmp' = alloc_regi(NOTRACE_INT)
 		     in
-			 add_instr(LI(TilWord32.fromInt 4096,tmp'));
+			 add_instr(LI(TilWord32.fromInt (maxByteRequest div 4),tmp'));
 			 add_instr(BCNDI(LE, wordlen, REG tmp', ismall_alloc, true))
 		     end;
 		     add_instr(CALL{call_type = C_NORMAL,
@@ -493,7 +494,7 @@ struct
 	    in  (let
 		     val tmp' = alloc_regi(NOTRACE_INT)
 		 in
-		     add_instr(LI(TilWord32.fromInt 4096,tmp'));
+		     add_instr(LI(TilWord32.fromInt (maxByteRequest div 4),tmp'));
 		     add_instr(BCNDI(LE, len, REG tmp', psmall_alloc, true))
 		 end;
 		 add_instr(CALL{call_type = C_NORMAL,

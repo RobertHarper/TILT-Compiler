@@ -21,7 +21,7 @@ signature UTIL =
     val mapopt : ('a -> 'b) -> 'a option -> 'b option
     val split_opt : ('a * 'b) option -> 'a option * 'b option
 
-    val substring : string * string -> bool (* (look for) pattern * (in) target -> present *)
+    val substring : string * string -> int option (* (look for) pattern * (in) target -> present *)
 (*
     (* Conversion: strings to/from int/word/char *)
     val IntStr2word : string -> Word32.word

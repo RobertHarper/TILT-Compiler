@@ -1,4 +1,24 @@
-(*$import MANAGER LinkParse LinkIl Compiler Linker MakeDep OS List SplayMapFn SplaySetFn Platform *)
+(*$import MANAGER LinkParse LinkIl Compiler Linker OS List SplayMapFn SplaySetFn Platform *)
+
+(* This is a slave step which gives a result:
+
+     Is there a message from the master?
+     (A) Yes, fetch the job j from from the channel. Compile j.  Send acknowledgement. 
+         This result in a WORK j.
+     (B) No, Is there a message from me to the master?
+         (1) Yes, do nothing.  Master has yet to consume this message. Result is WAIT.
+         (2) No, send ready message.  Result is READY.
+
+   The master sets up by deleting all channels and then takes master steps which are:
+   
+     While there are available jobs
+         (1) Look for available slave channels and process their acknowledgements
+	     by marking compilation jobs as done.  Ready messages require no action.
+	 (2) Issue all available jobs to availalbe slaves.
+	     (A) If there are more jobs than slaves, then we are PROCESSING fully.
+	     (B) Otherwise, we are IDLEing because the slaves are underutilized.
+     When there are no more jobs, we are COMPLETEd.
+*)
 
 structure Help :> HELP = 
 struct
@@ -38,154 +58,127 @@ struct
 end
 
 
-structure Communication :> COMMUNICATION = 
+structure Comm :> COMMUNICATION =
 struct
+
+    val error = fn s => Util.error "manager.sml" s
+
     type job = string list
+    datatype message = READY                 (* Slave signals readiness *)
+		     | ACK_INTERFACE of job  (* Slave signals that interface has compiled *)
+		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
+		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
+                     | FLUSH                 (* Master signals that slaves should flush file cache *)
+	             | REQUEST of job        (* Master requests slave to compile file *)
     val delimiter = #"|"
-    val ready = "!READY!" (* Slaves send this to signify readiness *)
-    val done = "!DONE!"   (* Master sends this to terminate slaves.
-			     Normally, the master sends an acknowledgement by sending the next request. *)
+    val ready = "READY"
+    val ack_interface= "ACK_INTERFACE"
+    val ack_object = "ACK_OBJECT"
+    val ack_error = "ACK_ERROR"
+    val flush = "FLUSH"
+    val request = "REQUEST"
 
-    fun namepid2ID (name,pid) = name ^ "." ^ (Int.toString pid)
-    val SOME selfName = OS.Process.getEnv "HOST"
-    val selfPid = Word32.toInt(Platform.pid())
-    val selfID = namepid2ID(selfName, selfPid)
-    fun channel(from, to) = to ^ "<-" ^ from 
+    fun messageToWords READY = [ready]
+      | messageToWords (ACK_INTERFACE words) = ack_interface :: words
+      | messageToWords (ACK_OBJECT words) = ack_object :: words
+      | messageToWords (ACK_ERROR words) = ack_error :: words
+      | messageToWords FLUSH = [flush]
+      | messageToWords (REQUEST words) = request :: words
+    fun wordsToMessage [] = error "no words - bad msg"
+      | wordsToMessage (first::rest) = 
+	if (first = ready andalso null rest)
+	    then READY
+	else if (first = flush andalso null rest)
+	    then FLUSH
+	else if (first = ack_interface)
+		 then ACK_INTERFACE rest
+	else if (first = ack_object)
+		 then ACK_OBJECT rest
+	else if (first = ack_error)
+		 then ACK_ERROR rest
+        else if (first = request)
+		 then REQUEST rest
+	else error ("strange header word " ^ first ^ " - bad msg")
 
-    (* --- Asynchronously send the message on the channel --- *)
-    fun send (channel, strings) = 
+    type channel = string * string
+    local
+	val SOME selfName = OS.Process.getEnv "HOST"
+	val selfName = (case Util.substring(".cs.cmu.edu",selfName) of
+			    NONE => error "cannot strip of realm name .cs.cmu.edu"
+			  | SOME pos => String.substring(selfName,0,pos))
+	val selfPid = Word32.toInt(Platform.pid())
+	val self = selfName ^ "." ^ (Int.toString selfPid)
+    in  val toMaster = (self, "master")
+	val fromMaster = ("master", self)
+	fun isToMaster (from,to) = to = "master"
+    end
+
+    fun source(from, to) = from
+    fun destination(from, to) = to
+    fun reverse(from, to) = (to, from)
+    fun channelToName(from, to) = from ^ "->" ^ to
+    fun nameToChannel name : channel option = 
+	(case Util.substring ("->", name) of
+	     NONE => NONE
+	   | SOME pos => if (String.sub(name,0) = #"!")
+			     then NONE
+			 else let val from = String.substring(name,0,pos)
+				  val to = String.substring(name, pos+2, (size name) - (pos + 2))
+			      in  SOME(from, to) 
+			      end)
+
+    fun remove (file : string) = if (OS.FileSys.access(file, [OS.FileSys.A_READ]))
+				     then OS.FileSys.remove file
+				 else ()
+    fun erase channel = let val file = channelToName channel
+			in  remove file
+			end
+    fun exists channel = OS.FileSys.access(channelToName channel,[])
+
+
+    fun send (channel, message) = 
 	let fun loop [] = ""
 	      | loop [str] = str
 	      | loop (str::rest) = str ^ (String.str delimiter) ^ (loop rest)
-	    val message = loop strings
-	    val temp = "TEMP" ^ channel
-	    val _ = if (OS.FileSys.access(temp, [OS.FileSys.A_READ]))
-			then OS.FileSys.remove temp
-		    else ()
+	    val message = loop (messageToWords message)
+	    val temp = "!" ^ (channelToName channel)
+	    val _ = remove temp
 	    val fd = TextIO.openAppend temp
 	    val _ = TextIO.output(fd, message)
 	    val _ = TextIO.closeOut fd
-	    val _ = OS.FileSys.rename{old=temp, new=channel}
+	    val _ = OS.FileSys.rename{old=temp, new=(channelToName channel)}
 	in  ()
 	end
 
-    (* --- Asynchronously look for a message on the channel --- *)
-    fun receive channel : job option =
-	if (OS.FileSys.access(channel,[])) 
-	    then let val fd = TextIO.openIn channel
+    fun receive channel : message option =
+	if (exists channel)
+	    then let val fd = TextIO.openIn (channelToName channel)
 		     fun loop acc = if (TextIO.endOfStream fd)
 					then acc
 				    else loop (acc ^ (TextIO.inputAll fd))
-		     val message = loop ""
+		     val string = loop ""
 		     val _ = TextIO.closeIn fd
-		     val _ = OS.FileSys.remove channel
-		     fun loop words curWord [] = rev ((implode (rev curWord)) :: words)
-		       | loop words curWord ((c : char)::crest) = 
-			 if (c = delimiter)
-			     then loop ((implode (rev curWord)) :: words) [] crest
-			 else loop words (c :: curWord) crest
-		     val words = loop [] [] (explode message)
-		 in  SOME words
+		     val _ = erase channel
+(*		     val _ = (print "XXX received from "; print (source channel);
+			      print string; print "\n") *)
+		     val words = String.fields (fn c => c = delimiter) string
+		 in  SOME (wordsToMessage words)
 		 end
 	else NONE
 
-    fun channelReady channel = not (OS.FileSys.access(channel,[]))
 
-    (* Non-blocking acknowledgement *)
-    fun acknowledge (completed : job option) = 
-	let val masterID = "master"
-	    val slaveID = selfID
-	    val ch = channel(slaveID, masterID)
-	    (* Acknowledge job completion and request more if acknowledgement processed *)
-	in (case completed of
-		SOME msg => send(ch, msg)
-	      | NONE => send(ch, [ready]))
-	end
-    (* blocking request for jobs *)
-    fun request () : job option =
-	let val masterID = "master"
-	    val slaveID = selfID
-	    val ch = channel(masterID, slaveID)
-	    (* Look for available jobs *)
-	    fun loop() = 
-		(case receive ch of
-		     NONE => loop()
-		   | SOME msg => 
-			 (case msg of
-			      [word] => if (word = done) then NONE else SOME msg
-			    | _ => SOME msg))
-	in  loop()
-	end
-
-
-    (* Master looks for willing slaves - this call does not block 
-       Slaves are represented by an optional string (indicating the file it just compiled)
-          and an invoking function to cause the slave to continue compiling.
-    *)
-    fun findSlaves () =
+    fun findToMasterChannels() =
 	let val files = 
-	      let val dirstream = OS.FileSys.openDir "."
-		  fun loop acc = let val cur = OS.FileSys.readDir dirstream
-				 in  if (cur = "")
-					 then (OS.FileSys.closeDir dirstream; acc)
-				     else loop (cur :: acc)
-				 end
-	      in  loop []
-	      end
-	    val masterID = "master"
-	    val len = size masterID
-	    val channels = List.filter (fn s => (size s > len) andalso
-					        (String.substring(s,0,len) = masterID)) files
-	    fun apper channel = 
-		let val SOME message = receive channel
-(*		    val _ = (print "received from slave: "; Help.chat_strings 20 message; print "\n") *)
-		    val message = (case message of
-				       [temp] => if (temp = ready) then NONE else SOME message
-				     | _ => SOME message)
-		    val tmp = size "master<-"
-		    val slaveName = String.substring(channel,tmp,(size channel) - tmp)
-		    val revChannel = slaveName ^ "<-master"
-		    fun invoke NONE = send(revChannel, [done])
-		      | invoke (SOME words) = send(revChannel, words)
-		in  (slaveName, message, invoke)
-		end
-	in  map apper channels
-	end
-
-    fun masterTest() = 
-	let val max = 5
-	    val current = ref 0
-	    val completed = ref 0
-	    fun nextJob invoke = (current := (!current) + 1;
-				  if (!current > max) 
-				      then invoke NONE
-				  else (print "Issuing "; print (Int.toString (!current)); print "\n";
-					invoke (SOME [(Int.toString(!current))]));
-				  if (!current = max) then print "Done Issuing\n" else ())
-	    fun loop () = 
-		let val slaves = findSlaves()
-		in  app (fn (slaveName, done, invoke) => 
-			 ((case done of
-			      NONE => ()
-			    | SOME str => (completed := (!completed) + 1;
-					   print ("  Slave " ^ slaveName ^ 
-						  " completed " ^ (String.concat str) ^ "\n")));
-			       nextJob invoke)) slaves;
-		    if (!completed < max) then loop() else (print "Master done\n"; ())
-		end
-	in  loop()
-	end
-
-    fun slaveTest() = 
-	let val _ = acknowledge NONE
-	    fun loop () = 
-		(case (request()) of
-		     NONE => print "Slave done\n"
-		   | SOME msg => (print "Received "; app print msg; print "\n";  
-				  Platform.sleep 1.0; acknowledge (SOME msg);
-				  print "Processed "; app print msg; print "\n";  
-				  loop ()))
-	in  loop ()
+	    let val dirstream = OS.FileSys.openDir "."
+		fun loop acc = let val cur = OS.FileSys.readDir dirstream
+			       in  if (cur = "")
+				       then (OS.FileSys.closeDir dirstream; acc)
+				   else loop (cur :: acc)
+			       end
+	    in  loop []
+	    end
+	    val channels = List.mapPartial nameToChannel files
+	in  List.filter isToMaster channels
 	end
 end
 
@@ -241,14 +234,13 @@ struct
       let val exists = 
 	  ((OS.FileSys.access(file, []) andalso
 	    OS.FileSys.access(file, [OS.FileSys.A_READ]))
-	   handle _ => (print ("Warning: OS.FileSys.access " ^ 
-			       file ^ "\n"); false))
+	   handle _ => (print ("Warning: OS.FileSys.access on " ^ 
+			       file ^ " failed \n"); false))
       in  if exists
 	      then SOME(OS.FileSys.fileSize file, OS.FileSys.modTime file)
 	  else NONE
       end
 	
-
   (* This two functions totally or partially flushes the cache *)
   fun flushAll() = (stats := StringMap.empty)
   fun flushSome files = 
@@ -274,6 +266,15 @@ struct
   fun size file = (case modTimeSize_cached file of
 		       NONE => error ("size on non-existent file " ^ file)
 		     | SOME (s,t) => s)
+
+  (* ----- Compute the latest mod time of a list of exiting files --------- *)
+    fun lastModTime [] = (NONE, Time.zeroTime)
+      | lastModTime (f::fs) = 
+	let
+	    val recur_result as (_,fstime) = lastModTime fs 
+	    val ftime = modTime f
+	in  if (Time.>=(ftime, fstime)) then (SOME f, ftime) else recur_result
+	end
 
   fun tick() =
       let fun mapper (CACHED (s, t, crc, tick, r)) = if (tick <= 1) then PRESENT (s,t)
@@ -345,6 +346,7 @@ struct
 	    val is = BinIO.openIn file
 	    val res = LinkIl.IlContextEq.blastInPartialContext is
 	    val _ = BinIO.closeIn is
+	    val _ = print ("XXX done reading context file " ^ file ^ "\n")
 	in  res
 	end
     val readPartialContextRaw = Stats.timer("ReadingContext",readPartialContextRaw)
@@ -406,30 +408,7 @@ struct
 	  | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 
 
-    fun setup () = (print "Starting slave.\n";
-		    Cache.flushAll();
-		    Communication.acknowledge NONE)
-    (* Blocking single step of slave - bool indicates progress *)
-    fun single perform =
-	(case Communication.request() of
-	     NONE => false
-	   | SOME cur => ((* Help.chat ("Received "); Help.chat_strings 10 cur; Help.chat "\n"; *)
-			  perform cur; Communication.acknowledge (SOME cur);
-			  (* Help.chat ("Processed "); Help.chat_strings 10 cur; Help.chat "\n"; *)
-			  true))
-    fun all perform =
-	let val _ = setup()
-	    fun loop () =
-		(if (single perform)
-		    then loop()  (* did some work *)
-		 else 
-		     all perform)  (* restarting *)
-	in  loop()
-	end
-
-    fun slaveTest() = all (fn _ => Platform.sleep 1.0)
-
-    fun perform (unit::base::importBases) = 
+    fun compile (unit,base,importBases) = 
 	let val intFile = Help.base2int base
 	    val smlFile = Help.base2sml base
 	    val uiFile = Help.base2ui base
@@ -444,47 +423,109 @@ struct
 	    val il_module =
 		if Cache.exists intFile then
 		    let val (_,fp2, _, specs) = LinkParse.parse_inter intFile
-			val _ = Help.chat ("  [Warning: constraints currently coerce.  Not compatiable with our notion of freshness.]\n")
+			val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
+			val _ = Help.chat ("Not compatiable with our notion of freshness.]\n")
 			val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
 		    in elab_constrained(unit,ctxt,smlFile,fp,dec,fp2,specs,uiFile,Time.zeroTime)
 		    end
 		else let val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
 		     in elab_nonconstrained(unit,ctxt,smlFile,fp,dec,uiFile,Time.zeroTime)
 		     end
-
-
-	    (* Continue compilation, generating a platform-dependent .o object file *)
-	    val _ = Help.chat ("  [Compiling to object file ...")
-	    val oFile = Til.compile (unit,base, il_module)
-	    val _ = Cache.flushSome [oFile]
-	    val _ =  Help.chat "]\n"
-		
-	    (* Generate a .uo file containing the checksum for the .o file *)
-	    val _ = Help.chat ("  [Creating .uo file ...")
-	    val imports_uo = map (fn impBase => (impBase, Cache.crc (Help.base2ui impBase))) importBases
-	    val exports_uo = [(base, Cache.crc uiFile)]
-	    val uoFile = Linker.mk_uo {imports = imports_uo,
-				       exports = exports_uo,
-				       base_result = base}
-	    val _ = Cache.flushSome [uoFile]
-	    val _ = Help.chat "]\n"
-
-
+	in  fn () =>
+	    let (* Continue compilation, generating a platform-dependent .o object file *)
+		val _ = Help.chat ("  [Compiling to object file ...")
+		val oFile = Til.compile (unit,base, il_module)
+		val _ = Cache.flushSome [oFile]
+		val _ =  Help.chat "]\n"
+		    
+		(* Generate a .uo file containing the checksum for the .o file *)
+		val _ = Help.chat ("  [Creating .uo file ...")
+		val imports_uo = map (fn impBase => (impBase, Cache.crc (Help.base2ui impBase))) 
+		                 importBases
+		val exports_uo = [(base, Cache.crc uiFile)]
+		val uoFile = Linker.mk_uo {imports = imports_uo,
+					   exports = exports_uo,
+					   base_result = base}
+		val _ = Cache.flushSome [uoFile]
+		val _ = Help.chat "]\n"
 		
 	    (* Print some diagnostic information *)
-	    val _ = if (!stat_each_file)
-			then (OS.Process.system ("size " ^ oFile); Stats.print_timers())
-		    else ()
-	      in  ()
+		val _ = if (!stat_each_file)
+			    then (OS.Process.system ("size " ^ oFile); 
+				  Stats.print_timers();
+				  Stats.clear_stats())
+			else ()
+	    in  ()
+	    end
 	end
-      | perform _ = error "Slave received ill-formed message"
-	
-    fun step() = single perform 
-    fun run() = all perform 
+
+    fun setup () = (print "Starting slave.\n";
+		    Cache.flushAll())
+
+
+    fun step () = 
+	(case Comm.receive Comm.fromMaster of
+	     NONE => if (Comm.exists Comm.toMaster)
+			 then WAIT
+		     else (Comm.send (Comm.toMaster, Comm.READY); READY)
+	   | SOME Comm.READY => error "Slave got a ready message"
+	   | SOME (Comm.ACK_INTERFACE _) => error "Slave got an ack_interface message"
+	   | SOME (Comm.ACK_OBJECT _) => error "Slave got an ack_object message"
+	   | SOME (Comm.ACK_ERROR _) => error "Slave got an ack_error message"
+	   | SOME Comm.FLUSH => (Cache.flushAll(); READY)
+	   | SOME (Comm.REQUEST (job as (unit::base::imports))) => 
+		       (* It's okay for the first acknowledgement to be missed. 
+			  In fact, we skip the acknowledgement if the expected compilation 
+			  time was small to avoid communication traffic. *)
+		       let 
+			   val start = Time.now()
+			   val rest = compile (unit,base,imports)
+				       handle e => 
+					   (Comm.send(Comm.toMaster, Comm.ACK_ERROR job);
+					    raise e)
+			   val diff = Time.-(Time.now(), start)
+			   val _ = if (Time.toReal diff > 0.5)
+				       then (print "XXX sending ACK_INTERFACE: interface took ";
+					     print (Time.toString diff);
+					     print " seconds \n";
+					     Comm.send (Comm.toMaster, Comm.ACK_INTERFACE job))
+				   else print "XXX skipping ACK_INTERFACE\n"
+			   val _ = rest()
+			             handle e => 
+					 (Comm.send(Comm.toMaster, Comm.ACK_ERROR job);
+					  raise e)
+			   val _ = Comm.send (Comm.toMaster, Comm.ACK_OBJECT job)
+		       in  WORK unit
+		       end
+	   | SOME (Comm.REQUEST _) => error "Slave got a funny request")
+
+    fun run() = 
+	let val _ = setup()
+	    val last = ref READY
+	    fun loop() = 
+		let val prev = !last
+		    val cur = step()
+		    val _ = last := prev
+		in  (case cur of
+			 WORK job => chat ("Slave compiled " ^ job ^ "\n")
+		       | WAIT => let val pause = (case prev of
+						      WORK _ => 0.1
+						    | _ => 0.5)
+				 in  chat ("Slave waiting for master to send work.\n");
+				     Platform.sleep pause
+				 end
+		       | READY => let val pause = (case prev of
+						       WORK _ => 0.1
+						     | _ => 0.5)
+				  in  chat ("Slave waiting for master to send work.\n");
+				      Platform.sleep pause
+				  end);
+		    loop()
+		end
+	in loop()
+	end
 
 end
-
-
 
 
 structure Master =
@@ -492,6 +533,8 @@ struct
     val error = fn s => Util.error "pmanager.sml" s
     open Help
 
+    val show_stale = Stats.ff("ShowStale")
+    val show_enable = Stats.ff("ShowEnable")
     structure Cache = FileCache(type internal = unit
 				val equaler = fn _ => true
 				val reader = fn _ => error "Master structure called read"
@@ -535,215 +578,280 @@ struct
     val _ = "*)*)"
 
 
-    datatype status = WAITING | READY | PENDING | DONE
+    type collapse = {maxWeight : int, maxParents : int, maxChildren : int}
+    datatype status = 
+	WAITING                 (* Not ready for compilation because some imports are not ready. *)
+      | READY of Time.time      (* Ready for compilation. Ready time. *) 
+      | PENDING of Time.time    (* Compiling interface. Pending time.*)
+      | PROCEEDING of Time.time (* Compiled interface.  Compiling object file. Pending Time. *)
+      | DONE                    (* Interface and object are both generated. *)
     local
-	datatype unitinfo = 
-	    UNIT of {position : int,
-		     filebase : string,
-		     imports_direct  : string list option ref,
-		     imports_transitive : string list option ref,
-		     dependents_direct : string list ref,
-		     status : status ref}
-	    
-        val units = ref ([] : string list)
-	val mapping = ref (StringMap.empty : unitinfo StringMap.map)
 
-	fun find_unit unitname = StringMap.find(!mapping,unitname)
+	val graph = ref (Dag.empty() : {position : int,
+					filebase : string,
+					status : status ref} Dag.graph)
+        val units = ref (true, ([] : string list)) (* kept in reverse order if bool is true *)
+
 	fun lookup unitname =
-	    (case (find_unit unitname) of
-		 NONE => error ("unit " ^ unitname ^ " missing")
-	       | SOME entry => entry)
+	    ((Dag.nodeAttribute(!graph,unitname))
+	     handle Dag.UnknownNode => error ("unit " ^ unitname ^ " missing"))
  
     in 
-	fun list_units() = !units
 
-	fun get_base unit = 
-            let val UNIT{filebase,...} = lookup unit
-            in filebase 
-	    end
-	fun get_position unit = 
-            let val UNIT{position,...} = lookup unit
-            in  position
-	    end
-	fun get_import_direct unit = 
-            let val UNIT{imports_direct = ref (SOME res),...} = lookup unit
-            in  res
-	    end
-	fun get_dependent_direct unit = 
-            let val UNIT{dependents_direct = ref res,...} = lookup unit
-            in  res
-	    end
-	fun get_import_transitive unit = 
-            let val UNIT{imports_transitive = ref (SOME res),...} = lookup unit
-            in  res
-	    end
 
-	fun isDone unit = 
-	    let val UNIT{status,...} = lookup unit
-	    in  (case !status of
-		     DONE => true
-		   | _ => false)
-	    end
-	fun markReady unit = 
-	    let val UNIT{status,...} = lookup unit
-	    in  (case !status of
-		     WAITING => status := READY
-		   | READY => status := READY
-		   | PENDING => error "unit was pending; making ready\n"
-		   | DONE => error "unit was done; making ready\n")
-	    end
-	fun checkReady unit = 
-	    let val imports = get_import_direct unit (* no need to check transitively *)
-		val ready = Listops.andfold isDone imports
-	    in  if ready then markReady unit else ()
-	    end
-	fun markPending unit = 
-	    let val UNIT{status,filebase,dependents_direct,...} = lookup unit
-		val _ = status := PENDING
+	fun reset_graph() = (graph := Dag.empty(); 
+			     units := (true, []))
+	fun add_node(node, size, attribute) = 
+	    let val u = (case !units of
+			     (false, rev_ls) => (false, node :: rev_ls)
+			   | (true, ls) => (false, node :: (rev ls)))
+		val _ = units := u
+		val _ = Dag.insert_node(!graph,node,size,attribute)
 	    in  ()
 	    end
-	(* Do we need to wait til the ui file is visible here? *)
-	fun isDone unit = 
-	    let val UNIT{status,filebase,dependents_direct,...} = lookup unit
-	    in  (case (!status) of
-		     DONE => true
-		   | _ => false)
-	    end
-	fun markDone unit = 
-	    let val UNIT{status,filebase,dependents_direct,...} = lookup unit
-		val uifile = base2ui filebase
-		val _ = status := DONE
-	    in  app checkReady (!dependents_direct)
-	    end
-	fun partition units = 
-	    let fun folder (unit,(w,r,p,d)) = 
-		let val UNIT {status,...} = lookup unit
-		in  (case !status of
-			 WAITING => (unit::w, r, p, d)
-		       | READY => (w, unit::r, p, d)
-		       | PENDING => (w, r, unit::p, d)
-		       | DONE => (w, r, p, unit::d))
-		end
-	    in  foldl folder ([],[],[],[]) units
-	    end
-	fun computeTransitive targetunit (seen : StringOrderedSet.set) : string list =
-	    let val UNIT{imports_transitive, ...} = lookup targetunit
-	    in  (case !imports_transitive of
-		   NONE => 
-		       let fun folder(import,acc) = 
-			   let val depends = computeTransitive import (StringOrderedSet.cons(import,seen))
-			   in  StringOrderedSet.cons(import,foldl StringOrderedSet.cons acc depends)
-			   end
-			   fun check_loop imports = 
-			       app (fn imp => if (StringOrderedSet.member(imp,seen))
-						  then error ("Loop detected in: " ^
-							      foldr (fn (a,b) => (a ^ " " ^ b)) "" 
-							      (StringOrderedSet.toList seen))
-					      else ()) imports
-			   val base_imports = get_import_direct targetunit
-			   val _ = check_loop base_imports
-			   val result = rev(StringOrderedSet.toList 
-					    (foldl folder StringOrderedSet.empty base_imports))
-			   val _ = imports_transitive := SOME result
-		       in  result
-		       end
-		 | SOME result => result)
-	    end
-	val computeTransitive = fn unit => computeTransitive unit StringOrderedSet.empty
+	fun add_edge(src,dest) = Dag.insert_edge(!graph,src,dest)
 
-	fun setMapping mapFile =
+
+	fun list_units() = (case !units of
+				(true, ls) => ls
+			      | (false, rev_ls) => 
+				    let val ls = rev rev_ls
+					val _ = units := (true, ls)
+				    in ls
+				    end)
+
+	fun get_base unit = #filebase(lookup unit)
+	fun get_position unit = #position(lookup unit)
+	fun get_status unit = !(#status(lookup unit))
+	fun set_status (unit,s) = (#status(lookup unit)) := s
+
+	fun get_import_direct unit = 
+	    (Dag.parents(!graph,unit)
+	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	fun get_import_transitive unit = 
+	    (rev(Dag.ancestors(!graph,unit))
+	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	fun get_dependent_direct unit = 
+	    (Dag.children(!graph,unit)
+	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	fun get_size unit = 
+	    (Dag.nodeWeight(!graph,unit)
+	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+	fun get_depth unit = 
+	    (Dag.pathWeight(!graph,unit)
+	     handle Dag.UnknownNode => error ("unit " ^ unit ^ " missing"))
+
+	fun markReady unit = 
+	    (case (get_status unit) of
+		 WAITING => set_status(unit,READY (Time.now()))
+	       | READY _ => ()
+	       | PENDING _ => error "unit was pending; making ready\n"
+	       | PROCEEDING _ => error "unit was proceeding; making ready\n"
+	       | DONE => error "unit was done; making ready\n")
+
+	fun markPending unit = 
+	    (case (get_status unit) of
+		 WAITING => error "markPending: unit was waiting\n"
+	       | READY _ => set_status(unit,PENDING (Time.now()))
+	       | PENDING _ => ()
+	       | PROCEEDING _ => error "markPending: unit was proceeding\n"
+	       | DONE => error "markPending: unit was done\n")
+
+	fun enableChildren parent = 
+	    let 
+		fun enableReady child = 
+		    let val imports = get_import_direct child (* no need to check transitively *)
+			fun atLeastProceeding unit = (case (get_status unit) of
+							  PROCEEDING _ => true
+							| DONE => true
+							| _ => false)
+			val ready = Listops.andfold atLeastProceeding imports
+		    in  ready andalso 
+			(case get_status child of
+			     WAITING => (markReady child; true)
+			   | _ => false)  (* The child status may be beyond READY since
+					     the same parent might call enableChildren twice. *)
+		    end
+		val enabled = List.filter enableReady (get_dependent_direct parent)
+	    in  if (!show_enable andalso (not (null enabled) ))
+		    then (chat "  [Compilation of "; chat parent;
+			  chat " has enabled these units: ";
+			  chat_strings 40 enabled; 
+			  chat "]\n")
+		else ()
+	    end
+
+	fun markProceeding unit = 
+	    ((case (get_status unit) of
+		 WAITING => error "markProceeding: unit was waiting\n"
+	       | READY _ => error "markProceeding: unit was ready\n"
+	       | PENDING t => set_status(unit,PROCEEDING t)
+	       | PROCEEDING _ => ()
+	       | DONE => error "markProceeding: unit was done\n");
+	      enableChildren unit)
+
+	(* We must call enableChildren here because units may skip through the Proceeding stage. *)
+	fun markDone unit : Time.time = 
+	    let val startTime = 
+		(case (get_status unit) of
+		     WAITING => error "markDone: unit was waiting\n"
+		   | READY t =>   (set_status(unit,DONE); t) (* May not need compile this unit. *)
+		   | PENDING t => (set_status(unit,DONE); t) (* Might have missed the proceding step. *)
+		   | PROCEEDING t => (set_status(unit,DONE); t)
+		   | DONE => (Time.now()))
+		val _ = enableChildren unit
+	    in  startTime
+	    end
+
+
+	fun partition units = 
+	    let fun folder (unit,(w,r,pe,pr,d)) = 
+		(case (get_status unit) of
+		     WAITING => (unit::w, r, pe, pr, d)
+		   | READY _ => (w, unit::r, pe, pr, d)
+		   | PENDING _ => (w, r, unit::pe, pr, d)
+		   | PROCEEDING _ => (w, r, pe, unit::pr, d)
+		   | DONE => (w, r, pe, pr, unit::d))
+	    in  foldl folder ([],[],[],[],[]) units
+	    end
+
+
+	fun setMapping (mapFile, getImports) =
 	    let val _ = Cache.flushAll()
 		val is = TextIO.openIn mapFile
-		fun loop (map,us) n = 
+		val _ = reset_graph()
+		fun loop n = 
 		    if (TextIO.endOfStream is)
-			then (map,us)
+			then ()
 		    else 
 			let fun dropper s = String.sub(s,0) = #"#"
 			    val line = TextIO.inputLine is
 			in  (case (split_line dropper line) of
 				 [unitname, filebase] => 
-				     let val entry = 
-					 UNIT {position = n,
-					       filebase = filebase,
-					       imports_direct = ref NONE,
-					       imports_transitive = ref NONE,
-					       dependents_direct = ref [],
-					       status = ref WAITING}
-				     in  loop (StringMap.insert(map, unitname, entry), 
-					       unitname::us) (n+1)
+				     let val nodeWeight = Cache.size(base2sml filebase)
+					 val info = 
+					     {position = n,
+					      filebase = filebase,
+					      status = ref WAITING}
+					 val _ = add_node(unitname, nodeWeight, info)
+				     in  loop (n+1)
 				     end
-			       | [] => loop (map,us) n
+			       | [] => loop n
 			       | _ => error ("ill-formed map line: " ^ line))
 			end
-		val (map,rev_us) = loop (StringMap.empty,[]) 0
+		val _ = loop 0
 		val _ = TextIO.closeIn is
-		val _ = mapping := map
-		val _ = units := rev rev_us
 		val _ = chat ("Mapfile " ^ mapFile ^ " read.\n")
-	    in  ()
+		fun read_import unit = 
+		    let val filebase = get_base unit
+			val imports = parse_impl_import(base2sml filebase)
+			val _ = app (fn import => add_edge(import,unit)) imports
+			val _ = set_status(unit, if (null imports) then READY (Time.now()) else WAITING)
+		    in  ()
+		    end
+	    in  if getImports
+		    then 
+			let val _ = app read_import (list_units());
+			    val _ = chat ("Imports read.\n");
+			    val _ = Dag.refresh (!graph);
+			    val _= (chat "Dependency graph computed: ";
+				    chat (Int.toString (Dag.numNodes (!graph))); print " nodes and ";
+				    chat (Int.toString (Dag.numEdges (!graph))); print " edges.\n")
+			    val reducedGraph = Dag.removeTransitive (!graph)
+			    val _ = graph := reducedGraph
+			    val _ = (chat "Reduced dependency graph computed: ";
+				     chat (Int.toString (Dag.numNodes (!graph))); print " nodes and ";
+				     chat (Int.toString (Dag.numEdges (!graph))); print " edges.\n")
+			in  ()
+			end
+			 
+		else ()
 	    end
 
-	fun compute_graph () = 
-	    let fun read_import unit = 
-		    let val UNIT {status, filebase, imports_direct, ...} = lookup unit
-			val imports = parse_impl_import(base2sml filebase)
-			val _ = imports_direct := SOME imports
-			val _ = if (null imports) then status := READY else status := WAITING
-		    in  ()
-		    end
-		fun do_node unit = 
-		    let val UNIT {status, imports_direct, ...} = lookup unit
-			val SOME imports = !imports_direct
-			val _ = computeTransitive unit 
-			val _ = app (fn imp => let val UNIT{dependents_direct, ...} = lookup imp
-					       in  dependents_direct := unit :: (!dependents_direct)
-					       end) imports
-		    in  ()
-		    end
-		val _ = app read_import (!units)
-		val _ = chat ("Imports read.\n")
-		val _ = app do_node (!units)
-		val _ = chat ("Dependency graph computed.\n")
-	    in  ()
+
+	fun makeGraph(mapfile : string, collapseOpt) = 
+	    let val _ = setMapping(mapfile, true)
+		val dot = mapfile ^ ".dot"
+		val out = TextIO.openOut dot
+		val g = !graph
+		val g = (case collapseOpt of
+			     NONE => g
+			   | SOME collapse => let val g = Dag.collapse(g, collapse)
+						  val _ = chat "Collapsed graph.\n"
+					      in  g
+					      end)
+		val _ = Dag.makeDot(out, g)
+		val _ = TextIO.closeOut out
+		val _ = chat ("Generated " ^ dot ^ ".\n")
+	    in  dot
 	    end
 
     end
 
 
     local
-	val waitingSlaves = ref ([] : (string * (Communication.job option -> unit)) list)
+	val readySlaves = ref ([] : Comm.channel list)
+	val workingSlaves = ref ([] : Comm.channel list)
     in  (* Asynchronously ask for whether there are slaves ready *)
-	fun pollForSlaves process_ack : int = 
-	    let val (names,acks,slaves) = Listops.unzip3 (Communication.findSlaves())
-		val _ = app process_ack (Listops.zip names acks)
-		val _ = waitingSlaves := (Listops.zip names slaves) @ (!waitingSlaves)
-	    in  length (!waitingSlaves)
+	fun pollForSlaves (do_ack_interface, do_ack_object): int = 
+	    let val channels = Comm.findToMasterChannels()
+		val _ = 
+		    app (fn ch => 
+			 (case Comm.receive ch of
+			      NONE => error "channel cannot be empty now"
+			    | SOME Comm.FLUSH => error "slave sent flush"
+			    | SOME (Comm.REQUEST _) => error "slave sent request"
+			    | SOME Comm.READY => ()
+			    | SOME (Comm.ACK_ERROR jobs) => 
+				  (chat "\n\nSlave "; chat (Comm.source ch); 
+				   chat " signalled error during job "; 
+				   chat_strings 30 jobs; chat "\n";
+				   error "Slave signalled error")
+			    | SOME (Comm.ACK_INTERFACE job) => do_ack_interface (Comm.source ch, job)
+			    | SOME (Comm.ACK_OBJECT job) => 
+				  (workingSlaves := 
+				   (Listops.list_diff_eq(op =, !workingSlaves, 
+							 [Comm.reverse ch]));
+				   do_ack_object (Comm.source ch, job)))) channels
+		val potentialNewSlaves = map Comm.reverse channels 
+		val _ = readySlaves := (foldl (fn (ch,acc) => 
+						 if ((Listops.member_eq(op =, ch, acc)) orelse
+						     (Listops.member_eq(op =, ch, !workingSlaves)))
+						     then acc else ch::acc) 
+					  (!readySlaves) potentialNewSlaves)
+(*
+		val _ = (chat "XXX poll ready slaves = ";
+			 chat_strings 10 (map Comm.destination (!readySlaves));
+			 chatnt "\n")
+*)
+	    in  length (!readySlaves)
 	    end
 	(* Works only if there are slaves available *)
 	fun useSlave (showSlave, msg) = 
-	    let val ((name,invoke)::rest) = !waitingSlaves
-		val _ = waitingSlaves := rest
-	    in  showSlave name; invoke (SOME msg)
+	    let val (chan::rest) = !readySlaves
+		val _ = readySlaves := rest
+		val _ = workingSlaves := (chan :: (!workingSlaves))
+	    in  showSlave (Comm.destination chan); 
+		Comm.send (chan, Comm.REQUEST msg)
 	    end
-	(* Send termination signal to slaves *)
-	fun resetSlaves() =  waitingSlaves := []
-	fun flushSlaves() = (app (fn (name,invoke) => invoke NONE) (!waitingSlaves);
-			     waitingSlaves := [])
+	(* Kill active slave channels to restart and send flush slave's file caches *)
+	fun resetSlaves() = let val _ = readySlaves := []
+				val _ = workingSlaves := []
+				val channels = Comm.findToMasterChannels()
+				fun apper ch = let val ch' = Comm.reverse ch
+					       in  Comm.send(ch',Comm.FLUSH);
+						   Comm.erase ch
+					       end
+			    in  app apper channels
+			    end
     end
 
-  (* ----- Compute the latest mod time of a list of files --------- *)
-    fun get_latest [] = (NONE, Time.zeroTime)
-      | get_latest (f::fs) = 
-	let
-	    val recur_result as (_,fstime) = get_latest fs 
-	    val ftime = Cache.modTime f
-	in  if (Time.>=(ftime, fstime)) then (SOME f, ftime) else recur_result
-	end
+
 
     (* Compiles the unit either by determining that compilation is not necessary or by calling a slave. 
        This call does not block. *)
-    fun needsCompile unitname = (* This unit is always in a ready state *)
-        if (isDone unitname)
+    fun needsCompile unitname = (* This unit is in at least a ready state so its imports exist *)
+        if (get_status unitname = DONE)
 	    then false
 	else 
 	let val sourcebase = get_base unitname
@@ -761,7 +869,7 @@ struct
 	    val direct_imports = get_import_direct unitname
 	    val direct_imports_base = map get_base direct_imports
 	    val direct_imports_ui = map Help.base2ui direct_imports_base
-	    val (latest_import_file, latest_import_time) = get_latest direct_imports_ui
+	    val (latest_import_file, latest_import_time) = Cache.lastModTime direct_imports_ui
  
 	    val sml_changed = 
                 (dest_ui_exists andalso
@@ -778,97 +886,109 @@ struct
 
 	    val fresh =           
 		 if (not dest_ui_exists) then
-		     (chat ("      [" ^ sourcebase ^ " is stale: " ^
-			    uifile ^ " is missing.]\n");
+		     (if (!show_stale)
+			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
+				     uifile ^ " is missing.]\n")
+		      else ();
 		      false)
 		 else if (not dest_uo_exists) then
-		     (chat ("      [" ^ sourcebase ^ " is stale: " ^
-			    uofile ^ " is missing.]\n");
+		     (if (!show_stale)
+			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
+				     uofile ^ " is missing.]\n")
+		      else ();
 		      false)
 		 else if (not dest_o_exists) then
-		     (chat ("      [" ^ sourcebase ^ " is stale: " ^
-			    ofile ^ " is missing.]\n");
+		     (if (!show_stale)
+			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
+				     ofile ^ " is missing.]\n")
+		      else ();
 		      false)
 		 else if sml_changed then
-		     (chat ("      [" ^ sourcebase ^ " is stale: " ^
-			    smlfile ^ " newer than objects or interface.]\n");
+		     (if (!show_stale)
+			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
+				     smlfile ^ " newer than objects or interface.]\n")
+		      else ();
 		      false)
                  else if import_changed then
-		     (chat ("      [" ^ sourcebase ^ " is stale: " ^
-			    (valOf latest_import_file) ^ " changed.]\n");
+		     (if (!show_stale)
+			  then chat ("      [" ^ sourcebase ^ " is stale: " ^
+				     (valOf latest_import_file) ^ " changed.]\n")
+		      else ();
 		      false)
 		 else 
 		     true
 
 
 	    val _ = if fresh
-			then (chat ("      [" ^ sourcebase ^ " is up-to-date.]\n");
-			      markDone unitname)
+			then (chat ("  [" ^ sourcebase ^ " is up-to-date.]\n");
+			      markDone unitname; ())
 		    else ()
 
 	in  not fresh
 	end
 
-    type state = string list * string list * string list
+    (* waiting, ready, pending, proceeding *)
+    type state = string list * string list * string list * string list
+    datatype result = PROCESSING of state        (* All slaves utilized *)
+                    | IDLE of state * int        (* Some slaves not utilized and there are ready jobs *)
+	            | COMPLETE
+
     fun once (mapfile, srcs,exeOpt) = 
 	let val _ = resetSlaves()
-	    val _ = setMapping mapfile
-	    val _ = compute_graph()
+	    val _ = setMapping(mapfile, true)
 	    val srcs = if (null srcs) then list_units() else srcs
 	    fun folder (unit,acc) = 
 		let val imports = get_import_transitive unit
-		in  foldl StringOrderedSet.cons acc imports
+		in  StringOrderedSet.cons(unit, foldl StringOrderedSet.cons acc imports)
 		end
 	    val units = rev (StringOrderedSet.toList (foldl folder StringOrderedSet.empty srcs))
 	    val _ = (chat "Computed all necessary units: \n";
 		     chat_strings 20 units; print "\n")
 	    val _ = showTime "Start compiling files"
 	    fun waitForSlaves() = 
-		let fun do_ack (_,NONE) = ()
-		      | do_ack (name,SOME (u::_::_)) = 
-		          (markDone u; chat ("  [Slave " ^ name ^ " compiled " ^ u ^ "]\n"))
-		      | do_ack _ = error "Acknowledgement not at least two words"
-		    val numSlaves = pollForSlaves do_ack
+		let fun ack_inter (name,(u::_::_)) = 
+		          (markProceeding u; 
+			   chat ("  [" ^ name ^ " compiled interface of " ^ u ^ "]\n"))
+		      | ack_inter _ = error "Acknowledgement message not at least two words"
+		    fun ack_obj (name,(u::_::_)) = 
+		          let val pendingTime = markDone u
+			      val diff = Time.toReal(Time.-(Time.now(),pendingTime))
+			      val diff = (Real.realFloor(diff * 100.0)) / 100.0
+			  in  chat ("  [" ^ name ^ " compiled object of " ^ u ^ " in " ^
+				 (Real.toString diff) ^ " seconds]\n")
+			  end
+		      | ack_obj _ = error "Acknowledgement message not at least two words"
+		    val numSlaves = pollForSlaves (ack_inter, ack_obj)
 		in  numSlaves 
 		end
 	    fun getReady waiting = 
-		let val (waiting,ready, [], []) = partition waiting
+		let val (waiting,ready, [], [], []) = partition waiting
 		    val (ready,done) = List.partition needsCompile ready
 		in  if (null done) 
 			then (waiting, ready)        (* no progress *)
 		    else getReady (waiting @ ready)  (* some more may have become ready now *)
 		end
 	    val idle = ref 0
-	    fun step (([], [], []) : state)  = (false, NONE)
-	      | step (waiting, ready, pending) =
-		let val ([],[], pending, done) = partition pending
+	    fun newState(waiting, ready, pending, proceeding) =
+		let val ([], [], [], proceeding, _) = partition proceeding
+		    val ([],[], pending, newProceeding, _) = partition pending
+		    val proceeding = proceeding @ newProceeding
 		    val (waiting,newReady) = getReady waiting
 		    val ready = ready @ newReady
-		    val numSlaves = waitForSlaves()
-		    fun useSlaves slavesLeft (pending, ready, waiting) = 
+		in  (waiting, ready, pending, proceeding)
+		end
+	    fun stateDone(([],[],[],[]) : state) = true
+	      | stateDone _ = false
+	    fun useSlaves slavesLeft state = 
+		let val (state as (_, ready, _, _)) = newState state
+		in  if (stateDone state)
+			then COMPLETE
+		    else
 			(case (slavesLeft, ready) of
-			     (0, _) => (true, pending, ready, waiting)
-			   | (_, []) =>
-				 (* In case a slave finished really fast *)
-				 let val ([],[], pending, done) = partition pending
-				     val (waiting, ready) = getReady waiting
-				 in  (case ready of
-					  [] => (idle := 1 + (!idle);
-						 chat "  [Idling ";
-						 chat (Int.toString (!idle));
-						 chat ": ";
-						 chat (Int.toString slavesLeft);
-						 chat " available slaves.  No ready jobs.  ";
-						 chat (Int.toString (length waiting));
-						 chat " jobs left.";
-						 chat "   Waiting for ";
-						 chat_strings 20 pending;
-						 chat "]\n";
-						 (false,pending,[],waiting))
-					| _ => useSlaves slavesLeft (pending, ready, waiting))
-				 end
+			     (0, _) => PROCESSING state
+			   | (_, []) => IDLE(state,slavesLeft)
 			   | (_, first::rest) =>
-				 let fun showSlave name = chat ("  [Calling slave " ^ name ^ 
+				 let fun showSlave name = chat ("  [Calling " ^ name ^ 
 								" to compile " ^ first ^ "]\n")
 				     val _ = markPending first
 				     val firstBase = get_base first
@@ -878,14 +998,20 @@ struct
 				     val _ = Cache.flushSome[base2ui base,
 							     base2o base,
 							     base2uo base]
+				     val (waiting, _, pending, proceeding) = state
+				     val state = (waiting, rest, first::pending, proceeding)
 				 in  useSlave (showSlave, first::firstBase::importBases);
-				     useSlaves (slavesLeft - 1) (first::pending, rest, waiting)
+				     useSlaves (slavesLeft - 1) state
 				 end)
-		    val (allSlavesUsed, pending, ready, waiting) = 
-			           useSlaves numSlaves (pending, ready, waiting)
-		in  (allSlavesUsed, (case (waiting,ready,pending) of
-					 ([],[],[]) => NONE
-				       | _ => SOME (waiting, ready, pending)))
+		end
+	    fun step state = 
+		let val state = newState state
+		in  if (stateDone state)
+			then COMPLETE
+		    else
+			let val numSlaves = waitForSlaves()
+			in  useSlaves numSlaves state
+			end
 		end
 	    fun makeExe(exe, units) = 
 		let val _ = showTime "Start linking" 
@@ -914,52 +1040,75 @@ struct
 			end
 		    val packages = map mapper units
 		in  (chat "Manager calling linker with: ";
-		     app (fn s => (print s; print " ")) units;
+		     chat_strings 30 units;
 		     chat "\n";
 		     Linker.mk_exe {units = packages, exe_result = exe})
 		end
-	in  {setup = fn _ => (units, [], []), 
+	in  {setup = fn _ => (units, [], [], []), 
 	     step = step, 
-	     complete = fn _ => (flushSlaves();
-				 case exeOpt of
+	     complete = fn _ => (case exeOpt of
 				     NONE => ()
 				   | SOME exe => makeExe (exe, units))}
 	end
     fun run args = 
 	let val {setup,step,complete} = once args
+	    val idle = ref 0
+	    val last = ref (PROCESSING([],[],[],[]))
 	    fun loop state = 
-		case (step state) of
-		    (_,NONE) => complete()
-		  | (allSlavesUsed,SOME state) => (if allSlavesUsed then () else Platform.sleep 1.0;
-						   loop state)
-	in  loop (setup())
+	      let val prev = !last
+		  val cur = step state
+		  val _ = last := cur
+	      in		    
+		(case cur of
+		    COMPLETE => complete()
+		  | PROCESSING state => 
+			let val _ =
+			    (case prev of
+				 PROCESSING _ => ()
+			       | _ => chat "  [All processors working!]\n")
+			in  Platform.sleep 0.5;
+			    loop state
+			end
+		  | IDLE(state as (waiting, ready, pending, proceeding), numIdle) =>
+			(if (null ready) then () 
+			 else (chat "IDLE but there are ready jobs: ";
+			       chat_strings 20 ready;
+			       error "IDLE but there are ready jobs");
+			 (case prev of
+			      IDLE _ => ()
+			    | _ => (chat "  [Idling ";
+				    chat (Int.toString (!idle));
+				    chat ": ";
+				    chat (Int.toString numIdle);
+				    chat " ready slaves.  ";
+				    chat (Int.toString (length waiting));
+				    chat " waiting jobs.\n";
+				    chat "     Waiting for interfaces of ";
+				    chat_strings 20 pending; chat ".";
+				    if (null proceeding)
+					then ()
+				    else (chat "\n     Waiting for objects of ";
+					  chat_strings 20 proceeding; chat ".");
+				    chat "]\n";
+				    Platform.sleep 0.5));
+			   loop state))
+	      end
+	in loop (setup())
 	end
 
-    fun graph(mapfile : string) = 
-	let val _ = setMapping mapfile
-	    val _ = compute_graph()
-	    val units = list_units()
-	    val dot = mapfile ^ ".dot"
+
+    fun makeGraphShow(mapfile : string, collapse) = 
+	let val dot = makeGraph (mapfile, collapse)
 	    val ps = mapfile ^ ".ps"
-	    val out = TextIO.openOut dot
-	    val _ = TextIO.output (out, "digraph G {\n")
-	    val _ = TextIO.output (out, "  size = \"8,8\"\n")
-	    val _ = TextIO.output (out, "  rankdir = LR\n")
-	    fun do_unit unit = 
-		let val children = get_dependent_direct unit
-		    fun apper child = TextIO.output (out, "  " ^ unit ^ " -> " ^ child ^";\n")
-		in  app apper children
-		end
-	    val _ = app do_unit units
-	    val _ = TextIO.output (out, "}\n")
-	    val _ = TextIO.closeOut out
-	    val _ = chat ("Generated " ^ dot ^ ".\n")
 	    val _ = OS.Process.system ("/afs/cs/user/swasey/bin/dot -Tps " ^ dot ^ " -o " ^ ps)
 	    val _ = chat ("Generated " ^ ps ^ ".\n")
-	in  ()
+	    val _ = OS.Process.system ("gv " ^ ps ^ "&")
+	    val _ = chat ("Invoked gv on " ^ ps ^ ".\n")
+	in  ps
 	end
+
     fun purge(mapfile : string) =
-	let val _ = setMapping mapfile
+	let val _ = setMapping(mapfile, false)
 	    val units = list_units()
 	    val _ = (print "Purging "; print mapfile; print "\n")
 	    fun remove unit = 
@@ -1003,11 +1152,14 @@ struct
       end
   fun pmake (mapfile, slaves) = 
       let fun startSlave (num,machine) = 
-	  let val geometry = "80x16+0+" ^ (Int.toString (num * 250))
+	  let val row = num mod 3
+	      val col = num div 3
+	      val geometry = "80x16+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 250))
 	      val dir = OS.FileSys.getDir()
 	      val SOME display = OS.Process.getEnv "DISPLAY"
 	      val SOME user = OS.Process.getEnv "USER"
 	      val out = TextIO.openOut "startSlave1"
+	      val _ = TextIO.output(out, "(set-default-font \"courier7\")\n")
 	      val _ = TextIO.output(out, "(shell)\n")
 	      val _ = TextIO.output(out, "(end-of-buffer)\n")
 	      val _ = TextIO.output(out, "(insert-file \"" ^ dir ^ "/startSlave2\")\n")
@@ -1039,8 +1191,9 @@ struct
 	      val _ = Slave.setup()
 	      fun loop state = 
 		  (case (step state) of
-		       (_,NONE) => complete()
-		     | (_,SOME state) => (Slave.step(); loop state))
+		       Master.COMPLETE => complete()
+		     | Master.PROCESSING state => (Slave.step(); loop state)
+		     | Master.IDLE (state, _) => (Slave.step(); loop state))
 	  in  loop (setup())
 	  end
 	  val _ = showTime "Starting compilation"
@@ -1112,8 +1265,6 @@ struct
 	  (print  ("Invalid arguments: -h or -? must occur by itself.\n"); 1)
     | ("-?"::_) =>
 	  (print  ("Invalid arguments: -h or -? must occur by itself.\n"); 1)
-    | (["-mkdep", makefile]) =>	(Makedep.mkDep(makefile); 0)
-    | ("-mkdep"::args) => (print ("Incorrect number of files to -mkdep.\n"); 1)
     | args => 
 	let val (mapFile, hasC, oFile, hasAll, srcs) = getArgs args
 	    val mapFile = (case mapFile of

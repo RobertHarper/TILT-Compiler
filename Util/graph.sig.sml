@@ -28,6 +28,7 @@ sig
 
    val insert_node : graph * node -> unit
    val insert_edge : graph * (node * node) -> unit  
+   val delete_edge : graph * (node * node) -> unit  
    val app : ((node * int) * (node * int) -> unit) -> graph -> unit
 
    (* list of nodes reachable from start without going through excluded node.
@@ -38,3 +39,42 @@ sig
    val sc_components : (node -> unit) -> graph -> int list list
    val reachable : graph -> node list -> (int -> bool)
 end
+
+signature DAG =
+sig
+    type node = string
+    type 'a graph
+    exception UnknownNode
+
+    val refresh : 'a graph -> unit                      (* Force the cache to be computed *)
+
+    val empty : unit -> 'a graph                        (* Create a new graph *)
+    val insert_node : 'a graph * node * int * 'a -> unit
+    val insert_edge : 'a graph * node * node -> unit
+
+    val numNodes : 'a graph -> int
+    val numEdges : 'a graph -> int
+    val nodeAttribute : 'a graph * node -> 'a
+    val nodeWeight : 'a graph * node -> int
+    val pathWeight : 'a graph * node -> int
+    val nodes : 'a graph -> node list
+    val children : 'a graph * node -> node list
+    val parents : 'a graph * node -> node list
+    val ancestors : 'a graph * node -> node list    (* topologically sorted with descendants first *)
+
+    val makeDot : TextIO.outstream * 'a graph -> unit  
+    val removeTransitive : 'a graph -> 'a graph
+    val collapse : 'a graph * 
+	                {maxWeight : int,
+			 maxParents : int,
+			 maxChildren : int} -> 'a graph  (* Create a new graph by removing node 
+                                                            with weight <= maxWeight
+							    and with <= maxParents parents
+							    and with <= maxChildren children.
+							    When a node is removed, all its
+							    parents point to all its children. *)
+								
+
+				 
+end
+

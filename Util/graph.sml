@@ -1,4 +1,4 @@
-(*$import GRAPH TopLevel Array *)
+(*$import GRAPH TopLevel Array SplayMapFn SplaySetFn Util HashString HashTableFn *)
 
 functor Graph(A : NODE) : DIRECTEDGRAPH =
 struct
@@ -100,6 +100,14 @@ struct
        in Array.update(!edges,index_n1,insert(Array.sub(!edges,index_n1)))
        end
 
+   fun delete_edge (g as GRAPH {edges,...},(n1,n2)) =
+       let val index_n1 = addhash(g,n1)
+	   val index_n2 = addhash(g,n2)
+           fun remove (h :: t) = if h=index_n2 then t else h :: (remove t)
+             | remove [] = []
+       in Array.update(!edges,index_n1,remove(Array.sub(!edges,index_n1)))
+       end
+
   (* reverse graph in O(V+E) time *)
 
   fun rev (g as GRAPH{edges=ref e,count=ref count,...}) =
@@ -177,4 +185,268 @@ struct
 	     in app (fn n2 => f (n1pair,(Array.sub(nodes,n2),n2)))
 		    (Array.sub(edges,i))
 	     end)
+end
+
+structure Dag :> DAG = 
+struct
+
+    val error = fn str => Util.error "graph.sml" str
+    exception UnknownNode
+    local
+	structure HashKey =
+	    struct
+		type hash_key = string
+		val hashVal = HashString.hashString 
+		val sameKey = (op = : string * string -> bool)
+	    end
+	structure HashTable = HashTableFn(HashKey)
+	structure Node = 
+	    struct
+		type node = string
+		open HashTable
+		fun make i = HashTable.mkTable(i,UnknownNode)
+	    end
+    in
+	structure Graph = Graph(Node)
+    end			
+
+
+    local
+	structure StringKey = 
+	    struct
+		type ord_key = string
+		val compare = String.compare
+	    end
+    in  structure StringMap = SplayMapFn(StringKey)
+	structure StringSet = SplaySetFn(StringKey)
+	structure StringOrderedSet = 
+	    struct
+		type set = StringSet.set * string list
+		val empty = (StringSet.empty, [])
+		fun member (str,(set,_) : set) = StringSet.member(set,str)
+		fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
+							    then (set,list)
+							else (StringSet.add(set,str), str::list)
+		fun toList ((set,list) : set) = list
+		fun append (s1, s2) = foldr cons s2 (toList s1)
+	    end
+    end
+
+    type node = string
+    type 'a graph = {main        : Graph.graph,                      (* Primary info *)
+		     attributes : (int * 'a) StringMap.map ref,  
+		     cached      : bool ref,                         (* Cache up-to-date? *)
+		     reverse     : Graph.graph ref,                  (* Cached info *)
+		     info        : {pathWeight : int,
+				    ancestors : StringOrderedSet.set}
+		                      StringMap.map ref}   
+
+    fun empty () = {main = Graph.empty "", 
+		    attributes = ref StringMap.empty,
+		    cached = ref false,
+		    reverse = ref (Graph.empty ""),
+		    info = ref StringMap.empty}
+
+    fun copy ({main,attributes,...} : 'a graph) : 'a graph = 
+	{main = Graph.copy main,
+	 attributes = ref (!attributes),
+	 cached = ref false,
+	 reverse = ref (Graph.empty ""),
+	 info = ref StringMap.empty}
+
+    fun flush ({cached, ...} : 'a graph) = cached := false
+
+    (* Modifications to the graph require flushing the cached information *)
+    fun insert_node (g as {main, attributes, ...} : 'a graph, node, weight, attr) = 
+	(flush g;
+	 Graph.insert_node(main, node); 
+	 attributes := (StringMap.insert(!attributes, node, (weight, attr))))
+	 
+    fun insert_edge (g as {main, ...} : 'a graph, src, dest) = 
+	(flush g;
+	 Graph.insert_edge(main, (src, dest)))
+
+    (* Queries requiring only inspection of non-cached infomation *)
+    fun isNode ({attributes, ...} : 'a graph, node) = 
+	(case StringMap.find(!attributes, node) of
+	     NONE => false
+	   | SOME _ => true)
+    fun nodeWeight ({attributes, ...} : 'a graph, node) = 
+	(case StringMap.find(!attributes, node) of
+	     NONE => (print ("nodeWeight could not find " ^ node ^ "\n");
+		      raise UnknownNode)
+	   | SOME (w,_) => w)
+    fun nodeAttribute ({attributes, ...} : 'a graph, node) = 
+	(case StringMap.find(!attributes, node) of
+	     NONE => raise UnknownNode
+	   | SOME (_,a) => a)
+    fun nodes ({main,...} : 'a graph) = Graph.nodes main
+    fun numNodes ({main,attributes,...} : 'a graph) = 
+	let val l1 = length(Graph.nodes main)
+	    val l2 = StringMap.numItems (!attributes)
+	    val _ = if (l1=l2) then ()
+		    else (print "numNodes detected inconsistency l1 = ";
+			  print (Int.toString l1); print "  l2 = ";
+			  print (Int.toString l2); print "\n")
+	in  l1
+	end
+    fun children (g as {main,...} : 'a graph, node : string) = 
+	let val edges = Graph.edges main (Graph.hash main node)
+	in  map (Graph.unhash main) edges
+	end
+    fun numChildren(g as {main,...} : 'a graph, node : string) = 
+	length(Graph.edges main (Graph.hash main node))
+    fun numEdges(g as {main,...} : 'a graph) = 
+	foldl (fn (n,acc) => acc + (numChildren(g,n))) 0 (nodes g)
+
+    fun refresh({cached = ref true, ...} : 'a graph) = ()
+      | refresh(g as {main, cached, reverse, info, ...} : 'a graph) = 
+	let val _ = reverse := Graph.rev main
+	    val _ = info := StringMap.empty
+	    fun get_info node = 
+		(case (StringMap.find(!info, node)) of
+		     SOME pw_a => pw_a
+		   | NONE => 
+			 let 	
+			     val this_size = nodeWeight(g,node)
+			     fun mapper hashedNode = 
+				 let val node = Graph.unhash main hashedNode
+				     val {ancestors,pathWeight} = get_info node
+				 in  (node, ancestors, pathWeight)
+				 end
+			     val parents_info = (map mapper 
+						 (Graph.edges (!reverse) (Graph.hash main node)))
+			     fun folder ((node,anc,size),(acc_anc,acc_size)) = 
+				 let val size = Int.max(size + this_size, acc_size)
+				     val acc_anc = StringOrderedSet.append(anc,acc_anc)
+				     val acc_anc = StringOrderedSet.cons(node,acc_anc)
+				 in  (acc_anc,size)
+				 end
+			     val i = foldl folder (StringOrderedSet.empty, 0) parents_info
+			     val i = {ancestors = #1 i, pathWeight = #2 i}
+			     val _ = info := (StringMap.insert(!info,node,i))
+			 in  i
+			 end)
+	in  map get_info (Graph.nodes main); 
+	    cached := true
+	end
+
+    (* Queries requiring the cached parts of the graph *)
+    fun pathWeight (g as {info, ...} : 'a graph, node) = 
+	(refresh g;
+	 case StringMap.find(!info, node) of
+	     NONE => raise UnknownNode
+	   | SOME {pathWeight,...} => pathWeight)
+    fun parents (g as {main, reverse,...} : 'a graph, node) = 
+	let val _ = refresh g
+	    val edges = Graph.edges (!reverse) (Graph.hash main node)
+	in  map (Graph.unhash main) edges
+	end
+    fun ancestors (g as {info,...} : 'a graph, node) = 
+	(refresh g; 
+	 (case (StringMap.find(!info, node)) of
+	      NONE => raise UnknownNode
+	    | SOME {ancestors = a,... } => StringOrderedSet.toList a))
+
+    fun makeDot (out, g) = 
+	let val _ = TextIO.output (out, "digraph G {\n")
+	    val _ = TextIO.output (out, "  size = \"8,8\"\n")
+	    val _ = TextIO.output (out, "  rankdir = LR\n") 
+	    val _ = TextIO.output (out, "  concentrate = true\n") 
+	    fun escape "Graph" = "_Graph"
+	      | escape "GRAPH" = "_GRAPH"
+	      | escape str = implode (map (fn #"-" => #"_"
+	                                    | c => c) (explode str))
+	    fun doNode parent =
+		let val children = children(g,parent)
+		    val parentName = escape parent
+		    val _ = TextIO.output (out, "  " ^ parentName ^ 
+					   " [label=\"" ^ parent ^"\"");
+		    val weight = nodeWeight(g,parent) 
+		    val _ = if (weight > 200000)
+				then TextIO.output (out, ", color=crimson, peripheries=4")
+			    else if (weight > 50000)
+				then TextIO.output (out, ", color=red, peripheries=2")
+			    else if (weight > 10000)
+				then TextIO.output (out, ", color=green, peripheries=1")
+			    else ()
+		    val _ = TextIO.output (out, "];\n")
+		    fun apper child = 
+			let val childName = escape child
+			in  TextIO.output (out, "  " ^ parentName ^ " -> " ^ childName ^";\n") 
+			end
+		in  app apper children
+		end
+	    val _ = app doNode (nodes g)
+	    val _ = TextIO.output (out, "}\n") 
+	in  ()
+	end
+
+
+    fun removeTransitive (g : 'a graph) = 
+	let val g as {main,...} : 'a graph = copy g
+	    fun removeEdge (parent : node) (child : node) = 
+		let val unhashedChild = Graph.hash main child
+		    val _ = Graph.delete_edge(main,(parent,child))
+		in  if (Graph.reachable main [parent] unhashedChild)
+			then ()
+		    else Graph.insert_edge(main,(parent,child))
+		end
+	    fun doNode parent = 
+		let val children = children(g,parent)
+		in  app (removeEdge parent) children
+		end
+	    val _ = app doNode (nodes g)
+	    val _ = flush g
+	in  g
+	end
+
+    fun collapse (g : 'a graph, {maxWeight, maxParents, maxChildren}) = 
+	let val g' : 'a graph = empty()
+	    fun isRemovable node = 
+		let val parents = parents(g, node)
+		    val children = children(g, node)
+		    val weight = nodeWeight(g, node)
+		in  (weight < maxWeight) andalso
+		    (length parents <= maxParents) andalso
+		    (length children <= maxChildren)
+		end
+	    fun addNodes n = if (isRemovable n)
+				 then ()
+			     else insert_node(g', n, nodeWeight(g,n), nodeAttribute(g,n))
+	    fun getUpwardDownward getLayer n = 
+		let val nextLayer = getLayer(g,n)
+		    fun folder (n,acc) = if (isRemovable n)
+						  then (getUpwardDownward getLayer n) @ acc
+					      else n :: acc
+		in  foldl folder [] nextLayer
+		end
+	    fun addEdges n = 
+		if (isRemovable n)
+		    then let val parents = getUpwardDownward parents n
+			     val children = getUpwardDownward children n
+			 in  app (fn src => app (fn dest => insert_edge(g',src,dest)) children) parents
+			 end
+		else let val children = children(g, n)
+		     in  app (fn c => if (isNode(g', c))
+					  then insert_edge(g',n,c)
+				      else ()) children
+		     end
+				
+	    val originalNodes = nodes g
+	    val _ = app addNodes originalNodes  (* First, add all nodes that will be eventually there. *)
+	    val _ = app addEdges originalNodes  (* Now, add all edges including the additional ones
+						   generated by the removal of certain nodes. *)
+	    val gV = numNodes g
+	    val gE = numEdges g
+	    val gV' =  numNodes g'
+	    val gE' = numEdges g'
+	    val _ = (print "Original graph has "; 
+		     print (Int.toString gV); print " nodes and ";
+		     print (Int.toString gE); print " edges\n";
+		     print "Collapsed graph has "; 
+		     print (Int.toString gV'); print " nodes and ";
+		     print (Int.toString gE'); print " edges\n")
+	in  g'
+	end
 end

@@ -1,24 +1,31 @@
-(*$import LinkIl *)
+(*$import LinkIl Crc *)
 
 
 (* ---- Provides an abstraction for communication between master and slave processes ---- *)
 signature COMMUNICATION = 
 sig
+    eqtype channel
+    val toMaster : channel    (* Channel from self/slave to master.  *)
+    val fromMaster : channel  (* Channel from master to self/slave.  *)
+    val reverse : channel -> channel (* Reverse directionality of channel. *)
+    val source : channel -> string   (* Gives name to sender of channel. *)
+    val destination : channel -> string   (* Gives name to sender of channel. *)
+
     type job = string list
+    datatype message = READY                 (* Slave signals readiness *)
+		     | ACK_INTERFACE of job  (* Slave signals that interface has compiled *)
+		     | ACK_OBJECT of job     (* Slave signals that object has compiled *)
+		     | ACK_ERROR of job      (* Slave signals that an error occurred during given job *)
+                     | FLUSH                 (* Master signals that slaves should flush file cache *)
+	             | REQUEST of job        (* Master requests slave to compile file *)
 
-    (* Slaves can acknowledge completed jobs and request new jobs.  *)
-    val acknowledge : job option -> unit    (* non-blocking *)
-    val request : unit -> job option        (* blocking *)
+    (* These are all non-blocking. *)
+    val erase : channel -> unit             (* Delete given channel. *)
+    val exists : channel -> bool            (* Does a channel have a message. *)
+    val send : channel * message -> unit    (* Write a message on given channel, even if channel exists. *)
+    val receive : channel -> message option (* Get a message from a given channel, if it exists. *)
+    val findToMasterChannels : unit -> channel list  (* Find all ready channels to master. *)
 
-    (* The master periodically calls findSlaves which polls for available slaves which are triples:
-       (1) Name of the slave
-       (2) The name of the last job the slave completed.  A NONE indicates a new slave.
-       (3) A thunk for passing another job to the slave. A NONE indicates slave can terminate.
-     *)
-    val findSlaves : unit -> (string * job option * (job option -> unit)) list
-
-    val masterTest : unit -> unit
-    val slaveTest : unit -> unit
 end
 
 signature HELP = 
@@ -44,6 +51,7 @@ signature FILECACHE =
 	val flushSome : string list -> unit
 	val exists : string -> bool
 	val modTime : string -> Time.time
+	val lastModTime : string list -> string option * Time.time
 	val size : string -> int
 	val read : string -> bool * internal    (* Was it cached? *) 
 	val write : string * internal -> bool   (* Did we write?  *)
@@ -54,7 +62,6 @@ signature FILECACHE =
 signature SLAVE = 
 sig
     datatype result = WORK of string | WAIT | READY
-    val slaveTest : unit -> unit
     val setup : unit -> unit
     val step : unit -> result
     val run : unit -> unit       (* run slave repeatedly and restart on termination *)
@@ -63,17 +70,24 @@ end
 signature MASTER = 
 sig
     type state
-    val masterTest : unit -> unit
+    datatype result = PROCESSING of state        (* All slaves utilized *)
+                    | IDLE of state * int * string list * string list  
+                                                 (* Number of idle slaves, waiting jobs, and pending jobs *)
+	            | COMPLETE
     (* Takes the mapfile, a list of units that are desired,
        and a name of the executable.  Generates the executable
        and compiles the necessart units. *)
     val once : string * string list * string option -> 
 	{setup : unit -> state,
-	 step : state -> bool * state option,  	  (* true indicates all available slaves were utilized *)
+	 step : state -> result,
 	 complete : unit -> unit}
     val run : string * string list * string option -> unit 
-    val graph : string -> unit
     val purge : string -> unit
+
+    type collapse = {maxWeight : int, maxParents : int, maxChildren : int}
+    val makeGraph     : string * collapse option -> string  (* Creates a .dot file *)
+    val makeGraphShow : string * collapse option -> string  (* Creates a .ps file and invokes gv on it *)
+
 end
 
 signature MANAGER = 

@@ -856,11 +856,11 @@ structure IlUtil
     val dt_str = "+O-X+D"
     val cluster_str = "+C"
 
-    fun is_open lab = substring (open_str,label2name lab)
-    fun is_nonexport lab =  substring (nonexport_str,label2name lab)
-    fun is_eq lab = substring (eq_str,label2name lab)
-    fun is_dt lab = substring (dt_str,label2name lab)
-    fun is_cluster lab = substring (cluster_str,label2name lab)
+    fun is_open lab = isSome(substring (open_str,label2name lab))
+    fun is_nonexport lab =  isSome(substring (nonexport_str,label2name lab))
+    fun is_eq lab = isSome(substring (eq_str,label2name lab))
+    fun is_dt lab = isSome(substring (dt_str,label2name lab))
+    fun is_cluster lab = isSome(substring (cluster_str,label2name lab))
 
     local
 	fun to_meta_lab meta_str lab =

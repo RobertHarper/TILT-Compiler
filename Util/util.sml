@@ -40,11 +40,16 @@ structure Util :> UTIL =
 
     fun substring (pattern,target) =
 	let val pattern = explode pattern
+	    val target = explode target
 	    fun match [] _ = true
-	      | match (a::arest) (b::brest) = 
-		(((a = b) andalso (match arest brest)) orelse (match pattern brest))
+	      | match (a::arest) (b::brest) = (a = b) andalso (match arest brest)
 	      | match _ _ = false
-	in  (match pattern (explode target))
+	    fun loop n cur = if (match pattern cur)
+				 then SOME n
+			     else (case cur of
+				       [] => NONE
+				     | (_::rest) => loop (n+1) rest)
+	in  loop 0 target
 	end
 
     fun curry2 f = fn a => fn b => f (a,b)
@@ -78,7 +83,7 @@ structure Util :> UTIL =
 	    let val is = TextIO.openIn "sysname"
 		val str = TextIO.input is
 		val _ = TextIO.closeIn is
-	    in  substring("alpha",str) orelse substring("sun",str)
+	    in  isSome(substring("alpha",str)) orelse isSome(substring("sun",str))
 	    end)
        end
    fun system command = 

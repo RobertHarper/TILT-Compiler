@@ -1,8 +1,9 @@
 (*$import String Option Substring List General TextIO *)
 (* http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
-
 val option_valOf = Option.valOf
+val option_isSome = Option.isSome
+
 val list_app = List.app
 val list_map = List.map
 val list_hd = List.hd
