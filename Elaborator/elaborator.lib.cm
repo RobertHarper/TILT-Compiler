@@ -1,6 +1,7 @@
 Library 
 signature PPPRIM
 signature PRIM
+signature PRIMUTIL
 signature ILSTATIC
 signature ILUTIL
 signature ILCONTEXT
