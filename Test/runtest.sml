@@ -22,7 +22,7 @@ DESCRIPTION
 	files before each test and after each successful test.  The -c
 	option prevents this cleanup.
 
-        A test comprises some SML code and an expected result.
+	A test comprises some SML code and an expected result.
 	Runtest uses TILT to compile the test code then runs the
 	generated executable.  If the observed result does not match
 	the expected result, then the test fails and runtest prints
