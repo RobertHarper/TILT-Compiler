@@ -10,6 +10,13 @@ Problem:     compiler takes a very long time to terminate, if at all, on an exam
 Code:        
 Transcript:  
 Comments:    
+	[Leaf] This is a known problem with TILT.  We do not parse trees
+	as an explicit DAG structure.  It is not clear whether we can in 
+	get the same effect in general using type names.  It is relatively
+	easy to put it into the right form, but harder to arrange so that 
+	we always traverse the types as DAGS.  Not clear if it is in general
+	possible in the typechecker, though it seems as if it ought to be.
+
 Fix:         
 Test: m0066
 Owner: 

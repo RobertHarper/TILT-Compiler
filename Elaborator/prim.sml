@@ -133,4 +133,248 @@ structure Prim :> PRIM =
 	   of (F32,F32) => true
 	    | (F64,F64) => true
 	    | _ => false)
+
+	(* control_effect p
+	 * This function returns true if the primitive p
+	 * may potentially have a control effect.  See Tarditi's thesis
+	 * section 5.3.1 for additional discussion.  In particular, if
+	 * this function returns false, then the effect of p is
+	 * a subset of {A,R,W}.  If this function returns true, then the
+	 * effect of p is a subset of {E,N,A,R,W}.
+	 * Note that code which does *not* satisfy this predicate may still 
+	 * modify or depend on the store.  
+	 *)
+    fun control_effect p = 
+    (* For some of these, I don't know what the right thing to say is.
+     * There are two issues:
+     * 1. From the standpoint of the basis, we use these as if they
+     * are unchecked: that is, we guard them with the appropriate checks.
+     * 2. Depending on the machine, it seems to me that these may still
+     * have some sort of control-flow effect: that is, they may set 
+     * condition codes or cause signals that may affect the program
+     * (such as causing it to core dump, in extreme cases).
+     * For the time being, I conservatively mark these as having an effect.
+     * The ones that I think fall into this category are marked as XXX 
+     * -leaf
+     *)
+	case p of
+	  (* At least some traps have a control effect.  This
+	   * is probably somewhat machine dependent.
+	   * -leaf 
+	   *)
+	    soft_vtrap _ => true
+	  | soft_ztrap _ => true
+	  | hard_vtrap _ => true
+	  | hard_ztrap _ => true
+(*	    
+	  (* These don't ever raise an exception
+	   *)
+	  | array2vector _ => false 
+	  | vector2array _ => false
+*)
+	  (* XXX May in principle raise size *)
+	  | create_table table => true
+	  (* XXX May in principle raise Subscript *)
+	  | sub t    => true
+	  | update t => true
+
+(*
+	  | length_table t => false 
+	  | equal_table t => false  
+	  | create_empty_table t => false 
+*)
+	  | float2int => true  (*XXX*)
+(*
+	  (* At least as currently implemented, these never
+	   * raise an exception.
+	   *)
+	  | int2float => false 
+	  | int2uint _ => false 
+	  | uint2int _ => false 
+	  | int2int _ => false 
+	  | uint2uint _ => false 
+	  | uinta2uinta _ => false 
+	  | uintv2uintv _ => false 
+*)
+	  (* These seem likely to be pure, but to be conservative,
+	   * I'm marking them as potentially having an effect.
+	   * XXX *)
+	  | neg_float _ => true
+	  | abs_float _ => true
+	  | plus_float _ => true
+	  | minus_float  _ => true
+	  | mul_float _ => true
+	  | div_float _  => true
+(*
+	  (* These seem safe *)
+	  | less_float _ => false 
+	  | greater_float _ => false 
+	  | lesseq_float _ => false 
+	  | greatereq_float _ => false 
+	  | eq_float _ => false 
+	  | neq_float _ => false 
+*)
+	  (* XXX *)
+	  | plus_int _ => true
+	  | minus_int _ => true
+	  | mul_int _ => true
+	  | div_int _ => true
+	  | mod_int _ => true
+	  | quot_int _ => true
+	  | rem_int _ => true
+(*
+	  (* Everything unsigned seems safe.
+	   *)
+	  | plus_uint _ => false 
+	  | minus_uint _ => false 
+	  | mul_uint _ => false 
+	  | div_uint _ => false 
+	  | mod_uint _ => false 
+
+	  (* Comparisons are safe *)
+	  | less_int _ => false 
+	  | greater_int _ => false 
+	  | lesseq_int _ => false 
+	  | greatereq_int _ => false 
+	  | less_uint _ => false 
+	  | greater_uint _ => false 
+	  | lesseq_uint _ => false 
+	  | greatereq_uint _ => false 
+	  | eq_int _ => false 
+	  | neq_int _ => false 
+*)
+	  (*Probably not safe *)
+	  | neg_int _ => true
+(* 
+	  | abs_int _ => false 
+		
+	  (* bit-pattern manipulation *)
+	  | not_int _ => false 
+	  | and_int _ => false 
+	  | or_int _ => false 
+	  | xor_int _ => false 
+	  | lshift_int _ => false 
+	  | rshift_int _ => false 
+	  | rshift_uint _ => false 
+*)
+	  | _ => false
+
+
+
+	(* store_effect p
+	 * This function returns true if the primitive p
+	 * may potentially have a store effect.  See Tarditi's thesis
+	 * section 5.3.1 for additional discussion.  In particular, if
+	 * this function returns false, then the effect of p is
+	 * a subset of {E,N}.  If this function returns true, then the
+	 * effect of p is a subset of {E,N,A,R,W} (that is, any effect).
+	 *
+	 * Note that code which does *not* satisfy this predicate may still 
+	 * raise exceptions or not terminate.  This means that while you can 
+	 * safely CSE this term (c.f. Tarditi section 6.1), you cannot 
+	 * eliminate it as dead code. 
+	 *)
+    fun store_effect p =
+	case p of
+	  (* I think you have to view traps as having a kind of
+	   * "read" store effect, where the store is the condition codes.
+	   * -leaf 
+	   *)
+	    soft_vtrap _ => true
+	  | soft_ztrap _ => true
+	  | hard_vtrap _ => true
+	  | hard_ztrap _ => true
+	    
+	  | array2vector _ => true   (* This reads updateable memory *)
+	  | vector2array _ => true   (* This allocates updateable memory
+				      * and equality is by reference *)
+	  | create_table table => 
+	      (case table 
+		 of IntArray _   => true
+		  | FloatArray _ => true
+		  | OtherArray _ => true
+		  | _ => false)  (* Vectors are not updateable, and 
+				  * are compared structurally *)
+	  | sub t    => true
+	  | update t => true
+	  | _ => false (* All others have no store effects *)
+(*
+	  | length_table t => false (* length does not change *)
+	  | equal_table t => false  (* equality does not change *)
+	  | create_empty_table t => false (*All empty tables are equal *)
+
+	  (* Some of these may raise exceptions, but they do not have
+	   * a store effect.
+	   *)
+	  | float2int => false
+	  | int2float => false 
+	  | int2uint _ => false 
+	  | uint2int _ => false 
+	  | int2int _ => false 
+	  | uint2uint _ => false 
+	  | uinta2uinta _ => false 
+	  | uintv2uintv _ => false 
+
+	  | neg_float _ => false 
+	  | abs_float _ => false 
+	  | plus_float _ => false 
+	  | minus_float  _ => false 
+	  | mul_float _ => false 
+	  | div_float _  => false 
+	  | less_float _ => false 
+	  | greater_float _ => false 
+	  | lesseq_float _ => false 
+	  | greatereq_float _ => false 
+	  | eq_float _ => false 
+	  | neq_float _ => false 
+
+	  | plus_int _ => false 
+	  | minus_int _ => false 
+	  | mul_int _ => false 
+	  | div_int _ => false 
+	  | mod_int _ => false 
+	  | quot_int _ => false 
+	  | rem_int _ => false 
+	  | plus_uint _ => false 
+	  | minus_uint _ => false 
+	  | mul_uint _ => false 
+	  | div_uint _ => false 
+	  | mod_uint _ => false 
+	  | less_int _ => false 
+	  | greater_int _ => false 
+	  | lesseq_int _ => false 
+	  | greatereq_int _ => false 
+	  | less_uint _ => false 
+	  | greater_uint _ => false 
+	  | lesseq_uint _ => false 
+	  | greatereq_uint _ => false 
+	  | eq_int _ => false 
+	  | neq_int _ => false 
+	  | neg_int _ => false 
+	  | abs_int _ => false 
+		
+	  (* bit-pattern manipulation *)
+	  | not_int _ => false 
+	  | and_int _ => false 
+	  | or_int _ => false 
+	  | xor_int _ => false 
+	  | lshift_int _ => false 
+	  | rshift_int _ => false 
+	  | rshift_uint _ => false 
+*)
+
+
+	(* has_effect p
+	 * This function returns true if the primitive p
+	 * may potentially have an effect.  See Tarditi's thesis
+	 * section 5.3.1 for additional discussion.  In particular, if
+	 * this function returns false, then the effect of p is
+	 * a subset of {}.  If this function returns true, then the
+	 * effect of p is a subset of {E,N,A,R,W} (that is, any effect).
+	 * 
+	 * Note that code that does *not* satisfy this predicate is 
+	 * guaranteed to be tantamount to a value.
+	 *)
+    fun has_effect p = (control_effect p) orelse (store_effect p)
+
   end

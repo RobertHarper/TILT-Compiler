@@ -122,4 +122,45 @@ signature PRIM =
 
     val same_intsize : intsize * intsize -> bool
     val same_floatsize : floatsize * floatsize -> bool
+
+    (* control_effect p
+     * This function returns true if the primitive p
+     * may potentially have a control effect.  See Tarditi's thesis
+     * section 5.3.1 for additional discussion.  In particular, if
+     * this function returns false, then the effect of p is
+     * a subset of {A,R,W}.  If this function returns true, then the
+     * effect of p is a subset of {E,N,A,R,W}.
+     * Note that code which does *not* satisfy this predicate may still 
+     * modify or depend on the store.  
+     *)
+    val control_effect : prim -> bool
+
+    (* store_effect p
+     * This function returns true if the primitive p
+     * may potentially have a store effect.  See Tarditi's thesis
+     * section 5.3.1 for additional discussion.  In particular, if
+     * this function returns false, then the effect of p is
+     * a subset of {E,N}.  If this function returns true, then the
+     * effect of p is a subset of {E,N,A,R,W} (that is, any effect).
+     *
+     * Note that code which does *not* satisfy this predicate may still 
+     * raise exceptions or not terminate.  This means that while you can 
+     * safely CSE this term (c.f. Tarditi section 6.1), you cannot 
+     * eliminate it as dead code. 
+     *)
+    val store_effect : prim -> bool
+
+    (* has_effect p
+     * This function returns true if the primitive p
+     * may potentially have an effect.  See Tarditi's thesis
+     * section 5.3.1 for additional discussion.  In particular, if
+     * this function returns false, then the effect of p is
+     * a subset of {}.  If this function returns true, then the
+     * effect of p is a subset of {E,N,A,R,W} (that is, any effect).
+     * 
+     * Note that code that does *not* satisfy this predicate is 
+     * guaranteed to be tantamount to a value.
+     *)
+    val has_effect : prim -> bool
+
   end

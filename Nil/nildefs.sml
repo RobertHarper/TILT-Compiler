@@ -10,6 +10,7 @@ structure NilDefs :> NILDEFS =
 
     open Nil Prim
 
+
     val fresh_var = Name.fresh_var
 
     (*
@@ -56,47 +57,86 @@ structure NilDefs :> NILDEFS =
        | inj_exn _ => Listops.andfold is_closed_value elist
        | _ => false)
 	 
-    (*Correct if in a-normal form
-     *)
-    fun effect (Var_e _) = false
-      | effect (Const_e _) = false
-      | effect (Unfold_e _) = false
-      | effect (Fold_e _)   = false
-      | effect (Coerce_e _) = false
-      | effect (Prim_e (NilPrimOp make_exntag, _,_, _)) = true
-      | effect (Prim_e (NilPrimOp _, _,_, _)) = false
-      | effect (Prim_e (PrimOp p, _,_, _)) = 
-      (case p of
-	 Prim.plus_uint _ => false
-       | Prim.minus_uint _ => false
-       | Prim.mul_uint _ => false
-       | Prim.less_int _ => false
-       | Prim.greater_int _ => false
-       | Prim.lesseq_int _ => false
-       | Prim.greatereq_int _ => false
-       | Prim.less_uint _ => false
-       | Prim.lesseq_uint _ => false
-       | Prim.greatereq_uint _ => false
-       | Prim.eq_int _ => false
-       | Prim.neq_int _ => false
-       | Prim.neg_int _ => false
-       | Prim.abs_int _ => false
-       | Prim.not_int _ => false
-       | Prim.and_int _ => false
-       | Prim.or_int _ => false
-       | Prim.xor_int _ => false
-       | Prim.lshift_int _ => false
-       | Prim.rshift_int _ => false 
-       | Prim.rshift_uint _ => false
-       | _ => true)
-      | effect (Let_e (_, bnds, e)) = (Listops.orfold bnd_effect bnds) orelse (effect e)
-      | effect _ = true
 
-    and bnd_effect (Exp_b (_,_,e)) = effect e
-      | bnd_effect (Con_b _) = false
-      | bnd_effect (Fixopen_b _) = false
-      | bnd_effect (Fixcode_b _) = false
-      | bnd_effect (Fixclosure_b _) = false
+    (*See individual comments below
+     *)
+    fun effect (store,control) e = 
+      let
+	val primcheck = 
+	  (case (store,control)
+	     of (true,true)  => Prim.has_effect
+	      | (true,false) => Prim.store_effect
+	      | (false,true) => Prim.control_effect)
+	fun check e =
+	  case e 
+	    of (Var_e _)     => false
+	     | (Const_e _)   => false
+	     | (Unfold_e _)  => false
+	     | (Fold_e _)    => false
+	     | (Coerce_e _)  => false
+	     | (Prim_e (NilPrimOp make_exntag, _,_, _)) => store 
+	     | (Prim_e (NilPrimOp _, _,_, _)) => false
+	     | (Prim_e (PrimOp p, _,_, _)) => primcheck p
+	     | (Let_e (_, bnds, e)) => (Listops.orfold bnd_check bnds) orelse (check e)
+	     | _ => true
+	and bnd_check bnd = 
+	  case bnd
+	    of (Exp_b (_,_,e)) => check e
+	     | (Con_b _)       => false
+	     | (Fixopen_b _)   => false
+	     | (Fixcode_b _)   => false
+	     | (Fixclosure_b _)=> false
+      in check e
+      end
+
+
+    (* The following three functions are predicates on expressions that
+     * categorize them according the the kinds of effects they may have.
+     * For our purposes, we care about two kinds of effects: control flow
+     * effects (non-termination and exceptions) and store effects (reads,
+     * writes, and allocates of mutable memory.  See Tarditi's thesis
+     * section 5.3.1 for additional discussion.
+     *
+     * These are only correct if the expression is in a-normal form, since 
+     * they do not check the arguments to term-constructors.
+     *
+     * These are a conservative approximation only, since we do not recurse inside
+     * of switches, etc.  The intention is that these should only be used on 
+     * small things, to keep asymptotic completexity down (c.f. Tarditi)
+     *)
+
+    (* storeEffect e  
+     * This function returns true if the expression e may potentially have a 
+     * store effect.  In particular, if this function returns false, then the 
+     * effect of e is a subset of {E,N}.  If this function returns true, 
+     * then the effect of e is a subset of {E,N,A,R,W} (that is, any effect).
+     * Note that code that does *not* satisfy this predicate may still raise 
+     * exceptions or not terminate.  This means that while you can safely CSE 
+     * this term (c.f. Tarditi section 6.1), you cannot eliminate it as dead code. 
+     *)
+    val storeEffect = effect (true,false)
+
+    (* controlEffect e  
+     * This function returns true if the expression e may potentially have a 
+     * control effect.  In particular, if this function returns false, then the 
+     * effect of e is a subset of {A,R,W}.  If this function returns true, 
+     * then the effect of e is a subset of {E,N,A,R,W} (that is, any effect).
+     * Note that code that does *not* satisfy this predicate may still depend on 
+     * or modify the store.  This means that you cannot safely CSE this term
+     * nor eliminate it as dead code.  
+     *)
+    val controlEffect = effect (false,true)
+
+
+    (* anyEffect e  
+     * This function returns true if the expression e may potentially have some 
+     * effect.  In particular, if this function returns false, then the effect 
+     * of e is a subset of {}.  If this function returns true, then the effect 
+     * of e is a subset of {E,N,A,R,W} (that is, any effect). 
+     * Note that code that does *not* satisfy this predicate is 
+     * guaranteed to be tantamount to a value.
+     *)
+    val anyEffect = effect (true,true)
 
     fun covariant_prim p =
       (case p of

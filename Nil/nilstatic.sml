@@ -38,6 +38,7 @@ struct
   val alpha_equiv_success    = Stats.counter "Alpha Equiv Checks Succeeded"
   val alpha_equiv_fails      = Stats.counter "Alpha Equiv Checks Failed"
   val kind_standardize_calls = Stats.counter "Kind Standardize Calls"
+  val sum_equiv_count        = Stats.counter "SumEquivCount"
 
   val print_lets          = Stats.ff "nilstatic_print_lets"
 
@@ -595,7 +596,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     in res
     end
 
-  and subtype     (D,c1,c2)     = con_equiv  (D,c1,c2,Type_k,true)
+  and sub_type     (D,c1,c2)     = con_equiv  (D,c1,c2,Type_k,true)
   and type_equiv  (D,c1,c2)     = con_equiv  (D,c1,c2,Type_k,false)
   and type_equiv' ((D,T),c1,c2) = con_equiv_wrapper ((D,T),c1,c2,Type_k,false)
 
@@ -895,6 +896,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		      | (SOME w1, SOME w2,_) => (w1=w2)
 		      | (SOME w1, NONE, true) => true
 		      | _ => false)
+		   val _ = sum_equiv_count()
 		 in  
 		   res1 andalso 
 		   eq_list(fn (c1,c2) => con_equiv((D,T),c1,c2,k,sk),
@@ -1552,7 +1554,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 			   pp_label label;
 			   print " from \n";
 			   pp_con rvals;
-			   print "\n which has labels";
+			   print "\n which has labels ";
 			   pp_list pp_label' labs ("",", ","",false);
 			   c_error(D,constructor,"Ill-formed projection"))
 	   in
@@ -1775,7 +1777,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
     let
       val con' = exp_valid(D,exp)
     in
-      ignore (subtimer("exp_analyze:st",subtype)(D,con',con) orelse 
+      ignore (subtimer("exp_analyze:st",sub_type)(D,con',con) orelse 
 	      (print "Analyzing an expression of type\n";Ppnil.pp_con con';
 	       print "\nAt type \n";Ppnil.pp_con con;
 	       e_error(D,exp,"Expression cannot be given required type")))
@@ -1826,7 +1828,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       (*Do an application node. *)
       fun do_app (openness,app,cons,texps,fexps) =
 	let           
-	  val subtype    = subtimer("Tchk:Exp:App:st",subtype)
+	  val sub_type    = subtimer("Tchk:Exp:App:st",sub_type)
 	  val con = exp_valid (D,app)
 	    
 	  val {openness = openness', tFormals, eFormals, fFormals, body_type, isDependent,...} = 
@@ -1908,11 +1910,11 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
        *)
       fun do_args (D,formals,actuals) =
 	let
-	  val subtype    = subtimer("Tchk:Exp:Arg:st",subtype)
+	  val sub_type    = subtimer("Tchk:Exp:Arg:st",sub_type)
 	  fun do_one (formal,actual) = 
 	    let val found = exp_valid(D,actual)
 	    in
-	      if subtype(D,found,formal) then ()
+	      if sub_type(D,found,formal) then ()
 	      else e_error(D,exp,"Formal/actual parameter mismatch in arglist")
 	    end
 	in (app2 do_one (formals,actuals)) handle e => (print "Length Mismatch?";raise e)
@@ -1967,13 +1969,13 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 | float (floatsize,string) => Prim_c (Float_c floatsize,[])
 	 | vector (con,vec) =>  
 	     let
-	       val subtype    = subtimer("Tchk:Exp:Val:st",subtype)
+	       val sub_type    = subtimer("Tchk:Exp:Val:st",sub_type)
 	       val _ = type_analyze (D,con)
 	       fun check exp = 
 		 let
 		   val con' = exp_valid (D,exp)
 		   val _ = 
-		     (subtype (D,con',con)) orelse
+		     (sub_type (D,con',con)) orelse
 		     (e_error(D,Const_e value,"Vector contains expression of incorrect type" handle e => raise e))
 		 in()
 		 end
@@ -1990,7 +1992,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       fun switch_valid (D,switch) =
 	let
 	  local
-	    val subtype    = subtimer("Tchk:Exp:Swt:default:st",subtype)
+	    val sub_type    = subtimer("Tchk:Exp:Swt:default:st",sub_type)
 	  in
 	  fun do_default (D,NONE,[],result_type) = e_error(D,Switch_e switch,"Case must be non-empty")
 	    | do_default (D,SOME e,_,result_type) = exp_analyze(D,e,result_type)
@@ -2005,14 +2007,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	  fun sum_exn (mk_itype,check_arg) (D,arg,bound,arms,default,result_type) = 
 	    let
 	      val result_type' = con_head_normalize(D,result_type)
-	      val subtype    = subtimer("Tchk:Exp:Swt:Arm:st",subtype)
+	      val sub_type    = subtimer("Tchk:Exp:Swt:Arm:st",sub_type)
 	      fun do_arm (index,tr,exp) = 
 		let
 		  val D = insert_con(D,bound,mk_itype (D,index))
 		  val con = exp_valid(D,exp)
 		  val _ = niltrace_valid(D,tr)
 		in
-		  subtype(D,con,result_type')
+		  sub_type(D,con,result_type')
 		end
 	      
 	      val argcon = exp_valid(D,arg)
@@ -2038,7 +2040,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   val _ = type_analyze(D,sumtype)
 		   val sumtype = con_head_normalize(D,sumtype)
 		   fun mk_sum (D,field) = convert_sum_to_special (sumtype,field)
-		   fun check_arg (D,c) = subtimer("Tchk:Exp:Swt:Arg:st",subtype)(D,c,sumtype)
+		   fun check_arg (D,c) = subtimer("Tchk:Exp:Swt:Arg:st",sub_type)(D,c,sumtype)
 		 in
 		   sum_exn (mk_sum,check_arg) (D,arg,bound,arms,default,result_type)
 		 end
@@ -2194,7 +2196,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 				  of Prim_c(GCTag_c,[rtype]) => rtype
 				   | _ => e_error(D,t,"Expression does not have GCTag type"))
 		   val cons  = map (curry2 exp_valid D) exps
-		   val _ = if subtype (D,Prim_c (Record_c (labels,NONE),cons),rtype) then ()
+		   val _ = if sub_type (D,Prim_c (Record_c (labels,NONE),cons),rtype) then ()
 			   else e_error(D,orig_exp,"Type of record does not agree with GCTag")
 		   val _ = (labels_distinct labels) orelse e_error(D,orig_exp, "Fields not distinct" )
 		   val _ = ((List.length labels) = (List.length exps)) orelse e_error(D,orig_exp, "Wrong number of fields")
@@ -2210,7 +2212,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		   val (inj_type,nontagcount,which,carrier) = sum_helper(D,sumcon,sumtype)
 		   val con_k = sum_project_carrier_type (which,nontagcount,carrier)
 		 in
-		   if subtype(D,exp_valid(D,v),con_k)
+		   if sub_type(D,exp_valid(D,v),con_k)
 		     then inj_type
 		   else e_error(D,orig_exp,"Injected argument doesn't have expected type")
 		 end
@@ -2232,7 +2234,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 				| ([t,v],_) => (exp_analyze(D,t,mkGCTagType(inj_type));v)
 				| _         => e_error(D,orig_exp,"Wrong number of arguments for sumtype")
 
-		     val _ = subtype(D,exp_valid(D,v),con_k)
+		     val _ = sub_type(D,exp_valid(D,v),con_k)
 		             orelse e_error(D,orig_exp,"Injected argument doesn't have expected type")
 
 		 in inj_type
@@ -2258,15 +2260,15 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 
 	    | (roll,[argcon],[exp]) => 
 		let val _ = type_analyze (D,argcon)
-		  val subtype    = subtimer("Tchk:Exp:Prim:Roll:st",subtype)
-		in if subtype(D,exp_valid (D,exp),expandMuType(D,argcon) ) then argcon
+		  val sub_type    = subtimer("Tchk:Exp:Prim:Roll:st",sub_type)
+		in if sub_type(D,exp_valid (D,exp),expandMuType(D,argcon) ) then argcon
 		   else e_error(D,orig_exp,"Error in roll")
 		end
 
 	    | (unroll,[con],[exp]) =>
 		let val _ = type_analyze (D,con)
-		  val subtype    = subtimer("Tchk:Exp:Prim:Unroll:st",subtype)
-		in if subtype(D,exp_valid (D,exp),con) then expandMuType (D,con)
+		  val sub_type    = subtimer("Tchk:Exp:Prim:Unroll:st",sub_type)
+		in if sub_type(D,exp_valid (D,exp),con) then expandMuType (D,con)
 		   else e_error(D,orig_exp,"Error in unroll")
 		end
 
@@ -2276,7 +2278,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		end
 
 	    | (inj_exn name,[],[exp1,exp2]) => 
-		if subtimer("Tchk:Exp:Prim:IExn:st",subtype)(D,exp_valid (D,exp2),strip_exntag(D,exp_valid (D,exp1))) then
+		if subtimer("Tchk:Exp:Prim:IExn:st",sub_type)(D,exp_valid (D,exp2),strip_exntag(D,exp_valid (D,exp1))) then
 		  Prim_c (Exn_c,[])
 		else e_error(D,orig_exp,"Type mismatch in exception injection")
 	    | (make_vararg (openness,effect),[argc,resc],[e]) =>
@@ -2307,7 +2309,7 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
       val switch_valid = subtimer("Tchk:Exp:switch_valid",switch_valid)
       val do_app      = subtimer("Tchk:Exp:do_app",do_app)
       val do_args     = subtimer("Tchk:Exp:do_args",do_args)
-      val subtype    = subtimer("Tchk:Exp:subtype",subtype)
+      val sub_type    = subtimer("Tchk:Exp:sub_type",sub_type)
       val con_valid   = subtimer("Tchk:Exp:con_valid",con_valid)
       val con_head_normalize = subtimer("Tchk:Exp:HNF",con_head_normalize)
       val substConInCon      = fn s => subtimer("Tchk:Exp:substConInCon",substConInCon s)

@@ -1,4 +1,4 @@
-(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs *)
+(*$import Util Listops Sequence Array List Name Prim TraceInfo Int TilWord64 TilWord32 Option String Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps NilPrimUtil NilRename NilDefs NilStatic *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.
@@ -12,6 +12,7 @@
 	Cancel make_vararg and make_onearg
         Fold constant expressions
 	Convert Sumsw to Intsw
+	Flatten int switches.
 	Not anormalize (old fear of classifier sizes) 
 	Reduce known switch
 *)
@@ -23,10 +24,21 @@ struct
 	open Util Nil NilUtil Listops
  	val error = fn s => Util.error "optimize.sml" s
 
+	val warn = fn s => print ("WARNING: "^s^"\n")
+
 	val debug = Stats.ff("OptimizeDebug")
 	val doTimer = Stats.ff("DoOptimizeTimer")
 	fun subtimer(str,f) = if (!doTimer) then Stats.subtimer(str,f) else f
 
+	fun inc r = r := !r + 1
+
+	val folds_reduced = ref 0
+	val coercions_cancelled = ref 0
+	val switches_flattened = ref 0
+	val switches_reduced = ref 0
+
+	val coercion_cancel = Stats.tt "CancelCoercions"
+	val chat = Stats.ff "OptimizeChat"
 
         (* Generate polymorphic aggregrate handling functions that use PrimOp's *)
 	local
@@ -251,6 +263,11 @@ struct
 				       mapping = Name.VarMap.empty,
 				       params = params}
 	  fun getParams (STATE{params,...}) = params		   
+
+	  (* Mark the current binding as used,
+	   * so that all variables encountered will be 
+	   * kept.
+	   *)
 	  fun retain_state(STATE{equation, current, mapping, avail, curry_processed, params}) =
 			STATE{equation=equation, avail=avail,
 			      curry_processed = curry_processed,
@@ -316,6 +333,20 @@ struct
 		   NONE => UNKNOWN
 		 | SOME (_,alias) => alias)
 
+	  (*Get an alias if possible, otherwise 
+	   * return the original expression
+	   *)
+	  fun unalias (state,e) = 
+	    let
+	      fun loop (Var_e v) =
+		(case lookup_alias(state,v) of
+		   MUSTe e => loop e
+		 | OPTIONALe e => e
+		 | _ => e)
+		| loop e = e
+	    in loop e
+	    end
+
 (*	  val lookup_alias = fn (s,v) =>
 	    let val alias = lookup_alias (s,v)
 	    in 
@@ -324,87 +355,6 @@ struct
 	      alias
 	    end
 *)
-
-	  fun find_availC(STATE{avail,params,...},c) = 
-	      if (#doCse params) then ExpTable.Conmap.find(#2 avail,c) else NONE
-	  fun add_availC(state as STATE{curry_processed,mapping,current,equation,avail,params},c,v) = 
-	      if (#doCse params)
-		  then STATE{mapping=mapping,current=current,
-			     equation=equation,
-			     curry_processed = curry_processed,
-			     avail=(#1 avail,
-				    ExpTable.Conmap.insert(#2 avail,c,v)),
-			     params=params}
-	      else state
-
-	  fun find_availE(STATE{avail,params,...},e) = 
-	      if (#doCse params) then ExpTable.Expmap.find(#1 avail,e) else NONE
-
-(*	  val find_availC = fn (s,c) =>
-	    let val res = find_availC (s,c)
-	    in (case res 
-		  of SOME c' => (print "XXX!!!\n";
-				 Ppnil.pp_con c;
-				 print "\n Rewritten with \n";
-				 Ppnil.pp_var c';
-				 print "\n")
-		   | _ => ())
-	      ;res
-	    end
-
-	  val find_availE = fn (s,c) =>
-	    let val res = find_availE (s,c)
-	    in (case res 
-		  of SOME c' => (print "XXX!!!\n";
-				 Ppnil.pp_exp c;
-				 print "\n ExpRewritten with \n";
-				 Ppnil.pp_var c';
-				 print "\n")
-		   | _ => ())
-	      ;res
-	    end
-*)
-          fun valuable (state as STATE {equation=ctxt, ...}, e) = 
-	      (case e of
-		   App_e(_,Var_e v,_,elist,eflist) =>
-		       (case NilContext.find_con (ctxt,v) of
-			    AllArrow_c{effect=Total,...} => Listops.andfold (fn e => valuable (state, e)) (elist @ eflist)
-			  | _ => false)
-		 | _ => not (NilDefs.effect e))
-
-	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail,params},e,v) = 
-	      if (#doCse params andalso valuable(state,e))
-		  then STATE{params=params,
-			     mapping=mapping,current=current,
-			     curry_processed = curry_processed,
-			     equation=equation,
-			     avail=(ExpTable.Expmap.insert(#1 avail,e,v),
-				    #2 avail)}
-	      else state
-
-	  (* Look up constructor level record projection *)
-	  fun lookup_cproj(state,v,labs) = 
-	      let fun loop c [] = SOME c
-		    | loop (Crecord_c lclist) (l::rest) =
-		         let val c = (case assoc_eq(Name.eq_label,l,lclist) of
-					  NONE => (print "lookup_cproj could not find ";
-						   Ppnil.pp_label l; print "  among ";
-						   app (fn (l,_) => (Ppnil.pp_label l; print "  ")) lclist;
-						   print "\n";
-						   error "lookup_cproj: could not find label")
-					| SOME c => c)
-			 in  loop c rest
-			 end
-		    | loop (Var_c v) labs = lookup_cproj(state,v,labs)
-		    | loop (Annotate_c (_,c)) labs = loop c labs
-		    | loop _ _ = NONE
-	      in  (case lookup_alias(state,v) of
-		       OPTIONALc c => loop c labs
-		     | MUSTc c => loop c labs
-		     | _ => (case find_availC(state,NilDefs.path2con(v,labs)) of
-				NONE =>	NONE
-			      | SOME v => SOME(Var_c v)))
-	      end
 
 	  fun get_env(STATE{equation,...}) = equation
 	  fun find_con(STATE{equation,...},v) = NilContext.find_con(equation,v)
@@ -458,6 +408,117 @@ struct
 
 	  fun type_of(STATE{equation,...},e) = 
 	      subtimer("optimizeTypeof", Normalize.type_of)(equation,e)
+
+	  fun type_equiv(STATE{equation,...},c1,c2) = 
+	      subtimer("optimizeTypeEquiv", NilStatic.type_equiv)(equation,c1,c2)
+
+	  fun sub_type(STATE{equation,...},c1,c2) = 
+	      subtimer("optimizeSubType", NilStatic.sub_type)(equation,c1,c2)
+
+
+	  fun find_availC(STATE{avail,params,...},c) = 
+	      if (#doCse params) then ExpTable.Conmap.find(#2 avail,c) else NONE
+	  fun add_availC(state as STATE{curry_processed,mapping,current,equation,avail,params},c,v) = 
+	      if (#doCse params)
+		  then STATE{mapping=mapping,current=current,
+			     equation=equation,
+			     curry_processed = curry_processed,
+			     avail=(#1 avail,
+				    ExpTable.Conmap.insert(#2 avail,c,v)),
+			     params=params}
+	      else state
+
+	  fun find_availE(STATE{avail,params,...},e) = 
+	      if (#doCse params) then ExpTable.Expmap.find(#1 avail,e) else NONE
+
+(*	  val find_availC = fn (s,c) =>
+	    let val res = find_availC (s,c)
+	    in (case res 
+		  of SOME c' => (print "XXX!!!\n";
+				 Ppnil.pp_con c;
+				 print "\n Rewritten with \n";
+				 Ppnil.pp_var c';
+				 print "\n")
+		   | _ => ())
+	      ;res
+	    end
+
+	  val find_availE = fn (s,c) =>
+	    let val res = find_availE (s,c)
+	    in (case res 
+		  of SOME c' => (print "XXX!!!\n";
+				 Ppnil.pp_exp c;
+				 print "\n ExpRewritten with \n";
+				 Ppnil.pp_var c';
+				 print "\n")
+		   | _ => ())
+	      ;res
+	    end
+*)
+
+	  (* Valuable expressions are expressions which do not have effects of
+	   * any kind.  These may be eliminated as dead code, or replicated, or
+	   * coalesced at will
+	   *)
+          fun valuable (state, e) = 
+	      (case e of
+		 App_e(_,Var_e v,_,elist,eflist) =>
+		   (case reduce_hnf (state,find_con (state,v))
+		      of (true,AllArrow_c{effect,...}) => (effect=Total) andalso (Listops.andfold (fn e => valuable (state, e)) (elist @ eflist))
+		       | (false,_) => (warn "Optimize unable to get head normal form for function type";false))
+		 | _ => not (NilDefs.anyEffect e))
+
+	  (* Pure expressions are expressions which do not have
+	   * any store effects (that is, they neither depend on nor modify
+	   * the store.  This means that either
+	   *    1. They always compute the same value
+	   * or 2. They always diverge or throw an exception
+	   * Pure expressions cannot be eliminated without changing the 
+	   * behaviour of the program, but they can be coalesced with
+	   * a previous binding of the same expression. c.g. Tarditi 6.1
+	   *)
+          fun pure (state, e) = 
+	    (case e of
+	       App_e(_,Var_e v,_,elist,eflist) =>
+		 (case reduce_hnf (state,find_con (state,v))
+		    of (true,AllArrow_c{effect,...}) => (effect=Total) andalso (Listops.andfold (fn e => valuable (state, e)) (elist @ eflist))
+		     | (false,_) => (warn "Optimize unable to get head normal form for function type";false))
+	     | _ => not (NilDefs.storeEffect e))
+
+	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail,params},e,v) = 
+	      if (#doCse params andalso pure(state,e))
+		  then STATE{params=params,
+			     mapping=mapping,current=current,
+			     curry_processed = curry_processed,
+			     equation=equation,
+			     avail=(ExpTable.Expmap.insert(#1 avail,e,v),
+				    #2 avail)}
+	      else state
+
+	  (* Look up constructor level record projection *)
+	  fun lookup_cproj(state,v,labs) = 
+	      let fun loop c [] = SOME c
+		    | loop (Crecord_c lclist) (l::rest) =
+		         let val c = (case assoc_eq(Name.eq_label,l,lclist) of
+					  NONE => (print "lookup_cproj could not find ";
+						   Ppnil.pp_label l; print "  among ";
+						   app (fn (l,_) => (Ppnil.pp_label l; print "  ")) lclist;
+						   print "\n";
+						   error "lookup_cproj: could not find label")
+					| SOME c => c)
+			 in  loop c rest
+			 end
+		    | loop (Var_c v) labs = lookup_cproj(state,v,labs)
+		    | loop (Annotate_c (_,c)) labs = loop c labs
+		    | loop _ _ = NONE
+	      in  (case lookup_alias(state,v) of
+		       OPTIONALc c => loop c labs
+		     | MUSTc c => loop c labs
+		     | _ => (case find_availC(state,NilDefs.path2con(v,labs)) of
+				NONE =>	NONE
+			      | SOME v => SOME(Var_c v)))
+	      end
+
 
 	  (* Full get_trace may rewrite the con in a way that the optimizer
 	   * won't like.  We have to use get_trace' and trust that the optimizer
@@ -560,72 +621,22 @@ struct
 	end
 
 
-
-
-	(*Apply the given function (of type state -> exp -> 'a)
-	 * to the result of looking up 
-	 * aliases and reducing let bnds@(x=e) in x  => let bnds in e.
-	 *
-	 * If f is applied, it is guaranteed to be applied to the first 
-	 * equivalent expression which is neither a variable nor a let 
-	 * whose body is a variable.
-	 *)
-	fun de_alias f state e = 
-	  let
-	    fun de_alias_var v =
-	      (case lookup_alias(state,v) 
-		 of OPTIONALe e => de_alias_e e
-		  | MUSTe e => de_alias_e e
-		  | _ => NONE)
-	    and de_alias_e e =
-	      (case e
-		 of Var_e v => de_alias_var v
-		  | Let_e (sort,bnds,e) =>
-		   let
-		     fun loop arg = 
-		       (case arg
-			  of ([],_) => de_alias f state e
-			   | (Exp_b(v, _, e)::rbnds, Var_e v') => 
-			    if (Name.eq_var(v,v')) then loop (rbnds,e)
-			    else de_alias_var v'
-			   | (rbnds, Var_e v) => de_alias_var v
-			   | (rbnds,e) => f state (Let_e (sort,rev rbnds,e)))
-		   in loop (rev bnds,e)
-		   end
-		  | _ => f state e)
-	  in de_alias_e e
-	  end
-
 	(*** Code for Sumsw to Intsw conversion ***)
 
-	(* Given a de-aliased expression, 
-	 * check to see if it is an integer comparison with a constant
-	 * and if so return the operands and the size.
-	 *)
-	fun is_int_eq' state e = 
-	  (case e 
-	     of Prim_e(PrimOp(Prim.eq_int is),[],[],[v1,v2]) =>
-	       (case (v1,v2)
-		  of (Var_e v,Const_e (Prim.int(_,w))) => SOME(is,v,w)
-		   | (Const_e (Prim.int(_,w)),Var_e v) => SOME(is,v,w)
-		   | _ => NONE)
-	      | Let_e (sort, bnds, e) => is_int_eq' state e
-	      | _ => NONE)
-
-	(* Given a de-aliased expression, 
-	 * check to see if it is a coercion application, and if so
-	 * return the argument to the coercion.
-	 *)
-	fun is_coerce' state e =
-	  (case e 
-	     of Coerce_e (q,[],e) => SOME e
-	      | Let_e (sort, bnds, Coerce_e (q,[],e)) => SOME (Let_e (sort,bnds,e))
-	      | _ => NONE)
-	     
-	val is_int_eq = de_alias is_int_eq'
- 	val is_coerce = de_alias is_coerce' 
-
-	fun get_eq_args state e = Option.join (Option.map (is_int_eq state) (is_coerce state e))
+	fun get_eq_args state e = 
+	  let
+	    val res = case unalias (state,e)
+			of Coerce_e (q,[],e) =>
+			  (case unalias (state,e)
+			     of Prim_e(PrimOp(Prim.eq_int is),[],[],[v1,v2]) =>
+			       (case (v1,v2)
+				  of (Var_e v,Const_e (Prim.int(_,w))) => SOME(is,v,w)
+				   | (Const_e (Prim.int(_,w)),Var_e v) => SOME(is,v,w)
+				   | _ => NONE)  (* Not compared to a constant *)
+			      | _ => NONE)  (* Not eq *)
+			 | _ => NONE (*Not a coercion *)
+	  in res
+	  end
 
 	fun is_sumsw_int state (Switch_e(Sumsw_e{sumtype,bound,arg,arms,default,...})) = 
 	  (case (get_eq_args state arg,arms,default) of
@@ -636,6 +647,12 @@ struct
 	       if (Name.eq_var(v,v')) then is_sumsw_int state e else NONE
 	  | is_sumsw_int state _ = NONE
 
+	(* This makes some effort to try and flatten the generated
+	 * int switches.  It will almost always fail, 
+	 * since there are always intervening bindings
+	 * in a-normal form.  Might be worth getting rid of this.
+	 * -leaf
+	 *)
 	fun convert_sumsw state (sum_sw as {result_type,...}) =
 	    let val exp = Switch_e(Sumsw_e sum_sw)
 	    in  (case is_sumsw_int state exp of
@@ -658,6 +675,124 @@ struct
 	       | _ => NONE)
 	    end
 
+
+	(* This code tries to catch code of the form
+ 	 * Intswitch x of i1 => e1
+	 *             |  _  => Intswitch x of i2 => e2
+	 *                                  | _   => .....
+	 * and turn it into code of the form
+ 	 * Intswitch x of i1 => e1
+	 *             |  i2 => e2 
+	 *             |  ....
+	 * This code arises commonly from the result of optimizing
+	 * the code that the elaborator generates for all sorts of
+	 * switches.
+	 *
+	 * This is a fairly brain dead version - one could do better.
+	 *
+	 * The important thing we must ensure is that that we do not accidentally
+	 * move switches with the same pattern into the same switch, since we
+	 * do not have a well-defined semantics for this.
+	 * We accomplish this by doing a very simple form of redudant comparison
+	 * elimination.  Any comparison of x to i1 in the default switch continuation
+	 * is dead.  Therefore, we simply always drop arms which have the same 
+	 * tag as an arm we've already found.  
+	 *
+	 * A perhaps better approach would be to do full redundant comparison elimination.
+	 *
+	 * Another extension to this would be to catch code where  e1 (above) is also
+	 * a switch on x.  This complicates the optimization however,
+	 * since we cannot hoist these comparisons up without ensuring that we are not
+	 * killing off a comparison to the same value in the default continuation (or in 
+         * the general case, in subsequent arms).
+	 * Given our current translation of switches, this "optimization" would probably
+         * produce worse code in many cases, since we would be taking a tree-structured 
+	 * decision tree and turning it into a linear one.  If we ever start generating
+         * good code for switches, we could reconsider this.
+	 *  -leaf
+	 *)
+	local
+	  (* We traverse the switch from top to bottom, maintaining the arms
+	   * that we have seen so far in a sorted list.  At each switch in a
+	   * default continuation, we add in the arms (deleting any new duplicates)
+	   * and recur on the new default continuation
+	   *
+	   * The number of arms we will collect up is small, so insertion sort
+	   * is probably a good choice.
+	   *)
+	  
+	  fun arm_cmp (arm1 : w32 * exp,arm2 : w32 * exp) = 
+	    let 
+	      val i1 = #1 arm1
+	      val i2 = #1 arm2
+	    in
+	      if TilWord32.slt (i1,i2) then LESS
+	      else if TilWord32.sgt (i1,i2) then GREATER
+	      else EQUAL
+	    end
+
+	  (* This implements the redudant switch elimination: 
+	   * if the arm tags are equal, then we throw away the
+	   * arm that we are adding, since it follows (in the control flow)
+	   * the previous comparison
+	   * We keep the arms in descending order, since ML code tends to 
+	   * generate them in ascending order and we are traversing top down
+	   *)
+	  fun add_arm(arm,arms) = 
+	    let 
+	      fun loop [] = [arm]
+		| loop (a as (arm'::arms)) =
+		(case arm_cmp(arm,arm') 
+		   of LESS => arm'::loop arms
+		    | GREATER => arm::a
+		    | EQUAL => a)
+	    in loop arms
+	    end
+
+	  fun sort_arms arms = 
+	    let fun loop (acc,[]) = acc
+		  | loop (acc,arm::arms) = loop(add_arm(arm,acc),arms)
+	    in loop ([],arms)
+	    end
+
+	  fun add_arms (new,sorted) = List.foldl add_arm sorted new
+
+	  (* Given the variable that we are collecting switches on,
+	   * the current list of arms, and the current default,
+	   * try to find more arms in the default to hoist if possible
+	   *)
+	  fun get_arms v (cur as (arms,default)) = 
+	    (case default
+	       of Switch_e(Intsw_e{size,arg=Var_e v',arms=newarms,default=SOME next,result_type}) =>
+		 if Name.eq_var (v,v') then
+		   (inc switches_flattened;
+		    get_arms v (add_arms(newarms,arms),next))
+		 else cur
+		| Let_e (_, [Exp_b(v', _, e)], Var_e v'') => 
+		   if (Name.eq_var(v',v'')) then get_arms v (arms,e) else cur
+		| _ => cur)
+
+	in
+	  (*This is the function that actually goes through
+	   * and tries to collect up the arms
+	   *)
+	  fun flatten_int_sw int_sw= 
+	    (case int_sw
+	       of {size,arms,default=SOME next,result_type,arg=Var_e v} =>
+		 let
+		   val (arms,default) = get_arms v (arms,next)
+		   (* Arms will be sorted in decreasing order.  We put
+		    * them in increasing order, since this is more 
+		    * standard, and is what the above code is optimized for
+		    *)
+		   val arms = rev arms
+		 in
+		   {size=size,arg=Var_e v,
+		    arms=arms,default=SOME default,
+		    result_type = result_type}
+		 end
+		| _ => int_sw)
+	end
 
 	fun flattenBnds [] = []
 	  | flattenBnds (Exp_b(v,tr,Let_e(Sequential,innerBnds,body))::rest) = 
@@ -793,6 +928,8 @@ struct
 		    val res = 
 		      case lookup_alias(state,v) of
 			MUSTc c => do_con state c
+		      | OPTIONALc c => if NilDefs.small_con c then do_con state c
+				       else (use_var(state,v); con)
 		      | _ => (use_var(state,v); con)
 		  in res
 		  end
@@ -1045,8 +1182,11 @@ struct
 		      (case (getVals elist) of
 			   NONE => default ()
 			 | SOME elist => 
-			       (NilPrimUtil.apply (get_env state) p clist elist) 
-			       handle _ => default())
+			     let
+			       val e = ((NilPrimUtil.apply (get_env state) p clist elist)
+					handle _ => default())
+			     in do_exp state e
+			     end)
                | _ => default()
 	 end
 
@@ -1076,10 +1216,19 @@ struct
 		| Prim_e(p,trlist,clist,elist) => do_prim state (p,trlist,clist,elist)
 		| Switch_e sw => do_switch state sw
 		| Let_e (letsort,bnds,e) => 
-			let (* we must put a wrapper in order to perform the filter *)
+			let 
+                         (* we must put a wrapper in order to perform the filter *)
 			    val state = retain_state state
 			    val (bnds,state) = do_bnds(bnds,state)
 			    val e = do_exp state e
+			    (* bnd_used will discard any bounds that were definitively unused.
+			     * Variables that appear free in any of the bounds will be deferred
+			     * to that variable being bound.  Variables that appear free in
+			     * in e will be deferred to current.  Therefore,
+			     * we retain_state to say that current is definitely used.  Otherwise,
+			     * all of the bnds will be marked as unused and discarded, since
+			     * we don't yet know the status if the binding that we are in.
+			     *)
 			    val bnds = List.mapPartial (bnd_used state) bnds
 			    (* We cannot flatten bnds inside do_bnds because bnd_used would access undefined vars *)
 			    val bnds = flattenBnds bnds
@@ -1140,30 +1289,28 @@ struct
                                     | OPTIONALe(alias_exp as Prim_e(NilPrimOp (make_onearg _),[],
 						       [c1,_],[Var_e v'])) =>
 					  ((do_onearg(c1, v, v', elist))
-	 handle e => (print "Error detected from do_onearg on expression ";
-	              Ppnil.pp_exp exp; 
-	              print "\nwhere the function part has alias ";
-	              Ppnil.pp_exp alias_exp; print "\n"; raise e))
-				    | _ => default())
-			      | _ => default())
+					   handle e => (print "Error detected from do_onearg on expression ";
+							Ppnil.pp_exp exp; 
+							print "\nwhere the function part has alias ";
+							Ppnil.pp_exp alias_exp; print "\n"; raise e))
+						     | _ => default())
+			   | _ => default())
 		     end
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
 		| Handle_e{body,bound,handler,result_type} =>
-			let val body = do_exp state body
-			    val result_type = do_con state result_type
-			    val ([(bound,_)],state') = 
-				do_vclist state [(bound,Prim_c(Exn_c,[]))]
-			    val handler = do_exp state' handler
-			in  Handle_e{body = body, bound = bound,
-				     handler = handler, 
-				     result_type = result_type}
-			end
-		| Coerce_e (coercion,cargs,exp) =>
-		  let val coercion = do_exp state coercion
-		      val cargs = map (do_con state) cargs
-		      val exp = do_exp state exp
-		  in Coerce_e (coercion,cargs,exp)
-		  end
+		     let val body = do_exp state body
+		       val result_type = do_con state result_type
+		       val ([(bound,_)],state') = 
+			 do_vclist state [(bound,Prim_c(Exn_c,[]))]
+		       val handler = do_exp state' handler
+		     in  Handle_e{body = body, bound = bound,
+				  handler = handler, 
+				  result_type = result_type}
+		     end
+
+		(*Cancel fold/unfold if possible.
+		 *)
+		| Coerce_e args => do_coercion state args
 		| Fold_e (vars,from,to) =>
 		  let val state = add_vars(state,vars)
 		      val from = do_con state from
@@ -1177,7 +1324,45 @@ struct
 		  in Unfold_e (vars,from,to)
 		  end)
 
-
+	and do_coercion (state : state) (coercion1,cargs1,exp1) = 
+	  let
+	    val default = fn () =>
+	      let 
+		val coercion = do_exp state coercion1
+		val cargs = map (do_con state) cargs1
+		val exp = do_exp state exp1
+	      in Coerce_e (coercion,cargs,exp)
+	      end
+	    
+	    val res = 
+	      case unalias (state,exp1)
+		of Coerce_e (coercion2,cargs2,exp2) =>
+		  (case (unalias (state,coercion1),unalias (state,coercion2))
+		     of (Unfold_e _,Fold_e _) => (inc folds_reduced;do_exp state exp2)
+		      | _ => 
+		       (* This optimization is based on a particular operational
+			* interpretation. Since coercions have no runtime effect,
+			* we can always safely delete them without changing the runtime
+			* behaviour.  However, they do have a typing effect, so we can 
+			* only cancel two coercions if we verify that the type of the 
+			* double application is the same as the type of the original
+			* object being coerced.
+			*)
+		       if !coercion_cancel then
+			 let
+			   val (true,Coercion_c {vars,from,to}) = reduce_hnf(state,type_of(state,coercion1))
+			   val to_type = Let_c (Sequential,Listops.map2 Con_cb (vars,cargs1),to)
+			   val e2_type = type_of(state,exp2)
+			 in
+			   if sub_type(state,e2_type,to_type) 
+			     then (inc coercions_cancelled; 
+				   do_exp state exp2)
+			   else default()
+			 end
+		       else default())
+		 | _ => default()
+	  in  res
+	  end
 
 	and do_switch (state : state) (switch : switch) : exp = 
 	    let fun sum_switch {sumtype,arg,bound,arms,default,result_type} =
@@ -1212,6 +1397,9 @@ struct
 		in
 		    case known_tag of
 			SOME w => 
+			  let
+			    val _ = inc switches_reduced
+			  in
 			    (* Reduce known switch *)
 			    (case List.find (fn (w',_,_) => w = w') arms of
 				 SOME (_,_,arm_body) =>
@@ -1225,9 +1413,12 @@ struct
 				     (Let_e(Sequential,
 					    [Exp_b(bound,TraceUnknown,arg)],
 					    Option.valOf default)))
-				 (* This valOf looks like it could cause a crash, but perhaps the elaborator just doesn't
-				  * generate code that will tickle this.
+				 (* A switch which does not either cover all of
+				  * the possibilities, or have a default, is 
+				  * ill-formed.  We are in the case where a possibility
+				  * was not covered, therefore default must be SOME.
 				  *)
+			  end
 		      | _ => let
 				 val sumtype = do_con state sumtype
 				 val result_type = do_con state result_type
@@ -1239,24 +1430,28 @@ struct
 						   result_type = result_type})
 			     end
 		end
-		fun int_switch {size,arg,arms,default,result_type} =
-		     (case (do_exp state arg) of
-			  Const_e (Prim.int(_,n)) => 
-			      let val n32 = TilWord64.toSignedHalf n
-				  val arm = case Listops.assoc (n32, arms) of
-				      SOME arm => arm 
-				    | NONE => Option.valOf default
-			      in
-				  do_exp state arm
-			      end
-			| arg => 
-			      let 
-				  val result_type = do_con state result_type
-				  val arms = map_second (do_exp state) arms
-				  val default = Util.mapopt (do_exp state) default
-			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default,
-						    result_type=result_type})
-			      end)
+		fun int_switch int_sw = 
+		  let val {size,arg,arms,default,result_type} = flatten_int_sw int_sw
+		  in
+		    case (do_exp state arg) of
+		      Const_e (Prim.int(_,n)) => 
+			let val _ = inc switches_reduced
+			  val n32 = TilWord64.toSignedHalf n
+			  val arm = case Listops.assoc (n32, arms) of
+			    SOME arm => arm 
+			  | NONE => Option.valOf default
+			in
+			  do_exp state arm
+			end
+		    | arg => 
+			let 
+			  val result_type = do_con state result_type
+			  val arms = map_second (do_exp state) arms
+			  val default = Util.mapopt (do_exp state) default
+			in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default,
+					      result_type=result_type})
+			end
+		  end
 
 	    in
 	    (case switch of
@@ -1498,11 +1693,15 @@ struct
 	fun optimize params (MODULE{imports, exports, bnds}) =
 	  let 
 	      val _ = reset_debug()
+	      val _ = folds_reduced :=  0
+	      val _ = coercions_cancelled := 0
+	      val _ = switches_flattened := 0
+	      val _ = switches_reduced := 0
+
 	      val state = newState params
 	      val (imports,state) = foldl_acc do_import state imports
 
 	      val (bnds,state) = do_bnds(bnds,state)
-
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
 	      val temp = map (do_export state) exports
@@ -1510,6 +1709,22 @@ struct
 	      val exports = map #2 temp
 	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
               val bnds = List.mapPartial (bnd_used state) bnds
+	      val bnds = flattenBnds bnds
+
+	      val _ = if !chat then
+		(print "\t";
+		 print (Int.toString (!folds_reduced));
+		 print " fold/unfold pairs reduced\n";
+		 print "\t";
+		 print (Int.toString (!coercions_cancelled));
+		 print " coercion pairs reduced\n";
+		 print "\t";
+		 print (Int.toString (!switches_flattened));
+		 print " int switches flattened\n" ;
+		 print "\t";
+		 print (Int.toString (!switches_reduced));
+		 print " known switches reduced\n" 
+		 ) else ()
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end
 

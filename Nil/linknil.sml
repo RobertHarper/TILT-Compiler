@@ -11,6 +11,8 @@ structure Linknil :> LINKNIL  =
     val show_size = Stats.ff("showSize")   (* show size after each pass *)
     val show_html = Stats.ff("showHTML")   (* when showing pass results, generate HTML *)
     val typecheck = Stats.ff "Typecheck"   (* typecheck after each pass *)
+    val measure   = Stats.ff "Measure"     (* measure after each pass *)
+    val show      = Stats.ff "ShowNil"     (* show after each pass *)
 
     val typeof_elim = fn nilmod => Typeof_Elim.mod_elim (NilContext.empty()) nilmod
 
@@ -20,6 +22,7 @@ structure Linknil :> LINKNIL  =
 				   Stats.ff("wcheck" ^ str),
 				   Stats.ff("measure" ^ str),
 				   str)
+
     val phasesplit  = makeEntry (true, "Phasesplit")
     val typeofelim1 = makeEntry (true, "TypeofElim1")
     val typeofelim2 = makeEntry (true, "TypeofElim2")
@@ -27,6 +30,7 @@ structure Linknil :> LINKNIL  =
     val optimize1   = makeEntry (true, "Optimize1")
     val optimize2   = makeEntry (true, "Optimize2")
     val optimize3   = makeEntry (true, "Optimize3")
+    val optimize4   = makeEntry (true, "Optimize4")
     val reify1      = makeEntry (true, "Reify1")
     val reify2      = makeEntry (true, "Reify2")
     val vararg      = makeEntry (true, "Vararg")
@@ -90,7 +94,7 @@ structure Linknil :> LINKNIL  =
 			   print (Int.toString (NilUtil.module_size nilmod));
 			   print "\n")
 		    else ()
-	    val _ = if !showphase then
+	    val _ = if !showphase orelse !show then
 		      ((if !show_html then
 			   PpnilHtml.pp_module 
 		       else
@@ -105,7 +109,7 @@ structure Linknil :> LINKNIL  =
 		      NilStatic.module_valid (NilContext.empty (), nilmod)
 		    else ()
 	val _ = 
-	  if !measurephase then 
+	  if !measurephase orelse !measure then 
 	    let
 	      val (imps,bnds,exps) = Measure.mod_size' {cstring=Measure.cstring,count=[],count_in=[]} nilmod
 	      val impsr = Stats.int (phasename^"::importsize")
@@ -196,6 +200,19 @@ structure Linknil :> LINKNIL  =
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
+
+	    (* Optimizing after every inlining is a good thing.  
+	     * We could notice when the inliner failed to do anything
+	     * and not do this pass in that case.  This would be
+	     * especially true if the optimizer was actually idempotent
+	     * (which it tries to be).
+	     *)
+	    val nilmod = transform optimize4
+				   (Optimize.optimize {doDead = true, 
+						       doProjection = SOME 50,
+						       doCse = !do_cse, 
+						       doUncurry = !do_uncurry},
+				   nilmod) 
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
 	    val nilmod = transform cc (ToClosure.close_mod, nilmod)

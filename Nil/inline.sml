@@ -1,4 +1,4 @@
-(*$import List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilSubst INLINE Analyze *)
+(*$import List NilRename TraceInfo Sequence Int Util Nil Listops Name NilUtil NilSubst INLINE Analyze Bool Ppnil Stats *)
 
 (* Inline functions that are non-recursive and either are called once
    or else are sufficiently small and called a sufficiently small number
@@ -30,6 +30,9 @@ struct
   open Nil Name NilUtil
 
   val error = fn s => Util.error "inline.sml" s
+
+  val chat = Stats.ff "InlineChat"
+
   val debug = ref false
   fun debugpr s = if (!debug) then print s else ()
   fun inc(r:int ref) = r := (!r) + 1
@@ -40,11 +43,33 @@ struct
   val inlineOnce = ref 0
   val inlineManyFun = ref 0
   val inlineManyCall = ref 0
+  val hasCandidates  = ref false
 
   fun updateDefinition(v,f) = 
       let val (table, {definition = _, size, occurs}) = Name.VarMap.remove(!analyzeTable, v) 
       in  analyzeTable := (Name.VarMap.insert(table,v,{definition=f,size=size,occurs=occurs}))
       end
+
+
+  fun showFunInfo(v,size,occurs,status) = 
+    let 
+      fun showOccur(isRecur, level) = (print "("; print (Bool.toString isRecur);
+				       print ", "; print (Int.toString level);
+				       print ") ")
+    in
+      print "\tFunction ";Ppnil.pp_var v;print " size=";print (Int.toString size);
+      print " occurrences:\n\t\t";
+      app showOccur occurs;
+      print "\n";
+      print "\tInline status is ";
+      print (case status 
+	       of NoInline => "NoInline"
+		| InlineOnce => "InlineOnce"
+		| InlineMany => "InlineMany");
+      print "\n"
+    end
+
+  val inline_tiny = Stats.tt "inline_tiny" 
 
   fun analyzeInfo {sizeThreshold, occurThreshold}
       (v,{size : int,
@@ -56,15 +81,29 @@ struct
 			      | _ => false)
 	  val recursive = Listops.orfold #1 occurs
 	  val escaping = Listops.orfold (fn (_, level) => level = 0) occurs
+	  val has_nonescape = Listops.orfold (fn (_, level) => level > 0) occurs
+	  val verysmall = if !inline_tiny then size <= 10 else false
 	  val small = (size <= sizeThreshold) andalso 
 	              (length occurs) <= (occurThreshold)
-      in  if recursive
-	      then NoInline
-	  else if calledOnce
-	      then InlineOnce
-	  else if (not escaping andalso small)
-	      then InlineMany
-	  else NoInline
+	  val status =  
+	    (* We don't inline any recursive functions.  
+	     * We may want to consider inlining functions
+	     * that are not self-recursive and do not escape.
+	     * this is a common idiom.
+	     *
+	     * If there are no non-escaping occurrences, then
+	     * there are no places to inline.
+	     *)
+	    if recursive orelse (not has_nonescape) then NoInline
+	    else if calledOnce                      then InlineOnce
+	    else if verysmall                       then InlineMany
+	    else if (not escaping andalso small)    then InlineMany
+            else                                         NoInline
+
+	  val _ = case status of NoInline => () |  _ => hasCandidates := true
+
+	  val _ = if !chat then showFunInfo (v,size,occurs,status) else ()
+      in status
       end
 
   fun ropt r opt = (case opt of NONE => NONE | SOME x => SOME(r x))
@@ -162,7 +201,18 @@ struct
 	    let val vf = Sequence.toList vfSeq
 		val vf = List.mapPartial
 		    (fn (v,f) => (case Name.VarMap.find(!optimizeTable,v) of
-				      SOME InlineOnce => NONE
+				      SOME InlineOnce => 
+					(* Tarditi's thesis suggests rewriting the definition
+					 * here before inlining, and I can't see any reason
+					 * not to.  In particular, rewriting it first may
+					 * allow inlining to converge more quickly.
+					 * -leaf
+					 *)
+					let
+					  val f = rfunction f
+					  val _ = updateDefinition(v,f)
+					in NONE
+					end
 				    | SOME InlineMany => 
 					  let val _ = inlineManyFun := 1 + (!inlineManyFun)
 					      val f = rfunction f
@@ -210,32 +260,30 @@ struct
 			  result_type = rcon result_type})
 
   fun inline threshold nilmod = 
-      let val _ = analyzeTable := Analyze.analyze nilmod
-(*
-	  fun showFuninfo({occurs, ...} : Analyze.funinfo) = 
-	      let fun showOccur(isRecur, level) = (print "("; print (Bool.toString isRecur);
-						   print ", "; print (Int.toString level);
-						   print ")  ")
-	      in  app showOccur occurs
-	      end
-	  val _ = Name.VarMap.appi (fn (v,i) => (Ppnil.pp_var v; print ": ";
-						 showFuninfo i; print "\n")) (!analyzeTable)
-*)
-	  val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
-	  val _ = inlineOnce := 0
-	  val _ = inlineManyCall := 0
-	  val _ = inlineManyFun := 0
-	  val MODULE{bnds,imports,exports} = nilmod
-	  val nilmod = MODULE{bnds=rbnds bnds,imports=imports,exports=exports}
-	  val _ = analyzeTable := Name.VarMap.empty
-	  val _ = optimizeTable := Name.VarMap.empty
-	  val _ = (print "  "; 
-		   print (Int.toString (!inlineOnce));
-		   print " functions inlined once.\n  ";
-		   print (Int.toString (!inlineManyCall));
-		   print " copies of ";
-		   print (Int.toString (!inlineManyFun));
-		   print " other functions inlined.\n")
+      let 
+	val _ = hasCandidates := false
+	val _ = analyzeTable := Analyze.analyze nilmod
+	val _ = optimizeTable := (Name.VarMap.mapi (analyzeInfo threshold) (!analyzeTable))
+	val _ = inlineOnce := 0
+	val _ = inlineManyCall := 0
+	val _ = inlineManyFun := 0
+	val MODULE{bnds,imports,exports} = nilmod
+	val bnds = if !hasCandidates then rbnds bnds else bnds
+	val nilmod = MODULE{bnds=bnds,imports=imports,exports=exports}
+	val _ = analyzeTable := Name.VarMap.empty
+	val _ = optimizeTable := Name.VarMap.empty
+	val _ = 
+	  if !hasCandidates then 
+	    (print "  "; 
+	     print (Int.toString (!inlineOnce));
+	     print " functions inlined once.\n  ";
+	     print (Int.toString (!inlineManyCall));
+	     print " copies of ";
+	     print (Int.toString (!inlineManyFun));
+	     print " other functions inlined.\n")
+	  else
+	    (print "  No candidate functions for inlining\n"
+	     )
       in  nilmod
       end
 

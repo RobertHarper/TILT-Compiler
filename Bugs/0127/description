@@ -14,7 +14,19 @@ Comments:
 	eliminating the negation operation because its result is not
 	used.  This is incorrect, because negation can raise Overflow
 	and hence is not valuable.
+
+	[Leaf] There are really two notions of effects that the compiler 
+	currently cares about: store effects and control effects.  We
+	can CSE anything that has no store effects, but we can only 
+	eliminate dead code if it also has no control effects.  The compiler
+	was using a single notion of effect which did not capture this
+	distinction.  See Dave Tarditi's thesis, section 5.3 and 6.1 for
+	more discussion, and/or the comments in NilDefs.sig.sml.
 Fix:         
+	[Leaf] I split the old "effect" function into three seperate functions:
+	anyEffect, storeEffect, and controlEffect.  See the comments in NilDefs.sig.sml
+	for more details.  CSE now uses (not (storeEffect e)), and dead-code uses
+	not (anyEffect e), as does hoisting, reorder, specialize, etc.
 Test: m0077
-Owner: 
-Status: open
+Owner: leaf
+Status: closed

@@ -11,6 +11,8 @@ Code:
 Transcript:  
 Comments:    name mangling?
 Fix:         
+	[Leaf] I believe Dave fixed this by adding additional mangling
+	to TILT generated labels.
 Test: m0026
 Owner: rwh
-Status: open
+Status: closed

@@ -21,30 +21,18 @@
 
 (* Known Bugs: 
  
- * Doesn't handle Typeof_c correctly.  The problem is that cbnds and
- * bnds being lifted are kept in separate lists, and when the bnds are
- * extracted, the cbnds get tacked on the front.  So if a cbnd depends
- * on a variable at the same level (via Typeof), then that variable will
- * be lifted out of scope.
- *
-
- * Fixing this is probably reasonably easy, but not worth doing unless
- * we decide to keep typeof.  For the time being, it should be an
- * invariant that we eliminate typeofs.
-
- *
- * Leaf  - 3/20/02
-
- * I believe this may be handling traces incorrectly.  It does not 
- * currently include the free variables of traces when deciding whether or
- * not to lift something.
- * Leaf - 3/21/02
-
  *)
 
 (* Known problems:
       Loses phase annotations on term-level constructor bindings.
       So reifier must be re-run afterwards.
+      
+      Currently always marks switches and handles as non-valuable.
+      In principle, switches with defaults where all the of the arms
+      are valuable, and handles with valuable bodies and handlers 
+      could be lifted.  Total switches without defaults could also be 
+      lifted, but this would be harder to catch.  It's not immediately
+      clear if there are any issues with hoisting switches.
  *)
 
 structure Hoist :> HOIST = 
@@ -768,10 +756,9 @@ struct
       
     | rcon' (Let_c(Sequential,cbnds,cbody), env, state) = 
       let
-	  val (env, state, bndlevel) = bumpCurrentlevel (env, state)
 	  val (env, state) = rcbnds(cbnds, env, state)
       in  
-          rcon_limited bndlevel (cbody, env, state)
+          rcon (cbody, env, state)
       end
 
     | rcon' (Let_c(Parallel,_,_),_,_) = error "rcon: Parallel Let_c found"
@@ -952,10 +939,29 @@ struct
 
     | rexp' (Let_e(Sequential, bnds, body), env, state) =
       let
-	  val (env, state, bndlevel) = bumpCurrentlevel (env, state)
+	(* We implement flattening by viewing these bnds as existing 
+	 * at the current level.  We do not bump the current level,
+	 * but instead just allow the bnds to be pulled upwards.
+	 * Valuable bnds will be moved, but non-valuable bnds will
+	 * be dumped (in order) as soon as we start to leave the current
+	 * level.  So for example, if this let occurs as follows:
+	 * fn () => let x = raise foo in e
+	 * then we will "hoist" the binding of x, and then dump it immediately,
+	 * producing the same code.  However, for code such as the following:
+	 * fn () => switch (let x = raise foo in x) (....)
+	 * we will hoist the binding of x as follows:
+	 * fn () => let x = raise foo in switch x (....)
+	 *)
+
+	val (env, state, bnds_valuable) = rbnds(bnds, env, state)
+
+	val (exp, state, levels, eff, body_valuable) =
+	  rexp (body, env, state)
+
+(*	  val (env, state, bndlevel) = bumpCurrentlevel (env, state)
 	  val (env, state, bnds_valuable) = rbnds(bnds, env, state)
 	  val (exp, state, levels, eff, body_valuable) =
-	      rexp_limited bndlevel (body, env, state)
+	      rexp_limited bndlevel (body, env, state)*)
 	  val valuable = bnds_valuable andalso body_valuable
       in
 	  (exp, state, levels, eff, valuable)
@@ -980,7 +986,7 @@ struct
 
 	  val levels = mergeMultiLevels[levels1, levels2,levels3]
 
-	  val valuable = (not (NilDefs.effect exp)) andalso args_valuable
+	  val valuable = (not (NilDefs.anyEffect exp)) andalso args_valuable
       in
 	  (Prim_e (prim, trs,cons, exps), state, levels, eff, valuable)
       end
@@ -1042,25 +1048,31 @@ struct
   
     | rexp' (Handle_e {body,bound,handler,result_type}, env, state) =
       let
-	  val (body, state, levels1, _, _)  =  rexp (body, env, state)
-	  val (result_type, state, levels2) =  rcon (result_type, env, state)
+	(* We must bump the current level and limit on the new level
+	 * to prevent non-valuable bindings from being hoisted out of 
+	 * the scope of the handler.  
+	 *)
+	val (body_env,state,body_level)   =  bumpCurrentlevel (env, state)
+	val (body, state, levels1, _, _)  =  rexp_limited body_level (body, body_env, state)
 
-	  val (inner_env, state, handlerlevel) = bumpCurrentlevel (env, state)
-	  val inner_env = bindLevel(inner_env, bound, handlerlevel)
-          val inner_env = bindEff(inner_env, bound, UNKNOWN_EFF)
-
-	  val limitlevel = lastFnLevel env
-	  val (handler, handler_leftover_state, levels3, _, _) = 
-              rexp_limited limitlevel (handler, inner_env, empty_state)
-          val state = mergeStates (state, handler_leftover_state)
-
-	  val levels = mergeMultiLevels[levels1, levels2, levels3]
-	  val eff = UNKNOWN_EFF
-	  val valuable = false	
+	val (result_type, state, levels2) =  rcon (result_type, env, state)
+	  
+	val (inner_env, state, handlerlevel) = bumpCurrentlevel (env, state)
+	val inner_env = bindLevel(inner_env, bound, handlerlevel)
+	val inner_env = bindEff(inner_env, bound, UNKNOWN_EFF)
+	  
+	val limitlevel = lastFnLevel env
+	val (handler, handler_leftover_state, levels3, _, _) = 
+	  rexp_limited limitlevel (handler, inner_env, empty_state)
+	val state = mergeStates (state, handler_leftover_state)
+	  
+	val levels = mergeMultiLevels[levels1, levels2, levels3]
+	val eff = UNKNOWN_EFF
+	val valuable = false	
       in
-	  (Handle_e {body = body, bound = bound,
-		     handler = handler, result_type = result_type},
-	   state, levels, eff, valuable)
+	(Handle_e {body = body, bound = bound,
+		   handler = handler, result_type = result_type},
+	 state, levels, eff, valuable)
       end
     | rexp' (Fold_e (vars,from,to), env, state) =
       let
@@ -1279,7 +1291,11 @@ struct
 	      
 	  val (ints, exps) = Listops.unzip arms
           val limitlevel = lastFnLevel env
-
+	  (* We do not need to bump the current level, since we do not
+	   * bind a variable.  We will still discharge any non-valuable
+	   * bindings, since we limit to the last function level, 
+	   * which is guaranteed to include the current level
+	   *)
 	  val (exps, arms_leftover_state, levels2, _, _) = 
 		  rexps_limited limitlevel (exps, env, empty_state)
 	  val arms = ListPair.zip(ints, exps)

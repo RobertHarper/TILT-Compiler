@@ -95,8 +95,8 @@
 0098 [open]	does not parse type variables properly
 0099 [closed]	exceptions as values
 0100 [open]	hidden hidden clashes
-0101 [open]	external symbol clash
-0102 [open]	word test fails
+0101 [closed]	external symbol clash
+0102 [closed]	word test fails
 0103 [open]	word8 problems
 0104 [open]	hidden hidden name clash
 0105 [open]	overloading with words
@@ -120,10 +120,10 @@
 0124 [open]	flexible records
 0125 [open]	BUG in get_record
 0126 [open]	parsing identifiers incorrectly
-0127 [open]	integer overflow discrepancy
+0127 [closed]	integer overflow discrepancy
 0128 [open]	discrepancy on arguments to datatypes
 0129 [open]	os exit status and textio
-0130 [open]	type_of failed in Reify2
+0130 [closed]	type_of failed in Reify2
 0131 [open]	scalb and real_scalb unimplemented
 0132 [open]	scalb, real_scalb unimplemented
 0133 [open]	~inf vs nan

@@ -1395,10 +1395,10 @@ struct
 
 
     (* makeSelect.  Given a record expression r and a list lbls 
-                    of labels, produce the term corresponding to r.lbls
-		      *)
+     * of labels, produce the term corresponding to r.lbls
+     *)
     fun makeSelect exp [] = exp
       | makeSelect exp (lbl::lbls) = 
-            makeSelect (Prim_e(NilPrimOp(select lbl), [], [], [exp])) lbls
+      makeSelect (Prim_e(NilPrimOp(select lbl), [], [], [exp])) lbls
 
 end

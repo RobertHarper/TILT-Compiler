@@ -642,7 +642,7 @@ extern mem_t datastart;
 void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
-  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * TILT_PAGESIZE;
+  unsigned long mem_bytes = GetPhysicalPages() * 0.30 * TILT_PAGESIZE;
   unsigned long address_bytes = RoundDown(ULONG_MAX - (unsigned long)heapstart, TILT_PAGESIZE);
   unsigned long heap_bytes;
   int max_heap_byte;

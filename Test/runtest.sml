@@ -132,6 +132,7 @@ sig
     val run_test : {tilt : string,
 		    clean : bool,
 		    mapfile : string,
+		    corefile : string,
 		    resultfile : string,
 		    binary : string} -> status
 end
@@ -270,11 +271,12 @@ struct
     fun run_test {tilt : string,
 		  clean : bool,
 		  mapfile : string,
+		  corefile : string,
 		  resultfile : string,
 		  binary : string} : status =
 	let
 	    val cleanup = if clean
-			      then fn () => run_for_effect [tilt,"-C",mapfile]
+			      then fn () => app run_for_effect [[tilt,"-C",mapfile],["/bin/rm", "-f","core",corefile]]
 			  else fn () => ()
 	    val _ = cleanup()
 	    val expected = read_result resultfile
@@ -284,11 +286,14 @@ struct
 		    | Exit (10, _) => Reject
 		    | Exit _ => Bomb
 		    | Suicide => Bomb)
+	    val _ = cleanup() (* Core files take up too much space, so always cleanup. 
+			       * If necessary, could add an option to keep trash in
+			       * failure cases, but shouldn't be default.  -leaf *)
 	in
 	    if same_result (expected, actual)
-		then (cleanup(); Success)
+	      then Success
 	    else
-		Failure (result_string actual)
+	      Failure (result_string actual)
 	end
 end
 
@@ -319,20 +324,23 @@ struct
     fun run_test {tilt : string,
 		  clean : bool,
 		  platform : string,
+		  succeed : unit -> unit,
 		  fail : unit -> unit} (testdir : string) : unit =
 	let
 	    val _ = print ("running test " ^ testdir ^ "\n")
 	    val mapfile = P.joinDirFile{dir=testdir, file="mapfile"}
+	    val corefile = P.joinDirFile{dir=testdir, file="core"}
 	    val result = P.joinDirFile{dir=testdir, file="result"}
 	    val binary = P.joinDirFile{dir=testdir, file="Test."^platform^".exe"}
 	    val arg = {tilt=tilt,
 		       clean=clean,
 		       mapfile=mapfile,
+		       corefile=corefile,
 		       resultfile=result,
 		       binary=binary}
 	in
 	    (case Test.run_test arg
-	       of Test.Success => ()
+	       of Test.Success => succeed ()
 		| Test.Failure msg =>
 		   (eprint ("FAILURE in " ^ testdir ^ ", actual results were:\n");
 		    eprint msg;
@@ -343,17 +351,37 @@ struct
 	P.joinDirFile {dir = P.dir (CommandLine.name()),
 		       file = name}
 
+    fun pblock b = 
+      let fun pline s = eprint ("\t"^s^"\n")
+      in app pline b
+      end
+ 
+    fun warn_on_success () = pblock
+      ["CONGRATULATIONS: This test was expected to fail, but succeeded.",
+       "Please change the status of this test from \"fail\" to \"pass\"",
+       "and close out applicable bug reports."
+       ]
+
+    fun warn_on_failure () = pblock
+      ["WARNING: This test was expected to succeed, but failed!!!",
+       "This probably means that you have broken something: please fix it.",
+       "If this is not possible, you should at least issue a bug report and",
+       "change its status from \"pass\" to \"fail\" before checking in."
+       ]
+
     fun main () : unit =
 	(let
-	     val opts = [G.Noarg (#"f",#"f"),
-			 G.Noarg (#"n",#"n"),
-			 G.Noarg (#"c",#"c")]
-	     val args = CommandLine.arguments()
+	   val opts = [G.Noarg (#"f",#"f"),
+		       G.Noarg (#"n",#"n"),
+		       G.Noarg (#"c",#"c"),
+		       G.Noarg (#"S",#"S"),
+		       G.Noarg (#"F",#"F")]
+	   val args = CommandLine.arguments()
 	 in
 	     (case G.getopt (opts,args)
 		of G.Error msg =>
 		    raise fail (msg ^ "\nusage: " ^ CommandLine.name() ^
-				" [-fnc] testdir ...")
+				" [-fncES] testdir ...")
 		 | G.Success (flags, args) =>
 			let
 			    fun has (flag : char) : bool =
@@ -361,11 +389,21 @@ struct
 			    val tilt = harness (if has #"n"
 						    then "tilt-nj"
 						else "tilt")
-			    val fail = if has #"f" then fn () => ()
-				       else fn () => fail "test failed"
+
+			    val onfail = if has #"f" then fn () => ()
+					 else fn () => fail "test failed"
+
+			    val (fail,succeed) =
+			      (case (has #"F",has #"S")
+				 of (true,true) => raise fail "S and F flags are mutually exclusive"
+				  | (false,false) => (onfail,fn ()=>())
+				  | (true,false)  => (onfail,warn_on_success)
+				  | (false,true)  => (onfail o warn_on_failure,fn () => ()))
+
 			    val run = run_test {tilt=tilt,
 						clean=not (has #"c"),
 						platform=platform(),
+						succeed=succeed,
 						fail=fail}
 			in
 			    app run args

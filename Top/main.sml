@@ -128,8 +128,9 @@ struct
 	
     (* main : string * string list -> OS.Process.status *)
     fun main (_, args) =
-	(let val _ = UtilError.showErrors := false
-	     val cmds = cmdline args
+	(let 
+	   val _ = UtilError.showErrors := false	     
+	   val cmds = cmdline args
 	 in
 	     run cmds; OS.Process.success
 	 end)

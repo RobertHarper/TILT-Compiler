@@ -43,6 +43,11 @@ struct
     open Nil 
     open TortlBase 
 
+
+  (* If you permanently change these flags, you must update the default values
+   * in Top/target.sml.  If a flag differs from its default, a different
+   * executable name will be generated.
+   *)
     val ptrWriteBarrier = Stats.tt "PtrWriteBarrier"     (* record pointer array mutation *)
     val fullWriteBarrier = Stats.tt "FullWriteBarrier"   (* all mutations recorded *)
     val mirrorPtrArray = Stats.ff "MirrorPtrArray"       (* replicate pointer arrays *)

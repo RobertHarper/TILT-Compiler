@@ -218,7 +218,7 @@ struct
                         hoisting of GC checks.  They may or may not
                         be movable, which is approximated as valuable *)
 		   | _ => (OTHER,
-                           if NilDefs.effect exp then Immovable else Movable))
+                           if NilDefs.anyEffect exp then Immovable else Movable))
 
 	      val (cons, cons_vset, cons_category) = 
 		     rcons (cons, env)

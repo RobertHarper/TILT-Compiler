@@ -8,7 +8,7 @@ struct
     val importantFlags =
 	[("PtrWriteBarrier", Linkrtl.ptrWriteBarrier, true),
 	 ("FullWriteBarrier", Linkrtl.fullWriteBarrier, true),
-	 ("MirrorGlobal", Linkrtl.mirrorGlobal, true),
+	 ("MirrorGlobal", Linkrtl.mirrorGlobal, false),
 	 ("MirrorPtrArray", Linkrtl.mirrorPtrArray, false),
 	 ("BranchingTraps", Core.branchingTraps, true)]
 

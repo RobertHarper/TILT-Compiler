@@ -350,8 +350,8 @@ structure Ppnil	:> PPNIL =
 
 	 
     and pp_switch sw =
-	let fun pp_default NONE = String "NODEFAULT"
-	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", Break0 0 2, pp_exp e]
+	let fun pp_default NONE = String " NODEFAULT"
+	      | pp_default (SOME e) = HOVbox[String " DEFAULT = ", Break0 0 2, pp_exp e]
 	in
 	    case sw of
 		Intsw_e {arg,size,arms,default,result_type} => 

@@ -10,7 +10,9 @@ Problem:     test raises failure exception, something to do with words
 Code:        
 Transcript:  
 Comments:    
+	[Leaf] Someone seems to have fixed this.  The test code now
+	passes.
 Fix:         
 Test: m0027
 Owner: rwh
-Status: open
+Status: closed

@@ -58,6 +58,8 @@ struct
   val error = fn s => Util.error "analyze.sml" s
   val debug = Stats.ff("DebugAnalyze")
 
+  fun debugdo f = if !debug then f() else ()
+
   type funinfo = {size : int,
 		  definition : function,
 		  occurs : (bool * int) list}
@@ -92,22 +94,39 @@ struct
 
       (* Add level constraints for a particular sequence of applications starting from a curried function. *)
       fun applyOccur(f,binds : var list) = 
-	  let val potentialLevel = 1 + (length binds)
-	      val r = ref potentialLevel
-	      val constraint = Listops.mapcount (fn (n,v) => (addConstraint(v, n, r))) (f::binds)
-	      (* While in the body of a function, we have not added the function yet *)
-	      val inside = not (isFunction f)
+	  let 
+	    val _ = debugdo (fn () => (print "Variable ";Ppnil.pp_var f;print " applied\n"))
+	    val potentialLevel = 1 + (length binds)
+	    val r = ref potentialLevel
+	    (* We do not need to constrain the function itself, since it is not being 
+	     * bound here.
+	     *)
+	    val constraint = Listops.mapcount (fn (n,v) => (addConstraint(v, n + 1, r))) (binds)
+	    (* While in the body of a function, we have not added the function yet *)
+	    val inside = not (isFunction f)
 	  in  occurs := (f, inside, r) :: (!occurs)
 	  end
 
       (* Possibly update max level of a function based on an occurrence of a variable that is the result of an application
        * of it. *)
       fun varOccur v = 
+	let
+	  val _ = debugdo (fn () => (print "Variable ";Ppnil.pp_var v;print " escapes\n"))
+	in
 	  (occurs := (v, not (isFunction v), ref 0) :: (!occurs);
 	   case Name.VarMap.find(!constraints, v) of
+	       (* The variable is not constrained *)
 	       NONE => ()
+	       (* The variable is a (possibly partially applied) function.
+		* r contains the highest level we can possibly assign to v 
+		* and whatever functions it is a partial application of
+		* (that is, the lowest level we have seen yet).  If this variable
+		* is an escaping occurrence of a partial application, then lower
+		* may be less than the contents of r, and we must change r.
+		*
+		*)
 	     | SOME (lower, r) => if (lower < !r) then r := lower else ())
-
+	end
       (* Create the map to be returned based on data kept in sizeDefs and occurs *)
       fun collect() : funinfo Name.VarMap.map =
 	  let val table = Name.VarMap.map (fn (i,f) => {size = i, definition = f, occurs = []}) (!sizeDefs)
@@ -207,20 +226,31 @@ struct
     
       (* We look for as many applications as possible to find *)
       and doBnds [] = 0
+	(* We have an application (possibly partial) of a function.
+	 * We wish to find as many partial applications of it as possible, 
+	 * so that its level is less constrained.
+	 *)
 	| doBnds ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest) = 
-	  let val junkVar = fresh_var()
-	      val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
-	      fun findApp (rPartials,cur,eAcc,
-			   all as ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest)) = 
-		  if (eq_var(f,cur))
-		      then let val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
-			   in  findApp(v::rPartials,v,e::eAcc,rest)
-			   end
-		  else (rev rPartials, eAcc, all)
-		| findApp (rPartials, cur, eAcc, all) = (rev rPartials, eAcc, all)
-	      val (partials, exps, rest) = findApp ([],v,[e],rest)
-	      val _ = applyOccur(f, partials)
-	      val sz = doExps exps
+	  let 
+	    val junkVar = fresh_var()
+	    val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
+	    fun findApp (rPartials,cur,eAcc,
+			 all as ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest)) = 
+	      if (eq_var(f,cur))
+		then let val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
+		     in  findApp(v::rPartials,v,e::eAcc,rest)
+		     end
+	      else (rev rPartials, eAcc, all)
+	      | findApp (rPartials, cur, eAcc, all) = (rev rPartials, eAcc, all)
+	    val (partials, exps, rest) = findApp ([],v,[e],rest)
+	    val _ = applyOccur(f, partials)
+
+	    (* Traverse the expressions (with junkVar in for the function applications)
+	     * to find escaping occurrences of function variables.
+	     * In a-normal form, fexps cannot contain function variables,
+	     * since they are of float type.  Therefore, no need to traverse them.
+	     *)
+	    val sz = doExps exps
 	  in  sz + (doBnds rest)
 	  end
 	| doBnds (first::rest) = (doBnd first) + (doBnds rest)

@@ -204,34 +204,34 @@ struct
    and lswitch lift state switch = 
      (case switch of
 	  Intsw_e {size,arg,arms,default,result_type} =>
-	      let val arg = lexp_lift' state arg
+	      let val (bnds,arg) = lexp lift state arg
 		  val result_type = lcon_flat state result_type
 		  val arms = map (fn (w,e) => (w,lexp_lift' state e)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
-	      in  Intsw_e {size=size,arg=arg,arms=arms,default=default,
-			   result_type=result_type}
+	      in  (bnds,Intsw_e {size=size,arg=arg,arms=arms,default=default,
+				 result_type=result_type})
 	      end
 	| Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 	      let val sumtype = lcon_flat state sumtype
 		  val result_type = lcon_flat state result_type
-		  val arg = lexp_lift' state arg
+		  val (bnds,arg) = lexp lift state arg
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (t,tr,e) => (t,tr,lexp_lift' state e)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
-	      in  Sumsw_e {sumtype=sumtype,arg=arg,
-			   bound=bound,arms=arms,default=default,
-			   result_type=result_type}
+	      in (bnds,Sumsw_e {sumtype=sumtype,arg=arg,
+				bound=bound,arms=arms,default=default,
+				result_type=result_type})
 	      end
 	| Exncase_e {arg,bound,arms,default,result_type} =>
 	      let 
-		  val arg = lexp_lift' state arg
+		  val (bnds,arg) = lexp lift state arg
 		  val result_type = lcon_flat state result_type
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (e1,trace,e2) => (lexp_lift' state e1, trace, lexp_lift' state e2)) arms
 		  val default = Util.mapopt (lexp_lift' state) default
-	      in  Exncase_e {arg=arg,
-			     bound=bound,arms=arms,default=default,
-			     result_type=result_type}
+	      in  (bnds,Exncase_e {arg=arg,
+				   bound=bound,arms=arms,default=default,
+				   result_type=result_type})
 	      end
 	| Typecase_e {arg,arms,default,result_type} =>
 	      let val result_type = lcon_flat state result_type
@@ -241,7 +241,7 @@ struct
 				  let val (vklist,state) = lvklist state vklist
 				  in  (pc, vklist, lexp_lift' state e)
 				  end) arms
-	      in  Typecase_e {arg=arg, arms=arms, default=default, result_type=result_type}
+	      in  ([],Typecase_e {arg=arg, arms=arms, default=default, result_type=result_type})
 	      end)
 
    (*
@@ -409,7 +409,9 @@ struct
 		    val c = lcon_flat state c
 		in  (bnds,Raise_e(e,c))
 		end
-	  | Switch_e switch => ([], Switch_e(lswitch lift state switch))
+	  | Switch_e switch => let val (bnds,switch) = lswitch lift state switch
+			       in (bnds,Switch_e switch)
+			       end
 	  | Handle_e {body,bound,handler,result_type} => 
 		let val body = lexp_lift' state body
 		    val (state,bound) = add_var(state,bound)

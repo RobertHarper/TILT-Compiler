@@ -22,21 +22,7 @@ fun show b =
     LoadVars.show := b;
     LinkIl.show_hil := b;
     Linkrtl.show_rtl := b;
-    Stats.bool "showPhasesplit" := b;
-    Stats.bool "showTypeofElim1"    := b;
-    Stats.bool "showClosureConv" := b;
-    Stats.bool "showOptimize1" := b;
-    Stats.bool "showOptimize2" := b;
-    Stats.bool "showOptimize3" := b;
-    Stats.bool "showReify1" := b;
-    Stats.bool "showReify2" := b;
-    Stats.bool "showVararg" := b;
-    Stats.bool "showSpecialize" := b;
-    Stats.bool "showRename" := b;
-    Stats.bool "showHoist" := b;
-    Stats.bool "showInline1" := b;
-    Stats.bool "showInline2" := b;
-    Stats.bool "showInline3" := b
+    Stats.bool "ShowNil" := b
   end;
 
 fun show_hil b = (LoadVars.show_hil := b;LinkIl.show_hil := b)
@@ -56,7 +42,7 @@ val show_some      = do_some (LoadVars.show_some,LoadVars.show_which,"show")
 val typecheck_some = do_some (LoadVars.typecheck_some,LoadVars.typecheck_which,"check")
 
 fun also which s = which := s :: !which
-fun dont which s =     which := List.filter (fn s' => s <> s') (!which)
+fun dont which s = which := List.filter (fn s' => s <> s') (!which)
 
 val also_show      = also LoadVars.show_which
 val also_typecheck = also LoadVars.typecheck_which
@@ -73,7 +59,7 @@ val _ =
      LoadVars.show_which := default_which;
      LoadVars.typecheck_which := default_which;
      toExe();
-     typecheck true;
+(*     typecheck_some true;*)
      LoadVars.first := false
    )
   else if !LoadVars.sticky then

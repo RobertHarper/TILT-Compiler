@@ -3,6 +3,10 @@
 structure Core :> CORE =
 struct
 
+  (* If you permanently change this flag, you must update the default values
+   * in Top/target.sml.  If the flag differs from its default, a different
+   * executable name will be generated.
+   *)
     val branchingTraps = Stats.tt("BranchingTraps")
     val error = fn s => Util.error "core.sml" s
     open Rtl

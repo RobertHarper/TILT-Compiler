@@ -357,8 +357,7 @@ structure Toil
 			let 
 			    val (con,eq_con,e2) = 
 				(case copt of
-				     NONE => let val _ = print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n"
-						 val tyvar = fresh_named_tyvar (ctxt,"eq_tyvar")
+				     NONE => let val tyvar = fresh_named_tyvar (ctxt,"eq_tyvar")
 						 val _ = add_eq_entry tyvar
 						 val _ = tyvar_use_equal tyvar
 						 val con = CON_TYVAR tyvar

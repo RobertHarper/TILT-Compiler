@@ -13,7 +13,11 @@ struct
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
 
-    val mirrorGlobal = Stats.tt "MirrorGlobal"           (* replicate pointer globals *)
+  (* If you permanently change this flag, you must update the default values
+   * in Top/target.sml.  If the flag differs from its default, a different
+   * executable name will be generated.
+   *)
+    val mirrorGlobal = Stats.ff "MirrorGlobal"           (* replicate pointer globals *)
     val mirrorGlobalTag = Rtltags.mirrorGlobalTag
 
     type label = Rtl.label

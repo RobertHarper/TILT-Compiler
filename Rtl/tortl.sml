@@ -1986,16 +1986,16 @@ struct
 	     let open Nil
 		 val lab = Name.symbol_label (Symbol.varSymbol lab)
 		 val v1 = Name.fresh_var()
-		 val v2 = Name.fresh_var()
+(*		 val v2 = Name.fresh_var()*)
 		 val v3 = Name.fresh_var()
 		 val c = AllArrow_c {openness = Closure, effect = Partial, isDependent = false,
 				     tFormals = [], eFormals = [], fFormals = 0w0,
 				     body_type = Prim_c(Record_c ([], NONE),[])}
-		 val str = Name.label2string lab
+(*		 val str = Name.label2string lab
 		 fun tabulator i = Const_e(Prim.int (Prim.W8, TilWord64.fromInt(ord (String.sub(str,i)))))
 		 val strVal = Const_e (Prim.vector(Prim_c(Int_c Prim.W8,[]),
 						   Array.tabulate(size str, tabulator)))
-
+*)
 	     in  (Nil.ImportValue (lab, v1, nt, c),
 		  [
 		   (* Nil.Exp_b(v2, nt, ExternApp_e(Var_e registerVar,[strVal])), *)

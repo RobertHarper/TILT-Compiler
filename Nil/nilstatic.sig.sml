@@ -45,7 +45,8 @@ signature NILSTATIC =
 
     val module_valid : context * Nil.module -> unit
 
-    val con_equiv : context * Nil.con * Nil.con * Nil.kind -> bool
+    val con_equiv  : context * Nil.con * Nil.con * Nil.kind -> bool
+    val type_equiv : context * Nil.con * Nil.con  -> bool
 
     val kind_equiv : context * Nil.kind * Nil.kind -> bool
 
@@ -54,6 +55,8 @@ signature NILSTATIC =
       * PRE : context, kind1, kind2 are well formed
       * POST: returns true if kind1 is equivalent to kind2
       *)
+
+    val sub_type : context * Nil.con * Nil.con -> bool
 
     (* bool indicates progress if true *)
 (*

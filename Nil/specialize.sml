@@ -188,7 +188,7 @@ struct
 		       [] => 
 			 (* No floating-point arguments? (Property 1.2) ]
 			  *)
-			 if (nonRecur andalso not (NilDefs.effect body)) then
+			 if (nonRecur andalso not (NilDefs.anyEffect body)) then
 			   (* Nonrecursive and no effects? (Property 1) 
 			    *)
 			   Candidate{body = body,
@@ -273,7 +273,7 @@ struct
 		  (* Is the expression e valuable and of type unit? 
                    *)
 		  fun isUnit (e : exp) = 
-		    (not (NilDefs.effect e)) andalso 
+		    (not (NilDefs.anyEffect e)) andalso 
 		    (case (Normalize.reduce_hnf(callContext,
 						Normalize.type_of (callContext,
 								   e))) of
