@@ -1,4 +1,4 @@
-(*$import Int String List CharVector *)
+(*$import Int String Char List CharVector *)
 
 (* Auxiliary functions for test cases *)
 
