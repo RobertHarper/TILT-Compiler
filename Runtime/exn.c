@@ -49,7 +49,7 @@ void raise_exception(struct ucontext *uctxt, exn exn_arg)
 #ifdef DEBUG
   {
     int i;
-    exn_ptr = th->saveregs[EXNPTR_REG];
+    exn_ptr = th->saveregs[EXNPTR];
     code = get_record(exn_ptr,0);
 
     fprintf(stderr,"\n\n--------exn_raise entered---------\n");
@@ -65,12 +65,12 @@ void raise_exception(struct ucontext *uctxt, exn exn_arg)
   raise_exception_raw(th,exn_arg);
 }
 
-void toplevel_exnhandler(Thread_t *curThread)
+void toplevel_exnhandler(Thread_t *th)
 {
   char buf[100];
   char *msg;
-  long *saveregs = curThread->saveregs;
-  value_t exn_arg = (saveregs[EXNARG_REG]);
+  long *saveregs = th->saveregs;
+  value_t exn_arg = (saveregs[EXNARG]);
   value_t first = get_record(exn_arg,0);
 
   if (first == *(value_t *)Divide_exncon)
@@ -87,6 +87,8 @@ void toplevel_exnhandler(Thread_t *curThread)
       msg = buf;
     }
   
-  printf("Runtime uncaught exception: %s\n",msg);
+  printf("Proc %d %d, Thread %d (%d): Uncaught exception: %s\n",
+	 getSysThread()->processor,
+	 th->sysThread->processor,th->tid,th->id,msg);
   Finish();
 }

@@ -342,7 +342,7 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	    int *ptr;
 	    int val;
 	    asm("ld   [%1],%0" : "=r" (val) : "r" (ptr)); */
-	 asm("cas [%1],%2,%0" : "=r" (localStall) : "r" (tagloc), "r" (tag)); 
+	 asm("cas [%1],%0,%2" : "=r" (localStall) : "r" (tagloc), "r" (tag)); 
        }
     }
 #endif
@@ -352,7 +352,6 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
   while (tag == stall) {
     tag = white[-1];
   }
-
 
   /* In the ensuing code, the tag must be restored only after the forwarding address is written */
   switch (tag)
@@ -465,7 +464,7 @@ void forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_
 	}
 	/* records with less than 3 components already handled */
 	if (numfields <= 2) {
-	  printf("bad record tag %d\n",tag);
+	  printf("bad record tag %d at %d\n",tag,white - 1);
 	  assert(0);
 	}
 
@@ -691,6 +690,9 @@ value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr,
 #endif	      
 	      forward_major(cur,alloc_ptr,from_range,from2_range,to_range);
 	    }
+	  if (mask != 0) {
+	    printf("Bad tag: %d\n", tag);
+	  }
 	}
       else
 	{
@@ -1155,6 +1157,10 @@ void scan_oneobject_minor_stack(value_t *gray,  value_t **alloc_ptr, value_t **l
 	  for (; gray<end; gray++, mask >>= 1)
 	    if (mask & 1)
 	      forward_local_minor_stack(gray,alloc,limit,toheap,sysThread);
+	  if (mask != 0) {
+	    printf("scan_oneobject_minor_stack: bad tag %d\n", tag);
+	    assert(0);
+	  }
 	}
       else
 	{

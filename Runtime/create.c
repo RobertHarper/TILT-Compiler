@@ -33,8 +33,8 @@ void get_alloc_limit(value_t **alloc, value_t **limit)
   Thread_t *th = getThread();
   if (th != NULL)
     {
-      *alloc = (value_t *)(th->saveregs[ALLOCPTR_REG]);
-      *limit = (value_t *)(th->saveregs[ALLOCLIMIT_REG]);
+      *alloc = (value_t *)(th->saveregs[ALLOCPTR]);
+      *limit = (value_t *)(th->saveregs[ALLOCLIMIT]);
     }
   else
     {
@@ -47,7 +47,7 @@ void set_alloc(value_t *alloc)
 {
   Thread_t *th = getThread();
   if (th != NULL)
-      th->saveregs[ALLOCPTR_REG] = (long) alloc;
+      th->saveregs[ALLOCPTR] = (long) alloc;
   else
       RuntimeGlobalData_Cur = (value_t) alloc;
 }

@@ -22,7 +22,7 @@
 	.proc	07
 	.align	4
 flushStore:
-	membar	#StoreStore | #StoreLoad
+	membar	#StoreStore | #StoreLoad | #LoadLoad | #LoadStore | #Sync | #MemIssue | #Lookaside
 	retl
 	nop
 			
@@ -80,55 +80,52 @@ GetTick:
 	
  ! ------------------------ start_client  -------------------------------------
  ! first C arg = current thread pointer
- ! second C arg = client_entry (array of starting addresss)
- ! third C arg = number of starting address in array client_entry
  ! ----------------------------------------------------------------------------
 	.proc	07
 	.align	4
 start_client:
-	mov	%o0, THREADPTR_SYMREG		! initialize thread ptr outside loop
-	st	%o1, [THREADPTR_SYMREG + ASMTMP_DISP]
-	st	%o2, [THREADPTR_SYMREG + ASMTMP2_DISP]
+	mov	%o0, THREADPTR_REG		! initialize thread ptr outside loop
 	call	load_regs			! restore dedicated pointers like
 						! heap pointer, heap limit, and stack pointer
 	nop
-	sub	SP_SYMREG, 96, SP_SYMREG	! allocate a little space on systhread stack
-	ld	[THREADPTR_SYMREG + ASMTMP_DISP], %o0	! %o0 = client_entry current
-	ld	[THREADPTR_SYMREG + ASMTMP2_DISP], %o1
-	sll	%o1, 2, %o1
-	add	%o0, %o1, %o1			! %o1 = client_entry end
- 	st	%o0, [SP_SYMREG+64]		! save current thunk
- 	st	%o1, [SP_SYMREG+68]		! save limit thunk
+	ba	start_client_retadd_val
+	nop
 thunk_loop:
-	st	%g0, [THREADPTR_SYMREG + notinml_disp]
- 	ld	[SP_SYMREG+64], %o0		! fetch current thunk
-	ld	[%o0], ASMTMP_SYMREG		! fetch current thunk address
-	ld	[ASMTMP_SYMREG + 0], LINK_SYMREG ! fetch code pointer
-	ld	[ASMTMP_SYMREG + 4], %o0	! fetch type env
-	ld	[ASMTMP_SYMREG + 8], %o2	! fetch term env
-        sethi   %hi(global_exnrec),EXNPTR_SYMREG
-	or      EXNPTR_SYMREG,%lo(global_exnrec),EXNPTR_SYMREG  ! install global handler
-	jmpl	LINK_SYMREG, %o7		! jump to thunk
+	st	%g0, [THREADPTR_REG + notinml_disp]
+ 	ld	[THREADPTR_REG + nextThunk_disp], %o0		! fetch nextThunk
+	add	%o0, 1, %o1					! increment and
+ 	st	%o1, [THREADPTR_REG + nextThunk_disp]		!   save nextThunk
+ 	ld	[THREADPTR_REG + thunk_disp], %o1		! fetch thunks
+	sll	%o0, 2, %o0				
+	add	%o1, %o0, %o0				! %o0 holds current thunk's address
+	ld	[%o0], ASMTMP_REG			! fetch current thunk
+	ld	[ASMTMP_REG + 0], LINK_REG		! fetch code pointer
+	ld	[ASMTMP_REG + 4], %o0			! fetch type env
+	ld	[ASMTMP_REG + 8], %o2			! fetch term env
+        sethi   %hi(global_exnrec),EXNPTR_REG
+	or      EXNPTR_REG,%lo(global_exnrec),EXNPTR_REG  ! install global handler
+	jmpl	LINK_REG, %o7				! jump to thunk
 	nop
-start_client_retadd_val:			! used by stack.c
- ! returned from client
-	ld	[SP_SYMREG + 64], %o0		! fetch current thunk
-	add	%o0, 4, %o0			! update current thunk
- 	st	%o0, [SP_SYMREG + 64]	! save current thunk	
-	ld	[SP_SYMREG + 68], %o1		! fetch thunk limit
+start_client_retadd_val:					! used by stack.c
+
+	ld	[THREADPTR_REG + nextThunk_disp], %o0		! fetch nextThunk
+
+	
+	ld	[THREADPTR_REG + numThunk_disp], %o1		! fetch numThunk
 	cmp	%o0, %o1
-	bl	thunk_loop
+	bl	thunk_loop					! execute if nextThunk < numThunk
 	nop
-	mov	1, ASMTMP_SYMREG
-	st	ASMTMP_SYMREG, [THREADPTR_SYMREG + notinml_disp]
-	call	save_regs		! need to save register set to get alloction pointer into thread state
+	mov	1, ASMTMP_REG
+	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]
+	call	save_regs					! need to save register set to get 
+								!   alloction pointer into thread state
 	nop
-	ld	[THREADPTR_SYMREG + sysThread_disp], ASMTMP_SYMREG	! get system thread pointer
-	ld	[ASMTMP_SYMREG], SP_SYMREG				! run on system thread stack	
+	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! get system thread pointer
+	ld	[ASMTMP_REG], SP_REG				! run on system thread stack	
 	call	Finish
 	nop
-        sethi   %hi($$errormsg),%o0
-	or      %o0,%lo($$errormsg),%o0  ! install global handler
+        sethi   %hi($$errormsg),%o0				! should not return from Finish
+	or      %o0,%lo($$errormsg),%o0  
 	call	printf
 	nop
 	call	abort
@@ -136,29 +133,25 @@ start_client_retadd_val:			! used by stack.c
 	.size	start_client,(.-start_client)
 
 	
- ! ---------------------------
- ! Yield
- ! ---------------------------	
+ ! -------------------------------------------------------------------------------
+ ! Yield - called by mutator as a C function 
+ ! (1) Don't call save_regs and load_regs
+ ! (2) Make sure %l0 contains thread pointer for use by save_regs_forC
+ ! -------------------------------------------------------------------------------
 	.proc	07
 	.align	4
 Yield:
-	st	LINK_SYMREG, [THREADPTR_SYMREG + LINK_DISP]    ! note that this is return address of Yield
-	call	save_regs
+	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Yield
+	ld	[THREADPTR_REG + sysThread_disp],ASMTMP_REG ! get system thread pointer into temp
+	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
+	call	YieldRest				! no need to restore $gp after this call
 	nop
-	ld	[THREADPTR_SYMREG + sysThread_disp],ASMTMP_SYMREG ! get system thread pointer into temp
-	ld	[ASMTMP_SYMREG], SP_SYMREG      ! run on system thread stack
-	call	YieldRest			! no need to restore $gp after this call
-	nop
-	mov	%o0, THREADPTR_SYMREG		! user thread pointer returned
-	call	load_regs			
-	nop
-	ld	[THREADPTR_SYMREG + LINK_DISP], LINK_SYMREG	   ! note that this is return address of Yield
+	mov	%o0, THREADPTR_REG			! user thread pointer returned
+	mov	%o0, %l0				! fix %l0 for use by save_regs_forC
+	ld	[THREADPTR_REG + LINK_DISP], LINK_REG	! note that this is return address of Yield
 	retl
 	nop
 	.size	Yield,(.-Yield)
-
-
-
 
 
 
@@ -169,10 +162,10 @@ Yield:
 	.proc	07
 	.align	4
 global_exnhandler:
-	st	EXNARG_SYMREG, [THREADPTR_SYMREG + EXNARG_DISP]    ! note that this is return address of Yield
+	st	EXNARG_REG, [THREADPTR_REG + EXNARG_DISP]    ! note that this is return address of Yield
 	call	save_regs
 	nop
-	mov	THREADPTR_SYMREG, %o0
+	mov	THREADPTR_REG, %o0
 	call	toplevel_exnhandler
 	nop
 	call	abort
@@ -188,14 +181,14 @@ global_exnhandler:
 	.proc	07
 	.align	4
 raise_exception_raw:
-	mov	%o0, THREADPTR_SYMREG		! save where regs are
-	mov	%o1, RESULT_SYMREG		! load_Iregs_forC does not change this reg
-	st	%o2, [SP_SYMREG + 24]		! save handler address
+	mov	%o0, THREADPTR_REG		! save where regs are
+	mov	%o1, RESULT_REG			! load_Iregs_forC does not change this reg
+	st	%o2, [SP_REG + 24]		! save handler address
 	call	load_regs_forC
 	nop
-	mov	RESULT_SYMREG, EXNARG_SYMREG ! restore exn arg
-	ld	[EXNPTR_SYMREG], ASMTMP_SYMREG	! fetch exn handler code
-	jmpl	ASMTMP_SYMREG, %g0		! jump not return and do not link
+	mov	RESULT_REG, EXNARG_REG		! restore exn arg
+	ld	[EXNPTR_REG], ASMTMP_REG	! fetch exn handler code
+	jmpl	ASMTMP_REG, %g0			! jump not return and do not link
 	nop
 	.size	raise_exception_raw,(.-raise_exception_raw)
 

@@ -5,6 +5,11 @@
 #include <math.h>
 #include <sys/wait.h>
 #include <stdio.h>
+#if (defined alpha_osf)
+#include <float.h>
+#elif (defined solaris)
+#include <ieeefp.h>
+#endif
 
 #include "tag.h"
 #include "thread.h"
@@ -161,17 +166,56 @@ double ln(double arg)
 }
 
 
-int getRoundingMode(int unused)
+int getRoundingMode(int unit)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
+#ifdef alpha_osf
+  unsigned int mode = read_rnd();
+  switch (mode) {
+    case FP_RND_RZ: return 1;
+    case FP_RND_RN: return 0;
+    case FP_RND_RP: return 2;
+    case FP_RND_RM: return 3;
+  }
+  printf("read_rnd retrurned unrecognized mode %d\n", mode);
   assert(0);
+#elif (defined solaris)
+  fp_rnd mode = fpgetround();
+  switch (mode) {
+    case FP_RZ: return 1;
+    case FP_RN: return 0;
+    case FP_RP: return 2;
+    case FP_RM: return 3;
+  }
+  printf("read_rnd retrurned unrecognized mode %d\n", mode);
+  assert(0);
+#endif
 }
 
 
-int setRoundingMode(int unused)
+value_t setRoundingMode(int ml_mode)
 {
-  printf("POSIX function not defined at line %d\n", __LINE__);
-  assert(0);
+#if (defined alpha_osf)
+  int mode = 0;
+  switch (ml_mode) {
+    case 1: ml_mode = FP_RND_RZ; break;
+    case 0: ml_mode = FP_RND_RN; break;
+    case 2: ml_mode = FP_RND_RP; break;
+    case 3: ml_mode = FP_RND_RM; break;
+    default : printf("setrounding given unknown mML rounding mode %d\n", mode); assert(0);
+    }
+  write_rnd(mode);
+#elif (defined solaris)
+  fp_rnd mode = 0;
+  switch (ml_mode) {
+    case 1: ml_mode = FP_RZ; break;
+    case 0: ml_mode = FP_RN; break;
+    case 2: ml_mode = FP_RP; break;
+    case 3: ml_mode = FP_RM; break;
+    default : printf("setrounding given unknown mML rounding mode %d\n", mode); assert(0);
+    }
+  fp_setround(mode);
+#endif  
+  return 256; /* ML rep of unit */
 }
 
 char* exnNameRuntime(void *unused)
@@ -190,18 +234,19 @@ char* exnMessageRuntime(void *unused)
 int real_logb(double arg)
 {
   int biasedExp = 0;
-  if (sizeof(unsigned long) ==  sizeof(double)) {
-    unsigned long temp;
-    *((double *)(&temp)) = arg;
-    biasedExp = (int)(temp >> 52);
-  }
-  else if ((2 * (sizeof(unsigned int))) == sizeof(double)) {
-    int temp[2];
-    *((double *)temp) = arg;
-    biasedExp = (int)(temp[1]);
-  }
-  else
-    assert(0);
+#ifdef alpha_osf
+  unsigned long temp;
+  assert(sizeof(unsigned long) ==  sizeof(double));
+  *((double *)(&temp)) = arg;
+  biasedExp = (int)(temp >> 52);
+#elif (defined solaris)
+  int temp[2];
+  assert((2 * (sizeof(unsigned int))) == sizeof(double));
+  *((double *)temp) = arg;
+  biasedExp = (int)(temp[1]);
+#else
+  assert(0);
+#endif
   biasedExp -= 1023;
   return biasedExp;
 }

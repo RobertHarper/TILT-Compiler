@@ -21,9 +21,9 @@ int ThreadedVersion = THREADED_VERSION;
 int LEAST_GC_TO_CHECK = -1;
 
 int NumHeap       = 20;
-int NumStack      = 100;
-int NumStackChain = 100;
-int NumThread     = 100;
+int NumStack      = 400;
+int NumStackChain = 400;
+int NumThread     = 200;
 int NumSysThread  = 1;
 
 int process_bool(int *var, char *item, char *option)
@@ -103,6 +103,7 @@ struct option_entry table[] =
    0, "gen", &gen,   "Use the generational garbage collector",
    0, "para", &para, "Use the semispace, parallel garbage collector",
    0, "paranoid", &paranoid, "Run in paranoid mode",
+   0, "verbose", &verbose, "Be verbose when paranoid",
    0, "diag", &diag, "Run in diagnostic mode",
    0, "gcstats", &SHOW_GCSTATS, "Show GC statistics during execution",
    0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
@@ -203,7 +204,7 @@ int main(int argc, char **argv)
   exn_init();
   gc_init();
 
-  thread_go((value_t)(&client_entry),module_count);
+  thread_go((value_t *)(&client_entry),module_count);
   stats_finish();
 }
 

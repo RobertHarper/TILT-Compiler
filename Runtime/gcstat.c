@@ -113,8 +113,8 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *fromspace,
       static value_t debug_reg_val = 64;
       value_t *data_add =  (value_t *)&(saveregs[i]);
       value_t data = *data_add;
-      if (i == ALLOCPTR_REG ||
-	  i == ALLOCLIMIT_REG)
+      if (i == ALLOCPTR ||
+	  i == ALLOCLIMIT)
 	continue;
       if (data >= fromspace->bottom && data < fromspace->top)
 	{

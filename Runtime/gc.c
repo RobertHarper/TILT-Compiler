@@ -21,6 +21,7 @@
 
 /* use generational by default */
 int paranoid = 0;
+int verbose = 0;
 int diag = 0;
 int collector_type = Generational;
 int SHOW_GCDEBUG_FORWARD = 0;
@@ -100,17 +101,17 @@ void debug_and_stat_before(unsigned long *saveregs, long req_size)
 {
 
   Thread_t *curThread = getThread();
-  long sp = saveregs[SP_REG];
+  long sp = saveregs[SP];
 #ifdef solaris
-  long ret_add = saveregs[LINK_REG] + 8;
+  long ret_add = saveregs[LINK] + 8;
 #else
-  long ret_add = saveregs[RA_REG];
+  long ret_add = saveregs[RA];
 #endif
 
   /* -------- print some debugging info and gather write statistics ---------- */
   int i;
-  int allocptr = saveregs[ALLOCPTR_REG];
-  int limitptr = saveregs[ALLOCLIMIT_REG];
+  int allocptr = saveregs[ALLOCPTR];
+  int limitptr = saveregs[ALLOCLIMIT];
   write_count += (writelist_cursor - writelist_start) / sizeof(int);
 
   if (req_size == 0)
@@ -130,9 +131,9 @@ void debug_and_stat_before(unsigned long *saveregs, long req_size)
       for (i=0; i<32; i++)
 	{
 	  printf("%2d - *%d: %10ld",i,&(saveregs[i]),saveregs[i]);
-	  if (i == ALLOCPTR_REG)
+	  if (i == ALLOCPTR)
 	    printf("    allocptr");
-	  if (i == ALLOCLIMIT_REG)
+	  if (i == ALLOCLIMIT)
 	    printf("    alloclimit");
 	  printf("\n");
 	}
@@ -229,18 +230,32 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
 {
     int count = 0, mi, i;
     long *saveregs = thread->saveregs;
-    long sp = saveregs[SP_REG];
+    long sp = saveregs[SP];
     value_t stack_top = thread->stackchain->stacks[0]->top;
     /* should check start_addr */
-    if (saveregs[ALLOCLIMIT_REG] == StopHeapLimit)
+    if (saveregs[ALLOCLIMIT] == StopHeapLimit)
+      return;
+    for (i=0; i<thread->numThunk; i++) { /* check thunks */
+      value_t thunk = thread->thunks[i];
+      if (thunk >= fromspace->bottom && thunk < fromspace->top) {
+	printf("TRACE ERROR*: thunk has from-space value after collection: %d", thunk);
+	assert(0);
+      }
+    }
+      
+    if (thread->nextThunk == 0) /* thunk not started */
       return;
     for (count = 0; count < 32; count++)
       {
 	int data = saveregs[count];
-	if (count == ALLOCPTR_REG)
-	  printf("Allocation Register %d has value %d\n", count, data);
-	else if (count == ALLOCLIMIT_REG)
-	  printf("Allocation Limit Register %d has value %d\n", count, data);
+	if (count == ALLOCPTR) {
+	  if (verbose)
+	    printf("Allocation Register %d has value %d\n", count, data);
+	}
+	else if (count == ALLOCLIMIT) {
+	  if (verbose)
+	    printf("Allocation Limit Register %d has value %d\n", count, data);
+	}
 	else if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
 	    static int newval = 62000;
@@ -250,7 +265,7 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
 	    saveregs[count] = newval; 
 	    newval++;
 	  }
-	else
+	else if (verbose)
 	  printf("Register %d has okay value %d\n", count, data);
       }
 
@@ -286,7 +301,7 @@ void paranoid_check_heap(Heap_t *fromspace, Heap_t *tospace)
 	static int newval = 52000;
 	if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	  {
-	    printf("TRACE WARNING: to-space has a from-space value after collection");
+	    printf("TRACE ERROR*: to-space has a from-space value after collection");
 	    printf("   data_add = %d   data = %d",data_add,data);
 	    printf("      changing to %d\n", newval);
 	    *data_add = newval;
@@ -303,7 +318,7 @@ void paranoid_check_heap(Heap_t *fromspace, Heap_t *tospace)
 	  value_t data = *current;
 	  if ((data & 3) == 0 && data >= fromspace->bottom && data < fromspace->top)
 	    {
-	      printf("TRACE WARNING: global has a from space value after collection");
+	      printf("TRACE ERROR*: global has a from space value after collection");
 	      printf("   cursor = %d   data = %d",current,data);
 	      printf("      changing to %d\n", newval);
 	      *current = newval;
@@ -418,13 +433,13 @@ Thread_t *gc(Thread_t *curThread)
 {
 
   /* If thread preempted, not a real GC */
-  if (curThread->saveregs[ALLOCLIMIT_REG] == StopHeapLimit) {
+  if (curThread->saveregs[ALLOCLIMIT] == StopHeapLimit) {
       scheduler();
       assert(0);
     }
 
   /* If real GC, then store request size */
-  curThread->request = curThread->saveregs[ASMTMP_REG] - curThread->saveregs[ALLOCPTR_REG];
+  curThread->request = curThread->saveregs[ASMTMP] - curThread->saveregs[ALLOCPTR];
   assert(curThread->request >= 0);
 
   switch (collector_type) 
@@ -432,7 +447,6 @@ Thread_t *gc(Thread_t *curThread)
     case Semispace : { gc_semi(curThread); break; }
     case Generational : { gc_gen(curThread,0); break; }
     case Parallel : { flushStore();
-                      tempdebug(curThread->sysThread,"gc",0);
                       gc_para(curThread); 
                       break; }
     }

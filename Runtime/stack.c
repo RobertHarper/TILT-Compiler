@@ -11,7 +11,7 @@
 #include "stats.h"
 #include "memobj.h"
 #include "client.h"
-
+#include "forward.h"
 
 int GCTableEntryIDFlag = 0;  /* let the user code set it if it thinks it's on */
 int save_rate = 70;
@@ -828,13 +828,13 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
 {
   unsigned int regstate = 0;
   static value_t last_exnptr = 0; 
-  value_t this_exnptr = saveregs[EXNPTR_REG];
+  value_t this_exnptr = saveregs[EXNPTR];
   extern value_t global_exnrec;
-  long sp = saveregs[SP_REG];
+  long sp = saveregs[SP];
 #ifdef solaris
-  long ret_add = saveregs[LINK_REG] + 8;
+  long ret_add = saveregs[LINK] + 8;
 #else
-  long ret_add = saveregs[RA_REG];
+  long ret_add = saveregs[RA];
 #endif
 
   if (!last_exnptr)
@@ -883,7 +883,7 @@ void debug_after_rootscan(unsigned long *saveregs, int regmask,
 			  Queue_t *root_lists)
 {
 #ifdef STACKDEBUG
-  int allocptr = saveregs[ALLOCPTR_REG];
+  int allocptr = saveregs[ALLOCPTR];
     if (SHOW_GCDEBUG && NumGC > LEAST_GC_TO_CHECK)
       {
 	long i,j;
@@ -938,10 +938,10 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
     Enqueue(reg_roots,&(((value_t *)th->thunks)[i]));
 
   if (th->nextThunk != 0) {  /* thread has started */
-      long sp = saveregs[SP_REG];
+      long sp = saveregs[SP];
       Stack_t *stack = GetStack(sp);
       regmask = trace_stack(th, saveregs, stack->top, root_lists, fromspace);
-      regmask |= 1 << EXNPTR_REG;
+      regmask |= 1 << EXNPTR;
       for (i=0; i<32; i++)
 	if ((regmask & (1 << i)) && (saveregs[i] > 256))
 	  Enqueue(reg_roots,(int *)(&(saveregs[i])));
@@ -967,8 +967,8 @@ void global_root_scan(SysThread_t *sth, Queue_t *global_roots, Heap_t *fromspace
     value_t *start = (value_t *)((&TRACE_GLOBALS_BEGIN_VAL)[mi]);
     value_t *stop = (value_t *)((&TRACE_GLOBALS_END_VAL)[mi]);
     for ( ; start < stop; start++) {
-      value_t *global = *start;
-      scan_oneobject_for_pointers(global_roots, global);
+      value_t global = *start;
+      scan_oneobject_for_pointers((value_t *)global, global_roots);
     }
   }
 }

@@ -39,22 +39,22 @@ void exn_save(long *saveregs, long sp, value_t handler)
     fprintf(stderr,"save: saveregs[%d] is %ld\n",i,saveregs[i]);
 #endif
 
-  allocptr = saveregs[ALLOCPTR_REG];
-  alloclimit = saveregs[ALLOCLIMIT_REG];
-  regmask = saveregs[REGMASK_REG];
+  allocptr = saveregs[ALLOCPTR];
+  alloclimit = saveregs[ALLOCLIMIT];
+  regmask = saveregs[REGMASK];
   {
     int wh = 0;
     value_t fields[32];
     int masks[1];
     masks[0] = 0;
-    fields[count++] = saveregs[EXNPTR_REG];
+    fields[count++] = saveregs[EXNPTR];
     fields[count++] = handler;
     while (wh < 32)
       {
-	if (wh != ALLOCLIMIT_REG &&
-	    wh != EXNPTR_REG &&
-	    wh != ALLOCPTR_REG &&
-	    wh != ASMTMP_REG)
+	if (wh != ALLOCLIMIT &&
+	    wh != EXNPTR &&
+	    wh != ALLOCPTR &&
+	    wh != ASMTMP)
 	  fields[count++] = saveregs[wh];
 
 	if (regmask & (1 << wh))
@@ -73,14 +73,14 @@ void exn_save(long *saveregs, long sp, value_t handler)
 #endif
   }
 
-  saveregs[ALLOCPTR_REG] = allocptr;
+  saveregs[ALLOCPTR] = allocptr;
 
 #ifdef DEBUG_EXN
   fprintf(stderr,"save: saveregs[0] is %d\n",saveregs[0]);
-  fprintf(stderr,"save: exnptr is %d\n",saveregs[EXNPTR_REG]);
+  fprintf(stderr,"save: exnptr is %d\n",saveregs[EXNPTR]);
 #endif
 
-  saveregs[EXNPTR_REG] = rec;
+  saveregs[EXNPTR] = rec;
 }
 
 
@@ -100,18 +100,18 @@ void exn_restore(long *saveregs, value_t exn_ptr, value_t exn_arg)
   fprintf(stderr,"restore: rec[0] is %d\n",((int *)exn_ptr)[0]);
 #endif
 
-  regmask = saveregs[REGMASK_REG];
+  regmask = saveregs[REGMASK];
   {
     int wh = 0;
     value_t *fields = (value_t *) exn_ptr;
-    saveregs[EXNPTR_REG] = get_record(fields,count++);
-    saveregs[ASMTMP_REG] = get_record(fields,count++);
+    saveregs[EXNPTR] = get_record(fields,count++);
+    saveregs[ASMTMP] = get_record(fields,count++);
     while (wh < 32)
       {
-	if (wh != ALLOCLIMIT_REG &&
-	    wh != ALLOCPTR_REG &&
-	    wh != ASMTMP_REG &&
-	    wh != EXNPTR_REG)
+	if (wh != ALLOCLIMIT &&
+	    wh != ALLOCPTR &&
+	    wh != ASMTMP &&
+	    wh != EXNPTR)
 	  saveregs[wh] = get_record(fields,count++);
 	wh++;
       }
@@ -122,7 +122,7 @@ void exn_restore(long *saveregs, value_t exn_ptr, value_t exn_arg)
     fprintf(stderr,"RESTORE: saveregs[%d] is %ld\n",i,saveregs[i]);
 
   fprintf(stderr,"restore: saveregs[0] is %d\n",saveregs[0]);
-  fprintf(stderr,"restore: saveregs[at] is %d\n",saveregs[ASMTMP_REG]);
+  fprintf(stderr,"restore: saveregs[at] is %d\n",saveregs[ASMTMP]);
   fprintf(stderr,"returning from exn_restore to asm linkage\n");
 #endif
 }

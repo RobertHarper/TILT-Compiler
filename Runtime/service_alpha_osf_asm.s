@@ -82,56 +82,46 @@ GetRpcc:
 	
  # ------------------------ start_client  -------------------------------------
  # first C arg = current thread pointer
- # second C arg = client_entry (array of starting addresss)
- # third C arg = number of starting address in array client_entry
  # ----------------------------------------------------------------------------
 	.ent	start_client 
 start_client:
  	ldgp	$gp, 0($27)	# get self gp
-	mov	$16,THREADPTR_SYMREG                                 # initialize thread ptr outside loop
-			        # $17 = client_entry current
-	s4addq	$18, $17, $19   # client_entry end
-	ldq	ALLOCPTR_SYMREG, ALLOCPTR_DISP(THREADPTR_SYMREG)     # initialize heap ptr outside loop
-	ldq	ALLOCLIMIT_SYMREG, ALLOCLIMIT_DISP(THREADPTR_SYMREG) # initizlize heap limit outside loop
-	ldq	$sp, SP_DISP(THREADPTR_SYMREG) # fetch stack argument
- 	lda	$sp, -32($sp)	# switch to new stack and allocate a little space
- 	stq	$17, 0($sp)	# save current thunk
- 	stq	$19, 8($sp)	# save limit thunk
+	mov	$16,THREADPTR_REG				# initialize thread ptr outside loop
+	ldq	ALLOCPTR_REG, ALLOCPTR_DISP(THREADPTR_REG)	# initialize heap ptr outside loop
+	ldq	ALLOCLIMIT_REG, ALLOCLIMIT_DISP(THREADPTR_REG)	# initizlize heap limit outside loop
+	ldq	$sp, SP_DISP(THREADPTR_REG)			# initialize stack outside loop
 thunk_loop:
-	stl	$31, notinml_disp(THREADPTR_SYMREG)
+	stl	$31, notinml_disp(THREADPTR_REG)
 .set noat
- 	ldq	$17, 0($sp)	# fetch current thunk
-	ldl	$at, ($17)	# fetch current thunk address
-	ldl	$27, ($at)	# fetch code pointer
-	ldl	$0, 4($at)	# fetch type env
-	ldl	$2, 8($at)	# fetch term env
-	lda	EXNPTR_SYMREG, global_exnrec # install global handler
-	jsr	$26,  ($27)	# jump to thunk
+ 	ldq	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
+	addq	$16, 1, $17				# increment and
+ 	stq	$16, nextThunk_disp(THREADPTR_REG)	#   save nextThunk
+ 	ldq	$17, thunk_disp(THREADPTR_REG)		# fetch thunks
+	s4addq	$16, $17, $16				# $16 holds current thunk' address
+	ldl	$at, ($17)				# fetch current thunk
+	ldl	$27, ($at)				# fetch code pointer
+	ldl	$0, 4($at)				# fetch type env
+	ldl	$2, 8($at)				# fetch term env
+	lda	EXNPTR_REG, global_exnrec		# install global handler
+	jsr	$26,  ($27)				# jump to thunk
 start_client_retadd_val:	
-	br	$26, dummy
-dummy:	ldgp	$gp, 0($26)
- # returned from client
-	ldq	$17, 0($sp)     # fetch current thunk
-	addq	$17, 4, $17	# update current thunk
- 	stq	$17, 0($sp)	# save current thunk	
-	ldq	$19, 8($sp)	# fetch thunk limit
-	cmplt	$17, $19, $at
-	bne	$at, thunk_loop
+	br	$gp, dummy
+dummy:	ldgp	$gp, 0($gp)
+after_loop:	
+	ldq	$16, nextThunk_disp(THREADPTR_REG)	# fetch nextThunk
+	ldq	$17, numThunk_disp(THREADPTR_REG)	# fetch numThunk
+	cmplt	$16, $17, $at
+	bne	$at, thunk_loop				# execute if nextThunk < numThunk
 	lda	$at, 1($31)
-	stl	$at, notinml_disp(THREADPTR_SYMREG)
-	bsr	save_regs	# need to save register set to get alloction pointer into thread state
-	ldl	$at, sysThread_disp(THREADPTR_SYMREG) # get system thread pointer
-	ldl	$sp, ($at)		        # run on system thread stack	
-	br	$gp, start_client_getgp
-start_client_getgp:	
-	ldgp	$gp, 0($gp)			# compute correct gp for self	
+	stl	$at, notinml_disp(THREADPTR_REG)
+	bsr	save_regs				# need to save register set to get 
+							#    alloction pointer into thread state
+	ldl	$at, sysThread_disp(THREADPTR_REG)	# get system thread pointer
+	ldl	$sp, ($at)				# run on system thread stack	
 	jsr	Finish
-	lda	$16, $$errormsg
+	lda	$16, $$errormsg				# should not return from Finish
 	jsr	printf
 	jsr	abort
-	ldq	$26, 0($sp)
-	lda	$sp, 320($sp)
-	ret	$31, ($26), 1
 	.end	start_client
 .set at
 	
@@ -143,17 +133,17 @@ start_client_getgp:
 	.prologue 0
 Yield:
 .set noat
-	stq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of Yield
+	stq	$26, 208(THREADPTR_REG)	# note that this is return address of Yield
 	bsr	save_regs
 	br	$gp, Yield_getgp
 Yield_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self	
-	ldl	$at, sysThread_disp(THREADPTR_SYMREG) # get system thread pointer
+	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
 	ldl	$sp, ($at)		        # run on system thread stack
 	jsr	$26, YieldRest			# no need to restore $gp after this call
 	ldgp	$gp, 0($26)			# compute correct gp for self	
-	bsr	load_regs			# THREADPTR_SYMREG is a callee-save register
-	ldq	$26, 208(THREADPTR_SYMREG)	# note that this is return address of Yield
+	bsr	load_regs			# THREADPTR_REG is a callee-save register
+	ldq	$26, 208(THREADPTR_REG)	# note that this is return address of Yield
 	ret	$31, ($26), 1	
 .set at			
 	.end	Yield
@@ -173,9 +163,9 @@ global_exnhandler:
 global_exn_handler_dummy:	
 	ldgp	$gp, 0($gp)
 	lda	$sp, -320($sp)
-	stq	EXNARG_SYMREG, EXNARG_DISP(THREADPTR_SYMREG)
+	stq	EXNARG_REG, EXNARG_DISP(THREADPTR_REG)
 	bsr	save_regs
-	mov	THREADPTR_SYMREG, $16
+	mov	THREADPTR_REG, $16
 	lda	$27, toplevel_exnhandler
 	bsr	toplevel_exnhandler
 	jsr	abort
@@ -187,18 +177,18 @@ global_exn_handler_dummy:
  # ------------------------------------------------------------
 	.ent	raise_exception_raw
 raise_exception_raw:
-	mov	$16, THREADPTR_SYMREG	# restore thread point
-	mov	$17, $16	# save the exn value;  load_regs_forC does not change $16
+	mov	$16, THREADPTR_REG	# restore thread point
+	mov	$17, $16		# save the exn value;  load_regs_forC does not change $16
 	br	$gp, restore_dummy
 restore_dummy:	
-	ldgp	$gp, 0($gp)	# get own gp
+	ldgp	$gp, 0($gp)		# get own gp
 .set noat
-				# restore address from argument
+					# restore address from argument
 	bsr	load_regs_forC
-	stq	$18, 24($sp)	# save handler address
-	mov	$16, EXNARG_SYMREG	# restore exn arg - which is same as $26 
-	ldq	$27, 0(EXNPTR_SYMREG)	# fetch exn handler code
-				# no need to pop frame as handler will change sp
+	stq	$18, 24($sp)		# save handler address
+	mov	$16, EXNARG_REG		# restore exn arg - which is same as $26 
+	ldq	$27, 0(EXNPTR_REG)	# fetch exn handler code
+					# no need to pop frame as handler will change sp
 	jmp	$31, ($27), 1
 .set at
 	.end	raise_exception_raw

@@ -30,7 +30,8 @@ long GetPc(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_pc);
 long GetSp(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_sp); }
 long GetIReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
 void SetIReg(struct ucontext *uctxt, int i, long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
-
+double GetFReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_fpregs[i]); }
+void SetFReg(struct ucontext *uctxt, int i, double v) { uctxt->uc_mcontext.sc_fpregs[i]= v; }
 long GetBadAddr(struct ucontext *uctxt, 
 		 siginfo_t *siginfo)   { return (long)(siginfo->si_addr); }
 #endif
@@ -62,7 +63,7 @@ long GetIReg(struct ucontext *uctxt, int i)
     }
     else { 
       /* window saved on stack */
-      int *sp = uctxt->uc_mcontext.gregs[REG_SP];
+      int *sp = (int *)(uctxt->uc_mcontext.gregs[REG_SP]);
       return sp[i - 16];
     }
   }
@@ -86,7 +87,7 @@ void SetIReg(struct ucontext *uctxt, int i, long v)
   }
 }
 long GetPc(struct ucontext *uctxt)    { return uctxt->uc_mcontext.gregs[REG_PC]; }
-long GetSp(struct ucontext *uctxt)    { return GetIReg(uctxt,SP_REG); }
+long GetSp(struct ucontext *uctxt)    { return GetIReg(uctxt,SP); }
 long GetBadAddr(struct ucontext *uctxt, 
 		 siginfo_t *siginfo)   { return (long)(siginfo->si_addr); }
 #endif
@@ -104,7 +105,7 @@ int zero()
 }
 
 #ifdef alpha_osf
-void float_exn_on()
+void float_exn_on(void)
 {
   /*
   ieee_set_fp_control( IEEE_TRAP_ENABLE_INV        
@@ -116,20 +117,20 @@ void float_exn_on()
 }
 #endif
 #ifdef rs_aix
-void float_exn_on()
+void float_exn_on(void)
 {
   fp_enable_all();
 }
 #endif
 #ifdef solaris
-void float_exn_on()
+void float_exn_on(void)
 {
   printf("need to implemented float_exn_on for SPARC");
 }
 #endif
 
 #ifdef alpha_osf
-void buserror_on()
+void buserror_on(void)
 {
   int buf[2], error;
   
@@ -140,7 +141,7 @@ void buserror_on()
   assert(!error);
 }
 #else
-void buserror_on()
+void buserror_on(void)
 {}
 #endif
 
@@ -312,15 +313,12 @@ void memfault_handler(int signum,
   exit(-1);
 }
 
-
+typedef void (*sa_sigaction_t)(int, struct siginfo*, void*);
+struct sigaction old_fpe_action;
 void fpe_handler(int signum, 
-#ifdef alpha_osf
+#if (defined alpha_osf || defined solaris)
 		 siginfo_t *siginfo, 
-#endif
-#ifdef solaris
-		 siginfo_t *siginfo, 
-#endif
-#ifdef rs_aix
+#elif (defined rs_aix)
 		 int always_zero,
 #endif
 		 struct ucontext *uctxt)
@@ -330,7 +328,7 @@ void fpe_handler(int signum,
   int errno = siginfo->si_errno;
   int code = siginfo->si_code;
   if (signum != SIGFPE || signo != SIGFPE)
-    printf("BUG: fpe_handler for non fpe signal\n");
+    printf("BUG: fpe_handler for non fpe signal: signum = %d, signo = %d\n",signum,signo);
   switch (code)
     {
     case FPE_INTDIV:
@@ -348,7 +346,7 @@ void fpe_handler(int signum,
 	printf("Integer overflow: we are not getting this... %d %d ",errno,code);
       raise_exception(uctxt,overflow_exn);
       break;
-    case FPE_FLTOVF:
+    case FPE_FLTOVF: 
       if (paranoid)
 	printf("Float OR integer overflow: %d %d ",errno,code);
       raise_exception(uctxt,overflow_exn);
@@ -360,8 +358,10 @@ void fpe_handler(int signum,
       printf("Float inexact result: %d %d ",errno,code);
       break;
     case FPE_FLTINV:
-      printf("Float invalid operation: %d %d ",errno,code);
+      /* We need to fix the result register but can't seem to use the default handler */
+      printf("Invalid Float operation; probably NAN operand; cannot patch result, resuming anyway\n");
       return;
+
     case FPE_FLTSUB:
       printf("Float subscript out of range: %d %d ",errno,code);
       break;
@@ -374,9 +374,6 @@ void fpe_handler(int signum,
       printf("Unknown FPE signal in non-alpha not implemented\n");
       */
 }
-
-
-
 
 
 
@@ -407,7 +404,7 @@ void signal_init()
 void install_signal_handlers(int isMain)
 {
   typedef void (*voidhandler_t)();
-  struct sigaction newact;
+  struct sigaction newact, oldact;
 
   sigfillset(&newact.sa_mask);
 #if (defined alpha_osf) || (defined solaris)
@@ -419,7 +416,7 @@ void install_signal_handlers(int isMain)
 
   if (!isMain) {
     newact.sa_handler = (voidhandler_t) fpe_handler;
-    sigaction(SIGFPE,&newact,NULL);
+    sigaction(SIGFPE,&newact,&old_fpe_action); 
     newact.sa_handler = (voidhandler_t) memfault_handler;
     sigaction(SIGSEGV,&newact,NULL);
     sigaction(SIGBUS,&newact,NULL); 

@@ -92,29 +92,7 @@ static void SynchEnd(void)
   }
 }
 
-/* XXX */
-void tempdebug(SysThread_t *sysThread, char *where, int cont)
-{
-  int i, fail = 0;
-  return;
-  for (i=0; i<=3; i++) {
-    int match = (&Threads[i]) == sysThread->userThread;
-    int bad = match && (Threads[i].saveregs[ASMTMP_REG] < Threads[i].saveregs[ALLOCPTR_REG]);
-    int consistent = (Threads[i].tid >= 0) ?
-                     (Threads[i].saveregs[THREADPTR_REG]) == (int)(&(Threads[i])) :
-                     (Threads[i].saveregs[ASMTMP_REG] == 0 &&
-		      Threads[i].saveregs[ALLOCPTR_REG] == 0);
-    printf("Proc %d: thread %d (%d) has tmp = %d, ptr = %d   %s %s %s %s\n",
-	   sysThread->stid,Threads[i].tid, Threads[i].id,
-	   Threads[i].saveregs[ASMTMP_REG], Threads[i].saveregs[ALLOCPTR_REG],
-	   where, match ? " <-- " : "", bad ? " *** " : "",
-	   consistent ? "" : "INCONSISTENT");
-    if (bad)
-      fail = 1;
-  }
-  if (fail && (!cont))
-    assert(0);
-}
+
 
 static void stop_copy(SysThread_t *sysThread)
 {
@@ -146,7 +124,7 @@ static void stop_copy(SysThread_t *sysThread)
     printf("Proc %d: proceeding to colection\n", sysThread->stid);
   numDoneThread = 0;
 
-  tempdebug(sysThread,"after mutation stopped",0);
+
 
   /* Get local ranges ready for use */
   SetRange(&from_range, fromheap->bottom, fromheap->top);
@@ -170,7 +148,6 @@ static void stop_copy(SysThread_t *sysThread)
     Thread_t *curThread = NULL;
     while ((curThread = NextJob()) != NULL) {
 
-      tempdebug(sysThread,"before forward_roots",0);
 
       /* Compute the roots from the stack and register set */
       local_root_scan(sysThread,curThread,fromheap);
@@ -211,7 +188,6 @@ static void stop_copy(SysThread_t *sysThread)
 	printf("Proc %d:    forwarded local roots of userThread %d\n",
 	       sysThread->stid,curThread->tid);      
 
-      tempdebug(sysThread,"after forward_roots",0);
 
     }
   }
@@ -347,8 +323,8 @@ void gc_para(Thread_t *curThread)
   int stid = sysThread->stid;
   int tid = curThread->tid;
   long *saveregs = curThread->saveregs;
-  value_t *alloc = (value_t *) saveregs[ALLOCPTR_REG];
-  value_t *limit = (value_t *) saveregs[ALLOCLIMIT_REG];
+  value_t *alloc = (value_t *) saveregs[ALLOCPTR];
+  value_t *limit = (value_t *) saveregs[ALLOCLIMIT];
   value_t *tmp1, *tmp2;
   int req_size = curThread->request;
 
@@ -360,39 +336,32 @@ void gc_para(Thread_t *curThread)
   assert(writelist_cursor <= writelist_end); /* XXX writelist is not synchronized */
   assert(req_size >= 0);
 
-  {
-    char tempbuf[30];
-    sprintf(tempbuf,"gc_para %d",NumGC);
-    tempdebug(sysThread,tempbuf,0);  
-  }
+
 
   /* See if we can grab another page from the fromspace; if not, then it's time to stop and copy */
   GetHeapArea(fromheap,pagesize,&tmp1,&tmp2);
   if (tmp1) {
     sysThread->alloc = (int)tmp1;
     sysThread->limit = (int)tmp2;
-    saveregs[ALLOCPTR_REG] = (long)tmp1;
-    saveregs[ALLOCLIMIT_REG] = (long)tmp2;
+    saveregs[ALLOCPTR] = (long)tmp1;
+    saveregs[ALLOCLIMIT] = (long)tmp2;
     if (diag) {
       printf("Proc %d: user thread %d: Mutator grabbed a page at %d\n",
-	     stid,tid,saveregs[ALLOCPTR_REG]);
+	     stid,tid,saveregs[ALLOCPTR]);
     }
     if (req_size > pagesize) {
       printf("req_size = %d   <=  pagesize = %d\n",req_size,pagesize);
       assert(0);
     }
     flushStore();                          /* make sure thread info is flushed to memory */
-    tempdebug(sysThread,"grabbed page",1);  
     return;
   }
 
-  tempdebug(sysThread,"invoking stop-copy1",0);  
   if (diag)
     printf("Proc %d: user thread %d: invoking stop-and-copy; requesting %d\n",
 	   stid,tid, req_size);
-  tempdebug(sysThread,"invoking stop-copy2",0);
 
-  sysThread->alloc = saveregs[ALLOCPTR_REG];
+  sysThread->alloc = saveregs[ALLOCPTR];
   FetchAndAdd(&curThread->status,-1);
   sysThread->userThread = NULL;
   stop_copy(sysThread);
@@ -425,7 +394,7 @@ void gc_init_para()
 void gc_finish_para()
 {
   Thread_t *th = getThread();
-  int allocsize = th->saveregs[ALLOCPTR_REG] - fromheap->alloc_start;
+  int allocsize = th->saveregs[ALLOCPTR] - fromheap->alloc_start;
   gcstat_finish(allocsize);
 #ifdef HEAPPROFILE
   gcstat_heapprofile_beforecollect((value_t *)fromheap->alloc_start,

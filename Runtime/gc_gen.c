@@ -315,14 +315,14 @@ void gc_gen(Thread_t *curThread, int isMajor)
   assert(sysThread->userThread == curThread);
   if (alloclimit == StartHeapLimit)
     {
-      saveregs[ALLOCPTR_REG] = nursery->bottom;
-      saveregs[ALLOCLIMIT_REG] = nursery->top;
+      saveregs[ALLOCPTR] = nursery->bottom;
+      saveregs[ALLOCLIMIT] = nursery->top;
       sysThread->alloc = nursery->bottom;
       sysThread->limit = nursery->top;
       return;
     }
 
-  assert(saveregs[ALLOCPTR_REG] <= saveregs[ALLOCLIMIT_REG]);
+  assert(saveregs[ALLOCPTR] <= saveregs[ALLOCLIMIT]);
   assert(allocptr <= alloclimit);
   assert(req_size >= 0);
   assert(writelist_cursor <= writelist_end);
@@ -377,7 +377,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  value_t *to_ptr = (value_t *)old_alloc_ptr;
 
 	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
-	  assert(old_fromheap->top - old_alloc_ptr > (saveregs[ALLOCPTR_REG] - nursery->bottom));
+	  assert(old_fromheap->top - old_alloc_ptr > (saveregs[ALLOCPTR] - nursery->bottom));
 
 	  SetRange(&from_range,nursery->bottom, nursery->top);
 	  SetRange(&from2_range,0,0);
@@ -553,8 +553,8 @@ void gc_gen(Thread_t *curThread, int isMajor)
     Heap_Unprotect(old_fromheap);
     debug_after_collect(nursery, old_fromheap);
 
-    saveregs[ALLOCPTR_REG] = nursery->bottom;
-    saveregs[ALLOCLIMIT_REG] = nursery->top;
+    saveregs[ALLOCPTR] = nursery->bottom;
+    saveregs[ALLOCLIMIT] = nursery->top;
     curThread->sysThread->limit = nursery->top;
 
   if (GCtype != Minor)
@@ -617,7 +617,7 @@ void gc_init_gen()
 void gc_finish_gen()
 {
   Thread_t *th = getThread();
-  int allocsize = th->saveregs[ALLOCPTR_REG] - nursery->alloc_start;
+  int allocsize = th->saveregs[ALLOCPTR] - nursery->alloc_start;
   gcstat_finish(allocsize);
 #ifdef HEAPPROFILE
   gcstat_heapprofile_beforecollect((value_t *)nursery->alloc_start,

@@ -58,7 +58,7 @@ struct Heap__t
 typedef struct Heap__t Heap_t;
 
 Heap_t* Heap_Alloc(int MinSize, int MaxSize);
-Heap_t* GetHeap();
+Heap_t* GetHeap(value_t);
 void Heap_Protect(Heap_t*);
 void Heap_Unprotect(Heap_t*);
 void Heap_Resize(Heap_t *res, long newsize);

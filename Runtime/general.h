@@ -50,6 +50,7 @@ extern int save_rate;
 extern int use_stack_gen;
 extern int collector_type;
 extern int paranoid;
+extern int verbose;
 extern int diag;
 extern int NumSysThread;
 extern int NumThread;

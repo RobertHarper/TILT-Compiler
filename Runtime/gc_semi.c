@@ -34,8 +34,8 @@ value_t alloc_bigwordarray_semi(int tagType, int word_len, value_t init_val, int
 {
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
-  value_t alloc_ptr = saveregs[ALLOCPTR_REG];
-  value_t alloc_limit = saveregs[ALLOCLIMIT_REG];
+  value_t alloc_ptr = saveregs[ALLOCPTR];
+  value_t alloc_limit = saveregs[ALLOCLIMIT];
   int tag = tagType | word_len << (2 + ARRLEN_OFFSET);
 
   int i;
@@ -49,8 +49,8 @@ value_t alloc_bigwordarray_semi(int tagType, int word_len, value_t init_val, int
 #endif
       curThread->request = 4 * (word_len + 1);
       gc_semi(curThread);
-      alloc_ptr = saveregs[ALLOCPTR_REG];
-      alloc_limit = saveregs[ALLOCLIMIT_REG];
+      alloc_ptr = saveregs[ALLOCPTR];
+      alloc_limit = saveregs[ALLOCLIMIT];
     }
   assert(alloc_ptr + (word_len + 1) < alloc_limit);
 
@@ -61,7 +61,7 @@ value_t alloc_bigwordarray_semi(int tagType, int word_len, value_t init_val, int
 #endif
   res = (value_t *)(alloc_ptr + 4);
   alloc_ptr += 4 * (word_len + 1);
-  saveregs[ALLOCPTR_REG] = alloc_ptr;
+  saveregs[ALLOCPTR] = alloc_ptr;
   res[-1] = tag;
   for (i=0; i<word_len; i++)
     res[i] = init_val;
@@ -91,8 +91,8 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
   Thread_t *curThread = getThread();
   long *saveregs = curThread->saveregs;
   int pos, tag = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
-  value_t alloc_ptr = saveregs[ALLOCPTR_REG];
-  value_t alloc_limit = saveregs[ALLOCLIMIT_REG];
+  value_t alloc_ptr = saveregs[ALLOCPTR];
+  value_t alloc_limit = saveregs[ALLOCLIMIT];
 
   /* Make sure there is enough space */
   if (alloc_ptr + 8 * (log_len + 3) >= alloc_limit)
@@ -101,10 +101,10 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
 #ifdef DEBUG
       printf("DOING GC inside float_alloc with a semispace collector\n");
 #endif
-      saveregs[ALLOCLIMIT_REG] = req_size;
+      saveregs[ALLOCLIMIT] = req_size;
       gc_semi(curThread);
-      alloc_ptr = saveregs[ALLOCPTR_REG];
-      alloc_limit = saveregs[ALLOCLIMIT_REG];
+      alloc_ptr = saveregs[ALLOCPTR];
+      alloc_limit = saveregs[ALLOCLIMIT];
     }
   assert(alloc_ptr + 8 * (log_len + 3) <= alloc_limit);
 
@@ -129,7 +129,7 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
   res = (value_t *)(alloc_ptr + 4);
   assert ((value_t)res % 8 == 0);
   alloc_ptr = (((value_t) res) + (8 * log_len));
-  saveregs[ALLOCPTR_REG] = alloc_ptr;
+  saveregs[ALLOCPTR] = alloc_ptr;
   res[-1] = RARRAY_TAG | (log_len << (3 + ARRLEN_OFFSET));
   for (i=0; i<log_len; i++)
     ((double *)res)[i] = init_val;
@@ -163,8 +163,8 @@ void gc_semi(Thread_t *curThread)
   /* Check for first time heap value needs to be initialized */
   if (sysThread->limit == StartHeapLimit)
     {
-      saveregs[ALLOCPTR_REG] = fromheap->bottom;
-      saveregs[ALLOCLIMIT_REG] = fromheap->top;
+      saveregs[ALLOCPTR] = fromheap->bottom;
+      saveregs[ALLOCLIMIT] = fromheap->top;
       sysThread->alloc = fromheap->bottom;
       sysThread->limit = fromheap->top;
       return;
@@ -286,8 +286,8 @@ void gc_semi(Thread_t *curThread)
   fromheap->alloc_start = fromheap->bottom;
 
   /* Update thread's allocation variables */
-  saveregs[ALLOCPTR_REG] = fromheap->alloc_start;
-  saveregs[ALLOCLIMIT_REG] = fromheap->top;
+  saveregs[ALLOCPTR] = fromheap->alloc_start;
+  saveregs[ALLOCLIMIT] = fromheap->top;
   sysThread->limit = fromheap->alloc_start;
   sysThread->limit = fromheap->top;
 
@@ -321,7 +321,7 @@ void gc_init_semi()
 void gc_finish_semi()
 {
   Thread_t *th = getThread();
-  int allocsize = th->saveregs[ALLOCPTR_REG] - fromheap->alloc_start;
+  int allocsize = th->saveregs[ALLOCPTR] - fromheap->alloc_start;
   gcstat_finish(allocsize);
 #ifdef HEAPPROFILE
   gcstat_heapprofile_beforecollect((value_t *)fromheap->alloc_start,

@@ -21,11 +21,6 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
       printf ("mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
       exit(-1);
     }
-  else
-    {
-      if (paranoid)
-	printf ("mprotect %d succeeded (%d,%d,%d)\n",which,bottom,size,perm);
-    }
 }
 
 int my_mmap(caddr_t start, int size, int prot)
@@ -39,21 +34,26 @@ int my_mmap(caddr_t start, int size, int prot)
 	printf ("unable to open /dev/zero, errno = %d\n", errno);
 	exit(-1);
       }
-    v = mmap((caddr_t) start,size, prot,
-	     MAP_FIXED | MAP_PRIVATE, fd, 0);
+    v = (value_t) mmap((caddr_t) start,size, prot,
+		       MAP_FIXED | MAP_PRIVATE, fd, 0);
   }
 #else
   v = mmap((caddr_t) start, size, prot,
 	      MAP_ANONYMOUS | MAP_FIXED, fd, 0);
 #endif
   if (paranoid) {
-    printf ("mmap (%d,%d,%d)\n",start,size,prot);
     if (prot == (PROT_READ | PROT_WRITE)) {
+      int a,b;
       caddr_t end = start + size - 4;
       *((int *)(start)) = 666;
       *((int *)(end)) = 666;
-      printf("written 666 to %u: read back %d\n",start,*((int *)(start)));
-      printf("written 666 to %u: read back %d\n",end,*((int *)(end)));
+      a = *((int *)(start));
+      b = *((int *)(end));
+      if (a != 666 || b != 666) {
+	printf ("mmap (%d,%d,%d)\n",start,size,prot);
+	printf("written 666 to %u: read back %d\n",start,*((int *)(start)));
+	printf("written 666 to %u: read back %d\n",end,*((int *)(end)));
+      }
     }
   }
   return v;

@@ -1,17 +1,24 @@
 #define reg_disp       0
 #ifdef alpha_osf
+#define doublesize     8
 #define longsize       8
 #define ptrsize        8
+#define intsize        4
 #endif
 #ifdef solaris
+#define doublesize     8
 #define longsize       4
 #define ptrsize        4
+#define intsize        4
 #endif
 #define maxsp_disp     longsize*32+8*32
 #define snapshot_disp  longsize*32+8*32+longsize
 #define sysThread_disp longsize*32+8*32+longsize+ptrsize
 #define notinml_disp   longsize*32+8*32+longsize+ptrsize+ptrsize
 #define scratch_disp   longsize*32+8*32+longsize+ptrsize+ptrsize+intsize
+#define thunk_disp     longsize*32+8*32+longsize+ptrsize+ptrsize+intsize+doublesize
+#define nextThunk_disp longsize*32+8*32+longsize+ptrsize+ptrsize+intsize+doublesize+ptrsize
+#define numThunk_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+intsize+doublesize+ptrsize+intsize
 
 #ifndef _inside_stack_h
 #ifndef _asm_
@@ -48,6 +55,12 @@ struct Thread__t
   struct SysThread__t *sysThread;      /* of type SysThread_t * - relied on by service_alpha_osf.s  */
   int                notInML;          /* set to true whenever mutator calls a normal external function */
   double             scratch;
+  value_t            *thunks;          /* Array of num_add unit -> unit */
+  int                nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
+  int                numThunk;         /* Number of thunks.  At least one. */
+
+  /* ---- The remaining fields not accessed by assembly code ---- */
+
   int                last_snapshot;    /* Index of last used snapshot */
   StackChain_t       *stackchain;      /* Stack */
   Queue_t            *retadd_queue;
@@ -56,10 +69,7 @@ struct Thread__t
   int                status;           /* Thread status */
   int                request;          /* Why pre-empted? */
   struct Thread__t   *parent;
-  value_t            oneThunk[1];      /* Avoid allocation by optimizing for common case */
-  value_t            thunks;           /* Array of num_add unit -> unit */
-  int                nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
-  int                numThunk;         /* Number of thunks.  At least one. */
+  value_t            oneThunk;         /* Avoid allocation by optimizing for common case */
   Queue_t            *reg_roots;
   Queue_t            *root_lists;
   Queue_t            *loc_roots;
@@ -95,7 +105,7 @@ void ResetJob(void);     /* For iterating over all jobs in work list */
 Thread_t *NextJob(void);
 
 void thread_init(void);
-void thread_go(value_t start_adds, int num_add);
+void thread_go(value_t *thunks, int numThunk);
 void Interrupt(struct ucontext *);
 void scheduler(void);
 void Finish(void);
