@@ -317,15 +317,15 @@ structure Machine =
 				 (msReg Rtest) ^ comma ^ (msLabel label))
     (* the assembler doesn't like mull or mullv with $at and an immediate operand *)
     | msInstr' (INTOP(MULL, R 28, oper as (IMMop _), R 28)) =  
-				let val mv1 = tab ^ "mv $at, $25"
+				let val mv1 = tab ^ "mov $at, $25"
 				    val mul = tab ^ "mull $25, " ^ (msOperand oper) ^ ", $25"
-				    val mv2 = tab ^ "mv $25, $at"
+				    val mv2 = tab ^ "mov $25, $at"
 				in  mv1 ^ "\n" ^ mul ^ "\n" ^ mv2
 				end
     | msInstr' (INTOP(MULLV, R 28, oper as (IMMop _), R 28)) =
-				let val mv1 = tab ^ "mv $at, $25"
+				let val mv1 = tab ^ "mov $at, $25"
 				    val mul = tab ^ "mullv $25, " ^ (msOperand oper) ^ ", $25"
-				    val mv2 = tab ^ "mv $25, $at"
+				    val mv2 = tab ^ "mov $25, $at"
 				in  mv1 ^ "\n" ^ mul ^ "\n" ^ mv2
 				end
     | msInstr' (INTOP(instr, Rsrc1, op2, Rdest)) =
