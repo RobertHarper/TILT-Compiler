@@ -90,6 +90,7 @@ struct
 	let val dir = realFullPath dir
 	    val _ = if dirAvailable dir then ()
 		    else error ("TILT_LIBDIR directory -- " ^ dir ^ " -- is inaccessible")
+	    val _ = (print "Expanded TILT_LIBDIR is "; print dir; print "\n")
 	    val sys = sysDir dir
 	    fun system file = sys andalso inDir (dir, file)
 	    val curDir = Delay.force cwd

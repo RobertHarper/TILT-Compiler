@@ -15,7 +15,7 @@ struct
     open TortlBase TortlRecord
     open Rtltags
 
-    val maxByteRequest = 8192
+    val maxByteRequest = 1024   (* This must be less than gc.c: arraySemengSize *)
     val w2i = TilWord32.toInt
     val i2w = TilWord32.fromInt
     fun error s = Util.error "tortl-array" s
@@ -129,7 +129,7 @@ struct
 				in  RREA(obj, byteDisp)
 				end)
 	  val _ = if (!do_fullWriteBarrier)
-		      then add_instr(STOREMUTATE ea)
+		      then add_instr(STOREMUTATE (ea, FLOAT_MUTATE))
 		  else ()
 	  val _ = add_instr(STORE64F(ea, newVal))
       in  (empty_record, state)
@@ -147,14 +147,14 @@ struct
 		   Prim.W32 => 
 		       (case (in_ea_range 4 vl2) of
 			    SOME i => (if (!do_fullWriteBarrier)
-					   then add_instr(STOREMUTATE (REA(obj,i)))
+					   then add_instr(STOREMUTATE (REA(obj,i), INT_MUTATE))
 				       else ();
 				       add_instr(STORE32I(REA(obj,i),newVal)))
 			  | NONE => let val index = load_ireg_term(vl2,NONE)
 					val byteDisp = alloc_regi NOTRACE_INT
 					val _ = add_instr(SLL(index, IMM 2, byteDisp))
 				    in  if (!do_fullWriteBarrier)
-					    then add_instr(STOREMUTATE (RREA(obj,byteDisp)))
+					    then add_instr(STOREMUTATE (RREA(obj,byteDisp), INT_MUTATE))
 					else ();
 					add_instr(STORE32I(RREA(obj,byteDisp),newVal))
 				    end)
@@ -162,7 +162,7 @@ struct
 			    let val index = load_ireg_term(vl2,NONE)
 				val byteDisp = index
 			    in  if (!do_fullWriteBarrier)
-				    then add_instr(STOREMUTATE(RREA(obj,byteDisp)))
+				    then add_instr(STOREMUTATE(RREA(obj,byteDisp), INT_MUTATE))
 				else ();
 				add_instr(STORE8I(RREA(obj,byteDisp),newVal))
 			    end
@@ -185,7 +185,7 @@ struct
 		       in  RREA(obj, byteOffset)
 		       end)
 	  val _ = if (!do_writeBarrier)
-		      then add_instr(STOREMUTATE ea)
+		      then add_instr(STOREMUTATE (ea, PTR_MUTATE))
 		  else ()
 	  val _ = add_instr(STORE32I(ea, newVal))
       in  (empty_record, state)
@@ -348,7 +348,7 @@ struct
 		
 	    (* now use a loop to initialize the data portion *)
 	    add_instr(S8ADD(len,REG dest,heapptr));
-	    add_instr(LI(Rtltags.skip 0, skiptag));
+	    add_instr(LI(Rtltags.skip 1, skiptag));
 	    add_instr(STORE32I(REA(heapptr,0),skiptag));
 	    add_instr(ADD(heapptr,IMM 4,heapptr));
 	    add_instr(SUB(len,IMM 1,i));       (* init val *)
@@ -385,9 +385,7 @@ struct
       in 
 	  add_instr(ICOMMENT "storing tag");
 	  add_instr(STORE32I(REA(heapptr,0),tag));           (* store tag *)
-	  add_instr(LI(Rtltags.skip 0, skiptag));               (* init field 0 to handle empty arrays *)
-	  add_instr(STORE32I(REA(heapptr,4),skiptag));
-	  add_instr(ADD(heapptr,IMM 4,dest));            (* compute final array *)
+	  add_instr(ADD(heapptr,IMM 4,dest));                (* compute final array *)
 	  add_instr(SLL(wordsNeeded,IMM 2,bytesNeeded));
 	  add_instr(ADD(heapptr,REG bytesNeeded,heapptr));      (* update heap pointer including possible padding *)
 	  add_instr(SUB(len,IMM 1,byteOffset));                 (* initialize byteOffset *)

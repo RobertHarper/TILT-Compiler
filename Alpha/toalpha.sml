@@ -997,11 +997,13 @@ struct
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
 
-     | translate (Rtl.STOREMUTATE ea) = 
+     | translate (Rtl.STOREMUTATE (ea, mutateType)) = 
 	   let val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	       val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	       val store_obj = Rtl.REGI(Name.fresh_var(),Rtl.TRACE)
 	       val store_disp = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
+	       val wordsForEachMutate = 3
+	       val bytesForEachMutate = 4 * wordsForEachMutate
 	   in  emit (SPECIFIC(LOADI (LDL, translateIReg writeAlloc, writelistAlloc_disp, Rth)));
 	       app translate
 	       ((case ea of
@@ -1009,21 +1011,30 @@ struct
 		   | Rtl.LEA (l, i) => [Rtl.LADDR (Rtl.LEA(l, 0), store_obj), Rtl.LI(TilWord32.fromInt i, store_disp)]
 		   | Rtl.RREA (r1, r2) => [Rtl.MV (r1, store_obj), Rtl.MV (r2, store_disp)]) @
 		     [Rtl.STORE32I(Rtl.REA(writeAlloc,0),store_obj),
-		      Rtl.STORE32I(Rtl.REA(writeAlloc,4),store_disp),
-		      Rtl.ADD(writeAlloc, Rtl.IMM 8, writeAllocTemp)]);
+		      Rtl.STORE32I(Rtl.REA(writeAlloc,4),store_disp)]
+		     @ (case mutateType of
+			    Rtl.PTR_MUTATE => (* The STOREMUTATE precedes the STORE32I *)
+				let val prevVal = Rtl.REGI(Name.fresh_var(), Rtl.TRACE)
+				in [Rtl.LOAD32I(ea,prevVal),
+				    Rtl.STORE32I(Rtl.REA(writeAlloc,8),prevVal)]
+				end
+			  | _ => [])
+		     @ [Rtl.ADD(writeAlloc, Rtl.IMM bytesForEachMutate, writeAllocTemp)]);
 	       emit (SPECIFIC(STOREI (STL, translateIReg writeAllocTemp,writelistAlloc_disp, Rth)))
 	   end
 
      | translate (Rtl.NEEDMUTATE n) =
-       let val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+       let val wordsForEachMutate = 3
+	   val bytesForEachMutate = 4 * wordsForEachMutate
+	   val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	   val writeLimit = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	   val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	   val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
        in  emit (SPECIFIC(LOADI (LDL, translateIReg writeAlloc, writelistAlloc_disp, Rth)));
 	   emit (SPECIFIC(LOADI (LDL, translateIReg writeLimit, writelistLimit_disp, Rth)));
-	   translate (Rtl.ADD(writeAlloc, Rtl.IMM (8 * n), writeAllocTemp));
+	   translate (Rtl.ADD(writeAlloc, Rtl.IMM (bytesForEachMutate * n), writeAllocTemp));
 	   translate (Rtl.BCNDI(Rtl.LE, writeAllocTemp, Rtl.REG writeLimit, afterLabel, true));
-	   emit (SPECIFIC (INTOP(SUBL, Rheap, IMMop(8 * n), Rat)));
+	   emit (SPECIFIC (INTOP(SUBL, Rheap, IMMop(bytesForEachMutate * n), Rat)));
 	   emit (BASE (GC_CALLSITE afterLabel));
 	   emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 			    {regs_modified=[Rat], regs_destroyed=[Rat],

@@ -78,7 +78,7 @@ hoist.sml
 reduce.sig.sml
 pass.sig.sml
 reduce.sml
-flatten.sml 
+(* flatten.sml  *)
 
 analyze.sig.sml
 analyze.sml

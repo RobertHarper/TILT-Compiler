@@ -649,7 +649,7 @@ end;
 fun bhP numParticles numIterations numCheckpoint = 
 let 
     val particles = randomParticles numParticles
-    val _ = print "\n\n--------- Parallel Barnes-Hutt Simulation -------------\n"
+    val _ = print "\n\n--- Parallel Barnes-Hutt Simulation ---\n"
     val _ = simulate bhForcesP particles 0.00001 0 numIterations (fn n => n mod numCheckpoint = 0)
 in  ()
 end;

@@ -1,6 +1,12 @@
 (*$import TopLevel *)
 
+(*
+extern fastTimerOn : (unit) -->
+extern fastTimerOff : (unit) -->
+*)
+
 local
+    fun (f o g) x = f(g x)
     exception ex_undefined of string
     fun error str = raise ex_undefined str
 	
@@ -20,7 +26,11 @@ local
 		   in existsp 
 		   end
 
-    fun member x a = exists (equal a) x
+    fun member x a = let (* val _ = Ccall(fastTimerOn) *)
+			 val res =  exists (equal a) x
+			 (* val _ = Ccall(fastTimerOff) *)
+		     in  res
+		     end
 	
     fun C f x y = f y x
 	
@@ -68,8 +78,10 @@ local
 		    if member x2 a then f xover (a::x3) x2 x1 x else
 			if member x1 a then f xover x3 (a::x2) x1 x else
 			    f xover x3 x2 (a::x1) x
-			    
-    in f [] [] [] [] x 
+(*	val _ = Ccall(fastTimerOn) 	     *)
+	val res =  f [] [] [] [] x 
+(*	val _ = Ccall(fastTimerOff) 	    *)
+    in  res
     end
 
     datatype generation = GEN of (int*int) list
@@ -78,16 +90,20 @@ local
     fun alive (GEN livecoords) = livecoords
     fun mkgen coordlist = GEN (lexordset coordlist)
     fun mk_nextgen_fn neighbours gen =
-	let val living = alive gen
-	    val isalive = member living
-	    val liveneighbours = length o filter isalive o neighbours
+	let 
 	    fun twoorthree 2 = true
 	      | twoorthree 3 = true
 	      | twoorthree _ = false
+	    val living = alive gen
+	    val isalive = member living
+	    val liveneighbours = length o filter isalive o neighbours
 	    val survivors = filter (twoorthree o liveneighbours) living
+(*	    val _ = Ccall(fastTimerOn)  *)
 	    val newnbrlist = flatten(map (filter (not o isalive) o neighbours) living)
+(*	    val _ = Ccall(fastTimerOff) *)
 	    val newborn = occurs3 newnbrlist
-	in mkgen (survivors @ newborn) 
+	    val nextGen = mkgen(survivors @ newborn)
+	in  nextGen
 	end
     
     
@@ -131,7 +147,14 @@ val genB = mkgen(glider at (2,2) @ bail at (2,12)
 		 @ rotate (barberpole 4) at (5,20))
 
 val show = app (fn s => (print s; print "\n")) o plot o alive
-fun nthgen g 0 = g | nthgen g i = (nthgen (mk_nextgen_fn neighbours g) (i-1))
+fun nthgen g 0 = g 
+  | nthgen g i = 
+    let 
+(* 	val _ = Ccall(fastTimerOn)   *)
+	val res = mk_nextgen_fn neighbours g
+(*	val _ = Ccall(fastTimerOff)  *)
+    in  nthgen res (i-1)
+    end
 
 (*
 fun run g = (show g;
@@ -165,12 +188,18 @@ val gun = mkgen
 
   fun doit start step thing = 
       let fun loop 0 thing = ()
-	    | loop count thing = (show thing; loop (count-1) (nthgen thing step))
+	    | loop count thing = let 
+				     val _ = show thing 
+(*				     val _ = Ccall(fastTimerOn)  *)
+				     val nextThing =  nthgen thing step
+(*				     val _ = Ccall(fastTimerOff) *)
+				 in loop (count-1) nextThing
+				 end
       in  loop start thing
       end
+
 in
-
-    val lifeResult = doit 10 10 gun
-
+    fun lifeDoit() = doit 10 10 gun
+    val lifeResult = lifeDoit()
 end
 

@@ -973,7 +973,7 @@ struct
 	  fun doUninitialize() = 
 	      let val tag = alloc_regi NOTRACE_INT
 		  val _ = add_mutable label
-	      in  add_data (INT32 (Rtltags.skip 2));  (* indicates uninitilized global *)
+	      in  add_data (INT32 (Rtltags.skip 2));  (* indicates uninitialized global *)
 		  app (fn l => add_data(DLABEL l)) (label::labels);
 		  add_instr(LI(tagData, tag));
 		  (case tagMaskOpt of
@@ -989,7 +989,7 @@ struct
 		      I r => (doUninitialize(); (* could optimize for non-pointers *)
 			      add_data(INT32 uninit_val);
 			      add_instr(STORE32I(labelEa,r)))  
-		    | F r => (doInitialize();  (* ok since floats are never pointers *)
+		    | F r => (doInitialize();   (* ok since floats are never pointers *)
 			      add_data(FLOAT "0.0");
 			      add_instr(STORE64F(labelEa,r))))
 	   | LOCATION (GLOBAL (l,rep)) => 

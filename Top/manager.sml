@@ -43,6 +43,7 @@ struct
     type filebase = string
     fun base2sml (f : string) = f ^ ".sml"
     fun base2int (f : string) = f ^ ".int"
+    val ui2base = Til.ui2base
     val base2ui = Til.base2ui
     val base2s = Til.base2s
     val base2o = Til.base2o
@@ -537,13 +538,13 @@ struct
 	  | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 
     (* true indicates .o file generated, false means only .s file generated *)
-    fun compile (unit,base,importBases) = 
-	let val intFile = Help.base2int base
-	    val smlFile = Help.base2sml base
-	    val uiFile = Help.base2ui base
+    fun compile (unit,absBase,importAbsBases) = 
+	let val intFile = Help.base2int absBase
+	    val smlFile = Help.base2sml absBase
+	    val uiFile = Help.base2ui absBase
 
 	    fun elaborate()=  
-		let val ctxt = getContext (map Help.base2ui importBases)
+		let val ctxt = getContext (map Help.base2ui importAbsBases)
 		    val _ = Help.chat ("\n  [Parsing " ^ smlFile ^ "]\n")
 		    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
 		    val _ = if (lines > 3000) 
@@ -567,20 +568,20 @@ struct
 			     end
 		    (* Generate a .uo file that matches up .ui files and theirs imports *)
 		    val _ = Help.chat ("  [Creating .uo file ...")
-		    val imports_uo = map (fn impBase => 
-					  (impBase, Cache.crc (Help.base2ui impBase))) 
-			importBases
-		    val exports_uo = [(base, Cache.crc uiFile)]
+		    val imports_uo = map (fn impAbsBase => 
+					  (impAbsBase, Cache.crc (Help.base2ui impAbsBase))) 
+			importAbsBases
+		    val exports_uo = [(absBase, Cache.crc uiFile)]
 		    val uoFile = Linker.mk_uo {imports = imports_uo,
 					       exports = exports_uo,
-					       base_result = base}
+					       base_result = absBase}
 		    val _ = Cache.flushSome [uoFile]
 		in  il_module
 		end
 	    fun generate il_module =
 		let (* Continue compilation, generating a platform-dependent .o object file *)
 		    val _ = Help.chat ("  [Compiling to assembly file]\n")
-		    val sFile = Til.il_to_asm (unit,base, il_module)
+		    val sFile = Til.il_to_asm (unit, absBase, il_module)
 		in  ()
 		end
 	in  (elaborate, generate)
@@ -619,7 +620,7 @@ struct
 	   | SOME (Comm.ACK_OBJECT _) => error "Slave got an ack_object message"
 	   | SOME (Comm.ACK_ERROR _) => error "Slave got an ack_error message"
 	   | SOME Comm.FLUSH => (Cache.flushAll(); chat "Slave received FLUSH.\n"; READY)
-	   | SOME (Comm.REQUEST (job as (platform::unit::base::imports))) => 
+	   | SOME (Comm.REQUEST (job as (platform::unit::absBase::absImportBases))) => 
 		       (* It's okay for the first acknowledgement to be missed. 
 			  In fact, we skip the acknowledgement if the expected compilation 
 			  time was small to avoid communication traffic. *)
@@ -630,7 +631,7 @@ struct
 					      "dunix" => Til.TIL_ALPHA
 					    | "solaris" => Til.TIL_SPARC
 					    | _ => error ("unknown target platform" ^ platform))
-			   val (elaborate, generate) = compile (unit,base,imports)
+			   val (elaborate, generate) = compile (unit,absBase,absImportBases)
 			   val il_module = (elaborate()
 					    handle e => 
 						(Comm.send(Comm.toMaster, Comm.ACK_ERROR job);
@@ -649,7 +650,7 @@ struct
 			   val _ = 
 			       if (Til.native())
 				   then
-				       (assemble(unit,base,imports);
+				       (assemble(unit,absBase,absImportBases);
 					Comm.send (Comm.toMaster, Comm.ACK_OBJECT job))
 			       else
 				   Comm.send (Comm.toMaster, Comm.ACK_ASSEMBLY job)
@@ -752,8 +753,10 @@ struct
     local
 
 	val graph = ref (Dag.empty() : {position : int,
-					filebase : string,
-					status : status ref} Dag.graph)
+					relBase : string,
+					absBase : string,
+					status : status ref,
+					isTarget : bool} Dag.graph)
         val units = ref (true, ([] : string list)) (* kept in reverse order if bool is true *)
 
 	fun lookup unitname =
@@ -784,10 +787,16 @@ struct
 				    in ls
 				    end)
 
-	fun get_base unit = #filebase(lookup unit)
+	fun get_relBase unit = #relBase(lookup unit)
+	fun get_absBase unit = #absBase(lookup unit)
 	fun get_position unit = #position(lookup unit)
+	fun get_isTarget unit = #isTarget(lookup unit)
 	fun get_status unit = !(#status(lookup unit))
 	fun set_status (unit,s) = (#status(lookup unit)) := s
+
+	fun list_targets() = let val allUnits = list_units()
+			     in  List.filter get_isTarget allUnits
+			     end
 
 	fun get_import_direct unit = 
 	    (Dag.parents(!graph,unit)
@@ -921,7 +930,7 @@ struct
 	(* mapfilePath : string -> string list *)
 	fun mapfilePath currentDir = [currentDir, getLibDir()]
 
-	(* readAssociation : string -> (string * string) list *)
+	(* readAssociation : string -> (string * string * bool) list *)
 	fun readAssociation mapfile = 
 	    let
 		val dir = OS.Path.dir mapfile
@@ -949,7 +958,8 @@ struct
 					    in
 						loop (n+1, (rev innerAssociation) @ acc)
 					    end)
-			       | [unitname, filebase] => loop (n+1, (unitname, relative filebase) :: acc)
+			       | [unitname, filebase] => loop (n+1, (unitname, relative filebase, false) :: acc)
+			       | [unitname, filebase, "TARGET"] => loop (n+1, (unitname, relative filebase, true) :: acc)
 			       | [] => loop (n, acc)
 			       | _ => error ("Line " ^ (Int.toString n) ^ 
 					     " of " ^ mapfile ^ " is ill-formed: " ^ line ^ "\n"))
@@ -965,19 +975,22 @@ struct
 	    let val _ = Cache.flushAll()
 		val _ = reset_graph()
 		val association = readAssociation mapFile
-		fun mapper (n, (unitname, filebase)) = 
+		fun mapper (n, (unitname, filebase, isTarg)) = 
 		    let val nodeWeight = Cache.size(base2sml filebase)
+			val absBase = OS.Path.mkAbsolute(filebase, OS.FileSys.getDir())
 			val info = 
 			    {position = n,
-			     filebase = filebase,
-			     status = ref WAITING}
+			     relBase = filebase,
+			     absBase = absBase,
+			     status = ref WAITING,
+			     isTarget = isTarg}
 		    in  add_node(unitname, nodeWeight, info)
 		    end
 		val _ = Listops.mapcount mapper association
 		val _ = chat ("Mapfile " ^ mapFile ^ " with " ^ (Int.toString (length association)) 
 			      ^ " units processed.\n")
 		fun read_import unit = 
-		    let val filebase = get_base unit
+		    let val filebase = get_relBase unit
 			val imports = parse_impl_import(base2sml filebase)
 			val _ = app (fn import => add_edge(import,unit)) imports
 			val _ = set_status(unit, if (null imports) then READY (Time.now()) else WAITING)
@@ -1125,7 +1138,7 @@ struct
         (case (get_status unitname) of
 	      DONE _ => false
 	    | _ => 
-		  let val sourcebase = get_base unitname
+		  let val sourcebase = get_relBase unitname
 		      val intfile = base2int sourcebase
 		      val smlfile = base2sml sourcebase
 		      val uofile = base2uo sourcebase
@@ -1138,7 +1151,7 @@ struct
 		      val dest_o_exists = Cache.exists ofile
 			  
 		      val direct_imports = get_import_direct unitname
-		      val direct_imports_base = map get_base direct_imports
+		      val direct_imports_base = map get_relBase direct_imports
 		      val direct_imports_ui = map Help.base2ui direct_imports_base
 		      val (latest_import_file, latest_import_time) = Cache.lastModTime direct_imports_ui
 			  
@@ -1222,15 +1235,19 @@ struct
     fun resultToTime (PROCESSING (t,_)) = t
       | resultToTime (IDLE (t,_,_)) = t
       | resultToTime (COMPLETE t) = t
-    fun once (mapfile, srcs,exeOpt) = 
+    fun once (mapfile, doLink) = 
 	let val _ = resetSlaves()
 	    val _ = setMapping(mapfile, true)
-	    val srcs = if (null srcs) then list_units() else srcs
+	    val finalTargets = let val mapfileTargets = list_targets()
+			       in  if (null mapfileTargets)
+				       then [List.last(list_units())] 
+				   else mapfileTargets
+			       end
 	    fun folder (unit,acc) = 
 		let val imports = get_import_transitive unit
 		in  StringOrderedSet.cons(unit, foldl StringOrderedSet.cons acc imports)
 		end
-	    val units = rev (StringOrderedSet.toList (foldl folder StringOrderedSet.empty srcs))
+	    val units = rev (StringOrderedSet.toList (foldl folder StringOrderedSet.empty finalTargets))
 
 	    val _ = (chat (Int.toString (length units));
 		     chat " necessary units: \n")
@@ -1253,7 +1270,7 @@ struct
 			  end
 		      | ack_asm _ = error "Acknowledgement message not at least three words"
 		    fun check_asm (name,asmTime) =
-			let val isDone = Til.assemble_done(get_base name)
+			let val isDone = Til.assemble_done(get_relBase name)
 			    val _ = 
 				if isDone 
 				    then 
@@ -1357,17 +1374,16 @@ struct
 				 let fun showSlave name = chat ("  [Calling " ^ name ^ 
 								" to compile " ^ first ^ "]\n")
 				     val _ = markPending first
-				     val firstBase = get_base first
+				     val absFirstBase = get_absBase first
 				     val imports = get_import_transitive first
-				     val importBases = map get_base imports
-				     val base = get_base first
-				     val _ = Cache.flushSome[base2ui base,
-							     base2s base,
-							     base2o base,
-							     base2uo base]
+				     val absImportBases = map get_absBase imports
+				     val _ = Cache.flushSome[base2ui absFirstBase,
+							     base2s absFirstBase,
+							     base2o absFirstBase,
+							     base2uo absFirstBase]
 				     val (waiting, _, pending, assembling, proceeding) = state
 				     val state = (waiting, rest, first::pending, assembling, proceeding)
-				 in  useSlave (showSlave, first::firstBase::importBases);
+				 in  useSlave (showSlave, first::absFirstBase::absImportBases);
 				     useSlaves (slavesLeft - 1) state
 				 end)
 		end
@@ -1381,45 +1397,37 @@ struct
 			in  useSlaves numSlaves state
 			end
 		end
-	    (* makeExe : string * string list -> unit *)
-	    fun makeExe(exe, units) = 
-		let val _ = showTime (true,"Start linking" )
-		    val exe = exeName (exe, units)
-		    val unit_set = 
-		    List.foldl 
-		    (fn (next, set) => 
-                     let val import_tr = get_import_transitive next
-			 val next_pos = get_position next
-			 fun check import = if (get_position import < next_pos) then ()
-			                    else 
-						error ("Mapfile file ordering is inconsistent because " ^
-						       next ^ " imports " ^ import ^ " but precedes it.")
-			 val _ = app check import_tr
-		     in StringSet.add(StringSet.addList (set, import_tr), next)
-                     end)
-		    (StringSet.empty)
-		    units
-		    
-		    val units = List.filter (fn unit => (StringSet.member(unit_set,unit))) units
+	    (* makeExe : string -> unit *)
+	    fun makeExe(finalTarget) = 
+		let val _ = showTime (true,"Start linking on " ^ finalTarget)
+		    val exe = exeName ("", [finalTarget])
+		    val requiredUnits =
+			let val import_tr = get_import_transitive finalTarget
+			    val next_pos = get_position finalTarget
+			    fun check import = if (get_position import < next_pos) then ()
+					       else 
+						   error ("Mapfile file ordering is inconsistent because " ^
+							  finalTarget ^ " imports " ^ import ^ " but precedes it.")
+			    val _ = app check import_tr
+			in  import_tr @ [finalTarget]
+			end
 			
 		    fun mapper unit = 
-			let val base = get_base unit
+			let val base = get_relBase unit
 			in  {unit=unit, base=base,
 			     uiFile=base2ui base, uoFile=base2uo base, oFile=base2o base}
 			end
-		    val packages = map mapper units
+		    val packages = map mapper requiredUnits
 		in  (chat "Manager calling linker with: ";
-		     chat_strings 30 units;
+		     chat_strings 30 requiredUnits;
 		     chat "\n";
 		     Linker.mk_exe {units = packages, exe_result = exe})
 		end
 	in  {setup = fn _ => initialState,
 	     step = step, 
-	     complete = fn _ => (case exeOpt of
-				     NONE => ()
-				   | SOME exe => makeExe (exe, units))}
+	     complete = fn _ => if doLink then app makeExe finalTargets else ()}
 	end
-    fun run (args as (mapfile,_,_)) = 
+    fun run (args as (mapfile,_)) = 
 	let val {setup,step = step : state -> result,complete} = once args
 	    val idle = ref 0
 	    val initialState = setup()
@@ -1515,7 +1523,7 @@ struct
 				then OS.FileSys.remove file
 			    else ()
 	    fun remove unit = 
-		let val base = get_base unit
+		let val base = get_relBase unit
 		    val ui = base2ui base
 		    val uo = base2uo base
 		    val s = base2s base
@@ -1547,20 +1555,16 @@ struct
   open Help
 
   val slave = Slave.run
-  fun helper runner (mapfile : string, cs : bool, os : string option, srcs : string list) =
+  fun helper runner (mapfile : string, cs : bool) =
 	let val _ = if !(Stats.tt "Reset stats between calls") then Stats.clear_stats() else ()
-	in  (case (cs, os) of
-		 (false, NONE)   => runner(mapfile, srcs, SOME "")
-	       | (false, SOME given_exe) => runner(mapfile, srcs, SOME given_exe)
-	       | (true,  NONE)   => runner(mapfile, srcs, NONE)
-	       | (true,  SOME _) => error "Cannot specify -c and -o");
+	in  runner(mapfile, cs);
 	    Stats.print_stats()
 	end
 
   fun master mapfile = 
       let val _ = Til.checkNative()
 	  val _ = startTime "Starting compilation"
-	  val _ = helper Master.run (mapfile, false, NONE, [])
+	  val _ = helper Master.run (mapfile, true)
 	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
@@ -1596,7 +1600,7 @@ struct
 	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
-  fun make mapfile = tilc (mapfile, false, NONE, [])
+  fun make mapfile = tilc (mapfile, true)
 
   fun purge mapfile = Master.purge mapfile
 

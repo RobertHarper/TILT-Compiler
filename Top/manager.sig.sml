@@ -33,6 +33,7 @@ end
 
 signature HELP = 
     sig
+	val ui2base : string -> string
 	val base2int : string -> string
 	val base2o : string -> string
 	val base2s : string -> string
@@ -104,7 +105,8 @@ sig
      slave          run a slave
      slaves	    run some slaves on the given machines
      master         run a master on the given mapfile
-     make           run a master on the given mapfile and interleave slave work in the same process
+     make           run a master on the given mapfile
+                    also interleave slave work in the same process
   *)
 
   val buildRuntime : bool -> unit

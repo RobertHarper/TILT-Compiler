@@ -266,7 +266,7 @@ in
     fun fftdoit() = 
 	let 
 	    val np = ref 16 
-	in for(1,13,fn i => (test (!np); np := (!np)*2))
+	in for(1,14,fn i => (test (!np); np := (!np)*2))
 	end
     val fftResult = fftdoit()
 end

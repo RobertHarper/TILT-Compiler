@@ -83,6 +83,8 @@ sig
 
   datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
 
+  datatype mutateType = INT_MUTATE | FLOAT_MUTATE | PTR_MUTATE
+
   datatype instr = 
       LI     of TilWord32.word * regi
     | LADDR  of ea * regi               
@@ -236,7 +238,7 @@ sig
     | STORE32I  of ea * regi      (* unchecked stores *)
     | LOAD64F   of ea * regf
     | STORE64F  of ea * regf      (* unchecked stores *)
-    | STOREMUTATE of ea
+    | STOREMUTATE of ea * mutateType
     | NEEDALLOC  of sv                       (* Calls GC if sv words are not allocatable *)
     | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)
 

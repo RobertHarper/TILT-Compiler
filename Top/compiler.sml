@@ -55,6 +55,7 @@ structure Til :> COMPILER =
 	   | TIL_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus"
 	   | MLRISC_ALPHA => if (!debug_asm) then " -g " else ""
 	   | MLRISC_SPARC => if (!debug_asm) then " -xarch=v8plus" else "-xarch=v8plus")
+    fun ui2base uiFile = String.substring(uiFile, 0, size uiFile - 3)
     fun base2ui base = base ^ ".ui"
 (*
 	(case (getTargetPlatform()) of

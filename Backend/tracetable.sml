@@ -13,10 +13,6 @@
    4 bytes for the return address for indexing into the entry.
 -- 4 bytes OPTIONALLY for an id so that one can easily match
        entries to the corresponding GC point in the code.
-OLD   4 bytes to indicate the size(in 4 bytes) of this entry.   
-OLD   4 bytes to indicate the size(in 4 bytes) of the "byte section"
-OLD   4 bytes to indicate the size(in bytes) the size of the stack frame
-OLD   4 bytes to indiate return address position in frame
    4 bytes/1 word used to represent table entry size, frame size, byte section size
       measured in words:
         the lowest 10 bits represent table entry size
@@ -24,28 +20,30 @@ OLD   4 bytes to indiate return address position in frame
         the next higher 10 bits represent byte section size
         the highest 2 bits represent the quadword offset of return address
       Note that |word section| = |table entry| - |byte section| - |fixed fields|
-   8 bytes to indicate the states of the registers
-      the two words are defined so that:
-         (1) least significant bit corresponds to register 0 and so on
-         (2)  if you define x_n and y_n to be bit n of word 1 and of word 2, respectively,
-                 then 10 is TRACE_YES, 00 is TRACE_no, 11 is TRACE_CALLEE, 01 is other.
-              note that for registers, a TRACE_CALLEE can arise only for the matching register
-         (3) this weird mapping is used so that bit operations will quickly give you
-             the status without space waste
-   varaible number of words used to indicate the state of the stack slots
-        (1) 16 pairs of two bits are used in each word from least to most significant
-              order to indicate the state of the stack slots
-        (2) padding is used to the next word boundary
-        (3) 00 -> TRACE_NO; 01-> TRACE_YES; 02 -> TRACE_CALLEE ?; 03 -> TRACE_?
-        (4) Note that here the reg on which TRACE_CALLEE is variable and
-            so one must look the info up in the byte data section
-   variable number of bytes to indicate "byte" and "word" data sections.
-     The "byte" data starts and extends with padding to a multiple of 4 bytes.
-     Then comes the "word" data.  This variable-sized data comes in the order of all
-     the stack slots first and then all the register.
+   2 words for register states.  The 2 words are defined so that:
+         (1) Bits (from LSB) n of the first and second word, respectively, specify for register n
+                 10 is TRACE_YES
+		 00 is TRACE_NO
+		 11 is TRACE_CALLEE  - can arise only for the matching register
+		 01 is TRACE_SPECIAL - look up in the word section
+         (2) This weird mapping allows bit operations that quickly give the status without space waste.
+   Variable number of words used to indicate the state of the stack slots
+        (1) Each word can describe up to 16 stack slots.  LSB bits describe lowest stack slots.
+            There may be unused bits at the upper end of the last word.
+        (2) As before, each two bits is interpreted as
+                 10 is TRACE_YES
+		 00 is TRACE_NO
+		 11 is TRACE_CALLEE  - look up in byte section for stack slot
+		 01 is TRACE_SPECIAL - look up in the word section
+   Variable number of words for the "byte" section.  There may be extra bytes for alignment.
+     Optional special data for large return addresses.
+     Special data for the stack slots.
+   Variable number of words for the "word" section.
+     Special data for the stack slots.
+     Special data for the registers.
 *)
-functor Tracetable(val little_endian    : bool)
-  :> TRACETABLE =
+
+functor Tracetable(val little_endian : bool) :> TRACETABLE =
   struct
 
     open Rtl
@@ -300,12 +298,6 @@ functor Tracetable(val little_endian    : bool)
 			       app (fn t => (print (msTrace t); print "  ")) matches;
 			       print "\n"; hd matches))
 		end
-(*
-	    fun reglookup n = 
-		case (List.find (fn (v,t) => (n = Core.regNum v)) regtrace) of
-		    NONE => TRACE_NO
-		  | (SOME (v,t)) => t
-*)
 	    val _ = clearwords()
 	    val _ = clearbytes()
 	    local

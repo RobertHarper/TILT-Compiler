@@ -251,7 +251,10 @@ struct
 	      | STORE8I (ea,r)  => op2si "stb" (ea, r)
 	      | STORE32I (ea,r) => op2si "stl" (ea, r)
               | STORE64F (ea,fr) => plain ["stt",regf2s fr,", ",ea2s ea]
-	      | STOREMUTATE ea     => plain ["storemutate", ea2s ea]
+	      | STOREMUTATE (ea,mutType) => plain ["storemutate", ea2s ea, ",", (case mutType of
+										     INT_MUTATE => "intMutate"
+										   | FLOAT_MUTATE => "floatMutate"
+										   | PTR_MUTATE => "ptrMutate")]
               | NEEDALLOC sv       => plain ["needalloc ",sv2s sv]
               | NEEDMUTATE n       => plain ["needmutate ",Int.toString n]
 

@@ -46,7 +46,7 @@ structure OS_FileSys :> OS_FILE_SYS =
 	  val oldCWD = getDir()
 	  fun mkPath pathFromRoot =
 		P.toString{isAbs=true, vol="", arcs=List.rev pathFromRoot}
-	  fun walkPath (0, _, _) = (* xxx raise Assembly.SysErr("too many links", NONE) *)
+	  and walkPath (0, _, _) = (* xxx raise Assembly.SysErr("too many links", NONE) *)
 	                           raise LibFail("too many links")
 	    | walkPath (n, pathFromRoot, []) =
 		mkPath pathFromRoot
@@ -73,12 +73,12 @@ structure OS_FileSys :> OS_FILE_SYS =
 		  | {isAbs=true, arcs, ...} =>
 		      gotoRoot (n-1, List.@(arcs, rest))
 		(* end case *))
-	  and gotoRoot (n, arcs) = (
-		chDir "/";
-		walkPath (n, [], arcs))
+	  and gotoRoot (n, arcs) = 
+	       (chDir "/";
+	       walkPath (n, [], arcs))
 	  fun computeFullPath arcs =
-		(gotoRoot(maxLinks, arcs) before chDir oldCWD)
-		  handle ex => (chDir oldCWD; raise ex)
+	      (gotoRoot(maxLinks, arcs) before chDir oldCWD)
+	      handle ex => (chDir oldCWD; raise ex)
 	  in
 	    case (P.fromString p)
 	     of {isAbs=false, arcs, ...} => let
@@ -143,9 +143,12 @@ structure OS_FileSys :> OS_FILE_SYS =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:54:08  pscheng
-# added basis
+# Revision 1.2  2000/04/20  20:00:04  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:54:08  pscheng
+# added basis
+#
  * Revision 1.3  1997/06/07  15:27:51  jhr
  *   SML'97 Basis Library changes (phase 3; Posix changes)
  *

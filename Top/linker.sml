@@ -2,6 +2,7 @@
 structure Linker :> LINKER =
   struct
 
+    val doConsistent = Stats.tt("doConsistent")
     val debug_asm = Stats.bool("debug_asm")
     val keep_link_asm = Stats.ff("keep_link_asm")
     val error = fn x => Util.error "Linker" x
@@ -41,7 +42,7 @@ structure Linker :> LINKER =
 			  linker    = ["/usr/ccs/bin/ld"], (* -L/usr/local/lib ? *)
 			  ldpre     = [runtimeFile "obj_solaris/firstdata.o", gccFile "crt1.o", gccFile "crti.o",
 				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
-			  ldpost    = [runtimeFile "runtime.solaris.a", "-lpthread","-lposix4", "-lm", "-lc",
+			  ldpost    = [runtimeFile "runtime.solaris.a", "-lpthread","-lposix4", "-lgen", "-lm", "-lc",
 				       gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"]}
 		     end)
     val alphaConfig : config Delay.value =
@@ -52,7 +53,7 @@ structure Linker :> LINKER =
 			 {assembler = ["/usr/bin/as"],
 			  linker    = ["/usr/bin/ld", "-call_shared", "-D", "a000000", "-T", "8000000"] @ debug,
 			  ldpre     = ["/usr/lib/cmplrs/cc/crt0.o"],
-			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm", "-lc"]}
+			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm", "-lc", "-lrt"]}
 		     end)
 
     (* targetConfig : unit -> config *)
@@ -80,33 +81,26 @@ structure Linker :> LINKER =
 	(* confine(UE1,UE2)=UE3 : UE3 holds those components of UE1,
 	 * that does not occur in UE2. Components that do also occur
 	 * in UE2, must match up; otherwise confinement fails. *)
-(*   
-	fun confine (unitname,ue1,ue2) : UE =
-	  let fun conf ([],ue2,a) = rev a
-		| conf (e::ue1,[],a) = conf(ue1,[],e::a)
-		| conf (ue1 as ((un1,crc1)::ue1'),ue2 as ((un2,crc2)::ue2'),a) =
-	        if un1 < un2 then conf(ue1',ue2,a)
-		else if un2 < un1 then conf(ue1,ue2',a)
-		else (* un1=un2 *)
-		    if crc1=crc2 then conf(ue1',ue2',(un1,crc1)::a) 
-		  else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
-			      "on a version of " ^ un1 ^ " which is inconcistent\n" ^
-			      "with which it is linked.") 
-	  in conf(ue1,ue2,[])
-	  end
-*)
 
 	fun confine (unitname,ue1 : UE, ue2 : UE) : UE =
 	    let fun find name = Listops.assoc_eq((op =) : string * string -> bool, name, ue2)
 		fun folder ((name,crc),acc) = 
 		    (case find name of
-			 NONE => (name,crc)::acc
+			 NONE => (print "Could not find "; print name; print " in ";
+				  app (fn (str,_) => (print str; print "\n")) ue2;
+				  print "\n\n";
+				  (name,crc)::acc)
 		       | SOME crc2 => 
-			     if (crc = crc2)
-				 then acc
-			     else error ("Link Error: The unit object " ^ unitname ^ " builds\n" ^
-					 "on a version of " ^ name ^ " which is inconsistent\n" ^
-					 "with which it is linked."))
+			     let val msg = "The unit object " ^ unitname ^ " builds\n" ^
+				           "on a version of " ^ name ^ " which is inconsistent\n" ^
+					   "with which it is linked."
+			     in  if (crc = crc2)
+				     then acc
+				 else if (!doConsistent)
+					  then error ("Link Error: " ^ msg)
+				      else (print ("Link Error overridden by doConsistent set to false: " ^ msg);
+					    acc)
+			     end)
 		val rev_ue = foldl folder [] ue1
 	  in rev rev_ue
 	  end
@@ -257,6 +251,10 @@ structure Linker :> LINKER =
 	    map (fn {unit, base, uiFile, uoFile, oFile} =>
 		 let
 		     val {imports,exports} = read_header_and_extract_code {uo_arg = uoFile}
+(*
+		     val _ = (print "IMPORTS: "; app print (map #1 imports); print "\n\n";
+			      print "EXPORTS: "; app print (map #1 exports); print "\n\n")
+*)
 		 in {unitname=unit, imports=imports, exports=exports, ofile=oFile}
 		 end) units
 	  fun li (iue0,eue0,[]) = (iue0,eue0)
@@ -265,11 +263,23 @@ structure Linker :> LINKER =
 	        val iue0' = UE.confine(unitname,iue0,eue)
 	        val iue_next = UE.plus_overlap(unitname,iue0',iue') 
 		val eue_next = UE.plus_no_overlap(unitname,eue0,eue)
+(*
+		val _ = print "------------------------------------------------\n";
+		val _ = (print "iue0: "; app print (map #1 iue0); print "\n\n")
+		val _ = (print "eue0: "; app print (map #1 eue0); print "\n\n")
+		val _ = (print "iue: "; app print (map #1 iue); print "\n\n")
+		val _ = (print "eue: "; app print (map #1 eue); print "\n\n")
+		val _ = (print "iue': "; app print (map #1 iue'); print "\n\n")
+		val _ = (print "iue0': "; app print (map #1 iue0'); print "\n\n")
+		val _ = (print "iue_next: "; app print (map #1 iue_next); print "\n\n")
+		val _ = (print "eue_next: "; app print (map #1 eue_next); print "\n\n")
+*)
 	    in li (iue_next,eue_next,rest)
 	    end
 	  val (imports, exports) = li ([],[],linkinfo)
+	  val _ = (print "imports: "; app print (map #1 imports); print "\n\n")
 	  val o_files = map #ofile linkinfo
-      in  (imports, o_files)
+      in  (imports, exports, o_files)
       end
 
     (* run' : string list -> unit *)
@@ -289,7 +299,7 @@ structure Linker :> LINKER =
      * that the sequence of imports is empty. *)
     fun mk_exe {units : package list,
 		exe_result : string} : unit =
-      let val (imports, o_files) = check units
+      let val (imports, exports, o_files) = check units
       in
 	  case imports
 	    of nil => (* everything has been resolved *)
@@ -314,13 +324,12 @@ structure Linker :> LINKER =
 		in
 		    ()
 		end
-	     | _ => let val units = map #1 imports
-			fun pr_units [] = error "pr_units"
+	     | _ => let fun pr_units [] = error "pr_units"
 			  | pr_units [a] = a
 			  | pr_units (a::rest) = (a ^ ", " ^ pr_units rest)
-		    in print ("\nError! The units : [" ^ pr_units units ^ 
-			      "] have not been resolved. I cannot generate\n" ^
-			      "an executable for you.\n"); error "mk_exe"
+		    in print ("\nError! The units : [" ^ pr_units (map #1 imports) ^ 
+			      "] have not been resolved.\nExports were : [" ^
+			      pr_units (map #1 exports) ^ "].\n I cannot generate an executable for you.\n"); error "mk_exe"
 		    end
       end
   end

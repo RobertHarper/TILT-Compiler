@@ -9,8 +9,8 @@ struct
     (* run : (string * string list -> OS.Process.status) -> unit *)
     fun run main =
 	let
-	    val cmd = CommandLine.name
-	    val args = CommandLine.arguments
+	    val cmd = CommandLine.name()
+	    val args = CommandLine.arguments()
 	    val status = main (cmd, args) handle _ => OS.Process.failure
 	in
 	    if status = OS.Process.success

@@ -32,6 +32,7 @@ signature COMPILER =
    val assemble_start : string -> string                  (* fileBase -> .o, if platform matches *)
    val assemble_done  : string -> bool                    (* fileBase -> done?, if platform matches *)
 
+   val ui2base : string -> string  (* Convert a platform-dependent .ui filename to a filebase *)
    val base2ui : string -> string  (* Convert a filebase to a platform-dependent .ui filename *)
    val base2s  : string -> string  (* Convert a filebase to a platform-dependent .s filename *)
    val base2o  : string -> string  (* Convert a filebase to a platform-dependent .o filename *)

@@ -160,7 +160,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
     fun link {old : string, new : string} = Ccall(posix_filesys_link,old,new)
     fun rename {old : string, new : string} = Ccall(posix_filesys_rename,old,new)
     fun symlink {old : string, new : string} = Ccall(posix_filesys_symlink,old,new)
-    fun mkdir (dirname : string, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)
+    fun mkdir (dirname : string, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)						 
     fun mkfifo (name : string, S.MODE mode) = Ccall(posix_filesys_mkfifo,name,mode)
 
     fun unlink name = Ccall(posix_filesys_unlink,name)

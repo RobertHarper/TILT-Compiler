@@ -1128,34 +1128,25 @@ datatype OBJECTS = junction of (int*(int list))
 
 (* some useful simple functions *)
 
-(* original code ...
+local 
+    val prefix = ref NONE
+in  
+    fun get_file_prefix  ()  =                 (* get_filename of model *)
+	case (!prefix) of
+	    SOME p => p   (* Example "Bench/bsim" *)
+	  | NONE => let val _ = output(TextIO.stdOut,"\nFile prefix for models, scenes, and arc-files: ")
+			val p = read_to_eol TextIO.stdIn
+			val _ = prefix := SOME p
+		    in  p
+		    end
+end
 
-fun get_file_model  ()  =                 (* get_filename of model *)
-    ( output(TextIO.stdOut,"\nFile containing model :\n");
-      read_to_eol TextIO.stdIn )(*;*)
-
-
-fun get_file_scene  ()=                    (* get scene name *)
-   let val fname =  ( output(TextIO.stdOut,"\nFile containing scene :\n");
-                      skip TextIO.stdIn;
-                      read_to_eol TextIO.stdIn  )
-       val YN =     ( output(TextIO.stdOut,"\nArcs file (y/n)? :\n");
-                      skip TextIO.stdIn;
-                      input(TextIO.stdIn,1)
-                    )
-   in 
-     (fname,YN)
-   end(*;*)
-*)
-
-fun get_file_model  ()  = "Bench/bsim"
-
-fun get_file_scene  ()=                    (* get scene name *)
-   let val fname =  "Bench/bsim"
+fun get_file_model() = get_file_prefix()
+fun get_file_scene() =
+   let val fname =  get_file_prefix()
        val YN =     "y"
-   in 
-     (fname,YN)
-   end(*;*)
+   in  (fname,YN)
+   end
 
 
 
