@@ -500,13 +500,17 @@ structure IlUtil :> ILUTIL =
 	 | DEC_CON(v,k,SOME c, inline) => DEC_CON(v, f_kind state k, SOME (f_con state c), inline)
 	 | DEC_MOD(v,b,s)      => DEC_MOD(v, b, f_signat state s))
 
+      fun f_ovld(state : state) (OVLD (celist, default) : ovld) : ovld =
+	  OVLD (map (fn (c,e) => (f_con state c,
+				  f_exp state e)) celist,
+		default)
+
       fun f_entry(state : state) (entry : context_entry) : context_entry = 
 	  (case entry of
 	       CONTEXT_SDEC sdec => CONTEXT_SDEC (f_sdec state sdec)
 	     | CONTEXT_SIGNAT (l, v, s) => CONTEXT_SIGNAT (l, v, f_signat state s)
 	     | CONTEXT_FIXITY _ => entry
-	     | CONTEXT_OVEREXP (l, celist) => CONTEXT_OVEREXP (l, map (fn (c,e) => (f_con state c,
-										    f_exp state e)) celist))
+	     | CONTEXT_OVEREXP (l, ovld) => CONTEXT_OVEREXP (l, f_ovld state ovld))
 
       val default_bound_convar = []
       val default_bound_var = []
@@ -1009,5 +1013,55 @@ structure IlUtil :> ILUTIL =
 			      print "exp = "; pp_exp exp; print "\n"))
 	in  kept
 	end
-	     
+    
+    (* Pick the default for an overloaded expression *)
+    val slash_label = Name.symbol_label (Symbol.varSymbol "/")
+    fun ovld_default (label,ce,fail) =
+	let
+	    exception Seen
+	    val con_handler =
+		if Name.eq_label (label, slash_label) then
+		    fn (CON_FLOAT F64) => raise Seen | _ => NONE
+		else
+		    fn (CON_INT W32) => raise Seen | _ => NONE
+	    val handler = (default_exp_handler,
+			   con_handler,
+			   default_mod_handler,
+			   default_sdec_handler)
+	    fun is_default (con,exp) = ((con_handle handler con; false)
+					handle Seen => true)
+(*
+	    val is_default =
+		(fn (con,exp) =>
+		 let val res = is_default(con,exp)
+		     val _ = (print (if res then "default: " else "not default: ");
+			      pp_exp exp; print " : "; pp_con con; print "\n")
+		 in  res
+		 end)
+*)
+	    fun scan (nil, res) = res
+	      | scan (ce :: ces, res) = if is_default ce then fail()
+					else scan(ces, res)
+	    fun search (i, nil) = NONE
+	      | search (i, ce :: ces) = if is_default ce then scan (ces, SOME i)
+					else search (i+1, ces)
+	in  search (0,ce)
+	end
+
+    	fun ovld_expand (OVLD (ce, default)) : (con * exp * bool) list =
+	    let val n = case default
+			  of NONE => ~1
+			   | SOME n => n
+	    in  Listops.mapcount (fn (i,(c,e)) => (c,e,i=n)) ce
+	    end
+	
+	fun ovld_collapse (L : (con * exp * bool) list) : ovld =
+	    let
+		fun scan (i, nil) = NONE
+		  | scan (i, (_,_,false) :: rest) = scan (i+1, rest)
+		  | scan (i, _) = SOME i
+		val default = scan (0, L)
+		val ce = map (fn (c,e,_) => (c,e)) L
+	    in  OVLD (ce, default)
+	    end
   end

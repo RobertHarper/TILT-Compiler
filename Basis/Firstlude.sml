@@ -13,7 +13,7 @@
    are in structure TiltPrim.  See Elaborator/basis.sml.
 *)
 
-(* overloads *)
+(* basic overloads - extended by TopLevel *)
 overload + : 'a as TiltPrim.iplus  and TiltPrim.bplus  and TiltPrim.uplus  and TiltPrim.fplus
 overload - : 'a as TiltPrim.iminus and TiltPrim.bminus and TiltPrim.uminus and TiltPrim.fminus
 overload * : 'a as TiltPrim.imult  and TiltPrim.bmult  and TiltPrim.umult  and TiltPrim.fmult
@@ -23,7 +23,6 @@ overload <  : 'a as TiltPrim.ilt  and TiltPrim.blt  and TiltPrim.ult  and TiltPr
 overload >  : 'a as TiltPrim.igt  and TiltPrim.bgt  and TiltPrim.ugt  and TiltPrim.fgt
 overload <= : 'a as TiltPrim.ilte and TiltPrim.blte and TiltPrim.ulte and TiltPrim.flte
 overload >= : 'a as TiltPrim.igte and TiltPrim.bgte and TiltPrim.ugte and TiltPrim.fgte
-(* Overloads for div, mod, abs and string comparisons provided in TopLevel. *)
 
 (* fixity *)
 infix  7 * / div mod

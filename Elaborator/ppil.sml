@@ -537,23 +537,30 @@ struct
     val pp_sdecs' = help (pp_sdecs [])
     val pp_phrase_class' = help (pp_phrase_class true [])
 
+    fun pp_ovld' (OVLD (ce, default)) =
+	let
+	    fun pp_ce (c,e,false) = Hbox[pp_exp [] e, String " : ", pp_con [] c]
+	      | pp_ce (c,e,true) = Hbox[String "DEFAULT > ", pp_exp [] e, String " : ", pp_con [] c]
+	    val (n,n') = case default
+			   of NONE => (~1, String "(no default)")
+			    | SOME n => (n, Hbox[String "(default ", String (Int.toString n), String ")"])
+	    val celist = Listops.mapcount (fn (i,(c,e)) => (c,e,i=n)) ce
+	in
+	    Hbox[n',Break,Vbox[pp_list pp_ce celist ("[",",","]",true)]]
+	end
+    
     fun pp_context_entry' (CONTEXT_SDEC sdec) = HOVbox[String "CONTEXT_SDEC: ", pp_sdec [] sdec]
       | pp_context_entry' (CONTEXT_SIGNAT (l,v,s)) = HOVbox[String "CONTEXT_SIGNAT: ",
 							    pp_label l, String " > ", pp_var v,
 							    String " = ", pp_signat [] s]
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
-      | pp_context_entry' (CONTEXT_OVEREXP (l,celist)) = 
-			   HOVbox[String "CONTEXT_OVEREXP: ", 
-				  pp_label l, String " > ", 
-				  pp_list (fn (c,e) => Hbox[pp_exp [] e, String " : ", pp_con [] c])
-			          celist ("[",",","]",false)]
+      | pp_context_entry' (CONTEXT_OVEREXP (l,ovld)) = 
+			   HOVbox[String "CONTEXT_OVEREXP: ", pp_label l, String " ", pp_ovld' ovld]
 
     fun pp_context' (CONTEXT{fixityMap, overloadMap, pathMap, ordering, ...}) = 
 	let fun fixity_doer (l, f) = Hbox[pp_label l, String " : ", pp_fixity f]
-	    fun overload_doer (l, celist) =
-		Vbox[pp_label l, String " OVEREXP: ", Break,
-		     pp_list (fn (c,e) => Hbox[pp_exp [] e, String " : ", pp_con [] c])
-		     celist ("[",",","]",false)]
+	    fun overload_doer (l, ovld) =
+		Vbox[pp_label l, String " OVEREXP: ", Break, pp_ovld' ovld]
 	    fun path_doer (PATH path) = 
 		let val SOME(label, pc) = Name.PathMap.find(pathMap, path)
 		in  HOVbox[pp_label label,
@@ -604,6 +611,7 @@ struct
     val pp_prim = help' Ppprim.pp_prim'
     val pp_mod = help' (pp_mod [])
     val pp_exp = help' (pp_exp [])
+    val pp_ovld = help' pp_ovld'
     val pp_context_entry = help' pp_context_entry'
     val pp_context = help' pp_context'
     val pp_pcontext = help' pp_pcontext'

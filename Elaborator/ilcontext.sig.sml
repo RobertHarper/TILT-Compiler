@@ -29,7 +29,7 @@ signature ILCONTEXT =
     val add_context_sdec  : context * sdec -> context
     val add_context_sdecs : context * sdecs -> context
     val add_context_fixity : context * label * Fixity.fixity -> context
-    val add_context_overexp : context * label * (con * exp) list -> context
+    val add_context_overexp : context * label * Il.ovld -> context
     val add_context_entries : context * context_entry list -> context
 	
     val add_context_mod  : context * label * var * signat            -> context
@@ -57,7 +57,7 @@ signature ILCONTEXT =
 	
     (* ---- These lookup functions don't perform selfification ---- *)		
     val Context_Fixity       : context -> Fixity.fixity Name.LabelMap.map
-    val Context_Lookup_Overload : context * label -> (con * exp) list option
+    val Context_Lookup_Overload : context * label -> Il.ovld option
     val Context_Lookup_Label : context * label -> (path * phrase_class) option
     val Context_Lookup_Var   : context * var   -> (label * phrase_class) option
     val Context_Lookup_Path  : context * path  -> (label * phrase_class) option

@@ -239,6 +239,13 @@ signature ILUTIL =
     val mod_resolved : mod -> bool
     val sig_resolved : signat -> bool
 
+    (* Help with overload data.
+     * ovld_default takes a label to be overloaded, a list of possible expressions, and a failure continuation
+     *     and finds a suitable default (a' la' appendix E of the definiton)
+     *)
+    val ovld_default : label * (con * exp) list * (unit -> int option) -> int option
+    val ovld_expand : Il.ovld -> (con * exp * bool) list
+    val ovld_collapse : (con * exp * bool) list -> Il.ovld
 
     (* Help creating type/eqtype sigs *)
     val make_typearg_sdecs : (label * bool) list -> Il.sdecs

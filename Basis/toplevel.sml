@@ -8,7 +8,7 @@
    Prelude and TopLevel.
 *)
 
-(* overloads *)
+(* overloads - complement's Prelude *)
 overload + : 'a as Word31.+
 overload - : 'a as Word31.-
 overload * : 'a as Word31.*

@@ -36,8 +36,9 @@ structure Tyvar :> TYVAR =
     type ('ctxt,'con,'exp) constraint = (unit -> unit) * (('ctxt,'con,'exp) tyvar * bool -> bool) 
 	
     datatype ('ctxt,'con,'exp) ocon = OCON of {constraints : ('ctxt,'con,'exp) constraint list ref,
-					  name : var,
-					  body : ('ctxt,'con,'exp) tyvar}
+					       default : ('ctxt,'con,'exp) constraint,
+					       name : var,
+					       body : ('ctxt,'con,'exp) tyvar}
 
     fun stamp2int stamp = (stamp : int)
     fun stamp_join(a : stamp,b) = if (a<b) then a else b
@@ -112,16 +113,17 @@ structure Tyvar :> TYVAR =
     fun ocon2string (OCON{name,...}) = var2string name
     fun ocon_deref (OCON{body,...}) = body
 
-    fun fresh_ocon (ctxt,constraints) =
+    fun fresh_ocon (ctxt,constraints,default) =
 	let val name = fresh_named_var "ocon"
 	    val body = fresh_named_tyvar (ctxt,"ocon")
 	    val _ = tyvar_constrain body
 	in  OCON{constraints = ref constraints,
+		 default = List.nth (constraints,default),
 		 name = name,
 		 body = body}
 	end
 
-    fun ocon_constrain (OCON{constraints, name, body}) =
+    fun ocon_constrain (OCON{constraints, body, ...}) =
 	let
 	    fun filter(thunk,unify) = if (unify(body,false))
 					  then SOME(thunk,unify)
@@ -134,6 +136,12 @@ structure Tyvar :> TYVAR =
 	in  length constraints'
 	end
 
-
-
+    fun ocon_constrain_default (ocon as OCON {constraints, default=default as (thunk,unify), body, ...}) =
+	(case ocon_constrain ocon
+	   of 0 => 0
+	    | 1 => 1
+	    | n => if unify(body,false)
+		       then (constraints := [default]; unify(body,true); thunk(); 1)
+		   else n)
+	     
   end

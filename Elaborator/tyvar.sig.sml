@@ -40,20 +40,22 @@ signature TYVAR =
     val tyvar_addctxts      : ('ctxt,'con,'exp) tyvar * 'ctxt list -> unit
 
 
-    val fresh_ocon  : 'ctxt * ('ctxt,'con,'exp) constraint list -> ('ctxt,'con,'exp) ocon 
+    val fresh_ocon  : 'ctxt * ('ctxt,'con,'exp) constraint list * int -> ('ctxt,'con,'exp) ocon 
                                               (* create an overloaded type 
-                                                 with a list of the possible types 
-						 and some action to perform when instantiated *)
+                                                 with a list of the possible types, each specifying some
+						 action to perform when instantiated, and a default. *)
 
     val ocon2string  : ('ctxt,'con,'exp) ocon -> string   (* for display purposes only; not an injection *)
     val ocon_deref   : ('ctxt,'con,'exp) ocon -> ('ctxt,'con,'exp) tyvar (* return the current internal type *)
 
     (* ocon_constrain takes an overloaded type
           the constraints are checked using the non-side-effecting version;
-	  if exactly one constraint is satisfied, the side-effecting unifier is called
-	  and the unit -> unit thunk is trigger.
-       Returns the number of constrains which are satisfied. *)
-    val ocon_constrain  : ('ctxt,'con,'exp) ocon -> int
-
+	  if exactly one constraint is satisfied, the side-effecting unifier
+	  is called and the unit -> unit thunk is triggered.
+       Returns the number of constrains which are satisfied.
+       ocon_constrain_default uses the default when its among the constraints which are
+       satisfied. *)
+    val ocon_constrain         : ('ctxt,'con,'exp) ocon -> int
+    val ocon_constrain_default : ('ctxt,'con,'exp) ocon -> int
   end
       

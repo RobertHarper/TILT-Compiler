@@ -732,9 +732,20 @@ struct
 	       | 5 => SIGNAT_VAR(blastInVar ())
 	       | 6 => SIGNAT_OF(blastInPath ())
 	       | _ => error "bad blastInSig")
-				
-	fun blastOutCelist celist = blastOutList (blastOutPair blastOutCon blastOutExp) celist
-        fun blastInCelist() = blastInList (fn() => blastInPair blastInCon blastInExp)
+
+	fun blastOutOvld (OVLD (celist,default)) =
+	    let val _ = blastOutChoice (case default
+					  of NONE => 0
+					   | SOME n => n+1)
+	    in  blastOutList (blastOutPair blastOutCon blastOutExp) celist
+	    end
+	fun blastInOvld () =
+	    let val default = case blastInChoice()
+				of 0 => NONE
+				 | n => SOME (n-1)
+		val celist = blastInList (fn () => blastInPair blastInCon blastInExp)
+	    in  OVLD (celist, default)
+	    end
 
 	fun blastOutPC pc = 
 	    case pc of
@@ -774,9 +785,9 @@ struct
 	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInFixity())
 
 	fun blastOutOverloadMap fm = 
-	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutCelist) fm
+	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutOvld) fm
 	fun blastInOverloadMap () = 
-	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInCelist())
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInOvld())
 
 
 	fun blastOutPathMap label_list = 
@@ -1257,11 +1268,32 @@ struct
 	    in  res
 	    end	    
 
+	fun eq_label_map (equaller : 'a * 'a -> bool) (m : 'a Name.LabelMap.map, m' : 'a Name.LabelMap.map) : bool =
+	    let val intersection = Name.LabelMap.intersectWith (fn (a,b) =>
+								if equaller (a,b) then a
+								else raise NOT_EQUAL) (m, m')
+		val numItems = Name.LabelMap.numItems
+		val n = numItems intersection
+	    in  n = numItems m andalso n = numItems m'
+	    end handle NOT_EQUAL => false
+
+	val eq_fixity_map = wrap "eq_fixity_map" (eq_label_map (op= : Fixity.fixity * Fixity.fixity -> bool))
+
+	fun eq_conexp vm ((c,e),(c',e')) = eq_con(vm,c,c')
+	fun eq_ovld vm (OVLD (ce,d), OVLD (ce',d')) = (Listops.eq_list (eq_conexp vm, ce,ce') andalso
+						       eq_opt (op= : int * int -> bool) (d, d'))
+	fun eq_overload_map (vm,om1,om2) = eq_label_map (eq_ovld vm) (om1,om2)
+	val eq_overload_map = wrap "eq_overload_map" eq_overload_map
+
 	fun eq_partial_context (pc as (c,u): partial_context, pc' as (c',u'): partial_context) : bool =
 	    let
 		val (vm,vlist) = extend_vm_unresolved(u,u',VM.empty,[])
 		val (vm,vlist) = extend_vm_context(c,c',vm,vlist)
-		val res = eq_cntxt(vm,c,c',vlist)
+		val CONTEXT {fixityMap=fm, overloadMap=om, ...} = c
+		val CONTEXT {fixityMap=fm', overloadMap=om', ...} = c'
+		val res = (eq_cntxt(vm,c,c',vlist) andalso
+			   eq_overload_map(vm,om,om') andalso
+			   eq_fixity_map(fm,fm'))
 		val _ = if (!showUnequal andalso not res)
 			    then (print "vm = "; VM.show_vm vm; print "\n";
 				  print "pc = "; Ppil.pp_pcontext pc; print "\n\n";

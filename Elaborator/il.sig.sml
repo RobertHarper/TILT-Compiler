@@ -108,12 +108,13 @@ signature IL =
                  | DEC_CON       of var * kind * con option * bool (* true indicates should inline *)
                  | DEC_MOD       of var * bool * signat
 
-
+    and     ovld = OVLD of (con * exp) list * int option (* types, default *)
+	
     and context_entry = 
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
       | CONTEXT_FIXITY of label * Fixity.fixity
-      | CONTEXT_OVEREXP of label * (con * exp) list
+      | CONTEXT_OVEREXP of label * ovld
 
     (* A context contains 
          (A) A mapping from labels to fixity information,
@@ -149,7 +150,7 @@ signature IL =
     *)
 
     and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
-			       overloadMap : (con * exp) list Name.LabelMap.map,
+			       overloadMap : ovld Name.LabelMap.map,
 			       pathMap  : (label * phrase_class) Name.PathMap.map,
 			       ordering : path list,
 			       labelMap : (path * phrase_class) Name.LabelMap.map} (* reconstructed from pathMap *)

@@ -17,7 +17,7 @@ struct
 				pathMap = PathMap.empty,
 				ordering = []}
 
-    (* ------ Type equivalence needed to ensure overloading resolvable by distnict types ------- *)
+    (* ------ Type equivalence needed to ensure overloading resolvable by distinct types ------- *)
     local 
 	val Ceq_con = ref (NONE : (context * con * con -> bool) option)
     in
@@ -29,9 +29,23 @@ struct
 	fun eq_con arg = let val SOME eq_con = !Ceq_con
 			 in  eq_con arg
 			 end
-	fun eq_conexp ctxt ((c1,e1),(c2,e2)) = eq_con(ctxt,c1,c2)
-	fun ce_sub(ctxt, ce1, ce2) = Listops.list_diff_eq(eq_conexp ctxt, ce1, ce2)
-	fun ce_add(ctxt, ce1, ce2) = rev (Listops.list_sum_eq(eq_conexp ctxt, rev ce1, ce2)) (* ordered like ce1 @ ce2 *)
+	fun eq ctxt ((c1,e1,d1),(c2,e2,d2)) = eq_con(ctxt,c1,c2)
+	fun sub ctxt (exp1, exp2) = Listops.list_diff_eq(eq ctxt, exp1, exp2)
+	fun add ctxt (exp1, exp2) = Listops.list_sum_eq(eq ctxt, exp1, exp2)
+	fun expanded f (o1, o2) = ovld_collapse (f (ovld_expand o1, ovld_expand o2))
+	
+	fun ovld_add (label, ctxt, ovld1 as OVLD (_, d1), ovld2 as OVLD (_, d2)) =
+	    let val _ = case (d1, d2)
+			  of (SOME _, SOME _) =>
+			      (print "overloaded identifier with ambiguous default: ";
+			       pp_label label; print "\n";
+			       print "ovld1 = "; pp_ovld ovld1; print "\n";
+			       print "ovld2 = "; pp_ovld ovld2; print "\n";
+			       error "overloaded identifier with ambiguous default")
+			   | _ => ()
+	    in  expanded (add ctxt) (ovld1, ovld2)
+	    end
+	fun ovld_sub (ctxt, ovld1, ovld2) = expanded (sub ctxt) (ovld1, ovld2)
     end
 
     (* ---------------- LOOKUP RULES --------------------------- 
@@ -160,12 +174,12 @@ struct
 	end
 
     fun add_context_overexp(ctxt as CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
-			    l, ce2) = 
-	let val ce1 = (case Name.LabelMap.find(overloadMap, l) of
-			   SOME ce => ce
-			 | NONE => [])
-	    val ce3 = ce_add(ctxt,ce1,ce2)
-	    val overloadMap = LabelMap.insert(overloadMap, l, ce3)
+			    l, ovld2) = 
+	let val ovld1 = (case Name.LabelMap.find(overloadMap, l) of
+			     SOME ovld1 => ovld1
+			   | NONE => OVLD ([], NONE))
+	    val ovld3 = ovld_add(l,ctxt,ovld1,ovld2)
+	    val overloadMap = LabelMap.insert(overloadMap, l, ovld3)
 	in  CONTEXT({fixityMap = fixityMap,
 		     overloadMap = overloadMap,
 		     labelMap = labelMap,
@@ -178,7 +192,7 @@ struct
 	     CONTEXT_FIXITY (l,f) => add_context_fixity(ctxt,l,f)
 	   | CONTEXT_SDEC sdec => add_sdec(ctxt,NONE,sdec)
 	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
-	   | CONTEXT_OVEREXP(l,celist) => add_context_overexp(ctxt,l,celist))
+	   | CONTEXT_OVEREXP(l,ovld) => add_context_overexp(ctxt,l,ovld))
 
     fun add_context_entry'(entry,ctxt) = add_context_entry(ctxt,entry)
     fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
@@ -232,8 +246,8 @@ struct
 		 in  PHRASE_CLASS_SIG(v,s)
 		 end)
 
-    fun con_exp_list_subst subst con_exp_list = 
-	map (fn (c,e) => (con_subst(c,subst), exp_subst(e,subst))) con_exp_list
+    fun con_exp_subst subst (c,e) = (con_subst(c,subst), exp_subst(e,subst))
+    fun ovld_subst subst (OVLD (celist, default)) = OVLD (map (con_exp_subst subst) celist, default)
 
     (* alphaVarying a partial context WRT a context so that
        (1) the partial context's unresolved list maps to variables as bound by the full context
@@ -306,7 +320,7 @@ struct
 	    else 
 		let val (labelMap,pathMap,ordering) = 
 		    foldr (folder (final_vsubst,final_subst)) (LabelMap.empty,PathMap.empty,[]) ord2
-		    val overloadMap = LabelMap.map (con_exp_list_subst final_subst) om2
+		    val overloadMap = LabelMap.map (ovld_subst final_subst) om2
 		in  SOME (CONTEXT{fixityMap = fm2,
 				  overloadMap = overloadMap,
 				  labelMap = labelMap,
@@ -398,15 +412,16 @@ struct
 					     pathMap = pathMap,
 					     ordering = ordering}
 	    val overloadMap = LabelMap.unionWithi
-                     	      (fn (l, ce1, ce2) => 
+                     	      (fn (l, ovld1, ovld2) =>
 			       (
 (*
 				print "almostFinalContext is ";
 				pp_context almostFinalContext;
 				print "\n\n\n";
-				print "ce1 is "; app (fn (c,e) => (pp_exp e; print ":"; pp_con c; print "\n")) ce1; print "\n";
-				print "ce2 is "; app (fn (c,e) => (pp_exp e; print ":"; pp_con c; print "\n")) ce2; print "\n";
-*)				ce_add(almostFinalContext,ce1, ce2)))
+				print "ovld1 is "; pp_ovld ovld1; print "\n";
+				print "ovld2 is "; pp_ovld ovld2; print "\n";
+*)
+				ovld_add(l,almostFinalContext,ovld1,ovld2)))
 			      (om1,om2)
 	in  (pctxt_option,
 	     CONTEXT{fixityMap = fixityMap,
@@ -458,10 +473,10 @@ struct
 	    val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1) of
 							 NONE => true
 						       | SOME _ => false)) f1
-	    val om3 = LabelMap.mapi (fn (l1, ce1) => (case LabelMap.find(om2, l1) of
-							  NONE => ce1
-							| SOME ce2 => ce_sub(bigger,ce1,ce2))) om1
-	    val om3 = LabelMap.filteri (fn (l3, []) => false
+	    val om3 = LabelMap.mapi (fn (l1, ovld1) => (case LabelMap.find(om2, l1) of
+							    NONE => ovld1
+							  | SOME ovld2 => ovld_sub(bigger,ovld1,ovld2))) om1
+	    val om3 = LabelMap.filteri (fn (l3, OVLD ([],_)) => false
 	                                 | _ => true) om3
 	    val o3 = List.filter (fn PATH vpath => (case PathMap.find(p2,vpath) of
 							NONE => true
@@ -481,7 +496,7 @@ struct
 			    | (_,_,s) => s)
 		          VarSet.empty p3
 	    val reachable = LabelMap.foldl
-		           (fn (celist,reach) =>
+		           (fn (OVLD (celist,_),reach) =>
 			      foldl (fn ((c,e),reach) => 
 				     let val cFree = con_free c
 					 val eFree = exp_free e

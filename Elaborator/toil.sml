@@ -43,7 +43,7 @@ structure Toil
 
     local 
       val tyvar_table = ref([] : tyvar list)
-      val overload_table = ref ([] : (region * ocon) list)
+      val overload_table = ref ([] : (region * ocon) list list)
       val eq_table = ref ([] : (region * tyvar) list)
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
       val unit_name = ref (NONE : string option)
@@ -52,7 +52,7 @@ structure Toil
 	fun reset_elaboration (fp, unitNameOpt) = (Error.reset fp;
 						   reset_eq();
 						   tyvar_table := [];
-						   overload_table := [];
+						   overload_table := [[]];
 						   flex_table := [];
 						   unit_name := unitNameOpt)
 	fun get_unit_name () = (case !unit_name
@@ -62,9 +62,14 @@ structure Toil
 	fun get_tyvar_table () = !tyvar_table
 	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
 
-	fun get_overload_table () = !overload_table
-	fun add_overload_entry ocon = (overload_table := (peek_region(),ocon)::(!overload_table))
-
+	fun overload_table_push () = overload_table := nil :: !overload_table
+	fun overload_table_pop () = (case !overload_table
+				       of nil => error "overload_table_pop: overload table is empty"
+					| (a::b) => (overload_table := b; a))
+	fun overload_table_empty () = List.concat (!overload_table) before overload_table := []
+	fun add_overload_entry ocon = (case !overload_table
+				       of nil => error "add_overload_entry: overload table is empty"
+					| (a::b) => (overload_table := ((peek_region(),ocon)::a) :: b))
 	fun get_flex_table () = !flex_table
 	fun add_flex_entry (l,rc,fc,e) = flex_table := (l,rc,fc,e)::(!flex_table)
 	fun add_eq_entry tyvar =
@@ -83,31 +88,123 @@ structure Toil
     fun fresh_con ctxt = CON_TYVAR(fresh_tyvar ctxt)
 
 
+    fun make_overload (context, cons_exps : (con * exp) list, default : int) : exp * con * bool =
+	let
+	    val eshot = oneshot()
+	    fun mk_constraint (con,exp) =
+		let fun check(tyvar,is_hard) = 
+		    let val c' = CON_TYVAR tyvar
+			val match = (if is_hard then eq_con else soft_eq_con)
+			    (context,con,c')
+		    in  match
+		    end
+		    fun thunk() = 
+			(case (oneshot_deref eshot) of
+			     SOME _ => ()
+			   | NONE => oneshot_set(eshot,exp))
+		in  (thunk, check)
+		end
+	    val constraints = map mk_constraint cons_exps
+	    val ocon = Tyvar.fresh_ocon(context,constraints,default)
+	    val con = CON_OVAR ocon
+	    val exp = OVEREXP(con,true,eshot)
+	    val _ = add_overload_entry ocon
+	in  (exp,con,Exp_IsValuable(context,exp))
+	end
+
+    (* -------------------- special constant overloading -------------------- *)
+    (* We overload when a literal fits in more than one type provided
+     * by Basis.  (Some types can't occur in user programs.)
+     *)
+    local
+	fun make_overload' (context, f : 'a -> con, g : 'a -> exp, domain : 'a list, default : int) =
+	    let val cons_exps = map (fn a => (f a, g a)) domain
+	    in  make_overload (context, cons_exps, default)
+	    end
+
+	open TilWord64
+
+	val uint8_max = fromHexString "FF"
+	val uint32_max = fromHexString "FFFFFFFF"
+	val int32_min = fromDecimalString "~2147483648"
+	val int32_max = fromDecimalString "2147483647"
+
+	fun in_range_int (lit, low, high) = slte (low, lit) andalso sgte (high, lit)
+	fun in_range_uint (lit, high) = ulte (lit, high)
+	    
+	fun in_range_int32 lit = in_range_int (lit, int32_min, int32_max)
+	fun in_range_uint8 lit = in_range_uint (lit, uint8_max)
+	fun in_range_uint32 lit = in_range_uint (lit, uint32_max)
+
+	fun check (p, s) lit = if p lit then ()
+			       else (error_region(); print s; print " constant too large\n")
+	val check_int = check (in_range_int32, "integer")
+	val check_uint = check (in_range_uint32, "word")
+	val check_float = check (fn _ => true, "floating point") (* XXX: punting for now *)
+    in
+	fun make_int_overload (context, lit) = (check_int lit;
+						(SCON(int(W32,lit)), CON_INT W32, true))
+
+	fun make_float_overload (context, s) = (check_float s;
+						(SCON(float(F64,s)), CON_FLOAT F64, true))
+	    
+	fun make_uint_overload (context, lit) =
+	    let val _ = check_uint lit
+	    in
+		if in_range_uint8 lit then
+		    make_overload' (context, CON_UINT, fn size => SCON(uint(size,lit)), [W32, W8], 0)
+		else
+		    (SCON(uint(W32,lit)), CON_UINT W32, true)
+	    end
+
+	fun make_string_overload (context, s) =
+	    (SCON(vector (CON_UINT W8,
+			  Array.fromList
+			  (map (fn c => SCON(uint(W8,fromInt (ord c))))
+			   (explode s)))), con_string, true)
+
+	fun make_char_overload (context, s) =
+	    (SCON(uint(W8,
+		       (case (explode s) of
+			    [c] => fromInt (ord c)
+			  | _ => parse_error "Ast.CharExp carries non-charcter string"))),
+	     CON_UINT W8, true) 
+    end
+	
      (* ----------------- overload_resolver ----------------------- *)
-    fun overload_help warn (region,ocon) =
+    fun overload_help (warn,force) (region,ocon) =
 	let val _ = push_region region
-	val res =  (
+	    val f = if force then ocon_constrain_default else ocon_constrain
+	val resolved =  (
 (*
 	    print "overload_help: internal type is: ";
 	    Ppil.pp_con (CON_TYVAR (ocon_deref ocon));
 	    print "\n";
 *)
-	    case (ocon_constrain ocon) of
+	    case (f ocon) of
 		0 => (error_region();
-		       print "overloaded type: none of the constraints are satisfied\n";
-		       true)
+		      print "overloaded type: none of the constraints are satisfied\n";
+		      false)
 	      | 1 => true
 	      | n => (if warn 
-			       then 
-				   (error_region(); 
-				    print "Warning: more than one constraint satisfied by overloaded type")
-			   else ();
-			       false))
+			  then 
+			      (error_region(); 
+			       print "overloaded type: more than one constraint is satisfied\n")
+		      else ();
+		      false))
 	    val _ = pop_region()
-	in res
+	in  resolved
 	end
-
-
+    fun resolve_overloads' overloads = if List.all (overload_help (true,true)) overloads
+					   then ()
+				       else error "unresolved overloading"
+    fun resolve_overloads (f : unit -> 'a) : 'a =
+	let val _ = overload_table_push()
+	    val res = f()
+	    val _ = resolve_overloads' (overload_table_pop())
+	in  res
+	end
+    fun resolve_all_overloads () = resolve_overloads' (overload_table_empty())
 
      (* ----------------- Helper Functions ----------------------- *)
     fun is_non_const context (syms : Symbol.symbol list) = 
@@ -427,20 +524,11 @@ structure Toil
        print "\n";
 *)
        case exp of
-	 Ast.IntExp lit => (SCON(int(W32,lit)), CON_INT W32, true)
-       | Ast.WordExp lit => (SCON(uint(W32,lit)), CON_UINT W32, true)
-       | Ast.RealExp s => (SCON(float(F64,s)), CON_FLOAT F64, true)
-       | Ast.StringExp s => 
-	     (SCON(vector (CON_UINT W8,
-			   Array.fromList
-			   (map (fn c => SCON(uint(W8,TilWord64.fromInt (ord c))))
-			    (explode s)))), con_string, true)
-       | Ast.CharExp s =>   
-	     (SCON(uint(W8,
-			(case (explode s) of
-			     [c] => TilWord64.fromInt (ord c)
-			   | _ => parse_error "Ast.CharExp carries non-charcter string"))),
-	      CON_UINT W8, true)
+	 Ast.IntExp lit => make_int_overload (context, lit)
+       | Ast.WordExp lit => make_uint_overload (context, lit)
+       | Ast.RealExp s => make_float_overload (context, s)
+       | Ast.StringExp s => make_string_overload (context, s)
+       | Ast.CharExp s => make_char_overload (context, s)
        | (Ast.TupleExp exps) => xrecordexp(context,length exps < 10,
 					   mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
        | (Ast.RecordExp sym_exps) => xrecordexp(context,false, sym_exps)
@@ -491,34 +579,16 @@ structure Toil
 		     in (res,eq_con,true)
 		     end
 		 val labs = map symbol_label path
-		 val cons_exps_option = 		
+		 val ovld_option = 		
 		     (case labs of
 			  [lab] => Context_Lookup_Overload(context, lab)
 			| _ => NONE)
-	     in  (case cons_exps_option of
-		      SOME cons_exps =>
-			  let 
-			      val eshot = oneshot()
-			      fun mk_constraint (con,exp) =
-				  let fun check(tyvar,is_hard) = 
-				      let val c' = CON_TYVAR tyvar
-					  val match = (if is_hard then eq_con else soft_eq_con)
-					      (context,con,c')
-				      in  match
-				      end
-				      fun thunk() = 
-					  (case (oneshot_deref eshot) of
-					       SOME _ => ()
-					     | NONE => oneshot_set(eshot,exp))
-				  in  (thunk, check)
-				  end
-			      val constraints = map mk_constraint cons_exps
-			      val ocon = Tyvar.fresh_ocon(context,constraints)
-			      val con = CON_OVAR ocon
-			      val exp = OVEREXP(con,true,eshot)
-			      val _ = add_overload_entry ocon
-			  in (exp,CON_OVAR ocon,Exp_IsValuable(context,exp))
-			  end
+	     in  (case ovld_option of
+		      SOME (OVLD (_, NONE)) => (error_region();
+						print "no default type for overloaded identifier: ";
+						AstHelp.pp_path path; print "\n";
+						error "no default type for overloaded identifier")
+		    | SOME (OVLD (ce, SOME n)) => make_overload (context, ce, n)
 		    | NONE => (* identifier is long or is not overloaded *)
 			  (case (Context_Lookup_Labels(context,labs)) of
 			       SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,c,Exp_IsValuable(context,e))
@@ -704,7 +774,7 @@ val _ = print "plet0\n"
 		 val rescon = fresh_con context
 		 val funcon = CON_ARROW([con2],rescon,false,arrow)
 		 fun constrain (OVEREXP (CON_OVAR ocon,_,_)) = 
-			   (overload_help false (peek_region(),ocon); ())
+			   (overload_help (false,false) (peek_region(),ocon); ())
 		   | constrain _ = ()
 	     in  if (semi_sub_con(context,funcon,con1))
 		     then (let val va3 = (case oneshot_deref arrow of
@@ -1662,8 +1732,15 @@ val _ = print "plet0\n"
 						  in (c,e)
 						  end) exp_list
 		  val l = symbol_label sym
+		  fun fail () =
+		      (error_region();
+		       print "overloaded identifier with ambiguous default: "; AstHelp.pp_sym sym; print "\n";
+		       debugdo (fn () =>
+				(print "con_exp_list = "; pp_ovld (OVLD (con_exp_list, NONE)); print "\n"));
+		       error "overloaded identifier with ambiguous default")
+		  val default = ovld_default (l, con_exp_list, fail)
 		  val v = gen_var_from_symbol sym
-		  val ce = CONTEXT_OVEREXP(l,con_exp_list)
+		  val ce = CONTEXT_OVEREXP(l,OVLD (con_exp_list, default))
 	      in  [(NONE,ce)]
 	      end
 	| Ast.ImportDec strlist => parse_error "import declaration not handled"
@@ -2134,6 +2211,7 @@ val _ = print "plet0\n"
 						 val _ = pop_region()
 					     in res
 					     end)
+	     val help = fn x => resolve_overloads (fn () => help x)
 	 in  packagedecs help (context,true) (map fctb_strip fctbs)
 	 end
 
@@ -2291,7 +2369,7 @@ val _ = print "plet0\n"
 	   fun help (n,(strexp,constraint)) = 
 	       let val v = fresh_named_var "strbindvar"
 		   val l = symbol_label n
-		   val (sbnd_ce_list,m,s) = xstrexp(context,strexp,constraint)
+		   val (sbnd_ce_list,m,s) = resolve_overloads (fn () => xstrexp(context,strexp,constraint))
 		   val rest = [(SOME(SBND(l,BND_MOD(v,false,m))),
 				CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
 	       in  sbnd_ce_list @ rest
@@ -2412,28 +2490,14 @@ val _ = print "plet0\n"
 			  pp_con (CON_TYVAR tv); print "\n";
 			  Stats.counter "toil.unresolved_tyvar" ();
 			  Tyvar.tyvar_set(tv,con_unit)))
-			
-	fun overload_loop warn overload_table = 
-	    let fun folder (entry,(rest,change)) = 
-		if (overload_help false entry)
-		    then (rest,true)
-		else (entry::rest, change)
-		val (rest,change) = foldl folder ([],warn) overload_table
-	    in  if warn
-		    then ()
-		else (if change 
-			  then overload_loop warn rest
-		      else overload_loop true rest)
-	    end
 
 	val _ = reset_elaboration (fp, unitNameOpt)
 	val _ = push_region(0,1000000)
 	val res = xobj arg
         val tyvar_table = get_tyvar_table()
-	val overload_table = get_overload_table()
 	val flex_table = get_flex_table()
 	val eq_table = get_eq_table()
-        val _ = overload_loop false overload_table 
+	val _ = resolve_all_overloads()
 	val _ = app flex_help flex_table 
         val _ = app tyvar_help tyvar_table
 	val _ = app eq_help eq_table

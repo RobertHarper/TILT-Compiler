@@ -17,6 +17,7 @@ signature PPIL =
     val pp_kind'    : Il.kind -> Formatter.format
     val pp_value'   : Il.value -> Formatter.format
     val pp_prim'    : Il.prim -> Formatter.format
+    val pp_ovld'    : Il.ovld -> Formatter.format
     val pp_context_entry' : Il.context_entry -> Formatter.format
     val pp_context' : Il.context -> Formatter.format
     val pp_pcontext' : Il.partial_context -> Formatter.format
@@ -46,6 +47,7 @@ signature PPIL =
     val pp_kind    : Il.kind -> unit
     val pp_value   : Il.value -> unit
     val pp_prim    : Il.prim -> unit
+    val pp_ovld    : Il.ovld -> unit
     val pp_context_entry : Il.context_entry -> unit
     val pp_context : Il.context -> unit
     val pp_pcontext : Il.partial_context -> unit
