@@ -38,16 +38,16 @@
         - Design considerations
            - Adequate as a target of phase-splitting
            - Closure under optimizations, closure-conversion, data representations
-           - Requires typecase/Typecase (not typerec)
            - Special treatment of units in Sums
-           - float vs. boxedfloat
-           - word kinds
-           - separate sub and floatsub primitives
-           - vararg/Vararg.  definable via typecase?
-           - open vs. code vs. closure
-           - Lambda-lambda only, must be named
 	   - inject/inject_record
 	   - project_sum/project_sum_record
+           - float vs. boxedfloat
+           - word kinds
+           - open vs. code vs. closure
+           - Lambda-lambda only, must be named
+           - Requires typecase/Typecase (not typerec)
+           - separate sub and floatsub primitives
+           - vararg/Vararg.  definable via typecase?
         - Typing issues
            - Algorithm status
            - Implementation experience

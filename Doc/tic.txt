@@ -1,3 +1,6 @@
+-----------------
+Structure of TILT
+-----------------
 The TILT compiler consists of 3 main phases which we will call the front end,
 the middle end, and the back end.  The front end, also called the elaborator,
 is responsible for type-checking the source ML program and converts the program 
@@ -10,7 +13,9 @@ program.  At this time, register allocation and stack layout is determined.
 The result is an assembly file which is sent to the system assembler, producing an
 object file that is linked with the runtime.
 
------------------------------------------------------------------------------------------
+------------
+What is HIL?
+------------
 
 HIL is a strongly-typed language with expressions, types, kinds, signatures, and
 modules.  The elaborator type checks an ML program and generates a fully-typed
@@ -18,7 +23,10 @@ HIL program.  During elaboration, we compile datatype, patterns, and polymorphis
 to the more primitive constructs of HIL.  Equality types, coercions,
 and hidden types are made explicit in HIL as well.
 
------------------------------------------------------------------------------------------
+
+----------
+Elaborator
+----------
 
 Throughout elaboration, types are inferred using a standard unification algorithm.
 To achieve type inference for ML, three type constructs 
@@ -85,7 +93,9 @@ need to be included.  Similarly, functor arguments are always named
 to expand their scope, allowing functor results to refer to the 
 functor arguments.
 
------------------------------------------------------------------------------------------
+---------------------------------
+Elaborator: Implementation Issues
+---------------------------------
 
 When a signature is added to the translation context, the signature is
 "selfifed" with respect to the path that the signature describes.
@@ -137,7 +147,9 @@ Polymorphic arguments are compiled to be a flat structure taking types
 and equality functions rather than a list of strucutres each
 containing one type and possibly one equality function.
 
------------------------------------------------------------------------------------------
+--------------
+Phase-Splitter
+--------------
 
 The translation from HIL to MIL is accomplished via a
 "phase-splitting" transformation based on the work of Harper,
@@ -196,7 +208,6 @@ this sharing information we get for free.
 
 "avoiding inlining (hence duplication) of constructors" ?
 
------------------------------------------------------------------------------------------
 
 To some extent, the two steps from SML through HIL to MIL might be
 unnecessary.  Changing the HIL elaboration to go directly to MIL
@@ -235,3 +246,97 @@ what the MIL would be like.  The main question was whether
 we wanted to use singleton kinds and dependent types or
 whether these should be eliminated entirely. (The FLINT compiler
 took the latter route.)  
+
+
+------------
+What is MIL?
+------------
+Unlike HIL, MIL is a language without modules or signatures.
+Instead, there are expressions, constructors, and kinds.
+There are singleton kinds, dependent record, and dependent arrow kinds.
+For optimization reasons, extra term and type constructs are introduced
+into MIL that are not present in HIL.
+
+-------------
+Design of MIL
+-------------
+
+To optimize datatype constructors that are not value-carrying, we specialize
+sum types by designating the number of non value-carrying arms carried by the sum.
+(The other possibility is to convert non-value-carrying arms into arms that carry unit.)
+By doing so, the data representation of sums can be
+made more efficient.  In particular, non value-carrying constructors
+are now represented by a tag rather than a pointer to a tag.  This augmentation 
+of sum types makes the distinction between value-carrying and non-value-carrying
+constructors explicitin the sum type, avoiding extra runtime checks needed in 
+certain datatypes like:
+
+	datatype 'a dt = A | B of 'a
+
+If no special care were taken, then the constructor B must check whether 'a is
+unit or not.  In our scheme, we decide at compile-time that we will never
+specialize B, whether 'a is instantiated at unit or not.
+
+Since datatypes of records are a common ML idiom, we would like a particularly
+efficient data representation that would flatten such sums of records.  In general,
+this means that the inject primitive must use its constructor argument.
+However, the head normal-form is often known to be a record.  In this case,
+we can optimize the inject primitive into the inject_record primitive which does
+not use its type (not constructor) argument.  Similarly, at deconstruction,
+we convert as many occurrences of project_sum into uses of project_sum_record as possible.
+
+To support efficient floating-point arithmetic, we make a distinction between
+the types float and boxed-float.  Consequently, boxing and unboxing operations
+are also explicit allowing the optimizer to remove as much boxing as possible.
+Types that classify terms are classified by kinds into TYPE and WORD.
+Terms of types of kind WORD fit into a machine word.  In contrast,
+the type float has kind WORD since floating-point values do not (in general) fit into
+a general-purpose register.
+
+MIL functions and arrow types are multi-argument.  Further, the
+distinction in kinds permit functions to take two set of arguments:
+word arguments and float-point arguments.  These refinements in
+functions reflects the realities of modern architecture: registers are
+fast and seprated into general-purpose and floating-point.  By making
+these separations in MIL, we permit MIL optimizations to take
+advantage of the archtecture.
+
+Since closure conversion occurs as a MIL transformation and we want to 
+be able to typecheck the closure converted result, we distinguish
+between open functions and code functions, giving them different types.
+In order to typecheck, code functions must be closed with respect to 
+non top-level term and constructor variables.  However, it may be open with
+respect to any top-level variables as well as type variables within scope.
+Finally, closures are created from aggregating code functions with their
+environment.  Each of these three constructs are given a different arrow type.
+Similarly, applications may be open, closed, or code.  After closure-conversion,
+there will be no open lambdas, open arrow types, or open application calls.
+Instead, only the closed or code version will remain.
+
+Term functions in MIL take type and term arguments simultaneously.  Similarly,
+all applications can pass both type and term arguments.  This was designed so that
+applications of polymorphic functions can be made with one call.  By currying,
+it is still possible to take only type arguments and perform type specialization.
+
+In MIL, type dispatch occurs in the typecase/Typecase constructs as well as primitives.
+The typecase constructs are present to permit the type dispatches to be lifted out of the
+primitives and coalesced.  As usual, the arms of a typecase may be optimized based on
+the extra type information present with the typecase.  Unlike TIL, TILT only supports
+typecase rather than typerec.  
+
+What have we lost with dropping typerec?
+Why sub vs floatsub?
+
+We plan to perform a systematic argument flattening transformation as in TIL.
+As in TIL, MIL has vararg and Vararg as primitives.  If only bounded record
+flattening is desired, vararg and Vararg are definable in terms of typecase/Typecase.
+From an implementation standpoint, using vararg/Vararg primitives rather than 
+inlining their definitions reduces code bloat and makes reduction steps in
+the optimizer faster.  Also, this approach faciliates experimenting with
+versions of vararg/Vararg that flatten arguments in a way that is inexpressible
+with typecase/Typecase alone.
+
+
+-------------------
+Typechecking of MIL
+-------------------
