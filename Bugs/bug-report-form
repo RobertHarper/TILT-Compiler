@@ -8,7 +8,7 @@ System:	     <e.g. solaris,alpha,linux>
 Severity:    <critical, major, minor, cosmetic>
 Problem:     <description of problem>
 Code:	     <SML source code to reproduce the bug>
-Transcript:  <transcript of exectution demonstating the bug>
+Transcript:  <transcript of execution demonstating the bug>
 Comments:    <additional comments>
 Fix:	     <optional - but you get extra credit>
 Test: *
