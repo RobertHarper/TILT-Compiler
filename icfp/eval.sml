@@ -55,14 +55,26 @@ struct
     fun u (s : stack) = 
 	(raise Unimplemented; s)
 
+    fun addi ((Int n2) :: (Int n1) :: s) = (Int (n2 + n1)) :: s
+    fun addf ((Real n2) :: (Real n1) :: s) = (Real (n2 + n1)) :: s
+
+    fun getx ((Point (x,_,_)) :: s) = (Real x) :: s
+    fun gety ((Point (_,y,_)) :: s) = (Real y) :: s
+    fun getz ((Point (_,_,z)) :: s) = (Real z) :: s
+
+    fun point ((Real z) :: (Real y) :: (Real x) :: s) =
+	(Point (x, y, z)) :: s
+
+    fun alength ((Array v) :: s) =
+	(Int (Vector.length v)) :: s
+    fun aget ((Int i) :: (Array v) :: s) =
+	(Vector.sub (v, i)) :: s
+
     val opers = 
 	foldl (fn ((oo,dd), m) => Envmap.insert (m, oo, dd)) Envmap.empty
 
-[ 
-  ("apply", u),
-  ("if", u),
-  ("addi", u),
-  ("addf", u),
+[ ("addi", addi),
+  ("addf", addf),
   ("acos", u),
   ("asin", u),
   ("clampf", u),
@@ -85,12 +97,12 @@ struct
   ("sqrt", u),
   ("subi", u),
   ("subf", u),
-  ("getx", u),
-  ("gety", u),
-  ("getz", u),
-  ("point", u),
-  ("get", u),
-  ("length", u),
+  ("getx", getx),
+  ("gety", gety),
+  ("getz", getz),
+  ("point", point),
+  ("get", aget),
+  ("length", alength),
   ("sphere", u),
   ("cube", u),
   ("cylinder", u),
@@ -123,7 +135,7 @@ end
 		val _ = print "environment:\n"
 		val _ = Envmap.appi (fn (a, _) => print (a^"\n"))
 	    in
-		raise Eval ("error looking up '" ^ var ^ "'")
+		raise Eval ("unbound variable/operator '" ^ var ^ "'")
 	    end
       | SOME v => v
 
@@ -144,13 +156,21 @@ end
 		      handle Match => 
 			  raise Eval ("inappropriate stack for " ^ p ^
 				      "(caught Match)"))
+	      | step (G, 
+		      (Closure (G'f, elf)) :: 
+		      (Closure (G't, elt)) :: 
+		      (Bool b) :: s, Gml.If :: c) =
+		let val (_, stk) = step (if b then G't else G'f, s, 
+					     if b then elt else elf)
+		in step (G, stk, c)
+		end
               | step (G, s, (Gml.Var v) :: c) = step (G, (G ?? v) :: s, c)
 	      | step (G, s, (Gml.Fun f) :: c) = 
 		step (G, (Closure (G, f)) :: s, c)
 	      | step (G, s, (Gml.Array a) :: c) =
 		let val (_, out) = step (G, nil, a)
 		(* might be missing a rev here XXX *)
-		in step (G, (Array (Vector.fromList out)) :: s, c)
+		in step (G, (Array (Vector.fromList (rev out))) :: s, c)
 		end
 	      | step (G, s, nil) = (G, s)
 	      | step _ = raise Eval ("Eval error")

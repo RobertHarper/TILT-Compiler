@@ -1,11 +1,18 @@
 signature TOKENS =
 sig
 
+  datatype tok =
+      LSquare 
+    | RSquare
+    | RCurly
+    | LCurly
+
   datatype token =
       Wordtok of string
     | Numbertok of int
     | Stringtok of string
     | Floattok of real
+    | Tok of tok
 
   (* parse a char stream into tokens separated by whitespace or comments *)
   val token      : (token * Pos.T, char) Parsing.T
@@ -23,5 +30,7 @@ sig
   val anyString  : (string, token) Parsing.T
   (* floatingpoint.constant *)
   val anyFloat   : (real, token) Parsing.T
+
+  val atok       : tok -> (tok, token) Parsing.T
 
 end

@@ -10,6 +10,13 @@ struct
 
 	val sin = Math.sin
   val cos = Math.cos
+	fun d2r angle = angle * (Math.pi / 180.0)
+
+	val ident =
+			(1.0, 0.0, 0.0, 0.0,
+			 0.0, 1.0, 0.0, 0.0,
+			 0.0, 0.0, 1.0, 0.0,
+			 0.0, 0.0, 0.0, 1.0)
 
 	fun translate (rtx, rty, rtz) =
 			(1.0, 0.0, 0.0, rtx,
@@ -31,7 +38,7 @@ struct
 
 	fun rotx angle =
 	let
-			val t = angle * (180.0 / Math.pi)
+			val t = d2r(angle)
       val s = sin(t)
 			val c = cos(t)
 	in
@@ -43,7 +50,7 @@ struct
 
 	fun roty angle =
 	let
-			val t = angle * (180.0 / Math.pi)
+			val t = d2r(angle)
       val s = sin(t)
 			val c = cos(t)
 	in
@@ -55,7 +62,7 @@ struct
 
   fun rotz angle =
 	let
-			val t = angle * (180.0 / Math.pi)
+			val t = d2r(angle)
       val s = sin(t)
 			val c = cos(t)
 	in
@@ -77,11 +84,14 @@ struct
 	fun applyV3((a11, a12, a13, a14,
 						 a21, a22, a23, a24,
 						 a31, a32, a33, a34,
-						 a41, a42, a43, a44):m4, (x, y, z):v3) =
-			(a14 + a11*x + a12*y + a13*z,
-			 a24 + a21*x + a22*y + a23*z,
-			 a34 + a31*x + a32*y + a33*z,
-			 a44 + a41*x + a42*y + a43*z)
+						 a41, a42, a43, a44):m4, (x, y, z):v3):v3 =
+			let
+					val w = a44 + a41*x + a42*y + a43*z
+			in
+					((a14 + a11*x + a12*y + a13*z)/w,
+					 (a24 + a21*x + a22*y + a23*z)/w,
+					 (a34 + a31*x + a32*y + a33*z)/w)
+			end
 
   fun combine((a11, a12, a13, a14,
 						   a21, a22, a23, a24,
@@ -141,7 +151,7 @@ struct
 							a31, a32, a33, a34,
 							a41, a42, a43, a44):m4) =
 			let
-					val t = angle * (180.0 / Math.pi)
+					val t = d2r(angle)
 					val s = sin(t)
 					val c = cos(t)
 			in
@@ -158,7 +168,7 @@ struct
 							a31, a32, a33, a34,
 							a41, a42, a43, a44):m4) =
 			let
-					val t = angle * (180.0 / Math.pi)
+					val t = d2r(angle)
 					val s = sin(t)
 					val c = cos(t)
 			in
@@ -174,7 +184,7 @@ struct
 						 a31, a32, a33, a34,
 						 a41, a42, a43, a44):m4) =
 			let
-					val t = angle * (180.0 / Math.pi)
+					val t = d2r(angle)
 					val s = sin(t)
 					val c = cos(t)
 			in

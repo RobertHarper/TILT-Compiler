@@ -31,11 +31,18 @@ struct
 
   (**** Tokenizer ****)
 
+  datatype tok =
+      LSquare 
+    | RSquare
+    | RCurly
+    | LCurly
+
   datatype token =
       Wordtok of string
     | Numbertok of int
     | Stringtok of string
     | Floattok of real
+    | Tok of tok
 
   (* Predicates for different kinds of characters. *)
       
@@ -44,26 +51,22 @@ struct
      each call. Also, - is now allowed in identifiers
      because-it-is-easy-to-type. *)
 
-	(* FIXME: ICFP: no escapes in string literals!
-	   COMMENTS
-		 FP correct?
-		 vertical tab
-	   Also fix chars allowed in identifiers, etc.
-	 *)
+  (* FIXME: ICFP: no escapes in string literals!
+     FP correct?
+     vertical tab
+     Also fix chars allowed in identifiers, etc.
+   *)
 
-	fun isSpace #"\v" = true
-		| isSpace #" "  = true
-		| isSpace #"\t" = true
-		| isSpace #"\n" = true
-		| isSpace #"\r" = true
-		| isSpace _ = false
+  fun isSpace #"\v" = true
+    | isSpace #" "  = true
+    | isSpace #"\t" = true
+    | isSpace #"\n" = true
+    | isSpace #"\r" = true
+    | isSpace _ = false
 
   fun isLetter #"_" = true
     | isLetter #"-" = true
     | isLetter c = Char.isAlpha c orelse Char.isDigit c
-
-  (* these never appear as part of a longer identifier *)
-  val isSep = Char.contains "[]{}"
 
   fun isIdent c = isLetter c orelse Char.isDigit c
 
@@ -77,7 +80,6 @@ struct
   val word = ((opt (literal #"/")) && letters) wth 
 			(fn (SOME _, l) => implode ( #"/" :: l )
 		    | (NONE, l) => implode l)
-     || (satisfy isSep) wth Char.toString
 
   (* A sequence of digits. *)
 
@@ -85,7 +87,7 @@ struct
 
   val integer = 
       ((digstream -- done) ||
-       (digstream << (ahead (satisfy (fn x => isSep x orelse x = #" ")))))
+       (digstream << (ahead (satisfy (fn x => not (Char.isDigit x))))))
       wth (Option.valOf o Int.fromString o implode)
 
   val escapechar = 
@@ -96,8 +98,9 @@ struct
   val floatmag = ((repeat  (satisfy Char.isDigit)) <<
 		  (literal #".")) &&
       (repeat1 (satisfy Char.isDigit)) &&
-      (opt (alt [literal #"e", literal #"E"] >> ((opt (literal #"-")) && 
-						 (repeat (satisfy Char.isDigit)))))
+      (opt (alt [literal #"e", literal #"E"] >> 
+	    ((opt (literal #"-")) && 
+	     (repeat (satisfy Char.isDigit)))))
       wth (fn (a, (b, exponent)) =>
 	   let val mantissa = 
 	       (Option.valOf (Real.fromString ("0." ^ (implode b)))) +
@@ -167,10 +170,16 @@ val insidechars = (repeat (satisfy (fn x => x <> quotc))) wth implode
   (* A token (skipping over white space).  The token is marked with
      its position. *)
 
+  val tok = alt [ literal #"[" return LSquare,
+		  literal #"]" return RSquare,
+		  literal #"{" return LCurly,
+		  literal #"}" return RCurly ]
+
   val token = space >> (!! (
 			    float wth Floattok ||
 			    number wth Numbertok || 
 			    stringlit wth Stringtok || 
+			    tok wth Tok ||
 			    word wth Wordtok
 			    ))
 
@@ -185,5 +194,8 @@ val insidechars = (repeat (satisfy (fn x => x <> quotc))) wth implode
   val anyNumber = any -- (fn Numbertok i => succeed i | _ => fail)
   val anyString = any -- (fn Stringtok s => succeed s | _ => fail)
   val anyFloat = any -- (fn Floattok f => succeed f | _ => fail)
+
+  fun atok t = any -- (fn Tok tt => if (t = tt) then succeed t else fail
+                        | _ => fail)
 
 end

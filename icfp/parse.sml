@@ -32,35 +32,29 @@ struct
 		suchthat (fn x => not (resvd (stl x))))
                 wth (fn x => Binder (stl x))
 
-(* val operator = [ "addi", "addf", "acos", "asin", "clampf", "cos",
-	"divi", "divf", "eqi", "equif", "floor", "frac", "lessi",
-	"lessf", "modi", "muli", "mulf", "negi", "negf", "real",
-	"sin", "sqrt", "subi", "subf", "getx", "gety", "getz",
-	"point", "get", "length", "sphere", "cube", "cylinder",
-	"cone", "plane", "translate", "scale", "uscale", "rotatex",
-	"rotatey", "rotatez", "light", "pointlight", "spotlight",
-	"union", "intersect", "difference", "render" ] *)
-      
+    
   val bool = lit "true" return (Bool true)
           || lit "false" return (Bool false)
 		
   val literal = anyWord wth Var
       
-  fun array () = (lit "[" >> repeat ($exp) << lit "]") 
+  fun array () = ((atok LSquare) >> repeat ($exp) << (atok RSquare)) 
       wth Array
       
-  and function () = (lit "{" >> repeat ($exp) << lit "}") wth Fun
+  and function () = ((atok LCurly) >> repeat ($exp) << (atok RCurly)) wth Fun
       
   and exp () =
       alt [ anyNumber wth Int,
 	    anyFloat wth Real,
 	    anyString wth String,
+	    $array,
+	    $function,
+	    lit "if" return If,
+	    lit "apply" return Apply,
 	    bool,
 	    oper,
 	    binder,
-	    literal,
-	    $array,
-	    $function ]
+	    literal ]
       
   val prog = repeat ($exp)
 						

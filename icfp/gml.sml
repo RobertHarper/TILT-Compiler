@@ -11,5 +11,7 @@ struct
     | String of string
     | Fun of exp list
     | Array of exp list
+    | If
+    | Apply
 
 end

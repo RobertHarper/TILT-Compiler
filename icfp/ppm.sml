@@ -37,7 +37,7 @@ struct
 
 	    fun dorow r = Vector.app (fn b => BinIO.output1 (out, b))
 
-	    fun go n = if n = h then () 
+	    fun go n = if n = h then {} 
 		       else (dorow (Array2.row (ppm, n));
 			     go (n + 1))
 	in
