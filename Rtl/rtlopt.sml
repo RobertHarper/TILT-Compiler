@@ -125,64 +125,64 @@ functor MakeRtlopt(structure Rtl : RTL
      or any of the special state registers or does not jump/branch *)
     fun state_readonly i = 
       let 
-	fun xxx(r1,REG r, r2) = not ((is_special_reg r1) orelse
+	fun default(r1,REG r, r2) = not ((is_special_reg r1) orelse
 				     (is_special_reg r) orelse 
 				     (is_special_reg r2))
-	  | xxx(r1,IMM _, r2) = not ((is_special_reg r1) orelse
+	  | default(r1,IMM _, r2) = not ((is_special_reg r1) orelse
 				       (is_special_reg r2))
       in
 	case i of
 	  LI  (_,r) => not (is_special_reg r)    
         | LADDR (_,_,r) => not (is_special_reg r)    
-	| ADD arg => xxx arg
-	| SUB arg => xxx arg
-	| MUL arg => xxx arg
-	| DIV arg => xxx arg
-	| MOD arg => xxx arg
-	| ADDT arg => xxx arg
-	| SUBT arg => xxx arg
-	| MULT arg => xxx arg
-	| DIVT arg => xxx arg
-	| MODT arg => xxx arg
+	| ADD arg => default arg
+	| SUB arg => default arg
+	| MUL arg => default arg
+	| DIV arg => default arg
+	| MOD arg => default arg
+	| ADDT arg => default arg
+	| SUBT arg => default arg
+	| MULT arg => default arg
+	| DIVT arg => default arg
+	| MODT arg => default arg
 	| _ => false
       end
 
     fun iaccess i = 
       let 
-	fun xxx(r1,REG r,r2) = [r1,r,r2]
-	  | xxx(r1,IMM _,r2) = [r1,r2]
+	fun default(r1,REG r,r2) = [r1,r,r2]
+	  | default(r1,IMM _,r2) = [r1,r2]
       in 
 	case i of
 	  LI (_,r) => [r]
 	| LADDR  (_,_,r) => [r]
 	| LEA    (_,r) => [r]
 	| MV     (r1,r2) => [r1,r2]
-	| CMV    (_,a,b,c) => xxx(a,b,c)
+	| CMV    (_,a,b,c) => default(a,b,c)
 	| FMV    (_) => []
-	| ADD    arg => xxx arg
-	| SUB    arg =>  xxx arg
-	| MUL   arg =>  xxx arg
-	| DIV   arg =>  xxx arg
-	| MOD   arg =>  xxx arg
-	| S4ADD arg =>  xxx arg
-	| S8ADD arg =>  xxx arg
-	| S4SUB arg =>  xxx arg
-	| S8SUB arg =>  xxx arg
-	| ADDT   arg =>  xxx arg
-	| SUBT   arg =>  xxx arg
-	| MULT   arg =>  xxx arg
-	| DIVT   arg =>  xxx arg
-	| MODT   arg =>  xxx arg
-	| CMPSI  (_,a,b,c) => xxx (a,b,c)
-	| CMPUI  (_,a,b,c) => xxx (a,b,c)
+	| ADD    arg => default arg
+	| SUB    arg =>  default arg
+	| MUL   arg =>  default arg
+	| DIV   arg =>  default arg
+	| MOD   arg =>  default arg
+	| S4ADD arg =>  default arg
+	| S8ADD arg =>  default arg
+	| S4SUB arg =>  default arg
+	| S8SUB arg =>  default arg
+	| ADDT   arg =>  default arg
+	| SUBT   arg =>  default arg
+	| MULT   arg =>  default arg
+	| DIVT   arg =>  default arg
+	| MODT   arg =>  default arg
+	| CMPSI  (_,a,b,c) => default (a,b,c)
+	| CMPUI  (_,a,b,c) => default (a,b,c)
 	
 	| NOTB (r1,r2) => [r1,r2]
-	| ANDB   arg =>  xxx arg
-	| ORB    arg =>  xxx arg
-	| XORB   arg =>  xxx arg
-	| SRA   arg =>  xxx arg
-	| SRL   arg =>  xxx arg
-	| SLL   arg =>  xxx arg
+	| ANDB   arg =>  default arg
+	| ORB    arg =>  default arg
+	| XORB   arg =>  default arg
+	| SRA   arg =>  default arg
+	| SRL   arg =>  default arg
+	| SLL   arg =>  default arg
 	
 	| CVT_REAL2INT (_,r) => [r]
 	| CVT_INT2REAL (r,_) => [r]

@@ -57,14 +57,14 @@ struct
   fun label2s (ML_EXTERN_LABEL s) = "ML "^s
     | label2s (C_EXTERN_LABEL s) = "C "^s
     | label2s (LOCAL_LABEL ll) = "L"^local_label2s ll
-  fun traceflag TRACE  = "(TRACE)"
-    | traceflag UNSET = "(UNSET)"
-    | traceflag NOTRACE_INT = "(NOTRACE_INT)"
-    | traceflag NOTRACE_CODE = "(NOTRACE_CODE)"
-    | traceflag NOTRACE_REAL = "(NOTRACE_REAL)"
-    | traceflag LABEL = "(LABEL)"
-    | traceflag LOCATIVE = "(LOCATIVE)"
-    | traceflag (COMPUTE p) = "(COMPUTE "^reppath2s p^")"
+  fun rep2s TRACE  = "(TRACE)"
+    | rep2s UNSET = "(UNSET)"
+    | rep2s NOTRACE_INT = "(NOTRACE_INT)"
+    | rep2s NOTRACE_CODE = "(NOTRACE_CODE)"
+    | rep2s NOTRACE_REAL = "(NOTRACE_REAL)"
+    | rep2s LABEL = "(LABEL)"
+    | rep2s LOCATIVE = "(LOCATIVE)"
+    | rep2s (COMPUTE p) = "(COMPUTE "^reppath2s p^")"
 
    and reppath2s p =
        let fun loop [] = ""
@@ -77,7 +77,7 @@ struct
 	 | Notneeded_p => "Notneed"
        end
 
-  and regi2s (REGI(v,tf)) = (if !symbolic_name then var2s v else i2s(Name.var2int v)) ^ (traceflag tf)
+  and regi2s (REGI(v,tf)) = (if !symbolic_name then var2s v else i2s(Name.var2int v)) ^ (rep2s tf)
     | regi2s (SREGI HEAPPTR)  = "HEAPPTR"
     | regi2s (SREGI HEAPLIMIT)  = "HEAPLIMIT"
     | regi2s (SREGI STACKPTR) = "STACKPTR"
@@ -87,7 +87,7 @@ struct
 
   and regf2s (REGF(v,tf)) =
     (if !symbolic_name then var2s v else i2s(Name.var2int v))
-       ^ (traceflag tf)
+       ^ (rep2s tf)
 
   fun ea2s (EA (r,d)) = i2s d^"("^regi2s r^")"
 
@@ -123,7 +123,7 @@ struct
 
 
   fun pp_LabelPair' (l,t) =
-      HOVbox [String (label2s l),String (traceflag t)]
+      HOVbox [String (label2s l),String (rep2s t)]
 
   fun pp_List' pr l = 
      let fun f (h::t) = String "," :: Break :: pr h :: f t
