@@ -103,17 +103,18 @@ structure Signature
 	    | s => NONE)
 
      fun find_labels_sdecs context sdecs = 
-	 let (* the path being carried is backwards so we must reverse when we add to accumulator *)
-	     fun find_labels path (SDEC(l,DEC_CON (_,k,NONE)),_) = 
+	 let fun driver path sdecs = rev(foldl (find_labels path) [] sdecs)
+	     (* the path being carried is backwards so we must reverse when we add to accumulator *)
+	     and find_labels path (SDEC(l,DEC_CON (_,k,NONE)),_) = 
 		 error "find_labels should not encounter any abstract types"
 	       | find_labels path (SDEC(l,DEC_CON (_,k,SOME c)),kpaths) =  (k,rev(l::path))::kpaths
 	       | find_labels path (SDEC(l,DEC_MOD (v,s)),kpaths) = 
 		 (case signat2sdecs context s of
-		      SOME sdecs => (find_labels_sdecs context sdecs) @ kpaths
+		      SOME sdecs => (driver (l::path) sdecs) @ kpaths
 		    | NONE => kpaths)
 	       | find_labels path (_,acc) = acc
 	     val rev_klabs = foldl (find_labels []) [] sdecs
-	 in  rev rev_klabs
+	 in  driver [] sdecs
 	 end
 
   (* could these signatures be made equal: 
@@ -383,10 +384,12 @@ structure Signature
 	  fun docon curl sdecs : sdecs =
 	      (case sdecs of
 		   [] => (error_region();
-			  print "signature wheretype could not find specified component\n";
+			  print "signature wheretype could not find specified component ";
+			  pp_label curl; print "\n";
 			  tab_region();
 			  pp_lpath lbls;
 			  print "\n";
+			  print "orig_sdecs = "; pp_sdecs orig_sdecs; print "\n";
 			  [])
 		 | ((sdec as SDEC(l,dec))::rest) => 
 		       (case dec of
