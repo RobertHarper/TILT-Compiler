@@ -1,4 +1,4 @@
-(*$import Name Rtl Nil  *)
+(*$import Rtl Nil  *)
 
 signature TORTL =
 sig
