@@ -105,3 +105,4 @@
 0105 [open]	overloading with words
 0106 [open]	internal Option failure
 0107 [open]	tilt option failure
+0108 [open]	Parsing of infix(r) declarations is not correct.
