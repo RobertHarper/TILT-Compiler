@@ -1,4 +1,4 @@
-(*$import NIL *)
+(*$import Nil *)
 signature NILCONTEXT = 
   sig
       

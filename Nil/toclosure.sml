@@ -1713,6 +1713,8 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	   val exports' = map export_rewrite exports
 	   val _ = chat "Closure conversion: Rewritten exports\n"
 
+	   val _ = reset_table []
+
        in  MODULE{bnds = bnds', imports = imports', exports = exports'}
        end	   
 

@@ -1,17 +1,17 @@
-(*$import Prim PRIM ANNOTATION Sequence *)
+(*$import Prim PRIM Annotation Sequence *)
 
 signature NIL =
 sig
 
   type var = Name.var
   type label = Name.label
-  datatype annotation = datatype Annotation.annotation
 
   type w32 = Word32.word
   type prim = Prim.prim
   type ('a,'b) sequence = ('a,'b) Sequence.sequence
                           (* conceptually this is a ('a*'b) list that allows
 			     fast access using 'a as a key *)
+  datatype annotation = datatype Annotation.annotation
 
   (* In general, we want to distinguish between functions/arrow types that 
    * are open (possibly having free variables) or those that are closed.
@@ -92,7 +92,7 @@ sig
              | Open_cb of (var * (var * kind) list * con * kind)
              | Code_cb of (var * (var * kind) list * con * kind)
 
-  withtype annot = kind annotation
+  withtype annot = kind Annotation.annotation
 
   datatype nilprim = 
       record of label list       (* record intro *)

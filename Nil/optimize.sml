@@ -1,4 +1,4 @@
-(*$import NIL NILCONTEXT NILSTATIC NILUTIL NILSUBST PPNIL OPTIMIZE Stats NORMALIZE *)
+(*$import Nil NILCONTEXT NILSTATIC NILUTIL NILSUBST PPNIL OPTIMIZE Stats NORMALIZE *)
 (* A one-pass optimizer with the following goals:
 	Convert project_sum to project_sum_record.
 	Eliminate dead code.

@@ -1,4 +1,5 @@
-(*$import NIL *)
+(*$import Nil *)
+
 signature SPECIALIZE =
   sig
       val debug : bool ref

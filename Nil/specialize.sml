@@ -1,4 +1,4 @@
-(*$import NIL NILUTIL PPNIL LibBase SPECIALIZE *)
+(*$import Nil NILUTIL PPNIL LibBase SPECIALIZE *)
 
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert

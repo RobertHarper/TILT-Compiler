@@ -3225,20 +3225,17 @@ end (* local defining splitting context *)
        end
 
      | xsig' context (con0, Il.SIGNAT_STRUCTURE (NONE,sdecs)) = xsig_struct context (con0,sdecs)
-     | xsig' context (con0, Il.SIGNAT_INLINE_STRUCTURE {self=NONE,abs_sig=sdecs,...}) =
-                        xsig_struct context (con0,sdecs)
-
      | xsig' context (con0, Il.SIGNAT_STRUCTURE (SOME p,sdecs)) = 
        let val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
 	   val sig' = IlStatic.UnselfifySig (Ilcontext.empty_context) (p,s)
        in  xsig' context (con0, sig')
        end
 
-     | xsig' context (con0, Il.SIGNAT_INLINE_STRUCTURE {self=SOME p,imp_sig=sdecs,...}) =
-       let val s = Il.SIGNAT_STRUCTURE(SOME p,sdecs)
-	   val sig' = IlStatic.UnselfifySig (Ilcontext.empty_context) (p,s)
-       in  xsig' context (con0, sig')
+     | xsig' context (con0, Il.SIGNAT_INLINE_STRUCTURE {code,...}) =
+       let val s = IlStatic.GetModSig(Ilcontext.empty_context, Il.MOD_STRUCTURE code)
+       in  xsig' context (con0, s)
        end
+
 
    and xsig_struct context (con0,sdecs) = 
        let

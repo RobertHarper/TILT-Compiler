@@ -2578,7 +2578,7 @@ val debug_bound = ref false
 		      local_update_used := false;
 		      local_array_used := false)
 	     val _ = resetDepth()
-		 val _ = resetWork()
+	     val _ = resetWork()
 	     val _ = reset_global_state (map #1 named_exports,globals)
 
 	     (* we put non-variable exports at the tail of the program;
@@ -2710,6 +2710,9 @@ val debug_bound = ref false
 				      main=LOCAL_CODE mainName,
 				      mutable_objects = get_mutable_objects(),
 				      mutable_variables = get_mutable_variables()}
+
+	     val _ = reset_global_state ([], Name.VarSet.empty)
+
 	 in module
 	 end
 

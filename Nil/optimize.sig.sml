@@ -1,4 +1,4 @@
-(*$import NIL *)
+(*$import Nil *)
 signature OPTIMIZE = 
   sig
       val debug : bool ref

@@ -1,4 +1,4 @@
-(*$import NIL PRIMUTILPARAM Int32 *)
+(*$import NIL PRIMUTILPARAM Int32 Nil *)
 structure NilPrimUtilParam
     :> PRIMUTILPARAM where type con = Nil.con 
 		       and type exp = Nil.exp =

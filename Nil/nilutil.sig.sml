@@ -1,4 +1,5 @@
-(*$import NIL *)
+(*$import Nil *)
+
 signature NILUTIL =
   sig
 

@@ -1,4 +1,4 @@
-(*$import Name *)
+(*$import Name Nil *)
 signature NILSUBST = 
   sig
     type exp = Nil.exp
