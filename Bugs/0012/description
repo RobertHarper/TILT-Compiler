@@ -57,6 +57,7 @@ Comments:
 	Dbx catches some floating point exceptions/signals prior to this printing
 	of NAN.
 Fix:
+	This bug has been merged with # 44.
 Test:
 Owner: swasey
-Status: open
+Status: closed

@@ -8,6 +8,10 @@ System:	     alpha
 Severity:    major
 Problem:
 	TILT on the alpha doesn't pass the simple tests in TestBasis/Dynamic.
+
+	The Alpha runtime says "Invalid Float operation; probably NAN
+	operand; cannot patch result, resuming anyway" This happens
+	with other floating point code (eg, when bootstrapping).
 Code:
 	See mapfile.
 Transcript:
@@ -139,7 +143,20 @@ Transcript:
 	       Max Threads   =        1     unsharedData =       143                                 swapping     =     0
 	                                    unsharedStk  =         2
 Comments:
-	This also touches on bug 12.
+	Dbx catches some floating point exceptions/signals before the
+	"Invalid" message is printed.
+
+	The old bug list had this to say:
+
+	(6) floating point is wrong right now
+		Currently, we place a trap barrier after each floating point instruction.
+		We use the "su" version of the floating point instruction.
+		For overflow and division by zero, our signal handler is not even
+			called and the OS puts the right answer there.
+			For NaNs, the right answer is put there but our
+			signal handler is also called.  For this case, we just return.
+		The OS handler may not be able to detect the correct answer
+			if the floating point instruction's src and dest registers are the same.
 Fix:
 Test:
 Owner: swasey

@@ -9,7 +9,7 @@
 0009 [closed]	Stack overflow segv on alpha.
 0010 [open]	Want a separate stack for signal handlers on alpha.
 0011 [closed]	Segv on alpha.
-0012 [open]	"Invalid Float operation" on alpha.
+0012 [closed]	"Invalid Float operation" on alpha.
 0013 [closed]	Prolog-based stacklet allocation not working properly on alpha.
 0014 [closed]	Stack overflow in C code on alpha.
 0015 [closed]	Large string constant compiles incorrectly on alpha.
