@@ -96,10 +96,9 @@ functor IlStatic(structure Il : IL
 							       sig_subst_modvar(s,[vm]))
 		   | _ => pc)
 	fun local_Sdecs_Lookup (m,sdecs,labels) = 
-	    (let val (_,pc) = Sdecs_Lookup(m,sdecs,labels)
-	    in SOME pc
-	    end)
-		 handle (NOTFOUND _) => NONE
+	    (case (Sdecs_Lookup(m,sdecs,labels)) of
+		 NONE => NONE
+	       | SOME(_,pc) => SOME pc)
 
 	fun local_Sdecs_Project(mopt, sdecs, l) = 
 	    let
@@ -598,10 +597,10 @@ functor IlStatic(structure Il : IL
      in case con of
        (CON_TYVAR tv) => KIND_TUPLE 1 
      | (CON_VAR v) => 
-	   ((case Context_Lookup'(ctxt,v) of
-			   PHRASE_CLASS_CON(c,k) => k
-			 | _ => error "CON_VAR looked up to a non-con")
-		 handle (NOTFOUND _) => error "GetConKind: v of (CON_VAR v) not in context")
+	   (case Context_Lookup'(ctxt,v) of
+		SOME(_,PHRASE_CLASS_CON(_,k)) => k
+	      | SOME _ => error "CON_VAR v with v bound to a non-con"
+	      | NONE => error "CON_VAR v with v unbound")
      | (CON_OVAR ocon) => raise UNIMP
      | (CON_INT _) => KIND_TUPLE 1
      | (CON_FLOAT _) => KIND_TUPLE 1
@@ -676,10 +675,10 @@ functor IlStatic(structure Il : IL
 				   | NONE => (va,con))
      | PRIM (p,cs) => (true, PrimUtil.get_type p cs)
      | ILPRIM (ip) => (true, PrimUtil.get_iltype ip)
-     | (VAR v) => ((case Context_Lookup'(ctxt,v) of
-			   PHRASE_CLASS_EXP(_,c) => (true,c)
-			 | _ => error "CON_VAR looked up to a non-con")
-		   handle (NOTFOUND _) => error "GetExpCon: v of (VAR v) not in context")
+     | (VAR v) => (case Context_Lookup'(ctxt,v) of
+		       SOME(_,PHRASE_CLASS_EXP(_,c)) => (true,c)
+		     | SOME _ => error "VAR looked up to a non-value"
+		     | NONE => error "GetExpCon: v of (VAR v) not in context")
      | (APP (e1,e2)) => 
 	   let val (va1,con1) = GetExpCon(e1,ctxt)
 	       val con1 = Normalize(con1,ctxt)
@@ -1002,8 +1001,9 @@ functor IlStatic(structure Il : IL
 	       
       case module of
        (MOD_VAR v) => (case Context_Lookup'(ctxt,v) of
-			   PHRASE_CLASS_MOD(m,s) => (true,s)
-			 | _ => error "expected a module")
+			   SOME(_,PHRASE_CLASS_MOD(_,s)) => (true,s)
+			 | SOME _ => error "MOD_VAR v with v not bound to a module"
+			 | NONE => error "MOD_VAR v with v not bound")
      | MOD_STRUCTURE (sbnds) => 
 	   let fun loop va [] acc ctxt = (va,rev acc)
 		 | loop va (sb::sbs) acc ctxt = 
@@ -1100,47 +1100,50 @@ functor IlStatic(structure Il : IL
 
     and HeadNormalize (arg,ctxt) : (bool * con) = 
 	 (case arg of
-	      CON_OVAR ocon => let val tv = ocon_deref ocon
-				   val (_,c') = HeadNormalize(CON_TYVAR tv,ctxt)
+	      CON_FUN ([v],CON_APP(c,CON_VAR v')) => 
+		  if (eq_var(v,v')) then HeadNormalize(c,ctxt) else (false,arg)
+	    | CON_OVAR ocon => let val tv = ocon_deref ocon
+			    val (_,c') = HeadNormalize(CON_TYVAR tv,ctxt)
 			       in (true,c')
 			       end
 	    | (CON_TYVAR tv) => (tyvar_isconstrained tv,
 				 case tyvar_deref tv of
 				     NONE => arg
 				   | SOME c => #2(HeadNormalize(c,ctxt)))
-	    | (CON_VAR v) => let val lbl = var2label(ctxt,v)
-			     in (case (Context_Lookup(ctxt,[lbl])) of
-				     PHRASE_CLASS_CON (CON_VAR v',k) => if (eq_var(v,v'))
-									then (false, CON_VAR v)
-								    else HeadNormalize(CON_VAR v',ctxt)
-				   | PHRASE_CLASS_CON (c,k) => HeadNormalize(c,ctxt)
-				   | _ => error "Normalize could not lookup CON_VAR")
-			     end
-	  | CON_TUPLE_PROJECT (i,c) => let val (f,c) = HeadNormalize(c,ctxt)
-				       in case c of
-					   CON_TUPLE_INJECT cons => 
-					       let val len = length cons
-					       in if (i >= 0 andalso i < len)
-						      then 
-							  let val (f',c') = HeadNormalize(List.nth(cons,i),
-											  ctxt)
-							  in (f orelse f', c')
-							  end
-						  else
-						      error "HeadNormalize: con tuple projection - index wrong"
+	    | (CON_VAR v) => (case (Context_Lookup'(ctxt,v)) of
+				    SOME(_,PHRASE_CLASS_CON (CON_VAR v',_)) => if (eq_var(v,v'))
+									       then (false, CON_VAR v)
+									   else HeadNormalize(CON_VAR v',ctxt)
+				  | SOME(_,PHRASE_CLASS_CON (c,_)) => HeadNormalize(c,ctxt)
+				  | SOME _ => error "Normalize given CON_VAR v with v bound to a non-con"
+				  | NONE => error "Normalize given CON_VAR v with v unbound")
+	    | CON_TUPLE_PROJECT (i,c) => 
+		  let val (f,c) = HeadNormalize(c,ctxt)
+		  in case c of
+		      CON_TUPLE_INJECT cons => 
+			  let val len = length cons
+			  in if (i >= 0 andalso i < len)
+				 then 
+				     let val (f',c') = HeadNormalize(List.nth(cons,i),
+								     ctxt)
+				     in (f orelse f', c')
+				     end
+			     else
+				 error "HeadNormalize: con tuple projection - index wrong"
 					       end
-					 | _ => (f,CON_TUPLE_PROJECT(i,c))
-				       end
-	  | CON_APP(c1,c2) => let val (f1,c1') = HeadNormalize(c1,ctxt)
-				  val (f2,c2') = HeadNormalize(c2,ctxt)
-				  val (f,c) = (case (c1',c2') of
-						   (CON_FUN(vars,cons), _) =>
-						    HeadNormalize(ConApply(c1',c2'),ctxt)
-						  | _ => (false,CON_APP(c1',c2')))
-			      in (f1 orelse f2 orelse f, c)
-			      end
-	  | (CON_MODULE_PROJECT (m,l)) =>
-	       (let 
+		    | _ => (f,CON_TUPLE_PROJECT(i,c))
+		  end
+	    | CON_APP(c1,c2) => 
+		  let val (f1,c1') = HeadNormalize(c1,ctxt)
+		      val (f2,c2') = HeadNormalize(c2,ctxt)
+		      val (f,c) = (case (c1',c2') of
+				       (CON_FUN(vars,cons), _) =>
+					   HeadNormalize(ConApply(c1',c2'),ctxt)
+				     | _ => (false,CON_APP(c1',c2')))
+		  in (f1 orelse f2 orelse f, c)
+		  end
+	    | (CON_MODULE_PROJECT (m,l)) =>
+		  (let 
 		   val (_,s) = GetModSig(m,ctxt)
 		   fun break_loop (c as (CON_MODULE_PROJECT(m',l'))) = 
 		       if (eq_label(l,l') andalso eq_mod(m,m')) 
@@ -1178,8 +1181,7 @@ functor IlStatic(structure Il : IL
 		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from functor = \n";
 					    pp_mod m;
 					    error "CON_MODULE_PROJECT from a functor"))
-	       end
-	   handle NOTFOUND _ => (false,arg))
+	       end)
 	  | c => (false,c))
 
 	
@@ -1221,9 +1223,10 @@ functor IlStatic(structure Il : IL
 				     in #2(HeadNormalize(arg',ctxt))
 				     end
       | (CON_MODULE_PROJECT (m as MOD_STRUCTURE sbnds,l)) => (* no need to normalize m *)
-	    (case Sbnds_Lookup(sbnds,[l]) of
-		 (_, PHRASE_CON c) => Normalize(c,ctxt)
-	       | _ => error "Module_Lookup found a non con while normalizing a con_mod_proj")
+	    (case (Sbnds_Lookup(sbnds,[l])) of
+		 SOME(_, PHRASE_CON c) => Normalize(c,ctxt)
+	       | SOME _ => error "Sbnds_Lookup projected out a non-con component"
+	       | NONE => error "Sbnds_Lookup could not find component")
       | (CON_MODULE_PROJECT (m,l)) => 
 	    (let val _ = debugdo (fn () =>
 				  (print "normalize about to call getmodsig of m = \n";
@@ -1312,8 +1315,8 @@ functor IlStatic(structure Il : IL
 	 Decs_Valid(add_context_dec(ctxt,SelfifyDec a),rest)
 
      and Dec_Valid (ctxt : context, dec) = 
-       let fun var_notin v  = (not (var_bound(ctxt,v)))
-	   fun name_notin n = (not (name_bound(ctxt,n)))
+	 let fun var_notin v  = (Context_Lookup'(ctxt,v); false) handle _ => true
+	     fun name_notin n = (Context_Exn_Lookup(ctxt,n); false) handle _ => true
        in  (case dec of
 	      DEC_EXP(v,c) => (var_notin v) andalso (GetConKind(c,ctxt) = (KIND_TUPLE 1))
 	    | DEC_MOD(v,s) => (var_notin v) andalso (Sig_Valid(ctxt,s))

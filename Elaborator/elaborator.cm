@@ -29,8 +29,8 @@ basis.sig.sml
 basis.sml
 illeak.sig.sml
 ilcontext.sig.sml
-ilcontext.sml
-(*slowilcontext.sml  *)
+ilcontext.sml 
+(* slowilcontext.sml *)
 datatype.sig.sml
 datatype.sml
 pat.sig.sml

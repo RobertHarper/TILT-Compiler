@@ -14,6 +14,7 @@ signature ILCONTEXT =
 	type decs = Il.decs
 	type sdec = Il.sdec
 	type sdecs = Il.sdecs
+	type tag = Il.tag
 	type fixity_table = Il.fixity_table
 	type path = Il.path
 	type inline = Il.inline
@@ -41,39 +42,42 @@ signature ILCONTEXT =
 
 	(* ------------ Lookup routines ----------------- *)
 
-	exception NOTFOUND of string
-	datatype phrase = PHRASE_EXP of exp
+	datatype phrase = 
+	    PHRASE_EXP of exp
 	  | PHRASE_CON of con
 	  | PHRASE_MOD of mod
 	  | PHRASE_SIG of signat
 	  | PHRASE_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
 	    
-	datatype class = CLASS_EXP of con
+	datatype class = 
+	    CLASS_EXP of con
 	  | CLASS_CON of kind
 	  | CLASS_MOD of signat
 	  | CLASS_SIG
 	  | CLASS_OVEREXP
 	    
-    datatype phrase_class = PHRASE_CLASS_EXP  of exp * con
-                          | PHRASE_CLASS_CON  of con * kind
-                          | PHRASE_CLASS_MOD  of mod * signat
-                          | PHRASE_CLASS_SIG  of signat
-                          | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
+	datatype phrase_class = 
+	    PHRASE_CLASS_EXP  of exp * con
+	  | PHRASE_CLASS_CON  of con * kind
+	  | PHRASE_CLASS_MOD  of mod * signat
+	  | PHRASE_CLASS_SIG  of signat
+	  | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Il.Tyvar.ocon
 
-	    
+
+        (* ----- Useful structure-related helper functions ------- *)	    
+        (* ----- Sdecs_Lookup' looks inside starred structure --------- *)
+	val Sdecs_Lookup  : mod * sdecs * label list -> (label list * phrase_class) option
+	val Sdecs_Lookup' : mod * sdecs * label list -> (label list * phrase_class) option
+	val Sbnds_Lookup  : Il.sbnds * label list -> (label list * phrase) option
+
 	(* ---- none of these lookup functions perform normalization ---- *)		
-	val Context_Get_FixityTable : context -> fixity_table
-	val var_bound : context * var -> bool
-	val name_bound : context * Il.tag -> bool
-	val Sdecs_Lookup  : mod * sdecs * label list -> label list * phrase_class
-	val Sdecs_Lookup' : mod * sdecs * label list -> label list * phrase_class
-	val Sbnds_Lookup  : Il.sbnds * label list -> label list * phrase
-	val Context_Lookup  : context * label list -> phrase_class
-	val Context_Lookup' : context * var -> phrase_class
-	val Context_Exn_Lookup : context * Il.tag -> con
-	val modsig_lookup : context * label list -> (path * mod * signat) option
-	val Path_Context_Lookup  : context * label list -> (path * phrase_class) option
-	val var2label     : context * var -> label 
+	val fixity : context -> fixity_table
+	val Context_Lookup     : context * label list -> (path * phrase_class) option
+	val Context_Lookup'    : context * var        -> (label * phrase_class) option
+	val Context_Exn_Lookup : context * tag        -> con option
+
+
+        (* -------- if you get desperate enough to print the context, i feel sorry for you ----- *)
 	val print_context    : {pp_exp : exp -> Formatter.format,
 				pp_mod : mod -> Formatter.format,
 				pp_con : con -> Formatter.format,
@@ -82,8 +86,9 @@ signature ILCONTEXT =
 				pp_kind   : kind   -> Formatter.format,
 				pp_label  : label  -> Formatter.format,
 				pp_var    : var    -> Formatter.format,
-				pp_tag    : Il.tag -> Formatter.format,
+				pp_tag    : tag    -> Formatter.format,
 				pp_signat : signat -> Formatter.format} *
 	    context -> Formatter.format
+
 
     end

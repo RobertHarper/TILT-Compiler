@@ -19,7 +19,7 @@ functor IlUtil(structure Ppil : PPIL
     val error = fn s => error "ilutil.sml" s
 
     exception FAILURE of string
-    exception NOTFOUND of string
+
     
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
@@ -37,15 +37,24 @@ functor IlUtil(structure Ppil : PPIL
     val functor_arg_lab = internal_label "functor_arg"
 
 
+    (* We can use Name.compare_label as long as it respects the ordering of
+       numeric labels that arise from tuples.  *)
     local 
-      fun geq_label (l1,l2) = (case (Name.compare_label(l1,l2)) of
-				 GREATER => true
-			       | EQUAL => true
-			       | LESS => false)
+      fun geq_label (l1,l2) = 
+	  (case (Name.compare_label(l1,l2)) of
+	       GREATER => true
+	     | EQUAL => true
+	     | LESS => false)
       fun geq_labelpair ((l1,_),(l2,_)) = geq_label(l1,l2)
     in 
       fun sort_label (arg : label list) : label list = ListMergeSort.sort geq_label arg
       fun sort_labelpair (arg : (label * 'a) list) : (label * 'a) list = ListMergeSort.sort geq_labelpair arg
+      fun label_issorted [] = true
+	| label_issorted [_] = true
+	| label_issorted (l1::(r as (l2::_))) = 
+	  (case (Name.compare_label(l1,l2)) of
+	       LESS => (label_issorted r)
+	     | _ => false)
     end
 
 

@@ -125,8 +125,6 @@ structure LinkIl (* : LINKIL *) =
 	fun elaborate_diff'(context,astdec) = 
 	    let
 		val sbnd_ctxt_list = Toil.xdec(context,astdec)
-		    handle (e as IlContext.NOTFOUND s) => 
-			(print "NOTFOUND: "; print s; print "\n"; raise e)
 		val sbnds = List.mapPartial #1 sbnd_ctxt_list
 		val ctxts = map #2 sbnd_ctxt_list
 	    in	(sbnds,ctxts)

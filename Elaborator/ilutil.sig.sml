@@ -82,6 +82,7 @@ signature ILUTIL =
     (* Sort labels into canonical order *)
     val sort_labelpair : (label * 'a) list -> (label * 'a) list 
     val sort_label : label list -> label list 
+    val label_issorted : label list -> bool
 
     (* derefences a constructor variable if possible *)
     val con_deref : con -> con

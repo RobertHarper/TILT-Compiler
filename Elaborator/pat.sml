@@ -11,7 +11,6 @@ functor Pat(structure Il : IL
   : PAT =
   struct
     
-    type modsig_lookup = Il.context * Il.label list -> (Il.path * Il.mod * Il.signat) option
     type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con
     type expcompile = Il.context * Ast.exp -> Il.exp * Il.con
@@ -66,13 +65,13 @@ functor Pat(structure Il : IL
     fun arm2sdecs(_,svc_list,_) = map (fn (s,v,c) => (SDEC(symbol_label s,
 							   DEC_EXP(v,c)))) svc_list
     fun arm_addbind(s,v,c,(cl,svc_list,expopt) : arm) = (cl,(s,v,c)::svc_list,expopt)
-    fun is_constr (modsig_lookup, context) (p : Ast.path) = 
+    fun is_constr context (p : Ast.path) = 
       let val res = (case Datatype.constr_lookup context p of
 			 SOME _ => true
 		       | NONE => false)
       in res
       end
-    fun is_exn (modsig_lookup, context) (p : Ast.path) = 
+    fun is_exn context (p : Ast.path) = 
 	 case Datatype.exn_lookup context p of
 		NONE => false
 	      | SOME _ => true
@@ -481,8 +480,8 @@ functor Pat(structure Il : IL
 		  gather some information, compile the rest of the patterns into a def,
 		  and then call the appropriate compiler for those patterns. 
               ----------------------------------------------------------------- *)
-	       val is_constr = is_constr(modsig_lookup, context)
-	       val is_exn    = is_exn(modsig_lookup, context)
+	       val is_constr = is_constr context
+	       val is_exn    = is_exn context
 	       fun exn_dispatch() = 
 		   let 
 		       fun general(p,patopt) = 
@@ -701,8 +700,7 @@ functor Pat(structure Il : IL
 			 | SOME {stamp,carried_type=SOME _} => true)
 	    | (SOME {name,datatype_path,is_const,datatype_sig}) => 
 		 not is_const)
-	val fixtable = Context_Get_FixityTable context
-	val res = InfixParse.parse_pat(fixtable, is_non_const, pats)
+	val res = InfixParse.parse_pat(fixity context, is_non_const, pats)
       in res
       end
 

@@ -109,16 +109,16 @@ functor Il(structure Prim : PRIM
               | CONTEXT_FIXITY of fixity_table
 
     and context = CONTEXT of  {flatlist : context_entry list,
-			       fixity_list : fixity_table list,
-			       label_list : (path * pc) Name.LabelMap.map,
-			       var_list : (label * pc) Name.VarMap.map,
+			       fixity_list : fixity_table,
+			       label_list : (path * phrase_class) Name.LabelMap.map,
+			       var_list : (label * phrase_class) Name.VarMap.map,
 			       tag_list : con Name.TagMap.map}
 
-      and pc = XPHRASE_CLASS_EXP  of exp * con
-	  | XPHRASE_CLASS_CON  of con * kind
-	  | XPHRASE_CLASS_MOD  of mod * signat
-	  | XPHRASE_CLASS_SIG  of signat
-	  | XPHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Tyvar.ocon
+      and phrase_class = PHRASE_CLASS_EXP  of exp * con
+	  | PHRASE_CLASS_CON  of con * kind
+	  | PHRASE_CLASS_MOD  of mod * signat
+	  | PHRASE_CLASS_SIG  of signat
+	  | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Tyvar.ocon
 	
     withtype value = (con,exp) Prim.value
     and decs = dec list

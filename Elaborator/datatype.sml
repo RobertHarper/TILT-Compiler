@@ -401,7 +401,7 @@ functor Datatype(structure Il : IL
 					pp_context context;
 					print "\n")))
 	in
-	    (case (Path_Context_Lookup(context,map symbol_label p)) of
+	    (case (Context_Lookup(context,map symbol_label p)) of
 		 NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup got NONE\n");
 			 NONE)
 	       | SOME (constr_path,pc) =>
@@ -510,10 +510,10 @@ functor Datatype(structure Il : IL
 
    fun exn_lookup context path : {stamp : Il.exp,
 				  carried_type : Il.con option} option =
-       (case (modsig_lookup(context,map symbol_label path)) of
+       (case (Context_Lookup(context,map symbol_label path)) of
 	  NONE=> NONE
-	| SOME (path_mod,m,exn_sig as 
-		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))])) =>
+	| SOME (path_mod,PHRASE_CLASS_MOD(m,exn_sig as 
+		SIGNAT_STRUCTURE (_,[SDEC(lab1,DEC_EXP(_,ctag)),SDEC(lab2,DEC_EXP(_,cmk))]))) =>
 	      if (eq_label(lab1,it_lab) andalso eq_label(lab2,mk_lab))
 		  then 
 		      (case (ctag,cmk) of 

@@ -438,21 +438,33 @@ functor Toil(structure Il : IL
 					    [c] => TilWord64.fromInt (ord c)
 					  | _ => error "Ast.CharExp carries bad string"))),
 			     CON_UINT W8)
-       | Ast.TupleExp (exp_list) => 
-	     let val recexp = Ast.RecordExp(mapcount (fn(n,a) => 
-						      (generate_tuple_symbol (n+1),a))
-					    exp_list)
-	     in xexp(context, recexp)
+       | (Ast.TupleExp _ | Ast.RecordExp _) =>
+	     let val (sorted, sym_expr_list) = 
+		 (case exp of
+		      Ast.TupleExp exps => 
+			  (true,mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
+		    | Ast.RecordExp sym_exps => (false,sym_exps)
+		    | _ => error "must have a TupleExp or RecordExp here")
+		 fun doer(sym,expr) = let val label = symbol_label sym
+					  val (exp,con) = xexp(context,expr)
+				      in (label,(label,exp),(label,con))
+				      end
+		 val label_rbnd_rdec = map doer sym_expr_list 
+		 val sorted = sorted orelse (label_issorted (map #1 label_rbnd_rdec))
+	     in
+		 if sorted 
+		     then (RECORD(map #2 label_rbnd_rdec), CON_RECORD(map #3 label_rbnd_rdec))
+		 else
+		     let
+			 fun make_var(l,rb,rd) = (l,(fresh_named_var (label2string l),rb,rd))
+			 val label_var_rbnd_rdec = map make_var label_rbnd_rdec
+			 val bnds = map (fn (_,(v,(_,e),_)) => BND_EXP(v,e)) label_var_rbnd_rdec
+			 val label_var_rbnd_rdec = sort_labelpair label_var_rbnd_rdec
+			 val con = CON_RECORD(map (fn (_,(_,_,rd)) => rd) label_var_rbnd_rdec)
+			 val body = RECORD(map (fn (l,(v,_,_)) => (l,VAR v)) label_var_rbnd_rdec)
+		     in (LET(bnds,body), con)
+		     end
 	     end
-       | Ast.RecordExp (sym_exp_list) => 
-	     (let val label_exp_list = map (fn (s,e) => (symbol_label s,e)) sym_exp_list
-		  val label_exp_list = sort_labelpair label_exp_list
-		  fun doer(label,expr) = let val (exp,con) = xexp(context,expr)
-					 in ((label,exp),(label,con))
-					 end
-		  val bnd_dec_list = map doer label_exp_list
-	      in (RECORD(map #1 bnd_dec_list), CON_RECORD(map #2 bnd_dec_list))
-	      end)
        | Ast.ListExp args => let fun loop [] = AstHelp.nil_exp
 				   | loop (a::b) = Ast.AppExp{function=AstHelp.cons_exp,
 							      argument=Ast.TupleExp[a,loop b]}
@@ -484,15 +496,15 @@ functor Toil(structure Il : IL
 		  end
 	   else 
 	     (case (Context_Lookup(context,map symbol_label path)) of
-	       PHRASE_CLASS_EXP ec => ec
-	     | PHRASE_CLASS_OVEREXP thunk =>
-			let 
-			  val (exp,ocon) = thunk()
-			  val _ = add_overload_entry ocon
-			in (exp,CON_OVAR ocon)
-			end
-	     | PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _) => polyfun_inst (context,m,s)
-	     | PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec])))) =>
+	       SOME(_,PHRASE_CLASS_EXP ec) => ec
+	     | SOME(_,PHRASE_CLASS_OVEREXP thunk) =>
+		   let 
+		       val (exp,ocon) = thunk()
+		       val _ = add_overload_entry ocon
+		   in (exp,CON_OVAR ocon)
+		   end
+	     | SOME(_,PHRASE_CLASS_MOD (m,s as SIGNAT_FUNCTOR _)) => polyfun_inst (context,m,s)
+	     | SOME(_,PHRASE_CLASS_MOD (m,(SIGNAT_STRUCTURE(_,([sdec] | [_,sdec]))))) =>
 		(case sdec of
 		  SDEC(l,DEC_EXP(_,c)) =>
 			 if (eq_label (l,mk_lab))
@@ -512,11 +524,12 @@ functor Toil(structure Il : IL
 	        | _ => (print "Ast.VarExp path leads to MOD.MOD with sdec\n";
 			pp_sdec sdec;
 			error "Ast.VarExp path leads to MOD"))
-	     | PHRASE_CLASS_MOD (m,s) => (print "Ast.VarExp path leads to MOD with sig\n";
-					  pp_signat s;
-					  error "Ast.VarExp path leads to MOD")
-	     | (PHRASE_CLASS_CON _) => error "Ast.VarExp path leads to CON"
-	     | (PHRASE_CLASS_SIG _) => error "Ast.VarExp path leads to SIG")
+	     | SOME(_,PHRASE_CLASS_MOD (m,s)) => (print "Ast.VarExp path leads to MOD with sig\n";
+						pp_signat s;
+						error "Ast.VarExp path leads to MOD")
+	     | SOME(_,PHRASE_CLASS_CON _) => error "Ast.VarExp path leads to CON"
+	     | SOME(_,PHRASE_CLASS_SIG _) => error "Ast.VarExp path leads to SIG"
+	     | NONE => error "unbound variable or constructor")
        | Ast.LetExp {dec,expr} => 
 	     let val boolsbnd_ctxt_list = xdec'(context, dec)
 		 val (sbnds,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
@@ -524,8 +537,7 @@ functor Toil(structure Il : IL
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
 	     in  (LET(bnds,e),c)
 	     end
-       | Ast.FlatAppExp _ => let val exp' = InfixParse.parse_exp(Context_Get_FixityTable 
-								 context, exp)
+       | Ast.FlatAppExp _ => let val exp' = InfixParse.parse_exp(fixity context, exp)
 			     in xexp(context,exp')
 			     end 
 
@@ -790,15 +802,7 @@ functor Toil(structure Il : IL
 		     At some future point when the syntax includes explicit scoping, 
 		     we must include those too *)
 		  val tyvar_stamp = get_stamp()
-		(* ---------- we used to compute this before change to Ast -------- *)
-                (*  val tyvars = 
-		      let fun sym_is_bound s = ((case (Context_Lookup(context,[symbol_label s])) of
-						    PHRASE_CLASS_CON _ => true
-						  | _ => error "tyvar symbol bound to a non-type")
-						handle (NOTFOUND _) => false)
-		      in free_tyvar_dec(binddec,sym_is_bound)
-		      end *)
-		val tyvars = map tyvar_strip tyvars
+		  val tyvars = map tyvar_strip tyvars
 		  local
 		      fun help tyvar = 
 			  let val type_str = Symbol.name tyvar
@@ -1035,8 +1039,8 @@ functor Toil(structure Il : IL
 	| Ast.OpenDec pathlist => 
 	      let fun help path = 
 		  (case (Context_Lookup(context,map symbol_label path)) of
-		       PHRASE_CLASS_MOD(m,s) => (m,s)
-		     | _ => error "Can't open a non structure")
+		       SOME(_,PHRASE_CLASS_MOD(m,s)) => (m,s)
+		     | _ => error "unbound structure")
 		  val modsig_list = map help pathlist
 		  val temp = mapcount (fn (i,a) => (fresh_open_internal_label ("openlbl" ^ (Int.toString i)),
 						    fresh_named_var "openvar",a)) modsig_list
@@ -1083,7 +1087,7 @@ functor Toil(structure Il : IL
 		end
 	| Ast.ExceptionDec [Ast.EbDef {exn: Symbol.symbol, edef: Ast.path}] => 
 	      (case (Context_Lookup(context,map symbol_label edef)) of
-		   PHRASE_CLASS_MOD(m,s) => 
+		   SOME(_,PHRASE_CLASS_MOD(m,s)) => 
 		       let val id_bar = symbol_label exn
 			   val path_mk_exp = MODULE_PROJECT(m,mk_lab)
 			   val path_it_exp = MODULE_PROJECT(m,it_lab)
@@ -1100,7 +1104,7 @@ functor Toil(structure Il : IL
 		       in [(SOME(SBND(id_bar,BND_MOD(modvar,inner_mod))),
 			    CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(modvar,inner_sig))))]
 		       end
-		 | _ => error "Rule 243 looup yielded non-module")
+		 | _ => error "unbound variable or constructor")
 	| Ast.ExceptionDec eblist => xdec(context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
 
         (* Rule 244 *)
@@ -1180,8 +1184,8 @@ functor Toil(structure Il : IL
       (case ty of
 	 Ast.VarTy tyvar => let val sym = AstHelp.tyvar_strip tyvar
 			    in (case (Context_Lookup(context,[symbol_label sym])) of
-				    PHRASE_CLASS_CON (c,k) => c
-				  | _ => error "tyvar lookup did not yield a PHRASE_CLASS_CON")
+				    SOME(_,PHRASE_CLASS_CON (c,_)) => c
+				  | _ => error "unbound type constructor")
 			    end
        | Ast.MarkTy (ty,r) => xty(context,ty)
        | Ast.TupleTy(tys) => let fun loop _ [] = []
@@ -1199,18 +1203,19 @@ functor Toil(structure Il : IL
 					    pp_list AstHelp.pp_sym' syms ("","",".",false); print "])"))
 		 val con_list = map (fn t => xty(context,t)) ty_list
 		 fun general() = (case (con_list,Context_Lookup(context, map symbol_label syms)) of
-				      ([],PHRASE_CLASS_CON(con,KIND_TUPLE 1)) => con
-				    | (_,PHRASE_CLASS_CON(con,KIND_ARROW(n,1))) => 
+				      ([],SOME(_,PHRASE_CLASS_CON(con,KIND_TUPLE 1))) => con
+				    | (_,SOME(_,PHRASE_CLASS_CON(con,KIND_ARROW(n,1)))) => 
 					  if (n = length con_list) 
 					      then CON_APP(con,(case con_list of
 								    [c] => c
 								  | _ => CON_TUPLE_INJECT(con_list)))
 					  else error "constructor applied to wrong # of types"
-				    | (_,PHRASE_CLASS_CON (c',k')) => (print "bad kindness: got args but k' =";
-								       pp_kind k'; print "\nand c' = ";
-								       pp_con c';
-								       error "bad kindness")
-				    | _ => error "xty found sym that looks up not to a convar")
+				    | (_,SOME(_,PHRASE_CLASS_CON (c',k'))) => 
+					  (print "bad kindness: got args but k' =";
+					   pp_kind k'; print "\nand c' = ";
+					   pp_con c';
+					   error "bad kindness")
+				    | (_,_) => error "unbound type constructor")
 	     in
 		 (* XXX can they be overridden ? *)
 		 case syms of
@@ -1298,17 +1303,19 @@ functor Toil(structure Il : IL
      and xsigexp(context,sigexp) : signat =
        (case sigexp of
 	  Ast.VarSig s => (case (Context_Lookup(context,[symbol_label s])) of
-					  PHRASE_CLASS_SIG(s) => s
-					| _ => error "lookup of sigexp yielded wrong flavor")
+			       SOME(_,PHRASE_CLASS_SIG s) => s
+			     | _ => error "unbound signature")
 	| Ast.SigSig speclist => SIGNAT_STRUCTURE(NONE,xspec(context,speclist))
 	| Ast.MarkSig (s,r) => xsigexp(context,s)
 	| Ast.AugSig (s, [], tyvars, ty) => error "ill-formed where type"
-	| Ast.AugSig (s, (sym::_), tyvars, ty) => (* why more than one symbol *)
+	| Ast.AugSig (s, syms, tyvars, ty) =>
 	      let val (popt,sdecs) = (case xsigexp(context,s) of
 					  SIGNAT_STRUCTURE popt_sdecs => popt_sdecs
 					| _ => error "can't where type a non-structure")
 		  val mjunk = MOD_VAR(fresh_named_var "mjunk")
-		  val (labels,pc) = (Sdecs_Lookup'(mjunk,sdecs,[symbol_label sym]))
+		  val (labels,pc) = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label syms)) of
+					 SOME lpc => lpc
+				       | NONE => error "wheretype given non-existent components")
 		  val k = (case pc of
 			       PHRASE_CLASS_CON(_,k) => k
 			     | _ => error "where type given a non-type")
@@ -1592,15 +1599,15 @@ functor Toil(structure Il : IL
       | xstrexp (context, strb, Ast.NoSig) =
 	(case strb of
 	     Ast.VarStr path => 
-			 (case modsig_lookup(context,map symbol_label path) of
-			      SOME (path,m,s) => ([],m,s)
-			    | NONE => error "module projection failed in lookup")
+			 (case Context_Lookup(context,map symbol_label path) of
+			      SOME (path,PHRASE_CLASS_MOD(m,s)) => ([],m,s)
+			    | _ => error "unbound structure")
 	   | Ast.AppStr (_,[]) => error "AppStr with no arguments"
 	   | Ast.AppStr (f,[(Ast.MarkStr (se,r),flag)]) =>
 		 xstrexp(context, Ast.AppStr(f,[(se,flag)]), Ast.NoSig)
 	   | Ast.AppStr (funpath,[(strexp as (Ast.VarStr argpath),_)]) =>
 		 (case (Context_Lookup(context,map symbol_label funpath)) of
-		      PHRASE_CLASS_MOD(m,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_))) => 
+		      SOME(_,PHRASE_CLASS_MOD(m,s as (SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
 			  let 
 			      val (sbnd_ce_list,argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
 			      val argmod = (mod2path argmod; argmod)
@@ -1782,7 +1789,7 @@ functor Toil(structure Il : IL
 	  type lpath = label list
 	  val mjunk = MOD_VAR(fresh_named_var "mjunk")
 	  fun path2sdecs p = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label p)) of
-				  (l,PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE(_,sd))) => (l,sd)
+				  SOME(l,PHRASE_CLASS_MOD(_,SIGNAT_STRUCTURE(_,sd))) => (l,sd)
 				| _ => error "xsig_sharing_structure: path led to non-structure")
 	  val lpath_sdecs_list : (lpath * sdecs) list = map path2sdecs paths
 	  fun getcomponents (lpath,sdecs) : (lpath * lpath list) = 
@@ -1824,7 +1831,9 @@ functor Toil(structure Il : IL
       end
   and xsig_sharing_type(ctxt,sdecs,path) : sdecs = 
       let val mjunk = MOD_VAR(fresh_named_var "mjunk")
-	  fun path2label p = #1(Sdecs_Lookup'(mjunk,sdecs,map symbol_label p))
+	  fun path2label p = (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label p)) of
+				  SOME(l,_) => l
+				| NONE => error "xsig_sharing_type found bad path")
           val labels = map path2label path
           val labels = map (follow_labels (sdecs,ctxt)) labels
       in xsig_sharing_rewrite(sdecs,labels)
@@ -1893,7 +1902,9 @@ functor Toil(structure Il : IL
 	  fun sig_actual_lookup lbl = 
 	      (case sig_actual_self of
 		   SIGNAT_STRUCTURE (_,self_sdecs) =>
-		       Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl])
+		       (case Sdecs_Lookup'(MOD_VAR v0, self_sdecs, [lbl]) of
+			    SOME lpc => lpc
+			  | NONE => error "sig_actual_lookup failed")
 		 | SIGNAT_FUNCTOR _ => error "sig_actual_Lookup for functor")
 
         (* ---- coercion of a polymorphic component to a mono or polymorphic specification --- *)
@@ -2081,10 +2092,12 @@ functor Toil(structure Il : IL
 	    CON_TYVAR tyvar => (case (tyvar_deref tyvar) of
 				NONE => error "resolved type does not permit equailty"
 			      | SOME c => self c)
-	  | CON_VAR v => (let val type_label = var2label(ctxt,v)
+	  | CON_VAR v => (let val type_label = (case (Context_Lookup'(ctxt,v)) of
+						    SOME(l,_) => l
+						  | _ => raise NoEqExp)
 			      val eq_label = to_eq_lab type_label
 			  in (case (Context_Lookup(ctxt,[eq_label])) of
-				  PHRASE_CLASS_EXP(e,c) => e
+				  SOME(_,PHRASE_CLASS_EXP(e,_)) => e
 				| _ => raise NoEqExp)
 			  end)
 	  | CON_OVAR ocon => self (CON_TYVAR (ocon_deref ocon))

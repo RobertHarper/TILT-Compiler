@@ -11,6 +11,7 @@ struct
 	type signat = Il.signat
 	type label = Il.label
 	type var = Il.var
+	type tag = Il.tag
 	type sdec = Il.sdec
 	type sdecs = Il.sdecs
 	type fixity_table = Il.fixity_table
@@ -86,23 +87,23 @@ struct
 		end
 	in case dec of
 		(DEC_EXP(v,c)) => help(v, VAR, MODULE_PROJECT,
-		    (fn obj => (XPHRASE_CLASS_EXP (obj, c))))
+		    (fn obj => (PHRASE_CLASS_EXP (obj, c))))
               | DEC_CON(v,k,NONE) => help(v, CON_VAR, CON_MODULE_PROJECT,
-		    (fn obj => (XPHRASE_CLASS_CON(obj, k))))
+		    (fn obj => (PHRASE_CLASS_CON(obj, k))))
               | DEC_CON(v,k,SOME c) => help(v, CON_VAR, CON_MODULE_PROJECT,
-		    (fn _ => (XPHRASE_CLASS_CON(c, k))))
+		    (fn _ => (PHRASE_CLASS_CON(c, k))))
 	      | DEC_MOD (v,s as SIGNAT_FUNCTOR _) => 
-		    help(v, MOD_VAR, MOD_PROJECT, (fn obj => (XPHRASE_CLASS_MOD(obj, s))))
+		    help(v, MOD_VAR, MOD_PROJECT, (fn obj => (PHRASE_CLASS_MOD(obj, s))))
 	      | DEC_MOD (v,SIGNAT_STRUCTURE(NONE,_)) => 
 		    error "adding non-selfified signature to context"
 	      | DEC_MOD(v,s as SIGNAT_STRUCTURE(SOME p, sdecs)) => 
 		    if (is_label_open l)
 			then foldl (sdec_help (v,l))
 			    (help(v, MOD_VAR, MOD_PROJECT,
-				  (fn obj => (XPHRASE_CLASS_MOD(obj, s)))))
+				  (fn obj => (PHRASE_CLASS_MOD(obj, s)))))
 			    sdecs
 		    else (help(v, MOD_VAR, MOD_PROJECT,
-			  (fn obj => (XPHRASE_CLASS_MOD(obj, s)))))
+			  (fn obj => (PHRASE_CLASS_MOD(obj, s)))))
 	      | DEC_EXCEPTION(t,c) => 
 		    let val tag_list = Name.TagMap.insert(tag_list,t,c)
 		    in CONTEXT{flatlist = flatlist,
@@ -116,7 +117,7 @@ struct
     fun add_context_fixity(CONTEXT {flatlist,fixity_list,
 				    label_list,var_list,tag_list}, 
 			   f) = CONTEXT({flatlist = flatlist,
-					 fixity_list = f :: fixity_list,
+					 fixity_list = f @ fixity_list,
 					 label_list = label_list,
 					 var_list = var_list,
 					 tag_list = tag_list})
@@ -152,19 +153,19 @@ struct
 		end
 	in
 	     case inline of
-		INLINE_EXPCON ec => help(XPHRASE_CLASS_EXP ec)
-	      | INLINE_CONKIND ck => help(XPHRASE_CLASS_CON ck)
-	      | INLINE_OVER arg => help(XPHRASE_CLASS_OVEREXP arg)
+		INLINE_EXPCON ec => help(PHRASE_CLASS_EXP ec)
+	      | INLINE_CONKIND ck => help(PHRASE_CLASS_CON ck)
+	      | INLINE_OVER arg => help(PHRASE_CLASS_OVEREXP arg)
 	      | INLINE_MODSIG (m,s) => 
 			if (is_label_open l)
 			    then 
 				case (m,s) of
 				    (MOD_STRUCTURE sbnds,
 				     SIGNAT_STRUCTURE(_,sdecs)) =>
-				    foldl (sbnd_sdec_help v) (help(XPHRASE_CLASS_MOD (m,s)))
+				    foldl (sbnd_sdec_help v) (help(PHRASE_CLASS_MOD (m,s)))
 				    (zip sbnds sdecs)
-				   | _ => (help(XPHRASE_CLASS_MOD (m,s)))
-			else help(XPHRASE_CLASS_MOD (m,s))
+				   | _ => (help(PHRASE_CLASS_MOD (m,s)))
+			else help(PHRASE_CLASS_MOD (m,s))
 	end
     fun add_context_inline(ctxt, l, v, inline) = add_context_inline'(ctxt, NONE, l, v, inline)
 
@@ -174,8 +175,8 @@ struct
 	CONTEXT({flatlist = flatlist,
 		 fixity_list = fixity_list,
 		 label_list = Name.LabelMap.insert(label_list,l,
-						   (SIMPLE_PATH v, XPHRASE_CLASS_SIG signat)),
-		 var_list = Name.VarMap.insert(var_list,v,(l, XPHRASE_CLASS_SIG signat)),
+						   (SIMPLE_PATH v, PHRASE_CLASS_SIG signat)),
+		 var_list = Name.VarMap.insert(var_list,v,(l, PHRASE_CLASS_SIG signat)),
 		 tag_list = tag_list})
     fun add_context_entry(ctxt, entry) = 
 	(case entry of
@@ -222,16 +223,12 @@ struct
                    | CLASS_SIG
                    | CLASS_OVEREXP
 
-    datatype phrase_class = PHRASE_CLASS_EXP  of exp * con
-                          | PHRASE_CLASS_CON  of con * kind
-                          | PHRASE_CLASS_MOD  of mod * signat
-                          | PHRASE_CLASS_SIG  of signat
-                          | PHRASE_CLASS_OVEREXP of unit -> exp * (context,con) Tyvar.ocon
 
     type phrase_class_p = path * phrase_class
-    exception NOTFOUND of string
 
-    fun Context_Get_FixityTable (CONTEXT {fixity_list,...}) = List.concat fixity_list
+
+    fun fixity (CONTEXT {fixity_list,...}) = fixity_list
+
     fun var_bound(CONTEXT{var_list,...},v) = (case Name.VarMap.find(var_list,v) of
 						  NONE => false
 						| SOME _ => true)
@@ -269,110 +266,101 @@ struct
       | classpath2pc (p, CLASS_SIG) = error "classpath2pc got a CLASS_SIG"
       | classpath2pc (p, CLASS_OVEREXP) = error "classpath2pc got a CLASS_OVEREXP"
 
-    fun Sbnds_Lookup (sbnds, labs) : (phrase * labels) = 
+    fun Sbnds_Lookup (sbnds, labs) : (labels * phrase) option =
 	let 
-	    fun loop lbl _ [] = raise (NOTFOUND "Sbnds_Lookup reached []")
+	    fun loop lbl _ [] = NONE
 	      | loop lbl prev ((sbnd as SBND(l,b))::r) = 
 		let val self = loop lbl (b::prev) 
 		in
 		    (case b of
 			 (BND_EXP (_,e)) => if (eq_label(l,lbl)) 
-						then (PHRASE_EXP e,[l]) else self r
+						then SOME([l],PHRASE_EXP e) else self r
 		       | (BND_CON (_,c)) => if (eq_label(l,lbl)) 
 						then let val c' = c (* XXX *)
-						     in (PHRASE_CON c',[l]) 
+						     in SOME([l],PHRASE_CON c') 
 						     end
 					    else self r
 		       | (BND_MOD (_,m)) => (if (eq_label(l,lbl)) 
-						 then (PHRASE_MOD m,[l]) 
+						 then SOME([l],PHRASE_MOD m) 
 					     else if (is_label_open l)
 						      then 
 							  (case m of 
 							       MOD_STRUCTURE sbnds =>
-								   (let val (phrase,lbls') = self sbnds
-								    in (phrase,l::lbls')
-								    end handle (NOTFOUND _) => self r)
+								   (case (self sbnds) of
+									SOME(lbls',phrase) => SOME(l::lbls',phrase)
+								      | NONE => self r)
 							     | _ => self r)
-					      else self r))
+						  else self r))
 		end
 	in
 	    (case labs of
 		 [] => error "Sbnds_Lookup got []"
 	       | [lbl] => loop lbl [] sbnds
 	       | (lbl :: lbls) =>
-		     let val (phrase,labs) = loop lbl [] sbnds
-		     in
-			 (case phrase of
-			      PHRASE_MOD (MOD_STRUCTURE sbnds) => 
-				  let val (phrase2,labs2) = Sbnds_Lookup(sbnds,lbls)
-				  in (phrase2,labs @ labs2)
-				  end 
-			    | _ => error "Sbnds_Lookup did not find a structure")
-		     end)
+		     (case (loop lbl [] sbnds) of
+			 SOME(labs,PHRASE_MOD (MOD_STRUCTURE sbnds)) => 
+			     (case (Sbnds_Lookup(sbnds,lbls)) of
+				  SOME(labs2,phrase2) => SOME(labs@labs2,phrase2)
+				| _ => NONE)
+		       | _ => NONE))
 	end
 
-    fun Sdecs_Lookup' (m, sdecs, labs) : (bool * (phrase_class * labels)) = 
+    fun Sdecs_Lookup_help (m, sdecs, labs) : (bool * (phrase_class * labels)) option = 
 	let 
-	    fun loop lbl [] : (bool * (phrase_class * labels)) = 
-		raise (NOTFOUND ("Sdecs_Lookup' reached [] while lbl = " ^
-				 (label2string lbl)))
+	    fun loop lbl [] = NONE
 	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
 		if (eq_label(l,lbl)) 
 		    then (case d of
 			      (DEC_EXP (_,c)) => 
-				  (false,(PHRASE_CLASS_EXP(MODULE_PROJECT(m,l), c),[l]))
+				  SOME(false,(PHRASE_CLASS_EXP(MODULE_PROJECT(m,l), c),[l]))
 			    | (DEC_CON (_,k,SOME c)) =>
-				  (true,(PHRASE_CLASS_CON(c,k),[l]))
+				  SOME(true,(PHRASE_CLASS_CON(c,k),[l]))
 			    | (DEC_CON (_,k,NONE)) => 
-				  (false,(PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
+				  SOME(false,(PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
 							   k),[l]))
 			    | (DEC_MOD (_,s)) => 
-				  (false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
+				  SOME(false,(PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s),[l]))
 			    | _ => loop lbl rest)
 		else if (is_label_open l)
 		    then (case d of
 			      (DEC_MOD(_,SIGNAT_STRUCTURE (_,sdecs))) =>
-				  (let val (flag,(class,lbls')) =
-				       loop lbl sdecs
-				   in (flag,(class,l::lbls'))
-				   end 
-				       handle (NOTFOUND _) => loop lbl rest)
+				  (case (loop lbl sdecs) of
+				       SOME (flag,(class,lbls')) => SOME(flag,(class,l::lbls'))
+				     | NONE => loop lbl rest)
 			    | _ => loop lbl rest)
 		     else loop lbl rest
 
 	in
 	    (case labs of
-		 [] => error "Sdecs_Lookup' got []"
+		 [] => error "Sdecs_Lookup_help got []"
 	       | [lbl] => loop lbl sdecs
 	       | (lbl :: lbls) =>
-		     let val (_,(phrase_class,labs)) = loop lbl sdecs
-		     in
-			 (case phrase_class of
-			      PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs')))) =>
-				  let val (nontrivial,(pc2,labs2)) = Sdecs_Lookup'(m',sdecs',lbls)
-				  in (nontrivial,(pc2,labs @ labs2))
-				  end 
-			    | _ => error "Sdecs_Lookup did not find a structure sig")
-		     end)
+		     case (loop lbl sdecs) of
+			 SOME(_,(phrase_class,labs)) =>
+			     (case phrase_class of
+				  PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs')))) =>
+				      (case (Sdecs_Lookup_help(m',sdecs',lbls)) of
+					  SOME(nontrivial,(pc2,labs2)) => SOME(nontrivial,(pc2,labs @ labs2))
+					| NONE => NONE)
+				| _ => NONE)
+		       | NONE => NONE)
 	end
 
-    fun Sdecs_Lookup (m, sdecs, labs) : (labels * phrase_class) =
+    fun Sdecs_Lookup (m, sdecs, labs) : (labels * phrase_class) option =
 	let 
-	    fun loop lbl [] : (labels * phrase_class) = 
-		raise (NOTFOUND ("Sdecs_Lookup reached [] while looking for " ^ 
-				 (label2string lbl)))
+	    fun loop lbl [] = NONE
 	      | loop lbl ((sdec as (SDEC(l,d)))::rest) =
 		if (eq_label(l,lbl)) 
 		    then (case d of
 			      (DEC_EXP (_,c)) => 
-				  ([l],PHRASE_CLASS_EXP(MODULE_PROJECT(m,l), c))
+				  SOME([l],PHRASE_CLASS_EXP(MODULE_PROJECT(m,l), c))
 			    | (DEC_CON (_,k,SOME c)) =>
-				  ([l],PHRASE_CLASS_CON(c,k))
+				  SOME([l],PHRASE_CLASS_CON(c,k))
 			    | (DEC_CON (_,k,NONE)) => 
-				  ([l],PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
+				  SOME([l],PHRASE_CLASS_CON(CON_MODULE_PROJECT(m,l),
 							k))
 			    | (DEC_MOD (_,s)) => 
-				  ([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s))
+				  SOME([l],PHRASE_CLASS_MOD(MOD_PROJECT(m,l),s))
 			    | _ => loop lbl rest)
 		else loop lbl rest
 
@@ -381,111 +369,56 @@ struct
 		 [] => error "Sdecs_Lookup got []"
 	       | [lbl] => loop lbl sdecs
 	       | (lbl :: lbls) =>
-		     let val (labs,phrase_class) = loop lbl sdecs
-		     in
-			 (case phrase_class of
-			      PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs')))) =>
-				  let val (labs2, pc2) = Sdecs_Lookup(m',sdecs',lbls)
-				  in (labs @ labs2, pc2)
-				  end 
-			    | _ => error "Sdecs_Lookup did not find a structure sig")
-		     end)
+		     case (loop lbl sdecs) of
+			 SOME(labs,PHRASE_CLASS_MOD (m',((SIGNAT_STRUCTURE (_,sdecs'))))) =>
+			     (case (Sdecs_Lookup(m',sdecs',lbls)) of
+				  SOME(labs2, pc2) => SOME(labs @ labs2, pc2)
+				| NONE => NONE)
+		       | SOME _ => NONE
+		       | NONE => NONE)
 	end
 
 
-    fun convertpc (XPHRASE_CLASS_MOD ms) = PHRASE_CLASS_MOD ms
-      | convertpc (XPHRASE_CLASS_EXP ec) = PHRASE_CLASS_EXP ec
-      | convertpc (XPHRASE_CLASS_CON ck) = PHRASE_CLASS_CON ck
-      | convertpc (XPHRASE_CLASS_SIG s) = PHRASE_CLASS_SIG s
-      | convertpc (XPHRASE_CLASS_OVEREXP oe) = PHRASE_CLASS_OVEREXP oe
-
-    fun newContext_Lookup (ctxt, [] : label list) : path * phrase_class =
-	error "newContext_Lookup with no labels"
-      | newContext_Lookup (CONTEXT{label_list, ...}, (lab::labrest)) = 
+    fun Context_Lookup (ctxt, [] : label list) : (path * phrase_class) option = NONE
+      | Context_Lookup (CONTEXT{label_list, ...}, (lab::labrest)) = 
 	(case (labrest,Name.LabelMap.find(label_list,lab)) of
-	    (_,NONE) => raise NOTFOUND("newContext_Lookup failed on" ^  (label2string lab))
-	  | ([],SOME (path,pc)) => (path,convertpc pc)
+	    (_,NONE) => NONE
+	  | ([],SOME (path,pc)) => SOME(path,pc)
 	  | (_,SOME (path,pc)) =>
 		case pc of
-		    XPHRASE_CLASS_MOD(module as (MOD_STRUCTURE sbnds),
+		    PHRASE_CLASS_MOD(module as (MOD_STRUCTURE sbnds),
 				     (SIGNAT_STRUCTURE (_,sdecs))) =>
-			  let 
-			      val (phrase,labels) = Sbnds_Lookup(sbnds,labrest)
-			      val (pc,labels') = #2(Sdecs_Lookup'(path2mod path,sdecs,labrest))
-			      val class = pc2class pc
-			      val p = join_path_labels(path,labels)
-			  in  (p,combine_pc(phrase,class))
-			  end
-		  | XPHRASE_CLASS_MOD(_,((SIGNAT_STRUCTURE (_,sdecs)))) =>
-			  let 
-			      val (pc,labels) = #2(Sdecs_Lookup'(path2mod path,sdecs,labrest))
-			      val class = pc2class pc
-			      val p = join_path_labels(path,labels)
-			  in  classpath2pc(p,class)
-			  end
-		  | _ => raise (NOTFOUND ("lbl did not look up to a structure")))
-
-      fun modsig_lookup arg = ((case newContext_Lookup arg of
-				  (path,PHRASE_CLASS_MOD (m,s)) => SOME(path,m,s)
-				| _ => NONE)
-			       handle (NOTFOUND _) => NONE)
-      fun Path_Context_Lookup arg =  (SOME (newContext_Lookup arg) 
-				      handle (NOTFOUND _) => NONE)
-      val Sbnds_Lookup =
-	  fn (sbnds,labels) => (let val (phrase,labels) = Sbnds_Lookup (sbnds,labels)
-				  in (labels,phrase)
-				  end)
-      val Sdecs_Lookup' = 
-	  fn (m,sdecs,labels) => (let val (f,(pc,labels)) = Sdecs_Lookup' (m,sdecs,labels)
-				  in (labels,pc)
-				  end)
-				      handle e => (
-(*print "error in Sdecs_Lookup with decs = ...\n";
- print "  and m = "; pp_mod m;
- print "  and sig = \n"; pp_sdecs sdecs;
- print "\n and labels = "; 
- pp_list pp_label' labels ("","",".",false); *)
-						     raise e)
-
-      fun print_mod (MOD_VAR v) = print (var2string v)
-	| print_mod (MOD_PROJECT (m,l)) = (print_mod m;
-					   print ".";
-					   print (label2string l))
-	| print_mod _ = print "print_mod case UNIMP"
-
-      val Context_Lookup = 
-	  fn (arg as (context as (CONTEXT{label_list,...}),labels)) =>
-	  ((case (#2(newContext_Lookup arg)) of
-		pc as PHRASE_CLASS_MOD(m,s) => ((* print "Context_Lookup returning m = ";
-						print_mod m;
-						print "  label_list has "; 
-						print (Int.toString (Name.LabelMap.numItems 
-								     label_list));
-						print " items\n"; *)
-						pc)
-	   | pc => pc)
-	       handle e => ((* print "error in Context_Lookup with labels = ";
-			    pp_pathlist pp_label' labels;
-			    print "\nand context = ";
-			    pp_context context;
-			    print "\n"; *)
-			    raise e))
-
-      fun var2label (CONTEXT {var_list,...}, tarv) = 
-	  case (Name.VarMap.find(var_list,tarv)) of
-	      SOME(l,_) => l
-	    | NONE => raise (NOTFOUND ("Context_Lookup' failed on var " ^ (var2string tarv)))
+		    (case (Sbnds_Lookup(sbnds,labrest)) of
+			 SOME(labels,phrase) =>
+			     (case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
+				  SOME(_,(pc,labels')) => 
+				      let val class = pc2class pc
+					  val p = join_path_labels(path,labels)
+				      in  SOME(p,combine_pc(phrase,class))
+				      end
+				| NONE => NONE)
+		       | NONE => NONE)
+		  | PHRASE_CLASS_MOD(_,((SIGNAT_STRUCTURE (_,sdecs)))) =>
+			(case (Sdecs_Lookup_help(path2mod path,sdecs,labrest)) of
+			     SOME(_,(pc,labels)) =>
+				 let val class = pc2class pc
+				     val p = join_path_labels(path,labels)
+				 in  SOME(classpath2pc(p,class))
+				 end
+			   | NONE => NONE)
+		  | _ => NONE)
 
 
-      fun Context_Lookup' (CONTEXT {var_list,...},v) = 
-	  case (Name.VarMap.find(var_list,v)) of
-	      SOME(_,pc) => convertpc pc
-	    | NONE => raise (NOTFOUND ("Context_Lookup' failed on var " ^ (var2string v)))
 
-      fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = 
-	  case (Name.TagMap.find(tag_list,t)) of
-	      SOME c => c
-	    | NONE => raise (NOTFOUND ("Context_Exn_Lookup failed on " ^ (tag2string t)))
+      fun Sdecs_Lookup'(m,sdecs,labels) = 
+	  (case (Sdecs_Lookup_help (m,sdecs,labels)) of
+	       SOME(_,(pc,labels)) => SOME(labels,pc)
+	     | NONE => NONE)
+
+
+
+      fun Context_Lookup' (CONTEXT {var_list,...},v) = Name.VarMap.find(var_list,v)
+      fun Context_Exn_Lookup (CONTEXT {tag_list,...},t) = Name.TagMap.find(tag_list,t)
 
 
     fun pp_list doer objs (left,sep,right,break) = 
@@ -508,11 +441,11 @@ struct
 		     SIMPLE_PATH v => pp_var v
 		   | COMPOUND_PATH (v,ls) => HOVbox[Hbox[pp_var v, String "."], 
 						    pp_list pp_label ls ("",".","",false)])
-	    fun pp_xpc (XPHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp e, String " : ", pp_con c]
-	      | pp_xpc (XPHRASE_CLASS_CON (c,k)) = HOVbox[pp_con c, String " : ", pp_kind k]
-	      | pp_xpc (XPHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod m, String " : ", pp_signat s]
-	      | pp_xpc (XPHRASE_CLASS_SIG s) = pp_signat s
-	      | pp_xpc (XPHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
+	    fun pp_xpc (PHRASE_CLASS_EXP (e,c)) = HOVbox[pp_exp e, String " : ", pp_con c]
+	      | pp_xpc (PHRASE_CLASS_CON (c,k)) = HOVbox[pp_con c, String " : ", pp_kind k]
+	      | pp_xpc (PHRASE_CLASS_MOD (m,s)) = HOVbox[pp_mod m, String " : ", pp_signat s]
+	      | pp_xpc (PHRASE_CLASS_SIG s) = pp_signat s
+	      | pp_xpc (PHRASE_CLASS_OVEREXP oe) = String "OVEREXP_NOTDONE"
 	    fun doer(lbl,(path,xpc)) = HOVbox[pp_label lbl,
 					   String " --> ",
 					   pp_path path,
@@ -521,7 +454,5 @@ struct
 	in  pp_list doer label_pathpc_list ("[",", ", "]", true)
 	end
 
-    val Sdecs_Lookup = fn arg => ((* Stats.counter "extern_Sdecs_Lookup" (); *)
-				Sdecs_Lookup arg)
 
     end
