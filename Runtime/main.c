@@ -20,7 +20,6 @@
 #include "client.h"
 #include "stack.h"
 
-int ThreadedVersion = THREADED_VERSION;
 int LEAST_GC_TO_CHECK = 0;
 
 int NumThread     = 100;
@@ -99,7 +98,8 @@ struct option_entry {
 
 extern int largeheapsize;
 
-static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0, fixheap=0, youngheap=0;
+static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0, semistack = 0;
+static int fixheap=0, youngheap=0;
 struct option_entry table[] = 
   {0, "help", &help, "Print help info but do not execute program",
    0, "semi", &semi, "Use the semispace garbage collector",
@@ -108,11 +108,13 @@ struct option_entry table[] =
    0, "genpara", &genpara, "Use the generational, parallel garbage collector",
    0, "semiconc", &semiconc, "Use the semispace, concurrent garbage collector",
    0, "genconc", &genconc, "Use the generational, concurrent garbage collector",
+   0, "semistack", &semistack, "Use the semispace, stack-based, collector",
    0, "forceMirrorArray", &forceMirrorArray, "Force collector to use mirrored pointer arrays",
    0, "useGenStack", &useGenStack, "Use generational stack tracing",
    1, "paranoid", &paranoid, "Run in paranoid mode every nth GC",
    0, "verbose", &verbose, "Be verbose when paranoid",
    0, "diag", &diag, "Run in diagnostic mode",
+   1, "collectDiag", &collectDiag, "Run in collector diagnostic mode",
    0, "timeDiag", &timeDiag, "Run in time-diagnostic mode",
    0, "threadDiag", &threadDiag, "Show thread-related diagnostic messages",
    0, "debugStack", &debugStack, "Show scanning of stack frames",
@@ -142,6 +144,7 @@ struct option_entry table[] =
 #ifdef solaris
    1, "perfType", &perfType, "Type of performance counters",
 #endif
+   0, "skipHistogram", &skipHistogram, "Skip printing histograms",
    0, "short", &shortSummary, "Print short summary of execution"};
 
 void process_option(int argc, char **argv)
@@ -193,6 +196,7 @@ void process_option(int argc, char **argv)
   if (genpara) collector_type = GenerationalParallel;
   if (semiconc) collector_type = SemispaceConcurrent;
   if (genconc) collector_type = GenerationalConcurrent;
+  if (semistack) collector_type = SemispaceStack;
   if (fixheap) MinHeap = MaxHeap = fixheap;
   if (youngheap) YoungHeapByte = 1024 * youngheap;
   if (help) {

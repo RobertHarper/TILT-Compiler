@@ -5,6 +5,7 @@
 #include "thread.h"
 #include "bitmap.h"
 #include "create.h"
+#include "barriers.h"
 #include "gc_para.h"
 
 extern int NumGC;
@@ -32,7 +33,18 @@ typedef struct ArraySpec__t {
 
 typedef enum Align__t {NoWordAlign, OddWordAlign, EvenWordAlign} Align_t;
 
-void AlignMemoryPointer(mem_t *allocRef, Align_t align);
+INLINE(AlignMemoryPointer)
+void AlignMemoryPointer(mem_t *allocRef, Align_t align)
+{
+  int curEven;
+  if (align == NoWordAlign)
+    return;
+  curEven = (((val_t)(*allocRef)) & 7) == 0;
+  if ((align == OddWordAlign && curEven) ||
+      (align == EvenWordAlign && !curEven))
+    *((*allocRef)++) = MAKE_SKIP(1);
+}
+
 mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align);             /* bytesToAlloc does not include alignment */
 mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t align); /* bytesToAlloc does not include alignment */
 
@@ -40,6 +52,7 @@ mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t al
 extern Heap_t *fromSpace, *toSpace;                   /* The 2 semispaces or the tenured area of a generational collector */
 extern Heap_t *nursery;                               /* Used by the generational collector */
 extern SharedStack_t *workStack;                      /* Used by all parallel/concurrent collectors */
+extern Barriers_t *barriers;                          /* Used by all parallel/concurrent collectors */
 
 /* GCFromML has a non-standard calling convention */
 void GCFromC(Thread_t *, int RequestSizeBytes, int isMajor);
@@ -52,10 +65,12 @@ void GCInit_SemiPara(void);
 void GCInit_GenPara(void);
 void GCInit_SemiConc(void);
 void GCInit_GenConc(void);
+void GCInit_SemiStack(void);
 
 /* Idle (unmapped) processors call the poll function periodically in case there is GC work. */
 void GCPoll(Proc_t *);              /* May return immediately or do some work */
 void GCPoll_SemiPara(Proc_t *);
+void GCPoll_SemiStack(Proc_t *);
 void GCPoll_GenPara(Proc_t *);
 void GCPoll_SemiConc(Proc_t *);
 void GCPoll_GenConc(Proc_t *);
@@ -73,12 +88,14 @@ int GCTry_SemiPara(Proc_t *, Thread_t *);
 int GCTry_GenPara(Proc_t *, Thread_t *);
 int GCTry_SemiConc(Proc_t *, Thread_t *);
 int GCTry_GenConc(Proc_t *, Thread_t *);
+int GCTry_SemiStack(Proc_t *, Thread_t *);
 
 /* Perform a stop-and-copy collection */
 void GCStop_Semi(Proc_t *);
 void GCStop_Gen(Proc_t *);
 void GCStop_SemiPara(Proc_t *);
 void GCStop_GenPara(Proc_t *);
+void GCStop_SemiStack(Proc_t *);
 /* Concurrent collectors do not have a Stop version */
 
 /* Must be called each time a thread is released */
@@ -88,6 +105,7 @@ void GCRelease_SemiPara(Proc_t *proc);
 void GCRelease_GenPara(Proc_t *proc);
 void GCRelease_SemiConc(Proc_t *proc);
 void GCRelease_GenConc(Proc_t *proc);
+void GCRelease_SemiStack(Proc_t *proc);
 
 int returnToML(Thread_t *, mem_t linkValue);
 int returnFromGCFromC(Thread_t *);
@@ -101,6 +119,7 @@ ptr_t AllocBigArray_SemiPara(Proc_t *, Thread_t *, ArraySpec_t *);
 ptr_t AllocBigArray_GenPara(Proc_t *, Thread_t *, ArraySpec_t *);
 ptr_t AllocBigArray_SemiConc(Proc_t *, Thread_t *, ArraySpec_t *);
 ptr_t AllocBigArray_GenConc(Proc_t *, Thread_t *, ArraySpec_t *);
+ptr_t AllocBigArray_SemiStack(Proc_t *, Thread_t *, ArraySpec_t *);
 
 extern double MinRatio, MaxRatio;
 extern int MinRatioSize, MaxRatioSize;
@@ -131,9 +150,15 @@ extern double pageWeight;
 extern double globalWeight;
 extern double stackSlotWeight;
 
-long ComputeHeapSize(long oldsize, double oldratio);
-double HeapAdjust1(unsigned int reqSize, Heap_t *from1, Heap_t *to);
-double HeapAdjust2(unsigned int reqSize, Heap_t *from1, Heap_t *from2, Heap_t *to);
+/* The amount "request" is added to what is considered live.  
+   The amount "withhold" is subtracted from both spaces for computation of liveness ratio.
+   The fraction "reserve" is reserved for concurrent collector.
+*/
+long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve);
+double HeapAdjust1(int request, int withhold,  double reserve, Heap_t *from1, Heap_t *to);
+double HeapAdjust2(int request, int withhold,  double reserve,  Heap_t *from1, Heap_t *from2, Heap_t *to);
+int expandedToReduced(int size, double rate);
+int reducedToExpanded(int size, int rate);
 
 /* Make sure all the pointer values in the stack/globals are in the legal heaps */
 void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,

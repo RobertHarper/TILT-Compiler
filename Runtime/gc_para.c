@@ -6,57 +6,28 @@
 #include "tag.h"
 #include "queue.h"
 #include "gc.h"
+#include "rooms.h"
 #include "gc_para.h"
 
 
-/* ------------ Two Room Functions ------------ */
-typedef void *Thunk_t(void *);
-
-static void resetTwoRoom(TwoRoom_t *tr)
-{
-  tr->Gate = tr->Turn1 = tr->Turn2 = 0;
-}
-
-static void SynchStart(TwoRoom_t *tr)
-{
-  while (tr->Gate) 
-   flushStore();  /* Without this, updates of tr->Gate from other procetrors are not visible here */
-  FetchAndAdd(&tr->Turn1, 1);
-  while (tr->Gate) {
-    FetchAndAdd(&tr->Turn1, -1);
-    while (tr->Gate)
-      flushStore();
-    FetchAndAdd(&tr->Turn1, 1);
-  }
-  flushStore();   /* Without this, the change to tr->Turn1 is not visible */
-}
-
-static void SynchMid(TwoRoom_t *tr)
-{
-  tr->Gate = 1;
-  flushStore(); /* for updating tr->Gate */
-  FetchAndAdd(&tr->Turn2, 1);
-  FetchAndAdd(&tr->Turn1, -1);
-  while (tr->Turn1 > 0) 
-    flushStore();
-}
-
-/* If thunk is not NULL, runs thunk on thunkData, returning the result for the last processor exitting.
-   Return NULL otherwise */
-static void *SynchEnd(TwoRoom_t *tr, Thunk_t *thunk, void *thunkData)
-{
-  void *result = NULL;
-  int i = FetchAndAdd(&tr->Turn2, -1);
-  if (i==1) {     /* Last one to decrement */
-    if (thunk != NULL)
-      result = (*thunk)(thunkData);
-    tr->Gate = 0;
-    flushStore(); /* for updating tr->Gate */
-  }
-  return result;
-}
-
 /* ------------ SharedStack  Functions ------------ */
+static int internalIsEmptySharedStack(SharedStack_t *ss)
+{
+  return (ss->stacklet.cursor == 0 && ss->globalLoc.cursor == 0 && ss->rootLoc.cursor == 0 && 
+	  ss->obj.cursor == 0 && ss->segment.cursor == 0 && ss->numLocalStack == 0);
+}
+
+#define StackEmpty 2
+#define StackNotEmpty 3
+static int finalizer(void *d) 
+{
+  SharedStack_t *ss = (SharedStack_t *) d;
+  if (internalIsEmptySharedStack(ss))
+    return StackEmpty;
+  else
+    return StackNotEmpty;
+}
+
 SharedStack_t *SharedStack_Alloc(int stackletSize, int globalLocSize, int rootLocSize, int objSize, int segmentSize)
 {
   SharedStack_t *ss = (SharedStack_t *) malloc(sizeof(SharedStack_t));
@@ -66,14 +37,9 @@ SharedStack_t *SharedStack_Alloc(int stackletSize, int globalLocSize, int rootLo
   allocStack(&ss->obj, objSize);
   allocStack(&ss->segment, segmentSize);
   ss->numLocalStack = 0;
-  resetTwoRoom(&ss->twoRoom);
+  ss->twoRoom = createRooms(2);
+  assignExitCode(ss->twoRoom, 1, &finalizer, (void *) ss);  /* check if stack empty in push room */
   return ss;
-}
-
-static int internalIsEmptySharedStack(SharedStack_t *ss)
-{
-  return (ss->stacklet.cursor == 0 && ss->globalLoc.cursor == 0 && ss->rootLoc.cursor == 0 && 
-	  ss->obj.cursor == 0 && ss->segment.cursor == 0 && ss->numLocalStack == 0);
 }
 
 /* Transfer all items from 'from' to 'to' */
@@ -98,16 +64,16 @@ static int getFromSharedStack(Stack_t *to, Stack_t *from, long numToFetch)
   int newFromCursor = oldFromCursor - numToFetch;  
   if (oldFromCursor < 0) {        /* Handle complete overreach */
     numToFetch = 0;
-    from->cursor = 0;             /* Multiple processors might execute this; this is fine since there are no increments */
+    from->cursor = 0;             /* Multiple processors might execute this; ok since there are no increments */
   }
   else if (newFromCursor < 0) {   /* Handle partial overreach */
     numToFetch += newFromCursor;  /* Fetching fewer items than requested */
     newFromCursor = oldFromCursor - numToFetch; /* Recompute newFromCursor */
-    from->cursor = 0;             /* Multiple processors might execute this; this is fine since there are no increments */
+    from->cursor = 0;             /* Multiple processors might execute this; ok since there are no increments */
   }
-  assert(to->cursor == 0);
-  memcpy(&to->data[0], &from->data[newFromCursor], sizeof(val_t) * numToFetch);
-  to->cursor = numToFetch;
+  memcpy(&to->data[to->cursor], &from->data[newFromCursor], sizeof(val_t) * numToFetch);
+  to->cursor += numToFetch;
+  assert(to->cursor < to->size);
   return numToFetch;
 }
 
@@ -115,10 +81,9 @@ static int getFromSharedStack(Stack_t *to, Stack_t *from, long numToFetch)
 int isEmptySharedStack(SharedStack_t *ss)
 {
   int empty;
-  SynchStart(&ss->twoRoom);
-  empty = internalIsEmptySharedStack(ss);
-  SynchMid(&ss->twoRoom);
-  SynchEnd(&ss->twoRoom, NULL, NULL);
+  enterRoom(ss->twoRoom,1);               /* Enter push room */
+  empty = internalIsEmptySharedStack(ss); /* If empty in push room, stack is really empty at this point */
+  exitRoom(ss->twoRoom);
   return empty;
 }
 
@@ -139,7 +104,7 @@ void popSharedStack(SharedStack_t *ss,
 		    Stack_t *segment,      int segRequest)
 {
   int stackletFetched, globalLocFetched, rootLocFetched, objFetched;
-  SynchStart(&ss->twoRoom);
+  enterRoom(ss->twoRoom,0);
   stackletFetched = getFromSharedStack(stacklet, &ss->stacklet, stackletRequest);
   globalLocRequest = MakeFraction(globalLocRequest, stackletRequest, stackletFetched);
   if (globalLocRequest > 0) {
@@ -159,8 +124,7 @@ void popSharedStack(SharedStack_t *ss,
   assert(ss->numLocalStack >= 0);
   FetchAndAdd(&ss->numLocalStack,1);  /* Local stack is possibly non-empty now; note that we must increment even when empty since 
 					 we don't know how to conditionally decrement later */
-  SynchMid(&ss->twoRoom);
-  SynchEnd(&ss->twoRoom, NULL, NULL);
+  exitRoom(ss->twoRoom);
 }
 
 static void helpPushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, Stack_t *rootLoc,
@@ -177,55 +141,25 @@ static void helpPushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *g
 int pushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, Stack_t *rootLoc, Stack_t *obj, Stack_t *segment)
 {
   int empty;
-  SynchStart(&ss->twoRoom);
-  SynchMid(&ss->twoRoom);
+  enterRoom(ss->twoRoom,1);
   helpPushSharedStack(ss, stacklet, globalLoc, rootLoc, obj, segment);
   FetchAndAdd(&ss->numLocalStack,-1);  /* Local stack is non-empty now */
   assert(ss->numLocalStack >= 0);
-  empty = (int) SynchEnd(&ss->twoRoom, (Thunk_t *) (&internalIsEmptySharedStack), ss);
+  empty = (exitRoom(ss->twoRoom) == StackEmpty);
   return empty;
 }
 
 int condPushSharedStack(SharedStack_t *ss, Stack_t *stacklet, Stack_t *globalLoc, Stack_t *rootLoc, Stack_t *obj, Stack_t *segment)
 {
-  int isNonEmpty;
-  SynchStart(&ss->twoRoom);
-  SynchMid(&ss->twoRoom);
-  isNonEmpty = !internalIsEmptySharedStack(ss);
-  if (isNonEmpty) 
+  int empty;
+  enterRoom(ss->twoRoom,1);
+  empty = internalIsEmptySharedStack(ss);
+  if (!empty) 
     helpPushSharedStack(ss, stacklet, globalLoc, rootLoc, obj, segment);
-  SynchEnd(&ss->twoRoom, NULL, NULL);
-  return isNonEmpty;   /* we pushed only if it was not empty */
+  exitRoom(ss->twoRoom);
+  return !empty;   /* we pushed only if it was not empty */
 }
 
 
 
-/* ---------- Other Helper Functions ------------------- */
 
-long synchBarrier(long *counter, long barrierSize, long*prevCounter)
-{
-  long preCounterValue = FetchAndAdd(counter, 1);
-  while (*counter < barrierSize) 
-    flushStore();
-  *prevCounter = 0;
-  return preCounterValue;
-}
-
-long asynchReachBarrier(long *counter)
-{
-  long preCounterValue = FetchAndAdd(counter, 1);
-  flushStore();
-  return preCounterValue;
-}
-
-
-long asynchCheckBarrier(long *counter, long barrierSize, long *prevCounter)
-{
-  flushStore();
-  if (*counter < barrierSize)
-    return 0;
-  else {
-    *prevCounter = 0;
-    return 1;
-  }
-}

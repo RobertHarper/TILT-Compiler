@@ -43,10 +43,10 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
     }
   }
   assert(region != NULL);
+  proc->segUsage.bytesAllocated += tagByteLen;
 
   /* Allocate object; update stats; initialize */
   obj = region + 1;
-  proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
@@ -61,7 +61,8 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 void GCRelease_Gen(Proc_t *proc)
 {
   int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
-  proc->minorUsage.bytesAllocated += alloc;
+  proc->allocStart = proc->allocCursor;
+  proc->segUsage.bytesAllocated += alloc;
 }
 
 int GCTry_Gen(Proc_t *proc, Thread_t *th)
@@ -206,7 +207,7 @@ void GCStop_Gen(Proc_t *proc)
     paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
 
     /* Resize the tenured toSpace. Discard fromSpace. Flip Spaces. */
-    liveRatio = HeapAdjust2(req_size, nursery, fromSpace, toSpace);
+    liveRatio = HeapAdjust2(req_size, 0, 0.0, nursery, fromSpace, toSpace);
     add_statistic(&proc->majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace,0,1);
     typed_swap(Heap_t *, fromSpace, toSpace);

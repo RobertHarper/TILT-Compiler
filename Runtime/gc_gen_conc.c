@@ -146,21 +146,6 @@
 static int reducedNurserySize = 0, expandedNurserySize = 0;
 static int reducedTenuredSize = 0, expandedTenuredSize = 0;
 
-
-
-/* Compute reduced heap size by reserving area and rounding down to nearest page */
-int expandedToReduced(int size, double rate)
-{
-  int newSize = (int) size * rate / (1.0 + rate);
-  return RoundDown(newSize, pagesize);
-}
-
-int reducedToExpanded(int size, int rate)
-{
-  int newSize = size * (1 + rate)  / rate;
-  return RoundUp(newSize, pagesize);
-}
-
 /* ------------------  Parallel array allocation routines ------------------- */
 
 mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
@@ -192,12 +177,12 @@ mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
     }
   }
   assert(region != NULL);
+  proc->segUsage.bytesAllocated += tagByteLen;
 
   /* Allocate object; update stats; initialize */
   obj = region + 1 + segments;
   for (i=0; i<segments; i++)
     obj[-(2+i)] = SEGPROCEED_TAG;
-  proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : assert(0);
@@ -212,21 +197,8 @@ mem_t AllocBigArray_GenConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 }
 
 /* --------------------- Concurrent collector --------------------- */
-static long totalRequest = 0;  /* Total number of bytes requested by all threads */
-
-/* These are barrier synchronizations which reset the previous one when completed.
-   So, after barrier_n is passed, all processors reset barrier_(n-1).  For this
-   cyclical scheme to work, there must be at least three barriers. 
-*/
-static long numWaitOnProc = 0;  /* waiting for mutators to stop; first proc does prelim work */
-static long numStackOnProc = 0; /* waiting for roots to be computed; determine if GC is major and then resize heaps */
-static long numDoneOnProc = 0;  /* waiting for roots to be forwarded and work to be shared */
-
-static long numWaitOffProc = 0;        /* waiting for mutators to stop; first proc does prelim work */
-static long numFlipOffProc = 0;        /* waiting for roots to be replaced with replica;
-				   if starting a major GC, find major roots and move to shared stack */				   
-static long numDoneOffProc = 0;        /* waiting for minor_global_promote; space resize/flip */
-
+static long totalRequest = 0;     /* Total number of bytes requested by all threads */
+static long totalReplicated = 0;  /* Total number of bytes replicated by all processors */
 
 static void CollectorOn(Proc_t *proc)
 {
@@ -240,13 +212,13 @@ static void CollectorOn(Proc_t *proc)
 
   switch (GCStatus) {
     case GCOff:                   /* Signalling to other processors that collector is turning on */
-      if (diag)
+      if (collectDiag >= 2)
 	printf("Proc %d: CollectorOn - stopping other processors\n", proc->procid); 
       GCStatus = GCPendingOn;
       StopAllThreads();
       break;
     case GCPendingOn:             /* Responding to signal that collector is turning on */
-      if (diag)
+      if (collectDiag >= 2)
 	printf("Proc %d: CollectorOn - stopped by another processor\n", proc->procid); 
       break;                      
     case GCOn:                    /* Collector already on */
@@ -260,7 +232,7 @@ static void CollectorOn(Proc_t *proc)
      prelimiary work.  This work must be completed before any processor begins collection.
      As a result, the "first" processor is counted twice.
   */
-  isFirst = (asynchReachBarrier(&numWaitOnProc)) == 0;
+  isFirst = (weakBarrier(barriers,0) == 0);
   if (isFirst) {
     Heap_ResetFreshPages(nursery);
     if (GCType == Major) {
@@ -276,11 +248,10 @@ static void CollectorOn(Proc_t *proc)
       }
     }
     totalRequest = 0;
+    totalReplicated = 0;
     ResetJob();                               /* Reset counter so all user threads are scanned */
-    asynchReachBarrier(&numWaitOnProc);       /* First processor is counted twice. */
   }
-  while (!(asynchCheckBarrier(&numWaitOnProc, NumProc + 1, &numDoneOnProc)))   /* The first thread is counted twice */
-    ;
+  strongBarrier(barriers,1);
 
   /* Reset root lists, compute thread-specific roots in parallel,
      determine whether a major GC was explicitly requested. */
@@ -293,7 +264,7 @@ static void CollectorOn(Proc_t *proc)
     if (threadIterator->requestInfo >= 0)  /* Allocation request */
       FetchAndAdd(&totalRequest, threadIterator->requestInfo);
   }
-  asynchReachBarrier(&numStackOnProc);
+  strongBarrier(barriers,2);
 
   /* The "first" processor is in charge of the globals but
      must wait until all threads are processed before knowing if GC is major. 
@@ -303,8 +274,6 @@ static void CollectorOn(Proc_t *proc)
   if (isFirst) {
     if (paranoid) /* Check heaps before starting GC */
       paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
-    while (!(asynchCheckBarrier(&numStackOnProc, NumProc, &numWaitOnProc)))
-      ;
     resetSharedStack(workStack,NumProc);
     major_global_scan(proc);    /* Always a major_global_scan because we must flip all globals */
     if (GCType == Major) {
@@ -315,10 +284,8 @@ static void CollectorOn(Proc_t *proc)
     else {
       Heap_Resize(nursery,expandedNurserySize,0);
     }
-    asynchReachBarrier(&numStackOnProc);            /* First processor is counted twice */
   }
-  while (!(asynchCheckBarrier(&numStackOnProc, NumProc + 1, &numWaitOnProc)))
-    ;
+  strongBarrier(barriers, 3);
 
   /* Check local stack empty, prepare copy range,
      forward all the roots (first proc handles backpointers),
@@ -340,9 +307,7 @@ static void CollectorOn(Proc_t *proc)
   /* Omit popSharedObjStack */
   pushSharedStack(workStack, &proc->threads, proc->globalLocs, proc->rootLocs, objStack, segmentStack);
   GCStatus = GCOn;
-  synchBarrier(&numDoneOnProc, NumProc, &numStackOnProc);
-  flushStore();
-
+  strongBarrier(barriers,4);
 }
 
 INLINE(flipRootLoc)
@@ -369,13 +334,13 @@ static void CollectorOff(Proc_t *proc)
   int curGCType = GCType;      /* GCType will be written to during this function for the next GC
 				  and so we save its value here for reading */
 
-  if (diag)
+  if (collectDiag >= 2)
     printf("Proc %d: entered CollectorOff\n", proc->procid);
   assert(isEmptyStack(&proc->majorObjStack));        /* Local stack must be empty */
   assert(GCStatus == GCPendingOff);
   flushStore();
 
-  isFirst = (asynchReachBarrier(&numWaitOffProc)) == 0;
+  isFirst = (weakBarrier(barriers,5) == 0);
   if (isFirst) {
     if (Heap_GetAvail(fromSpace) < Heap_GetSize(nursery))   
       GCType = Major;                         /* The next GC needs to be a major GC so we must 
@@ -383,10 +348,9 @@ static void CollectorOff(Proc_t *proc)
     else
       GCType = Minor;
     ResetJob();
-    asynchReachBarrier(&numWaitOffProc);
   }
-  while (!asynchCheckBarrier(&numWaitOffProc, NumProc+1, &numDoneOffProc))
-    ;
+  strongBarrier(barriers,6);
+
   /* Local stacks must be empty. */
   assert(isEmptyStack(&proc->majorObjStack));
   assert(isEmptyStack(&proc->majorObjStack));
@@ -415,7 +379,8 @@ static void CollectorOff(Proc_t *proc)
     ploc_t replicaLoc = DupGlobal(global);
     flipRootLoc(curGCType, replicaLoc);
   }
-  synchBarrier(&numFlipOffProc, NumProc, &numWaitOffProc);
+  FetchAndAdd(&totalReplicated, proc->segUsage.bytesReplicated + proc->cycleUsage.bytesReplicated);
+  strongBarrier(barriers,7);
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
@@ -430,7 +395,8 @@ static void CollectorOff(Proc_t *proc)
     else {
       paranoid_check_all(fromSpace, NULL, toSpace, NULL, largeSpace);
       gc_large_endCollect();
-      liveRatio = HeapAdjust2(totalRequest, nursery, fromSpace, toSpace);
+      liveRatio = HeapAdjust2(totalRequest, totalReplicated,  1.0/ (1.0 + majorCollectionRate),
+			      nursery, fromSpace, toSpace);
       add_statistic(&proc->majorSurvivalStatistic, liveRatio);
       Heap_Resize(fromSpace, 0, 1);
       typed_swap(Heap_t *, fromSpace, toSpace);
@@ -454,12 +420,8 @@ static void CollectorOff(Proc_t *proc)
   proc->allocCursor = StartHeapLimit;
   proc->allocLimit = StartHeapLimit;
   proc->writelistCursor = proc->writelistStart;
-  /* Resume normal scheduler work and start mutators */
-  if (diag)
-    printf("Proc %d: waiting to sync on completion of CollectorOff\n",proc->procid);
-  flushStore();
-  synchBarrier(&numDoneOffProc, NumProc, &numFlipOffProc);
 
+  strongBarrier(barriers,8);
 }
 
 
@@ -597,7 +559,7 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 
   assert(isEmptyStack(objStack));
   assert(isEmptyStack(segmentStack));
-  if (diag)
+  if (collectDiag >= 2)
     printf("GC %d Segment %d:  do_work:  workToDo = %d segWork = %d   shared workStack has %d items %d segments\n",
 	   NumGC, proc->numSegment, workToDo, getWorkDone(proc), workStack->obj.cursor, workStack->segment.cursor);
 
@@ -632,14 +594,15 @@ void GCRelease_GenConc(Proc_t *proc)
 
   /* Update statistics, reset cursors */
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  proc->minorUsage.bytesAllocated += sizeof(val_t) * (proc->allocCursor - proc->allocStart);
+  proc->segUsage.bytesAllocated += sizeof(val_t) * (proc->allocCursor - proc->allocStart);
   proc->allocStart = proc->allocCursor;          
   proc->writelistCursor = proc->writelistStart;  
 
   /* Replicate objects allocated by mutator when the collector is on */
   if (isGCOn) {
-    if (diag)
+    if (collectDiag >= 2)
       printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
+    proc->segUsage.bytesReplicated += sizeof(val_t) * (allocStop - allocCurrent);
     while (allocCurrent + 1 <= allocStop) {  /* There may be no data for empty array */
       int objSize;
       ptr_t obj = allocCurrent;  /* Eventually becomes start of object */
@@ -955,6 +918,7 @@ void GCInit_GenConc()
 
   gc_large_init();
   workStack = SharedStack_Alloc(100, 16 * 1024, 2 * 1024, 64 * 1024, 4 * 1024);
+  barriers = createBarriers(NumProc, 9);
   arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
   mirrorArray = 1;

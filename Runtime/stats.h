@@ -6,6 +6,8 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+extern int shortSummary, skipHistogram;
+
 /* Note that timer_t is a type already defined by the C library */
 typedef struct Timer__t
 {

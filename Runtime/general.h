@@ -23,6 +23,7 @@
 #define GenerationalParallel 3
 #define SemispaceConcurrent 4
 #define GenerationalConcurrent 5
+#define SemispaceStack 6
 
 #ifndef _asm_
 
@@ -39,6 +40,7 @@
 #define DivideDown(a,div) ((a)  / (div))
 #define RoundUp(x,mult) (((x) + (mult) - 1) / (mult) * (mult))
 #define RoundDown(x,mult) (((x) / (mult)) * (mult))
+#define Max(a,b) ((a) > (b) ? (a) : (b))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 #define arraysize(a) (sizeof(a)/sizeof(*(a)))
 
@@ -68,6 +70,7 @@ extern int debugStack;
 extern int verbose;
 extern int timeDiag;
 extern int diag;
+extern int collectDiag;
 extern int threadDiag;
 extern int NumProc;
 extern int NumThread;
@@ -75,7 +78,6 @@ extern int NumStack;
 extern int NumStackChain;
 extern int NumHeap;
 extern int NumGC, NumMajorGC;
-extern int shortSummary;
 
 #endif
 

@@ -63,6 +63,29 @@ AlreadySet:
         .end TestAndSet
 			
  # ----------------------------------------------------------------------------	
+ # CompareAndSwap takes an address, a test value, and a new value
+ # If the address contains the test value, it is changed to the new value
+ # In any case, the address's old value is returned
+ # ----------------------------------------------------------------------------
+        .ent CompareAndSwap
+CompareAndSwap:	
+.set noat
+	ldl_l	$0, ($16)
+	cmp	$0, $17, $at
+	bne	$at, NotEqual
+	mov	$18, $19		# need temp $19 since stl_c modifies register
+	stl_c	$19, ($16)		# try to set
+	beq	$19, CompareAndSwap	# must retry
+        ret     $31, ($26), 1		
+NotEqual:
+	mov	$0, $19			# need temp $19 since stl_c modifies register
+	stl_c	$19, ($16)		# cancel reservation by writing old value
+        ret     $31, ($26), 1	
+.set at
+        .end CompareAndSwap
+			
+
+ # ----------------------------------------------------------------------------	
  # one might call getrpcc twice and take the different between the two results
  # to obtain the cycles used; remember to subtract 5 from the result
  # return the rpcc in standard result register $0 (a 32-bit-quantity)

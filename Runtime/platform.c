@@ -100,8 +100,9 @@ long pic2[1024], pic3[1024];  /* Splitting into two areas */
 
 enum PerfType {UserBasic = 0, SysBasic, BothBasic, UserDCache, SysDCache, UserECache, SysECache, UserEWrite, UserESnoop};
 int perfType = (int) UserBasic;
+int hasPerfMon = 0;
 
-void initializePerfMon(void)
+int initializePerfMon(void)
 {
   int fd, rc;
   unsigned long long tmp;
@@ -109,11 +110,11 @@ void initializePerfMon(void)
   /* XXX Need to bind processor? */
   fd = open("/dev/perfmon", O_RDONLY);
   if (fd == -1) {
-    perror("open(/dev/perfmon)");
-    exit(1);
+    fprintf(stderr,"Cannot open /dev/perfmon\n");
+    return 0;
   }
 
-
+  hasPerfMon = 1;
   switch (perfType) {
     case UserBasic:  tmp = PCR_S0_CYCLE_CNT | PCR_S1_INSTR_CNT | PCR_USER_TRACE; break;
     case SysBasic:   tmp = PCR_S0_CYCLE_CNT | PCR_S1_INSTR_CNT | PCR_SYS_TRACE; break;
@@ -133,12 +134,11 @@ void initializePerfMon(void)
   ioctl(fd, PERFMON_FLUSH_CACHE);
 }
 
-
-
 void resetPerfMon()
 {
   unsigned register long long pic;
   int i;
+  assert(hasPerfMon);
   for (i=0; i<(sizeof(pic0) / sizeof(long)); i++)
     pic0[i] = pic1[i] = pic2[i] = pic3[i] = 0;
   picCursor = 0;
@@ -153,6 +153,7 @@ void update(int primary)
 {
   unsigned register long long pic;
   unsigned long cur0, cur1;
+  assert(hasPerfMon);
   pic = get_pic();
   cur0 = extract_pic0(pic);
   cur1 = extract_pic1(pic);
@@ -183,6 +184,7 @@ void lapPerfMon()
 void showPerfMon(int which)
 {
   int i;
+  assert(hasPerfMon);
   printf("\nPerfMon: %s\n", which == 0 ? "PRIMARY" : (which == 1 ? "ALTERNATE" : "BOTH"));
   switch (perfType) {
     case UserBasic: 
@@ -259,6 +261,7 @@ void showPerfMon(int which)
   }
 }
 
+/*
 void testPerfMon()
 {
   resetPerfMon();
@@ -266,6 +269,7 @@ void testPerfMon()
   showPerfMon(1);
   resetPerfMon();
 }
+*/
 
 #endif
 

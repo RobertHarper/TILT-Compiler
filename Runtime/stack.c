@@ -461,6 +461,9 @@ void thread_root_scan(Proc_t *proc, Thread_t *th)
   StackChain_t *stack = th->stack;
   ptr_t thunk = th->thunk;
 
+  if (collectDiag >= 2)
+    printf("Proc %d: GC %d: thread_root_scan on thread %d with thunk %d\n", proc->procid, NumGC, th->tid, thunk);
+
   if (thunk != NULL) {
     if (!IsTagData(thunk) && !IsGlobalData(thunk)) 
       pushStack(proc->rootLocs, (ptr_t) &(th->thunk));

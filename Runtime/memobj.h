@@ -107,7 +107,8 @@ struct Heap__t
   mem_t mappedTop;         /* The top of the memory region that is mapped. */
   mem_t writeableTop;      /* The top of the memory region that is unprotected. */
   mem_t cursor;            /* The next allocation point in the logical heap. bottom <= cursor <= top */
-  mem_t prevCursor;        /* The value of cursor at the end of hte last GC - used to compute liveness ratio */
+  mem_t prevCursor;        /* The value of cursor at the end of the last GC - 
+			      used to compute liveness ratio in generational collector */
   int   size;              /* bottom - top in bytes - makes inHeap faster */
   struct range__t range;   /* The physical range bottom to physicalTop */
   pthread_mutex_t *lock;   /* Used to synchronize multiple access to heap object. */

@@ -28,10 +28,10 @@ ptr_t AllocBigArray_Semi(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
     region = AllocFromThread(thread, tagByteLen, (spec->type == DoubleField) ? OddWordAlign : NoWordAlign);
   }
   assert(region != NULL);
+  proc->segUsage.bytesAllocated += tagByteLen;
 
   /* Allocate object; update stats; initialize */
   obj = region + 1;
-  proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); break;
@@ -44,7 +44,8 @@ ptr_t AllocBigArray_Semi(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 void GCRelease_Semi(Proc_t *proc)
 {
   int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
-  proc->majorUsage.bytesAllocated += alloc;
+  proc->allocStart = proc->allocCursor;
+  proc->segUsage.bytesAllocated += alloc;
 }
 
 
@@ -130,7 +131,7 @@ void GCStop_Semi(Proc_t *proc)
   paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
 
   /* Resize the tospace, discard fromspace, flip space */
-  liveRatio = HeapAdjust1(bytesRequested, fromSpace, toSpace);
+  liveRatio = HeapAdjust1(bytesRequested, 0, 0.0, fromSpace, toSpace);
   add_statistic(&proc->majorSurvivalStatistic, liveRatio);
   Heap_Resize(fromSpace,0,1);
   typed_swap(Heap_t *, fromSpace, toSpace);

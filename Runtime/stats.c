@@ -22,7 +22,7 @@ int ftime(struct timeb *tp);   /* Not in header file */
 static struct timespec start_tp, stop_tp;
 static struct rusage start_rusage, stop_rusage;
 
-int shortSummary;
+int shortSummary = 0, skipHistogram = 0;
 int	prof_fd = 1;
 static double time_diff(),time2double();
 static double eps=1e-7;
@@ -283,10 +283,11 @@ const char *collectorTypeString(void)
 {
   return (collector_type == Semispace) ? "Semi" : 
     ((collector_type == Generational) ? "Gen" : 
-     ((collector_type == SemispaceParallel) ? "SemiPara" :
-      ((collector_type == GenerationalParallel) ? "GenPara" : 
-       ((collector_type == SemispaceConcurrent) ? "SemiConc" :
-	((collector_type == GenerationalConcurrent) ? "GenConc" : "????")))));
+     ((collector_type == SemispaceStack) ? "SemiStack" : 
+      ((collector_type == SemispaceParallel) ? "SemiPara" :
+       ((collector_type == GenerationalParallel) ? "GenPara" : 
+	((collector_type == SemispaceConcurrent) ? "SemiConc" :
+	 ((collector_type == GenerationalConcurrent) ? "GenConc" : "????"))))));
 }
 
 
@@ -299,7 +300,7 @@ void stats_finish()
   double AvgStackDepth = TotalStackDepth/((double)NumGC+eps);
   double AvgNewStackDepth = TotalNewStackDepth/((double)NumGC+eps);
   double AvgStackFrameSize = TotalStackSize /(double)(TotalStackDepth+eps);
-  double bytesAllocated = 0.0, bytesCopied = 0.0;
+  double bytesAllocated = 0.0, bytesCopied = 0.0, bytesReplicated = 0.0;
   long NumCopied = 0, NumShared = 0, NumContention = 0, NumRoots = 0, NumLocatives = 0, NumWrites = 0;
 
   getrusage(RUSAGE_SELF,&stop_rusage);
@@ -308,6 +309,7 @@ void stats_finish()
 
   for (i=0; i<NumProc; i++) {
     Proc_t *proc = getNthProc(i);
+    bytesReplicated += proc->bytesReplicatedStatistic.sum;
     bytesAllocated += proc->bytesAllocatedStatistic.sum;
     bytesCopied += proc->bytesCopiedStatistic.sum;
     NumCopied += proc->numCopied;
@@ -335,11 +337,13 @@ void stats_finish()
       show_statistic("  GCMajor  ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
       show_statistic("  GCFlipOn ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
       show_statistic("  GCFlipOff", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
-      show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
-      show_histogram(" GCFlipOff   Hist", &proc->gcFlipOffHistogram);
-      show_histogram(" GCFlipOn    Hist", &proc->gcFlipOnHistogram);
-      /*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
+      if (!skipHistogram) {
+	show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
+	show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
+	show_histogram(" GCFlipOff   Hist", &proc->gcFlipOffHistogram);
+	show_histogram(" GCFlipOn    Hist", &proc->gcFlipOnHistogram);
+	/*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
+      }
       show_statistic("MinSurvRate", &proc->minorSurvivalStatistic, -1.0);
       show_statistic("MajSurvRate", &proc->majorSurvivalStatistic, -1.0);
       show_statistic("HeapSize   ", &proc->heapSizeStatistic, -1.0);
@@ -350,6 +354,9 @@ void stats_finish()
 	 "       StackMethod   = %8s     Copied       = %9.0f kb   NumShared    = %8d    AvgStkDepth  = %4.0f\n",
 	 collectorTypeString(),          bytesAllocated / 1024.0, NumCopied,      MaxStackDepth,
 	 useGenStack?"Gener":"Normal", bytesCopied / 1024.0,    NumShared,      AvgStackDepth); 
+  if (bytesReplicated)
+    printf("                                    Replicated   = %9.0f kb\n",
+	   bytesReplicated/1024.0);
   printf("       NumGC         = %8d     NumRoot      = %9d      NumConflict  = %8d    AvgFrameSize = %4.0f\n"
 	 "       NumMajorGC    = %8d     NumWrite     = %9d      NumLocative  = %8d\n",
 	 NumGC,                          NumRoots,                NumContention,   AvgStackFrameSize,

@@ -43,10 +43,10 @@ mem_t AllocBigArray_GenPara(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
     }
   }
   assert(region != NULL);
+  proc->segUsage.bytesAllocated += tagByteLen;
 
   /* Allocate object; update stats; initialize */
   obj = region + 1;
-  proc->majorUsage.bytesAllocated += tagByteLen;
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
     case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
@@ -61,7 +61,8 @@ mem_t AllocBigArray_GenPara(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 void GCRelease_GenPara(Proc_t *proc)
 {
   int alloc = sizeof(val_t) * (proc->allocCursor - proc->allocStart);
-  proc->minorUsage.bytesAllocated += alloc;
+  proc->allocStart = proc->allocCursor;
+  proc->segUsage.bytesAllocated += alloc;
 }
 
 int GCTry_GenPara(Proc_t *proc, Thread_t *th)
@@ -71,7 +72,7 @@ int GCTry_GenPara(Proc_t *proc, Thread_t *th)
   if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
     GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
     if (proc->allocStart) {
-      if (diag) 
+      if (collectDiag >= 3) 
 	printf("Proc %d: Grabbed %d page(s) at %d\n",proc->procid,roundSize/pagesize,proc->allocStart);
       return 1;
     }
@@ -82,15 +83,6 @@ int GCTry_GenPara(Proc_t *proc, Thread_t *th)
   }
   return 0;
 }
-
-/* These are barrier synchronizations which reset the previous one when completed.
-   So, after barrier_n is passed, all processors reset barrier_(n-1).  For this
-   cyclical scheme to work, there must be at least three barriers. 
-*/
-static long numWaitProc = 0;   /* waiting for mutators to stop and first processor to finish prelim work */
-static long numRootProc = 0;   /* waiting for computation of roots and GCtype */
-static long numWorkProc = 0;   /* waiting for roots to be forwarded and shared work to complete */
-static long numDoneProc = 0;   /* waiting for large area flush, heap resize, space flip before resuming mutators */
 
 void GCStop_GenPara(Proc_t *proc)
 {
@@ -105,7 +97,7 @@ void GCStop_GenPara(Proc_t *proc)
      prelimiary work.  This work must be completed before any processor begins collection.
      As a result, the "first" processor is counted twice.
   */
-  isFirst = (asynchReachBarrier(&numWaitProc)) == 0;
+  isFirst = (weakBarrier(barriers, 0) == 0);
   if (isFirst) {
     paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
     /* A Major GC is forced if the tenured space is potentially too small */
@@ -116,14 +108,8 @@ void GCStop_GenPara(Proc_t *proc)
     req_size = 0;
     resetSharedStack(workStack, NumProc);
     ResetJob();                        /* Reset counter so all user threads are scanned */
-    asynchReachBarrier(&numWaitProc);  /* First processor is counted twice. */
   }
-  /* Wait for all threads to reach this point; note that the first thread is counted twice */
-  if (diag)
-    printf("Proc %d: waiting for %d procs to stop mutator %s\n",
-	   proc->procid, (NumProc + 1) - numWaitProc, isFirst ? "First" : "");
-  while (!(asynchCheckBarrier(&numWaitProc, NumProc + 1, &numDoneProc)))
-    ;
+  strongBarrier(barriers, 1);
 
   /* Get local ranges ready for use; check local stack empty; reset root lists */
   assert(isEmptyStack(&proc->minorObjStack));
@@ -141,17 +127,14 @@ void GCStop_GenPara(Proc_t *proc)
     if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
       GCType = Major;      
   }
-  asynchReachBarrier(&numRootProc);
+  strongBarrier(barriers, 2);
 
+  /* After barrier, we know if GC is major */
   proc->gcSegment1 = (GCType == Minor) ? MinorWork : MajorWork;
   proc->gcSegment2 = FlipBoth;
-
-  /* The "first" GC processor is in charge of the globals but must wait 
-     until all threads are processed before knowing if GC is major. */
   procChangeState(proc, GCGlobal);
+
   if (isFirst) {
-    while (!(asynchCheckBarrier(&numRootProc, NumProc, &numWaitProc)))
-      ;
     if (GCType == Minor)
       ;
     else {
@@ -167,10 +150,8 @@ void GCStop_GenPara(Proc_t *proc)
 	Heap_Resize(toSpace, maxLive, 1);
       gc_large_startCollect();
     }
-    asynchReachBarrier(&numRootProc);            /* First processor is counted twice */
   }
-  while (!(asynchCheckBarrier(&numRootProc, NumProc + 1, &numWaitProc)))    /* GCType will be correct past the barrier */
-    ;
+  strongBarrier(barriers, 3);
 
   procChangeState(proc, GC);
   if (GCType == Major)
@@ -271,10 +252,7 @@ void GCStop_GenPara(Proc_t *proc)
   }
 
   /* Wait for all active threads to reach this point so all forwarding is complete */
-  if (diag)
-    printf("Proc %d: waiting for %d procs to finish collecting\n",proc->procid, 
-	   NumProc - numWorkProc);
-  synchBarrier(&numWorkProc, NumProc, &numRootProc);
+  strongBarrier(barriers, 4);
 
 
   /* Only the designated thread needs to perform the following */
@@ -294,7 +272,7 @@ void GCStop_GenPara(Proc_t *proc)
     }
     else {
       gc_large_endCollect();
-      liveRatio = HeapAdjust2(req_size,nursery,fromSpace,toSpace);
+      liveRatio = HeapAdjust2(req_size,0,0.0,nursery,fromSpace,toSpace);
       add_statistic(&proc->majorSurvivalStatistic, liveRatio);
       Heap_Resize(fromSpace, 0, 1);
       typed_swap(Heap_t *, fromSpace, toSpace);
@@ -311,15 +289,12 @@ void GCStop_GenPara(Proc_t *proc)
   assert(proc->writelistCursor == proc->writelistStart);
 
   /* Resume normal scheduler work and start mutators */
-  if (diag)
-    printf("Proc %d: waiting for %d threads to sync on space flip\n",proc->procid, 
-	   NumProc - numDoneProc);
-  synchBarrier(&numDoneProc, NumProc, &numWorkProc);
+  strongBarrier(barriers, 5);
 }
 
 void GCPoll_GenPara(Proc_t *proc)
 {
-  if (numWaitProc)
+  if (checkBarrier(barriers,0) > 0)
     GCStop_GenPara(proc);
 }
 
@@ -343,5 +318,6 @@ void GCInit_GenPara()
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
   gc_large_init();
   workStack = SharedStack_Alloc(0, 0, 0, 16384, 1024);
+  barriers = createBarriers(NumProc, 6);
 }
 

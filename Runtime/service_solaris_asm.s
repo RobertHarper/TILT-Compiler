@@ -12,6 +12,7 @@
 	.globl  global_exnrec
         .globl  GetTick
 	.globl	raise_exception_raw
+	.globl  CompareAndSwap
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
@@ -24,6 +25,21 @@ flushStore:
 	retl
 	nop
 			
+ ! ----------------------------------------------------------------------------	
+ ! CompareAndAdd takes an address, a test value, and a new value
+ ! If the address contains the test value, then the address is set to the new value
+ ! The address's value is returnd in either case.
+ ! Don't use register windows;  unused parameters slots used as temp (%o2 and %o3)
+ ! ----------------------------------------------------------------------------
+        .proc	07
+	.align	4  
+CompareAndSwap:	
+	cas	[%o0], %o1, %o2
+	mov	%o2, %o0
+        retl
+	nop
+        .size CompareAndSwap,(.-CompareAndSwap)
+
  ! ----------------------------------------------------------------------------	
  ! FetchAndAdd takes the address of the variable to be incremented (%o0) and the increment (%o1)
  ! Returns the pre-incremented value (%o0)
@@ -41,7 +57,7 @@ FetchAndAdd:
 	mov	%o2, %o0
         retl
 	nop
-        .size FetchAndAdd,(.-FetchAndAdd)
+        .size FetchAndAdd,(.-FetchAndAdd)	
 
  ! ----------------------------------------------------------------------------	
  ! TestAndSet takes the address of the variable to be test-and-set

@@ -20,6 +20,7 @@
 #include "platform.h"
 
 int    threadDiag = 0;
+extern int usageCount;
 
 Thread_t    *Threads;                         /* array of NumUserThread user threads */
 static Proc_t *Procs;                         /* array of NumSystemThread system threads */
@@ -318,6 +319,7 @@ Thread_t *getThread()
 void resetUsage(Usage_t *u)
 {
   u->bytesAllocated = 0;
+  u->bytesReplicated = 0;
   u->fieldsCopied = 0;
   u->fieldsScanned = 0;
   u->ptrFieldsScanned = 0;
@@ -328,7 +330,7 @@ void resetUsage(Usage_t *u)
   u->stackSlotsProcessed = 0;
   u->workDone = 0;
   u->lastWorkDone = 0;
-  u->counter = 0;
+  u->counter = usageCount;
 }
 
 long updateWorkDone(Proc_t *proc)
@@ -348,6 +350,7 @@ long updateWorkDone(Proc_t *proc)
 static void attributeUsage(Usage_t *from, Usage_t *to)
 {
   to->bytesAllocated += from->bytesAllocated;
+  to->bytesReplicated += from->bytesReplicated;
   to->fieldsCopied += from->fieldsCopied;
   to->fieldsScanned += from->fieldsScanned;
   to->ptrFieldsScanned += from->ptrFieldsScanned;
@@ -432,9 +435,9 @@ void thread_init()
     proc->gcTime = 0;
     proc->schedulerTime = 0;
     resetUsage(&proc->segUsage);
-    resetUsage(&proc->minorUsage);
-    resetUsage(&proc->majorUsage);
+    resetUsage(&proc->cycleUsage);
     reset_statistic(&proc->bytesAllocatedStatistic);
+    reset_statistic(&proc->bytesReplicatedStatistic);
     reset_statistic(&proc->bytesCopiedStatistic);
     reset_statistic(&proc->minorSurvivalStatistic);
     reset_statistic(&proc->heapSizeStatistic);
@@ -500,28 +503,23 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
     proc->schedulerTime += diff;
     if (procState == Mutator || procState == Done) {  /* Reset GC-related info once we enter mutator */
       /* First do statistics dependent on whether GC is major or minor */
+      attributeUsage(&proc->segUsage, &proc->cycleUsage);
+      if (flipOff || procState == Done) {
+	int bytesCopied = 4 * (proc->cycleUsage.fieldsCopied + proc->cycleUsage.objsCopied);
+	add_statistic(&proc->bytesAllocatedStatistic, proc->cycleUsage.bytesAllocated);
+	add_statistic(&proc->bytesReplicatedStatistic, proc->cycleUsage.bytesReplicated);
+	add_statistic(&proc->bytesCopiedStatistic, bytesCopied);
+	resetUsage(&proc->cycleUsage);
+      }
       if (proc->gcSegment1 == MinorWork) {
 	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
-	attributeUsage(&proc->segUsage, &proc->minorUsage);
-	if (flipOff) {
-	  add_statistic(&proc->bytesAllocatedStatistic, proc->minorUsage.bytesAllocated);
-	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->minorUsage.fieldsCopied);
-	  proc->majorUsage.bytesAllocated += 4 * proc->minorUsage.fieldsCopied;
-	  resetUsage(&proc->minorUsage);
-	}
       }
       else if (proc->gcSegment1 == MajorWork) {
 	add_histogram(&proc->gcWorkHistogram, proc->gcTime);
 	add_histogram(&proc->gcMajorWorkHistogram, proc->gcTime);
-	attributeUsage(&proc->segUsage, &proc->majorUsage);
-	if (flipOff) {
-	  add_statistic(&proc->bytesCopiedStatistic, 4 * proc->majorUsage.fieldsCopied);
-	  resetUsage(&proc->majorUsage);
-	}
       }
       else {
 	add_statistic(&proc->gcNoneStatistic, proc->gcTime);
-	resetUsage(&proc->segUsage);
       }
       /* Add statistics related to flipping on/off collector - independent of whether GC is major or minor */
       if (flipOn) {
@@ -876,6 +874,7 @@ Thread_t *SpawnRest(ptr_t thunk)
   switch (collector_type) {
   case Semispace:
   case Generational:
+  case SemispaceStack:
     assert(NumProc == 1);
   case SemispaceParallel:
   case GenerationalParallel:

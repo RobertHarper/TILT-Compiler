@@ -11,7 +11,7 @@ int GetDcacheSize(void); /* primary dcache size */
 
 #ifdef solaris
 extern int perfType;
-void initializePerfMon(void);   /* Must be called per processor */
+int initializePerfMon(void);   /* Must be called by each processor - returns 0 if perfmon not installed */
 void resetPerfMon();
 void startAlternatePerfMon(); 
 void stopAlternatePerfMon(); 

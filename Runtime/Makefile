@@ -43,8 +43,7 @@ sys_name=${${full_sys_name}_sys_name}
 chip_name=${${full_sys_name}_chip_name}
 
 ASM=${sys_name}_asm
-MAIN=main_nothread
-ROOT_OBJ=posix gcstat  forward gc_semi gc_gen gc_large gc_para gc_semi_para gc_gen_para gc_semi_conc gc_gen_conc gc create ${MAIN} show service global hash queue stats stack bitmap platform memobj thread exn signal  gc_${ASM} service_${ASM} 
+ROOT_OBJ=posix gcstat  forward gc_semi gc_gen gc_large gc_para gc_semi_para gc_gen_para gc_semi_conc gc_gen_conc gc create main show service global hash queue stats stack bitmap platform memobj thread exn signal  gc_${ASM} service_${ASM} rooms gc_semi_stack barriers
 objdir=obj_${sys_name}
 COREFILES_OBJ=${patsubst %,${objdir}/%.o,${ROOT_OBJ}}
 COREFILES_HPROF_OBJ=${patsubst %,${objdir}/%.hprof.o,${ROOT_OBJ}}

@@ -22,6 +22,7 @@
 int paranoid = 0;
 int verbose = 0;
 int diag = 0;
+int collectDiag = 0;
 int timeDiag = 0;
 int debug = 0;
 int collector_type = Generational;
@@ -40,6 +41,7 @@ GCStatus_t GCStatus = GCOff;
 Heap_t *fromSpace = NULL, *toSpace = NULL;
 Heap_t *nursery = NULL, *tenuredFrom = NULL, *tenuredTo = NULL;
 SharedStack_t *workStack = NULL;
+Barriers_t *barriers = NULL;
 
 int NumGC = 0;
 int NumMajorGC = 0;
@@ -72,6 +74,7 @@ double stackSlotWeight = 10.0;
 double pageWeight = 100.0;
 int arraySegmentSize = 0;         /* Either zero for off or must be greater than the compiler's maxByteRequest - notion of large array */
 int localWorkSize = 4096;
+int usageCount = 50;
 
 double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
 double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */
@@ -81,78 +84,85 @@ static void (*GCStopFun)(Proc_t *) = NULL;
 static void (*GCReleaseFun)(Proc_t *) = NULL;
 static void (*GCPollFun)(Proc_t *) = NULL;
 
-long ComputeHeapSize(long oldsize, double oldratio)
+/* 0.0 <= reserve < 1.0 is not mapped in */
+long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve)
 {
-  /* Internally, we will round to the nearest K */
-  long oldlive = ((long)(oldsize * oldratio) + 1023) / 1024;  /* must round up here */
+  long oldlive = DivideUp(oldsize * oldratio, 1024);  /* must round up here */
   double rawWhere = (oldlive - MinRatioSize) / (double)(MaxRatioSize - MinRatioSize);
   double where = (rawWhere > 1.0) ? 1.0 : ((rawWhere < 0.0) ? 0.0 : rawWhere);
   double newratio = MinRatio + where * (MaxRatio - MinRatio);
-  long newsize = (oldlive / newratio) / 32 * 32 + 32;
+  long newSize = RoundUp(oldlive / newratio + withhold, 32);
+  long unreservedSize = RoundUp(newSize / (1.0 - reserve), 32);
   if (oldlive > MaxHeap) {
     fprintf(stderr,"GC error: livedata = %d but maxheap constrained to %d\n", oldlive, MaxHeap);
     assert(0);
   }
-  if (newsize > MaxHeap) {
+  if (unreservedSize > MaxHeap) {
     double constrainedRatio = ((double)oldlive) / MaxHeap;
-    fprintf(stderr,"GC warning: Would like to make newheap %d but constrained to <= %d\n",newsize, MaxHeap);
+    if (collectDiag >= 1 || constrainedRatio > 0.95)
+      printf("GC warning: Would like to make newheap %d but constrained to <= %d\n",unreservedSize, MaxHeap);
     if (constrainedRatio > 0.95)
-      fprintf(stderr,"GC warning: Ratio is dangerously high %lf.\n", constrainedRatio);
-    newsize = MaxHeap;
+      printf("GC warning: Ratio is dangerously high %lf.\n", constrainedRatio);
+    unreservedSize = MaxHeap;
+    newSize = RoundDown(unreservedSize * (1.0 - reserve), 32);
   }
-  if (newsize < MinHeap) {
-    if (diag)
-      fprintf(stderr,"GC warning: Would like to make newheap %d but constrained to >= %d\n",newsize, MinHeap);
-    newsize = MinHeap;
+  if (unreservedSize < MinHeap) {
+    if (collectDiag >= 1)
+      printf("GC warning: Would like to make newheap %d but constrained to >= %d\n",unreservedSize, MinHeap);
+    unreservedSize = MinHeap;
+    newSize = RoundDown(unreservedSize * (1.0 - reserve), 32);
   }
-  assert(newsize > oldlive);
-  return 1024 * newsize;
+  assert(newSize > oldlive);
+  return 1024 * newSize;
 }
 
-double HeapAdjust(unsigned int bytesRequested, Heap_t **froms, Heap_t *to)
+double HeapAdjust(int request, int withhold, double reserve, Heap_t **froms, Heap_t *to)
 {
   long copied = 0, occupied = 0, live = 0, newSize = 0;
   double liveRatio = 0.0;
 
+  assert(request >= 0);
   while (*froms != NULL) {
     Heap_t *cur = *(froms++);
     if (cur != NULL)
-      occupied += (sizeof (val_t)) * (cur->top - cur->bottom);
+      occupied += (sizeof (val_t)) * (cur->cursor - cur->bottom);
   }
   copied = (sizeof (val_t)) * (to->cursor - to->bottom);
-  live = copied + bytesRequested;
-  liveRatio = (double) live / (double) occupied;
-  newSize = ComputeHeapSize(occupied, liveRatio);
+  assert(occupied >= copied);
+  assert(copied >= withhold);
+  live = copied + request;
+  liveRatio = (double) (live - withhold) / (double) (occupied - withhold);
+  newSize = ComputeHeapSize(occupied - withhold, liveRatio, withhold, reserve);
   Heap_Resize(to, newSize, 0);
-  if (newSize - copied < bytesRequested) {
-    printf("Error: newSize - copied < bytesRequested\n");
+  if (newSize - copied < request) {
+    printf("Error: newSize - copied < request\n");
     printf("       %d - %d <= %d\n\n",
-	   newSize, copied, bytesRequested);
+	   newSize, copied, request);
     assert(0);
   }
-  if (diag) {
-    printf("---- MAJOR GC %d (%d): ", NumMajorGC, NumGC);
-    printf("live = %d     oldHeap = %d(%.3lf)  -> newHeap = %d(%.3lf)\n", 
-	   live, occupied, liveRatio, newSize, ((double)live)/newSize);
+  if (collectDiag >= 1) {
+    printf("---- GC %d (%d): ", NumGC, NumMajorGC);
+    printf("req = %3d    live = %7d    withhold = %7d    oldHeap = %8d(%.3lf)   ->   newHeap = %8d(%.3lf)\n", 
+	   request, live, withhold, occupied, liveRatio, newSize, ((double)live)/newSize);
   }
   return liveRatio;
 }
 
-double HeapAdjust1(unsigned int bytesRequested, Heap_t *from1, Heap_t *to)
+double HeapAdjust1(int request, int withhold, double reserve, Heap_t *from1, Heap_t *to)
 {
   Heap_t *froms[2];
   froms[0] = from1;
   froms[1] = NULL;
-  return HeapAdjust(bytesRequested, froms, to);
+  return HeapAdjust(request, withhold, reserve, froms, to);
 }
 
-double HeapAdjust2(unsigned int bytesRequested, Heap_t *from1, Heap_t *from2, Heap_t *to)
+double HeapAdjust2(int request, int withhold,  double reserve, Heap_t *from1, Heap_t *from2, Heap_t *to)
 {
   Heap_t *froms[3];
   froms[0] = from1;
   froms[1] = from2;
   froms[2] = NULL;
-  return HeapAdjust(bytesRequested, froms, to);
+  return HeapAdjust(request, withhold, reserve, froms, to);
 }
 
 void GCInit(void)
@@ -204,6 +214,13 @@ void GCInit(void)
     GCReleaseFun = GCRelease_GenConc;
     GCPollFun = GCPoll_GenConc;
     GCInit_GenConc();
+    break;
+  case SemispaceStack:
+    GCTryFun = GCTry_SemiStack;
+    GCStopFun = GCStop_SemiStack;
+    GCReleaseFun = GCRelease_SemiStack;
+    GCPollFun = NULL; /* GCPoll_SemiStack; */
+    GCInit_SemiStack();
     break;
   default: 
     assert(0);
@@ -258,7 +275,7 @@ void paranoid_check_stack(char *label, Thread_t *thread, Heap_t **legalHeaps, Bi
     if ((mem_t)saveregs[ALLOCLIMIT] == StopHeapLimit)
       return;
     if (!inHeaps(thunk,legalHeaps,legalStarts) && inSomeHeap(thunk)) {
-      printf("TRACE ERROR: thunk %d has from-space value after collection: %d", i, thunk);
+      printf("TRACE ERROR at GC %d: thread %d's thunk %d is in from-space\n", NumGC, thread->tid, thunk);
       assert(0);
     }
     if (thunk != NULL) /* thunk not started */
@@ -394,13 +411,6 @@ void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,
 
 
 /* ------------------------------ Helper Routines -------------------- */
-void AlignMemoryPointer(mem_t *allocRef, Align_t align)
-{
-  int curEven = (((val_t)(*allocRef)) & 7) == 0;
-  if ((align == OddWordAlign && curEven) ||
-      (align == EvenWordAlign && !curEven))
-    *((*allocRef)++) = MAKE_SKIP(1);
-}
 
 mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* bytesToAlloc does not include alignment */
 {
@@ -443,8 +453,22 @@ static ptr_t alloc_bigdispatcharray(ArraySpec_t *spec)
     case GenerationalParallel:   return AllocBigArray_GenPara(proc,thread,spec);
     case SemispaceConcurrent:    return AllocBigArray_SemiConc(proc,thread,spec);
     case GenerationalConcurrent: return AllocBigArray_GenConc(proc,thread,spec);
+    case SemispaceStack:         return AllocBigArray_SemiStack(proc,thread,spec);
     default: assert(0);
   }
+}
+
+/* Compute reduced heap size by reserving area and rounding down to nearest page */
+int expandedToReduced(int size, double rate)
+{
+  int newSize = (int) size * rate / (1.0 + rate);
+  return RoundDown(newSize, pagesize);
+}
+
+int reducedToExpanded(int size, int rate)
+{
+  int newSize = size * (1 + rate)  / rate;
+  return RoundUp(newSize, pagesize);
 }
 
 /* ------------------------------ Interface Routines -------------------- */

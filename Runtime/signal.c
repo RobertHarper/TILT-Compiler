@@ -381,8 +381,6 @@ void alarm_handler(int signum,
   Interrupt(uctxt);
 }
 
-extern int ThreadedVersion;
-
 void signal_init()
 {
   buserror_on();
@@ -420,7 +418,7 @@ void install_signal_handlers(int isMain)
     pthread_sigmask(isMain ? SIG_BLOCK : SIG_UNBLOCK,  &sigset, NULL);
   }
 
-  if (ThreadedVersion)
+if (0)
   {
     struct itimerval newtimer,oldtimer;
     newact.sa_handler = (voidhandler_t) alarm_handler;

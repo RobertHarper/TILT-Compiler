@@ -67,6 +67,7 @@ typedef struct CopyRange__t   /* This is essentially an object clumsily expresse
 typedef struct Usage__t
 {
   long bytesAllocated;
+  long bytesReplicated;
   long fieldsCopied;
   long fieldsScanned;
   long ptrFieldsScanned;
@@ -181,9 +182,9 @@ typedef struct Proc__t
   ProcessorState_t   state;          /* What the processor is working on */
   long               numSegment;     /* Number of current segment, incremented each time we switch to a mutator */
   Usage_t            segUsage;       /* Info for current segment which will be added to a cycle */
-  Usage_t            minorUsage;     /* Info for current GC cycle */
-  Usage_t            majorUsage;
+  Usage_t            cycleUsage;     /* Info for current GC cycle */
   Statistic_t        bytesAllocatedStatistic;  /* just minor - won't this exclude large objects? XXXX */
+  Statistic_t        bytesReplicatedStatistic;  /* only for concurrent collectors */
   Statistic_t        bytesCopiedStatistic;     /* both minor and major */
                                                /* XXX Should the next 3 be program-wide */
   Statistic_t        heapSizeStatistic;        /* in Kb */
@@ -219,11 +220,13 @@ void procChangeState(Proc_t *, ProcessorState_t);
 
 long updateWorkDone(Proc_t *proc);
 
+extern int usageCount;
+
 INLINE(getWorkDone)
 long getWorkDone(Proc_t *proc)
 {
-  if (--proc->segUsage.counter) {
-    proc->segUsage.counter = 50;
+  if (--proc->segUsage.counter == 0) {
+    proc->segUsage.counter = usageCount;
     updateWorkDone(proc);
   }
   return proc->segUsage.workDone;
