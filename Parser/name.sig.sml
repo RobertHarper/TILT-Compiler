@@ -3,8 +3,8 @@
 signature NAME = 
   sig
 
-    type var     (* IS  generative *)
-    type label   (* NOT generative *)
+    type var = int * string          (* IS  generative *)
+    type label = int * string * bool (* NOT generative *)
     type tag
     type loc
 
