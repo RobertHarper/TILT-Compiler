@@ -1603,9 +1603,14 @@ struct
 			      val (vkl_free, cbnds) = Listops.unzip temp
 			  in  (code_var, cenv_var, vkl_free, cbnds, subst)
 			  end
-		 else  (Name.fresh_named_var "unclosed_open_cb",
+		 else  (if !debug then
+				(print "UNCLOSED: ";
+				Ppnil.pp_var v;
+				print "\n")
+			else ();
+			(Name.fresh_named_var "unclosed_open_cb",
 			Name.fresh_named_var "unclosed_open_cb_cenv",
-			[], [], NilSubst.C.empty())
+			[], [], NilSubst.C.empty()))
 
 
 	     val vklist = vklist_rewrite state vklist
@@ -1620,6 +1625,10 @@ struct
 	     val code_cb = Code_cb(code_var, vklist',Let_c(Sequential,cbnds,body))
 	     val con_env = Crecord_c(map (fn (v,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
+
+	     val _ = if (!debug)
+			 then (print "  /cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
+		     else ()
 	 in  [code_cb, closure_cb]
 	 end			
      | cbnd_rewrite state (Code_cb _) = error "found Code_cb during closure-conversion"
@@ -1712,27 +1721,29 @@ struct
 	   val state = initial_state top_fid
 
 	   (* Scan module for free variables *)
-	   fun import_folder (ImportValue(l,v,_,c),state) = 
-	       let val f = c_find_fv (state,empty_frees) c
-	       in  add_gboundevar(state,v,c)
+	   fun import_folder (ImportValue(l,v,_,c), (frees, state)) = 
+	       let val frees = c_find_fv (state,frees) c
+	       in  (frees, add_gboundevar(state,v,c))
 	       end
-	     | import_folder (ImportType(l,v,k),state) = 
-	       let val f = k_find_fv (state,empty_frees) k
-	       in  add_gboundcvar(state,v,k)
+	     | import_folder (ImportType(l,v,k), (frees, state)) = 
+	       let val frees = k_find_fv (state,frees) k
+	       in  (frees, add_gboundcvar(state,v,k))
 	       end
-	     | import_folder (ImportBnd (_, cb),state) =
+	     | import_folder (ImportBnd (_, cb), fstate) =
+	       cbnd_find_fv (cb, fstate)
+	     (*| import_folder (ImportBnd (_, cb),state) =
 	       let
 		   val v =
 		       case cb of
 			   Con_cb (v, _) => v
-			 | Open_cb (v, _, _) => v
-			 | Code_cb (v, _, _) => v
+			 | Open_cb (v, _, _) => (add_fun v; v)
+			 | Code_cb (v, _, _) => (add_fun v; v)
 	       in
 		   add_gboundcvar(state,v,Type_k)
-	       end
+	       end*)
 	   val _ = chat "  Scanning for free variables\n"
-	   val state = foldl import_folder state imports
-	   val ({free_evars,free_cvars,...},state) = foldl bnd_find_fv (empty_frees,state) bnds
+	   val (frees, state) = foldl import_folder (empty_frees, state) imports
+	   val ({free_evars,free_cvars,...},state) = foldl bnd_find_fv (frees,state) bnds
 	   fun export_mapper state (ExportValue(l,v)) = e_find_fv (state, empty_frees) (Var_e v)
 	     | export_mapper state (ExportType(l,v)) = c_find_fv (state, empty_frees) (Var_c v)
 	   val _ = map (export_mapper state) exports
@@ -1761,27 +1772,34 @@ struct
 	   val initial_state = new_state top_fid
 	   val _ = chat "  Rewriting imports, bindings, exports\n"
 
-	   fun import_folder (ImportValue(l,v,tr,c),D) =
+	   fun import_folder (ImportValue(l,v,tr,c), D) =
 	       let val c = c_rewrite initial_state c
 		   val tr = trace_rewrite initial_state tr
 		   val D = insert_con(D, v, c)
 		   val D = insert_label(D, l, v)
-	       in  (ImportValue(l,v,tr,c), D)
+	       in  ([ImportValue(l,v,tr,c)], D)
 	       end
-	     | import_folder (ImportType(l,v,k),D) =
+	     | import_folder (ImportType(l,v,k), D) =
 	       let val k = k_rewrite initial_state k
 		   val D = insert_kind(D, v, k)
 		   val D = insert_label(D, l, v)
-	       in  (ImportType(l,v,k),D)
+	       in  ([ImportType(l,v,k)], D)
 	       end
-	     | import_folder (ImportBnd (phase, cb),D) =
-	       let val cb = List.last (cbnd_rewrite initial_state cb)
-		   val (v, k) = NilStatic.kind_of_cbnd (D, cb)
-		   val D = insert_kind(D, v, k)
+	     | import_folder (ImportBnd (phase, cb), D) =
+	       let val cbs = cbnd_rewrite initial_state cb
+
+		   fun folder (cb, D) =
+		   let val (v, k) = NilStatic.kind_of_cbnd (D, cb)
+		   in insert_kind(D, v, k) end
+
+  		   val D = foldl folder D cbs
 	       in
-		   (ImportBnd (phase, cb),D)
+		   (map (fn cb => ImportBnd (phase, cb)) cbs, D)
 	       end
 	   val (imports', D) = Listops.foldl_acc import_folder (NilContext.empty()) imports
+	   val imports' = List.concat imports'
+
+	   val _ = chat "  Imports read\n"
 
 	   fun folder (bnd,D) = bnd_rewrite D initial_state bnd
 	   val (bndsbnds,D) = Listops.foldl_acc folder D bnds
