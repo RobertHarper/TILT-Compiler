@@ -41,5 +41,7 @@
 
 signature MANAGER = sig
   val up_to_phasesplit : bool ref
-  val tilc : string * string list  -> unit  (* mapfile * args  *)
+  val up_to_elaborate : bool ref
+  val tilc : string * bool * string option * string option * string list  -> unit  (* mapfile * args  *)
+  val command : string * string list  -> int  (* to be exported *)
 end
