@@ -1149,7 +1149,9 @@ structure Datatype
    end
 
 
-
+   (* N.B. Runtime/exn.c cares how exceptions are compiled.  If you
+      change exn_lookup you almost certainly have to change
+      getOverflowExn, etc. *)
    fun exn_lookup context path : {stamp : Il.exp,
 				  carried_type : Il.con option} option =
        (case (Context_Lookup_Labels(context,map symbol_label path)) of

@@ -1584,7 +1584,8 @@ structure Toil
 	      in res
 	      end
 	| Ast.ExceptionDec [Ast.EbGen {exn,etype}] =>
-		let 
+		let
+		  (* N.B. Runtime/exn.c cares how exceptions are compiled. *)
 		  val exn_str = Symbol.name exn
 		  val id_bar = symbol_label exn
 		  val var = fresh_named_var "exn_stamp"
