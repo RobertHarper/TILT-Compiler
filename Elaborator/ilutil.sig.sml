@@ -126,6 +126,7 @@ signature ILUTIL =
     val sig_subst_convar : (signat * (var * con) list) -> signat
     val sig_subst_modvar : (signat * (var * mod) list) -> signat
     val con_subst_conmodvar : (con * (var * con) list * (var * mod) list) -> con
+    val exp_subst_expconvar : (exp * (var * exp) list * (var * con) list) -> exp
 
     (* ------------ Functions that compute free variables ---------  *)
     (* mod_free_expvar: given a module, return all free expression variables  

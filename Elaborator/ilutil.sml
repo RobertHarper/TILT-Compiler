@@ -622,6 +622,15 @@ functor IlUtil(structure Ppil : PPIL
 			mod_handler = mod_handler mtable,
 			sig_handler = sig_handler self mtable})
 	      end
+	  fun echandlers etable ctable =
+	      let val self = fn () => echandlers etable ctable
+	      in STATE(default_bound,
+		       {sdec_handler = default_sdec_handler,
+			exp_handler = exp_handler etable,
+			con_handler = con_handler ctable,
+			mod_handler = default_mod_handler,
+			sig_handler = default_sig_handler})
+	      end
       in 
 	  fun exp_subst_expvar(arg,table) = f_exp (ehandlers table) arg
 	  fun con_subst_expvar(arg,table) = f_con (ehandlers table) arg
@@ -636,6 +645,7 @@ functor IlUtil(structure Ppil : PPIL
 	  fun mod_subst_modvar(arg,table) = f_mod (mhandlers table) arg
 	  fun sig_subst_modvar(arg,table) = f_signat (mhandlers table) arg
 	  fun con_subst_conmodvar(arg,ctable,mtable) = f_con (cmhandlers ctable mtable) arg
+	  fun exp_subst_expconvar(arg,etable,ctable) = f_exp (echandlers etable ctable) arg
       end
 
       local

@@ -106,7 +106,7 @@ structure LinkIl (* : LINKIL *) =
 	val error = fn s => Util.error "linkil.sml" s
 
 	fun setdepth d = Compiler.Control.Print.printDepth := d
-	val parse = LinkParse.close_dec o LinkParse.parse_one
+	val parse = LinkParse.named_form_dec o LinkParse.tvscope_dec o LinkParse.parse_one
 	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
@@ -157,7 +157,8 @@ structure LinkIl (* : LINKIL *) =
 	    let
 		val _ = Stats.reset_stats()
   	        val astdec = (Stats.timer("PARSING",LinkParse.parse_one)) filename
-  	        val astdec = (Stats.timer("PARSECLOSE",LinkParse.close_dec)) astdec
+  	        val astdec = (Stats.timer("PARSE_TVSCOPE",LinkParse.tvscope_dec)) astdec
+  	        val astdec = (Stats.timer("PARSE_NAMEDFORM",LinkParse.named_form_dec)) astdec
 		val (sbnds,cdiff) = (Stats.timer("ELABORATION",elaborate_diff')) (initial_context,astdec)
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";

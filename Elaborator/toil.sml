@@ -626,10 +626,10 @@ functor Toil(structure Il : IL
 	 let 
 	     val rest = make_typearg_sdec more
 	     val type_str = label2string type_lab
-	     val eq_str = type_str ^ "_eq"
-	     val type_var = fresh_named_var type_str
+	     val type_var = fresh_named_var type_str 
 	     val type_sdec = SDEC(type_lab,DEC_CON(type_var, KIND_TUPLE 1, NONE))
-	     val eq_lab = internal_label eq_str
+	     val eq_lab = to_eq_lab type_lab
+	     val eq_str = label2string eq_lab
 	     val eq_var = fresh_named_var eq_str
 	     val eq_con =  CON_ARROW(con_tuple[CON_VAR type_var, CON_VAR type_var],
 				     con_bool, oneshot_init PARTIAL)
@@ -2156,20 +2156,29 @@ functor Toil(structure Il : IL
 			 let
 			     val _ = if (m=n) then () else error "datatype constructor must have kind n=>n"
 			     val mu_cons = map0count (fn i => CON_MUPROJECT(i,con')) n
-			     val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) n
-			     val eq_lbls = map (fn l => internal_label ((label2string l) ^ "_eq")) type_lbls
-			     val var_poly = fresh_named_var "var_poly"
 			     val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) n
-			     local
-				 val temp = map (fn tlab => (tlab,true)) type_lbls
-				 val poly_sdecs = make_typearg_sdec temp
-			     in
-				 val extradec = DEC_MOD(var_poly,SIGNAT_STRUCTURE(NONE, poly_sdecs))
-			     end
-			     val ctxt = add_context_dec(ctxt,SelfifyDec extradec)
+			     val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) n
+			     val eq_lbls = map to_eq_lab type_lbls
+			     val evars = map0count (fn i => fresh_named_var ("evar" ^ (Int.toString i))) n
+			     val cvars = map0count (fn i => fresh_named_var ("cvar" ^ (Int.toString i))) n
+			     val elist = zip evars (map VAR vars_eq)
+			     val clist = zip cvars mu_cons
+			     fun cfolder ((cvar,cl),ctxt) = 
+				 let val dec = DEC_CON(cvar,KIND_TUPLE 1,NONE)
+				 in add_context_sdec(ctxt,SDEC(cl,SelfifyDec dec))
+				 end
+			     fun efolder ((evar,cvar,el),ctxt) = 
+				 let 
+				     val con = CON_ARROW(con_tuple[CON_VAR cvar, CON_VAR cvar],
+							 con_bool,oneshot_init PARTIAL)
+				     val dec = DEC_EXP(evar,con)
+				 in add_context_sdec(ctxt,SDEC(el,SelfifyDec dec))
+				 end
+			     val ctxt = foldl cfolder ctxt (zip cvars type_lbls)
+			     val ctxt = foldl efolder ctxt (zip3 evars cvars eq_lbls)
 
 			     local
-				 val temp = map (fn tlab => CON_MODULE_PROJECT(MOD_VAR var_poly,tlab)) type_lbls
+				 val temp = map CON_VAR cvars
 				 val applied = ConApply(con',(case temp of
 								  [c] => c
 								| _ => CON_TUPLE_INJECT temp))
@@ -2179,26 +2188,12 @@ functor Toil(structure Il : IL
 						       | c => [c])
 			     end
 			     val exps_v = map (fn c => xeq_hidden(ctxt,c)) reduced_cons
-			     local
-				 val eq_table = zip eq_lbls (map VAR vars_eq)
-				 val type_table = zip type_lbls mu_cons
-			     in 
-				 fun eproj_handler (MOD_VAR sv,eq_lab) = 
-				     if (eq_var(sv,var_poly))
-					 then assoc_eq(eq_label,eq_lab,eq_table)
-				     else NONE
-				   | eproj_handler _ = NONE
-				 fun cproj_handler (MOD_VAR sv,type_lab) = 
-				     if (eq_var(sv,var_poly))
-					 then assoc_eq(eq_label,type_lab,type_table)
-				     else NONE
-				   | cproj_handler _ = NONE
-			     end
+
 			     fun make_expeq (mu_con,expv) = 
 				 let
 				     val var = fresh_named_var "arg_pair"
 				     val var_con = con_tuple[mu_con,mu_con]
-				     val expv' = exp_subst_proj(expv,eproj_handler,cproj_handler)
+				     val expv' = exp_subst_expconvar(expv,elist,clist)
 				     val e1 = RECORD_PROJECT(VAR var,generate_tuple_label 1,var_con)
 				     val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
 				     val e1' = UNROLL(mu_con,e1)

@@ -32,7 +32,18 @@ functor IlStatic(structure Il : IL
 		  MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
      | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
      | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
-     | eq_modval(m1,m2) = false
+     | eq_modval (MOD_VAR _, MOD_PROJECT _) = false
+     | eq_modval (MOD_PROJECT _, MOD_VAR _) = false
+     | eq_modval (m1,m2) = (print "eq_modval for a non value\nm1 = \n";
+			   pp_mod m1; print "\nm2 = \n";
+			   pp_mod m2; print "\n";
+			   error "eq_modval for a non value")
+   fun eq_mod (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
+     | eq_mod (MOD_PROJECT (m,l), 
+		  MOD_PROJECT(m',l')) = eq_mod(m,m') andalso eq_label(l,l')
+     | eq_mod (MOD_SEAL(m,s),m') = eq_mod(m,m')
+     | eq_mod (m',MOD_SEAL(m,s)) = eq_mod(m,m')
+     | eq_mod _ = false
 
    (* --- remove references to internal variables from signature with given module ---- *)
    fun SelfifySig'(ctable : (var * con) list, 
@@ -88,67 +99,7 @@ functor IlStatic(structure Il : IL
 	       end
 	 | SIGNAT_STRUCTURE (SOME _,sdecs) => signat)
      end
-(*
-	       let 
-		   val (var,lbls) = (case path of
-					 SIMPLE_PATH v => (v,[])
-				       | COMPOUND_PATH (v,l) => (v,rev l))
-		   fun con_handler [] (MOD_VAR v) = if (eq_var(v,var)) then SOME mopt else NONE
-		     | con_handler (l::lrest) (CON_MODULE_PROJECT (m,l')) = 
-		       if (eq_label(l,l')) then con_handler lrest m else NONE
-		     | con_handler _ _ = NONE
-		   val sdecs' = 
-		       (case sig_mod_handler(SIGNAT_NORMAL_STRUCTURE sdecs,con_handler lbls) of
-			    SIGNAT_NORMAL_STRUCTURE sdecs => sdecs
-			  | _ => error "sig_con_handler changed shape of sig")
 
-				 (case mopt of
-				     SOME(MOD_VAR v) => if (eq_var(v,sv)) 
-							    then sdecs 
-							else Unselfify(sv,sdecs)
-				   | _ => Unselfify(sv,sdecs))
-		   val sdecs'' = loop (ctable,mtable) sdecs'
-	       in case mopt of
-		   SOME(MOD_VAR v) => SIGNAT_NORMAL_STRUCTURE(v,sdecs'')
-		 | _ => SIGNAT_STRUCTURE sdecs''
-	       end
-*)
-
-(*
-   and Unselfify (v, sdecs) = 
-       let 
-	   fun help (SDEC(l,DEC_EXP(v,_))) = SOME(l,v)
-	     | help (SDEC(l,DEC_MOD(v,_))) = SOME(l,v)
-	     | help (SDEC(l,DEC_CON(v,_,_))) = SOME(l,v)
-	     | help _ = NONE
-	   val table = List.mapPartial help sdecs
-	   fun lookup l = (case (assoc_eq(eq_label,l,table)) of
-			       SOME x => x
-			     | _ => error "Unselfify given bad sdecs: contains bad projections")
-	   fun eproj(MOD_VAR v',l) = if (eq_var(v,v')) 
-					 then SOME(VAR(lookup l))
-				     else NONE
-	     | eproj _ = NONE
-	   fun cproj(MOD_VAR v',l) = if (eq_var(v,v')) 
-					 then SOME(CON_VAR(lookup l))
-				     else NONE
-	     | cproj _ = NONE
-	   fun mproj(MOD_VAR v',l) = if (eq_var(v,v')) 
-					 then SOME(MOD_VAR(lookup l))
-				     else NONE
-	     | mproj _ = NONE
-	  fun sdecer (SDEC(l,DEC_CON(v',k,SOME (CON_MODULE_PROJECT(MOD_VAR v'',l'))))) =
-	      if (eq_var(v,v'') andalso eq_label(l,l'))
-		   then SOME(SDEC(l,DEC_CON(v',k,NONE)))
-	      else NONE
-	     | sdecer _ = NONE
-	   val m = SIGNAT_STRUCTURE sdecs
-	   val res = sig_subst_allproj(m,eproj,cproj,mproj,sdecer)
-       in case res of
-	   SIGNAT_STRUCTURE sdecs' => sdecs'
-	 | _ => error "mod_subst_allproj returned non structure"
-       end
-*)
      (* Performs lookup in a structure signature, performing
         normalization as needed with the supplied module argument. *)
     local
@@ -409,6 +360,13 @@ functor IlStatic(structure Il : IL
 	 else false
      end
    and meta_eq_con (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
+       (case (con1,con2) of
+	    (CON_MODULE_PROJECT(m,l),CON_MODULE_PROJECT(m',l')) =>
+		(eq_label(l,l') andalso eq_mod(m,m')) orelse
+		(meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub))
+	  | _ => (meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub)))
+	   
+   and meta_eq_con_hidden (is_hard,unifier) constrained (con1,con2,ctxt,is_sub) = 
      let 
 
        val _ = debugdo (fn () => (print "\nUnifying"; 
@@ -453,19 +411,8 @@ functor IlStatic(structure Il : IL
 	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,ctxt,is_sub) 
 	                                                andalso self(c1_r,c2_r,ctxt,is_sub)
 	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => 
-		let fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
-		      | eq_modval (MOD_PROJECT (m,l), 
-				   MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
-		      | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
-		      | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
-		      | eq_modval (MOD_VAR _, MOD_PROJECT _) = false
-		      | eq_modval (MOD_PROJECT _, MOD_VAR _) = false
-		      | eq_modval(m1,m2) = (print "eq_modval for a non value\nm1 = \n";
-					    pp_mod m1; print "\nm2 = \n";
-					    pp_mod m2; print "\n";
-					    error "eq_modval for a non value")
-		in eq_modval(m1,m2) andalso eq_label(l1,l2)
-		end
+		eq_modval(m1,m2) andalso eq_label(l1,l2)
+
 	  | ((CON_INT is1, CON_INT is2) | (CON_UINT is1, CON_UINT is2)) => is1 = is2
 	  | (CON_FLOAT fs1, CON_FLOAT fs2) => fs1 = fs2
 	  | (CON_ANY, CON_ANY) => true
@@ -952,9 +899,11 @@ functor IlStatic(structure Il : IL
 	       val guess_arm_cons = 
 		   mapcount (fn (i,_) => CON_ARROW(CON_SUM(SOME i,consNorm),
 						   rescon,oneshot())) consNorm
-	       fun loop [] [] = 
+	       fun loop still_none [] [] = 
 		   (case edef of 
-			NONE => (false, con_deref rescon)
+			NONE => if still_none 
+				    then error "CASE statement with no arms and no default"
+				else (false, con_deref rescon)
 		      | SOME edef => 
 			    let val (_,defcon) = GetExpCon(edef,ctxt)
 			    in  if (eq_con_from_get_exp13(CON_ARROW(sumcon,rescon,
@@ -963,11 +912,11 @@ functor IlStatic(structure Il : IL
 				    then (false, con_deref rescon)
 				else error "default arm type mismatch"
 			    end)
-		 | loop (NONE::arms) (con::cons) = loop arms cons
-		 | loop ((SOME exp)::arms) (con::cons) = 
+		 | loop still_none (NONE::arms) (con::cons) = loop still_none arms cons
+		 | loop _ ((SOME exp)::arms) (con::cons) = 
 		   let val (_,c) = GetExpCon(exp,ctxt)
 		   in if (eq_con_from_get_exp14(con,c,ctxt))
-			  then loop arms cons
+			  then loop false arms cons
 		      else (print "case arm type mismatch: checking exp = ";
 			    pp_exp exparg; print "\nwith ctxt = ";
 			    pp_context ctxt; print "\n";
@@ -976,9 +925,9 @@ functor IlStatic(structure Il : IL
 			    print "guess_arm_con = \n"; pp_con con;
 			    error "case arm type mismatch")
 		   end
-		 | loop _ _ = error "CASE: number of con != number of arms"
+		 | loop _ _ _ = error "CASE: number of con != number of arms"
 	   in if (eq_con_from_get_exp15(eargCon,sumcon,ctxt))
-		  then loop earms guess_arm_cons
+		  then loop true earms guess_arm_cons
 	      else 
 		  error "CASE: expression type and decoration con mismatch"
 	   end
@@ -1208,7 +1157,7 @@ functor IlStatic(structure Il : IL
 	       (let 
 		   val (_,s) = GetModSig(m,ctxt)
 		   fun break_loop (c as (CON_MODULE_PROJECT(m',l'))) = 
-		       if (eq_label(l,l') andalso eq_modval(m,m')) 
+		       if (eq_label(l,l') andalso eq_mod(m,m')) 
 			   then (false,c)
 		       else HeadNormalize(c,ctxt)
 		     | break_loop c = HeadNormalize(c,ctxt)
@@ -1311,7 +1260,7 @@ functor IlStatic(structure Il : IL
 			    | (SOME (PHRASE_CLASS_CON(c,k))) => 
 				  (case c of
 				       CON_MODULE_PROJECT(m',l') => 
-					   if (eq_label(l,l') andalso eq_modval(m,m'))
+					   if (eq_label(l,l') andalso eq_mod(m,m'))
 					       then c
 					   else Normalize(c,ctxt)
 				     | _ => Normalize(c,ctxt))
@@ -1327,7 +1276,7 @@ functor IlStatic(structure Il : IL
 			    | (SOME (PHRASE_CLASS_CON(c,k))) => 
 				  (case c of
 				       CON_MODULE_PROJECT(m',l') => 
-					   if (eq_label(l,l') andalso eq_modval(m,m'))
+					   if (eq_label(l,l') andalso eq_mod(m,m'))
 					       then c
 					   else Normalize(c,ctxt)
 				     | _ => Normalize(c,ctxt))
@@ -1347,7 +1296,7 @@ functor IlStatic(structure Il : IL
 	       | (SOME (_,PHRASE_CLASS_CON(c,k))) => 
 		     (case c of
 			  CON_MODULE_PROJECT(m',l') => 
-			      if (eq_label(l,l') andalso eq_modval(m,m'))
+			      if (eq_label(l,l') andalso eq_mod(m,m'))
 				  then c
 			      else Normalize(c,ctxt)
 			| _ => Normalize(c,ctxt))
