@@ -115,8 +115,16 @@ val debug = ref false
    fun make_state() : state = {local_state = make_varstate(),
 			       global_state = make_varstate()}
 
-   val mutable_objects : label list ref = ref nil
-   val mutable_variables : (label * rep) list ref = ref nil
+   local
+       val mutable_objects : label list ref = ref nil
+       val mutable_variables : (label * rep) list ref = ref nil
+   in  fun add_mutable_object l = mutable_objects := l :: !mutable_objects
+       fun get_mutable_objects () = !mutable_objects
+       fun reset_mutable_objects() = mutable_objects := nil
+       fun add_mutable_variable (l,r) = mutable_variables := (l,r) :: !mutable_variables
+       fun get_mutable_variables () = !mutable_variables
+       fun reset_mutable_variables() = mutable_variables := nil
+   end
    fun add_proc p = pl := p :: !pl
    datatype work = FunWork of (state * var * function)
                  | ConFunWork of (state * var * (var * kind) list * con * kind)
@@ -324,9 +332,14 @@ val debug = ref false
        end
 
    fun con2rep state con : rep = 
-       let fun dynamic() = (case con2rep_raw state (#2(simplify_type state con)) of
-				SOME rep => rep
-			      | NONE => error "con2rep failed")
+       let fun dynamic() = 
+	   let val (_,c) = (simplify_type state con)
+	   in  (case con2rep_raw state c of
+		    SOME rep => rep
+		  | NONE => (print "con2rep failed on ";
+			     Ppnil.pp_con c; print "\n";
+			     error "con2rep failed"))
+	   end
        in (case (con2rep_raw state con) of
 	       SOME (COMPUTE _) => dynamic()
 	     | SOME rep => rep
@@ -461,14 +474,14 @@ val debug = ref false
 	    do_code_align();
 	    add_instr(ILABEL (!top)))
 
-       fun reset_global_state exp =
+       fun reset_global_state exportlist =
 	   (resetWork();
 	    code_state :=  make_varstate();
-	    exports := exp;
+	    exports := (foldl (fn ((v,l),m) => VarMap.insert(m,v,l)) VarMap.empty exportlist);
             dl := nil;
 	    pl := nil;
-	    mutable_objects := nil;
-	    mutable_variables := nil;
+	    reset_mutable_objects();
+	    reset_mutable_variables();
 	    reset_state(false,fresh_var()))
 
        fun get_state() = {name = !currentfun,
@@ -559,7 +572,7 @@ val debug = ref false
   fun add_global     s (v,p,con)        = lvarmap_insert s (v,(VGLOBAL p, NONE,con))
   fun add_global_val s (v,p,con,value)  = lvarmap_insert s (v,(VGLOBAL p, SOME value,con))
 
-  fun add_label s (v,lab, con) = lvarmap_insert s (v,(VLABEL lab, NONE, con))
+  fun add_label s (v,lab , con) = lvarmap_insert s (v,(VLABEL lab, NONE, con))
 
   fun add_conglobal s (v,l,kind,copt) = (lenv_insert (lconvarmap_insert s (v,(VGLOBAL (l,TRACE), kind)))
 					 (v,kind,copt))
@@ -890,8 +903,7 @@ val debug = ref false
       val rtl_rep = con2rep state con
       val state' = add_global state (v,(label,rtl_rep),con)
       val _ = (case rtl_rep of
-		   (TRACE | COMPUTE _) => 
-		       mutable_variables := (label,rtl_rep) :: !mutable_variables
+		   (TRACE | COMPUTE _) => add_mutable_variable(label,rtl_rep)
 		 | _ => ())
     in 
 	add_data(ALIGN (QUAD));
@@ -922,6 +934,7 @@ val debug = ref false
 		     | NONE => LOCAL_LABEL(alloc_named_data_label v))
       val state' = add_conglobal state (v,label, kind, copt)
       val addr = alloc_regi LABEL
+      val _ = add_mutable_variable(label,TRACE)
     in 
 	add_data(ALIGN (QUAD));
 	add_data(DLABEL (label));
@@ -1238,6 +1251,9 @@ val debug = ref false
 		  let 
 (*		      val _ = stat_state state *)
 		      local
+			  val _ = add_instr (ICOMMENT (case openness of
+							   Code => "making a direct call"
+							 | Closure => "making a closure call"))
 			  val cregsi = map (fn c => #1(xcon(state,fresh_named_var "call_carg", c))) clist
 			  val eregs = map (fn e => #1(xexp'(state,fresh_named_var "call_e", 
 							    e, NONE, NOTID))) elist
@@ -1310,15 +1326,19 @@ val debug = ref false
 						       SOME _ => true
 						     | NONE => false),
 					 save=SAVE(getLocals())})
-		  in  (case (context,#elim_tail_call(!cur_params)) of
-			   ((NOTID,_) | (_, false)) => do_call NONE
-			 | (ID r,true) =>  
-			       if (selfcall)
-				   then (shuffle_iregs(iregs,getArgI());
-					 shuffle_fregs(fregs,getArgF());
-					 add_instr(BR (getTop())))
-			       else do_call (SOME r));
-		      (VAR_LOC(VREGISTER dest), rescon)
+		      val result = ((case (context,#elim_tail_call(!cur_params)) of
+					((NOTID,_) | (_, false)) => do_call NONE
+				      | (ID r,true) =>  
+					    if (selfcall)
+						then (shuffle_iregs(iregs,getArgI());
+						      shuffle_fregs(fregs,getArgF());
+						      add_instr(BR (getTop())))
+					    else do_call (SOME r));
+				    (VAR_LOC(VREGISTER dest), rescon))
+		      val _ = add_instr (ICOMMENT (case openness of
+						       Code => "done making a direct call"
+						     | Closure => "done making a closure call"))
+		  in  result
 		  end
 
 	    | Raise_e (exp, con) =>
@@ -1592,13 +1612,15 @@ val debug = ref false
 							end
 						end
 					  | _ => error "bad function for carrier case of sum switch")
-			      fun check cmp i = if in_imm_range(w2i i) 
-						    then add_instr(CMPSI(cmp,tag,IMM(w2i i),test))
-						else 
-						    let val tmp = alloc_regi(NOTRACE_INT)
-						    in add_instr(LI(i,tmp));
-							add_instr(CMPSI(cmp,tag,REG tmp,test))
-						    end
+			       (* perform check and branch to next case *)
+			      fun check cmp i = (if in_imm_range(w2i i) 
+						     then add_instr(CMPSI(cmp,tag,IMM(w2i i),test))
+						 else 
+						     let val tmp = alloc_regi(NOTRACE_INT)
+						     in  add_instr(LI(i,tmp));
+							 add_instr(CMPSI(cmp,tag,REG tmp,test))
+						     end;
+						  add_instr(BCNDI(EQ,test,next,true)))
 			  in  if (W32.ult(i,tagcount))
 				  then check EQ i
 			      else (if one_carrier
@@ -1606,7 +1628,6 @@ val debug = ref false
 						 then ()
 					     else check GT 0w255)
 				   else check EQ (W32.uminus(i,tagcount)));
-			      add_instr(BCNDI(EQ,test,next,true));
 			      mv(xexp'(state',fresh_var(),body,SOME con,context));
 			      add_instr(BR afterl);
 			      scan(next,rest)
@@ -2585,7 +2606,7 @@ val debug = ref false
 			   end
 *)
 
-
+  (* if we allocate arrays statically, we must add labels of pointer arrays to mutable_objects *)
  and xarray(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
     let 
 	val dest = alloc_regi TRACE
@@ -2777,6 +2798,7 @@ val debug = ref false
   and make_record (destopt, _ , []) = load_ireg_val(unitval,NONE)
     | make_record (destopt, reps : rep list, vl : loc_or_val list) = 
     let 
+	val _ = add_instr(ICOMMENT ("alllocating an " ^ (Int.toString (length vl)) ^ " record"))
 	val tagwords = mk_recordtag reps
 	val dest = (case destopt of
 			NONE => alloc_regi TRACE
@@ -2844,6 +2866,7 @@ val debug = ref false
       val offset = scan_vals (offset, vl)
       val _ = (add(heapptr,4 * length tagwords,dest);
 	       add(heapptr,4 * words_alloced,heapptr))
+      val _ = add_instr(ICOMMENT ("done alllocating an " ^ (Int.toString (length vl)) ^ " record"))
     in   dest
     end
   
@@ -2946,12 +2969,33 @@ val debug = ref false
   end
 
    fun translate trans_params (Nil.MODULE{bnds : bnd list,
-					  imports : Name.label Name.VarMap.map,
-					  exports : Name.label Name.VarMap.map}) = 
+					  imports : import_entry list,
+					  exports : export_entry list}) =
          let 
-	     val _ = reset_global_state exports
-	     val exp = Let_e(Sequential,bnds,Const_e(Prim.int(Prim.W32,W64.zero)))
-	     val con = Prim_c(Int_c Prim.W32,[])
+	     (* we do something special for exports of a variable *)
+	     local
+		 fun mapper (exp as ExportValue(l,Var_e v,_)) = ((v,l),exp)
+		   | mapper (exp as ExportType(l,Var_c v,_)) = ((v,l),exp)
+		   | mapper (exp as ExportValue(l,_,_)) = ((fresh_var(),l),exp)
+		   | mapper (exp as ExportType(l,_,_)) = ((fresh_var(),l),exp)
+	     in  val named_exports = map mapper exports
+		 val _ = reset_global_state (map #1 named_exports)
+	     end
+
+	     (* we put non-variable exports at the tail of the program;
+              creating an main expression to be translated  *)
+	     local fun mapper (_,ExportValue(l,Var_e v,_)) = NONE
+		     | mapper (_,ExportType(l,Var_c v,_)) = NONE
+		     | mapper ((v,_),ExportValue(l,e,c)) = SOME(Exp_b(v,c,e))
+		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(v,k,c))
+		   val export_bnds = List.mapPartial mapper named_exports
+	     in  val exp = Let_e(Sequential,bnds,
+				   Let_e(Sequential,export_bnds,
+				   Const_e(Prim.int(Prim.W32,W64.zero))))
+		 val con = Prim_c(Int_c Prim.W32,[])
+	     end
+
+	     (* set the translation parameters *)
 	     val _ = cur_params := trans_params
 	     val _ = (case trans_params of
 			  {HeapProfile = SOME c, ...} => (HeapProfile := true;
@@ -2961,8 +3005,12 @@ val debug = ref false
 		 
 	    (* translate the expression as a function taking no arguments *)
 	     val mainName = fresh_named_var "main"
-		 (* --- need to add locations of certain vars with labels for exports *)
 	     val state = make_state()
+	     fun folder (ImportValue(l,v,c),s) = 
+		 add_global s (v,(ML_EXTERN_LABEL(Name.label2string l),con2rep state c),c)
+	       | folder (ImportType(l,v,k),s) = 
+		 add_conglobal s (v,ML_EXTERN_LABEL(Name.label2string l),k,NONE)
+	     val state = foldl folder state imports
 	     val PROC{name,return,args,results,code,known,save,vars} =
 		 dofun_top (state,mainName,Function(Partial,Nonleaf,[],[],[],exp,con))
 	     val p' = PROC{name=name,
@@ -2979,8 +3027,8 @@ val debug = ref false
 	     val module = Rtl.MODULE {procs = rev (!pl),
 				      data = Array.fromList (rev(!dl)),
 				      main=LOCAL_CODE mainName,
-				      mutable_objects = !mutable_objects,
-				      mutable_variables = !mutable_variables}
+				      mutable_objects = get_mutable_objects(),
+				      mutable_variables = get_mutable_variables()}
 	 in module
 	 end
 

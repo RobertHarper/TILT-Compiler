@@ -3,6 +3,8 @@ sig
     structure Tortl : TORTL
     structure Rtl : RTL
     structure Pprtl : PPRTL
+
+    val compile_prelude : bool * string -> Rtl.module
     val compile : string -> Rtl.module
     val test : string -> Rtl.module
 end
@@ -45,9 +47,8 @@ struct
 				    structure Heap = Heap
 				    structure Registerset = Registerset
 				    structure Operations = Operations)
-    fun compile' debug s = 
-	let val nilmodule : Linknil.Nil.module = (if debug then Linknil.test else Linknil.compile) s
-	    val translate_params = {HeapProfile = NONE, do_write_list = true,
+    fun compile' debug nilmodule = 
+	let val translate_params = {HeapProfile = NONE, do_write_list = true,
 				    codeAlign = Rtl.QUAD, FullConditionalBranch = false,
 				    elim_tail_call = true, recognize_constants = true}
 	    val rtlmod = Tortl.translate translate_params nilmodule
@@ -62,7 +63,23 @@ struct
 	in  rtlmod
 	end
 
-    val test = compile' true
-    val compile = compile' false
+    fun compile filename = 
+	let val nilmodule : Linknil.Nil.module = Linknil.compile filename
+	in  compile' false nilmodule
+	end
+    fun test filename = 
+	let val nilmodule : Linknil.Nil.module = Linknil.test filename
+	in  compile' true nilmodule
+	end
+
+    val cached_prelude = ref (NONE : Rtl.module option)
+    fun compile_prelude (use_cache,filename) = 
+	case (use_cache, !cached_prelude) of
+		(true, SOME m) => m
+	      | _ => let val nilmod = Linknil.compile_prelude(use_cache,filename)
+			 val m = compile' false nilmod
+			 val _ = cached_prelude := SOME m
+		     in  m
+		     end
 
 end
