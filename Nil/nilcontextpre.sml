@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Name Listops Util NilError List ListPair Sequence Prim Nil Stats Option Ppnil NilSubst NilUtil ListMergeSort NILCONTEXTPRE *)
+(*$import Name Listops Util NilError List ListPair Sequence Prim Nil Stats Option Ppnil NilSubst NilUtil ListMergeSort NILCONTEXTPRE *)
 
 (* This structure implements the main body of the context code.
  * In order to eliminate cycles in the code dependencies, some
@@ -298,7 +298,7 @@ structure NilContextPre
 
 	
    (* One of the big bottlenecks in several stages, including typechecking,
-    * has been eliminating undecorated singletons (or equivalently, synthsizing
+    * has been eliminating undecorated singletons (or equivalently, synthesizing
     * kinds for constructors).  Frequently, you need to synthesize a kind for
     * a very large thing which you happen to have a name for.  Moreover, you
     * probably want to "selfify" the resulting kind with the name anyway.
@@ -513,16 +513,16 @@ structure NilContextPre
 		       end)
 	      in loop (bnds,(D,empty_subst()))
 	      end
-	    	      
+	    	     
 	     | (Closure_c (code,env)) => 
-	      let val (subst,code_kind) = kind_of' (D,code,name) 
+	      let val (subst,code_kind) = kind_of' (D,code,NONE) 
 		  val (TEv,vklist,body_kind) = 
 		    (case code_kind
 		       of Arrow_k (Code,(TEv,_)::vklist,body_kind) => (TEv,vklist,body_kind)
 			| _ => (error  (locate "kind_of") "Invalid closure: code component does not have correct kind" ))
-	      in (NilSubst.C.addl (TEv,env,subst),Arrow_k(Closure,vklist,body_kind))
+	      in name_self(name,Arrow_k(Closure,vklist,body_kind),NilSubst.C.addl (TEv,env,subst))
 	      end
-	    
+ 	    
 	     | (Crecord_c entries) => 
 	      let 
 		fun mapper (l,c) = 
@@ -626,7 +626,9 @@ structure NilContextPre
   fun find_kind_equation (s as {kindmap,...}:context,con) : con option = 
     let 
       datatype result = CON of con | KIND of (kind * NilSubst.con_subst) | NON_PATH
+	  (* found a constructor, a kind that is hopefully a singleton (with an applicable substitution), or nothing useful *)
       
+      (* look for an equation in a projection *)
       fun project_kind(k,c,l,subst) = 
 	(case k of
 	   Record_k lvk_seq => 
@@ -647,6 +649,7 @@ structure NilContextPre
 	      error (locate "find_kind_equation.project_kind") 
 	      "bad kind to project_kind"))
 
+      (* look for an equation in an application *)
       fun app_kind(k,c1,clist,subst) = 
 	(case k 
 	   of Arrow_k (openness,vklist, k) => 
@@ -657,6 +660,7 @@ structure NilContextPre
 	    | Single_k c => CON(App_c(substConInCon subst c,clist))
 	    | _ => error (locate "app_kind") "bad kind to app_kind")
 
+      (* look for an equation in a closure *)
       fun closure_kind (k,env,subst) = 
 	(case k
 	   of Single_k c => CON(Closure_c(substConInCon subst c,env))
@@ -664,18 +668,21 @@ structure NilContextPre
 	     KIND (Arrow_k(Closure,vklist,body_kind),add subst (TEv,env))
 	    | _ => (error  (locate "find_kind_equation") "Invalid closure: code component does not have code kind" ))
 
+      (* look for an equation in a kind *)
       fun kind_eqn k = 
 	(case k 
 	   of Single_k c => SOME c
 	    | SingleType_k c => SOME c
 	    | _ => NONE)
 
+      (* determine the relevant equation, if any, indicated by a traversal result *)
       fun get_eqn c = 
 	(case c
 	   of CON c => SOME c
 	    | KIND(k,s) => mapopt (substConInCon s) (kind_eqn k)
 	    | NON_PATH => NONE)
 
+      (* Traverse a constructor as far as possible to determine an equation *)
       fun trans c = 
 	if !transitive then
 	  (case get_eqn(traverse c)
@@ -683,6 +690,7 @@ structure NilContextPre
 	      | NONE => c)
 	else c
 
+      (* Traverse a constructor a single step in looking for an equation *)
       and traverse c : result = 
 	(case c 
 	   of (Var_c v) => 
@@ -732,6 +740,9 @@ structure NilContextPre
 
    (*****Labelled variable context functions. ******)
 
+    (* Insert a label into a context.  If the label is already bound,
+     * raises an exception.
+     *)
     fun insert_label (context as {kindmap,conmap,counter,varmap}:context,label,var) : context =
       let
 	val _ =
@@ -765,6 +776,9 @@ structure NilContextPre
 		else ();
 		raise Unbound))
 
+    (* is_well_formed (kind_valid,con_valid,subkind) D 
+     * Check whether or not a given context is well-formed.
+     *)
     fun is_well_formed (kind_valid : context * kind -> kind,
 			con_valid : context * con -> kind,
 			subkind : context * kind * kind -> bool) ({kindmap,...}:context) : bool =
@@ -809,8 +823,18 @@ structure NilContextPre
 
     fun filt cc = List.mapPartial (fn x => x) cc
 
+    (*These functions take an item or a list of items and 
+     * return the minimal context necessary to cover all
+     * the free variables in the item.  This can make error
+     * printouts vastly shorter.
+     *)
+
     (*SOME unpleasantness to make it robust with unbound variables
      *)
+
+   (* generate_error_context(orig, context, fvlist) ==> context extended as needed with a free variable transitive closure
+       started from fvlist, using orig to look up information on these variables. Free variables not found in orig will
+       be ignored silently. *)
    fun generate_error_context (orig,context,[]) = context
      | generate_error_context (orig,context,fvlist) = 
      let
