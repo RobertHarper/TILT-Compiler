@@ -520,11 +520,13 @@ structure Toil
 					end
 		     in (res,eq_con,true)
 		     end
-	     in
-		 (case (Context_Lookup_Labels(context,map symbol_label path)) of
-		      SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,c,Exp_IsValuable(context,e))
-		    | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,c,true)
-		    | SOME (_, PHRASE_CLASS_OVEREXP cons_exps) =>
+		 val labs = map symbol_label path
+		 val cons_exps_option = 		
+		     (case labs of
+			  [lab] => Context_Lookup_Overload(context, lab)
+			| _ => NONE)
+	     in  (case cons_exps_option of
+		      SOME cons_exps =>
 			  let 
 			      val eshot = oneshot()
 			      fun mk_constraint (con,exp) =
@@ -532,13 +534,6 @@ structure Toil
 				      let val c' = CON_TYVAR tyvar
 					  val match = (if is_hard then eq_con else soft_eq_con)
 					      (context,con,c')
-(*
-					  val _ = (print "CONSTRAINT: "; pp_con con;
-						   print "  with "; pp_con c'; print "  ";
-						   if match 
-						      then print "  satisfiable\n"
-						  else  print "   failed\n")
-*)
 				      in  match
 				      end
 				      fun thunk() = 
@@ -554,38 +549,40 @@ structure Toil
 			      val _ = add_overload_entry ocon
 			  in (exp,CON_OVAR ocon,Exp_IsValuable(context,exp))
 			  end
-		      
-		      
-		    | SOME(_,PHRASE_CLASS_MOD (m, _, s as SIGNAT_FUNCTOR _)) => 
-			  let val (e,c) = polyfun_inst (context,m,s)
-			  in  (e,c,true)
-			  end
-		    | SOME(_,PHRASE_CLASS_MOD (m, _,(SIGNAT_STRUCTURE(_,sdecs)))) =>
-			  let fun dosdec (SDEC(l,DEC_EXP(_,c,_,_))) =
-				   if (eq_label (l,mk_lab))
-				       then (MODULE_PROJECT(m,mk_lab),c,true)
-				   else unbound()
-				| dosdec (SDEC(l,DEC_MOD(_,_,s))) =
-				       if (eq_label(l,mk_lab))
-					   then 
-					       let val mk_mod = MOD_PROJECT(m,mk_lab)
-						   val (e,c) = polyfun_inst(context,mk_mod,s)
-					       in  (e,c,true)
-					       end
+		    | NONE => (* identifier is long or is not overloaded *)
+			  (case (Context_Lookup_Labels(context,labs)) of
+			       SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,c,Exp_IsValuable(context,e))
+			     | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,c,true)
+			     | SOME(_,PHRASE_CLASS_MOD (m, _, s as SIGNAT_FUNCTOR _)) => 
+				   let val (e,c) = polyfun_inst (context,m,s)
+				   in  (e,c,true)
+				   end
+			     | SOME(_,PHRASE_CLASS_MOD (m, _,(SIGNAT_STRUCTURE(_,sdecs)))) =>
+				   let fun dosdec (SDEC(l,DEC_EXP(_,c,_,_))) =
+				       if (eq_label (l,mk_lab))
+					   then (MODULE_PROJECT(m,mk_lab),c,true)
 				       else unbound()
-				| dosdec _ = unbound()
-			  in (case sdecs of
-				  [sdec] => dosdec sdec
-				| [_,sdec] => dosdec sdec
-				| _ => unbound())
-			  end
-		    | SOME (_, PHRASE_CLASS_CON _) => unbound()
-		    | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
-				  then eqcase true
-			      else if (length path = 1 andalso 
-				       (Symbol.eq(hd path,Symbol.varSymbol "<>")))
-				       then eqcase false
-				   else unbound())
+					 | dosdec (SDEC(l,DEC_MOD(_,_,s))) =
+					   if (eq_label(l,mk_lab))
+					       then 
+						   let val mk_mod = MOD_PROJECT(m,mk_lab)
+						       val (e,c) = polyfun_inst(context,mk_mod,s)
+						   in  (e,c,true)
+						   end
+					   else unbound()
+					 | dosdec _ = unbound()
+				   in (case sdecs of
+					   [sdec] => dosdec sdec
+					 | [_,sdec] => dosdec sdec
+					 | _ => unbound())
+				   end
+			     | SOME (_, PHRASE_CLASS_CON _) => unbound()
+			     | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
+					   then eqcase true
+				       else if (length path = 1 andalso 
+						(Symbol.eq(hd path,Symbol.varSymbol "<>")))
+						then eqcase false
+					    else unbound()))
 	     end
        | Ast.DelayExp expr =>
 	     (case (Context_Lookup_Label(context,symbol_label (Symbol.varSymbol "Susp")),
@@ -1126,10 +1123,6 @@ val _ = print "plet0\n"
 		end
 
 		val tyvar_stamp = get_stamp()
-		val lbl = to_open(internal_label ("!varpoly"))
-		val var_poly = fresh_named_var "varpoly"
-		val lbl' = to_nonexport (internal_label "!valbind")
-		val var' = fresh_named_var "valbind"
 		val tyvars = map tyvar_strip tyvars
 		local
 		     fun help tyvar = 
@@ -1142,9 +1135,11 @@ val _ = print "plet0\n"
 		     val temp = map help tyvars
 		in  val temp_sdecs = make_typearg_sdec temp
 		end
-		val context' = add_context_mod(context,lbl,var_poly,
-						  SelfifySig context (PATH (var_poly,[]),
-							     SIGNAT_STRUCTURE (NONE,temp_sdecs)))
+		val lbl_poly = to_open(internal_label ("!varpoly"))
+		val var_poly = fresh_named_var "varpoly"
+		val context' = add_context_mod(context,lbl_poly,var_poly,
+					       SelfifySig context (PATH (var_poly,[]),
+								   SIGNAT_STRUCTURE (NONE,temp_sdecs)))
 		val _ = eq_table_push()
 		val lbl = internal_label "!bindarg"
 		val v = fresh_named_var "bindarg"
@@ -1155,6 +1150,10 @@ val _ = print "plet0\n"
 		val bind_sbnd_sdec = (bindCompile{context = context',
 						  bindpat = parsed_pat,
 						  arg = (v,con)})
+		val varsBound = String.concat(map (fn (SBND(l,_),_) => label2name l) bind_sbnd_sdec)
+		val valbind_string = "valbind" ^ varsBound
+		val lbl_valbind = to_nonexport (internal_label ("!" ^ valbind_string))
+		val var_valbind = fresh_named_var valbind_string
 		val sbnd_sdec_list = 
 		    (case bind_sbnd_sdec of
 			 [(SBND(lbl',BND_EXP(v'',VAR v')),_)] =>
@@ -1199,7 +1198,7 @@ val _ = print "plet0\n"
 				     val labs = map (fn SDEC (l,_) => l) sdecs
 				     val cons = map (fn SDEC(l,DEC_EXP(_,c,_,_)) => c | _ => elab_error "Rule 237") sdecs
 				     fun mod_sig_help (l,c) =
-					 let val modapp = MOD_APP(MOD_VAR var',MOD_VAR var_poly)
+					 let val modapp = MOD_APP(MOD_VAR var_valbind,MOD_VAR var_poly)
 					     val inner_var = fresh_named_var "inner_valbind"
 					     val outer_var = fresh_named_var "outer_valbind"
 						 
@@ -1223,9 +1222,9 @@ val _ = print "plet0\n"
 				     val temp_sig = SIGNAT_FUNCTOR(var_poly,sig_poly,
 								   SIGNAT_STRUCTURE(NONE, sdecs), a)
 				     val rest_sbnds_sdecs = map2 mod_sig_help (labs,cons)
-				     val final_sbnds = ((SBND(lbl',BND_MOD(var',true,temp_mod)))::
+				     val final_sbnds = ((SBND(lbl_valbind,BND_MOD(var_valbind,true,temp_mod)))::
 							(map #1 rest_sbnds_sdecs))
-				     val final_sdecs = ((SDEC(lbl',DEC_MOD(var',true,temp_sig))) ::
+				     val final_sdecs = ((SDEC(lbl_valbind,DEC_MOD(var_valbind,true,temp_sig))) ::
 							(map #2 rest_sbnds_sdecs))
 				 in map2 (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) (final_sbnds, final_sdecs)
 				 end)
@@ -1646,7 +1645,7 @@ val _ = print "plet0\n"
 						  end) exp_list
 		  val l = symbol_label sym
 		  val v = gen_var_from_symbol sym
-		  val ce = CONTEXT_OVEREXP(l,v,con_exp_list)
+		  val ce = CONTEXT_OVEREXP(l,con_exp_list)
 	      in  [(NONE,ce)]
 	      end
 	| Ast.ImportDec strlist => parse_error "import declaration not handled"

@@ -902,9 +902,6 @@ structure Signature :> SIGNATURE =
 	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_SIG _)) => 
 			     (error_region_with "value specification but signature component: ";
 			      pp_label lab; print "\n"; NONE)
-	        | (DEC_EXP _, SOME(_,PHRASE_CLASS_OVEREXP _)) => 
-			     (error_region_with "value specification but overloaded term component: ";
-			      pp_label lab; print "\n"; NONE)
                 | (DEC_EXP _, NONE) => 
 			     (error_region_with "value specification but missing component: ";
 			      pp_label lab; print "\n"; NONE)

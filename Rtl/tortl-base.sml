@@ -840,7 +840,7 @@ struct
   fun align_odd_word () =
     let val tmp0 = alloc_regi(NOTRACE_INT)
       val tmp1 = alloc_regi(TRACE)
-    in  add_instr(LI(Rtltags.skip 0,tmp0));
+    in  add_instr(LI(Rtltags.skip 1,tmp0));
 	add_instr(STORE32I(REA(heapptr,0),tmp0));  (* store a skiptag *)
 	add_instr(ANDB(heapptr,IMM 4,tmp0));
 	add_instr(ADD(heapptr,IMM 4,tmp1));
@@ -851,7 +851,7 @@ struct
   fun align_even_word () =
     let val tmp0 = alloc_regi(NOTRACE_INT)
       val tmp1 = alloc_regi(NOTRACE_INT)
-    in add_instr(LI(Rtltags.skip 0,tmp0));
+    in add_instr(LI(Rtltags.skip 1,tmp0));
       add_instr(STORE32I(REA(heapptr,0),tmp0)); (* store a skiptag *)
       add_instr(ANDB(heapptr,IMM 4,tmp0));
       add_instr(ADD(heapptr,IMM 4,tmp1));
@@ -953,7 +953,7 @@ struct
 	  fun doUninitialize() = 
 	      let val tag = alloc_regi NOTRACE_INT
 		  val _ = add_mutable label
-	      in  add_data (INT32 (Rtltags.skip 1));  (* indicates uninitilized global *)
+	      in  add_data (INT32 (Rtltags.skip 2));  (* indicates uninitilized global *)
 		  app (fn l => add_data(DLABEL l)) (label::labels);
 		  add_instr(LI(tagData, tag));
 		  (case tagMaskOpt of

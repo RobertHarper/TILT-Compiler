@@ -113,12 +113,14 @@ signature IL =
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
       | CONTEXT_FIXITY of label * Fixity.fixity
-      | CONTEXT_OVEREXP of label * var * (con * exp) list
+      | CONTEXT_OVEREXP of label * (con * exp) list
 
     (* A context contains 
          (A) A mapping from labels to fixity information,
-	 (B) A mapping of labels and variables to some classifier information.  
-       The underlying structure of this second mapping consists of 
+	 (B) An ordered  mapping of labels and variables to some classifier information.  
+	 (C) A mapping from overloaded labels to the overloaded types and expressions.
+	 The labels of (B) and (C) are disjoint.
+       The underlying structure of (B) consists of 
          (a) An ordered mapping of variables to classifier (phrase_class).
 	     Entries in this mapping can never be shadowed so it is
 	     illegal to insert a new entry with the same variable.
@@ -127,7 +129,7 @@ signature IL =
 	     to insert a new entry with a label that already exists.
        There are 3 additional operations we want to make possible:
          (1) Strutures that have "open" labels signify that their components
-	     must be searched when performing lookup by label.  Thus, the
+	     must be searched when performing label lookup.  Thus, the
 	     corresponding internal name might be a path (and not just a variable).
 	     To support these "open" lookups, we must extend variables to paths.
 	 (2) We want to make obtaining classifier from a label fast.
@@ -140,24 +142,22 @@ signature IL =
 	 (iii) labelMap: A mapping that takes a label to a path and a classifier
        Notes:
          (!) Because of the possibility of shadowing, an insertion of a new label
-             may require the previous existing labels to be changed in both
+             may require the previously existing label to be changed in both
 	     the labelMap and the pathMap.
          (+) The labelMap is redundant and can be reconstructed from pathMap.
 	     Thus, it does not need to be written out to disk.
-	 (-) The label field in pathMap might be NONE if the corresponding label
-	     has been shadowed.
     *)
 
     and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
+			       overloadMap : (con * exp) list Name.LabelMap.map,
 			       pathMap  : (label * phrase_class) Name.PathMap.map,
 			       ordering : path list,
-			       labelMap : (path * phrase_class) Name.LabelMap.map}
+			       labelMap : (path * phrase_class) Name.LabelMap.map} (* reconstructed from pathMap *)
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
                      | PHRASE_CLASS_MOD     of mod * bool * signat
                      | PHRASE_CLASS_SIG     of var * signat
-                     | PHRASE_CLASS_OVEREXP of (con * exp) list
 
     withtype value = (con,exp) Prim.value
     and decs = dec list

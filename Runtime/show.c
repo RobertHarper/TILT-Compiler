@@ -31,7 +31,7 @@ int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 int ptr_check(ptr_t *ptrLoc, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
   ptr_t pointer = *ptrLoc;
-  if (IsConstructorData(pointer))
+  if (IsTagData(pointer))
     return 1;
   if (IsGlobalData(pointer))
     return 1;
@@ -93,19 +93,6 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
 	if (show)
 	  printf("\n");
 	end = obj + len;
-      }
-      break;
-    case FORWARD_TAG:
-      {
-	mem_t forwardstart = ((mem_t)obj[0]) - 1;
-	mem_t forwardend = NULL;
-	int len;
-
-	if (show)
-	  printf("%ld: SENT(%d) -> ",obj,forwardstart + 1);
-	forwardend = show_obj(forwardstart,show,legalHeaps,legalStarts);
-	len = forwardend - forwardstart;
-	end = start + len;
       }
       break;
     case IARRAY_TAG:
@@ -171,38 +158,35 @@ mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStart
 	  end = obj + wordlen;
       }
       break;
-    case SKIP_TAG:
+    case SKIP_TAG: {
+      int wordsSkipped = tag >> SKIPLEN_OFFSET;
+      end = start + wordsSkipped;
       if (show)
-	printf("%ld: SKIP\n", start);
-      end = obj;
+	printf("%ld - %ld: SKIP %d words\n", start, end, wordsSkipped);
+      assert(wordsSkipped > 0);
       break;
+    }
     default:
-      printf("\nshow_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
-      assert(0);
+      if (IS_FORWARDPTR(tag)) { /* tag is a forwarding pointer if it is a multiple of 4 */
+	mem_t forwardstart = ((mem_t)tag) - 1;
+	mem_t forwardend = NULL;
+	int len;
+	if (show)
+	  printf("%ld: SENT(%d) -> ",obj,forwardstart + 1);
+	forwardend = show_obj(forwardstart,show,legalHeaps,legalStarts);
+	len = forwardend - forwardstart;
+	end = start + len;
+      }
+      else {
+	printf("\nshow_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
+	assert(0);
+      }
       break;
     }
   return end;
 }
 
-mem_t show_skips(int show, mem_t start, mem_t finish)
-{
-  mem_t cur = start;
-  while (cur < finish) {
-    tag_t tag = *cur;
-    if (GET_TYPE(tag) == SKIP_TAG)
-      cur += 1 + (GET_SKIP(tag)); 
-    else
-      break;
-  }
-  if (show)
-    if (cur == start)
-      ;
-    else if (cur == start + 1)
-      printf("%ld: SKIP\n", start);
-    else
-      printf("%ld - %ld: %d SKIPs\n",start,cur-1,cur - start);
-  return cur;
-}
+
 
 Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top, 
 		    Heap_t **legalHeaps, Bitmap_t **legalStarts,
@@ -218,7 +202,6 @@ Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top,
     printf("--------------------------------------------------------------\n");
   }
   while (cur < finish) {
-    cur = show_skips(show,cur,finish);
     if (cur < finish) {
       if (makeBitmap) {
 	int pos = (cur + 1) - start;

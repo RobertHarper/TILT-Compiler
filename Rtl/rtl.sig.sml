@@ -93,7 +93,7 @@ sig
       LI     of TilWord32.word * regi
     | LADDR  of ea * regi               
     | MV     of regi * regi               (* src,dest *)
-    | CMV    of cmp * regi * sv * regi    (* if cmp ra then c <- b *)
+    | CMV    of cmp * regi * sv * regi    (* if cmp ra then b <- c *)
     | FMV    of regf * regf 
 
 

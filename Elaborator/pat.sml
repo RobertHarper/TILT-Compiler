@@ -39,7 +39,7 @@
    (4) INT if the column contains only Ints
    (5) SUMWILD (of int) if the column contains Sums and Wilds.
        The int indicates the first row that has a Wild.
-   (6) INTWILD (of int) if the column contains Sums and Wilds.
+   (6) INTWILD (of int) if the column contains Ints and Wilds.
        The int indicates the first row that has a Wild.
 
    We prefer pattern-matching on columns that are IRREF, WILD above all

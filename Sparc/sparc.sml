@@ -12,6 +12,7 @@ struct
     val threadScratch_disp = maxsp_disp + 4 + 4 + 4 + 4
     val writelistAlloc_disp = threadScratch_disp + 8 + 4 + 4 * 5 + 4 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4
+    val heapLimit_disp = iregs_disp + 4 * 5
 
 structure Machine = 
   struct

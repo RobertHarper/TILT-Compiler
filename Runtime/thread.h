@@ -119,8 +119,9 @@ Thread_t *getThread(void);
 SysThread_t *getSysThread(void);
 
 extern pthread_mutex_t ScheduleLock;       /* locks (de)scheduling of sys threads */
-void ResetJob(void);     /* For iterating over all jobs in work list */
+void ResetJob(void);                       /* For iterating over all jobs in work list */
 Thread_t *NextJob(void);
+void StopAllThreads();                     /* Change all user thread's limit to StopHeapLimit */
 
 void thread_init(void);
 void thread_go(ptr_t *thunks, int numThunk);

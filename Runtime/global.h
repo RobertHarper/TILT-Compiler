@@ -2,7 +2,11 @@
 
 void global_init(void);
 int  IsGlobalData(ptr_t);
-int  IsConstructorData(ptr_t addr);
+
+static int IsTagData(ptr_t addr)
+{
+  return (addr <= (ptr_t) 256);
+}
 
 extern ptr_t DivideByZeroExn;
 extern ptr_t OverflowExn;

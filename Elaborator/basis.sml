@@ -102,9 +102,7 @@ structure Basis
 	      end
 
 	  fun over_entry str con_exp =
-	      let val entry = CONTEXT_OVEREXP(mk_var_lab str, 
-					      fresh_named_var str,
-					      con_exp)
+	      let val entry = CONTEXT_OVEREXP(mk_var_lab str, con_exp)
 	      in   add_ce entry
 	      end
 	      
@@ -156,6 +154,8 @@ structure Basis
 				      int32, false, oneshot_init PARTIAL)
 	       val wordbin = CON_ARROW([con_tuple[uint32, uint32]], 
 				      uint32, false, oneshot_init PARTIAL)
+	       val bytebin = CON_ARROW([con_tuple[uint8, uint8]], 
+				       uint8, false, oneshot_init PARTIAL)
 	       val intuni = CON_ARROW([int32], int32, false, oneshot_init PARTIAL)
 	       val intpred = con_eqfun int32
 	       val floatuni = CON_ARROW([float64], float64, false, oneshot_init PARTIAL)
@@ -165,7 +165,7 @@ structure Basis
 	       val charpred = con_eqfun uint8
 	       val wordpred = con_eqfun uint32
 	       fun add_uni_entry (str,ei,ef) = over_entry str [(intuni, ei), (floatuni, ef)]
-	       fun add_bin_entry (str,ei,ew,ef) = over_entry str [(intbin, ei), (wordbin, ew), (floatbin, ef)]
+	       fun add_bin_entry (str,ei,eb,ew,ef) = over_entry str [(intbin, ei), (bytebin, eb), (wordbin, ew), (floatbin, ef)]
 	       fun add_pred_entry (str,ei,ew,ec,ef) = over_entry str [(charpred, ei), 
 								   (wordpred, ew), 
 								   (intpred, ec), 
@@ -173,12 +173,15 @@ structure Basis
 	       val uni_table = [("~", ETAPRIM (neg_int W32,[]),
 						ETAPRIM (neg_float F64,[]))]
 	       val bin_table = [("+", ETAPRIM (plus_int W32,[]),
+				      ETAPRIM (plus_uint W8,[]),
 				      ETAPRIM (plus_uint W32,[]),
 				      ETAPRIM (plus_float F64,[])),
 				("-", ETAPRIM (minus_int W32,[]),
+                                      ETAPRIM (minus_uint W8,[]),
                                       ETAPRIM (minus_uint W32,[]),
 				      ETAPRIM (minus_float F64,[])),
 				("*", ETAPRIM (mul_int W32,[]),
+                                      ETAPRIM (mul_uint W8,[]),
                                       ETAPRIM (mul_uint W32,[]),
 				      ETAPRIM (mul_float F64,[]))]
 	       val pred_table = [("<", ETAPRIM (less_uint W8,[]),
@@ -232,7 +235,8 @@ structure Basis
 		  [("/", (div_float F64)),
 		   ("float_eq", (eq_float F64)),
 		   ("float_neq", (neq_float F64)),
-(*		   ("div", (div_int W32)),
+(* these are defined in Basis/toplevel.sml	   
+                   ("div", (div_int W32)),
 		   ("mod", (mod_int W32)),
 *)
 		   ("quot", (quot_int W32)),

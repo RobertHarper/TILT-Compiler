@@ -98,13 +98,14 @@ struct option_entry {
   char *description;
 };
 
-static int help=0, semi=0, gen=0, semipara=0, genpara=0, fixheap=0, youngheap=0;
+static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, fixheap=0, youngheap=0;
 struct option_entry table[] = 
   {0, "help", &help, "Print help info but do not execute program",
    0, "semi", &semi, "Use the semispace garbage collector",
    0, "gen", &gen,   "Use the generational garbage collector",
    0, "semipara", &semipara, "Use the semispace, parallel garbage collector",
    0, "genpara", &genpara, "Use the generational, parallel garbage collector",
+   0, "semiconc", &semiconc, "Use the semispace, concurrnet garbage collector",
    0, "paranoid", &paranoid, "Run in paranoid mode",
    0, "verbose", &verbose, "Be verbose when paranoid",
    0, "diag", &diag, "Run in diagnostic mode",
@@ -172,6 +173,7 @@ void process_option(int argc, char **argv)
   if (gen) collector_type = Generational;
   if (semipara) collector_type = SemispaceParallel;
   if (genpara) collector_type = GenerationalParallel;
+  if (semiconc) collector_type = SemispaceConcurrent;
   if (fixheap) MinHeap = MaxHeap = fixheap;
   if (youngheap) YoungHeapByte = 1024 * youngheap;
   if (help) {

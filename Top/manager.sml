@@ -454,8 +454,9 @@ struct
 		     chat "   "; chat (Int.toString (length uncached)); chat " imports of total size ";
 		     chat (Int.toString uncached_size);  chat " were uncached and took ";
 		     chat (Real.toString diff); chat " seconds.  ";
-(*		     chat_strings 50 uncached; *)
-		     chat "]\n")
+(*		     chat "\n\nCACHED: "; chat_strings 20 cached;
+		     chat "\n\nUNCACHED: "; chat_strings 20 uncached;
+*)		     chat "]\n")
 	    val initial_ctxt = LinkIl.initial_context()
 	    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
 	    val (partial_context_opts, context) = addContext (initial_ctxt, partial_ctxts)

@@ -3,35 +3,37 @@ structure IlContext :> ILCONTEXT =
 struct
 
     structure Il = Il
-    type context = Il.context
-    type exp = Il.exp
-    type con = Il.con
-    type kind = Il.kind
-    type mod = Il.mod
-    type signat = Il.signat
-    type label = Il.label
-    type var = Il.var
-    type tag = Name.tag
-    type sdec = Il.sdec
-    type sdecs = Il.sdecs
-    type path = Il.path
-    type context_entry = Il.context_entry
-	
     open Il Util Name Listops Ppil IlUtil
 	
     val error = fn s => error "ilcontext.sml" s
-	
     val debug = Stats.ff("IlcontextDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
-
 
     (* --------------- BASICS ------------------------------- *)
     type var_seq_map = (label * phrase_class) VarMap.map * var list
     fun var_seq_insert ((m,s),v,value) = (VarMap.insert(m,v,value),v::s)
     val empty_context = CONTEXT{fixityMap = LabelMap.empty,
+				overloadMap = LabelMap.empty,
 				labelMap = LabelMap.empty,
 				pathMap = PathMap.empty,
 				ordering = []}
+
+    (* ------ Type equivalence needed to ensure overloading resolvable by distnict types ------- *)
+    local 
+	val Ceq_con = ref (NONE : (context * con * con -> bool) option)
+    in
+	fun installHelpers{eq_con} = 
+	    ((case !Ceq_con of
+		 NONE => ()
+	       | SOME _ => (print "WARNING: IlContext.installHelpers called more than once.\n"));
+	     Ceq_con := SOME eq_con)
+	fun eq_con arg = let val SOME eq_con = !Ceq_con
+			 in  eq_con arg
+			 end
+	fun eq_conexp ctxt ((c1,e1),(c2,e2)) = eq_con(ctxt,c1,c2)
+	fun ce_sub(ctxt, ce1, ce2) = Listops.list_diff_eq(eq_conexp ctxt, ce1, ce2)
+	fun ce_add(ctxt, ce1, ce2) = Listops.list_sum_eq(eq_conexp ctxt, ce1, ce2)
+    end
 
     (* ---------------- LOOKUP RULES --------------------------- 
      The lookup rules can return item from different grammatical classes
@@ -43,14 +45,16 @@ struct
 
     fun Context_Fixity (CONTEXT {fixityMap,...}) = fixityMap
     fun Context_Ordering (CONTEXT {ordering,...}) = rev ordering
+    fun Context_Lookup_Overload (CONTEXT {overloadMap, ...}, lab) = LabelMap.find(overloadMap, lab)
     fun Context_Lookup_Label (CONTEXT {labelMap, ...}, lab) = LabelMap.find(labelMap, lab)
     fun Context_Lookup_Path (CONTEXT {pathMap, ...}, PATH path) = PathMap.find(pathMap, path)
     fun Context_Lookup_Var (CONTEXT {pathMap, ...}, v) = PathMap.find(pathMap, (v,[]))
 
 
     (* --------------------- EXTENDERS ---------------------------------------- *)
-    fun add_context_fixity(CONTEXT {fixityMap, labelMap, pathMap, ordering}, label, fixity) = 
+    fun add_context_fixity(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}, label, fixity) = 
 	CONTEXT({fixityMap = LabelMap.insert(fixityMap,label,fixity),
+		 overloadMap = overloadMap,
 		 labelMap = labelMap,
 		 pathMap = pathMap,
 		 ordering = ordering})
@@ -75,36 +79,42 @@ struct
 	  end
       | reduce_signat ctxt s = s
 
-    fun shadow (labelMap, pathMap, lab) = 
-	(case (LabelMap.find(labelMap,lab) : (path * phrase_class) option) of
-	     NONE => (labelMap, pathMap)
-	   | SOME (PATH p,_) => 
-		 let val newlab = fresh_internal_label(label2name lab)
-		 in  (case PathMap.find(pathMap,p) of
-			  NONE => error "inconsistent context"
-			| SOME (_, pc) => 
-			      let val pathMap = PathMap.insert(pathMap,p,(newlab, pc))
-				  val (labelMap,_) = LabelMap.remove(labelMap, lab)
-				  val labelMap = LabelMap.insert(labelMap, newlab,(PATH p, pc))
-			      in  (labelMap, pathMap)
-			      end)
-		 end)
+    fun shadow (overloadMap, labelMap, pathMap, lab) = 
+	let val overloadMap = 
+	    (case (LabelMap.find(overloadMap,lab)) of
+		   NONE => overloadMap
+		 | SOME celist => #1(LabelMap.remove(overloadMap,lab)))
+	in  (case (LabelMap.find(labelMap,lab)) of
+		   NONE => (overloadMap, labelMap, pathMap)
+		 | SOME (PATH p,_) => 
+		       let val newlab = fresh_internal_label(label2name lab)
+		       in  (case PathMap.find(pathMap,p) of
+				NONE => error "inconsistent context"
+			      | SOME (_, pc) => 
+				    let val pathMap = PathMap.insert(pathMap,p,(newlab, pc))
+					val (labelMap,_) = LabelMap.remove(labelMap, lab)
+					val labelMap = LabelMap.insert(labelMap, newlab,(PATH p, pc))
+				    in  (overloadMap, labelMap, pathMap)
+				    end)
+		       end)
+	end
 	     
     fun add_sdec(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
 	let fun mk_path v = (case pathopt of
 				 NONE => PATH(v,[])
 			       | SOME p => join_path_labels(p,[l]))
-	    fun help(CONTEXT {fixityMap, labelMap, pathMap, ordering},
+	    fun help(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
 		     v, from_path, pc_maker) =
 		let val path = mk_path v
 		    val obj = from_path path
 		    val pc = pc_maker obj
 		    val PATH vpath = path
-		    val (labelMap, pathMap) = shadow(labelMap, pathMap, l)
+		    val (overloadMap, labelMap, pathMap) = shadow(overloadMap, labelMap, pathMap, l)
 		    val labelMap = LabelMap.insert(labelMap,l,(path,pc))
 		    val pathMap = PathMap.insert(pathMap,vpath,(l,pc))
 		    val ordering = path :: ordering
 		in CONTEXT{fixityMap = fixityMap,
+			   overloadMap = overloadMap,
 			   labelMap = labelMap,
 			   pathMap = pathMap,
 			   ordering = ordering}
@@ -137,26 +147,30 @@ struct
 
 
 
-    fun add_context_sig(CONTEXT {fixityMap, labelMap, pathMap, ordering},
+    fun add_context_sig(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
 			l, v, signat) = 
 	let val pc = PHRASE_CLASS_SIG(v,signat)
 	    val path = (v,[])
-	    val (labelMap, pathMap) = shadow(labelMap, pathMap, l)
+	    val (overloadMap,labelMap, pathMap) = shadow(overloadMap,labelMap, pathMap, l)
 	in  CONTEXT({fixityMap = fixityMap,
+		     overloadMap = overloadMap,
 		     labelMap = Name.LabelMap.insert(labelMap,l,(PATH path, pc)),
 		     pathMap = Name.PathMap.insert(pathMap,path,(l, pc)),
 		     ordering = (PATH path)::ordering})
 	end
 
-    fun add_context_overexp(CONTEXT {fixityMap, labelMap, pathMap, ordering},
-			    l, v, celist) = 
-	let val pc = PHRASE_CLASS_OVEREXP celist
-	    val path = (v,[])
-	    val (labelMap, pathMap) = shadow(labelMap, pathMap, l)
+    fun add_context_overexp(ctxt as CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
+			    l, ce2) = 
+	let val ce1 = (case Name.LabelMap.find(overloadMap, l) of
+			   SOME ce => ce
+			 | NONE => [])
+	    val ce3 = ce_add(ctxt,ce1,ce2)
+	    val overloadMap = LabelMap.insert(overloadMap, l, ce3)
 	in  CONTEXT({fixityMap = fixityMap,
-		     labelMap = Name.LabelMap.insert(labelMap,l,(PATH path, pc)),
-		     pathMap = Name.PathMap.insert(pathMap,path,(l,pc)),
-		     ordering = (PATH path)::ordering})
+		     overloadMap = overloadMap,
+		     labelMap = labelMap,
+		     pathMap = pathMap,
+		     ordering = ordering})
 	end
 
     fun add_context_entry(ctxt, entry) = 
@@ -164,7 +178,7 @@ struct
 	     CONTEXT_FIXITY (l,f) => add_context_fixity(ctxt,l,f)
 	   | CONTEXT_SDEC sdec => add_sdec(ctxt,NONE,sdec)
 	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
-	   | CONTEXT_OVEREXP(l,v,celist) => add_context_overexp(ctxt,l,v,celist))
+	   | CONTEXT_OVEREXP(l,celist) => add_context_overexp(ctxt,l,celist))
 
     fun add_context_entry'(entry,ctxt) = add_context_entry(ctxt,entry)
     fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
@@ -216,12 +230,10 @@ struct
 	   | PHRASE_CLASS_SIG (v,s) => 
 		 let val s = sig_subst(s,subst)
 		 in  PHRASE_CLASS_SIG(v,s)
-		 end
-	   | PHRASE_CLASS_OVEREXP celist => 
-		 let val celist = map (fn (c,e) => (con_subst(c,subst),
-						    exp_subst(e,subst))) celist
-		 in  PHRASE_CLASS_OVEREXP celist
 		 end)
+
+    fun con_exp_list_subst subst con_exp_list = 
+	map (fn (c,e) => (con_subst(c,subst), exp_subst(e,subst))) con_exp_list
 
     (* alphaVarying a partial context WRT a context so that
        (1) the partial context's unresolved list maps to variables as bound by the full context
@@ -232,80 +244,71 @@ struct
     *)
     fun alphaVaryPartialContext 
 	(CONTEXT{labelMap = lm1, pathMap = pm1, ...},
-	 (CONTEXT{fixityMap = fm2, labelMap = lm2, pathMap = pm2, ordering = ord2}, unresolved)) 
+	 (CONTEXT{fixityMap = fm2, overloadMap = om2, labelMap = lm2, pathMap = pm2, ordering = ord2}, unresolved)) 
 	: partial_context option = 
 	let 
-	    fun folder subst (PATH p,(lm,pm,ord)) =
+	    fun folder (vsubst,subst) (PATH p,(lm,pm,ord)) =
 		let val (lab,pc) = (case Name.PathMap.find(pm2, p) of
 					   SOME lab_pc => lab_pc
 					 | NONE => (print "missing path ";
 						    pp_path (PATH p); print "\n";
 						    error "missing path"))
 		    val (v,labs) = p
-		    val v = 
-			(case pc of
-			     PHRASE_CLASS_EXP _ => let val VAR v' = exp_subst(VAR v, subst)
-						   in  v'
-						   end
-			   | PHRASE_CLASS_CON _ => let val CON_VAR v' = con_subst(CON_VAR v, subst)
-						   in  v'
-						   end
-			   | PHRASE_CLASS_MOD _ => let val MOD_VAR v' = mod_subst(MOD_VAR v, subst)
-						   in  v'
-						   end
-			   | PHRASE_CLASS_SIG _ => let val SIGNAT_VAR v' = sig_subst(SIGNAT_VAR v, subst)
-						   in  v'
-						   end
-			   | PHRASE_CLASS_OVEREXP _ => let val VAR v' = exp_subst(VAR v, subst)
-						       in  v'
-						       end)
+		    val v = (case VarMap.find(vsubst,v) of
+				 NONE => v
+			       | SOME v' => v')
 		    val p = (v,labs)
 		    val pc = pcSubst(pc,subst)
 		    val lm = LabelMap.insert(lm,lab,(PATH p,pc))
 		    val pm = Name.PathMap.insert(pm,p,(lab,pc))
 		in (lm, pm, (PATH p)::ord)
 		end
-            (* ---- We compute the new unresolved and the substitution that arises ----- *)
-	    fun unresolvedFolder (v,l,(unresolved,subst)) =
+            (* ---- Using the current unresolved of the partial conetxt and the context,
+	       ---- compute the substitution of the unresolved variables on the partial context
+	       ---- to match the corresponding variables of the context and 
+	       ---- generate a new unresolved list. *)
+	    fun unresolvedFolder (v,l,(unresolved,vsubst)) =
 		(case Name.LabelMap.find(lm1,l) of
 		     SOME (PATH(v',[]), pc) =>
-			 let val unresolved = VarMap.insert(unresolved, v', l)
-			     val subst = 
-				 if (eq_var (v,v'))
-				     then subst
-				 else (case pc of
-					   PHRASE_CLASS_EXP _ => subst_add_expvar(subst,v,VAR v')
-					 | PHRASE_CLASS_CON _ => subst_add_convar(subst,v,CON_VAR v')
-					 | PHRASE_CLASS_MOD _ => subst_add_modvar(subst,v,MOD_VAR v')
-					 | PHRASE_CLASS_SIG _ => subst_add_sigvar(subst,v,v')
-					 | PHRASE_CLASS_OVEREXP _ => subst_add_expvar(subst,v,VAR v'))
-			 in  (unresolved, subst)
-			 end
+			 (VarMap.insert(unresolved, v', l),
+			 if (eq_var(v,v'))
+			     then vsubst
+			 else Name.VarMap.insert(vsubst,v,v'))
 		    | _ => error ("add_context could not resolve " ^ (Name.label2name l)))
-	    val (unresolved,unresolvedSubst) = Name.VarMap.foldli unresolvedFolder
-		                               (VarMap.empty, empty_subst) unresolved
+	    val (unresolved,unresolvedVsubst) = Name.VarMap.foldli unresolvedFolder
+		                                (VarMap.empty, VarMap.empty) unresolved
             (* ---- Compute the substitution to avoid clashes of bound variables ------- *)
-	    fun clashFolder ((v,[]), (l, pc), subst) = 
+	    fun clashFolder ((v,[]), (l, pc), vsubst) = 
 		(case PathMap.find(pm1, (v, [])) of
-		     NONE => subst
-		   | SOME _ => 
-			 let val v' = derived_var v
-			 in  (case pc of
-				  PHRASE_CLASS_EXP _ => subst_add_expvar(subst,v,VAR v')
-				| PHRASE_CLASS_CON _ => subst_add_convar(subst,v,CON_VAR v')
-				| PHRASE_CLASS_MOD _ => subst_add_modvar(subst,v,MOD_VAR v')
-				| PHRASE_CLASS_SIG _ => subst_add_sigvar(subst,v,v')
-				| PHRASE_CLASS_OVEREXP _ => subst_add_expvar(subst,v,VAR v'))
-			 end)
-	      | clashFolder (_, _, subst) = subst
-	    val clashSubst = Name.PathMap.foldli clashFolder empty_subst pm2
-	    val subst = subst_add(clashSubst, unresolvedSubst)
-	in  if (subst_is_empty subst)
+		     NONE => vsubst
+		   | SOME _ => let val v' = fresh_named_var "clash" (* derived_var v *)
+			       in  VarMap.insert(vsubst,v,v')
+			       end)
+	      | clashFolder (_, _, vsubst) = vsubst
+	    val clashVsubst = Name.PathMap.foldli clashFolder VarMap.empty pm2
+	    (* ----- Compute the final substitution by combining unresolved and clash ---- *)
+	    local
+		fun folder(v,v',subst) = 
+		    if (eq_var (v,v'))
+			then subst
+		    else let val subst = subst_add_expvar(subst,v,VAR v')
+			     val subst = subst_add_convar(subst,v,CON_VAR v')
+			     val subst = subst_add_modvar(subst,v,MOD_VAR v')
+			     val subst = subst_add_sigvar(subst,v,v')
+			 in  subst
+			 end
+	    in  val final_vsubst = Name.VarMap.unionWithi (fn (v,_,_) => error "same var in vsubst")
+		                   (unresolvedVsubst, clashVsubst)
+		val final_subst = Name.VarMap.foldli folder empty_subst final_vsubst
+	    end
+	in  if (subst_is_empty final_subst)
 		then NONE
 	    else 
 		let val (labelMap,pathMap,ordering) = 
-		    foldr (folder subst) (LabelMap.empty,PathMap.empty,[]) ord2
+		    foldr (folder (final_vsubst,final_subst)) (LabelMap.empty,PathMap.empty,[]) ord2
+		    val overloadMap = LabelMap.map (con_exp_list_subst final_subst) om2
 		in  SOME (CONTEXT{fixityMap = fm2,
+				  overloadMap = overloadMap,
 				  labelMap = labelMap,
 				  pathMap = pathMap,
 				  ordering = ordering}, 
@@ -332,30 +335,46 @@ struct
 		let val set = VarSet.union(set, mod_free m) 
 		in  VarSet.union(set, sig_free s)
 		end
-	   | PHRASE_CLASS_SIG (_, s) => VarSet.union(set, sig_free s)
-	   | PHRASE_CLASS_OVEREXP celist =>
-		let fun folder((c,e),acc) = 
-		        VarSet.union(acc, VarSet.union(con_free c, exp_free e))
-		in  foldl folder set celist
-		end)
+	   | PHRASE_CLASS_SIG (_, s) => VarSet.union(set, sig_free s))
+
 
     (* adding the partial context to the context *)
     fun plus (orig_pctxt : partial_context,
-	      ctxt as CONTEXT{fixityMap = fm1, labelMap = lm1, 
-			      pathMap = pm1, ordering = ord1})
+	      ctxt as CONTEXT{fixityMap = fm1, overloadMap = om1,
+			      labelMap = lm1, pathMap = pm1, ordering = ord1})
 	: partial_context option * context = 
 	let
 	    val pctxt_option = alphaVaryPartialContext(ctxt, orig_pctxt)
-	    val (CONTEXT{fixityMap = fm2, labelMap = lm2, 
-			 pathMap = pm2, ordering = ord2}, 
+	    val (CONTEXT{fixityMap = fm2, overloadMap = om2,
+			 labelMap = lm2, pathMap = pm2, ordering = ord2}, 
 		 unresolved) = (case pctxt_option of
 				    NONE => orig_pctxt (* alpha-varying not needed *)
 				  | SOME pctxt => pctxt)
 	    val fixityMap = LabelMap.unionWithi
-		            (fn (l,_,_) => error ("fixityMap not disjoint at " ^ (label2name l)))
-			     (fm1,fm2)
+		            (fn (l, _, _) => error ("fixityMap not disjoint at " ^ (label2name l)))
+			    (fm1,fm2)
+	    fun is_open_internal_path (_,PATH(v,[])) = false
+	      | is_open_internal_path (pathmap,PATH(v,labs)) = 
+		let val (almostLastLab, lastLab) = 
+		    (case labs of
+			 [lab] => let val SOME (l,_) = PathMap.find(pathmap,(v,[]))
+				  in (l, lab)
+				  end
+		       | _ => let val len = length labs
+			      in (List.nth(labs, len - 2), List.nth(labs, len - 1))
+			      end)
+		in  is_open almostLastLab andalso is_label_internal lastLab
+		end
 	    val labelMap = LabelMap.unionWithi 
-		            (fn (l,_,second) => second) (* take the second to shadow the first *)
+		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
+			     if (is_open_internal_path(pm1,p1) orelse 
+				 is_open_internal_path(pm2,p2))
+				 then second
+			     else (print "p1 = "; pp_path p1; print " :\n";
+				   pp_phrase_class pc1; print "\n\n";
+				   print "p2 = "; pp_path p2; print " :\n";
+				   pp_phrase_class pc2; print "\n\n";
+				   error ("labelMap not disjoint at " ^ (label2name l))))
 			     (lm1,lm2)
 	    val pathMap = PathMap.unionWithi 
 			    (fn (p,(l,_),(l',_)) => (print "pathMap not disjoint at label ";
@@ -369,8 +388,27 @@ struct
 			     (pm1,pm2)
 	    (* orderings are backwards *)
 	    val ordering = ord2 @ ord1
+	    val almostFinalContext = CONTEXT{fixityMap = fixityMap,
+					     overloadMap = Name.LabelMap.empty,
+					     labelMap = labelMap,
+					     pathMap = pathMap,
+					     ordering = ordering}
+(*	    val _ = print "!!ABOUT to make overloadmap!!\n"*)
+	    val overloadMap = LabelMap.unionWithi
+                     	      (fn (l, ce1, ce2) => 
+			       (
+(*
+				print "almostFinalContext is ";
+				pp_context almostFinalContext;
+				print "\n\n\n";
+				print "ce1 is "; app (fn (c,e) => (pp_exp e; print ":"; pp_con c; print "\n")) ce1; print "\n";
+				print "ce2 is "; app (fn (c,e) => (pp_exp e; print ":"; pp_con c; print "\n")) ce2; print "\n";
+*)				ce_add(almostFinalContext,ce1, ce2)))
+			      (om1,om2)
+(*	    val _ = print "!!JUST MADE overloadmap!!\n" *)
 	in  (pctxt_option,
 	     CONTEXT{fixityMap = fixityMap,
+		     overloadMap = overloadMap,
 		     labelMap = labelMap,
 		     pathMap = pathMap,
 		     ordering = ordering})
@@ -410,11 +448,16 @@ struct
 
     fun sub_context (bigger : Il.context, smaller : Il.context) : Il.partial_context = 
 	let 
-	    val CONTEXT{fixityMap=f1, labelMap=l1, pathMap=p1, ordering=o1} = bigger
-	    val CONTEXT{fixityMap=f2, labelMap=l2, pathMap=p2, ordering=o2} = smaller
+	    val CONTEXT{fixityMap=f1, overloadMap=om1, labelMap=l1, pathMap=p1, ordering=o1} = bigger
+	    val CONTEXT{fixityMap=f2, overloadMap=om2, labelMap=l2, pathMap=p2, ordering=o2} = smaller
 	    val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1) of
 							 NONE => true
 						       | SOME _ => false)) f1
+	    val om3 = LabelMap.mapi (fn (l1, ce1) => (case LabelMap.find(om2, l1) of
+							  NONE => ce1
+							| SOME ce2 => ce_sub(bigger,ce1,ce2))) om1
+	    val om3 = LabelMap.filteri (fn (l3, []) => false
+	                                 | _ => true) om3
 	    val o3 = List.filter (fn PATH vpath => (case PathMap.find(p2,vpath) of
 							NONE => true
 						      | SOME _ => false)) o1
@@ -426,12 +469,21 @@ struct
 					   (case PathMap.find(p2,p) of
 						NONE => true
 					      | SOME _ => false)) p1
-	    val diff = CONTEXT{fixityMap = f3, labelMap = l3, pathMap = p3, ordering = o3} 
+	    val diff = CONTEXT{fixityMap = f3, overloadMap = om3,
+			       labelMap = l3, pathMap = p3, ordering = o3} 
 	    val roots = PathMap.foldli 
 		          (fn ((v,[]),_,s) => VarSet.add(s,v)
 			    | (_,_,s) => s)
 		          VarSet.empty p3
-	    val reachable = reachableVars(p1, VarSet.empty, roots)
+	    val reachable = LabelMap.foldl
+		           (fn (celist,reach) =>
+			      foldl (fn ((c,e),reach) => 
+				     let val cFree = con_free c
+					 val eFree = exp_free e
+				     in  VarSet.union(VarSet.union(reach,cFree),eFree)
+				     end) reach celist)
+			   VarSet.empty om3
+	    val reachable = reachableVars(p1, reachable, roots)
 	    val keepVars = VarSet.difference(reachable, roots)
 	    val unresolved = VarSet.foldl
 		                  (fn (v,vm) => 
@@ -464,7 +516,7 @@ struct
 		end
 	    val roots = foldl folder roots sbndopt_entry
 	    val roots = VarSet.difference(roots, exclude)
-	    val CONTEXT{pathMap, labelMap, ordering, fixityMap} = context
+	    val CONTEXT{pathMap, labelMap, ordering, overloadMap, fixityMap} = context
 	    val reachable = reachableVars(pathMap, VarSet.empty, roots)
 	    fun isReachable (v,_) = Name.VarSet.member(reachable,v)
 	    val pathMap_orig = pathMap (* used for the print statements below *)
@@ -477,6 +529,7 @@ struct
 			   (Int.toString (PathMap.numItems pathMap))
 			   ^ " items in reduced context.\n")
 	in  CONTEXT{pathMap = pathMap,
+		    overloadMap = overloadMap,
 		    labelMap = labelMap,
 		    ordering = ordering,
 		    fixityMap = fixityMap}

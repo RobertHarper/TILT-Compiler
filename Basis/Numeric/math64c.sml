@@ -2,6 +2,10 @@
 
 structure Math64 : MATH =
   struct
+    (* div and mod will eventually be overloaded to work at multiple types *)
+    val div = idiv
+    val mod = imod
+
     type real = real
 
     val pi = 3.14159265358979323846

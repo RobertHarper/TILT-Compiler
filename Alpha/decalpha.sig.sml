@@ -23,6 +23,7 @@ sig
   val threadScratch_disp : int
   val writelistAlloc_disp : int
   val writelistLimit_disp : int
+  val heapLimit_disp : int
 
   datatype storei_instruction = STL | STQ  | STQ_U
   datatype storef_instruction = STT | STS

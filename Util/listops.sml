@@ -119,6 +119,10 @@ structure Listops :> LISTOPS =
       | assoc (aa,(a,b)::rest) = if (a = aa) then SOME b else assoc(aa,rest)
     fun assoc_eq (eq:'a*'a->bool, aa,[]) = NONE
       | assoc_eq (eq,aa,((a:'a,b:'b)::rest)) = if eq(a,aa) then SOME b else assoc_eq(eq,aa,rest)
+    fun list_sum (a,[]) = a
+      | list_sum (a,b::rest) = if (member(b,a)) then list_sum(a,rest) else list_sum(b::a,rest)
+    fun list_sum_eq (_,a,[]) = a
+      | list_sum_eq (p,a,b::rest) = if (member_eq(p,b,a)) then list_sum_eq(p,a,rest) else list_sum_eq(p,b::a,rest)
     fun list_diff ([],_) = []
       | list_diff (a::rest,b) = if (member(a,b)) then list_diff(rest,b) else a::(list_diff (rest,b))
     fun list_diff_eq (_,[],_) = []

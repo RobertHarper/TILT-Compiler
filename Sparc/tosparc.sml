@@ -920,6 +920,7 @@ struct
 			    (load_imm(i2w size, Rat);
 			     emit (SPECIFIC (INTOP (ADD, Rheap, REGop Rat, Rat))))
 		    end);
+	  emit (SPECIFIC (LOADI (LD, Rhlimit, INT heapLimit_disp, Rth)));
 	  emit (SPECIFIC (CMP     (Rat, REGop Rhlimit)));
 	  emit (SPECIFIC (CBRANCHI(BLE, rtl_loclabel)));
 	  emit (BASE (GC_CALLSITE rtl_loclabel));

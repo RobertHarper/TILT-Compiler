@@ -24,14 +24,14 @@ NilRewrite Nil/rewrite
 MEASURE Nil/measure.sig
 Measure Nil/measure
 
+ALPHA Nil/alpha_context.sig
+Alpha Nil/alpha_context
+
 NILRENAME 	Nil/nilrename.sig
 NilRename	Nil/nilrename
 
 NILSUBST Nil/subst.sig
 NilSubst Nil/subst
-
-ALPHA Nil/alpha_context.sig
-Alpha Nil/alpha_context
 
 NilPrimUtilParam Nil/nilprimutilparam
 
@@ -68,17 +68,17 @@ Reify Nil/reify
 EXPTABLE Nil/NilOpts/exptable.sig
 ExpTable Nil/NilOpts/exptable
 
-OPTIMIZE Nil/optimize.sig
-Optimize Nil/optimize
-
-SPECIALIZE Nil/specialize.sig
-Specialize Nil/specialize
-
 TOCLOSURE Nil/toclosure.sig
 ToClosure Nil/toclosure
 
 VARARG Nil/vararg.sig
 Vararg Nil/vararg
+
+OPTIMIZE Nil/optimize.sig
+Optimize Nil/optimize
+
+SPECIALIZE Nil/specialize.sig
+Specialize Nil/specialize
 
 TONIL Nil/tonil.sig
 ToNil Nil/tonil

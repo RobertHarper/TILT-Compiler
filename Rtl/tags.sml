@@ -7,11 +7,12 @@ structure Rtltags :> RTLTAGS =
 struct
   
     (* The low 3 bits of the 32-bit word describe the object type *)
-    val record    = 0w0 : TilWord32.word
+    val record    = 0w1 : TilWord32.word
     val intarray  = 0w2 : TilWord32.word
     val ptrarray  = 0w3 : TilWord32.word
-    val realarray = 0w4 : TilWord32.word
-    fun skip numSkip = TilWord32.fromInt (5 + (8 * numSkip))
+    val realarray = 0w5 : TilWord32.word
+    val skipbase  = 0w6 : TilWord32.word
+    fun skip numSkip = TilWord32.orb(skipbase, TilWord32.fromInt (8 * numSkip))
 
     (* For raw(bytes), pointer(words), and real(double) arrays, 
        the upper 29 bits measure the length of the array in bytes.

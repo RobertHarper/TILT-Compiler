@@ -724,7 +724,10 @@ struct
 	       | 5 => SIGNAT_VAR(blastInVar ())
 	       | 6 => SIGNAT_OF(blastInPath ())
 	       | _ => error "bad blastInSig")
-				     
+				
+	fun blastOutCelist celist = blastOutList (blastOutPair blastOutCon blastOutExp) celist
+        fun blastInCelist() = blastInList (fn() => blastInPair blastInCon blastInExp)
+
 	fun blastOutPC pc = 
 	    case pc of
 		PHRASE_CLASS_EXP (e,c,eopt,inline) => (blastOutChoice 0; blastOutExp e; 
@@ -736,8 +739,6 @@ struct
 	      | PHRASE_CLASS_MOD (m,b,s) => (blastOutChoice 2; blastOutMod m; blastOutBool b; 
 					     blastOutSig s)
 	      | PHRASE_CLASS_SIG (v,s) => (blastOutChoice 3; blastOutVar v; blastOutSig s)
-	      | PHRASE_CLASS_OVEREXP celist => (blastOutChoice 4; 
-						blastOutList (blastOutPair blastOutCon blastOutExp) celist)
 
 	fun blastInPC () = 
 	    (tab "  blastInPC\n"; 
@@ -746,7 +747,6 @@ struct
 	      | 1 => PHRASE_CLASS_CON(blastInCon (), blastInKind (), blastInOption blastInCon, blastInBool())
 	      | 2 => PHRASE_CLASS_MOD(blastInMod (), blastInBool (), blastInSig ())
 	      | 3 => PHRASE_CLASS_SIG(blastInVar (), blastInSig ())
-	      | 4 => PHRASE_CLASS_OVEREXP(blastInList (fn() => blastInPair blastInCon blastInExp))
 	      | _ => error "bad blastInPC")
 
 	fun blastOutFixity Fixity.NONfix = blastOutChoice 0
@@ -765,6 +765,11 @@ struct
 	fun blastInFixityMap () = 
 	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInFixity())
 
+	fun blastOutOverloadMap fm = 
+	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutCelist) fm
+	fun blastInOverloadMap () = 
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInCelist())
+
 
 	fun blastOutPathMap label_list = 
 	    NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) label_list
@@ -782,18 +787,20 @@ struct
 	fun blastInUnresolved () : Name.label Name.VarMap.map =
 	    NameBlast.blastInVarmap int2var (curIn()) (fn _ => blastInLabel())
 
-    fun blastOutContext (CONTEXT {fixityMap, labelMap, pathMap, ordering}) = 
+    fun blastOutContext (CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}) = 
 	(blastOutFixityMap fixityMap;
+         blastOutOverloadMap overloadMap;
 	 blastOutPathMap pathMap;
 	 blastOutList blastOutPath ordering)
 
     fun blastInContext () = 
 	let val fixityMap = blastInFixityMap ()
+	    val overloadMap = blastInOverloadMap()	 
 	    val pathMap = blastInPathMap ()
 	    val ordering = blastInList blastInPath
 	    val labelMap = reconstructLabelMap pathMap
-	in CONTEXT {fixityMap = fixityMap, labelMap = labelMap,
-		    pathMap = pathMap, ordering = ordering}
+	in CONTEXT {fixityMap = fixityMap, overloadMap = overloadMap,
+		    labelMap = labelMap, pathMap = pathMap, ordering = ordering}
 	end
 
     fun blastOutPartialContext (ctxt, unresolved) = 

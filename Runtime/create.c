@@ -13,7 +13,7 @@ mem_t oddword_align(mem_t ptr)
 {
   unsigned int v = (unsigned int) ptr;
   if ((v & 7) == 0) 
-    *(ptr++) = SKIP_TAG;
+    *(ptr++) = SKIP_TAG | (1 << SKIPLEN_OFFSET);
   return ptr;
 }
 
@@ -21,7 +21,7 @@ mem_t evenword_align(mem_t ptr)
 {
   unsigned int v = (unsigned int) ptr;
   if ((v & 7) != 0) 
-    *(ptr++) = SKIP_TAG;
+    *(ptr++) = SKIP_TAG | (1 << SKIPLEN_OFFSET);
   return ptr;
 }
 
@@ -88,7 +88,7 @@ ptr_t alloc_rarray(int count, double val)
     count--;
     ((double *)obj)[count]  = val;
   }
-  obj[2*len] = SKIP_TAG;
+  obj[2*len] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
   return obj;
 }
 
@@ -190,8 +190,7 @@ void adjust_stringlen(ptr_t str, int newlen)
 
   assert(newlen <= oldlen);
   str[-1] = newtag;
-  for (i=newword; i<oldword; i++)
-    str[i] = SKIP_TAG;
+  str[newword] = SKIP_TAG | ((oldword - newword) << SKIPLEN_OFFSET);
 }
 
 ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)

@@ -21,6 +21,7 @@
 #define Generational 1
 #define SemispaceParallel 2
 #define GenerationalParallel 3
+#define SemispaceConcurrent 4
 
 #ifndef _asm_
 

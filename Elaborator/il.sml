@@ -117,9 +117,10 @@ structure Il :> IL =
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
       | CONTEXT_FIXITY of label * Fixity.fixity
-      | CONTEXT_OVEREXP of label * var * (con * exp) list
+      | CONTEXT_OVEREXP of label * (con * exp) list
 
     and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
+			       overloadMap : (con * exp) list Name.LabelMap.map,
 			       pathMap  : (label * phrase_class) Name.PathMap.map,
 			       ordering : path list,
 			       labelMap : (path * phrase_class) Name.LabelMap.map}
@@ -128,7 +129,6 @@ structure Il :> IL =
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
                      | PHRASE_CLASS_MOD     of mod * bool * signat
                      | PHRASE_CLASS_SIG     of var * signat
-                     | PHRASE_CLASS_OVEREXP of (con * exp) list
 
     withtype value = (con,exp) Prim.value
     and decs = dec list

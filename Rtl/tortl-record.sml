@@ -112,7 +112,7 @@ struct
 			   then (if (null dynamic)
 				     then add_data(INT32 static)
 				 else error "making constant record with dynamic tag")
-		       else let val _ = add_data(INT32 (Rtltags.skip numTerms))
+		       else let val _ = add_data(INT32 (Rtltags.skip (1 + numTerms)))
 				val tag = alloc_regi(NOTRACE_INT)
 			    in  add_instr (LI(static,tag));
 				app (fn a => do_dynamic(tag,a)) dynamic;

@@ -42,7 +42,7 @@ objdir=obj_${sys_name}
 ASM=${sys_name}_asm
 MAIN=main_nothread.o
 # mllib.o used to be a core object file
-COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o  ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_large.o ${objdir}/gc_para.o ${objdir}/gc_semi_para.o ${objdir}/gc_gen_para.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o  ${objdir}/gc_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/forward.o
+COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o  ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_large.o ${objdir}/gc_para.o ${objdir}/gc_semi_para.o ${objdir}/gc_gen_para.o ${objdir}/gc_semi_conc.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o  ${objdir}/gc_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/forward.o
 COREFILES_HPROF_OBJ=$(COREFILES_OBJ:.o=.hprof.o)
 
 
@@ -185,6 +185,9 @@ ${objdir}/gc_semi_para.o: gc_semi_para.c tag.h general.h platform.h forward.h gc
 
 ${objdir}/gc_gen_para.o: gc_gen_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_gen_para.c
+
+${objdir}/gc_semi_conc.o: gc_semi_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
+	${CC} -o $@ ${CFLAGS} gc_semi_conc.c
 
 ${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc.c

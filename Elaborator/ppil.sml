@@ -280,11 +280,7 @@ struct
 	       | PHRASE_CLASS_MOD  (m,true,s)  => 
 		     help "PC_$POLY$MOD(" ")" [pp_mod m, String ": ", pp_signat s]
 	       | PHRASE_CLASS_SIG  (v,s)  => 
-		     help "PC_SIG(" ")" [pp_var v, String " = ", pp_signat s]
-	       | PHRASE_CLASS_OVEREXP celist => 
-		     Vbox[String "PC_OVEREXP: ", Break,
-			  pp_list (fn (c,e) => Hbox[pp_exp e, String " : ", pp_con c])
-			          celist ("[",",","]",false)])
+		     help "PC_SIG(" ")" [pp_var v, String " = ", pp_signat s])
 	end
 
 
@@ -537,14 +533,18 @@ struct
 							    pp_label l, String " > ", pp_var v,
 							    String " = ", pp_signat [] s]
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
-      | pp_context_entry' (CONTEXT_OVEREXP (l,v,celist)) = 
+      | pp_context_entry' (CONTEXT_OVEREXP (l,celist)) = 
 			   HOVbox[String "CONTEXT_OVEREXP: ", 
-				  pp_label l, String " > ", pp_var v,
+				  pp_label l, String " > ", 
 				  pp_list (fn (c,e) => Hbox[pp_exp [] e, String " : ", pp_con [] c])
 			          celist ("[",",","]",false)]
 
-    fun pp_context' (CONTEXT{fixityMap, pathMap, ordering, ...}) = 
+    fun pp_context' (CONTEXT{fixityMap, overloadMap, pathMap, ordering, ...}) = 
 	let fun fixity_doer (l, f) = Hbox[pp_label l, String " : ", pp_fixity f]
+	    fun overload_doer (l, celist) =
+		Vbox[pp_label l, String " OVEREXP: ", Break,
+		     pp_list (fn (c,e) => Hbox[pp_exp [] e, String " : ", pp_con [] c])
+		     celist ("[",",","]",false)]
 	    fun path_doer (PATH path) = 
 		let val SOME(label, pc) = Name.PathMap.find(pathMap, path)
 		in  HOVbox[pp_label label,
@@ -556,6 +556,10 @@ struct
 	in  Vbox[String "---- Fixity ----",
 		 Break,
 		 pp_list fixity_doer (Name.LabelMap.listItemsi fixityMap) ("","", "", true),
+		 Break,
+		 String "---- Overload ----",
+		 Break,
+		 pp_list overload_doer (Name.LabelMap.listItemsi overloadMap) ("","", "", true),
 		 Break,
 		 String "---- Pathmap ----",
 		 Break,

@@ -28,13 +28,14 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 				 There is not necessarily a object at the location. */
 #endif
 
-
-#define RECORD_TAG      0x0
+/* Note that 0x0 and 0x4 cannot be used as those are possible pointer values 
+   and that position of that tag might be occupied by a forwarding pointer */
+#define RECORD_TAG      0x1
 #define IARRAY_TAG      0x2
 #define PARRAY_TAG      0x3
-#define RARRAY_TAG      0x4
-#define SKIP_TAG        0x5
-#define FORWARD_TAG     0x6
+#define RARRAY_TAG      0x5
+#define SKIP_TAG        0x6
+#define STALL_TAG       0x7
 
 #define GET_TYPE(t)       (((tag_t)t) & 0x7)
 #define IS_RECORD(t)      (GET_TYPE(t) == RECORD_TAG)
@@ -42,7 +43,7 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 #define IS_PARRAY(t)      (GET_TYPE(t) == PARRAY_TAG)
 #define IS_RARRAY(t)      (GET_TYPE(t) == RARRAY_TAG)
 #define IS_SKIP(t)        (GET_TYPE(t) == SKIP_TAG)
-#define IS_FORWARD(t)     (GET_TYPE(t) == FORWARD_TAG)
+#define IS_FORWARDPTR(t)  ((((tag_t)t) & 0x3) == 0)
 
 #define SKIPLEN_OFFSET   3 /* offset storing number of words to skip */
 #define GET_SKIP(t)       (((tag_t)t) >> SKIPLEN_OFFSET)

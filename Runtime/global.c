@@ -52,10 +52,7 @@ int IsGlobalData(ptr_t addr)
 	  IsRuntimeGlobalData(addr));
 }
 
-int IsConstructorData(ptr_t addr)
-{
-  return (addr <= (ptr_t) 256);
-}
+
 
 #ifdef solaris
 extern int firstdata;

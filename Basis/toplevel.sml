@@ -1,7 +1,7 @@
 (*$import Prelude TopLevelHelp *)
-(* http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
+(* see http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
-(* 
+(* these are for debugging only 
 extern ml_output : (int, string, unit) --> 
 fun raw_print(s : string) : unit = Ccall(ml_output,1,s)
 *)
@@ -22,14 +22,19 @@ val concat = string_concat
 val print = textio_print
 val trunc = real_trunc
 
-overload + : 'a as iplus and bplus and uplus and fplus
-overload - : 'a as iminus and bminus and uminus and fminus
-overload * : 'a as imult and bmult and umult and fmult
+
+(* --- These identifier are already done in build-in context *)
+(* overload + : 'a as iplus and bplus and uplus and fplus *)
+(* overload - : 'a as iminus and bminus and uminus and fminus *)
+(* overload * : 'a as imult and bmult and umult and fmult *)
+
+(* --- These identifier were undefined before ---- *)
 overload div : 'a as idiv and bdiv and udiv
 overload mod : 'a as imod and bmod and umod
 
-overload <  : 'a as ilt and blt and ult and flt and string_lt
-overload <= : 'a as ilte and blte and ulte and flte and string_le
-overload >  : 'a as igt and bgt and ugt and fgt and string_gt
-overload >= : 'a as igte and bgte and ugte and fgte and string_ge
+(* --- These identifiers were partially defined before --- *)
+overload <  : 'a as (* ilt  and blt  and ult  and flt  and *) string_lt
+overload <= : 'a as (* ilte and blte and ulte and flte and *) string_le
+overload >  : 'a as (* igt  and bgt  and ugt  and fgt  and *) string_gt
+overload >= : 'a as (* igte and bgte and ugte and fgte and *) string_ge
 

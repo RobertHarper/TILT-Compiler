@@ -206,10 +206,11 @@ void gcstat_heapprofile_beforecollect(value_t *bot, value_t *top)
     int proftag = cur[0];
     int tag = cur[1];
     int size = 0;
-    if (proftag == SKIP_TAG)
-      { cur++; continue; }
-    if (GET_TYPE(tag) == FORWARD_TAG)
-      {
+    if (GET_TYPE(proftag) == SKIP_TAG) {
+      cur += proftag >> SKIPLEN_OFFSET;
+      continue; 
+    }
+    if (GET_TYPE(tag) == FORWARD_TAG) {
 	printf("\n\nproftag,tag is %d/%d  at  %d\n", proftag,tag,cur);
 	printf("heapprofile: no forward tags should be in from space\n");
 	assert(0);
@@ -231,10 +232,11 @@ void gcstat_heapprofile_aftercollect(value_t *bot, value_t *top)
     int proftag = cur[0];
     int age = proftag >> HP_AGESHIFT;
     int tag = cur[1];
-    if (proftag == SKIP_TAG)
-      { cur++; continue; }
-    else 
-      {
+    if (GET_TYPE(proftag) == SKIP_TAG) {
+      cur += proftag >> SKIPLEN_OFFSET;
+      continue; 
+    }
+    else {
 	ProfileTagEntry_t *x = GetProfileTagEntry(proftag);
 	int size = objlength(cur,0);
 	cur += size; 

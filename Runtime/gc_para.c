@@ -32,17 +32,20 @@ void SynchMid(void)
   while (Turn1 > 0);
 }
 
-void SynchEnd(void)
+int isEmptyGlobalStack()
+{
+  return (SharedCursor == 0);
+}
+
+/* Returns 1 if gate was closed and global stack empty; i.e. global stack can not become non-empty */
+int SynchEnd(void)
 {
   int i = FetchAndAdd(&Turn2, -1);
   if (i==1) {
     Gate = 0;
+    return isEmptyGlobalStack();
   }
-}
-
-int isEmptyGlobalStack()
-{
-  return (SharedCursor == 0);
+  return 0;
 }
 
 void moveToGlobalStack(ptr_t *localStack, int *localCursorPtr)
@@ -66,4 +69,30 @@ void fetchFromGlobalStack(ptr_t *localStack, int *localCursorPtr, int numToFetch
   for (i=0; i<numToFetch; i++)
     localStack[localCursor++] = SharedStack[oldSharedCursor - (i + 1)];
   *localCursorPtr = localCursor;
+}
+
+long synchBarrier(long *counter, long barrierSize, long*prevCounter)
+{
+  long preCounterValue = FetchAndAdd(counter, 1);
+  while (*counter < barrierSize)
+    ;
+  *prevCounter = 0;
+  return preCounterValue;
+}
+
+long asynchReachBarrier(long *counter)
+{
+  long preCounterValue = FetchAndAdd(counter, 1);
+  return preCounterValue;
+}
+
+
+long asynchCheckBarrier(long *counter, long barrierSize, long *prevCounter)
+{
+  if (*counter < barrierSize)
+    return 0;
+  else {
+    *prevCounter = 0;
+    return 1;
+  }
 }

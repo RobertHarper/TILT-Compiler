@@ -58,6 +58,8 @@ signature LISTOPS =
     val member_eq : ('a * 'b -> bool) * 'a * 'b list -> bool
     val assoc : (''a * (''a * 'b) list) -> 'b option
     val assoc_eq : (('a * 'a -> bool) * 'a * ('a * 'b) list) -> 'b option
+    val list_sum  : ''a list * ''a list -> ''a list
+    val list_sum_eq  : (('a * 'a -> bool) * 'a list * 'a list) -> 'a list
     val list_diff  : ''a list * ''a list -> ''a list
     val list_diff_eq  : (('a * 'a -> bool) * 'a list * 'a list) -> 'a list
     val list_inter : ''a list * ''a list -> ''a list

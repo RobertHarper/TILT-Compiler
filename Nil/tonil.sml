@@ -2384,8 +2384,7 @@ end (* local defining splitting context *)
 				(iv::it::imports, context)
 			end
 		  | Il.PHRASE_CLASS_SIG(v,il_sig) => 
-			(imports,update_insert_sig(context,v,il_sig))
-		  | _ => (imports,context))
+			(imports,update_insert_sig(context,v,il_sig)))
 	   fun folder (p,acc) =
 	       let val SOME(l,pc) = IlContext.Context_Lookup_Path(HILctx,p)
 	       in  (case (IlUtil.is_dt l, IlUtil.is_nonexport l, p) of

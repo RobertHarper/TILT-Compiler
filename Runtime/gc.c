@@ -111,29 +111,25 @@ void HeapAdjust(int show, unsigned int bytesRequested, Heap_t **froms, Heap_t *t
 void gc_init(void)
 {
   SetRange(&null_range,0,0);
-  switch (collector_type) 
-    {
-      case Semispace :
-	{
-	  gc_init_Semi();
-	  break;
-	}
-      case Generational :
-	{ 
-	  gc_init_Gen();
-	  break;
-	}
-      case SemispaceParallel:
-	{
-	  gc_init_SemiPara();
-	  break;
-	}
-      case GenerationalParallel:
-	{
-	  gc_init_GenPara();
-	  break;
-	}
-      }
+  switch (collector_type) {
+  case Semispace :
+    gc_init_Semi();
+    break;
+  case Generational :
+    gc_init_Gen();
+    break;
+  case SemispaceParallel:
+    gc_init_SemiPara();
+    break;
+  case GenerationalParallel:
+    gc_init_GenPara();
+    break;
+  case SemispaceConcurrent:
+    gc_init_SemiConc();
+    break;
+  default : 
+    assert(0);
+  }
 }
 
 void paranoid_check_global(char *label, Heap_t **legalHeaps, Bitmap_t **legalStarts)
@@ -258,6 +254,8 @@ ptr_t alloc_bigintarray(int byteLen, int value, int ptag)
     case Generational : { return alloc_bigintarray_Gen (byteLen,value,ptag); }
     case SemispaceParallel :     { return alloc_bigintarray_SemiPara(byteLen,value,ptag); }
     case GenerationalParallel :  { return alloc_bigintarray_GenPara(byteLen,value,ptag); }
+    case SemispaceConcurrent : assert(0);
+    default : assert(0);
     }
 }
 
@@ -269,6 +267,8 @@ ptr_t alloc_bigptrarray(int wordlen, ptr_t value, int ptag)
     case Generational : { return alloc_bigptrarray_Gen (wordlen,value,ptag); }
     case SemispaceParallel :    { return alloc_bigptrarray_SemiPara(wordlen,value,ptag); }
     case GenerationalParallel : { return alloc_bigptrarray_GenPara(wordlen,value,ptag); }
+    case SemispaceConcurrent : assert(0);
+    default : assert(0);
     }
 }
 
@@ -279,14 +279,21 @@ ptr_t alloc_bigfloatarray(int loglen, double value, int ptag)
     case Generational : { return alloc_bigfloatarray_Gen (loglen,value,ptag); }
     case SemispaceParallel :     { return alloc_bigfloatarray_SemiPara(loglen,value,ptag); }
     case GenerationalParallel :     { return alloc_bigfloatarray_GenPara(loglen,value,ptag); }
+    case SemispaceConcurrent : assert(0);
+    default : assert(0);
   }
 }
 
 void gc_poll(SysThread_t *sth)
 {
-  if (collector_type == SemispaceParallel ||
-      collector_type == GenerationalParallel)
-    gc_poll_SemiPara(sth);
+  switch (collector_type) {
+    case Semispace :            return;
+    case Generational :         return;
+    case SemispaceParallel :    gc_poll_SemiPara(sth); return;
+    case GenerationalParallel : gc_poll_GenPara(sth); return;
+    case SemispaceConcurrent : return;
+    default : assert(0);
+  }
   return;
 }
 
@@ -305,6 +312,8 @@ int GCAllocate(SysThread_t *sth, int req)
     case Generational :         { return GCAllocate_Gen(sth,req); }
     case SemispaceParallel :    { return GCAllocate_SemiPara(sth,req); }
     case GenerationalParallel : { return GCAllocate_GenPara(sth,req); }
+    case SemispaceConcurrent : { return GCAllocate_SemiConc(sth,req); }
+    default : assert(0);
   }
 }
 
@@ -325,7 +334,7 @@ void GC(Thread_t *curThread)
   assert(alloc <= syslimit);
   ReleaseJob(self);
 
-  /* Write skip tag to end of region */
+  /* Write skip tag to indicate the end of region */
   if (alloc < syslimit) {
     unsigned int wordsLeft = syslimit - alloc;
     tag_t skiptag = SKIP_TAG | (wordsLeft << SKIPLEN_OFFSET);
@@ -346,8 +355,7 @@ void GC(Thread_t *curThread)
   }
 
   /* Dispatch to the underlying collector */
-  switch (collector_type) 
-    {
+  switch (collector_type) {
     case Semispace : 
       GC_Semi(self);
       scheduler(self);
@@ -364,6 +372,9 @@ void GC(Thread_t *curThread)
       GC_GenPara(self);
       scheduler(self); 
       break; 
+    case SemispaceConcurrent :
+      assert(0);
+      break; 
     }
   assert(0);
 }
@@ -377,6 +388,8 @@ void gc_finish()
     case Generational : { gc_finish_Gen(); break; }
     case SemispaceParallel : { gc_finish_SemiPara(); break; }
     case GenerationalParallel : { gc_finish_GenPara(); break; }
+    case SemispaceConcurrent : { gc_finish_SemiConc(); break; }
+    default : assert(0);
     }
 }
 

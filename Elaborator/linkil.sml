@@ -3,6 +3,7 @@
 structure LinkIl :> LINKIL  = 
     struct
 
+	val _ = IlContext.installHelpers {eq_con = IlStatic.eq_con}
 	val _ = Pat.installHelpers {typecompile = Toil.typecompile,
 				    expcompile = Toil.expcompile,
 				    polyinst = Toil.polyinst}
@@ -22,6 +23,7 @@ structure LinkIl :> LINKIL  =
 	structure Basis = Basis
 
 	val show_hil = Stats.ff("showHIL")
+	val show_hilcontext = Stats.ff("showHILContext")
 
 	open Il IlUtil Ppil IlStatic Formatter
 	val error = fn s => Util.error "linkil.sml" s
@@ -157,29 +159,26 @@ structure LinkIl :> LINKIL  =
 	      | NONE => NONE
 
 	fun elab_dec (base_ctxt, fp, dec) = 
-	    case xdec(base_ctxt,fp,dec) of
-		SOME sbnd_ctxtent_list => 
+	  let val _ = if (!show_hilcontext)
+			  then (print "\nCONTEXT:\n"; Ppil.pp_context base_ctxt) 
+		      else ()
+	  in  case xdec(base_ctxt,fp,dec) of
+	      SOME sbnd_ctxtent_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list
 			val new_ctxt = local_add_context_entries (base_ctxt,ctxtents) 
 			val _ = if (!show_hil)
-				    then  (
-(*
-					   print "\nCONTEXT:\n";
-					   Ppil.pp_context base_ctxt;
-*)
-					   print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
-(*
+				    then  (print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
 					   print "\nENTRIES:\n"; 
 					   (app (fn e => (Ppil.pp_context_entry e; 
 							  print "\n")) ctxtents);
-*)
 					   print "\n")
 				else ()
 			val partial_ctxt = IlContext.sub_context(new_ctxt, base_ctxt)
 		    in  SOME(base_ctxt,partial_ctxt,sbnd_ctxtent_list)
 		    end
 	      | NONE => NONE
+	  end
 
 
 	local

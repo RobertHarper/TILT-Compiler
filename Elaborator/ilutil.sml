@@ -440,8 +440,8 @@ structure IlUtil
 	       CONTEXT_SDEC sdec => CONTEXT_SDEC (f_sdec state sdec)
 	     | CONTEXT_SIGNAT (l, v, s) => CONTEXT_SIGNAT (l, v, f_signat state s)
 	     | CONTEXT_FIXITY _ => entry
-	     | CONTEXT_OVEREXP (l, v, celist) => CONTEXT_OVEREXP (l, v, map (fn (c,e) => (f_con state c,
-											  f_exp state e)) celist))
+	     | CONTEXT_OVEREXP (l, celist) => CONTEXT_OVEREXP (l, map (fn (c,e) => (f_con state c,
+										    f_exp state e)) celist))
 
       val default_bound_convar = []
       val default_bound_var = []

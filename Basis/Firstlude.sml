@@ -220,14 +220,15 @@ val arraymaxlength = 1024 * 1024
 
 
 
-	fun (a : int) mod (b : int) =
+	fun imod(a : int, b : int) =
 	    let val temp = a rem b
 	    in if ((b>0 andalso temp>=0) orelse
 		   (b<0 andalso temp<=0))
 		   then temp
 	       else temp+b
 	    end
-	fun (a : int) div (b : int) =
+
+	fun idiv(a : int, b : int) =
 	    let val temp = a quot b
 	    in  (* same if sign of a and b agree *)
 		if ((a>=0 andalso b>0) orelse (a<=0 andalso b<0))
@@ -237,8 +238,7 @@ val arraymaxlength = 1024 * 1024
 			then temp
 		    else temp - 1       (* here's where they differ *)
 	    end
-	val imod = op mod
-	val idiv = op div
+
 
 (* unimped parts of the standard basis - or exception indicating internal error in basis *)
 exception LibFail of string

@@ -12,6 +12,7 @@
 #include "memobj.h"
 #include "client.h"
 #include "forward.h"
+#include "global.h"
 
 int GCTableEntryIDFlag = 0;  /* let the user code set it if it thinks it's on */
 int save_rate = 70;
@@ -502,9 +503,10 @@ int trace_stack_step(Thread_t *th, unsigned long *saveregs,
 	      if (should_trace(trace,callinfo,cur_sp, regstate,
 			       &byte_offset, &word_offset,
 			       slot,i)) {
-		if (*slot > (val_t) 256) {
+		ptr_t data = (ptr_t) *slot;
+		if (!IsTagData(data)) {
 		  if (debugStack)
-		    printf("Enqueueing stack slot %d with value %d\n", slot, *slot);
+		    printf("!!! Enqueueing stack slot %d with value %d\n", slot, data);
 		  Enqueue(roots,(void *)slot);
 		}
 	      }
@@ -603,8 +605,7 @@ unsigned int trace_stack_gen(Thread_t *th, unsigned long *saveregs,
 
   if (th->last_snapshot >= 0)
     {
-      for (i=0; i<=th->last_snapshot; i++)
-	{
+      for (i=0; i<=th->last_snapshot; i++) {
 	  Queue_t *r = th->snapshots[i].roots;
 	  Enqueue(root_lists,r);
 	}
@@ -714,8 +715,9 @@ unsigned int trace_stack(Thread_t *th, unsigned long *saveregs,
     for (j=0; j<QueueLength(root_lists); j++) {
       Queue_t *roots = QueueAccess(root_lists,j);
       for (i=0; i<QueueLength(roots); i++) {
-	sum += (val_t)QueueAccess(roots,i); 
-	printf("  root %d: %d\n",count,QueueAccess(roots,i));
+	mem_t root = (mem_t) QueueAccess(roots,i);
+	sum += (val_t) root;
+	printf("  root %d: *%d = %d\n",count,root,*root);
 	count++; 
       }
     }
@@ -761,10 +763,14 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
 
   start_timer(&sth->stacktime);
   QueueClear(reg_roots);
-  
 
-  for (i=th->nextThunk; i<th->numThunk; i++)
+  for (i=th->nextThunk; i<th->numThunk; i++) {
+    if (debugStack)
+      printf("!!! Enqueueing thunk - position %d with value %d\n",
+	     &(((ptr_t)th->thunks)[i]),
+	     (((ptr_t)th->thunks)[i]));
     Enqueue(reg_roots,&(((ptr_t)th->thunks)[i]));
+  }
 
   if (th->nextThunk != 0) {  /* thread has started */
     mem_t sp = (mem_t) saveregs[SP];
@@ -772,8 +778,13 @@ void local_root_scan(SysThread_t *sth, Thread_t *th, Heap_t *fromspace)
     regmask = trace_stack(th, saveregs, stack->top, root_lists, fromspace);
     regmask |= 1 << EXNPTR;
     for (i=0; i<32; i++)
-      if ((regmask & (1 << i)) && (saveregs[i] > 256))
+      if ((regmask & (1 << i)) && (!(IsTagData((ptr_t)(saveregs[i]))))) {
+	if (debugStack)
+	  printf("!!! Enqueueing register %d - position %d with value %d\n",
+		 i, (int *)(&(saveregs[i])),
+		 saveregs[i]);
 	Enqueue(reg_roots,(int *)(&(saveregs[i])));
+      }
   }
   Enqueue(root_lists,reg_roots);
 
@@ -837,7 +848,7 @@ void minor_global_scan(SysThread_t *sth)
     if (GET_TYPE(tag) == SKIP_TAG)
       Enqueue(potentialTemp, (void *)global);
     else 
-      getPointerLocations(global, promotedGlobalLoc);
+      getNontagPointerLocations(global, promotedGlobalLoc);
   }
   typed_swap(Queue_t *, potentialTemp, potentialGlobal);
   Enqueue(sth->root_lists, promotedGlobalLoc);

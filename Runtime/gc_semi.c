@@ -86,11 +86,11 @@ ptr_t alloc_bigfloatarray_Semi(int elemLen, double initVal, int ptag)
 
   region = alloc_big(4 * wordLen,0);
   if ((((val_t)region) & 7) == 0) {
-    region[0] = SKIP_TAG;
+    region[0] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
     res = region + 1;
   }
   else {
-    region[wordLen-1] = SKIP_TAG;
+    region[wordLen-1] = SKIP_TAG | (1 << SKIPLEN_OFFSET);
     res = region;
   }
   init_farray(res, elemLen, initVal);

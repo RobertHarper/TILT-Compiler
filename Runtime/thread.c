@@ -185,6 +185,18 @@ void DeleteJob(SysThread_t *sth)
 }
 
 
+void StopAllThreads()
+{
+  int i;
+  LocalLock();
+  for (i=0; i<NumThread; i++) {
+    Thread_t *th = JobQueue[i];
+    if (th != NULL)
+      th->saveregs[ALLOCLIMIT] = StopHeapLimit;
+  }
+  LocalUnlock();
+}
+
 
 /* --------------------- Helpers ---------------------- */
 void check(char *str, SysThread_t *sth)
@@ -394,8 +406,6 @@ static void work(SysThread_t *sth)
 {
   Thread_t *th = sth->userThread;
 
-  check("workstart",sth);
-
   /* System thread should not be mapped */
   assert(th == NULL);
 
@@ -428,6 +438,17 @@ static void work(SysThread_t *sth)
   
     case NoRequest : assert(0);
 
+    case YieldRequest : {
+#ifdef solaris
+      th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
+#endif	
+      th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
+      th->saveregs[ALLOCLIMIT] = (reg_t) sth->limit;
+      th->writelistAlloc = sth->writelistCursor;
+      th->writelistLimit = sth->writelistEnd;
+      returnFromYield(th);
+    }
+
     case StartRequest : {              /* Starting thread for the first time */
       mem_t stack_top = th->stackchain->stacks[0]->top;
       assert(th->nextThunk == 0);
@@ -444,20 +465,8 @@ static void work(SysThread_t *sth)
 	       th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
-      check("workstart",sth);
       start_client(th,th->thunks, th->numThunk);
       assert(0);
-    }
-
-    case YieldRequest : {
-#ifdef solaris
-      th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
-#endif	
-      th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
-      th->saveregs[ALLOCLIMIT] = (reg_t) sth->limit;
-      th->writelistAlloc = sth->writelistCursor;
-      th->writelistLimit = sth->writelistEnd;
-      returnFromYield(th);
     }
 
     case GCRequestFromML : {
@@ -488,7 +497,6 @@ static void work(SysThread_t *sth)
 	       sth->stid, th->tid,th->id,
 	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
       assert(th->requestInfo + th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
-      check("workresume",sth);
       returnFromGCFromML(th);
     }
 
@@ -517,7 +525,6 @@ static void work(SysThread_t *sth)
 	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
 	       sth->stid, th->tid,th->id,
 	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
-      check("workresume",sth);
       returnFromGCFromC(th);
     }
 
@@ -645,7 +652,8 @@ Thread_t *SpawnRest(ptr_t thunk)
   check("Spawnmid",sth);
 
   if (collector_type != SemispaceParallel &&
-      collector_type != GenerationalParallel) {
+      collector_type != GenerationalParallel &&
+      collector_type != SemispaceConcurrent) {
     printf("!!! Spawn called in a sequential collector\n");
     assert(0);
   }
