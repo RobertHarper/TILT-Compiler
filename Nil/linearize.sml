@@ -484,9 +484,9 @@ struct
 	  | AllArrow_c {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} =>
 	      let 
 		  val (tFormals,state) = lvklist state tFormals
-		  val (eFormals,cbnds,state) = lvoptclist lift state eFormals
+		  val (eFormals,state) = lvoptclist state eFormals
 		  val body_type = lcon_lift' state body_type
-	      in  (cbnds,
+	      in  ([],
 		   AllArrow_c {openness=openness,effect=effect,isDependent=isDependent,
 			       tFormals=tFormals,eFormals=eFormals,fFormals=fFormals,
 			       body_type=body_type})
@@ -569,21 +569,20 @@ struct
        in  foldl_acc vtrcfolder state vtrclist
        end
 
-   and lvoptclist lift state vclist = 
+   and lvoptclist state vclist = 
        let fun vcfolder((vopt,c),state) =
 	   let val _ = inc depth_lcon_function
-	       val (cbnds,c) = lcon lift state c
+	       val c = lcon_lift' state c
                val _ = dec depth_lcon_function
 	       val (state,vopt) = (case vopt of
 				       SOME v => let val (s,v) = add_var(state,v)
 						 in  (s, SOME v)
 						 end
 				     | NONE => (state, vopt))
-	   in  (((vopt,c), cbnds), state)
+	   in  ((vopt,c), state)
 	   end
-	   val (temp,state) = foldl_acc vcfolder state vclist
-	   val (vopt_c,cbnds) = Listops.unzip temp
-       in  (vopt_c, Listops.flatten cbnds, state)
+	   val (vopt_c,state) = foldl_acc vcfolder state vclist
+       in  (vopt_c, state)
        end
 
    and lkind state arg_kind : kind = 
