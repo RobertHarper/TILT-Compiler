@@ -41,8 +41,8 @@ void* my_malloc(size_t size)
 {
   void* mem = malloc(size);
   if (mem == NULL) {
-    fprintf(stderr, "malloc %u failed with %d (%s)\n", (unsigned)size,errno,strerror(errno));
-    assert(0);
+    fprintf(stderr, "malloc %u failed: %s\n", (unsigned)size,strerror(errno));
+    DIE("out of memory");
   }
   return mem;
 }
@@ -51,8 +51,8 @@ void* my_realloc(void* src, size_t size)
 {
   void* mem = realloc(src, size);
   if (mem == NULL && size != 0) {
-    fprintf(stderr, "realloc %u failed with %d (%s)\n", (unsigned)size,errno,strerror(errno));
-    assert(0);
+    fprintf(stderr, "realloc %u failed: %s\n", (unsigned)size,strerror(errno));
+    DIE("out of memory");
   }
   return mem;
 }
@@ -62,8 +62,8 @@ void my_mprotect(int which, caddr_t bottom, int size, int perm)
 {
   int status = mprotect(bottom, size, perm);
   if (status) {
-    fprintf (stderr, "mprotect %d failed (%d,%d,%d) with %d\n",which,bottom,size,perm,errno);
-    assert(0);
+    fprintf(stderr, "mprotect %d failed (%d,%d,%d): %s\n",which,bottom,size,perm,strerror(errno));
+    DIE("out of memory");
   }
 }
 
@@ -78,8 +78,8 @@ mem_t my_mmap(int size, int prot)
   {
     if (fd == -1)
       if ((fd = open("/dev/zero", O_RDWR)) == -1) {
-	fprintf (stderr, "unable to open /dev/zero, errno = %d\n", errno);
-	exit(-1);
+	perror("/dev/zero");
+	DIE("out of memory");
       }
     flags = MAP_PRIVATE;
   }
@@ -97,12 +97,12 @@ mem_t my_mmap(int size, int prot)
 #endif
   mapped = (mem_t) mmap(start, size, prot, flags, fd, 0);
   if (mapped == (mem_t) -1) {
-    fprintf(stderr,"mmap failed with size = %d: %s\n", size, strerror(errno));
-    assert(0);
+    fprintf(stderr,"mmap %d failed: %s\n", size, strerror(errno));
+    DIE("out of memory");
   }
   if (diag)
-    fprintf(stderr,"mmap succeeded with mapped = %x, size = %d, prot = %d\n",
-	    mapped, size, prot);
+    fprintf(stderr,"mmap %d succeeded with mapped = %x, prot = %d\n",
+	    size, mapped, prot);
   return mapped;
 }
 
@@ -157,16 +157,8 @@ static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
       res = &Stacklets[i];
       break;
     }
-  if (res == NULL) {
-    Thread_t* thread = (Thread_t*)stackChain->thread;
-    volatile Proc_t* proc = (thread ? thread->proc : NULL);
-    if(thread && proc)
-      fprintf(stderr,"Proc %d: thread %d: out of stack space\n",
-	      proc->procid, thread->tid);
-    else
-      fprintf(stderr,"out of stack space\n");
-    abort();
-  }
+  if (res == NULL)
+    DIE("out of stack space");
 
   res->parent = stackChain;
   res->state = Inconsistent;
@@ -298,13 +290,13 @@ Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp)
     }
   }
   if (active < 0) {
-    printf("EstablishStacklet failed for sp = %d  sp_base = %d",sp, sp_base);
+    fprintf(stderr,"EstablishStacklet failed for sp = %d  sp_base = %d",sp, sp_base);
     for (i=0; i < stackChain->cursor; i++) {
       Stacklet_t *stacklet = stackChain->stacklets[i];
-      printf("Stacklet %d: %d to %d\n",
-	     stacklet->baseExtendedBottom, stacklet->baseTop);
-    } 
-    assert(active>=0);
+      fprintf(stderr,"Stacklet %d: %d to %d\n",
+	      stacklet->baseExtendedBottom, stacklet->baseTop);
+    }
+    DIE("stack pointer not in stack chain");
   }
   for (i=active+1; i<stackChain->cursor; i++) {
     Stacklet_Dealloc(stackChain->stacklets[i]);
@@ -338,26 +330,6 @@ void DequeueStacklet(StackChain_t *stackChain)
   assert(stackChain->cursor>=0);
 }
 
-void showAllThreads(void)
-{
-  int i;
-  for (i=0; i<NumThread; i++) {
-    Thread_t *th = &Threads[i];
-    StackChain_t *stack = th->stack;
-    int stackNum = (stack == NULL) ? -1 : (stack - &StackChains[0]);
-    printf("%3d: stat = %d    tid = %4d  stack = %3d\n", 
-	   i, th->status, th->tid, stackNum);
-  }
-  printf("\n\nStackChains:\n");
-  for (i=0; i<NumStackChain; i++) {
-    StackChain_t *sc = &StackChains[i];
-    Thread_t *th = (Thread_t *) sc->thread;
-    int tid = (th == NULL) ? -1 : (th - &Threads[0]);
-    printf("%3d: th = %d\n",
-	   i, tid);
-  }
-}
-
 StackChain_t* StackChain_BaseAlloc(Thread_t *t, int n)
 {
   int i;
@@ -376,8 +348,7 @@ StackChain_t* StackChain_BaseAlloc(Thread_t *t, int n)
       }
       return res;
     }
-  showAllThreads();
-  assert(0);
+  DIE("could not allocate new stack chain\n");
 }
 
 
@@ -472,8 +443,7 @@ void HeapInitialize(void)
 void PadHeapArea(mem_t bottom, mem_t top)
 {
   if (bottom > top)
-    printf("bottom = %d   top = %d\n", bottom , top);
-  assert(bottom <= top);
+    DIE("PadHeapArea failing beause bottom > top");
   if (bottom < top)
     *bottom = MAKE_SKIP(top - bottom);
 }
@@ -528,16 +498,11 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   assert(res->bottom != (mem_t) -1);
   assert(heap_count < NumHeap);
   assert(MaxSize >= MinSize);
-  /* Lock down pages and force page-table to be initialized; otherwise, PadHeapArea can often take 0.1 - 0.2 ms. 
+  /* Try to lock down pages and force page-table to be initialized; otherwise, PadHeapArea can often take 0.1 - 0.2 ms. 
      Even with this, there are occasional (but far fewer) page table misses.
    */
-  if (geteuid() == 0) {
-    stat = mlock((caddr_t) res->bottom, maxsize_pageround); 
-    if (stat) {
-      printf("mlock failed with errno %d\n", errno);
-      assert(0);
-    }
-  }
+  if (geteuid() == 0)
+    (void) mlock((caddr_t) res->bottom, maxsize_pageround); 
   return res;
 }
 
@@ -584,10 +549,7 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
   long oldSizeRound = RoundUp(oldSize, TILT_PAGESIZE);
   long newSizeRound = RoundUp(newSize, TILT_PAGESIZE);
 
-  if (newSize > maxSize) {
-    printf("FATAL ERROR in Heap_Resize at GC %d.  Heap size = %d.  Trying to resize to %d\n", NumGC, maxSize, newSize);
-    assert(0);
-  }
+  if (newSize > maxSize) DIE("resized heap too big");
   if (reset) {
     h->cursor = h->bottom;
   }
@@ -610,6 +572,8 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
 }
 
 
+/* Why is the type wrong?  Why not return (to the signal handler)
+   for further diagnostics?  */
 mem_t StackError(ucontext_t *ucontext, mem_t badadd)
 {
   Stacklet_t *faultstack = 0;
@@ -617,9 +581,9 @@ mem_t StackError(ucontext_t *ucontext, mem_t badadd)
   int i;
   mem_t sp = GetSp(ucontext);
 
-  printf("\n------------------StackError---------------------\n");
-  printf("sp, badreference:  %u   %u\n",sp,badadd);
-  assert(0);
+  fprintf(stderr,"\n------------------StackError---------------------\n");
+  fprintf(stderr,"sp, badreference:  %u   %u\n",sp,badadd);
+  DIE("stack error");
   return sp; /* Bogus!  silence warnings. */
 }
 
@@ -628,13 +592,20 @@ extern mem_t datastart;
 void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
-  unsigned long mem_bytes = GetPhysicalPages() * 0.90 * TILT_PAGESIZE;
-  unsigned long heap_bytes;
-  int max_heap_byte;
-  heap_bytes = (unsigned long)INT_MAX;
-  heap_bytes = Min(heap_bytes, mem_bytes);
-  init_int(&MinHeapByte, 2048 * 1024);
-  init_int(&MaxHeapByte, 0.40 * heap_bytes);
+  unsigned long min_bytes, max_bytes;
+  unsigned long mem_bytes = GetPhysicalPages() * 0.30 * TILT_PAGESIZE;
+  unsigned long cache_bytes = GetBcacheSize() * 2;
+
+  min_bytes = 2048 * 1024;
+  min_bytes = Max(min_bytes, cache_bytes);
+
+  max_bytes = (unsigned long)INT_MAX;
+  max_bytes = Min(max_bytes, mem_bytes);
+
+  init_int(&MinHeapByte, min_bytes);
+  init_int(&MaxHeapByte, 0.40 * max_bytes);
+  assert(MinHeapByte <= MaxHeapByte);
+
 #ifdef solaris
   assert(TILT_PAGESIZE == sysconf(_SC_PAGESIZE));
 #else

@@ -160,13 +160,8 @@ void UpdateJob(Proc_t *proc)
   /* Check that thread's allocation pointers are consistent and update processor's version */
   if (((mem_t) th->saveregs[ALLOCLIMIT] != proc_allocLimit &&
        (mem_t) th->saveregs[ALLOCLIMIT] != StopHeapLimit) ||
-      (mem_t) th->saveregs[ALLOCPTR] > proc_allocLimit) {
-    printf("proc->allocCursor = %d\n",proc_allocCursor);
-    printf("proc->allocLimit = %d\n",proc_allocLimit);
-    printf("th->saveregs[ALLOC] = %d\n",th->saveregs[ALLOCPTR]);
-    printf("th->saveregs[LIMIT] = %d\n",th->saveregs[ALLOCLIMIT]);
-    assert(0);
-  }
+      (mem_t) th->saveregs[ALLOCPTR] > proc_allocLimit)
+    DIE("invariants not met in UpdateJob");
 
   /* Update processor's version of allocation range and write list.  Update stats */
   proc->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
@@ -333,21 +328,10 @@ Thread_t *getThread(void)
   ui_t localVar;
   Stacklet_t *stacklet = GetStacklet(&localVar);
   Thread_t *thread = NULL;
-
-  if (stacklet == NULL)
-    return NULL;
-  thread = (Thread_t *) stacklet->parent->thread;
-  if (thread != NULL) {
-    Proc_t *proc2 = getProcPthread();
-    if (thread->proc != proc2) {
-      printf("thread->proc  %d  %d\n", thread->proc->procid, thread->proc);
-      if (proc2 != NULL) {
-	printf("getProcPthread()  %d %d\n", proc2->procid, proc2);
-      } else {
-	printf("getProcPthread()  NULL\n");
-      }
-    }
-    assert(thread->proc == proc2);
+  if (stacklet != NULL) {
+    thread = (Thread_t *) stacklet->parent->thread;
+    if (thread != NULL)
+      assert(thread->proc == getProcPthread());
   }
   return thread;
 }
@@ -815,7 +799,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
   case Done:
     break;
   default:
-    assert(0);
+    DIE("bad state in procChangeState");
   }
 
   /* A mutator is considered to have access unless a GC is active not triggered by an Idle state */
@@ -897,7 +881,7 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int discardedSubst
       double timeDivWork = proc->nonMutatorTime / (segWork / 1000.0);
       add_histogram(&proc->timeDivWorkHistogram, timeDivWork);
     }
-    if (diag && (proc->mutatorTime / proc->nonMutatorTime) < 0.2) {
+    if (diag && proc->nonMutatorTime != 0.0 && (proc->mutatorTime / proc->nonMutatorTime) < 0.2) {
       printf("segmentNumber = %d    mutatorTime = %.3f    nonMutatorTime = %.3f   util = %.3f   segType = %d\n", 
 	     proc->segmentNumber, proc->mutatorTime, proc->nonMutatorTime,
 	     proc->mutatorTime / proc->nonMutatorTime,
@@ -939,38 +923,21 @@ Thread_t *thread_create(Thread_t *parent, ptr_t thunk)
       LocalUnlock();
     }
   }
-  printf("Work list has %d threads\n",NumTotalJob());
-  printf("thread_create failed\n");
-  assert(0);
-}
-
-
-void load_iregs_fail(int memValue, int regValue)
-{
-  printf("load_iregs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
-  assert(0);
-}
-
-void save_iregs_fail(int memValue, int regValue)
-{
-  printf("save_iregs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
-  assert(0);
+  DIE("out of threads in thread_create");
 }
 
 void load_regs_fail(int memValue, int regValue)
 {
-  printf("load_regs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
-  assert(0);
+  fprintf(stderr,"load_regs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
+  DIE("load_regs failed");
 }
 
 void save_regs_fail(int memValue, int regValue)
 {
-  printf("save_regs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
-  assert(0);
+  fprintf(stderr,"save_regs_fail with memValue = %d  regValue = %d\n",memValue,regValue);
+  DIE("save_regs failed");
 }
 
-
-/* Map thread onto processor.  Processor must be unmapped or already mapped to thread. */
 static void mapThread(Proc_t *proc, Thread_t *th)
 {
   Stacklet_t *stacklet = CurrentStacklet(th->stack);
@@ -1021,7 +988,7 @@ static void work(Proc_t *proc)
 #elif defined(solaris)
       thr_yield();
 #else
-      assert(0);
+#error "fix work() for your OS/processor"
 #endif 
       th = FetchJob();  /* Provisionally grab thread but don't map onto processor yet */
     if (th == NULL) {
@@ -1055,8 +1022,6 @@ Abort
 
   switch (th->request) {
 
-    case NoRequest: 
-      assert(0);
     case YieldRequest: {
 #ifdef solaris
       th->saveregs[16] = (unsigned long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
@@ -1078,7 +1043,7 @@ Abort
       memBarrier();  /* make visible changes to other processors */
       procChangeState(proc, Mutator, 28);
       start_client(th,thunk);
-      assert(0);
+      DIE("start_client returned");
     }
 
     case GCRequestFromML:
@@ -1099,7 +1064,7 @@ Abort
 	memBarrier();  /* make visible changes to other processors */
 	procChangeState(proc, Mutator, 30);
 	returnFromGCFromML(th);	
-	assert(0);
+	DIE("returnFromGCFromML returned");
       }
       else if (th->request == GCRequestFromC ||
 	       th->request == MajorGCRequestFromC) {
@@ -1110,17 +1075,15 @@ Abort
 	memBarrier();  /* make visible changes to other processors */
 	procChangeState(proc, Mutator, 31);
 	returnFromGCFromC(th);	
-	assert(0);
+	DIE("returnFromGCFromC returned");
       }
       else
-	assert(0);
+	DIE("impossible");
     }
-   default: {
-      printf("Odd request %d\n",th->request);
-      assert(0);
-    }
+   default:
+      DIE("bad request");
   } /* end of switch */
-  assert(0);
+  DIE("work finished");
 }
 
 
@@ -1152,8 +1115,7 @@ static void* proc_go(void* untypedProc)
   GCReleaseThread(proc);    /* Fault in the code to avoid later Icache miss */
   proc->segmentNumber = 0;  /* Enable procChangeState */
   work(proc);
-  assert(0);
-  return 0;
+  return 0;	/* NOTREACHED */
 }
 
 void thread_go(ptr_t thunk)
@@ -1177,10 +1139,8 @@ void thread_go(ptr_t thunk)
       printf(" %d ", activeProcs[i]);
     printf("\n");
   }
-  if (active < NumProc) {
-    printf("Needed %d processors.\n", NumProc);
-    assert(0);
-  }
+  if (active < NumProc)
+    DIE("needed more processors");
 #endif
 
   mainThread = thread_create(NULL,thunk);
@@ -1213,8 +1173,8 @@ void thread_go(ptr_t thunk)
       printf("pthread_attr_setschedparam returned status = %d\n", status);
     status = pthread_create(&discard,&attr,proc_go,&Procs[i]);
     if (status) {
-      printf("pthread_create returned status = %d (%s)\n", status, strerror(status));
-      assert(0);
+      perror("pthread_create");
+      DIE("pthread_create failed");
     }
     if (threadDiag)
       printf("Proc %d:  processor %d and pthread = %d\n",
@@ -1245,7 +1205,7 @@ void thread_go(ptr_t thunk)
 #elif defined(solaris)
       thr_yield();
 #else
-      assert(0);
+#error "update for your OS/processor"
 #endif
   }
 
@@ -1273,7 +1233,7 @@ Thread_t *SpawnRest(ptr_t thunk)
   case GenerationalConcurrent:
     break;
   default:
-    assert(0);
+    DIE("bad collector_type");
   }
 
   assert(proc->stack - ((int) &proc) < 1024);   /* stack frame for this function should be < 1K */
@@ -1297,7 +1257,6 @@ void Finish(void)
   if (threadDiag) printf("Proc %d: finished user thread %d\n",proc->procid,th->tid);
   DeleteJob(proc);
   work(proc);
-  assert(0);
 }
 
 /* Mutator calls Yield which is defined in the service_platform_asm.s assembly file */
@@ -1309,8 +1268,7 @@ Thread_t *YieldRest(void)
   ReleaseJob(proc);
   procChangeState(proc, Scheduler, 11);
   work(proc);
-  assert(0);
-  return 0;
+  return 0; /* NOTREACHED */
 }
 
 /* Processor might be mapped but is at least up-to-date */
@@ -1319,7 +1277,6 @@ void schedulerRest(Proc_t *proc)
   int local;
   assert((proc->stack - (int) (&local)) < 1024); /* Check that we are running on own stack */
   work(proc);
-  assert(0);
 }
 
 
