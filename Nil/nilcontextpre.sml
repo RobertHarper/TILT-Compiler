@@ -103,7 +103,7 @@ structure NilContextPre
 		   std_kind : kind delay,
 		   index : int}
      
-   type c_entry = {con : con,
+   type c_entry = {con : con delay,
 		   std_con : con delay}
 
    type context = 
@@ -138,7 +138,7 @@ structure NilContextPre
      fun print_con (var,{con,std_con}:c_entry) =
        (print (Name.var2string var);
 	print ":";
-	Ppnil.pp_con con;
+	Ppnil.pp_con (thaw con);
 	if (!print_std_cons) then 
 	  (lprint ":";
 	   Ppnil.pp_con (thaw std_con))
@@ -194,20 +194,30 @@ structure NilContextPre
      let
        val _ = 
 	 if !debug then
-	   assert (locate "insert_con")
-	   [
-	    (not (contains conmap var),
-	     fn () => print ("Term variable already occurs in context: "^(Name.var2string var)))
-(*            ,
-	    (isRenamedCon ctx con, 
-	     fn () => (Ppnil.pp_con con;
-		       print ("Type not properly renamed when inserted into context"))) *)
-	    ]
+	   assert (locate "insert_con") []
 	 else ()
        val thunk = fn () => raise Unimplemented (*type_standardize(ctx,con)*)
        val c_entry = 
-	 {con = con,
+	 {con = immediate con,
 	  std_con = delay thunk}
+     in
+       {conmap = Vinsert (conmap, var, c_entry), 
+	kindmap = kindmap,
+	counter = counter}
+     end
+
+   fun insert_exp_pre (typeof) (ctx as {conmap,kindmap,counter}:context,var,con) = 
+     let
+       val _ = 
+	 if !debug then
+	   assert (locate "insert_con") []
+	 else ()
+
+       val cthunk = fn () => typeof(ctx,con)
+       val sthunk = fn () => raise Unimplemented (*type_standardize(ctx,con)*)
+       val c_entry = 
+	 {con = delay cthunk,
+	  std_con = delay sthunk}
      in
        {conmap = Vinsert (conmap, var, c_entry), 
 	kindmap = kindmap,
@@ -219,13 +229,13 @@ structure NilContextPre
 
    fun find_con ({conmap,...}:context,var) = 
        (case V.find (conmap, var) of
-	    SOME {con,std_con} => con
+	    SOME {con,std_con} => thaw con
 	  | NONE => raise Unbound)
 
 
    fun find_std_con_pre normalize (D as {conmap,...}:context,var) = 
        (case V.find (conmap, var) of
-	    SOME {con,std_con} => (std_con := (THAWED (normalize (D,con)));
+	    SOME {con,std_con} => (std_con := (THAWED (normalize (D,thaw con)));
 				   thaw std_con)
 	  | NONE => raise Unbound)
 

@@ -14,6 +14,12 @@ signature NILCONTEXTPRE =
     (*Insert a type into a context: the constructor is not necessarily normalized *)
     val insert_con : context * var * con -> context
 
+    (*Given a function to synthesize the type, 
+     * take a context and an expression and insert the corresponding type
+     * (delayed and memoized)
+     *)
+    val insert_exp_pre : ((context * exp) -> con) -> context * var * exp -> context
+
     val find_con   : context * var -> con
     val find_std_con_pre : (context * con -> con) -> context * var -> con
 
