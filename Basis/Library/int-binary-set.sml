@@ -1,4 +1,4 @@
-(*$import ORD_SET Int32 LibBase List *)
+(*$import ORD_SET LibBase List *)
 (* int-binary-set.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

@@ -16,562 +16,289 @@
 #include "platform.h"
 #include "client.h"
 #include "show.h"
+#include "gc_large.h"
 
 
-extern Queue_t *ScanQueue;
-
-
-static int floatheapsize = 16384 * 1024;
-static int floatbitmapsize = 128;
-Queue_t   *float_roots = 0;
-
-
-enum GCType { Minor, Major, ForcedMajor, Complete };
-
-
-
-Heap_t *nursery = NULL;  /* nursery used by old_alloc assembly routine */
-static Heap_t *old_fromheap = NULL, *old_toheap = NULL;
-Heap_t *floatheap = NULL; /* floatheap used by forward.c */
-static Bitmap_t  *floatbitmap = NULL;
-
-
-#ifdef OLD_ALLOC
-value_t old_alloc_ptr = 0;
-value_t old_alloc_limit = 0;
-#endif
+static Heap_t *nurseryGen = NULL;
+static Heap_t *tenuredFromGen = NULL, *tenuredToGen = NULL;
 
 /* ------------------  Generational array allocation routines ------------------- */
 
-static value_t* alloc_big(int wordLen, int oddAlign)
+static mem_t alloc_big(int byteLen, int hasPointers)
 {
-  value_t *res = 0;
+  mem_t region = NULL;
   Thread_t *curThread = getThread();
-  long *saveregs = curThread->saveregs;
-  int byteLen = 4 * wordLen;
-  int byteLenPad = byteLen + (oddAlign ? 4 : 0);
-  assert(byteLen >= 512);                /* Should be at least 0.5K to be considered big */
+  unsigned long *saveregs = curThread->saveregs;
+  int wordLen = byteLen / (sizeof (val_t));
 
-  /* Make sure there is enough room in the older generation */
-  if (old_fromheap->alloc_start + byteLenPad >= old_fromheap->top) 
-    GCFromC(curThread, 4, 1);
-  assert (old_fromheap->alloc_start + byteLenPad < old_fromheap->top);
+  /* Should be at least 0.5K to be considered big */
+  assert(byteLen >= 512);                
+  assert(wordLen * (sizeof (val_t)) == byteLen);
 
-  /* Perform odd alignment and actual allocation */
-  if (oddAlign && (old_fromheap->alloc_start & 7) == 0) {
-    *((value_t *)old_fromheap->alloc_start) = SKIP_TAG;
-    old_fromheap->alloc_start += 4;
+  /* Try to allocate */
+  if (hasPointers) {
+    if (tenuredFromGen->alloc_start + wordLen <= tenuredFromGen->top) {
+      region = tenuredFromGen->alloc_start;
+      tenuredFromGen->alloc_start += wordLen;
+    }
   }
-  res = (value_t *)(old_fromheap->alloc_start);
-  old_fromheap->alloc_start += byteLen;
-  old_alloc_ptr = old_fromheap->alloc_start;
-  assert(old_fromheap->alloc_start < old_fromheap->top);
+  else
+    region = gc_large_alloc(byteLen);
+
+  /* If allocation failed, perform GC and try again */
+  if (region == NULL) {
+    GCFromC(curThread, 4, 1);
+    if (hasPointers) {
+      if (tenuredFromGen->alloc_start + wordLen <= tenuredFromGen->top) {
+	region = tenuredFromGen->alloc_start;
+	tenuredFromGen->alloc_start += wordLen;
+      }
+    }
+    else
+      region = gc_large_alloc(byteLen);
+  }
+
+  assert(region != NULL);
+  assert(tenuredFromGen->alloc_start < tenuredFromGen->top);
 
   /* Update Statistics */
-  gcstat_normal(byteLen, 0);
+  gcstat_normal(byteLen, 0, 0);
+  return region;
+}
 
+
+ptr_t alloc_bigintarray_Gen(int elemLen, int initVal, int ptag)
+{
+  /* elemements are byte-sized */
+  int wordLen = 1 + (elemLen + 3) / 4;
+  mem_t space = alloc_big(4 * wordLen,0);
+  ptr_t res = space + 1;
+  init_iarray(res, elemLen, initVal);
   return res;
 }
 
-
-value_t alloc_bigintarray_Gen(int byteLen, value_t initVal, int ptag)
+ptr_t alloc_bigptrarray_Gen(int elemLen, ptr_t initVal, int ptag)
 {
-  int wordLen = 4 + (byteLen + 3) / 4;
-  value_t *space = alloc_big(4 * wordLen,0);
-  value_t *res = space + 1;
-  init_iarray(res, byteLen, initVal);
-  return (value_t) res;
+  int wordLen = 1 + elemLen;
+  mem_t space = alloc_big(4 * wordLen,1);
+  ptr_t res = space + 1;
+  init_parray(res, elemLen, initVal);
+  return res;
 }
 
-value_t alloc_bigptrarray_Gen(int wordLen, value_t initVal, int ptag)
+ptr_t alloc_bigfloatarray_Gen(int elemLen, double initVal, int ptag)
 {
-  value_t *space = alloc_big(1 + wordLen,0);
-  value_t *res = space + 1;
-  init_parray(res, wordLen, initVal);
-  return (value_t) res;
-}
-
-value_t alloc_bigfloatarray_Gen(int log_len, double init_val, int ptag)
-{
-  double *rawstart = NULL;
-  value_t *res = NULL;
-  long i;
+  ptr_t res = NULL;
+  mem_t region = NULL;
   Thread_t *curThread = getThread();
-  long *saveregs = curThread->saveregs;
-  int byte_len = log_len << 3;
-  int pos, tag = RARRAY_TAG | (byte_len << ARRLEN_OFFSET);
-  int real_byte_len = byte_len + 8;  /* one word for tag, possibly another for alignment */
+  int wordLen = 2 + (elemLen << 1);  /* Includes one word for alignment */
 
-  assert(byte_len >= 8192);
-  assert(real_byte_len < floatheapsize);
-  pos = AllocBitmapRange(floatbitmap,DivideUp(real_byte_len,floatbitmapsize));
-
-  if (pos < 0)
-    {
-      int qlen;
-      QueueClear(float_roots);    
-      GCFromC(curThread, 4, 1); /* Perform a major GC */
-      /* --- stuff already marked; sweep the bitmap, then mark the live stuff --- */
-      ClearBitmap(floatbitmap);
-      qlen = QueueLength(float_roots);
-      for (i=0; i<qlen; i++)
-	{
-	  value_t far_val = (value_t) QueueAccess(float_roots,i);
-	  value_t tag = ((int *)far_val)[-1];
-	  int word_len = GET_ARRLEN(tag)/4;
-	  value_t start = RoundDown(far_val, floatbitmapsize);
-	  value_t end   = RoundUp(far_val+4*word_len, floatbitmapsize);
-	  int bitmap_start = (start - floatheap->bottom) / floatbitmapsize;
-	  int bitmap_end   = (end - floatheap->bottom) / floatbitmapsize;
-	  int bitmap_size = bitmap_end - bitmap_start;
-	  if (!(IS_RARRAY(tag))) {
-	    fprintf(stderr,"expected array tag at %d: got %d\n",far_val,tag);
-	    assert(0);
-	  }
-	  SetBitmapRange(floatbitmap,bitmap_start,bitmap_size);
-	}
-      pos = AllocBitmapRange(floatbitmap,
-			     DivideUp(real_byte_len,floatbitmapsize));
-      assert(pos >= 0);
-    }
-
-  rawstart = (double *)(floatheap->bottom + floatbitmapsize * pos);
-  res = (value_t *)(rawstart + 1);
-  gcstat_normal(RoundUp(real_byte_len,floatbitmapsize), 0);
-
-  init_farray(res, log_len, init_val);
-
-  return (value_t) res;
+  region = alloc_big(4 * wordLen,0);
+  if ((((val_t)region) & 7) == 0) {
+    region[0] = SKIP_TAG;
+    res = region + 1;
+  }
+  else {
+    region[wordLen-1] = SKIP_TAG;
+    res = region;
+  }
+  init_farray(res, elemLen, initVal);
+  return res;
 }
 
 /* --------------------- Generational collector --------------------- */
 
-
-value_t *forward_writelist_major(value_t *more_roots, value_t *to_ptr, 
-				 range_t *from_range, range_t *from2_range, range_t *to_range)
-{
-  value_t *slot = 0;
-  while (slot = (value_t *)(*(more_roots++))) {
-    value_t data = *slot;
-    if (data - to_range->low >= to_range->diff)
-      forward_major(slot,to_ptr,from_range,from2_range,to_range);
-  }
-  return to_ptr;
-}
-
-value_t *forward_writelist_minor(value_t *more_roots, value_t *to_ptr, 
-				 range_t *from_range, range_t *to_range)
-{
-  value_t *slot = 0;
-  while (slot = (value_t *)(*(more_roots++))) {
-    value_t data = *slot;
-    if (data - to_range->low >= to_range->diff)
-	forward_minor(slot,to_ptr,from_range);
-  }
-  return to_ptr;
-}
-
-
-value_t *forward_gen_locatives(value_t *to_ptr, 
-			       range_t *from_range, range_t *from2_range, range_t *to_range)
-{
-  long i;
-    static Queue_t *LastScanQueue = 0;
-    if (LastScanQueue == 0)
-      LastScanQueue = QueueCreate(0,100);
-
-  /* --------- forward objects with unset and update unset from scanqueue --------- */
-  NumLocatives += QueueLength(ScanQueue);
-  for (i=0; i<QueueLength(ScanQueue); i++)
-    {
-      /* be very careful with type, in particular meta_addr is NOT a value_t **  */
-      value_t *meta_addr = (value_t *)QueueAccess(ScanQueue,i);
-      value_t *data_addr = (value_t *)(*meta_addr);
-      value_t data = *data_addr;
-      int offset = 0;
-      value_t *obj_start = 0; 
-      value_t *new_data_addr = 0;
-      if (data <= 255)
-	{
-	  offset = 255 - data;
-	  obj_start = data_addr - offset;
-	}
-      else /* the object containing the locative has been forwarded 
-	      and the locative was in the forward-address slot, i.e. slot 0 */
-	{
-	  offset = 0;
-	  obj_start = (value_t *)data;
-	}
-      forward_major((value_t *)(&obj_start),to_ptr,from_range,from2_range,to_range);
-      if (data <= 255)
-	new_data_addr = obj_start + offset;
-      else
-	new_data_addr = obj_start;
-      *meta_addr = (value_t)new_data_addr;
-    }
-  
-
-  /* ------ forward_int the unset locations from the last time and update ------ */
-
-    for (i=0; i<QueueLength(LastScanQueue); i++)
-      {
-	value_t *data_addr = (value_t *)QueueAccess(LastScanQueue,i);
-	forward_major(data_addr,to_ptr,from_range,from2_range,to_range); 
-      }
-    QueueClear(LastScanQueue);
-    for (i=0; i<QueueLength(ScanQueue); i++)
-      {
-	value_t *meta_addr = (value_t *)QueueAccess(ScanQueue,i);
-	Enqueue(LastScanQueue,(void *)(*meta_addr));
-      }
-    return to_ptr;
-}
-
-int GCAllocate_Gen(SysThread_t *sysThread, int req_size)
+int GCAllocate_Gen(SysThread_t *sysThread, int bytesRequested)
 {
   /* Check for first time heap value needs to be initialized */
   assert(sysThread->userThread == NULL);
   if (sysThread->limit == StartHeapLimit) 
     {
-      sysThread->alloc = nursery->bottom;
-      sysThread->limit = nursery->top;
-      return (req_size < (sysThread->alloc  - sysThread->limit));
+      unsigned int bytesAvailable;
+      sysThread->alloc = nurseryGen->bottom;
+      sysThread->limit = nurseryGen->top;
+      nurseryGen->alloc_start = nurseryGen->top;
+      bytesAvailable = (((unsigned int)sysThread->alloc) - 
+			((unsigned int)sysThread->limit));
+      return (bytesRequested <= bytesAvailable);
     }
   return 0;
 }
 
-void GC_Gen(SysThread_t *sysThread, int req_size, int isMajor)
+void GC_Gen(SysThread_t *sysThread)
 {
-  int regmask = 0;
-  int allocptr = sysThread->alloc;
-  int alloclimit = sysThread->limit;
-  Thread_t *curThread;
+  Thread_t *oneThread = &(Threads[0]);     /* In a sequential collector, 
+					      there is only one user thread */
+  int req_size = oneThread->requestInfo;
+  Queue_t *root_lists = sysThread->root_lists;
+  Queue_t *largeRoots = sysThread->largeRoots;
+  enum GCType GCtype = Minor;
+  unsigned int allocated = (sizeof (val_t)) * (nurseryGen->top - nurseryGen->alloc_start);
+  unsigned int copied = 0;
+  unsigned int writes = (sysThread->writelistCursor - 
+			 sysThread->writelistStart);
+  range_t nurseryGenRange, tenuredFromGenRange, tenuredToGenRange, largeRange;
 
-  struct rusage start,finish;
-  Queue_t *root_lists, *loc_roots;
-  enum GCType GCtype = isMajor ? Major : Minor;
-  value_t to_allocptr;
+  /* A Major GC is forced if the tenured space is potentially too small */
+  if (oneThread->request == MajorGCRequestFromC)
+    GCtype = Major;
+  else if ((tenuredFromGen->top - tenuredFromGen->alloc_start) < 
+	   (nurseryGen->top - nurseryGen->bottom))
+    GCtype = ForcedMajor;    
 
   /* start timer */
   start_timer(&sysThread->gctime);
-
-  assert(allocptr <= alloclimit);
-  assert(req_size >= 0);
-  assert(req_size < pagesize);
-  assert(writelist_cursor <= writelist_end);
-
-  curThread = &(Threads[0]);             /* In a sequential collector, 
-					    there is only one user thread */
-  root_lists = curThread->root_lists;
-  loc_roots = curThread->loc_roots;
-
-  if (paranoid) {
-    Heap_t *legalHeaps[3];
-    legalHeaps[0] = nursery;
-    legalHeaps[1] = old_fromheap;
-    legalHeaps[2] = NULL;
-    paranoid_check_heap_global(nursery, legalHeaps);  
-    paranoid_check_heap_global(old_fromheap, legalHeaps);  
-  }
-
-  /* these are debugging and stat-gatherting procedure */
-#ifdef DEBUG
-  measure_semantic_garbage_before();
-  debug_and_stat_before(saveregs, req_size);
-#endif
-
-  /* Compute the roots from the stack and register set */
-  local_root_scan(sysThread,curThread,nursery);
-  {
-    Queue_t *promotedGlobalRoots = minor_global_scan(sysThread);
-    Enqueue(root_lists,promotedGlobalRoots);
-  }
-
-  /* -------------- the actual heap collection ---------------------- */
-    {
-      int old_unused_amount = (old_fromheap->top - old_alloc_ptr);
-      double old_unused_ratio = ((double)old_unused_amount) /
-	(old_fromheap->top - old_fromheap->bottom);
-      /* A minor collection is promoted to a major collection if
-	 (1) there is less than 10% free in the tenured area
-	 (2) the amount of space left in the tenured area is less
-	     than the size of the nursery.
-     */
-      if (GCtype == Minor)
-	{
-	  if ((old_unused_ratio < 0.1) || 
-	    (old_unused_amount < (nursery->top - nursery->bottom)))
-	      {
-		GCtype = Major;
-#ifdef DEBUG
-		printf("old_unused_ratio = %lf\n",old_unused_ratio);
-		printf("old_unused_amount = %d\n",old_unused_amount);
-#endif
-	      }
-        }
-      assert(nursery->alloc_start     < nursery->top);
-      assert(old_fromheap->alloc_start < old_fromheap->top);
-      assert(old_toheap->alloc_start   < old_toheap->top);
-
-      assert(writelist_cursor <= writelist_end);
-      *((int *)writelist_cursor) = 0;
-
-   /* Perform just a minor GC if it is very likely we don't need a major GC */
-      if (GCtype == Minor)
-	{
-	  range_t from_range, from2_range, to_range;
-	  value_t *to_ptr = (value_t *)old_alloc_ptr;
-
-	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
-	  assert(old_fromheap->top - old_alloc_ptr > (nursery->top - nursery->bottom));
-
-	  SetRange(&from_range,nursery->bottom, nursery->top);
-	  SetRange(&from2_range,0,0);
-	  SetRange(&to_range,old_fromheap->bottom, old_fromheap->top);
-
-#ifdef HEAPPROFILE
-         /* necessary since before collect assumes no forward tags */
-	    gcstat_heapprofile_beforecollect((value_t *)nursery->alloc_start,
-				     (value_t *)allocptr);
-	  
-#endif
-	  
-	  /* do the normal roots and the writelist */
-	  to_ptr = forward_root_lists_minor(root_lists, to_ptr, 
-					    &from_range, &to_range);
-	  
-	  to_ptr = forward_writelist_minor((value_t *)writelist_start, to_ptr, 
-					   &from_range, &to_range);
-	  
-	  to_ptr = forward_gen_locatives(to_ptr,&from_range,&from2_range,&to_range); 
-	  to_ptr = scan_stop_minor(old_fromheap->alloc_start,to_ptr,(value_t *)old_alloc_ptr,
-				   &from_range,&to_range);
-	  to_ptr = scan_nostop_minor(old_alloc_ptr,to_ptr,&from_range,&to_range);
-	  
-#ifdef HEAPPROFILE
-	  gcstat_heapprofile_aftercollect((value_t *)from_range->low,
-					  (value_t *)allocptr);
-	  
-#endif
-	  to_allocptr = (value_t)to_ptr;
-
-	  old_fromheap->alloc_start = old_alloc_ptr;
-	  assert(old_fromheap->alloc_start < old_fromheap->top);
-	  gcstat_normal(allocptr - nursery->alloc_start,
-			to_allocptr - old_alloc_ptr);
-
-	  old_alloc_ptr = to_allocptr;
-	  old_alloc_limit = old_fromheap->top;
-
-
-
-	  old_fromheap->alloc_start = to_allocptr;
-	  assert(old_fromheap->alloc_start < old_fromheap->top);
-
-	  /* If the minor GC failed to produce less free space in the tenured area
-	     than the size of the nursery, then trigger a major GC */
-	  if ((old_fromheap->top - old_fromheap->alloc_start) < 
-	      (nursery->top - nursery->bottom))
-	    GCtype = ForcedMajor;
-	}
-
-      /* Perform a major GC if 
-	  (1) a minor GC was not taken in the first place
-	  (2) a minor GC was performed but this triggered a major GC due to low space
-      */
-      if (GCtype != Minor)
-	{
-	  range_t from_range, from2_range, to_range;
-	  value_t *to_ptr = (value_t *)old_toheap->bottom;
-
-	  int i, newsize;
-	  start_timer(&(sysThread->majorgctime));
-	  newsize = ((old_fromheap->alloc_start - old_fromheap->bottom) +
-		     (nursery->top - nursery->bottom));
-	  if ((newsize >= (Heap_Getsize(old_toheap))) && (MinHeap != MaxHeap))
-	    {
-	      printf("WARNING: GC failure possible due to newsize\n");
-	      printf("old_fromheap->top = %d, old_fromheap->bottom = %d\n",
-		     old_fromheap->top, old_fromheap->bottom);
-	      printf("nursery->top = %d, nursery->bottom = %d\n",
-		     nursery->top, nursery->bottom);
-	      printf("old_toheap->top = %d, old_toheap->bottom = %d\n",
-		     old_toheap->top, old_toheap->bottom);
-	    }    
-	  newsize = Heap_Getsize(old_toheap);
-	  Heap_Resize(old_toheap,newsize);
-	  Heap_Unprotect(old_toheap); 	  
-#ifdef DEBUG
-	  printf("nursery->bottom, nursery->top: %d %d\n",
-		 nursery->bottom, nursery->top);
-	  printf("old_fromheap->{bottom, alloc_start, top}: %d %d %d\n",
-		 old_fromheap->bottom, old_fromheap->alloc_start, old_fromheap->top);
-#endif
-
-	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
-	  {
-	    Queue_t *tenuredGlobalRoots = major_global_scan(sysThread);
-	    Enqueue(root_lists,tenuredGlobalRoots);
-	  }
-	  SetRange(&from_range,nursery->bottom, nursery->top);
-	  SetRange(&from2_range,old_fromheap->bottom, old_alloc_ptr);
-	  SetRange(&to_range,old_toheap->bottom, old_toheap->top);
-
-
-
-#ifdef HEAPPROFILE
- /* necessary since before collect assumes no forward tags */
-	  if (GCtype != ForcedMajor)
-	    gcstat_heapprofile_beforecollect((value_t *)nursery->alloc_start,
-					     (value_t *)allocptr);
-	  
-#endif
-
-	  /* do the normal roots and the writelist */
-	  to_ptr = forward_root_lists_major(root_lists, to_ptr, 
-					    &from_range, &from2_range, &to_range);
-	  
-	  to_ptr = forward_writelist_major((value_t *)writelist_start, to_ptr, 
-					   &from_range, &from2_range, &to_range);
-	  
-	  to_ptr = forward_gen_locatives(to_ptr,&from_range,&from2_range,&to_range); 
-	  to_ptr = scan_major(old_toheap->bottom,to_ptr,(value_t *)to_range.high,
-			      &from_range,&from2_range,&to_range);
-
-
-#ifdef HEAPPROFILE
-	  gcstat_heapprofile_aftercollect((value_t *)from2_range->low,
-					    (value_t *)from2_range->high);
-	  gcstat_heapprofile_aftercollect((value_t *)from_range->low,
-					  (value_t *)allocptr);
-	  
-#endif
-	  to_allocptr = (value_t) to_ptr;
-
-	  assert(to_allocptr < old_toheap->top);
-	  old_toheap->alloc_start = to_allocptr;
-	  old_alloc_ptr = to_allocptr;
-	  old_alloc_limit = old_toheap->top;
-	  gcstat_normal(allocptr - nursery->alloc_start,
-			to_allocptr - old_toheap->bottom);
-
-
-	  typed_swap(Heap_t *, old_fromheap, old_toheap);
-
-
-	  stop_timer(&sysThread->majorgctime);
-	}
-
-
-      assert(nursery->alloc_start     < nursery->top);
-      assert(old_fromheap->alloc_start < old_fromheap->top);
-      assert(old_toheap->alloc_start   < old_toheap->top);
-    }
-
-
-    writelist_cursor = writelist_start;
-
-    if (GCtype != Minor)
-    {
-      long oldsize = (GCtype != Minor)?(old_toheap->top - old_toheap->bottom):
-	(old_fromheap->top - old_fromheap->bottom);
-      long copied = old_fromheap->alloc_start - old_fromheap->bottom;
-      long live = copied + req_size;
-      long eff_oldsize = (copied + req_size > oldsize) ? 
-	(copied + req_size) : oldsize;
-      double oldratio = oldsize ? (double)(live)/ oldsize : 1.0;
-      long newsize = ComputeHeapSize(eff_oldsize, oldratio);
-      if ((newsize < copied + req_size) || 
-	  req_size > (nursery->top - nursery->bottom))
-	{
-	  fprintf(stderr,"\ncopied = %d,  req_size = %d\n",copied,req_size);
-	  fprintf(stderr,"oldsize = %d,  newsize = %d\n",oldsize,newsize);
-	  fprintf(stderr,"FATAL ERROR: gen failure reqesting %d bytes\n",req_size);
-	  exit(-1);
-	}
-      fprintf(stderr,"---- %sMAJOR GC %d (%d): ",
-	      GCtype == ForcedMajor ? "*" : " ", NumMajorGC, NumGC);
-      fprintf(stderr,"live = %d     oldHeap = %d(%.3lf)  -> newHeap = %d(%.3lf)\n", 
-	      live, oldsize, oldratio, newsize, ((double)live)/newsize);
-      Heap_Resize(old_fromheap,newsize);
-    }
-
-
-    Heap_Unprotect(old_fromheap);
-    debug_after_collect(nursery, old_fromheap);
-
-
-    sysThread->alloc = nursery->bottom;
-    sysThread->limit = nursery->top;
-
-  /* More debugging and stat-gathering procedure */
-  measure_semantic_garbage_after();    
-  if (paranoid) {
-    Heap_t *legalHeaps[2];
-    legalHeaps[0] = old_fromheap;
-    legalHeaps[1] = NULL;
-    paranoid_check_stack(curThread,nursery);
-    paranoid_check_heap_global(old_fromheap, legalHeaps);  
-  }
-
   if (GCtype != Minor)
+    start_timer(&(sysThread->majorgctime));
+
+  /* Set ranges to for determining what needs to be forwarded; not all are necessarily used */
+  SetRange(&nurseryGenRange, nurseryGen->bottom, nurseryGen->top);
+  SetRange(&tenuredFromGenRange, tenuredFromGen->bottom, tenuredFromGen->top);
+  SetRange(&tenuredToGenRange, tenuredToGen->bottom, tenuredToGen->top);
+  SetRange(&largeRange, large->bottom, large->top);
+
+  /* Sanity checks */
+  assert((0 <= req_size) && (req_size < pagesize));
+  assert(nurseryGen->alloc_start     <= nurseryGen->top);
+  assert(tenuredFromGen->alloc_start <= tenuredFromGen->top);
+  assert(tenuredToGen->alloc_start   <= tenuredToGen->top);
+  if (paranoid) {
+    /* At this point, the nursery and tenured from-space may have cross-pointers */
+    Heap_t *legalHeaps[3] = {nurseryGen, tenuredFromGen, NULL};
+    Bitmap_t *legalStarts[3] = {NULL, NULL, NULL};
+    legalStarts[0] = paranoid_check_heap_without_start("nursery before GC",nurseryGen, legalHeaps);  
+    legalStarts[1] = paranoid_check_heap_without_start("tenuredFrom before GC",tenuredFromGen, legalHeaps);  
+    paranoid_check_global("global before GC",legalHeaps, legalStarts);  
+    paranoid_check_heap_with_start("nursery before GC",nurseryGen, legalHeaps, legalStarts);  
+    paranoid_check_heap_with_start("tenuredFrom before GC",tenuredFromGen, legalHeaps, legalStarts);  
+    DestroyBitmap(legalStarts[0]);
+    DestroyBitmap(legalStarts[1]);
+  }
+
+  /* Compute stack/register/global roots to sysThread->root_lists. */
+  QueueClear(sysThread->root_lists);
+  local_root_scan(sysThread,oneThread,nurseryGen);
+  if (GCtype == Minor)
+    minor_global_scan(sysThread);
+  else
+    major_global_scan(sysThread);
+
+  /* Perform just a minor GC */
+  if (GCtype == Minor) {
+
+    /* --- forward the roots and the writelist; then Cheney-scan until no gray objects */
+
+    mem_t tenuredFromGenAlloc = tenuredFromGen->alloc_start;
+    tenuredFromGenAlloc = forward1_root_lists(root_lists, tenuredFromGenAlloc,
+					      &nurseryGenRange, &tenuredFromGenRange);
+    tenuredFromGenAlloc = forward1_writelist(sysThread,
+					     tenuredFromGenAlloc, 
+					     &nurseryGenRange, &tenuredFromGenRange);
+    tenuredFromGenAlloc = scan1_until(tenuredFromGen->alloc_start,tenuredFromGenAlloc,
+				   &nurseryGenRange, &tenuredFromGenRange);
+    copied = (sizeof (val_t)) * (tenuredFromGenAlloc - tenuredFromGen->alloc_start),
+    tenuredFromGen->alloc_start = tenuredFromGenAlloc;
+  }
+  
+  else if (GCtype == Major || GCtype == ForcedMajor) {
+
+    int tenuredToGenSize = Heap_Getsize(tenuredToGen);
+    int maxLive = (sizeof (val_t)) * (tenuredFromGen->alloc_start - tenuredFromGen->bottom) +
+                  (sizeof (val_t)) * (nurseryGen->top - nurseryGen->bottom);
+    mem_t tenuredToGenAlloc = tenuredToGen->bottom;
+    Heap_t *fromHeaps[3] = {nurseryGen, tenuredFromGen, NULL};
+
+    /* Resize tospace so live data fits, if possible */
+    if (maxLive >= tenuredToGenSize) {
+      printf("WARNING: GC failure possible since maxPossibleLive = %d > toSpaceSize = %d\n",
+	     maxLive, tenuredToGenSize);
+      Heap_Resize(tenuredToGen, tenuredToGenSize);
+    }    
+    else
+      Heap_Resize(tenuredToGen, maxLive);
+    Heap_Unprotect(tenuredToGen); 	  
+
+    /* do the normal roots; writelist can be skipped on a major GC;
+       then the usual Cheney scan followed by sweeping the large-object region */
+    tenuredToGenAlloc = forward2_root_lists(root_lists, tenuredToGenAlloc, 
+					 &nurseryGenRange, &tenuredFromGenRange, &tenuredToGenRange,
+					 &largeRange, largeRoots);
+    tenuredToGenAlloc = scan2_region(tenuredToGen->bottom,tenuredToGenAlloc,tenuredToGenRange.high,
+				  &nurseryGenRange,&tenuredFromGenRange,&tenuredToGenRange,
+				  &largeRange, largeRoots);
+    gc_large_addRoots(largeRoots);
+    gc_large_flush();
+    copied = (sizeof (val_t)) * (tenuredToGenAlloc - tenuredToGen->bottom),
+    tenuredToGen->alloc_start = tenuredToGenAlloc;
+
+    /* Resize the tenured area now, discard old space, flip space  */
+    HeapAdjust(1, req_size, fromHeaps, tenuredToGen);
+    typed_swap(Heap_t *, tenuredFromGen, tenuredToGen);
+
+  }
+  else
+    assert(0);
+
+  /* Update sole thread's allocation pointers and root lists */
+  QueueClear(largeRoots);
+  QueueClear(root_lists);
+  sysThread->alloc = nurseryGen->bottom;
+  sysThread->limit = nurseryGen->top;
+  sysThread->writelistCursor = sysThread->writelistStart;
+
+  /* Sanity checks afterwards */
+  assert(nurseryGen->alloc_start     <= nurseryGen->top);
+  assert(tenuredFromGen->alloc_start <= tenuredFromGen->top);
+  assert(tenuredToGen->alloc_start   <= tenuredToGen->top);
+  if (debug)
+    debug_after_collect(nurseryGen, tenuredFromGen);
+  if (paranoid) {
+    Heap_t *legalHeaps[2] = {tenuredFromGen, NULL};
+    Bitmap_t *legalStarts[2] = {NULL, NULL};
+    legalStarts[0] = paranoid_check_heap_without_start("tenuredFrom after GC",tenuredFromGen, legalHeaps);
+    paranoid_check_stack("stack after GC",oneThread,nurseryGen);
+    paranoid_check_global("global after GC",legalHeaps,legalStarts);
+    paranoid_check_heap_with_start("tenuredFrom after GC",tenuredFromGen, legalHeaps, legalStarts);  
+    DestroyBitmap(legalStarts[0]);
+  }
+
+  /* stop timer and update counts */
+  gcstat_normal(allocated, copied, writes);
+  if (GCtype != Minor) {
     NumMajorGC++;
+    stop_timer(&sysThread->majorgctime);
+  }
   NumGC++;
-
-  /* stop timer */
   stop_timer(&sysThread->gctime); 
-
 }
 
-#define INT_INIT(x,y) { if (x == 0) x = y; }
-#define DOUBLE_INIT(x,y) { if (x == 0.0) x = y; }
 
 void gc_init_Gen() 
 {
   /* secondary cache size */
   int cache_size = GetBcacheSize();
-  INT_INIT(YoungHeapByte, (int)(0.85 * cache_size));
+  init_int(&YoungHeapByte, (int)(0.85 * cache_size));
   
-  INT_INIT(MaxHeap, 80 * 1024);
-  INT_INIT(MinHeap, 1024);
+  init_int(&MaxHeap, 80 * 1024);
+  init_int(&MinHeap, 1024);
   if (MinHeap > MaxHeap)
     MinHeap = MaxHeap;
-  DOUBLE_INIT(MinRatio, 0.2);
-  DOUBLE_INIT(MaxRatio, 0.8);
-  DOUBLE_INIT(MinRatioSize, 512);
-  DOUBLE_INIT(MaxRatioSize, 50 * 1024);
+  init_double(&MinRatio, 0.2);
+  init_double(&MaxRatio, 0.8);
+  init_int(&MinRatioSize, 512);
+  init_int(&MaxRatioSize, 50 * 1024);
   assert(MinHeap >= 1.2*(YoungHeapByte / 1024));
-  nursery = Heap_Alloc(YoungHeapByte, YoungHeapByte);
-  old_fromheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
-  old_toheap = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  floatheap = Heap_Alloc(floatheapsize,floatheapsize);
-  floatbitmap = CreateBitmap(floatheapsize / floatbitmapsize);
-  float_roots = QueueCreate(0,100);
-#ifdef OLD_ALLOC
-  old_alloc_ptr = old_fromheap->alloc_start;
-  old_alloc_limit = old_fromheap->top;
-#endif
+  nurseryGen = Heap_Alloc(YoungHeapByte, YoungHeapByte);
+  tenuredFromGen = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
+  tenuredToGen = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
+  gc_large_init(0);
 }
 
 
 void gc_finish_Gen()
 {
   Thread_t *th = getThread();
-  int allocsize = th->saveregs[ALLOCPTR] - nursery->alloc_start;
-  gcstat_finish(allocsize);
-#ifdef HEAPPROFILE
-  gcstat_heapprofile_beforecollect((value_t *)nursery->alloc_start,
-				   (value_t *)allocptr);
-  gcstat_heapprofile_aftercollect((value_t *)nursery->bottom,
-				   (value_t *)allocptr);
-  printf("gcstat_heapprofile_aftercollect: old_fromheap->bottom = %d\n",
-	 old_fromheap->bottom);
-  printf("gcstat_heapprofile_aftercollect: old_fromheap->alloc_start = %d\n",
-	 old_fromheap->alloc_start);
-  gcstat_heapprofile_aftercollect((value_t *)old_fromheap->bottom,
-				  (value_t *)old_fromheap->alloc_start);
-  gcstat_show_heapprofile("full",0.0,0.0);
-  printf("\n\n\n\n");
-  gcstat_show_heapprofile("short",1.0,1.0);
-#endif
+  unsigned int allocsize = (unsigned int)(th->saveregs[ALLOCPTR]) - 
+                           (unsigned int)(nurseryGen->alloc_start);
+  gcstat_normal(allocsize,0,0);
 }

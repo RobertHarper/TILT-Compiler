@@ -1,4 +1,4 @@
-(*$import Prelude POSIX_FLAGS Word8Vector Word8Array Int32 *)
+(*$import Prelude POSIX_FLAGS Word8Vector Word8Array Int *)
 (* posix-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -86,9 +86,12 @@ signature POSIX_IO =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:22  pscheng
-# added basis
+# Revision 1.2  99/09/22  15:45:11  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:53:22  pscheng
+# added basis
+#
  * Revision 1.3  1997/06/07  15:27:40  jhr
  *   SML'97 Basis Library changes (phase 3; Posix changes)
  *

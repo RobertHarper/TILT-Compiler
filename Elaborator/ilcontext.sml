@@ -62,7 +62,7 @@ struct
       | reduce_signat ctxt (SIGNAT_OF (PATH(v,labs))) = 
 	  let val s = (case Context_Lookup_Var(ctxt,v) of
 			   SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
-			 | SOME _ => error ("SIGNAT_OF(" ^ (Name.var2string v) ^ ",...) unbound"))
+			 | _ => error ("SIGNAT_OF(" ^ (Name.var2string v) ^ ",...) unbound"))
 	      fun find l [] = error "cannot find label in SIGNAT_OF"
 		| find l ((SDEC(l',DEC_MOD(_,_,s)))::rest) = s
 		| find l (_::rest) = find l rest
@@ -73,6 +73,7 @@ struct
 		     | _ => error "ill-formed SIGNAT_OF")
 	  in  foldl project s labs
 	  end
+      | reduce_signat ctxt s = s
 
     fun shadow (labelMap, pathMap, lab) = 
 	(case (LabelMap.find(labelMap,lab) : (path * phrase_class) option) of

@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import TopLevel *)
 
 (***********************************************************************)
 (*                                                                     *)
@@ -19,6 +19,7 @@ val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y))
 val (op &&) = andb
 fun inc x = x := (!x) + 1
 fun dec x = x := (!x) - 1
+open Array
 
 fun qsort lo hi (a : int array) =
   if lo < hi then 

@@ -25,81 +25,139 @@
 #include "general.h"
 #include "forward.h"
 
-extern Queue_t *float_roots;
-extern Heap_t *floatheap;
+
 
 const int stall = -2;
 
-void SetRange(range_t *range, value_t low, value_t high)
+void SetRange(range_t *range, mem_t low, mem_t high)
 {
   range->low = low;
   range->high = high;
-  range->diff = high - low;
+  range->diff = (high - low) * (sizeof (val_t));
 }
 
 /* ------------------ Forwarding Routines ------------------ */
 
+int getPointerLocations(ptr_t obj, Queue_t *locs)
+{
+  tag_t tag = obj[-1];
+
+  switch (GET_TYPE(tag)) {
+    case RECORD_TAG: {
+      int i, count = 0;
+      int len = GET_RECLEN(tag);
+      int curMask = GET_RECMASK(tag);
+      for (i=0; i<len; i++) {
+	if (curMask & 1) {   /* low bit set means current field is pointer */
+	  Enqueue(locs, (loc_t) (obj + i));
+	  count++;
+	}
+	curMask >>= 1;
+      }
+      assert(curMask == 0);
+      return count;
+    }
+    case PARRAY_TAG: {
+      int byteLen = GET_ARRLEN(tag);
+      int wordLen = byteLen >> 2;
+      int i;
+      for (i=0; i<wordLen; i++)
+	Enqueue(locs, (loc_t) (obj + i));
+      return wordLen;
+    }
+    case IARRAY_TAG: return 0;
+    case RARRAY_TAG: return 0;
+    case SKIP_TAG: { printf("SKIP_TAG found in getPointerLocation\n"); assert(0); }
+    case FORWARD_TAG: { printf("FORWARD_TAG found in getPointerLocation\n"); assert(0); }
+    default: { printf("Unknown tag %d found in getPointerLocation\n",tag); assert(0); }
+  }
+  assert(0);
+}
+
+
+/* Returns object length in bytes */
+unsigned long objectLength(ptr_t obj)
+{
+  tag_t tag = (tag_t) obj[-1];
+
+  if (tag == SKIP_TAG)
+    return 4;
+  switch (GET_TYPE(tag))
+  {
+    case IARRAY_TAG:
+    case RARRAY_TAG:
+    case PARRAY_TAG:
+    {
+      int bytelen = GET_ARRLEN(tag);
+      if (bytelen == 0)
+	return 8;
+      else
+	return 4 + ((bytelen + 3) / 4) * 4;
+    }
+  case FORWARD_TAG:
+    {
+      ptr_t newobj = (ptr_t) obj[0];
+      return objectLength(newobj);
+    }
+  case RECORD_TAG:
+    {
+      int numFields = GET_RECLEN(tag);
+      if (numFields == 0)  /* There should be no empty records */
+	assert(0);
+      return 4 * (1 + numFields);
+    }
+  case SKIP_TAG:
+  default:
+    {
+      mem_t tagstart = (mem_t) (obj - 1);
+      printf("bad tag %d at %d\n",tag,tagstart);
+      memdump("",tagstart-10,30,tagstart);
+      printf("\n\n\n");
+      printf("NumGC is %d\n",NumGC);
+      assert(0);
+    }
+  } /* case */
+}
 
 /* This should not be called directly. */
-value_t *forward(value_t *vpp, value_t *alloc_ptr)
+mem_t forward(ploc_t vpp, mem_t alloc_ptr)
 {
-  value_t *v = (value_t *)(*vpp);
+  ptr_t v = *vpp;
   int tag;
   unsigned int a,b;
 
   /* read some garbage to simulate write-allocate */
   int foobar = *(alloc_ptr + 4); 
 
-#ifdef HEAPPROFILE
-  update_object_profile(&collected_object_profile,v);
-#endif
   tag = v[-1];
 
   switch (tag)
     {
     case TAG_REC_INT:
     case TAG_REC_TRACE:
-#ifdef HEAPPROFILE
-	*alloc_ptr = v[-2];
-	SetBirth(alloc_ptr);
-	alloc_ptr++;
-#endif
       {
-	value_t *temp = alloc_ptr;
-	temp[0] = v[-1];
-	temp[1] = v[0];
+	alloc_ptr[0] = v[-1];
+	alloc_ptr[1] = v[0];
 	v[-1] = FORWARD_TAG;
-	v[0] = (value_t)(temp+1);
-	*vpp = (value_t)(temp+1);
-	alloc_ptr = temp+2;
-#ifdef SEMANTIC_GARBAGE
-      update_lifetime(&v[-1],temp,1);
-#endif
+	v[0] = (val_t)(alloc_ptr+1);
+	*vpp = (alloc_ptr+1);
+	alloc_ptr += 2;
+	return alloc_ptr;
       }
-      return alloc_ptr;
     case TAG_REC_INTINT:
     case TAG_REC_TRACEINT:
     case TAG_REC_INTTRACE:
     case TAG_REC_TRACETRACE:
-#ifdef HEAPPROFILE
-      *alloc_ptr = v[-2];
-      SetBirth(alloc_ptr);
-      alloc_ptr++;
-#endif
       {
-	value_t *temp = alloc_ptr;
-	temp[0] = v[-1];
-	temp[1] = v[0];
-	temp[2] = v[1];
+	alloc_ptr[0] = v[-1];
+	alloc_ptr[1] = v[0];
+	alloc_ptr[2] = v[1];
 	v[-1] = FORWARD_TAG;
-	v[0] = (value_t)(temp+1);
-	*vpp =  (value_t)(temp+1);
-	alloc_ptr = temp+3;
-#ifdef SEMANTIC_GARBAGE
-      update_lifetime(&v[-1],temp,2);
-#endif
+	v[0] = (val_t)(alloc_ptr+1);
+	*vpp = (alloc_ptr+1);
+	alloc_ptr += 3;
+	return alloc_ptr;
       }
-      return alloc_ptr;
     default:
       break;
     }
@@ -110,139 +168,86 @@ value_t *forward(value_t *vpp, value_t *alloc_ptr)
     case PARRAY_TAG:
     case RARRAY_TAG:
       {
-	value_t *rawstart = v-1;
-	int i,upper = GET_ARRLEN(tag), newadd = 0;
-	upper = (upper + 3) / 4;
+	int byteLen = GET_ARRLEN(tag);
+	int wordLen = (byteLen + 3) / 4;
+	if (wordLen == 0)   	/* empty arrays have 1 word of storage */
+	  wordLen = 1;
 
-	if (floatheap &&
-	    ((value_t) v) >= floatheap->bottom &&
-	    ((value_t) v) < floatheap->top)
-	  {
-	    Enqueue(float_roots,(void *)v);
-	    return alloc_ptr;
-	  }
+	/* if real array, odd-word-align the pointer so data is even-word-aligned */
+	if (GET_TYPE(tag) == RARRAY_TAG) {
+	  int temp = (int) (alloc_ptr);
+	  if ((temp & 7) == 0) 
+	    *(alloc_ptr++) = SKIP_TAG;
+	}
 	
-	if (GET_TYPE(tag) == RARRAY_TAG)
-	  {
-	    int temp = (int) (alloc_ptr);
-/* odd/even-word align the pointer so data is even/odd-aligned */
-#ifdef HEAPPROFILE
-	    if ((temp & 7) == 4)  
-#else
-	    if ((temp & 7) == 0)
-#endif
-	      {
-		*((int *)temp) = SKIP_TAG;
-		alloc_ptr = (value_t *)(temp+4);
-	      }
-	  }
-#ifdef HEAPPROFILE
-	    *alloc_ptr = v[-2];
-	    SetBirth(alloc_ptr);
-	    alloc_ptr++;
-#endif
-	/* empty arrays have 1 word of storage */
-	if (upper == 0)
-	  upper = 1;
-
-
-	bcopy((char *)rawstart,(char *)(alloc_ptr),4*(1+upper));
-	newadd = ((int)(alloc_ptr)) + 4;
-	alloc_ptr += (1 + upper);
+	bcopy((char *)(v-1), (char *)(alloc_ptr), 4*(1+wordLen));
 	v[-1] = FORWARD_TAG;
-	v[0] = newadd;
-	*vpp = newadd;
-#ifdef SEMANTIC_GARBAGE
-	update_lifetime(&v[-1],(value_t *)(((int)newadd)-4),upper);
-#endif
+	v[0] = (val_t) (alloc_ptr + 1);
+	*vpp = (ptr_t) (alloc_ptr + 1);
+	alloc_ptr += (1 + wordLen);
 	return alloc_ptr;
       }
     case RECORD_TAG:
       {
-	value_t *rawstart = v-1;
-	int upper = -1; 
-	int curlen = GET_RECLEN(rawstart[0]);
+	mem_t rawstart = v-1;
+	tag_t tag = v[-1];
+	int curlen = GET_RECLEN(tag);
 	if (curlen > RECLEN_MAX)
 	  curlen = RECLEN_MAX;
-#ifdef PARANOID
-	if ((GET_RECMASK(rawstart[0]) >> curlen) != 0) {
+	if (paranoid && (GET_RECMASK(tag) >> curlen) != 0) {
 	  printf("BAD RECORD TAG\n");
 	  assert(0);
 	}
-#endif
-	upper += curlen + 1;
 
-#ifdef HEAPPROFILE
-	*alloc_ptr = rawstart[-1];
-	SetBirth(alloc_ptr);
-	alloc_ptr++;
-#endif
-	switch (upper)
+	switch (curlen)
 	  {
-	    /* empty records have one word of storage */
 	  case 0: 
+	    assert(0);  /* empty records are not permitted */
 	  case 1:
 	    {
-	      int *temp = (int *)alloc_ptr;
-	      temp[0] = rawstart[0];
-	      temp[1] = rawstart[1];
+	      alloc_ptr[0] = rawstart[0];
+	      alloc_ptr[1] = rawstart[1];
 	      v[-1] = FORWARD_TAG;
-	      v[0] = (int)(((value_t)alloc_ptr) + ((value_t)v-(value_t)rawstart));
+	      v[0] = (val_t) (alloc_ptr + 1);
+	      *vpp = (ptr_t) (v[0]);
 	      alloc_ptr += 2;
-	      *vpp = v[0];
-#ifdef SEMANTIC_GARBAGE
-	    update_lifetime(&v[-1],(value_t *)(((int)(alloc_ptr))-8),1);
-#endif
 	      return alloc_ptr;
 	    }
 	  case 2:
 	    {
-	      int *temp = (int *)alloc_ptr;
-	      value_t newadd = (value_t)temp + ((value_t)v-(value_t)rawstart);
-	      temp[0] = rawstart[0];
-	      temp[1] = rawstart[1];
-	      temp[2] = rawstart[2];
-	      alloc_ptr += 3;
+	      alloc_ptr[0] = rawstart[0];
+	      alloc_ptr[1] = rawstart[1];
+	      alloc_ptr[2] = rawstart[2];
 	      v[-1] = FORWARD_TAG;
-	      v[0] = (int)newadd;
-	      *vpp = newadd;
+	      v[0] = (val_t) (alloc_ptr + 1);
+	      *vpp = (ptr_t) (v[0]);
+	      alloc_ptr += 3;
+	      return alloc_ptr;
 	    }
-#ifdef SEMANTIC_GARBAGE
-	    update_lifetime(&v[-1],(value_t *)(((int)(*alloc_ptr))-12),2);
-#endif
-	    return alloc_ptr;
 	  case 3:
 	    {
-	      int *temp = (int *)alloc_ptr;
-	      temp[0] = rawstart[0];
-	      temp[1] = rawstart[1];
-	      temp[2] = rawstart[2];
-	      temp[3] = rawstart[3];
+	      alloc_ptr[0] = rawstart[0];
+	      alloc_ptr[1] = rawstart[1];
+	      alloc_ptr[2] = rawstart[2];
+	      alloc_ptr[3] = rawstart[3];
 	      v[-1] = FORWARD_TAG;
-	      v[0] = (int)((value_t)temp + ((value_t)v-(value_t)rawstart));
+	      v[0] = (val_t) (alloc_ptr + 1);
+	      *vpp = (ptr_t) v[0];
 	      alloc_ptr += 4;
-	      *vpp = v[0];
-#ifdef SEMANTIC_GARBAGE
-	    update_lifetime(&v[-1],(value_t *)(((int)(alloc_ptr))-16),3);
-#endif
+	      return alloc_ptr;
 	    }
-	    return alloc_ptr;
 	  default:
-
-	    bcopy((char *)rawstart,(char *)(alloc_ptr),4*(1+upper));
+	    bcopy((char *)rawstart,(char *)(alloc_ptr),4*(1+curlen));
 	    v[-1] = FORWARD_TAG;
-	    v[0] = (int)(((value_t)alloc_ptr) + ((value_t)v-(value_t)rawstart));
-	    alloc_ptr += (1 + upper);
-	    *vpp = v[0];
-#ifdef SEMANTIC_GARBAGE
-	    update_lifetime(&v[-1],(value_t *)(((int)(alloc_ptr))-4*(1+upper)),upper);
-#endif
+	    v[0] = (val_t) (alloc_ptr + 1);
+	    *vpp = (ptr_t) v[0];
+	    alloc_ptr += (1 + curlen);
 	    return alloc_ptr;
 	  }
 	break;
       }
     case FORWARD_TAG:
-      *vpp = v[0];
+      *vpp = (ptr_t) v[0];
       return alloc_ptr;
     case SKIP_TAG:
       printf("\n\nv = %d\n",v);
@@ -258,23 +263,20 @@ value_t *forward(value_t *vpp, value_t *alloc_ptr)
 }
 
 
-
-/* This should not be called directly. */
-int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap)
+bool_t forward_atomic(ploc_t vpp, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap)
 {
-  value_t *white = (value_t *)(*vpp); /* old object must be in from space */
-  value_t *obj;                       /* forwarded object */
-  value_t tag;                        /* original tag */
-  value_t *alloc = *alloc_ptr;
-  value_t *limit = *limit_ptr;
+  ptr_t white = *vpp;              /* old object must be in from space */
+  ptr_t obj;                       /* forwarded object */
+  tag_t tag;                       /* original tag */
+  mem_t alloc = *alloc_ptr;
+  mem_t limit = *limit_ptr;
 
   assert(white < toheap->bottom ||
 	 white >= toheap->top);     /* white object cannot be in to space */
 
   /* Check for forward tag first since ldl_l/stl_c is expensive */
-  if (white[-1] == FORWARD_TAG)
-   {
-     *vpp = white[0];
+  if (white[-1] == FORWARD_TAG) {
+     *vpp = (ptr_t) white[0];
      return 0;
    }
 
@@ -298,8 +300,8 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 
 #ifdef sparc
     {
-       value_t *tagloc = white - 1;
-       tag = * tagloc;
+       mem_t tagloc = white - 1;
+       tag = *tagloc;
        if (tag == FORWARD_TAG)  /* Somebody already completed forwarding */
 	 ;
        else if (tag == stall) { /* Somebody grabbed it but did not finish forwarding */
@@ -317,19 +319,17 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 	    Note that registers that are input and output are specified twice with the input
 	    use referring to the output register.
 	 */
-	 value_t localStall = stall;
+	 val_t localStall = stall;
 	 asm("cas [%2],%3,%0" : "=r" (localStall) : "0" (localStall), "r" (tagloc), "r" (tag)); 
 	 /* localStall == tag     : we are the copier
 	    localStall == stall   : somebody else is the copier and was in the middle of its operation
 	    localStall == FORWARD : somebody else is the copier and forwarded it already */
-	 if (localStall != tag) { /* wait til tag is FORWARD */
+	 if (localStall != tag) { /* we are not copier, wait til tag is FORWARD */
 	   tag = white[-1];
 	   while (tag == stall)
 	     tag = white[-1];
 	   assert(tag == FORWARD_TAG);
 	 }
-	 else 
-	   assert(white[-1] == stall);
        }
     }
 #endif
@@ -352,8 +352,8 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 	*alloc_ptr = alloc;
 	obj[-1] = tag;
 	obj[0] = white[0];
-	*vpp = (value_t)obj;
-	white[0] = (value_t)obj;
+	*vpp = obj;
+	white[0] = (val_t) obj;
 	flushStore();
 	white[-1] = FORWARD_TAG; /* Write tag last */
 	assert(obj[-1] != FORWARD_TAG);
@@ -376,8 +376,8 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 	obj[-1] = tag;
 	obj[0] = white[0];
 	obj[1] = white[1];
-	*vpp =  (value_t)obj;
-	white[0] = (value_t)obj;
+	*vpp = obj;
+	white[0] = (val_t) obj;
 	flushStore();
 	white[-1] = FORWARD_TAG; /* Write tag last */
 	assert(obj[-1] != FORWARD_TAG);
@@ -393,7 +393,7 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
     case PARRAY_TAG:
     case RARRAY_TAG:
       {
-	value_t *rawstart = white-1;
+	mem_t rawstart = white-1;
 	int bytelen = GET_ARRLEN(tag);
 	int wordlen = (bytelen + 3) / 4;
 	int i;
@@ -409,16 +409,9 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 	  GetHeapArea(toheap,request,alloc_ptr,limit_ptr);
 	  alloc = *alloc_ptr;
 	  limit = *limit_ptr;
-	  assert (alloc + (2+wordlen) < limit);
+	  assert (alloc + (2+wordlen) <= limit);
 	}
 
-	if (floatheap &&
-	    ((value_t) white) >= floatheap->bottom &&
-	    ((value_t) white) < floatheap->top) {
-	  Enqueue(float_roots,(void *)white);
-	  return 0; /* does not need to go into shared stack */
-	}
-	
 	if (GET_TYPE(tag) == RARRAY_TAG) {
 	  int alloc_int = (int) (alloc);
 	  /* odd-word align the pointer so data is even-aligned */
@@ -432,8 +425,8 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 	*alloc_ptr = alloc;
 	obj[-1] = tag;	
 	bcopy((const char *)white, (char *)obj, 4*wordlen);
-	*vpp = (value_t)obj;
-	white[0] = (value_t)obj;
+	*vpp = obj;
+	white[0] = (val_t) obj;
 	flushStore();
 	white[-1] = FORWARD_TAG;
 	assert(obj[-1] != FORWARD_TAG);
@@ -462,8 +455,8 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 	*alloc_ptr = alloc;
 	bcopy((char *)(white),(char *)(obj),4*(numfields));
 	obj[-1] = tag;
-	*vpp = (value_t)obj;
-	white[0] = (value_t)obj;
+	*vpp = obj;
+	white[0] = (val_t) obj;
 	flushStore();
 	white[-1] = FORWARD_TAG;
 	assert(obj[-1] != FORWARD_TAG);
@@ -471,15 +464,17 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
       }
     case FORWARD_TAG:
       {
-	value_t gray = white[0];
+	ptr_t gray = (ptr_t) white[0];
+	printf("forward_atomic FORWARD_TAG gray = %d\n",gray);
+	assert(tag == FORWARD_TAG);
+	assert(gray[-1] != FORWARD_TAG);
 	*vpp = gray;
-	assert(((value_t *)gray)[-1] != FORWARD_TAG);
 	return 0;
       }
     case SKIP_TAG:
     default:
-      printf("\n\nforward_stack: BAD TAG: white = %d, tag = %d\n",white,tag);
-      BUG("forward_stack: IMPOSSIBLE TAG");
+      printf("\n\nforward_atomic: BAD TAG: white = %d, tag = %d\n",white,tag);
+      BUG("forward_atomic: IMPOSSIBLE TAG");
     }
   assert(0);
 }
@@ -487,29 +482,26 @@ int forward_stack(value_t *vpp, value_t **alloc_ptr, value_t **limit_ptr, Heap_t
 
 /* ------------ These forwarding routines/macros are the ones to use --------- */
 
-void check_ptr(value_t *ptr)
+void check_ptr(ploc_t ptrLoc)
 {
-  if (*ptr >= 42000 && *ptr <= 70000) {
-    printf("A Paranoid value failed check_ptr %d\n", *ptr);
+  if (*ptrLoc >= (mem_t) 42000 && *ptrLoc <= (mem_t) 70000) {
+    printf("A paranoid value of %d at %d failed check_ptr\n", *ptrLoc, ptrLoc);
     assert(0);
   }
 }
 
-value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr, 
-				 range_t *from_range, range_t *to_range)
+mem_t forward1_root_lists(Queue_t *root_lists, mem_t to_ptr, 
+			       range_t *from_range, range_t *to_range)
 {
   long i, j, rlen = QueueLength(root_lists);
-  for (i=0; i<rlen; i++)
-    {
+  for (i=0; i<rlen; i++) {
       Queue_t *roots = QueueAccess(root_lists,i);
       int qlen = QueueLength(roots);
-      for (j=0; j<qlen; j++)
-	{
-	  value_t *temp = (value_t *)QueueAccess(roots,j);
-#ifdef PARANOID
-	  check_ptr(temp);
-#endif
-	  forward_minor(temp,to_ptr,from_range);
+      for (j=0; j<qlen; j++) {
+	  ploc_t temp = (ploc_t) QueueAccess(roots,j);
+	  if (paranoid)
+	    check_ptr(temp);
+	  to_ptr = forward1(temp,to_ptr,from_range);
 	  NumRoots++;
 	}
     }
@@ -517,65 +509,59 @@ value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr,
 }
 
 
-value_t *forward_root_lists_major(Queue_t *root_lists, value_t *to_ptr, 
-				  range_t *from_range, range_t *from2_range, range_t *to_range)
+mem_t forward2_root_lists(Queue_t *root_lists, mem_t to_ptr, 
+			  range_t *from, range_t *from2, range_t *to,
+			  range_t *large, Queue_t *largeRoots)
 {
   long i, j, rlen = QueueLength(root_lists);
-  for (i=0; i<rlen; i++)
-    {
+  for (i=0; i<rlen; i++) {
       Queue_t *roots = QueueAccess(root_lists,i);
       int qlen = QueueLength(roots);
-      for (j=0; j<qlen; j++)
-	{
-	  value_t *temp = (value_t *)QueueAccess(roots,j);
-#ifdef PARANOID
-	  check_ptr(temp);
-#endif
-	  forward_major(temp,to_ptr,from_range,from2_range,to_range);
+      for (j=0; j<qlen; j++) {
+	  ploc_t temp = (ploc_t) QueueAccess(roots,j);
+	  if (paranoid)
+	    check_ptr(temp);
+	  to_ptr = forward2(temp,to_ptr,from,from2,large,largeRoots);
 	  NumRoots++;
 	}
     }
   return to_ptr;
+}
+
+mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
+			 range_t *from, range_t *to)
+{
+  ploc_t curLoc = sysThread->writelistStart;
+  ploc_t end = sysThread->writelistCursor;
+  while (curLoc < end) {
+    ploc_t field = (ploc_t)(*(curLoc++));
+    ptr_t data = *field;
+    if (NotInRange(data,to)) 
+      alloc = forward1(field,alloc,from);
+  }
+  return alloc;
+}
+
+void forward1_writelist_atomic_stack(mem_t *alloc, mem_t *limit,
+				     Heap_t *toheap, range_t *from, range_t *to, SysThread_t *sysThread)
+{
+  ploc_t curLoc = sysThread->writelistStart;
+  ploc_t end = sysThread->writelistCursor;
+  while (curLoc < end) {
+    ploc_t field = (ploc_t)(*(curLoc++));
+    ptr_t data = *field;
+    if (NotInRange(data,to))
+      forward1_atomic_stack(field,alloc,limit,toheap,from,sysThread);
+  }
 }
 
 
 
 /* -------------------------------------------------------------- */
 
-#ifdef SEMANTIC_GARBAGE
-void update_lifetime(value_t *from, value_t *to, value_t sz)
+void update_object_profile(Object_Profile_t *prof, ptr_t objstart)
 {
-  extern value_t semantic_garbage_offset;
-  int curstamp = *((value_t *)(((value_t)from) + semantic_garbage_offset));
-  int used = 0, i;
-  assert((*from) == FORWARD_TAG);
-  for (i=1; i<=sz; i++)
-    {
-      int temp = *(int *)(((value_t)(from + i)) + semantic_garbage_offset);
-      if (temp == 0)
-	{ 
-	  used = 1; 
-	  break; 
-	}
-    }
-
-  for (i=1; i<=sz; i++)
-     *(int *)(((value_t)(to + i)) + semantic_garbage_offset) = 98765;
-  if ((value_t)from >= fromheap->bottom && (value_t)from < fromheap->top)
-    if ((value_t)to >= old_toheap->bottom && (value_t)to < old_toheap->top)
-      curstamp = NumMajorGC;
-    else
-      curstamp = NumMajorGC-1;
-  else if (used)
-    curstamp = NumMajorGC;
-  *((value_t *)(((value_t)to) + semantic_garbage_offset)) = curstamp;
-}
-#endif
-
-
-void update_object_profile(Object_Profile_t *prof, value_t *objstart)
-{
-  value_t *tagstart = objstart - 1;
+  mem_t tagstart = objstart - 1;
   int tag = *tagstart;
   switch(GET_TYPE(tag))
     {
@@ -611,272 +597,191 @@ void update_object_profile(Object_Profile_t *prof, value_t *objstart)
     }
 }
 
-#ifdef HEAPPROFILE
-void SetBirth(value_t *proftag_addr)
-{
-  unsigned int proftag = *proftag_addr;
-  unsigned int oldage = proftag >> HP_AGESHIFT;
-  /*
-  printf("NumGC = %d   progtag_addr = %d, proftag = %d, oldage = %d\n",
-	 NumGC,proftag_addr, proftag,oldage);
-	 */
-  if (oldage == 0)
-    proftag += NumGC << HP_AGESHIFT;
-  *proftag_addr = proftag;
-}
-#endif
-
-
-
 
 
 /* --------------- Scanning routines ----------------------- */
 
-value_t * scan_oneobject_major(value_t **where,  value_t *alloc_ptr, 
-			       range_t *from_range, range_t *from2_range, range_t *to_range)
+mem_t scan1_object(mem_t *where, mem_t alloc,
+		   range_t *from, range_t *to)
 {
-  value_t *cur = (value_t *)(*where);
-  value_t tag = cur[0];
-  value_t type= GET_TYPE(tag);
-  value_t local_to_low = to_range->low;
-  value_t local_to_diff = to_range->diff;
-
-  if (tag == SKIP_TAG)
-    {
-      *where = cur + 1;
-      return alloc_ptr;
-    }
-
-
+  ptr_t cur = (ptr_t) (*where);
+  tag_t tag = cur[0];
+  unsigned int type = GET_TYPE(tag);
 
   switch (type)
     {
     case RECORD_TAG:
       {
 	int i, fieldlen = GET_RECLEN(tag);
-	value_t *end = cur + 1 + fieldlen;
+	mem_t end = cur + 1 + fieldlen;
 	unsigned mask = GET_RECMASK(tag);
 	cur++;
 	for (; cur<end; cur++, mask >>= 1)
 	  if (mask & 1) {
-#ifdef PARANOID
-	    check_ptr(cur);
-#endif	      
-	    forward_major(cur,alloc_ptr,from_range,from2_range,to_range);
+	    if (paranoid)
+	      check_ptr((ploc_t)cur);
+	    alloc = forward1((ploc_t)cur,alloc,from);
 	  }
-	if (mask != 0) {
-	  printf("Bad tag: %d\n", tag);
-	}
 	break;
       }
-    case SKIP_TAG:
-      cur++;
-      break;
     case IARRAY_TAG:
+    case RARRAY_TAG: 
       {
-	unsigned int upper = GET_ARRLEN(tag);
-	upper = (upper + 3) / 4; /* round up to multiple of 4 first */
-	if (upper == 0)
-	  upper = 1;
-	cur += 1 + upper;
-	break;
-      }
-    case RARRAY_TAG:
-      {
-	unsigned int upper = GET_ARRLEN(tag);
-	upper /= 4;   /* already a multiple of 8 */
-	if (upper == 0)
-	  upper = 1;
-	cur += 1 + upper;
+	unsigned int wordLen = (GET_ARRLEN(tag) + 3) / 4; /* IARRAY len might not be mult of 4 */
+	if (wordLen == 0)
+	  wordLen = 1;
+	cur += 1 + wordLen;
 	break;
       }
     case PARRAY_TAG:
       {
-	unsigned int upper = GET_ARRLEN(tag);
-	upper /= 4;   /* already a multiple of 4 */
-	if (upper == 0)
+	unsigned int wordLen = GET_ARRLEN(tag) / 4;
+	if (wordLen == 0)
 	  cur += 2;
-	else
-	  {
-	    unsigned int *end = cur + 1 + upper;
+	else {
+	    unsigned int *end = cur + 1 + wordLen;
 	    cur++;
-	    while (cur < end)
-	      {
-#ifdef PARANOID
-		check_ptr(cur);
-#endif	      
-		forward_major(cur,alloc_ptr,from_range,from2_range,to_range);
+	    while (cur < end) {
+		if (paranoid)
+		  check_ptr((ploc_t)cur);
+		alloc = forward1((ploc_t)cur,alloc,from);
 		cur++;
 	      }
 	  }
 	break;
       }
+    case SKIP_TAG:
+      cur++;
+      break;
     case FORWARD_TAG:
     default:
-      printf("\n\ntag = %d at cur=%d\n",tag,cur);
-      printf("scan_gen: IMPOSSIBLE TAG\n");
+      printf("\n\nscan1_object found bad tag = %d at cur=%d\n",tag,cur);
       assert(0);
     }
   (*where) = cur;
-  return alloc_ptr;
+  return alloc;
 }
 
 
-value_t * scan_oneobject_minor(value_t **where,  value_t *alloc_ptr, 
-			       range_t *from_range,  range_t *to_range)
+mem_t scan2_object(mem_t *where, mem_t alloc,
+		   range_t *from, range_t *from2,  range_t *to,
+		   range_t *large, Queue_t *largeRoots)
 {
-  value_t *cur = (value_t *)(*where);
-  value_t tag = cur[0];
-  value_t type= GET_TYPE(tag);
-  value_t local_from_low = from_range->low;
-  value_t local_from_diff = from_range->diff;
-
-  if (tag == SKIP_TAG)
-    {
-      *where = cur + 1;
-      return alloc_ptr;
-    }
+  ptr_t cur = (ptr_t) (*where);
+  tag_t tag = cur[0];
+  unsigned int type = GET_TYPE(tag);
 
   switch (type)
     {
     case RECORD_TAG:
       {
 	int i, fieldlen = GET_RECLEN(tag);
-	value_t *end = cur + 1 + fieldlen;
+	mem_t end = cur + 1 + fieldlen;
 	unsigned mask = GET_RECMASK(tag);
 	cur++;
 	for (; cur<end; cur++, mask >>= 1)
 	  if (mask & 1) {
-#ifdef PARANOID
-	    check_ptr(cur);
-#endif	      
-	    forward_local_minor(cur,alloc_ptr);
+	    if (paranoid)
+	      check_ptr((ploc_t)cur);
+	    alloc = forward2((ploc_t)cur,alloc,from,from2,large,largeRoots);
+	  }
+	break;
+      }
+    case IARRAY_TAG:
+    case RARRAY_TAG: 
+      {
+	unsigned int wordLen = (GET_ARRLEN(tag) + 3) / 4; /* IARRAY len might not be mult of 4 */
+	if (wordLen == 0)
+	  wordLen = 1;
+	cur += 1 + wordLen;
+	break;
+      }
+    case PARRAY_TAG:
+      {
+	unsigned int wordLen = GET_ARRLEN(tag) / 4;
+	if (wordLen == 0)
+	  cur += 2;
+	else {
+	    unsigned int *end = cur + 1 + wordLen;
+	    cur++;
+	    while (cur < end) {
+		if (paranoid)
+		  check_ptr((ploc_t)cur);
+		alloc = forward2((ploc_t)cur,alloc,from,from2,large,largeRoots);
+		cur++;
+	      }
 	  }
 	break;
       }
     case SKIP_TAG:
       cur++;
       break;
-    case IARRAY_TAG:
-      {
-	unsigned int upper = (GET_ARRLEN(tag) + 3) / 4;
-	if (upper == 0)
-	  upper = 1;
-	cur += 1 + upper;
-	break;
-      }
-    case RARRAY_TAG:
-      {
-	unsigned int upper = GET_ARRLEN(tag) / 4;
-	if (upper == 0)
-	  upper = 1;
-	cur += 1 + upper;
-	break;
-      }
-    case PARRAY_TAG:
-      {
-	unsigned int upper = GET_ARRLEN(tag) / 4;
-	if (upper == 0)
-	  cur += 2;
-	else
-	  {
-	    unsigned int *end = cur + 1 + upper;
-	    cur++;
-	    while (cur < end)
-	      {
-#ifdef PARANOID
-		check_ptr(cur);
-#endif	      
-		forward_local_minor(cur,alloc_ptr);
-		cur++;
-	      }
-	  }
-	break;
-      }
     case FORWARD_TAG:
     default:
-      printf("\n\nscan_gen impossible: forward tag = %d at cur=%d\n",tag,cur);
+      printf("\n\nscan2_object found bad tag = %d at cur=%d\n",tag,cur);
       assert(0);
     }
   (*where) = cur;
-  return alloc_ptr;
+  return alloc;
 }
 
 
-value_t* scan_major(value_t start_scan, value_t *alloc_ptr, value_t *stop, 
-		    range_t *from_range, range_t *from2_range, range_t *to_range)
+mem_t scan2_region(mem_t start_scan, mem_t alloc_ptr, mem_t stop, 
+		   range_t *from_range, range_t *from2_range, range_t *to_range,
+		   range_t *large, Queue_t *largeRoots)
 {
-  value_t *cur = (value_t *)start_scan;
+  mem_t cur = start_scan;
   unsigned int a,b, c=0;
-  value_t local_to_low = to_range->low;
-  value_t local_to_diff = to_range->diff;
-
 
   while (cur < alloc_ptr && cur < stop)
     {
-#ifdef HEAPPROFILE
-      unsigned int proftag = *(cur++);
-#endif
-      value_t tag = cur[0];
-      value_t type= GET_TYPE(tag);
-      
-
-#ifdef HEAPPROFILE
-      if (proftag == SKIP_TAG)
-	  continue; /* break; */
-#endif
-
+      tag_t tag = cur[0];
+      unsigned int type= GET_TYPE(tag);
       if ((GET_TYPE(tag) == RECORD_TAG) && (GET_RECLEN(tag) <= 2))
 	{
-	  if (tag == TAG_REC_TRACETRACE)
-	    {
-#ifdef PARANOID
-	      check_ptr(cur+1);
-	      check_ptr(cur+2);
-#endif	      
-	      forward_major(cur+1,alloc_ptr,from_range,from2_range,to_range);
-	      forward_major(cur+2,alloc_ptr,from_range,from2_range,to_range);
+	  if (tag == TAG_REC_TRACETRACE) {
+	    if (paranoid) {
+	      check_ptr((ploc_t)cur+1);
+	      check_ptr((ploc_t)cur+2);
+	    }
+	    alloc_ptr = forward2((ploc_t)cur+1,alloc_ptr,from_range,from2_range,large,largeRoots);
+	    alloc_ptr = forward2((ploc_t)cur+2,alloc_ptr,from_range,from2_range,large,largeRoots);
+	    cur += 3;
+	    continue;
+	  }
+	  else if (tag == TAG_REC_INTTRACE) {
+	      alloc_ptr = forward2((ploc_t)cur+2,alloc_ptr,from_range,from2_range,large,largeRoots);
 	      cur += 3;
 	      continue;
 	    }
-	  if (tag == TAG_REC_INTTRACE)
-	    {
-	      forward_major(cur+2,alloc_ptr,from_range,from2_range,to_range);
-	      cur += 3;
-	      continue;
-	    }
-	  if (tag == TAG_REC_INT)
-	    {
+	  else if (tag == TAG_REC_INT) {
 	      cur += 2;
 	      continue;
 	    }
-	  if (tag == TAG_REC_TRACE)
-	    {
-	      forward_major(cur+1,alloc_ptr,from_range,from2_range,to_range);
+	  else if (tag == TAG_REC_TRACE) {
+	      alloc_ptr = forward2((ploc_t)cur+1,alloc_ptr,from_range,from2_range,large,largeRoots);
 	      cur += 2;
 	      continue;
 	    }
-	  if (tag == TAG_REC_INTINT)
-	    {
+	  else if (tag == TAG_REC_INTINT) {
 	      cur += 3;
 	      continue;
 	    }
-	  if (tag == TAG_REC_TRACEINT)
-	    {
-		forward_major(cur+1,alloc_ptr,from_range,from2_range,to_range);
-		cur += 3;
-		continue;
+	  else if (tag == TAG_REC_TRACEINT) {
+	      alloc_ptr = forward2((ploc_t)cur+1,alloc_ptr,from_range,from2_range,large,largeRoots);
+	      cur += 3;
+	      continue;
 	    }
+	  else 
+	    assert(0);
       }
-      else if (GET_TYPE(tag) == SKIP_TAG)
-	{
+      else if (GET_TYPE(tag) == SKIP_TAG) {
 	  cur++;
 	  continue;
 	}
-
-      {
-	value_t *temp = cur;
-	alloc_ptr = scan_oneobject_major(&temp, alloc_ptr, from_range, from2_range, to_range);
+      else {
+	mem_t temp = cur;
+	alloc_ptr = scan2_object(&temp, alloc_ptr, from_range, from2_range, to_range,large,largeRoots);
 	cur = temp;
 	continue;
       }
@@ -886,132 +791,94 @@ value_t* scan_major(value_t start_scan, value_t *alloc_ptr, value_t *stop,
 
 
 
-value_t* scan_nostop_minor(value_t start_scan, value_t *alloc_ptr, 
-			   range_t *from_range, range_t *to_range)
+mem_t scan1_until(mem_t start_scan, mem_t alloc_ptr, 
+		  range_t *from_range, range_t *to_range)
 {
-  value_t *cur = (value_t *)start_scan;
+  mem_t cur = start_scan;
   unsigned int a,b, c=0;
-  value_t local_from_low = from_range->low;
-  value_t local_from_diff = from_range->diff;
 
   while (cur < alloc_ptr)
     {
-#ifdef HEAPPROFILE
-      unsigned int proftag = *(cur++);
-#endif
-      value_t tag = cur[0];
-      value_t type= GET_TYPE(tag);
-      
-#ifdef HEAPPROFILE
-      if (proftag == SKIP_TAG)
-	  continue; /* break; */
-#endif
+      tag_t tag = cur[0];
+      unsigned int type = GET_TYPE(tag);
 
       if ((GET_TYPE(tag) == RECORD_TAG) && (GET_RECLEN(tag) <= 2))
 	{
-	  if (tag == TAG_REC_TRACETRACE)
-	    {
-	      forward_local_minor(cur+1,alloc_ptr);
-	      forward_local_minor(cur+2,alloc_ptr);
+	  if (tag == TAG_REC_TRACETRACE) {
+	      alloc_ptr = forward1((ploc_t)cur+1,alloc_ptr,from_range);
+	      alloc_ptr = forward1((ploc_t)cur+2,alloc_ptr,from_range);
 	      cur += 3;
 	    }
-	  else if (tag == TAG_REC_INTTRACE)
-	    {
-	      forward_local_minor(cur+2,alloc_ptr);
+	  else if (tag == TAG_REC_INTTRACE) {
+	      alloc_ptr = forward1((ploc_t)cur+2,alloc_ptr,from_range);
 	      cur += 3;
 	    }
-	  else if (tag == TAG_REC_INT)
-	    {
+	  else if (tag == TAG_REC_INT) {
 	      cur += 2;
 	    }
-	  else if (tag == TAG_REC_TRACE)
-	    {
-	      forward_local_minor(cur+1,alloc_ptr);
+	  else if (tag == TAG_REC_TRACE) {
+	      alloc_ptr = forward1((ploc_t)cur+1,alloc_ptr,from_range);
 	      cur += 2;
 	    }
-	  else if (tag == TAG_REC_INTINT)
-	    {
+	  else if (tag == TAG_REC_INTINT) {
 	      cur += 3;
 	    }
-	  else if (tag == TAG_REC_TRACEINT)
-	    {
-		forward_local_minor(cur+1,alloc_ptr);
-		cur += 3;
+	  else if (tag == TAG_REC_TRACEINT) {
+	      alloc_ptr = forward1((ploc_t)cur+1,alloc_ptr,from_range);
+	      cur += 3;
 	    }
 	  else 
-	    alloc_ptr = scan_oneobject_minor(&cur, alloc_ptr, from_range, to_range);
+	    alloc_ptr = scan1_object(&cur, alloc_ptr, from_range, to_range);
       }
       else if (GET_TYPE(tag) == SKIP_TAG)
 	cur++;
       else
-	alloc_ptr = scan_oneobject_minor(&cur, alloc_ptr, from_range, to_range);
+	alloc_ptr = scan1_object(&cur, alloc_ptr, from_range, to_range);
     }
   assert(cur == alloc_ptr);
   return alloc_ptr;
 }
 
 
-value_t* scan_stop_minor(value_t start_scan, value_t *alloc_ptr, value_t *stop,
-			range_t *from_range, range_t *to_range)
+mem_t scan1_region(mem_t start_scan, mem_t alloc, mem_t stop,
+		   range_t *from_range, range_t *to_range)
 {
-  register value_t *cur = (value_t *)start_scan;
-  register value_t local_from_low = from_range->low;
-  register value_t local_from_diff = from_range->diff;
-
+  register mem_t cur = start_scan;
 
   while (cur < stop)
     {
-
-#ifdef HEAPPROFILE
-      unsigned int proftag = *(cur++);
-#endif
-      
-      value_t tag = cur[0]; /* note that declaration of variable causes a stack slot
-				 allocated for it by the C compiler */
-
-
-      
-#ifdef HEAPPROFILE
-      if (proftag == SKIP_TAG)
-	continue; /* break; */
-#endif
+      tag_t tag = cur[0]; /* note that declaration of variable causes a stack slot
+			     allocated for it by the C compiler */
       if (tag == SKIP_TAG)
 	continue;
       if ((GET_TYPE(tag) == RECORD_TAG) && (GET_RECLEN(tag) <= 2))
 	{
-	  if (tag == TAG_REC_TRACETRACE)
-	    {
-	      forward_local_minor(cur+1,alloc_ptr);
-	      forward_local_minor(cur+2,alloc_ptr);
+	  if (tag == TAG_REC_TRACETRACE) {
+	      alloc = forward1((ploc_t)cur+1,alloc,from_range);
+	      alloc = forward1((ploc_t)cur+2,alloc,from_range);
 	      cur += 3;
 	    }
-	  else if (tag == TAG_REC_INTTRACE)
-	    {
-	      forward_local_minor(cur+2,alloc_ptr);
+	  else if (tag == TAG_REC_INTTRACE) {
+	      alloc = forward1((ploc_t)cur+2,alloc,from_range);
 	      cur += 3;
 	    }
-	  else if (tag == TAG_REC_INT)
-	    {
+	  else if (tag == TAG_REC_INT) {
 	      cur += 2;
 	    }
-	  else if (tag == TAG_REC_TRACE)
-	    {
-	      forward_local_minor(cur+1,alloc_ptr);
+	  else if (tag == TAG_REC_TRACE) {
+	      alloc = forward1((ploc_t)cur+1,alloc,from_range);
 	      cur += 2;
 	    }
-	  else if (tag == TAG_REC_INTINT)
-	    {
+	  else if (tag == TAG_REC_INTINT) {
 	      cur += 3;
 	    }
-	  else if (tag == TAG_REC_TRACEINT)
-	    {
-		forward_local_minor(cur+1,alloc_ptr);
-		cur += 3;
+	  else if (tag == TAG_REC_TRACEINT) {
+	      alloc = forward1((ploc_t)cur+1,alloc,from_range);
+	      cur += 3;
 	    }
-	  else 
-	    {
-	      value_t *temp = cur;
-	      alloc_ptr = scan_oneobject_minor(&temp, alloc_ptr, from_range, to_range);
+	  else {
+	      mem_t temp = cur;
+	      alloc = scan1_object(&temp, alloc, from_range, to_range);
 	      cur = temp;
 	    }
 	}
@@ -1019,24 +886,20 @@ value_t* scan_stop_minor(value_t start_scan, value_t *alloc_ptr, value_t *stop,
 	  cur++;
       else 
 	{
-	  value_t *temp = cur;
-	  alloc_ptr = scan_oneobject_minor(&temp, alloc_ptr, from_range, to_range);
+	  mem_t temp = cur;
+	  alloc = scan1_object(&temp, alloc, from_range, to_range);
 	  cur = temp;
 	}
     }
 
-  return alloc_ptr;
+  return alloc;
 }
   
-void scan_oneobject_minor_stack(value_t *gray,  value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap,
-				range_t *from_range,  range_t *to_range, SysThread_t *sysThread)
+void scan1_object_atomic_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+			       range_t *from_range,  range_t *to_range, SysThread_t *sysThread)
 {
-  value_t tag = gray[-1];
-  value_t type= GET_TYPE(tag);
-  value_t local_from_low = from_range->low;
-  value_t local_from_diff = from_range->diff;
-  value_t *alloc = *alloc_ptr;
-  value_t *limit = *limit_ptr;
+  tag_t tag = gray[-1];
+  unsigned int type= GET_TYPE(tag);
 
   while (tag == stall)
     tag = gray[-1];
@@ -1049,14 +912,15 @@ void scan_oneobject_minor_stack(value_t *gray,  value_t **alloc_ptr, value_t **l
     case RECORD_TAG:
       {
 	int i, fieldlen = GET_RECLEN(tag);
-	value_t *end = gray + fieldlen;
+	loc_t cursor = gray;
+	mem_t end = gray + fieldlen;
 	unsigned mask = GET_RECMASK(tag);
-	for (; gray<end; gray++, mask >>= 1) {
+	for (; cursor<end; cursor++, mask >>= 1) {
 	  if (mask & 1)
-	    forward_local_minor_stack(gray,alloc,limit,toheap,sysThread);
+	    forward1_atomic_stack((ploc_t)cursor,alloc_ptr,limit_ptr,toheap,from_range,sysThread);
 	}
 	if (mask != 0) {
-	  printf("scan_oneobject_minor_stack: bad tag %d\n", tag);
+	  printf("scan_object_minor_stack: bad tag %d\n", tag);
 	  assert(0);
 	}
 	break;
@@ -1068,97 +932,49 @@ void scan_oneobject_minor_stack(value_t *gray,  value_t **alloc_ptr, value_t **l
     case PARRAY_TAG:
       {
 	unsigned int len = GET_ARRLEN(tag) / 4, i;
-	for (i=0; i<len; i++) {
-	  forward_local_minor_stack(gray,alloc,limit,toheap,sysThread);
-	  gray++;
-	}
+	for (i=0; i<len; i++) 
+	  forward1_atomic_stack((ploc_t)gray+i,alloc_ptr,limit_ptr,toheap,from_range,sysThread);
 	break;
       }
     case SKIP_TAG:
     case FORWARD_TAG:
     default:
-      printf("\n\nScan_oneobject_minor_stack impossible: tag = %d at gray=%d\n",tag,gray);
+      printf("\n\nScan1_object_atomic_stack impossible: tag = %d at gray=%d\n",tag,gray);
       assert(0);
     }
-
-  *alloc_ptr = alloc;
-  *limit_ptr = limit;
 }
 
 
-void scan_minor_stack(value_t *gray, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap,
-		      range_t *from_range, range_t *to_range, SysThread_t *sysThread)
+void scan2_object_atomic_stack(ptr_t gray,  mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+			       range_t *from_range,  range_t *from2_range,
+			       range_t *large_range, SysThread_t *sysThread)
 {
-  value_t local_from_low = from_range->low;
-  value_t local_from_diff = from_range->diff;
-  value_t *alloc = *alloc_ptr;
-  value_t *limit = *limit_ptr;
-
-#ifdef HEAPPROFILE
-  unsigned int proftag = gray[-2];
-#endif
-  value_t tag = gray[-1];
-  value_t type = GET_TYPE(tag);
-
-#ifdef DEBUG
-  assert(type != SKIP_TAG);
-#endif
-
-  if ((GET_TYPE(tag) == RECORD_TAG) && (GET_RECLEN(tag) <= 2))
-    {
-      if (tag == TAG_REC_TRACETRACE)
-	{
-	  forward_local_minor_stack(gray,alloc,limit,toheap,sysThread);
-	  forward_local_minor_stack(gray+1,alloc,limit,toheap,sysThread);
-	}
-      else if (tag == TAG_REC_INTTRACE)
-	{
-	  forward_local_minor_stack(gray+1,alloc,limit,toheap,sysThread);
-	}
-      else if (tag == TAG_REC_INT ||
-	       tag == TAG_REC_INTINT)
-	{
-	}
-      else if (tag == TAG_REC_TRACE ||
-	       tag == TAG_REC_TRACEINT)
-	{
-	  forward_local_minor_stack(gray,alloc,limit,toheap,sysThread);
-	}
-      else 
-	scan_oneobject_minor_stack(gray, &alloc, &limit, toheap, from_range, to_range,sysThread);
-    }
-  else if (GET_TYPE(tag) == SKIP_TAG)
-    assert(0);
-  else
-    scan_oneobject_minor_stack(gray, &alloc, &limit, toheap, from_range, to_range,sysThread);
-
-  *alloc_ptr = alloc;
-  *limit_ptr = limit;
-}
-
-
-
-void scan_oneobject_for_pointers(value_t *gray, Queue_t *queue)
-{
-  value_t tag = gray[-1];
-  value_t type= GET_TYPE(tag);
-
-  if (tag == SKIP_TAG)
-    assert(0);
+  tag_t tag = gray[-1];
+  unsigned int type= GET_TYPE(tag);
 
   while (tag == stall)
     tag = gray[-1];
+
+  if (tag == SKIP_TAG)
+    assert(0);
 
   switch (type)
     {
     case RECORD_TAG:
       {
 	int i, fieldlen = GET_RECLEN(tag);
-	value_t *end = gray + fieldlen;
+	loc_t cursor = gray;
+	mem_t end = gray + fieldlen;
 	unsigned mask = GET_RECMASK(tag);
-	for (; gray<end; gray++, mask >>= 1)
+	for (; cursor<end; cursor++, mask >>= 1) {
 	  if (mask & 1)
-	    Enqueue(queue, gray);
+	    forward2_atomic_stack((ploc_t)cursor,alloc_ptr,limit_ptr,toheap,
+				  from_range,from2_range,large_range,sysThread);
+	}
+	if (mask != 0) {
+	  printf("scan_object_minor_stack: bad tag %d\n", tag);
+	  assert(0);
+	}
 	break;
       }
     case IARRAY_TAG:
@@ -1168,16 +984,15 @@ void scan_oneobject_for_pointers(value_t *gray, Queue_t *queue)
     case PARRAY_TAG:
       {
 	unsigned int len = GET_ARRLEN(tag) / 4, i;
-	for (i=0; i<len; i++) {
-	  Enqueue(queue,gray);
-	  gray++;
-	}
+	for (i=0; i<len; i++) 
+	  forward2_atomic_stack((ploc_t)gray+i,alloc_ptr,limit_ptr,toheap,
+				from_range,from2_range,large_range,sysThread);
 	break;
       }
     case SKIP_TAG:
     case FORWARD_TAG:
     default:
-      printf("\n\nScan_oneobject_forpointers impossible: tag = %d at gray=%d\n",tag,gray);
+      printf("\n\nScan2_object_atomic_stack impossible: tag = %d at gray=%d\n",tag,gray);
       assert(0);
     }
 }

@@ -16,11 +16,11 @@
 #include "til-signal.h"
 #include "stats.h"
 #include "global.h"
-#include "mllib.h"
+/* #include "mllib.h" */
 #include "client.h"
 
 int ThreadedVersion = THREADED_VERSION;
-int LEAST_GC_TO_CHECK = 1 << 30;
+int LEAST_GC_TO_CHECK = 0;
 
 int NumHeap       = 20;
 int NumStack      = 100;
@@ -98,21 +98,23 @@ struct option_entry {
   char *description;
 };
 
-static int help=0, semi=0, gen=0, para=0, fixheap=0, youngheap=0;
+static int help=0, semi=0, gen=0, semipara=0, genpara=0, fixheap=0, youngheap=0;
 struct option_entry table[] = 
   {0, "help", &help, "Print help info but do not execute program",
    0, "semi", &semi, "Use the semispace garbage collector",
    0, "gen", &gen,   "Use the generational garbage collector",
-   0, "para", &para, "Use the semispace, parallel garbage collector",
+   0, "semipara", &semipara, "Use the semispace, parallel garbage collector",
+   0, "genpara", &genpara, "Use the generational, parallel garbage collector",
    0, "paranoid", &paranoid, "Run in paranoid mode",
    0, "verbose", &verbose, "Be verbose when paranoid",
    0, "diag", &diag, "Run in diagnostic mode",
+   0, "debugStack", &debugStack, "Show scanning of stack frames",
    0, "gcstats", &SHOW_GCSTATS, "Show GC statistics during execution",
    0, "gcdebug", &SHOW_GCDEBUG, "Show GC debugging information during execution",
    0, "gcforward", &SHOW_GCFORWARD, "Show object forwarding infomation during GC",
    0, "gcerror", &SHOW_GCERROR, "Show GC errors",
    0, "gcheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
-   0, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
+   1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
    1, "stacksize", &StackSize, "Stack size of threads measured in Kbytes",
    1, "proc", &NumSysThread, "Use this many processors",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",
@@ -168,7 +170,8 @@ void process_option(int argc, char **argv)
     }
   if (semi) collector_type = Semispace;
   if (gen) collector_type = Generational;
-  if (para) collector_type = Parallel;
+  if (semipara) collector_type = SemispaceParallel;
+  if (genpara) collector_type = GenerationalParallel;
   if (fixheap) MinHeap = MaxHeap = fixheap;
   if (youngheap) YoungHeapByte = 1024 * youngheap;
   if (help) {
@@ -191,6 +194,18 @@ void process_option(int argc, char **argv)
   }
 }
 
+void init_int(int *x, int y)
+{
+  if (*x == 0)
+    *x = y;
+}
+
+void init_double(double *x, double y)
+{
+  if (*x == 0.0)
+    *x = y;
+}
+
 int main(int argc, char **argv)
 {
   int i;
@@ -202,14 +217,14 @@ int main(int argc, char **argv)
   platform_init();
   memobj_init();
   stack_init();
-  mllib_init();
+/*   mllib_init(); */
   signal_init();
   thread_init();
   global_init(); 
   exn_init();
   gc_init();
 
-  thread_go((value_t *)(&client_entry),module_count);
+  thread_go((ptr_t *)(&client_entry),module_count);
   stats_finish();
 }
 

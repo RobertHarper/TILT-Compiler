@@ -1,11 +1,10 @@
-(*$import Prelude *)
+(*$import TopLevel Array Array2 Int Real64 Math64 *)
 
 local
 
-    open Array
-    open Array2
-  val makestring_real = Real.toString
-  val makestring_int = Int.toString
+
+    val makestring_real = Real64.toString
+    val makestring_int = Int.toString
 
   val Control_trace = ref false
 
@@ -18,10 +17,10 @@ local
   exception MaxList
   exception MinList
   exception SumList
-  fun max_list [] = raise MaxList | max_list l = foldl max (hd l) l
-  fun min_list [] = raise MinList | min_list l = foldl min (hd l) l
+  fun max_list [] = raise MaxList | max_list l = List.foldl max (hd l) l
+  fun min_list [] = raise MinList | min_list l = List.foldl min (hd l) l
   fun sum_list [] = raise SumList
-    | sum_list (l:real list) = foldl (op +) 0.0 l
+    | sum_list (l:real list) = List.foldl (op +) 0.0 l
   fun for {from=start:int,step=delta:int, to=endd:int} body =
       if delta>0 andalso endd>=start then 
 	  let fun f x = if x > endd then () else (body x; f(x+delta))
@@ -38,13 +37,13 @@ local
   fun pow(x:real,y:int) = if y = 0 then 1.0 else x * pow(x,y-1)
 
   val array2 = fn(bounds as ((l1,u1),(l2,u2)),v) =>
-      (array2(u1-l1+1,u2-l2+1,v), bounds) 
+      (Array2.array(u1-l1+1,u2-l2+1,v), bounds) 
   val sub2 = fn((A,((lb1:int,ub1:int),(lb2:int,ub2:int))),(k,l)) =>
-      sub2(A, k-lb1, l-lb2) 
+      Array2.sub(A, k-lb1, l-lb2) 
   val update2 = fn((A,((lb1,_),(lb2,_))),(k,l), v) => 
-      update2(A,k-lb1,l-lb2,v)
+      Array2.update(A,k-lb1,l-lb2,v)
   fun bounds2(_,b) = b
-  fun printarray2 (A as (M:real array2,((l1,u1),(l2,u2)))) =
+  fun printarray2 (A as (M:real Array2.array2,((l1,u1),(l2,u2)))) =
       for {from=l1,step=1,to=u1} 
       (fn i =>
        (print "[";
@@ -52,9 +51,9 @@ local
 	(fn j => 
 	 print (makestring_real (sub2(A,(i,j))) ^ ", "));
 	print (makestring_real (sub2(A,(i,u2))) ^ "]\n")))
-  val array1 = fn ((l,u),v) => (array(u-l+1,v),(l,u))
-  val sub1 = fn ((A,(l:int,u:int)),i:int) => sub(A,i-l) 
-  val update1 = fn((A,(l,_)),i,v) => update(A,i-l,v)
+  val array1 = fn ((l,u),v) => (Array.array(u-l+1,v),(l,u))
+  val sub1 = fn ((A,(l:int,u:int)),i:int) => Array.sub(A,i-l) 
+  val update1 = fn((A,(l,_)),i,v) => Array.update(A,i-l,v)
   fun bounds1(_,b) = b
  (*
   * Specification of the state variable computation
@@ -129,7 +128,7 @@ local
   fun for_west_zones f = 
       for {from=kmin+1, step=1, to=kmax+1}(fn k => f (k,lmin))
 
-  type real_array2 = (real array2) * ((int * int) * (int * int))
+  type real_array2 = (real Array2.array2) * ((int * int) * (int * int))
   fun reflect dir (node:int*int) (A:real_array2) = sub2(A, dir node)
   val reflect_north = reflect north
   val reflect_south = reflect south

@@ -1533,28 +1533,14 @@ end (* local defining splitting context *)
        in  con
        end
 
-     | xcon' context (il_con as Il.CON_APP (il_con1, il_con2)) = 
+     | xcon' context (il_con as Il.CON_APP (il_con1, il_cons2)) = 
        let
            (* XXX Does not handle the case where il_con1 has a
               dependent kind.  Fortunately, the CON_FUN case of
               xcon' always returns a non-dependent kind. *)
 	   val con1 = xcon context il_con1
-           val con2 = xcon context il_con2
-	   val con = 
-	       (case NilContext_kind_of(context,con2) of
-		    Record_k lvk_seq => 
-			let 
-			    val arg_var = Name.fresh_var()
-			    val lvk_list = Sequence.toList lvk_seq
-			    val args = 
-				map (fn ((l,_),_) => Proj_c(Var_c arg_var, l))
-				lvk_list
-			in
-			    NilUtil.makeLetC 
-			       [Con_cb(arg_var,con2)] 
-			       (App_c(con1, args))
-			end
-		  | _ => App_c(con1, [con2]))
+           val cons2 = map (xcon context) il_cons2
+	   val con = App_c(con1, cons2)
        in  con
        end
 
@@ -2339,13 +2325,15 @@ end (* local defining splitting context *)
 	    erdecs = erdecs}
        end
 
-   and xkind context (Il.KIND_TUPLE n) = 
+   and xkind context (Il.KIND) = Type_k
+     | xkind context (Il.KIND_TUPLE n) = 
        let val k = makeKindTuple n
        in k
        end
-     | xkind context (Il.KIND_ARROW (n,m)) =
+     | xkind context (Il.KIND_ARROW (n,il_kres)) =
        let val args = map0count (fn _ => (Name.fresh_var(), Type_k)) n
-           val k = Arrow_k (Open, args, makeKindTuple m)
+	   val kres = xkind context il_kres
+           val k = Arrow_k (Open, args, kres)
        in  k
        end
 

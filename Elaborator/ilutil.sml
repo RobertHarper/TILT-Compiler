@@ -95,25 +95,33 @@ structure IlUtil
     fun con_record symconlist = let fun help(s,c) = (symbol_label s,c)
 				in CON_RECORD(sort_labelpair(map help  symconlist))
 				end
-    fun con_tuple_inject [c] = c
-      | con_tuple_inject clist = CON_TUPLE_INJECT clist
+    fun con_tuple_inject clist = CON_TUPLE_INJECT clist
     fun exp_tuple explist = let fun help(i,e) = (generate_tuple_label (i+1),e)
 			    in  RECORD(mapcount help explist)
 			    end
     val con_string = CON_VECTOR (CON_UINT W8)
-	fun bool_help special = CON_SUM{names = [Name.symbol_label(Symbol.varSymbol "false"), 
-						 Name.symbol_label(Symbol.varSymbol "true")],
-					noncarriers = 2,
-					carrier = CON_TUPLE_INJECT[],
-					special = special}
-	val con_bool = bool_help NONE
-	val con_false = bool_help (SOME 0)
-	val con_true = bool_help (SOME 1)
+    local val names = [Name.symbol_label(Symbol.varSymbol "false"), 
+		       Name.symbol_label(Symbol.varSymbol "true")]
+    in  fun sumbool_help special = CON_SUM{names = names,
+					   noncarriers = 2,
+					   carrier = CON_TUPLE_INJECT[],
+					   special = special}
+	fun bool_help special = 
+	    let val con_sum = sumbool_help special
+	    in  CON_TUPLE_PROJECT(0,CON_MU(CON_FUN([fresh_var()],
+						   CON_TUPLE_INJECT [con_sum])))
+	    end
+    end
+
+    val con_sumbool = sumbool_help NONE
+    val con_bool = bool_help NONE
+    val con_false = bool_help (SOME 0)
+    val con_true = bool_help (SOME 1)
     fun con_eqfun c = CON_ARROW([con_tuple[c,c]],
 				con_bool,false, oneshot_init PARTIAL)
 
-    val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
-    val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
+    val false_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=0,inject=NONE})
+    val true_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=1,inject=NONE})
     fun make_lambda_help totality (var,con,rescon,e) 
       : exp * con = let val funvar = fresh_named_var "anonfun"
 			val fbnd = FBND(funvar,var,con,rescon,e)
@@ -122,7 +130,9 @@ structure IlUtil
     val make_total_lambda = make_lambda_help TOTAL
     val make_lambda  = make_lambda_help PARTIAL
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
-	CASE{sumtype=con_bool,arg=e1,bound=fresh_named_var "unused",
+	CASE{sumtype=con_sumbool,
+	     arg=UNROLL(con_bool,con_sumbool,e1),
+	     bound=fresh_named_var "unused",
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
     fun make_seq eclist =
 	let fun loop _ [] = error "make_seq given empty list"
@@ -346,7 +356,7 @@ structure IlUtil
 		     | CON_REF c => CON_REF (self c)
 		     | CON_TAG c => CON_TAG (self c)
 		     | CON_ARROW (cons,c2,closed,complete) => CON_ARROW (map self cons, self c2, closed, complete)
-		     | CON_APP (c1,c2) => CON_APP (self c1, self c2)
+		     | CON_APP (cfun,cargs) => CON_APP (self cfun, map self cargs)
 		     | CON_MU c =>  CON_MU (self c)
 		     | CON_RECORD rdecs => CON_RECORD (map (f_rdec state) rdecs)
 		     | CON_FLEXRECORD r => (* don't dereference until flex_handler called *)
@@ -731,9 +741,9 @@ structure IlUtil
       end
 
 
-      fun con_subst_conapps (argcon, con_app_handler : (con * con -> con option)) : con = 
+      fun con_subst_conapps (argcon, con_app_handler : (con * con list -> con option)) : con = 
 	let 
-	  fun con_handler (CON_APP(c1,c2),_) = con_app_handler(c1,c2)
+	  fun con_handler (CON_APP(c1,cargs),_) = con_app_handler(c1,cargs)
 	    | con_handler _ = NONE
 	  val handlers = STATE(default_bound,
 			       {sdec_handler = default_sdec_handler,
@@ -787,31 +797,19 @@ structure IlUtil
       
 
 
-      fun ConApply (reduce_small,c1,c2) = 
-	  let 
-	      fun help(vars,body,args) = 
-		  let val subst = foldl (fn ((v,c),s) => subst_add_convar(s,v,c)) empty_subst (zip vars args)
-		  val (count,res) = con_subst'(body, subst)
-	      in  if (count <= length vars)
-		      then res
-		  else CON_APP(c1,c2)
-	      end
-	  in 
-	      (case (reduce_small,c1,c2) of
-		   (true,CON_FUN([var],body),arg as CON_VAR _) => 
-		       con_subst(body, list2subst ([],[(var,arg)],[]))
-		 | (true,CON_FUN([var],body),arg) => help([var],body,[arg])
-		 | (true,CON_FUN(vars,body),CON_TUPLE_INJECT args) => help(vars,body,args)
-		 | (true,_,_) => CON_APP(c1,c2)
-		 | (_,CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => 
-		       con_subst(c, list2subst ([], [(var,arg_con)],[]))
-		 | (_,CON_FUN([var],c),arg_con) => con_subst(c, list2subst([],[(var,arg_con)],[]))
-		 | (_,CON_FUN(vars,c),CON_TUPLE_INJECT(arg_cons)) => 
-		       con_subst(c, list2subst([],zip vars arg_cons,[]))
-		 | _ => (print "ConApply got bad arguments\nc1 = ";
-			 pp_con c1; print "\nc2 = "; 
-			 pp_con c2; print "\n";
-			 error "ConApply got bad arguments"))
+      fun ConApply (reduce_small,cfun,cargs) = 
+	  let val default = CON_APP(cfun,cargs)
+	  in  (case cfun of
+		   CON_FUN (vars, body) =>
+		       let val argsShort = andfold (fn CON_VAR _ => true | _ => false) cargs
+			   val subst = foldl (fn ((v,c),s) => subst_add_convar(s,v,c)) 
+			               empty_subst (zip vars cargs)
+			   val (count,res) = con_subst'(body, subst)
+		       in  if (argsShort orelse (not reduce_small) orelse count <= length vars)
+			       then res
+			   else default
+		       end		       
+		 | _ => default)
 	  end
 
 
@@ -889,12 +887,14 @@ structure IlUtil
     (* Some internal labels are non-exported *)
     (* Eq labels are identifiable as eq labels *)
 	 
+    val questionable_str = "+Q"
     val open_str = "+O"
     val nonexport_str = "-X"
     val eq_str = "+E"
     val dt_str = "+O-X+D"
     val cluster_str = "+C"
 
+    fun is_questionable lab =  isSome(substring (questionable_str,label2name lab))
     fun is_open lab = isSome(substring (open_str,label2name lab))
     fun is_nonexport lab =  isSome(substring (nonexport_str,label2name lab))
     fun is_eq lab = isSome(substring (eq_str,label2name lab))
@@ -903,16 +903,16 @@ structure IlUtil
 
     local
 	fun to_meta_lab meta_str lab =
-	  let
-	      val str = label2name lab
+	  let val str = label2name lab
 	      val final_str = meta_str ^ str
 	  in  internal_label final_str
 	  end
-    in  fun to_open lab = to_meta_lab open_str lab
-	fun to_nonexport lab = to_meta_lab nonexport_str lab 
-	fun to_eq lab = to_meta_lab eq_str lab
-	fun to_dt lab = to_meta_lab dt_str lab
-	fun to_cluster lab = to_meta_lab cluster_str lab
+    in  val to_questionable = to_meta_lab questionable_str
+	val to_open = to_meta_lab open_str 
+	val to_nonexport = to_meta_lab nonexport_str
+	val to_eq = to_meta_lab eq_str
+	val to_dt = to_meta_lab dt_str
+	val to_cluster = to_meta_lab cluster_str
     end
 
     fun label2name lab = 
@@ -964,4 +964,18 @@ structure IlUtil
 	   | _ => NONE)
 
 
-  end;
+    fun ConUnroll con = 
+	(case con of
+	     CON_MU (CON_FUN ([v], body)) =>
+	     let val subst = list2subst([],[(v,con)],[])
+	     in  con_subst(body,subst)
+	     end
+	   | CON_TUPLE_PROJECT(i, con_mu as (CON_MU (CON_FUN (vars, body)))) =>
+	     let val vars_cons = mapcount (fn (i,v) => (v,CON_TUPLE_PROJECT(i, con_mu))) vars
+		 val subst = list2subst([],vars_cons,[])
+	     in  CON_TUPLE_PROJECT(i, con_subst(body, subst))
+	     end
+	   | _ => (print "Cannot unroll this con: ";
+		   pp_con con; print "\n";
+		   error "Bad con to ConUnroll"))
+  end

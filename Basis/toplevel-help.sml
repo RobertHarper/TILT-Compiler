@@ -19,5 +19,5 @@ val string_le = String.<=
 val string_gt = String.>
 val string_ge = String.>=
 
-
 val textio_print = TextIO.print
+val real_trunc = Real.trunc

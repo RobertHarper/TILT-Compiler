@@ -1,4 +1,4 @@
-(*$import RTL CORE String Rtl Util Char Int32 BinaryMapFn BinarySetFn *)
+(*$import RTL CORE String Rtl Util Char Int BinaryMapFn BinarySetFn *)
 
 structure Core :> CORE =
 struct

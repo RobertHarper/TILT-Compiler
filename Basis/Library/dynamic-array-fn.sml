@@ -1,4 +1,4 @@
-(*$import MONO_ARRAY MONO_DYNAMIC_ARRAY General Int32 *)
+(*$import MONO_ARRAY MONO_DYNAMIC_ARRAY General *)
 (* dynamic-array-fn.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

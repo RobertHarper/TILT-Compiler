@@ -179,7 +179,6 @@ struct
       subtimer("RTL_kind_of",NilContext.kind_of) (#1 env,c)
 
   val codeAlign = ref (Rtl.OCTA)
-  fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
 
   (* ---- Looking up and adding new variables --------------- *)
@@ -579,7 +578,6 @@ struct
 	    currentfun := names;
 	    top := fresh_code_label "funtop";
 	    il := nil; 
-	    do_code_align();
 	    add_instr(ILABEL (!top)))
 
 
@@ -633,19 +631,7 @@ struct
     val w2i = TW32.toInt
     val i2w = TW32.fromInt;
 
-    local
-	val counter = ref 10000
-    in
-	val HeapProfile = ref false
-	fun GetHeapProfileCounter() = !counter
-	fun SetHeapProfileCounter(x) = counter := x
-	fun MakeProfileTag() = 
-	    (counter := (!counter) + 1;
-	     if (!counter > 65535) 
-		 then error "counter must be stored in 16 bits for heap profile"
-	     else ();
-		 i2w((!counter) - 1))
-    end
+
 
   fun in_imm_range_vl (VALUE(INT w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
    | in_imm_range_vl (VALUE(TAG w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
@@ -721,9 +707,10 @@ struct
 	(case loc of
 	     GLOBAL(l,NOTRACE_REAL) => error "load_ireg called with (GLOBAL real)"
 	   | GLOBAL(label,rep) =>
-		 let val reg = (case destOpt of
-				    NONE => alloc_regi rep
-				  | SOME d => d)
+		 let val reg = 
+		     (case destOpt of
+			  NONE => alloc_regi rep
+			| SOME d => d)
 		 in  add_instr(LOAD32I(LEA(label,0),reg));
 		     reg
 		 end
@@ -853,18 +840,18 @@ struct
   fun align_odd_word () =
     let val tmp0 = alloc_regi(NOTRACE_INT)
       val tmp1 = alloc_regi(TRACE)
-    in add_instr(LI(Rtltags.skip,tmp0));
-	 add_instr(STORE32I(REA(heapptr,0),tmp0));  (* store a skiptag *)
-	 add_instr(ANDB(heapptr,IMM 4,tmp0));
-	 add_instr(ADD(heapptr,IMM 4,tmp1));
-	 add_instr(CMV(EQ,tmp0,REG tmp1,heapptr))
+    in  add_instr(LI(Rtltags.skip 0,tmp0));
+	add_instr(STORE32I(REA(heapptr,0),tmp0));  (* store a skiptag *)
+	add_instr(ANDB(heapptr,IMM 4,tmp0));
+	add_instr(ADD(heapptr,IMM 4,tmp1));
+	add_instr(CMV(EQ,tmp0,REG tmp1,heapptr))
     end
   (* by possibly adding 4 to heapptr, make it even-quadword aligned;
    if addition took place, store a skip tag first *)
   fun align_even_word () =
     let val tmp0 = alloc_regi(NOTRACE_INT)
       val tmp1 = alloc_regi(NOTRACE_INT)
-    in add_instr(LI(Rtltags.skip,tmp0));
+    in add_instr(LI(Rtltags.skip 0,tmp0));
       add_instr(STORE32I(REA(heapptr,0),tmp0)); (* store a skiptag *)
       add_instr(ANDB(heapptr,IMM 4,tmp0));
       add_instr(ADD(heapptr,IMM 4,tmp1));
@@ -966,7 +953,7 @@ struct
 	  fun doUninitialize() = 
 	      let val tag = alloc_regi NOTRACE_INT
 		  val _ = add_mutable label
-	      in  add_data (INT32 Rtltags.skip);  (* indicates uninitilized global *)
+	      in  add_data (INT32 (Rtltags.skip 1));  (* indicates uninitilized global *)
 		  app (fn l => add_data(DLABEL l)) (label::labels);
 		  add_instr(LI(tagData, tag));
 		  (case tagMaskOpt of
@@ -1038,10 +1025,10 @@ struct
     end
 	
   val add_term = 
-      fn arg as (_,v,_,_,_) =>
+      fn arg as (s,v,con,term,e) =>
       if (Name.VarSet.member(!globals,v)) 
 	  then help_global(add_term, arg)
-      else add_term arg
+      else add_term(s,v,con,term,e)
   fun add_reg (s,v,con,reg) = add_term (s,v,con,LOCATION(REGISTER(false,reg)), NONE)
   fun add_code(s,v,con,l)   = add_term (s,v,con,VALUE(CODE l),NONE)
 
@@ -1087,24 +1074,12 @@ struct
 
   fun boxFloat (state,regf) : regi * state = 
       let val dest = alloc_regi TRACE
-	  val state = if (not (!HeapProfile))
-		      then let val state = needgc(state,IMM 4)
-			   in  align_odd_word();
-			       store_tag_zero(realarraytag (i2w 1));
-			       add_instr(STOREQF(REA(heapptr,4),regf)); (* allocation *)
-			       add(heapptr,4,dest);
-			       add(heapptr,12,heapptr);
-			       state
-			   end
-		  else let val state = needgc(state,IMM 5)
-		       in  align_even_word();
-			   store_tag_disp(0,MakeProfileTag());
-			   store_tag_disp(4,realarraytag (i2w 1));
-			   add_instr(STOREQF(REA(heapptr,8),regf)); (* allocation *)
-			   add(heapptr,8,dest);
-			   add(heapptr,16,heapptr);
-			   state
-		       end
+	  val state = needgc(state,IMM 4)
+	  val _ = (align_odd_word();
+		   store_tag_zero(realarraytag (i2w 1));
+		   add_instr(STOREQF(REA(heapptr,4),regf)); (* allocation *)
+		   add(heapptr,4,dest);
+		   add(heapptr,12,heapptr))
       in  (dest,state)
       end
 
@@ -1130,22 +1105,11 @@ struct
 	  in  add_instr(STOREQF(REA(res,offset),src));
 	      scan(t,offset+8)
 	  end
-      val state = 
-       if (not (!HeapProfile))
-	 then 
-	     let val state = needgc(state,IMM((if len = 0 then 1 else 2*len)+2))
-	     in  align_odd_word();
-		 store_tag_zero(realarraytag(i2w len));
-		 add_instr(ADD(heapptr,IMM 4,res));
-		 state
-	     end
-       else let val state = needgc(state,IMM((if len = 0 then 1 else 2*len)+3))
-	    in  align_even_word();
-		store_tag_disp(0,MakeProfileTag());
-		store_tag_disp(4,realarraytag(i2w len));
-		add_instr(ADD(heapptr,IMM 8,res));
-		state
-	    end;
+      val state = needgc(state,IMM((if len = 0 then 1 else 2*len)+2))
+      val _ = (align_odd_word();
+	       store_tag_zero(realarraytag(i2w len));
+	       add_instr(ADD(heapptr,IMM 4,res)))
+
     in
        scan (val_locs,0);
        if (len = 0)

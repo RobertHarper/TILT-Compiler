@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import TopLevel Int *)
 
 
 (* simple quadratic insertion sort; space consumption is also quadratic;

@@ -30,9 +30,6 @@ sig
 								      -> new state, new record *)
    val record_delete : regi -> regi         (* original record, new record *)
 
-   val HeapProfile : bool ref
-   val SetHeapProfileCounter : int -> unit
-   val MakeProfileTag : unit -> TilWord32.word
 
 
 end

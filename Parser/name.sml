@@ -1,4 +1,4 @@
-(*$import NAME Util Symbol Int32 Word31 SplaySetFn SplayMapFn Char String Stats *)
+(*$import NAME Util Symbol Int Word31 SplaySetFn SplayMapFn Char String Stats *)
 
 structure Name :> NAME =
   struct

@@ -1,4 +1,5 @@
-(*$import Prelude *)
+(*$import TopLevel *)
+
 local
     exception ex_undefined of string
     fun error str = raise ex_undefined str
@@ -129,14 +130,13 @@ fun barberpole n =
 val genB = mkgen(glider at (2,2) @ bail at (2,12)
 		 @ rotate (barberpole 4) at (5,20))
 
-val show =  app (fn s => (output(std_out,s); output(std_out,"\n"))) 
-           o plot o alive
+val show = app (fn s => (print s; print "\n")) o plot o alive
+fun nthgen g 0 = g | nthgen g i = (nthgen (mk_nextgen_fn neighbours g) (i-1))
 
+(*
 fun run g = (show g;
              input_line std_in;
 	     run(mk_nextgen_fn neighbours g))
-
-fun nthgen g 0 = g | nthgen g i = (nthgen (mk_nextgen_fn neighbours g) (i-1))
 
 fun read filename = 
   let val f = open_in filename
@@ -147,6 +147,7 @@ fun read filename =
                      | "" => nil
    in mkgen(g(0,0))
   end
+*)
 
 val gun = mkgen
  [(2,20),(3,19),(3,21),(4,18),

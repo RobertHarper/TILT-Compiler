@@ -14,13 +14,13 @@
 #undef GCTABLE_HASENTRYID
 #undef PARANOID
 #undef STACKDEBUG
-#undef SEMANTIC_GARBAGE 
 #define WRITE
 #define OLD_ALLOC
 
 #define Semispace 0
 #define Generational 1
-#define Parallel 2
+#define SemispaceParallel 2
+#define GenerationalParallel 3
 
 #ifndef _asm_
 
@@ -29,10 +29,13 @@
 #include <stdlib.h>
 
 #define DivideUp(a,div) (((a) + (div) - 1) / (div))
+#define DivideDown(a,div) ((a)  / (div))
 #define RoundUp(x,mult) (((x) + (mult) - 1) / (mult) * (mult))
 #define RoundDown(x,mult) ((x) / (mult) * (mult))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 
+void init_int(int *, int);
+void init_double(double *, double);
 long FetchAndAdd(long *, int);
 long TestAndSet(long *);
 
@@ -51,6 +54,7 @@ extern int use_stack_gen;
 extern int collector_type;
 extern int paranoid;
 extern int debug;
+extern int debugStack;
 extern int verbose;
 extern int diag;
 extern int NumSysThread;

@@ -1,4 +1,4 @@
-(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int32 Util Listops List *)
+(*$import PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int Util Listops List *)
 functor Rtltoasm (val commentHeader : string
 		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV
@@ -235,11 +235,7 @@ struct
 			 emitString (main'^"_CODE_END_VAL:\n");
 			 dumpGCDatalist (Tracetable.MakeTableTrailer main');
 			 app emitString dataStart;
-			 emitString ("\t.globl "^global_start^"\n");
-			 emitString ("\t.globl "^global_end^"\n");
-			 emitString (global_start^":\n");
 			 dumpDatalist data;
-			 emitString (global_end^":\n");
 			 emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
 			 emitString ("\t.globl "^trace_global_start^"\n");
 			 emitString ("\t.globl "^trace_global_end^"\n");

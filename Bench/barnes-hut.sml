@@ -1,8 +1,5 @@
-(*$import Prelude *)
+(*$import TopLevel Int List Help Math64 Real64 String Help *)
 
-(*
- * Franklin Chen
- *)
 
 val realEq = Real.==
 
@@ -128,7 +125,7 @@ fun vecDist ((x', y') : pos, (x, y) : pos) : real =
 	val dx = x' - x
 	val dy = y' - y
     in
-	Math.sqrt (dx*dx + dy*dy)
+	Math64.sqrt (dx*dx + dy*dy)
     end
 
 
@@ -576,7 +573,7 @@ fun bhForcesP ([] : particle list) : force list = []
 	val box = boundingBox ss
 	val tree = createTreeP (box, ss)
     in
-	pmap (fn s => treeForce (tree, s)) ss
+	mapP (fn s => treeForce (tree, s)) ss
     end
 
 (*
@@ -623,8 +620,14 @@ in  fun random() =
     in  next
     end
     fun randomParticle() = ((random(), random()), 1.0, vecZero)
-    fun randomParticles 0 = []
-      | randomParticles n = (randomParticle()) :: randomParticles (n-1)
+    fun randomParticles n = 
+	let fun loop acc 0 = acc
+	      | loop acc n =
+	        let val acc' = (randomParticle()) :: acc
+		in  loop acc' (n-1)
+		end
+	in  loop [] n
+	end
 end
 
 fun standard numParticles numIterations numCheckpoint = 

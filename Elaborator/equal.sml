@@ -166,7 +166,7 @@ struct
 			handle _ => raise NoEqExp);
 		  	(e, con_eqfun con)
 	       end
-	  | CON_APP(c,tuple) => 
+	  | CON_APP(c,types) => 
 		let val meq = 
 		    (case c of
 			 CON_MODULE_PROJECT(m,l) => 
@@ -191,9 +191,6 @@ struct
 		    SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE (NONE, sdecs),
 				   SIGNAT_STRUCTURE(NONE, [res_sdec]),_) => 
 			let 
-			    val types = (case tuple of
-					     CON_TUPLE_INJECT cons => cons
-					   | c => [c])
 			    fun translucentfy [] [] = []
 			      | translucentfy [] _ = elab_error "arity mismatch in eq compiler"
 			      | translucentfy ((SDEC(l,DEC_CON(v,k,NONE,_)))::
@@ -213,9 +210,14 @@ struct
 		  | _ => raise NoEqExp
 		end
 	  | CON_MU confun => xeq_mu(polyinst_opt,vector_eq) ctxt (name,confun)
-	  | CON_TUPLE_PROJECT (j,CON_MU confun) => 
-		let val (fix_exp,fix_con) = xeq_mu(polyinst_opt,vector_eq) ctxt (CON_MU confun,confun)
-		in  (RECORD_PROJECT(fix_exp, generate_tuple_label (j+1), fix_con), con_eqfun con)
+	  | CON_TUPLE_PROJECT (j, con_mu as (CON_MU confun)) => 
+		let val (fix_exp,fix_con) = xeq_mu(polyinst_opt,vector_eq) ctxt (con_mu,confun)
+		    val con_res = con_eqfun con
+		    val exp_res = 
+			(case confun of
+			     CON_FUN ([_],_) => fix_exp
+			   | _ => RECORD_PROJECT(fix_exp, generate_tuple_label (j+1), con_res))
+		in  (exp_res, con_res)
 		end
 	  | _ => raise NoEqExp
       end
@@ -231,27 +233,27 @@ struct
 	  (name : con, confun : con) : exp * con =
       let
 	  val xeq = xeq (polyinst_opt,vector_eq)
+	  val confunKind = GetConKind(ctxt,confun) 
 	  val arity = 
-	      (case GetConKind(ctxt,confun) of
-		   KIND_TUPLE _ => elab_error "cannot perform equality on con tuples"
-		 | KIND_ARROW (m,n) => if (m = n) then m
-				       else elab_error "xeq_mu given confun not of kind n => n")
-	  val name_cons = 
-	      if (arity = 1)
-		  then [name]
-	      else map0count (fn i => CON_TUPLE_PROJECT(i,name)) arity
+	      (case confunKind of
+		   KIND_ARROW (m,KIND_TUPLE n) => if (m = n) then SOME m else NONE
+		 | _ => NONE)
+	  val arity = (case arity of
+			   NONE =>
+			       (print "confun of bad kind: "; pp_kind confunKind; print "\n\n";
+				elab_error "xeq_mu given confun of bad kind")
+			 | SOME arity => arity)
+	  val name_cons = map0count (fn i => CON_TUPLE_PROJECT(i,name)) arity
 	  val mu_cons = 
 	      (case confun of
 		   CON_FUN(vdts,CON_TUPLE_INJECT cons) => 
 		       map0count (fn i => CON_TUPLE_PROJECT(i,name)) arity
-		 | CON_FUN([vdt], con) => [name]
-		 | _ => error "xeq_mu given confun which is not CON_FUN")
+		 | _ => error "xeq_mu given confun which is not CON_FUN returning CON_TUPLE")
 	  val expanded_cons = 
 	      (case confun of
 		   CON_FUN(vdts,CON_TUPLE_INJECT cons) => 
 		       map (fn c => con_subst(c,list2subst([], zip vdts name_cons,[]))) cons
-		 | CON_FUN([vdt], con) => [con_subst(con,list2subst([], zip [vdt] name_cons, []))]
-		 | _ => error "xeq_mu given confun which is not CON_FUN")
+		 | _ => error "xeq_mu given confun which is not CON_FUN returning CON_TUPLE")
 	  val expanded_cons_vars = map0count (fn i => fresh_named_var ("expanded_con_" ^ (Int.toString i))) arity
 	  val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) arity
 	  val type_lbls = map0count (fn i => internal_label("type" ^ (Int.toString i))) arity
@@ -261,7 +263,7 @@ struct
 	  val subst = list2subst(zip evars (map VAR vars_eq),
 				 zip cvars mu_cons, [])
 	  fun cfolder ((cvar,cl),ctxt) = 
-	      let val dec = DEC_CON(cvar,KIND_TUPLE 1,NONE,false)
+	      let val dec = DEC_CON(cvar,KIND,NONE,false)
 	      in add_context_sdec(ctxt,SDEC(cl,SelfifyDec ctxt dec))
 	      end
 	  fun efolder ((evar,cvar,el),ctxt) = 
@@ -273,13 +275,9 @@ struct
 	  val ctxt = foldl cfolder ctxt (zip cvars type_lbls)
 	  val ctxt = foldl efolder ctxt (zip3 evars cvars eq_lbls)
 	      
-	  local
-	      val applied = ConApply(false,confun,con_tuple_inject (map CON_VAR cvars))
-	  in
-	      val reduced_cons = (case applied of
-				      CON_TUPLE_INJECT conlist => conlist
-				    | c => [c])
-	  end
+	  val reduced_cons = (case (ConApply(false,confun,map CON_VAR cvars)) of
+				  CON_TUPLE_INJECT conlist => conlist
+				| _ => error "body of confun not a CON_TUPLE")
 	      
 	  fun make_fbnd (name_con,expanded_con_var,expanded_con,expv,var_eq) = 
 	      let
@@ -302,7 +300,10 @@ struct
 	  val exps_v = map2 (fn (v,c) => #1(xeq ctxt (CON_VAR v,c))) (expanded_cons_vars,reduced_cons)
 	  val (fbnds,cons) = Listops.unzip(map5 make_fbnd (name_cons,expanded_cons_vars,expanded_cons,exps_v,vars_eq))
 
-      in  (FIX(true,TOTAL,fbnds), con_tuple cons)
+      in  (FIX(true,TOTAL,fbnds), 
+	   (case cons of  (* FIX does not return a record when there is only one function *)
+		[c] => c
+	      | _ => con_tuple cons))
       end
 
     fun compile ({polyinst_opt : context * sdecs -> 

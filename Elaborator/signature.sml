@@ -777,15 +777,15 @@ structure Signature :> SIGNATURE =
 					    path_actual,
 					    sdecs_actual,
 					    sdecs_target)
-	       | (SIGNAT_FUNCTOR _, _) =>
+	   | (SIGNAT_FUNCTOR _, _) =>
 		 (error_region();
 		  print "cannot coerce a functor to a structure\n";
 		  (true, MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[])))
-	       | (_,SIGNAT_FUNCTOR _) => 
+	   | (_,SIGNAT_FUNCTOR _) => 
 		 (error_region();
 		  print "cannot coerce a structure to a functor\n";
 		  (true, MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[])))
-	       | _ => error "xcoerce should get reduced sig")
+	   | _ => error "xcoerce should get reduced sig")
 	end
 
    and xcoerce_structure (polyinst : polyinst,
@@ -963,8 +963,7 @@ structure Signature :> SIGNATURE =
 	       (* ------- coercion of a type component to a type spec ---- *)
 	       | (DEC_CON (v_spec, k_spec, copt_spec, _),
 	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,_,inline))) => 
-			let
-			    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
+			let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 			    val bnd = BND_CON(v,con_actual)
 			    val dec = DEC_CON(v,k_actual,SOME con_actual,inline)
 			    val con_path = join_path_labels(path_actual, lbls)
@@ -1003,7 +1002,21 @@ structure Signature :> SIGNATURE =
 			end
 
 		   (* ------- coercion of a non-type component to a type spec ---- *)
-		   | (DEC_CON _, _) => 
+		   | (DEC_CON (v_spec, k_spec, SOME c_spec, inline_spec), NONE) => 
+			if (is_questionable lab)
+			    then 
+				let val v = fresh_named_var ("generated_" ^ (Name.label2string lab))
+				    val c = con_subst(c_spec, subst)
+				in  SOME(BND_CON(v, c),
+					 DEC_CON(v, k_spec, SOME c, inline_spec),
+					 subst_add_convar(subst, v_spec, c))
+				end
+			else
+			    (error_region_with "coercion of a non-existent component\n";
+			     tab_region_with   "  to a type specification failed at ";
+			     pp_label lab; print "\n";
+			     NONE)
+		   | (DEC_CON _, _) =>
 			(error_region_with "coercion of a non-type or non-existent component\n";
 			 tab_region_with   "  to a type specification failed at ";
 			 pp_label lab; print "\n";

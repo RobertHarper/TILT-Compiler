@@ -18,8 +18,6 @@
 	.globl	returnFromYield		# used by scheduler to go back to ML mutator's Yield
 	.globl	save_regs_MLtoC		# used by ML mutator before calling a C function
 	.globl	load_regs_MLtoC		# used by ML mutator after calling a C function
-	.globl	old_alloc
-	.globl	cur_alloc_ptr
 
 
  # ----------------- save_regs---------------------------------
@@ -411,67 +409,4 @@ load_regs_MLtoC_getgp:
 	jsr	abort
         .end load_regs_MLtoC
 	
- # ----------------- old_alloc --------------------------
- # return address comes in $26
- # request size come in at heap limit
- # ------------------------------------------------------
-	.ent	old_alloc
-	.frame $sp, 640, $at
-.set noat
-old_alloc:
-	stq	$gp, -8($sp)    # save caller gp
-	br	$gp, old_alloc_dummy
-old_alloc_dummy:
-	ldgp	$gp, 0($gp)     # get self gp so we can access globals
-				# return address passed in at $26
 
-	stq	$0, -32($sp)    # we some scratch regs
-	stq	$27, -24($sp)    # we some scratch regs
-	stl	ALLOCLIMIT_REG, -16($sp)	# save req size
-	
- 	lda	$0, old_alloc_limit
- 	ldl	$27, 0($0)      # at this point $27 is top/limit
-	lda	$0, old_alloc_ptr
-	ldl	$at, 0($0)			# at this point $at is ptr/start
-	addl	ALLOCLIMIT_REG, $at, ALLOCLIMIT_REG	# heaplimit contains address to check against limit
-	
-
-	cmpule	$27, ALLOCLIMIT_REG, $at
-	beq     $at, old_alloc_ok
-old_alloc_bad:
-        jsr	abort
-.globl old_alloc_ok
-old_alloc_ok:
-	# we must make sure we won't be asked to old_alloc more than we can give
-	# it suffices to make sure that there is less space in the nursery than
-	# in the old alloc area
-	subl	$27, ALLOCLIMIT_REG, $27   # $27 contains space left in old_alloc area
-	lda	$0, nursery
-	ldl	$0, 0($0)		 # $0 is nursery
-	ldl	ALLOCLIMIT_REG, 8($0)      # at this point ALLOCLIMIT_REG is restored to heaplimit
-	subl	ALLOCLIMIT_REG, $11, $at	 # $at has less space between limit and at
-	cmple   $at, $27, $at
-	bne	$at, no_limit_reset
-	addl	$11, $27, ALLOCLIMIT_REG
-no_limit_reset:
-	ldl	$at, -16($sp)
-	subl	ALLOCLIMIT_REG, $at, ALLOCLIMIT_REG
-	subl	ALLOCLIMIT_REG, $at, ALLOCLIMIT_REG
-	# return old_alloc_ptr at ALLOCPTR_REG;  code retrieves normal from cur_alloc_ptr
-	lda	$0, cur_alloc_ptr
-	stl	ALLOCPTR_REG, 0($0)
-	lda	$0, old_alloc_ptr
-	ldl	ALLOCPTR_REG, 0($0)		# at this point $at is ptr/start
-	ldq	$27, -24($sp)			# restore scractch regs
-	ldq	$0, -32($sp)
-	ldq	$gp, -8($sp)
-	ret	$31, ($26), 1
-.set at
-	.end	old_alloc
-
-
-
-.data
-cur_alloc_ptr:	
-	.long	0
-	.long	0

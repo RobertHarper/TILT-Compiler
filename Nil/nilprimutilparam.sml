@@ -1,4 +1,5 @@
-(*$import NIL PRIMUTILPARAM Int32 Nil *)
+(*$import NIL PRIMUTILPARAM Int Nil IlUtil *)
+
 structure NilPrimUtilParam
     :> PRIMUTILPARAM where type con = Nil.con 
 		       and type exp = Nil.exp =
@@ -28,7 +29,12 @@ structure NilPrimUtilParam
 	fun con_ref c = Prim_c(Array_c,[c])
 	fun con_vector c = Prim_c(Vector_c,[c])
 	fun con_tag c = Prim_c(Exntag_c,[c])
-	val con_bool = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
+	val con_bool = 
+	    Proj_c(Mu_c(false,
+			Sequence.fromList
+			[(Name.fresh_named_var "nil_con_bool",
+			  Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]]))]),
+		   IlUtil.generate_tuple_label 1)
 	val con_unit = Prim_c(Record_c ([],NONE), [])
 	val unit_value = Prim_e(NilPrimOp(record []),[],[])
 
@@ -44,12 +50,8 @@ structure NilPrimUtilParam
 		val labs = Listops.mapcount mapper clist
 	    in Prim_c(Record_c (labs,NONE),clist)
 	    end
-	val false_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w0},[Crecord_c[]])
-	val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[Crecord_c[]])
-	val false_con' = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
-	val true_con' = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
-	val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[false_con'],[])
-	val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[true_con'],[])
+	val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[con_bool],[])
+	val true_exp = Prim_e(NilPrimOp (inject_known 0w1),[con_bool],[])
 	fun bool2exp false = false_exp
 	  | bool2exp true = true_exp
 

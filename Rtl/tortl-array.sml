@@ -255,21 +255,12 @@ struct
       end
 
     (* -----------------  allocation code ---------------------- *)
-  fun make_ptag_opt () = 
-      if (!HeapProfile) 
-	  then let val temp = alloc_regi(NOTRACE_INT)
-		   val _ = add_instr(LI(MakeProfileTag(), temp))
-	       in  SOME temp
-	       end
-      else NONE
 
     fun xarray_float (state, Prim.F32) (_, _) : term * state = error "no 32-bit floats"
-      | xarray_float (state, Prim.F64) (vl1, vl2) = (* logical length, float value *)
+      | xarray_float (state, Prim.F64) (vl1, vl2opt) = (* logical length, float value *)
 	let 
 	    val len = load_ireg_term(vl1,NONE)
-	    val fr = load_freg_term(vl2,NONE)
 	    val dest = alloc_regi TRACE
-	    val ptag_opt = make_ptag_opt()
 	    val skiptag = alloc_regi NOTRACE_INT
 	    val tag = alloc_regi(NOTRACE_INT)
 	    val i = alloc_regi(NOTRACE_INT)
@@ -279,15 +270,17 @@ struct
 	    val fafter       = fresh_code_label "array_float_after" 
 	    val fbottom      = fresh_code_label "array_float_bottom"
 	    val ftop         = fresh_code_label "array_float_top"
-	    (* store object tag and profile tag with alignment so that
+	    (* store object tag with alignment so that
 	     raw data is octaligned;  then loop through and initialize *)
 
+	    val fr = (case vl2opt of
+			  SOME vl2 => load_freg_term(vl2,NONE)
+			| NONE => alloc_regf()) 
 	    
 	in  (* gctemp is # words needed *)
 	    add_instr(ADD(len,REG len, gctemp));
-	    (case ptag_opt of
-		 NONE => add_instr(ADD(gctemp, IMM 3, gctemp))
-	       | SOME _ => add_instr(ADD(gctemp, IMM 4, gctemp)));  
+	    add_instr(ADD(gctemp, IMM 3, gctemp));
+
 	    (* if array is too large, call runtime to allocate *)
 	    let	val tmp' = alloc_regi(NOTRACE_INT)
 	    in	add_instr(LI(TilWord32.fromInt (maxByteRequest div 4),tmp'));  (* gctemp in words *)
@@ -296,38 +289,27 @@ struct
 	    (* call the runtime to allocate large array *)
 	    add_instr(CALL{call_type = C_NORMAL,
 			   func = LABEL' (ML_EXTERN_LABEL "alloc_bigfloatarray"),
-			   args = (case ptag_opt of 
-					NONE => [I len,F fr]
-				      | SOME ptag => [I len,I ptag,F fr]),
+			   args = [I len,F fr],
 			   results = [I dest],
 			   save = getLocals()});
 	    add_instr(BR fafter);
 	     
 	    (* inline allocation code - start by doing the tag stuff*)
 	    add_instr(ILABEL fsmall_alloc);
-	    (case ptag_opt of
-		 NONE =>
-		    (needgc(state,REG gctemp);
-		     align_odd_word();
-		     mk_realarraytag(len,tag);
-		     add_instr(STORE32I(REA(heapptr,0),tag)); (* store tag *)
-		     add_instr(ADD(heapptr,IMM 4,dest)))
-	       | SOME ptag =>
-		    (needgc(state,REG gctemp);
-		     align_even_word();
-		     add_instr(STORE32I(REA(heapptr,0), ptag));                (* store profile tag *)
-		     mk_realarraytag(len,tag);               
-		     add_instr(STORE32I(REA(heapptr,4),tag)); (* store tag *)
-		     add_instr(ADD(heapptr,IMM 8,dest))));
+
+	    needgc(state,REG gctemp);
+	    align_odd_word();
+	    mk_realarraytag(len,tag);
+	    add_instr(STORE32I(REA(heapptr,0),tag)); (* store tag *)
+	    add_instr(ADD(heapptr,IMM 4,dest));
 		
 	    (* now use a loop to initialize the data portion *)
 	    add_instr(S8ADD(len,REG dest,heapptr));
-	    add_instr(LI(Rtltags.skip, skiptag));
+	    add_instr(LI(Rtltags.skip 0, skiptag));
 	    add_instr(STORE32I(REA(heapptr,0),skiptag));
 	    add_instr(ADD(heapptr,IMM 4,heapptr));
 	    add_instr(SUB(len,IMM 1,i));       (* init val *)
 	    add_instr(BR fbottom);             (* enter loop from bottom *)
-	    do_code_align();
 	    add_instr(ILABEL ftop);            (* loop start *)
 	    add_instr(S8ADD(i,REG dest,tmp));
 	    add_instr(STOREQF(REA(tmp,0),fr));  (* initialize value *)
@@ -340,61 +322,58 @@ struct
 	end (* end of floatcase *)
 
 
-  fun general_init_case(ptag_opt : regi option, (* optional profile tag *)
+  fun general_init_case(state : state,
 			tag  : regi,         (* tag *)
 			dest : regi,         (* destination register *)
-			gctemp : term, (* number of words to increment heapptr by *)
 			len : regi,          (* number of words to write *)
-			v : regi,            (* write v (len) times *)
+			v : regi,            (* word-sized value to write *)
 			gafter,              (* label to jump to when done *)
 			isptr
-			) = 
-      let 
-	  val skiptag      = alloc_regi NOTRACE_INT
-	  val tmp          = alloc_regi NOTRACE_INT
-	  val i            = alloc_regi NOTRACE_INT
-	  val gbottom      = fresh_code_label "array_init_bottom"
-	  val gtop         = fresh_code_label "array_init_top"
-      in 
-	  (case ptag_opt of
-	       NONE => (add_instr(ICOMMENT "storing tag");
-			add_instr(STORE32I(REA(heapptr,0),tag)); (* allocation *)
-			add_instr(ADD(heapptr,IMM 4,dest)))
-	     | SOME ptag => (add_instr(STORE32I(REA(heapptr,0), ptag));
-			     add_instr(STORE32I(REA(heapptr,4),tag)); (* allocation *)
-			     add_instr(ADD(heapptr,IMM 8,dest))));
-	       
-	   (* gctemp's contents reflects the profile tag already *)
-	   (case gctemp of
-		   (VALUE (INT n)) => add_instr(ADD(heapptr, IMM (4*(w2i n)), heapptr))
-		  | _ => let val gctemp = load_ireg_term(gctemp,NONE)
-			 in  add_instr(S4ADD(gctemp,REG heapptr,heapptr))
-			 end);
+			) : state = 
+      let val wordsNeeded = alloc_regi NOTRACE_INT
+	  val bytesNeeded = alloc_regi NOTRACE_INT
+	  val skiptag     = alloc_regi NOTRACE_INT
+	  val byteOffset      = alloc_regi NOTRACE_INT
+	  val loopBottom  = fresh_code_label "array_init_loopcheck"
+	  val loopTop     = fresh_code_label "array_init_looptop"
 
-	    add_instr(LI(Rtltags.skip, skiptag));
-	    add_instr(STORE32I(REA(heapptr,0),skiptag));
-	    add_instr(SUB(len,IMM 1,i));  (* init val and enter loop from bot *)
-	    add_instr(BR gbottom);
-	    do_code_align();
-	    add_instr(ILABEL gtop);        (* top of loop *)
-	    add_instr(S4ADD(i,REG dest,tmp));
-	    if isptr
-		then (incMutate();
-		      add_instr(MUTATE(REA(tmp,0),v,NONE)))
-	    else add_instr(STORE32I(REA(tmp,0),v)); (* allocation *)
-	    add_instr(SUB(i,IMM 1,i));
-	    add_instr(ILABEL gbottom);
-	    add_instr(BCNDI(GE,i,IMM 0,gtop,true));
-	    add_instr(ILABEL gafter)
+	  val _ = (add_instr(CMPUI(EQ,len,IMM 0, wordsNeeded));       (* 1 extra word for empty arrays 
+								       to store forwarding pointer *)
+		   add_instr(ADD(wordsNeeded,IMM 1, wordsNeeded));    (* 1 word for tag *)
+		   add_instr(ADD(wordsNeeded,REG len, wordsNeeded));  (* len  words to store data of array *)
+		   needgc(state,REG wordsNeeded))
+      in 
+	  add_instr(ICOMMENT "storing tag");
+	  add_instr(STORE32I(REA(heapptr,0),tag));         (* store tag *)
+	  add_instr(LI(Rtltags.skip 0, skiptag));          (* init field 0 to handle empty arrays *)
+	  add_instr(STORE32I(REA(heapptr,4),skiptag));
+	  add_instr(ADD(heapptr,IMM 4,dest));              (* compute final array *)
+	  add_instr(SLL(wordsNeeded,IMM 2,bytesNeeded));
+	  add_instr(ADD(heapptr,REG bytesNeeded,heapptr)); (* update heap pointer including possible padding *)
+	  add_instr(SUB(len,IMM 1,byteOffset));            (* initialize offset *)
+	  add_instr(SLL(byteOffset,IMM 2,byteOffset));
+	  add_instr(BR loopBottom);                        (* enter loop from the bottom *)
+	  add_instr(ILABEL loopTop);                       (* beginning of loop *)
+	  if isptr                                         (* initialize field *)
+	      then add_instr(INIT(RREA(dest,byteOffset),v,NONE))
+	  else add_instr(STORE32I(RREA(dest,byteOffset),v));
+	  add_instr(SUB(byteOffset,IMM 4,byteOffset));     (* decrement byte offset *)
+	  add_instr(ILABEL loopBottom);
+	  add_instr(BCNDI(GE,byteOffset,IMM 0,loopTop,true));  (* check if byte offset still positive *)
+	  add_instr(ILABEL gafter);
+	  new_gcstate state                                (* must occur after heapptr incremented *)
       end
 
-    fun xarray_int (state,is) (vl1,vl2) : term * state = 
+    fun xarray_int (state,is) (vl1,vl2opt) : term * state = 
 	    let val dest  = alloc_regi TRACE
-		val gctemp  = alloc_regi(NOTRACE_INT)
 		val i       = alloc_regi(NOTRACE_INT)
-		val field = load_ireg_term(vl2,NONE)
+		val initv = 
+		    let val vl2 = (case vl2opt of
+				       NONE => VALUE(INT 0w0)
+				     | SOME vl2 => vl2)
+		    in  load_ireg_term(vl2,NONE)
+		    end
 		val loglen = load_ireg_term(vl1,NONE)
-		val ptag_opt = make_ptag_opt()
 
 		val _ = add_instr(ICOMMENT "initializing int/ptr array start")
 		(* bytelen - the logical length of the array in bytes which is used by alloca_bigintarray
@@ -416,8 +395,8 @@ struct
 				 val tmp2    = alloc_regi NOTRACE_INT
 				 val _ = (add_instr(ADD(loglen,IMM 3,tmp));      (* tmp = loglen + 3 *)  
 					  add_instr(SRL(tmp,IMM 2,wordlen));     (* wordlen = (loglen + 3)/4 *)
-					  add_instr(SLL(field,IMM 8,tmp2));      (* tmp2 = 00b0 where b is the byte *)
-					  add_instr(ORB(tmp2,REG field,tmp2));   (* tmp2 = 00bb *)
+					  add_instr(SLL(initv,IMM 8,tmp2));      (* tmp2 = 00b0 where b is the byte *)
+					  add_instr(ORB(tmp2,REG initv,tmp2));   (* tmp2 = 00bb *)
 					  add_instr(SLL(tmp2,IMM 16, word));     (* word = bb00 *)
 					  add_instr(ORB(word,REG tmp2,word)))    (* word = bbbb *)
 			     in  (loglen,wordlen,word)
@@ -425,83 +404,62 @@ struct
 		       | Prim.W16 => error "Prim.W16 is not implemented"
 		       | Prim.W32 => (let val bytelen = alloc_regi NOTRACE_INT
 				      in  add_instr(SLL(loglen,IMM 2, bytelen)); (* bytelen = loglen * 4  *)
-					  (bytelen,loglen,field)
+					  (bytelen,loglen,initv)
 				      end)
 		       | Prim.W64 => error "Prim.W64 not implemented")
 		val gafter = fresh_code_label "array_int_after"
 		val ismall_alloc = fresh_code_label "array_int_small"
-		val _ = add_instr(CMPUI(EQ,loglen,IMM 0, gctemp))
-		val _ = add_instr(ADD(gctemp,IMM 1, gctemp))
-		val _ =  add_instr(ADD(gctemp,REG wordlen, gctemp))
-		val _ = if (!HeapProfile)
-			    then add_instr(ADD(gctemp, IMM 1, gctemp))
-			else ()
-		val _ = let val tmp = alloc_regi(NOTRACE_INT)
-			in  add_instr(LI(TilWord32.fromInt (maxByteRequest div 4),tmp));
-			    add_instr(BCNDI(LE, gctemp, REG tmp, ismall_alloc, true))
+		val _ = let val dataMax = alloc_regi(NOTRACE_INT)
+			in  add_instr(LI(TilWord32.fromInt ((maxByteRequest div 4)-1),
+					 dataMax));
+			    add_instr(BCNDI(LE, wordlen, REG dataMax, ismall_alloc, true))
 			end
 		val _ = add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (ML_EXTERN_LABEL "alloc_bigintarray"),
-				    args = (case ptag_opt of
-						 NONE => [I bytelen,I word]
-					       | SOME ptag => [I bytelen, I word, I ptag]),
+				    args = [I bytelen,I word],
 				    results = [I dest],
 				    save = getLocals()})
 		val _ = add_instr(BR gafter)
-		val _ = do_code_align()
 		val _ = add_instr(ILABEL ismall_alloc)
-		val _ = needgc(state,REG gctemp)
 		val tag = alloc_regi(NOTRACE_INT)
 		val _ = mk_intarraytag(bytelen,tag)
-		val _ = general_init_case(ptag_opt,tag,dest,
-					  LOCATION(REGISTER(false,I gctemp)),
-					  wordlen,word,gafter,false)
-		val _ = add_instr(ICOMMENT "initializing intarray end")
-		val state = new_gcstate state   (* after all this allocation, we cannot merge *)
+		val state = general_init_case(state,tag,dest,
+					      wordlen,word,gafter,false)
+
 	    in  (LOCATION(REGISTER(false, I dest)), state)
 	    end
 
-     fun xarray_ptr (state,c) (vl1,vl2) : term * state = 
+     fun xarray_ptr (state,c) (vl1,vl2opt) : term * state = 
 	    let val tag = alloc_regi(NOTRACE_INT)
 		val dest = alloc_regi TRACE
-		val gctemp  = alloc_regi(NOTRACE_INT)
 		val i       = alloc_regi(NOTRACE_INT)
 		val tmp     = alloc_regi(LOCATIVE)
-		val ptag_opt = make_ptag_opt()
 		val len = load_ireg_term(vl1,NONE)
-		val v = load_ireg_term(vl2,NONE)
+		val initv = 
+		    let val vl2 = (case vl2opt of
+				       NONE => VALUE(INT 0w0)
+				     | SOME vl2 => vl2)
+		    in  load_ireg_term(vl2,NONE)
+		    end
 		val gafter = fresh_code_label "array_ptr_aftert"
 		val psmall_alloc = fresh_code_label "array_ptr_alloc"
 		val state = new_gcstate state
-	    in   add_instr(CMPUI(EQ,len,IMM 0, gctemp));
-		 add_instr(ADD(gctemp,IMM 1, gctemp));
-		 add_instr(ADD(gctemp,REG len, gctemp));
-		 if (!HeapProfile)
-		     then add_instr(ADD(gctemp, IMM 1, gctemp))
-		 else ();
-		 let
-		     val tmp' = alloc_regi(NOTRACE_INT)
-		 in
-		     add_instr(LI(TilWord32.fromInt (maxByteRequest div 4),tmp'));
-		     add_instr(BCNDI(LE, gctemp, REG tmp', psmall_alloc, true))
-		 end;
-		 add_instr(CALL{call_type = C_NORMAL,
-				func = LABEL' (ML_EXTERN_LABEL "alloc_bigptrarray"),
-				args = (case ptag_opt of
-					    NONE => [I len, I v]
-					  | SOME ptag => [I len, I v,I ptag]),
-				results = [I dest],
-				save = getLocals()});
-		 add_instr(BR gafter);
-		 do_code_align();
-		 add_instr(ILABEL psmall_alloc);
-		 needgc(state,REG gctemp);
-		 mk_ptrarraytag(len,tag);
-		 general_init_case(ptag_opt,tag,dest,
-				   LOCATION(REGISTER(false,I gctemp)),
-				   len,v,gafter,true);
-		 (* after all this allocation, we cannot merge *)
-		 (LOCATION(REGISTER(false, I dest)), new_gcstate state)
+		val _ = let val dataMax = alloc_regi(NOTRACE_INT)
+			in  add_instr(LI(TilWord32.fromInt ((maxByteRequest div 4) - 1),
+					 dataMax));
+			    add_instr(BCNDI(LE, len, REG dataMax, psmall_alloc, true))
+			end
+		val _ = add_instr(CALL{call_type = C_NORMAL,
+				       func = LABEL' (ML_EXTERN_LABEL "alloc_bigptrarray"),
+				       args = [I len, I initv],
+				       results = [I dest],
+				       save = getLocals()})
+		val _ = add_instr(BR gafter)
+		val _ = add_instr(ILABEL psmall_alloc)
+		val _ = mk_ptrarraytag(len,tag);
+		val state = general_init_case(state,tag,dest,
+					      len,initv,gafter,true)
+	    in  (LOCATION(REGISTER(false, I dest)), state)
 	    end
 
   fun xarray_known(state, c) vl_list : term * state =
@@ -516,7 +474,7 @@ struct
       end
 
   (* if we allocate arrays statically, we must add labels of pointer arrays to mutable_objects *)
- and xarray_dynamic (state,c, con_ir) (vl1 : term, vl2 : term) : term * state =
+ and xarray_dynamic (state,c, con_ir) (vl1 : term, vl2opt : term option) : term * state =
     let 
 	val _ = Stats.counter("Rtlxarray_dyn")()
 	val dest = alloc_regi TRACE
@@ -530,7 +488,7 @@ struct
 		 add_instr(BCNDI(EQ, r, IMM 2, intl, false));
 		 add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
 	val ptr_state = 
-	    let val (term,state) = xarray_ptr(state,c) (vl1,vl2)
+	    let val (term,state) = xarray_ptr(state,c) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state 
@@ -539,7 +497,7 @@ struct
 	    
 	val _ = add_instr(ILABEL intl)
 	val int_state = 
-	    let val (term,state) = xarray_int(state,Prim.W32) (vl1,vl2)
+	    let val (term,state) = xarray_int(state,Prim.W32) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state 
@@ -548,7 +506,7 @@ struct
 	    
 	val _ = add_instr(ILABEL charl)
 	val char_state = 
-	    let val (term,state) = xarray_int(state,Prim.W8) (vl1,vl2)
+	    let val (term,state) = xarray_int(state,Prim.W8) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state 
@@ -556,13 +514,17 @@ struct
 	val _ = add_instr(BR afterl)
 	    
 	val _ = add_instr(ILABEL floatl)
-	val temp = load_ireg_term(vl2,NONE)
-	val fr = alloc_regf()
-	val _ = add_instr(LOADQF(REA(temp,0),fr))
-	    
+	val vl2unbox_opt = 
+	    (case vl2opt of
+		 NONE => NONE
+	       | SOME vl2 => let val fr = alloc_regf()
+				 val temp = load_ireg_term(vl2,NONE)
+				 val _ = add_instr(LOADQF(REA(temp,0),fr))
+			     in  SOME (LOCATION(REGISTER(false, F fr)))
+			     end)
 	val float_state = 
-	    let val vl2 = LOCATION(REGISTER(false, F fr))
-		val (term,state) = xarray_float(state,Prim.F64) (vl1,vl2)
+	    let 
+		val (term,state) = xarray_float(state,Prim.F64) (vl1,vl2unbox_opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
 		val _ = add_instr(MV(tmp,dest))
 	    in  state

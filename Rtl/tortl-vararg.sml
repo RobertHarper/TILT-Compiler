@@ -204,7 +204,7 @@ val debug_full = ref false
 					    tFormals=[], 
 					    eFormals=[(NONE,con_tuple(map Var_c convars))],
 					    fFormals=0w0, body_type=Var_c resconvar}
-		    val state = add_term  (state,funvar,funcon,
+		    val state = add_term  (state,funvar,funcon, 
 					   LOCATION(REGISTER (false,I function)), NONE)
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
 				  [Var_e funvar],[])
@@ -274,8 +274,6 @@ val debug_full = ref false
 						eFormals = [(NONE, funcon)],
 						body_type = newfuncon}
 		    val state = add_term (state,funvar,funcon,
-					  LOCATION(REGISTER (false,I function)), NONE)
-		    val state = add_term (state,supportvar,supportcon,
 					  LOCATION(REGISTER (false,I function)), NONE)
 		    val e = App_e(Code,Var_e supportvar, targs, [Var_e funvar],[])
 		    val resulti = xexp(state,e)

@@ -2,12 +2,15 @@
 #ifndef _show_h
 #define _show_h
 
+#include "bitmap.h"
+
 extern long SemanticGarbageSize;
-void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t **legalHeaps, int show);
+Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top, Heap_t **legalHeaps, Bitmap_t **legalStarts,
+		    int show, int makeBitmap);
 
 void show_heap_raw(char *label, int numwords,
-		   value_t from_low, value_t from_high,
-		   value_t to_low,   value_t to_high);
+		   mem_t from_low, mem_t from_high,
+		   mem_t to_low,   mem_t to_high);
 void memdump(char *title, int *start, int len, int *target);
 
 #endif

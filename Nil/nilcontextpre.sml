@@ -404,16 +404,15 @@ structure NilContextPre
 	     | (Mu_c (recur,defs)) => 
 	      let val len = Sequence.length defs
 		  val kind = 		   
-		    if len = 1 then name_eqn(name,SingleType_k(constructor))
-		    else let 
-			   fun mapper (i,(v,c)) = 
-			     let val label = generate_tuple_label(i+1)
-			         val kind = name_eqn(name_proj(name,label),SingleType_k(Proj_c(constructor,label)))
-			     in((label,Name.derived_var v),kind)
-			     end
-			   val entries = Sequence.mapcount mapper defs
-			 in  Record_k(entries)
-			 end
+		      let 
+			  fun mapper (i,(v,c)) = 
+			      let val label = generate_tuple_label(i+1)
+				  val kind = name_eqn(name_proj(name,label),SingleType_k(Proj_c(constructor,label)))
+			      in((label,Name.derived_var v),kind)
+			      end
+			  val entries = Sequence.mapcount mapper defs
+		      in  Record_k(entries)
+		      end
 	      in  (empty_subst(),kind)
 	      end
 	    

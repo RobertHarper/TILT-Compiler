@@ -1,4 +1,4 @@
-(* $import Nil *)
+(*$import Nil *)
 
 signature TRAIL = 
   sig

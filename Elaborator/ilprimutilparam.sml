@@ -20,16 +20,26 @@ structure IlPrimUtilParam
 	fun generate_tuple_label (i : int) = Name.symbol_label(generate_tuple_symbol i)
 	val unit_exp : exp = RECORD[]
 	val con_unit = CON_RECORD[]
-	fun bool_help special = CON_SUM{names = [Name.symbol_label(Symbol.varSymbol "false"), 
-						 Name.symbol_label(Symbol.varSymbol "true")],
-					noncarriers = 2,
-					carrier = CON_TUPLE_INJECT[],
-					special = special}
+
+        local val names = [Name.symbol_label(Symbol.varSymbol "false"), 
+			   Name.symbol_label(Symbol.varSymbol "true")]
+	in  fun sumbool_help special = CON_SUM{names = names,
+					       noncarriers = 2,
+					       carrier = CON_TUPLE_INJECT[],
+					       special = special}
+	    fun bool_help special = 
+		let val con_sum = sumbool_help special
+		in  CON_TUPLE_PROJECT(0,CON_MU(CON_FUN([Name.fresh_var()],
+						       CON_TUPLE_INJECT [con_sum])))
+		end
+	end
+
+	val con_sumbool = sumbool_help NONE
 	val con_bool = bool_help NONE
 	val con_false = bool_help (SOME 0)
 	val con_true = bool_help (SOME 1)
-	val false_exp = INJ{sumtype=con_bool,field=0,inject=NONE}
-	val true_exp = INJ{sumtype=con_bool,field=1,inject=NONE}
+	val false_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=0,inject=NONE})
+	val true_exp = ROLL(con_bool,INJ{sumtype=con_sumbool,field=1,inject=NONE})
 	    
 	fun con_tuple conlist = CON_RECORD(Listops.mapcount (fn (i,c) => 
 							     (generate_tuple_label (i+1),c)) conlist)

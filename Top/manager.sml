@@ -1195,17 +1195,24 @@ struct
 		in  numSlaves 
 		end
 	    fun getReady waiting = 
-		let val (waiting,ready, [], [], [], []) = partition waiting
-		    val (ready,done) = List.partition needsCompile ready
+		let fun loop (waiting, ready, done) = 
+		    let val (waiting,ready', [], [], [], []) = partition waiting
+			val ready = ready @ ready'
+			val (ready,done') = List.partition needsCompile ready
+			val done = done @ done'
+		    in  if (null done') 
+			    then  (waiting, ready, done)  (* no progress *)
+			else loop (waiting, ready, done)  (* some more may have become ready now *)
+		    end
+		    val (waiting, ready, done) = loop (waiting, [], [])
 		    val _ = if (null done)
 				then ()
 			    else (chat "  [These files are up-to-date already:";
 				  chat_strings 40 done;
 				  chat "]\n")
-		in  if (null done) 
-			then (waiting, ready)        (* no progress *)
-		    else getReady (waiting @ ready)  (* some more may have become ready now *)
+		in  (waiting, ready)
 		end
+
 	    val idle = ref 0
 	    fun newState(waiting, ready, pending, assembling, proceeding) : state =
 		let val ([], [], [], [], assembling, _) = partition assembling

@@ -27,20 +27,18 @@ struct
 
   fun make_record_core (const, state, reps, terms, labopt) = 
     let 
-	val _ = if (length terms > maxRtlRecord) 
+	val numTerms = length terms
+	val _ = if (numTerms > maxRtlRecord) 
 		    then error "max_record_core given too maxn terms" else ()
 	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length terms)) ^ "-record"))
 
 	val is_mutable = ref false
 	val dest = alloc_regi TRACE
 
-	val tagword = recordtag reps
-	val tagwords = if (not (!HeapProfile))
-			   then [tagword]
-		       else [{dynamic=nil,static=MakeProfileTag()}, tagword]
+	val tagwords = [recordtag reps]
 
         (* total number of words needed *)
-	val words_alloced = length terms + length tagwords
+	val words_alloced = numTerms + length tagwords
 
 	(* shadow heapptr with thunk to prevent accidental use *)
 	val (heapptr,state) = 
@@ -114,7 +112,7 @@ struct
 			   then (if (null dynamic)
 				     then add_data(INT32 static)
 				 else error "making constant record with dynamic tag")
-		       else let val _ = add_data(INT32 Rtltags.skip)
+		       else let val _ = add_data(INT32 (Rtltags.skip numTerms))
 				val tag = alloc_regi(NOTRACE_INT)
 			    in  add_instr (LI(static,tag));
 				app (fn a => do_dynamic(tag,a)) dynamic;

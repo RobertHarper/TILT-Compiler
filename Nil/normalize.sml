@@ -903,9 +903,7 @@ struct
 	      val var' = Name.fresh_named_var "mu_bnd"
 	      val defs = Sequence.toList defs
 	      fun mapper (n,(v,_)) = 
-		if (length defs = 1) 
-		  then Con_cb (v,Var_c var')
-		else Con_cb (v,Proj_c(Var_c var',NilUtil.generate_tuple_label(n+1)))
+		  Con_cb (v,Proj_c(Var_c var',NilUtil.generate_tuple_label(n+1)))
 	      val bnds = Listops.mapcount mapper defs
 	      val bnds = (Con_cb (var',mu_tuple_con))::bnds
 	      val (_,c) = List.nth(defs,which-1)
@@ -915,9 +913,11 @@ struct
 
 	in 
 	  case #2(reduce_hnf(D,mu_con)) of  
-	    (Mu_c (_,defs)) => extract mu_con (defs,1)
-	  | (Proj_c (mu_tuple as Mu_c (_,defs), l))  => extract mu_tuple (defs, lab2int l (Sequence.length defs))
-	  | _ => error "expandMuType reduced to non-mu type"
+	   Proj_c (mu_tuple as Mu_c (_,defs), l)  => 
+	       extract mu_tuple (defs, lab2int l (Sequence.length defs))
+	  | c => (print "expandMuType given type not reducible to projection from mu:\n";
+		  Ppnil.pp_con c;
+		  error "expandMuType does not reduce to projection from a mu type")
 	end
 
 

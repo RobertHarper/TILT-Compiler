@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS DecAlpha Int32 Util *)
+(*$import MACHINEUTILS DecAlpha Int Util *)
 
 structure Decalphautils :> MACHINEUTILS =
 struct

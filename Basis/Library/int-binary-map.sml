@@ -1,4 +1,4 @@
-(*$import ORD_MAP Int32 LibBase *)
+(*$import ORD_MAP LibBase *)
 (* int-binary-map.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

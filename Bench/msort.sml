@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import TopLevel Help *)
 
 (* Merge sort *)
 local

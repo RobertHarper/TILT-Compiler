@@ -119,7 +119,6 @@ sig
    val mk_float_data : string -> label
    val mk_named_float_data : string * label -> unit
    val needgc : state * sv -> state
-   val do_code_align : unit -> unit
    val align_even_word  : unit -> unit
    val align_odd_word  : unit -> unit
 
@@ -148,9 +147,6 @@ sig
    val mk_ptrarraytag : regi * regi -> unit
    val store_tag_zero : TilWord32.word -> unit
    val store_tag_disp : int * TilWord32.word -> unit
-   val HeapProfile : bool ref
-   val SetHeapProfileCounter : int -> unit
-   val MakeProfileTag : unit -> TilWord32.word
 
    (* Recording stats *)
    val incSelect : unit -> unit

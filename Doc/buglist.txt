@@ -62,6 +62,10 @@ HIGH PRIORITY
 	fun f x = g Foo
 	and g fooer = fooer 3
 
+(10)  Occasionlly overloaded identifiers do not seem to work/exist at all types.
+	In particular, the Random module uses "div" at type word.
+	The elaborator complains that it is not at type int.
+
 
 NORMAL PRIORITY
 ---------------

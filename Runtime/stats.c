@@ -11,10 +11,6 @@
 
 extern int use_stack_gen;
 
-#ifdef HEAPPROFILE
-extern Object_Profile_t allocated_object_profile;
-extern Object_Profile_t collected_object_profile;
-#endif
 
 static struct timeb start_tp;
 static struct timeb stop_tp;
@@ -153,10 +149,6 @@ void stats_finish()
   gc_copy_user = gc_user - gc_stack_user;
   gc_copy_sys = gc_sys - gc_stack_sys;
 
-#ifdef SEMANTIC_GARBAGE
-  printf("SemanticGarbageSize = %d\n",SemanticGarbageSize);
-#endif
-
   printf("\n\n");
   printf("TIME(s): elapsed_time              = %6.3lf\n"
 	 "         total_time                = %6.3lf\n"
@@ -202,7 +194,8 @@ void stats_finish()
 	   "         NumGC         = %9d    NumMajorGC    = %d\n",
 	   (collector_type == Semispace) ? "Semi" : 
 	   ((collector_type == Generational) ? "Gen " : 
-	    ((collector_type == Parallel) ? "Para" : "????")),
+	    ((collector_type == SemispaceParallel) ? "SemiPara" :
+	    ((collector_type == GenerationalParallel) ? "GenPara" : "????"))),
 	   use_stack_gen?"Gener":"Normal",
 	   KBytesAllocated,             KBytesCollected,
 	   NumGC,                           NumMajorGC);
@@ -233,9 +226,6 @@ void stats_finish()
 	   GCTableSize,                    
 	   SMLGlobalSize,                   
 	   GlobalTableSize,    MutableTableSize);
-#ifdef HEAPPROFILE
-    show_gcstats(&allocated_object_profile, &collected_object_profile);
-#endif
     printf("DONE:\n");
   }
 }

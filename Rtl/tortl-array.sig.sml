@@ -25,9 +25,9 @@ sig
     val xupdate_known : state * con            -> term * term * term -> term * state
     val xupdate_dynamic : state * con * regi   -> term * term * term -> term * state
 
-    val xarray_float : state * Prim.floatsize -> term * term -> term * state
-    val xarray_int   : state * Prim.intsize   -> term * term -> term * state
-    val xarray_known : state * con            -> term * term -> term * state
-    val xarray_dynamic : state * con * regi   -> term * term -> term * state
+    val xarray_float : state * Prim.floatsize -> term * term option -> term * state
+    val xarray_int   : state * Prim.intsize   -> term * term option -> term * state
+    val xarray_known : state * con            -> term * term option -> term * state
+    val xarray_dynamic : state * con * regi   -> term * term option -> term * state
 
 end

@@ -799,19 +799,14 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXX *)
 			| _ => NONE)
       end
 
-(*
-      val _ = (print "datacon is "; Ppil.pp_con datacon; print "\n";
-	       print "casecon before is "; Ppil.pp_con casecon; print "\n")
-*)
+
       val _ = if (sub_con(context,casecon,datacon))
 		  then ()
 	      else (error_region();
 		    print "datacon is "; Ppil.pp_con datacon; print "\n";
 		    print "casecon is "; Ppil.pp_con casecon; print "\n";
 		    print "constructor pattern used on an argument of the wrong type\n")
-(*
-      val _ = (print "casecon after is "; Ppil.pp_con casecon; print "\n")
-*)
+
 
       fun getarm (i,{name=cur_constr,arg_type}) : exp option = 
 	let 

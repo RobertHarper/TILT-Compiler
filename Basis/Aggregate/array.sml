@@ -265,9 +265,12 @@ structure Array : ARRAY =
 
 (*
  * $Log$
-# Revision 1.3  98/05/14  16:38:56  pscheng
-# result types on sme functions were wrong
+# Revision 1.4  99/09/22  15:44:59  pscheng
+# *** empty log message ***
 # 
+# Revision 1.3  1998/05/14  16:38:56  pscheng
+# result types on sme functions were wrong
+#
 # Revision 1.2  1998/03/11  20:08:14  pscheng
 # bug in foldr
 #

@@ -248,7 +248,7 @@ structure Linker :> LINKER =
 	      let val link = "link_" ^ exe_result
 		  val unitnames = map #unit units
 		  val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
-					  ("main_" ^ un ^ "_doit")) unitnames
+					  (un ^ "_unit")) unitnames
 		  val link_s = (case (Til.getTargetPlatform()) of
 				Til.TIL_ALPHA => Linkalpha.link
 			      |	Til.TIL_SPARC => Linksparc.link

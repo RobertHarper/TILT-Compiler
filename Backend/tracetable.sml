@@ -1,4 +1,4 @@
-(*$import Core TRACETABLE Int32 Util List Pprtl *)
+(*$import Core TRACETABLE Int Util List Pprtl *)
 
 (* This is how the compiler tells the runtime about how to determine all roots
    from the registers and from the stack.  The runtime, at GC, will walk the 

@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS Sparc Int32 Util *)
+(*$import MACHINEUTILS Sparc Int Util *)
 
 structure Sparcutils
     :> MACHINEUTILS =

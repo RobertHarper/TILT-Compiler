@@ -71,7 +71,7 @@ signature IL =
                  | CON_REF           of con
                  | CON_TAG           of con
                  | CON_ARROW         of con list * con * bool * (arrow Util.oneshot)
-                 | CON_APP           of con * con
+                 | CON_APP           of con * con list
                  | CON_MU            of con
                  | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
@@ -82,8 +82,9 @@ signature IL =
                  | CON_TUPLE_INJECT  of con list
                  | CON_TUPLE_PROJECT of int * con 
                  | CON_MODULE_PROJECT of mod * label
-    and     kind = KIND_TUPLE of int
-                 | KIND_ARROW of int * int
+    and     kind = KIND
+                 | KIND_TUPLE of int
+                 | KIND_ARROW of int * kind
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
                  | MOD_FUNCTOR of arrow * var * signat * mod * signat

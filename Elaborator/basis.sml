@@ -81,7 +81,7 @@ structure Basis
 		  val l = internal_label str
 		  val argsig = SIGNAT_STRUCTURE(NONE,
 						[SDEC(l,DEC_CON(fresh_var(),
-								KIND_TUPLE 1, 
+								KIND,
 								NONE, false))])
 		  val inner_ctxt = add_context_dec(empty_context,
 						   IlStatic.SelfifyDec empty_context

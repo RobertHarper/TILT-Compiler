@@ -1,73 +1,14 @@
-val sin = Real.Math.sin
-val cos = Real.Math.cos
-val log = Real.Math.ln
-val exp = Real.Math.exp
-type 'a array1 = 'a Array.array
-val array = Array.array
-val sub = Array.sub
-val update = Array.update
-val array1 = Array.array
-val sub1 = Array.sub
-val update1 = Array.update
-val length1 = Array.length
-val std_out = TextIO.stdOut
-val std_in = TextIO.stdIn
-fun output(des,s) = TextIO.output (des,s)
-fun input_line des = TextIO.inputLine des
-fun input arg = TextIO.inputN arg
-fun open_in filename = TextIO.openIn filename
-fun close_in des = TextIO.closeIn des
-fun open_out filename = TextIO.openOut filename
-fun close_out des = TextIO.closeOut des
-fun flush_out des = TextIO.flushOut des
-fun end_of_stream des = TextIO.endOfStream des
-fun input1 arg = (case TextIO.input1 arg of
-			 SOME c => c
-		       | NONE => #" ")
-fun lookahead arg = (case TextIO.lookahead arg of
-			 SOME c => c
-		       | NONE => #" ")
+(* ------ Looping constructs ------ *)
+fun stride(start,stop,stride,f) = 
+    let fun loop cur = if (cur <= stop) then (f cur; loop (cur+stride : int)) else ()
+    in  loop start
+    end
+
+fun for(start,stop,f) = stride(start,stop,1,f)
+val strideP = stride
+val forP = for
+val mapP = map
+val filterP = List.filter
 
 
-structure Integer = Int
-fun int32touint32 (x : int) = x
-fun uint32toint32 (x : int) = x
-val uint8toint32 = ord
-val int32touint8 = chr
-fun max(x : int,y) = if (x>y) then x else y
-infix && || >> <<
-fun op >>(x,y) = Word32.toInt(Word32.>>(Word32.fromInt x,Word.fromInt y))
-fun op <<(x,y) = Word32.toInt(Word32.<<(Word32.fromInt x,Word.fromInt y))
-fun op &&(x,y) = Word32.toInt(Word32.andb(Word32.fromInt x,Word32.fromInt y))
-fun op ||(x,y) = Word32.toInt(Word32.orb(Word32.fromInt x,Word32.fromInt y))
-val op mod = (op mod) : int * int -> int
-val op div = (op div) : int * int -> int
-fun inc x = x := (!x + 1)
-val vsub1 = String.sub
-type instream = TextIO.instream
-type outstream = TextIO.outstream
-
-val notb = fn (x : int) => ~x - 1
-val atan = Real.Math.atan
-val sqrt = Real.Math.sqrt
-
-structure Real = struct open Real fun eq(x,y) = Real.==(x,y) end
-
-type 'a array2 = {rows : int, columns : int, data : 'a array}
-	    
-fun array2(rows : int, columns : int, e : 'a) : 'a array2 = 
-    if rows<0 orelse columns<0 then raise Size
-    else {rows=rows, columns=columns,
-	  data=array(rows * columns,e)}
-	     
-fun sub2 ({rows,columns,data} : 'a array2, s :int, t:int) : 'a =
-    if (s >= 0 andalso s < rows andalso t >= 0 andalso t < columns)
-	    then sub(data,s * columns + t)
-	else raise Subscript
-	
-fun update2 ({rows,columns,data} : 'a array2, s : int, t:int, e) : unit =
-    if (s >= 0 andalso s < rows andalso t >= 0 andalso t < columns)
-	    then update(data,s * columns + t, e)
-	else raise Subscript
-
-fun length2 ({rows,columns,data} : 'a array2) : int * int = (rows,columns)
+fun time f arg = ....

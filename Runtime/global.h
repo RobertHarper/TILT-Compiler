@@ -1,11 +1,11 @@
 /*  global_init should be called once; the rest are thread-safe */
 
 void global_init(void);
-int  IsGlobalData(value_t);
-int  IsConstructorData(value_t addr);
+int  IsGlobalData(ptr_t);
+int  IsConstructorData(ptr_t addr);
 
-extern value_t DivideByZeroExn;
-extern value_t OverflowExn;
+extern ptr_t DivideByZeroExn;
+extern ptr_t OverflowExn;
 
-extern value_t RuntimeGlobalData_Cur;
-extern value_t RuntimeGlobalData_End;
+extern mem_t RuntimeGlobalData_Cur;
+extern mem_t RuntimeGlobalData_End;

@@ -1,4 +1,4 @@
-(*$import POSIX_FileSys POSIX_Process Int32 Word32 Byte POSIX_TTY POSIX_extern *)
+(*$import POSIX_FileSys POSIX_Process Word32 Byte POSIX_TTY POSIX_extern *)
 (* posix-tty.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -289,9 +289,12 @@ structure POSIX_TTY :> POSIX_TTY
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:43  pscheng
-# added basis
+# Revision 1.2  99/09/22  15:45:14  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:53:43  pscheng
+# added basis
+#
  * Revision 1.2  1997/06/07  15:27:43  jhr
  *   SML'97 Basis Library changes (phase 3; Posix changes)
  *

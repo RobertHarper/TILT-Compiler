@@ -1,4 +1,4 @@
-(*$import INTSTRMAP TopLevel Array List Word32 Int32 Control *)
+(*$import INTSTRMAP TopLevel Array List Word32 Int Control *)
 
 (* Copyright 1989 by AT&T Bell Laboratories *)
 structure IntStrMap : INTSTRMAP =
@@ -100,9 +100,12 @@ end
 
 (*
  * $Log$
-# Revision 1.2  98/01/21  20:40:19  pscheng
-# moved the .sig files to .sig.sml file
+# Revision 1.3  99/09/22  15:46:07  pscheng
+# *** empty log message ***
 # 
+# Revision 1.2  1998/01/21  20:40:19  pscheng
+# moved the .sig files to .sig.sml file
+#
 # Revision 1.1  97/03/26  14:12:29  pscheng
 # added copy of SMLNJ parser files
 # 

@@ -1,4 +1,4 @@
-(*$import POSIX_IO_SIG POSIX_FileSys POSIX_Process Word32 Int32 POSIX_extern *)
+(*$import POSIX_IO_SIG POSIX_FileSys POSIX_Process Word32 POSIX_extern *)
 (* posix-io.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -226,9 +226,12 @@ structure POSIX_IO :> POSIX_IO where type open_mode = POSIX_FileSys.open_mode
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:24  pscheng
-# added basis
+# Revision 1.2  99/09/22  15:45:12  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:53:24  pscheng
+# added basis
+#
  * Revision 1.2  1997/06/07  15:27:41  jhr
  *   SML'97 Basis Library changes (phase 3; Posix changes)
  *

@@ -29,7 +29,7 @@ static int curThread = 0;                     /* cursor for iterating over all j
 static const int ThreadDone = -1;
 static const int ThreadNew = -1;
 
-extern void start_client(Thread_t *, value_t *, int);
+extern void start_client(Thread_t *, ptr_t *, int);
 extern void context_restore(Thread_t *);
 
 /* ------------------ Manipulating the job queue ----------------- */
@@ -122,22 +122,32 @@ void ReleaseJob(SysThread_t *sth)
   int i;
   Thread_t *th = sth->userThread;
 
+  if (diag)
+    printf("Proc %d: unmapping with %d (<= %d)\n",sth->stid,sth->alloc,sth->limit);
+
+  /* Check that thread's allocation pointers are consistent and update processor's version */
   assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
-  sth->alloc = th->saveregs[ALLOCPTR];
-  if (sth->limit != th->saveregs[ALLOCLIMIT]) {
+  sth->alloc = (mem_t) th->saveregs[ALLOCPTR];
+  if (sth->limit != (mem_t) th->saveregs[ALLOCLIMIT]) {
     printf("sth->limit = %d\n",sth->limit);
     printf("th->saveregs[LIMIT] = %d\n",th->saveregs[ALLOCLIMIT]);
     assert(0);
   }
-
-  if (diag)
-    printf("Proc %d: unmapping with %d (<= %d)\n",sth->stid,sth->alloc,sth->limit);
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;
+
+  /* Update processor's version of write list */
+  sth->writelistCursor = th->writelistAlloc;
+  assert(sth->writelistEnd == th->writelistLimit);
+  th->writelistAlloc = 0;
+  th->writelistLimit = 0;
+
+  /* Break association between thread and processor */
   sth->userThread = NULL;
   th->sysThread = NULL;
+  
   flushStore();                          /* make sure thread info is flushed to memory */
-  assert(th->status >= 1);               /* THread was mapped and running so could not be ready or done */
+  assert(th->status >= 1);               /* Thread was mapped and running so could not be ready or done */
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
   if (diag)
     printf("Thread %d released; status = %d\n",th->tid,th->status);
@@ -185,11 +195,11 @@ void check(char *str, SysThread_t *sth)
     if (Threads[i].status < 0)
       continue;
     for (j=Threads[i].nextThunk; j<Threads[i].numThunk; j++) {
-      value_t t = Threads[i].thunks[j];
-      if (t != 0 && *((value_t *)t) > 1000000) {
+      ptr_t t = Threads[i].thunks[j];
+      if (t != 0 && *t > 1000000) {
 	printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to sysThread %d\n",
 	       (sth == 0) ? -1 : sth->stid,
-	       str,i,*((value_t *)t),Threads[i].sysThread);
+	       str,i,*t,Threads[i].sysThread);
 	assert(0);
       }
     }
@@ -230,8 +240,8 @@ void fillThread(Thread_t *th, int i)
   th->snapshots = (StackSnapshot_t *)malloc(NUM_STACK_STUB * sizeof(StackSnapshot_t));
   for (i=0; i<NUM_STACK_STUB; i++)
     {
-      th->snapshots[i].saved_ra = (value_t) stub_error;
-      th->snapshots[i].saved_sp = (value_t) 0;
+      th->snapshots[i].saved_ra = (val_t) stub_error;
+      th->snapshots[i].saved_sp = (val_t) 0;
       th->snapshots[i].saved_regstate = 0;
       th->snapshots[i].roots = (i == 0) ? QueueCreate(0,50) : NULL;
     }
@@ -240,12 +250,10 @@ void fillThread(Thread_t *th, int i)
   th->retadd_queue = QueueCreate(0,2000);
   th->stackchain = NULL;
   th->reg_roots = QueueCreate(0,32);
-  th->root_lists = QueueCreate(0,200);
-  th->loc_roots = QueueCreate(0,10);
-  th->thunks = (value_t *)69;
+  th->thunks = (ptr_t *) 69;
 }
 
-void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
+void resetThread(Thread_t *th, Thread_t *parent, ptr_t *thunks, int numThunk)
 {
   assert(&(Threads[th->id]) == th);
   th->tid = FetchAndAdd(&totalThread,1);
@@ -257,7 +265,7 @@ void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
   if (numThunk == 0) { 
     /* thunks actually is a thunk */
     th->thunks = &(th->oneThunk);
-    th->oneThunk = (value_t) thunks;
+    th->oneThunk = (ptr_t) thunks;
     th->nextThunk = 0;
     th->numThunk = 1;
   }
@@ -273,13 +281,11 @@ void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
   QueueClear(th->snapshots[0].roots);
   QueueClear(th->retadd_queue);
   QueueClear(th->reg_roots);
-  QueueClear(th->root_lists);
-  QueueClear(th->loc_roots);
 }
 
 void thread_init()
 {
-  int i;
+  int i, j;
   Threads = (Thread_t *)malloc(sizeof(Thread_t) * NumThread);
   SysThreads = (SysThread_t *)malloc(sizeof(SysThread_t) * NumSysThread);
   JobQueue = (Thread_t **)malloc(sizeof(Thread_t *) * NumThread);
@@ -289,18 +295,26 @@ void thread_init()
     fillThread(&Threads[i], i);
   for (i=0; i<NumSysThread; i++) {
     char *temp;
-    SysThreads[i].stid = i;
-    SysThreads[i].alloc = StartHeapLimit;
-    SysThreads[i].limit = StartHeapLimit;
+    SysThread_t *sth = &(SysThreads[i]); /* Structures are by-value in C */
+    sth->stid = i;
+    sth->alloc = StartHeapLimit;
+    sth->limit = StartHeapLimit;
     temp = malloc(20 * sizeof(char));
     sprintf(temp, "stacktime_%d", i);
-    reset_timer(temp,&(SysThreads[i].stacktime));
+    reset_timer(temp,&(sth->stacktime));
     temp = malloc(20 * sizeof(char));
     sprintf(temp, "gctime_%d", i);
-    reset_timer(temp,&(SysThreads[i].gctime));
+    reset_timer(temp,&(sth->gctime));
     temp = malloc(20 * sizeof(char));
     sprintf(temp, "majorgcime_%d", i);
-    reset_timer(temp,&(SysThreads[i].majorgctime));
+    reset_timer(temp,&(sth->majorgctime));
+    sth->writelistStart = &(sth->writelist[0]);
+    sth->writelistCursor = sth->writelistStart;
+    sth->writelistEnd = &(sth->writelist[(sizeof(sth->writelist) / sizeof(ptr_t)) - 2]);
+    for (j=0; j<(sizeof(sth->writelist) / sizeof(ptr_t)); j++)
+      sth->writelist[j] = 0;
+    sth->root_lists = QueueCreate(0,50);
+    sth->largeRoots = QueueCreate(0,50);
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -319,7 +333,7 @@ int thread_max()
 }
 
 /* If numThunk is zero, then thunks IS the thunk rather than an array of thunks */
-Thread_t *thread_create(Thread_t *parent, value_t *thunks, int numThunk)
+Thread_t *thread_create(Thread_t *parent, ptr_t *thunks, int numThunk)
 {
   int i;
   Thread_t *th = NULL;
@@ -415,13 +429,15 @@ static void work(SysThread_t *sth)
     case NoRequest : assert(0);
 
     case StartRequest : {              /* Starting thread for the first time */
-      value_t stack_top = th->stackchain->stacks[0]->top;
+      mem_t stack_top = th->stackchain->stacks[0]->top;
       assert(th->nextThunk == 0);
       th->saveregs[THREADPTR] = (long)th;
       /* Get some initial room; Sparc requires at least 68 byte for the save area */
       th->saveregs[SP] = (long)stack_top - 128; 
-      th->saveregs[ALLOCPTR] = sth->alloc;
-      th->saveregs[ALLOCLIMIT] = sth->limit;
+      th->saveregs[ALLOCPTR] = (unsigned long) sth->alloc;
+      th->saveregs[ALLOCLIMIT] = (unsigned long) sth->limit;
+      th->writelistAlloc = sth->writelistCursor;
+      th->writelistLimit = sth->writelistEnd;
       if (diag) {
 	printf("Proc %d: starting user thread %d (%d) with %d <= %d\n",
 	       sth->stid, th->tid, th->id, 
@@ -429,7 +445,7 @@ static void work(SysThread_t *sth)
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
       check("workstart",sth);
-      start_client(th,(value_t *)th->thunks, th->numThunk);
+      start_client(th,th->thunks, th->numThunk);
       assert(0);
     }
 
@@ -437,8 +453,10 @@ static void work(SysThread_t *sth)
 #ifdef solaris
       th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
-      th->saveregs[ALLOCPTR] = sth->alloc;
-      th->saveregs[ALLOCLIMIT] = sth->limit;
+      th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
+      th->saveregs[ALLOCLIMIT] = (reg_t) sth->limit;
+      th->writelistAlloc = sth->writelistCursor;
+      th->writelistLimit = sth->writelistEnd;
       returnFromYield(th);
     }
 
@@ -454,17 +472,22 @@ static void work(SysThread_t *sth)
 	    printf("Proc %d: cannot resume user thread %d; write list full\n",
 		   sth->stid, th->tid);
 	}
-	th->saveregs[ALLOCPTR] = sth->alloc;
-	th->saveregs[ALLOCLIMIT] = sth->limit;
+	th->saveregs[ALLOCPTR] = (unsigned long) sth->alloc;
+	th->saveregs[ALLOCLIMIT] = (unsigned long) sth->limit;
+	th->writelistAlloc = sth->writelistCursor;
+	th->writelistLimit = sth->writelistEnd;
 	GC(th); /* map the thread as though calling from gc_raw */
 	assert(0);
       }
-      th->saveregs[ALLOCPTR] = sth->alloc;
-      th->saveregs[ALLOCLIMIT] = sth->limit;
+      th->saveregs[ALLOCPTR] = (unsigned long) sth->alloc;
+      th->saveregs[ALLOCLIMIT] = (unsigned long) sth->limit;
+      th->writelistAlloc = sth->writelistCursor;
+      th->writelistLimit = sth->writelistEnd;
       if (diag)
 	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
 	       sth->stid, th->tid,th->id,
 	       th->requestInfo, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
+      assert(th->requestInfo + th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       check("workresume",sth);
       returnFromGCFromML(th);
     }
@@ -474,17 +497,22 @@ static void work(SysThread_t *sth)
        /* Requests from C may exceed a page - like large array */
        if (th->requestInfo + sth->alloc >= sth->limit) 
 	 GCAllocate(sth, th->requestInfo);
-       if (th->requestInfo + sth->alloc > sth->limit) {
+       if (th->requestInfo + (val_t) sth->alloc > (val_t) sth->limit) {
 	if (diag)
 	  printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
-		 sth->stid, th->tid, th->requestInfo, sth->limit - sth->alloc);
-	th->saveregs[ALLOCPTR] = sth->alloc;
-	th->saveregs[ALLOCLIMIT] = sth->limit;
+		 sth->stid, th->tid, th->requestInfo, 
+		 (sizeof(val_t)) * (sth->limit - sth->alloc));
+	th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
+	th->saveregs[ALLOCLIMIT] = (reg_t)sth->limit;
+	th->writelistAlloc = sth->writelistCursor;
+	th->writelistLimit = sth->writelistEnd;
 	GC(th); /* map the thread as though calling from GCFromML */
 	assert(0);
       }
-      th->saveregs[ALLOCPTR] = sth->alloc;
-      th->saveregs[ALLOCLIMIT] = sth->limit;
+      th->saveregs[ALLOCPTR] = (reg_t) sth->alloc;
+      th->saveregs[ALLOCLIMIT] = (reg_t) sth->limit;
+      th->writelistAlloc = sth->writelistCursor;
+      th->writelistLimit = sth->writelistEnd;
       if (diag)
 	printf("Proc %d: resuming user thread %d (%d) from GCRequestFromML of %d  bytes.   %d < %d\n",
 	       sth->stid, th->tid,th->id,
@@ -520,7 +548,7 @@ static void* systhread_go(void* unused)
 }
 
 
-void thread_go(value_t *thunks, int numThunk)
+void thread_go(ptr_t *thunks, int numThunk)
 {
   int curproc = -1;
   int i;
@@ -565,28 +593,28 @@ void thread_go(value_t *thunks, int numThunk)
   }
   /* Now collect the GC times of the system threads */
   for (i=0; i<NumSysThread; i++) {
-    SysThread_t sth = SysThreads[i];
-    stats_finish_thread(&sth.stacktime,&sth.gctime,&sth.majorgctime);
+    SysThread_t *sth = &(SysThreads[i]);
+    stats_finish_thread(&sth->stacktime,&sth->gctime,&sth->majorgctime);
   }
 }
 
 
 /* ------------------ Mutator interface ----------------- */
-int showIntList(value_t v)
+int showIntList(ptr_t v)
 {
-  printf("%d: %d %d\n",v, ((value_t*) v)[0], ((value_t*) v)[1]);
+  printf("%d: %d %d\n",v, v[0], v[1]);
   return 256; /* ML unit */
 }
 
-int showInt(value_t v)
-{
-    printf("%d",v); 
-  return 256; /* ML unit */
-}
-
-int showIntRef(value_t v)
+int showInt(val_t v)
 {
   printf("%d",v); 
+  return 256; /* ML unit */
+}
+
+int showIntRef(ptr_t v)
+{
+  printf("%d: %d", v, *v); 
   return 256; /* ML unit */
 }
 
@@ -600,7 +628,7 @@ int threadID()
   return temp;
 }
 
-Thread_t *SpawnRest(value_t thunk)
+Thread_t *SpawnRest(ptr_t thunk)
 {
   SysThread_t *sth = getSysThread();
   Thread_t *parent = sth->userThread;
@@ -609,14 +637,15 @@ Thread_t *SpawnRest(value_t thunk)
   assert(sth->stack - ((int) &sth) < 1024);   /* stack frame for this function should be < 1K */
   assert(parent->sysThread == sth);
   check("Spawnstart",sth);
-  if (thunk < 1000000) {
+  if (thunk < (mem_t) 1000000) {
     printf("Proc %d: Thread %d: Spawn given bad thunk %d\n",
 	   sth->stid, parent->tid, thunk);
   }
-  child = thread_create(parent,(value_t *)thunk, 0);    /* zero indicates passing one actual thunk */
+  child = thread_create(parent,(ptr_t *)thunk, 0);    /* zero indicates passing one actual thunk */
   check("Spawnmid",sth);
 
-  if (collector_type != Parallel) {
+  if (collector_type != SemispaceParallel &&
+      collector_type != GenerationalParallel) {
     printf("!!! Spawn called in a sequential collector\n");
     assert(0);
   }
@@ -665,8 +694,8 @@ void Interrupt(struct ucontext *uctxt)
   Thread_t *th = getThread();
   if (!th->notInML)
     {
-      long pc = GetPc(uctxt);
-      SetIReg(uctxt, ALLOCLIMIT, StopHeapLimit);
+      mem_t pc = GetPc(uctxt);
+      SetIReg(uctxt, ALLOCLIMIT, (reg_t) StopHeapLimit);
       printf("      setting heap limit to %d while at %d\n",StopHeapLimit, pc);
     }
   return;

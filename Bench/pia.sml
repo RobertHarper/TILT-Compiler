@@ -1,36 +1,36 @@
-(*$import Prelude *)
-
-
-(* jgm:  What I did to this file to get it to run:
- *
- * 1) replaced overloaded abs : real->real with a hand-coded abs_real
- * 2) eliminated all abstype's
- * 3) replaced overloaded print : real->unit with print o makestring_real
- *)
+(*$import TopLevel Real64 Math64 TextIO *)
 
 local
 
-val sin = fn arg => Ccall(sin,arg)
-val cos = fn arg => Ccall(cos,arg)
-val sqrt = fn arg => Ccall(sqrt,arg)
-val atan = fn arg => Ccall(atan,arg)
-val exp = fn arg => Ccall(exp,arg)
-val log = fn arg => Ccall(log,arg)
+open Math64
+val open_in = TextIO.openIn
+val open_out = TextIO.openOut
+val close_out = TextIO.closeOut
+val input = TextIO.input
+val output = TextIO.output
+type instream = TextIO.instream
+type outstream = TextIO.outstream
+val endOfStream = TextIO.endOfStream
+fun lookahead s : char = 
+    (case TextIO.lookahead s of
+	 NONE => chr 255
+       | SOME c => c)
+fun input1 s : char = 
+    (case TextIO.input1 s of
+	 NONE => chr 255
+       | SOME c => c)
 
 (* FILE: Build.PIA *)
 val makestring_real = Real.toString
-fun query_prompt () = output(std_out,
-                             "\n================QUERY================\n")(*;*)
+fun query_prompt () = print("\n================QUERY================\n")
 
 (*  ask user if timing code is required *)
 val timing_wanted = true
 (**
    let val ans = (query_prompt(); 
-                    output(std_out,"\nTiming code required, (y/n) ?\n");
-                    input(std_in,1)
-                   )
-     in
-        (ans = "y") orelse  (ans = "Y")
+                  print(std_out,"\nTiming code required, (y/n) ?\n");
+                  input(std_in,1))
+     in (ans = "y") orelse  (ans = "Y")
      end(*;*)
  **)
 
@@ -66,8 +66,8 @@ fun real_abs (x:real) = if x < 0.0 then ~x else x
 fun real_zero (x:real) =      (* accept that reals need care :-) *)
        (real_abs x) < 1E~15(*;*)
 fun real_equal (x:real) y = 
-        if Real.eq(x,y) then true
-                 else if Real.eq(x+y,0.0) then false
+        if Real64.==(x,y) then true
+                 else if Real64.==(x+y,0.0) then false
                  else real_abs((x-y)/(x+y)) < 1E~15(*;*)
 
 fun int_equal (x:int) y = (x=y)(*;*)
@@ -97,7 +97,7 @@ exception e_power(*;*)
 fun pow x y = if real_zero x then 0.0    (* x to a real power *)
               else if x<0.0 then raise e_power
               else if real_zero y then 1.0
-              else exp( y* (log x))(*;*)
+              else exp( y* (Math64.ln x))(*;*)
 
 fun cube_root x =
        if x <0.0
@@ -132,17 +132,19 @@ fun digit c =
 fun digitval d = if digit d then ord d - ord #"0"
 		 else raise e_digitval
 
-fun skip s = if lookahead s = #" " orelse
-                lookahead s = #"\n" orelse
-                lookahead s = #"\t"
-             then  (input1 s;skip s) 
-             else ()(*;*)
+fun skip s = let val c = lookahead s
+	     in  if (c = #" " orelse
+		     c = #"\n" orelse
+		     c = #"\t")
+		     then  (input1 s;skip s) 
+		 else ()
+	     end
 
 fun have s c = if c = lookahead s then  input1 s
-               else (output(std_out,"Did not get "^ (c2s c));
+               else (TextIO.output(TextIO.stdOut,"Did not get "^ (c2s c));
                      raise e_have)(*;*)
 local fun getint' s n =
-       if digit(lookahead s)
+       if digit((lookahead s) : char)
        then getint' s (10*n+digitval(input1 s))
        else n
       fun getposint s = if digit(lookahead s)
@@ -163,28 +165,28 @@ end(*;*)
 
 
 exception early_eof;
-fun safe_get_int (s:instream) =
-   if end_of_stream s then raise early_eof
+fun safe_get_int s =
+   if endOfStream s then raise early_eof
                       else getint s(*;*)
 
 
 (*==================================================================*)
 local 
     exception e_notreal
-    fun getsimreal' (s:instream) (n:real) (c:int)=
+    fun getsimreal' s (n:real) (c:int)=
       if digit(lookahead s)
-      then getsimreal' s (n+(real((digitval o s2c)( input(s,1) 
+      then getsimreal' s (n+(real((digitval)(input1 s
 						))/(pow 10.0 (real c))) ) (c+1)
       else n
 in
-fun getsimreal (s:instream) =
+fun getsimreal s =
     let val intpart = (skip s;
                        if lookahead s = #"." then 0.0
                                             else (real(get_no_skip_int s)) )
     in
      if lookahead s = #"." 
      then
-        ( input(s,1) ;   (* get rid of decimal point *)
+        ( input1 s;   (* get rid of decimal point *)
         if intpart >= 0.0 
         then intpart+(getsimreal' s 0.0 1)
         else intpart-(getsimreal' s 0.0 1)
@@ -215,22 +217,22 @@ end(*;*)
 
 
 local fun getchars s = if lookahead s = #"\"" (* " *) then ""
-                        else  input(s,1)^getchars s 
+                        else  (String.str(input1 s))^getchars s 
 in fun getstring s = (skip s; have s #"\"";
                       let val str = getchars s
                       in (have s #"\""; str) end)
 end(*;*)
 
 
-local  fun get_no_space_string (file:instream) =
-       if lookahead file = #" " orelse
-          lookahead file = #"\t" orelse
-          lookahead file = #"\n" 
+local  fun get_no_space_string s =
+       if lookahead s = #" " orelse
+          lookahead s = #"\t" orelse
+          lookahead s = #"\n" 
         then ("")
-        else input(file,1)^(get_no_space_string file);
+        else (String.str(input1 s))^(get_no_space_string s);
 in
-fun get_unquoted_string (file:instream) = (skip file;
-                                           get_no_space_string file);
+fun get_unquoted_string file = (skip file;
+				get_no_space_string file);
 end(*;*)
 
 
@@ -240,17 +242,16 @@ fun putstring s str =
 
 fun skip_to_eol s =
         if lookahead s = #"\n"  
-        then ( input(s,1) ;())
-        else if end_of_stream s then ()
-                                else ( input(s,1) ; skip_to_eol s) (*;*)
+        then (input1 s;())
+        else if endOfStream s then ()
+                                else ( input1 s; skip_to_eol s) (*;*)
 
 
 fun read_to_eol s=
         if lookahead s = #"\n" orelse 
            lookahead s = #"\255"
         then ""
-        else 
-			(input(s ,1))^read_to_eol s(*;*)
+        else (String.str(input1 s))^read_to_eol s(*;*)
 
 
 local 
@@ -287,9 +288,9 @@ fun putreality  s (N:real) = putreal s N 9(*;*)
 
 
 fun get_filename  s  =                 (* get_filename *)
-     (output (std_out,"\n" ^ s ^ "\n");
-      skip std_in;
-      read_to_eol std_in )(*;*)
+     (output (TextIO.stdOut,"\n" ^ s ^ "\n");
+      skip TextIO.stdIn;
+      read_to_eol TextIO.stdIn )(*;*)
 
 
 (* val _ = use "LIBRARY/first_things.sml"; *)
@@ -300,8 +301,8 @@ fun get_filename  s  =                 (* get_filename *)
 (* ================ *)
 
 (* screen keyboard files *)
-val FILEIN = std_in(*;*)
-val FILEOUT = std_out(*;*)
+val FILEIN = TextIO.stdIn(*;*)
+val FILEOUT = TextIO.stdOut(*;*)
 
 (*=================================================================*)
 (* a collection of useful types *)
@@ -1130,17 +1131,17 @@ datatype OBJECTS = junction of (int*(int list))
 (* original code ...
 
 fun get_file_model  ()  =                 (* get_filename of model *)
-    ( output(std_out,"\nFile containing model :\n");
-      read_to_eol std_in )(*;*)
+    ( output(TextIO.stdOut,"\nFile containing model :\n");
+      read_to_eol TextIO.stdIn )(*;*)
 
 
 fun get_file_scene  ()=                    (* get scene name *)
-   let val fname =  ( output(std_out,"\nFile containing scene :\n");
-                      skip std_in;
-                      read_to_eol std_in  )
-       val YN =     ( output(std_out,"\nArcs file (y/n)? :\n");
-                      skip std_in;
-                      input(std_in,1)
+   let val fname =  ( output(TextIO.stdOut,"\nFile containing scene :\n");
+                      skip TextIO.stdIn;
+                      read_to_eol TextIO.stdIn  )
+       val YN =     ( output(TextIO.stdOut,"\nArcs file (y/n)? :\n");
+                      skip TextIO.stdIn;
+                      input(TextIO.stdIn,1)
                     )
    in 
      (fname,YN)
@@ -1159,10 +1160,10 @@ fun get_file_scene  ()=                    (* get scene name *)
 
 
 exception early_eof(*;*)
-fun safe_get_int (s:instream) =
-   if end_of_stream s then raise early_eof
+fun safe_get_int s = 
+   if endOfStream s then raise early_eof
                       else getint s(*;*)
-fun safe_get_real (s:instream) =
+fun safe_get_real s = 
    real(safe_get_int s)(*;*)
 
 
@@ -1186,8 +1187,8 @@ fun safe_get_real (s:instream) =
 local
    exception e_read_polygon(*;*)
    exception e_read_cylinder(*;*)
-   fun  read_polygon_lines (s:instream) 0 = nil
-     |  read_polygon_lines (s:instream) n =
+   fun  read_polygon_lines s 0 = nil
+     |  read_polygon_lines s n =
                  let val x =getsimreal s
                      val y =getsimreal s
                      val z =getsimreal s
@@ -1195,13 +1196,13 @@ local
                     (x,y,z) :: (read_polygon_lines s (n-1))
                  end
 
-   fun read_polygon (s:instream)  =
-       (if lookahead s = #"p" then (input(s,1))
+   fun read_polygon s = 
+       (if lookahead s = #"p" then String.str(input1 s)
         else raise e_read_polygon;
         polygon( (read_polygon_lines s (safe_get_int s)) )
        )
 
-   fun read_cylinder_line (s:instream) =
+   fun read_cylinder_line s = 
       let val x= getsimreal s;
           val y= getsimreal s;
           val z= getsimreal s;
@@ -1209,13 +1210,13 @@ local
       in 
        (x,y,z,r)
       end
-   fun read_cylinder (s:instream)  =
+   fun read_cylinder s = 
      (
       if lookahead s = #"c" then skip_to_eol s
                            else raise e_read_cylinder;
       cylinder( (read_cylinder_line s , read_cylinder_line s) )
      )
-   fun read_components (s:instream) =
+   fun read_components s = 
        (skip s;
         case (lookahead s)  
         of  #"p" => (read_polygon s)::(read_components s)
@@ -1380,7 +1381,7 @@ local
              )
            end
 
-   fun get_connect_list (s:instream) =
+   fun get_connect_list s = 
      let val num= safe_get_int s
       in
         get_connect_list' s num
@@ -1392,7 +1393,7 @@ local
     
    fun read_junction_list (s:instream) =
     (skip s;
-    if end_of_stream s 
+    if endOfStream s 
     then nil
     else ( (read_junction s)::(read_junction_list s))
     )
@@ -1421,7 +1422,7 @@ local
 
    fun read_arcs_list (s:instream) (N:int) =
      (skip s;
-      if end_of_stream s
+      if endOfStream s
       then nil
       else ( (read_arc_line s N) :: (read_arcs_list s (N+1) ) )
      )
@@ -2046,7 +2047,7 @@ fun do_clever_bit (FILE:outstream) =
 
 fun go() = 
      let val filename = "screen" (* get_filename "Name of output file (screen for VDU) :"; *)
-         (* val ss = skip_to_eol std_in; *)
+         (* val ss = skip_to_eol TextIO.stdIn; *)
          val FILE = if filename = "screen" then FILEOUT
                                            else open_out(filename);
      in (
@@ -2060,9 +2061,9 @@ fun go() =
 
 (*
 val _ = query_prompt()(*;*)
-val _ = output(std_out, "\nInput name of target file for executable, if timed ")(*;*)
-val _ = output(std_out, "code has been\nselected then the code file will have .timed ")(*;*)
-val _ = output(std_out, "appended to it.\n")(*;*)
+val _ = output(TextIO.stdOut, "\nInput name of target file for executable, if timed ")(*;*)
+val _ = output(TextIO.stdOut, "code has been\nselected then the code file will have .timed ")(*;*)
+val _ = output(TextIO.stdOut, "appended to it.\n")(*;*)
 *)
 
 in

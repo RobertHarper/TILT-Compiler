@@ -23,20 +23,10 @@
 #endif
 
 
-#ifdef HEAPPROFILE
-#define HP_AGESHIFT 16
-extern Object_Profile_t allocated_object_profile;
-extern Object_Profile_t collected_object_profile;
-#endif
-
-
 extern int NumGC;
-
-
-
 int KBytesAllocated = 0;
 int KBytesCollected = 0;
-int GenKBytesCollected = 0;
+
 
 void object_profile_init(Object_Profile_t *p)
 {
@@ -145,7 +135,7 @@ void gc_sanity_stackreg_check(unsigned long *saveregs, Heap_t *fromspace,
 
 
 
-void gcstat_normal(unsigned allocsize, unsigned copied)
+void gcstat_normal(unsigned allocsize, unsigned copied, unsigned writes)
 {
   static int bytesAllocated = 0;
   static int bytesCollected = 0;
@@ -155,15 +145,12 @@ void gcstat_normal(unsigned allocsize, unsigned copied)
   KBytesCollected += (bytesCollected / 1024);
   bytesAllocated %= 1024;
   bytesCollected %= 1024;
+  write_count += writes;
 }
 
 
 
-void gcstat_finish(unsigned long allocsize)
-{
-  gcstat_normal(allocsize, 0);
-  KBytesCollected += GenKBytesCollected;
-}
+
 
 #ifdef HEAPPROFILE
 struct ProfileTagEntry
@@ -202,96 +189,8 @@ ProfileTagEntry_t *GetProfileTagEntry(unsigned int proftag)
   }
 }
 
-/* tagstart points to where the raw object starts.
-   If no object is present, then a skip tag is there.
-   Otherwise, the profile tag is first followed
-   by the object tag(s) and the object data.
-   result if non-zero is set to start of obj */
-unsigned long objlength(value_t *tagstart, value_t **result)
-{
-  value_t tag, *i;
-  if ((value_t)tagstart < 256)
-    {
-      printf("tagstart is %d\n",tagstart);
-      exit(-1);
-    }
-  if (*tagstart == SKIP_TAG)
-    return 1;
-  tagstart++;
-  tag = *tagstart;
-  if (result)
-    *result = tagstart + 1;
-  switch (GET_TYPE(tag))
-  {
-    case IARRAY_TAG:
-    case RARRAY_TAG:
-    case ARRAY_TAG:
-    {
-      int bytelen = GET_ARRLEN(tag);
-      if (bytelen == 0)
-	return 3;
-      else
-	return 2 + ((bytelen + 3) / 4);
-    case FORWARD_TAG:
-      {
-	value_t *newdata = ((value_t *)tagstart[1]);
-	value_t *newstart = newdata - 1;
-	while (GET_TYPE(*newstart) == RECORD_SUB_TAG)
-	  newstart--;
-	newstart--;
-	return objlength(newstart,0);
-      }
-  case RECORD_TAG:
-  case RECORD_SUB_TAG:
-    {
-      int taglen = 0, fieldlen = 0;
-      int tag, curlen;
-      value_t *tagpos;
-      for (tagpos=tagstart; 1; tagpos++)
-	{
-	  tag = *tagpos;
-	  if ((GET_TYPE(tag) == FORWARD_TAG))
-	    {
-	      value_t *newadd = tagpos[1];
-	      value_t *newstart = newadd - taglen - 2; 
-	      /* two for prof and forward tag */
-	      return objlength(newstart,0);
-	    }
-	  if ((GET_TYPE(tag) != RECORD_TAG) &&
-	      (GET_TYPE(tag) != RECORD_SUB_TAG))
-	    {
-	      printf("tagstart = %d\n",tagstart);
-	      memdump("objlength expects record; encountered strange tags",
-		      (int *)tagstart-10,15,(int *)tagpos);
-	      assert(0);
-	    }
-	  curlen = GET_RECLEN(tag);
-	  taglen++;
-	  if (curlen < MAX_RECORDLEN)
-	    {
-	      fieldlen += curlen;
-	      break;
-	    }
-	  fieldlen += MAX_RECORDLEN;
-	}
-      if (fieldlen == 0) /* empty records still have a space reserved */
-	fieldlen = 1;
-      if (result)
-	*result += taglen - 1;
-      return 1 + taglen + fieldlen;
-    }
-  case SKIP_TAG:
-  default:
-    {
-      value_t *i;
-      printf("bad tag %d at %d\n",tag,tagstart);
-      memdump("",tagstart-10,30,tagstart);
-      printf("\n\n\n");
-      printf("NumGC is %d\n",NumGC);
-    }
-    assert(0);
-  }
-}
+
+
 
 #ifdef HEAPPROFILE
 /* parameters denote region of newly allocated objects */

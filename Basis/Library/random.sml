@@ -1,4 +1,4 @@
-(*$import RANDOM *)
+(*$import RANDOM Array Word32 Word8Array Word8Vector LibBase Pack32Big *)
 (* random.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.
@@ -15,6 +15,10 @@
  *
  * Although the interface is fairly abstract, the implementation uses 
  * 31-bit ML words. At some point, it might be good to use 32-bit words.
+ *
+ * Since TILT does not have Word31, the code is modified to use Word32.
+ * There is a possiblity that the linear congruential generator's magic
+ * numbers have to be modified.
  *)
 
 structure Random : RANDOM =
@@ -25,17 +29,17 @@ structure Random : RANDOM =
     structure W8V = Word8Vector
     structure P   = Pack32Big
 
-    val << = Word31.<<
-    val >> = Word31.>>
-    val & = Word31.andb
-    val ++ = Word31.orb
-    val xorb = Word31.xorb
+    val << = Word32.<<
+    val >> = Word32.>>
+    val & = Word32.andb
+    val ++ = Word32.orb
+    val xorb = Word32.xorb
     infix << >> & ++
 
-    val nbits = 31                                      (* bits per word *)
-    val maxWord : Word31.word = 0wx7FFFFFFF             (* largest word *)
-    val bit30 : Word31.word   = 0wx40000000
-    val lo30 : Word31.word    = 0wx3FFFFFFF
+    val nbits = 32                                      (* bits per word *)
+    val maxWord : Word32.word = 0wxffffffff
+    val bit31 : Word32.word   = 0wx80000000
+    val lo31 : Word32.word    = 0wx7fffffff
 
     val N = 48
     val lag = 8
@@ -43,15 +47,17 @@ structure Random : RANDOM =
 
     fun error (f,msg) = LibBase.failure {module="Random",func=f, msg=msg}
 
-    val two2neg30 = 1.0/((real 0x8000)*(real 0x8000))   (* 2^~30 *)
+    val two2neg31 = let val two2thirty = 0x40000000
+		    in  0.5 / (real two2thirty)
+		    end
 
     fun minus(x,y,false) = (x - y, y > x)
       | minus(x,y,true) = (x - y - 0w1, y >= x)
 
     datatype rand = RND of {
-        vals   : Word31.word A.array,(* seed array *)
+        vals   : Word32.word A.array,(* seed array *)
         borrow : bool ref,           (* last borrow *)
-        congx  : Word31.word ref,    (* congruential seed *)
+        congx  : Word32.word ref,    (* congruential seed *)
         index  : int ref             (* index of next available value in vals *)
       }
 
@@ -63,18 +69,18 @@ structure Random : RANDOM =
     val numWords = 3 + N
     val magic : LW.word = 0wx72646e64
     fun toString (RND{vals, borrow, congx, index}) = let
-          val arr = W8A.array (4*numWords, 0w0)
+          val arr = W8A.array (4*numWords, Word8.fromInt 0)
           val word0 = if !borrow then LW.orb (magic, 0w1) else magic
           fun fill (src,dst) =
                 if src = N then ()
                 else (
-                  P.update (arr, dst, Word31.toLargeWord (A.sub (vals, src)));
+                  P.update (arr, dst, A.sub (vals, src));
                   fill (src+1,dst+1)
                 )
           in
             P.update (arr, 0, word0);
             P.update (arr, 1, LW.fromInt (!index));
-            P.update (arr, 2, Word31.toLargeWord (!congx));
+            P.update (arr, 2, (!congx));
             fill (0,3);
             Byte.bytesToString (W8A.extract (arr, 0, NONE))
           end
@@ -89,12 +95,12 @@ structure Random : RANDOM =
           fun subVec i = P.subVec (bytes, i)
           val borrow = ref (LW.andb(word0,0w1) = 0w1)
           val index = ref (LW.toInt (subVec 1))
-          val congx = ref (Word31.fromLargeWord (subVec 2))
-          val arr = A.array (N, 0w0 : Word31.word)
+          val congx = ref (subVec 2)
+          val arr = A.array (N, 0w0 : Word32.word)
           fun fill (src,dst) =
                 if dst = N then ()
                 else (
-                  A.update (arr, dst, Word31.fromLargeWord (subVec src));
+                  A.update (arr, dst, subVec src);
                   fill (src+1,dst+1)
                 )
           in
@@ -106,10 +112,10 @@ structure Random : RANDOM =
           end
 
       (* linear congruential generator:
-       * multiplication by 48271 mod (2^31 - 1) 
+       * multiplication by 48271 mod (2^32 - 1) 
        *)
-    val a : Word31.word = 0w48271
-    val m : Word31.word = 0w2147483647
+    val a : Word32.word = 0w48271
+    val m : Word32.word = 0wxffffffff
     val q = m div a
     val r = m mod a
     fun lcg seed = let
@@ -145,7 +151,7 @@ structure Random : RANDOM =
       (* Create initial seed array and state of generator.
        * Fills the seed array one bit at a time by taking the leading 
        * bit of the xor of a shift register and a congruential sequence. 
-       * The congruential generator is (c*48271) mod (2^31 - 1).
+       * The congruential generator is (c*48271) mod (2^32 - 1).
        * The shift register generator is c(I + L18)(I + R13).
        * The same congruential generator continues to be used as a 
        * mixing generator with the SWB generator.
@@ -155,7 +161,7 @@ structure Random : RANDOM =
                 val c' = lcg c
                 val s' = xorb(s, s << 0w18)
                 val s'' = xorb(s', s' >> 0w13)
-                val i' = (lo30 & (i >> 0w1)) ++ (bit30 & xorb(c',s''))
+                val i' = (lo31 & (i >> 0w1)) ++ (bit31 & xorb(c',s''))
                 in (i',c',s'') end
 	  fun iterate (0, v) = v
 	    | iterate (n, v) = iterate(n-1, mki v)
@@ -164,8 +170,8 @@ structure Random : RANDOM =
             | genseed (n,seeds,congx,shrgx) = let
                 val (seed,congx',shrgx') = mkseed (congx,shrgx)
                 in genseed(n-1,seed::seeds,congx',shrgx') end
-          val congx = ((Word31.fromInt congy & maxWord) << 0w1)+0w1
-          val (seeds,congx) = genseed(N,[],congx, Word31.fromInt shrgx)
+          val congx = ((Word32.fromInt congy & maxWord) << 0w1)+0w1
+          val (seeds,congx) = genseed(N,[],congx, Word32.fromInt shrgx)
           in
             RND{vals = A.fromList seeds, 
                 index = ref 0, 
@@ -190,16 +196,16 @@ structure Random : RANDOM =
            else tweak(A.sub(vals,idx)) before index := idx+1
          end
 
-    fun randInt state = Word31.toIntX(randWord state)
-    fun randNat state = Word31.toIntX(randWord state & lo30)
+    fun randInt state = Word32.toIntX(randWord state)
+    fun randNat state = Word32.toIntX(randWord state & lo31)
     fun randReal state =
-      (real(randNat state) + real(randNat state) * two2neg30) * two2neg30
+      (real(randNat state) + real(randNat state) * two2neg31) * two2neg31
 
     fun randRange (i,j) = 
           if j < i 
             then error ("randRange", "hi < lo")
             else let
-              val R = two2neg30*real(j - i + 1)
+              val R = two2neg31*real(j - i + 1)
               in
                 fn s => i + trunc(R*real(randNat s))
               end handle _ => let

@@ -17,7 +17,16 @@ structure Datatype
     val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s 
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
+	
+    fun geq_string (s1,s2) = 
+	(case (String.compare(s1,s2)) of
+	     GREATER => true
+	   | EQUAL => true
+	   | LESS => false)
+    fun geq_sym(sym1,sym2) = 
+	geq_string(Symbol.symbolToString sym1, Symbol.symbolToString sym2)
 
+	     
     fun con_fun(args,body) = 
 	let val args' = map Name.derived_var args
 	    fun folder ((v,v'),s) = subst_add_convar(s,v,CON_VAR v')
@@ -43,7 +52,7 @@ structure Datatype
 
 	val num_tyvar = length tyvar_labs
 	val tyvar_vars = map (fn lab => fresh_named_var "poly") tyvar_labs
-	val tyvar_tuple = con_tuple_inject(map CON_VAR tyvar_vars)
+	val tyvar_cons = map CON_VAR tyvar_vars
 	val mpoly_var = fresh_named_var "mpoly_var"
 	val is_monomorphic = num_tyvar = 0
 	val num_datatype = length std_list
@@ -63,7 +72,7 @@ structure Datatype
 	val top_type_string = foldl (fn (s,acc) => acc ^ "_" ^ (Symbol.name s)) "" type_syms
 	val top_eq_string = top_type_string ^ "_eq"
 	val top_type_var = if (num_datatype = 1) then (hd type_vars) else fresh_named_var top_type_string
-	val top_type_lab = internal_label top_type_string
+	val top_type_lab = to_questionable (internal_label top_type_string)
 	val top_eq_var = fresh_named_var top_eq_string
 	val top_eq_lab = symbol_label (Symbol.tycSymbol top_eq_string)
 	val module_labvars = map (fn s => let val str = Symbol.name s
@@ -94,14 +103,6 @@ structure Datatype
 	val constr_con_vars = mapmap (Util.mapopt fresh_named_var) constr_con_strings
 	val constr_con_labs = mapmap (Util.mapopt internal_label) constr_con_strings
 
-	(* ------ if all constructors are non value-carrying, we don't (un)roll ----- *)
-	val is_noncarrying = 
-	      (case std_list of
-		   [(_,_,sym_tyopts)] => (Listops.andfold (fn (_,NONE) => true 
-		                                           | (_,SOME _) => false) sym_tyopts)
-		 | _ => false)
-	fun roll(x,y) = if (is_noncarrying) then y else ROLL(x,y)
-	fun unroll(x,y,z) = if (is_noncarrying) then z else UNROLL(x,y,z)
 
         (* -- we name the variables representing the instantited fixpoints in CON_MU *)
 	val vardt_list = map (fn s => (fresh_named_var ("vdt" ^ "_" ^ (Symbol.name s)))) type_syms
@@ -113,14 +114,14 @@ structure Datatype
 	    fun folder ((tv,v), (sdecs, sdecs_eq, ctxt)) = 
 		let val eq_label = to_eq tv
 		    val eq_con = con_eqfun(CON_VAR v)
-		    val sdec = SDEC(tv,DEC_CON(v,KIND_TUPLE 1,NONE,false))
+		    val sdec = SDEC(tv,DEC_CON(v,KIND,NONE,false))
 		    val sdec_eq = SDEC(eq_label,DEC_EXP(fresh_var(),eq_con,NONE,false))
-		    val ctxt = add_context_con(ctxt,tv,v,KIND_TUPLE 1,NONE)
+		    val ctxt = add_context_con(ctxt,tv,v,KIND,NONE)
 		in  (sdec :: sdecs, sdec :: sdec_eq :: sdecs_eq, ctxt)
 		end
 	    val (sdecs, sdecs_eq, ctxt) = foldr folder ([],[],context) (Listops.zip tyvar_labs tyvar_vars)
 	    fun folder ((tc,vty),ctxt) = 
-		let val k = if (num_tyvar = 0) then KIND_TUPLE 1 else KIND_ARROW(num_tyvar,1)
+		let val k = if (num_tyvar = 0) then KIND else KIND_ARROW(num_tyvar,KIND)
 		in  add_context_con(ctxt,tc,vty,k,NONE)
 		end
 	in
@@ -143,7 +144,7 @@ structure Datatype
 	    val subst_tyvar2mproj = vclist2subst (map2 (fn (l,v) => (v, CON_MODULE_PROJECT(MOD_VAR mpoly_var,l)))
 						  (tyvar_labs, tyvar_vars))
 
-	    fun conapper(CON_VAR tarv,c2) : con option = assoc_eq(eq_var,tarv,list_tyvar2vdt)
+	    fun conapper(CON_VAR tarv,cargs) : con option = assoc_eq(eq_var,tarv,list_tyvar2vdt)
 	      | conapper _ = NONE
 
 	in
@@ -167,14 +168,16 @@ structure Datatype
 	    fun mapper (conopts,conopts_vdt,constr_sumarg_var,names) = 
 		let val (nca,ca) = conopts_split conopts
 		    val (_,ca_vdt) = conopts_split conopts_vdt
-		    val (sumarg,sumarg_vdt,sumarg_kind) = 
-			(case (ca,ca_vdt) of
-			     ([],_) => (CON_TUPLE_INJECT [], CON_TUPLE_INJECT[], KIND_TUPLE 0)
-			   | ([c],[c_vdt]) => (c, c_vdt, KIND_TUPLE 1)
-			   | _ => (CON_TUPLE_INJECT ca, CON_TUPLE_INJECT ca_vdt, KIND_TUPLE (length ca)))
+		    val (sumarg, sumarg_kind) = 
+			(case ca of
+			     [ca1] => (ca1, KIND)
+			   | _ => (CON_TUPLE_INJECT ca, KIND_TUPLE (length ca)))
+		    val sumarg_vdt = (case ca_vdt of
+					  [ca_vdt1] => ca_vdt1
+					| _ => CON_TUPLE_INJECT ca_vdt)
 		    val carrier = if is_monomorphic
 				      then CON_VAR constr_sumarg_var
-				  else CON_APP(CON_VAR constr_sumarg_var, tyvar_tuple)
+				  else CON_APP(CON_VAR constr_sumarg_var, tyvar_cons)
 		in (sumarg, sumarg_kind,
 		    CON_SUM{names=names,
 			    noncarriers=nca,
@@ -194,20 +197,17 @@ structure Datatype
 
         (* ---------- now create the top datatype tuple using var_poly ------ *)
 	val top_type_tyvar = 
-	    if is_noncarrying 
-		then hd constr_fullsum_vdt
-	    else CON_MU(CON_FUN(vardt_list,con_tuple_inject constr_fullsum_vdt))
+	    CON_MU(CON_FUN(vardt_list,con_tuple_inject constr_fullsum_vdt))
 
         (* ------------ create the polymorphic type arguments --------------------- 
 	   ------------- and instanitated versions of datatypes ------------------- *)
 	val tyvar_mprojs = map (fn l => CON_MODULE_PROJECT (MOD_VAR mpoly_var, l)) tyvar_labs
-	val tyvar_mproj = con_tuple_inject tyvar_mprojs
 	val type_cinsts = map (fn tv => if (is_monomorphic) 
 					    then (CON_VAR tv)
-					else CON_APP(CON_VAR tv, tyvar_tuple)) type_vars
+					else CON_APP(CON_VAR tv, tyvar_cons)) type_vars
 	val type_minsts = map (fn tv => if (is_monomorphic) 
 					    then (CON_VAR tv)
-					else CON_APP(CON_VAR tv, tyvar_mproj)) type_vars
+					else CON_APP(CON_VAR tv, tyvar_mprojs)) type_vars
 
 
 
@@ -219,20 +219,20 @@ structure Datatype
 		let 
 		    val mutype = if is_monomorphic
 				     then CON_VAR type_var_i
-				 else ConApply(true, CON_VAR type_var_i, tyvar_mproj)
+				 else ConApply(true, CON_VAR type_var_i, tyvar_mprojs)
 		    val sumtype = if (is_monomorphic)
 				      then CON_VAR constr_sum_var_i
-				  else ConApply(true, CON_VAR constr_sum_var_i, tyvar_mproj)
+				  else ConApply(true, CON_VAR constr_sum_var_i, tyvar_mprojs)
 		    fun help (j, constr_mproj_type_ij_opt) =
 			let val var = fresh_named_var "injectee"
 			in  case constr_mproj_type_ij_opt of
-			    NONE => (roll(mutype, INJ{sumtype = sumtype,
+			    NONE => (ROLL(mutype, INJ{sumtype = sumtype,
 						      field = j,
 						      inject = NONE}), mutype)
 			  | SOME constr_mproj_type_ij =>
 				(make_total_lambda
 				 (var, constr_mproj_type_ij, mutype,
-				  roll(mutype,
+				  ROLL(mutype,
 				       INJ{sumtype = sumtype,
 					   field = j,
 					   inject = SOME (VAR var)})))
@@ -250,9 +250,9 @@ structure Datatype
 		    val sumtype = CON_VAR constr_sum_var_i
 		    val sumtype = if is_monomorphic
 				      then sumtype
-				  else ConApply(true ,sumtype, tyvar_mproj)
+				  else ConApply(true ,sumtype, tyvar_mprojs)
 		in  make_total_lambda(expose_var,type_minst,sumtype,
-				      unroll(type_minst,sumtype,VAR expose_var))
+				      UNROLL(type_minst,sumtype,VAR expose_var))
 		end
 	in val exp_con_expose = map2 expose_help (type_minsts, constr_sum_vars)
 	end
@@ -263,7 +263,7 @@ structure Datatype
 		    if is_monomorphic
 			then (top_type_tyvar, KIND_TUPLE num_datatype)
 		    else (con_fun(tyvar_vars, top_type_tyvar), 
-			  KIND_ARROW(num_tyvar, num_datatype))
+			  KIND_ARROW(num_tyvar, KIND_TUPLE num_datatype))
 		in  if num_datatype = 1 
 			then []
 		     else [(SBND(top_type_lab, BND_CON(top_type_var, c)),
@@ -272,14 +272,17 @@ structure Datatype
 
 
 	val type_sbnd_sdecs = 
-		let val kind = if is_monomorphic then KIND_TUPLE 1 else KIND_ARROW(num_tyvar,1)
+		let val kind = KIND
+		    val kind = if is_monomorphic 
+				   then kind
+			       else KIND_ARROW(num_tyvar,kind)
 		    fun mapper(i,l,v) =
 			let val c = if num_datatype = 1 
-					then top_type_tyvar
+					then CON_TUPLE_PROJECT(0,top_type_tyvar)
 				    else 
 			              let val c = CON_VAR top_type_var
 					  val c = if is_monomorphic then c
-						  else CON_APP(c, tyvar_tuple)
+						  else CON_APP(c, tyvar_cons)
 				      in  CON_TUPLE_PROJECT(i,c)
 				      end
 			    val c = if is_monomorphic then c 
@@ -299,7 +302,7 @@ structure Datatype
 						(top_type_sbnd_sdec @ type_sbnd_sdecs))
 	in  val eq_exp_con = eqcomp(ctxt, if is_monomorphic 
 					      then CON_VAR top_type_var
-					  else CON_APP(CON_VAR top_type_var, tyvar_mproj))
+					  else CON_APP(CON_VAR top_type_var, tyvar_mprojs))
 				    (*  top_type_tyvar *)
 	end
 
@@ -313,7 +316,8 @@ structure Datatype
 		  expcon_mk_i) = 
 	  let 
 	    (* ----- do the type -------- *)
-	    val k = if is_monomorphic then KIND_TUPLE 1 else KIND_ARROW(num_tyvar,1)
+	    val k = KIND
+	    val k = if is_monomorphic then k else KIND_ARROW(num_tyvar,k)
 	    val type_sbnd = SBND(inner_type_lab_i, BND_CON(inner_type_var_i,CON_VAR type_var_i))
 	    val type_sdec = SDEC(inner_type_lab_i, DEC_CON(inner_type_var_i,k,SOME(CON_VAR type_var_i),true))
 
@@ -388,7 +392,7 @@ structure Datatype
 						     generate_tuple_label(i+1), top_eq_con)
 		    val con_eq = con_eqfun(if is_monomorphic 
 					       then CON_VAR type_var_i
-					   else CON_APP (CON_VAR type_var_i, tyvar_mproj))
+					   else CON_APP (CON_VAR type_var_i, tyvar_mprojs))
 		    val eq_expbnd = BND_EXP(equal_var,exp_eq)
 		    val eq_expdec = DEC_EXP(equal_var,con_eq,NONE,false)
 		    val eq_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,
@@ -454,8 +458,9 @@ structure Datatype
 
 	fun mapper(constr_sum_lab_i, constr_sum_var_i, constr_rf_sum_i) = 
 	    let val (c,k) = if is_monomorphic 
-				then (constr_rf_sum_i, KIND_TUPLE 1)
-			    else (con_fun(tyvar_vars,constr_rf_sum_i), KIND_ARROW(num_tyvar,1))
+				then (constr_rf_sum_i, KIND)
+			    else (con_fun(tyvar_vars,constr_rf_sum_i), 
+				  KIND_ARROW(num_tyvar,KIND))
 	    in  (SBND(constr_sum_lab_i,BND_CON(constr_sum_var_i, c)),
 		 SDEC(constr_sum_lab_i,DEC_CON(constr_sum_var_i, k, SOME c, false)))
 	    end
@@ -505,17 +510,15 @@ structure Datatype
 	   and retain the accumulated context *)
 	fun loop context acc [] = rev acc
 	  | loop context acc (std_list::rest) = 
-	    let fun geq_sym((s1,_),(s2,_)) = 
-		(case (String.compare(Symbol.symbolToString s1,Symbol.symbolToString s2)) of
-		     GREATER => true
-		   | EQUAL => true
-		   | LESS => false)
-		fun sort_std' (ncs,cs) [] = (ListMergeSort.sort geq_sym ncs) @ 
-		                            (ListMergeSort.sort geq_sym cs)
+	    let fun geq_symrest((s1,_),(s2,_)) = geq_sym(s1,s2)
+		val sort_symrest = ListMergeSort.sort geq_symrest
+		fun sort_std' (ncs,cs) [] = (sort_symrest ncs) @ (sort_symrest cs)
 		  | sort_std' (ncs,cs) ((nc as (_,NONE))::rest) = sort_std' (nc::ncs,cs) rest
 		  | sort_std' (ncs,cs) ((c as (_,SOME _))::rest) = sort_std' (ncs,c::cs) rest
 		fun sort_std (s,tvs,st_list) = (s,tvs,sort_std' ([],[]) st_list)
 		val std_list = map sort_std std_list
+		fun geq_std((s1,_,_),(s2,_,_)) = geq_sym(s1,s2)
+		val std_list = ListMergeSort.sort geq_std std_list
 		val sbnd_sdecs = driver(typecompile,context,
 					std_list, eq_compile)
 		val _ = if (!debug)
@@ -918,10 +921,8 @@ structure Datatype
        val (sumcon,datacon) = (case sbnds_sdecs_cons_opt of
 				   NONE => (sumtycon,tycon)
 				 | SOME (_,_,cons) => 
-				       let val arg = con_tuple_inject cons
-				       in  (CON_APP(sumtycon,arg), 
-					    CON_APP(tycon, arg))
-				       end)
+				       (CON_APP(sumtycon, cons), 
+					CON_APP(tycon, cons)))
 	   
        val expose_path = join_path_labels(datatype_path,[expose_lab])
        val expose_exp = 

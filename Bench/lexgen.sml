@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import TopLevel Int String TextIO *)
 
 
 local
@@ -6,6 +6,7 @@ val makestring_int = Int.toString
 fun fold f l a = foldr f a l
 fun ordof(s : string, i : int) = ord(String.sub(s,i))
 fun char2string c = implode[c]
+open Array
 
     fun char_leq(a : char, b : char) = (ord a) <= (ord b)
     fun char_geq(a : char, b : char) = (ord a) >= (ord b)
@@ -141,8 +142,8 @@ end (* local ... nonfix > *)
 				ArgCode := NONE;
 				StrDecl := false)
 
-   val LexOut = ref(std_out);
-   val say = fn x => output (!LexOut,x)
+   val LexOut = ref(TextIO.stdOut);
+   val say = fn x => TextIO.output (!LexOut,x)
 
 (* Union: merge two sorted lists of integers *)
 
@@ -245,13 +246,13 @@ fun ++(x) : int = (x := !x + 1; !x);
 val LineNum = ref 1;
 
 datatype ibuf =
-	BUF of instream * {b : string ref, p : int ref}
+	BUF of TextIO.instream * {b : string ref, p : int ref}
 	fun make_ibuf(s) = BUF (s, {b=ref"", p = ref 0})
-	fun close_ibuf (BUF (s,_)) = close_in(s)
+	fun close_ibuf (BUF (s,_)) = TextIO.closeIn(s)
 	exception eof
 	fun getch (a as (BUF(s,{b,p}))) = 
 		 if (!p = (size (!b)))
-		   then (b := input(s,1024);
+		   then (b := TextIO.inputN(s, 1024);
 			 p := 0;
 			 if (size (!b))=0
 			    then raise eof
@@ -271,15 +272,15 @@ datatype ibuf =
 
 exception error
 
-val pr_err = fn x => (output (std_out,"mlex: syntax error in line "^
-			    (makestring_int (!LineNum))^
-			    ": "^x^"\n"); raise error)
+val pr_err = fn x => (TextIO.output (TextIO.stdOut,"mlex: syntax error in line "^
+				     (makestring_int (!LineNum))^
+				     ": "^x^"\n"); raise error)
 
 exception syntax_error; (* error in user's input file *)
 
 exception lex_error; (* unexpected error in lexer *)
 
-val LexBuf = ref(make_ibuf(std_in));
+val LexBuf = ref(make_ibuf(TextIO.stdIn));
 val LexState = ref 0;
 val NextTok = ref BOF;
 val inquote = ref false;
@@ -724,9 +725,9 @@ fun maketable (fins:(int * (int list)) list,
 
    let datatype elem = N of int | T of int | D of int
        val count = ref 0
-       val _ = (if length(trans)<256 then CharFormat := true
+       val _ = (if List.length(trans)<256 then CharFormat := true
 		 else CharFormat := false;
-		 if length(tcpairs)> 0 then 
+		 if List.length(tcpairs)> 0 then 
 		    (UsesTrailingContext := true;
     		     say "\ndatatype yyfinstate = N of int | \
 			   \ T of int | D of int\n")
@@ -828,10 +829,10 @@ fun maketable (fins:(int * (int list)) list,
 	      end
           | makeTable _ = raise error (* dtarditi: complete match *)
 
-	fun msg x = output(std_out,x)
+	fun msg x = TextIO.output(TextIO.stdOut,x)
 
   in (say "in arrayoflist\n["; makeTable(rs,newfins); say "]\nend\n";
-    msg ("\nNumber of states = " ^ (makestring_int (length trans)));
+    msg ("\nNumber of states = " ^ (makestring_int (List.length trans)));
     msg ("\nNumber of distinct rows = " ^ (makestring_int (!count)));
     msg ("\nApprox. memory size of trans. table = " ^
 	  (makestring_int (!count*(!CharSetSize)*(if !CharFormat then 1 else 8))));
@@ -1107,10 +1108,10 @@ fun lexGen(xinfile) =
 
     in (UsesPrevNewLine := false;
 	ResetFlags();
-        LexBuf := make_ibuf(open_in xinfile);
+        LexBuf := make_ibuf(TextIO.openIn xinfile);
         NextTok := BOF;
         inquote := false;
-	LexOut := open_out(outfile);
+	LexOut := TextIO.openOut(outfile);
 	StateNum := 2;
 	LineNum := 1;
 	StateTab := enter(create(string_leq))("INITIAL",1);
@@ -1157,7 +1158,7 @@ fun lexGen(xinfile) =
 	  else ();
 	  PrintLexer(ends);
 	  close_ibuf(!LexBuf);
-	   close_out(!LexOut)
+	  TextIO.closeOut(!LexOut)
 	 end)
     end
 fun doit() = (lexGen "Bench/ml.lex")

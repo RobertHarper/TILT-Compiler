@@ -1,8 +1,10 @@
 (*$import Prelude TopLevelHelp *)
 (* http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
-extern ml_output : (int, string, unit) -->
+(* 
+extern ml_output : (int, string, unit) --> 
 fun raw_print(s : string) : unit = Ccall(ml_output,1,s)
+*)
 
 val valOf = option_valOf
 val isSome = option_isSome
@@ -18,6 +20,7 @@ val null = list_null
 
 val concat = string_concat
 val print = textio_print
+val trunc = real_trunc
 
 overload + : 'a as iplus and bplus and uplus and fplus
 overload - : 'a as iminus and bminus and uminus and fminus

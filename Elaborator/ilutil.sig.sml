@@ -80,15 +80,20 @@ signature ILUTIL =
     val expose_lab : label
     val functor_arg_lab : label
 
-    (* Some internal labels are opened for lookup *)
-    (* Some internal labels are non-exported *)
-    (* Eq labels are internal, non-exported, and identifiable as eq labels *)
+    (* A type component with a questionable label in a signature can be synthesized
+         and not merely matched during signature matching.
+       Some internal labels are opened for lookup 
+       Some internal labels are non-exported 
+       Eq labels are internal, non-exported, and identifiable as eq labels 
+    *)
+    val to_questionable : label -> label
     val to_open : label -> label
     val to_nonexport : label -> label
     val to_eq: label -> label       
     val to_dt: label -> label       
     val to_cluster: label -> label       
 
+    val is_questionable : label -> bool
     val is_open : label -> bool
     val is_nonexport : label -> bool
     val is_eq : label -> bool
@@ -120,12 +125,15 @@ signature ILUTIL =
     (* derefences a constructor variable if possible *)
     val con_deref : con -> con
 
-    (*  ConApply: takes two types and if they are CON_FUN and CON_TUPLE or CON_VAR,
-                  performs a substitution(i.e. beta reduction. 
-		  If the flag is true, then the reduction occurs if each argument variable
-		  is used at most once in the function body.  This prevents code explosion. *)
-    val ConApply       : bool * con * con -> con
+    (*  ConApply: takes a type and a list of types
+                  if the first type is a CON_FUN, performs a substitution (beta reduction). 
+		  If the flag is true, then the reduction occurs if each argument is a variable
+		  or is used at most once in the function body.  This prevents code explosion. *)
+    val ConApply  : bool * con * con list -> con
 
+    (* ConUnroll : takes a singly-recursive mu-type or a projection of
+                   a multiply-recursive mu-type and returns the unrolled version *)
+    val ConUnroll      : con -> con
 
     val find_sdec : sdec list * label -> sdec option
     val find_sbnd : sbnd list * label -> sbnd option
@@ -218,7 +226,7 @@ signature ILUTIL =
 		The initial int indicates how many tyvar names to skip.
 			       *)
 
-    val con_subst_conapps : (con * (con * con -> con option)) -> con
+    val con_subst_conapps : (con * (con * con list -> con option)) -> con
     val remove_modvar_type : con * var * Il.sdecs -> con
     val rebind_free_type_var : int * Tyvar.stamp * con * context * var -> 
 	                          (tyvar * label * bool) list

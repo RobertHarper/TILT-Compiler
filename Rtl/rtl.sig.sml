@@ -99,9 +99,9 @@ sig
 
     | ADD    of regi * sv * regi        (* add(a,b,c): c <- a+b *)
     | SUB    of regi * sv * regi        (* c <- a-b *)
-    | MUL   of regi * sv * regi        (* c <- a*b *)
-    | DIV   of regi * sv * regi        (* c <- a/b *)
-    | MOD   of regi * sv * regi        (* c <- a mod b *)
+    | MUL    of regi * sv * regi        (* c <- a*b *)
+    | UDIV   of regi * sv * regi        (* c <- a/b *)
+    | UMOD   of regi * sv * regi        (* c <- a mod b *)
     | S4ADD of regi * sv * regi        (* scaled add by 4: c <- 4*a+*b *)
     | S8ADD of regi * sv * regi        (* scaled add by 8: c <- 8*a+*b *)
     | S4SUB of regi * sv * regi        (* scaled sub by 4: c <- 4*a-b *)
@@ -243,9 +243,9 @@ sig
     | LOADQF   of ea * regf
     | STOREQF  of ea * regf
 
-    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer;
-						   *ea = regi *)
-    | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
+    | MUTATE of ea * regi * regi option   (* if option is NONE or SOME (nonzero value), a pointer is indicated *)
+						   
+    | INIT of ea * regi * regi option     (* if option is NONE or SOME (nonzero value), a pointer is indicated *)
 
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that
 			       many words are not allocatable *)

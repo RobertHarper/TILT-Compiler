@@ -182,8 +182,8 @@ struct
               | S4SUB a => op3i "s4sub" a
               | S8SUB a => op3i "s8sub" a
 	      | MUL a => op3i "mull" a
-	      | DIV a => op3i "divl" a
-	      | MOD a => op3i "modl" a
+	      | UDIV a => op3i "divlu" a
+	      | UMOD a => op3i "modlu" a
               | ADDT a => op3i "addl/v" a
 	      | SUBT a => op3i "subl/v" a
 	      | MULT a => op3i "mull/v" a

@@ -1,4 +1,4 @@
-(* $import Nil NilUtil Alpha *)
+(*$import Nil NilUtil Alpha TRAIL *)
 
 structure Trail :> TRAIL = 
   struct

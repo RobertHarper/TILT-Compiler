@@ -604,10 +604,6 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	 end
        | (_,Single_k c) => ck_error (D,constructor,kind,"Non standard kind given to con_analyze")
        | (Prim_c (pcon,args),  Type_k) =>  pcon_analyze(D,pcon,args)
-       | (Mu_c (is_recur,defs),Type_k) =>
-	 (case Sequence.toList defs
-	    of [(v,c)] => type_analyze (if is_recur then insert_stdkind (D,v,Type_k) else D) c
-	     | _ => c_error(D,constructor,"Mu::Type has wrong number of arms"))
        | (Mu_c (is_recur,defs),Record_k lvk_seq) =>
 	 let 
 	   val D = if is_recur 
@@ -831,18 +827,14 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 	       else D
 		 
 	     val _ = app (fn (_,c) => type_analyze (D,c)) (Sequence.toList defs)
-	   in  
-	     if (Sequence.length defs) = 1
-	       then SingleType_k(constructor)
-	     else 
-	       let 
-		 fun mapper (i,(v,c)) = 
-		   let val label = generate_tuple_label(i+1)
-		   in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
-		   end
-		 val entries = Sequence.mapcount mapper defs
-	       in  Record_k(entries)
-	       end
+
+	     fun mapper (i,(v,c)) = 
+		 let val label = generate_tuple_label(i+1)
+		 in((label,derived_var v),SingleType_k(Proj_c(constructor,label)))
+		 end
+	     val entries = Sequence.mapcount mapper defs
+		 
+	   in  Record_k(entries)
 	   end
 	 | (v as (Var_c var)) => 
 	   let
@@ -1450,15 +1442,8 @@ val flagtimer = fn (flag,name,f) => fn args => ((if !profile orelse !local_profi
 		       (ir1 = ir2) andalso eq_list(pred,vc1,vc2)
 		     end
 
-		   (*This should only apply when there is one
-		    * arm.  Otherwise, it should be caught by the projections.*)
-		   fun do_unroll () = 
-		     (case (Sequence.length defs1,Sequence.length defs2)
-			of (1,1) => mu_equate((D,T),c1,c2)
-			 | _ => false)
 		 in
-		   (flagtimer (equiv_profile,"Tchk:Equiv:Mu",do_mu) ()) orelse
-		   (flagtimer (equiv_profile,"Tchk:Equiv:Mu_unroll",do_unroll) ())
+		   (flagtimer (equiv_profile,"Tchk:Equiv:Mu",do_mu) ())
 		 end
 	     | (AllArrow_c {openness=o1,effect=eff1,isDependent=i1,
 			    tFormals=t1,eFormals=e1,fFormals=f1,body_type=b1},

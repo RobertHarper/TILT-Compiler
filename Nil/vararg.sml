@@ -271,7 +271,7 @@ struct
 	(case argc of
 	     Prim_c(Record_c (labs,_),cons) => SOME(RECORD(labs, cons))
 	   | (Prim_c _) => SOME NOT_RECORD
-	   | (Mu_c _) => SOME NOT_RECORD
+	   | (Mu_c _) => SOME NOT_TYPE
 	   | (AllArrow_c _) => SOME NOT_RECORD
 	   | (Crecord_c _) => SOME NOT_TYPE
 	   | (Closure_c _) => SOME NOT_TYPE
@@ -314,8 +314,12 @@ struct
 	                  | _ => map (do_con state) clist)
 		   in  Prim_c(pc, clist)
 		   end
-	     | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
-					  (fn (v,c) => (v,do_con state c)) vc_seq)
+	     | Mu_c(recur,vc_seq) => 
+		   let val state' = Sequence.foldl
+		                    (fn ((v,c),state) => add_kind(state,v,Type_k)) state vc_seq
+		   in  Mu_c(recur,Sequence.map
+			    (fn (v,c) => (v,do_con state' c)) vc_seq)
+		   end
 	     | AllArrow_c{openness,effect,isDependent,
 			  tFormals=[],fFormals=0w0,eFormals=[(argvopt,argc)],body_type=resc} =>
 		   do_arrow state (openness,effect,isDependent,argvopt,argc,resc)

@@ -4,9 +4,8 @@
 #define _exn_h
 
 void exn_init(void);
-typedef value_t exn;
-extern exn divide_exn;
-extern exn overflow_exn;
-void raise_exception(struct ucontext *, exn);
+extern ptr_t divide_exn;
+extern ptr_t overflow_exn;
+void raise_exception(struct ucontext *, ptr_t);
 
 #endif

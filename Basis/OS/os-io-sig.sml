@@ -1,4 +1,4 @@
-(*$import Prelude Int32 Time *)
+(*$import Prelude Time *)
 (* os-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -77,9 +77,12 @@ signature OS_IO =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:04  pscheng
-# added basis
+# Revision 1.2  99/09/22  15:45:11  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:53:04  pscheng
+# added basis
+#
  * Revision 1.2  1997/06/02  19:16:03  jhr
  *   SML'97 Basis Library changes (phase 2)
  *

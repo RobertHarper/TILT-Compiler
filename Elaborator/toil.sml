@@ -374,7 +374,7 @@ structure Toil
 		fun dotype l v = let val tv = fresh_tyvar context
 				     val c = CON_TYVAR tv
 				 in (tv,(SBND(l,BND_CON(v,c)),
-					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, SOME c,false))))
+					 SDEC(l,DEC_CON(v,KIND, SOME c,false))))
 				 end
 		fun help ([] : sdecs) = []
 		  | help (SDEC(l1,DEC_CON(v1,_,_,_)) :: SDEC(l2,DEC_EXP(v2,c2,_,_)) :: rest) =
@@ -614,7 +614,7 @@ structure Toil
 		      val thunk_e = #1(make_thunk(c, APP(ILPRIM(deref,[thunk_c],[VAR ref_arg]),
 							 unit_exp)))
 		      val wrapped_exp = APP(wrapper_exp,thunk_e)
-		      val final_c = CON_APP(sc, c)
+		      val final_c = CON_APP(sc, [c])
 		      val inner_body = #1(make_seq[(ILPRIM(setref,[thunk_c],
 						    [VAR ref_arg,
 						     #1(make_thunk(c, VAR value_arg))]), con_unit),
@@ -936,7 +936,7 @@ val _ = print "plet0\n"
 	     val rest = make_typearg_sdec more
 	     val type_str = label2string type_lab
 	     val type_var = fresh_named_var type_str 
-	     val type_sdec = SDEC(type_lab,DEC_CON(type_var, KIND_TUPLE 1, NONE, false))
+	     val type_sdec = SDEC(type_lab,DEC_CON(type_var, KIND, NONE, false))
 	     val eq_lab = to_eq type_lab
 	     val eq_str = label2string eq_lab
 	     val eq_var = fresh_named_var eq_str
@@ -1450,9 +1450,10 @@ val _ = print "plet0\n"
 	| Ast.TypeDec tblist => 
 	      let val typeresult = xtybind(context,tblist) 
 		  fun make_eq_bnddec(l,c,k) = 
-		      let val is_poly = (case k of
-					     KIND_TUPLE _ => NONE
-					   | KIND_ARROW(m,_) => SOME m)
+		      let val is_poly = 
+			  (case k of
+			       KIND_ARROW(m,_) => SOME m
+			     | _ => NONE)
 			  val vp = fresh_named_var "varpoly"
 			  val (ctxt',c',c'',sigpoly) = 
 			      case is_poly of 
@@ -1463,7 +1464,7 @@ val _ = print "plet0\n"
 					  fun mapper l = 
 					      let val eql = to_eq l
 						  val v = fresh_var()
-						  val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE, false))
+						  val sdec1 = SDEC(l,DEC_CON(v,KIND, NONE, false))
 						  val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
 									       con_eqfun(CON_VAR v),
 									       NONE, false))
@@ -1473,9 +1474,8 @@ val _ = print "plet0\n"
 					  val sp = SIGNAT_STRUCTURE(NONE,sdecs)
 					  val ctxt' = add_context_dec(context,SelfifyDec context (DEC_MOD(vp,false,sp)))
 					  val arg_cons = map (fn l => CON_MODULE_PROJECT(MOD_VAR vp,l)) lbls
-					  val arg_con = con_tuple_inject arg_cons
-					  val c' = CON_APP(c,arg_con)
-					  val c'' = ConApply(true,c,arg_con)
+					  val c' = CON_APP(c,arg_cons)
+					  val c'' = ConApply(true,c,arg_cons)
 				      in  (ctxt',c',c'',sp)
 				      end
 			  val eqlab = to_eq l
@@ -1701,10 +1701,10 @@ val _ = print "plet0\n"
 			     | _ => path2con path)
 			in
 			  (case (con_list,k) of
-			      ([],KIND_TUPLE 1) => con
-			    | (_,KIND_ARROW(n,1)) => 
+			      ([],KIND) => con
+			    | (_,KIND_ARROW(n, KIND)) => 
 				  if (n = length con_list) 
-				      then ConApply(true,con,con_tuple_inject con_list)
+				      then ConApply(true,con,con_list)
 				  else (error_region();
 					tab_region();
 					print "type constructor wants ";
@@ -1713,8 +1713,8 @@ val _ = print "plet0\n"
 					print (Int.toString (length con_list));
 					fresh_named_con(context,"badarity_type"))
 			     | _ => (pp_kind k; print "\nand c = "; 
-				      pp_con con;
-				      elab_error "external_label mapped to type with KIND_ARROW(_,!= 1)"))
+				     pp_con con;
+				     elab_error "external_label mapped to type with unexpected kind"))
 			end
 		    | _ => 
 		      if (length syms = 1 andalso
@@ -1746,13 +1746,13 @@ val _ = print "plet0\n"
 	     val vars = map (fn s => gen_var_from_symbol s) tyvars
 	     val tyvars_bar = map (fn s => symbol_label s) tyvars
 	     val context' = (foldl (fn ((v,tv),c) => 
-				    add_context_con(c,tv,v,KIND_TUPLE 1,NONE))
+				    add_context_con(c,tv,v,KIND,NONE))
 			     context (zip vars tyvars_bar))
 	     val con' = xty(context',def)
 	     val n = length tyvars
 	     val (con,kind) = (case tyvars of
-				 [] => (con',KIND_TUPLE 1)
-			       | _ => (CON_FUN(vars,con'),KIND_ARROW(n,1)))
+				 [] => (con',KIND)
+			       | _ => (CON_FUN(vars,con'),KIND_ARROW(n,KIND)))
 	     val var = gen_var_from_symbol tyc
 	     val tyc_bar = symbol_label tyc
 	   in (SOME(SBND(tyc_bar,BND_CON(var,con))),
@@ -1775,14 +1775,14 @@ val _ = print "plet0\n"
 		       val eq_var = fresh_named_var (label2string eq_label)
 		       val kind = 
 			   (case tyvars of
-				[] => KIND_TUPLE 1
-			      | _ => KIND_ARROW(length tyvars,1))
+				[] => KIND
+			      | _ => KIND_ARROW(length tyvars,KIND))
 		       fun doty ty =
 			   let 
 			       val vars = map (fn _ => fresh_var()) tyvars
 			       val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
 			       val context' = (foldl (fn ((v,tv),c) => 
-						      add_context_con(c,tv,v,KIND_TUPLE 1,NONE))
+						      add_context_con(c,tv,v,KIND,NONE))
 					       context (zip vars tyvars_bar))
 			       val con' = xty(context',ty)
 			   in  (case tyvars of
@@ -1800,7 +1800,7 @@ val _ = print "plet0\n"
 				    fun mapper l = 
 					let val eql = to_eq l
 					    val v = fresh_var()
-					    val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE,false))
+					    val sdec1 = SDEC(l,DEC_CON(v,KIND, NONE,false))
 					    val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
 									 con_eqfun(CON_VAR v),
 									 NONE, false))
@@ -1810,7 +1810,7 @@ val _ = print "plet0\n"
 				    val sigpoly = SIGNAT_STRUCTURE(NONE,sdecs)
 				    val args = map (fn l => CON_MODULE_PROJECT(MOD_VAR vpoly,l)) lbls
 				    val eq_con = con_eqfun(CON_APP(CON_VAR type_var, 
-								   con_tuple_inject args))
+								   args))
 				    val innersig = SIGNAT_STRUCTURE(NONE,
 								    [SDEC(it_lab,
 									  DEC_EXP(fresh_var(),
@@ -1879,7 +1879,7 @@ val _ = print "plet0\n"
 				       fun folder ((sym,var),context) = 
 				        add_context_sdec(context,SDEC(symbol_label sym, 
 								      DEC_CON(var,
-									      KIND_TUPLE 1, NONE,false)))
+									      KIND, NONE,false)))
 				       val context = foldl folder context sym_vars
 				       val c = xty(context,ty)
 				       val c = (case sym_vars of
@@ -1935,7 +1935,7 @@ val _ = print "plet0\n"
 				    val is_eq =  ((size type_str >= 2) andalso 
 						  (String.substring(type_str,0,2) = "''"))
 				    val eq_con = con_eqfun(CON_VAR type_var)
-				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND_TUPLE 1, 
+				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND,
 									  NONE,false))
 				    val eq_sdec = SDEC(eq_lab, DEC_EXP(eq_var,eq_con,NONE,false))
 				in if is_eq

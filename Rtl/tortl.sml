@@ -107,7 +107,14 @@ struct
 	    | Exp_b (v,t,e) => 
 		  let val _ = (msg "working on exp_b "; msg (var2string v); msg "\n")
 		      val (term,state) = xexp(state,v,e,t,NOTID)
-		  in  add_term (state,v,Typeof_c e,term, SOME e)
+		      val term = 
+			  if (is_global v)
+			      then (case term of
+					LOCATION(REGISTER (const, I (REGI (v, COMPUTE _)))) =>
+					    LOCATION(REGISTER (const, I (REGI (v, niltrace2rep state t))))
+				      | _ => term)
+			  else term
+		  in  add_term (state,v,Typeof_c e,term,SOME e)
 		  end
 	    | Fixopen_b var_fun_seq => error "no open functions permitted"
 	    | Fixcode_b var_fun_seq =>
@@ -133,7 +140,8 @@ struct
 						  (Int.toString (length var_vcelist)) ^ " closures"))
 		      val toplevel = istoplevel()
 		      fun folder((v,{code,cenv,venv,tipe}),state) = 
-			  add_term(state,v,tipe,VALUE(LABEL(LOCAL_DATA(Name.var2string v))),NONE)
+			  add_term(state,v,tipe,
+				   VALUE(LABEL(LOCAL_DATA(Name.var2string v))),NONE)
 		      val state = if toplevel then foldl folder state var_vcelist else state
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
 			  let val _ = incClosure()
@@ -353,10 +361,11 @@ struct
 	  fun pickdestf () = alloc_named_regf name
 	  val res = 
 	  case arg_e of
-	      Var_e v => (case (getrep state v) of
-			      (_,SOME value) => (VALUE value, state)
-			    | (SOME loc,_) => (LOCATION loc, state)
-			    | (NONE,NONE) => error "no info on var")
+	      Var_e v => 
+		  (case (getrep state v) of
+		       (_,SOME value) => (VALUE value, state)
+		     | (SOME loc,_) => (LOCATION loc, state)
+		     | (NONE,NONE) => error "no info on var")
 	    | Const_e v => xconst(state,v)
 	    | Let_e (_, [], body) => xexp(state,name,body,trace,context)
 	    | Let_e (_, bnds, body) => 
@@ -1112,14 +1121,12 @@ struct
 			  print "\n";
 			  error s)
 
-	  (* First, rewrite negation as subtraction and create_empty_table with create_table.
-	     We will represent zero length array as an integer zero-length array.
-	     Note that zero is NOT a legal representation for an empty array.
+	  (* First, rewrite negation as subtraction.
 	  *)
-	  val zero = Const_e(Prim.int(Prim.W32,TW64.zero))
+	  val zero_exp = Const_e(Prim.int(Prim.W32,TW64.zero))
+	  val zero_term = VALUE(INT 0w0)
 	  val (prim,elist) = (case (prim,elist) of
-				  (Prim.neg_int is, [e]) => (Prim.minus_int is, [zero,e])
-				| (Prim.create_empty_table t, []) => (Prim.create_table t, [zero, zero])
+				  (Prim.neg_int is, [e]) => (Prim.minus_int is, [zero_exp,e])
 				| _ => (prim,elist))
 
 	  val _ = incPrim()
@@ -1233,11 +1240,9 @@ struct
 	  fun extract_dispatch(t,state,arg,
 			       (xfloat,xint,xknown,xdynamic)) = 
 	      let fun dynamic c = 
-		  if (isLink)
-		      then let val (con_ir,state) = xcon(state,fresh_var(),c)
-			   in  xdynamic (state,c,con_ir) arg
-			   end
-		  else error "extract_dispatch: Can't get here"
+		  let val (con_ir,state) = xcon(state,fresh_var(),c)
+		  in  xdynamic (state,c,con_ir) arg
+		  end
 	      in  
 		  (case (t,clist) of
 		       (IntArray is,_) => xint (state,is) arg
@@ -1306,8 +1311,8 @@ struct
 	    | plus_uint W32 =>  op2i (true, ADD)
 	    | mul_uint W32 =>   op2i (true, MUL)
 	    | minus_uint W32 => op2i (false, SUB)
-	    | div_uint W32 =>   op2i (false, DIV)
-	    | mod_uint W32 =>   op2i (false, MOD)
+	    | div_uint W32 =>   op2i (false, UDIV)
+	    | mod_uint W32 =>   op2i (false, UMOD)
 
 	    (* XXXXX should this mod with 255 *)
 	    | plus_uint W8 =>  op2i (true, ADDT)
@@ -1385,13 +1390,19 @@ struct
 						  TortlArray.xupdate_dynamic))
 			    end)
 		  
-	     | (create_empty_table t) => error "cannot get here"
+	     (* Note that zero is NOT a legal representation for an empty array. *)
+	     | (create_empty_table t) => 
+		       extract_dispatch(t,state,(zero_term,NONE),
+					(TortlArray.xarray_float,
+					 TortlArray.xarray_int,
+					 TortlArray.xarray_known,
+					 TortlArray.xarray_dynamic))
 	     | (create_table t) => 
 		  (case (isLink, t) of
 		       (false, OtherArray false) => aggregateApp localArray
 		     | (false, OtherVector false) => aggregateApp localVector
 		     | _ => let val ([vl1,vl2],state) = xexp_list(state,elist)
-			    in  extract_dispatch(t,state,(vl1,vl2),
+			    in  extract_dispatch(t,state,(vl1,SOME vl2),
 						 (TortlArray.xarray_float,
 						  TortlArray.xarray_int,
 						  TortlArray.xarray_known,
@@ -1848,9 +1859,10 @@ struct
 	     end
 
              (* Set global state and reset debugging info *)
-	     val mainCodeVar = Name.fresh_named_var("main_" ^ unitname ^ "_code")
-	     val mainCodeName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_code")
-	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
+	     val mainString = unitname ^ "_unit"
+	     val mainCodeName = ML_EXTERN_LABEL(unitname ^ "_main")
+	     val mainCodeVar = Name.fresh_named_var(unitname ^ "_main")
+	     val mainName = ML_EXTERN_LABEL mainString
 	     val _ = set_global_state (unitname,
 				       (mainCodeVar,mainCodeName)::named_exports,
 				       trueGlobals)
@@ -1900,9 +1912,16 @@ struct
 	     val _ = add_data(INT32(0w0))
 
 	     val procs = rev (!pl)
+	     val data = rev (!dl)
+	     val globalStart = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_BEGIN_VAL")
+	     val globalEnd = ML_EXTERN_LABEL (mainString ^ "_GLOBALS_END_VAL")
+	     val data = (DLABEL globalStart) ::
+		        (data @ 
+			 [DLABEL globalEnd,
+			  INT32 0w0])
 	     val module = Rtl.MODULE {procs = procs,
-				      data = rev(!dl),
-				      main= mainName,
+				      data = data,
+				      main = mainName,
 				      global = get_mutable()}
 
 	     val _ = resetDepth()

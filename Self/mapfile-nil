@@ -38,6 +38,9 @@ NilPrimUtilParam Nil/nilprimutilparam
 NILUTIL Nil/nilutil.sig
 NilUtil Nil/nilutil
 
+TRAIL Nil/trail.sig
+Trail Nil/trail
+
 NILCONTEXTPRE	Nil/nilcontextpre.sig
 NilContextPre Nil/nilcontextpre
 

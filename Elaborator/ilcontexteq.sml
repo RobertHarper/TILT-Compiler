@@ -176,16 +176,18 @@ struct
 
 	and blastOutKind k = 
 	    (case k of
-		KIND_TUPLE n => (blastOutChoice 0; blastOutChoice n)
-	      | KIND_ARROW (m,n) => (blastOutChoice 1; blastOutChoice m;  blastOutChoice n))
+		 KIND => blastOutChoice 0
+	       | KIND_TUPLE n => (blastOutChoice 1; blastOutChoice n)
+	       | KIND_ARROW (m,kres) => (blastOutChoice 2; blastOutChoice m;  blastOutKind kres))
 
 		    
 	and blastInKind () = 
 	    (case blastInChoice() of
-		0 => KIND_TUPLE(blastInChoice())
-	      | 1 => KIND_ARROW(blastInChoice(), blastInChoice())
-	      | _ => error "bad blastInKind")
-
+		 0 => KIND
+	       | 1 => KIND_TUPLE(blastInChoice())
+	       | 2 => KIND_ARROW(blastInChoice(), blastInKind())
+	       | _ => error "bad blastInKind")
+		 
 	and blastOutCon c = 
 	    (case c of
 		 CON_VAR v => (blastOutChoice 0; blastOutVar v)
@@ -210,7 +212,8 @@ struct
 					   blastOutArrow (case (oneshot_deref oa) of
 								 SOME a => a
 							       | _ => error "unresolved CON_ARROW"))
-	       | CON_APP (c1,c2) => (blastOutChoice 10; blastOutCon c1; blastOutCon c2)
+	       | CON_APP (c1,cargs) => (blastOutChoice 10; blastOutCon c1; 
+					blastOutList blastOutCon cargs)
 	       | CON_MU c => (blastOutChoice 11; blastOutCon c)
 	       | CON_RECORD lclist => (blastOutChoice 12; blastOutList (blastOutPair blastOutLabel blastOutCon) lclist)
 	       | CON_FUN (vlist, c) => (blastOutChoice 13; blastOutList blastOutVar vlist; blastOutCon c)
@@ -255,7 +258,7 @@ struct
 		      in 
 			  CON_ARROW (cs,c,f,a)
 		      end
-	       | 10 => CON_APP (blastInCon (), blastInCon ())
+	       | 10 => CON_APP (blastInCon (), blastInList blastInCon)
 	       | 11 => CON_MU (blastInCon ())
 	       | 12 => CON_RECORD(blastInList (fn () => blastInPair blastInLabel blastInCon))
 	       | 13 => CON_FUN (blastInList blastInVar, blastInCon ())
@@ -991,8 +994,8 @@ struct
 		     eq_cons(vm,cons,cons') andalso eq_con(vm,con,con')
 		     andalso b=b' 
 		     andalso eq_arrow_oneshot(vm,arrow_oneshot,arrow_oneshot')
-	       | (CON_APP(con1,con2), CON_APP(con1',con2')) =>
-		     eq_con(vm,con1,con1') andalso eq_con(vm,con2,con2')
+	       | (CON_APP(con1,cons2), CON_APP(con1',cons2')) =>
+		     eq_con(vm,con1,con1') andalso eq_cons(vm,cons2,cons2')
 	       | (CON_MU(con), CON_MU(con')) => eq_con(vm,con,con')    
 	       | (CON_RECORD labcons, CON_RECORD labcons') => eq_labcons(vm,labcons,labcons')        
 	       | (CON_FUN(vars,con), CON_FUN(vars',con')) => 
@@ -1218,6 +1221,12 @@ struct
 	    let val pc = (c, Name.VarMap.empty)
 		val pc' = (c', Name.VarMap.empty)
 	    in  eq_partial_context (pc, pc')
+	    end
+
+	val eq_con = 
+	    fn (c: con, c': con) =>
+	    let val vm = Name.VarMap.empty
+	    in  eq_con (vm, c, c')
 	    end
 
     end

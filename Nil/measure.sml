@@ -1,4 +1,4 @@
-(*$import MEASURE NilRewrite Stats Option Int32 *)
+(*$import MEASURE NilRewrite Stats Option Int *)
 
 structure Measure :> MEASURE =
   struct

@@ -10,6 +10,7 @@ signature ILCONTEXTEQ =
 	val blastOutPartialContext : BinIO.outstream -> Il.partial_context -> unit
 	val blastInPartialContext : BinIO.instream -> Il.partial_context
 
+	val eq_con : Il.con * Il.con -> bool
 	val eq_context : Il.context * Il.context -> bool
 	val eq_partial_context : Il.partial_context * Il.partial_context -> bool
 

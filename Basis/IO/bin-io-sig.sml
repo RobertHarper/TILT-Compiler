@@ -1,4 +1,4 @@
-(*$import IMPERATIVE_IO Word8Vector Int32 Word8 Prelude *)
+(*$import IMPERATIVE_IO Word8Vector Word8 Int Prelude *)
 (* bin-io-sig.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -21,9 +21,12 @@ signature BIN_IO =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:50:38  pscheng
-# added basis
+# Revision 1.2  99/09/22  15:45:00  pscheng
+# *** empty log message ***
 # 
+# Revision 1.1  1998/03/09  19:50:38  pscheng
+# added basis
+#
  * Revision 1.2  1997/05/20  12:12:43  dbm
  *   SML '97 sharing, where structure.
  *

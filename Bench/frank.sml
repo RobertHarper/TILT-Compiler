@@ -1,5 +1,6 @@
-(*$import Prelude *)
+(*$import TopLevel Int *)
 local
+    fun inc ir = ir := (!ir) + 1
     val makestring_int = Int.toString
 
         datatype 'a option = SOME of 'a | NONE

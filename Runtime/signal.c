@@ -26,23 +26,23 @@
 
 
 #ifdef alpha_osf
-long GetPc(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_pc); }
-long GetSp(struct ucontext *uctxt)          { return (uctxt->uc_mcontext.sc_sp); }
+mem_t GetPc(struct ucontext *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_pc); }
+mem_t GetSp(struct ucontext *uctxt)          { return (mem_t) (uctxt->uc_mcontext.sc_sp); }
 long GetIReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_regs[i]); }
 void SetIReg(struct ucontext *uctxt, int i, long v) { uctxt->uc_mcontext.sc_regs[i] = v; }
 double GetFReg(struct ucontext *uctxt, int i) { return (uctxt->uc_mcontext.sc_fpregs[i]); }
 void SetFReg(struct ucontext *uctxt, int i, double v) { uctxt->uc_mcontext.sc_fpregs[i]= v; }
-long GetBadAddr(struct ucontext *uctxt, 
-		 siginfo_t *siginfo)   { return (long)(siginfo->si_addr); }
+mem_t GetBadAddr(struct ucontext *uctxt, 
+		 siginfo_t *siginfo)   { return (mem_t) (siginfo->si_addr); }
 #endif
 
 
 #ifdef rs_aix
 scp is sigcontext obtained from uctxt
-long *GetPc(struct ucontext *uctxt)    { return &((scp)->sc_jmpbuf.jmp_context.iar); }
-long *GetSp(struct ucontext *uctxt)    { return &((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
+mem_t GetPc(struct ucontext *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.iar); }
+mem_t GetSp(struct ucontext *uctxt)    { return (mem_t) ((scp)->sc_jmpbuf.jmp_context.gpr[1]); }
 long *GetIRegs(struct ucontext *uctxt) { return &((scp)->sc_jmpbuf.jmp_context.gpr[0]); }
-long  GetBadAddr(struct ucontext *uctxt, int dummy) { return &((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
+mem_t GetBadAddr(struct ucontext *uctxt, int dummy) { return (mem_t)((scp)->sc_jmpbuf.jmp_context.o_vaddr); }
 #endif
 
 #ifdef solaris
@@ -86,10 +86,10 @@ void SetIReg(struct ucontext *uctxt, int i, long v)
     else assert(0);
   }
 }
-long GetPc(struct ucontext *uctxt)    { return uctxt->uc_mcontext.gregs[REG_PC]; }
-long GetSp(struct ucontext *uctxt)    { return GetIReg(uctxt,SP); }
-long GetBadAddr(struct ucontext *uctxt, 
-		 siginfo_t *siginfo)   { return (long)(siginfo->si_addr); }
+mem_t GetPc(struct ucontext *uctxt)    { return (mem_t) (uctxt->uc_mcontext.gregs[REG_PC]); }
+mem_t GetSp(struct ucontext *uctxt)    { return (mem_t) (GetIReg(uctxt,SP)); }
+mem_t GetBadAddr(struct ucontext *uctxt, 
+		 siginfo_t *siginfo)   { return (mem_t) (siginfo->si_addr); }
 #endif
 
 void GetIRegs(struct ucontext *uctxt,long *dest) 
@@ -220,8 +220,8 @@ void memfault_handler(int signum,
   siginfo_t *siginfo = NULL;
   int code = 0;
 #endif
-  int badaddr = GetBadAddr(uctxt,siginfo);
-  int badpc = GetPc(uctxt);
+  mem_t badaddr = GetBadAddr(uctxt,siginfo);
+  mem_t badpc = GetPc(uctxt);
 
 #if (defined alpha_osf) || (defined solaris)
   assert(signum == (siginfo->si_signo));
@@ -288,20 +288,7 @@ void memfault_handler(int signum,
       }
     }
 
-#ifdef WRITE
-  {
-    extern value_t writelist_start;
-    extern value_t writelist_cursor;    
-    extern value_t writelist_end;
-    if ((value_t)badaddr == ((value_t)writelist_end)+sizeof(value_t))
-      { 
-	printf("past writelist.  XXX need to implement resize.\n");
-	printf("writelist_start = %d\n",writelist_start);
-	printf("writelist_cursor = %d\n",writelist_cursor);
-	printf("writelist_end = %d\n",writelist_end);
-      }
-  }
-#endif
+
   {
     Heap_t *heap = GetHeap(badaddr);
     Stack_t *stack = GetStack(badaddr);

@@ -1,4 +1,4 @@
-(*$import Char TopLevel Int32 String *)
+(*$import Char TopLevel Int String *)
 
 (* stringhash.sml
  *
@@ -41,9 +41,12 @@ structure StrgHash =
 
 (*
  * $Log$
-# Revision 1.3  98/04/24  22:51:59  pscheng
-# fixed imports
+# Revision 1.4  99/09/22  15:46:09  pscheng
+# *** empty log message ***
 # 
+# Revision 1.3  1998/04/24  22:51:59  pscheng
+# fixed imports
+#
 # Revision 1.2  1998/01/21  20:40:51  pscheng
 # moved the .sig files to .sig.sml file
 #

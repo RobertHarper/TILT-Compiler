@@ -19,8 +19,7 @@
 	.globl	returnFromYield
 	.globl	save_regs_MLtoC
 	.globl	load_regs_MLtoC
-	.globl	old_alloc
-	.globl	cur_alloc_ptr
+
 
  ! ---------------------------------------------------------------------------------------------
  ! save_regs stores the integer register (exceptions noted) into the save area pointed to by r1.
@@ -387,18 +386,6 @@ load_regs_MLtoC:
 
 
 
-
- ! ----------------- old_alloc --------------------------
- ! return address comes in $26
- ! request size come in at heap limit
- ! ------------------------------------------------------
-	.proc	07
-	.align  4
-old_alloc:
-	call	abort
-	nop
-
-
 	.proc	07
 	.align  4
 load_regs2:	
@@ -440,11 +427,3 @@ load_regs2:
 	
         .size load_regs2,(.-load_regs2)
 		
-
-		
-.data
-.align 4
-cur_alloc_ptr:	
-	.word	0
-	.word	0
-

@@ -1,11 +1,14 @@
-(*$import YaccBase Stream LrTable TextIO Int32 *)
+(*$import YaccBase Stream LrTable TextIO Int *)
 
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.5  98/03/09  15:39:30  pscheng
-# added debugs
+# Revision 1.6  99/09/22  15:46:08  pscheng
+# *** empty log message ***
 # 
+# Revision 1.5  1998/03/09  15:39:30  pscheng
+# added debugs
+#
 # Revision 1.4  1998/02/15  22:44:04  pscheng
 # bootstrapping changes
 #

@@ -178,11 +178,11 @@ struct
 				  (complete2string comp)),
 			  Break,
 			  pp_con seen c2, String ")"]
-       | CON_APP (c1,c2) => pp_region "CON_APP(" ")"
-	                              [pp_con seen c1,
-				       String ",",
-				       Break,
-				       pp_con seen c2]
+       | CON_APP (c1,cargs) => pp_region "CON_APP(" ")"
+	                        [pp_con seen c1,
+				 String ";",
+				 Break,
+				 pp_list (pp_con seen) cargs ("", ",", "", false)]
        | CON_MU c => pp_region "CON_MU(" ")" [pp_con seen c]
        | CON_RECORD [] => String "UNIT"
        | CON_FLEXRECORD (ref(FLEXINFO(_,true,[]))) => String "UNIT"
@@ -288,11 +288,13 @@ struct
 	end
 
 
-    and pp_kind seen kind = (case kind of
-			    KIND_TUPLE 1 => String "TYPE"
-			  | KIND_TUPLE i => String ("KIND(" ^ (Int.toString i) ^ ")")
-			  | KIND_ARROW (i,j) => String ("KIND(" ^ (Int.toString i) ^
-							" -> " ^ (Int.toString j) ^ ")"))
+    and pp_kind seen kind = 
+	(case kind of
+	     KIND => String "TYPE"
+	   | KIND_TUPLE i => String ("KIND(" ^ (Int.toString i) ^ ")")
+	   | KIND_ARROW (i,k) => Hbox[String ("KIND(" ^ (Int.toString i) ^ " -> "),
+					      pp_kind seen k,
+					      String ")"])
 
     and pp_elist seen exps = pp_list (pp_exp seen) exps ("[",",","]",false)
     and pp_clist seen cons = pp_list (pp_con seen) cons ("[",",","]",false)
@@ -381,7 +383,8 @@ struct
 	     let val rules = (mapcount (fn (n,e) => ((Int.toString n) ^ ": ", e)) arms) @ 
 	                     [("Default: ", default)]
 	     in  pp_region "CASE(" ")"
-		 [String "arg = ", pp_exp arg, String ":", pp_con sumtype, String ",", Break,
+		 [String "arg = ", pp_exp arg, String ":", Break,
+		  pp_con sumtype, String ",", Break,
 		  String "resultType = ", pp_con tipe, String ",", Break,
 		  String "boundVar = ", pp_var bound, String ",", Break,
 		  (pp_list (fn (str,eopt) => Hbox[String str,

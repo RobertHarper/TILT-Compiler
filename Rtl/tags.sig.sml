@@ -3,7 +3,7 @@ signature RTLTAGS =
 sig
 
    (* the low 3 bits indicate the object type *)
-   val skip : TilWord32.word
+   val skip : int -> TilWord32.word
    val record : TilWord32.word
    val intarray : TilWord32.word
    val realarray : TilWord32.word

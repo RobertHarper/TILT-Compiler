@@ -21,7 +21,7 @@ Substring   Basis/Text/substring
 PreInt      Basis/Numeric/pre-int
 NumScan     Basis/Text/num-scan
 INTEGER     Basis/Numeric/integer-sig
-Int32       Basis/Numeric/int32 
+Int         Basis/Numeric/int32 
 PreReal     Basis/Numeric/pre-real
 MATH        Basis/Numeric/math-sig
 Math64      Basis/Numeric/math64c
@@ -43,6 +43,8 @@ MONO_VECTOR Basis/Aggregate/mono-vector-sig
 MONO_ARRAY  Basis/Aggregate/mono-array-sig
 Word8Vector Basis/Aggregate/word8-vector
 Word8Array  Basis/Aggregate/word8-array
+PACK_WORD   Basis/Aggregate/pack-word-sig
+Pack32Big   Basis/Aggregate/pack-word-b32
 BYTE        Basis/Numeric/byte-sig
 Byte        Basis/Numeric/byte
 CharVector  Basis/Aggregate/char-vector

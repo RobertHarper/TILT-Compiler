@@ -21,9 +21,6 @@ test:
 	echo ${ASFLAGS}
 
 
-
-
-
 # ------------------------------ General macros --------------------------
 alpha_osf20_sys_name = alpha_osf
 alpha_osf32_sys_name = alpha_osf
@@ -44,7 +41,8 @@ chip_name=${${full_sys_name}_chip_name}
 objdir=obj_${sys_name}
 ASM=${sys_name}_asm
 MAIN=main_nothread.o
-COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o  ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_para.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/mllib.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o  ${objdir}/gc_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/forward.o
+# mllib.o used to be a core object file
+COREFILES_OBJ=${objdir}/posix.o ${objdir}/gcstat.o  ${objdir}/gc_semi.o ${objdir}/gc_gen.o ${objdir}/gc_large.o ${objdir}/gc_para.o ${objdir}/gc_semi_para.o ${objdir}/gc_gen_para.o ${objdir}/gc.o ${objdir}/create.o ${objdir}/${MAIN} ${objdir}/show.o ${objdir}/service.o ${objdir}/global.o ${objdir}/hash.o ${objdir}/queue.o ${objdir}/stats.o ${objdir}/stack.o ${objdir}/bitmap.o ${objdir}/platform.o ${objdir}/memobj.o ${objdir}/thread.o ${objdir}/exn.o ${objdir}/signal.o  ${objdir}/gc_${ASM}.o ${objdir}/stack_${ASM}.o ${objdir}/service_${ASM}.o ${objdir}/forward.o
 COREFILES_HPROF_OBJ=$(COREFILES_OBJ:.o=.hprof.o)
 
 
@@ -68,8 +66,11 @@ alpha_osf_cc=cc
 solaris_cc=gcc
 # /usr/local/opt/SUNWspro/bin/cc Solaris ANSI C compiler
 # /usr/lang/cc for SunOS 
-alpha_osf_cflags=-warnprotos -D__STDC__ -c -g -D${sys_name}
-solaris_cflags=-Wa,-xarch=v8plus -c -g -D${sys_name}
+
+# The xtaso_short flag instructs the Alpha compiler to use 32-bit pointers 
+# If this were not set, then the ML pointers would be incorrectly 64 bits.
+alpha_osf_cflags=-xtaso_short -warnprotos -D__STDC__ -c -g -D${sys_name}
+solaris_cflags=-O2 -Winline -finline-functions -Wa,-xarch=v8plus -c -g -D${sys_name}
 CC=${${sys_name}_cc}
 CFLAGS=${${sys_name}_cflags}
 
@@ -173,8 +174,17 @@ ${objdir}/gc_semi.o: gc_semi.c tag.h general.h platform.h forward.h gc.h stack.h
 ${objdir}/gc_gen.o: gc_gen.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_gen.c
 
+${objdir}/gc_large.o: gc_large.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
+	${CC} -o $@ ${CFLAGS} gc_large.c
+
 ${objdir}/gc_para.o: gc_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc_para.c
+
+${objdir}/gc_semi_para.o: gc_semi_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
+	${CC} -o $@ ${CFLAGS} gc_semi_para.c
+
+${objdir}/gc_gen_para.o: gc_gen_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
+	${CC} -o $@ ${CFLAGS} gc_gen_para.c
 
 ${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
 	${CC} -o $@ ${CFLAGS} gc.c

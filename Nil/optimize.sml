@@ -558,6 +558,14 @@ fun pp_alias UNKNOWN = print "unknown"
 	    end	     
 
 
+	fun flattenBnds [] = []
+	  | flattenBnds (Exp_b(v,tr,Let_e(Sequential,innerBnds,body))::rest) = 
+	    let val innerBnds = flattenBnds innerBnds
+		val bnd = Exp_b(v,tr,body)
+	    in  innerBnds @ (bnd :: (flattenBnds rest))
+	    end
+	  | flattenBnds (bnd::rest) = bnd :: (flattenBnds rest)
+	    
 	fun cbnd_used' state cbnd = get_varuse(state, #1(extractCbnd cbnd))
 	fun cbnd_used state cbnd = is_used_var(state, #1(extractCbnd cbnd))
 
@@ -926,6 +934,8 @@ fun pp_alias UNKNOWN = print "unknown"
 			    val (bnds,state) = do_bnds(bnds,state)
 			    val e = do_exp state e
 			    val bnds = List.mapPartial (bnd_used state) bnds
+			    (* We cannot flatten bnds inside do_bnds because bnd_used would access undefined vars *)
+			    val bnds = flattenBnds bnds
 		        in  NilUtil.makeLetE letsort bnds e
 			end
 		| ExternApp_e(f,elist) =>
@@ -1133,18 +1143,10 @@ fun pp_alias UNKNOWN = print "unknown"
 	       | _ => niltrace)
 
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
-	    let  fun flattenBnds [] = []
-		   | flattenBnds (Exp_b(v,tr,Let_e(Sequential,innerBnds,body))::rest) = 
-		      let val innerBnds = flattenBnds innerBnds
-			  val bnd = Exp_b(v,tr,body)
-		      in  innerBnds @ (bnd :: (flattenBnds rest))
-		      end
-		   | flattenBnds (bnd::rest) = bnd :: (flattenBnds rest)
-		val bnds = flattenBnds bnds
-		val (bnds_list,state) = foldl_acc do_bnd state bnds
-		(* The un-onearg optimization may result in a nested let binding *)
-		val bnds = flattenBnds bnds
-	    in  (List.concat bnds_list,state)
+	    let val bnds = flattenBnds bnds
+		val (newbnds_list,state) = foldl_acc do_bnd state bnds
+		val newbnds = List.concat newbnds_list
+	    in  (newbnds,state)
 	    end
 
 	and do_bnd (bnd : bnd, state : state) : bnd list * state = 
@@ -1221,7 +1223,6 @@ fun pp_alias UNKNOWN = print "unknown"
 				      val eff = not (valuable(state,e))
 				      val (effect,alias) = 
 					  (case e of
-					       
 					       Var_e v' => 
 						   let
 						       val n = Name.var2name v

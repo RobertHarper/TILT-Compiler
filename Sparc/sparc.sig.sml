@@ -13,6 +13,8 @@ sig
   val in_ea_disp_range : int -> bool
   val maxsp_disp : int
   val threadScratch_disp : int
+  val writelistAlloc_disp : int
+  val writelistLimit_disp : int
 
   datatype storei_instruction = ST | STUB | STD
   datatype storef_instruction = STF | STDF

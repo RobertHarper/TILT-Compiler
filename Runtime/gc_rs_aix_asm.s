@@ -41,7 +41,6 @@
 	.globl	float_alloc_raw
 	.globl	int_alloc_raw
 	.globl	ptr_alloc_raw
-	.globl	old_alloc
 	.extern	.float_alloc{PR}
 	.extern	.int_alloc{PR}
 	.extern	.ptr_alloc{PR}
@@ -708,7 +707,3 @@ ptr_alloc_raw:
         blr
 
 	
-old_alloc:			# alloc_limit contains size of request
-        cal     r3,-1(r0)
-        bl      .abort{PR}	# old_alloc not implemented XXX
-	cror	r31, r31, r31

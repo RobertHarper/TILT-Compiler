@@ -1,4 +1,4 @@
-(*$import Name Nil *)
+(*$import Name Nil Alpha *)
 signature NILRENAME = 
   sig
     type exp = Nil.exp

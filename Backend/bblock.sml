@@ -1,4 +1,4 @@
-(*$import MACHINEUTILS BBLOCK Int32 Util Listops TRACETABLE List Stats *)
+(*$import MACHINEUTILS BBLOCK Int Util Listops TRACETABLE List Stats *)
 functor Bblock(structure Machine : MACHINE
 	       structure Machineutils : MACHINEUTILS
 	       structure Tracetable : TRACETABLE)

@@ -24,37 +24,37 @@ extern unsigned long _ftext;
 extern unsigned long _fbss;
 extern unsigned long _end;
 
-value_t DivideByZeroExn = 0;
-value_t OverflowExn = 0;
-value_t datastart, dataend;
+ptr_t DivideByZeroExn = 0;
+ptr_t OverflowExn = 0;
+mem_t datastart, dataend;
 
 /* Little allocation area for data allocated by the runtime. */
-static value_t RuntimeGlobalData_Start;
-value_t RuntimeGlobalData_Cur;
-value_t RuntimeGlobalData_End;
+static mem_t RuntimeGlobalData_Start;
+mem_t RuntimeGlobalData_Cur;
+mem_t RuntimeGlobalData_End;
 
-int IsCompileGlobalData(value_t addr)
+int IsCompileGlobalData(ptr_t addr)
 {
   int res = (datastart <= addr) && (addr <= dataend);
   return res;
 }
 
 
-int IsRuntimeGlobalData(value_t addr)
+int IsRuntimeGlobalData(ptr_t addr)
 {
   return ((RuntimeGlobalData_Start <= addr) &&
 	  (addr < RuntimeGlobalData_End));
 }
 
-int IsGlobalData(value_t addr)
+int IsGlobalData(ptr_t addr)
 {
   return (IsCompileGlobalData(addr) || 
 	  IsRuntimeGlobalData(addr));
 }
 
-int IsConstructorData(value_t addr)
+int IsConstructorData(ptr_t addr)
 {
-  return (addr <= 256);
+  return (addr <= (ptr_t) 256);
 }
 
 #ifdef solaris
@@ -63,13 +63,13 @@ extern int firstdata;
 
 void global_init()
 {
-  value_t fields[3];
+  val_t fields[3];
   int masks[1];
-  int RuntimeGlobalDataSize = 1024;
-  char *RuntimeGlobalData = (char *) malloc(sizeof(char) * RuntimeGlobalDataSize);
+  int RuntimeGlobalDataSize = 256;
+  mem_t RuntimeGlobalData = (mem_t) malloc(sizeof(unsigned int) * RuntimeGlobalDataSize);
 
-  RuntimeGlobalData_Start = (value_t) RuntimeGlobalData;
-  RuntimeGlobalData_Cur = (value_t) RuntimeGlobalData;
+  RuntimeGlobalData_Start = (mem_t) RuntimeGlobalData;
+  RuntimeGlobalData_Cur = RuntimeGlobalData_Start;
   RuntimeGlobalData_End = RuntimeGlobalData_Start + RuntimeGlobalDataSize;
 
   fields[0] = MLEXN_DIVZERO;
@@ -83,14 +83,14 @@ void global_init()
   OverflowExn  = alloc_record(fields,masks,2);
   
 #ifdef alpha_osf
-  datastart = (value_t) &_fdata;
-  dataend   = (value_t) &_end;  
+  datastart = (mem_t) &_fdata;
+  dataend   = (mem_t) &_end;  
   /* _edata does not seem to work at all, in fact, it's less then _fdata */
 #endif
 
 #ifdef solaris
-  datastart = (value_t) &firstdata;
-  dataend   = (value_t) &_end;  
+  datastart = (mem_t) &firstdata;
+  dataend   = (mem_t) &_end;  
 #endif
 
 }

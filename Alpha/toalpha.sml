@@ -400,7 +400,7 @@ struct
 	 emit (SPECIFIC(INTOP (MULL, Rsrc1, src2, Rdest)))
        end
 
-     | translate (Rtl.DIV (rtl_Rsrc1, Rtl.REG rtl_Rsrc2, rtl_Rdest)) =
+     | translate (Rtl.DIVT (rtl_Rsrc1, Rtl.REG rtl_Rsrc2, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
 	 val Rsrc2 = translateIReg rtl_Rsrc2
@@ -419,7 +419,7 @@ struct
 					       ireg 26, ireg 27, ireg 29]})))
        end
 
-     | translate (Rtl.DIV (rtl_Rsrc1, Rtl.IMM denom, rtl_Rdest)) =
+     | translate (Rtl.DIVT (rtl_Rsrc1, Rtl.IMM denom, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
 	 val Rdest = translateIReg rtl_Rdest
@@ -442,34 +442,47 @@ struct
 						   ireg 26, ireg 27, ireg 29]})))
 	   end
        end
-     | translate (Rtl.MOD (rtl_Rsrc1, Rtl.REG rtl_Rsrc2, rtl_Rdest)) =
+
+     | translate (Rtl.MODT (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
-	 val Rsrc2 = translateIReg rtl_Rsrc2
+	 val Rsrc2 = 
+	     (case rtl_op2 of
+		  Rtl.REG r2 => translateIReg r2
+		| Rtl.IMM denom => let val Rsrc2 = freshIreg()
+				   in  emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero))); Rsrc2
+				   end)
 	 val Rdest = translateIReg rtl_Rdest
        in
 	 (* This is a special call to the libc __reml routine, which
 	    wants arguments in $24 & 25, its address in $27, a return
             address in $23, and returns its result in $27 and the pv in $23. *)
-		   emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-					func = DIRECT (Rtl.ML_EXTERN_LABEL "__reml",SOME(ireg 23)),
-					args = [Rsrc1, Rsrc2],
-					results = [Rdest],
-					argregs = SOME [ireg 24, ireg 25],
-					resregs = SOME [ireg 27],
-					destroys = SOME [ireg 23, ireg 24, ireg 25, 
-							 ireg 26, ireg 27, ireg 29]})))
+	   emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
+				func = DIRECT (Rtl.ML_EXTERN_LABEL "__reml",SOME(ireg 23)),
+				args = [Rsrc1, Rsrc2],
+				results = [Rdest],
+				argregs = SOME [ireg 24, ireg 25],
+				resregs = SOME [ireg 27],
+				destroys = SOME [ireg 23, ireg 24, ireg 25, 
+						 ireg 26, ireg 27, ireg 29]})))
        end
 
-     | translate (Rtl.MOD (rtl_Rsrc1, Rtl.IMM denom, rtl_Rdest)) =
+     | translate (Rtl.UDIV (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
        let
 	 val Rsrc1 = translateIReg rtl_Rsrc1
+	 val Rsrc2 = 
+	     (case rtl_op2 of
+		  Rtl.REG r2 => translateIReg r2
+		| Rtl.IMM denom => let val Rsrc2 = freshIreg()
+				   in  emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero))); Rsrc2
+				   end)
 	 val Rdest = translateIReg rtl_Rdest
-	 val Rsrc2 = freshIreg ()
        in
-	 emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero)));
+	 (* This is a special call to the libc __divl routine, which
+	    wants arguments in $24 & 25, its address in $27, a return
+            address in $23, and returns its result in $27. *)
 	 emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
-			      func = DIRECT (Rtl.ML_EXTERN_LABEL "__reml",SOME(ireg 23)),
+			      func = DIRECT (Rtl.ML_EXTERN_LABEL "__divlu", SOME (ireg 23)),
 			      args = [Rsrc1, Rsrc2],
 			      results = [Rdest],
 			      argregs = SOME [ireg 24, ireg 25],
@@ -477,6 +490,31 @@ struct
 			      destroys = SOME [ireg 23, ireg 24, ireg 25, 
 					       ireg 26, ireg 27, ireg 29]})))
        end
+
+     | translate (Rtl.UMOD (rtl_Rsrc1, rtl_op2, rtl_Rdest)) =
+       let
+	 val Rsrc1 = translateIReg rtl_Rsrc1
+	 val Rsrc2 = 
+	     (case rtl_op2 of
+		  Rtl.REG r2 => translateIReg r2
+		| Rtl.IMM denom => let val Rsrc2 = freshIreg()
+				   in  emit (SPECIFIC(LOADI(LDA, Rsrc2, denom, Rzero))); Rsrc2
+				   end)
+	 val Rdest = translateIReg rtl_Rdest
+       in
+	 (* This is a special call to the libc __reml routine, which
+	    wants arguments in $24 & 25, its address in $27, a return
+            address in $23, and returns its result in $27 and the pv in $23. *)
+	   emit (BASE(RTL (CALL{calltype = Rtl.ML_NORMAL,
+				func = DIRECT (Rtl.ML_EXTERN_LABEL "__remlu",SOME(ireg 23)),
+				args = [Rsrc1, Rsrc2],
+				results = [Rdest],
+				argregs = SOME [ireg 24, ireg 25],
+				resregs = SOME [ireg 27],
+				destroys = SOME [ireg 23, ireg 24, ireg 25, 
+						 ireg 26, ireg 27, ireg 29]})))
+       end
+
 
      | translate (Rtl.S4ADD (rtl_Rsrc1, op2, rtl_Rdest)) =
        let
@@ -545,10 +583,6 @@ struct
        in
 	 emit (SPECIFIC(INTOP (MULLV, Rsrc1, src2, Rdest)))
        end
-
-     | translate (Rtl.DIVT args) = translate (Rtl.DIV args)
-
-     | translate (Rtl.MODT args) = translate (Rtl.MOD args)
 
      | translate (Rtl.CMPSI (comparison, rtl_Rsrc1, Rtl.REG rtl_Rsrc2,
 			     rtl_Rdest)) =
@@ -964,41 +998,39 @@ struct
 
      | translate (Rtl.MUTATE (ea, newval, isptr_opt)) =
 	 let 
-	     fun logwrite() = 
-		 let val writelist_cursor = Rtl.ML_EXTERN_LABEL "writelist_cursor"
-		     val writelist_end = Rtl.ML_EXTERN_LABEL "writelist_end"
-		     val cursor_addr = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
-		     val cursor_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-		     val cursor_val2 = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-		     val end_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+	     fun barrier() = 
+		 let 
+		     val writeAlloc = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
+		     val writeLimit = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
+		     val writeAlloc2 = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
 		     val Rskip = Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 		     val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
 		     val storeLoc = Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-		 in  app translate [Rtl.LOAD32I(Rtl.LEA(writelist_cursor,0),cursor_val),
-				    Rtl.LOAD32I(Rtl.LEA(writelist_end,0),end_val),
-				    Rtl.BCNDI(Rtl.LT, cursor_val, Rtl.REG end_val, afterLabel, true)];
+		 in  emit (SPECIFIC(LOADI (LDL, translateIReg writeAlloc, writelistAlloc_disp, Rth)));
+		     emit (SPECIFIC(LOADI (LDL, translateIReg writeLimit, writelistLimit_disp, Rth)));
+		     translate (Rtl.BCNDI(Rtl.LT, writeAlloc, Rtl.REG writeLimit, afterLabel, true));
 		     emit (BASE (MOVE (Rheap, Rat)));
 		     emit (BASE (GC_CALLSITE afterLabel));
 		     emit (BASE (BSR (Rtl.ML_EXTERN_LABEL ("GCFromML"), NONE,
 				      {regs_modified=[Rat], regs_destroyed=[Rat],
 				       args=[Rat]})));
-		     app translate [Rtl.ILABEL afterLabel,
-				    Rtl.LADDR(Rtl.LEA(writelist_cursor,0),cursor_addr),
-				    Rtl.LOAD32I(Rtl.REA(cursor_addr,0),cursor_val2),
-				    Rtl.LADDR(ea, storeLoc),
-				    Rtl.STORE32I(Rtl.REA(cursor_val2,0),storeLoc),
-				    Rtl.ADD(cursor_val2, Rtl.IMM 4, cursor_val2),
-				    Rtl.STORE32I(Rtl.REA(cursor_addr,0),cursor_val2)]
+		     translate (Rtl.ILABEL afterLabel);
+		     emit (SPECIFIC(LOADI (LDL, translateIReg writeAlloc2, writelistAlloc_disp, Rth)));
+		     app translate [Rtl.LADDR(ea, storeLoc),
+				    Rtl.STORE32I(Rtl.REA(writeAlloc2,0),storeLoc),
+				    Rtl.ADD(writeAlloc2, Rtl.IMM 4, writeAlloc2)];
+		     emit (SPECIFIC(STOREI (STL, translateIReg writeAlloc2,writelistAlloc_disp, Rth)))
 		 end
+	     fun write() = translate (Rtl.STORE32I(ea,newval)) 
 	 in
-	     translate (Rtl.STORE32I(ea,newval));
 	     (case isptr_opt of
-		  NONE => logwrite()
+		  NONE => (barrier(); write())
 		| SOME isptr =>
 		      let val after = Rtl.fresh_code_label "dynmutate_after"
 		      in  translate (Rtl.BCNDI(Rtl.EQ,isptr,Rtl.IMM 0,after,false));
-			  logwrite();
-			  translate (Rtl.ILABEL after)
+			  barrier();
+			  translate (Rtl.ILABEL after);
+			  write()
 		      end)
 	 end
 

@@ -1,4 +1,4 @@
-(*$import ARRAY_SORT Int32 Word32 Array TopLevel *)
+(*$import ARRAY_SORT Word32 Array TopLevel *)
 (* array-qsort.sml
  *
  * COPYRIGHT (c) 1993 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

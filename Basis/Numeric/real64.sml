@@ -1,4 +1,4 @@
-(*$import REAL Math64 General Bool Int32 RealFormat NumScan *)
+(*$import REAL Math64 General Bool Int RealFormat NumScan *)
 (* real64.sml
  *
  * COPYRIGHT (c) 1995 AT&T Bell Laboratories.
@@ -316,9 +316,12 @@ structure LargeReal = Real64
 
 (*
  * $Log$
-# Revision 1.3  99/04/15  18:52:56  pscheng
+# Revision 1.4  99/09/22  15:45:09  pscheng
 # *** empty log message ***
 # 
+ * Revision 1.3  1999/04/15 18:52:56  pscheng
+ * *** empty log message ***
+ *
 # Revision 1.2  1998/04/06  21:17:40  pscheng
 # update: Typeof_c, dependent arrow/record types
 #

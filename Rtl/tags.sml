@@ -11,8 +11,8 @@ struct
     val intarray  = 0w2 : TilWord32.word
     val ptrarray  = 0w3 : TilWord32.word
     val realarray = 0w4 : TilWord32.word
-    val skip      = 0w5 : TilWord32.word
-    
+    fun skip numSkip = TilWord32.fromInt (5 + (8 * numSkip))
+
     (* For raw(bytes), pointer(words), and real(double) arrays, 
        the upper 29 bits measure the length of the array in bytes.
        The following offsets can be used for masking in the logical lengths. *)

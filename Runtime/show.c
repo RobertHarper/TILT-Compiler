@@ -7,99 +7,103 @@
 #include "global.h"
 
 
-/* Check that pointer is either a tag, a global, or a current heap value */
-int ptr_check(value_t *loc, Heap_t **legalHeaps)
+
+int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
-  value_t pointer = *loc;
+  while (1) {
+    Heap_t *curHeap = *(legalHeaps++);
+    Bitmap_t *curStart = (legalStarts == NULL) ? NULL : *(legalStarts++);
+    if (curHeap == NULL)
+      break;
+    if ((mem_t) v >= curHeap->bottom && (mem_t) v < curHeap->top) {
+      unsigned int wordOffset = ((mem_t) v) - curHeap->bottom;
+      if (curStart == NULL)
+	return 1;
+      if (!(IsSet(curStart, wordOffset)))
+	printf("!!! wordOffset %d not set\n",wordOffset);
+      return IsSet(curStart, wordOffset);
+    }
+  }
+  return 0;
+}
+
+/* Check that pointer is either a tag, a global, or a current heap value */
+int ptr_check(ptr_t *ptrLoc, Heap_t **legalHeaps, Bitmap_t **legalStarts)
+{
+  ptr_t pointer = *ptrLoc;
   if (IsConstructorData(pointer))
     return 1;
   if (IsGlobalData(pointer))
     return 1;
-  if (pointer == 258) /* Uninitialized pointer */
+  if (pointer == (ptr_t) 258) /* Uninitialized pointer */
     return 1;
-  while (1) {
-    Heap_t *curHeap = *(legalHeaps++);
-    if (curHeap == NULL)
-      break;
-    if (pointer >= curHeap->bottom && pointer < curHeap->top)
-      return 1;
-  }
-  printf("TRACE ERROR: ptr_check %d at %d failed.  GC #%d\n",pointer,loc,NumGC);
+  if (inHeaps(pointer,legalHeaps,legalStarts))
+    return 1;
+  printf("\n  !!!!TRACE ERROR: ptr_check %d at %d failed.  GC #%d\n",pointer,ptrLoc,NumGC);
   return 0;
 }
 
 extern int heapstart;
 
-/* If i looks like a printer, issue a warning. */
-int data_check(value_t *loc, Heap_t **legalHeaps)
+/* If it looks like a pointer, issue a warning. */
+int data_check(val_t *loc, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
-  value_t i = *loc;
-  if (verbose) {
-    while (1) {
-      Heap_t *curHeap = *(legalHeaps++);
-      if (curHeap == NULL)
-	break;
-      if (i >= curHeap->bottom && i < curHeap->alloc_start) 
-	printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
-    }
-   if (i > heapstart)
-     printf("TRACE WARNING: data_check given int that is large enough to be pointer %d\n", i);
-  }
+  val_t i = *loc;
+  if (verbose) 
+    if (inHeaps((ptr_t) i,legalHeaps,legalStarts))
+      printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
   return 1;
 }
 
-value_t show_obj(value_t s, int checkonly, Heap_t **legalHeaps)
+/* Show the object whose raw beginning (i.e. including tag(s)) is at s */
+mem_t show_obj(mem_t start, int show, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {
-  value_t *start = (value_t *)s, *end = NULL;
-  value_t *obj = start + 1;
-  int i, tag, type;
-#ifdef HEAPPROFILE
-  assert(0);
-#endif
+  mem_t end = NULL;
+  ptr_t obj = start + 1;
+  tag_t tag = start[0];
+  int type = GET_TYPE(tag);
+  int i;
 
-  tag = start[0];
-  type = GET_TYPE(tag);
   switch (type)
     {
     case RECORD_TAG:
       {
-	int i;
 	int len = GET_RECLEN(tag);
 	int mask = GET_RECMASK(tag);
 	if (mask >> len) {
 	  printf("TRACE ERROR: Bad record tag %d at %d\n", tag, start);
 	  assert(0);
 	}
-	if (!checkonly)
+	if (show)
 	  printf("%ld: REC(%d)    ", obj,len);
 	for (i=0; i<len; i++) {
-	  value_t field = obj[i];
+	  val_t field = obj[i];
 	  int isPointer = 1 & (mask >> i);
 	  if (isPointer) {
-	    if (!checkonly)
+	    if (show)
 	      printf("P(%5d)  ",field);
-	    ptr_check(obj+i,legalHeaps);
+	    ptr_check((ptr_t *)(obj+i),legalHeaps,legalStarts);
 	  }
 	  else {
-	    if (!checkonly)
+	    if (show)
 	      printf("I(%5d)  ",field);
-	    data_check(obj+i,legalHeaps);
+	    data_check(obj+i,legalHeaps,legalStarts);
 	  }
 	}
-	if (!checkonly)
+	if (show)
 	  printf("\n");
 	end = obj + len;
       }
       break;
     case FORWARD_TAG:
       {
-	value_t *forwardstart = ((value_t *)start[0]) - 1;
-	value_t *forwardend = NULL;
+	mem_t forwardstart = ((mem_t)obj[0]) - 1;
+	mem_t forwardend = NULL;
 	int len;
 
-	if (!checkonly)
+	if (show)
 	  printf("%ld: SENT(%d) -> ",obj,forwardstart + 1);
-	forwardend = (value_t *)(show_obj((value_t)forwardstart,checkonly,legalHeaps));
+	forwardend = show_obj(forwardstart,show,legalHeaps,legalStarts);
 	len = forwardend - forwardstart;
 	end = start + len;
       }
@@ -114,51 +118,53 @@ value_t show_obj(value_t s, int checkonly, Heap_t **legalHeaps)
 
 	if (type == IARRAY_TAG) {
 	  loglen = bytelen;
-	  if (!checkonly)
-	    printf("%ld: IAR(%ld)  ",start,wordlen,bytelen);
+	  if (show)
+	    printf("%ld: IAR(%ld/%ld)  ",obj,wordlen,loglen);
 	}
 	else if (type == RARRAY_TAG) {
 	  loglen = bytelen / 8;
-	  if (!checkonly)
-	    printf("%ld: RAR(%ld/%ld)  ",start,wordlen,loglen);
+	  if (show)
+	    printf("%ld: RAR(%ld/%ld)  ",obj,wordlen,loglen);
 	}
 	else if (type == PARRAY_TAG) {
 	  loglen = bytelen / 4;
-	  if (!checkonly)
-	    printf("%ld: PAR(%ld/%ld)  ",start,wordlen,loglen);
+	  if (show)
+	    printf("%ld: PAR(%ld/%ld)  ",obj,wordlen,loglen);
 	}
 	else 
 	  assert(0);
 
 	for (i=0; i<((type==IARRAY_TAG)?wordlen:loglen); i++) {
-	  if (!checkonly && ((i) / 8 * 8) == (i) && (i != 0))
+	  if (show && ((i) / 8 * 8) == (i) && (i != 0))
 	    printf("        ");
 	  switch (type) {
 	    case IARRAY_TAG: {
-	      value_t field = obj[i];
-	      if (!checkonly)
+	      val_t field = obj[i];
+	      if (show)
 		printf("I(%ld)  ",field);
-	      data_check(obj+i,legalHeaps);
+	      data_check(obj+i,legalHeaps,legalStarts);
 	      break;
 	    }
 	    case PARRAY_TAG: {
-	      value_t field = obj[i];
-	      if (!checkonly)
+	      ptr_t field = (ptr_t) obj[i];
+	      if (show)
 		printf("%ld   ",field);
-	      ptr_check(obj+i,legalHeaps);
+	      ptr_check((ptr_t *)(obj+i),legalHeaps,legalStarts);
 	      break;
 	    }
 	    case RARRAY_TAG: {
-	      if (!checkonly)
-		printf("%lf   ",((double *)obj)[i]);
+	      if (show)
+		printf("%12f   ",((double *)obj)[i]);
 	      break;
 	    }
 	  default : 
 	    assert(0);
 	  }
-	  if (!checkonly && ((i+1) / 8 * 8) == (i+1))
+	  if (show && ((i+1) / 8 * 8) == (i+1))
 	    printf("\n");
 	}
+	if (show)
+	  printf("\n");
 	if (wordlen == 0)
 	  end = obj + 1;
 	else 
@@ -166,81 +172,79 @@ value_t show_obj(value_t s, int checkonly, Heap_t **legalHeaps)
       }
       break;
     case SKIP_TAG:
-      if (!checkonly)
+      if (show)
 	printf("%ld: SKIP\n", start);
       end = obj;
       break;
     default:
-      printf("\nshow.c:show_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),s);
+      printf("\nshow_obj  tag = %d(%d) at address = %d\b",tag,GET_TYPE(tag),obj);
       assert(0);
       break;
     }
-  return (value_t)end;
+  return end;
 }
 
-
-
-
-void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t **legalHeaps, int show)
+mem_t show_skips(int show, mem_t start, mem_t finish)
 {
+  mem_t cur = start;
+  while (cur < finish) {
+    tag_t tag = *cur;
+    if (GET_TYPE(tag) == SKIP_TAG)
+      cur += 1 + (GET_SKIP(tag)); 
+    else
+      break;
+  }
+  if (show)
+    if (cur == start)
+      ;
+    else if (cur == start + 1)
+      printf("%ld: SKIP\n", start);
+    else
+      printf("%ld - %ld: %d SKIPs\n",start,cur-1,cur - start);
+  return cur;
+}
+
+Bitmap_t *scan_heap(char *label, mem_t start, mem_t finish, mem_t top, 
+		    Heap_t **legalHeaps, Bitmap_t **legalStarts,
+		    int show, int makeBitmap)
+{
+  mem_t cur = start;
+  Bitmap_t *curStart = makeBitmap ? CreateBitmap(finish - start) : NULL;
   if (NumGC < LEAST_GC_TO_CHECK)
     return;
   if (show) {
-    printf("--------------HEAP CHECK START GC %d ------------------------------\n",NumGC);
+    printf("--------------HEAP CHECK at GC %d ------------------------------\n",NumGC);
     printf("%s %d <= %d < %d\n",label,start,finish,top);
     printf("--------------------------------------------------------------\n");
   }
-  while (start < finish)
-      start = show_obj(start,!show,legalHeaps);
-  if (show) {
-    printf("--------------HEAP CHECK END-----------------------------------\n\n");
-  }
-}
-
-#ifdef SEMANTIC_GARBAGE  
-extern unsigned long semantic_garbage_offset;
-extern int NumGC, NumMajorGC;
-unsigned long SemanticGarbageSize = 0;
-
-void scandead_heap(char *label, value_t start, value_t finish, value_t top)
-{
-  unsigned long temp = 0, temp2 = 0;
-  printf("\n\n");
-  printf("--------------SCANDEAD HEAP START --------------------------------\n");
-  printf("%s %d <= %d < %d\n",label,start,finish,top);
-  printf("------------------------------------------------------------------\n");
-  while (start < finish)
-    {
-      value_t *cur = (value_t *)start;
-      value_t tag = *cur;
-      start = show_obj(start,1,NULL);
-      if (tag != FORWARD_TAG)
-	{
-	  int size = start - (value_t)cur;
-	  value_t stamp_add = ((value_t)cur) + semantic_garbage_offset;
-	  int stamp = *((int *)stamp_add);
-	  temp += size*(NumMajorGC-stamp);
-	  temp2 += size;
-	  /*	  printf("Dead obj: size = %d    life = %d  loc = %d\n",size,NumMajorGC-stamp,cur); */
-	}
+  while (cur < finish) {
+    cur = show_skips(show,cur,finish);
+    if (cur < finish) {
+      if (makeBitmap) {
+	int pos = (cur + 1) - start;
+	SetBitmapRange(curStart,pos,1);
+      }
+      cur = show_obj(cur,show,legalHeaps,legalStarts);
     }
-  printf("GC = %d,  sz*life = %d  sz = %d\n",NumMajorGC,temp,temp2);
-  SemanticGarbageSize += temp;
-  printf("--------------SCANDEAD HEAP END-----------------------------------\n\n");
+  }
+  if (show) {
+    printf("-----------------------------------------------------------------\n\n");
+  }
+  return curStart;
 }
-#endif
+
 
 void show_heap_raw(char *label, int numwords,
-		   value_t from_low, value_t from_high,
-		   value_t to_low,   value_t to_high)
+		   mem_t from_low, mem_t from_high,
+		   mem_t to_low,   mem_t to_high)
 {
   int f;
-  printf("---------HEAP SHOW RAW BEGIN : %s   ----------\n",label);	
-  for (f=0; f<4*numwords; f+=4)
+  printf("---------HEAP SHOW RAW : %s   ----------\n",label);	
+  for (f=0; f<numwords; f++)
     printf("%ld: %ld       %ld: %ld\n",
-	   from_low+f,*((int *)(from_low+f)),
-	   to_low+f,*((int *)(to_low+f)));
-  printf("---------HEAP SHOW RAW BEGIN ------------------------\n");	
+	   from_low+f,*(from_low+f),
+	   to_low+f,*(to_low+f));
+  printf("-----------------------------------------------\n");	
 }
 
 void memdump(char *title, int *start, int len, int *target)

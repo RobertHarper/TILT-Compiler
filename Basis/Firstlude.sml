@@ -130,8 +130,6 @@ val arraymaxlength = 1024 * 1024
 		explode_loop(0w0,[])
 	    end
 	
-	fun sub(x : string, i : int) = vsub(x,i)
-
 	local
     (* copies len words from vector x starting at x_start to array y starting at y_start *)
 	    fun wordcopy(len : uint,

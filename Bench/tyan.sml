@@ -1,10 +1,12 @@
-(*$import Prelude *)
+(*$import TopLevel List Array Int *)
 
 local
 
-fun fold f l acc = foldr f acc l
-fun revfold f l acc = foldl f acc l
-
+fun fold f l acc = List.foldr f acc l
+fun revfold f l acc = List.foldl f acc l
+val update = Array.update
+val sub = Array.sub
+val max = Int.max
 
 val makestring_int = Int.toString
 (* val andb = fn(x,y) => uint32toint32((int32touint32 x) && (int32touint32 y)) *)
@@ -621,7 +623,7 @@ structure G = struct
 	        in 
 		    if andb(n,15)=0 then print (makestring_int n) else (); 
 			print "."; 
-			flush_out std_out;
+			TextIO.flushOut TextIO.stdOut;
 			tasksleft := n-1
 		end
 	  fun try h = 
@@ -631,7 +633,7 @@ structure G = struct
 	      in if P.isZero h 
 		     then ()
 		 else let val h = mkMonic h
-			  val _ = (print "#"; flush_out std_out)
+			  val _ = (print "#"; TextIO.flushOut TextIO.stdOut)
 		      in pairs := addPairs(h,mi,!pairs);
 			  addGen h;
 			  inc newGens
@@ -721,7 +723,7 @@ in
 
     fun readIdeal stream = let
 	  fun readLine () = let
-	        val s = input_line stream
+	        val s = TextIO.inputLine stream
 		val n = size s
 		val n = if n>0 andalso substring(s,n-1,1)="\n" then n-1 else n
 		fun r i = if i>=n then []
@@ -730,9 +732,9 @@ in
 			    | " " => r(i+1)
 			    | _ => map char (char_explode(substring(s,i,n-i)))
 		in r 0 end
-	  fun r () = if end_of_stream stream then []
+	  fun r () = if TextIO.endOfStream stream then []
 		     else poly(P.zero,readLine()) :: r()
-	  fun num() = if end_of_stream stream then Util.illegal "missing #"
+	  fun num() = if TextIO.endOfStream stream then Util.illegal "missing #"
 		      else case nat(0,readLine()) of
 			  (_,_::_) => Util.illegal "junk after #"
 			| (n,_) => n
@@ -743,9 +745,9 @@ in
 	  in i end
 
 fun read filename = let
-      val stream = open_in filename
+      val stream = TextIO.openIn filename
       val i = readIdeal stream
-      val _ = close_in stream
+      val _ = TextIO.closeIn stream
       in i end
 end (* local *) 
 
@@ -863,8 +865,8 @@ val u4 = map G.parsePoly ["abcd-e4","a+b+c+d","ab+bc+cd+da","abc+bcd+cda+dab"]
 
 fun runit () = 
     let
-	val _ = (print "Enter fs, u7, u6, u5, or u4: "; flush_out std_out);
-	val s = input(std_in,2)
+	val _ = (print "Enter fs, u7, u6, u5, or u4: "; TextIO.flushOut TextIO.stdOut);
+	val s = TextIO.inputN(TextIO.stdIn,2)
 	val data = if (s = "fs") then fs else if (s = "u7") then u7 else if (s = "u6") then u6 else 
 	    if (s = "u5") then u5 else if (s = "u4") then u4 else 
 		(print "no such data\n"; raise (Util.Impossible "no such data"))

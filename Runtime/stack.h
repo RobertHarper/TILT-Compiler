@@ -34,8 +34,8 @@
 /* the size and layout of this structure affects the code in stack_asm.s */
 struct StackSnapshot
 {
-  value_t saved_ra;            /* Real return address for this stub */
-  value_t saved_sp;            /* Stack pointer position where stub was inserted */
+  val_t saved_ra;            /* Real return address for this stub */
+  val_t saved_sp;            /* Stack pointer position where stub was inserted */
   unsigned int saved_regstate; /* Register state (mask) at this point */
   Queue_t *roots;              /* Roots between this stub and the one above it */
 };
@@ -46,11 +46,11 @@ typedef struct StackSnapshot StackSnapshot_t;
 #define _inside_stack_h
 #include "thread.h"
 
-void show_stack(value_t sp, value_t cur_retadd, value_t top);
+void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 
 void stack_init(void);
-Queue_t* minor_global_scan(SysThread_t *);
-Queue_t* major_global_scan(SysThread_t *);
+void minor_global_scan(SysThread_t *);
+void major_global_scan(SysThread_t *);
 void local_root_scan(SysThread_t *, Thread_t *, Heap_t *fromspace);
 void stub_error(void);
 

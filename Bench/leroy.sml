@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import TopLevel Int *)
 
 local
     
@@ -420,7 +420,7 @@ fun kb_completion greater =
                     let val new_rule = (n+1, mk_rule left right) in
                      (pretty_rule new_rule;
                       let fun left_reducible (_,(_,(L,_))) = reducible left L;
-                          val (redl,irredl) = partition left_reducible rules
+                          val (redl,irredl) = List.partition left_reducible rules
                       in (do_list deletion_message redl;
                           let fun right_reduce (m,(_,(L,R))) = 
                               (m,mk_rule L (mrewrite_all (new_rule::rules) R));

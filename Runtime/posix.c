@@ -25,27 +25,27 @@
 
 #define PAIR(t,t1,t2,tlong,tstruct) struct tstruct { t1 first; t2 second; }; \
                                     typedef struct tstruct *tlong; \
-                                    typedef value_t t;
+                                    typedef ptr_t t;
                            
 #define TRIPLE(t,t1,t2,t3,tlong,tstruct) struct tstruct { t1 first; t2 second; t3 third; }; \
                                          typedef struct tstruct *tlong; \
-                                         typedef value_t t;
+                                         typedef ptr_t t;
 
 #define LIST(t,tlist,tlong,tstruct) struct tstruct \
                         { t car; \
-			  value_t cdr; \
+			  ptr_t cdr; \
 			}; \
                         typedef struct tstruct *tlong; \
-                        typedef value_t tlist;
+                        typedef ptr_t tlist;
 
-typedef int unit;
+typedef ptr_t unit;  /* The value 256 */
 typedef int bool;
 typedef int posint;
 typedef int word;
 typedef char word8;
-typedef value_t word8array;
-typedef const value_t word8vector;
-typedef value_t string;
+typedef ptr_t word8array;
+typedef const ptr_t word8vector;
+typedef ptr_t string;
 PAIR(intpair,int,int,intpair_long,intpair_struct)
 typedef intpair intpair_option;
 typedef string string_option;
@@ -206,7 +206,7 @@ int getRoundingMode(int unit)
 }
 
 
-value_t setRoundingMode(int ml_mode)
+ptr_t setRoundingMode(int ml_mode)
 {
 #if (defined alpha_osf)
   int mode = 0;
@@ -268,7 +268,7 @@ int real_logb(double arg)
 
 intpair ml_timeofday()
 {
-  value_t result;
+  ptr_t result;
   struct timeval tp;
   struct timezone tzp;
   int fail = gettimeofday (&tp, &tzp);
@@ -282,23 +282,23 @@ intpair ml_timeofday()
 
 mltm ctm2mltm_alloc(struct tm *tm)
 {
-  value_t result = alloc_manyint(9,0);
-  ((value_t *) result)[0] = tm->tm_sec;
-  ((value_t *) result)[1] = tm->tm_min;
-  ((value_t *) result)[2] = tm->tm_hour;
-  ((value_t *) result)[3] = tm->tm_mday;
-  ((value_t *) result)[4] = tm->tm_mon;
-  ((value_t *) result)[5] = tm->tm_year;
-  ((value_t *) result)[6] = tm->tm_wday;
-  ((value_t *) result)[7] = tm->tm_yday;
-  ((value_t *) result)[8] = tm->tm_isdst;
+  ptr_t result = alloc_manyint(9,0);
+  result[0] = tm->tm_sec;
+  result[1] = tm->tm_min;
+  result[2] = tm->tm_hour;
+  result[3] = tm->tm_mday;
+  result[4] = tm->tm_mon;
+  result[5] = tm->tm_year;
+  result[6] = tm->tm_wday;
+  result[7] = tm->tm_yday;
+  result[8] = tm->tm_isdst;
   return ((mltm) result);
 }
 
 string posix_ascTime (mltm mltm)
 {
   char *result = asctime((struct tm *) mltm);
-  value_t res = alloc_string(strlen(result),result);
+  ptr_t res = alloc_string(strlen(result),result);
   return (word8vector) res;
 }
 
@@ -359,7 +359,7 @@ int posix_error_num(string arg)
 string posix_os_tmpname(unit unused)
 {
   char *buf = NULL;
-  value_t res = alloc_uninit_string(L_tmpnam,&buf);
+  ptr_t res = alloc_uninit_string(L_tmpnam,&buf);
   char *result = tmpnam(buf);
   assert(result == buf);
   adjust_stringlen(res,strlen(buf));
@@ -371,7 +371,7 @@ intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_o
   struct pollfd fds[10];
   unsigned long count = 0;
   int i, timeout = INFTIM;
-  value_t result = 0;        /* nil */
+  ptr_t result = 0;        /* nil */
 
   if (sec_usec_option != 0)  /* is it NONE? */
     {
@@ -382,10 +382,10 @@ intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_o
     }
   while (fd_event_list != 0) /* is it nil? */
     {
-      int *fd_event = (int *)(((value_t *)fd_event_list)[0]);
+      int *fd_event = (int *)(fd_event_list[0]);
       int fd = fd_event[0];
       int event = fd_event[1];
-      fd_event_list = ((value_t *)fd_event_list)[0];
+      fd_event_list = (intword_list)(fd_event_list[1]);
       fds[count].fd = fd;
       fds[count].events = event;
       count++;
@@ -394,7 +394,7 @@ intword_list posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_o
   printf("count = %d, timeout = %d \n",count, timeout);
   poll(fds,count,timeout);
   for (i=count-1; i>=0; i--) {
-    int car = alloc_intint(fds[i].fd, fds[i].revents);
+    ptr_t car = alloc_intint(fds[i].fd, fds[i].revents);
     result = alloc_recrec(car,result);
   }
   return result;
@@ -435,11 +435,10 @@ unit posix_io_dup2(int unused1, int unused2)
 unit posix_io_close(int fd)
 {
   int fail = close(fd);
-  if (fail == -1)
-    {
-      printf("POSIX function close returned with errno = %d\n", errno);
-      assert(0);
-    }
+  if (fail == -1) {
+    printf("POSIX function close returned with errno = %d\n", errno);
+    assert(0);
+  }
   return empty_record;
 }
 
@@ -447,16 +446,15 @@ unit posix_io_close(int fd)
 /* ML strings are not null-terminated */
 word8vector posix_io_read(int fd, int size)
 {
-  value_t *alloc, *limit;
+  ptr_t *alloc, *limit;
   char *buf = NULL;
   int bytes_read;
-  value_t res;
+  ptr_t res;
 
   assert(size >= 0);
   res = alloc_uninit_string(size,&buf);
   bytes_read = read(fd,buf,size);
-  if (bytes_read == -1)
-    { 
+  if (bytes_read == -1) {
       printf("POSIX function read failed with errno = %d\n", errno);
       assert(0);
     }
@@ -734,7 +732,7 @@ string_option posix_procenv_getenv(string mlname)
   char *empty = "";
   char *cname = mlstring2cstring_static(mlname);  /* Don't need to free this */
   char *cvalue = getenv(cname);                   /* Don't need to free this and cannot modify it */
-  value_t mlvalue = (cvalue == NULL) ? 0 : alloc_string(strlen(cvalue),cvalue);
+  ptr_t mlvalue = (cvalue == NULL) ? 0 : alloc_string(strlen(cvalue),cvalue);
   return mlvalue;
 }
 
@@ -847,7 +845,7 @@ unit posix_process_execp(string unused1, string_list unused)
 inttriple posix_process_waitpid(int argpid, word options)
 {
   int status;
-  value_t result;
+  ptr_t result;
   int pid = waitpid(argpid, &status, options);
   int how, val;
   if (pid < 0)
@@ -875,9 +873,9 @@ inttriple posix_process_waitpid(int argpid, word options)
      }
 
   result = alloc_manyint(3,0);
-  ((value_t *) result)[0] = pid;
-  ((value_t *) result)[1] = how;
-  ((value_t *) result)[2] = val;
+  result[0] = pid;
+  result[1] = how;
+  result[2] = val;
   return (inttriple) result;
 }
 
@@ -984,12 +982,15 @@ string posix_filesys_getcwd(unit unused)
 
 int posix_filesys_openf(string filename, word oflag, word mode)
 {
-  int fd = open(mlstring2cstring_static(filename),oflag,mode);
-  if (fd == -1)
-    {
-      printf("POSIX function open returned with errno = %d\n", errno);
+  const char *cfilename = mlstring2cstring_static(filename);
+  int fd = open(cfilename,oflag,mode);
+  if (fd == -1) {
+      printf("POSIX function open on ('%s',%d,%d) returned with errno = %d\n", 
+	     cfilename, oflag, mode, errno);
       assert(0);
     }
+  else printf("POSIX function open on ('%s',%d,%d) succeeded.\n",
+	      cfilename, oflag, mode);
   return fd;
 }
 
@@ -1065,7 +1066,7 @@ unit posix_filesys_ftruncate(int unused1, int unused)
 
 statrep cstat2mlstat_alloc(struct stat *buffer)
 {
-  value_t record = alloc_manyint(11,0);
+  ptr_t record = alloc_manyint(11,0);
   statrep s = (statrep)record;
   s->ftype = buffer->st_mode & S_IFMT;
   s->mode = buffer->st_mode & MODE_BITS;
@@ -1189,9 +1190,9 @@ void posix_io_fcntl_gfd()
   assert(0);
 }
 
-value_t til_selfusage()
+ptr_t til_selfusage()
 {
-  value_t fields[4];
+  val_t fields[4];
   int masks[4];
   struct rusage rusage;
   getrusage(RUSAGE_SELF, &rusage);
@@ -1203,7 +1204,7 @@ value_t til_selfusage()
   return alloc_record(fields, masks, 4);
 }
 
-value_t til_realtime()
+ptr_t til_realtime()
 {
   struct timeb tp;
   ftime(&tp);

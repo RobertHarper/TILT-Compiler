@@ -6,75 +6,186 @@
 
 struct range_st
 {
-  value_t low;
-  value_t high;
-  value_t diff;
+  mem_t low;            /* pointers */
+  mem_t high;
+  unsigned int diff;    /* difference in bytes = 4 * (high - low) */
 };
 
 typedef struct range_st range_t;
 
-void SetRange(range_t *range, value_t low, value_t high);
+void SetRange(range_t *range, mem_t low, mem_t high);
+
+static inline InRange(mem_t addr, range_t *range) 
+{
+  return ((unsigned int)addr - (unsigned int)range->low <= range->diff);
+}
+
+static inline NotInRange(mem_t addr, range_t *range) 
+{
+  return ((unsigned int)addr - (unsigned int)range->low > range->diff);
+}
 
 
-/* Forwarding:
-   (1) Takes the address of a pointer to an object (of any color)
-   (2) Copies the object, if necessary, to the tospace
-   (3) Updates the address to the new pointer
-   (4) Returns the new pointer
-   Different routines take one or two fromspaces.
-   Scanning:
-   (1) Takes the pointer to an object (presumed gray)
-   (2) Decodes the object to find all pointer fields
-   (3) Forwards each of the fields (thus updating the fields and making the object black)
-   (4) Possibly put the new gray forwarded objects onto a work queue
+/* getPointerLocations - used for processing globals
+   (1) Takes an object and a queue of pointer locations
+   (2) Decode the object using its tag and place all the pointer fields 
+       in the queue.
+   (3) Return the number of locations added. */
+
+int getPointerLocations(ptr_t obj, Queue_t *locs);
+
+
+/* forward - don't call this directly 
+   (1) This routine does NOT check if object is already in tospace
+   (2) Takes the address of a pointer to an object (of any color)
+       and the an allocation pointer
+   (3) Copies the object, if it is not already forwarded, 
+       to a newly allocated area using the allocation pointer
+   (4) Updates the address with the new pointer (new copy or previously forwarded copy)
+   (5) Returns the possibly updated allocation pointer */
+
+mem_t forward(ploc_t vpp, mem_t alloc);  
+
+
+/* forward_atomic - don't call this directly
+   (1) This routine assumes passed object is NOT already in tospace.
+   (2) Takes the address of a pointer to an object,
+       the addresses of the allocation and limit pointers, and the tospace.
+   (3) Atomically copies the object, if it is not already forwarded,
+       to a newly allocated area using the allocation pointer.
+       If no space is available between the allocation and limit pointers,
+       then new space is acquired from the tospace and the alloc/limit
+       pointers are updated accordingly.
+   (4) Updates the address with the new pointer (new copy or previously forwarded copy)
+   (5) Returns a bool indicating if the object was actually forwarded.
+       Note that the allocation/limit pointers are passed by reference and
+       may be updated. */
+
+bool_t forward_atomic(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap);  
+
+/* forward1
+   (1) Calls the underlying forward routine after checking
+       that the pointer at the given location is in from-space */
+static inline mem_t forward1(ploc_t vpp, mem_t alloc, range_t *from)                       
+{
+  if ((val_t)(*vpp) - (val_t)from->low < from->diff)           
+    alloc = forward(vpp,alloc);                          
+  return alloc;
+}
+
+/* forward2
+   (1) Calls the underlying forward routine after checking
+       that the pointer at the given location is in one of 
+       two from-spaces 
+   (2) If pointer is in the large object range, then add it
+       to the queue containing large object roots */
+static inline mem_t forward2(ploc_t vpp, mem_t alloc, 
+			     range_t *from, range_t *from2,
+			     range_t *large, Queue_t *largeRoots)
+{ 
+  ptr_t p = *vpp;                                      
+  if (((val_t) p - (val_t) from->low < from->diff) ||  
+      ((val_t) p - (val_t) from2->low < from2->diff))  
+    alloc = forward(vpp,alloc);                        
+  else if ((val_t) p - (val_t) large->low < large->diff)
+    Enqueue(largeRoots, p);
+  return alloc;
+}
+
+/* forward1_atomic_stack
+   (1) Calls the underlying forward_atomic routine after
+       checking that the pointer at the given location is
+       in the from-space.
+   (2) If the object was actually forwarded, the (newly-made) 
+       forwarded object is inserted into the system thread's stack. */
+static inline void forward1_atomic_stack(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap,
+					 range_t *from, SysThread_t *sysThread)
+{ 
+  ptr_t p = *vpp;							
+  if ((val_t) p - (val_t)from->low < from->diff)                     
+    if (forward_atomic(vpp,alloc,limit,toheap)) {                    
+      sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(*vpp);
+      assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
+    }
+}
+
+/* forward2_atomic_stack
+   (1) Calls the underlying forward_atomic routine after
+       checking that the pointer at the given location is
+       in the from-space.
+   (2) If the object was actually forwarded, the (newly-made) 
+       forwarded object is inserted into the system thread's stack. */
+static inline void forward2_atomic_stack(ploc_t vpp, mem_t *alloc, mem_t *limit, Heap_t *toheap,
+					 range_t *from, range_t *from2, range_t *large, 
+					 SysThread_t *sysThread)
+{ 
+  ptr_t p = *vpp;							 	    
+  if (((val_t) p - (val_t)from->low < from->diff) ||
+      ((val_t) p - (val_t)from2->low < from2->diff))
+    if (forward_atomic(vpp,alloc,limit,toheap)) {                    
+      sysThread->LocalStack[sysThread->LocalCursor++] = (loc_t)(*vpp);
+      assert(sysThread->LocalCursor < (sizeof(sysThread->LocalStack) / sizeof (ptr_t)));
+    }
+  else if ((val_t) p - (val_t) large->low < large->diff)
+    Enqueue(sysThread->largeRoots, p);
+}
+
+/* forward1_root_lists, forward2_root_lists
+   (1) Repeatedly call forward1/forward2 on each given root.
+   (2) The root_lists argument is a queue of queue of roots (ploc_t)
+   (3) The upadted allocation pointer is returned.
 */
+mem_t forward1_root_lists(Queue_t *root_lists, mem_t alloc,
+			  range_t *from_range, range_t *to_range);
+mem_t forward2_root_lists(Queue_t *root_lists, mem_t alloc,
+			  range_t *from_range, range_t *from2_range, range_t *to_range,
+			  range_t *large, Queue_t *largeRoots);
+void forward1_writelist_atomic_stack(mem_t *alloc, mem_t *limit,
+				     Heap_t *toheap, range_t *from, range_t *to, SysThread_t *sysThread);
+
+/* forward1_writelist
+   (1) Call forward1 on each location in the writelist
+   (2) the writelist is terminated by a NULL 
+   (3) The updated allocation pointer is returned. */
+mem_t forward1_writelist(SysThread_t *sysThread, mem_t alloc,
+			 range_t *from, range_t *to);
 
 
-/* --------------- Forwarding Routines ---------------------------- */
-/* Don't call directly */
-value_t *forward(value_t *vpp, value_t *alloc);  
-
-/* Do not call directly.
-   forward_stack returns a bool indicating if the object needs to be put in the stack.
-   This happens if this thread became the copier and hte object was not large or already forwarded. */
-int forward_stack(value_t *vpp, value_t **alloc, value_t **limit, Heap_t *toheap);  
-
-#define forward_minor(vpp,alloc,from)  \
-    { if (((*(vpp)) - (from)->low) < (from)->diff) alloc = forward(vpp,alloc); }
-#define forward_major(vpp,alloc,from,from2,to)  \
-    { if ((((*(vpp)) - (from)->low) < (from)->diff) ||  \
-	  (((*(vpp)) - (from2)->low) < (from2)->diff)) alloc = forward(vpp,alloc); }
-#define forward_local_minor(vpp,alloc)  \
-    { if (((*(vpp)) - local_from_low) < local_from_diff) alloc = forward(vpp,alloc); }
-
-#define forward_stack_help(vpp,alloc,limit,toheap,from,sysThread)  \
-    { if (forward_stack(vpp,&alloc,&limit,toheap)) \
-         sysThread->LocalStack[sysThread->LocalCursor++] = (*(vpp)); \
-    } 
-
-#define forward_minor_stack(vpp,alloc,limit,toheap,from,sysThread)  \
-{ if (((*(vpp)) - (from)->low) < (from)->diff) forward_stack_help(vpp,alloc,limit,toheap,from,sysThread); }
-#define forward_local_minor_stack(vpp,alloc,limit,toheap,sysThread)  \
-{ if (((*(vpp)) - local_from_low) < local_from_diff) forward_stack_help(vpp,alloc,limit,toheap,from,sysThread); }
-
-value_t *forward_root_lists_minor(Queue_t *root_lists, value_t *to_ptr, 
-				  range_t *from_range, range_t *to_range);
-value_t *forward_root_lists_major(Queue_t *root_lists, value_t *to_ptr, 
-				  range_t *from_range, range_t *from2_range, range_t *to_range);
 
 /* ------------------- Scanning Routines ---------------------- */
-value_t * scan_oneobject_major(value_t **where,  value_t *alloc,
-			       range_t *from_range, range_t *from2_range, range_t *to_range);
-value_t* scan_major(value_t start_scan, value_t *alloc, value_t *stop, 
-		    range_t *from_range, range_t *from2_range, range_t *to_range);
-value_t* scan_nostop_minor(value_t start_scan, value_t *alloc,
-			   range_t *from_range, range_t *to_range);
-value_t* scan_stop_minor(value_t start_scan, value_t *alloc, value_t *stop,
-			 range_t *from_range, range_t *to_range);
 
-void scan_minor_stack(value_t *gray_obj, value_t **alloc_ptr, value_t **limit_ptr, Heap_t *toheap,
-		      range_t *from_range, range_t *to_range, SysThread_t *sysThread);
+/* scan1_region
+   (1) Scan the objects from start_scan to stop
+   (2) For each object, forward_minor its pointer fields (ploc_t)
+   (3) Return the new allocation pointer. */
+mem_t scan1_region(mem_t start_scan, mem_t alloc, mem_t stop,
+		   range_t *from_range, range_t *to_range);
 
-void scan_oneobject_for_pointers(value_t *gray, Queue_t *queue);
+/* scan1_until - standard cheney scan
+   (1) Scan the objects from start_scan until there are no more objects.
+       That is, keep scanning until we hit the allocation pointer.
+   (2) For each object, forward_minor its pointer fields (ploc_t)
+   (3) Return the new allocation pointer. */
+mem_t scan1_until(mem_t start_scan, mem_t alloc,
+		  range_t *from_range, range_t *to_range);
+
+/* scan2_region
+   (1) Scan the objects from start_scan to stop.
+   (2) For each object, forward2 its pointer fields (ploc_t)
+   (3) Return the new allocation pointer. */
+mem_t scan2_region(mem_t start_scan, mem_t alloc, mem_t stop, 
+		   range_t *from_range, range_t *from2_range, range_t *to_range,
+		   range_t *large, Queue_t *largeRoots);
+
+/* scan1_object_atomic_stack
+   (1) Scan the given object
+   (2) For each pointer field, call scan_object_minor_atomic_stack
+   (3) The allocation/limit pointers and stack may be updated. */
+void scan1_object_atomic_stack(ptr_t gray_obj, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+			       range_t *from_range, range_t *to_range, SysThread_t *sysThread);
+void scan2_object_atomic_stack(ptr_t gray_obj, mem_t *alloc_ptr, mem_t *limit_ptr, Heap_t *toheap,
+			       range_t *from_range, range_t *from2_range,
+			       range_t *to_range, SysThread_t *sysThread);
+
 
 #endif

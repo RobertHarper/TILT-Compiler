@@ -57,8 +57,10 @@ ListMergeSort Basis/Library/list-mergesort
 //MONO_DYNAMIC_ARRAY Basis/Library/mono-dynamic-array-sig
 //PARSER_COMB   Basis/Library/parser-comb-sig
 //ParserComb    Basis/Library/parser-comb
-//RAND          Basis/Library/rand-sig
+//RAND            Basis/Library/rand-sig
 //Rand          Basis/Library/rand
+RANDOM		Basis/Library/random-sig
+Random          Basis/Library/random
 //SCAN          Basis/Library/scan-sig
 //Scan          Basis/Library/scan
 //UREF          Basis/Library/uref-sig

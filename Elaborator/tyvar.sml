@@ -1,4 +1,4 @@
-(*$import TYVAR Listops Name Util List Stats Int32 *)
+(*$import TYVAR Listops Name Util List Stats Int *)
 
 (* Type variables parameterized over types *)
 structure Tyvar :> TYVAR =

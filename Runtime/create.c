@@ -6,104 +6,95 @@
 #include "create.h"
 #include "gc.h"
 
-const value_t empty_record = 256; /* This is the ML unit. */
+int exncounter = 4000;
+const ptr_t empty_record = (ptr_t) 256; /* This is the ML unit. */
 
-value_t* oddword_align(value_t *ptr)
+mem_t oddword_align(mem_t ptr)
 {
-  int v = (int) ptr;
-  if ((v & 7) == 0)
-    {
-      *ptr = SKIP_TAG;
-      return ptr + 1;
-    }
+  unsigned int v = (unsigned int) ptr;
+  if ((v & 7) == 0) 
+    *(ptr++) = SKIP_TAG;
   return ptr;
 }
 
-value_t* evenword_align(value_t *ptr)
+mem_t evenword_align(mem_t ptr)
 {
-  int v = (int) ptr;
-  if ((v & 7) != 0)
-    {
-      *ptr = SKIP_TAG;
-      return ptr + 1;
-    }
+  unsigned int v = (unsigned int) ptr;
+  if ((v & 7) != 0) 
+    *(ptr++) = SKIP_TAG;
   return ptr;
 }
 
-static value_t* alloc_space(int bytesNeeded) 
+static mem_t alloc_space(int bytesNeeded) 
 {
-  value_t alloc, limit, newAlloc;
+  mem_t alloc, limit, newAlloc;
   Thread_t *th = getThread();
+  int wordsNeeded = bytesNeeded / 4;
   if (th != NULL) {
-    alloc = th->saveregs[ALLOCPTR];
-    limit = th->saveregs[ALLOCLIMIT];
-    newAlloc = alloc + bytesNeeded;
+    alloc = (mem_t) th->saveregs[ALLOCPTR];
+    limit = (mem_t) th->saveregs[ALLOCLIMIT];
+    newAlloc = alloc + wordsNeeded;
     if (newAlloc <= limit) {
-      th->saveregs[ALLOCPTR] = newAlloc;
-      return (value_t *) alloc;
+      th->saveregs[ALLOCPTR] = (unsigned long) newAlloc;
+      return alloc;
     }
     else {
       GCFromC(th,bytesNeeded,0);
-      alloc = th->saveregs[ALLOCPTR];
-      limit = th->saveregs[ALLOCLIMIT];
-      newAlloc = alloc + bytesNeeded;
+      alloc = (mem_t) th->saveregs[ALLOCPTR];
+      limit = (mem_t) th->saveregs[ALLOCLIMIT];
+      newAlloc = alloc + wordsNeeded;
       assert(newAlloc <= limit);  /* This time the request must have been satisfied. */
-      th->saveregs[ALLOCPTR] = newAlloc;
-      return (value_t *) alloc;
+      th->saveregs[ALLOCPTR] = (unsigned long) newAlloc;
+      return alloc;
     }
   }
   else {
-    alloc = (value_t)RuntimeGlobalData_Cur;
-    limit = (value_t)RuntimeGlobalData_End;
-    newAlloc = alloc + bytesNeeded;
+    alloc = (mem_t) RuntimeGlobalData_Cur;
+    limit = (mem_t) RuntimeGlobalData_End;
+    newAlloc = alloc + wordsNeeded;
     assert(newAlloc <= limit);  /* We should not allocate from global segment too much. */
     RuntimeGlobalData_Cur = newAlloc;
-    return (value_t *) alloc;
+    return alloc;
   }
 }
 
 
-value_t alloc_iarray(int count, int n)
-
+ptr_t alloc_iarray(int count, int n)
 {
-  value_t *obj = 0;
+  ptr_t obj = 0;
   int len = count ? count : 1;
   int mask = 0;
-  value_t *alloc = alloc_space(4 * (len + 1));
+  mem_t alloc = alloc_space(4 * (len + 1));
 
   obj = alloc + 1;
   obj[-1] = IARRAY_TAG | (count << (2+ARRLEN_OFFSET));
   while (len > 0)
     obj[--len]  = n;
   
-  return (value_t) obj;
+  return obj;
 }
 
-value_t alloc_rarray(int count, double val)
-
+ptr_t alloc_rarray(int count, double val)
 {
   int len = count ? count : 1;
   int mask = 0;
-  value_t *obj;
+  ptr_t obj;
 
-  value_t *alloc = alloc_space(8 * (len + 1)); /* tags and alignment */
+  mem_t alloc = alloc_space(8 * (len + 1)); /* tags and alignment */
   alloc = oddword_align(alloc);
   obj = alloc + 1;
   obj[-1] = RARRAY_TAG | (len << (2+ARRLEN_OFFSET));
-  while (count > 0)
-    {
-      count--;
-      ((double *)obj)[count]  = val;
-    }
-  obj[2 * len] = SKIP_TAG;
-  
-  return (value_t) obj;
+  while (count > 0) {
+    count--;
+    ((double *)obj)[count]  = val;
+  }
+  obj[2*len] = SKIP_TAG;
+  return obj;
 }
 
-value_t get_record(value_t rec, int which)
+val_t get_record(ptr_t rec, int which)
 {
-  value_t *objstart = (value_t *) rec;
-  value_t tag = objstart[-1];
+  tag_t tag = rec[-1];
   int len = GET_RECLEN(tag);
 
   if (!(IS_RECORD(tag))) {
@@ -112,27 +103,26 @@ value_t get_record(value_t rec, int which)
   }
 
   if (which < len)
-    return objstart[which];
+    return rec[which];
   else
     {
-      printf("BUG: calling get_field with"
-	     " non-existent field %d on rec of len %d at addr %d\n",
-	     which,len,objstart);
+      printf("BUG in get_record: record %d has %d fields.  No field %d.\n",
+	     rec,len,which);
       exit(-1);
     }
 }
 
-value_t alloc_record(value_t *fields, int *masks, int count)
+ptr_t alloc_record(val_t *fields, int *masks, int count)
 {
   int i;
-  value_t *objstart;
-  value_t *alloc;
+  mem_t alloc;
+  ptr_t rec;
   assert(count <= RECLEN_MAX);
   if (count == 0)
     return empty_record;
 
   alloc = alloc_space(4 * (count + 1));
-  objstart = alloc + 1;
+  rec = alloc + 1;
 
   /* Initialize record tag */
   {
@@ -146,84 +136,82 @@ value_t alloc_record(value_t *fields, int *masks, int count)
 	  mask |= 1 << i;
       }
     tag = RECORD_TAG | (count << RECLEN_OFFSET) | (mask << RECMASK_OFFSET);
-    objstart[-1] = tag;
+    rec[-1] = tag;
   }
 
   /* Initialize record fields */
   for (i=0; i<count; i++)
-    objstart[i] = fields[i];
+    rec[i] = fields[i];
       
-  return (value_t)objstart;
+  return rec;
 }
 
 
 
-value_t alloc_string(int strlen, char *str)
+ptr_t alloc_string(int strlen, char *str)
 
 {
   int offset = 0;
   int wordlen = (strlen + 3) / 4;
-  value_t *res;
+  ptr_t res;
   int tag = IARRAY_TAG | (strlen << ARRLEN_OFFSET);
 
-  value_t *alloc = alloc_space(4 * (wordlen + 1));
+  mem_t alloc = alloc_space(4 * (wordlen + 1));
   res = alloc + 1;
   res[-1] = tag;
   bcopy(str,(char *)res,strlen);
 
-  return (value_t) res;
+  return res;
 }
 
 
-value_t alloc_uninit_string(int strlen, char **raw)
+ptr_t alloc_uninit_string(int strlen, char **raw)
 {
   int offset = 0;
   int wordlen = (strlen + 3) / 4;
-  value_t *res;
+  ptr_t res;
   int tag = IARRAY_TAG | (strlen << ARRLEN_OFFSET);
-
-  value_t *alloc = alloc_space(4 * (wordlen + 1));
+  mem_t alloc = alloc_space(4 * (wordlen + 1));
   res = alloc + 1;
   res[-1] = tag;
   *raw = (char *)res;
-  return (value_t)res;
+  return res;
 }
 
 /* Shorten a string and fill the space it used to occupy with SKIP_TAG */
-void adjust_stringlen(value_t str, int newlen)
+void adjust_stringlen(ptr_t str, int newlen)
 {
-  value_t *obj = (value_t *)str;
-  int oldtag = obj[-1];
-  int newtag = IARRAY_TAG | (newlen << ARRLEN_OFFSET);
+  int i;
+  tag_t oldtag = str[-1];
+  tag_t newtag = IARRAY_TAG | (newlen << ARRLEN_OFFSET);
   int oldlen = GET_ARRLEN(oldtag);
   int oldword = (oldlen + 3) / 4;
   int newword = (newlen + 3) / 4;
-  int i;
+
   assert(newlen <= oldlen);
-  obj[-1] = newtag;
-  for (i=newword+1; i<=oldword; i++)
-    obj[i] = SKIP_TAG;
+  str[-1] = newtag;
+  for (i=newword; i<oldword; i++)
+    str[i] = SKIP_TAG;
 }
 
-
-value_t alloc_recrec(value_t rec1, value_t rec2)
+ptr_t alloc_recrec(ptr_t rec1, ptr_t rec2)
 {
-  value_t fields[2];
+  val_t fields[2];
   int mask = 3;
-  fields[0] = rec1;
-  fields[1] = rec2;
+  fields[0] = (val_t) rec1;
+  fields[1] = (val_t) rec2;
 
   return alloc_record(fields, &mask, 2);
 }
 
 
-value_t alloc_manyint(int count, int v)
+ptr_t alloc_manyint(int count, int v)
 {
   int masks[1 + (100/RECLEN_MAX)];
-  value_t fields[100]; 
+  val_t fields[100]; 
   int i;
 
-  if (count > (sizeof(fields)) / (sizeof(value_t)))
+  if (count > (sizeof(fields)) / (sizeof(val_t)))
     BUG("alloc_manyint not quite fully imped");
 
   for (i=0; i<count; i++)
@@ -234,11 +222,10 @@ value_t alloc_manyint(int count, int v)
   return alloc_record(fields, masks, count);
 }
 
-value_t alloc_manyintrec(int count, int v, value_t rec)
-
+ptr_t alloc_manyintrec(int count, int v, ptr_t rec)
 {
   int masks[100/RECLEN_MAX];
-  value_t fields[100];
+  val_t fields[100];
   int i;
 
   if (count>100)
@@ -250,24 +237,24 @@ value_t alloc_manyintrec(int count, int v, value_t rec)
   
   for (i=0; i<count; i++)
     fields[i] = v;
-  fields[count] = rec;
+  fields[count] = (val_t) rec;
   
   return alloc_record(fields, masks, count+1);
 }
 
-value_t alloc_intrec(int n, value_t rec)
+ptr_t alloc_intrec(int n, ptr_t rec)
 {
   return alloc_manyintrec(1,n,rec);
 }
 
-value_t alloc_intint(int a, int b)
+ptr_t alloc_intint(int a, int b)
 {
-  value_t result = alloc_manyint(2,a);
-  ((int *)result)[1] = b;
+  ptr_t result = alloc_manyint(2,a);
+  result[1] = b;
   return result;
 }
 
-void init_iarray(value_t *obj, int byteLen, int v)
+void init_iarray(ptr_t obj, int byteLen, int v)
 {
   int i;
   int tag = IARRAY_TAG | (byteLen << ARRLEN_OFFSET);
@@ -276,22 +263,22 @@ void init_iarray(value_t *obj, int byteLen, int v)
     obj[i] = v;
 }
 
-void init_parray(value_t *obj, int len, value_t v)
+void init_parray(ptr_t obj, int len, ptr_t v)
 {
   int i;
   int byteLen = 4 * len;
   int tag = PARRAY_TAG | (byteLen << ARRLEN_OFFSET);
   obj[-1] = tag;
   for (i=0; i<len; i++)
-    obj[i] = v;
+    obj[i] = (val_t) v;
 }
 
-void init_farray(value_t *obj, int len, double v)
+void init_farray(ptr_t obj, int len, double v)
 {
   int i;
   int byteLen = 8 * len;
   int tag = RARRAY_TAG | (byteLen << ARRLEN_OFFSET);
-  assert((((value_t)obj) & 7) == 0);
+  assert((((unsigned int)obj) & 7) == 0);
   obj[-1] = tag;
   for (i=0; i<len; i++)
     ((double *)obj)[i] = v;

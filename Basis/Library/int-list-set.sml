@@ -1,4 +1,4 @@
-(*$import ORD_SET Int32 List LibBase *)
+(*$import ORD_SET List LibBase *)
 (* int-list-set.sml
  *
  * COPYRIGHT (c) 1996 by AT&T Research.  See COPYRIGHT file for details.

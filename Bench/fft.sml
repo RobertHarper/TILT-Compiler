@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import TopLevel Math64 Real64 Array *)
 
 (***********************************************************************)
 (*                                                                     *)
@@ -12,12 +12,16 @@
 (***********************************************************************)
 (* compatability *)
 
+
 local
 
-val cos = fn x => Ccall(cos,x)
-val sin = fn x => Ccall(sin,x)
+
+open Math64
+open Array
 fun abs_real(x:real) = if x < 0.0 then ~x else x
 fun print_real (x:real) = print(Real.toString x)
+
+
 
 (* $Id$ *)
 
@@ -199,7 +203,6 @@ in
 
 end
 
-
 fun test np =
   (print_int np; print_string "... "; 
   let val enp = real np 
@@ -259,10 +262,10 @@ fun test np =
   end
  end)
 
-
 in
     fun fftdoit() = 
-	let val np = ref 16 
+	let 
+	    val np = ref 16 
 	in for(1,13,fn i => (test (!np); np := (!np)*2))
 	end
     val fftResult = fftdoit()

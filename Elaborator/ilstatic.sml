@@ -1,4 +1,4 @@
-(*$import Il IlContext PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
+(*$import Il IlContext IlContextEq PrimUtil Ppil IlUtil Util Listops ILSTATIC Stats Option *)
 (* Static semantics *)
 structure IlStatic
   :> ILSTATIC =
@@ -197,7 +197,8 @@ structure IlStatic
 
    (* --------- structural equality on scons, kinds ------------ *)
    fun eq_scon (s1,s2) = s1 = s2
-   fun eq_kind (KIND_TUPLE n1, KIND_TUPLE n2) = n1 = n2
+   fun eq_kind (KIND,KIND) = true
+     | eq_kind (KIND_TUPLE n1, KIND_TUPLE n2) = n1 = n2
      | eq_kind (KIND_ARROW (m1,n1), KIND_ARROW(m2,n2)) = (m1 = m2) andalso (n1 = n2)
      | eq_kind _ = false
 
@@ -339,8 +340,8 @@ structure IlStatic
      end
 
 
-   fun meta_eq_con (setter,is_sub) (con1,con2,ctxt) = 
-       let val self = meta_eq_con (setter, is_sub)
+   fun meta_eq_con (setter,is_sub,equations) (con1,con2,ctxt) = 
+       let val self = meta_eq_con (setter, is_sub, equations)
 	   val _ = if (!showing)
 		       then (print "meta_eq_con called on:-------------\n";
 			     print "con1 = "; pp_con con1; print "\n";
@@ -368,23 +369,28 @@ structure IlStatic
 		       (case (con1,con2) of
 			    (CON_APP(c1,a1),CON_APP(c2,a2)) =>
 				(self (c2,c1,ctxt)
-				 andalso self (a1,a2,ctxt))
+				 andalso (andfold (fn (c1,c2) => self (c1,c2,ctxt)) (zip a1 a2)))
 			  | _ => eq_cpath(con1,con2))
 		   in  same orelse
 		       let 			   
 			   val (_, con1, path1) = HeadNormalize(con1,ctxt)
 			   val (_, con2, path2) = HeadNormalize(con2,ctxt)
 		       in  (path_match path1 path2) orelse
-			   (meta_eq_con_hidden (setter,is_sub) (con1,con2,ctxt))
+			   (meta_eq_con_hidden (setter,is_sub,equations) (con1,con2,ctxt))
 		       end
 		   end
        end
 
 
    (* ------------ con1 and con2 are head-normalized *)
-   and meta_eq_con_hidden (setter,is_sub) (con1,con2,ctxt) = 
+   and meta_eq_con_hidden (setter,is_sub,equations) (con1,con2,ctxt) = 
      let 
-	 val self = meta_eq_con (setter, is_sub)
+	   val _ = if (!showing)
+		       then (print "meta_eq_con_hidden called on:-------------\n";
+			     print "con1 = "; pp_con con1; print "\n";
+			     print "con2 = "; pp_con con2; print "\n")
+		   else ()
+	 val self = meta_eq_con (setter, is_sub, equations)
 
        (* the flex record considered as an entirety is not generalizeable
 	  but its subparts are generalizable *)
@@ -457,14 +463,24 @@ structure IlStatic
 					    end))
 		       | _ => error "must have a CON_RECORD or CON_FLEXRECORD here")
 		end
-
+       fun domu () =
+	   let fun eq_con2((c1,c2),(c3,c4)) = 
+	       (IlContextEq.eq_con(c1,c3)) andalso (IlContextEq.eq_con(c2,c4))
+	   in  (member_eq(eq_con2, (con1,con2), equations)) orelse
+	       let val c1 = ConUnroll con1
+		   val c2 = ConUnroll con2
+		   val equations = (con1,con2)::equations
+	       in  meta_eq_con (setter, is_sub, equations) (c1,c2,ctxt)
+	       end
+	   end
      in
 	 (case (con1,con2) of
 	    (CON_TYVAR _, _) => self(con1,con2,ctxt)
 	  | (_, CON_TYVAR _) => self(con1,con2,ctxt)
 	  | (CON_VAR v1, CON_VAR v2) => eq_var(v1,v2)
-	  | (CON_APP(c1_a,c1_r), CON_APP(c2_a,c2_r)) => self(c1_a,c2_a,ctxt) 
-	                                                andalso self(c1_r,c2_r,ctxt)
+	  | (CON_APP(c1_f,c1_args), CON_APP(c2_f,c2_args)) => 
+		self(c2_f,c1_f,ctxt) 
+		andalso (andfold (fn (c1,c2) => self(c1,c2,ctxt)) (zip c1_args c2_args))
 	  | (CON_MODULE_PROJECT (m1,l1), CON_MODULE_PROJECT (m2,l2)) => eq_cpath(con1,con2)
 	  | (CON_INT is1, CON_INT is2) => is1 = is2
 	  | (CON_UINT is1, CON_UINT is2) => is1 = is2
@@ -480,14 +496,13 @@ structure IlStatic
 		 andalso (length c1_a = length c2_a andalso
 			  Listops.andfold (fn (c2,c1) => self (c2,c1,ctxt)) (zip c1_a c2_a))
 		 andalso self(c1_r,c2_r,ctxt))
-	  | (CON_MU c1, CON_MU c2) => (self(c1,c2,ctxt))
 	  | (CON_RECORD _, CON_RECORD _) => dorecord()
 	  | (CON_RECORD _, CON_FLEXRECORD _) => dorecord()
 	  | (CON_FLEXRECORD _, CON_RECORD _) => dorecord()
 	  | (CON_FLEXRECORD _, CON_FLEXRECORD _) => dorecord()
 	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) => 
 		(length vs1 = length vs2) andalso
-		let fun folder ((v1,v2),(ctxt,subst)) = (add_context_con'(ctxt,v1,KIND_TUPLE 1, NONE),
+		let fun folder ((v1,v2),(ctxt,subst)) = (add_context_con'(ctxt,v1,KIND, NONE),
 							 subst_add_convar(subst,v2,CON_VAR v1))
 		    val (ctxt',subst) = foldl folder (ctxt,empty_subst) (zip vs1 vs2)
 		    val c2' = con_subst(c2,subst)
@@ -502,8 +517,19 @@ structure IlStatic
 		end
 	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
 		eq_list (fn (a,b) => self(a,b,ctxt), cs1, cs2)
+
+	  (* projection from a mu type *)
+	  | (CON_TUPLE_PROJECT (i1, CON_MU c1), 
+	     CON_TUPLE_PROJECT (i2, CON_MU c2)) => 
+		(i1 = i2 andalso self(c1,c2,ctxt)) orelse domu()
+	  | (CON_TUPLE_PROJECT (_, CON_MU _), CON_MU _) => domu()
+	  | (CON_MU _, CON_TUPLE_PROJECT (_, CON_MU _)) => domu()
+	  | (CON_MU (c1 as (CON_FUN ([_], _))), CON_MU c2) => 
+		self(c1,c2,ctxt) orelse domu()
+
+	  | (CON_MU c1, CON_MU c2) => self(c1,c2,ctxt) 
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
-		(i1 =i2) andalso (self(c1,c2,ctxt))
+		(i1 = i2) andalso (self(c1,c2,ctxt))
 	  | _ => false)
 
      end
@@ -513,7 +539,7 @@ structure IlStatic
 		       then print "eq_con calling meta_eq_con\n"
 		   else ()
 	   val (setter,undo) = unify_maker()
-       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,false)
+       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,false,[])
 	   (con1, con2, ctxt)
        end
 
@@ -522,20 +548,20 @@ structure IlStatic
 		       then print "sub_con calling meta_eq_con\n"
 		   else ()
 	   val (setter,undo) = unify_maker()
-       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,true)
+       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,true,[])
 	   (con1, con2, ctxt)
        end
 
    and soft_eq_con (ctxt,con1,con2) = 
        let val (setter,undo) = unify_maker()
-	   val is_eq = meta_eq_con (setter,false) (con1,con2,ctxt)
+	   val is_eq = meta_eq_con (setter,false,[]) (con1,con2,ctxt)
 	   val _ = undo()
        in  is_eq
        end
 
    and semi_sub_con (ctxt,con1,con2) = 
        let val (setter,undo) = unify_maker()
-	   val is_eq = meta_eq_con (setter,true) (con1,con2,ctxt)
+	   val is_eq = meta_eq_con (setter,true,[]) (con1,con2,ctxt)
 	   val _ = if is_eq then () else undo()
        in  is_eq
        end
@@ -635,56 +661,62 @@ structure IlStatic
 
    and GetConKind' (con : con, ctxt : context) : kind = 
       (case con of
-       (CON_TYVAR tv) => KIND_TUPLE 1 
+       (CON_TYVAR tv) => KIND
      | (CON_VAR v) => 
 	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
 	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
-     | (CON_OVAR ocon) => KIND_TUPLE 1
-     | (CON_INT _) => KIND_TUPLE 1
-     | (CON_FLOAT _) => KIND_TUPLE 1
-     | (CON_UINT _) => KIND_TUPLE 1
-     | (CON_ANY) => KIND_TUPLE 1
-     | (CON_REF _) => KIND_TUPLE 1
-     | (CON_ARRAY _) => KIND_TUPLE 1
-     | (CON_VECTOR _) => KIND_TUPLE 1
-     | (CON_TAG _) => KIND_TUPLE 1
-     | (CON_ARROW _) => KIND_TUPLE 1
-     | (CON_APP (c1,c2)) => 
-	   let val (k1,k2) = (GetConKind(c1,ctxt),GetConKind(c2,ctxt))
-	   in (case (k1, k2) of
-		   (KIND_ARROW(a,b),KIND_TUPLE c) => 
-		       if (a=c) then KIND_TUPLE b
+     | (CON_OVAR ocon) => KIND
+     | (CON_INT _) => KIND
+     | (CON_FLOAT _) => KIND
+     | (CON_UINT _) => KIND
+     | (CON_ANY) => KIND
+     | (CON_REF _) => KIND
+     | (CON_ARRAY _) => KIND
+     | (CON_VECTOR _) => KIND
+     | (CON_TAG _) => KIND
+     | (CON_ARROW _) => KIND
+     | (CON_APP (c1,cargs)) => 
+	   let val k1 = GetConKind(c1,ctxt)
+	       val kargs = map (fn c => GetConKind(c,ctxt)) cargs
+	       val b = length kargs
+	   in (case k1 of
+		   KIND_ARROW(a,kres) =>
+		       if (a = b)
+			   then
+			       if (andfold (fn KIND => true | _ => false) kargs)
+				   then kres
+			       else (print "GetConKind: arguments of app not of kind KIND in ";
+				     pp_con con; print "Argument kinds = ";
+				     app pp_kind kargs;
+				     error "GetConKind: arguments not of kind KIND")
 		       else (print "GetConKind: kind mismatch in "; pp_con con;
 			     print "\nDomain arity = "; print (Int.toString a);
-			     print "\nArgument arity = "; print (Int.toString c); print "\n";
+			     print "\nNumber of arguments = "; 
+			     print (Int.toString b); print "\n";
 			     error "GetConKind: kind mismatch in CON_APP")
-		 | (k1,k2) => 
-			(print "GetConKind: kind mismatch in "; pp_con con;
-			     print "\nFunction kind = "; pp_kind k1;
-			     print "\nArgument kind = "; pp_kind k2; print "\n";
-			     error "GetConKind: kind mismatch in CON_APP"))
+		 | _ => (print "GetConKind: bad function kind in "; pp_con con;
+			   print "\nFunction kind = "; pp_kind k1;
+			   error "GetConKind: wrong kind in CON_APP"))
 	   end
      | (CON_MU c) => (case GetConKind(c,ctxt) of
-			KIND_ARROW(m,n) => KIND_TUPLE n
-			| _ => error "kind of CON_MU argument not KIND_ARROW")
-     | (CON_FLEXRECORD _) => KIND_TUPLE 1
-     | (CON_RECORD _) => KIND_TUPLE 1
+			KIND_ARROW(m,kres) => KIND_TUPLE m
+		      | _ => error "kind of CON_MU argument not KIND_ARROW")
+     | (CON_FLEXRECORD _) => KIND
+     | (CON_RECORD _) => KIND
      | (CON_FUN (vs,c)) => 
-	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND_TUPLE 1,NONE)
+	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND,NONE)
 	       val ctxt' = foldl folder ctxt vs
-	   in (case GetConKind(c,ctxt') of
-		   KIND_TUPLE n => KIND_ARROW(length vs,n)
-		 | (KIND_ARROW _) => error "kind of constructor body not a KIND_TUPLE")
+	       val kbody = GetConKind(c,ctxt')
+	   in  KIND_ARROW(length vs,kbody)
 	   end
-     | (CON_SUM _) => KIND_TUPLE 1
-     | (CON_TUPLE_INJECT [_]) => error "Cannot CON_TUPLE_INJECT one con"
+     | (CON_SUM _) => KIND
      | (CON_TUPLE_INJECT cs) => KIND_TUPLE (length cs)
      | (CON_TUPLE_PROJECT (i,c)) => (case (GetConKind(c,ctxt)) of
 				       KIND_TUPLE n =>
 					 (if (i >= 0 andalso i < n)
-					    then KIND_TUPLE 1
+					    then KIND
 					  else
 					    (print "GetConKind got: ";
 					     pp_con con;
@@ -716,50 +748,49 @@ structure IlStatic
 
    and GetConKindFast (con : con, ctxt : context) : kind = 
       (case con of
-       (CON_TYVAR tv) => KIND_TUPLE 1 
+       (CON_TYVAR tv) => KIND
      | (CON_VAR v) => 
 	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
 	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
-     | (CON_OVAR ocon) => KIND_TUPLE 1
-     | (CON_INT _) => KIND_TUPLE 1
-     | (CON_FLOAT _) => KIND_TUPLE 1
-     | (CON_UINT _) => KIND_TUPLE 1
-     | (CON_ANY) => KIND_TUPLE 1
-     | (CON_REF _) => KIND_TUPLE 1
-     | (CON_ARRAY _) => KIND_TUPLE 1
-     | (CON_VECTOR _) => KIND_TUPLE 1
-     | (CON_TAG _) => KIND_TUPLE 1
-     | (CON_ARROW _) => KIND_TUPLE 1
-     | (CON_APP (c1,c2)) => 
+     | (CON_OVAR ocon) => KIND
+     | (CON_INT _) => KIND
+     | (CON_FLOAT _) => KIND
+     | (CON_UINT _) => KIND
+     | (CON_ANY) => KIND
+     | (CON_REF _) => KIND
+     | (CON_ARRAY _) => KIND
+     | (CON_VECTOR _) => KIND
+     | (CON_TAG _) => KIND
+     | (CON_ARROW _) => KIND
+     | (CON_APP (c1,_)) => 
 	   let val k = GetConKindFast(c1,ctxt)
 	   in (case k of
-		   KIND_ARROW(a,b) =>KIND_TUPLE b
+		   KIND_ARROW(a,kres) => kres
 		 | _ => 
 			(print "GetConKindFast: kind mismatch in "; pp_con con;
 			 print "\nFunction kind = "; pp_kind k;
 			 error "GetConKindFast: kind mismatch in CON_APP"))
 	   end
      | (CON_MU c) => (case GetConKindFast(c,ctxt) of
-			KIND_ARROW(m,n) => KIND_TUPLE n
-			| _ => error "kind of CON_MU argument not KIND_ARROW")
-     | (CON_FLEXRECORD _) => KIND_TUPLE 1
-     | (CON_RECORD _) => KIND_TUPLE 1
+			KIND_ARROW(m,_) => KIND_TUPLE m
+		      | _ => error "kind of CON_MU argument not KIND_ARROW")
+     | (CON_FLEXRECORD _) => KIND
+     | (CON_RECORD _) => KIND
      | (CON_FUN (vs,c)) => 
-	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND_TUPLE 1,NONE)
+	   let fun folder(v,ctxt) = add_context_con'(ctxt,v,KIND,NONE)
 	       val ctxt' = foldl folder ctxt vs
-	   in (case GetConKindFast(c,ctxt') of
-		   KIND_TUPLE n => KIND_ARROW(length vs,n)
-		 | (KIND_ARROW _) => error "kind of constructor body not a KIND_TUPLE")
+	       val kbody = GetConKindFast(c,ctxt') 
+	   in  KIND_ARROW(length vs,kbody)
 	   end
-     | (CON_SUM _) => KIND_TUPLE 1
+     | (CON_SUM _) => KIND
      | (CON_TUPLE_INJECT [_]) => error "Cannot CON_TUPLE_INJECT one con"
      | (CON_TUPLE_INJECT cs) => KIND_TUPLE (length cs)
      | (CON_TUPLE_PROJECT (i,c)) => (case (GetConKindFast(c,ctxt)) of
 				       KIND_TUPLE n =>
 					 (if (i >= 0 andalso i < n)
-					    then KIND_TUPLE 1
+					    then KIND
 					  else
 					    (print "GetConKind got: ";
 					     pp_con con;
@@ -846,48 +877,47 @@ structure IlStatic
 				  Ppil.pp_exp e;
 				  print "\n";
 				  error str)
-	   val (i,cInner) = (case cNorm of
-			       (CON_TUPLE_PROJECT(i,CON_MU cInner)) => (i, cInner)
-	                     | CON_MU cInner => (0, cInner)
-  	                     | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
-				   pp_con c; print "\n";
-				   print "\nNormalized Decoration of (UN)ROLL was ";
-				   pp_con cNorm; print "\n";
-				   error "decoration of ROLL not a recursive type CON_MU or CON_TUPLE_PROJ(CON_MU)"))
+	   val (i,cInner) = 
+	       (case cNorm of
+		    CON_TUPLE_PROJECT(i,CON_MU cInner) => (i, cInner)
+		  | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
+			  pp_con c; print "\n";
+			  print "\nNormalized Decoration of (UN)ROLL was ";
+			  pp_con cNorm; print "\n";
+			  error "decoration of ROLL not of the form CON_TUPLE_PROJ(CON_MU ...)"))
        in (va,
 	   (case GetConKind(cInner,ctxt) of
-			KIND_ARROW(n,n') =>
-			    (if ((n = n') andalso (0 <= i) andalso (i < n))
-				 then 
-				     let 
-					 fun temp j = if n = 1 then cInner else CON_TUPLE_PROJECT(j,CON_MU cInner)
-					 val contemp = CON_APP(cInner,con_tuple_inject(map0count temp n))
-					 val con2 = if (n = 1) then contemp
-						    else CON_TUPLE_PROJECT(i,contemp)
-				     in
-					 if isroll
-					     then
-						 (if (sub_con(ctxt,econ,con2))
-						      then cNorm
-						  else
-						      (Ppil.pp_con econ; print "\n";
-						       Ppil.pp_con con2; print "\n";
-						      error "ROLL: expression type does not match decoration"))
-					 else 
-					     (if (eq_con(ctxt,econ,cNorm))
-						  then #2(HeadNormalize(con2,ctxt))
-					      else (print "UNROLL: expression type does not match decoration";
-						    print "\necon = "; pp_con econ;
-						    print "\ncNorm = "; pp_con cNorm;
-						    print "\nctxt = "; pp_context ctxt;
-						    error "UNROLL: expression type does not match decoration"))
-				     end
-			     else error "projected decoration has the wrong KIND_ARROW")
-		      | _ => error "projected decoration has the wrong kind"))
+		KIND_ARROW(n,KIND_TUPLE n') =>
+		    (if ((n = n') andalso (0 <= i) andalso (i < n))
+			 then 
+			     let 
+				 fun mapper j = CON_TUPLE_PROJECT(j,CON_MU cInner)
+				 val cUnroll = CON_TUPLE_PROJECT(i,CON_APP(cInner, map0count mapper n))
+				 val (_,cUnroll,_) = HeadNormalize(cUnroll,ctxt)
+			     in
+				 if isroll
+				     then
+					 (if (sub_con(ctxt,econ,cUnroll))
+					      then cNorm
+					  else
+					      (Ppil.pp_con econ; print "\n";
+					       Ppil.pp_con cUnroll; print "\n";
+					       error "ROLL: expression type does not match decoration"))
+				 else 
+				     (if (eq_con(ctxt,econ,cNorm))
+					  then cUnroll
+				      else (print "UNROLL: expression type does not match decoration";
+					    print "\necon = "; pp_con econ;
+					    print "\ncNorm = "; pp_con cNorm;
+					    print "\nctxt = "; pp_context ctxt;
+					    error "UNROLL: expression type does not match decoration"))
+			     end
+		     else error "projected decoration has the wrong KIND_ARROW")
+	      | _ => error "projected decoration has the wrong kind"))
        end
-
+   
    and GetExpCon' (exparg,ctxt) : bool * con = 
-     (case exparg of
+       (case exparg of
        SCON scon => (true,GetSconCon(ctxt,scon))
      | OVEREXP (con,va,eone) => (case oneshot_deref eone of
 				     SOME e => if va then (va,con)
@@ -1023,7 +1053,7 @@ structure IlStatic
 	       val {names,carrier,noncarriers,...} = 
 		   (case sumtype of
 			CON_SUM info => info
-		      | _ => error "INJ's decoration not reudcible to a sumtype")
+		      | _ => error "INJ's decoration not reducible to a sumtype")
 	   in  
 	       (case (field<noncarriers,inject) of
 		    (true,NONE) => 
@@ -1097,7 +1127,9 @@ structure IlStatic
 	       val {names,carrier,noncarriers,special=_} = 
 		   (case sumtype of
 			CON_SUM info => info
-		      | _ => error "CASE got type irreducible to a sumtype")
+		      | _ => (print "CASE statement is decorated with non-sumtype:\n";
+			      pp_exp exparg; print "\n";
+			      error "CASE statement is decorated with non-sumtype"))
 	       val n = length arms
 	       val (_,carrier,_) = HeadNormalize(carrier,ctxt)
 	       val (va,eargCon) = GetExpCon(arg,ctxt)
@@ -1138,10 +1170,11 @@ structure IlStatic
 		  then (loop 0 va arms)
 	      else 
 		  (Ppil.convar_display := Ppil.VAR_VALUE;
-		   print "CASE: expression type and decoration con mismatch";
-		   print "eargCon = "; pp_con eargCon; print "\n";
-		   print "sumcon = "; pp_con sumcon; print "\n";
-		   error "CASE: expression type and decoration con mismatch")
+		   print "CASE: expression's type and decoration type are unequal\n";
+		   print "  eargCon = "; pp_con eargCon; print "\n";
+		   print "  sumcon = "; pp_con sumcon; print "\n";
+		   print "  CASE exp = "; pp_exp exparg; print "\n";
+		   error "CASE: expression type and decoration type are unequal")
 	   end
      | (MODULE_PROJECT(m,l)) => 
 	   let val (va,signat) = GetModSig(m,ctxt)
@@ -1470,44 +1503,45 @@ structure IlStatic
 		      | SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
 		      | NONE => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound"))
 	    | CON_TUPLE_PROJECT (i,c) => 
-		  (case Reduce how (c,ctxt) of
-		       NONE => NONE
-		     | SOME(CON_TUPLE_INJECT cons, _) => 
-			   let val len = length cons
-			       val _ = if (i >= 0 andalso i < len)
-					   then ()
-				       else
-					   error "Reduce: con tuple projection - index wrong"
-			       val c = List.nth(cons,i)
-			   in  ReduceAgain c
-			   end
-		    | SOME(c,_) => SOME(CON_TUPLE_PROJECT(i,c), []))
-	    | CON_FUN(formals,CON_APP(f,arg)) =>
+		  let fun reducible cons = 
+		      let val len = length cons
+			  val _ = if (i >= 0 andalso i < len)
+				      then ()
+				  else
+				      error "Reduce: con tuple projection - index wrong"
+			  val c = List.nth(cons,i)
+		      in  ReduceAgain c
+		      end
+		  in
+		      (case Reduce how (c,ctxt) of
+			   NONE => (case c of
+					CON_TUPLE_INJECT cons => reducible cons
+				      | _ => NONE)
+			 | SOME(CON_TUPLE_INJECT cons, _) => reducible cons
+			 | SOME(c,_) => SOME(CON_TUPLE_PROJECT(i,c), []))
+		  end
+	    | CON_FUN(formals,CON_APP(f,args)) =>
 		let fun match (v,(CON_VAR v')) = eq_var(v,v')
 		      | match _ = false
 		in  (* --- Eta contract functions --- *)
-		    if (case arg of
-			    CON_VAR _ => eq_list(match,formals,[arg])
-			  | CON_TUPLE_INJECT args => eq_list(match,formals,args)
-			  | _ => false)
-		      then
-			  ReduceAgain f
+		    if (eq_list(match,formals,args))
+		      then ReduceAgain f
 		    else NONE
 		end
 	    | CON_FUN(formals,_) => NONE
-	    | CON_APP(f as CON_FUN(vars,body),arg) => ReduceAgain(ConApply(false,f,arg))
-	    | CON_APP(c1,c2) => 
+	    | CON_APP(f as CON_FUN(vars,body),args) => ReduceAgain(ConApply(false,f,args))
+	    | CON_APP(c1,cargs) => 
 		  let val c1' = Reduce how (c1,ctxt)
-		      val c2' = Reduce how (c2,ctxt)
-		      val c2 = (case c2' of
-				    NONE => c2
-				  | SOME (c2,_) => c2)
+		      fun folder(carg,reduced) = (case Reduce how (carg,ctxt) of
+						      NONE => (carg, reduced)
+						    | SOME (c, _) => (c, true))
+		      val (cargs, cargsReduced) = foldl_acc folder false cargs
 		  in  (case c1' of
-			   SOME(c1 as (CON_FUN _),_) => ReduceAgain(CON_APP(c1,c2))
-			 | SOME(c1,_) => SOME(CON_APP(c1,c2),[])
-			 | _ => (case c2' of
-				     NONE => NONE
-				   | SOME _ => SOME(CON_APP(c1,c2),[])))
+			   SOME(c1 as (CON_FUN _),_) => ReduceAgain(CON_APP(c1,cargs))
+			 | SOME(c1,_) => SOME(CON_APP(c1,cargs),[])
+			 | _ => if cargsReduced
+				   then SOME(CON_APP(c1,cargs),[])
+				else NONE)
 		  end
 	    | CON_MODULE_PROJECT (m,l) =>
 		(let 
@@ -1552,8 +1586,9 @@ structure IlStatic
 	       end))
        end	
 
-     and Kind_Valid (KIND_TUPLE n,_)     = n >= 0
-       | Kind_Valid (KIND_ARROW (m,n),_) = (m >= 0) andalso (n >= 0)
+     and Kind_Valid (KIND,_) = true
+       | Kind_Valid (KIND_TUPLE n,_)     = n >= 0
+       | Kind_Valid (KIND_ARROW (m,kres),ctxt) = (m >= 0) andalso Kind_Valid(kres,ctxt)
 
      and Context_Valid ctxt = raise Util.UNIMP
 
@@ -1567,7 +1602,7 @@ structure IlStatic
 	      DEC_EXP(v,c,eopt,_) => 
 		  (var_notin v) andalso 
 		  (case GetConKind(c,ctxt) of
-		       KIND_TUPLE 1 => true
+		       KIND => true
 		     | _ => false) andalso
 		  (case eopt of
 		       SOME e => eq_con(ctxt,c,#2 (GetExpCon(e,ctxt)))

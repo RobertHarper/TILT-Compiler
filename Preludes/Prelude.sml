@@ -107,7 +107,7 @@ structure List =
 	    in  loop
 	    end
     end
-open List
+
 
 
 
@@ -140,11 +140,50 @@ structure Array =
 		    else (f (unsafe_sub(a,index)); loop (uplus(index,0w1)))
 	    in  loop 0w0
 	    end
+
+	fun copy {src, si=si', len, dst, di} = 
+	    let val (sstop', dstop') =
+		let val srcLen = length src
+		in  case len
+		    of NONE => if ((si' < 0) orelse (srcLen < si'))
+				   then raise Subscript
+			       else (srcLen, di+srcLen-si')
+		  | (SOME n) => if ((n < 0) orelse (si' < 0) orelse (srcLen < si'+n))
+				    then raise Subscript
+				else (si'+n, di+n)
+		(* end case *)
+		end
+		val sstop = int32touint32 sstop'
+		val dstop = int32touint32 dstop'
+		val si = int32touint32 si'
+		fun copyUp (j, k) = if ult(j,sstop)
+					then (unsafe_update(dst, k, unsafe_sub(src, j));
+					      copyUp (uplus(j,0w1),uplus(k,0w1)))
+				    else ()
+		fun copyDown (j, k) = if ulte(si,j)
+					  then (unsafe_update(dst, k, unsafe_sub(src, j));
+						copyDown (uminus(j,0w1), uminus(k,0w1)))
+				      else ()
+	    in  if ((di < 0) orelse (length dst < dstop'))
+		    then raise Subscript
+		else if (si' < di)
+			 then copyDown (uminus(sstop,0w1), uminus(dstop,0w1))
+		     else copyUp (si, int32touint32 di)
+	    end
+	val array0 = empty_array
+	fun tabulate (0, _) = array0
+	  | tabulate (n, f) : 'a array =
+	    let val a = array(n, f 0)
+		val n = int32touint32 n
+		fun tab i =
+		    if ult(i,n) then (unsafe_update(a, i, f (uint32toint32 i));
+				      tab(uplus(i,0w1)))
+		    else a
+	    in tab 0w1
+	    end
+
     end
 
-val array = Array.array
-val sub = Array.sub
-val update = Array.update
 
 structure Array2 =
     struct	
@@ -210,8 +249,7 @@ structure Vector =
 	    in  (lx = ly) andalso vector_eq_loop 0w0
 	    end
     end
-open Vector
-type string = char vector
+
 
 structure Math = 
     struct
@@ -237,7 +275,7 @@ structure Misc =
 	fun max(a:int,b) = if a>b then a else b
       end
   
-open Misc
+
   
 structure Char = 
     struct
@@ -248,8 +286,9 @@ structure Char =
 	    in  unsafe_array2vector a
 	    end
     end
-open Char
 
+val vector_eq = Vector.vector_eq
+type string = char vector
 val stringmaxsize = 1024 * 1024
 val vectormaxlength = 1024 * 1024
 val arraymaxlength = 1024 * 1024
@@ -261,7 +300,7 @@ structure String =
 	    let val sz = size x
 		fun explode_loop(i,accum) = 
 		    if (i < sz)
-			then explode_loop (i+1,(vsub(x,i))::accum)
+			then explode_loop (i+1,(Vector.vsub(x,i))::accum)
 		    else List.rev accum
 	    in
 		explode_loop(0,[])
@@ -299,7 +338,7 @@ structure String =
 		let val x_sz = vector_length x
 		    val y_sz = vector_length y
 		    val a_sz = uplus(x_sz,y_sz)
-		    val c = chr 0
+		    val c = Char.chr 0
 		    val a : char array = unsafe_array(a_sz,c)
 		    val aw = uinta8touinta32 a
 		    val xw = uintv8touintv32 x
@@ -310,8 +349,8 @@ structure String =
 	    val op ^ = concat
 		
 	    fun implode(x : char list) : string = 
-		let val sz = int32touint32 (length x)
-		    val c = chr 0
+		let val sz = int32touint32 (List.length x)
+		    val c = Char.chr 0
 		    val a : char array = unsafe_array(sz,c)
 		    fun loop i [] = ()
 		      | loop i (c::rest) = 
@@ -323,7 +362,7 @@ structure String =
 
 	    fun revImplode(len : int, x : char list) : string = 
 		let val sz = int32touint32 len
-		    val c = chr 0
+		    val c = Char.chr 0
 		    val a : char array = unsafe_array(sz,c)
 		    fun loop i [] = ()
 		      | loop i (c::rest) = 
@@ -338,7 +377,7 @@ structure String =
 		    val start = if start<0 then raise Substring else (int32touint32 start)
 		    val len = if len<0 then raise Substring else (int32touint32 len)
 		    val stop = uplus(len,start)
-		    val c = chr 0
+		    val c = Char.chr 0
 		    val res : char array = unsafe_array(len,c)
 		    val _ = if (ugt(stop,size))
 				then raise Substring
@@ -384,12 +423,7 @@ structure String =
 				     else raise Size
     end
 
-val size = String.size
-val implode = String.implode
-val revImplode = String.revImplode
-val explode = String.explode
-val (op ^) = String.^
-val substring = String.substring
+
 
 	fun (a : int) mod (b : int) =
 	    let val temp = a rem b
@@ -422,7 +456,7 @@ structure Int =
     struct  
 	type int = int
 	fun toChars (i:int):char list =
-	    let fun ord' (i : uint) = chr(uint32toint32(uplus(i,0w48)))
+	    let fun ord' (i : uint) = Char.chr(uint32toint32(uplus(i,0w48)))
 		fun loop (i : uint) = 
 		    if ulte(i,0w9) 
 			then [ord' i]
@@ -432,10 +466,10 @@ structure Int =
 			 end
 		val chars = if (i>=0)
 				then List.rev(loop (int32touint32 i))
-			    else #"~"::(rev(loop (int32touint32 (~i))))
+			    else #"~"::(List.rev(loop (int32touint32 (~i))))
 	    in  chars
 	    end
-	fun toString (i:int):string = implode (toChars i)
+	fun toString (i:int):string = String.implode (toChars i)
     end
 
 
@@ -452,7 +486,7 @@ structure Real =
 		val ten  = 10.0
 		val one = 1.0
 		val zero = 0.0
-		fun chr'(x:int) = chr(x+48)
+		fun chr'(x:int) = Char.chr(x+48)
 		fun scistr(a::b::tl,e) : string =
 		    let val tail = #"E" :: (Int.toChars e)
 			fun trail nil : char list = tail
@@ -464,7 +498,7 @@ structure Real =
 			    end
 			  | trail (hd::tl) = (chr' hd) :: (trail tl)
 			val chars = (chr' a) :: #"." :: (chr' b) :: (trail tl)
-		    in  implode chars
+		    in  String.implode chars
 		    end
 		  | scistr _ = "" (* prevents non-exhaustive match *)
 		fun normstr(digits : int list,e) : string =
@@ -483,9 +517,9 @@ structure Real =
 				  | zeros n = #"0" :: zeros(n - 1)
 			    in   (#"0" :: #"." :: zeros n)
 			    end
-			val sl = implode(if e < 0
-					     then header(~e)
-					 else acc)
+			val sl = String.implode(if e < 0
+						    then header(~e)
+						else acc)
 		    in sl
 		    end
 		fun mkdigits(f : real, 0) : (int list * int) = (nil,if f < five then 0 else 1)
@@ -564,22 +598,33 @@ structure IO =
 	fun input_line (ins : instream) =
 	    let fun loop prev : char list = 
 		if end_of_stream ins 
-		    then (rev prev)
+		    then (List.rev prev)
 		else let val c = input1 ins 
 		     in
 			 case c of
-			     #"\n" => rev(c :: prev)
+			     #"\n" => List.rev(c :: prev)
 			   | _ => loop (c::prev)
 		     end
-	    in  implode (loop [])
+	    in  String.implode (loop [])
 	    end
 	fun print (x:char vector):unit = output(std_out, x)
     end
+
+
+open List
+val array = Array.array
+val sub = Array.sub
+val update = Array.update
+open Vector
+open Misc
+open Char
+val size = String.size
+val implode = String.implode
+val revImplode = String.revImplode
+val explode = String.explode
+val (op ^) = String.^
+val substring = String.substring
 open IO
-
-
-(* unimped parts of the standard basis *)
-exception LibFail of string
 
 
 (* ------ Looping constructs ------ *)

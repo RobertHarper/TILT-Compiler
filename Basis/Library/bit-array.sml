@@ -1,4 +1,4 @@
-(*$import Word8 Int32 Word8Array Word8Vector BIT_ARRAY Word32 LibBase Byte TopLevel *)
+(*$import Word8 Word8Array Word8Vector BIT_ARRAY Word32 LibBase Byte TopLevel *)
 (* bit-array.sml
  *
  * COPYRIGHT (c) 1995 by AT&T Bell Laboratories.  See COPYRIGHT file for details.

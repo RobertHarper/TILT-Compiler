@@ -19,5 +19,6 @@ void      DeallocBitmapRange(Bitmap_t *, int start, int size);
 int       ClearBitmap(Bitmap_t *);
 int       SetBitmapRange(Bitmap_t *, int start, int size);
 int       BitmapSize(Bitmap_t *);
+int       IsSet(Bitmap_t *, unsigned int);
 
 #endif 

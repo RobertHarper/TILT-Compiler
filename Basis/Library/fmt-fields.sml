@@ -1,4 +1,4 @@
-(*$import Word8 Word32 Int32 Real64 Substring Atom *)
+(*$import Word8 Word32 Real64 Substring Atom *)
 
 (* fmt-fields.sml
  *
