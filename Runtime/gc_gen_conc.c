@@ -328,7 +328,6 @@ static void CollectorOn(Proc_t *proc)
     proc->gcSegment1 = MajorWork;
 
   assert(isEmptyStack(&proc->majorObjStack));
-  assert(isEmptyStack(&proc->majorObjStack));
   if (GCType == Minor) {
     if (IsNullCopyRange(&proc->minorRange))   /* First minor GC (after a major GC) */
       SetCopyRange(&proc->minorRange, proc, fromSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
@@ -355,11 +354,11 @@ void flipRootLoc(int curGCType, ploc_t root)
     ptr_t replica = (ptr_t) primary[-1];
     *root = replica;
   }
-  else if (paranoid) {
-    assert(IsGlobalData(primary) || 
-	   IsTagData(primary) ||
-	   inHeap(primary,(curGCType == Minor) ? fromSpace : toSpace) ||   /* Already flipped */
-	   inHeap(primary,largeSpace));
+  else {
+    fastAssert(IsGlobalData(primary) || 
+	       IsTagData(primary) ||
+	       inHeap(primary,(curGCType == Minor) ? fromSpace : toSpace) ||   /* Already flipped */
+	       inHeap(primary,largeSpace));
   }
 }
 
@@ -516,7 +515,7 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 	if (occur == 0)
 	  pushStack2(proc->backObjsTemp, backObj, (ptr_t) 1);
 	else
-	  assert(occur == 1);
+	  fastAssert(occur == 1);
       }
       while (!recentWorkDone(proc, localWorkSize) && 
 	     ((backLoc = (ploc_t) popStack2(proc->backLocs, (ploc_t) &occur)) != NULL)) {
@@ -527,7 +526,7 @@ static void do_work(Proc_t *proc, int workToDo, int local)
 	if (occur == 0)
 	  pushStack2(proc->backLocsTemp, (ptr_t) mirrorBackLoc, (ptr_t) 1);
 	else
-	  assert(occur == 1);
+	  fastAssert(occur == 1);
       }
     }
     else {
@@ -555,7 +554,7 @@ static void do_work(Proc_t *proc, int workToDo, int local)
       if (GCType == Minor) {
 	int isMirrorPtrArray = (GET_TYPE(gray[-1]) == MIRROR_PTR_ARRAY_TYPE);
 	if (isMirrorPtrArray) {
-	  assert(inHeap(gray, fromSpace));
+	  fastAssert(inHeap(gray, fromSpace));
 	  selfTransferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,largeStart,largeEnd,
 											 objStack, segmentStack,
 											 copyRange, srcRange);
@@ -656,7 +655,7 @@ void GCRelease_GenConc(Proc_t *proc)
       if (objSize == 0) {
 	mem_t dummy = NULL;
 	objSize = objectLength(obj, &dummy);
-	assert(dummy == allocCurrent);
+	fastAssert(dummy == allocCurrent);
       }
       allocCurrent += objSize / sizeof(val_t);
     }
@@ -686,11 +685,9 @@ void GCRelease_GenConc(Proc_t *proc)
 	if (GET_TYPE(tag) == MIRROR_PTR_ARRAY_TYPE) {
 	  pushStack2(proc->backLocs, (ptr_t) &mutatorPrimary[wordDisp], (ptr_t) 0);
 	}
-	else if (GET_TYPE(tag) == WORD_ARRAY_TYPE ||
-		 GET_TYPE(tag) == QUAD_ARRAY_TYPE)
-	  ;
 	else 
-	  assert(0);
+	  fastAssert((GET_TYPE(tag) == WORD_ARRAY_TYPE ||
+		      GET_TYPE(tag) == QUAD_ARRAY_TYPE));
       }
     }
     else {
@@ -769,7 +766,7 @@ void GCRelease_GenConc(Proc_t *proc)
 	*/
 	ptr_t mutatorField = (ptr_t) mutatorPrimary[wordDisp];
 	
-	assert(((byteDisp - primaryArrayOffset) % (2 * sizeof(val_t))) == 0);
+	fastAssert(((byteDisp - primaryArrayOffset) % (2 * sizeof(val_t))) == 0);
 
 	/* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
 	   even if it might die to prevent the mutator from hiding live data */
@@ -781,19 +778,19 @@ void GCRelease_GenConc(Proc_t *proc)
 	      splitAlloc1_copyCopySync_primaryStack(proc,mutatorField,objStack,copyRange,srcRange);
 	      newField = (ptr_t) mutatorField[-1];
 	    }
-	    assert(!inHeap(newField, nursery));
+	    fastAssert(!inHeap(newField, nursery));
 	    fromSpaceEither[mirrorWordDisp] = (val_t) newField;
 	    if (inHeap(mutatorPrimary, nursery))
 	      fromSpaceEither[wordDisp] = (val_t) newField;
 	    else {
-	      assert(inHeap(mutatorPrimary, fromSpace));
+	      fastAssert(inHeap(mutatorPrimary, fromSpace));
 	      pushStack2(proc->backLocs, (ptr_t) &mutatorPrimary[wordDisp], (ptr_t) 0);
 	    }
 	}
 	else {  
 	  ptr_t newField = mutatorField;
 	  assert(GCType == Major);
-	  assert(inHeap(mutatorPrimary,fromSpace));
+	  fastAssert(inHeap(mutatorPrimary,fromSpace));
 	  if (inHeap(newField,fromSpace)) {
 	    splitAlloc1L_copyCopySync_primaryStack(proc,mutatorField,objStack,copyRange,srcRange,largeSpace);
 	    newField = (ptr_t) mutatorField[-1];

@@ -16,6 +16,7 @@
 	.globl	GCFromC			# called from C function including those of runtime
 	.globl	returnFromGCFromC	# used by scheduler to go back to C function
 	.globl	returnFromYield		# used by scheduler to go back to ML mutator's Yield
+	.globl	returnToML
 	.globl	save_regs_MLtoC		# used by ML mutator before calling a C function
 	.globl	load_regs_MLtoC		# used by ML mutator after calling a C function
 
@@ -267,6 +268,30 @@ returnFromGCFromML:
 .set at
 	.end	returnFromGCFromML
 
+ ! -------------------------------------------------------------------------------
+ ! returnToML is called from the runtime with
+ ! thread pointer as 1st argument
+ ! link value/return address as 2nd argument - this may or may not be the same saveregs[LINK]
+ ! -------------------------------------------------------------------------------
+	.ent	returnToML
+.set noat
+returnToML:
+	ldgp	$gp, 0($27)				# compute self-gp for load_regs
+	mov	CFIRSTARG_REG, THREADPTR_REG		# restore THREADPTR_REG
+	mov	CSECONDARG_REG, $1			# use $1 as temp for return address
+	stl	$31, noinml_disp(THREADPTR_REG)		# set notInML to zero
+	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer structure
+	bsr	load_regs				
+	mov	$1, $26					# restore return address to r26
+	ldq	$1, MLsaveregs_disp+8(THREADPTR_REG)	# restore r1 which was used to save return address
+	ldq	$0, MLsaveregs_disp+0(THREADPTR_REG)	# restore r0 which was used as arg to load_regs
+	ldq	$gp, MLsaveregs_disp+232(THREADPTR_REG)		# restore r29/gp return address	
+	ret	$31, ($26), 1
+	jsr	abort
+	nop
+.set at
+	.end    returnToML
+	
  # ----------------- GCFromC ---------------------------------
  # gcFromC is called from the runtime system with 3 arguments:	
  #	thread pointer, request size, a bool for majorGC
