@@ -6,20 +6,25 @@ structure Til : COMPILER =
 
     datatype platform = TIL_ALPHA | TIL_SPARC | MLRISC_ALPHA | MLRISC_SPARC
     val platform = 
-	ref (case OS.Process.getEnv "SYS_TYPE" of
-		 NONE => (print "Environtment variable SYS_TYPE unset. Defaulting to Alpha.\n";  
-			  littleEndian := true; TIL_ALPHA)
-	       | SOME sysType => 
-		     if (String.substring(sysType,0,3)) = "sun"
-			 then (print "Sun detected. Using Til-Sparc\n"; 
-			       littleEndian := false; TIL_SPARC)
-		     else if (String.substring(sysType,0,5)) = "alpha"
-			 then (print "Alpha detected. Using Til-Alpha\n"; 
-			       littleEndian := true; TIL_ALPHA)
-		     else (print "Environment variable SYS_TYPE's value ";
-			   print sysType; 
-			   print " is unrecognized. Defaulting to Alpha.\n";  
-			   littleEndian := true; TIL_ALPHA))
+	let val envType = (case OS.Process.getEnv "SYS_TYPE" of
+			       NONE => OS.Process.getEnv "SYS"
+			     | some => some)
+	in
+	    ref (case envType of
+		     NONE => (print "Environment variable SYS_TYPE unset. Defaulting to Alpha.\n";  
+			      littleEndian := true; TIL_ALPHA)
+		   | SOME sysType => 
+			 if (String.substring(sysType,0,3)) = "sun"
+			     then (print "Sun detected. Using Til-Sparc\n"; 
+				   littleEndian := false; TIL_SPARC)
+			 else if (String.substring(sysType,0,5)) = "alpha"
+				  then (print "Alpha detected. Using Til-Alpha\n"; 
+					littleEndian := true; TIL_ALPHA)
+			      else (print "Environment variable SYS_TYPE's value ";
+				    print sysType; 
+				    print " is unrecognized. Defaulting to Alpha.\n";  
+				    littleEndian := true; TIL_ALPHA))
+	end
 
     type sbnd = Il.sbnd
     type context_entry = Il.context_entry

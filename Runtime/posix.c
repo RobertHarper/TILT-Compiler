@@ -697,11 +697,13 @@ int_int_int_int_int posix_procenv_times(unit unused)
   assert(0);
 }
 
+/* This code relies on NONE being represented by 0. */
 string_option posix_procenv_getenv(string mlname)
 {
-  char *cname = mlstring2cstring(mlname);  /* Don't need to free this */
-  char *cvalue = getenv(cname);            /* Don't need to free this and cannot modify it */
-  value_t mlvalue = alloc_string(strlen(cvalue),cvalue);
+  char *empty = "";
+  char *cname = mlstring2cstring(mlname);      /* Don't need to free this */
+  char *cvalue = getenv(cname);                /* Don't need to free this and cannot modify it */
+  value_t mlvalue = (cvalue == NULL) ? 0 : alloc_string(strlen(cvalue),cvalue);
   return mlvalue;
 }
 
