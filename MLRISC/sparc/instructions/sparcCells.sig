@@ -52,23 +52,3 @@ signature SPARCCELLS = sig
   val addReg  : register * cellset -> cellset (* addCell GP *)
   val addFreg : register * cellset -> cellset (* addCell FP *)
 end
-
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:27  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:17:41  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:09:41  pscheng
-# *** empty log message ***
-#
- * Revision 1.2  1998/10/06 14:06:22  george
- *  fixed up some machine description problems. [leunga]
- *
- * Revision 1.1.1.1  1998/08/05 19:38:49  george
- *   Release 110.7.4
- *
- *)

@@ -21,16 +21,3 @@ sig
           ('n2,'e2,'g2) cdg 
 
 end
-
-(*
- * $Log$
-# Revision 1.2  2001/12/13  16:32:12  swasey
-# *** empty log message ***
-# 
-# Revision 1.1  99/02/17  21:16:36  pscheng
-# *** empty log message ***
-# 
-# Revision 1.1  1999/02/17  20:08:13  pscheng
-# *** empty log message ***
-#
- *)
