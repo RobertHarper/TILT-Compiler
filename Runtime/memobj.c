@@ -43,11 +43,11 @@ const mem_t heapstart  = (mem_t) (780 * 1024 * 1024);
 #endif
 
 /* The heaps are managed by a bitmap where each bit corresponds to a 32K chunk of the heap.
-   We take 288 megs for heap space which result in 9216 bits.
+   We take 320 megs for heap space which result in 10240 bits.
 */
 static int chunksize = 32768;
 static Bitmap_t *bmp = NULL;
-static const int Heapbitmap_bits = 9216;
+static const int Heapbitmap_bits = 10240;
 
 
 
