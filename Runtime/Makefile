@@ -15,7 +15,7 @@ all:
 	echo "Try gmake runtime"
 
 purge:
-	rm -rf obj*/*.o obj*/*.d *~ *.m4.c
+	rm -rf obj*/*.o obj*/*.d *~ *.i
 
 test:
 	echo ${asm_name}
