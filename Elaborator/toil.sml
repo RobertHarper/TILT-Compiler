@@ -156,14 +156,13 @@ val decs1 = ref ([] : Il.dec list)
 	    val _ = debugdo (fn () => (print "\n*********\ndone make_non_dependent_type with signat_temp:\n";
 				       pp_signat signat_temp; print "\n\n"))
 	    val signat'= SIGNAT_FUNCTOR(v,signat_poly,signat_temp,oneshot_init PARTIAL)
-(* XXX this check causes a tyvar to be unified with something not in its scope!!!
+(* XXX this check causes a tyvar to be unified with something not in its scope!!! *)
 	    val _ = if (Sig_IsSub(decs,s,signat')) then ()
 		    else (print "s is\n";
 			  pp_signat s; print "\nsignat' is \n";
 			  pp_signat signat'; print "\n";
 			  s1 := s; s2 := signat'; decs1 := decs;
 			  error "Failed rule 24 Sig_IsSub")
-*)
 	    val exp = MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab)
 	    val _ = debugdo (fn () => (print "polyfun_inst returning exp :\n";
 				       pp_exp exp; print "\n\n  and rescon:\n";

@@ -284,7 +284,7 @@ functor IlStatic(structure Il : IL
 				  print "\n"))
        val (isocon1, con1) = normalize con1
        val (isocon2, con2) = normalize con2
-       val _ = debugdo (fn () => (print "\nNormalized to: "; pp_con con1;
+       val _ = debugdo (fn () => (print "\nHeadNormalized to: "; pp_con con1;
 				  print "\nand:     "; pp_con con2;
 				  print "\n"))
        val constrained = constrained orelse isocon1 orelse isocon2
@@ -872,6 +872,10 @@ functor IlStatic(structure Il : IL
     and HeadNormalize (arg,decs) : (bool * con) = 
 	 (case arg of
 	      CON_OVAR ocon => (true, ocon_deref ocon)
+	    | (CON_TYVAR tv) => (tyvar_isconstrained tv,
+				 case tyvar_deref tv of
+				     NONE => arg
+				   | SOME c => #2(HeadNormalize(c,decs)))
 	    | (CON_VAR v) => let fun loop [] = error "Normalize could not reduce CON_VAR"
 				   | loop (DEC_CON(v',_,copt)::rest) = 
 				     if (eq_var (v,v'))
@@ -916,7 +920,12 @@ functor IlStatic(structure Il : IL
 		     | loop (_::rest) = loop rest
 	       in (case s of 
 		       (SIGNAT_DATATYPE (_,_,sdecs)) => loop sdecs
-		     | SIGNAT_STRUCTURE sdecs => loop sdecs
+		     | SIGNAT_STRUCTURE sdecs => 
+			   (print "HeadNormalize: CON_MODULE_PROJECT case: l = "; pp_label l;
+			    print "\n and sdecs = ";
+			    pp_sdecs sdecs;
+			    print "\n";
+			    loop sdecs)
 		     | _ => (false,arg))
 	       end
 	   handle NOTFOUND _ => (false,arg))

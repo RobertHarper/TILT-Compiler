@@ -1,10 +1,16 @@
 signature TYVAR = 
   sig
 
-    type '1con tyvar     (* type variable *)
+    val debug : bool ref (* the usual debug flag *)
+
+    type '1con tyvar     (* type meta-variable used for type inference *)
     type '1con ocon      (* overloaded type with constraints *)
 
-    val debug : bool ref
+    val fresh_tyvar : string -> '1con tyvar   (* create a new initially unset tyvar *)
+    val fresh_ocon  : '1con * (Name.var * '1con list) list -> '1con ocon 
+                                              (* create an uninstantiated overloaded type 
+                                                 with a list of the constraints imposed on the variables *)
+
     val eq_tyvar     : '1con tyvar * '1con tyvar -> bool
     val tyvar_getvar : '1con tyvar -> Name.var
     val tyvar_deref  : '1con tyvar -> '1con option
@@ -23,8 +29,5 @@ signature TYVAR =
     val ocon_check   : '1con ocon * ('1con * '1con -> bool) -> int list option
 
 
-    val fresh_tyvar : string -> '1con tyvar   (* create an unset tyvar *)
-    val fresh_var_tyvar : Name.var -> '1con tyvar  (* create unset tyvar with given var *)
-    val fresh_ocon : '1con * (Name.var * '1con list) list -> '1con ocon
   end
       

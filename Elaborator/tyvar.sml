@@ -38,10 +38,6 @@ functor Tyvar()
 			      constrained = ref false, 
 			      use_equal = ref false,
 			      body = oneshot()}
-    fun fresh_var_tyvar v = TYVAR{name = v,
-				  constrained = ref false, 
-				  use_equal = ref false,
-				  body = oneshot()}
 
     fun fresh_ocon (body, var_constraint) = OCON_UNINST{name=fresh_var(),
 							body = body,
@@ -57,7 +53,7 @@ functor Tyvar()
       let 
 	val var_list = map #1 var_constraint
 	val constr_list = map #2 var_constraint
-	val tyvar_list = map (fn v => fresh_var_tyvar v) var_list
+	val tyvar_list = map (fresh_tyvar o var2string) var_list
 	val newbody = subster(body,zip var_list tyvar_list)
       in OCON_INST{name=name,
 		   body=newbody,
