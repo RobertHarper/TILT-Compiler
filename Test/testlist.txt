@@ -234,3 +234,4 @@ m0089	overloading
 m0090	patterns
 m0091	polymorphic equality
 m0092	polymorphic equality
+m0093	posix exit
