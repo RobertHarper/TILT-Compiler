@@ -357,7 +357,7 @@ structure Toil
 			let 
 			    val (con,eq_con,e2) = 
 				(case copt of
-				     NONE => let 
+				     NONE => let val _ = print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n"
 						 val tyvar = fresh_named_tyvar (ctxt,"eq_tyvar")
 						 val _ = add_eq_entry tyvar
 						 val _ = tyvar_use_equal tyvar
@@ -2484,7 +2484,7 @@ structure Toil
 	end
 
     (* ------------ Exported interface to resolve overloading ------------ *)
-    fun overload_wrap unitNameOpt fp xobj arg = 
+    fun overload_wrap ctxt unitNameOpt fp xobj arg = 
       let 
 	fun flex_help (l,ref(FLEXINFO(stamp,false,rdecs)),fieldc,eshot) = 
 	    (error_region();
@@ -2531,7 +2531,8 @@ structure Toil
 	       | NONE => (print "Warning: top-level unresolved tyvar -- setting to type unit: ";
 			  pp_con (CON_TYVAR tv); print "\n";
 			  Stats.counter "toil.unresolved_tyvar" ();
-			  Tyvar.tyvar_set(tv,con_unit)))
+			  Tyvar.tyvar_set(tv,con_unit);
+			  xeq(ctxt, CON_TYVAR tv); ()))
 
 	val _ = reset_elaboration (fp, unitNameOpt)
 	val _ = push_region(0,1000000)
@@ -2555,17 +2556,17 @@ structure Toil
     val expcompile = xexp
     val typecompile = xty
 
-    val xdec = fn (unitName, ctxt,fp,dec) => overload_wrap (SOME unitName) fp (xdec false) (ctxt,dec)
+    val xdec = fn (unitName, ctxt,fp,dec) => overload_wrap ctxt  (SOME unitName) fp (xdec false) (ctxt,dec)
     val xdecspec = fn (unitName, ctxt,fp,dec,fp2,spec) => 
 	(case xdec (unitName,ctxt,fp,dec) of
 	     NONE => NONE
-	   | SOME decresult => overload_wrap (SOME unitName) fp2 xdecspec (ctxt,decresult,spec))
-    val xexp = fn (ctxt,fp,exp) => overload_wrap NONE fp xexp (ctxt,exp)
-    val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap NONE fp xstrexp (ctxt,strexp,sigc)
-    val xspec = fn (unitName,ctxt,fp,specs) => overload_wrap (SOME unitName) fp xspec (ctxt,specs)
-    val xsigexp = fn (ctxt,fp,se) => overload_wrap NONE fp xsigexp (ctxt,se)
-    val xty = fn (ctxt,fp,ty) => overload_wrap NONE fp xty (ctxt,ty)
-    val xtybind = fn (ctxt,fp,tyb) => overload_wrap NONE fp xtybind (ctxt,tyb)
+	   | SOME decresult => overload_wrap ctxt  (SOME unitName) fp2 xdecspec (ctxt,decresult,spec))
+    val xexp = fn (ctxt,fp,exp) => overload_wrap ctxt  NONE fp xexp (ctxt,exp)
+    val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap ctxt  NONE fp xstrexp (ctxt,strexp,sigc)
+    val xspec = fn (unitName,ctxt,fp,specs) => overload_wrap ctxt  (SOME unitName) fp xspec (ctxt,specs)
+    val xsigexp = fn (ctxt,fp,se) => overload_wrap ctxt  NONE fp xsigexp (ctxt,se)
+    val xty = fn (ctxt,fp,ty) => overload_wrap ctxt  NONE fp xty (ctxt,ty)
+    val xtybind = fn (ctxt,fp,tyb) => overload_wrap ctxt  NONE fp xtybind (ctxt,tyb)
 
 
   end;

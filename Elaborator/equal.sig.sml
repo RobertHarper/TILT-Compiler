@@ -5,6 +5,8 @@ signature EQUAL =
 
     val debug : bool ref
 	
+    val installHelpers : { add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit } -> unit
+
     (* Equality at a type or tuple of types arising from a recursive type *)
 
     val compile : {polyinst_opt : 

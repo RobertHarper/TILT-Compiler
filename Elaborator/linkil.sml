@@ -7,6 +7,7 @@ structure LinkIl :> LINKIL  =
 
 	val _ = IlStatic.installHelpers {eq_compile = Toil.xeq}
 	val _ = IlContext.installHelpers {eq_con = IlStatic.eq_con}
+	val _ = Equal.installHelpers {add_eq_entry = Toil.add_eq_entry}
 	val _ = Pat.installHelpers {typecompile = Toil.typecompile,
 				    expcompile = Toil.expcompile,
 				    polyinst = Toil.polyinst}

@@ -17,6 +17,9 @@ struct
 
     exception NoEqExp
 
+    val cadd_eq_entry = ref (NONE : ((Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit) option);
+    fun installHelpers { add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit } = cadd_eq_entry := SOME add_eq_entry;
+
     type 'a bindparm = {dontBind : 'a -> bool,
 			fromVar  : var -> 'a,
 			toBnd    : var * 'a -> bnd}
@@ -85,6 +88,7 @@ struct
 					| (NONE, SOME os) => (* hole is empty since tyvar is unset *)
 					   let val eq_con = con_eqfun ctxt con
 					       val exp = OVEREXP(eq_con,true,os)
+					       val _ = (valOf (!cadd_eq_entry)) tyvar
 					   in  (exp,eq_con)
 					   end
 					| (SOME c, SOME os) => (valOf (oneshot_deref os), con_eqfun ctxt c)
@@ -206,7 +210,9 @@ struct
 					 false, oneshot())
 		      val _ = if (eq_con(ctxt,vc,ac))
 				  then ()
-			      else (elab_error "Prelude vector_eq is bad")
+			      else (print "vc = "; Ppil.pp_con vc; print "\n";
+				    print "ac = "; Ppil.pp_con ac; print "\n";
+				    elab_error "Prelude vector_eq is bad")
 		      val exp = APP(e, #1 (self (NONE,c)))
 		  in  ((case exp_reduce (ctxt,exp) of
 			    NONE => exp

@@ -5,6 +5,7 @@ signature TOIL =
 
     val debug : bool ref
 
+    val add_eq_entry : (Il.context,Il.con,Il.exp) Tyvar.tyvar -> unit 
 
     (* ---------------------- Translations --------------------------- *)
     type decresult = (Il.sbnd option * Il.context_entry) list
