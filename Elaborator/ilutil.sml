@@ -244,7 +244,9 @@ functor IlUtil(structure Il : IL
 	     | NONE =>
 	  (case exp of
 	     SCON _ => exp
-	   | OVEREXP _ => exp
+	   | OVEREXP (c,b,oe) => (case (oneshot_deref oe) of
+				      NONE => OVEREXP(f_con state c, b, oe)
+				    | SOME e => OVEREXP(f_con state c, b, oneshot_init(self e)))
 	   | VAR v => exp
 	   | PRIM (p,cs,es) => PRIM(p, map (f_con state) cs, map self es)
 	   | ILPRIM (ilp,cs,es) => ILPRIM(ilp, map (f_con state) cs, map self es)
@@ -676,9 +678,10 @@ functor IlUtil(structure Il : IL
 								   | SOME _ => (count := !count + 1))
 						    in  res
 						    end
-	  fun exp_handler count table (VAR var,bound) = if (member_eq(eq_var,var,bound)) 
-						      then NONE
-						  else assoc_eq count (eq_var,var,table)
+	  fun exp_handler count table (VAR var,bound) = 
+	       if (member_eq(eq_var,var,bound)) 
+		  then NONE
+	      else assoc_eq count (eq_var,var,table)
 	    | exp_handler _ _ _ = NONE
 	  fun con_handler count table (CON_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
 							  then NONE
@@ -932,7 +935,8 @@ functor IlUtil(structure Il : IL
 		 end
 	  in 
 	      (case (reduce_small,c1,c2) of
-		   (true,CON_FUN([var],body),arg) => help([var],body,[arg])
+		   (true,CON_FUN([var],body),arg as CON_VAR _) => con_subst_convar(body, [(var,arg)])
+		 | (true,CON_FUN([var],body),arg) => help([var],body,[arg])
 		 | (true,CON_FUN(vars,body),CON_TUPLE_INJECT args) => help(vars,body,args)
 		 | (true,_,_) => CON_APP(c1,c2)
 		 | (_,CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => con_subst_convar(c, [(var,arg_con)])

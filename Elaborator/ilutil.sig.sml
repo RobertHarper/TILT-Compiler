@@ -103,7 +103,7 @@ signature ILUTIL =
     (* derefences a constructor variable if possible *)
     val con_deref : con -> con
 
-    (*  ConApply: takes two types and if they are CON_FUN and CON_TUPLE,
+    (*  ConApply: takes two types and if they are CON_FUN and CON_TUPLE or CON_VAR,
                   performs a substitution(i.e. beta reduction. 
 		  If the flag is true, then the reduction occurs if each argument variable
 		  is used at most once in the function body.  This prevents code explosion. *)
@@ -168,7 +168,6 @@ signature ILUTIL =
     val mod_size : mod -> int
     val bnd_size : bnd -> int
     val sig_size : signat -> int
-
 
 
     (* ----------- Functions related to type inference ----------- *)

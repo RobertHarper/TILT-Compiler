@@ -241,15 +241,15 @@ functor Datatype(structure Il : IL
 		    val (nca,cons) = conopts_split constr_con_i
 		    fun mapper c = if (is_monomorphic)
 				       then c
-				   else CON_APP(c,tyvar_mproj)
+				   else ConApply(true,c,tyvar_mproj)
 		    val ca = map mapper cons
 		    val mutype = if is_monomorphic
 				     then type_i
-				 else CON_APP(type_i, tyvar_mproj)
+				 else ConApply(true,type_i, tyvar_mproj)
 		    fun help (j, constr_con_ij_opt) =
 			let val constr_sum = if (is_monomorphic)
 						  then constr_sum_i
-					      else CON_APP(constr_sum_i, tyvar_mproj)
+					      else ConApply(true,constr_sum_i, tyvar_mproj)
 			in  case constr_con_ij_opt of
 			    NONE =>
 				(roll(type_minst,
@@ -260,7 +260,7 @@ functor Datatype(structure Il : IL
 				(make_total_lambda(var,
 					   if (is_monomorphic)
 					       then constr_con_ij
-					   else CON_APP(constr_con_ij, tyvar_mproj),
+					   else ConApply(true,constr_con_ij, tyvar_mproj),
 					   mutype,
 					   roll(type_minst,
 						INJ{sumtype = constr_sum,
@@ -296,10 +296,10 @@ functor Datatype(structure Il : IL
 		    val (count,cons : con list) = conopts_split constr_con_i
 		    fun mapper c = if (is_monomorphic)
 				       then c
-				   else CON_APP(c,tyvar_mproj)
+				   else ConApply(true,c,tyvar_mproj)
 		    val sumtype = if is_monomorphic
 				      then constr_sum_i
-				  else CON_APP(constr_sum_i, tyvar_mproj)
+				  else ConApply(true,constr_sum_i, tyvar_mproj)
 		    val var = fresh_named_var "exposee"
 		in  make_total_lambda(var,type_minst,sumtype,
 				      unroll(type_minst,sumtype,VAR var))
@@ -516,7 +516,7 @@ functor Datatype(structure Il : IL
 			     (print "case 4 \n"; 
 			      CON_FUN(tyvar_vars,
 				      con_tuple_inject
-				      (map (fn c => CON_APP(c, tyvar_tuple)) cons))))
+				      (map (fn c => ConApply(true,c, tyvar_tuple)) cons))))
 	    in  (SBND(constr_sumarg_lab_i,BND_CON(constr_sumarg_var_i, c)),
 		 SDEC(constr_sumarg_lab_i,DEC_CON(constr_sumarg_var_i, k, SOME c)))
 	    end

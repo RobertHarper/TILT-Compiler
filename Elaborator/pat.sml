@@ -120,6 +120,19 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 	   If the let was created for case_exps, then the augmentation is unneeded.
      ------------------------------------------------------------------------ *)
 
+    fun wrapbnds' ([] : bnds, (e : exp, c : con)) = (e,c)
+      | wrapbnds' (bnds, (e,c)) = 
+	let fun folder(BND_EXP(v,e),subst) = 
+	         let val e' = IlUtil.exp_subst_expvar(e,subst)
+		     val v' = Name.fresh_named_var (Name.var2string v)
+		 in  (BND_EXP(v',e'),(v,VAR v')::subst)
+		 end
+	      | folder(BND_CON(v,c),subst) = (BND_CON(v,IlUtil.con_subst_expvar(c,subst)),subst)
+	      | folder(BND_MOD(v,m),subst) = (BND_MOD(v,IlUtil.mod_subst_expvar(m,subst)),subst)
+	    val (bnds,subst) = foldl_acc folder [] bnds
+	    val e = IlUtil.exp_subst_expvar(e,subst)
+	in  (LET (bnds, e),c)
+	end
 
     fun wrapbnds ([] : bnds, (e : exp, c : con)) = (e,c)
       | wrapbnds (bnds, (e,c)) = (LET (bnds, e),c)
@@ -240,7 +253,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 				 val bound_cons = map #3 bound
 				 val funvar = Name.fresh_named_var "repeat_patbody"
 				 val argvar = if (length bound_cons = 1)
-						then hd bound_vars
+						then Name.derived_var(hd bound_vars)
 					      else Name.fresh_named_var "repeat_casevar"
 				 val argcon = if (length bound_cons = 1)
 						then hd bound_cons
@@ -248,10 +261,12 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 				 val labels = Listops.mapcount
 				     (fn (n,_) => generate_tuple_label(n+1)) bound
 				 val lbnds = letprojecthelp(argvar,bound_vars,
-							bound_cons,labels)
-				 val (e,c) = if (length bound_cons = 1)
-						then (e,c)
-						else wrapbnds(lbnds,(e,c))
+							    bound_cons,labels)
+				 val (e,c) = 
+				     if (length bound_cons = 1)
+					 then (IlUtil.exp_subst_expvar
+					       (e,[(hd bound_vars,VAR argvar)]),c)
+				     else wrapbnds'(lbnds,(e,c))
 				 val (lambda,funcon) = make_lambda(argvar,argcon,c,e)
 				 val bnd = BND_EXP(funvar,lambda)
 				 fun apper(one,bounds : bound) = 
