@@ -264,3 +264,9 @@ m0119	text io
 m0120	time
 m0121	time
 m0122	time
+m0123	string comparison
+m0124	type specs
+m0125	unary constructors
+m0126	unary arithmetic
+m0127	non-generalized type variables
+m0128	unix paths
