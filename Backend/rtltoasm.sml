@@ -1,4 +1,3 @@
-(*$import Rtl Core PRINTUTILS CALLCONV INTRAPROC RECURSION TOASM MACHINEUTILS Stats RTLTOASM Int Util Listops List *)
 functor Rtltoasm (val commentHeader : string
 		  structure Machineutils : MACHINEUTILS
 		  structure Callconv : CALLCONV
@@ -7,19 +6,19 @@ functor Rtltoasm (val commentHeader : string
 		  structure Recursion : RECURSION
 		  structure Toasm : TOASM
 
-		  sharing Printutils.Machine 
+		  sharing Printutils.Machine
 		      = Callconv.Machine
 		      = Procalloc.Bblock.Machine
 		      = Toasm.Machine
-(* should not be needed *) = Printutils.Bblock.Machine 
+(* should not be needed *) = Printutils.Bblock.Machine
 
 
-		  sharing Printutils.Bblock 
+		  sharing Printutils.Bblock
 		    = Procalloc.Bblock
 		    = Toasm.Bblock
 
 		  sharing Printutils.Tracetable
-		      = Procalloc.Tracetable 
+		      = Procalloc.Tracetable
 		      = Toasm.Tracetable)
 
 		     :> RTLTOASM  =
@@ -42,7 +41,7 @@ struct
 			      then Stats.subtimer(str,f)
 			  else f
 
-   fun makeUnknownSig (args,results) = 
+   fun makeUnknownSig (args,results) =
        let val linkage = Callconv.unknown_ml (FORMALS{args=args,results=results})
        in UNKNOWN_PROCSIG
 	   {linkage = linkage,
@@ -50,11 +49,11 @@ struct
 	    regs_modified = listToSet general_regs,
 	    callee_saved = indirect_callee_saved_regs}
        end
-	   
+
 
 (* ----------------------------------------------------------------- *)
 
-   fun allocateModule (prog as Rtl.MODULE{procs, data, entry, global}) =
+   fun allocateModule (prog as Rtl.MODULE{procs, data, entry, global, ...}) =
      let
        val names = map (fn (Rtl.PROC{name,...}) => name) procs
        local
@@ -114,7 +113,7 @@ struct
 		   loop groups
 	       end
 
-	   fun sameComponent groups proc1 proc2 = 
+	   fun sameComponent groups proc1 proc2 =
 	       Listops.member_eq(Rtl.eq_label, proc2, getComponent groups proc1)
 *)
        in
@@ -133,23 +132,23 @@ struct
 				   SOME s => s
 				 | _ => error ("getSig " ^ (msLabel proc_name)))
 
-       fun existsSig proc_name = 
+       fun existsSig proc_name =
 	   case Labelmap.find (!Labelmap,proc_name) of
 	       SOME _ => true
 	     | _ => false
 
-       fun setSig proc_name proc_sig = 
+       fun setSig proc_name proc_sig =
 	 Labelmap := Labelmap.insert(!Labelmap, proc_name, proc_sig)
 
        fun initSig proc =
-	   let 
+	   let
 	     val (Rtl.PROC{name, args, results, return, ...}) = proc
 	     val args = map Toasm.translateReg args
 	     val results  = map Toasm.translateReg results
 
 	     val sign = makeUnknownSig(args,results)
 
-           in if existsSig name 
+           in if existsSig name
 		  then error ("function names not unique: " ^ (msLabel name) ^ " occurs twice")
 	      else setSig name sign
 	   end
@@ -162,15 +161,15 @@ struct
 	   findRtlProc p rest
 
        fun allocateProc (name : label) =
-	 let 
-	   val (psig as (UNKNOWN_PROCSIG{linkage,regs_destroyed, 
+	 let
+	   val (psig as (UNKNOWN_PROCSIG{linkage,regs_destroyed,
 					 regs_modified,callee_saved})) = getSig name
 
-	   val _ = 
+	   val _ =
 	       if (! debug) then
 		   (emitString commentHeader;
-		    emitString ("  Allocating " ^ 
-				(msLabel name) ^ "\n")) 
+		    emitString ("  Allocating " ^
+				(msLabel name) ^ "\n"))
 	       else ()
 
 	   val _ = msg ((msLabel name) ^ "\n")
@@ -181,7 +180,7 @@ struct
 	       subtimer("backend_toasm",
 			Toasm.translateProc) rtlproc
 	   val Rtl.PROC{args,results,...} = rtlproc
-	   val temp_psig = 
+	   val temp_psig =
 	       KNOWN_PROCSIG {linkage = linkage,
 			      framesize  = 0,
 			      ra_offset = 0,
@@ -191,56 +190,56 @@ struct
 			      blocklabels = blocklabels,
 			      argFormal = map Toasm.translateReg args,
 			      resFormal = map Toasm.translateReg results}
-	       
+
 	   val _ = msg "\tabout to dump initial version\n"
-	       
-	   val _ = 
+
+	   val _ =
 	       if !debug
 		   then (emitString commentHeader;
 			 emitString (" dumping initial version of procedure");
 			 dumpProc(name,temp_psig, block_map, blocklabels, true))
 	       else ()
-		   
+
 	   val _ = msg "\tallocating\n"
 
 	   val (new_sig, new_block_map, new_block_labels, gc_data) =
 	       subtimer("backend_chaitin",
-			Procalloc.allocateProc) 
+			Procalloc.allocateProc)
 	       {getSignature = getSig,
 		name = name,
 		block_map = block_map,
 		tracemap = tracemap,
 		procsig = temp_psig,
 		stack_resident = stack_resident}
-	       
-	
+
+
 	   val _ = setSig name new_sig
 	   val _ = msg "\tdumping\n"
-	   val _ = if !debug 
+	   val _ = if !debug
 		       then (emitString commentHeader;
 			     emitString(" dumping final version of procedure "))
 		   else ()
 	   val _ = subtimer("backend_output",
-			    fn() => (dumpProc (name, 
-					       new_sig, new_block_map, 
+			    fn() => (dumpProc (name,
+					       new_sig, new_block_map,
 					       new_block_labels, !debug);
 				     dumpGCDatalist gc_data)) ()
-	   val _ = if !debug 
+	   val _ = if !debug
 		       then (emitString commentHeader;
 			     emitString(" done procedure "))
 		   else ()
 	 in  ()
 	 end
-	   
-       fun allocateComponent (count,chunk) = 
-	 let 
+
+       fun allocateComponent (count,chunk) =
+	 let
 	     val _ = if (!debug)
-			 then (print "allocating component #"; 
+			 then (print "allocating component #";
 			       print (Int.toString count); print "\n")
 		     else ()
 	     val _ = app allocateProc chunk
 	     val _ = if (!debug)
-			 then (print "done allocating component #"; 
+			 then (print "done allocating component #";
 			       print (Int.toString count); print "\n")
 		     else ()
 	 in ()
@@ -265,7 +264,7 @@ struct
 			 emitString ("\t.long 0" ^ commentHeader ^ "filler\n\n");
 			 let val globalData = map DATA global
 			     val globalData = [DLABEL (#trace_global_start entry)] @ globalData @
-				              [DLABEL (#trace_global_end entry), 
+				              [DLABEL (#trace_global_end entry),
 					       COMMENT "filler so label is defined", INT32 0w0]
 			 in  dumpDatalist globalData
 			 end;
