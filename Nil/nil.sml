@@ -1,341 +1,141 @@
 functor Nil(structure Annotation : ANNOTATION
-	structure )
-	 : NIL = 
+	    structure Name : NAME
+	    structure Prim : PRIM)
+	   : NIL =
 struct	
-  structure A : ANNOTATION
-  structure Name : NAME
+
+  structure Annotation = Annotation
+  structure Name = Name
+  structure Prim = Prim
+  open Util
+  val error = fn s => error "nil.sml" s
+
   type var = Name.var
   type label = Name.label
-  type annot = A.annotation
+  type annot = Annotation.annotation
+  type w32 = Word32.word
+  type prim = Prim.prim
 
-  (* A constructor of kind Arrow_k(CLOSURE,[K1,...,Kn],K) is a
-   * closure object from constructors of kind K1,...,Kn to constructors
-   * of kind K.  A constructor of kind Arrow_k(CODE,[K1,...,Kn],K) is a
-   * code object for a closure (and is thus closed).  CODE does not arise
-   * until after closure conversion.
-   *)
-  datatype arrow = CLOSURE | CODE   
 
-  (* A term level function either terminates without effects (TOTAL) 
-   * or might have a computational effect (PARTIAL).   Note that we
-   * explicitly distinguish term-level code types from term-level closure
-   * types because term-level code must abstract both types and values.
+  (* In general, we want to distinguish between functions/arrow types that 
+   * are open (possibly having free variables) or those that are closed.
    *)
-  datatype effect = TOTAL | PARTIAL
+  datatype openness = Open | Closed
 
-  (* various int sizes:  W8 is an 8-bit word, W16 is a 16-bit word, etc.
-   * We may want to generalize this to W64 and possibly even W1.
+  (* In addition, we would like to know if application of an arrow object
+   * is total(i.e. effect-free) or partial (i.e. not necessarily effect-free)
+   * In the total case, we are then guaranteed that the computation always
+   * terminates and that, when given the same input, will yield the same output.
    *)
-  datatype intsize = W8 | W16 | W32
+  datatype effect = Total | Partial
 
-  (* Kinds include a distinguished base kind (Type_k), dependent sums
-   * (Record_k), lists of kinds (List_k), functions from kinds to kinds
-   * (and code from kinds to kinds), and singleton kinds (= to a particular
-   * constructor.)  This last sort of kind is used to express translucency.
+  (* A leaf procedure makes no function calls.  A self-recursive procedure may 
+   * only call itself.  A non-leaf procedure may call any functions.
    *)
+  datatype recursive = Leaf | Self | Nonleaf
+
+  (* A sequential let only permits the bindings to be evaluated sequentially. 
+   * A parallel let permits the bindings to be concurrently executed.
+   *)
+  datatype letsort = Sequential | Parallel
+
+
+
+
   datatype kind = 
-    Type_k | Record_k of (label * var * kind) list | 
-    List_k of kind | Arrow_k of arrow * (kind list) * kind |
-    Singleton_k of con
+      Type_k                        (* classifies constructors that are types *)
+    | Word_k                        (* classifies types that fit in a word *)
+    | Singleton_k of kind * con     (* singleton-kind at kind type that leaks 
+				           through the constructor *)
+                                    (* dependent record kind classify records of 
+				           constructors *)
+    | Record_k of (label * var * kind) list
+                                    (* dependent arrow kinds classify open 
+				       constructor funs or closures *)
+    | Arrow_k of openness * (var * kind) list * kind 
+                                    (* classifies closed constructor functions *)
+    | Code_k of (var * kind) list * kind 
 
-  (* monocons are the intro forms for Type_k, excluding All_c, Code_c,
-   * and Mu_c, since typecase must be parametric with respect to these
-   * "higher-order" type constructors. 
-   *)
-  and monocon = 
-    Int_c of intsize | Float_c | Any_c | Array_c | Vector_c | Exntag_c |
-    Arrow_c of effect | Sum_c | Record_c 
 
-  (* listcons are the intro forms for List_k(K) -- they're broken out
-   * to support a listcase construct. 
-   *)
-  and listcon = Nil_c of kind | Cons_c
-
-  (* a conswitch is either a monocon consw or a listcon consw.  
-   * Note that this could be generalized to a fold operation for Type_k, 
-   * and List_k, but there's no need to do this since we don't take
-   * advantage of this yet.  
-   *)
-  and conswitch = 
-	Typecase_c of monocon consw | Listcase_c of listcon consw
-
-  and primcon = Mono_c of monocon | List_c of listcon
+  and primcon =                          (* classifies term-level ... *)
+      Int_c of Prim.intsize                   (* integers *)
+    | Float_c of Prim.floatsize               (* register floating-points *)
+    | BoxFloat_c of Prim.floatsize            (* boxed floating-points *)
+    | Exn_c                                   (* exceptions *)
+    | Array_c                                 (* arrays *)
+    | Vector_c                                (* vectors *)
+    | Ref_c                                   (* references *)
+    | Exntag_c                                (* exception tags *)
+    | Sum_c                                   (* sum types *)
+    | Record_c                                (* records *)
+    | Vararg_c | Onearg_c                     (* make_vararg and make_onearg *)
 
   and con = 
-    Var_c of var | 
-    Prim_c of primcon * (con list) | 
-    Crecord_c of (label * var * con) list |  
-    Proj_c of label * con |
-    Let_c of var * con * con | 
-    Fun_c of arrow * confun | 
-    Closure_c of con * con |  (* code and environment *)
-    App_c of arrow * con * (con list) |
-    Mu_c of (var * con) list * con |
-    Switch_c of conswitch |
-    All_c of confun |
-    Code_c of effect * confun |  (* for describing code at the term level *)
-    Annotate_c of annot * con
+      Var_c of var
+    | Let_c of letsort * (var * con) list * con   (* Constructor-level bindings *)
+    | Fun_c of openness * (var * kind) list * con (* Constructor-level lambdas *)
+    | Crecord_c of (label * var * con) list       (* Constructor-level records *)
+    | Proj_c of con * label                       (* Constructor-level record projection *)
+    | Closure_c of con * con                      (* Constructor-level closure: 
+					               code and environment *)
+    | App_c of openness * con * (con list)        (* Constructor-level application 
+						       of open or closed constructor function *)
+    | Prim_c of primcon * (con list)              (* Classify term-level values 
+                                                       of primitive types *)
+    | Mu_c of (var * con) list * con              (* Fix-point of constructors classify 
+						       recursive datatypes *)
+    | Arrow_c of openness * confun                (* open functions and closures *)
+    | Code_c of confun                            (* for describing code at the term level: 
+					               note that the classifiers of open functions 
+                                                       and closures are given by Arrow_c *)
+    | Annotate_c of annot * con                   (* General-purpose place to hang information *)
 
-  withtype confun = (var*kind) list * con
-  and 't consw = {arg:con,arms:('t * confun) list,default:con option}
+  withtype confun = effect * (var * kind) list * con list * con
 
-(*****************************************************************************
-Here are the constructor formation rules.  I still need to code up the
-constructor equivalence rules, which may be a bit tricky in the presence
-of these dependent and singleton constructors.  I doubt that I have the
-formation rules right for singletons.  I also need to look into this.
-
-I use D to range over contexts.  D is generated by:
-
-  D ::= 0 | D[x:K]
-
-where x is a variable, and K is a kind.  Since kinds can include
-singleton constructors, we must ensure that any constructors in
-K are well-formed under D.
-
-Context Formation:
-==================
-   |- 0 context
-
-   |- D context  D |- K kind
-   ------------------------- (x not in D)
-       D[x:K] context
+  datatype nilprim = 
+      record of label list       (* record intro *)
+    | select of label            (* record field selection *)
+    | inject of w32              (* slow; sum intro *)
+    | inject_record of w32       (* fast; sum intro where argument is a record
+					  whose components are individually passed in *)
+    | project_sum                (* slow; given a special sum type, return carried value *)
+    | project_sum_record of w32  (* fast; given a special sum type of record type, 
+				          return the specified field *)
+    | roll | unroll              (* coerce to/from recursive type *) 
+    | make_exntag                (* generate new exn tag *)
+    | inj_exn                    (* takes tag + value and give exn *)
+    | make_vararg                (* given a function in onearg calling convention, convert to vararg *)
+    | make_onearg                (* given a function in vararg calling convention, convert to onearg *)
+    | peq                        (* polymorphic equality: unused since HIL compiles away equality *)
 
 
-Kind Formation:
-===============
-   D |- Type_k iskind
-
-   D |- K1 iskind
-   D[x1:K1] |- K2 iskind        
-   D[x1:K1,x2:K2] |- K3 iskind  
-      ...
-   D[x1:K1,x2:K2,...,xn-1:Kn-1] |- Kn iskind 
-   ------------------------------------------------------------
-   D |- Record_k [(l1,x1,K1),(l2,x2,K2),....,(ln,xn,Kn)] iskind
-
-   D |- K iskind
-   --------------------
-   D |- List_k K iskind
-
-   D |- K1 iskind ... D |- Kn iskind  D |- K iskind
-   ------------------------------------------------
-   D |- Arrow_k(ca,[K1,...,Kn],K) iskind  
-
-   D |- c : K
-   --------------------------
-   D |- Singleton_k(c) iskind
-
-Primitive monotype constructor formation (assuming D is well-formed):
-=====================================================================
-   D |- Int_c : Arrow_k(CODE,[],Type_k)
-   D |- Float_c : Arrow_k(CODE,[],Type_k)
-   D |- Any_c : Arrow_k(CODE,[],Type_k)
-   D |- Array_c : Arrow_k(CODE,[Type_k],Type_k)
-   D |- Vector_c : Arrow_k(CODE,[Type_k],Type_k)
-   D |- Exntag_c : Arrow_k(CODE,[Type_k],Type_k)
-   D |- Arrow_c e : Arrow_k(CODE,[List_k(Type_k),Type_k],Type_k)
-   D |- Sum_c : Arrow_k(CODE,[List_k(List_k(Type_k))],Type_k)
-   D |- Record_c : Arrow_k(CODE,[List_k(Type_k)],Type_k)
-
-Note:  all primitive constructors are considered to have an Arrow_k
-to simplify the presentation of Prim_c and Typecase_c (see below).
-Since these are primitive constructors and must always be fully
-applied, they are given a CODE Arrow kind instead of a CLOSURE
-arrow kind.  
-
-Primitive list constructor formation (assuming D is well-formed):
-=================================================================
-   D |- Nil_c K : Arrow_k(CODE,[],List_k(K))
-   D |- Cons_c : Arrow_k(CODE,[K,List(K)],List_k(K))
-
-Constructor formation (assuming D is well-formed):
-==================================================
-  (var)  D[x:K] |- Var_c x : K
-
-	 D |- p : Arrow_k(CODE,[K1,...,Kn],K)
-	 D |- c1 : K1 ... D |- cn : Kn
-  (prim) -----------------------------
-	 D |- Prim_c[c1,...,cn] : K
-
-	 D |- c1 : K1
-	 D[x1:K1] |- c2 : K2
-	 D[x1:K1,x2:K2] |- c3 : K3
-		...
-	 D[x1:K1,x2:K2,....,xn-1:Kn-1] : Kn
-  (crec) ------------------------------------------------
-	 D |- Crecord_c[(l1,x1,c1),(l2,x2,c2),...,(ln,xn,cn)] : 
-		Record_k[(l1,x1,K1),(l2,x2,K2),...,(ln,xn,Kn)]
-
-         D |- c : Record_k[(l1,x1,K1),...,(li,xi,Ki),....,(ln,xn,Kn)]
-  (proj) ------------------------------------------------------------
-         D |- Proj_c li : [Prim_c(Proj_c lj,[c])/xj]Ki  (j in 1..i-1)
-
-	 D |- c1 : K1  D[x:K1] |- c2 : K2
-  (let)  --------------------------------
-	 D |- Let_c(x,c1,c2) : K2
-
-	 D[x1:K1,...,xn:Kn] |- c : K
-  (fun)  ---------------------------------------------
-	 D |- Fun_c (CLOSURE,([x1:K1,...,xn:Kn],c)) : 
-			Arrow_k(CLOSURE,[K1,...,Kn],K)
-
-	 [x1:K1,...,xn:Kn] |- c : K
-  (cod)  ---------------------------------------------------------------------
-	 D |- Fun_c (CODE,([x1:K1,...,xn:Kn],c)) : Arrow_k(CODE,[K1,...,Kn],K)
-
-	 D |- c1 : Arrow_k(CODE,[Kenv,K1,...,Kn],K)
-	 D |- c2 : Kenv
-  (clos) -------------------------------------------------------
-	 D |- Closure_c (c1,c2) : Arrow_k(CLOSURE,[K1,...,Kn],K)
-
-	 D |- c : Arrow_k(CLOSURE,[K1,...,Kn],K)
-	 D |- c1 : K1 ... D |- cn : Kn
-  (app)  -----------------------------------------
-	 D |- App_c(CLOSURE,c,[c1,...,cn]) : K
-
-         D |- c : Arrow_k(CODE,[K1,...,Kn],K)
-	 D |- c1 : K1 ... D |- cn : Kn
-  (call) -----------------------------------
-         D |- App_c(CODE,c,[c1,...,cn]) : K
-
-        D[x1:Type_k,...,xn:Type_k] |- c1 : Type_k
-	      ...
-	D[x1:Type_k,...,xn:Type_k] |- cn : Type_k
-	D[x1:Type_k,...,xn:Type_k] |- c : 
-		Record_k[("1",y1,Type_k),...,("n",yn,Type_k)]
-  (mu)	---------------------------------------------------------------------
-	D |- Mu_c ([(x1,c1),...,(xn,cn)],c):
-		Record_k[("1",y1,Type_k),...,("n",yn,Type_k)]
-
-	NOTE:  may need to generalize the above to deal with singletons...
-	Also note that I'm using specific labels, "1", "2", ... "n"
-	to label the record.  
-
-	D |- c : Type_k
-        D |- m1 : Arrow_k(CODE,[K11,...,Kq1],Type_k)
-	D |- f1 : Arrow_k(CODE,[K11,...,Kq1],K)
-	  ...
-	D |- mn : Arrow_k(CODE,[Kn1,...,Kqn],Type_k)
-	D |- fn : Arrow_k(CODE,[Kn1,...,Kqn],K)
-	D |- c' : K
-  (tcs) --------------------------------------------------------------------
-	D |- Typecase_c {arg=c,arms=[(m1,f1),...,(mn,fn)],default=SOME c'}:K
-
-		(also, mi must be distinct.  default is never allowed to be
-		 NONE.)
-
-	D |- c : List_k(K')
-        D |- l1 : Arrow_k(CODE,[K11,...,Kq1],List_k(K')
-	D |- f1 : Arrow_k(CODE,[K11,...,Kq1],K)
-	  ...
-	D |- ln : Arrow_k(CODE,[Kn1,...,Kqn],List_k(K')
-	D |- fn : Arrow_k(CODE,[Kn1,...,Kqn],K)
-	D |- c' : K
-  (lcs) --------------------------------------------------------------------
-	D |- Listcase_c {arg=c,arms=[(l1,f1),...,(ln,fn)],default=SOME c'}:K
-
-		(also, li must be distinct.  default is allowed to be NONE
-		 only if all li [e.g., Nil_c and Cons_c] are present.  Oops,
-		 also, li here stands for a listcon, not a label.)
-
-	D |- c : K   D |- c = c' : K
- (s1)   ----------------------------
-	D |- c : Singleton_c(c')
-
-         D |- c' : K   D |- c : Singleton_c(c')
-  (s2)   --------------------------------------
-	 D |- c : K
-
-	D[x1:K1,...,xn:Kn] |- c : Type_k
-  (all) ---------------------------------------------
-	D |- All_c ([(x1,K1),...,(xn,Kn)],c) : Type_k
-
-         D[x1:K1,...,xn:Kn] |- c1 : List_k(Type_k)
-	 D[x1:K1,...,xn:Kn] |- c1 : Type_k
-  (code) ------------------------------------------------------------------
-	 D |- Code_c (e,[(x1,K1),...,(xn,Kn)],Prim_c(Arrow_c CODE,[c1,c2])) :
-		Type_k		
-
-	 D |- c : K
-  (ann)  -------------------------  (ignore the annotation for now)
-	 D |- Annotate_c (a,c) : K  
-******************************************************************************)
+  datatype allprim = NilPrimOp of nilprim
+                   | PrimOp of prim
 
 
-(*
-  structure Prim : PRIM
-  type primop = Prim.primop
-*)
-(******************************************************************************
-Notes:
-
-Primops should include all of the other constructs that we need.  Of
-course, we need to nail them down, but they should at least include
-the following (this needs to be generalized to include different 
-int sizes, trap information, etc.)
-
-*)
-  datatype primop = 
-    plus_i | minus_i | times_i | div_i | mod_i |
-    lte_i | gte_i | lt_i | gt_i |
-    plus_ui | minus_ui | times_ui | div_ui | mod_ui |
-    lte_ui | gte_ui | lt_ui | gt_ui |
-    plus_r | minus_r | times_r | div_r |
-    lte_r | gte_r | lt_r | gt_r |
-    or_i | and_i | xor_i | leftsh_i | arightsh_i | lrightsh_i |
-    record | (* select of w32 | inject of w32 | *)
-    ptreq |  (* doubles as integer eq but works at any type except float *)
-    roll | unroll | 
-    make_exntag | inj_exn | 
-    peq |  (* polymorphic equality *)
-    create_intarray |   (* uninitialized *)  (* different word sizes? *)
-    create_array |      (* polymorphic versions below *)
-    sub_array    |	
-    update_array |
-    size_array   |
-    sub_vector   |
-    size_vector  |
-    make_vararg | make_onearg |   (* unboxing function arguments *)
-    get_tag |  (* returns the tag from a sum *)
-    closure    (* takes code, type environment, and value environment *)
-
-  type w32 = Word32.word
-  datatype const = Int_e of intsize * w32 | Float_e of string
-
-  (* a sequential let is a normal let.  a parallel let means that the bindings
-   * can be executed in any order or even in parallel.  A recursive let is
-   * used for recursive definitions of bindings.
+  (* Intswitch should be apparent.
+   * The con in the Sumswitch tells us the sum type and the w32
+   *    is used to index the different cases for the sum type.
+   * Exncase's arms are indexed by variables that must have type Exntag_c(c) and
+   *    the arms must be functions from [c]->tau for some fixed result type tau.  
    *)
-  datatype letsort = Seq | Par
+  datatype switch =                                 (* Switching on / Elim Form *)
+      Intsw_e of (Prim.intsize,exp,w32) sw                (* integers *)
+    | Sumsw_e of (con,exp,w32) sw                         (* sum types *)
+    | Exncase_e of (unit,exp,var) sw                      (* exceptions *)
 
-  (* NOTES:  int and float switches should be apparent, though it's not
-   * clear to me we can really use a float switch.  The con in the Sumswitch
-   * tells us the sum type that the expression must have and the w32 
-   * indexes the arms of the switch.  Typecase requires a scheme where
-   * the var is a Type_k var, and con is a scheme.  The arms are indexed
-   * by monocons.  Listcase is similar.  Exncase's arms are indexed by
-   * variables that must have type Exntag_c(c) and the arms must be functions
-   * from [c]->tau for some fixed type tau.  
-   *)
-  and switch = 
-    Intsw_e of (intsize,exp,w32) sw | 
-    Floatsw of (unit,exp,string) sw |  (* not sure if needed *)
-    Sumsw_e of (con,exp,w32) sw | 
-    Typecase_e of (var*con,con,monocon) sw |
-    Listcase_e of (var*kind*con,con,listcon) sw |
-    Exncase_e of (unit,exp,var) sw
 
-  (* NOTE:  most of the intro and elim forms are actually in the primops. *)
-  and exp = 
-    Var_e of var | 
-    Const_e of const | 
-    Let_e of letsort * (bnd list) * exp | 
-    Prim_e of primop * (con list) * (exp list) |
-    Switch of switch | 
-    App_e of arrow * exp * (con list) * (exp list) |
-    Raise_e of exp * con | 
-    Handle_e of exp * function
+  and exp =                                          (* Term-level constructs *)
+      Var_e of var                                        (* Term-level variables *)
+    | Const_e of exp Prim.value                           (* Term-level constants *)
+    | Let_e of letsort * bnd list * exp                   (* Binding construct *)
+    | Prim_e of allprim * (con list) * (exp list) option  (* allow primops to be partially applied *)
+    | Switch_e of switch                                  (* Switch statements *)
+    | App_e of openness * exp * (con list) * (exp list)   (* Application of open functions and closures *)
+    | Call_e of openness * var * (con list) * (exp list)  (* Application of code pointers *)
+    | Raise_e of exp * con                                
+    | Handle_e of exp * function
+
 
   (* result types are needed for recursive definitions in order to make
    * type-checking syntax directed.  Also note that I've forced all functions
@@ -343,77 +143,29 @@ int sizes, trap information, etc.)
    * recursive expressions involving records and closures in order to
    * closure-convert recursive functions.
    *)
-  and bnd = 
-    Con_b of var * con |
-    Exp_b of var * exp |
-    Fixfun_b of fix list |
-    Fixexp_b of (var * con * exp) list
 
-  (* result is the result type of the function, arrow indicates whether
-   * this is code or a closure, effect indicates whether it's pure or not,
-   * and recur indicates whether the function is truly recursive or not.
+  and bnd =                                (* Term-level Bindings *)
+      Con_b of var * con                            (* Binds constructors *)
+    | Exp_b of var * exp                            (* Binds expressions *)
+    | Fixfun_b of (var * function) list             (* Binds mutually recursive functions *)
+                                                    (* Allows the creation of closures *)
+    | Fixclosure_b of (var * con * {code:var, cenv:con, venv:exp}) list 
+
+  (* A function is either open or closed.  It is a "code pointer" if it is closed.
+   * It may or may not be effect-free and may or may not be recursive.
+   * The type and value parameters with their kinds and types are given next.
+   * Finally, the body and the result type is given.
+   * Note that the type of the function can be easily given from these ingredients.
    *)
-  withtype function = ((var * kind) list) * ((var * con) list) * exp
-  and fix =
-    {name:var,result:con,arrow:arrow,effect:effect,recur:bool,defn:function}
+
+  and function = Function of openness * effect * recursive *
+                             ((var * kind) list) * ((var * con) list) * 
+			     exp * con  
+
   (* a generic term-level switch construct. *)
-  and ('info,'arg,'t) sw = 
+  withtype ('info,'arg,'t) sw = 
     {info : 'info, arg: 'arg, arms : ('t * function) list, default : exp option}
-  (* functions abstract both types and values. *)
 
 
 end
-(*
-The term formation rules are as follows, where D is a type context, and
-G is a type assigment mapping term variables to types.  We assume the
-type and term variables in D and G are disjoint.  We also assume that
-D |- G holds for each rule (i.e., for each x in Dom(G), D |- G(x) : Type_k.)
-
-(var)	D;G |- x : G(x)
-
-(int)	D;G |- Const_e(Int_e (size,i)) : Prim_c(Mono_c(Int_c size),[])
-
-(float) D;G |- Const_e(Float_e f) : Prim_c(Mono_c(Float_c),[])
-
-	D;G |- b1 => D1;G1
-	D1;G1 |- b2 => D2;G2
-	   ...
-	Dn-1;Gn-1 |- bn => Dn;Gn
-	Dn;Gn |- e : c
-(let)   ----------------------------------------------
-	D;G |- Let_e (Seq,[b1,...,bn],e) : c
-	D;G |- Let_e (Par,[b1,...,bn],e) : c
-
-
-     D[x1:K1,...,xn:Kn] |- c' = [c1,...,cm] : List_k(Type_k)
-     D;G |- p : Code_c(e,([(x1,K1),...,(xn,Kn)],Prim_c(Arrow_c e,[c',c])))
-	D |- c1' : K1   D |- c2' : K2  ...   D |- cn' : Kn
-      D;G |- e1 : [ci'/xi]c1   (i=1..n)
-      D;G |- e2 : [ci'/xi]c2   (i=1..n)
-		...
-      D;G |- em : [ci'/xi]cm   (i=1..n)
-      -----------------------------------------------------------------------
-(prim) D;G |- Prim_e(p,[c1',...,cn'],[e1,...,em]) : [ci'/xi]c  (i=1..n)
-
-	Note:  I'm using [c1,...,cm] as an abbreviation for
-	Prim_c(List_c Cons_c,[c1,Prim_c(List_c Cons_c,[c2,....
-		Prim_c(List_c (Nil_c Type_k))...])])
-
-
-     D;G |- e : Prim_c(Mono_c(Int_c size),[])
-     D;G |- f1 : Prim_c(Arrow_c e,[Nil_k Type_k,c])
-	...
-     D;G |- fn : Prim_c(Arrow_c e,[Nil_k Type_k,c])
-     D;G |- e' : c
-(intsw) ------------------------------------------------------------
-     D;G |- Intsw_e {info=size,arg=e,arms=[(w1,f1),...,(wn,fn)],
-			default=SOME e'} : c
-
-     (w1,...,wn distinct and default must be SOME unless w1,...,wn
-      cover the entire range of intsize -- very unlikely.)
-
-Still lots more to do.....
-
-*)
-
 
