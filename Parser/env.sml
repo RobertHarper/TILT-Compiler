@@ -153,7 +153,8 @@ struct
   end (* local FastSymbol *)
 end (* structure FastSymbol *)
 
-exception Unbound = System.Unsafe.Assembly.UnboundTable
+(* exception Unbound = System.Unsafe.Assembly.UnboundTable *)
+exception Unbound
 
 structure IntStrMapV :> INTSTRMAPV = 
 struct 
@@ -359,6 +360,9 @@ structure FastSymbol = Env.FastSymbol
 
 (*
  * $Log$
+# Revision 1.2  97/07/24  11:24:27  pscheng
+# changed Unbound exception for 109.30
+# 
 # Revision 1.1  97/03/26  14:12:25  pscheng
 # added copy of SMLNJ parser files
 # 
