@@ -928,7 +928,7 @@ end (* local defining splitting context *)
 
    (* xmod.  Translation of an IL module.
              Arguments are a splitting context, the module to be
-             translated, an optionally a specification of names
+             translated, and optionally a specification of names
              to which the two parts of the module must be bound.
 	     If so, these names must be "fresh" (not in the context).
 
@@ -1007,7 +1007,7 @@ end (* local defining splitting context *)
 				   update_NILctx_insert_kind_equation(context,
 								      req_c,
 								      name_c)
-				   val context' = insert_con(context,
+				   val context' = insert_con(context',
 							     req_r,
 							     NilRename.renameCon con_r)
 			       in  (Var_c req_c, Var_e req_r,
