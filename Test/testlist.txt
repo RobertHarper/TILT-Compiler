@@ -25,6 +25,9 @@
 0007	pass	overload resolution order (top-level)
 0008	pass	overload resolution order (in structures)
 0009	pass	overload resolution order (in functors)
+0010	fail	[Bug# 0151] name-mangling test [x] <- [x]
+0011	fail	[Bug# 0151] name-mangling test [x] <- * -> [x]
+0012	fail	[Bug# 0151] name-mangling test [x] <- * <- * -> [x]
 m0001	pass	Raise uncaught exception.
 m0002	pass	Raise uncaught exception.
 m0003	pass	[Bug# 0098] Type variable syntax.
