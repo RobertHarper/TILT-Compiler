@@ -100,8 +100,13 @@ struct
     | intsize_leq (Prim.W64, Prim.W64) = true
     | intsize_leq (Prim.W64, _) = false
 
+  (*Correct if in a-normal form
+   *)
   fun effect (Var_e _) = false
     | effect (Const_e _) = false
+    | effect (Unfold_e _) = false
+    | effect (Fold_e _)   = false
+    | effect (Coerce_e _) = false
     | effect (Prim_e (NilPrimOp make_exntag, _,_, _)) = true
     | effect (Prim_e (NilPrimOp _, _,_, _)) = false
     | effect (Prim_e (PrimOp p, _,_, _)) = 

@@ -251,17 +251,21 @@ struct
 	    val uptoNil = (!Help.uptoPhasesplit orelse !Help.uptoClosureConvert)
 	    val uptoRtl = !Help.uptoRtl
 	    val uptoAsm = !Help.uptoAsm
-	    val removeGenerate = uptoElaborate
+
+	    (*If the interface is up to date and we are only compiling to
+	     * NIL or RTL, then don't redo the generation phase
+	     *)
+	    val elaborating = List.exists (fn todo => todo = ELABORATE) plan
+	    val removeGenerate = uptoElaborate orelse  ( not elaborating andalso (uptoNil orelse uptoRtl))
 	    val removePrepare = (uptoElaborate orelse uptoNil orelse uptoRtl orelse uptoAsm)
 	    val removeAssemble = removePrepare
 	    val removeCleanup = (uptoElaborate orelse uptoNil orelse uptoRtl)
-	    fun folder (ELABORATE, acc) = ELABORATE::acc
-	      | folder (GENERATE, acc) = if removeGenerate then acc else GENERATE::acc
-	      | folder (PREPARE, acc) = if removePrepare then acc else PREPARE::acc
-	      | folder (ASSEMBLE, acc) = if removeAssemble then acc else ASSEMBLE::acc
-	      | folder (CLEANUP, acc) = if removeCleanup then acc else CLEANUP::acc
-	in
-	    rev (foldl folder nil plan)
+	    fun keep (ELABORATE) = true
+	      | keep (GENERATE)  = not removeGenerate 
+	      | keep (PREPARE)   = not removePrepare
+	      | keep (ASSEMBLE)  = not removeAssemble
+	      | keep (CLEANUP)   = not removeCleanup
+	in List.filter keep plan
 	end
 
     (* The plan generated here is correct but imperfect. *)

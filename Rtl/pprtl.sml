@@ -206,19 +206,19 @@ struct
 	      | CMPF (cmp,r,v,dest) => opffi (cmpf2s cmp) (r,v,dest)
               | BR l => String("br "^label2s l)
               | BCNDI (cmp,regi1,sv2,dest,pred) =>
-		    plain("b"^(cmpi2s cmp true) ::
-			  regi2s regi1 ::
-			  sv2s sv2 ::
-			  label2s dest ::
-			  (if !predicted then [pred2s pred]
-			   else nil))
+		    plain["b"^(cmpi2s cmp true),
+			  regi2s regi1,", ",
+			  sv2s sv2,", ",
+			  label2s dest,
+			  (if !predicted then ", "^(pred2s pred)
+			   else "")]
               | BCNDF (cmp,regf1,regf2,dest,pred) =>
-		    plain("br"^(cmpf2s cmp) ::
-			  regf2s regf1 ::
-			  regf2s regf2 ::
-			  label2s dest ::
-			  (if !predicted then [pred2s pred]
-			  else nil))
+		    plain["br"^(cmpf2s cmp) ,
+			  regf2s regf1,", ",
+			  regf2s regf2,", ",
+			  label2s dest,
+			  (if !predicted then ", "^(pred2s pred)
+			   else "")]
               | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
 					pp_List' (String o label2s) labels]
               | CALL {call_type, func, args,

@@ -8,7 +8,7 @@
 -       Replace projections of known records with the known value if value is small
 -       Uncurry functions
         Propagate constants
-*	Convert project_sum to project_sum_record
+*	Convert project_sum to project_known
 	Cancel make_vararg and make_onearg
         Fold constant expressions
 	Convert Sumsw to Intsw
@@ -549,26 +549,43 @@ fun pp_alias UNKNOWN = print "unknown"
 
 
 
+
+	fun de_alias f state e =
+	  (case e
+	     of Var_e v =>
+	       (case lookup_alias(state,v) 
+		  of OPTIONALe e => de_alias f state e
+		   | MUSTe e => de_alias f state e
+		   | _ => NONE)
+	      | Let_e (_, [Exp_b(v, _, e)], Var_e v') =>
+		    if (Name.eq_var(v,v')) then de_alias f state e 
+		    else NONE
+	      | _ => f state e)
+	     
+	fun is_int_eq' state e = 
+	  (case e 
+	     of Prim_e(PrimOp(Prim.eq_int is),[],[],[v1,v2]) =>
+	       (case (v1,v2)
+		  of (Var_e v,Const_e (Prim.int(_,w))) => SOME(is,v,w)
+		   | (Const_e (Prim.int(_,w)),Var_e v) => SOME(is,v,w)
+		   | _ => NONE)
+	      | _ => NONE)
+
+	fun is_coerce' state e =
+	  (case e 
+	     of Coerce_e (q,[],e) => SOME e
+	      | _ => NONE)
+	     
+	val is_int_eq = de_alias is_int_eq'
+ 	val is_coerce = de_alias is_coerce' 
+
+	fun get_eq_args state e = Option.join (Option.map (is_int_eq state) (is_coerce state e))
+
 	fun is_sumsw_int state (Switch_e(Sumsw_e{sumtype,bound,arg,arms,default,...})) = 
-	    let	val arg = 
-		  (case arg of
-		       Var_e v =>
-			   (case lookup_alias(state,v) of
-				OPTIONALe 
-				(e as (Prim_e(PrimOp(Prim.eq_int is),[],[],
-					      [Var_e v,Const_e (Prim.int(_,w))]))) => e
-			     | _ => arg)
-		     | (Let_e (_, [Exp_b(v, _, e)], Var_e v')) =>
-				if (Name.eq_var(v,v')) then e else arg
-		     | _ => arg)
-	    in
-		(case (arg,arms,default) of
-		     (Prim_e(PrimOp(Prim.eq_int is),[],[],
-			     [Var_e v,Const_e (Prim.int(_,w))]),
-		      [(0w0,_,zeroexp), (0w1,_,oneexp)],
-		      NONE) => SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
-		    | _ => NONE)
-	    end
+	  (case (get_eq_args state arg,arms,default) of
+	     (SOME(is,v,w), [(0w0,_,zeroexp), (0w1,_,oneexp)], NONE) => 
+	       SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
+	   | _ => NONE)
 	  | is_sumsw_int state (Let_e (_, [Exp_b(v, _, e)], Var_e v')) = 
 	       if (Name.eq_var(v,v')) then is_sumsw_int state e else NONE
 	  | is_sumsw_int state _ = NONE
@@ -1318,7 +1335,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		     | _ => NONE)
 	  in	(case bnd of
 		     Exp_b(v,niltrace,e) =>
-			 ((* print "working on bnd with v = "; Ppnil.pp_var v; print "\n";  *)
+			 ((* print "XXXworking on bnd with v = "; Ppnil.pp_var v; print "\n";  *)
 			  case rewrite_bnd(v,niltrace,e) of
 			      NONE => 
 				  let
