@@ -6,10 +6,10 @@
 *)
 
 (* The translation from EL to IL *)
-structure Toil
-   :> TOIL =
+structure Toil :> TOIL =
   struct
 
+    val EqPayAsYouGo = Stats.tt "EqPayAsYouGo"
 
     open AstHelp Il IlStatic IlUtil Ppil Pat
     open Util Listops Name IlContext Tyvar
@@ -1386,7 +1386,9 @@ structure Toil
 		      end
 		  fun mapper (SOME(SBND(l,BND_CON(_,c))), CONTEXT_SDEC(SDEC(_,DEC_CON(_,k,_,_)))) = make_eq_bnddec(l,c,k)
 		    | mapper _ = []
-		  val eqresult = List.concat(map mapper typeresult)
+		  val eqresult =
+		      if !EqPayAsYouGo then []
+		      else List.concat(map mapper typeresult)
 	      in  typeresult @ eqresult
 	      end
 	| Ast.DatatypeDec {datatycs,withtycs=[]} =>
