@@ -1,16 +1,31 @@
 Number: 0167
 Title:       Elaborator bombs on toplevel raise/handle/raise
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    value restriction, exceptions, elaborator
 Submitter:   leaf
 Date:        07/19/03
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of execution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     CVS
+System:      ALL
+Severity:    minor
+Problem:     The elaborator bombs on the following code fragment:
+Code:        
+
+   val x = (raise Div) handle _ => raise Div
+
+Transcript:  The exact error messages are as follows:
+
+ tilt: internal error: ilblast.sml: cannot simplify unresolved CON_TYVAR
+ tilt: internal error: ilblast.sml: cannot simplify unresolved CON_TYVAR
+
+ uncaught exception BUG
+   raised at: Util/util-error.sml:6.8-6.31
+              Top/file.sml:50.44
+              Util/util.sml:108.13
+              Top/slave.sml:87.45
+              Top/manager.sml:93.35
+
+Comments:    This code should be accepted, but subject to the value restriction 
+   it should be made non-polymorphic.
+Fix:         
 Test: *
 Owner: *
 Status: open
