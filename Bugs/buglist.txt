@@ -114,3 +114,4 @@
 0114 [open]	overloading constants
 0115 [open]	withtype scoping wrong
 0116 [open]	option failure
+0117 [open]	option failure
