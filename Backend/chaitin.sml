@@ -762,6 +762,21 @@ struct
 			 (* Store live variables for GC *)
 		      val ra_sloc = fixStackOffset RETADD_POS
 		      val maybe_overflow_args = tailcallImpossible()
+		         (* the results are not live yet during the call *)
+(*
+		      val _ = (print "CHAITIN CALL: live(before) = ";
+			       Regset.app (fn r => (print (msReg r); print "  ")) live;
+			       print "\n")
+		      val _ = (print "        CALL: results = ";
+			       app (fn r => (print (msReg r); print "  ")) results;
+			       print "\n")
+*)
+		      val live = Regset.difference(live,listToSet results)
+(*
+		      val _ = (print "CHAITIN CALL: live(after) = ";
+			       Regset.app (fn r => (print (msReg r); print "  ")) live;
+			       print "\n")
+*)
 		      val _ = 
 			case (maybe_overflow_args,func, tailcall) of
 			  (true,_,_) =>

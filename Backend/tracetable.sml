@@ -194,12 +194,18 @@ functor Tracetable(val little_endian    : bool
     in
 	fun indices2int indices = 
 	    let val len = length indices
-	    in  if (len = 0)
+	        val res = if (len = 0)
 		    then error "no index"
 		else if (len > maxindices)
 			 then error ("more than 3 index(" ^ (Int.toString len) ^ ")")
-		     else #2(foldl folder (1,1) indices)
-
+		     else #2(foldl folder (1,0) indices)
+		val _ = (print ("indices2int: ");
+			 app (fn m => (print (Int.toString m);
+				       print "  ")) indices;
+			 print " --> ";
+			 print (Int.toString res);
+			 print "\n")
+	    in res
 	    end
     end
 
