@@ -209,10 +209,41 @@ value_t mla_input(value_t _des, value_t numtoread)
   assert(0);
 }
 
+value_t til_div(value_t n1, value_t n2)
+
+{
+  return (value_t)((int)n1/(int)n2);
+}
+
+value_t til_divt(value_t n1, value_t n2)
+
+{
+  return (value_t)((int)n1/(int)n2); /* doesn't trap ??? */
+}
+
+value_t til_mod(value_t n1, value_t n2)
+
+{
+  return (value_t)((int)n1%(int)n2); /* may be wrong for signed values ??? */
+}
+
+value_t til_modt(value_t n1, value_t n2)
+
+{
+  return (value_t)((int)n1%(int)n2); /* may be wrong for signed values
+					doesn't trap ??? */
+}
+
 value_t cvt_real2int(double x)
 
 {
   return (value_t)x;
+}
+
+double cvt_int2real(value_t n)
+
+{
+  return (double)n;
 }
 
 
