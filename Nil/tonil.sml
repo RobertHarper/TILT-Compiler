@@ -519,14 +519,16 @@ struct
            val il_fun_signat = 
 	       Il.SIGNAT_FUNCTOR(var_arg, il_arg_signat, il_body_signat, arrow)
 
+           val local_name_fun_c = Name.fresh_var ()
+
 	   val (knd_fun_c, type_fun_r) = xsig context' (name_fun_c, il_fun_signat)
 
            val cbnd_fun_cat = 
 	       LIST[(var_fun_c, knd_fun_c,
-		     makeLetC [Open_cb(var_fun_c, [(var_arg_c, knd_arg)],
+		     makeLetC [Open_cb(local_name_fun_c, [(var_arg_c, knd_arg)],
 				       makeLetC (map Con_cb cbnds_body) name_body_c,
 				       knd_body_c)]
-		              (Var_c var_fun_c))]
+		              (Var_c local_name_fun_c))]
 
 	   val ebnd_fun_cat =  
 	       LIST[Fixopen_b (Util.list2set
