@@ -3,6 +3,7 @@
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
    (2) Empty records translate to 256, requiring no allocation 
+   (3) Folds/unfolds translate to 257.
 *)
 
 (* A state contains classification information(type/kind),
@@ -78,6 +79,9 @@ struct
     val do_write_list = Stats.tt("DoWriteList")
     val recognize_constants = Stats.tt("RtlRecognizeConstants")
     val elim_tail_call = Stats.tt("ElimTailCall")
+
+    val coercion_int = 257
+    val coercion_term = VALUE(TAG 0w257)
 
    datatype work = FunWork of (state * var * function)
                  | ConFunWork of (state * var * (var * kind) list * con)
@@ -468,8 +472,8 @@ struct
 				 new_gcstate state)))
 		  end
 
-	    | Fold_e (vars,from,to) => (VALUE (INT 0w258),state)
-	    | Unfold_e (vars,from,to) => (VALUE (INT 0w258),state)
+	    | Fold_e (vars,from,to) => (coercion_term,state)
+	    | Unfold_e (vars,from,to) => (coercion_term,state)
 	    | Coerce_e (coercion,cargs,exp) => 
 	      let
 		  (* We need to translate the coercion in case it generates       *)
