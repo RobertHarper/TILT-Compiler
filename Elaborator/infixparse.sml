@@ -259,9 +259,10 @@ structure InfixParse
 	    val db_names = map get_dbname datatycs
 	    val with_table = map get_tbname withtycs
 	    val names = db_names @ (map #1 with_table)
+            (* Check that all the type names being bound are distinct. *)
 	    fun loop (a::rest) seen = if (Listops.member_eq(Symbol.eq, a, seen))
 					  then error "datbind/withbind binding duplicate variables"
-				      else loop rest seen
+				      else loop rest (a::seen)
 	      | loop [] _ = ()
 	    val _ = loop names []
 	    fun subst_ty (handler : Ast.ty -> Ast.ty option) ty = 
@@ -279,14 +280,21 @@ structure InfixParse
 	      | eq_tv _ = false
 	    fun varty_handler table (VarTy tv) = Listops.assoc_eq(eq_tv, tv, table)
 	      | varty_handler _ _ = NONE
+
+	    (* (tys) sym is a reference to the withtype-bound sym in one of the datatype definitions *)
 	    fun conty_handler (ConTy ([sym], tys)) = 
 		(case (Listops.assoc_eq(Symbol.eq, sym, with_table)) of
 		     NONE => NONE
+                   (* def is the withtype definition of sym, tyvars are its type variables *)
 		   | SOME (def,tyvars) => 
-			 let val table = Listops.zip tyvars tys
+			 let 
+			     (* first substitute withtype bindings into the type arguments (tys) to sym *)
+			     val tys' = map (subst_ty conty_handler) tys
+			     val table = Listops.zip tyvars tys'
+			     (* then plug those type arguments in for the type variables of sym *)
 			     val def' = subst_ty (varty_handler table) def
-			     val def'' = subst_ty conty_handler def' 
-			 in SOME def''
+			 in 
+			     SOME def'
 			 end)
 	      | conty_handler _ = NONE
 	    fun subst_def (s,NONE) = (s,NONE)
