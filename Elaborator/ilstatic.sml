@@ -175,7 +175,8 @@ functor IlStatic(structure Il : IL
       | RECORD rbnds => foldr (fn (a,b) => a andalso b) true 
 	                (map (fn (l,e) => Exp_IsSyntacticValue e) rbnds)
       | FIX _ => true
-      | INJ (_,_,e) => Exp_IsSyntacticValue e
+      | INJ {inject=NONE,...} => true
+      | INJ {inject=SOME e,...} => Exp_IsSyntacticValue e
       | _ => false)
    and Module_IsSyntacticValue module = 
       (case module of
@@ -477,9 +478,10 @@ functor IlStatic(structure Il : IL
 		    val c2' = con_subst_convar(c2,table)
 		in self(c1,c2',ctxt',is_sub)
 		end
-	  | (CON_SUM (i1,cs1), CON_SUM (i2,cs2)) => 
-		(i1=i2) andalso
-		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), cs1, cs2)
+	  | (CON_SUM {noncarriers=n1,carriers=c1,special=i1},
+	     CON_SUM {noncarriers=n2,carriers=c2,special=i2}) =>
+		(i1=i2 orelse (i2=NONE andalso is_sub)) andalso (n1=n2) andalso
+		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), c1, c2)
 	  | (CON_TUPLE_INJECT cs1, CON_TUPLE_INJECT cs2) => 
 		eq_list (fn (a,b) => self(a,b,ctxt,is_sub), cs1, cs2)
 	  | (CON_TUPLE_PROJECT (i1, c1), CON_TUPLE_PROJECT(i2,c2)) => 
@@ -759,7 +761,10 @@ functor IlStatic(structure Il : IL
 	   let val (va,con) = GetExpCon(e,ctxt)
 	   in if (eq_con_from_get_exp2(c,con,ctxt)) 
 		  then (case c of
-			    CON_SUM(SOME i,cons) => (va,List.nth(cons,i))
+			    CON_SUM{noncarriers,carriers,special=SOME i} => 
+				if (i<noncarriers) 
+				    then error "SUM_TAIL projecting noncarrier"
+				else (va,List.nth(carriers,(i-noncarriers)))
 			  | _ => error "adornment of SUM_TAIL not a CON_SUM(SOME _,...)")
 	      else error "SUM_TAIL: adornment mismatches type of expression"
 	   end
@@ -806,6 +811,10 @@ functor IlStatic(structure Il : IL
 			     ROLL _ => true
 			   | UNROLL _ => false
 			   | _ => error "IMPOSSIBLE: what happened to (UN)ROLL")
+	   val error = fn str => (print "typing expression:\n";
+				  Ppil.pp_exp exparg;
+				  print "\n";
+				  error str)
        in (va,
 	   case cNorm of
 	       CON_MUPROJECT(i,cInner) =>
@@ -821,9 +830,12 @@ functor IlStatic(structure Il : IL
 				     in
 					 if isroll
 					     then
-						 (if (eq_con_from_get_exp5(econ,con2,ctxt))
+						 (if (sub_con(econ,con2,ctxt))
 						      then cNorm
-						  else error "ROLL: expression type does not match decoration")
+						  else
+						      (Ppil.pp_con econ; print "\n";
+						       Ppil.pp_con con2; print "\n";
+						      error "ROLL: expression type does not match decoration"))
 					 else 
 					     (if (eq_con_from_get_exp6(econ,cNorm,ctxt))
 						  then Normalize' "ROLL/UNROLL 3" (con2,ctxt)
@@ -841,15 +853,24 @@ functor IlStatic(structure Il : IL
 		   pp_con cNorm; print "\n";
 		   error "decoration of ROLL not a recursive type CON_MUPROJ"))
        end
-    | (INJ (cons,i,e)) => 
-	  let val (va,econ) = GetExpCon(e,ctxt)
-	      val clist = map (fn c => Normalize(c,ctxt)) cons
-	      val n = length clist
-	  in if (0 <= i andalso i < n andalso 
-		 (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt)))
-		 then (va,CON_SUM(NONE,clist))
-	     else (error "INJ: injection field out of range")
-	  end
+    | (INJ {noncarriers,carriers,inject=NONE,special}) =>
+	  if (special<noncarriers)
+	      then (true,CON_SUM{noncarriers=noncarriers,
+				 carriers=map (fn c => Normalize(c,ctxt)) carriers,
+				 special=SOME special})
+	  else (error "INJ: bad injection")
+    | (INJ {noncarriers,carriers,inject=SOME e,special}) =>
+	  if (special<noncarriers)
+	      then (error "INJ: bad injection")
+	  else let val (va,econ) = GetExpCon(e,ctxt)
+		   val clist = map (fn c => Normalize(c,ctxt)) carriers
+		   val i = special - noncarriers (* i >= 0 *)
+		   val n = length clist
+	       in if (i < n andalso 
+		      (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt)))
+		      then (va,CON_SUM{noncarriers=noncarriers,carriers=clist,special=SOME special})
+		  else (error "INJ: injection field out of range")
+	       end
      | (EXN_CASE (arg,arms,eopt)) =>
 	   let 
 	       val (_,argcon) = GetExpCon(arg,ctxt)
@@ -874,18 +895,22 @@ functor IlStatic(structure Il : IL
 		       else error "rescon does not match in EXN_CASE"
 	      else error "arg not a CON_ANY in EXN_CASE"
 	   end
-     | (CASE (cons,earg,earms,edef)) => 
+     | (CASE {noncarriers,carriers,arg,arms,default}) => 
 	   let 
-	       val n = length earms
-	       val consNorm = map (fn c => Normalize' "CASE" (c,ctxt)) cons
-	       val (_,eargCon) = GetExpCon(earg,ctxt)
-	       val sumcon = CON_SUM (NONE,consNorm)
+	       val n = length arms
+	       val consNorm = map (fn c => Normalize' "CASE" (c,ctxt)) carriers
+	       val (_,eargCon) = GetExpCon(arg,ctxt)
+	       val sumcon = CON_SUM {special = NONE,
+				     carriers = consNorm,
+				     noncarriers = noncarriers}
 	       val rescon = fresh_con ctxt
 	       val guess_arm_cons = 
-		   mapcount (fn (i,_) => CON_ARROW(CON_SUM(SOME i,consNorm),
+		   mapcount (fn (i,_) => CON_ARROW(CON_SUM{special = SOME i,
+							   carriers = consNorm,
+							   noncarriers = noncarriers},
 						   rescon,oneshot())) consNorm
-	       fun loop still_none [] [] = 
-		   (case edef of 
+	       fun loop still_none [] 0 [] = 
+		   (case default of 
 			NONE => if still_none 
 				    then error "CASE statement with no arms and no default"
 				else (false, con_deref rescon)
@@ -897,11 +922,11 @@ functor IlStatic(structure Il : IL
 				    then (false, con_deref rescon)
 				else error "default arm type mismatch"
 			    end)
-		 | loop still_none (NONE::arms) (con::cons) = loop still_none arms cons
-		 | loop _ ((SOME exp)::arms) (con::cons) = 
+		 | loop still_none (NONE::arms) 0 (con::cons) = loop still_none arms 0 cons
+		 | loop _ ((SOME exp)::arms) 0 (con::cons) =
 		   let val (_,c) = GetExpCon(exp,ctxt)
 		   in if (eq_con_from_get_exp14(con,c,ctxt))
-			  then loop false arms cons
+			  then loop false arms 0 cons
 		      else (print "case arm type mismatch: checking exp = ";
 			    pp_exp exparg; print "\nwith ctxt = ";
 			    pp_context ctxt; print "\n";
@@ -910,9 +935,23 @@ functor IlStatic(structure Il : IL
 			    print "guess_arm_con = \n"; pp_con con;
 			    error "case arm type mismatch")
 		   end
-		 | loop _ _ _ = error "CASE: number of con != number of arms"
+		 | loop still_none (NONE::arms) n cons = loop still_none arms (n-1) cons
+		 | loop still_none ((SOME exp)::arms) n cons = 
+		   let val (_,c) = GetExpCon(exp,ctxt)
+		   in  if (eq_con(rescon,c,ctxt))
+		       then loop false arms (n-1) cons
+		       else (print "case arm type mismatch: checking exp = ";
+			    pp_exp exparg; print "\nwith ctxt = ";
+			    pp_context ctxt; print "\n";
+			    print "exp = \n"; pp_exp exp;
+			    print "c = \n"; pp_con c;
+			    print "guess_rescon = \n"; pp_con rescon;
+			    error "case arm type mismatch")
+		   end
+
+		 | loop _ _ _ _ = error "CASE: number of con != number of arms"
 	   in if (eq_con_from_get_exp15(eargCon,sumcon,ctxt))
-		  then loop true earms guess_arm_cons
+		  then loop true arms noncarriers guess_arm_cons
 	      else 
 		  error "CASE: expression type and decoration con mismatch"
 	   end
@@ -1216,7 +1255,10 @@ functor IlStatic(structure Il : IL
 	    in arg
 	    end
       | (CON_FUN (vs,c))          => CON_FUN (vs,c)
-      | (CON_SUM (i,cs))          => CON_SUM (i,map (fn c => Normalize(c,ctxt)) cs)
+      | (CON_SUM {noncarriers,carriers,special}) => 
+	    CON_SUM{noncarriers = noncarriers,
+		    carriers = map (fn c => Normalize(c,ctxt)) carriers,
+		    special = special}
       | (CON_TUPLE_INJECT cs)     => CON_TUPLE_INJECT (map (fn c => Normalize(c,ctxt)) cs)
       | (CON_TUPLE_PROJECT (i,c)) => let val c' = Normalize(c,ctxt)
 					 val arg' = CON_TUPLE_PROJECT(i,c')

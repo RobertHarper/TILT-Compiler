@@ -78,9 +78,16 @@ functor Datatype(structure Il : IL
 	      | conapper _ = NONE
 	in fun to_var_dt c = con_subst_conapps(c,conapper)
 	end
-	val almost_conss_nrc = mapmap (fn NONE => con_unit | SOME ty => xty(context',ty)) tys
-	val conss_nrc = mapmap to_var_dt almost_conss_nrc
-	val con_nrc = con_tuple_inject(map (fn cons => CON_SUM (NONE,cons)) conss_nrc)
+	fun conopts_split (nca,ca) [] = (nca,ca)
+	  | conopts_split (nca,ca) (NONE::rest) = conopts_split (nca+1,ca) rest
+	  | conopts_split (nca,ca) ((SOME c)::rest) = conopts_split (nca,c::ca) rest
+	val conopts_split = conopts_split (0,[])
+	val almost_conss_nrc = mapmap (fn NONE => NONE | SOME ty => SOME(xty(context',ty))) tys
+	val conss_nrc = mapmap (Util.mapopt to_var_dt) almost_conss_nrc
+	val con_nrc = con_tuple_inject(map (fn conopts => let val (nca,ca) = conopts_split conopts
+							  in CON_SUM{noncarriers=nca,carriers=ca,special=NONE}
+							  end)
+				       conss_nrc)
 	val cons_rc_help = CON_FUN(vardt_list,con_nrc)
 	val cons_rc = map0count (fn i => CON_MUPROJECT(i,cons_rc_help)) p
 	val cons_rf_help = map (fn l => CON_MODULE_PROJECT (MOD_VAR var_poly, l)) tyvar_label
@@ -92,7 +99,7 @@ functor Datatype(structure Il : IL
 	    val subst_nr2r = zip vardt_list cons_rf 
 	    val subst_both = subst_c2f @ subst_nr2r
 	    fun subst c = con_subst_convar(c,subst_both)
-	in val conss_rf = mapmap subst conss_nrc
+	in val conss_rf = mapmap (Util.mapopt subst) conss_nrc
 	end 
 (*
 	val _ = (print "\nconss_nrc are:\n";
@@ -114,24 +121,36 @@ functor Datatype(structure Il : IL
 	  
 	(* ----------------- compute the constructors ------------- *)
 	local 
-	    fun mk_help (conss_rf_i, cons_rf_i, tys_i) = 
+	    fun mk_help (conss_rf_i, cons_rf_i) = 
 		let 
 		    val var = fresh_var()
-		    fun help (j, _, NONE) = (ROLL(cons_rf_i,
-						  INJ(conss_rf_i,j,unit_exp)), cons_rf_i)
-		      | help (j, conss_rf_ij, _) = (make_total_lambda(var,conss_rf_ij,cons_rf_i,
-								      ROLL(cons_rf_i,
-									   INJ(conss_rf_i,j,VAR var))))
-		in map2count help (conss_rf_i, tys_i)
+		    val (nca,ca) = conopts_split conss_rf_i
+		    fun help (j, NONE) = 
+			(ROLL(cons_rf_i,
+			      INJ{noncarriers = nca,
+				  carriers = ca,
+				  inject = NONE,
+				  special = j}), cons_rf_i)
+		      | help (j, SOME conss_rf_ij) =
+			(make_total_lambda(var,conss_rf_ij,cons_rf_i,
+					   ROLL(cons_rf_i,
+						INJ{noncarriers = nca,
+						    carriers = ca,
+						    inject = SOME (VAR var),
+						    special = j})))
+		in mapcount help conss_rf_i
 		end
-	in val exp_con_mk = map3 mk_help (conss_rf,cons_rf,tys)
+	in val exp_con_mk = map2 mk_help (conss_rf,cons_rf)
 	end
 
 	(* ----------------- compute the exposes ------------------- *)
 	local 
 	    fun expose_help (conss_rf_i,cons_rf_i) =
 		let
-		    val sumtype = CON_SUM(NONE, conss_rf_i)
+		    val (nca,ca) = conopts_split conss_rf_i
+		    val sumtype = CON_SUM{special = NONE,
+					  carriers = ca,
+					  noncarriers = nca}
 		    val var' = fresh_var()
 		in make_total_lambda(var',cons_rf_i,sumtype,UNROLL(cons_rf_i,VAR var'))
 		end

@@ -81,18 +81,18 @@ functor Basis(structure Il : IL
 		  val s = IlStatic.GetModSig(empty_context,m)
 	      in result := add_context_inline(!result,mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
 	      end
-	  fun over_entry ctxt str con_thunker constraints =
-	    add_context_inline(ctxt,
-			       mk_var_lab str, 
-			       fresh_named_var str,
-			       INLINE_OVER(fn _ => 
-					   let val eshot = oneshot()
-					       val ocon = uocon_inst (empty_context,
-								      fresh_uocon constraints, 
-								      con_thunker eshot)
+	  fun over_entry str con_thunker constraints =
+	      result := add_context_inline(!result,
+					   mk_var_lab str, 
+					   fresh_named_var str,
+					   INLINE_OVER(fn _ => 
+						       let val eshot = oneshot()
+							   val ocon = uocon_inst (empty_context,
+										  fresh_uocon constraints, 
+										  con_thunker eshot)
 					       val con = CON_OVAR ocon
-					   in (OVEREXP(con,true,eshot),ocon)
-					   end))
+						       in (OVEREXP(con,true,eshot),ocon)
+						       end))
 	    
 	    
 
@@ -136,7 +136,7 @@ functor Basis(structure Il : IL
 	      val _ = app add_basetype basetype_list
 	  end
       
-(* ---------------------- begin of example test case for overloading ----------------
+(* ---------------------- begin of example test case for overloading ---------------- *)
 	val context = 
 	   let
 	       datatype X = A | B
@@ -156,9 +156,9 @@ functor Basis(structure Il : IL
 						  CON_INT W32, oneshot_init PARTIAL), A)
 	       val cstr2 = constraints (CON_ARROW(con_tuple[CON_FLOAT F64, CON_FLOAT F64], 
 						  CON_FLOAT F64, oneshot_init PARTIAL), B)
-	   in over_entry context "over" con_thunk [cstr1,cstr2]
+	   in over_entry "over" con_thunk [cstr1,cstr2]
 	   end
- ---------------------- end of example test case for overloading ---------------- *)
+(* ---------------------- end of example test case for overloading ---------------- *)
 
 
 	  (* ----------------- add base monomorphic values -------------- *)
@@ -240,7 +240,7 @@ functor Basis(structure Il : IL
 							   con_unit,APP(PRIM(setref,[c]),
 									exp_tuple[proj 1, proj 2])))
 				   end))]
-	  in
+	  in val _ = app poly_entry basepolyvalue_list
 	  end
 
 	   

@@ -174,11 +174,12 @@ functor Ppil(structure Il : IL
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
 				       pp_con seen con]
-       | CON_SUM (iopt,conlist) => pp_list (pp_con seen) conlist ("SUM"^ (case iopt of 
-									      NONE => ""
-									    | SOME x => (Int.toString x))
-								  ^"(", 
-							   ",",")", false)
+       | CON_SUM {noncarriers,carriers,special} => 
+	     pp_list (pp_con seen) carriers ("SUM"^ (case special of 
+							NONE => ""
+						      | SOME x => (Int.toString x))
+					    ^"(" ^ (Int.toString noncarriers) ^ "; ",
+					    ",",")", false)
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
        | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
        | CON_MODULE_PROJECT (module,label) => pp_region "CON_MPROJ(" ")"
@@ -317,18 +318,26 @@ functor Ppil(structure Il : IL
 			  [pp_con seen con, pp_exp seen e]
        | UNROLL (con,e) => pp_region "UNROLL(" ")"
 			  [pp_con seen con, String ",", pp_exp seen e]
-       | INJ  (conlist, i, e) => pp_region "INJ(" ")"
-			  [pp_list (pp_con seen) conlist ("[",", ","]",false), 
-			   String ("," ^ (Int.toString i) ^ ","), pp_exp seen e]
-(*       | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
-       | CASE (cs,earg,elist,edef) => pp_region "CASE(" ")"
-			  ((pp_con seen (CON_SUM (NONE,cs))) :: (String ",") :: Break ::
-			   (pp_exp seen earg) :: (String ",") :: Break ::
-			   (pp_list (fn NONE => String "NONE" 
-			 | SOME e => pp_exp seen e) elist ("[",", ","]",true)) ::
-			   (case edef of
-			      NONE => []
-			    | SOME e => [String ", DEFAULT: ", pp_exp seen e]))
+       | INJ {noncarriers,carriers,special,inject} => 
+	     pp_region "INJ(" ")"
+	     [String ((Int.toString noncarriers) ^ "; "),
+	      pp_list (pp_con seen) carriers ("[",", ","]",false), 
+	      String ("," ^ (Int.toString special) ^ ","), 
+	      case inject of
+		  NONE => String "NONE"
+		| SOME e => pp_exp seen e]
+       (*       | TAG (name,c) => pp_region "TAG(" ")" [pp_tag name, pp_con seen c] *)
+       | CASE {noncarriers,carriers,arg,arms,default} =>
+	     pp_region "CASE(" ")"
+	     ((pp_con seen (CON_SUM {special = NONE,
+				     carriers = carriers,
+				     noncarriers = noncarriers})) :: (String ",") :: Break ::
+	      (pp_exp seen arg) :: (String ",") :: Break ::
+	      (pp_list (fn NONE => String "NONE" 
+	    | SOME e => pp_exp seen e) arms ("[",", ","]",true)) ::
+	      (case default of
+		   NONE => []
+		 | SOME e => [String ", DEFAULT: ", pp_exp seen e]))
        | EXN_CASE (earg,elist,eopt) => pp_region "EXN_CASE(" ")"
 			  [pp_exp seen earg,
 			   String ",",

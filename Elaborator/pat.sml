@@ -314,7 +314,7 @@ functor Pat(structure Il : IL
 				  CASE_VAR(v,con) => (VAR v, con)
 				| CASE_NONVAR (_,binde,bindc) => (binde,bindc))
       val rescon = fresh_con context
-      fun getarm datacon sumcon (i,{name=cur_constr,arg_type}) : bound list * exp option = 
+      fun getarm datacon (sumcon : int * con list) (i,{name=cur_constr,arg_type}) : bound list * exp option = 
 	let 
 	  fun armhelp ((path,patopt), (clause,bound,body)) : arm option = 
 	      (case (eq_label(cur_constr, symbol_label (List.last path)), patopt) of
@@ -327,7 +327,9 @@ functor Pat(structure Il : IL
 		  else (error_region();
 			print "constructor pattern used on an argument of the wrong type\n")
 	  val rsvar = fresh_var()
-	  val rscon = CON_SUM(SOME i,sumcon)
+	  val rscon = CON_SUM{carriers = #2 sumcon,
+			      noncarriers = #1 sumcon,
+			      special = SOME i}
 	in (case (relevants : arm list, arg_type) of
 	      ([],_) => ([],NONE)
 	    | (_,NONE) => let 
@@ -336,11 +338,10 @@ functor Pat(structure Il : IL
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
-			  in (vf_ll,SOME (#1 (make_lambda(rsvar,rscon,mc,me))))
+			  in (vf_ll,SOME me)
 			  end
-	    | (_,SOME at) => let 
+	    | (_,SOME rcon) => let 
 			   val var = fresh_var()
-			   val rcon = List.nth(sumcon,i)
 			   val (vf_ll,(me,mc)) = match((CASE_VAR (var,rcon))::args, relevants, def)
 			    val _ = if (eq_con(context,rescon,mc))
 					 then ()
@@ -358,8 +359,10 @@ functor Pat(structure Il : IL
 	   NONE => error "constructor_lookup got path not to constructor"
 	 | (SOME {name,datatype_path,is_const,datatype_sig}) => 
 	     Datatype.instantiate_datatype_signature(datatype_path,datatype_sig,context,polyinst))
-      val sumcon = (map (fn {name,arg_type} => case arg_type of 
-			 NONE => con_unit | SOME c => c) constr_patconopt_list)
+      fun loop (nca,ca) [] = (nca,rev ca)
+	| loop (nca,ca) ({name,arg_type = NONE}::rest) = loop (nca+1,ca) rest
+	| loop (nca,ca) ({name,arg_type = SOME c}::rest) = loop (nca,c::ca) rest
+      val sumcon as (nca,ca) = loop (0,[]) constr_patconopt_list
       val vfll_expopt_list : (bound list * (exp option)) list = 
 	                                    mapcount (getarm datacon sumcon) constr_patconopt_list
       val _ = debugdo (fn () => (print "Got these arms:";
@@ -371,7 +374,11 @@ functor Pat(structure Il : IL
       val sumtypes = map (fn {arg_type=NONE,...} => con_unit | {arg_type=SOME c,...} => c)  constr_patconopt_list
       val expopt_list = map #2 vfll_expopt_list
       val vfll_list = map #1 vfll_expopt_list
-    in  (flatten vfll_list,(CASE(sumtypes,APP(expose_exp,casearg),expopt_list,NONE), con_deref rescon))
+    in  (flatten vfll_list,(CASE{noncarriers = nca,
+				 carriers = ca,
+				 arg = APP(expose_exp,casearg),
+				 arms = expopt_list,
+				 default = NONE}, con_deref rescon))
     end
 
   and match (args : case_exp list, 

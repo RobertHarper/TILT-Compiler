@@ -81,9 +81,11 @@ functor IlUtil(structure Ppil : PPIL
 			    end
     val con_string = CON_VECTOR (CON_UINT W8)
     val con_bool = CON_MUPROJECT(0,CON_FUN([fresh_named_var "dummy"],
-					   CON_SUM(NONE,[con_unit,con_unit])))
-    val false_exp = ROLL(con_bool,INJ([con_unit,con_unit], 0, unit_exp))
-    val true_exp = ROLL(con_bool,INJ([con_unit,con_unit], 1, unit_exp))
+					   CON_SUM{noncarriers = 2,
+						   carriers = [],
+						   special = NONE}))
+    val false_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=0,inject=NONE})
+    val true_exp = ROLL(con_bool,INJ{noncarriers=2,carriers=[],special=1,inject=NONE})
     fun make_lambda_help (a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
@@ -92,13 +94,8 @@ functor IlUtil(structure Ppil : PPIL
     fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
     fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
-	let val con_dummy_false = CON_SUM(SOME 0,[con_unit,con_unit])
-	    val con_dummy_true = CON_SUM(SOME 1,[con_unit,con_unit])
-	    val e2' = #1(make_lambda(fresh_named_var "dummy",con_dummy_true,c,e2))
-	    val e3' = #1(make_lambda(fresh_named_var "dummy",con_dummy_false,c,e3))
-	in CASE([con_unit,con_unit],UNROLL(con_bool,e1),
-		[SOME e3',SOME e2'],NONE)
-	end
+	CASE{noncarriers=2,carriers=[],arg=UNROLL(con_bool,e1),
+	     arms=[SOME e3,SOME e2],default=NONE}
     fun make_seq eclist =
 	let fun loop [] = error "make_seq given empty list"
 	      | loop [ec] = ec
@@ -218,12 +215,16 @@ functor IlUtil(structure Ppil : PPIL
 	   | EXN_INJECT (e1,e2) => EXN_INJECT(self e1, self e2)
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
 	   | UNROLL (c,e) => UNROLL(f_con state c, self e)
-	   | INJ (c,i,e) => INJ(map (f_con state) c, i, self e)
-	   | CASE(c,earg,elist,edef) => let fun help NONE = NONE
-					      | help (SOME e) = SOME(self e)
-					in CASE(map (f_con state) c, 
-						self earg, map help elist, help edef)
-					end
+	   | INJ {carriers,noncarriers,special,inject} => INJ{noncarriers=noncarriers,
+							      carriers = map (f_con state) carriers, 
+							      special = special,
+							      inject = Util.mapopt self inject}
+	   | CASE{carriers,noncarriers,arg,arms,default} =>
+		 CASE{noncarriers = noncarriers,
+		      carriers = map (f_con state) carriers,
+		      arg = self arg,
+		      arms = map (Util.mapopt self) arms,
+		      default = Util.mapopt self default}
 	   | EXN_CASE(earg,ecelist,eopt) => let fun help (e1,c,e2) = (self e1, f_con state c, self e2)
 						val eopt' = (case eopt of 
 								 NONE => NONE
@@ -270,7 +271,9 @@ functor IlUtil(structure Ppil : PPIL
 		     | CON_FUN (vars,c) => let val state' = add_convars(state,vars)
 					   in CON_FUN(vars,f_con state' c)
 					   end
-		     | CON_SUM (iopt,clist) => CON_SUM (iopt,map self clist)
+		     | CON_SUM {noncarriers,special,carriers} =>
+			   CON_SUM{special=special,noncarriers=noncarriers,
+				   carriers = map self carriers}
 		     | CON_TUPLE_INJECT clist => CON_TUPLE_INJECT (map self clist)
 		     | CON_TUPLE_PROJECT (i,c) =>  CON_TUPLE_PROJECT (i, self c)
 		     | CON_MODULE_PROJECT (m,l) => CON_MODULE_PROJECT(f_mod state m, l)))

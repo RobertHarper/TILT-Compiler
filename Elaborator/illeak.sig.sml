@@ -38,9 +38,16 @@ signature ILLEAK =
                  | EXN_INJECT of exp * exp (* tag and value *)
                  | ROLL    of con * exp
                  | UNROLL  of con * exp
-                 | INJ     of con list * int * exp
+                 | INJ     of {noncarriers : int,
+			       carriers : con list,
+			       special : int,
+			       inject : exp option}
                  (* case over sum types of exp with arms and defaults*)
-                 | CASE    of con list * exp * (exp option) list * exp option 
+                 | CASE    of {noncarriers : int,
+			       carriers : con list,
+			       arg : exp,
+			       arms : (exp option) list,
+			       default : exp option}
                  (* exnarms include: tag exp whose type must be CON_TAG(con) and body : con -> con_result *) 
                  | EXN_CASE of exp * (exp * con * exp) list * exp option
                  | MODULE_PROJECT of mod * label
@@ -69,7 +76,9 @@ signature ILLEAK =
                  | CON_MUPROJECT     of int * con
                  | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
-                 | CON_SUM           of int option * con list
+                 | CON_SUM           of {noncarriers : int,
+					 carriers : con list,
+					 special : int option}
                  | CON_TUPLE_INJECT  of con list
                  | CON_TUPLE_PROJECT of int * con 
                  | CON_MODULE_PROJECT of mod * label

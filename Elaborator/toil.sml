@@ -2287,7 +2287,7 @@ functor Toil(structure Il : IL
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
-	  | CON_SUM (iopt,conlist) => 
+	  | CON_SUM {carriers,noncarriers,special} =>
 		let 
 		    val v = fresh_var()
 		    val v1 = fresh_var()
@@ -2295,27 +2295,46 @@ functor Toil(structure Il : IL
 		    val paircon = con_tuple[con',con']
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
-		    fun help(i,cs) = let val eqexp = self cs
-					 val var' = fresh_var()
-					 val var'' = fresh_var()
-					 val sumc = CON_SUM(SOME i,conlist)
-					 val armbody = APP(eqexp,
-							   exp_tuple[SUM_TAIL(sumc,VAR var'),
-								     SUM_TAIL(sumc,VAR var'')])
-					 val arms2 = map0count 
-					     (fn j =>
-					      if (i=j) 
-						  then SOME(#1(make_lambda(var'',
-									   sumc,
-									   con_bool,
-									   armbody)))
-					      else NONE) (length conlist)
-				     in SOME (#1(make_lambda(var', CON_SUM(SOME i,conlist),
-							     con_bool,
-							     CASE(conlist,VAR v2,arms2,NONE))))
-				     end
-		    val arms1 = mapcount help conlist
-		    val inner_body = CASE(conlist,VAR v1,arms1,NONE)
+		    val totalcount = (noncarriers + length carriers)
+		    fun help i = let val var' = fresh_var()
+				     val var'' = fresh_var()
+				     val is_carrier = i >= noncarriers
+				     val sumc = CON_SUM{carriers=carriers,
+							noncarriers=noncarriers,
+							special = SOME i}
+				     val armbody = if is_carrier
+						       then APP(self(List.nth(carriers,i-noncarriers)),
+								exp_tuple[SUM_TAIL(sumc,VAR var'),
+									  SUM_TAIL(sumc,VAR var'')])
+						   else true_exp
+				     val arms2 = map0count 
+					 (fn j =>
+					  if (i=j) 
+					      then 
+						  SOME (if is_carrier
+							    then (#1(make_lambda(var'',
+										 sumc,
+										 con_bool,
+										 armbody)))
+							else armbody)
+					  else NONE) totalcount
+				     val switch = CASE{noncarriers = noncarriers,
+						       carriers = carriers,
+						       arg = VAR v2,
+						       arms = arms2,
+						       default = NONE}
+				 in SOME (if is_carrier
+					      then #1(make_lambda(var', sumc,
+								  con_bool,
+								  switch))
+					  else switch)
+				 end
+		    val arms1 = map0count help totalcount
+		    val inner_body = CASE{noncarriers = noncarriers,
+					  carriers = carriers,
+					  arg = VAR v1,
+					  arms = arms1,
+					  default = NONE}
 		    val body = make_catch(inner_body,con_bool,false_exp)
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
