@@ -31,7 +31,7 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   if (spec->type == PointerField) {
     region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
     if (region == NULL) {
-      GCFromC(thread, tagByteLen + 4, 1);
+      GCFromC(thread, tagByteLen + 4, 0);
       region = AllocFromHeap(fromSpace, thread, tagByteLen, align);
     }
   }

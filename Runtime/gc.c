@@ -492,7 +492,7 @@ void GCPoll(Proc_t *proc)
 
 
 /* Is there enough room in proc to satisfy mapping th onto it */
-int GCSatisfied(Proc_t *proc, Thread_t *th)
+int GCSatisfied(Proc_t *proc, Thread_t *th, int honorMajorGC)
 {
   /* requestInfo < 0 means that many bytes in write buffer is requested 
      requestInfo > 0 means that many bytes of allocation is requested */
@@ -500,7 +500,7 @@ int GCSatisfied(Proc_t *proc, Thread_t *th)
     if ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd)
       return 1;
   } 
-  else if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
+  else if ((!honorMajorGC || th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
     if (th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit) 
       return 1; 
   }
@@ -517,7 +517,7 @@ int GCFromScheduler(Proc_t *proc, Thread_t *th)
   procChangeState(proc, GC);
   assert(proc->userThread == NULL);
   assert(th->proc == NULL);
-  if (GCSatisfied(proc,th))
+  if (GCSatisfied(proc,th,1))
     return 1;
   if (GCTryFun != NULL && (*GCTryFun)(proc,th))  /* Might have to do work dependent on collector */
     return 2;
@@ -525,7 +525,7 @@ int GCFromScheduler(Proc_t *proc, Thread_t *th)
   proc->gcSegment1 = MajorWork;                  /* Non-generational collectors only do major GC's */
   if (GCStopFun != NULL) 
     (*GCStopFun)(proc);
-  if (GCSatisfied(proc,th))
+  if (GCSatisfied(proc,th,0))
     return 3;
   if (GCTryFun != NULL && (*GCTryFun)(proc,th))
     return 4;
