@@ -28,6 +28,7 @@
 bug55a	fail	Unresolved tyvar breaking elaborator.
 bug55b	fail	Unresolved tyvar breaking phase-splitter.
 bug80	fail	Phase splitter and signatures.
+bug82	fail	Type of thunk prematurely made a rigid record.
 bug151a	pass	name-mangling test [x] <- [x]
 bug151b	fail	name-mangling test [x] <- * -> [x]
 bug151c	fail	name-mangling test [+] <- * -> [+] (overloaded vs. normal identifier)
