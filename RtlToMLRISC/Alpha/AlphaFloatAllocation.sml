@@ -26,7 +26,8 @@ functor AlphaFloatAllocation(
 				  and type I.instruction =
 					     AlphaInstructions.instruction
 	  ): sig
-	    val ra: FlowGraph.cluster -> FlowGraph.cluster
+	    datatype mode = REGISTER_ALLOCATION | COPY_PROPAGATION
+	    val ra: mode -> FlowGraph.cluster -> FlowGraph.cluster
 	  end
 
 	  sharing type AlphaInstructions.instruction =
@@ -34,7 +35,7 @@ functor AlphaFloatAllocation(
 	      and type IntegerConvention.id =
 		       FloatConvention.id
 	) :> REGISTER_ALLOCATION
-	       where type id      = int
+	       where type id	  = int
 		 and type offset  = AlphaInstructions.Constant.const
 		 and type cluster = FlowGraph.cluster
 	  = struct
@@ -149,8 +150,13 @@ functor AlphaFloatAllocation(
   fun setLookup(lookupSpill', lookupReload') = (lookupSpill  := lookupSpill';
 						lookupReload := lookupReload')
 
-  fun allocateCluster cluster = (FloatAllocation.ra cluster before
-				 GetRegister.reset())
+  local
+    val allocate  = FloatAllocation.ra FloatAllocation.REGISTER_ALLOCATION
+    val propagate = FloatAllocation.ra FloatAllocation.COPY_PROPAGATION
+  in
+    fun allocateCluster cluster =
+	(propagate(allocate cluster) before GetRegister.reset())
+  end
 
 end
 
