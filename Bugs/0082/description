@@ -34,6 +34,6 @@ testing/test_file.sml:6.3-8.6 Error:  application is ill-typed.
 
 Comments:    
 Fix:	     
-Test: 
+Test: bug82
 Owner: 
 Status: open
