@@ -25,11 +25,13 @@ struct
 
    (* Find the union of a list of sets of registers *)
 
-   fun unionLists l =
-     let fun sum(nil,accum) = accum
-	   | sum(h::t,accum) = sum(t,Regset.union(h,accum))
-     in sum(l, Regset.empty)
-     end
+   fun unionLists [] = Regset.empty
+     | unionLists [s] = s
+     | unionLists (s::rest) = 
+       let fun sum(nil,accum) = accum
+             | sum(h::t,accum) = sum(t,Regset.union(accum,h))
+       in sum(rest,s)
+       end
 
    val defUse = Machineutils.Machine.defUse
 
@@ -55,25 +57,36 @@ struct
    val \/ = Regset.union
    infix 4 \/
 
+   val special_regs_set = listToSet special_regs
+
+   (* computes s1 + (l2 - s3) *)
+   fun setPlusListMinusSet(baseset,addlist,filterset) = 
+       let fun folder (item,curset) = 
+           if (Regset.member(filterset,item))
+               then curset
+           else Regset.add(curset,item)
+       in  foldl folder baseset addlist
+       end
+
    fun blockDefUse (BLOCK{instrs,
-			   def,
-			   use,
-			   in_live,
-			   out_live,
-	                   truelabel,
-			   succs}) =
-       let fun loop ([],use,def) = (use,def)
-	     | loop (h :: t,use, def) =
-	     	    (* We don't want special registers to appear in def/use sets *)
-		 let val (def_list, use_list) = defUse (stripAnnot h)
-		     val instr_def = listToSet def_list - (listToSet special_regs)
-		     val instr_use = listToSet use_list - (listToSet special_regs)
-	            (* variables used before being defined *)
-	             val use' = use \/ (instr_use - def)
-		    (* variables assigned before being used *)
-		     val def' = def \/ (instr_def - use')
-		 in loop(t,use',def')
-		 end
+                           def,
+                           use,
+                           in_live,
+                           out_live,
+                           truelabel,
+                           succs}) =
+       let 
+         (* We don't want special registers to appear in def/use sets
+	    when we are done though we permit them in intermediate results *)
+           fun loop ([],use,def) = (use - special_regs_set, def - special_regs_set)
+             | loop (h :: t,use, def) =
+                 let val (instr_def, instr_use) = defUse (stripAnnot h)
+                     (* we could convert these very short lists to sets and use set operation;
+                    but it's more efficient to have the following specialized version *)
+                     val use' = setPlusListMinusSet(use,instr_use,def)
+                     val def' = setPlusListMinusSet(def,instr_def,use')
+                 in loop(t,use',def')
+                 end
 	   val (use,def) = loop (rev (!instrs),Regset.empty,Regset.empty)
        in BLOCK{instrs=instrs,
 		 def=def,
@@ -181,10 +194,14 @@ struct
        fun loop (out,[]) = []
 	 | loop (out,instr :: instrs) =
 	      let val instr = stripAnnot instr
-		  val (def_list, use_list) = defUse instr
-		  val instr_def = listToSet def_list - (listToSet special_regs)
-		  val instr_use = listToSet use_list - (listToSet special_regs)
-	          val in' = instr_use \/ (out - instr_def)
+                  val (def_list, use_list) = defUse instr
+		  val instr_def = listToSet def_list
+                  (* we don't want special regs in in' so we subtract 
+                     them out as we add use_list;  note that we don't
+                     need to remove special regs from instr_def since 
+                     instr_def is used to subtract away from out which
+                     already doesn't have any special regs *)
+		   val in' = setPlusListMinusSet(out - instr_def, use_list, special_regs_set)
               in LIVE(out,instr) :: loop(in',instrs)
 	      end
 

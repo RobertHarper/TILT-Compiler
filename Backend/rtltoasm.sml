@@ -234,7 +234,7 @@ struct
 		       findRtlProc (Toasm.untranslateLocalLabel name) procs
 		   in
 		     (known andalso (! knowns), 
-		      Toasm.translateProc rtlproc)
+		      Stats.subtimer("toasm_translateproc",Toasm.translateProc) rtlproc)
 		   end
 
 	     val _ = if (!debug)
@@ -301,20 +301,22 @@ struct
 		       else ()
 	       val (new_sig, new_block_map, new_block_labels, gc_data) =
 		   Procalloc.allocateProc2 res_of_allocateproc1
-	       fun doer l = 
+	       fun doer (l,acc) = 
 		 let
 		   val (Bblock.BLOCK{instrs,in_live,out_live,succs,def,use,truelabel,...}) =
 		       (case (Labelmap.find (new_block_map, l)) of
 			    SOME b => b | NONE => error "missing block")
-		   fun filter [] = []
-		     | filter ((BASE(LADDR(_,I (LOCAL_CODE l))))::rest) = (I (LOCAL_CODE l)) :: (filter rest)
-		     | filter ((BASE(LADDR(_,MLE s)))::rest) = (MLE s) :: (filter rest)
-		     | filter ((BASE(LADDR(_,CE x)))::rest) = (CE x) :: (filter rest)
-		     | filter (a::rest) = filter rest
-		 in filter (map Bblock.stripAnnot (!instrs))
+		     val instrs = !instrs
+		     fun folder (annote_instr,acc) = 
+			 (case (Bblock.stripAnnot annote_instr) of
+			    (BASE(LADDR(_,I (LOCAL_CODE l)))) => (I (LOCAL_CODE l)) :: acc
+			  | (BASE(LADDR(_,MLE s))) => (MLE s) :: acc
+			  | (BASE(LADDR(_,CE x))) => (CE x) :: acc
+			  | _ => acc)
+		 in foldl folder acc instrs
 		 end
-	       val code_label_listlist = map doer new_block_labels
-	       val code_label_list : label list = flatten code_label_listlist
+	       val rev_code_label_list = foldl doer [] new_block_labels
+	       val code_label_list : label list = rev rev_code_label_list
 	   in
 	       setSig name new_sig;
 	       msg "\tdumping\n";
@@ -361,7 +363,7 @@ struct
 	     fun final_alloc arg = 
 		 case arg of
 		   (SOME psig, NONE, cls) => ((psig,[]),cls)
-		 | (NONE, SOME x, cls) => (allocateProc2 x,cls)
+		 | (NONE, SOME x, cls) => (Stats.subtimer("toasm_allocProc2",allocateProc2) x,cls)
 		 | _ => error "allocateproc in allocatecomponent"
 	     val code_labels_listlist = map (fn ((_,a),b) => (a @ b)) (map final_alloc temps)
 	     val code_labels = flatten code_labels_listlist
