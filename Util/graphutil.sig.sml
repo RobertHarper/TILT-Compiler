@@ -1,3 +1,5 @@
+(*$import TopLevel *)
+
 (* Chris Okasaki
    School of Computer Science
    Carnegie Mellon University

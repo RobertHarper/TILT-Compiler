@@ -1,3 +1,5 @@
+(*$import TopLevel *)
+
 signature NODE =
 sig
   type node

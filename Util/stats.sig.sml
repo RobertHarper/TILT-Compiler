@@ -1,3 +1,5 @@
+(*$import TopLevel *)
+
 signature STATS =
    sig
 

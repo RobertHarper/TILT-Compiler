@@ -1,4 +1,4 @@
-(*$Graph: NODE DIRECTEDGRAPH *)
+(*$import GRAPH TopLevel Array *)
 
 functor Graph(A : NODE) : DIRECTEDGRAPH =
 struct

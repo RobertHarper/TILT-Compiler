@@ -1,3 +1,5 @@
+(*$import TopLevel LISTOPS Util ListPair *)
+
 structure Listops : LISTOPS = 
   struct
 
@@ -14,7 +16,12 @@ structure Listops : LISTOPS =
     fun zip6 a b c d e f = (map (fn ((a,b,c),(d,e,f)) => (a,b,c,d,e,f)) (zip (zip3 a b c) (zip3 d e f)))
     fun zip7 a b c d e f g = (map (fn ((a,b,c),(d,e,f,g)) => (a,b,c,d,e,f,g)) (zip (zip3 a b c) (zip4 d e f g)))
 
-    val unzip = ListPair.unzip
+
+    fun unzip ab_list = 
+	let fun unzip_loop [] (aa,bb) = (rev aa, rev bb)
+	      | unzip_loop ((a,b)::rest) (aa,bb) = unzip_loop rest (a::aa,b::bb)
+	in unzip_loop ab_list ([],[])
+	end
 
     fun unzip3 abc_list = 
 	let fun unzip3_loop [] (aa,bb,cc) = (rev aa, rev bb, rev cc)
@@ -70,7 +77,7 @@ structure Listops : LISTOPS =
     fun app2 f = 
       let
 	fun loop ([],[]) = ()
-	  | loop (a::aa,b::bb) = (ignore (f (a,b));loop (aa,bb))
+	  | loop (a::aa,b::bb) = (f (a,b);loop (aa,bb))
 	  | loop _ = error "app2 passed lists of different lengths"
       in
 	loop
@@ -79,7 +86,7 @@ structure Listops : LISTOPS =
     fun app3 f = 
       let
 	fun loop ([],[],[]) = ()
-	  | loop (a::aa,b::bb,c::cc) = (ignore (f (a,b,c));loop (aa,bb,cc))
+	  | loop (a::aa,b::bb,c::cc) = (f (a,b,c);loop (aa,bb,cc))
 	  | loop _ = error "app3 passed lists of different lengths"
       in
 	loop
@@ -199,7 +206,8 @@ structure Listops : LISTOPS =
 
     fun exist_pair pred = 
       let
-	fun loop ([] | [_]) = false
+	fun loop [] = false
+	  | loop [_] = false
 	  | loop (a::b::rest) = pred(a,b) orelse loop(b::rest)
       in
 	loop

@@ -1,3 +1,5 @@
+(*$import TopLevel UTIL *)
+
 structure Util : UTIL = 
   struct
     exception UNIMP
@@ -20,18 +22,7 @@ structure Util : UTIL =
       | eq_opt _ = false
     fun split_opt (NONE) = (NONE,NONE)
       | split_opt (SOME (a,b)) = (SOME a,SOME b)
-(*
-    fun IntStr2word s = (case (Int.fromString s) of
-			SOME i => Word32.fromInt i
-		      | NONE => error "IntStr2word failed")
-    fun WordStr2word s = (case (String.sub(s,2)) of
-			    #"x" => (case Word32.fromString (String.substring(s,3,size s - 3)) of
-				       SOME w => w
-				     | NONE => error "WordStr2word failed")
-			  | _ => IntStr2word (String.substring(s,2,size s - 2)))
-    val IntStr2word64 = Word64.fromWord32 o IntStr2word
-    val WordStr2word64 = Word64.fromWord32 o WordStr2word
-*)
+
     fun CharStr2char s = String.sub(s,0)
 
 
@@ -84,7 +75,8 @@ structure Util : UTIL =
 
     fun all_pairs p = 
       let
-	fun loop ([] | [_]) = true
+	fun loop [] = true
+	  | loop [_]= true
 	  | loop (fst::snd::rest) = 
 	  (p (fst,snd)) andalso (loop (snd::rest))
       in

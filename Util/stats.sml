@@ -1,3 +1,5 @@
+(*$import TopLevel Util STATS Timer Listops *)
+
 structure Stats :> STATS =
    struct
 

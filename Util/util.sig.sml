@@ -1,3 +1,5 @@
+(*$import TopLevel *)
+
 (*Non IL specific utility routines *)
 signature UTIL =
   sig

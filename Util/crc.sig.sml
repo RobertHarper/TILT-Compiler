@@ -1,3 +1,5 @@
+(*$import BinIO *)
+
 signature CRC =
   sig
     eqtype crc

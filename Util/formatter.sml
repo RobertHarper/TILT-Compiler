@@ -1,3 +1,5 @@
+(*$import TopLevel FORMATTER Listops *)
+
 (* Perry's modifications:
     (1) added fold and changed implode to concat 
         so the 0.93-NJ version now works with 1.09-NJ
@@ -14,7 +16,7 @@
   with the formatting and printing routines.}
 %************************************************************************
 *)
-structure Formatter (* :> FORMATTER *) =
+structure Formatter : FORMATTER  =
    struct
 
 fun fold f l b = foldr f b l

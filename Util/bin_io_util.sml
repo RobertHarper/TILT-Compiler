@@ -1,3 +1,5 @@
+(*$import BINIOUTIL BinIO TopLevel *)
+
 structure BinIO_Util : BIN_IO_UTIL =
   struct
 

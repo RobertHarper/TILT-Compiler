@@ -1,3 +1,5 @@
+(*$import TopLevel *)
+
 signature TILWORD =
     sig
 	

@@ -1,3 +1,5 @@
+(*$import TopLevel GRAPHUTIL List Array *)
+
 (* Chris Okasaki
    School of Computer Science
    Carnegie Mellon University

@@ -1,3 +1,5 @@
+(*$import TILWORD TilWord32 Util *)
+
 structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
  struct
 
@@ -135,8 +137,10 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 	  val res = (high_low,low_low)
 	  val s3 = sign res
       in case (s1,s2,s3) of
-	  (1,1,(0 | ~1)) => raise Overflow
-	| (~1,~1,(0 | 1)) => raise Overflow
+	  (1,1,0) => raise Overflow
+	| (1,1,~1) => raise Overflow
+	| (~1,~1,0) => raise Overflow
+	| (~1,~1,1) => raise Overflow
 	| _ => res
       end
   fun snegate arg = if (equal(arg,most_neg))
@@ -161,7 +165,8 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
 		 else raise Overflow
 	      end
       in case (sa,sb) of
-	  ((0,_) | (_,0)) => zero
+	  (0,_) => zero
+        | (_,0) => zero
 	| (1,1) => help(a,b)
 	| (~1,1) => smult(b,a)
 	| (1,~1) => if (equal(a,one)) then b else snegate(help(a,snegate b))
@@ -209,7 +214,8 @@ structure TilWord64 :> TILWORD where type halfword = TilWord32.word =
       end
   fun toInt(high,low) = 
       (case (W.equal(high,W.zero),W.equal(high,W.neg_one),W.sign low) of
-	   (true,_,(0 | 1)) => W.toInt low
+	   (true,_,0) => W.toInt low
+	 | (true,_,1) => W.toInt low
 	 | (_,true,~1) => W.toInt low
 	 | _ => (print "TilWord64.toInt overflowed with ";
 		 print (toHexString(high,low)); print "\n";

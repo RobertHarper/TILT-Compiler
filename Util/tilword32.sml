@@ -1,3 +1,5 @@
+(*$import TILWORD Word32 *)
+
 (* TIL2/ML Compiler Source, 
  * Copyright (c) 1997:  Perry Cheng, Chris Stone, Greg Morrisett,
  * Robert Harper, and Peter Lee.
