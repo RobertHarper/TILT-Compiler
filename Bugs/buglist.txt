@@ -110,7 +110,6 @@
 0113 [open]	parsing problem
 0114 [open]	overloading constants
 0115 [open]	withtype scoping wrong
-0116 [open]	option failure
 0117 [open]	option failure
 0118 [open]	syntax discrepancies
 0119 [open]	discrepancies on byte/char tests
