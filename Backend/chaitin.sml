@@ -57,6 +57,7 @@ functor Chaitin(val commentHeader: string
 		sharing type Ifgraph.node = Bblock.Machineutils.Machine.register
 		sharing Color.Trackstorage = Trackstorage
 		sharing Color.Ifgraph = Ifgraph
+		sharing Ifgraph.Regset = Bblock.Machineutils.Regset
 	        sharing Tracetable = Printutils.Tracetable
 		  ) : PROCALLOC =
 struct
@@ -520,9 +521,9 @@ struct
 	   fun print_node n = 
 	     (print_reg n;
 	      emitString ":  ";
-	      print_list print_reg (Ifgraph.edges g n))
+	      print_list print_reg (Regset.listItems (Ifgraph.edges g n)))
 	 in
-	   app print_node nodes;
+	   Regset.app print_node nodes;
 	   TextIO.flushOut TextIO.stdOut
 	 end
 
@@ -963,7 +964,7 @@ struct
 		   handle DEAD => (emitInstr "" (BASE (COMMENT ("dead instr" ^
 								(msInstruction "" (stripAnnot instr)))));
 				   (instructionLoop rest))
-			| GETREGBUG => (print "GETREGBUG while processing procedure ";
+			| GETREGBUG => (print "GETREGBUG in ";
 					print (msLoclabel name);
 					print ": ";
 					print (msInstruction "" (stripAnnot instr));
@@ -1325,9 +1326,11 @@ struct
 		 | has_exn ((BASE(RTL HANDLER_ENTRY))::_) = true
 		 | has_exn (_::rest) = has_exn rest
 	       val instr_blocks = 
-		   Labelmap.app (fn (BLOCK{instrs,...}) => 
+		   Stats.subtimer("chaitin_has_exn",
+				  Labelmap.app (fn (BLOCK{instrs,...}) => 
 				 if (has_exn (map stripAnnot (!instrs)) )
-				     then (has_exn_flag := true) else ()) block_map
+				     then (has_exn_flag := true) else ()) )
+		   block_map
 	   in
 	       val _ = if (!has_exn_flag)
 			   then regs_destroyed := (!regs_destroyed) @ (!regs_modified)
@@ -1348,7 +1351,7 @@ struct
 			       regs_destroyed = (!regs_destroyed)}
 
        val stackOffset = Trackstorage.stackOffset storage_info
-       val _ = initBias block_map
+       val _ = Stats.subtimer("chaitin_initbias",initBias) block_map
        val _ = msg "\tbuilding interference graph\n"
        val igraph = buildGraph(getSignature,name,block_map,
 			       args,res,callee_saved)
@@ -1365,7 +1368,7 @@ struct
 					    stackframe_size,
 					    registers_used,
 					    callee_save_slots,...}) = 
-	                summarize storage_info
+	               Stats.subtimer("chaitin_summarize", summarize) storage_info
 
         val new_procsig =
 	       let 
@@ -1396,12 +1399,13 @@ struct
 	    at every call site. *)
 
 	 val callsite_info = 
-		map (fn bblock => 
+		Stats.subtimer("chaitin_rewrite",
+			       map (fn bblock => 
 		        allocateBlock (mapping,
 				       stackframe_size,
 				       fixStackOffset,
 				       tailcallImpossible,
-				       name) callee_save_slots bblock)
+				       name) callee_save_slots bblock))
 		(Labelmap.listItems block_map)
 
 	 val callsite_info = foldr (op @) nil callsite_info 
@@ -1410,13 +1414,15 @@ struct
 	 val _ = createPostamble(block_map,hd(rev block_labels),arg_ra_pos,summary)
          val _ = createPreamble (block_map,name,arg_ra_pos,summary)
 
-	 val callinfo = getCallInfo name summary mapping tracemap callsite_info
+	 val callinfo = Stats.subtimer("chaitin_getcallinfo",
+				       getCallInfo name summary mapping tracemap) callsite_info
+
 
 	 val _ = msg "\tleaving allocateproc2\n"
      in	(new_procsig, 
 	 block_map, 
 	 block_labels,
-	 Tracetable.MakeTable callinfo)
+	 Stats.subtimer("chaitin_maketable",Tracetable.MakeTable) callinfo)
      end (* allocateProc2 *)
 
 (*   val allocateProc = allocateProcOrig  *)

@@ -11,7 +11,8 @@ functor Color1(structure Ifgraph : IFGRAPH
 	       sharing MU.Machine = Trackstorage.Machine 
 	                          = Printutils.Machine
 
-	       sharing type Ifgraph.node = MU.Machine.register) : COLOR =
+               sharing Ifgraph.Regset = MU.Regset
+	       sharing type Ifgraph.node = MU.Machine.register) : COLOR = 
 struct
   structure Ifgraph = Ifgraph
   structure Trackstorage = Trackstorage
@@ -71,55 +72,48 @@ struct
 	  be returned by the nodes function on interference graphs.*)
  
        fun simplify node_stack =
-	  case (Ifgraph.nodes_excluding_physical g)
-	  of nil => node_stack
-	   | l as (h :: _)=>
-	       let fun loop [] = []
-		     | loop (node :: nodes) =
-		          if isPhysical node then loop nodes
+       let val nodes = Ifgraph.nodes_excluding_physical g
+       in  if (Regset.isEmpty nodes) then node_stack
+	   else
+	       let 
+		   fun folder (node,acc as (good,bad)) =
+		          if isPhysical node then acc
 			  else
 		             let val count = degree node
-			         val remove =
-				   case node
-				   of R _ => count < num_iregs
-				    | F _ => count < num_fregs
-			     in if remove 
-			        then node :: loop nodes
-			        else loop nodes
+				 val isInt = (case node of R _ => true | F _ => false)
+			         val isGood = count < (if isInt then num_iregs else num_fregs)
+			         val isBad = count > (if isInt then 4*num_iregs else 4*num_fregs)
+			     in  (if isGood then node::good else good,
+				  if isBad then node::bad else bad)
 			     end
 		    (* get low-degree nodes which can be removed *)
-	            val next_nodes = loop l
+	            val (good_nodes, bad_nodes) = Regset.foldl folder ([],[]) nodes
 
 		    (* if there aren't any, then spill pseudo-randomly *)
 
-		    val next_nodes =
-			  case next_nodes 
-			  of [] => [h]
-			   | _ => next_nodes 
-	   in app delete_node next_nodes;
-	      simplify  (next_nodes @ node_stack)
-	   end
+		    val random_nodes = 
+			  (case (good_nodes,bad_nodes) of
+			   ([],[]) => [valOf(Regset.find (fn _ => true) nodes)]
+			   | _ => [])
 
-           val simplify = simplify_graph_time simplify 
+		val _ = (print "(GOOD,BAD,RANDOM) = ";
+			print (Int.toString (length good_nodes)); print ", ";
+			print (Int.toString (length bad_nodes)); print ", ";
+			print (Int.toString (length random_nodes)); print "\n")
+
+	   in app delete_node good_nodes;
+	      app delete_node bad_nodes;
+	      app delete_node random_nodes;
+	      simplify  (random_nodes @ bad_nodes @ good_nodes @ node_stack)
+	   end
+       end
+       val simplify = simplify_graph_time simplify 
 
        fun select mapping [] = mapping
 	 | select mapping (node :: nodes) =
 	   let
 	     val _ = if (!debug) then
 	       (emitString "select: "; print_list print_reg [node]) else ()
-
-	     val neighbors = Ifgraph.edges igraph node
-	     val neighborcolors =
-	       let
-		 fun loop [] = []
-		   | loop (nbr :: nbrs) =
-		       if isPhysical nbr then nbr :: loop nbrs
-		       else case Regmap.find (mapping, nbr) of
-			       SOME (IN_REG r) => r :: loop nbrs
-			     | _ => loop nbrs
-	       in
-		 listToSet(loop neighbors)
-	       end
 
 	     fun bestReg pseudoreg [] bias' reg' = reg'
                | bestReg pseudoreg (reg::rest) bias' reg' =
@@ -149,22 +143,34 @@ struct
 			  bestReg pseudoreg rest bias' reg'
 		 end
 
-	     val regs_available = 
-	       (case node of 
-		  (R _) => 
-		    Regset.listItems
-		    (Regset.difference(listToSet general_iregs, neighborcolors))
-		| (F _) =>
-		    Regset.listItems
-		    (Regset.difference(listToSet general_fregs, neighborcolors)))
+	     val neighbors = Ifgraph.edges igraph node
 
 	     val chosen_reg = 
-	       if (length regs_available = 0) then
-		 NONE
-	       else
-		 SOME (bestReg node regs_available ~1000000 node)
+	       if (Regset.numItems neighbors > 128) then NONE
+	       else 
+	         let 
+		   fun folder (nbr,acc) =
+		       if isPhysical nbr then Regset.add(acc,nbr)
+		       else case Regmap.find (mapping, nbr) of
+			       SOME (IN_REG r) => Regset.add(acc,r)
+			     | _ => acc
+		   val neighborcolors = Regset.foldl folder Regset.empty neighbors
 
-	   in
+	           val regs_available = 
+		       (case node of 
+			  (R _) => 
+			    Regset.listItems
+			    (Regset.difference(listToSet general_iregs, neighborcolors))
+			| (F _) =>
+			    Regset.listItems
+			    (Regset.difference(listToSet general_fregs, neighborcolors)))
+
+		 in
+	           if (length regs_available = 0) then NONE
+	           else SOME (bestReg node regs_available ~1000000 node)
+                 end
+
+          in
 	     case chosen_reg of
 	       SOME r => 
 		 (if (! debug) then 
@@ -178,10 +184,11 @@ struct
 		    (emitString "Allocating pseudoregister "; print_reg node;
 		     emitString " on stack\n") else ();
 		  select (Regmap.insert(mapping, node,
-				       ON_STACK (stackOffset (neighbors,node)))) nodes)
-           end (* select *)
+				       ON_STACK (stackOffset (Regset.listItems neighbors,
+								node)))) nodes)
+          end (* select *)
 
-           val select = select_colors_time select 
+        val select = select_colors_time select 
 
 	val node_stack = simplify []
 

@@ -1,6 +1,7 @@
 (* interference graph *)
 
-functor Ifgraph (structure Machine : MACHINE) : IFGRAPH =
+(*
+functor IfgraphOldReliable (structure Machine : MACHINE) : IFGRAPH =
 struct
 
     val error = fn s => Util.error "ifgraph.sml" s
@@ -147,6 +148,190 @@ struct
 		 then print "undef"
 	       else print (Int.toString ((!edges) div (!count))));
 	      print ")\n"
+	   end
+end
+
+*)
+
+functor Ifgraph (structure Machine : MACHINE
+		 structure Machineutils : MACHINEUTILS
+		 sharing Machineutils.Machine = Machine) : IFGRAPH =
+struct
+
+    val badness_threshold = ref 128
+
+    val error = fn s => Util.error "ifgraph.sml" s
+
+    open Machine
+    structure Regset = Machineutils.Regset
+
+    fun eqReg (r1,r2) = Machine.eqRegs r1 r2
+
+
+     structure HashKey =
+       struct
+         type hash_key = Machine.register
+         fun hashVal (Machine.R v) = Word.fromInt v
+           | hashVal (Machine.F v) = Word.fromInt v
+	 val sameKey = eqReg
+       end
+     structure A : MONO_HASH_TABLE = HashTableFn(HashKey)
+
+     (* graph representation:
+          size is the total number of nodes
+	    all is the list of all nodes
+          bad is the set of nodes that interferes with all other nodes
+	  graph is a hash table with one entry for each of the non-bad nodes
+	    each entry contains a set of non-bad neighbors *)
+
+     type node = Machine.register
+     datatype graph = GRAPH of {size : int ref,
+				bad : Regset.set ref,
+				all : Regset.set ref,
+				graph : Regset.set A.hash_table}
+
+     (* set utilities *)
+
+     fun single v = Regset.singleton v
+     fun member (a,s) = Regset.member(s,a)
+     fun delete (a,s) = Regset.delete(s,a)
+     fun insert (a,s) = Regset.add(s,a)
+     fun hash_member(k,ht) = (case A.find ht k of
+				  NONE => false
+				| SOME _ => true)
+
+     (* graph operations *)
+     val hint = 64
+     exception AdjList
+     fun empty () = GRAPH {size = ref 0,
+			   bad = ref(Regset.empty),
+			   all = ref(Regset.empty),
+			   graph = A.mkTable(hint,AdjList)}
+
+     fun nodes (GRAPH {all,...}) = !all
+     fun nodes_excluding_physical (GRAPH {all,...}) = !all
+     
+     val num_general_iregs = length Machine.general_iregs
+     val num_general_fregs = length Machine.general_fregs
+     val general_iregs = Regset.addList(Regset.empty,general_iregs)
+     val general_fregs = Regset.addList(Regset.empty,general_fregs)
+
+     fun edges (GRAPH {bad,graph,all,...}) n =
+	 case A.find graph n of
+	     NONE => if (member(n,!bad)) 
+			 then Regset.union(!all, (case n of
+					 R _ => general_iregs
+				       | F _ => general_fregs))
+		     else Regset.empty
+	   | SOME l => Regset.union(l,!bad)
+
+     fun degree (GRAPH {all,bad,graph,size}) n =
+	 case A.find graph n of
+	     NONE => if (member(n,!bad)) 
+			 then (!size-1+(case n of
+					 R _ => num_general_iregs
+				       | F _ => num_general_fregs))
+		     else 0
+	   | SOME neighbors => (Regset.numItems neighbors) + (Regset.numItems (!bad))
+
+     fun insert_node (GRAPH {all,bad,graph,size}) n =
+	  ((* print "insert_node "; print (msReg n); print "\n";*)
+	    if ((isPhysical n)
+		  orelse (member(n,!bad))
+		  orelse (hash_member(n,graph))) then ()
+	      else (A.insert graph (n,Regset.empty);
+		    all := Regset.add(!all,n);
+		    size := (!size) + 1))
+
+
+     (* remove the node entry from graph and remove the node from its neighbors's entries *)
+     fun delete_from_graph graph node = 
+	 let val neighbors = A.remove graph node handle AdjList => 
+			      (print ("delete_node: AdjList:"^msReg node^"\n");
+			       raise AdjList)
+	     fun find k = (case A.find graph k of
+			       SOME value => value
+			     | _ => error "delete_from_graph: node does not exist")
+	     fun apper n = if (isPhysical n)
+			      then ()
+		           else A.insert graph (n,delete(node,find n))
+         in Regset.app apper neighbors
+	 end
+
+     fun delete_node (GRAPH {all,bad,graph,size}) n =
+	 let val remove = A.remove graph
+	     val insert = A.insert graph
+	     fun find k = (case A.find graph k of
+			       SOME value => value
+			     | _ => error "delete_node: node does not exist")
+	 in (if (member(n,!bad))
+		   then bad := delete(n,!bad)
+	     else delete_from_graph graph n);
+	      size := !size - 1;
+	      all := delete(n,!all)
+         end
+
+     (* add an interference edge between 2 registers:
+              . two registers interfere only if they're the same type
+              . don't keep edge lists for physical registers
+              . don't add an edge from a register to itself
+      *)
+
+     fun copy (GRAPH {all,size,bad,graph}) = 
+	 GRAPH{graph = A.copy graph,
+	       size = ref (!size),
+	       all = ref (!all),
+	       bad = ref (!bad)}
+
+
+     fun insert_edge (g as GRAPH{all,size,bad,graph}) (a,b) =
+       let 
+(*
+	  val _ = (print "insert_edge "; print (msReg a); print "  ";
+			print (msReg b); print "\n")
+*)
+	   val _ = insert_node g a
+	   val _ = insert_node g b
+	   val graph_insert = A.insert graph
+	   fun add (a,b) = 
+	       if isPhysical a 
+		   then ()
+	       else 
+		   let val l = A.lookup graph a 
+				handle AdjList => error "insert_edge: node not found!"
+		       val l' = insert(b,l)
+		   in  graph_insert (a,l')
+		   end
+	   fun promote a = 
+	   if (isPhysical a) then () else
+	   let val l = A.lookup graph a 
+			handle AdjList => error "insert_edge: node not found!"
+	   in if (Regset.numItems l > !badness_threshold) then
+		       (delete_from_graph graph a;
+			bad := Regset.add(!bad,a))
+	      else ()
+	   end
+       in  if eqReg(a,b) orelse member(b,!bad) orelse member(a,!bad) then ()
+	    else case (a,b)
+		of (R _,R _) => (add(a,b); add(b,a); promote a; promote b)
+	      | (F _,F _) => (add(a,b); add(b,a); promote a; promote b)
+	      | _ => ()
+       end
+
+       fun print_stats (GRAPH{all,size,bad,graph}) =
+	   let val numBad = Regset.numItems (!bad)
+	       val edges = ref (numBad * (!size - 1))
+	   in A.appi (fn (_,n) =>
+		         (edges := !edges + numBad + (Regset.numItems n))) graph;
+	      
+	      print "IG stat:  (V,E,avg deg) = (";
+	      print (Int.toString (!size)); print ", ";
+	      print (Int.toString (!edges)); print ", ";
+	      (if ((!size) = 0)
+		 then print "undef"
+	       else print (Int.toString ((!edges) div (!size))));
+	      print ")\n";
+	      print "       bad = "; print (Int.toString numBad); print "\n"
 	   end
 end
 

@@ -300,7 +300,8 @@ struct
 			     then (print "allocateProc 2 entered\n")
 		       else ()
 	       val (new_sig, new_block_map, new_block_labels, gc_data) =
-		   Procalloc.allocateProc2 res_of_allocateproc1
+		   Stats.subtimer("chaitin_allocproc2",
+				  Procalloc.allocateProc2) res_of_allocateproc1
 	       fun doer (l,acc) = 
 		 let
 		   val (Bblock.BLOCK{instrs,in_live,out_live,succs,def,use,truelabel,...}) =

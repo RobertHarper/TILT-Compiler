@@ -186,15 +186,9 @@ functor Tracetable(val little_endian    : bool
     (* these number must match up with the macros in stack.h *)
     (* the lower 2 bits are used for other things so we only have 30 bits *)
     local
-	val factor = 128 (* 7 bits *)
-	val maxindices = 4
-	fun folder (i,(curfactor,acc)) = 
-	    let val i = if (curfactor = 1) then i else i + 1
-	    in  if (i < factor) then (factor*curfactor, acc + i * curfactor)
-		else (print "i = "; print (Int.toString i); print "\n";
-		      print "curfactor = "; print (Int.toString curfactor); print "\n";
-		      error "projection too big")
-	    end
+	val amounts = [6,8,8,8] (* must sum to <= 30 *)
+	val pow_amounts = [1,64,64*256,64*256*256]
+	val maxindices = length amounts
 	fun local_error indices = 
 	     (print ("indices2int: ");
 	      app (fn m => (print (Int.toString m);
@@ -204,6 +198,14 @@ functor Tracetable(val little_endian    : bool
      print (Int.toString res);
      print "\n")
 	     *)
+	fun loop [] _ = 0
+	  | loop (index::rest) (pow::pow_rest) = 
+	      let val index = if (pow = 1) then index else index+1
+		  val restsum = loop rest pow_rest
+	      in  index * pow + restsum
+	      end
+	  | loop curfactor _ = error "indices2int failed: can't get to this pattern"
+
     in
 	fun indices2int indices = 
 	    let val len = length indices
@@ -212,7 +214,7 @@ functor Tracetable(val little_endian    : bool
 			  else if (len > maxindices)
 				   then (local_error indices;
 					 error "too many indices")
-			       else #2(foldl folder (1,0) indices)
+			       else (loop indices pow_amounts)
 	    in res
 	    end
     end
