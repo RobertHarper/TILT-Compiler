@@ -61,7 +61,7 @@ functor Toil(structure Il : IL
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
       val error_level = ref NoError
       val src_region = ref ([] : (Ast.srcpos * Ast.srcpos) list)
-      fun nofilepos _ = ("nofilepos",0,0)
+      fun nofilepos (_ : SourceMap.charpos) = ("nofilepos",0,0)
       val filepos = ref nofilepos
       fun error_max (Error,_) = Error
 	| error_max (_,Error) = Error

@@ -126,23 +126,21 @@ structure LinkIl (* : LINKIL *) =
 	    in IlContext.add_context_entries(ctxt,entries')
 	    end
 
-	fun elaborate_diff'(context,(filepos,astdec)) = 
+	fun elaborate_help (context,(filepos,astdec)) = 
 	    (case (Toil.xdec(context,filepos,astdec)) of
-		SOME sbnd_ctxt_list =>
-		    let val sbnds = List.mapPartial #1 sbnd_ctxt_list
-			val ctxts = map #2 sbnd_ctxt_list
-		    in	SOME(sbnds,ctxts)
-		    end
-	      | _ => NONE)
-
-	fun elaborate'(context,(filepos,astdec)) = 
-	    (case (elaborate_diff'(context,(filepos,astdec))) of
-		 SOME(sbnds,context_diff) =>
-		     SOME(sbnds,local_add_context_entries(context,context_diff))
+		 SOME sbnd_ctxt_list =>
+		     let val sbnds = List.mapPartial #1 sbnd_ctxt_list
+			 val ctxts = map #2 sbnd_ctxt_list
+		     in	SOME(sbnds,ctxts)
+		     end
 	       | _ => NONE)
 
-	fun elaborate s = elaborate'(initial_context,parse s)
-	fun elaborate_diff s = elaborate_diff'(initial_context,parse s)
+	fun elaborate s = (case (elaborate_help(initial_context,parse s)) of
+			       SOME (sbnds,entries) => SOME(initial_sbnds @ sbnds, 
+							    local_add_context_entries(initial_context,entries))
+			     | NONE => NONE)
+	    
+(*
 	fun evaluate target_sbnds =
 	    let
 		val allsbnds = initial_sbnds @ target_sbnds
@@ -154,7 +152,7 @@ structure LinkIl (* : LINKIL *) =
 		       | _ => error "a structure evaluated to a non-structure")
 	    in ressbnds
 	    end
-
+*)
 
 	
 	fun check' filename {doprint,docheck} =
@@ -165,9 +163,10 @@ structure LinkIl (* : LINKIL *) =
   	        val astdec = (Stats.timer("PARSE_TVSCOPE",LinkParse.tvscope_dec)) astdec
   	        val astdec = (Stats.timer("PARSE_NAMEDFORM",LinkParse.named_form_dec)) astdec
 		val (sbnds,cdiff) = 
-		    (case (Stats.timer("ELABORATION",elaborate_diff')) (initial_context,(fp,astdec)) of
+		    (case (Stats.timer("ELABORATION",elaborate_help)) (initial_context,(fp,astdec)) of
 			 SOME res => res
 		       | NONE => error "Elaboration failed")
+		val sbnds = initial_sbnds @ sbnds
 		val _ = if doprint 
 			    then (print "test: sbnds are: \n";
 				  Ppil.pp_sbnds sbnds)
