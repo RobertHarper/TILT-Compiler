@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil NilSubst ANALYZE NilDefs *)
+(*$import Util Stats Sequence Array Prim Ppnil Int Nil Listops Name NilUtil NilSubst ANALYZE NilDefs *)
 
 (* This module performs function usage analysis.
    The result is some information for each term-level function
@@ -18,7 +18,7 @@
    val g = f 5         level = 1
    val g = f 5 6       level = 2
 
-   The anaylsis will attempt to compute the maximum level.  
+   The analysis will attempt to compute the maximum level.  
    Consider this expression:
 
    let val g = f 5
@@ -48,6 +48,8 @@
        of wrapper functions.
 *)
 
+(* Some optimizations depend on all applications being of variables. *)
+
 structure Analyze :> ANALYZE = 
 struct
   open Nil Name NilUtil
@@ -61,9 +63,26 @@ struct
 
   local
       type occur = var * bool * int ref
+	  (* 1: variable that occurs
+	   * 2: whether it occurs recursively
+	   * 3: currently determined highest possible level
+	   *)
+
       val sizeDefs = ref (Name.VarMap.empty : (int * Nil.function) Name.VarMap.map)
+	  (* 1: size of function body
+	   * 2: function itself
+	   *)
+
       val occurs = ref ([] : occur list)
+
       val constraints = ref (Name.VarMap.empty : (int * int ref) Name.VarMap.map)
+          (* The following are what I think these are supposed to mean, though it looks like the current code doesn't do it.
+	   * (See bug #0087) -adamc
+	   * 1: Level that bounds from above the level of the function of which the variable represented by this constraint
+	   *    is some degree of partial application, if that variable occurs in code
+	   * 2: Currently determined highest possible level of that function
+           *)
+
       fun isFunction f = (case Name.VarMap.find(!sizeDefs,f) of
 			      NONE => false
 			    | SOME _ => true)
@@ -71,6 +90,8 @@ struct
       fun reset() = (sizeDefs := Name.VarMap.empty; occurs := [])
       fun addFunction(v,i,f) = sizeDefs := Name.VarMap.insert(!sizeDefs, v, (i, f))
       fun addConstraint(v, n, r) = constraints := Name.VarMap.insert(!constraints, v, (n,r))
+
+      (* Add level constraints for a particular sequence of applications starting from a curried function. *)
       fun applyOccur(f,binds : var list) = 
 	  let val potentialLevel = 1 + (length binds)
 	      val r = ref potentialLevel
@@ -79,11 +100,16 @@ struct
 	      val inside = not (isFunction f)
 	  in  occurs := (f, inside, r) :: (!occurs)
 	  end
+
+      (* Possibly update max level of a function based on an occurrence of a variable that is the result of an application
+       * of it. *)
       fun varOccur v = 
 	  (occurs := (v, not (isFunction v), ref 0) :: (!occurs);
 	   case Name.VarMap.find(!constraints, v) of
 	       NONE => ()
 	     | SOME (lower, r) => if (lower < !r) then r := lower else ())
+
+      (* Create the map to be returned based on data kept in sizeDefs and occurs *)
       fun collect() : funinfo Name.VarMap.map =
 	  let val table = Name.VarMap.map (fn (i,f) => {size = i, definition = f, occurs = []}) (!sizeDefs)
 	      fun folder ((v, inside, ref level), table) = 
@@ -99,6 +125,8 @@ struct
 	  in  table
 	  end
   end
+
+  (* The following functions primarily calculate the sizes of various Nil objects *)
 
   fun doList doObj objs = foldl (fn( obj,s) => (doObj obj) + s) 0 objs
 
@@ -143,6 +171,7 @@ struct
 	       | Open_cb (v,vks,c) => (doVklist vks) + (doCon c)
 	       | Code_cb (v,vks,c) => (doVklist vks) + (doCon c))
 
+  (* This is the function where variable occurrences are noticed and possibly used to update function max levels. *)
   and doExp (exp:exp) : int = 
 	1 + 
         (case exp of
@@ -184,9 +213,9 @@ struct
 	      val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
 	      fun findApp (rPartials,cur,eAcc,
 			   all as ((Exp_b(v, tr, App_e(ot, Var_e f, cons, exps, fexps))) :: rest)) = 
-		  if (eq_var(v,cur)) 
+		  if (eq_var(v,cur)) (* Possible bug: should it be f instead of v? *)
 		      then let val e = App_e(ot, Var_e junkVar, cons, exps, fexps)
-			   in  findApp(v::rPartials,cur,e::eAcc,rest)
+			   in  findApp(v::rPartials,cur,e::eAcc,rest) (* should cur be v? *)
 			   end
 		  else (rev rPartials, eAcc, all)
 		| findApp (rPartials, cur, eAcc, all) = (rev rPartials, eAcc, all)
@@ -249,6 +278,7 @@ struct
   fun doExport (ExportValue(l,v)) = doExp(Var_e v)
     | doExport (ExportType(l,v)) = doCon(Var_c v)
 
+  (* Produce statistics on occurrences of function symbols in a module *)
   fun analyze (Nil.MODULE{imports, bnds, exports}) = 
       let val _ = reset()
 	  (* Skip imports *)
